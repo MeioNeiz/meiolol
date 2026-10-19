@@ -111,7 +111,7 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
         }
         if (site.lean) |l| try lean_line.line(w, l, ch.id, ch.name, r, "../method.html#lean");
         try patch_page.since(site, w, ch, r, "../");
-        try builds_page.link(site, w, ch, r, path);
+        try builds_page.strip(site, w, ch, r, path);
         try opponentTable(site, w, ch, r, cr, opponentK(st, r), usualK(st, r), opps.items);
         try tpl.renderPart(w, "</section>\n", .{});
     }

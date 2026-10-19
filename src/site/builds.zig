@@ -107,9 +107,11 @@ pub fn route(site: *const Site, w: *Writer, f: *const File, rest: []const u8) !b
     return true;
 }
 
-/// Champion page, in `r`'s section: a link to the build page, in this view or its patch
-/// view. `from`: the champion page's path
-pub fn link(site: *const Site, w: *Writer, ch: Champ, r: Role, from: []const u8) !void {
+/// Champion page, in `r`'s section: the most played choice of each kind with its games,
+/// share and win rate (a past-games fact, the build page's framing), and a link to the
+/// build page, in this view or its patch view. Builds follow the patch view, not the
+/// page's filters. `from`: the champion page's path
+pub fn strip(site: *const Site, w: *Writer, ch: Champ, r: Role, from: []const u8) !void {
     const pv = patchView(site);
     const f = if (site.view_builds[pv.index()]) |*f| f else return;
     const b = shown(f, ch.id, r) orelse return;
@@ -118,16 +120,51 @@ pub fn link(site: *const Site, w: *Writer, ch: Champ, r: Role, from: []const u8)
         .{ .root = site.toRoot(from), .path = to }
     else
         .{ .root = site.toShared(from), .up = pv.dir(), .path = to };
+    try tpl.renderPart(w,
+        \\<div class="bstrip"><p class="bhead"><b>Most played build</b> <span class="muted">patch {patch}, {in}, {ranks}: {games} game{s}; the filters above don't change it.</span> <a href="{href}">Full build: runes, items and skill order</a></p>
+        \\<div class="bks">
+    , .{
+        .patch = f.label,
+        .in = pv.region.in(),
+        .ranks = try rankLabel(site.arena, f.min_tier),
+        .games = try root.thousands(site.arena, b.games),
+        .s = plural(b.games),
+        .href = href,
+    });
+    try top(site.arena, w, f, b, .runes, "Runes");
+    try top(site.arena, w, f, b, .shards, "Shards");
+    try top(site.arena, w, f, b, .spells, "Spells");
+    try top(site.arena, w, f, b, .start, "Start");
+    try top(site.arena, w, f, b, .boots, "Boots");
+    try top(site.arena, w, f, b, .core3, "First 3 items");
+    try top(site.arena, w, f, b, .skill_start, "Levels 1-3");
+    try top(site.arena, w, f, b, .skills, "Skill priority");
+    try w.writeAll("</div></div>\n");
+}
+
+/// One kind's most played option: value, then games, share and win rate
+fn top(a: std.mem.Allocator, w: *Writer, f: *const File, b: File.Build, kind: Kind, comptime title: []const u8) !void {
+    const rows = b.get(kind) orelse return;
+    if (rows.options.len == 0) return;
+    const o = rows.options[0];
+    const share = 100 * @as(f64, @floatFromInt(o.games)) / @as(f64, @floatFromInt(@max(rows.games, 1)));
     try tpl.render(w,
-        \\<p class="curves-links"><b>Build:</b> <a href="{href}">runes, items and skill order, patch {patch}</a> <span class="muted">{games} game{s}, {ranks}</span></p>
+        \\<div class="bk {kind}{thin}"><span>{title}</span><div class="bv">{value}</div><small title="{games} of {all} players took this">{games} games · {share:.0}%{rate}</small></div>
         \\
     , .{
-        .href = href,
-        .patch = f.label,
-        .games = b.games,
-        .s = plural(b.games),
-        .ranks = try rankLabel(site.arena, f.min_tier),
+        .kind = @tagName(kind),
+        .thin = tpl.when(o.games < solid_games, " thin"),
+        .title = title,
+        .value = tpl.call(value, .{ f, kind, o.v, true }),
+        .share = share,
+        .all = try root.thousands(a, rows.games),
+        .games = try root.thousands(a, o.games),
+        .rate = tpl.when(o.games >= rate_games, tpl.t("<br>{wr:.1}% won", .{ .wr = wonPct(o) })),
     });
+}
+
+fn wonPct(o: File.Option) f64 {
+    return 100 * @as(f64, @floatFromInt(o.wins)) / @as(f64, @floatFromInt(@max(o.games, 1)));
 }
 
 /// "PLATINUM" -> "Platinum IV and up"; "" -> "every player in Platinum+ games"
@@ -215,6 +252,7 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
     try table(w, f, b, .core3, "First three finished items", "players who finished three items: longer games, so compare these win rates with each other rather than with the champion's overall");
     try w.writeAll("<h2>Skill priority</h2>\n");
     try table(w, f, b, .skills, "Order", "players with a match timeline who reached level 11");
+    try table(w, f, b, .skill_start, "Levels 1 to 3", "players with a match timeline");
     const to_site = site.toShared(page_path);
     try tpl.render(w,
         \\<p class="muted"><a href="{champ}">{name}</a> · <a href="{site}method.html#builds">How builds are counted</a></p>
@@ -247,7 +285,7 @@ fn table(w: *Writer, f: *const File, b: File.Build, kind: Kind, comptime title: 
             \\
         , .{
             .thin = tpl.flag(o.games < solid_games, "class=\"thin\""),
-            .value = tpl.call(value, .{ f, kind, o.v }),
+            .value = tpl.call(value, .{ f, kind, o.v, false }),
             .games = o.games,
             .share = 100 * @as(f64, @floatFromInt(o.games)) / @as(f64, @floatFromInt(@max(rows.games, 1))),
             .rate = tpl.call(winRate, .{ o.games, o.wins }),
@@ -258,15 +296,16 @@ fn table(w: *Writer, f: *const File, b: File.Build, kind: Kind, comptime title: 
     });
 }
 
-fn value(w: *Writer, f: *const File, kind: Kind, v: []const u32) !void {
+/// `compact`: icons without names beside them (names on hover), shards one a line
+fn value(w: *Writer, f: *const File, kind: Kind, v: []const u32, compact: bool) !void {
     switch (kind) {
         .keystone, .boots => {
             if (v[0] == 0) return w.writeAll("No boots");
-            try named(w, if (kind == .boots) f.items else f.runes, v[0], true);
+            try named(w, if (kind == .boots) f.items else f.runes, v[0], !compact);
         },
         .spells => for (v, 0..) |x, i| {
             if (i > 0) try w.writeAll(" ");
-            try named(w, f.spells, x, true);
+            try named(w, f.spells, x, !compact);
         },
         .runes => for (v, 0..) |x, i| {
             // Trees (0, 5) as a divider, runes as icons
@@ -275,7 +314,7 @@ fn value(w: *Writer, f: *const File, kind: Kind, v: []const u32) !void {
             try named(w, f.runes, x, false);
         },
         .shards => for (v, 0..) |x, i| {
-            if (i > 0) try w.writeAll(" · ");
+            if (i > 0) try w.writeAll(if (compact) "<br>" else " · ");
             if (ddragon.find(f.runes, x)) |n| try tpl.writeEscaped(n.name, w) else try w.print("#{d}", .{x});
         },
         .start => for (v) |x| try named(w, f.items, x, false),
@@ -283,8 +322,8 @@ fn value(w: *Writer, f: *const File, kind: Kind, v: []const u32) !void {
             if (i > 0) try w.writeAll("<span class=\"sep\">›</span>");
             try named(w, f.items, x, false);
         },
-        .skills => for (v, 0..) |x, i| {
-            if (i > 0) try w.writeAll("<span class=\"sep\">›</span>");
+        .skills, .skill_start => for (v, 0..) |x, i| {
+            if (i > 0) try w.writeAll(if (kind == .skills) "<span class=\"sep\">›</span>" else " ");
             try tpl.render(w, "<b>{key}</b>", .{ .key = switch (x) {
                 1 => "Q",
                 2 => "W",

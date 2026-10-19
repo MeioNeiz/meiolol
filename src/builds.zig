@@ -39,6 +39,8 @@ pub const Kind = enum {
     /// Basic ability slots (1 Q, 2 W, 3 E) by points after 13 skill-ups (or the game's
     /// end, from 11), ties by who got there first
     skills,
+    /// Ability slots of the first three skill-ups (levels 1 to 3)
+    skill_start,
 
     pub fn fromTimeline(k: Kind) bool {
         return @backingInt(k) >= @backingInt(Kind.start);
@@ -205,6 +207,7 @@ pub const Builder = struct {
         if (k.core_len >= 2) try b.add(p.champion, p.role, .core2, k.core[0..2], p.won);
         if (k.core_len >= 3) try b.add(p.champion, p.role, .core3, k.core[0..3], p.won);
         if (k.skillOrder()) |order| try b.add(p.champion, p.role, .skills, &order, p.won);
+        if (k.skill_ups >= 3) try b.add(p.champion, p.role, .skill_start, &.{ k.first[0], k.first[1], k.first[2] }, p.won);
     }
 
     /// The file, in `arena`: `rows` options per champion, role and kind, and the names
@@ -285,7 +288,7 @@ fn nameList(kind: Kind) ?usize {
         .keystone, .runes, .shards => 1,
         .spells => 2,
         .start, .boots, .core2, .core3 => 0,
-        .skills => null,
+        .skills, .skill_start => null,
     };
 }
 
@@ -293,7 +296,7 @@ fn valueLen(kind: Kind, v: [max_values]u32) usize {
     return switch (kind) {
         .keystone, .boots => 1,
         .runes => 8,
-        .shards, .core3, .skills => 3,
+        .shards, .core3, .skills, .skill_start => 3,
         .spells, .core2 => 2,
         .start => std.mem.indexOfScalar(u32, &v, 0) orelse max_values,
     };
@@ -325,6 +328,8 @@ pub const Picks = struct {
     points: [4]u8 = @splat(0),
     reached_ms: [4]i64 = @splat(0),
     skill_ups: u8 = 0,
+    /// Slots of the first three skill-ups
+    first: [3]u8 = @splat(0),
 
     fn removeStart(p: *Picks, item: u32) void {
         const i = std.mem.indexOfScalar(u32, p.start[0..p.start_len], item) orelse return;
@@ -386,6 +391,7 @@ pub fn picks(t: timeline.Timeline, d: *const ddragon.BuildData, out: []Picks) vo
             // EVOLVE: Kai'Sa, Kha'Zix and the like upgrading an ability, not a point
             if (s.slot < 1 or s.slot > 4 or std.mem.eql(u8, s.type, "EVOLVE")) continue;
             if (p.skill_ups == skill_snapshot) continue;
+            if (p.skill_ups < 3) p.first[p.skill_ups] = s.slot;
             p.skill_ups += 1;
             p.points[s.slot - 1] += 1;
             p.reached_ms[s.slot - 1] = e.t_ms;
@@ -611,6 +617,7 @@ test "picks: starting items, boots, core and skills from events" {
     try testing.expectEqualSlices(u32, &.{ 3078, 3153, 6631 }, p.core[0..p.core_len]);
     // Q and E both 5 by the 13th point; Q got there first
     try testing.expectEqual([3]u32{ 1, 3, 2 }, p.skillOrder().?);
+    try testing.expectEqual([3]u8{ 1, 2, 3 }, p.first);
     try testing.expectEqual(0, out[1].start_len);
     try testing.expectEqual(null, out[1].skillOrder());
 }

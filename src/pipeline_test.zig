@@ -90,6 +90,7 @@ test "fixture games to stats, curves and the website" {
     try testing.expectEqual(games, darius.games);
     try testing.expectEqual(games, darius.get(.start).?.games);
     try testing.expectEqualSlices(u32, &.{ 4, 6 }, darius.get(.spells).?.options[0].v);
+    try testing.expectEqual(games, darius.get(.skill_start).?.games);
     const builds_json = try std.json.Stringify.valueAlloc(arena, build_file, .{});
     try tmp.dir.writeFile(io, .{ .sub_path = "builds.json", .data = builds_json });
     const builds_path = try std.fs.path.join(arena, &.{ dir, "builds.json" });
@@ -212,7 +213,10 @@ test "fixture games to stats, curves and the website" {
         // levels (learn.js draws them)
         .{ "learn.html", &.{ "<section id=\"practice\" data-view=\"practice\">", "<div class=\"lesson-nav\"></div>", "id=\"p-levels\"", "<article class=\"card lesson\" id=\"lesson-roles\"" } },
         .{ "matchup/index.html", &.{ "data-min-search", "<li data-games=\"3\" data-name=\"", "<section data-min-group><h2>Top ", "</ul></section>" } },
-        .{ "champion/darius.html", &.{"href=\"../patch/build/darius-top.html\""} },
+        // Champion page: the patch view's most played choice per kind, few games so no
+        // win rate, then the build page
+        .{ "champion/darius.html", &.{ "href=\"../patch/build/darius-top.html\"", "<div class=\"bstrip\">", "Most played build</b>", "the filters above don't change it", "<div class=\"bk runes thin\"><span>Runes</span>", "<span>Levels 1-3</span>", "<span>Skill priority</span>", "players took this\">3 games · 100%</small>" } },
+        .{ "patch/build/darius-top.html", &.{"<th>Levels 1 to 3</th>"} },
         .{ "champion/darius.html", &.{"win rates on Darius: more data needed (0 players in EUW with 10+ games on it, 20 needed)."} },
         // Filters: the champion's counts by region, rank, patch, role and opponent, its
         // bans and each view's curve gold, the players per role for pick rates, and the

@@ -912,3 +912,23 @@ body:has(#m-cs:checked) .mu-m:not(.mu-m-cs) { display: none; }
   .levels .level { padding: 8px; }
   .lesson-head { font-size: 18px; }
 }
+
+/* Champion page build strip (builds.zig strip): most played choice per kind */
+.bstrip { margin: 8px 0 14px; }
+.bhead { font-size: 13.5px; margin: 0 0 6px; }
+.bhead a { white-space: nowrap; }
+.bks { display: flex; flex-wrap: wrap; gap: 8px; }
+.bk { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; display: flex; flex-direction: column; gap: 4px; }
+.bk > span { color: var(--muted); font-size: 12px; }
+.bk small { color: var(--faint); font-size: 11.5px; white-space: nowrap; }
+.bk.thin { opacity: 0.6; }
+.bv { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; min-height: 28px; }
+.bv .icon { width: 28px; height: 28px; border-radius: 4px; }
+.bv .sep { color: var(--muted); margin: 0 3px; }
+.bk.runes .bv .icon:first-of-type { width: 34px; height: 34px; border-radius: 50%; }
+.bk.shards .bv { display: block; font-size: 11.5px; line-height: 1.3; color: var(--t2); }
+.bk.skills .bv { font-size: 16px; }
+@media (max-width: 640px) {
+  .bks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bk.runes { grid-column: 1 / -1; }
+}
