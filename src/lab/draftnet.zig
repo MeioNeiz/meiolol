@@ -324,13 +324,6 @@ fn stepSeed(cfg: Config) u32 {
     return cfg.seed *% 0x2545f491 | 1;
 }
 
-fn bias(step: u32) [2]f32 {
-    return .{
-        1 - std.math.pow(f32, 0.9, @floatFromInt(step)),
-        1 - std.math.pow(f32, 0.999, @floatFromInt(step)),
-    };
-}
-
 /// Batches in one pass over n games
 pub const stepsPerEpoch = nnlib.stepsPerEpoch;
 
@@ -559,6 +552,9 @@ pub fn fitGpu(gpa: std.mem.Allocator, io: std.Io, gpu: *const cuda.Gpu, dev: *De
     var r_off = l.r;
     var c_off = l.c;
     var a_off = l.a;
+    // No moments on the host (dn_adamw keeps them on the device): only each step's constants
+    var opt: nnlib.Adam = try .init(gpa, 0, .{ .lr = cfg.lr });
+    defer opt.deinit(gpa);
     var step: u32 = 0;
     var at: u32 = @intCast(order.len);
     while (step < steps) {
@@ -592,13 +588,13 @@ pub fn fitGpu(gpa: std.mem.Allocator, io: std.Io, gpu: *const cuda.Gpu, dev: *De
             try k.gemm(b.dh1, b.x, sub(b.gr, l.w1), dn.h1, dn.input, rws, 1, dn.h1, dn.input, 1);
             try k.gemm(b.dh1, sub(b.p, l.w1), b.dx, rws, dn.input, dn.h1, dn.h1, 1, dn.input, 1);
             try gpu.launch(k.scatter, rws * dn.input, &.{ @ptrCast(&b.dx), @ptrCast(&games), @ptrCast(&dorder), @ptrCast(&start), @ptrCast(&rws), @ptrCast(&e_off), @ptrCast(&r_off), @ptrCast(&b.gr) });
-            const c = bias(step);
+            const a = opt.begin();
             var len = l.len;
-            var lr = cfg.lr;
+            var lr = a.lr;
             var wd = cfg.wd;
             var decay = l.decay;
-            var c1 = c[0];
-            var c2 = c[1];
+            var c1 = a.c1;
+            var c2 = a.c2;
             try gpu.launch(k.adamw, l.len, &.{ @ptrCast(&b.p), @ptrCast(&b.gr), @ptrCast(&b.m1), @ptrCast(&b.m2), @ptrCast(&len), @ptrCast(&lr), @ptrCast(&wd), @ptrCast(&decay), @ptrCast(&c1), @ptrCast(&c2) });
         }
         if (watch) |x| if (x.due(step, steps)) {
