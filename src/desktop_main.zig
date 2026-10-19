@@ -152,7 +152,7 @@ fn publish(status: ui.Status, arena: std.heap.ArenaAllocator) void {
 }
 
 fn poll(gpa: std.mem.Allocator) void {
-    var p: Poller = .{ .gpa = gpa, .own_arena = .init(gpa) };
+    var p: Poller = .{ .watch = .init(gpa, io, null), .own_arena = .init(gpa) };
     defer p.deinit();
     var shown: u64 = 0;
     while (!shared.quit.load(.acquire)) {
@@ -170,26 +170,22 @@ fn poll(gpa: std.mem.Allocator) void {
     }
 }
 
-/// The client connection and the player's own data, kept across ticks
+/// The client watch and the player's own data, kept across ticks
 const Poller = struct {
-    gpa: std.mem.Allocator,
-    /// Holds the credentials; reset on reconnect
-    conn: ?std.heap.ArenaAllocator = null,
-    client: ?lcu.Client = null,
-    /// Pool, mastery and tier: loaded once per champ select
+    watch: lcu.Watch,
+    /// Mastery and tier: loaded once per champ select
     own_arena: std.heap.ArenaAllocator,
     own: ?Own = null,
     /// What the last tick saw, for key()
     fingerprint: u64 = 0,
 
     const Own = struct {
-        pickable: ?[]u32,
         mastery: []lanecard.Mastery,
         tier: ?[]const u8,
     };
 
     fn deinit(p: *Poller) void {
-        if (p.conn) |*c| c.deinit();
+        p.watch.deinit();
         p.own_arena.deinit();
     }
 
@@ -199,9 +195,7 @@ const Poller = struct {
     }
 
     fn disconnect(p: *Poller, arena: std.mem.Allocator, err: anyerror) ui.Status {
-        if (p.conn) |*c| c.deinit();
-        p.conn = null;
-        p.client = null;
+        p.watch.disconnect();
         p.forgetOwn();
         if (err == error.ClientNotRunning) return .no_client;
         return .{ .client_error = arena.dupe(u8, @errorName(err)) catch "error" };
@@ -221,33 +215,23 @@ const Poller = struct {
     }
 
     fn tick(p: *Poller, arena: std.mem.Allocator) !ui.Status {
-        if (p.client == null) {
-            p.conn = .init(p.gpa);
-            const found = try lcu.lockfile.discover(p.conn.?.allocator(), io, null);
-            p.client = .{ .gpa = p.gpa, .io = io, .credentials = found.credentials };
-        }
-        const client = p.client.?;
-
-        const phase_body = try client.getOk(lcu.session.paths.phase);
-        defer p.gpa.free(phase_body);
-        const phase = lcu.session.parsePhase(arena, phase_body) catch "unknown";
-        if (!std.mem.eql(u8, phase, "ChampSelect")) {
-            p.forgetOwn();
-            return .{ .waiting = phaseLabel(phase) };
-        }
-
-        const resp = try client.get(lcu.session.paths.session);
-        defer p.gpa.free(resp.body);
-        // Between phases the session can briefly be missing
-        if (resp.status == 404) return .{ .waiting = "Champ select" };
-        if (resp.status / 100 != 2) return error.HttpStatus;
-        const cs = try lcu.session.parse(arena, resp.body);
+        const cs = switch (try p.watch.step(arena)) {
+            .phase => |phase| {
+                p.forgetOwn();
+                return .{ .waiting = phaseLabel(phase) };
+            },
+            .between => return .{ .waiting = "Champ select" },
+            .bad_session => |err| return .{ .client_error = @errorName(err) },
+            .select => |cs| cs,
+        };
         const role = cs.my_role orelse return .no_role;
 
-        if (p.own == null) p.own = p.loadOwn(client);
+        if (p.own == null) p.own = p.loadOwn(p.watch.client.?);
         const own = p.own.?;
+        const pool = p.watch.pool;
         var h: std.hash.Wyhash = .init(cs.fingerprint());
         h.update(std.mem.asBytes(&role));
+        if (pool) |ids| h.update(std.mem.sliceAsBytes(ids));
         p.fingerprint = h.final();
 
         const card = try arena.create(lanecard.Card);
@@ -260,7 +244,7 @@ const Poller = struct {
             .allies = cs.allies,
             .enemies = cs.enemies,
             .bans = cs.bans,
-            .pickable = own.pickable,
+            .pickable = pool,
             .mastery = own.mastery,
             .tier = own.tier,
         });
@@ -270,13 +254,7 @@ const Poller = struct {
     /// Whatever fails to load is left out: the card works without it
     fn loadOwn(p: *Poller, client: lcu.Client) Own {
         const a = p.own_arena.allocator();
-        const pickable = ids(a, client, lcu.session.paths.pickable, false);
-        const owned = ids(a, client, lcu.session.paths.owned, true);
-        var own: Own = .{
-            .pickable = lcu.session.intersectPool(a, pickable, owned) catch null,
-            .mastery = &.{},
-            .tier = null,
-        };
+        var own: Own = .{ .mastery = &.{}, .tier = null };
         if (client.getOk(lcu.me.paths.mastery)) |body| {
             defer client.gpa.free(body);
             const rows = lcu.me.parseMastery(a, body) catch &.{};
@@ -288,13 +266,6 @@ const Poller = struct {
             own.tier = lcu.me.parseSoloTier(a, body) catch null;
         } else |_| {}
         return own;
-    }
-
-    fn ids(a: std.mem.Allocator, client: lcu.Client, path: []const u8, objects: bool) ?[]u32 {
-        const body = client.getOk(path) catch return null;
-        defer client.gpa.free(body);
-        const list = (if (objects) lcu.session.parseOwned(a, body) else lcu.session.parseIds(a, body)) catch return null;
-        return if (list.len == 0) null else list;
     }
 };
 

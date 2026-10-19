@@ -315,7 +315,7 @@ const App = struct {
         var w: Watcher = .{
             .app = app,
             .stats = &loaded.stats,
-            .pool_arena = .init(app.gpa),
+            .watch = .init(app.gpa, app.io, app.args.lockfile),
         };
         defer w.deinit();
         while (true) {
@@ -342,31 +342,15 @@ const State = union(enum) {
 const Watcher = struct {
     app: App,
     stats: *const Stats,
-    /// Holds the credentials; reset on reconnect
-    conn: ?std.heap.ArenaAllocator = null,
-    client: ?lcu.Client = null,
-    /// Loaded once per champ select
-    pool_arena: std.heap.ArenaAllocator,
-    pool: ?[]u32 = null,
-    pool_tries: u8 = 0,
+    watch: lcu.Watch,
     state: State = .starting,
 
     fn deinit(w: *Watcher) void {
-        if (w.conn) |*c| c.deinit();
-        w.pool_arena.deinit();
-    }
-
-    fn forgetPool(w: *Watcher) void {
-        _ = w.pool_arena.reset(.retain_capacity);
-        w.pool = null;
-        w.pool_tries = 0;
+        w.watch.deinit();
     }
 
     fn disconnect(w: *Watcher, err: anyerror) void {
-        if (w.conn) |*c| c.deinit();
-        w.conn = null;
-        w.client = null;
-        w.forgetPool();
+        w.watch.disconnect();
         const next: State = if (err == error.ClientNotRunning)
             .no_client
         else
@@ -382,48 +366,30 @@ const Watcher = struct {
     }
 
     fn tick(w: *Watcher) !void {
-        if (w.client == null) {
-            w.conn = .init(w.app.gpa);
-            w.client = try w.app.connect(w.conn.?.allocator());
-        }
-        const client = w.client.?;
         var frame: std.heap.ArenaAllocator = .init(w.app.gpa);
         defer frame.deinit();
-        const arena = frame.allocator();
-
-        const phase_body = try client.getOk(lcu.session.paths.phase);
-        defer w.app.gpa.free(phase_body);
-        const phase = lcu.session.parsePhase(arena, phase_body) catch "unknown";
-        if (!std.mem.eql(u8, phase, "ChampSelect")) {
-            w.forgetPool();
-            const h = std.hash.Wyhash.hash(1, phase);
-            if (!std.meta.eql(w.state, State{ .phase = h })) {
-                w.state = .{ .phase = h };
-                try w.app.out.print("\nclient: {s}; waiting for champ select\n", .{
-                    phase,
-                });
-            }
-            return;
-        }
-
-        const resp = try client.get(lcu.session.paths.session);
-        defer w.app.gpa.free(resp.body);
-        // Between phases the session can briefly be missing
-        if (resp.status == 404) return;
-        if (resp.status / 100 != 2) return error.HttpStatus;
-        const cs = lcu.session.parse(arena, resp.body) catch |err| {
-            if (!std.meta.eql(w.state, State{ .bad_session = err })) {
-                w.state = .{ .bad_session = err };
-                const msg = "\ncannot read the champ select session ({t})\n";
-                try w.app.out.print(msg, .{err});
-            }
-            return;
+        const cs = switch (try w.watch.step(frame.allocator())) {
+            .phase => |phase| {
+                const h = std.hash.Wyhash.hash(1, phase);
+                if (!std.meta.eql(w.state, State{ .phase = h })) {
+                    w.state = .{ .phase = h };
+                    try w.app.out.print("\nclient: {s}; waiting for champ select\n", .{
+                        phase,
+                    });
+                }
+                return;
+            },
+            .between => return,
+            .bad_session => |err| {
+                if (!std.meta.eql(w.state, State{ .bad_session = err })) {
+                    w.state = .{ .bad_session = err };
+                    const msg = "\ncannot read the champ select session ({t})\n";
+                    try w.app.out.print(msg, .{err});
+                }
+                return;
+            },
+            .select => |cs| cs,
         };
-
-        if (w.pool == null and w.pool_tries < 5) {
-            w.pool_tries += 1;
-            w.pool = try w.loadPool(client);
-        }
 
         const role = cs.my_role orelse w.app.args.role orelse {
             if (w.state != .no_role) {
@@ -433,9 +399,10 @@ const Watcher = struct {
             }
             return;
         };
+        const pool = w.watch.pool;
         var h: std.hash.Wyhash = .init(cs.fingerprint());
         h.update(std.mem.asBytes(&role));
-        if (w.pool) |p| h.update(std.mem.sliceAsBytes(p));
+        if (pool) |p| h.update(std.mem.sliceAsBytes(p));
         const key = h.final();
         if (std.meta.eql(w.state, State{ .shown = key })) return;
         w.state = .{ .shown = key };
@@ -443,36 +410,13 @@ const Watcher = struct {
         const out = w.app.out;
         const timer_phase = if (cs.phase.len > 0) cs.phase else "?";
         try out.print("\n=== champ select ({s}) ===\n", .{timer_phase});
-        const draft = cs.draft(role, w.pool);
+        const draft = cs.draft(role, pool);
         try printDraft(out, w.stats, draft, cs.my_champion, cs.my_locked);
         if (cs.my_locked) {
             try out.print("you locked {s}\n", .{w.stats.nameOf(cs.my_champion)});
             return;
         }
         try w.app.printSuggestions(w.stats, draft, cs.my_champion);
-    }
-
-    /// Pickable and owned champions; null when neither loads, so anything may show
-    fn loadPool(w: *Watcher, client: lcu.Client) !?[]u32 {
-        const arena = w.pool_arena.allocator();
-        const pickable = fetchIds(arena, client, lcu.session.paths.pickable, false);
-        const owned = fetchIds(arena, client, lcu.session.paths.owned, true);
-        return lcu.session.intersectPool(arena, pickable, owned);
-    }
-
-    fn fetchIds(
-        arena: std.mem.Allocator,
-        client: lcu.Client,
-        path: []const u8,
-        objects: bool,
-    ) ?[]u32 {
-        const body = client.getOk(path) catch return null;
-        defer client.gpa.free(body);
-        const ids = (if (objects)
-            lcu.session.parseOwned(arena, body)
-        else
-            lcu.session.parseIds(arena, body)) catch return null;
-        return if (ids.len == 0) null else ids;
     }
 };
 
