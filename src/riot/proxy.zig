@@ -10,6 +10,7 @@ const Allocator = std.mem.Allocator;
 const Client = @import("client.zig").Client;
 const Limiters = @import("ratelimit.zig").Limiters;
 const Fake = @import("fake.zig").Fake;
+const httpd = @import("../httpd.zig");
 
 const log = std.log.scoped(.proxy);
 
@@ -32,46 +33,24 @@ pub const Proxy = struct {
 
     /// Until cancelled
     pub fn serve(p: *Proxy, server: *Io.net.Server) void {
-        var group: Io.Group = .init;
-        defer group.cancel(p.io);
-        while (true) {
-            const stream = server.accept(p.io) catch |err| switch (err) {
-                error.Canceled => return,
-                else => {
-                    log.warn("accept: {t}", .{err});
-                    p.io.sleep(.fromSeconds(1), .awake) catch return;
-                    continue;
-                },
-            };
-            group.concurrent(p.io, connection, .{ p, stream }) catch |err| {
-                log.warn("connection: {t}", .{err});
-                stream.close(p.io);
-            };
-        }
+        httpd.accept(.proxy, p.io, server, p, connection);
     }
 
     const Clients = [@typeInfo(@FieldType(Limiters, "all")).array.len]?Client;
 
+    /// Per connection: a client per route, made on first use
+    const Conn = struct { p: *Proxy, clients: Clients = @splat(null) };
+
     fn connection(p: *Proxy, stream: Io.net.Stream) void {
-        defer stream.close(p.io);
-        var clients: Clients = @splat(null);
-        defer for (&clients) |*c| if (c.*) |*client| client.deinit();
-        var recv_buffer: [8192]u8 = undefined;
-        var send_buffer: [16 * 1024]u8 = undefined;
-        var conn_reader = stream.reader(p.io, &recv_buffer);
-        var conn_writer = stream.writer(p.io, &send_buffer);
-        var server = std.http.Server.init(&conn_reader.interface, &conn_writer.interface);
-        while (server.reader.state == .ready) {
-            var request = server.receiveHead() catch |err| switch (err) {
-                error.HttpConnectionClosing => return,
-                else => return log.debug("closing connection: {t}", .{err}),
-            };
-            // The path may hold a Riot ID or PUUID: error names only
-            p.handle(&clients, &request) catch |err| return log.warn("request: {t}", .{err});
-        }
+        var conn: Conn = .{ .p = p };
+        defer for (&conn.clients) |*c| if (c.*) |*client| client.deinit();
+        // The path may hold a Riot ID or PUUID: error names only
+        httpd.requests(.proxy, p.io, stream, &conn, handle, .error_only);
     }
 
-    fn handle(p: *Proxy, clients: *Clients, request: *std.http.Server.Request) !void {
+    fn handle(conn: *Conn, request: *std.http.Server.Request) !void {
+        const p = conn.p;
+        const clients = &conn.clients;
         const prefix = "/riot/";
         const target = request.head.target;
         if (request.head.method != .GET or !std.mem.startsWith(u8, target, prefix)) {

@@ -14,6 +14,7 @@ const Io = std.Io;
 const store = @import("store");
 const core = @import("core");
 const ddragon = @import("../ddragon.zig");
+const httpd = @import("../httpd.zig");
 pub const cache = @import("cache.zig");
 pub const fetch = @import("fetch.zig");
 pub const game = @import("game.zig");
@@ -75,22 +76,11 @@ pub fn run(gpa: Allocator, io: Io, opts: Options) !void {
 
     var worker = try io.concurrent(work, .{&fetcher});
     defer worker.cancel(io);
-    try serve(&ctx, &server);
+    serve(&ctx, &server);
 }
 
-fn serve(ctx: *Context, server: *Io.net.Server) !void {
-    const io = ctx.io;
-    var group: Io.Group = .init;
-    defer group.cancel(io);
-    while (true) {
-        const stream = try server.accept(io);
-        // Its own thread, as serve.zig: async may run it here when the pool is busy, and
-        // an idle keep-alive connection then blocks every later one
-        group.concurrent(io, connection, .{ ctx, stream }) catch |err| {
-            log.warn("connection: {t}", .{err});
-            stream.close(io);
-        };
-    }
+fn serve(ctx: *Context, server: *Io.net.Server) void {
+    httpd.accept(.api, ctx.io, server, ctx, connection);
 }
 
 test "idle keep-alive connections do not hold up the next request" {
@@ -103,7 +93,7 @@ test "idle keep-alive connections do not hold up the next request" {
     var server = try address.listen(io, .{ .reuse_address = true });
     defer server.deinit(io);
     var serving = try io.concurrent(serve, .{ &ctx, &server });
-    defer serving.cancel(io) catch {};
+    defer serving.cancel(io);
 
     var idle: [4]Io.net.Stream = undefined;
     for (&idle) |*c| c.* = try server.socket.address.connect(io, .{ .mode = .stream });
@@ -229,32 +219,8 @@ test newestPatch {
 }
 
 fn connection(ctx: *Context, stream: Io.net.Stream) void {
-    const io = ctx.io;
-    defer stream.close(io);
-    var recv_buffer: [8192]u8 = undefined;
-    var send_buffer: [16 * 1024]u8 = undefined;
-    var conn_reader = stream.reader(io, &recv_buffer);
-    var conn_writer = stream.writer(io, &send_buffer);
-    var server = std.http.Server.init(&conn_reader.interface, &conn_writer.interface);
-    while (server.reader.state == .ready) {
-        var request = server.receiveHead() catch |err| switch (err) {
-            error.HttpConnectionClosing => return,
-            else => return log.debug("closing connection: {t}", .{err}),
-        };
-        // std's respond() asserts a POST states its body length; a bare `curl -X POST`
-        // states none, which would crash the service. No length and no chunking means
-        // no body (RFC 9112 6.3)
-        if (request.head.transfer_encoding == .none and request.head.content_length == null) {
-            request.head.content_length = 0;
-        }
-        handle(ctx, &request) catch |err| {
-            // The query holds the Riot ID: the path only
-            const target = request.head.target;
-            const path = target[0 .. std.mem.indexOfScalar(u8, target, '?') orelse target.len];
-            log.warn("{s}: {t}", .{ path, err });
-            return;
-        };
-    }
+    // The query holds the Riot ID: the path only
+    httpd.requests(.api, ctx.io, stream, ctx, handle, .path);
 }
 
 const Status = std.http.Status;

@@ -9,6 +9,7 @@ const Io = std.Io;
 const site = @import("site/root.zig");
 const matchup = @import("site/matchup.zig");
 const store = @import("store");
+const httpd = @import("httpd.zig");
 pub const admin_api = @import("admin_api.zig");
 
 const log = std.log.scoped(.serve);
@@ -161,15 +162,7 @@ pub fn run(gpa: std.mem.Allocator, io: Io, opts: Options) !void {
     var group: Io.Group = .init;
     defer group.cancel(io);
     if (opts.dev) |d| group.async(io, watchBinary, .{ io, d });
-    while (true) {
-        const stream = try server.accept(io);
-        // Its own thread: async may run it here when the pool is busy, and a browser's
-        // idle keep-alive connection then blocks every later one
-        group.concurrent(io, connection, .{ &ctx, stream }) catch |err| {
-            log.warn("connection: {t}", .{err});
-            stream.close(io);
-        };
-    }
+    httpd.accept(.serve, io, &server, &ctx, connection);
 }
 
 fn mtime(io: Io, dir: Io.Dir, path: []const u8) i96 {
@@ -193,25 +186,7 @@ fn watchBinary(io: Io, dev: Dev) void {
 }
 
 fn connection(ctx: *Context, stream: Io.net.Stream) void {
-    const io = ctx.io;
-    defer stream.close(io);
-    // Holds the whole request head: browsers send every localhost port's cookies, often
-    // over 8 KB from other dev servers, and a head that overflows is dropped unanswered
-    var recv_buffer: [64 * 1024]u8 = undefined;
-    var send_buffer: [16 * 1024]u8 = undefined;
-    var conn_reader = stream.reader(io, &recv_buffer);
-    var conn_writer = stream.writer(io, &send_buffer);
-    var server = std.http.Server.init(&conn_reader.interface, &conn_writer.interface);
-    while (server.reader.state == .ready) {
-        var request = server.receiveHead() catch |err| switch (err) {
-            error.HttpConnectionClosing => return,
-            else => return log.debug("closing connection: {t}", .{err}),
-        };
-        respond(ctx, &request) catch |err| {
-            log.warn("{s}: {t}", .{ request.head.target, err });
-            return;
-        };
-    }
+    httpd.requests(.serve, ctx.io, stream, ctx, respond, .path);
 }
 
 fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
@@ -222,11 +197,6 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
         if (try admin_api.handle(api, request)) return;
     }
     if (request.head.method != .GET and request.head.method != .HEAD) {
-        // A bodyless POST has neither length nor encoding, and respond() asserts on one
-        // when it discards the body
-        if (request.head.transfer_encoding == .none and request.head.content_length == null) {
-            request.head.content_length = 0;
-        }
         return request.respond("method not allowed\n", .{ .status = .method_not_allowed, .keep_alive = false });
     }
     var path_buf: [512]u8 = undefined;
