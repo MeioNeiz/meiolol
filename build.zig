@@ -82,6 +82,25 @@ pub fn build(b: *std.Build) void {
     b.step("lab-native", "Build meiolol-lab for this machine only").dependOn(lab_native);
     b.step("lab-gpu-box", "Build meiolol-lab for the gpu-box only").dependOn(lab_gpu_box);
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = lab_mod, .filters = test_filters })).step);
+    // win-draft copies the shipped draft model, as a candidate sees only std and api
+    const lab_api = b.createModule(.{ .root_source_file = b.path("src/lab/api.zig"), .target = target, .optimize = optimize });
+    const win_draft = b.createModule(.{
+        .root_source_file = b.path("src/lab/cand/win-draft/root.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "api", .module = lab_api }},
+    });
+    const win_draft_test = b.createModule(.{
+        .root_source_file = b.path("src/lab/windraft_test.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "core", .module = m.core },
+            .{ .name = "api", .module = lab_api },
+            .{ .name = "win_draft", .module = win_draft },
+        },
+    });
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = win_draft_test, .filters = test_filters })).step);
 
     // What the pre-push hook runs (deploy/hooks/pre-push): every push to main deploys
     const ci = b.step("ci", "Everything before a push: fmt, tests, cross-builds, scripts");
