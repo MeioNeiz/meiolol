@@ -17,6 +17,7 @@ const rows = @import("rows.zig");
 const seatstats = @import("seatstats.zig");
 const winnet = @import("winnet.zig");
 const gates = @import("gates.zig");
+const nn = @import("nn");
 const cand = @import("cand");
 
 const Io = std.Io;
@@ -306,61 +307,59 @@ fn setGames(gpa: std.mem.Allocator, d: *const rows.Data, seat: []const u32, p: *
     return out;
 }
 
-/// Flat parameters: platform intercepts, the offset's weight, phi and rho biases (no
+/// The parameters: platform intercepts, the offset's weight, phi and rho biases (no
 /// decay); champion-role embeddings (emb_wd); W1 (phi x in), V (rho x rin), w (wd)
-const Layout = struct {
+const Shape = struct {
+    ps: nn.Params,
     phi: usize,
     rho: usize,
     emb: usize,
+    /// A slot's input: profile, role one-hot, embedding
     in: usize,
+    /// rho's input: own team vector (and the other's with cross)
     rin: usize,
     cross: bool,
-    c: usize,
-    a: usize,
-    b1: usize,
-    cb: usize,
-    e: usize,
-    w1: usize,
-    v: usize,
-    out: usize,
-    len: usize,
+    c: nn.Param,
+    a: nn.Param,
+    b1: nn.Param,
+    cb: nn.Param,
+    e: nn.Param,
+    w1: nn.Param,
+    v: nn.Param,
+    out: nn.Param,
 
-    fn init(cfg: Config, emb: usize, n_ids: usize) Layout {
-        var l: Layout = undefined;
-        l.phi = cfg.phi;
-        l.rho = cfg.rho;
-        l.emb = if (cfg.ids) emb else 0;
-        l.in = n_prof + 5 + l.emb;
-        l.cross = cfg.cross;
-        l.rin = if (cfg.cross) 2 * l.phi else l.phi;
-        l.c = 0;
-        l.a = winnet.n_platforms;
-        l.b1 = l.a + 1;
-        l.cb = l.b1 + l.phi;
-        l.e = l.cb + l.rho;
-        l.w1 = l.e + n_ids * l.emb;
-        l.v = l.w1 + l.phi * l.in;
-        l.out = l.v + l.rho * l.rin;
-        l.len = l.out + l.rho;
-        return l;
+    fn init(gpa: std.mem.Allocator, opts: winnet.Options, n_ids: usize) !Shape {
+        const cfg = opts.set;
+        var s: Shape = .{ .ps = .empty, .phi = cfg.phi, .rho = cfg.rho, .emb = if (cfg.ids) opts.emb else 0, .in = undefined, .rin = if (cfg.cross) 2 * cfg.phi else cfg.phi, .cross = cfg.cross, .c = undefined, .a = undefined, .b1 = undefined, .cb = undefined, .e = undefined, .w1 = undefined, .v = undefined, .out = undefined };
+        errdefer s.ps.deinit(gpa);
+        s.in = n_prof + 5 + s.emb;
+        const ps = &s.ps;
+        s.c = try ps.vector(gpa, "platform", winnet.n_platforms, .{});
+        s.a = try ps.scalar(gpa, "offset", .{ .init = .{ .constant = 1 }, .frozen = opts.fix_offset });
+        s.b1 = try ps.vector(gpa, "b1", s.phi, .{});
+        s.cb = try ps.vector(gpa, "cb", s.rho, .{});
+        s.e = try ps.table(gpa, "champion_role", n_ids, s.emb, .{ .init = .{ .uniform = 0.1 }, .decay = opts.emb_wd orelse opts.wd });
+        s.w1 = try ps.matrix(gpa, "w1", s.phi, s.in, .{ .init = .kaiming(s.in), .decay = opts.wd });
+        s.v = try ps.matrix(gpa, "v", s.rho, s.rin, .{ .init = .kaiming(s.rin), .decay = opts.wd });
+        // Starts at 0: the net starts as the offset
+        s.out = try ps.vector(gpa, "out", s.rho, .{ .decay = opts.wd });
+        return s;
     }
 };
 
 const Net = struct {
-    l: Layout,
+    s: Shape,
     p: []f32,
 
-    fn init(gpa: std.mem.Allocator, l: Layout, rnd: std.Random) !Net {
-        const p = try gpa.alloc(f32, l.len);
-        @memset(p, 0);
-        p[l.a] = 1;
-        for (p[l.e..l.w1]) |*x| x.* = (rnd.float(f32) * 2 - 1) * 0.1;
-        const b1 = @sqrt(6.0 / @as(f32, @floatFromInt(l.in)));
-        for (p[l.w1..l.v]) |*x| x.* = (rnd.float(f32) * 2 - 1) * b1;
-        const bv = @sqrt(6.0 / @as(f32, @floatFromInt(l.rin)));
-        for (p[l.v..l.out]) |*x| x.* = (rnd.float(f32) * 2 - 1) * bv;
-        // w stays 0: the net starts as the offset
-        return .{ .l = l, .p = p };
+    fn init(gpa: std.mem.Allocator, s: Shape, rnd: std.Random) !Net {
+        const p = try s.ps.alloc(gpa);
+        s.ps.initValues(p, rnd);
+        return .{ .s = s, .p = p };
+    }
+
+    fn deinit(n: *Net, gpa: std.mem.Allocator) void {
+        gpa.free(n.p);
+        n.s.ps.deinit(gpa);
     }
 };
 
@@ -375,20 +374,21 @@ const Work = struct {
     hid: []f32,
     dt: []f32,
     din: []f32,
+    dh: []f32,
     du: []f32,
 
-    fn init(gpa: std.mem.Allocator, l: Layout) !Work {
-        const sizes = [_]usize{ 10 * l.in, 10 * l.phi, 2 * l.phi, 2 * l.rin, 2 * l.rho, 2 * l.phi, l.rin, l.phi };
+    fn init(gpa: std.mem.Allocator, s: *const Shape) !Work {
+        const sizes = [_]usize{ 10 * s.in, 10 * s.phi, 2 * s.phi, 2 * s.rin, 2 * s.rho, 2 * s.phi, s.rin, s.rho, 10 * s.phi };
         var total: usize = 0;
-        for (sizes) |s| total += s;
+        for (sizes) |x| total += x;
         const buf = try gpa.alloc(f32, total);
         var at: usize = 0;
         var parts: [sizes.len][]f32 = undefined;
-        for (sizes, &parts) |s, *p| {
-            p.* = buf[at..][0..s];
-            at += s;
+        for (sizes, &parts) |x, *p| {
+            p.* = buf[at..][0..x];
+            at += x;
         }
-        return .{ .buf = buf, .x = parts[0], .u = parts[1], .t = parts[2], .rin = parts[3], .hid = parts[4], .dt = parts[5], .din = parts[6], .du = parts[7] };
+        return .{ .buf = buf, .x = parts[0], .u = parts[1], .t = parts[2], .rin = parts[3], .hid = parts[4], .dt = parts[5], .din = parts[6], .dh = parts[7], .du = parts[8] };
     }
 
     fn deinit(w: *const Work, gpa: std.mem.Allocator) void {
@@ -396,82 +396,75 @@ const Work = struct {
     }
 };
 
-const dot = winnet.dot;
-const axpy = winnet.axpy;
-const sigmoid = winnet.sigmoid;
+const axpy = nn.axpy;
+
+fn sigmoid(x: f32) f32 {
+    return nn.sigmoid(x);
+}
 
 /// f per side order (0: blue's view, 1: red's); with rnd, rho's units drop at 1 - keep
 fn forward(n: *const Net, g: *const SetGame, w: *const Work, keep: f32, rnd: ?std.Random) [2]f32 {
-    const l = n.l;
+    const s = &n.s;
     const p = n.p;
-    for (0..10) |s| {
-        const x = w.x[s * l.in ..][0..l.in];
-        @memcpy(x[0..n_prof], &g.z[s]);
+    for (0..10) |slot| {
+        const x = w.x[slot * s.in ..][0..s.in];
+        @memcpy(x[0..n_prof], &g.z[slot]);
         @memset(x[n_prof..][0..5], 0);
-        x[n_prof + s % 5] = 1;
-        if (l.emb > 0) @memcpy(x[n_prof + 5 ..], p[l.e + g.g.ids[s] * l.emb ..][0..l.emb]);
-        const u = w.u[s * l.phi ..][0..l.phi];
-        for (u, 0..) |*o, j| o.* = @max(0, p[l.b1 + j] + dot(p[l.w1 + j * l.in ..][0..l.in], x));
+        x[n_prof + slot % 5] = 1;
+        if (s.emb > 0) @memcpy(x[n_prof + 5 ..], s.e.row(p, g.g.ids[slot]));
+        const u = w.u[slot * s.phi ..][0..s.phi];
+        nn.linear.forward(s.w1.of(p), s.b1.of(p), x, u);
+        nn.relu.forward(u, u, 1, null);
     }
-    for (0..2) |side| {
-        const t = w.t[side * l.phi ..][0..l.phi];
-        @memset(t, 0);
-        for (0..5) |r| axpy(t, 0.2, w.u[(side * 5 + r) * l.phi ..][0..l.phi]);
-    }
+    for (0..2) |side| nn.meanPool.forward(w.u[side * 5 * s.phi ..][0 .. 5 * s.phi], s.phi, w.t[side * s.phi ..][0..s.phi]);
     var f: [2]f32 = undefined;
     for (0..2) |o| {
-        const rin = w.rin[o * l.rin ..][0..l.rin];
-        @memcpy(rin[0..l.phi], w.t[o * l.phi ..][0..l.phi]);
-        if (l.cross) @memcpy(rin[l.phi..], w.t[(1 - o) * l.phi ..][0..l.phi]);
-        const hid = w.hid[o * l.rho ..][0..l.rho];
-        for (hid, 0..) |*h, j| {
-            const z = p[l.cb + j] + dot(p[l.v + j * l.rin ..][0..l.rin], rin);
-            const kept = if (rnd) |rr| rr.float(f32) < keep else true;
-            h.* = if (z > 0 and kept) (if (rnd != null) z / keep else z) else 0;
-        }
-        f[o] = dot(p[l.out..l.len], hid);
+        const rin = w.rin[o * s.rin ..][0..s.rin];
+        @memcpy(rin[0..s.phi], w.t[o * s.phi ..][0..s.phi]);
+        if (s.cross) @memcpy(rin[s.phi..], w.t[(1 - o) * s.phi ..][0..s.phi]);
+        const hid = w.hid[o * s.rho ..][0..s.rho];
+        nn.linear.forward(s.v.of(p), s.cb.of(p), rin, hid);
+        nn.relu.forward(hid, hid, keep, rnd);
+        f[o] = nn.dot(s.out.of(p), hid);
     }
     return f;
 }
 
 fn gameLogit(n: *const Net, g: *const SetGame, f: [2]f32) f32 {
-    return (f[0] - f[1]) / 2 + n.p[n.l.c + g.g.platform] + n.p[n.l.a] * g.g.off;
+    return (f[0] - f[1]) / 2 + n.s.c.at(n.p, g.g.platform).* + n.s.a.at(n.p, 0).* * g.g.off;
 }
 
 /// Adds dl (d loss / d logit)'s gradient to gr, from forward's activations in w
 fn backward(n: *const Net, g: *const SetGame, w: *const Work, dl: f32, keep: f32, gr: []f32) void {
-    const l = n.l;
+    const s = &n.s;
     const p = n.p;
-    gr[l.c + g.g.platform] += dl;
-    gr[l.a] += dl * g.g.off;
+    s.c.at(gr, g.g.platform).* += dl;
+    s.a.at(gr, 0).* += dl * g.g.off;
     @memset(w.dt, 0);
     for (0..2) |o| {
         const df: f32 = if (o == 0) dl / 2 else -dl / 2;
-        const rin = w.rin[o * l.rin ..][0..l.rin];
-        const hid = w.hid[o * l.rho ..][0..l.rho];
-        axpy(gr[l.out..l.len], df, hid);
+        const rin = w.rin[o * s.rin ..][0..s.rin];
+        const hid = w.hid[o * s.rho ..][0..s.rho];
+        axpy(s.out.of(gr), df, hid);
+        for (w.dh, s.out.of(p)) |*d, wv| d.* = df * wv;
+        nn.relu.backward(hid, w.dh, keep, w.dh);
         @memset(w.din, 0);
-        for (hid, 0..) |h, j| {
-            if (h == 0) continue;
-            const dz = df * p[l.out + j] / keep;
-            gr[l.cb + j] += dz;
-            axpy(gr[l.v + j * l.rin ..][0..l.rin], dz, rin);
-            axpy(w.din, dz, p[l.v + j * l.rin ..][0..l.rin]);
-        }
-        axpy(w.dt[o * l.phi ..][0..l.phi], 1, w.din[0..l.phi]);
-        if (l.cross) axpy(w.dt[(1 - o) * l.phi ..][0..l.phi], 1, w.din[l.phi..]);
+        nn.linear.backward(s.v.of(p), rin, w.dh, s.v.of(gr), s.cb.of(gr), w.din);
+        axpy(w.dt[o * s.phi ..][0..s.phi], 1, w.din[0..s.phi]);
+        if (s.cross) axpy(w.dt[(1 - o) * s.phi ..][0..s.phi], 1, w.din[s.phi..]);
     }
-    for (0..10) |s| {
-        const x = w.x[s * l.in ..][0..l.in];
-        const u = w.u[s * l.phi ..][0..l.phi];
-        const dt = w.dt[(s / 5) * l.phi ..][0..l.phi];
-        for (u, dt, 0..) |uj, d, j| {
-            if (uj <= 0) continue;
-            const dz = 0.2 * d;
-            gr[l.b1 + j] += dz;
-            axpy(gr[l.w1 + j * l.in ..][0..l.in], dz, x);
-            if (l.emb > 0) axpy(gr[l.e + g.g.ids[s] * l.emb ..][0..l.emb], dz, p[l.w1 + j * l.in + n_prof + 5 ..][0..l.emb]);
-        }
+    @memset(w.du, 0);
+    for (0..2) |side| nn.meanPool.backward(w.du[side * 5 * s.phi ..][0 .. 5 * s.phi], s.phi, w.dt[side * s.phi ..][0..s.phi]);
+    for (0..10) |slot| {
+        const x = w.x[slot * s.in ..][0..s.in];
+        const u = w.u[slot * s.phi ..][0..s.phi];
+        const du = w.du[slot * s.phi ..][0..s.phi];
+        nn.relu.backward(u, du, 1, du);
+        // The embedding's share of the input gradient goes straight to its row
+        nn.linear.backward(s.w1.of(p), x, du, s.w1.of(gr), s.b1.of(gr), null);
+        if (s.emb > 0) for (du, 0..) |d, j| {
+            if (d != 0) axpy(s.e.row(gr, g.g.ids[slot]), d, s.w1.row(p, j)[n_prof + 5 ..]);
+        };
     }
 }
 
@@ -481,104 +474,94 @@ fn predict(n: *const Net, games: []const SetGame, w: *const Work, out: []f32) vo
 
 fn meanLoss(n: *const Net, games: []const SetGame, w: *const Work) f64 {
     var s: f64 = 0;
-    for (games) |*g| s += winnet.loss1(g.g.y, sigmoid(gameLogit(n, g, forward(n, g, w, 1, null))));
+    for (games) |*g| s += nn.logLoss(g.g.y, sigmoid(gameLogit(n, g, forward(n, g, w, 1, null))));
     return s / @as(f64, @floatFromInt(@max(games.len, 1)));
 }
 
 /// The offset alone's loss: a fresh net's reference, since it starts as the offset
 fn offsetLoss(games: []const SetGame) f64 {
     var s: f64 = 0;
-    for (games) |*g| s += winnet.loss1(g.g.y, sigmoid(g.g.off));
+    for (games) |*g| s += nn.logLoss(g.g.y, sigmoid(g.g.off));
     return s / @as(f64, @floatFromInt(@max(games.len, 1)));
 }
 
 const Trained = struct { net: Net, steps: u64, epochs: f64, val_loss: f64 };
+
+/// train's side of nn.fit
+const SetFit = struct {
+    n: *Net,
+    w: *const Work,
+    set: []const SetGame,
+    val: []const SetGame,
+    gr: []f32,
+    opt: *nn.Adam,
+    segs: []const nn.Segment,
+    keep: f32,
+    drop: ?std.Random,
+    clip: f32,
+
+    pub fn step(f: *SetFit, part: []const u32) !void {
+        @memset(f.gr, 0);
+        const count: f32 = @floatFromInt(part.len);
+        for (part) |gi| {
+            const g = &f.set[gi];
+            const out = forward(f.n, g, f.w, f.keep, f.drop);
+            backward(f.n, g, f.w, (sigmoid(gameLogit(f.n, g, out)) - g.g.y) / count, f.keep, f.gr);
+        }
+        if (f.clip > 0) _ = nn.clipGradNorm(f.gr, f.clip);
+        f.opt.step(f.n.p, f.gr, f.segs);
+    }
+
+    pub fn valLoss(f: *SetFit) !f64 {
+        return meanLoss(f.n, f.val, f.w);
+    }
+};
 
 /// AdamW over shuffled batches for at most max_steps, as netcheck's small net; with val,
 /// also scored before the first step, so 0 steps (the offset alone) can win
 fn train(gpa: std.mem.Allocator, opts: winnet.Options, seed: u32, n_ids: u32, set: []const SetGame, val: ?[]const SetGame, max_steps: u64) !Trained {
     var rng: std.Random.DefaultPrng = .init(seed);
     const rnd = rng.random();
-    const l: Layout = .init(opts.set, opts.emb, n_ids);
-    var n = try Net.init(gpa, l, rnd);
-    errdefer gpa.free(n.p);
-    const w: Work = try .init(gpa, l);
+    const shape: Shape = try .init(gpa, opts, n_ids);
+    var n: Net = Net.init(gpa, shape, rnd) catch |e| {
+        var x = shape;
+        x.ps.deinit(gpa);
+        return e;
+    };
+    errdefer n.deinit(gpa);
+    const w: Work = try .init(gpa, &n.s);
     defer w.deinit(gpa);
-    const scratch = try gpa.alloc(f32, 4 * l.len);
-    defer gpa.free(scratch);
-    const gr = scratch[0..l.len];
-    const m1 = scratch[l.len..][0..l.len];
-    const m2 = scratch[2 * l.len ..][0..l.len];
-    const best = scratch[3 * l.len ..][0..l.len];
-    @memset(m1, 0);
-    @memset(m2, 0);
-    const order = try gpa.alloc(u32, set.len);
-    defer gpa.free(order);
-    for (order, 0..) |*o, i| o.* = @intCast(i);
-    const keep = 1 - opts.dropout;
-    const drop: ?std.Random = if (opts.dropout > 0) rnd else null;
-    const emb_wd = opts.emb_wd orelse opts.wd;
-    const per_epoch = winnet.stepsPerEpoch(set.len, opts.batch);
-    const eval_every = @max(1, per_epoch / @max(opts.evals, 1));
+    const gr = try n.s.ps.alloc(gpa);
+    defer gpa.free(gr);
+    const best = try n.s.ps.alloc(gpa);
+    defer gpa.free(best);
+    var opt: nn.Adam = try .init(gpa, n.s.ps.len, .{ .lr = opts.lr });
+    defer opt.deinit(gpa);
+    const segs = try n.s.ps.segments(gpa);
+    defer gpa.free(segs);
+    if (val) |v| gates.initLoss("setnet", meanLoss(&n, v, &w), offsetLoss(v));
 
-    var best_loss = std.math.inf(f64);
-    if (val) |v| {
-        best_loss = meanLoss(&n, v, &w);
-        gates.initLoss("setnet", best_loss, offsetLoss(v));
-    }
-    @memcpy(best, n.p);
-    var best_step: u64 = 0;
-    var since_best: u32 = 0;
-    var step: u64 = 0;
-    var at: usize = order.len;
-    while (step < max_steps) {
-        if (at >= order.len) {
-            rnd.shuffle(u32, order);
-            at = 0;
-        }
-        const part = order[at..@min(at + opts.batch, order.len)];
-        at += part.len;
-        @memset(gr, 0);
-        const count: f32 = @floatFromInt(part.len);
-        for (part) |gi| {
-            const g = &set[gi];
-            const f = forward(&n, g, &w, keep, drop);
-            backward(&n, g, &w, (sigmoid(gameLogit(&n, g, f)) - g.g.y) / count, keep, gr);
-        }
-        if (opts.clip > 0) {
-            var norm: f32 = 0;
-            for (gr) |x| norm += x * x;
-            norm = @sqrt(norm);
-            if (norm > opts.clip) for (gr) |*x| {
-                x.* *= opts.clip / norm;
-            };
-        }
-        step += 1;
-        const c1 = 1 - std.math.pow(f32, 0.9, @floatFromInt(step));
-        const c2 = 1 - std.math.pow(f32, 0.999, @floatFromInt(step));
-        for (n.p, gr, m1, m2, 0..) |*x, g, *s1, *s2, i| {
-            s1.* = 0.9 * s1.* + 0.1 * g;
-            s2.* = 0.999 * s2.* + 0.001 * g * g;
-            if (i == l.a and opts.fix_offset) continue;
-            const decay: f32 = if (i < l.e) 0 else if (i < l.w1) emb_wd * x.* else opts.wd * x.*;
-            x.* -= opts.lr * ((s1.* / c1) / (@sqrt(s2.* / c2) + 1e-8) + decay);
-        }
-        const v = val orelse continue;
-        if (step % eval_every != 0 and step != max_steps) continue;
-        const loss = meanLoss(&n, v, &w);
-        if (loss < best_loss - 1e-7) {
-            best_loss = loss;
-            best_step = step;
-            since_best = 0;
-            @memcpy(best, n.p);
-        } else {
-            since_best += 1;
-            if (since_best >= opts.patience) break;
-        }
-    }
-    if (val == null) best_step = step else @memcpy(n.p, best);
-    const epochs = @as(f64, @floatFromInt(best_step)) / @as(f64, @floatFromInt(per_epoch));
-    return .{ .net = n, .steps = best_step, .epochs = epochs, .val_loss = best_loss };
+    var f: SetFit = .{
+        .n = &n,
+        .w = &w,
+        .set = set,
+        .val = val orelse &.{},
+        .gr = gr,
+        .opt = &opt,
+        .segs = segs,
+        .keep = 1 - opts.dropout,
+        .drop = if (opts.dropout > 0) rnd else null,
+        .clip = opts.clip,
+    };
+    const r = try nn.fit(gpa, &f, .{
+        .batch = opts.batch,
+        .max_steps = max_steps,
+        .evals_per_epoch = opts.evals,
+        .patience = opts.patience,
+        .score_start = true,
+        .validate = val != null,
+    }, set.len, rnd, n.p, best);
+    return .{ .net = n, .steps = r.steps, .epochs = r.epochs, .val_loss = r.loss };
 }
 
 /// netcheck's fit for one seed: tune on the inner games (early stopping on val), refit on
@@ -603,8 +586,8 @@ pub fn fit(gpa: std.mem.Allocator, io: Io, opts: winnet.Options, seed: u32, s: w
         try dumpPart(gpa, io, opts.out, s.block, "inner", d, s.idx.inner, inner);
         try dumpPart(gpa, io, opts.out, s.block, "val", d, s.idx.val, val);
     }
-    const tuned = try train(gpa, opts, seed, s.n_inner, inner, val, opts.max_epochs * winnet.stepsPerEpoch(inner.len, opts.batch));
-    gpa.free(tuned.net.p);
+    var tuned = try train(gpa, opts, seed, s.n_inner, inner, val, opts.max_epochs * nn.stepsPerEpoch(inner.len, opts.batch));
+    tuned.net.deinit(gpa);
 
     var p_all: Profiles = try .build(gpa, d, seat, s.idx.fit, won);
     defer p_all.deinit(gpa);
@@ -618,19 +601,19 @@ pub fn fit(gpa: std.mem.Allocator, io: Io, opts: winnet.Options, seed: u32, s: w
         try dumpPart(gpa, io, opts.out, s.block, "scored", d, s.idx.scored, scored);
     }
     const steps = if (tuned.steps == 0) 0 else winnet.refitSteps(tuned.epochs, all.len, opts.batch);
-    const full = try train(gpa, opts, seed, s.n_all, all, null, steps);
-    defer gpa.free(full.net.p);
-    const w: Work = try .init(gpa, full.net.l);
+    var full = try train(gpa, opts, seed, s.n_all, all, null, steps);
+    defer full.net.deinit(gpa);
+    const w: Work = try .init(gpa, &full.net.s);
     defer w.deinit(gpa);
     const pred = try gpa.alloc(f32, scored.len);
     predict(&full.net, scored, &w, pred);
-    std.debug.print("netcheck: seed {d}: set net {d:.2} epochs, offset weight {d:.3}\n", .{ seed, tuned.epochs, full.net.p[full.net.l.a] });
+    std.debug.print("netcheck: seed {d}: set net {d:.2} epochs, offset weight {d:.3}\n", .{ seed, tuned.epochs, full.net.s.a.at(full.net.p, 0).* });
     if (opts.export_net and s.block == .dev) try writeExport(gpa, io, opts, seed, &full.net, &p_all, s, scored, &w);
     return .{ .pred = pred, .epochs = tuned.epochs, .val_loss = tuned.val_loss, .seconds = winnet.secondsSince(io, t0) };
 }
 
 /// --export 1: one seed's dev fit as DIR/setnet-s<seed>.json (format meiolol-setnet,
-/// version 1). A game's logit is gameLogit over forward: params are the flat Layout
+/// version 1). A game's logit is gameLogit over forward: params are flat
 /// (offsets in `layout`); a slot's input is its champion-role's z profile (zeros when
 /// not in `profiles`), the role one-hot and, with emb > 0, the embedding row of its
 /// vocab id (`ids`, else the role's 0..4). `refs`: the first scored games' inputs and
@@ -671,7 +654,7 @@ fn writeExport(gpa: std.mem.Allocator, io: Io, opts: winnet.Options, seed: u32, 
     for (refs, scored[0..n_refs], s.idx.scored[0..n_refs]) |*r, *g, gi| {
         r.* = .{ .teams = s.d.games[gi].teams, .platform = g.g.platform, .offset = g.g.off, .logit = gameLogit(n, g, forward(n, g, w, 1, null)) };
     }
-    const l = n.l;
+    const l = &n.s;
     const file = .{
         .format = "meiolol-setnet",
         .version = 1,
@@ -684,7 +667,7 @@ fn writeExport(gpa: std.mem.Allocator, io: Io, opts: winnet.Options, seed: u32, 
         .cross = l.cross,
         .n_prof = n_prof,
         .features = std.enums.values(Feature),
-        .layout = .{ .in = l.in, .rin = l.rin, .c = l.c, .a = l.a, .b1 = l.b1, .cb = l.cb, .e = l.e, .w1 = l.w1, .v = l.v, .out = l.out, .len = l.len },
+        .layout = .{ .in = l.in, .rin = l.rin, .c = l.c.offset, .a = l.a.offset, .b1 = l.b1.offset, .cb = l.cb.offset, .e = l.e.offset, .w1 = l.w1.offset, .v = l.v.offset, .out = l.out.offset, .len = l.ps.len },
         .params = n.p,
         .ids = ids.items,
         .profiles = profs.items,
@@ -735,9 +718,10 @@ fn dumpPart(gpa: std.mem.Allocator, io: Io, out: []const u8, block: winnet.Block
 pub fn healthFit(gpa: std.mem.Allocator, cfg: Config, seed: u32, n_ids: u32, set: []const SetGame, steps: u64, scored: []const SetGame, pred: []f32) ![]f32 {
     var opts: winnet.Options = .{ .net = .set };
     opts.set = cfg;
-    const t = try train(gpa, opts, seed, n_ids, set, null, steps);
+    var t = try train(gpa, opts, seed, n_ids, set, null, steps);
+    defer t.net.s.ps.deinit(gpa);
     errdefer gpa.free(t.net.p);
-    const w: Work = try .init(gpa, t.net.l);
+    const w: Work = try .init(gpa, &t.net.s);
     defer w.deinit(gpa);
     predict(&t.net, scored, &w, pred);
     return t.net.p;
@@ -756,38 +740,34 @@ fn testGame(r: std.Random, n_ids: u32) SetGame {
 
 test "set net: gradient matches finite differences" {
     const gpa = testing.allocator;
+    const GameLoss = struct {
+        n: *const Net,
+        w: *const Work,
+        g: *const SetGame,
+        fn loss(c: *const @This()) f64 {
+            return meanLoss(c.n, c.g[0..1], c.w);
+        }
+    };
     for ([_]Config{ .{ .phi = 6, .rho = 5 }, .{ .phi = 4, .rho = 3, .cross = false, .ids = true } }) |cfg| {
         const n_ids = 30;
-        const l: Layout = .init(cfg, 3, n_ids);
+        var opts: winnet.Options = .{ .net = .set, .emb = 3 };
+        opts.set = cfg;
         var rng: std.Random.DefaultPrng = .init(7);
         const r = rng.random();
-        var n = try Net.init(gpa, l, r);
-        defer gpa.free(n.p);
-        for (n.p[l.out..l.len]) |*x| x.* = r.floatNorm(f32);
-        n.p[l.a] = 0.8;
-        const w: Work = try .init(gpa, l);
+        var n: Net = try .init(gpa, try .init(gpa, opts, n_ids), r);
+        defer n.deinit(gpa);
+        for (n.s.out.of(n.p)) |*x| x.* = r.floatNorm(f32);
+        n.s.a.at(n.p, 0).* = 0.8;
+        const w: Work = try .init(gpa, &n.s);
         defer w.deinit(gpa);
         var g = testGame(r, n_ids);
         g.g.y = 1;
         g.g.off = 0.4;
-        const gr = try gpa.alloc(f32, l.len);
+        const gr = try n.s.ps.alloc(gpa);
         defer gpa.free(gr);
-        @memset(gr, 0);
         const f = forward(&n, &g, &w, 1, null);
         backward(&n, &g, &w, sigmoid(gameLogit(&n, &g, f)) - g.g.y, 1, gr);
-        var checks: std.ArrayList(usize) = .empty;
-        defer checks.deinit(gpa);
-        try checks.appendSlice(gpa, &.{ l.c + g.g.platform, l.a, l.b1 + 1, l.cb + 2, l.w1 + 3, l.w1 + l.in + 7, l.v + 1, l.v + l.rin + 2, l.out + 1 });
-        if (l.emb > 0) try checks.append(gpa, l.e + g.g.ids[2] * l.emb + 1);
-        for (checks.items) |i| {
-            const old = n.p[i];
-            n.p[i] = old + 1e-3;
-            const up = meanLoss(&n, (&g)[0..1], &w);
-            n.p[i] = old - 1e-3;
-            const down = meanLoss(&n, (&g)[0..1], &w);
-            n.p[i] = old;
-            try testing.expectApproxEqAbs((up - down) / 2e-3, gr[i], 2e-3);
-        }
+        try nn.expectGradient(&GameLoss{ .n = &n, .w = &w, .g = &g }, GameLoss.loss, n.p, gr, null, .{});
     }
 }
 
@@ -812,9 +792,9 @@ test "set net: starts at the offset, antisymmetric, learns a lopsided-team effec
     var opts: winnet.Options = .{ .net = .set, .dropout = 0, .wd = 0, .lr = 3e-3, .batch = 64, .clip = 0, .evals = 2, .patience = 4, .max_epochs = 15 };
     opts.set = .{ .phi = 8, .rho = 8 };
 
-    const t0 = try train(gpa, opts, 1, n_ids, set, null, 0);
-    defer gpa.free(t0.net.p);
-    const w: Work = try .init(gpa, t0.net.l);
+    var t0 = try train(gpa, opts, 1, n_ids, set, null, 0);
+    defer t0.net.deinit(gpa);
+    const w: Work = try .init(gpa, &t0.net.s);
     defer w.deinit(gpa);
     var a = games[0];
     a.g.off = 0.7;
@@ -822,8 +802,8 @@ test "set net: starts at the offset, antisymmetric, learns a lopsided-team effec
     predict(&t0.net, (&a)[0..1], &w, p[0..1]);
     try testing.expectApproxEqAbs(sigmoid(0.7), p[0], 1e-6);
 
-    const t = try train(gpa, opts, 1, n_ids, set, val, opts.max_epochs * winnet.stepsPerEpoch(set.len, opts.batch));
-    defer gpa.free(t.net.p);
+    var t = try train(gpa, opts, 1, n_ids, set, val, opts.max_epochs * nn.stepsPerEpoch(set.len, opts.batch));
+    defer t.net.deinit(gpa);
     try testing.expect(t.steps > 0);
     try testing.expect(t.val_loss < @log(2.0) - 0.05);
     // Swapping the teams (and the offset's sign) flips everything but blue's intercept
@@ -834,7 +814,7 @@ test "set net: starts at the offset, antisymmetric, learns a lopsided-team effec
     }
     b.g.off = -a.g.off;
     predict(&t.net, &.{ a, b }, &w, &p);
-    try testing.expectApproxEqAbs(2 * t.net.p[t.net.l.c], winnet.logit(p[0]) + winnet.logit(p[1]), 1e-4);
+    try testing.expectApproxEqAbs(2 * t.net.s.c.at(t.net.p, 0).*, nn.logit(p[0]) + nn.logit(p[1]), 1e-4);
     // Lopsided blue (feature 0 high in every slot) into a balanced red
     var c = a;
     c.g.off = 0;
