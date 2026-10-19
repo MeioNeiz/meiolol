@@ -46,8 +46,25 @@ judgements, 3 to 5 options with reasons, no "best pick" or "+X% win rate" wordin
   System32 on Windows 10/11. Idle 0.3% of a core (2911db5). Memory ~470 MB private with
   EUW recent-curves (158 MB; whole files held, the all-region one is 288 MB)
 - Admin download: /admin/desktop/meiolol-desktop.zip (8f47b90)
+- Mock champ select from the Mac (20 Oct): `deploy/mock-cs.sh [SCENARIO] [--window]`
+  starts a mock League client playing a scripted champ select and game (scenarios:
+  full-game, laner-locked-first, trade, dodge, aram, blind-normal; `list`) and runs
+  `meiolol-app watch` against it, or with --window the desktop window on the Mac (SDL3
+  dev build, `brew install sdl3`). --speed X, --manual (Enter per step), --loop. The
+  mock also serves the in-game Live Client Data API (port 2999) and the end of game
+  stats block, for whatever comes after champ select; no in-game view is built. Every
+  scenario runs in `zig build test`. Shots: docs/review-shots/mock-mid-blind.png, mock-top-vs-darius.png. How it works:
+  docs/architecture.md "App"
 
 ## Next
+
+- Mock client vs a real capture: once session-real.json comes, diff its shape against
+  the mock's (`meiolol-app get /lol-champ-select/v1/session` on each) and fix the mock;
+  same for a real Live Client Data reply and eog-stats-block (all synthetic now). Check
+  in a real trade that pick actions keep the first champion (the mock and session.zig's
+  lock check now assume so)
+- Lane gold colour: lanecard.zig colours by sign alone (Sett "-8 gold at 14 min" red in
+  the mock run), architecture.md says only 2 SE from even; one of them is wrong
 
 - Jacob, in a real champ select (also needed for the application's screenshots and
   LCU list), from C:\Users\jacob\meiolol-desktop-test (exe, meiolol-app.exe,

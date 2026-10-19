@@ -720,8 +720,26 @@ level still pickable.
 - Never shows other players' names or stats (Riot policy, docs/production-key.md)
 - Known gaps: no network timeouts in Zig 0.16 Threaded IO; refused connect on Windows
   surfaces as error.Unexpected (mapped to ClientNotRunning)
+- Mock client (src/lcu/mock.zig, src/mocklcu_main.zig): `deploy/mock-cs.sh [SCENARIO]
+  [--window] [--speed X] [--manual] [--loop]` plays a scenario from
+  testdata/lcu/scenarios (`list`) and runs `meiolol-app watch` (or the window) against
+  it. Serves the LCU paths the app reads (gameflow phase and session, champ select
+  session, pickable, owned, mastery, ranked, current summoner, end of game stats block)
+  and the in-game Live Client Data API on 127.0.0.1:2999 (`curl -s
+  127.0.0.1:2999/liveclientdata/allgamedata`); `meiolol-app get PATH` probes the rest.
+  Plain HTTP: the app takes it only from an override lockfile ending `:http`
+  (Credentials.plain); the install path and process list stay HTTPS pinned to Riot's
+  root. Shapes from the community schema, as session-synthetic.json; check them against
+  a real capture. `zig build test` plays every scenario through lcu.Watch and checks
+  each step's `expect` (keys in mock.zig's header)
 
 ### Desktop window (src/desktop_main.zig, src/desktop, src/lanecard.zig)
+
+- The data and the poller are backend-free (desktop/poller.zig); desktop_main.zig is the
+  Windows window around them, desktop_dev.zig the same on macOS or Linux through dvui's
+  SDL3 backend, for the mock client: `zig build desktop-dev -Ddev-window -fsys=sdl3
+  --search-prefix /opt/homebrew` (`brew install sdl3`; dvui's SDL3 source build fails on
+  0.17, a config header mismatch). Not shipped; reads MEIOLOL_LOCKFILE
 
 - `zig build desktop -Doptimize=ReleaseSmall`: zig-out/bin/meiolol-desktop.exe (~3 MB;
   dvui pinned to PR #1012, lazy so the box never fetches it). Reads the newest

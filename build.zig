@@ -40,11 +40,13 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests (-Dtest-filter=NAME for some)");
     // The box and jomify get meiolol only: a plain install also builds meiolol-app (~25 s)
     const backend_step = b.step("backend", "Install meiolol only (deploy/box.sh, jomify.sh)");
+    const app_step = b.step("app", "Install meiolol-app only");
     for (exes) |e| {
         const exe = b.addExecutable(.{ .name = e.name, .root_module = e.mod });
         const install = b.addInstallArtifact(exe, .{});
         b.getInstallStep().dependOn(&install.step);
         if (std.mem.eql(u8, e.name, "meiolol")) backend_step.dependOn(&install.step);
+        if (std.mem.eql(u8, e.name, "meiolol-app")) app_step.dependOn(&install.step);
         const run = b.addRunArtifact(exe);
         run.addPassthruArgs();
         b.step(e.name, b.fmt("Run {s} ({s})", .{ e.name, e.about })).dependOn(&run.step);
@@ -61,6 +63,17 @@ pub fn build(b: *std.Build) void {
     const windows = b.resolveTargetQuery(ci_targets[0]);
     const desktop_step = b.step("desktop", "Build the desktop window for Windows (meiolol-desktop.exe)");
     if (desktopExe(b, windows, optimize)) |exe| desktop_step.dependOn(&b.addInstallArtifact(exe, .{}).step);
+    // Opt in: dvui's SDL3 dependency would be fetched on every host otherwise
+    const dev_step = b.step("desktop-dev", "Run the desktop window on this Mac or Linux " ++
+        "via SDL3 (-Ddev-window -fsys=sdl3; deploy/mock-cs.sh)");
+    if (b.option(bool, "dev-window", "Configure desktop-dev (needs SDL3 installed)") orelse false) {
+        if (desktopDev(b, target, optimize)) |exe| {
+            const run = b.addRunArtifact(exe);
+            run.addPassthruArgs();
+            dev_step.dependOn(&run.step);
+            b.step("desktop-dev-install", "Install meiolol-desktop-dev").dependOn(&b.addInstallArtifact(exe, .{}).step);
+        }
+    } else dev_step.dependOn(&b.addFail("desktop-dev needs -Ddev-window -fsys=sdl3 (deploy/mock-cs.sh)").step);
     const shot_step = b.step("desktop-shot", "Render the desktop window's states to PNG " ++
         "(-- --stats FILE --curves FILE [--out DIR])");
     // Once per build: dvui's module takes the raster backend as an import, so a second
@@ -274,6 +287,32 @@ fn desktopExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lan
     });
     exe.subsystem = .windows;
     return exe;
+}
+
+/// The desktop window through dvui's SDL3 backend (src/desktop_dev.zig), for trying it
+/// off Windows; SDL3 from the system (Homebrew's on the Mac)
+fn desktopDev(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode) ?*std.Build.Step.Compile {
+    const dvui = b.lazyDependency("dvui", .{
+        .target = target,
+        .optimize = optimize,
+        .backend = .sdl3,
+        .@"tree-sitter" = false,
+    }) orelse return null;
+    const mod = b.createModule(.{
+        .root_source_file = b.path("src/desktop_dev.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "core", .module = modules(b, target, optimize).core },
+            .{ .name = "dvui", .module = dvui.module("dvui_sdl3") },
+        },
+    });
+    // dvui's macOS monitor helper (Objective-C) needs these at link time
+    if (target.result.os.tag == .macos) {
+        mod.linkFramework("AppKit", .{});
+        mod.linkSystemLibrary("objc", .{});
+    }
+    return b.addExecutable(.{ .name = "meiolol-desktop-dev", .root_module = mod });
 }
 
 /// The same UI drawn into memory by src/desktop/raster.zig, for PNGs on any host

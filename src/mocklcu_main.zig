@@ -15,6 +15,8 @@ const usage =
     \\  --lockfile PATH   where to write the lockfile (default zig-out/mock-lcu/lockfile)
     \\  --port N          LCU port (default any free one)
     \\  --live-port N     Live Client Data port (default 2999, as a real game)
+    \\  --hold SECS       after the last step, serve SECS more then exit (default: until
+    \\                    Ctrl+C)
     \\
 ;
 
@@ -29,6 +31,7 @@ pub fn main(init: std.process.Init) !void {
     var lock_path: []const u8 = "zig-out/mock-lcu/lockfile";
     var port: u16 = 0;
     var live_port: u16 = 2999;
+    var hold: ?f64 = null;
     var i: usize = 1;
     while (i < argv.len) : (i += 1) {
         const a = argv[i];
@@ -47,6 +50,8 @@ pub fn main(init: std.process.Init) !void {
                 lock_path = v;
             } else if (std.mem.eql(u8, a, "--port")) {
                 port = std.fmt.parseInt(u16, v, 10) catch fail("--port: not a port", .{});
+            } else if (std.mem.eql(u8, a, "--hold")) {
+                hold = std.fmt.parseFloat(f64, v) catch fail("--hold: not a number", .{});
             } else if (std.mem.eql(u8, a, "--live-port")) {
                 live_port = std.fmt.parseInt(u16, v, 10) catch fail("--live-port: not a port", .{});
             } else fail("unknown option {s}", .{a});
@@ -118,6 +123,11 @@ pub fn main(init: std.process.Init) !void {
         m.next = 0;
         m.state = .{};
         std.debug.print("starting over\n", .{});
+    }
+    if (hold) |secs| {
+        std.debug.print("scenario done; serving {d} s more\n", .{secs});
+        try io.sleep(.fromNanoseconds(@intFromFloat(secs * std.time.ns_per_s)), .awake);
+        return;
     }
     std.debug.print("scenario done; still serving, Ctrl+C to stop\n", .{});
     while (true) try io.sleep(.fromSeconds(3600), .awake);
