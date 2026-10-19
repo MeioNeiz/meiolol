@@ -97,6 +97,8 @@ pub const TimelineGames = struct {
     scratch: std.heap.ArenaAllocator,
     /// Digests, for passes that read only what they keep (riot/digest.zig)
     source: ?digest.Source = null,
+    /// With digests: their reads and the participants', ahead of next
+    ahead: ?*store.Ahead = null,
 
     /// Valid until the next call to next
     pub const Game = struct { match_id: []const u8, patch: []const u8, t: timeline.Timeline };
@@ -118,29 +120,32 @@ pub const TimelineGames = struct {
         platforms: []const []const u8,
         since_ms: i64,
     ) !TimelineGames {
-        return initWith(gpa, db, patches, platforms, since_ms, false);
+        return initWith(gpa, null, db, patches, platforms, since_ms);
     }
 
     /// As initSince, each game's timeline as its digest gives it (riot/digest.zig cut):
     /// for a pass that reads nothing a digest leaves out
     pub fn initDigests(
         gpa: std.mem.Allocator,
+        io: std.Io,
         db: store.Db,
         patches: []const []const u8,
         platforms: []const []const u8,
         since_ms: i64,
     ) !TimelineGames {
-        return initWith(gpa, db, patches, platforms, since_ms, true);
+        return initWith(gpa, io, db, patches, platforms, since_ms);
     }
 
+    /// Digests when `io` is given
     fn initWith(
         gpa: std.mem.Allocator,
+        io: ?std.Io,
         db: store.Db,
         patches: []const []const u8,
         platforms: []const []const u8,
         since_ms: i64,
-        digests: bool,
     ) !TimelineGames {
+        const digests = io != null;
         const patch_json = try std.json.Stringify.valueAlloc(gpa, patches, .{});
         errdefer gpa.free(patch_json);
         const platform_json = try std.json.Stringify.valueAlloc(gpa, platforms, .{});
@@ -165,6 +170,8 @@ pub const TimelineGames = struct {
         try q.bind(.{ patch_json, stats.ranked_solo, platform_json, since_ms });
         var players = try db.prepare("SELECT slot, team_id, position FROM participants WHERE match_id = ?");
         errdefer players.deinit();
+        var source: ?digest.Source = if (digests) try .init(db) else null;
+        errdefer if (source) |*src| src.deinit();
         return .{
             .gpa = gpa,
             .patch_json = patch_json,
@@ -172,11 +179,16 @@ pub const TimelineGames = struct {
             .q = q,
             .players = players,
             .scratch = .init(gpa),
-            .source = if (digests) try .init(db) else null,
+            .source = source,
+            .ahead = if (io) |i| try .start(gpa, i, db, .{
+                .list = "SELECT m.match_id, t.rowid FROM matches m JOIN timeline.timelines t USING (match_id)\n" ++ where,
+                .reads = &.{ digest.read_ahead, "SELECT slot FROM participants WHERE match_id = ?1" },
+            }, .{ patch_json, stats.ranked_solo, platform_json, since_ms }) else null,
         };
     }
 
     pub fn deinit(s: *TimelineGames) void {
+        if (s.ahead) |a| a.stop();
         s.q.deinit();
         s.players.deinit();
         if (s.source) |*src| src.deinit();
@@ -187,6 +199,7 @@ pub const TimelineGames = struct {
 
     pub fn next(s: *TimelineGames) !?Game {
         while (try s.q.step()) {
+            if (s.ahead) |a| a.next();
             _ = s.scratch.reset(.retain_capacity);
             const scratch = s.scratch.allocator();
             const t = if (s.source) |*src|

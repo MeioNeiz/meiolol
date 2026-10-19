@@ -401,9 +401,9 @@ fn at(out: []Picks, participant: u8) ?*Picks {
 
 /// Every ranked solo game (no remake, a winner) of `o.patches` from `o.platforms`, with
 /// its timeline where there is one. Caller owns the builder
-pub fn build(gpa: std.mem.Allocator, db: store.Db, d: *const ddragon.BuildData, o: Options) !Builder {
+pub fn build(gpa: std.mem.Allocator, io: std.Io, db: store.Db, d: *const ddragon.BuildData, o: Options) !Builder {
     var b: [1]Builder = undefined;
-    try buildEach(gpa, db, d, o, &.{o.platforms}, &b);
+    try buildEach(gpa, io, db, d, o, &.{o.platforms}, &b);
     return b[0];
 }
 
@@ -411,6 +411,7 @@ pub fn build(gpa: std.mem.Allocator, db: store.Db, d: *const ddragon.BuildData, 
 /// timeline read once: EUW's and every region's files in one pass. Caller owns `out`
 pub fn buildEach(
     gpa: std.mem.Allocator,
+    io: std.Io,
     db: store.Db,
     d: *const ddragon.BuildData,
     o: Options,
@@ -426,17 +427,21 @@ pub fn buildEach(
     defer gpa.free(platform_json);
     const floor: ?usize = if (o.min_tier) |t| tierIndex(t) orelse return error.UnknownTier else null;
 
-    var q = try db.prepare(
-        \\SELECT m.match_id, m.platform, t.rowid, d.data
-        \\FROM matches m LEFT JOIN timeline.timelines t USING (match_id)
-        \\LEFT JOIN timeline.digests d ON d.source = t.rowid AND d.match_id = m.match_id
+    const where =
         \\WHERE (? = 0 OR m.patch IN (SELECT value FROM json_each(?)))
         \\  AND m.game_start >= ? AND m.queue_id = ?
         \\  AND m.platform IN (SELECT value FROM json_each(?))
         \\  AND m.remake = 0 AND m.winning_team IS NOT NULL
-    );
+    ;
+    const args = .{ o.patches.len, patch_json, o.since_ms, stats.ranked_solo, platform_json };
+    var q = try db.prepare(
+        \\SELECT m.match_id, m.platform, t.rowid, d.data
+        \\FROM matches m LEFT JOIN timeline.timelines t USING (match_id)
+        \\LEFT JOIN timeline.digests d ON d.source = t.rowid AND d.match_id = m.match_id
+        \\
+    ++ where);
     defer q.deinit();
-    try q.bind(.{ o.patches.len, patch_json, o.since_ms, stats.ranked_solo, platform_json });
+    try q.bind(args);
     var players = try db.prepare(
         \\SELECT slot, position, champion_id, win, tier, summoner1, summoner2,
         \\  keystone, primary_style, perk1, perk2, perk3, perk4, perk5, secondary_style,
@@ -448,10 +453,18 @@ pub fn buildEach(
     defer source.deinit();
     defer log.info("timelines from digests {d}, in full {d}", .{ source.digests, source.fulls });
 
+    // Each game is ~3 reads at random (digest, its overflow page, participants)
+    const ahead: *store.Ahead = try .start(gpa, io, db, .{
+        .list = "SELECT m.match_id, t.rowid FROM matches m LEFT JOIN timeline.timelines t USING (match_id)\n" ++ where,
+        .reads = &.{ digest.read_ahead, "SELECT slot FROM participants WHERE match_id = ?1" },
+    }, args);
+    defer ahead.stop();
+
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
     var all: [timeline.max_participants]Picks = undefined;
     while (try q.step()) {
+        ahead.next();
         _ = arena_state.reset(.retain_capacity);
         const arena = arena_state.allocator();
         const m = q.row(struct { match_id: []const u8, platform: []const u8, source: ?i64, digest: ?[]const u8 });

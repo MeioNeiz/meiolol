@@ -104,6 +104,9 @@ pub fn decode(arena: std.mem.Allocator, bytes: []const u8) !?Timeline {
 /// `LEFT JOIN timeline.digests d ON d.source = t.rowid AND d.match_id = <match id>`:
 /// t's rowid comes from its match_id index, so a full blob is read only for a game
 /// without a current digest
+/// A digest's read for store.Ahead (?1 match_id, ?2 timelines rowid)
+pub const read_ahead = "SELECT data FROM timeline.digests WHERE source = ?2 AND match_id = ?1";
+
 pub const Source = struct {
     full: store.Stmt,
     one: store.Stmt,

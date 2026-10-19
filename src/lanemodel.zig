@@ -46,7 +46,7 @@ pub fn run(gpa: std.mem.Allocator, io: std.Io, db: store.Db, dir: []const u8, w:
         if (std.mem.eql(u8, id, protocol.home_platform)) break @intCast(i);
     } else unreachable;
 
-    const d = try load(gpa, arena, db, &ids);
+    const d = try load(gpa, io, arena, db, &ids);
     try w.print("{d} played games, {d} rows\n", .{ d.games.len, d.rows.len });
     try w.flush();
     const cuts = try eval.cutsOf(d.starts, .{});
@@ -94,10 +94,10 @@ pub fn run(gpa: std.mem.Allocator, io: std.Io, db: store.Db, dir: []const u8, w:
     }, try lf.championList(arena, db), dir, w);
 }
 
-fn load(gpa: std.mem.Allocator, arena: std.mem.Allocator, db: store.Db, ids: []const []const u8) !Data {
+fn load(gpa: std.mem.Allocator, io: std.Io, arena: std.mem.Allocator, db: store.Db, ids: []const []const u8) !Data {
     var list: analysis.GameList = .{ .gpa = gpa };
     defer list.items.deinit(gpa);
-    _ = try stats.scan(gpa, db, try stats.patches(arena, db, ids), ids, 0, &list);
+    _ = try stats.scanAhead(gpa, io, db, try stats.patches(arena, db, ids), ids, 0, &list);
     var played: std.ArrayList(stats.Row) = .empty;
     defer played.deinit(gpa);
     for (list.items.items) |g| if (g.duration_s >= eval.min_duration_s) try played.append(gpa, g);
@@ -129,7 +129,14 @@ fn load(gpa: std.mem.Allocator, arena: std.mem.Allocator, db: store.Db, ids: []c
         var q = try db.prepare("SELECT match_id, slot, team_id, position, champion_id, gold14 FROM participants ORDER BY match_id, slot");
         defer q.deinit();
         try q.bind(.{});
+        // The whole table in key order, its pages scattered on disk
+        const ahead: *store.Ahead = try .start(gpa, io, db, .{
+            .list = "SELECT match_id, NULL FROM matches ORDER BY match_id",
+            .reads = &.{"SELECT slot FROM participants WHERE match_id = ?1"},
+        }, .{});
+        defer ahead.stop();
         while (try q.step()) {
+            if (q.int(1) == 0) ahead.next();
             const gi = index.get(stats.matchKey(q.bytes(0))) orelse continue;
             const role = core.Role.fromLcu(q.bytes(3)) orelse continue;
             const slot: usize = @intCast(q.int(1));

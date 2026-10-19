@@ -71,7 +71,7 @@ test "fixture games to stats, curves and the website" {
     }
     try testing.expectEqual(games, n_drafts);
 
-    var cv = try curves.build(gpa, db, &.{patch}, 0, &.{"EUW1"}, &.{});
+    var cv = try curves.build(gpa, io, db, &.{patch}, 0, &.{"EUW1"}, &.{});
     defer cv.builder.deinit();
     try testing.expectEqual(games, cv.summary.games);
     const curves_path = try std.fs.path.join(arena, &.{ dir, "curves.bin" });
@@ -81,7 +81,7 @@ test "fixture games to stats, curves and the website" {
 
     // Builds count Platinum IV and up only: one rank snapshot below it is left out
     try db.exec("UPDATE participants SET tier = CASE slot WHEN 5 THEN 'GOLD' ELSE 'PLATINUM' END");
-    var bd = try builds.build(gpa, db, &build_data, .{ .patches = &.{patch}, .platforms = &.{"EUW1"} });
+    var bd = try builds.build(gpa, io, db, &build_data, .{ .patches = &.{patch}, .platforms = &.{"EUW1"} });
     defer bd.deinit();
     try testing.expectEqual(games, bd.timelines);
     const build_file = try bd.file(arena, &build_data, patch, "PLATINUM", 10);
@@ -95,7 +95,7 @@ test "fixture games to stats, curves and the website" {
     const builds_path = try std.fs.path.join(arena, &.{ dir, "builds.json" });
 
     // Early or late (`meiolol lean`): every fixture game counts, too few for any line
-    var ln = try lean.load(gpa, db, &.{patch}, &.{"EUW1"}, 0, std.math.maxInt(i64));
+    var ln = try lean.load(gpa, io, db, &.{patch}, &.{"EUW1"}, 0, std.math.maxInt(i64));
     defer ln.deinit(gpa);
     try testing.expectEqual(games, ln.list.items.len);
     const lf = try lean.fit(gpa, ln.list.items, ln.champs.ids.items.len);
@@ -133,7 +133,7 @@ test "fixture games to stats, curves and the website" {
     try db.exec("DELETE FROM forgotten");
 
     try fillPrev(arena, db);
-    var prev_cv = try curves.build(gpa, db, &.{prev_patch}, 0, &.{"EUW1"}, &.{});
+    var prev_cv = try curves.build(gpa, io, db, &.{prev_patch}, 0, &.{"EUW1"}, &.{});
     defer prev_cv.builder.deinit();
     try testing.expectEqual(games, prev_cv.summary.games);
     var prev_curves_bytes: std.Io.Writer.Allocating = .init(arena);
@@ -634,10 +634,20 @@ test "curves, lean, lane-model and builds: the same files with digests, without,
     // Every other one another version: those games' readers take the full timeline
     try db.exec("UPDATE timeline.digests SET data = x'00' || substr(data, 2) WHERE source % 2 = 0");
     const mixed = try timelineOutputs(arena, io, db, tmp, "mixed");
-    for (want, with, mixed) |a, b, c| {
+    // From files, as on the box: their reads ahead (store.Ahead) take sibling connections
+    const dir = try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path, "db" });
+    try std.Io.Dir.cwd().createDirPath(io, dir);
+    for ([_][]const u8{ "main", "raw", "timeline" }, [_][]const u8{ "meiolol", "raw", "timeline" }) |name, file| {
+        try db.run(try arena.print("VACUUM {s} INTO ?", .{name}), .{try arena.print("{s}/{s}.db", .{ dir, file })});
+    }
+    const files = try store.schema.openReadOnly(gpa, dir);
+    defer files.close();
+    const ahead = try timelineOutputs(arena, io, files, tmp, "files");
+    for (want, with, mixed, ahead) |a, b, c, d| {
         try testing.expect(a.len > 0);
         try testing.expectEqualStrings(a, b);
         try testing.expectEqualStrings(a, c);
+        try testing.expectEqualStrings(a, d);
     }
 }
 
@@ -647,17 +657,17 @@ fn timelineOutputs(arena: std.mem.Allocator, io: std.Io, db: store.Db, tmp: std.
     const both: []const []const u8 = &.{ "EUW1", "NA1" };
     var out: [5][]const u8 = undefined;
 
-    var cv = try curves.build(gpa, db, &.{patch}, 0, both, &.{});
+    var cv = try curves.build(gpa, io, db, &.{patch}, 0, both, &.{});
     defer cv.builder.deinit();
     var curves_bytes: std.Io.Writer.Allocating = .init(arena);
     try cv.builder.write(&curves_bytes.writer, patch, 1);
     out[0] = curves_bytes.written();
 
-    var bd = try builds.build(gpa, db, &build_data, .{ .patches = &.{patch}, .platforms = both });
+    var bd = try builds.build(gpa, io, db, &build_data, .{ .patches = &.{patch}, .platforms = both });
     defer bd.deinit();
     out[1] = try std.json.Stringify.valueAlloc(arena, try bd.file(arena, &build_data, patch, "PLATINUM", 10), .{});
 
-    var ln = try lean.load(gpa, db, &.{patch}, both, 0, std.math.maxInt(i64));
+    var ln = try lean.load(gpa, io, db, &.{patch}, both, 0, std.math.maxInt(i64));
     defer ln.deinit(gpa);
     const lf = try lean.fit(gpa, ln.list.items, ln.champs.ids.items.len);
     defer lf.deinit(gpa);
@@ -668,13 +678,18 @@ fn timelineOutputs(arena: std.mem.Allocator, io: std.Io, db: store.Db, tmp: std.
     const dir = try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path, tag });
     var log: std.Io.Writer.Allocating = .init(arena);
     try lanemodel.run(gpa, io, db, dir, &log.writer);
-    out[3] = try tmp.dir.readFileAlloc(io, try arena.print("{s}/lane-model.json", .{tag}), arena, .limited(16 << 20));
+    const model = try tmp.dir.readFileAlloc(io, try arena.print("{s}/lane-model.json", .{tag}), arena, .limited(16 << 20));
+    // Its run time to the minute: two runs either side of one differ there only
+    const run = std.mem.indexOf(u8, model, "\"run\":\"").? + 7;
+    @memset(model[run..][0.."2026-10-19 08:02Z".len], '-');
+    out[3] = model;
     out[4] = try tmp.dir.readFileAlloc(io, try arena.print("{s}/lane-ref.json", .{tag}), arena, .limited(1 << 20));
     return out;
 }
 
 test "fixture games to builds: EUW and every region from one pass, game counts" {
     const gpa = testing.allocator;
+    const io = testing.io;
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
@@ -685,13 +700,13 @@ test "fixture games to builds: EUW and every region from one pass, game counts" 
     const both: []const []const u8 = &.{ "EUW1", "NA1" };
     const o: builds.Options = .{ .patches = &.{patch}, .platforms = both, .min_tier = null };
     var each: [2]builds.Builder = undefined;
-    try builds.buildEach(gpa, db, &build_data, o, &.{ &.{"EUW1"}, both }, &each);
+    try builds.buildEach(gpa, io, db, &build_data, o, &.{ &.{"EUW1"}, both }, &each);
     defer for (&each) |*b| b.deinit();
     try testing.expectEqual(30, each[0].games);
     try testing.expectEqual(40, each[1].games);
     try testing.expectEqual(27, each[1].timelines);
     for (each, [_][]const []const u8{ &.{"EUW1"}, both }) |b, platforms| {
-        var alone = try builds.build(gpa, db, &build_data, .{ .patches = &.{patch}, .platforms = platforms, .min_tier = null });
+        var alone = try builds.build(gpa, io, db, &build_data, .{ .patches = &.{patch}, .platforms = platforms, .min_tier = null });
         defer alone.deinit();
         try testing.expectEqual(alone.games, b.games);
         try testing.expectEqual(alone.timelines, b.timelines);
@@ -1023,9 +1038,16 @@ test "views partials: the database's views file, after late, replaced, timelined
 
     const db = try store.schema.memory();
     defer db.close();
-    try fillGames(arena, db, 12, true);
+    try fillGames(arena, db, 14, true);
     try fillPrev(arena, db);
     try fillFlex(arena, db);
+    // Learn's damage split from 10 games or more: every champion's damage type known, so
+    // its team mixes count. Again after the forget, which deletes the player's
+    const raw_body = store.Blob{ .bytes = try store.raw.compress(arena, @embedFile("riot/testdata/match.json")) };
+    const raw_docs = "INSERT OR IGNORE INTO raw.raw_docs SELECT 'riot_match', match_id, 0, ? FROM matches";
+    try db.run(raw_docs, .{raw_body});
+    // Out of learn's games
+    try db.exec("UPDATE matches SET winning_team = NULL WHERE match_id = 'EUW1_6'");
     try db.exec("UPDATE participants SET tier = CASE slot % 3 WHEN 0 THEN 'GOLD' WHEN 1 THEN 'DIAMOND' END");
     _ = try riot.crawl.rebuildGold(gpa, db);
     try db.exec("INSERT INTO players (puuid, source, region, matches_checked_at) SELECT DISTINCT puuid, 'ladder', 'europe', 1 FROM participants WHERE puuid IS NOT NULL");
@@ -1064,7 +1086,7 @@ test "views partials: the database's views file, after late, replaced, timelined
         try partials.dump(each, &b.writer);
         try testing.expectEqualStrings(a.written(), b.written());
         // Flex copies listed as others
-        try testing.expectEqual(12 + games, bulk.counts.games);
+        try testing.expectEqual(14 + games, bulk.counts.games);
     }
 
     // `meiolol forget`: the player's key out of every file at once, and gone for good
@@ -1099,6 +1121,7 @@ test "views partials: the database's views file, after late, replaced, timelined
         \\DELETE FROM matches WHERE match_id = 'EUW1_5';
     );
     try putMastery(arena, db, puuids[0], "EUW1", now_s, 7);
+    try db.run(raw_docs, .{raw_body});
     var counts: partials.Counts = .{};
     const after = try viewsFile(arena, io, db, opts, null, views_path, null);
     try testing.expect(!std.mem.eql(u8, before, after));

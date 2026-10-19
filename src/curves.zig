@@ -54,6 +54,7 @@ fn has(list: []const []const u8, x: []const u8) bool {
 /// builder.
 pub fn build(
     gpa: std.mem.Allocator,
+    io: std.Io,
     db: store.Db,
     chosen: []const []const u8,
     since_ms: i64,
@@ -64,7 +65,7 @@ pub fn build(
     errdefer b[0].deinit();
     var summary: [1]Summary = undefined;
     const spec: Spec = .{ .chosen = chosen, .since_ms = since_ms, .platforms = platforms };
-    try buildMany(gpa, db, &.{spec}, legendaries, &b, &summary);
+    try buildMany(gpa, io, db, &.{spec}, legendaries, &b, &summary);
     return .{ .builder = b[0], .summary = summary[0] };
 }
 
@@ -72,6 +73,7 @@ pub fn build(
 /// however many files take its game. Caller owns the builders, also on error
 pub fn buildMany(
     gpa: std.mem.Allocator,
+    io: std.Io,
     db: store.Db,
     specs: []const Spec,
     legendaries: []const u32,
@@ -95,17 +97,21 @@ pub fn buildMany(
     const platform_json = try std.json.Stringify.valueAlloc(gpa, platforms.items, .{});
     defer gpa.free(platform_json);
 
-    var q = try db.prepare(
-        \\SELECT m.match_id, m.winning_team, t.rowid, d.data, m.patch, m.game_start, m.platform
-        \\FROM matches m JOIN timeline.timelines t USING (match_id)
-        \\LEFT JOIN timeline.digests d ON d.source = t.rowid AND d.match_id = m.match_id
+    const where =
         \\WHERE (m.game_start >= ? OR m.patch IN (SELECT value FROM json_each(?)))
         \\  AND m.queue_id = ?
         \\  AND m.platform IN (SELECT value FROM json_each(?))
         \\  AND m.remake = 0 AND m.winning_team IS NOT NULL
-    );
+    ;
+    const args = .{ since, patch_json, stats.ranked_solo, platform_json };
+    var q = try db.prepare(
+        \\SELECT m.match_id, m.winning_team, t.rowid, d.data, m.patch, m.game_start, m.platform
+        \\FROM matches m JOIN timeline.timelines t USING (match_id)
+        \\LEFT JOIN timeline.digests d ON d.source = t.rowid AND d.match_id = m.match_id
+        \\
+    ++ where);
     defer q.deinit();
-    try q.bind(.{ since, patch_json, stats.ranked_solo, platform_json });
+    try q.bind(args);
     // tier is the rank snapshot stored with the match (players is emptied on a rekey);
     // mastery is a later snapshot of each player, absent after a rekey
     var players = try db.prepare(
@@ -119,11 +125,19 @@ pub fn buildMany(
     defer source.deinit();
     defer log.info("timelines from digests {d}, in full {d}", .{ source.digests, source.fulls });
 
+    // Each game is ~3 reads at random (digest, its overflow page, participants)
+    const ahead: *store.Ahead = try .start(gpa, io, db, .{
+        .list = "SELECT m.match_id, t.rowid FROM matches m JOIN timeline.timelines t USING (match_id)\n" ++ where,
+        .reads = &.{ digest.read_ahead, "SELECT puuid FROM participants WHERE match_id = ?1" },
+    }, args);
+    defer ahead.stop();
+
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
     var takers: std.ArrayList(usize) = .empty;
     defer takers.deinit(gpa);
     while (try q.step()) {
+        ahead.next();
         const m = q.row(struct {
             match_id: []const u8,
             winner: i64,
@@ -357,7 +371,7 @@ test "curves from a real timeline" {
     // Every item anyone bought counts as finished here: first purchase times
     {
         // Any patch, from the second game's start on
-        var recent = try build(gpa, db, &.{}, 1000, &.{"EUW1"}, &.{});
+        var recent = try build(gpa, testing.io, db, &.{}, 1000, &.{"EUW1"}, &.{});
         defer recent.builder.deinit();
         try testing.expectEqual(Summary{ .games = 1, .skipped = 0 }, recent.summary);
     }
@@ -366,7 +380,7 @@ test "curves from a real timeline" {
         var b: [3]curvesfile.Builder = @splat(.{ .gpa = gpa });
         defer for (&b) |*x| x.deinit();
         var sum: [3]Summary = undefined;
-        try buildMany(gpa, db, &.{
+        try buildMany(gpa, testing.io, db, &.{
             .{ .chosen = &.{}, .since_ms = 1000, .platforms = &.{"EUW1"} },
             .{ .chosen = &.{"16.19"}, .since_ms = 0, .platforms = &.{"EUW1"} },
             .{ .chosen = &.{"16.20"}, .since_ms = 0, .platforms = &.{ "KR", "EUW1" } },
@@ -377,7 +391,7 @@ test "curves from a real timeline" {
         try testing.expectEqual(5, b[0].lanes.items.len);
         try testing.expectEqual(10, b[2].lanes.items.len);
     }
-    var r = try build(gpa, db, &.{"16.20"}, 0, &.{"EUW1"}, &.{ 1055, 3078 });
+    var r = try build(gpa, testing.io, db, &.{"16.20"}, 0, &.{"EUW1"}, &.{ 1055, 3078 });
     defer r.builder.deinit();
     try testing.expectEqual(Summary{ .games = 2, .skipped = 0 }, r.summary);
     try testing.expectEqual(10, r.builder.lanes.items.len);

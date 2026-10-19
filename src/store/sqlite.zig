@@ -193,6 +193,11 @@ pub const Stmt = struct {
         };
     }
 
+    /// The highest parameter number in the SQL
+    pub fn params(s: *Stmt) c_int {
+        return c.sqlite3_bind_parameter_count(s.handle);
+    }
+
     /// Ends a read early (a statement stepped to its first row only)
     pub fn reset(s: *Stmt) void {
         _ = c.sqlite3_reset(s.handle);

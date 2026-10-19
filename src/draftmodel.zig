@@ -32,7 +32,7 @@ pub fn run(gpa: std.mem.Allocator, io: std.Io, db: store.Db, dir: []const u8, w:
     for (riot.endpoints.platforms, &ids) |p, *id| id.* = p.id;
     var list: analysis.GameList = .{ .gpa = gpa };
     defer list.items.deinit(gpa);
-    _ = try stats.scan(gpa, db, try stats.patches(arena, db, &ids), &ids, 0, &list);
+    _ = try stats.scanAhead(gpa, io, db, try stats.patches(arena, db, &ids), &ids, 0, &list);
     // Played games set the protocol's cuts (analysis.protocolCuts) and are fitted, as the lab
     var played: std.ArrayList(Game) = .empty;
     for (list.items.items) |g| if (g.duration_s >= eval.min_duration_s) try played.append(arena, g);

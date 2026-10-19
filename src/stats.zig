@@ -132,6 +132,32 @@ pub fn scan(
     since_ms: i64,
     sink: anytype,
 ) !Summary {
+    return scanWith(gpa, null, db, chosen, platforms, since_ms, sink);
+}
+
+/// As scan, reading each game's participants ahead (store.Ahead): for passes over most
+/// of the table, whose pages lie scattered on disk
+pub fn scanAhead(
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    db: store.Db,
+    chosen: []const []const u8,
+    platforms: []const []const u8,
+    since_ms: i64,
+    sink: anytype,
+) !Summary {
+    return scanWith(gpa, io, db, chosen, platforms, since_ms, sink);
+}
+
+fn scanWith(
+    gpa: std.mem.Allocator,
+    io: ?std.Io,
+    db: store.Db,
+    chosen: []const []const u8,
+    platforms: []const []const u8,
+    since_ms: i64,
+    sink: anytype,
+) !Summary {
     const patch_json = try std.json.Stringify.valueAlloc(gpa, chosen, .{});
     defer gpa.free(patch_json);
     const platform_json = try std.json.Stringify.valueAlloc(gpa, platforms, .{});
@@ -139,13 +165,19 @@ pub fn scan(
     // Matches sorted alone, then each one's participants by primary key: sorting the
     // joined rows sorted 10 a match (2x the time). The outer ORDER BY costs nothing, as
     // SQLite knows m is in order, and keeps that order guaranteed
-    var q = try db.prepare(
-        \\WITH m AS MATERIALIZED (
-        \\  SELECT match_id, winning_team, game_start, patch, platform, duration_s FROM matches m
+    const pick =
         \\  WHERE m.patch IN (SELECT value FROM json_each(?)) AND m.queue_id = ?
         \\    AND m.platform IN (SELECT value FROM json_each(?))
         \\    AND m.remake = 0 AND m.winning_team IS NOT NULL AND m.game_start >= ?
         \\  ORDER BY match_id
+    ;
+    const args = .{ patch_json, ranked_solo, platform_json, since_ms };
+    var q = try db.prepare(
+        \\WITH m AS MATERIALIZED (
+        \\  SELECT match_id, winning_team, game_start, patch, platform, duration_s FROM matches m
+        \\
+    ++ pick ++
+        \\
         \\)
         \\SELECT m.match_id, m.winning_team, m.game_start, m.patch, m.platform, m.duration_s,
         \\  p.team_id, p.position, p.champion_id
@@ -153,7 +185,12 @@ pub fn scan(
         \\ORDER BY m.match_id
     );
     defer q.deinit();
-    try q.bind(.{ patch_json, ranked_solo, platform_json, since_ms });
+    try q.bind(args);
+    const ahead: ?*store.Ahead = if (io) |i| try .start(gpa, i, db, .{
+        .list = "SELECT match_id, NULL FROM matches m\n" ++ pick,
+        .reads = &.{"SELECT slot FROM participants WHERE match_id = ?1"},
+    }, args) else null;
+    defer if (ahead) |a| a.stop();
 
     var summary: Summary = .{ .games = 0, .skipped = 0 };
     var game: Game = .{};
@@ -172,6 +209,7 @@ pub fn scan(
             champion_id: i64,
         });
         if (!std.mem.eql(u8, r.match_id, current.items)) {
+            if (ahead) |a| a.next();
             try game.finish(sink, &summary);
             current.clearRetainingCapacity();
             try current.appendSlice(gpa, r.match_id);

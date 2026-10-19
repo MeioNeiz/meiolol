@@ -68,6 +68,7 @@ pub const Games = struct {
 /// [since_ms, before_ms)
 pub fn load(
     gpa: std.mem.Allocator,
+    io: std.Io,
     db: store.Db,
     patches: []const []const u8,
     platforms: []const []const u8,
@@ -76,7 +77,7 @@ pub fn load(
 ) !Games {
     var scanned: analysis.GameList = .{ .gpa = gpa };
     defer scanned.items.deinit(gpa);
-    _ = try stats.scan(gpa, db, patches, platforms, since_ms, &scanned);
+    _ = try stats.scanAhead(gpa, io, db, patches, platforms, since_ms, &scanned);
     var by_id: std.AutoHashMapUnmanaged(u64, u32) = .empty;
     defer by_id.deinit(gpa);
     for (scanned.items.items, 0..) |g, i| {
@@ -84,7 +85,7 @@ pub fn load(
     }
     var out: Games = .{};
     errdefer out.deinit(gpa);
-    var tg: analysis.TimelineGames = try .initDigests(gpa, db, patches, platforms, since_ms);
+    var tg: analysis.TimelineGames = try .initDigests(gpa, io, db, patches, platforms, since_ms);
     defer tg.deinit();
     while (try tg.next()) |game| {
         const i = by_id.get(stats.matchKey(game.match_id)) orelse continue;
@@ -664,7 +665,7 @@ pub fn check(
     prior_rows: f64,
     w: *Io.Writer,
 ) !void {
-    var games = try load(gpa, db, patches, platforms, 0, cuts[6]);
+    var games = try load(gpa, io, db, patches, platforms, 0, cuts[6]);
     defer games.deinit(gpa);
     const all = games.list.items;
     std.mem.sort(Game, all, {}, struct {

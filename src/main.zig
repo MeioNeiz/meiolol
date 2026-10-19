@@ -778,7 +778,7 @@ fn cmdCurves(c: *Cmd) !u8 {
     @memset(builders, .{ .gpa = gpa });
     defer for (builders) |*b| b.deinit();
     const summaries = try arena.alloc(curves.Summary, files.items.len);
-    try curves.buildMany(gpa, db, specs, legendaries, builders, summaries);
+    try curves.buildMany(gpa, io, db, specs, legendaries, builders, summaries);
 
     var missing = false;
     for (files.items, builders, summaries) |f, *b, sum| {
@@ -844,7 +844,7 @@ fn cmdBuilds(c: *Cmd) !u8 {
     var sets: [2][]const []const u8 = undefined;
     for (targets, 0..) |t, i| sets[i] = t.platforms;
     var bs: [2]builds.Builder = undefined;
-    try builds.buildEach(gpa, db, &data, o, sets[0..targets.len], bs[0..targets.len]);
+    try builds.buildEach(gpa, io, db, &data, o, sets[0..targets.len], bs[0..targets.len]);
     defer for (bs[0..targets.len]) |*b| b.deinit();
     for (targets, bs[0..targets.len]) |t, *b| {
         if (b.games == 0) {
@@ -1190,7 +1190,7 @@ fn cmdLean(c: *Cmd) !u8 {
     }
     const now_ms = std.Io.Clock.real.now(io).toMilliseconds();
     const since_ms = if (g.patches.items.len > 0) 0 else now_ms - @as(i64, days) * std.time.ms_per_day;
-    var games = try lean.load(gpa, db, chosen, platforms, since_ms, std.math.maxInt(i64));
+    var games = try lean.load(gpa, io, db, chosen, platforms, since_ms, std.math.maxInt(i64));
     defer games.deinit(gpa);
     if (games.list.items.len == 0) {
         std.log.err("lean: no games with a timeline", .{});
