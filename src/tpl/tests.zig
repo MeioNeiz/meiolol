@@ -326,6 +326,40 @@ test "tpl.attr escapes as a quoted hole of its attribute" {
     );
 }
 
+test "attribute names in any case, with spaces around =" {
+    const js = "javascript:x";
+    try expectRender(
+        "<a HREF=\"about:invalid#tpl\"></a><a href =\n\"about:invalid#tpl\"></a>" ++
+            "<a\thref\t=\t'about:invalid#tpl'></a><img SRC=\"about:invalid#tpl\"><p ONCLICK=\"go(1)\"></p>",
+        "<a HREF=\"{a}\"></a><a href =\n\"{a}\"></a><a\thref\t=\t'{a}'></a><img{b}><p ONCLICK=\"go({n})\"></p>",
+        .{ .a = js, .b = tpl.attr("SRC", js), .n = 1 },
+    );
+}
+
+test "tag names in any case" {
+    try expectRender(
+        "<SCRIPT>f(1)</SCRIPT><DIV><BR><Svg><Path/></svg></div>",
+        "<SCRIPT>f({n})</SCRIPT><DIV><BR><Svg><Path/></svg></div>",
+        .{ .n = 1 },
+    );
+}
+
+test "an enum with format writes through it" {
+    const Side = enum {
+        blue,
+        red,
+
+        pub fn format(side: @This(), w: *Writer) Writer.Error!void {
+            try w.writeAll(if (side == .blue) "Blue <1>" else "Red <2>");
+        }
+    };
+    try expectRender("<p title=\"Red &lt;2&gt;\">Blue &lt;1&gt;</p>", "<p title=\"{r}\">{b}</p>", .{ .b = Side.blue, .r = Side.red });
+}
+
+test "a less-than sign before a hole is written as an entity" {
+    try expectRender("<p>&lt;5 games</p>", "<p>&lt;{n} games</p>", .{ .n = 5 });
+}
+
 test "unquoted attribute values aren't names" {
     try expectRender("<input type=search name=search>", "<input type=search name=search>", .{});
 }

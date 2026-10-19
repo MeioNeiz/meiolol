@@ -37,13 +37,14 @@
 //! - Any other brace is text, so most inline JS and CSS needs no escaping: `{ a: 1 }`,
 //!   `p{ color: red }` and `try{f()}` are text. But `{a:1}` and `p{color:red}` are holes
 //!   with options: write `{{` for a `{`.
-//! - Inside `<!-- -->` nothing is a hole: comments are written as they are.
+//! - Inside `<!-- -->` nothing is a hole: comments are written as they are. A hole can't
+//!   be a tag's name or sit in `<!...>`: write `&lt;{n}` for a less-than sign before one.
 //! - A field may fill several holes.
 //!
 //! Values, by type
 //!
-//! - strings (`[]const u8`, `*const [n]u8`), numbers (with the hole's options) and enums
-//!   (the tag name)
+//! - strings (`[]const u8`, `*const [n]u8`), numbers (the only values that take the
+//!   hole's options) and enums (the tag name, or `format` if the enum has one)
 //! - optionals: null writes nothing; `void` writes nothing
 //! - components: anything with `pub fn render(self, w: *std.Io.Writer) !void`, written
 //!   as is in text; `t`, `call` and `each` make them from templates and functions
@@ -62,12 +63,15 @@
 //!   with the attribute's text around the hole, must be relative or http, https or
 //!   mailto, else it is written as `about:invalid#tpl`. A second hole before the scheme
 //!   is fixed is a compile error. After that it is a plain attribute value
-//! - on* and style attribute values are script and CSS once the browser decodes entities:
-//!   a string is a compile error; numbers, enums and `format` values only
+//! - on*, style and srcdoc attribute values are script, CSS and HTML once the browser
+//!   decodes entities: a string is a compile error; numbers, enums and `format` values
+//!   only
 //! - inside a tag, outside quotes: only `attr`, `flag` or `trusted` (an unquoted string
 //!   could add attributes)
 //! - `<script>` and `<style>`: numbers, `json` or `trusted`, as HTML escaping is wrong
 //!   there; data for JS goes in `<script type="application/json">{data}</script>`
+//!
+//! Tag and attribute names match in any case, as in HTML.
 //!
 //! Components
 //!
@@ -262,7 +266,7 @@ const Context = enum {
     attr,
     /// A URL attribute's value until its scheme is fixed
     url,
-    /// An on* or style attribute's value: script or CSS
+    /// An on*, style or srcdoc attribute's value: script, CSS or HTML
     code,
     /// Inside a tag, outside quotes
     tag,
@@ -289,7 +293,7 @@ const void_tags = [_][]const u8{
 };
 
 fn isVoid(name: []const u8) bool {
-    for (void_tags) |v| if (std.mem.eql(u8, v, name)) return true;
+    for (void_tags) |v| if (std.ascii.eqlIgnoreCase(v, name)) return true;
     return false;
 }
 
@@ -345,6 +349,8 @@ fn parse(comptime src: []const u8, comptime balanced: bool) []const Seg {
                     continue;
                 }
                 if (lexHole(src, i)) |h| {
+                    // `<{x}>` could open a <script> the parser never saw
+                    if (state == .text and i > 0 and src[i - 1] == '<') fail(src, i, tag_name_hole);
                     segs = withLit(segs, src[lit_start..i]);
                     const ctx: Context = switch (state) {
                         .text => .text,
@@ -366,7 +372,7 @@ fn parse(comptime src: []const u8, comptime balanced: bool) []const Seg {
                     continue;
                 }
             }
-            if (state == .script and std.mem.startsWith(u8, src[i..], script_end)) {
+            if (state == .script and std.ascii.startsWithIgnoreCase(src[i..], script_end)) {
                 state = .text; // the end tag itself is read as text
                 continue;
             }
@@ -378,9 +384,11 @@ fn parse(comptime src: []const u8, comptime balanced: bool) []const Seg {
                     } else if (src[i] == '!') {
                         // doctype: no holes or nesting worth tracking
                         const end = std.mem.indexOfScalarPos(u8, src, i, '>') orelse fail(src, i, "unclosed <!");
+                        if (findHole(src, i, end)) |at| fail(src, at, "a hole in <!...> isn't filled");
                         i = end + 1;
                     } else if (src[i] == '/') {
                         const end = std.mem.indexOfScalarPos(u8, src, i, '>') orelse fail(src, i, "unclosed end tag");
+                        if (findHole(src, i, end)) |at| fail(src, at, tag_name_hole);
                         stack = closeTag(src, i, std.mem.trim(u8, src[i + 1 .. end], " \n"), stack, balanced);
                         i = end + 1;
                     } else if (std.ascii.isAlphabetic(src[i])) {
@@ -408,7 +416,7 @@ fn parse(comptime src: []const u8, comptime balanced: bool) []const Seg {
                         }
                         if (!self_closing and !isVoid(tag_name)) {
                             stack = stack ++ [_][]const u8{tag_name};
-                            if (std.mem.eql(u8, tag_name, "script") or std.mem.eql(u8, tag_name, "style")) {
+                            if (std.ascii.eqlIgnoreCase(tag_name, "script") or std.ascii.eqlIgnoreCase(tag_name, "style")) {
                                 state = .script;
                                 script_end = "</" ++ tag_name;
                             }
@@ -445,9 +453,17 @@ fn closeTag(comptime src: []const u8, comptime at: usize, comptime name: []const
         if (balanced) fail(src, at, "</" ++ name ++ "> closes nothing");
         return stack;
     };
-    if (std.mem.eql(u8, open, name)) return stack[0 .. stack.len - 1];
+    if (std.ascii.eqlIgnoreCase(open, name)) return stack[0 .. stack.len - 1];
     if (balanced) fail(src, at, "</" ++ name ++ "> closes <" ++ open ++ ">");
     return stack;
+}
+
+const tag_name_hole = "a tag's name can't come from a hole (`&lt;` for a less-than sign)";
+
+/// The first hole in src[start..end], for text the parser skips
+fn findHole(comptime src: []const u8, comptime start: usize, comptime end: usize) ?usize {
+    for (start..end) |j| if (src[j] == '{' and lexHole(src, j) != null) return j;
+    return null;
 }
 
 fn withLit(comptime segs: []const Seg, comptime lit: []const u8) []const Seg {
@@ -485,23 +501,24 @@ fn attrContext(comptime name: []const u8) Context {
     return if (isCodeAttr(name)) .code else if (isUrlAttr(name)) .url else .attr;
 }
 
-/// on* and style values are script and CSS once entities are decoded
+/// on*, style and srcdoc values are script, CSS and HTML once entities are decoded
 fn isCodeAttr(comptime name: []const u8) bool {
-    return std.ascii.eqlIgnoreCase(name, "style") or (name.len > 2 and std.ascii.startsWithIgnoreCase(name, "on"));
+    return std.ascii.eqlIgnoreCase(name, "style") or std.ascii.eqlIgnoreCase(name, "srcdoc") or
+        (name.len > 2 and std.ascii.startsWithIgnoreCase(name, "on"));
 }
 
 /// Attributes whose value a browser loads or navigates to: a javascript: URL there runs
 const url_attrs = [_][]const u8{ "href", "src", "action", "formaction", "poster", "cite", "data", "xlink:href" };
 
 fn isUrlAttr(name: []const u8) bool {
-    for (url_attrs) |u| if (std.mem.eql(u8, u, name)) return true;
+    for (url_attrs) |u| if (std.ascii.eqlIgnoreCase(u, name)) return true;
     return false;
 }
 
-/// The attribute name before `="` at the end of `before`
+/// The attribute name before `="` at the end of `before`, spaces around `=` allowed
 fn lastAttrName(comptime before: []const u8) []const u8 {
     var end = before.len;
-    while (end > 0 and (before[end - 1] == '=' or before[end - 1] == ' ')) end -= 1;
+    while (end > 0 and (before[end - 1] == '=' or std.ascii.isWhitespace(before[end - 1]))) end -= 1;
     var start = end;
     while (start > 0 and isAttrName(before[start - 1])) start -= 1;
     return before[start..end];
@@ -513,9 +530,9 @@ const svg_shapes = [_][]const u8{
 };
 
 fn inSvg(comptime stack: []const []const u8, comptime name: []const u8) bool {
-    if (std.mem.eql(u8, name, "svg")) return true;
-    for (svg_shapes) |shape| if (std.mem.eql(u8, shape, name)) return true;
-    for (stack) |open| if (std.mem.eql(u8, open, "svg")) return true;
+    if (std.ascii.eqlIgnoreCase(name, "svg")) return true;
+    for (svg_shapes) |shape| if (std.ascii.eqlIgnoreCase(shape, name)) return true;
+    for (stack) |open| if (std.ascii.eqlIgnoreCase(open, "svg")) return true;
     return false;
 }
 
@@ -535,7 +552,7 @@ fn checkAttrs(comptime src: []const u8, comptime start: usize, comptime end: usi
             var j = i;
             while (j < attrs.len and isAttrName(attrs[j])) j += 1;
             const name = attrs[i..j];
-            for (names) |n| if (std.mem.eql(u8, n, name)) fail(src, start + i, "attribute " ++ name ++ " twice");
+            for (names) |n| if (std.ascii.eqlIgnoreCase(n, name)) fail(src, start + i, "attribute " ++ name ++ " twice");
             names = names ++ [_][]const u8{name};
             // An unquoted value (`type=search`) is no attribute name
             while (j < attrs.len and std.ascii.isWhitespace(attrs[j])) j += 1;
@@ -583,6 +600,9 @@ fn check(comptime T: type, comptime where: []const u8, comptime ctx: Context) vo
     }
     const name = @typeName(T);
     if (T == std.fmt.Alt([]const u8, writeEscaped)) holeError(where, "esc() value would be escaped twice; pass the string");
+    if (@typeInfo(T) == .array and @typeInfo(T).array.child == u8) {
+        holeError(where, "a " ++ name ++ " by value would write its bytes as numbers; pass a slice or pointer (&array)");
+    }
     const value = isNumber(T) or isString(T) or @typeInfo(T) == .@"enum" or hasDecl(T, "render") or hasDecl(T, "format");
     switch (ctx) {
         .text => {},
@@ -595,7 +615,7 @@ fn check(comptime T: type, comptime where: []const u8, comptime ctx: Context) vo
                 holeError(where, "a URL attribute takes a string, number, enum or a `render` or `format` value (scheme-checked), not " ++ name);
             }
             if (ctx == .code and isString(T)) {
-                holeError(where, "a string in an on* or style attribute is script or CSS once entities are decoded; pass a number or a `format` value");
+                holeError(where, "a string in an on*, style or srcdoc attribute is script, CSS or HTML once entities are decoded; pass a number or a `format` value");
             }
         },
         .tag => if (T != Raw and !hasDecl(T, "is_attr")) {
@@ -608,6 +628,13 @@ fn check(comptime T: type, comptime where: []const u8, comptime ctx: Context) vo
     if (value) return;
     if (Item(T)) |I| return check(I, where, ctx);
     holeError(where, "can't write a " ++ name);
+}
+
+/// T without optionals, slices and arrays around it: what the hole's options format
+fn Base(comptime T: type) type {
+    if (@typeInfo(T) == .optional) return Base(@typeInfo(T).optional.child);
+    if (isString(T)) return T;
+    return if (Item(T)) |I| Base(I) else T;
 }
 
 /// The element type of a slice or array (or a pointer to one), else null
@@ -667,7 +694,11 @@ fn renderSegs(w: *Writer, comptime segs: []const Seg, comptime src: []const u8, 
         }
         for (segs) |s| if (s == .hole) {
             if (!@hasField(Args, s.hole.name)) fail(src, s.hole.at, "hole {" ++ s.hole.name ++ "} has no field in the args");
-            check(@FieldType(Args, s.hole.name), "hole {" ++ s.hole.name ++ "}", s.hole.ctx);
+            const T = @FieldType(Args, s.hole.name);
+            check(T, "hole {" ++ s.hole.name ++ "}", s.hole.ctx);
+            if (s.hole.spec.len > 0 and !isNumber(Base(T))) {
+                fail(src, s.hole.at, "{" ++ s.hole.name ++ ":" ++ s.hole.spec ++ "}: options are for numbers, not " ++ @typeName(T));
+            }
         };
     }
     inline for (segs) |s| switch (s) {
@@ -681,7 +712,7 @@ fn writeValue(w: *Writer, v: anytype, comptime spec: []const u8, comptime ctx: C
     const T = @TypeOf(v);
     switch (@typeInfo(T)) {
         .int, .comptime_int, .float, .comptime_float => return w.print("{d" ++ (if (spec.len > 0) ":" ++ spec else "") ++ "}", .{v}),
-        .@"enum" => if (!@hasDecl(T, "render")) return writeText(w, @tagName(v), ctx, around),
+        .@"enum" => if (!@hasDecl(T, "render") and !@hasDecl(T, "format")) return writeText(w, @tagName(v), ctx, around),
         .optional => return if (v) |inner| writeValue(w, inner, spec, ctx, around),
         .void => return,
         else => {},
