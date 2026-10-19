@@ -332,6 +332,26 @@ const Review = (() => {
     return box;
   }
 
+  // Record-book facts of the game's win chance: its best minute, high, low and minutes
+  // ahead. A start at 0:00 is no record, so a high or low there is left out
+  function records(wc) {
+    const box = el("div", "rv-records facts-inline");
+    const fact = (value, rest) => {
+      const f = el("span");
+      f.append(el("b", "num", value), ` ${rest}`);
+      box.append(f);
+    };
+    const n = wc.length - 1;
+    let best = 0;
+    for (let m = 1; m <= n; m++) if (wc[m] - wc[m - 1] > (best ? wc[best] - wc[best - 1] : 0)) best = m;
+    if (best) fact(pct(wc[best] - wc[best - 1]), `best minute, ${best - 1}-${best} min`);
+    const hi = wc.indexOf(Math.max(...wc)), lo = wc.indexOf(Math.min(...wc));
+    if (hi > 0) fact(`${wc[hi]}%`, `highest, at ${hi}:00`);
+    if (lo > 0) fact(`${wc[lo]}%`, `lowest, at ${lo}:00`);
+    fact(`${wc.slice(1).filter((p) => p > 50).length} of ${n}`, "minutes ahead");
+    return box;
+  }
+
   // The lane chart (src/site/lanechart.zig) through chart_wasm.zig, whose header has the
   // input layout. Names come back escaped by the Zig templates, so the SVG may go in as
   // markup
@@ -594,6 +614,7 @@ const Review = (() => {
       const holder = el("div");
       wrap.append(bar, holder);
       panel.append(wrap, counts(M));
+      if (opts.lane !== false) panel.append(records(wc));
       const ml = momentList(M, (i) => set(Math.min(wc.length - 1, Math.ceil(M[i].minute)), i), opts.keep);
       set = (minute, i) => {
         // The chart is redrawn: a keyboard user keeps their place on the same dot
