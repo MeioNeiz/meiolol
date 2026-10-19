@@ -47,6 +47,36 @@ test "the module doc's example" {
     );
 }
 
+// The module doc's components example
+fn docRow(w: *Writer, name: []const u8, games: u32) !void {
+    try tpl.render(w, "<li>{name} <b>{games}</b></li>", .{ .name = name, .games = games });
+}
+
+const Champ = struct { name: []const u8, games: u32 };
+
+fn rowOf(_: void, w: *Writer, c: Champ) !void {
+    try docRow(w, c.name, c.games);
+}
+
+fn champList(w: *Writer, champs: []const Champ) !void {
+    try tpl.render(w, "<ul>{first}{rest}</ul>{note}", .{
+        .first = tpl.call(docRow, .{ "Ahri", 2 }),
+        .rest = tpl.each(champs, {}, rowOf),
+        .note = tpl.when(champs.len == 0, tpl.t("<p>{none}</p>", .{ .none = "none yet" })),
+    });
+}
+
+test "the module doc's components example" {
+    var buf: [256]u8 = undefined;
+    var w: Writer = .fixed(&buf);
+    try champList(&w, &.{.{ .name = "K'Sante", .games = 1 }});
+    try champList(&w, &.{});
+    try std.testing.expectEqualStrings(
+        "<ul><li>Ahri <b>2</b></li><li>K&#39;Sante <b>1</b></li></ul><ul><li>Ahri <b>2</b></li></ul><p>none yet</p>",
+        w.buffered(),
+    );
+}
+
 test "holes escape by type" {
     try expectRender(
         "<a href=\"x?a=1&amp;b=2\">Nunu &amp; Willump</a> 3 1.5 euw",

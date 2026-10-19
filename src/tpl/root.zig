@@ -27,7 +27,7 @@
 //! What it trusts: the template text itself (it is source code), `trusted` HTML, the markup
 //! a component writes, and what a `format` type writes into an on* or style attribute.
 //! A URL hole's scheme is checked, nothing else: `href="{x}"` may still point to another
-//! site.
+//! site. A `render` or `format` value in a URL hole is buffered for the check, up to 2 KB.
 //!
 //! Holes
 //!
@@ -80,7 +80,7 @@
 //!     }
 //!     try tpl.render(w, "<ul>{first}{rest}</ul>{note}", .{
 //!         .first = tpl.call(row, .{ "Ahri", 2 }),
-//!         .rest = tpl.each(champs, {}, rowOf), // rowOf(ctx: void, w, item)
+//!         .rest = tpl.each(champs, {}, rowOf), // rowOf(ctx, w, item), ctx `{}` here
 //!         .note = tpl.when(champs.len == 0, tpl.t("<p>{none}</p>", .{ .none = "none yet" })),
 //!     });
 
@@ -322,6 +322,9 @@ fn fail(comptime src: []const u8, comptime at: usize, comptime msg: []const u8) 
     @compileError("template \"" ++ dots[0] ++ &near ++ dots[1] ++ "\": " ++ msg);
 }
 
+/// The template as text and holes, each hole with its context. A small HTML tokenizer
+/// (text, tag, quoted value, comment, script or style body) that tracks open elements;
+/// `balanced` makes every element close, in order, within this template
 fn parse(comptime src: []const u8, comptime balanced: bool) []const Seg {
     @setEvalBranchQuota(20_000 + 100 * src.len);
     comptime {
@@ -720,7 +723,7 @@ fn writeValue(w: *Writer, v: anytype, comptime spec: []const u8, comptime ctx: C
     if (comptime isString(T)) return writeText(w, v, ctx, around);
     if (comptime hasDecl(T, "render") or hasDecl(T, "format")) {
         if (ctx == .url) {
-            // Whole, for the scheme check: URLs are short
+            // Whole, for the scheme check: URLs are short (a longer one fails, WriteFailed)
             var buf: [2048]u8 = undefined;
             var url: Writer = .fixed(&buf);
             if (comptime hasDecl(T, "render")) try v.render(&url) else try url.print("{f}", .{v});
