@@ -3,7 +3,7 @@
 # one directory per run in ~/ml/runs on that host. Builds from the working tree, not a
 # clean checkout: experiments are usually uncommitted, so each run keeps HEAD and a diff.
 # On the gpu-box, deploy/lab-watch.sh pauses every run while League is open (Jacob's
-# rule); `watch-install` sets it up. docs/compute.md
+# rule); `watch-install` (deploy/gpu-box.sh install) sets it up. docs/compute.md
 #
 #   deploy/lab-run.sh start [HOST] NAME [--meiolol] [--head | --commit SHA | --bin KEY]
 #                           [--no-build] [--build-arg A]... [--with PATH]...
@@ -18,7 +18,8 @@
 #   deploy/lab-run.sh stop HOST RUN
 #   deploy/lab-run.sh restart HOST RUN       run it again in its dir (after a WSL restart)
 #   deploy/lab-run.sh pull HOST RUN          results to data/runs/RUN here
-#   deploy/lab-run.sh watch-install          League watcher on the gpu-box
+#   deploy/lab-run.sh watch-install          deploy/gpu-box.sh install: the League watcher
+#                                            and the gpu-box's other standing pieces
 #
 # HOST: gpu-box, or auto (also when left out): host and resource by predicted
 # finish, deploy/lab-place.pl (wait for the lock + run time from past runs; it says why).
@@ -1013,39 +1014,9 @@ case "${1:-}" in
         echo "in data/runs/$3"
         ;;
     watch-install)
-        on gpu-box "mkdir -p ml/bin $RUNS .config/systemd/user"
-        scp -q "$ROOT/deploy/lab-watch.sh" gpu-box:ml/bin/
-        scp -q "$ROOT/deploy/systemd/$WATCH.service" gpu-box:.config/systemd/user/
-        # The raw archive's hourly pull (docs/data-safety.md "Raw archive") rides along:
-        # nothing else syncs it. Its unit's environment drop-ins on the host are kept
-        scp -q "$ROOT/deploy/archive-pull.sh" gpu-box:ml/bin/
-        scp -q "$ROOT/deploy/systemd/meiolol-archive-pull".{service,timer} gpu-box:.config/systemd/user/
-        # And the backup mirror (docs/data-safety.md "Backups"), with the meiolol it tends
-        # the mirror with (backup --mirror)
-        scp -q "$ROOT/deploy/backup-mirror.sh" gpu-box:ml/bin/
-        scp -q "$ROOT/deploy/systemd/meiolol-backup-mirror".{service,timer} gpu-box:.config/systemd/user/
-        mirror_bin=$(mktemp -d)
-        (cd "$ROOT" && zig build -Doptimize=ReleaseSafe -Dtarget=x86_64-linux-musl -Dcpu=x86_64_v3 \
-            --prefix "$mirror_bin")
-        scp -q "$mirror_bin/bin/meiolol" gpu-box:ml/bin/meiolol.new
-        on gpu-box "mv ml/bin/meiolol.new ml/bin/meiolol"
-        rm -rf "$mirror_bin"
-        # Windows side (deploy/windows) to %USERPROFILE%\.meiolol, CRLF for Windows. WSL
-        # can write there, so nothing there runs elevated: the archive mount (admin) is
-        # installed once, by hand, by install-watchdog.ps1 (docs/compute.md). cmd.exe
-        # reads stdin, so it gets /dev/null
-        # shellcheck disable=SC2016 # expands on the host
-        win=$(on gpu-box 'cd /mnt/c && /mnt/c/Windows/System32/cmd.exe /c "echo %USERPROFILE%" \
-            < /dev/null | tr -d "\r\n" | xargs -0 wslpath')/.meiolol
-        on gpu-box "mkdir -p '$win'"
-        for f in "$ROOT"/deploy/windows/*; do
-            sed 's/$/\r/' "$f" | on gpu-box "cat > '$win/$(basename "$f")'"
-        done
-        on gpu-box "loginctl enable-linger \$USER; systemctl --user daemon-reload \
-            && systemctl --user enable -q $WATCH meiolol-archive-pull.timer meiolol-backup-mirror.timer \
-            && systemctl --user restart $WATCH \
-            && systemctl --user start meiolol-archive-pull.timer meiolol-backup-mirror.timer \
-            && systemctl --user is-active $WATCH meiolol-archive-pull.timer meiolol-backup-mirror.timer"
+        # The watcher with the gpu-box's other standing pieces (archive pull, backup
+        # mirror, Windows side), from HEAD
+        exec "$ROOT/deploy/gpu-box.sh" install
         ;;
     *) usage_of "$0"; exit 2 ;;
 esac

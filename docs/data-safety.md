@@ -78,8 +78,8 @@ under the write lock they starve the crawler on a slow host.
   deploy/mac-watch.sh, every ~20 h while it is awake; meiolol for the mirror in
   ~/.cache/meiolol-watch/bin, built by `deploy/box.sh watch install`) and the gpu-box
   into /mnt/wsl/archive/meiolol-backups (systemd user timer meiolol-backup-mirror,
-  hourly, only while the archive partition is mounted; installed by `deploy/lab-run.sh
-  watch-install`; key ~/.ssh/meiolol_backup, alias meiolol-backup, forced command
+  hourly, only while the archive partition is mounted; installed by `deploy/gpu-box.sh
+  install`; key ~/.ssh/meiolol_backup, alias meiolol-backup, forced command
   deploy/backup-serve.sh on the box). Both 700: tables hold real PUUIDs. Never in git.
   The partition's root is root's: once, on the gpu-box, `sudo install -d -o jmu -g jmu
   -m 700 /mnt/wsl/archive/meiolol-backups` (until then each hourly run fails at mkdir)

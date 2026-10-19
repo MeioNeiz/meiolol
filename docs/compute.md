@@ -45,7 +45,8 @@ deploy/lab-run.sh start [HOST] NAME [--meiolol] [--head | --commit SHA | --bin K
 deploy/lab-run.sh wait RUN... [--timeout S]
 deploy/lab-run.sh status [HOST] | logs HOST RUN [N] | stop HOST RUN | restart HOST RUN
 deploy/lab-run.sh pull HOST RUN
-deploy/lab-run.sh watch-install
+deploy/lab-run.sh watch-install    # = deploy/gpu-box.sh install
+deploy/gpu-box.sh drift | install  # watcher, archive pull, backup mirror, Windows side
 ```
 
 - Builds from the working tree (experiments are often uncommitted), --head from
