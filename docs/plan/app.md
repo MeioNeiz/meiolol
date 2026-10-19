@@ -12,6 +12,11 @@ Champ select, updating live as champions are hovered and locked:
 - Ban options from the champions people are most likely to play
 - Champions and team comps from what people play and how they have done recently
 - Options from a chosen pool
+- Aware of pick order (Jacob 19 Oct: "they haven't picked top yet, what is good"): when
+  the enemy has not picked your lane, blind-safe options (J2: best low end of win
+  against an average pick, few hard counters, lane gold as a reason); once they have,
+  counters to their pick; same per role for allies still to pick. Show which mode an
+  option comes from ("safe blind" / "into Darius")
 Once all are picked:
 - Team comp: what is strong, notes
 - Who is strong, who is good early and late, who will carry, matchup info
