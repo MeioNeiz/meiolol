@@ -960,3 +960,6 @@ body:has(#m-cs:checked) .mu-m:not(.mu-m-cs) { display: none; }
 svg.wc .mo-note { font-size: 10.5px; font-weight: 700; paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
 svg.wc .mo-note.t-gain { fill: var(--gain); }
 svg.wc .mo-note.t-cost { fill: var(--cost); }
+svg.wc .mo-obj { stroke-width: 2.5px; }
+svg.wc .mo-obj.obj { stroke: var(--us); }
+svg.wc .mo-obj.objl { stroke: var(--them); }

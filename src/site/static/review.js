@@ -235,8 +235,11 @@ const Review = (() => {
     M.forEach((mo, i) => {
       const m = Math.min(mo.minute, n);
       const p = at(wc, m);
-      const r = mo.kind === "death" ? 3.5 : mo.kind === "obj" || mo.kind === "objl" ? 4 : 5;
-      const c = svgEl("circle", { class: "mo", cx: x(m), cy: y(p), r, fill: KINDS[mo.kind].colour });
+      // Objective dots are light with a team-colour ring: a team-colour fill would vanish
+      // into that team's area
+      const obj = mo.kind === "obj" || mo.kind === "objl";
+      const r = mo.kind === "death" ? 3.5 : obj ? 4 : 5;
+      const c = svgEl("circle", { class: obj ? `mo mo-obj ${mo.kind}` : "mo", cx: x(m), cy: y(p), r, fill: obj ? "var(--text)" : KINDS[mo.kind].colour });
       const tip = svgEl("title", {});
       tip.textContent = `${clock(mo.t_s)} ${mo.title}`;
       c.append(tip);
