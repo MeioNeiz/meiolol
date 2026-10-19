@@ -44,7 +44,8 @@
 # the file, so a stale example (perhaps a player forgotten since) never ships; the pages
 # then offer none until the next success.
 # Every round, the private admin page (`meiolol admin`) goes to admin/ on the server,
-# behind basic auth there; the site's rsync leaves that directory alone. Daily, a dbstat
+# behind basic auth there; the site's rsync leaves that directory alone. data/desktop
+# (the Windows app's zip, made by hand) goes with it to admin/desktop/. Daily, a dbstat
 # scan (system sqlite3, read-only) leaves space by table and index in data/storage.tsv
 # for it.
 # The daily jobs' timers start from the files each leaves, and curves' from their files,
@@ -339,6 +340,8 @@ while true; do
         --health "$(bin/health.sh)" 2>&1; then
         # Times kept, so the upload sends the tester's files only when the daily job changed them
         [[ -d data/tester ]] && cp -pR data/tester data/admin.new/models
+        # Desktop app zip, put there by hand until the public release; linked, not copied (51 MB)
+        [[ -d data/desktop ]] && cp -al data/desktop data/admin.new/desktop
         rm -rf data/admin && mv data/admin.new data/admin
         rsync -a --delete data/admin/ meiolol-web:admin/ || echo "$(date -u +%FT%TZ) admin upload FAILED"
     fi
