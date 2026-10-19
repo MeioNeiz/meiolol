@@ -6,6 +6,7 @@
 //! number of chunks in order: the same result whatever the thread count
 
 const std = @import("std");
+const nn = @import("nn");
 const par = @import("../par.zig");
 const analysis = @import("../analysis.zig");
 
@@ -42,40 +43,44 @@ pub const Data = struct {
 
 const chunks = 8;
 
-const Layout = struct {
-    in: u32,
-    w1: usize,
-    b1: usize,
-    w2: usize,
-    b2: usize,
-    w3: usize,
-    b3: usize,
-    e: usize,
-    len: usize,
+/// The parameters in Net.p's order: w1 (hidden x in, in = n_in + emb), b1, w2 (bottleneck
+/// x hidden), b2, w3, b3, the champion-role table. Biases get no weight decay
+const Shape = struct {
+    ps: nn.Params,
+    in: usize,
+    w1: nn.Param,
+    b1: nn.Param,
+    w2: nn.Param,
+    b2: nn.Param,
+    w3: nn.Param,
+    b3: nn.Param,
+    e: nn.Param,
 
-    fn init(cfg: Config, d: Data) Layout {
-        var l: Layout = undefined;
-        l.in = d.n_in + cfg.emb;
-        l.w1 = 0;
-        l.b1 = l.w1 + cfg.hidden * l.in;
-        l.w2 = l.b1 + cfg.hidden;
-        l.b2 = l.w2 + cfg.bottleneck * cfg.hidden;
-        l.w3 = l.b2 + cfg.bottleneck;
-        l.b3 = l.w3 + cfg.bottleneck;
-        l.e = l.b3 + 1;
-        l.len = l.e + cfg.emb * d.n_ids;
-        return l;
+    fn init(gpa: std.mem.Allocator, cfg: Config, d: Data) !Shape {
+        var s: Shape = undefined;
+        s.ps = .empty;
+        errdefer s.ps.deinit(gpa);
+        const ps = &s.ps;
+        s.in = d.n_in + cfg.emb;
+        // He init for the ReLU layers; the output starts at 0, so f starts as the offset
+        s.w1 = try ps.matrix(gpa, "w1", cfg.hidden, s.in, .{ .init = heNormal(s.in), .decay = cfg.wd });
+        s.b1 = try ps.vector(gpa, "b1", cfg.hidden, .{});
+        s.w2 = try ps.matrix(gpa, "w2", cfg.bottleneck, cfg.hidden, .{ .init = heNormal(cfg.hidden), .decay = cfg.wd });
+        s.b2 = try ps.vector(gpa, "b2", cfg.bottleneck, .{});
+        s.w3 = try ps.vector(gpa, "w3", cfg.bottleneck, .{ .decay = cfg.wd });
+        s.b3 = try ps.scalar(gpa, "b3", .{});
+        s.e = try ps.table(gpa, "champion_role", d.n_ids, cfg.emb, .{ .init = .{ .normal = 0.1 }, .decay = cfg.wd });
+        return s;
     }
 
-    /// Biases get no weight decay
-    fn decays(l: Layout, i: usize) bool {
-        return !((i >= l.b1 and i < l.w2) or (i >= l.b2 and i < l.w3) or i == l.b3);
+    fn heNormal(fan_in: usize) nn.Init {
+        return .{ .normal = @sqrt(2 / @as(f32, @floatFromInt(fan_in))) };
     }
 };
 
 pub const Net = struct {
     cfg: Config,
-    l: Layout,
+    s: Shape,
     p: []f32,
     epochs: u32,
     val_loss: f64,
@@ -83,19 +88,20 @@ pub const Net = struct {
 
     pub fn deinit(n: *Net, gpa: std.mem.Allocator) void {
         gpa.free(n.p);
+        n.s.ps.deinit(gpa);
     }
 
     /// f(x) for row i
     pub fn predict(n: *const Net, d: Data, i: usize) f32 {
-        var s: Scratch = undefined;
-        return forward(n.cfg, n.l, n.p, d, i, &s, null);
+        var sc: Scratch = undefined;
+        return forward(n.cfg, &n.s, n.p, d, i, &sc, null);
     }
 
     /// The bottleneck units of row i
     pub fn embed(n: *const Net, d: Data, i: usize, out: []f32) void {
-        var s: Scratch = undefined;
-        _ = forward(n.cfg, n.l, n.p, d, i, &s, null);
-        @memcpy(out, s.h2[0..n.cfg.bottleneck]);
+        var sc: Scratch = undefined;
+        _ = forward(n.cfg, &n.s, n.p, d, i, &sc, null);
+        @memcpy(out, sc.h2[0..n.cfg.bottleneck]);
     }
 };
 
@@ -111,28 +117,6 @@ const Scratch = struct {
     h2: [max_bottleneck]f32,
 };
 
-const V = @Vector(8, f32);
-
-fn dot(a: []const f32, b: []const f32) f32 {
-    var acc: V = @splat(0);
-    var i: usize = 0;
-    while (i + 8 <= a.len) : (i += 8) acc += @as(V, a[i..][0..8].*) * @as(V, b[i..][0..8].*);
-    var s = @reduce(.Add, acc);
-    while (i < a.len) : (i += 1) s += a[i] * b[i];
-    return s;
-}
-
-/// y += a x
-fn axpy(y: []f32, a: f32, x: []const f32) void {
-    const av: V = @splat(a);
-    var i: usize = 0;
-    while (i + 8 <= y.len) : (i += 8) {
-        const r: V = @as(V, y[i..][0..8].*) + av * @as(V, x[i..][0..8].*);
-        y[i..][0..8].* = r;
-    }
-    while (i < y.len) : (i += 1) y[i] += a * x[i];
-}
-
 /// Dropout: whether unit j of batch row r survives at this step. A hash, so any thread
 /// order drops the same units
 fn kept(seed: u32, step: u32, r: u32, j: u32, keep: f32) bool {
@@ -146,165 +130,186 @@ fn kept(seed: u32, step: u32, r: u32, j: u32, keep: f32) bool {
 }
 
 /// mask: (step, batch row) for training with dropout, null for prediction
-fn forward(cfg: Config, l: Layout, p: []const f32, d: Data, i: usize, s: *Scratch, mask: ?[2]u32) f32 {
-    const xin = s.xin[0..l.in];
+fn forward(cfg: Config, s: *const Shape, p: []const f32, d: Data, i: usize, sc: *Scratch, mask: ?[2]u32) f32 {
+    const xin = sc.xin[0..s.in];
     @memcpy(xin[0..d.n_in], d.row(i));
-    if (cfg.emb > 0) @memcpy(xin[d.n_in..], p[l.e + d.ids[i] * cfg.emb ..][0..cfg.emb]);
+    if (cfg.emb > 0) @memcpy(xin[d.n_in..], s.e.row(p, d.ids[i]));
+    const z1 = sc.z1[0..cfg.hidden];
+    const h1 = sc.h1[0..cfg.hidden];
+    nn.linear.forward(s.w1.of(p), s.b1.of(p), xin, z1);
     const keep = 1 - cfg.dropout;
-    for (0..cfg.hidden) |j| {
-        const z = p[l.b1 + j] + dot(p[l.w1 + j * l.in ..][0..l.in], xin);
-        s.z1[j] = z;
+    for (z1, h1, 0..) |z, *h, j| {
         const on = if (mask) |m| kept(cfg.seed, m[0], m[1], @intCast(j), keep) else true;
-        s.h1[j] = if (z > 0 and on) (if (mask != null) z / keep else z) else 0;
+        h.* = if (z > 0 and on) (if (mask != null) z / keep else z) else 0;
     }
-    var f = p[l.b3];
-    for (0..cfg.bottleneck) |k| {
-        const z = p[l.b2 + k] + dot(p[l.w2 + k * cfg.hidden ..][0..cfg.hidden], s.h1[0..cfg.hidden]);
-        s.z2[k] = z;
-        s.h2[k] = @max(z, 0);
-        f += p[l.w3 + k] * s.h2[k];
-    }
+    const z2 = sc.z2[0..cfg.bottleneck];
+    const h2 = sc.h2[0..cfg.bottleneck];
+    nn.linear.forward(s.w2.of(p), s.b2.of(p), h1, z2);
+    nn.relu.forward(z2, h2, 1, null);
+    // In order from b3, not nn.dot's lanes: the sum's rounding is the trained nets'
+    var f = s.b3.at(p, 0).*;
+    for (s.w3.of(p), h2) |w, h| f += w * h;
     return f;
 }
 
-/// Adds row i's log-loss gradient, scaled by `scale`, into g; returns its loss
-fn backward(cfg: Config, l: Layout, p: []const f32, d: Data, i: usize, g: []f32, scale: f32, step: u32, r: u32) f64 {
-    var s: Scratch = undefined;
-    const f = forward(cfg, l, p, d, i, &s, .{ step, r });
-    const logit = d.offset[i] + f;
-    const prob = 1 / (1 + @exp(-logit));
-    const dl = (prob - d.y[i]) * scale;
-    g[l.b3] += dl;
-    var dh1: [max_hidden]f32 = @splat(0);
-    for (0..cfg.bottleneck) |k| {
-        g[l.w3 + k] += dl * s.h2[k];
-        if (s.z2[k] <= 0) continue;
-        const dz = dl * p[l.w3 + k];
-        g[l.b2 + k] += dz;
-        axpy(g[l.w2 + k * cfg.hidden ..][0..cfg.hidden], dz, s.h1[0..cfg.hidden]);
-        axpy(dh1[0..cfg.hidden], dz, p[l.w2 + k * cfg.hidden ..][0..cfg.hidden]);
+/// Adds row i's log-loss gradient, scaled by `scale`, into g
+fn backward(cfg: Config, s: *const Shape, p: []const f32, d: Data, i: usize, g: []f32, scale: f32, step: u32, r: u32) void {
+    var sc: Scratch = undefined;
+    const f = forward(cfg, s, p, d, i, &sc, .{ step, r });
+    const dl = (nn.sigmoid(d.offset[i] + f) - d.y[i]) * scale;
+    const h1 = sc.h1[0..cfg.hidden];
+    const h2 = sc.h2[0..cfg.bottleneck];
+    s.b3.at(g, 0).* += dl;
+    nn.axpy(s.w3.of(g), dl, h2);
+    var dz2: [max_bottleneck]f32 = undefined;
+    for (dz2[0..cfg.bottleneck], s.w3.of(p)) |*dz, w| dz.* = dl * w;
+    nn.relu.backward(h2, dz2[0..cfg.bottleneck], 1, dz2[0..cfg.bottleneck]);
+    var dz1: [max_hidden]f32 = @splat(0);
+    nn.linear.backward(s.w2.of(p), h1, dz2[0..cfg.bottleneck], s.w2.of(g), s.b2.of(g), dz1[0..cfg.hidden]);
+    nn.relu.backward(h1, dz1[0..cfg.hidden], 1 - cfg.dropout, dz1[0..cfg.hidden]);
+    nn.linear.backward(s.w1.of(p), sc.xin[0..s.in], dz1[0..cfg.hidden], s.w1.of(g), s.b1.of(g), null);
+    // Unit by unit into the row, not through linear's din: keeps the summation order
+    if (cfg.emb > 0) {
+        const ge = s.e.row(g, d.ids[i]);
+        for (dz1[0..cfg.hidden], 0..) |dz, j| if (dz != 0) nn.axpy(ge, dz, s.w1.row(p, j)[d.n_in..]);
     }
-    const keep = 1 - cfg.dropout;
-    const xin = s.xin[0..l.in];
-    for (0..cfg.hidden) |j| {
-        if (s.h1[j] == 0) continue;
-        const dz = dh1[j] / keep;
-        g[l.b1 + j] += dz;
-        axpy(g[l.w1 + j * l.in ..][0..l.in], dz, xin);
-        if (cfg.emb > 0) axpy(g[l.e + d.ids[i] * cfg.emb ..][0..cfg.emb], dz, p[l.w1 + j * l.in + d.n_in ..][0..cfg.emb]);
-    }
-    return analysis.logLoss(prob, d.y[i]);
 }
 
 const Step = struct {
     cfg: Config,
-    l: Layout,
+    s: *const Shape,
     p: []const f32,
     d: Data,
     rows: []const u32,
     grads: [chunks][]f32,
     step: u32,
 
-    fn body(s: *const Step, c: usize) !void {
-        const g = s.grads[c];
+    fn body(st: *const Step, c: usize) !void {
+        const g = st.grads[c];
         @memset(g, 0);
-        const per = (s.rows.len + chunks - 1) / chunks;
-        const lo = @min(c * per, s.rows.len);
-        const hi = @min(lo + per, s.rows.len);
-        const scale = 1 / @as(f32, @floatFromInt(s.rows.len));
-        for (s.rows[lo..hi], lo..) |i, r| _ = backward(s.cfg, s.l, s.p, s.d, i, g, scale, s.step, @intCast(r));
+        const per = (st.rows.len + chunks - 1) / chunks;
+        const lo = @min(c * per, st.rows.len);
+        const hi = @min(lo + per, st.rows.len);
+        const scale = 1 / @as(f32, @floatFromInt(st.rows.len));
+        for (st.rows[lo..hi], lo..) |i, r| backward(st.cfg, st.s, st.p, st.d, i, g, scale, st.step, @intCast(r));
     }
 };
 
 const Eval = struct {
     cfg: Config,
-    l: Layout,
+    s: *const Shape,
     p: []const f32,
     d: Data,
     rows: []const u32,
     out: []f64,
 
     fn body(e: *const Eval, i: usize) !void {
-        var s: Scratch = undefined;
+        var sc: Scratch = undefined;
         const r = e.rows[i];
-        const f = forward(e.cfg, e.l, e.p, e.d, r, &s, null);
-        e.out[i] = analysis.logLoss(1 / (1 + @exp(-(e.d.offset[r] + f))), e.d.y[r]);
+        const f = forward(e.cfg, e.s, e.p, e.d, r, &sc, null);
+        e.out[i] = analysis.logLoss(nn.sigmoid(e.d.offset[r] + f), e.d.y[r]);
     }
 };
 
-fn meanLoss(gpa: std.mem.Allocator, io: std.Io, cfg: Config, l: Layout, p: []const f32, d: Data, rows: []const u32) !f64 {
+fn meanLoss(gpa: std.mem.Allocator, io: std.Io, cfg: Config, s: *const Shape, p: []const f32, d: Data, rows: []const u32) !f64 {
     const out = try gpa.alloc(f64, rows.len);
     defer gpa.free(out);
-    const e: Eval = .{ .cfg = cfg, .l = l, .p = p, .d = d, .rows = rows, .out = out };
+    const e: Eval = .{ .cfg = cfg, .s = s, .p = p, .d = d, .rows = rows, .out = out };
     try par.forEach(io, rows.len, &e, Eval.body);
     return analysis.mean(out);
 }
 
-/// Trains on `train`, keeping the epoch with the lowest mean log loss on `val`
+/// train's side of nn.fit: a batch's gradients in `chunks` parts on the threads, summed in
+/// chunk order into g, then AdamW
+const Fit = struct {
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    st: Step,
+    p: []f32,
+    g: []f32,
+    train_rows: []const u32,
+    val: []const u32,
+    batch: []u32,
+    opt: *nn.Adam,
+    segs: []const nn.Segment,
+    per_epoch: u64,
+
+    pub fn step(f: *Fit, part: []const u32) !void {
+        const rows = f.batch[0..part.len];
+        for (rows, part) |*r, k| r.* = f.train_rows[k];
+        f.st.rows = rows;
+        f.st.step = @intCast(f.opt.t);
+        try par.forEach(f.io, chunks, &f.st, Step.body);
+        @memset(f.g, 0);
+        for (f.st.grads) |gr| for (f.g, gr) |*a, b| {
+            a.* += b;
+        };
+        f.opt.step(f.p, f.g, f.segs);
+    }
+
+    pub fn valLoss(f: *Fit) !f64 {
+        return meanLoss(f.gpa, f.io, f.st.cfg, f.st.s, f.p, f.st.d, f.val);
+    }
+
+    pub fn onEval(f: *Fit, at: u64, loss: f64) void {
+        if (at == 0) return;
+        const cfg = f.st.cfg;
+        std.log.scoped(.stylenet).info("H{d} B{d} drop {d:.1} emb {d} epoch {d}: inner val {d:.5}", .{ cfg.hidden, cfg.bottleneck, cfg.dropout, cfg.emb, at / f.per_epoch, loss });
+    }
+};
+
+/// Trains on `train`, keeping the epoch with the lowest mean log loss on `val` (the
+/// starting net, the offset alone, can win)
 pub fn train(gpa: std.mem.Allocator, io: std.Io, cfg: Config, d: Data, train_rows: []const u32, val: []const u32) !Net {
     std.debug.assert(cfg.hidden <= max_hidden and cfg.bottleneck <= max_bottleneck and d.n_in + cfg.emb <= max_in);
-    const l: Layout = .init(cfg, d);
-    const p = try gpa.alloc(f32, l.len);
+    var s: Shape = try .init(gpa, cfg, d);
+    errdefer s.ps.deinit(gpa);
+    const p = try s.ps.alloc(gpa);
     errdefer gpa.free(p);
     var prng: std.Random.DefaultPrng = .init(cfg.seed);
     const rnd = prng.random();
-    // He init for the ReLU layers; the output starts at 0, so f starts as the offset
-    @memset(p, 0);
-    const s1 = @sqrt(2 / @as(f32, @floatFromInt(l.in)));
-    for (p[l.w1..l.b1]) |*w| w.* = rnd.floatNorm(f32) * s1;
-    const s2 = @sqrt(2 / @as(f32, @floatFromInt(cfg.hidden)));
-    for (p[l.w2..l.b2]) |*w| w.* = rnd.floatNorm(f32) * s2;
-    for (p[l.e..]) |*w| w.* = rnd.floatNorm(f32) * 0.1;
-    const best = try gpa.dupe(f32, p);
+    s.ps.initValues(p, rnd);
+    const g = try s.ps.alloc(gpa);
+    defer gpa.free(g);
+    const best = try s.ps.alloc(gpa);
     defer gpa.free(best);
-    const m1 = try gpa.alloc(f32, l.len);
-    defer gpa.free(m1);
-    const m2 = try gpa.alloc(f32, l.len);
-    defer gpa.free(m2);
-    @memset(m1, 0);
-    @memset(m2, 0);
-    var st: Step = .{ .cfg = cfg, .l = l, .p = p, .d = d, .rows = &.{}, .grads = undefined, .step = 0 };
-    for (&st.grads) |*g| g.* = try gpa.alloc(f32, l.len);
-    defer for (st.grads) |g| gpa.free(g);
-    const order = try gpa.dupe(u32, train_rows);
-    defer gpa.free(order);
-
-    var best_loss = try meanLoss(gpa, io, cfg, l, p, d, val);
-    var best_epoch: u32 = 0;
-    var t: u32 = 0;
-    const t0 = std.Io.Clock.awake.now(io);
-    var epochs: u32 = 0;
-    for (1..cfg.max_epochs + 1) |epoch| {
-        epochs = @intCast(epoch);
-        rnd.shuffle(u32, order);
-        var start: usize = 0;
-        while (start < order.len) : (start += cfg.batch) {
-            st.rows = order[start..@min(start + cfg.batch, order.len)];
-            st.step = t;
-            try par.forEach(io, chunks, &st, Step.body);
-            t += 1;
-            const c1 = 1 - std.math.pow(f32, 0.9, @floatFromInt(t));
-            const c2 = 1 - std.math.pow(f32, 0.999, @floatFromInt(t));
-            for (p, m1, m2, 0..) |*w, *a, *b, i| {
-                var g: f32 = 0;
-                for (st.grads) |gr| g += gr[i];
-                a.* = 0.9 * a.* + 0.1 * g;
-                b.* = 0.999 * b.* + 0.001 * g * g;
-                const decay: f32 = if (l.decays(i)) cfg.wd * w.* else 0;
-                w.* -= cfg.lr * ((a.* / c1) / (@sqrt(b.* / c2) + 1e-8) + decay);
-            }
-        }
-        const loss = try meanLoss(gpa, io, cfg, l, p, d, val);
-        std.log.scoped(.stylenet).info("H{d} B{d} drop {d:.1} emb {d} epoch {d}: inner val {d:.5}", .{ cfg.hidden, cfg.bottleneck, cfg.dropout, cfg.emb, epoch, loss });
-        if (loss < best_loss) {
-            best_loss = loss;
-            best_epoch = @intCast(epoch);
-            @memcpy(best, p);
-        } else if (epoch - best_epoch >= cfg.patience) break;
+    const segs = try s.ps.segments(gpa);
+    defer gpa.free(segs);
+    var opt: nn.Adam = try .init(gpa, s.ps.len, .{ .lr = cfg.lr });
+    defer opt.deinit(gpa);
+    const batch = try gpa.alloc(u32, cfg.batch);
+    defer gpa.free(batch);
+    var f: Fit = .{
+        .gpa = gpa,
+        .io = io,
+        .st = .{ .cfg = cfg, .s = &s, .p = p, .d = d, .rows = &.{}, .grads = undefined, .step = 0 },
+        .p = p,
+        .g = g,
+        .train_rows = train_rows,
+        .val = val,
+        .batch = batch,
+        .opt = &opt,
+        .segs = segs,
+        .per_epoch = nn.stepsPerEpoch(train_rows.len, cfg.batch),
+    };
+    var n_grads: usize = 0;
+    defer for (f.st.grads[0..n_grads]) |gr| gpa.free(gr);
+    for (&f.st.grads) |*gr| {
+        gr.* = try s.ps.alloc(gpa);
+        n_grads += 1;
     }
-    const secs = @as(f64, @floatFromInt(t0.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds())) / 1e9 / @as(f64, @floatFromInt(epochs));
-    @memcpy(p, best);
-    return .{ .cfg = cfg, .l = l, .p = p, .epochs = best_epoch, .val_loss = best_loss, .seconds_per_epoch = secs };
+
+    const t0 = std.Io.Clock.awake.now(io);
+    const r = try nn.fit(gpa, &f, .{
+        .batch = cfg.batch,
+        .max_steps = cfg.max_epochs * f.per_epoch,
+        .patience = cfg.patience,
+        .min_delta = 0,
+        .score_start = true,
+    }, train_rows.len, rnd, p, best);
+    const epochs_run: f64 = @floatFromInt(r.ran / f.per_epoch);
+    const secs = @as(f64, @floatFromInt(t0.durationTo(std.Io.Clock.awake.now(io)).toNanoseconds())) / 1e9 / epochs_run;
+    return .{ .cfg = cfg, .s = s, .p = p, .epochs = @intCast(r.steps / f.per_epoch), .val_loss = r.loss, .seconds_per_epoch = secs };
 }
 
 const testing = std.testing;
@@ -337,6 +342,7 @@ test "the net learns a residual the offset misses" {
 }
 
 test "gradient matches finite differences" {
+    const gpa = testing.allocator;
     const n_in = 5;
     var x: [n_in]f32 = .{ 0.5, -1.2, 0.3, 2.0, -0.7 };
     const ids = [_]u32{1};
@@ -344,28 +350,25 @@ test "gradient matches finite differences" {
     const y = [_]f32{1};
     const d: Data = .{ .x = &x, .n_in = n_in, .ids = &ids, .n_ids = 2, .offset = &offset, .y = &y };
     const cfg: Config = .{ .hidden = 6, .bottleneck = 3, .emb = 2, .dropout = 0 };
-    const l: Layout = .init(cfg, d);
-    var p: [200]f32 = undefined;
-    std.debug.assert(l.len <= p.len);
+    var s: Shape = try .init(gpa, cfg, d);
+    defer s.ps.deinit(gpa);
+    const p = try s.ps.alloc(gpa);
+    defer gpa.free(p);
     var prng: std.Random.DefaultPrng = .init(5);
-    for (p[0..l.len]) |*w| w.* = prng.random().floatNorm(f32) * 0.5;
-    var g: [200]f32 = @splat(0);
-    _ = backward(cfg, l, p[0..l.len], d, 0, g[0..l.len], 1, 0, 0);
-    for (0..l.len) |i| {
-        if (i >= l.e and i < l.e + cfg.emb) continue; // row 0's id is 1: these are unused
-        const h = 1e-2;
-        const w0 = p[i];
-        p[i] = w0 + h;
-        const up = rowLoss(cfg, l, p[0..l.len], d);
-        p[i] = w0 - h;
-        const down = rowLoss(cfg, l, p[0..l.len], d);
-        p[i] = w0;
-        try testing.expectApproxEqAbs((up - down) / (2 * h), g[i], 2e-3);
-    }
-}
-
-fn rowLoss(cfg: Config, l: Layout, p: []const f32, d: Data) f32 {
-    var s: Scratch = undefined;
-    const f = forward(cfg, l, p, d, 0, &s, null);
-    return @floatCast(analysis.logLoss(1 / (1 + @exp(-(d.offset[0] + f))), d.y[0]));
+    for (p) |*w| w.* = prng.random().floatNorm(f32) * 0.5;
+    const g = try s.ps.alloc(gpa);
+    defer gpa.free(g);
+    backward(cfg, &s, p, d, 0, g, 1, 0, 0);
+    const Row = struct {
+        cfg: Config,
+        s: *const Shape,
+        p: []const f32,
+        d: Data,
+        fn loss(r: *const @This()) f64 {
+            var sc: Scratch = undefined;
+            const f = forward(r.cfg, r.s, r.p, r.d, 0, &sc, null);
+            return analysis.logLoss(nn.sigmoid(r.d.offset[0] + f), r.d.y[0]);
+        }
+    };
+    try nn.expectGradient(&Row{ .cfg = cfg, .s = &s, .p = p, .d = d }, Row.loss, p, g, null, .{});
 }
