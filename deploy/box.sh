@@ -24,10 +24,14 @@ unchanged=0
 # working tree: other sessions keep uncommitted work there. The binary and scripts are
 # staged so the tree is free again before the copy. The box logs each deploy in DEPLOYED.
 # Nothing is copied when the box has every file already: a change to src/lab code the
-# backend doesn't use, or to Mac-side scripts (16 of 137 deploys to 17 Oct)
+# backend doesn't use, or to Mac-side scripts (16 of 137 deploys to 17 Oct).
+# Only commits on origin/main: those passed the pre-push ci and are what DEPLOYED and the
+# Deploys tab name; a by-hand start from an unpushed HEAD skipped both
 sync() {
     local rev tree target
     rev=$(git -C "$ROOT" rev-parse "${REV:-HEAD}")
+    git -C "$ROOT" merge-base --is-ancestor "$rev" origin/main \
+        || { echo "box.sh: ${rev:0:7} is not on origin/main: push it first (the pre-push ci)"; exit 1; }
     target=$(ssh "$HOST" uname -m)-linux-musl
     tree=$(mktemp -d)
     # shellcheck disable=SC2064 # expand now: tree is local to sync
@@ -253,16 +257,6 @@ case "${1:-}" in
         fi
         model "$rows"
         ;;
-    site)
-        # Generate the website on the box (the data is there) and copy it to data/site
-        [[ -n "${2:-}" ]] || { echo "usage: deploy/box.sh site <contact email> [meiolol site args]"; exit 2; }
-        contact=$2; shift 2
-        sync
-        ssh "$HOST" "cd $DIR && rm -rf data/site && bin/meiolol site --contact '$contact' $*"
-        mkdir -p "$ROOT/data"
-        rsync -a --delete "$HOST:$DIR/data/site/" "$ROOT/data/site/"
-        echo "site in $ROOT/data/site"
-        ;;
     run) shift; ssh "$HOST" "cd $DIR && bin/meiolol $*" ;;
     snapshot)
         # The tables `meiolol site` reads, with the curves, builds and Daily Draft files,
@@ -457,6 +451,6 @@ SQL
             *) echo "usage: deploy/box.sh watch install|uninstall"; exit 2 ;;
         esac
         ;;
-    *) echo "usage: deploy/box.sh sync|start [crawl args]|restart|stop|status|wait-deployed [rev] [--live] [--timeout S]|job run|status|wait NAME|logs [n]|model [rows] [-f]|run <meiolol args>|snapshot|preview [static|stop]|site <contact>|web start [contact]|rebuild|stop|status|backup|health start|stop|status|health check|watch install|uninstall"
+    *) echo "usage: deploy/box.sh sync|start [crawl args]|restart|stop|status|wait-deployed [rev] [--live] [--timeout S]|job run|status|wait NAME|logs [n]|model [rows] [-f]|run <meiolol args>|snapshot|preview [static|stop]|web start [contact]|rebuild|stop|status|backup|health start|stop|status|health check|watch install|uninstall"
        exit 2 ;;
 esac

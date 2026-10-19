@@ -552,9 +552,8 @@ data/stats.bin (for the app) + data/champions.json, meiolol.wasm (core.recommend
 browser, for pages that score drafts). Champion icons hotlink Data Dragon. Edges use the
 same maths as the app (score.matchupPp, duoPp). Preview mode by default (noindex,
 robots.txt disallow, banner): Riot forbids serving the public on a personal key;
-`--public` only once the production key is granted. `deploy/box.sh site EMAIL` builds
-it on the box and rsyncs it to data/site. `meiolol render` serves the pages and files
-the static build leaves out from the same code, its data swapped whole on reload
+`--public` only once the production key is granted. `meiolol render` serves the pages
+and files the static build leaves out from the same code, its data swapped whole on reload
 (serve.Rendered; docs/hosting.md "Rendering on request"), read from the views file
 that `site --views` writes (below). `--static core` (the web loop's) writes only
 core_static (root.zig: home, robots.txt, riot.txt, root sitemap)
