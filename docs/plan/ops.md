@@ -21,7 +21,7 @@ its requests from ~2,000 to ~1,170 (box io pressure full avg300 60%). Fixed in 1
 Done 20 Oct (traffic agent): deploy/traffic.sh counts a browser-agent page view as a
 person only when the same agent fetched /style.css within 60 s (pages revalidate it on
 every load; they link with no-referrer, so the match is by agent, one fetch per view).
-12-19 Oct: 20,832 "people" by the old count, 506 by the new; 13.2k on 18 Oct were one
+12-19 Oct: 20,832 "people" by the old count, 506 by the new; 12.5k of 18 Oct's 13.2k were one
 crawler with a 2015 Edge 12 agent in one hour, 5.5k on 12 Oct likewise. Scanners
 (.env, .php, wp-) were already out: all 404s, never page views. Admin traffic tab shows
 people, unconfirmed and bots. Next, only if needed:
