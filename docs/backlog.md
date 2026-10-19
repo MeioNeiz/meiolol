@@ -454,7 +454,7 @@ decided on evidence of what gets clicks, not just a game floor (Jacob 2026-10-12
 canonical, sitemap and noindex support as settings.
 
 Site UI pass (2026-10-12, meiolol-a0, from research/questions/site-design.md):
-- Templates: src/site/tpl.zig (named holes checked at compile time, escaping by
+- Templates: src/tpl/root.zig (named holes checked at compile time, escaping by
   position); layout, matchup chart and the page files moved onto it, byte-identical
 - Landing leads with one matchup's gold curve (matchup.featured) and links a Your games
   example (`meiolol your-example`, anonymised, written by the web loop); the champions
