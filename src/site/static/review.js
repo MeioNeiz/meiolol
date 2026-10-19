@@ -129,8 +129,9 @@ const Review = (() => {
     const y = (p) => T + ((H - T - B) * (100 - p)) / 100;
     const svg = svgEl("svg", { class: "wc", viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Your team's win chance by minute" });
     const id = `wc${Math.random().toString(36).slice(2, 8)}`;
-    svg.innerHTML = `<defs><linearGradient id="${id}u" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e9ecf1" stop-opacity=".22"/><stop offset="1" stop-color="#e9ecf1" stop-opacity=".02"/></linearGradient>
-      <linearGradient id="${id}d" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f0596b" stop-opacity=".02"/><stop offset="1" stop-color="#f0596b" stop-opacity=".3"/></linearGradient>
+    const stop = (at, team, a) => `<stop offset="${at}" style="stop-color: var(--${team}); stop-opacity: ${a}"/>`;
+    svg.innerHTML = `<defs><linearGradient id="${id}u" x1="0" y1="0" x2="0" y2="1">${stop(0, "us", 0.5)}${stop(1, "us", 0.08)}</linearGradient>
+      <linearGradient id="${id}d" x1="0" y1="0" x2="0" y2="1">${stop(0, "them", 0.08)}${stop(1, "them", 0.5)}</linearGradient>
       <clipPath id="${id}cu"><rect x="0" y="0" width="${W}" height="${y(50)}"/></clipPath><clipPath id="${id}cd"><rect x="0" y="${y(50)}" width="${W}" height="${H}"/></clipPath></defs>`;
     for (const p of [100, 75, 25, 0]) svg.append(svgEl("line", { class: "gl", x1: L, x2: W - R, y1: y(p), y2: y(p) }));
     for (const p of [100, 50, 0]) {

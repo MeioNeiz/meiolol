@@ -20,8 +20,10 @@
   --good: #5aaeff;
   --bad: #f59a4a;
   --axis: rgba(255, 255, 255, 0.16);
-  /* Game review: like a game review's move classes */
-  --us: #e9ecf1;
+  /* Game review: your team blue, the enemy red as in game; moments like a game
+     review's move classes */
+  --us: #5aaeff;
+  --them: #f0596b;
   --turn: #f5c451;
   --gain: #3ccf91;
   --drop: #f59a4a;
@@ -485,14 +487,14 @@ button.primary { background: var(--text); color: var(--bg); border-color: var(--
 .rv-strip > .share { margin-left: auto; }
 .rv-cols { display: grid; grid-template-columns: 1fr 360px; gap: 14px; margin-top: 14px; align-items: start; }
 .wc-wrap { display: grid; grid-template-columns: 18px 1fr; gap: 12px; padding: 14px 14px 6px; }
-.evalbar { position: relative; border-radius: 4px; overflow: hidden; background: #2a2c31; box-shadow: 0 0 0 1px var(--line-2); min-height: 120px; }
+.evalbar { position: relative; border-radius: 4px; overflow: hidden; background: var(--them); box-shadow: 0 0 0 1px var(--line-2); min-height: 120px; }
 .evalbar i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--us); transition: height 0.25s; }
 .evalbar span { position: absolute; left: 0; right: 0; bottom: 4px; text-align: center; font-size: 9.5px; font-weight: 700; color: #111; z-index: 1; }
 svg.wc { width: 100%; height: auto; display: block; overflow: visible; }
 svg.wc text { fill: var(--faint); font-size: 10.5px; font-family: Inter, system-ui, sans-serif; }
 svg.wc .gl { stroke: var(--line); }
 svg.wc .mid { stroke: var(--line-2); stroke-dasharray: 2 3; }
-svg.wc .ln { fill: none; stroke: var(--us); stroke-width: 1.75; stroke-linejoin: round; }
+svg.wc .ln { fill: none; stroke: var(--text); stroke-width: 1.75; stroke-linejoin: round; }
 svg.wc .turn { fill: var(--turn); opacity: 0.1; }
 svg.wc .cursor { stroke: var(--brand); stroke-width: 1.5; }
 svg.wc .cursor-dot { fill: var(--brand); stroke: var(--bg); stroke-width: 2; }
