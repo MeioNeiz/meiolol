@@ -25,9 +25,16 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
   browser-tool's first commit is Jacob's; "429 (server)" is Riot's side, count it
   apart from our key's limit, no action. Password rotation skipped (your call)
 - J9 Admin is for you only: jargon stays low priority
+- J10 (20 Oct) Public games are public data: drop self-imposed privacy rules (Daily
+  Draft week delay, no per-player stats or ranks, "no names" style anonymising) across
+  the codebase and docs; keep only what law (GDPR: erasure, privacy page true) or Riot
+  policy actually requires. Numbers may come back where they help (with counts)
+- J11 (20 Oct) Small leads: coordinator's call (one rule site-wide, the matchup page's:
+  under 200 gold at 14 reads as even, plus the 2 SE and games test)
 - Q1 Rewrite the application around game review of your own games, lane curves as the
   benchmark; squads worded as planned, or out until built
-- Q2 Daily games at least 7 days old; the previous patch's in a patch's first week
+- Q2 (dropped 20 Oct by J10) Daily games at least 7 days old; the previous patch's in a
+  patch's first week
 - Q3 Ban suggestions in scope: yes, several with games and range, never auto-ban
 - Q4 Crawl floor: Gold IV once the key's rate allows (the identity is Silver to Emerald),
   Silver after
