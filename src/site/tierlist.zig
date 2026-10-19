@@ -60,35 +60,10 @@ fn tierRows(site: *const Site, role: ?Role) ![]Row {
     return rows.items;
 }
 
-/// Win rate cell: a bar from 50% to the rate on an axis 50% ± `span`, then the rate,
-/// coloured by wrColour and fainter with fewer games (curvesfile.fade); nothing in it
-/// narrows as games come in. data-v for sorting
-pub fn winRateCell(w: *Writer, wins: u32, games: u32, span: f64) !void {
-    const p = ratio(wins, games);
-    const at = struct {
-        fn f(x: f64, half: f64) f64 {
-            return 100 * (std.math.clamp(x, 0.5 - half, 0.5 + half) - (0.5 - half)) / (2 * half);
-        }
-    }.f;
-    const dot = at(p, span);
-    try tpl.render(w, "<td data-v=\"{p:.4}\"><span class=\"wr\" style=\"--c:{colour};opacity:{fade:.2}\" title=\"{games} games\"><span class=\"ci\">" ++
-        "<i class=\"r\" style=\"left:{left:.1}%;width:{width:.1}%\"></i><i class=\"d\" style=\"left:{dot:.1}%\"></i></span>" ++
-        "<b>{rate:.1}%</b></span></td>", .{
-        .p = p,
-        .colour = wrColour(p, span),
-        .fade = core.curvesfile.fade(games),
-        .games = games,
-        .left = @min(dot, 50),
-        .width = @abs(dot - 50),
-        .dot = dot,
-        .rate = 100 * p,
-    });
-}
-
-/// Champions table's win rate cell: winRateCell's track and dot (the champion's win
-/// rate), the bar the shape of its players' own win rates around it (spread.zig),
-/// mirrored about the track and coloured by win rate along it (shapeGradient); none
-/// under min_players. The shape doesn't narrow as games come in; only the rate fades
+/// Champions table's win rate cell: trackCell with the shape of its players' own win
+/// rates around it (spread.zig), mirrored about the track and coloured by win rate
+/// along it (shapeGradient); none under min_players. The shape doesn't narrow as games
+/// come in; only the rate fades
 fn distCell(w: *Writer, site: *const Site, ch: Champ, wins: u32, games: u32) !void {
     const p = ratio(wins, games);
     const s = &site.spread;
@@ -97,20 +72,30 @@ fn distCell(w: *Writer, site: *const Site, ch: Champ, wins: u32, games: u32) !vo
         try site.arena.print("{d} games; players with {d}+ games on {s}: middle half {d}% to {d}% ({d} players)", .{ games, s.min_games, ch.name, c.p25, c.p75, c.players })
     else
         try site.arena.print("{d} games", .{games});
+    const shape = if (players) |c| try shapePath(site.arena, c.shape, 100 * p) else null;
+    try trackCell(w, p, games, title, shape);
+}
+
+/// Win rate as the champions table shows it: a dot at the rate on a track from 25% to
+/// 75% (50% marked), an optional shape path behind it (shapePath), then the rate,
+/// coloured by wrColour on the table's scale and fainter with fewer games
+/// (curvesfile.fade). data-v for sorting. Champion page opponents use it bare
+pub fn trackCell(w: *Writer, p: f64, games: u32, title: []const u8, shape: ?[]const u8) !void {
     try tpl.render(w, "<td data-v=\"{p:.4}\"><span class=\"wr\" style=\"--c:{colour}\" title=\"{title}\"><span class=\"ci\">" ++
         "{shape}<i class=\"d\" style=\"left:{dot:.1}%\"></i></span>" ++
         "<b style=\"opacity:{fade:.2}\">{rate:.1}%</b></span></td>", .{
         .p = p,
-        .colour = wrColour(p, 0.12),
+        .colour = wrColour(p, table_span),
         .title = title,
-        .shape = if (players) |c| tpl.t("<svg class=\"shape\" viewBox=\"0 0 100 10\" preserveAspectRatio=\"none\" aria-hidden=\"true\"><path d=\"{d}\"></path></svg>", .{
-            .d = try shapePath(site.arena, c.shape, 100 * p),
-        }) else null,
+        .shape = if (shape) |d| tpl.t("<svg class=\"shape\" viewBox=\"0 0 100 10\" preserveAspectRatio=\"none\" aria-hidden=\"true\"><path d=\"{d}\"></path></svg>", .{ .d = d }) else null,
         .dot = trackX(100 * p),
         .fade = core.curvesfile.fade(games),
         .rate = 100 * p,
     });
 }
+
+/// wrColour's span on the champions table, and for anything coloured to match it
+pub const table_span = 0.12;
 
 /// The track's scale: 25% to 75% as 0 to 100
 const track_lo = 25.0;
@@ -163,13 +148,13 @@ fn shapeGradient(w: *Writer) !void {
 }
 
 /// Win rate colour, diverging: orange below 50%, blue above, grey at 50%; full at
-/// 50% ± 40% of the bar's `span` (±5 points on the champions table, ±10 against an
-/// opponent). Not red against green: the pair red-green colour blindness merges
-fn wrColour(p: f64, span: f64) WrColour {
+/// 50% ± 40% of `span` (±5 points on table_span). Not red against green: the pair
+/// red-green colour blindness merges
+pub fn wrColour(p: f64, span: f64) WrColour {
     return .{ .t = std.math.clamp((p - 0.5) / (0.4 * span), -1, 1) };
 }
 
-const WrColour = struct {
+pub const WrColour = struct {
     t: f64,
 
     pub fn format(c: WrColour, w: *Writer) Writer.Error!void {

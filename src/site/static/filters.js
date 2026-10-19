@@ -49,16 +49,21 @@ const HARDEST = "hardest first";
     .map((el) => ({ el, role: meta.roles.indexOf(el.id) }))
     .filter((s) => s.role >= 0)
     .map((s) => {
-      const body = s.el.querySelector("table.tl tbody");
+      const body = s.el.querySelector("table.og tbody");
       const links = new Map();
+      // Opponents' own win rates in the role, from the page (the root view): the filter
+      // data has only this champion's games, so other filters reuse them
+      const strength = new Map();
       for (const tr of body?.rows ?? []) {
-        const a = tr.cells[2]?.querySelector("a");
+        const a = tr.cells[3]?.querySelector("a");
         if (a) links.set(Number(tr.dataset.id), a.getAttribute("href"));
+        strength.set(Number(tr.dataset.id), Number(tr.dataset.q));
       }
       return {
         ...s,
         body,
         links,
+        strength,
         original: {
           tiles: s.el.querySelector(".tiles")?.innerHTML,
           body: body?.innerHTML,
@@ -214,7 +219,7 @@ const HARDEST = "hardest first";
       more.innerHTML = s.original.more;
       more.hidden = s.original.moreHidden;
     }
-    const table = s.el.querySelector("table.tl");
+    const table = s.el.querySelector("table.og");
     if (table) delete table.dataset.showRare;
   }
 
@@ -240,7 +245,9 @@ const HARDEST = "hardest first";
     const thin = 10;
     const all = [...r.opps.values()];
     const opps = all.filter((o) => o.games >= Math.max(1, floor));
-    const k = Number(s.el.querySelector("table.tl")?.dataset.k) || 0;
+    const table = s.el.querySelector("table.og");
+    const k = Number(table?.dataset.k) || 0;
+    const ka = Number(table?.dataset.ka) || 0;
     const base = r.games ? r.wins / r.games : 0.5;
     const shrunk = (o) => (o.wins + k * base) / (o.games + k);
     opps.sort((x, y) => {
@@ -260,7 +267,8 @@ const HARDEST = "hardest first";
           : pages.has(k)
             ? matchupHref(view.dir, meta.roles[s.role], o.id)
             : null;
-        return row(o, o.games < thin, curve?.get(k), href, q);
+        const vs = { base, strength: s.strength.get(o.id) ?? 0.5, k: ka, role: s.el.querySelector("h2")?.textContent };
+        return row(o, o.games < thin, curve?.get(k), href, q, vs);
       }),
     );
     const count = s.el.querySelector(".opp-h .muted");
@@ -289,13 +297,14 @@ const HARDEST = "hardest first";
     return `../${dir}matchup/${role}/${self.slug}-vs-${other.slug}.html`;
   }
 
-  function row(o, thin, curve, href, q) {
+  function row(o, thin, curve, href, q, vs) {
     const tr = document.createElement("tr");
     const ch = byId.get(o.id);
     tr.dataset.id = o.id;
     tr.dataset.name = ch?.name ?? String(o.id);
     if (thin) tr.className = "thin";
-    tr.append(nameCell(ch, q, href), winRateCell(o.wins, o.games, 0.25), goldCell(o, curve, href), gamesCell(o.games));
+    tr.dataset.q = vs.strength;
+    tr.append(nameCell(ch, q, href), trackCell(o.wins, o.games), usualCell(o, ch, vs), goldCell(o, curve, href), gamesCell(o.games));
     return tr;
   }
 
@@ -319,19 +328,40 @@ const HARDEST = "hardest first";
     return td;
   }
 
-  // As root.zig winRateCell: a bar from 50% to the rate on 50% ± span, fainter with
-  // fewer games
-  function winRateCell(wins, games, span) {
+  // As tierlist.zig trackCell: a dot on 25% to 75%, the rate fainter with fewer games
+  function trackCell(wins, games) {
     const p = games ? wins / games : 0;
-    const at = (x) => (100 * (Math.min(Math.max(x, 0.5 - span), 0.5 + span) - (0.5 - span))) / (2 * span);
-    const dot = at(p);
+    const dot = (100 * (Math.min(Math.max(p, 0.25), 0.75) - 0.25)) / 0.5;
     const td = document.createElement("td");
     td.dataset.v = p.toFixed(4);
     td.innerHTML =
-      `<span class="wr" style="--c:${wrColour(p, span)};opacity:${fade(games)}" title="${games} games">` +
-      `<span class="ci"><i class="r" style="left:${Math.min(dot, 50).toFixed(1)}%;width:${Math.abs(dot - 50).toFixed(1)}%"></i>` +
-      `<i class="d" style="left:${dot.toFixed(1)}%"></i></span>` +
-      `<b>${(100 * p).toFixed(1)}%</b></span>`;
+      `<span class="wr" style="--c:${wrColour(p, TABLE_SPAN)}" title="${games} games">` +
+      `<span class="ci"><i class="d" style="left:${dot.toFixed(1)}%"></i></span>` +
+      `<b style="opacity:${fade(games)}">${(100 * p).toFixed(1)}%</b></span>`;
+    return td;
+  }
+
+  // As champion.zig usualCell and VsUsual: the matchup's rate pulled toward usual by k
+  // games, minus usual, in points
+  function usualCell(o, ch, vs) {
+    const n = o.games;
+    const e = usual(vs.base, vs.strength);
+    const mean = (o.wins - n * e) / (n + vs.k);
+    const sd = Math.sqrt((e * (1 - e)) / (n + vs.k));
+    const td = document.createElement("td");
+    td.dataset.v = mean.toFixed(4);
+    const span = document.createElement("span");
+    span.className = "vs";
+    span.style.setProperty("--c", wrColour(0.5 + mean, TABLE_SPAN));
+    const role = vs.role ? ` in ${vs.role}` : "";
+    span.title =
+      `Against an opponent winning ${(100 * vs.strength).toFixed(1)}%${role}, ${self?.name ?? "it"} usually wins about ${(100 * e).toFixed(1)}%; ` +
+      `against ${ch?.name ?? "it"} ${(100 * (n ? o.wins / n : 0)).toFixed(1)}% in ${n} games. ` +
+      `Vs usual ${points(mean)} points, pulled toward 0 the fewer the games; 8 in 10 between ${points(mean - 1.2816 * sd)} and ${points(mean + 1.2816 * sd)}`;
+    const b = document.createElement("b");
+    b.textContent = points(mean);
+    span.append(b, " vs usual");
+    td.append(span);
     return td;
   }
 
@@ -362,17 +392,14 @@ const HARDEST = "hardest first";
     const value = document.createElement(href ? "a" : "span");
     value.className = `gold ${cls}`;
     value.style.opacity = fade(games);
-    if (href) {
-      value.href = href;
-      value.title = `Lane curves, ${games} games`;
-    }
-    if (!curve) value.title = (href ? "Lane curves. " : "") + "Plain average of the games picked";
-    value.textContent = `${m > 0 ? "+" : ""}${m}`;
-    const small = document.createElement("small");
     const sign = (x) => `${x > 0 ? "+" : ""}${Math.round(x)}`;
-    small.textContent = `${sign(p10)} to ${sign(p90)}`;
-    small.title = "8 games in 10";
-    td.append(value, small);
+    const range = `8 games in 10 from ${sign(p10)} to ${sign(p90)}`;
+    if (href) value.href = href;
+    value.title = curve ? `Lane curves, ${games} games; ${range}` : `${href ? "Lane curves. " : ""}Plain average of the games picked; ${range}`;
+    value.textContent = sign(m);
+    const small = document.createElement("small");
+    small.textContent = "gold";
+    td.append(value, " ", small);
     return td;
   }
 
@@ -380,7 +407,9 @@ const HARDEST = "hardest first";
     const td = document.createElement("td");
     td.className = "dim";
     td.dataset.v = games;
-    td.textContent = games;
+    const small = document.createElement("small");
+    small.textContent = "games";
+    td.append(`${games} `, small);
     return td;
   }
 
@@ -405,7 +434,26 @@ function fade(games) {
   return (0.35 + 0.65 * Math.min(1, Math.sqrt(games / 200))).toFixed(2);
 }
 
-// As root.zig wrColour: orange below 50%, blue above, grey at 50%
+// As tierlist.zig table_span: the champions table's colour scale
+const TABLE_SPAN = 0.12;
+
+// As champion.zig usual: the champion's own rate moved by the opponent's, in log-odds
+function usual(base, strength) {
+  const logit = (x) => {
+    const c = Math.min(Math.max(x, 0.01), 0.99);
+    return Math.log(c / (1 - c));
+  };
+  return 1 / (1 + Math.exp(logit(strength) - logit(base)));
+}
+
+// As champion.zig Points: a share as signed points, 0.021 -> "+2.1"
+function points(v) {
+  const x = 100 * v;
+  if (Math.abs(x) < 0.05) return "0.0";
+  return `${x > 0 ? "+" : ""}${x.toFixed(1)}`;
+}
+
+// As tierlist.zig wrColour: orange below 50%, blue above, grey at 50%
 function wrColour(p, span) {
   const t = Math.min(Math.max((p - 0.5) / (0.4 * span), -1), 1);
   return `oklch(0.76 ${(0.15 * Math.abs(t)).toFixed(3)} ${t < 0 ? 50 : 225})`;

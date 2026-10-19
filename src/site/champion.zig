@@ -27,7 +27,7 @@ const side = root.side;
 const earlyNote = root.earlyNote;
 const roleSlug = root.roleSlug;
 const roleName = root.roleName;
-const winRateCell = @import("tierlist.zig").winRateCell;
+const tierlist = @import("tierlist.zig");
 
 /// Champion page: lane opponents with fewer games are faded and listed last
 const min_opponent_games = 10;
@@ -39,6 +39,8 @@ const Opponent = struct {
     other: Champ,
     games: u32,
     wins: u32,
+    /// The opponent's own win rate in the role, for usual()
+    strength: f64,
 };
 
 /// One page per champion, from the root view (EUW, 30 days) at the site root; its
@@ -104,18 +106,19 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
             if (other.c == ch.c) continue;
             const e = st.enemy(r, r, ch.c, other.c);
             if (e.games == 0) continue;
-            try opps.append(a, .{ .other = other, .games = e.games, .wins = e.wins });
+            const oc = st.champRole(r, other.c);
+            try opps.append(a, .{ .other = other, .games = e.games, .wins = e.wins, .strength = ratio(oc.wins, oc.games) });
         }
         if (site.lean) |l| try lean_line.line(w, l, ch.id, ch.name, r, "../method.html#lean");
         try patch_page.since(site, w, ch, r, "../");
         try builds_page.link(site, w, ch, r, path);
-        try opponentTable(site, w, ch, r, cr, opponentK(st, r), opps.items);
+        try opponentTable(site, w, ch, r, cr, opponentK(st, r), usualK(st, r), opps.items);
         try tpl.renderPart(w, "</section>\n", .{});
     }
     try pool_page.section(site, w, &site.pool, ch);
     try learning_page.section(w, &site.learning, ch);
     try tpl.render(w,
-        \\<p class="muted small">Win rates are raw: no pulling toward 50%, fainter under {full} games. Hardest first sorts by the win rate pulled toward the champion's own in the role, the more so the fewer the games, so a few lucky games can't top the list. Gold at {minute} min is the lane curve's estimate, then where 8 games in 10 end (10th to 90th percentile); green ahead, red behind, fainter under {full} games; for filters other than a region and period above, the plain average of the games picked. <a href="../method.html">Method</a>.</p>
+        \\<p class="muted small">Win rates are raw: no pulling toward 50%, fainter under {full} games; on the champions table's scale, a dot on 25% to 75%. Vs usual: how much more or less often than usual the champion won in the matchup, in points, after allowing for the opponent's own win rate in the role (against a strong opponent it usually wins less), pulled toward 0 the fewer the games so a thin matchup stays quiet; hover for the numbers behind it. Hardest first sorts by the win rate pulled toward the champion's own in the role, the more so the fewer the games, so a few lucky games can't top the list. Gold at {minute} min is the lane curve's estimate, then where 8 games in 10 end (10th to 90th percentile); green ahead, red behind, fainter under {full} games; for filters other than a region and period above, the plain average of the games picked. <a href="../method.html">Method</a>.</p>
         \\<script src="../table.js" defer></script>
         \\<script src="../filters.js" defer></script>
         \\
@@ -253,13 +256,71 @@ fn shrunk(o: Opponent, base: f64, k: f64) f64 {
     return (@as(f64, @floatFromInt(o.wins)) + k * base) / (@as(f64, @floatFromInt(o.games)) + k);
 }
 
-/// Every lane opponent: win rate with its interval and the lane curve's gold difference at
-/// lane_minute, the opponent and the gold linking to the matchup page from ch's side.
+/// What ch usually wins against an opponent: ch's own win rate in the role (`base`)
+/// moved by the opponent's own there (`strength`), on the log-odds scale. Two 50%
+/// champions: 50%; a 53% champion against a 47% one: 55.9%
+pub fn usual(base: f64, strength: f64) f64 {
+    const logit = struct {
+        fn f(x: f64) f64 {
+            const c = std.math.clamp(x, 0.01, 0.99);
+            return @log(c / (1 - c));
+        }
+    }.f;
+    return 1 / (1 + @exp(logit(strength) - logit(base)));
+}
+
+/// A matchup's win rate against usual(), as a share: the matchup's rate pulled toward
+/// usual by k games (usualK) minus usual, so (wins - games * usual) / (games + k) and a
+/// thin matchup reads near 0. sd: its spread, sqrt(usual (1 - usual) / (games + k))
+pub const VsUsual = struct {
+    mean: f64,
+    sd: f64,
+
+    pub fn of(wins: u32, games: u32, e: f64, k: f64) VsUsual {
+        const n: f64 = @floatFromInt(games);
+        return .{
+            .mean = (@as(f64, @floatFromInt(wins)) - n * e) / (n + k),
+            .sd = @sqrt(e * (1 - e) / (n + k)),
+        };
+    }
+};
+
+/// Games to stabilise (k) for a matchup's win rate against usual() in role r: as
+/// opponentK, but how much true rates differ from usual(), the opponent's strength
+/// allowed for, so less than opponentK's spread and a larger k
+pub fn usualK(st: *const Stats, r: Role) f64 {
+    var q: f64 = 0;
+    var noise: f64 = 0;
+    var scale: f64 = 0;
+    for (0..st.n) |c| {
+        const cc = st.champRole(r, c);
+        if (cc.games == 0) continue;
+        for (0..st.n) |o| {
+            const e = st.enemy(r, r, c, o);
+            if (o == c or e.games == 0) continue;
+            const oc = st.champRole(r, o);
+            const u = usual(ratio(cc.wins, cc.games), ratio(oc.wins, oc.games));
+            const g: f64 = @floatFromInt(e.games);
+            const d = @as(f64, @floatFromInt(e.wins)) - g * u;
+            q += d * d / g;
+            noise += u * (1 - u);
+            scale += g;
+        }
+    }
+    const tau2 = std.math.clamp((q - noise) / @max(scale, 1), 0.0001, 0.01);
+    return 0.25 / tau2;
+}
+
+/// Every lane opponent as a tile in one grid, all on screen: the opponent linking to
+/// the matchup page from ch's side, ch's win rate there (tierlist.trackCell), against
+/// usual (usualCell), the lane curve's gold difference at lane_minute and games. Still
+/// a table, so static/table.js sorts it by the header row (shown as sort buttons).
 /// Hardest first by the shrunk rate, so a few lucky games don't top the list; under
 /// min_opponent_games faded and last, by games; under min_opponent_share of cr hidden
 /// until asked for (static/filters.js redraws it the same way)
-fn opponentTable(site: *const Site, w: *Writer, ch: Champ, r: Role, cr: core.statsfile.Counts, k: f64, opps: []Opponent) !void {
+fn opponentTable(site: *const Site, w: *Writer, ch: Champ, r: Role, cr: core.statsfile.Counts, k: f64, ka: f64, opps: []Opponent) !void {
     if (opps.len == 0) return;
+    const base = ratio(cr.wins, cr.games);
     const Order = struct {
         base: f64,
         k: f64,
@@ -271,7 +332,7 @@ fn opponentTable(site: *const Site, w: *Writer, ch: Champ, r: Role, cr: core.sta
             return shrunk(x, o.base, o.k) < shrunk(y, o.base, o.k);
         }
     };
-    std.mem.sort(Opponent, opps, Order{ .base = ratio(cr.wins, cr.games), .k = k }, Order.f);
+    std.mem.sort(Opponent, opps, Order{ .base = base, .k = k }, Order.f);
     const floor = @max(1, min_opponent_share * @as(f64, @floatFromInt(cr.games)));
     var shown: usize = 0;
     for (opps) |o| {
@@ -280,26 +341,28 @@ fn opponentTable(site: *const Site, w: *Writer, ch: Champ, r: Role, cr: core.sta
     try tpl.renderPart(w,
         \\<div class="tl-bar"><h3 class="opp-h">Lane opponents <span class="muted">{n}, hardest first</span></h3>
         \\<input type="search" placeholder="Search opponent" data-filter="opp-{slug}" aria-label="Search opponent"></div>
-        \\<div class="tl-wrap"><table class="tl" id="opp-{slug}" data-sortable data-k="{k:.0}">
-        \\<thead><tr><th class="l" data-sort="text">Opponent</th><th data-sort="num">{name}'s win rate</th><th data-sort="num" title="Lane curve estimate: {name} minus the opponent; green when {name} is ahead">{name}'s gold lead at {minute} min<small class="sub">average, then 8 games in 10</small></th><th data-sort="num">Games</th></tr></thead>
+        \\<div class="og-wrap"><table class="og" id="opp-{slug}" data-sortable data-k="{k:.0}" data-ka="{ka:.0}">
+        \\<thead><tr><th class="l" data-sort="text">Name</th><th data-sort="num" title="{name}'s win rate in the matchup">Win rate</th><th data-sort="num" title="Points more or less than {name} usually wins against an opponent this strong">Vs usual</th><th data-sort="num" title="Lane curve estimate: {name} minus the opponent; blue when {name} is ahead">Gold at {minute}</th><th data-sort="num">Games</th></tr></thead>
         \\<tbody>
         \\
-    , .{ .n = shown, .name = ch.name, .minute = core.curvesfile.lane_minute, .slug = roleSlug(r), .k = k });
+    , .{ .n = shown, .name = ch.name, .minute = core.curvesfile.lane_minute, .slug = roleSlug(r), .k = k, .ka = ka });
     var few: usize = 0;
     for (opps) |o| {
         const thin = o.games < min_opponent_games;
         const rare = @as(f64, @floatFromInt(o.games)) < floor;
         if (thin and !rare) few += 1;
         try tpl.render(w,
-            \\<tr data-id="{id}" data-name="{name}"{thin}{rare}><td class="l">{link}</td>{wr}{gold}<td class="dim" data-v="{games}">{games}</td></tr>
+            \\<tr data-id="{id}" data-name="{name}" data-q="{q:.4}"{thin}{rare}><td class="l">{link}</td>{wr}{vs}{gold}<td class="dim" data-v="{games}">{games} <small>games</small></td></tr>
             \\
         , .{
             .id = o.other.id,
             .name = o.other.name,
+            .q = o.strength,
             .thin = tpl.flag(thin, "class=\"thin\""),
             .rare = tpl.flag(rare, "data-rare hidden"),
             .link = tpl.call(opponentLink, .{ site, ch, o.other, r }),
-            .wr = tpl.call(winRateCell, .{ o.wins, o.games, @as(f64, 0.25) }),
+            .wr = tpl.call(tierlist.trackCell, .{ ratio(o.wins, o.games), o.games, try site.arena.print("{d} games", .{o.games}), @as(?[]const u8, null) }),
+            .vs = tpl.call(usualCell, .{ site, ch, r, o, base, ka }),
             .gold = tpl.call(goldCell, .{ site, ch, o.other, r }),
             .games = o.games,
         });
@@ -322,6 +385,52 @@ fn opponentTable(site: *const Site, w: *Writer, ch: Champ, r: Role, cr: core.sta
     });
 }
 
+/// "+2.1 vs usual" (VsUsual in points), coloured as win rates on the champions table
+/// are, as if usual were 50%; the numbers behind it on hover. As static/filters.js
+/// usualCell
+fn usualCell(w: *Writer, site: *const Site, ch: Champ, r: Role, o: Opponent, base: f64, k: f64) !void {
+    const e = usual(base, o.strength);
+    const d = VsUsual.of(o.wins, o.games, e, k);
+    const z = 1.2816;
+    const title = try site.arena.print("Against an opponent winning {d:.1}% in {s}, {s} usually wins about {d:.1}%; against {s} {d:.1}% in {d} games. Vs usual {f} points, pulled toward 0 the fewer the games; 8 in 10 between {f} and {f}", .{
+        100 * o.strength,                 roleName(r),                      ch.name, 100 * e,
+        o.other.name,                     100 * ratio(o.wins, o.games),     o.games, Points{ .v = d.mean },
+        Points{ .v = d.mean - z * d.sd }, Points{ .v = d.mean + z * d.sd },
+    });
+    try tpl.render(w, "<td data-v=\"{v:.4}\"><span class=\"vs\" style=\"--c:{colour}\" title=\"{title}\"><b>{pts}</b> vs usual</span></td>", .{
+        .v = d.mean,
+        .colour = tierlist.wrColour(0.5 + d.mean, tierlist.table_span),
+        .title = title,
+        .pts = Points{ .v = d.mean },
+    });
+}
+
+/// A share as signed points to one decimal: 0.021 -> "+2.1", -0.0004 -> "0.0"
+pub const Points = struct {
+    v: f64,
+
+    pub fn format(p: Points, w: *Writer) Writer.Error!void {
+        const x = 100 * p.v;
+        if (@abs(x) < 0.05) return w.writeAll("0.0");
+        if (x > 0) try w.writeByte('+');
+        try w.print("{d:.1}", .{x});
+    }
+};
+
+test "usual and vs usual" {
+    try std.testing.expectApproxEqAbs(0.5, usual(0.5, 0.5), 1e-9);
+    try std.testing.expectApproxEqAbs(0.5598, usual(0.53, 0.47), 1e-4);
+    try std.testing.expectApproxEqAbs(0.53, usual(0.53, 0.5), 1e-9);
+    // No games: nothing to say; many: close to the raw difference
+    try std.testing.expectEqual(0, VsUsual.of(0, 0, 0.5, 400).mean);
+    const d = VsUsual.of(5500, 10000, 0.5, 400);
+    try std.testing.expectApproxEqAbs(0.0481, d.mean, 1e-4);
+    var buf: [16]u8 = undefined;
+    try std.testing.expectEqualStrings("+2.1", try std.fmt.bufPrint(&buf, "{f}", .{Points{ .v = 0.021 }}));
+    try std.testing.expectEqualStrings("-2.1", try std.fmt.bufPrint(&buf, "{f}", .{Points{ .v = -0.021 }}));
+    try std.testing.expectEqualStrings("0.0", try std.fmt.bufPrint(&buf, "{f}", .{Points{ .v = -0.0004 }}));
+}
+
 /// To the matchup page from ch's side, or the opponent's own page where there is none
 fn opponentLink(w: *Writer, site: *const Site, ch: Champ, other: Champ, r: Role) !void {
     const has = if (site.curves) |*c| c.get(r, .all, ch.id, other.id) != null else false;
@@ -341,7 +450,7 @@ fn goldCell(w: *Writer, site: *const Site, ch: Champ, other: Champ, r: Role) !vo
     const i = core.curvesfile.lane_minute - 1;
     const e = v.estimate(.gold, i);
     const g = matchup.range(v, curves.baseline(r, .all), .gold, i);
-    try tpl.render(w, "<td data-v=\"{mean}\"><a class=\"gold {side}\" style=\"opacity:{fade:.2}\" href=\"../{path}\" title=\"Lane curves, {games} games\">{sign}{mean}</a><small title=\"8 games in 10\">{p10s}{p10} to {p90s}{p90}</small></td>", .{
+    try tpl.render(w, "<td data-v=\"{mean}\"><a class=\"gold {side}\" style=\"opacity:{fade:.2}\" href=\"../{path}\" title=\"Lane curves, {games} games; 8 games in 10 from {p10s}{p10} to {p90s}{p90}\">{sign}{mean}</a> <small>gold</small></td>", .{
         .mean = e.mean,
         .side = if (e.mean > 0) "up" else if (e.mean < 0) "down" else "even",
         .fade = core.curvesfile.fade(v.games()),

@@ -59,17 +59,25 @@ Jacob 19 Oct: more like lolalytics, better use of space; lane opponents are too 
 see all at once; builds, skill order and runes on the first screen. Then more useful
 than lolalytics: our own edge is the lane curves, early/late lean, "Into which teams"
 (data-and-model.md step 2) and the player's own record when looked up.
-- Data check first: builds exist (src/builds.zig, skill events in src/riot/timeline.zig);
-  runes and skill order on the page may need the per-seat table (data-and-model.md
-  step 1 blocker)
-- Opponents: one dense grid (icon, win rate, games, gold at 14) all visible, sortable
-- Matchup win rates shown like the champions index shows win rates (same style)
-- Normalised matchup win rate (Jacob 19 Oct): side by side, the champion's own win rate,
-  the matchup's, and the delta, so a matchup reads as better or worse than this
-  champion usually does, adjusted for the opponent's own strength. lolalytics has
-  Delta 1 and Delta 2 for this, but Jacob finds them unclear: show it more
-  intuitively (e.g. a bar from the champion's average, or "+2.1 vs usual" coloured,
-  with a range so thin matchups don't shout)
+- Done 20 Oct (night run, champion): lane opponents as one grid of tiles, all on
+  screen (desktop 11 a row, phone 4), sortable by name, win rate, vs usual, gold at 14
+  and games; win rates on the champions table's track and colours; "+2.1 vs usual":
+  the matchup's rate against usual, where usual is the champion's role rate moved by
+  the opponent's on the log-odds scale, pulled toward 0 by k games a role (champion.zig
+  usualK; learned.md 2026-10-20), its 8-in-10 range on hover. Left: under a filter
+  other than the root view, filters.js reuses the root view's opponent strengths (the
+  filter data has only this champion's games); the matchup page's delta (below)
+- Builds, runes and skill order on the first screen, data check 20 Oct: no per-seat
+  table needed (that blocker is the comp profiles'). The patch view's builds file
+  (`meiolol builds`, daily; 246k games on 16.20, 857 champion roles) already holds per
+  champion and role the rune pages, summoner spells, starting items, boots, first
+  finished items in order and skill priority with games and wins each; the build page
+  (builds.zig) draws them. The champion page needs only a compact top option per kind
+  in each role section (keystone and runes, spells, start, core 3, skill priority) in
+  place of the "Build:" link line, from site.view_builds[patch view] as builds.link
+  finds it. Limits: builds follow the patch view, so the Region/Rank/Period filters
+  don't move them (say so, or grey them when filtered); per-matchup builds for the
+  matchup page would need builds counted by lane opponent, a new builds file key
 - Pick and ban rate like lolalytics (Jacob wrote "pbr": confirm whether he means PR
   and BR, or lolalytics' PBI, pick/ban influence)
 

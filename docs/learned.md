@@ -25,6 +25,18 @@ How to write a line:
 
 ## Win
 
+- 2026-10-20 (early): Once the two champions' own win rates in the role are allowed
+  for, lane matchups still differ by about 2 percentage points in top and mid, 1.2 in
+  bot, 1.0 in support and 0.7 in jungle; the opponent's own strength is about 40% of how
+  much matchup win rates differ in top and mid, 60% in bot and 80-90% in jungle and
+  support. Sure: method of moments on the live site's lane opponent tables (269k EUW
+  games, last 30 days, 1.5-4k matchups a role), no held-out look; sizes agree with the
+  2253Z v2 line below except jungle (lower here). Site: the champion page's "vs usual"
+  pulls each matchup toward usual by this, about 650-700 games in top and mid, 1,750 in
+  bot, the 2,500 cap in jungle and support. Evidence: champion.zig usualK (the same sums
+  as the page's data-ka), cross-checked in Python on the pages (raw k for mid 390 vs the
+  page's 371)
+
 - 2026-10-18 (early): A neural network now predicts the winner from the draft better
   than the model the site and app use. It reads what each team's champions typically do
   in games (damage type, tankiness, crowd control, healing, range) together with which

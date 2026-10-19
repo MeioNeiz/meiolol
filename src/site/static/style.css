@@ -374,7 +374,6 @@ table.tl th small.sub { display: block; margin: 1px 0 0; font-size: 11px; }
 .ci { position: relative; display: inline-block; width: 150px; height: 18px; }
 .ci::before { content: ""; position: absolute; top: 8px; left: 0; right: 0; height: 2px; background: var(--axis); border-radius: 1px; }
 .ci::after { content: ""; position: absolute; top: 2px; left: 50%; width: 1px; height: 14px; background: var(--axis); }
-.ci .r { position: absolute; top: 5px; height: 8px; border-radius: 4px; opacity: 0.45; }
 .ci .d { position: absolute; top: 4px; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; border: 2px solid var(--bg); z-index: 1; }
 b.up, a.up, .up { color: var(--good); }
 b.down, a.down, .down { color: var(--bad); }
@@ -704,3 +703,77 @@ td.wrap { white-space: normal; min-width: 140px; max-width: none; padding: 7px 1
 #wr-shape .lo { stop-color: var(--bad); }
 #wr-shape .mid { stop-color: var(--muted); }
 #wr-shape .hi { stop-color: var(--good); }
+/* Champion page lane opponents (champion.zig opponentTable): a table drawn as a grid of
+   tiles, all on screen; its header row is the sort buttons (static/table.js) */
+.og-wrap { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+table.og, .og thead, .og tbody { display: block; }
+.og thead tr { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.og thead tr::before { content: "Sort by"; color: var(--faint); font-size: 12px; margin-right: 2px; }
+.og th {
+  font-weight: 500; font-size: 12px; color: var(--muted); padding: 2px 10px; border: 1px solid var(--line-2);
+  border-radius: 999px; cursor: pointer; user-select: none; white-space: nowrap;
+}
+.og th:hover, .og th[aria-sort] { color: var(--text); border-color: var(--muted); }
+.og th[aria-sort="descending"]::after { content: " \25BE"; }
+.og th[aria-sort="ascending"]::after { content: " \25B4"; }
+.og tbody { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 4px; padding: 8px; }
+.og tbody tr { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 6px 4px; border-radius: 8px; min-width: 0; }
+.og tbody tr[hidden] { display: none; }
+.og tbody tr:hover { background: var(--panel-3); }
+.og td { display: block; padding: 0; text-align: center; font-size: 12px; line-height: 1.35; color: var(--t2); max-width: 100%; }
+.og td.dim { color: var(--muted); }
+.og small { color: var(--faint); font-size: 11px; }
+.og .champ { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 500; color: var(--text); }
+.og .champ img { display: block; width: 36px; height: 36px; margin: 0 auto 2px; border-radius: 6px; }
+.og .wr { flex-direction: column-reverse; gap: 0; }
+.og .wr b { width: auto; font-size: 14px; }
+.og .ci { display: block; width: 72px; height: 10px; }
+.og .ci::before { top: 4px; }
+.og .ci::after { top: 1px; height: 8px; }
+.og .ci .d { top: 1px; width: 8px; height: 8px; margin-left: -4px; border-width: 1px; border-color: var(--panel); }
+.og .vs { color: var(--faint); font-size: 11px; white-space: nowrap; }
+.og .vs b { color: var(--c); font-size: 12px; font-weight: 600; }
+.og a.gold { font-weight: 600; }
+@media (max-width: 480px) {
+  .og tbody { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 2px; padding: 6px; }
+  .og tbody tr { padding: 5px 2px; }
+  .og .champ img { width: 32px; height: 32px; }
+  .og .ci { width: 60px; }
+}
+/* Matchup page first screen (matchup.zig tiles, leads, why): stats beside one chart, the
+   Gold/Experience/CS tabs are radios */
+.mu-tiles { margin-bottom: 10px; }
+.mu-tiles b.vs { color: var(--c); }
+.mu-top { display: grid; gap: 12px 28px; margin: 4px 0 8px; }
+@media (min-width: 1000px) {
+  .mu-top { grid-template-columns: minmax(0, 1fr) minmax(0, 600px); align-items: start; }
+}
+table.mu-leads { width: 100%; font-size: 14px; margin: 0 0 4px; }
+.mu-leads th, .mu-leads td { padding: 4px 8px; }
+.mu-leads th:first-child { text-align: left; font-weight: 500; color: var(--muted); }
+.mu-leads td.even { color: var(--muted); }
+.mu-leads tr.n td { color: var(--faint); font-size: 12px; }
+.mu-leads.thin td, .mu-why.thin { opacity: 0.6; }
+h3.mu-h { margin: 14px 0 4px; font-size: 15px; }
+ul.mu-why { margin: 0; padding-left: 18px; font-size: 14px; color: var(--t2); }
+ul.mu-why li { margin: 3px 0; }
+ul.mu-why b { color: var(--text); }
+.mu-tabs { display: flex; gap: 6px; margin: 0 0 8px; }
+.mu-tabs label {
+  font-size: 13px; color: var(--muted); padding: 3px 12px; border: 1px solid var(--line-2);
+  border-radius: 999px; cursor: pointer;
+}
+.mu-tabs input { position: absolute; opacity: 0; pointer-events: none; }
+.mu-tabs label:has(input:checked) { color: var(--text); border-color: var(--muted); background: var(--panel-3); }
+.mu-tabs label:has(input:focus-visible) { outline: 2px solid var(--accent); }
+body:has(#m-gold:checked) .mu-m:not(.mu-m-gold),
+body:has(#m-xp:checked) .mu-m:not(.mu-m-xp),
+body:has(#m-cs:checked) .mu-m:not(.mu-m-cs) { display: none; }
+.mu-curves .verdict { margin: 0 0 6px; font-size: 14px; }
+.mu-curves figcaption { font-size: 12px; }
+@media (max-width: 600px) {
+  .mu-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .mu-tiles > div { min-width: 0; padding: 7px 9px; }
+  .mu-tiles b { font-size: 18px; }
+  .mu-tiles span, .mu-tiles small { font-size: 11px; }
+}

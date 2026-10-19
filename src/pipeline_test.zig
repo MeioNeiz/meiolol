@@ -191,11 +191,12 @@ test "fixture games to stats, curves and the website" {
         .{ "champion/darius.html", &.{"Patch 15.13 against 15.12: too early to tell, too few games on 15.13 so far. <a href=\"../patch.html\">Patch changes</a>"} },
         .{ "champions.html", &.{"Matchups</a>\n<a href=\"patch.html\">Patch changes</a>"} },
         .{ "index.html", &.{"New patch: <a href=\"patch/patch.html\">what changed in 15.13 since 15.12</a>."} },
-        // Champion table and page: raw win rate with its interval, every lane opponent
-        // (few games: shown, faded), it and the curve's gold at 14 linking to the matchup
-        // page from the champion's side
+        // Champion table and page: raw win rate on the table's track, every lane opponent
+        // as a tile in one grid (few games: shown, faded) with its rate against usual
+        // (the opponent's own rate on the row for filters.js), it and the curve's gold at
+        // 14 linking to the matchup page from the champion's side
         .{ "champions.html", &.{ "data-sortable", "class=\"ci\"", "own win rates spread around it", "id=\"wr-edge\"", "opacity:" } },
-        .{ "champion/darius.html", &.{ "Lane opponents", "<a class=\"champ\" href=\"../matchup/top/darius-vs-mordekaiser.html\" title=\"Darius vs Mordekaiser\">", "href=\"../matchup/top/darius-vs-mordekaiser.html\" title=\"Lane curves", "Darius's gold lead at 14 min<small class=\"sub\">average, then 8 games in 10</small>", "Search opponent", "data-name=\"Mordekaiser\" class=\"thin\">" } },
+        .{ "champion/darius.html", &.{ "Lane opponents", "<a class=\"champ\" href=\"../matchup/top/darius-vs-mordekaiser.html\" title=\"Darius vs Mordekaiser\">", "href=\"../matchup/top/darius-vs-mordekaiser.html\" title=\"Lane curves", "<th data-sort=\"num\" title=\"Lane curve estimate: Darius minus the opponent; blue when Darius is ahead\">Gold at 14</th>", "Search opponent", "data-name=\"Mordekaiser\" data-q=\"", "class=\"thin\">", "<table class=\"og\"", "data-ka=\"", "</b> vs usual</span>", "usually wins about" } },
         // Hardest first by the rate shrunk with the role's k; opponents under 1% of the
         // champion's games hidden by default (the Opponents filter's p1). Rank filter from
         // Platinum, the tier the crawl samples
