@@ -56,7 +56,8 @@ src/
   store/             sqlite.zig (thin wrapper), schema.zig, raw.zig (compression)
   tpl/               HTML templates (module "tpl", std only, library-grade): named holes,
                      escaping by position, compile-time checks; usage in root.zig's
-                     header
+                     header; tests.zig the contract, compile_errors.zig templates that
+                     must not compile (each built by `zig build test`, expecting its error)
   core/              pure, std only, shared: roles, statsfile (model file format),
                      score (recommender), curvesfile (lane curves format)
   lcu/               League client: lockfile/process discovery, https (TLS to

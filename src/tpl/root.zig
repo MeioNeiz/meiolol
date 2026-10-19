@@ -1,55 +1,111 @@
-//! HTML templates with named holes, checked at compile time.
+//! HTML templates with named holes, parsed at compile time and escaped by where each hole
+//! sits, so a mistake in escaping is a compile error rather than an injection.
 //!
-//!     try tpl.render(w, "<a href=\"{href}\">{name}</a>", .{ .href = url, .name = champ.name });
+//!     const tpl = @import("tpl");
 //!
-//! - A hole is `{name}` or `{name:options}` (std.fmt options for a number: `{gold:.1}`, `{secs:0>2}`).
-//!   Any other brace is plain text, so inline JS needs no escaping; `{{` writes `{`.
-//! - Every hole needs a field and every field a hole: a typo is a compile error.
-//! - Values by type: strings, numbers, enums (tag name), optionals (null writes
-//!   nothing), anything with `render(self, w)` (components, `t`, `call`, `each`), slices
-//!   of those, and anything with `format`. `trusted` marks HTML written as is.
-//! - Escaping comes from where the hole sits, known at compile time (maud's
-//!   attribute break-outs come from escaping by type alone):
-//!   - text: escaped; components write their own markup
-//!   - quoted attribute value: everything escaped, components and `format` included,
-//!     as they stream. `trusted`, `t`, `call` and `each` are compile errors: their
-//!     markup would be escaped, their own holes twice
-//!   - URL attribute (href, src, action...) until its text fixes the scheme (a `:`,
-//!     `/`, `?` or `#` before the hole): strings, components and `format` are
-//!     scheme-checked (javascript: and the like become about:invalid); a second hole
-//!     before the scheme is fixed is a compile error. `attr("href", ...)` the same
-//!   - on* and style values: script after entity decoding, so a string is a compile
-//!     error; numbers, enums and our own `format` types only
-//!   - inside a tag, outside quotes: only `attr`, `flag` or `trusted` (an unquoted
-//!     string could add attributes)
-//!   - <script>, <style>: numbers, `json` or `trusted` (HTML escaping is wrong there);
-//!     data for JS goes in `<script type="application/json">{data}</script>`
-//! - `render` and `t` templates must balance their tags; `renderPart` is for layout
-//!   pieces that open in one call and close in another.
+//!     fn link(w: *std.Io.Writer, name: []const u8, page: []const u8, games: u32) !void {
+//!         try tpl.render(w,
+//!             \\<a href="{page}" title="{name}">{name}</a> <span>{games} games</span>
+//!         , .{ .page = page, .name = name, .games = games });
+//!     }
 //!
-//! No allocator or I/O: the same components run in wasm with a fixed-buffer Writer.
+//! `link(w, "Nunu & Willump", "javascript:alert(1)", 3)` writes
+//! `<a href="about:invalid#tpl" title="Nunu &amp; Willump">Nunu &amp; Willump</a>
+//! <span>3 games</span>`.
+//!
+//! What it guarantees
+//!
+//! - Every hole has a field in the args and every field a hole: a typo is a compile error.
+//! - The template text is read as HTML at compile time. Each hole's context comes from its
+//!   position, its value's type decides how it is written, and a pairing that can't be
+//!   made safe is a compile error naming the hole.
+//! - `render` and `t` templates balance their tags; `renderPart` is for layout pieces
+//!   that open in one call and close in another.
+//! - No allocator and no I/O beyond the `std.Io.Writer` it is given: it runs in wasm with
+//!   a fixed-buffer writer.
+//!
+//! What it trusts: the template text itself (it is source code), `trusted` HTML, the markup
+//! a component writes, and what a `format` type writes into an on* or style attribute.
+//! A URL hole's scheme is checked, nothing else: `href="{x}"` may still point to another
+//! site.
+//!
+//! Holes
+//!
+//! - `{name}`, or `{name:options}` with std.fmt options for a number: `{gold:.1}`,
+//!   `{secs:0>2}`. A name is a letter or `_`, then letters, digits and `_`; the options
+//!   hold no space, newline, `{`, `;` or `,`.
+//! - Any other brace is text, so most inline JS and CSS needs no escaping: `{ a: 1 }`,
+//!   `p{ color: red }` and `try{f()}` are text. But `{a:1}` and `p{color:red}` are holes
+//!   with options: write `{{` for a `{`.
+//! - Inside `<!-- -->` nothing is a hole: comments are written as they are.
+//! - A field may fill several holes.
+//!
+//! Values, by type
+//!
+//! - strings (`[]const u8`, `*const [n]u8`), numbers (with the hole's options) and enums
+//!   (the tag name)
+//! - optionals: null writes nothing; `void` writes nothing
+//! - components: anything with `pub fn render(self, w: *std.Io.Writer) !void`, written
+//!   as is in text; `t`, `call` and `each` make them from templates and functions
+//! - anything with `pub fn format(self, w: *std.Io.Writer) !void`, escaped as it streams
+//! - slices and arrays of the above, one after another
+//! - `trusted` HTML, `json` for scripts, `attr` and `flag` for holes inside a tag
+//!
+//! Contexts
+//!
+//! - text: escaped (`& < > " '`); components write their own markup
+//! - quoted attribute value: escaped, components and `format` values included as they
+//!   stream; `trusted`, `t`, `call` and `each` are compile errors (their markup would be
+//!   escaped, their own holes twice)
+//! - URL attribute (href, src, action, formaction, poster, cite, data, xlink:href) until
+//!   its text fixes the scheme with a `:`, `/`, `?` or `#` before the hole: the value,
+//!   with the attribute's text around the hole, must be relative or http, https or
+//!   mailto, else it is written as `about:invalid#tpl`. A second hole before the scheme
+//!   is fixed is a compile error. After that it is a plain attribute value
+//! - on* and style attribute values are script and CSS once the browser decodes entities:
+//!   a string is a compile error; numbers, enums and `format` values only
+//! - inside a tag, outside quotes: only `attr`, `flag` or `trusted` (an unquoted string
+//!   could add attributes)
+//! - `<script>` and `<style>`: numbers, `json` or `trusted`, as HTML escaping is wrong
+//!   there; data for JS goes in `<script type="application/json">{data}</script>`
+//!
+//! Components
+//!
+//!     fn row(w: *std.Io.Writer, name: []const u8, games: u32) !void {
+//!         try tpl.render(w, "<li>{name} <b>{games}</b></li>", .{ .name = name, .games = games });
+//!     }
+//!     try tpl.render(w, "<ul>{first}{rest}</ul>{note}", .{
+//!         .first = tpl.call(row, .{ "Ahri", 2 }),
+//!         .rest = tpl.each(champs, {}, rowOf), // rowOf(ctx: void, w, item)
+//!         .note = tpl.when(champs.len == 0, tpl.t("<p>{none}</p>", .{ .none = "none yet" })),
+//!     });
 
 const std = @import("std");
 const Writer = std.Io.Writer;
 
+/// Writes the template `src` with each `{hole}` filled from the field of `args` with its
+/// name, escaped for where the hole sits. The template must balance its tags.
 pub fn render(w: *Writer, comptime src: []const u8, args: anytype) !void {
     return renderSegs(w, comptime parse(src, true), src, args);
 }
 
-/// As `render`, but tags may stay open or close ones opened elsewhere (page layout)
+/// As `render`, but tags may stay open or close ones opened by an earlier call: for page
+/// layout split across functions
 pub fn renderPart(w: *Writer, comptime src: []const u8, args: anytype) !void {
     return renderSegs(w, comptime parse(src, false), src, args);
 }
 
-/// A template as a value, to pass into another template's hole
+/// A template as a value, to fill another template's hole; rendered there, as `render`
 pub fn t(comptime src: []const u8, args: anytype) Template(src, @TypeOf(args)) {
     return .{ .args = args };
 }
 
+/// The type `t` returns. Naming it lets a function return a template without rendering it.
 pub fn Template(comptime src: []const u8, comptime Args: type) type {
     return struct {
         args: Args,
 
+        /// Marks markup a quoted attribute can't take
         pub const is_template = true;
 
         pub fn render(self: @This(), w: *Writer) !void {
@@ -58,7 +114,7 @@ pub fn Template(comptime src: []const u8, comptime Args: type) type {
     };
 }
 
-/// HTML written as is
+/// HTML written as is: what `trusted` and `flag` return
 pub const Raw = struct {
     html: []const u8,
 
@@ -67,20 +123,24 @@ pub const Raw = struct {
     }
 };
 
-/// HTML written as is: only for markup we wrote, never for data (long name on purpose)
+/// HTML written as is: only for markup the program wrote, never for data (the long name
+/// is on purpose). Allowed in text, inside a tag and in `<script>`
 pub fn trusted(html: []const u8) Raw {
     return .{ .html = html };
 }
 
-/// `v` as JSON for a <script> hole, `<` `>` `&` as \u escapes so it can't end the script
+/// `v` as JSON (std.json) for a `<script>` hole, with `<`, `>` and `&` as \u escapes so it
+/// can't end the script or open a comment there
 pub fn json(v: anytype) Json(@TypeOf(v)) {
     return .{ .value = v };
 }
 
+/// The type `json` returns
 pub fn Json(comptime T: type) type {
     return struct {
         value: T,
 
+        /// Marks a value a `<script>` hole takes
         pub const is_json = true;
 
         pub fn render(self: @This(), w: *Writer) Writer.Error!void {
@@ -92,20 +152,24 @@ pub fn Json(comptime T: type) type {
     };
 }
 
-/// ` name="value"`, value escaped as in a quoted hole of that attribute; for a hole
-/// inside a tag
+/// ` name="value"`, for a hole inside a tag: `<a{href}>`. The value is checked and escaped
+/// as in a quoted hole of that attribute (a URL's scheme, a string in on* refused)
 pub fn attr(comptime name: []const u8, value: anytype) Attr(name, @TypeOf(value)) {
     return .{ .value = value };
 }
 
+/// The type `attr` returns
 pub fn Attr(comptime name: []const u8, comptime T: type) type {
     return struct {
         value: T,
 
+        /// Marks a value a hole inside a tag takes
         pub const is_attr = true;
 
+        const ctx = attrContext(name);
+
         pub fn render(self: @This(), w: *Writer) !void {
-            const ctx: Context = comptime if (isCodeAttr(name)) .code else if (isUrlAttr(name)) .url else .attr;
+            comptime check(T, "tpl.attr(\"" ++ name ++ "\")", ctx);
             try w.writeAll(" " ++ name ++ "=\"");
             try writeValue(w, self.value, "", ctx, .{ "", "" });
             try w.writeByte('"');
@@ -113,25 +177,29 @@ pub fn Attr(comptime name: []const u8, comptime T: type) type {
     };
 }
 
-/// ` name` when `on`, for boolean attributes and classes: `<li{thin}>`
+/// ` html` when `on`, else nothing: boolean attributes and fixed classes inside a tag,
+/// `<li{thin}>` with `.thin = tpl.flag(thin, "class=\"thin\"")`
 pub fn flag(on: bool, comptime html: []const u8) ?Raw {
     return if (on) trusted(" " ++ html) else null;
 }
 
-/// `value` when `on`, else nothing
+/// `v` when `on`, else nothing
 pub fn when(on: bool, v: anytype) ?@TypeOf(v) {
     return if (on) v else null;
 }
 
-/// A component call as a value: `func(w, args...)` when rendered
+/// A function call as a value: `func(w, args...)` when rendered, `w` the writer of the
+/// template it fills. For components that take parameters
 pub fn call(comptime func: anytype, args: anytype) Call(func, @TypeOf(args)) {
     return .{ .args = args };
 }
 
+/// The type `call` returns
 pub fn Call(comptime func: anytype, comptime Args: type) type {
     return struct {
         args: Args,
 
+        /// Marks markup a quoted attribute can't take
         pub const is_template = true;
 
         pub fn render(self: @This(), w: *Writer) @typeInfo(@TypeOf(func)).@"fn".return_type.? {
@@ -140,16 +208,18 @@ pub fn Call(comptime func: anytype, comptime Args: type) type {
     };
 }
 
-/// `func(ctx, w, item)` for each item
+/// `func(ctx, w, item)` for each of `items` when rendered: lists and table rows
 pub fn each(items: anytype, ctx: anytype, comptime func: anytype) Each(@TypeOf(items), @TypeOf(ctx), func) {
     return .{ .items = items, .ctx = ctx };
 }
 
+/// The type `each` returns
 pub fn Each(comptime Items: type, comptime Ctx: type, comptime func: anytype) type {
     return struct {
         items: Items,
         ctx: Ctx,
 
+        /// Marks markup a quoted attribute can't take
         pub const is_template = true;
 
         pub fn render(self: @This(), w: *Writer) @typeInfo(@TypeOf(func)).@"fn".return_type.? {
@@ -158,10 +228,13 @@ pub fn Each(comptime Items: type, comptime Ctx: type, comptime func: anytype) ty
     };
 }
 
+/// `s` HTML-escaped as a std.fmt value, for writing outside a template:
+/// `w.print("<td>{f}</td>", .{tpl.esc(name)})`. A template hole takes `s` itself
 pub fn esc(s: []const u8) std.fmt.Alt([]const u8, writeEscaped) {
     return .{ .data = s };
 }
 
+/// Writes `s` with `& < > " '` as entities: safe in text and in quoted attribute values
 pub fn writeEscaped(s: []const u8, w: *Writer) Writer.Error!void {
     var start: usize = 0;
     for (s, 0..) |ch, i| {
@@ -182,9 +255,22 @@ pub fn writeEscaped(s: []const u8, w: *Writer) Writer.Error!void {
 
 // --- parsing --------------------------------------------------------------------------
 
-/// Where a hole sits; code: an on* or style attribute value
-const Context = enum { text, attr, url, code, tag, script };
+/// Where a hole sits
+const Context = enum {
+    text,
+    /// A quoted attribute value
+    attr,
+    /// A URL attribute's value until its scheme is fixed
+    url,
+    /// An on* or style attribute's value: script or CSS
+    code,
+    /// Inside a tag, outside quotes
+    tag,
+    /// In <script> or <style>
+    script,
+};
 
+/// A parsed template: text written as is, and holes
 const Seg = union(enum) {
     lit: []const u8,
     hole: struct {
@@ -193,6 +279,8 @@ const Seg = union(enum) {
         ctx: Context,
         /// url: the value's text before and after the hole, for the scheme check
         around: [2][]const u8 = .{ "", "" },
+        /// Offset in the template, for errors
+        at: usize,
     },
 };
 
@@ -213,10 +301,21 @@ fn isName(c: u8) bool {
     return std.ascii.isAlphanumeric(c) or c == '_';
 }
 
+fn isAttrName(c: u8) bool {
+    return std.ascii.isAlphanumeric(c) or c == '-' or c == ':' or c == '_';
+}
+
+/// A compile error naming the template text around `at`, message last (the build's
+/// compile-error check matches the end of the line)
 fn fail(comptime src: []const u8, comptime at: usize, comptime msg: []const u8) noreturn {
-    const from = if (at > 30) at - 30 else 0;
+    const from = at -| 30;
     const to = @min(src.len, at + 30);
-    @compileError("template: " ++ msg ++ ", at: \"" ++ src[from..to] ++ "\"");
+    var near = src[from..to].*;
+    for (&near) |*ch| if (ch.* == '\n') {
+        ch.* = ' ';
+    };
+    const dots = [2][]const u8{ if (from > 0) "..." else "", if (to < src.len) "..." else "" };
+    @compileError("template \"" ++ dots[0] ++ &near ++ dots[1] ++ "\": " ++ msg);
 }
 
 fn parse(comptime src: []const u8, comptime balanced: bool) []const Seg {
@@ -225,11 +324,13 @@ fn parse(comptime src: []const u8, comptime balanced: bool) []const Seg {
         var segs: []const Seg = &.{};
         // Literal text is src[lit_start..i]: slices, not copies
         var lit_start: usize = 0;
+        // Open elements, innermost last
         var stack: []const []const u8 = &.{};
         const State = enum { text, tag, dq, sq, comment, script };
         var state: State = .text;
         var tag_name: []const u8 = "";
-        var tag_start: usize = 0;
+        // Where the tag's attributes start, after its name
+        var attrs_start: usize = 0;
         var attr_name: []const u8 = "";
         var value_start: usize = 0;
         var script_end: []const u8 = "";
@@ -243,13 +344,14 @@ fn parse(comptime src: []const u8, comptime balanced: bool) []const Seg {
                     lit_start = i;
                     continue;
                 }
-                if (hole(src, i)) |h| {
+                if (lexHole(src, i)) |h| {
                     segs = withLit(segs, src[lit_start..i]);
                     const ctx: Context = switch (state) {
-                        .text, .comment => .text,
+                        .text => .text,
                         .tag => .tag,
-                        .dq, .sq => if (isCodeAttr(attr_name)) .code else if (isUrlAttr(attr_name)) .url else .attr,
+                        .dq, .sq => attrContext(attr_name),
                         .script => .script,
+                        .comment => unreachable,
                     };
                     const around = if (ctx == .url) urlAround(src, value_start, i, h.end) else null;
                     segs = segs ++ [_]Seg{.{ .hole = .{
@@ -257,6 +359,7 @@ fn parse(comptime src: []const u8, comptime balanced: bool) []const Seg {
                         .spec = h.spec,
                         .ctx = if (ctx == .url and around == null) .attr else ctx,
                         .around = around orelse .{ "", "" },
+                        .at = i,
                     } }};
                     i = h.end;
                     lit_start = i;
@@ -278,22 +381,13 @@ fn parse(comptime src: []const u8, comptime balanced: bool) []const Seg {
                         i = end + 1;
                     } else if (src[i] == '/') {
                         const end = std.mem.indexOfScalarPos(u8, src, i, '>') orelse fail(src, i, "unclosed end tag");
-                        const name = std.mem.trim(u8, src[i + 1 .. end], " \n");
-                        if (isVoid(name)) fail(src, i, "</" ++ name ++ ">: void elements have no end tag");
-                        if (balanced) {
-                            if (stack.len == 0) fail(src, i, "</" ++ name ++ "> closes nothing");
-                            const open = stack[stack.len - 1];
-                            if (!std.mem.eql(u8, open, name)) fail(src, i, "</" ++ name ++ "> closes <" ++ open ++ ">");
-                            stack = stack[0 .. stack.len - 1];
-                        } else if (stack.len > 0 and std.mem.eql(u8, stack[stack.len - 1], name)) {
-                            stack = stack[0 .. stack.len - 1];
-                        }
+                        stack = closeTag(src, i, std.mem.trim(u8, src[i + 1 .. end], " \n"), stack, balanced);
                         i = end + 1;
                     } else if (std.ascii.isAlphabetic(src[i])) {
                         var end = i;
                         while (end < src.len and (std.ascii.isAlphanumeric(src[end]) or src[end] == '-')) end += 1;
                         tag_name = src[i..end];
-                        tag_start = end;
+                        attrs_start = end;
                         i = end;
                         state = .tag;
                     }
@@ -306,7 +400,7 @@ fn parse(comptime src: []const u8, comptime balanced: bool) []const Seg {
                     },
                     '>' => {
                         state = .text;
-                        checkAttrs(src, tag_start, i - 1);
+                        checkAttrs(src, attrs_start, i - 1);
                         const self_closing = src[i - 2] == '/';
                         // Self-closing is SVG's; in HTML `<div/>` opens a div
                         if (self_closing and !isVoid(tag_name) and !inSvg(stack, tag_name)) {
@@ -328,6 +422,7 @@ fn parse(comptime src: []const u8, comptime balanced: bool) []const Seg {
                 .sq => if (c == '\'') {
                     state = .tag;
                 },
+                // `<!-->` and `<!--->` close too, as in HTML
                 .comment => if (std.mem.endsWith(u8, src[0..i], "-->")) {
                     state = .text;
                 },
@@ -340,6 +435,19 @@ fn parse(comptime src: []const u8, comptime balanced: bool) []const Seg {
         const out = segs[0..segs.len].*;
         return &out;
     }
+}
+
+/// The open elements after `</name>` at src[at]. Unbalanced (renderPart), an end tag may
+/// close an element opened by an earlier call
+fn closeTag(comptime src: []const u8, comptime at: usize, comptime name: []const u8, comptime stack: []const []const u8, comptime balanced: bool) []const []const u8 {
+    if (isVoid(name)) fail(src, at, "</" ++ name ++ ">: void elements have no end tag");
+    const open = if (stack.len > 0) stack[stack.len - 1] else {
+        if (balanced) fail(src, at, "</" ++ name ++ "> closes nothing");
+        return stack;
+    };
+    if (std.mem.eql(u8, open, name)) return stack[0 .. stack.len - 1];
+    if (balanced) fail(src, at, "</" ++ name ++ "> closes <" ++ open ++ ">");
+    return stack;
 }
 
 fn withLit(comptime segs: []const Seg, comptime lit: []const u8) []const Seg {
@@ -355,7 +463,7 @@ fn urlAround(comptime src: []const u8, comptime start: usize, comptime at: usize
     var after_hole = false;
     while (j < at) {
         if (std.mem.indexOfScalar(u8, ":/?#", src[j]) != null) return null;
-        if (src[j] == '{') if (hole(src, j)) |h| {
+        if (src[j] == '{') if (lexHole(src, j)) |h| {
             after_hole = true;
             j = h.end;
             continue;
@@ -373,11 +481,16 @@ fn urlAround(comptime src: []const u8, comptime start: usize, comptime at: usize
     return .{ src[start..at], src[end..k] };
 }
 
+fn attrContext(comptime name: []const u8) Context {
+    return if (isCodeAttr(name)) .code else if (isUrlAttr(name)) .url else .attr;
+}
+
 /// on* and style values are script and CSS once entities are decoded
 fn isCodeAttr(comptime name: []const u8) bool {
     return std.ascii.eqlIgnoreCase(name, "style") or (name.len > 2 and std.ascii.startsWithIgnoreCase(name, "on"));
 }
 
+/// Attributes whose value a browser loads or navigates to: a javascript: URL there runs
 const url_attrs = [_][]const u8{ "href", "src", "action", "formaction", "poster", "cite", "data", "xlink:href" };
 
 fn isUrlAttr(name: []const u8) bool {
@@ -390,7 +503,7 @@ fn lastAttrName(comptime before: []const u8) []const u8 {
     var end = before.len;
     while (end > 0 and (before[end - 1] == '=' or before[end - 1] == ' ')) end -= 1;
     var start = end;
-    while (start > 0 and (std.ascii.isAlphanumeric(before[start - 1]) or before[start - 1] == '-' or before[start - 1] == ':' or before[start - 1] == '_')) start -= 1;
+    while (start > 0 and isAttrName(before[start - 1])) start -= 1;
     return before[start..end];
 }
 
@@ -406,8 +519,8 @@ fn inSvg(comptime stack: []const []const u8, comptime name: []const u8) bool {
     return false;
 }
 
-/// No attribute twice in one tag; `attrs` is the tag after its name, up to `>`. Holes
-/// outside quotes (tpl.attr, tpl.flag) aren't seen, so can still repeat one
+/// No attribute twice in one tag; src[start..end] is the tag after its name, up to `>`.
+/// Holes outside quotes (tpl.attr, tpl.flag) aren't seen, so can still repeat one
 fn checkAttrs(comptime src: []const u8, comptime start: usize, comptime end: usize) void {
     const attrs = src[start..end];
     var names: []const []const u8 = &.{};
@@ -420,7 +533,7 @@ fn checkAttrs(comptime src: []const u8, comptime start: usize, comptime end: usi
             i = (std.mem.indexOfScalarPos(u8, attrs, i, '}') orelse attrs.len - 1) + 1;
         } else if (std.ascii.isAlphabetic(c)) {
             var j = i;
-            while (j < attrs.len and (std.ascii.isAlphanumeric(attrs[j]) or attrs[j] == '-' or attrs[j] == ':' or attrs[j] == '_')) j += 1;
+            while (j < attrs.len and isAttrName(attrs[j])) j += 1;
             const name = attrs[i..j];
             for (names) |n| if (std.mem.eql(u8, n, name)) fail(src, start + i, "attribute " ++ name ++ " twice");
             names = names ++ [_][]const u8{name};
@@ -438,10 +551,10 @@ fn checkAttrs(comptime src: []const u8, comptime start: usize, comptime end: usi
     }
 }
 
-const Hole = struct { name: []const u8, spec: []const u8, end: usize };
+const Lexed = struct { name: []const u8, spec: []const u8, end: usize };
 
 /// `{name}` or `{name:spec}` at src[i], else null (a plain brace)
-fn hole(comptime src: []const u8, comptime i: usize) ?Hole {
+fn lexHole(comptime src: []const u8, comptime i: usize) ?Lexed {
     var j = i + 1;
     if (j >= src.len or !isNameStart(src[j])) return null;
     while (j < src.len and isName(src[j])) j += 1;
@@ -454,80 +567,70 @@ fn hole(comptime src: []const u8, comptime i: usize) ?Hole {
     return .{ .name = name, .spec = spec, .end = close + 1 };
 }
 
-// --- rendering ------------------------------------------------------------------------
+// --- checking -------------------------------------------------------------------------
 
-fn renderSegs(w: *Writer, comptime segs: []const Seg, comptime src: []const u8, args: anytype) !void {
-    const Args = @TypeOf(args);
-    comptime {
-        for (std.meta.fieldNames(Args)) |field| {
-            var used = false;
-            for (segs) |s| if (s == .hole and std.mem.eql(u8, s.hole.name, field)) {
-                used = true;
-            };
-            if (!used) @compileError("template: field ." ++ field ++ " has no {" ++ field ++ "} hole in \"" ++ src ++ "\"");
-        }
-    }
-    inline for (segs) |s| switch (s) {
-        .lit => |l| try w.writeAll(l),
-        .hole => |h| {
-            if (!@hasField(Args, h.name)) @compileError("template: hole {" ++ h.name ++ "} has no field in the args (" ++ @typeName(Args) ++ ")");
-            try writeValue(w, @field(args, h.name), h.spec, h.ctx, h.around);
-        },
-    };
+fn holeError(comptime where: []const u8, comptime msg: []const u8) noreturn {
+    @compileError("template " ++ where ++ ": " ++ msg);
 }
 
-fn writeValue(w: *Writer, v: anytype, comptime spec: []const u8, comptime ctx: Context, comptime around: [2][]const u8) !void {
-    const T = @TypeOf(v);
-    comptime check(T, ctx);
+/// What a hole may hold where it sits; `where` names it in errors. writeValue relies on
+/// it: what passes here, writeValue can write safely
+fn check(comptime T: type, comptime where: []const u8, comptime ctx: Context) void {
     switch (@typeInfo(T)) {
-        .int, .comptime_int, .float, .comptime_float => return w.print("{d" ++ (if (spec.len > 0) ":" ++ spec else "") ++ "}", .{v}),
-        .@"enum" => if (!@hasDecl(T, "render")) return writeText(w, @tagName(v), ctx, around),
-        .optional => return if (v) |inner| writeValue(w, inner, spec, ctx, around),
+        .optional => |o| return check(o.child, where, ctx),
         .void => return,
         else => {},
     }
-    if (comptime isString(T)) return writeText(w, v, ctx, around);
-    if (comptime hasDecl(T, "render") or hasDecl(T, "format")) {
-        if (T == std.fmt.Alt([]const u8, writeEscaped)) @compileError("template: esc() value would be escaped twice; pass the string");
-        if (ctx == .url) {
-            // Whole, for the scheme check: URLs are short
-            var buf: [2048]u8 = undefined;
-            var url: Writer = .fixed(&buf);
-            if (comptime hasDecl(T, "render")) try v.render(&url) else try url.print("{f}", .{v});
-            return writeText(w, url.buffered(), ctx, around);
-        }
-        // Escaped as it streams: in an attribute a component's markup is just text
-        const escape = comptime !hasDecl(T, "render") or ctx == .attr or ctx == .code;
-        if (!escape) return v.render(w);
-        var buf: [64]u8 = undefined;
-        var e: Escaping = .init(w, &buf, .html);
-        if (comptime hasDecl(T, "render")) {
-            try v.render(&e.writer);
-        } else {
-            e.writer.print("{f}", .{v}) catch return error.WriteFailed;
-        }
-        return e.writer.flush();
-    }
-    switch (@typeInfo(T)) {
-        .pointer => |p| if (p.size == .slice) {
-            for (v) |item| try writeValue(w, item, spec, ctx, around);
-            return;
-        } else if (p.size == .one and @typeInfo(p.child) == .array) {
-            for (v) |item| try writeValue(w, item, spec, ctx, around);
-            return;
+    const name = @typeName(T);
+    if (T == std.fmt.Alt([]const u8, writeEscaped)) holeError(where, "esc() value would be escaped twice; pass the string");
+    const value = isNumber(T) or isString(T) or @typeInfo(T) == .@"enum" or hasDecl(T, "render") or hasDecl(T, "format");
+    switch (ctx) {
+        .text => {},
+        .attr, .url, .code => {
+            if (T == Raw) holeError(where, "tpl.trusted HTML inside an attribute value would be escaped; pass the text");
+            if (hasDecl(T, "is_template")) {
+                holeError(where, "a " ++ name ++ " in an attribute writes markup, which would be escaped (its own holes twice); pass text or a `format` value");
+            }
+            if (ctx == .url and !value) {
+                holeError(where, "a URL attribute takes a string, number, enum or a `render` or `format` value (scheme-checked), not " ++ name);
+            }
+            if (ctx == .code and isString(T)) {
+                holeError(where, "a string in an on* or style attribute is script or CSS once entities are decoded; pass a number or a `format` value");
+            }
         },
-        .array => {
-            for (v) |item| try writeValue(w, item, spec, ctx, around);
-            return;
+        .tag => if (T != Raw and !hasDecl(T, "is_attr")) {
+            holeError(where, "a " ++ name ++ " hole inside a tag must be quoted, or be tpl.attr, tpl.flag or tpl.trusted");
         },
-        else => {},
+        .script => if (!isNumber(T) and T != Raw and !hasDecl(T, "is_json")) {
+            holeError(where, "a " ++ name ++ " hole in <script> or <style> needs JS or CSS escaping; pass tpl.json or tpl.trusted");
+        },
     }
-    @compileError("template: can't write a " ++ @typeName(T));
+    if (value) return;
+    if (Item(T)) |I| return check(I, where, ctx);
+    holeError(where, "can't write a " ++ name);
 }
 
-fn writeText(w: *Writer, s: []const u8, comptime ctx: Context, comptime around: [2][]const u8) !void {
-    if (ctx == .url and !safeUrl(around[0], s, around[1])) return w.writeAll("about:invalid#tpl");
-    return writeEscaped(s, w);
+/// The element type of a slice or array (or a pointer to one), else null
+fn Item(comptime T: type) ?type {
+    return switch (@typeInfo(T)) {
+        .pointer => |p| switch (p.size) {
+            .slice => p.child,
+            .one => switch (@typeInfo(p.child)) {
+                .array => |a| a.child,
+                else => null,
+            },
+            else => null,
+        },
+        .array => |a| a.child,
+        else => null,
+    };
+}
+
+fn isNumber(comptime T: type) bool {
+    return switch (@typeInfo(T)) {
+        .int, .comptime_int, .float, .comptime_float => true,
+        else => false,
+    };
 }
 
 fn isString(comptime T: type) bool {
@@ -552,37 +655,64 @@ fn hasDecl(comptime T: type, comptime name: []const u8) bool {
     };
 }
 
-/// What a hole may hold where it sits
-fn check(comptime T: type, comptime ctx: Context) void {
-    if (@typeInfo(T) == .optional) return check(@typeInfo(T).optional.child, ctx);
-    if (T == void) return;
-    const number = switch (@typeInfo(T)) {
-        .int, .comptime_int, .float, .comptime_float => true,
-        else => false,
-    };
-    const name = @typeName(T);
-    switch (ctx) {
-        .text => {},
-        .attr, .url, .code => {
-            if (T == Raw) @compileError("template: tpl.trusted HTML inside an attribute value would be escaped; pass the text");
-            if (hasDecl(T, "is_template")) {
-                @compileError("template: a " ++ name ++ " in an attribute writes markup, which would be escaped (its own holes twice); pass text or a `format` value");
-            }
-            const value = number or isString(T) or @typeInfo(T) == .@"enum" or hasDecl(T, "render") or hasDecl(T, "format");
-            if (ctx == .url and !value) {
-                @compileError("template: a URL attribute takes a string, number, enum or a `render` or `format` value (scheme-checked), not " ++ name);
-            }
-            if (ctx == .code and isString(T)) {
-                @compileError("template: a string in an on* or style attribute is script or CSS once entities are decoded; pass a number or a `format` value");
-            }
-        },
-        .tag => if (T != Raw and !hasDecl(T, "is_attr")) {
-            @compileError("template: a " ++ name ++ " hole inside a tag must be quoted, or be tpl.attr, tpl.flag or tpl.trusted");
-        },
-        .script => if (!number and T != Raw and !hasDecl(T, "is_json")) {
-            @compileError("template: a " ++ name ++ " hole in <script> or <style> needs JS or CSS escaping; pass tpl.json or tpl.trusted");
-        },
+// --- rendering ------------------------------------------------------------------------
+
+fn renderSegs(w: *Writer, comptime segs: []const Seg, comptime src: []const u8, args: anytype) !void {
+    const Args = @TypeOf(args);
+    comptime {
+        for (std.meta.fieldNames(Args)) |field| {
+            for (segs) |s| {
+                if (s == .hole and std.mem.eql(u8, s.hole.name, field)) break;
+            } else fail(src, 0, "field ." ++ field ++ " has no {" ++ field ++ "} hole");
+        }
+        for (segs) |s| if (s == .hole) {
+            if (!@hasField(Args, s.hole.name)) fail(src, s.hole.at, "hole {" ++ s.hole.name ++ "} has no field in the args");
+            check(@FieldType(Args, s.hole.name), "hole {" ++ s.hole.name ++ "}", s.hole.ctx);
+        };
     }
+    inline for (segs) |s| switch (s) {
+        .lit => |l| try w.writeAll(l),
+        .hole => |h| try writeValue(w, @field(args, h.name), h.spec, h.ctx, h.around),
+    };
+}
+
+/// `v` as `check` let it through for `ctx`
+fn writeValue(w: *Writer, v: anytype, comptime spec: []const u8, comptime ctx: Context, comptime around: [2][]const u8) !void {
+    const T = @TypeOf(v);
+    switch (@typeInfo(T)) {
+        .int, .comptime_int, .float, .comptime_float => return w.print("{d" ++ (if (spec.len > 0) ":" ++ spec else "") ++ "}", .{v}),
+        .@"enum" => if (!@hasDecl(T, "render")) return writeText(w, @tagName(v), ctx, around),
+        .optional => return if (v) |inner| writeValue(w, inner, spec, ctx, around),
+        .void => return,
+        else => {},
+    }
+    if (comptime isString(T)) return writeText(w, v, ctx, around);
+    if (comptime hasDecl(T, "render") or hasDecl(T, "format")) {
+        if (ctx == .url) {
+            // Whole, for the scheme check: URLs are short
+            var buf: [2048]u8 = undefined;
+            var url: Writer = .fixed(&buf);
+            if (comptime hasDecl(T, "render")) try v.render(&url) else try url.print("{f}", .{v});
+            return writeText(w, url.buffered(), ctx, around);
+        }
+        // Escaped as it streams: in an attribute a component's markup is just text
+        const escape = comptime !hasDecl(T, "render") or ctx == .attr or ctx == .code;
+        if (!escape) return v.render(w);
+        var buf: [64]u8 = undefined;
+        var e: Escaping = .init(w, &buf, .html);
+        if (comptime hasDecl(T, "render")) {
+            try v.render(&e.writer);
+        } else {
+            e.writer.print("{f}", .{v}) catch return error.WriteFailed;
+        }
+        return e.writer.flush();
+    }
+    for (v) |item| try writeValue(w, item, spec, ctx, around);
+}
+
+fn writeText(w: *Writer, s: []const u8, comptime ctx: Context, comptime around: [2][]const u8) !void {
+    if (ctx == .url and !safeUrl(around[0], s, around[1])) return w.writeAll("about:invalid#tpl");
+    return writeEscaped(s, w);
 }
 
 /// Relative, or http, https or mailto: what a page links to. Anything else with a
@@ -652,151 +782,6 @@ const Escaping = struct {
     }
 };
 
-// --- tests ----------------------------------------------------------------------------
-
-fn expectRender(expected: []const u8, comptime src: []const u8, args: anytype) !void {
-    var buf: [512]u8 = undefined;
-    var w: Writer = .fixed(&buf);
-    try render(&w, src, args);
-    try std.testing.expectEqualStrings(expected, w.buffered());
-}
-
-test "holes escape by type" {
-    try expectRender(
-        "<a href=\"x?a=1&amp;b=2\">Nunu &amp; Willump</a> 3 1.5 euw",
-        "<a href=\"{href}\">{name}</a> {n} {f:.1} {region}",
-        .{ .href = "x?a=1&b=2", .name = "Nunu & Willump", .n = 3, .f = @as(f64, 1.46), .region = enum { euw }.euw },
-    );
-}
-
-test "raw, optional, flag and attr" {
-    const thin = true;
-    try expectRender(
-        "<li class=\"thin\" data-games=\"5\"><b>hi</b></li>",
-        "<li{thin}{games}>{body}{none}</li>",
-        .{
-            .thin = flag(thin, "class=\"thin\""),
-            .games = attr("data-games", 5),
-            .body = trusted("<b>hi</b>"),
-            .none = @as(?[]const u8, null),
-        },
-    );
-}
-
-test "plain braces, {{ and script holes" {
-    try expectRender(
-        "<script>try{f(3)}catch(e){}</script><p>{x}</p>",
-        "<script>try{f({n})}catch(e){}</script><p>{{x}</p>",
-        .{ .n = 3 },
-    );
-}
-
-test "nested templates, calls and each" {
-    const Item = struct { name: []const u8, games: u32 };
-    const items = [_]Item{ .{ .name = "Ahri", .games = 2 }, .{ .name = "K'Sante", .games = 1 } };
-    const row = struct {
-        fn f(unit: []const u8, w: *Writer, it: Item) !void {
-            try render(w, "<li>{name} {games} {unit}</li>", .{ .name = it.name, .games = it.games, .unit = unit });
-        }
-    }.f;
-    const heading = struct {
-        fn f(w: *Writer, text: []const u8, games: u32) !void {
-            try render(w, "<h2>{text} <span>{games}</span></h2>", .{ .text = text, .games = games });
-        }
-    }.f;
-    try expectRender(
-        "<div><h2>Picks <span>3</span></h2><ul><li>Ahri 2 games</li><li>K&#39;Sante 1 games</li></ul><i>x</i></div>",
-        "<div>{title}<ul>{rows}</ul>{note}</div>",
-        .{
-            .title = call(heading, .{ "Picks", @as(u32, 3) }),
-            .rows = each(&items, @as([]const u8, "games"), row),
-            .note = t("<i>{s}</i>", .{ .s = "x" }),
-        },
-    );
-}
-
-test "format values escape as they stream" {
-    const V = struct {
-        pub fn format(_: @This(), w: *Writer) Writer.Error!void {
-            try w.writeAll("a<b");
-        }
-    };
-    try expectRender("<p>a&lt;b</p>", "<p>{v}</p>", .{ .v = V{} });
-}
-
-test "parts may leave tags open" {
-    var buf: [64]u8 = undefined;
-    var w: Writer = .fixed(&buf);
-    try renderPart(&w, "<main>{x}", .{ .x = 1 });
-    try renderPart(&w, "</main>", .{});
-    try std.testing.expectEqualStrings("<main>1</main>", w.buffered());
-}
-
-test "void and self-closing tags, comments, doctype" {
-    try expectRender(
-        "<!doctype html><!-- {x} --><p><br><img src=\"a\"><svg><line x1=\"1\"/></svg></p>",
-        "<!doctype html><!-- {x} --><p><br><img src=\"{src}\"><svg><line x1=\"{x}\"/></svg></p>",
-        .{ .src = "a", .x = 1 },
-    );
-}
-
-test "escaping follows the hole's position" {
-    const Bold = struct {
-        pub fn render(_: @This(), w: *Writer) Writer.Error!void {
-            try w.writeAll("<b>\"x\"</b>");
-        }
-    };
-    const Link = struct {
-        pub fn render(_: @This(), w: *Writer) Writer.Error!void {
-            try w.writeAll("../a.html?x=1&y=2");
-        }
-    };
-    try expectRender(
-        "<b>\"x\"</b><p title=\"&lt;b&gt;&quot;x&quot;&lt;/b&gt;\"></p>" ++
-            "<a href=\"about:invalid#tpl\"></a><a href=\"https://x.io/?a=1&amp;b\"></a>" ++
-            "<a href=\"../a.html?x=1&amp;y=2\"></a><a href=\"../javascript:x\"></a>",
-        "{b}<p title=\"{b2}\"></p><a href=\"{bad}\"></a><a href=\"{good}\"></a>" ++
-            "<a href=\"{link}\"></a><a href=\"../{rel}\"></a>",
-        .{ .b = Bold{}, .b2 = Bold{}, .bad = " JavaScript:alert(1)", .good = "https://x.io/?a=1&b", .link = Link{}, .rel = "javascript:x" },
-    );
-}
-
-test "json in a script can't end it" {
-    try expectRender(
-        "<script type=\"application/json\">{\"name\":\"\\u003c/script\\u003e\",\"n\":2}</script>",
-        "<script type=\"application/json\">{data}</script>",
-        .{ .data = json(.{ .name = "</script>", .n = 2 }) },
-    );
-}
-
-test "URL holes: the scheme is checked with the text around the hole, components too" {
-    const Js = struct {
-        pub fn render(_: @This(), w: *Writer) Writer.Error!void {
-            try w.writeAll("javascript:alert(1)");
-        }
-    };
-    try expectRender(
-        "<a href=\"about:invalid#tpl:x\"></a><a href=\"learn.html\"></a>" ++
-            "<a href=\"https://x.io/javascript:x\"></a><img src=\"about:invalid#tpl\"><a href=\"../a/x:y\"></a>",
-        "<a href=\"{bad}:x\"></a><a href=\"{page}.html\"></a>" ++
-            "<a href=\"https://x.io/{fixed}\"></a><img src=\"{js}\"><a href=\"{root}a/{slug}\"></a>",
-        .{ .bad = "javascript", .page = "learn", .fixed = "javascript:x", .js = Js{}, .root = "../", .slug = "x:y" },
-    );
-}
-
-test "tpl.attr escapes as a quoted hole of its attribute" {
-    const Colour = struct {
-        pub fn format(_: @This(), w: *Writer) Writer.Error!void {
-            try w.writeAll("color:oklch(0.7 0.1 50)");
-        }
-    };
-    try expectRender(
-        "<a href=\"about:invalid#tpl\" title=\"a&amp;b\"></a><i style=\"color:oklch(0.7 0.1 50)\"></i>",
-        "<a{href}{title}></a><i{style}></i>",
-        .{ .href = attr("href", "javascript:x"), .title = attr("title", "a&b"), .style = attr("style", Colour{}) },
-    );
-}
-
-test "unquoted attribute values aren't names" {
-    try expectRender("<input type=search name=search>", "<input type=search name=search>", .{});
+test {
+    _ = @import("tests.zig");
 }

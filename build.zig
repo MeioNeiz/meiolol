@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const Translator = @import("translate_c").Translator;
+const tpl_errors = @import("src/tpl/compile_errors.zig");
 
 // 0.x releases break APIs; move versions on purpose
 comptime {
@@ -52,6 +53,8 @@ pub fn build(b: *std.Build) void {
         const t = b.addTest(.{ .root_module = mod, .filters = test_filters });
         test_step.dependOn(&b.addRunArtifact(t).step);
     }
+
+    test_step.dependOn(tplErrorChecks(b, target, m.tpl));
 
     b.step("fmt", "Format the Zig sources").dependOn(&b.addFmt(.{ .paths = &fmt_paths }).step);
 
@@ -121,7 +124,9 @@ pub fn build(b: *std.Build) void {
     ci.dependOn(&b.addExecutable(.{ .name = "meiolol-lab", .root_module = lab_check }).step);
     ci.dependOn(lint(b, "shellcheck", "shellcheck -S warning deploy/*.sh deploy/hooks/*"));
     ci.dependOn(lint(b, "git", "deploy/check-deploy.sh"));
-    ci.dependOn(lint(b, "node", "for f in src/site/static/*.js; do node --check \"$f\" || exit 1; done"));
+    ci.dependOn(lint(b, "sh", "deploy/hooks/claude-bash-guard.sh --test > /dev/null"));
+    ci.dependOn(lint(b, "perl", "for f in deploy/*.pl; do perl -c \"$f\" 2> /dev/null || { perl -c \"$f\"; exit 1; }; done"));
+    ci.dependOn(lint(b, "node", "for f in src/site/static/*.js deploy/training/*.js deploy/*.js; do node --check \"$f\" || exit 1; done"));
 }
 
 const Modules = struct {
@@ -289,6 +294,27 @@ fn desktopShot(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.la
             },
         }),
     });
+}
+
+/// Templates that must not compile (src/tpl/compile_errors.zig), each built on its own and
+/// expecting its error: a Zig test can't catch a compile error
+fn tplErrorChecks(b: *std.Build, target: std.Build.ResolvedTarget, tpl: *std.Build.Module) *std.Build.Step {
+    const step = b.step("tpl-errors", "Check that bad templates fail to compile, each with its error");
+    for (tpl_errors.cases) |c| {
+        const options = b.addOptions();
+        options.addOption([]const u8, "case", c.name);
+        const t = b.addTest(.{ .name = c.name, .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tpl/compile_errors.zig"),
+            .target = target,
+            .imports = &.{
+                .{ .name = "tpl", .module = tpl },
+                .{ .name = "options", .module = options.createModule() },
+            },
+        }) });
+        t.expect_errors = .{ .contains = c.expect };
+        step.dependOn(&t.step);
+    }
+    return step;
 }
 
 /// A non-Zig check run from the repo root. A missing tool fails the step, not the
