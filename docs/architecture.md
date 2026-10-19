@@ -562,17 +562,20 @@ and the front-end assets, loading only the root and shared views' stats and cham
 (src/serve.zig) serves a site directory over HTTP with .gz siblings; handy for local
 previews.
 
-Code shape (root.zig): `load` reads one view's data from the DB into a `Site` (stats,
-champions, pool, learning, Learn facts, data and script files); pages are functions of
-(path, Site): `renderPage` routes a path within the view to its page function,
-`renderShared` the site-root pages (shared_pages), `pagePaths` lists every page. The
+Code shape (src/site: root.zig the Site, options and router; load.zig, extras.zig and
+champs.zig the loading; views.zig `Loaded` and the views file; write.zig the static
+build; home.zig, tierlist.zig, champion.zig and the other page files): `load` reads
+one view's data from the DB into a `Site` (stats, champions, pool, learning, Learn
+facts, data and script files); pages are functions of (path, Site): `renderPage`
+routes a path within the view to its page function, `renderShared` the site-root pages
+(shared_pages), `pagePaths` lists every page. The
 static build writes each listed path through the router (one arena per page), so a page
 rendered on request is the same bytes: `Loaded` holds every view (loaded on first
 request) and answers any path from the site root (pipeline_test checks every file of
 the full build, and that `--static core` writes only its list, each the renderer's
 bytes).
 Views file (data/views.bin; src/site/flat.zig, `Loaded.writeViews`/`readViews`): the
-site options and every loaded view's data in parts (Part in src/site/root.zig): base
+site options and every loaded view's data in parts (Part in src/site/views.zig): base
 (stats file, champions, patches), filter (root view), people (pool, learning, spread),
 daily (shared view: Daily Draft, your example, Learn, eval points). Little-endian,
 slices length-prefixed; each part is tag, view, key, length, bytes. A part's key hashes
@@ -602,7 +605,7 @@ list. One read transaction diffs (match_id, rowid) of matches and timeline.timel
 (read first: an attached file's snapshot starts at its first read, and the writer
 commits main first) against the files, then reads only new, REPLACEd (new rowid) or
 newly timelined matches, by key, or whole tables past 150k (the first build;
-the views write sets it in root.zig); mastery
+the views write sets it in site/extras.zig); mastery
 rows likewise by rowid. In-place changes the diff can't see: forgotten PUUIDs (scrubbed
 each write from `forgotten`, and at once by `meiolol forget` under the directory's
 lock), PUUIDs blanked at 24 months (days near the cutoff read again each write, older

@@ -1,0 +1,364 @@
+//! Champion pages (champion/<slug>.html): lane opponents by role, the filter bar
+
+const std = @import("std");
+const core = @import("core");
+const html = @import("html.zig");
+const matchup = @import("matchup.zig");
+const pool_page = @import("pool.zig");
+const learning_page = @import("learning.zig");
+const spread_page = @import("spread.zig");
+const builds_page = @import("builds.zig");
+const lean_line = @import("lean.zig");
+const filters = @import("filters.zig");
+const patch_page = @import("patch.zig");
+
+const Writer = std.Io.Writer;
+const Stats = core.Stats;
+const Role = core.Role;
+const tpl = html.tpl;
+
+const root = @import("root.zig");
+const min_role_share = @import("tierlist.zig").min_role_share;
+const Champ = root.Champ;
+const Site = root.Site;
+const pct = root.pct;
+const ratio = root.ratio;
+const side = root.side;
+const earlyNote = root.earlyNote;
+const roleSlug = root.roleSlug;
+const roleName = root.roleName;
+const winRateCell = @import("tierlist.zig").winRateCell;
+
+/// Champion page: lane opponents with fewer games are faded and listed last
+const min_opponent_games = 10;
+/// And those under this share of the champion's games in the role are hidden until asked
+/// for: the Opponents filter's default, "Seen in 1%+ of games"
+const min_opponent_share = 0.01;
+
+const Opponent = struct {
+    other: Champ,
+    games: u32,
+    wins: u32,
+};
+
+/// One page per champion, from the root view (EUW, 30 days) at the site root; its
+/// filters (filterBar) show the other views and any other region, rank or patch
+pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
+    const a = site.arena;
+    const st = &site.stats;
+    const title = try a.print("{s} win rate, lane opponents and curves | meiolol", .{ch.name});
+    const desc = try a.print("{s} in ranked solo queue by region, rank and patch: win rate with how sure it is, every lane opponent and lane curves.", .{ch.name});
+    const path = try a.print("champion/{s}.html", .{ch.slug});
+    var p = site.sharedPage(title, desc, .champions);
+    p.root = "../";
+    p.counterparts = @as([html.View.count][]const u8, undefined);
+    for (html.View.all, &p.counterparts.?) |v, *there| there.* = try std.mem.concat(a, u8, &.{ path, v.query() });
+    p.canonical = site.canonical("", path);
+    try html.head(w, p);
+
+    var roles: [Role.count]Role = undefined;
+    var n_roles: usize = 0;
+    for (Role.all) |r| {
+        const g = st.champRole(r, ch.c).games;
+        if (g > 0 and @as(f64, @floatFromInt(g)) >= min_role_share * @as(f64, @floatFromInt(ch.games))) {
+            roles[n_roles] = r;
+            n_roles += 1;
+        }
+    }
+    std.mem.sort(Role, roles[0..n_roles], RoleGames{ .st = st, .c = ch.c }, RoleGames.more);
+    try tpl.render(w,
+        \\<div class="hero"><img src="{icon}" alt="" width="64" height="64"><div><h1>{name}</h1><p class="muted">Ranked solo/duo <span data-scope>{in}, {when}, Platinum+ games</span>.{plays}</p></div></div>
+        \\
+    , .{
+        .icon = site.icon(ch),
+        .name = ch.name,
+        .in = site.view.region.in(),
+        .when = site.when,
+        .plays = tpl.when(n_roles > 1, tpl.t(" Plays {roles}.", .{ .roles = tpl.call(roleLinks, .{roles[0..n_roles]}) })),
+    });
+    try earlyNote(site, w, true);
+    try filterBar(site, w, ch);
+    try spread_page.section(w, &site.spread, ch, site.view.region);
+    if (n_roles == 0) try tpl.render(w, "<p>No games yet.</p>\n", .{});
+
+    for (roles[0..n_roles]) |r| {
+        const cr = st.champRole(r, ch.c);
+        const rate = ratio(cr.wins, cr.games);
+        try tpl.renderPart(w,
+            \\<section id="{slug}"><h2>{role}</h2>
+            \\<div class="tiles"><div data-tile="wr"><span>Win rate</span><b class="{side}" style="opacity:{fade:.2}">{wr}</b><small>of games won</small></div><div data-tile="pick"><span>Pick rate</span><b>{pick}</b><small>of games</small></div><div data-tile="ban"><span>Ban rate</span><b>{ban}</b><small>of games</small></div><div data-tile="games"><span>Games</span><b>{games}</b><small>{role} lane</small></div></div>
+            \\
+        , .{
+            .slug = roleSlug(r),
+            .role = roleName(r),
+            .side = side(rate),
+            .fade = core.curvesfile.fade(cr.games),
+            .wr = tpl.call(pct, .{ cr.wins, cr.games }),
+            .pick = tpl.call(pct, .{ cr.games, site.games }),
+            .ban = tpl.call(pct, .{ ch.banned, site.games }),
+            .games = cr.games,
+        });
+
+        var opps: std.ArrayList(Opponent) = .empty;
+        for (site.champs) |other| {
+            if (other.c == ch.c) continue;
+            const e = st.enemy(r, r, ch.c, other.c);
+            if (e.games == 0) continue;
+            try opps.append(a, .{ .other = other, .games = e.games, .wins = e.wins });
+        }
+        if (site.lean) |l| try lean_line.line(w, l, ch.id, ch.name, r, "../method.html#lean");
+        try patch_page.since(site, w, ch, r, "../");
+        try builds_page.link(site, w, ch, r, path);
+        try opponentTable(site, w, ch, r, cr, opponentK(st, r), opps.items);
+        try tpl.renderPart(w, "</section>\n", .{});
+    }
+    try pool_page.section(site, w, &site.pool, ch);
+    try learning_page.section(w, &site.learning, ch);
+    try tpl.render(w,
+        \\<p class="muted small">Win rates are raw: no pulling toward 50%, fainter under {full} games. Hardest first sorts by the win rate pulled toward the champion's own in the role, the more so the fewer the games, so a few lucky games can't top the list. Gold at {minute} min is the lane curve's estimate, then where 8 games in 10 end (10th to 90th percentile); green ahead, red behind, fainter under {full} games; for filters other than a region and period above, the plain average of the games picked. <a href="../method.html">Method</a>.</p>
+        \\<script src="../table.js" defer></script>
+        \\<script src="../filters.js" defer></script>
+        \\
+    , .{ .minute = core.curvesfile.lane_minute, .full = core.curvesfile.full_games });
+    try html.foot(w, p);
+}
+
+/// "<a>Top</a>, <a>Jungle</a> and <a>Mid</a>"
+fn roleLinks(w: *Writer, roles: []const Role) !void {
+    for (roles, 0..) |r, i| {
+        try tpl.render(w, "{sep}<a href=\"#{slug}\">{name}</a>", .{
+            .sep = if (i == 0) null else if (i + 1 == roles.len) " and " else ", ",
+            .slug = roleSlug(r),
+            .name = roleName(r),
+        });
+    }
+}
+
+/// Filter bar (filters.zig, static/filters.js), set to the page as written (the root
+/// view); disabled until the script has the champion's filter data
+fn filterBar(site: *const Site, w: *Writer, ch: Champ) !void {
+    const region = site.opts.platforms[0];
+    try tpl.render(w,
+        \\<div class="filter-bar" data-src="../data/filters/{slug}.json" data-meta="../data/filters.json" data-champions="../data/champions.json" data-ddragon="{ddragon}" data-id="{id}" data-region="{region}" data-current="{patch}"><label>Region <select data-f="region" disabled><option value="all">All regions</option>{regions}</select></label>
+        \\<label>Rank <select data-f="rank" disabled><option value="" selected>All (Platinum+ games)</option>{ranks}</select></label>
+        \\<label>Period <select data-f="period" disabled><option value="days30" selected>Last 30 days</option>{patches}</select></label>
+        \\<label>Opponents <select data-f="min" disabled>{mins}</select></label>
+        \\<button class="link" data-reset hidden>Reset</button></div>
+        \\
+    , .{
+        .slug = ch.slug,
+        .ddragon = site.ddragon_version,
+        .id = ch.id,
+        .region = region,
+        .patch = site.patch,
+        .regions = tpl.each(site.opts.all_platforms, region, regionOption),
+        .ranks = tpl.call(rankOptions, .{site.arena}),
+        .patches = tpl.each(site.filter.patches, site.filter.current, patchOption),
+        .mins = tpl.call(minOptions, .{}),
+    });
+}
+
+fn regionOption(current: []const u8, w: *Writer, pl: []const u8) !void {
+    try tpl.render(w, "<option value=\"{pl}\"{selected}>{name}</option>", .{
+        .pl = pl,
+        .selected = tpl.flag(std.mem.eql(u8, pl, current), "selected"),
+        .name = platformName(pl),
+    });
+}
+
+/// From Platinum: the crawl samples Platinum IV+ players, so a lower tier's players are
+/// only teammates in those games and "Gold+" would read as more than it holds
+fn rankOptions(w: *Writer, a: std.mem.Allocator) !void {
+    for (filters.tiers, 0..) |t, i| {
+        if (i < filters.lowest_offered) continue;
+        try tpl.render(w, "<option value=\"{i}\">{initial}{rest}{plus} players</option>", .{
+            .i = i,
+            .initial = t[0..1],
+            .rest = try std.ascii.allocLowerString(a, t[1..]),
+            .plus = tpl.when(i + 1 < filters.tiers.len, "+"),
+        });
+    }
+}
+
+fn patchOption(current: []const []const u8, w: *Writer, pa: []const u8) !void {
+    const is_current = for (current) |c| {
+        if (std.mem.eql(u8, c, pa)) break true;
+    } else false;
+    try tpl.render(w, "<option value=\"patch:{pa}\">Patch {pa}{days}</option>", .{
+        .pa = pa,
+        .days = tpl.when(!is_current, " (last 30 days)"),
+    });
+}
+
+fn minOptions(w: *Writer) !void {
+    const mins = [_][2][]const u8{
+        .{ "0", "All" },        .{ "5", "5+ games" },     .{ "10", "10+ games" },            .{ "20", "20+ games" },
+        .{ "50", "50+ games" }, .{ "100", "100+ games" }, .{ "p1", "Seen in 1%+ of games" }, .{ "p2", "Seen in 2%+ of games" },
+    };
+    for (mins) |m| try tpl.render(w, "<option value=\"{v}\"{selected}>{label}</option>", .{
+        .v = m[0],
+        .selected = tpl.flag(std.mem.eql(u8, m[0], "p1"), "selected"),
+        .label = m[1],
+    });
+}
+
+/// "EUW1" -> "EUW", "EUN1" -> "EUNE", as static/filters.js platformName
+fn platformName(p: []const u8) []const u8 {
+    const names = [_][2][]const u8{ .{ "EUN1", "EUNE" }, .{ "LA1", "LAN" }, .{ "LA2", "LAS" }, .{ "OC1", "OCE" } };
+    for (names) |n| if (std.mem.eql(u8, n[0], p)) return n[1];
+    return std.mem.trimEnd(u8, p, "0123456789");
+}
+
+/// Games to stabilise (k) for a lane opponent's win rate in role r: game-to-game variance
+/// over how much true rates against different opponents differ from the champion's own,
+/// measured over every champion (method of moments, as curvefit for the curves). A rate
+/// on n games gets the weight n / (n + k) against the champion's rate in the role
+fn opponentK(st: *const Stats, r: Role) f64 {
+    var q: f64 = 0;
+    var noise: f64 = 0;
+    var scale: f64 = 0;
+    for (0..st.n) |c| {
+        var n: f64 = 0;
+        var wins: f64 = 0;
+        var n2: f64 = 0;
+        var cells: f64 = 0;
+        for (0..st.n) |o| {
+            const e = st.enemy(r, r, c, o);
+            if (o == c or e.games == 0) continue;
+            const g: f64 = @floatFromInt(e.games);
+            n += g;
+            wins += @floatFromInt(e.wins);
+            n2 += g * g;
+            cells += 1;
+        }
+        if (cells < 2) continue;
+        const m = wins / n;
+        for (0..st.n) |o| {
+            const e = st.enemy(r, r, c, o);
+            if (o == c or e.games == 0) continue;
+            const g: f64 = @floatFromInt(e.games);
+            const d = @as(f64, @floatFromInt(e.wins)) - g * m;
+            q += d * d / g;
+        }
+        noise += (cells - 1) * m * (1 - m);
+        scale += n - n2 / n;
+    }
+    // Rates spread at least 1 point beyond noise (k at most 2,500) and at most 10
+    const tau2 = std.math.clamp((q - noise) / @max(scale, 1), 0.0001, 0.01);
+    return 0.25 / tau2;
+}
+
+/// Opponent's win rate pulled toward the champion's own in the role by games (opponentK)
+fn shrunk(o: Opponent, base: f64, k: f64) f64 {
+    return (@as(f64, @floatFromInt(o.wins)) + k * base) / (@as(f64, @floatFromInt(o.games)) + k);
+}
+
+/// Every lane opponent: win rate with its interval and the lane curve's gold difference at
+/// lane_minute, the opponent and the gold linking to the matchup page from ch's side.
+/// Hardest first by the shrunk rate, so a few lucky games don't top the list; under
+/// min_opponent_games faded and last, by games; under min_opponent_share of cr hidden
+/// until asked for (static/filters.js redraws it the same way)
+fn opponentTable(site: *const Site, w: *Writer, ch: Champ, r: Role, cr: core.statsfile.Counts, k: f64, opps: []Opponent) !void {
+    if (opps.len == 0) return;
+    const Order = struct {
+        base: f64,
+        k: f64,
+        fn f(o: @This(), x: Opponent, y: Opponent) bool {
+            const x_thin = x.games < min_opponent_games;
+            const y_thin = y.games < min_opponent_games;
+            if (x_thin != y_thin) return y_thin;
+            if (x_thin) return x.games > y.games;
+            return shrunk(x, o.base, o.k) < shrunk(y, o.base, o.k);
+        }
+    };
+    std.mem.sort(Opponent, opps, Order{ .base = ratio(cr.wins, cr.games), .k = k }, Order.f);
+    const floor = @max(1, min_opponent_share * @as(f64, @floatFromInt(cr.games)));
+    var shown: usize = 0;
+    for (opps) |o| {
+        if (@as(f64, @floatFromInt(o.games)) >= floor) shown += 1;
+    }
+    try tpl.renderPart(w,
+        \\<div class="tl-bar"><h3 class="opp-h">Lane opponents <span class="muted">{n}, hardest first</span></h3>
+        \\<input type="search" placeholder="Search opponent" data-filter="opp-{slug}" aria-label="Search opponent"></div>
+        \\<div class="tl-wrap"><table class="tl" id="opp-{slug}" data-sortable data-k="{k:.0}">
+        \\<thead><tr><th class="l" data-sort="text">Opponent</th><th data-sort="num">{name}'s win rate</th><th data-sort="num" title="Lane curve estimate: {name} minus the opponent; green when {name} is ahead">{name}'s gold lead at {minute} min<small class="sub">average, then 8 games in 10</small></th><th data-sort="num">Games</th></tr></thead>
+        \\<tbody>
+        \\
+    , .{ .n = shown, .name = ch.name, .minute = core.curvesfile.lane_minute, .slug = roleSlug(r), .k = k });
+    var few: usize = 0;
+    for (opps) |o| {
+        const thin = o.games < min_opponent_games;
+        const rare = @as(f64, @floatFromInt(o.games)) < floor;
+        if (thin and !rare) few += 1;
+        try tpl.render(w,
+            \\<tr data-id="{id}" data-name="{name}"{thin}{rare}><td class="l">{link}</td>{wr}{gold}<td class="dim" data-v="{games}">{games}</td></tr>
+            \\
+        , .{
+            .id = o.other.id,
+            .name = o.other.name,
+            .thin = tpl.flag(thin, "class=\"thin\""),
+            .rare = tpl.flag(rare, "data-rare hidden"),
+            .link = tpl.call(opponentLink, .{ site, ch, o.other, r }),
+            .wr = tpl.call(winRateCell, .{ o.wins, o.games, @as(f64, 0.25) }),
+            .gold = tpl.call(goldCell, .{ site, ch, o.other, r }),
+            .games = o.games,
+        });
+    }
+    try tpl.renderPart(w,
+        \\</tbody></table></div>
+        \\<p class="tl-more"{none}>{faded}{rare}</p>
+        \\
+    , .{
+        .none = tpl.flag(few == 0 and shown == opps.len, "hidden"),
+        .faded = tpl.when(few > 0, tpl.t("Faded: the last {few} opponents, under {min} games each, too few to read much into. ", .{
+            .few = few,
+            .min = min_opponent_games,
+        })),
+        .rare = tpl.when(shown < opps.len, tpl.t("{n} rarer opponents (under 1% of {name}'s games) hidden. <button class=\"link\" data-show-rare=\"opp-{slug}\" data-show-all>Show them</button>", .{
+            .n = opps.len - shown,
+            .name = ch.name,
+            .slug = roleSlug(r),
+        })),
+    });
+}
+
+/// To the matchup page from ch's side, or the opponent's own page where there is none
+fn opponentLink(w: *Writer, site: *const Site, ch: Champ, other: Champ, r: Role) !void {
+    const has = if (site.curves) |*c| c.get(r, .all, ch.id, other.id) != null else false;
+    if (!has) return site.champLink(w, other, "../");
+    try tpl.render(w, "<a class=\"champ\" href=\"../{path}\" title=\"{ch} vs {name}\"><img src=\"{icon}\" alt=\"\" loading=\"lazy\" width=\"32\" height=\"32\">{name}</a>", .{
+        .path = try matchup.path(site.arena, r, ch, other),
+        .ch = ch.name,
+        .icon = site.icon(other),
+        .name = other.name,
+    });
+}
+
+fn goldCell(w: *Writer, site: *const Site, ch: Champ, other: Champ, r: Role) !void {
+    const none = "<td class=\"dim\" data-v=\"\"></td>";
+    const curves = if (site.curves) |*c| c else return tpl.render(w, none, .{});
+    const v = curves.get(r, .all, ch.id, other.id) orelse return tpl.render(w, none, .{});
+    const i = core.curvesfile.lane_minute - 1;
+    const e = v.estimate(.gold, i);
+    const g = matchup.range(v, curves.baseline(r, .all), .gold, i);
+    try tpl.render(w, "<td data-v=\"{mean}\"><a class=\"gold {side}\" style=\"opacity:{fade:.2}\" href=\"../{path}\" title=\"Lane curves, {games} games\">{sign}{mean}</a><small title=\"8 games in 10\">{p10s}{p10} to {p90s}{p90}</small></td>", .{
+        .mean = e.mean,
+        .side = if (e.mean > 0) "up" else if (e.mean < 0) "down" else "even",
+        .fade = core.curvesfile.fade(v.games()),
+        .games = v.games(),
+        .path = try matchup.path(site.arena, r, ch, other),
+        .sign = if (e.mean > 0) "+" else "",
+        .p10s = if (g[0] > 0) "+" else "",
+        .p10 = g[0],
+        .p90s = if (g[1] > 0) "+" else "",
+        .p90 = g[1],
+    });
+}
+
+const RoleGames = struct {
+    st: *const Stats,
+    c: usize,
+    fn more(ctx: RoleGames, a: Role, b: Role) bool {
+        return ctx.st.champRole(a, ctx.c).games > ctx.st.champRole(b, ctx.c).games;
+    }
+};

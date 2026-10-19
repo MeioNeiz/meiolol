@@ -89,8 +89,8 @@ one fetched dependency. Not tried here.
 
 These compile on 0.17 and will break on 0.18:
 - `std.builtin` becomes `std.lang`
-- `std.fmt.allocPrint(a, ...)` becomes `a.print(...)` (src/daily.zig, site/root.zig,
-  site/matchup.zig, main.zig, cmd/, ddragon.zig, riot/client.zig, curves.zig)
+- `std.fmt.allocPrint(a, ...)` becomes `a.print(...)` (src/daily.zig, site/,
+  main.zig, cmd/, ddragon.zig, riot/client.zig, curves.zig)
 - `std.StaticBitSet` becomes `std.bit_set.Static` (or `bit_set.Integer`)
 - ArrayList `getLast` becomes `last().?`
 

@@ -11,7 +11,7 @@ API doesn't send them yet). Look: Linear-like (small type, dark, violet accent, 
 colour); Jacob rejected League-site looks (splash art, big condensed type), editorial,
 terminal and Wrapped styles. Home leads with the lookup and a review demo. Menu: Your
 games, Daily Draft, Learn, Champions (Matchups and Champion pool as its tabs). Code:
-static/review.js, your.js, home.js; root.zig writeIndex; html.zig nav
+static/review.js, your.js, home.js; home.zig writeIndex; html.zig nav
 
 ## Identity draft four: scout your own games (Jacob, 2026-10-12)
 
@@ -20,7 +20,7 @@ extras. Focus on the player, not the meta.
 
 - Pitch: every ranked game you've played, turned into the stats nobody else shows you:
   fun enough to share, deep enough to learn from. Home page leads with "look yourself
-  up" (src/site/root.zig writeIndex); matchup curves are the benchmark behind it
+  up" (src/site/home.zig writeIndex); matchup curves are the benchmark behind it
 - Pillars (Jacob's picks from ~60 ideas):
   1. Game rewind: summary story, turning minute (win-chance model, whole game), how you
      died (damage by type: needs death recaps), death cost, jump to the moment (replay)
