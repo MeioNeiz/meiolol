@@ -6,6 +6,7 @@
 //! after another. docs/compute.md "GPU vs CPU"
 
 const std = @import("std");
+const nn = @import("nn");
 const fm = @import("fm.zig");
 const rows = @import("rows.zig");
 const enemy = @import("enemy.zig");
@@ -159,12 +160,10 @@ pub fn fitThreads(gpa: std.mem.Allocator, io: std.Io, cfg: fm.Config, n: usize, 
     const len = m.p.len;
     const grads = try gpa.alloc(f32, parts * len);
     defer gpa.free(grads);
-    const m1 = try gpa.alloc(f32, len);
-    defer gpa.free(m1);
-    const m2 = try gpa.alloc(f32, len);
-    defer gpa.free(m2);
-    @memset(m1, 0);
-    @memset(m2, 0);
+    const gr = try gpa.alloc(f32, len);
+    defer gpa.free(gr);
+    var opt = try fm.adam(gpa, len, cfg);
+    defer opt.deinit(gpa);
     const order = try gpa.alloc(u32, train.len);
     defer gpa.free(order);
     for (order, 0..) |*o, i| o.* = @intCast(i);
@@ -190,11 +189,13 @@ pub fn fitThreads(gpa: std.mem.Allocator, io: std.Io, cfg: fm.Config, n: usize, 
     };
     const Step = struct {
         p: []f32,
-        m1: []f32,
-        m2: []f32,
+        gr: []f32,
         grads: []const f32,
         parts: usize,
-        adam: fm.Adam,
+        scale: f32,
+        l2: f32,
+        opt: *const nn.Adam,
+        s: nn.Adam.Step,
         fn range(c: @This(), r: usize) !void {
             const len_ = c.p.len;
             const lo = len_ * r / c.parts;
@@ -202,19 +203,19 @@ pub fn fitThreads(gpa: std.mem.Allocator, io: std.Io, cfg: fm.Config, n: usize, 
             for (lo..hi) |j| {
                 var g: f32 = 0;
                 for (0..c.parts) |t| g += c.grads[t * len_ + j];
-                c.adam.update(&c.p[j], g, &c.m1[j], &c.m2[j]);
+                c.gr[j] = g * c.scale;
             }
+            c.opt.update(c.s, c.p, c.gr, lo, hi, c.l2);
         }
     };
-    var step: u32 = 0;
     for (0..epochs) |_| {
         rng.random().shuffle(u32, order);
         var at: usize = 0;
         while (at < order.len) : (at += cfg.batch) {
             const batch = order[at..@min(at + cfg.batch, order.len)];
             try par.forEach(io, parts, Grad{ .m = &m, .train = train, .batch = batch, .grads = grads, .parts = parts }, Grad.part);
-            step += 1;
-            const s: Step = .{ .p = m.p, .m1 = m1, .m2 = m2, .grads = grads, .parts = parts, .adam = .init(&cfg, step, batch.len) };
+            const scale = 1 / @as(f32, @floatFromInt(batch.len));
+            const s: Step = .{ .p = m.p, .gr = gr, .grads = grads, .parts = parts, .scale = scale, .l2 = cfg.l2, .opt = &opt, .s = opt.begin() };
             try par.forEach(io, parts, s, Step.range);
         }
     }
@@ -288,6 +289,9 @@ pub fn fitGpu(gpa: std.mem.Allocator, io: std.Io, gpu: *const cuda.Gpu, rows_dev
     try gpu.memset32(m1, 0, len);
     try gpu.memset32(m2, 0, len);
     try gpu.upload(u8, l, std.mem.asBytes(&lay));
+    // No moments on the host (fm_adam keeps them on the device): only each step's constants
+    var opt = try fm.adam(gpa, 0, cfg);
+    defer opt.deinit(gpa);
     const grad_fn = try gpu.function("fm_grad");
     const adam_fn = try gpu.function("fm_adam");
 
@@ -318,11 +322,11 @@ pub fn fitGpu(gpa: std.mem.Allocator, io: std.Io, gpu: *const cuda.Gpu, rows_dev
             }
             const t_adam = std.Io.Clock.awake.now(io);
             step += 1;
-            const a: fm.Adam = .init(&cfg, step, count);
+            const a = opt.begin();
             var n_ = len;
             var lr = a.lr;
-            var l2 = a.l2;
-            var scale = a.scale;
+            var l2 = cfg.l2;
+            var scale = 1 / @as(f32, @floatFromInt(count));
             var c1 = a.c1;
             var c2 = a.c2;
             try gpu.launch(adam_fn, len, &.{ @ptrCast(&p), @ptrCast(&gr), @ptrCast(&m1), @ptrCast(&m2), @ptrCast(&n_), @ptrCast(&lr), @ptrCast(&l2), @ptrCast(&scale), @ptrCast(&c1), @ptrCast(&c2) });

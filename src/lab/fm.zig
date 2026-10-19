@@ -13,6 +13,7 @@
 
 const std = @import("std");
 const core = @import("core");
+const nn = @import("nn");
 const rows_mod = @import("rows.zig");
 
 pub const Kind = enum { base, additive, lane, pairwise };
@@ -142,6 +143,31 @@ pub const Model = struct {
 
 pub const Fit = struct { model: Model, epochs: u32, val_loss: f64 };
 
+/// fit's side of nn.fit
+const FmFit = struct {
+    m: *const Model,
+    train: []const Example,
+    val: []const Example,
+    gr: []f32,
+    opt: *nn.Adam,
+    segs: []const nn.Segment,
+
+    pub fn step(f: *FmFit, part: []const u32) !void {
+        @memset(f.gr, 0);
+        for (part) |i| {
+            const e = &f.train[i];
+            f.m.grad(e, f.m.predict(e) - e.y, f.gr);
+        }
+        const scale = 1 / @as(f32, @floatFromInt(part.len));
+        for (f.gr) |*g| g.* *= scale;
+        f.opt.step(f.m.p, f.gr, f.segs);
+    }
+
+    pub fn valLoss(f: *FmFit) !f64 {
+        return mse(f.m, f.val);
+    }
+};
+
 /// Trains on train, stopping on val and returning the model at its best validation
 /// epoch; without val, runs cfg.max_epochs and keeps the last
 pub fn fit(gpa: std.mem.Allocator, cfg: Config, n: usize, train: []const Example, val: ?[]const Example) !Fit {
@@ -151,48 +177,19 @@ pub fn fit(gpa: std.mem.Allocator, cfg: Config, n: usize, train: []const Example
     defer gpa.free(best);
     const gr = try gpa.alloc(f32, m.p.len);
     defer gpa.free(gr);
-    const m1 = try gpa.alloc(f32, m.p.len);
-    defer gpa.free(m1);
-    const m2 = try gpa.alloc(f32, m.p.len);
-    defer gpa.free(m2);
-    @memset(m1, 0);
-    @memset(m2, 0);
-    const order = try gpa.alloc(u32, train.len);
-    defer gpa.free(order);
-    for (order, 0..) |*o, i| o.* = @intCast(i);
+    var opt = try adam(gpa, m.p.len, cfg);
+    defer opt.deinit(gpa);
     var rng = shuffler(cfg);
-
-    var best_loss = std.math.inf(f64);
-    var best_epoch: u32 = 0;
-    var step: u32 = 0;
-    var epoch: u32 = 0;
-    while (epoch < cfg.max_epochs) : (epoch += 1) {
-        rng.random().shuffle(u32, order);
-        var at: usize = 0;
-        while (at < order.len) : (at += cfg.batch) {
-            const batch = order[at..@min(at + cfg.batch, order.len)];
-            @memset(gr, 0);
-            for (batch) |i| {
-                const e = &train[i];
-                m.grad(e, m.predict(e) - e.y, gr);
-            }
-            step += 1;
-            const a: Adam = .init(&cfg, step, batch.len);
-            for (m.p, gr, m1, m2) |*p, g, *s1, *s2| a.update(p, g, s1, s2);
-        }
-        const v = val orelse {
-            best_epoch = epoch + 1;
-            continue;
-        };
-        const loss = mse(&m, v);
-        if (loss < best_loss - 1e-9) {
-            best_loss = loss;
-            best_epoch = epoch + 1;
-            @memcpy(best, m.p);
-        } else if (epoch + 1 - best_epoch >= cfg.patience) break;
-    }
-    if (val != null) @memcpy(m.p, best);
-    return .{ .model = m, .epochs = best_epoch, .val_loss = best_loss };
+    var f: FmFit = .{ .m = &m, .train = train, .val = val orelse &.{}, .gr = gr, .opt = &opt, .segs = &.{.{ .len = m.p.len, .decay = cfg.l2 }} };
+    const per_epoch = nn.stepsPerEpoch(train.len, cfg.batch);
+    const r = try nn.fit(gpa, &f, .{
+        .batch = cfg.batch,
+        .max_steps = cfg.max_epochs * per_epoch,
+        .patience = cfg.patience,
+        .min_delta = 1e-9,
+        .validate = val != null,
+    }, train.len, rng.random(), m.p, best);
+    return .{ .model = m, .epochs = @intCast(r.steps / per_epoch), .val_loss = r.loss };
 }
 
 /// The model before its first step: mu the train mean, b and pl warm-started
@@ -211,35 +208,11 @@ pub fn shuffler(cfg: Config) std.Random.DefaultPrng {
     return .init(cfg.seed ^ 0x9e3779b97f4a7c15);
 }
 
-/// Adam with L2 for one minibatch step (kernels.zig's fm_adam is the same on the GPU)
-pub const Adam = struct {
-    lr: f32,
-    l2: f32,
-    scale: f32,
-    c1: f32,
-    c2: f32,
-
-    pub const b1: f32 = 0.9;
-    pub const b2: f32 = 0.999;
-
-    pub fn init(cfg: *const Config, step: u32, batch_len: usize) Adam {
-        return .{
-            .lr = cfg.lr,
-            .l2 = cfg.l2,
-            .scale = 1 / @as(f32, @floatFromInt(batch_len)),
-            .c1 = 1 - std.math.pow(f32, b1, @floatFromInt(step)),
-            .c2 = 1 - std.math.pow(f32, b2, @floatFromInt(step)),
-        };
-    }
-
-    /// g0: the batch's summed gradient for p
-    pub inline fn update(a: *const Adam, p: *f32, g0: f32, s1: *f32, s2: *f32) void {
-        const g = g0 * a.scale + a.l2 * p.*;
-        s1.* = b1 * s1.* + (1 - b1) * g;
-        s2.* = b2 * s2.* + (1 - b2) * g * g;
-        p.* -= a.lr * (s1.* / a.c1) / (@sqrt(s2.* / a.c2) + 1e-8);
-    }
-};
+/// Adam with L2 in the gradient over n parameters. 1 - beta rounds in f32 (0.10000002,
+/// not 0.1), as kernels.zig's fm_adam computes it on the GPU
+pub fn adam(gpa: std.mem.Allocator, n: usize, cfg: Config) !nn.Adam {
+    return .init(gpa, n, .{ .lr = cfg.lr, .beta1 = @as(f32, 0.9), .beta2 = @as(f32, 0.999), .decay = .coupled });
+}
 
 /// Trains for a fixed number of epochs (the refit on all of train)
 pub fn fitEpochs(gpa: std.mem.Allocator, cfg: Config, n: usize, train: []const Example, epochs: u32) !Model {
