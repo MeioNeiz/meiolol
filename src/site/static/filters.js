@@ -5,7 +5,10 @@
 // redraws each role's tiles and opponent table, the early-data note and the header
 // switches. The page as written is the bar's defaults (the root view), put back as it
 // was on Reset. Picks live in the URL so a view can be shared; the views' own links use
-// the same keys (html.View.query).
+// the same keys (html.View.query). The URL's picks always win. A page opened with none
+// takes the last view visited (as the menu does) and the rank and opponents picks kept in
+// this browser; one opened from another page of the site (search.js marks the tab) with
+// only some takes the kept picks for the rest.
 "use strict";
 
 // As root.zig opponentTable: by the win rate pulled toward the champion's own in the role
@@ -37,8 +40,25 @@ const HARDEST = "hardest first";
   const fromUrl = (k, v) => (k === "period" && v === "patch" && current ? `patch:${current}` : v);
   const toUrl = (k, v) => (k === "period" && current && v === `patch:${current}` ? "patch" : v);
   const params = new URLSearchParams(location.search);
+  const KEEP = "champion-filters";
+  const kept = {};
+  try {
+    const none = Object.keys(selects).every((k) => !params.has(k));
+    if (none || sessionStorage.getItem("meio-in") === "1") {
+      const k = JSON.parse(localStorage.getItem(KEEP));
+      for (const f of ["rank", "min"]) if (typeof k?.[f] === "string") kept[f] = k[f];
+    }
+    const v = none ? localStorage.getItem("view") : null;
+    if (v?.startsWith("all/")) kept.region = "all";
+    if (v?.endsWith("patch/") && current) kept.period = `patch:${current}`;
+  } catch {}
+  const keep = () => {
+    try {
+      localStorage.setItem(KEEP, JSON.stringify({ rank: selects.rank.value, min: selects.min.value }));
+    } catch {}
+  };
   for (const [k, s] of Object.entries(selects)) {
-    const want = fromUrl(k, params.get(k) ?? defaults[k]);
+    const want = fromUrl(k, params.get(k) ?? kept[k] ?? defaults[k]);
     s.value = [...s.options].some((o) => o.value === want) ? want : defaults[k];
     s.disabled = false;
   }
@@ -176,6 +196,7 @@ const HARDEST = "hardest first";
       e.preventDefault();
       selects[k].value = v;
       apply();
+      keep();
     });
   }
 
@@ -203,7 +224,8 @@ const HARDEST = "hardest first";
     for (const s of sections) {
       if (fresh) restore(s);
       else draw(s, sums, f, view);
-      // Re-run the table's name search over the new rows
+      // The visitor's sort (table.js), then the table's name search, over the new rows
+      s.el.querySelector("table.og")?._resort?.();
       s.el.querySelector("input[data-filter]")?.dispatchEvent(new Event("input"));
     }
   }
@@ -419,12 +441,19 @@ const HARDEST = "hardest first";
       if (!e.target.closest?.("[data-show-all]")) return;
       selects.min.value = "0";
       apply();
+      keep();
     });
   }
-  for (const s of Object.values(selects)) s.addEventListener("change", apply);
+  for (const s of Object.values(selects)) {
+    s.addEventListener("change", () => {
+      apply();
+      keep();
+    });
+  }
   bar.querySelector("[data-reset]").addEventListener("click", () => {
     for (const [k, s] of Object.entries(selects)) s.value = defaults[k];
     apply();
+    keep();
   });
   apply();
 })();

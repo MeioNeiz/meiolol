@@ -276,7 +276,8 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\provider keeps standard request logs (IP address, time, page) for security and
         \\abuse prevention, for a limited time. The Daily Draft keeps your guesses, streak
         \\and archive in your own browser (local storage); they are never sent to us, and
-        \\clearing site data removes them.</p>
+        \\clearing site data removes them. Pages also keep your view settings there, such
+        \\as filters, sort orders and tabs.</p>
         \\<p>Daily Draft puzzles are real ranked games with every player identity removed:
         \\no names, Riot IDs, match ids or game dates, only champions, bans, patch, an
         \\approximate rank tier and team totals. Each game is at least a week old; the date
@@ -296,8 +297,10 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\our server logs.</p>
         \\<p>Your games remembers the last five Riot IDs you looked up, and the newest game
         \\it saw for each, in your own browser (local storage) to offer them again and count
-        \\new games; they are never sent to us. "Forget on this device" under the lookup,
-        \\or clearing site data, removes them.</p>
+        \\new games, and the last player's games as last shown, to open them straight away
+        \\when you come back; they are never sent to us. "Not you?" by the player's name
+        \\stops that; "Forget on this device" under the lookup, or clearing site data,
+        \\removes them all.</p>
         \\<p>To remove your games and stop us collecting them again, use "Remove a Riot ID"
         \\on the Your games page. You prove the account is yours by setting a given free
         \\profile icon in the League client for a minute; we then delete everything about

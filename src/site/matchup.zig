@@ -373,7 +373,7 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
 
     const vs = try variants(a, curves, r, x, y);
     if (vs.len > 1) {
-        try tpl.renderPart(w, "<fieldset class=\"exp-toggle\"><legend>Games counted</legend>", .{});
+        try tpl.renderPart(w, "<fieldset class=\"exp-toggle\" data-keep=\"matchup-exp\"><legend>Games counted</legend>", .{});
         for (vs, 0..) |s, i| {
             try tpl.render(w, "<label><input type=\"radio\" name=\"exp\" value=\"{key}\" id=\"exp-{key}\"{checked}> {label} <span class=\"muted\">({games})</span></label> ", .{
                 .key = s.key,
@@ -402,7 +402,7 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
         if (vs.len > 1) try tpl.renderPart(w, "</div>\n", .{});
     }
     try tpl.renderPart(w,
-        \\</div><div class="mu-curves"><div class="mu-tabs" role="radiogroup" aria-label="Curve">
+        \\</div><div class="mu-curves"><div class="mu-tabs" role="radiogroup" aria-label="Curve" data-keep="matchup-curve">
     , .{});
     for (charts, 0..) |c, i| try tpl.renderPart(w,
         \\<label><input type="radio" name="metric" id="m-{metric}"{checked}> {title}</label>

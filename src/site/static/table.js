@@ -3,6 +3,8 @@
 // by its text; td.rank cells renumber the shown rows. input[data-filter=ID] hides rows
 // of table#ID whose data-name lacks the text; a search also finds rows marked data-rare,
 // which stay hidden otherwise until button[data-show-rare=ID] shows them. By id, not sibling order: markup between them moves.
+// A table's sort is kept in this browser by its id (the same table on every champion's
+// page), by column name; table._resort() sorts redrawn rows the same way.
 "use strict";
 
 (() => {
@@ -38,6 +40,8 @@
       th.setAttribute("aria-sort", descending ? "descending" : "ascending");
       renumber();
     };
+    const key = table.id && `sort:${table.id}`;
+    const name = (th) => th.textContent.trim();
     for (const th of heads) {
       if (!th.dataset.sort) continue;
       th.tabIndex = 0;
@@ -46,6 +50,9 @@
         // Numbers start high first, names A to Z
         const descending = current ? current === "ascending" : th.dataset.sort === "num";
         sortBy(th, descending);
+        try {
+          if (key) localStorage.setItem(key, JSON.stringify({ col: name(th), descending }));
+        } catch {}
       };
       th.addEventListener("click", toggle);
       th.addEventListener("keydown", (e) => {
@@ -56,7 +63,17 @@
       });
     }
     table._renumber = renumber;
-    renumber();
+    table._resort = () => {
+      const th = heads.find((h) => h.hasAttribute("aria-sort"));
+      if (th) sortBy(th, th.getAttribute("aria-sort") === "descending");
+    };
+    let saved = null;
+    try {
+      saved = key && JSON.parse(localStorage.getItem(key));
+    } catch {}
+    const th = saved && heads.find((h) => h.dataset.sort && name(h) === saved.col);
+    if (th) sortBy(th, saved.descending === true);
+    else renumber();
   }
 
   for (const input of document.querySelectorAll("input[data-filter]")) {

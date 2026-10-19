@@ -90,13 +90,19 @@ function previewNote() {
   );
 }
 
-// The Riot ID lives in the fragment, which never reaches the server or its logs
+// The Riot ID lives in the fragment, which never reaches the server or its logs. Kept
+// for this tab too, so the menu's link back here opens the same player and game
 function setUrl(hash) {
   const url = new URL(location.href);
   url.search = "";
   url.hash = hash;
   history.replaceState(null, "", url);
+  try {
+    if (hash) sessionStorage.setItem(HASH, hash);
+    else sessionStorage.removeItem(HASH);
+  } catch {}
 }
+const HASH = "your-hash";
 
 const idHash = (id, game) => `id=${encodeURIComponent(id)}${game ? `&game=${game}` : ""}`;
 const playerId = (p) => `${p.name}#${p.tag}`;
@@ -120,7 +126,38 @@ function recentWrite(list) {
     if (list.length) localStorage.setItem(RECENT, JSON.stringify(list.slice(0, 5)));
     else localStorage.removeItem(RECENT);
   } catch {}
+  if (!list.some((r) => sameId(r.id, lastRead()?.id ?? ""))) lastWrite(null);
+  if (!list.length) {
+    try {
+      sessionStorage.removeItem(HASH);
+    } catch {}
+  }
   renderRecent();
+}
+
+// The last player looked up and their report as last shown: a visit without a Riot ID
+// in the URL opens them straight away, then asks the service as a lookup does
+const LAST = "your-last";
+
+function lastRead() {
+  try {
+    const last = JSON.parse(localStorage.getItem(LAST));
+    return typeof last?.id === "string" ? last : null;
+  } catch {
+    return null;
+  }
+}
+
+function lastWrite(last) {
+  try {
+    if (last) localStorage.setItem(LAST, JSON.stringify(last));
+    else localStorage.removeItem(LAST);
+  } catch {
+    // Over quota: the ID alone still opens them next time
+    try {
+      if (last) localStorage.setItem(LAST, JSON.stringify({ id: last.id }));
+    } catch {}
+  }
 }
 
 function remember(id, newest) {
@@ -162,6 +199,11 @@ async function lookup(id, game = 0) {
   newAfter = since;
   setUrl(idHash(id, game));
   status("Looking up…");
+  const last = lastRead();
+  if (last?.body?.player && sameId(last.id, id)) {
+    current = last.body;
+    render(last.body);
+  }
   await poll();
 }
 
@@ -214,7 +256,10 @@ async function poll(refresh) {
       setUrl(idHash(lookupId));
       if (games.length) status("That game is no longer among this player's recent games, so here is the newest.");
     }
-    if (p) remember(playerId(p), newest(body));
+    if (p) {
+      remember(playerId(p), newest(body));
+      lastWrite({ id: playerId(p), body: { player: p, report: body.report } });
+    }
     if (watchUntil) watchStep(body);
     renderCheck(body);
     return;
@@ -346,6 +391,7 @@ function render(body) {
   renderRoles(body);
   $("start").classList.add("compact");
   $("player-name").textContent = body.example ? p.name : `${p.name}#${p.tag}`;
+  $("not-you").hidden = !!body.example;
   const tier = p.tier
     ? `${titleCase(p.tier)}${p.division && !["MASTER", "GRANDMASTER", "CHALLENGER"].includes(p.tier) ? ` ${p.division}` : ""}`
     : "Unranked in solo/duo";
@@ -521,6 +567,9 @@ function renderMatchups(matchups) {
 }
 
 function setTab(id) {
+  try {
+    localStorage.setItem("your-tab", id);
+  } catch {}
   for (const a of $("time-tabs").querySelectorAll("a")) {
     const on = a.dataset.tab === id;
     if (on) a.setAttribute("aria-current", "page");
@@ -605,10 +654,34 @@ function forgetState(j) {
   }
 }
 
-// ?id= from the lookup forms on other pages and old links; lookup() moves it to #id=
+// "Not you?": back to an empty lookup, and later visits open none until the next one
+function notYou() {
+  clearTimeout(pollTimer);
+  stopWatch();
+  lookupId = "";
+  current = null;
+  lastWrite(null);
+  setUrl("");
+  $("player").hidden = true;
+  $("start").classList.remove("compact");
+  status("");
+  $("riot-id").value = "";
+  $("riot-id").focus();
+}
+
+// ?id= from the lookup forms on other pages and old links; lookup() moves it to #id=.
+// Without either, where this tab last was, else the last player looked up
 function fromUrl() {
   const params = new URLSearchParams(location.search);
-  const hash = new URLSearchParams(location.hash.slice(1));
+  let saved = "";
+  if (!location.hash && !location.search) {
+    try {
+      saved = sessionStorage.getItem(HASH) ?? "";
+    } catch {}
+    const last = lastRead();
+    if (!saved && last) saved = idHash(last.id);
+  }
+  const hash = new URLSearchParams(saved || location.hash.slice(1));
   const id = hash.get("id") ?? params.get("id");
   if (id) {
     $("riot-id").value = id;
@@ -640,7 +713,12 @@ async function start() {
       setTab(a.dataset.tab);
     });
   }
+  try {
+    const tab = localStorage.getItem("your-tab");
+    if ($("time-tabs").querySelector(`[data-tab="${CSS.escape(tab ?? "")}"]`)) setTab(tab);
+  } catch {}
   $("check").addEventListener("click", startWatch);
+  $("not-you").addEventListener("click", notYou);
   $("forget").addEventListener("click", () => forget(false));
   $("forget-check").addEventListener("click", () => forget(true));
   $("example-link").addEventListener("click", (e) => {

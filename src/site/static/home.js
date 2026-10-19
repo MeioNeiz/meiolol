@@ -31,6 +31,8 @@
     forget.addEventListener("click", () => {
       try {
         localStorage.removeItem("your-recent");
+        localStorage.removeItem("your-last");
+        sessionStorage.removeItem("your-hash");
       } catch {}
       box.remove();
     });

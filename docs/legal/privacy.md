@@ -113,6 +113,13 @@ per-minute statistics, with no names; the other players in those games are kept 
 one-way hashes of their identifiers. A player nobody has looked up for 30 days is
 deleted. We don't record who looked up whom, and lookups are not in our server logs.
 
+Your games remembers the last five Riot IDs you looked up, and the newest game it saw for
+each, in your own browser (local storage) to offer them again and count new games, and
+the last player's games as last shown, to open them straight away when you come back;
+they are never sent to us. "Not you?" by the player's name stops that; "Forget on this
+device" under the lookup, or clearing site data, removes them all. Pages also keep view
+settings there (filters, sort orders, tabs).
+
 To remove your games and stop us collecting them again, use "Remove a Riot ID" on the
 Your games page (the profile icon check below); we delete everything about you and keep
 only your encrypted identifier on a "do not collect" list.

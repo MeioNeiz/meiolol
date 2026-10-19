@@ -21,6 +21,25 @@
     "Wukong": ["monkeyking"], "Nunu & Willump": ["nunu"], "Kog'Maw": ["kog"],
   };
   const norm = (s) => s.toLowerCase().normalize("NFD").replace(/[^a-z0-9]/g, "");
+  // This tab has been on the site: filters.js fills picks a link leaves out
+  addEventListener("pagehide", () => {
+    try {
+      sessionStorage.setItem("meio-in", "1");
+    } catch {}
+  });
+  // [data-keep=KEY]: the radio picked inside (matchup curve tabs) kept in this browser
+  for (const box of document.querySelectorAll("[data-keep]")) {
+    const key = `keep:${box.dataset.keep}`;
+    try {
+      const saved = box.querySelector(`input[type=radio][id="${CSS.escape(localStorage.getItem(key) ?? "")}"]`);
+      if (saved) saved.checked = true;
+    } catch {}
+    box.addEventListener("change", (e) => {
+      try {
+        if (e.target.checked) localStorage.setItem(key, e.target.id);
+      } catch {}
+    });
+  }
   const viewDir = () => {
     if (script.hasAttribute("data-view")) return script.dataset.view;
     try {
