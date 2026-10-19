@@ -58,6 +58,11 @@ src/
                      escaping by position, compile-time checks; usage in root.zig's
                      header; tests.zig the contract, compile_errors.zig templates that
                      must not compile (each built by `zig build test`, expecting its error)
+  nn/                training the lab's nets on the CPU (module "nn", std only,
+                     library-grade): named parameters in one flat buffer, Adam(W),
+                     clipping, the minibatch loop with early stopping, layers, metrics,
+                     a gradient checker; a worked example in root.zig's header. Nets
+                     write their own forward and backward (no autograd)
   core/              pure, std only, shared: roles, statsfile (model file format),
                      score (recommender), curvesfile (lane curves format)
   lcu/               League client: lockfile/process discovery, https (TLS to
