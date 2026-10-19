@@ -16,15 +16,19 @@ Jacob 19 Oct:
   moment meant (gold, objective, win chance it moved, in plain words or a mark on the
   chart rather than paragraphs)
 - Pick a time frame (lane phase, mid game, whole game; charts and stats follow it)
-- Bug, quick: the gold curve runs past 14 minutes but its label still says 14 min
 - More interesting stats of the game (record-book style: firsts, biggest swing, your
   best minute)
 - More specifics in the analysis (what happened, who, where, what it cost)
-- Win chance chart colours: the grey and light blue are not clear; stronger contrast
-  between the two teams, ahead/behind readable at a glance
 
-Already planned: mark the new games in the film strip (CSS, small); example review per
-role (B7); "what your draft was up against" from comp leans (data-and-model.md step 4).
+Done 20 Oct (night run): lane panel heading gives the minutes drawn (71c3eae); win
+chance in team colours, yours blue and the enemy red, area and eval bar (cc02525; site
+is dark only); New badge in the film strip (9b634e8); first records under the win
+chance counts: best minute, high, low, minutes ahead (d15755e). Next for records:
+firsts (first blood, tower, dragon) and your own best minute need per-minute player
+events in the game report (src/api/game.zig). Jacob: blue/red OK?
+
+Already planned: example review per role (B7); "what your draft was up against" from
+comp leans (data-and-model.md step 4).
 
 ## Daily Draft
 
