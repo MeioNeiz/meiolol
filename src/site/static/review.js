@@ -333,24 +333,43 @@ const Review = (() => {
     return box;
   }
 
-  // Record-book facts of the game's win chance: its best minute, high, low and minutes
-  // ahead. A start at 0:00 is no record, so a high or low there is left out
-  function records(wc) {
-    const box = el("div", "rv-records facts-inline");
+  // Record-book facts of the game: your best minute by your own gold, the win chance's
+  // biggest rise, high, low and minutes ahead (a start at 0:00 is no record), then the
+  // game's firsts in team colours. Older reports lack best_minute and firsts
+  function records(g) {
+    const wc = g.win_chance;
+    const out = el("div", "rv-records");
+    const box = el("div", "facts-inline");
     const fact = (value, rest) => {
       const f = el("span");
       f.append(el("b", "num", value), ` ${rest}`);
       box.append(f);
     };
+    const b = g.best_minute;
+    if (b) {
+      const what = [b.kills ? `${plural(b.kills, "kill")} with you` : "", b.deaths ? plural(b.deaths, "death") : "", ...(b.taken ?? [])].filter(Boolean);
+      fact(`${signed(b.gold)} gold`, `your best minute, ${b.minute - 1}-${b.minute} min${what.length ? `: ${list(what)}` : ""}`);
+    }
     const n = wc.length - 1;
     let best = 0;
     for (let m = 1; m <= n; m++) if (wc[m] - wc[m - 1] > (best ? wc[best] - wc[best - 1] : 0)) best = m;
-    if (best) fact(pct(wc[best] - wc[best - 1]), `best minute, ${best - 1}-${best} min`);
+    if (best) fact(pct(wc[best] - wc[best - 1]), `biggest rise, ${best - 1}-${best} min`);
     const hi = wc.indexOf(Math.max(...wc)), lo = wc.indexOf(Math.min(...wc));
     if (hi > 0) fact(`${wc[hi]}%`, `highest, at ${hi}:00`);
     if (lo > 0) fact(`${wc[lo]}%`, `lowest, at ${lo}:00`);
     fact(`${wc.slice(1).filter((p) => p > 50).length} of ${n}`, "minutes ahead");
-    return box;
+    out.append(box);
+    if (g.firsts?.length) {
+      const fs = el("div", "rv-firsts");
+      for (const f of g.firsts) {
+        const c = el("span", `first ${f.ours ? "us" : "them"}`);
+        c.append(el("b", "", f.what), ` ${clock(f.t_s)} ${f.ours ? "yours" : "theirs"}`);
+        if (f.you || f.died) c.append(el("i", "", f.died ? "you died" : "with you"));
+        fs.append(c);
+      }
+      out.append(fs);
+    }
+    return out;
   }
 
   // The lane chart (src/site/lanechart.zig) through chart_wasm.zig, whose header has the
@@ -615,7 +634,7 @@ const Review = (() => {
       const holder = el("div");
       wrap.append(bar, holder);
       panel.append(wrap, counts(M));
-      if (opts.lane !== false) panel.append(records(wc));
+      if (opts.lane !== false) panel.append(records(g));
       const ml = momentList(M, (i) => set(Math.min(wc.length - 1, Math.ceil(M[i].minute)), i), opts.keep);
       set = (minute, i) => {
         // The chart is redrawn: a keyboard user keeps their place on the same dot
