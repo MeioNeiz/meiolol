@@ -30,9 +30,9 @@ pub const thin_games = 200;
 const min_minute_games = 10;
 /// Experienced-only curves with fewer games are not offered
 const min_experienced = 10;
-/// Minimum games choices on the matchup index; shows everything by default
-const index_floors = [_]u32{ 1, 5, 10, 20, 50, 100, thin_games };
-/// 23k matchups at 1 (a 140,000 px list per role); 50 keeps ~3k
+/// Minimum games choices on the matchup index, from indexFloor up
+const index_floors = [_]u32{ 1, 5, 10, 20, 50, 100, thin_games, 500, 1000 };
+/// 27k matchups at 1 (24 MB of rows); 50 keeps ~4k
 const index_default = 50;
 
 /// A thinner matchup (greyed out anyway) draws minutes while all its games are going
@@ -90,24 +90,21 @@ pub fn route(site: *const Site, w: *Writer, curves: *const Curves, rest: []const
     return true;
 }
 
-/// matchup/index.html: every matchup page by role, most games first
+/// matchup/index.html: one sortable table per role (tabs pick one), most games first.
+/// Each pair once, from the side that won more of its games, so win rate and vs usual
+/// read as how one-sided it was. Only the most played (indexFloor) are listed: the
+/// rest are on each champion's page
 pub fn writeIndex(site: *const Site, w: *Writer, curves: ?*const Curves) !void {
     const a = site.arena;
     const p = site.page(
-        if (curves) |c| try a.print("Lane matchup curves, {s} | meiolol", .{try period(a, c)}) else "Lane matchup curves | meiolol",
-        "How every lane matchup unfolds minute by minute: gold, experience and CS difference, kills and level 6 timing, by rank.",
+        if (curves) |c| try a.print("Lane matchups, {s} | meiolol", .{try period(a, c)}) else "Lane matchups | meiolol",
+        "Every lane matchup by role: win rate, against usual, gold at 14 minutes and games, each linking to how it unfolds minute by minute.",
         "matchup/index.html",
         .matchups,
     );
     try html.head(w, p);
     try tpl.render(w,
-        \\<h1>Lane matchup curves</h1>
-        \\<p class="lead">How each lane matchup unfolds, minute by minute: the typical gold,
-        \\experience and CS difference with its spread, who tends to lead at 14 minutes and
-        \\whether that side then wins the game.</p>
-        \\<p>Each matchup reads from either side: ⇄ on its page swaps them, and Change
-        \\opponent or Change champion moves to another. From a champion's page, every lane
-        \\opponent links to its matchup from that champion's side.</p>
+        \\<h1>Lane matchups</h1>
         \\
     , .{});
     const c = curves orelse {
@@ -117,31 +114,50 @@ pub fn writeIndex(site: *const Site, w: *Writer, curves: ?*const Curves) !void {
         , .{});
         return html.foot(w, p);
     };
-    try w.writeAll(
-        \\<div class="tl-bar" hidden><input type="search" placeholder="Search champion" data-min-search aria-label="Search champion"></div>
-        \\
-    );
-    try html.minGames(w, "../", "matchups", &index_floors, index_default, 0);
-    for (Role.all) |r| {
-        var list: std.ArrayList(IndexEntry) = .empty;
+    var lists: [Role.count]std.ArrayList(IndexEntry) = @splat(.empty);
+    for (Role.all, &lists) |r, *list| {
+        const ka = champion.usualK(&site.stats, r);
         for (c.curves) |cv| {
             const h = cv.header;
             if (h.role != @backingInt(r) or !isPage(h)) continue;
             const x = champ(site, h.a) orelse continue;
             const y = champ(site, h.b) orelse continue;
-            try list.append(a, .{ .x = x, .y = y, .games = h.games, .thin = thin(.{ .curve = &cv, .flipped = false }) });
+            try list.append(a, indexEntry(site, c, r, x, y, h.games, ka));
         }
         std.mem.sort(IndexEntry, list.items, {}, struct {
             fn f(_: void, p_: IndexEntry, q: IndexEntry) bool {
                 return p_.games > q.games;
             }
         }.f);
+    }
+    const floor = indexFloor(&lists);
+    const default = @max(floor, index_default);
+    for (&lists) |*list| {
+        var keep: usize = 0;
+        while (keep < list.items.len and list.items[keep].games >= floor) keep += 1;
+        list.shrinkRetainingCapacity(keep);
+    }
+    try tpl.render(w,
+        \\<p class="muted">Each pair once, from the side that won more, {region}, {when}; under {floor} games, see champion pages.</p>
+        \\<div class="tl-bar mu-bar"><nav class="tabs mu-roles" aria-label="Role"><a href="#all">All roles</a>{tabs}</nav><span class="mu-search" hidden><input type="search" placeholder="Search champion" data-min-search aria-label="Search champion"></span></div>
+        \\
+    , .{
+        .region = site.view.region.in(),
+        .when = try period(a, c),
+        .floor = floor,
+        .tabs = tpl.each(&Role.all, {}, roleTab),
+    });
+    var choices: std.ArrayList(u32) = .empty;
+    for (index_floors) |f| if (f >= floor) try choices.append(a, f);
+    try html.minGames(w, "../", "matchups", choices.items, default, 0);
+    try w.writeAll("<div class=\"mu-ix\" data-role=\"top\">\n");
+    for (Role.all, lists) |r, list| {
         const slug = root.roleSlug(r);
         var shown: usize = 0;
-        for (list.items) |e| shown += @intFromBool(e.games >= index_default);
+        for (list.items) |e| shown += @intFromBool(e.games >= default);
         // One block per role, so a search can drop and reorder them (min-games.js)
         try tpl.renderPart(w,
-            \\<section data-min-group><h2>{role} <span class="muted"><span id="n-{slug}">{n}</span> matchups</span></h2>
+            \\<section data-min-group data-r="{slug}" id="{slug}"><h2>{role} <span class="muted"><span id="n-{slug}">{n}</span> matchups</span></h2>
             \\
         , .{ .role = root.roleName(r), .slug = slug, .n = shown });
         if (list.items.len == 0) {
@@ -149,33 +165,120 @@ pub fn writeIndex(site: *const Site, w: *Writer, curves: ?*const Curves) !void {
             continue;
         }
         try tpl.renderPart(w,
-            \\<ul class="matchup-list" data-min-list data-count="n-{slug}">
-            \\{items}<li class="empty"{hidden}>None with this many games yet: lower Min games.</li>
-            \\</ul></section>
+            \\<div data-min-list data-count="n-{slug}"><div class="tl-wrap"><table class="tl mu-table" id="mu-{slug}" data-sortable>
+            \\<thead><tr><th class="l" data-sort="text">Champion</th><th class="l" data-sort="text">Opponent</th><th data-sort="num" title="The first champion's win rate in the matchup">Win rate</th><th data-sort="num" title="Points more or less than the first champion usually wins against an opponent this strong">Vs usual</th><th data-sort="num" class="opt" title="Lane curve estimate: the first champion minus the opponent">Gold at {minute}</th><th data-sort="num" aria-sort="descending">Games</th></tr></thead>
+            \\<tbody>
+            \\{rows}</tbody></table></div>
+            \\<p class="empty muted"{hidden}>None with this many games yet: lower Min games.</p></div></section>
             \\
         , .{
             .slug = slug,
-            .items = tpl.each(list.items, .{ a, r }, indexItem),
+            .minute = core.curvesfile.lane_minute,
+            .rows = tpl.each(list.items, .{ site, r, default }, indexRow),
             .hidden = tpl.flag(shown > 0, "hidden"),
         });
     }
+    try tpl.renderPart(w,
+        \\</div>
+        \\<p class="muted small">Win rate and vs usual: the first champion's games in the role against the second, {when}; vs usual as on champion pages, pulled toward 0 the fewer the games. Gold at {minute} min: the lane curve's estimate, first minus second. Fainter under {full} games. <a href="../method.html">Method</a>.</p>
+        \\
+    , .{ .when = try period(a, c), .minute = core.curvesfile.lane_minute, .full = core.curvesfile.full_games });
+    // Role tabs: one role's table at a time, every role while searching (style.css .mu-ix)
+    try w.writeAll(
+        \\<script>(()=>{const ix=document.querySelector(".mu-ix"),tabs=[...document.querySelectorAll(".mu-roles a")],q=document.querySelector("input[data-min-search]");
+        \\const set=(r)=>{if(!tabs.some((t)=>t.hash==="#"+r))r="top";ix.dataset.role=r;for(const t of tabs)t.hash==="#"+r?t.setAttribute("aria-current","page"):t.removeAttribute("aria-current")};
+        \\let r=location.hash.slice(1);if(!r)try{r=localStorage.getItem("mu-role")}catch(e){}set(r);
+        \\for(const t of tabs)t.addEventListener("click",(e)=>{e.preventDefault();const r=t.hash.slice(1);set(r);history.replaceState(null,"",t.hash);try{localStorage.setItem("mu-role",r)}catch(e){}});
+        \\const sync=()=>ix.classList.toggle("q",!!q&&q.value.trim()!=="");if(q){q.addEventListener("input",sync);addEventListener("pageshow",sync)}})()</script>
+        \\<script src="../table.js" defer></script>
+        \\
+    );
     try html.foot(w, p);
 }
 
-const IndexEntry = struct { x: Champ, y: Champ, games: u32, thin: bool };
+/// Most index rows a page carries; past it the lowest floors go (index_floors)
+const index_max_rows = 5000;
 
-fn indexItem(ctx: struct { std.mem.Allocator, Role }, w: *Writer, e: IndexEntry) !void {
+/// The lowest index_floors choice whose rows fit in index_max_rows
+fn indexFloor(lists: []const std.ArrayList(IndexEntry)) u32 {
+    for (index_floors) |f| {
+        var n: usize = 0;
+        for (lists) |l| {
+            for (l.items) |e| n += @intFromBool(e.games >= f);
+        }
+        if (n <= index_max_rows) return f;
+    }
+    return index_floors[index_floors.len - 1];
+}
+
+fn roleTab(_: void, w: *Writer, r: Role) !void {
+    try tpl.render(w, "<a href=\"#{slug}\">{name}</a>", .{ .slug = root.roleSlug(r), .name = root.roleName(r) });
+}
+
+const IndexEntry = struct {
+    x: Champ,
+    y: Champ,
+    games: u32,
+    thin: bool,
+    /// x's games against y in the role (the stats, not the curves)
+    wins: u32,
+    played: u32,
+    vs: champion.VsUsual,
+    /// Lane curve's gold at lane_minute, x minus y
+    gold: i32,
+};
+
+/// x and y swapped when y won more
+fn indexEntry(site: *const Site, c: *const Curves, r: Role, x0: Champ, y0: Champ, games: u32, ka: f64) IndexEntry {
+    const st = &site.stats;
+    var x = x0;
+    var y = y0;
+    var e = st.enemy(r, r, x.c, y.c);
+    if (2 * e.wins < e.games) {
+        std.mem.swap(Champ, &x, &y);
+        e = st.enemy(r, r, x.c, y.c);
+    }
+    const xr = st.champRole(r, x.c);
+    const yr = st.champRole(r, y.c);
+    const u = champion.usual(root.ratio(xr.wins, xr.games), root.ratio(yr.wins, yr.games));
+    const v = c.get(r, .all, x.id, y.id).?;
+    return .{
+        .x = x,
+        .y = y,
+        .games = games,
+        .thin = thin(v),
+        .wins = e.wins,
+        .played = e.games,
+        .vs = champion.VsUsual.of(e.wins, e.games, u, ka),
+        .gold = v.estimate(.gold, core.curvesfile.lane_minute - 1).mean,
+    };
+}
+
+fn indexRow(ctx: struct { *const Site, Role, u32 }, w: *Writer, e: IndexEntry) !void {
+    const site, const r, const default = ctx;
+    const a = site.arena;
+    const p = root.ratio(e.wins, e.played);
     try tpl.render(w,
-        \\<li data-games="{games}" data-name="{x}|{y}"{thin}{hidden}><a href="{href}">{x} vs {y}</a> <span class="muted">{games} game{s}</span></li>
+        \\<tr data-games="{games}" data-name="{x}|{y}"{thin}{hidden}><td class="l"><a class="champ" href="{x_href}"><img src="{x_icon}" alt="" loading="lazy" width="24" height="24">{x}</a></td><td class="l"><a class="champ" href="{y_href}"><img src="{y_icon}" alt="" loading="lazy" width="24" height="24">{y}</a></td>{wr}<td data-v="{vs:.4}"><span class="vs" style="--c:{colour}"><b>{pts}</b></span></td><td class="opt" data-v="{gold}"><span class="gold {side}" style="opacity:{fade:.2}">{sign}{gold}</span></td><td class="dim" data-v="{games}">{games}</td></tr>
         \\
     , .{
         .games = e.games,
-        .thin = tpl.flag(e.thin, "class=\"thin\""),
-        .hidden = tpl.flag(e.games < index_default, "hidden"),
-        .href = (try path(ctx[0], ctx[1], e.x, e.y))["matchup/".len..],
         .x = e.x.name,
         .y = e.y.name,
-        .s = plural(e.games),
+        .thin = tpl.flag(e.thin, "class=\"thin\""),
+        .hidden = tpl.flag(e.games < default, "hidden"),
+        .x_href = (try path(a, r, e.x, e.y))["matchup/".len..],
+        .y_href = (try path(a, r, e.y, e.x))["matchup/".len..],
+        .x_icon = site.icon(e.x),
+        .y_icon = site.icon(e.y),
+        .wr = tpl.call(tierlist.trackCell, .{ p, e.played, try a.print("{d} games in the stats", .{e.played}), @as(?[]const u8, null) }),
+        .vs = e.vs.mean,
+        .colour = tierlist.wrColour(0.5 + e.vs.mean, tierlist.table_span),
+        .pts = champion.Points{ .v = e.vs.mean },
+        .side = if (e.gold > 0) "up" else if (e.gold < 0) "down" else "even",
+        .fade = core.curvesfile.fade(e.games),
+        .sign = if (e.gold > 0) "+" else "",
+        .gold = e.gold,
     });
 }
 

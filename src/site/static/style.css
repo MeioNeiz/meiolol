@@ -963,3 +963,22 @@ svg.wc .mo-note.t-cost { fill: var(--cost); }
 svg.wc .mo-obj { stroke-width: 2.5px; }
 svg.wc .mo-obj.obj { stroke: var(--us); }
 svg.wc .mo-obj.objl { stroke: var(--them); }
+/* Matchup index (matchup.zig writeIndex): one role's table at a time, all while searching */
+.mu-bar { gap: 10px; }
+.mu-search { display: flex; flex: 1 1 200px; }
+.mu-search input { flex: 1; }
+.mu-ix:not(.q)[data-role="top"] > section:not([data-r="top"]),
+.mu-ix:not(.q)[data-role="jungle"] > section:not([data-r="jungle"]),
+.mu-ix:not(.q)[data-role="mid"] > section:not([data-r="mid"]),
+.mu-ix:not(.q)[data-role="bot"] > section:not([data-r="bot"]),
+.mu-ix:not(.q)[data-role="support"] > section:not([data-r="support"]) { display: none; }
+.mu-ix > section > h2 { margin-top: 12px; font-size: 16px; }
+table.mu-table { width: 100%; }
+table.mu-table .champ img { width: 24px; height: 24px; }
+table.mu-table .vs b { color: var(--c); font-weight: 600; }
+table.mu-table .gold.up { color: var(--good); }
+table.mu-table .gold.down { color: var(--bad); }
+@media (max-width: 480px) {
+  table.mu-table .champ img { display: none; }
+  .mu-roles a { padding: 5px 8px; }
+}
