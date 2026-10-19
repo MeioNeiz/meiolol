@@ -3,7 +3,7 @@ title: iTero homepage (AI companion coach)
 url: https://www.itero.gg/
 kind: project
 commit: 
-for: [riot-production-key]
+for: [riot-production-key, dense-stat-layout]
 looked: 2026-10-11
 depth: docs (homepage; FAQ questions not captured)
 relevance: high
@@ -32,6 +32,8 @@ Why: iTero is a live, widely installed AI pick recommender in champ select, the 
 - [tools] Claims more than a million downloads. ^f4
   > +1,000,000 Downloads
 - [policy] Checked, not there: no production key, registration or removed-feature statement on the homepage. ^f5
+- [ux/features] App screenshots on the homepage show a draft panel of champion icons each with a small score, a lane matchup table by level labelled in words (Safe, Bully, Neutral, Pole) and per game-phase gauges (0-7, 7-14, 14-21 minutes) with the game count under each (seen in screenshot itero-home-full.png). ^f6
+- [ux/uncertainty] (inferred) Word labels per level and a game count per phase gauge are two ways to keep a dense matchup read honest without showing win rate deltas. ^f7
 
 ## Read
 

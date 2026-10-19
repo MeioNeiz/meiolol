@@ -3,7 +3,7 @@ title: 'U.GG: Darius counters (patch 26.20)'
 url: https://u.gg/lol/champions/darius/counter
 kind: docs
 commit: 
-for: [league-tools-landscape]
+for: [league-tools-landscape, dense-stat-layout]
 looked: 2026-10-11
 depth: docs (whole rendered page, text only)
 relevance: high
@@ -33,6 +33,10 @@ Why: does a top stats site use timeline data on its matchup pages?
   > Heimerdinger +661 GD15 229 games
 - [draft] (inferred) The two lists disagree (Kayle top by win rate, Heimerdinger top by GD15), which is exactly the "wins lane vs wins game" distinction a matchup-learning tool could explain. ^f4
 - [tools] [ux/features] Checked, not there: no per-minute curve (only a single 15-minute snapshot), no XP or CS diff, no explanation of why a matchup wins. ^f5
+- [ux/layout] Three side-by-side lists (best picks, worst picks, lane counters by GD@15), each a header card with a one-line definition then about 10 rows (seen in screenshot ugg-darius-counter.png). ^f6
+- [ux/density] Each row: icon, name, a short horizontal bar under the name for magnitude, the value right-aligned in colour and the game count small and grey beneath it, so one row carries value, magnitude and sample (seen in screenshot ugg-darius-counter.png). ^f7
+  > Heimerdinger +661 GD15 229 games
+- [ux/colour] Each list has its own hue: blue win rates for best picks, red text on a red-tinted panel for worst picks, green bars and values for gold leads; the hue says which list you are in before you read a number (seen in screenshot ugg-darius-counter.png). ^f8
 
 ## Read
 

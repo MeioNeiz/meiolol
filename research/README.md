@@ -43,6 +43,7 @@ Area: which areas/ page the tag's findings go to (blank on a sub-tag: its parent
 | `ux/trust` | | what makes players trust or distrust numbers |
 | `ux/layout` | | navigation, page structure, what goes first |
 | `ux/features` | | what competitor tools show and how |
+| `ux/density` | | dense tables and number layout: colour-scaled cells, bars or sparklines in cells, small multiples |
 | `web/template` | | HTML generation, templating languages, components |
 | `web/wasm` | | wasm, JS interop, client-side rendering |
 | `ops/io` | | disk IO on the box: schedulers, ionice, cgroup io controls, block volume limits |

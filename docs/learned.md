@@ -567,6 +567,24 @@ How to write a line:
 
 ## Early game
 
+- 2026-10-20 (early): Being ahead of your lane opponent goes with winning in your own
+  game, but a matchup where one side is usually ahead is not a matchup that side
+  usually wins. In a single game the player about 1,000-1,700 gold ahead at 14 (850 for
+  supports) wins 37-51 percentage points more often than the one as far behind, and
+  CS at 10, deaths before 15 and first item time show the same (0 deaths before 15:
+  65-71% won, 4 or more: 31-39%). Across matchups, a matchup's average gold lead at 14
+  (300-480 gold apart between typical matchups) moves its win rate by -2.6 to +2.3
+  points per 1,000 gold, and its share of games ahead, CS, deaths and item timing by
+  about a point or less per typical difference; matchup win rates themselves spread
+  2.3-2.7 points, champions' 1.3-2.8. Sure: raw associations, not causes (the team's
+  state is not held), 877,814 games of snap-20261018T1007Z (every platform, Platinum+,
+  9.5% without a 14-minute timeline), matchups with 300+ games (736-1,540 a role),
+  binomial noise taken out of the spreads; no held-out look. Site: colour a game's own
+  leads (Your games) but not a matchup's or champion's average lead as good or bad: it
+  says how the lane goes, not who wins; colour win rate and vs usual
+  (docs/design-ideas.md "What to colour"). Evidence: Python over the snapshot's pack
+  columns (rows.y, rows.role, rows.champion), data/team/2026-10-19-night/design-impact.py
+  on Jacob's Mac
 - 2026-10-13: On the same champion and role, rune and spell choices go with different
   early games: First Strike players have about 120 more gold at 14, Inspiration with
   Domination about 150 more, Teleport with Ignite about 100 more gold and 2 more CS at

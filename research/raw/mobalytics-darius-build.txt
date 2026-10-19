@@ -1,0 +1,429 @@
+# Darius Build Guide - Runes, Items & More - Patch 26.20
+
+<https://mobalytics.gg/lol/champions/darius/build>
+
+LoL
+TFT
+Diablo 4
+PoE 2
+PoE
+WoW Forever
+New
+Destiny 2
+Marathon
+STS 2
+Gamebase
+Reviews, Previews, & More
+Download App
+Sign In
+Home
+Summoner
+Game Highlights
+GPI
+Challenges
+Champions
+Tier List
+Guides
+Classic
+Darius
+·Top Build
+P
+Q
+W
+E
+R
+Win rate
+49.7%
+Pick rate
+6.4%
+Ban rate
+9.9%
+Matches
+150 762
+-
+Darius Top has a 49.7% win rate with 6.4% pick rate in Emerald + and is currently ranked S tier. Based on our analysis of 150 762 matches in patch 16.20 the best build for Darius is Youmuu's Ghostblade, Plated Steelcaps, Dead Man's Plate, Death's Dance, and Sterak's Gage. Most picked runes for Darius Top are Stormraider's Surge, Nimbus Cloak, Celerity, and Gathering Storm for primary tree, as well as Legend: Alacrity, and Triumph for secondary tree.
+
+Builds
+
+Mayhem
+
+NEW
+
+ARAM
+
+Arena
+
+Counters
+
+Guide
+
+Combos
+
+Emerald +
+All Regions
+Ranked Solo
+16.20
+Builds
+Runes
+Expert Video Guide
+DARIUS BUILD
+Top ∙ Patch
+ 16.20
+
+MOST POPULAR
+
+Win Rate 54.4% based on 24 193 matches
+
+Import this build directly into your game client:
+
+IMPORT TO CLIENT
+RECOMMENDED BUILDS
+Build
+WR
+
+Most Popular
+
+54.4%
+
+2nd Most Popular
+
+51.6%
+
+Alternative
+
+51.3%
+
+Off-Meta
+
+53.2%
+TOP PLAYERS
+ALL
+Player name
+WR
+
+yuix x OTP
+
+70.4%
+
+먐해성#KR1 OTP
+
+52.1%
+
+CHAVERINHO OTP
+
+64.1%
+MATCHUP SPECIFIC
+vs Champion
+WR
+
+Yone
+
+58.6%
+
+Gangplank
+
+51.5%
+RUNES
+Sorcery
+Precision
+SPELLS
+
+D
+
+F
+
+ITEMS
+Starter Items
+Time Target
+
+@ 11 sec
+
+Early Items
+
+@ 3 min
+
+Core Items
+
+@ 19 min
+
+Full Build
+ABILITY ORDER
+Max:
+
+Q
+
+E
+
+W
+
+1
+W
+2
+Q
+3
+E
+4
+Q
+5
+Q
+6
+R
+7
+Q
+8
+E
+9
+Q
+10
+E
+11
+R
+12
+E
+13
+E
+14
+W
+15
+W
+16
+R
+17
+W
+18
+W
+SITUATIONAL ITEMS
+
+Force of Nature
+
+4th item alternative for: Death's Dance
+
+Tank item which is recommended in situations where: 1) enemy team has a lot of magic damage; 2) you need increased movement speed. Effective against champions like Syndra, Brand, LeBlanc.
+
+LOOKING FOR THE BEST BUILDS FOR YOUR CHAMP?
+Get them directly in your LoL client with our free Desktop App
+USE IN-GAME
+DARIUS MATCHUPS OVERVIEW
+WEAK AGAINST
+
+Teemo
+
+45.7%
+
+Win Rate
+
+Dr. Mundo
+
+46.1%
+
+Win Rate
+
+Wukong
+
+46.5%
+
+Win Rate
+
+Gangplank
+
+46.7%
+
+Win Rate
+
+Quinn
+
+46.9%
+
+Win Rate
+
+Kayle
+
+47.6%
+
+Win Rate
+
+STRONG AGAINST
+
+Poppy
+
+54.0%
+
+Win Rate
+
+Yasuo
+
+53.7%
+
+Win Rate
+
+Sion
+
+53.3%
+
+Win Rate
+
+K'Sante
+
+53.2%
+
+Win Rate
+
+Yone
+
+52.5%
+
+Win Rate
+
+Garen
+
+52.4%
+
+Win Rate
+
+BEST SYNERGY (DUO)
+
+Rek'Sai
+
+55.8%
+
+Win Rate
+
+Gwen
+
+54.8%
+
+Win Rate
+
+Rammus
+
+53.7%
+
+Win Rate
+
+Nidalee
+
+53.4%
+
+Win Rate
+
+Fiddlesticks
+
+53.3%
+
+Win Rate
+
+Zyra
+
+53.2%
+
+Win Rate
+
+DARIUS GENERAL INFORMATION
+DARIUS TIPS AND TRICKS
+
+Make the most of your champions kit by auto-attacking before you activate your 
+W
+ as your 
+W
+ is an auto-attack reset.
+
+Darius biggest weakness is that he can get kited easily. If you have to fight in a team fight, look to attack from the side to reduce the chances of being poked down or kited.
+
+Try to go for longer trades over short ones as Darius benefits more from extended trades thanks to his Hemorrhage Passive.
+
+DARIUS COMBOS
+
+Every combo you need to master the champion!
+
+CHECK COMBOS
+THE BEST DARIUS BUILDS, RUNES AND ITEMS FOR TOP IN EMERALD +
+Most Popular
+
+If you want to use the most popular Darius Top build, you should take Flash and Ignite as your Summoner Spells. For runes, you should pick Stormraider's Surge as your keystone, followed by Nimbus Cloak, Celerity and Gathering Storm in the primary tree, as well as Legend: Alacrity and Triumph in the secondary tree. For rune shards, you want Attack Speed in offense, Adaptive Force in flex and Health Scaling in defense, though it depends on the matchup. Finally, for your items, you should build Youmuu's Ghostblade as your first item, followed by Plated Steelcaps and Dead Man's Plate. For your last 3 items, you should build Death's Dance, Sterak's Gage and finish with Randuin's Omen. For the skill order, you want to stick with Q - E - W. Right now, this build has 54.4% winrate over 24 193 matches played.
+
+Optional
+
+Your second option for Darius Top build would be to take Flash and Ghost as your Summoner Spells. The runes that this build takes advantage of are Conqueror as your keystone, Triumph, Legend: Alacrity and Last Stand in the primary tree, and Axiom Arcanist with Celerity in the secondary tree. The shards used in this build are Attack Speed in offense, Adaptive Force in flex and Health Scaling in defense. The items for the build are Youmuu's Ghostblade, which you should build first, followed by Plated Steelcaps as your second item and Dead Man's Plate as your third item. The rest of the items in order are Death's Dance, Sterak's Gage and Randuin's Omen. The skill order for this build is Q - E - W. In the current patch, this build has a 51.6% win rate over 12 503 matches.
+
+Alternative
+
+If you're looking for alternatives, you can use Flash and Ghost as your Summoner Spells, with runes being Conqueror as your keystone, Triumph, Legend: Alacrity and Last Stand in the primary tree, and Axiom Arcanist with Celerity in the secondary tree, as well as Attack Speed, Adaptive Force, and Health Scaling as your rune shards. The items that this build incorporates are Stridebreaker as your first item, then Plated Steelcaps as a second item and Dead Man's Plate as a third item. You want to finish the build with Death's Dance, Force of Nature and Sterak's Gage. As far as ability max order goes, you want to keep it Q - E - W. This build is currently sitting at a 51.3% win rate across 10 235 matches played.
+
+Off-Meta
+
+If you want to try an Off-Meta Darius Top build in the current patch, try Flash and Ghost as your Summoner Spells, Conqueror, Triumph, Legend: Alacrity and Last Stand as your primary rune tree, and Axiom Arcanist with Celerity as your secondary tree. Use Attack Speed, Adaptive Force and Health Scaling as your shards. For items in this build, you want to complete Trinity Force as your first item, then finish Plated Steelcaps as your second item, and Sterak's Gage as third item. The last 3 options are Death's Dance, Force of Nature and Randuin's Omen. The ability order for this build is Q - E - W. As of the current patch, this build has a 53.2% win rate over 3 421 matches played.
+
+Situational Darius Runes and Items
+
+Depending on the context of your game, your matchup, and enemy champions, you might want to consider building some situational items or take specific runes. Carefully examine your team, enemy team, game state , and your matchup to plan your Darius build accordingly! For example, when it comes to rune shards, you might want to take either Armor or Magic Resist, depending on which champion you are about to lane against.
+
+Furthermore, if you want a more detailed breakdown, you should also check out Darius runes page.
+
+DARIUS USEFUL RESOURCES
+
+Probuilds
+
+Check out the latest and best Darius Probuilds used by pros from around the world, featured by lolvvv.
+
+New Champion: Locke
+
+New champion is live! Check out the latest Locke build now!
+
+In-depth Build Stats
+
+Dive into even more Darius builds stats with additional analysis from our friends at LoLalytics.
+
+Darius Communities
+
+Join other Darius mains and discuss your favorite champion!
+
+REDDIT
+DARIUS COUNTERS - BEST AND WORST MATCHUPS FOR TOP IN EMERALD +
+Best Matchups
+
+In Patch 26.20 the best possible matchups for Darius Top are:
+
+vs. Poppy - 54.0% win rate over 624 games.
+vs. Yasuo - 53.7% win rate over 2 587 games.
+vs. Sion - 53.3% win rate over 2 265 games.
+vs. K'Sante - 53.2% win rate over 2 938 games.
+vs. Yone - 52.5% win rate over 6 020 games.
+
+Consider picking Darius into these matches to increase your chance to win a game. These are the most popular Top matchups that currently are in favor of Darius.
+
+Worst Matchups
+
+We highly recommend avoiding picking Darius in the current patch into the following Top matchups:
+
+vs. Teemo - 45.7% win rate over 3 235 games.
+vs. Dr. Mundo - 46.1% win rate over 3 426 games.
+vs. Wukong - 46.5% win rate over 1 151 games.
+vs. Gangplank - 46.7% win rate over 4 029 games.
+vs. Quinn - 46.9% win rate over 678 games.
+
+These champions are considered as Darius counters in the current patch, and playing such a matchup will decrease your chances of winning a game.
+
+Additional Notes
+
+If you want to find out more about best and worst matchups, as well as specific matchup statistics, we highly encourage you to check our Darius counters page. Keep in mind that while the champion may counter or be countered, it also comes down to your individual skill, the skill of your opponent, your team, and enemy team compositions.
+
+DARIUS RELATED CHAMPIONS
+Garen
+The Might of Demacia
+
+Average
+
+Illaoi
+The Kraken Priestess
+
+Average
+
+Olaf
+The Berserker
+
+Average
+
+Pantheon
+The Unbreakable Spear
+
+Average

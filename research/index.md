@@ -13,7 +13,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 2 | 115 | 463 |
 | [data](areas/data.md) | what the Riot API serves and how to crawl it | 3 | 122 | 282 |
 | [stats](areas/stats.md) | estimation and recommendation methods | 15 | 234 | 1875 |
-| [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 4 | 86 | 305 |
+| [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 5 | 119 | 486 |
 | [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 7 | 98 | 452 |
 
 ## Questions
@@ -67,6 +67,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Status | Pri. | Question | Claims | Sources | Searches | Leads |
 | --- | --- | --- | --- | --- | --- | --- |
+| answered | now | [How do the best dense stat sites lay out many numbers readably, and what should meio.lol steal?](questions/dense-stat-layout.md): How dense stat sites (League and outside) lay out many numbers readably, and which ideas fit meio.lol's pages | 10 strong, 5 moderate, 1 contested | 36 | 4 (growing) | 8 |
 | answered | now | [What should meiolol's site show first and how should it present numbers so players and Riot reviewers trust and use it?](questions/site-design.md): What the site leads with and how it shows numbers, spread and thin data, for players and for Riot's production key reviewers | 11 strong, 7 moderate | 22 | 0 |  |
 | answered | soon | [Which GUI library fits a small Windows desktop window built in Zig 0.16 from macOS?](questions/zig-gui-options.md): Which GUI library fits a small Windows desktop window built in Zig 0.16 from macOS? | 5 strong, 3 moderate | 14 | 10 (saturated) | 4 |
 | answered | soon | [Could a Zig library or framework replace meiolol's hand-written w.print HTML and vanilla JS, and what would it give us?](questions/zig-web-ui.md): Could a Zig library or framework replace meiolol's hand-written w.print HTML and vanilla JS, and what would it give us? | 2 strong, 8 moderate, 3 weak | 10 | 4 (growing) |  |
@@ -86,6 +87,6 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 ## Health
 
-- 36 questions, 494 sources, 3578 findings
-- Open leads: 151 (`josearch leads`)
+- 37 questions, 527 sources, 3759 findings
+- Open leads: 159 (`josearch leads`)
 - Lint: 0 errors, 1 warnings (`josearch lint`)

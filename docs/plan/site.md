@@ -5,6 +5,8 @@ was already planned. Policy limits on what pages may show: docs/production-key.m
 "Product rules" (no public draft win chance, no "+X% win rate", picks as several options
 with reasons). Running theme across the list: fewer words, clearer facts, denser
 layouts, more engaging.
+Site-wide colour and density (Jacob 20 Oct: "more colour", "space inefficient"):
+docs/design-ideas.md, measured layout, colour by impact, build order.
 
 ## Your games (home)
 

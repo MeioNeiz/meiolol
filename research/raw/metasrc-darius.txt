@@ -1,0 +1,487 @@
+# Darius Build 26.20 – Runes, Items, Counters – METAsrc LoL
+
+<https://www.metasrc.com/lol/champions/darius/build>
+
+METAsrc
+Legacy Theme
+Report a Bug
+Ranked
+26.20
+Home
+Champions
+Tier Lists
+Comps
+Databases
+Counter Picker
+Darius Build
+ 
+LoL Runes, Items, Counters
+ 
+Patch 26.20
+ 
+Top
+P
+Q
+W
+E
+R
+
+Darius is ranked S+ Tier and has a 48.74% win rate in LoL Patch 26.20. We've analyzed 1,254,002 Darius games to compile the highest win rate League of Legends Darius build & runes guide with the best items, runes, summoner spells, skill order, counters, and synergies.
+
+Ranked
+ARAM: Mayhem
+Arena
+ARAM
+More
+Patch 26.20
+All Regions
+All Ranks
+Summary Text
+Build Style:
+Recommended
+Select a counter build
+Select a duo build
+Tier:
+S+
+Win %:
+48.74%
+Pick %:
+8.02%
+Role %:
+84.82%
+Ban %:
+14.18%
+KDA:
+1.70
+Games:
+1,254,002
+Score:
+64.52
+Advertisement
+Build
+Runes
+Info
+Counters
+Synergies
+Stats
+Darius Runes
+Darius Runes
+
+Best runes for Darius: Precision primary and Sorcery secondary.
+
+Win %
+Pick %
+49%
+38%
+49%
+28%
+48%
+28%
+51%
+2%
+Summoner Spells
+Summoner Spells
+
+The best summoner spells for Darius are Flash and Ghost.
+
+Win %
+Pick %
+49%
+70%
+48%
+22%
+50%
+4%
+44%
+3%
+43%
+1%
+Starting Items
+Starting Items
+
+The best starting items for Darius include Doran's Blade and Health Potion.
+
+Win %
+Buy %
+49%
+63%
+48%
+18%
+49%
+40%
+Darius Skill Order
+Darius Skill Order
+
+When playing Darius, prioritize Q, followed by E, and finally W.
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+Q
+Q
+Q
+Q
+Q
+W
+W
+W
+W
+W
+E
+E
+E
+E
+E
+R
+R
+R
+Priority
+Q > E > W
+Win %
+50%
+Pick %
+78%
+Darius Items
+Darius Items
+
+Best items for Darius, featuring Plated Steelcaps, Youmuu's Ghostblade, and Dead Man's Plate.
+
+Win %
+Buy %
+Core
+51%
+51%
+ 
+56%
+36%
+ 
+58%
+25%
+ 
+56%
+17%
+ 
+49%
+82%
+ 
+50%
+53%
+Item Build Order
+Item Build Order
+
+Best Darius item build path for efficient power spikes.
+
+1200
+2800
+2900
+3300
+3200
+2800
+Slot 4 Item Options
+Slot 4 Item Options
+
+Popular item choices for slot 4 on Darius.
+
+Win %
+Buy %
+56%
+36%
+53%
+21%
+57%
+18%
+55%
+4%
+Slot 5 Item Options
+Slot 5 Item Options
+
+Popular item choices for slot 5 on Darius.
+
+Win %
+Buy %
+58%
+25%
+56%
+25%
+52%
+13%
+50%
+8%
+Slot 6 Item Options
+Slot 6 Item Options
+
+Popular item choices for slot 6 on Darius.
+
+Win %
+Buy %
+56%
+17%
+53%
+15%
+52%
+11%
+57%
+8%
+Elixirs
+Elixirs
+
+Preferred elixirs for Darius in the late game.
+
+Win %
+Buy %
+50%
+53%
+51%
+47%
+49%
+1%
+Darius Boots
+Darius Boots
+
+Best boots for Darius are Plated Steelcaps.
+
+Win %
+Buy %
+49%
+58%
+49%
+25%
+52%
+14%
+52%
+0%
+46%
+0%
+Trinkets
+Trinkets
+
+Most effective trinkets to use on Darius.
+
+Win %
+Buy %
+49%
+82%
+51%
+12%
+50%
+6%
+Recommended Bans
+Recommended Bans
+
+Ban champions like Kennen, Jayce, Riven, and Ornn to increase the win rate of Darius.
+
+Win %
+Diff
+Games
+51%
++2.0%
+20K
+51%
++1.8%
+43.4K
+50%
++1.5%
+10.3K
+50%
++1.2%
+7.3K
+50%
++1.2%
+2.7K
+50%
++1.1%
+9K
+50%
++1.1%
+11.5K
+Darius Team Synergies
+Darius Team Synergies
+
+Top synergy picks to play alongside Darius Top include Lillia, Malzahar, Jinx, and Nami.
+
+Jungle
+Win %
+ 
+Games
+52%
++3.7%
+31.3K
+52%
++3.3%
+39.3K
+52%
++3.1%
+29.8K
+Win %
+ 
+Games
+52%
++2.9%
+24.2K
+51%
++2.7%
+36.4K
+50%
++1.6%
+50K
+Mid
+Win %
+ 
+Games
+51%
++2.4%
+40.7K
+51%
++1.9%
+34.2K
+51%
++1.9%
+40.3K
+Win %
+ 
+Games
+50%
++1.6%
+35.1K
+50%
++1.5%
+28K
+50%
++1.1%
+37.7K
+ADC
+Win %
+ 
+Games
+51%
++1.9%
+98.6K
+51%
++1.8%
+31.9K
+51%
++1.8%
+19.1K
+Win %
+ 
+Games
+50%
++1.2%
+21.9K
+50%
++1.2%
+28.7K
+50%
++1.2%
+17.4K
+Support
+Win %
+ 
+Games
+51%
++2.5%
+35.4K
+51%
++2.2%
+25.4K
+51%
++2.1%
+48.6K
+Win %
+ 
+Games
+51%
++1.8%
+21.7K
+50%
++1.7%
+23.7K
+50%
++1.4%
+65.2K
+Latest News
+AP Sion Mid Guide
+League Classic Build, Runes and Masteries
+JUL 22, 2026
+·
+METAsrc Hamilton
+LEAGUE CLASSIC
+MID
+A data-backed League Classic Sion mid guide, from prepared AP picks and roaming to the separate off-role Cannibalism path.
+League of Legends Patch 26.14 Preview
+Meta Impact
+JUL 14, 2026
+·
+METAsrc Maxwell
+PATCH 26.14
+META PREVIEW
+SUMMONER'S RIFT
+A Patch 26.14 meta preview for League of Legends, focused on the champion, item, ARAM: Mayhem, and Arena changes most likely to move the meta.
+Classic, Mayhem & More
+July 2026 Dev Update Recap
+JUL 14, 2026
+·
+METAsrc Maxwell
+DEV UPDATE
+MAYHEM CLASSIC-ISH
+LEAGUE CLASSIC
+A complete recap of Riot's Classic, Mayhem & More Dev Update, including Mayhem Classic-ish, League Classic, Hall of Legends, and partner-program news.
+VIEW ALL
+METAsrc Network
+League of Legends
+Teamfight Tactics
+METAsrc News
+LoL Modes
+Ranked
+ARAM: Mayhem
+Arena
+ARAM
+League Classic
+LoL Ranked Content
+Home
+Champions
+Tier Lists
+Comps
+Counter Picker
+
+Copyright 2026 METASRC LLC
+
+www.metasrc.com isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.
+
+Made with ♥ in Boulder, CO
+
+Terms and Conditions
+Privacy Policy
+ 
+
+Welcome to metasrc
+
+metasrc asks for your consent to use your personal data to:
+Personalised advertising and content, advertising and content measurement, audience research and services development
+Store and/or access information on a device
+Learn more
+
+Your personal data will be processed and information from your device (cookies, unique identifiers, and other device data) may be stored by, accessed by and shared with 630 partners, or used specifically by this site. We and our partners may use precise geolocation data. List of partners.
+
+Some vendors may process your personal data on the basis of legitimate interest, which you can object to by managing your options below. Look for a link at the bottom of this page or in the site menu to manage or withdraw consent in privacy and cookie settings.
+
+Consent
+
+Do not consent
+
+Manage options
