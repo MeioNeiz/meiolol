@@ -85,8 +85,10 @@ Later: puzzles from clear comp leans (data-and-model.md step 5).
 Jacob 19 Oct: harder and easier at once (an easy start, harder levels later), more
 engaging, much fewer words, less overwhelming (one thing per screen). Later: lessons
 from comp leans and lane matchups (data-and-model.md step 5).
-- Done 20 Oct (night run, learn): Lessons and Practice as tabs, a lesson a screen (text,
-  then each question alone, "2 of 3 right" at the end), practice in three levels of
+- Done 20 Oct (night run, learn): Lessons and Practice as tabs, a lesson a screen (text
+  with one question at a time under it, "2 of 3 right" at the end; Jacob 01:00 tapped the
+  lesson text's champions as if they were answers, so those and the board's are plain
+  names now and the "Check yourself" step is gone), practice in three levels of
   five drills from the generator's Difficulty (clear-cut: one option brings the damage
   type the team lacks; two fit; close call: balanced team), next level offered when one
   is done; role and own champions folded into a closed "Role and your champions"; copy

@@ -137,7 +137,7 @@ function setupTabs() {
   showView(view);
 }
 
-// ---- Lessons: one at a time, the text then each question on its own screen ----
+// ---- Lessons: one at a time, its short text above one question at a time ----
 
 const checks = JSON.parse($("checks").textContent);
 const lessonEls = [...document.querySelectorAll(".lesson")];
@@ -161,8 +161,8 @@ function icon(id, size) {
   return img;
 }
 
-// Screen within the current lesson: 0 the text, i the i-th question
-let step = 0;
+// Question shown in the current lesson, from 1; 0 when the lesson has none
+let step = 1;
 
 function currentLessonEl() {
   return (
@@ -178,11 +178,19 @@ function lessonMine(key) {
   return mine;
 }
 
-function openLesson(key, at = 0, focus = false) {
+// The first question not yet answered, else the last
+function resumeStep(key) {
+  const qs = checks[key] || [];
+  const mine = lessonMine(key);
+  const first = qs.findIndex((_, i) => mine.answers[i] === undefined);
+  return first < 0 ? qs.length : first + 1;
+}
+
+function openLesson(key, focus = false) {
   state.lesson = key;
   state.lessons[key] = lessonMine(key);
   save();
-  step = at;
+  step = resumeStep(key);
   renderLesson(focus ? "head" : null);
 }
 
@@ -195,7 +203,7 @@ function renderDots() {
     const key = l.dataset.lesson;
     const li = el("li");
     const title = l.querySelector(".lesson-head > span:nth-child(2)").firstChild.textContent.trim();
-    const b = button(lessonDone(key) ? "done" : "", `${i + 1}`, () => openLesson(key, 0, true));
+    const b = button(lessonDone(key) ? "done" : "", `${i + 1}`, () => openLesson(key, true));
     b.title = title;
     b.setAttribute("aria-label", `Lesson ${i + 1}: ${title}${lessonDone(key) ? ", done" : ""}`);
     if (l === cur) b.setAttribute("aria-current", "step");
@@ -221,7 +229,7 @@ function renderLesson(focus = null) {
   const qs = checks[key] || [];
   const mine = lessonMine(key);
   for (const l of lessonEls) l.hidden = l !== art;
-  step = Math.min(step, qs.length);
+  step = Math.max(Math.min(step, qs.length), qs.length ? 1 : 0);
   let bar = art.querySelector(".stepbar");
   if (!bar) {
     bar = el("div", "stepbar");
@@ -229,8 +237,7 @@ function renderLesson(focus = null) {
     art.querySelector(".lesson-head").after(bar);
   }
   const answered = qs.filter((_, i) => mine.answers[i] !== undefined).length;
-  stepBar(bar, qs.length + 1, 1 + answered, step);
-  art.querySelector(".lesson-body").hidden = step !== 0;
+  stepBar(bar, qs.length, answered, step - 1);
   const box = art.querySelector(".check");
   box.replaceChildren();
   let focusAfter = focus === "head" ? art.querySelector(".lesson-head") : null;
@@ -285,55 +292,40 @@ function renderLessonNav(art, qs, mine) {
   const nextLesson = lessonEls[idx + 1];
   const onward = () =>
     nextLesson
-      ? button("primary", "Next lesson", () => openLesson(nextLesson.dataset.lesson, 0, true))
+      ? button("primary", "Next lesson", () => openLesson(nextLesson.dataset.lesson, true))
       : button("primary", "Practice drafts", () => showView("practice", true));
   const go = (at) => {
     step = at;
-    renderLesson(at === 0 ? "head" : "first");
+    renderLesson("first");
   };
-  if (step === 0) {
-    if (qs.length === 0) {
-      nav.append(el("span", "muted small", "Not enough games yet for questions."), onward());
-    } else if (lessonDone(art.dataset.lesson)) {
-      nav.append(
-        onward(),
-        button("link", "Questions again", () => {
-          mine.answers = [];
-          save();
-          go(1);
-        }),
-      );
-    } else {
-      const first = qs.findIndex((_, i) => mine.answers[i] === undefined);
-      nav.append(button("primary", `Check yourself (${qs.length})`, () => go(first + 1)));
-    }
+  if (qs.length === 0) {
+    nav.append(el("span", "muted small", "Not enough games yet for questions."), onward());
     return;
   }
   const i = step - 1;
-  if (mine.answers[i] === undefined) {
-    nav.append(button("link", "Read again", () => go(0)));
-    return;
-  }
+  // Unanswered: the choices are the only buttons, so a tap there is the answer
+  if (mine.answers[i] === undefined) return;
   if (step < qs.length) {
     nav.append(button("primary", "Next question", () => go(step + 1)));
     return;
   }
   const right = qs.filter((q, j) => mine.answers[j] === q.answer).length;
-  nav.append(el("span", "score", `${right} of ${qs.length} right`), onward());
+  nav.append(
+    el("span", "score", `${right} of ${qs.length} right`),
+    onward(),
+    button("link", "Questions again", () => {
+      mine.answers = [];
+      save();
+      go(1);
+    }),
+  );
 }
 
 function setupLessons() {
-  step = 0;
   const cur = currentLessonEl();
   // Pinned, so finishing it does not jump to the next one before the reader asks
   state.lesson = cur.dataset.lesson;
-  if (!lessonDone(cur.dataset.lesson) && state.lessons[cur.dataset.lesson]) {
-    // Carry on at the first question not yet answered
-    const qs = checks[cur.dataset.lesson] || [];
-    const mine = lessonMine(cur.dataset.lesson);
-    const first = qs.findIndex((_, i) => mine.answers[i] === undefined);
-    if (first > 0) step = first + 1;
-  }
+  step = resumeStep(cur.dataset.lesson);
   renderLesson();
 }
 
@@ -639,10 +631,10 @@ class Practice {
             li.append("You");
           } else {
             const you = el("span", "you");
-            you.append(this.champ(mine), el("span", "tag", "you"));
+            you.append(this.champ(mine, 32, false), el("span", "tag", "you"));
             li.append(you);
           }
-        } else li.append(this.champ(d.teams[t][r]));
+        } else li.append(this.champ(d.teams[t][r], 32, false));
         list.append(li);
       });
       const bans = $(`p-bans-${t}`);
@@ -722,6 +714,7 @@ class Practice {
       b.append(this.champ(o.id, 40, false));
       b.disabled = cur.mine !== null;
       b.classList.toggle("chosen", cur.mine === o.id);
+      if (cur.mine === o.id) b.append(el("span", "pick", "your pick"));
       if (cur.mine !== null) {
         const fit = this.brings(cur.d, o.id) ? "good" : this.lacks(cur.d, o.id) ? "bad" : "";
         if (fit) b.classList.add(fit);

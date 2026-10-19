@@ -902,7 +902,7 @@ body:has(#m-cs:checked) .mu-m:not(.mu-m-cs) { display: none; }
 .lesson-head { display: flex; align-items: center; gap: 12px; margin: 0 0 10px; font-size: 20px; }
 .lesson-head .muted { display: block; font-size: 14px; font-weight: 400; }
 .learn-js .lesson-body { padding: 0; }
-.learn-js .check { border-top: 0; margin-top: 0; padding-top: 0; }
+.learn-js .check { margin-top: 14px; padding-top: 12px; }
 .learn-js .check .q-text { font-size: 17px; margin-bottom: 12px; }
 .check .q-n { margin: 0 0 4px; }
 .lesson-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 16px; }
@@ -925,6 +925,8 @@ body:has(#m-cs:checked) .mu-m:not(.mu-m-cs) { display: none; }
 .choices .fit { display: block; font-size: 12px; font-weight: 600; margin-top: 2px; }
 .choices .fit.good { color: var(--gain); }
 .choices .fit.bad { color: var(--muted); }
+.learn-js .choices button.chosen { background: var(--panel-3); opacity: 1; }
+.choices .pick { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
 #p-reveal-title { font-size: 18px; }
 .level-done { border-color: var(--gain); }
 @media (max-width: 640px) {

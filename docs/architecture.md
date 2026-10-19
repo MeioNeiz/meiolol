@@ -689,7 +689,8 @@ For new players: five lessons (roles, counters and why your own champion matters
 early vs late, mixing damage, synergy), each with examples picked from the patch's games
 and a three-question check, then unlimited practice drafts. No streaks or timers. One
 thing per screen (learn.js): Lessons and Practice as two tabs; a lesson at a time (dots
-1 to 5), its text then each question on its own screen; practice a drill at a time in
+1 to 5), its short text above one question at a time (the answers are the only buttons;
+champions in lesson text and on the practice board are plain names, not links); practice a drill at a time in
 three levels of five drills (Level 1 clear-cut = easy, 2 two fit = medium, 3 close call
 = hard, the generator's Difficulty below), the next level offered once one is done, any
 level still pickable.

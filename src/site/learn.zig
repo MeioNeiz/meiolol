@@ -102,8 +102,12 @@ fn rate(n: Counts) f64 {
     return @as(f64, @floatFromInt(n.wins)) / @as(f64, @floatFromInt(n.games));
 }
 
+/// Plain, not a link: in a lesson, a tappable champion reads as an answer to pick
 fn champ(w: *Writer, ctx: Ctx, ch: Champ) !void {
-    try ctx.site.champLink(w, ch, "");
+    try tpl.render(w, "<span class=\"champ\"><img src=\"{icon}\" alt=\"\" loading=\"lazy\" width=\"32\" height=\"32\">{name}</span>", .{
+        .icon = ctx.site.icon(ch),
+        .name = ch.name,
+    });
 }
 
 fn pctOf(n: Counts) u32 {
@@ -236,7 +240,7 @@ fn practiceSection(w: *Writer) !void {
     );
 }
 
-fn champLinks(w: *Writer, ctx: Ctx, list: []const Champ) !void {
+fn champRow(w: *Writer, ctx: Ctx, list: []const Champ) !void {
     try w.writeAll("<span class=\"champ-row\">");
     for (list) |ch| try champ(w, ctx, ch);
     try w.writeAll("</span>");
@@ -300,7 +304,7 @@ fn roles(ctx: Ctx, w: *Writer) ![]const Question {
         , .{
             .role = root.roleName(r),
             .job = job,
-            .champs = tpl.call(champLinks, .{ ctx, try mostPlayed(ctx, r, 3) }),
+            .champs = tpl.call(champRow, .{ ctx, try mostPlayed(ctx, r, 3) }),
         });
     }
     try w.writeAll("</ul>\n");
@@ -680,8 +684,8 @@ fn damage(ctx: Ctx, w: *Writer) ![]const Question {
     }
     if (mid_magic.len > 0 and mid_physical.len > 0) {
         try tpl.render(w, "<p>Magic mids: {magic}<br>Physical mids: {physical}</p>\n", .{
-            .magic = tpl.call(champLinks, .{ ctx, mid_magic[0..@min(mid_magic.len, 4)] }),
-            .physical = tpl.call(champLinks, .{ ctx, mid_physical[0..@min(mid_physical.len, 4)] }),
+            .magic = tpl.call(champRow, .{ ctx, mid_magic[0..@min(mid_magic.len, 4)] }),
+            .physical = tpl.call(champRow, .{ ctx, mid_physical[0..@min(mid_physical.len, 4)] }),
         });
     }
 
