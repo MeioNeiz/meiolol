@@ -4,6 +4,12 @@
 build.zig            modules: core (pure), store (SQLite C), backend, app
 src/
   main.zig           `meiolol` backend CLI: crawl, stats, site, status, champions
+  cmd/               its commands, each beside its usage text: crawl.zig (crawl, stats,
+                     champions, draft-backfill, digest), sitedata.zig (curves, builds,
+                     pool, lean, draft-model, lane-model), analysis.zig (eval and the
+                     analyses), site.zig (site, dev, render, serve), ops.zig (api,
+                     your-example, status, admin), data.zig (raw-export, rebuild,
+                     rekey, backup, restore, forget)
   ddragon.zig        Data Dragon: champion ids/names; item classes, rune and spell names
   date.zig           UTC dates (Date: format, parse, epoch days)
   pipeline_test.zig  fixture games through stats, curves and the site
