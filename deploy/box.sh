@@ -36,14 +36,14 @@ sync() {
         -Doptimize=ReleaseSafe --prefix zig-out/box --cache-dir "$2/.zig-cache" \
         && mkdir "$3/zig-out" && cp -R zig-out/box "$3/zig-out/" && cp -R deploy "$3/"' \
         _ "$target" "$ROOT" "$tree"
-    local scripts="web-loop.sh health.sh health-loop.sh backup-loop.sh backup-serve.sh render-swap.sh archive-serve.sh cache-version.sh cache-warm.sh" s
-    local files=("$tree/zig-out/box/bin/meiolol") on_box=("$DIR/bin/meiolol") want=() f i
+    # check-deploy.sh (zig build ci) reads both lists: each committed, every unit that runs
+    # in ~/ml/meiolol listed, every script a unit or listed script runs listed
+    local scripts="web-loop.sh health.sh health-loop.sh backup-loop.sh backup-serve.sh render-swap.sh archive-serve.sh cache-version.sh cache-warm.sh box-lib.sh" s
+    local units="meiolol-crawl.service meiolol-web.service meiolol-render@.service meiolol-health.service meiolol-backup.service meiolol-cache-version.service meiolol-cache-version.path meiolol-cache-warm.service" u
+    local files=("$tree/zig-out/box/bin/meiolol") on_box=("$DIR/bin/meiolol") want=() i
     local have stamp
     for s in $scripts; do files+=("$tree/deploy/$s"); on_box+=("$DIR/bin/$s"); done
-    for f in "$tree"/deploy/systemd/*.service "$tree"/deploy/systemd/meiolol-cache-version.path; do
-        files+=("$f")
-        on_box+=(".config/systemd/user/${f##*/}")
-    done
+    for u in $units; do files+=("$tree/deploy/systemd/$u"); on_box+=(".config/systemd/user/$u"); done
     for i in "${!files[@]}"; do
         want+=("$(shasum -a 256 < "${files[i]}" | cut -d' ' -f1)  ${on_box[i]}")
     done

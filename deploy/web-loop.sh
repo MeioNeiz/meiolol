@@ -155,13 +155,11 @@ if [[ -n "$patch" && -n "$format" ]]; then
     fi
 fi
 batch() { nice -n 10 ionice -c 3 "$@"; }
-# One line in data/deploys.tsv (docs/hosting.md "Deploy events"): unix time, the commit,
-# step, status, detail. Forced rounds only (round_sha set)
-deploy_event() {
+. bin/box-lib.sh
+# A forced round's deploy event (round_sha set): STEP STATUS [DETAIL]
+round_event() {
     [[ -n "$round_sha" ]] || return 0
-    local f=data/deploys.tsv detail=${3:-}
-    [[ -s $f ]] || printf 'time\tsha\tstep\tstatus\tdetail\n' > "$f"
-    printf '%s\t%s\t%s\t%s\t%s\n' "$(date +%s)" "$round_sha" "$1" "$2" "${detail//$'\t'/ }" >> "$f"
+    deploy_event "$round_sha" "$@"
 }
 # The views write's parts: each view's load line marks a part it took from the old file
 # "... kept" (src/site/root.zig loadParts); a part never kept was loaded again
@@ -260,8 +258,8 @@ while true; do
     fi
     round_sha=''
     if (( forced )); then
-        round_sha=$(tail -n 1 DEPLOYED 2> /dev/null | cut -d' ' -f1)
-        deploy_event round start "site build, upload and views file with the new binary$( (( full )) && echo ', every part fresh (web rebuild)')"
+        round_sha=$(deployed_sha)
+        round_event round start "site build, upload and views file with the new binary$( (( full )) && echo ', every part fresh (web rebuild)')"
     fi
     # Fails (logged) until there are games; the patch then stays as it was
     if peek=$(bin/meiolol site --patch-games 2>&1) && [[ $peek =~ ^([^ ]+)\ ([0-9]+)$ ]]; then
@@ -293,10 +291,10 @@ while true; do
         site_start=$SECONDS
         if ! out=$(bin/meiolol site "${site_args[@]}" --out data/site.new --static core 2>&1); then
             echo "$out"
-            deploy_event site failed "$(tail -n 1 <<< "$out")"
+            round_event site failed "$(tail -n 1 <<< "$out")"
         else
             site_s=$(( SECONDS - site_start ))
-            deploy_event site ok "core build ${site_s}s"
+            round_event site ok "core build ${site_s}s"
             echo "$out"
             t=$SECONDS
             changed=$(rsync -rlpD --checksum --delete --stats data/site.new/ data/site/ \
@@ -304,33 +302,33 @@ while true; do
             copy_s=$(( SECONDS - t )) t=$SECONDS
             if ! stats=$(rsync -az --delete-delay --delay-updates --exclude /admin/ --stats \
                 data/site/ meiolol-web:./); then
-                deploy_event upload failed "rsync to the web server failed"
+                round_event upload failed "rsync to the web server failed"
             else
                 sent=$(sed -nE 's/^Total bytes sent: ([0-9,]+)/\1/p' <<< "$stats")
                 echo "$(date -u +%FT%TZ) upload: site ${site_s}s, copy ${copy_s}s" \
                     "(${changed:-?} files changed), send $(( SECONDS - t ))s (${sent:-?} bytes)"
                 echo "$(date -u +%FT%TZ) uploaded"
-                deploy_event upload ok "${changed:-?} files changed, sent ${sent:-?} bytes"
+                round_event upload ok "${changed:-?} files changed, sent ${sent:-?} bytes"
                 # For meiolol-render: every view, which it reads on the touch. A deploy's
                 # or start's round keeps the old file's current parts and leaves the
                 # refresh of the rest to the next upload (last_upload unchanged)
                 t=$SECONDS
                 reuse=()
                 (( forced && ! full )) && reuse=(--reuse)
-                deploy_event views start "every view into data/views.bin${reuse:+, current parts kept}"
+                round_event views start "every view into data/views.bin${reuse:+, current parts kept}"
                 if views_write "${reuse[@]}" "${site_args[@]}"; then
                     echo "$(date -u +%FT%TZ) views file $(( SECONDS - t ))s" \
                         "($(stat -c %s data/views.bin) bytes${reuse:+, current parts kept})"
-                    deploy_event views ok "$(( SECONDS - t ))s, $(views_parts)"
+                    round_event views ok "$(( SECONDS - t ))s, $(views_parts)"
                     (( forced && ! full )) || { touch data/views.full; last_upload=$now; }
                     touch data/render.reload
-                    deploy_event reload ok "renderer told to read the new views file"
+                    round_event reload ok "renderer told to read the new views file"
                 else
                     echo "$(date -u +%FT%TZ) views file FAILED after $(( SECONDS - t ))s:" \
                         "$(tail -n 1 data/views.log)"
-                    deploy_event views failed "after $(( SECONDS - t ))s: $(tail -n 1 data/views.log)"
+                    round_event views failed "after $(( SECONDS - t ))s: $(tail -n 1 data/views.log)"
                     touch data/render.reload
-                    deploy_event reload ok "renderer told to reload (from the database)"
+                    round_event reload ok "renderer told to reload (from the database)"
                 fi
                 last_patch=$patch last_games=$games fresh_curves=0
             fi
