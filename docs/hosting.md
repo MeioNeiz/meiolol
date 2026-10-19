@@ -104,8 +104,9 @@ nginx caches each encoding apart, and answers a directory URL without its slash 
   data/partials (docs/architecture.md "Views partials"): the first build 1,038 s
   (partials 685 s, all 952k games), then 322 s (21k games read: partials 56 s, people
   100 s, learn 152 s from the database) and 468 s (59k read as whole tables, 331 s,
-  hence the 150k threshold), against 1,119-1,706 s before. Learn (from the database)
-  is the biggest part left.
+  hence the 150k threshold), against 1,119-1,706 s before. Learn reads its tallies and
+  practice ids from the partials too (19 Oct): 100.9 s (cpu 17.4) of the 03:20 write ->
+  10.0 s (cpu 4.9) in the deploy's 08:08 write; raw JSON and practice games stay on the db.
   The heavy loads read in parallel (16 Oct): filters in 4 runs of games, learning in 4
   puuid ranges, each on its own read-only connection (schema.openSibling), and filters
   beside the people tallies; the box waits on cold pages, one read in flight each.
