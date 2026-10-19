@@ -29,6 +29,7 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+. "$ROOT/deploy/lib.sh"
 RUNS=${MEIOLOL_RUNS:-$HOME/ml/runs}
 STATE=$HOME/.cache/meiolol-training
 GPU=${MEIOLOL_GPU_HOST-gpu-box}
@@ -209,14 +210,7 @@ case "${1:-}" in
     '') push ;;
     --force) push force ;;
     use) use "${2:-}" "${3:-}" ;;
-    install)
-        cp "$ROOT/deploy/$PLIST" ~/Library/LaunchAgents/
-        launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/$PLIST
-        echo "installed $PLIST"
-        ;;
-    uninstall)
-        launchctl bootout "gui/$(id -u)/${PLIST%.plist}" || true
-        rm -f ~/Library/LaunchAgents/$PLIST
-        ;;
-    *) sed -n '19,24p' "$0"; exit 2 ;;
+    install) launchd_install "$PLIST" && echo "installed $PLIST" ;;
+    uninstall) launchd_uninstall "$PLIST" ;;
+    *) usage_of "$0"; exit 2 ;;
 esac

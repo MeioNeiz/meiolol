@@ -24,6 +24,7 @@ set -euo pipefail
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+. "$ROOT/deploy/lib.sh"
 GPU=${SNAP_GPU:-gpu-box}
 STATE=$HOME/.cache/meiolol-snapshot
 BIN=$ROOT/zig-out/snapshot
@@ -134,19 +135,15 @@ schedule() {
     local plist=net.jacob.meiolol-snapshot.plist
     case "${1:-}" in
         install)
-            cp "$ROOT/deploy/$plist" ~/Library/LaunchAgents/
-            launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/$plist
+            launchd_install "$plist"
             echo "installed $plist (log /tmp/meiolol-snapshot.log)"
             ;;
-        uninstall)
-            launchctl bootout "gui/$(id -u)/${plist%.plist}" || true
-            rm -f ~/Library/LaunchAgents/$plist
-            ;;
+        uninstall) launchd_uninstall "$plist" ;;
         *) usage ;;
     esac
 }
 
-usage() { sed -n '7,11p' "$0"; exit 2; }
+usage() { usage_of "$0"; exit 2; }
 
 case "${1:-}" in
     make) make_snap ;;

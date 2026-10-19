@@ -39,11 +39,12 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+. "$ROOT/deploy/lib.sh"
 RUN=$ROOT/deploy/lab-run.sh
 HOST=gpu-box
 
 usage() {
-    sed -n '5,14p' "$0"
+    usage_of "$0"
     exit 2
 }
 

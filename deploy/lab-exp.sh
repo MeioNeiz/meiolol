@@ -38,6 +38,7 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+. "$ROOT/deploy/lib.sh"
 HOST=${LAB_HOST:-gpu-box}
 SNAP=${LAB_SNAP:-snap-20261012T2055Z}
 BUDGET=${LAB_BUDGET_S:-600}
@@ -60,7 +61,8 @@ on() {
 }
 
 usage() {
-    sed -n '7,28p' "$0"
+    usage_of "$0"
+    echo "TARGET: $TARGETS"
     exit 2
 }
 
@@ -68,8 +70,6 @@ die() {
     echo "$1" >&2
     exit 2
 }
-
-name_ok() { [[ "$1" =~ ^[A-Za-z0-9_.-]+$ && "$1" != *..* ]]; }
 
 check_name() { name_ok "$2" || die "$1: letters, digits, _ . - only, no .. ($2)"; }
 

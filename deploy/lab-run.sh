@@ -59,6 +59,7 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+. "$ROOT/deploy/lib.sh"
 RUNS=ml/runs
 BUILD_ARGS=()
 WITH=()
@@ -99,7 +100,7 @@ check_mount() {
 
 # RUN goes into shell commands on the host: a run dir name only
 check_run() {
-    [[ "$1" =~ ^[A-Za-z0-9_.-]+$ && "$1" != *..* ]] && return
+    name_ok "$1" && return
     echo "RUN: a run dir name (letters, digits, _ . -), not $1"
     exit 2
 }
@@ -1046,7 +1047,7 @@ case "${1:-}" in
             && systemctl --user start meiolol-archive-pull.timer meiolol-backup-mirror.timer \
             && systemctl --user is-active $WATCH meiolol-archive-pull.timer meiolol-backup-mirror.timer"
         ;;
-    *) sed -n '8,20p' "$0"; exit 2 ;;
+    *) usage_of "$0"; exit 2 ;;
 esac
 }
 
