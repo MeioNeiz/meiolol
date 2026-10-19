@@ -113,7 +113,7 @@ Measured 2026-10-11 (8,117 matches, 1.13M players): state 146 MB, segment 23 MB,
 
 ### Restore
 
-1. `bin/meiolol restore --from /mnt/d/meiolol-backups --data data.restored` (refuses a
+1. `bin/meiolol restore --from backups --data data.restored` (refuses a
    directory that already holds a database; `--state FILE` for an older snapshot)
 2. `bin/meiolol status --exact --data data.restored`: compare with what you expect
    (without --exact some counts are estimates)
@@ -148,12 +148,12 @@ deploy/health.sh runs on the box and prints one line per problem:
 
 | Check | Problem when |
 |---|---|
-| crawler | tmux `meiolol-crawl` gone; "Riot rejected the key" if crawl.log ends in KEY REJECTED |
+| crawler | unit `meiolol-crawl` not active; "Riot rejected the key" if crawl.log ends in KEY REJECTED |
 | crawler silent | last per-minute report older than 15 min |
 | no new matches | report's per-region match counters unchanged for 2h (STALL_H) |
-| site | tmux `meiolol-web` gone, or last upload in web.log older than 26h |
-| disk | /mnt/c or / at 80%, /mnt/d at 90% (it was 86% before backups) |
-| backup | tmux `meiolol-backup` gone, or newest state snapshot older than 26h |
+| site | unit `meiolol-web` not active, or last upload in web.log older than 26h |
+| disk | / at 80% |
+| backup | unit `meiolol-backup` not active, or newest state snapshot older than 26h |
 | gpu-box | no raw archive ack for 12h (ACK_H): PC off, asleep or WSL down; first export never acked; one export unacked for 12h while others are acked (see archive-pull.log on the gpu-box) |
 | gpu-box disks | C: (holds the WSL disk) or the WSL disk or the archive partition at 85%, or the partition not attached; reported by each archive pull |
 | raw held | free disk above the raw valve under 3 days of raw (bytes sent to the gpu-box over the last 24 h, data/archive-sent.log): what an outage of the gpu-box can last before the valve drops unarchived raw; exports waiting on the box shown apart |
@@ -209,7 +209,7 @@ are overwritten. Logs counts only, never the PUUID or Riot ID.
   backups within a day. PUUIDs already in `forgotten` are skipped, so reruns stay cheap.
   `forget` opens whichever of meiolol.db and api.db the data directory holds
 - Riot erasure lists: copy the list (PUUIDs or Riot IDs, one per line) to the box, then
-  `deploy/box.sh run forget --list FILE --backups /mnt/d/meiolol-backups`. A Riot ID
+  `deploy/box.sh run forget --list FILE --backups backups`. A Riot ID
   that no longer resolves (renamed or deleted) is counted and exits 1: get its PUUID
 - Not wiped: freed ext4 blocks inside the WSL image and on D: (accepted; files are
   rewritten, not just unlinked)

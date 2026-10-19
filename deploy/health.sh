@@ -7,14 +7,12 @@ cd "$(dirname "$0")/.." || exit 1
 # host.env (MEIOLOL_BACKUPS etc.) is the services' EnvironmentFile; mac-watch.sh runs this
 # over ssh without it
 [[ -f host.env ]] && { set -a; . ./host.env; set +a; }
-BACKUPS=${MEIOLOL_BACKUPS:-/mnt/d/meiolol-backups}
+BACKUPS=${MEIOLOL_BACKUPS:-$HOME/ml/meiolol/backups}
 STALL_H=${STALL_H:-2}
 now=$(date +%s)
 problems=()
-# A systemd user service (deploy/systemd) on the cloud box, a tmux session on the gpu-box
-running() {
-    systemctl --user is-active -q "$1" 2>/dev/null || tmux has-session -t "$1" 2>/dev/null
-}
+# A systemd user service (deploy/systemd)
+running() { systemctl --user is-active -q "$1" 2>/dev/null; }
 
 if ! running meiolol-crawl; then
     if tail -n 5 data/crawl.log 2>/dev/null | grep -q 'KEY REJECTED'; then
@@ -48,13 +46,8 @@ if [[ -z "$uploaded" ]] || (( now - $(date -d "$uploaded" +%s) > 26 * 3600 )); t
     problems+=("site upload stale: last ${uploaded:-never}")
 fi
 
-# /mnt/c holds the WSL disk image, so it, not /, is the real limit. D: (backups) was
-# already 86% full with other things when backups started, hence 90
-for limit in /mnt/c:80 /mnt/d:90 /:80; do
-    mount=${limit%:*}
-    use=$(df --output=pcent "$mount" 2>/dev/null | tail -n 1 | tr -dc '0-9')
-    if (( ${use:-0} >= ${limit#*:} )); then problems+=("disk $mount at ${use}%"); fi
-done
+use=$(df --output=pcent / 2>/dev/null | tail -n 1 | tr -dc '0-9')
+(( ${use:-0} >= 80 )) && problems+=("disk / at ${use}%")
 
 if ! running meiolol-backup; then
     problems+=("backup loop not running (meiolol-backup)")

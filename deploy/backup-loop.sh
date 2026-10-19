@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Runs on the box (deploy/box.sh backup start): once a day at ~04:00 UTC, swap forgotten
 # PUUIDs with the Your games service, then `meiolol backup` into $MEIOLOL_BACKUPS (set in
-# host.env on the cloud box; default /mnt/d/meiolol-backups, the gpu-box's D: drive),
+# host.env; default ~/ml/meiolol/backups, as backup-serve.sh's),
 # then drop what a mirror has acked (deploy/backup-serve.sh prune). docs/data-safety.md.
 set -u
 cd "$(dirname "$0")/.." || exit 1
-export MEIOLOL_BACKUPS=${MEIOLOL_BACKUPS:-/mnt/d/meiolol-backups}
+export MEIOLOL_BACKUPS=${MEIOLOL_BACKUPS:-$HOME/ml/meiolol/backups}
 while true; do
     # Complete lists both ways (docs/your-games.md); the meiolol-exchange ssh alias is the
     # rrsync user on the web server. Skipped until the service is deployed
