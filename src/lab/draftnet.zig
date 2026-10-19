@@ -8,6 +8,8 @@
 
 const std = @import("std");
 const rows = @import("rows.zig");
+// nnlib: this file's nn is the matrix product
+const nnlib = @import("nn");
 const par = @import("../par.zig");
 const cuda = @import("../gpu/cuda.zig");
 const dn = @import("../gpu/draftnet_layout.zig");
@@ -175,19 +177,6 @@ const Work = struct {
 
 const V = @Vector(8, f32);
 
-fn dot(a: []const f32, b: []const f32) f32 {
-    var acc: V = @splat(0);
-    var i: usize = 0;
-    while (i < a.len) : (i += 8) acc += @as(V, a[i..][0..8].*) * @as(V, b[i..][0..8].*);
-    return @reduce(.Add, acc);
-}
-
-fn axpy(y: []f32, s: f32, x: []const f32) void {
-    const sv: V = @splat(s);
-    var i: usize = 0;
-    while (i < y.len) : (i += 8) y[i..][0..8].* = @as(V, y[i..][0..8].*) + sv * @as(V, x[i..][0..8].*);
-}
-
 /// c[m x n] = a[m x k] . w[n x k]^T (k a multiple of 8), rows split across parts threads.
 /// Blocks of 2 rows x 4 columns: 8 independent accumulators, each loaded row used 4 times
 fn nt(io: std.Io, parts: usize, a: []const f32, w: []const f32, c: []f32, m: u32, n: u32, k: u32) !void {
@@ -222,11 +211,11 @@ fn nt(io: std.Io, parts: usize, a: []const f32, w: []const f32, c: []f32, m: u32
                     };
                 }
                 for (j..x.n) |jj| for (i..i + 2) |ii| {
-                    x.c[ii * x.n + jj] = dot(x.a[ii * x.k ..][0..x.k], x.w[jj * x.k ..][0..x.k]);
+                    x.c[ii * x.n + jj] = nnlib.dot(x.a[ii * x.k ..][0..x.k], x.w[jj * x.k ..][0..x.k]);
                 };
             }
             for (i..hi) |ii| for (0..x.n) |jj| {
-                x.c[ii * x.n + jj] = dot(x.a[ii * x.k ..][0..x.k], x.w[jj * x.k ..][0..x.k]);
+                x.c[ii * x.n + jj] = nnlib.dot(x.a[ii * x.k ..][0..x.k], x.w[jj * x.k ..][0..x.k]);
             };
         }
     };
@@ -343,9 +332,7 @@ fn bias(step: u32) [2]f32 {
 }
 
 /// Batches in one pass over n games
-pub fn stepsPerEpoch(n: usize, batch: u32) u64 {
-    return @max(1, (n + batch - 1) / batch);
-}
+pub const stepsPerEpoch = nnlib.stepsPerEpoch;
 
 /// Trains `steps` batches on the CPU over threads (1: one core), reshuffling every pass
 pub fn fitCpu(gpa: std.mem.Allocator, io: std.Io, cfg: Config, n_ids: u32, train: []const dn.Game, steps: u64, threads: usize, watch: ?*Watch) !Net {
@@ -360,36 +347,30 @@ pub fn fitCpu(gpa: std.mem.Allocator, io: std.Io, cfg: Config, n_ids: u32, train
     defer w.deinit(gpa);
     const gr = try gpa.alloc(f32, l.len);
     defer gpa.free(gr);
-    const m1 = try gpa.alloc(f32, l.len);
-    defer gpa.free(m1);
-    const m2 = try gpa.alloc(f32, l.len);
-    defer gpa.free(m2);
-    @memset(m1, 0);
-    @memset(m2, 0);
+    var opt: nnlib.Adam = try .init(gpa, l.len, .{ .lr = cfg.lr });
+    defer opt.deinit(gpa);
     const order = try gpa.alloc(u32, train.len);
     defer gpa.free(order);
     for (order, 0..) |*o, i| o.* = @intCast(i);
     var rng: std.Random.DefaultPrng = .init(cfg.seed);
     const seed = stepSeed(cfg);
 
+    // One AdamW step over thread t's share of the parameters, weight decay from
+    // decay_from on
     const Adam = struct {
+        opt: *const nnlib.Adam,
+        s: nnlib.Adam.Step,
         p: []f32,
         gr: []const f32,
-        m1: []f32,
-        m2: []f32,
-        lr: f32,
         wd: f32,
-        decay_from: u32,
-        c: [2]f32,
+        decay_from: usize,
         parts: usize,
         fn run(x: @This(), t: usize) !void {
-            for (x.p.len * t / x.parts..x.p.len * (t + 1) / x.parts) |i| {
-                const g = x.gr[i];
-                x.m1[i] = 0.9 * x.m1[i] + 0.1 * g;
-                x.m2[i] = 0.999 * x.m2[i] + 0.001 * g * g;
-                const decay: f32 = if (i >= x.decay_from) x.wd * x.p[i] else 0;
-                x.p[i] -= x.lr * ((x.m1[i] / x.c[0]) / (@sqrt(x.m2[i] / x.c[1]) + 1e-8) + decay);
-            }
+            const lo = x.p.len * t / x.parts;
+            const hi = x.p.len * (t + 1) / x.parts;
+            const mid = std.math.clamp(x.decay_from, lo, hi);
+            x.opt.update(x.s, x.p, x.gr, lo, mid, 0);
+            x.opt.update(x.s, x.p, x.gr, mid, hi, x.wd);
         }
     };
 
@@ -420,7 +401,7 @@ pub fn fitCpu(gpa: std.mem.Allocator, io: std.Io, cfg: Config, n_ids: u32, train
             const w3 = n.p[l.w3..l.len];
             const gw3 = gr[l.w3..l.len];
             for (0..rws) |i| {
-                axpy(gw3, w.df[i], w.h2[i * dn.h2 ..][0..dn.h2]);
+                nnlib.axpy(gw3, w.df[i], w.h2[i * dn.h2 ..][0..dn.h2]);
                 for (w.dh2[i * dn.h2 ..][0..dn.h2], w3) |*d, v| d.* = w.df[i] * v;
             }
             try actBack(io, parts, w.dh2, w.z2, rws, dn.h2, seed, step, 2);
@@ -436,11 +417,11 @@ pub fn fitCpu(gpa: std.mem.Allocator, io: std.Io, cfg: Config, n_ids: u32, train
                 for (0..dn.slots) |slot| {
                     const src = if (i % 2 == 1) (slot + 5) % 10 else slot;
                     const d = w.dx[i * dn.input + slot * dn.emb ..][0..dn.emb];
-                    axpy(gr[l.e + g.ids[src] * dn.emb ..][0..dn.emb], 1, d);
-                    axpy(gr[l.r + (slot % 5) * dn.emb ..][0..dn.emb], 1, d);
+                    nnlib.axpy(gr[l.e + g.ids[src] * dn.emb ..][0..dn.emb], 1, d);
+                    nnlib.axpy(gr[l.r + (slot % 5) * dn.emb ..][0..dn.emb], 1, d);
                 }
             }
-            const a: Adam = .{ .p = n.p, .gr = gr, .m1 = m1, .m2 = m2, .lr = cfg.lr, .wd = cfg.wd, .decay_from = l.decay, .c = bias(step), .parts = parts };
+            const a: Adam = .{ .opt = &opt, .s = opt.begin(), .p = n.p, .gr = gr, .wd = cfg.wd, .decay_from = l.decay, .parts = parts };
             try split(io, parts, a, Adam.run);
         }
         if (watch) |x| if (x.due(step, steps) and try x.check(gpa, io, &n, step)) break;
