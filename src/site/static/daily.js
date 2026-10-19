@@ -235,7 +235,7 @@ class Game {
     const vs = `vs ${this.name(this.enemy)}`;
     const l = o.lane;
     if (!l || l.games < LANE_GAMES) {
-      return { head: "Rare matchup", sub: l ? `${vs} · ${fmt(l.games)} games` : vs, tone: "" };
+      return { head: "Few games", sub: l ? `${vs} · ${fmt(l.games)} games` : vs, tone: "" };
     }
     const sub = `${vs} · ${fmt(l.games)} games`;
     if (l.side > 0) return { head: `Ahead at ${LANE_MINUTE} min`, sub: `gold ${sub}`, tone: "up" };

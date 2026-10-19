@@ -38,7 +38,7 @@ visual answer reveal, streaks. J1 (decisions.md) dropped win chance and points; 
 facts with counts are not that, but check the line with Jacob before numbers come back.
 - Done 20 Oct (night run, daily): the four options flip after the guess, each to one
   fact and its games ("Good into Zed" when a detected reason clears chance, else "Ahead
-  / Behind at 14 min, gold vs X", "No clear lane lead", "Rare matchup"), played one
+  / Behind at 14 min, gold vs X", "No clear lane lead", "Few games"), played one
   marked; side buttons colour, winner marked; a score card (both right / one of two,
   days in a row, best, played); tiles (winner, kills, gold); lanes as rows with "Blue
   ahead at 14" chips and games. Copy cut to one line, method in a closed details. Gold
