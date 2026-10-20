@@ -110,6 +110,26 @@ fn champ(w: *Writer, ctx: Ctx, ch: Champ) !void {
     });
 }
 
+/// A question's answer must clear chance: a win rate gap of at least min_gap and of
+/// min_z standard errors (Jacob 20 Oct: near-even pairs read as coin flips)
+const min_gap = 0.05;
+const min_z = 2;
+
+/// `a` wins clearly more than `b`, or than even when `b` is null
+fn clearlyAbove(a: Counts, b: ?Counts) bool {
+    if (a.games == 0) return false;
+    const pa = rate(a);
+    var v = pa * (1 - pa) / @as(f64, @floatFromInt(a.games));
+    var pb: f64 = 0.5;
+    if (b) |n| {
+        if (n.games == 0) return false;
+        pb = rate(n);
+        v += pb * (1 - pb) / @as(f64, @floatFromInt(n.games));
+    }
+    const gap = pa - pb;
+    return gap >= min_gap and gap >= min_z * @sqrt(v);
+}
+
 fn pctOf(n: Counts) u32 {
     return @intFromFloat(@round(100 * rate(n)));
 }
@@ -368,13 +388,16 @@ fn byPp(_: void, p: Pair, q: Pair) bool {
 
 fn counters(ctx: Ctx, w: *Writer) ![]const Question {
     const st = &ctx.site.stats;
-    const pairs = try lanePairs(ctx);
+    var pairs: std.ArrayList(Pair) = .empty;
+    for (try lanePairs(ctx)) |p| {
+        if (clearlyAbove(p.n, null)) try pairs.append(ctx.a, p);
+    }
     try tpl.render(w,
         \\<p>A {counter} tends to beat another champion, usually in the same lane.</p>
         \\
     , .{ .counter = term("counter", "counter") });
-    if (pairs.len > 0) {
-        const p = pairs[0];
+    if (pairs.items.len > 0) {
+        const p = pairs.items[0];
         try tpl.render(w,
             \\<p class="example">{x} won {pct}% of {games} games against {y} in {lane} lane this
             \\patch (usually {x_pct}% and {y_pct}%).</p>
@@ -390,20 +413,20 @@ fn counters(ctx: Ctx, w: *Writer) ![]const Question {
         });
     }
     try tpl.render(w,
-        \\<p><b>Your own champion matters more.</b> New to a champion (under 10,000 {mastery}
+        \\<p class="note"><b>Your own champion matters more.</b> New to a champion (under 10,000 {mastery}
         \\points), players win about 44%; once they know it, 51.5%. Most counters move it 2 to 4
         \\{points}. <a href="{source}" rel="noopener">Source</a> (1M+ ranked games).</p>
         \\
     , .{ .mastery = term("mastery", "mastery"), .points = term("points", "points"), .source = mastery_source });
 
     var qs: std.ArrayList(Question) = .empty;
-    if (pairs.len >= 3) {
-        for (pairs[1..3], 0..) |p, i| {
+    if (pairs.items.len >= 2) {
+        for (pairs.items[1..@min(pairs.items.len, 3)], 0..) |p, i| {
             // Alternate which side is listed first so the answer is not always the first
             const two = [2]Choice{ Ctx.choice(p.x), Ctx.choice(p.y) };
             const choices = if (i == 0) two else .{ two[1], two[0] };
             try qs.append(ctx.a, .{
-                .q = try ctx.print("{s} lane: which tends to do better, {s} or {s}?", .{
+                .q = try ctx.print("{s}: which tends to do better, {s} or {s}?", .{
                     root.roleName(p.r), choices[0].t, choices[1].t,
                 }),
                 .choices = try ctx.a.dupe(Choice, &choices),
@@ -414,7 +437,8 @@ fn counters(ctx: Ctx, w: *Writer) ![]const Question {
             });
         }
     }
-    try qs.insert(ctx.a, @min(qs.items.len, 1), .{
+    // First: the question the lesson is most for
+    try qs.insert(ctx.a, 0, .{
         .q = "You have played one champion for 100 games. The enemy laner is a champion " ++
             "it is a little weak against. At most ranks, what tends to matter more?",
         .choices = try ctx.a.dupe(Choice, &.{
@@ -528,11 +552,23 @@ fn timing(ctx: Ctx, w: *Writer) ![]const Question {
     var qs: std.ArrayList(Question) = .empty;
     if (list.len >= 6) {
         const Ask = struct { late: Timing, early: Timing, long: bool };
-        const asks = [_]Ask{
-            .{ .late = list[1], .early = list[list.len - 2], .long = true },
-            .{ .late = list[2], .early = list[list.len - 3], .long = false },
-        };
-        for (asks, 0..) |q, i| {
+        var asks: std.ArrayList(Ask) = .empty;
+        // From the ends inward past the examples, the first pair whose answer clears
+        // chance for each question, a different pair each
+        var k: usize = 1;
+        for ([_]bool{ true, false }) |long| {
+            const b: usize = if (long) learn.lengths - 1 else 0;
+            while (k < list.len / 2) : (k += 1) {
+                const late = list[k];
+                const early = list[list.len - 1 - k];
+                const clear = if (long) clearlyAbove(late.n[b], early.n[b]) else clearlyAbove(early.n[b], late.n[b]);
+                if (!clear) continue;
+                try asks.append(ctx.a, .{ .late = late, .early = early, .long = long });
+                k += 1;
+                break;
+            }
+        }
+        for (asks.items, 0..) |q, i| {
             // The second question lists the early champion first
             const first, const second = if (i == 0) .{ q.late, q.early } else .{ q.early, q.late };
             const winner = if (q.long) q.late else q.early;
@@ -794,6 +830,7 @@ fn synergy(ctx: Ctx, w: *Writer) ![]const Question {
     const weak = duos[duos.len - 3 ..];
     for (0..3) |i| {
         const good = duos[i];
+        if (!clearlyAbove(good.n, weak[i].n) or !clearlyAbove(good.n, weak[(i + 1) % 3].n)) continue;
         var choices: [3]Choice = .{
             .{ .t = try duoName(ctx, weak[i]) },
             .{ .t = try duoName(ctx, weak[(i + 1) % 3]) },

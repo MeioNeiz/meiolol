@@ -90,7 +90,9 @@ puzzle game: docs/learn-proposal.md (team run 2026-10-19 night, teach).
 - Done 20 Oct (night run, learn): Lessons and Practice as tabs, a lesson a screen (text
   with one question at a time under it, "2 of 3 right" at the end; Jacob 01:00 tapped the
   lesson text's champions as if they were answers, so those and the board's are plain
-  names now and the "Check yourself" step is gone), practice in three levels of
+  names now and the "Check yourself" step is gone). Lesson questions only where the
+  answer clears chance: a gap of 5+ points and 2 standard errors (Jacob: "who knows Yasuo
+  vs Yone when it's so close"); the mastery-vs-counter question first, its fact a note, practice in three levels of
   five drills from the generator's Difficulty (clear-cut: one option brings the damage
   type the team lacks; two fit; close call: balanced team), next level offered when one
   is done; role and own champions folded into a closed "Role and your champions"; copy
