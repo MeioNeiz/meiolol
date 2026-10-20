@@ -69,6 +69,27 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
   Volume)" to free block storage. GitHub/Hugging Face ruled out: size limits, "not a
   backup tool", erasure from git history impractical
 
+- Night run 19-20 Oct questions (team notes data/team/2026-10-19-night/<agent>.md):
+  - Champion/matchup: "vs usual" quiet for most matchups (-3 to +2 on big ones): fine,
+    or a wider range shown? Opponent grid mostly grey now that only vs usual is
+    coloured: wanted? Matchup CS split "about 20 gold a CS" clear, or raw CS and gold?
+    Matchups index lists 50+ game pairs only (page weight): fine? "% won" on build
+    options: ok, or games and share only?
+  - Your games: moments list, keep all or only those that moved win chance? "(lane)"
+    after the lane opponent's name clear? Last player reopens on every visit, or only
+    within a day?
+  - Learn: keep the old lessons as "Basics"? Daily streak on Learn or Daily Draft?
+    Levels lock or stay pickable? (docs/learn-proposal.md is the redesign)
+  - Site: preview banner as a slim strip or a header badge? Blue means both "good" and
+    "your side" in review and Daily Draft: ok?
+  - Privacy (docs/privacy-rules.md "For Jacob"): other players' names on public pages
+    (Daily Draft, Your games teammates): lia.md balancing needs rewriting and streamer
+    mode players must stay hidden; retention lengths; ICO fee and EEA representative
+  - Desktop: lane card gold coloured by sign alone or only 2 SE from even? Refresh or
+    drop data/desktop (v4 curves)?
+  - jomify: "Tešter#EUW" was looked up by a test and is stored (ages out in 30 days);
+    `meiolol forget` it now?
+
 ## Ruled out (do not revisit without new facts)
 
 - Multiple keys or friends' keys to multiply limits: against Riot's terms, risks the
