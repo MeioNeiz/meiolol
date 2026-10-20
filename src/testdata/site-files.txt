@@ -140,7 +140,7 @@ patch/role/mid.html fc5051a87ab7393f
 patch/role/support.html 7614432bbdc609c9
 patch/role/top.html 52d6b9a869c371de
 pool.html 6113f7fc50494bdc
-privacy.html 89404bd30f3f212a
+privacy.html b1f726a81e4cdf7d
 robots.txt 331ea9090db0c9f6
 role/bot.html c4d347510d8b0659
 role/jungle.html 2bfd080994060263
@@ -148,4 +148,4 @@ role/mid.html f14dd41571a748fb
 role/support.html 1cef678b0b62f873
 role/top.html 91efd8800dc449bd
 terms.html d257fab656c008b1
-your.html a7992074ec1d5b73
+your.html efc53515f2b2a9be

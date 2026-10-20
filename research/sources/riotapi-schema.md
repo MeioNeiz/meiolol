@@ -105,6 +105,12 @@ challenges, spectator, clash, league-exp), without scraping Riot's JS reference 
   > description: 'Winning team on Summoners Rift. First placement in Teamfight Tactics.'
   > description: 'Losing team on Summoners Rift. Second through eighth placement in Teamfight Tactics.'
 
+- [privacy] [data] spectator-v5 (live games) returns a null PUUID for an anonymous
+  (streamer mode) participant. `spectator-v5.CurrentGameParticipant` ^f21
+  > description: 'The encrypted puuid of this participant. null when the player is anonym.'
+- [privacy] [data] Checked, not there: match-v5 ParticipantDto has no anonymous,
+  streamer or hidden field and says nothing of blanking riotIdGameName. ^f22
+
 ## Read
 
 - `openapi-3.0.0.yml`: paths for match-v5, rso-match, mastery, challenges, spectator,

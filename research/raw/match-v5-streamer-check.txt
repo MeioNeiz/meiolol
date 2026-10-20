@@ -1,0 +1,50 @@
+2026-10-20T07:43:50Z
+matches 5000 participants 50000
+suspicious keys {}
+empty (name, puuid, summonerName): {}
+patches {'16.20': 5000} queues {420: 5000}
+participant keys 156 ['PlayerBehavior', 'PlayerScore0', 'PlayerScore1', 'PlayerScore10', 'PlayerScore11', 'PlayerScore2', 'PlayerScore3', 'PlayerScore4', 'PlayerScore5', 'PlayerScore6', 'PlayerScore7', 'PlayerScore8', 'PlayerScore9', 'allInPings', 'assistMePings', 'assists', 'baronKills', 'basicPings', 'causedGameEndFromIGNBSurrender', 'challenges', 'champExperience', 'champLevel', 'championId', 'championName', 'championTransform', 'commandPings', 'consumablesPurchased', 'damageDealtToBuildings', 'damageDealtToEpicMonsters', 'damageDealtToObjectives', 'damageDealtToTurrets', 'damageSelfMitigated', 'dangerPings', 'deaths', 'detectorWardsPlaced', 'doubleKills', 'dragonKills', 'eligibleForProgression', 'enemyMissingPings', 'enemyVisionPings', 'firstBloodAssist', 'firstBloodKill', 'firstTowerAssist', 'firstTowerKill', 'gameEndedInEarlySurrender', 'gameEndedInIGNBSurrender', 'gameEndedInSurrender', 'getBackPings', 'goldEarned', 'goldSpent', 'holdPings', 'individualPosition', 'inhibitorKills', 'inhibitorTakedowns', 'inhibitorsLost', 'item0', 'item1', 'item2', 'item3', 'item4', 'item5', 'item6', 'itemsPurchased', 'killingSprees', 'kills', 'lane', 'largestCriticalStrike', 'largestKillingSpree', 'largestMultiKill', 'longestTimeSpentLiving', 'magicDamageDealt', 'magicDamageDealtToChampions', 'magicDamageTaken', 'missions', 'needVisionPings', 'neutralMinionsKilled', 'nexusKills', 'nexusLost', 'nexusTakedowns', 'objectivesStolen', 'objectivesStolenAssists', 'onMyWayPings', 'participantId', 'pentaKills', 'perks', 'physicalDamageDealt', 'physicalDamageDealtToChampions', 'physicalDamageTaken', 'placement', 'playerAugment1', 'playerAugment2', 'playerAugment3', 'playerAugment4', 'playerAugment5', 'playerAugment6', 'playerSubteamId', 'positionAssignedByMatchmaking', 'profileIcon', 'pushPings', 'puuid', 'quadraKills', 'retreatPings', 'riotIdGameName', 'riotIdTagline', 'role', 'roleBoundItem', 'selectedRolePreferences', 'sightWardsBoughtInGame', 'spell1Casts', 'spell2Casts', 'spell3Casts', 'spell4Casts', 'subteamPlacement', 'summoner1Casts', 'summoner1Id', 'summoner2Casts', 'summoner2Id', 'summonerId', 'summonerLevel', 'summonerName', 'teamEarlySurrendered', 'teamIGNBSurrendered', 'teamId', 'teamPosition', 'timeCCingOthers', 'timePlayed', 'totalAllyJungleMinionsKilled', 'totalDamageDealt', 'totalDamageDealtToChampions', 'totalDamageShieldedOnTeammates', 'totalDamageTaken', 'totalEnemyJungleMinionsKilled', 'totalHeal', 'totalHealsOnTeammates', 'totalMinionsKilled', 'totalTimeCCDealt', 'totalTimeSpentDead', 'totalUnitsHealed', 'tripleKills', 'trueDamageDealt', 'trueDamageDealtToChampions', 'trueDamageTaken', 'turretKills', 'turretTakedowns', 'turretsLost', 'unrealKills', 'visionClearedPings', 'visionScore', 'visionWardsBoughtInGame', 'wardsKilled', 'wardsPlaced', 'wasAfk', 'wasPremadeWithIGNBGameEndCauser', 'wasPremadeWithSevereTransgressor', 'wasSevereTransgressor', 'win']
+import sqlite3, gzip, json, collections, sys
+db = sqlite3.connect("file:raw.db?mode=ro", uri=True)
+rows = db.execute("select body from raw_docs where source='riot_match' order by fetched_at desc limit 5000").fetchall()
+n = parts = 0
+empty_name = collections.Counter()
+keys = collections.Counter()
+examples = []
+for (b,) in rows:
+    if b[:2] != b"\x1f\x8b":
+        continue
+    m = json.loads(gzip.decompress(b))
+    info = m.get("info", {})
+    n += 1
+    for p in info.get("participants", []):
+        parts += 1
+        for k in p:
+            kl = k.lower()
+            if any(s in kl for s in ("anon", "stream", "hidden", "privacy", "hide")):
+                keys[k] += 1
+        gn = p.get("riotIdGameName")
+        st = (gn in (None, ""), p.get("puuid") in (None, "", "BOT"), p.get("summonerName") in (None, ""))
+        if st[0] or st[1]:
+            empty_name[st] += 1
+            if len(examples) < 5:
+                examples.append({k: p.get(k) for k in ("riotIdGameName", "riotIdTagline", "summonerName", "puuid", "summonerId", "profileIcon", "summonerLevel")} | {"queue": info.get("queueId"), "ver": info.get("gameVersion")})
+print("matches", n, "participants", parts)
+print("suspicious keys", dict(keys))
+print("empty (name, puuid, summonerName):", dict(empty_name))
+for e in examples:
+    e["puuid"] = (e["puuid"] or "")[:6]
+    e["summonerId"] = (e["summonerId"] or "")[:4]
+    e["riotIdGameName"] = "<set>" if e["riotIdGameName"] else e["riotIdGameName"]
+    print(e)
+vers = collections.Counter(); allkeys = set(); queues = collections.Counter()
+for (b,) in rows:
+    if b[:2] != b"\x1f\x8b":
+        continue
+    info = json.loads(gzip.decompress(b)).get("info", {})
+    vers[".".join(info.get("gameVersion", "?").split(".")[:2])] += 1
+    queues[info.get("queueId")] += 1
+    for p in info.get("participants", []):
+        allkeys.update(p.keys())
+print("patches", dict(vers), "queues", dict(queues))
+print("participant keys", len(allkeys), sorted(allkeys))

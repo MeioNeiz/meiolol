@@ -307,7 +307,8 @@ pub const shared_pages = [_][]const u8{
 pub fn robots(arena: std.mem.Allocator, opts: Options) ![]const u8 {
     if (!opts.public) return "User-agent: *\nDisallow: /\n";
     var out: std.ArrayList(u8) = .empty;
-    try out.appendSlice(arena, "User-agent: *\nAllow: /\n");
+    // Your games answers name players (docs/legal/lia.md safeguards): never crawled
+    try out.appendSlice(arena, "User-agent: *\nAllow: /\nDisallow: /api/\n");
     if (opts.origin) |origin| for (html.View.all) |v| {
         if (opts.euw_only and v.region != .euw) continue;
         try out.print(arena, "Sitemap: {s}/{s}sitemap.xml\n", .{ origin, v.dir() });
@@ -330,7 +331,7 @@ test robots {
     public.origin = "https://x.io";
     public.euw_only = true;
     try std.testing.expectEqualStrings(
-        "User-agent: *\nAllow: /\nSitemap: https://x.io/sitemap.xml\nSitemap: https://x.io/patch/sitemap.xml\n",
+        "User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: https://x.io/sitemap.xml\nSitemap: https://x.io/patch/sitemap.xml\n",
         try robots(arena.allocator(), public),
     );
 }

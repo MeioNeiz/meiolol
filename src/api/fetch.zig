@@ -246,7 +246,20 @@ pub const Fetcher = struct {
             const have = try f.db.scalar("SELECT 1 FROM player_games WHERE puuid = ? AND match_id = ?", .{ puuid, id });
             if (have == null) try wanted.append(arena, id);
         }
-        try f.db.run("UPDATE jobs SET pending = ?, total = ? WHERE key = ?", .{ wanted.items.len, wanted.items.len, job_key });
+        // Games cached before Riot IDs were kept (20 Oct 2026) get them: one call each
+        var unnamed: std.ArrayList([]const u8) = .empty;
+        {
+            var q = try f.db.prepare(
+                \\SELECT match_id FROM player_games pg WHERE puuid = ? AND NOT EXISTS
+                \\  (SELECT 1 FROM match_names n WHERE n.match_id = pg.match_id)
+                \\ORDER BY start_ms DESC LIMIT ?
+            );
+            defer q.deinit();
+            try q.bind(.{ puuid, f.opts.max_new });
+            while (try q.step()) try unnamed.append(arena, try arena.dupe(u8, q.bytes(0)));
+        }
+        const total = wanted.items.len + unnamed.items.len;
+        try f.db.run("UPDATE jobs SET pending = ?, total = ? WHERE key = ?", .{ total, total, job_key });
 
         var hash_buf: [game.hash_len]u8 = undefined;
         const hash = game.hashPuuid(&hash_buf, puuid);
@@ -255,7 +268,16 @@ pub const Fetcher = struct {
                 error.KeyRejected, error.OutOfMemory, error.Canceled => return err,
                 else => log.warn("{s}: {t}", .{ id, err }),
             };
-            try f.db.run("UPDATE jobs SET pending = ? WHERE key = ?", .{ wanted.items.len - i - 1, job_key });
+            try f.db.run("UPDATE jobs SET pending = ? WHERE key = ?", .{ total - i - 1, job_key });
+        }
+        for (unnamed.items, 0..) |id, i| {
+            if (endpoints.match(try f.route(@tagName(region)), region, id)) |found| {
+                if (found) |body| try f.storeNames(arena, id, body);
+            } else |err| switch (err) {
+                error.KeyRejected, error.OutOfMemory, error.Canceled => return err,
+                else => log.warn("{s}: names {t}", .{ id, err }),
+            }
+            try f.db.run("UPDATE jobs SET pending = ? WHERE key = ?", .{ unnamed.items.len - i - 1, job_key });
         }
         try f.db.run("UPDATE players SET refreshed = ?, error = NULL WHERE puuid = ?", .{ f.seconds(), puuid });
     }
@@ -297,7 +319,19 @@ pub const Fetcher = struct {
             store.Blob{ .bytes = packed_summary },
             if (packed_timeline) |b| store.Blob{ .bytes = b } else null,
         });
+        try f.storeNames(arena, id, body);
         return summary;
+    }
+
+    /// Each player's Riot ID as at the game, none for a blocked player
+    fn storeNames(f: *Fetcher, arena: Allocator, id: []const u8, body: []const u8) !void {
+        var hash_buf: [game.hash_len]u8 = undefined;
+        for (try game.riotIds(arena, body), 0..) |n, slot| {
+            const puuid = n.puuid orelse continue;
+            const riot_id = n.riot_id orelse continue;
+            if (try f.blocked(puuid)) continue;
+            try f.db.run("INSERT OR REPLACE INTO match_names VALUES (?, ?, ?, ?)", .{ id, slot, game.hashPuuid(&hash_buf, puuid), riot_id });
+        }
     }
 
     fn seconds(f: *Fetcher) i64 {
@@ -377,6 +411,22 @@ fn pickIcon(io: std.Io, current: i64) i64 {
     // Not a starter icon now: any starter differs from it
     const from = if (current >= 0 and current < starter_icons) current else 0;
     return @mod(from + offset, starter_icons);
+}
+
+test "riot ids: none kept for a blocked player, a later erasure drops the rest" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const db = try cache.open(":memory:");
+    defer db.close();
+    var f: Fetcher = .{ .gpa = std.testing.allocator, .io = std.testing.io, .db = db, .opts = .{} };
+    defer f.deinit();
+    try db.run("INSERT INTO blocked VALUES ('puuid-2', 0)", .{});
+    try f.storeNames(arena_state.allocator(), "EUW1_1", @embedFile("../riot/testdata/match.json"));
+    try std.testing.expectEqual(@as(?i64, 9), try db.scalar("SELECT count(*) FROM match_names", .{}));
+    try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM match_names WHERE slot = 2", .{}));
+    try std.testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM match_names WHERE riot_id = 'player3#player3'", .{}));
+    try cache.forget(db, "puuid-3", 1);
+    try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM match_names WHERE riot_id = 'player3#player3'", .{}));
 }
 
 test pickIcon {

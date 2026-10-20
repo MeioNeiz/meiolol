@@ -81,6 +81,29 @@ pub fn summarise(arena: Allocator, body: []const u8) !Summary {
     };
 }
 
+/// One player's Riot ID from a match-v5 document, as at that game, with their PUUID for
+/// the caller's blocked check. Index = slot
+pub const Named = struct { puuid: ?[]const u8, riot_id: ?[]const u8 };
+
+pub fn riotIds(arena: Allocator, body: []const u8) ![]const Named {
+    const Doc = struct { info: struct { participants: []const struct {
+        puuid: ?[]const u8 = null,
+        riotIdGameName: ?[]const u8 = null,
+        riotIdTagline: ?[]const u8 = null,
+    } } };
+    const doc = try std.json.parseFromSliceLeaky(Doc, arena, body, .{ .ignore_unknown_fields = true });
+    const out = try arena.alloc(Named, doc.info.participants.len);
+    for (doc.info.participants, out) |p, *o| {
+        const name = p.riotIdGameName orelse "";
+        const tag = p.riotIdTagline orelse "";
+        o.* = .{
+            .puuid = p.puuid,
+            .riot_id = if (name.len == 0 or tag.len == 0) null else try std.fmt.allocPrint(arena, "{s}#{s}", .{ name, tag }),
+        };
+    }
+    return out;
+}
+
 /// Curves files by patch label ("16.20", or "16.19-16.20" for a range)
 pub const CurveSet = struct {
     files: []const File = &.{},
@@ -182,6 +205,20 @@ pub const Game = struct {
     firsts: []const First = &.{},
     /// The minute you earned most gold
     best_minute: ?BestMinute = null,
+    /// Everyone in the game by slot, with their Riot ID as at the game where the
+    /// service has it (the example has none)
+    players: []const Seat = &.{},
+};
+
+pub const Seat = struct {
+    riot_id: ?[]const u8,
+    team: i64,
+    role: ?[]const u8,
+    champion: u32,
+    kills: i64,
+    deaths: i64,
+    assists: i64,
+    you: bool,
 };
 
 /// A fight (champion kills close in time and place, one of them yours: a kill, an
@@ -356,6 +393,8 @@ pub const Input = struct {
     timeline: ?timeline.Timeline,
     /// Match id prefix ("EUW1") for the win chance's platform term; "" unknown
     platform: []const u8 = "",
+    /// By slot, null unknown; empty when none are known
+    riot_ids: []const ?[]const u8 = &.{},
 };
 
 /// `games` newest first
@@ -387,6 +426,7 @@ pub fn analyse(arena: Allocator, in: Input, rank: Rank, set: CurveSet) !Game {
         .deaths = me.deaths,
         .assists = me.assists,
         .lane = null,
+        .players = try seats(arena, s, in.slot, in.riot_ids),
     };
     if (!s.remake) if (in.timeline) |t| try wholeGame(arena, s, in.slot, t, in.platform, set.legendaries, &g);
     const r = role orelse return g;
@@ -436,6 +476,21 @@ pub fn analyse(arena: Allocator, in: Input, rank: Rank, set: CurveSet) !Game {
     lr.rise = stretch(t, my_id, lr.gold, lr.curve, .rise);
     g.lane = lr;
     return g;
+}
+
+fn seats(arena: Allocator, s: Summary, slot: u8, riot_ids: []const ?[]const u8) ![]const Seat {
+    const out = try arena.alloc(Seat, s.players.len);
+    for (s.players, out, 0..) |p, *o, i| o.* = .{
+        .riot_id = if (i < riot_ids.len) riot_ids[i] else null,
+        .team = p.team,
+        .role = if (Role.fromLcu(p.position)) |r| r.label() else null,
+        .champion = p.champion,
+        .kills = p.kills,
+        .deaths = p.deaths,
+        .assists = p.assists,
+        .you = i == slot,
+    };
+    return out;
 }
 
 /// Blue's win chance by minute from 0: statemodel (state, items, timers and champions)
@@ -1013,6 +1068,25 @@ const testing = std.testing;
 
 test {
     _ = statemodel;
+}
+
+test "riot ids by slot, seats name only those known" {
+    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const body = @embedFile("../riot/testdata/match.json");
+    const named = try riotIds(arena, body);
+    try testing.expectEqual(@as(usize, 10), named.len);
+    try testing.expectEqualStrings("player1#player1", named[1].riot_id.?);
+    try testing.expectEqualStrings("puuid-1", named[1].puuid.?);
+
+    const s = try summarise(arena, body);
+    const ids = [_]?[]const u8{ "A#1", null };
+    const players = try seats(arena, s, 1, &ids);
+    try testing.expectEqualStrings("A#1", players[0].riot_id.?);
+    try testing.expect(players[1].riot_id == null and players[1].you and !players[0].you);
+    try testing.expect(players[9].riot_id == null);
+    try testing.expectEqual(s.players[9].champion, players[9].champion);
 }
 
 test weekStart {

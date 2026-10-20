@@ -460,9 +460,29 @@ fn report(ctx: *Context, arena: Allocator, db: store.Db, puuid: []const u8, rank
             break :blk null;
         } else null;
         const platform = r.match_id[0 .. std.mem.indexOfScalar(u8, r.match_id, '_') orelse 0];
-        try inputs.append(arena, .{ .summary = summary, .slot = r.slot, .timeline = t, .platform = try arena.dupe(u8, platform) });
+        try inputs.append(arena, .{
+            .summary = summary,
+            .slot = r.slot,
+            .timeline = t,
+            .platform = try arena.dupe(u8, platform),
+            .riot_ids = try riotIds(arena, db, r.match_id, summary.players.len),
+        });
     }
     return game.report(arena, inputs.items, rank, ctx.curves);
+}
+
+/// By slot, null where none is kept (blocked, or not yet backfilled)
+fn riotIds(arena: Allocator, db: store.Db, match_id: []const u8, players: usize) ![]const ?[]const u8 {
+    const out = try arena.alloc(?[]const u8, players);
+    @memset(out, null);
+    var q = try db.prepare("SELECT slot, riot_id FROM match_names WHERE match_id = ?");
+    defer q.deinit();
+    try q.bind(.{match_id});
+    while (try q.step()) {
+        const r = q.row(struct { slot: u8, riot_id: []const u8 });
+        if (r.slot < players) out[r.slot] = try arena.dupe(u8, r.riot_id);
+    }
+    return out;
 }
 
 /// Objection and removal, gated by the profile icon check (docs/your-games.md).

@@ -47,8 +47,8 @@ who is the controller of the data described here. Contact: privacy@meio.lol.
 
 - No accounts, no cookies, no advertising, no analytics trackers
 - The public pages show champion and aggregate statistics, and Daily Draft games with
-  players shown only as seats (no names); a player's games appear only when someone
-  looks up their Riot ID
+  players shown only as seats (no names); a player's games, with the Riot IDs of the
+  players in them, appear only when someone looks up their Riot ID
 - To build those statistics we collect ranked match data from the official Riot Games
   API, which includes encrypted player identifiers. We never sell it or share it
 - You can object and have your data removed at any time by emailing us at
@@ -108,14 +108,17 @@ They are never sent to us; clearing this site's data removes them.
 When you enter a Riot ID, we ask the Riot Games API for that player's recent Summoner's
 Rift games and show their own lane against the typical curve for each matchup. Anyone can
 look up any Riot ID, as on other League statistics sites (legal basis: legitimate
-interests). The page shows only that player's games: their champion, their lane
-opponent's champion and the numbers, never other players' names.
+interests). The page shows that player's finished games, and lists the ten players in
+each with their champion, kills, deaths and assists and their Riot ID as at that game, as
+the League client's match history and other statistics sites do. Riot's streamer mode
+hides names only during a game, and we show no live games.
 
 For each player looked up we store the Riot ID, Riot's encrypted player identifier,
-server, visible rank, and the games we fetched: champions, positions, results and
-per-minute statistics, with no names; the other players in those games are kept only as
-one-way hashes of their identifiers. A player nobody has looked up for 30 days is
-deleted. We don't record who looked up whom, and lookups are not in our server logs.
+server, visible rank, and the games we fetched: champions, positions, results,
+per-minute statistics and each player's Riot ID as at that game; the other players'
+identifiers are kept only as one-way hashes. A player nobody has looked up for 30 days
+is deleted, with games no remaining player is in. We don't record who looked up whom,
+and lookups are not in our server logs.
 
 Your games remembers the last five Riot IDs you looked up, and the newest game it saw for
 each, in your own browser (local storage) to offer them again and count new games, and
@@ -125,8 +128,9 @@ device" under the lookup, or clearing site data, removes them all. Pages also ke
 settings there (filters, sort orders, tabs).
 
 To remove your games and stop us collecting them again, use "Remove a Riot ID" on the
-Your games page (the profile icon check below); we delete everything about you and keep
-only your encrypted identifier on a "do not collect" list.
+Your games page (the profile icon check below); we delete everything about you, your
+Riot ID in other players' games included, and keep only your encrypted identifier on a
+"do not collect" list, so we never store your name again.
 
 ## Squads *(when live)*
 

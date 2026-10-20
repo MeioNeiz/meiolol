@@ -115,18 +115,22 @@ the service calls Riot itself with RIOT_API_KEY (local testing).
 Decided 2026-10-11 from research/questions/identity-and-privacy.md (meiolol-44):
 
 - Any Riot ID may be looked up, on legitimate interests: League policy has no consent
-  rule for ranked history (C1), and that is how lookup sites work (C8). The page shows
-  only the looked-up player's own lane: their champion, the lane opponent's champion and
-  the numbers. No other player's name or Riot ID, anywhere (self-imposed, not Riot or
-  law: J10 allows names, docs/privacy-rules.md). Why the opponent's
-  champion: the comparison is a champion matchup, and the curves are champion level.
-  Teammates and the other eight players do not appear at all
+  rule for ranked history (C1), and that is how lookup sites work (C8). The review is
+  the looked-up player's own lane and game; a Players panel lists all ten with champion,
+  K/D/A and Riot ID as at that game, each linking to their own lookup (J18, 20 Oct;
+  balancing in docs/legal/lia.md). Streamer mode: match-v5 neither blanks nor marks
+  players who had it on, and Riot says it hides names only during the match
+  (research/questions/streamer-mode-names.md), so finished games show everyone, as on
+  lookup sites. The example (below) has no names
 - Stored per looked-up player: PUUID, Riot ID as Riot spells it, platform, visible rank,
   times of last refresh and lookup, and which slot they had in each game. Per match: the
   summary above without names or Riot IDs; the ten PUUIDs only as truncated SHA-256
   hashes (so a later lookup can find its slot in a cached match without refetching; a
-  hash is pseudonymous, not anonymous: anyone with the PUUID can recompute it); and the
-  compact timeline (per-minute stats per slot, no identities)
+  hash is pseudonymous, not anonymous: anyone with the PUUID can recompute it); the
+  compact timeline (per-minute stats per slot, no identities); and `match_names`, each
+  slot's Riot ID as at the game with its PUUID hash, none for a blocked PUUID. Games
+  cached before 20 Oct 2026 get names on the player's next refresh (one match-v5 call
+  each, up to 10 per refresh)
 - Retention: a player nobody has looked up for 30 days is deleted (hourly prune), with
   matches no remaining player uses: Riot's advice to refresh stored players at least
   every 30 days (C7) and the privacy policy's promise. Each visit refreshes from Riot (at
@@ -135,8 +139,9 @@ Decided 2026-10-11 from research/questions/identity-and-privacy.md (meiolol-44):
 - Objection and removal, open to anyone who owns the Riot ID: the page issues a random
   starter profile icon (ids 0-28, never the current one), the player sets it in the
   client within 15 min and presses check; the service re-reads it via summoner-v4 and on
-  a match deletes everything about the player and blocks the PUUID (blocked table: PUUID
-  and time, the minimum to honour the objection). Later lookups of that Riot ID answer
+  a match deletes everything about the player (their Riot ID in other players' cached
+  games too) and blocks the PUUID (blocked table: PUUID and time, the minimum to honour
+  the objection). Later lookups of that Riot ID answer
   "opted_out" without fetching. A random guess passes 1 time in 28. Squads will use the
   same check for consent. RSO replaces it once the production key allows (C6, C13)
 - Riot's erasure lists and emailed requests: `api.cache.forget(db, puuid, now)` deletes

@@ -556,6 +556,43 @@ const Review = (() => {
     return p;
   }
 
+  // Everyone in the game, your team first, in Riot's order (top to support). A Riot ID is
+  // as at the game and opens that player's games; none in the example
+  function playersPanel(g) {
+    const me = g.players?.find((p) => p.you);
+    if (!me) return null;
+    const p = el("div", "panel");
+    p.style.marginTop = "14px";
+    const h = el("div", "panel-h");
+    h.append(el("b", "", "Players"), el("span", "", g.players.some((x) => x.riot_id) ? "Riot IDs as at the game; pick one to see their games" : "champions and K/D/A"));
+    const cols = el("div");
+    cols.style.cssText = "display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr))";
+    for (const ours of [true, false]) {
+      const t = el("table", "lane");
+      const head = el("tr");
+      const won = ours === g.win;
+      head.append(el("th", "", `${ours ? "Your team" : "Enemy team"}${g.remake ? "" : won ? ", won" : ", lost"}`), el("th", "", "K/D/A"));
+      t.append(head);
+      for (const x of g.players.filter((y) => (y.team === me.team) === ours)) {
+        const tr = el("tr");
+        const who = el("td", x.you ? "you" : "");
+        const img = icon(x.champion);
+        img.style.verticalAlign = "middle";
+        who.append(img, " ", champName(x.champion));
+        if (x.riot_id) {
+          const name = x.you ? el("span", "muted", x.riot_id) : el("a", "muted", x.riot_id);
+          if (!x.you) name.href = `your.html#id=${encodeURIComponent(x.riot_id)}`;
+          who.append(el("br"), name);
+        }
+        tr.append(who, el("td", "num", `${x.kills}/${x.deaths}/${x.assists}`));
+        t.append(tr);
+      }
+      cols.append(t);
+    }
+    p.append(h, cols);
+    return p;
+  }
+
   // Fun facts from recent games (newest first), each only when there is something to
   // say, so a short history shows fewer rather than empty ones. key names each for the
   // home page; champ: a champion to show beside it; tone: gain, cost or turn colour
@@ -675,8 +712,8 @@ const Review = (() => {
 
   // The whole review into `box`. opts: pager {index, count, go}, to which render adds
   // move(index, count) for games added around this one, date(g) for the strip,
-  // lane: false for no lane panel, keep: moment indexes to list (default all), link: this
-  // game's URL for a share button
+  // lane: false for no lane or players panel, keep: moment indexes to list (default
+  // all), link: this game's URL for a share button
   function render(box, g, opts = {}) {
     box.replaceChildren(strip(g, opts));
     if (g.remake) {
@@ -741,6 +778,8 @@ const Review = (() => {
         box.append(cols);
       }
     }
+    const pp = opts.lane === false ? null : playersPanel(g);
+    if (pp) box.append(pp);
     return { moments: M, set };
   }
 

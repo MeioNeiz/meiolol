@@ -13,7 +13,7 @@ keep** (our choice, cheap and harmless, or it deletes data: only Jacob changes i
 | No other players' names or stats in Ranked Solo/Duo champ select | src/lcu/session.zig redact, src/lanecard.zig, app_main.zig, docs/production-key.md "Product rules" | Riot: "Apps that reveal player names or stats in Champ Select will be asked to remove this feature immediately. This specifically applies only to Ranked Solo/Duo" (riot-champ-select-anon-apps-1222#^f1) |
 | Same, in every other queue's champ select (flex, normals) | same code: redact runs on every session | self, keep: the Riot application text promises "never shows other players' names or statistics" for the app; changing it means editing the application (Jacob) |
 | Other players' ranks only post-game (lab win chance scopes) | src/lab/api.zig Scope | self in part: Riot allows from the loading screen, "you will as soon as you hit the loading screen" (riot-champ-select-anon-apps-1222#^f4). Lab only, no page; loosen if an in-game feature needs it |
-| Never show or analyse players hidden by the game (streamer mode, champ select) | docs/legal/lia.md safeguards, method page | Riot: "Products cannot identify or analyze players who are deliberately hidden by the game" (riot-docs-lol#^f5); "Products cannot de-anonymize players who cannot reasonably be identified from visible information" (riot-policies-general#^f10). Streamer mode hides the Riot ID "in third party apps" (riot-dev-streamer-mode-2025#^f1) |
+| Never show or analyse players hidden by the game (streamer mode, champ select) | docs/legal/lia.md safeguards, method page | Riot: "Products cannot identify or analyze players who are deliberately hidden by the game" (riot-docs-lol#^f5); "Products cannot de-anonymize players who cannot reasonably be identified from visible information" (riot-policies-general#^f10). Streamer mode hides the Riot ID "in third party apps" (riot-dev-streamer-mode-2025#^f1), "only for the duration of the match. Match History and Replays are not affected" (riot-support-anonymizing-riot-id#^f2); match-v5 neither blanks nor marks those players (match-v5-streamer-check#^f1, riotapi-schema#^f22), only spectator-v5 does (riotapi-schema#^f21). So: no live games or champ select names; finished games may name everyone (research/questions/streamer-mode-names.md) |
 | No MMR or hidden rank inference | method page "never does", lia.md | Riot: "Prohibited alternatives include MMR or ELO calculators" (riot-policies-general#^f7) |
 | Several options with reasons, no auto pick/ban/lock, no dodge advice | production-key.md, prose.zig download | Riot: "may highlight decisions that are important and give multiple choices" (riot-policies-general#^f6); "Apps that dictate player decisions" unapproved (riot-docs-lol#^f10). Not privacy, listed for completeness |
 | Custom game history only with opt-in | none shown (we crawl ranked only) | Riot: "may not publicly display a player's match history from the custom match queue unless the player opts in" (riot-docs-lol#^f15) |
@@ -38,7 +38,7 @@ keep** (our choice, cheap and harmless, or it deletes data: only Jacob changes i
 | Daily Draft game at least a week old | src/daily.zig min_age_days, daily page, method page "Daily Draft" | self (Q2, dropped by J10). daily2's area |
 | Daily Draft and Learn puzzles carry no names, Riot IDs, match ids, dates; only team totals and one approximate tier | src/daily.zig, src/learn.zig, privacy page | self. Showing per-seat ranks or stats is allowed by J10; daily2 decides. If added, the privacy page's Daily Draft line and lia.md "Safeguards" must say so |
 | "Never shows other players" site-wide (method page lead and "never does" list) | src/site/prose.zig method | self beyond champ select: narrowed to champ select (Riot) and hidden players on 20 Oct |
-| Your games shows only the looked-up player's lane: no teammate or opponent names | src/api/game.zig, api/cache.zig (summaries keep no names, other PUUIDs as truncated SHA-256), your.zig, docs/your-games.md | self. Showing names needs the API to keep them (schema change on jomify plus a refetch): not simple, left for a plan item |
+| Your games showed no teammate or opponent names | src/api/game.zig, api/cache.zig, review.js | self, dropped 20 Oct (J18): a Players panel names all ten as at the game (api.db `match_names`, erased with the player); lia.md rebalanced |
 | Your games example player anonymised | src/api/example.zig, `meiolol your-example` | self, keep: a reviewer demo, a real name adds nothing |
 | Raw archive drops Riot IDs, hashes PUUIDs and match ids | src/lab/archive.zig, anonymise.rewriteMatch | self, keep: rewrites stored data; changing it is a data job (Jacob) |
 | Analysis snapshots (Mac, gpu-box) salted-hashed | src/lab/anonymise.zig, deploy/snapshot-gpu.sh | self, keep: lab copies, no page; hashing costs nothing |
@@ -53,11 +53,7 @@ keep** (our choice, cheap and harmless, or it deletes data: only Jacob changes i
 - Riot application text (docs/production-key.md draft 18 Oct) says Daily Draft has "no
   player names" and the app never shows other players: true today; update it if Daily
   Draft gains names or ranks
-- Unsure lawful: showing other players' names and per-seat stats on public pages
-  (Daily Draft, Your games teammates) is how op.gg works and fits J10, but it changes
-  the legitimate interests balance: lia.md "Likely impact" says "No public profile,
-  ranking of players, comparison with named players", and its Revisit list names "a
-  feature starts showing players to anyone other than the person who looked them up".
-  Rewrite lia.md with the feature, and check streamer mode players (Riot hides their
-  Riot ID in third-party apps) are not shown by name: whether match-v5 marks them is not
-  yet known
+- Names on public pages (J18): done for Your games 20 Oct, lia.md rebalanced (privacy
+  agent, data/team/2026-10-20-morning/privacy.md). Daily Draft still names nobody: see
+  that note's questions. Streamer mode: match-v5 does not mark it, Riot hides names
+  only during the match; we show no live games

@@ -1,6 +1,6 @@
 //! Fixed text pages. Wording follows docs/production-key.md and docs/concept.md
 //! ("Application wording"): champion and aggregate data, facts not advice, never a
-//! single "best pick"; no other players' names; no auto actions.
+//! single "best pick"; no other players' names in champ select; no auto actions.
 
 const std = @import("std");
 const Writer = std.Io.Writer;
@@ -285,15 +285,17 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\<p>When you enter a Riot ID on <a href="your.html">Your games</a>, we ask the Riot
         \\Games API for that player's recent Summoner's Rift games and show their own lane
         \\against the typical curve for each matchup. Anyone can look up any Riot ID, as on other
-        \\League statistics sites (legal basis: legitimate interests). The page shows only
-        \\that player's games: their champion, their lane opponent's champion and the
-        \\numbers, never other players' names.</p>
+        \\League statistics sites (legal basis: legitimate interests). The page shows that
+        \\player's finished games, and lists the ten players in each with their champion,
+        \\kills, deaths and assists and their Riot ID as at that game, as the League
+        \\client's match history and other statistics sites do. Riot's streamer mode hides
+        \\names only during a game, and we show no live games.</p>
         \\<p>For each player looked up we store the Riot ID, Riot's encrypted player
         \\identifier, server, visible rank, and the games we fetched: champions, positions,
-        \\results and per-minute statistics, with no names; the other players in those games
-        \\are kept only as one-way hashes of their identifiers. A player nobody has looked up
-        \\for 30 days is deleted. We don't record who looked up whom, and lookups are not in
-        \\our server logs.</p>
+        \\results, per-minute statistics and each player's Riot ID as at that game; the
+        \\other players' identifiers are kept only as one-way hashes. A player nobody has
+        \\looked up for 30 days is deleted, with games no remaining player is in. We don't
+        \\record who looked up whom, and lookups are not in our server logs.</p>
         \\<p>Your games remembers the last five Riot IDs you looked up, and the newest game
         \\it saw for each, in your own browser (local storage) to offer them again and count
         \\new games, and the last player's games as last shown, to open them straight away
@@ -303,8 +305,9 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\<p>To remove your games and stop us collecting them again, use "Remove a Riot ID"
         \\on the Your games page. You prove the account is yours by setting a given free
         \\profile icon in the League client for a minute; we then delete everything about
-        \\you, and keep only your encrypted identifier on a "do not collect" list so we
-        \\never fetch your games again.</p>
+        \\you, your Riot ID in other players' games included, and keep only your encrypted
+        \\identifier on a "do not collect" list so we never fetch your games or store your
+        \\name again.</p>
         \\<h2>The desktop app</h2>
         \\<p>The desktop app is not released yet. When it is, it will read champ select from
         \\the League client running on your own PC and show lane information on screen. It
@@ -315,11 +318,12 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\API. Raw match records, which include Riot's per-application encrypted player
         \\identifiers, are stored privately and used to compute the statistics and the
         \\Daily Draft. We publish no Riot IDs or player identifiers from them; Daily Draft
-        \\shows players only as seats, and Your games shows a player's own games when their
-        \\Riot ID is looked up. Riot IDs in raw records are removed within days, when the
-        \\records are archived, and player identifiers are removed from stored games 24
-        \\months after the game. Deletion requests passed on by Riot Games are honoured, and you can ask
-        \\us directly to delete any data about your account.</p>
+        \\shows players only as seats, and Your games shows a player's games, with the Riot
+        \\IDs of the players in them, when their Riot ID is looked up. Riot IDs in raw
+        \\records are removed within days, when the records are archived, and player
+        \\identifiers are removed from stored games 24 months after the game. Deletion
+        \\requests passed on by Riot Games are honoured, and you can ask us directly to
+        \\delete any data about your account.</p>
         \\<h2>Contact</h2>
         \\<p>Questions or requests: <a href="mailto:{contact}">{contact}</a>.</p>
         \\</div>

@@ -9,11 +9,11 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Area | Covers | Questions | Sources | Findings |
 | --- | --- | --- | --- | --- |
-| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 6 | 145 | 604 |
-| [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 2 | 115 | 463 |
-| [data](areas/data.md) | what the Riot API serves and how to crawl it | 3 | 122 | 282 |
+| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 6 | 146 | 605 |
+| [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 3 | 122 | 487 |
+| [data](areas/data.md) | what the Riot API serves and how to crawl it | 3 | 123 | 286 |
 | [stats](areas/stats.md) | estimation and recommendation methods | 15 | 234 | 1875 |
-| [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 5 | 126 | 504 |
+| [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 5 | 129 | 509 |
 | [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 7 | 98 | 452 |
 
 ## Questions
@@ -35,6 +35,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | --- | --- | --- | --- | --- | --- | --- |
 | answered | now | [How can players look themselves up and opt into Squads without RSO, and what do Riot policy and GDPR require for storing and showing player data?](questions/identity-and-privacy.md): How can players look themselves up and opt into Squads without RSO, and what do Riot policy and GDPR require for storing and showing player data? | 10 strong, 1 moderate, 2 weak, 1 contested | 21 | 16 (growing) | 1 |
 | answered | soon | [Would Riot grant meiolol a production API key, and what does the application need?](questions/riot-production-key.md): Would Riot grant meiolol a production API key, and what does the application need? | 9 strong, 4 moderate, 2 contested | 54 | 48 (slowing) | 3 |
+| answered | soon | [How do lookup sites and the Riot API treat streamer mode and other players' Riot IDs on public pages?](questions/streamer-mode-names.md): How do lookup sites and the Riot API treat streamer mode and other players' Riot IDs on public pages? | - | 9 | 12 (saturated) |  |
 
 ### data
 
@@ -88,6 +89,6 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 ## Health
 
-- 38 questions, 544 sources, 3892 findings
+- 39 questions, 551 sources, 3919 findings
 - Open leads: 161 (`josearch leads`)
-- Lint: 0 errors, 1 warnings (`josearch lint`)
+- Lint: 0 errors, 2 warnings (`josearch lint`)

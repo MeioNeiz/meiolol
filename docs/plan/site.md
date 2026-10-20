@@ -212,8 +212,14 @@ detected cross-role kinds. Admin only today; the public draft tool follows J2.
   placeholders; objection by email (`meiolol forget`) until the form is live
 - Privacy rules (J10) audited 20 Oct: docs/privacy-rules.md (each rule Riot, law or
   self-imposed, with quotes). Done: method and privacy pages, privacy.md, lia.md say what
-  Daily Draft shows. Next: Your games teammates' names would need api.game to keep them
-  (self-imposed rule, plan item); Jacob's list at the end of privacy-rules.md
+  Daily Draft shows. Jacob's list at the end of privacy-rules.md
+- Names (J18) done 20 Oct for Your games: a Players panel in the game review (review.js)
+  lists all ten with champion, K/D/A and Riot ID as at the game, each linking to their
+  lookup; api.db `match_names` (erased with the player, none for blocked PUUIDs; old
+  games backfilled on refresh); lia.md rebalanced, privacy page and robots.txt (/api/
+  not crawled). Streamer mode only hides names live (research streamer-mode-names), so
+  finished games show everyone. Next: `deploy/jomify.sh install api` (live API still
+  nameless until then); Daily Draft stays nameless unless Jacob says otherwise
 - Reviewer walk 2026-10-14 (desktop and phone, every section) fixed in 38b940f,
   145a898, bbda65c, b37dd02, 74d6cdb, ab7d4cc; screenshots docs/review-shots/. Left:
   unknown URLs get a plain-text "not found" from meiolol-render (a site 404 page needs

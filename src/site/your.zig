@@ -55,9 +55,9 @@ pub fn page(w: *Writer, info: prose.Info) Writer.Error!void {
         \\<section class="your-data">
         \\<h2>Your data</h2>
         \\<p class="muted">Looking up a Riot ID fetches its recent games from the Riot
-        \\Games API and keeps them, so the page loads fast and your history builds up. Only
-        \\your own lane is shown: champions, never other players' names. Details in the
-        \\<a href="privacy.html">privacy policy</a>.</p>
+        \\Games API and keeps them, so the page loads fast and your history builds up. Each
+        \\game lists its ten players with their Riot IDs as at that game, as other League
+        \\statistics sites do. Details in the <a href="privacy.html">privacy policy</a>.</p>
         \\<p class="muted">Don't want your games here? Remove them and stop us collecting
         \\them again. To prove the account is yours, you set a given profile icon for a
         \\moment.</p>

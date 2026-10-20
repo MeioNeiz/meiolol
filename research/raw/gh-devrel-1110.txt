@@ -1,0 +1,20 @@
+# #1110 Clarification on getCurrentGameInfoByPuuid removal in future
+state: open created: 2025-10-25T04:30:56Z closed: null
+author: azure-gh
+
+https://xcancel.com/LeagueOfLegends/status/1980434309736771638
+
+> Spectating in the League client will continue to function as it does today and will hide information for players that have streamer mode on.
+
+> Live spectate options on 3rd party sites will be disabled and replaced with enhanced access to replays files via a new endpoint that will be made available in Riot API’s match endpoint. Featured games capabilities will also be disabled.
+
+> Live games capabilities on 3rd party sites will continue to function but returned results will respect players’ streamer mode settings.
+
+Does this imply that in the near future (with or without notice), there will no longer be an encryption key to allow spectating, or command-line/batch-file spectating is forbidden or removed? All spectating outside of being friends with the target is forbidden from this point onward?
+
+What does live game capability update respecting streamer mode here mean?
+- Calling getCurrentGameInfoByPuuid on a user requires them to authorise your application via RSO
+- Calling getCurrentGameInfoByPuuid on a user with streamer mode on will always return not in a match
+- Calling getCurrentGameInfoByPuuid on a non-streamer mode user will return the match, but anyone in the match with streamer mode enabled will be zeroed out and not have any name or identifier
+
+
