@@ -73,7 +73,11 @@ judgements, 3 to 5 options with reasons, no "best pick" or "+X% win rate" wordin
   testdata/cards/fixture.txt (a change fails with the diff command; cp to accept), and
   checks 400 random drafts: options from the pool when it has 3+, else widened; 3 to 5
   (fewer only when fewer exist); never banned, taken or unpickable; no "%", "win" or
-  "best" in reasons
+  "best" in reasons; filled-up options play the role (10%+ of their games)
+- Expertise (20 Oct): the pool is ranked by the draft plus the player's own mastery
+  points (lanecard.Expertise.fitted, from `meiolol eval --replay`: docs/model.md "Pool
+  and expertise replay"); the window's "Rank by your mastery points" box turns it off
+  (not kept across restarts yet); `meiolol-app cards --expertise off` for diffs
 
 ## Next
 

@@ -775,6 +775,20 @@ How to write a line:
 
 ## Player
 
+- 2026-10-20: Ranking your own champions by your mastery on them as well as by the
+  draft helps: a player wins more on a champion they have more points on, even compared
+  with their own other champions, by about 3.7 percentage points from 10k to 300k
+  points in an otherwise even game, the same in every role. With it the lane card shows
+  the champion the player actually picked 47% of the time instead of 39% (other picks
+  known; 48% instead of 37% blind). Sure: held out, 944k player-games of 130k ranked
+  games (15 to 18 Oct, every crawled region) with the player's mastery fetched before
+  the game; 977k older player-games to fit; log loss of the player's own result
+  -0.00052 ± 0.00007 nats (EUW alone -0.00087 ± 0.00021); log of points works as well
+  as five bands, and one weight as well as one per role. Players with more points on
+  everything win slightly less, so the gain is within a player's pool, not "experienced
+  players win". Site: the app ranks the pool with it (a toggle, on by default) and says
+  only "150k mastery points", never a win chance from it. Evidence: docs/model.md "Pool
+  and expertise replay"
 - 2026-10-20: Every champion is harder when you're new to it, and some much more than
   others. Players with under 10k mastery points on their champion win 47.7%, with 300k+
   51.7% (practised players are also better players overall, so every champion shows

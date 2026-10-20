@@ -45,10 +45,10 @@ const prior_grid = [_]f64{ 50, 100, 200, 400, 800, 1600, 3200, 6400, 1e9 };
 
 /// Every model but the current one sums its terms plainly, as it did before term weights
 /// became the default (17 Oct), so their history stays comparable
-const unweighted: score.Options = .{ .weights = .{} };
+pub const unweighted: score.Options = .{ .weights = .{} };
 
 /// Cells with fewer games are left out of the empirical-Bayes estimate
-const eb_min_games = 30;
+pub const eb_min_games = 30;
 
 pub fn run(
     gpa: std.mem.Allocator,
@@ -513,7 +513,7 @@ fn experienceSection(
 
 /// Draft terms of each train game from a model built without its fold, under the
 /// fold model's empirical-Bayes priors
-fn oofTerms(
+pub fn oofTerms(
     gpa: std.mem.Allocator,
     io: std.Io,
     champs: []const core.statsfile.Champion,
@@ -1279,7 +1279,7 @@ fn roleInference(st: *const core.Stats, games: []const Game, w: *std.Io.Writer) 
     try w.writeAll("\n");
 }
 
-fn sigmoid(x: f64) f64 {
+pub fn sigmoid(x: f64) f64 {
     return 1 / (1 + @exp(-x));
 }
 

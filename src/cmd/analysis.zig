@@ -4,6 +4,7 @@
 const std = @import("std");
 const stats = @import("../stats.zig");
 const eval = @import("../eval.zig");
+const replay = @import("../replay.zig");
 const outcomes = @import("../outcomes.zig");
 const objectives = @import("../objectives.zig");
 const winchance = @import("../winchance.zig");
@@ -31,6 +32,9 @@ pub const usage_eval =
     \\                               alone with every --platform pooled
     \\              --history FILE   append one TSV line (date, sizes, log loss and AUC
     \\                               per model) for the accuracy-vs-data curve
+    \\              --replay         only the pool and expertise replay, on a snapshot
+    \\                               with mastery_pre.tsv and mastery_pre_pool.tsv
+    \\                               (meiolol-lab mastery-pre); fits lanecard.Expertise
     \\
 ;
 
@@ -38,6 +42,7 @@ pub fn cmdEval(c: *Cmd) !u8 {
     var g: Games = .{};
     var o: eval.Options = .{};
     var history: ?[]const u8 = null;
+    var replay_only = false;
     while (c.next()) |_| {
         if (try g.parse(c)) continue;
         if (c.is("--test-share")) {
@@ -50,8 +55,11 @@ pub fn cmdEval(c: *Cmd) !u8 {
             o.test_platform = try c.value();
         } else if (c.is("--history")) {
             history = try c.value();
+        } else if (c.is("--replay")) {
+            replay_only = true;
         } else return error.Usage;
     }
+    if (replay_only and history != null) return error.Usage;
     const io = c.init.io;
     const db = try c.open();
     defer db.close();
@@ -59,6 +67,11 @@ pub fn cmdEval(c: *Cmd) !u8 {
     const chosen = if (g.patches.items.len > 0) g.patches.items else try stats.patches(c.arena, db, platforms);
     var buf: [64 * 1024]u8 = undefined;
     var stdout = std.Io.File.stdout().writer(io, &buf);
+    if (replay_only) {
+        try replay.run(c.init.gpa, io, db, c.data_dir, chosen, platforms, o, &stdout.interface);
+        try stdout.interface.flush();
+        return 0;
+    }
     const line = try eval.run(c.init.gpa, io, db, chosen, platforms, o, &stdout.interface);
     try stdout.interface.flush();
     if (history) |path| {

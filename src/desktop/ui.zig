@@ -35,6 +35,10 @@ pub const Note = union(enum) {
     restart,
 };
 
+/// The window's "Rank by your mastery points" box; the poller reads it each tick
+pub var by_mastery: std.atomic.Value(bool) = .init(true);
+var by_mastery_box = true;
+
 pub const View = struct {
     status: Status,
     stats: ?*const core.Stats,
@@ -130,6 +134,9 @@ fn card(c: *const Card, stats: *const core.Stats) void {
         .font = dvui.themeGet().font_heading,
         .margin = .{ .y = 14, .h = 2 },
     });
+    if (dvui.checkbox(@src(), &by_mastery_box, "Rank by your mastery points", .{})) {
+        by_mastery.store(by_mastery_box, .release);
+    }
     if (c.options.len == 0) para(@src(), "No champion you can pick has enough games in this role.", .{}, .{});
     for (c.options, 0..) |o, i| option(i, o, stats, o.champion == c.me);
     if (c.options.len > 0) {

@@ -270,8 +270,10 @@ const Poller = struct {
         if (p.own == null) p.own = p.loadOwn(p.watch.client.?);
         const own = p.own.?;
         const pool = p.watch.pool;
+        const by_mastery = ui.by_mastery.load(.acquire);
         var h: std.hash.Wyhash = .init(cs.fingerprint());
         h.update(std.mem.asBytes(&role));
+        h.update(std.mem.asBytes(&by_mastery));
         if (pool) |ids| h.update(std.mem.sliceAsBytes(ids));
         p.fingerprint = h.final();
 
@@ -288,6 +290,7 @@ const Poller = struct {
             .pickable = pool,
             .mastery = own.mastery,
             .tier = own.tier,
+            .expertise = if (by_mastery) .fitted else null,
         });
         return .{ .card = card };
     }

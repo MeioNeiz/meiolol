@@ -1,8 +1,8 @@
 == top blind, before any pick
 top
 - Malphite | 20k mastery points; strong in top this patch
-- Sett | 80k mastery points
 - Garen | 150k mastery points
+- Sett | 80k mastery points
 - Ornn | 9k mastery points
 == top, their Darius is in
 top; opponent Darius (guessed)
@@ -28,8 +28,8 @@ At 14 min Malphite is typically 193 gold ahead of Darius (8 games in 10 between 
 mid, hovering Ahri; opponent Syndra (guessed)
 At 14 min Ahri is typically 226 gold behind Syndra (8 games in 10 between -708 and +289) and ahead in 31% of 208 games (Gold to Emerald, last 30 days).
 - Viktor | vs Syndra: +164 gold at 14 min (605 games) | 30k mastery points; strong in mid this patch; good into Lee Sin
-- Orianna | vs Syndra: -62 gold at 14 min (546 games) | 41k mastery points; pairs well with Jinx
 - Ahri | vs Syndra: -226 gold at 14 min (208 games) | 212k mastery points
+- Orianna | vs Syndra: -62 gold at 14 min (546 games) | 41k mastery points; pairs well with Jinx
 == mid, pool champion banned and one taken
 mid; opponent Syndra (guessed)
 - Viktor | vs Syndra: +164 gold at 14 min (605 games) | 30k mastery points; strong in mid this patch

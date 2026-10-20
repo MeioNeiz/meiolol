@@ -30,6 +30,27 @@ const max_reasons = 3;
 
 pub const Mastery = struct { champion: u32, points: u32 };
 
+/// The player's own experience on an option, from their mastery points: adds
+/// beta[role] * feature(points) to the option's log-odds before the pool is ranked. Shown
+/// only as the points fact, never as a win chance (docs/production-key.md)
+pub const Expertise = struct {
+    beta: [Role.count]f64,
+
+    /// `meiolol eval --replay` of 20 Oct (snap-20261018T1007Z, 977k train seats): one beta
+    /// for every role, fitted beside the player's total points, so it ranks within a
+    /// pool (docs/model.md "Pool and expertise replay")
+    pub const fitted: Expertise = .{ .beta = @splat(0.1022) };
+
+    /// 0 for never played; one more per tenfold points past 1000
+    pub fn feature(points: u32) f64 {
+        return @log10(@as(f64, @floatFromInt(points)) + 1000) - 3;
+    }
+
+    pub fn logit(e: Expertise, role: Role, points: u32) f64 {
+        return e.beta[@backingInt(role)] * feature(points);
+    }
+};
+
 pub const Input = struct {
     stats: *const Stats,
     curves: ?*const Curves,
@@ -46,6 +67,8 @@ pub const Input = struct {
     mastery: []const Mastery = &.{},
     /// Visible solo queue tier ("GOLD"), never MMR
     tier: ?[]const u8 = null,
+    /// Null ranks the pool by the draft alone (the window's toggle)
+    expertise: ?Expertise = .fitted,
     opts: core.Options = .{},
 };
 
@@ -272,8 +295,17 @@ fn options(arena: std.mem.Allocator, in: Input, opp: ?Opponent, bracket: Bracket
         .bans = in.bans,
         .pool = pool.items,
     };
-    var buf: [max_options]core.Suggestion = undefined;
+    var buf: [pool_size]core.Suggestion = undefined;
     var list = core.recommend(stats, draft, in.opts, &buf);
+    if (in.expertise) |e| {
+        const Rank = struct { e: Expertise, in: Input };
+        std.mem.sort(core.Suggestion, list, Rank{ .e = e, .in = in }, struct {
+            fn more(r: Rank, a: core.Suggestion, b: core.Suggestion) bool {
+                return rankLogit(r.e, r.in, a) > rankLogit(r.e, r.in, b);
+            }
+        }.more);
+    }
+    list = list[0..@min(list.len, max_options)];
     if (list.len < min_options) {
         // Keep the pool's options, then fill from everyone who plays the role
         var wide = draft;
@@ -326,6 +358,10 @@ fn rolePlayers(arena: std.mem.Allocator, stats: *const Stats, role: Role, pickab
 fn isStrong(s: core.Suggestion) bool {
     for (s.reasons()) |r| if (r.kind == .base and r.pp > 0) return true;
     return false;
+}
+
+fn rankLogit(e: Expertise, in: Input, s: core.Suggestion) f64 {
+    return @log(s.win / (1 - s.win)) + e.logit(in.role, masteryOf(in.mastery, s.champion));
 }
 
 fn masteryOf(mastery: []const Mastery, champion: u32) u32 {
@@ -548,6 +584,34 @@ test "before picks: no opponent, no sentence" {
     try testing.expectEqualStrings("", card.period);
     try testing.expectEqual(1, card.options.len);
     try testing.expectEqual(ahri, card.options[0].champion);
+}
+
+test "expertise ranks the pool by points too" {
+    var f = try fixture();
+    defer f.deinit();
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var in: Input = .{
+        .stats = &f.stats,
+        .curves = null,
+        .role = .top,
+        .mastery = &.{
+            .{ .champion = sett, .points = 400_000 },
+            .{ .champion = darius, .points = 20_000 },
+            .{ .champion = garen, .points = 1000 },
+        },
+        .opts = test_opts,
+        .expertise = null,
+    };
+    const draft_only = try build(arena.allocator(), in);
+    try testing.expect(draft_only.options[0].champion != sett);
+    in.expertise = .{ .beta = @splat(1) };
+    const card = try build(arena.allocator(), in);
+    try testing.expectEqual(3, card.options.len);
+    try testing.expectEqual(sett, card.options[0].champion);
+    try testing.expectEqual(garen, card.options[2].champion);
+    try testing.expectEqual(0, Expertise.feature(0));
+    try testing.expectApproxEqAbs(1, Expertise.feature(9000), 1e-12);
 }
 
 test compact {

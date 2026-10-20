@@ -46,6 +46,7 @@ const usage =
     \\                    else next to this program)
     \\  --min-games N     fewest games in the role to be suggested (default 200)
     \\  --prior N         pseudo-games pulling duos and matchups to neutral (default 1000)
+    \\  --expertise on|off  cards: rank the pool by mastery points too (default on)
     \\
     \\Suggestions only: meiolol never locks, bans or dodges, and never shows other
     \\players' names.
@@ -63,6 +64,7 @@ const Args = struct {
     lockfile: ?[]const u8 = null,
     save: ?[]const u8 = null,
     opts: core.Options = .{},
+    expertise: bool = true,
     positional: ?[]const u8 = null,
 };
 
@@ -135,6 +137,8 @@ fn parseArgs(argv: []const [:0]const u8) Args {
             args.opts.prior_games = std.fmt.parseFloat(f64, val) catch
                 fail("--prior: not a number", .{});
             if (args.opts.prior_games < 0) fail("--prior must be >= 0", .{});
+        } else if (std.mem.eql(u8, flag, "--expertise")) {
+            args.expertise = if (std.mem.eql(u8, val, "on")) true else if (std.mem.eql(u8, val, "off")) false else fail("--expertise: on or off", .{});
         } else if (std.mem.eql(u8, flag, "--lockfile")) {
             args.lockfile = val;
         } else if (std.mem.eql(u8, flag, "--save")) {
@@ -194,8 +198,9 @@ const App = struct {
         try app.printHeader(loaded);
         for (scenes) |s| {
             var bad: []const u8 = "";
-            const in = cardscenes.input(app.arena, stats, if (curves) |*c| c else null, s, app.args.opts, &bad) catch |err|
+            var in = cardscenes.input(app.arena, stats, if (curves) |*c| c else null, s, app.args.opts, &bad) catch |err|
                 fail("scene {s}: {t} {s}", .{ s.name, err, bad });
+            if (!app.args.expertise) in.expertise = null;
             try app.out.print("\n== {s}\n", .{s.name});
             try lanecard.write(try lanecard.build(app.arena, in), stats, app.out);
         }

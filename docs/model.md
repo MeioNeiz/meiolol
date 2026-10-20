@@ -4900,6 +4900,57 @@ Reading (dev, no test look):
   detected running through the early lead) and narrows it: the comp and pair part of
   the edge shows up only in who wins
 
+### Pool and expertise replay, 2026-10-20
+
+Question: does ranking the lane card's pool by the player's own mastery as well as by
+the draft help, and with what weight? Layer 3 of the pool tests (data/team/
+2026-10-20-pooltest/notes.md). `meiolol eval --replay` (src/replay.zig) on
+snap-20261018T1007Z, every platform, the eval time split (train 746k games 26 Sep to
+15 Oct, test 132k games 15 to 18 Oct). Data: mastery_pre.tsv (points on the game's
+champion and on every champion, from the player's latest fetch before the game) and
+mastery_pre_pool.tsv (that fetch's top 15, the pool the app sees; `meiolol-lab
+mastery-pre`, 8aca7cb). Only seats with a pre-game fetch.
+
+Term (lanecard.Expertise): logit += beta * (log10(points + 1000) - 3), own seat only
+(all the app knows). Fit: logistic regression of each known seat's team result on the
+draft's four terms from that side (out-of-fold on train, empirical-Bayes priors), side
+and a constant, plus the expertise features; 977k train seats. Test: 944k seats in
+130k games, terms from the full-train model; ± paired by game.
+
+| model | log loss | vs draft alone | 10k to 300k points (pp, even game) |
+| --- | --- | --- | --- |
+| draft alone | 0.68679 | | |
+| + log points, one beta | 0.68645 | -0.00034 ± 0.00006 | 2.7 |
+| + log points, beta per role | 0.68644 | -0.00034 ± 0.00006 | 2.7 2.7 2.7 2.6 2.7 |
+| + bands (<10k, 10-30k, 30-100k, 100-300k, 300k+) | 0.68645 | -0.00034 ± 0.00006 | vs <10k: 1.1 2.0 3.2 4.2 |
+| + log points, one beta, beside log total points | 0.68626 | -0.00052 ± 0.00007 | 3.7 (total: -0.103 a tenfold) |
+
+EUW test games only (24k games, 114k seats, same train): -0.00052 ± 0.00017 one beta,
+-0.00087 ± 0.00021 beside total points.
+
+Lane card hit rate: for each test seat with a pool, the card (shipped options, train
+stats, no curves) from the pre-game top 15; hit when the champion picked is among the
+options shown. 65.4% of picks are in the top 15 at all (EUW 70.8%).
+
+| draft known | hit, draft only | hit, + expertise (beta 0.1022) | difference | win rate, hit / missed |
+| --- | --- | --- | --- | --- |
+| other nine (as the pick metric) | 38.6% | 46.9% | +8.32 ± 0.07 pp | 51.9% / 48.5% |
+| blind | 37.0% | 47.5% | +10.48 ± 0.08 pp | 51.7% / 48.6% |
+| EUW, other nine | 40.8% | 51.7% | +10.89 ± 0.22 pp | 52.1% / 47.9% |
+
+Reading:
+- Shipped: one beta 0.1022 for every role (lanecard.Expertise.fitted), from the row
+  beside total points: within one player's pool total points are fixed, so that
+  coefficient is the one that ranks. Per role adds nothing; log points match the
+  bands' shape. A toggle in the window ("Rank by your mastery points") turns it off
+- Players with more points overall win slightly less once their points on the champion
+  are known: the gain is the share of a player's play on this champion, not experience
+  in general
+- Win rate by hit is descriptive only: comfort picks confound it
+- Not tried: a per-champion slope shrunk to the role's (d1's per-champion gap, true sd
+  ~2 points, split-half r 0.33); a pick-order-aware draft (which picks the player had
+  seen); persisting the toggle across restarts
+
 ## Shipped model, 2026-10-17
 
 `score.Options` defaults (app suggest, site draft tester, Daily Draft, pool, matchup and
