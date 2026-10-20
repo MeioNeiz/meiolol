@@ -188,10 +188,11 @@ than lolalytics: our own edge is the lane curves, early/late lean, "Into which t
   lolalytics' PBI, (win - average) x 100 x pick / (100 - ban), with the win rate pulled
   toward the role's average by k games (method of moments per role, as usualK; 500 to 750 on
   the EUW snapshot), so a thin champion's lucky edge can't count in full
-  (research/questions/ban-impact-score.md). A "Ban impact" column on champions.html and
-  the role pages beside win rate, pick, ban and games, sortable (table.js); title gives
+  (research/questions/ban-impact-score.md). An "Influence" column (first "Ban impact",
+  renamed 20 Oct: Jacob wanted a word without "ban") on champions.html and the role pages
+  beside win rate, pick, ban and games, sortable (table.js); title gives
   its two parts (edge after pulling, pick rate when not banned); below 0 dim; footnote
-  explains it. Wording: "ban impact", never "best ban" or a win rate gain. Reusable:
+  explains it. Wording: "influence", never "best ban" or a win rate gain. Reusable:
   Prior.of(stats, role) then score(wins, picked, banned, total), for the picker's ban
   options (B3, Q3: plan/app.md); the app's stats.bin has no ban counts yet (needs a
   per-champion banned count in statsfile, or champions.json). Next: Jacob's look; per

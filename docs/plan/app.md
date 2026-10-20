@@ -10,7 +10,7 @@ Champ select, updating live as champions are hovered and locked:
 - Pick options given what people hover
 - Ban options from hovers
 - Ban options from the champions people are most likely to play: rank them by
-  core.banimpact (J20, the site's "Ban impact" column), several with games, never auto
+  core.banimpact (J20, the site's "Influence" column), several with games, never auto
 - Champions and team comps from what people play and how they have done recently
 - Options from a chosen pool
 - Aware of pick order (Jacob 19 Oct: "they haven't picked top yet, what is good"): when
