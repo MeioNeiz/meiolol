@@ -8,7 +8,7 @@ layouts, more engaging.
 Site-wide colour and density (Jacob 20 Oct: "more colour", "space inefficient"):
 docs/design-ideas.md, measured layout, colour by impact, build order. Done: build
 order 1-3 (9ed5c1f, d0026ff): scale tokens in style.css, tierlist.wrColour steps with
-the thin-data cut and step-4 chip (champions index, matchups index, vs usual, champion
+the thin-data cut and step-4 chip (dropped 20 Oct, Jacob: "they just look weird"; step 4 is now plain vivid text) (champions index, matchups index, vs usual, champion
 win rate tile), matchup win rate, gold and lead table in ink; wrap 1,560, header 48,
 29 px table rows (1080p champions table 17 to 26 rows). Next: build order 4 (opponent
 tiles 76 px, 0 of 41 on a 1080p screen still), 5 (heat cells, pick/ban bars), 6

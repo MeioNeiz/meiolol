@@ -167,20 +167,19 @@ pub fn wrColour(p: f64, span: f64) WrColour {
 }
 
 /// Aggregate scale (a champion's or matchup's rate over many games): the points where
-/// --hi1..--hi4 sit; past the last, --hi4 as a filled chip with dark ink. 4% of
-/// champion roles with 500+ games reach it
+/// --hi1..--hi4 sit; past the last, --hi4. 4% of champion roles with 500+ games reach
+/// it
 const stops = [_]f64{ 0, 2, 3.5, 5.5 };
 
 pub const WrColour = struct {
     pts: f64,
 
-    /// The value of --c: a mix of the two stops either side; past the last stop it
-    /// also sets --chip, so the number shows as dark ink on a vivid fill (style.css)
+    /// The value of --c: a mix of the two stops either side
     pub fn format(c: WrColour, w: *Writer) Writer.Error!void {
         const side = if (c.pts < 0) "lo" else "hi";
         const x = @abs(c.pts);
         if (x < 0.05) return w.writeAll("var(--s0)");
-        if (x >= stops[stops.len - 1]) return w.print("var(--chip-ink);--chip:var(--{s}4)", .{side});
+        if (x >= stops[stops.len - 1]) return w.print("var(--{s}4)", .{side});
         var i: usize = 1;
         while (x >= stops[i]) i += 1;
         const t = (x - stops[i - 1]) / (stops[i] - stops[i - 1]);
@@ -199,7 +198,7 @@ test wrColour {
         .{ 0.495, "color-mix(in oklab,var(--lo1) 75%,var(--lo2))" },
         .{ 0.52, "var(--hi2)" },
         .{ 0.545, "color-mix(in oklab,var(--hi3) 50%,var(--hi4))" },
-        .{ 0.44, "var(--chip-ink);--chip:var(--lo4)" },
+        .{ 0.44, "var(--lo4)" },
     };
     inline for (cases) |c| {
         const s = try std.fmt.bufPrint(&buf, "{f}", .{wrColour(c[0], table_span)});

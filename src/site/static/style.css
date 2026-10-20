@@ -34,7 +34,7 @@
   --death: #8a8f98;
   --obj: #6aa1ff;
   /* Magnitude scale (docs/design-ideas.md, tierlist.zig wrColour): grey middle, four
-     steps a side; step 4 only as a filled chip with dark ink */
+     steps a side */
   --lo4: #fb2b9a;
   --lo3: #fe6652;
   --lo2: #f79c40;
@@ -44,7 +44,6 @@
   --hi2: #59aaf8;
   --hi3: #25d1ff;
   --hi4: #0bfaf4;
-  --chip-ink: #08090a;
   /* Heat-map cell fills under --text */
   --f-lo3: #ae4200;
   --f-lo2: #7d3400;
@@ -420,9 +419,8 @@ b.down, a.down, .down { color: var(--bad); }
 .ci .down { background: var(--bad); }
 .ci .even { background: var(--muted); }
 .wr b { color: var(--c); }
-.wr .ci i { background: var(--chip, var(--c)); }
+.wr .ci i { background: var(--c); }
 .wrc { color: var(--c); }
-.wr b, .vs b, b.vs, .wrc { background: var(--chip, none); box-shadow: 0 0 0 2px var(--chip, transparent); border-radius: 3px; }
 /* Gold leads and ahead shares barely move a matchup: neutral */
 .mu-tiles b.up, .mu-tiles b.down { color: var(--text); }
 a.gold, a.gold.up, a.gold.down, .mu-leads td.up, .mu-leads td.down, table.mu-table .gold { color: var(--text); font-weight: 500; }

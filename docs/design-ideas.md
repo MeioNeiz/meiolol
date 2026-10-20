@@ -17,7 +17,8 @@ wording, several options with reasons).
    which metric a row is, so it carries nothing (C8)
 2. One diverging scale everywhere: blue above, orange below, a grey middle that
    recedes, vivid only at the clamped ends (C3, C4, finviz). Four steps a side; the
-   fourth is a filled chip in electric aqua or hot pink, rare by design
+   fourth electric aqua or hot pink text, rare by design (a filled chip at first,
+   dropped 20 Oct: Jacob, "they just look weird")
 3. Always a second cue beside colour: the sign, a bar, bold (C2: FBref, Basketball
    Reference, Dotabuff). Colour-blind readers and the policy both need the number
 4. Thin data loses colour first: shrink, then fade toward grey; never sorted to the top
@@ -86,7 +87,7 @@ Coloured numbers (text on the dark page; all at least 5.3:1):
 
 | Step | Below | Above | Use |
 | --- | --- | --- | --- |
-| 4, extreme | `#fb2b9a` hot pink | `#0bfaf4` electric aqua | as a filled chip, dark text (5.6 and 15.2:1) |
+| 4, extreme | `#fb2b9a` hot pink | `#0bfaf4` electric aqua | as text (a filled chip with dark text until 20 Oct) |
 | 3 | `#fe6652` | `#25d1ff` | |
 | 2 | `#f79c40` | `#59aaf8` | today's --bad / --good |
 | 1 | `#caac83` | `#89afd6` | |
@@ -94,7 +95,7 @@ Coloured numbers (text on the dark page; all at least 5.3:1):
 
 Cell fills for heat-map tables (number in --text on top; the design reader's scale,
 5.0-11:1): below `#ae4200` `#7d3400` `#512a0f`, neutral `#202225`, above `#153758`
-`#104e89` `#1a68bf`; step 4 is the vivid chip above.
+`#104e89` `#1a68bf`; step 4 is the vivid colour above.
 
 Other tokens:
 - Team: --us `#5aaeff`, --them `#f0596b`, sides only (review, Daily Draft), always with
@@ -142,7 +143,7 @@ single games; raw, the team's state not held unless stated.
 ## Per page (ranked; source in brackets, slugs in research/sources/)
 
 Champions index
-1. Win rate as a heat cell (fills above), vivid chip at 5.5+ points; sorted column band
+1. Win rate as a heat cell (fills above), vivid colour at 5.5+ points; sorted column band
    (finviz-map, ugg-darius-matchups)
 2. 30 px rows, 24 px icons, role as an icon: 25 rows a 1080p screen (bbref-jokic 23 px
    rows)

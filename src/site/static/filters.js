@@ -484,14 +484,14 @@ function points(v) {
   return `${x > 0 ? "+" : ""}${x.toFixed(1)}`;
 }
 
-// As tierlist.zig wrColour: the value of --c, past the last stop also setting --chip
+// As tierlist.zig wrColour: the value of --c
 function wrColour(p, span) {
   const stops = [0, 2, 3.5, 5.5];
   const pts = (100 * (p - 0.5) * TABLE_SPAN) / span;
   const side = pts < 0 ? "lo" : "hi";
   const x = Math.abs(pts);
   if (x < 0.05) return "var(--s0)";
-  if (x >= stops[3]) return `var(--chip-ink);--chip:var(--${side}4)`;
+  if (x >= stops[3]) return `var(--${side}4)`;
   let i = 1;
   while (x >= stops[i]) i++;
   const near = Math.round((100 * (stops[i] - x)) / (stops[i] - stops[i - 1]));
