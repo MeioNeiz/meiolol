@@ -313,6 +313,23 @@ reads even, now coloured by sign); leaner rows (short icon paths, or rows drawn 
 from JSON) to list thinner matchups; a search for one champion could flip its pairs to
 its side; phone hides icons (names only) to keep Games on screen.
 
+## Pool page
+
+Jacob 20 Oct: champion pool and learning "so unintuitive ... not clear at all that these
+stats mean anything"; likes "how hard champs are to learn"; also play "needs to be way
+more helpful to actual players". Done 20 Oct (learning session): "How hard to pick up"
+from mastery points at the time (games after the player's mastery fetch; learned.md
+Player) replaces the 16-day history curves (93 of 173 "from the start", top rows noise):
+pool.html table of every champion (new under 30k vs practised 100k+, gap, harder or
+easier only for the clearest), a champion page line and table by points (under 10k to
+300k+, gold at 14), each pool option's line. Also play as plain shares ("59% (28%)")
+with harder/easier to pick up; lanes, options and ban fallbacks only from 1 point either
+way, so most mains now say "none stands out" instead of +0.2s. Every region's games for
+difficulty, whatever the view. Next: how a main's players do on their first games of
+each also-played champion (skills that carry over), once enough games; per champion and
+role (Ashe support vs bot) when the games allow; keep the pool page's mains in the
+browser (ask Jacob).
+
 ## Draft tester
 
 Jacob 19 Oct: fewer words, more information, much clearer what affects what; "get more

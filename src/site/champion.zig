@@ -106,7 +106,7 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
             .won = tpl.when(rank == null, "of games won"),
             .pick = tpl.call(pct, .{ cr.games, site.games }),
             .ban = tpl.call(pct, .{ ch.banned, site.games }),
-            .games = cr.games,
+            .games = try root.thousands(site.arena, cr.games),
         });
 
         var opps: std.ArrayList(Opponent) = .empty;
@@ -124,7 +124,7 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
         try tpl.renderPart(w, "</section>\n", .{});
     }
     try pool_page.section(site, w, &site.pool, ch);
-    try learning_page.section(w, &site.learning, ch);
+    try learning_page.section(site, w, &site.learning, ch);
     try tpl.render(w,
         \\<p class="muted small">Win rates are raw: no pulling toward 50%, fainter under {full} games; coloured on a scale twice as wide as the champions table's (a matchup's rate is mostly the opponent's strength), a dot on 25% to 75%. Vs usual: how much more or less often than usual the champion won in the matchup, in points, after allowing for the opponent's own win rate in the role (against a strong opponent it usually wins less), pulled toward 0 the fewer the games so a thin matchup stays quiet; the matchup page has the numbers behind it. Hardest first, and sorting by win rate, use the win rate pulled toward the champion's own in the role, the more so the fewer the games, so a few lucky games can't top the list. Gold at {minute} min is the lane curve's estimate, then where 8 games in 10 end (10th to 90th percentile); + when the champion is ahead, in plain ink (gold is not a win rate), fainter under {full} games; for filters other than a region and period above, the plain average of the games picked. <a href="../method.html">Method</a>.</p>
         \\<script src="../table.js" defer></script>

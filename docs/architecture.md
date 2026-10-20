@@ -18,7 +18,7 @@ src/
   curves.zig         lane matchup curves from timelines (`meiolol curves`)
   builds.zig         builds per champion and role (`meiolol builds`, JSON for the site)
   pool.zig           Pool: who mains X also plays Y, hard-lane options, ban fallback
-  learning.zig       learning curves: results by games played on a champion
+  learning.zig       how hard champions are to pick up: win rate by mastery points
   stats.zig          model file from the matches table (`meiolol stats`)
   partials.zig       views partials (data/partials): the views write's games and mastery
                      contributions kept between writes ("Views partials")
@@ -491,31 +491,35 @@ own scope ("every region, last 30 days"), not the filters'. Method page `#lean`.
 
 ## Pool (src/pool.zig, src/site/pool.zig, static/pool.js)
 
-A player's main is their top champion; they play another when it has at least 10% of
-the main's weight (games now, mastery points once that table fills; min 10 games).
-"Players who main X also play Y" is lift: share of X-mains playing Y over Y's share
+A player's main is their top champion; they play another when it has at least 10% of the
+main's weight (games now, mastery points once that table fills; min 10 games). "Players
+who main X also play Y" is listed by lift: share of X-mains playing Y over Y's share
 among players who don't main Y, shrunk toward 1 by 20 pseudo-players; lists from 30
-mains, n shown. From the model file's lane pairs (score.matchupPp, 30+ games): X's
-five worst lane matchups, the also-played champions in X's role that are positive into
-them ("options", several, with reasons), and those positive into X's best lanes (ban
-fallback). `meiolol site` writes data/pool.json, pool.html (pick up to three mains;
-pool.html#garen,darius) and a section on each champion page; `meiolol pool` writes the
-same JSON to data/export/pool.json for a look. Mastery source (points, champions
-played in the last year, 50k total and 10k per champion) is used once it has more
-players than the games source. Not yet: curves instead of win rates for hard lanes,
-your own record per matchup.
+mains, shown as both shares ("59% (28%)") with how hard Y is to pick up. Lanes (hard,
+options' and fallbacks') only from 1 point either way (Options.min_lane_pp). From the
+model file's lane pairs (score.matchupPp, 30+ games): X's five worst lane matchups, the
+also-played champions in X's role that are positive into them ("options", several, with
+reasons), and those positive into X's best lanes (ban fallback). `meiolol site` writes
+data/pool.json, pool.html (pick up to three mains; pool.html#garen,darius) and a section
+on each champion page; `meiolol pool` writes the same JSON to data/export/pool.json for
+a look. Mastery source (points, champions played in the last year, 50k total and 10k per
+champion) is used once it has more players than the games source. Not yet: curves
+instead of win rates for hard lanes, your own record per matchup.
 
-## Learning curves (src/learning.zig, src/site/learning.zig)
+## How hard to pick up (src/learning.zig, src/site/learning.zig)
 
-For players whose match history was crawled, each ranked solo game's number on that
-champion (all patches) goes into bins 1-5, 6-20, 21-50, 51+: games, win rate, and lane
-gold difference at 14 (timeline frame 14, laner minus lane opponent) where a timeline
-exists. "Usual by games X-Y": the first bin within 1 point of the champion's overall win
-rate, only when every bin up to it has 400+ games; bins under 200 are greyed. Games
-before the crawl window count as early games, so early bins hold some returning players
-(the gap shown is too small, never too big); mastery can correct that once it fills.
-`meiolol site` writes data/learning.json, a section on each champion page, a "How long
-champions take to learn" table on pool.html, and a line per pool option.
+Win rate by the player's mastery points on the champion at the time: bins under 10k,
+10-30k, 30-100k, 100-300k, 300k+, with lane gold difference at 14 where a timeline exists.
+Points at the time: the player's one mastery row (refetched monthly) for games that start
+after its fetch (median 1.6 days after, p90 3.5 on snap-20261018T1007Z), points of the
+champion then, 0 when absent. Games between fetch and game are missing from the points.
+Ruled out: the row's last game on a champion (its points are that game's), which leans to
+losses (docs/learned.md). Per champion, all roles: new (under 30k) against practised
+(100k+), 200+ games each; the gap's average over champions, and harder or easier when the
+gap is 2 standard errors off it; the table sorts by the gap pulled toward the average by
+the between-champion spread over its own noise. `meiolol site` writes data/learning.json
+(pool.js lines), a section on each champion page and a table on pool.html. Partials:
+learning.bin (Views partials); the database path joins participants to mastery.
 
 ## Recommender (src/core/score.zig)
 
@@ -610,10 +614,12 @@ writes so a write reads only what changed. days/<unix day>.bin: every ranked sol
 (420, no remake) started that UTC day as the views read it (match row, participants by
 slot with a 128-bit Wyhash of the PUUID, never the PUUID, bans in key order), other
 matches by id, queue, platform and patch; per game, not per-day sums, because the
-30-day window starts mid-day, pool mains and learning game numbers need each player's
-games, and filters' byte order follows match ids. mastery.bin: per mastery row (key,
-rowid) its pool contribution (main, one-trick, champions also played) for one champion
-list. One read transaction diffs (match_id, rowid) of matches and timeline.timelines
+30-day window starts mid-day, pool mains need each player's games, and filters' byte
+order follows match ids. mastery.bin: per mastery row (key, rowid, fetched_at) its pool
+contribution (main, one-trick, champions also played) for one champion list.
+learning.bin: per player and champion with a game after the player's mastery fetch, the
+points bin then, by (rowid, fetched_at, champion); a write decodes only rows not in it
+(first build ~all such rows) and keeps only pairs still needed. One read transaction diffs (match_id, rowid) of matches and timeline.timelines
 (read first: an attached file's snapshot starts at its first read, and the writer
 commits main first) against the files, then reads only new, REPLACEd (new rowid) or
 newly timelined matches, by key, or whole tables past 150k (the first build;
@@ -622,7 +628,7 @@ rows likewise by rowid. In-place changes the diff can't see: forgotten PUUIDs (s
 each write from `forgotten`, and at once by `meiolol forget` under the directory's
 lock), PUUIDs blanked at 24 months (days near the cutoff read again each write, older
 ones keep no keys), and rebuild, rekey and restore, which drop the files (under the
-lock). A migration that rewrites participants or bans in place must drop them too. A
+lock; learning.bin too, as rowids may repeat). A migration that rewrites participants or bans in place must drop them too. A
 change to partials.zig, pool.zig or riot/mastery.zig, or to the file types, starts them
 again. Readers: stats, bans, patches, patch day, filters, pool, spread, learning, and
 learn's length and team mix tallies and practice match ids; learn's damage split (raw

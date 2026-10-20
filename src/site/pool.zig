@@ -29,17 +29,18 @@ pub fn sourceText(p: *const pool.Pool) []const u8 {
 pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool, l: *const learning.Learning) !void {
     const pg = site.page(
         "Champion pool | meiolol",
-        "Pick the champions you main: what their players also play, which of those do well into your hard lanes, and what they play when your main is banned.",
+        "Pick the champions you main: what their players also play, how hard each champion is to pick up, and which do well where your main struggles.",
         "pool.html",
         .pool,
     );
     try html.head(w, pg);
     try tpl.render(w,
         \\<h1>Champion pool</h1>
-        \\<p class="lead">Pick the champion you main, or up to three. See what players who
-        \\main them also play, which of those champions do well into your main's hard lanes,
-        \\and what they play when it is banned. Several options with the numbers behind
-        \\each; the choice is yours.</p>
+        \\<p class="lead">Looking for a second champion? Pick the one you main, or up to
+        \\three: see what else their players play, how hard each is to pick up, and which do
+        \\well where your main struggles or when it is banned. Several options with the
+        \\numbers behind each; the choice is yours. <a href="#pick-up">How hard every
+        \\champion is to pick up</a>.</p>
         \\<p id="status" class="note">Loading…</p>
         \\<form id="pool" class="pool-form" autocomplete="off" onsubmit="return false">
         \\<datalist id="champions"></datalist>
@@ -49,10 +50,12 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool, l: *const l
         \\</form>
         \\<div id="results" data-to-site="{up}" data-query="{query}"></div>
         \\<p class="muted">A player's main is their most played champion, from {source}
-        \\({players} players so far). "×2.4" means players who main that champion play this one
-        \\2.4 times as often as other players do; small groups are pulled toward ×1. Lists
-        \\start at {min} players per main. Lane numbers are percentage points of win chance
-        \\beyond what the two champions' own win rates predict, {in} {when}.
+        \\({players} players so far); they play another when it has at least a tenth of their
+        \\main's games or points. "59% (28%)": 59% of the main's players play it, 28% of other players do.
+        \\Listed are those played most beyond their usual share (small groups count for less),
+        \\from {min} players per main. Lane numbers are points of win chance beyond what the two
+        \\champions' own win rates predict, {in} {when}, shown from 1 point either way (most
+        \\matchups are closer to even).
         \\<a href="{up}method.html">Method</a>.</p>
         \\<script src="pool.js" defer></script>
         \\
@@ -84,7 +87,7 @@ pub fn section(site: *const Site, w: *Writer, p: *const pool.Pool, ch: Champ) !v
         return;
     }
     try tpl.render(w,
-        \\<p class="muted">{players} players main {name}, from {source}; ×2 means twice as often as other players.</p>
+        \\<p class="muted">{players} players main {name}, from {source}: the share of them who play each champion (of other players in brackets), those played most beyond their usual share first.</p>
         \\
     , .{ .players = m.players, .name = ch.name, .source = sourceText(p) });
     try w.writeAll("<div class=\"card\"><ul class=\"also\">\n");
@@ -92,20 +95,32 @@ pub fn section(site: *const Site, w: *Writer, p: *const pool.Pool, ch: Champ) !v
     for (m.also[0..@min(m.also.len, also_shown)]) |a| {
         const other = matchup.champ(site, a.id) orelse continue;
         try tpl.render(w,
-            \\<li class="bx"><span>{champ}</span><span class="num" title="{together} of {players} players">×{lift:.1}</span></li>
+            \\<li class="bx"><span>{champ}</span><span class="num" title="{together} of {players} players">{share:.0}% <span class="muted">({base:.0}%)</span>{kind}</span></li>
             \\
         , .{
             .champ = tpl.call(champCell, .{ site, other }),
             .together = a.together,
             .players = m.players,
-            .lift = a.lift,
+            .share = 100 * @as(f64, @floatFromInt(a.together)) / @as(f64, @floatFromInt(m.players)),
+            .base = 100 * a.base,
+            .kind = if (kindNote(site, a.id)) |k| tpl.t(" <span class=\"role\">{k}</span>", .{ .k = k }) else null,
         });
     }
     try tpl.renderPart(w,
         \\</ul></div>
-        \\<p><a href="../pool.html#{slug}">{name}'s pool: options for hard lanes and when it is banned</a></p>
+        \\<p><a href="../pool.html#{slug}">{name}'s pool: options for its hard lanes and when it is banned</a></p>
         \\
     , .{ .slug = ch.slug, .name = ch.name });
+}
+
+/// "harder to pick up" when the champion's gap stands out (learning.zig)
+fn kindNote(site: *const Site, id: u32) ?[]const u8 {
+    const g = (site.learning.get(id) orelse return null).gap orelse return null;
+    return switch (g.kind) {
+        .harder => "harder to pick up",
+        .easier => "easier to pick up",
+        .usual => null,
+    };
 }
 
 fn champCell(w: *Writer, site: *const Site, other: Champ) !void {

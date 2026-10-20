@@ -10,7 +10,10 @@
 //!   each player's games, and filters' file order follows match ids, so only the games
 //!   themselves merge exactly. Smaller than the sums anyway (a stats builder is 12 MB)
 //! - mastery.bin: each mastery row's contribution to the pool tally (main, one-trick,
-//!   champions also played), for one champion list
+//!   champions also played) and its fetch time, for one champion list
+//! - learning.bin: learning.zig's points bin of each player and champion with a game after
+//!   the player's mastery fetch, by the row's rowid and fetch time (a refetch's REPLACE
+//!   gives a new rowid), so a write decodes only rows new since
 //!
 //! A refresh diffs (match_id, rowid) of every match and (match_id, rowid) of every
 //! timeline against the files and reads only the matches new, replaced (INSERT OR
@@ -27,6 +30,7 @@ const flat = @import("site/flat.zig");
 const riot_mastery = @import("riot/mastery.zig");
 const core = @import("core");
 const pool = @import("pool.zig");
+const learning = @import("learning.zig");
 const stats = @import("stats.zig");
 
 const Allocator = std.mem.Allocator;
@@ -106,6 +110,7 @@ const Contribution = struct {
     main: u16,
     one_trick: bool,
     others: []const u16,
+    fetched_at: i64,
 };
 
 const MasteryFile = struct {
@@ -115,12 +120,20 @@ const MasteryFile = struct {
     entries: []const Contribution,
 };
 
+const Cached = struct { rowid: i64, fetched_at: i64, champion: u16, bin: u8 };
+
+const LearningFile = struct {
+    /// learningKey
+    key: u64,
+    entries: []const Cached,
+};
+
 const magic = "MEIOPAR1";
 
 /// Hashes the files' types and this source: another binary's files are read again
 pub fn formatKey() u64 {
     var h: std.hash.Wyhash = .init(1);
-    inline for (.{ DayFile, State, MasteryFile }) |T| h.update(std.mem.asBytes(&flat.fingerprint(T)));
+    inline for (.{ DayFile, State, MasteryFile, LearningFile }) |T| h.update(std.mem.asBytes(&flat.fingerprint(T)));
     h.update(@embedFile("partials.zig"));
     return h.final();
 }
@@ -131,6 +144,14 @@ fn masteryKey(st: *const core.Stats) u64 {
     h.update(@embedFile("pool.zig"));
     h.update(@embedFile("riot/mastery.zig"));
     h.update(std.mem.sliceAsBytes(st.ids));
+    return h.final();
+}
+
+/// Bins follow learning's edges and the blob format
+fn learningKey() u64 {
+    var h: std.hash.Wyhash = .init(formatKey());
+    h.update(@embedFile("learning.zig"));
+    h.update(@embedFile("riot/mastery.zig"));
     return h.final();
 }
 
@@ -188,7 +209,7 @@ pub fn drop(gpa: Allocator, io: std.Io, dir: []const u8) !void {
     const days = try s.path("days", .{});
     defer gpa.free(days);
     try cwd.deleteTree(io, days);
-    for ([_][]const u8{ "state.bin", "mastery.bin" }) |name| {
+    for ([_][]const u8{ "state.bin", "mastery.bin", "learning.bin" }) |name| {
         const file = try s.path("{s}", .{name});
         defer gpa.free(file);
         cwd.deleteFile(io, file) catch |err| switch (err) {
@@ -219,7 +240,17 @@ pub const Counts = struct {
     bulk: bool = false,
     mastery: usize = 0,
     mastery_read: usize = 0,
+    /// Players and champions with a game after the player's mastery fetch, and the
+    /// mastery rows decoded for them
+    learning: usize = 0,
+    learning_read: usize = 0,
 };
+
+/// A player and a champion they played
+pub const Pair = struct { key: Key, champion: u16 };
+
+/// The mastery row's fetch time and the champion's points bin then
+pub const PairBin = struct { fetched_at: i64, bin: u8 };
 
 /// The games and mastery contributions, held under the directory's lock until deinit
 pub const Store = struct {
@@ -232,6 +263,8 @@ pub const Store = struct {
     days: std.AutoArrayHashMapUnmanaged(i64, Day) = .empty,
     /// Every game, by match id: after refresh
     sorted: []const *const Game = &.{},
+    /// After masteryTallies, in gpa
+    learning: ?std.AutoHashMapUnmanaged(Pair, PairBin) = null,
     counts: Counts = .{},
 
     /// Opens (or starts) `dir`, waiting for its lock, and brings it up to date with db
@@ -261,6 +294,7 @@ pub const Store = struct {
     }
 
     pub fn deinit(s: *Store) void {
+        if (s.learning) |*l| l.deinit(s.gpa);
         s.lock.close(s.io);
         s.arena_state.deinit();
         s.gpa.destroy(s);
@@ -840,7 +874,7 @@ pub const Store = struct {
                 e.* = old[at];
             } else {
                 try missing.append(gpa, i);
-                e.* = .{ .key = r.key, .rowid = r.rowid, .platform = 0, .main = 0, .one_trick = false, .others = &.{} };
+                e.* = .{ .key = r.key, .rowid = r.rowid, .platform = 0, .main = 0, .one_trick = false, .others = &.{}, .fetched_at = 0 };
             }
         }
         s.counts.mastery = entries.len;
@@ -866,6 +900,7 @@ pub const Store = struct {
                 _ = scratch.reset(.retain_capacity);
                 const r = q.row(struct { data: []const u8, fetched_at: i64, platform: ?[]const u8 });
                 e.platform = try internIn(wa, &strings, r.platform);
+                e.fetched_at = r.fetched_at;
                 plays.clearRetainingCapacity();
                 if (!try pool.masteryPlays(scratch.allocator(), gpa, r.data, r.fetched_at, &plays)) continue;
                 const c = pool.contribution(st, plays.items, .mastery) orelse continue;
@@ -879,6 +914,7 @@ pub const Store = struct {
             }
         }
         try writeIn(s.io, file, MasteryFile{ .champs_key = champs_key, .strings = strings.keys(), .entries = entries });
+        try s.learningBins(db, st, entries);
 
         const masks = try wa.alloc(u32, strings.count() + 1);
         masks[0] = 0;
@@ -892,6 +928,117 @@ pub const Store = struct {
                 t.addContribution(st, e.main, e.one_trick, e.others);
             }
         }
+    }
+
+    /// learning.zig's points bin for each player and champion of a game after the
+    /// player's mastery fetch (`rows`: masteryTallies' contributions, in key order), into
+    /// s.learning: from learning.bin when the row's rowid and fetch time match, the rest
+    /// decoded from db
+    fn learningBins(s: *Store, db: store.Db, st: *const core.Stats, rows: []const Contribution) !void {
+        const gpa = s.gpa;
+        var work: std.heap.ArenaAllocator = .init(gpa);
+        defer work.deinit();
+        const wa = work.allocator();
+        const Need = struct { row: u32, champion: u16, bin: u8 = unknown };
+        var needs: std.ArrayList(Need) = .empty;
+        for (s.sorted) |g| for (g.players) |p| {
+            const k = p.puuid orelse continue;
+            const row = findRow(rows, k) orelse continue;
+            if (rows[row].fetched_at == 0 or !learning.after(rows[row].fetched_at, g.start)) continue;
+            const champion = std.math.cast(u16, p.champion) orelse continue;
+            if (st.index(champion) == null) continue;
+            try needs.append(wa, .{ .row = @intCast(row), .champion = champion });
+        };
+        std.mem.sort(Need, needs.items, {}, struct {
+            fn f(_: void, a: Need, b: Need) bool {
+                return if (a.row != b.row) a.row < b.row else a.champion < b.champion;
+            }
+        }.f);
+        var n: usize = 0;
+        for (needs.items) |x| {
+            if (n > 0 and needs.items[n - 1].row == x.row and needs.items[n - 1].champion == x.champion) continue;
+            needs.items[n] = x;
+            n += 1;
+        }
+        const pairs = needs.items[0..n];
+
+        const file = try s.path("learning.bin", .{});
+        defer gpa.free(file);
+        const CacheKey = struct { rowid: i64, fetched_at: i64, champion: u16 };
+        var cached: std.AutoHashMapUnmanaged(CacheKey, u8) = .empty;
+        if (try readIn(s.io, gpa, wa, LearningFile, file)) |f| if (f.key == learningKey()) {
+            for (f.entries) |e| try cached.put(wa, .{ .rowid = e.rowid, .fetched_at = e.fetched_at, .champion = e.champion }, e.bin);
+        };
+        for (pairs) |*x| {
+            const r = rows[x.row];
+            x.bin = cached.get(.{ .rowid = r.rowid, .fetched_at = r.fetched_at, .champion = x.champion }) orelse unknown;
+        }
+
+        // Rows with a pair still unknown, in rowid order: the table's, so the reads walk it once
+        var missing: std.ArrayList(u32) = .empty;
+        for (pairs) |x| {
+            if (x.bin != unknown) continue;
+            if (missing.items.len > 0 and missing.items[missing.items.len - 1] == x.row) continue;
+            try missing.append(wa, x.row);
+        }
+        std.mem.sort(u32, missing.items, rows, struct {
+            fn f(r: []const Contribution, a: u32, b: u32) bool {
+                return r[a].rowid < r[b].rowid;
+            }
+        }.f);
+        s.counts.learning = pairs.len;
+        s.counts.learning_read = missing.items.len;
+        {
+            var q = try db.prepare("SELECT data, fetched_at FROM mastery WHERE rowid = ?");
+            defer q.deinit();
+            var scratch: std.heap.ArenaAllocator = .init(gpa);
+            defer scratch.deinit();
+            for (missing.items) |row| {
+                try q.bind(.{rows[row].rowid});
+                defer q.reset();
+                if (!try q.step()) continue;
+                _ = scratch.reset(.retain_capacity);
+                const r = q.row(struct { data: []const u8, fetched_at: i64 });
+                if (r.fetched_at != rows[row].fetched_at) continue;
+                const entries = riot_mastery.decode(scratch.allocator(), r.data, r.fetched_at) catch continue;
+                // pairs is in row order: this row's are together
+                var lo: usize = 0;
+                var hi: usize = pairs.len;
+                while (lo < hi) {
+                    const mid = lo + (hi - lo) / 2;
+                    if (pairs[mid].row < row) lo = mid + 1 else hi = mid;
+                }
+                while (lo < pairs.len and pairs[lo].row == row) : (lo += 1) {
+                    pairs[lo].bin = @intCast(learning.binIn(entries, pairs[lo].champion));
+                }
+            }
+        }
+
+        var keep: std.ArrayList(Cached) = .empty;
+        var out: std.AutoHashMapUnmanaged(Pair, PairBin) = .empty;
+        errdefer out.deinit(gpa);
+        try out.ensureTotalCapacity(gpa, @intCast(pairs.len));
+        for (pairs) |x| {
+            if (x.bin == unknown) continue;
+            const r = rows[x.row];
+            try keep.append(wa, .{ .rowid = r.rowid, .fetched_at = r.fetched_at, .champion = x.champion, .bin = x.bin });
+            out.putAssumeCapacity(.{ .key = r.key, .champion = x.champion }, .{ .fetched_at = r.fetched_at, .bin = x.bin });
+        }
+        try writeIn(s.io, file, LearningFile{ .key = learningKey(), .entries = keep.items });
+        if (s.learning) |*l| l.deinit(gpa);
+        s.learning = out;
+    }
+
+    const unknown = std.math.maxInt(u8);
+
+    fn findRow(rows: []const Contribution, k: Key) ?usize {
+        var lo: usize = 0;
+        var hi: usize = rows.len;
+        while (lo < hi) {
+            const mid = lo + (hi - lo) / 2;
+            if (rows[mid].key.lessThan(k)) lo = mid + 1 else hi = mid;
+        }
+        return if (lo < rows.len and rows[lo].key.eql(k)) lo else null;
     }
 
     /// Into `banned`, games each champion was banned in (once a game) on `patches` and

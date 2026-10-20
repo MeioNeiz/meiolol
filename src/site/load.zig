@@ -152,7 +152,8 @@ pub fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Opt
             if (set >= people.learning.len) return error.NoView;
             site.pool = try pool.make(arena, &people.pool, set, &site.stats, .{});
             site.spread = try spread.make(arena, &people.pool.spread[set], &site.stats, .{});
-            site.learning = try learning.make(arena, &people.learning[set], &site.stats, .{});
+            // Every region's, whatever the view (learning.zig)
+            site.learning = try learning.make(arena, &people.learning[people.learning.len - 1], &site.stats, .{});
         }
         if (shared) {
             if (try Parts.ofFor(old, DailyPart, .daily, view, arena, champs_key)) |d| {
@@ -192,7 +193,7 @@ const Loading = struct {
         if (i == 0) {
             if (l.want_filter) l.filter = if (l.games) |g| try filters.makeFrom(l.site, g, l.opts) else try filters.make(l.site, l.db, l.opts);
         } else if (l.want_people) {
-            l.people = try l.extras.tallies(l.site.gpa, io, l.sibling orelse l.db, &l.site.stats, l.opts);
+            l.people = try l.extras.tallies(l.site.gpa, l.sibling orelse l.db, &l.site.stats, l.opts);
         }
         l.ms[i] = std.Io.Clock.awake.now(io).toMilliseconds() - start;
     }

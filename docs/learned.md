@@ -496,7 +496,7 @@ How to write a line:
   history isn't for the app. Evidence: docs/model.md "Player experience and everything
   pre-game" (log loss 0.6878 vs 0.6897, -0.0019 ± 0.0018). Superseded the same day by
   the held-out result above~~
-- 2026-10-14: We can't tell which champions reward experience more than others: how
+- ~~2026-10-14: We can't tell which champions reward experience more than others: how
   much a player's earlier games on a champion add to the win chance looked the same for
   every champion in a role. Sure: 10,604 held-out EUW games, one pre-declared look; not
   detected, and only a large difference would show: experience here is the earlier
@@ -505,7 +505,8 @@ How to write a line:
   one typical step from its role, showed on the rounds of older games (about three
   times the test's size) but not on the smaller dev games. Site: no "champions that
   reward mastery" list. Evidence: docs/model.md "Carry and impact" (test -0.00001 ±
-  0.00004 nats; audited by meiolol-33)
+  0.00004 nats; audited by meiolol-33). Superseded 2026-10-20 by Player "Every
+  champion is harder when you're new" (mastery points, far more games)~~
 - ~~2026-10-13 (early): We can't yet tell which champions reward a practised player most:
   giving each champion its own gain from earlier games on it predicted worse than one
   gain per role, and every champion's estimate is uncertain by 7-10 percentage points.
@@ -774,6 +775,24 @@ How to write a line:
 
 ## Player
 
+- 2026-10-20: Every champion is harder when you're new to it, and some much more than
+  others. Players with under 10k mastery points on their champion win 47.7%, with 300k+
+  51.7% (practised players are also better players overall, so every champion shows
+  some gap: 3.6 points on average between under 30k and 100k+). New Rengar players win
+  39% against 51% for practised ones, Yuumi 43% against 51%, Nunu, Shaco, Udyr, Briar
+  and Hecarim similar; new Leona, Milio, Braum, Caitlyn, Vayne, Lulu and Nami players do
+  about as well as practised ones. Sure: 1.92M ranked solo player-games, every crawled
+  region, with the player's mastery fetched before the game (median 1.6 days before);
+  champions differ by about 2 points (sd) beyond chance, the same order on accounts
+  with 1M+ total points (r 0.92, so not autofill or new accounts), but split in half
+  the order per champion and role only partly repeats (r 0.33): single champions are
+  rough, and only the clearest (10 harder, 18 easier of 173) get a label. Ruled out:
+  taking a champion's last game before the fetch as the game the points belong to
+  (those games win 42-45%: players drop a champion after a loss). Site: "harder or
+  easier to pick up" only for those, always with both win rates and their games, never
+  as a win rate gain; the rest "usual". Evidence: src/learning.zig; scratch checks
+  2026-10-20 on snap-20261018T1007Z (scripts and per champion-role table in
+  data/team/2026-10-20-morning/, learning.md)
 - 2026-10-15: How widely players' win rates on a champion spread (about 46% to 64% for
   the middle half of players with 10+ games) is almost all luck: with 10 to 20 games a
   player's rate swings by about 15 points by chance, and no real difference between

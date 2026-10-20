@@ -7,7 +7,6 @@ const core = @import("core");
 const html = @import("html.zig");
 const pool = @import("../pool.zig");
 const learning = @import("../learning.zig");
-const par = @import("../par.zig");
 const builds = @import("../builds.zig");
 const lean = @import("../lean.zig");
 const partials = @import("../partials.zig");
@@ -88,7 +87,7 @@ pub const Extras = struct {
         return g;
     }
 
-    pub fn tallies(e: *Extras, gpa: std.mem.Allocator, io: std.Io, db: store.Db, st: *const Stats, opts: Options) !*const People {
+    pub fn tallies(e: *Extras, gpa: std.mem.Allocator, db: store.Db, st: *const Stats, opts: Options) !*const People {
         if (e.people) |*p| {
             if (std.mem.eql(u32, p.ids, st.ids)) return p;
             // A champion added since (a new release): tally again
@@ -101,38 +100,13 @@ pub const Extras = struct {
             &.{ opts.platforms, opts.all_platforms };
         const ids = try gpa.dupe(u32, st.ids);
         errdefer gpa.free(ids);
-        // Pool on a connection of its own beside learning's: both wait on the disk
-        var t: Tallying = .{ .gpa = gpa, .io = io, .db = db, .sibling = try store.schema.openSibling(gpa, db), .st = st, .sets = sets, .games = e.games };
-        defer if (t.sibling) |sibling| sibling.close();
-        errdefer {
-            if (t.pool) |*p| p.deinit(gpa);
-            if (t.learning) |l| learning.freeTallies(gpa, l);
-        }
-        if (t.sibling != null) {
-            try par.each(io, 2, &t, Tallying.run);
-        } else for (0..2) |i| try t.run(i);
-        e.people = .{ .ids = ids, .pool = t.pool.?, .learning = t.learning.? };
+        // Learning after pool: it reads the bins pool's mastery pass finds
+        var pools = try pool.tallyWith(gpa, db, st, sets, e.games);
+        errdefer pools.deinit(gpa);
+        const learnt = try learning.tallyWith(gpa, db, st, sets, e.games);
+        e.people = .{ .ids = ids, .pool = pools, .learning = learnt };
         if (e.games) |g| log.info("partials: {d} mastery rows, {d} read", .{ g.counts.mastery, g.counts.mastery_read });
         return &e.people.?;
-    }
-};
-
-const Tallying = struct {
-    gpa: std.mem.Allocator,
-    io: std.Io,
-    db: store.Db,
-    /// For pool, when db is in a file
-    sibling: ?store.Db,
-    st: *const Stats,
-    sets: []const []const []const u8,
-    games: ?*partials.Store,
-    pool: ?pool.Tallies = null,
-    learning: ?[]learning.Tally = null,
-
-    fn run(t: *Tallying, i: usize) !void {
-        if (i == 0) {
-            t.pool = try pool.tallyWith(t.gpa, t.sibling orelse t.db, t.st, t.sets, t.games);
-        } else t.learning = try learning.tallyWith(t.gpa, t.io, t.db, t.st, t.sets, t.games);
     }
 };
 

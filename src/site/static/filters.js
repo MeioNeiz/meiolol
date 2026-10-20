@@ -263,7 +263,7 @@ const HARDEST = "hardest first";
       const ban = tiles.querySelector('[data-tile="ban"]');
       ban.querySelector("b").textContent = pct(sums.bans, sums.games);
       if (f.rank !== "") ban.title = "Of games whose players' middle rank is in the filter";
-      tiles.querySelector('[data-tile="games"] b').textContent = r.games;
+      tiles.querySelector('[data-tile="games"] b').textContent = r.games.toLocaleString("en-GB");
     }
     if (!s.body) return;
     const floor = f.min.startsWith("p") ? (Number(f.min.slice(1)) / 100) * r.games : Number(f.min);

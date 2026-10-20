@@ -1,6 +1,6 @@
 all/champions.html c63ab2ae1cda8af7
 all/data/champions.json 00926860dfeebe26
-all/data/learning.json c0076574631dc78e
+all/data/learning.json f360732099c4c801
 all/data/pool.json c49c24af4a83207c
 all/data/search.json bfd236184c673343
 all/data/stats.bin bffab0c56008909d
@@ -29,7 +29,7 @@ all/patch/build/rakan-support.html 0092b7df4c674b2b
 all/patch/build/twitch-bot.html 19281ed669648199
 all/patch/champions.html e2e29185b7a43f75
 all/patch/data/champions.json 00926860dfeebe26
-all/patch/data/learning.json c0076574631dc78e
+all/patch/data/learning.json f360732099c4c801
 all/patch/data/pool.json 7d1d4f7e19454d8f
 all/patch/data/search.json bfd236184c673343
 all/patch/data/stats.bin e8331f5e09d9aebc
@@ -46,13 +46,13 @@ all/patch/matchup/support/rakan-vs-pyke.html 4f399df45677b4f7
 all/patch/matchup/top/darius-vs-mordekaiser.html 01e0655254a1d3a6
 all/patch/matchup/top/mordekaiser-vs-darius.html db18beb66a9498ac
 all/patch/patch.html d0832d004568de54
-all/patch/pool.html 2fc5d6cb587747e0
+all/patch/pool.html edc172b5c416cb3b
 all/patch/role/bot.html 5c5c27e0d5c96daf
 all/patch/role/jungle.html a2718c6eaf3f9be2
 all/patch/role/mid.html b9027663a0a98d72
 all/patch/role/support.html 65d4e429be4b2cd1
 all/patch/role/top.html da7f4be37f89bea0
-all/pool.html 849e892286c65b50
+all/pool.html a8092c5eb42f6e7a
 all/role/bot.html 7188dfb60563f23b
 all/role/jungle.html 90dfbe1201887f61
 all/role/mid.html b35c5043d281aa0b
@@ -82,7 +82,7 @@ data/filters/orianna.json 9ba3447a7bc8d960
 data/filters/pyke.json 31f315c14a4acf39
 data/filters/rakan.json 5b0d1ec2bb9862be
 data/filters/twitch.json 33b2338d799e2cc7
-data/learning.json c0076574631dc78e
+data/learning.json f360732099c4c801
 data/pool.json c49c24af4a83207c
 data/search.json bfd236184c673343
 data/stats.bin bffab0c56008909d
@@ -116,7 +116,7 @@ patch/build/rakan-support.html 985087b17807ab92
 patch/build/twitch-bot.html 89a3942d56c755a5
 patch/champions.html 6077f60c88f46040
 patch/data/champions.json 00926860dfeebe26
-patch/data/learning.json c0076574631dc78e
+patch/data/learning.json f360732099c4c801
 patch/data/pool.json 7d1d4f7e19454d8f
 patch/data/search.json bfd236184c673343
 patch/data/stats.bin e8331f5e09d9aebc
@@ -133,13 +133,13 @@ patch/matchup/support/rakan-vs-pyke.html 818f05d9b6a17157
 patch/matchup/top/darius-vs-mordekaiser.html ba41a8054380e429
 patch/matchup/top/mordekaiser-vs-darius.html d6e9d0a6503aef41
 patch/patch.html 2d66cfd0e5d58dd8
-patch/pool.html 0c7385a756c96b29
+patch/pool.html 9b15dbda3a7ce1e9
 patch/role/bot.html 66cc8a9d9c9ae47e
 patch/role/jungle.html a524cce6e805e651
 patch/role/mid.html 838b74b0e06c94e7
 patch/role/support.html 6f6b41d47e9691f3
 patch/role/top.html 9e3e18f4b17b5508
-pool.html 6113f7fc50494bdc
+pool.html 6936d1f3e99081f8
 privacy.html fad8c61a16867274
 robots.txt 331ea9090db0c9f6
 role/bot.html 3fd5f8cab387ca3d

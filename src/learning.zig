@@ -1,54 +1,54 @@
-//! Learning curves: how players do on a champion by how many games they have on it.
-//! Win rate and lane gold difference at 14 per experience bin, and roughly when players
-//! reach the champion's usual win rate. Sets expectations for trying a champion
-//! (research/questions/player-tool-needs.md C3: experience outweighs counters).
+//! How hard champions are to pick up: win rate by the player's mastery points on the
+//! champion at the time. Players new to a champion (under 30k points) against practised
+//! ones (100k+): every champion has a gap (practised players are often better players
+//! too), so a champion is harder or easier to pick up only when its gap is clearly off
+//! the average one (docs/learned.md, Player). Every region's games, whatever the view:
+//! a champion's difficulty hardly depends on the region, and one region's games are too
+//! few to tell most champions apart.
 //!
-//! Experience is a game's number on that champion in the player's crawled ranked
-//! history, so only players whose match history was crawled count. Games before the
-//! crawl window look like early games: early bins hold some returning players, which
-//! makes the gap shown smaller than the real one, never larger. Mastery (once the
-//! table fills) can tell those players apart.
+//! Points at the time: the player's mastery row (one per player, refetched monthly) for
+//! games that start after its fetch. Games on the champion between the fetch and the
+//! game are missing from the points, so some players count as newer than they are; the
+//! row's last game on a champion instead (points of that very game) leans to losses,
+//! as players drop a champion after one (docs/learned.md).
 
 const std = @import("std");
 const store = @import("store");
 const core = @import("core");
-const timeline = @import("riot/timeline.zig");
 const stats = @import("stats.zig");
-const ep = @import("riot/endpoints.zig");
-const par = @import("par.zig");
+const riot_mastery = @import("riot/mastery.zig");
 const partials = @import("partials.zig");
 
-/// FROM and WHERE for the participant rows of the scan pool's players (matches_checked_at
-/// set), driven from players_region_check: ~15k players of 9M, where joining every
-/// participant to players did 2.3M lookups (19 s of the box's site build, now ~5x less).
-/// Every region listed so the index's first column is an equality; a checked player
-/// always has one
-pub const checked_players = "FROM players pl CROSS JOIN participants pa USING (puuid)" ++
-    " CROSS JOIN matches m USING (match_id)" ++
-    " WHERE pl.region IN (" ++ region_list ++ ") AND pl.matches_checked_at IS NOT NULL";
-
-const region_list = blk: {
-    var list: []const u8 = "";
-    for (std.enums.values(ep.Region), 0..) |r, i| list = list ++ (if (i == 0) "'" else ", '") ++ @tagName(r) ++ "'";
-    break :blk list;
-};
-
-const Role = core.Role;
 const Stats = core.Stats;
 const Allocator = std.mem.Allocator;
 
 const log = std.log.scoped(.learning);
 
-/// First game number of each bin: 1-5, 6-20, 21-50, 51+
-pub const bins = [_]u32{ 1, 6, 21, 51 };
+/// Lowest points of each bin: under 10k, 10-30k, 30-100k, 100-300k, 300k+
+pub const bins = [_]u32{ 0, 10_000, 30_000, 100_000, 300_000 };
 pub const bin_count = bins.len;
+/// Bins below this are players new to the champion (under 30k points)
+pub const new_bins = 2;
+/// Bins from this are practised players (100k+)
+pub const practised_from = 3;
 /// Lane gold is read at this minute (the usual GD@14 convention)
 pub const gold_minute = core.curvesfile.lane_minute;
 
-pub fn binOf(game: u32) usize {
+pub fn binOf(points: u32) usize {
     var i: usize = bin_count - 1;
-    while (game < bins[i]) i -= 1;
+    while (points < bins[i]) i -= 1;
     return i;
+}
+
+/// `champion`'s bin in a decoded mastery row; absent (never played) is the first
+pub fn binIn(entries: []const riot_mastery.Entry, champion: u32) usize {
+    for (entries) |e| if (e.champion == champion) return binOf(e.points);
+    return 0;
+}
+
+/// Whether a game starting at `start_ms` counts for a row fetched at `fetched_at`
+pub fn after(fetched_at: i64, start_ms: i64) bool {
+    return start_ms > fetched_at * 1000;
 }
 
 pub const Bin = struct {
@@ -66,21 +66,36 @@ pub const Bin = struct {
         if (b.gold_games == 0) return null;
         return @as(f64, @floatFromInt(b.gold_sum)) / @as(f64, @floatFromInt(b.gold_games));
     }
+
+    fn merge(b: *Bin, x: Bin) void {
+        b.games += x.games;
+        b.wins += x.wins;
+        b.gold_games += x.gold_games;
+        b.gold_sum += x.gold_sum;
+    }
 };
+
+/// The bins from `lo` to `hi` (exclusive) as one
+fn sum(b: [bin_count]Bin, lo: usize, hi: usize) Bin {
+    var out: Bin = .{};
+    for (b[lo..hi]) |x| out.merge(x);
+    return out;
+}
 
 pub const Options = struct {
     /// Bins with fewer games are greyed out as "more data needed"
     thin_games: u32 = 200,
-    /// Every bin up to the one reached needs this many games to say when players reach
-    /// the usual win rate
-    reach_games: u32 = 400,
-    /// Within this many points of the usual win rate counts as reached
-    reach_pp: f64 = 1.0,
+    /// Games of new and of practised players each, for a champion's gap
+    min_games: u32 = 200,
+    /// A champion is harder or easier when its pulled gap is this many of its own
+    /// standard deviations (after pulling) off the average: with ~170 champions a plain
+    /// 2-standard-error rule labels several by chance
+    z: f64 = 2,
 };
 
 /// Bins per champion, by stats index
 pub const Tally = struct {
-    players: u32 = 0,
+    games: u32 = 0,
     bins: [][bin_count]Bin,
 
     pub fn init(gpa: Allocator, n: usize) !Tally {
@@ -93,9 +108,10 @@ pub const Tally = struct {
         gpa.free(t.bins);
     }
 
-    /// `game`: 1 for a player's first game on champion index `c`
-    pub fn add(t: *Tally, c: usize, game: u32, win: bool, gold: ?i32) void {
-        const b = &t.bins[c][binOf(game)];
+    /// Champion index `c` played from points bin `bin`
+    pub fn add(t: *Tally, c: usize, bin: usize, win: bool, gold: ?i32) void {
+        t.games += 1;
+        const b = &t.bins[c][bin];
         b.games += 1;
         b.wins += @intFromBool(win);
         if (gold) |g| {
@@ -104,28 +120,6 @@ pub const Tally = struct {
         }
     }
 };
-
-/// Win rate over all bins: what players on the champion usually get
-pub fn usual(b: [bin_count]Bin) f64 {
-    var games: u32 = 0;
-    var wins: u32 = 0;
-    for (b) |x| {
-        games += x.games;
-        wins += x.wins;
-    }
-    return @as(f64, @floatFromInt(wins)) / @as(f64, @floatFromInt(@max(games, 1)));
-}
-
-/// The first bin whose win rate is within reach_pp of the usual one; null while any
-/// bin up to it is under reach_games, or when none gets there
-pub fn reach(b: [bin_count]Bin, opts: Options) ?usize {
-    const target = usual(b) - opts.reach_pp / 100;
-    for (b, 0..) |x, i| {
-        if (x.games < opts.reach_games) return null;
-        if (x.winRate() >= target) return i;
-    }
-    return null;
-}
 
 /// Lane gold difference at gold_minute per participant slot, from the gold columns the
 /// crawler fills from each timeline (riot/crawl.zig goldAt)
@@ -193,248 +187,75 @@ fn pairLanes(arena: Allocator, map: *GoldMap, match_id: []const u8, lanes: anyty
     }
 }
 
-/// Puuid ranges the history is read in, each on its own connection: its participant
-/// rows are found through the puuid index, a cold page each (on the box 16 Oct: 238 s,
-/// 14 s of it CPU). Lower bounds, by first character over Riot's base64url alphabet; a
-/// player's rows all fall in one range
-const ranges = blk: {
-    const alphabet = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz";
-    const n = 4;
-    var lows: [n][]const u8 = undefined;
-    lows[0] = "";
-    for (1..n) |i| lows[i] = alphabet[alphabet.len * i / n ..][0..1];
-    break :blk lows;
-};
-
-/// Past every puuid character
-const puuid_end = "\x7f";
-
-/// Every ranked solo game of players whose match history was crawled, all patches
-/// (experience builds across patches), into out[i] for the platforms of sets[i]: one
-/// pass per puuid range, summed (counts, so in any order)
-pub fn tallyHistory(
-    gpa: Allocator,
-    io: std.Io,
-    db: store.Db,
-    st: *const Stats,
-    sets: []const []const []const u8,
-    out: []Tally,
-) !void {
+/// Every ranked solo game after its player's mastery fetch, into out[i] for the platforms
+/// of sets[i]
+fn tallyDb(gpa: Allocator, db: store.Db, st: *const Stats, sets: []const []const []const u8, out: []Tally) !void {
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
     const platform_json = try stats.setsJson(arena, sets);
     const gold = try goldMap(arena, db, platform_json);
-
-    const parts = try arena.alloc([]Tally, ranges.len);
-    for (parts) |*part| {
-        part.* = try arena.alloc(Tally, sets.len);
-        for (part.*) |*t| t.* = .{ .bins = try arena.alloc([bin_count]Bin, st.n) };
-        for (part.*) |*t| @memset(t.bins, @splat(.{}));
-    }
-    const reading: Reading = .{
-        .gpa = gpa,
-        .db = db,
-        .siblings = db.filename("main").len != 0,
-        .st = st,
-        .sets = sets,
-        .platform_json = platform_json,
-        .gold = &gold,
-        .parts = parts,
-    };
-    if (reading.siblings) {
-        try par.each(io, ranges.len, &reading, Reading.read);
-    } else for (0..ranges.len) |i| try reading.read(i);
-    for (parts) |part| for (out, part) |*into, from| {
-        into.players += from.players;
-        for (into.bins, from.bins) |*to, add| for (to, add) |*b, x| {
-            b.games += x.games;
-            b.wins += x.wins;
-            b.gold_games += x.gold_games;
-            b.gold_sum += x.gold_sum;
-        };
-    };
-}
-
-const Reading = struct {
-    gpa: Allocator,
-    db: store.Db,
-    /// Each range on its own connection; false for an in-memory db, whose ranges go in
-    /// turn on its one
-    siblings: bool,
-    st: *const Stats,
-    sets: []const []const []const u8,
-    platform_json: []const u8,
-    gold: *const GoldMap,
-    parts: []const []Tally,
-
-    fn read(r: *const Reading, i: usize) !void {
-        const db = if (r.siblings) (try store.schema.openSibling(r.gpa, r.db)).? else r.db;
-        defer if (r.siblings) db.close();
-        const high = if (i + 1 < ranges.len) ranges[i + 1] else puuid_end;
-        try historyRange(r.gpa, db, r.st, r.sets, r.platform_json, r.gold, ranges[i], high, r.parts[i]);
-    }
-};
-
-/// tallyHistory for the players with puuid in [low, high)
-fn historyRange(
-    gpa: Allocator,
-    db: store.Db,
-    st: *const Stats,
-    sets: []const []const []const u8,
-    platform_json: []const u8,
-    gold: *const GoldMap,
-    low: []const u8,
-    high: []const u8,
-    out: []Tally,
-) !void {
-    var q = try db.prepare("SELECT pa.puuid, pa.champion_id, pa.match_id, pa.slot, pa.win, m.platform " ++
-        checked_players ++ " AND pl.puuid >= ? AND pl.puuid < ? AND m.queue_id = ? AND m.remake = 0" ++
-        " AND m.platform IN (SELECT value FROM json_each(?))" ++
-        " ORDER BY pa.puuid, pa.champion_id, m.game_start");
+    var q = try db.prepare(
+        \\SELECT pa.match_id, pa.slot, pa.champion_id, pa.win, m.platform, m.game_start,
+        \\  ma.data, ma.fetched_at
+        \\FROM matches m CROSS JOIN participants pa USING (match_id)
+        \\  CROSS JOIN mastery ma ON ma.puuid = pa.puuid
+        \\WHERE m.queue_id = ? AND m.remake = 0
+        \\  AND m.platform IN (SELECT value FROM json_each(?))
+        \\  AND m.game_start > ma.fetched_at * 1000
+    );
     defer q.deinit();
-    try q.bind(.{ low, high, stats.ranked_solo, platform_json });
-    var player: std.ArrayList(u8) = .empty;
-    defer player.deinit(gpa);
-    var champion: i64 = -1;
-    // Per set: the game's number on the champion, and whether the player counted yet
-    const games = try gpa.alloc(u32, sets.len);
-    defer gpa.free(games);
-    var seen: u32 = 0;
+    try q.bind(.{ stats.ranked_solo, platform_json });
+    var scratch: std.heap.ArenaAllocator = .init(gpa);
+    defer scratch.deinit();
     while (try q.step()) {
+        _ = scratch.reset(.retain_capacity);
         const r = q.row(struct {
-            puuid: []const u8,
-            champion: i64,
             match_id: []const u8,
             slot: i64,
+            champion: u32,
             win: bool,
             platform: []const u8,
+            start: i64,
+            data: []const u8,
+            fetched_at: i64,
         });
-        if (!std.mem.eql(u8, r.puuid, player.items)) {
-            player.clearRetainingCapacity();
-            try player.appendSlice(gpa, r.puuid);
-            seen = 0;
-            champion = -1;
-        }
-        if (r.champion != champion) {
-            champion = r.champion;
-            @memset(games, 0);
-        }
-        const in = stats.setsWith(sets, r.platform);
-        for (out, games, 0..) |*t, *game, i| {
-            const bit = @as(u32, 1) << @intCast(i);
-            if (in & bit == 0) continue;
-            game.* += 1;
-            if (seen & bit == 0) t.players += 1;
-            seen |= bit;
-        }
-        const c = st.index(@intCast(champion)) orelse continue;
-        const slot = r.slot;
+        const c = st.index(r.champion) orelse continue;
+        std.debug.assert(after(r.fetched_at, r.start));
+        const entries = riot_mastery.decode(scratch.allocator(), r.data, r.fetched_at) catch continue;
+        const bin = binIn(entries, r.champion);
         const g: ?i32 = if (gold.get(r.match_id)) |slots|
-            (if (slot >= 0 and slot < 10) slots[@intCast(slot)] else null)
+            (if (r.slot >= 0 and r.slot < 10) slots[@intCast(r.slot)] else null)
         else
             null;
-        for (out, games, 0..) |*t, game, i| {
-            if (in & (@as(u32, 1) << @intCast(i)) != 0) t.add(c, game, r.win, g);
+        const in = stats.setsWith(sets, r.platform);
+        for (out, 0..) |*t, i| {
+            if (in & (@as(u32, 1) << @intCast(i)) != 0) t.add(c, bin, r.win, g);
         }
     }
 }
 
-/// tallyHistory from the views partials: the same rows, with the checked players read
-/// from db, grouped by PUUID key instead of PUUID (sums, so in any player order)
-pub fn tallyHistoryFrom(
-    gpa: Allocator,
-    db: store.Db,
-    games: *const partials.Store,
-    st: *const Stats,
-    sets: []const []const []const u8,
-    out: []Tally,
-) !void {
-    var checked: std.AutoHashMapUnmanaged(partials.Key, void) = .empty;
-    defer checked.deinit(gpa);
-    {
-        var q = try db.prepare("SELECT puuid FROM players WHERE region IN (" ++ region_list ++ ") AND matches_checked_at IS NOT NULL" ++
-            // As the puuid ranges
-            " AND puuid < '" ++ puuid_end ++ "'");
-        defer q.deinit();
-        try q.bind(.{});
-        while (try q.step()) try checked.put(gpa, partials.key(q.row(struct { p: []const u8 }).p), {});
-    }
+/// tallyDb from the views partials, with the bins masteryTallies found
+fn tallyPartials(gpa: Allocator, games: *const partials.Store, st: *const Stats, sets: []const []const []const u8, out: []Tally) !void {
+    const bins_of = &(games.learning orelse return error.NoMastery);
     const masks = try games.setMasks(gpa, sets);
     defer gpa.free(masks);
-    const lanes = blk: {
-        var lane = try gpa.alloc(bool, games.strings.count() + 1);
-        @memset(lane, false);
-        for (games.strings.keys(), 1..) |k, code| {
-            for ([_][]const u8{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" }) |l| if (std.mem.eql(u8, k, l)) {
-                lane[code] = true;
-            };
-        }
-        break :blk lane;
-    };
+    const lanes = try games.codesIn(gpa, &.{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" });
     defer gpa.free(lanes);
-    const Row = struct {
-        key: partials.Key,
-        champion: i64,
-        start: i64,
-        id: []const u8,
-        platform: partials.Code,
-        win: bool,
-        gold: ?i32,
-    };
-    var rows: std.ArrayList(Row) = .empty;
-    defer rows.deinit(gpa);
     for (games.sorted) |g| {
-        if (masks[g.platform] == 0) continue;
+        const in = masks[g.platform];
+        if (in == 0) continue;
         for (g.players) |p| {
             const k = p.puuid orelse continue;
-            if (!checked.contains(k)) continue;
-            try rows.append(gpa, .{
-                .key = k,
-                .champion = p.champion,
-                .start = g.start,
-                .id = g.id,
-                .platform = g.platform,
-                .win = p.win,
-                .gold = laneGold(g, lanes, p.slot),
-            });
-        }
-    }
-    // Games on a champion in start order; a tie (never seen) by match id
-    std.mem.sort(Row, rows.items, {}, struct {
-        fn f(_: void, a: Row, b: Row) bool {
-            if (!a.key.eql(b.key)) return a.key.lessThan(b.key);
-            if (a.champion != b.champion) return a.champion < b.champion;
-            if (a.start != b.start) return a.start < b.start;
-            return std.mem.lessThan(u8, a.id, b.id);
-        }
-    }.f);
-    const counts = try gpa.alloc(u32, sets.len);
-    defer gpa.free(counts);
-    var player: ?partials.Key = null;
-    var champion: i64 = -1;
-    var seen: u32 = 0;
-    for (rows.items) |r| {
-        if (player == null or !player.?.eql(r.key)) {
-            player = r.key;
-            seen = 0;
-            champion = -1;
-        }
-        if (r.champion != champion) {
-            champion = r.champion;
-            @memset(counts, 0);
-        }
-        const in = masks[r.platform];
-        for (out, counts, 0..) |*t, *game, i| {
-            const bit = @as(u32, 1) << @intCast(i);
-            if (in & bit == 0) continue;
-            game.* += 1;
-            if (seen & bit == 0) t.players += 1;
-            seen |= bit;
-        }
-        const c = st.index(@intCast(champion)) orelse continue;
-        for (out, counts, 0..) |*t, game, i| {
-            if (in & (@as(u32, 1) << @intCast(i)) != 0) t.add(c, game, r.win, r.gold);
+            const id = std.math.cast(u16, p.champion) orelse continue;
+            const at = bins_of.get(.{ .key = k, .champion = id }) orelse continue;
+            if (!after(at.fetched_at, g.start)) continue;
+            const c = st.index(id) orelse continue;
+            const bin = at.bin;
+            const gold = laneGold(g, lanes, p.slot);
+            for (out, 0..) |*t, i| {
+                if (in & (@as(u32, 1) << @intCast(i)) != 0) t.add(c, bin, p.win, gold);
+            }
         }
     }
 }
@@ -458,20 +279,16 @@ fn laneGold(g: *const partials.Game, lanes: []const bool, slot: i8) ?i32 {
     return null;
 }
 
-/// Tallies for each of `sets` (platform lists) in one pass; free with freeTallies
-pub fn tally(gpa: Allocator, io: std.Io, db: store.Db, st: *const Stats, sets: []const []const []const u8) ![]Tally {
-    return tallyWith(gpa, io, db, st, sets, null);
-}
-
-/// As tally; with `from`, the games from the views partials
-pub fn tallyWith(gpa: Allocator, io: std.Io, db: store.Db, st: *const Stats, sets: []const []const []const u8, from: ?*const partials.Store) ![]Tally {
+/// Tallies for each of `sets` (platform lists); with `from`, the games from the views
+/// partials, after their masteryTallies. Free with freeTallies
+pub fn tallyWith(gpa: Allocator, db: store.Db, st: *const Stats, sets: []const []const []const u8, from: ?*const partials.Store) ![]Tally {
     const out = try gpa.alloc(Tally, sets.len);
     var made: usize = 0;
     errdefer freeTallies(gpa, out[0..made]);
     while (made < sets.len) : (made += 1) out[made] = try .init(gpa, st.n);
     if (from) |p| {
-        try tallyHistoryFrom(gpa, db, p, st, sets, out);
-    } else try tallyHistory(gpa, io, db, st, sets, out);
+        try tallyPartials(gpa, p, st, sets, out);
+    } else try tallyDb(gpa, db, st, sets, out);
     return out;
 }
 
@@ -480,17 +297,35 @@ pub fn freeTallies(gpa: Allocator, ts: []Tally) void {
     gpa.free(ts);
 }
 
+pub const Kind = enum { harder, usual, easier };
+
+/// New against practised players on a champion
+pub const Gap = struct {
+    new: Bin,
+    practised: Bin,
+    /// Practised win rate minus new, percentage points, and its standard error
+    pp: f64,
+    se: f64,
+    /// pp pulled toward the average gap by its noise, so a few lucky games can't top
+    /// the table
+    pulled: f64,
+    kind: Kind,
+};
+
 pub const Champion = struct {
     id: u32,
     bins: [bin_count]Bin,
-    usual: f64,
-    /// Index into `bins`
-    reach: ?usize,
+    /// Null under Options.min_games new or practised
+    gap: ?Gap,
 };
 
 pub const Learning = struct {
-    players: u32 = 0,
+    games: u32 = 0,
     thin_games: u32 = 0,
+    /// Average gap over the champions with one, percentage points
+    mean_pp: f64 = 0,
+    /// Every champion's games together
+    all: [bin_count]Bin = @splat(.{}),
     /// Champions with any games, in stats order
     champions: []const Champion = &.{},
 
@@ -501,153 +336,168 @@ pub const Learning = struct {
 };
 
 pub fn build(arena: Allocator, t: *const Tally, st: *const Stats, opts: Options) !Learning {
+    var out: Learning = .{ .games = t.games, .thin_games = opts.thin_games };
     var list: std.ArrayList(Champion) = .empty;
+    var n_gaps: f64 = 0;
+    var pp_sum: f64 = 0;
+    var noise_sum: f64 = 0;
     for (t.bins, 0..) |b, c| {
-        if (usualGames(b) == 0) continue;
-        try list.append(arena, .{ .id = st.ids[c], .bins = b, .usual = usual(b), .reach = reach(b, opts) });
+        for (&out.all, b) |*a, x| a.merge(x);
+        if (sum(b, 0, bin_count).games == 0) continue;
+        const new = sum(b, 0, new_bins);
+        const practised = sum(b, practised_from, bin_count);
+        var gap: ?Gap = null;
+        if (new.games >= opts.min_games and practised.games >= opts.min_games) {
+            const pn = new.winRate();
+            const pp = practised.winRate();
+            const se = 100 * @sqrt(pn * (1 - pn) / @as(f64, @floatFromInt(new.games)) +
+                pp * (1 - pp) / @as(f64, @floatFromInt(practised.games)));
+            gap = .{ .new = new, .practised = practised, .pp = 100 * (pp - pn), .se = se, .pulled = 0, .kind = .usual };
+            n_gaps += 1;
+            pp_sum += gap.?.pp;
+            noise_sum += se * se;
+        }
+        try list.append(arena, .{ .id = st.ids[c], .bins = b, .gap = gap });
     }
-    return .{ .players = t.players, .thin_games = opts.thin_games, .champions = list.items };
-}
-
-fn usualGames(b: [bin_count]Bin) u32 {
-    var n: u32 = 0;
-    for (b) |x| n += x.games;
-    return n;
+    out.champions = list.items;
+    if (n_gaps == 0) return out;
+    const mean = pp_sum / n_gaps;
+    out.mean_pp = mean;
+    var spread: f64 = 0;
+    for (list.items) |c| if (c.gap) |g| {
+        spread += (g.pp - mean) * (g.pp - mean);
+    };
+    // Spread between champions beyond what their noise alone gives
+    const between = if (n_gaps > 1) @max(0, spread / (n_gaps - 1) - noise_sum / n_gaps) else 0;
+    for (list.items) |*c| if (c.gap) |*g| {
+        const keep = if (between > 0) between / (between + g.se * g.se) else 0;
+        g.pulled = mean + keep * (g.pp - mean);
+        // (pulled - mean) / (sqrt(keep) se)
+        const z = (g.pp - mean) / g.se * @sqrt(keep);
+        g.kind = if (z >= opts.z) .harder else if (z <= -opts.z) .easier else .usual;
+    };
+    return out;
 }
 
 pub fn make(arena: Allocator, t: *const Tally, st: *const Stats, opts: Options) !Learning {
     const l = try build(arena, t, st, opts);
-    var reached: usize = 0;
-    for (l.champions) |c| reached += @intFromBool(c.reach != null);
-    log.info("{d} players' histories, {d} champions, {d} with a learning point", .{
-        l.players, l.champions.len, reached,
+    var counts: [3]usize = @splat(0);
+    for (l.champions) |c| if (c.gap) |g| {
+        counts[@backingInt(g.kind)] += 1;
+    };
+    log.info("{d} games with points at the time, average gap {d:.1} pp; {d} harder, {d} usual, {d} easier", .{
+        l.games, l.mean_pp, counts[0], counts[1], counts[2],
     });
     return l;
 }
 
-/// data/learning.json: per champion [games, wins, gold games, mean gold] per bin
+/// data/learning.json, the champions with a gap: win rates of new and practised players
+/// and their games
 pub fn writeJson(w: *std.Io.Writer, l: Learning) !void {
-    try w.print("{{\"players\":{d},\"thin_games\":{d},\"bins\":[", .{ l.players, l.thin_games });
-    for (bins, 0..) |b, i| {
-        if (i > 0) try w.writeByte(',');
-        try w.print("{d}", .{b});
-    }
-    try w.writeAll("],\"champions\":[");
-    for (l.champions, 0..) |c, i| {
-        if (i > 0) try w.writeByte(',');
-        try w.print("{{\"id\":{d},\"usual\":{d:.4},\"reach\":", .{ c.id, c.usual });
-        if (c.reach) |r| try w.print("{d}", .{r}) else try w.writeAll("null");
-        try w.writeAll(",\"bins\":[");
-        for (c.bins, 0..) |b, j| {
-            if (j > 0) try w.writeByte(',');
-            try w.print("[{d},{d},{d},{d:.0}]", .{ b.games, b.wins, b.gold_games, b.gold() orelse 0 });
-        }
-        try w.writeAll("]}");
+    try w.print("{{\"games\":{d},\"mean_pp\":{d:.1},\"champions\":[", .{ l.games, l.mean_pp });
+    var first = true;
+    for (l.champions) |c| {
+        const g = c.gap orelse continue;
+        if (!first) try w.writeByte(',');
+        first = false;
+        try w.print("{{\"id\":{d},\"kind\":\"{t}\",\"new\":[{d:.4},{d}],\"practised\":[{d:.4},{d}]}}", .{
+            c.id, g.kind, g.new.winRate(), g.new.games, g.practised.winRate(), g.practised.games,
+        });
     }
     try w.writeAll("]}\n");
 }
 
 const testing = std.testing;
 
-test "bins and reach" {
-    try testing.expectEqual(0, binOf(1));
-    try testing.expectEqual(0, binOf(5));
-    try testing.expectEqual(1, binOf(6));
-    try testing.expectEqual(2, binOf(50));
-    try testing.expectEqual(3, binOf(51));
-    try testing.expectEqual(3, binOf(4000));
-
-    const opts: Options = .{ .reach_games = 100 };
-    // 44%, 49%, 52%, 53%: usual is pulled toward the later bins by their games
-    const b: [bin_count]Bin = .{
-        .{ .games = 200, .wins = 88 },
-        .{ .games = 400, .wins = 196 },
-        .{ .games = 600, .wins = 312 },
-        .{ .games = 1000, .wins = 530 },
+test "bins" {
+    try testing.expectEqual(0, binOf(0));
+    try testing.expectEqual(0, binOf(9_999));
+    try testing.expectEqual(1, binOf(10_000));
+    try testing.expectEqual(2, binOf(99_999));
+    try testing.expectEqual(4, binOf(2_000_000));
+    const entries = [_]riot_mastery.Entry{
+        .{ .champion = 10, .level = 5, .points = 50_000, .last_play = 0 },
+        .{ .champion = 20, .level = 9, .points = 400_000, .last_play = 0 },
     };
-    try testing.expectEqual(2, reach(b, opts).?);
-    var thin = b;
-    thin[1].games = 50;
-    try testing.expectEqual(null, reach(thin, opts));
-    // Easy from the start
-    var easy = b;
-    easy[0].wins = 105;
-    try testing.expectEqual(0, reach(easy, opts).?);
+    try testing.expectEqual(2, binIn(&entries, 10));
+    try testing.expectEqual(0, binIn(&entries, 30));
+    try testing.expect(after(1_752_000_000, 1_752_000_000_001));
+    try testing.expect(!after(1_752_000_000, 1_752_000_000_000));
 }
 
-test "history: game number per player and champion, lane gold from the gold columns" {
-    const gpa = testing.allocator;
-    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+test "gaps: off the average only when clear" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-
-    const json = try store.raw.decompress(arena, @embedFile("riot/testdata/timeline.json.gz"));
-    const tl = try timeline.fromJson(arena, json);
-    // In memory, the puuid ranges in turn; in a file, each on its own connection. The
-    // two players in different ranges
-    var tmp = testing.tmpDir(.{});
-    defer tmp.cleanup();
-    const memory_db = try store.schema.memory();
-    defer memory_db.close();
-    const file_db = try store.schema.open(gpa, try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path }));
-    defer file_db.close();
-    for ([_]store.Db{ memory_db, file_db }) |db| try historyCase(arena, db, tl);
-}
-
-fn historyCase(arena: Allocator, db: store.Db, tl: anytype) !void {
-    const gpa = testing.allocator;
-    try db.exec(
-        \\INSERT INTO champions VALUES (10,'A','A','',''), (60,'B','B','',''), (99,'C','C','','');
-        \\INSERT INTO players (puuid, source, region, matches_checked_at) VALUES ('Bme','t','europe',1), ('Xyou','t','europe',1);
-        \\INSERT INTO players (puuid, source) VALUES ('other','t');
-    );
-    const positions = [_][]const u8{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" };
-    // Seven games: 'me' on champion 10 in top (slot 0), 'you' on 60 against (slot 5)
-    for (0..7) |g| {
-        const id = try arena.print("EUW1_{d}", .{g});
-        try db.run("INSERT INTO matches VALUES (?,'t','EUW1',420,'16.20','',?,1600,100,0)", .{ id, g });
-        for (0..10) |slot| {
-            const team: i64 = if (slot < 5) 100 else 200;
-            const who: []const u8 = if (slot == 0) "Bme" else if (slot == 5) "Xyou" else "other";
-            const champ: i64 = if (slot == 0) 10 else if (slot == 5) 60 else 99;
-            try db.run(
-                \\INSERT INTO participants (match_id, slot, team_id, puuid, champion_id, position, win)
-                \\VALUES (?,?,?,?,?,?,?)
-            , .{ id, slot, team, who, champ, positions[slot % 5], team == 100 });
-            // Game 0 has a timeline: the crawler's gold columns from its frames
-            if (g == 0) try db.run("UPDATE participants SET gold14 = ?, gold15 = ? WHERE match_id = ? AND slot = ?", .{
-                tl.frames[14].get(@intCast(slot + 1), .total_gold), tl.frames[15].get(@intCast(slot + 1), .total_gold), id, slot,
-            });
-        }
-    }
-
     var champs: std.ArrayList(core.statsfile.Champion) = .empty;
-    for ([_]u32{ 10, 60, 99 }) |id| try champs.append(arena, .{ .id = id, .name = "x" });
+    for (1..9) |id| try champs.append(arena, .{ .id = @intCast(id), .name = "x" });
     var b: core.statsfile.Builder = try .init(arena, champs.items);
     var aw: std.Io.Writer.Allocating = .init(arena);
     try b.write(&aw.writer, "16.20");
     const st: Stats = try .parse(arena, aw.written());
 
-    const both = try tally(gpa, std.testing.io, db, &st, &.{ &.{"EUW1"}, &.{ "KR", "EUW1" } });
-    defer freeTallies(gpa, both);
-    try testing.expectEqualDeep(both[0].bins, both[1].bins);
-    const t = both[0];
-    try testing.expectEqual(2, t.players);
-    const a = t.bins[st.index(10).?];
-    try testing.expectEqual(Bin{ .games = 5, .wins = 5, .gold_games = 1, .gold_sum = a[0].gold_sum }, a[0]);
-    try testing.expectEqual(2, a[1].games);
-    const f = tl.frames[gold_minute];
-    const want = f.get(1, .total_gold) - f.get(6, .total_gold);
-    try testing.expectEqual(want, a[0].gold_sum);
-    const opp = t.bins[st.index(60).?];
-    try testing.expectEqual(-want, opp[0].gold_sum);
-    try testing.expectEqual(0, opp[0].wins);
-    try testing.expectEqual(0, t.bins[st.index(99).?][0].games); // 'other' not crawled
-
+    var t: Tally = try .init(arena, st.n);
+    // New players win 48%, practised 52%; champion 1 new 40%, champion 2 new 50% on few
+    // games, champion 3 too few practised
+    const new_wins = [_]u32{ 400, 110, 480, 480, 480, 480, 480, 480 };
+    const new_games = [_]u32{ 1000, 220, 1000, 1000, 1000, 1000, 1000, 1000 };
+    for (0..8) |i| {
+        const c = st.index(@intCast(i + 1)).?;
+        t.bins[c][0] = .{ .games = new_games[i], .wins = new_wins[i] };
+        t.bins[c][4] = .{ .games = if (i == 2) 50 else 1000, .wins = if (i == 2) 26 else 520 };
+    }
     const l = try build(arena, &t, &st, .{});
-    try testing.expectEqual(2, l.champions.len);
+    try testing.expectEqual(.harder, l.get(1).?.gap.?.kind);
+    try testing.expectEqual(null, l.get(3).?.gap);
+    // Champion 2's gap is small but on 220 new games: pulled most of the way back
+    const g2 = l.get(2).?.gap.?;
+    try testing.expect(g2.pulled > g2.pp and g2.pulled < l.mean_pp);
+    try testing.expectEqual(.usual, l.get(4).?.gap.?.kind);
     var out: std.Io.Writer.Allocating = .init(arena);
     try writeJson(&out.writer, l);
     const parsed = try std.json.parseFromSliceLeaky(std.json.Value, arena, out.written(), .{});
-    try testing.expectEqual(4, parsed.object.get("bins").?.array.items.len);
+    try testing.expectEqual(7, parsed.object.get("champions").?.array.items.len);
+}
+
+test "db: games after the player's fetch, by the points then" {
+    const gpa = testing.allocator;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const db = try store.schema.memory();
+    defer db.close();
+    try db.exec("INSERT INTO champions VALUES (10,'A','A','',''), (20,'B','B','',''), (99,'C','C','','')");
+    const fetched_s: i64 = 1_752_000_000;
+    const blob = try riot_mastery.encode(arena, &.{
+        .{ .champion = 10, .level = 9, .points = 50_000, .last_play = fetched_s - 3600 },
+        .{ .champion = 20, .level = 1, .points = 900, .last_play = fetched_s - 7200 },
+    }, fetched_s);
+    try db.run("INSERT INTO mastery VALUES ('me','EUW1',?,2,?)", .{ fetched_s, store.Blob{ .bytes = blob } });
+    // Game 0 before the fetch; then 'me' (slot 0) wins on 10 and loses on 20
+    for ([_]struct { i64, i64, bool }{ .{ -3600, 10, true }, .{ 3600, 10, true }, .{ 7200, 20, false } }, 0..) |g, n| {
+        const id = try arena.print("EUW1_{d}", .{n});
+        try db.run("INSERT INTO matches VALUES (?,'t','EUW1',420,'16.20','',?,1600,?,0)", .{ id, (fetched_s + g[0]) * 1000, @as(i64, if (g[2]) 100 else 200) });
+        for (0..10) |slot| {
+            const team: i64 = if (slot < 5) 100 else 200;
+            try db.run(
+                \\INSERT INTO participants (match_id, slot, team_id, puuid, champion_id, position, win)
+                \\VALUES (?,?,?,?,?,'TOP',?)
+            , .{ id, slot, team, if (slot == 0) "me" else "other", if (slot == 0) g[1] else 99, (team == 100) == g[2] });
+        }
+    }
+
+    var champs: std.ArrayList(core.statsfile.Champion) = .empty;
+    for ([_]u32{ 10, 20, 99 }) |id| try champs.append(arena, .{ .id = id, .name = "x" });
+    var b: core.statsfile.Builder = try .init(arena, champs.items);
+    var aw: std.Io.Writer.Allocating = .init(arena);
+    try b.write(&aw.writer, "16.20");
+    const st: Stats = try .parse(arena, aw.written());
+
+    const ts = try tallyWith(gpa, db, &st, &.{&.{"EUW1"}}, null);
+    defer freeTallies(gpa, ts);
+    const t = ts[0];
+    try testing.expectEqual(2, t.games);
+    try testing.expectEqual(Bin{ .games = 1, .wins = 1 }, t.bins[st.index(10).?][2]);
+    try testing.expectEqual(Bin{ .games = 1, .wins = 0 }, t.bins[st.index(20).?][0]);
+    try testing.expectEqual(0, t.bins[st.index(99).?][0].games);
 }

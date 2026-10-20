@@ -59,6 +59,9 @@ pub const Options = struct {
     min_together: u32 = 3,
     /// Lane pairs with fewer games say nothing either way
     min_pair_games: u32 = 30,
+    /// Lane matchups closer to even than this, in points, are not hard or good: the
+    /// model's matchup terms are pulled toward 0, so most are a fraction of a point
+    min_lane_pp: f64 = 1,
     /// A champion plays a role when it has this share of its own games there
     min_role_share: f64 = 0.1,
     also_shown: usize = 12,
@@ -117,15 +120,20 @@ pub const Tally = struct {
         t.together[m * t.n + o] += 1;
     }
 
+    /// Share of players who don't main `other` but play it; null when none do
+    pub fn base(t: *const Tally, other: usize) ?f64 {
+        const rest = t.players - t.mains[other];
+        if (rest == 0 or t.plays[other] == 0) return null;
+        return @as(f64, @floatFromInt(t.plays[other])) / @as(f64, @floatFromInt(rest));
+    }
+
     /// How much more often `main`'s players play `other` than players of other mains
     /// do, shrunk toward 1 by `prior` pseudo-players; null when nobody plays `other`
     pub fn lift(t: *const Tally, main: usize, other: usize, prior: f64) ?f64 {
-        const rest = t.players - t.mains[other];
-        if (rest == 0 or t.plays[other] == 0) return null;
-        const base = @as(f64, @floatFromInt(t.plays[other])) / @as(f64, @floatFromInt(rest));
+        const b = t.base(other) orelse return null;
         const k: f64 = @floatFromInt(t.together[main * t.n + other]);
         const n: f64 = @floatFromInt(t.mains[main]);
-        return (k + prior * base) / ((n + prior) * base);
+        return (k + prior * b) / ((n + prior) * b);
     }
 };
 
@@ -423,7 +431,13 @@ pub fn make(arena: Allocator, t: *const Tallies, set: usize, st: *const Stats, o
     return p;
 }
 
-pub const Also = struct { id: u32, together: u32, lift: f64 };
+pub const Also = struct {
+    id: u32,
+    together: u32,
+    lift: f64,
+    /// Share of other players who play it
+    base: f64,
+};
 
 /// A lane matchup from the main's side (or an option's), in its role
 pub const Lane = struct { id: u32, pp: f64, games: u32 };
@@ -503,7 +517,7 @@ fn buildMain(arena: Allocator, t: *const Tally, st: *const Stats, m: usize, opts
         if (o == m or k < opts.min_together) continue;
         const l = t.lift(m, o, opts.prior_players) orelse continue;
         if (l <= 1) continue;
-        try also.append(arena, .{ .id = st.ids[o], .together = k, .lift = l });
+        try also.append(arena, .{ .id = st.ids[o], .together = k, .lift = l, .base = t.base(o).? });
     }
     std.mem.sort(Also, also.items, {}, struct {
         fn f(_: void, a: Also, b: Also) bool {
@@ -516,9 +530,11 @@ fn buildMain(arena: Allocator, t: *const Tally, st: *const Stats, m: usize, opts
     out.role = r;
     const lanes = try laneMatchups(arena, st, m, r, opts);
     var n_good: usize = 0;
-    while (n_good < lanes.len and lanes[n_good].pp > 0) n_good += 1;
+    while (n_good < lanes.len and lanes[n_good].pp >= opts.min_lane_pp) n_good += 1;
+    var n_hard: usize = 0;
+    while (n_hard < lanes.len - n_good and lanes[lanes.len - 1 - n_hard].pp <= -opts.min_lane_pp) n_hard += 1;
     const good = lanes[0..@min(n_good, opts.lanes_shown)];
-    var hard = lanes[@max(n_good, lanes.len -| opts.lanes_shown)..];
+    var hard = lanes[lanes.len - @min(n_hard, opts.lanes_shown) ..];
     hard = try arena.dupe(Lane, hard);
     std.mem.reverse(Lane, hard);
     out.hard = hard;
@@ -614,7 +630,7 @@ fn into(
         const games = st.enemy(r, r, y, e).games;
         if (games < opts.min_pair_games) continue;
         const pp = score.matchupPp(st, opts.score, r, y, r, e);
-        if (pp > 0) try list.append(arena, .{ .id = en.id, .pp = pp, .games = games });
+        if (pp >= opts.min_lane_pp) try list.append(arena, .{ .id = en.id, .pp = pp, .games = games });
     }
     return list.items;
 }
@@ -632,7 +648,7 @@ pub fn writeJson(w: *std.Io.Writer, p: Pool) !void {
             try w.writeAll(",\"also\":[");
             for (m.also, 0..) |a, j| {
                 if (j > 0) try w.writeByte(',');
-                try w.print("[{d},{d},{d:.2}]", .{ a.id, a.together, a.lift });
+                try w.print("[{d},{d},{d:.2},{d:.3}]", .{ a.id, a.together, a.lift, a.base });
             }
             try w.writeByte(']');
         }

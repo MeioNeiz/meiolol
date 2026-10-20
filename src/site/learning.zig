@@ -1,6 +1,5 @@
-//! Learning curves on the site (src/learning.zig): a section on each champion page and
-//! a table of how long champions take to learn on the pool page. n on every row; thin
-//! rows greyed out as "more data needed".
+//! How hard champions are to pick up (src/learning.zig): a section on each champion page
+//! and a table on the pool page. Games on every row; thin rows greyed out.
 
 const std = @import("std");
 const root = @import("root.zig");
@@ -15,55 +14,73 @@ const Site = root.Site;
 const Champ = root.Champ;
 const Learning = learning.Learning;
 
-/// "1-5", "6-20", "51+"
+/// "Under 10k", "10k-30k", "300k+"
 fn binLabel(buf: []u8, i: usize) []const u8 {
-    const lo = learning.bins[i];
-    if (i + 1 == learning.bin_count) return std.mem.print(buf, "{d}+", .{lo}) catch "";
-    return std.mem.print(buf, "{d}-{d}", .{ lo, learning.bins[i + 1] - 1 }) catch "";
+    const lo = learning.bins[i] / 1000;
+    if (i == 0) return std.mem.print(buf, "Under {d}k", .{learning.bins[1] / 1000}) catch "";
+    if (i + 1 == learning.bin_count) return std.mem.print(buf, "{d}k+", .{lo}) catch "";
+    return std.mem.print(buf, "{d}k-{d}k", .{ lo, learning.bins[i + 1] / 1000 }) catch "";
 }
 
 fn pct(x: f64) f64 {
     return 100 * x;
 }
 
-fn footnote(w: *Writer, players: u32) !void {
-    try tpl.render(w, "<p class=\"muted\">From the ranked histories of {players} players in our data. A game's " ++
-        "number counts only the games we have, so early rows include some players coming " ++
-        "back to a champion: the real gap is, if anything, bigger. Gold is the laner's total " ++
-        "gold minus their lane opponent's at {minute} minutes.</p>\n", .{ .players = players, .minute = learning.gold_minute });
+const new_text = "under 30k mastery points on it";
+const practised_text = "100k+";
+
+fn footnote(site: *const Site, w: *Writer, l: *const Learning) !void {
+    try tpl.render(w, "<p class=\"muted\">From {games} ranked solo games in every region we crawl where we know the player's mastery " ++
+        "points on the champion at the time: their mastery, looked up after the game, when no later game on " ++
+        "that champion came before the lookup. Practised players are often better players overall, so every " ++
+        "champion shows a gap ({mean:.1} points on average); a champion is harder or easier to pick up only " ++
+        "when its gap is clearly bigger or smaller than that, by more than chance in its games could give. " ++
+        "Gold is the laner's total gold minus their lane opponent's at {minute} minutes.</p>\n", .{
+        .games = try root.thousands(site.arena, l.games),
+        .mean = l.mean_pp,
+        .minute = learning.gold_minute,
+    });
 }
 
-/// Champion page: results by games on `ch`
-pub fn section(w: *Writer, l: *const Learning, ch: Champ) !void {
-    if (l.players == 0) return;
+/// Champion page: results by mastery points on `ch`
+pub fn section(site: *const Site, w: *Writer, l: *const Learning, ch: Champ) !void {
+    if (l.games == 0) return;
     const c = l.get(ch.id) orelse return;
-    var buf: [16]u8 = undefined;
-    try tpl.renderPart(w, "<h2>How long {name} takes to learn</h2>\n<p>", .{ .name = ch.name });
-    if (c.reach) |r| {
-        if (r == 0) {
-            try tpl.render(w, "Players do about as well on {name} from their first games as later ({usual:.1}% usual win rate).", .{
-                .name = ch.name,
-                .usual = pct(c.usual),
-            });
-        } else {
-            try tpl.render(w, "Players reach {name}'s usual win rate ({usual:.1}%) around their games {bin} on it.", .{
-                .name = ch.name,
-                .usual = pct(c.usual),
-                .bin = binLabel(&buf, r),
-            });
+    try tpl.renderPart(w, "<h2>How hard {name} is to pick up</h2>\n<p>", .{ .name = ch.name });
+    if (c.gap) |g| {
+        try tpl.renderPart(w, "Players new to {name} ({new_text}) win {new:.1}%, practised ones ({practised_text}) {practised:.1}%. ", .{
+            .name = ch.name,
+            .new_text = new_text,
+            .practised_text = practised_text,
+            .new = pct(g.new.winRate()),
+            .practised = pct(g.practised.winRate()),
+        });
+        const args = .{ .pp = g.pp, .mean = l.mean_pp };
+        switch (g.kind) {
+            .harder => try tpl.render(w, "That gap of {pp:.1} points is bigger than most champions' ({mean:.1} on average): expect a rough start.", args),
+            .easier => try tpl.render(w, "That gap of {pp:.1} points is smaller than most champions' ({mean:.1} on average): players do nearly as well from the start.", args),
+            .usual => try tpl.render(w, "That gap of {pp:.1} points is about the usual one ({mean:.1} on average).", args),
         }
     } else {
-        try tpl.render(w, "More data needed to say when players reach {name}'s usual win rate: every row needs 400+ games.", .{
+        const b = c.bins;
+        var new: u32 = 0;
+        var practised: u32 = 0;
+        for (b[0..learning.new_bins]) |x| new += x.games;
+        for (b[learning.practised_from..]) |x| practised += x.games;
+        try tpl.render(w, "More data needed to say how hard {name} is to pick up: it takes 200+ games each from players new to it and practised on it ({new} and {practised} so far).", .{
             .name = ch.name,
+            .new = new,
+            .practised = practised,
         });
     }
     try tpl.renderPart(w,
         \\</p>
         \\<div class="table-scroll"><table>
-        \\<thead><tr><th>Games on {name}</th><th class="num">Win rate</th><th class="num">Gold at {minute} vs lane</th><th class="num">Games</th></tr></thead>
+        \\<thead><tr><th>Mastery points on {name}</th><th class="num">Win rate</th><th class="num">Gold at {minute} vs lane</th><th class="num">Games</th></tr></thead>
         \\<tbody>
         \\
     , .{ .name = ch.name, .minute = learning.gold_minute });
+    var buf: [24]u8 = undefined;
     for (c.bins, 0..) |b, i| {
         const gold = if (b.gold()) |g| tpl.t("<span title=\"{n} games with a timeline\">{sign}{g:.0}</span>", .{
             .n = b.gold_games,
@@ -84,56 +101,70 @@ pub fn section(w: *Writer, l: *const Learning, ch: Champ) !void {
         });
     }
     try w.writeAll("</tbody></table></div>\n");
-    try footnote(w, l.players);
+    try footnote(site, w, l);
 }
 
 fn champCell(w: *Writer, site: *const Site, ch: Champ) !void {
     try site.champBox(w, ch, site.view.up());
 }
 
-/// Pool page: champions with a learning point, quickest first
+fn kindText(w: *Writer, k: learning.Kind) !void {
+    try w.writeAll(switch (k) {
+        .harder => "<b>Harder</b>",
+        .usual => "Usual",
+        .easier => "<b>Easier</b>",
+    });
+}
+
+/// Pool page: every champion with a gap, biggest (pulled toward the average) first
 pub fn table(site: *const Site, w: *Writer, l: *const Learning) !void {
-    try w.writeAll("<h2>How long champions take to learn</h2>\n");
+    try w.writeAll("<h2 id=\"pick-up\">How hard champions are to pick up</h2>\n");
     var list: std.ArrayList(learning.Champion) = .empty;
-    for (l.champions) |c| if (c.reach != null) try list.append(site.arena, c);
+    for (l.champions) |c| if (c.gap != null) try list.append(site.arena, c);
     if (list.items.len == 0) {
         try tpl.render(w,
-            \\<p class="note">More data needed: no champion has 400+ games in every range of games played on it yet ({players} players' histories so far).</p>
+            \\<p class="note">More data needed: no champion has 200+ games each from players new to it and practised on it yet ({games} games so far).</p>
             \\
-        , .{ .players = l.players });
+        , .{ .games = l.games });
         return;
     }
     std.mem.sort(learning.Champion, list.items, {}, struct {
         fn f(_: void, a: learning.Champion, b: learning.Champion) bool {
-            if (a.reach.? != b.reach.?) return a.reach.? < b.reach.?;
-            return a.bins[0].winRate() - a.usual > b.bins[0].winRate() - b.usual;
+            return a.gap.?.pulled > b.gap.?.pulled;
         }
     }.f);
-    var buf: [16]u8 = undefined;
-    try w.writeAll(
-        \\<p class="muted">When players reach a champion's usual win rate, by their games on
-        \\it. Several champions can sit in the same range; within one, the smaller first-games
-        \\gap comes first.</p>
-        \\<div class="table-scroll"><table>
-        \\<thead><tr><th>Champion</th><th>Usual win rate by games</th><th class="num">First 5 games</th><th class="num">Usual</th><th class="num">Games</th></tr></thead>
+    try tpl.renderPart(w,
+        \\<p class="muted">Win rate of players new to each champion ({new_text}) and of practised ones ({practised_text}). Harder: a bigger gap between them than most champions have, so expect a rough start; easier: a smaller one.</p>
+        \\<div class="tl-wrap"><table class="tl" id="pick-up-table" data-sortable>
+        \\<thead><tr><th class="l" data-sort="text">Champion</th><th class="l" data-sort="num">Pick up</th><th data-sort="num">New</th><th data-sort="num">Practised</th><th data-sort="num" aria-sort="descending" title="Practised minus new, in points; sorts pulled toward the average by its games">Gap</th><th data-sort="num">Games</th></tr></thead>
         \\<tbody>
         \\
-    );
+    , .{ .new_text = new_text, .practised_text = practised_text });
     for (list.items) |c| {
         const ch = matchup.champ(site, c.id) orelse continue;
-        var games: u32 = 0;
-        for (c.bins) |b| games += b.games;
+        const g = c.gap.?;
         try tpl.render(w,
-            \\<tr class="bx"><td>{champ}</td><td>{reach}</td><td class="num">{first}</td><td class="num">{usual}</td><td class="num">{games}</td></tr>
+            \\<tr class="bx"><td class="l" data-v="{name}">{champ}</td><td class="l" data-v="{kind_v}">{kind}</td><td data-v="{new:.4}">{new_wr}</td><td data-v="{practised:.4}">{practised_wr}</td><td data-v="{pulled:.2}">{sign}{pp:.1}</td><td class="dim" data-v="{games}">{games}</td></tr>
             \\
         , .{
+            .name = ch.name,
             .champ = tpl.call(champCell, .{ site, ch }),
-            .reach = if (c.reach.? == 0) "from the start" else binLabel(&buf, c.reach.?),
-            .first = tpl.call(tierlist.wrText, .{ c.bins[0].winRate(), c.bins[0].games }),
-            .usual = tpl.call(tierlist.wrText, .{ c.usual, games }),
-            .games = games,
+            .kind_v = @as(u8, switch (g.kind) {
+                .harder => 2,
+                .usual => 1,
+                .easier => 0,
+            }),
+            .kind = tpl.call(kindText, .{g.kind}),
+            .new = g.new.winRate(),
+            .new_wr = tpl.call(tierlist.wrText, .{ g.new.winRate(), g.new.games }),
+            .practised = g.practised.winRate(),
+            .practised_wr = tpl.call(tierlist.wrText, .{ g.practised.winRate(), g.practised.games }),
+            .pulled = g.pulled,
+            .sign = if (g.pp >= 0) "+" else "",
+            .pp = g.pp,
+            .games = g.new.games + g.practised.games,
         });
     }
     try w.writeAll("</tbody></table></div>\n");
-    try footnote(w, l.players);
+    try footnote(site, w, l);
 }
