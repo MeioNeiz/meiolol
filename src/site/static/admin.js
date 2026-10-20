@@ -852,10 +852,10 @@ VIEWS.overview = body => {
     const h = TRAFFIC.hours.filter(r => r[0] >= TRAFFIC.generated - 86400);
     tile(tiles, "Site views, 24 h", num(sumR(h.map(r => r[1]))), `${num(sumR(h.map(r => r[2] + (r[6] || 0))))} by bots or unconfirmed`, null, () => setTab("traffic"));
   }
-  // The Models tab's headline: best model by log loss, accuracy on held-out games
+  // The Models tab's headline: the shipped model's accuracy on held-out games
   const W = winReadings();
-  if (W && W.best) {
-    tile(tiles, "Draft model", pct(W.best.acc), `right on ${num(W.games)} held-out games (coin flip 50%), best: ${W.best.label}`, null, () => { ui.cat = "win"; setTab("models"); });
+  if (W && W.shipped) {
+    tile(tiles, "Draft model", pct(W.shipped.acc), `shipped, right on ${num(W.games)} held-out games (coin flip 50%)` + (W.experiment ? `; experiment ${W.experiment.label}: ${pct(W.experiment.acc)}` : ""), null, () => { ui.cat = "win"; setTab("models"); });
   }
   if (TRAIN && TRAIN.runs.length) {
     const live = TRAIN.runs.filter(r => r.state === "running" || r.state === "paused");
@@ -1491,7 +1491,9 @@ function intervalChart(parent, o) {
 
 // ---------- models: win (draft) ----------
 
-// The eval report's tables, read into plain findings
+// The eval report's tables, read into plain findings. One rule for every headline: the
+// shipped model ("current model" row); the best experiment that beats it stays beside it,
+// labelled, so it can still be tested
 function winReadings() {
   const R = reportTables(D.eval_report);
   const full = (R["Full draft, held-out games"] || [])[0];
@@ -1504,12 +1506,16 @@ function winReadings() {
   const find = re => rows.find(r => re.test(r.label));
   const base = find(/base only/), current = find(/^current/);
   const real = rows.filter(r => !/coin|blue side/.test(r.label));
-  const best = real.reduce((a, r) => r.ll < a.ll ? r : a, real[0]);
-  const out = { rows, games, base, current, best, lines: [] };
+  const shipped = current || real.reduce((a, r) => r.ll < a.ll ? r : a, real[0]);
+  const tried = real.filter(r => r !== shipped && r !== base && !/^previous/.test(r.label));
+  const top = tried.reduce((a, r) => !a || r.ll < a.ll ? r : a, null);
+  const experiment = top && shipped && top.ll < shipped.ll ? top : null;
+  const out = { rows, games, base, current, shipped, experiment, lines: [] };
   const L = out.lines;
-  if (best) {
-    const share = Math.max(0, (LL_COIN - best.ll) / (LL_COIN - LL_PUBLISHED));
-    L.push(`From the draft alone the best model calls the winner of ${num(games)} new games right ${pct(best.acc)} of the time (a coin flip: 50%). Published draft models trained on millions of games reach about 55 to 57%; by log loss we are ${Math.round(100 * share)}% of the way there.`);
+  if (shipped) {
+    const share = Math.max(0, (LL_COIN - shipped.ll) / (LL_COIN - LL_PUBLISHED));
+    L.push(`From the draft alone the shipped model calls the winner of ${num(games)} new games right ${pct(shipped.acc)} of the time (a coin flip: 50%). Published draft models trained on millions of games reach about 55 to 57%; by log loss we are ${Math.round(100 * share)}% of the way there.` +
+      (experiment ? ` Best experiment, not shipped: ${experiment.label}, ${pct(experiment.acc)}${experiment.d ? ` (log loss ${pmText(experiment.d)} against the shipped model)` : ""}.` : ""));
   }
   if (base && current && base.d) {
     const b = base.d;
@@ -1581,7 +1587,7 @@ function winView(body) {
   const W = winReadings();
   const running = L && L.running && L.running.eval;
   const head = actionButton("eval-run", running ? `Eval running (${span(nowS() - running)})` : "Run eval now", { disabled: !!running || !L, confirm: "Run meiolol eval now? About 10 minutes at low priority on the box." });
-  const sec = section(body, "Best model against the baseline", ev.length ? `Daily eval (docs/model.md), newest ${ev[ev.length - 1].date}: models built from older games, scored on the newest games they never saw.` : "Daily eval (docs/model.md).", head);
+  const sec = section(body, "Shipped model against the baseline", ev.length ? `Daily eval (docs/model.md), newest ${ev[ev.length - 1].date}: models built from older games, scored on the newest games they never saw.` : "Daily eval (docs/model.md).", head);
   if (!W) { sec.append(el("p", { class: "muted" }, "No eval report yet.")); winLearnt(body); return; }
   // The headline reading and the run-by-run chart first, the other readings after
   sec.append(el("ul", { class: "readings" }, ...W.lines.slice(0, 1).map(t => el("li", {}, t))));
@@ -1896,7 +1902,7 @@ function allView(body) {
     const runs = MODELS.runs.filter(r => (cat === "lab" ? r.lab : r.cat === cat));
     const live = runs.filter(r => r.state === "running" || r.state === "paused").length;
     const card = el("button", { type: "button", class: "card catcard", onclick: () => setCat(cat) }, el("h3", {}, label));
-    if (cat === "win" && W && W.best) card.append(el("p", { class: "headline" }, `Best model right ${pct(W.best.acc)} of the time (coin flip 50%).`));
+    if (cat === "win" && W && W.shipped) card.append(el("p", { class: "headline" }, `Shipped model right ${pct(W.shipped.acc)} of the time (coin flip 50%).` + (W.experiment ? ` Experiment ${W.experiment.label}: ${pct(W.experiment.acc)}.` : "")));
     if (cat === "early" && te) {
       const tot = te.t.rows.find(r => /^total/.test(r.step));
       const v = tot && pmIn(tot.lanediff14);

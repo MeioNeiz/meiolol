@@ -506,7 +506,7 @@ function draftView(body) {
   for (const c of DRAFT.netChecks || []) c.info ? checks.push(c.text) : health(c);
   sec.append(...bad);
   if (dev.accuracy != null) about.push(el("p", { class: "sub" }, `In plain words: on ${num(dev.games)} recent games it wasn't fitted on, the model picked the winner ${pct(dev.accuracy)} of the time; a coin manages 50%. ` +
-    "The Models tab's headline is a different reading (the best of the daily eval's models on the final test games), so the two numbers differ."));
+    "The Models tab's headline is the same shipped model scored on other games (the daily eval's newest), so the two numbers differ a little."));
   if (m.pairs && M.model.kind === "draft") about.push(el("p", { class: "sub" }, "The shipped model, as the app and site score drafts: each champion's strength in its role plus every pair of allies and every matchup, each pulled towards what the two champions' strengths predict and weighted as the daily eval tuned them. " +
     "The range on a win chance covers the champion ratings only."));
   else if (m.pairs) about.push(el("p", { class: "sub" }, `Pair terms: one learnt number for each pair of allies and each matchup seen in at least ${num(m.pairs.min_games)} games (rarer pairs count as average), plus the team's mix of magic and physical damage. ` +

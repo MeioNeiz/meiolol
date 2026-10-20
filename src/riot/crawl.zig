@@ -152,6 +152,7 @@ pub const Crawler = struct {
         c.limiters = try .init(c.gpa, c.io);
         defer c.limiters.deinit();
         for (&c.limiters.all) |*l| l.paced = true;
+        c.loadWindows();
         // First, so a lookup waits only for the restart itself
         var proxy: Proxy = .{ .gpa = c.gpa, .io = c.io, .key = c.opts.key, .limiters = &c.limiters, .fake = c.opts.fake };
         var proxy_server = if (c.opts.proxy) |address| try proxy.listen(address) else null;
@@ -183,9 +184,18 @@ pub const Crawler = struct {
 
         const started = c.nowS();
         var last_report = started;
+        var saved_ok = true;
         while (!c.stop.load(.acquire)) {
             c.io.sleep(.fromSeconds(1), .awake) catch break;
             const now = c.nowS();
+            if (@mod(now, windows_save_s) == 0) {
+                if (c.saveWindows()) {
+                    saved_ok = true;
+                } else |err| {
+                    if (saved_ok) log.warn("rate windows not saved: {t}", .{err});
+                    saved_ok = false;
+                }
+            }
             if (c.opts.hours) |h| {
                 if (@as(f64, @floatFromInt(now - started)) > h * 3600) c.stop.store(true, .release);
             }
@@ -196,7 +206,45 @@ pub const Crawler = struct {
         }
         c.stopAll(&threads, writer_thread);
         c.report(c.nowS() - started);
+        c.saveWindows() catch |err| log.warn("rate windows not saved: {t}", .{err});
         if (c.failure) |err| return err;
+    }
+
+    /// The limiters' send times, saved every few seconds and loaded at start: a
+    /// deploy's restart then waits only for what it sent, not 2-3 min of windows padded
+    /// full from Riot's counts (Limiters.save). systemd stops the crawler with a
+    /// SIGTERM, so the last save is the periodic one
+    const windows_file = "rate-windows.txt";
+    const windows_save_s = 2;
+
+    fn loadWindows(c: *Crawler) void {
+        if (c.opts.fake != null) return;
+        const path = std.fs.path.join(c.gpa, &.{ c.opts.data_dir, windows_file }) catch return;
+        defer c.gpa.free(path);
+        const text = std.Io.Dir.cwd().readFileAlloc(c.io, path, c.gpa, .limited(1 << 20)) catch |err| {
+            if (err != error.FileNotFound) log.warn("rate windows not loaded: {t}", .{err});
+            return;
+        };
+        defer c.gpa.free(text);
+        const n = c.limiters.load(text, std.Io.Clock.real.now(c.io).toMilliseconds()) catch |err| {
+            log.warn("rate windows not loaded: {t}", .{err});
+            return;
+        };
+        log.info("rate windows: {d} requests of the last run still in their window", .{n});
+    }
+
+    fn saveWindows(c: *Crawler) !void {
+        if (c.opts.fake != null) return;
+        var aw: std.Io.Writer.Allocating = .init(c.gpa);
+        defer aw.deinit();
+        try c.limiters.save(&aw.writer, std.Io.Clock.real.now(c.io).toMilliseconds());
+        const path = try std.fs.path.join(c.gpa, &.{ c.opts.data_dir, windows_file });
+        defer c.gpa.free(path);
+        const tmp = try std.fmt.allocPrint(c.gpa, "{s}.tmp", .{path});
+        defer c.gpa.free(tmp);
+        const cwd = std.Io.Dir.cwd();
+        try cwd.writeFile(c.io, .{ .sub_path = tmp, .data = aw.written() });
+        try cwd.rename(tmp, cwd, path, c.io);
     }
 
     /// A key from another Riot app answers every call but gives 400 "Exception

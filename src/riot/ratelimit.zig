@@ -10,6 +10,10 @@ const Allocator = std.mem.Allocator;
 /// window here stays under either.
 const margin_ns: i96 = 750 * std.time.ns_per_ms;
 const max_windows = 4;
+/// Paced callers may run this many requests ahead of one per span / limit, making up
+/// the slots a slow answer or a busy database cost them (a thread sends one request at
+/// a time). The window's limit still holds
+const catch_up = 16;
 
 pub const Window = struct {
     limit: u32,
@@ -29,15 +33,17 @@ pub const Window = struct {
     }
 
     /// ns until another request fits, 0 if one fits now. Paced: also one per span / limit
-    /// at most, so the window fills evenly instead of in a burst, and a slot frees every
-    /// span / limit for a priority caller instead of once the burst slides out
+    /// on average, at most `catch_up` ahead, so the window fills evenly instead of in a
+    /// burst, and a slot frees every span / limit for a priority caller instead of once
+    /// the burst slides out
     fn waitNs(w: *Window, now: i96, paced: bool) i96 {
         w.prune(now);
         const limit = @max(1, w.limit);
         var wait: i96 = 0;
         if (w.hits.len >= limit) wait = w.hits.at(w.hits.len - limit) + w.span() - now;
-        if (paced) {
-            if (w.hits.back()) |last| wait = @max(wait, last + @divTrunc(w.span(), limit) - now);
+        if (paced and w.hits.len > 0) {
+            const k = @min(w.hits.len, catch_up);
+            wait = @max(wait, w.hits.at(w.hits.len - k) + @divTrunc(w.span() * k, limit) - now);
         }
         return @max(wait, 0);
     }
@@ -257,6 +263,56 @@ pub const Limiters = struct {
     pub fn get(l: *Limiters, route: []const u8) ?*Limiter {
         return &l.all[index(route) orelse return null];
     }
+
+    fn routeName(i: usize) []const u8 {
+        return if (i < regions.len) @tagName(regions[i]) else ep.platforms[i - regions.len].host;
+    }
+
+    /// Each route's app windows, a line "route seconds ms ms ..." of send times in real
+    /// ms, for the next process (a deploy's restart) to load. Without them it padded
+    /// Riot's counts at its start (syncCounts), held back a whole window
+    pub fn save(l: *Limiters, w: *std.Io.Writer, real_ms: i64) !void {
+        for (&l.all, 0..) |*limiter, i| {
+            limiter.mutex.lockUncancelable(limiter.io);
+            defer limiter.mutex.unlock(limiter.io);
+            const now = limiter.now();
+            for (limiter.app.windows.items) |*win| {
+                win.prune(now);
+                if (win.hits.len == 0) continue;
+                try w.print("{s} {d}", .{ routeName(i), win.seconds });
+                for (0..win.hits.len) |j| {
+                    try w.print(" {d}", .{real_ms - @as(i64, @intCast(@divTrunc(now - win.hits.at(j), std.time.ns_per_ms)))});
+                }
+                try w.writeByte('\n');
+            }
+        }
+    }
+
+    /// What save wrote, into windows of the same length; how many send times were
+    /// still in their window
+    pub fn load(l: *Limiters, text: []const u8, real_ms: i64) !usize {
+        var loaded: usize = 0;
+        var lines = std.mem.tokenizeScalar(u8, text, '\n');
+        while (lines.next()) |line| {
+            var fields = std.mem.tokenizeScalar(u8, line, ' ');
+            const limiter = l.get(fields.next() orelse continue) orelse continue;
+            const seconds = std.fmt.parseInt(u32, fields.next() orelse continue, 10) catch continue;
+            limiter.mutex.lockUncancelable(limiter.io);
+            defer limiter.mutex.unlock(limiter.io);
+            const now = limiter.now();
+            for (limiter.app.windows.items) |*win| {
+                if (win.seconds != seconds or win.hits.len > 0) continue;
+                while (fields.next()) |field| {
+                    const ms = std.fmt.parseInt(i64, field, 10) catch continue;
+                    const t = now - @as(i96, @max(real_ms - ms, 0)) * std.time.ns_per_ms;
+                    if (now - t >= win.span()) continue;
+                    try win.hits.pushBack(limiter.gpa, t);
+                    loaded += 1;
+                }
+            }
+        }
+        return loaded;
+    }
 };
 
 const testing = std.testing;
@@ -314,6 +370,46 @@ test Limiters {
     defer l.deinit();
     try testing.expect(l.get("europe") != l.get("euw1"));
     try testing.expect(l.get("euw1") != null and l.get("nope") == null);
+}
+
+test "saved windows load into the next process's limiters" {
+    var a = try Limiters.init(testing.allocator, testing.io);
+    defer a.deinit();
+    const eu = a.get("europe").?;
+    try eu.acquire("m", false);
+    try eu.acquire("m", true);
+    var buf: [256]u8 = undefined;
+    var w: std.Io.Writer = .fixed(&buf);
+    try a.save(&w, 1_000_000);
+    try testing.expect(std.mem.startsWith(u8, w.buffered(), "europe 1 "));
+
+    var b = try Limiters.init(testing.allocator, testing.io);
+    defer b.deinit();
+    // The same moment, then 2 s later: the 1 s window's hits have expired
+    try testing.expectEqual(@as(usize, 4), try b.load(w.buffered(), 1_000_000));
+    try testing.expectEqual(@as(usize, 2), b.get("europe").?.app.windows.items[1].hits.len);
+    try testing.expectEqual(@as(usize, 0), b.get("americas").?.app.windows.items[1].hits.len);
+    var c = try Limiters.init(testing.allocator, testing.io);
+    defer c.deinit();
+    try testing.expectEqual(@as(usize, 2), try c.load(w.buffered(), 1_002_000));
+    try testing.expectEqual(@as(usize, 0), c.get("europe").?.app.windows.items[0].hits.len);
+}
+
+test "paced callers catch up on slots a slow answer cost them" {
+    var w: Window = .{ .limit = 100, .seconds = 120 };
+    defer w.hits.deinit(testing.allocator);
+    const step = @divTrunc(w.span(), 100);
+    for (0..20) |i| try w.hits.pushBack(testing.allocator, @as(i96, @intCast(i)) * step);
+    const last = 19 * step;
+    try testing.expectEqual(step, w.waitNs(last, true));
+    // Held up 5 slots: the next 5 go at once, the one after waits its turn
+    var now = last + 5 * step;
+    for (0..5) |_| {
+        try testing.expectEqual(@as(i96, 0), w.waitNs(now, true));
+        try w.hits.pushBack(testing.allocator, now);
+        now += 1;
+    }
+    try testing.expect(w.waitNs(now, true) > 0);
 }
 
 test "paced windows space requests evenly" {
