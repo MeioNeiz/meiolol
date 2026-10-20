@@ -365,7 +365,7 @@ fn checkCard(in: lanecard.Input, card: lanecard.Card) !void {
     }
     var everyone: usize = 0;
     for (in.stats.ids) |id| {
-        if (eligible(in, id) and available(in, id)) everyone += 1;
+        if (eligible(in, id) and available(in, id) and playsRole(in, id)) everyone += 1;
     }
     const from_pool = pool_left >= lanecard.min_options;
     try testing.expectEqual(@min(if (from_pool) pool_left else everyone, lanecard.max_options), card.options.len);
@@ -374,6 +374,7 @@ fn checkCard(in: lanecard.Input, card: lanecard.Card) !void {
     for (card.options, 0..) |o, i| {
         try testing.expect(available(in, o.champion) and eligible(in, o.champion));
         if (from_pool) try testing.expect(masteryOf(in, o.champion) > 0);
+        if (i >= pool_left) try testing.expect(playsRole(in, o.champion));
         for (card.options[0..i]) |p| try testing.expect(p.champion != o.champion);
         for (o.reasons) |r| try policyWording(r);
         if (o.lane) |l| try policyWording(l.text);
@@ -386,6 +387,13 @@ fn eligible(in: lanecard.Input, id: u32) bool {
     if (in.stats.champRole(in.role, i).games < in.opts.min_games) return false;
     if (in.pickable) |p| if (std.mem.indexOfScalar(u32, p, id) == null) return false;
     return true;
+}
+
+/// Enough of its games in the role to fill up a pool
+fn playsRole(in: lanecard.Input, id: u32) bool {
+    const i = in.stats.index(id).?;
+    const g: f64 = @floatFromInt(in.stats.champRole(in.role, i).games);
+    return g >= lanecard.min_role_share * @as(f64, @floatFromInt(in.stats.champGames(i)));
 }
 
 fn available(in: lanecard.Input, id: u32) bool {

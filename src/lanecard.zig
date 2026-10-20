@@ -23,6 +23,9 @@ pub const min_options = 3;
 pub const max_options = 5;
 /// Most-played champions (by mastery) that make up "your pool"
 pub const pool_size = 15;
+/// As the champions table's rare rows: under this share of a champion's games in the role
+/// and it never fills up a pool (off-role players who win on it are a self-selected few)
+pub const min_role_share = 0.1;
 const max_reasons = 3;
 
 pub const Mastery = struct { champion: u32, points: u32 };
@@ -272,9 +275,9 @@ fn options(arena: std.mem.Allocator, in: Input, opp: ?Opponent, bracket: Bracket
     var buf: [max_options]core.Suggestion = undefined;
     var list = core.recommend(stats, draft, in.opts, &buf);
     if (list.len < min_options) {
-        // Keep the pool's options, then fill from everyone
+        // Keep the pool's options, then fill from everyone who plays the role
         var wide = draft;
-        wide.pool = in.pickable;
+        wide.pool = try rolePlayers(arena, stats, in.role, in.pickable);
         var more: [2 * max_options]core.Suggestion = undefined;
         var len = list.len;
         for (core.recommend(stats, wide, in.opts, &more)) |s| {
@@ -289,16 +292,40 @@ fn options(arena: std.mem.Allocator, in: Input, opp: ?Opponent, bracket: Bracket
         list = buf[0..len];
     }
 
+    // Strong this patch only says something when it sets an option apart
+    var strong: usize = 0;
+    for (list) |s| strong += @intFromBool(isStrong(s));
+    const show_strong = 2 * strong < list.len;
+
     const out = try arena.alloc(Option, list.len);
     for (list, out) |s, *o| {
         o.* = .{
             .champion = s.champion,
             .mastery = masteryOf(in.mastery, s.champion),
             .lane = if (opp) |p| try laneFact(arena, in, s.champion, p.champion, bracket) else null,
-            .reasons = try reasons(arena, in, s, opp),
+            .reasons = try reasons(arena, in, s, opp, show_strong),
         };
     }
     return out;
+}
+
+/// Of `pickable` (every champion when null), those with min_role_share of their games
+/// in `role`
+fn rolePlayers(arena: std.mem.Allocator, stats: *const Stats, role: Role, pickable: ?[]const u32) ![]const u32 {
+    var out: std.ArrayList(u32) = .empty;
+    for (0..stats.n) |c| {
+        const id = stats.ids[c];
+        if (pickable) |p| if (std.mem.indexOfScalar(u32, p, id) == null) continue;
+        const g: f64 = @floatFromInt(stats.champRole(role, c).games);
+        if (g < min_role_share * @as(f64, @floatFromInt(stats.champGames(c)))) continue;
+        try out.append(arena, id);
+    }
+    return out.items;
+}
+
+fn isStrong(s: core.Suggestion) bool {
+    for (s.reasons()) |r| if (r.kind == .base and r.pp > 0) return true;
+    return false;
 }
 
 fn masteryOf(mastery: []const Mastery, champion: u32) u32 {
@@ -329,7 +356,7 @@ fn laneFact(arena: std.mem.Allocator, in: Input, me: u32, them: u32, bracket: Br
     };
 }
 
-fn reasons(arena: std.mem.Allocator, in: Input, s: core.Suggestion, opp: ?Opponent) ![]const []const u8 {
+fn reasons(arena: std.mem.Allocator, in: Input, s: core.Suggestion, opp: ?Opponent, show_strong: bool) ![]const []const u8 {
     const stats = in.stats;
     var out: std.ArrayList([]const u8) = .empty;
     const points = masteryOf(in.mastery, s.champion);
@@ -345,7 +372,7 @@ fn reasons(arena: std.mem.Allocator, in: Input, s: core.Suggestion, opp: ?Oppone
         if (opp != null and r.kind == .enemy and r.champion == opp.?.champion) continue;
         const name = stats.nameOf(r.champion);
         const text = switch (r.kind) {
-            .base => if (r.pp > 0) try std.fmt.allocPrint(arena, "strong in {s} this patch", .{in.role.label()}) else continue,
+            .base => if (r.pp > 0 and show_strong) try std.fmt.allocPrint(arena, "strong in {s} this patch", .{in.role.label()}) else continue,
             .ally => if (r.pp > 0) try std.fmt.allocPrint(arena, "pairs well with {s}", .{name}) else continue,
             .enemy => try std.fmt.allocPrint(arena, "{s} into {s}", .{ if (r.pp > 0) "good" else "hard", name }),
         };
@@ -389,8 +416,9 @@ const Fixture = struct {
     }
 };
 
-/// Garen, Darius and Sett play top, Ahri mid, Lux support. Darius leads Garen by
-/// about 300 gold at 14 in 300 games; Sett vs Garen has 20 games
+/// Garen, Darius and Sett play top, Ahri mid, Lux support (and top in a few won
+/// games). Darius leads Garen by about 300 gold at 14 in 300 games; Sett vs Garen has 20
+/// games
 fn fixture() !Fixture {
     const gpa = testing.allocator;
     var sb: statsfile.Builder = try .init(gpa, &test_champions);
@@ -401,6 +429,8 @@ fn fixture() !Fixture {
         const b = tops[(i + 1) % 3];
         sb.addGame(.{ .{ a, 0, ahri, 0, lux }, .{ b, 0, 0, 0, 0 } }, @intCast(i % 2));
     }
+    // Lux top: a few games, all won, under min_role_share of hers
+    for (0..60) |_| sb.addGame(.{ .{ lux, 0, 0, 0, 0 }, .{ garen, 0, 0, 0, 0 } }, 0);
     var aw: std.Io.Writer.Allocating = .init(gpa);
     defer aw.deinit();
     try sb.write(&aw.writer, "test");
@@ -482,7 +512,8 @@ test "guessed opponent, thin curve, options with reasons" {
     try testing.expect(card.opponent.?.guessed);
     try testing.expect(card.matchup.?.thin);
     try testing.expect(std.mem.indexOf(u8, card.sentence, "mostly from how both champions do against everyone: 20 games") != null);
-    // Darius alone is in the pool for top: widened to everyone who plays it, Garen taken
+    // Darius alone is in the pool for top: widened to everyone who plays it, Garen taken;
+    // not Lux, whose few top games are all wins
     try testing.expectEqual(2, card.options.len);
     for (card.options) |o| try testing.expect(o.champion == darius or o.champion == sett);
     const d = for (card.options) |o| {
