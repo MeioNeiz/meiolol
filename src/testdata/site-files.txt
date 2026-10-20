@@ -69,7 +69,7 @@ champion/pyke.html 8104e63e58b12bdb
 champion/rakan.html 934daec301621c8e
 champion/twitch.html a5d8a0a1a3c927cb
 champions.html 7968ae40316a50ca
-daily.html 942d72118cc4a0c8
+daily.html 8b657cac2c22bb50
 data/champions.json 00926860dfeebe26
 data/filters.json 406e23555894da4c
 data/filters/ahri.json 3ae6e09eadd8da20
@@ -140,7 +140,7 @@ patch/role/mid.html 69ed7ef4ca7db1ca
 patch/role/support.html a39a66da01b51830
 patch/role/top.html 2f83bd628bdfdce4
 pool.html 6113f7fc50494bdc
-privacy.html 0aa58ddf824113f1
+privacy.html fad8c61a16867274
 robots.txt 331ea9090db0c9f6
 role/bot.html c55be56b0896c1c5
 role/jungle.html d5351736f5b9969e

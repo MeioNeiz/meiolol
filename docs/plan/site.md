@@ -19,8 +19,8 @@ the rate pulled toward an average (role's, champion's own, usual), shown raw; --
 #7a7f88 (4.6:1) and fade floor 0.6 (0.35 put grey ink near 1.9:1); champion header
 "27th of 60 in Top" (the champions table's order, raw when filtered); no highest win
 rate mark on boots and finished items (purchase timing: Mejai's ~80%); stale colour
-prose fixed. Not built: Hard lanes column, Daily Draft pick shares (API counter on
-jomify), players behind a matchup's games (curves format).
+prose fixed. Not wanted (Jacob 20 Oct): Hard lanes column; players behind a matchup's
+games (curves format) left for now.
 Done 20 Oct (morning, sitewide, J12 J14; e80df37): win rates continuous, no steps or
 thin-data cut (wrColour mixes the stops in oklab, grey only at 50.0%, few games fade by
 opacity); matchup rates on matchup_span (0.24, twice the table's) and coloured again on
@@ -112,6 +112,12 @@ facts with counts are not that, but check the line with Jacob before numbers com
   still alive), best too (daily.js streaks(); duolingo-streaks ^f4, teach-draft C13).
   Share hidden in preview mode (its text links the site; production-key.md "do not
   advertise"), keyed on html.zig's preview banner, so it returns with the public build
+- Done 20 Oct (Jacob: "sounds great"): pick shares. A finished puzzle's answers go once
+  per browser (mine.sent) to POST /api/daily (option index, side), counted in api.db
+  daily_answers with nothing about the sender (/api/ unlogged, nginx 60/min per IP);
+  "42% picked" on each turned card and "50% chose" on each side from 10 players, with
+  the count under the sides. Privacy page says so. Repeats or scripts can inflate it
+  within the rate limit: accepted, counts only
 - Next: pick verdicts (J2 form, Jacob 20 Oct): plan in
   data/team/2026-10-19-night/daily.md (score.pickSe, measure how many picks clear on
   the live patch first); a hint before the guess; share text with the facts

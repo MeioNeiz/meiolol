@@ -8,6 +8,10 @@
 //!   POST /api/forget?id=Name%23TAG  objection: issue a profile icon; &check=1 checks it
 //!   GET  /api/forget?id=Name%23TAG  the objection's state
 //!   GET  /api/health                queue length
+//!   POST /api/daily?n=N&pick=I&side=S  a finished Daily Draft puzzle's answers (option
+//!                                   index 0-3, side 0 blue or 1 red), counted; returns
+//!                                   the counts as GET does
+//!   GET  /api/daily?n=N             how many picked each option and each side
 
 const std = @import("std");
 const Io = std.Io;
@@ -247,6 +251,12 @@ fn handle(ctx: *Context, request: *std.http.Server.Request) !void {
         const r = try forget(ctx, arena, db, query, method == .POST);
         return send(ctx, request, r.status, r.body);
     }
+    if (std.mem.eql(u8, path, "/api/daily") and (method == .POST or method == .GET)) {
+        const db = try cache.open(ctx.opts.db_path);
+        defer db.close();
+        const r = try daily(arena, db, query, method == .POST);
+        return send(ctx, request, r.status, r.body);
+    }
     if (std.mem.eql(u8, path, "/api/health") and method == .GET) {
         const db = try cache.open(ctx.opts.db_path);
         defer db.close();
@@ -274,6 +284,50 @@ const Reply = struct { status: Status, body: []const u8 };
 
 fn errorReply(arena: Allocator, status: Status, state: []const u8, message: []const u8) !Reply {
     return .{ .status = status, .body = try std.json.Stringify.valueAlloc(arena, .{ .state = state, .@"error" = message }, .{}) };
+}
+
+pub const daily_options = 4;
+/// Puzzle numbers past this are refused, so junk can't grow the table without bound
+const max_daily = 100_000;
+
+pub const DailyOut = struct {
+    n: u32,
+    /// Players who finished it, and how many picked each option and each side
+    players: i64,
+    picks: [daily_options]i64,
+    sides: [2]i64,
+};
+
+/// Daily Draft answer counts. The page sends a puzzle's once per browser when finished
+/// (daily.js); a repeat or a script can add more, which nginx's rate limit bounds
+fn daily(arena: Allocator, db: store.Db, query: []const u8, post: bool) !Reply {
+    const n = try intParam(arena, query, "n", max_daily) orelse
+        return errorReply(arena, .bad_request, "error", "expected ?n=puzzle");
+    if (n == 0) return errorReply(arena, .bad_request, "error", "expected ?n=puzzle");
+    if (post) {
+        const pick = try intParam(arena, query, "pick", daily_options - 1);
+        const side = try intParam(arena, query, "side", 1);
+        if (pick == null or side == null) return errorReply(arena, .bad_request, "error", "expected &pick=0-3&side=0-1");
+        try db.run("INSERT INTO daily_answers VALUES (?, ?, ?, 1) ON CONFLICT DO UPDATE SET count = count + 1", .{ n, pick.?, side.? });
+    }
+    var out: DailyOut = .{ .n = n, .players = 0, .picks = @splat(0), .sides = @splat(0) };
+    var q = try db.prepare("SELECT pick, side, count FROM daily_answers WHERE n = ?");
+    defer q.deinit();
+    try q.bind(.{n});
+    while (try q.step()) {
+        const r = q.row(struct { pick: i64, side: i64, count: i64 });
+        out.players += r.count;
+        out.picks[@intCast(r.pick)] += r.count;
+        out.sides[@intCast(r.side)] += r.count;
+    }
+    return .{ .status = .ok, .body = try std.json.Stringify.valueAlloc(arena, out, .{}) };
+}
+
+/// A whole number from 0 to `max` in ?name=; null when absent or not one
+fn intParam(arena: Allocator, query: []const u8, name: []const u8, max: u32) !?u32 {
+    const v = try param(arena, query, name) orelse return null;
+    const x = std.fmt.parseInt(u32, v, 10) catch return null;
+    return if (x <= max) x else null;
 }
 
 /// Value of `name` in a query string, percent-decoded; null when absent
@@ -567,6 +621,24 @@ test "games: a visit refreshes after refresh_after_s, a check after check_after_
     try db.run("UPDATE players SET refreshed = ?", .{now - 30});
     _ = try games(&ctx, arena, db, "id=A%231&refresh=1");
     try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM jobs", .{}));
+}
+
+test "daily: counts a finished puzzle's answers, refuses junk" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const db = try cache.open(":memory:");
+    defer db.close();
+    _ = try daily(arena, db, "n=3&pick=2&side=0", true);
+    _ = try daily(arena, db, "n=3&pick=2&side=1", true);
+    _ = try daily(arena, db, "n=3&pick=0&side=1", true);
+    _ = try daily(arena, db, "n=4&pick=1&side=1", true);
+    const got = try daily(arena, db, "n=3", false);
+    try std.testing.expectEqualStrings("{\"n\":3,\"players\":3,\"picks\":[1,0,2,0],\"sides\":[1,2]}", got.body);
+    for ([_][]const u8{ "n=3&pick=4&side=0", "n=3&pick=1&side=2", "n=3&pick=-1&side=0", "n=0&pick=1&side=0", "n=100001&pick=1&side=0", "n=3&pick=1", "pick=1&side=0" }) |bad| {
+        try std.testing.expectEqual(Status.bad_request, (try daily(arena, db, bad, true)).status);
+    }
+    try std.testing.expectEqual(@as(?i64, 4), try db.scalar("SELECT sum(count) FROM daily_answers", .{}));
 }
 
 test {

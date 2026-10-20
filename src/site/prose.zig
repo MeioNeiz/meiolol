@@ -298,9 +298,12 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\<p>No accounts, no cookies, no analytics or advertising trackers. The hosting
         \\provider keeps standard request logs (IP address, time, page) for security and
         \\abuse prevention, for a limited time. The Daily Draft keeps your guesses, streak
-        \\and archive in your own browser (local storage); they are never sent to us, and
-        \\clearing site data removes them. Pages also keep your view settings there, such
-        \\as filters, sort orders and tabs.</p>
+        \\and archive in your own browser (local storage), and clearing site data removes
+        \\them. When you finish a puzzle, its two answers (which champion, which side) are
+        \\sent once with nothing that identifies you; we keep only each puzzle's totals, to
+        \\show what share of players picked each answer, and these requests are not in our
+        \\server logs. Pages also keep your view settings in your browser, such as filters,
+        \\sort orders and tabs.</p>
         \\<p>Daily Draft puzzles are real ranked games shown without names, Riot IDs, player
         \\identifiers, match ids or game dates: at most champions, bans, patch, game length,
         \\and each player's rank and game statistics (kills, gold and the like); the date

@@ -129,3 +129,5 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
 - lolalytics/op.gg/u.gg scraping, old datasets, pro play data: docs/data.md
 - Replay-file analysis: Riot locked replays from 26.20 (research)
 - Python: Jacob wants Zig for everything, including training if feasible
+- Champions table "Hard lanes" column (3 hardest opponents' icons a row): Jacob 20 Oct
+  "dont like that"

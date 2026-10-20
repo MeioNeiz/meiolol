@@ -1,5 +1,6 @@
-//! api.db: looked-up accounts and players, the refresh queue, and matches cached by id.
-//! Own file, separate from the crawler's databases: the service runs on the web server.
+//! api.db: looked-up accounts and players, the refresh queue, matches cached by id, and
+//! Daily Draft answer counts. Own file, separate from the crawler's databases: the
+//! service runs on the web server.
 
 const std = @import("std");
 const store = @import("store");
@@ -86,6 +87,16 @@ pub const schema =
     \\    PRIMARY KEY (match_id, slot)
     \\) WITHOUT ROWID;
     \\CREATE INDEX IF NOT EXISTS match_names_hash ON match_names (hash);
+    \\
+    \\-- Daily Draft: how many finished puzzle n with each option (0-3, the puzzle's order)
+    \\-- and side (0 blue, 1 red). Counts only: nothing about who answered
+    \\CREATE TABLE IF NOT EXISTS daily_answers (
+    \\    n INTEGER NOT NULL,
+    \\    pick INTEGER NOT NULL,
+    \\    side INTEGER NOT NULL,
+    \\    count INTEGER NOT NULL,
+    \\    PRIMARY KEY (n, pick, side)
+    \\) WITHOUT ROWID;
 ;
 
 pub fn open(path: [:0]const u8) !Db {

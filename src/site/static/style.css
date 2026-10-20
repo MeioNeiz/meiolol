@@ -880,6 +880,8 @@ body:has(#m-cs:checked) .mu-m:not(.mu-m-cs) { display: none; }
 .dd-side.dd-red:hover:not(:disabled), .dd-side.dd-red.won { border-color: var(--them); background: color-mix(in srgb, var(--them) 18%, var(--panel)); }
 .dd-side:disabled:not(.won) { opacity: 0.55; }
 .dd-side .dd-mark { color: var(--text); }
+.dd-crowd { font-size: 12px; font-weight: 500; color: var(--muted); }
+.dd-crowd-note { font-size: 12.5px; margin: 10px 0 0; }
 @keyframes dd-pop { 0% { transform: scale(0.94); } 60% { transform: scale(1.03); } 100% { transform: none; } }
 .dd-side.pop, .dd-score.pop { animation: dd-pop 0.45s ease-out; }
 .dd-score {

@@ -3,7 +3,8 @@
 // and the reveal shows the scoreboard and the lanes at 14, this game's and the patch's
 // usual, with game counts: never a draft win chance or "+X% win rate" (Riot policy,
 // docs/production-key.md). Results, streaks and archive stay in this browser
-// (localStorage); nothing is sent. Reasons: reasons.js.
+// (localStorage); a finished puzzle's two answers go once to /api/daily, counted with
+// nothing about who sent them, for the share of players picking each. Reasons: reasons.js.
 "use strict";
 
 const ROLES = [
@@ -18,6 +19,11 @@ const roleIndex = Object.fromEntries(ROLES.map(([r], i) => [r, i]));
 const SIDES = ["Blue", "Red"];
 const SIDE_CLS = ["dd-blue", "dd-red"];
 const KEY = "meiolol.daily.v1";
+const API = ["localhost", "127.0.0.1"].includes(location.hostname) && location.port !== "8090"
+  ? "http://127.0.0.1:8090/api"
+  : "/api";
+// Players who finished a puzzle before its shares show: under it one player is 10%+
+const CROWD_MIN = 10;
 // Preview mode (no production key yet): the page carries html.zig's banner. No Share
 // then, as its text links the site, and the site may not be advertised until the key
 // (docs/production-key.md); it comes back with the public build
@@ -149,7 +155,9 @@ async function start() {
     const puzzle = await getJson(`daily/${entry.n}.json`);
     status.hidden = true;
     $("daily").hidden = false;
-    new Game(puzzle, meta, live).render();
+    const game = new Game(puzzle, meta, live);
+    game.render();
+    if (game.done) game.fetchCrowd();
   } catch (e) {
     status.textContent = "Could not load the puzzle: " + e.message;
   }
@@ -165,6 +173,8 @@ class Game {
     this.mine = this.results[p.n] || {};
     // The question just answered, whose reveal animates; a reload shows it settled
     this.fresh = null;
+    // /api/daily's counts for this puzzle once finished: null until they arrive
+    this.crowd = null;
   }
 
   name(id) {
@@ -203,7 +213,52 @@ class Game {
     saveResults(this.results);
     this.fresh = field;
     this.render();
+    if (this.done) this.fetchCrowd();
     if (field === "side") $("reveal").scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "start" });
+  }
+
+  // Sends this browser's answers the first time (mine.sent), else only reads the counts.
+  // No API (local site, outage): no shares, the page as before
+  async fetchCrowd() {
+    const pick = this.p.options.findIndex((o) => o.id === this.mine.pick);
+    const send = !this.mine.sent && pick >= 0;
+    const url = `${API}/daily?n=${this.p.n}${send ? `&pick=${pick}&side=${this.mine.side}` : ""}`;
+    try {
+      const r = await fetch(url, { method: send ? "POST" : "GET", credentials: "omit" });
+      if (!r.ok) return;
+      this.crowd = await r.json();
+    } catch {
+      return;
+    }
+    if (send) {
+      this.mine.sent = true;
+      this.results[this.p.n] = this.mine;
+      saveResults(this.results);
+    }
+    this.renderCrowd();
+  }
+
+  // Share of players picking each option and side, on the turned cards and side buttons
+  renderCrowd() {
+    const c = this.crowd;
+    const enough = c && c.players >= CROWD_MIN;
+    const share = (k) => `${Math.round((100 * k) / c.players)}%`;
+    for (const s of document.querySelectorAll(".dd-crowd")) s.remove();
+    if (enough) {
+      [...$("options").children].forEach((b, i) => {
+        b.querySelector(".dd-back")?.append(el("small", "dd-crowd", `${share(c.picks[i] ?? 0)} picked`));
+      });
+      for (const b of $("q-side").querySelectorAll("button")) {
+        b.append(el("small", "dd-crowd", `${share(c.sides[Number(b.dataset.side)] ?? 0)} chose`));
+      }
+    }
+    const note = $("crowd");
+    note.hidden = !c;
+    if (c) {
+      note.textContent = enough
+        ? `How ${fmt(c.players)} players who finished this puzzle answered.`
+        : `${c.players} ${c.players === 1 ? "player has" : "players have"} finished this puzzle: shares show from ${CROWD_MIN}.`;
+    }
   }
 
   get picked() {
@@ -231,6 +286,7 @@ class Game {
     this.renderSide();
     $("reveal").hidden = !this.done;
     if (this.done) this.renderReveal();
+    this.renderCrowd();
     this.renderArchive();
   }
 

@@ -27,6 +27,7 @@ pub fn page(w: *Writer, info: prose.Info) Writer.Error!void {
         \\<section id="q-side" class="card question" hidden>
         \\<h2>Which side won?</h2>
         \\<div class="dd-sides"><button type="button" data-side="0">Blue side</button><button type="button" data-side="1">Red side</button></div>
+        \\<p id="crowd" class="muted dd-crowd-note" hidden></p>
         \\</section>
         \\<section id="reveal" hidden>
         \\<div id="score" class="dd-score"></div>
