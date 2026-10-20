@@ -1,0 +1,3 @@
+Tooltip text of the PBI column header in lolalytics.com/lol/tierlist/ server HTML, fetched 2026-10-20 with curl:
+
+Pick Ban Influence. PBI = (win-AvgWinofTier) x 100 x pick / (100 - ban) Champions with a high PBI are very likely to be contested picks, very strong in the current meta and are optimal global bans against the enemy team.

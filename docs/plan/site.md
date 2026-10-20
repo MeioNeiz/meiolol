@@ -183,8 +183,20 @@ than lolalytics: our own edge is the lane curves, early/late lean, "Into which t
   under 1% of the pair's players left out of the file), "Runes in this matchup" under
   the matchup strip; game count (950, 9.5k) under each rune on both pages. Next:
   Jacob's look; watch the matchup builder's pruning floor and file size on the next run
-- Pick and ban rate like lolalytics (Jacob wrote "pbr": confirm whether he means PR
-  and BR, or lolalytics' PBI, pick/ban influence)
+- Ban impact (J20, Jacob 20 Oct: "pbr" means a PBI-style score, "the most optimal ban in
+  terms of pick rate and win rate"). Done 20 Oct (morning run, bans): core/banimpact.zig,
+  lolalytics' PBI, (win - average) x 100 x pick / (100 - ban), with the win rate pulled
+  toward the role's average by k games (method of moments per role, as usualK; 500 to 750 on
+  the EUW snapshot), so a thin champion's lucky edge can't count in full
+  (research/questions/ban-impact-score.md). A "Ban impact" column on champions.html and
+  the role pages beside win rate, pick, ban and games, sortable (table.js); title gives
+  its two parts (edge after pulling, pick rate when not banned); below 0 dim; footnote
+  explains it. Wording: "ban impact", never "best ban" or a win rate gain. Reusable:
+  Prior.of(stats, role) then score(wins, picked, banned, total), for the picker's ban
+  options (B3, Q3: plan/app.md); the app's stats.bin has no ban counts yet (needs a
+  per-champion banned count in statsfile, or champions.json). Next: Jacob's look; per
+  opponent (bans into your pool's hard lanes, B3) and per rank filter (filters.zig has
+  bans by rank)
 
 ## Matchup page
 

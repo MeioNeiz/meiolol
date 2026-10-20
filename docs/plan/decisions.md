@@ -50,6 +50,9 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
   needing to be redownloaded, even update itself ideally with changes": the app fetches
   stats and curves from the site itself and replaces its exe (version file, download,
   swap on next start), behind the admin gate (the zip's own key) until the key
+- J20 (20 Oct) "pbr" on the champions pages means a PBI-style ban impact, "the most
+  optimal ban in terms of pick rate and win rate": lolalytics' PBI with small samples
+  pulled toward the average, worded "ban impact" (Product rules: no "best ban")
 - nn on the GPU: planned, not now
 - Q1 Rewrite the application around game review of your own games, lane curves as the
   benchmark; squads worded as planned, or out until built
