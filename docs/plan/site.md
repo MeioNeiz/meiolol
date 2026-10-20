@@ -173,8 +173,12 @@ than lolalytics: our own edge is the lane curves, early/late lean, "Into which t
   rune (each of a page's six runes) and shard ([row, id]), role-wide only. Build page:
   every rune players took, laid out as in game, share and win rate under each, most
   played lit and highest win rate ringed per row (trees with a rune on 2%+); replaces
-  the keystone and shard tables. Highest win rate everywhere = best among options with
-  100+ games and 5%+ of players, only when two qualify: tagged on rune page cards (that
+  the keystone and shard tables. Highest win rate everywhere (J13 follow-up, Jacob: "use
+  our understanding of data"): the option whose win rate, pulled toward its slot's by k
+  games (k per kind from how much options really differ, method of moments over the
+  whole builds file at write time: File.shrink, builds.zig Spread; docs/learned.md
+  Items) and taken at the low end of its range, is highest, among options with 100+
+  games; a strict 2-SE lead test would mark under 1% of slots, so none. Tagged on rune page cards (that
   page shown even outside the top 4), table rows, and under each strip cell ("Highest
   win rate" with its value; for a rune page on the same trees, blue rings on the most
   played page). Unchosen runes less dim. Wording: "most played", "highest win rate",

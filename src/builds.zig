@@ -107,6 +107,18 @@ pub const File = struct {
     /// Per lane opponent, sorted by champion, role, then opponent; only matchup_kinds.
     /// Empty in files from before 20 Oct 2026
     matchups: []const Build = &.{},
+    /// Per kind, k: the games that pull an option's win rate halfway to its slot's, so a
+    /// few lucky games can't make an option look best (spreadK). Empty in files before
+    /// 21 Oct 2026
+    shrink: []const Shrink = &.{},
+
+    pub const Shrink = struct { kind: Kind, k: f64, vs: f64 };
+
+    /// `kind`'s k in `builds`, or with `vs` in `matchups`
+    pub fn shrinkK(f: *const File, kind: Kind, vs: bool) ?f64 {
+        for (f.shrink) |x| if (x.kind == kind) return if (vs) x.vs else x.k;
+        return null;
+    }
 
     pub const Build = struct {
         champion: u32,
@@ -327,6 +339,7 @@ pub const Builder = struct {
             .trees = d.trees,
             .builds = builds,
             .matchups = matchups,
+            .shrink = try shrinks(arena, builds, matchups, d.trees),
         };
     }
 
@@ -395,6 +408,95 @@ pub const Builder = struct {
         return builds.items;
     }
 };
+
+/// k for an option's win rate: how much true win rates differ between the options of one
+/// slot (a kind's rows; for .rune a tree row, for .shard a shard row), by the method of
+/// moments over every champion and role, as core/banimpact.zig's Prior. Each option's
+/// squared gap to its slot's win rate, less the binomial noise expected (an option is
+/// part of its slot's average, so 1 - its share of it), leaves the true spread tau2;
+/// k = p(1 - p) / tau2. 16.20 EUW: about 6,000 for a rune, 600 to 1,000 for items
+pub const Spread = struct {
+    q: f64 = 0,
+    noise: f64 = 0,
+    pq: f64 = 0,
+    games: f64 = 0,
+
+    /// No measurable spread: an option's own games barely move its estimate
+    pub const max_k = 1e6;
+
+    pub fn add(s: *Spread, options: []const File.Option, games: u32, wins: u32) void {
+        if (games == 0) return;
+        const n: f64 = @floatFromInt(games);
+        const base = @as(f64, @floatFromInt(wins)) / n;
+        for (options) |o| {
+            if (o.games == 0) continue;
+            const g: f64 = @floatFromInt(o.games);
+            const d = @as(f64, @floatFromInt(o.wins)) - g * base;
+            s.q += d * d / g;
+            s.noise += base * (1 - base) * (1 - g / n);
+            s.pq += g * base * (1 - base);
+            s.games += g;
+        }
+    }
+
+    pub fn k(s: Spread) f64 {
+        if (s.games == 0) return max_k;
+        const pq = s.pq / s.games;
+        const tau2 = (s.q - s.noise) / s.games;
+        return if (tau2 * max_k <= pq) max_k else pq / tau2;
+    }
+};
+
+/// Rows of `kind` as slots into `s`: .rune by tree row, .shard by shard row (only those
+/// with two or more options), any other kind whole
+fn addSlots(s: *Spread, trees: []const ddragon.Tree, rows: File.Rows) void {
+    var buf: [8]File.Option = undefined;
+    switch (rows.kind) {
+        .rune => for (trees) |t| for (t.slots) |slot| {
+            var n: usize = 0;
+            for (slot) |id| for (rows.options) |o| {
+                if (o.v[0] == id and n < buf.len) {
+                    buf[n] = o;
+                    n += 1;
+                }
+            };
+            addSlot(s, buf[0..n]);
+        },
+        .shard => for (0..ddragon.shard_rows.len) |row| {
+            var n: usize = 0;
+            for (rows.options) |o| if (o.v[0] == row and n < buf.len) {
+                buf[n] = o;
+                n += 1;
+            };
+            addSlot(s, buf[0..n]);
+        },
+        else => s.add(rows.options, rows.games, rows.wins),
+    }
+}
+
+fn addSlot(s: *Spread, options: []const File.Option) void {
+    if (options.len < 2) return;
+    var games: u32 = 0;
+    var wins: u32 = 0;
+    for (options) |o| {
+        games += o.games;
+        wins += o.wins;
+    }
+    s.add(options, games, wins);
+}
+
+fn shrinks(arena: std.mem.Allocator, builds: []const File.Build, matchups: []const File.Build, trees: []const ddragon.Tree) ![]const File.Shrink {
+    var role: std.EnumArray(Kind, Spread) = .initFill(.{});
+    var vs: std.EnumArray(Kind, Spread) = .initFill(.{});
+    for (builds) |b| for (b.kinds) |rows| addSlots(role.getPtr(rows.kind), trees, rows);
+    for (matchups) |b| for (b.kinds) |rows| addSlots(vs.getPtr(rows.kind), trees, rows);
+    var out: std.ArrayList(File.Shrink) = .empty;
+    for (std.enums.values(Kind)) |kind| {
+        if (role.get(kind).games == 0) continue;
+        try out.append(arena, .{ .kind = kind, .k = role.get(kind).k(), .vs = vs.get(kind).k() });
+    }
+    return out.items;
+}
 
 /// 0: items, 1: runes, 2: summoner spells; skills are ability slots
 fn nameList(kind: Kind) ?usize {
@@ -802,6 +904,21 @@ test "builder: shares, rank floor in build, pruning keeps totals" {
     const json = try std.json.Stringify.valueAlloc(arena, f, .{});
     const back = try File.parse(arena, json);
     try testing.expectEqual(5, back.get(122, .top).?.get(.start).?.options[0].games);
+}
+
+test "spread: k from how much a slot's options differ beyond noise" {
+    const o = struct {
+        fn f(games: u32, wins: u32) File.Option {
+            return .{ .v = &.{}, .games = games, .wins = wins };
+        }
+    }.f;
+    var same: Spread = .{};
+    same.add(&.{ o(1000, 500), o(1000, 500) }, 2000, 1000);
+    try testing.expectEqual(Spread.max_k, same.k());
+    // 60% and 40%: q = 20, noise 0.25, tau2 = 19.75 / 2000, k = 0.25 / tau2
+    var apart: Spread = .{};
+    apart.add(&.{ o(1000, 600), o(1000, 400) }, 2000, 1000);
+    try testing.expectApproxEqAbs(25.32, apart.k(), 0.01);
 }
 
 test "builder: per lane opponent, own floor, only matchups with enough games" {

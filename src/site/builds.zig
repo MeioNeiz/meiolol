@@ -28,9 +28,6 @@ const rows_shown = 6;
 const pages_shown = 4;
 /// A role gets a page when it has this share of the champion's games in the file
 const min_role_share = 0.1;
-/// "Highest win rate" marks the option with the highest win rate among those with
-/// rate_games and this share of players, so a rare pick on a lucky streak is not it
-const min_rate_share = 0.05;
 /// The build page's rune view shows a tree when one of its runes has this share
 const min_tree_share = 0.02;
 
@@ -211,22 +208,39 @@ fn sameTop(rows: File.Rows, usual: ?File.Build, kind: Kind) bool {
     return rows.options.len > 0 and ur.options.len > 0 and std.mem.eql(u32, ur.options[0].v, rows.options[0].v);
 }
 
-/// Index of the option with the highest win rate among those with rate_games and
-/// min_rate_share of the `all` players; null unless two qualify, so a lone option is
-/// never marked
-fn highest(options: []const File.Option, all: u32) ?usize {
+/// Index of the option with the highest win rate once each is pulled toward its slot's
+/// (`games` players, `wins` won) by `k` games (File.shrinkK), taking the low end of
+/// that estimate's range (one standard error), so a few lucky games can't top it and
+/// near ties go to the option with more games. Only options showing a win rate
+/// (rate_games); null under two of them, or without k (older files)
+fn highest(options: []const File.Option, games: u32, wins: u32, k: ?f64) ?usize {
+    const kk = k orelse return null;
+    const base = @as(f64, @floatFromInt(wins)) / @as(f64, @floatFromInt(@max(games, 1)));
     var hi: ?usize = null;
+    var best: f64 = 0;
     var n: usize = 0;
     for (options, 0..) |o, i| {
-        if (!rated(o, all)) continue;
+        if (o.games < rate_games) continue;
         n += 1;
-        if (hi == null or wonPct(o) > wonPct(options[hi.?])) hi = i;
+        const g = @as(f64, @floatFromInt(o.games)) + kk;
+        const s = (@as(f64, @floatFromInt(o.wins)) + kk * base) / g - @sqrt(base * (1 - base) / g);
+        if (hi == null or s > best) {
+            hi = i;
+            best = s;
+        }
     }
     return if (n >= 2) hi else null;
 }
 
-fn rated(o: File.Option, all: u32) bool {
-    return o.games >= rate_games and @as(f64, @floatFromInt(o.games)) >= min_rate_share * @as(f64, @floatFromInt(all));
+/// A row's highest(): its players are its options' (one rune of a row each)
+fn highestInRow(row: []const File.Option, k: ?f64) ?usize {
+    var games: u32 = 0;
+    var wins: u32 = 0;
+    for (row) |o| {
+        games += o.games;
+        wins += o.wins;
+    }
+    return highest(row, games, wins, k);
 }
 
 fn pct(n: u32, all: u32) f64 {
@@ -241,7 +255,7 @@ fn top(a: std.mem.Allocator, w: *Writer, f: *const File, b: File.Build, usual: ?
     const rows = b.get(kind) orelse return;
     if (rows.options.len == 0) return;
     const o = rows.options[0];
-    const hi = highest(rows.options, rows.games);
+    const hi = highest(rows.options, rows.games, rows.wins, f.shrinkK(kind, b.opponent != 0));
     const other: ?File.Option = if (hi) |i| if (i > 0) rows.options[i] else null else null;
     const ringed = if (other) |h| kind == .runes and f.trees.len > 0 and h.v[0] == o.v[0] and h.v[5] == o.v[5] else false;
     try tpl.render(w,
@@ -350,7 +364,7 @@ fn pages(w: *Writer, f: *const File, b: File.Build) !bool {
     if (f.trees.len == 0) return false;
     const rows = b.get(.runes) orelse return false;
     if (rows.options.len == 0) return false;
-    const hi = highest(rows.options, rows.games);
+    const hi = highest(rows.options, rows.games, rows.wins, f.shrinkK(.runes, false));
     try w.writeAll("<div class=\"rpages\">\n");
     for (rows.options, 0..) |o, i| {
         if (i >= pages_shown and i != hi) continue;
@@ -392,8 +406,10 @@ fn runeStats(w: *Writer, f: *const File, b: File.Build) !bool {
     if (f.trees.len == 0) return false;
     const rows = b.get(.rune) orelse return false;
     if (rows.options.len == 0) return false;
-    var buf: [256]u8 = undefined;
+    var buf: [512]u8 = undefined;
     var fba: std.heap.FixedBufferAllocator = .init(&buf);
+    const vs = b.opponent != 0;
+    const k_rune = f.shrinkK(.rune, vs);
     const Shown = struct { tree: ddragon.Tree, keystones: u32, most: u32 };
     var shown_trees: [8]Shown = undefined;
     var n: usize = 0;
@@ -427,7 +443,7 @@ fn runeStats(w: *Writer, f: *const File, b: File.Build) !bool {
                 ids[j] = id;
                 row[j] = find(rows.options, &.{id}) orelse .{ .v = &.{}, .games = 0, .wins = 0 };
             }
-            try statRow(w, f.runes, ids[0..len], row[0..len], rows.games);
+            try statRow(w, f.runes, ids[0..len], row[0..len], rows.games, k_rune);
             try w.writeAll("</div>");
         }
         try w.writeAll("</div>");
@@ -438,16 +454,24 @@ fn runeStats(w: *Writer, f: *const File, b: File.Build) !bool {
             try w.writeAll("<div class=\"rr\">");
             var row: [3]File.Option = undefined;
             for (ids, &row) |id, *o| o.* = find(sr.options, &.{ @intCast(i), id }) orelse .{ .v = &.{}, .games = 0, .wins = 0 };
-            try statRow(w, &ddragon.shards, &ids, &row, sr.games);
+            try statRow(w, &ddragon.shards, &ids, &row, sr.games, f.shrinkK(.shard, vs));
             try w.writeAll("</div>");
         }
         try w.writeAll("</div>");
     };
     try tpl.renderPart(w,
         \\</div>
-        \\<p class="muted caption">Under each rune: share of {games} players, win rate (from {rated} games), then games. <span class="key mp"></span> most played in its row, <span class="key hw"></span> highest win rate in its row among runes with {rated}+ games and {min_share}%+ of players.</p>
+        \\<p class="muted caption">Under each rune: share of {games} players, win rate (from {rated} games), then games. <span class="key mp"></span> most played in its row{hw}.</p>
         \\
-    , .{ .games = try root.thousands(fba.allocator(), rows.games), .rated = rate_games, .min_share = 100 * min_rate_share });
+    , .{
+        .games = try root.thousands(fba.allocator(), rows.games),
+        .rated = rate_games,
+        .hw = if (k_rune) |k| tpl.t(", <span class=\"key hw\"></span> highest win rate in its row among runes with {rated}+ games, each pulled toward the row's by {k} games (how much runes really differ, from every champion{vs}) and taken at the low end of its range", .{
+            .k = try root.thousands(fba.allocator(), @intFromFloat(@round(k))),
+            .rated = rate_games,
+            .vs = tpl.when(vs, " in its matchups"),
+        }) else null,
+    });
     return true;
 }
 
@@ -465,12 +489,12 @@ fn find(options: []const File.Option, v: []const u32) ?File.Option {
 }
 
 /// One row of runeStats: each rune's icon, share, win rate and games
-fn statRow(w: *Writer, list: []const ddragon.Named, ids: []const u32, row: []const File.Option, all: u32) !void {
+fn statRow(w: *Writer, list: []const ddragon.Named, ids: []const u32, row: []const File.Option, all: u32, k: ?f64) !void {
     var most: ?usize = null;
     for (row, 0..) |o, i| {
         if (o.games > 0 and (most == null or o.games > row[most.?].games)) most = i;
     }
-    const hi = highest(row, all);
+    const hi = highestInRow(row, k);
     for (ids, row, 0..) |id, o, i| {
         const n = ddragon.find(list, id) orelse continue;
         const share = pct(o.games, all);
@@ -564,9 +588,14 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
         , .{ .games = b.games, .s = plural(b.games), .solid = solid_games, .rated = rate_games });
     }
     try tpl.render(w,
-        \\<p class="muted">Most played first: what players take, not a ranking. Win rates show a 95% range (±) from the number of games; two rows whose ranges overlap may not differ at all. Rows under {solid} games are greyed out; under {rated} there is no win rate. Marked: the most played, and the highest win rate among options with {rated}+ games and {min_share}%+ of players.</p>
+        \\<p class="muted">Most played first: what players take, not a ranking. Win rates show a 95% range (±) from the number of games; two rows whose ranges overlap may not differ at all. Rows under {solid} games are greyed out; under {rated} there is no win rate. Marked: the most played, and the highest win rate among options with {rated}+ games once each is pulled toward the average by k games (k from how much options of a kind really differ across every champion: {k_rune} for a rune, {k_item} for first items) and taken at the low end of its range, so a few lucky games can't top it.</p>
         \\
-    , .{ .solid = solid_games, .rated = rate_games, .min_share = 100 * min_rate_share });
+    , .{
+        .solid = solid_games,
+        .rated = rate_games,
+        .k_rune = try root.thousands(site.arena, @intFromFloat(@round(f.shrinkK(.rune, false) orelse 0))),
+        .k_item = try root.thousands(site.arena, @intFromFloat(@round(f.shrinkK(.core2, false) orelse 0))),
+    });
 
     try w.writeAll("<h2>Runes</h2>\n");
     const explored = try runeStats(w, f, b);
@@ -611,7 +640,7 @@ fn table(w: *Writer, f: *const File, b: File.Build, kind: Kind, comptime title: 
     if (rows.options.len == 0) {
         try w.writeAll("<tr class=\"thin\"><td colspan=\"4\">More data needed</td></tr>\n");
     }
-    const hi = highest(rows.options, rows.games);
+    const hi = highest(rows.options, rows.games, rows.wins, f.shrinkK(kind, false));
     for (rows.options, 0..) |o, i| {
         if (i >= rows_shown and i != hi) continue;
         try tpl.render(w,
@@ -682,16 +711,19 @@ fn named(w: *Writer, list: []const ddragon.Named, id: u32, label: bool) !void {
     if (label or n.icon.len == 0) try tpl.render(w, "<span class=\"label\">{name}</span>", .{ .name = n.name });
 }
 
-test "highest win rate: only options with rate_games and min_rate_share, two or more" {
+test "highest win rate: pulled toward the slot's by k games, two or more options" {
     const o = struct {
         fn f(games: u32, wins: u32) File.Option {
             return .{ .v = &.{}, .games = games, .wins = wins };
         }
     }.f;
-    // 30 games at 70% is too few; 40 of 2000 players is under the share
-    try std.testing.expectEqual(2, highest(&.{ o(1200, 600), o(700, 360), o(500, 270), o(30, 21) }, 2430));
-    try std.testing.expectEqual(0, highest(&.{ o(1500, 800), o(460, 220), o(40, 30) }, 2000));
-    try std.testing.expectEqual(null, highest(&.{ o(1900, 1000), o(90, 60) }, 1990));
+    // 70% in 30 games shows no win rate, so is never marked; 54% in 500 games
+    const opts = [_]File.Option{ o(1200, 600), o(700, 360), o(500, 270), o(30, 21) };
+    try std.testing.expectEqual(2, highest(&opts, 2430, 1251, 1000));
+    try std.testing.expectEqual(null, highest(&opts, 2430, 1251, null));
+    // The low end of the range: 53% in 100 games is less sure than 52% in 2,000
+    try std.testing.expectEqual(0, highest(&.{ o(2000, 1040), o(100, 53) }, 2100, 1093, 0));
+    try std.testing.expectEqual(null, highest(&.{ o(1900, 1000), o(90, 60) }, 1990, 1060, 1000));
 }
 
 test "rank label" {

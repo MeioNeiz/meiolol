@@ -660,6 +660,20 @@ How to write a line:
 
 ## Items
 
+- 2026-10-20 (early): Within one champion and role, the options players pick differ in
+  win rate far less than raw win rates suggest: about 0.6 percentage points between
+  runes in a row and between stat shards, 0.7 for summoner spells, 0.8 for starting
+  items, 1.0 for skill order, 1.4 for rune pages and 1.5 to 2 for boots and first items
+  (true spread, binomial noise taken out). So a rune's own games count for little
+  against the row's average until it has thousands of them (k about 6,000 for a rune,
+  600 to 1,000 for items). Under a 2-standard-error test the top win rate beats the next
+  in under 1% of slots, as expected from the 13 Oct finding that these choices don't
+  detectably change who wins. Sure: method of moments over 858 champion roles and 2,000
+  matchups (274k EUW games, 16.20); the spread is not causal (who picks an option
+  differs too) and is larger on small samples (a few players' streaks), so k comes from
+  each builds run. Site: "highest win rate" marks the option with the best win rate
+  pulled toward the average by k games and taken at the low end of its range (100+
+  games only), never "best". Evidence: builds.zig Spread, the builds log's k lines
 - 2026-10-13: Which item you finish adds almost nothing to predicting the win once you
   know when you bought it and how far ahead you were (a twentieth of what the champion
   adds). Sure: 118k games (2.9M first-three-item purchases); an item being better on one

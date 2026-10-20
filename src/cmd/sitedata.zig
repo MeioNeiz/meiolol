@@ -232,6 +232,8 @@ pub fn cmdBuilds(c: *Cmd) !u8 {
         std.log.info("{s}: patch {s}, {d} games ({d} with timelines), {d} champion roles, {d} options held, {d} matchups, {d} matchup options held", .{
             t.path, label, b.games, b.timelines, f.builds.len, b.options.count(), f.matchups.len, if (b.vs) |v| v.options.count() else 0,
         });
+        // docs/learned.md keeps these: how much options of a kind really differ
+        for (f.shrink) |x| std.log.info("{s}: k {d:.0}, in matchups {d:.0}", .{ @tagName(x.kind), x.k, x.vs });
     }
     return 0;
 }
