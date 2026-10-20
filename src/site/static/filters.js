@@ -374,7 +374,7 @@ const HARDEST = "hardest first";
     td.dataset.v = mean.toFixed(4);
     const span = document.createElement("span");
     span.className = "vs";
-    span.style.setProperty("--c", wrColour(0.5 + mean, TABLE_SPAN));
+    span.style.cssText = `--c:${wrColour(0.5 + mean, TABLE_SPAN)}`;
     const role = vs.role ? ` in ${vs.role}` : "";
     span.title =
       `Against an opponent winning ${(100 * vs.strength).toFixed(1)}%${role}, ${self?.name ?? "it"} usually wins about ${(100 * e).toFixed(1)}%; ` +
@@ -482,10 +482,13 @@ function points(v) {
   return `${x > 0 ? "+" : ""}${x.toFixed(1)}`;
 }
 
-// As tierlist.zig wrColour: orange below 50%, blue above, grey at 50%
+// As tierlist.zig wrColour: the value of --c, step 4 also setting --chip
 function wrColour(p, span) {
-  const t = Math.min(Math.max((p - 0.5) / (0.4 * span), -1), 1);
-  return `oklch(0.76 ${(0.15 * Math.abs(t)).toFixed(3)} ${t < 0 ? 50 : 225})`;
+  const pts = (100 * (p - 0.5) * TABLE_SPAN) / span;
+  const n = [1, 2, 3.5, 5.5].filter((s) => Math.abs(pts) >= s).length;
+  const side = pts < 0 ? "lo" : "hi";
+  if (n === 0) return "var(--s0)";
+  return n === 4 ? `var(--chip-ink);--chip:var(--${side}4)` : `var(--${side}${n})`;
 }
 
 function pct(part, whole) {

@@ -85,7 +85,7 @@ pub fn trackCell(w: *Writer, p: f64, games: u32, title: []const u8, shape: ?[]co
         "{shape}<i class=\"d\" style=\"left:{dot:.1}%\"></i></span>" ++
         "<b style=\"opacity:{fade:.2}\">{rate:.1}%</b></span></td>", .{
         .p = p,
-        .colour = wrColour(p, table_span),
+        .colour = wrColour(p, table_span).thin(games),
         .title = title,
         .shape = if (shape) |d| tpl.t("<svg class=\"shape\" viewBox=\"0 0 100 10\" preserveAspectRatio=\"none\" aria-hidden=\"true\"><path d=\"{d}\"></path></svg>", .{ .d = d }) else null,
         .dot = trackX(100 * p),
@@ -147,21 +147,61 @@ fn shapeGradient(w: *Writer) !void {
         "<rect width=\"100\" height=\"10\" fill=\"url(#wr-fade)\"></rect></mask></defs></svg>\n");
 }
 
-/// Win rate colour, diverging: orange below 50%, blue above, grey at 50%; full at
-/// 50% ± 40% of `span` (±5 points on table_span). Not red against green: the pair
-/// red-green colour blindness merges
+/// Win rate colour on the site's diverging scale (style.css --lo4 to --hi4,
+/// docs/design-ideas.md): grey middle, orange then hot pink below 50%, blue then aqua
+/// above, four steps a side at `steps` points (scaled by span / table_span). Not red
+/// against green: the pair red-green colour blindness merges
 pub fn wrColour(p: f64, span: f64) WrColour {
-    return .{ .t = std.math.clamp((p - 0.5) / (0.4 * span), -1, 1) };
+    const pts = 100 * (p - 0.5) * table_span / span;
+    var step: i8 = 0;
+    for (steps) |s| {
+        if (@abs(pts) >= s) step += 1;
+    }
+    return .{ .step = if (pts < 0) -step else step };
 }
 
-pub const WrColour = struct {
-    t: f64,
+/// Aggregate scale (a champion's or matchup's rate over many games): 4% of champion
+/// roles with 500+ games reach step 4
+const steps = [_]f64{ 1, 2, 3.5, 5.5 };
 
+pub const WrColour = struct {
+    step: i8,
+
+    /// One step less per 100 games short of 200, grey at none
+    pub fn thin(c: WrColour, games: u32) WrColour {
+        const cut: i8 = if (games >= 200) 0 else if (games >= 100) 1 else 2;
+        const n: i8 = @max(0, @as(i8, @intCast(@abs(c.step))) - cut);
+        return .{ .step = if (c.step < 0) -n else n };
+    }
+
+    /// The value of --c: the step's colour; step 4 also sets --chip, so the number
+    /// shows as dark ink on a vivid fill (style.css)
     pub fn format(c: WrColour, w: *Writer) Writer.Error!void {
-        const hue: f64 = if (c.t < 0) 50 else 225;
-        try w.print("oklch(0.76 {d:.3} {d:.0})", .{ 0.15 * @abs(c.t), hue });
+        const side = if (c.step < 0) "lo" else "hi";
+        switch (@abs(c.step)) {
+            0 => try w.writeAll("var(--s0)"),
+            4 => try w.print("var(--chip-ink);--chip:var(--{s}4)", .{side}),
+            else => |n| try w.print("var(--{s}{d})", .{ side, n }),
+        }
     }
 };
+
+test wrColour {
+    var buf: [64]u8 = undefined;
+    const cases = .{
+        .{ 0.505, 1000, "var(--s0)" },
+        .{ 0.515, 1000, "var(--hi1)" },
+        .{ 0.47, 1000, "var(--lo2)" },
+        .{ 0.536, 1000, "var(--hi3)" },
+        .{ 0.44, 1000, "var(--chip-ink);--chip:var(--lo4)" },
+        .{ 0.44, 150, "var(--lo3)" },
+        .{ 0.515, 50, "var(--s0)" },
+    };
+    inline for (cases) |c| {
+        const s = try std.fmt.bufPrint(&buf, "{f}", .{wrColour(c[0], table_span).thin(c[1])});
+        try std.testing.expectEqualStrings(c[2], s);
+    }
+}
 
 /// All roles (champions.html) and one per role (role/<slug>.html)
 fn roleTabs(w: *Writer, current: ?Role, root: []const u8) !void {
