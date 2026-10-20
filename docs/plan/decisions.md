@@ -31,6 +31,23 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
   policy actually requires. Numbers may come back where they help (with counts)
 - J11 (20 Oct) Small leads: coordinator's call (one rule site-wide, the matchup page's:
   under 200 gold at 14 reads as even, plus the 2 SE and games test)
+- J12 (20 Oct) Win rates: always show the number, even when close ("about even" hiding
+  is more confusing); colour every champion win rate, no grey "quiet" cells. Overrides
+  J11's "reads as even" text (keep the games and range test for emphasis only)
+- J13 (20 Oct) Runes and build options: show pick rate and win rate together; highlight
+  the highest win rate among options with enough games (not raw highest wr), alongside
+  most played; others stay easy to read. Keep the in-game rune view and its highlight
+- J14 (20 Oct) Clickable things are the whole box (matchup rows, champion tiles,
+  cards), not just the name: site-wide
+- J15 (20 Oct) Admin Overview tile shows the shipped model; experiments stay visible
+  and testable beside it, labelled. One rule everywhere
+- J16 (20 Oct) Crawler target 99-100% of the key's limit (now ~97%)
+- J17 (20 Oct) CI much lighter: lighter heavy tests and lab tests out of the push check
+- J18 (20 Oct) Other players' names on public pages: yes, rewrite lia.md balancing;
+  hide streamer-mode players if op.gg and other big sites do
+- J19 (20 Oct) Desktop download on the site for Jacob (admin login until the key, per
+  Product rules); data in it kept fresh
+- nn on the GPU: planned, not now
 - Q1 Rewrite the application around game review of your own games, lane curves as the
   benchmark; squads worded as planned, or out until built
 - Q2 (dropped 20 Oct by J10) Daily games at least 7 days old; the previous patch's in a
