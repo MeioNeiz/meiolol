@@ -4844,6 +4844,62 @@ src/site/static/admin-setnet.js, on additive v2 fitted on the same games (`draft
 average, a trait zeroed across a team, every embedding row for its role's), not terms
 - Not yet: a test look (needs Jacob's go; rule to declare first) and `meiolol eval`'s view
 
+### Scoring draft models against the in-game win chance, 2026-10-20
+
+Question: can a draft comparison be scored against q = P(blue wins | state at minute m,
+draft) instead of the result, for narrower intervals? Per-game log loss is linear in the
+outcome, so the paired difference d(q) has the same mean as d(y) when q is the true
+conditional chance, and drops the outcome noise left after minute m. The catch:
+d(y) - d(q) = (q - y)(logit pB - logit pA) exactly, so d(q) is unbiased only if q's
+error is uncorrelated with the two models' logit difference.
+
+`py/xcheck/rbscore.py`, run 20261020T215512Z-rbscore-2253Zr (gpu-box, 13 s): richc's
+out-of-fold chances (20261014T032052Z-state-richc-2253Zr, fitted per netcheck block on
+its fit games) joined by match id to 16 archived per-game draft pairs on the same 2253Z
+re-cut blocks (effects, netcheck, pretrain runs of 14 Oct; blocks and results checked
+equal on every joined game). Folds pooled, games with a timeline (100,847 of 134,375 at
+15:00), milli-nats a game, B minus A:
+
+| pair (B vs A) | y, all games | y, timeline games | q at 15:00 | bias d(y) - d(q) | games saved |
+| --- | --- | --- | --- | --- | --- |
+| additive v2 vs ratings | -1.72 ± 0.30 | -1.75 ± 0.35 | +0.10 ± 0.21 | -1.86 ± 0.28 | 2.8x |
+| damage mix over strength | -0.77 ± 0.21 | -0.80 ± 0.24 | +0.49 ± 0.14 | -1.30 ± 0.19 | 2.8x |
+| win-comp vs ratings | -0.48 ± 0.16 | -0.49 ± 0.19 | +0.33 ± 0.11 | -0.81 ± 0.15 | 2.7x |
+| embx vs win-comp | -0.40 ± 0.15 | -0.43 ± 0.17 | +0.08 ± 0.10 | -0.51 ± 0.14 | 2.8x |
+| additive, temperature-scaled | +0.01 ± 0.10 | -0.01 ± 0.12 | +0.30 ± 0.07 | -0.31 ± 0.09 | 2.8x |
+| bigres vs win-comp | -0.66 ± 0.18 | -0.59 ± 0.21 | -0.49 ± 0.13 | -0.11 ± 0.17 | 2.8x |
+| big net 1-10 vs ratings | -0.39 ± 0.18 | -0.36 ± 0.21 | -0.28 ± 0.13 | -0.08 ± 0.17 | 2.8x |
+| small net vs ratings | -0.34 ± 0.14 | -0.33 ± 0.16 | -0.24 ± 0.10 | -0.09 ± 0.13 | 2.8x |
+| resid vs ratings | -0.17 ± 0.08 | -0.14 ± 0.09 | -0.15 ± 0.06 | +0.01 ± 0.08 | 2.8x |
+| strength only vs ratings | -0.05 ± 0.08 | -0.04 ± 0.09 | +0.04 ± 0.06 | -0.08 ± 0.07 | 2.8x |
+| random embedding prior vs ratings | +0.17 ± 0.12 | +0.14 ± 0.13 | +0.14 ± 0.08 | +0.01 ± 0.11 | 2.8x |
+| team gold at 14 vs ratings (reads state) | +20.40 ± 1.14 | +21.31 ± 1.32 | +21.46 ± 0.80 | -0.16 ± 1.05 | 2.7x |
+
+At 10:00 intervals shrink more (4.2x games) and biases grow (additive v2 -2.36); at
+20:00 less (2.3x) and smaller (-1.55); report.md in the run has every row. A synthetic
+check (q from the true model: bias +0.24 ± 0.49, 3.2x; q missing a pair effect the
+candidate has: sign flipped, bias -3.59 ± 0.49) behaves the same.
+
+Reading (dev, no test look):
+- Not usable for what we need. q-scoring is unbiased where the two models differ in
+  champion strength, which richc knows (nets on ratings, embedding priors, strength
+  only), and saves ~2.8x games there; where they differ in damage mix, pairs, comp
+  terms or calibration (richc's draft input is ratings plus champion-role effects) it
+  loses nearly all of the real gain, often flipping its sign. New draft effects are
+  what experiments look for, so it would reject them
+- No fix inside the method: recalibrating q with both models' logits, fitted on other
+  folds' results, makes the bias's direction a fitted one and gives back d(y) with its
+  noise (synthetic: equal to d(y), 1.0x games). q can only cut variance on effects it
+  already contains
+- Also rules out soft-label training on q (idea A2 of 20 Oct): its targets carry richc's
+  draft view, so the pair and comp effects get pulled toward zero in proportion to q's
+  weight
+- On the data, not the method: additive v2's edge over ratings (-1.75) is not in how
+  the game stands at 10-20 minutes as richc reads it (+0.60, +0.10, +0.01), nor is the
+  damage mix's. That agrees with "How drafts win" Q3 (no part of the draft's edge
+  detected running through the early lead) and narrows it: the comp and pair part of
+  the edge shows up only in who wins
+
 ## Shipped model, 2026-10-17
 
 `score.Options` defaults (app suggest, site draft tester, Daily Draft, pool, matchup and
@@ -4884,6 +4940,19 @@ Columns sharing the part after the last `_` share a chart (`train_loss`, `test_l
 and each prefix keeps its colour across charts. Flush each row as it is written.
 
 ## Next steps
+
+- Untried model ideas (20 Oct; in-game chance as score or soft label ruled out:
+  "Scoring draft models against the in-game win chance"), cheapest first: a pairwise
+  interaction net (MLP summed over the 25 enemy and 20 ally pairs, antisymmetric, on
+  additive v2's offset: the set net pools a team before comparing); TabM / BatchEnsemble
+  heads for the big and set nets (one run instead of 10 seeds); additive v2 cells shrunk
+  toward the same champion in other roles and matchup cells toward kit group x kit group
+  or a low-rank u.v, not 0; GBDT (gbdt.zig) on dense pre-game features with additive
+  v2's logit as base margin; masked-pick pretraining (hide one pick, predict it from the
+  other nine) as a third embedding source; leaver games (flat gold and XP after 15:00)
+  out of training only; champion strength as a daily random walk whose patch-day jump
+  depends on the patch notes (needs 16.21 in dev); a small team-vs-team cross-attention
+  net last (research expects a tie)
 
 - Patch and rank context (meiolol-48, 2026-10-13; cand/win-context, model.md "Patch
   and rank context"): rerun per-patch offsets (cfg.folds with the shuffled control) once

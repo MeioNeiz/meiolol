@@ -25,6 +25,16 @@ How to write a line:
 
 ## Win
 
+- 2026-10-20 (early): What a team comp and its champion pairs add beyond each
+  champion's own strength does not show in how the game stands at 10 to 20 minutes
+  (gold, objectives, towers): it shows only in who wins. So we can't use the in-game
+  win chance as a less noisy stand-in for the result when testing new draft effects:
+  scored that way, the better draft model's gains vanish or flip sign, while
+  champion-strength differences come through with about a third of the noise. Sure:
+  16 archived model pairs on 100,847 held-out games of the 2253Z folds; additive v2 over
+  ratings -0.00175 ± 0.00035 nats a game on results, +0.00010 ± 0.00021 against the
+  win chance at 15:00. Site: nothing. Evidence: docs/model.md "Scoring draft models
+  against the in-game win chance"
 - 2026-10-20 (early): Once the two champions' own win rates in the role are allowed
   for, lane matchups still differ by about 2 percentage points in top and mid, 1.2 in
   bot, 1.0 in support and 0.7 in jungle; the opponent's own strength is about 40% of how
