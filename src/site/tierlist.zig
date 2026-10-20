@@ -17,6 +17,8 @@ const ratio = @import("root.zig").ratio;
 const earlyNote = @import("root.zig").earlyNote;
 const roleSlug = @import("root.zig").roleSlug;
 const roleName = @import("root.zig").roleName;
+const roleIcons = @import("root.zig").roleIcons;
+const roleIcon = @import("root.zig").roleIcon;
 const thousands = @import("root.zig").thousands;
 
 /// Below this share of all games a champion's row is a rare pick, listed on request
@@ -267,7 +269,7 @@ fn roleTabs(w: *Writer, current: ?Role, root: []const u8) !void {
         .current = tpl.flag(current == null, "aria-current=\"page\""),
     });
     for (Role.all) |r| {
-        try tpl.render(w, "<a href=\"{root}role/{slug}.html\"{current}>{name}</a>", .{
+        try tpl.render(w, "<a href=\"{root}role/{slug}.html\"{current}><svg class=\"ri\" aria-hidden=\"true\"><use href=\"#ri-{slug}\"></use></svg>{name}</a>", .{
             .root = root,
             .slug = roleSlug(r),
             .current = tpl.flag(current == r, "aria-current=\"page\""),
@@ -282,17 +284,18 @@ fn roleTabs(w: *Writer, current: ?Role, root: []const u8) !void {
 fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void {
     const rows = try tierRows(site, role);
     sortShrunk(rows);
+    try roleIcons(w);
     try tpl.renderPart(w, "<div class=\"tl-bar\">", .{});
     try roleTabs(w, role, root);
     try tpl.renderPart(w,
         \\<input type="search" placeholder="Search champion" data-filter="tiers" aria-label="Search champion"></div>
-        \\{gradient}<div class="tl-wrap"><table class="tl" id="tiers" data-sortable>
+        \\{gradient}<div class="tl-wrap"><table class="tl tiers" id="tiers" data-sortable>
         \\<thead><tr><th class="rank">#</th><th class="l" data-sort="text">Champion</th>{role}<th data-sort="num" aria-sort="descending">Win rate</th><th data-sort="num" class="opt">Pick</th><th data-sort="num" class="opt">Ban</th><th data-sort="num" title="Wins above the role's average per 10,000 games it was not banned">Influence</th><th data-sort="num">Games</th></tr></thead>
         \\<tbody>
         \\
     , .{
         .gradient = tpl.call(shapeGradient, .{}),
-        .role = tpl.when(role == null, tpl.t("<th class=\"l\" data-sort=\"text\">Role</th>", .{})),
+        .role = tpl.when(role == null, tpl.t("<th class=\"role\" data-sort=\"text\">Role</th>", .{})),
     });
     const to_site = try std.mem.concat(site.arena, u8, &.{ root, site.view.up() });
     var rare: usize = 0;
@@ -307,7 +310,10 @@ fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void
             .rare = tpl.flag(row.rare, "data-rare hidden"),
             .n = n,
             .link = tpl.call(champLinkTo, .{ site, row.ch, to_site }),
-            .role = tpl.when(role == null, tpl.t("<td class=\"l role\" data-v=\"{role}\">{role}</td>", .{ .role = roleName(row.role) })),
+            .role = tpl.when(role == null, tpl.t("<td class=\"role\" data-v=\"{n}\">{icon}</td>", .{
+                .n = @backingInt(row.role),
+                .icon = tpl.call(roleIcon, .{row.role}),
+            })),
             .wr = tpl.call(distCell, .{ site, row.ch, row.wins, row.games, row.shrunk }),
             .games = row.games,
             .pick = tpl.call(pct, .{ row.games, site.games }),

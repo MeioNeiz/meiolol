@@ -1,6 +1,7 @@
 // Champion tables (root.zig tierTable, opponentTable). table[data-sortable]: a click on a
 // th[data-sort] sorts by that column, "num" by each cell's data-v (blank last), "text"
-// by its text; td.rank cells renumber the shown rows. input[data-filter=ID] hides rows
+// by its data-v or else its text; td.rank cells renumber the shown rows.
+// input[data-filter=ID] hides rows
 // of table#ID whose data-name lacks the text; a search also finds rows marked data-rare,
 // which stay hidden otherwise until button[data-show-rare=ID] shows them. By id, not sibling order: markup between them moves.
 // A table's sort is kept in this browser by its id (the same table on every champion's
@@ -23,7 +24,7 @@
       const num = th.dataset.sort === "num";
       const key = (row) => {
         const cell = row.cells[i];
-        if (!num) return cell.textContent.trim().toLowerCase();
+        if (!num) return (cell.dataset.v ?? cell.textContent.trim()).toLowerCase();
         const v = cell.dataset.v;
         return v === "" || v === undefined ? NaN : Number(v);
       };

@@ -404,6 +404,14 @@ table.tl .rank { color: var(--faint); width: 36px; }
 table.tl .champ { gap: 10px; font-weight: 500; }
 table.tl .champ img { width: 24px; height: 24px; }
 table.tl .role { color: var(--faint); font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+/* Champions table (tierlist.zig): roomier rows than the dense matchup tables */
+table.tiers td { padding: 5px 12px; }
+table.tiers .champ { gap: 12px; }
+table.tiers .champ img { width: 30px; height: 30px; border-radius: 6px; }
+table.tiers .role { text-align: center; width: 56px; color: var(--text); }
+table.tiers th.role { color: var(--muted); font: inherit; font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; }
+svg.ri { width: 22px; height: 22px; fill: currentColor; vertical-align: middle; }
+.tabs a .ri { width: 16px; height: 16px; margin: -2px 6px 0 0; }
 table.tl .dim { color: var(--muted); }
 table.tl small { color: var(--faint); font-size: 12px; margin-left: 4px; }
 table.tl th small.sub { display: block; margin: 1px 0 0; font-size: 11px; }
@@ -478,6 +486,8 @@ h3.opp-h .muted { font-weight: 400; font-size: 13px; }
   table.tl .rank, table.tl .lo { display: none; }
   table.tl .champ { gap: 6px; }
   table.tl .champ img { width: 22px; height: 22px; }
+  /* Role tabs on one line */
+  .tabs a .ri { display: none; }
   .wr { gap: 4px; }
   .wr b, .wr small { width: auto; }
   table.comeback td.num { white-space: normal; }
