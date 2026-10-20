@@ -146,10 +146,9 @@ pub fn strip(site: *const Site, w: *Writer, ch: Champ, r: Role, from: []const u8
 }
 
 /// Matchup page: what `x` players took against `y` in `r` (File.matchups), each cell
-/// marked when it is also x's most played in the role, then the runes taken more or less
-/// often than usual (runeShifts) with the full rune grid folded. When nothing differs
-/// from usual, one line with all of it folded. Nothing when the pair has too few games
-/// for the file. `from`: the matchup page's path
+/// marked when it is also x's most played in the role, beside every rune's pick and win
+/// rate there, the runes taken more or less often than usual (runeShifts) on top.
+/// Nothing when the pair has too few games for the file. `from`: the page's path
 pub fn vsStrip(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ, from: []const u8) !void {
     const pv = patchView(site);
     const f = if (site.view_builds[pv.index()]) |*f| f else return;
@@ -162,33 +161,12 @@ pub fn vsStrip(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ, from:
         else
             .{ .root = site.toShared(from), .up = pv.dir(), .path = to };
     };
-    const kinds = [_]Kind{ .runes, .shards, .start, .boots, .core2, .core3, .skills };
-    var usual_all = usual != null;
-    for (kinds) |k| {
-        if (k == .shards and f.trees.len > 0) continue;
-        const rows = b.get(k) orelse continue;
-        if (rows.options.len > 0 and !sameTop(rows, usual, k)) usual_all = false;
-    }
-    const grid = f.trees.len > 0 and b.get(.rune) != null;
-    const shifts = if (grid) try runeShifts(site.arena, b, usual) else &.{};
-    const all_usual = usual_all and grid and shifts.len == 0;
     try tpl.renderPart(w,
-        \\{open}<b>{title}</b>{as_usual} <span class="muted">{games} game{s} of {x} vs {y} in {lane}, patch {patch}, {in}, {ranks}.</span>{link}{close}
+        \\<div class="mu-build"><section class="mu-card"><h2>Most played build</h2><p class="mu-note">{games} game{s}, patch {patch}, {in}, {ranks}.{link}</p>
         \\<div class="bks">
     , .{
-        .open = if (usual_all) tpl.trusted("<details class=\"bstrip vs\"><summary class=\"bhead\">") else tpl.trusted("<div class=\"bstrip vs\"><p class=\"bhead\">"),
-        .title = if (all_usual) "Build and runes in this matchup" else "Most played build in this matchup",
-        .as_usual = tpl.when(usual_all, tpl.t(": same as {x}'s usual {lane} build{runes}.", .{
-            .x = x.name,
-            .lane = root.roleName(r),
-            .runes = tpl.when(all_usual, " and runes"),
-        })),
-        .close = if (usual_all) tpl.trusted("</summary>") else tpl.trusted("</p>"),
         .games = try root.thousands(site.arena, b.games),
         .s = plural(b.games),
-        .x = x.name,
-        .y = y.name,
-        .lane = root.roleName(r),
         .patch = f.label,
         .in = pv.region.in(),
         .ranks = try rankLabel(site.arena, f.min_tier),
@@ -201,37 +179,27 @@ pub fn vsStrip(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ, from:
     try top(site.arena, w, f, b, usual, .core2, "First 2 items");
     try top(site.arena, w, f, b, usual, .core3, "First 3 items");
     try top(site.arena, w, f, b, usual, .skills, "Skill priority");
+    try w.writeAll("</div></section>\n");
+    if (f.trees.len > 0 and b.get(.rune) != null) {
+        const shifts = try runeShifts(site.arena, b, usual);
+        try tpl.renderPart(w, "<section class=\"mu-card\"><h2>Runes against {y}</h2><div class=\"mu-rbody\"><div>\n", .{ .y = y.name });
+        _ = try runeStats(w, f, b, true);
+        try tpl.renderPart(w, "</div><div>\n", .{});
+        if (shifts.len > 0) {
+            try tpl.renderPart(w, "<ul class=\"rshift\">\n", .{});
+            for ([_]bool{ true, false }) |more| {
+                var any = false;
+                for (shifts) |sh| any = any or (sh.here > sh.usual) == more;
+                if (!any) continue;
+                try tpl.renderPart(w, "<li><span>{label}</span>", .{ .label = if (more) "Taken more" else "Taken less" });
+                for (shifts) |sh| if ((sh.here > sh.usual) == more) try shiftChip(w, f, sh);
+                try tpl.renderPart(w, "</li>\n", .{});
+            }
+            try tpl.renderPart(w, "</ul>\n<p class=\"mu-note\">Share of {x} players against {y}, then in {x}'s other {lane} games; runes {gap}+ points apart.</p>\n", .{ .x = x.name, .y = y.name, .lane = root.roleName(r), .gap = shift_points });
+        } else try tpl.renderPart(w, "<p class=\"mu-note\">Every rune picked within {gap} points of {x}'s other {lane} games.</p>\n", .{ .gap = shift_points, .x = x.name, .lane = root.roleName(r) });
+        try w.writeAll("</div></div></section>\n");
+    }
     try w.writeAll("</div>\n");
-    if (all_usual) {
-        try tpl.renderPart(w, "<p class=\"bhead\"><b>Runes in this matchup</b> <span class=\"muted\">each rune {x} players took against {y}: pick rate, win rate and games.</span></p>\n", .{ .x = x.name, .y = y.name });
-        _ = try runeStats(w, f, b);
-        return w.writeAll("</details>\n");
-    }
-    try w.writeAll(if (usual_all) "</details>\n" else "</div>\n");
-    if (!grid) return;
-    try tpl.renderPart(w,
-        \\<div class="bstrip vs"><p class="bhead"><b>Runes in this matchup</b>{none}</p>
-        \\
-    , .{ .none = tpl.when(shifts.len == 0, tpl.t(": picked about as often as in {x}'s other {lane} games.", .{ .x = x.name, .lane = root.roleName(r) })) });
-    if (shifts.len > 0) {
-        try tpl.renderPart(w, "<ul class=\"rshift\">\n", .{});
-        for ([_]bool{ true, false }) |more| {
-            var any = false;
-            for (shifts) |s| any = any or (s.here > s.usual) == more;
-            if (!any) continue;
-            try tpl.renderPart(w, "<li><span>{label}</span>", .{ .label = if (more) "Taken more" else "Taken less" });
-            for (shifts) |s| if ((s.here > s.usual) == more) try shiftChip(w, f, s);
-            try tpl.renderPart(w, "</li>\n", .{});
-        }
-        try tpl.renderPart(w,
-            \\</ul>
-            \\<p class="muted caption">Against {y}, share of {x} players taking each rune, then in {x}'s other {lane} games; only runes {gap}+ points apart.</p>
-            \\
-        , .{ .y = y.name, .x = x.name, .lane = root.roleName(r), .gap = shift_points });
-    }
-    try tpl.renderPart(w, "<details><summary>Every rune {x} players took against {y}</summary>\n", .{ .x = x.name, .y = y.name });
-    _ = try runeStats(w, f, b);
-    try w.writeAll("</details></div>\n");
 }
 
 /// A rune counts as taken differently in a matchup when its pick share is this many
@@ -497,7 +465,7 @@ fn tags(w: *Writer, i: usize, hi: ?usize) !void {
 /// pick rate, win rate and games; in each row the most played lit and the highest win rate (highest()) ringed.
 /// Trees by keystone players, then those with a rune on min_tree_share. False without
 /// trees or per-rune counts (files before 21 Oct 2026)
-fn runeStats(w: *Writer, f: *const File, b: File.Build) !bool {
+fn runeStats(w: *Writer, f: *const File, b: File.Build, short: bool) !bool {
     if (f.trees.len == 0) return false;
     const rows = b.get(.rune) orelse return false;
     if (rows.options.len == 0) return false;
@@ -554,6 +522,14 @@ fn runeStats(w: *Writer, f: *const File, b: File.Build) !bool {
         }
         try w.writeAll("</div>");
     };
+    if (short) {
+        try tpl.renderPart(w,
+            \\</div>
+            \\<p class="mu-note">Pick rate, win rate, games. <span class="key mp"></span> most played <span class="key hw"></span> highest win rate, adjusted for few games</p>
+            \\
+        , .{});
+        return true;
+    }
     try tpl.renderPart(w,
         \\</div>
         \\<p class="muted caption">Under each rune: share of {games} players, win rate (from {rated} games), then games. <span class="key mp"></span> most played in its row{hw}.</p>
@@ -655,7 +631,7 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
         .in = site.view.region.in(),
         .patch = f.label,
         .ranks = ranks,
-        .games = b.games,
+        .games = try root.thousands(a, b.games),
         .s = plural(b.games),
         .rate = tpl.when(b.games >= rate_games, tpl.t(", win rate {wr}", .{
             .wr = tpl.call(winRate, .{ b.games, b.wins }),
@@ -699,7 +675,7 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
     });
 
     try w.writeAll("<h2>Runes</h2>\n");
-    const explored = try runeStats(w, f, b);
+    const explored = try runeStats(w, f, b, false);
     const paged = try pages(w, f, b);
     if (!explored) try table(w, f, b, .keystone, "Keystone", "players");
     if (!paged) try table(w, f, b, .runes, "Rune page", "players");

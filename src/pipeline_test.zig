@@ -229,16 +229,16 @@ test "fixture games to stats, curves and the website" {
         .{ "all/matchup/top/mordekaiser-vs-darius.html", &.{"href=\"../../../champion/darius.html?region=all\""} },
         // Lane curves: the estimate (curvefit.zig) on the page, k on the method page
         .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "estimated average", "First finished item", "More data needed" } },
-        // First screen: a headline against usual, three tiles (vs usual: champion.VsUsual),
-        // how the lane goes beside one chart, XP and CS behind tabs; the minute table and
-        // the rest folded under More detail
-        .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "<p class=\"verdict mu-sum\">Mordekaiser wins ", "% against Darius, ", "Mordekaiser's usual ", "<div class=\"tiles mu-tiles\">", "</b> vs usual ", "Mordekaiser usually wins about", "<span>Lane at 14 min</span>", "How the lane goes", "from CS (", "Kills or assists on the lane opponent before 6 min", "<input type=\"radio\" name=\"metric\" id=\"m-xp\">", "<div class=\"mu-m mu-m-cs\">", "<details class=\"mu-more\"><summary><b>More detail</b>", "<h2>Minute by minute</h2>\n<table class=\"mu-leads thin\">", "<th class=\"num\">14 min</th>", "<h2>Both sides</h2>", "<h2>Comeback odds</h2>", "<h2>By rank</h2>" } },
+        // All on screen as cards: a headline against usual, tiles (vs usual:
+        // champion.VsUsual), the gold curve beside head to head bars, XP and CS curves
+        // (hover titles per minute), comeback chart, by rank and mastery
+        .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "<p class=\"verdict mu-sum\">Mordekaiser wins ", "% against Darius, ", "Mordekaiser's usual ", "<div class=\"tiles mu-tiles\">", "<span>Vs usual</span>", "Mordekaiser usually wins about", "<span>Gold at 14 min</span>", "<section class=\"mu-card mu-gold\"><h2>Gold difference</h2>", "<title>14 min: ", "<section class=\"mu-card mu-h2h thin\"><h2>Head to head</h2>", "<span class=\"h2h-l\">Kill on the other, 0 to 6 min</span>", "<span class=\"h2h-l\">Level 6</span>", "<h2>Experience difference</h2>", "<h2>CS difference</h2>", "<section class=\"mu-card mu-comeback\"><h2>Win rate by gold at 10 min</h2>", "<section class=\"mu-card mu-split\"><h2>By rank and mastery</h2>", "Iron to Silver" } },
         // Either side's page, each swapping to the other
         .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "<h1>Mordekaiser vs Darius</h1>", "class=\"swap\" href=\"darius-vs-mordekaiser.html\"" } },
-        .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<h1>Darius vs Mordekaiser</h1>", "class=\"swap\" href=\"mordekaiser-vs-darius.html\"", "From Darius's side", "<details class=\"bstrip vs\"><summary class=\"bhead\"><b>Build and runes in this matchup</b>: same as Darius's usual Top build and runes.", "of Darius vs Mordekaiser in Top, patch", "href=\"../../patch/build/darius-top.html\">Darius's full Top build</a>", "<span>Runes <em class=\"muted\">same as usual</em></span>", "<span>First 2 items" } },
-        // Per rune in the matchup: share, win rate and games under each, folded with the
-        // build when no rune's share moves (builds.runeShifts)
-        .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<b>Runes in this matchup</b>", "each rune Darius players took against Mordekaiser", "<div class=\"rx\">", "<span class=\"rc on\" title=\"Conqueror: 3 games, 100.0%\">" } },
+        .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<h1>Darius vs Mordekaiser</h1>", "class=\"swap\" href=\"mordekaiser-vs-darius.html\"", "From Darius's side", "<div class=\"mu-build\"><section class=\"mu-card\"><h2>Most played build</h2>", "games, patch ", "href=\"../../patch/build/darius-top.html\">Darius's full Top build</a>", "<span>Runes <em class=\"muted\">same as usual</em></span>", "<span>First 2 items" } },
+        // Per rune in the matchup: share, win rate and games under each, beside the runes
+        // whose share moves (builds.runeShifts)
+        .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<h2>Runes against Mordekaiser</h2>", "Every rune picked within 10 points of Darius's other Top games.", "<div class=\"rx\">", "<span class=\"rc on\" title=\"Conqueror: 3 games, 100.0%\">" } },
         .{ "method.html", &.{ "Games to stabilise", "<h2 id=\"lean\">Early or late</h2>" } },
         // Early or late: three games, so no numbers, only that it can't tell yet
         .{ "champion/darius.html", &.{ "<b>Early or late:</b> too few games yet to tell.", "Games still going at 20 min: 3 (every region, last 30 days)", "href=\"../method.html#lean\"" } },
@@ -260,11 +260,13 @@ test "fixture games to stats, curves and the website" {
             return error.TestUnexpectedResult;
         };
     }
-    // Three games: greyed out, so the headline has no lane part (matchup.lead)
+    // Three games: greyed out, so the headline has no lane part (matchup.lead) and nothing
+    // is folded away
     {
         const path = try std.fs.path.join(arena, &.{ out, "matchup/top/mordekaiser-vs-darius.html" });
         const html = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 20));
         try testing.expect(std.mem.indexOf(u8, html, "whoever is ahead wins") == null);
+        try testing.expectEqual(std.mem.count(u8, html, "<details class=\"pick\">"), std.mem.count(u8, html, "<details"));
     }
     // table.js finds each search's, minimum's and rare button's table by id: every target on
     // the page

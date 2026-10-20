@@ -18,8 +18,6 @@ const Curves = curvesfile.Curves;
 const View = curvesfile.View;
 const Champ = root.Champ;
 
-const minutes = [_]curvesfile.Comeback{ .ten, .fifteen };
-
 /// From x's side, bucket 0 (1500+ behind) to 4 (1500+ ahead); curvesfile.comeback_edges
 const labels = [curvesfile.buckets][]const u8{
     "1,500+ behind",
@@ -29,76 +27,103 @@ const labels = [curvesfile.buckets][]const u8{
     "1,500+ ahead",
 };
 
-/// The row the opening sentence is about: behind, but not out of it
-const headline_bucket = 1;
+/// Bucket names under the comeback chart, x's lead at the minute
+const short_labels = [curvesfile.buckets][]const u8{ "-1.5k", "-1k", "0", "+1k", "+1.5k" };
 
-pub fn section(w: *Writer, curves: *const Curves, r: Role, x: Champ, y: Champ) !void {
+/// Chart area in SVG units, about the size it is drawn so its text stays near 11px
+const G = struct {
+    const width = 300;
+    const height = 200;
+    const left = 34;
+    const right = 10;
+    const top = 10;
+    const bottom = 34;
+
+    fn px(i: usize) f64 {
+        return left + (@as(f64, @floatFromInt(i)) + 0.5) * (width - left - right) / curvesfile.buckets;
+    }
+
+    fn py(rate: f64) f64 {
+        return top + (1 - rate) * (height - top - bottom);
+    }
+};
+
+/// Matchup page card: x's win rate by lane gold at 10 minutes, the matchup's line over
+/// every lane in the role; a hollow dot under thin_games. Each dot titled with both
+/// minutes' counts
+pub fn card(w: *Writer, curves: *const Curves, r: Role, x: Champ, y: Champ) !void {
     const v = curves.get(r, .all, x.id, y.id) orelse return;
     const base = curves.baseline(r, .all);
     const lane = root.roleName(r);
-    try w.writeAll("<h2>Comeback odds</h2>\n");
-
-    const head = v.comeback(.ten, headline_bucket);
-    if (head.games >= matchup.thin_games) {
-        const all = if (base) |bl| blk: {
-            const bh = bl.comeback(.ten, headline_bucket);
-            break :blk tpl.t(" (all {lane} lanes: {rate})", .{ .lane = lane, .rate = tpl.call(percent, .{ bh.wins, bh.games }) });
-        } else null;
+    try tpl.renderPart(w,
+        \\<section class="mu-card mu-comeback"><h2>Win rate by gold at 10 min</h2>
+        \\<p class="mu-key"><span class="k x"></span>{x} vs {y} <span class="k all"></span>All {lane} lanes</p>
+        \\<svg viewBox="0 0 {width} {height}" role="img" aria-label="{x}'s win rate against {y} by lane gold at 10 minutes">
+        \\
+    , .{ .x = x.name, .y = y.name, .lane = lane, .width = G.width, .height = G.height });
+    for ([_]f64{ 0.25, 0.5, 0.75 }) |t| try tpl.render(w,
+        \\<line class="{class}" x1="{l}" x2="{r}" y1="{y:.1}" y2="{y:.1}"/><text x="{tx}" y="{ty:.1}" text-anchor="end">{p}%</text>
+        \\
+    , .{
+        .class = if (t == 0.5) "zero" else "grid",
+        .l = G.left,
+        .r = G.width - G.right,
+        .y = G.py(t),
+        .tx = G.left - 5,
+        .ty = G.py(t) + 4,
+        .p = @as(u32, @intFromFloat(100 * t)),
+    });
+    for (short_labels, 0..) |label, i| try tpl.render(w,
+        \\<text x="{x:.1}" y="{y}" text-anchor="middle">{label}</text>
+        \\
+    , .{ .x = G.px(i), .y = G.height - 18, .label = label });
+    try tpl.render(w,
+        \\<text x="{x:.1}" y="{y}" text-anchor="start" class="side">{name} behind in gold</text><text x="{x2:.1}" y="{y}" text-anchor="end" class="side">ahead</text>
+        \\
+    , .{ .x = G.left, .x2 = G.width - G.right, .y = G.height - 3, .name = x.name });
+    if (base) |bl| try line(w, bl, "all");
+    try line(w, v, "x");
+    for (0..curvesfile.buckets) |i| {
+        const c = v.comeback(.ten, i);
+        if (c.games == 0) continue;
+        const later = v.comeback(.fifteen, i);
+        const all = if (base) |bl| bl.comeback(.ten, i) else curvesfile.Counts{};
         try tpl.render(w,
-            \\<p>Between 500 and 1,500 gold behind {y} at 10 minutes, {x} still won {rate} of {games} game{s}{all}.</p>
+            \\<circle class="dot{thin}" cx="{cx:.1}" cy="{cy:.1}" r="4.5"><title>{label} at 10 min: {x} won {rate} of {games} games (all {lane} lanes {all}); at 15 min {later} of {later_games}</title></circle>
             \\
         , .{
-            .y = y.name,
+            .thin = tpl.when(c.games < matchup.thin_games, " thin"),
+            .cx = G.px(i),
+            .cy = G.py(ratio(c)),
+            .label = labels[i],
             .x = x.name,
-            .rate = tpl.call(percent, .{ head.wins, head.games }),
-            .games = head.games,
-            .s = text.plural(head.games),
-            .all = all,
+            .rate = tpl.call(percent, .{ c.wins, c.games }),
+            .games = c.games,
+            .lane = lane,
+            .all = tpl.call(percent, .{ all.wins, all.games }),
+            .later = tpl.call(percent, .{ later.wins, later.games }),
+            .later_games = later.games,
         });
-    } else {
-        try tpl.render(w,
-            \\<p class="note">More data needed: cells under {thin} games are greyed out. The all-{lane}-lanes columns fill sooner.</p>
-            \\
-        , .{ .thin = matchup.thin_games, .lane = lane });
     }
-
-    try tpl.renderPart(w,
-        \\<div class="table-scroll"><table class="comeback">
-        \\<thead><tr><th>{x}'s lane gold vs {y}</th><th class="num">{x} won, at 10 min</th><th class="num">at 15 min</th><th class="num">All {lane} lanes, 10 min</th><th class="num">15 min</th></tr></thead>
-        \\<tbody>
-        \\
-    , .{ .x = x.name, .y = y.name, .lane = lane });
-    for (labels, 0..) |label, i| {
-        try tpl.renderPart(w, "<tr><td>{label}</td>", .{ .label = label });
-        for (minutes) |m| try cell(w, v.comeback(m, i));
-        for (minutes) |m| {
-            if (base) |bl| try cell(w, bl.comeback(m, i)) else try w.writeAll("<td class=\"num\">-</td>");
-        }
-        try w.writeAll("</tr>\n");
-    }
-    try tpl.renderPart(w,
-        \\</tbody></table></div>
-        \\<p class="muted">Gold is {x}'s total minus {y}'s at that minute. Games that ended
-        \\before it are left out. All {lane} lanes counts every lane from both sides. Cells under
-        \\{thin} games are greyed out.</p>
-        \\
-    , .{ .x = x.name, .y = y.name, .lane = lane, .thin = matchup.thin_games });
+    try tpl.renderPart(w, "</svg></section>\n", .{});
 }
 
-fn cell(w: *Writer, c: curvesfile.Counts) !void {
-    const value = if (c.games == 0) null else tpl.t("{rate} <span class=\"muted\">{games}</span>", .{
-        .rate = tpl.call(percent, .{ c.wins, c.games }),
-        .games = c.games,
-    });
-    try tpl.render(w, "<td class=\"num{thin}\" title=\"{games} games\">{dash}{value}</td>", .{
-        .thin = tpl.when(c.games < matchup.thin_games, " thin"),
-        .games = c.games,
-        .dash = tpl.when(c.games == 0, "-"),
-        .value = value,
-    });
+fn ratio(c: curvesfile.Counts) f64 {
+    return @as(f64, @floatFromInt(c.wins)) / @as(f64, @floatFromInt(@max(c.games, 1)));
 }
 
-test "comeback section from both sides" {
+fn line(w: *Writer, v: View, class: []const u8) !void {
+    var buf: [curvesfile.buckets * 24]u8 = undefined;
+    var pw: Writer = .fixed(&buf);
+    for (0..curvesfile.buckets) |i| {
+        const c = v.comeback(.ten, i);
+        if (c.games == 0) continue;
+        try pw.print("{d:.1},{d:.1} ", .{ G.px(i), G.py(ratio(c)) });
+    }
+    try tpl.render(w, "<polyline class=\"{class}\" points=\"{p}\"/>\n", .{ .class = class, .p = pw.buffered() });
+}
+
+test "comeback card from both sides" {
     const gpa = std.testing.allocator;
     var b: curvesfile.Builder = .{ .gpa = gpa };
     defer b.deinit();
@@ -123,11 +148,10 @@ test "comeback section from both sides" {
     }.f;
     var out: Writer.Allocating = .init(gpa);
     defer out.deinit();
-    try section(&out.writer, &c, .top, champ(10, "Garen"), champ(60, "Darius"));
-    try std.testing.expect(std.mem.indexOf(u8, out.written(), "behind Darius at 10 minutes, Garen still won 33% of 300 games") != null);
+    try card(&out.writer, &c, .top, champ(10, "Garen"), champ(60, "Darius"));
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "<circle class=\"dot\" cx=\"110.8\" cy=\"114.0\" r=\"4.5\"><title>500 to 1,500 behind at 10 min: Garen won 33% of 300 games") != null);
+    try std.testing.expectEqual(1, std.mem.count(u8, out.written(), "<circle"));
     out.clearRetainingCapacity();
-    try section(&out.writer, &c, .top, champ(60, "Darius"), champ(10, "Garen"));
-    // Darius is 500 to 1,500 ahead: its row 3 shows 67%; the headline row is empty
-    try std.testing.expect(std.mem.indexOf(u8, out.written(), "More data needed") != null);
-    try std.testing.expect(std.mem.indexOf(u8, out.written(), "67%") != null);
+    try card(&out.writer, &c, .top, champ(60, "Darius"), champ(10, "Garen"));
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "<title>500 to 1,500 ahead at 10 min: Darius won 67% of 300 games") != null);
 }

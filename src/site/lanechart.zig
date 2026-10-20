@@ -22,6 +22,11 @@ pub const Chart = struct {
     you: []const i32 = &.{},
     /// The previous patch's line, dashed
     prev: []const i32 = &.{},
+    /// Set: a hover column per minute titled with the line and band in this unit
+    tips: []const u8 = "",
+    /// SVG units; text is a fixed size in them, so a chart drawn small wants fewer
+    width: u16 = 640,
+    height: u16 = 240,
 };
 
 /// Before this minute nearly every game is still running (no surrender vote yet)
@@ -40,10 +45,10 @@ pub fn render(w: *Writer, c: Chart) !void {
     for (c.line) |v| max_abs = @max(max_abs, @abs(v));
     for (c.you) |v| max_abs = @max(max_abs, @abs(v));
     for (c.prev) |v| max_abs = @max(max_abs, @abs(v));
-    const g: Geometry = .{ .scale = niceCeil(@intCast(max_abs)), .longest = n };
+    const g: Geometry = .{ .scale = niceCeil(@intCast(max_abs)), .longest = n, .width = c.width, .height = c.height };
     try tpl.renderPart(w, "<svg viewBox=\"0 0 {width} {height}\" role=\"img\" aria-label=\"{aria}\">\n", .{
-        .width = Geometry.width,
-        .height = Geometry.height,
+        .width = c.width,
+        .height = c.height,
         .aria = c.aria,
     });
     for ([_]i32{ g.scale, 0, -g.scale }) |tick| {
@@ -53,7 +58,7 @@ pub fn render(w: *Writer, c: Chart) !void {
         , .{
             .class = if (tick == 0) "zero" else "grid",
             .left = Geometry.left,
-            .right = Geometry.width - Geometry.right,
+            .right = g.width - Geometry.right,
             .y = g.py(tick),
             .label_x = Geometry.left - 6,
             .label_y = g.py(tick) + 4,
@@ -65,7 +70,7 @@ pub fn render(w: *Writer, c: Chart) !void {
     while (minute <= n) : (minute += 5) {
         try tpl.render(w, "<text x=\"{x:.1}\" y=\"{y}\" text-anchor=\"middle\">{minute} min</text>", .{
             .x = g.px(minute - 1),
-            .y = Geometry.height - 8,
+            .y = g.height - 8,
             .minute = minute,
         });
     }
@@ -73,7 +78,7 @@ pub fn render(w: *Writer, c: Chart) !void {
         try tpl.render(w, "<line class=\"ending\" x1=\"{x:.1}\" x2=\"{x:.1}\" y1=\"{top}\" y2=\"{bottom}\"/>", .{
             .x = g.px(surrender_minute - 1),
             .top = Geometry.top,
-            .bottom = Geometry.height - Geometry.bottom,
+            .bottom = g.height - Geometry.bottom,
         });
     }
     try tpl.render(w,
@@ -82,7 +87,7 @@ pub fn render(w: *Writer, c: Chart) !void {
     , .{
         .x = Geometry.left + 6,
         .top = Geometry.top + 12,
-        .bottom = Geometry.height - Geometry.bottom - 6,
+        .bottom = g.height - Geometry.bottom - 6,
         .a = c.a,
         .b = c.b,
     });
@@ -98,31 +103,64 @@ pub fn render(w: *Writer, c: Chart) !void {
     if (c.you.len >= 2) try tpl.render(w, "<polyline class=\"you\" points=\"{p}\"/>\n", .{
         .p = Points{ .g = g, .line = c.you },
     });
+    if (c.tips.len > 0) try tips(w, c, g);
     try w.writeAll("</svg>\n");
 }
+
+/// Hover columns, one per minute of the line, each as wide as a minute
+fn tips(w: *Writer, c: Chart, g: Geometry) !void {
+    const step = (g.width - Geometry.left - Geometry.right) / @as(f64, @floatFromInt(g.longest - 1));
+    for (c.line, 0..) |v, i| {
+        try tpl.render(w,
+            \\<rect class="hit" x="{x:.1}" y="{top}" width="{step:.1}" height="{h}"><title>{m} min: {sign}{v} {unit}{band}</title></rect>
+            \\
+        , .{
+            .x = g.px(i) - step / 2,
+            .top = Geometry.top,
+            .step = step,
+            .h = g.height - Geometry.top - Geometry.bottom,
+            .m = i + 1,
+            .sign = if (v > 0) "+" else "",
+            .v = v,
+            .unit = c.tips,
+            .band = if (i < c.band.len) tpl.t(", middle half {lo} to {hi}", .{
+                .lo = Signed{ .v = c.band[i][0] },
+                .hi = Signed{ .v = c.band[i][1] },
+            }) else null,
+        });
+    }
+}
+
+const Signed = struct {
+    v: i32,
+
+    pub fn format(s: Signed, w: *Writer) Writer.Error!void {
+        if (s.v > 0) try w.writeByte('+');
+        try w.print("{d}", .{s.v});
+    }
+};
 
 /// Chart area in SVG units; values map onto it by the chart's scale
 const Geometry = struct {
     scale: i32,
     longest: usize,
+    width: f64,
+    height: f64,
 
-    const width = 640;
-    const height = 240;
     const left = 56;
     const right = 28;
     const top = 16;
     const bottom = 28;
-    const mid: f64 = top + (height - top - bottom) / 2.0;
-    const half: f64 = (height - top - bottom) / 2.0;
 
     fn px(g: Geometry, i: usize) f64 {
         const span: f64 = @floatFromInt(g.longest - 1);
-        return left + @as(f64, @floatFromInt(i)) / span * (width - left - right);
+        return left + @as(f64, @floatFromInt(i)) / span * (g.width - left - right);
     }
 
     fn py(g: Geometry, value: i32) f64 {
         const v: f64 = @floatFromInt(value);
-        return mid - v / @as(f64, @floatFromInt(g.scale)) * half;
+        const half = (g.height - top - bottom) / 2.0;
+        return top + half - v / @as(f64, @floatFromInt(g.scale)) * half;
     }
 };
 
