@@ -223,12 +223,11 @@ pub fn method(w: *Writer, info: Info) Writer.Error!void {
         \\comparing with each other.</li>
         \\</ul>
         \\<h2>Daily Draft</h2>
-        \\<p>One complete ranked game a day, the same for everyone, with every player
-        \\identity removed: no names, Riot IDs, match ids or dates, and the game is at least a
-        \\week old. One champion is hidden among four that were plausible in that draft; the
-        \\reveal shows what was played, who won and, in words, what this patch's games say
-        \\about the draft and its lanes. It describes the game, it does not grade the
-        \\pick.</p>
+        \\<p>One complete ranked game a day from recent games, the same for everyone, shown
+        \\without names, Riot IDs, match ids or dates. One champion is hidden among four that
+        \\were plausible in that draft; the reveal shows what was played, who won, the
+        \\scoreboard and what this patch's games say about the draft and its lanes. It
+        \\describes the game, it does not grade the pick.</p>
         \\<h2>What meiolol never does</h2>
         \\<ul>
         \\<li>Show other players' names or statistics in champ select, or anyone the game

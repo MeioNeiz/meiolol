@@ -184,7 +184,7 @@ class Game {
     $("number").textContent = `#${p.n}`;
     this.renderBack();
     const tier = p.tier ? ` · ${p.tier[0]}${p.tier.slice(1).toLowerCase()}` : "";
-    // The date is the puzzle's, not the game's (src/daily.zig min_age_days)
+    // The date is the puzzle's, not the game's
     $("about").textContent = `${longDate(p.date)} · EUW ranked solo/duo · patch ${p.patch}${tier}`;
     this.renderBoard();
     this.renderPick();

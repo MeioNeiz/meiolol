@@ -4,10 +4,10 @@
 //! reveal is what happened and what this patch's numbers say about it, never "the
 //! correct pick" (docs/concept.md).
 //!
-//! Anonymised: puzzles carry no Riot IDs, PUUIDs, match ids or game dates, only
-//! champions, bans, patch, a rank tier, game length and team totals, and the game is at
-//! least `min_age_days` old so a puzzle cannot point to one played that day (in a patch's
-//! first week, the previous patch's). Each puzzle is made once and kept in
+//! Puzzles carry no Riot IDs, PUUIDs, match ids or game dates: champions, bans, patch,
+//! ranks and the scoreboard of a recent finished game (J10: public games are public
+//! data). When the current patch has no usable game yet, the previous patch's. Each
+//! puzzle is made once and kept in
 //! DIR/daily/<n>.json (public content), its numbers refreshed while the patch they come
 //! from is current; DIR/daily/used.txt lists the match ids behind them so none repeats,
 //! and is never published.
@@ -32,8 +32,6 @@ const min_duration_s = 15 * 60;
 /// Each of the ten picks must be this share of its role's games: off-role and rare picks
 /// leave every lane row with too few games to say anything. ~37% of games pass (16.20)
 const min_role_share = 0.01;
-/// The page says "at least a week old"
-pub const min_age_days = 7;
 const tries = 64;
 
 pub const Options = struct {
@@ -262,9 +260,8 @@ pub fn isUsed(used: []const u8, match_id: []const u8) bool {
     return false;
 }
 
-/// Puzzle JSON for day `day` from a random unused game at least `min_age_days` old,
-/// recording its match id in `used`: from `opts.patches`, else (a patch's first week)
-/// the patch before. Null when no candidate works.
+/// Puzzle JSON for day `day` from a random unused game, recording its match id in
+/// `used`: from `opts.patches`, else the patch before. Null when no candidate works.
 fn make(
     arena: std.mem.Allocator,
     db: store.Db,
@@ -296,11 +293,9 @@ fn makeFrom(
         \\WHERE patch IN (SELECT value FROM json_each(?)) AND queue_id = ?
         \\  AND platform IN (SELECT value FROM json_each(?))
         \\  AND remake = 0 AND winning_team IS NOT NULL AND duration_s >= ?
-        \\  AND game_start <= ?
     ;
-    const cutoff_ms = (@as(i64, opts.today) - min_age_days) * std.time.ms_per_day;
     const total = try db.scalar("SELECT count(*) " ++ where, .{
-        patch_json, stats.ranked_solo, platform_json, min_duration_s, cutoff_ms,
+        patch_json, stats.ranked_solo, platform_json, min_duration_s,
     }) orelse 0;
     if (total == 0) return null;
 
@@ -312,7 +307,7 @@ fn makeFrom(
     for (0..tries) |_| {
         const offset = rand.uintLessThan(u64, @intCast(total));
         try q.bind(.{
-            patch_json, stats.ranked_solo, platform_json, min_duration_s, cutoff_ms, offset,
+            patch_json, stats.ranked_solo, platform_json, min_duration_s, offset,
         });
         if (!try q.step()) continue;
         const match_id = try arena.dupe(u8, q.bytes(0));
@@ -705,11 +700,10 @@ test "puzzles are made once, anonymised and published" {
     const saved = try std.Io.Dir.cwd().readFileAlloc(io, four, arena, .unlimited);
     try testing.expectEqualStrings(files[0].data, saved);
 
-    // Games under a week old are never drawn: in a patch's first week the previous
-    // patch's, scored with the current patch's numbers
-    const recent_ms = @as(i64, next.today) * std.time.ms_per_day;
-    try db.run("UPDATE matches SET game_start = ?", .{recent_ms});
-    try db.exec("UPDATE matches SET patch = '16.19', game_start = 0 WHERE match_id LIKE '%0'");
+    // With no usable game on the current patch, the previous patch's, scored with the
+    // current patch's numbers
+    try db.exec("UPDATE matches SET remake = 1");
+    try db.exec("UPDATE matches SET patch = '16.19', remake = 0 WHERE match_id LIKE '%0'");
     next.today += 1;
     const fourth = try update(arena, io, db, &st, next);
     const prev = try std.json.parseFromSliceLeaky(Puzzle, arena, fourth[4].data, .{});

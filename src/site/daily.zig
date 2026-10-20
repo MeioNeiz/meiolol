@@ -9,8 +9,8 @@ pub fn page(w: *Writer, info: prose.Info) Writer.Error!void {
     _ = info;
     try w.writeAll(
         \\<h1>Daily Draft <span id="number" class="muted"></span></h1>
-        \\<p class="lead">One real ranked game a day, at least a week old and the same for
-        \\everyone. Guess the last pick, then the winner.</p>
+        \\<p class="lead">One real ranked game a day from recent games, the same for everyone.
+        \\Guess the last pick, then the winner.</p>
         \\<p id="status" class="note">Loading…</p>
         \\<div id="daily" class="dd" hidden>
         \\<p id="about" class="muted"></p>

@@ -69,7 +69,7 @@ champion/pyke.html 0dac6d8635ffb6cd
 champion/rakan.html 2176b6ef6b5c30a7
 champion/twitch.html e434d50dedcd62b0
 champions.html 8e9b5f81eb36d2e2
-daily.html 33cf3ce5ae5e993b
+daily.html 9672cab39d576189
 data/champions.json 00926860dfeebe26
 data/filters.json 406e23555894da4c
 data/filters/ahri.json 3ae6e09eadd8da20
@@ -102,7 +102,7 @@ matchup/support/pyke-vs-rakan.html 004336447f1a8ecf
 matchup/support/rakan-vs-pyke.html bb0a3a032a79cf8b
 matchup/top/darius-vs-mordekaiser.html 6db6133aa74cfe15
 matchup/top/mordekaiser-vs-darius.html cfa502520b034003
-method.html 2d2b7908ca26fb1a
+method.html 5708572153d0fd9f
 patch.html 110d927a1eddf25a
 patch/build/ahri-mid.html 45865821d12289d7
 patch/build/amumu-jungle.html 0bf3e42ad3fc98d4
