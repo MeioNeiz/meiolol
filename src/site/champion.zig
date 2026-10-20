@@ -88,12 +88,12 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
         const rate = ratio(cr.wins, cr.games);
         try tpl.renderPart(w,
             \\<section id="{slug}"><h2>{role}</h2>
-            \\<div class="tiles"><div data-tile="wr"><span>Win rate</span><b class="{side}" style="opacity:{fade:.2}">{wr}</b><small>of games won</small></div><div data-tile="pick"><span>Pick rate</span><b>{pick}</b><small>of games</small></div><div data-tile="ban"><span>Ban rate</span><b>{ban}</b><small>of games</small></div><div data-tile="games"><span>Games</span><b>{games}</b><small>{role} lane</small></div></div>
+            \\<div class="tiles"><div data-tile="wr"><span>Win rate</span><b class="wrc" style="--c:{colour};opacity:{fade:.2}">{wr}</b><small>of games won</small></div><div data-tile="pick"><span>Pick rate</span><b>{pick}</b><small>of games</small></div><div data-tile="ban"><span>Ban rate</span><b>{ban}</b><small>of games</small></div><div data-tile="games"><span>Games</span><b>{games}</b><small>{role} lane</small></div></div>
             \\
         , .{
             .slug = roleSlug(r),
             .role = roleName(r),
-            .side = side(rate),
+            .colour = tierlist.wrColour(rate, tierlist.table_span).thin(cr.games),
             .fade = core.curvesfile.fade(cr.games),
             .wr = tpl.call(pct, .{ cr.wins, cr.games }),
             .pick = tpl.call(pct, .{ cr.games, site.games }),

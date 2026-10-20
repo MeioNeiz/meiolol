@@ -410,12 +410,13 @@ b.down, a.down, .down { color: var(--bad); }
 .ci .even { background: var(--muted); }
 .wr b { color: var(--c); }
 .wr .ci i { background: var(--chip, var(--c)); }
-.wr b, .vs b, b.vs { background: var(--chip, none); box-shadow: 0 0 0 2px var(--chip, transparent); border-radius: 3px; }
+.tiles b.wrc { color: var(--c); }
+.wr b, .vs b, b.vs, b.wrc { background: var(--chip, none); box-shadow: 0 0 0 2px var(--chip, transparent); border-radius: 3px; }
 /* A matchup's own win rate is mostly the opponent's strength: plain ink, vs usual
    carries the colour. Gold leads and ahead shares barely move a matchup: neutral */
 .og .wr b, table.mu-table .wr b, .mu-tiles b.up, .mu-tiles b.down { color: var(--text); background: none; box-shadow: none; }
 .og .wr .ci i, table.mu-table .wr .ci i { background: var(--t2); }
-a.gold, a.gold.up, a.gold.down, .mu-leads td.up, .mu-leads td.down { color: var(--text); font-weight: 500; }
+a.gold, a.gold.up, a.gold.down, .mu-leads td.up, .mu-leads td.down, table.mu-table .gold { color: var(--text); font-weight: 500; }
 .tl-more { color: var(--faint); font-size: 13px; margin: 8px 2px 0; }
 .tl-more button.link { font-size: 13px; }
 .tiles { display: flex; flex-wrap: wrap; gap: 10px; margin: 6px 0 14px; }
@@ -1031,8 +1032,6 @@ svg.wc .mo-obj.objl { stroke: var(--them); }
 table.mu-table { width: 100%; }
 table.mu-table .champ img { width: 24px; height: 24px; }
 table.mu-table .vs b { color: var(--c); font-weight: 600; }
-table.mu-table .gold.up { color: var(--good); }
-table.mu-table .gold.down { color: var(--bad); }
 @media (max-width: 480px) {
   table.mu-table .champ img { display: none; }
   .mu-roles a { padding: 5px 8px; }

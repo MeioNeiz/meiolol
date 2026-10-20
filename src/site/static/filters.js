@@ -252,7 +252,7 @@ const HARDEST = "hardest first";
       tiles.innerHTML = s.original.tiles;
       const p = r.games ? r.wins / r.games : 0.5;
       const b = tiles.querySelector('[data-tile="wr"] b');
-      b.className = p > 0.5 ? "up" : p < 0.5 ? "down" : "even";
+      b.style.cssText = `--c:${wrColour(p, TABLE_SPAN, r.games)}`;
       b.style.opacity = fade(r.games);
       b.textContent = pct(r.wins, r.games);
       // Two players per role and game
@@ -357,7 +357,7 @@ const HARDEST = "hardest first";
     const td = document.createElement("td");
     td.dataset.v = p.toFixed(4);
     td.innerHTML =
-      `<span class="wr" style="--c:${wrColour(p, TABLE_SPAN)}" title="${games} games">` +
+      `<span class="wr" style="--c:${wrColour(p, TABLE_SPAN, games)}" title="${games} games">` +
       `<span class="ci"><i class="d" style="left:${dot.toFixed(1)}%"></i></span>` +
       `<b style="opacity:${fade(games)}">${(100 * p).toFixed(1)}%</b></span>`;
     return td;
@@ -482,10 +482,11 @@ function points(v) {
   return `${x > 0 ? "+" : ""}${x.toFixed(1)}`;
 }
 
-// As tierlist.zig wrColour: the value of --c, step 4 also setting --chip
-function wrColour(p, span) {
+// As tierlist.zig wrColour and thin: the value of --c, step 4 also setting --chip
+function wrColour(p, span, games = 200) {
   const pts = (100 * (p - 0.5) * TABLE_SPAN) / span;
-  const n = [1, 2, 3.5, 5.5].filter((s) => Math.abs(pts) >= s).length;
+  const cut = games >= 200 ? 0 : games >= 100 ? 1 : 2;
+  const n = Math.max(0, [1, 2, 3.5, 5.5].filter((s) => Math.abs(pts) >= s).length - cut);
   const side = pts < 0 ? "lo" : "hi";
   if (n === 0) return "var(--s0)";
   return n === 4 ? `var(--chip-ink);--chip:var(--${side}4)` : `var(--${side}${n})`;
