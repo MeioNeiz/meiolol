@@ -85,6 +85,8 @@ Later: puzzles from clear comp leans (data-and-model.md step 5).
 Jacob 19 Oct: harder and easier at once (an easy start, harder levels later), more
 engaging, much fewer words, less overwhelming (one thing per screen). Later: lessons
 from comp leans and lane matchups (data-and-model.md step 5).
+Jacob 20 Oct 01:00: "not a good way to learn", just a quiz. Redesign as a discovery
+puzzle game: docs/learn-proposal.md (team run 2026-10-19 night, teach).
 - Done 20 Oct (night run, learn): Lessons and Practice as tabs, a lesson a screen (text
   with one question at a time under it, "2 of 3 right" at the end; Jacob 01:00 tapped the
   lesson text's champions as if they were answers, so those and the board's are plain

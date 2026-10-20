@@ -1,0 +1,563 @@
+Should There Be a Three-Strikes Rule Against Pure
+Discovery Learning?
+The Case for Guided Methods of Instruction
+Richard E. Mayer
+University of California, Santa Barbara
+
+The author’s thesis is that there is sufficient research
+evidence to make any reasonable person skeptical about
+the benefits of discovery learning—practiced under the
+guise of cognitive constructivism or social constructivism—as a preferred instructional method. The author reviews research on discovery of problem-solving rules culminating in the 1960s, discovery of conservation strategies
+culminating in the 1970s, and discovery of LOGO programming strategies culminating in the 1980s. In each
+case, guided discovery was more effective than pure discovery in helping students learn and transfer. Overall, the
+constructivist view of learning may be best supported by
+methods of instruction that involve cognitive activity rather
+than behavioral activity, instructional guidance rather than
+pure discovery, and curricular focus rather than unstructured exploration.
+
+A
+
+s constructivism has become the dominant view
+of how students learn, it may seem obvious to
+equate active learning with active methods of
+instruction. Thus, educators who wish to use constructivist
+methods of instruction are often encouraged to focus on
+discovery learning—in which students are free to work in
+a learning environment with little or no guidance. Under
+the banner of social constructivism, the call for discovery
+learning remains, but with a modest shift in form—students
+are expected to work in groups in a learning environment
+with little or no guidance. My thesis in this article is that
+there is sufficient research evidence to make any reasonable
+person skeptical about the benefits of discovery learning—
+practiced under the guise of cognitive constructivism or
+social constructivism—as a preferred instructional method.
+I review research on discovery of problem-solving rules
+culminating in the 1960s, discovery of conservation strategies culminating in the 1970s, and discovery of LOGO
+programming strategies culminating in the 1980s. In each
+case, guided discovery has been more effective than pure
+discovery in helping students learn and transfer. Overall,
+the constructivist view of learning may be best supported
+by methods of instruction that enable deep understanding
+of targeted concepts, principles, and strategies— even
+when such methods involve guidance and structure. In
+short, there is increasing evidence that effective methods
+14
+
+for promoting constructivist learning involve cognitive activity rather than behavioral activity, instructional guidance
+rather than pure discovery, and curricular focus rather than
+unstructured exploration. The self-correcting nature of scientific research can be useful in guiding educational decisions about which instructional methods work under which
+circumstances for which learners.
+
+The Search for Constructivist Teaching
+Methods
+The constructivist revolution has brought new conceptions
+of learning and teaching (Marshall, 1996; Phillips, 1998;
+Steffe & Gale, 1995). Although constructivism takes many
+forms (Phillips, 1998), an underlying premise is that learning is an active process in which learners are active sense
+makers who seek to build coherent and organized knowledge. I start this article with the premise that there is merit
+in the constructivist vision of learning as knowledge construction (Bransford, Brown, & Cocking, 1999; Bruer,
+1993; Lambert & McCombs, 1998; Mayer, 2003).
+My goal is to examine how the constructivist view of
+learning translates into a constructivist view of teaching. A
+common interpretation of the constructivist view of learning as an active process is that students must be active
+during learning. According to this interpretation, passive
+venues involving books, lectures, and on-line presentations
+are classified as nonconstructivist teaching whereas active
+venues such as group discussions, hands-on activities, and
+interactive games are classified as constructivist teaching.
+The idea that constructivist learning requires active
+teaching methods is a recurring theme in the field of education. For example, in a textbook for teachers, Lefrancois
+(1997) summarized the field by noting that “the constructivist approach to teaching . . . is . . . based on the assumption that students should build (construct) knowledge for
+themselves. Hence, constructivist approaches are basically
+discovery oriented” (p. 206). This statement—and similar
+prescriptions—may be interpreted to mean that a constructivist theory of learning in which the learner is cognitively
+Correspondence concerning this article should be addressed to Richard E.
+Mayer, Department of Psychology, University of California, Santa Barbara, CA 93106-9660. E-mail: mayer@psych.ucsb.edu
+
+January 2004 ● American Psychologist
+Copyright 2004 by the American Psychological Association, Inc. 0003-066X/04/$12.00
+Vol. 59, No. 1, 14 –19
+DOI: 10.1037/0003-066X.59.1.14
+
+active translates into a constructivist theory of teaching in
+which the learner is behaviorally active.
+I refer to this interpretation as the constructivist teaching fallacy because it equates active learning with active
+teaching. I do not object to the idea that constructivist
+learning is a worthwhile goal, but rather I object to the idea
+that constructivist teaching should be restricted to pure
+discovery methods. Figure 1 presents a 2 ⫻ 2 matrix that
+helps to summarize my argument: The columns represent
+passive learning (in which learners are not cognitively
+active) and active learning (in which learners are cognitively active) whereas the rows represent guided teaching
+methods (in which learners are not necessarily behaviorally
+active) and the pure discovery teaching methods (in which
+learners are highly behaviorally active). The constructivist
+teaching fallacy is that the only way to achieve constructivist learning is through active methods of teaching—as
+indicated in the lower right quadrant. In contrast, my hypothesis in this article is that a variety of instructional
+methods can lead to constructivist learning—including
+those in both the upper right and the lower right quadrants.
+Thus, a challenge facing educational researchers is to discover instructional methods that promote appropriate processing in learners rather than methods that promote hands-on
+activity or group discussion as ends in themselves.
+As evidence, I briefly review three attempts to promote constructivist learning by using discovery methods of
+teaching: research on discovery of problem-solving rules,
+which peaked in the 1960s; research on discovery of conservation strategies, which peaked in the 1970s; and research on discovery of computer programming concepts,
+which peaked in the 1980s. In each literature, pure discovery methods—in which students have maximal freedom to
+explore—are compared with guided discovery methods—in which the teacher provides systematic guidance
+focused on the learning objective.
+
+Strike One: Discovery of ProblemSolving Rules
+The 1960s began with Bruner’s (1961) eloquent call for
+discovery methods, in which the learner is allowed to
+discover new rules and ideas rather than being required to
+
+Figure 1
+Two Dimensions of Active Learning: Cognitive Activity
+and Behavioral Activity
+
+January 2004 ● American Psychologist
+
+memorize what the teacher says. Bruner’s message helped
+touch off a flurry of research studies aimed at comparing
+various forms of discovery methods: pure discovery methods, in which the student receives problems to solve with
+little or no guidance from the teacher; guided discovery
+methods, in which the student receives problems to solve
+but the teacher also provides hints, direction, coaching,
+feedback, and/or modeling to keep the student on track; and
+expository methods, in which the student is given the
+problem along with the correct answer.
+In an early forerunner of method-of-instruction studies, Craig (1956) investigated how to help students learn to
+solve logical problems such as finding the word that does
+not belong among CYCLE SELDOM SAWDUST SAUSAGE CELLAR. In this problem, the student must discover the rule “pick the word with the odd initial sound”
+and therefore choose CYCLE because it is the only word
+that begins with a sigh sound. Students in the pure discovery group received no hints whereas students in the guided
+discovery group were told what to attend to (e.g., “look for
+the initial sound”) but were not given the rule or answer.
+The guided discovery group learned more efficiently than,
+remembered more than, and transferred to new problems
+just as well as the pure discovery group.
+In another pioneering study, Kittel (1957) used similar
+problems, but in addition to a pure discovery group (in
+which students were given no hints) and a guided discovery
+group (in which students were given a hint about the
+general rule for each set of problems), there was also an
+expository group that received the guiding rule and the
+correct answer for each problem. The pure discovery group
+performed the worst and the guided discovery group performed the best on tests of immediate retention, delayed
+retention, and transfer to solving new problems.
+Finally, in a study by Gagne and Brown (1961), students learned to derive formulas and solve series sum
+problems such as how to compute the sum of “1, 3, 5, 7,
+9. . . .” and write the corresponding formula. Students
+learned by pure discovery, guided discovery, or expository
+methods. Although guided discovery required the most
+learning time, it resulted in the best performance on solving
+transfer problems.
+In a book summarizing much of the research on discovery methods, Shulman and Keisler (1966) found that
+guided discovery is generally more effective than pure
+discovery in promoting learning and transfer to new problems. Apparently, some students do not learn the rule or
+principle under pure discovery methods, so some appropriate amount of guidance is required to help students mentally construct the desired learning outcome. Guided discovery is effective because it helps students meet two
+important criteria for active learning—(a) activating or
+constructing appropriate knowledge to be used for making
+sense of new incoming information and (b) integrating new
+incoming information with an appropriate knowledge base.
+Pure discovery can be ineffective when it fails to promote
+the second criterion—that is, students may not come into
+contact with the to-be-learned principle and therefore have
+nothing to integrate with their knowledge base. Expository
+15
+
+methods can be ineffective when they discourage learners
+from actively making sense of the presented material, that
+is, the first criterion.
+What is the relevance of 40-year-old research on artificial tasks using an old-fashioned experimental “horserace” design? Scientific research on discovery of problemsolving rules provides a clear and consistent picture of how
+Bruner’s vision of discovery learning could be achieved:
+Students need enough freedom to become cognitively active in the process of sense making, and students need
+enough guidance so that their cognitive activity results in
+the construction of useful knowledge. Various forms of
+guided discovery seem to be best suited to meet these two
+criteria. The relevance of classic research on discovery of
+problem-solving rules is that it yields strike one against
+pure discovery as a useful method of instruction.
+
+Strike Two: Discovery of
+Conservation Strategies
+By the 1970s, American scholars had become increasingly
+interested in Piaget’s (1970) vision of constructivist education, in which students would choose situations to manipulate as they saw fit, discover when their current conceptions conflicted with their observations, and do so on
+their own without teachers providing corrections. An important test bed concerned finding the best way to help
+students develop the conservation concepts they need to
+move into the concrete operational stage of cognitive
+growth—pure discovery methods, in which students work
+with conservation materials on their own, or guided discovery methods, in which teachers direct students’ attention toward relevant aspects of the conservation task.
+In a landmark study, Gelman (1969) demonstrated
+that kindergarteners could learn to solve conservation problems through guided practice in which the teacher directed
+their attention to appropriate aspects of the task and showed
+them why they were wrong when they made errors. Similar
+results were reported by May and Tisshaw (1975).
+In another set of studies, Wallach and Sprott (1964)
+showed students concrete demonstrations of conceptual
+rules underlying conservation problems such as reversibility. For example, children where shown a row of five beds
+with a doll in each one. Then, the dolls were taken out and
+placed in a parallel row that was longer (or shorter) than the
+row of beds. When the child stated that the longer row
+contained more items than the shorter row, the child was
+instructed to put each doll back in its bed. The teacher
+pointed out that the number of dolls and the number of beds
+were equal. This method demonstrating the reversibility
+rule produced large improvements on subsequent conservation tests. Similar results were reported by Beilin (1965).
+Finally, Brainerd (1972) provided corrective feedback
+to children as they solved conservation problems, such as
+telling them “you’re right” or “you’re wrong.” This minimal level of guidance was sufficient to help students learn
+to give correct answers on subsequent conservation problems and be able to provide sound explanations for their
+answers.
+16
+
+In a recent review, Brainerd (2003) noted that “very
+little research was ever reported that was designed to compare specific self-discovery procedures to parallel tutorial
+procedures” (p. 281). However, in five studies of selfdiscovery of conservation concepts reported by Inhelder,
+Sinclair, and Bovet (1974), the magnitudes of the effects
+were small in comparison to those obtained using the kinds
+of guided discovery methods described in the preceding
+paragraphs.
+What is the relevance of this 30-year-old literature on
+a famous but contrived task? The research on teaching of
+conservation strategies is still important because it helps to
+qualify the instructional implications of Piaget’s vision of
+discovery learning. Children seem to learn better when they
+are active and when a teacher helps guide their activity in
+productive directions. Overall, research on teaching of conservation strategies yields strike two against pure discovery
+methods of instruction.
+
+Strike Three: Discovery of
+Programming Concepts
+By the 1980s, a new arena had opened for examining the
+effectiveness of various forms of learning by discovery—
+namely, discovery of computer programming concepts. In
+his influential book Mindstorms, Papert (1980) argued that
+children should be allowed to engage in hands-on discovery within a LOGO environment without any teaching
+intervention or even curricular objectives. Once again, discovery learning is fundamental to this vision of being
+allowed to learn without being taught.
+Papert’s call for hands-on discovery of LOGO environments helped to stimulate a healthy set of research
+studies. Kurland and Pea (1985) carefully tested a group of
+11- and 12-year-olds who had logged more than 50 hours
+of LOGO programming experience under pure discovery
+conditions. The students were able to write and interpret
+short, simple programs but had much difficulty on programs involving fundamental programming concepts. In
+interviews, students revealed many incorrect conceptions
+about how programs work although “none of these sources
+of confusion will be intractable to instruction” (Kurland &
+Pea, 1985, p. 242). In a controlled experiment, Pea and
+Kurland (1984) found that students who received extensive
+hands-on experience exploring a LOGO environment were
+no better on tests of planning than were students who
+received no programming experience. In a review of results
+such as these, Dalbey and Linn (1985) concluded that
+“students who learn LOGO fail to generalize this learning
+to other tasks” (p. 267).
+If pure discovery does not help students learn programming concepts, is guided discovery any better? Fay
+and Mayer (1994) taught LOGO programming using either
+a pure discovery or a guided discovery approach. In the
+pure discovery method, students were given a LOGO manual and then engaged in creating several LOGO projects
+over four one-hour sessions. In the guided discovery
+method, students were given the same projects along with
+explicit modeling of design concepts such as modularizaJanuary 2004 ● American Psychologist
+
+tion of programs, hints, and feedback about how their
+programs related to design principles. On subsequent tests,
+the guided discovery group wrote more elegant programs,
+made better use of good design principles, and solved
+planning tasks better than the pure discovery group.
+In a related study, Lee and Thompson (1997) found
+that students who learned LOGO based on a guided discovery method performed better on generating and debugging new programs than did students who learned by pure
+discovery. Guided discovery students learned by following
+a worksheet that guided them through the basic processes
+of programming and debugging with corresponding classroom discussion whereas pure discovery students learned
+from a less structured worksheet along with free-ranging
+classroom discussion.
+What is the relevance of a 20-year-old research literature on how children learn computer programming? It is
+useful because it provides yet another example of the
+failure of pure discovery as an effective instructional
+method. In a book summarizing the state of research on
+teaching and learning of computer programming (Mayer,
+1988), author after author noted the role of guidance in
+learning to program: Clements and Merriman (1988) concluded that “it is clear that LOGO programming— especially divorced from mediated learning— does not represent an educational panacea, as Papert is often
+misunderstood to claim” (p. 46); Lehrer, Guckenberg, and
+Sancilio (1988) concluded that “mediated instruction in
+LOGO is a prerequisite for the transfer of LOGO to other
+domains” (p. 96); and Littlefield et al. (1988) observed that
+“mastery of the programming language has not been
+achieved when LOGO has been taught in a discoveryoriented environment” (p. 116). Thus, research on teaching
+of programming concepts yields strike three against pure
+discovery as a method of instruction.
+
+Three Strikes Against Pure Discovery
+My historical review of three research literatures—teaching
+problem-solving rules, teaching conservation strategies,
+and teaching programming concepts— does not offer support for pure discovery methods. Does this mean that
+constructivism is wrong? It certainly means that a doctrinebased approach to constructivism does not lead to fruitful
+educational practice. The research in this brief review
+shows that the formula constructivism ⫽ hands-on activity
+is a formula for educational disaster.
+Yet the failure of pure discovery as a method of
+instruction does not necessarily mean that constructivism is
+wrong as a theory of learning or that hands-on activity is
+necessarily a wrong method of instruction. A basic premise
+in constructivism is that meaningful learning occurs when
+the learner strives to make sense of the presented material
+by selecting relevant incoming information, organizing it
+into a coherent structure, and integrating it with other
+organized knowledge (Mayer, 2003). It follows that instructional methods that foster these processes will be more
+successful in promoting meaningful learning than instructional methods that do not.
+January 2004 ● American Psychologist
+
+Pure discovery— even when it involves lots of
+hands-on activity and large amounts of group discussion—
+may fail to promote the first cognitive process, namely,
+selecting relevant incoming information. In short, when
+students have too much freedom, they may fail to come
+into contact with the to-be-learned material. There is nothing magical to insure that simply working on a problem or
+simply discussing a problem will lead to discovering its
+solution. If the learner fails to come into contact with the
+to-be-learned material, no amount of activity or discussion
+will be able to help the learner make sense of it.
+In many ways, guided discovery appears to offer the
+best method for promoting constructivist learning. The
+challenge of teaching by guided discovery is to know how
+much and what kind of guidance to provide and to know
+how to specify the desired outcome of learning. In some
+cases, direct instruction can promote the cognitive processing needed for constructivist learning, but in others, some
+mixture of guidance and exploration is needed. This is a
+lesson that emerges again within the context of learning in
+social context. Slavin’s (1983) research on cooperative
+learning showed that all forms of cooperative learning are
+not equally effective, so there is nothing particularly effective about free-ranging group discussions. Palinscar and
+Brown’s (1984) groundbreaking research on reciprocal
+teaching showed that some amount of teacher guidance is
+needed to keep discussions focused on targeted cognitive
+skills. Thus, a fourth strike against pure discovery begins to
+emerge, and there are, of course, many others.
+In conclusion, the goal of this article has been to
+determine whether there is any warrant for the use of
+unfettered discovery as an instructional method. Like some
+zombie that keeps returning from its grave, pure discovery
+continues to have its advocates. However, anyone who
+takes an evidence-based approach to educational practice
+must ask the same question: Where is the evidence that it
+works? In spite of calls for free discovery in every decade,
+the supporting evidence is hard to find. Until there is a
+reasoned, evidence-based argument for pure discovery, the
+best course for constructivist-oriented educators is to focus
+on techniques that guide students’ cognitive processing
+during learning and that focus on clearly specified educational goals.
+Activity may help promote meaningful learning, but
+instead of behavioral activity per se (e.g., hands-on activity,
+discussion, and free exploration), the kind of activity that
+really promotes meaningful learning is cognitive activity
+(e.g., selecting, organizing, and integrating knowledge).
+Instead of depending solely on learning by doing or learning by discussion, the most genuine approach to constructivist learning is learning by thinking. Methods that rely on
+doing or discussing should be judged not on how much
+doing or discussing is involved but rather on the degree to
+which they promote appropriate cognitive processing.
+Guidance, structure, and focused goals should not be ignored. This is the consistent and clear lesson of decade
+after decade of research on the effects of discovery
+methods.
+17
+
+Nothing in this article should be construed as arguing
+against the view of learning as knowledge construction or
+against using hands-on inquiry or group discussion that
+promotes the process of knowledge construction in learners. The main conclusion I draw from the three research
+literatures I have reviewed is that it would be a mistake to
+interpret the current constructivist view of learning as a
+rationale for reviving pure discovery as a method of instruction. Pure discovery did not work in the 1960s, it did
+not work in the 1970s, and it did not work in the 1980s, so
+after these three strikes, there is little reason to believe that
+pure discovery will somehow work today.
+
+The Role of Psychology in Educational
+Reform
+The larger message of this article is that psychology has
+something useful to contribute to the ongoing debate about
+educational reform. First, psychology can offer a testable
+theory of how people learn. In determining how best to
+help students learn—the goal of education—it is useful to
+begin with an understanding of the mechanisms by which
+people learn (Bransford et al., 1999; Lambert & McCombs,
+1998). Second, psychology can offer a powerful methodology for testing theories of how to help people learn. To
+determine the value of any theory of learning, it is useful to
+derive clear predictions and to test them with valid evidence from scientifically rigorous research (Shavelson &
+Towne, 2002). Third, psychology can contribute to building a research base in the psychologies of subject matter—
+including how to help people learn to read, write, and think
+mathematically (Mayer, 1999). Thus, psychology—more
+than any other science— has demonstrated that educational
+issues can be informed by evidence-based arguments.
+The foregoing review can be criticized on the grounds
+that it is based on a naive interpretation of constructivism.
+Yet this criticism serves to confirm my point about the need
+for constructivism to be formulated as a clearly stated
+theory with testable predictions. As discussed among educational philosophers, constructivism is a complex, multifaceted, and somewhat indefinable doctrine, but when educators look for practical implications of constructivist
+philosophy, they often conclude that constructivism calls
+for discovery methods. If constructivism is so complex that
+no predictions can be derived from it, then it is not a
+scientific theory. If many educators draw the conclusion
+that discovery methods are sanctioned by constructivism,
+then it is worthwhile to test this claim. My goal in this
+article has been to try to view at least one aspect of
+constructivism as a testable theory rather than an ideology
+and to explicitly test the predictions of the theory. To guard
+against drawing unwarranted conclusions—such as the idea
+that pure discovery should become education’s method of
+choice—it is useful to identify aspects of constructivism
+that are testable and to test them. This article provides an
+example of what happens when this occurs—the calls for a
+return to discovery methods are not supported by several
+research literatures. Thus, the issue addressed in this article
+is not whether constructivism is a good idea for education
+18
+
+but rather whether the educational implications attributed
+to constructivism are good ideas. In the case of discovery
+methods, the implications attributed to constructivism are
+not good ideas.
+The foregoing review also can be criticized on the
+grounds that some of the evidence is old. However, that is
+exactly the point of the article. The debate about discovery
+has been replayed many times in education, but each time,
+the research evidence has favored a guided approach to
+learning. For example, a recent replication is research
+showing that students learn to become better at solving
+mathematics problems when they study worked-out examples rather than when they solely engage in hands-on
+problem solving (Sweller, 1999). Today’s proponents of
+discovery methods, who claim to draw their support from
+constructivist philosophy, are making inroads into educational practice. Yet a dispassionate review of the relevant
+research literatures shows that discovery-based practice is
+not as effective as guided discovery. An important role for
+psychologists is to show how educational practice can be
+guided by evidence and research-based theory rather than
+ever-shifting philosophical ideology.
+Thus, the contribution of psychology is to help move
+educational reform efforts from the fuzzy and unproductive
+world of educational ideology—which sometimes hides
+under the banner of various versions of constructivism—to
+the sharp and productive world of theory-based research on
+how people learn. Nitpicking arguments about which expert said what about which version of constructivism are
+not useful in promoting learning in students, but psychologists have shown that careful theory-based research is
+useful. For 100 years, psychologists have developed methods for studying learning and, within the past few decades,
+have focused significant attention on studying educationally relevant aspects of learning (Mayer, 2003). At a time
+when the field of educational research seems to be drawing
+away from psychology, the need for answering educational
+questions is stronger than ever. This is not a good time to
+give up on evidence-based arguments in the arena of educational reform. As this article demonstrates, psychology
+can be a highly useful participant in the struggle for educational reform.
+REFERENCES
+Beilin, H. (1965). Learning and operational convergence in logical
+thought development. Journal of Experimental Child Psychology, 2,
+317–339.
+Brainerd, C. J. (1972). Reinforcement and reversibility in quantity conservation acquisition. Psychonomic Science, 27, 114 –116.
+Brainerd, C. J. (2003). Jean Piaget, learning research, and American
+education. In B. J. Zimmerman & D. H. Schunk (Eds.), Educational
+psychology: A century of contributions (pp. 251–287). Mahwah, NJ:
+Erlbaum.
+Bransford, J. D., Brown, A. L., & Cocking, R. R. (Eds.). (1999). How
+people learn. Washington, DC: National Academy Press.
+Bruer, J. T. (1993). Schools for thought: A science of learning in the
+classroom. Cambridge, MA: MIT Press.
+Bruner, J. S. (1961). The act of discovery. Harvard Educational Review,
+31, 21–32.
+Clements, D. H., & Merriman, S. (1988). Componential developments in
+
+January 2004 ● American Psychologist
+
+LOGO programming environments. In R. E. Mayer (Ed.), Teaching and
+learning computer programming (pp. 13–54). Hillsdale, NJ: Erlbaum.
+Craig, R. C. (1956). Directed versus independent discovery of established
+relations. Journal of Educational Psychology, 47, 223–234.
+Dalbey, J., & Linn, M. C. (1985). The demands and requirements of
+computer programming: A literature review. Journal of Educational
+Computing Research, 1, 253–274.
+Fay, A. L., & Mayer, R. E. (1994). Benefits of teaching design skills
+before teaching LOGO computer programming: Evidence for syntaxindependent learning. Journal of Educational Computing Research, 11,
+187–210.
+Gagne, R. M., & Brown, L. T. (1961). Some factors in the programming
+of conceptual learning. Journal of Experimental Psychology, 62,
+313–321.
+Gelman, R. (1969). Conservation acquisition: A problem of learning to
+attend to relevant attributes. Journal of Experimental Child Psychology,
+7, 167–187.
+Inhelder, B., Sinclair, H., & Bovet, M. (1974). Learning and cognitive
+development. Cambridge, MA: Harvard University Press.
+Kittel, J. E. (1957). An experimental study of the effect of external
+direction during learning on transfer and retention of principles. Journal
+of Educational Psychology, 48, 391– 405.
+Kurland, D. M., & Pea, R. D. (1985). Children’s mental models of
+recursive LOGO programs. Journal of Educational Computing Research, 1, 235–244.
+Lambert, N. M., & McCombs, B. L. (Eds.). (1998). How students learn.
+Washington, DC: American Psychological Association.
+Lee, M., & Thompson, A. (1997). Guided instruction in LOGO programming and the development of cognitive monitoring strategies among
+college students. Journal of Educational Computing Research, 16,
+125–144.
+Lefrancois, G. R. (1997). Psychology for teachers (9th ed). Belmont, CA:
+Wadsworth.
+Lehrer, R., Guckenberg, T., & Sancilio, L. (1988). Influences of LOGO on
+children’s intellectual development. In R. E. Mayer (Ed.), Teaching and
+learning computer programming (pp. 75–110). Hillsdale, NJ: Erlbaum.
+Littlefield, J., Delclos, V. R., Lever, S., Clayton, K. N., Bransford, J. D.,
+& Franks, J. J. (1988). Learning LOGO: Method of teaching, transfer of
+
+general skills, and attitudes toward school and computers. In R. E.
+Mayer (Ed.), Teaching and learning computer programming (pp. 111–
+136). Hillsdale, NJ: Erlbaum.
+Marshall, H. (Ed.). (1996). Recent and emerging theoretical frameworks
+for research on classroom teaching: Contributions and limitations [Special issue]. Educational Psychologist, 31(3/4).
+May, R. B., & Tisshaw, S. K. (1975). Variations of learning-set training
+and quantity conservation. Child Development, 48, 661– 667.
+Mayer, R. E. (Ed.). (1988). Teaching and learning computer programming. Hillsdale, NJ: Erlbaum.
+Mayer, R. E. (1999). The promise of educational psychology: Learning in
+the content areas. Upper Saddle River, NJ: Prentice Hall.
+Mayer, R. E. (2003). Learning and instruction. Upper Saddle River:
+Prentice Hall.
+Palinscar, A. S., & Brown, A. L. (1984). Reciprocal teaching of comprehension-fostering and monitoring activities. Cognition and Instruction,
+1, 117–175.
+Papert, S. (1980). Mindstorms: Children, computers, and powerful ideas.
+New York: Basic Books.
+Pea, R. D., & Kurland, D. M. (1984). On the cognitive effects of learning
+computer programming. New Ideas in Psychology, 2, 137–168.
+Phillips, D. C. (1998). How, why, what, when, and where: Perspectives on
+constructivism in psychology and education. Issues in Education, 3,
+151–194.
+Piaget, J. (1970). Science of education and psychology of the child. New
+York: Oxford University Press.
+Shavelson, R. J., & Towne, L. (Eds.). (2002). Scientific research in
+education. Washington, DC: National Academy Press.
+Shulman, L. S., & Keisler, E. R. (1966). Learning by discovery. Chicago:
+Rand McNally.
+Slavin, R. (1983). When does cooperative learning increase student
+achievement? Psychological Bulletin, 94, 429 – 445.
+Steffe, L. P., & Gale, J. (Eds.). (1995). Constructivism in education.
+Mahwah, NJ: Erlbaum.
+Sweller, J. (1999). Instructional design in technical areas. Camberwell,
+Australia: ACER Press.
+Wallach, L., & Sprott, R. L. (1964). Inducing conservation in children.
+Child Development, 35, 71– 84.
+
+CORRECTION NOTICE
+In Philip G. Zimbardo’s President’s Address that appeared in the August 2003 edition of the
+American Psychologist, the word “minority” was inadvertently omitted from the second full
+paragraph on page 529. The paragraph should read as follows:
+I facilitated new members’ talking more and some old timers’ talking less,
+added an open microphone time during which nonagenda issues could be raised
+by anyone, encouraged the APA council to take more charge in developing new
+visions for APA and its governance (which has eventuated in a new Task Force
+on Governance), and introduced the “Changing Demographics” presentation to
+make members aware of the new look that is emerging in the composition of the
+United States. In addition, I strongly endorsed passage of the new ethics code
+revision (spearheaded by Celia Fisher), creation of a voting seat on the APA
+council and a nonvoting seat on the APA board for an American Psychological
+Association of Graduate Students representative, addition of the term education
+to APA’s mission statement, and proposals to increase minority representation
+on the APA council and all APA boards and committees.
+
+January 2004 ● American Psychologist
+
+19
+
+
