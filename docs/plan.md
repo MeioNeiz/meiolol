@@ -30,15 +30,18 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
    matchups index table; Daily Draft facts, reveal, last pick, J10 recent games; Learn
    one per screen; site-wide colour scale and denser frame; mock champ select on the
    Mac (deploy/mock-cs.sh); privacy rules audit (docs/privacy-rules.md)
-3. Next on the site, by size of win: Learn redesign (docs/learn-proposal.md), design
+3. Front end (Jacob 20 Oct: styling, JS and templates "really holding us back" for
+   app development, wants time on it soon): scope a rework of src/site templates,
+   style.css and static/*.js before more page work
+4. Next on the site, by size of win: Learn redesign (docs/learn-proposal.md), design
    build order 4-6 (docs/design-ideas.md), per-matchup builds (vsbuilds notes), Daily
    Draft pick verdicts (daily notes); Jacob's answers to the night's questions first
-4. Application: Jacob checks the 18 Oct draft text and pastes (production-key.md);
+5. Application: Jacob checks the 18 Oct draft text and pastes (production-key.md);
    screenshots, video and LCU list need his real champ select run (app.md "Next");
    docs/privacy-rules.md lists what the text and privacy page must still match (J10)
-5. Draft tester and desktop items from Jacob's 19 Oct list (site.md, app.md), desktop
+6. Draft tester and desktop items from Jacob's 19 Oct list (site.md, app.md), desktop
    after the real champ select run, with the policy check in app.md
-6. Comp leans: held-out look ~24 Oct, then champion pages and reasons:
+7. Comp leans: held-out look ~24 Oct, then champion pages and reasons:
    data-and-model.md
 
 Others own: the TW2 mastery retry (meiolol-8f); neural nets vs

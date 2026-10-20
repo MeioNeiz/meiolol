@@ -81,6 +81,12 @@ judgements, 3 to 5 options with reasons, no "best pick" or "+X% win rate" wordin
 
 ## Next
 
+- Expertise bonus richer (Jacob 20 Oct: "a calculated bonus based on as much stats as we
+  can, not just a simple bonus"): today one fitted beta per tenfold mastery points. Next:
+  per-champion slope shrunk to the role's (d1: per-champion gap real, true sd ~2 points),
+  recent games and win rate on the champion, games in the role, rank, time since last
+  played; each term kept only if `meiolol eval --replay` shows it beats the error bar.
+  Open items: data/team/2026-10-20-pooltest/notes.md
 - Mock client vs a real capture: once session-real.json comes, diff its shape against
   the mock's (`meiolol-app get /lol-champ-select/v1/session` on each) and fix the mock;
   same for a real Live Client Data reply and eog-stats-block (all synthetic now). Check
