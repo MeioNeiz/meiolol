@@ -9,11 +9,11 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Area | Covers | Questions | Sources | Findings |
 | --- | --- | --- | --- | --- |
-| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 6 | 146 | 605 |
-| [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 3 | 122 | 487 |
-| [data](areas/data.md) | what the Riot API serves and how to crawl it | 3 | 123 | 286 |
-| [stats](areas/stats.md) | estimation and recommendation methods | 15 | 234 | 1875 |
-| [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 5 | 129 | 509 |
+| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 8 | 185 | 862 |
+| [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 3 | 126 | 501 |
+| [data](areas/data.md) | what the Riot API serves and how to crawl it | 3 | 152 | 382 |
+| [stats](areas/stats.md) | estimation and recommendation methods | 17 | 251 | 1877 |
+| [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 5 | 137 | 524 |
 | [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 7 | 98 | 452 |
 
 ## Questions
@@ -22,10 +22,12 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Status | Pri. | Question | Claims | Sources | Searches | Leads |
 | --- | --- | --- | --- | --- | --- | --- |
+| answered | soon | [What does Coach Rogue teach about champion select, counter picks, champion pools, runes and builds, and where does it agree or clash with meiolol's data and recommender?](questions/coach-draft-advice.md): What does Coach Rogue teach about champion select, counter picks, champion pools, runes and builds, and where does it agree or clash with meiolol's data and recommender? | 5 strong, 4 moderate, 2 weak, 1 contested | 9 | 2 (thin) |  |
 | answered | soon | [What do the big League tools show a first-time visitor, and what brings players back (accounts, progress, habit, notifications)?](questions/competitor-first-visit-returning.md): What do the big League tools show a first-time visitor, and what brings players back (accounts, progress, habit, notifications)? | 5 strong, 6 moderate | 13 | 2 (thin) | 1 |
 | answered | soon | [What do League of Legends players search for most, and which of those searches could meiolol answer better than existing sites?](questions/search-demand.md): What do League of Legends players search for most, and which of those searches could meiolol answer better than existing sites? | 9 strong, 5 moderate, 3 weak | 24 | 14 (growing) | 1 |
 | answered | soon | [How do good teaching products and coaches teach a skill like drafting, and what should meio.lol's Learn copy?](questions/teach-draft.md): How do good teaching products and coaches teach a skill like drafting, and what should meio.lol's Learn copy? | 10 strong, 4 moderate | 17 | 15 (growing) | 2 |
-| decided | soon | [What League of Legends third-party tools exist, what do they do with match data, and where are the gaps?](questions/league-tools-landscape.md): What League of Legends third-party tools exist, what do they do with match data, and where are the gaps? | 8 strong, 6 moderate, 2 weak | 27 | 28 (saturated) | 12 |
+| answered | later | [Is farm value flat while kill value and kill rate rise with game time, so ganking and grouping beat farming from about level 8 or 20 minutes, as Coach Rogue's Moneyball video claims?](questions/kill-vs-farm-value.md): Is farm value flat while kill value and kill rate rise with game time, so ganking and grouping beat farming from about level 8 or 20 minutes, as Coach Rogue's Moneyball video claims? | 6 strong, 4 moderate, 1 weak, 3 contested | 16 | 2 (thin) | 1 |
+| decided | soon | [What League of Legends third-party tools exist, what do they do with match data, and where are the gaps?](questions/league-tools-landscape.md): What League of Legends third-party tools exist, what do they do with match data, and where are the gaps? | 8 strong, 7 moderate, 3 weak | 32 | 33 (saturated) | 12 |
 | decided | soon | [What do ranked and casual League players want from third-party tools that they don't get today?](questions/player-tool-needs.md): What do ranked and casual League players want from third-party tools that they don't get today? | 7 strong, 4 moderate, 2 contested | 13 | 33 (growing) | 8 |
 | decided | soon | [What kinds of third-party League tools does Riot encourage, feature or partner with, and what is it moving against?](questions/riot-appreciated-tools.md): What kinds of third-party League tools does Riot encourage, feature or partner with, and what is it moving against? | 9 strong, 2 moderate | 18 | 13 (growing) | 4 |
 
@@ -34,7 +36,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | Status | Pri. | Question | Claims | Sources | Searches | Leads |
 | --- | --- | --- | --- | --- | --- | --- |
 | answered | now | [How can players look themselves up and opt into Squads without RSO, and what do Riot policy and GDPR require for storing and showing player data?](questions/identity-and-privacy.md): How can players look themselves up and opt into Squads without RSO, and what do Riot policy and GDPR require for storing and showing player data? | 10 strong, 1 moderate, 2 weak, 1 contested | 21 | 16 (growing) | 1 |
-| answered | soon | [Would Riot grant meiolol a production API key, and what does the application need?](questions/riot-production-key.md): Would Riot grant meiolol a production API key, and what does the application need? | 9 strong, 4 moderate, 2 contested | 54 | 48 (slowing) | 3 |
+| answered | soon | [Would Riot grant meiolol a production API key, and what does the application need?](questions/riot-production-key.md): Would Riot grant meiolol a production API key, and what does the application need? | 9 strong, 5 moderate, 2 contested | 55 | 52 (saturated) | 3 |
 | answered | soon | [How do lookup sites and the Riot API treat streamer mode and other players' Riot IDs on public pages?](questions/streamer-mode-names.md): How do lookup sites and the Riot API treat streamer mode and other players' Riot IDs on public pages? | - | 9 | 12 (saturated) |  |
 
 ### data
@@ -63,7 +65,9 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | answered | soon | [How should champion-into-comp effects at several levels (team damage mix, kit groups, per-champion leans, pair and matchup terms) be combined in one additive draft model without double counting, so each part stays a nameable reason?](questions/hierarchical-comp-terms.md): How should champion-into-comp effects at several levels (team damage mix, kit groups, per-champion leans, pair and matchup terms) be combined in one additive draft model without double counting, so each part stays a nameable reason? | 8 strong, 2 moderate | 10 | 13 (slowing) | 3 |
 | answered | soon | [How should an LLM agent run meiolol's modelling experiments, and which tools should it get?](questions/llm-experiment-agent.md): How should an LLM agent run meiolol's modelling experiments, and which tools should it get? | 14 strong, 6 moderate, 1 contested | 22 | 11 (growing) | 7 |
 | answered | soon | [How should an experiment agent choose what to try next, instead of brute-forcing many runs?](questions/smart-experiment-search.md): How should an experiment agent choose what to try next, instead of brute-forcing many runs? | 7 strong, 5 moderate | 12 | 7 (growing) | 5 |
+| answered | later | [Which of Coach Rogue's stats-based claims (split push win rate, objective win rates, bounties, game length, gold leads, carrying when fed) hold in our ranked data?](questions/coach-stat-claims.md): Which of Coach Rogue's stats-based claims (split push win rate, objective win rates, bounties, game length, gold leads, carrying when fed) hold in our ranked data? | 11 strong, 2 moderate, 4 contested | 16 | 1 (thin) | 3 |
 | decided | now | [How should per-matchup per-minute lane curves be estimated robustly when many pairs are thin?](questions/curve-statistics-method.md): How should per-matchup per-minute lane curves be estimated robustly when many pairs are thin? | 9 strong, 2 moderate | 14 | 21 (growing) | 2 |
+| decided | soon | [How do stat sites score a champion's ban value (lolalytics PBI), and how should meiolol handle small samples?](questions/ban-impact-score.md): How do stat sites score a champion's ban value (lolalytics PBI), and how should meiolol handle small samples? | 4 moderate | 3 | 2 (thin) |  |
 
 ### ui
 
@@ -89,6 +93,6 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 ## Health
 
-- 39 questions, 551 sources, 3919 findings
-- Open leads: 161 (`josearch leads`)
-- Lint: 0 errors, 2 warnings (`josearch lint`)
+- 43 questions, 599 sources, 4277 findings
+- Open leads: 165 (`josearch leads`)
+- Lint: 0 errors, 3 warnings (`josearch lint`)

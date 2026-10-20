@@ -38,6 +38,7 @@ status under that change is unstated (C11).
 - C10: No other players' names or stats in Ranked Solo/Duo champ select. for: [[riot-champ-select-anon-apps-1222#^f1]], [[overwolf-riot-compliance#^f3]], [[riot-docs-lol#^f5]]
 - C11: From 6 Oct 2026 memory access is blocked; official API the only allowed route; LCU not named. for: [[riot-memory-access-removed#^f1]], [[riot-memory-access-removed#^f2]], [[riot-memory-access-removed#^f7]]
 - C12: LCU use goes on the same product's application (note on app), one app per game per product. for: [[riot-docs-lol#^f13]], [[riot-faqs#^f4]]
+- C14: Riot has denied keys on business model too, not only broken sites (betting/wager site Gamestars, 2016); a 2025 AI-recommendation app was denied production with no stated reason. for: [[gamestars-key-refused#^f1]], [[gh-devrel-1099#^f4]]
 - C13 (inferred): Frame meiolol as several explained options that teach draft, never a single "best pick" or uplift claim. from: C3, C1
 
 ## Disagreements

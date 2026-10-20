@@ -148,6 +148,12 @@ puzzle game: docs/learn-proposal.md (team run 2026-10-19 night, teach).
   lesson examples as tiles, not sentences; a lesson from lane curves (who is ahead at 14)
   as Level 2's primer
 
+- Undecided, for Jacob (not built; Coach Rogue research 20 Oct,
+  research/questions/coach-draft-advice.md, coach-stat-claims.md): a "popular advice,
+  tested" page or lesson set, each common coaching claim with what our games say
+  (jungler-support and mid-ADC synergy not detected; damage mix matters; split pushers
+  no better than other top laners; bounties pay the team behind more per kill)
+
 ## Search
 
 Jacob 19 Oct: the champions index search is good; the same search on more of the site
@@ -229,6 +235,13 @@ than lolalytics: our own edge is the lane curves, early/late lean, "Into which t
   per-champion banned count in statsfile, or champions.json). Next: Jacob's look; per
   opponent (bans into your pool's hard lanes, B3) and per rank filter (filters.zig has
   bans by rank)
+
+- Undecided, for Jacob (not built; Coach Rogue research 20 Oct,
+  research/questions/coach-draft-advice.md): a blind-safe score per champion (fits any
+  ally and holds up into any enemy comp: low spread across comp leans, with J2's low end
+  of win); build blocks with rune rows split by melee or ranged lane opponent, the first
+  three items as one sequence instead of separate slots, and purchases split by gold
+  lead at purchase (wording stays "most played", never "best")
 
 ## Matchup page
 

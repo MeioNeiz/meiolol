@@ -46,6 +46,8 @@ neglect (C16, weak).
 - C14: Replay-file analysis is a dead end for a Riot-friendly tool after 26.20/26.21. for: [[rofl-replay-parser#^f1]], [[lol-patch-26-20#^f2]], [[replaybook#^f4]]
 - C15: Friend and Discord group trackers are a crowded small niche. for: [[topgg-dorans-bot#^f5]], [[topgg-dorans-bot#^f6]], [[awesome-league#^f4]]
 - C16: Tools die from traffic loss and neglect more than key revocation. for: [[esportsnet-lolking#^f1]], [[esportsnet-lolking#^f4]]
+- C17: Goal-based "mental" training apps exist on Overwolf but are small: WaveClear (seed-stage startup, free with ads, 30.7K downloads, 25 ratings) sets one skill goal, tracks focus live from Riot API and Overwolf events with reminders, and debriefs after the game; its draft feature sets a goal, it does not suggest picks. for: [[overwolf-waveclear#^f2]], [[overwolf-waveclear#^f4]], [[overwolf-waveclear#^f5]], [[waveclear-privacy#^f1]], [[f4fund-waveclear#^f1]]
+- C18: Practice apps' own win-rate gains are uncontrolled (WaveClear: 2,047 self-selected matches, no control group, starting from each player's worst stat). for: [[waveclear-research#^f3]] from: C17
 
 ## Disagreements
 

@@ -9,7 +9,7 @@ Riot developer policy, production key, player privacy and GDPR
 | Status | Pri. | Question | Claims | Sources | Searches | Leads |
 | --- | --- | --- | --- | --- | --- | --- |
 | answered | now | [How can players look themselves up and opt into Squads without RSO, and what do Riot policy and GDPR require for storing and showing player data?](../questions/identity-and-privacy.md): How can players look themselves up and opt into Squads without RSO, and what do Riot policy and GDPR require for storing and showing player data? | 10 strong, 1 moderate, 2 weak, 1 contested | 21 | 16 (growing) | 1 |
-| answered | soon | [Would Riot grant meiolol a production API key, and what does the application need?](../questions/riot-production-key.md): Would Riot grant meiolol a production API key, and what does the application need? | 9 strong, 4 moderate, 2 contested | 54 | 48 (slowing) | 3 |
+| answered | soon | [Would Riot grant meiolol a production API key, and what does the application need?](../questions/riot-production-key.md): Would Riot grant meiolol a production API key, and what does the application need? | 9 strong, 5 moderate, 2 contested | 55 | 52 (saturated) | 3 |
 | answered | soon | [How do lookup sites and the Riot API treat streamer mode and other players' Riot IDs on public pages?](../questions/streamer-mode-names.md): How do lookup sites and the Riot API treat streamer mode and other players' Riot IDs on public pages? | - | 9 | 12 (saturated) |  |
 
 ## Sources
@@ -123,6 +123,7 @@ Riot developer policy, production key, player privacy and GDPR
 | [Riot Games DevRel on X: Spectator-v5 off, Match-v5 unaffected by anonymous modes (2025-10-17)](../sources/riotdevrel-tweet-spectator-anonymity.md) | Riot DevRel's announcement to API developers: Spectator-v5 switched off over streamer mode, Match-v5 and leaderboards not affected; getCurrentGameInfoByPuuid back on 20 Oct | thread | policy privacy | docs (post and Riot's follow-up reply, logged-out X) | high | A/weak | 3/4 | 2026-10-20 |
 | [Riot Games Legal Jibber Jabber (fan project IP policy)](../sources/riot-legal.md) | Riot's IP licence for fan projects; commercial exception via API key; notice wording | docs | policy | docs (whole page) | medium | A/fair | 5/5 | 2026-10-11 |
 | [Riot Games Terms of Service (last modified 2024-12-01)](../sources/riot-terms-of-service.md) | Riot's player ToS; User Rules ban unauthorised third-party programs and memory reading; no AI training clause | docs | data policy | skimmed (grepped for AI, scraping, third-party programs; read User Rules 7.1) | medium | A/weak | 4/4 | 2026-10-11 |
+| [Riot refused Gamestars an API key (GameTyrant)](../sources/gamestars-key-refused.md) | 2016 news piece quoting Riot's Sargonas: Gamestars (betting/wager site) refused an API key over business model and values | article | policy | skimmed | medium | B/fair | 2/2 | 2026-10-20 |
 | [Riot Support: Anonymizing Your Riot ID (streamer mode, 2026-02-10)](../sources/riot-support-anonymizing-riot-id.md) | Riot's player-facing description of streamer mode: hides Riot ID from third-party apps during a match only; match history unaffected | docs | policy privacy | docs (whole article) | high | A/fair | 2/3 | 2026-10-11 |
 | [riotapi-schema: OpenAPI spec of the Riot Games API](../sources/riotapi-schema.md) | OpenAPI 3 spec generated daily from Riot's API reference; field-level view of every LoL endpoint | spec | data fun privacy | code (gh-pages openapi-3.0.0.yml, match-v5, mastery, challenges, spectator, clash, league-exp) | high | B/fair | 18/18 | 2026-10-11 `b5a159ab1d65e8e400eaaa1184d4179d877ee29f` |
 | [ROFL (Mowokuma/ROFL) replay file parser README](../sources/rofl-replay-parser.md) | Archived Rust parser that pulls per-second positions and ward placements from .rofl replays because the Riot API lacks them | project | data learning market policy | docs (README) | medium | C/fair | 3/5 | 2026-10-11 `7181c9a745881cad9e14b79653c48af0d2fcd824` |
@@ -138,10 +139,13 @@ Riot developer policy, production key, player privacy and GDPR
 | [Vercel fair use guidelines (docs, 2026)](../sources/vercel-fair-use.md) | Vercel's fair use guidelines: Hobby is non-commercial; ads (e.g. AdSense) count as commercial use, donations do not | docs | ops policy | docs (included usage, commercial usage) | medium | A/fair | 2/2 | 2026-10-11 |
 | [Vercel Hobby plan (docs, 2026-09-14)](../sources/vercel-hobby.md) | Vercel's free Hobby plan: personal projects, first 100 GB Fast Data Transfer, non-commercial personal use only | docs | ops policy | docs (whole page) | medium | A/fair | 3/3 | 2026-10-11 |
 | [Wasabi Pay as You Go pricing FAQ (2026)](../sources/wasabi-pricing-faq.md) | Wasabi's pricing FAQ: $7.99/TB-month, 1 TB monthly minimum charge, 90-day minimum storage duration, free egress up to stored volume | docs | ops privacy | docs (pricing table, minimums, free egress policy) | medium | A/fair | 4/5 | 2026-10-11 |
+| [WaveClear home page (waveclear.gg)](../sources/waveclear-home.md) | WaveClear's landing page: a no-hardware Focus Tracker and goal-based skill training for LoL, distributed only through Overwolf, with win-rate marketing claims | project | learning market needs policy tools ux/features | docs (whole page) | medium | C/weak | 6/7 | 2026-10-20 |
+| [WaveClear on the Overwolf app store (v1.16.3.47, Oct 2026)](../sources/overwolf-waveclear.md) | Overwolf store page of WaveClear, Coach Rogue's "mental performance" and VOD debrief app for League: free with ads, 30.7K downloads, 4.3 from 25 ratings | project | learning market needs policy privacy tools ux/features | docs (store listing, whole page) | medium | C/fair | 9/10 | 2026-10-20 |
+| [WaveClear privacy policy (15 Jul 2025)](../sources/waveclear-privacy.md) | WaveClear's privacy policy: what game, input and face-video data the Overwolf app collects, from Riot's and Overwolf's APIs and an optional emotion-analysis SDK | docs | policy privacy tools | docs (sections 1-2, 4 sharing, 7 retention; skimmed the rest) | high | B/fair | 6/6 | 2026-10-20 |
 
 ## Findings by tag
 
-### policy: Riot developer policies, API key approval process, legal requirements (365)
+### policy: Riot developer policies, API key approval process, legal requirements (374)
 
 - [[blitz-lutris-description#^f1]] [data] [policy] Blitz said it fetched all data from Riot's League API and analysed it itself, using no other third-party stats. (C/weak, verified)
 - [[blitz-lutris-description#^f3]] [policy] Blitz claimed it consulted Riot before major features. (C/weak, verified)
@@ -162,6 +166,9 @@ Riot developer policy, production key, player privacy and GDPR
 - [[draftgap#^f4]] [policy] (inferred) So DraftGap needs no Riot API key at all; its continued operation is not evidence about production key approval, only about Riot tolerating an LCU-reading pick recommender. (B/fair, unquoted)
 - [[draftgap#^f5]] [policy] Checked, not there: no mention of Riot approval, production key, registration or the "isn't endorsed" boilerplate in README or FAQ; no GitHub issue (16 total) about Riot policy, Vanguard or removed features. (B/fair, absence)
 - [[esportsnet-lolking#^f4]] [policy] Checked, not there: no mention of a Riot API key problem in its closure. (C/weak, absence)
+- [[gamestars-key-refused#^f1]] [policy] Riot refused Gamestars (a paid tournament/wager site) an API key over its business model and values, after talks with them. (B/fair, verified)
+- [[gamestars-key-refused#^f2]] [policy] Gamestars then forced deprecated legacy tournament codes to work without authorisation; Riot patched it. (B/fair, verified)
+- [[gamestars-key-refused#^f3]] [policy] Checked, not there: no date in the article itself. (B/fair, absence)
 - [[gh-aup#^f1]] [ops] [policy] GitHub may suspend accounts, throttle file hosting or, after notice, delete repos that place undue strain on its infrastructure. (A/fair, verified)
 - [[gh-aup#^f2]] [ops] [policy] The AUP points to the large-files page for acceptable object storage use in repositories. (A/fair, verified)
 - [[gh-aup#^f3]] [ops] [policy] No excessive automated bulk activity or undue burden by automated means. (A/fair, verified)
@@ -335,6 +342,8 @@ Riot developer policy, production key, player privacy and GDPR
 - [[overwolf-riot-compliance#^f5]] [policy] Riot bans display of TFT Legend and Augment win rates and Augment placements. (B/fair, verified)
 - [[overwolf-riot-compliance#^f6]] [policy] Brawl and League Classic data must not be aggregated or shown by third-party apps. (B/fair, verified)
 - [[overwolf-riot-compliance#^f7]] [policy] Checked, not there: no ban on champion pick recommendations, champion win rates or team win probability in champ select; the champ select rule is only name anonymity. (B/fair, absence)
+- [[overwolf-waveclear#^f8]] [policy] [tools] The maker (WaveClear LTD, "gamers and behavioral researchers") says the app is hardware-free and publisher-rule friendly: no cheating, automation or gameplay control. (C/fair, verified)
+- [[overwolf-waveclear#^f11]] [policy] Checked, not there: no mention of Riot API use, a production key, Riot registration, or what input data the focus tracker reads. (C/fair, absence)
 - [[pcgamesn-blitz-plugins#^f1]] [tools] [policy] Riot product lead Chris 'Auberaun' Roberts confirmed using Blitz in League incurs no penalties, after Marvel Rivals banned it. (B/fair, verified)
 - [[pcgamesn-blitz-plugins#^f2]] [policy] Riot's line: no gameplay information giving an advantage beyond extrapolating what the game provides; enemy ult tracking crosses it. (B/fair, verified)
 - [[pcgamesn-blitz-plugins#^f3]] [policy] Riot's enforcement trigger is when players start to "need" a tool to be competitive. (B/fair, verified)
@@ -508,8 +517,12 @@ Riot developer policy, production key, player privacy and GDPR
 - [[vercel-fair-use#^f1]] [policy] [ops] All commercial use needs Pro or Enterprise. (A/fair, verified)
 - [[vercel-fair-use#^f2]] [policy] Showing advertisements counts as commercial use; donations do not. (A/fair, verified)
 - [[vercel-hobby#^f3]] [ops] [policy] Hobby is restricted to non-commercial, personal use. (A/fair, verified)
+- [[waveclear-home#^f6]] [policy] Carries Riot's standard not-endorsed legal boilerplate. (C/weak, verified)
+- [[waveclear-privacy#^f1]] [policy] [tools] Game data comes from Riot's API and Overwolf's API, including in-game clicks, match history, game statistics and real-time performance metrics, analysed to determine focus. (B/fair, verified)
+- [[waveclear-privacy#^f5]] [privacy] [policy] May share gameplay stats with third-party leaderboard and stats sites "in a manner similar to how Riot Games publishes such data", and, by choice, the player's measured "mindset". (B/fair, verified)
+- [[waveclear-privacy#^f7]] [policy] Checked, not there: no mention of reading keyboard or mouse input outside the game events Overwolf supplies, no named Riot product registration or key. (B/fair, absence)
 
-### privacy: player identity, Riot ID lookup, consent, data retention, GDPR, privacy policies (142)
+### privacy: player identity, Riot ID lookup, consent, data retention, GDPR, privacy policies (148)
 
 - [[aws-s3-pricing#^f3]] [ops] [privacy] Deep Archive minimum storage duration 180 days (Glacier Flexible and Instant 90); early deletes pay the remaining days. (A/fair, verified)
 - [[backblaze-b2-pricing#^f2]] [ops] [privacy] No minimum file size and no minimum storage duration fees, so deleting early (erasure) costs nothing extra. (A/fair, verified)
@@ -614,6 +627,7 @@ Riot developer policy, production key, player privacy and GDPR
 - [[opgg-privacy-policy#^f6]] [privacy] [policy] Non-EU controller names an EU representative (GDPR Art. 27) and a UK representative (UK GDPR Art. 27), both Bird & Bird services. (A/fair, verified)
 - [[opgg-privacy-policy#^f7]] [privacy] Adults only (18+, 19 in Korea); deletes data of children found. (A/fair, verified)
 - [[opgg-privacy-policy#^f8]] [privacy] States 72-hour breach notification for GDPR-covered breaches. (A/fair, verified)
+- [[overwolf-waveclear#^f10]] [privacy] No registration needed to use it. (C/fair, verified)
 - [[porofessor-featured-live-2026-10-20#^f1]] [ux/features] [privacy] Featured Games lists live Ranked Solo/Duo games, each seat as Riot ID plus rank; a streamer-mode seat shows the text "Streamer Mode" with no rank, in place of the name. 10 of 80 seats were Streamer Mode. (B/fair, verified)
 - [[porofessor-featured-live-2026-10-20#^f2]] [privacy] In the EUW game 8019181098, Porofessor's four "Streamer Mode" seats are exactly the four seats spectator-v5 returns with a champion name and a null puuid; the other six show Riot ID and rank (e.g. Challenger). (B/fair, verified)
 - [[porofessor-featured-live-2026-10-20#^f3]] [privacy] A seat is never dropped: the hidden player keeps its place in the team list, only name and rank are replaced. (B/fair, unquoted)
@@ -653,3 +667,8 @@ Riot developer policy, production key, player privacy and GDPR
 - [[ugg-privacy#^f4]] [privacy] Deletion and access requests by email to privacy@u.gg. (A/weak, verified)
 - [[ugg-privacy#^f6]] [privacy] Checked, not there: no section on Riot API match data, no removal process for looked-up profiles, no ownership check for requests. (A/weak, absence)
 - [[wasabi-pricing-faq#^f3]] [ops] [privacy] 90-day minimum storage duration: objects deleted earlier are billed for the remaining days. (A/fair, verified)
+- [[waveclear-privacy#^f2]] [privacy] Needs an Overwolf account and a LoL account; Overwolf passes the Riot game name and tag, which the app ties to its user. (B/fair, verified)
+- [[waveclear-privacy#^f3]] [privacy] [tools] An optional feature installs the TruSight SDK (Revealense) to analyse the player's face on camera for stress and emotional response to game events; processed on the device, video not stored, the analysis shared with Revealense. (B/fair, verified)
+- [[waveclear-privacy#^f4]] [privacy] Mentions in-app purchases through Overwolf payments, beside ads. (B/fair, verified)
+- [[waveclear-privacy#^f5]] [privacy] [policy] May share gameplay stats with third-party leaderboard and stats sites "in a manner similar to how Riot Games publishes such data", and, by choice, the player's measured "mindset". (B/fair, verified)
+- [[waveclear-privacy#^f6]] [privacy] Under-16s may not use it. (B/fair, verified)
