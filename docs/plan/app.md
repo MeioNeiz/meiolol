@@ -80,6 +80,11 @@ judgements, 3 to 5 options with reasons, no "best pick" or "+X% win rate" wordin
   `meiolol-app.exe session --save session-real.json`, then copy that file to
   testdata/lcu/session-real.json (check mastery and ranked replies parse)
 - Not checked: 150% scaling (set a display to 150% and open the exe) and the card itself
+- Not checked on Windows: the updater in the real exe (gpu-box offline 20 Oct). Checked
+  from the Mac against meio.lol with `meiolol-app update DIR` (same code): stats,
+  curves and exe fetched (stats 1.4 MB gzipped), exe swapped, second run nothing to do.
+  On Windows: unzip the admin zip, open the exe; expect "Downloading champion
+  statistics", then the client states; stats-16.20.bin and recent-curves.bin appear
 - Not yet: your own record in the matchup (concept part 6; LCU match history, needs a
   real reply to fix the schema), champion icons, window icon (title bar shows dvui's),
   the public download (after the key, in this order: drop the admin gate and the key,
