@@ -68,16 +68,17 @@ facts with counts are not that, but check the line with Jacob before numbers com
   ahead at 14" chips and games. Copy cut to one line, method in a closed details. Gold
   sides from the lane curves (src/daily.zig LaneGold: 2 SE, 200+ games, own >= 0.5);
   the puzzle JSON also carries the gold amount and lane lead counts, unshown (J1)
-- Jacob: may numbers come back, e.g. "ahead at 14 in 58% of 1,220 games" or "+300
-  gold at 14"? Learn and matchup pages already show both
 - Done 20 Oct: framed as the last pick (match data has no pick order: "treat it as"),
   EUW in the context line, bans as icons per side (no seat in match-v5)
-- Jacob 20 Oct 00:36-00:41 asked for pick verdicts (J2 form), per-player ranks, a
-  scoreboard and no week delay: plan and the privacy questions in
-  data/team/2026-10-19-night/daily.md (Q2 and the privacy page set the week delay)
-- Next: a hint before the guess (e.g. reveal one lane fact for a smaller streak?);
-  share text with the facts; small leads (+100 gold) read "ahead" when clear: maybe a
-  floor (200 gold) so "ahead" means something to a player
+- Done 20 Oct (J10, J11; f564fc1, d1ba73c): recent games (no week minimum); each
+  player's rank by their champion; after the reveal a scoreboard per team (K/D/A, CS,
+  gold, damage) and lanes at 14 with this game's gold difference beside the patch's
+  usual ("Blue +420 at 14", "usually blue +300"); option facts with numbers ("+300 gold
+  at 14", "led 58%", games); under 200 gold at 14 reads as even. Puzzle JSON `players`
+  per seat, older puzzles backfilled from their used.txt game
+- Next: pick verdicts (J2 form, Jacob 20 Oct): plan in
+  data/team/2026-10-19-night/daily.md (score.pickSe, measure how many picks clear on
+  the live patch first); a hint before the guess; share text with the facts
 Later: puzzles from clear comp leans (data-and-model.md step 5).
 
 ## Learn

@@ -651,10 +651,12 @@ One real ranked solo game a day, same for everyone: one slot hidden behind four 
 then guess the winner. The hidden slot is the one with the best fit: its ally and enemy
 points plus a quarter of its points in the draft (`hideBestFit`), so the guess is about
 the draft, not the meta (`hidden_by`: "fit"; puzzles before 18 Oct 2026 hid a random
-slot). Pick order is not in match-v5, so "which was picked last" became
-"which was played here". The reveal is facts plus numbers, never "the correct pick":
-result, length, team kills and gold, blue's estimated win chance, the five same-role lane
-edges with games (greyed under 200), and each option's points with reasons.
+slot). Pick order is not in match-v5: the page asks it as the last pick ("treat it
+as"). Each seat shows its rank. The reveal is facts plus numbers, never "the correct
+pick" nor a draft win chance: result, length, team kills and gold, a scoreboard per
+team, and per lane this game's gold difference at 14 beside the lane curves' usual one
+(a side only for 200+ gold, 2 SE, 200+ games: J11); each option flips to one fact (a
+detected reason that clears chance, else its usual gold at 14 against the enemy).
 
 - Made by every full site load (the web loop's `site --views`, after each upload;
   its `--static core` build skips it): puzzles for today to today+2 (UTC) that
@@ -665,8 +667,11 @@ edges with games (greyed under 200), and each option's points with reasons.
 - GDPR: puzzles hold no PUUIDs; used.txt holds match ids, so a deletion that covers a
   match means dropping its line (the puzzle itself stays anonymous)
 - A failure here (or a bad curves file) is logged and the rest of the site still builds
-- Anonymised: no Riot IDs, PUUIDs, match ids or game dates; tier is the median visible
-  rank of the players we have a rank for, only when 5+ are known
+- No Riot IDs, PUUIDs, match ids or game dates; recent games (J10 dropped the week
+  delay). `players` per seat: rank at match time (participants.tier/division), K/D/A,
+  CS, gold, damage to champions, gold14 (null without a timeline; new puzzles prefer
+  games with one). Puzzles made before it get `players` from the used.txt game with the
+  same ten champions (`backfillPlayers`). `tier` is the median of the known ranks
 - Site: daily.html + daily.js, daily/index.json ([{n, date}]) and daily/<n>.json. The
   page shows the viewer's local date's puzzle (hence two days ahead), ?n= for the
   archive. Guesses, streak and archive in localStorage (key meiolol.daily.v1); share
