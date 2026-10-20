@@ -12,6 +12,8 @@ while read -r _ sha remote_ref _; do
     echo "pre-push: zig build ci on $(git -C "$root" rev-parse --short "$sha")"
     "$events" add "$sha" ci start "zig build ci on the Mac"
     if ! "$root/deploy/build-tree.sh" ci "$sha" zig build ci --cache-dir "$root/.zig-cache"; then
+        # on-push.sh names deployed commits; a refused one would show with no message
+        "$events" add "$sha" commit info "$(git -C "$root" log -1 --format='%h %s' "$sha")"
         "$events" add "$sha" ci failed "zig build ci failed: push refused"
         nohup "$events" flush > /dev/null 2>&1 < /dev/null &
         echo "pre-push: ci failed, push refused"
