@@ -212,8 +212,8 @@ fn sameTop(rows: File.Rows, usual: ?File.Build, kind: Kind) bool {
 /// (`games` players, `wins` won) by `k` games (File.shrinkK), taking the low end of
 /// that estimate's range (one standard error), so a few lucky games can't top it and
 /// near ties go to the option with more games. Only options showing a win rate
-/// (rate_games); null under two of them, or without k (older files)
-fn highest(options: []const File.Option, games: u32, wins: u32, k: ?f64) ?usize {
+/// (rate_games); null under `min` of them, or without k (older files)
+fn highest(options: []const File.Option, games: u32, wins: u32, k: ?f64, min: usize) ?usize {
     const kk = k orelse return null;
     const base = @as(f64, @floatFromInt(wins)) / @as(f64, @floatFromInt(@max(games, 1)));
     var hi: ?usize = null;
@@ -229,10 +229,11 @@ fn highest(options: []const File.Option, games: u32, wins: u32, k: ?f64) ?usize 
             best = s;
         }
     }
-    return if (n >= 2) hi else null;
+    return if (n >= min) hi else null;
 }
 
-/// A row's highest(): its players are its options' (one rune of a row each)
+/// A row's highest(): its players are its options' (one rune of a row each). A row's
+/// only rune with a win rate is its highest, so every row with a win rate has a ring
 fn highestInRow(row: []const File.Option, k: ?f64) ?usize {
     var games: u32 = 0;
     var wins: u32 = 0;
@@ -240,7 +241,7 @@ fn highestInRow(row: []const File.Option, k: ?f64) ?usize {
         games += o.games;
         wins += o.wins;
     }
-    return highest(row, games, wins, k);
+    return highest(row, games, wins, k, 1);
 }
 
 fn pct(n: u32, all: u32) f64 {
@@ -255,7 +256,7 @@ fn top(a: std.mem.Allocator, w: *Writer, f: *const File, b: File.Build, usual: ?
     const rows = b.get(kind) orelse return;
     if (rows.options.len == 0) return;
     const o = rows.options[0];
-    const hi = highest(rows.options, rows.games, rows.wins, f.shrinkK(kind, b.opponent != 0));
+    const hi = highest(rows.options, rows.games, rows.wins, f.shrinkK(kind, b.opponent != 0), 2);
     const other: ?File.Option = if (hi) |i| if (i > 0) rows.options[i] else null else null;
     const ringed = if (other) |h| kind == .runes and f.trees.len > 0 and h.v[0] == o.v[0] and h.v[5] == o.v[5] else false;
     try tpl.render(w,
@@ -364,7 +365,7 @@ fn pages(w: *Writer, f: *const File, b: File.Build) !bool {
     if (f.trees.len == 0) return false;
     const rows = b.get(.runes) orelse return false;
     if (rows.options.len == 0) return false;
-    const hi = highest(rows.options, rows.games, rows.wins, f.shrinkK(.runes, false));
+    const hi = highest(rows.options, rows.games, rows.wins, f.shrinkK(.runes, false), 2);
     try w.writeAll("<div class=\"rpages\">\n");
     for (rows.options, 0..) |o, i| {
         if (i >= pages_shown and i != hi) continue;
@@ -646,7 +647,7 @@ fn table(w: *Writer, f: *const File, b: File.Build, kind: Kind, comptime title: 
     if (rows.options.len == 0) {
         try w.writeAll("<tr class=\"thin\"><td colspan=\"4\">More data needed</td></tr>\n");
     }
-    const hi = highest(rows.options, rows.games, rows.wins, f.shrinkK(kind, false));
+    const hi = highest(rows.options, rows.games, rows.wins, f.shrinkK(kind, false), 2);
     for (rows.options, 0..) |o, i| {
         if (i >= rows_shown and i != hi) continue;
         try tpl.render(w,
@@ -725,11 +726,13 @@ test "highest win rate: pulled toward the slot's by k games, two or more options
     }.f;
     // 70% in 30 games shows no win rate, so is never marked; 54% in 500 games
     const opts = [_]File.Option{ o(1200, 600), o(700, 360), o(500, 270), o(30, 21) };
-    try std.testing.expectEqual(2, highest(&opts, 2430, 1251, 1000));
-    try std.testing.expectEqual(null, highest(&opts, 2430, 1251, null));
+    try std.testing.expectEqual(2, highest(&opts, 2430, 1251, 1000, 2));
+    try std.testing.expectEqual(null, highest(&opts, 2430, 1251, null, 2));
     // The low end of the range: 53% in 100 games is less sure than 52% in 2,000
-    try std.testing.expectEqual(0, highest(&.{ o(2000, 1040), o(100, 53) }, 2100, 1093, 0));
-    try std.testing.expectEqual(null, highest(&.{ o(1900, 1000), o(90, 60) }, 1990, 1060, 1000));
+    try std.testing.expectEqual(0, highest(&.{ o(2000, 1040), o(100, 53) }, 2100, 1093, 0, 2));
+    try std.testing.expectEqual(null, highest(&.{ o(1900, 1000), o(90, 60) }, 1990, 1060, 1000, 2));
+    // A rune row: its only rated rune is ringed
+    try std.testing.expectEqual(0, highest(&.{ o(1900, 1000), o(90, 60) }, 1990, 1060, 1000, 1));
 }
 
 test "rank label" {

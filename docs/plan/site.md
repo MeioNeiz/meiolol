@@ -187,6 +187,9 @@ than lolalytics: our own edge is the lane curves, early/late lean, "Into which t
   under 1% of the pair's players left out of the file), "Runes in this matchup" under
   the matchup strip; game count (950, 9.5k) under each rune on both pages. Next:
   Jacob's look; watch the matchup builder's pruning floor and file size on the next run
+  Every rune row with a win rate rings one (Jacob 20 Oct: "every row should have the win
+  rate thing"): a row's only rune with 100+ games is its highest; 59 of 147 rows on 10
+  pages had none, 44 of them such rows. Rows with no rune at 100+ games stay unringed
 - Ban impact (J20, Jacob 20 Oct: "pbr" means a PBI-style score, "the most optimal ban in
   terms of pick rate and win rate"). Done 20 Oct (morning run, bans): core/banimpact.zig,
   games won above the role's average per 10,000 games the champion was not banned, edge
