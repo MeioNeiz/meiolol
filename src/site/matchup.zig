@@ -11,6 +11,7 @@ const lanechart = @import("lanechart.zig");
 const text = @import("text.zig");
 const champion = @import("champion.zig");
 const tierlist = @import("tierlist.zig");
+const builds = @import("builds.zig");
 
 const Writer = std.Io.Writer;
 const Role = core.Role;
@@ -415,6 +416,7 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
         try tpl.renderPart(w, "</div>\n", .{});
     }
     try tpl.renderPart(w, "</div></div>\n", .{});
+    try builds.vsStrip(site, w, r, x, y, page_path);
 
     try tpl.render(w, "<h2>Lane and game</h2>\n", .{});
     for (vs) |s| {

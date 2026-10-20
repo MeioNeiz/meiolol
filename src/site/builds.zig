@@ -132,30 +132,72 @@ pub fn strip(site: *const Site, w: *Writer, ch: Champ, r: Role, from: []const u8
         .s = plural(b.games),
         .href = href,
     });
-    try top(site.arena, w, f, b, .runes, "Runes");
-    if (f.trees.len == 0) try top(site.arena, w, f, b, .shards, "Shards");
-    try top(site.arena, w, f, b, .spells, "Spells");
-    try top(site.arena, w, f, b, .start, "Start");
-    try top(site.arena, w, f, b, .boots, "Boots");
-    try top(site.arena, w, f, b, .core3, "First 3 items");
-    try top(site.arena, w, f, b, .skill_start, "Levels 1-3");
-    try top(site.arena, w, f, b, .skills, "Skill priority");
+    try top(site.arena, w, f, b, null, .runes, "Runes");
+    if (f.trees.len == 0) try top(site.arena, w, f, b, null, .shards, "Shards");
+    try top(site.arena, w, f, b, null, .spells, "Spells");
+    try top(site.arena, w, f, b, null, .start, "Start");
+    try top(site.arena, w, f, b, null, .boots, "Boots");
+    try top(site.arena, w, f, b, null, .core3, "First 3 items");
+    try top(site.arena, w, f, b, null, .skill_start, "Levels 1-3");
+    try top(site.arena, w, f, b, null, .skills, "Skill priority");
     try w.writeAll("</div></div>\n");
 }
 
-/// One kind's most played option: value, then games, share and win rate
-fn top(a: std.mem.Allocator, w: *Writer, f: *const File, b: File.Build, kind: Kind, comptime title: []const u8) !void {
+/// Matchup page: what `x` players took against `y` in `r` (File.matchups), each cell
+/// marked when it is also x's most played in the role. Nothing when the pair has too few
+/// games for the file. `from`: the matchup page's path
+pub fn vsStrip(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ, from: []const u8) !void {
+    const pv = patchView(site);
+    const f = if (site.view_builds[pv.index()]) |*f| f else return;
+    const b = f.getVs(x.id, r, y.id) orelse return;
+    const usual = f.get(x.id, r);
+    const href: ?html.Link = if (shown(f, x.id, r) == null) null else blk: {
+        const to = try path(site.arena, x, r);
+        break :blk if (site.view.period == .patch)
+            .{ .root = site.toRoot(from), .path = to }
+        else
+            .{ .root = site.toShared(from), .up = pv.dir(), .path = to };
+    };
+    try tpl.renderPart(w,
+        \\<div class="bstrip vs"><p class="bhead"><b>Most played build in this matchup</b> <span class="muted">{games} game{s} of {x} vs {y} in {lane}, patch {patch}, {in}, {ranks}.</span>{link}</p>
+        \\<div class="bks">
+    , .{
+        .games = try root.thousands(site.arena, b.games),
+        .s = plural(b.games),
+        .x = x.name,
+        .y = y.name,
+        .lane = root.roleName(r),
+        .patch = f.label,
+        .in = pv.region.in(),
+        .ranks = try rankLabel(site.arena, f.min_tier),
+        .link = tpl.when(href != null, tpl.t(" <a href=\"{href}\">{x}'s full {lane} build</a>", .{ .href = href orelse html.Link{ .root = "", .path = "" }, .x = x.name, .lane = root.roleName(r) })),
+    });
+    try top(site.arena, w, f, b, usual, .runes, "Runes");
+    if (f.trees.len == 0) try top(site.arena, w, f, b, usual, .shards, "Shards");
+    try top(site.arena, w, f, b, usual, .start, "Start");
+    try top(site.arena, w, f, b, usual, .boots, "Boots");
+    try top(site.arena, w, f, b, usual, .core2, "First 2 items");
+    try top(site.arena, w, f, b, usual, .core3, "First 3 items");
+    try top(site.arena, w, f, b, usual, .skills, "Skill priority");
+    try w.writeAll("</div></div>\n");
+}
+
+/// One kind's most played option: value, then games, share and win rate; "same as
+/// usual" when it is also `usual`'s most played
+fn top(a: std.mem.Allocator, w: *Writer, f: *const File, b: File.Build, usual: ?File.Build, kind: Kind, comptime title: []const u8) !void {
     const rows = b.get(kind) orelse return;
     if (rows.options.len == 0) return;
     const o = rows.options[0];
+    const same = if (usual) |u| if (u.get(kind)) |ur| ur.options.len > 0 and std.mem.eql(u32, ur.options[0].v, o.v) else false else false;
     const share = 100 * @as(f64, @floatFromInt(o.games)) / @as(f64, @floatFromInt(@max(rows.games, 1)));
     try tpl.render(w,
-        \\<div class="bk {kind}{thin}"><span>{title}</span><div class="bv">{value}</div><small title="{games} of {all} players took this">{games} games · {share:.0}%{rate}</small></div>
+        \\<div class="bk {kind}{thin}"><span>{title}{same}</span><div class="bv">{value}</div><small title="{games} of {all} players took this">{games} games · {share:.0}%{rate}</small></div>
         \\
     , .{
         .kind = @tagName(kind),
         .thin = tpl.when(o.games < solid_games, " thin"),
         .title = title,
+        .same = tpl.when(same, tpl.t(" <em class=\"muted\">same as usual</em>", .{})),
         .value = tpl.call(cell, .{ f, b, kind, o.v }),
         .share = share,
         .all = try root.thousands(a, rows.games),

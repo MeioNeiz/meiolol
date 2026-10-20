@@ -81,7 +81,7 @@ test "fixture games to stats, curves and the website" {
 
     // Builds count Platinum IV and up only: one rank snapshot below it is left out
     try db.exec("UPDATE participants SET tier = CASE slot WHEN 5 THEN 'GOLD' ELSE 'PLATINUM' END");
-    var bd = try builds.build(gpa, io, db, &build_data, .{ .patches = &.{patch}, .platforms = &.{"EUW1"} });
+    var bd = try builds.build(gpa, io, db, &build_data, .{ .patches = &.{patch}, .platforms = &.{"EUW1"}, .min_matchup_games = 0 });
     defer bd.deinit();
     try testing.expectEqual(games, bd.timelines);
     const build_file = try bd.file(arena, &build_data, patch, "PLATINUM", 10);
@@ -234,7 +234,7 @@ test "fixture games to stats, curves and the website" {
         .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "<div class=\"tiles mu-tiles\">", "<span>Vs usual</span>", "Mordekaiser usually wins about", "<table class=\"mu-leads thin\">", "<th class=\"num\">14 min</th>", "Where the lead comes from", "from CS (", "Kills or assists on the lane opponent before 6 min", "<input type=\"radio\" name=\"metric\" id=\"m-xp\">", "<div class=\"mu-m mu-m-cs\">" } },
         // Either side's page, each swapping to the other
         .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "<h1>Mordekaiser vs Darius</h1>", "class=\"swap\" href=\"darius-vs-mordekaiser.html\"" } },
-        .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<h1>Darius vs Mordekaiser</h1>", "class=\"swap\" href=\"mordekaiser-vs-darius.html\"", "From Darius's side" } },
+        .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<h1>Darius vs Mordekaiser</h1>", "class=\"swap\" href=\"mordekaiser-vs-darius.html\"", "From Darius's side", "<div class=\"bstrip vs\">", "Most played build in this matchup</b>", "of Darius vs Mordekaiser in Top, patch", "href=\"../../patch/build/darius-top.html\">Darius's full Top build</a>", "<span>Runes <em class=\"muted\">same as usual</em></span>", "<span>First 2 items" } },
         .{ "method.html", &.{ "Games to stabilise", "<h2 id=\"lean\">Early or late</h2>" } },
         // Early or late: three games, so no numbers, only that it can't tell yet
         .{ "champion/darius.html", &.{ "<b>Early or late:</b> too few games yet to tell.", "Games still going at 20 min: 3 (every region, last 30 days)", "href=\"../method.html#lean\"" } },
