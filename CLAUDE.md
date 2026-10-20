@@ -74,7 +74,8 @@ docs/plan.md "Now". Read it first.
   80,120p b`), independent calls in parallel in one turn; never one read per turn
 - Waiting: run_in_background, then wait for the notification
 - Tests: `zig build test 2>&1 | tee $SCRATCH/t.log | tail -30`, then grep the log
-- Hand over at ~200k context (fleet skill)
+- Past ~200k context, hand over at the next natural break (step committed); a new
+  topic starts fresh (fleet skill)
 - Team runs: shared state in the run's common.md; messages are "done: <path>" or
   "blocked: <why>, <path>", details in the file
 
