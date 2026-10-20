@@ -81,11 +81,14 @@ judgements, 3 to 5 options with reasons, no "best pick" or "+X% win rate" wordin
   `meiolol-app.exe session --save session-real.json`, then copy that file to
   testdata/lcu/session-real.json (check mastery and ranked replies parse)
 - Not checked: 150% scaling (set a display to 150% and open the exe) and the card itself
-- Not checked on Windows: the updater in the real exe (gpu-box offline 20 Oct). Checked
-  from the Mac against meio.lol with `meiolol-app update DIR` (same code): stats,
-  curves and exe fetched (stats 1.4 MB gzipped), exe swapped, second run nothing to do.
-  On Windows: unzip the admin zip, open the exe; expect "Downloading champion
-  statistics", then the client states; stats-16.20.bin and recent-curves.bin appear
+- Updater checked on Windows (gpu-box, 20 Oct, admin zip in a fresh folder): stats and
+  curves arrive and match update.json. The exe swap failed there: std's rename opens the
+  source for writing, which a running exe refuses (FileBusy); update.zig renames it with
+  MoveFileExW, checked swapping on Windows. A second exe update in one session waits for
+  a restart (the running image is then the .old.exe, which Windows won't replace).
+  Exes from before the fix never swap themselves: download the zip once more
+- Started from WSL (ssh), the exe can't open a window (D3D11 "not currently available",
+  session 0) and panics; start it in Jacob's session via a one-off `schtasks /it` task
 - Not yet: your own record in the matchup (concept part 6; LCU match history, needs a
   real reply to fix the schema), champion icons, window icon (title bar shows dvui's),
   the public download (after the key, in this order: drop the admin gate and the key,

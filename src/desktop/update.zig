@@ -9,6 +9,7 @@
 //! which nginx accepts for that directory only (docs/hosting.md). No update.key: no
 //! updates, the app uses whatever files are beside it.
 
+const builtin = @import("builtin");
 const std = @import("std");
 const Io = std.Io;
 
@@ -89,6 +90,11 @@ pub fn run(o: Options) !Result {
             if (std.ascii.eqlIgnoreCase(&have.hex, f.sha256)) continue;
         } else |err| if (err != error.FileNotFound) return err;
 
+        // After a swap in this session the running image is old_exe, which Windows won't
+        // delete or replace: the new exe waits for a restart
+        if (kind == .exe) o.dir.deleteFile(o.io, old_exe) catch |err| {
+            if (err != error.FileNotFound) continue;
+        };
         const part = try std.fmt.allocPrint(arena, "{s}.part", .{local});
         try u.download(f.name, part);
         const got = u.hash(part) catch |err| {
@@ -100,9 +106,9 @@ pub fn run(o: Options) !Result {
             return error.HashMismatch;
         }
         if (kind == .exe) {
-            try o.dir.rename(local, o.dir, old_exe, o.io);
+            try renameExe(arena, o, local, old_exe);
             o.dir.rename(part, o.dir, local, o.io) catch |err| {
-                o.dir.rename(old_exe, o.dir, local, o.io) catch {};
+                renameExe(arena, o, old_exe, local) catch {};
                 return err;
             };
             result.exe = true;
@@ -116,6 +122,25 @@ pub fn run(o: Options) !Result {
 }
 
 /// Digits and dots only: it becomes part of a file name
+extern "kernel32" fn MoveFileExW(
+    from: [*:0]const u16,
+    to: [*:0]const u16,
+    flags: u32,
+) callconv(.winapi) std.os.windows.BOOL;
+
+/// std's rename opens the source for writing too, which the running exe refuses
+/// (FileBusy, checked on Windows 11); MoveFileExW asks for delete access only
+fn renameExe(arena: std.mem.Allocator, o: Options, from: []const u8, to: []const u8) !void {
+    if (builtin.os.tag != .windows) return o.dir.rename(from, o.dir, to, o.io);
+    var buf: [Io.Dir.max_path_bytes]u8 = undefined;
+    const dir = buf[0..try o.dir.realPath(o.io, &buf)];
+    const wide = std.unicode.wtf8ToWtf16LeAllocZ;
+    const from_w = try wide(arena, try std.fs.path.join(arena, &.{ dir, from }));
+    const to_w = try wide(arena, try std.fs.path.join(arena, &.{ dir, to }));
+    const replace_existing = 1;
+    if (!MoveFileExW(from_w, to_w, replace_existing).toBool()) return error.RenameFailed;
+}
+
 fn validPatch(patch: []const u8) bool {
     if (patch.len == 0 or patch.len > 16) return false;
     for (patch) |c| if (!std.ascii.isDigit(c) and c != '.') return false;
