@@ -78,6 +78,8 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
   - Your games: moments list, keep all or only those that moved win chance? "(lane)"
     after the lane opponent's name clear? Last player reopens on every visit, or only
     within a day?
+  - Daily Draft: items and summoner spells on the scoreboard too? Keep the "Blue wins it
+    more" lane chip (draft model's lane edge, words only)?
   - Learn: keep the old lessons as "Basics"? Daily streak on Learn or Daily Draft?
     Levels lock or stay pickable? (docs/learn-proposal.md is the redesign)
   - Site: preview banner as a slim strip or a header badge? Blue means both "good" and
