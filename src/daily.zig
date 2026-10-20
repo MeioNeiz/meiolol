@@ -69,10 +69,10 @@ pub const Option = struct {
 pub const LaneGold = struct {
     /// Games in the curve
     games: u32,
-    /// 1 ahead, -1 behind, 0 no clear lead: the estimate is within 2 standard errors of
-    /// even, or the curve is thin (as the matchup page greys it out)
+    /// 1 ahead, -1 behind, 0 about even: the estimate is under min_lead_gold or within 2
+    /// standard errors of even, or the curve is thin (as the matchup page greys it out)
     side: i8,
-    /// Estimated difference, to the nearest 100; the page shows only `side` (J1)
+    /// Estimated difference, to the nearest 100
     gold: i32,
     /// Games with a lane result, and how many of them the first champion led in gold
     lane_games: u32,
@@ -82,6 +82,8 @@ pub const LaneGold = struct {
 /// As matchup.zig's thin(): fewer games, or most of the estimate the champions' baselines
 const lane_thin_games = 200;
 const lane_min_own = 0.5;
+/// As matchup.zig's: a smaller lead reads as even (J11)
+const min_lead_gold = 200;
 
 fn laneGold(curves: ?*const curvesfile.Curves, role: Role, me: u32, them: u32) ?LaneGold {
     const c = curves orelse return null;
@@ -91,7 +93,7 @@ fn laneGold(curves: ?*const curvesfile.Curves, role: Role, me: u32, them: u32) ?
     const e = v.estimate(.gold, i);
     const mean: i32 = e.mean;
     const thin = v.games() < lane_thin_games or v.own() < lane_min_own;
-    const clear = !thin and @abs(mean) > 2 * @as(u32, e.se);
+    const clear = !thin and @abs(mean) >= min_lead_gold and @abs(mean) > 2 * @as(u32, e.se);
     const lane = v.lane();
     return .{
         .games = v.games(),
@@ -118,6 +120,22 @@ pub const Lane = struct {
     games: u32,
     /// Blue's side
     gold: ?LaneGold = null,
+};
+
+/// One seat's end of game line. Rank: the ladder rank when the game was stored, null
+/// when the player was not on the ladder then
+pub const Player = struct {
+    tier: ?[]const u8 = null,
+    division: ?[]const u8 = null,
+    kills: u32 = 0,
+    deaths: u32 = 0,
+    assists: u32 = 0,
+    cs: u32 = 0,
+    gold: u32 = 0,
+    /// To champions
+    damage: u32 = 0,
+    /// Total gold at lane_minute; null without a timeline
+    gold14: ?u32 = null,
 };
 
 pub const Puzzle = struct {
@@ -151,6 +169,8 @@ pub const Puzzle = struct {
     lean: ?Lean = null,
     /// Same-role matchups, indexed by role
     lanes: [5]Lane,
+    /// [blue, red], indexed by role; null on puzzles made before it until backfilled
+    players: ?[2][5]Player = null,
 };
 
 pub const File = struct { path: []const u8, data: []const u8 };
@@ -194,7 +214,7 @@ pub fn update(
             },
             else => return err,
         };
-        const data = try refresh(arena, io, dir, st, opts, name, read_data);
+        const data = try refresh(arena, io, dir, db, used.items, st, opts, name, read_data);
         const path = try arena.print("daily/{s}", .{name});
         try files.append(arena, .{ .path = path, .data = data });
         if (index.writer.end > 1) try index.writer.writeByte(',');
@@ -210,11 +230,14 @@ pub fn update(
 /// `st` and are saved back; once the patch is gone the last ones stay. Only the numbers
 /// change: champions, the four options, the hidden slot and the winner (the answers
 /// archive results were marked against) are the game's. Kept as made when it does not
-/// parse or `st` cannot score it.
+/// parse or `st` cannot score it. A puzzle made before `Puzzle.players` gets them, on
+/// any patch.
 fn refresh(
     arena: std.mem.Allocator,
     io: std.Io,
     dir: std.Io.Dir,
+    db: store.Db,
+    used: []const u8,
     st: *const Stats,
     opts: Options,
     name: []const u8,
@@ -227,10 +250,16 @@ fn refresh(
         log.info("{s} kept as made: {t}", .{ name, err });
         return data;
     };
-    if (!isCurrent(opts.patches, p.numbers_patch orelse p.patch)) return data;
-    var ids: [4]u32 = undefined;
-    for (p.options, &ids) |o, *id| id.* = o.id;
-    if (!try numbers(arena, st, opts.curves, &p, ids)) return data;
+    const backfilled = p.players == null and try backfillPlayers(arena, db, used, &p);
+    var scored = false;
+    if (isCurrent(opts.patches, p.numbers_patch orelse p.patch)) {
+        var ids: [4]u32 = undefined;
+        for (p.options, &ids) |o, *id| id.* = o.id;
+        const before = p;
+        scored = try numbers(arena, st, opts.curves, &p, ids);
+        if (!scored) p = before;
+    }
+    if (!backfilled and !scored) return data;
     const fresh = try std.json.Stringify.valueAlloc(arena, p, .{});
     if (std.mem.eql(u8, fresh, data)) return data;
     // The web loop and the renderer both build the shared view: never a half-written file
@@ -304,7 +333,7 @@ fn makeFrom(
     const seed = std.hash.Wyhash.hash(n, std.mem.asBytes(&used.items.len));
     var prng: std.Random.DefaultPrng = .init(seed);
     const rand = prng.random();
-    for (0..tries) |_| {
+    for (0..tries) |attempt| {
         const offset = rand.uintLessThan(u64, @intCast(total));
         try q.bind(.{
             patch_json, stats.ranked_solo, platform_json, min_duration_s, offset,
@@ -314,6 +343,8 @@ fn makeFrom(
         if (isUsed(used.items, match_id)) continue;
         var puzzle = try load(arena, db, st, opts.curves, match_id, rand) orelse continue;
         if (!usualPicks(st, puzzle.teams)) continue;
+        // The reveal's lane results need the timeline; most games have one
+        if (attempt < tries / 2 and !hasTimeline(puzzle)) continue;
         puzzle.n = n;
         puzzle.date = try arena.print("{f}", .{Date.fromDay(day)});
         if (!isCurrent(opts.patches, puzzle.patch)) puzzle.numbers_patch = newest(opts.patches);
@@ -322,6 +353,11 @@ fn makeFrom(
         return try std.json.Stringify.valueAlloc(arena, puzzle, .{});
     }
     return null;
+}
+
+fn hasTimeline(p: Puzzle) bool {
+    for (p.players.?) |team| for (team) |pl| if (pl.gold14 == null) return false;
+    return true;
 }
 
 /// The newest patch older than all of `opts.patches` with ranked solo games
@@ -385,32 +421,25 @@ pub fn load(
         var seen: [2][5]bool = @splat(@splat(false));
         p.kills = .{ 0, 0 };
         p.gold = .{ 0, 0 };
-        var q = try db.prepare(
-            \\SELECT team_id, position, champion_id, kills, gold
-            \\FROM participants WHERE match_id = ?
-        );
+        var q = try db.prepare(participants_sql);
         defer q.deinit();
         try q.bind(.{match_id});
         var rows: usize = 0;
+        var players: [2][5]Player = undefined;
         while (try q.step()) : (rows += 1) {
-            const pa = q.row(struct {
-                team_id: i64,
-                position: []const u8,
-                champion_id: u32,
-                kills: ?i64,
-                gold: ?i64,
-            });
+            const pa = q.row(Participant);
             const t: u1 = if (pa.team_id == 100) 0 else 1;
             const r = Role.fromLcu(pa.position) orelse return null;
             if (seen[t][@backingInt(r)] or st.index(pa.champion_id) == null) return null;
             seen[t][@backingInt(r)] = true;
             p.teams[t][@backingInt(r)] = pa.champion_id;
-            p.kills[t] += @intCast(@max(0, pa.kills orelse 0));
-            p.gold[t] += @intCast(@max(0, pa.gold orelse 0));
+            const pl = try player(arena, pa);
+            players[t][@backingInt(r)] = pl;
+            p.kills[t] += pl.kills;
+            p.gold[t] += pl.gold;
         }
         if (rows != 10) return null;
-        // Exact totals would help find the game elsewhere; the reveal shows 0.1k anyway
-        for (&p.gold) |*g| g.* = (g.* + 50) / 100 * 100;
+        p.players = players;
     }
     {
         var bans: [2]std.ArrayList(u32) = .{ .empty, .empty };
@@ -514,6 +543,75 @@ fn numbers(
         };
     }
     return true;
+}
+
+const participants_sql =
+    \\SELECT team_id, position, champion_id, kills, deaths, assists, cs, gold,
+    \\  damage_to_champions, tier, division, gold14
+    \\FROM participants WHERE match_id = ?
+;
+
+const Participant = struct {
+    team_id: i64,
+    position: []const u8,
+    champion_id: u32,
+    kills: ?i64,
+    deaths: ?i64,
+    assists: ?i64,
+    cs: ?i64,
+    gold: ?i64,
+    damage_to_champions: ?i64,
+    tier: ?[]const u8,
+    division: ?[]const u8,
+    gold14: ?i64,
+};
+
+fn player(arena: std.mem.Allocator, pa: Participant) !Player {
+    const n = struct {
+        fn n(x: ?i64) u32 {
+            return @intCast(@max(0, x orelse 0));
+        }
+    }.n;
+    return .{
+        .tier = if (pa.tier) |t| try arena.dupe(u8, t) else null,
+        .division = if (pa.division) |d| try arena.dupe(u8, d) else null,
+        .kills = n(pa.kills),
+        .deaths = n(pa.deaths),
+        .assists = n(pa.assists),
+        .cs = n(pa.cs),
+        .gold = n(pa.gold),
+        .damage = n(pa.damage_to_champions),
+        .gold14 = if (pa.gold14) |g| n(g) else null,
+    };
+}
+
+/// Puzzles made before `Puzzle.players`: the seats of the used.txt game with the same
+/// ten champions in the same seats. False when none matches
+fn backfillPlayers(
+    arena: std.mem.Allocator,
+    db: store.Db,
+    used: []const u8,
+    p: *Puzzle,
+) !bool {
+    var q = try db.prepare(participants_sql);
+    defer q.deinit();
+    var it = std.mem.tokenizeScalar(u8, used, '\n');
+    next: while (it.next()) |match_id| {
+        try q.bind(.{match_id});
+        var players: [2][5]Player = undefined;
+        var rows: usize = 0;
+        while (try q.step()) : (rows += 1) {
+            const pa = q.row(Participant);
+            const t: u1 = if (pa.team_id == 100) 0 else 1;
+            const r = Role.fromLcu(pa.position) orelse continue :next;
+            if (p.teams[t][@backingInt(r)] != pa.champion_id) continue :next;
+            players[t][@backingInt(r)] = try player(arena, pa);
+        }
+        if (rows != 10) continue;
+        p.players = players;
+        return true;
+    }
+    return false;
 }
 
 /// From the rank snapshot stored with the match: players is emptied on a rekey
@@ -665,6 +763,10 @@ test "puzzles are made once, anonymised and published" {
     try testing.expectEqual(.fit, p.hidden_by);
     try testing.expect(p.lean != null);
     try testing.expectEqual(null, p.numbers_patch);
+    const red_mid = p.players.?[1][@backingInt(Role.middle)];
+    try testing.expectEqual(7, red_mid.kills);
+    try testing.expectEqualStrings("GOLD", red_mid.tier.?);
+    try testing.expectEqual(null, red_mid.gold14);
 
     // Kept, not remade; a new game for each new day, never one already used
     var next = opts;
@@ -678,9 +780,11 @@ test "puzzles are made once, anonymised and published" {
     const used = try std.Io.Dir.cwd().readFileAlloc(io, used_path, arena, .unlimited);
     try testing.expectEqual(4, std.mem.count(u8, used, "\n"));
 
-    // Numbers frozen thin on an early day follow the patch's stats; the answers stay.
-    // A puzzle on a patch no longer in the stats keeps what it has.
+    // Numbers frozen thin on an early day follow the patch's stats; the answers stay, and
+    // seats missing from an older puzzle come back from its game. A puzzle on a patch no
+    // longer in the stats keeps what it has.
     var thin = p;
+    thin.players = null;
     thin.games = 7;
     thin.lanes = @splat(.{ .pp = 0, .games = 1 });
     const four = try arena.print("{s}/4.json", .{dir});

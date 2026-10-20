@@ -900,10 +900,24 @@ body:has(#m-cs:checked) .mu-m:not(.mu-m-cs) { display: none; }
 .dd .bans .champ img { width: 24px; height: 24px; filter: grayscale(0.7); opacity: 0.8; }
 .dd .bans .champ .name { display: none; }
 .dd-q-note { margin: -6px 0 12px; font-size: 13px; }
+.dd .team .dd-rank { margin-left: auto; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.dd-sbs { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 10px; margin: 0 0 14px; }
+.dd-sb th, .dd-sb td { padding: 4px 8px; text-align: right; }
+.dd-sb .l { text-align: left; }
+.dd-sb th.l { font-size: 14px; }
+.dd-sb.dd-blue th.l { color: var(--us); }
+.dd-sb.dd-red th.l { color: var(--them); }
+.dd-sb .champ img { width: 24px; height: 24px; }
+.dd-sb tr.dd-was-hidden .champ img { box-shadow: 0 0 0 2px var(--accent); }
+.dd-h { margin: 6px 0 4px; font-size: 15px; }
+.dd-usual { font-size: 12.5px; color: var(--muted); }
+.dd-usual.dd-blue { color: color-mix(in srgb, var(--us) 80%, var(--muted)); }
+.dd-usual.dd-red { color: color-mix(in srgb, var(--them) 80%, var(--muted)); }
 @media (max-width: 640px) {
   .dd-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dd-lanes li { grid-template-columns: 52px auto minmax(0, 1fr) auto; gap: 8px; }
-  .dd-lanes .champ .name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .dd-lanes .champ .name, .dd-sb .champ .name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .dd-sb th, .dd-sb td { padding: 4px 6px; }
   .dd-streak { text-align: left; }
   .dd-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
   .dd-tiles > div { min-width: 0; padding: 7px 9px; }

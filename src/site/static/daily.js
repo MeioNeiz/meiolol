@@ -1,8 +1,9 @@
 // Daily Draft: puzzles from src/daily.zig (daily/index.json lists them, daily/<n>.json
 // each). Guess the hidden champion, then the winner. The options flip to one fact each
-// and the reveal reads the lanes, in words and game counts from this patch's games: never
-// a win chance, points or gold amounts (J1, docs/plan/decisions.md). Results, streaks and
-// archive stay in this browser (localStorage); nothing is sent. Reasons: reasons.js.
+// and the reveal shows the scoreboard and the lanes at 14, this game's and the patch's
+// usual, with game counts: never a draft win chance or "+X% win rate" (Riot policy,
+// docs/production-key.md). Results, streaks and archive stay in this browser
+// (localStorage); nothing is sent. Reasons: reasons.js.
 "use strict";
 
 const ROLES = [
@@ -28,10 +29,22 @@ const clear = (pp, n) => n >= PAIR_GAMES && Math.abs(pp) > 98 / Math.sqrt(n);
 // this many games the curve is thin
 const LANE_GAMES = 200;
 const LANE_MINUTE = 14;
+// A smaller gold lead at 14 reads as even, as on the matchup page (J11)
+const MIN_LEAD = 200;
+const APEX = new Set(["MASTER", "GRANDMASTER", "CHALLENGER"]);
 
 const $ = (id) => document.getElementById(id);
 const pad = (n) => String(n).padStart(2, "0");
 const fmt = (n) => n.toLocaleString("en-GB");
+const signed = (n) => `${n > 0 ? "+" : n < 0 ? "\u2212" : ""}${fmt(Math.abs(n))}`;
+const kilo = (n) => `${(n / 1000).toFixed(1)}k`;
+const title = (s) => s[0] + s.slice(1).toLowerCase();
+
+// "Gold II", "Master"; "" when the player was not on the ladder
+function rankText(pl) {
+  if (!pl || !pl.tier) return "";
+  return APEX.has(pl.tier) || !pl.division ? title(pl.tier) : `${title(pl.tier)} ${pl.division}`;
+}
 const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 function el(tag, cls, text) {
@@ -210,6 +223,8 @@ class Game {
           if (hidden) li.classList.add("dd-was-hidden");
           li.append(this.champ(p.teams[t][r]));
         }
+        const rank = rankText(p.players?.[t][r]);
+        if (rank) li.append(el("span", "dd-rank", rank));
         list.append(li);
       });
       const bans = $(`bans-${t}`);
@@ -239,10 +254,10 @@ class Game {
     if (!l || l.games < LANE_GAMES) {
       return { head: "Few games", sub: l ? `${vs} · ${fmt(l.games)} games` : vs, tone: "" };
     }
-    const sub = `${vs} · ${fmt(l.games)} games`;
-    if (l.side > 0) return { head: `Ahead at ${LANE_MINUTE} min`, sub: `gold ${sub}`, tone: "up" };
-    if (l.side < 0) return { head: `Behind at ${LANE_MINUTE} min`, sub: `gold ${sub}`, tone: "down" };
-    return { head: "No clear lane lead", sub, tone: "" };
+    const led = l.lane_games ? ` · led ${Math.round((100 * l.ahead) / l.lane_games)}%` : "";
+    const sub = `${vs}${led} · ${fmt(l.games)} games`;
+    if (l.side) return { head: `${signed(l.gold)} gold at ${LANE_MINUTE}`, sub, tone: l.side > 0 ? "up" : "down" };
+    return { head: `About even at ${LANE_MINUTE}`, sub, tone: "" };
   }
 
   renderPick() {
@@ -325,7 +340,7 @@ class Game {
       return d;
     };
     const k = p.kills;
-    const gold = p.gold.map((g) => `${(g / 1000).toFixed(1)}k`);
+    const gold = p.gold.map(kilo);
     const winner = tile("Winner", `${SIDES[p.winner]}`, `in ${p.minutes} min`);
     winner.querySelector("b").className = `dd-win ${SIDE_CLS[p.winner]}`;
     $("happened").replaceChildren(
@@ -352,6 +367,7 @@ class Game {
       read = `the lanes (${games}).`;
     }
     est.append(read);
+    this.renderScoreboard();
     this.renderLanes();
     $("share").onclick = () => this.share(stats.streak);
   }
@@ -378,7 +394,41 @@ class Game {
     box.append(head, streak);
   }
 
-  // Each lane: who was ahead in gold at 14 (or nothing clear), and the games behind it
+  // Per team: each seat's K/D/A, CS, gold and damage to champions, by role
+  renderScoreboard() {
+    const p = this.p;
+    const box = $("scoreboard");
+    box.hidden = !p.players;
+    if (!p.players) return;
+    box.replaceChildren();
+    for (const t of [0, 1]) {
+      const table = el("table", `dd-sb ${SIDE_CLS[t]}`);
+      const head = el("tr");
+      const won = p.winner === t ? " · won" : "";
+      head.append(el("th", "l", `${SIDES[t]}${won}`), ...["K / D / A", "CS", "Gold", "Damage"].map((h) => el("th", "", h)));
+      table.append(el("thead"), el("tbody"));
+      table.tHead.append(head);
+      ROLES.forEach(([role], r) => {
+        const pl = p.players[t][r];
+        const tr = el("tr");
+        if (t === p.hidden_team && role === p.hidden_role) tr.className = "dd-was-hidden";
+        const who = el("td", "l");
+        who.append(this.champ(p.teams[t][r], 24));
+        tr.append(
+          who,
+          el("td", "", `${pl.kills} / ${pl.deaths} / ${pl.assists}`),
+          el("td", "", fmt(pl.cs)),
+          el("td", "", kilo(pl.gold)),
+          el("td", "", kilo(pl.damage)),
+        );
+        table.tBodies[0].append(tr);
+      });
+      box.append(table);
+    }
+  }
+
+  // Each lane at 14: this game's gold difference, then the patch's usual one (from the
+  // lane curves: a side only when clear), with the games behind it
   renderLanes() {
     const p = this.p;
     const list = $("lanes");
@@ -388,21 +438,30 @@ class Game {
       const g = lane.gold;
       const li = el("li");
       li.append(el("span", "role", label), this.champ(p.teams[0][r], 28));
+      const mid = el("span", "dd-lane-fact");
+      const b = p.players?.[0][r].gold14;
+      const red = p.players?.[1][r].gold14;
+      if (b != null && red != null) {
+        const d = b - red;
+        const side = d > 0 ? 0 : 1;
+        const lead = `${SIDES[side].toLowerCase()} ${signed(Math.abs(d))}`;
+        if (Math.abs(d) < MIN_LEAD) mid.append(el("span", "dd-chip", `Even at ${LANE_MINUTE} (${lead})`));
+        else mid.append(el("span", `dd-chip ${SIDE_CLS[side]}`, `${SIDES[side]} ${signed(Math.abs(d))} at ${LANE_MINUTE}`));
+      }
       let chip, cls, games;
       if (g && g.games >= LANE_GAMES) {
         games = g.games;
         if (g.side) {
           const side = g.side > 0 ? 0 : 1;
-          chip = `${SIDES[side]} ahead at ${LANE_MINUTE}`;
+          chip = `usually ${SIDES[side].toLowerCase()} ${signed(Math.abs(g.gold))}`;
           cls = `${SIDE_CLS[side]}`;
-        } else chip = "No clear lead";
+        } else chip = "usually even";
       } else {
         games = g ? g.games : lane.games;
-        chip = "Few games";
+        chip = "usually: few games";
       }
-      if (!cls) li.classList.add("thin");
-      const mid = el("span", "dd-lane-fact");
-      mid.append(el("span", `dd-chip ${cls || ""}`, chip));
+      if (!cls && b == null) li.classList.add("thin");
+      mid.append(el("span", `dd-usual ${cls || ""}`, chip));
       // The draft model's lane edge, when it clears chance (rare until a lot of data)
       if (clear(lane.pp, lane.games)) {
         const side = lane.pp > 0 ? 0 : 1;
