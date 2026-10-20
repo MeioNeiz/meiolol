@@ -18,6 +18,10 @@ const roleIndex = Object.fromEntries(ROLES.map(([r], i) => [r, i]));
 const SIDES = ["Blue", "Red"];
 const SIDE_CLS = ["dd-blue", "dd-red"];
 const KEY = "meiolol.daily.v1";
+// Preview mode (no production key yet): the page carries html.zig's banner. No Share
+// then, as its text links the site, and the site may not be advertised until the key
+// (docs/production-key.md); it comes back with the public build
+const PREVIEW = document.querySelector("div.preview") !== null;
 // Win-rate numbers are noise until there is a lot of data (draft model eval: level with
 // a coin flip on 6k games). A pair edge needs PAIR_GAMES games and must clear chance
 // (|pp| > 1.96 SE, SE = 50 / sqrt(n) points); reading whole drafts needs DRAFT_GAMES
@@ -102,6 +106,29 @@ function shortReason(r, other) {
 const glyphs = (marks) => [...marks].map((m) => (m === "1" ? "✅" : "❌")).join("");
 const marksText = (marks) =>
   ["pick", "winner"].map((q, i) => `${q} ${marks[i] === "1" ? "right" : "wrong"}`).join(", ");
+
+// Days in a row from each published puzzle (oldest first) finished on its own day or
+// not: one missed puzzle between finished ones is forgiven (not counted), two in a row
+// end the run (forgiving breaks bring players back: research/sources/duolingo-streaks.md
+// ^f4). A day without a puzzle is no miss. Today's puzzle unfinished is pending, not
+// missed, so the run ending yesterday, or with yesterday missed, is still alive.
+// best: the longest run
+function streaks(onTime) {
+  const days = onTime.length && !onTime[onTime.length - 1] ? onTime.slice(0, -1) : onTime;
+  let run = 0;
+  let missed = 0;
+  let best = 0;
+  for (const ok of days) {
+    if (ok) {
+      run += 1;
+      missed = 0;
+      best = Math.max(best, run);
+    } else if (++missed >= 2) {
+      run = 0;
+    }
+  }
+  return { streak: run, best };
+}
 
 async function start() {
   const status = $("status");
@@ -369,6 +396,7 @@ class Game {
     est.append(read);
     this.renderScoreboard();
     this.renderLanes();
+    $("share-row").hidden = PREVIEW;
     $("share").onclick = () => this.share(stats.streak);
   }
 
@@ -388,6 +416,8 @@ class Game {
     const streak = el("div", "dd-streak");
     const n = el("b", stats.streak > 1 ? "hot" : "", String(stats.streak));
     streak.append(n, ` ${stats.streak === 1 ? "day" : "days"} in a row`);
+    streak.title =
+      "Puzzles finished on their own day. One missed day is forgiven; two in a row end it.";
     const more = [`best ${stats.best}`, `played ${stats.played}`, `both right ${stats.both}`];
     if (this.isToday) more.push(`next in ${untilMidnight()}`);
     streak.append(el("small", "", more.join(" · ")));
@@ -492,29 +522,17 @@ class Game {
     }
   }
 
-  // Days in a row: consecutive published puzzles each finished on its own day, ending with
-  // today's or the one before (a day without a puzzle does not break it); best, the
-  // longest such run
+  // Days in a row and best: see streaks(); played and both right count every puzzle
   record() {
     const done = (n) => {
       const r = this.results[n];
       return r && r.pick !== undefined && r.side !== undefined;
     };
     const onTime = (e) => done(e.n) && this.results[e.n].on === e.date;
-    let i = this.live.length - 1;
-    if (!onTime(this.live[i])) i -= 1;
-    let streak = 0;
-    while (i >= 0 && onTime(this.live[i])) {
-      streak += 1;
-      i -= 1;
-    }
+    const { streak, best } = streaks(this.live.map(onTime));
     let played = 0;
     let both = 0;
-    let best = 0;
-    let run = 0;
     for (const e of this.live) {
-      run = onTime(e) ? run + 1 : 0;
-      best = Math.max(best, run);
       if (!done(e.n)) continue;
       played += 1;
       // Only today's puzzle is loaded; older ones keep the marks saved with them
