@@ -2,6 +2,11 @@
 Description=meiolol site build and upload (deploy/web-loop.sh)
 
 [Service]
+# Its daily jobs read the 15 GB database (draft-model 30 min at 44 MB/s, 19 Oct 20:00):
+# uncapped, their page cache pushed the crawler's hot pages out of the box's 12 GB and
+# its commits stalled, crawl rate 77% for that hour. Over this, the jobs reclaim their
+# own cache first
+MemoryHigh=6G
 WorkingDirectory=%h/ml/meiolol
 EnvironmentFile=-%h/ml/meiolol/host.env
 ExecStart=/bin/sh -c 'exec bin/web-loop.sh "$(cat contact)" >> data/web.log 2>&1'

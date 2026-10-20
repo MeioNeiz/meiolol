@@ -222,11 +222,13 @@ case "${1:-}" in
         case "${2:-}" in
             run)
                 [[ -n "${4:-}" ]] || { echo "usage: deploy/box.sh job run NAME 'CMD'"; exit 2; }
-                # A subshell, so an exit in CMD still leaves its status
+                # A subshell, so an exit in CMD still leaves its status. MemoryHigh as
+                # meiolol-web.service: a job's page cache must not evict the crawler's
                 body=$(printf '( %s\n) > %s 2>&1; echo $? > %s' "$4" "$log" "$rc")
                 ssh "$HOST" "cd $DIR && if systemctl --user -q is-active $unit; then \
                     echo '$unit already running'; exit 1; fi; rm -f $rc \
-                    && systemd-run --user -q --collect --unit $unit --working-directory=\$HOME/$DIR \
+                    && systemd-run --user -q --collect --unit $unit -p MemoryHigh=6G \
+                        --working-directory=\$HOME/$DIR \
                         /bin/bash -c $(printf %q "$body") && echo 'started $unit ($log)'"
                 ;;
             status) ssh "$HOST" "$status_job" ;;
