@@ -588,13 +588,19 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
         , .{ .games = b.games, .s = plural(b.games), .solid = solid_games, .rated = rate_games });
     }
     try tpl.render(w,
-        \\<p class="muted">Most played first: what players take, not a ranking. Win rates show a 95% range (±) from the number of games; two rows whose ranges overlap may not differ at all. Rows under {solid} games are greyed out; under {rated} there is no win rate. Marked: the most played, and the highest win rate among options with {rated}+ games once each is pulled toward the average by k games (k from how much options of a kind really differ across every champion: {k_rune} for a rune, {k_item} for first items) and taken at the low end of its range, so a few lucky games can't top it.</p>
+        \\<p class="muted">Most played first: what players take, not a ranking. Win rates show a 95% range (±) from the number of games; two rows whose ranges overlap may not differ at all. Rows under {solid} games are greyed out; under {rated} there is no win rate. Marked: the most played{hw}.</p>
         \\
     , .{
         .solid = solid_games,
         .rated = rate_games,
-        .k_rune = try root.thousands(site.arena, @intFromFloat(@round(f.shrinkK(.rune, false) orelse 0))),
-        .k_item = try root.thousands(site.arena, @intFromFloat(@round(f.shrinkK(.core2, false) orelse 0))),
+        // Files before 21 Oct 2026 have no k, so no highest win rate marks
+        .hw = tpl.when(f.shrink.len > 0, tpl.t(", and the highest win rate among options with {rated}+ games once each is pulled toward the average by k games (k from how much options of a kind really differ across every champion{ks}) and taken at the low end of its range, so a few lucky games can't top it", .{
+            .rated = rate_games,
+            .ks = if (f.shrinkK(.rune, false)) |kr| if (f.shrinkK(.core2, false)) |ki| tpl.t(": {r} for a rune, {i} for first items", .{
+                .r = try root.thousands(site.arena, @intFromFloat(@round(kr))),
+                .i = try root.thousands(site.arena, @intFromFloat(@round(ki))),
+            }) else null else null,
+        })),
     });
 
     try w.writeAll("<h2>Runes</h2>\n");
