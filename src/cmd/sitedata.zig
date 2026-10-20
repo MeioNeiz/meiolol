@@ -173,7 +173,7 @@ pub fn cmdBuilds(c: *Cmd) !u8 {
     var g: Games = .{};
     var out: ?[]const u8 = null;
     var site_files = false;
-    var o: builds.Options = .{ .patches = &.{}, .platforms = &.{} };
+    var o: builds.Options = .{ .patches = &.{}, .platforms = &.{}, .min_matchup_games = builds.min_matchup_games };
     while (c.next()) |_| {
         if (try g.parse(c)) continue;
         if (c.is("--out")) {
@@ -225,8 +225,8 @@ pub fn cmdBuilds(c: *Cmd) !u8 {
         try std.json.Stringify.value(f, .{}, &w.interface);
         try w.interface.flush();
         try file.replace(io);
-        std.log.info("{s}: patch {s}, {d} games ({d} with timelines), {d} champion roles, {d} options held", .{
-            t.path, label, b.games, b.timelines, f.builds.len, b.options.count(),
+        std.log.info("{s}: patch {s}, {d} games ({d} with timelines), {d} champion roles, {d} options held, {d} matchups, {d} matchup options held", .{
+            t.path, label, b.games, b.timelines, f.builds.len, b.options.count(), f.matchups.len, if (b.vs) |v| v.options.count() else 0,
         });
     }
     return 0;

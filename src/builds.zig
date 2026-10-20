@@ -48,6 +48,10 @@ pub const Kind = enum {
 };
 
 pub const max_values = 8;
+/// What `builds --site` writes per lane opponent: matchups with this many games, this
+/// many options per kind
+pub const min_matchup_games = 300;
+const matchup_rows = 3;
 /// Starting items: bought before this many ms
 pub const start_ms = 90_000;
 const skill_snapshot = 13;
@@ -66,6 +70,11 @@ pub const Options = struct {
     max_keys: usize = 1 << 19,
     /// Options written per champion, role and kind, most played first
     rows: usize = 10,
+    /// Distinct matchup options held (Builder.vs)
+    max_matchup_keys: usize = 1 << 20,
+    /// Matchups (champion, role and lane opponent) written: those with this many games
+    /// or more; null for none
+    min_matchup_games: ?u32 = null,
 };
 
 pub const Count = struct { games: u32 = 0, wins: u32 = 0 };
@@ -87,10 +96,15 @@ pub const File = struct {
     trees: []const ddragon.Tree = &.{},
     /// Sorted by champion, then role
     builds: []const Build,
+    /// Per lane opponent, sorted by champion, role, then opponent; only matchup_kinds.
+    /// Empty in files from before 20 Oct 2026
+    matchups: []const Build = &.{},
 
     pub const Build = struct {
         champion: u32,
         role: Role,
+        /// Lane opponent's champion in `matchups`, 0 in `builds`
+        opponent: u32 = 0,
         /// Players counted (champion, role, rank floor) and their wins
         games: u32,
         wins: u32,
@@ -110,6 +124,12 @@ pub const File = struct {
         return f.builds[i];
     }
 
+    pub fn getVs(f: *const File, champion: u32, role: Role, opponent: u32) ?Build {
+        const key: BuildKey = .{ .champion = champion, .role = role, .opponent = opponent };
+        const i = std.sort.binarySearch(Build, f.matchups, key, BuildKey.order) orelse return null;
+        return f.matchups[i];
+    }
+
     pub fn parse(arena: std.mem.Allocator, bytes: []const u8) !File {
         return std.json.parseFromSliceLeaky(File, arena, bytes, .{ .ignore_unknown_fields = true });
     }
@@ -118,15 +138,21 @@ pub const File = struct {
 const BuildKey = struct {
     champion: u32,
     role: Role,
+    opponent: u32 = 0,
 
     fn order(k: BuildKey, b: File.Build) std.math.Order {
         const c = std.math.order(k.champion, b.champion);
-        return if (c != .eq) c else std.math.order(@backingInt(k.role), @backingInt(b.role));
+        if (c != .eq) return c;
+        const r = std.math.order(@backingInt(k.role), @backingInt(b.role));
+        return if (r != .eq) r else std.math.order(k.opponent, b.opponent);
     }
 };
 
-const Key = struct { champion: u16, role: Role, kind: Kind, v: [max_values]u32 };
-const Total = struct { champion: u16, role: Role, kind: ?Kind };
+/// Kinds counted per lane opponent; keystone, spells and skill_start only role-wide
+pub const matchup_kinds = [_]Kind{ .runes, .shards, .start, .boots, .core2, .core3, .skills };
+
+const Key = struct { champion: u16, role: Role, opponent: u16 = 0, kind: Kind, v: [max_values]u32 };
+const Total = struct { champion: u16, role: Role, opponent: u16 = 0, kind: ?Kind };
 
 pub const Builder = struct {
     gpa: std.mem.Allocator,
@@ -139,10 +165,29 @@ pub const Builder = struct {
     dropped_games: u64 = 0,
     games: u32 = 0,
     timelines: u32 = 0,
+    /// Per lane opponent, own pruning floor so matchups never push role-wide options out;
+    /// owned
+    vs: ?*Builder = null,
+    /// Matchups below this many games are left out of the file
+    min_matchup_games: u32 = 0,
+    /// This builder counts per opponent (Player.opponent, 0: skipped) and matchup_kinds
+    per_opponent: bool = false,
 
     pub fn deinit(b: *Builder) void {
         b.options.deinit(b.gpa);
         b.totals.deinit(b.gpa);
+        if (b.vs) |v| {
+            v.deinit();
+            b.gpa.destroy(v);
+        }
+    }
+
+    /// Starts counting per lane opponent beside the role-wide counts
+    pub fn countMatchups(b: *Builder, max_keys: usize, min_games: u32) !void {
+        const v = try b.gpa.create(Builder);
+        v.* = .{ .gpa = b.gpa, .max_keys = @max(max_keys, 2), .per_opponent = true };
+        b.vs = v;
+        b.min_matchup_games = min_games;
     }
 
     fn total(b: *Builder, t: Total, won: bool) !void {
@@ -153,9 +198,14 @@ pub const Builder = struct {
     }
 
     pub fn add(b: *Builder, champion: u32, role: Role, kind: Kind, v: []const u32, won: bool) !void {
+        try b.addVs(champion, role, 0, kind, v, won);
+    }
+
+    fn addVs(b: *Builder, champion: u32, role: Role, opponent: u16, kind: Kind, v: []const u32, won: bool) !void {
         const c: u16 = @intCast(champion);
-        try b.total(.{ .champion = c, .role = role, .kind = kind }, won);
-        var key: Key = .{ .champion = c, .role = role, .kind = kind, .v = @splat(0) };
+        if (b.per_opponent and std.mem.indexOfScalar(Kind, &matchup_kinds, kind) == null) return;
+        try b.total(.{ .champion = c, .role = role, .opponent = opponent, .kind = kind }, won);
+        var key: Key = .{ .champion = c, .role = role, .opponent = opponent, .kind = kind, .v = @splat(0) };
         @memcpy(key.v[0..v.len], v);
         if (b.options.count() >= b.max_keys and !b.options.contains(key)) try b.prune();
         const e = try b.options.getOrPut(b.gpa, key);
@@ -179,90 +229,51 @@ pub const Builder = struct {
             b.options.deinit(b.gpa);
             b.options = kept;
         }
-        log.info("dropped options with {d} or fewer games ({d} games in all)", .{ b.floor, b.dropped_games });
+        log.info("{s}dropped options with {d} or fewer games ({d} games in all)", .{
+            if (b.per_opponent) "matchups: " else "", b.floor, b.dropped_games,
+        });
     }
 
     /// One player: their participants row and, with a timeline, their picks
     pub fn addPlayer(b: *Builder, p: Player, chosen: ?Picks, d: *const ddragon.BuildData) !void {
+        if (b.vs) |v| if (p.opponent != 0) try v.addPlayer(p, chosen, d);
         const c: u16 = @intCast(p.champion);
-        try b.total(.{ .champion = c, .role = p.role, .kind = null }, p.won);
+        const opp: u16 = if (b.per_opponent) @intCast(p.opponent) else 0;
+        if (b.per_opponent and opp == 0) return;
+        try b.total(.{ .champion = c, .role = p.role, .opponent = opp, .kind = null }, p.won);
         if (p.keystone != 0) {
-            try b.add(p.champion, p.role, .keystone, &.{p.keystone}, p.won);
-            try b.add(p.champion, p.role, .runes, &.{
+            try b.addVs(p.champion, p.role, opp, .keystone, &.{p.keystone}, p.won);
+            try b.addVs(p.champion, p.role, opp, .runes, &.{
                 p.primary,  p.keystone,  p.perks[0],                   p.perks[1],
                 p.perks[2], p.secondary, @min(p.perks[3], p.perks[4]), @max(p.perks[3], p.perks[4]),
             }, p.won);
         }
-        if (p.shards[0] != 0) try b.add(p.champion, p.role, .shards, &p.shards, p.won);
-        if (p.spells[0] != 0) try b.add(p.champion, p.role, .spells, &.{
+        if (p.shards[0] != 0) try b.addVs(p.champion, p.role, opp, .shards, &p.shards, p.won);
+        if (p.spells[0] != 0) try b.addVs(p.champion, p.role, opp, .spells, &.{
             @min(p.spells[0], p.spells[1]), @max(p.spells[0], p.spells[1]),
         }, p.won);
         const k = chosen orelse return;
         if (!k.start_overflow and k.start_len > 0) {
             var start = k.start;
             std.mem.sort(u32, start[0..k.start_len], {}, std.sort.asc(u32));
-            try b.add(p.champion, p.role, .start, start[0..k.start_len], p.won);
+            try b.addVs(p.champion, p.role, opp, .start, start[0..k.start_len], p.won);
         }
         if (k.boots != 0 or k.core_len >= 2) {
             const boots = if (k.boots != 0) d.bootsOf(k.boots) orelse 0 else 0;
-            try b.add(p.champion, p.role, .boots, &.{boots}, p.won);
+            try b.addVs(p.champion, p.role, opp, .boots, &.{boots}, p.won);
         }
-        if (k.core_len >= 2) try b.add(p.champion, p.role, .core2, k.core[0..2], p.won);
-        if (k.core_len >= 3) try b.add(p.champion, p.role, .core3, k.core[0..3], p.won);
-        if (k.skillOrder()) |order| try b.add(p.champion, p.role, .skills, &order, p.won);
-        if (k.skill_ups >= 3) try b.add(p.champion, p.role, .skill_start, &.{ k.first[0], k.first[1], k.first[2] }, p.won);
+        if (k.core_len >= 2) try b.addVs(p.champion, p.role, opp, .core2, k.core[0..2], p.won);
+        if (k.core_len >= 3) try b.addVs(p.champion, p.role, opp, .core3, k.core[0..3], p.won);
+        if (k.skillOrder()) |order| try b.addVs(p.champion, p.role, opp, .skills, &order, p.won);
+        if (k.skill_ups >= 3) try b.addVs(p.champion, p.role, opp, .skill_start, &.{ k.first[0], k.first[1], k.first[2] }, p.won);
     }
 
     /// The file, in `arena`: `rows` options per champion, role and kind, and the names
     /// of what they use
     pub fn file(b: *const Builder, arena: std.mem.Allocator, d: *const ddragon.BuildData, label: []const u8, min_tier: []const u8, rows: usize) !File {
-        const Entry = struct { key: Key, count: Count };
-        var entries: std.ArrayList(Entry) = .empty;
-        var it = b.options.iterator();
-        while (it.next()) |e| try entries.append(arena, .{ .key = e.key_ptr.*, .count = e.value_ptr.* });
-        std.mem.sort(Entry, entries.items, {}, struct {
-            fn f(_: void, x: Entry, y: Entry) bool {
-                if (x.key.champion != y.key.champion) return x.key.champion < y.key.champion;
-                if (x.key.role != y.key.role) return @backingInt(x.key.role) < @backingInt(y.key.role);
-                if (x.key.kind != y.key.kind) return @backingInt(x.key.kind) < @backingInt(y.key.kind);
-                if (x.count.games != y.count.games) return x.count.games > y.count.games;
-                return std.mem.order(u32, &x.key.v, &y.key.v) == .lt;
-            }
-        }.f);
-
         var used: [3]std.AutoArrayHashMapUnmanaged(u32, void) = @splat(.empty);
-        var builds: std.ArrayList(File.Build) = .empty;
-        var kinds: std.ArrayList(File.Rows) = .empty;
-        var options: std.ArrayList(File.Option) = .empty;
-        var i: usize = 0;
-        while (i < entries.items.len) {
-            const first = entries.items[i].key;
-            const all = b.totals.get(.{ .champion = first.champion, .role = first.role, .kind = null }) orelse Count{};
-            kinds = .empty;
-            while (i < entries.items.len and entries.items[i].key.champion == first.champion and entries.items[i].key.role == first.role) {
-                const kind = entries.items[i].key.kind;
-                const t = b.totals.get(.{ .champion = first.champion, .role = first.role, .kind = kind }) orelse Count{};
-                options = .empty;
-                while (i < entries.items.len) : (i += 1) {
-                    const e = entries.items[i];
-                    if (e.key.champion != first.champion or e.key.role != first.role or e.key.kind != kind) break;
-                    if (options.items.len == rows) continue;
-                    const v = try arena.dupe(u32, e.key.v[0..valueLen(kind, e.key.v)]);
-                    if (nameList(kind)) |list| for (v) |x| {
-                        if (x != 0) try used[list].put(arena, x, {});
-                    };
-                    try options.append(arena, .{ .v = v, .games = e.count.games, .wins = e.count.wins });
-                }
-                try kinds.append(arena, .{ .kind = kind, .games = t.games, .wins = t.wins, .options = options.items });
-            }
-            try builds.append(arena, .{
-                .champion = first.champion,
-                .role = first.role,
-                .games = all.games,
-                .wins = all.wins,
-                .kinds = kinds.items,
-            });
-        }
+        const builds = try b.fileBuilds(arena, &used, rows, 0);
+        const matchups = if (b.vs) |v| try v.fileBuilds(arena, &used, @min(rows, matchup_rows), b.min_matchup_games) else &.{};
         for (d.trees) |t| {
             try used[1].put(arena, t.id, {});
             for (t.slots) |slot| for (slot) |id| try used[1].put(arena, id, {});
@@ -285,8 +296,72 @@ pub const Builder = struct {
             .runes = named[1].items,
             .spells = named[2].items,
             .trees = d.trees,
-            .builds = builds.items,
+            .builds = builds,
+            .matchups = matchups,
         };
+    }
+
+    /// Champion, role and opponent groups with `min_games` or more, adding the ids their
+    /// options use to `used`
+    fn fileBuilds(b: *const Builder, arena: std.mem.Allocator, used: *[3]std.AutoArrayHashMapUnmanaged(u32, void), rows: usize, min_games: u32) ![]const File.Build {
+        const Entry = struct { key: Key, count: Count };
+        var entries: std.ArrayList(Entry) = .empty;
+        var it = b.options.iterator();
+        while (it.next()) |e| try entries.append(arena, .{ .key = e.key_ptr.*, .count = e.value_ptr.* });
+        std.mem.sort(Entry, entries.items, {}, struct {
+            fn f(_: void, x: Entry, y: Entry) bool {
+                if (x.key.champion != y.key.champion) return x.key.champion < y.key.champion;
+                if (x.key.role != y.key.role) return @backingInt(x.key.role) < @backingInt(y.key.role);
+                if (x.key.opponent != y.key.opponent) return x.key.opponent < y.key.opponent;
+                if (x.key.kind != y.key.kind) return @backingInt(x.key.kind) < @backingInt(y.key.kind);
+                if (x.count.games != y.count.games) return x.count.games > y.count.games;
+                return std.mem.order(u32, &x.key.v, &y.key.v) == .lt;
+            }
+        }.f);
+
+        var builds: std.ArrayList(File.Build) = .empty;
+        var kinds: std.ArrayList(File.Rows) = .empty;
+        var options: std.ArrayList(File.Option) = .empty;
+        var i: usize = 0;
+        while (i < entries.items.len) {
+            const first = entries.items[i].key;
+            const group = struct {
+                fn same(x: Key, y: Key) bool {
+                    return x.champion == y.champion and x.role == y.role and x.opponent == y.opponent;
+                }
+            }.same;
+            const all = b.totals.get(.{ .champion = first.champion, .role = first.role, .opponent = first.opponent, .kind = null }) orelse Count{};
+            if (all.games < min_games) {
+                while (i < entries.items.len and group(entries.items[i].key, first)) i += 1;
+                continue;
+            }
+            kinds = .empty;
+            while (i < entries.items.len and group(entries.items[i].key, first)) {
+                const kind = entries.items[i].key.kind;
+                const t = b.totals.get(.{ .champion = first.champion, .role = first.role, .opponent = first.opponent, .kind = kind }) orelse Count{};
+                options = .empty;
+                while (i < entries.items.len) : (i += 1) {
+                    const e = entries.items[i];
+                    if (!group(e.key, first) or e.key.kind != kind) break;
+                    if (options.items.len == rows) continue;
+                    const v = try arena.dupe(u32, e.key.v[0..valueLen(kind, e.key.v)]);
+                    if (nameList(kind)) |list| for (v) |x| {
+                        if (x != 0) try used[list].put(arena, x, {});
+                    };
+                    try options.append(arena, .{ .v = v, .games = e.count.games, .wins = e.count.wins });
+                }
+                try kinds.append(arena, .{ .kind = kind, .games = t.games, .wins = t.wins, .options = options.items });
+            }
+            try builds.append(arena, .{
+                .champion = first.champion,
+                .role = first.role,
+                .opponent = first.opponent,
+                .games = all.games,
+                .wins = all.wins,
+                .kinds = kinds.items,
+            });
+        }
+        return builds.items;
     }
 };
 
@@ -321,6 +396,8 @@ pub const Player = struct {
     perks: [5]u32 = @splat(0),
     shards: [3]u32 = @splat(0),
     spells: [2]u32 = @splat(0),
+    /// Lane opponent's champion: the other team's player in the same role; 0 for none
+    opponent: u32 = 0,
 };
 
 /// One player's choices from a timeline
@@ -435,6 +512,7 @@ pub fn buildEach(
     std.debug.assert(sets.len == out.len and sets.len <= max_sets);
     for (out) |*b| b.* = .{ .gpa = gpa, .max_keys = @max(o.max_keys, 2) };
     errdefer for (out) |*b| b.deinit();
+    if (o.min_matchup_games) |min| for (out) |*b| try b.countMatchups(o.max_matchup_keys, min);
     const patch_json = try std.json.Stringify.valueAlloc(gpa, o.patches, .{});
     defer gpa.free(patch_json);
     const platform_json = try std.json.Stringify.valueAlloc(gpa, o.platforms, .{});
@@ -477,6 +555,9 @@ pub fn buildEach(
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
     var all: [timeline.max_participants]Picks = undefined;
+    // One game's players, kept until the loop has seen every lane opponent
+    const Row = struct { p: Player, team: bool, k: ?Picks, counted: bool };
+    var game: [timeline.max_participants]Row = undefined;
     while (try q.step()) {
         ahead.next();
         _ = arena_state.reset(.retain_capacity);
@@ -501,6 +582,7 @@ pub fn buildEach(
             b.timelines += @intFromBool(have_picks);
         };
         try players.bind(.{m.match_id});
+        var n: usize = 0;
         while (try players.step()) {
             const r = players.row(struct {
                 slot: usize,
@@ -523,10 +605,12 @@ pub fn buildEach(
                 shard_defense: ?i64,
             });
             const role = Role.fromLcu(r.position) orelse continue;
-            if (floor) |f| {
+            if (n == game.len) break;
+            // Below the floor: not counted, still someone's lane opponent
+            const counted = if (floor) |f| blk: {
                 const rank = if (r.tier) |t| tierIndex(t) else null;
-                if (rank == null or rank.? > f) continue;
-            }
+                break :blk rank != null and rank.? <= f;
+            } else true;
             const p: Player = .{
                 .champion = r.champion_id,
                 .role = role,
@@ -539,7 +623,18 @@ pub fn buildEach(
                 .shards = .{ idOf(r.shard_offense), idOf(r.shard_flex), idOf(r.shard_defense) },
             };
             const k: ?Picks = if (have_picks and r.slot < timeline.max_participants) all[r.slot] else null;
-            for (out, in[0..out.len]) |*b, yes| if (yes) try b.addPlayer(p, k, d);
+            game[n] = .{ .p = p, .team = r.slot < 5, .k = k, .counted = counted };
+            n += 1;
+        }
+        for (game[0..n], 0..) |*g, i| {
+            if (!g.counted) continue;
+            var found: usize = 0;
+            for (game[0..n], 0..) |h, j| if (i != j and h.team != g.team and h.p.role == g.p.role) {
+                g.p.opponent = h.p.champion;
+                found += 1;
+            };
+            if (found != 1) g.p.opponent = 0;
+            for (out, in[0..out.len]) |*b, yes| if (yes) try b.addPlayer(g.p, g.k, d);
         }
     }
 }
@@ -671,4 +766,39 @@ test "builder: shares, rank floor in build, pruning keeps totals" {
     const json = try std.json.Stringify.valueAlloc(arena, f, .{});
     const back = try File.parse(arena, json);
     try testing.expectEqual(5, back.get(122, .top).?.get(.start).?.options[0].games);
+}
+
+test "builder: per lane opponent, own floor, only matchups with enough games" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const d = try testData(arena);
+    var b: Builder = .{ .gpa = testing.allocator, .max_keys = 64 };
+    defer b.deinit();
+    try b.countMatchups(64, 3);
+    // Darius top: 3 games vs Garen (2 won), 2 vs Sett, 1 without a lane opponent
+    for ([_]u32{ 86, 86, 86, 875, 875, 0 }, 0..) |opp, i| {
+        var k: Picks = .{};
+        k.start[0] = 1055;
+        k.start_len = 1;
+        try b.addPlayer(.{ .champion = 122, .role = .top, .won = i < 2, .keystone = 8010, .spells = .{ 4, 12 }, .opponent = opp }, k, &d);
+    }
+    const f = try b.file(arena, &d, "16.20", "PLATINUM", 3);
+    try testing.expectEqual(6, f.get(122, .top).?.games);
+    try testing.expectEqual(1, f.matchups.len);
+    const garen = f.getVs(122, .top, 86).?;
+    try testing.expectEqual(3, garen.games);
+    try testing.expectEqual(2, garen.wins);
+    try testing.expectEqual(3, garen.get(.start).?.options[0].games);
+    // Role-wide only
+    try testing.expectEqual(null, garen.get(.keystone));
+    try testing.expectEqual(null, garen.get(.spells));
+    try testing.expectEqual(null, f.getVs(122, .top, 875));
+
+    const back = try File.parse(arena, try std.json.Stringify.valueAlloc(arena, f, .{}));
+    try testing.expectEqual(3, back.getVs(122, .top, 86).?.games);
+    const old = try File.parse(arena,
+        \\{"label":"16.20","min_tier":"","games":0,"timelines":0,"items":[],"runes":[],"spells":[],"builds":[]}
+    );
+    try testing.expectEqual(0, old.matchups.len);
 }
