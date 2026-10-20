@@ -302,7 +302,10 @@ post-game). Columns match_id, slot, fetched_at, level, points, last_play (the ga
 champion, 0s if absent from the fetch), champions, total_points (the whole fetch); no
 line without such a fetch. Two zstd -dc passes over ARCHIVE's mastery files (the first
 keeps one best fetched_at per participant, the second decodes only the chosen blobs);
-exports begun after the last game are skipped. Temp file, then rename.
+exports begun after the last game are skipped. Temp file, then rename. Beside it
+mastery_pre_pool.tsv, from the same fetches: match_id, slot, champion, pool (the 15
+champions with most points, `champion:points,...`), the pool the app would see; `meiolol
+eval --replay` reads it.
 
 `meiolol-lab seat-stats SNAP [DDRAGON]` (src/lab/seatstats.zig) adds seat_stats.tsv: per
 queue 420 seat, what the player did (api.SeatStat), for comp features. Header line, then

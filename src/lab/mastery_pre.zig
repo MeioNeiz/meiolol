@@ -7,6 +7,9 @@
 //! level, points, last_play (unix s, up to an hour late): the game's champion in that
 //! fetch, 0s when it is absent (never played). champions, total_points: the whole fetch.
 //! Participants without such a fetch get no line.
+//! SNAP/mastery_pre_pool.tsv, the pool the app would see (lanecard.pool_size most points
+//! first), one line per participant of mastery_pre.tsv, in fetch order:
+//!   match_id slot champion pool   (pool: champion:points,... most points first)
 //!
 //! Two passes over the mastery files, each streamed through `zstd -dc`: the first keeps
 //! only each participant's best fetched_at so far, the second decodes just the chosen
@@ -21,6 +24,9 @@ const Allocator = std.mem.Allocator;
 const log = std.log.scoped(.mastery_pre);
 
 pub const file_name = "mastery_pre.tsv";
+pub const pool_file_name = "mastery_pre_pool.tsv";
+pub const pool_size = 15;
+const pool_header = "match_id\tslot\tchampion\tpool\n";
 const header = "match_id\tslot\tfetched_at\tlevel\tpoints\tlast_play\tchampions\ttotal_points\n";
 const ranked_solo = 420;
 const no_fetch = std.math.minInt(i64);
@@ -96,19 +102,31 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8, archive_dir: []const u8) !S
     for (s.parts.items) |p| if (p.best != no_fetch) {
         wanted[p.best_file] = true;
     };
-    for (files.read, wanted, 0..) |path, want, i| {
-        if (!want) continue;
-        var pass: Decode = .{
-            .gpa = gpa,
-            .s = &s,
-            .file = @intCast(i),
-            .arena = &line_arena,
-            .blob = &blob,
-        };
-        try scan(io, path, buf, &pass);
+    const cwd = Io.Dir.cwd();
+    const pool_path = try std.fs.path.join(arena, &.{ snap, pool_file_name });
+    const pool_tmp = try std.fmt.allocPrint(arena, "{s}.tmp", .{pool_path});
+    {
+        var file = try cwd.createFile(io, pool_tmp, .{});
+        errdefer cwd.deleteFile(io, pool_tmp) catch {};
+        defer file.close(io);
+        var wbuf: [64 * 1024]u8 = undefined;
+        var fw = file.writer(io, &wbuf);
+        try fw.interface.writeAll(pool_header);
+        for (files.read, wanted, 0..) |path, want, i| {
+            if (!want) continue;
+            var pass: Decode = .{
+                .gpa = gpa,
+                .s = &s,
+                .file = @intCast(i),
+                .arena = &line_arena,
+                .blob = &blob,
+                .pool = &fw.interface,
+            };
+            try scan(io, path, buf, &pass);
+        }
+        try fw.interface.flush();
     }
 
-    const cwd = Io.Dir.cwd();
     const out_path = try std.fs.path.join(arena, &.{ snap, file_name });
     const tmp_path = try std.fmt.allocPrint(arena, "{s}.tmp", .{out_path});
     var gaps: std.ArrayList(f64) = .empty;
@@ -132,6 +150,7 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8, archive_dir: []const u8) !S
         try w.flush();
     }
     try cwd.rename(tmp_path, cwd, out_path, io);
+    try cwd.rename(pool_tmp, cwd, pool_path, io);
     return .{
         .rows = s.parts.items.len,
         .pre_game = gaps.items.len,
@@ -300,6 +319,7 @@ const Decode = struct {
     file: u32,
     arena: *std.heap.ArenaAllocator,
     blob: *std.ArrayList(u8),
+    pool: *std.Io.Writer,
 
     fn chosen(c: *const Decode, p: *const Participant, fetched_at: i64) bool {
         return !p.filled and p.best == fetched_at and p.best_file == c.file;
@@ -318,9 +338,15 @@ const Decode = struct {
         const entries = try riot_mastery.decode(c.arena.allocator(), c.blob.items, l.fetched_at);
         var total: u64 = 0;
         for (entries) |e| total += e.points;
+        std.mem.sort(riot_mastery.Entry, entries, {}, morePoints);
         for (c.s.of(l.player)) |i| {
             const p = &parts[i];
             if (!c.chosen(p, l.fetched_at)) continue;
+            try c.pool.print("{s}\t{d}\t{d}\t", .{ c.s.match_ids.items[p.match], p.slot, p.champion });
+            for (entries[0..@min(entries.len, pool_size)], 0..) |e, k| {
+                try c.pool.print("{s}{d}:{d}", .{ if (k == 0) "" else ",", e.champion, e.points });
+            }
+            try c.pool.writeAll("\n");
             p.filled = true;
             p.champions = @intCast(entries.len);
             p.total_points = total;
@@ -332,6 +358,10 @@ const Decode = struct {
         }
     }
 };
+
+fn morePoints(_: void, a: riot_mastery.Entry, b: riot_mastery.Entry) bool {
+    return a.points > b.points;
+}
 
 fn median(xs: []f64) f64 {
     if (xs.len == 0) return std.math.nan(f64);
@@ -469,4 +499,10 @@ test "latest fetch strictly before game start, champion entry decoded" {
     }), out);
     const tmp_path = try arena.print("{s}.tmp", .{out_path});
     try testing.expectError(error.FileNotFound, cwd.access(io, tmp_path, .{}));
+
+    const pool = try cwd.readFileAlloc(io, try std.fs.path.join(arena, &.{ snap, pool_file_name }), arena, .limited(1 << 20));
+    try testing.expectEqualStrings(pool_header ++
+        "EUW1_1\t1\t999\t2:20,1:10\n" ++
+        "EUW1_1\t0\t38\t1:1000,38:200\n" ++
+        "EUW1_2\t0\t1\t1:1000,38:400\n", pool);
 }
