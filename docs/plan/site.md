@@ -139,9 +139,12 @@ than lolalytics: our own edge is the lane curves, early/late lean, "Into which t
   links the full build page. New builds kind skill_start (first three skill-ups), on
   the build page too. Next: grey or hide the strip when a filter moves away from the
   patch view's region (filters.js); full 1-18 skill sequence (a packed u32 key, 2 bits
-  a level, would fit the builds Key); shard icons (ddragon has none; CommunityDragon
-  StatMods); per-matchup builds for the matchup page need builds counted by lane
-  opponent, a new builds file key
+  a level, would fit the builds Key)
+- Done 20 Oct (night run, mbuilds, 03361b3): rune pages drawn as the in-game page (every
+  rune of both trees, chosen ones lit, shard rows with CommunityDragon icons) in the
+  strip (two grid rows beside the other kinds) and on the build page (4 most played pages
+  as cards). The builds file carries the rune trees (`trees`). Next: per-matchup builds
+  (Matchup page below)
 - Pick and ban rate like lolalytics (Jacob wrote "pbr": confirm whether he means PR
   and BR, or lolalytics' PBI, pick/ban influence)
 
@@ -162,6 +165,11 @@ chart with Gold/Experience/CS tabs. Next: level 2 timing (curves format: a heade
 and a box rebuild of the curves), builds and runes that do well here (the patch view's
 builds file), the leans and kit kinds that apply, the champion pool block, then maybe
 fold the Lane and game table, which now repeats the facts.
+Per-matchup builds (Jacob 20 Oct: "Kaisa Jinx, I still can't see runes and items of the
+specific matchup"): builds counted by lane opponent in a second builder (own Key field
+and key budget), a `matchups` part of the builds file (or its own file if big), and a
+strip on the matchup page; step by step in
+data/team/2026-10-19-night/mbuilds.md "Plan B".
 Already planned: pool first in the picker (B2), then bans from the pool's hard lanes
 (B3, Q3); public form waits on J2 (decisions.md). Patch day (B4, z 2.58).
 Matchup index: Jacob 20 Oct "unusable" (10k-item two-column bullet list). Done 20 Oct
