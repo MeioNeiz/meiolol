@@ -143,6 +143,21 @@ puzzle game: docs/learn-proposal.md (team run 2026-10-19 night, teach).
   reasons an option at most); after the pick each option button says "adds magic" or
   "more of the same". Progress in localStorage only. No win chance or points: Learn
   never showed them (raw win rates with games only), checked in learn.js and the reveal
+- Done 20 Oct evening (learn, 2a4a9cb): Puzzles tab first (src/site/puzzles.zig). Jacob 20
+  Oct: "learn is boring ... too easy, its gotta make someone think ... the best question
+  was wr or switching to counter vs playing what you know". Eleven puzzles, one a screen:
+  a committed guess (slider scored spot on / close / off, or one of two to four), then the
+  real number with its games, bars of the table behind it, one line why, a takeaway; a
+  score and all takeaways at the end. Ten hand-written from finished checks (mastery
+  bands, Rengar vs Vayne newcomers, fed laner with the other four behind, fed top vs bot,
+  5k behind at 15, bounty gold, first dragon vs herald/grub/tower, kills at 3:00-3:30,
+  split pushers, luck), one from this patch's curves (a matchup whose lane leader, 60%+ of
+  games ahead at 14, wins 5+ points and 2 SE under even, 300+ games; live: Viego vs Zac
+  jungle, 74% ahead, Zac wins 57% of 367). Lessons renamed Basics; Practice unchanged
+- Next for puzzles: refresh the hand-written numbers when the checks are rerun (each
+  names its source in puzzles.zig); more generated puzzles from live data (champion
+  lean: early or late; counter or just strong, from vs usual); a daily five; drop or
+  keep Basics and Practice (Jacob)
 - Next: levels inside a Difficulty by clarity (easy drills whose one bringer also leads
   its lane before ones whose doesn't; hard ones sorted by how close the four sit);
   lesson examples as tiles, not sentences; a lesson from lane curves (who is ahead at 14)
