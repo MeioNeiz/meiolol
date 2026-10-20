@@ -2,6 +2,8 @@ const std = @import("std");
 const core = @import("core");
 const lcu = @import("lcu/root.zig");
 const datafiles = @import("datafiles.zig");
+const lanecard = @import("lanecard.zig");
+const cardscenes = @import("cardscenes.zig");
 const update = @import("desktop/update.zig");
 
 // watch retries every second; Debug builds would print a stack trace for each
@@ -23,6 +25,9 @@ const usage =
     \\            --enemy LIST      e.g. Ahri,Jinx or mid=Ahri (roles guessed if left out)
     \\            --ban LIST        e.g. Yasuo,Zed
     \\            --top N           how many to show (default 5)
+    \\  cards [FILE]  the lane card for each scene in FILE (default
+    \\            testdata/cards/scenes.json), as the desktop window shows it
+    \\            --curves FILE     (default: data/export recent-curves.bin)
     \\  watch     follow champ select in the League client and suggest as it changes
     \\            --role R          used when the client gives no position (blind pick)
     \\            --top N
@@ -54,6 +59,7 @@ const Args = struct {
     enemy: ?[]const u8 = null,
     ban: ?[]const u8 = null,
     top: usize = 5,
+    curves: ?[]const u8 = null,
     lockfile: ?[]const u8 = null,
     save: ?[]const u8 = null,
     opts: core.Options = .{},
@@ -81,6 +87,7 @@ pub fn main(init: std.process.Init) !void {
         .args = args,
     };
     if (std.mem.eql(u8, command, "suggest")) return app.suggest();
+    if (std.mem.eql(u8, command, "cards")) return app.cards();
     if (std.mem.eql(u8, command, "watch")) return app.watch();
     if (std.mem.eql(u8, command, "session")) return app.session();
     if (std.mem.eql(u8, command, "get")) return app.get();
@@ -107,6 +114,8 @@ fn parseArgs(argv: []const [:0]const u8) Args {
         const val = argv[i];
         if (std.mem.eql(u8, flag, "--stats")) {
             args.stats = val;
+        } else if (std.mem.eql(u8, flag, "--curves")) {
+            args.curves = val;
         } else if (std.mem.eql(u8, flag, "--role")) {
             args.role = Role.parse(val) orelse fail("--role: unknown role {s}", .{val});
         } else if (std.mem.eql(u8, flag, "--ally")) {
@@ -166,6 +175,30 @@ const App = struct {
         try app.printHeader(loaded);
         try printDraft(app.out, stats, draft, 0, false);
         try app.printSuggestions(stats, draft, 0);
+    }
+
+    fn cards(app: App) !void {
+        const loaded = try app.loadStats();
+        const stats = &loaded.stats;
+        const path = app.args.positional orelse cardscenes.default_path;
+        const scenes = cardscenes.load(app.arena, app.io, path) catch |err|
+            fail("cannot read scenes {s}: {t}", .{ path, err });
+        var curves: ?core.curvesfile.Curves = null;
+        const curves_path = app.args.curves orelse try datafiles.curves(app.arena, app.io);
+        if (curves_path) |p| {
+            const bytes = std.Io.Dir.cwd().readFileAlloc(app.io, p, app.arena, .limited(1 << 30)) catch |err|
+                fail("cannot read {s}: {t}", .{ p, err });
+            curves = core.curvesfile.Curves.parse(app.arena, bytes) catch |err|
+                fail("{s} is not a meiolol curves file: {t}", .{ p, err });
+        }
+        try app.printHeader(loaded);
+        for (scenes) |s| {
+            var bad: []const u8 = "";
+            const in = cardscenes.input(app.arena, stats, if (curves) |*c| c else null, s, app.args.opts, &bad) catch |err|
+                fail("scene {s}: {t} {s}", .{ s.name, err, bad });
+            try app.out.print("\n== {s}\n", .{s.name});
+            try lanecard.write(try lanecard.build(app.arena, in), stats, app.out);
+        }
     }
 
     /// "top=Darius,jungle=Lee Sin?,Ahri"
@@ -511,7 +544,8 @@ fn fail(comptime fmt: []const u8, args: anytype) noreturn {
 
 test {
     _ = lcu;
-    _ = @import("lanecard.zig");
+    _ = lanecard;
+    _ = cardscenes;
     _ = update;
     std.testing.refAllDecls(lcu);
 }

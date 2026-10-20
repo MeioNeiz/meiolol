@@ -65,6 +65,16 @@ judgements, 3 to 5 options with reasons, no "best pick" or "+X% win rate" wordin
   scenario runs in `zig build test`. Shots: docs/review-shots/mock-mid-blind.png, mock-top-vs-darius.png. How it works:
   docs/architecture.md "App"
 
+- Lane card scenes (20 Oct): testdata/cards/scenes.json, ten champ selects (blind,
+  counter, locked, guessed positions, bans, pickable, widened pool, no mastery).
+  `meiolol-app cards [FILE]` prints each card as text against real stats and curves:
+  run it before and after a recommender change and diff. `zig build test` shows the
+  same scenes on a synthetic fixture (src/cardscenes.zig) against
+  testdata/cards/fixture.txt (a change fails with the diff command; cp to accept), and
+  checks 400 random drafts: options from the pool when it has 3+, else widened; 3 to 5
+  (fewer only when fewer exist); never banned, taken or unpickable; no "%", "win" or
+  "best" in reasons
+
 ## Next
 
 - Mock client vs a real capture: once session-real.json comes, diff its shape against

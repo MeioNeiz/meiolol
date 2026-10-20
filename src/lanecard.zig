@@ -144,6 +144,21 @@ pub fn build(arena: std.mem.Allocator, in: Input) !Card {
     return card;
 }
 
+/// The card as text in reading order: scenario tests and `meiolol-app cards`
+pub fn write(card: Card, stats: *const Stats, w: *std.Io.Writer) !void {
+    try w.writeAll(card.role.label());
+    if (card.me != 0) try w.print(", {s} {s}", .{ if (card.locked) "locked" else "hovering", stats.nameOf(card.me) });
+    if (card.opponent) |o| try w.print("; opponent {s}{s}", .{ stats.nameOf(o.champion), if (o.guessed) " (guessed)" else "" });
+    try w.writeAll("\n");
+    if (card.sentence.len > 0) try w.print("{s}\n", .{card.sentence});
+    for (card.options) |o| {
+        try w.print("- {s}", .{stats.nameOf(o.champion)});
+        if (o.lane) |l| try w.print(" | {s}", .{l.text});
+        for (o.reasons, 0..) |r, i| try w.print("{s}{s}", .{ if (i == 0) " | " else "; ", r });
+        try w.writeAll("\n");
+    }
+}
+
 /// An enemy shown in my position, else the one inferred into it
 fn opponent(in: Input) ?Opponent {
     for (in.enemies) |e| if (e.role == in.role) return .{ .champion = e.champion, .guessed = false };
