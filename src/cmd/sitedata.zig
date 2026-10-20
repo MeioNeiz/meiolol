@@ -163,7 +163,7 @@ pub const usage_builds =
     \\              --min-tier T     lowest rank counted, per player (default PLATINUM;
     \\                               "any" counts everyone, unranked too)
     \\              --max-keys N     distinct options held in memory (default 524288)
-    \\              --max-matchup-keys N  the same per lane opponent (default 1048576)
+    \\              --max-matchup-keys N  the same per lane opponent (default 4194304)
     \\              --out FILE       default DIR/export/builds-<patch>.json
     \\                               (all-builds-... with --platform all)
     \\              --site           the files the site reads, in one pass over the

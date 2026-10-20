@@ -70,8 +70,9 @@ pub const Options = struct {
     max_keys: usize = 1 << 19,
     /// Options written per champion, role and kind, most played first
     rows: usize = 10,
-    /// Distinct matchup options held (Builder.vs)
-    max_matchup_keys: usize = 1 << 20,
+    /// Distinct matchup options held (Builder.vs): at 1 << 22 the box's 16.20 run kept its
+    /// floor at 1 in 1.1 GB (1 << 20: floor 12)
+    max_matchup_keys: usize = 1 << 22,
     /// Matchups (champion, role and lane opponent) written: those with this many games
     /// or more; null for none
     min_matchup_games: ?u32 = null,
