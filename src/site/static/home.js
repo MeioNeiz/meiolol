@@ -140,15 +140,19 @@
     const lg = hasCurve(g) ? g : games.find(hasCurve);
     if (lane && lg) {
       const l = lg.lane, c = l.curve, i = Review.LANE_END - 1;
-      const row = (label, value, diff, good, text) => {
+      const row = (label, value, diff, good, text, note) => {
         const li = el("li");
         const b = el("b", "num", `${value} `);
         b.append(el("span", `pill ${diff === 0 ? "n" : good ? "g" : "r"}`, text));
-        li.append(el("span", "", label), b);
+        const name = el("span", "", label);
+        if (note) name.append(note);
+        li.append(name, b);
         return li;
       };
       const sec = (s) => `${s > 0 ? "+" : s < 0 ? "−" : ""}${Math.abs(s)}s`;
-      const rows = [row(`Gold lead at ${Review.LANE_END}`, signed(l.gold[i]), l.gold[i] - c.gold[i][1], l.gold[i] >= c.gold[i][1], signed(l.gold[i] - c.gold[i][1]))];
+      const among = el("small", "among", Review.among(l.gold[i], c.gold[i]));
+      among.title = Review.middleHalf(c.gold[i]);
+      const rows = [row(`Gold lead at ${Review.LANE_END}`, signed(l.gold[i]), l.gold[i] - c.gold[i][1], l.gold[i] >= c.gold[i][1], signed(l.gold[i] - c.gold[i][1]), among)];
       if (l.level6?.[0] != null && c.level6?.[0] != null) rows.push(row("Level 6", clock(l.level6[0]), l.level6[0] - c.level6[0], l.level6[0] <= c.level6[0], sec(l.level6[0] - c.level6[0])));
       if (l.first_item?.[0] != null && c.first_item?.[0] != null) rows.push(row("First item", clock(l.first_item[0]), l.first_item[0] - c.first_item[0], l.first_item[0] <= c.first_item[0], sec(l.first_item[0] - c.first_item[0])));
       lane.replaceChildren(...rows);

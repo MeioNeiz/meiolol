@@ -14,6 +14,13 @@ const Review = (() => {
   // Deaths costing at least this much win chance, or followed by an objective while the
   // team's chance did not rise, are costly
   const COSTLY = 5;
+  // A moment's size from how far its minute moved win chance, in points; bands finer
+  // near the fold as chess.com's (2, 5, 10, 20). Under FOLD (about half of all moments)
+  // fold away, unless only a couple would
+  const SIZES = [[20, "huge"], [10, "big"], [5, "medium"], [0, "small"]];
+  const FOLD = 5;
+  const size = (m) => SIZES.find(([at]) => Math.abs(m.d) >= at)?.[1] ?? "small";
+  const minor = (m) => Math.abs(m.d) < FOLD && m.kind !== "turn";
 
   let champs = new Map();
   let ddragon = "";
@@ -238,10 +245,12 @@ const Review = (() => {
       // Objective dots are light with a team-colour ring: a team-colour fill would vanish
       // into that team's area
       const obj = mo.kind === "obj" || mo.kind === "objl";
-      const r = mo.kind === "death" ? 3.5 : obj ? 4 : 5;
+      // Small moments, folded in the list, are fainter and smaller here
+      const r = (mo.kind === "death" ? 3.5 : obj ? 4 : 5) - (minor(mo) ? 1 : 0);
       const c = svgEl("circle", { class: obj ? `mo mo-obj ${mo.kind}` : "mo", cx: x(m), cy: y(p), r, fill: obj ? "var(--text)" : KINDS[mo.kind].colour });
+      if (minor(mo)) c.setAttribute("opacity", "0.55");
       const tip = svgEl("title", {});
-      tip.textContent = `${clock(mo.t_s)} ${mo.title}`;
+      tip.textContent = `${clock(mo.t_s)} ${mo.title}, ${size(mo)} (${pct(mo.d)})`;
       c.append(tip);
       if (pick) {
         const go = () => pick(Math.min(n, Math.ceil(mo.minute)), i);
@@ -355,35 +364,50 @@ const Review = (() => {
   // costly death gets a colour
   const tone = (m) => (m.kind === "cost" ? "t-cost" : m.kind === "death" || !m.d ? "" : m.d > 0 ? "t-gain" : "t-cost");
 
-  function momentList(M, onPick, keep) {
-    const ul = el("ul", "moments");
-    M.forEach((m, i) => {
-      if (keep && !keep.includes(i)) return;
-      const li = el("li");
-      li.dataset.i = i;
-      li.tabIndex = 0;
-      const what = el("span", "what");
-      what.append(el("b", "", m.title));
-      const sub = el("div");
-      if (m.killer !== undefined) sub.append(icon(m.killer));
-      if (m.text) sub.append(m.text);
-      what.append(sub);
-      li.append(el("span", "t num", clock(m.t_s)), badge(m.kind), what, el("span", `d num ${tone(m)}`, pct(m.d)));
-      const go = () => onPick(i);
-      li.addEventListener("click", go);
-      li.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          go();
-        }
-      });
-      ul.append(li);
+  function momentItem(m, i, onPick) {
+    const li = el("li");
+    li.dataset.i = i;
+    li.tabIndex = 0;
+    const what = el("span", "what");
+    what.append(el("b", "", m.title));
+    const sub = el("div");
+    if (m.killer !== undefined) sub.append(icon(m.killer));
+    if (m.text) sub.append(m.text);
+    what.append(sub);
+    const d = el("span", `d num ${tone(m)}`, pct(m.d));
+    d.append(el("small", "", size(m)));
+    li.append(el("span", "t num", clock(m.t_s)), badge(m.kind), what, d);
+    const go = () => onPick(i);
+    li.addEventListener("click", go);
+    li.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        go();
+      }
     });
-    if (!ul.children.length) {
-      const li = el("li", "empty", "Nothing to show: no fights or objectives with you in them.");
-      ul.append(li);
+    return li;
+  }
+
+  // The moments in time order, the small ones folded below them (each list still in time
+  // order); `keep` lists only those, unfolded
+  function momentList(M, onPick, keep) {
+    const box = el("div");
+    const ul = el("ul", "moments");
+    const idx = M.map((_, i) => i).filter((i) => !keep || keep.includes(i));
+    const small = keep ? [] : idx.filter((i) => minor(M[i]));
+    const fold = small.length > 2;
+    for (const i of idx) if (!fold || !small.includes(i)) ul.append(momentItem(M[i], i, onPick));
+    if (!idx.length) ul.append(el("li", "empty", "Nothing to show: no fights or objectives with you in them."));
+    box.append(ul);
+    if (fold) {
+      const det = el("details", "mo-fold");
+      det.append(el("summary", "", `${small.length} smaller moments: win chance moved under ${FOLD}% each`));
+      const sl = el("ul", "moments");
+      for (const i of small) sl.append(momentItem(M[i], i, onPick));
+      det.append(sl);
+      box.append(det);
     }
-    return ul;
+    return box;
   }
 
   function counts(M, yours) {
@@ -477,6 +501,17 @@ const Review = (() => {
     return fig;
   }
 
+  // Where `v` sits among this matchup's games, from the curve's [p25, p50, p75] at a
+  // minute (raw percentiles from your side, src/api/game.zig curveReport)
+  function among(v, [p25, p50, p75]) {
+    if (v > p75) return "above 3 in 4 games";
+    if (v < p25) return "below 3 in 4 games";
+    if (v > p50) return "above half the games";
+    if (v < p50) return "below half the games";
+    return "level with the middle game";
+  }
+  const middleHalf = (q) => `Middle half of this matchup's games: ${signed(q[0])} to ${signed(q[2])}`;
+
   function laneTable(g) {
     const l = g.lane, c = l.curve;
     const i = LANE_END - 1;
@@ -489,17 +524,24 @@ const Review = (() => {
       const s = el("span", `pill ${v === 0 ? "n" : good ? "g" : "r"}`, text);
       return s;
     };
-    const row = (label, you, opp, typ, diff) => {
+    const row = (label, you, opp, typ, diff, spread) => {
       const tr = el("tr");
       tr.append(el("td", "", label), el("td", "you", you), el("td", "", opp ?? ""), el("td", "", typ ?? "·"));
       const d = el("td");
       if (diff) d.append(diff);
+      if (spread) d.append(spread);
       tr.append(d);
       t.append(tr);
     };
     if (l.gold.length > i) {
-      const typ = solid(i) ? c.gold[i][1] : null;
-      row(`Gold lead at ${LANE_END}`, signed(l.gold[i]), null, typ === null ? null : signed(typ), typ === null ? null : pill(l.gold[i] - typ, l.gold[i] >= typ, signed(l.gold[i] - typ)));
+      const q = solid(i) ? c.gold[i] : null;
+      const typ = q ? q[1] : null;
+      let spread = null;
+      if (q) {
+        spread = el("small", "among", among(l.gold[i], q));
+        spread.title = middleHalf(q);
+      }
+      row(`Gold lead at ${LANE_END}`, signed(l.gold[i]), null, typ === null ? null : signed(typ), typ === null ? null : pill(l.gold[i] - typ, l.gold[i] >= typ, signed(l.gold[i] - typ)), spread);
     }
     const timing = (label, mine, typical) => {
       if (!mine || mine[0] == null) return;
@@ -751,7 +793,12 @@ const Review = (() => {
         bar.dataset.hot = wc[minute] >= 80 ? "us" : wc[minute] <= 20 ? "them" : "";
         val.textContent = wc[minute];
         bar.setAttribute("aria-label", `Win chance at ${minute}:00: ${wc[minute]}%`);
-        for (const li of ml.children) li.classList.toggle("on", Number(li.dataset.i) === i);
+        for (const li of ml.querySelectorAll("li[data-i]")) {
+          const on = Number(li.dataset.i) === i;
+          li.classList.toggle("on", on);
+          // A folded moment picked on the chart opens the fold
+          if (on) li.closest("details")?.setAttribute("open", "");
+        }
       };
       if (opts.lane === false) {
         panel.append(ml);
@@ -783,5 +830,5 @@ const Review = (() => {
     return { moments: M, set };
   }
 
-  return { init, render, moments, spark, highlights, highlightCard, icon, iconUrl, champName, clock, plural, signed, pct, list, el, LANE_END, MIN_N };
+  return { init, render, moments, spark, highlights, highlightCard, icon, iconUrl, champName, clock, plural, signed, pct, list, el, among, middleHalf, LANE_END, MIN_N };
 })();
