@@ -17,6 +17,7 @@ rev=$(git -C "$root" rev-parse --verify HEAD) || exit 1
             | (cd "$root" && xargs -0 -I{} rsync -R {} "$tree/") || exit 1
         short="$short + $*"
     fi
+    mkdir -p .zig-cache
     rm -f .zig-cache/site-files.txt
     if zig build test -Dtest-filter="fixture games to stats, curves and the website" \
         --cache-dir "$root/.zig-cache" > .zig-cache/site-hashes.log 2>&1; then
