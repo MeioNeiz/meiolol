@@ -587,6 +587,7 @@ function markdown(text) {
 let L = null, liveErr = null, liveAt = 0;
 let TRAFFIC = null, trafficErr = null;
 let TRAIN = null, trainErr = null;
+let DESKTOP = null;
 const runCache = new Map();
 
 async function fetchOk(path) {
@@ -607,6 +608,20 @@ async function pollSnapshot() {
 async function pollTraffic() {
   try { TRAFFIC = await getJson("ops/traffic.json"); trafficErr = null; } catch (e) { trafficErr = e.message; }
   refreshView("traffic");
+}
+// The Windows app's zip, rebuilt by the web loop when its data changes (web-loop.sh
+// desktop_zip); the site's download page shows Jacob the same link from localStorage
+async function pollDesktop() {
+  try { DESKTOP = await getJson("desktop/info.json"); } catch (e) { DESKTOP = null; }
+  store("desktop", DESKTOP && { ...DESKTOP, href: new URL(DESKTOP_ZIP, location.href).pathname });
+  document.getElementById("desktop-dl")?.replaceWith(desktopLink());
+}
+const DESKTOP_ZIP = "desktop/meiolol-desktop.zip";
+function desktopLink() {
+  const d = DESKTOP;
+  const about = d ? `patch ${d.patch}, built ${uk(Date.parse(d.built) / 1000)}, ${bytes(d.bytes)}` : null;
+  return el("a", { id: "desktop-dl", class: "download", href: DESKTOP_ZIP, download: "", title: about ? "Windows zip: " + about : "Windows zip" },
+    "Download desktop app", about ? el("span", {}, d.patch) : null);
 }
 async function pollTraining() {
   try {
@@ -748,6 +763,7 @@ function render(keep) {
     controls.append(el("button", { type: "button", class: "zoom", onclick: () => setZoom(null) },
       `${uk(ui.zoom[0])} to ${uk(ui.zoom[1])}`, el("span", { "aria-hidden": "true" }, " ×")));
   }
+  controls.append(desktopLink());
   controls.append(el("button", { type: "button", class: "ghost", title: "Fetch everything now", onclick: () => refreshAll() }, "Refresh"));
   top.append(controls);
   const nav = el("nav", { class: "tabs", "aria-label": "Sections" });
@@ -785,7 +801,7 @@ function renderStatus() {
 }
 
 async function refreshAll() {
-  await Promise.all([pollLive(), pollSnapshot(), pollTraffic(), pollTraining()]);
+  await Promise.all([pollLive(), pollSnapshot(), pollTraffic(), pollTraining(), pollDesktop()]);
 }
 
 // ---------- views ----------
@@ -2462,6 +2478,7 @@ render();
 pollLive();
 pollTraffic();
 pollTraining();
+pollDesktop();
 setInterval(() => { if (!document.hidden) pollLive(); }, LIVE_MS);
 setInterval(() => { if (!document.hidden) pollSnapshot(); }, SNAPSHOT_MS);
 setInterval(() => { if (!document.hidden) pollTraffic(); }, TRAFFIC_MS);

@@ -45,7 +45,7 @@
 # then offer none until the next success.
 # Every round, the private admin page (`meiolol admin`) goes to admin/ on the server,
 # behind basic auth there; the site's rsync leaves that directory alone. data/desktop
-# (the Windows app's zip, made by hand) goes with it to admin/desktop/. Daily, a dbstat
+# (the Windows app's zip, desktop_zip) goes with it to admin/desktop/. Daily, a dbstat
 # scan (system sqlite3, read-only) leaves space by table and index in data/storage.tsv
 # for it.
 # The daily jobs' timers start from the files each leaves, and curves' from their files,
@@ -107,6 +107,55 @@ storage_scan() {
                 ORDER BY 4 DESC" >> data/storage.tsv.new 2> data/storage.log || return 1
     done
     mv data/storage.tsv.new data/storage.tsv
+}
+
+# The Windows app's download, admin/desktop/ (behind the login until the public release,
+# plan J7): the deployed exe (box.sh sync), the renderer's data/stats.bin (EUW, current
+# patch: what meio.lol serves) and recent-curves.bin, zipped again when one changed, so
+# the download's data is at most a round older than the site's. The app reads the newest
+# stats-*.bin beside it (src/datafiles.zig): unzipped over an old folder, the new wins
+desktop_zip() {
+    local d=data/desktop.new inputs
+    [[ -f bin/meiolol-desktop.exe && -f data/export/recent-curves.bin && -n "$patch" ]] \
+        || return 0
+    rm -rf "$d" && mkdir -p "$d/meiolol"
+    if ! curl -sf --max-time 120 -o "$d/meiolol/stats-$patch.bin" \
+        "http://$(hostname -I | cut -d' ' -f1):8091/data/stats.bin"; then
+        echo "$(date -u +%FT%TZ) desktop zip: no stats.bin from the renderer, old zip kept"
+        rm -rf "$d"
+        return 1
+    fi
+    # The curves by size and time, not content: 80 MB to read every round
+    inputs=$(sha256sum "$d/meiolol/stats-$patch.bin" bin/meiolol-desktop.exe | cut -d' ' -f1 \
+        && stat -c '%s %Y' data/export/recent-curves.bin && echo "$patch")
+    if [[ -f data/desktop/meiolol-desktop.zip \
+        && "$inputs" == "$(cat data/desktop.inputs 2> /dev/null)" ]]; then
+        rm -rf "$d"
+        return 0
+    fi
+    cp -p bin/meiolol-desktop.exe "$d/meiolol/"
+    ln data/export/recent-curves.bin "$d/meiolol/"
+    if ! batch python3 - "$d" "$patch" <<'EOF'
+import datetime, json, os, sys, zipfile
+d, patch = sys.argv[1:]
+zip_path = os.path.join(d, "meiolol-desktop.zip")
+with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+    for f in sorted(os.listdir(os.path.join(d, "meiolol"))):
+        z.write(os.path.join(d, "meiolol", f), "meiolol/" + f)
+built = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+with open(os.path.join(d, "info.json"), "w") as f:
+    json.dump({"patch": patch, "built": built, "bytes": os.path.getsize(zip_path)}, f)
+EOF
+    then
+        echo "$(date -u +%FT%TZ) desktop zip FAILED, old zip kept"
+        rm -rf "$d"
+        return 1
+    fi
+    rm -rf "$d/meiolol" data/desktop.old
+    [[ -d data/desktop ]] && mv data/desktop data/desktop.old
+    mv "$d" data/desktop && rm -rf data/desktop.old
+    echo "$inputs" > data/desktop.inputs
+    echo "$(date -u +%FT%TZ) desktop zip: $(stat -c %s data/desktop/meiolol-desktop.zip) bytes, patch $patch"
 }
 
 last_patch='' last_games=0
@@ -335,12 +384,13 @@ while true; do
             fi
         fi
     fi
+    desktop_zip || true
     if nice -n 10 bin/meiolol admin --out data/admin.new \
         --disk "$(df -B1 --output=size,used,avail data | tail -n 1)" \
         --health "$(bin/health.sh)" 2>&1; then
         # Times kept, so the upload sends the tester's files only when the daily job changed them
         [[ -d data/tester ]] && cp -pR data/tester data/admin.new/models
-        # Desktop app zip, put there by hand until the public release; linked, not copied (51 MB)
+        # Linked, not copied (~50 MB)
         [[ -d data/desktop ]] && cp -al data/desktop data/admin.new/desktop
         rm -rf data/admin && mv data/admin.new data/admin
         rsync -a --delete data/admin/ meiolol-web:admin/ || echo "$(date -u +%FT%TZ) admin upload FAILED"

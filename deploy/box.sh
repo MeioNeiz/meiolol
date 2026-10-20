@@ -36,15 +36,19 @@ sync() {
     tree=$(mktemp -d)
     # shellcheck disable=SC2064 # expand now: tree is local to sync
     trap "rm -rf '$tree'" EXIT
+    # The Windows desktop app too: the web loop zips it with fresh data for the download
     "$HERE/build-tree.sh" box "$rev" sh -c 'zig build backend -Dtarget="$1" \
         -Doptimize=ReleaseSafe --prefix zig-out/box --cache-dir "$2/.zig-cache" \
+        && zig build desktop -Doptimize=ReleaseSmall --prefix zig-out/box \
+            --cache-dir "$2/.zig-cache" \
         && mkdir "$3/zig-out" && cp -R zig-out/box "$3/zig-out/" && cp -R deploy "$3/"' \
         _ "$target" "$ROOT" "$tree"
     # check-deploy.sh (zig build ci) reads both lists: each committed, every unit that runs
     # in ~/ml/meiolol listed, every script a unit or listed script runs listed
     local scripts="web-loop.sh health.sh health-loop.sh backup-loop.sh backup-serve.sh render-swap.sh archive-serve.sh cache-version.sh cache-warm.sh box-lib.sh" s
     local units="meiolol-crawl.service meiolol-web.service meiolol-render@.service meiolol-health.service meiolol-backup.service meiolol-cache-version.service meiolol-cache-version.path meiolol-cache-warm.service" u
-    local files=("$tree/zig-out/box/bin/meiolol") on_box=("$DIR/bin/meiolol") want=() i
+    local files=("$tree/zig-out/box/bin/meiolol" "$tree/zig-out/box/bin/meiolol-desktop.exe")
+    local on_box=("$DIR/bin/meiolol" "$DIR/bin/meiolol-desktop.exe") want=() i
     local have stamp
     for s in $scripts; do files+=("$tree/deploy/$s"); on_box+=("$DIR/bin/$s"); done
     for u in $units; do files+=("$tree/deploy/systemd/$u"); on_box+=(".config/systemd/user/$u"); done
@@ -60,7 +64,7 @@ sync() {
     else
         ssh "$HOST" "mkdir -p $DIR/bin/new $DIR/data .config/systemd/user"
         scp -q "${files[@]}" "$HOST:$DIR/bin/new/"
-        ssh "$HOST" "cd $DIR && mv bin/new/meiolol bin/meiolol \
+        ssh "$HOST" "cd $DIR && mv bin/new/meiolol bin/new/meiolol-desktop.exe bin/ \
             && for s in $scripts; do mv bin/new/\$s bin/\$s; done \
             && mv bin/new/*.service bin/new/*.path \$HOME/.config/systemd/user/ \
             && systemctl --user daemon-reload \
