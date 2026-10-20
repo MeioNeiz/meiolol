@@ -131,6 +131,10 @@ fn parseLegendaries(gpa: std.mem.Allocator, arena: std.mem.Allocator, body: []co
 /// URL ("" for stat shards, which have no icon there)
 pub const Named = struct { id: u32, name: []const u8, icon: []const u8 = "" };
 
+/// A rune tree as the in-game page lays it out: slots top down (keystones first), rune ids
+/// left to right
+pub const Tree = struct { id: u32, slots: []const []const u32 };
+
 /// What the builds step (src/builds.zig) needs from Data Dragon: which items are
 /// finished, boots or trinkets, and names and icons for the pages. Slices sorted by id
 pub const BuildData = struct {
@@ -144,6 +148,7 @@ pub const BuildData = struct {
     items: []const Named,
     runes: []const Named,
     spells: []const Named,
+    trees: []const Tree = &.{},
 
     pub fn isLegendary(d: *const BuildData, item: u32) bool {
         return std.sort.binarySearch(u32, d.legendary, item, orderU32) != null;
@@ -168,18 +173,24 @@ fn orderU32(key: u32, item: u32) std.math.Order {
     return std.math.order(key, item);
 }
 
-/// Stat shards are not in runesReforged.json; ids as match-v5 reports them
-const shards = [_]Named{
-    .{ .id = 5001, .name = "Health scaling" },
+const shard_icons = "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/perk-images/statmods/";
+
+/// Stat shards are not in runesReforged.json; ids as match-v5 reports them, icons from
+/// CommunityDragon (its perks.json pairs 5001 with the "plus" icon and 5011 with "scaling")
+pub const shards = [_]Named{
+    .{ .id = 5001, .name = "Health scaling", .icon = shard_icons ++ "statmodshealthplusicon.png" },
     .{ .id = 5002, .name = "Armor" },
     .{ .id = 5003, .name = "Magic resist" },
-    .{ .id = 5005, .name = "Attack speed" },
-    .{ .id = 5007, .name = "Ability haste" },
-    .{ .id = 5008, .name = "Adaptive force" },
-    .{ .id = 5010, .name = "Move speed" },
-    .{ .id = 5011, .name = "Health" },
-    .{ .id = 5013, .name = "Tenacity and slow resist" },
+    .{ .id = 5005, .name = "Attack speed", .icon = shard_icons ++ "statmodsattackspeedicon.png" },
+    .{ .id = 5007, .name = "Ability haste", .icon = shard_icons ++ "statmodscdrscalingicon.png" },
+    .{ .id = 5008, .name = "Adaptive force", .icon = shard_icons ++ "statmodsadaptiveforceicon.png" },
+    .{ .id = 5010, .name = "Move speed", .icon = shard_icons ++ "statmodsmovementspeedicon.png" },
+    .{ .id = 5011, .name = "Health", .icon = shard_icons ++ "statmodshealthscalingicon.png" },
+    .{ .id = 5013, .name = "Tenacity and slow resist", .icon = shard_icons ++ "statmodstenacityicon.png" },
 };
+
+/// The shard page's rows (offense, flex, defense), left to right as in game
+pub const shard_rows = [3][3]u32{ .{ 5008, 5005, 5007 }, .{ 5008, 5010, 5001 }, .{ 5011, 5013, 5001 } };
 
 /// Item, rune and summoner spell data for `patch` (as legendaries), in `arena`
 pub fn buildData(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io, patch: []const u8) !BuildData {
@@ -242,20 +253,28 @@ pub fn parseBuildData(
     }.f);
 
     const Rune = struct { id: u32, name: []const u8, icon: []const u8 };
-    const Tree = struct {
+    const TreeJson = struct {
         id: u32,
         name: []const u8,
         icon: []const u8,
         slots: []const struct { runes: []const Rune },
     };
-    const trees = try std.json.parseFromSliceLeaky([]const Tree, arena, runes_json, .{ .ignore_unknown_fields = true });
+    const trees = try std.json.parseFromSliceLeaky([]const TreeJson, arena, runes_json, .{ .ignore_unknown_fields = true });
     var runes: std.ArrayList(Named) = .empty;
     try runes.appendSlice(arena, &shards);
-    for (trees) |t| {
+    const layout = try arena.alloc(Tree, trees.len);
+    for (trees, layout) |t, *out| {
         try runes.append(arena, .{ .id = t.id, .name = t.name, .icon = try runeIcon(arena, t.icon) });
-        for (t.slots) |slot| for (slot.runes) |r| {
-            try runes.append(arena, .{ .id = r.id, .name = r.name, .icon = try runeIcon(arena, r.icon) });
-        };
+        const slots = try arena.alloc([]const u32, t.slots.len);
+        for (t.slots, slots) |slot, *ids| {
+            const row = try arena.alloc(u32, slot.runes.len);
+            for (slot.runes, row) |r, *id| {
+                try runes.append(arena, .{ .id = r.id, .name = r.name, .icon = try runeIcon(arena, r.icon) });
+                id.* = r.id;
+            }
+            ids.* = row;
+        }
+        out.* = .{ .id = t.id, .slots = slots };
     }
 
     const Spell = struct { key: []const u8, name: []const u8, image: struct { full: []const u8 } };
@@ -287,6 +306,7 @@ pub fn parseBuildData(
         .items = named.items,
         .runes = runes.items,
         .spells = spells.items,
+        .trees = layout,
     };
 }
 
@@ -364,6 +384,7 @@ test "build data: boots tiers, trinkets, names" {
         find(d.items, 3006).?.icon,
     );
     try std.testing.expectEqualStrings("Conqueror", find(d.runes, 8010).?.name);
+    try std.testing.expectEqual(8010, d.trees[0].slots[0][0]);
     try std.testing.expectEqualStrings("Adaptive force", find(d.runes, 5008).?.name);
     try std.testing.expectEqualStrings("Flash", find(d.spells, 4).?.name);
 }

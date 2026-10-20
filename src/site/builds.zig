@@ -25,6 +25,7 @@ pub const rate_games = 100;
 /// Below this a row is greyed out
 pub const solid_games = 400;
 const rows_shown = 6;
+const pages_shown = 4;
 /// A role gets a page when it has this share of the champion's games in the file
 const min_role_share = 0.1;
 
@@ -132,7 +133,7 @@ pub fn strip(site: *const Site, w: *Writer, ch: Champ, r: Role, from: []const u8
         .href = href,
     });
     try top(site.arena, w, f, b, .runes, "Runes");
-    try top(site.arena, w, f, b, .shards, "Shards");
+    if (f.trees.len == 0) try top(site.arena, w, f, b, .shards, "Shards");
     try top(site.arena, w, f, b, .spells, "Spells");
     try top(site.arena, w, f, b, .start, "Start");
     try top(site.arena, w, f, b, .boots, "Boots");
@@ -155,12 +156,100 @@ fn top(a: std.mem.Allocator, w: *Writer, f: *const File, b: File.Build, kind: Ki
         .kind = @tagName(kind),
         .thin = tpl.when(o.games < solid_games, " thin"),
         .title = title,
-        .value = tpl.call(value, .{ f, kind, o.v, true }),
+        .value = tpl.call(cell, .{ f, b, kind, o.v }),
         .share = share,
         .all = try root.thousands(a, rows.games),
         .games = try root.thousands(a, o.games),
         .rate = tpl.when(o.games >= rate_games, tpl.t("<br>{wr:.1}% won", .{ .wr = wonPct(o) })),
     });
+}
+
+/// The strip's value: the rune page with the most played shards as the in-game tree
+fn cell(w: *Writer, f: *const File, b: File.Build, kind: Kind, v: []const u32) !void {
+    if (kind == .runes) {
+        const shards: ?[]const u32 = if (b.get(.shards)) |r| if (r.options.len > 0) r.options[0].v else null else null;
+        if (try runePage(w, f, v, shards)) return;
+    }
+    try value(w, f, kind, v, true);
+}
+
+fn findTree(f: *const File, id: u32) ?ddragon.Tree {
+    for (f.trees) |t| if (t.id == id) return t;
+    return null;
+}
+
+/// `v` (a .runes value) as the in-game page: every rune of the primary tree and of the
+/// secondary's rows (its keystones left out), the chosen ones lit, and `shards` (a
+/// .shards value) on the shard rows. False, writing nothing, without the trees (files
+/// before 20 Oct 2026)
+fn runePage(w: *Writer, f: *const File, v: []const u32, shards: ?[]const u32) !bool {
+    const primary = findTree(f, v[0]) orelse return false;
+    const secondary = findTree(f, v[5]) orelse return false;
+    if (secondary.slots.len == 0) return false;
+    try w.writeAll("<div class=\"rp\"><div class=\"rt\">");
+    try rune(w, f.runes, primary.id, "rh", true);
+    for (primary.slots, 0..) |slot, i| {
+        try w.writeAll(if (i == 0) "<div class=\"rr ks\">" else "<div class=\"rr\">");
+        for (slot) |id| try rune(w, f.runes, id, "", std.mem.indexOfScalar(u32, v[1..5], id) != null);
+        try w.writeAll("</div>");
+    }
+    try w.writeAll("</div><div class=\"rt\">");
+    try rune(w, f.runes, secondary.id, "rh", true);
+    for (secondary.slots[1..]) |slot| {
+        try w.writeAll("<div class=\"rr\">");
+        for (slot) |id| try rune(w, f.runes, id, "", std.mem.indexOfScalar(u32, v[6..8], id) != null);
+        try w.writeAll("</div>");
+    }
+    try w.writeAll("</div>");
+    if (shards) |s| {
+        try w.writeAll("<div class=\"rt rs\" title=\"Most played stat shards\">");
+        for (ddragon.shard_rows, 0..) |row, i| {
+            try w.writeAll("<div class=\"rr\">");
+            for (row) |id| try rune(w, &ddragon.shards, id, "", i < s.len and s[i] == id);
+            try w.writeAll("</div>");
+        }
+        try w.writeAll("</div>");
+    }
+    try w.writeAll("</div>");
+    return true;
+}
+
+/// A rune's icon, dimmed unless `lit`; the name on hover, as alt text only when lit
+fn rune(w: *Writer, list: []const ddragon.Named, id: u32, comptime class: []const u8, lit: bool) !void {
+    const n = ddragon.find(list, id) orelse return w.writeAll("<i></i>");
+    try tpl.render(w,
+        \\<img class="{class}" src="{src}" alt="{alt}" title="{name}" loading="lazy">
+    , .{
+        .class = if (lit) (if (class.len == 0) "on" else class ++ " on") else class ++ " off",
+        .src = n.icon,
+        .alt = if (lit) n.name else "",
+        .name = n.name,
+    });
+}
+
+/// Build page: the most played rune pages as in-game trees, each with games, share and
+/// win rate. False without the trees, for the table instead
+fn pages(w: *Writer, f: *const File, b: File.Build) !bool {
+    if (f.trees.len == 0) return false;
+    const rows = b.get(.runes) orelse return false;
+    if (rows.options.len == 0) return false;
+    try w.writeAll("<div class=\"rpages\">\n");
+    for (rows.options[0..@min(rows.options.len, pages_shown)]) |o| {
+        try w.writeAll(if (o.games < solid_games) "<div class=\"rpc thin\">" else "<div class=\"rpc\">");
+        if (!try runePage(w, f, o.v, null)) try value(w, f, .runes, o.v, true);
+        try tpl.renderPart(w,
+            \\<small>{games} games · {share:.1}%<br>{rate}</small></div>
+            \\
+        , .{
+            .games = o.games,
+            .share = 100 * @as(f64, @floatFromInt(o.games)) / @as(f64, @floatFromInt(@max(rows.games, 1))),
+            .rate = tpl.call(winRate, .{ o.games, o.wins }),
+        });
+    }
+    try tpl.renderPart(w, "</div>\n<p class=\"muted caption\">Most played rune pages first. Share of {games} players.</p>\n", .{
+        .games = rows.games,
+    });
+    return true;
 }
 
 fn wonPct(o: File.Option) f64 {
@@ -239,8 +328,9 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
     , .{ .solid = solid_games, .rated = rate_games });
 
     try w.writeAll("<h2>Runes</h2>\n");
+    const paged = try pages(w, f, b);
     try table(w, f, b, .keystone, "Keystone", "players");
-    try table(w, f, b, .runes, "Rune page", "players");
+    if (!paged) try table(w, f, b, .runes, "Rune page", "players");
     try table(w, f, b, .shards, "Stat shards", "players");
     try w.writeAll("<h2>Summoner spells</h2>\n");
     try table(w, f, b, .spells, "Spells", "players");

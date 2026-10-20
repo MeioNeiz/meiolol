@@ -215,8 +215,8 @@ test "fixture games to stats, curves and the website" {
         .{ "matchup/index.html", &.{ "data-min-search", "<tr data-games=\"3\" data-name=\"", "<section data-min-group data-r=\"top\" id=\"top\"><h2>Top ", "<nav class=\"tabs mu-roles\" aria-label=\"Role\"><a href=\"#all\">All roles</a><a href=\"#top\">Top</a>", "<table class=\"tl mu-table\" id=\"mu-top\" data-sortable>", "<option selected>50</option>", " vs usual", "</b></span></td><td class=\"opt\" data-v=\"" } },
         // Champion page: the patch view's most played choice per kind, few games so no
         // win rate, then the build page
-        .{ "champion/darius.html", &.{ "href=\"../patch/build/darius-top.html\"", "<div class=\"bstrip\">", "Most played build</b>", "the filters above don't change it", "<div class=\"bk runes thin\"><span>Runes</span>", "<span>Levels 1-3</span>", "<span>Skill priority</span>", "players took this\">3 games · 100%</small>" } },
-        .{ "patch/build/darius-top.html", &.{"<th>Levels 1 to 3</th>"} },
+        .{ "champion/darius.html", &.{ "href=\"../patch/build/darius-top.html\"", "<div class=\"bstrip\">", "Most played build</b>", "the filters above don't change it", "<div class=\"bk runes thin\"><span>Runes</span>", "<div class=\"rp\"><div class=\"rt\"><img class=\"rh on\" src=\"https://example.com/8000.png\" alt=\"Precision\"", "<img class=\"on\" src=\"https://example.com/8242.png\" alt=\"Unflinching\"", "<div class=\"rt rs\" title=\"Most played stat shards\">", "<span>Levels 1-3</span>", "<span>Skill priority</span>", "players took this\">3 games · 100%</small>" } },
+        .{ "patch/build/darius-top.html", &.{ "<th>Levels 1 to 3</th>", "<div class=\"rpages\">", "<div class=\"rpc thin\"><div class=\"rp\">", "Most played rune pages first. Share of 3 players." } },
         .{ "champion/darius.html", &.{"win rates on Darius: more data needed (0 players in EUW with 10+ games on it, 20 needed)."} },
         // Filters: the champion's counts by region, rank, patch, role and opponent, its
         // bans and each view's curve gold, the players per role for pick rates, and the
@@ -1191,8 +1191,17 @@ const build_data: ddragon.BuildData = .{
     .trinkets = &.{ 3340, 3363, 3364 },
     .boots = &.{ .{ 3006, 3006 }, .{ 3008, 3008 }, .{ 3009, 3009 }, .{ 3020, 3020 }, .{ 3047, 3047 }, .{ 3111, 3111 } },
     .items = &.{.{ .id = 1054, .name = "Doran's Shield", .icon = "https://example.com/1054.png" }},
-    .runes = &.{.{ .id = 8010, .name = "Conqueror", .icon = "https://example.com/8010.png" }},
+    .runes = &.{
+        .{ .id = 8000, .name = "Precision", .icon = "https://example.com/8000.png" },
+        .{ .id = 8010, .name = "Conqueror", .icon = "https://example.com/8010.png" },
+        .{ .id = 8242, .name = "Unflinching", .icon = "https://example.com/8242.png" },
+        .{ .id = 8400, .name = "Resolve", .icon = "https://example.com/8400.png" },
+    },
     .spells = &.{ .{ .id = 4, .name = "Flash" }, .{ .id = 6, .name = "Ghost" } },
+    .trees = &.{
+        .{ .id = 8000, .slots = &.{ &.{ 8005, 8008, 8021, 8010 }, &.{ 9101, 9111, 8009 }, &.{ 9104, 9105, 9103 }, &.{ 8014, 8017, 8299 } } },
+        .{ .id = 8400, .slots = &.{ &.{ 8437, 8439, 8465 }, &.{ 8446, 8463, 8401 }, &.{ 8429, 8444, 8473 }, &.{ 8451, 8453, 8242 } } },
+    },
 };
 
 /// The fixture game stored `games` times under EUW match ids, with its timeline and

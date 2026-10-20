@@ -82,6 +82,9 @@ pub const File = struct {
     items: []const ddragon.Named,
     runes: []const ddragon.Named,
     spells: []const ddragon.Named,
+    /// Rune trees for the pages' rune view; every rune in them is in `runes`. Empty in
+    /// files from before 20 Oct 2026
+    trees: []const ddragon.Tree = &.{},
     /// Sorted by champion, then role
     builds: []const Build,
 
@@ -260,6 +263,10 @@ pub const Builder = struct {
                 .kinds = kinds.items,
             });
         }
+        for (d.trees) |t| {
+            try used[1].put(arena, t.id, {});
+            for (t.slots) |slot| for (slot) |id| try used[1].put(arena, id, {});
+        }
         var named: [3]std.ArrayList(ddragon.Named) = @splat(.empty);
         for (used, &named, [_][]const ddragon.Named{ d.items, d.runes, d.spells }) |ids, *out, list| {
             for (ids.keys()) |id| if (ddragon.find(list, id)) |n| try out.append(arena, n);
@@ -277,6 +284,7 @@ pub const Builder = struct {
             .items = named[0].items,
             .runes = named[1].items,
             .spells = named[2].items,
+            .trees = d.trees,
             .builds = builds.items,
         };
     }
