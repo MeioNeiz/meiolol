@@ -82,6 +82,13 @@ people, unconfirmed and bots. Next, only if needed:
 - Alerts and backups: decisions.md "Open decisions" (ntfy topic, Mac watch job)
 - Crawl floor Gold IV once the key's rate allows (Q4)
 
+## Deploys
+
+- From cf8a06b (20 Oct): the renderer swap waits for the deploy's site upload (up to
+  30 min, old renderer serving), so new pages never link old style.css or scripts (that
+  day the swap came 4 s after the deploy, the upload 140 s later). Wait over 183 past
+  deploys: 66 s median, 305 s p90. wait-deployed --live waits for the swap too
+
 ## Reference
 
 - Hosting: jomify server (Oracle uk-london-1, `ssh jomify`: alias in the Mac's
