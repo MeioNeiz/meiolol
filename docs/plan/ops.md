@@ -14,7 +14,10 @@ active pages 4.5 -> 1.4 GB, commits stall, and every thread waits for its commit
   16 slots (040c41e); MemoryHigh=6G on the web loop and box jobs (8a4e366). Restart
   test 20 Oct 08:21: platform requests 508, 1187, 1744 in the first 3 min (before: 25,
   95, 213), regions ~120-147 in 3 min (full pace 150), no 429s
-- Next: hourly rates after, tonight's draft-model and builds rounds. If job dips stay:
+- After, 20 Oct (americas/asia/europe/sea, mean): 09h 99.3/99.8/98.3/98.6, 99.0; 10h
+  98.1/98.6/97.6/98.5, 98.2 (deploys and web rounds 10:07, 10:33, no crawler restart);
+  no 429s 08-11h. Sea up from ~97 to ~98.5; others no better than before (~99)
+- Next: tonight's draft-model and builds rounds. If job dips stay:
   pipelined steps instead of Bucket.flush after each, or BFQ (mq-deadline honours
   ionice -c 3 only partly)
 - Sea: few "due" players (sea scans them fast, then falls back to never-scanned ones),
