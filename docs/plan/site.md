@@ -162,6 +162,14 @@ builds file), the leans and kit kinds that apply, the champion pool block, then 
 fold the Lane and game table, which now repeats the facts.
 Already planned: pool first in the picker (B2), then bans from the pool's hard lanes
 (B3, Q3); public form waits on J2 (decisions.md). Patch day (B4, z 2.58).
+Matchup index: Jacob 20 Oct "unusable" (10k-item two-column bullet list). Done 20 Oct
+(5682adf): role tabs (all roles while searching), one sortable table per role: both
+champions with icons linking to each side's page, win rate track, vs usual, gold at 14,
+games; each pair from the side that won more; rows only from the lowest Min games floor
+keeping 5,000 or fewer (50 now: 4.4 MB, 315 KB gzip). Next: J11 (gold under 200 at 14
+reads even, now coloured by sign); leaner rows (short icon paths, or rows drawn by JS
+from JSON) to list thinner matchups; a search for one champion could flip its pairs to
+its side; phone hides icons (names only) to keep Games on screen.
 
 ## Draft tester
 
