@@ -3,7 +3,10 @@
 // by its data-v or else its text; td.rank cells renumber the shown rows.
 // input[data-filter=ID] hides rows
 // of table#ID whose data-name lacks the text; a search also finds rows marked data-rare,
-// which stay hidden otherwise until button[data-show-rare=ID] shows them. By id, not sibling order: markup between them moves.
+// which stay hidden otherwise until button[data-show-rare=ID] shows them.
+// input[data-min=ATTR][data-for=ID]: rows of table#ID whose data-ATTR is under its value
+// count as data-rare, [data-rare-count=ID] their number; button[data-no-min=ID] sets
+// them to 0. Kept in this browser by table id. By id, not sibling order: markup between them moves.
 // A table's sort is kept in this browser by its id (the same table on every champion's
 // page), by column name; table._resort() sorts redrawn rows the same way.
 "use strict";
@@ -77,6 +80,7 @@
     else renumber();
   }
 
+  const filters = new Map();
   for (const input of document.querySelectorAll("input[data-filter]")) {
     const table = document.getElementById(input.dataset.filter);
     const filter = () => {
@@ -87,6 +91,7 @@
       }
       table._renumber?.();
     };
+    filters.set(table, filter);
     input.addEventListener("input", filter);
     // Back restores the search text after this script ran, with no input event
     addEventListener("pageshow", () => input.value && filter());
@@ -100,5 +105,56 @@
       table._renumber?.();
       button.parentElement.hidden = true;
     });
+  }
+
+  const minInputs = [...document.querySelectorAll("input[data-min][data-for]")];
+  for (const id of new Set(minInputs.map((i) => i.dataset.for))) {
+    const table = document.getElementById(id);
+    const inputs = minInputs.filter((i) => i.dataset.for === id);
+    const count = document.querySelector(`[data-rare-count="${id}"]`);
+    const key = `min:${id}`;
+    try {
+      const saved = JSON.parse(localStorage.getItem(key)) ?? {};
+      for (const i of inputs) {
+        if (Number.isFinite(saved[i.dataset.min])) i.value = saved[i.dataset.min];
+      }
+    } catch {}
+    const apply = () => {
+      let rare = 0;
+      for (const row of table.tBodies[0].rows) {
+        const under = inputs.some((i) => Number(row.dataset[i.dataset.min]) < Number(i.value));
+        row.toggleAttribute("data-rare", under);
+        if (under) rare++;
+      }
+      if (count) {
+        count.textContent = rare;
+        count.parentElement.hidden = rare === 0;
+      }
+      const filter = filters.get(table);
+      if (filter) return filter();
+      for (const row of table.tBodies[0].rows) row.hidden = row.hasAttribute("data-rare");
+      table._renumber?.();
+    };
+    const save = () => {
+      try {
+        localStorage.setItem(key, JSON.stringify(Object.fromEntries(
+          inputs.map((i) => [i.dataset.min, Number(i.value)]))));
+      } catch {}
+    };
+    for (const i of inputs) {
+      i.addEventListener("input", () => {
+        save();
+        apply();
+      });
+    }
+    for (const button of document.querySelectorAll(`button[data-no-min="${id}"]`)) {
+      button.addEventListener("click", () => {
+        for (const i of inputs) i.value = 0;
+        save();
+        apply();
+      });
+    }
+    inputs[0].closest("[hidden]")?.removeAttribute("hidden");
+    apply();
   }
 })();

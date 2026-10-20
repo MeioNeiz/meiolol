@@ -196,7 +196,7 @@ test "fixture games to stats, curves and the website" {
         // as a tile in one grid (few games: shown, faded) with its rate against usual
         // (the opponent's own rate on the row for filters.js), it and the curve's gold at
         // 14 linking to the matchup page from the champion's side
-        .{ "champions.html", &.{ "data-sortable", "class=\"ci\"", "own win rates spread around it", "id=\"wr-edge\"", "opacity:", "<p class=\"wr-key\">Win rate colour <span class=\"wrc\" style=\"--c:var(--lo4)\">44.5%</span>", "Sorted by it pulled toward the role's average", "<symbol id=\"ri-top\"", "<td class=\"role\" data-v=\"", "<title>Top</title><use href=\"#ri-top\">" } },
+        .{ "champions.html", &.{ "data-sortable", "class=\"ci\"", "own win rates spread around it", "id=\"wr-edge\"", "opacity:", "<p class=\"wr-key\">Win rate colour <span class=\"wrc\" style=\"--c:var(--lo4)\">44.5%</span>", "Sorted by it pulled toward the role's average", "<symbol id=\"ri-top\"", "<td class=\"role\" data-v=\"", "<title>Top</title><use href=\"#ri-top\">", "data-min=\"games\"", "data-min=\"share\" data-for=\"tiers\"", "\" data-share=\"" } },
         .{ "champion/darius.html", &.{ "Lane opponents", "<a class=\"champ box\" href=\"../matchup/top/darius-vs-mordekaiser.html\" title=\"Darius vs Mordekaiser\">", "href=\"../matchup/top/darius-vs-mordekaiser.html\" title=\"Lane curves", "<th data-sort=\"num\" title=\"Lane curve estimate: Darius minus the opponent\">Gold at 14</th>", "Search opponent", "data-name=\"Mordekaiser\" data-q=\"", "<tr class=\"bx thin\" data-id=", "<table class=\"og\"", "data-ka=\"", "</b> vs usual</span>", "usually wins about", "<small data-rank>", "<p class=\"wr-key\">Win rate colour <span class=\"wrc\" style=\"--c:var(--lo4)\">39%</span>" } },
         // Hardest first by the rate shrunk with the role's k; opponents under 1% of the
         // champion's games hidden by default (the Opponents filter's p1). Rank filter from
@@ -264,12 +264,13 @@ test "fixture games to stats, curves and the website" {
         const html = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 20));
         try testing.expect(std.mem.indexOf(u8, html, "class=\"verdict") == null);
     }
-    // table.js finds each search's and rare button's table by id: every target on the page
+    // table.js finds each search's, minimum's and rare button's table by id: every target on
+    // the page
     for ([_][]const u8{ "champions.html", "role/top.html", "champion/darius.html" }) |page| {
         const path = try std.fs.path.join(arena, &.{ out, page });
         const html = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 20));
         var found: usize = 0;
-        for ([_][]const u8{ "data-filter=\"", "data-show-rare=\"" }) |attr| {
+        for ([_][]const u8{ "data-filter=\"", "data-show-rare=\"", "data-for=\"", "data-no-min=\"", "data-rare-count=\"" }) |attr| {
             var it = std.mem.splitSequence(u8, html, attr);
             _ = it.next();
             while (it.next()) |rest| {

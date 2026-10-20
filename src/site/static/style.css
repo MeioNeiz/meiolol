@@ -385,6 +385,9 @@ p.caption { font-size: 13px; margin: 4px 0 16px; }
 .tl-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin: 14px 0 10px; }
 .tl-bar .tabs { margin: 0; }
 .tl-bar input { flex: 0 1 220px; background: var(--panel); }
+.tl-mins { display: flex; gap: 14px; margin-left: auto; }
+.tl-mins label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; white-space: nowrap; }
+.tl-bar .tl-mins input { flex: none; width: 76px; padding: 5px 8px; }
 .tl-wrap { border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
 table.tl { border-collapse: separate; border-spacing: 0; border-radius: 0; font-size: 14px; }
 table.tl th {
@@ -448,7 +451,8 @@ h3.opp-h { margin: 0; font-size: 15px; }
 h3.opp-h .muted { font-weight: 400; font-size: 13px; }
 @media (max-width: 760px) {
   .ci, table.tl .opt { display: none; }
-  .tl-bar input { flex: 1 1 100%; }
+  .tl-bar input[type="search"] { flex: 1 1 100%; }
+  .tl-mins { margin-left: 0; }
 }
 .filter-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 14px 0 4px; padding: 10px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; font-size: 13px; color: var(--muted); }
 .filter-bar label { display: flex; align-items: center; gap: 6px; }

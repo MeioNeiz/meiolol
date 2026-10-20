@@ -31,6 +31,8 @@ const Row = struct {
     role: Role,
     games: u32,
     wins: u32,
+    /// Of the champion's games, the share in this role
+    share: f64,
     /// Under min_pick_rate or min_role_share: listed only on request
     rare: bool,
     /// core.banimpact: edge pulled toward the role's average, times pick when available
@@ -58,6 +60,7 @@ fn tierRows(site: *const Site, role: ?Role) ![]Row {
                 .role = r,
                 .games = cr.games,
                 .wins = cr.wins,
+                .share = share,
                 .rare = site.pickRate(cr.games) < min_pick_rate or share < min_role_share,
                 .impact = prior.score(cr.wins, cr.games, ch.banned, site.games),
                 .edge = prior.edge(cr.wins, cr.games),
@@ -280,13 +283,21 @@ fn roleTabs(w: *Writer, current: ?Role, root: []const u8) !void {
 }
 
 /// Champions table: win rate, pick and ban rate, games. Rows sorted by win rate pulled
-/// toward the role's average (Row.shrunk); rare picks hidden until asked for
+/// toward the role's average (Row.shrunk); rare picks hidden until asked for, the
+/// minimums each player's own (table.js data-min)
 fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void {
     const rows = try tierRows(site, role);
     sortShrunk(rows);
     try roleIcons(w);
     try tpl.renderPart(w, "<div class=\"tl-bar\">", .{});
     try roleTabs(w, role, root);
+    try tpl.renderPart(w,
+        \\<span class="tl-mins" hidden><label>Min games <input type="number" inputmode="numeric" min="0" step="100" value="{games}" data-min="games" data-for="tiers"></label><label title="Share of the champion's games played in the role">Min lane % <input type="number" inputmode="numeric" min="0" max="100" step="5" value="{share}" data-min="share" data-for="tiers"></label></span>
+        \\
+    , .{
+        .games = @as(u64, @intFromFloat(@ceil(min_pick_rate * @as(f64, @floatFromInt(site.games))))),
+        .share = 100 * min_role_share,
+    });
     try tpl.renderPart(w,
         \\<input type="search" placeholder="Search champion" data-filter="tiers" aria-label="Search champion"></div>
         \\{gradient}<div class="tl-wrap"><table class="tl tiers" id="tiers" data-sortable>
@@ -303,10 +314,11 @@ fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void
     for (rows) |row| {
         if (row.rare) rare += 1 else n += 1;
         try tpl.render(w,
-            \\<tr class="bx" data-name="{name}"{rare}><td class="rank">{n}</td><td class="l">{link}</td>{role}{wr}<td class="opt" data-v="{games}">{pick}</td><td class="opt" data-v="{banned}">{ban}</td>{impact}<td class="dim" data-v="{games}">{games}</td></tr>
+            \\<tr class="bx" data-name="{name}" data-games="{games}" data-share="{share:.1}"{rare}><td class="rank">{n}</td><td class="l">{link}</td>{role}{wr}<td class="opt" data-v="{games}">{pick}</td><td class="opt" data-v="{banned}">{ban}</td>{impact}<td class="dim" data-v="{games}">{games}</td></tr>
             \\
         , .{
             .name = row.ch.name,
+            .share = 100 * row.share,
             .rare = tpl.flag(row.rare, "data-rare hidden"),
             .n = n,
             .link = tpl.call(champLinkTo, .{ site, row.ch, to_site }),
@@ -328,10 +340,10 @@ fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void
         \\{more}<script src="{table_js}" defer></script>
         \\
     , .{
-        .more = tpl.when(rare > 0, tpl.t(
-            \\<p class="tl-more">{rare} rare picks (under {min:.1}% pick rate, or a role the champion seldom plays) hidden. <button class="link" data-show-rare="tiers">Show them</button></p>
+        .more = tpl.t(
+            \\<p class="tl-more"{none}><span data-rare-count="tiers">{rare}</span> rare picks (under the minimum games, or a role the champion seldom plays) hidden. <button class="link" data-no-min="tiers">Show them</button></p>
             \\
-        , .{ .rare = rare, .min = 100 * min_pick_rate })),
+        , .{ .rare = rare, .none = tpl.flag(rare == 0, "hidden") }),
         .table_js = html.Link{ .root = root, .up = site.view.up(), .path = "table.js" },
     });
 }
