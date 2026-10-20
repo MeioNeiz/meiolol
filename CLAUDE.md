@@ -36,9 +36,9 @@ docs/plan.md "Now". Read it first.
   (not in ci; deploy/lab-run.sh runs them before a new lab build), run it after a lab
   change
 - src/pipeline_test.zig: fixture games through stats, curves and the whole site; extend
-  it when adding a pipeline step or page. A page change moves src/testdata/site-files.txt:
-  `deploy/site-hashes.sh <your changed paths>` (HEAD plus those files, never others'
-  edits), then commit your paths and site-files.txt together
+  it when adding a pipeline step or page. Its page hashes (src/testdata/site-files.txt)
+  are rewritten and committed by deploy/commit.sh for any src/ commit; its diff shows
+  which pages a change moved
 - Local site: `deploy/dev.sh` (data/snap; `--exports` refreshes the box's curves and
   builds when it warns the curves are an old version)
 - Zig 0.16/0.17 std changed a lot (std.Io everywhere, renames): LSP hover/goToDefinition

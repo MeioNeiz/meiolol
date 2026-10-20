@@ -924,7 +924,7 @@ fn expectSiteFiles(arena: std.mem.Allocator, io: std.Io, out: []const u8) !void 
     }
     const new_path = ".zig-cache/site-files.txt";
     try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = new_path, .data = got });
-    std.debug.print("site output changed; if on purpose: cp {s} src/testdata/site-files.txt\n", .{new_path});
+    std.debug.print("site output changed; if on purpose, deploy/commit.sh rewrites src/testdata/site-files.txt (or cp {s})\n", .{new_path});
     return error.TestUnexpectedResult;
 }
 
