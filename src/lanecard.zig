@@ -249,8 +249,8 @@ fn period(arena: std.mem.Allocator, c: *const Curves) ![]const u8 {
 }
 
 /// "From your pool": the most-played champions that are pickable and played in the
-/// role, ranked by the recommender; widened to every pickable champion when the pool
-/// has fewer than min_options
+/// role, ranked by the recommender; filled up from every pickable champion when the
+/// pool has fewer than min_options
 fn options(arena: std.mem.Allocator, in: Input, opp: ?Opponent, bracket: Bracket) ![]const Option {
     const stats = in.stats;
     var pool: std.ArrayList(u32) = .empty;
@@ -272,9 +272,21 @@ fn options(arena: std.mem.Allocator, in: Input, opp: ?Opponent, bracket: Bracket
     var buf: [max_options]core.Suggestion = undefined;
     var list = core.recommend(stats, draft, in.opts, &buf);
     if (list.len < min_options) {
+        // Keep the pool's options, then fill from everyone
         var wide = draft;
         wide.pool = in.pickable;
-        list = core.recommend(stats, wide, in.opts, &buf);
+        var more: [2 * max_options]core.Suggestion = undefined;
+        var len = list.len;
+        for (core.recommend(stats, wide, in.opts, &more)) |s| {
+            if (len == max_options) break;
+            for (list) |p| {
+                if (p.champion == s.champion) break;
+            } else {
+                buf[len] = s;
+                len += 1;
+            }
+        }
+        list = buf[0..len];
     }
 
     const out = try arena.alloc(Option, list.len);

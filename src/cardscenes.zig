@@ -369,6 +369,8 @@ fn checkCard(in: lanecard.Input, card: lanecard.Card) !void {
     }
     const from_pool = pool_left >= lanecard.min_options;
     try testing.expectEqual(@min(if (from_pool) pool_left else everyone, lanecard.max_options), card.options.len);
+    // Filled up, the pool's champions still come first
+    if (!from_pool) for (card.options[0..pool_left]) |o| try testing.expect(masteryOf(in, o.champion) > 0);
     for (card.options, 0..) |o, i| {
         try testing.expect(available(in, o.champion) and eligible(in, o.champion));
         if (from_pool) try testing.expect(masteryOf(in, o.champion) > 0);

@@ -37,8 +37,8 @@ mid; opponent Syndra (guessed)
 - Zed | vs Syndra: -35 gold at 14 min (626 games)
 == bot, one champion in the pool: widened
 bot, hovering Jinx
-- Kai'Sa | strong in bot this patch
 - Jinx | 90k mastery points; strong in bot this patch
+- Kai'Sa | strong in bot this patch
 - Caitlyn
 - Ezreal
 == top, pickable limits the pool
