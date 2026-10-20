@@ -43,7 +43,7 @@ its requests from ~2,000 to ~1,170 (box io pressure full avg300 60%). Fixed in 1
   except 21:20-21:50 BST (americas, asia, sea 83-89%; europe 97%): the gpu-box back
   after ~16 h away, eight 2 h exports 20:31-22:13, writer queue 72 vs ~20. 10-15% for
   30 min against ~45% on 19 Oct, so the export rests stay. What looked down: "Games by
-  game day" (days fill for ~a week; the chart now shows each bar's last 24 h), platform
+  game day" (days keep filling; the chart now shows each bar's last 24 h), platform
   calls ~610 to ~400/min (mastery, fewer new players), timelines 5.5k to 4k/h (9afcdc9's
   sparse sample, by design)
 - Open lead, not chased: fewer recent games stored. Of the drafts stored in a 24 h
@@ -51,6 +51,11 @@ its requests from ~2,000 to ~1,170 (box io pressure full avg300 60%). Fixed in 1
   46% (20 Oct); 19 Oct had 74k a day after it, 17-18 Oct 83-85k. Total stored is flat,
   so the budget goes to older games from players' histories (match id lists, queue
   order)
+- Old game days never stop filling (admin data.json, 20 Oct 21:55 UTC): in the last
+  24 h, 7-16 Oct each gained 4.2-9.5k games (5-11% of what the window holds of them),
+  17 Oct 12k, 18 Oct 18k, 19 Oct 40k (53%). So no day's count is final, and only the
+  newest few are far from it. Part of the old days' share is the 1M-row window dropping
+  their earliest-stored rows
 
 ## Traffic looks inflated (Jacob 19 Oct: "def mostly bots, it's not proper")
 

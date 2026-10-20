@@ -1277,9 +1277,9 @@ VIEWS.ingest = body => {
   const sec = section(body, "What we ingest", `Complete ranked games (draft rows): the newest ${num(M.rows)} stored, by the day each was played.`);
   const g = grid(sec);
   const days = M.days;
-  // The window's first day is cut by the row limit. Days keep filling for about a week
-  // (players' older games found later), so each bar's part stored in the last 24 h shows
-  // how far from finished it is
+  // The window's first day is cut by the row limit. Old days keep gaining a few thousand
+  // games a day (players' older games found later; ops.md "Crawler speed"), so each
+  // bar's part stored in the last 24 h shows how far from finished it is
   const cut = days.map((_, i) => i === 0);
   const recent = d => d.recent ? sumR(regions.map(r => d.recent[regionIdx[r]])) : 0;
   chart(g, {
@@ -1291,7 +1291,7 @@ VIEWS.ingest = body => {
         { name: "stored in the last 24 h", color: "#8a93a6", values: days.map((d, i) => cut[i] ? 0 : recent(d)) },
         { name: "cut by the window", color: "#5b6478", values: days.map((d, i) => cut[i] ? sumR(regions.map(r => d.region[regionIdx[r]])) : 0) },
       ]),
-    caption: "By the day the game was played, not the day it was stored. Light grey: stored in the last 24 h; a day keeps gaining games for about a week, so a bar with much light grey is not finished. Dark grey: the first day, cut by the window. Games stored a day: Overview.",
+    caption: "By the day the game was played, not the day it was stored. Light grey: stored in the last 24 h; old days keep gaining a few thousand games a day, so no day is complete and the newest few are far from it. Dark grey: the first day, cut by the window. Games stored a day: Overview.",
   });
   chart(g, {
     x: M.minutes.map((_, i) => i * 5), step: 5, title: "Game length", type: "bars",
