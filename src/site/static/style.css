@@ -1040,6 +1040,8 @@ table.build tr.hw td:first-child { box-shadow: inset 2px 0 0 var(--good); }
 .rx .rs .rc img { width: 22px; height: 22px; background: #1b1d22; padding: 2px; }
 .rc b { font-weight: 600; color: var(--text); min-height: 1.25em; }
 .rc i { font-style: normal; color: var(--muted); min-height: 1.25em; }
+.rc em { font-style: normal; color: var(--faint); min-height: 1.25em; }
+.bstrip .rx { margin-top: 0; }
 .rc.on img { box-shadow: 0 0 0 2px var(--turn); }
 .rc.hw img { box-shadow: 0 0 0 2px var(--good); }
 .rc.on.hw img { box-shadow: 0 0 0 2px var(--turn), 0 0 0 4px var(--good); }

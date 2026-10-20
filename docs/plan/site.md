@@ -15,6 +15,19 @@ tiles 76 px, 0 of 41 on a 1080p screen still), 5 (heat cells, pick/ban bars), 6
 (header row, phone filters button); prose that still says "green ahead, red behind"
 or "orange through grey to blue" (champion.zig methods line, root.zig early note,
 prose.zig); Your games game scale (2.5, 5, 10, 15 points) not wired yet.
+Done 20 Oct (morning, sitewide, J12 J14; e80df37): win rates continuous, no steps or
+thin-data cut (wrColour mixes the stops in oklab, grey only at 50.0%, few games fade by
+opacity); matchup rates on matchup_span (0.24, twice the table's) and coloured again on
+the opponent grid, matchups index and matchup tile; patch page, champion patch line,
+learning curves, Learn length bars and duos coloured too (tierlist.wrText). Matchup
+gold verdict and Daily Draft lanes always give the number ("Ahri is 140 gold behind at
+14 minutes", "usually level"); colour only where clear. Whole-box links: .bx row/tile
+with its main a.box covering it (::after), other links and controls raised above;
+hover and focus ring; tr.thin opacity moved to the row (a cell with opacity traps the
+link). On champions, role and matchups tables, opponent grid (static and filtered),
+pick lists, patch tables, pool lists and suggestions, learning tables, Daily archive;
+centre-click checked on 8 pages at 1280 and 390 px. Next: Your games lists, home
+record book and Learn lesson cards (not boxed yet); build order 4 to 6 above.
 
 ## Your games (home)
 
@@ -156,6 +169,20 @@ than lolalytics: our own edge is the lane curves, early/late lean, "Into which t
   strip (two grid rows beside the other kinds) and on the build page (4 most played pages
   as cards). The builds file carries the rune trees (`trees`). Per-matchup builds done
   (Matchup page below)
+- Done 20 Oct (morning run, builds, J13): pick and win rate per rune. New builds kinds
+  rune (each of a page's six runes) and shard ([row, id]), role-wide only. Build page:
+  every rune players took, laid out as in game, share and win rate under each, most
+  played lit and highest win rate ringed per row (trees with a rune on 2%+); replaces
+  the keystone and shard tables. Highest win rate everywhere = best among options with
+  100+ games and 5%+ of players, only when two qualify: tagged on rune page cards (that
+  page shown even outside the top 4), table rows, and under each strip cell ("Highest
+  win rate" with its value; for a rune page on the same trees, blue rings on the most
+  played page). Unchosen runes less dim. Wording: "most played", "highest win rate",
+  never "best". Needs the next builds run on the box (old files: tables as before).
+  Per matchup too (Jacob: "game count, wr, pr"): rune and shard in matchup_kinds (runes
+  under 1% of the pair's players left out of the file), "Runes in this matchup" under
+  the matchup strip; game count (950, 9.5k) under each rune on both pages. Next:
+  Jacob's look; watch the matchup builder's pruning floor and file size on the next run
 - Pick and ban rate like lolalytics (Jacob wrote "pbr": confirm whether he means PR
   and BR, or lolalytics' PBI, pick/ban influence)
 
@@ -184,8 +211,9 @@ pairs, file 5.6 MB; every region 7,047, 12.5 MB), and a "Most played build in th
 matchup" strip on the matchup page under the first screen ("same as usual" on cells
 that match the role-wide most played; live on Kai'Sa vs Jinx, 3,341 games). Matchup key
 budget 1 << 22 (floor 1, 1.1 GB, 6.5 min on the box; 1 << 20 let the floor reach 12).
-Next: when every cell is "same as usual" say it once in the header; a link to the
-matchup build from the champion page's opponents grid; a real 390 px check (Playwright);
+Done 20 Oct (morning, builds): when every cell is "same as usual" the strip folds to
+one line saying so (details, cells inside); 390 px checked. Next: a link to the
+matchup build from the champion page's opponents grid;
 maybe its own file if the site build's parse time grows (pages are static, so no page
 pays for its size).
 Already planned: pool first in the picker (B2), then bans from the pool's hard lanes

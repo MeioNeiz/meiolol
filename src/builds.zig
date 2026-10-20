@@ -56,7 +56,8 @@ pub const max_values = 8;
 /// many options per kind
 pub const min_matchup_games = 300;
 const matchup_rows = 3;
-/// Options written for .rune and .shard: every rune a champion's players took
+/// Options written for .rune and .shard: every rune a champion's players took, in a
+/// matchup only those on 1%+ of its players (the file stays small)
 const every_rune = 64;
 /// Starting items: bought before this many ms
 pub const start_ms = 90_000;
@@ -156,7 +157,7 @@ const BuildKey = struct {
 };
 
 /// Kinds counted per lane opponent; keystone, spells and skill_start only role-wide
-pub const matchup_kinds = [_]Kind{ .runes, .shards, .start, .boots, .core2, .core3, .skills };
+pub const matchup_kinds = [_]Kind{ .runes, .shards, .rune, .shard, .start, .boots, .core2, .core3, .skills };
 
 const Key = struct { champion: u16, role: Role, opponent: u16 = 0, kind: Kind, v: [max_values]u32 };
 const Total = struct { champion: u16, role: Role, opponent: u16 = 0, kind: ?Kind };
@@ -371,7 +372,9 @@ pub const Builder = struct {
                 while (i < entries.items.len) : (i += 1) {
                     const e = entries.items[i];
                     if (!group(e.key, first) or e.key.kind != kind) break;
-                    if (options.items.len == if (kind == .rune or kind == .shard) every_rune else rows) continue;
+                    const per_rune = kind == .rune or kind == .shard;
+                    if (options.items.len == if (per_rune) every_rune else rows) continue;
+                    if (per_rune and min_games > 0 and e.count.games * 100 < t.games) continue;
                     const v = try arena.dupe(u32, e.key.v[0..valueLen(kind, e.key.v)]);
                     if (nameList(kind)) |list| for (v) |x| {
                         if (x != 0) try used[list].put(arena, x, {});
@@ -823,6 +826,8 @@ test "builder: per lane opponent, own floor, only matchups with enough games" {
     try testing.expectEqual(3, garen.games);
     try testing.expectEqual(2, garen.wins);
     try testing.expectEqual(3, garen.get(.start).?.options[0].games);
+    try testing.expectEqualSlices(u32, &.{8010}, garen.get(.rune).?.options[0].v);
+    try testing.expectEqual(3, garen.get(.rune).?.options[0].games);
     // Role-wide only
     try testing.expectEqual(null, garen.get(.keystone));
     try testing.expectEqual(null, garen.get(.spells));

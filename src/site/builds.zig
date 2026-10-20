@@ -196,6 +196,13 @@ pub fn vsStrip(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ, from:
     try top(site.arena, w, f, b, usual, .core3, "First 3 items");
     try top(site.arena, w, f, b, usual, .skills, "Skill priority");
     try w.writeAll(if (usual_all) "</div></details>\n" else "</div></div>\n");
+    if (f.trees.len == 0 or b.get(.rune) == null) return;
+    try tpl.renderPart(w,
+        \\<div class="bstrip vs"><p class="bhead"><b>Runes in this matchup</b> <span class="muted">each rune {x} players took against {y}: pick rate, win rate and games.</span></p>
+        \\
+    , .{ .x = x.name, .y = y.name });
+    _ = try runeStats(w, f, b);
+    try w.writeAll("</div>\n");
 }
 
 fn sameTop(rows: File.Rows, usual: ?File.Build, kind: Kind) bool {
@@ -377,14 +384,16 @@ fn tags(w: *Writer, i: usize, hi: ?usize) !void {
     try w.writeAll("</span>");
 }
 
-/// Build page: every rune players took, laid out as in game with its pick rate and win
-/// rate; in each row the most played lit and the highest win rate (highest()) ringed.
+/// Build page and matchup page: every rune players took, laid out as in game with its
+/// pick rate, win rate and games; in each row the most played lit and the highest win rate (highest()) ringed.
 /// Trees by keystone players, then those with a rune on min_tree_share. False without
 /// trees or per-rune counts (files before 21 Oct 2026)
 fn runeStats(w: *Writer, f: *const File, b: File.Build) !bool {
     if (f.trees.len == 0) return false;
     const rows = b.get(.rune) orelse return false;
     if (rows.options.len == 0) return false;
+    var buf: [256]u8 = undefined;
+    var fba: std.heap.FixedBufferAllocator = .init(&buf);
     const Shown = struct { tree: ddragon.Tree, keystones: u32, most: u32 };
     var shown_trees: [8]Shown = undefined;
     var n: usize = 0;
@@ -436,10 +445,18 @@ fn runeStats(w: *Writer, f: *const File, b: File.Build) !bool {
     };
     try tpl.renderPart(w,
         \\</div>
-        \\<p class="muted caption">Under each rune: share of {games} players, then win rate (from {rated} games). <span class="key mp"></span> most played in its row, <span class="key hw"></span> highest win rate in its row among runes with {rated}+ games and {min_share}%+ of players.</p>
+        \\<p class="muted caption">Under each rune: share of {games} players, win rate (from {rated} games), then games. <span class="key mp"></span> most played in its row, <span class="key hw"></span> highest win rate in its row among runes with {rated}+ games and {min_share}%+ of players.</p>
         \\
-    , .{ .games = rows.games, .rated = rate_games, .min_share = 100 * min_rate_share });
+    , .{ .games = try root.thousands(fba.allocator(), rows.games), .rated = rate_games, .min_share = 100 * min_rate_share });
     return true;
+}
+
+/// A rune's game count in its narrow column: 950, 9.5k, 95k
+fn shortCount(w: *Writer, n: u32) !void {
+    if (n == 0) return;
+    if (n < 1000) return w.print("{d}", .{n});
+    if (n < 10_000) return w.print("{d:.1}k", .{@as(f64, @floatFromInt(n)) / 1000});
+    try w.print("{d}k", .{n / 1000});
 }
 
 fn find(options: []const File.Option, v: []const u32) ?File.Option {
@@ -447,7 +464,7 @@ fn find(options: []const File.Option, v: []const u32) ?File.Option {
     return null;
 }
 
-/// One row of runeStats: each rune's icon, share and win rate
+/// One row of runeStats: each rune's icon, share, win rate and games
 fn statRow(w: *Writer, list: []const ddragon.Named, ids: []const u32, row: []const File.Option, all: u32) !void {
     var most: ?usize = null;
     for (row, 0..) |o, i| {
@@ -460,7 +477,7 @@ fn statRow(w: *Writer, list: []const ddragon.Named, ids: []const u32, row: []con
         var buf: [32]u8 = undefined;
         const rate = if (o.games >= rate_games) try std.fmt.bufPrint(&buf, ", {d:.1}% won", .{wonPct(o)}) else "";
         try tpl.render(w,
-            \\<span class="rc{state}" title="{name}: {games} games, {share:.1}%{rate}"><img src="{src}" alt="{name}" loading="lazy"><b>{pick}{few}</b><i>{wr}</i></span>
+            \\<span class="rc{state}" title="{name}: {games} games, {share:.1}%{rate}"><img src="{src}" alt="{name}" loading="lazy"><b>{pick}{few}</b><i>{wr}</i><em>{n}</em></span>
         , .{
             .state = if (i == most and i == hi) " on hw" else if (i == most) " on" else if (i == hi) " hw" else if (share < 1) " off" else "",
             .name = n.name,
@@ -471,6 +488,7 @@ fn statRow(w: *Writer, list: []const ddragon.Named, ids: []const u32, row: []con
             .pick = tpl.when(share >= 1, tpl.t("{p:.0}%", .{ .p = share })),
             .few = tpl.when(o.games > 0 and share < 1, "<1%"),
             .wr = tpl.when(o.games >= rate_games, tpl.t("{wr:.1}%", .{ .wr = wonPct(o) })),
+            .n = tpl.call(shortCount, .{o.games}),
         });
     }
 }

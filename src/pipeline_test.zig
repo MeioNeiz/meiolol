@@ -235,6 +235,8 @@ test "fixture games to stats, curves and the website" {
         // Either side's page, each swapping to the other
         .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "<h1>Mordekaiser vs Darius</h1>", "class=\"swap\" href=\"darius-vs-mordekaiser.html\"" } },
         .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<h1>Darius vs Mordekaiser</h1>", "class=\"swap\" href=\"mordekaiser-vs-darius.html\"", "From Darius's side", "<details class=\"bstrip vs\"><summary class=\"bhead\"><b>Most played build in this matchup</b>: same as Darius's usual Top build in every part.", "of Darius vs Mordekaiser in Top, patch", "href=\"../../patch/build/darius-top.html\">Darius's full Top build</a>", "<span>Runes <em class=\"muted\">same as usual</em></span>", "<span>First 2 items" } },
+        // Per rune in the matchup: share, win rate and games under each
+        .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<b>Runes in this matchup</b>", "each rune Darius players took against Mordekaiser", "<div class=\"rx\">", "<span class=\"rc on\" title=\"Conqueror: 3 games, 100.0%\">" } },
         .{ "method.html", &.{ "Games to stabilise", "<h2 id=\"lean\">Early or late</h2>" } },
         // Early or late: three games, so no numbers, only that it can't tell yet
         .{ "champion/darius.html", &.{ "<b>Early or late:</b> too few games yet to tell.", "Games still going at 20 min: 3 (every region, last 30 days)", "href=\"../method.html#lean\"" } },
