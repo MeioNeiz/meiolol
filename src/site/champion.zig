@@ -23,7 +23,6 @@ const Champ = root.Champ;
 const Site = root.Site;
 const pct = root.pct;
 const ratio = root.ratio;
-const side = root.side;
 const earlyNote = root.earlyNote;
 const roleSlug = root.roleSlug;
 const roleName = root.roleName;
@@ -93,7 +92,7 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
         , .{
             .slug = roleSlug(r),
             .role = roleName(r),
-            .colour = tierlist.wrColour(rate, tierlist.table_span).thin(cr.games),
+            .colour = tierlist.wrColour(rate, tierlist.table_span),
             .fade = core.curvesfile.fade(cr.games),
             .wr = tpl.call(pct, .{ cr.wins, cr.games }),
             .pick = tpl.call(pct, .{ cr.games, site.games }),
@@ -118,7 +117,7 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
     try pool_page.section(site, w, &site.pool, ch);
     try learning_page.section(w, &site.learning, ch);
     try tpl.render(w,
-        \\<p class="muted small">Win rates are raw: no pulling toward 50%, fainter under {full} games; on the champions table's scale, a dot on 25% to 75%. Vs usual: how much more or less often than usual the champion won in the matchup, in points, after allowing for the opponent's own win rate in the role (against a strong opponent it usually wins less), pulled toward 0 the fewer the games so a thin matchup stays quiet; hover for the numbers behind it. Hardest first sorts by the win rate pulled toward the champion's own in the role, the more so the fewer the games, so a few lucky games can't top the list. Gold at {minute} min is the lane curve's estimate, then where 8 games in 10 end (10th to 90th percentile); green ahead, red behind, fainter under {full} games; for filters other than a region and period above, the plain average of the games picked. <a href="../method.html">Method</a>.</p>
+        \\<p class="muted small">Win rates are raw: no pulling toward 50%, fainter under {full} games; coloured on a scale twice as wide as the champions table's (a matchup's rate is mostly the opponent's strength), a dot on 25% to 75%. Vs usual: how much more or less often than usual the champion won in the matchup, in points, after allowing for the opponent's own win rate in the role (against a strong opponent it usually wins less), pulled toward 0 the fewer the games so a thin matchup stays quiet; the matchup page has the numbers behind it. Hardest first sorts by the win rate pulled toward the champion's own in the role, the more so the fewer the games, so a few lucky games can't top the list. Gold at {minute} min is the lane curve's estimate, then where 8 games in 10 end (10th to 90th percentile); green ahead, red behind, fainter under {full} games; for filters other than a region and period above, the plain average of the games picked. <a href="../method.html">Method</a>.</p>
         \\<script src="../table.js" defer></script>
         \\<script src="../filters.js" defer></script>
         \\
@@ -352,16 +351,16 @@ fn opponentTable(site: *const Site, w: *Writer, ch: Champ, r: Role, cr: core.sta
         const rare = @as(f64, @floatFromInt(o.games)) < floor;
         if (thin and !rare) few += 1;
         try tpl.render(w,
-            \\<tr data-id="{id}" data-name="{name}" data-q="{q:.4}"{thin}{rare}><td class="l">{link}</td>{wr}{vs}{gold}<td class="dim" data-v="{games}">{games} <small>games</small></td></tr>
+            \\<tr class="bx{thin}" data-id="{id}" data-name="{name}" data-q="{q:.4}"{rare}><td class="l">{link}</td>{wr}{vs}{gold}<td class="dim" data-v="{games}">{games} <small>games</small></td></tr>
             \\
         , .{
             .id = o.other.id,
             .name = o.other.name,
             .q = o.strength,
-            .thin = tpl.flag(thin, "class=\"thin\""),
+            .thin = tpl.when(thin, " thin"),
             .rare = tpl.flag(rare, "data-rare hidden"),
             .link = tpl.call(opponentLink, .{ site, ch, o.other, r }),
-            .wr = tpl.call(tierlist.trackCell, .{ ratio(o.wins, o.games), o.games, try site.arena.print("{d} games", .{o.games}), @as(?[]const u8, null) }),
+            .wr = tpl.call(tierlist.trackCell, .{ ratio(o.wins, o.games), o.games, tierlist.matchup_span, try site.arena.print("{d} games", .{o.games}), @as(?[]const u8, null) }),
             .vs = tpl.call(usualCell, .{ site, ch, r, o, base, ka }),
             .gold = tpl.call(goldCell, .{ site, ch, o.other, r }),
             .games = o.games,
@@ -434,8 +433,8 @@ test "usual and vs usual" {
 /// To the matchup page from ch's side, or the opponent's own page where there is none
 fn opponentLink(w: *Writer, site: *const Site, ch: Champ, other: Champ, r: Role) !void {
     const has = if (site.curves) |*c| c.get(r, .all, ch.id, other.id) != null else false;
-    if (!has) return site.champLink(w, other, "../");
-    try tpl.render(w, "<a class=\"champ\" href=\"../{path}\" title=\"{ch} vs {name}\"><img src=\"{icon}\" alt=\"\" loading=\"lazy\" width=\"32\" height=\"32\">{name}</a>", .{
+    if (!has) return site.champBox(w, other, "../");
+    try tpl.render(w, "<a class=\"champ box\" href=\"../{path}\" title=\"{ch} vs {name}\"><img src=\"{icon}\" alt=\"\" loading=\"lazy\" width=\"32\" height=\"32\">{name}</a>", .{
         .path = try matchup.path(site.arena, r, ch, other),
         .ch = ch.name,
         .icon = site.icon(other),

@@ -73,6 +73,15 @@ body::before {
 }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
+/* Whole-box links (J14): a row, tile or card (.bx) whose main link (a.box) covers all
+   of it; other links and controls inside stay on top and keep their own target */
+.bx { position: relative; }
+.bx a.box::after { content: ""; position: absolute; inset: 0; z-index: 2; border-radius: inherit; }
+.bx :is(a:not(.box), button, input, select, summary) { position: relative; z-index: 3; }
+.bx:hover { background: var(--panel-2); }
+.bx:hover a.box, a.box:hover { text-decoration: none; }
+.bx:has(a.box:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
+.bx a.box:focus-visible { outline: none; }
 .wrap { max-width: 1560px; margin: 0 auto; padding: 0 24px; }
 @media (max-width: 600px) { .wrap { padding: 0 16px; } }
 header.top {
@@ -206,9 +215,11 @@ button:disabled { cursor: default; }
   font-size: 12px; font-weight: 600; color: var(--good); border: 1px solid var(--good);
   border-radius: 999px; padding: 0 8px; margin-left: 8px;
 }
-tr.thin td { color: var(--muted); opacity: 0.6; }
+/* On the row, not its cells: a cell with opacity would trap a whole-box link (.bx) */
+tr.thin { opacity: 0.6; }
+tr.thin td { color: var(--muted); }
 .archive { list-style: none; padding: 0; }
-.archive li { display: flex; gap: 12px; padding: 2px 0; }
+.archive li { display: flex; gap: 12px; padding: 3px 8px; margin: 0 -8px; border-radius: 6px; max-width: 420px; }
 .hero img + img { margin-left: -12px; }
 .hero .swap {
   display: grid; place-items: center; width: 36px; height: 36px; margin: 0 -14px; z-index: 1;
@@ -227,7 +238,7 @@ tr.thin td { color: var(--muted); opacity: 0.6; }
   list-style: none; margin: 8px 0 0; padding: 0;
   display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 12px;
 }
-.pick-list li { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.pick-list li { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 2px 6px; border-radius: 6px; }
 .pick-list a { display: inline-flex; align-items: center; gap: 6px; color: var(--text); min-width: 0; }
 .pick-list img { width: 24px; height: 24px; border-radius: 5px; }
 .pick-list .current a { color: var(--accent); font-weight: 600; }
@@ -410,12 +421,10 @@ b.down, a.down, .down { color: var(--bad); }
 .ci .even { background: var(--muted); }
 .wr b { color: var(--c); }
 .wr .ci i { background: var(--chip, var(--c)); }
-.tiles b.wrc { color: var(--c); }
-.wr b, .vs b, b.vs, b.wrc { background: var(--chip, none); box-shadow: 0 0 0 2px var(--chip, transparent); border-radius: 3px; }
-/* A matchup's own win rate is mostly the opponent's strength: plain ink, vs usual
-   carries the colour. Gold leads and ahead shares barely move a matchup: neutral */
-.og .wr b, table.mu-table .wr b, .mu-tiles b.up, .mu-tiles b.down { color: var(--text); background: none; box-shadow: none; }
-.og .wr .ci i, table.mu-table .wr .ci i { background: var(--t2); }
+.wrc { color: var(--c); }
+.wr b, .vs b, b.vs, .wrc { background: var(--chip, none); box-shadow: 0 0 0 2px var(--chip, transparent); border-radius: 3px; }
+/* Gold leads and ahead shares barely move a matchup: neutral */
+.mu-tiles b.up, .mu-tiles b.down { color: var(--text); }
 a.gold, a.gold.up, a.gold.down, .mu-leads td.up, .mu-leads td.down, table.mu-table .gold { color: var(--text); font-weight: 500; }
 .tl-more { color: var(--faint); font-size: 13px; margin: 8px 2px 0; }
 .tl-more button.link { font-size: 13px; }
@@ -1009,7 +1018,36 @@ body:has(#m-cs:checked) .mu-m:not(.mu-m-cs) { display: none; }
 .rp .rs { gap: 4px; padding-top: 18px; }
 .rp .rs img { width: 15px; height: 15px; background: #1b1d22; padding: 1px; }
 .rp img.on:not(.rh) { box-shadow: 0 0 0 1.5px var(--turn); }
-.rp img.off { filter: grayscale(1); opacity: 0.28; }
+.rp img.off { filter: grayscale(0.8); opacity: 0.45; }
+.rp img.hw { filter: none; opacity: 1; box-shadow: 0 0 0 1.5px var(--good); }
+.bhw { border-top: 1px solid var(--line); padding-top: 5px; display: flex; flex-direction: column; gap: 3px; }
+.bhw > span { color: var(--good); font-size: 11.5px; }
+.tags { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: 6px; vertical-align: middle; }
+.tag { font-size: 11px; line-height: 1.5; border-radius: 999px; padding: 0 7px; border: 1px solid var(--turn); color: var(--turn); white-space: nowrap; }
+.tag.hw { border-color: var(--good); color: var(--good); }
+table.build tr.hw td:first-child { box-shadow: inset 2px 0 0 var(--good); }
+.rpc .tags { margin: 0; }
+.rpc.hw { border-color: color-mix(in srgb, var(--good) 55%, transparent); }
+/* Build page: every rune taken, pick rate and win rate under each (builds.zig runeStats) */
+.rx { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: flex-start; margin: 6px 0 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.rx .rt { gap: 6px; }
+.rx .rr { gap: 4px; align-items: flex-start; }
+.rx img.rh { width: 20px; height: 20px; border-radius: 50%; }
+.rx .rs { padding-top: 26px; }
+.rc { display: flex; flex-direction: column; align-items: center; width: 42px; font-size: 10.5px; line-height: 1.25; }
+.rc img { width: 28px; height: 28px; border-radius: 50%; margin-bottom: 3px; }
+.rx .ks .rc img { width: 34px; height: 34px; }
+.rx .rs .rc img { width: 22px; height: 22px; background: #1b1d22; padding: 2px; }
+.rc b { font-weight: 600; color: var(--text); min-height: 1.25em; }
+.rc i { font-style: normal; color: var(--muted); min-height: 1.25em; }
+.rc.on img { box-shadow: 0 0 0 2px var(--turn); }
+.rc.hw img { box-shadow: 0 0 0 2px var(--good); }
+.rc.on.hw img { box-shadow: 0 0 0 2px var(--turn), 0 0 0 4px var(--good); }
+.rc.off img { filter: grayscale(0.8); opacity: 0.45; }
+.key { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin: 0 2px; vertical-align: 0; }
+.key.mp { box-shadow: 0 0 0 2px var(--turn); }
+.key.hw { box-shadow: 0 0 0 2px var(--good); }
+details.bstrip > summary { cursor: pointer; }
 .rpages { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 2px; }
 .rpc { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
 .rpc small { color: var(--faint); font-size: 12px; }
@@ -1020,6 +1058,11 @@ body:has(#m-cs:checked) .mu-m:not(.mu-m-cs) { display: none; }
 @media (max-width: 640px) {
   .bks:has(.rp) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .bks:has(.rp) .bk.runes { grid-row: auto; }
+  .bk small { white-space: normal; }
+  .rx { gap: 10px 14px; padding: 8px; }
+  .rc { width: 37px; }
+  .rc img { width: 24px; height: 24px; }
+  .rx .ks .rc img { width: 28px; height: 28px; }
 }
 
 /* Game review: your moments (fights, objectives) and their marks on the win chance */

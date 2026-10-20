@@ -197,7 +197,7 @@ test "fixture games to stats, curves and the website" {
         // (the opponent's own rate on the row for filters.js), it and the curve's gold at
         // 14 linking to the matchup page from the champion's side
         .{ "champions.html", &.{ "data-sortable", "class=\"ci\"", "own win rates spread around it", "id=\"wr-edge\"", "opacity:" } },
-        .{ "champion/darius.html", &.{ "Lane opponents", "<a class=\"champ\" href=\"../matchup/top/darius-vs-mordekaiser.html\" title=\"Darius vs Mordekaiser\">", "href=\"../matchup/top/darius-vs-mordekaiser.html\" title=\"Lane curves", "<th data-sort=\"num\" title=\"Lane curve estimate: Darius minus the opponent; blue when Darius is ahead\">Gold at 14</th>", "Search opponent", "data-name=\"Mordekaiser\" data-q=\"", "class=\"thin\">", "<table class=\"og\"", "data-ka=\"", "</b> vs usual</span>", "usually wins about" } },
+        .{ "champion/darius.html", &.{ "Lane opponents", "<a class=\"champ box\" href=\"../matchup/top/darius-vs-mordekaiser.html\" title=\"Darius vs Mordekaiser\">", "href=\"../matchup/top/darius-vs-mordekaiser.html\" title=\"Lane curves", "<th data-sort=\"num\" title=\"Lane curve estimate: Darius minus the opponent; blue when Darius is ahead\">Gold at 14</th>", "Search opponent", "data-name=\"Mordekaiser\" data-q=\"", "<tr class=\"bx thin\" data-id=", "<table class=\"og\"", "data-ka=\"", "</b> vs usual</span>", "usually wins about" } },
         // Hardest first by the rate shrunk with the role's k; opponents under 1% of the
         // champion's games hidden by default (the Opponents filter's p1). Rank filter from
         // Platinum, the tier the crawl samples
@@ -216,7 +216,7 @@ test "fixture games to stats, curves and the website" {
         // Champion page: the patch view's most played choice per kind, few games so no
         // win rate, then the build page
         .{ "champion/darius.html", &.{ "href=\"../patch/build/darius-top.html\"", "<div class=\"bstrip\">", "Most played build</b>", "the filters above don't change it", "<div class=\"bk runes thin\"><span>Runes</span>", "<div class=\"rp\"><div class=\"rt\"><img class=\"rh on\" src=\"https://example.com/8000.png\" alt=\"Precision\"", "<img class=\"on\" src=\"https://example.com/8242.png\" alt=\"Unflinching\"", "<div class=\"rt rs\" title=\"Most played stat shards\">", "<span>Levels 1-3</span>", "<span>Skill priority</span>", "players took this\">3 games · 100%</small>" } },
-        .{ "patch/build/darius-top.html", &.{ "<th>Levels 1 to 3</th>", "<div class=\"rpages\">", "<div class=\"rpc thin\"><div class=\"rp\">", "Most played rune pages first. Share of 3 players." } },
+        .{ "patch/build/darius-top.html", &.{ "<th>Levels 1 to 3</th>", "<div class=\"rpages\">", "<div class=\"rpc thin\"><span class=\"tags\"><span class=\"tag mp\">most played</span></span><div class=\"rp\">", "<div class=\"rx\">", "<span class=\"rc on\" title=\"Conqueror: 3 games, 100.0%\">", "<span class=\"rc off\" title=\"Adaptive force: 0 games, 0.0%\">", "Most played rune pages first. Share of 3 players." } },
         .{ "champion/darius.html", &.{"win rates on Darius: more data needed (0 players in EUW with 10+ games on it, 20 needed)."} },
         // Filters: the champion's counts by region, rank, patch, role and opponent, its
         // bans and each view's curve gold, the players per role for pick rates, and the
@@ -234,7 +234,7 @@ test "fixture games to stats, curves and the website" {
         .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "<div class=\"tiles mu-tiles\">", "<span>Vs usual</span>", "Mordekaiser usually wins about", "<table class=\"mu-leads thin\">", "<th class=\"num\">14 min</th>", "Where the lead comes from", "from CS (", "Kills or assists on the lane opponent before 6 min", "<input type=\"radio\" name=\"metric\" id=\"m-xp\">", "<div class=\"mu-m mu-m-cs\">" } },
         // Either side's page, each swapping to the other
         .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "<h1>Mordekaiser vs Darius</h1>", "class=\"swap\" href=\"darius-vs-mordekaiser.html\"" } },
-        .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<h1>Darius vs Mordekaiser</h1>", "class=\"swap\" href=\"mordekaiser-vs-darius.html\"", "From Darius's side", "<div class=\"bstrip vs\">", "Most played build in this matchup</b>", "of Darius vs Mordekaiser in Top, patch", "href=\"../../patch/build/darius-top.html\">Darius's full Top build</a>", "<span>Runes <em class=\"muted\">same as usual</em></span>", "<span>First 2 items" } },
+        .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<h1>Darius vs Mordekaiser</h1>", "class=\"swap\" href=\"mordekaiser-vs-darius.html\"", "From Darius's side", "<details class=\"bstrip vs\"><summary class=\"bhead\"><b>Most played build in this matchup</b>: same as Darius's usual Top build in every part.", "of Darius vs Mordekaiser in Top, patch", "href=\"../../patch/build/darius-top.html\">Darius's full Top build</a>", "<span>Runes <em class=\"muted\">same as usual</em></span>", "<span>First 2 items" } },
         .{ "method.html", &.{ "Games to stabilise", "<h2 id=\"lean\">Early or late</h2>" } },
         // Early or late: three games, so no numbers, only that it can't tell yet
         .{ "champion/darius.html", &.{ "<b>Early or late:</b> too few games yet to tell.", "Games still going at 20 min: 3 (every region, last 30 days)", "href=\"../method.html#lean\"" } },
@@ -1215,14 +1215,15 @@ fn fillGames(arena: std.mem.Allocator, db: store.Db, n_games: usize, varied: boo
     const body = @embedFile("riot/testdata/match.json");
     const json = try store.raw.decompress(arena, @embedFile("riot/testdata/timeline.json.gz"));
     const ct = try riot.crawl.compactTimeline(arena, json);
+    var doc = try riot.match.parse(arena, body);
+    const duration = doc.info.gameDuration;
     for (0..n_games) |n| {
         const platform = if (varied and n % 4 == 3) "NA1" else "EUW1";
-        var doc = try riot.match.parse(arena, body);
         doc.metadata.matchId = try arena.print("{s}_{d}", .{ platform, n + 1 });
         doc.info.platformId = platform;
         doc.info.gameVersion = patch ++ ".1.1";
         doc.info.gameStartTimestamp = if (varied) start_ms + @as(i64, @intCast(n)) * 3_600_000 else start_ms;
-        if (varied) doc.info.gameDuration -= @as(i64, @intCast(n % 7)) * 60;
+        doc.info.gameDuration = if (varied) duration - @as(i64, @intCast(n % 7)) * 60 else duration;
         try riot.match.storeRows(db, doc, "riot");
         if (varied and n % 3 == 2) continue;
         try db.run("INSERT INTO timeline.timelines VALUES (?,?,?,?)", .{

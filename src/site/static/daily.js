@@ -29,7 +29,7 @@ const clear = (pp, n) => n >= PAIR_GAMES && Math.abs(pp) > 98 / Math.sqrt(n);
 // this many games the curve is thin
 const LANE_GAMES = 200;
 const LANE_MINUTE = 14;
-// A smaller gold lead at 14 reads as even, as on the matchup page (J11)
+// A smaller gold lead at 14 shows uncoloured: the number is always there (J12)
 const MIN_LEAD = 200;
 const APEX = new Set(["MASTER", "GRANDMASTER", "CHALLENGER"]);
 
@@ -256,8 +256,8 @@ class Game {
     }
     const led = l.lane_games ? ` · led ${Math.round((100 * l.ahead) / l.lane_games)}%` : "";
     const sub = `${vs}${led} · ${fmt(l.games)} games`;
-    if (l.side) return { head: `${signed(l.gold)} gold at ${LANE_MINUTE}`, sub, tone: l.side > 0 ? "up" : "down" };
-    return { head: `About even at ${LANE_MINUTE}`, sub, tone: "" };
+    const head = l.gold ? `${signed(l.gold)} gold at ${LANE_MINUTE}` : `Level at ${LANE_MINUTE}`;
+    return { head, sub, tone: l.side > 0 ? "up" : l.side < 0 ? "down" : "" };
   }
 
   renderPick() {
@@ -444,18 +444,15 @@ class Game {
       if (b != null && red != null) {
         const d = b - red;
         const side = d > 0 ? 0 : 1;
-        const lead = `${SIDES[side].toLowerCase()} ${signed(Math.abs(d))}`;
-        if (Math.abs(d) < MIN_LEAD) mid.append(el("span", "dd-chip", `Even at ${LANE_MINUTE} (${lead})`));
-        else mid.append(el("span", `dd-chip ${SIDE_CLS[side]}`, `${SIDES[side]} ${signed(Math.abs(d))} at ${LANE_MINUTE}`));
+        const text = d ? `${SIDES[side]} ${signed(Math.abs(d))} at ${LANE_MINUTE}` : `Level at ${LANE_MINUTE}`;
+        mid.append(el("span", `dd-chip ${Math.abs(d) < MIN_LEAD ? "" : SIDE_CLS[side]}`, text));
       }
       let chip, cls, games;
       if (g && g.games >= LANE_GAMES) {
         games = g.games;
-        if (g.side) {
-          const side = g.side > 0 ? 0 : 1;
-          chip = `usually ${SIDES[side].toLowerCase()} ${signed(Math.abs(g.gold))}`;
-          cls = `${SIDE_CLS[side]}`;
-        } else chip = "usually even";
+        const side = g.gold > 0 ? 0 : 1;
+        chip = g.gold ? `usually ${SIDES[side].toLowerCase()} ${signed(Math.abs(g.gold))}` : "usually level";
+        if (g.side) cls = SIDE_CLS[g.side > 0 ? 0 : 1];
       } else {
         games = g ? g.games : lane.games;
         chip = "usually: few games";
@@ -554,8 +551,8 @@ class Game {
     const list = $("archive");
     list.replaceChildren();
     for (const e of [...this.live].reverse()) {
-      const li = document.createElement("li");
-      const a = document.createElement("a");
+      const li = el("li", "bx");
+      const a = el("a", "box");
       a.href = `?n=${e.n}`;
       a.textContent = `#${e.n}, ${longDate(e.date)}`;
       if (e.n === this.p.n) a.setAttribute("aria-current", "page");

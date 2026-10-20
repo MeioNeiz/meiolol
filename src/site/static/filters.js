@@ -252,7 +252,7 @@ const HARDEST = "hardest first";
       tiles.innerHTML = s.original.tiles;
       const p = r.games ? r.wins / r.games : 0.5;
       const b = tiles.querySelector('[data-tile="wr"] b');
-      b.style.cssText = `--c:${wrColour(p, TABLE_SPAN, r.games)}`;
+      b.style.cssText = `--c:${wrColour(p, TABLE_SPAN)}`;
       b.style.opacity = fade(r.games);
       b.textContent = pct(r.wins, r.games);
       // Two players per role and game
@@ -324,7 +324,7 @@ const HARDEST = "hardest first";
     const ch = byId.get(o.id);
     tr.dataset.id = o.id;
     tr.dataset.name = ch?.name ?? String(o.id);
-    if (thin) tr.className = "thin";
+    tr.className = thin ? "bx thin" : "bx";
     tr.dataset.q = vs.strength;
     tr.append(nameCell(ch, q, href), trackCell(o.wins, o.games), usualCell(o, ch, vs), goldCell(o, curve, href), gamesCell(o.games));
     return tr;
@@ -337,7 +337,7 @@ const HARDEST = "hardest first";
     td.className = "l";
     if (!ch) return td;
     const a = document.createElement("a");
-    a.className = "champ";
+    a.className = "champ box";
     a.href = href ?? `${ch.slug}.html${q}`;
     if (href && self) a.title = `${self.name} vs ${ch.name}`;
     const img = document.createElement("img");
@@ -350,14 +350,15 @@ const HARDEST = "hardest first";
     return td;
   }
 
-  // As tierlist.zig trackCell: a dot on 25% to 75%, the rate fainter with fewer games
+  // As tierlist.zig trackCell on matchup_span: a dot on 25% to 75%, the rate fainter
+  // with fewer games
   function trackCell(wins, games) {
     const p = games ? wins / games : 0;
     const dot = (100 * (Math.min(Math.max(p, 0.25), 0.75) - 0.25)) / 0.5;
     const td = document.createElement("td");
     td.dataset.v = p.toFixed(4);
     td.innerHTML =
-      `<span class="wr" style="--c:${wrColour(p, TABLE_SPAN, games)}" title="${games} games">` +
+      `<span class="wr" style="--c:${wrColour(p, MATCHUP_SPAN)}" title="${games} games">` +
       `<span class="ci"><i class="d" style="left:${dot.toFixed(1)}%"></i></span>` +
       `<b style="opacity:${fade(games)}">${(100 * p).toFixed(1)}%</b></span>`;
     return td;
@@ -463,8 +464,9 @@ function fade(games) {
   return (0.35 + 0.65 * Math.min(1, Math.sqrt(games / 200))).toFixed(2);
 }
 
-// As tierlist.zig table_span: the champions table's colour scale
+// As tierlist.zig table_span and matchup_span: the colour scales
 const TABLE_SPAN = 0.12;
+const MATCHUP_SPAN = 0.24;
 
 // As champion.zig usual: the champion's own rate moved by the opponent's, in log-odds
 function usual(base, strength) {
@@ -482,14 +484,20 @@ function points(v) {
   return `${x > 0 ? "+" : ""}${x.toFixed(1)}`;
 }
 
-// As tierlist.zig wrColour and thin: the value of --c, step 4 also setting --chip
-function wrColour(p, span, games = 200) {
+// As tierlist.zig wrColour: the value of --c, past the last stop also setting --chip
+function wrColour(p, span) {
+  const stops = [0, 2, 3.5, 5.5];
   const pts = (100 * (p - 0.5) * TABLE_SPAN) / span;
-  const cut = games >= 200 ? 0 : games >= 100 ? 1 : 2;
-  const n = Math.max(0, [1, 2, 3.5, 5.5].filter((s) => Math.abs(pts) >= s).length - cut);
   const side = pts < 0 ? "lo" : "hi";
-  if (n === 0) return "var(--s0)";
-  return n === 4 ? `var(--chip-ink);--chip:var(--${side}4)` : `var(--${side}${n})`;
+  const x = Math.abs(pts);
+  if (x < 0.05) return "var(--s0)";
+  if (x >= stops[3]) return `var(--chip-ink);--chip:var(--${side}4)`;
+  let i = 1;
+  while (x >= stops[i]) i++;
+  const near = Math.round((100 * (stops[i] - x)) / (stops[i] - stops[i - 1]));
+  if (near === 100) return `var(--${side}${i})`;
+  if (near === 0) return `var(--${side}${i + 1})`;
+  return `color-mix(in oklab,var(--${side}${i}) ${near}%,var(--${side}${i + 1}))`;
 }
 
 function pct(part, whole) {

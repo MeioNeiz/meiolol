@@ -260,19 +260,19 @@ fn indexRow(ctx: struct { *const Site, Role, u32 }, w: *Writer, e: IndexEntry) !
     const a = site.arena;
     const p = root.ratio(e.wins, e.played);
     try tpl.render(w,
-        \\<tr data-games="{games}" data-name="{x}|{y}"{thin}{hidden}><td class="l"><a class="champ" href="{x_href}"><img src="{x_icon}" alt="" loading="lazy" width="24" height="24">{x}</a></td><td class="l"><a class="champ" href="{y_href}"><img src="{y_icon}" alt="" loading="lazy" width="24" height="24">{y}</a></td>{wr}<td data-v="{vs:.4}"><span class="vs" style="--c:{colour}"><b>{pts}</b></span></td><td class="opt" data-v="{gold}"><span class="gold {side}" style="opacity:{fade:.2}">{sign}{gold}</span></td><td class="dim" data-v="{games}">{games}</td></tr>
+        \\<tr class="bx{thin}" data-games="{games}" data-name="{x}|{y}"{hidden}><td class="l"><a class="champ box" href="{x_href}"><img src="{x_icon}" alt="" loading="lazy" width="24" height="24">{x}</a></td><td class="l"><a class="champ" href="{y_href}"><img src="{y_icon}" alt="" loading="lazy" width="24" height="24">{y}</a></td>{wr}<td data-v="{vs:.4}"><span class="vs" style="--c:{colour}"><b>{pts}</b></span></td><td class="opt" data-v="{gold}"><span class="gold {side}" style="opacity:{fade:.2}">{sign}{gold}</span></td><td class="dim" data-v="{games}">{games}</td></tr>
         \\
     , .{
         .games = e.games,
         .x = e.x.name,
         .y = e.y.name,
-        .thin = tpl.flag(e.thin, "class=\"thin\""),
+        .thin = tpl.when(e.thin, " thin"),
         .hidden = tpl.flag(e.games < default, "hidden"),
         .x_href = (try path(a, r, e.x, e.y))["matchup/".len..],
         .y_href = (try path(a, r, e.y, e.x))["matchup/".len..],
         .x_icon = site.icon(e.x),
         .y_icon = site.icon(e.y),
-        .wr = tpl.call(tierlist.trackCell, .{ p, e.played, try a.print("{d} games in the stats", .{e.played}), @as(?[]const u8, null) }),
+        .wr = tpl.call(tierlist.trackCell, .{ p, e.played, tierlist.matchup_span, try a.print("{d} games in the stats", .{e.played}), @as(?[]const u8, null) }),
         .vs = e.vs.mean,
         .colour = tierlist.wrColour(0.5 + e.vs.mean, tierlist.table_span),
         .pts = champion.Points{ .v = e.vs.mean },
@@ -486,10 +486,11 @@ fn pickItem(ctx: PickCtx, w: *Writer, o: Other) !void {
         .champion => .{ o.ch, ctx.fixed },
     };
     try tpl.render(w,
-        \\<li{current}><a href="{href}"><img src="{icon}" alt="" loading="lazy" width="32" height="32">{name}</a> <span class="muted">{games}</span></li>
+        \\<li class="bx{current}"{aria}><a class="box" href="{href}"><img src="{icon}" alt="" loading="lazy" width="32" height="32">{name}</a> <span class="muted">{games}</span></li>
         \\
     , .{
-        .current = tpl.flag(o.ch.id == ctx.current.id, "class=\"current\" aria-current=\"page\""),
+        .current = tpl.when(o.ch.id == ctx.current.id, " current"),
+        .aria = tpl.flag(o.ch.id == ctx.current.id, "aria-current=\"page\""),
         .href = try file(ctx.site.arena, x, y),
         .icon = ctx.site.icon(o.ch),
         .name = o.ch.name,
@@ -599,10 +600,10 @@ fn tiles(site: *const Site, w: *Writer, v: View, base: ?View, r: Role, x: Champ,
     const g_range = if (has_gold) range(v, base, .gold, i) else .{ 0, 0 };
     const lane = v.lane();
     try tpl.render(w,
-        \\<div class="tiles mu-tiles"><div><span>Win rate</span><b class="{side}" style="opacity:{fade:.2}">{wr}</b><small>{x} against {y}</small></div><div title="{title}"><span>Vs usual</span><b class="vs" style="--c:{colour}">{pts}</b><small>usually {usual:.1}%</small></div><div><span>Games</span><b>{games}</b><small>{curve_games} in the lane curves</small></div>{gold}<div{lane_thin}><span>Ahead at {minute} min</span><b>{ahead}</b><small>in gold, of {lane_games}</small></div></div>
+        \\<div class="tiles mu-tiles"><div><span>Win rate</span><b class="wrc" style="--c:{wr_colour};opacity:{fade:.2}">{wr}</b><small>{x} against {y}</small></div><div title="{title}"><span>Vs usual</span><b class="vs" style="--c:{colour}">{pts}</b><small>usually {usual:.1}%</small></div><div><span>Games</span><b>{games}</b><small>{curve_games} in the lane curves</small></div>{gold}<div{lane_thin}><span>Ahead at {minute} min</span><b>{ahead}</b><small>in gold, of {lane_games}</small></div></div>
         \\
     , .{
-        .side = root.side(root.ratio(e.wins, e.games)),
+        .wr_colour = tierlist.wrColour(root.ratio(e.wins, e.games), tierlist.matchup_span),
         .fade = curvesfile.fade(e.games),
         .wr = tpl.call(pct1, .{ e.wins, e.games }),
         .x = x.name,
@@ -778,7 +779,7 @@ fn duration(w: *Writer, secs: u32) !void {
     try w.print("{d}:{d:0>2}", .{ secs / 60, secs % 60 });
 }
 
-/// One plain line above the gold chart: who is ahead by lane_minute and since when, only
+/// One plain line above the gold chart: who is ahead by lane_minute, since when only
 /// where the estimate is more than 2 SE from 0, then how often the side ahead wins.
 /// Greyed-out (thin) curves get none: their note says why
 fn verdict(w: *Writer, one: Variant, toggle: bool, x: Champ) !void {
@@ -802,14 +803,25 @@ fn verdict(w: *Writer, one: Variant, toggle: bool, x: Champ) !void {
 
 /// Minutes up to this read as "from the start": gold differences barely exist yet
 const start_minute = 4;
-/// A clear lead under this at lane_minute (after rounding to 100) still reads as even
+/// A clear lead under this at lane_minute (after rounding to 100) gets no "since when":
+/// just the number (J12)
 const min_lead_gold = 200;
 
 fn leadSince(w: *Writer, v: View, x: Champ) !void {
     const i = curvesfile.lane_minute - 1;
+    const mean: i32 = v.estimate(.gold, i).mean;
     const side = clearSide(v.estimate(.gold, i));
-    const gold = @divTrunc(@abs(@as(i32, v.estimate(.gold, i).mean)) + 50, 100) * 100;
-    if (side == 0 or gold < min_lead_gold) return tpl.render(w, "About even in gold until {minute} minutes", .{ .minute = curvesfile.lane_minute });
+    const gold = @divTrunc(@abs(mean) + 50, 100) * 100;
+    if (side == 0 or gold < min_lead_gold) {
+        const near = round10(mean);
+        if (near == 0) return tpl.render(w, "{x} is level in gold at {minute} minutes", .{ .x = x.name, .minute = curvesfile.lane_minute });
+        return tpl.render(w, "{x} is {gold} gold {side} at {minute} minutes", .{
+            .x = x.name,
+            .gold = @abs(near),
+            .side = if (near > 0) "ahead" else "behind",
+            .minute = curvesfile.lane_minute,
+        });
+    }
     var from: usize = i;
     while (from > 0 and clearSide(v.estimate(.gold, from - 1)) == side) from -= 1;
     const early = from + 1 <= start_minute;
@@ -1188,12 +1200,19 @@ test verdict {
     try verdict(&aw.writer, .{ .v = .{ .curve = &cv, .flipped = false }, .key = "x", .label = "" }, true, x);
     try std.testing.expectEqualStrings("<p class=\"verdict exp exp-x\">Ahri is ahead from minute 9, about 800 gold by 14 minutes, then whoever is ahead wins 64% of games.</p>\n", aw.written());
 
-    // Within 2 SE at 14, or clear but about 100 gold: even
-    for ([_]curvesfile.Estimate{ .{ .mean = 30, .se = 20 }, .{ .mean = 140, .se = 20 } }) |e| {
-        minutes[curvesfile.lane_minute - 1].est[0] = e;
+    // Within 2 SE at 14, or clear but about 100 gold: the number, no "since when"
+    const small = [_]struct { e: curvesfile.Estimate, want: []const u8 }{
+        .{ .e = .{ .mean = 30, .se = 20 }, .want = "Ahri is 30 gold ahead" },
+        .{ .e = .{ .mean = -140, .se = 20 }, .want = "Ahri is 140 gold behind" },
+        .{ .e = .{ .mean = 4, .se = 20 }, .want = "Ahri is level in gold" },
+    };
+    for (small) |case| {
+        minutes[curvesfile.lane_minute - 1].est[0] = case.e;
         aw.clearRetainingCapacity();
         try verdict(&aw.writer, .{ .v = .{ .curve = &cv, .flipped = false }, .key = "any", .label = "" }, false, x);
-        try std.testing.expectEqualStrings("<p class=\"verdict\">About even in gold until 14 minutes, then whoever is ahead wins 64% of games.</p>\n", aw.written());
+        const want = try std.fmt.allocPrint(gpa, "<p class=\"verdict\">{s} at 14 minutes, then whoever is ahead wins 64% of games.</p>\n", .{case.want});
+        defer gpa.free(want);
+        try std.testing.expectEqualStrings(want, aw.written());
     }
 
     // Mostly baseline: the page's note says so, no verdict

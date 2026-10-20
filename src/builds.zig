@@ -27,6 +27,10 @@ pub const Kind = enum {
     shards,
     /// [lower id, higher id]: Flash on D or F is the same pair
     spells,
+    /// [rune id]: each of a page's six runes, so a rune's share is its pick rate
+    rune,
+    /// [shard row 0 to 2, shard id]
+    shard,
     /// Items bought in the first start_ms, sorted, net of undos and sales; trinkets out
     start,
     /// [tier-2 boots] (tier 3 counts as the tier 2 it upgrades), [0] for none by the
@@ -52,6 +56,8 @@ pub const max_values = 8;
 /// many options per kind
 pub const min_matchup_games = 300;
 const matchup_rows = 3;
+/// Options written for .rune and .shard: every rune a champion's players took
+const every_rune = 64;
 /// Starting items: bought before this many ms
 pub const start_ms = 90_000;
 const skill_snapshot = 13;
@@ -206,6 +212,19 @@ pub const Builder = struct {
         const c: u16 = @intCast(champion);
         if (b.per_opponent and std.mem.indexOfScalar(Kind, &matchup_kinds, kind) == null) return;
         try b.total(.{ .champion = c, .role = role, .opponent = opponent, .kind = kind }, won);
+        try b.option(c, role, opponent, kind, v, won);
+    }
+
+    /// The player once in the total, then each value of `vs` as an option; one ending in
+    /// 0 (no rune) is skipped
+    fn addEach(b: *Builder, champion: u32, role: Role, opponent: u16, kind: Kind, vs: []const []const u32, won: bool) !void {
+        const c: u16 = @intCast(champion);
+        if (b.per_opponent and std.mem.indexOfScalar(Kind, &matchup_kinds, kind) == null) return;
+        try b.total(.{ .champion = c, .role = role, .opponent = opponent, .kind = kind }, won);
+        for (vs) |v| if (v[v.len - 1] != 0) try b.option(c, role, opponent, kind, v, won);
+    }
+
+    fn option(b: *Builder, c: u16, role: Role, opponent: u16, kind: Kind, v: []const u32, won: bool) !void {
         var key: Key = .{ .champion = c, .role = role, .opponent = opponent, .kind = kind, .v = @splat(0) };
         @memcpy(key.v[0..v.len], v);
         if (b.options.count() >= b.max_keys and !b.options.contains(key)) try b.prune();
@@ -248,8 +267,16 @@ pub const Builder = struct {
                 p.primary,  p.keystone,  p.perks[0],                   p.perks[1],
                 p.perks[2], p.secondary, @min(p.perks[3], p.perks[4]), @max(p.perks[3], p.perks[4]),
             }, p.won);
+            try b.addEach(p.champion, p.role, opp, .rune, &.{
+                &.{p.keystone}, &.{p.perks[0]}, &.{p.perks[1]}, &.{p.perks[2]}, &.{p.perks[3]}, &.{p.perks[4]},
+            }, p.won);
         }
-        if (p.shards[0] != 0) try b.addVs(p.champion, p.role, opp, .shards, &p.shards, p.won);
+        if (p.shards[0] != 0) {
+            try b.addVs(p.champion, p.role, opp, .shards, &p.shards, p.won);
+            try b.addEach(p.champion, p.role, opp, .shard, &.{
+                &.{ 0, p.shards[0] }, &.{ 1, p.shards[1] }, &.{ 2, p.shards[2] },
+            }, p.won);
+        }
         if (p.spells[0] != 0) try b.addVs(p.champion, p.role, opp, .spells, &.{
             @min(p.spells[0], p.spells[1]), @max(p.spells[0], p.spells[1]),
         }, p.won);
@@ -344,7 +371,7 @@ pub const Builder = struct {
                 while (i < entries.items.len) : (i += 1) {
                     const e = entries.items[i];
                     if (!group(e.key, first) or e.key.kind != kind) break;
-                    if (options.items.len == rows) continue;
+                    if (options.items.len == if (kind == .rune or kind == .shard) every_rune else rows) continue;
                     const v = try arena.dupe(u32, e.key.v[0..valueLen(kind, e.key.v)]);
                     if (nameList(kind)) |list| for (v) |x| {
                         if (x != 0) try used[list].put(arena, x, {});
@@ -369,19 +396,19 @@ pub const Builder = struct {
 /// 0: items, 1: runes, 2: summoner spells; skills are ability slots
 fn nameList(kind: Kind) ?usize {
     return switch (kind) {
-        .keystone, .runes, .shards => 1,
+        .keystone, .runes, .shards, .rune => 1,
         .spells => 2,
         .start, .boots, .core2, .core3 => 0,
-        .skills, .skill_start => null,
+        .shard, .skills, .skill_start => null,
     };
 }
 
 fn valueLen(kind: Kind, v: [max_values]u32) usize {
     return switch (kind) {
-        .keystone, .boots => 1,
+        .keystone, .boots, .rune => 1,
         .runes => 8,
         .shards, .core3, .skills, .skill_start => 3,
-        .spells, .core2 => 2,
+        .spells, .core2, .shard => 2,
         .start => std.mem.indexOfScalar(u32, &v, 0) orelse max_values,
     };
 }
@@ -731,16 +758,16 @@ test "builder: shares, rank floor in build, pruning keeps totals" {
     defer arena_state.deinit();
     const arena = arena_state.allocator();
     const d = try testData(arena);
-    var b: Builder = .{ .gpa = testing.allocator, .max_keys = 8 };
+    var b: Builder = .{ .gpa = testing.allocator, .max_keys = 10 };
     defer b.deinit();
-    // Darius top: Doran's Blade start five times (3 won), five rare starts once each
+    // Darius top: Doran's Blade start five times (3 won), six rare starts once each
     for (0..5) |i| {
         var k: Picks = .{};
         k.start[0] = 1055;
         k.start_len = 1;
         try b.addPlayer(.{ .champion = 122, .role = .top, .won = i < 3, .keystone = 8010, .spells = .{ 4, 12 } }, k, &d);
     }
-    for (0..5) |i| {
+    for (0..6) |i| {
         var k: Picks = .{};
         k.start[0] = @intCast(2000 + i);
         k.start_len = 1;
@@ -749,16 +776,21 @@ test "builder: shares, rank floor in build, pruning keeps totals" {
     try testing.expect(b.floor >= 1);
     const f = try b.file(arena, &d, "16.20", "PLATINUM", 3);
     const darius = f.get(122, .top).?;
-    try testing.expectEqual(10, darius.games);
+    try testing.expectEqual(11, darius.games);
     const start = darius.get(.start).?;
-    try testing.expectEqual(10, start.games);
+    try testing.expectEqual(11, start.games);
     try testing.expectEqualSlices(u32, &.{1055}, start.options[0].v);
     try testing.expectEqual(5, start.options[0].games);
     try testing.expectEqual(3, start.options[0].wins);
     // D/F order does not split spells
     const spells = darius.get(.spells).?;
     try testing.expectEqualSlices(u32, &.{ 4, 12 }, spells.options[0].v);
-    try testing.expectEqual(10, spells.options[0].games);
+    try testing.expectEqual(11, spells.options[0].games);
+    // Per rune: the player once in the total, no option for an empty slot
+    const rune = darius.get(.rune).?;
+    try testing.expectEqual(5, rune.games);
+    try testing.expectEqual(1, rune.options.len);
+    try testing.expectEqualSlices(u32, &.{8010}, rune.options[0].v);
     try testing.expectEqual(null, darius.get(.core3));
     try testing.expectEqualStrings("Doran's Blade", f.items[0].name);
     try testing.expectEqual(null, f.get(122, .jungle));

@@ -92,7 +92,7 @@ pub fn section(site: *const Site, w: *Writer, p: *const pool.Pool, ch: Champ) !v
     for (m.also[0..@min(m.also.len, also_shown)]) |a| {
         const other = matchup.champ(site, a.id) orelse continue;
         try tpl.render(w,
-            \\<li><span>{champ}</span><span class="num" title="{together} of {players} players">×{lift:.1}</span></li>
+            \\<li class="bx"><span>{champ}</span><span class="num" title="{together} of {players} players">×{lift:.1}</span></li>
             \\
         , .{
             .champ = tpl.call(champCell, .{ site, other }),
@@ -109,5 +109,5 @@ pub fn section(site: *const Site, w: *Writer, p: *const pool.Pool, ch: Champ) !v
 }
 
 fn champCell(w: *Writer, site: *const Site, other: Champ) !void {
-    try site.champLink(w, other, "../");
+    try site.champBox(w, other, "../");
 }

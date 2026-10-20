@@ -7,6 +7,7 @@ const root = @import("root.zig");
 const html = @import("html.zig");
 const tpl = html.tpl;
 const matchup = @import("matchup.zig");
+const tierlist = @import("tierlist.zig");
 const learning = @import("../learning.zig");
 
 const Writer = std.Io.Writer;
@@ -76,7 +77,7 @@ pub fn section(w: *Writer, l: *const Learning, ch: Champ) !void {
             .thin = tpl.flag(b.games < l.thin_games, "class=\"thin\""),
             .bin = binLabel(&buf, i),
             .dash = tpl.when(b.games == 0, "-"),
-            .rate = tpl.when(b.games > 0, tpl.t("{r:.1}%", .{ .r = pct(b.winRate()) })),
+            .rate = tpl.when(b.games > 0, tpl.call(tierlist.wrText, .{ b.winRate(), b.games })),
             .gold = gold,
             .none = tpl.when(gold == null, "-"),
             .games = b.games,
@@ -87,7 +88,7 @@ pub fn section(w: *Writer, l: *const Learning, ch: Champ) !void {
 }
 
 fn champCell(w: *Writer, site: *const Site, ch: Champ) !void {
-    try site.champLink(w, ch, site.view.up());
+    try site.champBox(w, ch, site.view.up());
 }
 
 /// Pool page: champions with a learning point, quickest first
@@ -123,13 +124,13 @@ pub fn table(site: *const Site, w: *Writer, l: *const Learning) !void {
         var games: u32 = 0;
         for (c.bins) |b| games += b.games;
         try tpl.render(w,
-            \\<tr><td>{champ}</td><td>{reach}</td><td class="num">{first:.1}%</td><td class="num">{usual:.1}%</td><td class="num">{games}</td></tr>
+            \\<tr class="bx"><td>{champ}</td><td>{reach}</td><td class="num">{first}</td><td class="num">{usual}</td><td class="num">{games}</td></tr>
             \\
         , .{
             .champ = tpl.call(champCell, .{ site, ch }),
             .reach = if (c.reach.? == 0) "from the start" else binLabel(&buf, c.reach.?),
-            .first = pct(c.bins[0].winRate()),
-            .usual = pct(c.usual),
+            .first = tpl.call(tierlist.wrText, .{ c.bins[0].winRate(), c.bins[0].games }),
+            .usual = tpl.call(tierlist.wrText, .{ c.usual, games }),
             .games = games,
         });
     }

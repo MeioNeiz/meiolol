@@ -12,6 +12,7 @@ const root = @import("root.zig");
 const html = @import("html.zig");
 const tpl = html.tpl;
 const matchup = @import("matchup.zig");
+const tierlist = @import("tierlist.zig");
 const learn = @import("../learn.zig");
 
 const Writer = std.Io.Writer;
@@ -128,6 +129,15 @@ fn clearlyAbove(a: Counts, b: ?Counts) bool {
     }
     const gap = pa - pb;
     return gap >= min_gap and gap >= min_z * @sqrt(v);
+}
+
+/// "52%", coloured and faded as win rates are on the champions table (tierlist.wrText)
+fn wrWhole(w: *Writer, n: Counts) !void {
+    try tpl.render(w, "<span class=\"wrc\" style=\"--c:{colour};opacity:{fade:.2}\">{p}%</span>", .{
+        .colour = tierlist.wrColour(rate(n), tierlist.table_span),
+        .fade = curvesfile.fade(n.games),
+        .p = pctOf(n),
+    });
 }
 
 fn pctOf(n: Counts) u32 {
@@ -515,13 +525,13 @@ fn lengthBars(w: *Writer, ctx: Ctx, t: Timing) !void {
         const width = (std.math.clamp(p, 30, 70) - 30) * 100 / 40;
         try tpl.render(w,
             \\<div class="lenbar"><span>{label}</span><span class="bar"><i style="width:{width}%"{up}></i>
-            \\</span><span class="num">{p}% of {games}</span></div>
+            \\</span><span class="num">{p} of {games}</span></div>
             \\
         , .{
             .label = lengthLabel(b),
             .width = width,
             .up = tpl.flag(p >= 50, "class=\"up\""),
-            .p = p,
+            .p = tpl.call(wrWhole, .{n}),
             .games = n.games,
         });
     }
@@ -810,14 +820,14 @@ fn synergy(ctx: Ctx, w: *Writer) ![]const Question {
         for (duos[0..3]) |p| {
             try tpl.render(w,
                 \\<li>{x}<span class="muted">{x_role}</span> + {y}<span class="muted">{y_role}</span>
-                \\<span class="num">won {p}% of {games} games together</span></li>
+                \\<span class="num">won {p} of {games} games together</span></li>
                 \\
             , .{
                 .x = tpl.call(champ, .{ ctx, p.x }),
                 .x_role = root.roleName(p.r),
                 .y = tpl.call(champ, .{ ctx, p.y }),
                 .y_role = root.roleName(p.yr),
-                .p = pctOf(p.n),
+                .p = tpl.call(wrWhole, .{p.n}),
                 .games = p.n.games,
             });
         }

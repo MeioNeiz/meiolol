@@ -73,19 +73,19 @@ fn distCell(w: *Writer, site: *const Site, ch: Champ, wins: u32, games: u32) !vo
     else
         try site.arena.print("{d} games", .{games});
     const shape = if (players) |c| try shapePath(site.arena, c.shape, 100 * p) else null;
-    try trackCell(w, p, games, title, shape);
+    try trackCell(w, p, games, table_span, title, shape);
 }
 
 /// Win rate as the champions table shows it: a dot at the rate on a track from 25% to
 /// 75% (50% marked), an optional shape path behind it (shapePath), then the rate,
-/// coloured by wrColour on the table's scale and fainter with fewer games
-/// (curvesfile.fade). data-v for sorting. Champion page opponents use it bare
-pub fn trackCell(w: *Writer, p: f64, games: u32, title: []const u8, shape: ?[]const u8) !void {
+/// coloured by wrColour on `span` and fainter with fewer games (curvesfile.fade). data-v
+/// for sorting. Matchup rates (matchup_span) use it bare
+pub fn trackCell(w: *Writer, p: f64, games: u32, span: f64, title: []const u8, shape: ?[]const u8) !void {
     try tpl.render(w, "<td data-v=\"{p:.4}\"><span class=\"wr\" style=\"--c:{colour}\" title=\"{title}\"><span class=\"ci\">" ++
         "{shape}<i class=\"d\" style=\"left:{dot:.1}%\"></i></span>" ++
         "<b style=\"opacity:{fade:.2}\">{rate:.1}%</b></span></td>", .{
         .p = p,
-        .colour = wrColour(p, table_span).thin(games),
+        .colour = wrColour(p, span),
         .title = title,
         .shape = if (shape) |d| tpl.t("<svg class=\"shape\" viewBox=\"0 0 100 10\" preserveAspectRatio=\"none\" aria-hidden=\"true\"><path d=\"{d}\"></path></svg>", .{ .d = d }) else null,
         .dot = trackX(100 * p),
@@ -96,6 +96,9 @@ pub fn trackCell(w: *Writer, p: f64, games: u32, title: []const u8, shape: ?[]co
 
 /// wrColour's span on the champions table, and for anything coloured to match it
 pub const table_span = 0.12;
+/// A matchup's win rate spreads about twice as wide (it is mostly the opponent's
+/// strength): on table_span most would be the vivid end
+pub const matchup_span = 0.24;
 
 /// The track's scale: 25% to 75% as 0 to 100
 const track_lo = 25.0;
@@ -148,59 +151,63 @@ fn shapeGradient(w: *Writer) !void {
 }
 
 /// Win rate colour on the site's diverging scale (style.css --lo4 to --hi4,
-/// docs/design-ideas.md): grey middle, orange then hot pink below 50%, blue then aqua
-/// above, four steps a side at `steps` points (scaled by span / table_span). Not red
-/// against green: the pair red-green colour blindness merges
+/// docs/design-ideas.md): continuous, orange then hot pink below 50%, blue then aqua
+/// above, each colour at its stop's points (scaled by span / table_span). Grey only when
+/// it shows as 50.0%: every other rate has a side (J12). Not red against green: the
+/// pair red-green colour blindness merges. Few games fade by opacity, not colour
 pub fn wrColour(p: f64, span: f64) WrColour {
-    const pts = 100 * (p - 0.5) * table_span / span;
-    var step: i8 = 0;
-    for (steps) |s| {
-        if (@abs(pts) >= s) step += 1;
-    }
-    return .{ .step = if (pts < 0) -step else step };
+    return .{ .pts = 100 * (p - 0.5) * table_span / span };
 }
 
-/// Aggregate scale (a champion's or matchup's rate over many games): 4% of champion
-/// roles with 500+ games reach step 4
-const steps = [_]f64{ 1, 2, 3.5, 5.5 };
+/// Aggregate scale (a champion's or matchup's rate over many games): the points where
+/// --hi1..--hi4 sit; past the last, --hi4 as a filled chip with dark ink. 4% of
+/// champion roles with 500+ games reach it
+const stops = [_]f64{ 0, 2, 3.5, 5.5 };
 
 pub const WrColour = struct {
-    step: i8,
+    pts: f64,
 
-    /// One step less per 100 games short of 200, grey at none
-    pub fn thin(c: WrColour, games: u32) WrColour {
-        const cut: i8 = if (games >= 200) 0 else if (games >= 100) 1 else 2;
-        const n: i8 = @max(0, @as(i8, @intCast(@abs(c.step))) - cut);
-        return .{ .step = if (c.step < 0) -n else n };
-    }
-
-    /// The value of --c: the step's colour; step 4 also sets --chip, so the number
-    /// shows as dark ink on a vivid fill (style.css)
+    /// The value of --c: a mix of the two stops either side; past the last stop it
+    /// also sets --chip, so the number shows as dark ink on a vivid fill (style.css)
     pub fn format(c: WrColour, w: *Writer) Writer.Error!void {
-        const side = if (c.step < 0) "lo" else "hi";
-        switch (@abs(c.step)) {
-            0 => try w.writeAll("var(--s0)"),
-            4 => try w.print("var(--chip-ink);--chip:var(--{s}4)", .{side}),
-            else => |n| try w.print("var(--{s}{d})", .{ side, n }),
-        }
+        const side = if (c.pts < 0) "lo" else "hi";
+        const x = @abs(c.pts);
+        if (x < 0.05) return w.writeAll("var(--s0)");
+        if (x >= stops[stops.len - 1]) return w.print("var(--chip-ink);--chip:var(--{s}4)", .{side});
+        var i: usize = 1;
+        while (x >= stops[i]) i += 1;
+        const t = (x - stops[i - 1]) / (stops[i] - stops[i - 1]);
+        const near: u8 = @intFromFloat(@round(100 * (1 - t)));
+        if (near == 100) return w.print("var(--{s}{d})", .{ side, i });
+        if (near == 0) return w.print("var(--{s}{d})", .{ side, i + 1 });
+        try w.print("color-mix(in oklab,var(--{s}{d}) {d}%,var(--{s}{d}))", .{ side, i, near, side, i + 1 });
     }
 };
 
 test wrColour {
-    var buf: [64]u8 = undefined;
+    var buf: [96]u8 = undefined;
     const cases = .{
-        .{ 0.505, 1000, "var(--s0)" },
-        .{ 0.515, 1000, "var(--hi1)" },
-        .{ 0.47, 1000, "var(--lo2)" },
-        .{ 0.536, 1000, "var(--hi3)" },
-        .{ 0.44, 1000, "var(--chip-ink);--chip:var(--lo4)" },
-        .{ 0.44, 150, "var(--lo3)" },
-        .{ 0.515, 50, "var(--s0)" },
+        .{ 0.5004, "var(--s0)" },
+        .{ 0.501, "color-mix(in oklab,var(--hi1) 95%,var(--hi2))" },
+        .{ 0.495, "color-mix(in oklab,var(--lo1) 75%,var(--lo2))" },
+        .{ 0.52, "var(--hi2)" },
+        .{ 0.545, "color-mix(in oklab,var(--hi3) 50%,var(--hi4))" },
+        .{ 0.44, "var(--chip-ink);--chip:var(--lo4)" },
     };
     inline for (cases) |c| {
-        const s = try std.fmt.bufPrint(&buf, "{f}", .{wrColour(c[0], table_span).thin(c[1])});
-        try std.testing.expectEqualStrings(c[2], s);
+        const s = try std.fmt.bufPrint(&buf, "{f}", .{wrColour(c[0], table_span)});
+        try std.testing.expectEqualStrings(c[1], s);
     }
+}
+
+/// A win rate in text (.wrc), coloured by wrColour on the champions table's scale and
+/// fainter with fewer games, as the table's own
+pub fn wrText(w: *Writer, p: f64, games: u32) !void {
+    try tpl.render(w, "<span class=\"wrc\" style=\"--c:{colour};opacity:{fade:.2}\">{rate:.1}%</span>", .{
+        .colour = wrColour(p, table_span),
+        .fade = core.curvesfile.fade(games),
+        .rate = 100 * p,
+    });
 }
 
 /// All roles (champions.html) and one per role (role/<slug>.html)
@@ -246,7 +253,7 @@ fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void
     for (rows) |row| {
         if (row.rare) rare += 1 else n += 1;
         try tpl.render(w,
-            \\<tr data-name="{name}"{rare}><td class="rank">{n}</td><td class="l">{link}</td>{role}{wr}<td class="opt" data-v="{games}">{pick}</td><td class="opt" data-v="{banned}">{ban}</td><td class="dim" data-v="{games}">{games}</td></tr>
+            \\<tr class="bx" data-name="{name}"{rare}><td class="rank">{n}</td><td class="l">{link}</td>{role}{wr}<td class="opt" data-v="{games}">{pick}</td><td class="opt" data-v="{banned}">{ban}</td><td class="dim" data-v="{games}">{games}</td></tr>
             \\
         , .{
             .name = row.ch.name,
@@ -274,9 +281,9 @@ fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void
     });
 }
 
-/// Site.champLink for tpl.call
+/// Site.champBox for tpl.call
 fn champLinkTo(w: *Writer, site: *const Site, ch: Champ, to_site: []const u8) !void {
-    return site.champLink(w, ch, to_site);
+    return site.champBox(w, ch, to_site);
 }
 
 pub fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {

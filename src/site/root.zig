@@ -244,7 +244,17 @@ pub const Site = struct {
     }
 
     pub fn champLink(s: *const Site, w: *Writer, ch: Champ, to_site: []const u8) !void {
-        try tpl.render(w, "<a class=\"champ\" href=\"{href}\"><img src=\"{icon}\" alt=\"\" loading=\"lazy\" width=\"32\" height=\"32\">{name}</a>", .{
+        return s.champLinkAs(w, ch, to_site, "champ");
+    }
+
+    /// champLink as the main link of a row or tile (class bx) that it covers whole
+    pub fn champBox(s: *const Site, w: *Writer, ch: Champ, to_site: []const u8) !void {
+        return s.champLinkAs(w, ch, to_site, "champ box");
+    }
+
+    fn champLinkAs(s: *const Site, w: *Writer, ch: Champ, to_site: []const u8, class: []const u8) !void {
+        try tpl.render(w, "<a class=\"{class}\" href=\"{href}\"><img src=\"{icon}\" alt=\"\" loading=\"lazy\" width=\"32\" height=\"32\">{name}</a>", .{
+            .class = class,
             .href = s.champHref(ch, to_site),
             .icon = s.icon(ch),
             .name = ch.name,
@@ -448,11 +458,6 @@ pub fn ratio(part: u64, whole: u64) f64 {
     return if (whole == 0) 0 else @as(f64, @floatFromInt(part)) / @as(f64, @floatFromInt(whole));
 }
 
-/// Which side of 50% a win rate is, however few the games: they show as fading
-pub fn side(p: f64) []const u8 {
-    return if (p > 0.5) "up" else if (p < 0.5) "down" else "even";
-}
-
 /// Under this many games a page says its data is early
 const early_games = 50_000;
 
@@ -462,7 +467,7 @@ pub fn earlyNote(site: *const Site, w: *Writer, filtered: bool) !void {
     const early = site.games < early_games;
     if (!early and !filtered) return;
     try tpl.render(w,
-        \\<p class="note" data-early="{early}"{hidden}>Early data: <span data-early-games>{games} games so far ({when})</span>. Win rates fade the fewer games they have. Colour runs from orange (low) through grey (50%) to blue (high).</p>
+        \\<p class="note" data-early="{early}"{hidden}>Early data: <span data-early-games>{games} games so far ({when})</span>. Win rates fade the fewer games they have. Colour runs from orange (low) to blue (high), paler near 50%.</p>
         \\
     , .{
         .early = early_games,

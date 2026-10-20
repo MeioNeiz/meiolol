@@ -7,6 +7,7 @@ const core = @import("core");
 const root = @import("root.zig");
 const html = root.html;
 const matchup = @import("matchup.zig");
+const tierlist = @import("tierlist.zig");
 const patchday = @import("../patchday.zig");
 
 const Writer = std.Io.Writer;
@@ -103,6 +104,13 @@ fn byAheadDelta(_: void, x: ChampionMove, y: ChampionMove) bool {
 }
 
 /// "52.1% of 8,400"
+/// As rateOf, the rate coloured as a win rate (tierlist.wrText)
+fn winOf(w: *Writer, c: core.curvesfile.Counts) !void {
+    if (c.games == 0) return rateOf(w, c);
+    try tierlist.wrText(w, root.ratio(c.wins, c.games), @intCast(c.games));
+    try w.print(" of {f}", .{Thousands{ .n = c.games }});
+}
+
 fn rateOf(w: *Writer, c: core.curvesfile.Counts) !void {
     try root.pct(w, c.wins, c.games);
     try w.print(" of {f}", .{Thousands{ .n = c.games }});
@@ -138,11 +146,11 @@ fn winTable(site: *const Site, w: *Writer, pd: *const PatchDay, rows: []const Ch
     , .{ .dir = dir, .prev = pd.prev_patch, .cur = pd.cur_patch });
     for (rows[0..@min(rows.len, max_rows)]) |m| {
         const ch = matchup.champ(site, m.id) orelse continue;
-        try tpl.render(w, "<tr><td>{champ}</td><td>{role}</td><td>{prev}</td><td>{cur}</td><td>{gap}</td></tr>\n", .{
+        try tpl.render(w, "<tr class=\"bx\"><td>{champ}</td><td>{role}</td><td>{prev}</td><td>{cur}</td><td>{gap}</td></tr>\n", .{
             .champ = tpl.call(champCell, .{ site, ch }),
             .role = root.roleName(m.role),
-            .prev = tpl.call(rateOf, .{m.win.prev}),
-            .cur = tpl.call(rateOf, .{m.win.cur}),
+            .prev = tpl.call(winOf, .{m.win.prev}),
+            .cur = tpl.call(winOf, .{m.win.cur}),
             .gap = tpl.call(gap, .{ m.win, pd.opts.z }),
         });
     }
@@ -150,7 +158,7 @@ fn winTable(site: *const Site, w: *Writer, pd: *const PatchDay, rows: []const Ch
 }
 
 fn champCell(w: *Writer, site: *const Site, ch: Champ) !void {
-    try site.champLink(w, ch, site.view.up());
+    try site.champBox(w, ch, site.view.up());
 }
 
 fn more(w: *Writer, n: usize) !void {
@@ -167,7 +175,7 @@ fn laneTable(site: *const Site, w: *Writer, pd: *const PatchDay, rows: []const C
     for (rows[0..@min(rows.len, max_rows)]) |m| {
         const ch = matchup.champ(site, m.id) orelse continue;
         const r = m.ahead.?;
-        try tpl.render(w, "<tr><td>{champ}</td><td>{role}</td><td>{prev}</td><td>{cur}</td><td>{dir} {gap}</td></tr>\n", .{
+        try tpl.render(w, "<tr class=\"bx\"><td>{champ}</td><td>{role}</td><td>{prev}</td><td>{cur}</td><td>{dir} {gap}</td></tr>\n", .{
             .champ = tpl.call(champCell, .{ site, ch }),
             .role = root.roleName(m.role),
             .prev = tpl.call(rateOf, .{r.prev}),
@@ -204,14 +212,14 @@ fn matchupTable(site: *const Site, w: *Writer, pd: *const PatchDay) !void {
     for (rows.items[0..@min(rows.items.len, max_rows)]) |m| {
         const x = matchup.champ(site, m.a) orelse continue;
         const y = matchup.champ(site, m.b) orelse continue;
-        try tpl.render(w, "<tr><td><a href=\"{href}\">{x} vs {y}</a></td><td>{role}</td><td>{gold}</td><td>{prev}</td><td>{cur}</td></tr>\n", .{
+        try tpl.render(w, "<tr class=\"bx\"><td><a class=\"box\" href=\"{href}\">{x} vs {y}</a></td><td>{role}</td><td>{gold}</td><td>{prev}</td><td>{cur}</td></tr>\n", .{
             .href = try std.mem.concat(a, u8, &.{ to_patch, try matchup.path(a, m.role, x, y) }),
             .x = x.name,
             .y = y.name,
             .role = root.roleName(m.role),
             .gold = tpl.call(goldCell, .{m.gold}),
-            .prev = tpl.call(rateOf, .{m.win.prev}),
-            .cur = tpl.call(rateOf, .{m.win.cur}),
+            .prev = tpl.call(winOf, .{m.win.prev}),
+            .cur = tpl.call(winOf, .{m.win.cur}),
         });
     }
     try tpl.renderPart(w,
@@ -263,8 +271,8 @@ pub fn since(site: *const Site, w: *Writer, ch: Champ, r: core.Role, to_view: []
         .prev = pd.prev_patch,
         .in = site.view.region.in(),
         .verdict = if (!clear) "no clear change" else if (m.win.z > 0) "won more often" else "won less often",
-        .now = tpl.call(rateOf, .{m.win.cur}),
-        .then = tpl.call(rateOf, .{m.win.prev}),
+        .now = tpl.call(winOf, .{m.win.cur}),
+        .then = tpl.call(winOf, .{m.win.prev}),
     });
     if (clear) try tpl.renderPart(w, " (a gap of {gap}, 99% range)", .{ .gap = tpl.call(gap, .{ m.win, o.z }) });
     if (m.ahead) |l| if (l.clear(o.min_role_games, o.z)) {

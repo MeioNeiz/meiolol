@@ -28,6 +28,11 @@ const rows_shown = 6;
 const pages_shown = 4;
 /// A role gets a page when it has this share of the champion's games in the file
 const min_role_share = 0.1;
+/// "Highest win rate" marks the option with the highest win rate among those with
+/// rate_games and this share of players, so a rare pick on a lucky streak is not it
+const min_rate_share = 0.05;
+/// The build page's rune view shows a tree when one of its runes has this share
+const min_tree_share = 0.02;
 
 pub fn path(a: std.mem.Allocator, ch: Champ, r: Role) ![]const u8 {
     return a.print("build/{s}-{s}.html", .{ ch.slug, root.roleSlug(r) });
@@ -158,10 +163,21 @@ pub fn vsStrip(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ, from:
         else
             .{ .root = site.toShared(from), .up = pv.dir(), .path = to };
     };
+    const kinds = [_]Kind{ .runes, .shards, .start, .boots, .core2, .core3, .skills };
+    var usual_all = usual != null;
+    for (kinds) |k| {
+        if (k == .shards and f.trees.len > 0) continue;
+        const rows = b.get(k) orelse continue;
+        if (rows.options.len > 0 and !sameTop(rows, usual, k)) usual_all = false;
+    }
+    // Every cell the usual: one line, the cells (and their highest win rates) folded
     try tpl.renderPart(w,
-        \\<div class="bstrip vs"><p class="bhead"><b>Most played build in this matchup</b> <span class="muted">{games} game{s} of {x} vs {y} in {lane}, patch {patch}, {in}, {ranks}.</span>{link}</p>
+        \\{open}<b>Most played build in this matchup</b>{as_usual} <span class="muted">{games} game{s} of {x} vs {y} in {lane}, patch {patch}, {in}, {ranks}.</span>{link}{close}
         \\<div class="bks">
     , .{
+        .open = if (usual_all) tpl.trusted("<details class=\"bstrip vs\"><summary class=\"bhead\">") else tpl.trusted("<div class=\"bstrip vs\"><p class=\"bhead\">"),
+        .as_usual = tpl.when(usual_all, tpl.t(": same as {x}'s usual {lane} build in every part.", .{ .x = x.name, .lane = root.roleName(r) })),
+        .close = if (usual_all) tpl.trusted("</summary>") else tpl.trusted("</p>"),
         .games = try root.thousands(site.arena, b.games),
         .s = plural(b.games),
         .x = x.name,
@@ -179,38 +195,82 @@ pub fn vsStrip(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ, from:
     try top(site.arena, w, f, b, usual, .core2, "First 2 items");
     try top(site.arena, w, f, b, usual, .core3, "First 3 items");
     try top(site.arena, w, f, b, usual, .skills, "Skill priority");
-    try w.writeAll("</div></div>\n");
+    try w.writeAll(if (usual_all) "</div></details>\n" else "</div></div>\n");
+}
+
+fn sameTop(rows: File.Rows, usual: ?File.Build, kind: Kind) bool {
+    const u = usual orelse return false;
+    const ur = u.get(kind) orelse return false;
+    return rows.options.len > 0 and ur.options.len > 0 and std.mem.eql(u32, ur.options[0].v, rows.options[0].v);
+}
+
+/// Index of the option with the highest win rate among those with rate_games and
+/// min_rate_share of the `all` players; null unless two qualify, so a lone option is
+/// never marked
+fn highest(options: []const File.Option, all: u32) ?usize {
+    var hi: ?usize = null;
+    var n: usize = 0;
+    for (options, 0..) |o, i| {
+        if (!rated(o, all)) continue;
+        n += 1;
+        if (hi == null or wonPct(o) > wonPct(options[hi.?])) hi = i;
+    }
+    return if (n >= 2) hi else null;
+}
+
+fn rated(o: File.Option, all: u32) bool {
+    return o.games >= rate_games and @as(f64, @floatFromInt(o.games)) >= min_rate_share * @as(f64, @floatFromInt(all));
+}
+
+fn pct(n: u32, all: u32) f64 {
+    return 100 * @as(f64, @floatFromInt(n)) / @as(f64, @floatFromInt(@max(all, 1)));
 }
 
 /// One kind's most played option: value, then games, share and win rate; "same as
-/// usual" when it is also `usual`'s most played
+/// usual" when it is also `usual`'s most played. Below it the option with the highest
+/// win rate (highest()) when that is another one; a rune page on the same trees as
+/// its runes ringed in the most played page
 fn top(a: std.mem.Allocator, w: *Writer, f: *const File, b: File.Build, usual: ?File.Build, kind: Kind, comptime title: []const u8) !void {
     const rows = b.get(kind) orelse return;
     if (rows.options.len == 0) return;
     const o = rows.options[0];
-    const same = if (usual) |u| if (u.get(kind)) |ur| ur.options.len > 0 and std.mem.eql(u32, ur.options[0].v, o.v) else false else false;
-    const share = 100 * @as(f64, @floatFromInt(o.games)) / @as(f64, @floatFromInt(@max(rows.games, 1)));
+    const hi = highest(rows.options, rows.games);
+    const other: ?File.Option = if (hi) |i| if (i > 0) rows.options[i] else null else null;
+    const ringed = if (other) |h| kind == .runes and f.trees.len > 0 and h.v[0] == o.v[0] and h.v[5] == o.v[5] else false;
     try tpl.render(w,
-        \\<div class="bk {kind}{thin}"><span>{title}{same}</span><div class="bv">{value}</div><small title="{games} of {all} players took this">{games} games · {share:.0}%{rate}</small></div>
+        \\<div class="bk {kind}{thin}"><span>{title}{same}</span><div class="bv">{value}</div><small title="{games} of {all} players took this">{games} games · {share:.0}%{rate}</small>{hw}</div>
         \\
     , .{
         .kind = @tagName(kind),
         .thin = tpl.when(o.games < solid_games, " thin"),
         .title = title,
-        .same = tpl.when(same, tpl.t(" <em class=\"muted\">same as usual</em>", .{})),
-        .value = tpl.call(cell, .{ f, b, kind, o.v }),
-        .share = share,
+        .same = tpl.when(sameTop(rows, usual, kind), tpl.t(" <em class=\"muted\">same as usual</em>", .{})),
+        .value = tpl.call(cell, .{ f, b, kind, o.v, if (ringed) other.?.v else null }),
+        .share = pct(o.games, rows.games),
         .all = try root.thousands(a, rows.games),
         .games = try root.thousands(a, o.games),
-        .rate = tpl.when(o.games >= rate_games, tpl.t("<br>{wr:.1}% won", .{ .wr = wonPct(o) })),
+        .rate = tpl.when(o.games >= rate_games, tpl.t("<br>{wr:.1}% won{also}", .{
+            .wr = wonPct(o),
+            .also = tpl.when(hi != null and hi.? == 0, tpl.t(", the highest win rate", .{})),
+        })),
+        .hw = if (other) |h| tpl.t(
+            \\<div class="bhw"><span>{label}</span>{value}<small>{wr:.1}% won · {games} games · {share:.0}%</small></div>
+        , .{
+            .label = if (ringed) "Highest win rate page: blue rings" else "Highest win rate",
+            .value = tpl.when(!ringed, tpl.t("<div class=\"bv\">{v}</div>", .{ .v = tpl.call(value, .{ f, kind, h.v, true }) })),
+            .wr = wonPct(h),
+            .games = try root.thousands(a, h.games),
+            .share = pct(h.games, rows.games),
+        }) else null,
     });
 }
 
-/// The strip's value: the rune page with the most played shards as the in-game tree
-fn cell(w: *Writer, f: *const File, b: File.Build, kind: Kind, v: []const u32) !void {
+/// The strip's value: the rune page with the most played shards as the in-game tree,
+/// `ringed` (another page on the same trees) marking its other runes
+fn cell(w: *Writer, f: *const File, b: File.Build, kind: Kind, v: []const u32, ringed: ?[]const u32) !void {
     if (kind == .runes) {
         const shards: ?[]const u32 = if (b.get(.shards)) |r| if (r.options.len > 0) r.options[0].v else null else null;
-        if (try runePage(w, f, v, shards)) return;
+        if (try runePage(w, f, v, shards, ringed)) return;
     }
     try value(w, f, kind, v, true);
 }
@@ -221,10 +281,10 @@ fn findTree(f: *const File, id: u32) ?ddragon.Tree {
 }
 
 /// `v` (a .runes value) as the in-game page: every rune of the primary tree and of the
-/// secondary's rows (its keystones left out), the chosen ones lit, and `shards` (a
-/// .shards value) on the shard rows. False, writing nothing, without the trees (files
-/// before 20 Oct 2026)
-fn runePage(w: *Writer, f: *const File, v: []const u32, shards: ?[]const u32) !bool {
+/// secondary's rows (its keystones left out), the chosen ones lit, those only in
+/// `ringed` (a page on the same trees) ringed, and `shards` (a .shards value) on the
+/// shard rows. False, writing nothing, without the trees (files before 20 Oct 2026)
+fn runePage(w: *Writer, f: *const File, v: []const u32, shards: ?[]const u32, ringed: ?[]const u32) !bool {
     const primary = findTree(f, v[0]) orelse return false;
     const secondary = findTree(f, v[5]) orelse return false;
     if (secondary.slots.len == 0) return false;
@@ -232,14 +292,14 @@ fn runePage(w: *Writer, f: *const File, v: []const u32, shards: ?[]const u32) !b
     try rune(w, f.runes, primary.id, "rh", true);
     for (primary.slots, 0..) |slot, i| {
         try w.writeAll(if (i == 0) "<div class=\"rr ks\">" else "<div class=\"rr\">");
-        for (slot) |id| try rune(w, f.runes, id, "", std.mem.indexOfScalar(u32, v[1..5], id) != null);
+        for (slot) |id| try rune(w, f.runes, id, mark(v[1..5], if (ringed) |g| g[1..5] else &.{}, id), std.mem.indexOfScalar(u32, v[1..5], id) != null);
         try w.writeAll("</div>");
     }
     try w.writeAll("</div><div class=\"rt\">");
     try rune(w, f.runes, secondary.id, "rh", true);
     for (secondary.slots[1..]) |slot| {
         try w.writeAll("<div class=\"rr\">");
-        for (slot) |id| try rune(w, f.runes, id, "", std.mem.indexOfScalar(u32, v[6..8], id) != null);
+        for (slot) |id| try rune(w, f.runes, id, mark(v[6..8], if (ringed) |g| g[6..8] else &.{}, id), std.mem.indexOfScalar(u32, v[6..8], id) != null);
         try w.writeAll("</div>");
     }
     try w.writeAll("</div>");
@@ -256,13 +316,20 @@ fn runePage(w: *Writer, f: *const File, v: []const u32, shards: ?[]const u32) !b
     return true;
 }
 
+/// "hw" for a rune in `ringed` and not in `lit`
+fn mark(lit: []const u32, ringed: []const u32, id: u32) []const u8 {
+    const in = std.mem.indexOfScalar(u32, ringed, id) != null and std.mem.indexOfScalar(u32, lit, id) == null;
+    return if (in) "hw" else "";
+}
+
 /// A rune's icon, dimmed unless `lit`; the name on hover, as alt text only when lit
-fn rune(w: *Writer, list: []const ddragon.Named, id: u32, comptime class: []const u8, lit: bool) !void {
+fn rune(w: *Writer, list: []const ddragon.Named, id: u32, class: []const u8, lit: bool) !void {
     const n = ddragon.find(list, id) orelse return w.writeAll("<i></i>");
     try tpl.render(w,
-        \\<img class="{class}" src="{src}" alt="{alt}" title="{name}" loading="lazy">
+        \\<img class="{class}{state}" src="{src}" alt="{alt}" title="{name}" loading="lazy">
     , .{
-        .class = if (lit) (if (class.len == 0) "on" else class ++ " on") else class ++ " off",
+        .class = class,
+        .state = if (lit) (if (class.len == 0) "on" else " on") else (if (class.len == 0) "off" else " off"),
         .src = n.icon,
         .alt = if (lit) n.name else "",
         .name = n.name,
@@ -270,21 +337,28 @@ fn rune(w: *Writer, list: []const ddragon.Named, id: u32, comptime class: []cons
 }
 
 /// Build page: the most played rune pages as in-game trees, each with games, share and
-/// win rate. False without the trees, for the table instead
+/// win rate, and the highest win rate page (highest()) if it is not among them. False
+/// without the trees, for the table instead
 fn pages(w: *Writer, f: *const File, b: File.Build) !bool {
     if (f.trees.len == 0) return false;
     const rows = b.get(.runes) orelse return false;
     if (rows.options.len == 0) return false;
+    const hi = highest(rows.options, rows.games);
     try w.writeAll("<div class=\"rpages\">\n");
-    for (rows.options[0..@min(rows.options.len, pages_shown)]) |o| {
-        try w.writeAll(if (o.games < solid_games) "<div class=\"rpc thin\">" else "<div class=\"rpc\">");
-        if (!try runePage(w, f, o.v, null)) try value(w, f, .runes, o.v, true);
+    for (rows.options, 0..) |o, i| {
+        if (i >= pages_shown and i != hi) continue;
+        try tpl.renderPart(w, "<div class=\"rpc{thin}{hw}\">{tags}", .{
+            .thin = tpl.when(o.games < solid_games, " thin"),
+            .hw = tpl.when(i == hi, " hw"),
+            .tags = tpl.call(tags, .{ i, hi }),
+        });
+        if (!try runePage(w, f, o.v, null, null)) try value(w, f, .runes, o.v, true);
         try tpl.renderPart(w,
             \\<small>{games} games · {share:.1}%<br>{rate}</small></div>
             \\
         , .{
             .games = o.games,
-            .share = 100 * @as(f64, @floatFromInt(o.games)) / @as(f64, @floatFromInt(@max(rows.games, 1))),
+            .share = pct(o.games, rows.games),
             .rate = tpl.call(winRate, .{ o.games, o.wins }),
         });
     }
@@ -292,6 +366,113 @@ fn pages(w: *Writer, f: *const File, b: File.Build) !bool {
         .games = rows.games,
     });
     return true;
+}
+
+/// "most played" on the first option, "highest win rate" on option `hi`
+fn tags(w: *Writer, i: usize, hi: ?usize) !void {
+    if (i != 0 and i != hi) return;
+    try w.writeAll("<span class=\"tags\">");
+    if (i == 0) try w.writeAll("<span class=\"tag mp\">most played</span>");
+    if (i == hi) try w.writeAll("<span class=\"tag hw\">highest win rate</span>");
+    try w.writeAll("</span>");
+}
+
+/// Build page: every rune players took, laid out as in game with its pick rate and win
+/// rate; in each row the most played lit and the highest win rate (highest()) ringed.
+/// Trees by keystone players, then those with a rune on min_tree_share. False without
+/// trees or per-rune counts (files before 21 Oct 2026)
+fn runeStats(w: *Writer, f: *const File, b: File.Build) !bool {
+    if (f.trees.len == 0) return false;
+    const rows = b.get(.rune) orelse return false;
+    if (rows.options.len == 0) return false;
+    const Shown = struct { tree: ddragon.Tree, keystones: u32, most: u32 };
+    var shown_trees: [8]Shown = undefined;
+    var n: usize = 0;
+    for (f.trees) |t| {
+        if (n == shown_trees.len) break;
+        var s: Shown = .{ .tree = t, .keystones = 0, .most = 0 };
+        for (t.slots, 0..) |slot, i| for (slot) |id| {
+            const g = if (find(rows.options, &.{id})) |o| o.games else 0;
+            if (i == 0) s.keystones += g;
+            s.most = @max(s.most, g);
+        };
+        if (@as(f64, @floatFromInt(s.most)) < min_tree_share * @as(f64, @floatFromInt(rows.games))) continue;
+        shown_trees[n] = s;
+        n += 1;
+    }
+    std.mem.sort(Shown, shown_trees[0..n], {}, struct {
+        fn lt(_: void, x: Shown, y: Shown) bool {
+            return if (x.keystones != y.keystones) x.keystones > y.keystones else x.most > y.most;
+        }
+    }.lt);
+    try w.writeAll("<div class=\"rx\">");
+    for (shown_trees[0..n]) |s| {
+        try w.writeAll("<div class=\"rt\">");
+        try rune(w, f.runes, s.tree.id, "rh", true);
+        for (s.tree.slots, 0..) |slot, i| {
+            try w.writeAll(if (i == 0) "<div class=\"rr ks\">" else "<div class=\"rr\">");
+            var row: [8]File.Option = undefined;
+            var ids: [8]u32 = undefined;
+            const len = @min(slot.len, row.len);
+            for (slot[0..len], 0..) |id, j| {
+                ids[j] = id;
+                row[j] = find(rows.options, &.{id}) orelse .{ .v = &.{}, .games = 0, .wins = 0 };
+            }
+            try statRow(w, f.runes, ids[0..len], row[0..len], rows.games);
+            try w.writeAll("</div>");
+        }
+        try w.writeAll("</div>");
+    }
+    if (b.get(.shard)) |sr| if (sr.options.len > 0) {
+        try w.writeAll("<div class=\"rt rs\">");
+        for (ddragon.shard_rows, 0..) |ids, i| {
+            try w.writeAll("<div class=\"rr\">");
+            var row: [3]File.Option = undefined;
+            for (ids, &row) |id, *o| o.* = find(sr.options, &.{ @intCast(i), id }) orelse .{ .v = &.{}, .games = 0, .wins = 0 };
+            try statRow(w, &ddragon.shards, &ids, &row, sr.games);
+            try w.writeAll("</div>");
+        }
+        try w.writeAll("</div>");
+    };
+    try tpl.renderPart(w,
+        \\</div>
+        \\<p class="muted caption">Under each rune: share of {games} players, then win rate (from {rated} games). <span class="key mp"></span> most played in its row, <span class="key hw"></span> highest win rate in its row among runes with {rated}+ games and {min_share}%+ of players.</p>
+        \\
+    , .{ .games = rows.games, .rated = rate_games, .min_share = 100 * min_rate_share });
+    return true;
+}
+
+fn find(options: []const File.Option, v: []const u32) ?File.Option {
+    for (options) |o| if (std.mem.eql(u32, o.v, v)) return o;
+    return null;
+}
+
+/// One row of runeStats: each rune's icon, share and win rate
+fn statRow(w: *Writer, list: []const ddragon.Named, ids: []const u32, row: []const File.Option, all: u32) !void {
+    var most: ?usize = null;
+    for (row, 0..) |o, i| {
+        if (o.games > 0 and (most == null or o.games > row[most.?].games)) most = i;
+    }
+    const hi = highest(row, all);
+    for (ids, row, 0..) |id, o, i| {
+        const n = ddragon.find(list, id) orelse continue;
+        const share = pct(o.games, all);
+        var buf: [32]u8 = undefined;
+        const rate = if (o.games >= rate_games) try std.fmt.bufPrint(&buf, ", {d:.1}% won", .{wonPct(o)}) else "";
+        try tpl.render(w,
+            \\<span class="rc{state}" title="{name}: {games} games, {share:.1}%{rate}"><img src="{src}" alt="{name}" loading="lazy"><b>{pick}{few}</b><i>{wr}</i></span>
+        , .{
+            .state = if (i == most and i == hi) " on hw" else if (i == most) " on" else if (i == hi) " hw" else if (share < 1) " off" else "",
+            .name = n.name,
+            .games = o.games,
+            .share = share,
+            .rate = rate,
+            .src = n.icon,
+            .pick = tpl.when(share >= 1, tpl.t("{p:.0}%", .{ .p = share })),
+            .few = tpl.when(o.games > 0 and share < 1, "<1%"),
+            .wr = tpl.when(o.games >= rate_games, tpl.t("{wr:.1}%", .{ .wr = wonPct(o) })),
+        });
+    }
 }
 
 fn wonPct(o: File.Option) f64 {
@@ -365,15 +546,16 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
         , .{ .games = b.games, .s = plural(b.games), .solid = solid_games, .rated = rate_games });
     }
     try tpl.render(w,
-        \\<p class="muted">Most played first: what players take, not a ranking. Win rates show a 95% range (±) from the number of games; two rows whose ranges overlap may not differ at all. Rows under {solid} games are greyed out; under {rated} there is no win rate.</p>
+        \\<p class="muted">Most played first: what players take, not a ranking. Win rates show a 95% range (±) from the number of games; two rows whose ranges overlap may not differ at all. Rows under {solid} games are greyed out; under {rated} there is no win rate. Marked: the most played, and the highest win rate among options with {rated}+ games and {min_share}%+ of players.</p>
         \\
-    , .{ .solid = solid_games, .rated = rate_games });
+    , .{ .solid = solid_games, .rated = rate_games, .min_share = 100 * min_rate_share });
 
     try w.writeAll("<h2>Runes</h2>\n");
+    const explored = try runeStats(w, f, b);
     const paged = try pages(w, f, b);
-    try table(w, f, b, .keystone, "Keystone", "players");
+    if (!explored) try table(w, f, b, .keystone, "Keystone", "players");
     if (!paged) try table(w, f, b, .runes, "Rune page", "players");
-    try table(w, f, b, .shards, "Stat shards", "players");
+    if (!explored) try table(w, f, b, .shards, "Stat shards", "players");
     try w.writeAll("<h2>Summoner spells</h2>\n");
     try table(w, f, b, .spells, "Spells", "players");
     try w.writeAll("<h2>Items</h2>\n");
@@ -411,13 +593,16 @@ fn table(w: *Writer, f: *const File, b: File.Build, kind: Kind, comptime title: 
     if (rows.options.len == 0) {
         try w.writeAll("<tr class=\"thin\"><td colspan=\"4\">More data needed</td></tr>\n");
     }
-    for (rows.options[0..@min(rows.options.len, rows_shown)]) |o| {
+    const hi = highest(rows.options, rows.games);
+    for (rows.options, 0..) |o, i| {
+        if (i >= rows_shown and i != hi) continue;
         try tpl.render(w,
-            \\<tr{thin}><td>{value}</td><td class="num">{games}</td><td class="num">{share:.1}%</td><td class="num">{rate}</td></tr>
+            \\<tr{class}><td>{value}{tags}</td><td class="num">{games}</td><td class="num">{share:.1}%</td><td class="num">{rate}</td></tr>
             \\
         , .{
-            .thin = tpl.flag(o.games < solid_games, "class=\"thin\""),
+            .class = if (i == hi) tpl.flag(true, "class=\"hw\"") else tpl.flag(o.games < solid_games, "class=\"thin\""),
             .value = tpl.call(value, .{ f, kind, o.v, false }),
+            .tags = tpl.call(tags, .{ i, hi }),
             .games = o.games,
             .share = 100 * @as(f64, @floatFromInt(o.games)) / @as(f64, @floatFromInt(@max(rows.games, 1))),
             .rate = tpl.call(winRate, .{ o.games, o.wins }),
@@ -431,10 +616,11 @@ fn table(w: *Writer, f: *const File, b: File.Build, kind: Kind, comptime title: 
 /// `compact`: icons without names beside them (names on hover), shards one a line
 fn value(w: *Writer, f: *const File, kind: Kind, v: []const u32, compact: bool) !void {
     switch (kind) {
-        .keystone, .boots => {
+        .keystone, .boots, .rune => {
             if (v[0] == 0) return w.writeAll("No boots");
             try named(w, if (kind == .boots) f.items else f.runes, v[0], !compact);
         },
+        .shard => if (ddragon.find(&ddragon.shards, v[1])) |n| try tpl.writeEscaped(n.name, w),
         .spells => for (v, 0..) |x, i| {
             if (i > 0) try w.writeAll(" ");
             try named(w, f.spells, x, !compact);
@@ -476,6 +662,18 @@ fn named(w: *Writer, list: []const ddragon.Named, id: u32, label: bool) !void {
         , .{ .src = n.icon, .name = n.name });
     }
     if (label or n.icon.len == 0) try tpl.render(w, "<span class=\"label\">{name}</span>", .{ .name = n.name });
+}
+
+test "highest win rate: only options with rate_games and min_rate_share, two or more" {
+    const o = struct {
+        fn f(games: u32, wins: u32) File.Option {
+            return .{ .v = &.{}, .games = games, .wins = wins };
+        }
+    }.f;
+    // 30 games at 70% is too few; 40 of 2000 players is under the share
+    try std.testing.expectEqual(2, highest(&.{ o(1200, 600), o(700, 360), o(500, 270), o(30, 21) }, 2430));
+    try std.testing.expectEqual(0, highest(&.{ o(1500, 800), o(460, 220), o(40, 30) }, 2000));
+    try std.testing.expectEqual(null, highest(&.{ o(1900, 1000), o(90, 60) }, 1990));
 }
 
 test "rank label" {

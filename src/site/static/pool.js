@@ -80,7 +80,7 @@ function setup(pool, meta, learning) {
     if (!c) return el("span", {}, "?");
     return el(
       "a",
-      { class: "champ", href: `${out.dataset.toSite}champion/${c.slug}.html${out.dataset.query}` },
+      { class: "champ box", href: `${out.dataset.toSite}champion/${c.slug}.html${out.dataset.query}` },
       el("img", { src: icon(c), alt: "", width: "32", height: "32", loading: "lazy" }),
       c.name,
     );
@@ -102,7 +102,7 @@ function setup(pool, meta, learning) {
       ul.append(
         el(
           "li",
-          {},
+          { class: "bx" },
           el("span", {}, link(id)),
           el(
             "span",
@@ -122,7 +122,7 @@ function setup(pool, meta, learning) {
       ul.append(
         el(
           "li",
-          {},
+          { class: "bx" },
           el("span", {}, link(id)),
           el("span", { class: "num bad", title: `${games} games` }, pts(pp)),
         ),
@@ -135,7 +135,7 @@ function setup(pool, meta, learning) {
   const options = (items, why) => {
     const ul = el("ul", { class: "card suggestions" });
     for (const o of items) {
-      const li = el("li", {}, el("div", {}, link(o.id)));
+      const li = el("li", { class: "bx" }, el("div", {}, link(o.id)));
       for (const line of why(o)) li.append(el("div", { class: "why" }, line));
       ul.append(li);
     }
@@ -238,7 +238,7 @@ function setup(pool, meta, learning) {
       ul.append(
         el(
           "li",
-          {},
+          { class: "bx" },
           el("span", {}, link(other)),
           el(
             "span",

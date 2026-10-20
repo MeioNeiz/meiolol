@@ -157,7 +157,7 @@ pub fn method(w: *Writer, info: Info) Writer.Error!void {
         \\of games with it in that role, share of games where it was banned.</li>
         \\<li><b>How sure a win rate is</b>: every win rate is the raw share of games won,
         \\never pulled toward 50%. Its bar runs from 50% to the rate. Colour runs from
-        \\orange (low) through grey (50%) to blue (high) by the rate alone, not red and
+        \\orange (low) to blue (high), paler near 50%, by the rate alone, not red and
         \\green, which colour-blind readers can't tell apart. Fewer games make it fainter,
         \\full from 200: with few games a rate can sit far from the truth.</li>
         \\<li><b>Lane opponents</b>: the champion's win rate against each lane opponent and
@@ -258,12 +258,32 @@ pub fn download(w: *Writer, info: Info) Writer.Error!void {
         \\<li>Never picks, bans, locks or dodges for you, and never shows other players'
         \\names or statistics.</li>
         \\</ul>
+        \\<div id="admin-download"></div>
         \\<p class="note">Not released yet. Meanwhile the <a href="matchup/index.html">matchup
         \\curves</a> on this site show the same lane data.</p>
         \\</div>
         \\
-    );
+    ++ admin_download);
 }
+
+/// Jacob's download before the release: the admin page stores the zip's path and patch in
+/// this origin's localStorage (admin.js pollDesktop), as html.zig admin_link; the zip
+/// itself stays behind the admin login
+const admin_download =
+    \\<script>try{const d=JSON.parse(localStorage.getItem("admin-desktop"));
+    \\if(d&&typeof d.href=="string"&&d.href.startsWith("/admin/")){
+    \\const p=document.createElement("p"),a=document.createElement("a");p.className="note";
+    \\a.href=d.href;a.download="";a.textContent="Download for Windows";
+    \\a.style.cssText="display:inline-block;margin-bottom:6px;padding:7px 16px;border-radius:8px;"
+    \\+"background:var(--accent);color:var(--bg);font-weight:600";
+    \\const built=new Date(d.built).toLocaleString("en-GB",
+    \\{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
+    \\p.append(a,document.createElement("br"),`Admin only until the public release. Patch
+    \\ ${d.patch} statistics, built ${built}. Unzip it and run meiolol-desktop.exe in the
+    \\ meiolol folder; Windows asks first (More info, then Run anyway).`);
+    \\document.getElementById("admin-download").append(p)}}catch(e){}</script>
+    \\
+;
 
 pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
     try tpl.render(w,
@@ -311,8 +331,10 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\<h2>The desktop app</h2>
         \\<p>The desktop app is not released yet. When it is, it will read champ select from
         \\the League client running on your own PC and show lane information on screen. It
-        \\will not send your games, account or any other personal data anywhere, and will
-        \\download updated champion statistics from this site.</p>
+        \\will not send your games, account or any other personal data anywhere. Apart from
+        \\the League client it will connect only to this site, every few hours, to download
+        \\newer champion statistics and updates to itself; those requests carry nothing
+        \\about you, and our server logs them like any page visit (below).</p>
         \\<h2>Game data from Riot Games</h2>
         \\<p>The statistics are computed from ranked match data provided by the Riot Games
         \\API. Raw match records, which include Riot's per-application encrypted player
