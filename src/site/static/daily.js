@@ -223,8 +223,8 @@ class Game {
           if (hidden) li.classList.add("dd-was-hidden");
           li.append(this.champ(p.teams[t][r]));
         }
-        const rank = rankText(p.players?.[t][r]);
-        if (rank) li.append(el("span", "dd-rank", rank));
+        // Always there, empty when unknown: the champion stays left either way
+        li.append(el("span", "dd-rank", rankText(p.players?.[t][r])));
         list.append(li);
       });
       const bans = $(`bans-${t}`);
