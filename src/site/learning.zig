@@ -166,5 +166,6 @@ pub fn table(site: *const Site, w: *Writer, l: *const Learning) !void {
         });
     }
     try w.writeAll("</tbody></table></div>\n");
+    try tpl.render(w, "<script src=\"{up}table.js\" defer></script>\n", .{ .up = site.view.up() });
     try footnote(site, w, l);
 }

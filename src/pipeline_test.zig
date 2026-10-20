@@ -311,6 +311,12 @@ test "fixture games to stats, curves and the website" {
         };
         try testing.expectEqualStrings(want, got);
         checked += 1;
+        if (std.mem.endsWith(u8, e.path, ".html") and std.mem.indexOf(u8, want, "data-sortable") != null and
+            std.mem.indexOf(u8, want, "table.js\"") == null)
+        {
+            std.debug.print("{s}: sortable table without table.js\n", .{e.path});
+            return error.TestUnexpectedResult;
+        }
     }
     try testing.expect(checked > 50);
     // `meiolol site --views` and `render` reading it: the same bytes for every file
