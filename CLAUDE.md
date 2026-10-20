@@ -10,22 +10,14 @@ docs/plan.md "Now". Read it first.
 
 ## Git and deploys
 
-- Work on main only: no branches or worktrees (one developer). Other sessions share the
-  checkout, so commit by explicit path (`git commit -m ... -- <paths>`) only: never a
-  plain `git commit` after `git add`, and never through a temporary index
-  (`GIT_INDEX_FILE`); both can commit a stale copy of another session's file
-- A new file goes in the same commit as its first use, scripts too (a deploy failed
-  twice on 17 Oct: box.sh copied a script the commit lacked). Git only takes a path it
-  knows: `deploy/commit.sh -m msg -- <paths>` adds new ones first, then commits by path
-- Every push to main deploys (deploy/on-push.sh, log .git/meiolol-deploy.log; docs and
-  research-only pushes skip the build). Push the tested sha, `git push origin
-  <sha>:main`: over HTTPS git re-reads main after the pre-push ci, so a commit another
-  session made meanwhile goes out untested
-- Solid, tested change (a fix checked working, tests pass): commit and push it without
-  asking, then `deploy/box.sh wait-deployed`. Ask first only when unfinished, risky or
-  hard to undo
-- Hooks in deploy/hooks (`git config core.hooksPath deploy/hooks`): pre-commit fmt,
-  pre-push `zig build ci` on a clean checkout of the pushed commit
+- Work on main only (one developer); other sessions share the checkout. Commit with
+  `deploy/commit.sh -m msg -- <paths>`: by path, so others' dirty files stay out; adds
+  new files and the page hashes. A new file goes in the same commit as its first use
+- Every push to main deploys (log .git/meiolol-deploy.log). Push the tested sha, `git
+  push origin <sha>:main` (plain push can send a commit another session made meanwhile);
+  pre-push runs `zig build ci` on it
+- Solid, tested change: commit and push without asking, then `deploy/box.sh
+  wait-deployed`. Ask first only when unfinished, risky or hard to undo
 
 ## Build and test
 
@@ -36,9 +28,7 @@ docs/plan.md "Now". Read it first.
   (not in ci; deploy/lab-run.sh runs them before a new lab build), run it after a lab
   change
 - src/pipeline_test.zig: fixture games through stats, curves and the whole site; extend
-  it when adding a pipeline step or page. Its page hashes (src/testdata/site-files.txt)
-  are rewritten and committed by deploy/commit.sh for any src/ commit; its diff shows
-  which pages a change moved
+  it when adding a pipeline step or page
 - Local site: `deploy/dev.sh` (data/snap; `--exports` refreshes the box's curves and
   builds when it warns the curves are an old version)
 - Zig 0.16/0.17 std changed a lot (std.Io everywhere, renames): LSP hover/goToDefinition
@@ -52,12 +42,12 @@ docs/plan.md "Now". Read it first.
   session, get). `zig build lab`: `meiolol-lab`, modelling experiments on the gpu-box
   (CUDA via libcuda, kernels in src/gpu compiled to PTX)
 - The box: `ssh meiolol-cloud`. Crawler 24/7: `deploy/box.sh start|stop|restart|status|
-  logs|run`; a deploy restarts it only when src/riot or src/store changed. Data lives
+  logs|run`. Data lives
   only there (~/ml/meiolol/data); the gpu-box keeps a copy as a restore point. Hosts,
   limits: docs/hosting.md
 - Box jobs over a minute: `deploy/box.sh job run NAME 'CMD'` (a user unit, outlives
   ssh), `job status|wait NAME`. Waiting for a push: `deploy/box.sh wait-deployed [REV]
-  [--live]` (exits 0, 1 failed, 3 timeout), not a sleep loop. Hand-edited Daily or Learn
+  [--live]` (exits 0, 1 failed, 3 timeout). Hand-edited Daily or Learn
   files: `deploy/box.sh web rebuild` (a forced round keeps the old ones)
 - Website: https://meio.lol (DNS on Cloudflare: docs/architecture.md; mail to @meio.lol:
   deploy/mail.sh), static nginx and the Your games API on the jomify server (`ssh
@@ -66,9 +56,8 @@ docs/plan.md "Now". Read it first.
   [privacy@meio.lol]|stop|status`. jomify's pieces are installed by hand:
   `deploy/jomify.sh drift`, `install api|traffic|...`. Admin pages: `deploy/admin-get.sh
   PATH` (keeps the login off screen). Preview mode until prod key
-- Visiting meio.lol counts as a bot only when tagged: `browse`, persona-walk, curl,
-  WebFetch and headless Chrome already are; a scripted headed browser appends
-  `meiolol-agent` to its user agent (deploy/traffic.sh)
+- A scripted headed browser visiting meio.lol appends `meiolol-agent` to its user agent,
+  so traffic counts it as a bot (deploy/traffic.sh)
 - Heavy model work on the gpu-box (`ssh gpu-box`; 3080, 20 threads) or Mac CPU, never
   the box: deploy/lab-run.sh; League pauses gpu-box runs; warn sessions using it before
   restarting WSL. Parallel loops: src/par.zig. docs/compute.md
@@ -83,11 +72,9 @@ docs/plan.md "Now". Read it first.
 
 - Batch reads: several files or line ranges in one Bash call (`sed -n 1,40p a; sed -n
   80,120p b`), independent calls in parallel in one turn; never one read per turn
-- Waiting: run_in_background, then wait for the notification; never re-read task output
-  or sleep/poll (the sleep guard blocks it)
-- Tests: `zig build test 2>&1 | tee $SCRATCH/t.log | tail -30`, then grep the log;
-  re-run only after a change
-- Hand over at ~200k context (fleet skill), don't run on into compaction
+- Waiting: run_in_background, then wait for the notification
+- Tests: `zig build test 2>&1 | tee $SCRATCH/t.log | tail -30`, then grep the log
+- Hand over at ~200k context (fleet skill)
 - Team runs: shared state in the run's common.md; messages are "done: <path>" or
   "blocked: <why>, <path>", details in the file
 
