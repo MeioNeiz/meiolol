@@ -1179,4 +1179,5 @@ table.mu-table .vs b { color: var(--c); font-weight: 600; }
 .mo-fold { border-top: 1px solid var(--line); }
 .mo-fold > summary { cursor: pointer; padding: 9px 14px; color: var(--muted); font-size: 12.5px; }
 .mo-fold > summary:hover { color: var(--text); }
-small.among { display: block; margin-top: 2px; font-size: 11px; color: var(--faint); }
+/* Wraps, as td is nowrap: on one line it widened the lane table past a phone screen */
+small.among { display: block; margin: 2px 0 0 auto; max-width: 8em; font-size: 11px; line-height: 1.3; color: var(--faint); white-space: normal; }
