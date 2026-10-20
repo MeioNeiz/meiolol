@@ -40,9 +40,9 @@ pub fn page(w: *Writer, info: prose.Info) Writer.Error!void {
         \\<p class="muted">From this patch's ranked solo games. The hidden slot is the pick the
         \\rest of the draft explains best, by its matchups and teammates more than its strength
         \\this patch. A draft leans to a side only when our model is 95% sure it is not even;
-        \\otherwise it reads "close". A lane or option is usually ahead at 14 minutes only when
-        \\the gold estimate is 200 or more and clear of even by two standard errors on 200+
-        \\games, mostly the matchup's own; in this game, under 200 gold reads as even. A reason ("good into", "better with") needs 400+ games and a
+        \\otherwise it reads "close". A lane or option is usually ahead at 14 minutes only
+        \\when the gold estimate is 200 or more and clear of even by two standard errors on 200+ games,
+        \\mostly the matchup's own; in this game, under 200 gold reads as even. A reason ("good into", "better with") needs 400+ games and a
         \\difference larger than chance, and comes only from lane matchups and the few other
         \\pairings the data shows matter. How drafts like this tend to go, not a verdict on
         \\anyone's pick. <a href="method.html">Method</a>.</p></details>
