@@ -840,7 +840,13 @@ ul.mu-why b { color: var(--text); }
 body:has(#m-gold:checked) .mu-m:not(.mu-m-gold),
 body:has(#m-xp:checked) .mu-m:not(.mu-m-xp),
 body:has(#m-cs:checked) .mu-m:not(.mu-m-cs) { display: none; }
-.mu-curves .verdict { margin: 0 0 6px; font-size: 14px; }
+.mu-tiles small b.vs { display: inline; font-size: inherit; margin: 0; }
+p.mu-sum { margin: 10px 0 8px; max-width: 760px; font-weight: 500; }
+details.mu-more { margin: 18px 0 8px; border-top: 1px solid var(--line); padding-top: 10px; }
+details.mu-more > summary { cursor: pointer; font-size: 15px; }
+details.mu-more > summary .muted { font-size: 13px; }
+details.mu-more[open] > summary { margin-bottom: 10px; }
+details.mu-more h2 { font-size: 16px; }
 .mu-curves figcaption { font-size: 12px; }
 @media (max-width: 600px) {
   .mu-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
@@ -1068,6 +1074,17 @@ table.build tr.hw td:first-child { box-shadow: inset 2px 0 0 var(--good); }
 .key.mp { box-shadow: 0 0 0 2px var(--turn); }
 .key.hw { box-shadow: 0 0 0 2px var(--good); }
 details.bstrip > summary { cursor: pointer; }
+.bstrip details > summary { cursor: pointer; color: var(--muted); font-size: 13px; margin: 6px 0; }
+/* Matchup page: runes taken more or less often than usual (builds.zig runeShifts) */
+ul.rshift { list-style: none; margin: 0 0 4px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+ul.rshift li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+ul.rshift li > span { color: var(--muted); font-size: 12px; min-width: 76px; }
+.rsh {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 13px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px 2px 3px;
+}
+.rsh img { width: 22px; height: 22px; border-radius: 50%; }
+.rsh small { color: var(--faint); font-size: 11.5px; }
 .rpages { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 2px; }
 .rpc { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
 .rpc small { color: var(--faint); font-size: 12px; }

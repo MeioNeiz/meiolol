@@ -375,21 +375,10 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
             \\
         , .{});
     }
-    try tiles(site, w, v, curves.baseline(r, .all), r, x, y);
-
     const vs = try variants(a, curves, r, x, y);
-    if (vs.len > 1) {
-        try tpl.renderPart(w, "<fieldset class=\"exp-toggle\" data-keep=\"matchup-exp\"><legend>Games counted</legend>", .{});
-        for (vs, 0..) |s, i| {
-            try tpl.render(w, "<label><input type=\"radio\" name=\"exp\" value=\"{key}\" id=\"exp-{key}\"{checked}> {label} <span class=\"muted\">({games})</span></label> ", .{
-                .key = s.key,
-                .checked = tpl.flag(i == 0, "checked"),
-                .label = s.label,
-                .games = s.v.games(),
-            });
-        }
-        try tpl.renderPart(w, "</fieldset>\n", .{});
-    }
+    try headline(site, w, vs, r, x, y);
+    try tiles(site, w, v, r, x, y, when);
+    try builds.vsStrip(site, w, r, x, y, page_path);
 
     const base = curves.baseline(r, .all);
     const prev = prevLine(site, r, x, y);
@@ -399,11 +388,9 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
         .{ .title = "Experience", .metric = .xp, .unit = "XP" },
         .{ .title = "CS", .metric = .cs, .unit = "CS" },
     };
-    // First screen: the stat block beside one chart, XP and CS behind tabs
     try tpl.renderPart(w, "<div class=\"mu-top\"><div class=\"mu-stats\">\n", .{});
     for (vs) |s| {
         if (vs.len > 1) try tpl.renderPart(w, "<div class=\"exp exp-{key}\">\n", .{ .key = s.key });
-        try leads(w, s.v, x, y);
         try why(w, s.v, r, x, y);
         if (vs.len > 1) try tpl.renderPart(w, "</div>\n", .{});
     }
@@ -416,14 +403,38 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     try tpl.renderPart(w, "</div>\n", .{});
     for (charts) |c| {
         try tpl.renderPart(w, "<div class=\"mu-m mu-m-{metric}\">\n", .{ .metric = @tagName(c.metric) });
-        if (c.metric == .gold) for (vs) |s| try verdict(w, s, vs.len > 1, x);
         try chart(w, vs, base, prev, c.metric, c.unit, x, y, when, lane);
         try tpl.renderPart(w, "</div>\n", .{});
     }
     try tpl.renderPart(w, "</div></div>\n", .{});
-    try builds.vsStrip(site, w, r, x, y, page_path);
 
-    try tpl.render(w, "<h2>Lane and game</h2>\n", .{});
+    // Everything for a look back after the game, folded: the first screen answers champ
+    // select's questions
+    try tpl.renderPart(w,
+        \\<details class="mu-more"><summary><b>More detail</b> <span class="muted">minute by minute, both sides, comeback odds, by rank{mastery}</span></summary>
+        \\
+    , .{ .mastery = tpl.when(vs.len > 1, ", mastery") });
+    if (vs.len > 1) {
+        // Not kept between visits (no data-keep): folded, a kept choice would change the
+        // page with no visible reason
+        try tpl.renderPart(w, "<fieldset class=\"exp-toggle\"><legend>Games counted, for the whole page</legend>", .{});
+        for (vs, 0..) |s, i| {
+            try tpl.render(w, "<label><input type=\"radio\" name=\"exp\" value=\"{key}\" id=\"exp-{key}\"{checked}> {label} <span class=\"muted\">({games})</span></label> ", .{
+                .key = s.key,
+                .checked = tpl.flag(i == 0, "checked"),
+                .label = s.label,
+                .games = s.v.games(),
+            });
+        }
+        try tpl.renderPart(w, "</fieldset>\n", .{});
+    }
+    try tpl.render(w, "<h2>Minute by minute</h2>\n", .{});
+    for (vs) |s| {
+        if (vs.len > 1) try tpl.renderPart(w, "<div class=\"exp exp-{key}\">\n", .{ .key = s.key });
+        try leads(w, s.v, x, y);
+        if (vs.len > 1) try tpl.renderPart(w, "</div>\n", .{});
+    }
+    try tpl.render(w, "<h2>Both sides</h2>\n", .{});
     for (vs) |s| {
         if (vs.len == 1) try sides(w, s.v, x, y) else try tpl.render(w,
             \\<div class="exp exp-{key}">
@@ -434,6 +445,7 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     try comeback.section(w, curves, r, x, y);
     try tpl.render(w, "<h2>By rank</h2>\n", .{});
     try brackets(w, curves, r, x, y);
+    try tpl.renderPart(w, "</details>\n", .{});
     const to_site = site.toShared(page_path);
     try tpl.render(w,
         \\<p class="muted"><a href="{x_href}">{x}</a> · <a href="{y_href}">{y}</a> · <a href="{up}method.html">Method</a></p>
@@ -588,56 +600,71 @@ fn summary(w: *Writer, v: View, x: Champ, y: Champ) !void {
     });
 }
 
-/// The first screen's numbers, as the champion page's tiles: x's win rate against y and
-/// against usual (champion.VsUsual, as the champion page's opponent grid) from the
-/// view's stats, games, then the lane curve's gold at lane_minute and how often x leads
-fn tiles(site: *const Site, w: *Writer, v: View, base: ?View, r: Role, x: Champ, y: Champ) !void {
+/// x's win rate against y (the view's stats) and against usual (champion.VsUsual, as
+/// the champion page's opponent grid)
+const Odds = struct { wins: u32, games: u32, usual: f64, d: champion.VsUsual };
+
+fn odds(site: *const Site, r: Role, x: Champ, y: Champ) Odds {
     const st = &site.stats;
     const e = st.enemy(r, r, x.c, y.c);
     const xr = st.champRole(r, x.c);
     const yr = st.champRole(r, y.c);
     const u = champion.usual(root.ratio(xr.wins, xr.games), root.ratio(yr.wins, yr.games));
-    const d = champion.VsUsual.of(e.wins, e.games, u, champion.usualK(st, r));
+    return .{ .wins = e.wins, .games = e.games, .usual = u, .d = champion.VsUsual.of(e.wins, e.games, u, champion.usualK(st, r)) };
+}
+
+/// Vs usual within this (a share) reads "about usual" in the headline
+const about_usual = 0.01;
+
+/// The page's answer in a line or two, descriptive (docs/production-key.md product
+/// rules): x's win rate here against x's usual, then the lane (lead()) per variant
+fn headline(site: *const Site, w: *Writer, vs: []const Variant, r: Role, x: Champ, y: Champ) !void {
+    const o = odds(site, r, x, y);
+    if (o.games == 0) return;
+    try tpl.renderPart(w, "<p class=\"verdict mu-sum\">{x} wins {wr} against {y}, {side} {x}'s usual {usual:.1}%.", .{
+        .x = x.name,
+        .wr = tpl.call(pct1, .{ o.wins, o.games }),
+        .y = y.name,
+        .side = if (@abs(o.d.mean) < about_usual) "about" else if (o.d.mean > 0) "above" else "below",
+        .usual = 100 * o.usual,
+    });
+    for (vs) |s| try lead(w, s, vs.len > 1, x);
+    try tpl.renderPart(w, "</p>\n", .{});
+}
+
+/// The first screen's numbers: win rate and vs usual (odds()), the lane curve's gold at
+/// lane_minute and how often x leads, then games
+fn tiles(site: *const Site, w: *Writer, v: View, r: Role, x: Champ, y: Champ, when: []const u8) !void {
+    const o = odds(site, r, x, y);
     const z = 1.2816;
     const i = curvesfile.lane_minute - 1;
     const has_gold = i < v.minutes() and v.minute(i).n >= minuteFloor(v);
     const g = v.estimate(.gold, i);
-    const g_range = if (has_gold) range(v, base, .gold, i) else .{ 0, 0 };
     const lane = v.lane();
     try tpl.render(w,
-        \\<div class="tiles mu-tiles"><div><span>Win rate</span><b class="wrc" style="--c:{wr_colour};opacity:{fade:.2}">{wr}</b><small>{x} against {y}</small></div><div title="{title}"><span>Vs usual</span><b class="vs" style="--c:{colour}">{pts}</b><small>usually {usual:.1}%</small></div><div><span>Games</span><b>{games}</b><small>{curve_games} in the lane curves</small></div>{gold}<div{lane_thin}><span>Ahead at {minute} min</span><b>{ahead}</b><small>in gold, of {lane_games}</small></div></div>
+        \\<div class="tiles mu-tiles"><div title="{title}"><span>Win rate</span><b class="wrc" style="--c:{wr_colour};opacity:{fade:.2}">{wr}</b><small><b class="vs" style="--c:{colour}">{pts}</b> vs usual {usual:.1}%</small></div><div{thin}><span>Lane at {minute} min</span><b class="{side}">{gold}{dash}</b><small>ahead in {ahead}</small></div><div><span>Games</span><b>{games}</b><small>{when}</small></div></div>
         \\
     , .{
-        .wr_colour = tierlist.wrColour(root.ratio(e.wins, e.games), tierlist.matchup_span),
-        .fade = curvesfile.fade(e.games),
-        .wr = tpl.call(pct1, .{ e.wins, e.games }),
-        .x = x.name,
-        .y = y.name,
-        .title = try site.arena.print("Against an opponent winning {d:.1}% in {s}, {s} usually wins about {d:.1}%; against {s} {d:.1}% in {d} games. Vs usual {f} points, pulled toward 0 the fewer the games; 8 in 10 between {f} and {f}", .{
-            100 * root.ratio(yr.wins, yr.games),       root.roleName(r),               x.name,
-            100 * u,                                   y.name,                         100 * root.ratio(e.wins, e.games),
-            e.games,                                   champion.Points{ .v = d.mean }, champion.Points{ .v = d.mean - z * d.sd },
-            champion.Points{ .v = d.mean + z * d.sd },
+        .title = try site.arena.print("Against {s} {s} wins {d:.1}% in {d} games. Against an opponent this strong in {s}, {s} usually wins about {d:.1}%. Vs usual {f} points, pulled toward 0 the fewer the games; 8 in 10 between {f} and {f}", .{
+            y.name,                                        x.name,                           100 * root.ratio(o.wins, o.games),
+            o.games,                                       root.roleName(r),                 x.name,
+            100 * o.usual,                                 champion.Points{ .v = o.d.mean }, champion.Points{ .v = o.d.mean - z * o.d.sd },
+            champion.Points{ .v = o.d.mean + z * o.d.sd },
         }),
-        .colour = tierlist.wrColour(0.5 + d.mean, tierlist.table_span),
-        .pts = champion.Points{ .v = d.mean },
-        .usual = 100 * u,
-        .games = e.games,
-        .curve_games = v.games(),
-        .gold = tpl.when(has_gold, tpl.t(
-            \\<div{thin}><span>Gold at {minute} min</span><b class="{side}">{mean}</b><small>8 in 10: {p10} to {p90}</small></div>
-        , .{
-            .thin = tpl.flag(thin(v), "class=\"stale\""),
-            .minute = curvesfile.lane_minute,
-            .side = if (clearSide(g) > 0) "up" else if (clearSide(g) < 0) "down" else "even",
-            .mean = tpl.call(signed, .{g.mean}),
-            .p10 = tpl.call(signed, .{g_range[0]}),
-            .p90 = tpl.call(signed, .{g_range[1]}),
-        })),
-        .lane_thin = tpl.flag(lane.games < thin_games, "class=\"stale\""),
+        .wr_colour = tierlist.wrColour(root.ratio(o.wins, o.games), tierlist.matchup_span),
+        .fade = curvesfile.fade(o.games),
+        .wr = tpl.call(pct1, .{ o.wins, o.games }),
+        .colour = tierlist.wrColour(0.5 + o.d.mean, tierlist.table_span),
+        .pts = champion.Points{ .v = o.d.mean },
+        .usual = 100 * o.usual,
+        .thin = tpl.flag(thin(v), "class=\"stale\""),
         .minute = curvesfile.lane_minute,
+        .side = if (!has_gold) "even" else if (clearSide(g) > 0) "up" else if (clearSide(g) < 0) "down" else "even",
+        .gold = tpl.when(has_gold, tpl.t("{mean} gold", .{ .mean = tpl.call(signed, .{g.mean}) })),
+        .dash = tpl.when(!has_gold, "-"),
         .ahead = tpl.call(percent, .{ lane.ahead, lane.games }),
-        .lane_games = lane.games,
+        .games = o.games,
+        .when = when,
     });
 }
 
@@ -693,7 +720,7 @@ fn why(w: *Writer, v: View, r: Role, x: Champ, y: Champ) !void {
     const i = curvesfile.lane_minute - 1;
     if (i >= v.minutes() or v.minute(i).n < minuteFloor(v)) return;
     try tpl.renderPart(w,
-        \\<h3 class="mu-h">Where the lead comes from</h3><ul class="mu-why{thin}">
+        \\<h3 class="mu-h">How the lane goes</h3><ul class="mu-why{thin}">
         \\
     , .{ .thin = tpl.when(thin(v), " thin") });
     const gold = v.estimate(.gold, i).mean;
@@ -784,26 +811,23 @@ fn duration(w: *Writer, secs: u32) !void {
     try w.print("{d}:{d:0>2}", .{ secs / 60, secs % 60 });
 }
 
-/// One plain line above the gold chart: who is ahead by lane_minute, since when only
-/// where the estimate is more than 2 SE from 0, then how often the side ahead wins.
-/// Greyed-out (thin) curves get none: their note says why
-fn verdict(w: *Writer, one: Variant, toggle: bool, x: Champ) !void {
+/// The headline's lane part: who is ahead by lane_minute, since when only where the
+/// estimate is more than 2 SE from 0, then how often the side ahead wins; a span per
+/// variant when toggled. Greyed-out (thin) curves get none: their note says why
+fn lead(w: *Writer, one: Variant, toggle: bool, x: Champ) !void {
     const v = one.v;
     const i = curvesfile.lane_minute - 1;
     if (thin(v) or i >= v.minutes() or v.minute(i).n < minuteFloor(v)) return;
     const lane = v.lane();
     const split = lane.ahead >= min_minute_games and lane.behind >= min_minute_games;
-    try tpl.render(w,
-        \\<p class="verdict{exp}{key}">{gold}{wins}.</p>
-        \\
-    , .{
-        .exp = tpl.when(toggle, " exp exp-"),
-        .key = tpl.when(toggle, one.key),
+    if (toggle) try tpl.renderPart(w, "<span class=\"exp exp-{key}\">", .{ .key = one.key });
+    try tpl.render(w, " {gold}{wins}.", .{
         .gold = tpl.call(leadSince, .{ v, x }),
         .wins = tpl.when(split, tpl.t(", then whoever is ahead wins {share} of games", .{
             .share = tpl.call(percent, .{ lane.wins_ahead + lane.behind - lane.wins_behind, lane.ahead + lane.behind }),
         })),
     });
+    if (toggle) try tpl.renderPart(w, "</span>", .{});
 }
 
 /// Minutes up to this read as "from the start": gold differences barely exist yet
@@ -1170,7 +1194,7 @@ test "one page per matchup, though experienced players' curves share its pair" {
     try std.testing.expectEqual(1, pages);
 }
 
-test verdict {
+test lead {
     const gpa = std.testing.allocator;
     var minutes: [curvesfile.lane_minute]curvesfile.Minute = @splat(.{ .n = 400, .gold = .{}, .xp = .{}, .cs = .{} });
     var header = std.mem.zeroes(curvesfile.Header);
@@ -1188,13 +1212,13 @@ test verdict {
     const cv: curvesfile.Curve = .{ .header = &header, .minutes = &minutes };
     const Case = struct { flipped: bool, want: []const u8 };
     const ahead = [_]Case{
-        .{ .flipped = false, .want = "<p class=\"verdict\">Ahri is ahead from the start, about 800 gold by 14 minutes, then whoever is ahead wins 64% of games.</p>\n" },
-        .{ .flipped = true, .want = "<p class=\"verdict\">Ahri is behind from the start, about 800 gold by 14 minutes, then whoever is ahead wins 64% of games.</p>\n" },
+        .{ .flipped = false, .want = " Ahri is ahead from the start, about 800 gold by 14 minutes, then whoever is ahead wins 64% of games." },
+        .{ .flipped = true, .want = " Ahri is behind from the start, about 800 gold by 14 minutes, then whoever is ahead wins 64% of games." },
     };
     for (ahead) |case| {
         var aw: Writer.Allocating = .init(gpa);
         defer aw.deinit();
-        try verdict(&aw.writer, .{ .v = .{ .curve = &cv, .flipped = case.flipped }, .key = "any", .label = "" }, false, x);
+        try lead(&aw.writer, .{ .v = .{ .curve = &cv, .flipped = case.flipped }, .key = "any", .label = "" }, false, x);
         try std.testing.expectEqualStrings(case.want, aw.written());
     }
 
@@ -1202,8 +1226,8 @@ test verdict {
     for (minutes[0..8]) |*m| m.est[0].se = 1000;
     var aw: Writer.Allocating = .init(gpa);
     defer aw.deinit();
-    try verdict(&aw.writer, .{ .v = .{ .curve = &cv, .flipped = false }, .key = "x", .label = "" }, true, x);
-    try std.testing.expectEqualStrings("<p class=\"verdict exp exp-x\">Ahri is ahead from minute 9, about 800 gold by 14 minutes, then whoever is ahead wins 64% of games.</p>\n", aw.written());
+    try lead(&aw.writer, .{ .v = .{ .curve = &cv, .flipped = false }, .key = "x", .label = "" }, true, x);
+    try std.testing.expectEqualStrings("<span class=\"exp exp-x\"> Ahri is ahead from minute 9, about 800 gold by 14 minutes, then whoever is ahead wins 64% of games.</span>", aw.written());
 
     // Within 2 SE at 14, or clear but about 100 gold: the number, no "since when"
     const small = [_]struct { e: curvesfile.Estimate, want: []const u8 }{
@@ -1214,8 +1238,8 @@ test verdict {
     for (small) |case| {
         minutes[curvesfile.lane_minute - 1].est[0] = case.e;
         aw.clearRetainingCapacity();
-        try verdict(&aw.writer, .{ .v = .{ .curve = &cv, .flipped = false }, .key = "any", .label = "" }, false, x);
-        const want = try std.fmt.allocPrint(gpa, "<p class=\"verdict\">{s} at 14 minutes, then whoever is ahead wins 64% of games.</p>\n", .{case.want});
+        try lead(&aw.writer, .{ .v = .{ .curve = &cv, .flipped = false }, .key = "any", .label = "" }, false, x);
+        const want = try std.fmt.allocPrint(gpa, " {s} at 14 minutes, then whoever is ahead wins 64% of games.", .{case.want});
         defer gpa.free(want);
         try std.testing.expectEqualStrings(want, aw.written());
     }
@@ -1225,7 +1249,7 @@ test verdict {
     thin_header.own = 300;
     const thin_cv: curvesfile.Curve = .{ .header = &thin_header, .minutes = &minutes };
     aw.clearRetainingCapacity();
-    try verdict(&aw.writer, .{ .v = .{ .curve = &thin_cv, .flipped = false }, .key = "any", .label = "" }, false, x);
+    try lead(&aw.writer, .{ .v = .{ .curve = &thin_cv, .flipped = false }, .key = "any", .label = "" }, false, x);
     try std.testing.expectEqualStrings("", aw.written());
 }
 
@@ -1258,7 +1282,7 @@ test why {
     try why(&aw.writer, .{ .curve = &cv, .flipped = false }, .middle, x, y);
     // 780 gold and 13 CS at 14: 260 of it from CS; half (390) first reached at minute 8
     try std.testing.expectEqualStrings(
-        \\<h3 class="mu-h">Where the lead comes from</h3><ul class="mu-why">
+        \\<h3 class="mu-h">How the lane goes</h3><ul class="mu-why">
         \\<li><b>+780 gold</b> at 14 min: about +260 from CS (+13 CS at about 20 gold), +520 from kills, assists, plates and the rest; half of it is there by 8 min</li>
         \\<li>Kills or assists on the lane opponent before 6 min: Ahri in 30% of games, Zed in 20%; 6 to 14 min: 50% against 55%</li>
         \\<li>Level 6 at 5:30 against 5:42 (medians), 12 s earlier</li>
@@ -1272,7 +1296,7 @@ test why {
     aw.clearRetainingCapacity();
     try why(&aw.writer, .{ .curve = &cv, .flipped = true }, .jungle, y, x);
     try std.testing.expect(std.mem.startsWith(u8, aw.written(),
-        \\<h3 class="mu-h">Where the lead comes from</h3><ul class="mu-why">
+        \\<h3 class="mu-h">How the lane goes</h3><ul class="mu-why">
         \\<li><b>-780 gold</b> at 14 min with -13 CS; half of it is there by 8 min</li>
         \\<li>Kills or assists on the lane opponent before 6 min: Zed in 20% of games, Ahri in 30%
     ));

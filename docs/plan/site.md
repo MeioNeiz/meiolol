@@ -260,6 +260,20 @@ chart with Gold/Experience/CS tabs. Next: level 2 timing (curves format: a heade
 and a box rebuild of the curves), builds and runes that do well here (the patch view's
 builds file), the leans and kit kinds that apply, the champion pool block, then maybe
 fold the Lane and game table, which now repeats the facts.
+Jacob 20 Oct: still "ridiculously long and unwieldy" (2,570 px desktop, 4,490 phone on
+Kai'Sa vs Jinx; gold at 14 shown five times). Reshaped 20 Oct for champ select's last 30
+seconds first (ugg-faq ^f8), the look back after a game folded: a headline (win rate
+here against x's usual, "about" within 1 point of the shrunk vs usual, then the lane
+line that sat above the chart; descriptive, production-key.md product rules), three
+tiles (win rate with vs usual, lane at 14, games), build and runes, then "How the lane
+goes" beside the chart; "More detail" folds the minute table, both sides, comeback odds,
+by rank and the mastery toggle (no longer kept between visits: folded, a kept choice
+would change the page unseen). Runes: only those whose pick share is 10+ points from
+x's usual in the role (builds.runeShifts), as "Taken more / Taken less" chips, the grid
+folded; when the build and runes are all usual, one folded line. Win rate does not
+enter: shrunk by k ~6,245, no rune in any of 2,002 EUW 16.20 matchups moves 2 points;
+193 matchups get a list. Kai'Sa vs Jinx now ~880 px desktop, 1,700 phone. Next: Jacob's
+look; by rank as one line unless a rank differs.
 Per-matchup builds (Jacob 20 Oct: "Kaisa Jinx, I still can't see runes and items of the
 specific matchup"). Done 20 Oct (night run, vsbuilds, dd987a7, 1ea4ce3): builds counted
 per lane opponent (Builder.vs: own key budget and pruning floor; runes, shards, start,
