@@ -120,7 +120,10 @@ nginx caches each encoding apart, and answers a directory URL without its slash 
   research/questions/fast-deploy-data-servers.md. A deploy runs
   deploy/render-swap.sh: it starts the idle
   instance beside the running one (both listen, SO_REUSEPORT), and stops the old once the
-  new one writes data/render-<a|b>.ready, so there is no gap. Connections queued on the
+  new one writes data/render-<a|b>.ready, so there is no gap. It first waits (up to
+  30 min) for the deploy's round to upload: the new pages link the front-end files that
+  upload ships (20 Oct: swapping first showed new pages unstyled for the core build's
+  25-110 s). Connections queued on the
   stopping one move to the new one (sysctl net.ipv4.tcp_migrate_req=1,
   /etc/sysctl.d/60-meiolol-render.conf) and nginx retries a dropped one once. Alone (a
   boot) it listens at once and serves each view as it loads (the root view after ~40 s,

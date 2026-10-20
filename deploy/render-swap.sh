@@ -6,7 +6,10 @@
 # differs from the file's: a part's types or sources), it first waits up to 3 h for the
 # web loop's round to write one in the new format, the old renderer serving meanwhile,
 # rather than load from the database beside it (4 min on a quiet box, over an hour on a
-# busy one, 14 Oct); that round loads only the parts the deploy changed. If the new one
+# busy one, 14 Oct); that round loads only the parts the deploy changed. Either way it
+# then waits up to 30 min for that round's upload: the new binary's pages link the
+# front-end files (style.css, *.js) the upload ships, and swapping first served new
+# pages with the old files for the core build's 25-110 s (20 Oct). If the new one
 # dies, or isn't ready within 60 minutes, the old one stays. Then its data's version goes
 # into jomify's nginx cache key (cache-version.sh). Run detached on the box by
 # deploy/box.sh web start; again if the binary changed meanwhile. Log in data/render.log
@@ -21,6 +24,12 @@ views_fits() {
         && [[ $(od -An -t u8 -j 8 -N 8 data/views.bin | tr -d ' ') == "$(bin/meiolol site --views-format)" ]]
 }
 
+# The web loop's round for `sha` uploaded the site, or its build or upload failed
+uploaded() {
+    awk -F'\t' -v s="$1" '$2 == s && ($3 == "upload" || ($3 == "site" && $4 == "failed")) {
+        f = 1 } END { exit !f }' data/deploys.tsv 2> /dev/null
+}
+
 while true; do
     binary=$(stat -c %Y bin/meiolol)
     sha=$(deployed_sha)
@@ -33,6 +42,18 @@ while true; do
             log "no views file in this format after 3 h: loading from the database"
             deploy_event "$sha" swap info "no views file in this format after 3 h: loading from the database"
         fi
+    fi
+    # Off, the web loop runs no round to wait for. 30 min: a curves pass running at the
+    # deploy holds its round back. A deploy close behind gets the round instead (183
+    # deploys to 20 Oct: each of the 10 with no upload had another within 8 min), so its
+    # sha starts the wait again
+    if systemctl --user -q is-active meiolol-web && ! uploaded "$sha"; then
+        deploy_event "$sha" swap waiting "for the web loop's upload of the front-end files"
+        start=$SECONDS
+        until uploaded "$sha" || [[ $(deployed_sha) != "$sha" ]] \
+            || (( SECONDS - start >= 1800 )); do sleep 5; done
+        [[ $(deployed_sha) != "$sha" ]] && continue
+        uploaded "$sha" || deploy_event "$sha" swap info "no upload after 30 min: swapping anyway"
     fi
     new=a
     systemctl --user -q is-active meiolol-render@a && new=b

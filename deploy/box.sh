@@ -168,9 +168,11 @@ case "${1:-}" in
     wait-deployed)
         # deploy/box.sh wait-deployed [REV] [--live] [--timeout S]: until REV (default
         # origin/main) is on the box (DEPLOYED), or with --live until a site round that
-        # includes it has told the renderer to reload. A push the deploy skipped (no
-        # change in src, deploy or build files) counts as there. Exit 0 there, 1 the
-        # round's views write failed, 3 timeout (default 900 s; --live 5400 s)
+        # includes it has told the renderer to reload and a renderer that includes it is
+        # serving (render-swap.sh swaps after the round's upload). A push the deploy
+        # skipped (no change in src, deploy or build files) counts as there. Exit 0 there,
+        # 1 the round's views write or the swap failed, 3 timeout (default 900 s; --live
+        # 5400 s)
         rev=origin/main live=0 timeout=''
         for a in "${@:2}"; do
             case $a in
@@ -185,7 +187,7 @@ case "${1:-}" in
         end=$(( SECONDS + timeout ))
         while (( SECONDS < end )); do
             got=$(ssh "$HOST" "cd $DIR && tail -n 20 DEPLOYED; echo ---; \
-                grep -P '\t(deploy\tskipped|reload\t)' data/deploys.tsv | tail -n 50" 2> /dev/null) \
+                grep -P '\t(deploy\tskipped|reload\t|swap\t(ok|failed))' data/deploys.tsv | tail -n 50" 2> /dev/null) \
                 || { sleep 10; continue; }
             if grep -q "^$sha.*deploy.skipped" <<< "$(cut -f2- <<< "${got#*---}")"; then
                 echo "${sha:0:7}: nothing to deploy (no change in src, deploy or build files)"
@@ -194,13 +196,21 @@ case "${1:-}" in
             if (( ! live )); then
                 if grep -q "^$sha " <<< "${got%%---*}"; then echo "${sha:0:7} on $HOST"; exit 0; fi
             else
-                while IFS=$'\t' read -r _ round step _ detail; do
-                    [[ $step == reload ]] || continue
+                swapped='' live_line=''
+                while IFS=$'\t' read -r _ round step status detail; do
                     git -C "$ROOT" merge-base --is-ancestor "$sha" "$round" 2> /dev/null || continue
-                    echo "${sha:0:7} live in round ${round:0:7}: $detail"
-                    grep -q 'database' <<< "$detail" && exit 1
-                    exit 0
+                    if [[ $step == swap ]]; then
+                        swapped=$status
+                    elif [[ $step == reload && -z $live_line ]]; then
+                        live_line="${sha:0:7} live in round ${round:0:7}: $detail"
+                    fi
                 done <<< "${got#*---}"
+                if [[ -n $live_line && -n $swapped ]]; then
+                    echo "$live_line"
+                    [[ $swapped == failed ]] && { echo "renderer swap failed: data/render.log"; exit 1; }
+                    grep -q 'database' <<< "$live_line" && exit 1
+                    exit 0
+                fi
             fi
             sleep 10
         done
