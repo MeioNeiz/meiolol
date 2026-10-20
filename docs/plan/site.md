@@ -6,7 +6,15 @@ was already planned. Policy limits on what pages may show: docs/production-key.m
 with reasons). Running theme across the list: fewer words, clearer facts, denser
 layouts, more engaging.
 Site-wide colour and density (Jacob 20 Oct: "more colour", "space inefficient"):
-docs/design-ideas.md, measured layout, colour by impact, build order.
+docs/design-ideas.md, measured layout, colour by impact, build order. Done: build
+order 1-3 (9ed5c1f, d0026ff): scale tokens in style.css, tierlist.wrColour steps with
+the thin-data cut and step-4 chip (champions index, matchups index, vs usual, champion
+win rate tile), matchup win rate, gold and lead table in ink; wrap 1,560, header 48,
+29 px table rows (1080p champions table 17 to 26 rows). Next: build order 4 (opponent
+tiles 76 px, 0 of 41 on a 1080p screen still), 5 (heat cells, pick/ban bars), 6
+(header row, phone filters button); prose that still says "green ahead, red behind"
+or "orange through grey to blue" (champion.zig methods line, root.zig early note,
+prose.zig); Your games game scale (2.5, 5, 10, 15 points) not wired yet.
 
 ## Your games (home)
 
