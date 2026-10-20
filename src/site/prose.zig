@@ -279,7 +279,7 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\as filters, sort orders and tabs.</p>
         \\<p>Daily Draft puzzles are real ranked games shown without names, Riot IDs, player
         \\identifiers, match ids or game dates: at most champions, bans, patch, game length,
-        \\and each player's rank and game statistics (kills, gold and the like). The date
+        \\and each player's rank and game statistics (kills, gold and the like); the date
         \\shown is the puzzle's, not the game's.</p>
         \\<h2>Your games</h2>
         \\<p>When you enter a Riot ID on <a href="your.html">Your games</a>, we ask the Riot
