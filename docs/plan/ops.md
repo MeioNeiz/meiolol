@@ -16,7 +16,10 @@ active pages 4.5 -> 1.4 GB, commits stall, and every thread waits for its commit
   95, 213), regions ~120-147 in 3 min (full pace 150), no 429s
 - After, 20 Oct (americas/asia/europe/sea, mean): 09h 99.3/99.8/98.3/98.6, 99.0; 10h
   98.1/98.6/97.6/98.5, 98.2 (deploys and web rounds 10:07, 10:33, no crawler restart);
-  no 429s 08-11h. Sea up from ~97 to ~98.5; others no better than before (~99)
+  no 429s 08-11h; 11h 98.9/99.9/100.8/98.6, 99.6. Europe's 10h dip: the deploys' web
+  rounds; 11:50-12:30 its 120 s window held 100 of 100 every minute. Sea up from ~97 to
+  ~98.6, the one region short (96-99 of 100 in its window: long round trips, one
+  request at a time)
 - Next: tonight's draft-model and builds rounds. If job dips stay:
   pipelined steps instead of Bucket.flush after each, or BFQ (mq-deadline honours
   ionice -c 3 only partly)
