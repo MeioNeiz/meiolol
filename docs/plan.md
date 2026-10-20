@@ -1,6 +1,6 @@
 # Plan
 
-Updated 2026-10-19. This file is the index: the goal, what to do now, and one file per
+Updated 2026-10-20. This file is the index: the goal, what to do now, and one file per
 area under docs/plan/. Read Now, then only the area you work on. Close or add items in
 the area file; keep Now short (pointers, not detail).
 
@@ -22,21 +22,26 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
 
 1. Storage: Hetzner BX11 and the rolling window (Jacob orders, needed within ~a week
    of 18 Oct), raw.db VACUUM, gpu-box WSL compaction: ops.md "Storage and hosts"
-2. Crawler slower (Jacob 19 Oct): recovered after 1037318 (checked 19 Oct), ops.md
-3. Traffic looks inflated by bots (Jacob 19 Oct): ops.md "Traffic"
+2. Night run 19-20 Oct (data/team/2026-10-19-night/, questions in decisions.md "Open
+   decisions"): crawler recovered; traffic counts people by stylesheet fetch (97% of
+   old "people" were bots) and our own visits as bots; jomify logrotate; header search;
+   Your games moments, firsts, best minute, filled chart, remembered player and views;
+   champion opponents grid, vs usual, builds strip, rune tree; matchup first screen;
+   matchups index table; Daily Draft facts, reveal, last pick, J10 recent games; Learn
+   one per screen; site-wide colour scale and denser frame; mock champ select on the
+   Mac (deploy/mock-cs.sh); privacy rules audit (docs/privacy-rules.md)
+3. Next on the site, by size of win: Learn redesign (docs/learn-proposal.md), design
+   build order 4-6 (docs/design-ideas.md), per-matchup builds (vsbuilds notes), Daily
+   Draft pick verdicts (daily notes); Jacob's answers to the night's questions first
 4. Application: Jacob checks the 18 Oct draft text and pastes (production-key.md);
-   screenshots, video and LCU list need his real champ select run (app.md "Next").
-   Before going live, so the text is true: the 24-month sweep over backup segments and
-   deleting archive files (privacy.md notes; `archive-age` only blanks hashed PUUIDs)
-5. Jacob's 19 Oct product list, by page in site.md and app.md. Suggested order:
-   quick fixes (gold chart's "14 min" label), Your games review (the application's
-   core), champion and matchup pages (lolalytics-dense), Daily Draft and Learn (fewer
-   words), search across the site, draft tester; desktop items after the real champ
-   select run, with the policy check in app.md
+   screenshots, video and LCU list need his real champ select run (app.md "Next");
+   docs/privacy-rules.md lists what the text and privacy page must still match (J10)
+5. Draft tester and desktop items from Jacob's 19 Oct list (site.md, app.md), desktop
+   after the real champ select run, with the policy check in app.md
 6. Comp leans: held-out look ~24 Oct, then champion pages and reasons:
    data-and-model.md
 
-Others own: traffic.sh install and the TW2 mastery retry (meiolol-8f); neural nets vs
+Others own: the TW2 mastery retry (meiolol-8f); neural nets vs
 today's model; the draft's "Rammus into high AD/AP" check.
 
 ## Areas
