@@ -110,9 +110,12 @@ pub fn build(b: *std.Build) void {
     // One target each: deploy/lab-run.sh builds only the host a run goes to
     b.step("lab-native", "Build meiolol-lab for this machine only").dependOn(lab_native);
     b.step("lab-gpu-box", "Build meiolol-lab for the gpu-box only").dependOn(lab_gpu_box);
-    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = lab_mod, .filters = test_filters })).step);
+    // Lab code never ships: its tests stay out of ci (deploy/lab-run.sh runs them before a
+    // build). ci still compiles meiolol-lab, so a core change can't break it unseen
+    const test_lab_step = b.step("test-lab", "Run the lab's and nn's unit tests (-Dtest-filter=NAME)");
+    test_lab_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = lab_mod, .filters = test_filters })).step);
     const nn_test = b.addTest(.{ .root_module = nnModule(b, target, optimize), .filters = test_filters });
-    test_step.dependOn(&b.addRunArtifact(nn_test).step);
+    test_lab_step.dependOn(&b.addRunArtifact(nn_test).step);
     // win-draft copies the shipped draft model, as a candidate sees only std and api
     const lab_api = b.createModule(.{ .root_source_file = b.path("src/lab/api.zig"), .target = target, .optimize = optimize });
     const win_draft = b.createModule(.{

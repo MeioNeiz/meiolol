@@ -186,10 +186,26 @@ zig_args() {
     fi
 }
 
+# Lab tests (zig build test-lab, out of the pre-push ci) once per HARNESS, in mirror
+# tree TREE on HOST, before its first meiolol-lab build; a pass leaves a marker in
+# TESTED. Default candidate: HARNESS leaves out src/lab/cand
+labtests() {
+    local host=$1 harness=$2 tree=$3 tested=$4 cache=$5 zig=$6
+    on "$host" "[[ -f $tested/$harness ]]" && return
+    echo "lab tests (zig build test-lab) for harness $harness" >&2
+    if ! on "$host" "cd $tree && nice -n 0 $zig build test-lab --cache-dir $cache" >&2; then
+        echo "lab tests failed: zig build test-lab in $host:$tree" >&2
+        return 1
+    fi
+    on "$host" "mkdir -p $tested && touch $tested/$harness \
+        && find $tested -type f -mtime +14 -delete"
+}
+
 # Builds BIN for HOST into store dir PREFIX from the inputs in STAGE, through the host's
-# mirror tree (gpu-box: tree.SLOT): a fixed path keeps zig's cache warm
+# mirror tree (gpu-box: tree.SLOT): a fixed path keeps zig's cache warm. meiolol-lab
+# passes labtests for HARNESS first
 build() {
-    local host=$1 bin=$2 prefix=$3 stage=$4 slot=$5 a q=""
+    local host=$1 bin=$2 prefix=$3 stage=$4 slot=$5 harness=$6 a q=""
     if [[ "$host" == gpu-box ]]; then
         for a in ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}; do
             [[ "$a" != -D*=/* ]] && continue
@@ -203,6 +219,10 @@ build() {
         # zig-pkg: zig 0.17 keeps fetched packages (sqlite, translate-c) in the build
         # root; the mirror's stays, so they are fetched once
         rsync -a --delete --checksum --exclude /zig-pkg "$stage/" "gpu-box:$tree/" || return 1
+        if [[ "$bin" == meiolol-lab ]]; then
+            labtests gpu-box "$harness" "$tree" "$RSTORE/tested" "\$HOME/$RCACHE" \
+                "\$HOME/.local/bin/zig" || return 1
+        fi
         # Ahead of runs (nice 10): a start waits on its build, and at 19 a build starved
         # behind 8 runs
         on gpu-box "cd $tree && nice -n 0 ~/.local/bin/zig build --prefix ~/$prefix$q" \
@@ -218,6 +238,10 @@ build() {
     [[ -L "$STORE/tree/zig-pkg" ]] || rm -rf "$STORE/tree/zig-pkg"
     ln -sfn "$pkg" "$STORE/tree/zig-pkg"
     rsync -a --delete --checksum --exclude /zig-pkg "$stage/" "$STORE/tree/"
+    if [[ "$bin" == meiolol-lab ]]; then
+        labtests mac "$harness" "$(printf '%q' "$STORE/tree")" "$(printf '%q' "$STORE/tested")" \
+            "$(printf '%q' "$CACHE")" "$(printf '%q' "$ZIG")" || return 1
+    fi
     zig_args "$host" "$bin"
     (cd "$STORE/tree" && "$ZIG" build --prefix "$prefix" "${ZARGS[@]}" --cache-dir "$CACHE" >&2)
 }
@@ -331,7 +355,7 @@ ensure() {
                 echo "building $key for $host $bin" >&2
                 harness=$(inputs "" "$stage" | grep -v ' src/lab/cand/' | shasum | cut -c1-16)
                 on "$host" "rm -rf $dir"
-                if ! build "$host" "$bin" "$dir" "$stage" "$slot"; then
+                if ! build "$host" "$bin" "$dir" "$stage" "$slot" "$harness"; then
                     on "$host" "rm -rf $dir"
                     rm -rf "$stage"
                     exec 7>&- 8>&-

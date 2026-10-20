@@ -403,6 +403,13 @@ pub fn load(
     match_id: []const u8,
     rand: std.Random,
 ) !?Puzzle {
+    const p = try readGame(arena, db, st, match_id) orelse return null;
+    return finishGame(arena, st, curves, p, rand);
+}
+
+/// `load` up to the options: the game and its hidden slot, no randomness, so a caller
+/// trying the same game many times (learn.practice) reads it once
+pub fn readGame(arena: std.mem.Allocator, db: store.Db, st: *const Stats, match_id: []const u8) !?Puzzle {
     var p: Puzzle = undefined;
     {
         var q = try db.prepare(
@@ -459,6 +466,18 @@ pub fn load(
 
     if (!try hideBestFit(arena, st, &p)) return null;
     p.played = p.teams[p.hidden_team][@backingInt(p.hidden_role)];
+    return p;
+}
+
+/// `load` after `readGame`: the options and the numbers
+pub fn finishGame(
+    arena: std.mem.Allocator,
+    st: *const Stats,
+    curves: ?*const curvesfile.Curves,
+    game: Puzzle,
+    rand: std.Random,
+) !?Puzzle {
+    var p = game;
     const ids = (try options(arena, st, p, rand)) orelse return null;
     if (!try numbers(arena, st, curves, &p, ids)) return null;
     return p;

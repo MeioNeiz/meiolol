@@ -32,7 +32,9 @@ docs/plan.md "Now". Read it first.
 - `zig build`; `zig build test` (`-Dtest-filter=NAME`; a test that logs a warning
   fails); format only your own files, `zig fmt <paths>` (`zig build fmt` rewrites the
   whole tree, other sessions' dirty files too); `zig build ci` = fmt check, tests,
-  Windows and Linux builds, shellcheck, JS syntax
+  Windows and Linux builds, shellcheck, JS syntax. Lab and nn tests: `zig build test-lab`
+  (not in ci; deploy/lab-run.sh runs them before a new lab build), run it after a lab
+  change
 - src/pipeline_test.zig: fixture games through stats, curves and the whole site; extend
   it when adding a pipeline step or page. A page change moves src/testdata/site-files.txt:
   `deploy/site-hashes.sh <your changed paths>` (HEAD plus those files, never others'

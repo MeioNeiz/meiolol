@@ -452,6 +452,8 @@ fn practice(
     var prng: std.Random.DefaultPrng = .init(std.hash.Wyhash.hash(opts.today, "learn"));
     const rand = prng.random();
     var pack: std.ArrayList(Practice) = .empty;
+    // A cell's tries draw the same game again and again on a small store
+    var games: std.StringHashMapUnmanaged(?daily.Puzzle) = .empty;
     for (Role.all) |role| {
         for (std.enums.values(Difficulty)) |want| {
             var made: usize = 0;
@@ -459,7 +461,9 @@ fn practice(
             while (made < per_cell and tries < tries_per_cell) : (tries += 1) {
                 const match_id = ids.items[@intCast(rand.uintLessThan(u64, ids.items.len))];
                 if (daily.isUsed(used.items, match_id)) continue;
-                const p = try daily.load(arena, db, st, null, match_id, rand) orelse continue;
+                const game = try games.getOrPut(arena, match_id);
+                if (!game.found_existing) game.value_ptr.* = try daily.readGame(arena, db, st, match_id);
+                const p = try daily.finishGame(arena, st, null, game.value_ptr.* orelse continue, rand) orelse continue;
                 if (!daily.usualPicks(st, p.teams)) continue;
                 const drill = try draftFor(arena, st, facts, curves, p, role, want, rand) orelse continue;
                 try pack.append(arena, drill);

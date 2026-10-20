@@ -6,7 +6,7 @@
 //! parameters, another seed others, no NaN. A table of checks; exit 1 when one fails.
 //! Families: the big net (draftnet), small and resid (winnet.healthFit), set
 //! (setnet.healthFit), player history (playernet.healthFit)
-//! `zig build test` runs the quick subset
+//! `zig build test-lab` runs the quick subset
 
 const std = @import("std");
 const draftnet = @import("draftnet.zig");
