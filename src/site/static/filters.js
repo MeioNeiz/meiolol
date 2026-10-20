@@ -255,6 +255,9 @@ const HARDEST = "hardest first";
       b.style.cssText = `--c:${wrColour(p, TABLE_SPAN)}`;
       b.style.opacity = fade(r.games);
       b.textContent = pct(r.wins, r.games);
+      // The rank is the champions table's, unfiltered
+      const rank = tiles.querySelector("[data-rank]");
+      if (rank) rank.textContent = "of games won";
       // Two players per role and game
       tiles.querySelector('[data-tile="pick"] b').textContent = pct(2 * r.games, r.slots);
       const ban = tiles.querySelector('[data-tile="ban"]');
@@ -289,7 +292,7 @@ const HARDEST = "hardest first";
           : pages.has(k)
             ? matchupHref(view.dir, meta.roles[s.role], o.id)
             : null;
-        const vs = { base, strength: s.strength.get(o.id) ?? 0.5, k: ka, role: s.el.querySelector("h2")?.textContent };
+        const vs = { base, strength: s.strength.get(o.id) ?? 0.5, k: ka, role: s.el.querySelector("h2")?.textContent, shrunk };
         return row(o, o.games < thin, curve?.get(k), href, q, vs);
       }),
     );
@@ -326,7 +329,7 @@ const HARDEST = "hardest first";
     tr.dataset.name = ch?.name ?? String(o.id);
     tr.className = thin ? "bx thin" : "bx";
     tr.dataset.q = vs.strength;
-    tr.append(nameCell(ch, q, href), trackCell(o.wins, o.games), usualCell(o, ch, vs), goldCell(o, curve, href), gamesCell(o.games));
+    tr.append(nameCell(ch, q, href), trackCell(o.wins, o.games, vs.shrunk(o)), usualCell(o, ch, vs), goldCell(o, curve, href), gamesCell(o.games));
     return tr;
   }
 
@@ -351,12 +354,12 @@ const HARDEST = "hardest first";
   }
 
   // As tierlist.zig trackCell on matchup_span: a dot on 25% to 75%, the rate fainter
-  // with fewer games
-  function trackCell(wins, games) {
+  // with fewer games, sorting by `sort`
+  function trackCell(wins, games, sort) {
     const p = games ? wins / games : 0;
     const dot = (100 * (Math.min(Math.max(p, 0.25), 0.75) - 0.25)) / 0.5;
     const td = document.createElement("td");
-    td.dataset.v = p.toFixed(4);
+    td.dataset.v = sort.toFixed(4);
     td.innerHTML =
       `<span class="wr" style="--c:${wrColour(p, MATCHUP_SPAN)}" title="${games} games">` +
       `<span class="ci"><i class="d" style="left:${dot.toFixed(1)}%"></i></span>` +
@@ -461,7 +464,7 @@ const HARDEST = "hardest first";
 
 // As curvesfile.fade: opacity from games, full from 200
 function fade(games) {
-  return (0.35 + 0.65 * Math.min(1, Math.sqrt(games / 200))).toFixed(2);
+  return (0.6 + 0.4 * Math.min(1, Math.sqrt(games / 200))).toFixed(2);
 }
 
 // As tierlist.zig table_span and matchup_span: the colour scales

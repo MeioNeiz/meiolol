@@ -470,7 +470,7 @@ test "guessed opponent, thin curve, options with reasons" {
     } else unreachable;
     // 20 games: a lean, shown faint
     try testing.expect(sett_vs.lean != .unclear);
-    try testing.expect(sett_vs.strength < 0.7);
+    try testing.expect(sett_vs.strength < 0.8);
     try testing.expectEqual(1, d.lane.?.strength);
 }
 

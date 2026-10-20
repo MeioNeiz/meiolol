@@ -85,9 +85,10 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
     for (roles[0..n_roles]) |r| {
         const cr = st.champRole(r, ch.c);
         const rate = ratio(cr.wins, cr.games);
+        const rank = try tierlist.roleRank(site, r, ch.id);
         try tpl.renderPart(w,
             \\<section id="{slug}"><h2>{role}</h2>
-            \\<div class="tiles"><div data-tile="wr"><span>Win rate</span><b class="wrc" style="--c:{colour};opacity:{fade:.2}">{wr}</b><small>of games won</small></div><div data-tile="pick"><span>Pick rate</span><b>{pick}</b><small>of games</small></div><div data-tile="ban"><span>Ban rate</span><b>{ban}</b><small>of games</small></div><div data-tile="games"><span>Games</span><b>{games}</b><small>{role} lane</small></div></div>
+            \\<div class="tiles"><div data-tile="wr"><span>Win rate</span><b class="wrc" style="--c:{colour};opacity:{fade:.2}">{wr}</b><small data-rank>{rank}{won}</small></div><div data-tile="pick"><span>Pick rate</span><b>{pick}</b><small>of games</small></div><div data-tile="ban"><span>Ban rate</span><b>{ban}</b><small>of games</small></div><div data-tile="games"><span>Games</span><b>{games}</b><small>{role} lane</small></div></div>
             \\
         , .{
             .slug = roleSlug(r),
@@ -95,6 +96,14 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
             .colour = tierlist.wrColour(rate, tierlist.table_span),
             .fade = core.curvesfile.fade(cr.games),
             .wr = tpl.call(pct, .{ cr.wins, cr.games }),
+            .rank = if (rank) |k| tpl.t("<a href=\"../role/{slug}.html\">{n}{th} of {of} in {role}</a>", .{
+                .slug = roleSlug(r),
+                .n = k.rank,
+                .th = ordinal(k.rank),
+                .of = k.of,
+                .role = roleName(r),
+            }) else null,
+            .won = tpl.when(rank == null, "of games won"),
             .pick = tpl.call(pct, .{ cr.games, site.games }),
             .ban = tpl.call(pct, .{ ch.banned, site.games }),
             .games = cr.games,
@@ -117,12 +126,23 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
     try pool_page.section(site, w, &site.pool, ch);
     try learning_page.section(w, &site.learning, ch);
     try tpl.render(w,
-        \\<p class="muted small">Win rates are raw: no pulling toward 50%, fainter under {full} games; coloured on a scale twice as wide as the champions table's (a matchup's rate is mostly the opponent's strength), a dot on 25% to 75%. Vs usual: how much more or less often than usual the champion won in the matchup, in points, after allowing for the opponent's own win rate in the role (against a strong opponent it usually wins less), pulled toward 0 the fewer the games so a thin matchup stays quiet; the matchup page has the numbers behind it. Hardest first sorts by the win rate pulled toward the champion's own in the role, the more so the fewer the games, so a few lucky games can't top the list. Gold at {minute} min is the lane curve's estimate, then where 8 games in 10 end (10th to 90th percentile); green ahead, red behind, fainter under {full} games; for filters other than a region and period above, the plain average of the games picked. <a href="../method.html">Method</a>.</p>
+        \\<p class="muted small">Win rates are raw: no pulling toward 50%, fainter under {full} games; coloured on a scale twice as wide as the champions table's (a matchup's rate is mostly the opponent's strength), a dot on 25% to 75%. Vs usual: how much more or less often than usual the champion won in the matchup, in points, after allowing for the opponent's own win rate in the role (against a strong opponent it usually wins less), pulled toward 0 the fewer the games so a thin matchup stays quiet; the matchup page has the numbers behind it. Hardest first, and sorting by win rate, use the win rate pulled toward the champion's own in the role, the more so the fewer the games, so a few lucky games can't top the list. Gold at {minute} min is the lane curve's estimate, then where 8 games in 10 end (10th to 90th percentile); + when the champion is ahead, in plain ink (gold is not a win rate), fainter under {full} games; for filters other than a region and period above, the plain average of the games picked. <a href="../method.html">Method</a>.</p>
         \\<script src="../table.js" defer></script>
         \\<script src="../filters.js" defer></script>
         \\
     , .{ .minute = core.curvesfile.lane_minute, .full = core.curvesfile.full_games });
     try html.foot(w, p);
+}
+
+/// 1 -> "st", 12 -> "th", 22 -> "nd"
+fn ordinal(n: usize) []const u8 {
+    if (n % 100 >= 11 and n % 100 <= 13) return "th";
+    return switch (n % 10) {
+        1 => "st",
+        2 => "nd",
+        3 => "rd",
+        else => "th",
+    };
 }
 
 /// "<a>Top</a>, <a>Jungle</a> and <a>Mid</a>"
@@ -341,7 +361,7 @@ fn opponentTable(site: *const Site, w: *Writer, ch: Champ, r: Role, cr: core.sta
         \\<div class="tl-bar"><h3 class="opp-h">Lane opponents <span class="muted">{n}, hardest first</span></h3>
         \\<input type="search" placeholder="Search opponent" data-filter="opp-{slug}" aria-label="Search opponent"></div>
         \\<div class="og-wrap"><table class="og" id="opp-{slug}" data-sortable data-k="{k:.0}" data-ka="{ka:.0}">
-        \\<thead><tr><th class="l" data-sort="text">Name</th><th data-sort="num" title="{name}'s win rate in the matchup">Win rate</th><th data-sort="num" title="Points more or less than {name} usually wins against an opponent this strong">Vs usual</th><th data-sort="num" title="Lane curve estimate: {name} minus the opponent; blue when {name} is ahead">Gold at {minute}</th><th data-sort="num">Games</th></tr></thead>
+        \\<thead><tr><th class="l" data-sort="text">Name</th><th data-sort="num" title="{name}'s win rate in the matchup; sorts with few games pulled toward {name}'s own">Win rate</th><th data-sort="num" title="Points more or less than {name} usually wins against an opponent this strong">Vs usual</th><th data-sort="num" title="Lane curve estimate: {name} minus the opponent">Gold at {minute}</th><th data-sort="num">Games</th></tr></thead>
         \\<tbody>
         \\
     , .{ .n = shown, .name = ch.name, .minute = core.curvesfile.lane_minute, .slug = roleSlug(r), .k = k, .ka = ka });
@@ -360,14 +380,15 @@ fn opponentTable(site: *const Site, w: *Writer, ch: Champ, r: Role, cr: core.sta
             .thin = tpl.when(thin, " thin"),
             .rare = tpl.flag(rare, "data-rare hidden"),
             .link = tpl.call(opponentLink, .{ site, ch, o.other, r }),
-            .wr = tpl.call(tierlist.trackCell, .{ ratio(o.wins, o.games), o.games, tierlist.matchup_span, try site.arena.print("{d} games", .{o.games}), @as(?[]const u8, null) }),
+            .wr = tpl.call(tierlist.trackCell, .{ ratio(o.wins, o.games), shrunk(o, base, k), o.games, tierlist.matchup_span, try site.arena.print("{d} games", .{o.games}), @as(?[]const u8, null) }),
             .vs = tpl.call(usualCell, .{ site, ch, r, o, base, ka }),
             .gold = tpl.call(goldCell, .{ site, ch, o.other, r }),
             .games = o.games,
         });
     }
+    try tpl.renderPart(w, "</tbody></table></div>\n", .{});
+    try tierlist.legend(w, tierlist.matchup_span);
     try tpl.renderPart(w,
-        \\</tbody></table></div>
         \\<p class="tl-more"{none}>{faded}{rare}</p>
         \\
     , .{

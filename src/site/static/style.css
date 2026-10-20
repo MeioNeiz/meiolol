@@ -11,7 +11,8 @@
   --text: #f1f2f4;
   --t2: #b4b7bd;
   --muted: #8e939c;
-  --faint: #5d6169;
+  /* 4.6:1 on --panel: game counts and units must stay readable */
+  --faint: #7a7f88;
   --line: rgba(255, 255, 255, 0.075);
   --line-2: rgba(255, 255, 255, 0.13);
   --accent: #a99dff;
@@ -421,6 +422,9 @@ b.down, a.down, .down { color: var(--bad); }
 .wr b { color: var(--c); }
 .wr .ci i { background: var(--c); }
 .wrc { color: var(--c); }
+.wr-key { color: var(--faint); font-size: 12px; margin: 6px 2px 0; }
+.wr-key .wrc { margin-left: 6px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tiles small a { color: inherit; }
 /* Gold leads and ahead shares barely move a matchup: neutral */
 .mu-tiles b.up, .mu-tiles b.down { color: var(--text); }
 a.gold, a.gold.up, a.gold.down, .mu-leads td.up, .mu-leads td.down, table.mu-table .gold { color: var(--text); font-weight: 500; }
@@ -1093,3 +1097,10 @@ table.mu-table .vs b { color: var(--c); font-weight: 600; }
   table.mu-table .champ img { display: none; }
   .mu-roles a { padding: 5px 8px; }
 }
+/* Game review: each moment's size under its change, small ones folded; where the lane's
+   number sits among the matchup's games */
+.moments .d small { display: block; font-size: 11px; font-weight: 500; color: var(--faint); }
+.mo-fold { border-top: 1px solid var(--line); }
+.mo-fold > summary { cursor: pointer; padding: 9px 14px; color: var(--muted); font-size: 12.5px; }
+.mo-fold > summary:hover { color: var(--text); }
+small.among { display: block; margin-top: 2px; font-size: 11px; color: var(--faint); }

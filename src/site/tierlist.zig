@@ -35,6 +35,9 @@ const Row = struct {
     impact: f64,
     /// The pulled edge, as a share, for the impact cell's title
     edge: f64,
+    /// Win rate pulled toward the role's average (base + edge): the sort order, so a few
+    /// lucky games can't top the table
+    shrunk: f64,
 };
 
 /// Every champion's games in `role`, or in each role it plays when null. Most played
@@ -56,6 +59,7 @@ fn tierRows(site: *const Site, role: ?Role) ![]Row {
                 .rare = site.pickRate(cr.games) < min_pick_rate or share < min_role_share,
                 .impact = prior.score(cr.wins, cr.games, ch.banned, site.games),
                 .edge = prior.edge(cr.wins, cr.games),
+                .shrunk = prior.base + prior.edge(cr.wins, cr.games),
             });
         }
     }
@@ -67,11 +71,50 @@ fn tierRows(site: *const Site, role: ?Role) ![]Row {
     return rows.items;
 }
 
+fn sortShrunk(rows: []Row) void {
+    std.mem.sort(Row, rows, {}, struct {
+        fn f(_: void, a: Row, b: Row) bool {
+            return a.shrunk > b.shrunk;
+        }
+    }.f);
+}
+
+pub const Rank = struct { rank: usize, of: usize };
+
+/// The champion's place in its role's champions table (rare picks left out, as the table
+/// hides them); null when it is one
+pub fn roleRank(site: *const Site, r: Role, id: u32) !?Rank {
+    const rows = try tierRows(site, r);
+    sortShrunk(rows);
+    var n: usize = 0;
+    var rank: ?usize = null;
+    for (rows) |row| {
+        if (row.rare) continue;
+        n += 1;
+        if (row.ch.id == id) rank = n;
+    }
+    return if (rank) |k| .{ .rank = k, .of = n } else null;
+}
+
+/// The colour scale's key: rates at its stops (wrColour) on `span`, each in its colour
+pub fn legend(w: *Writer, span: f64) !void {
+    try w.writeAll("<p class=\"wr-key\">Win rate colour");
+    const pts = [_]f64{ -5.5, -3.5, -2, 0, 2, 3.5, 5.5 };
+    for (pts) |x| {
+        const p = 0.5 + x * span / table_span / 100;
+        try tpl.render(w, " <span class=\"wrc\" style=\"--c:{colour}\">{rate}%</span>", .{
+            .colour = wrColour(p, span),
+            .rate = @round(1000 * p) / 10,
+        });
+    }
+    try w.writeAll("</p>\n");
+}
+
 /// Champions table's win rate cell: trackCell with the shape of its players' own win
 /// rates around it (spread.zig), mirrored about the track and coloured by win rate
 /// along it (shapeGradient); none under min_players. The shape doesn't narrow as games
 /// come in; only the rate fades
-fn distCell(w: *Writer, site: *const Site, ch: Champ, wins: u32, games: u32) !void {
+fn distCell(w: *Writer, site: *const Site, ch: Champ, wins: u32, games: u32, sort: f64) !void {
     const p = ratio(wins, games);
     const s = &site.spread;
     const players = if (s.get(ch.id)) |c| (if (c.players >= s.min_players) c else null) else null;
@@ -80,18 +123,19 @@ fn distCell(w: *Writer, site: *const Site, ch: Champ, wins: u32, games: u32) !vo
     else
         try site.arena.print("{d} games", .{games});
     const shape = if (players) |c| try shapePath(site.arena, c.shape, 100 * p) else null;
-    try trackCell(w, p, games, table_span, title, shape);
+    try trackCell(w, p, sort, games, table_span, title, shape);
 }
 
 /// Win rate as the champions table shows it: a dot at the rate on a track from 25% to
 /// 75% (50% marked), an optional shape path behind it (shapePath), then the rate,
-/// coloured by wrColour on `span` and fainter with fewer games (curvesfile.fade). data-v
-/// for sorting. Matchup rates (matchup_span) use it bare
-pub fn trackCell(w: *Writer, p: f64, games: u32, span: f64, title: []const u8, shape: ?[]const u8) !void {
-    try tpl.render(w, "<td data-v=\"{p:.4}\"><span class=\"wr\" style=\"--c:{colour}\" title=\"{title}\"><span class=\"ci\">" ++
+/// coloured by wrColour on `span` and fainter with fewer games (curvesfile.fade). `sort`
+/// (data-v): the rate pulled toward an average by its games, so sorting by the column
+/// can't put a few lucky games on top. Matchup rates (matchup_span) use it bare
+pub fn trackCell(w: *Writer, p: f64, sort: f64, games: u32, span: f64, title: []const u8, shape: ?[]const u8) !void {
+    try tpl.render(w, "<td data-v=\"{sort:.4}\"><span class=\"wr\" style=\"--c:{colour}\" title=\"{title}\"><span class=\"ci\">" ++
         "{shape}<i class=\"d\" style=\"left:{dot:.1}%\"></i></span>" ++
         "<b style=\"opacity:{fade:.2}\">{rate:.1}%</b></span></td>", .{
-        .p = p,
+        .sort = sort,
         .colour = wrColour(p, span),
         .title = title,
         .shape = if (shape) |d| tpl.t("<svg class=\"shape\" viewBox=\"0 0 100 10\" preserveAspectRatio=\"none\" aria-hidden=\"true\"><path d=\"{d}\"></path></svg>", .{ .d = d }) else null,
@@ -233,14 +277,11 @@ fn roleTabs(w: *Writer, current: ?Role, root: []const u8) !void {
     try tpl.renderPart(w, "</nav>\n", .{});
 }
 
-/// Champions table: win rate, pick and ban rate, games. Rows sorted by win rate; rare picks hidden until asked for
+/// Champions table: win rate, pick and ban rate, games. Rows sorted by win rate pulled
+/// toward the role's average (Row.shrunk); rare picks hidden until asked for
 fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void {
     const rows = try tierRows(site, role);
-    std.mem.sort(Row, rows, {}, struct {
-        fn f(_: void, a: Row, b: Row) bool {
-            return ratio(a.wins, a.games) > ratio(b.wins, b.games);
-        }
-    }.f);
+    sortShrunk(rows);
     try tpl.renderPart(w, "<div class=\"tl-bar\">", .{});
     try roleTabs(w, role, root);
     try tpl.renderPart(w,
@@ -267,7 +308,7 @@ fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void
             .n = n,
             .link = tpl.call(champLinkTo, .{ site, row.ch, to_site }),
             .role = tpl.when(role == null, tpl.t("<td class=\"l role\" data-v=\"{role}\">{role}</td>", .{ .role = roleName(row.role) })),
-            .wr = tpl.call(distCell, .{ site, row.ch, row.wins, row.games }),
+            .wr = tpl.call(distCell, .{ site, row.ch, row.wins, row.games, row.shrunk }),
             .games = row.games,
             .pick = tpl.call(pct, .{ row.games, site.games }),
             .banned = row.ch.banned,
@@ -275,8 +316,9 @@ fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void
             .impact = tpl.call(impactCell, .{ row, site.games }),
         });
     }
+    try tpl.renderPart(w, "</tbody></table></div>\n", .{});
+    try legend(w, table_span);
     try tpl.renderPart(w,
-        \\</tbody></table></div>
         \\{more}<script src="{table_js}" defer></script>
         \\
     , .{
@@ -340,7 +382,7 @@ pub fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {
     try earlyNote(site, w, false);
     try tierTable(site, w, role, root);
     try tpl.render(w,
-        \\<p class="muted small">Win rate: the champion's, the dot. Bar: how its players' own win rates spread around it, thicker where more players are, players with {min}+ games on it (every role and patch we have; none under {need} such players). On a scale from 25% to 75%, 50% marked. In 10 to 20 games luck alone moves a player's win rate by about 15 points, so much of the spread is luck. Influence: games won above the role's average, per 10,000 games the champion was not banned: its win rate over the role's average, pulled toward the average the fewer its games (so a few hundred lucky games can't make a big number), times how often it was picked in those games. 30: in every 10,000 such games, its team won about 30 more than the role's average win rate would give. High: often played and winning more than most, so a ban takes it away often. Below 0: winning less than most. Per 10,000 so the numbers are whole games (per 1,000 most would be under 1); the scale of lolalytics' PBI, which has no pull. A past-games measure, not a promise about your game.</p>
+        \\<p class="muted small">Win rate: the champion's, the dot. Sorted by it pulled toward the role's average, the more so the fewer its games, so a few hundred lucky games can't top the table; the rate shown is raw. Bar: how its players' own win rates spread around it, thicker where more players are, players with {min}+ games on it (every role and patch we have; none under {need} such players). On a scale from 25% to 75%, 50% marked. In 10 to 20 games luck alone moves a player's win rate by about 15 points, so much of the spread is luck. Influence: games won above the role's average, per 10,000 games the champion was not banned: its win rate over the role's average, pulled toward the average the fewer its games (so a few hundred lucky games can't make a big number), times how often it was picked in those games. 30: in every 10,000 such games, its team won about 30 more than the role's average win rate would give. High: often played and winning more than most, so a ban takes it away often. Below 0: winning less than most. Per 10,000 so the numbers are whole games (per 1,000 most would be under 1); the scale of lolalytics' PBI, which has no pull. A past-games measure, not a promise about your game.</p>
         \\
     , .{ .min = site.spread.min_games, .need = site.spread.min_players });
     try html.foot(w, p);

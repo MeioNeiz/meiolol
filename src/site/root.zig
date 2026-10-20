@@ -467,7 +467,7 @@ pub fn earlyNote(site: *const Site, w: *Writer, filtered: bool) !void {
     const early = site.games < early_games;
     if (!early and !filtered) return;
     try tpl.render(w,
-        \\<p class="note" data-early="{early}"{hidden}>Early data: <span data-early-games>{games} games so far ({when})</span>. Win rates fade the fewer games they have. Colour runs from orange (low) to blue (high), paler near 50%.</p>
+        \\<p class="note" data-early="{early}"{hidden}>Early data: <span data-early-games>{games} games so far ({when})</span>. Win rates fade the fewer games they have. Colour runs from hot pink through orange (low) to blue through aqua (high), grey at 50%.</p>
         \\
     , .{
         .early = early_games,

@@ -232,6 +232,16 @@ fn highest(options: []const File.Option, games: u32, wins: u32, k: ?f64, min: us
     return if (n >= min) hi else null;
 }
 
+/// Whether a kind gets a highest win rate mark: chosen before the game or in its first
+/// minutes. A finished item's win rate mostly says how the game was going when it was
+/// bought (Mejai's wins ~80%: nobody finishes it in a lost game), and boots follow it
+fn marked(kind: Kind) bool {
+    return switch (kind) {
+        .boots, .core2, .core3 => false,
+        else => true,
+    };
+}
+
 /// A row's highest(): its players are its options' (one rune of a row each). A row's
 /// only rune with a win rate is its highest, so every row with a win rate has a ring
 fn highestInRow(row: []const File.Option, k: ?f64) ?usize {
@@ -256,7 +266,7 @@ fn top(a: std.mem.Allocator, w: *Writer, f: *const File, b: File.Build, usual: ?
     const rows = b.get(kind) orelse return;
     if (rows.options.len == 0) return;
     const o = rows.options[0];
-    const hi = highest(rows.options, rows.games, rows.wins, f.shrinkK(kind, b.opponent != 0), 2);
+    const hi = if (marked(kind)) highest(rows.options, rows.games, rows.wins, f.shrinkK(kind, b.opponent != 0), 2) else null;
     const other: ?File.Option = if (hi) |i| if (i > 0) rows.options[i] else null else null;
     const ringed = if (other) |h| kind == .runes and f.trees.len > 0 and h.v[0] == o.v[0] and h.v[5] == o.v[5] else false;
     try tpl.render(w,
@@ -595,9 +605,9 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
         .solid = solid_games,
         .rated = rate_games,
         // Files before 21 Oct 2026 have no k, so no highest win rate marks
-        .hw = tpl.when(f.shrink.len > 0, tpl.t(", and the highest win rate among options with {rated}+ games once each is pulled toward the average by k games (k from how much options of a kind really differ across every champion{ks}) and taken at the low end of its range, so a few lucky games can't top it", .{
+        .hw = tpl.when(f.shrink.len > 0, tpl.t(", and the highest win rate among options with {rated}+ games once each is pulled toward the average by k games (k from how much options of a kind really differ across every champion{ks}) and taken at the low end of its range, so a few lucky games can't top it. None on boots and finished items: their win rates mostly say how the game was going when they were bought (nobody finishes Mejai's in a game they're losing)", .{
             .rated = rate_games,
-            .ks = if (f.shrinkK(.rune, false)) |kr| if (f.shrinkK(.core2, false)) |ki| tpl.t(": {r} for a rune, {i} for first items", .{
+            .ks = if (f.shrinkK(.rune, false)) |kr| if (f.shrinkK(.start, false)) |ki| tpl.t(": {r} for a rune, {i} for starting items", .{
                 .r = try root.thousands(site.arena, @intFromFloat(@round(kr))),
                 .i = try root.thousands(site.arena, @intFromFloat(@round(ki))),
             }) else null else null,
@@ -647,7 +657,7 @@ fn table(w: *Writer, f: *const File, b: File.Build, kind: Kind, comptime title: 
     if (rows.options.len == 0) {
         try w.writeAll("<tr class=\"thin\"><td colspan=\"4\">More data needed</td></tr>\n");
     }
-    const hi = highest(rows.options, rows.games, rows.wins, f.shrinkK(kind, false), 2);
+    const hi = if (marked(kind)) highest(rows.options, rows.games, rows.wins, f.shrinkK(kind, false), 2) else null;
     for (rows.options, 0..) |o, i| {
         if (i >= rows_shown and i != hi) continue;
         try tpl.render(w,

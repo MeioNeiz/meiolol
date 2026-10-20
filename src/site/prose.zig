@@ -156,10 +156,13 @@ pub fn method(w: *Writer, info: Info) Writer.Error!void {
         \\<li><b>Win, pick and ban rate</b>: games won with the champion in that role, share
         \\of games with it in that role, share of games where it was banned.</li>
         \\<li><b>How sure a win rate is</b>: every win rate is the raw share of games won,
-        \\never pulled toward 50%. Its bar runs from 50% to the rate. Colour runs from
-        \\orange (low) to blue (high), paler near 50%, by the rate alone, not red and
-        \\green, which colour-blind readers can't tell apart. Fewer games make it fainter,
-        \\full from 200: with few games a rate can sit far from the truth.</li>
+        \\never pulled toward 50%; a dot marks it on a track from 25% to 75%. Colour runs
+        \\from hot pink through orange (low) to blue through aqua (high), grey at 50%, by
+        \\the rate alone, not red and green, which colour-blind readers can't tell apart;
+        \\a key under each table gives the rates. Fewer games make it fainter, full from
+        \\200: with few games a rate can sit far from the truth. Sorting by win rate uses
+        \\the rate pulled toward the average, the more so the fewer its games, so a few
+        \\lucky games can't top a table.</li>
         \\<li><b>Lane opponents</b>: the champion's win rate against each lane opponent and
         \\the lane curve's gold difference at 14 minutes. Every opponent is listed, hardest
         \\first; those with under 10 games are faded and listed last.</li>
@@ -213,7 +216,9 @@ pub fn method(w: *Writer, info: Info) Writer.Error!void {
         \\the first 90 seconds (net of undos and sales, trinkets left out); boots are the
         \\first pair bought, an upgraded pair counting as the boots it came from, and "no
         \\boots" once a player finished two items without any; finished items are those
-        \\used for first-item timing above, in the order they were bought.</li>
+        \\used for first-item timing above, in the order they were bought. Boots and finished
+        \\items get no highest win rate mark: their win rates mostly say how the game was
+        \\going when they were bought (nobody finishes Mejai's in a game they're losing).</li>
         \\<li><b>Skill priority</b>: Q, W and E ordered by points spent after 13 skill
         \\points (or the game's end, from 11), ties going to the ability that got there
         \\first.</li>

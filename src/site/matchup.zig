@@ -167,7 +167,7 @@ pub fn writeIndex(site: *const Site, w: *Writer, curves: ?*const Curves) !void {
         }
         try tpl.renderPart(w,
             \\<div data-min-list data-count="n-{slug}"><div class="tl-wrap"><table class="tl mu-table" id="mu-{slug}" data-sortable>
-            \\<thead><tr><th class="l" data-sort="text">Champion</th><th class="l" data-sort="text">Opponent</th><th data-sort="num" title="The first champion's win rate in the matchup">Win rate</th><th data-sort="num" title="Points more or less than the first champion usually wins against an opponent this strong">Vs usual</th><th data-sort="num" class="opt" title="Lane curve estimate: the first champion minus the opponent">Gold at {minute}</th><th data-sort="num" aria-sort="descending">Games</th></tr></thead>
+            \\<thead><tr><th class="l" data-sort="text">Champion</th><th class="l" data-sort="text">Opponent</th><th data-sort="num" title="The first champion's win rate in the matchup; sorts with few games pulled toward what it usually wins">Win rate</th><th data-sort="num" title="Points more or less than the first champion usually wins against an opponent this strong">Vs usual</th><th data-sort="num" class="opt" title="Lane curve estimate: the first champion minus the opponent">Gold at {minute}</th><th data-sort="num" aria-sort="descending">Games</th></tr></thead>
             \\<tbody>
             \\{rows}</tbody></table></div>
             \\<p class="empty muted"{hidden}>None with this many games yet: lower Min games.</p></div></section>
@@ -179,9 +179,10 @@ pub fn writeIndex(site: *const Site, w: *Writer, curves: ?*const Curves) !void {
             .hidden = tpl.flag(shown > 0, "hidden"),
         });
     }
+    try w.writeAll("</div>\n");
+    try tierlist.legend(w, tierlist.matchup_span);
     try tpl.renderPart(w,
-        \\</div>
-        \\<p class="muted small">Win rate and vs usual: the first champion's games in the role against the second, {when}; vs usual as on champion pages, pulled toward 0 the fewer the games. Gold at {minute} min: the lane curve's estimate, first minus second. Fainter under {full} games. <a href="../method.html">Method</a>.</p>
+        \\<p class="muted small">Win rate and vs usual: the first champion's games in the role against the second, {when}; vs usual as on champion pages, pulled toward 0 the fewer the games. Sorting by win rate uses usual plus vs usual, so a few lucky games can't top the table. Gold at {minute} min: the lane curve's estimate, first minus second. Fainter under {full} games. <a href="../method.html">Method</a>.</p>
         \\
     , .{ .when = try period(a, c), .minute = core.curvesfile.lane_minute, .full = core.curvesfile.full_games });
     // Role tabs: one role's table at a time, every role while searching (style.css .mu-ix)
@@ -225,6 +226,8 @@ const IndexEntry = struct {
     wins: u32,
     played: u32,
     vs: champion.VsUsual,
+    /// x's usual win rate against an opponent this strong (champion.usual)
+    usual: f64,
     /// Lane curve's gold at lane_minute, x minus y
     gold: i32,
 };
@@ -251,6 +254,7 @@ fn indexEntry(site: *const Site, c: *const Curves, r: Role, x0: Champ, y0: Champ
         .wins = e.wins,
         .played = e.games,
         .vs = champion.VsUsual.of(e.wins, e.games, u, ka),
+        .usual = u,
         .gold = v.estimate(.gold, core.curvesfile.lane_minute - 1).mean,
     };
 }
@@ -272,7 +276,8 @@ fn indexRow(ctx: struct { *const Site, Role, u32 }, w: *Writer, e: IndexEntry) !
         .y_href = (try path(a, r, e.y, e.x))["matchup/".len..],
         .x_icon = site.icon(e.x),
         .y_icon = site.icon(e.y),
-        .wr = tpl.call(tierlist.trackCell, .{ p, e.played, tierlist.matchup_span, try a.print("{d} games in the stats", .{e.played}), @as(?[]const u8, null) }),
+        // Sorts by usual + vs usual: the rate pulled toward usual by its games
+        .wr = tpl.call(tierlist.trackCell, .{ p, e.usual + e.vs.mean, e.played, tierlist.matchup_span, try a.print("{d} games in the stats", .{e.played}), @as(?[]const u8, null) }),
         .vs = e.vs.mean,
         .colour = tierlist.wrColour(0.5 + e.vs.mean, tierlist.table_span),
         .pts = champion.Points{ .v = e.vs.mean },

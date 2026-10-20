@@ -12,9 +12,15 @@ the thin-data cut and step-4 chip (dropped 20 Oct, Jacob: "they just look weird"
 win rate tile), matchup win rate, gold and lead table in ink; wrap 1,560, header 48,
 29 px table rows (1080p champions table 17 to 26 rows). Next: build order 4 (opponent
 tiles 76 px, 0 of 41 on a 1080p screen still), 5 (heat cells, pick/ban bars), 6
-(header row, phone filters button); prose that still says "green ahead, red behind"
-or "orange through grey to blue" (champion.zig methods line, root.zig early note,
-prose.zig); Your games game scale (2.5, 5, 10, 15 points) not wired yet.
+(header row, phone filters button); Your games game scale (2.5, 5, 10, 15 points) not
+wired yet. Done 20 Oct (research review, f9's list): colour key under the champions
+table, opponent grid and matchups index (tierlist.legend); win rate columns sort by
+the rate pulled toward an average (role's, champion's own, usual), shown raw; --faint
+#7a7f88 (4.6:1) and fade floor 0.6 (0.35 put grey ink near 1.9:1); champion header
+"27th of 60 in Top" (the champions table's order, raw when filtered); no highest win
+rate mark on boots and finished items (purchase timing: Mejai's ~80%); stale colour
+prose fixed. Not built: Hard lanes column, Daily Draft pick shares (API counter on
+jomify), players behind a matchup's games (curves format).
 Done 20 Oct (morning, sitewide, J12 J14; e80df37): win rates continuous, no steps or
 thin-data cut (wrColour mixes the stops in oklab, grey only at 50.0%, few games fade by
 opacity); matchup rates on matchup_span (0.24, twice the table's) and coloured again on
@@ -58,9 +64,13 @@ who killed you, kill gold swung, where on the map, objectives each team took wit
 minute, win chance moved), objectives you took part in, towers in your lane and every
 Baron, Elder and Atakhan; team swings without you are gone (old reports keep them).
 Dots on the chart by kind, the biggest five labelled with what they moved ("+12%
-kill", "-13% died"). Next: 15 to 30 moments a game is long (fold the small ones or a
-biggest-only view? ask Jacob); a minute's win chance change is the whole minute, not
-the fight alone; map areas are rough, check a few against real positions
+kill", "-13% died"). 20 Oct: each moment named by size, small under 5 points, medium,
+big 10+, huge 20+ (chess.com's bands, finer near zero); small ones (about half) fold
+under "N smaller moments" when over two, fainter dots on the chart; the lane's gold at
+14 says where it sits among the matchup's games (above or below 3 in 4, or half).
+Next: a minute's win chance change is the whole minute, not the fight alone; map areas
+are rough, check a few against real positions; level 6 and first item have only a
+median (spread needs curvesfile percentiles)
 
 Done 20 Oct (night run, persist; Jacob 00:42 "go to Learn then back to Your games it
 should still show me ... maintain filters"): views kept in this browser, URL picks
@@ -97,6 +107,11 @@ facts with counts are not that, but check the line with Jacob before numbers com
   usual ("Blue +420 at 14", "usually blue +300"); option facts with numbers ("+300 gold
   at 14", "led 58%", games); under 200 gold at 14 reads as even. Puzzle JSON `players`
   per seat, older puzzles backfilled from their used.txt game
+- Done 20 Oct (research review): days in a row forgives one missed puzzle between
+  finished ones (not counted; two in a row end it; today unplayed with yesterday missed
+  still alive), best too (daily.js streaks(); duolingo-streaks ^f4, teach-draft C13).
+  Share hidden in preview mode (its text links the site; production-key.md "do not
+  advertise"), keyed on html.zig's preview banner, so it returns with the public build
 - Next: pick verdicts (J2 form, Jacob 20 Oct): plan in
   data/team/2026-10-19-night/daily.md (score.pickSe, measure how many picks clear on
   the live patch first); a hint before the guess; share text with the facts

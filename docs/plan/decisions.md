@@ -36,7 +36,9 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
   J11's "reads as even" text (keep the games and range test for emphasis only)
 - J13 (20 Oct) Runes and build options: show pick rate and win rate together; highlight
   the highest win rate among options with enough games (not raw highest wr), alongside
-  most played; others stay easy to read. Keep the in-game rune view and its highlight
+  most played; others stay easy to read. Keep the in-game rune view and its highlight.
+  20 Oct research review: no mark on boots and finished items, whose win rates mostly
+  say how the game was going when bought (loltheory-item-recs ^f3)
 - J14 (20 Oct) Clickable things are the whole box (matchup rows, champion tiles,
   cards), not just the name: site-wide
 - J15 (20 Oct) Admin Overview tile shows the shipped model; experiments stay visible
