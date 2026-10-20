@@ -609,8 +609,9 @@ async function pollTraffic() {
   try { TRAFFIC = await getJson("ops/traffic.json"); trafficErr = null; } catch (e) { trafficErr = e.message; }
   refreshView("traffic");
 }
-// The Windows app's zip, rebuilt by the web loop when its data changes (web-loop.sh
-// desktop_zip); the site's download page shows Jacob the same link from localStorage
+// The Windows app's zip, its exe and update key (web-loop.sh desktop_files; the app
+// fetches the data itself); the site's download page shows Jacob the same link from
+// localStorage
 async function pollDesktop() {
   try { DESKTOP = await getJson("desktop/info.json"); } catch (e) { DESKTOP = null; }
   store("desktop", DESKTOP && { ...DESKTOP, href: new URL(DESKTOP_ZIP, location.href).pathname });

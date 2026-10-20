@@ -46,7 +46,10 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
 - J18 (20 Oct) Other players' names on public pages: yes, rewrite lia.md balancing;
   hide streamer-mode players if op.gg and other big sites do
 - J19 (20 Oct) Desktop download on the site for Jacob (admin login until the key, per
-  Product rules); data in it kept fresh
+  Product rules); data in it kept fresh. 09:05: "it should update its own data without
+  needing to be redownloaded, even update itself ideally with changes": the app fetches
+  stats and curves from the site itself and replaces its exe (version file, download,
+  swap on next start), behind the admin gate (the zip's own key) until the key
 - nn on the GPU: planned, not now
 - Q1 Rewrite the application around game review of your own games, lane curves as the
   benchmark; squads worded as planned, or out until built

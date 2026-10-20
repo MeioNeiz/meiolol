@@ -276,11 +276,10 @@ const admin_download =
     \\a.href=d.href;a.download="";a.textContent="Download for Windows";
     \\a.style.cssText="display:inline-block;margin-bottom:6px;padding:7px 16px;border-radius:8px;"
     \\+"background:var(--accent);color:var(--bg);font-weight:600";
-    \\const built=new Date(d.built).toLocaleString("en-GB",
-    \\{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
-    \\p.append(a,document.createElement("br"),`Admin only until the public release. Patch
-    \\ ${d.patch} statistics, built ${built}. Unzip it and run meiolol-desktop.exe in the
-    \\ meiolol folder; Windows asks first (More info, then Run anyway).`);
+    \\p.append(a,document.createElement("br"),`Admin only until the public release. Unzip
+    \\ it and run meiolol-desktop.exe in the meiolol folder; Windows asks first (More info,
+    \\ then Run anyway). It downloads patch ${d.patch} statistics on first start and keeps
+    \\ them and itself up to date.`);
     \\document.getElementById("admin-download").append(p)}}catch(e){}</script>
     \\
 ;

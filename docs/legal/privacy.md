@@ -145,7 +145,9 @@ a squad with no members is deleted.
 
 The app reads champ select from the League client on your own PC, read-only, and shows
 lane information on screen. It does not send your games, account or any other personal
-data anywhere. It downloads updated champion statistics from this site.
+data anywhere. Apart from the League client it connects only to this site, every few
+hours, to download newer champion statistics and updates to itself; those requests carry
+nothing about you, and the server logs them like any page visit (below).
 
 ## Server logs
 

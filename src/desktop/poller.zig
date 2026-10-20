@@ -1,7 +1,9 @@
 //! The desktop window's data, shared by every window backend (desktop_main.zig on
 //! Windows, desktop_dev.zig elsewhere): stats and curves loaded once, and a poller thread
 //! that reads the League client once a second and publishes what to show; the UI thread
-//! only draws it. Read-only GETs, as `meiolol-app watch`.
+//! only draws it. Read-only GETs, as `meiolol-app watch`. An update thread keeps the
+//! data and the exe current from meio.lol (update.zig); new data is swapped in by the
+//! poller between ticks.
 
 const std = @import("std");
 const core = @import("core");
@@ -9,6 +11,7 @@ const lcu = @import("../lcu/root.zig");
 const lanecard = @import("../lanecard.zig");
 const datafiles = @import("../datafiles.zig");
 const ui = @import("ui.zig");
+const update = @import("update.zig");
 
 /// What the UI shows. The poller swaps `status` and the arena that owns it under the
 /// mutex; the UI holds the mutex for a whole frame
@@ -17,12 +20,37 @@ const Shared = struct {
     status: ui.Status = .no_client,
     arena: ?std.heap.ArenaAllocator = null,
     quit: std.atomic.Value(bool) = .init(false),
+    /// Under the mutex: the UI reads it, the poller swaps it
+    data: ?*Data = null,
+    /// Set by the update thread when new files are on disk; the poller loads them
+    fresh: std.atomic.Value(bool) = .init(false),
+    /// The update thread's note for the footer, under the mutex
+    note: Note = .none,
 };
+
+/// Stats and curves with the memory they live in
+const Data = struct {
+    arena: std.heap.ArenaAllocator,
+    stats: core.Stats,
+    curves: ?core.curvesfile.Curves,
+};
+
+pub const Note = union(enum) {
+    none,
+    /// First start with update.key: fetching the data
+    downloading,
+    /// Error name of the last failed check, while there is no data
+    failed: [32]u8,
+    /// A new exe is in place
+    restart,
+};
+
+/// Between checks; after a failure, sooner
+const update_every: std.Io.Duration = .fromSeconds(3 * 3600);
+const retry_after: std.Io.Duration = .fromSeconds(5 * 60);
 
 var shared: Shared = .{};
 var io: std.Io = undefined;
-var stats: ?core.Stats = null;
-var curves: ?core.curvesfile.Curves = null;
 /// Null finds the client (lockfile.discover); the dev window passes MEIOLOL_LOCKFILE
 var lockfile: ?[]const u8 = null;
 /// Wakes the UI thread after a publish
@@ -33,30 +61,92 @@ pub fn start(init: std.process.Init, lockfile_override: ?[]const u8, wake_ui: *c
     lockfile = lockfile_override;
     wake = wake_ui;
     const gpa = init.gpa;
-    const arena = init.arena.allocator();
+    shared.data = load(gpa);
+    if (shared.data == null) shared.status = .no_data;
+    // Detached, both: a request to a hung client or server cannot be interrupted (no
+    // network timeouts in Threaded IO), so quitting must not wait for them
+    if (updateOptions(init)) |o| {
+        if (shared.data == null) shared.note = .downloading;
+        (try std.Thread.spawn(.{}, updateLoop, .{o})).detach();
+    }
+    (try std.Thread.spawn(.{}, poll, .{gpa})).detach();
+}
+
+/// The newest stats and curves files (datafiles.zig); null without stats
+fn load(gpa: std.mem.Allocator) ?*Data {
+    const data = gpa.create(Data) catch return null;
+    data.arena = .init(gpa);
+    if (loadInto(data)) return data else |err| std.log.err("loading data: {t}", .{err});
+    data.arena.deinit();
+    gpa.destroy(data);
+    return null;
+}
+
+fn loadInto(data: *Data) !void {
+    const arena = data.arena.allocator();
     const cwd = std.Io.Dir.cwd();
     const limit: std.Io.Limit = .limited(1 << 30);
-
-    const stats_path = try datafiles.stats(arena, io) orelse {
-        shared.status = .no_data;
-        return;
-    };
-    stats = core.Stats.parse(arena, try cwd.readFileAlloc(io, stats_path, arena, limit)) catch |err| {
-        std.log.err("{s}: {t}", .{ stats_path, err });
-        shared.status = .no_data;
-        return;
-    };
+    const stats_path = try datafiles.stats(arena, io) orelse return error.NoStatsFile;
+    data.stats = try core.Stats.parse(arena, try cwd.readFileAlloc(io, stats_path, arena, limit));
+    data.curves = null;
     // Without curves the card still lists options, without lane gold
     if (try datafiles.curves(arena, io)) |p| {
-        curves = core.curvesfile.Curves.parse(arena, try cwd.readFileAlloc(io, p, arena, limit)) catch |err| blk: {
+        data.curves = core.curvesfile.Curves.parse(arena, try cwd.readFileAlloc(io, p, arena, limit)) catch |err| blk: {
             std.log.err("{s}: {t}", .{ p, err });
             break :blk null;
         };
     }
-    // Detached: a request to a hung client cannot be interrupted (no network timeouts
-    // in Threaded IO), so quitting must not wait for it
-    const thread = try std.Thread.spawn(.{}, poll, .{gpa});
-    thread.detach();
+}
+
+fn freeData(gpa: std.mem.Allocator, data: *Data) void {
+    data.arena.deinit();
+    gpa.destroy(data);
+}
+
+/// Updates need update.key beside the exe; MEIOLOL_UPDATE_URL points them elsewhere
+fn updateOptions(init: std.process.Init) ?update.Options {
+    const arena = init.arena.allocator();
+    const exe_path = std.process.executablePathAlloc(io, arena) catch return null;
+    const dir_path = std.fs.path.dirname(exe_path) orelse return null;
+    const dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch return null;
+    const key = update.readKey(arena, io, dir) orelse {
+        dir.close(io);
+        return null;
+    };
+    return .{
+        .gpa = init.gpa,
+        .io = io,
+        .dir = dir,
+        .exe = std.fs.path.basename(exe_path),
+        .base = init.environ_map.get("MEIOLOL_UPDATE_URL") orelse update.default_base,
+        .key = key,
+    };
+}
+
+fn updateLoop(o: update.Options) void {
+    while (!shared.quit.load(.acquire)) {
+        var wait = update_every;
+        if (update.run(o)) |r| {
+            if (r.data) shared.fresh.store(true, .release);
+            if (r.exe) setNote(.restart);
+        } else |err| {
+            std.log.warn("update: {t}", .{err});
+            wait = retry_after;
+            var name: [32]u8 = @splat(0);
+            const e = @errorName(err);
+            @memcpy(name[0..@min(e.len, name.len)], e[0..@min(e.len, name.len)]);
+            setNote(.{ .failed = name });
+        }
+        std.Io.sleep(io, wait, .awake) catch {};
+    }
+}
+
+/// A failure never hides the restart note
+fn setNote(note: Note) void {
+    shared.mutex.lockUncancelable(io);
+    if (note != .failed or shared.note != .restart) shared.note = note;
+    shared.mutex.unlock(io);
+    wake();
 }
 
 pub fn stop() void {
@@ -67,7 +157,15 @@ pub fn stop() void {
 pub fn frame() void {
     shared.mutex.lockUncancelable(io);
     defer shared.mutex.unlock(io);
-    ui.frame(.{ .status = shared.status, .stats = if (stats) |*s| s else null });
+    const stats = if (shared.data) |d| &d.stats else null;
+    const note: ui.Note = switch (shared.note) {
+        .none => .none,
+        .downloading => .downloading,
+        // Only matters while there is nothing else to show
+        .failed => |*e| if (stats == null) .{ .failed = std.mem.sliceTo(e, 0) } else .none,
+        .restart => .restart,
+    };
+    ui.frame(.{ .status = shared.status, .stats = stats, .note = note });
 }
 
 fn publish(status: ui.Status, arena: std.heap.ArenaAllocator) void {
@@ -85,16 +183,30 @@ fn poll(gpa: std.mem.Allocator) void {
     defer p.deinit();
     var shown: u64 = 0;
     while (!shared.quit.load(.acquire)) {
+        // The UI may still draw a card made from the old data until the publish below
+        // replaces it, so the old data goes only after that
+        var old: ?*Data = null;
+        if (shared.fresh.swap(false, .acq_rel)) {
+            if (load(gpa)) |new| {
+                shared.mutex.lockUncancelable(io);
+                old = shared.data;
+                shared.data = new;
+                if (shared.note == .downloading or shared.note == .failed) shared.note = .none;
+                shared.mutex.unlock(io);
+                shown = 0;
+            }
+        }
         var arena: std.heap.ArenaAllocator = .init(gpa);
-        const status = p.tick(arena.allocator()) catch |err| switch (err) {
+        const status = if (shared.data) |d| p.tick(arena.allocator(), d) catch |err| switch (err) {
             error.OutOfMemory => return,
             else => p.disconnect(arena.allocator(), err),
-        };
+        } else ui.Status.no_data;
         const key = p.key(status);
         if (key != shown) {
             shown = key;
             publish(status, arena);
         } else arena.deinit();
+        if (old) |d| freeData(gpa, d);
         std.Io.sleep(io, .fromSeconds(1), .awake) catch {};
     }
 }
@@ -143,7 +255,7 @@ const Poller = struct {
         return h.final();
     }
 
-    fn tick(p: *Poller, arena: std.mem.Allocator) !ui.Status {
+    fn tick(p: *Poller, arena: std.mem.Allocator, data: *const Data) !ui.Status {
         const cs = switch (try p.watch.step(arena)) {
             .phase => |phase| {
                 p.forgetOwn();
@@ -165,8 +277,8 @@ const Poller = struct {
 
         const card = try arena.create(lanecard.Card);
         card.* = try lanecard.build(arena, .{
-            .stats = &stats.?,
-            .curves = if (curves) |*c| c else null,
+            .stats = &data.stats,
+            .curves = if (data.curves) |*c| c else null,
             .role = role,
             .me = cs.my_champion,
             .locked = cs.my_locked,

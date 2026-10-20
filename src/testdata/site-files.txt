@@ -86,7 +86,7 @@ data/learning.json c0076574631dc78e
 data/pool.json c49c24af4a83207c
 data/search.json bfd236184c673343
 data/stats.bin bffab0c56008909d
-download.html 0c68ade09c107427
+download.html f4a3fdb8cc288623
 index.html ad0b8a2a1d67812a
 learn.html 41ca304a7010e32f
 learn/champs.json 7c5a77a4464faa98

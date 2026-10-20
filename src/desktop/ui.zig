@@ -25,9 +25,20 @@ pub const Status = union(enum) {
     card: *const Card,
 };
 
+/// From the update thread (update.zig), under the content
+pub const Note = union(enum) {
+    none,
+    downloading,
+    /// Error name
+    failed: []const u8,
+    /// A new version is in place for the next start
+    restart,
+};
+
 pub const View = struct {
     status: Status,
     stats: ?*const core.Stats,
+    note: Note = .none,
 };
 
 const ahead_color: dvui.Color = .fromHex("#4fb37a");
@@ -51,13 +62,20 @@ pub fn frame(v: View) void {
         defer body.deinit();
         header(v.status);
         switch (v.status) {
-            .no_data => para(@src(), "No stats file found. Put stats-*.bin and recent-curves.bin next to meiolol-desktop.exe.", .{}, .{}),
+            .no_data => switch (v.note) {
+                .downloading => para(@src(), "Downloading champion statistics from meio.lol.", .{}, .{}),
+                .failed => |e| para(@src(), "Could not download champion statistics from meio.lol ({s}); trying again in 5 minutes.", .{e}, .{}),
+                else => para(@src(), "No stats file found. Put stats-*.bin and recent-curves.bin next to meiolol-desktop.exe.", .{}, .{}),
+            },
             .no_client => para(@src(), "Waiting for the League client to start.", .{}, .{}),
             .client_error => |e| para(@src(), "League client not reachable ({s}); retrying.", .{e}, .{}),
             .waiting => para(@src(), "The lane card shows in champ select.", .{}, .{}),
             .no_role => para(@src(), "This champ select has no assigned positions, so there is no lane to show.", .{}, .{}),
             .card => |c| card(c, v.stats.?),
         }
+    }
+    if (v.note == .restart) {
+        para(@src(), "A new version of meiolol is downloaded: it starts the next time you open the app.", .{}, .{ .muted = true, .small = true });
     }
     footer();
 }

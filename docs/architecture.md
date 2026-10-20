@@ -77,8 +77,10 @@ src/
                      lab/nnexport.zig tensors for the draft nets (SNAP/nn/)
   lanecard.zig       the lane card's content (pure): opponent, sentence, curve, options
   desktop_main.zig   `meiolol-desktop`: the lane card in a window (dvui, Direct3D 11)
-  desktop/           ui.zig (the window, drawn from a View), raster.zig (dvui backend
-                     drawing into memory, for desktop_shot.zig's PNGs)
+  desktop/           ui.zig (the window, drawn from a View), poller.zig (data and
+                     client poller), update.zig (data and exe updates from meio.lol),
+                     raster.zig (dvui backend drawing into memory, for
+                     desktop_shot.zig's PNGs)
 deploy/box.sh        cross-compile (static musl, for the host's CPU) and run on the box
 deploy/systemd/      the box's loops as systemd user services (docs/hosting.md)
 deploy/*-loop.sh     box loops in tmux: web (site upload), backup, health (ntfy);
@@ -758,6 +760,18 @@ level still pickable.
   main draws every vsync, ~10% of a core idle). Detached because a request to a hung
   client cannot be interrupted. Per champ select it also reads pickable and owned champions, the
   player's own mastery and visible solo tier (lcu/me.zig)
+- Updates (desktop/update.zig, J19): with update.key beside the exe, a detached thread
+  reads https://meio.lol/admin/desktop/update.json at start and every 3 h (5 min after a
+  failure; MEIOLOL_UPDATE_URL elsewhere) and fetches each listed file whose SHA-256
+  differs from the local copy: stats.bin as stats-<patch>.bin (older stats-*.bin
+  deleted), recent-curves.bin, meiolol-desktop.exe. Each goes to NAME.part (gzip on the
+  wire, nginx's .gz copies), is checked against hash and size, then renamed over the
+  old. The running exe is renamed to meiolol-desktop.old.exe (kept for a manual
+  rollback) and the new one takes its name: next start runs it, and the footer says
+  so. New data: the poller loads it between ticks, publishes a status built from it,
+  then frees the old. The key goes in X-Meiolol-Desktop with redirects off
+  (std 0.17's privileged_headers are never sent). `meiolol-app update DIR` runs the same
+  check on a folder. Box side: web-loop.sh desktop_files; gate: hosting.md
 - Lane card (lanecard.zig, docs/concept.md part 6): the enemy shown in my position, else
   the one core.score.inferRoles puts there (labelled a guess); gold at 14 min one
   sentence and a chart (estimate line, middle half of games shaded) from the player's

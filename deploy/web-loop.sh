@@ -45,7 +45,7 @@
 # then offer none until the next success.
 # Every round, the private admin page (`meiolol admin`) goes to admin/ on the server,
 # behind basic auth there; the site's rsync leaves that directory alone. data/desktop
-# (the Windows app's zip, desktop_zip) goes with it to admin/desktop/. Daily, a dbstat
+# (the Windows app's files and zip, desktop_files) goes with it to admin/desktop/. Daily, a dbstat
 # scan (system sqlite3, read-only) leaves space by table and index in data/storage.tsv
 # for it.
 # The daily jobs' timers start from the files each leaves, and curves' from their files,
@@ -109,45 +109,68 @@ storage_scan() {
     mv data/storage.tsv.new data/storage.tsv
 }
 
-# The Windows app's download, admin/desktop/ (behind the login until the public release,
-# plan J7): the deployed exe (box.sh sync), the renderer's data/stats.bin (EUW, current
-# patch: what meio.lol serves) and recent-curves.bin, zipped again when one changed, so
-# the download's data is at most a round older than the site's. The app reads the newest
-# stats-*.bin beside it (src/datafiles.zig): unzipped over an old folder, the new wins
-desktop_zip() {
+# The Windows app, admin/desktop/ (behind the login until the public release, plan J7,
+# J19): the deployed exe (box.sh sync), the renderer's data/stats.bin (EUW, current
+# patch: what meio.lol serves) and recent-curves.bin, each with a .gz for nginx's
+# gzip_static, and update.json listing them (name, sha256, bytes) for the app's own
+# update check (src/desktop/update.zig), which nginx lets in with the key in
+# desktop.token (docs/hosting.md). The zip people download is the exe and that key as
+# update.key: the app fetches its data on first start and keeps it and itself current.
+# All made again when an input changed, the curves' .gz only when they did
+desktop_files() {
     local d=data/desktop.new inputs
     [[ -f bin/meiolol-desktop.exe && -f data/export/recent-curves.bin && -n "$patch" ]] \
         || return 0
+    [[ -s desktop.token ]] || (umask 077 && openssl rand -hex 32 > desktop.token)
     rm -rf "$d" && mkdir -p "$d/meiolol"
-    if ! curl -sf --max-time 120 -o "$d/meiolol/stats-$patch.bin" \
+    if ! curl -sf --max-time 120 -o "$d/stats.bin" \
         "http://$(hostname -I | cut -d' ' -f1):8091/data/stats.bin"; then
-        echo "$(date -u +%FT%TZ) desktop zip: no stats.bin from the renderer, old zip kept"
+        echo "$(date -u +%FT%TZ) desktop files: no stats.bin from the renderer, old ones kept"
         rm -rf "$d"
         return 1
     fi
     # The curves by size and time, not content: 80 MB to read every round
-    inputs=$(sha256sum "$d/meiolol/stats-$patch.bin" bin/meiolol-desktop.exe | cut -d' ' -f1 \
+    inputs=$(sha256sum "$d/stats.bin" bin/meiolol-desktop.exe desktop.token | cut -d' ' -f1 \
         && stat -c '%s %Y' data/export/recent-curves.bin && echo "$patch")
-    if [[ -f data/desktop/meiolol-desktop.zip \
+    if [[ -f data/desktop/update.json \
         && "$inputs" == "$(cat data/desktop.inputs 2> /dev/null)" ]]; then
         rm -rf "$d"
         return 0
     fi
-    cp -p bin/meiolol-desktop.exe "$d/meiolol/"
-    ln data/export/recent-curves.bin "$d/meiolol/"
+    cp -p bin/meiolol-desktop.exe "$d/"
+    ln data/export/recent-curves.bin "$d/"
+    if [[ data/desktop/recent-curves.bin -ef data/export/recent-curves.bin \
+        && data/desktop/recent-curves.bin.gz -nt data/export/recent-curves.bin ]]; then
+        ln data/desktop/recent-curves.bin.gz "$d/"
+    fi
+    cp bin/meiolol-desktop.exe "$d/meiolol/"
+    cp desktop.token "$d/meiolol/update.key"
     if ! batch python3 - "$d" "$patch" <<'EOF'
-import datetime, json, os, sys, zipfile
+import datetime, gzip, hashlib, json, os, shutil, sys, zipfile
 d, patch = sys.argv[1:]
+files = []
+for name in ("stats.bin", "recent-curves.bin", "meiolol-desktop.exe"):
+    path = os.path.join(d, name)
+    if not os.path.exists(path + ".gz"):
+        with open(path, "rb") as src, gzip.open(path + ".gz", "wb", compresslevel=6) as dst:
+            shutil.copyfileobj(src, dst, 1 << 20)
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    files.append({"name": name, "sha256": h.hexdigest(), "bytes": os.path.getsize(path)})
 zip_path = os.path.join(d, "meiolol-desktop.zip")
 with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
     for f in sorted(os.listdir(os.path.join(d, "meiolol"))):
         z.write(os.path.join(d, "meiolol", f), "meiolol/" + f)
 built = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+with open(os.path.join(d, "update.json"), "w") as f:
+    json.dump({"patch": patch, "built": built, "files": files}, f)
 with open(os.path.join(d, "info.json"), "w") as f:
     json.dump({"patch": patch, "built": built, "bytes": os.path.getsize(zip_path)}, f)
 EOF
     then
-        echo "$(date -u +%FT%TZ) desktop zip FAILED, old zip kept"
+        echo "$(date -u +%FT%TZ) desktop files FAILED, old ones kept"
         rm -rf "$d"
         return 1
     fi
@@ -155,7 +178,8 @@ EOF
     [[ -d data/desktop ]] && mv data/desktop data/desktop.old
     mv "$d" data/desktop && rm -rf data/desktop.old
     echo "$inputs" > data/desktop.inputs
-    echo "$(date -u +%FT%TZ) desktop zip: $(stat -c %s data/desktop/meiolol-desktop.zip) bytes, patch $patch"
+    echo "$(date -u +%FT%TZ) desktop files: zip $(stat -c %s data/desktop/meiolol-desktop.zip)" \
+        "bytes, patch $patch"
 }
 
 last_patch='' last_games=0
@@ -384,7 +408,7 @@ while true; do
             fi
         fi
     fi
-    desktop_zip || true
+    desktop_files || true
     if nice -n 10 bin/meiolol admin --out data/admin.new \
         --disk "$(df -B1 --output=size,used,avail data | tail -n 1)" \
         --health "$(bin/health.sh)" 2>&1; then

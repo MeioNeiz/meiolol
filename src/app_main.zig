@@ -2,6 +2,7 @@ const std = @import("std");
 const core = @import("core");
 const lcu = @import("lcu/root.zig");
 const datafiles = @import("datafiles.zig");
+const update = @import("desktop/update.zig");
 
 // watch retries every second; Debug builds would print a stack trace for each
 // error.Unexpected from the network layer
@@ -31,6 +32,9 @@ const usage =
     \\            --lockfile PATH
     \\  get PATH  GET any League client path and print the reply (identities removed)
     \\            --lockfile PATH
+    \\  update DIR  run the desktop app's update check on a folder: needs
+    \\            DIR/update.key; swaps DIR/meiolol-desktop.exe if there is one
+    \\            (env MEIOLOL_UPDATE_URL: another update directory)
     \\
     \\common:
     \\  --stats FILE      model file (default: newest data/export/stats-*.bin here,
@@ -80,6 +84,7 @@ pub fn main(init: std.process.Init) !void {
     if (std.mem.eql(u8, command, "watch")) return app.watch();
     if (std.mem.eql(u8, command, "session")) return app.session();
     if (std.mem.eql(u8, command, "get")) return app.get();
+    if (std.mem.eql(u8, command, "update")) return app.updateFolder(init.environ_map.get("MEIOLOL_UPDATE_URL"));
     if (std.mem.eql(u8, command, "help") or std.mem.eql(u8, command, "--help")) {
         std.debug.print(usage, .{});
         return;
@@ -286,6 +291,27 @@ const App = struct {
         try app.out.print("HTTP {d}\n{s}\n", .{ resp.status, body });
     }
 
+    fn updateFolder(app: App, base: ?[]const u8) !void {
+        const path = app.args.positional orelse fail("update needs a folder", .{});
+        var dir = try std.Io.Dir.cwd().openDir(app.io, path, .{ .iterate = true });
+        defer dir.close(app.io);
+        const key = update.readKey(app.arena, app.io, dir) orelse fail("no {s} in {s}", .{ update.key_file, path });
+        const exe = "meiolol-desktop.exe";
+        const has_exe = if (dir.access(app.io, exe, .{})) true else |_| false;
+        const r = try update.run(.{
+            .gpa = app.gpa,
+            .io = app.io,
+            .dir = dir,
+            .exe = if (has_exe) exe else null,
+            .base = base orelse update.default_base,
+            .key = key,
+        });
+        try app.out.print("data {s}, exe {s}\n", .{
+            if (r.data) "updated" else "current",
+            if (r.exe) "replaced" else if (has_exe) "current" else "not here",
+        });
+    }
+
     fn session(app: App) !void {
         const client = app.connectOrExit();
         const resp = client.get(lcu.session.paths.session) catch |err|
@@ -486,5 +512,6 @@ fn fail(comptime fmt: []const u8, args: anytype) noreturn {
 test {
     _ = lcu;
     _ = @import("lanecard.zig");
+    _ = update;
     std.testing.refAllDecls(lcu);
 }

@@ -45,7 +45,15 @@ judgements, 3 to 5 options with reasons, no "best pick" or "+X% win rate" wordin
   monitor DPI aware, fonts crisp, resizes and closes cleanly; D3DCOMPILER_47.dll is in
   System32 on Windows 10/11. Idle 0.3% of a core (2911db5). Memory ~470 MB private with
   EUW recent-curves (158 MB; whole files held, the all-region one is 288 MB)
-- Admin download: /admin/desktop/meiolol-desktop.zip (8f47b90)
+- Admin download (J19): /admin/desktop/meiolol-desktop.zip, button in the admin header
+  and, for Jacob (admin page visited in that browser), on the site's download page.
+  The zip is the exe and update.key; the app updates itself (Jacob 20 Oct 09:05): at
+  start and every 3 h it fetches the current stats and curves and a new exe from
+  /admin/desktop/ when their hashes change, swaps data in while open and the exe on the
+  next start (architecture.md "Desktop window"). box.sh sync builds the exe for the
+  box; each web round (web-loop.sh desktop_files) publishes the files and update.json.
+  Behind the admin gate until the key: the zip's key opens that directory only
+  (hosting.md)
 - Mock champ select from the Mac (20 Oct): `deploy/mock-cs.sh [SCENARIO] [--window]`
   starts a mock League client playing a scripted champ select and game (scenarios:
   full-game, laner-locked-first, trade, dodge, aram, blind-normal; `list`) and runs
@@ -74,5 +82,9 @@ judgements, 3 to 5 options with reasons, no "best pick" or "+X% win rate" wordin
 - Not checked: 150% scaling (set a display to 150% and open the exe) and the card itself
 - Not yet: your own record in the matchup (concept part 6; LCU match history, needs a
   real reply to fix the schema), champion icons, window icon (title bar shows dvui's),
-  the download page shipping the exe with stats and curves
+  the public download (after the key, in this order: drop the admin gate and the key,
+  and sign the exe, as SmartScreen warns on unsigned ones in a zip or an installer
+  alike; then a per-user install, perhaps the exe installing itself to %LOCALAPPDATA%
+  with a Start menu entry). A signed exe should also check the new exe's signature
+  before swapping, not only the hash from the same server
 - dvui: pin PR #1012 (0.17.x branch) until it merges
