@@ -1,4 +1,4 @@
-// Learn: lesson checks (embedded in learn.html) and practice drafts from
+// Learn: puzzles and lesson checks (embedded in learn.html) and practice drafts from
 // learn/practice.json (src/learn.zig). Champions the player picks are scored with the
 // site's recommender (meiolol.wasm, src/wasm.zig) when they join a draft's options.
 // Progress stays in this browser (localStorage); no streaks, no timers.
@@ -66,6 +66,10 @@ const fresh = () => ({
   levels: {},
   view: "",
   lesson: "",
+  // Puzzle id to the guess (a number) or the picked choice's index
+  puzzles: {},
+  puzzle: 0,
+  puzzlesSeen: false,
 });
 
 function loadState() {
@@ -108,6 +112,7 @@ function currentLevel() {
 }
 
 function renderTabs() {
+  $("t-puzzles").textContent = `${puzzles.filter((p) => answer(p) !== undefined).length}/${puzzles.length}`;
   const done = lessonEls.filter((l) => lessonDone(l.dataset.lesson)).length;
   $("t-lessons").textContent = `${done}/${lessonEls.length}`;
   $("t-practice").textContent = LEVELS[levelIndex(currentLevel())][1];
@@ -129,12 +134,187 @@ function setupTabs() {
   tabs.hidden = false;
   for (const t of tabs.querySelectorAll("button")) t.onclick = () => showView(t.dataset.view);
   const hash = location.hash.slice(1);
-  const allDone = lessonEls.every((l) => lessonDone(l.dataset.lesson));
-  const view =
-    hash === "practice" || hash === "lessons"
-      ? hash
-      : state.view || (allDone ? "practice" : "lessons");
+  // Puzzles are new: shown first once, even to readers who left on another tab
+  const view = ["puzzles", "lessons", "practice"].includes(hash)
+    ? hash
+    : (state.puzzlesSeen && state.view) || "puzzles";
+  state.puzzlesSeen = true;
   showView(view);
+}
+
+// ---- Puzzles: a committed guess, then the measured answer (src/site/puzzles.zig) ----
+
+const puzzles = JSON.parse($("puzzle-data").textContent);
+const num = (v) => v.toLocaleString("en-GB", { maximumFractionDigits: 1 });
+const answer = (p) => state.puzzles[p.id];
+
+// A guess within 4% of the slider's range is spot on, within 12% close
+function verdict(p, g) {
+  if (p.kind === "pick") return g === p.answer ? ["Right.", "good"] : ["Not this time.", "bad"];
+  const off = Math.abs(g - p.answer);
+  const range = p.max - p.min;
+  if (off <= range * 0.04) return ["Spot on.", "good"];
+  const by = `${num(Math.round(off * 10) / 10)}${p.unit === "%" ? " points" : p.unit}`;
+  if (off <= range * 0.12) return [`Close: ${by} off.`, "good"];
+  return [`${by} off.`, "bad"];
+}
+
+const gotIt = (p) => answer(p) !== undefined && verdict(p, answer(p))[1] === "good";
+
+function pzBars(p) {
+  const box = el("div", "pz-bars");
+  const top = p.bar_unit === "%" ? 100 : Math.max(...p.bars.map((b) => b.v));
+  for (const b of p.bars) {
+    const row = el("div", b.hi ? "pz-bar hi" : "pz-bar");
+    const track = el("span", "pz-track");
+    const fill = el("i");
+    fill.style.width = `${Math.max(1, (100 * b.v) / top)}%`;
+    track.append(fill);
+    const v = p.bar_unit === " points" ? `+${num(b.v)}` : num(b.v);
+    const val = el("span", "pz-val", `${v}${p.bar_unit}`);
+    val.append(el("small", "", ` ${num(b.n)} ${p.per}`));
+    row.append(el("span", "pz-label", b.label), track, val);
+    box.append(row);
+  }
+  return box;
+}
+
+function pzReveal(box, p, g) {
+  const [say, cls] = verdict(p, g);
+  const head = el("p", `pz-verdict ${cls}`, say);
+  head.tabIndex = -1;
+  box.append(head);
+  if (p.kind === "guess") {
+    const vs = el("p", "pz-vs");
+    vs.append(
+      el("span", "", "You "),
+      el("b", "", `${num(g)}${p.unit}`),
+      el("span", "", " Real "),
+      el("b", "pz-real-n", `${num(p.answer)}${p.unit}`),
+      el("span", "", p.real),
+    );
+    box.append(vs);
+  } else {
+    box.append(el("p", "pz-real", p.real));
+  }
+  if (p.bars.length) box.append(pzBars(p));
+  box.append(el("p", "pz-why", p.why), el("p", "pz-tip", p.tip), el("p", "muted small", p.from));
+  return head;
+}
+
+function pzInput(box, p) {
+  if (p.kind === "pick") {
+    const row = el("div", "choices pz-choices");
+    p.choices.forEach((c, j) => {
+      const b = button("", undefined, () => pzAnswer(p, j));
+      if (c.icon) {
+        const img = document.createElement("img");
+        img.src = c.icon;
+        img.alt = "";
+        img.width = img.height = 28;
+        b.append(img);
+      }
+      b.append(c.t);
+      row.append(b);
+    });
+    box.append(row);
+    return;
+  }
+  const start = Math.round((p.min + p.max) / 2 / p.step) * p.step;
+  const wrap = el("div", "pz-guess");
+  const out = el("output", "pz-out", `${num(start)}${p.unit}`);
+  const range = document.createElement("input");
+  range.type = "range";
+  range.min = p.min;
+  range.max = p.max;
+  range.step = p.step;
+  range.value = start;
+  range.setAttribute("aria-label", "Your guess");
+  range.oninput = () => (out.textContent = `${num(Number(range.value))}${p.unit}`);
+  const ends = el("div", "pz-ends muted small");
+  ends.append(el("span", "", `${num(p.min)}${p.unit}`), el("span", "", `${num(p.max)}${p.unit}`));
+  wrap.append(out, range, ends, button("primary", "Lock in", () => pzAnswer(p, Number(range.value))));
+  box.append(wrap);
+}
+
+function pzAnswer(p, g) {
+  state.puzzles[p.id] = g;
+  save();
+  renderPuzzle("reveal");
+}
+
+// `focus`: "q" (a new puzzle) or "reveal" (an answer just given)
+function renderPuzzle(focus = null) {
+  const box = $("pz");
+  box.hidden = false;
+  box.replaceChildren();
+  const at = Math.min(state.puzzle, puzzles.length);
+  stepBar($("pz-bar"), puzzles.length, puzzles.filter((p) => answer(p) !== undefined).length, at);
+  renderTabs();
+  if (at === puzzles.length) return pzEnd(box, focus);
+  const p = puzzles[at];
+  box.append(el("p", "pz-topic muted small", `${at + 1} of ${puzzles.length}: ${p.topic}`));
+  const q = el("h2", "pz-q", p.q);
+  q.tabIndex = -1;
+  box.append(q);
+  const g = answer(p);
+  let target = focus === "q" ? q : null;
+  if (g === undefined) {
+    pzInput(box, p);
+  } else {
+    if (p.kind === "pick") {
+      const row = el("div", "choices pz-choices");
+      p.choices.forEach((c, j) => {
+        const b = button(j === g ? "chosen" : "", c.t);
+        b.disabled = true;
+        if (j === p.answer) b.classList.add("played");
+        const tag = [j === g && "your pick", j === p.answer && "answer"].filter(Boolean).join(", ");
+        if (tag) b.append(el("span", "pick", tag));
+        row.append(b);
+      });
+      box.append(row);
+    }
+    const head = pzReveal(box, p, g);
+    if (focus === "reveal") target = head;
+    const nav = el("div", "lesson-nav");
+    nav.append(button("primary", at + 1 < puzzles.length ? "Next puzzle" : "See your score", () => pzGo(at + 1)));
+    if (at > 0) nav.append(button("link", "Back", () => pzGo(at - 1)));
+    box.append(nav);
+  }
+  if (target) target.focus();
+}
+
+function pzGo(i) {
+  state.puzzle = i;
+  save();
+  renderPuzzle("q");
+}
+
+function pzEnd(box, focus) {
+  const got = puzzles.filter(gotIt).length;
+  const head = el("h2", "pz-q", `${got} of ${puzzles.length} right or close`);
+  head.tabIndex = -1;
+  box.append(head, el("p", "", "Every takeaway, for your next game:"));
+  const tips = el("ul", "pz-tips");
+  for (const p of puzzles) tips.append(el("li", "", p.tip));
+  box.append(tips);
+  const nav = el("div", "lesson-nav");
+  nav.append(
+    button("primary", "Basics for new players", () => showView("lessons", true)),
+    button("link", "Puzzles again", () => {
+      state.puzzles = {};
+      pzGo(0);
+    }),
+  );
+  box.append(nav);
+  if (focus) head.focus();
+}
+
+function setupPuzzles() {
+  // Resume at the first one not answered
+  const open = puzzles.findIndex((p) => answer(p) === undefined);
+  if (open >= 0 && open < state.puzzle) state.puzzle = open;
+  renderPuzzle();
 }
 
 // ---- Lessons: one at a time, its short text above one question at a time ----
@@ -867,6 +1047,7 @@ class Practice {
 
 async function start() {
   setupTabs();
+  setupPuzzles();
   setupLessons();
   const status = $("p-status");
   try {

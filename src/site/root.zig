@@ -329,6 +329,7 @@ pub fn robots(arena: std.mem.Allocator, opts: Options) ![]const u8 {
 test {
     _ = evalchart;
     _ = flat;
+    _ = @import("puzzles.zig");
 }
 
 test robots {

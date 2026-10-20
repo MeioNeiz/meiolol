@@ -211,7 +211,7 @@ test "fixture games to stats, curves and the website" {
         .{ "privacy.html", &.{ "the date\nshown is the puzzle's, not the game's", "we keep only each puzzle's totals" } },
         // Learn: lessons and practice as tabs, a lesson a screen with its own nav, practice
         // levels (learn.js draws them)
-        .{ "learn.html", &.{ "<section id=\"practice\" data-view=\"practice\">", "<div class=\"lesson-nav\"></div>", "id=\"p-levels\"", "<article class=\"card lesson\" id=\"lesson-roles\"" } },
+        .{ "learn.html", &.{ "<section id=\"puzzles\" data-view=\"puzzles\">", "<script type=\"application/json\" id=\"puzzle-data\">[{\"id\":\"know\"", "\"id\":\"luck\"", "<ol class=\"pz-list nojs\">", "<section id=\"practice\" data-view=\"practice\">", "<div class=\"lesson-nav\"></div>", "id=\"p-levels\"", "<article class=\"card lesson\" id=\"lesson-roles\"" } },
         .{ "matchup/index.html", &.{ "data-min-search", "<tr class=\"bx thin\" data-games=\"3\" data-name=\"", "<section data-min-group data-r=\"top\" id=\"top\"><h2>Top ", "<nav class=\"tabs mu-roles\" aria-label=\"Role\"><a href=\"#all\">All roles</a><a href=\"#top\">Top</a>", "<table class=\"tl mu-table\" id=\"mu-top\" data-sortable>", "<option selected>50</option>", " vs usual", "</b></span></td><td class=\"opt\" data-v=\"", "<p class=\"wr-key\">" } },
         // Champion page: the patch view's most played choice per kind, few games so no
         // win rate, then the build page

@@ -1,7 +1,8 @@
-//! The Learn page: short lessons for new players with examples picked from this
-//! patch's games, a three-question check each, and practice drafts (static/learn.js
-//! fills those from learn/practice.json). Plain words first, numbers behind them; jargon
-//! carries a glossary tip. Progress stays in the browser.
+//! The Learn page: puzzles from measured facts (puzzles.zig), then short lessons for new
+//! players with examples picked from this patch's games, a three-question check each,
+//! and practice drafts (static/learn.js fills those from learn/practice.json). Plain
+//! words first, numbers behind them; jargon carries a glossary tip. Progress stays in
+//! the browser.
 //!
 //! Examples show raw win rates with n, not the draft model's points: at a few thousand
 //! games the model's pair terms are still noise.
@@ -14,6 +15,7 @@ const tpl = html.tpl;
 const matchup = @import("matchup.zig");
 const tierlist = @import("tierlist.zig");
 const learn = @import("../learn.zig");
+const puzzles = @import("puzzles.zig");
 
 const Writer = std.Io.Writer;
 const Role = core.Role;
@@ -147,19 +149,29 @@ fn pctOf(n: Counts) u32 {
 pub fn write(site: *const Site, w: *Writer, facts: *const learn.Facts) !void {
     const a = site.arena;
     const p = site.sharedPage(
-        "Learn to draft | meiolol",
-        "Short lessons for new League of Legends players, with examples from real ranked " ++
-            "games, and practice drafts with every option explained.",
+        "Learn from real games | meiolol",
+        "League of Legends puzzles from real ranked games: guess, then see the numbers. " ++
+            "Plus short lessons and practice drafts for new players.",
         .learn,
     );
     try html.head(w, p);
+    const puzzle_list = try puzzles.list(site);
     try w.writeAll(
-        \\<h1>Learn to draft</h1>
-        \\<p class="lead">Five short lessons, then practice on real ranked drafts. One step at
-        \\a time.</p>
+        \\<h1>Learn from real games</h1>
+        \\<p class="lead">Guess first, then see what the games say.</p>
         \\<div class="learn-tabs" role="tablist" hidden><button type="button" role="tab"
-        \\data-view="lessons">Lessons <span id="t-lessons"></span></button><button type="button"
-        \\role="tab" data-view="practice">Practice <span id="t-practice"></span></button></div>
+        \\data-view="puzzles">Puzzles <span id="t-puzzles"></span></button><button type="button"
+        \\role="tab" data-view="lessons">Basics <span id="t-lessons"></span></button><button
+        \\type="button" role="tab" data-view="practice">Practice <span id="t-practice"></span></button></div>
+        \\<section id="puzzles" data-view="puzzles">
+        \\<h2 class="nojs">Puzzles</h2>
+        \\<div id="pz-bar" class="stepbar" aria-hidden="true"></div>
+        \\<div id="pz" class="card pz" hidden></div>
+        \\
+    );
+    try puzzles.write(w, puzzle_list);
+    try w.writeAll(
+        \\</section>
         \\<section id="lessons" data-view="lessons">
         \\<h2 class="nojs">Lessons</h2>
         \\<ol id="lesson-dots" class="dots" hidden></ol>
@@ -216,10 +228,11 @@ pub fn write(site: *const Site, w: *Writer, facts: *const learn.Facts) !void {
     try tpl.render(w,
         \\<script type="application/json" id="checks">{checks}</script>
         \\<script type="application/json" id="glossary">{terms}</script>
+        \\<script type="application/json" id="puzzle-data">{puzzles}</script>
         \\<script src="reasons.js" defer></script>
         \\<script src="learn.js" defer></script>
         \\
-    , .{ .checks = tpl.json(checks), .terms = tpl.json(terms) });
+    , .{ .checks = tpl.json(checks), .terms = tpl.json(terms), .puzzles = tpl.json(puzzle_list) });
     try html.foot(w, p);
 }
 

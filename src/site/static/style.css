@@ -1004,6 +1004,49 @@ details.mu-more h2 { font-size: 16px; }
 .learn-js .choices button.chosen { background: var(--panel-3); opacity: 1; }
 .choices .pick { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
 #p-reveal-title { font-size: 18px; }
+/* Learn puzzles (learn.js renderPuzzle) */
+.pz { max-width: 760px; padding: 18px 20px; }
+.pz-topic { margin: 0 0 6px; }
+.pz-q { font-size: 20px; line-height: 1.35; margin: 0 0 16px; }
+.pz-q:focus, .pz-verdict:focus { outline: none; }
+.pz-guess { display: grid; gap: 8px; max-width: 520px; }
+.pz-out { font-size: 32px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pz-guess input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; margin: 0; }
+.pz-ends { display: flex; justify-content: space-between; margin-top: -4px; }
+.pz-guess button { justify-self: start; margin-top: 6px; }
+.pz-choices { margin-bottom: 4px; }
+.pz-choices button { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; text-align: left; }
+.pz-choices .pick { flex-basis: 100%; }
+.pz-choices button img { border-radius: 5px; }
+.pz-verdict { font-size: 20px; font-weight: 700; margin: 16px 0 4px; }
+.pz-verdict.good { color: var(--gain); }
+.pz-vs { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin: 0 0 14px; color: var(--muted); }
+.pz-vs b { font-size: 26px; color: var(--text); font-variant-numeric: tabular-nums; margin-right: 12px; }
+.pz-vs .pz-real-n { color: var(--accent); }
+.pz-real { font-weight: 600; margin: 8px 0 12px; }
+.pz-bars { display: grid; gap: 6px; margin: 0 0 14px; }
+.pz-bar { display: grid; grid-template-columns: minmax(0, 13em) minmax(60px, 1fr) 13em; align-items: center; gap: 10px; font-size: 14px; }
+.pz-label { color: var(--t2); }
+.pz-track { height: 10px; border-radius: 5px; background: var(--line); overflow: hidden; }
+.pz-track i { display: block; height: 100%; background: var(--bar-lo); border-radius: 5px; }
+.pz-bar.hi .pz-track i { background: var(--accent); }
+.pz-bar.hi .pz-label, .pz-bar.hi .pz-val { color: var(--text); font-weight: 600; }
+.pz-val { font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+.pz-val small { color: var(--faint); font-weight: 400; font-size: 12px; }
+.pz-why { margin: 0 0 12px; }
+.pz-tip { border-left: 3px solid var(--gain); background: color-mix(in srgb, var(--gain) 10%, var(--panel)); padding: 10px 12px; border-radius: 0 6px 6px 0; font-weight: 600; margin: 0 0 10px; }
+.pz-tips { padding-left: 20px; }
+.pz-tips li { display: list-item; margin: 6px 0; }
+.pz-list { list-style: none; padding: 0; display: grid; gap: 10px; max-width: 760px; }
+@media (max-width: 640px) {
+  .pz { padding: 14px; }
+  .pz-q { font-size: 18px; }
+  .pz-bar { grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; }
+  .learn-tabs { gap: 4px; }
+  .learn-tabs button { padding: 7px 11px; }
+  #t-practice { display: none; }
+  .pz-bar .pz-track { grid-column: 1 / -1; grid-row: 2; }
+}
 .level-done { border-color: var(--gain); }
 @media (max-width: 640px) {
   .levels .level { padding: 8px; }
