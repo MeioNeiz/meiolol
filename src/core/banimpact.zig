@@ -1,8 +1,9 @@
 //! Ban impact (J20): lolalytics' PBI with the win rate pulled toward the role's average,
 //! so a thin champion's lucky edge can't count in full (research/questions/
 //! ban-impact-score.md). Win rate edge over the role's average, times how often it is
-//! picked in games where it was not banned. Per champion and role; the site's champions
-//! table and, later, the picker's ban options (B3) use it
+//! picked in games where it was not banned: wins above the role's average per 10,000
+//! such games. Per champion and role; the site's champions table ("Influence") and,
+//! later, the picker's ban options (B3) use it
 
 const std = @import("std");
 const roles = @import("roles.zig");
@@ -47,10 +48,10 @@ pub const Prior = struct {
         return (@as(f64, @floatFromInt(wins)) - n * p.base) / (n + p.k);
     }
 
-    /// Edge in points times pick rate in % of games it was available, as lolalytics'
-    /// PBI's scale: (win - average) x 100 x pick / (100 - ban), rates in %. `picked`:
-    /// games it was played in the role; `banned` and `total`: games it was banned in
-    /// and all games, so picked / (total - banned) is its pick rate when available
+    /// Wins above the role's average per 10,000 games it was available: edge times pick
+    /// rate when available. The scale of lolalytics' PBI, (win - average) x 100 x pick /
+    /// (100 - ban) with rates in %. `picked`: games it was played in the role; `banned`
+    /// and `total`: games it was banned in and all games
     pub fn score(p: Prior, wins: u32, picked: u32, banned: u64, total: u64) f64 {
         if (banned >= total) return 0;
         const available: f64 = @floatFromInt(total - banned);
@@ -58,7 +59,7 @@ pub const Prior = struct {
     }
 };
 
-test "score: lolalytics' scale, thin champions pulled in" {
+test "score: wins per 10,000 games, thin champions pulled in" {
     const p: Prior = .{ .base = 0.5, .k = 0 };
     // Cho'Gath on lolalytics 16.20: 53.48% won, 6.29% picked, 7.98% banned; their own
     // average put it at +1.97, PBI 12: 1.97 x 6.29 / 92.02 x 100 = 13.5 with ours

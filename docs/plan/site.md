@@ -189,7 +189,10 @@ than lolalytics: our own edge is the lane curves, early/late lean, "Into which t
   Jacob's look; watch the matchup builder's pruning floor and file size on the next run
 - Ban impact (J20, Jacob 20 Oct: "pbr" means a PBI-style score, "the most optimal ban in
   terms of pick rate and win rate"). Done 20 Oct (morning run, bans): core/banimpact.zig,
-  lolalytics' PBI, (win - average) x 100 x pick / (100 - ban), with the win rate pulled
+  games won above the role's average per 10,000 games the champion was not banned, edge
+  x pick rate when not banned, whole numbers (lolalytics' PBI, (win - average) x 100 x
+  pick / (100 - ban), is this count unlabelled; Jacob wanted a scale a reader can
+  picture; per 1,000 most rows read 0.0 to 0.4), with the win rate pulled
   toward the role's average by k games (method of moments per role, as usualK; 500 to 750 on
   the EUW snapshot), so a thin champion's lucky edge can't count in full
   (research/questions/ban-impact-score.md). An "Influence" column (first "Ban impact",

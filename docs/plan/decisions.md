@@ -53,7 +53,10 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
 - J20 (20 Oct) "pbr" on the champions pages means a PBI-style ban impact, "the most
   optimal ban in terms of pick rate and win rate": lolalytics' PBI with small samples
   pulled toward the average, worded "ban impact" (Product rules: no "best ban");
-  column renamed "Influence" the same day (Jacob: a word without "ban")
+  column renamed "Influence" the same day (Jacob: a word without "ban"); scale: games
+  won above the role's average per 10,000 games it was not banned, whole numbers (Jacob:
+  "a different scale to lolalytics but just something smart"; PBI turned out to be this
+  count unlabelled; per 1,000 most rows read 0.0 to 0.4)
 - nn on the GPU: planned, not now
 - Q1 Rewrite the application around game review of your own games, lane curves as the
   benchmark; squads worded as planned, or out until built

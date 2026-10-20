@@ -247,7 +247,7 @@ fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void
     try tpl.renderPart(w,
         \\<input type="search" placeholder="Search champion" data-filter="tiers" aria-label="Search champion"></div>
         \\{gradient}<div class="tl-wrap"><table class="tl" id="tiers" data-sortable>
-        \\<thead><tr><th class="rank">#</th><th class="l" data-sort="text">Champion</th>{role}<th data-sort="num" aria-sort="descending">Win rate</th><th data-sort="num" class="opt">Pick</th><th data-sort="num" class="opt">Ban</th><th data-sort="num" title="Win rate over the role's average, pulled toward it the fewer the games, times how often it is picked when not banned">Influence</th><th data-sort="num">Games</th></tr></thead>
+        \\<thead><tr><th class="rank">#</th><th class="l" data-sort="text">Champion</th>{role}<th data-sort="num" aria-sort="descending">Win rate</th><th data-sort="num" class="opt">Pick</th><th data-sort="num" class="opt">Ban</th><th data-sort="num" title="Wins above the role's average per 10,000 games it was not banned">Influence</th><th data-sort="num">Games</th></tr></thead>
         \\<tbody>
         \\
     , .{
@@ -289,17 +289,18 @@ fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void
     });
 }
 
-/// Influence (ban impact), one decimal as lolalytics' PBI; below 0 dim. Title: its two parts
+/// Influence (ban impact), whole games won per 10,000; below 0 dim. Title: its two parts
 fn impactCell(w: *Writer, row: Row, total: u64) !void {
     const available = total -| row.ch.banned;
-    try tpl.render(w, "<td class=\"{class}\" data-v=\"{v:.3}\" title=\"Win rate {edge:.1} points {side} the role's average once pulled toward it; picked in {pick:.1}% of games it was not banned\">{minus}{abs:.1}</td>", .{
+    try tpl.render(w, "<td class=\"{class}\" data-v=\"{v:.4}\" title=\"Win rate {edge:.1} points {side} the role's average once pulled toward it, picked in {pick:.1}% of games it was not banned: {abs:.0} {more} games won per 10,000 such games\">{minus}{abs:.0}</td>", .{
         .class = if (row.impact < 0) "bi dim" else "bi",
         .v = row.impact,
         // U+2212: tabular figures space a hyphen out as if it were a digit
-        .minus = if (row.impact <= -0.05) "\u{2212}" else "",
+        .minus = if (row.impact <= -0.5) "\u{2212}" else "",
         .abs = @abs(row.impact),
         .edge = 100 * @abs(row.edge),
         .side = if (row.edge < 0) "under" else "over",
+        .more = if (row.impact < 0) "fewer" else "more",
         .pick = if (available == 0) 0 else 100 * @as(f64, @floatFromInt(row.games)) / @as(f64, @floatFromInt(available)),
     });
 }
@@ -340,7 +341,7 @@ pub fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {
     try earlyNote(site, w, false);
     try tierTable(site, w, role, root);
     try tpl.render(w,
-        \\<p class="muted small">Win rate: the champion's, the dot. Bar: how its players' own win rates spread around it, thicker where more players are, players with {min}+ games on it (every role and patch we have; none under {need} such players). On a scale from 25% to 75%, 50% marked. In 10 to 20 games luck alone moves a player's win rate by about 15 points, so much of the spread is luck. Influence: how far the champion's win rate in the role sits above the role's average, pulled toward the average the fewer its games (so a few hundred lucky games can't make a big number), times its pick rate in the games it was not banned; as lolalytics' PBI. High: often played and winning more than most, so a ban takes it away often. Below 0: winning less than most. A past-games measure, not a promise about your game.</p>
+        \\<p class="muted small">Win rate: the champion's, the dot. Bar: how its players' own win rates spread around it, thicker where more players are, players with {min}+ games on it (every role and patch we have; none under {need} such players). On a scale from 25% to 75%, 50% marked. In 10 to 20 games luck alone moves a player's win rate by about 15 points, so much of the spread is luck. Influence: games won above the role's average, per 10,000 games the champion was not banned: its win rate over the role's average, pulled toward the average the fewer its games (so a few hundred lucky games can't make a big number), times how often it was picked in those games. 30: in every 10,000 such games, its team won about 30 more than the role's average win rate would give. High: often played and winning more than most, so a ban takes it away often. Below 0: winning less than most. Per 10,000 so the numbers are whole games (per 1,000 most would be under 1); the scale of lolalytics' PBI, which has no pull. A past-games measure, not a promise about your game.</p>
         \\
     , .{ .min = site.spread.min_games, .need = site.spread.min_players });
     try html.foot(w, p);
