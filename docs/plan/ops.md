@@ -3,6 +3,23 @@
 Crawler, traffic, storage and hosts. How things run: docs/hosting.md, docs/compute.md,
 docs/data-safety.md.
 
+## Crawler at 99%+ of the key (J16)
+
+Measured 16-20 Oct from crawl.log (region requests / 100 per 120 s): steady hours
+~99% (sea ~97%), losses from deploy restarts (2-3 min of nothing each: Riot's counts
+padded our windows full) and daily jobs (19 Oct 20:00 draft-model 77%, 23:00-01:00
+builds 94-96%: sar shows the job reading meiolol.db at up to 44 MB/s, the crawler's
+active pages 4.5 -> 1.4 GB, commits stall, and every thread waits for its commit).
+- Done 20 Oct: rate windows saved and reloaded across restarts, paced catch-up of up to
+  16 slots (040c41e); MemoryHigh=6G on the web loop and box jobs (8a4e366). Restart
+  test 20 Oct 08:21: platform requests 508, 1187, 1744 in the first 3 min (before: 25,
+  95, 213), regions ~120-147 in 3 min (full pace 150), no 429s
+- Next: hourly rates after, tonight's draft-model and builds rounds. If job dips stay:
+  pipelined steps instead of Bucket.flush after each, or BFQ (mq-deadline honours
+  ionice -c 3 only partly)
+- Sea: few "due" players (sea scans them fast, then falls back to never-scanned ones),
+  so more id lookups per new match; a yield question, not key use
+
 ## Crawler speed (Jacob 19 Oct: "seems like it could be a bit faster, it's got slower")
 
 Known cause, 19 Oct: the gpu-box woke to a ~30 h raw backlog and its back-to-back 2 h
