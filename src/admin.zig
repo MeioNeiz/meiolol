@@ -112,6 +112,7 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
     const files = try fileSizes(arena, io, o.data_dir);
     const history_path = try std.fs.path.join(arena, &.{ o.data_dir, "admin-history.tsv" });
     try appendHistory(arena, io, history_path, o, counts, files);
+    const history = try tail(arena, io, history_path, history_lines);
 
     const window_start = o.now_s - @as(i64, o.days) * 86400;
     var key_problems: std.ArrayList(KeyProblem) = .empty;
@@ -132,9 +133,9 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
         .players = try playersByRegion(arena, db, count(counts, "players")),
         .ladder = try ladderTiers(arena, db),
         .by_patch = try groups(arena, db, "SELECT patch, count(*) FROM matches GROUP BY 1 ORDER BY 1 DESC LIMIT 8"),
-        .drafts = try draftMix(arena, db),
+        .drafts = try draftMix(arena, db, storedSince(history, "drafts", o.now_s - 86400, count(counts, "drafts"))),
         .crawl = crawl,
-        .history = try tail(arena, io, history_path, history_lines),
+        .history = history,
         .eval = try tail(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "eval-history.tsv" }), 400),
         .uploads = try uploads(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "web.log" }), window_start),
         .deploys = try tail(arena, io, "DEPLOYED", 15),
@@ -317,24 +318,58 @@ const DraftMix = struct {
     /// Game length histogram, 5-minute bins from 0 (last: 60+)
     minutes: [13]u64 = @splat(0),
 };
-const DayRow = struct { day: i64, region: [regions.len]u64 };
+/// recent: of region, rows stored in the last 24 h
+const DayRow = struct { day: i64, region: [regions.len]u64, recent: [regions.len]u64 };
+
+/// Rows of history's `col` added since `at` (its last line at or before), given the count
+/// now; null without a line in the day before `at`. drafts counts are rowid ranges
+/// (status.rows), so this many back from the newest rowid were stored since `at`
+fn storedSince(history: []const u8, col: []const u8, at: i64, now: i64) ?u64 {
+    var lines = std.mem.tokenizeScalar(u8, history, '\n');
+    const ci = column(lines.next() orelse return null, col) orelse return null;
+    var then: ?i64 = null;
+    while (lines.next()) |line| {
+        const t = std.fmt.parseInt(i64, field(line, 0) orelse continue, 10) catch continue;
+        if (t > at) break;
+        if (t < at - 86400) continue;
+        then = std.fmt.parseInt(i64, field(line, ci) orelse continue, 10) catch continue;
+    }
+    return @intCast(@max(now - (then orelse return null), 0));
+}
+
+fn column(header: []const u8, name: []const u8) ?usize {
+    var it = std.mem.splitScalar(u8, header, '\t');
+    var i: usize = 0;
+    while (it.next()) |h| : (i += 1) if (std.mem.eql(u8, h, name)) return i;
+    return null;
+}
+
+fn field(line: []const u8, i: usize) ?[]const u8 {
+    var it = std.mem.splitScalar(u8, line, '\t');
+    for (0..i) |_| _ = it.next() orelse return null;
+    return it.next();
+}
 
 /// Complete ranked games (drafts rows) of the newest `draft_tail` stored: by game day
 /// and region, platform, patch, rank, side and length
-fn draftMix(arena: std.mem.Allocator, db: store.Db) !DraftMix {
+fn draftMix(arena: std.mem.Allocator, db: store.Db, stored_day: ?u64) !DraftMix {
+    const max_id = try db.scalar("SELECT coalesce(max(id), 0) FROM drafts", .{}) orelse 0;
+    // No history from a day ago: nothing counts as recent
+    const recent_from = max_id - @as(i64, @intCast(stored_day orelse 0));
     var q = try db.prepare(
-        \\SELECT day, platform, patch, rank, blue_win, minutes FROM drafts
-        \\WHERE id > (SELECT coalesce(max(id), 0) FROM drafts) - ? AND queue = ?
+        \\SELECT id, day, platform, patch, rank, blue_win, minutes FROM drafts
+        \\WHERE id > ? AND queue = ?
     );
     defer q.deinit();
     // Solo only, as the models: drafts also holds the flex test sample
-    try q.bind(.{ @as(i64, draft_tail), ep.ranked_solo });
+    try q.bind(.{ max_id - draft_tail, ep.ranked_solo });
     var mix: DraftMix = .{};
-    var days: std.AutoArrayHashMapUnmanaged(i64, [regions.len]u64) = .empty;
+    var days: std.AutoArrayHashMapUnmanaged(i64, [2][regions.len]u64) = .empty;
     var platforms: std.StringArrayHashMapUnmanaged(i64) = .empty;
     var patches: std.StringArrayHashMapUnmanaged(i64) = .empty;
     while (try q.step()) {
         const row = q.row(struct {
+            id: i64,
             day: i64,
             platform: []const u8,
             patch: []const u8,
@@ -357,8 +392,9 @@ fn draftMix(arena: std.mem.Allocator, db: store.Db) !DraftMix {
         pt.value_ptr.* += 1;
         if (ep.platform(row.platform)) |pl| {
             const d = try days.getOrPut(arena, row.day);
-            if (!d.found_existing) d.value_ptr.* = @splat(0);
-            d.value_ptr[@backingInt(pl.region)] += 1;
+            if (!d.found_existing) d.value_ptr.* = @splat(@splat(0));
+            d.value_ptr[0][@backingInt(pl.region)] += 1;
+            if (row.id > recent_from) d.value_ptr[1][@backingInt(pl.region)] += 1;
         }
         const tier: usize = if (row.rank) |r| @min(@as(usize, @intCast(@max(r, 0))) / 4, store.schema.tiers.len) else store.schema.tiers.len;
         mix.tiers[tier] += 1;
@@ -366,7 +402,7 @@ fn draftMix(arena: std.mem.Allocator, db: store.Db) !DraftMix {
         if (row.minutes) |m| mix.minutes[@min(@as(usize, @intCast(@max(m, 0))) / 5, mix.minutes.len - 1)] += 1;
     }
     const day_rows = try arena.alloc(DayRow, days.count());
-    for (days.keys(), days.values(), day_rows) |d, v, *r| r.* = .{ .day = d, .region = v };
+    for (days.keys(), days.values(), day_rows) |d, v, *r| r.* = .{ .day = d, .region = v[0], .recent = v[1] };
     std.mem.sort(DayRow, day_rows, {}, struct {
         fn lt(_: void, a: DayRow, b: DayRow) bool {
             return a.day < b.day;

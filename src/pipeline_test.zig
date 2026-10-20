@@ -496,6 +496,10 @@ test "admin page from the fixture games and a crawl log" {
         "1760224020\tnot-a-sha\tdeploy\tok\tdropped\n" ++
         "1760224030\tab12cd\tswap\tok\tmeiolol-render@a serving; stopped meiolol-render@b\n" });
 
+    // A day before now_s, one draft row fewer: the newest is stored in the last 24 h
+    try tmp.dir.writeFile(io, .{ .sub_path = "admin-history.tsv", .data = "time\tmeiolol_db\ttimeline_db\traw_db\tdisk_used" ++
+        "\tdisk_size\tplayers\tranks\tmatches\ttimelines\tdrafts\tmatch_queue\ttimeline_queue\tmastery\tmeiolol_wal\ttimeline_wal\traw_wal\n" ++
+        "1760137700\t\t\t\t\t\t\t\t\t\t2\t\t\t\t\t\t\n" });
     const out = try std.fs.path.join(arena, &.{ dir, "admin" });
     for (0..2) |_| try admin.generate(gpa, io, db, .{
         .out_dir = out,
@@ -514,6 +518,7 @@ test "admin page from the fixture games and a crawl log" {
         "\"m\":[0,0,25,0]",
         "\"text\":\"warning(riot): 429 (server) on /lol/match/vN/matches/…, waiting Ns\"",
         "\"rows\":3,\"days\":[{\"day\":",
+        "\"recent\":[0,0,1,0]}]",
     }) |want| if (std.mem.indexOf(u8, html, want) == null) {
         std.debug.print("admin page lacks {s}\n", .{want});
         return error.TestUnexpectedResult;
@@ -563,7 +568,7 @@ test "admin page from the fixture games and a crawl log" {
     }
     // One history line per build, under one header
     const history = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ dir, "admin-history.tsv" }), arena, .limited(1 << 20));
-    try testing.expectEqual(3, std.mem.count(u8, history, "\n"));
+    try testing.expectEqual(4, std.mem.count(u8, history, "\n"));
 }
 
 test "fixture games to the Draft tester's draft and lane models" {

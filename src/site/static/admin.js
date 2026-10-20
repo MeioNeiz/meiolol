@@ -1277,17 +1277,21 @@ VIEWS.ingest = body => {
   const sec = section(body, "What we ingest", `Complete ranked games (draft rows): the newest ${num(M.rows)} stored, by the day each was played.`);
   const g = grid(sec);
   const days = M.days;
-  // The window's first day is cut by the row limit; the newest two still fill in as
-  // matches arrive after the game
-  const today = Math.floor(D.now / 86400);
-  const partial = days.map((d, i) => i === 0 || d.day >= today - 1);
+  // The window's first day is cut by the row limit. Days keep filling for about a week
+  // (players' older games found later), so each bar's part stored in the last 24 h shows
+  // how far from finished it is
+  const cut = days.map((_, i) => i === 0);
+  const recent = d => d.recent ? sumR(regions.map(r => d.recent[regionIdx[r]])) : 0;
   chart(g, {
     x: days.map(d => d.day * 86400), step: 86400, title: "Games by game day", type: "bars",
     xFmt: t => dayLabel(t / 86400), xMin: days.length ? days[0].day * 86400 : 0,
     xMax: days.length ? (days[days.length - 1].day + 1) * 86400 : 1,
-    series: regions.map(r => ({ name: r, color: REGION_COLOR[r], values: days.map((d, i) => partial[i] ? 0 : d.region[regionIdx[r]]) }))
-      .concat([{ name: "partial day", color: "#5b6478", values: days.map((d, i) => partial[i] ? sumR(regions.map(r => d.region[regionIdx[r]])) : 0) }]),
-    caption: "By the day the game was played, not the day it was stored. Grey: the first day is cut by the window, the last two still fill in. Games stored a day: Overview.",
+    series: regions.map(r => ({ name: r, color: REGION_COLOR[r], values: days.map((d, i) => cut[i] ? 0 : d.region[regionIdx[r]] - (d.recent ? d.recent[regionIdx[r]] : 0)) }))
+      .concat([
+        { name: "stored in the last 24 h", color: "#8a93a6", values: days.map((d, i) => cut[i] ? 0 : recent(d)) },
+        { name: "cut by the window", color: "#5b6478", values: days.map((d, i) => cut[i] ? sumR(regions.map(r => d.region[regionIdx[r]])) : 0) },
+      ]),
+    caption: "By the day the game was played, not the day it was stored. Light grey: stored in the last 24 h; a day keeps gaining games for about a week, so a bar with much light grey is not finished. Dark grey: the first day, cut by the window. Games stored a day: Overview.",
   });
   chart(g, {
     x: M.minutes.map((_, i) => i * 5), step: 5, title: "Game length", type: "bars",

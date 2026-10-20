@@ -38,6 +38,19 @@ its requests from ~2,000 to ~1,170 (box io pressure full avg300 60%). Fixed in 1
 - If it drops: requests per match, 429s ours vs
   Riot's (J8), time per request, SQLite write and fsync time, the rolling-window and
   VACUUM work below; then whether the key's rate is the ceiling (production key)
+- Rechecked 20 Oct 22:30 (Jacob: "down quite a lot", "americas sub 95%"): no drop.
+  Stored ~166k/day, match routes ~196 req/min (key limit), every 15-min window 96-100%
+  except 21:20-21:50 BST (americas, asia, sea 83-89%; europe 97%): the gpu-box back
+  after ~16 h away, eight 2 h exports 20:31-22:13, writer queue 72 vs ~20. 10-15% for
+  30 min against ~45% on 19 Oct, so the export rests stay. What looked down: "Games by
+  game day" (days fill for ~a week; the chart now shows each bar's last 24 h), platform
+  calls ~610 to ~400/min (mastery, fewer new players), timelines 5.5k to 4k/h (9afcdc9's
+  sparse sample, by design)
+- Open lead, not chased: fewer recent games stored. Of the drafts stored in a 24 h
+  window, the share played that day or the day before fell from 55-69% (15-18 Oct) to
+  46% (20 Oct); 19 Oct had 74k a day after it, 17-18 Oct 83-85k. Total stored is flat,
+  so the budget goes to older games from players' histories (match id lists, queue
+  order)
 
 ## Traffic looks inflated (Jacob 19 Oct: "def mostly bots, it's not proper")
 
