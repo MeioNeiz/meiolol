@@ -202,20 +202,23 @@ function pzReveal(box, p, g) {
   return head;
 }
 
+function pzChoice(b, c) {
+  if (c.icon) {
+    const img = document.createElement("img");
+    img.src = c.icon;
+    img.alt = "";
+    img.width = img.height = 28;
+    b.append(img);
+  }
+  b.append(c.t);
+  return b;
+}
+
 function pzInput(box, p) {
   if (p.kind === "pick") {
     const row = el("div", "choices pz-choices");
     p.choices.forEach((c, j) => {
-      const b = button("", undefined, () => pzAnswer(p, j));
-      if (c.icon) {
-        const img = document.createElement("img");
-        img.src = c.icon;
-        img.alt = "";
-        img.width = img.height = 28;
-        b.append(img);
-      }
-      b.append(c.t);
-      row.append(b);
+      row.append(pzChoice(button("", undefined, () => pzAnswer(p, j)), c));
     });
     box.append(row);
     return;
@@ -265,7 +268,7 @@ function renderPuzzle(focus = null) {
     if (p.kind === "pick") {
       const row = el("div", "choices pz-choices");
       p.choices.forEach((c, j) => {
-        const b = button(j === g ? "chosen" : "", c.t);
+        const b = pzChoice(button(j === g ? "chosen" : ""), c);
         b.disabled = true;
         if (j === p.answer) b.classList.add("played");
         const tag = [j === g && "your pick", j === p.answer && "answer"].filter(Boolean).join(", ");
