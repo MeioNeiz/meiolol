@@ -184,6 +184,10 @@ detected cross-role kinds. Admin only today; the public draft tool follows J2.
 
 - Privacy/terms into src/site/prose.zig from docs/legal once Jacob fills the
   placeholders; objection by email (`meiolol forget`) until the form is live
+- Privacy rules (J10) audited 20 Oct: docs/privacy-rules.md (each rule Riot, law or
+  self-imposed, with quotes). Done: method and privacy pages, privacy.md, lia.md say what
+  Daily Draft shows. Next: Your games teammates' names would need api.game to keep them
+  (self-imposed rule, plan item); Jacob's list at the end of privacy-rules.md
 - Reviewer walk 2026-10-14 (desktop and phone, every section) fixed in 38b940f,
   145a898, bbda65c, b37dd02, 74d6cdb, ab7d4cc; screenshots docs/review-shots/. Left:
   unknown URLs get a plain-text "not found" from meiolol-render (a site 404 page needs
