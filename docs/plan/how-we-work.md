@@ -24,3 +24,12 @@ Unattended runs (17 Oct night): the Mac slept at 22:33 and killed the fix agent
 mid-turn, and a usage limit stopped two agents at 21:44. Start the coordinator under
 `caffeinate -i`, keep team notes in data/team/ (CLAUDE.md), and long box jobs in
 systemd units, not a foreground ssh.
+Push CI (J17, 20 Oct): lab and nn tests left `zig build ci` for `zig build test-lab`
+(deploy/lab-run.sh runs it once per lab harness before a build); learn.practice reads
+each game once; synth tests on fewer games. Warm ci on a one-line core change, Mac at
+load 13-17: 56 s to 38 s; idle, compile 18 s plus run 11 s, ~30 s. Next if wanted: the
+backend test compile (18 s, LLVM Debug) is now most of it; splitting pipeline_test into
+its own test binary would compile in parallel but costs memory on the 24 GB Mac.
+Self-hosted backend (-fno-llvm) on the Mac reached 32 GB on a one-test file: not usable.
+Tried and dropped: the lane-model fixture needs 150 games (100 with timelines); lean's
+"planted" test needs its 60k games (absolute tolerances)
