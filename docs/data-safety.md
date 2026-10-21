@@ -142,6 +142,17 @@ segment 000002 had copied it (Key switch, below). 000002 on both mirrors blanked
 same way on 18 Oct (980 PUUIDs); a second restore then had no unexplained difference in
 any of the seven tables (participants: 49 exempt, the rest the same).
 
+## Desktop signing keys
+
+The desktop app trusts two Ed25519 public keys built into it (src/desktop/sign.zig).
+Secrets: vault meiolol/desktop (DESKTOP_RELEASE_KEY, DESKTOP_DATA_KEY; source file
+~/.config/meiolol/desktop-keys.env, mode 600), and the data key also on the box as
+ml/meiolol/desktop-data.key (mode 600, not in the backups: restore it from vault onto a
+new box). The release key never goes to a server. Lost or leaked: make a new pair, put
+its public half in sign.zig, release, and every installed app needs the zip once more
+(it rejects the new key). Made 21 Oct by a one-off generator; `meiolol desktop-sign`
+refuses any key whose public half the app doesn't ship.
+
 ## Health alerts
 
 deploy/health.sh runs on the box and prints one line per problem:

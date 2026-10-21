@@ -1,7 +1,8 @@
 //! The desktop app keeping itself current from meio.lol (J19): its statistics, lane
-//! curves and its own exe. update.json in the update directory lists each file's name,
-//! SHA-256 and size; one whose local copy differs is downloaded beside it as .part,
-//! checked, then renamed over it. Windows can't overwrite a running exe but can rename it:
+//! curves and its own exe. update.signed in the update directory lists each file's name,
+//! SHA-256 and size, signed by the box's data key; the exe's entry also carries its
+//! release version and the release key's signature (sign.zig). A file whose local copy
+//! differs is downloaded beside it as .part, checked, then renamed over it. Windows can't overwrite a running exe but can rename it:
 //! it becomes meiolol-desktop.old.exe (kept for a manual rollback) and the new one takes
 //! its name, so the next start runs it.
 //! Until the production key the directory is behind the admin login (Product rules:
@@ -12,10 +13,10 @@
 const builtin = @import("builtin");
 const std = @import("std");
 const Io = std.Io;
+const sign = @import("sign.zig");
 
 pub const default_base = "https://meio.lol/admin/desktop/";
 pub const key_file = "update.key";
-pub const manifest_name = "update.json";
 pub const old_exe = "meiolol-desktop.old.exe";
 const exe_name = "meiolol-desktop.exe";
 const key_header = "x-meiolol-desktop";
@@ -24,7 +25,14 @@ const Manifest = struct {
     patch: []const u8,
     files: []const File,
 
-    const File = struct { name: []const u8, sha256: []const u8, bytes: u64 };
+    const File = struct {
+        name: []const u8,
+        sha256: []const u8,
+        bytes: u64,
+        /// The exe's: release version and the release key's signature
+        version: u64 = 0,
+        sig: []const u8 = "",
+    };
 };
 
 pub const Result = struct {
@@ -44,6 +52,11 @@ pub const Options = struct {
     /// Ends in a slash
     base: []const u8 = default_base,
     key: []const u8,
+    /// The running exe's release (build option desktop-version): an exe of the same or
+    /// an older release is never installed, so an old signed one can't be served again.
+    /// 0, unreleased builds, takes any signed exe
+    version: u64 = 0,
+    keys: sign.Keys = sign.shipped,
 };
 
 /// The key in update.key in `dir`, trimmed; null when there is none
@@ -64,8 +77,9 @@ pub fn run(o: Options) !Result {
     var u: Updater = .{ .o = o, .http = &http, .headers = &headers };
 
     var body: Io.Writer.Allocating = .init(arena);
-    try u.get(manifest_name, &body.writer);
-    const manifest = try std.json.parseFromSliceLeaky(Manifest, arena, body.written(), .{
+    try u.get(sign.manifest_name, &body.writer);
+    const json = try sign.openManifest(body.written(), o.keys.data);
+    const manifest = try std.json.parseFromSliceLeaky(Manifest, arena, json, .{
         .ignore_unknown_fields = true,
     });
     if (!validPatch(manifest.patch)) return error.BadManifest;
@@ -86,6 +100,10 @@ pub fn run(o: Options) !Result {
             .exe => o.exe.?,
         };
         if (f.sha256.len != 64) return error.BadManifest;
+        if (kind == .exe) {
+            if (o.version != 0 and f.version <= o.version) continue;
+            try sign.verifyExe(o.keys.release, f.sig, f.version, f.sha256, f.bytes);
+        }
         if (u.hash(local)) |have| {
             if (std.ascii.eqlIgnoreCase(&have.hex, f.sha256)) continue;
         } else |err| if (err != error.FileNotFound) return err;
@@ -223,6 +241,10 @@ const Updater = struct {
     }
 };
 
+test {
+    _ = sign;
+}
+
 const httpd = @import("../httpd.zig");
 
 /// Serves the files in `dir` under /d/ to requests carrying the key "k"
@@ -252,19 +274,29 @@ fn testFile(dir: Io.Dir, name: []const u8, data: []const u8) !void {
     try dir.writeFile(std.testing.io, .{ .sub_path = name, .data = data });
 }
 
-fn testManifest(dir: Io.Dir, files: []const [2][]const u8) !void {
+/// update.signed listing `files`, signed with sign.testKeys()'s pairs; the exe as
+/// release `version`
+fn testManifest(dir: Io.Dir, files: []const [2][]const u8, version: u64) !void {
     var buf: [2048]u8 = undefined;
     var w: Io.Writer = .fixed(&buf);
     try w.writeAll("{\"patch\":\"16.20\",\"built\":\"x\",\"files\":[");
     for (files, 0..) |f, i| {
         var digest: [32]u8 = undefined;
         std.crypto.hash.sha2.Sha256.hash(f[1], &digest, .{});
-        try w.print("{s}{{\"name\":\"{s}\",\"sha256\":\"{s}\",\"bytes\":{d}}}", .{
-            if (i > 0) "," else "", f[0], &std.fmt.bytesToHex(digest, .lower), f[1].len,
+        const hex = std.fmt.bytesToHex(digest, .lower);
+        try w.print("{s}{{\"name\":\"{s}\",\"sha256\":\"{s}\",\"bytes\":{d}", .{
+            if (i > 0) "," else "", f[0], &hex, f[1].len,
         });
+        if (std.mem.eql(u8, f[0], exe_name)) {
+            const sig = try sign.signExe(sign.testKeyPair(1), version, &hex, f[1].len);
+            try w.print(",\"version\":{d},\"sig\":\"{s}\"", .{ version, &sig });
+        }
+        try w.writeAll("}");
     }
     try w.writeAll("]}");
-    try testFile(dir, manifest_name, w.buffered());
+    const signed = try sign.sealManifest(std.testing.allocator, sign.testKeyPair(2), w.buffered());
+    defer std.testing.allocator.free(signed);
+    try testFile(dir, sign.manifest_name, signed);
 }
 
 test "update fetches changed files, swaps the exe, then has nothing to do" {
@@ -282,7 +314,7 @@ test "update fetches changed files, swaps the exe, then has nothing to do" {
         .{ "later.bin", "ignored" },
     };
     for (files) |f| try testFile(srv, f[0], f[1]);
-    try testManifest(srv, &files);
+    try testManifest(srv, &files, 5);
     try testFile(app, "app.exe", "old exe");
     try testFile(app, "stats-16.19.bin", "old stats");
     try testFile(app, "recent-curves.bin", "curves");
@@ -295,7 +327,16 @@ test "update fetches changed files, swaps the exe, then has nothing to do" {
     defer serving.cancel(io);
     var base_buf: [64]u8 = undefined;
     const base = try std.fmt.bufPrint(&base_buf, "http://127.0.0.1:{d}/d/", .{server.socket.address.getPort()});
-    var o: Options = .{ .gpa = std.testing.allocator, .io = io, .dir = app, .exe = "app.exe", .base = base, .key = "k" };
+    var o: Options = .{
+        .gpa = std.testing.allocator,
+        .io = io,
+        .dir = app,
+        .exe = "app.exe",
+        .base = base,
+        .key = "k",
+        .version = 4,
+        .keys = sign.testKeys(),
+    };
 
     try std.testing.expectEqual(Result{ .data = true, .exe = true }, try run(o));
     var buf: [64]u8 = undefined;
@@ -310,8 +351,22 @@ test "update fetches changed files, swaps the exe, then has nothing to do" {
     try std.testing.expectError(error.Unauthorized, run(o));
 
     o.key = "k";
-    try testManifest(srv, &.{.{ "stats.bin", "other stats" }});
+    try testManifest(srv, &.{.{ "stats.bin", "other stats" }}, 0);
     try std.testing.expectError(error.HashMismatch, run(o));
     try std.testing.expectEqualStrings("new stats", try app.readFile(io, "stats-16.20.bin", &buf));
     try std.testing.expectError(error.FileNotFound, app.access(io, "stats-16.20.bin.part", .{}));
+
+    // Signed by the release key but not newer than the running exe: left alone
+    try testFile(srv, exe_name, "older exe");
+    try testManifest(srv, &.{.{ exe_name, "older exe" }}, 4);
+    try std.testing.expectEqual(Result{}, try run(o));
+    try std.testing.expectEqualStrings("new exe", try app.readFile(io, "app.exe", &buf));
+
+    // Any other key, on the manifest or the exe, is refused before a download
+    o.keys.data = sign.testKeyPair(3).public_key.toBytes();
+    try std.testing.expectError(error.BadSignature, run(o));
+    o.keys = .{ .release = sign.testKeyPair(3).public_key.toBytes(), .data = sign.testKeys().data };
+    try testManifest(srv, &.{.{ exe_name, "older exe" }}, 6);
+    try std.testing.expectError(error.BadSignature, run(o));
+    try std.testing.expectError(error.FileNotFound, app.access(io, "app.exe.part", .{}));
 }

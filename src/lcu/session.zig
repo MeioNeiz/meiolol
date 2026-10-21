@@ -358,3 +358,18 @@ test "phase, ids, owned, pool" {
     const not_ids = parseIds(arena, "{\"message\": \"x\"}");
     try testing.expectError(error.UnexpectedToken, not_ids);
 }
+
+fn fuzzSession(fixture: []const u8, s: *testing.Smith) !void {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const cs = parse(arena, try core.fuzz.mutate(s, arena, fixture)) catch return;
+    _ = cs.fingerprint();
+    _ = cs.draft(s.value(Role), null);
+}
+
+test "fuzz: a damaged session parses or fails, never crashes" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    try testing.fuzz(@as([]const u8, try readFixture(arena_state.allocator())), fuzzSession, .{});
+}

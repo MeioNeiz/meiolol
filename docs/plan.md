@@ -50,6 +50,9 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
 8. Training across patches (Jacob 21 Oct, 16.21 out): docs/plan/patch-transfer.md.
    16.21's first day moved champions 0.75 pp (patched ones 1.9 pp); arms, newest-only
    rolling evaluation, train-vs-eval curve; needs a drafts pin with 16.21
+9. Our Zig "libraries" toward what the Rust crates give (Jacob 21 Oct), checks outside
+   ci: desktop releases signed, fuzzed and ReleaseSafe done; next HTTP server limits,
+   backend fuzzing, TSan, one `net` module: docs/plan/libraries.md
 
 Others own: the TW2 mastery retry (meiolol-8f); neural nets vs
 today's model; the draft's "Rammus into high AD/AP" check.
@@ -66,6 +69,8 @@ today's model; the draft's "Rammus into high AD/AP" check.
   internal teacher model, ensembles, explaining it, causal and patch tests
 - docs/plan/patch-transfer.md: training on old patches for the newest, evaluated on
   the newest only (21 Oct)
+- docs/plan/libraries.md: our Zig pieces toward Rust-crate quality, with fuzzing and
+  ThreadSanitizer outside ci (21 Oct)
 - docs/plan/ops.md: crawler speed, traffic, storage and hosts, hosting reference
 - docs/plan/decisions.md: Jacob's decisions (J, Q, G ids), open decisions, ruled out
 - docs/plan/how-we-work.md: sessions, team size, unattended runs

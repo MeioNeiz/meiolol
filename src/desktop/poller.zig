@@ -55,9 +55,12 @@ var io: std.Io = undefined;
 var lockfile: ?[]const u8 = null;
 /// Wakes the UI thread after a publish
 var wake: *const fn () void = undefined;
+/// This exe's release (update.Options.version)
+var version: u64 = 0;
 
-pub fn start(init: std.process.Init, lockfile_override: ?[]const u8, wake_ui: *const fn () void) !void {
+pub fn start(init: std.process.Init, lockfile_override: ?[]const u8, wake_ui: *const fn () void, release: u64) !void {
     io = init.io;
+    version = release;
     lockfile = lockfile_override;
     wake = wake_ui;
     const gpa = init.gpa;
@@ -120,6 +123,7 @@ fn updateOptions(init: std.process.Init) ?update.Options {
         .exe = std.fs.path.basename(exe_path),
         .base = init.environ_map.get("MEIOLOL_UPDATE_URL") orelse update.default_base,
         .key = key,
+        .version = version,
     };
 }
 

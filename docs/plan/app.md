@@ -51,8 +51,10 @@ judgements, 3 to 5 options with reasons, no "best pick" or "+X% win rate" wordin
   The zip is the exe and update.key; the app updates itself (Jacob 20 Oct 09:05): at
   start and every 3 h it fetches the current stats and curves and a new exe from
   /admin/desktop/ when their hashes change, swaps data in while open and the exe on the
-  next start (architecture.md "Desktop window"). box.sh sync builds the exe for the
-  box; each web round (web-loop.sh desktop_files) publishes the files and update.json.
+  next start (architecture.md "Desktop window"). Since 21 Oct only
+  deploy/desktop-release.sh ships an exe (release checks, fuzzing, ReleaseSafe, signed
+  with the offline release key); each web round (web-loop.sh desktop_files) publishes
+  the released exe, the data and update.signed (signed with the box's data key).
   Behind the admin gate until the key: the zip's key opens that directory only
   (hosting.md)
 - Mock champ select from the Mac (20 Oct): `deploy/mock-cs.sh [SCENARIO] [--window]`

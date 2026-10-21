@@ -5,6 +5,7 @@ pub const statsfile = @import("statsfile.zig");
 pub const score = @import("score.zig");
 pub const curvesfile = @import("curvesfile.zig");
 pub const banimpact = @import("banimpact.zig");
+pub const fuzz = @import("fuzz.zig");
 pub const curvefit = curvesfile.curvefit;
 
 pub const Role = roles.Role;

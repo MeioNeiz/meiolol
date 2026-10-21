@@ -640,6 +640,8 @@ pub const Curves = struct {
 
     /// Over `bytes`, which must outlive it. Checks the header and that the size is
     /// exactly its curves, so every curve lies inside `bytes`; values are not checked
+    /// (a mapped file would be read whole), so View's sums saturate: a damaged file
+    /// gives wrong counts, never a crash (the desktop app's fuzz test)
     fn view(gpa: std.mem.Allocator, bytes: []align(file_align) const u8) ParseError!Curves {
         if (bytes.len < header_len) return error.Truncated;
         if (!std.mem.eql(u8, bytes[0..magic.len], magic)) return error.BadMagic;
@@ -749,7 +751,7 @@ pub const View = struct {
 
     pub fn wins(v: View) u32 {
         const h = v.curve.header;
-        return if (v.flipped) h.games - h.a_wins else h.a_wins;
+        return if (v.flipped) h.games -| h.a_wins else h.a_wins;
     }
 
     pub const Lane = struct {
@@ -767,7 +769,7 @@ pub const View = struct {
             .ahead = h.lane_a,
             .behind = h.lane_b,
             .wins_ahead = h.a_wins_lane_a,
-            .wins_behind = h.lane_b - h.b_wins_lane_b,
+            .wins_behind = h.lane_b -| h.b_wins_lane_b,
         };
         if (!v.flipped) return lane_a;
         return .{
@@ -775,7 +777,7 @@ pub const View = struct {
             .ahead = h.lane_b,
             .behind = h.lane_a,
             .wins_ahead = h.b_wins_lane_b,
-            .wins_behind = h.lane_a - h.a_wins_lane_a,
+            .wins_behind = h.lane_a -| h.a_wins_lane_a,
         };
     }
 
@@ -802,7 +804,7 @@ pub const View = struct {
         const row = v.curve.header.comeback[@backingInt(at)];
         if (!v.flipped) return row[b];
         const c = row[buckets - 1 - b];
-        return .{ .games = c.games, .wins = c.games - c.wins };
+        return .{ .games = c.games, .wins = c.games -| c.wins };
     }
 
     /// Median seconds to the first finished item for me and them; 0 when unknown

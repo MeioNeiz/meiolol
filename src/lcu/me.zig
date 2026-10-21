@@ -3,6 +3,7 @@
 //! replies (puuid, summonerId) are never kept.
 
 const std = @import("std");
+const core = @import("core");
 
 pub const paths = struct {
     pub const mastery = "/lol-champion-mastery/v1/local-player/champion-mastery";
@@ -76,4 +77,22 @@ test "solo tier" {
     ;
     try std.testing.expectEqual(null, try parseSoloTier(a, none));
     try std.testing.expectEqual(null, try parseSoloTier(a, "{}"));
+}
+
+fn fuzzMe(_: void, s: *std.testing.Smith) !void {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const mastery =
+        \\[{"championId":103,"championPoints":1200},{"championId":266,"championPoints":91000}]
+    ;
+    const ranked =
+        \\{"queueMap":{"RANKED_SOLO_5x5":{"tier":"GOLD","division":"II"}}}
+    ;
+    _ = parseMastery(arena, try core.fuzz.mutate(s, arena, mastery)) catch {};
+    _ = parseSoloTier(arena, try core.fuzz.mutate(s, arena, ranked)) catch {};
+}
+
+test "fuzz: damaged mastery and ranked replies" {
+    try std.testing.fuzz({}, fuzzMe, .{});
 }

@@ -759,7 +759,7 @@ level still pickable.
   --search-prefix /opt/homebrew` (`brew install sdl3`; dvui's SDL3 source build fails on
   0.17, a config header mismatch). Not shipped; reads MEIOLOL_LOCKFILE
 
-- `zig build desktop -Doptimize=ReleaseSmall`: zig-out/bin/meiolol-desktop.exe (~3 MB;
+- `zig build desktop`: zig-out/bin/meiolol-desktop.exe (~3 MB;
   dvui pinned to PR #1012, lazy so the box never fetches it). Reads the newest
   stats-*.bin and recent-curves.bin (else curves-<patch>.bin) from data/export or next
   to the exe (src/datafiles.zig, shared with `meiolol-app`)
@@ -769,10 +769,23 @@ level still pickable.
   main draws every vsync, ~10% of a core idle). Detached because a request to a hung
   client cannot be interrupted. Per champ select it also reads pickable and owned champions, the
   player's own mastery and visible solo tier (lcu/me.zig)
+- Releases (21 Oct): only deploy/desktop-release.sh ships an exe; a push never does.
+  On a clean checkout of a pushed commit it runs `zig build desktop-check` (core and app
+  tests under ThreadSanitizer) and `zig build desktop-fuzz --fuzz=N` (fuzz tests of what
+  the app reads: stats, curves and the lane card, champ select, mastery and ranked
+  replies, the signed manifest; core/fuzz.zig mutates good files), builds ReleaseSafe
+  with `-Ddesktop-version=<unix seconds>`, signs and copies it to the box's release/.
+  Plain `zig build test` runs each fuzz test once
+- Signatures (desktop/sign.zig, Ed25519, public keys built in): the release key (vault
+  meiolol/desktop only) signs each exe's version, SHA-256 and size (`meiolol
+  desktop-sign exe`); the data key (box ml/meiolol/desktop-data.key, copy in the same
+  vault group) signs the manifest each web round (`desktop-sign manifest`). The app
+  refuses an unsigned manifest, an exe not signed by the release key, and an exe whose
+  release is not newer than its own. A new key needs a new download
 - Updates (desktop/update.zig, J19): with update.key beside the exe, a detached thread
-  reads https://meio.lol/admin/desktop/update.json at start and every 3 h (5 min after a
-  failure; MEIOLOL_UPDATE_URL elsewhere) and fetches each listed file whose SHA-256
-  differs from the local copy: stats.bin as stats-<patch>.bin (older stats-*.bin
+  reads https://meio.lol/admin/desktop/update.signed at start and every 3 h (5 min after
+  a failure; MEIOLOL_UPDATE_URL elsewhere), checks its signature, and fetches each listed
+  file whose SHA-256 differs from the local copy: stats.bin as stats-<patch>.bin (older stats-*.bin
   deleted), recent-curves.bin, meiolol-desktop.exe. Each goes to NAME.part (gzip on the
   wire, nginx's .gz copies), is checked against hash and size, then renamed over the
   old. The running exe is renamed to meiolol-desktop.old.exe (kept for a manual

@@ -61,8 +61,11 @@ pub fn build(b: *std.Build) void {
     b.step("fmt", "Format the Zig sources").dependOn(&b.addFmt(.{ .paths = &fmt_paths }).step);
 
     const windows = b.resolveTargetQuery(ci_targets[0]);
+    // The updater never installs an exe of the same or an older release (update.zig)
+    const desktop_version = b.option(u64, "desktop-version", "Release number for the desktop " ++
+        "exe (deploy/desktop-release.sh; 0, the default, is unreleased)") orelse 0;
     const desktop_step = b.step("desktop", "Build the desktop window for Windows (meiolol-desktop.exe)");
-    if (desktopExe(b, windows, optimize)) |exe| desktop_step.dependOn(&b.addInstallArtifact(exe, .{}).step);
+    if (desktopExe(b, windows, optimize, desktop_version)) |exe| desktop_step.dependOn(&b.addInstallArtifact(exe, .{}).step);
     // Opt in: dvui's SDL3 dependency would be fetched on every host otherwise
     const dev_step = b.step("desktop-dev", "Run the desktop window on this Mac or Linux " ++
         "via SDL3 (-Ddev-window -fsys=sdl3; deploy/mock-cs.sh)");
@@ -146,7 +149,7 @@ pub fn build(b: *std.Build) void {
             ci.dependOn(&b.addExecutable(.{ .name = name, .root_module = mod }).step);
         }
     }
-    if (desktopExe(b, windows, .Debug)) |exe| ci.dependOn(&exe.step);
+    if (desktopExe(b, windows, .Debug, 0)) |exe| ci.dependOn(&exe.step);
     if (shot) |exe| ci.dependOn(&exe.step);
     ci.dependOn(&mock_exe.step);
     // Debug: ci only needs it to compile, and ReleaseFast spends up to a minute in LLVM
@@ -157,6 +160,19 @@ pub fn build(b: *std.Build) void {
     ci.dependOn(lint(b, "sh", "deploy/hooks/claude-bash-guard.sh --test > /dev/null"));
     ci.dependOn(lint(b, "perl", "for f in deploy/*.pl; do perl -c \"$f\" 2> /dev/null || { perl -c \"$f\"; exit 1; }; done"));
     ci.dependOn(lint(b, "node", "for f in src/site/static/*.js deploy/training/*.js deploy/*.js; do node --check \"$f\" || exit 1; done"));
+
+    // Desktop release checks (deploy/desktop-release.sh), slower than ci so not in it:
+    // core and app tests under ThreadSanitizer, and their fuzz tests searched for --fuzz=N
+    // inputs (plain `zig build test` runs each fuzz test once)
+    const tsan = modules(b, target, .Debug);
+    const fuzz = modules(b, target, .Debug);
+    const check_step = b.step("desktop-check", "Desktop release: core and app tests under ThreadSanitizer");
+    const fuzz_step = b.step("desktop-fuzz", "Desktop release: fuzz the parsers it downloads (--fuzz=N)");
+    for ([_]*std.Build.Module{ tsan.core, tsan.app }, [_]*std.Build.Module{ fuzz.core, fuzz.app }) |t, f| {
+        t.sanitize_thread = true;
+        check_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = t, .filters = test_filters })).step);
+        fuzz_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = f, .filters = &.{"fuzz"} })).step);
+    }
 }
 
 const Modules = struct {
@@ -269,7 +285,7 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
 
 /// The desktop window (src/desktop_main.zig): dvui with its Direct3D 11 backend, tree-sitter
 /// off. Null until the lazy dvui dependency is fetched (the build reruns after)
-fn desktopExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode) ?*std.Build.Step.Compile {
+fn desktopExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode, version: u64) ?*std.Build.Step.Compile {
     const dvui = b.lazyDependency("dvui", .{
         .target = target,
         .optimize = optimize,
@@ -288,6 +304,9 @@ fn desktopExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lan
             },
         }),
     });
+    const options = b.addOptions();
+    options.addOption(u64, "desktop_version", version);
+    exe.root_module.addOptions("build_options", options);
     exe.subsystem = .windows;
     return exe;
 }

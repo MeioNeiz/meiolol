@@ -111,16 +111,20 @@ storage_scan() {
 }
 
 # The Windows app, admin/desktop/ (behind the login until the public release, plan J7,
-# J19): the deployed exe (box.sh sync), the renderer's data/stats.bin (EUW, current
-# patch: what meio.lol serves) and recent-curves.bin, each with a .gz for nginx's
-# gzip_static, and update.json listing them (name, sha256, bytes) for the app's own
-# update check (src/desktop/update.zig), which nginx lets in with the key in
-# desktop.token (docs/hosting.md). The zip people download is the exe and that key as
-# update.key: the app fetches its data on first start and keeps it and itself current.
-# All made again when an input changed, the curves' .gz only when they did
+# J19): the released exe (release/, put there by deploy/desktop-release.sh on the Mac,
+# never by a deploy), the renderer's data/stats.bin (EUW, current patch: what meio.lol
+# serves) and recent-curves.bin, each with a .gz for nginx's gzip_static, and the
+# manifest listing them (name, sha256, bytes; the exe also its release version and
+# signature from release/meiolol-desktop.json) for the app's own update check
+# (src/desktop/update.zig), which nginx lets in with the key in desktop.token
+# (docs/hosting.md). update.signed is that manifest signed with desktop-data.key
+# (`meiolol desktop-sign`); update.json, the same unsigned, only for apps from before
+# 22 Oct. The zip people download is the exe and that key as update.key: the app fetches
+# its data on first start and keeps it and itself current. All made again when an input
+# changed, the curves' .gz only when they did
 desktop_files() {
     local d=data/desktop.new inputs
-    [[ -f bin/meiolol-desktop.exe && -f data/export/recent-curves.bin && -n "$patch" ]] \
+    [[ -f release/meiolol-desktop.exe && -f data/export/recent-curves.bin && -n "$patch" ]] \
         || return 0
     [[ -s desktop.token ]] || (umask 077 && openssl rand -hex 32 > desktop.token)
     rm -rf "$d" && mkdir -p "$d/meiolol"
@@ -131,24 +135,29 @@ desktop_files() {
         return 1
     fi
     # The curves by size and time, not content: 80 MB to read every round
-    inputs=$(sha256sum "$d/stats.bin" bin/meiolol-desktop.exe desktop.token | cut -d' ' -f1 \
-        && stat -c '%s %Y' data/export/recent-curves.bin && echo "$patch")
-    if [[ -f data/desktop/update.json \
+    inputs=$(sha256sum "$d/stats.bin" release/meiolol-desktop.exe release/meiolol-desktop.json \
+        desktop.token | cut -d' ' -f1 && stat -c '%s %Y' data/export/recent-curves.bin \
+        && echo "$patch")
+    if [[ -f data/desktop/update.signed \
         && "$inputs" == "$(cat data/desktop.inputs 2> /dev/null)" ]]; then
         rm -rf "$d"
         return 0
     fi
-    cp -p bin/meiolol-desktop.exe "$d/"
+    cp -p release/meiolol-desktop.exe "$d/"
     ln data/export/recent-curves.bin "$d/"
     if [[ data/desktop/recent-curves.bin -ef data/export/recent-curves.bin \
         && data/desktop/recent-curves.bin.gz -nt data/export/recent-curves.bin ]]; then
         ln data/desktop/recent-curves.bin.gz "$d/"
     fi
-    cp bin/meiolol-desktop.exe "$d/meiolol/"
+    cp release/meiolol-desktop.exe "$d/meiolol/"
     cp desktop.token "$d/meiolol/update.key"
-    if ! batch python3 - "$d" "$patch" <<'EOF'
+    if ! batch python3 - "$d" "$patch" release/meiolol-desktop.json <<'EOF' \
+        || ! bin/meiolol desktop-sign manifest --key-file desktop-data.key \
+            "$d/update.json" "$d/update.signed"
 import datetime, gzip, hashlib, json, os, shutil, sys, zipfile
-d, patch = sys.argv[1:]
+d, patch, release_path = sys.argv[1:]
+with open(release_path) as f:
+    release = json.load(f)
 files = []
 for name in ("stats.bin", "recent-curves.bin", "meiolol-desktop.exe"):
     path = os.path.join(d, name)
@@ -159,7 +168,13 @@ for name in ("stats.bin", "recent-curves.bin", "meiolol-desktop.exe"):
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
-    files.append({"name": name, "sha256": h.hexdigest(), "bytes": os.path.getsize(path)})
+    entry = {"name": name, "sha256": h.hexdigest(), "bytes": os.path.getsize(path)}
+    if name == "meiolol-desktop.exe":
+        # Mid-release (the exe and its json move in one at a time): next round
+        if (release["sha256"], release["bytes"]) != (entry["sha256"], entry["bytes"]):
+            sys.exit("release/meiolol-desktop.json does not match the exe")
+        entry.update(version=release["version"], sig=release["sig"])
+    files.append(entry)
 zip_path = os.path.join(d, "meiolol-desktop.zip")
 with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
     for f in sorted(os.listdir(os.path.join(d, "meiolol"))):
@@ -168,7 +183,8 @@ built = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S
 with open(os.path.join(d, "update.json"), "w") as f:
     json.dump({"patch": patch, "built": built, "files": files}, f)
 with open(os.path.join(d, "info.json"), "w") as f:
-    json.dump({"patch": patch, "built": built, "bytes": os.path.getsize(zip_path)}, f)
+    json.dump({"patch": patch, "built": built, "bytes": os.path.getsize(zip_path),
+               "release": release["version"]}, f)
 EOF
     then
         echo "$(date -u +%FT%TZ) desktop files FAILED, old ones kept"
@@ -180,7 +196,7 @@ EOF
     mv "$d" data/desktop && rm -rf data/desktop.old
     echo "$inputs" > data/desktop.inputs
     echo "$(date -u +%FT%TZ) desktop files: zip $(stat -c %s data/desktop/meiolol-desktop.zip)" \
-        "bytes, patch $patch"
+        "bytes, patch $patch, release $(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' release/meiolol-desktop.json)"
 }
 
 last_patch='' last_games=0

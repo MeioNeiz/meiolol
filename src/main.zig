@@ -43,6 +43,7 @@ const cmd_site = @import("cmd/site.zig");
 const cmd_ops = @import("cmd/ops.zig");
 const cmd_data = @import("cmd/data.zig");
 const cmd_lab = @import("cmd/lab.zig");
+const cmd_desktop = @import("cmd/desktop.zig");
 pub const labtools = @import("labtools/root.zig");
 
 pub const std_options: std.Options = .{ .logFn = logFn };
@@ -99,6 +100,7 @@ const usage = usage_head ++
     cmd_data.usage_backup ++
     cmd_data.usage_restore ++
     cmd_data.usage_forget ++
+    cmd_desktop.usage_desktop_sign ++
     cmd_lab.usage_lab_place ++
     cmd_lab.usage_lab_sweep ++
     usage_tail;
@@ -123,8 +125,8 @@ pub fn main(init: std.process.Init) !u8 {
         } else try flags.append(arena, argv[i]);
     }
     c.args = flags.items;
-    // The lab tools run from deploy/ scripts in any directory
-    if (!std.mem.startsWith(u8, argv[1], "lab-")) try std.Io.Dir.cwd().createDirPath(init.io, c.data_dir);
+    // The lab tools and desktop-sign run from deploy/ scripts in any directory
+    if (!std.mem.startsWith(u8, argv[1], "lab-") and !std.mem.startsWith(u8, argv[1], "desktop-")) try std.Io.Dir.cwd().createDirPath(init.io, c.data_dir);
     return run(&c) catch |err| switch (err) {
         error.Usage => usageError(c.flag),
         // Logged where it happened
@@ -168,6 +170,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "backup", cmd_data.cmdBackup },
     .{ "restore", cmd_data.cmdRestore },
     .{ "forget", cmd_data.cmdForget },
+    .{ "desktop-sign", cmd_desktop.cmdDesktopSign },
     .{ "lab-place", cmd_lab.cmdLabPlace },
     .{ "lab-sweep", cmd_lab.cmdLabSweep },
 });

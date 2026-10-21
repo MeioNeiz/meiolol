@@ -443,12 +443,14 @@ const test_champions = [_]statsfile.Champion{
 const Fixture = struct {
     stats_bytes: []u8,
     stats: Stats,
+    curves_bytes: []u8,
     curves: Curves,
 
     fn deinit(f: *Fixture) void {
         f.stats.deinit(testing.allocator);
         testing.allocator.free(f.stats_bytes);
         f.curves.deinit(testing.allocator);
+        testing.allocator.free(f.curves_bytes);
     }
 };
 
@@ -495,7 +497,9 @@ fn fixture() !Fixture {
     var cw: std.Io.Writer.Allocating = .init(gpa);
     defer cw.deinit();
     try cb.write(&cw.writer, "last 30 days", 1);
-    return .{ .stats_bytes = bytes, .stats = stats, .curves = try .parse(gpa, cw.written()) };
+    const curves_bytes = try cw.toOwnedSlice();
+    errdefer gpa.free(curves_bytes);
+    return .{ .stats_bytes = bytes, .stats = stats, .curves_bytes = curves_bytes, .curves = try .parse(gpa, curves_bytes) };
 }
 
 const test_opts: core.Options = .{ .min_games = 50, .base_prior_games = 50, .prior_games = 20 };
@@ -621,4 +625,48 @@ test compact {
         try compact(&w, n);
         try testing.expectEqualStrings(want, w.buffered());
     }
+}
+
+const FuzzFiles = struct { stats: []const u8, curves: []const u8 };
+
+/// Damaged stats and curves files (what update.zig downloads) and any champions the
+/// client may name: the card is built or refused, never a crash
+fn fuzzCard(files: FuzzFiles, s: *testing.Smith) !void {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const stats = Stats.parse(arena, try core.fuzz.mutate(s, arena, files.stats)) catch return;
+    var curves: ?Curves = Curves.parse(arena, try core.fuzz.mutate(s, arena, files.curves)) catch null;
+    const ids = [_]u32{ 0, garen, darius, sett, ahri, lux, 1, std.math.maxInt(u32) };
+    var picks: [10]Pick = undefined;
+    for (&picks) |*p| p.* = .{
+        .champion = ids[s.index(ids.len)],
+        .role = if (s.value(bool)) s.value(Role) else null,
+        .hover = s.value(bool),
+    };
+    const n_allies = s.valueRangeAtMost(u8, 0, 4);
+    const card = build(arena, .{
+        .stats = &stats,
+        .curves = if (curves) |*c| c else null,
+        .role = s.value(Role),
+        .me = ids[s.index(ids.len)],
+        .locked = s.value(bool),
+        .allies = picks[0..n_allies],
+        .enemies = picks[5 .. 5 + s.valueRangeAtMost(u8, 0, 5)],
+        .bans = &.{ ids[s.index(ids.len)], ids[s.index(ids.len)] },
+        .pickable = if (s.value(bool)) &.{ garen, darius, ids[s.index(ids.len)] } else null,
+        .mastery = &.{.{ .champion = ids[s.index(ids.len)], .points = s.value(u32) }},
+        .tier = ([_]?[]const u8{ null, "GOLD", "CHALLENGER", "NONE", "" })[s.index(5)],
+        .expertise = if (s.value(bool)) .fitted else null,
+        .opts = test_opts,
+    }) catch return;
+    var buf: [256]u8 = undefined;
+    var w: std.Io.Writer.Discarding = .init(&buf);
+    try write(card, &stats, &w.writer);
+}
+
+test "fuzz: damaged files and odd drafts never crash the card" {
+    var f = try fixture();
+    defer f.deinit();
+    try testing.fuzz(FuzzFiles{ .stats = f.stats_bytes, .curves = f.curves_bytes }, fuzzCard, .{});
 }
