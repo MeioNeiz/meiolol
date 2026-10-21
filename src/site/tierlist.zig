@@ -373,9 +373,9 @@ pub fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {
     const a = site.arena;
     const name = if (role) |r| roleName(r) else "All";
     const title = if (role) |r|
-        try a.print("{s} lane champions, {s} | meiolol", .{ roleName(r), site.when })
+        try a.print("{s} lane champions, {s} | meiolol", .{ roleName(r), site.period() })
     else
-        try a.print("Champions, {s} | meiolol", .{site.when});
+        try a.print("Champions, {s} | meiolol", .{site.period()});
     const desc = try a.print("{s} champions in ranked solo queue {s}, {s}: win rate with how sure it is, pick and ban rates, influence.", .{ name, site.view.region.in(), site.when });
     const path = if (role) |r| try a.print("role/{s}.html", .{roleSlug(r)}) else "champions.html";
     const root = site.toRoot(path);

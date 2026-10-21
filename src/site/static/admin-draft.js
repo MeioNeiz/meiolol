@@ -151,8 +151,8 @@ function champComp(C) {
 }
 
 // The exported model (docs/model.md "Draft model file"; Scorer in src/lab/draft.zig is the
-// reference): champions, play share per role on the newest patch, blue's win chance with a
-// 95% interval for a draft, and the candidates for a slot. A draft here is
+// reference): champions, play share per role on the share patch (meta.patch), blue's
+// win chance with a 95% interval for a draft, and the candidates for a slot. A draft here is
 // {blue: {role: id}, red: {role: id}}; an empty slot, or a champion with no term in the
 // role, is average[role] with sd 0. Version 2 adds comp terms (model.comp, null without):
 // each slot's profile p summed per team, P_b'S P_b - P_r'S P_r + P_b'A P_r. Version 3 adds
@@ -469,6 +469,14 @@ function laneCheck(lm, ref) {
 
 // Search key: letters and digits only, so "kaisa" finds Kai'Sa and "nunu" Nunu & Willump
 const champKey = s => (s || "").toLowerCase().normalize("NFD").replace(/[^a-z0-9]/g, "");
+// What patches a model file's numbers come from (files before 21 Oct have meta.patch only)
+const patchSpan = meta => meta.oldest_patch && meta.oldest_patch !== meta.newest_patch
+  ? `patches ${meta.oldest_patch} to ${meta.newest_patch}` : `patch ${meta.newest_patch || meta.patch || "unknown"}`;
+const sharePatch = meta => `patch ${meta.patch || "unknown"}`;
+const shareFrom = meta => sharePatch(meta) + (meta.patch_games == null ? "" : ` (${num(meta.patch_games)} games` +
+  (meta.newest_patch && meta.newest_patch !== meta.patch ? `; ${meta.newest_patch} has too few so far)` : ")"));
+const fittedOn = meta => meta.training_games == null ? "" :
+  ` Fitted on ${num(meta.training_games)} games, ${patchSpan(meta)}, newest ${meta.newest_game}; play shares from ${shareFrom(meta)}.`;
 const takenIn = d => new Set([...Object.values(d.blue), ...Object.values(d.red), ...d.bans].map(String));
 
 function draftView(body) {
@@ -481,8 +489,8 @@ function draftView(body) {
   const modelName = lab ? (meta.name ? `Lab: ${meta.name.split(":")[0]}` : "Lab experiment") : "Shipped model";
   sec.append(el("div", { class: "modelpick" }, el("span", { class: "sub" }, "Model"),
     switcher(DRAFT_SOURCES, lab ? "lab" : "shipped", k => { if (k !== draftSource()) { store("draftModel", k); reloadDraft(); } }, "Draft model"),
-    el("span", { class: "sub" }, !m ? "" : lab ? `${meta.name || "an export"}${DRAFT.net ? ", with the neural net on top" : ""}, sent from the lab (${meta.snapshot || "snapshot unknown"}); not used by the app or site.`
-      : "What the app and site use, refitted daily by the box on the newest games.")));
+    el("span", { class: "sub" }, !m ? "" : lab ? `${meta.name || "an export"}${DRAFT.net ? ", with the neural net on top" : ""}, sent from the lab (${meta.snapshot || "snapshot unknown"}); not used by the app or site.${fittedOn(meta)}`
+      : `What the app and site use, refitted daily by the box.${fittedOn(meta)}`)));
   if (!m) {
     if (DRAFT.err && !/^404/.test(DRAFT.err)) sec.append(el("div", { class: "health bad" }, el("b", {}, "The draft model didn't load: "), DRAFT.err));
     else if (lab) sec.append(el("p", { class: "muted" }, "No lab experiment loaded: send one with `deploy/lab-push.sh use draft RUN|DIR` (meiolol-lab's `draft --export`), or switch to the shipped model."));
@@ -523,8 +531,8 @@ function draftView(body) {
   }
   if (DRAFT.lane) {
     const lm = DRAFT.lane.L.meta, dev = (lm.dev || []).find(x => x.outcome === "lanediff14");
-    checks.push(`Lane model: ${lm.name} on ${num(lm.training_games)} games to ${lm.newest_game}.`);
-    about.push(el("p", { class: "sub" }, `Lane column: an early-game model on ${num(lm.training_games)} games to ${lm.newest_game}.` +
+    checks.push(`Lane model: ${lm.name} on ${num(lm.training_games)} games, ${patchSpan(lm)}, to ${lm.newest_game}; patch term for ${lm.patch}.`);
+    about.push(el("p", { class: "sub" }, `Lane column: an early-game model on ${num(lm.training_games)} games (${patchSpan(lm)}) to ${lm.newest_game}, read as patch ${lm.patch}.` +
       (dev ? ` It predicts the gold lead at 14 ${dev.removed_pct.toFixed(0)}% better than champion averages alone, so matchups nudge the numbers rather than decide them.` : "")));
   }
   if (dev.accuracy != null) checks.push(`Accuracy: this page's model, refitted on older games and scored on the ${num(dev.games)} played games just before the final test cut (the 10% of games before the newest 15%).`);
@@ -534,7 +542,7 @@ function draftView(body) {
   // The crawl's scope (docs/learned.md, docs/data.md): ranked solo, Platinum IV and up, nearly
   // all EUW
   sec.append(el("details", { class: "about" }, el("summary", { class: "sub" }, ["ranked solo, Platinum IV and up, mostly EUW",
-    meta.training_games != null ? `${num(meta.training_games)} games to ${meta.newest_game}` : null,
+    meta.training_games != null ? `${num(meta.training_games)} games, ${patchSpan(meta)}, to ${meta.newest_game}` : null,
     dev.accuracy != null ? `picks the winner in ${pct(dev.accuracy)} of ${num(dev.games)} recent games it wasn't fitted on (a coin: 50%; not the Models tab's test reading)` : null,
     bad.length || !(DRAFT.check || ccCheck || DRAFT.laneCheck) ? null : "page matches the model files (a software check, details under Debug)"].filter(Boolean).join(" · ")), ...about));
 
@@ -632,7 +640,7 @@ function fillSlots(d, sides, pick, emptyOnly) {
 }
 
 function fillMenu(m, d) {
-  // The picks the picker lists: 1%+ of the role's games on the newest patch
+  // The picks the picker lists: 1%+ of the role's games on the share patch
   const legal = role => m.champs.filter(c => m.games(c.id, role) >= m.M.min_games && m.rate(c.id, role) >= PICK_MIN_SHARE);
   const weighted = (list, role, taken) => {
     const pool = list.filter(c => !taken.has(String(c.id)));
@@ -686,7 +694,7 @@ function fillMenu(m, d) {
   const menu = el("details", { class: "fillmenu" }, el("summary", {}, "Fill…"));
   for (const [title, buttons] of groups) menu.append(el("div", { class: "fillgroup" }, el("span", { class: "sub" }, title), el("div", { class: "actions" }, ...buttons)));
   if (!tags) menu.append(el("p", { class: "sub" }, DRAFT.tags === null ? "AD, AP, tank and assassin fills need Data Dragon, which didn't answer." : "Loading Data Dragon tags…"));
-  const drawn = "each slot drawn by its play share in the role on the newest patch, from the picks the picker lists (1%+ of the role's games); locked slots stay";
+  const drawn = `each slot drawn by its play share in the role on ${sharePatch(m.M.meta || {})}, from the picks the picker lists (1%+ of the role's games); locked slots stay`;
   return el("div", { class: "fillbar" },
     btn("Random game", () => fillSlots(d, both, realistic), "Every slot: " + drawn),
     btn("Fill empty", () => fillSlots(d, both, realistic, true), "Empty slots only: " + drawn),
@@ -721,7 +729,7 @@ function draftDebug(m, d, name, checks = []) {
 // pick, the lane lead at 14 (top, mid and bot: for junglers and supports gold says more about
 // farming than winning), draft fit (the change less the champion's own strength: an off-meta
 // pick that suits this draft) and the main reasons; a row opens to the whole breakdown,
-// which adds up to the change. Regular picks only (1%+ of the role's games this
+// which adds up to the change. Regular picks only (1%+ of the role's games on the share
 // patch: off-role picks farm more and top lists on a few hundred games) unless searched
 const PICK_MIN_SHARE = 0.01;
 
@@ -774,7 +782,7 @@ function slotPicker(m, d, side, role) {
     const line = p => el("li", { class: p.kind === "rest" ? "muted" : null }, el("b", { class: tone(p.pp, 0.05) }, signed(p.pp)), " ", p.text, p.note ? el("span", { class: "sub" }, ` (${p.note})`) : null);
     const out = el("div", { class: "breakdown" },
       el("ul", {}, ...named.map(line), ...w.parts.filter(p => p.kind === "rest").map(line)),
-      el("p", { class: "sub" }, `= ${signed(w.total)} points (lines rounded): ${side} wins ${pct(x.win)} (95% range ${pct(x.lo)} to ${pct(x.hi)}) against ${pct(q.empty)} with an average ${roleName}; ${num(x.games)} games of ${x.c.name} ${roleName}, ${pct(x.share)} of the role's games on the newest patch.`));
+      el("p", { class: "sub" }, `= ${signed(w.total)} points (lines rounded): ${side} wins ${pct(x.win)} (95% range ${pct(x.lo)} to ${pct(x.hi)}) against ${pct(q.empty)} with an average ${roleName}; ${num(x.games)} games of ${x.c.name} ${roleName}, ${pct(x.share)} of the role's games on ${sharePatch(m.M.meta || {})}.`));
     const L = x.lane;
     if (L) {
       const { cs10: C, deaths15: D } = lm.at;

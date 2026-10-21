@@ -19,6 +19,8 @@ pub const Info = struct {
     updated: []const u8,
     /// For the method page's "games to stabilise" table
     curves: ?*const Curves = null,
+    /// The shared view's, for Daily Draft: "16.21"
+    patch: []const u8 = "",
 };
 
 /// k by role and minute, every bracket: how many games a matchup needs before its own

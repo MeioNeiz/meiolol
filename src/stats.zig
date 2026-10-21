@@ -15,6 +15,27 @@ pub const Summary = struct {
     games: u32,
     /// Games on the chosen patches left out: missing or repeated positions, unknown teams
     skipped: u32,
+    by_patch: PatchGames = .{},
+};
+
+/// Games per patch (patchKey) in the order met; past `cap` patches, in Summary.games only
+pub const PatchGames = struct {
+    keys: [cap]u32 = @splat(0),
+    games: [cap]u32 = @splat(0),
+    len: u8 = 0,
+
+    pub const cap = 8;
+
+    fn add(p: *PatchGames, key: u32) void {
+        for (p.keys[0..p.len], p.games[0..p.len]) |k, *n| if (k == key) {
+            n.* += 1;
+            return;
+        };
+        if (p.len == cap) return;
+        p.keys[p.len] = key;
+        p.games[p.len] = 1;
+        p.len += 1;
+    }
 };
 
 /// Every ranked solo game on `chosen` patches and `platforms` (Riot ids: EUW1, KR; no
@@ -357,6 +378,7 @@ const Game = struct {
             .duration_s = g.duration_s,
         });
         summary.games += 1;
+        summary.by_patch.add(g.patch);
     }
 };
 
@@ -462,7 +484,10 @@ test "build counts valid games only" {
 
     var r = try build(gpa, db, &.{"16.20"}, euw);
     defer r.builder.deinit();
-    try testing.expectEqual(Summary{ .games = 2, .skipped = 2 }, r.summary);
+    try testing.expectEqual(2, r.summary.games);
+    try testing.expectEqual(2, r.summary.skipped);
+    try testing.expectEqualSlices(u32, &.{16020}, r.summary.by_patch.keys[0..r.summary.by_patch.len]);
+    try testing.expectEqualSlices(u32, &.{2}, r.summary.by_patch.games[0..r.summary.by_patch.len]);
 
     var aw: std.Io.Writer.Allocating = .init(gpa);
     defer aw.deinit();

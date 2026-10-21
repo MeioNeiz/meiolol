@@ -142,7 +142,11 @@ pub const Meta = struct {
     snapshot: []const u8,
     newest_game: []const u8,
     training_games: usize,
+    /// Patch whose offset the scorer adds (the newest), and the training games' first
+    /// and last (patchRange)
     patch: []const u8,
+    oldest_patch: []const u8,
+    newest_patch: []const u8,
     platform: []const u8,
     dev: []const DevOut,
 };
@@ -224,6 +228,23 @@ pub fn championList(arena: std.mem.Allocator, db: store.Db) ![]const ChampionOut
         try out.append(arena, .{ .id = @intCast(q.int(0)), .name = name, .alias = alias.items });
     }
     return out.items;
+}
+
+/// stats.patchKey back to "16.21"
+pub fn patchLabel(arena: std.mem.Allocator, key: u32) ![]const u8 {
+    return std.fmt.allocPrint(arena, "{d}.{d}", .{ key / 1000, key % 1000 });
+}
+
+/// Oldest and newest of `games`' patches (each .patch, a stats.patchKey) as labels
+pub fn patchRange(arena: std.mem.Allocator, games: anytype) ![2][]const u8 {
+    var lo: u32 = std.math.maxInt(u32);
+    var hi: u32 = 0;
+    for (games) |g| {
+        lo = @min(lo, g.patch);
+        hi = @max(hi, g.patch);
+    }
+    if (hi == 0) lo = 0;
+    return .{ try patchLabel(arena, lo), try patchLabel(arena, hi) };
 }
 
 pub fn dayOf(arena: std.mem.Allocator, ms: i64) ![]const u8 {

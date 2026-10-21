@@ -98,6 +98,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     const champions = try lf.championList(arena, db);
     var newest: i64 = 0;
     for (data.games) |g| newest = @max(newest, g.start);
+    const range = try lf.patchRange(arena, t.games);
     try lf.write(arena, io, &sc, .{
         .name = if (@hasDecl(cand, "name")) cand.name else "candidate",
         // "--export ." from a deploy/lab-run.sh run dir: the run is the dir's name
@@ -105,7 +106,9 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         .snapshot = std.fs.path.basename(snap),
         .newest_game = try lf.dayOf(arena, newest),
         .training_games = t.games.len,
-        .patch = try std.fmt.allocPrint(arena, "{d}.{d}", .{ ex.patch / 1000, ex.patch % 1000 }),
+        .patch = try lf.patchLabel(arena, ex.patch),
+        .oldest_patch = range[0],
+        .newest_patch = range[1],
         .platform = protocol.home_platform,
         .dev = &dev,
     }, champions, dir, w);

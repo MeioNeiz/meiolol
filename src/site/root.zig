@@ -70,6 +70,10 @@ pub const Options = struct {
     curves_prev: [html.View.count]?[]const u8 = @splat(null),
     /// Builds file per view (`meiolol builds`): build pages in the patch views where set
     builds: [html.View.count]?[]const u8 = @splat(null),
+    /// The previous patch's builds files, by view as `builds`: the champion and matchup
+    /// pages' build strips while the current patch has few games of a pick (builds.zig
+    /// pick)
+    builds_prev: [html.View.count]?[]const u8 = @splat(null),
     /// Only the EUW views (the root and patch/; the shared pages come from patch/): a
     /// quick preview, links into all/ dangle
     euw_only: bool = false,
@@ -147,8 +151,11 @@ pub const Site = struct {
     games: u32,
     /// Current patch
     patch: []const u8,
-    /// The view's games in running text: "last 30 days", "patch 16.20"
+    /// The view's games in running text: "last 30 days, patches 16.19 to 16.21", "patch
+    /// 16.20"
     when: []const u8,
+    /// A 30-day view's games by patch: "16.19 9%, 16.20 88%, 16.21 3%"; "" for one patch
+    patch_mix: []const u8 = "",
     ddragon_version: []const u8,
     /// The view being written; opts.platforms and opts.patches are its own
     view: html.View,
@@ -165,6 +172,8 @@ pub const Site = struct {
     view_curves: *const [html.View.count]?core.curvesfile.Curves,
     /// Every view's builds (html.View.index); the 30-day views link to their patch view's
     view_builds: *const [html.View.count]?builds.File,
+    /// The previous patch's (Options.builds_prev)
+    view_builds_prev: *const [html.View.count]?builds.File,
     /// One file for every view: its scope is its own, every region
     lean: ?*const lean.File = null,
     pool: pool.Pool = .{},
@@ -212,8 +221,21 @@ pub const Site = struct {
             .description = description,
             .nav = nav,
             .patch = s.patch,
-            .data = s.arena.print("{s}, {s}, {s} games", .{ s.view.region.in(), s.when, thousands(s.arena, s.games) catch "" }) catch "",
+            .data = s.arena.print("{s}, {s}, {s} games{s}", .{
+                s.view.region.in(),
+                s.when,
+                thousands(s.arena, s.games) catch "",
+                if (s.patch_mix.len > 0) s.arena.print(" ({s})", .{s.patch_mix}) catch "" else "",
+            }) catch "",
             .public = s.opts.public,
+        };
+    }
+
+    /// `when` short, for titles: "last 30 days", "patch 16.20"
+    pub fn period(s: *const Site) []const u8 {
+        return switch (s.view.period) {
+            .days30 => "last 30 days",
+            .patch => s.when,
         };
     }
 
@@ -270,7 +292,7 @@ pub const Site = struct {
     }
 
     fn info(s: *const Site) prose.Info {
-        return .{ .contact = s.opts.contact, .updated = s.opts.updated, .curves = biggestCurves(s.view_curves) };
+        return .{ .contact = s.opts.contact, .updated = s.opts.updated, .curves = biggestCurves(s.view_curves), .patch = s.patch };
     }
 };
 

@@ -160,7 +160,13 @@ const HARDEST = "hardest first";
     return out;
   }
 
-  const when = (f) => (f.period === "days30" ? "last 30 days" : `patch ${f.period.slice(6)}`);
+  // The patches the 30 days span, oldest first, as the page's own scope (load.zig patchMix)
+  const span = [...meta.newest].reverse();
+  const days30 =
+    span.length < 2
+      ? `last 30 days${span.length ? `, patch ${span[0]}` : ""}`
+      : `last 30 days, patches ${span[0]} ${span.length === 2 ? "and" : "to"} ${span[span.length - 1]}`;
+  const when = (f) => (f.period === "days30" ? days30 : `patch ${f.period.slice(6)}`);
 
   function scopeText(f) {
     const where = f.region === "all" ? "across all regions" : `in ${platformName(f.region)}`;

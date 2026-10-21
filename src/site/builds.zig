@@ -51,6 +51,39 @@ fn patchView(site: *const Site) html.View {
     return .{ .region = site.view.region, .period = .patch };
 }
 
+/// A strip's build: the current patch's, or the previous patch's while the current one
+/// has under solid_games of it and the previous more (a new patch's first days)
+const Picked = struct {
+    f: *const File,
+    b: File.Build,
+    /// The current patch's games of it when the previous patch's is shown
+    newer: ?u64 = null,
+
+    /// "patch 16.21", or "patch 16.20 (16.21: 57 games so far)"
+    fn patch(p: Picked, site: *const Site) ![]const u8 {
+        const n = p.newer orelse return site.arena.print("patch {s}", .{p.f.label});
+        return site.arena.print("patch {s} ({s}: {s} game{s} so far)", .{ p.f.label, site.patch, try root.thousands(site.arena, n), plural(n) });
+    }
+};
+
+fn pick(site: *const Site, get: anytype, args: anytype) ?Picked {
+    const pv = patchView(site);
+    const cur = pickFrom(&site.view_builds[pv.index()], get, args);
+    const prev = pickFrom(&site.view_builds_prev[pv.index()], get, args) orelse return cur;
+    const c = cur orelse return .{ .f = prev.f, .b = prev.b, .newer = 0 };
+    if (c.b.games >= solid_games or prev.b.games <= c.b.games) return c;
+    return .{ .f = prev.f, .b = prev.b, .newer = c.b.games };
+}
+
+fn pickFrom(slot: *const ?File, get: anytype, args: anytype) ?Picked {
+    const f = if (slot.*) |*f| f else return null;
+    return .{ .f = f, .b = @call(.auto, get, .{f} ++ args) orelse return null };
+}
+
+fn getVs(f: *const File, x: u32, r: Role, y: u32) ?File.Build {
+    return f.getVs(x, r, y);
+}
+
 /// A page per champion and role with enough of the champion's games (patch views only)
 pub fn paths(site: *const Site, f: *const File, list: *std.ArrayList([]const u8)) !void {
     try list.append(site.arena, index_path);
@@ -116,23 +149,25 @@ pub fn route(site: *const Site, w: *Writer, f: *const File, rest: []const u8) !b
 /// page's filters. `from`: the champion page's path
 pub fn strip(site: *const Site, w: *Writer, ch: Champ, r: Role, from: []const u8) !void {
     const pv = patchView(site);
-    const f = if (site.view_builds[pv.index()]) |*f| f else return;
-    const b = shown(f, ch.id, r) orelse return;
+    const picked = pick(site, shown, .{ ch.id, r }) orelse return;
+    const f = picked.f;
+    const b = picked.b;
     const to = try path(site.arena, ch, r);
-    const href: html.Link = if (site.view.period == .patch)
+    // The previous patch's build has no page
+    const href: ?html.Link = if (picked.newer != null) null else if (site.view.period == .patch)
         .{ .root = site.toRoot(from), .path = to }
     else
         .{ .root = site.toShared(from), .up = pv.dir(), .path = to };
     try tpl.renderPart(w,
-        \\<div class="bstrip"><p class="bhead"><b>Most played build</b> <span class="muted">patch {patch}, {in}, {ranks}: {games} game{s}; the filters above don't change it.</span> <a href="{href}">Full build: runes, items and skill order</a></p>
+        \\<div class="bstrip"><p class="bhead"><b>Most played build</b> <span class="muted">{patch}, {in}, {ranks}: {games} game{s}; the filters above don't change it.</span>{link}</p>
         \\<div class="bks">
     , .{
-        .patch = f.label,
+        .patch = try picked.patch(site),
         .in = pv.region.in(),
         .ranks = try rankLabel(site.arena, f.min_tier),
         .games = try root.thousands(site.arena, b.games),
         .s = plural(b.games),
-        .href = href,
+        .link = tpl.when(href != null, tpl.t(" <a href=\"{href}\">Full build: runes, items and skill order</a>", .{ .href = href orelse html.Link{ .root = "", .path = "" } })),
     });
     try top(site.arena, w, f, b, null, .runes, "Runes");
     if (f.trees.len == 0) try top(site.arena, w, f, b, null, .shards, "Shards");
@@ -151,10 +186,11 @@ pub fn strip(site: *const Site, w: *Writer, ch: Champ, r: Role, from: []const u8
 /// Nothing when the pair has too few games for the file. `from`: the page's path
 pub fn vsStrip(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ, from: []const u8) !void {
     const pv = patchView(site);
-    const f = if (site.view_builds[pv.index()]) |*f| f else return;
-    const b = f.getVs(x.id, r, y.id) orelse return;
+    const picked = pick(site, getVs, .{ x.id, r, y.id }) orelse return;
+    const f = picked.f;
+    const b = picked.b;
     const usual = f.get(x.id, r);
-    const href: ?html.Link = if (shown(f, x.id, r) == null) null else blk: {
+    const href: ?html.Link = if (picked.newer != null or shown(f, x.id, r) == null) null else blk: {
         const to = try path(site.arena, x, r);
         break :blk if (site.view.period == .patch)
             .{ .root = site.toRoot(from), .path = to }
@@ -162,12 +198,12 @@ pub fn vsStrip(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ, from:
             .{ .root = site.toShared(from), .up = pv.dir(), .path = to };
     };
     try tpl.renderPart(w,
-        \\<div class="mu-build"><section class="mu-card"><h2>Most played build</h2><p class="mu-note">{games} game{s}, patch {patch}, {in}, {ranks}.{link}</p>
+        \\<div class="mu-build"><section class="mu-card"><h2>Most played build</h2><p class="mu-note">{games} game{s}, {patch}, {in}, {ranks}.{link}</p>
         \\<div class="bks">
     , .{
         .games = try root.thousands(site.arena, b.games),
         .s = plural(b.games),
-        .patch = f.label,
+        .patch = try picked.patch(site),
         .in = pv.region.in(),
         .ranks = try rankLabel(site.arena, f.min_tier),
         .link = tpl.when(href != null, tpl.t(" <a href=\"{href}\">{x}'s full {lane} build</a>", .{ .href = href orelse html.Link{ .root = "", .path = "" }, .x = x.name, .lane = root.roleName(r) })),

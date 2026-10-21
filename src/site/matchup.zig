@@ -48,6 +48,14 @@ fn period(a: std.mem.Allocator, curves: *const Curves) ![]const u8 {
     return label;
 }
 
+/// period in a page's scope line: a 30-day file's with the patches its view's 30 days
+/// span ("last 30 days, patches 16.19 to 16.21"), as the footer
+fn scope(site: *const Site, curves: *const Curves) ![]const u8 {
+    const label = curves.patch();
+    if (label.len > 0 and std.ascii.isDigit(label[0])) return site.arena.print("patch {s}", .{label});
+    return if (site.view.period == .days30) site.when else label;
+}
+
 /// From x's side: x's gold, wins and timings first
 pub fn path(a: std.mem.Allocator, r: Role, x: Champ, y: Champ) ![]const u8 {
     return a.print("matchup/{s}/{s}", .{ root.roleSlug(r), try file(a, x, y) });
@@ -144,7 +152,7 @@ pub fn writeIndex(site: *const Site, w: *Writer, curves: ?*const Curves) !void {
         \\
     , .{
         .region = site.view.region.in(),
-        .when = try period(a, c),
+        .when = try scope(site, c),
         .floor = floor,
         .tabs = tpl.each(&Role.all, {}, roleTab),
     });
@@ -358,7 +366,7 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
         .y = y.name,
         .lane = lane,
         .region = site.view.region.in(),
-        .when = when,
+        .when = try scope(site, curves),
         .opponents = tpl.call(picker, .{ site, curves, r, x, y, Pick.opponent }),
         .champions = tpl.call(picker, .{ site, curves, r, y, x, Pick.champion }),
     });

@@ -2,7 +2,7 @@
 //! the reference scorer the page's JS must match, and the writer of draft-model.json and
 //! draft-ref.json. Shared by `meiolol-lab draft --export` (lab/draft.zig) and the box's
 //! `meiolol draft-model` (draftmodel.zig). An empty slot counts as its role's average pick
-//! on the newest patch.
+//! on the share patch (Champions.countShares).
 
 const std = @import("std");
 
@@ -11,15 +11,23 @@ const Io = std.Io;
 pub const n_role = 5;
 pub const default_min_games = 100;
 pub const z95 = 1.96;
+/// Play shares come from the newest patch with this many games (every platform): a patch's
+/// first hours hold a few thousand, too few for the picker's 1%-of-the-role cut
+pub const min_share_games = 20_000;
 
 pub const Champions = struct {
     names: std.AutoHashMapUnmanaged(u32, []const u8) = .empty,
     /// Training games per champion and role, every patch
     games: std.AutoHashMapUnmanaged(u64, u32) = .empty,
-    /// Games per champion and role on the newest patch, and that patch's games
+    /// Games per champion and role on the share patch, and that patch's games
     patch_games: std.AutoHashMapUnmanaged(u64, u32) = .empty,
+    /// Two a game (each role twice)
     patch_total: u32 = 0,
+    /// Share patch (stats.patchKey)
     patch: u32 = 0,
+    /// Training games' patches
+    oldest_patch: u32 = 0,
+    newest_patch: u32 = 0,
 
     pub fn key(champion: u32, role: usize) u64 {
         return (@as(u64, champion) << 3) | role;
@@ -32,6 +40,34 @@ pub const Champions = struct {
     pub fn patchShare(c: *const Champions, champion: u32, role: usize) f64 {
         const n = c.patch_games.get(key(champion, role)) orelse 0;
         return @as(f64, @floatFromInt(n)) / @as(f64, @floatFromInt(@max(c.patch_total, 1)));
+    }
+
+    /// Training patches and play shares from `games` (each with .patch, a stats.patchKey,
+    /// and .teams by side and role): shares from the newest patch with min_share_games,
+    /// else the newest
+    pub fn countShares(c: *Champions, arena: std.mem.Allocator, games: anytype) !void {
+        var per: std.AutoArrayHashMapUnmanaged(u32, u32) = .empty;
+        for (games) |g| {
+            const e = try per.getOrPut(arena, g.patch);
+            if (!e.found_existing) e.value_ptr.* = 0;
+            e.value_ptr.* += 1;
+        }
+        var full: u32 = 0;
+        for (per.keys(), per.values()) |p, n| {
+            c.oldest_patch = if (c.oldest_patch == 0) p else @min(c.oldest_patch, p);
+            c.newest_patch = @max(c.newest_patch, p);
+            if (n >= min_share_games) full = @max(full, p);
+        }
+        c.patch = if (full != 0) full else c.newest_patch;
+        for (games) |g| {
+            if (g.patch != c.patch) continue;
+            c.patch_total += 2;
+            for (g.teams) |t| for (t, 0..) |ch, r| {
+                const e = try c.patch_games.getOrPut(arena, key(ch, r));
+                if (!e.found_existing) e.value_ptr.* = 0;
+                e.value_ptr.* += 1;
+            };
+        }
     }
 
     pub fn name(c: *const Champions, champion: u32) []const u8 {
@@ -500,7 +536,11 @@ pub const ModelFile = struct {
         snapshot: []const u8,
         newest_game: []const u8,
         training_games: usize,
+        /// Play shares' patch, its games, and the training games' first and last
         patch: []const u8,
+        patch_games: u32,
+        oldest_patch: []const u8,
+        newest_patch: []const u8,
         platform: []const u8,
         dev: Dev,
     },
@@ -598,7 +638,10 @@ pub fn exportFiles(
             .snapshot = src.snapshot,
             .newest_game = try dayOf(arena, src.newest_start),
             .training_games = src.training_games,
-            .patch = try std.fmt.allocPrint(arena, "{d}.{d}", .{ champs.patch / 1000, champs.patch % 1000 }),
+            .patch = try patchLabel(arena, champs.patch),
+            .patch_games = champs.patch_total / 2,
+            .oldest_patch = try patchLabel(arena, champs.oldest_patch),
+            .newest_patch = try patchLabel(arena, champs.newest_patch),
             .platform = src.platform,
             .dev = src.dev,
         },
@@ -712,11 +755,36 @@ pub fn firstOther(champs: *const Champions, teams: *const [2][n_role]u32) u32 {
     return 0;
 }
 
+/// stats.patchKey back to "16.21"
+pub fn patchLabel(arena: std.mem.Allocator, key: u32) ![]const u8 {
+    return std.fmt.allocPrint(arena, "{d}.{d}", .{ key / 1000, key % 1000 });
+}
+
 pub fn dayOf(arena: std.mem.Allocator, ms: i64) ![]const u8 {
     const es: std.time.epoch.EpochSeconds = .{ .secs = @intCast(@divFloor(ms, 1000)) };
     const yd = es.getEpochDay().calculateYearDay();
     const md = yd.calculateMonthDay();
     return std.fmt.allocPrint(arena, "{d}-{d:0>2}-{d:0>2}", .{ yd.year, md.month.numeric(), md.day_index + 1 });
+}
+
+test "play shares: the newest patch with enough games, else the newest" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const G = struct { patch: u32, teams: [2][n_role]u32 };
+    const teams: [2][n_role]u32 = .{ .{ 1, 2, 3, 4, 5 }, .{ 6, 7, 8, 9, 10 } };
+    const games = try arena.alloc(G, min_share_games + 5);
+    for (games, 0..) |*g, i| g.* = .{ .patch = if (i < 3) 16021 else if (i < 5) 16019 else 16020, .teams = teams };
+    var c: Champions = .{};
+    try c.countShares(arena, games);
+    try std.testing.expectEqual(16020, c.patch);
+    try std.testing.expectEqual(16019, c.oldest_patch);
+    try std.testing.expectEqual(16021, c.newest_patch);
+    try std.testing.expectEqual(2 * min_share_games, c.patch_total);
+    var few: Champions = .{};
+    try few.countShares(arena, games[0..5]);
+    try std.testing.expectEqual(16021, few.patch);
+    try std.testing.expectEqual(6, few.patch_total);
 }
 
 test "scorer: the documented formula on known parameters" {

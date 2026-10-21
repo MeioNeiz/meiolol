@@ -24,6 +24,7 @@ pub const Extras = struct {
     curves: [html.View.count]?core.curvesfile.Curves = @splat(null),
     curves_prev: [html.View.count]?core.curvesfile.Curves = @splat(null),
     builds: [html.View.count]?builds.File = @splat(null),
+    builds_prev: [html.View.count]?builds.File = @splat(null),
     lean: ?lean.File = null,
     /// Pool and learning tallies by html.Region, on the first view's load: all patches,
     /// so both periods share them, and one pass over the database serves every view
@@ -43,6 +44,9 @@ pub const Extras = struct {
             if (path) |p| c.* = loadCurves(arena, io, p);
         }
         for (opts.builds, &e.builds) |path, *b| {
+            if (path) |p| b.* = loadBuilds(arena, io, p);
+        }
+        for (opts.builds_prev, &e.builds_prev) |path, *b| {
             if (path) |p| b.* = loadBuilds(arena, io, p);
         }
         if (opts.lean) |p| e.lean = loadLean(arena, io, p);

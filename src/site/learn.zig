@@ -222,7 +222,7 @@ pub fn write(site: *const Site, w: *Writer, facts: *const learn.Facts) !void {
         try checks.map.put(a, l.key, qs);
     }
     try w.writeAll("</div>\n</section>\n");
-    try practiceSection(w);
+    try practiceSection(w, site.patch);
     var terms: std.json.ArrayHashMap([]const u8) = .{};
     for (glossary) |t| try terms.map.put(a, t[0], t[1]);
     try tpl.render(w,
@@ -236,8 +236,8 @@ pub fn write(site: *const Site, w: *Writer, facts: *const learn.Facts) !void {
     try html.foot(w, p);
 }
 
-fn practiceSection(w: *Writer) !void {
-    try w.writeAll(
+fn practiceSection(w: *Writer, patch: []const u8) !void {
+    try tpl.render(w,
         \\<section id="practice" data-view="practice">
         \\<h2 class="nojs">Practice drafts</h2>
         \\<p class="muted">A real ranked game with your slot open. Pick one of four, then see
@@ -274,13 +274,13 @@ fn practiceSection(w: *Writer) !void {
         \\<p id="p-real" class="muted small"></p>
         \\<p id="p-done" class="note level-done" hidden></p>
         \\<p><button type="button" id="p-next" class="primary">Next draft</button></p>
-        \\<p class="muted small">From this patch's ranked games: how drafts like this tend to
-        \\go, not what anyone should pick.</p>
+        \\<p class="muted small">From patch {patch}'s ranked games: how drafts like this tend
+        \\to go, not what anyone should pick.</p>
         \\</section>
         \\</div>
         \\</section>
         \\
-    );
+    , .{ .patch = patch });
 }
 
 fn champRow(w: *Writer, ctx: Ctx, list: []const Champ) !void {
@@ -371,8 +371,8 @@ fn roles(ctx: Ctx, w: *Writer) ![]const Question {
             .q = try ctx.print("Which role is {s} played in most?", .{ch.name}),
             .choices = choices.items,
             .answer = @backingInt(want),
-            .why = try ctx.print("{s}: {d:.0}% of {s}'s games this patch.", .{
-                root.roleName(want), 100 * best_share, ch.name,
+            .why = try ctx.print("{s}: {d:.0}% of {s}'s games on patch {s}.", .{
+                root.roleName(want), 100 * best_share, ch.name, ctx.site.patch,
             }),
         });
     }
@@ -454,8 +454,8 @@ fn counters(ctx: Ctx, w: *Writer) ![]const Question {
                 }),
                 .choices = try ctx.a.dupe(Choice, &choices),
                 .answer = i,
-                .why = try ctx.print("{s} won {d}% of {d} games against {s} this patch.", .{
-                    p.x.name, pctOf(p.n), p.n.games, p.y.name,
+                .why = try ctx.print("{s} won {d}% of {d} games against {s} on patch {s}.", .{
+                    p.x.name, pctOf(p.n), p.n.games, p.y.name, ctx.site.patch,
                 }),
             });
         }
@@ -561,11 +561,12 @@ fn timing(ctx: Ctx, w: *Writer) ![]const Question {
         const late = list[0];
         const early = list[list.len - 1];
         try tpl.render(w,
-            \\<p>Win rate by game length this patch:</p>
+            \\<p>Win rate by game length on patch {patch}:</p>
             \\<div class="grid">
             \\{late_bars}{early_bars}</div>
             \\
         , .{
+            .patch = ctx.site.patch,
             .late_bars = tpl.call(lengthBars, .{ ctx, late }),
             .early_bars = tpl.call(lengthBars, .{ ctx, early }),
         });
@@ -725,12 +726,12 @@ fn damage(ctx: Ctx, w: *Writer) ![]const Question {
                 .games = m.games,
             });
         }
-        try w.writeAll(
+        try tpl.renderPart(w,
             \\</tbody></table></div>
-            \\<p class="muted small">Teams this patch by their champions' usual magic share; under
-            \\200 teams greyed out.</p>
+            \\<p class="muted small">Teams on patch {patch} by their champions' usual magic share;
+            \\under 200 teams greyed out.</p>
             \\
-        );
+        , .{ .patch = ctx.site.patch });
     }
 
     // Mid laners for the options, and one physical teammate per other role
@@ -825,11 +826,11 @@ fn synergy(ctx: Ctx, w: *Writer) ![]const Question {
         \\
     , .{ .duo = term("duo", "duo") });
     if (duos.len >= 3) {
-        try w.writeAll(
-            \\<p>Pairs that win most together this patch:</p>
+        try tpl.renderPart(w,
+            \\<p>Pairs that win most together on patch {patch}:</p>
             \\<ul class="duos">
             \\
-        );
+        , .{ .patch = ctx.site.patch });
         for (duos[0..3]) |p| {
             try tpl.render(w,
                 \\<li>{x}<span class="muted">{x_role}</span> + {y}<span class="muted">{y_role}</span>
@@ -865,8 +866,8 @@ fn synergy(ctx: Ctx, w: *Writer) ![]const Question {
             .q = "Which pair tends to win more together?",
             .choices = try ctx.a.dupe(Choice, &choices),
             .answer = 2 - i,
-            .why = try ctx.print("{s}: won {d}% of {d} games together this patch.", .{
-                try duoName(ctx, good), pctOf(good.n), good.n.games,
+            .why = try ctx.print("{s}: won {d}% of {d} games together on patch {s}.", .{
+                try duoName(ctx, good), pctOf(good.n), good.n.games, ctx.site.patch,
             }),
         });
     }

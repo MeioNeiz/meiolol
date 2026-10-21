@@ -162,9 +162,9 @@ test "views: a tree each, switches between them, shared pages once" {
         }
     }.f;
     const want = [_]struct { []const u8, []const u8 }{
-        .{ "role/top.html", "in EUW, last 30 days, 1 games" },
+        .{ "role/top.html", "in EUW, last 30 days, patch 16.20, 1 games" },
         .{ "patch/role/top.html", "in EUW, patch 16.20, 2 games" },
-        .{ "all/role/top.html", "across all regions, last 30 days, 2 games" },
+        .{ "all/role/top.html", "across all regions, last 30 days, patch 16.20, 2 games" },
         .{ "all/patch/role/top.html", "across all regions, patch 16.20, 3 games" },
         .{ "daily.html", "in EUW, patch 16.20, 2 games" },
     };

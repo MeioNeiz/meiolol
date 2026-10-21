@@ -80,7 +80,7 @@ pub fn run(gpa: std.mem.Allocator, io: std.Io, db: store.Db, dir: []const u8, w:
     }, dir, w);
 }
 
-/// Names, games in each role and the newest patch's play rates (the empty slot's average)
+/// Names, games in each role and the share patch's play rates (the empty slot's average)
 fn champions(arena: std.mem.Allocator, st: *const core.Stats, games: []const Game) !df.Champions {
     var c: df.Champions = .{};
     for (0..st.n) |i| {
@@ -90,16 +90,7 @@ fn champions(arena: std.mem.Allocator, st: *const core.Stats, games: []const Gam
             if (n > 0) try c.games.put(arena, df.Champions.key(st.ids[i], @backingInt(r)), n);
         }
     }
-    for (games) |g| c.patch = @max(c.patch, g.patch);
-    for (games) |g| {
-        if (g.patch != c.patch) continue;
-        c.patch_total += 2;
-        for (g.teams) |t| for (t, 0..) |ch, r| {
-            const e = try c.patch_games.getOrPut(arena, df.Champions.key(ch, r));
-            if (!e.found_existing) e.value_ptr.* = 0;
-            e.value_ptr.* += 1;
-        };
-    }
+    try c.countShares(arena, games);
     return c;
 }
 

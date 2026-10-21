@@ -109,6 +109,12 @@ const SiteFlags = struct {
                 try buildsPath(arena, c.data_dir, chosen, true),
             },
             .prev_patch = if (prev) |p| p[0] else null,
+            .builds_prev = if (prev) |p| .{
+                null,
+                try buildsPath(arena, c.data_dir, p, false),
+                null,
+                try buildsPath(arena, c.data_dir, p, true),
+            } else @splat(null),
             .curves_prev = if (prev) |p| .{
                 null,
                 try curvesPath(arena, c.data_dir, p, false),

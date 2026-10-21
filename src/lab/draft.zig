@@ -257,18 +257,7 @@ fn loadChampions(gpa: std.mem.Allocator, arena: std.mem.Allocator, snap: []const
     defer q.deinit();
     try q.bind(.{});
     while (try q.step()) try c.names.put(arena, @intCast(q.int(0)), try arena.dupe(u8, q.bytes(1)));
-    for (d.games) |g| c.patch = @max(c.patch, g.patch);
-    for (d.games) |g| {
-        if (g.patch != c.patch) continue;
-        c.patch_total += 1;
-        for (g.teams) |t| for (t, 0..) |ch, r| {
-            const e = try c.patch_games.getOrPut(arena, Champions.key(ch, r));
-            if (!e.found_existing) e.value_ptr.* = 0;
-            e.value_ptr.* += 1;
-        };
-    }
-    // Each patch game has two of every role
-    c.patch_total *= 2;
+    try c.countShares(arena, d.games);
     for (d.rows) |r| {
         const e = try c.games.getOrPut(arena, Champions.key(r.champion, @backingInt(r.role)));
         if (!e.found_existing) e.value_ptr.* = 0;

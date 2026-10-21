@@ -4319,7 +4319,10 @@ test games, so the tester scores drafts as the app and site do. Its companion,
 draft-model.json (format meiolol-draft-model, version 4; 3 had no pairs, 2 no
 temperature, 1 no p and no comp):
 - meta: name ("win-ratings (ratings)"), run, snapshot, newest_game, training_games
-  (games that lasted 15:00, as the harness fits), patch (newest), platform (EUW1: the intercept used), dev {what, games, log_loss,
+  (games that lasted 15:00, as the harness fits), patch (the share patch: the newest
+  with 20,000+ games every platform, else the newest; draftfile.min_share_games),
+  patch_games (its games), oldest_patch and newest_patch (training games'; 21 Oct, older
+  files lack them), platform (EUW1: the intercept used), dev {what, games, log_loss,
   baseline_log_loss, coin_log_loss, accuracy, auc}: a refit on dev's games, scored on
   dev-val, as described in `what`
 - roles: top, jungle, middle, bottom, utility; role fields are indices into it
@@ -4328,10 +4331,10 @@ temperature, 1 no p and no comp):
 - min_games: default floor of training games in the role to list a candidate (100)
 - champions [{id, name, alias}]: alias is the name lowercased, letters and digits only
 - cells [{champion, role, games, patch_games, patch_share}]: training games in the role
-  (every patch); games and share of the role's games on the newest patch (random games,
+  (every patch); games and share of the role's games on the share patch (random games,
   picker order, role averages)
 - average[role] {b, u, v, s, p, raw}: the empty-slot term, patch_share-weighted mean of the
-  role's terms on the newest patch
+  role's terms on the share patch
 - model {kind, dim, intercept, w[25], z[25], terms [{champion, role, games, b, sd, u, v,
   s, p, raw}], comp, temperature}: temperature multiplies the whole logit and the
   interval's ends (calibration; draft.zig default_temperature 0.80: win-ratings' preds on
@@ -4438,7 +4441,8 @@ and dev figure equals the lab export's; 137 s on the Mac. The scorer and writer 
 src/lanefile.zig, shared with lab/lane.zig.
 
 lane-model.json (format meiolol-lane-model, version 1); every number rounded to 0.01:
-- meta: name, run, snapshot, newest_game, training_games, patch (newest), platform
+- meta: name, run, snapshot, newest_game, training_games, patch (newest: its offset is
+  in the intercept), oldest_patch and newest_patch (training games'), platform
   (EUW1), dev [{outcome, unit, rows, err_base, err_cand, removed_pct, removed_half}]: a
   refit on dev's games scored on dev-val (typical miss in the unit, % of the champion-role
   baseline's error removed, 95% half-width)

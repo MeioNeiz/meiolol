@@ -94,6 +94,17 @@ test "fixture games to stats, curves and the website" {
     const builds_json = try std.json.Stringify.valueAlloc(arena, build_file, .{});
     try tmp.dir.writeFile(io, .{ .sub_path = "builds.json", .data = builds_json });
     const builds_path = try std.fs.path.join(arena, &.{ dir, "builds.json" });
+    // The previous patch's: Ahri mid with more games than the current patch's few,
+    // so its strips show it; Darius's stay on the current patch
+    var prev_builds = build_file;
+    prev_builds.label = prev_patch;
+    const more = try arena.dupe(builds.File.Build, build_file.builds);
+    for (more) |*b| if (b.champion == 103 and b.role == .middle) {
+        b.games += 1000;
+    };
+    prev_builds.builds = more;
+    try tmp.dir.writeFile(io, .{ .sub_path = "builds-prev.json", .data = try std.json.Stringify.valueAlloc(arena, prev_builds, .{}) });
+    const prev_builds_path = try std.fs.path.join(arena, &.{ dir, "builds-prev.json" });
 
     // Early or late (`meiolol lean`): every fixture game counts, too few for any line
     var ln = try lean.load(gpa, io, db, &.{patch}, &.{"EUW1"}, 0, std.math.maxInt(i64));
@@ -155,6 +166,7 @@ test "fixture games to stats, curves and the website" {
         .builds = .{ null, builds_path, null, builds_path },
         .prev_patch = prev_patch,
         .curves_prev = .{ null, prev_curves_path, null, prev_curves_path },
+        .builds_prev = .{ null, prev_builds_path, null, prev_builds_path },
         .lean = lean_path,
     };
     try site.generate(gpa, io, db, opts);
@@ -201,8 +213,8 @@ test "fixture games to stats, curves and the website" {
         // Hardest first by the rate shrunk with the role's k; opponents under 1% of the
         // champion's games hidden by default (the Opponents filter's p1). Rank filter from
         // Platinum, the tier the crawl samples
-        .{ "champion/darius.html", &.{ "data-sortable data-k=\"", "<option value=\"p1\" selected>", "<option value=\"\" selected>All (Platinum+ games)</option><option value=\"4\">Platinum+ players</option>", "Challenger players</option>", "last 30 days, Platinum+ games</span>" } },
-        .{ "champions.html", &.{"Platinum+ ranked solo/duo games in EUW, last 30 days."} },
+        .{ "champion/darius.html", &.{ "data-sortable data-k=\"", "<option value=\"p1\" selected>", "<option value=\"\" selected>All (Platinum+ games)</option><option value=\"4\">Platinum+ players</option>", "Challenger players</option>", "last 30 days, patch 15.13, Platinum+ games</span>" } },
+        .{ "champions.html", &.{"Platinum+ ranked solo/duo games in EUW, last 30 days, patch 15.13."} },
         .{ "index.html", &.{"<a href=\"download.html\">Coming: a champ select helper for Windows</a>"} },
         // Daily Draft: a recent game, read in words (no draft win chance,
         // points or gold amounts); reasons from the list Learn uses; option cards and lane
@@ -242,6 +254,11 @@ test "fixture games to stats, curves and the website" {
         .{ "method.html", &.{ "Games to stabilise", "<h2 id=\"lean\">Early or late</h2>" } },
         // Early or late: three games, so no numbers, only that it can't tell yet
         .{ "champion/darius.html", &.{ "<b>Early or late:</b> too few games yet to tell.", "Games still going at 20 min: 3 (every region, last 30 days)", "href=\"../method.html#lean\"" } },
+        // A pick the current patch has few games of: the previous patch's build, no link
+        // to the thin page (builds.zig pick)
+        .{ "champion/ahri.html", &.{"<b>Most played build</b> <span class=\"muted\">patch 15.12 (15.13: 3 games so far), in EUW"} },
+        .{ "learn.html", &.{"From patch 15.13's ranked games"} },
+        .{ "daily.html", &.{"From patch 15.13's ranked solo games"} },
     };
     for (pages) |pg| {
         const path = try std.fs.path.join(arena, &.{ out, pg[0] });
@@ -599,7 +616,7 @@ test "fixture games to the Draft tester's draft and lane models" {
     const File = struct {
         format: []const u8,
         version: u32,
-        meta: struct { training_games: usize, patch: []const u8 },
+        meta: struct { training_games: usize, patch: []const u8, patch_games: u32, oldest_patch: []const u8, newest_patch: []const u8 },
         champions: []const struct { id: u32 },
         model: struct { kind: []const u8, terms: []const struct { champion: u32 }, pairs: struct { cells: []const [5]f64 } },
     };
@@ -610,6 +627,8 @@ test "fixture games to the Draft tester's draft and lane models" {
     try testing.expectEqualStrings("draft", m.model.kind);
     try testing.expectEqual(150, m.meta.training_games);
     try testing.expectEqualStrings("15.13", m.meta.patch);
+    try testing.expectEqualStrings("15.13", m.meta.newest_patch);
+    try testing.expectEqual(150, m.meta.patch_games);
     // Every game the same ten champions: one term each; 10 ally pairs a team, 10 matchups
     // across roles each way, 5 lane matchups
     try testing.expectEqual(10, m.model.terms.len);
@@ -624,7 +643,7 @@ test "fixture games to the Draft tester's draft and lane models" {
     try lanemodel.run(gpa, io, db, dir, &log.writer);
     const Lane = struct {
         format: []const u8,
-        meta: struct { training_games: usize, dev: []const struct { outcome: []const u8 } },
+        meta: struct { training_games: usize, newest_patch: []const u8, dev: []const struct { outcome: []const u8 } },
         outcomes: []const []const u8,
         champ: []const struct { champion: u32, n: u32, b: [4]f64 },
         pairs: []const [12]f64,
@@ -633,6 +652,7 @@ test "fixture games to the Draft tester's draft and lane models" {
     const lane = try std.json.parseFromSliceLeaky(Lane, arena, lane_text, .{ .ignore_unknown_fields = true });
     try testing.expectEqualStrings("meiolol-lane-model", lane.format);
     try testing.expectEqual(150, lane.meta.training_games);
+    try testing.expectEqualStrings("15.13", lane.meta.newest_patch);
     try testing.expectEqual(4, lane.meta.dev.len);
     try testing.expectEqualStrings("lanediff14", lane.outcomes[1]);
     // Both sides' laners in every role; rows only from the two thirds of games whose

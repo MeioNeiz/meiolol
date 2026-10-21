@@ -82,13 +82,16 @@ pub fn run(gpa: std.mem.Allocator, io: std.Io, db: store.Db, dir: []const u8, w:
 
     const dev = try devScore(gpa, &d, cuts);
     for (dev) |x| try w.print("dev {s}: typical miss {d:.2} -> {d:.2} {s} ({d:.2}% of the error removed, ±{d:.2})\n", .{ x.outcome, x.err_base, x.err_cand, x.unit, x.removed_pct, x.removed_half });
+    const range = try lf.patchRange(arena, d.games);
     try lf.write(arena, io, &sc, .{
         .name = team2.name,
         .run = try std.fmt.allocPrint(arena, "{s} {d:0>2}:{d:0>2}Z", .{ try lf.dayOf(arena, now_ms), @as(u64, @intCast(@mod(@divFloor(now_ms, 3_600_000), 24))), @as(u64, @intCast(@mod(@divFloor(now_ms, 60_000), 60))) }),
         .snapshot = "box database",
         .newest_game = try lf.dayOf(arena, d.starts[d.starts.len - 1]),
         .training_games = d.games.len,
-        .patch = try std.fmt.allocPrint(arena, "{d}.{d}", .{ ex.patch / 1000, ex.patch % 1000 }),
+        .patch = try lf.patchLabel(arena, ex.patch),
+        .oldest_patch = range[0],
+        .newest_patch = range[1],
         .platform = protocol.home_platform,
         .dev = &dev,
     }, try lf.championList(arena, db), dir, w);

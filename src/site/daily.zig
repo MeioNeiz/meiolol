@@ -4,10 +4,10 @@
 const std = @import("std");
 const Writer = std.Io.Writer;
 const prose = @import("prose.zig");
+const tpl = @import("html.zig").tpl;
 
 pub fn page(w: *Writer, info: prose.Info) Writer.Error!void {
-    _ = info;
-    try w.writeAll(
+    try tpl.render(w,
         \\<h1>Daily Draft <span id="number" class="muted"></span></h1>
         \\<p class="lead">One real ranked game a day from recent games, the same for everyone.
         \\Guess the last pick, then the winner.</p>
@@ -38,9 +38,9 @@ pub fn page(w: *Writer, info: prose.Info) Writer.Error!void {
         \\<ul id="lanes" class="dd-lanes"></ul>
         \\<p id="share-row"><button type="button" id="share">Share result</button> <span id="share-note" class="muted"></span></p>
         \\<details class="dd-how"><summary>How these facts are read</summary>
-        \\<p class="muted">From this patch's ranked solo games. The hidden slot is the pick the
-        \\rest of the draft explains best, by its matchups and teammates more than its strength
-        \\this patch. A draft leans to a side only when our model is 95% sure it is not even;
+        \\<p class="muted">From patch {patch}'s ranked solo games, whichever patch the game was
+        \\played on. The hidden slot is the pick the rest of the draft explains best, by its
+        \\matchups and teammates more than its strength on the patch. A draft leans to a side only when our model is 95% sure it is not even;
         \\otherwise it reads "close". A lane or option's usual gold at 14 minutes is always
         \\shown, coloured only when it is 200 or more and clear of even by
         \\two standard errors on 200+ games, mostly the matchup's own; in this game, under 200
@@ -55,5 +55,5 @@ pub fn page(w: *Writer, info: prose.Info) Writer.Error!void {
         \\<script src="reasons.js" defer></script>
         \\<script src="daily.js" defer></script>
         \\
-    );
+    , .{ .patch = info.patch });
 }

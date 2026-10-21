@@ -85,6 +85,7 @@ pub fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Opt
         .curves_prev = extras.curves_prev[view.index()],
         .view_curves = &extras.curves,
         .view_builds = &extras.builds,
+        .view_builds_prev = &extras.builds_prev,
         .lean = if (extras.lean) |*l| l else null,
     };
     var phases: Phases = .init(io);
@@ -97,6 +98,7 @@ pub fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Opt
         site.games = b.games;
         site.patch = b.patch;
         site.when = b.when;
+        site.patch_mix = b.patch_mix;
         site.ddragon_version = b.ddragon_version;
         site.since_ms = b.since_ms;
         site.model = b.model;
@@ -225,12 +227,61 @@ fn loadBase(site: *Site, db: store.Db, all_opts: Options, phases: *Phases, games
     site.model = model.written();
     site.stats = try .parse(arena, site.model);
     site.games = built.summary.games;
-    site.when = switch (view.period) {
-        .patch => try arena.print("patch {s}", .{site.patch}),
-        .days30 => "last 30 days",
-    };
+    switch (view.period) {
+        .patch => site.when = try arena.print("patch {s}", .{site.patch}),
+        .days30 => {
+            const p = try patchMix(arena, built.summary.by_patch, built.summary.games);
+            site.when = p.when;
+            site.patch_mix = p.mix;
+        },
+    }
     try loadChamps(site, db, games);
     phases.mark("champions");
+}
+
+/// The 30-day views' patches, oldest first: "last 30 days, patches 16.19 to 16.21" and
+/// each one's share of the games, "16.19 9%, 16.20 88%, 16.21 3%"
+fn patchMix(a: std.mem.Allocator, by: stats.PatchGames, games: u32) !struct { when: []const u8, mix: []const u8 } {
+    const keys = try a.dupe(u32, by.keys[0..by.len]);
+    std.mem.sort(u32, keys, {}, std.sort.asc(u32));
+    const name = struct {
+        fn f(al: std.mem.Allocator, k: u32) ![]const u8 {
+            return al.print("{d}.{d}", .{ k / 1000, k % 1000 });
+        }
+    }.f;
+    const when = switch (keys.len) {
+        0 => "last 30 days",
+        1 => try a.print("last 30 days, patch {s}", .{try name(a, keys[0])}),
+        2 => try a.print("last 30 days, patches {s} and {s}", .{ try name(a, keys[0]), try name(a, keys[1]) }),
+        else => try a.print("last 30 days, patches {s} to {s}", .{ try name(a, keys[0]), try name(a, keys[keys.len - 1]) }),
+    };
+    if (keys.len < 2) return .{ .when = when, .mix = "" };
+    var mix: Writer.Allocating = .init(a);
+    for (keys, 0..) |k, i| {
+        const n = for (by.keys[0..by.len], by.games[0..by.len]) |bk, bn| {
+            if (bk == k) break bn;
+        } else 0;
+        const share = 100 * @as(f64, @floatFromInt(n)) / @as(f64, @floatFromInt(@max(games, 1)));
+        if (i > 0) try mix.writer.writeAll(", ");
+        if (share < 1) try mix.writer.print("{s} under 1%", .{try name(a, k)}) else try mix.writer.print("{s} {d:.0}%", .{ try name(a, k), share });
+    }
+    return .{ .when = when, .mix = mix.written() };
+}
+
+test patchMix {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var by: stats.PatchGames = .{};
+    by.keys[0..3].* = .{ 16021, 16019, 16020 };
+    by.games[0..3].* = .{ 3, 9, 988 };
+    by.len = 3;
+    const p = try patchMix(arena.allocator(), by, 1000);
+    try std.testing.expectEqualStrings("last 30 days, patches 16.19 to 16.21", p.when);
+    try std.testing.expectEqualStrings("16.19 under 1%, 16.20 99%, 16.21 under 1%", p.mix);
+    by.len = 1;
+    const one = try patchMix(arena.allocator(), by, 3);
+    try std.testing.expectEqualStrings("last 30 days, patch 16.21", one.when);
+    try std.testing.expectEqualStrings("", one.mix);
 }
 
 /// The view's patch day (Options.prev_patch): its champions' win rates from both

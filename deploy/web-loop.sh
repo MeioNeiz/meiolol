@@ -28,7 +28,8 @@
 # accuracy vs data volume) and leaves its report in data/eval-latest.md. Read-only on the
 # DB. One at a time with the admin page's Run eval (src/admin_api.zig): both flock
 # data/eval.lock. Builds (`meiolol builds`, EUW and every region, current patch) the same
-# way: daily and on a new patch; the next site build picks the files up.
+# way: on a new patch, then every 6 h for its first 3 days, then daily; the next site
+# build picks the files up.
 # Daily, `meiolol lean` (every region, last 30 days; docs/model.md "Early and late
 # champions") the same way: data/lean.tsv, the champion pages' early or late line.
 # Daily, the admin Draft tester's models refit on every played game into data/tester/:
@@ -202,6 +203,11 @@ interval_for() {
     [[ -e data/patch-$1.seen ]] || touch "data/patch-$1.seen"
     if (( $(date +%s) - $(mtime "data/patch-$1.seen") < 86400 )); then echo 3600; else echo 21600; fi
 }
+# Builds: 6 h for a patch's first 3 days, else daily. A new patch's first run has a few
+# dozen games (16.21: 57) and the site showed them for a day
+builds_every() {
+    if (( $(date +%s) - $(mtime "data/patch-$1.seen") < 3 * 86400 )); then echo 21600; else echo 86400; fi
+}
 # The rounds read the patch from the database, but the check below needs it first:
 # without it a restart's first round redoes the curves (35-50 min) though they are
 # current, so start from the newest of those files (by version: prev_patch's is
@@ -274,7 +280,7 @@ run_daily() {
     local now=$1
     # One left running by a deploy's round
     [[ -n "$daily_pid" ]] && kill -0 "$daily_pid" 2> /dev/null && return 1
-    if [[ -n "$patch" ]] && { [[ "$patch" != "$builds_patch" ]] || (( now - last_builds >= 86400 )); }; then
+    if [[ -n "$patch" ]] && { [[ "$patch" != "$builds_patch" ]] || (( now - last_builds >= $(builds_every "$patch") )); }; then
         last_builds=$now builds_patch=$patch
         # EUW's and every region's files from one read of the timelines (two passes until
         # 18 Oct, the second 15 min)
