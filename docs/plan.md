@@ -31,8 +31,11 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
    one per screen; site-wide colour scale and denser frame; mock champ select on the
    Mac (deploy/mock-cs.sh); privacy rules audit (docs/privacy-rules.md)
 3. Front end (Jacob 20 Oct: styling, JS and templates "really holding us back" for
-   app development, wants time on it soon): scope a rework of src/site templates,
-   style.css and static/*.js before more page work
+   app development, wants time on it soon): scoped in docs/frontend-rework.md,
+   recommends Option A (ui.zig components, CSS tokens and layers, one JS core, hashed
+   assets, wasm for the filters redraw, Playwright QA at 390/1280 px; ~8-10 days
+   foundation, pages move with design steps 4-9). Waits on Jacob: A or not, and whether
+   "app" means the site or the desktop window (dvui, shares nothing with the site)
 4. Next on the site, by size of win: Learn redesign (docs/learn-proposal.md), design
    build order 4-6 (docs/design-ideas.md), per-matchup builds (vsbuilds notes), Daily
    Draft pick verdicts (daily notes); Jacob's answers to the night's questions first
