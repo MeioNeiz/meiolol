@@ -931,12 +931,15 @@ const RegionCrawler = struct {
     ;
 
     /// Players with ranked games since their last scan (ladder wins + losses), most
-    /// first. Uses players_new_games
+    /// first. Uses players_new_games. ?5 (--patch-only): scanned players only, as a
+    /// never scanned one's count runs from its first sighting, mostly older patches on
+    /// a patch day (16.21 americas: 0.41 new ids per call); scan_players takes those first
     const new_games =
         \\SELECT puuid, matches_checked_at, platform FROM players
         \\WHERE region = ?1 AND games_checked IS NOT NULL AND wins + losses - games_checked > 0
         \\    AND (?2 IS NULL OR platform = ?2)
         \\    AND (?3 IS NULL OR instr(?3, '|' || tier || '|') > 0)
+        \\    AND (NOT ?5 OR matches_checked_at IS NOT NULL)
         \\ORDER BY wins + losses - games_checked DESC
         \\LIMIT ?4
     ;
@@ -988,7 +991,7 @@ const RegionCrawler = struct {
                 defer s.deinit();
                 for (filters.items) |platform| {
                     if (players.items.len == scan_batch) break;
-                    try s.bind(.{ @tagName(rc.region), platform, floor, scan_batch - players.items.len });
+                    try s.bind(.{ @tagName(rc.region), platform, floor, scan_batch - players.items.len, c.opts.patch_only });
                     try takePlayers(a, &s, &players, .active);
                 }
                 if (players.items.len < scan_batch and rc.worth(.snowball)) try rc.snowball(a, floor, &players);
@@ -1709,13 +1712,18 @@ test "active first: players the ladder shows played since their last scan, most 
     defer arena.deinit();
     const a = arena.allocator();
     const plat = try RegionCrawler.tierFloor(a, 5);
-    const got = try column(db, a, RegionCrawler.new_games, .{ "europe", null, plat, 10 });
+    const got = try column(db, a, RegionCrawler.new_games, .{ "europe", null, plat, 10, false });
     try std.testing.expectEqual(2, got.len);
     try std.testing.expectEqualStrings("five", got[0]);
     try std.testing.expectEqualStrings("two", got[1]);
+    // --patch-only: never scanned players wait for scan_players
+    try db.exec("UPDATE players SET matches_checked_at = 1 WHERE puuid = 'two'");
+    const scanned = try column(db, a, RegionCrawler.new_games, .{ "europe", null, plat, 10, true });
+    try std.testing.expectEqual(1, scanned.len);
+    try std.testing.expectEqualStrings("two", scanned[0]);
     var plan = try db.prepare("EXPLAIN QUERY PLAN " ++ RegionCrawler.new_games);
     defer plan.deinit();
-    try plan.bind(.{ "europe", null, plat, 10 });
+    try plan.bind(.{ "europe", null, plat, 10, true });
     try std.testing.expect(try plan.step());
     try std.testing.expectEqualStrings("SEARCH players USING INDEX players_new_games (region=? AND <expr>>?)", plan.bytes(3));
     // No temp B-tree: rows come in ORDER BY order straight from the index
