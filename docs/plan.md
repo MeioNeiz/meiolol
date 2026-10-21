@@ -20,8 +20,9 @@ show: docs/production-key.md "Product rules".
 Ranked by harm: outages and data risk, then what Riot's reviewers see, then what brings
 players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-18.md.
 
-1. Storage: Hetzner BX11 and the rolling window (Jacob orders, needed within ~a week
-   of 18 Oct), raw.db VACUUM, gpu-box WSL compaction: ops.md "Storage and hosts"
+1. Storage: Hetzner BX11 and the rolling window (Jacob orders; less urgent since raw.db
+   VACUUM 21 Oct freed 30 GB, box 42% used), gpu-box WSL compaction: ops.md "Storage
+   and hosts"
 2. Night run 19-20 Oct (data/team/2026-10-19-night/, questions in decisions.md "Open
    decisions"): crawler recovered; traffic counts people by stylesheet fetch (97% of
    old "people" were bots) and our own visits as bots; jomify logrotate; header search;

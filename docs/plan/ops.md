@@ -72,7 +72,10 @@ people, unconfirmed and bots. Next, only if needed:
 
 ## Storage and hosts
 
-- raw.db: VACUUM its 21 GB of free pages (meiolol-b5, after a rehearsal on a copy)
+- raw.db VACUUM done 21 Oct: 40.5 GB to 10.3 GB, now auto_vacuum=INCREMENTAL so
+  prunes return pages; box disk 62% to 42% (85 GB free). docs/data-safety.md "Raw
+  archive". Next: check a prune logs "MB of raw.db returned" (data/crawl.log,
+  data/archive-prune.log) and the admin's "full in ~N days" moves out
 - Off-site and rolling window: Hetzner BX11 plus ~30-day window on the box
   (decisions.md "Storage and hosting", data-and-model.md step 7). Jacob orders; needed
   within ~a week of 18 Oct (admin's "full in ~N days": ~26 days on 18 Oct)
