@@ -44,9 +44,11 @@ out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
 
 echo "desktop release $version from ${rev:0:7}: checks, fuzzing $fuzz inputs, build"
+# Fuzzing in the release tree's own cache: its corpus there is the release's, and two
+# fuzzers on one corpus stop with "in use by another fuzzer"
 "$HERE/build-tree.sh" desktop "$rev" sh -c 'cache="$1/.zig-cache"
     zig build desktop-check --cache-dir "$cache" \
-    && zig build desktop-fuzz --fuzz="$2" --cache-dir "$cache" \
+    && zig build desktop-fuzz --fuzz="$2" \
     && zig build desktop -Doptimize=ReleaseSafe -Ddesktop-version="$3" --prefix "$4/desktop" \
         --cache-dir "$cache" \
     && zig build backend --prefix "$4/tool" --cache-dir "$cache"' _ "$ROOT" "$fuzz" "$version" "$out"
