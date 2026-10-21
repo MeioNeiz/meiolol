@@ -722,6 +722,8 @@ const RegionCrawler = struct {
     /// UTC day and flex lookups made on it (--flex-calls-per-day)
     flex_day: i64 = 0,
     flex_calls: u32 = 0,
+    /// Each platform's patch whose start went to the writer (patchStarts)
+    started: [ep.platforms.len]u32 = @splat(0),
 
     const Of = ep.Region;
 
@@ -742,12 +744,28 @@ const RegionCrawler = struct {
     /// and as many timelines, newest first, so new games get theirs at once. A short
     /// match batch makes room for more timelines, so a backlog drains in quiet spells
     fn step(rc: *RegionCrawler) !void {
+        if (rc.b.c.opts.patch_only) try rc.patchStarts();
         const pending = try rc.b.db.scalar("SELECT count(*) FROM match_queue " ++
             "WHERE region = ? AND status = 'pending'", .{@tagName(rc.region)}) orelse 0;
         const scanned = if (pending < pending_low) try rc.scanPlayers(scan_batch) else 0;
         const matches = try rc.drain(.match, detail_batch);
         const timelines = try rc.drain(.timeline, if (matches == detail_batch) detail_batch else timeline_batch);
         if (scanned + matches + timelines == 0) try rc.b.nap(idle_s);
+    }
+
+    /// Once per platform and patch, so active_first skips players whose new ladder games
+    /// are all an older patch's: on a patch day they made most match id calls return
+    /// nothing. At startup too, for a patch begun before it
+    fn patchStarts(rc: *RegionCrawler) !void {
+        const gpa = rc.b.c.gpa;
+        for (ep.platforms, rc.patches.of, &rc.started) |p, s, *started| {
+            if (p.region != rc.region or s.patch == started.*) continue;
+            const job = try Job.create(gpa, .none);
+            errdefer job.destroy(gpa);
+            job.kind = .{ .patch_start = .{ .platform = p, .start_s = s.start_s } };
+            try rc.b.submit(job);
+            started.* = s.patch;
+        }
     }
 
     /// Fetch up to `n` of a queue's next items and wait for the writer to store them,

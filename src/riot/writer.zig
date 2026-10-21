@@ -72,6 +72,9 @@ pub const Kind = union(enum) {
     /// found: ids new to the queue, set by apply
     match_ids: struct { ids: []const []const u8, discovered_at: i64, region: ep.Region, found: u32 = 0 },
     checked: struct { puuid: []const u8, t: i64 },
+    /// The platform's newest patch began at start_s: games a ladder counted before it
+    /// are an older patch's, so they stop putting the player first for a scan
+    patch_start: struct { platform: ep.Platform, start_s: i64 },
     /// id: the queue's, in case Riot's document names another. timeline false: an older
     /// patch's match under --patch-only, stored without one
     match: struct { region: ep.Region, id: []const u8, doc: match.Doc, raw: []const u8, t: i64, timeline: bool = true },
@@ -378,6 +381,7 @@ pub const Writer = struct {
                 q.found = @intCast(db.totalChanges() - before);
             },
             .checked => |ch| try s.checked.exec(.{ ch.t, ch.puuid }),
+            .patch_start => |p| try s.patch_start.exec(.{ @tagName(p.platform.region), p.platform.id, p.start_s }),
             .match => |m| return try wr.storeMatch(s, m.region, m.id, m.doc, m.raw, m.t, m.timeline),
             .timeline => |t| return try wr.storeTimeline(s, t.id, t.raw, t.compact),
             .queue => |q| switch (q.which) {
@@ -706,6 +710,7 @@ const Stmts = struct {
     player_delete: store.Stmt,
     match_queue: store.Stmt,
     checked: store.Stmt,
+    patch_start: store.Stmt,
     raw_doc: store.Stmt,
     participant_player: store.Stmt,
     blank_participant: store.Stmt,
@@ -781,6 +786,12 @@ const Stmts = struct {
         \\SELECT ?1, ?2, ?3 WHERE NOT EXISTS (SELECT 1 FROM matches WHERE match_id = ?1)
         ,
         .checked = "UPDATE players SET matches_checked_at = ?, games_checked = wins + losses WHERE puuid = ?",
+        // Through players_new_games: only the rows with games pending
+        .patch_start =
+        \\UPDATE players SET games_checked = wins + losses
+        \\WHERE region = ?1 AND games_checked IS NOT NULL AND wins + losses - games_checked > 0
+        \\    AND platform = ?2 AND rank_seen_at < ?3
+        ,
         .raw_doc = "INSERT OR REPLACE INTO raw.raw_docs VALUES (?,?,?,?)",
         .participant_player =
         \\INSERT INTO players (puuid, source, platform, region, seen_at)
@@ -1283,6 +1294,28 @@ test "games_checked: from the ladder's previous counts, reset by a scan or a new
     // New season: counts restart below games_checked
     try s.ladder_player.exec(.{ "old", "GOLD", "I", 0, 1, 0, 8, "EUW1", "europe" });
     try std.testing.expectEqual(@as(?i64, 0), try db.scalar(pending, .{"old"}));
+}
+
+test "patch_start: ladder games counted before the patch are no longer pending" {
+    const db = try store.schema.memory();
+    defer db.close();
+    var s: Stmts = try .init(db);
+    defer s.deinit();
+    const Row = struct { []const u8, i64, []const u8 };
+    const first = [_]Row{ .{ "before", 5, "EUW1" }, .{ "after", 5, "EUW1" }, .{ "eune", 5, "EUN1" } };
+    for (first) |r| try s.ladder_player.exec(.{ r[0], "GOLD", "I", 0, 10, 10, r[1], r[2], "europe" });
+    const later = [_]Row{ .{ "before", 50, "EUW1" }, .{ "after", 150, "EUW1" }, .{ "eune", 50, "EUN1" } };
+    for (later) |r| try s.ladder_player.exec(.{ r[0], "GOLD", "I", 0, 12, 10, r[1], r[2], "europe" });
+    try s.patch_start.exec(.{ "europe", "EUW1", 100 });
+    const pending = "SELECT wins + losses - games_checked FROM players WHERE puuid = ?";
+    try std.testing.expectEqual(@as(?i64, 0), try db.scalar(pending, .{"before"}));
+    try std.testing.expectEqual(@as(?i64, 2), try db.scalar(pending, .{"after"}));
+    try std.testing.expectEqual(@as(?i64, 2), try db.scalar(pending, .{"eune"}));
+    var plan = try db.prepare("EXPLAIN QUERY PLAN " ++ Stmts.sql.patch_start);
+    defer plan.deinit();
+    try plan.bind(.{ "europe", "EUW1", 100 });
+    try std.testing.expect(try plan.step());
+    try std.testing.expectEqualStrings("SEARCH players USING INDEX players_new_games (region=? AND <expr>>?)", plan.bytes(3));
 }
 
 test "non-priority jobs wait at half the queue, priority ones at full" {
