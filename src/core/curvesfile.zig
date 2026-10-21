@@ -838,8 +838,9 @@ pub const View = struct {
         return @as(f64, @floatFromInt(v.curve.header.own)) / 1000;
     }
 
+    /// Saturating: -32768 from a damaged file would overflow i16
     fn neg(q: Spread) Spread {
-        return .{ .p10 = -q.p90, .p25 = -q.p75, .p50 = -q.p50, .p75 = -q.p25, .p90 = -q.p10 };
+        return .{ .p10 = 0 -| q.p90, .p25 = 0 -| q.p75, .p50 = 0 -| q.p50, .p75 = 0 -| q.p25, .p90 = 0 -| q.p10 };
     }
 };
 

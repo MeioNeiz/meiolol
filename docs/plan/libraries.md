@@ -13,8 +13,11 @@ that slow everyday development).
   ReleaseSafe (was ReleaseSmall: no bounds or overflow checks); Ed25519-signed exe
   and manifest with an offline release key and a rollback guard (sign.zig, what
   Velopack or self_update give); `zig build desktop-check` (ThreadSanitizer) and
-  `desktop-fuzz` (architecture.md "Desktop window"). The first fuzz run found a crash:
-  a damaged curves file underflowed curvesfile View.lane (fixed: View's sums saturate)
+  `desktop-fuzz` (architecture.md "Desktop window"). Fuzzing found two crashes on
+  damaged curves files: View.lane's sums underflowed and a flipped minute negated
+  -32768 in i16 (both saturate now). `zig build --fuzz` exits 0 when a fuzz test
+  crashes: the first release went out past one (withdrawn before any web round
+  published it); the script now fails on the log's "terminated with signal"
 
 ## Next, by how exposed the code is
 
