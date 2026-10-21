@@ -4951,6 +4951,54 @@ Reading:
   ~2 points, split-half r 0.33); a pick-order-aware draft (which picks the player had
   seen); persisting the toggle across restarts
 
+### Patch 16.21's first day: how far champions moved, 2026-10-21
+
+Question: how big is a patch-day jump on our games, against within-patch noise, and is
+it in the champions the patch touched? Sizes the prize for patch-aware training
+(docs/plan/patch-transfer.md). Data: the box's drafts table, ranked solo, read-only
+export (16.20: 1.32M games; 16.21: 51,852 games, 21 Oct, KR and VN2 heavy). Old = 16.20
+days 13 to 18 Oct (632k games); new = all 16.21; control = 16.20's last two days, 19
+and 20 Oct (134k games). Cells: platform x champion x role (rates within platform, as
+16.21's first day is 35% KR against 23% on 16.20), 200+ old picks and 20+ new and
+control picks. True jump spread tau = sqrt(pick-weighted mean of d^2 minus its sampling
+variance), d = new rate minus old. "Changed": 12 champions whose Data Dragon 16.21.1
+championFull differs from 16.20.1 (stats, spell cooldowns, costs, ranges, tooltips:
+Varus, Viktor, Darius, Sion, Jinx, Azir, Yuumi, Xin Zhao, Orianna, Wukong, Lee Sin,
+Locke); patch notes change more than Data Dragon shows. SQL on the export, no model.
+
+| cells | n | new picks | tau, 16.21 vs old | tau, control vs old | slope of d on old - 50% (control) |
+| --- | --- | --- | --- | --- | --- |
+| all | 2,421 | 496k | 0.75 pp | 0.00 pp | -0.32 (-0.31) |
+| unchanged champions | 2,247 | 451k | 0.50 pp | 0.00 pp | -0.31 (-0.31) |
+| changed champions | 174 | 45k | 1.92 pp | 0.29 pp | -0.42 (-0.27) |
+
+Pooled over platforms instead (mix not matched): tau 0.70 pp vs control 0.27 pp.
+
+Reading:
+- The patch moved champions, the control didn't: within a platform two later days of
+  16.20 differ from the week before by sampling noise only, while 16.21's first day
+  differs by 0.75 pp per pick (RMS). The changed champions moved about 4x as far as the
+  rest (1.9 vs 0.5 pp); the rest still moved (other champions' changes, C6 in
+  frontier-dynamics, and who plays on patch day)
+- Cost of ignoring it: a team's logit moves by the sum of ten seats' shifts, about
+  4 x d each, so last patch's ratings lose roughly 20 tau^2 nats per game: ~1.1
+  milli-nats on 16.21's first day, against the shipped model's whole edge over a coin
+  of ~7.6 milli-nats (0.6855 vs 0.6931)
+- How much a day of new games can win back: with a cell's noise 0.25/n, a shrunk
+  per-patch offset recovers tau^2 / (tau^2 + 0.25/n) of a cell's jump. At 1,000 new
+  picks: 9% for an unchanged cell, 60% for a changed one. So one shared shrinkage
+  learns almost nothing on day one; a looser prior for patched champions is where the
+  early gain is
+- Mean reversion (E3's prior): no sign of it overall (slope = control's: the -0.3 is
+  the old rate's own noise). Changed champions -0.42 vs -0.27: a hint, 12 champions
+- Eval noise: paired per-game log loss differences between models this close have an
+  sd of ~0.022 nats (from Patch and rank context: ± 0.00020 on 44,353 games), so one
+  day of 16.21 (52k games) gives ± 0.19 milli-nats at 95%. Evaluating only on the
+  newest patch costs little precision after day one
+- Caveats: one boundary, day one only, raw rates (no draft adjustment), Data Dragon
+  only as the changed list. Rerun by day since patch as 16.21 fills
+- Rerun: the SQL in docs/plan/patch-transfer.md "Step 0"
+
 ## Shipped model, 2026-10-17
 
 `score.Options` defaults (app suggest, site draft tester, Daily Draft, pool, matchup and

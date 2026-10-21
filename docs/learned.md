@@ -857,3 +857,11 @@ How to write a line:
   game, 58% under 5 and 71% under 10; only 9% had 50+. Sure: 190k games, every curve in
   curves-16.20.bin counted. Site: `meiolol curves` writes matchups from 10 games
   (docs/architecture.md "Lane curves"); thinner ones show the plain average or nothing
+- 2026-10-21: A new patch moves champions' win rates beyond noise, mostly the ones it
+  changed: on 16.21's first day champion-role rates moved 0.75 pp (RMS, within platform)
+  from the week before, while two later days of 16.20 moved 0; the 12 champions with
+  Data Dragon changes moved 1.9 pp, the rest 0.5 pp. Using last patch's numbers unchanged
+  costs about 1 milli-nat per game on day one. Fairly sure for day one (52k games, noise
+  subtracted per cell, control on the same cells); later days not yet measured. Models:
+  nothing changed yet; docs/plan/patch-transfer.md. Evidence: docs/model.md "Patch
+  16.21's first day"

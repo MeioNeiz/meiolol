@@ -2149,3 +2149,18 @@
 {"t": "search", "date": "2026-10-21", "where": "web", "query": "Riot dodge rate percentage ranked champ selects dodged", "for": "frontier-causal", "new": 1}
 {"t": "fetch", "date": "2026-10-21", "url": "https://u.gg/lol/news/riot-moved-thousands-of-league-of-legends-players-out-of-their-ranks", "slug": "ugg-dodge-rate-2026", "file": "raw/ugg-dodge-rate-2026.md", "sha": "42e6a1c2cfc0", "key": "u.gg/lol/news/riot-moved-thousands-of-league-of-legends-players-out-of-their-ranks"}
 {"t": "snap", "date": "2026-10-21", "slug": "meiolol-learned-player", "commit": "3664821dde69d87bc2df4df21b5bb3e3e97c4a13", "files": ["raw/meiolol-learned-player/docs/learned.md"]}
+{"t": "search", "date": "2026-10-21", "where": "web", "query": "frustratingly easy domain adaptation little target data prior source weights", "for": "patch-transfer", "new": 2}
+{"t": "search", "date": "2026-10-21", "where": "arxiv", "query": "temporal distribution shift benchmark train on all past vs recent window fine-tuning", "for": "patch-transfer", "new": 1, "seen": 1}
+{"t": "search", "date": "2026-10-21", "where": "web", "query": "prequential evaluation test-then-train stream learning", "for": "patch-transfer", "new": 1}
+{"t": "search", "date": "2026-10-21", "where": "web", "query": "what size test set gives good error rate estimates", "for": "patch-transfer", "new": 1}
+{"t": "fetch", "date": "2026-10-21", "url": "https://arxiv.org/pdf/0907.1815", "slug": "daume-2007-easy-da", "file": "raw/daume-2007-easy-da.md", "sha": "795d8a3bab1d", "key": "arxiv.org/abs/0907.1815"}
+{"t": "fetch", "date": "2026-10-21", "url": "https://arxiv.org/pdf/2211.14238", "slug": "wild-time-2022", "file": "raw/wild-time-2022.md", "sha": "a5eb9c000b1e", "key": "arxiv.org/abs/2211.14238"}
+{"t": "fetch", "date": "2026-10-21", "url": "https://aclanthology.org/W04-3237.pdf", "slug": "chelba-acero-2004", "file": "raw/chelba-acero-2004.txt", "sha": "18ce0484f108", "key": "aclanthology.org/W04-3237.pdf"}
+{"t": "fetch", "date": "2026-10-21", "url": "https://arxiv.org/abs/0907.1815", "slug": "daume-2007-easy-da", "file": "raw/daume-2007-easy-da.txt", "sha": "1ab82986e627", "key": "arxiv.org/abs/0907.1815"}
+{"t": "fetch", "date": "2026-10-21", "url": "https://arxiv.org/abs/2211.14238", "slug": "wild-time-2022", "file": "raw/wild-time-2022.txt", "sha": "5b9fbe760f67", "key": "arxiv.org/abs/2211.14238"}
+{"t": "search", "date": "2026-10-21", "where": "web", "query": "prequential evaluation Gama Sebastiao Rodrigues pdf", "for": "patch-transfer", "new": 1}
+{"t": "search", "date": "2026-10-21", "where": "web", "query": "what size test set gives good error rate estimates Guyon pdf", "for": "patch-transfer"}
+{"t": "lead", "date": "2026-10-21", "url": "https://doi.org/10.1007/s10994-012-5320-9", "why": "Gama 2013 prequential evaluation: canonical test-then-train reference; no open PDF found (INESC record, mlanthology)", "for": "patch-transfer", "key": "doi.org/10.1007/s10994-012-5320-9"}
+{"t": "fetch", "date": "2026-10-21", "url": "https://www.cis.upenn.edu/~mkearns/papers/cv.pdf", "slug": "kearns-1996-cv-split", "file": "raw/kearns-1996-cv-split.txt", "sha": "a42052e742c7", "key": "cis.upenn.edu/~mkearns/papers/cv.pdf"}
+{"t": "search", "date": "2026-10-21", "where": "web", "query": "Kearns bound error cross validation training-test split fraction", "for": "patch-transfer", "new": 1}
+{"t": "fetch", "date": "2026-10-21", "url": "https://meio.lol/lab/patch-jump-16-21", "slug": "patch-jump-16-21-measured", "file": "raw/patch-jump-16-21-measured.txt", "sha": "2c89c48692a2", "key": "meio.lol/lab/patch-jump-16-21"}

@@ -1,0 +1,13 @@
+Patch 16.21 first day: champion win rate jump vs within-patch control (our measurement, 2026-10-21)
+
+Data: box drafts table, ranked solo. Old = 16.20 days 13-18 Oct (632k games). New = 16.21, 21 Oct (51,852 games). Control = 16.20 19-20 Oct (134k games).
+Cells: platform x champion x role, 200+ old picks, 20+ new and control picks.
+tau = sqrt(pick-weighted mean of d^2 minus sampling variance), d = new rate minus old rate.
+
+all cells: 2421 cells, 495923 new picks, tau patch 0.0075, tau control 0.0, slope -0.318, slope control -0.307
+unchanged champions: 2247 cells, 450555 new picks, tau patch 0.005, tau control 0.0, slope -0.306, slope control -0.312
+changed champions (Data Dragon 16.21.1 differs from 16.20.1, 12 champions): 174 cells, 45368 new picks, tau patch 0.0192, tau control 0.0029, slope -0.415, slope control -0.273
+pooled over platforms (mix not matched): tau patch 0.007, tau control 0.0027
+
+Platform mix: 16.21 first day KR 34.5%, VN2 24.0%, EUW1 19.2%, NA1 2.1%; 16.20 old window KR 23.4%, EUW1 22.3%, VN2 15.0%, NA1 10.5%.
+Changed list: Varus, Viktor, Darius, Sion, Jinx, Azir, Yuumi, XinZhao, Orianna, MonkeyKing, LeeSin, Locke.

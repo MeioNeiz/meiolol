@@ -1,0 +1,4851 @@
+Wild-Time: A Benchmark of in-the-Wild Distribution
+Shift over Time
+
+arXiv:2211.14238v2 [cs.LG] 16 Jan 2023
+
+Huaxiu Yao1∗ , Caroline Choi1∗ , Bochuan Cao2 , Yoonho Lee1 , Pang Wei Koh1 , Chelsea Finn1
+1
+Stanford University, 2 Pennsylvania State University
+wildtime@googlegroups.com
+
+Abstract
+Distribution shift occurs when the test distribution differs from the training distribution, and it can considerably degrade performance of machine learning models
+deployed in the real world. Temporal shifts – distribution shifts arising from the
+passage of time – often occur gradually and have the additional structure of timestamp metadata. By leveraging timestamp metadata, models can potentially learn
+from trends in past distribution shifts and extrapolate into the future. While recent
+works have studied distribution shifts, temporal shifts remain underexplored. To
+address this gap, we curate Wild-Time, a benchmark of 5 datasets that reflect
+temporal distribution shifts arising in a variety of real-world applications, including
+patient prognosis and news classification. On these datasets, we systematically
+benchmark 13 prior approaches, including methods in domain generalization,
+continual learning, self-supervised learning, and ensemble learning. We use two
+evaluation strategies: evaluation with a fixed time split (Eval-Fix) and evaluation
+with a data stream (Eval-Stream). Eval-Fix, our primary evaluation strategy, aims
+to provide a simple evaluation protocol, while Eval-Stream is more realistic for
+certain real-world applications. Under both evaluation strategies, we observe an
+average performance drop of 20% from in-distribution to out-of-distribution data.
+Existing methods are unable to close this gap. Code is available at https://wildtime.github.io/.
+
+1
+
+Introduction
+
+Distribution shift occurs when the test distribution differs from the training distribution. Temporal shifts – distribution shifts that arise from
+the passage of time – are a common type of
+distribution shift. Due to non-stationarity, production (i.e. test) data shifts over time [39]. This
+degrades the performance of machine learning
+systems deployed in the real world. For example,
+Lazaridou et al. [60] found that neural language
+models perform worse when predicting future utterances from beyond their training period, and
+that their performance worsens with time. As
+another example, flu incidence prediction from
+Internet search queries performed remarkably
+well in 2008 [27]. However, using the same
+model in 2013 incorrectly predicted double the
+∗
+
+Distribution shift over time
+Training Distribution
+(acc: 97.99%)
+
+…
+
+Test Distribution
+(acc: 79.50%)
+
+…
+Time
+
+1930s
+
+… 1960s … 2000s
+
+2010s
+
+Figure 1: An illustration of temporal distribution
+shift on Yearbook. In Wild-Time, we split the
+train and test sets by timestamp and observe performance drops between train and test distributions.
+
+Huaxiu Yao and Caroline Choi contributed equally.
+
+36th Conference on Neural Information Processing Systems (NeurIPS 2022) Track on Datasets and Benchmarks.
+
+Datasets
+
+Yearbook
+
+FMoW-Time
+
+Input (x)
+
+yearbook
+photos
+
+satel. image
+
+Prediction (y)
+
+gender
+
+land use
+
+Time Range
+# Examples
+
+1930 - 2013
+
+2002 - 2017
+
+37,189
+
+118,886
+
+MIMIC-IV
+Readmission
+Mortality
+
+HuffPost
+
+arXiv
+
+diagnosis, treatment (ICD9)
+
+article
+headline
+
+paper title
+
+readmission
+
+news tag
+
+primary
+category
+
+2008 - 2019
+
+2012 - 2018
+
+2007 - 2022
+
+270,617
+
+63,907
+
+2,057,952
+
+Killer Fail: How
+Romney’s Broken
+Orca App Cost Him
+Thousand of Votes
+
+The Limitations of
+Deep Learning in
+Adversarial Settings
+
+TECH
+
+cs.CR
+
+Treatment: 423, 549, 990, 990
+
+Possible Autopilot
+Use Probed After
+Tesla Crashes at
+60mph
+
+Progressive-Scale
+Boundary Blackbox
+Attack via Projective
+Gradient Estimation
+
+Readmission: Yes; Mortality: Yes
+
+TECH
+
+cs.LG
+
+mortality
+
+Diagnosis: 560, 998, 788, 278,
+E878, 311, V88, V10, 266, 272
+
+Train
+Example
+
+Treatment: 456, 545
+Female
+
+Residential
+
+Readmission: No; Mortality: No
+
+Diagnosis: 155, 456, 452, 572
+
+Test Example
+Time
+
+Female
+
+Park
+
+Figure 2: The Wild-Time benchmark includes a collection of 5 datasets with 6 tasks, from [26], [48],
+[76], [17]. For each task, we train models on the past and evaluate it in the future. We list the input,
+prediction, time range and the number of examples for each task.
+incidence [8]. Finally, in Figure 1, the style of yearbook portraits of American high schoolers [26]
+change over the decades. As a result, models trained on earlier years and evaluated on future years
+suffer substantial drops in performance.
+Though temporal shifts are ubiquitous in real-world scenarios, they remain understudied. Prior
+benchmarks for out-of-distribution robustness in the wild focus on domain shifts and subpopulation
+shifts [55, 72, 109, 89]. Many popular benchmarks that feature a stream of data, such as those
+used in continual learning [1, 13, 54, 92, 111, 14, 69, 84, 95], contain a manually delineated set
+of tasks and artificial sequential variations, which are not representative of natural temporal shifts.
+These include small-image sequences with disparate label splits (e.g., Split TinyImageNet [61], Split
+CIFAR [57]), different kinds of image transformations to MNIST digits (e.g., Rainbow MNIST [23]),
+or different visual recognition targets [64] (cf. Section 6.) Recent works have investigated natural
+temporal distribution shifts in different domains such as drug discovery [37], visual recognition
+[10], and sepsis prediction [30] and created datasets in each of these domains. However, there does
+not exist a systematic study of real-world temporal distribution shifts and a benchmark spanning
+various domains. Here, we curate a collection of these datasets and create a benchmark that allows
+researchers to easily evaluate their methods across multiple domains.
+This paper presents Wild-Time (“in-the-Wild distribution shifts over Time"), a benchmark of inthe-wild gradual temporal distribution shifts together with two comprehensive evaluation protocols.
+In Wild-Time, we investigate real-world temporal distribution shifts across a diverse set of tasks
+(Figure 2), including portraits classification [26], ICU patient readmission prediction [48], ICU
+patient mortality prediction [48], news tag classification [76], and article category classification [17].
+The distribution shifts in these applications happen naturally due to the passage of time, which the
+datasets reflect through changing fashion and social norms [26], atmospheric conditions [72], and
+current events [75, 76]. We propose two evaluation strategies for Wild-Time: evaluation with a fixed
+time split (Eval-Fix) and with a data stream (Eval-Stream).
+On these datasets, we evaluate several representative approaches in continual learning, invariant
+learning, self-supervised learning, and ensemble learning. We extend invariant learning methods
+to the temporal distribution shift setting. While prior invariant learning approaches are trained on
+clearly delineated sets of distributions, we consider a stream of unsegmented observations, where
+domain labels are not provided. To extend domain invariant methods to the temporal distribution
+shift setting, we construct domains to be different windows of time. More specifically, all temporal
+windows of a certain window size are treated as a domain, allowing us to directly apply invariant
+learning approaches over the constructed domains.
+The main conclusions of our benchmark analysis are that invariant learning, self-supervised learning,
+and continual learning approaches do not show substantial improvements compared to standard
+ERM training. To make the Wild-Time datasets accessible for future research, we released a Python
+2
+
+package that automates data loading and baseline training at https://wild-time.github.io/. We hope
+that Wild-Time will accelerate the development of temporally robust models.
+
+2
+
+Problem and Evaluation Settings
+
+We define the temporal robustness setting. Following [55], we view the entire data distribution as a
+mixture of T timestamps T = {1, . . . , T }. Each timestamp t is associated with a data distribution
+Pt over (x, y), where x and y represent input features and labels, respectively, and all examples are
+sampled from the data distribution Pt . To formulate the temporal distribution shift setting, we define
+PT
+PT
+ts
+the training distribution as P tr = t=1 λtr
+= t=1 λts
+t Pt , and the test distribution as P
+t Pt . Note
+that, here, timestamp differs from the notion of “domain" used in other works on distribution shift
+[24, 63, 3, 2, 55, 108]. In the temporal shift setting, we do not require distribution shift between
+consecutive timestamps, i.e., we can have Pt = Pt−1 . Based on the problem setting, we will detail
+the criteria to select datasets and the evaluation strategies in Wild-Time.
+2.1
+
+Criteria for Dataset Selection
+
+In Wild-Time, we select datasets using three criteria:
+• Naturally Occurring Temporal Shifts. We select real-world datasets that consist of data collected
+over time and contain timestamp metadata. We select datasets for which it is natural to train on
+the past and test into the future, and we include datasets from a diverse collection of domains,
+including vision, healthcare, and language modeling.
+• Temporal Distribution Shifts with Performance Drops. We require that there is substantial
+performance degradation between the training and test splits, i.e., we observe large drops in
+performance between the in-distribution and out-of-distribution times.
+• Gradual Temporal Distribution Shifts. Sudden shifts are well-represented by existing benchmarks on domain shift and subpopulation shift. Models can more effectively extrapolate temporal
+correlations when the distribution shifts occur gradually over time, as opposed to sudden shifts.
+Thus, in this paper, we focus on gradual temporal distribution shifts, where we require gradual
+performance drops between consecutive periods of time.
+2.2
+
+Evaluation Strategies
+
+Before presenting the datasets, we first discuss two evaluation strategies in Wild-Time.
+Evaluation with a fixed time split (Eval-Fix). Eval-Fix evaluates models on a single, fixed train-test
+time split and offers a simple and quick evaluation protocol. Eval-Fix is the primary evaluation
+strategy in Wild-Time. Concretely, we denote the split timestamp as ts . The train and test sets
+are T tr = {t ≤ ts |∀t}, T ts = {t > ts |∀t}, respectively. Eval-Fix evaluates performance using
+two metrics, average and worst-time performance (Avg) and worst-time performance (Worst).
+Specifically, let Rt denote the performance at each timestamp t. We define the average performance
+(Avg) and worst-time performance (Worst) as
+Avg =
+
+X
+1
+Rt , Worst = min Rt .
+ts
+|T |
+t∈T ts
+ts
+
+(1)
+
+t∈T
+
+Here, average performance measures the overall out-of-distribution performance. Worst-time performance evaluates the model’s robustness over time.
+Evaluation with data stream (Eval-Stream). Eval-Stream evaluates models at each timestamp,
+evaluating average and worst-time performance on the next K timestamps. Eval-Stream mimics
+standard machine learning development pipelines, where models are updated frequently and evaluated
+on timestamps in the near future.
+Specifically, we construct a performance matrix R ∈ RT ×K , where each element Ri,j is the test
+accuracy of the model trained on timestamp ti and evaluated on timestamp tj . Following [69], we
+define the average performance (Avgstream ) and worst-time performance (Worststream ) as
+Avgstream =
+
+t+K
+1 X X
+1 X
+Ri,j , Worststream =
+min
+Ri,j
+|T |K t∈T j=t+1
+|T | t∈T j∈{t+1...t+K}
+
+3
+
+(2)
+
+Here, K is a hyperparameter. Compared with typical continual learning metrics in Lopez-Paz and
+Ranzato [69], we evaluate performance on the next few timestamps, rather than just the subsequent
+timestamp, to assess the model’s robustness across time.
+
+3
+
+Datasets
+
+In this section, we briefly discuss the datasets and tasks included in Wild-Time, which reflect
+natural gradual temporal distribution shifts. We provide more detailed descriptions of all datasets
+in Appendix A. Additionally, in Appendix F, we discuss some datasets that violate our criteria of
+dataset selection discussed in Section 2.1, e.g., datasets with sudden temporal distribution shifts.
+Yearbook (Appendix A.1). Social norms, fashion styles, and population demographics change over
+time. This is captured in the Yearbook dataset, which consists of 37,921 frontal-facing American high
+school yearbook photos [26]. We exclude portraits from 1905 − 1929 due to the limited number of
+examples in these years, resulting in 33,431 examples from 1930 − 2013. Each photo is a 32 × 32 × 1
+grey-scale image associated with a binary label y, which represents the student’s gender. In Eval-Fix,
+the training set consists of data from before 1970, and the test set comprises data after 1970, which
+corresponds to 40 and 30 years, respectively.
+FMoW-Time (Appendix A.2). Machine learning models can be used to analyze satellite imagery
+and aid humanitarian and policy efforts by monitoring croplands [44] and predicting crop yield [93]
+and poverty levels [42]. Due to human activity, satellite imagery changes over time, requiring models
+that are robust to temporal distribution shifts.
+We study this problem on the Functional Map of the World (FMoW) dataset [16], adapted from
+the WILDS benchmark [55] and is named as FMoW-Time. Given a satellite image, the task is to
+predict the type of land usage. The FMoW-Time dataset [55] consists of 141,696 examples from
+2002 − 2017. Each input x is a 224 × 224 RGB satellite image, and the corresponding label y is
+one of 62 land use categories. We use the train/val/test splits in WILDS to construct FMoW-Time
+dataset in Wild-Time. The train/val/test data splits from WILDS contain images from disjoint location
+coordinates, and all splits contain data from all 5 geographic regions. In Eval-Fix, the training set
+includes data from 2002 − 2015, and the test set includes data from 2016 − 2017.
+MIMIC-IV (Appendix A.3). Many machine learning healthcare applications have emerged in the
+last decade, such as predicting disease risk [70], medication changes [105], patient subtyping [5],
+in-hospital mortality [30], and length of hospital stay [20]. However, changes in healthcare over time,
+such as the emergence of new treatments and changes in patient demographics, are an obstacle in
+deploying machine learning-based clinical decision support systems [30].
+We study this problem on MIMIC-IV, one of the largest public healthcare datasets that comprises
+abundant medical records of over 40,000 patients. In MIMIC-IV, we treat each admission as one
+record, resulting in 216,487 healthcare records from 2008 − 2019. To protect patient privacy, the
+reported admission year is in a three year long date range. Hence, our timestamps are groups of three
+years: 2008 − 2010, 2011 − 2013, 2014 − 2016, 2017 − 2019. We consider two classification tasks:
+• MIMIC-Readmission aims to predict the risk of being readmitted to the hospital within 15 days.
+• MIMIC-Mortality aims to predict in-hospital mortality for each patient.
+For each record, we concatenate the corresponding ICD9 codes [80] of diagnosis and treatment. A
+binary indicator is used to indicate the codes are come from diagnosis or treatment. We use the
+concatenated one as the input feature. The label is a binary value that indicates whether the patient
+is readmitted or passed away for MIMIC-Readmission and MIMIC-Mortality, respectively. For the
+Eval-Fix setting, the train set consists of patient data fom 2008 − 2013, while the test set consists of
+data from 2014 − 2020.
+Huffpost (Appendix A.4). In many language models which deal with information correlated with
+time, temporal distribution shifts cause performance degradation in downstream tasks such as Twitter
+hashtag classification [45] or question-answering systems [66]. Performance drops across time reflect
+changes in the style or content of current events.
+We study this temporal shift on the Huffpost dataset [76]. The task is to identify tags of news articles
+from their headlines. Each input feature x is a news headline, and the output y is the news category.
+4
+
+We only keep categories that appear in all years from 2012 − 2022, resulting 11 categories in total.
+We choose year 2015 as the split timestamp in Eval-Fix.
+arXiv (Appendix A.5). Due to the evolution of research fields, the style of arXiv pre-prints also
+changes over time, reflected by the change in article categories. For example, “neural network attack"
+was originally a popular keyword in the security community, but gradually became more prevalent in
+the machine learning community. We study this temporal shift in the arXiv dataset [18], where the
+task is to predict the primary category of arXiv pre-prints given the paper title as input. The entire
+dataset includes 172 pre-print categories from 2007 − 2022.
+
+4
+
+Baselines for Temporal Distribution Shifts
+
+Many algorithms have been proposed to improve a model’s robustness to distribution shifts or improve
+a model’s performance on a stream of data. For our evaluation, we choose several representative
+methods from five main categories: classical supervised learning (empirical risk minimization),
+continual learning, invariant learning, self-supervised learning, and ensemble learning. These
+methods have been successful on domain generalization and continual learning benchmarks. We
+extend the selected invariant learning approaches to the temporal distribution shift setting. See
+Appendix B for a detailed discussion of these algorithms and how we apply them to our tasks.
+Classical Supervised Learning (Appendix B.1). We evaluate the performance of empirical risk
+minimization (ERM) on all tasks. In Eval-Fix, we directly train a machine learning model with ERM.
+In Eval-Stream, we apply ERM to every timestamp and report the performance.
+Continual Learning (Appendix B.2). Continual learning, also known as lifelong learning or incremental learning, aims to effectively learn from non-stationary distributions via a stream of data
+[1, 13, 54, 92, 111, 14, 69, 84, 95]. The goal is to accumulate and reuse knowledge in future learning
+without forgetting information needed for previous tasks, a phenomenon known as catastrophic
+forgetting [54], which may enable such models to robustly extrapolate into the future in the temporal
+shift setting. We evaluate four representative algorithms, including fine-tuning, regularization-based
+(EWC, SI) and memory-based (A-GEM) methods. These methods have been successful on several
+continual learning benchmarks, such as permuted MNIST [28] and Split TinyImagenet [61].
+Temporally Invariant Learning (Appendix B.3). Invariant learning methods learn representations
+or predictors that are invariant across different domains. Common approaches include aligning feature
+representation over different domains [24, 68, 96, 99, 104, 110, 115], learning invariant predictors
+via selective augmentation [108] or by strengthening the correlations between representations and
+labels [2, 3, 53, 58], and optimizing worst-group performance [88, 113, 114]. In Wild-Time, we select
+four representative invariant learning methods: CORAL [96], IRM [3], LISA [108], and GroupDRO
+[88]. We adapt these methods to a temporal setting and train them incrementally at each timestamp t.
+In the following, we discuss how we adapt these approaches to the temporal shift setting.
+As mentioned in Section 2, in the temporal shift setting, the “timestamp" information is not the same
+as the notion of a “domain," as the distribution shift may not occur between consecutive timestamps.
+The data streams in our benchmark are unsegmented and do not include domain boundaries. This
+setting poses new challenges to the above invariant learning approaches, which rely on domain labels.
+To address this challenge, we adapt the above invariant
+learning approaches to the temporal distribution shift
+setting. We leverage timestamp metadata to create a
+temporal robustness set consisting of substreams of data,
+where each substream is treated as one domain. Specifically, as shown in Figure 3, we define a sliding window
+G with length L. For a data stream with T timestamps,
+we apply the sliding window G to obtain T − L + 1
+substreams. We treat each substream as a “domain" and
+apply the above invariant algorithms on the robustness
+set. We name the adapted CORAL, GroupDRO and
+IRM as CORAL-T, GroupDRO-T, IRM-T, respectively.
+Note that we do not adapt LISA since the intra-label
+LISA performs well without domain information, which
+is also mentioned in the original paper.
+5
+
+Apply invariant learning to the robustness sets
+Domain
+1
+
+Domain
+2
+
+Domain
+3
+
+Domain
+4
+
+Original
+data
+
+Time
+𝑡!
+
+𝑡"
+
+𝑡#
+
+𝑡$
+
+𝑡%
+
+𝑡&
+
+𝑡'
+
+Figure 3: Construction of a temporal robustness set. Here, we have T = 7 and
+L = 3. By applying sliding window-based
+segmentation, we obtain 4 substreams of
+data. We apply invariant learning approaches to this robustness set.
+
+See Appendix E.2 for details on the temporal adaptation of these invariant learning algorithms
+and additional ablations. In particular, we compare vanilla invariant learning algorithms with their
+temporally adapted versions, assess the effect of the length of the time window L, and compare
+performance using overlapping versus non-overlapping time windows.
+Self-Supervised Learning (Appendix B.4). Self-supervised learning has been shown to improve
+out-of-distribution robustness [43, 94]. Here, we introduce two representative self-supervised
+learning methods, SimCLR [15] and SwaV [11], and evaluate their performance on the Wild-Time
+image classification datasets, Yearbook and FMoW-Time.
+Ensemble Learning (Appendix B.5). Typically, using ensemble learning improves the performance
+of machine learning models. We introduce Stochastic Weighted Averaging (SWA) as the representative ensemble learning approach, which is an approximate Bayesian method which averages multiple
+parameter values along the trajectory of stochastic gradient descent [41].
+
+5
+
+Experiments
+
+We benchmark the performance of all methods in Section 4 on each dataset in Wild-Time. Each
+baseline is evaluated using both the Eval-Fix and Eval-Stream settings. See Appendix D for all
+evaluation results and experimental details under the Eval-Stream setting.
+5.1
+
+Experimental Setup
+
+Data Split. For both Eval-Fix and Eval-Stream, the training and test sets are subsets of the entire
+dataset such that the training timestamps are earlier than the test timestamps. We measure temporal
+out-of-distribution (OOD) robustness as performance on the test set. To compare out-of-distribution
+with in-distribution (ID) performance, we measure the average per-timestep performance on a heldout set of 10% training examples (20% for MIMIC-Mortality and MIMIC-Readmission) from each
+training ID timestamp. More details of our data split protocols are described in Appendix C.1.
+Evaluation Metrics. We measure accuracy in most classification tasks, including Yearbook, FMoWTime, MIMIC-Readmission, HuffPost, and arXiv. For the MIMIC-Mortality task, we use ROC-AUC
+due to label imbalance.
+Hyperparameter Settings. For each dataset, we use the same backbone for all baselines.The choice
+of backbones are based on the original paper (e.g., DenseNet101 [36] for FMoW-Time [55], or the
+commonly used ones (e.g., DistilBERT [90] for arXiv and Huffpost). For each method, we tune
+hyperparameters using cross-validation with grid search. In Eval-Fix, we hold out 10% of the data
+of each training timestamp (20% for MIMIC-Readmission, and MIMIC-Mortality) to construct the
+validation set for hyperparameter tuning. Here, we use examples from the remaining 90% of the data
+to train the model and evaluate the performance on the corresponding validation set. We repeat this
+process three times via cross-validation with different held-out 10% of the data. After selecting all
+hyperparameters, we use the entire training set to train the model. See Appendix C.2 for a detailed
+hyperparameter search setting.
+5.2
+
+Performance Drops from Temporal Distribution Shifts
+
+The Wild-Time datasets should exhibit observable performance drops between training and test times.
+In this section, we demonstrate this for every Wild-Time dataset. Table 1 shows the ID and OOD
+performance of ERM on each Wild-Time dataset. (See Table 20 in the Appendix for comprehensive
+results on all remaining baselines.)
+We observe that OOD performance is substantially lower than ID performance. We conduct further
+experiments, in which we train ERM on both ID and OOD examples, in Appendix E.1. The substantial
+drop in ID versus OOD performance indicates that the performance drop is caused by distribution
+shift rather than the difficulty of training timestamps.
+5.3
+
+Baseline Comparison
+
+Table 2 shows the performance of all methods on Wild-Time under the Eval-Fix setting. Due to
+space constraints, we report results on the Eval-Stream setting in Appendix D. We report the average
+6
+
+Table 1: The in-distribution versus out-of-distribution test performance evaluated on Wild-Time under
+the Eval-Fix setting. For each dataset, higher value means better performance.
+Dataset (Metric)
+
+In-distribution
+
+Out-of-distribution
+
+Yearbook (Acc)
+FMoW-Time (Acc)
+MIMIC-Readmission (Acc)
+MIMIC-Mortality (AUC)
+Huffpost (Acc)
+arXiv (Acc)
+
+97.99 (1.40)
+58.07 (0.15)
+73.00 (2.94)
+90.89 (0.59)
+79.40 (0.05)
+53.78 (0.16)
+
+79.50 (6.23)
+54.07 (0.25)
+61.33 (3.45)
+72.89 (8.96)
+70.42 (1.15)
+45.94 (0.97)
+
+Table 2: The out-of-distribution test performance of each method evaluated on Wild-Time under the
+Eval-Fix setting. Different groups of rows correspond to different categories of methods. Full table
+with standard deviation are computed over three random seeds and reported in Table 20 of Appendix.
+We bold the best OOD performance for each dataset.
+Yearbook
+(Accuracy (%) ↑)
+Avg.
+Worst
+
+FMoW-Time
+(Accuracy (%) ↑)
+Avg.
+Worst
+
+MIMIC-Readmission
+(Accuracy (%) ↑)
+Avg.
+Worst
+
+Fine-tuning
+EWC
+SI
+A-GEM
+
+81.98
+80.07
+78.70
+81.04
+
+69.62
+66.61
+65.18
+67.07
+
+44.25
+44.02
+44.25
+44.10
+
+37.14
+36.42
+37.14
+36.02
+
+62.19
+66.40
+62.60
+63.95
+
+59.57
+64.69
+61.13
+62.66
+
+ERM
+GroupDRO-T
+mixup
+LISA
+CORAL-T
+IRM-T
+
+79.50
+77.06
+76.72
+83.65
+77.53
+80.46
+
+63.09
+60.96
+58.70
+68.53
+59.34
+64.42
+
+54.07
+43.87
+53.67
+52.33
+49.43
+45.00
+
+46.00
+36.60
+44.57
+43.30
+41.23
+37.67
+
+61.33
+56.12
+58.82
+56.90
+57.31
+56.53
+
+59.46
+53.12
+57.30
+54.01
+54.69
+52.67
+
+SimCLR
+SwaV
+
+78.59
+78.38
+
+60.15
+60.73
+
+44.76
+44.92
+
+37.00
+37.17
+
+n/a
+n/a
+
+n/a
+n/a
+
+SWA
+
+84.25
+
+67.90
+
+54.06
+
+46.01
+
+59.10
+
+56.54
+
+MIMIC-Mortality
+(AUC (%) ↑)
+Avg.
+Worst
+
+HuffPost
+(Accuracy (%) ↑)
+Avg.
+Worst
+
+arXiv
+(Accuracy (%) ↑)
+Avg.
+Worst
+
+Fine-tuning
+EWC
+SI
+A-GEM
+
+63.37
+62.07
+61.76
+61.78
+
+52.45
+50.41
+50.19
+50.40
+
+69.59
+69.42
+70.46
+70.22
+
+68.91
+68.61
+69.05
+69.15
+
+50.31
+50.40
+50.21
+50.30
+
+48.19
+48.18
+48.07
+48.14
+
+ERM
+GroupDRO-T
+mixup
+LISA
+CORAL-T
+IRM-T
+
+72.89
+76.88
+73.69
+76.34
+77.98
+76.16
+
+65.80
+71.40
+66.83
+71.14
+64.81
+70.64
+
+70.42
+69.53
+71.18
+69.99
+70.05
+70.21
+
+68.71
+67.68
+68.89
+68.04
+68.39
+68.71
+
+45.94
+39.06
+45.12
+47.82
+42.32
+35.75
+
+44.09
+37.18
+43.23
+45.91
+40.31
+33.91
+
+SWA
+
+69.53
+
+60.83
+
+70.98
+
+69.52
+
+44.36
+
+42.54
+
+and standard deviation of each method’s performance across three different random seeds. For each
+task, we visualize the OOD performance on every test timestamp in Figure 4, and show best ID
+performance over all approaches as an upper bound on temporally robust performance. The following
+high-level observations summarize our findings:
+• In FMoW-Time, MIMIC-Readmission, and MIMIC-Mortality, model performance degrades with
+time (Figures 7h, 4c, 4d), as models exhibit higher OOD accuracy on timestamps closer to that of
+the training data. Such gradual temporal shifts correspond to our motivation in dataset selection,
+as discussed in Section 2.1. In Yearbook (Figure 7g), performance fluctuates significantly, with
+models achieving higher OOD accuracy at later timestamps (e.g., 1991 − 1996) compared to earlier
+timestamps (e.g., 1981 − 1986). In HuffPost and arXiv, models achieve the best performance on
+the earliest test timestamps. Nevertheless, there is a significant gap between the OOD performance
+7
+
+70%
+
+Oracle ID
+CORAL-T
+GroupDRO-T
+
+ERM
+LISA
+FT
+
+60%1971 1981 1991 2001 2011
+Time
+
+40%
+30%2013
+
+(a) : Yearbook
+
+70%
+
+50%
+2014
+
+ERM
+LISA
+FT
+
+2017
+Time
+
+(d) : MIMIC-Mortality
+
+Average OOD Accuracy
+
+Average OOD AUC
+
+80%
+
+Oracle ID
+CORAL-T
+GroupDRO-T
+
+Oracle ID
+CORAL-T
+GroupDRO-T
+
+ERM
+LISA
+FT
+
+2015
+Time
+
+2017
+
+80%
+76%
+72%
+68%
+2016
+
+Oracle ID
+CORAL-T
+GroupDRO-T
+
+2017
+Time
+
+(e) : HuffPost
+
+75%
+65%
+
+Oracle ID
+CORAL-T
+GroupDRO-T
+
+ERM
+LISA
+FT
+
+55%
+45%2014
+
+2017
+Time
+
+(c) : MIMIC-Readmission
+55%
+
+(b) : FMoW-Time
+
+90%
+
+60%
+
+Average OOD Accuracy
+
+80%
+
+50%
+
+ERM
+LISA
+FT
+
+2018
+
+Average OOD Accuracy
+
+Average OOD Accuracy
+
+90%
+
+Average OOD Accuracy
+
+60%
+
+100%
+
+50%
+45%
+40%
+35%
+
+Oracle ID
+CORAL-T
+GroupDRO-T
+
+2018
+
+ERM
+LISA
+FT
+
+2020
+Time
+
+2022
+
+(f) : arXiv
+
+Figure 4: Out-of-distribution performance per test timestamp. We select five representative baselines
+– ERM, FT (Fine-tuning), CORAL-T, GroupDRO-T, LISA, and show the corresponding performance.
+Oracle ID represent the best ID performance over all compared baselines. Note that for MIMICReadmission and MIMIC-Mortality, our OOD timestamps are the three-year blocks 2014 − 2016,
+2017 − 2019. Hence in Figures 4(c) and 4(d), the performance over this three-year block is the same.
+and best ID performance for all datasets and methods. Furthermore, this performance gap changes
+in a continual manner over time, indicating that the nature of the distribution shift is correlated with
+the provided timestamps.
+• Most invariant learning approaches (CORAL-T, GroupDRO-T, IRM-T, LISA, mixup) did not
+show clear improvements over ERM. In some cases, invariant learning approaches performed
+worse than ERM, corroborating the findings in other natural distribution shift benchmarks, such as
+WILDS [55].
+• Incremental training approaches (Fine-tuning, EWC, SI, A-GEM) improve OOD performance on
+the arXiv and MIMIC-Readmission datasets, and worst OOD performance on the HuffPost dataset.
+This is expected, since these datasets exhibit more gradual temporal shifts, and incremental training
+tends to bias the trained model towards the last few timestamps. In all tasks other than Yearbook,
+incremental training methods perform worse than invariant learning approaches, indicating the
+power of invariance in learning temporally robust models.
+• Neither self-supervised learning nor ensemble learning approaches show consistent benefits over
+ERM. In summary, ERM has been shown to be a strong baseline in Wild-Time, even when we
+reduce the number of training examples, as discussed in Appendix E.4.
+• Most results from the Eval-Stream setting (Appendix D) concur with the above findings from
+the Eval-Fix setting. In particular, invariant learning approaches outperform continual learning
+approaches in more scenarios except FMoW-Time, Huffpost and arXiv, though we do not restrict
+the buffer size for invariant learning approaches. We hope that Wild-Time will be used to investigate
+more memory-efficient invariant learning approaches.
+
+6
+
+Comparison with Existing Benchmarks
+
+Wild-Time offers a unified framework to facilitate the development of models robust to in-the-wild
+temporal distribution shifts. We discuss how Wild-Time is related to existing distribution shift and
+continual learning benchmarks.
+Relation to Distribution Shift Benchmarks. Distribution shift has been widely studied in the
+machine learning community. Early works presented small-scale benchmarks to study distribution
+shifts in sentiment analysis [22] and object detection [87]. Subsequent distribution shift benchmarks
+focused on larger-scale, real-world data. The first line of such benchmarks induce distribution shifts
+8
+
+by applying different transformations to object recognition datasets. These benchmarks include: (1)
+ImageNet-A [35], ImageNet-C [33], and CIFAR-10.1 [85], which add noise or adversarial examples
+to the original Imagenet [86] and CIFAR [57] datasets, respectively; (2) Colored MNIST [3], which
+changes the color of digits from the original MNIST. More recent works created domain generalization
+benchmarks by collecting sets of images with different styles or backgrounds, such as PACS [62],
+DomainNet [82], VLCS [21], OfficeHome [102], ImageNet-R [34], BREEDS [91], Waterbirds [88],
+NICO [32], and MetaShift [65]. While these datasets are useful testbeds for verifying the efficacy of
+new algorithms, they do not reflect natural distribution shifts that arise in real-world applications.
+Recently, a few works have constructed datasets and benchmarks for real-world distribution shifts.
+WILDS benchmark consists of ten datasets spanning a wide range of real-world applications, such
+medical image recognition, sentiment classification, land-use classification with satellite image,
+and code autocompletion, with a focus on domain shifts and subpopulation shifts [55]. WILDS
+2.0 extends WILDS and introduces unlabeled data to help boost model robustness to distribution
+shifts [89]. SHIFTS [72] is composed of three datasets, concerning weather prediction, machine
+translation, and self-driving vehicle motion prediction. Unlike these works that focus on general
+distribution shifts, we target temporal distribution shifts arising in real-world applications. A few
+recent works have started investigating model robustness over time, in real-world applications such as
+healthcare-related prediction [30], drug discovery [37], image-based geo-localization [10], machine
+reading comprehension [66], and tweet hashtag prediction [45]. Unlike prior datasets that target
+specific applications, Wild-Time presents a comprehensive benchmark comprised of 7 datasets from
+diverse domains and offers systematic evaluation protocols.
+Relation to Continual Learning Benchmarks. Continual learning methods are often benchmarked
+on image classification datasets. Some popular benchmarks such as RainbowMNIST [23] and
+permuted MNIST [50] apply various image transformations to a small-scale image dataset to obtain a
+sequence of tasks. Others such as Split CIFAR100 [57], Split TinyImagenet [61], F-CelebA [51], and
+Stanford Cars [56] split a large image dataset into multiple non-overlapping class sets, where each is
+regarded as one task. A third collection of related benchmarks treats each object recognition dataset
+as a different task. For example, Visual Domain Decathlon [64] consists of 10 datasets from various
+domains, such as Aircraft [71], SVHN [77], Omniglot [59], VGG-Flowers [78], CLEAR [67]. In
+the natural language processing (NLP) domain, continual learning benchmarks such as ASC [52]
+and DSC [51] have been used to evaluate the performance of large-scale pretrained models over
+time. Unlike these prior benchmarks, Wild-Time presents a collection of datasets that reflect natural
+temporal distribution shifts arising in real-world applications as well as an evaluation strategy (EvalStream) to assess incremental learning approaches.
+
+7
+
+Conclusion and Discussion
+
+In this paper, we present the Wild-Time benchmark, and examine in-the-wild distribution shifts over
+time. We leverage timestamp metadata, which is largely ignored by existing robustness techniques
+and benchmarks. Wild-Time includes 6 tasks from 5 datasets, which span a range of applications
+(facial recognition, news, healthcare) and tasks (classification, regresssion). On each of these datasets,
+we systematically benchmark 13 approaches, including continual learning, invariant learning, selfsupervised learning, and ensemble learning approaches. Our experiments show a large gap between
+ID and OOD performance on all tasks due to temporal distribution shift. We conclude that no existing
+invariant learning, continual learning, self-supervised, or ensemble learning approach is consistently
+more robust to temporal distribution shifts than ERM. We hope that Wild-Time facilitates further
+research in developing temporally robust methods that can be safely deployed in the wild.
+
+Acknowledgement
+We thank Zhenbang Wu, Shiori Sagawa, Kexin Huang, Ananya Kumar, Scott Lanyon Fleming, and
+members of the IRIS lab for the many insightful discussions and helpful feedback. This research
+was funded in part by Apple, Intel, Juniper Networks, and JPMorgan Chase & Co. Any views or
+opinions expressed herein are solely those of the authors listed, and may differ from the views and
+opinions expressed by JPMorgan Chase & Co. or its affiliates. This material is not a product of the
+Research Department of J.P. Morgan Securities LLC. This material should not be construed as an
+individual recommendation for any particular client and is not intended as a recommendation of
+particular securities, financial instruments or strategies for a particular client. This material does not
+constitute a solicitation or offer in any jurisdiction. CF is a CIFAR fellow.
+9
+
+References
+[1] Tameem Adel, Han Zhao, and Richard E Turner. Continual learning with adaptive weights
+(claw). arXiv preprint arXiv:1911.09514, 2019.
+[2] Kartik Ahuja, Ethan Caballero, Dinghuai Zhang, Yoshua Bengio, Ioannis Mitliagkas, and Irina
+Rish. Invariance principle meets information bottleneck for out-of-distribution generalization.
+2021.
+[3] Martin Arjovsky, Léon Bottou, Ishaan Gulrajani, and David Lopez-Paz. Invariant risk minimization. arXiv preprint arXiv:1907.02893, 2019.
+[4] Ben Athiwaratkun, Marc Finzi, Pavel Izmailov, and Andrew Gordon Wilson. There are
+many consistent explanations of unlabeled data: Why you should average. arXiv preprint
+arXiv:1806.05594, 2018.
+[5] Inci M Baytas, Cao Xiao, Xi Zhang, Fei Wang, Anil K Jain, and Jiayu Zhou. Patient subtyping
+via time-aware lstm networks. In Proceedings of the 23rd ACM SIGKDD international
+conference on knowledge discovery and data mining, pages 65–74, 2017.
+[6] Gabrielle Berman, Sara de la Rosa, Tanya Accone, et al. Ethical considerations when using
+geospatial technologies for evidence generation. 2018.
+[7] Matteo Boschini, Lorenzo Bonicelli, Pietro Buzzega, Angelo Porrello, and Simone Calderara. Class-incremental continual learning into the extended der-verse. arXiv preprint
+arXiv:2201.00766, 2022.
+[8] Declan Butler. When google got flu wrong: Us outbreak foxes a leading web-based method
+for tracking seasonal flu. Nature, 494(7436):155–157, 2013.
+[9] Pietro Buzzega, Matteo Boschini, Angelo Porrello, Davide Abati, and Simone Calderara.
+Dark experience for general continual learning: a strong, simple baseline. In H. Larochelle,
+M. Ranzato, R. Hadsell, M. F. Balcan, and H. Lin, editors, Advances in Neural Information
+Processing Systems, volume 33, pages 15920–15930. Curran Associates, Inc., 2020.
+[10] Zhipeng Cai, Ozan Sener, and Vladlen Koltun. Online continual learning with natural distribution shifts: An empirical study with visual data. In Proceedings of the IEEE/CVF International
+Conference on Computer Vision, pages 8281–8290, 2021.
+[11] Mathilde Caron, Ishan Misra, Julien Mairal, Priya Goyal, Piotr Bojanowski, and Armand
+Joulin. Unsupervised learning of visual features by contrasting cluster assignments. Advances
+in Neural Information Processing Systems, 33:9912–9924, 2020.
+[12] Kristy A Carpenter, David S Cohen, Juliet T Jarrell, and Xudong Huang. Deep learning and
+virtual drug screening. Future medicinal chemistry, 10(21):2557–2567, 2018.
+[13] Arslan Chaudhry, Puneet K Dokania, Thalaiyasingam Ajanthan, and Philip HS Torr. Riemannian walk for incremental learning: Understanding forgetting and intransigence. In
+Proceedings of the European Conference on Computer Vision (ECCV), pages 532–547, 2018.
+[14] Arslan Chaudhry, Marc’Aurelio Ranzato, Marcus Rohrbach, and Mohamed Elhoseiny. Efficient lifelong learning with a-GEM. In International Conference on Learning Representations,
+2019. URL https://openreview.net/forum?id=Hkf2_sC5FX.
+[15] Ting Chen, Simon Kornblith, Mohammad Norouzi, and Geoffrey Hinton. A simple framework
+for contrastive learning of visual representations. In International conference on machine
+learning, pages 1597–1607. PMLR, 2020.
+[16] Gordon Christie, Neil Fendley, James Wilson, and Ryan Mukherjee. Functional map of the
+world. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition,
+2018.
+[17] Colin B. Clement, Matthew Bierbaum, Kevin P. O’Keeffe, and Alexander A. Alemi. On the
+use of arxiv as a dataset, 2019.
+10
+
+[18] Colin B Clement, Matthew Bierbaum, Kevin P O’Keeffe, and Alexander A Alemi. On the use
+of arxiv as a dataset. arXiv preprint arXiv:1905.00075, 2019.
+[19] Drew DeSilver. The polarization in today’s congress has roots that go back decades. 2022.
+[20] Roelof GA Ettema, Linda M Peelen, Marieke J Schuurmans, Arno P Nierich, Cor J Kalkman,
+and Karel GM Moons. Prediction models for prolonged intensive care unit stay after cardiac
+surgery: systematic review and validation study. Circulation, 122(7):682–689, 2010.
+[21] Chen Fang, Ye Xu, and Daniel N Rockmore. Unbiased metric learning: On the utilization of
+multiple datasets and web images for softening bias. In Proceedings of the IEEE International
+Conference on Computer Vision, pages 1657–1664, 2013.
+[22] Fang Fang, Kaushik Dutta, and Anindya Datta. Domain adaptation for sentiment classification
+in light of multiple sources. INFORMS Journal on Computing, 26(3):586–598, 2014.
+[23] Chelsea Finn, Aravind Rajeswaran, Sham Kakade, and Sergey Levine. Online meta-learning.
+In International Conference on Machine Learning, pages 1920–1930, 2019.
+[24] Yaroslav Ganin, Evgeniya Ustinova, Hana Ajakan, Pascal Germain, Hugo Larochelle, François
+Laviolette, Mario Marchand, and Victor Lempitsky. Domain-adversarial training of neural
+networks. The journal of machine learning research, 17(1):2096–2030, 2016.
+[25] Sara Gerke, Timo Minssen, and Glenn Cohen. Ethical and legal challenges of artificial
+intelligence-driven healthcare. In Artificial intelligence in healthcare, pages 295–336. Elsevier,
+2020.
+[26] Shiry Ginosar, Kate Rakelly, Sarah Sachs, Brian Yin, and Alexei A Efros. A century of
+portraits: A visual historical record of american high school yearbooks. In Proceedings of the
+IEEE International Conference on Computer Vision Workshops, pages 1–7, 2015.
+[27] Jeremy Ginsberg, Matthew H Mohebbi, Rajan S Patel, Lynnette Brammer, Mark S Smolinski,
+and Larry Brilliant. Detecting influenza epidemics using search engine query data. Nature,
+457(7232):1012–1014, 2009.
+[28] Ian J Goodfellow, Mehdi Mirza, Da Xiao, Aaron Courville, and Yoshua Bengio. An empirical
+investigation of catastrophic forgetting in gradient-based neural networks. arXiv preprint
+arXiv:1312.6211, 2013.
+[29] Ishaan Gulrajani and David Lopez-Paz. In search of lost domain generalization. arXiv preprint
+arXiv:2007.01434, 2020.
+[30] Lin Lawrence Guo, Stephen R Pfohl, Jason Fries, Alistair EW Johnson, Jose Posada, Catherine
+Aftandilian, Nigam Shah, and Lillian Sung. Evaluation of domain generalization and adaptation
+on improving model robustness to temporal dataset shift in clinical medicine. Scientific reports,
+12(1):1–10, 2022.
+[31] Matthew C Hansen, Peter V Potapov, Rebecca Moore, Matt Hancher, Svetlana A Turubanova,
+Alexandra Tyukavina, David Thau, Stephen V Stehman, Scott J Goetz, Thomas R Loveland,
+et al. High-resolution global maps of 21st-century forest cover change. science, 342(6160):
+850–853, 2013.
+[32] Yue He, Zheyan Shen, and Peng Cui. Towards non-iid image classification: A dataset and
+baselines. Pattern Recognition, 110:107383, 2021.
+[33] Dan Hendrycks and Thomas Dietterich. Benchmarking neural network robustness to common
+corruptions and perturbations. arXiv preprint arXiv:1903.12261, 2019.
+[34] Dan Hendrycks, Steven Basart, Norman Mu, Saurav Kadavath, Frank Wang, Evan Dorundo,
+Rahul Desai, Tyler Zhu, Samyak Parajuli, Mike Guo, et al. The many faces of robustness:
+A critical analysis of out-of-distribution generalization. In Proceedings of the IEEE/CVF
+International Conference on Computer Vision, pages 8340–8349, 2021.
+11
+
+[35] Dan Hendrycks, Kevin Zhao, Steven Basart, Jacob Steinhardt, and Dawn Song. Natural
+adversarial examples. In Proceedings of the IEEE/CVF Conference on Computer Vision and
+Pattern Recognition, pages 15262–15271, 2021.
+[36] Gao Huang, Zhuang Liu, Laurens Van Der Maaten, and Kilian Q Weinberger. Densely
+connected convolutional networks. In Proceedings of the IEEE conference on computer vision
+and pattern recognition, pages 4700–4708, 2017.
+[37] Kexin Huang, Tianfan Fu, Wenhao Gao, Yue Zhao, Yusuf Roohani, Jure Leskovec, Connor W Coley, Cao Xiao, Jimeng Sun, and Marinka Zitnik. Therapeutics data commons:
+Machine learning datasets and tasks for drug discovery and development. arXiv preprint
+arXiv:2102.09548, 2021.
+[38] James P Hughes, Stephen Rees, S Barrett Kalindjian, and Karen L Philpott. Principles of early
+drug discovery. British journal of pharmacology, 162(6):1239–1249, 2011.
+[39] Chip Huyen. Designing Machine Learning Systems. " O’Reilly Media, Inc.", 2022.
+[40] Philipp Wirth Jeremy Prescott Malte Ebner et al. Igor Susmelj, Matthias Heller. Lightly.
+GitHub. Note: https://github.com/lightly-ai/lightly, 2020.
+[41] Pavel Izmailov, Dmitrii Podoprikhin, Timur Garipov, Dmitry Vetrov, and Andrew Gordon
+Wilson. Averaging weights leads to wider optima and better generalization. arXiv preprint
+arXiv:1803.05407, 2018.
+[42] Neal Jean, Marshall Burke, Michael Xie, W Matthew Davis, David B Lobell, and Stefano
+Ermon. Combining satellite imagery and machine learning to predict poverty. Science, 353
+(6301):790–794, 2016.
+[43] Wenlong Ji, Zhun Deng, Ryumei Nakada, James Zou, and Linjun Zhang. The power of
+contrast for feature learning: A theoretical analysis. arXiv preprint arXiv:2110.02473, 2021.
+[44] Xiaowei Jia, Mengdie Wang, Ankush Khandelwal, Anuj Karpatne, and Vipin Kumar. Recurrent
+generative networks for multi-resolution satellite data: An application in cropland monitoring.
+In IJCAI, 2019.
+[45] Xisen Jin, Dejiao Zhang, Henghui Zhu, Wei Xiao, Shang-Wen Li, Xiaokai Wei, Andrew
+Arnold, and Xiang Ren. Lifelong pretraining: Continually adapting language models to
+emerging corpora. arXiv preprint arXiv:2110.08534, 2021.
+[46] Anna Jobin, Marcello Ienca, and Effy Vayena. The global landscape of ai ethics guidelines.
+Nature Machine Intelligence, 1(9):389–399, 2019.
+[47] Alistair Johnson, Lucas Bulgarelli, Tom Pollard, Steven Horng, Leo Anthony Celi, and Roger
+Mark. Mimic-iv. version 0.4). PhysioNet. https://doi. org/10.13026/a3wn-hq05, 2020.
+[48] Alistair Johnson, Lucas Bulgarelli, Tom Pollard, Steven Horng, Leo Anthony Celi, and Roger
+Mark. Mimic-iv, 2021. URL https://physionet.org/content/mimiciv/1.0/.
+[49] Manu Joseph. Pytorch tabular: A framework for deep learning with tabular data, 2021.
+[50] Prakhar Kaushik, Alex Gain, Adam Kortylewski, and Alan Yuille. Understanding catastrophic
+forgetting and remembering in continual learning with optimal relevance mapping. arXiv
+preprint arXiv:2102.11343, 2021.
+[51] Zixuan Ke, Bing Liu, Hao Wang, and Lei Shu. Continual learning with knowledge transfer for
+sentiment classification. In Joint European Conference on Machine Learning and Knowledge
+Discovery in Databases, pages 683–698. Springer, 2020.
+[52] Zixuan Ke, Hu Xu, and Bing Liu. Adapting bert for continual learning of a sequence of aspect
+sentiment classification tasks. arXiv preprint arXiv:2112.03271, 2021.
+[53] Kia Khezeli, Arno Blaas, Frank Soboczenski, Nicholas Chia, and John Kalantari. On invariance
+penalties for risk minimization. arXiv preprint arXiv:2106.09777, 2021.
+12
+
+[54] James Kirkpatrick, Razvan Pascanu, Neil Rabinowitz, Joel Veness, Guillaume Desjardins,
+Andrei A Rusu, Kieran Milan, John Quan, Tiago Ramalho, Agnieszka Grabska-Barwinska,
+et al. Overcoming catastrophic forgetting in neural networks. Proceedings of the national
+academy of sciences, 114(13):3521–3526, 2017.
+[55] Pang Wei Koh, Shiori Sagawa, Sang Michael Xie, Marvin Zhang, Akshay Balsubramani,
+Weihua Hu, Michihiro Yasunaga, Richard Lanas Phillips, Irena Gao, Tony Lee, et al. Wilds:
+A benchmark of in-the-wild distribution shifts. In International Conference on Machine
+Learning, pages 5637–5664. PMLR, 2021.
+[56] Jonathan Krause, Michael Stark, Jia Deng, and Li Fei-Fei. 3d object representations for
+fine-grained categorization. In 4th International IEEE Workshop on 3D Representation and
+Recognition (3dRR-13), Sydney, Australia, 2013.
+[57] Alex Krizhevsky, Geoffrey Hinton, et al. Learning multiple layers of features from tiny images.
+2009.
+[58] David Krueger, Ethan Caballero, Joern-Henrik Jacobsen, Amy Zhang, Jonathan Binas,
+Dinghuai Zhang, Remi Le Priol, and Aaron Courville. Out-of-distribution generalization
+via risk extrapolation (rex). In International Conference on Machine Learning, pages 5815–
+5826. PMLR, 2021.
+[59] Brenden M Lake, Ruslan Salakhutdinov, and Joshua B Tenenbaum. Human-level concept
+learning through probabilistic program induction. Science, 350(6266):1332–1338, 2015.
+[60] Angeliki Lazaridou, Adhi Kuncoro, Elena Gribovskaya, Devang Agrawal, Adam Liska, Tayfun
+Terzi, Mai Gimenez, Cyprien de Masson d’Autume, Tomas Kocisky, Sebastian Ruder, et al.
+Mind the gap: Assessing temporal generalization in neural language models. Advances in
+Neural Information Processing Systems, 34:29348–29363, 2021.
+[61] Ya Le and Xuan Yang. Tiny imagenet visual recognition challenge. CS 231N, 7(7):3, 2015.
+[62] Da Li, Yongxin Yang, Yi-Zhe Song, and Timothy M Hospedales. Deeper, broader and artier
+domain generalization. In Proceedings of the IEEE international conference on computer
+vision, pages 5542–5550, 2017.
+[63] Haoliang Li, Sinno Jialin Pan, Shiqi Wang, and Alex C Kot. Domain generalization with
+adversarial feature learning. In Proceedings of the IEEE Conference on Computer Vision and
+Pattern Recognition, pages 5400–5409, 2018.
+[64] Xilai Li, Yingbo Zhou, Tianfu Wu, Richard Socher, and Caiming Xiong. Learn to grow: A
+continual structure learning framework for overcoming catastrophic forgetting. arXiv preprint
+arXiv:1904.00310, 2019.
+[65] Weixin Liang and James Zou. Metashift: A dataset of datasets for evaluating contextual
+distribution shifts and training conflicts. arXiv preprint arXiv:2202.06523, 2022.
+[66] Bill Yuchen Lin, Sida Wang, Xi Victoria Lin, Robin Jia, Lin Xiao, Xiang Ren, and Wentau Yih. On continual model refinement in out-of-distribution data streams. arXiv preprint
+arXiv:2205.02014, 2022.
+[67] Zhiqiu Lin, Jia Shi, Deepak Pathak, and Deva Ramanan. The clear benchmark: Continual
+learning on real-world imagery. In Thirty-fifth Conference on Neural Information Processing
+Systems Datasets and Benchmarks Track, 2021.
+[68] Mingsheng Long, Yue Cao, Jianmin Wang, and Michael Jordan. Learning transferable features
+with deep adaptation networks. In International conference on machine learning, pages
+97–105. PMLR, 2015.
+[69] David Lopez-Paz and Marc’Aurelio Ranzato. Gradient episodic memory for continual learning.
+In Advances in Neural Information Processing Systems, pages 6467–6476, 2017.
+13
+
+[70] Fenglong Ma, Radha Chitta, Jing Zhou, Quanzeng You, Tong Sun, and Jing Gao. Dipole:
+Diagnosis prediction in healthcare via attention-based bidirectional recurrent neural networks.
+In Proceedings of the 23rd ACM SIGKDD international conference on knowledge discovery
+and data mining, pages 1903–1911, 2017.
+[71] S. Maji, J. Kannala, E. Rahtu, M. Blaschko, and A. Vedaldi. Fine-grained visual classification
+of aircraft. Technical report, 2013.
+[72] Andrey Malinin, Neil Band, German Chesnokov, Yarin Gal, Mark JF Gales, Alexey Noskov,
+Andrey Ploskonosov, Liudmila Prokhorenkova, Ivan Provilkov, Vatsal Raina, et al. Shifts:
+A dataset of real distributional shift across multiple large-scale tasks. arXiv preprint
+arXiv:2107.07455, 2021.
+[73] Eric J Martin, Valery R Polyakov, Xiang-Wei Zhu, Li Tian, Prasenjit Mukherjee, and Xin Liu.
+All-assay-max2 pqsar: activity predictions as accurate as four-concentration ic50s for 8558
+novartis assays. Journal of chemical information and modeling, 59(10):4450–4459, 2019.
+[74] Ninareh Mehrabi, Fred Morstatter, Nripsuta Saxena, Kristina Lerman, and Aram Galstyan. A
+survey on bias and fairness in machine learning. ACM Computing Surveys (CSUR), 54(6):
+1–35, 2021.
+[75] Rishabh Misra. News category dataset, 06 2018.
+[76] Rishabh Misra and Jigyasa Grover. Sculpting Data for ML: The first act of Machine Learning.
+01 2021. ISBN 978-0-578-83125-1.
+[77] Yuval Netzer, Tao Wang, Adam Coates, Alessandro Bissacco, Bo Wu, and Andrew Y Ng.
+Reading digits in natural images with unsupervised feature learning. 2011.
+[78] Maria-Elena Nilsback and Andrew Zisserman. Automated flower classification over a large
+number of classes. In 2008 Sixth Indian Conference on Computer Vision, Graphics & Image
+Processing, pages 722–729. IEEE, 2008.
+[79] Peter A Noseworthy, Zachi I Attia, LaPrincess C Brewer, Sharonne N Hayes, Xiaoxi Yao,
+Suraj Kapa, Paul A Friedman, and Francisco Lopez-Jimenez. Assessing and mitigating bias in
+medical artificial intelligence: the effects of race and ethnicity on a deep learning model for
+ecg analysis. Circulation: Arrhythmia and Electrophysiology, 13(3):e007988, 2020.
+[80] World Health Organization. International Statistical Classification of Diseases and Related
+Health Problems: Alphabetical index, volume 3. World Health Organization, 2004.
+[81] Hakime Öztürk, Arzucan Özgür, and Elif Ozkirimli. Deepdta: deep drug–target binding
+affinity prediction. Bioinformatics, 34(17):i821–i829, 2018.
+[82] Xingchao Peng, Qinxun Bai, Xide Xia, Zijun Huang, Kate Saenko, and Bo Wang. Moment
+matching for multi-source domain adaptation. In Proceedings of the IEEE/CVF international
+conference on computer vision, pages 1406–1415, 2019.
+[83] R Powers and D Beede. Fostering innovation, creating jobs, driving better decisions: The value
+of government data. Office of the Chief Economist, Economics and Statistics Administration,
+US Department of Commerce, 2014.
+[84] Sylvestre-Alvise Rebuffi, Alexander Kolesnikov, Georg Sperl, and Christoph H Lampert. icarl:
+Incremental classifier and representation learning. In Proceedings of the IEEE conference on
+Computer Vision and Pattern Recognition, pages 2001–2010, 2017.
+[85] Benjamin Recht, Rebecca Roelofs, Ludwig Schmidt, and Vaishaal Shankar. Do cifar-10
+classifiers generalize to cifar-10? arXiv preprint arXiv:1806.00451, 2018.
+[86] Olga Russakovsky, Jia Deng, Hao Su, Jonathan Krause, Sanjeev Satheesh, Sean Ma, Zhiheng
+Huang, Andrej Karpathy, Aditya Khosla, Michael Bernstein, et al. Imagenet large scale visual
+recognition challenge. International journal of computer vision, 115(3):211–252, 2015.
+[87] Kate Saenko, Brian Kulis, Mario Fritz, and Trevor Darrell. Adapting visual category models
+to new domains. In European conference on computer vision, pages 213–226. Springer, 2010.
+14
+
+[88] Shiori Sagawa, Pang Wei Koh, Tatsunori B Hashimoto, and Percy Liang. Distributionally
+robust neural networks for group shifts: On the importance of regularization for worst-case
+generalization. In ICLR, 2020.
+[89] Shiori Sagawa, Pang Wei Koh, Tony Lee, Irena Gao, Sang Michael Xie, Kendrick Shen,
+Ananya Kumar, Weihua Hu, Michihiro Yasunaga, Henrik Marklund, Sara Beery, Etienne
+David, Ian Stavness, Wei Guo, Jure Leskovec, Kate Saenko, Tatsunori Hashimoto, Sergey
+Levine, Chelsea Finn, and Percy Liang. Extending the wilds benchmark for unsupervised
+adaptation. In International Conference on Learning Representations (ICLR), 2022.
+[90] Victor Sanh, Lysandre Debut, Julien Chaumond, and Thomas Wolf. Distilbert, a distilled
+version of bert: smaller, faster, cheaper and lighter. arXiv preprint arXiv:1910.01108, 2019.
+[91] Shibani Santurkar, Dimitris Tsipras, and Aleksander Madry. Breeds: Benchmarks for subpopulation shift. arXiv preprint arXiv:2008.04859, 2020.
+[92] Jonathan Schwarz, Wojciech Czarnecki, Jelena Luketina, Agnieszka Grabska-Barwinska,
+Yee Whye Teh, Razvan Pascanu, and Raia Hadsell. Progress & compress: A scalable framework for continual learning. In International Conference on Machine Learning, pages 4528–
+4537, 2018.
+[93] Alireza Sharifi. Yield prediction with machine learning algorithms and satellite images.
+Journal of the Science of Food and Agriculture, 101(3):891–896, 2021.
+[94] Kendrick Shen, Robbie M Jones, Ananya Kumar, Sang Michael Xie, Jeff Z HaoChen, Tengyu
+Ma, and Percy Liang. Connect, not collapse: Explaining contrastive learning for unsupervised
+domain adaptation. In International Conference on Machine Learning, pages 19847–19878.
+PMLR, 2022.
+[95] Hanul Shin, Jung Kwon Lee, Jaehong Kim, and Jiwon Kim. Continual learning with deep
+generative replay. In Advances in Neural Information Processing Systems, pages 2990–2999,
+2017.
+[96] Baochen Sun and Kate Saenko. Deep coral: Correlation alignment for deep domain adaptation.
+In European conference on computer vision, pages 443–450. Springer, 2016.
+[97] Vladimir Svetnik, Andy Liaw, Christopher Tong, J Christopher Culberson, Robert P Sheridan,
+and Bradley P Feuston. Random forest: a classification and regression tool for compound
+classification and qsar modeling. Journal of chemical information and computer sciences, 43
+(6):1947–1958, 2003.
+[98] Tobias G. Tiecke, Xianming Liu, Amy Zhang, Andreas Gros, Nan Li, Gregory Yetman, Talip
+Kilic, Siobhan Murray, Brian Blankespoor, Espen B. Prydz, and Hai-Anh H. Dang. Mapping
+the world population one building at a time. arXiv preprint arXiv: Arxiv-1712.05839, 2017.
+[99] Eric Tzeng, Judy Hoffman, Ning Zhang, Kate Saenko, and Trevor Darrell. Deep domain
+confusion: Maximizing for domain invariance. arXiv preprint arXiv:1412.3474, 2014.
+[100] Gido M van de Ven and Andreas S Tolias. Generative replay with feedback connections as a
+general strategy for continual learning. arXiv preprint arXiv:1809.10635, 2018.
+[101] Gido M van de Ven and Andreas S Tolias. Three scenarios for continual learning. arXiv
+preprint arXiv:1904.07734, 2019.
+[102] Hemanth Venkateswara, Jose Eusebio, Shayok Chakraborty, and Sethuraman Panchanathan.
+Deep hashing network for unsupervised domain adaptation. In Proceedings of the IEEE
+conference on computer vision and pattern recognition, pages 5018–5027, 2017.
+[103] Sherrie Wang, William Chen, Sang Michael Xie, George Azzari, and David B Lobell. Weakly
+supervised deep learning for segmentation of remote sensing imagery. Remote Sensing, 12(2):
+207, 2020.
+[104] Minghao Xu, Jian Zhang, Bingbing Ni, Teng Li, Chengjie Wang, Qi Tian, and Wenjun Zhang.
+Adversarial domain adaptation with domain mixup. In Proceedings of the AAAI Conference
+on Artificial Intelligence, volume 34, pages 6502–6509, 2020.
+15
+
+[105] Chaoqi Yang, Cao Xiao, Lucas Glass, and Jimeng Sun. Change matters: Medication change
+prediction with recurrent residual networks. arXiv preprint arXiv:2105.01876, 2021.
+[106] Huaxiu Yao, Long-Kai Huang, Linjun Zhang, Ying Wei, Li Tian, James Zou, Junzhou Huang,
+et al. Improving generalization in meta-learning via task augmentation. In International
+Conference on Machine Learning, pages 11887–11897. PMLR, 2021.
+[107] Huaxiu Yao, Ying Wei, Long-Kai Huang, Ding Xue, Junzhou Huang, and Zhenhui Jessie Li.
+Functionally regionalized knowledge transfer for low-resource drug discovery. Advances in
+Neural Information Processing Systems, 34, 2021.
+[108] Huaxiu Yao, Yu Wang, Sai Li, Linjun Zhang, Weixin Liang, James Zou, and Chelsea Finn.
+Improving out-of-distribution robustness via selective augmentation. In ICML, 2022.
+[109] Nanyang Ye, Kaican Li, Haoyue Bai, Runpeng Yu, Lanqing Hong, Fengwei Zhou, Zhenguo Li,
+and Jun Zhu. Ood-bench: Quantifying and understanding two dimensions of out-of-distribution
+generalization. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition, pages 7947–7958, 2022.
+[110] Xiangyu Yue, Yang Zhang, Sicheng Zhao, Alberto Sangiovanni-Vincentelli, Kurt Keutzer, and
+Boqing Gong. Domain randomization and pyramid consistency: Simulation-to-real generalization without accessing target domain data. In Proceedings of the IEEE/CVF International
+Conference on Computer Vision, pages 2100–2110, 2019.
+[111] Friedemann Zenke, Ben Poole, and Surya Ganguli. Continual learning through synaptic
+intelligence. In Proceedings of the 34th International Conference on Machine LearningVolume 70, pages 3987–3995. JMLR. org, 2017.
+[112] Hongyi Zhang, Moustapha Cisse, Yann N Dauphin, and David Lopez-Paz. mixup: Beyond
+empirical risk minimization. 2018.
+[113] Jingzhao Zhang, Aditya Menon, Andreas Veit, Srinadh Bhojanapalli, Sanjiv Kumar, and Suvrit
+Sra. Coping with label shift via distributionally robust optimisation. In ICLR, 2021.
+[114] Chunting Zhou, Xuezhe Ma, Paul Michel, and Graham Neubig. Examining and combating
+spurious features under distribution shift. In ICML, 2021.
+[115] Kaiyang Zhou, Yongxin Yang, Timothy Hospedales, and Tao Xiang. Deep domain-adversarial
+image generation for domain generalisation. In Proceedings of the AAAI Conference on
+Artificial Intelligence, volume 34, pages 13025–13032, 2020.
+
+A
+
+Dataset Description
+
+A.1
+
+Yearbook
+
+A.1.1
+
+Setup
+
+Problem Setting. The task is classifying the gender of an American high schooler from a yearbook
+photo. The input x is a 32 × 32 grayscale image, and the label y is male or female.
+Data. Yearbook is based on the Portraits dataset [26] (MIT license), which collected and processed
+37,921 frontal-facing yearbook portraits from 1905 − 2013 from 128 American high schools in 27
+states. The Portraits dataset reflects changing fashion styles and social norms over the decades.
+The original Portraits dataset did not evaluate models under a distribution shift setting. We use a
+subset of the Portraits dataset, consisting of data from 1930 − 2013. Our fixed time split (Eval-Fix)
+uses the first 41 years (1930 − 1970) for ID, and the remaining 43 years for OOD (1971 − 2013). For
+streaming evaluation (Eval-Stream), we treat each year as a single timestamp. For each timestamp,
+we randomly allocate 10% of the data to training, and the remaining 90% for validation. For OOD
+testing, all samples in each year are used. We provide the number of examples allocated to ID Train,
+ID Test, and OOD Test for each timestamp in Table 3.
+16
+
+The original Portraits dataset is provided as a set of hierarchical directories, organized by year, with
+PNG images of size 96 × 96 pixels. To reduce download times and I/O usage, we downsample the
+images from [26] to 32 × 32 pixels. We exclude the first 25 years (1905 − 1929) due to few samples
+in these years.
+Table 3: Data subset sizes for the Yearbook task.
+Years
+
+ID Train
+
+ID Test
+
+OOD Test
+
+1930 - 1934
+1935 - 1939
+1940 - 1944
+1945 - 1949
+1950 - 1954
+1955 - 1959
+1960 - 1964
+1965 - 1969
+
+1,051
+1,361
+2,047
+1,979
+1,604
+1,820
+1,482
+2,812
+
+120
+154
+230
+222
+181
+205
+167
+315
+
+1,171
+1,515
+2,277
+2,201
+1,785
+2,025
+1,649
+3,127
+
+1970 - 1974
+1975 - 1979
+1980 - 1984
+1985 - 1989
+1990 - 1994
+1995 - 1999
+2000 - 2004
+2005 - 2009
+2010 - 2013
+
+2,326
+2,329
+2,654
+2,239
+2,207
+2,564
+2,447
+1,407
+1,102
+
+260
+261
+298
+251
+249
+287
+274
+159
+125
+
+2,586
+2,590
+2,952
+2,490
+2,456
+2,851
+2,721
+1,566
+1,227
+
+Fixed-time split
+
+14,901
+
+1,677
+
+21,439
+
+Evaluation Metrics. We evaluate models by their average and worst-time OOD accuracies. The
+former measures the model’s ability to generalize across time, while the latter additionally measures
+model robustness to trends in time-specific visual patterns.
+Eval-Stream evaluates performance across the next 10 years to test on visual trend changes over
+the decade without resulting in an unreasonably long evaluation time, due to the large number of
+timestamps in this dataset.
+A.1.2
+
+Broader Context
+
+Facial recognition has been widely adopted in recent years. Employed by governments and private
+companies, facial recognition models are used in smartphones, robotics, advanced human-computer
+interaction systems. However, human appearance shifts over time due to changing social norms (e.g.,
+the practice of smiling to the camera) and fashion trends (e.g., hair styles, popularity of eyewear).
+To remain reliable and effective, facial recognition models must be robust to changes in human
+appearance over time.
+While Yearbook is not a facial recognition task, the Yearbook dataset can be used to train facial image
+analysis models that are robust to changes in appearance over time.
+A.2
+A.2.1
+
+FMoW-Time
+Setup
+
+Problem Setting. The task in the FMoW-Time dataset is to classify the functional purpose of a
+region inside a satellite image. The input x is an 224 × 224 RGB satellite image, and the label y is
+one of 62 categories of building or land use. The data was collected from 16 different years. Our
+fixed time split (Eval-Fix) allocates the first 12 years for training and the last 4 years for testing. For
+streaming evaluation (Eval-Stream), we treat each year as a single timestamp.
+Data.
+FMoW-Time is based on the Functional Map of the World dataset (license:
+https://github.com/fMoW/dataset/blob/master/LICENSE) [16], a dataset of satellite images taken
+from 2002−2018, from over 200 countries. Each satellite image is labeled according to the functional
+purpose of the buildings or land depicted in the image.
+17
+
+Table 4: Data subset sizes for the FMoW-Time task.
+Year
+
+ID Train
+
+ID Test
+
+OOD Test
+
+2002
+2003
+2004
+2005
+2006
+2007
+2008
+2009
+2010
+2011
+2012
+
+1,455
+1,985
+1,545
+2,207
+2,765
+1,338
+1,975
+6,454
+16,498
+19,237
+21,404
+
+448
+570
+450
+629
+796
+349
+584
+1,920
+4,915
+5,711
+6,438
+
+1,903
+2,555
+1,995
+2,836
+3,561
+1,687
+2,559
+8,374
+21,413
+24,948
+27,842
+
+2013
+2014
+2015
+2016
+2017
+
+3,465
+5,572
+8,885
+14,363
+5,534
+
+385
+620
+988
+1,596
+615
+
+3,850
+6,192
+9,873
+15,959
+6,149
+
+Eval-Fix split
+
+76,863
+
+22,810
+
+42,023
+
+We adapt the version of the FMoW dataset from the WILDS benchmark [55], which consists of
+141,696 RGB satellite images resized to 224 × 224 pixels. The train/val/test data splits in FMoWWILDS contain images from disjoint location coordinates, and all splits contain data from all 5
+geographic regions. For FMoW-Time, we partition each year’s data into train/validation as follows.
+For 2002 − 2013, we use the FMoW-WILDS Training (ID) split for training, and the Validation
+(ID) and Test (ID) splits for validation. For 2013 − 2015, we use data in the Validation (OOD) split
+and allocate 90% of the data from each year to train, and the remaining 10% to validation. For
+2015 − 2017, we allocate 90% of the data from each year in the Test (OOD) split to train, and the
+remaining 10% to validation. Our fixed time split (Eval-Fix) uses the first 11 years (2002 − 2013) for
+training, and the remaining 5 years (2013 − 2018) for testing. For streaming evaluation (Eval-Stream),
+we treat each year as a single timestamp. We provide the number of examples allocated to ID Train,
+ID Test, and OOD Test at each timestamp in Table 4.
+Evaluation Metrics. We evaluate models with the top-1 accuracy, both in terms of the average across
+all OOD timestamps and the accuracy on the worst timestamp. The former measures the model’s
+ability to reliably generalize across time and the latter more specifically tests the robustness at the
+most severe shifts. For Eval-Stream, we evaluate performance across the next 6 years.
+A.2.2
+
+Broader Context
+
+ML models for satellite imagery can automate applications such as deforestation tracking, population
+density prediction, crop yield prediction [31, 98, 103]. Visual features in satellite data change over
+time due to both human and environmental activity, requiring a model that makes predictions for
+recent images using labeled data from the past. Through such applications, policy and humanitarian
+efforts would greatly benefit from temporally robust models which can reliably monitor global-scale
+satellite imagery even when conditions change over time.
+A.3
+
+MIMIC-IV
+
+A.3.1
+
+Setup
+
+Problem Setting. The MIMIC-IV dataset contains two tasks: MIMIC-Readmission and MIMICMortality. For both of these tasks, the input x is the concatenated ICD9 codes of diagnosis and
+treatment for a single patient.
+• MIMIC-Readmission: the task is predicting hospital readmission for a patient. The label y is
+whether the patient was readmitted to the hospital within 15 days.
+• MIMIC-Mortality: the task is predicting in-hospital mortality for each patient. The label y is
+whether the patient passed away during their hospital stay.
+18
+
+Table 5: Data subset sizes for the two MIMIC-IV tasks, MIMIC-Mortality and MIMIC-Readmission.
+3-Year Block
+
+ID Train
+
+ID Test
+
+OOD Test
+
+2008 - 2010
+2011 - 2013
+
+60,851
+55,714
+
+15,215
+13,930
+
+76,066
+69,644
+
+2014 - 2016
+2017 - 2019
+
+53,932
+45,990
+
+13,485
+11,500
+
+67,417
+57,490
+
+Eval-Fix split
+
+116,565
+
+29,145
+
+124,907
+
+Data. The MIMIC-IV database [48] contains deidentified EHRs of 382,278 patients admitted to
+the emergency department or intensive care unit (ICU) at the Beth Israel Deaconess Medical Center
+(BIDMC) from 2008 − 2019. To protect patient privacy, the reported admission year is in a three year
+long date range. Hence, our timestamps are groups of three years: 2008 − −2010, 2011 − −2013,
+2014 − −2016, 2017 − −2019. We considered ICU patient data sourced from the clinical information
+system MetaVision at the BIDMC, released in the MIMIC-IV v1.0 dataset, which contains 53,150
+patient records. MIMIC-IV requires PhysioNet credentialing for use of human subject data.
+We use a subset of the original MIMIC-IV dataset, where we regard each admission as one entry.
+For each admission, we collect the ICD9 codes of diagnosis and treatment. For each record, we
+concatenate the corresponding ICD9 codes [80] of diagnosis and treatment. We use the concatenated
+diagnosis and treatment ICD9 codes as the input feature. Our fixed time split (Eval-Fix) uses the
+first 6 years (2008 − 2013) for training, and the remaining 6 years for testing (2014 − 2019). For
+streaming evaluation (Eval-Stream), we treat each three-year block as a single timestamp. We allocate
+20% of the data at each timestamp for test, and the rest for training. For OOD testing, all samples in
+each three-year block are used. We provide the number of examples allocated to ID Train, ID Test,
+and OOD Test for each timestamp in Table 5.
+Evaluation Metrics. For MIMIC-Readmission, we evaluate models by their average and worst-time
+OOD accuracies. For MIMIC-Mortality, we evaluate models by their average and worst-time ROCAUC due to label imbalance. The average metric measures the model’s ability to generalize across
+time, while the worst-time metric additionally measures model robustness to temporal distribution
+shifts in patient data. Eval-Stream evaluates performance across the next 3 years, which represents
+25% of all timestamps in the entire dataset.
+A.3.2
+
+Broader Context
+
+Many applications of machine learning to clinical healthcare have emerged in the last decade, such as
+predicting disease risk [70], medication changes [105], patient subtyping [5], in-hospital mortality
+[30], and length of hospital stay [20]. However, a key obstacle in deploying machine learning-based
+clinical decision support systems is distribution shift associated with changes in healthcare over time
+[30]. Existing domain generalization and unsupervised domain adaptation algorithms have been
+shown to produce less robust models compared to ERM in a variety of tasks (e.g., mortality, length
+of stay, sepsis, and invasive ventilation prediction) on the MIMIC-IV dataset [30], underscoring the
+need for better approaches.
+The MIMIC-IV Mortality and Readmission tasks evaluate model robustness to temporal shifts in
+clinical medicine.
+A.4
+
+Huffpost
+
+A.4.1
+
+Setup
+
+Problem Setting. The task is classifying the news category of an article from the headline. The input
+x is a news headline, and the label y is one of 11 news categories.
+Data. Huffpost is based on the Kaggle News Category Dataset [76] (license: CC0: Public Domain),
+which contains approximately 200,000 news headlines and their corresponding news categories from
+the Huffington Post from 2012 − 2018. The Kaggle News Category Dataset contains 41 different
+news categories.
+19
+
+Table 6: Data subset sizes for the Huffpost task.
+Year
+
+ID Train
+
+ID Test
+
+OOD Test
+
+2012
+2013
+2014
+2015
+
+6,701
+7,492
+9,539
+11,826
+
+744
+832
+1,059
+1,313
+
+7,446
+8,325
+10,599
+13,140
+
+2016
+2017
+2018
+
+10,548
+7,907
+3,501
+
+1,172
+878
+388
+
+11,721
+8,786
+3,890
+
+Eval-Fix split
+
+35,558
+
+3,948
+
+24,397
+
+We use a subset of the Huffpost dataset, consisting of 7 years from 2012 − 2018 and samples from
+11 news categories (Black Voices, Business, Comedy, Crime, Entertainment, Impact, Queer Voices,
+Science, Sports, Tech, Travel). We partition the data by year.
+Our fixed time split (Eval-Fix) uses 2016 as the time split, allocating 2012 − 2015 (4 years) for ID
+and 2016 − 2018 (3 years) for OOD. For streaming evaluation (Eval-Stream), we treat each year as a
+single timestamp. We allocate 10% of the data at each timestamp for test, and the rest for training.
+For OOD testing, all samples are used. Table 6 lists the number of examples allocated to ID Train, ID
+Test, and OOD Test for each timestamp.
+The News Category Dataset is provided as a CSV file. We exclude news categories which do not
+appear in all years 2012 − 2018 to obtain the 11 news categories in Huffpost. We shuffle samples in
+each year, and randomly select 10% of the samples in each year as ID test and allocate the remaining
+90% for training. For OOD testing, all samples in each year are used.
+Evaluation Metrics. We evaluate models by their average and worst-time OOD accuracies. The
+former measures the model’s ability to generalize across time, while the latter additionally measures
+model robustness to trends in time-specific visual patterns.
+Eval-Stream evaluates performance across the next 3 years, which represents 42.9% of the timestamps
+in the entire dataset.
+A.4.2
+
+Broader Context
+
+Many language models which deal with information correlated with time exhibit performance
+degradation in downstream tasks such as Twitter hashtag classification [45] or question answering
+systems [66]. These performance drops along the temporal dimension reflect changes in the style or
+content of news that change over time. For instance, American politics in 2022 is more polarized
+than it was in 2012, according to a study by the Pew Research Center [19]. Models must be robust to
+such changes in factual knowledge.
+A.5
+A.5.1
+
+arXiv
+Setup
+
+Problem Setting. The task is classifying the primary classification category of a research paper from
+the title. The input x is the paper title, and the label y is one of 172 paper categories.
+Data. arXiv is based on the Kaggle arXiv Dataset [17] (license: CC0: Public Domain), which
+provides metadata of arXiv preprints from 2007 − 2023. These include: arXiv id, submitter, authors,
+title, comments, journal-ref, doi, abstract, categories, and versions.
+We use a subset of the Kaggle arXiv dataset for arXiv, which consists of paper titles and theirr
+corresponding primary categories. Our fixed time split (Eval-Fix) uses 2016 as the time split,
+allocating data from 2007 − 2016 (10 years) for ID, and data from 2017 − 2022 (6 years) for OOD.
+For streaming evaluation (Eval-Stream), we treat each year as a single timestamp. We allocate 10%
+of the data at each timestamp for test, and the rest for training. For OOD testing, all samples are
+used. Table 7 lists the number of examples allocated to ID Train, ID Test, and OOD Test for each
+timestamp.
+20
+
+Table 7: Data subset sizes for the arXiv task.
+Year
+
+ID Train
+
+ID Test
+
+OOD Test
+
+2007
+2008
+2009
+2010
+2011
+2012
+2013
+2014
+2015
+2016
+
+131,550
+62,460
+206,244
+50,665
+55,741
+51,678
+64,951
+79,498
+193,979
+120,682
+
+14,616
+6,939
+22,916
+5,629
+6,193
+5,741
+7,216
+8,833
+21,553
+13,409
+
+146,167
+69,400
+229,161
+56,295
+61,935
+57,420
+72,168
+88,332
+215,533
+134,092
+
+2017
+2018
+2019
+2020
+2021
+2022
+
+111,024
+123,891
+142,767
+166,014
+201,241
+89,765
+
+12,336
+13,765
+15,862
+18,445
+22,360
+9,973
+
+123,361
+137,657
+158,630
+184,460
+223,602
+99,739
+
+1,017,448
+
+113,045
+
+927,449
+
+Eval-Fix split
+
+The arXiv Dataset metadata is provided as a JSON file. We store only the primary category and the
+preprint title, and sort the data by update date, partitioning by year. We shuffle samples in each year,
+and randomly select 10% of the samples in each year as ID test and allocate the remaining 90% for
+training. For OOD testing, all samples in each year are used.
+Evaluation Metrics. We evaluate models by their average and worst-time OOD accuracies. The
+former measures the model’s ability to generalize across time, while the latter additionally measures
+model robustness to trends in time-specific visual patterns.
+Eval-Stream evaluates performance across the next 6 years, which represents 37.5% of all timestamps
+in the dataset.
+A.5.2
+
+Broader Context
+
+Similar to changes in news and current events reflected in the Huffpost dataset, the content of arXiv
+preprints also change over time as research fields evolve. For example, “neural network attack" was
+originally a popular keyword in the security community, but it gradually became more prevalent in
+the machine learning community. As a result, primary categories of arXiv preprints shift over time.
+
+B
+
+Algorithm Description
+
+Before introducing all algorithms, we recall that each example is (x, y, t), where x, y, t represent
+input feature, label, and timestamp, respectively.
+B.1
+
+Classical Supervised Learning
+
+• Empirical Risk Minimization (ERM). We first consider Empirical Risk Minimization (ERM).
+This algorithm ignores the time information (t) and minimizes the average training loss
+θ∗ = arg min `(x, y; fθ )
+θ
+
+(3)
+
+over the entire training dataset.
+B.2
+
+Continual Learning
+
+• Fine-tuning. In fine-tuning, we use the newly observed labeled examples to continuously fine-tune
+the learned model without any explicit regularizer between consecutive timestamps.
+• Elastic Weight Consolidation (EWC). Inspired by synaptic consolidation, EWC slows down
+the learning process for new tasks based on their relevance to previous tasks. Specifically, when
+21
+
+adapting to a new task, EWC’s loss function keeps the post-adaptation network parameters close to
+the parameters learned on previous tasks.
+• Synaptic Intelligence (SI). Motivated by synaptic dynamics, SI enables deep neural network to
+learn sequence of tasks by using synaptic state to track the parameter values and maintain online
+estimation of the importance of past learned experience.
+• Averaged Gradient Episodic Memory (A-GEM). Gradient Episodic Memory (GEM) leverages
+an episodic memory to store a selected set of examples from previous tasks in a continual learning
+setting. When adapting to a new task, the algorithm aims to make the updated model simultaneously
+perform well on examples in the new task and examples from the episode memory. A-GEM
+provides an efficient training strategy for Gradient Episodic Memory that significantly improves its
+computation and memory efficiency. Specifically, instead of making the updated model perform
+better on each individual previous tasks in the memory, A-GEM aims to produce a model that
+shows high average performance across the tasks in the episode memory.
+B.3
+
+Temporal Invariant Learning
+
+• CORAL. CORAL penalizes the differences in the mean and covariance of the feature distributions
+of each domain. For CORAL, we adapted our implementation from the public repositories for
+DomainBed and WILDS [55]. CORAL is applicable to all datasets used in Wild-Time.
+• IRM. Invariant risk minimization aims to learn an invariant predictor that performs well across
+all domains. The vanilla IRM objective can be reformulated as a bi-level optimization, which is
+challenging to solve. Following the original paper [3], we adopt IRM-v1 in this paper, an efficient
+approximation to the original IRM objective for learning invariant predictors.
+• Mixup is an interpolation-based approach, which generates new training examples by applying
+the same interpolation strategies on the input features and their corresponding labels [112]. The
+original training samples are replaced by the newly generated samples for training.
+• LISA. Motivated by mixup [112], LISA selectively interpolates examples to cancel out domain
+information. LISA has two variants — intra-label LISA and intra-domain LISA. Intra-label
+LISA interpolates examples with the same label but from different domains. Intra-domain LISA
+interpolates examples with the same domain but different labels. Furthermore, as mentioned
+in [108], intra-LISA performs better in domain shifts without considering domain information. We
+follow the implementation of Yao et al. [108] and only apply intra-label in Wild-Time.
+• GroupDRO. GroupDRO uses distributionally robust optimization to optimize the worst-domain
+loss during the training stage. We follow the implementation of Sagawa et al. [88] and apply group
+adjustments, strong penalty and early stopping in GroupDRO.
+B.4
+
+Self-Supervised Learning
+
+• SimCLR [15] is a simple contrastive learning approach for visual recognition. It uses normalized
+temperature-scaled cross entropy as the loss function and introduces a nonlinear transformation
+between the learned representation and the contrastive loss. We follow the implementation of Chen
+et al. [15].
+• SwAV [11] simultaneously clusters the data and encourages the consistency of cluster assignments
+generated by different kinds of data augmentations. We follow the implementation of Caron et al.
+[11].
+B.5
+
+Bayesian Learning
+
+• SWA. Stochastic Weight Averaging [41] averages multiple parameter values along the trajectory
+of SGD with almost no computational overhead. This method has been shown to lead to better
+in-distribution generalization due to its ability to find a better approximation to the posterior
+distribution over parameters. This property is reflected through the flatness of the learned optima.
+We follow the official implementation of SWA with the same learning rate as ERM and use default
+values for other hyperparameters.
+
+22
+
+C
+
+Experimental Details
+
+All reported results are averaged over 3 random seeds. Experiments are conducted on a GPU-cluster
+with 6 GPU nodes. All classification tasks (i.e., Yearbook, FMoW-Time, MIMIC Mortality, MIMIC
+Readmission, Precipitation, HuffPost, arXiv) were trained with cross-entropy loss. In our experiments,
+we tune hyperparameters of all baselines by applying cross-validation with grid search.
+For all methods, we use minibatch stochastic optimizers to train models, sampling uniformly from
+the ID set (in the Eval-Fix setting) or from each timestamp (in the Eval-Stream setting).
+We report the number of train iterations used to train baselines for each dataset, under both the Eval-Fix
+and Eval-Stream settings. A single train iteration corresponds to one update via loss backpropagation.
+Under the Eval-Fix setting, the number of train iterations is the number of updates to the model on the
+ID train set. Under the Eval-Stream setting, in which models are trained incrementally, the number of
+train iterations corresponds to the number of updates to the model at each timestamp.
+C.1
+
+Eval-Fix Split Determination
+
+To determine the time splits for the Eval-Fix setting of each dataset, we considered all ID/OOD splits
+ranging from 40%-60% ID/OOD to 80%-20% ID/OOD. For each of these time splits, we ran ERM on
+the ID and OOD sets, and selected the split with the largest discrepancy between average ID accuracy
+and average OOD accuracy.
+C.2
+
+Detailed Set Split Strategy
+
+Suppose we have T timestamps. At each timestamp, we randomly sample 90% of the examples
+for training, and allocate the remaining 10% validation examples for ID evaluation. We detail the
+difference between the Eval-Fix and Eval-Stream setting as follows:
+Eval-Fix Setting. In Eval-Fix, as shown in Figure 5, we have a split timestamp ts . The ID timestamps
+are t < ts , and the OOD timestamps are t ≥ ts . The training set consists of all training examples
+from the ID timestamps t < ts . The ID validation set consists of all validation examples from the ID
+timestamps t < ts . All examples in all test timestamps t ≥ ts are used as the OOD test set.
+90%
+
+10%
+
+90%
+
+10%
+
+90%
+
+100%
+
+10%
+
+100%
+
+Time
+𝑡!
+
+𝑡"
+Training
+Timestamps
+Training Set
+
+…
+
+𝑡# − 1
+
+𝑡#
+Split
+Timestamp
+ID Test Set
+
+𝑡# + 1
+
+…
+
+𝑇
+
+Test
+Timestamps
+OOD Test Set
+
+Figure 5: Data split under Eval-Fix setting.
+Eval-Stream Setting. In Eval-Stream, at each evaluation timestamp, we evaluate across the next
+K timestamps. Specifically, at each timestamp t ∈ [1, . . . , T ], we evaluate our model across the
+timestamps {t + 1, . . . , t + K}, which is illustrated in Figure 6.
+Hence, Eval-Fix can be viewed as a single timestamp evaluation within Eval-Stream, where we
+evaluate only at ts and set n = T − ts .
+C.3
+C.3.1
+
+Hyperparameter Settings and Model Architectures
+General Settings
+
+Yearbook. We use a 4-layer convolutional network. Each convolutional layer has kernel size 3 × 3,
+stride of 1 × 1, padding of size 1, 32 output channels, a spatial batch norm layer, ReLU activation,
+and a 2D max pool layer with kernel size 2 × 2.
+23
+
+90%
+
+Evaluation
+Time 1
+
+10%
+
+100%
+
+Time
+𝑡"
+
+𝑡!
+
+90%
+
+…
+
+𝑡#
+
+Training
+Timestamps
+
+Evaluation
+Time 2
+
+100%
+
+100%
+
+…
+
+𝑡$%!
+
+𝑇
+
+Test
+Timestamps
+
+10%
+
+90%
+
+100%
+
+100%
+
+10%
+
+Time
+𝑡"
+
+𝑡!
+
+…
+
+𝑡#
+
+Training
+Timestamps
+
+𝑡$%"
+
+…
+
+𝑇
+
+Test
+Timestamps
+
+…
+
+…
+90%
+
+10%
+
+90%
+
+10%
+
+90%
+
+90%
+
+10%
+
+100%
+
+10%
+
+Time
+Evaluation
+Time T-K
+
+𝑡!
+
+𝑡"
+
+𝑡#
+
+…
+
+𝑡&'(
+
+Training
+Timestamps
+Training Set
+
+…
+
+𝑇
+
+Test
+Timestamps
+ID Test Set
+
+OOD Test Set
+
+Figure 6: Data split under Eval-Stream setting.
+We use the Adam optimizer with a fixed learning rate of 10−3 and train with a batch size of 32.
+Baselines were trained for 3000 iterations under the Eval-Fix setting and for 100 iterations under the
+Eval-Stream setting.
+FMoW-Time. Following [55] and [16], we use a DenseNet-121 model [36] pretrained on ImageNet
+with no L2 regularization.
+We use the Adam optimizer with an initial learning rate of 10−4 that decays by 0.96 per epoch and
+a batch size of 64. Baselines were trained for 3000 iterations for the Eval-Fix setting and for 500
+iterations for the Eval-Stream setting.
+MIMIC-IV. We use a Transformer, consisting of an encoder and an decoder. Here, we collect the
+vocabulary based on the ICD9 codes.
+We use the Adam optimizer with a learning rate of 5 × 10−4 and a batch size of 128. Baselines were
+trained for 3000 iterations under the Eval-Fix setting and for 500 iterations under the Eval-Stream
+setting.
+Huffpost. We use a network backbone comprising of a pretrained DistilBERT base model (uncased)
+from [90] and a fully-connected, classification layer.
+We use the AdamW optimizer with a learning rate of 2 × 10−5 , weight decay of 10−2 , and train with
+a batch size of 32. Baselines were trained for 6000 iterations under the Eval-Fix setting and for 1000
+iterations under the Eval-Stream setting.
+arXiv. We use the same network backbone, optimizer, learning rate, weight decay, and number of
+train iterations as those used for the Huffpost dataset. We train all baselines with a batch size of 64.
+C.3.2
+
+Algorithm-Specific Hyperparameters
+
+Temporally Invariant Methods For GroupDRO, CORAL, and IRM, we follow WILDS [55] and
+use minibatch stochastic optimizers to train models, sampling uniformly from each substream (i.e.,
+the domain in our temporal robustness setting), regardless of the number of training examples in the
+substream.
+24
+
+Table 8: Hyperparameters for CORAL, GroupDRO, and IRM baselines on all WildT datasets.
+Dataset
+
+CORAL Penalty
+
+IRM Penalty
+
+lr
+
+# Substreams
+
+Substream Size
+
+0.9
+0.9
+1.0
+1.0
+0.9
+0.9
+
+1.0
+1.0
+1.0
+1.0
+1.0
+1.0
+
+1e-1
+1e-4
+5e-4
+5e-4
+2e-5
+2e-5
+
+10
+3
+4
+3
+3
+4
+
+5
+3
+3
+3
+2
+4
+
+Yearbook
+FMoW-Time
+MIMIC-IV-Mort
+MIMIC-IV-Readmit
+HuffPost
+arXiv
+
+• GroupDRO. We adapted the implementation of GroupDRO from Sagawa et al. [88] and Koh et al.
+[55]. Each example in the minibatch is sampled independently with uniform probabilities across
+substreams.
+We list the hyperparameters used for GroupDRO on all WildT datasets in Table 8; namely, the
+number of substreams (e.g., number of groups) and substream size (e.g., group size).
+• CORAL. We adapted the implementations of DeepCORAL from Gulrajani and Lopez-Paz [29]
+and Koh et al. [55], and compute CORAL penalties between features from all pairs of substreams,
+which we treat as groups/domains.
+We list the hyperparameters used for CORAL on all WildT datasets in Table 8, which include
+the CORAL penalty λc , number of substreams (e.g., number of groups), and substream size (e.g.,
+group size). CORAL was trained with a penalty of λc = 0.1 on the MIMIC-Mortality task, and
+λc = 1.0 on the MIMIC-Readmission task. For all remaining datasets, we used a default penalty
+of λc = 0.9.
+• IRM. We adapted the implementations of IRM from Arjovsky et al. [3] and Koh et al. [55].
+We list the hyperparameters used for IRM on all WildT datasets in Table 8, which include the IRM
+penalty λi , number of substreams (e.g., number of groups), and substream size (e.g., group size).
+IRM was trained with a penalty of λi = 1.0 on all datasets.
+• LISA. We adapted the implementation of LISA from Yao et al. [108] and implemented intra-label
+LISA, where training samples with the same label are interpolated. For the Yearbook and FMoWTime datasets, the input image tensors were interpolated. For the arXiv, Huffpost, and MIMIC-IV
+datasets, the learned feature representations were interpolated.
+All LISA experiments were conducted with α = 2.0, where the interpolation ratio λ ∈ [0, 1] is
+drawn from a Beta(α, α) distribution.
+• Mixup. For mixup, we use the same hyperparameters as ERM.
+Continual Learning Methods
+• A-GEM. We adapted the implementation of A-GEM from Chaudhry et al. [14] and “Mammoth - An
+Extendible (General) Continual Learning Framework for Pytorch" [7, 9]. All A-GEM experiments
+were conducted with a default buffer size of 1000.
+• EWC. We adapted the implementation of EWC from Kirkpatrick et al. [54], van de Ven and Tolias
+[100], and van de Ven and Tolias [101].
+For the EWC loss regularization strength, we use a default value of 0.5 for the Yearbook, FMoWTime, Huffpost, arXiv, and MIMIC-IV-Readmit datasets. For MIMIC-IV-Mortality, we use 1.0.
+• SI. We adapted the implementation of SI from Zenke et al. [111], van de Ven and Tolias
+[100], van de Ven and Tolias [101].
+For the SI loss regularization strength λs , we use a default value of 0.1 for all datasets.
+Self-Supervised Methods
+• SimCLR. We implement SimCLR using the Lightly framework [40]. We apply SimCLR to learn
+representations, and then fine-tune the model with the same (labeled) training data.
+For both Yearbook and FMoW-Time, we use the set of image transforms from Chen et al. [15].
+Specifically, we sequentially apply the following three random augmentations: random cropping
+followed by resize back to the original size, color distortions, and Gaussian blur. We list all
+hyperparameters in Table 9.
+25
+
+Table 10: Hyperparameters for SwaV on Yearbook and FMoW-Time.
+
+Table 9: Hyperparameters for SimCLR on
+Yearbook and FMoW-Time.
+Dataset
+
+Yearbook FMoW-Time
+
+Prob. Color Jitter
+Color Jitter Strength
+Min. Crop Scale
+Prob. Grayscale
+Kernel Size
+Prob. Vertical Flip
+Prob. Horizontal Flip
+Prob. Rotation (+90)
+
+0.8
+0.5
+0.08
+0.2
+0.1 × 32
+0.5
+0.5
+0.0
+
+0.8
+0.5
+0.08
+0.2
+0.1 × 224
+0
+0.5
+0.5
+
+Embedding Dim.
+
+128
+
+128
+
+No. SSL Iters.
+No. Finetune Iters.
+
+2700
+300
+
+1500
+1500
+
+Dataset
+
+Yearbook
+
+FMoW-Time
+
+No. Views
+2
+Crop Sizes
+224, 96
+No. Crops
+2, 6
+Min. Crop Scale
+0.08, 0.05
+1.0, 0.14
+Max. Crop Scale
+Prob. Horizontal Flip
+0.5
+0.8
+Prob. Color Jitter
+Color Jitter Strength
+0.8
+Prob. Grayscale
+0.2
+
+2
+224, 96
+2, 6
+0.08, 0.05
+1.0, 0.14
+0.5
+0.8
+0.8
+0.2
+
+Embedding Dim.
+No. Prototypes
+
+128
+32
+
+128
+1024
+
+No. SSL Iters.
+No. Finetune Iters.
+
+2700
+300
+
+1500
+1500
+
+Table 11: Hyperparameters for EWC and SI baselines on all WildT datasets.
+Dataset
+Yearbook
+FMoW-Time
+MIMIC-IV-Mort
+MIMIC-IV-Readmit
+HuffPost
+arXiv
+
+EWC λe
+
+SI λs
+
+0.5
+0.5
+1.0
+0.5
+0.5
+0.5
+
+0.1
+0.1
+0.1
+0.1
+0.1
+0.1
+
+• SwaV. We implement SwaV using the Lightly framework [40]. We apply SwaV to learn representations, and then fine-tune the model with the same training data. We follow the multi-crop
+augmentation strategy proposed by Caron et al. [11]. We use 2 views and list all hyperparameters
+in Table 10.
+Bayesian Methods
+• SWA. We follow the official implementation of SWA [41, 4]. We use the same learning rate as
+ERM and use default values for other hyperparameters.
+
+D
+
+Results Under Eval-Stream Setting
+
+Under Eval-Stream setting, we visualize the average performance and worst-time performance for
+every timestamp. For each timestamp, we calculate the average/worst performance over the evaluated
+time window. The results of all tasks are shown in Figure 7. The key observations are very close to
+the findings under Eval-Fix setting. Additionally, invariant learning approaches performs slightly
+better than continual learning approaches in most tasks.
+Under the Eval-Stream setting, we further explain why continual learning approaches fail to improve
+over other baselines in the Eval-Stream setting from the following two reasons: (1) Most existing
+continual learning approaches focus on backward transfer (i.e., catastrophic forgetting). In WildTime, we focus on forward transfer, and evaluate performance on future timestamps (i.e., temporal
+robustness); (2) For continual learning approaches that also focus on forward transfer (e.g., A-GEM),
+most of these approaches only show improvements on manually delineated sets of tasks with artificial
+temporal variations (e.g., Split CUB, Split CIFAR), but are not evaluated on benchmarks with
+natural temporal distribution shifts, such as Wild-Time. Analogously, we note that invariant learning
+approaches show improvements in artificial datasets (e.g., ColoredMNIST, Waterbirds [88]), but fail
+to outperform ERM in benchmarks with natural distribution shifts, e.g., WILDS [55].
+26
+
+100%
+90%
+80%
+A-GEM
+EWC
+70%
+FT
+SI
+60%
+CORAL-T
+GroupDRO-T
+50%
+IRM-T
+40% 1931 1941
+
+Worst OOD Accuracy
+
+ERM
+LISA
+mixup
+SimCLR
+SwAV
+SWA
+
+1961
+
+1971
+Time
+
+1981
+
+1991
+
+2001
+
+2005
+
+Time
+
+2008
+
+2011
+
+Average OOD Accuracy
+
+(c) FMoW-Time Avg
+70%
+68%
+66%
+64%
+62%
+2013
+
+CORAL-T
+GroupDRO-T
+IRM-T
+ERM
+LISA
+A-GEM
+
+EWC
+FT
+SI
+mixup
+SWA
+
+2014
+Time
+
+2015
+
+(g) : Huffpost Avg
+
+Average OOD Accuracy
+
+35%
+25%
+15%
+5%
+2002
+
+CORAL-T
+GroupDRO-T
+IRM-T
+ERM
+LISA
+mixup
+
+2005
+
+Time
+
+2008
+
+A-GEM
+FT
+SI
+SimCLR
+SWA
+SwAV
+
+75%
+70%
+65%
+60%
+55%
+50%
+
+2011
+
+(d) FMoW-Time Worst
+68%
+66%
+64%
+62%
+60%
+2013
+
+CORAL-T
+GroupDRO-T
+ERM
+LISA
+mixup
+IRM-T
+
+2011
+
+1971
+Time
+
+1981
+
+1991
+
+2001
+
+90%
+
+A-GEM
+EWC
+FT
+SI
+SWA
+
+2014
+Time
+
+2017
+
+80%
+70%
+60%
+50%2011
+
+(e) Readmission Avg
+Average OOD Accuracy
+
+5%2002
+
+A-GEM
+FT
+SI
+SimCLR
+SWA
+SwAV
+
+Worst OOD Accuracy
+
+15%
+
+CORAL-T
+GroupDRO-T
+IRM-T
+ERM
+LISA
+mixup
+
+Worst OOD Accuracy
+
+Average OOD Accuracy
+
+25%
+
+1961
+
+(b) Yearbook Worst
+
+(a) Yearbook Avg
+35%
+
+1951
+
+Average OOD AUC
+
+1951
+
+ERM
+LISA
+mixup
+SimCLR
+SwAV
+SWA
+
+CORAL-T
+GroupDRO-T
+IRM-T
+ERM
+LISA
+A-GEM
+
+EWC
+FT
+SI
+mixup
+SWA
+
+2014
+Time
+
+2015
+
+(h) : Huffpost Worst
+
+48%
+44%
+
+LISA
+FT
+IRM-T
+ERM
+CORAL-T
+GroupDRO-T
+
+40%
+36%
+2008
+
+2010
+
+2012
+Time
+
+A-GEM
+EWC
+SI
+mixup
+SWA
+
+2014
+
+(i) arXiv Avg
+
+CORAL-T
+GroupDRO-T
+ERM
+LISA
+mixup
+IRM-T
+
+A-GEM
+EWC
+FT
+SI
+SWA
+
+2014
+Time
+
+2017
+
+(f) Mortality Avg
+
+52%
+Worst OOD Accuracy
+
+Average OOD Accuracy
+
+100%
+90%
+80%
+A-GEM
+EWC
+70%
+FT
+SI
+60%
+CORAL-T
+GroupDRO-T
+50%
+IRM-T
+40% 1931 1941
+
+48%
+44%
+40%
+
+LISA
+FT
+IRM-T
+ERM
+CORAL-T
+GroupDRO-T
+
+36%
+32%
+2008
+
+2010
+
+2012
+Time
+
+A-GEM
+EWC
+SI
+mixup
+SWA
+
+2014
+
+(j) arXiv Worst
+
+Figure 7: Results under Eval-Stream Setting. Note that for MIMIC-Readmission (e) and MIMICMortality (f), we only report the average timestamp performance as we only evaluate on the next
+timestamp, which is a three-year block.
+
+E
+
+Additional Experiments under Eval-Fix Setting
+
+E.1
+
+Standard Split vs. Mixed Split
+
+We verify that the performance gap between ID and OOD timestamps are not caused by the difficulty
+of examples from OOD timestamps. First, we analyze the effect of the difficulty of OOD examples.
+We use two kinds of data splits – standard split and mixed split. In the standard split, the model is
+trained on timestamps before the split time and then evaluated on examples from future timestamps.
+In the mixed split, the training data is merged from all timestamps, and the model is evaluated on
+the original OOD examples. We report the results in Table 12 and observe large performance gaps
+between standard split and mixed split on all Wild-Time tasks. The observation verifies that the
+performance gaps between ID and OOD are not caused by the difficulty.
+For each Wild-Time dataset, we plot the label distributions over time in Figure 8. We observe that the
+label distributions change over time for all Wild-Time datasets, as this is a naturally-occurring shift
+that we aim to tackle with the Wild-Time benchmark.
+Table 12: Performance drops of ERM with different splits under Eval-Fix setting. In the standard
+split, we train the model on timestamps before the split timestamp, and evaluate the model in the
+future timestamps. In the mixed split, we merge the training data from all timestamps, and evaluate
+the model on the original OOD set. The large gap between standard split and mixed split indicates
+that the performance drops between ID and OOD shown in Table 1 in the main paper are not caused
+by the difficulty of the examples from OOD timestamps.
+Dataset
+
+Standard Split
+OOD Avg. OOD Worst
+
+Mixed Split
+OOD Avg. OOD Worst
+
+Yearbook
+FMoW-Time
+MIMIC-Mortality
+MIMIC-Readmission
+Huffpost
+arXiv
+
+81.98%
+54.07%
+72.89%
+61.33%
+70.42%
+45.94%
+
+94.57%
+57.80%
+91.00%
+57.18%
+78.11%
+52.12%
+
+69.62%
+46.00%
+65.80%
+59.46%
+68.71%
+44.09%
+
+27
+
+78.57%
+52.00%
+88.67%
+54.84%
+76.87%
+50.57%
+
+1.00
+0.75
+0.50
+0.25
+
+0.001930 1950 1970 1990 2010
+Timesteps
+
+2.5
+2.0
+1.5
+1.0
+0.5
+0.0 2002 2005 2008 2011 2014 2017
+Timesteps
+
+(a) Yearbook
+
+0.8
+
+No Mortality
+Mortality
+
+0.6
+0.4
+0.2
+0.0 2008
+
+2011 2014
+Timesteps
+
+(b) FMoW-Time
+×105
+
+Number of Examples
+
+Number of Examples
+
+1.0
+
+×109
+
+2.0
+1.5
+1.0
+0.5
+
+2017
+
+2007 2010 2013 2016 2019 2022
+Timesteps
+
+(d) MIMIC-Mortality
+
+(e) arXiv
+
+1.5
+
+×109
+
+No Readmission
+Readmission
+
+1.0
+0.5
+0.0 2008
+
+Number of Examples
+
+Male
+Female
+
+Number of Examples
+
+×104
+
+3
+
+Number of Examples
+
+Number of Examples
+
+1.25 ×10
+
+2011 2014
+Timesteps
+
+2017
+
+(c) MIMIC-Readmission
+×104
+1.25
+1.00
+0.75
+0.50
+0.25
+0.00 2012 2014 2016 2018
+Timesteps
+(f) Huffpost
+
+Figure 8: Label distributions of all Wild-Time classification datasets over time. Note that we include
+legends for datasets with less than 8 classes due to space limitations.
+E.2
+
+Temporal Adaptation of Invariant Learning Methods
+
+In this section, we provide additional analysis for temporal adaptation, including the analysis of the
+effectiveness of temporal adaptation, the effect of time window size, and the comparison between
+overlapping and non-overlapping substreams.
+E.2.1
+
+Temporal Adaptation Improves Performance
+
+We compare the temporal adapted invariant learning approaches with the original approaches. The results are listed in Table 13. We observe that temporal adaptation indeed shows improved performance
+over vanilla invariant learning approaches, verifying the efficacy of the proposed strategy.
+E.2.2
+
+Effect of Time Window Size
+
+We include an ablation in which we report the performance of CORAL-T, GroupDRO-T, and IRM-T
+when the time window size L (defined in Section 4 of the main paper) is reduced. We report baseline
+results in Table 14. We found that reducing L marginally worsens the performance of invariant
+learning baselines.
+E.2.3
+
+Non-Overlapping Time Windows
+
+In the proposed temporal adaptations of the invariant learning methods (CORAL-T, GroupDRO-T,
+IRM-T), we use overlapping time windows to capture the gradual temporal distribution shift. Here, we
+run all invariant learning baselines using non-overlapping windows, and report the OOD performance
+in Table 15. For the Yearbook, Huffpost, arXiv, MIMIC-Mortality, and MIMIC-Readmission,
+invariant learning baselines generally obtained better performance using overlapping time windows.
+Since, on the aggregate, using overlapping time windows resulted in better performance, we keep the
+results using non-overlapping windows in Table 2 of the main paper.
+E.3
+
+Effect of Model Backbones
+
+We investigate the effect of different models backbones on a Wild-Time image dataset (FMoW-Time)
+and text dataset (arXiv). Specifically, we use ResNet18 and ResNet50 backbones for FMoWTime, and BERT and ALBERT backbones for arXiv. We report the performance of ERM and two
+28
+
+Table 13: The vanilla versus temporal adapted invariant learning performance of each method
+evaluated on Wild-Time under the Eval-Fix setting.
+Yearbook
+(Accuracy (%) ↑)
+OOD Avg.
+OOD Worst
+
+FMoW-Time
+(Accuracy (%) ↑)
+OOD Avg.
+OOD Worst
+
+MIMIC-Readmission
+(Accuracy (%) ↑)
+OOD Avg.
+OOD Worst
+
+GroupDRO
+GroupDRO-T
+
+76.19 (1.58)
+77.06 (1.67)
+
+59.61 (1.09)
+60.96 (1.83)
+
+42.54 (0.39)
+43.87 (0.55)
+
+35.17 (1.08)
+36.60 (1.25)
+
+55.69 (3.53)
+56.12 (4.35)
+
+54.18 (2.79)
+53.12 (4.41)
+
+CORAL
+CORAL-T
+
+76.29 (1.75)
+77.53 (2.15)
+
+58.54 (2.91)
+59.34 (1.46)
+
+48.96 (0.23)
+49.43 (0.38)
+
+40.17 (0.89)
+41.23 (0.78)
+
+56.62 (3.21)
+57.31 (4.45)
+
+54.08 (3.50)
+54.69 (4.36)
+
+IRM
+IRM-T
+
+77.08 (2.05)
+80.46 (3.53)
+
+63.79 (1.27)
+64.42 (4.38)
+
+45.25 (1.01)
+45.00 (1.18)
+
+38.73 (0.69)
+37.67 (1.17)
+
+57.89 (2.76)
+56.53 (3.36)
+
+53.02 (2.53)
+52.67 (5.17)
+
+MIMIC-Mortality
+(AUC (%) ↑)
+OOD Avg.
+OOD Worst
+
+HuffPost
+(Accuracy (%) ↑)
+OOD Avg.
+OOD Worst
+
+arXiv
+(Accuracy (%) ↑)
+OOD Avg.
+OOD Worst
+
+GroupDRO
+GroupDRO-T
+
+74.93 (3.17)
+76.88 (4.74)
+
+70.58 (3.46)
+71.40 (6.84)
+
+68.33 (0.88)
+69.53 (0.54)
+
+67.42 (1.27)
+67.68 (0.78)
+
+37.37 (1.09)
+39.06 (0.54)
+
+36.09 (0.93)
+37.18 (0.52)
+
+CORAL
+CORAL-T
+
+76.83 (2.70)
+77.98 (2.57)
+
+64.62 (5.58)
+64.81 (10.8)
+
+70.64 (0.43)
+70.05 (0.63)
+
+67.82 (1.16)
+68.39 (0.88)
+
+40.82 (1.16)
+42.32 (0.60)
+
+38.16 (0.62)
+40.31 (0.61)
+
+IRM
+IRM-T
+
+76.25 (5.87)
+76.16 (6.32)
+
+69.91 (6.02)
+70.64 (8.99)
+
+71.69 (1.33)
+70.21 (1.05)
+
+69.49 (1.46)
+68.71 (1.13)
+
+35.07 (0.55)
+35.75 (0.90)
+
+34.22 (0.63)
+33.91 (1.09)
+
+Table 14: Performance of the temporally adapted invariant learning baselines when decreasing the
+length of the time windows, L. We evaluate under the Eval-Fix setting and report the average
+and standard deviation (value in parentheses), computed over three random seeds. For Yearbook,
+performance worsens when L is reduced, but improves for FMoW-Time.
+
+L
+
+Yearbook
+(Accuracy (%) ↑)
+OOD Avg.
+OOD Worst
+
+FMoW-Time
+(Accuracy (%) ↑)
+OOD Avg.
+OOD Worst
+
+L
+
+GroupDRO-T
+
+5
+4
+2
+
+77.06 (1.67)
+72.84 (3.04)
+73.42 (2.29)
+
+60.96 (1.83)
+56.05 (0.75)
+56.99 (2.54)
+
+3 43.87 (0.55)
+2 45.17 (0.83)
+n/a
+n/a
+
+36.60 (1.25)
+36.97 (1.00)
+n/a
+
+CORAL-T
+
+5
+4
+2
+
+77.53 (2.15)
+77.09 (1.56)
+76.92 (1.07)
+
+59.34 (1.46)
+59.17 (1.89)
+59.26 (1.38)
+
+3 49.43 (0.38)
+2 49.67 (0.49)
+n/a
+n/a
+
+41.23 (0.78)
+41.63 (0.32)
+n/a
+
+IRM-T
+
+5
+4
+2
+
+80.46 (3.53)
+79.56 (3.12)
+79.47 (2.69)
+
+64.42 (4.38)
+63.70 (3.85)
+63.65 (3.91)
+
+3 45.00 (1.18)
+2 48.50 (0.10)
+n/a
+n/a
+
+37.67 (1.17)
+40.63 (0.59)
+n/a
+
+representative invariant learning and continual learning approaches – LISA and Fine-tuning – under
+the Eval-Fix setting in Table 16.
+These results are consistent with our findings that neither invariant learning nor continual learning
+approaches make models more robust to temporal distribution shift, even with different backbones.
+
+E.4
+
+Reducing the Number of Training Examples
+
+We analyze the performance of all baselines when reducing the number of training examples. Specifically, under the Eval-Fix setting, we randomly allocate 30% of the data at each training timestamp
+as training, rather than 90% in our original results (c.f., Table 2 in the main paper). We report all
+results in Table 17. We observe that ERM still outperforms invariant learning and continual learning
+approaches, corroborating our findings in the main paper.
+29
+
+Table 15: Performance of CORAL-T, GroupDRO-T, and IRM-T baselines when trained on nonoverlapping time substreams. OL: Overlapping; NOL: Non-overlapping
+Yearbook
+(Accuracy (%) ↑)
+OOD Avg.
+OOD Worst
+
+FMoW-Time
+(Accuracy (%) ↑)
+OOD Avg.
+OOD Worst
+
+MIMIC-Readmission
+(Accuracy (%) ↑)
+OOD Avg.
+OOD Worst
+
+CORAL-T
+
+OL
+NOL
+
+77.53 (2.15)
+75.97 (0.63)
+
+59.34 (1.46)
+57.47 (0.29)
+
+49.43 (0.38)
+49.93 (0.64)
+
+41.23 (0.78)
+42.13 (0.96)
+
+57.31 (4.45)
+54.86 (2.93)
+
+54.69 (4.36)
+51.44 (4.63)
+
+GroupDRO-T
+
+OL
+NOL
+
+77.06 (1.67)
+76.94 (1.87)
+
+60.96 (1.83)
+58.58 (1.82)
+
+43.87 (0.55)
+48.67 (0.57)
+
+36.60 (1.25)
+45.50 (0.62)
+
+56.12 (4.35)
+53.96 (3.03)
+
+53.12 (4.41)
+50.47 (4.43)
+
+IRM-T
+
+OL
+NOL
+
+80.46 (3.53)
+77.21 (2.34)
+
+64.42 (4.38)
+59.44 (1.72)
+
+45.00 (1.18)
+49.67 (0.40)
+
+37.67 (1.17)
+42.50 (1.08)
+
+56.53 (3.36)
+54.31 (3.67)
+
+52.67 (5.17)
+51.08 (5.23)
+
+MIMIC-Mortality
+(AUC (%) ↑)
+OOD Avg.
+OOD Worst
+
+HuffPost
+(Accuracy (%) ↑)
+OOD Avg.
+OOD Worst
+
+arXiv
+(Accuracy (%) ↑)
+OOD Avg.
+OOD Worst
+
+CORAL-T
+
+OL
+NOL
+
+77.98 (2.57)
+71.57 (11.7)
+
+64.81 (10.8)
+65.77 (15.3)
+
+70.05 (0.63)
+68.11 (1.40)
+
+68.39 (0.88)
+66.94 (1.50)
+
+42.32 (0.60)
+42.07 (0.72)
+
+40.31 (0.61)
+40.10 (0.72)
+
+GroupDRO-T
+
+OL
+NOL
+
+76.88 (4.74)
+72.78 (10.7)
+
+71.40 (6.84)
+67.40 (14.1)
+
+69.53 (0.54)
+68.41 (0.41)
+
+67.68 (0.78)
+67.26 (0.49)
+
+39.06 (0.54)
+36.07 (1.35)
+
+37.18 (0.52)
+33.98 (1.46)
+
+IRM-T
+
+OL
+NOL
+
+76.17 (6.32)
+73.08 (9.99)
+
+70.64 (8.99)
+67.69 (13.1)
+
+70.21 (1.05)
+69.58 (0.79)
+
+68.71 (1.13)
+68.16 (0.64)
+
+35.75 (0.90)
+38.85 (0.44)
+
+33.91 (1.09)
+36.86 (0.42)
+
+Table 16: Performance comparison w.r.t. Different backbones.
+
+FMoW-Time
+
+arXiv
+
+F
+
+Backbone
+
+ERM
+
+Fine-tuning
+
+LISA
+
+ResNet18
+
+47.95 (0.39)
+
+40.95 (0.50)
+
+47.59 (0.36)
+
+ResNet50
+
+52.91 (0.46)
+
+45.68 (0.79)
+
+53.17 (0.85)
+
+DenseNet101
+
+54.07 (0.25)
+
+44.22 (0.56)
+
+52.33 (0.42)
+
+DistilBERT
+
+45.94 (0.97)
+
+50.31 (0.39)
+
+47.82 (0.47)
+
+BERT
+
+47.51 (1.20)
+
+50.99 (0.52)
+
+49.05 (1.01)
+
+ALBERT
+
+45.25 (0.65)
+
+49.76 (0.69)
+
+46.01 (0.52)
+
+Datasets without Gradual Temporal Distribution Shifts
+
+In this section, we discuss two additional datasets that were not included in Wild-Time. These datasets
+do not satisfy the criteria discussed in Section 2.1.
+F.1
+F.1.1
+
+Drug-BA
+Dataset Setup
+
+Problem Setting. The task is predicting the binding affinity of candidate drugs to their target
+molecules. The input x contains molecular information of both the drug and target molecules, and
+the label y is the binding affinity value.
+Data. The Therapeutics Data Commons (TDC) benchmark (MIT license). TDC offers the BindingDB
+dataset, which was curated from BindingDB, a public database that features drug-target binding
+affinities collected from a variety of sources, including patents, journals, and assays. Each entry in
+BindingDB consists of a small molecule and the corresponding target protein. We exclude data from
+the year 2021 in the original TDC benchmark as 2021 includes only one month’s worth of data.
+For Eval-Fix, we use the first 4 years (2013 − 2016) for training and allocate 4 years (2017 − 2020)
+for testing. For streaming evaluation (Eval-Stream), we treat each year as a single timestamp. We
+provide the number of examples allocated to ID Train, ID Test, and OOD Test for each timestamp in
+Table 18.
+Evaluation Metrics. We use Pearson Correlation Coefficient (PCC), which measures the amount of
+linear correlations between the true values and the predicted values, to evaluate model performance
+30
+
+Table 17: Performance of all baselines when reducing the amount of training data. We randomly
+allocate 30% of the data at each timestamp to training, rather than 90% in our original benchmark.
+
+ID Avg.
+
+Yearbook
+(Accuracy (%) ↑)
+OOD Avg.
+OOD Worst
+
+ID Avg.
+
+FMoW-Time
+(Accuracy (%) ↑)
+OOD Avg.
+OOD Worst
+
+Fine-tuning
+EWC
+SI
+A-GEM
+
+46.29 (1.17)
+45.50 (0.00)
+49.42 (6.73)
+45.50 (0.00)
+
+52.00 (5.00)
+48.84 (0.01)
+47.03 (17.2)
+46.98 (3.57)
+
+44.10 (2.15)
+42.86 (0.01)
+45.52 (4.61)
+44.95 (3.45)
+
+40.30 (0.14)
+40.89 (0.66)
+41.03 (0.19)
+40.52 (0.56)
+
+39.34 (0.57)
+39.99 (0.66)
+39.65 (0.53)
+39.60 (0.41)
+
+30.91 (0.29)
+31.24 (0.43)
+30.91 (0.29)
+31.05 (0.38)
+
+ERM
+GroupDRO-T
+mixup
+LISA
+CORAL-T
+IRM-T
+
+93.96 (1.72)
+77.56 (11.5)
+92.88 (2.35)
+92.51 (4.03)
+75.35 (19.7)
+77.04 (17.7)
+
+77.05 (5.13)
+60.45 (7.10)
+77.31 (2.60)
+74.17 (5.22)
+59.66 (10.1)
+60.45 (7.10)
+
+60.72 (2.92)
+47.03 (7.99)
+61.56 (3.00)
+57.39 (1.77)
+44.00 (10.58)
+47.03 (7.99)
+
+51.74 (0.77)
+40.16 (0.68)
+54.23 (0.26)
+51.34 (0.14)
+44.15 (0.93)
+45.19 (0.94)
+
+50.63 (0.56)
+39.52 (0.86)
+53.77 (0.23)
+50.76 (0.83)
+43.85 (0.46)
+44.11 (1.23)
+
+40.29 (0.94)
+31.62 (0.29)
+43.04 (0.77)
+40.12 (1.42)
+34.59 (0.25)
+36.26 (1.36)
+
+MIMIC-Readmission
+(Accuracy (%) ↑)
+ID Avg.
+OOD Avg.
+OOD Worst
+
+ID Avg.
+
+MIMIC-Mortality
+(AUC (%) ↑)
+OOD Avg.
+OOD Worst
+
+Fine-tuning
+EWC
+SI
+A-GEM
+
+74.22 (2.96)
+74.49 (1.41)
+74.22 (2.96)
+80.58 (0.14)
+
+64.20 (3.73)
+66.75 (0.99)
+64.20 (3.73)
+69.90 (0.01)
+
+62.33 (5.25)
+65.93 (1.26)
+62.33 (5.25)
+68.48 (0.01)
+
+87.92 (0.92)
+87.94 (0.08)
+87.92 (0.92)
+70.27 (17.5)
+
+59.20 (0.71)
+60.07 (2.45)
+59.20 (0.71)
+53.68 (3.76)
+
+50.00 (1.35)
+51.21 (3.11)
+50.00 (1.35)
+48.00 (1.83)
+
+ERM
+GroupDRO-T
+mixup
+LISA
+CORAL-T
+IRM-T
+
+70.49 (2.47)
+74.36 (2.65)
+71.82 (3.61)
+67.50 (2.22)
+74.48 (1.72)
+74.36 (1.90)
+
+55.28 (2.54)
+59.90 (15.3)
+41.57 (1.12)
+40.48 (0.68)
+45.00 (4.50)
+52.00 (14.4)
+
+51.69 (5.47)
+54.92 (21.3)
+30.29 (0.00)
+30.29 (0.00)
+34.58 (7.05)
+44.24 (20.0)
+
+89.53 (0.82)
+89.48 (0.85)
+89.48 (1.14)
+90.01 (0.32)
+89.12 (1.43)
+88.24 (1.59)
+
+71.06 (7.63)
+73.28 (7.58)
+71.32 (8.55)
+73.37 (10.5)
+71.55 (10.4)
+73.13 (10.1)
+
+65.76 (10.2)
+68.25 (9.97)
+65.65 (11.4)
+68.97 (14.5)
+66.01 (13.6)
+68.66 (13.5)
+
+ID Avg.
+
+HuffPost
+(Accuracy (%) ↑)
+OOD Avg.
+OOD Worst
+
+ID Avg.
+
+arXiv
+(Accuracy (%) ↑)
+OOD Avg.
+OOD Worst
+
+Fine-tuning
+EWC
+SI
+A-GEM
+
+13.11 (1.03)
+13.26 (1.27)
+13.06 (1.05)
+13.07 (0.69)
+
+14.12 (3.27)
+13.65 (1.51)
+14.22 (3.26)
+15.53 (2.18)
+
+12.89 (2.46)
+12.37 (1.03)
+12.95 (2.44)
+13.43 (2.03)
+
+50.34 (0.13)
+50.31 (0.17)
+50.35 (0.13)
+50.36 (0.18)
+
+48.88 (0.26)
+48.56 (0.05)
+48.88 (0.25)
+48.79 (0.32)
+
+46.72 (0.25)
+46.38 (0.11)
+46.72 (0.26)
+46.53 (0.39)
+
+ERM
+GroupDRO-T
+mixup
+LISA
+CORAL-T
+IRM-T
+
+15.86 (1.45)
+14.23 (1.05)
+15.49 (0.92)
+14.95 (0.68)
+16.56 (0.56)
+14.06 (0.65)
+
+12.32 (2.64)
+11.82 (1.07)
+13.35 (1.45)
+13.26 (3.62)
+13.15 (5.17)
+11.39 (0.41)
+
+11.32 (2.08)
+11.03 (0.76)
+11.92 (1.08)
+11.93 (2.54)
+11.82 (4.29)
+11.05 (0.47)
+
+53.55 (0.21)
+50.01 (0.03)
+52.66 (0.13)
+49.17 (0.43)
+52.60 (0.06)
+46.20 (0.12)
+
+46.07 (0.53)
+39.71 (0.63)
+45.98 (0.47)
+47.66 (0.27)
+42.72 (0.27)
+35.85 (0.70)
+
+44.16 (0.50)
+37.79 (0.65)
+44.00 (0.45)
+45.71 (0.30)
+40.72 (0.24)
+34.14 (0.75)
+
+in predicting drug-target binding affinity. Eval-Stream evaluates performance across the next 3 years,
+which represents 37.5% of all timestamps in the entire dataset.
+F.1.2
+
+Baseline Results and Analysis
+
+Experimental Setup. We use the DeepDTA model from [81], which achieves state-of-the-art performance on drug target binding affinity prediction by using CNNs to construct high-level representations
+of a drug and a target. We use the Adam optimizer with a learning rate of 2 × 10−5 or 5 × 10−5
+(for different baselines) and batch size of 256. Baselines were trained for 5000 iterations under the
+Eval-Fix setting and for 500 iterations under the Eval-Stream setting. In terms of hyperparameters
+for CORAL, GroupDRO and IRM, the CORAL penalty, IRM penalty, learning rate, the number of
+substreams and the size of substreams are set as 0.9, 10−3 , 5 × 10−5 , 3, 2, respectively. Notice that
+LISA is only applicable to classification problem, thus we do not evaluate LISA on Drug-BA.
+Results. In Drug-BA, similar to Table 12, we reported the results of standard splits and mixed
+splits and the results of Eval-Stream and Eval-Fix in Figure 9. First, though the performance
+comparison between standard split and mixed split in the top table of Figure 9, we observe a
+significant drop between them, where OOD average performance drops from 0.724 (mixed split) to
+0.357 (standard split). Second, the performance per test time in Figure 9(b) further indicates such
+31
+
+Table 18: Data subset sizes for the Drug-BA task.
+Year
+
+ID Train
+
+ID Test
+
+OOD Test
+
+2013
+2014
+2015
+2016
+
+9,121
+16,148
+24,251
+23,095
+
+2,281
+4,038
+6,063
+5,774
+
+11,402
+20,186
+30,314
+28,869
+
+2017
+2018
+2019
+2020
+
+41,203
+32,924
+33,607
+5,557
+
+10,301
+8,231
+8,402
+1,390
+
+51,504
+41,155
+42,009
+6,947
+
+Eval-Fix split
+
+72,615
+
+18,156
+
+141,615
+
+Dataset
+
+Standard Split
+OOD Avg. OOD Worst
+
+Drug-BA
+
+0.4
+0.2
+2017
+
+0.724
+
+0.710
+
+Oracle ID
+CORAL-T
+GroupDRO-T
+
+2018
+
+Time
+
+2019
+
+(b) Eval-Fix
+
+ERM
+SI
+
+2020
+
+0.38
+0.36
+0.34
+0.32
+0.30
+0.28
+0.26
+2004
+
+A-GEM
+CORAL-T
+EWC
+FT
+GroupDRO-T
+
+IRM-T
+SI
+ERM
+mixup
+SWA
+
+2005
+Time
+
+2006
+
+Worst OOD R
+
+0.6
+
+0.244
+
+(a) Performance drops of ERM with different splits on Drug-BA dataset.
+Average OOD R
+
+Average OOD R
+
+0.8
+
+0.357
+
+Mixed Split
+OOD Avg. OOD Worst
+
+0.26
+0.24
+0.22
+0.20
+0.18
+0.16
+2004
+
+A-GEM
+CORAL-T
+EWC
+FT
+GroupDRO-T
+
+IRM-T
+SI
+ERM
+mixup
+SWA
+
+2005
+Time
+
+2006
+
+(c) Drug-BA Avg (Eval-Stream) (d) Drug-BA Worst (Eval-Stream)
+
+Figure 9: Results on Drug-BA. (b) out-of-distribution performance per test timestamp under Eval-Fix
+setting; (b) (c): results under Eval-Stream setting.
+a sudden performance drop between Oracle ID and ERM in 2017. These results suggest that the
+Drug-BA dataset violates our criterion about gradual temporal distribution shifts. Thus, we exclude it
+in the official Wild-Time benchmark.
+F.1.3
+
+Broader Context
+
+Drug discovery brings new candidate medications to potentially billions of people, allowing people
+to live longer and healthier lives. Traditional methods of drug discovery are via high-throughput,
+wet-lab experiments [38], which are expensive, time-consuming, and limited in their ability to search
+over large sets of drug candidates. Virtual screening is a computational pre-screening process in
+which the binding activity of a drug candidate with the target protein of a disease is predicted [12, 97].
+Recently, there has been a surge of interest in applying machine learning to virtual screening, which
+can reduce costs and increase the search space to avoid missing potential drug candidates. Recent
+binding activity prediction models investigate binding pairs between existing compounds and target
+proteins [73, 81, 106, 107]. In practice, new target proteins or new classes of compounds appear over
+time, requiring machine learning models that are robust to subtle domain shifts across time.
+F.2
+F.2.1
+
+Precipitation
+Dataset Setup
+
+Problem Setting. The task is classifying the precipitation level of a region. The input x is tabular
+data consisting of 123 meteorological features (1 categorical feature and 122 continuous features).
+The label y is one of 9 precipitation classes.
+Data. Precipitation is based on the Shifts Precipitation Prediction dataset [72] (Apache-2.0 license),
+which collected and processed tabular Precipitation data from the Yandex Precipitation Service to
+provide a domain shift benchmark for two tasks: temperature prediction (scalar regression) and
+32
+
+Table 19: Data subset sizes for the Precipitation task.
+Month
+
+ID Train
+
+ID Test
+
+OOD Test
+
+Sep 2018
+Oct 2018
+Nov 2018
+Dec 2019
+Jan 2019
+Feb 2019
+Mar 2019
+Apr 2019
+May 2019
+Jun 2019
+Jul 2019
+Aug 2019
+
+698,134
+714,265
+613,885
+707,274
+739,325
+665,745
+729,527
+691,366
+673,058
+548,793
+680,152
+681,035
+
+77,570
+79,362
+68,209
+78,586
+82,147
+73,971
+81,058
+76,818
+74,784
+60,976
+75,572
+75,670
+
+775,705
+793,628
+682,095
+785,861
+821,473
+739,717
+810,586
+768,185
+747,843
+609,770
+755,725
+756,706
+
+Eval-Fix split
+
+4,868,155
+
+540,903
+
+3,638,229
+
+precipitation classification (multi-class classification). The Shifts Precipitation Prediction dataset
+contains 10 million 129-column entries, consisting of 123 heterogeneous meteorological features, 4
+meta-data attributes (e.g., time, latitude, longitude, and climate type), and 2 targets (temperature and
+precipitation class). The data is distributed uniformly between September 1, 2018 to September 1,
+2019 and is partitioned by both time and climate type.
+We use a subset of the original Shifts Precipitation Prediction dataset, using measurements taken from
+October 2018 - August 2019. The Precipitation dataset consists of 123 heterogeneous meteorological
+features, 1 target (precipitation class), and 1 metadata attribute (time). We partition the dataset by
+month. Our fixed time split (Eval-Fix) uses data from October 2018 - April 2019 (7 months) for ID,
+and data from May 2019 - August 2019 (4 months) for OOD. For streaming evaluation (Eval-Stream),
+we treat each month as a single timestamp. We allocate 10% of the data at each timestamp for test,
+and the rest for training. For OOD testing, all samples are used. Table 19 lists the number of examples
+allocated to ID Train, ID Test, and OOD Test for each timestamp.
+The Shifts Precipitation Prediction dataset is provided as a CSV file. We ignore the latitude, longitude,
+and climate type metadata and filter out samples where at least one of the meteorological features
+is NaN. We shuffle Precipitation measurements in each month, and randomly select 10% of the
+measurements in each month as test-ID and allocate the remaining 90% for training. For OOD testing,
+all samples in each month are used.
+Evaluation Metrics. We evaluate models by their average and worst-time OOD accuracies. The
+former measures the model’s ability to generalize across time, while the latter additionally measures
+model robustness to trends in seasonal Precipitation patterns.
+Eval-Stream evaluates performance across the next 4 months, which represents 33.3% of all timestamps in the entire dataset and tests a model’s robustness to shifting meteorological measurements
+from seasonal Precipitation changes.
+F.3
+
+Results
+
+Experimental Setup. We follow [72] and use a FTTransformer [49], which is well-suited for deep
+learning with tabular data. We use all default architecture settings for the FTTransformer, except
+that the deep MLP in our FTTransformer has 2 layers, each of size 32 units, and uses LeakyReLU
+activation.
+We use the Adam optimizer with a fixed learning rate of 10−3 and train with a batch size of 128.
+Baselines were trained for 5000 iterations under the Eval-Fix setting and for 500 iterations under the
+Eval-Stream setting. In terms of hyperparameters for CORAL, GroupDRO and IRM, the CORAL
+penalty, IRM penalty, learning rate, the number of substreams and the size of substreams are set as
+0.9, 1.0, 10−3 , 3, 4, respectively.
+Results. Similar to Table 12, we reported the results of standard splits and mixed splits and the results
+of Eval-Stream and Eval-Fix in Figure 10. According to the performance between different splits, we
+can not observe clear performance gaps between standard split and mixed split. Thus, precipitation
+33
+
+Dataset
+
+Standard Split
+OOD Avg. OOD Worst
+
+Mixed Split
+OOD Avg. OOD Worst
+
+Precipitation
+
+46.08%
+
+47.56%
+
+44.15%
+
+45.51%
+
+50%
+45%
+40% May
+
+Oracle ID
+CORAL-T
+GroupDRO-T
+
+ERM
+LISA
+FT
+
+June
+
+Aug
+
+July
+Time
+
+Sept
+
+(b) Eval-Fix
+
+50%
+Worst OOD Accuracy
+
+Average OOD Accuracy
+
+Average OOD Accuracy
+
+(a) Performance drops of ERM with different splits on Precipitation dataset.
+46%
+CORAL-T
+GroupDRO-T
+IRM-T
+ERM
+LISA
+A-GEM
+
+42%
+38%
+
+Nov
+
+Jan
+
+Time
+
+EWC
+FT
+SI
+mixup
+SWA
+
+Mar
+
+May
+
+48%
+44%
+CORAL-T
+GroupDRO-T
+IRM-T
+ERM
+LISA
+A-GEM
+
+40%
+36%
+
+Nov
+
+Jan
+
+EWC
+FT
+SI
+mixup
+SWA
+
+Time
+
+Mar
+
+May
+
+(c) PCPN Avg (Eval-Stream) (d) PCPN Worst (Eval-Stream)
+
+Figure 10: Results on Precipitation. (b) out-of-distribution performance per test timestamp under
+Eval-Fix setting; (b) (c): results under Eval-Stream setting.
+dataset violates our first dataset selection criterion, and we decide not to include this dataset in the
+Wild-Time benchmark.
+F.3.1
+
+Broader Context
+
+Precipitation forecasting enhances public health, safety, and economic prosperity. Extreme Precipitation warnings can save lives and reduce property damage. Forecasts on temperature and precipitation
+are crucial to agriculture, and hence to traders on commodity markets. On a daily basis, many people
+use Precipitation forecasts on a daily basis. Precipitation forecasting comprises a large part of the
+economy: the United States alone spent 5.1 billion on Precipitation forecasting in 2009, resulting in
+benefits estimated to be 6 times as much [83].
+The Precipitation dataset, which contains heterogeneous tabular data, exhibits data that changes over
+time due to seasonal changes in Precipitation patterns. In addition, the distribution of the measurement
+locations are distributed non-uniformly across the planet. Certain climate regions, such as the polar
+caps, are under-represented, presenting further challenges [72].
+
+G
+
+User Guide and Maintenance Plan
+
+G.1
+
+User Guide of Wild-Time
+
+Licenses. The Wild-Time datasets and baselines are freely available for research purposes. Though
+Drug-BA and Precipitation are not included in the formal Wild-Time benchmark, we still include
+these datasets in the Wild-Time package. All code for Wild-Time is available under the MIT license.
+We list the licenses for each Wild-Time dataset below:
+• Yearbook: MIT License
+• FMoW-Time: The Functional Map of the World Challenge Public License
+• MIMIC-IV (Readmission and Mortality): PhysioNet Credentialed Health Data License 1.5.0
+• Drug-BA: MIT License
+• Precipitation: CC BY-NC 4.0
+• Huffpost: CC0: Public Domain
+• arXiv: CC0: Public Domain
+Hosting Platform. We will use GitHub as the hosting platform of code. We provide (1) detailed data
+preprocessing scripts to help users process the data from scratch, and (2) preprocessed data from each
+curated dataset except MIMIC-IV.
+Dependencies. Wild-Time is built upon Python 3.8+, and depends on PyTorch, PyTorch Tabular,
+PyTorch Transformers, PyTDC, Huggingface-Hub. Additionally, it uses numpy, scipy, and scikit-learn
+for data manipulation.
+34
+
+G.2
+
+Using the Wild-Time Package
+
+In this section, we discuss our open-sourced Python package that provides a simple interface to use
+the Wild-Time benchmark. Our Python package allows the users to use our datasets with a few lines
+of code. In addition, users can easily construct their own datasets or baselines on top of our package.
+Specifically, Figure 11 shows how to use APIs to load the Wild-Time datasets and train a baseline.
+Beyond the current APIs, we plan to provide standardized evaluation of methods using our dataset in
+the future.
+>>> import argparse
+>>> from WildTime import dataloader, baseline_trainer
+# Load the corresponding config for a specific baseline and dataset
+>>> from WildTime.configs.eval_fix.configs_fmow import configs_fmow_ewc
+>>> configs = argparse.Namespace(**configs_fmow_ewc)
+# If you only need data, you only need the get_data method
+>>> fmow_data = dataloader.getdata("fmow", configs)
+# If you need to run a baseline, use the following method
+>>> baseline_trainer.train(configs)
+
+Figure 11: Dataset initialization and baseline training.
+G.3
+
+Maintenance Plan
+
+Wild-Time will be maintained by the authors of this paper. The group can be contacted by raising
+an issue on the GitHub or by writing to the first authors. The dataset is currently hosted on Google
+Drive storage. The Wild-Time benchmark may be updated at the discretion of the authors. Updates
+may include adding more diverse baseline methods, datasets, and tasks, or updating infrastructure to
+improve efficiency. Updates which correct errors will replace previous versions of the datasets.
+We welcome contributions to the Wild-Time benchmark. Other parties may update the Wild-Time
+benchmark by submitting a pull request on GitHub. We are releasing the Wild-Time benchmark under
+the open-source MIT License. We permit other parties to create new datasets from the Wild-Time
+benchmark, given that the changes are documented and the Wild-Time benchmark is referenced.
+G.4
+
+Author Statement
+
+To the best of our knowledge, the released dataset and benchmark does not violate any existing
+licenses. However, if such a violation were to exist, the authors claim responsibility for resolving
+these issues.
+
+H
+
+Discussion
+
+H.1
+
+Limitations
+
+One limitation of this paper is that we do not categorize covariant shift and concept drift over time.
+Though, we’ve seen some sudden distribution shifts occur in our benchmark, we currently do not find
+a good way to precisely identify the reasons of sudden distribution shifts and further categorize them.
+We will focus on this in the next version.
+H.2
+
+Ethics Discussion
+
+The Wild-Time benchmark includes the Yearbook dataset, which is an adaptation of the Portraits
+dataset [26]. The task is binary gender prediction from yearbook photos of American high schoolers.
+We recognize the harmful ramifications of binary gender prediction. A binary gender prediction
+task excludes nonbinary individuals, may misgender transgender individuals, and may reinforce
+problematic gender norms.
+35
+
+The FMoW-Time dataset, adapted from the WILDS benchmark [55], involves geographic region
+prediction from satellite imagery and has applications to remote sensing. We recognize the privacy
+and surveillance issues surrounding remote sensing. We remark that FMoW-Time uses a lower image
+resolution than other publicly available satellite data, such as Google Maps. We also recognize
+that the FMoW-Time dataset raises issues of systematic bias and fairness. Specifically, the WILDS
+benchmark [55] found that models performed poorly on satellite images from Africa. As remote
+sensing is used for development and humanitarian purposes, poor model performance in certain
+geographic regions can harm certain populations. These issues are discussed in more detail in the
+UNICEF discussion paper by Berman et al. [6].
+The MIMIC dataset, adapted from the MIMIC-IV database [47], involves predicting patient mortality
+and readmission to the ICU. Ethical challenges associated with using artificial intelligence (AI)
+in healthcare include (1) informed consent to use, (2) safety and transparency, (3) fairness and
+algorithmic biases, and (4) data privacy [25]. The MIMIC-IV database adopted a permissive access
+scheme, allowing for broad reuse of data. With regards to patient privacy, we note that the MIMIC-IV
+database includes de-identified patient data [47]. We also note that the authors of Wild-Time followed
+proper credentialing protocol to access the MIMIC-IV dataset. To protect patient confidentiality, we
+do not release the MIMIC dataset. Instead, we provide instructions for how users can get credentialed
+on PhysioNet to download the MIMIC-IV dataset and provide a script to generate the MIMIC
+dataset. We recognize considerations of fairness and algorithmic bias for the MIMIC task. Several
+studies have found that AI algorithms exhibit biases with respect to ethnicity and gender [74, 79].
+Phenotype-related data in healthcare can similarly lead to biased models. This can result in incorrect
+diagnoses for certain subpopulations, endangering their safety. Finally, we emphasize the importance
+of robust and interpretable AI, especially in healthcare, where human safety is at stake. We hope that
+the MIMIC task can help lay the groundwork for further research in this direction. We refer readers
+to [46] for an in-depth discussion of the ethical issues surrounding AI in healthcare.
+H.3
+
+Comments on Designing Temporally Robust Models
+
+In our experiments, we found that most existing approaches can not effectively mitigate natural
+temporal distribution shifts. We believe that there are two important aspects to consider in resolving
+natural distribution shift:
+• Learning changeable temporal invariance. To build a robust model, it would be useful to learn
+invariance, which captures features in the data that remain invariant across different distributions.
+However, this is difficult to do when temporal distribution shift happens, as such invariance can
+also change over time, where one kind of invariance is only suitable for a specific time window.
+Capturing the correlations between different time windows and determining when and how to
+update the invariant model are crucial.
+• Leveraging supervised and unsupervised adaptation. In addition to maintaining a temporally
+invariant model, adapting to new timestamps is also necessary in tackling temporal distribution
+shifts. Here, we can leverage labeled data from timestamps in the near past and unlabeled observations from the current timestamp to fine-tune the model. How to combine temporal invariance with
+supervised and unsupervised adaptation to achieve effective adaptation remains an open problem.
+
+36
+
+Table 20: The in-distribution versus out-of-distribution test performance of each method evaluated on
+Wild-Time under the Eval-Fix setting. The average and standard deviation (value in parentheses) are
+computed over three random seeds. We bold the best OOD performance for each dataset.
+
+ID Avg.
+
+Yearbook
+(Accuracy (%) ↑)
+OOD Avg.
+OOD Worst
+
+ID Avg.
+
+FMoW-Time
+(Accuracy (%) ↑)
+OOD Avg.
+OOD Worst
+
+Fine-tuning
+EWC
+SI
+A-GEM
+
+95.43 (1.65)
+96.36 (0.47)
+96.40 (0.83)
+97.18 (0.43)
+
+81.98 (1.52)
+80.07 (0.22)
+78.70 (3.78)
+81.04 (1.40)
+
+69.62 (3.38)
+66.61 (1.95)
+65.18 (2.44)
+67.07 (2.23)
+
+47.67 (0.81)
+47.42 (0.64)
+47.41 (0.36)
+47.09 (0.36)
+
+44.22 (0.56)
+44.02 (0.65)
+44.25 (0.97)
+44.10 (0.65)
+
+36.59 (0.98)
+36.42 (1.56)
+37.14 (1.34)
+36.02 (0.61)
+
+ERM
+GroupDRO-T
+mixup
+LISA
+CORAL-T
+IRM-T
+
+97.99 (1.40)
+96.04 (0.45)
+96.42 (0.26)
+96.56 (0.97)
+98.19 (0.58)
+97.02 (1.52)
+
+79.50 (6.23)
+77.06 (1.67)
+76.72 (1.35)
+83.65 (4.61)
+77.53 (2.15)
+80.46 (3.53)
+
+63.09 (5.15)
+60.96 (1.83)
+58.70 (1.36)
+68.53 (5.79)
+59.34 (1.46)
+64.42 (4.38)
+
+58.07 (0.15)
+46.57 (0.57)
+56.93 (0.50)
+55.10 (0.26)
+52.60 (0.10)
+46.60 (1.40)
+
+54.07 (0.25)
+43.87 (0.55)
+53.67 (0.49)
+52.33 (0.42)
+49.43 (0.38)
+45.00 (1.18)
+
+46.00 (0.79)
+36.60 (1.25)
+44.57 (1.02)
+43.30 (0.75)
+41.23 (0.78)
+37.67 (1.17)
+
+SimCLR
+SwaV
+
+96.11 (0.92)
+96.24 (0.58)
+
+78.59 (2.72)
+78.38 (1.86)
+
+60.15 (3.48)
+60.73 (1.08)
+
+46.91 (0.65)
+47.31 (0.46)
+
+44.76 (0.17)
+44.92 (0.81)
+
+37.00 (0.44)
+37.17 (0.52)
+
+SWA
+
+98.46 (0.15)
+
+84.25 (3.06)
+
+67.90 (4.34)
+
+58.05 (0.14)
+
+54.06 (0.23)
+
+46.01 (0.78)
+
+MIMIC-Readmission
+(Accuracy (%) ↑)
+ID Avg.
+OOD Avg.
+OOD Worst
+
+ID Avg.
+
+MIMIC-Mortality
+(AUC (%) ↑)
+OOD Avg.
+OOD Worst
+
+Fine-tuning
+EWC
+SI
+A-GEM
+
+69.71 (10.8)
+77.78 (0.38)
+71.28 (6.22)
+73.56 (3.25)
+
+62.19 (3.71)
+66.40 (0.09)
+62.60 (3.27)
+63.95 (0.14)
+
+59.57 (4.43)
+64.69 (0.01)
+61.13 (3.39)
+62.66 (1.23)
+
+89.99 (0.98)
+89.53 (0.65)
+89.25 (0.84)
+88.74 (0.17)
+
+63.37 (1.91)
+62.07 (1.52)
+61.76 (0.58)
+61.78 (0.27)
+
+52.45 (2.64)
+50.41 (2.03)
+50.19 (1.25)
+50.40 (0.51)
+
+ERM
+GroupDRO-T
+mixup
+LISA
+CORAL-T
+IRM-T
+
+73.00 (2.94)
+69.70 (4.71)
+70.08 (2.14)
+70.52 (1.10)
+70.18 (4.72)
+72.33 (1.50)
+
+61.33 (3.45)
+56.12 (4.35)
+58.82 (4.03)
+56.90 (0.95)
+57.31 (4.45)
+56.53 (3.36)
+
+59.46 (3.66)
+54.69 (4.36)
+57.30 (4.77)
+54.01 (0.92)
+54.69 (4.36)
+52.67 (5.17)
+
+90.89 (0.59)
+89.22 (0.46)
+89.75 (1.04)
+89.29 (0.47)
+88.77 (0.97)
+89.49 (0.17)
+
+72.89 (8.96)
+76.88 (4.74)
+73.69 (7.83)
+76.34 (8.94)
+77.98 (2.57)
+76.17 (6.32)
+
+65.80 (12.3)
+71.40 (6.84)
+66.83 (11.1)
+71.14 (12.4)
+64.81 (10.8)
+70.64 (8.99)
+
+SWA
+
+72.62 (3.60)
+
+59.88 (5.48)
+
+57.68 (6.36)
+
+89.53 (1.96)
+
+69.53 (1.60)
+
+60.83 (2.73)
+
+ID Avg.
+
+HuffPost
+(Accuracy (%) ↑)
+OOD Avg.
+OOD Worst
+
+ID Avg.
+
+arXiv
+(Accuracy (%) ↑)
+OOD Avg.
+OOD Worst
+
+Fine-tuning
+EWC
+SI
+A-GEM
+
+76.79 (0.51)
+76.26 (0.32)
+76.97 (0.30)
+77.15 (0.07)
+
+69.59 (0.10)
+69.42 (1.00)
+70.46 (0.27)
+70.22 (0.50)
+
+68.91 (0.49)
+68.61 (0.98)
+69.05 (0.52)
+69.15 (0.88)
+
+51.42 (0.15)
+51.34 (0.13)
+51.52 (0.19)
+51.57 (0.18)
+
+50.31 (0.39)
+50.40 (0.11)
+50.21 (0.40)
+50.30 (0.37)
+
+48.19 (0.41)
+48.18 (0.18)
+48.07 (0.48)
+48.14 (0.40)
+
+ERM
+GroupDRO-T
+mixup
+LISA
+CORAL-T
+IRM-T
+
+79.40 (0.05)
+78.04 (0.26)
+80.15 (0.17)
+78.20 (0.53)
+78.19 (0.31)
+78.38 (0.51)
+
+70.42 (1.15)
+69.53 (0.54)
+71.18 (1.17)
+69.99 (0.60)
+70.05 (0.63)
+70.21 (1.05)
+
+68.71 (1.36)
+67.68 (0.78)
+68.89 (0.38)
+68.04 (0.75)
+68.39 (0.88)
+68.71 (1.13)
+
+53.78 (0.16)
+49.78 (0.22)
+51.40 (0.20)
+50.72 (0.31)
+53.25 (0.12)
+46.30 (0.53)
+
+45.94 (0.97)
+39.06 (0.54)
+45.12 (0.71)
+47.82 (0.47)
+42.32 (0.60)
+35.75 (0.90)
+
+44.09 (1.05)
+37.18 (0.52)
+43.23 (0.75)
+45.91 (0.42)
+40.31 (0.61)
+33.91 (1.09)
+
+SWA
+
+80.40 (0.22)
+
+70.98 (0.05)
+
+69.52 (0.10)
+
+51.42 (0.30)
+
+44.36 (0.77)
+
+42.54 (0.68)
+
+37
+
+

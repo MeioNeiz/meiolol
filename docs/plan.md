@@ -47,6 +47,9 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
    after the real champ select run, with the policy check in app.md
 7. Comp leans: held-out look ~24 Oct, then champion pages and reasons:
    data-and-model.md
+8. Training across patches (Jacob 21 Oct, 16.21 out): docs/plan/patch-transfer.md.
+   16.21's first day moved champions 0.75 pp (patched ones 1.9 pp); arms, newest-only
+   rolling evaluation, train-vs-eval curve; needs a drafts pin with 16.21
 
 Others own: the TW2 mastery retry (meiolol-8f); neural nets vs
 today's model; the draft's "Rammus into high AD/AP" check.
@@ -61,6 +64,8 @@ today's model; the draft's "Rammus into high AD/AP" check.
   work), data and ops proposal, neural nets
 - docs/plan/lab-frontier.md: gpu-box experiment programme (21 Oct): draft ceiling, the
   internal teacher model, ensembles, explaining it, causal and patch tests
+- docs/plan/patch-transfer.md: training on old patches for the newest, evaluated on
+  the newest only (21 Oct)
 - docs/plan/ops.md: crawler speed, traffic, storage and hosts, hosting reference
 - docs/plan/decisions.md: Jacob's decisions (J, Q, G ids), open decisions, ruled out
 - docs/plan/how-we-work.md: sessions, team size, unattended runs
