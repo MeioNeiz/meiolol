@@ -36,6 +36,15 @@ const detail_batch = 40;
 const timeline_batch = 60;
 /// Nap when a region has nothing due
 const idle_s = 15;
+/// Spare-budget timelines per round: few, so a player found meanwhile waits little
+const backfill_batch = 20;
+/// Snowball and blind rescans go before spare-budget timelines while they find this
+/// many new match ids per call: a match then costs about two calls, a timeline one
+const min_yield = 1.0;
+/// Snowball and blind rescans run at least this often, so their yield stays measured
+const probe_s = 600;
+/// Matches stored before start that the participant snowball still reads
+const snowball_backlog = 5000;
 const all_regions = std.enums.values(ep.Region);
 
 pub const Options = struct {
@@ -108,6 +117,10 @@ pub const Options = struct {
     fake: ?*const @import("fake.zig").Fake = null,
 };
 
+/// Why a player's match ids were fetched: the ladder shows new games, they were in a
+/// newly stored match, or a blind rescan
+pub const Source = enum { active, snowball, stale };
+
 const RegionCounters = struct {
     matches: std.atomic.Value(u64) = .init(0),
     timelines: std.atomic.Value(u64) = .init(0),
@@ -115,6 +128,11 @@ const RegionCounters = struct {
     /// Match ids new to the queue
     ids_found: std.atomic.Value(u64) = .init(0),
     requests: std.atomic.Value(u64) = .init(0),
+    calls_by: std.EnumArray(Source, std.atomic.Value(u64)) = .initFill(.init(0)),
+    found_by: std.EnumArray(Source, std.atomic.Value(u64)) = .initFill(.init(0)),
+    /// Timelines the sample skipped, fetched with spare budget
+    backfill: std.atomic.Value(u64) = .init(0),
+    idle_s: std.atomic.Value(u64) = .init(0),
 };
 
 const Counters = struct {
@@ -358,6 +376,18 @@ pub const Crawler = struct {
             ws.busy.load(.monotonic),
             ws.pages_written.load(.monotonic),
             ws.pages_read.load(.monotonic),
+        });
+        w = .fixed(&buf);
+        for (c.opts.regions) |r| {
+            const rc = &c.counters.region[@backingInt(r)];
+            w.print(" | {t}", .{r}) catch break;
+            for (std.enums.values(Source)) |s| {
+                w.print(" {t} {d}/{d}", .{ s, rc.calls_by.get(s).load(.monotonic), rc.found_by.get(s).load(.monotonic) }) catch break;
+            }
+            w.print(", {d} backfill t, {d} s idle", .{ rc.backfill.load(.monotonic), rc.idle_s.load(.monotonic) }) catch break;
+        }
+        log.info("scans, ids calls/new{s}", .{
+            w.buffered(),
         });
     }
 
@@ -724,16 +754,30 @@ const RegionCrawler = struct {
     flex_calls: u32 = 0,
     /// Each platform's patch whose start went to the writer (patchStarts)
     started: [ep.platforms.len]u32 = @splat(0),
+    /// matches rowid the snowball has read up to
+    snowball_after: i64 = 0,
+    /// game_start (ms) the spare-budget timeline walk goes on below, and when the walk
+    /// began
+    backfill_before: i64 = 0,
+    backfill_walk_at: i64 = 0,
+    /// Recent new match ids per call by source (snowball and stale used), and when each
+    /// next runs regardless. Snowball starts at 16.21 day's measure
+    yield: std.EnumArray(Source, f64) = .init(.{ .active = 0, .snowball = 2, .stale = 0 }),
+    probe_at: std.EnumArray(Source, i64) = .initFill(0),
 
     const Of = ep.Region;
 
     fn init(c: *Crawler, r: ep.Region) !RegionCrawler {
         const requests = &c.counters.region[@backingInt(r)].requests;
-        return .{
+        var rc: RegionCrawler = .{
             .b = try .init(c, @tagName(r), c.isPriorityRegion(r), requests),
             .region = r,
             .patches = c.patches,
         };
+        errdefer rc.b.deinit();
+        const newest = try rc.b.db.scalar("SELECT max(rowid) FROM matches", .{}) orelse 0;
+        rc.snowball_after = @max(0, newest - snowball_backlog);
+        return rc;
     }
 
     fn counters(rc: *RegionCrawler) *RegionCounters {
@@ -747,10 +791,80 @@ const RegionCrawler = struct {
         if (rc.b.c.opts.patch_only) try rc.patchStarts();
         const pending = try rc.b.db.scalar("SELECT count(*) FROM match_queue " ++
             "WHERE region = ? AND status = 'pending'", .{@tagName(rc.region)}) orelse 0;
-        const scanned = if (pending < pending_low) try rc.scanPlayers(scan_batch) else 0;
+        const scanned = if (pending < pending_low) try rc.scanPlayers(.useful) else 0;
         const matches = try rc.drain(.match, detail_batch);
         const timelines = try rc.drain(.timeline, if (matches == detail_batch) detail_batch else timeline_batch);
-        if (scanned + matches + timelines == 0) try rc.b.nap(idle_s);
+        if (scanned + matches + timelines == 0) try rc.spare();
+    }
+
+    /// Nothing queued and no player known to have new games: blind rescans while they
+    /// find enough, else timelines the sample skipped, else the snowball and blind
+    /// rescans anyway, else a nap
+    fn spare(rc: *RegionCrawler) !void {
+        if (rc.worth(.stale) and try rc.scanPlayers(.stale) > 0) return;
+        if (try rc.skippedTimelines() > 0) return;
+        if (try rc.scanPlayers(.snowball) > 0) return;
+        if (try rc.scanPlayers(.stale) > 0) return;
+        _ = rc.counters().idle_s.fetchAdd(idle_s, .monotonic);
+        try rc.b.nap(idle_s);
+    }
+
+    fn worth(rc: *RegionCrawler, s: Source) bool {
+        return rc.yield.get(s) >= min_yield or rc.b.now() >= rc.probe_at.get(s);
+    }
+
+    /// Ranked matches the timeline sample skipped (wantTimeline), long enough, newest
+    /// first: game_start (ms) below ?1, at least ?2. Uses matches_start
+    const skipped_timelines =
+        \\SELECT match_id, game_start FROM matches m
+        \\WHERE game_start < ?1 AND game_start >= ?2
+        \\    AND platform IN (SELECT value FROM json_each(?3))
+        \\    AND queue_id = ?4 AND remake = 0 AND duration_s >= ?5
+        \\    AND NOT EXISTS (SELECT 1 FROM timeline.timelines t WHERE t.match_id = m.match_id)
+        \\    AND NOT EXISTS (SELECT 1 FROM timeline_queue q WHERE q.match_id = m.match_id)
+        \\ORDER BY game_start DESC
+        \\LIMIT ?6
+    ;
+
+    /// Spare budget's timelines, a guaranteed result per call: a walk down from now to
+    /// since_days back, so the newest patch's come first, begun again hourly for the
+    /// matches stored since
+    fn skippedTimelines(rc: *RegionCrawler) !usize {
+        const c = rc.b.c;
+        const now = rc.b.now();
+        if (now - rc.backfill_walk_at >= 3600) {
+            rc.backfill_before = now * 1000;
+            rc.backfill_walk_at = now;
+        }
+        const floor = (now - c.opts.since_days * std.time.s_per_day) * 1000;
+        var arena: std.heap.ArenaAllocator = .init(c.gpa);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var q = try rc.b.db.prepare(skipped_timelines);
+        defer q.deinit();
+        try q.bind(.{ rc.backfill_before, floor, try rc.platformsJson(a), ep.ranked_solo, c.opts.timeline_min_s, backfill_batch });
+        var ids: std.ArrayList([]const u8) = .empty;
+        // Walked to the floor when none: nothing more until the next walk
+        rc.backfill_before = floor;
+        while (try q.step()) {
+            const r = q.row(struct { match_id: []const u8, game_start: i64 });
+            try ids.append(a, try a.dupe(u8, r.match_id));
+            rc.backfill_before = r.game_start;
+        }
+        for (ids.items) |id| {
+            try rc.b.check();
+            try rc.fetchTimeline(id);
+            _ = rc.counters().backfill.fetchAdd(1, .monotonic);
+        }
+        try rc.b.flush();
+        return ids.items.len;
+    }
+
+    /// The region's platform ids as a JSON array
+    fn platformsJson(rc: *const RegionCrawler, a: std.mem.Allocator) ![]const u8 {
+        var ids: std.ArrayList([]const u8) = .empty;
+        for (ep.platforms) |p| if (p.region == rc.region) try ids.append(a, p.id);
+        return std.json.Stringify.valueAlloc(a, ids.items, .{});
     }
 
     /// Once per platform and patch, so active_first skips players whose new ladder games
@@ -833,38 +947,73 @@ const RegionCrawler = struct {
         return try a.print("|{s}|", .{try std.mem.join(a, "|", tiers[0 .. min_tier + 1])});
     }
 
-    /// Priority platforms' players first, then the region's. Within those, never
-    /// scanned (NULL sorts first), then the stalest. PUUIDs are random, so ordering by
-    /// them samples players without favouring any rank or activity. Waits for the
-    /// writer, so the match queue has their ids
-    fn scanPlayers(rc: *RegionCrawler, n: u32) !u32 {
+    /// Sampled players in the region's newly stored matches, played after their last
+    /// scan: one who just played tends to have more games of the session (16.21 day: 1.6
+    /// to 3.5 more per scanned player with one). Matches in storage order after ?1, up
+    /// to ?2
+    const snowball_players =
+        \\SELECT p.puuid, p.matches_checked_at, p.platform, m.rowid, m.game_start / 1000
+        \\FROM matches m CROSS JOIN participants pa ON pa.match_id = m.match_id
+        \\CROSS JOIN players p ON p.puuid = pa.puuid
+        \\WHERE m.rowid > ?1 AND m.rowid <= ?2 AND m.platform IN (SELECT value FROM json_each(?3))
+        \\    AND (p.matches_checked_at IS NULL OR p.matches_checked_at < m.game_start / 1000)
+        \\    AND (?4 IS NULL OR instr(?4, '|' || p.tier || '|') > 0)
+        \\ORDER BY m.rowid
+        \\LIMIT ?5
+    ;
+
+    const Scan = enum { useful, snowball, stale };
+
+    /// .useful: players the ladder shows played since their last scan, most new games
+    /// first, then the snowball's while it finds enough. .stale: never scanned (NULL
+    /// sorts first), then the stalest; PUUIDs are random, so ordering by them samples
+    /// players without favouring any rank or activity. Priority platforms' players
+    /// first. Waits for the writer, so the match queue has their ids
+    fn scanPlayers(rc: *RegionCrawler, which: Scan) !u32 {
         const c = rc.b.c;
         var arena: std.heap.ArenaAllocator = .init(c.gpa);
         defer arena.deinit();
-        var s = try rc.b.db.prepare(scan_players);
-        defer s.deinit();
-        var active = try rc.b.db.prepare(new_games);
-        defer active.deinit();
-        const floor = try tierFloor(arena.allocator(), c.opts.min_tier);
+        const a = arena.allocator();
+        const floor = try tierFloor(a, c.opts.min_tier);
         var players: std.ArrayList(Player) = .empty;
         var filters: std.ArrayList(?[]const u8) = .empty;
         for (c.opts.priority) |id| {
             const p = ep.platform(id) orelse continue;
-            if (p.region == rc.region) try filters.append(arena.allocator(), id);
+            if (p.region == rc.region) try filters.append(a, id);
         }
-        try filters.append(arena.allocator(), null);
-        for (filters.items) |platform| {
-            if (c.opts.active_first) {
-                try active.bind(.{ @tagName(rc.region), platform, floor, n - players.items.len });
-                try takePlayers(arena.allocator(), &active, &players);
-            }
-            if (players.items.len == n) break;
-            try s.bind(.{ @tagName(rc.region), platform, rc.b.now() - c.opts.recheck_s, n - players.items.len, floor });
-            try takePlayers(arena.allocator(), &s, &players);
+        try filters.append(a, null);
+        switch (which) {
+            .useful => if (c.opts.active_first) {
+                var s = try rc.b.db.prepare(new_games);
+                defer s.deinit();
+                for (filters.items) |platform| {
+                    if (players.items.len == scan_batch) break;
+                    try s.bind(.{ @tagName(rc.region), platform, floor, scan_batch - players.items.len });
+                    try takePlayers(a, &s, &players, .active);
+                }
+                if (players.items.len < scan_batch and rc.worth(.snowball)) try rc.snowball(a, floor, &players);
+            },
+            .snowball => try rc.snowball(a, floor, &players),
+            .stale => {
+                var s = try rc.b.db.prepare(scan_players);
+                defer s.deinit();
+                for (filters.items) |platform| {
+                    if (players.items.len == scan_batch) break;
+                    try s.bind(.{ @tagName(rc.region), platform, rc.b.now() - c.opts.recheck_s, scan_batch - players.items.len, floor });
+                    try takePlayers(a, &s, &players, .stale);
+                }
+            },
+        }
+        const cs = rc.counters();
+        var calls_before: std.EnumArray(Source, u64) = undefined;
+        var found_before: std.EnumArray(Source, u64) = undefined;
+        for (std.enums.values(Source)) |src| {
+            calls_before.set(src, cs.calls_by.get(src).load(.monotonic));
+            found_before.set(src, cs.found_by.get(src).load(.monotonic));
         }
         for (players.items) |p| {
             try rc.b.check();
-            rc.scanPlayer(p.puuid, p.checked_at, p.platform) catch |err| {
+            rc.scanPlayer(p) catch |err| {
                 if (rc.b.fatal(err)) return err;
                 log.warn("{t} match ids: {t}", .{ rc.region, err });
                 // Marking them checked would skip their games since the last scan
@@ -877,48 +1026,84 @@ const RegionCrawler = struct {
             try rc.b.submit(job);
         }
         try rc.b.flush();
+        for (std.enums.values(Source)) |src| {
+            const calls = cs.calls_by.get(src).load(.monotonic) - calls_before.get(src);
+            if (calls == 0) continue;
+            const found = cs.found_by.get(src).load(.monotonic) - found_before.get(src);
+            const per_call = @as(f64, @floatFromInt(found)) / @as(f64, @floatFromInt(calls));
+            rc.yield.set(src, 0.7 * rc.yield.get(src) + 0.3 * per_call);
+            rc.probe_at.set(src, rc.b.now() + probe_s);
+        }
         return @intCast(players.items.len);
     }
 
-    const Player = struct { puuid: []const u8, checked_at: ?i64, platform: []const u8 };
-
-    /// Rows of new_games or scan_players, skipping players already taken
-    fn takePlayers(a: std.mem.Allocator, s: *store.Stmt, players: *std.ArrayList(Player)) !void {
+    /// Fills `players` from snowball_players, past every match it reads
+    fn snowball(rc: *RegionCrawler, a: std.mem.Allocator, floor: ?[]const u8, players: *std.ArrayList(Player)) !void {
+        const newest = try rc.b.db.scalar("SELECT max(rowid) FROM matches", .{}) orelse 0;
+        var s = try rc.b.db.prepare(snowball_players);
+        defer s.deinit();
+        // Rows over the batch: some are skipped below
+        const limit = 4 * scan_batch;
+        try s.bind(.{ rc.snowball_after, newest, try rc.platformsJson(a), floor, limit });
+        var rows: usize = 0;
         next: while (try s.step()) {
-            const r = s.row(Player);
+            rows += 1;
+            const r = s.row(struct { puuid: []const u8, checked_at: ?i64, platform: []const u8, rowid: i64, start_s: i64 });
+            rc.snowball_after = r.rowid;
+            if (rc.b.c.opts.patch_only) if (rc.patches.start(r.platform)) |start| if (r.start_s < start) continue;
             for (players.items) |p| if (std.mem.eql(u8, p.puuid, r.puuid)) continue :next;
             try players.append(a, .{
                 .puuid = try a.dupe(u8, r.puuid),
                 .checked_at = r.checked_at,
                 .platform = try a.dupe(u8, r.platform),
+                .source = .snowball,
+            });
+            if (players.items.len == scan_batch) return;
+        }
+        if (rows < limit) rc.snowball_after = newest;
+    }
+
+    const Player = struct { puuid: []const u8, checked_at: ?i64, platform: []const u8, source: Source };
+
+    /// Rows of new_games or scan_players, skipping players already taken
+    fn takePlayers(a: std.mem.Allocator, s: *store.Stmt, players: *std.ArrayList(Player), source: Source) !void {
+        next: while (try s.step()) {
+            const r = s.row(struct { puuid: []const u8, checked_at: ?i64, platform: []const u8 });
+            for (players.items) |p| if (std.mem.eql(u8, p.puuid, r.puuid)) continue :next;
+            try players.append(a, .{
+                .puuid = try a.dupe(u8, r.puuid),
+                .checked_at = r.checked_at,
+                .platform = try a.dupe(u8, r.platform),
+                .source = source,
             });
         }
     }
 
-    fn scanPlayer(rc: *RegionCrawler, puuid: []const u8, checked_at: ?i64, platform: []const u8) !void {
+    fn scanPlayer(rc: *RegionCrawler, p: Player) !void {
         const c = rc.b.c;
         const end = rc.b.now();
-        var start_time = @max(checked_at orelse 0, end - c.opts.since_days * 86400);
-        if (c.opts.patch_only) start_time = @max(start_time, rc.patches.start(platform) orelse 0);
+        var start_time = @max(p.checked_at orelse 0, end - c.opts.since_days * 86400);
+        if (c.opts.patch_only) start_time = @max(start_time, rc.patches.start(p.platform) orelse 0);
         var start: u32 = 0;
         while (true) : (start += 100) {
-            if (try rc.queueIds(puuid, ep.ranked_solo, start_time, end, start) < 100) break;
+            if (try rc.queueIds(p.puuid, p.source, ep.ranked_solo, start_time, end, start) < 100) break;
         }
         // One page: a sample of the player's flex games, not all of them
-        if (rc.flexDue(platform, end)) _ = try rc.queueIds(puuid, ep.ranked_flex, start_time, end, 0);
+        if (rc.flexDue(p.platform, end)) _ = try rc.queueIds(p.puuid, p.source, ep.ranked_flex, start_time, end, 0);
     }
 
     /// One page of the player's match ids in `queue`, onto the match queue; how many
-    fn queueIds(rc: *RegionCrawler, puuid: []const u8, queue: u16, start_time: i64, end: i64, start: u32) !usize {
+    fn queueIds(rc: *RegionCrawler, puuid: []const u8, source: Source, queue: u16, start_time: i64, end: i64, start: u32) !usize {
         const c = rc.b.c;
         const got = try ep.matchIds(&rc.b.client, rc.region, puuid, queue, start_time, end, start);
         defer if (got) |b| c.gpa.free(b);
         const body = got orelse "[]";
         _ = rc.counters().ids_calls.fetchAdd(1, .monotonic);
+        _ = rc.counters().calls_by.getPtr(source).fetchAdd(1, .monotonic);
         const job = try Job.create(c.gpa, .none);
         errdefer job.destroy(c.gpa);
         const ids = try ep.parse([]const []const u8, job.allocator(), try job.allocator().dupe(u8, body));
-        job.kind = .{ .match_ids = .{ .ids = ids, .discovered_at = end, .region = rc.region } };
+        job.kind = .{ .match_ids = .{ .ids = ids, .discovered_at = end, .region = rc.region, .source = source } };
         try rc.b.submit(job);
         return ids.len;
     }
@@ -1535,6 +1720,78 @@ test "active first: players the ladder shows played since their last scan, most 
     try std.testing.expectEqualStrings("SEARCH players USING INDEX players_new_games (region=? AND <expr>>?)", plan.bytes(3));
     // No temp B-tree: rows come in ORDER BY order straight from the index
     try std.testing.expect(!try plan.step());
+}
+
+test "snowball: sampled players of newly stored matches who played since their last scan" {
+    const db = try store.schema.memory();
+    defer db.close();
+    try db.exec(
+        \\INSERT INTO matches (match_id, source, platform, queue_id, patch, game_version,
+        \\    game_start, duration_s, remake) VALUES
+        \\    ('EUW1_1', 'riot', 'EUW1', 420, '16.21', '16.21.1', 5000, 1500, 0),
+        \\    ('EUW1_2', 'riot', 'EUW1', 420, '16.21', '16.21.1', 9000, 1500, 0),
+        \\    ('KR_1', 'riot', 'KR', 420, '16.21', '16.21.1', 9000, 1500, 0);
+        \\INSERT INTO participants (match_id, slot, team_id, puuid, champion_id, win) VALUES
+        \\    ('EUW1_1', 0, 100, 'new', 1, 1), ('EUW1_1', 1, 100, 'scanned', 1, 1),
+        \\    ('EUW1_2', 0, 100, 'gold', 1, 1), ('EUW1_2', 1, 100, 'stale', 1, 1),
+        \\    ('EUW1_2', 2, 100, 'unsampled', 1, 1), ('KR_1', 0, 100, 'kr', 1, 1);
+        \\INSERT INTO players (puuid, tier, matches_checked_at, source, platform, region) VALUES
+        \\    ('new', 'DIAMOND', NULL, 'ladder', 'EUW1', 'europe'),
+        \\    ('scanned', 'DIAMOND', 6, 'ladder', 'EUW1', 'europe'),
+        \\    ('gold', 'GOLD', NULL, 'ladder', 'EUW1', 'europe'),
+        \\    ('stale', 'PLATINUM', 2, 'ladder', 'EUW1', 'europe'),
+        \\    ('kr', 'DIAMOND', NULL, 'ladder', 'KR', 'asia');
+    );
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const plat = try RegionCrawler.tierFloor(a, 5);
+    const europe = "[\"EUW1\",\"EUN1\"]";
+    const got = try column(db, a, RegionCrawler.snowball_players, .{ 0, 10, europe, plat, 10 });
+    try std.testing.expectEqual(2, got.len);
+    try std.testing.expectEqualStrings("new", got[0]);
+    try std.testing.expectEqualStrings("stale", got[1]);
+    // Past the first match, and not past ?2
+    try std.testing.expectEqual(1, (try column(db, a, RegionCrawler.snowball_players, .{ 1, 10, europe, plat, 10 })).len);
+    try std.testing.expectEqual(1, (try column(db, a, RegionCrawler.snowball_players, .{ 0, 1, europe, plat, 10 })).len);
+}
+
+test "skipped timelines: long ranked matches without a timeline or queue row, newest first" {
+    const db = try store.schema.memory();
+    defer db.close();
+    try db.exec(
+        \\INSERT INTO matches (match_id, source, platform, queue_id, patch, game_version,
+        \\    game_start, duration_s, remake) VALUES
+        \\    ('EUW1_1', 'riot', 'EUW1', 420, '16.21', '16.21.1', 1000, 1500, 0),
+        \\    ('EUW1_2', 'riot', 'EUW1', 420, '16.21', '16.21.1', 2000, 1500, 0),
+        \\    ('EUW1_3', 'riot', 'EUW1', 420, '16.21', '16.21.1', 3000, 1500, 0),
+        \\    ('EUW1_4', 'riot', 'EUW1', 420, '16.21', '16.21.1', 4000, 600, 0),
+        \\    ('EUW1_5', 'riot', 'EUW1', 440, '16.21', '16.21.1', 5000, 1500, 0),
+        \\    ('EUW1_6', 'riot', 'EUW1', 420, '16.21', '16.21.1', 6000, 1500, 0),
+        \\    ('EUW1_7', 'riot', 'EUW1', 420, '16.21', '16.21.1', 7000, 1500, 1),
+        \\    ('KR_1', 'riot', 'KR', 420, '16.21', '16.21.1', 6500, 1500, 0);
+        \\INSERT INTO timeline.timelines VALUES ('EUW1_2', 1, 1, x'00');
+        \\INSERT INTO timeline_queue (match_id, region, queued_at) VALUES ('EUW1_3', 'europe', 1);
+    );
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const europe = "[\"EUW1\",\"EUN1\"]";
+    const got = try column(db, a, RegionCrawler.skipped_timelines, .{ 10000, 0, europe, ep.ranked_solo, 900, 10 });
+    try std.testing.expectEqual(2, got.len);
+    try std.testing.expectEqualStrings("EUW1_6", got[0]);
+    try std.testing.expectEqualStrings("EUW1_1", got[1]);
+    try std.testing.expectEqual(1, (try column(db, a, RegionCrawler.skipped_timelines, .{ 6000, 0, europe, ep.ranked_solo, 900, 10 })).len);
+    var plan = try db.prepare("EXPLAIN QUERY PLAN " ++ RegionCrawler.skipped_timelines);
+    defer plan.deinit();
+    try plan.bind(.{ 10000, 0, europe, ep.ranked_solo, 900, 10 });
+    var uses_start = false;
+    while (try plan.step()) {
+        if (std.mem.indexOf(u8, plan.bytes(3), "matches_start") != null) uses_start = true;
+        // Rows in game_start order straight from the index
+        try std.testing.expect(std.mem.indexOf(u8, plan.bytes(3), "TEMP B-TREE") == null);
+    }
+    try std.testing.expect(uses_start);
 }
 
 test "patches: newest per platform, from its first game seen" {

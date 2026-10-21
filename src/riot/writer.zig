@@ -70,10 +70,11 @@ pub const Kind = union(enum) {
     /// blob null: Riot does not know the PUUID, so the player goes
     mastery: struct { puuid: []const u8, platform: []const u8, t: i64, champions: usize, blob: ?[]const u8 },
     /// found: ids new to the queue, set by apply
-    match_ids: struct { ids: []const []const u8, discovered_at: i64, region: ep.Region, found: u32 = 0 },
+    match_ids: struct { ids: []const []const u8, discovered_at: i64, region: ep.Region, source: crawl.Source = .stale, found: u32 = 0 },
     checked: struct { puuid: []const u8, t: i64 },
-    /// The platform's newest patch began at start_s: games a ladder counted before it
-    /// are an older patch's, so they stop putting the player first for a scan
+    /// The platform's newest patch began at start_s: games counted since a scan or
+    /// ladder sighting before it may be an older patch's, so they stop putting the
+    /// player first for a scan
     patch_start: struct { platform: ep.Platform, start_s: i64 },
     /// id: the queue's, in case Riot's document names another. timeline false: an older
     /// patch's match under --patch-only, stored without one
@@ -307,7 +308,11 @@ pub const Writer = struct {
             switch (job.kind) {
                 .match => |m| _ = wr.c.counters.region[@backingInt(m.region)].matches.fetchAdd(1, .monotonic),
                 .timeline => |t| _ = wr.c.counters.region[@backingInt(t.region)].timelines.fetchAdd(1, .monotonic),
-                .match_ids => |q| _ = wr.c.counters.region[@backingInt(q.region)].ids_found.fetchAdd(q.found, .monotonic),
+                .match_ids => |q| {
+                    const rc = &wr.c.counters.region[@backingInt(q.region)];
+                    _ = rc.ids_found.fetchAdd(q.found, .monotonic);
+                    _ = rc.found_by.getPtr(q.source).fetchAdd(q.found, .monotonic);
+                },
                 .mastery => |m| if (m.blob != null) {
                     _ = wr.c.counters.mastery.fetchAdd(1, .monotonic);
                 },
@@ -786,11 +791,15 @@ const Stmts = struct {
         \\SELECT ?1, ?2, ?3 WHERE NOT EXISTS (SELECT 1 FROM matches WHERE match_id = ?1)
         ,
         .checked = "UPDATE players SET matches_checked_at = ?, games_checked = wins + losses WHERE puuid = ?",
-        // Through players_new_games: only the rows with games pending
+        // Through players_new_games: only the rows with games pending. A scan before
+        // the patch moves to its start, which --patch-only's ids window starts at anyway,
+        // so a rerun (every start) leaves rows alone once reset. Never scanned: by the
+        // ladder sighting alone, as matches_checked_at marks the scan pool
         .patch_start =
-        \\UPDATE players SET games_checked = wins + losses
+        \\UPDATE players SET games_checked = wins + losses,
+        \\    matches_checked_at = max(matches_checked_at, ?3)
         \\WHERE region = ?1 AND games_checked IS NOT NULL AND wins + losses - games_checked > 0
-        \\    AND platform = ?2 AND rank_seen_at < ?3
+        \\    AND platform = ?2 AND (matches_checked_at < ?3 OR rank_seen_at < ?3)
         ,
         .raw_doc = "INSERT OR REPLACE INTO raw.raw_docs VALUES (?,?,?,?)",
         .participant_player =
@@ -1296,21 +1305,31 @@ test "games_checked: from the ladder's previous counts, reset by a scan or a new
     try std.testing.expectEqual(@as(?i64, 0), try db.scalar(pending, .{"old"}));
 }
 
-test "patch_start: ladder games counted before the patch are no longer pending" {
+test "patch_start: games counted since a sighting or scan before the patch are no longer pending" {
     const db = try store.schema.memory();
     defer db.close();
     var s: Stmts = try .init(db);
     defer s.deinit();
     const Row = struct { []const u8, i64, []const u8 };
-    const first = [_]Row{ .{ "before", 5, "EUW1" }, .{ "after", 5, "EUW1" }, .{ "eune", 5, "EUN1" } };
+    const first = [_]Row{ .{ "before", 5, "EUW1" }, .{ "after", 5, "EUW1" }, .{ "scanned", 5, "EUW1" }, .{ "eune", 5, "EUN1" } };
     for (first) |r| try s.ladder_player.exec(.{ r[0], "GOLD", "I", 0, 10, 10, r[1], r[2], "europe" });
-    const later = [_]Row{ .{ "before", 50, "EUW1" }, .{ "after", 150, "EUW1" }, .{ "eune", 50, "EUN1" } };
+    try s.checked.exec(.{ 6, "scanned" });
+    const later = [_]Row{ .{ "before", 50, "EUW1" }, .{ "after", 150, "EUW1" }, .{ "scanned", 150, "EUW1" }, .{ "eune", 50, "EUN1" } };
     for (later) |r| try s.ladder_player.exec(.{ r[0], "GOLD", "I", 0, 12, 10, r[1], r[2], "europe" });
     try s.patch_start.exec(.{ "europe", "EUW1", 100 });
     const pending = "SELECT wins + losses - games_checked FROM players WHERE puuid = ?";
+    const checked = "SELECT matches_checked_at FROM players WHERE puuid = ?";
     try std.testing.expectEqual(@as(?i64, 0), try db.scalar(pending, .{"before"}));
+    try std.testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT matches_checked_at IS NULL FROM players WHERE puuid = ?", .{"before"}));
+    // Never scanned, seen since the patch: its games may be the patch's
     try std.testing.expectEqual(@as(?i64, 2), try db.scalar(pending, .{"after"}));
+    try std.testing.expectEqual(@as(?i64, 0), try db.scalar(pending, .{"scanned"}));
+    try std.testing.expectEqual(@as(?i64, 100), try db.scalar(checked, .{"scanned"}));
     try std.testing.expectEqual(@as(?i64, 2), try db.scalar(pending, .{"eune"}));
+    // A restart sends it again: games seen since stay pending
+    try s.ladder_player.exec(.{ "scanned", "GOLD", "I", 0, 13, 10, 200, "EUW1", "europe" });
+    try s.patch_start.exec(.{ "europe", "EUW1", 100 });
+    try std.testing.expectEqual(@as(?i64, 1), try db.scalar(pending, .{"scanned"}));
     var plan = try db.prepare("EXPLAIN QUERY PLAN " ++ Stmts.sql.patch_start);
     defer plan.deinit();
     try plan.bind(.{ "europe", "EUW1", 100 });
