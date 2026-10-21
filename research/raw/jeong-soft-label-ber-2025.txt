@@ -1,0 +1,4680 @@
+Published as a conference paper at ICLR 2026
+
+P RACTICAL ESTIMATION OF THE OPTIMAL CLASSIFI CATION ERROR WITH SOFT LABELS AND CALIBRATION
+Ryota Ushio1,2 , Takashi Ishida2,1 , Masashi Sugiyama2,1
+The University of Tokyo, Tokyo, Japan
+2
+RIKEN AIP, Tokyo, Japan
+{ushio@ms.,ishida@,sugiyama@}k.u-tokyo.ac.jp
+
+arXiv:2505.20761v4 [cs.LG] 12 May 2026
+
+1
+
+A BSTRACT
+While the performance of machine learning systems has experienced significant
+improvement in recent years, relatively little attention has been paid to the fundamental question: to what extent can we improve our models? This paper provides a means of answering this question in the setting of binary classification,
+which is practical and theoretically supported. We extend a previous work that
+utilizes soft labels for estimating the Bayes error, the optimal error rate, in two
+important ways. First, we theoretically investigate the properties of the bias of
+the hard-label-based estimator discussed in the original work. We reveal that
+the decay rate of the bias is adaptive to how well the two class-conditional distributions are separated, and it can decay significantly faster than the previous
+result suggested as the number of hard labels per instance grows. Second, we
+tackle a more challenging problem setting: estimation with corrupted soft labels. One might be tempted to use calibrated soft labels instead of clean ones.
+However, we reveal that calibration guarantee is not enough, that is, even perfectly calibrated soft labels can result in a substantially inaccurate estimate. Then,
+we show that isotonic calibration can provide a statistically consistent estimator under an assumption weaker than that of the previous work. Our method
+is instance-free, i.e., we do not assume access to any input instances. This
+feature allows it to be adopted in practical scenarios where the instances are
+not available due to privacy issues. Experiments with synthetic and real-world
+datasets show the validity of our methods and theory. The code is available at
+https://github.com/RyotaUshio/bayes-error-estimation.
+
+1
+
+I NTRODUCTION
+
+It is a common practice in the field of machine learning research to assess the performance of a
+newly proposed algorithm using one or more metrics and compare them to the previous state-ofthe-art (SOTA) performance to show its effectiveness (Neu, 2024; Int, 2025a;b). In classification,
+arguably the most common one is the error rate, i.e., the expected frequency of misclassification for
+future data.
+While the SOTA performance continues to improve for a wide range of benchmarks over time,
+there is a limit on the prediction performance that any machine learning model can achieve, which
+is determined by the underlying data distribution. It is important to know this limit, or the best
+achievable performance. For example, if the current SOTA performance is close enough to the
+limit, there is no point in seeking further improvement. It is not only wasteful in terms of time
+and financial resources but also harmful to the environment, since large-scale machine learning
+models are notorious for their high energy consumption (Strubell et al., 2020; Luccioni et al., 2023).
+Knowing the best possible performance also provides a practical check for test-set overfitting (Recht
+et al., 2018; Ishida et al., 2023): if a model’s score on the test set approaches or even exceeds the
+upper bound, it may be a signal of the model directly training on the test set.
+In classification, the best achievable error rate for a given data distribution is called the Bayes error,
+and the estimation of the Bayes error has a rich history of research (Fukunaga and Hostetler, 1975;
+Devijver, 1985; Berisha et al., 2014; Moon et al., 2018; Noshad et al., 2019; Theisen et al., 2021;
+1
+
+Published as a conference paper at ICLR 2026
+
+Ishida et al., 2023; Jeong et al., 2023). In the case of binary classification, the existing approaches
+can be roughly categorized into two groups: the majority of estimation from instance-label pairs
+(x1 , y1 ), . . . , (xn , yn ) ∈ X × {0, 1} (Fukunaga and Hostetler, 1975; Devijver, 1985; Berisha et al.,
+2014; Moon et al., 2018; Noshad et al., 2019; Theisen et al., 2021), where X is the space of instances,
+and the recently proposed methods of estimation from soft labels η1 , . . . , ηn ∈ [0, 1] (Ishida et al.,
+2023; Jeong et al., 2023). A soft label is a special type of supervision that represents the posterior
+class probability ηi := P(y = 1 | x = xi ), i ∈ {1, . . . , n}, and it quantifies the uncertainty
+of class labels associated with each instance xi . The strength of the methods proposed in (Ishida
+et al., 2023; Jeong et al., 2023) based on soft labels is that they are instance-free, i.e., they do not
+n
+require access to the instances {xi }i=1 . Since the instances themselves are not used for estimation,
+these methods do not suffer from the curse of dimensionality even when dealing with very highdimensional data. Moreover, the instance-free property is practically valuable since it makes the
+methods easy to apply to real-world problems, such as medical diagnoses, where the instances are
+often inaccessible due to privacy concerns. However, these methods have a crucial limitation: they
+assume that we have direct access to clean soft labels ηi = P(y = 1 | x = xi ), which only an oracle
+would know. Ishida et al. (2023) also discussed a scenario where each soft label ηi is approximated
+Pm (j)
+(1)
+(m)
+1
+by an average ηbi = m
+of m hard labels yi , . . . , yi per instance. They showed that,
+j=1 yi
+for a fixed number n of samples, the bias of the resulting estimator approaches zero as m tends to
+infinity. However, their bound on the bias is prohibitively large for practical values of m, and thus
+the theoretical guarantee for this estimator is weak.
+Another issue is labeling distribution shift. For
+example, whereas the images in the original
+CIFAR-10 dataset (Krizhevsky, 2009) can be
+regarded as though they were annotated before they were downscaled, the images in the
+CIFAR-10H dataset (Peterson et al., 2019) were
+annotated after downscaling, making the task
+more challenging and thus increasing label un- Figure 1: The Bayes error estimated with the
+certainty. 1 Given that the Bayes error can be method of Ishida et al. (2023) is larger than the test
+interpreted as the average label uncertainty, we error of a Vision Transformer (Dosovitskiy et al.,
+will get an unreasonably high estimate of the 2021).
+Bayes error if we just plug the soft labels in
+CIFAR-10H into their estimator, as shown in Fig. 1. In general, a similar issue can arise due to
+subjectivity of human soft labelers, or the bias of using large language models (LLMs) as annotators
+(Gilardi et al., 2023; Tjuatja et al., 2024). Recent work has explored a range of techniques to obtain
+soft labels and confidence scores from LLMs, but constructing a high-quality soft label remains to
+be a challenge (Xie et al., 2024; Kadavath et al., 2022; Argyle et al., 2023). This distortion issue
+due to the distribution shift was also mentioned by Ishida et al. (2023), but no solution was shown
+in their paper.
+Contribution of this paper We extend the previous work by Ishida et al. (2023) that utilizes soft
+labels for estimating the Bayes error, the optimal error rate, in two important ways.
+First, we deepen the theoretical understanding of the bias of the hard-label-based estimator discussed
+in the original work. Specifically, we show that the decay speed of the bias depends on how well the
+two class-conditional distributions are separated, and it can approach zero significantly faster than
+the previous result suggested as the number m of hard labels per instance grows.
+Second, we discuss a new, more challenging problem of estimation from corrupted soft labels. In
+this scenario, we are given a distorted version of the clean soft labels. The distortion can arise from a
+shifted labeling distribution or subjectivity of human/LLM soft labelers. It reflects many real-world
+problems including the estimation of best achievable performances for benchmark datasets and esti1
+
+For more information, CIFAR-10 was curated as follows. First, images for each class were collected by
+searching for the class label or its hyponym on the Internet. Second, the images were downscaled to 32 × 32.
+Finally, human labelers were asked to filter out mislabeled images. On the other hand, CIFAR-10H is a softlabeled version of CIFAR-10, i.e., it consists of 10,000 test images of the CIFAR-10 test set along with their
+soft labels. Each soft label was obtained as an average of 47–63 hard labels, which were collected by asking
+human labelers to answer which class the downscaled image belongs to. As a result, the labeling processes are
+significantly different between these two datasets.
+
+2
+
+Published as a conference paper at ICLR 2026
+
+mation from soft labels obtained from subjective confidence. One might be tempted to use calibrated
+soft labels in place of clean ones. However, we reveal that calibration guarantee is not enough, i.e.,
+even perfectly calibrated soft labels can result in a substantially inaccurate Bayes error estimate,
+which highlights the importance of choosing appropriate calibration algorithms. Then, we show
+that a classical calibration algorithm called isotonic calibration (Zadrozny and Elkan, 2002) can
+provide a statistically consistent estimator as long as the original soft labels are correctly ordered.
+
+2
+
+F INE - GRAINED ANALYSIS OF THE BIAS
+
+We first explain the preliminaries for this section and then present our main results.
+2.1
+
+P RELIMINARIES
+
+Formulation and notations
+Let X ⊂ Rd and Y be the spaces of instances and output labels,
+respectively. In this paper, we confine ourselves to binary classification problems and thus we set
+Y = {0, 1}. Classes 1 and 0 are also called the positive and negative classes, respectively. Let P be
+a distribution over X × Y and (x, y) be a pair of random variables following P, where x ∈ Rd is
+an input instance and y ∈ {0, 1} is the corresponding class label. Throughout this paper, x1 , . . . , xn
+are n i.i.d. samples drawn from the marginal distribution PX over the input space X . We denote
+by P1 , P0 two class-conditional distributions over the input space X given y = 1 and y = 0,
+respectively. Note that PX = θP1 + (1 − θ)P0 , where θ := P(y = 1) ∈ (0, 1) is the base rate.
+η(x) is the clean soft label for an instance x, i.e., the posterior probability P(y = 1 | x) of y = 1
+given x. The expectation and the variance with respect to the marginal PX are denoted by E and
+Var, respectively.
+For any positive integer n, we denote [n] := {1, . . . , n}. An indicator function is denoted by 1 [·].
+Given a sequence of n random variables z1 , . . . , zn , we use a shorthand z1:n = (z1 , . . . , zn ). For
+µ ∈ Rd and Σ ∈ Rd×d , N (µ, Σ) is the Gaussian distribution with mean µ and covariance Σ.
+Estimating the best possible performance with soft labels Among the most commonly used
+performance measures would be the error rate. The error rate of a classifier h : X → Y is defined
+as Err(h) := E(x,y)∼P [1 [y ̸= h(x)]], where (x, y) is a test instance-label pair drawn independently
+of training data. The best possible error rate Err∗ := inf h:X →Y Err(h) is called the Bayes error
+(Mohri et al., 2018).2
+Recall that η(x) := P(y = 1 | x). Ishida et al. (2023) proposed a direct approach to estimating
+n
+the Bayes error Err∗ assuming access to the soft labels {η(xi )}i=1 rather than instance-label pairs
+n
+{(xi , yi )}i=1 . Its derivation is outlined as follows. First, it is well-known that the Bayes error can
+be expressed as Err∗ = Ex∼PX [min {η(x), 1 − η(x)}] (Cover, 1968). Replacing the expectation
+n
+with a sample average over {xi }i=1 , they obtained an unbiased estimator
+n
+X
+d∗ (η1:n ) := 1
+Err
+min {ηi , 1 − ηi } ,
+n i=1
+
+(1)
+
+where ηi := η(xi ). It is also statistically consistent, or more
+q specifically, for any δ ∈ (0, 1), with
+∗
+∗
+d (η1:n ) − Err ≤ log(2/δ) .
+probability at least 1 − δ, we have Err
+8n
+
+In practical terms, the instance-free nature of this method exhibits considerable advantages over existing methods described in Appendix A despite its simplicity. It can be applied to settings where
+input instances themselves are unavailable, e.g., due to privacy issues. On the other hand, one
+of the crucial drawbacks of this method is that clean soft labels are usually inaccessible in practice.
+Therefore, we have no choice but to substitute some estimates for them. Ishida et al. (2023) also conPm (j)
+1
+sidered a setting where ηi is approximated by an average of hard labels ηbi := m
+j=1 yi , where
+(1)
+
+(m)
+
+yi , . . . , yi are m hard labels each of which is drawn independently from the posterior distribu(1)
+(m)
+tion of the class labels given the instance xi . In practice, yi , . . . , yi could be collected by asking
+m different human labelers to answer whether xi belongs to class 1. CIFAR-10H (Peterson et al.,
+2
+
+The infimum is taken over all measurable functions.
+
+3
+
+Published as a conference paper at ICLR 2026
+
+2019) and Fashion-MNIST-H (Ishida et al., 2023) are examples of a dataset constructed as such.
+Pn
+d∗ (b
+ηi , 1 − ηbi }.
+By plugging ηbi in place of ηi , they obtained the estimator Err
+η1:n ) = n1 i=1 min {b
+They showed that the bias is bounded as
+r
+√
+h
+i
+1
+log(2n m)
+∗
+∗
+d
+E Err (b
+η1:n ) − Err ≤ √ +
+,
+(2)
+m
+2 m
+√
+and thus vanishes as m → ∞ given n fixed. However, the rate Õ (1/ m) is quite slow given
+that m is typically much smaller than n. For example, in the case of the CIFAR-10H dataset, each
+image is given only around 50 hard labels. Later in Section 2.2, we will show that this rate can be
+significantly improved for well-conditioned distributions. In addition, the second term on the righthand side of (2) increases as n grows, which appears to be unnatural. We also show that the bias can
+be upper-bounded by a quantity irrelevant to n.
+2.2
+
+M AIN RESULTS
+
+Improved bound on the bias The following theorem provides a new bound on the bias of the
+d∗ (b
+estimator Err
+η1:n ). The proofs for all results in this section can be found in Appendix B.
+Theorem 1. We have
+r
+
+
+
+h
+i
+LErr (η(x))
+π
+d∗ (b
+− E min
+,
+≤ E Err
+η1:n ) − Err∗ ≤ 0,
+(3)
+x∼PX
+m
+2m
+where LErr (q) is q(1−q)
+|2q−1| if q ̸= 0.5 and ∞ if q = 0.5.
+First of all, we note that our upper bound does not contain n unlike the existing result (2) by Ishida
+et al. (2023). More importantly, our bound (3) indeed improves upon theirs
+(Proposition
+1). We only
+h
+i
+p π
+d∗ (b
+≤ E Err
+η1:n ) − Err∗ ≤ 0.
+need a weaker version of (3) to show the improvement: − 2m
+(η(x))
+Although the LErrm
+term in the left-hand side of (3) is unnecessary to improve the previous result
+(2), it provides further insights. Fig. 5 in Appendix B shows the graph of the function LErr (p). It
+takes a near-zero value when p is close to 0 or 1 and diverges to infinity as p → 0.5. This means
+that LErr (η(x)) is large for instances x close to the Bayes-optimal decision boundary η(x) = 0.5,
+while it is close to zero for instances far away from it. Therefore, the rate at
+√ which the bias decays
+can be understood as a mixture of the fast rate 1/m and the slower rate 1/ m, whose weights are
+determined by how well the two classes are separated. We validate this with numerical expeirments
+in Appendix B.3.
+
+Well-separated cases Here we note that real-world datasets often have well-separated classes;
+see, e.g., Fig. 6 in Appendix B. If the two classes are perfectly
+√ separated, the bias can decay at the
+fast rate O(1/m), as opposed to the worst cases rate O(1/ m).
+Corollary 1. Suppose there exists a constant c > 0 such that |η(x) − 0.5| ≥ c holds almost surely.
+Then, we have
+h
+i
+1 − 4c2
+d∗ (b
+−
+≤ E Err
+η1:n ) − Err∗ ≤ 0.
+(4)
+8cm
+The assumption of Corollary 1 is satisfied by, for example, the following distribution.
+Example 1 (Perfectly separated distributions with label noise). Consider two continuous distributions F0 , F1 over X with disjoint supports. An instance-label pair (x, y) is generated as follows.
+First, an index k is selected from {0, 1} with equal probability. Given k, x and y are generated
+conditionally independently as follows: (i) The instance x is sampled from Fk . (ii) The label y is
+set to 1 − k with conditional probability ν and k with conditional probability 1 − ν, where ν ̸= 0.5.
+Then, the assumption of Corollary 1 is satisfied for c = |ν − 0.5|.
+Computable bound for general cases Our results so far (Theorem 1 and Corollary 1) provide
+tigher bounds and a more detailed perspective on the bias. However, a downside of those results is
+that, in order to compute the numerical values of the lower bounds directly, we need to know some
+characteristics of the data distribution that might not be available in most practical scenarios. The
+good news is that we can still derive a computable bound that only requires an upper bound on the
+Bayes error, e.g., the error rate of the SOTA model, from Theorem 1.
+4
+
+Published as a conference paper at ICLR 2026
+
+h
+i
+d∗ (b
+Corollary 2. Assume that Err∗ ≤ E. Then, we have −B(E, m) ≤ E Err
+η1:n ) − Err∗ ≤ 0,
+where
+
+
+r
+
+t(1 − t) 1
+π
+E
+B(E, m) := inf
++ min 1,
+.
+(5)
+1 − 2t m
+t
+2m
+t∈(0,1/2)
+100
+Maximum bias
+
+The function B(E, m) can be computed numerically
+without any information about the data distribution,
+except for an upper bound of the Bayes error, E. Fig. 2
+shows the magnitude of our lower bound, B(E, m),
+for various values of E (the blue line). It also shows
+the existing bias bound by Ishida et al. (2023) (the orange line). This comparison demonstrates that Corollary 2 is a substantial improvement over the existing
+result across the entire range of the parameter E.
+
+10 1
+10 2
+
+Our result (B(E, m))
+Ishida et al. (2023)
+Let us take the binarized3 CIFAR-10 test set as an
+10 3 4
+example. It consists of n = 10000 instances, each
+10
+10 1
+10 3
+10 2
+of which has a soft label obtained as the average of
+E
+around m = 50 hard labels from the CIFAR-10H
+dataset. As the parameter E, we can use the Vision Figure 2: A comparison of our bias bound
+Transformer (Dosovitskiy et al., 2021)’s empirical er- (Corollary 2) and the existing bound by
+ror rate of 0.0005 reported by Ishida et al. (2023), Ishida et al. (2023) with n = 10000, m =
+which is shown by the black dashed line in Fig. 2. 50. The dashed line indicates the test error
+While the existing bound suggests the bias of the hard- (0.05%) of the SOTA model for the binad∗ (b
+label-based estimator Err
+η1:n ) could be as large as rized CIFAR-10 dataset, which we can use
+0.557, our bound reveals the estimator is not that bad; as E in Corollary 2. Our bound is over 200
+indeed, it implies the bias is never larger than 0.00276. times tighter than the existing one in this
+In this case, our result is over 200 times tighter than setup.
+theirs.
+d∗ (b
+Theorem 1 also implies the estimator Err
+η1:n ) is statistically consistent; see Corollary 3 for details.
+
+3
+
+E STIMATION FROM CORRUPTED SOFT LABELS
+
+This section tackles a more challenging setting where we do not have access to the true posterior
+probability η. This setting reflects many real-world problems, such as in medical diagnosis where a
+doctor’s subjective confidence in their decision can be regarded as a soft label, or when practitioners provide automated soft labels with LLMs in place of human annotators. However, there is no
+guarantee that it exactly reflects the true underlying probability.
+In this section, we consider a problem setting where each instance xi is given a real number η̃i ∈
+[0, 1], which is expected to approximate the clean soft label ηi in some sense but not necessarily
+n
+identical to ηi . We call {η̃i }i=1 corrupted soft labels. How can we estimate the Bayes error when
+only corrupted soft labels are available instead of clean ones? Estimation with a provable guarantee
+will be impossible without some assumption on the quality of the soft labels. Then, what guarantee
+can be provided under what assumption?
+3.1
+
+P RELIMINARIES
+
+In addition to the preliminaries introduced in Section 2.1, we briefly review a few more required for
+the discussion in this section.
+Calibration Predicting accurate class labels is not always sufficient in classification problems.
+It is often crucial to obtain reliable probability estimates, especially in high-stakes applications including personalized medicine (Jiang et al., 2012) and meteorological forecasting (Murphy, 1973;
+DeGroot and Fienberg, 1983).
+3
+
+See Section 4.1 for details.
+
+5
+
+Published as a conference paper at ICLR 2026
+
+A popular notion to capture the quality of probability estimates is calibration. A probabilistic classifier c is said to be well-calibrated if the predicted probabilities closely match the actual frequencies
+of the class labels (Kull et al., 2017), i.e., c(x) = E [y | c(x)] almost surely. While one might hope
+that a perfectly calibrated output c(x) matches the posterior probability E [y | x] = P(y = 1 | x),
+it is not necessarily true. Indeed, calibration is a weaker notion and just a necessary condition for
+c(x) = E [y | x]. For example, even a constant predictor c(x) ≡ P (y = 1) is well-calibrated 4
+although it can be far from P (y = 1 | x).
+It is known that many machine learning models, including modern neural networks, are not calibrated out of the box (Zadrozny and Elkan, 2001; Guo et al., 2017). Therefore, their outputs have
+to be recalibrated in post-processing, and various methods have been proposed to achieve this goal.
+They can be roughly categorized into two groups, namely parametric and nonparametric methods.
+The former includes Platt scaling (Platt, 1999), also known as logistic calibration (Kull et al., 2017),
+and beta calibration (Kull et al., 2017). Among the latter category are histogram binning (Zadrozny
+and Elkan, 2001) and isotonic calibration (Zadrozny and Elkan, 2002). Each of these methods ren
+quires a dataset {(ci , yi )}i=1 to obtain a function that takes the output of an uncalibrated predictor c
+and transforms it into a reliable probability estimate. This function is sometimes called a calibration
+map (Kull et al., 2017; 2019). Here, ci = c(xi ) is the output of c for an instance xi , and yi is the
+corresponding class label. To avoid overfitting, each (xi , yi ) needs to be sampled independently of
+the training set used to obtain the predictor c.
+Isotonic calibration Here, we briefly describe the algorithm of isotonic calibration (Zadrozny
+and Elkan, 2002), arguably one of the most commonly used nonparametric recalibration methn
+ods, as it plays an important role in this paper. Suppose a dataset {(ci , yi )}i=1 is given.
+The algorithm
+proceeds as follows. First, the dataset (c1 , y1 ), . . . , (cn , yn ) is reordered into
+
+c(1) , y(1) , . . . , c(n) , y(n) so that the resulting sequence c(1) , . . . , c(n) of outputs becomes nondecreasing. Then, we find a non-decreasing sequence 0 ≤ c′(1) ≤ · · · ≤ c′(n) ≤ 1 such that it
+2
+Pn 
+minimizes the squared error n1 i=1 y(i) − c′(i) . Finally, for each i ∈ [n], c′(i) is assigned as the
+calibrated version of c(i) . This procedure is a special case of isotonic regression, one of the most
+well-studied shape-constrained regression problems.
+3.2
+
+P ROPOSED METHOD
+
+We propose a simple approach where we first calibrate the corrupted soft labels and then plug them
+into the formula (1) for clean soft labels. Although calibration was originally developed for transforming the output scores of classifiers into reliable probability estimates, here we suggest using
+it for corrupted soft labels. We assume that, for each i ∈ [n], we are given a corrupted soft label η̃i ∈ [0, 1] and a single hard label yi ∈ {0, 1} sampled from the true posterior distribution
+n
+n
+P(y | x = xi ). We use the hard labels {yi }i=1 to calibrate the soft labels {η̃i }i=1 using some
+calibration algorithm A. We write ηbiA to represent the resulting calibrated soft labels. Finally, we
+d∗ ηbA  = 1 Pn min ηbA , 1 − ηbA .
+estimate the Bayes error Err∗ by Err
+1:n
+i
+i
+i=1
+n
+However, as we mentioned earlier, even perfect calibration does not necessarily imply that the resulting soft labels are accurate estimates of the clean soft labels. A simple example illustrates this
+limitation:
+Example 2. Consider drawing instances from a mixture of two distributions over X with disjoint
+supports, and let us set the mixture rate θ to be 0.5. The true Bayes error is trivially 0. If A is a
+calibration algorithm that produces constant soft labels ηbiA = θ = 0.5 for all i ∈ [n], it indeed
+achieves perfect calibration. However, the resulting estimate of the Bayes error is min {θ, 1 − θ} =
+0.5, which deviates significantly from the true value 0.
+Therefore, estimation with a provable guarantee will not be possible for arbitrary calibration algorithms or without any assumptions on the soft labels. What calibration algorithm can achieve reliable
+estimation under what assumption? In Section 3.3, we provide the first answer to this question.
+4
+If c(x) takes the constant value P (y = 1) for all x, E [y | c(x)] is equal to E [y] = P (y = 1) since it is a
+conditional expectation conditioned by a constant.
+
+6
+
+Published as a conference paper at ICLR 2026
+
+3.3
+
+T HEORETICAL GUARANTEE FOR ISOTONIC CALIBRATION
+
+Here, we propose choosing isotonic calibration (Zadrozny and Elkan, 2002) as the calibration algorithm A and indentify a condition under which we can consistently estimate the Bayes error with
+our method. Specifically, we estimate the Bayes error by the following procedure:
+
+
+(i) Reorder (η̃1 , y1 ), . . . , (η̃n , yn ) into η̃(1) , y(1) , . . . , η̃(n) , y(n) so that the resulting sequence η̃(1) , . . . , η̃(n) of outputs becomes non-decreasing.
+iso
+iso
+(ii) Find a non-decreasing sequence 0 ≤ ηb(1)
+≤ · · · ≤ ηb(n)
+≤ 1 such that it minimizes
+
+
+2
+P
+n
+iso
+the squared error n1 i=1 y(i) − ηb(i)
+. This gives us isotonic-calibrated soft labels
+iso
+iso
+ηb(1)
+, . . . , ηb(n)
+.
+
+n
+o
+Pn
+iso
+iso
+iso
+d∗ (b
+(iii) Estimate the Bayes error as Err
+η1:n
+) = n1 i=1 min ηb(i)
+, 1 − ηb(i)
+.
+The next theorem is the main theoretical result of this section, which states that we can construct a
+consistent estimator of the Bayes error using isotonic calibration as long as the soft labels’ order is
+preserved. The use of isotonic regression allows us to provide a solid theoretical guarantee without
+making parametric assumptions on how corruption occurs. See Appendix C for the proof.
+Theorem 2. Suppose that there exists an increasing function f such that η̃i = f (ηi ) almost surely.
+Then, for any δ ∈ (0, 1), with probability at least 1 − δ, we have
+!
+r
+1
+log(1/δ)
+∗ iso
+∗
+d
+,
+(6)
++
+Err (b
+η1:n ) − Err ≤ C
+n
+n1/3
+where C > 0 is a constant.
+Note that the assumption of Theorem 2 is a relaxation of the availability of clean soft labels since
+we can take the identity map as f when η̃i = ηi . In other words, the original work by Ishida et al.
+(2023) assumes that we have access to the exact values of the clean soft labels, whereas our proposed
+method only requires the knowledge of their order.
+Furthermore, our result can be extended to the case where the corruption involves random noise.
+Theorem 3. Assume each corrupted soft label η̃i is generated as η̃i = f (ηi ) + εi where f is a
+differentiable function such that f ′ ≥ c for some constant c > 0 and εi is a zero-mean random
+variable with variance ≤ σ 2 . Then, for any δ ∈ (0, 1), with probability at least 1 − δ, we have
+!
+r
+1
+log(1/δ)
+∗ iso
+∗
+′
+d
+,
+(7)
+Err (b
+η1:n ) − Err ≤ C σ + 1/3 +
+n
+n
+where C ′ > 0 is a constant.
+As an example, we can think of the situation we studied in Section 2 but with corrupted labeling distribution skewed by some function f . For each i = 1, . . . , n, the resulting posterior distribution can be seen as a Bernoulli distribution with mean f (ηi ). Then, we draw m hard labels
+(1)
+(m)
+yi , . . . , yi from that distribution. We can then approximate the unknown soft label ηi by the
+Pm (j)
+1
+of the hard labels and plug it into our estimator. In this case, the randomness
+average m
+j=1 yi
+over the hard labels translates to additive noise with standard deviation at most σ = 2√1m .
+A limitation of Theorem 3 is that it cannot be applied to f whose derivative can be arbitrarily small.
+Roughly speaking, it is because a small fluctuation in the function value can translate to a large deviation in the inverse function value if the function is too “flat.” We have not yet reached a theoretical
+understanding of how much violating this assumption hurts the estimation accuracy. However, in
+our empirical study with synthetic data (Appendix D.2), the results suggest that our method can
+perform well even for such corruption functions. An interesting finding is that beta calibration (Kull
+et al. (2017)) performs poorly even though it is a well-specified parametric calibrator in our experimental setting. This fact suggests that choosing appropriate calibration methods, such as isotonic
+calibration, is indeed crucial in our algorithm design. See Appendix D.2 for details.
+7
+
+Published as a conference paper at ICLR 2026
+
+4
+
+E XPERIMENTS
+
+In this section, we present experimental results where we estimate the Bayes error of synthetic and
+real-world datasets using our proposed method.
+4.1
+
+E XPERIMENTAL SETTINGS
+
+The methods employed in this experiment were the following: (i) clean: the estimator with
+d∗ (η1:n ), (ii) hard: the estimator with approximate soft labels obtained
+clean soft labels, i.e., Err
+d∗ (b
+as averaged hard labels, i.e., Err
+η1:n ), (iii) corrupted: the estimator with corrupted soft la∗
+d
+bels, i.e., Err (η̃1:n ), and (iv) the estimator with soft labels obtained by calibrating the corrupted
+d∗ ηbA . We used the following calibration algorithms A: isotonic calibration
+soft labels, i.e., Err
+1:n
+(isotonic; Zadrozny and Elkan, 2002), uniform-mass histogram binning (Zadrozny and Elkan,
+2001) with 10, 25, 50 and 100 bins (hist-10, hist-25, hist-50 and hist-100), beta calibration (beta; Kull et al. (2017)), its variants with restricted parameters (beta-am, beta-ab
+and beta-a; see Appendix D.3.2 for details), and the classic Platt scaling (platt; Platt (1999)).
+Here, isotonic is our proposed choice of calibration algorithm in Section 3.
+We used the following synthetic and real-world datasets.
+Synthetic dataset We generated a two-dimensional synthetic dataset of size n = 10, 000 from a
+Gaussian mixture PX = 0.6 · P0 + 0.4 · P1 , where P0 = N (0, 0)⊤ , I2 , P1 = N (2, 2)⊤ , I2
+and Id is the d-by-d identity matrix. We used m = 50 hard labels per instance in the hard setup.
+For each i ∈ [n], we generated the corrupted version η̃i of the soft label ηi by η̃i = f (ηi ; 2, 0.7),
+
+−1
+
+1/a
+1−b
+where f (p; a, b) = 1 + 1−p
+, 0 < p < 1, a > 0 and 0 < b < 1. The function f
+p
+b
+is the inverse function of the two-parameter beta calibration map (Kull et al., 2017) and can express
+various continuous increasing transformations on the interval (0, 1) depending on the parameters a
+and b. Fig. 3 shows the graph of the corruption function f . As can be seen in the figure, it pushes
+probability values away from zero or one, making the soft labels “unconfident.” It also distorts
+soft labels so that ηi = 0.5 is mapped to η̃i = f (ηi ) = b. Note that f satisfies the assumption
+of Theorem 2 since it is increasing. We also explored other sets of parameters and other types of
+corruption; see Appendix D for details.
+1.0
+0.8
+f(p; a, b)
+
+CIFAR-10
+The second dataset is the test set of CIFAR-10
+(Krizhevsky, 2009) with soft labels taken from the CIFAR-10H
+dataset (Peterson et al., 2019). Since they are originally multi-class
+datasets, we reconstructed a binary dataset by relabeling the animalrelated classes (bird, cat, deer, dog, frog and horse) as positive and
+the rest as negative, similarly to what Ishida et al. (2023) did in
+their experiments. Recall that the CIFAR-10H soft labels can be
+considered to be corrupted because of the mismatched labeling distributions, as we mentioned in Section 1. We compared the estimated Bayes error with the test error of a Vision Transformer (ViT)
+(Dosovitskiy et al., 2021) on this dataset reported by Ishida et al.
+(2023), which is 0.05%.
+
+0.6
+0.4
+0.2
+0.0
+0.0
+
+0.2
+
+0.4
+
+p
+
+0.6
+
+0.8
+
+1.0
+
+Fashion-MNIST
+We also used the Fashion-MNIST dataset Figure 3: The corruption
+(Xiao et al., 2017) and its soft-labeled counterpart, Fashion- function f (p; a, b) with paMNIST-H (Ishida et al., 2023). Following Ishida et al. (2023), we rameters a = 2, b = 0.7.
+binarized the dataset by treating T-shirt/top, pullover, dress, coat
+and shirt as the positive class. The rest proceeded similarly to the
+CIFAR-10 experiment except that we newly trained a ResNet-18 (He et al., 2016) in place of the
+ViT. Details such as training parameters can be found in Appendix D.
+ChaosNLI ChaosNLI (Nie et al., 2020; Zhou et al., 2022) is a natural language processing dataset
+with 100 hard labels per data point. It consists of three sub-datasets: SNLI (n = 1, 514), MNLI
+(n = 1, 599) and AbductiveNLI (n = 1, 532).
+8
+
+Estimated Bayes error (%)
+
+0.2
+0.1
+0.0
+
+(b) CIFAR-10
+
+rru
+p
+iso ted
+ton
+his ic
+t1
+his 0
+t2
+his 5
+t
+his 50
+t10
+0
+b
+be eta
+tabe am
+taa
+be b
+taa
+pla
+tt
+
+0.3
+
+3.5
+3.0
+2.5
+2.0
+1.5
+1.0
+0.5
+0.0
+
+co
+
+0.4
+
+co
+
+Estimated Bayes error (%)
+
+(a) Synthetic dataset
+
+0.5
+
+rru
+p
+iso ted
+ton
+his ic
+t1
+his 0
+t2
+his 5
+t
+his 50
+t10
+0
+b
+be eta
+tabe am
+taa
+be b
+taa
+pla
+tt
+
+17.5
+15.0
+12.5
+10.0
+7.5
+5.0
+2.5
+0.0
+
+cle
+a
+co ha n
+rru rd
+p
+iso ted
+to
+his nic
+t
+his 10
+t
+his 25
+his t50
+t10
+0
+be beta
+tabe am
+ta
+be -ab
+tapla a
+tt
+
+Estimated Bayes error (%)
+
+Published as a conference paper at ICLR 2026
+
+(c) Fashion-MNIST
+
+Figure 4: The estimated Bayes error for the synthetic dataset, CIFAR-10, and Fashion-MNIST,
+obtained with various methods. Error bars denote 95% bootstrap confidence intervals. For CIFAR10, the ViT test error is indicated by a horizontal dashed line, while for Fashion-MNIST the dashed
+line marks the ResNet-18 test error.
+ICLR peer-review datasets We also put together a new dataset, which consists of n = 32, 829
+instances of peer-review results for the past ICLR conferences. Peer-review can be considered as
+a binary classification task (accept/reject). We used our dataset to estimate the Bayes error of the
+ICLR reviews, which is the probability that the ideal, most competent possible reviewer mistakenly
+rejects a good paper or accepts a bad paper. It can be regarded as representing the inherent difficulty
+of the review task. For each paper submission xi , we utilized the OpenReview API to retrieve the
+averaged score si weighted by the confidences of the reviewers and the final decision yi : accept
+(yi = 1) or reject (yi = 0). We then obtained a corrupted soft label η̃i for xi by normalizing the
+averaged score si to fit into [0, 1]. We merged data from ICLR 2017–2025 to construct a dataset
+consisting of n = 32, 829 examples, each of which has a corrupted soft label (i.e., normalized
+average score) and a single hard label (i.e., final decision) for calibration.5
+4.2
+
+E STIMATION OF THE BAYES ERROR
+
+Here, we estimated the Bayes error of the above-mentioned datasets using the methods described
+in Section 4.1. We used 1, 000 bootstrap resamples to compute a 95% confidence interval for
+each method. Note that, for real-world datasets, we could not experiment with the clean
+setup as clean soft labels are unavailable. Therefore, we conducted our experiment only for
+corrupted/isotonic/hist-*/beta*/platt treating the given soft labels as corrupted.6
+Results Fig. 4 shows the results of the experiments with the synthetic, CIFAR-10 and FashionMNIST datasets. The full results including those for the ChaosNLI and ICLR peer-review datasets
+can be found in Appendix D.3.3. The black dashed lines in Fig. 4b and Fig. 4c indicate the test
+error of a classifier trained for each dataset as a reference. As expected, the underconfidence of
+the corrupted soft labels resulted in a severe overestimation of the Bayes error. All the calibration
+methods (isotonic, hist-*, beta* and platt) produced far more reasonable estimates compared with the baseline corrupted. For Fashion-MNIST, however, histogram binning sometimes
+failed to offer reasonable estimates, as can be seen in Fig. 4c. Specifically, hist-25 resulted in a
+Bayes error estimate substantially larger than the ResNet’s test error. This may highlight the necessity for a carefully chosen calibration method, as we mentioned in Section 3.2. On the other hand,
+isotonic, beta* and platt produced reasonable estimates in these settings.
+4.3
+
+C OMPARING CALIBRATION ALGORITHMS USING F EE B EE
+
+For real-world datasets, it is hard to conclude which calibration algorithm is the best just from the
+above results, since the true Bayes error is unknown. To address this limitation, here we compared
+various calibration algorithms using FeeBee (Renggli et al., 2021), a real-world evaluation frame5
+We also conducted experiments with single-year datasets (ICLR2017, . . . , ICLR2025). The results are
+deferred to Appendix D due to space limitations.
+6
+Although we could run hard experiments with m = 1 using the hard labels from the CIFAR-10 test set,
+they would not produce any meaningful estimates of the Bayes error because min {y, 1 − y} = 0 for both
+y = 0 and 1.
+
+9
+
+Published as a conference paper at ICLR 2026
+
+Table 1: FeeBee scores of calibration algorithms across real-world datasets (lower is better). The
+best scores for each dataset are highlighted in bold, and the rank within each column is shown in
+parentheses.
+Dataset
+Algorithm
+
+CIFAR-10
+
+Fashion-MNIST
+
+SNLI
+
+MNLI
+
+AbductiveNLI
+
+ICLR2017-2025
+
+isotonic
+hist-10
+hist-25
+hist-50
+hist-100
+beta
+beta-am
+beta-ab
+beta-a
+platt
+
+0.00307 (3)
+0.00318 (4)
+0.00253 (1)
+0.00322 (5)
+0.00329 (6)
+0.02396 (8)
+0.02401 (10)
+0.02335 (7)
+0.02400 (9)
+0.00278 (2)
+
+0.00240 (1)
+0.00250 (2)
+0.00825 (6)
+0.00329 (4)
+0.00373 (5)
+0.08796 (8)
+0.09055 (10)
+0.08737 (7)
+0.08878 (9)
+0.00262 (3)
+
+0.00292 (2)
+0.00283 (1)
+0.00356 (4)
+0.00520 (5)
+0.00714 (6)
+0.01392 (8)
+0.01452 (9)
+0.01476 (10)
+0.01370 (7)
+0.00305 (3)
+
+0.00147 (2)
+0.00210 (5)
+0.00322 (7)
+0.00421 (9)
+0.00666 (10)
+0.00380 (8)
+0.00208 (4)
+0.00143 (1)
+0.00223 (6)
+0.00154 (3)
+
+0.00118 (2)
+0.00143 (3)
+0.00362 (4)
+0.00558 (5)
+0.00813 (6)
+0.05400 (9)
+0.05204 (8)
+0.04949 (7)
+0.05537 (10)
+0.00081 (1)
+
+0.00013 (5)
+0.00011 (3)
+0.00016 (7)
+0.00033 (9)
+0.00056 (10)
+0.00012 (4)
+0.00014 (6)
+0.00010 (2)
+0.00017 (8)
+0.00001 (1)
+
+work for Bayes error estimators. The key idea of FeeBee is to inject various levels of synthetic label
+noise and see if the estimator is able to track the resulting changes in the Bayes error; the estimator
+is penalized if it fails to do so. As a result, the lower the FeeBee score is, the better the estimator is.
+FeeBee provides a practical way to evaluate Bayes error estimators on real-world datasets without
+requiring knowledge of the true Bayes error rates. Appendix D.4.1 is dedicated to a more detailed
+review of the FeeBee framework.
+For each dataset, we compared the FeeBee scores of the calibration algorithms listed in Section 4.1,
+namely, isotonic calibration (isotonic), histogram binning (hist-10, hist-25, hist-50
+and hist-100), beta calibration (beta) and its variants (beta-am, beta-ab and beta-a),
+and Platt scaling (platt). See Appendix D.4.2 for more details on the experimental settings.
+Results As shown in Table 1, isotonic calibration (isotonic) and Platt scaling (platt) were
+among the best-performing algorithms in most datasets. Histogram binning (hist-*) performed
+well if the number of bins was appropriately chosen, but its performance was quite sensitive to this
+choice, implying that practitioners may need to carefully tune this hyperparameter. The performance
+of beta calibration and its variants (beta*) varied considerably depending on the dataset: they
+performed substantially worse than other algorithms in many datasets although they were often the
+best in many single-year ICLR datasets as shown in Table 2 in the appendix. We note that Platt
+scaling’s strong empirical performance is intriguing: it implicitly assumes that the uncalibrated
+input scores are distributed according to a Gaussian mixture and hence are unbounded (Kull et al.,
+2017), yet the soft labels it is applied to are bounded in [0, 1]. Understanding why this mismatched
+assumption still yields accurate Bayes-error estimates is left as future work. Overall, these results
+again highlight that choosing an appropriate calibration algorithm is key to successful estimation of
+the Bayes error.
+
+5
+
+C ONCLUSION AND DISCUSSION
+
+We discussed the estimation of the Bayes error in binary classification. In Section 2, we significantly
+improved the existing bound on the bias of the hard-label-based estimator. We also revealed that the
+decay rate of the bias depends on how well the two class-conditional distributions are separated, and
+it can decay at a much faster rate than the previous result suggested. In Section 3, we tackled the
+challenging problem of Bayes error estimation from corrupted soft labels and proposed an estimator
+based on calibration. After presenting an example highlighting the importance of choosing appropriate calibration algorithms, we proved that we can construct a statistically consistent estimator
+using isotonic calibration as long as the original soft labels are correctly ordered. Then, our theory
+was validated by numerical experiments with synthetic and real-world datasets in Section 4.
+Finally, we discuss possible future directions. An important one is the extension to multi-class problems. Investigating theoretical guarantees for calibration algorithms other than isotonic calibration
+such as Platt scaling is another interesting direction.
+10
+
+Published as a conference paper at ICLR 2026
+
+ACKNOWLEDGMENTS
+RU was supported by the RIKEN Junior Research Associate Program, TI was supported by KAKENHI Grant Number 22K17946, and MS was supported by JST ASPIRE Grant Number JPMJAP2405.
+R EPRODUCIBILITY STATEMENT
+All the information needed to reproduce the experimental results in this paper is fully disclosed in
+the body text, the appendices, and the source code in the supplementary material or our GitHub
+repository. The body text and the appendices clearly explain the experimental settings. The supplementary material and the GitHub repository provide all the source code to run the experiments and
+the README.md file containing the instructions required to reproduce the experimental results. The
+appendices contain the proofs for all the theoretical results in this paper. We also made sure it is
+clear what assumptions are made in each theorem, proposition, lemma, and corollary.
+
+R EFERENCES
+Lisa P Argyle, Ethan C Busby, Nancy Fulda, Joshua R Gubler, Christopher Rytting, and David
+Wingate. Out of one, many: Using language models to simulate human samples. Political Analysis, 31(3):337–351, 2023.
+Miriam Ayer, H. Daniel Brunk, George M. Ewing, William T. Reid, and Edward Silverman. An
+empirical distribution function for sampling with incomplete information. The Annals of Mathematical Statistics, pages 641–647, 1955.
+Pierre C. Bellec. Sharp oracle inequalities for least squares estimators in shape restricted regression.
+The Annals of Statistics, 46(2):745–780, 2018.
+Pierre C. Bellec and Alexandre B. Tsybakov. Sharp oracle bounds for monotone and convex regression through aggregation. The Journal of Machine Learning Research, 16:1879–1892, 2015.
+Visar Berisha, Alan Wisler, Alfred O. Hero, and Andreas Spanias. Empirically estimable classification bounds based on a new divergence measure. arXiv preprint arXiv:1412.6534, 2014.
+Stéphane Boucheron, Gábor Lugosi, and Pascal Massart. Concentration inequalities: A nonasymptotic theory of independence. Oxford University Press, 2013.
+Sabyasachi Chatterjee and John Lafferty. Adaptive risk bounds in unimodal regression. Bernoulli,
+25(1):1–25, 2019.
+Sabyasachi Chatterjee, Adityanand Guntuboyina, and Bodhisattva Sen. On risk bounds in isotonic
+and other shape restricted regression problems. The Annals of Statistics, 43(4):1774–1800, 2015.
+Sourav Chatterjee. A new perspective on least squares under convex constraint. The Annals of
+Statistics, pages 2340–2381, 2014.
+Thomas Cover. Nearest neighbor pattern classification. IEEE Trans. Information Theory, 4(5):
+515–516, 1968.
+Morris H. DeGroot and Stephen E. Fienberg. The comparison and evaluation of forecasters. Journal
+of the Royal Statistical Society: Series D (The Statistician), 32(1-2):12–22, 1983.
+Pierre A. Devijver. A multiclass, k-NN approach to Bayes risk estimation. Pattern Recognition
+Letters, 3(1):1–6, 1985.
+Persi Diaconis and Susan Holmes. Three examples of Monte-Carlo Markov chains: At the interface
+between statistical computing, computer science, and statistical mechanics. In Discrete probability and algorithms, pages 43–56. Springer, 1995.
+11
+
+Published as a conference paper at ICLR 2026
+
+Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas
+Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, and Neil Houlsby. An image is worth 16x16 words: Transformers for image recognition at
+scale. In International Conference on Learning Representations, 2021.
+Keinosuke Fukunaga and L. Hostetler. K-nearest-neighbor Bayes-risk estimation. IEEE Transactions on Information Theory, 21(3):285–293, 1975.
+Fuchang Gao and Jon A. Wellner. Entropy estimate for high-dimensional monotonic functions.
+Journal of Multivariate Analysis, 98(9):1751–1764, 2007.
+Xiang Gao, Meera Sitharam, and Adrian E Roitberg. Bounds on the Jensen gap, and implications
+for mean-concentrated distributions. The Australian Journal of Mathematical Analysis and Applications, 16(2):1–16, 2019.
+Alexandra Gessner, Oindrila Kanjilal, and Philipp Hennig. Integrals over Gaussians under linear
+domain constraints. In International Conference on Artificial Intelligence and Statistics, pages
+2764–2774. PMLR, 2020.
+Fabrizio Gilardi, Meysam Alizadeh, and Maël Kubli. Chatgpt outperforms crowd workers for textannotation tasks. Proceedings of the National Academy of Sciences, 120(30):e2305016120, 2023.
+Chuan Guo, Geoff Pleiss, Yu Sun, and Kilian Q. Weinberger. On calibration of modern neural
+networks. In International Conference on Machine Learning, pages 1321–1330. PMLR, 2017.
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition,
+pages 770–778, 2016.
+Jean-Baptiste Hiriart-Urruty and Claude Lemaréchal. Convex analysis and minimization algorithms
+I: Fundamentals. Springer Berlin, Heidelberg, 1993.
+Proceedings of the 13th International Conference on Learning Representations (ICLR 2025), Singapore, April 2025a. International Conference on Learning Representations. URL https:
+//iclr.cc/Conferences/2025. Conference dates: April 24–28 2025.
+Proceedings of the 42nd International Conference on Machine Learning (ICML 2025), Vancouver,
+BC, Canada, July 2025b. International Machine Learning Society. URL https://icml.cc/.
+Conference dates: July 13–19 2025.
+Takashi Ishida, Ikko Yamane, Nontawat Charoenphakdee, Gang Niu, and Masashi Sugiyama. Is the
+performance of my deep network too good to be true? A direct approach to estimating the Bayes
+error in binary classification. In International Conference on Learning Representations, 2023.
+Minoh Jeong, Martina Cardone, and Alex Dytso. Demystifying the optimal performance of multiclass classification. In Thirty-seventh Conference on Neural Information Processing Systems,
+2023.
+Xiaoqian Jiang, Melanie Osl, Jihoon Kim, and Lucila Ohno-Machado. Calibrating predictive model
+estimates to support personalized medicine. Journal of the American Medical Informatics Association, 19(2):263–274, 2012.
+Saurav Kadavath, Tom Conerly, Amanda Askell, Tom Henighan, Dawn Drain, Ethan Perez,
+Nicholas Schiefer, Zac Hatfield-Dodds, Nova DasSarma, Eli Tran-Johnson, et al. Language models (mostly) know what they know. arXiv preprint arXiv:2207.05221, 2022.
+Maurice G Kendall. A new measure of rank correlation. Biometrika, 30(1-2):81–93, 1938.
+Durk P. Kingma and Prafulla Dhariwal. Glow: Generative flow with invertible 1x1 convolutions.
+Advances in Neural Information Processing Systems, 31, 2018.
+Alex Krizhevsky. Learning multiple layers of features from tiny images. Technical report, University
+of Toronto, 2009.
+12
+
+Published as a conference paper at ICLR 2026
+
+Meelis Kull, Telmo Silva Filho, and Peter Flach. Beta calibration: A well-founded and easily
+implemented improvement on logistic calibration for binary classifiers. In Artificial Intelligence
+and Statistics, pages 623–631. PMLR, 2017.
+Meelis Kull, Miquel Perello Nieto, Markus Kängsepp, Telmo Silva Filho, Hao Song, and Peter
+Flach. Beyond temperature scaling: Obtaining well-calibrated multi-class probabilities with
+dirichlet calibration. Advances in Neural Information Processing Systems, 32, 2019.
+Ananya Kumar, Percy S. Liang, and Tengyu Ma. Verified uncertainty calibration. Advances in
+Neural Information Processing Systems, 32, 2019.
+Alexandra Sasha Luccioni, Sylvain Viguier, and Anne-Laure Ligozat. Estimating the carbon footprint of bloom, a 176b parameter language model. Journal of Machine Learning Research, 24
+(253):1–15, 2023.
+Mehryar Mohri, Afshin Rostamizadeh, and Ameet Talwalkar. Foundations of machine learning, 2nd
+Edition. MIT press, 2018.
+Kevin R. Moon, Kumar Sricharan, Kristjan Greenewald, and Alfred O. Hero III. Ensemble estimation of information divergence. Entropy, 20(8):560, 2018.
+Allan H. Murphy. A new vector partition of the probability score. Journal of Applied Meteorology
+and Climatology, 12(4):595–600, 1973.
+Proceedings of the 38th Conference on Neural Information Processing Systems (NeurIPS 2024),
+Vancouver, BC, Canada, December 2024. Neural Information Processing Systems Foundation.
+URL https://neurips.cc/Conferences/2024. Conference dates: December 10–15
+2024.
+Yixin Nie, Xiang Zhou, and Mohit Bansal. What can we learn from collective human opinions on
+natural language inference data? In Proceedings of the 2020 Conference on Empirical Methods
+in Natural Language Processing (EMNLP). Association for Computational Linguistics, 2020.
+Morteza Noshad, Li Xu, and Alfred Hero. Learning to benchmark: Determining best achievable
+misclassification error from training data. arXiv preprint arXiv:1909.07192, 2019.
+George Papamakarios, Eric Nalisnick, Danilo Jimenez Rezende, Shakir Mohamed, and Balaji Lakshminarayanan. Normalizing flows for probabilistic modeling and inference. The Journal of
+Machine Learning Research, 22(1):2617–2680, 2021.
+F. Pedregosa, G. Varoquaux, A. Gramfort, V. Michel, B. Thirion, O. Grisel, M. Blondel, P. Prettenhofer, R. Weiss, V. Dubourg, J. Vanderplas, A. Passos, D. Cournapeau, M. Brucher, M. Perrot, and
+E. Duchesnay. Scikit-learn: Machine learning in Python. Journal of Machine Learning Research,
+12:2825–2830, 2011.
+Joshua C. Peterson, Ruairidh M. Battleday, Thomas L. Griffiths, and Olga Russakovsky. Human
+uncertainty makes classification more robust. In Proceedings of the IEEE/CVF International
+Conference on Computer Vision, pages 9617–9626, 2019.
+John Platt. Probabilistic outputs for support vector machines and comparisons to regularized likelihood methods. Advances in Large Margin Classifiers, 10(3):61–74, 1999.
+Benjamin Recht, Rebecca Roelofs, Ludwig Schmidt, and Vaishaal Shankar. Do CIFAR-10 classifiers generalize to CIFAR-10? arXiv preprint arXiv:1806.00451, 2018.
+Cedric Renggli, Luka Rimanic, Nora Hollenstein, and Ce Zhang. Evaluating bayes error estimators
+on real-world datasets with feebee. In Thirty-fifth Conference on Neural Information Processing
+Systems Datasets and Benchmarks Track (Round 2), 2021.
+T. Robertson, F.T. Wright, and R. Dykstra. Order Restricted Statistical Inference. Probability and
+Statistics Series. Wiley, 1988. ISBN 9780471917878.
+Emma Strubell, Ananya Ganesh, and Andrew McCallum. Energy and policy considerations for
+modern deep learning research. Proceedings of the AAAI Conference on Artificial Intelligence,
+34(09):13693–13696, 2020.
+13
+
+Published as a conference paper at ICLR 2026
+
+Ryan Theisen, Huan Wang, Lav R. Varshney, Caiming Xiong, and Richard Socher. Evaluating
+state-of-the-art classification models against Bayes optimality. Advances in Neural Information
+Processing Systems, 34:9367–9377, 2021.
+Lindia Tjuatja, Valerie Chen, Tongshuang Wu, Ameet Talwalkwar, and Graham Neubig. Do LLMs
+exhibit human-like response biases? a case study in survey design. Transactions of the Association
+for Computational Linguistics, 12, 2024.
+Aad W. Van Der Vaart and Jon A. Wellner. Weak convergence and empirical processes: With
+applications to statistics. Springer, 1996.
+Ramon van Handel. APC 550: Probability in high dimension. Lecture Notes. Princeton University,
+21, 2016. URL https://web.math.princeton.edu/rvan/APC550.pdf.
+Roman Vershynin. High-dimensional probability: An introduction with applications in data science,
+volume 47. Cambridge University Press, 2018.
+Pauli Virtanen, Ralf Gommers, Travis E. Oliphant, Matt Haberland, Tyler Reddy, David Cournapeau, Evgeni Burovski, Pearu Peterson, Warren Weckesser, Jonathan Bright, Stéfan J. van der
+Walt, Matthew Brett, Joshua Wilson, K. Jarrod Millman, Nikolay Mayorov, Andrew R. J. Nelson, Eric Jones, Robert Kern, Eric Larson, C J Carey, İlhan Polat, Yu Feng, Eric W. Moore,
+Jake VanderPlas, Denis Laxalde, Josef Perktold, Robert Cimrman, Ian Henriksen, E. A. Quintero,
+Charles R. Harris, Anne M. Archibald, Antônio H. Ribeiro, Fabian Pedregosa, Paul van Mulbregt, and SciPy 1.0 Contributors. SciPy 1.0: Fundamental Algorithms for Scientific Computing
+in Python. Nature Methods, 17:261–272, 2020. doi: 10.1038/s41592-019-0686-2.
+Han Xiao, Kashif Rasul, and Roland Vollgraf. Fashion-mnist: a novel image dataset for benchmarking machine learning algorithms, 2017.
+Zhihui Xie, Jizhou Guo, Tong Yu, and Shuai Li. Calibrating reasoning in language models with
+internal consistency. In The Thirty-eighth Annual Conference on Neural Information Processing
+Systems, 2024.
+Fan Yang and Rina Foygel Barber. Contraction and uniform convergence of isotonic regression.
+Electronic Journal of Statistics, 13:646–677, 2019.
+Bianca Zadrozny and Charles Elkan. Obtaining calibrated probability estimates from decision trees
+and naive Bayesian classifiers. In International Conference on Machine Learning, volume 1,
+pages 609–616, 2001.
+Bianca Zadrozny and Charles Elkan. Transforming classifier scores into accurate multiclass probability estimates. In Proceedings of the eighth ACM SIGKDD International Conference on Knowledge Discovery and Data Mining, pages 694–699, 2002.
+Cun-Hui Zhang. Risk bounds in isotonic regression. The Annals of Statistics, 30(2):528–555, 2002.
+Xiang Zhou, Yixin Nie, and Mohit Bansal. Distributed nli: Learning to predict human opinion distributions for language reasoning. In Findings of the Association for Computational Linguistics:
+ACL 2022. Association for Computational Linguistics, 2022.
+
+14
+
+Published as a conference paper at ICLR 2026
+
+T HE U SE OF L ARGE L ANGUAGE M ODELS
+We used OpenAI’s ChatGPT and Codex for the following assistance purposes:
+• Detect grammatical errors and improve clarity.
+• Assist in writing the code for generating the figures in the paper.
+
+A
+
+R ELATED WORK
+
+Estimation of the Bayes error Err∗ (see Section 2.1 for the definition) is a classical problem in the
+field of machine learning and pattern recognition. Existing methods for Bayes error estimation can
+be categorized based on the type of data used, specifically as either instance-label pair-based or soft
+label-based estimation.
+n
+
+Most of the existing methods require a dataset {(xi , yi )}i=1 composed of instances xi ∈ X paired
+with their respective labels yi ∈ Y = {0, 1}. Assuming the two class-conditional distributions
+of instances have densities satisfying certain conditions, Berisha et al. (2014), Moon et al. (2018)
+and Noshad et al. (2019) proposed approaches based on the estimation of f -divergence between
+the class-conditional densities. Specifically, Berisha et al. (2014) and Moon et al. (2018) suggested estimating upper or lower bounds and thus their methods suffer from relatively large biases.
+Although Noshad et al. (2019) succeeded in estimating the exact Bayes error instead of bounds
+on it, they assumed that the class-conditional densities p0 , p1 are Hölder-continuous and satisfy
+0 < L ≤ pi ≤ U (i = 0, 1) for some constants L and U , and their estimator requires the knowledge
+of the values of these constants, which can be unpractical.
+On the other hand, Theisen et al. (2021) proposed a Bayes error estimation method based on normalizing flow models (Papamakarios et al., 2021; Kingma and Dhariwal, 2018). They first showed
+that the Bayes error is invariant under invertible transformations. Using this result, they suggested
+approximating the data distribution with a normalizing flow and then computing the Bayes error
+for its base Gaussian distribution, which can be done using the Holmes–Diaconis–Ross integration
+scheme (Diaconis and Holmes, 1995; Gessner et al., 2020). One of the drawbacks of their approach
+is that it is prohibitively memory-intensive for high-dimensional data, as mentioned in their paper.
+The method proposed by Ishida et al. (2023), described in Section 2.1, was unique in that it utilized
+the soft labels ηi = η(xi ) instead of the instances xi themselves. Jeong et al. (2023) extended the
+approach of Ishida et al. (2023) to the estimation of the Bayes error in multi-class classification
+problems.
+
+B
+
+S UPPLEMENTARY FOR S ECTION 2
+
+B.1
+
+P ROOF OF T HEOREM 1
+
+Pm
+(j)
+(1)
+(m)
+1
+For each i = 1, . . . , d, let pbi = m
+where Zi , . . . , Zi
+∈ {0, 1} are independent
+j=1 Zi
+Bernoulli random variables with mean pi . For ease of notation, we denote pb = (b
+p1 , . . . , pbd ) and
+p = (p1 , . . . , pd ). Noting that E [b
+p] = p, pb is an unbiased and consistent estimator of p.
+Suppose that we would like to estimate the value ϕ(p) for some function ϕ : Rd → R. It is natural
+to consider a plug-in estimator ϕ(b
+p). We can evaluate its bias E [ϕ(b
+p)] − ϕ(p) = E [ϕ(b
+p)] − ϕ (E [b
+p])
+using a sharpened version of Jensen’s inequality by Gao et al. (2019).
+Lemma 1. Suppose ϕ is differentiable at µ. Then, we have
+d
+
+d
+
+supz̸=µ h(z) X
+inf z̸=µ h(z) X
+pi (1 − pi ) ≤ E [ϕ(b
+p)] − ϕ(p) ≤
+pi (1 − pi ),
+m
+m
+i=1
+i=1
+
+(8)
+
+where
+h(z) :=
+
+ϕ(z) − ϕ(µ) − ∇ϕ(µ)⊤ (z − µ)
+.
+∥z − µ∥22
+15
+
+(9)
+
+Published as a conference paper at ICLR 2026
+
+Proof. For any i, j ∈ [d], we have
+1
+pi (1 − pi )δij ,
+m
+where δij = 1 [i = j] is the Kronecker delta. This implies
+E [(b
+pi − pi )(b
+pj − pj )] =
+
+d
+
+
+1 X
+tr Cov [ pb ] =
+pi (1 − pi ).
+m i=1
+
+(10)
+
+(11)
+
+Now, we can apply (2.4) in Gao et al. (2019) to conclude the proof.7
+It is often the case that the function ϕ in question is Lipschitz continuous. For example, every convex
+function is locally Lipschitz on any convex compact subset of the relative interior of its domain (see
+e.g. Hiriart-Urruty and Lemaréchal, 1993, Theorem 3.1.2 in Chapter IV). In such cases, we can
+derive another type of bound based on Lipschitzness.
+Lemma 2 (Lipschitzness-based bounds for the bias). If ϕ is L-Lipschitz with respect to the 1-norm,
+we have
+r
+π
+E [ϕ(b
+p)] − ϕ(p) ≤ Ld
+.
+(12)
+2m
+Proof. First of all, it holds that
+E [ϕ(b
+p)] − ϕ(p) ≤ E [|ϕ(b
+p) − ϕ(p)|]
+" d
+#
+X
+≤L E
+|b
+p i − pi |
+
+(13)
+(by Lipschitzness)
+
+(14)
+
+i=1
+
+=L
+
+d
+X
+
+E [|b
+pi − pi |] .
+
+(15)
+
+i=1
+
+Each summand can be bounded by integrating Hoeffding’s tail bound (see, e.g., Theorem 2.2.6 of
+(Vershynin, 2018)):
+Z ∞
+E [|b
+pi − pi |] =
+P (|b
+pi − pi | ≥ t) dt
+(16)
+Z0 ∞
+≤
+2 exp(−2mt2 ) dt
+(17)
+0
+r
+π
+.
+(18)
+=
+2m
+Hence the result follows.
+√
+Lemma 2 suggests that the bias is at most O(1/ m), whereas Lemma 1 indicates a faster convergence rate of O(1/m) whenever the supremum and infimum are finite.
+Now, define
+ϕErr (z) := min {z, 1 − z}
+(19)
+for z ∈ [0, 1]. We choose ϕ = ϕErr and apply Lemma 1 and Lemma 2 to show the following lemma.
+Lemma 3. For each i ∈ [d], we have
+r
+π
+−
+≤ E [ϕErr (b
+pi )] − ϕErr (pi ) ≤ 0.
+(20)
+2m
+Furthermore, if pi ̸= 0.5, it holds that
+−
+
+pi (1 − pi )
+≤ E [ϕErr (b
+pi )] − ϕErr (pi ) ≤ 0.
+m|2pi − 1|
+
+(21)
+
+7
+Although Gao et al. (2019) only discusses the univariate case, it is straightforward to extend the result to
+the multivariate case.
+
+16
+
+Published as a conference paper at ICLR 2026
+
+Proof. The lower bound of the first inequality is a direct consequences of Lemma 2 and the fact
+that ϕErr is 1-Lipschitz. The upper bound follows from the concavity of ϕErr and the classic Jensen
+inequality.
+To prove the second inequality, we first assume 0 ≤ pi < 0.5. For any z ∈ [0, 1] \ {pi }, we have
+
+0
+for z ∈ [0, 0.5],
+ϕErr (z) − ϕErr (pi ) − (z − pi ) 
+h(z) =
+=
+(22)
+1
+−
+2z
+
+(z − pi )2
+for z ∈ [0.5, 1],
+2
+(z − pi )
+and thus
+1
+≤ h(z) ≤ 0.
+1 − 2pi
+
+(23)
+
+pi (1 − pi )
+≤ E [ϕErr (b
+pi )] − ϕErr (pi ) ≤ 0.
+m(1 − 2pi )
+
+(24)
+
+−
+Therefore, Lemma 1 implies
+−
+
+Next, we assume 0.5 < pi ≤ 1. A similar argument proves − 2pi1−1 ≤ h(z) ≤ 0 and
+−
+
+pi (1 − pi )
+≤ E [ϕErr (b
+pi )] − ϕErr (pi ) ≤ 0.
+m(2pi − 1)
+
+(25)
+
+Combining (24) and (25) proves the second bound.
+Note that Lemma 3 can be rewritten as
+r
+
+
+LErr (pi )
+π
+− min
+,
+≤ E [ϕErr (b
+pi )] − ϕErr (pi ) ≤ 0,
+m
+2m
+
+(26)
+
+where
+
+ q(1 − q)
+LErr (q) = |2q − 1|
+
++∞
+
+if q ̸= 0.5,
+
+(27)
+
+if q = 0.5.
+
+Fig. 5 shows the graph of the function LErr . Finally, Theorem 1 is proved as follows.
+
+m
+Proof of Theorem 1. Conditioning on x, let y (j) j=1 be independent Bernoulli random variables
+Pm (j)
+1
+with mean η(x) and ηb be their average m
+. Then, Lemma 3 gives
+j=1 y
+r
+
+
+π
+LErr (η(x))
+,
+≤ E [ϕErr (b
+η ) | x] − ϕErr (η(x)) ≤ 0.
+(28)
+− min
+m
+2m
+By taking expectation over x, we obtain
+r
+
+
+
+LErr (η(x))
+π
+− E min
+,
+≤ E [ϕErr (b
+η )] − E [ϕErr (η(x))] ≤ 0.
+m
+2m
+h
+i
+d∗ (b
+Now the claim follows since E Err
+η1:n ) = E [ϕErr (b
+η )] and Err∗ = E [ϕErr (η(x))].
+
+B.2
+B.2.1
+
+(29)
+
+P ROOFS FOR OTHER RESULTS
+S UPERIORITY OF T HEOREM 1 OVER THE EXISTING RESULT
+
+Proposition 1. Theorem 1 is tighter than the existing result (2) by Ishida et al. (2023) for all n, m ≥
+1.
+17
+
+Published as a conference paper at ICLR 2026
+
+10
+
+LErr(q)
+
+8
+6
+4
+2
+0
+0.0
+
+0.5
+q
+
+1.0
+
+Figure 5: The graph of the function LErr .
+
+6000
+
+Number of samples
+
+5000
+4000
+3000
+2000
+1000
+0
+
+0 0.2
+
+0.2 0.4 0.4 0.6 0.6 0.8
+Soft labels for the positive class
+
+0.8 1.0
+
+Figure 6: The distribution of the soft labels for the positive class in the binarized CIFAR-10H dataset
+(see Section 4.1 for details). You can see the two classes are very well-separated.
+
+Proof. Our upper bound 0 is of course smaller than the upper bound in (2). As for the lower bounds,
+we can see that the condition
+r
+r
+√
+π
+1
+log(2n m)
+≤ √ +
+(30)
+2m
+m
+2 m
+is equivalent to
+
+!2 
+√
+√
+1
+2π
+−
+1
+.
+n m ≥ exp 
+2
+2
+The right-hand side is less than 1 so (31) always holds.
+18
+
+(31)
+
+Published as a conference paper at ICLR 2026
+
+B.2.2
+
+FASTER DECAY RATE OF THE BIAS IN WELL - SEPARATED CASES (C OROLLARY 1 &
+E XAMPLE 1)
+
+Proof of Corollary 1. By the assumption, we have
+η(x)(1 − η(x))
+1/4 − c2
+LErr (η(x)) =
+≤
+2 |η(x) − 0.5|
+2c
+almost surely. Combining this with Theorem 1, we obtain the result.
+
+(32)
+
+Proof of Example 1. Let f0 , f1 be the densities of F0 , F1 , respectively. From the data generation
+model, we can see that
+νf0 (x) + (1 − ν)f1 (x)
+η(x) =
+(33)
+f0 (x) + f1 (x)
+for any x ∈ X such that f0 (x) > 0 or f1 (x) > 0. Since the supports of F0 , F1 are disjoint, we can
+assume that
+f0 (x) > 0 =⇒ f1 (x) = 0, f1 (x) > 0 =⇒ f0 (x) = 0 for any x ∈ X ,
+(34)
+which implies
+
+ν
+if f0 (x) > 0,
+(35)
+η(x) =
+1 − ν if f1 (x) > 0.
+Therefore, it holds that
+|η(x) − 0.5| = |ν − 0.5| = c > 0
+(36)
+almost surely.
+B.2.3
+
+C OMPUTABLE BOUND OF THE BIAS (C OROLLARY 2)
+
+Lemma 4. If Err∗ ≤ E, we have
+
+
+E
+P (ϕErr (η(x)) ≥ t) ≤ min 1,
+t
+
+(37)
+
+for any t ∈ (0, 1/2].
+Proof. Since ϕErr (η(x)) is a non-negative random variable with mean E [ϕErr (η(x))] = Err∗ ,
+Markov’s inequality gives
+E
+Err∗
+P (ϕErr (η(x)) ≥ t) ≤
+≤
+(38)
+t
+t
+for any t > 0.
+Proof of Corollary 2. Let z = ϕErr (η(x)). Since
+η(x)(1 − η(x))
+z(1 − z)
+=
+,
+|2η(x) − 1|
+1 − 2z
+we have
+η(x)(1 − η(x))
+t(1 − t)
+<
+|2η(x) − 1|
+1 − 2t
+if z < t. Therefore,
+r
+
+
+
+LErr (η(x))
+π
+E min
+,
+m
+2m
+r
+
+
+π
+1 t(1 − t)
+· 1 [z ≥ t] +
+·
+· 1 [z < t]
+≤E
+2m
+m 1 − 2t
+r
+π
+1 t(1 − t)
+≤
+· P (z ≥ t) +
+·
+· 1.
+2m
+m 1 − 2t
+By using Lemma 4, we obtain
+r
+
+
+ r
+
+
+LErr (η(x))
+π
+π
+E
+1 t(1 − t)
+E min
+,
+≤
+· min 1,
++
+·
+.
+m
+2m
+2m
+t
+m 1 − 2t
+Combining this with Theorem 1 yields the result.
+19
+
+(39)
+
+(40)
+
+(41)
+(42)
+(43)
+
+(44)
+
+Published as a conference paper at ICLR 2026
+
+B.2.4
+
+S TATISTICAL CONSISTENCY
+
+Corollary 3.
+
+(i) For any δ ∈ (0, 1), with probability at least 1 − δ, we have
+r
+r
+log(2/δ)
+π
+∗
+∗
+d
+Err (b
+η1:n ) − Err ≤
++
+.
+2n
+2m
+
+(45)
+
+(ii) Suppose there exists a constant c > 0 such that |η(x) − 0.5| ≥ c holds almost surely. Then,
+for any δ ∈ (0, 1), with probability at least 1 − δ, we have
+r
+log(2/δ) 1 − 4c2
+∗
+∗
+d (b
+Err
+η1:n ) − Err ≤
++
+.
+(46)
+2n
+8cm
+Proof. By Hoeffding’s inequality, we have
+h
+i
+d∗ (b
+d∗ (b
+Err
+η1:n ) − E Err
+η1:n )
+h
+i
+i
+h
+d∗ (b
+d∗ (b
+d∗ (b
+η1:n ) − E Err
+η1:n ) − Err∗
+≤ Err
+η1:n ) + E Err
+r
+i
+h
+log(2/δ)
+d∗ (b
+≤
+η1:n ) − Err∗
++ E Err
+2n
+
+(47)
+(48)
+(49)
+
+with probability greater than 1 − δ. By upper-bounding the second term using Theorem 1 and
+Corollary 1, we obtain (45) and (46), respectively.
+B.3
+
+N UMERICAL EXPERIMENTS
+
+Here, we examine the validity of our theory using synthetic datasets composed of instances drawn
+from the following distributions.8
+(a) The Gaussian mixture PX = 0.5 · P0 + 0.5 · P1 with P0 = N ((0, 0), I2 ) and P1 =
+N ((2, 2), I2 ).
+(b) The Gaussian mixture PX = 0.5·P0 +0.5·P1 with the completely overlapping components
+P0 = P1 = N ((0, 0), I2 ).
+(c) The distribution with label flips discussed in Example 1. We set the label flip rate to ν = 0.1
+and use the uniform distributions over [0, 1)2 and [1, 2)2 as F0 and F1 , respectively. 9
+Note that the “perfect separation” assumption of Corollary 1 is met only by (c). For each m =
+10, 25, 50, 100, 250, 500, 1000, we perform the following procedure 1000 times:
+(i) Sample n = 2000 instances from one of the distributions (a), (b) and (c).
+(1)
+
+(m)
+
+(ii) For each instance xi , generate m hard labels yi , . . . , yi from the posterior class distriPm (j)
+1
+bution P(y | x = xi ) and compute the approximate soft label ηbi = m
+j=1 yi .
+d∗ (b
+(iii) Compute the estimate Err
+η1:n ).
+h
+i
+d∗ (b
+Then, we approximate the expectation E Err
+η1:n ) by the average of the 1000 estimates to calh
+i
+d∗ (b
+culate the bias E Err
+η1:n ) − Err∗ .
+Fig. 7 is a log-log plot showing the empirical bias (the blue solid line) as a function of m for each
+setup. The corresponding theoretical bound (3) is also shown by the black dashed line.10 We note
+8
+
+This experiment takes around 1 hour for each distribution on a CPU.
+Note that the choice of base distributions F0 , F1 does not matter as long as they satisfy the assumption
+(34) because η is determined
+solely
+by the label flip
+h
+n
+oirate ν; see (35).
+LErr (η(x)) p π
+10
+The expectation E min
+,
+is approximated by the sample average over 20000 data
+m
+2m
+points.
+9
+
+20
+
+Published as a conference paper at ICLR 2026
+
+100
+
+100
+
+10 1
+
+10 1
+
+10 1
+
+10 2
+
+10 2
+
+10 2
+
+10 3
+
+10 3
+
+10 3
+
+10 4
+
+Bias
+
+100
+
+Bias
+
+Bias
+
+that the empirically observed bias is smaller than the theoretical bound in all the setups as expected.
+Our theory accurately predicts the decay of the bias, especially in (a) and (b). If we fit a function
+of the form mp to a bias curve, the slope of its graph corresponds to the exponent p. The slopes
+obtained by least-squares fitting are −0.9066 for (a), −0.4970 for (b), and −0.4228 for (c). Recall
+that, the two class-conditional distributions were completely overlapping with each other in (b).
+Thus the slope close to −0.5 is as expected. What is somewhat interesting is the result for (a).
+Although this setup does not satisfy the perfect separation assumption of Corollary 1, the observed
+bias decay is approximately proportional to m−1 . It suggests that the “fast” m−1 term dominates
+the “slow” m−1/2 term. As for (c), examining the slope −0.4228 will not make much sense as the
+shape of the graph Fig. 7c is far from being a straight line.
+
+10 4
+
+10 4
+
+10 5
+
+10 5
+
+10 5
+
+10 6
+
+10 6
+
+10 6
+
+10 7 1 2 3
+10 10 10
+m
+
+10 7 1 2 3
+10 10 10
+m
+
+10 7 1 2 3
+10 10 10
+m
+
+(a)
+
+(b)
+
+(c)
+
+d∗ (b
+Figure 7: The bias of the hard-label-based estimator Err
+η1:n ) as a function of the number m of
+hard labels per sample. The blue solid lines indicate the experimental results while the black dashed
+lines indicate the theoretical upper bounds in Theorem 1.
+
+C
+
+S UPPLEMENTARY FOR S ECTION 3
+
+In this section, we present the proof of Theorem 2. Appendix C.1 presents a new risk bound for
+binary isotonic regression (Proposition 2) as well as a useful lemma for general shape-constrained
+nonparametric regression problems (Lemma 5). Then, we employ these results to prove the theorem
+in Appendix C.2.
+C.1
+C.1.1
+
+R ISK BOUND FOR BINARY ISOTONIC REGRESSION
+N ONPARAMETRIC REGRESSION AND ISOTONIC REGRESSION
+
+Here, we introduce general nonparametric regression problems where we aim to estimate the underlying signal from noisy observations. Then, we describe the isotonic regression setting.
+Let T be a set. Assume that, for each design point ti ∈ T , i = 1, . . . , n, we observe
+yi = f ∗ (ti ) + ξi ,
+
+(50)
+
+where f ∗ : T → R is the unknown regression function and ξi ∈ R are independent and mean-zero
+noise variables. A natural estimator would be the least squares estimator (LSE)
+n
+1X
+2
+fb ∈ arg min
+(yi − f (ti )) ,
+n i=1
+f ∈F
+
+21
+
+(51)
+
+Published as a conference paper at ICLR 2026
+
+where F is some pre-defined function class. In the fixed design setting, the quality of an estimator
+fb is evaluated by the ℓ2 risk
+n
+2
+1 Xb
+f (ti ) − f ∗ (ti ) .
+(52)
+n i=1
+Under this criterion, estimators are evaluated only on the fixed design points ti so estimating the
+function f ∗ is equivalent to estimating the sequence/vector µ := (f ∗ (t1 ), . . . , f ∗ (tn )) ∈ Rn .
+From this perspective, the regression problem can be reformulated as follows. Our observation is an
+n-dimensional random vector y = (y1 , . . . , yn ) ∈ Rn of the form
+y = µ + ξ.
+
+(53)
+
+n
+
+n
+
+Here µ = (µ1 , . . . , µn ) ∈ R is the unknown signal and ξ = (ξ1 , . . . , ξn ) ∈ R is a centered noise
+vector whose elements are independent. Let K ⊂ Rn be a closed convex subset from which we
+choose our estimates, which corresponds to the function class F in the function estimation formulation described above. Often it is assumed that the true signal µ indeed belongs to K. However, in
+our results in Appendix C.1, we allow model misspecification, i.e., we do not assume µ ∈ K. The
+b is the Euclidean projection of y onto K:
+LSE µ
+b = arg min∥y − u∥22 .
+µ
+(54)
+u∈K
+
+Isotonic regression Isotonic regression is a special case where we choose K to be the collection
+Mn of all non-decreasing sequences of length n:
+Mn := {u ∈ Rn | u1 ≤ . . . ≤ un } .
+
+(55)
+
+Note that Mn is a closed convex cone. Here the goal is to estimate isotonic, or monotonic, signals
+b is the Euclidean projection of the observation vector
+from noisy observations. Recall that the LSE µ
+y onto Mn :
+b = arg min∥y − u∥22 .
+µ
+(56)
+u∈Mn
+
+It has the following explicit representation (Robertson et al., 1988), which is known as the min-max
+formula:
+µ
+bi = min max ȳk:l , i = 1, . . . , n,
+(57)
+l≥i k≤i
+Pl
+1
+where ȳk:l := l−k+1
+i=k yi is the average of yk , . . . , yl . It can be efficiently computed with the
+pool adjacent violators (PAV) algorithm (Ayer et al., 1955).
+b − µ∥22 of the LSE b
+We are interested in evaluating the risk n1 ∥µ
+µ, which has been extensively
+studied in the literature (e.g. Zhang, 2002; Chatterjee, 2014; Chatterjee et al., 2015; Bellec and
+Tsybakov, 2015; Bellec, 2018; Yang and Barber, 2019; Chatterjee and Lafferty, 2019). We will
+cover the results from these existing works later in Appendix C.1.2.
+C.1.2
+
+R EVIEW OF THE EXISTING RISK BOUNDS FOR ISOTONIC REGRESSION
+
+First, we introduce some notions that will be needed below. For each non-decreasing sequence
+u ∈ Mn , we denote its total variation by
+V (u) := max ui − min ui .
+i
+
+i
+
+(58)
+
+We also let k(u) be the number of constant pieces in u. In other words, k(u) − 1 is the number of
+the inequalities ui ≤ ui+1 that are strict, so the sequence u1 , . . . , un has k(u) − 1 jumps in total.
+ 
+For the cases where µ ∈ Mn and the noises have bounded variance E ξi2 ≤ σ 2 , the following
+bound on the expected risk was proven by Zhang (2002):
+(
+)
+
+
+2/3
+σ 2 V (µ)
+σ 2 log(en)
+1
+2
+b − µ∥2 ≤ C
+∥µ
++
+,
+(59)
+E
+n
+n
+n
+where C ≤ 12.3 is an absolute constant. Chatterjee et al. (2015) showed this n−2/3 rate is minimax,
+while providing another type of risk bound
+
+
+
+
+1
+1
+σ 2 k(u)
+en
+2
+2
+b − µ∥2 ≤ 6 min
+(60)
+E
+∥µ
+∥u − µ∥2 +
+log
+u∈Mn
+n
+n
+n
+k(u)
+22
+
+Published as a conference paper at ICLR 2026
+
+ 
+under the assumptions that µ ∈ Mn and ξi are i.i.d. with finite variance E ξi2 = σ 2 . (60) is
+adaptive, unlike (59), in the sense that it gives a parametric rate n−1/2 up to logarithmic factors
+when the true signal µ is well-approximated by some u ∈ Mn with small k(u) (i.e., a piecewise
+constant sequence with not too many pieces). Later, Bellec (2018) showed two types of bounds,
+improving the previous results in the case of i.i.d. Gaussian noise ξ ∼ N (0, σ 2 In ). In the first
+result, they proved that, with probability greater than 1 − e−x , we have
+(
+2/3 )
+
+1
+4σ 2 x
+σ + V (u)
+1
+2
+2
+2
+b − µ∥2 ≤ min
++
+∥µ
+∥u − µ∥2 + 2cσ
+,
+(61)
+u∈Mn
+n
+n
+σn
+n
+where c is an absolute constant. A corresponding bound in expectation also can be derived by
+integrating this high-probability bound. The second result is that, with probability at least 1 − e−x ,
+we have
+
+
+1
+1
+2σ 2 k(u)
+en
+4σ 2 x
+2
+2
+b − µ∥2 ≤ min
+∥µ
+∥u − µ∥2 +
+log
++
+.
+(62)
+u∈Mn
+n
+n
+n
+k(u)
+n
+A similar in-expectation bound
+
+
+
+
+1
+1
+σ 2 k(u)
+en
+2
+2
+b − µ∥2 ≤ min
+∥µ
+∥u − µ∥2 +
+log
+E
+(63)
+u∈Mn
+n
+n
+n
+k(u)
+also holds. Bellec (2018)’s results, (61), (62) and (63), have several features worth mentioning.
+First, their leading constants are 1. For this reason, these bounds are called sharp oracle inequalities.
+Second, they are valid even under model misspecification, which (59) nor (60) allowed. Third, (61)
+and (62) were the first oracle inequalities that were shown to hold with high probability, rather than
+in expectation. The last point is especially important for our purpose, i.e., computing confidence
+intervals. A major drawback of the results by Bellec (2018) is that they are restricted to Gaussian
+noise. Yang and Barber (2019) employed their unique sliding window norm technique to prove the
+following bound for general sub-Gaussian noise with variance proxy σ 2 :
+2/3
+
+
+ 2
+96σ 2 log2 (2n)
+1
+σ V (µ) log(2n)
+2
+b − µ∥2 ≤ 48
+∥µ
++
+(64)
+E
+n
+n
+n
+Under model misspecification µ ̸∈ Mn , (64) still remains valid with µ replaced by its projection
+onto Mn . A similar high-probability bound also can be derived by almost the same argument,
+although they did not mention it in their paper.
+C.1.3
+
+M ETRIC ENTROPY BOUNDS FOR ISOTONIC CONSTRAINTS
+
+For real numbers −∞ < a < b < ∞, we define the truncated version of the isotonic cone Mn as
+Mn (a, b) := {x ∈ Rn | a ≤ x1 ≤ . . . ≤ xn ≤ b} .
+
+(65)
+
+Mn (a, b) is not a cone, unlike Mn , but it is still a closed convex set. We also define the set of all
+non-decreasing functions from [0, 1) to [0, 1]:
+M := {f : [0, 1) → [0, 1] | f is non-decreasing} .
+
+(66)
+
+Let (F , ∥·∥) be a subset of a normed function space. Given two functions l, u ∈ F with ∥u − l∥ ≤ ε,
+the set
+{f ∈ F | l ≤ f ≤ u}
+(67)
+is called an ε-bracket (Van Der Vaart and Wellner, 1996). The ε-bracketing number N[ ] (F, ∥·∥, ε)
+of (F, ∥·∥) is the smallest number of ε-brackets needed to cover F . The logarithm of bracketing
+numbers is called bracketing entropy.
+Van Der Vaart and Wellner (1996, Theorem 2.7.5) and Gao and Wellner (2007, Theorem 1.1) proved
+the ε-bracketing entropy of M is of order ε−1 , i.e.,
+Cp
+, ∀ε > 0,
+(68)
+ε
+where Cp > 0 is a universal constant depending only on p ∈ [1, ∞) and ∥·∥Lp is the Lp norm
+under Lebesgue measure. Later, Chatterjee (2014, Lemma 4.20) established a tool that enables us to
+log N[ ] (M, ∥·∥Lp , ε) ≤
+
+23
+
+Published as a conference paper at ICLR 2026
+
+convert the bracketing entropy bound (68) for monotone functions into a metric entropy bound for
+monotone sequences. It has been commonly utilized in previous studies (Chatterjee, 2014; Bellec,
+2018; Chatterjee and Lafferty, 2019). Although the original result by Chatterjee (2014) was stated
+for the Euclidean norm ∥·∥2 , results for other p-norms ∥·∥p , p ∈ [1, ∞] can be obtained by a similar
+argument. We state and prove this generalized version below.
+Theorem 4. Take any p ∈ [1, ∞). Then, we have
+log N (Mn (a, b), ∥·∥p , ε) ≤
+
+Cp (b − a)n1/p
+ε
+
+(69)
+
+for ε > 0. Here Cp is the same constant as in (68).
+Proof. Without loss of generality, we assume a = 0 and b = 1. First of all, note the general fact that
+ε-covering number is upper-bounded by 2ε-bracketing number (see, e.g. Van Der Vaart and Wellner,
+1996). This, together with the bracketing number bound (68), implies
+log N (M, ∥·∥Lp , ε) ≤ log N[ ] (M, ∥·∥Lp , 2ε) ≤
+
+Cp
+.
+2ε
+
+(70)
+
+C
+
+Therefore, there exists an ε-net Ñ of the function class M with log|Ñ | ≤ 2εp . Now set δ = 2n1/p ε.
+We will construct a δ-net N of the sequence class Mn (0, 1) based on Ñ . To this end, for each
+monotone sequence u ∈ Mn (0, 1), we associate it with a monotone piecewise constant function
+gu ∈ M of the form
+
+
+
+n
+X
+i−1 i
+gu (x) =
+ui 1 x ∈
+,
+.
+(71)
+n n
+i=1
+For each f ∈ Ñ , we check if f can be approximated by gu for some u ∈ Mn (0, 1) so that
+∥f − gu ∥Lp ≤ ε. If it can, we put one of the corresponding sequences u into N . By construction
+C
+of N , we have log |N | ≤ log|Ñ | ≤ 2εp .
+Next, we confirm N is indeed a δ-net of Mn (0, 1). Take any u ∈ Mn (0, 1). Then, since Ñ is a
+ε-net of M and gu belongs to M, there exists f ∈ Ñ approximating gu so that
+∥gu − f ∥Lp ≤ ε.
+
+(72)
+
+Now, observe that (72) implies “f ∈ Ñ can be approximated by gu for some u ∈ Mn (0, 1),” so
+there is v ∈ N such that ∥f − gv ∥Lp ≤ ε by the construction of N . So the triangle inequality
+implies
+∥gu − gv ∥Lp ≤ ∥gu − f ∥Lp + ∥f − gv ∥Lp ≤ 2ε.
+(73)
+On the other hand, the left-hand side can be explicitly calculated as follows.
+Z 1
+1/p
+p
+∥gu − gv ∥Lp =
+(gu − gv )
+0
+
+=
+
+=
+
+
+
+!1/p
+Z 1X
+n
+i−1 i
+p
+(ui − vi ) 1 x ∈
+,
+n n
+0 i=1
+!1/p
+n
+1X
+p
+(ui − vi i)
+n i=1
+
+∥u − v∥p
+.
+n1/p
+Therefore, it follows that, for any u ∈ Mn (0, 1), there exists v ∈ N such that
+=
+
+∥u − v∥p ≤ 2n1/p ε = δ,
+
+(74)
+
+(75)
+
+which proves N is a δ-net of Mn (0, 1) with respect to p-norm. Thus, we have
+log N (Mn (0, 1), ∥·∥p , δ) ≤ log |N | ≤
+
+24
+
+Cp
+Cp n1/p
+=
+.
+2ε
+δ
+
+(76)
+
+Published as a conference paper at ICLR 2026
+
+C.1.4
+
+L EMMA FOR PROVING SHARP ORACLE INEQUALITIES
+
+Here, we present a general lemma that we can use to prove a sharp oracle inequality for the LSE
+b = arg min∥y − u∥22 = arg min∥(µ + ξ) − u∥22
+µ
+u∈K
+
+(77)
+
+u∈K
+
+under a convex constraint K ⊂ Rn and a general noise ξ. Here “sharp” means that the resulting
+oracle inequality has a leading constant 1. Lemma 5 below is a slight extension of the elegant
+argument given by Bellec (2018, Theorem 2.3), which was given for the i.i.d. Gaussian noise setting.
+In fact, it is essentially just a deterministic statement, so there is no requirement for the stochastic
+structure of the noise ξ. Their key idea was to make use of convexity to obtain a stronger basic
+inequality than usual. Here basic inequality refers to the elementary fact
+b − µ∥22 ≤ ∥u − µ∥22 + 2⟨ξ, µ
+b − u⟩,
+∥µ
+
+∀u ∈ K
+
+(78)
+
+that holds even if K is non-convex. (78) immediately follows from the optimality of b
+µ, i.e.,
+∥y − b
+µ∥22 ≤ ∥y − u∥22 ,
+
+∀u ∈ K.
+
+(79)
+
+Now suppose K is convex. Then, the LSE (i.e., the projection of y onto K) satisfies the variational
+inequality
+⟨u − b
+µ, y − b
+µ⟩ ≤ 0, ∀u ∈ K,
+(80)
+which is an elementary result of convex geometry. Importantly, it implies
+b − u∥22 ,
+∥y − b
+µ∥22 ≤ ∥y − u∥22 − ∥µ
+
+∀u ∈ K.
+
+(81)
+
+b − u∥22 . Therefore
+(81) can be seen as a strengthened version of (79) with the additional term −∥µ
+it can be used to derive a stronger version of the basic inequality (78), i.e.,
+b − µ∥22 ≤ ∥u − µ∥22 + 2⟨ξ, µ
+b − u⟩ − ∥µ
+b − u∥22 ,
+∥µ
+
+∀u ∈ K
+
+(82)
+
+This is the inequality (2.3) in Bellec (2018). Following their method, we use this fact as the starting
+point of the proof of Lemma 5. Recall that we do not require µ to belong to K. It can be any point
+in Rn , i.e., we allow model misspecification.
+Lemma 5 (Localized width and projection). Take any p ∈ [2, ∞]. Let ξ, µ ∈ Rn be arbitrarily
+fixed vectors and K ⊂ Rn be a convex set. Suppose that a point u ∈ K and positive numbers t, s
+satisfy
+t2
+Z(u, t) :=
+sup
+⟨ξ, v − u⟩ ≤
++ ts.
+(83)
+2
+v∈K,∥v−u∥p ≤t
+b of µ + ξ onto K satisfies
+Then, the projection µ
+2
+
+b − µ∥22 ≤ ∥u − µ∥22 + (t + s) .
+∥µ
+
+(84)
+
+Kp (u, t) := {v ∈ K | ∥v − u∥p ≤ t} .
+
+(85)
+
+Proof. For ease of notation, let
+
+Note that Z(u, t) = supv∈Kp (u,t) ⟨ξ, v − u⟩. We break our analysis into two cases.
+b − u∥p ≤ t, then µ
+b ∈ Kp (u, t). Therefore the basic inequality (82) implies
+(i) If ∥µ
+b − µ∥22 − ∥u − µ∥22 ≤ 2⟨ξ, µ
+b − u⟩ − ∥µ
+b − u∥22 ≤ 2Z(u, t) − ∥µ
+b − u∥22 ≤ 2Z(u, t).
+∥µ
+(86)
+Now use the assumption (83) to obtain
+2
+
+b − µ∥22 − ∥u − µ∥22 ≤ t2 + 2ts ≤ (t + s) .
+∥µ
+
+(87)
+
+b − u∥p > t. Letting α := t/∥µ
+b − u∥p , we have α ∈ (0, 1). Now
+(ii) Next, suppose ∥µ
+b − u). Then, the convexity of K implies v ∈ K, and clearly, we have
+take v := u + α(µ
+25
+
+Published as a conference paper at ICLR 2026
+
+b − u = α−1 (v − u)
+∥v − u∥p = t, so v is a member of Kp (u, t). Therefore, we can plug µ
+into the basic inequality (82) to obtain
+b − µ∥22 − ∥u − µ∥22 ≤ 2⟨ξ, µ
+b − u⟩ − ∥µ
+b − u∥22
+∥µ
+
+(88)
+
+2
+∥v − u∥22
+= ⟨ξ, v − u⟩ −
+α
+α2
+
+(89)
+
+2
+t2
+Z(u, t) − 2
+α
+α
+ 2
+Z(u, t) t
+t
+=2
+−
+t
+α
+α
+
+2
+Z(u, t)
+≤
+,
+t
+≤
+
+(90)
+(91)
+(92)
+
+where we used ∥v − u∥22 ≥ ∥v − u∥2p = t2 in (90) and 2ab − b2 ≤ a2 in (92). Now, the
+the assumption (83) readily implies
+2
+
+t
+2
+b − µ∥22 − ∥u − µ∥22 ≤
+(93)
++ s ≤ (t + s)
+∥µ
+2
+Therefore the claim is true for both cases.
+C.1.5
+
+R ISK BOUND FOR BINARY ISOTONIC REGRESSION
+
+In the sequel, we apply the general results stated in the previous sections to investigate the binary
+isotonic regression problem. In binary regression, we are given n binary observations yi ∈ {0, 1},
+each of which is drawn independently from the Bernoulli distribution with mean µi ∈ [0, 1]. The
+noise distribution can be described as
+P (ξi = 1 − µi ) = µi ,
+
+P (ξi = −µi ) = 1 − µi .
+
+(94)
+
+Many calibration methods for probabilistic classification, including calibration by isotonic regression (Zadrozny and Elkan, 2002), can be seen as an instance of binary regression problems. Some
+authors refer to this setup as the Bernoulli model (Yang and Barber, 2019).
+To the best of our knowledge, there is no previous work that investigated risk bounds in binary
+isotonic regression. Here, we derive a new risk bound for this setting. Recall the definitions of the
+isotonic cone Mn and its truncation Mn (a, b) (see (55) and (65)):
+Mn = {u ∈ Rn | u1 ≤ . . . ≤ un } ,
+Mn (a, b) = {u ∈ Rn | a ≤ u1 ≤ . . . ≤ un ≤ b}
+
+(−∞ < a < b < ∞).
+
+(95)
+(96)
+
+From the min-max formula (57), one can observe that the unbounded set Mn can be replaced with
+the bounded closed convex set Mn (0, 1) in binary isotonic regression. In other words, the least
+squares estimator for the binary isotonic regression problem can be written as
+b = arg min ∥y − u∥22 .
+µ
+
+(97)
+
+u∈Mn (0,1)
+
+It leads to the following result.
+Proposition 2. With probability at least 1 − e−x , we have
+1
+1
+b − µ∥22 ≤
+∥µ
+min
+∥u − µ∥22 +
+n
+u∈Mn (0,1) n
+
+
+
+C
+n
+
+1/3
+
+r
++
+
+2x
+n
+
+!2
+,
+
+(98)
+
+where C is an absolute constant.
+Remark.
+(i) Thanks to the replacement of the unbounded set Mn with the bounded set Mn (0, 1),
+we do not have to go through the additional “pealing” step used in Chatterjee (2014) and
+Chatterjee and Lafferty (2019).
+26
+
+Published as a conference paper at ICLR 2026
+
+(ii) This result is valid even under model misspecification.
+Proof. For any u ∈ Mn (0, 1) and t > 0, let
+K(u, t) := {v ∈ Mn (0, 1) | ∥v − u∥2 ≤ t} ,
+Z(u, t) := sup ⟨ξ, v − u⟩.
+
+(99)
+(100)
+
+v∈K(u,t)
+
+We first control the expectation E [Z(u, t)]. To this end, observe that the process (Xv )v∈K(u,t) ,
+where Xv := ⟨ξ, v − u⟩, is a sub-Gaussian process, i.e., for any v1 , v2 ∈ T , we have E [Xv1 ] = 0
+and
+h
+i λ2 ∥v − v ∥2
+2
+1 2
+log E eλ(Xv2 −Xv1 ) ≤
+, ∀λ ≥ 0.
+(101)
+8
+Now combining Dudley’s chaining technique (see e.g. van Handel, 2016, Corollary 5.25) and the
+metric entropy bound in Theorem 4 gives
+Z tp
+E [Z(u, t)] ≤ 6
+log N (K(u, t), ∥·∥2 , ε) dε
+0
+r
+√
+Z t
+C2 n
+dε
+≤6
+ε
+0
+1/2
+
+= 12C2 n1/4 t1/2 ,
+
+(102)
+
+where C2 is the constant appearing in (68).
+Moreover, it is straightforward to see that, for each fixed u and t, Z(u, t) is a convex t-Lipschitz
+function of ξ. Therefore, by using Theorem 6.10 in Boucheron et al. (2013) together with (102),
+with probability greater than 1 − e−x , we have
+√
+√
+1/2
+Z(u, t) ≤ E [Z(u, t)] + t 2x ≤ 12C2 n1/4 t1/2 + t 2x.
+(103)
+1/2
+
+2
+
+Now, define t∗ := 4(9C2 )1/3 n1/6 and observe that we have 12C2 n1/4 t1/2 ≤ t2 for any t ≥ t∗ .
+Therefore, Lemma 5 yields
+
+√ 2 
+√ 2
+b − µ∥22 ≤ ∥u − µ∥22 + t∗ + 2x ≤ ∥u − µ∥2 + t∗ + 2x
+∥µ
+(104)
+with probability at least 1 − e−x . we obtain the result by dividing both sides by n and taking the
+minimum over all u ∈ Mn (0, 1).
+C.2
+
+P ROOF OF T HEOREM 2
+
+We are just one lemma away from proving our main theorem. The following lemma states that
+the error between the two estimates with different sets of soft labels can be upper bounded by the
+root-mean-square error between them.
+n
+Lemma 6. For any set of soft labels {ηi′ }i=1 ∈ [0, 1]n , it holds that
+v
+u n
+n
+X
+u1 X
+1
+2
+∗ ′
+∗
+′
+d
+d
+Err (η1:n ) − Err (η1:n ) ≤
+|ηi − ηi | ≤ t
+(η ′ − ηi ) .
+n i=1
+n i=1 i
+Proof. Since x ∈ [0, 1] 7→ min {x, 1 − x} is 1-Lipschitz, we have
+n
+X
+d∗ (η ′ ) − Err
+d∗ (η1:n ) ≤ 1
+Err
+|min {ηi′ , 1 − ηi′ } − min {ηi , 1 − ηi }|
+1:n
+n i=1
+
+(105)
+
+(106)
+
+n
+
+1X ′
+≤
+|η − ηi | .
+n i=1 i
+The second inequality follows from Jensen’s inequality.
+
+27
+
+(107)
+
+Published as a conference paper at ICLR 2026
+
+We can finally prove Theorem 2.
+Proof. By the triangle inequality, we have
+iso
+iso
+d∗ (η1:n ) − Err∗ .
+d∗ (b
+d∗ (η1:n ) + Err
+d∗ (b
+η1:n
+) − Err
+Err
+η1:n
+) − Err∗ ≤ Err
+
+(108)
+
+Using Lemma 6 for the first term and Proposition 3.2 of Ishida et al. (2023) for the second term, we
+have
+v
+r
+u n
+u1 X
+2
+log(4/δ)
+∗ iso
+∗
+iso
+d
+t
+Err (b
+η1:n ) − Err ≤
+ηbi − ηi +
+(109)
+n i=1
+8n
+with probability at least 1 − δ/2. Now, we evaluate the first term on the right-hand side by applying
+n
+Proposition 2 for µ = (η(1) , . . . , η(n) ). Conditioned on {xi }i=1 , with probability at least 1 − δ/2,
+we have
+!2
+ 1/3 r
+n
+n
+2
+2
+1 X iso
+2 log(2/δ)
+1X
+C
++
+. (110)
+ηb − ηi ≤
+ui − η(i) +
+min
+n i=1 i
+n
+n
+u∈Mn (0,1) n
+i=1
+Since f is increasing and η̃(1) = f (η(1) ) ≤ · · · ≤ η̃(n) = f (η(n) ), we have η(1) ≤ · · · ≤ η(n) , i.e.,
+2
+Pn
+(η(1) , . . . , η(n) ) ∈ Mn . Therefore, minu∈Mn (0,1) n1 i=1 ui − η(i) is zero as we can choose
+u = (η(1) , . . . , η(n) ). As a result, we have
+v
+u n
+ 1/3 r
+u1 X
+2
+C
+2 log(2/δ)
+iso
+t
+ηbi − ηi ≤
++
+.
+(111)
+n i=1
+n
+n
+Plugging (111) into (109) and rewriting C 1/3 as C, we have
+r
+2 log(2/δ)
+C
+∗ iso
+∗
+d
+Err (b
+η1:n ) − Err ≤ 1/3 + 2
+n
+n
+
+(112)
+
+with probability at least 1 − δ.
+We can also prove an extension to the case where random noise is added to the corrupted soft labels.
+Proof of Theorem 3. By the same argument as in the main theorem proof, we have
+v
+r
+u n
+u1 X
+2
+log(6/δ)
+∗ iso
+∗
+iso
+d
+t
+Err (b
+η1:n ) − Err ≤
+ηb − ηi +
+n i=1 i
+8n
+
+(113)
+
+n
+
+with probability at least 1 − δ/3. Also, conditioned on {xi }i=1 , with probability at least 1 − δ/3,
+we have
+!2
+ 1/3 r
+n
+n
+2
+2
+1 X iso
+1X
+C
+2 log(3/δ)
+ηb − ηi ≤
+min
+ui − η(i) +
++
+. (114)
+n i=1 i
+n
+n
+u∈Mn (0,1) n
+i=1
+Now, under the new assumption, f has an inverse function f −1 , which is also differentiable and
+increasing. Therefore, the mean value theorem gives
+ε(i)
+(115)
+η(i) = f −1 (η̃(i) ) − ′
+f (t(i) )
+for some t(i) ∈ (0, 1), which means
+n
+n
+n
+2
+X
+1X
+2
+2 X ε(i)
+(ui − η(i) )2 ≤
+min
+(ui − f −1 (η̃(i) ))2 +
+.
+n u∈Mn (0,1) i=1
+n i=1 f ′ (t(i) )2
+u∈Mn (0,1) n
+i=1
+
+min
+
+28
+
+(116)
+
+Published as a conference paper at ICLR 2026
+
+Since f −1 is increasing and η(1)
+˜ ≤ · · · ≤ η(n)
+˜ , the first term vanishes by choosing ui = f −1 (η̃(i) ).
+By using the assumption that f ′ ≥ c, we obtain
+n
+n
+1X
+2 X 2
+(ui − η(i) )2 ≤ 2
+ε .
+c n i=1 (i)
+u∈Mn (0,1) n
+i=1
+h i
+Since ε2(i) ∈ [0, 1] and E ε2(i) ≤ σ 2 for each i, the Hoeffding’s inequality gives
+
+min
+
+n
+
+1X 2
+ε ≤ σ2 +
+n i=1 (i)
+
+r
+
+log(3/δ)
+2n
+
+(117)
+
+(118)
+
+with probability at least 1 − δ/3.
+By combining the above bounds, there exists a constant C ′ > 0 such that
+!
+r
+1
+log(1/δ)
+∗ iso
+∗
+′
+d
+Err (b
+η1:n ) − Err ≤ C σ + 1/3 +
+n
+n
+
+(119)
+
+holds with probability at least 1 − δ.
+
+D
+
+E XPERIMENTAL DETAILS
+
+We utilized the scikit-learn library (Pedregosa et al., 2011), version 1.6.1, for isotonic regression. We used the implementation of the histogram binning algorithm provided by the
+uncertainty-calibration package (version 0.1.4; Kumar et al., 2019). We employed the
+beta-calibration implementation provided in the betacal package (version 1.1.0; Kull et al., 2017).
+We used the bootstrap function from the SciPy library (Virtanen et al., 2020), version 1.15.3, to
+obtain 95% bootstrap confidence intervals. For each estimation method, the experiment took around
+20–30 minutes on a CPU.
+For the sake of comparison in Fig. 4c, we trained a ResNet-18 (He et al., 2016) on Fashion-MNIST
+for 100 epochs with a batch size of 128 using the Adam optimizer with a learning rate of 0.001. It
+took less than an hour.
+Our experiments do not require any special computer resouces. All of them were conducted on the
+CPU of a single Apple MacBook Pro (M1 chip, 16GB RAM) except for the ResNet training where
+we used a T4 GPU on Google Colab.
+D.1
+
+C ORRUPTION PARAMETERS
+
+In experiments with synthetic mixture-of-gaussians data, we used the following corruption function:
+!−1
+1/a
+
+1−b
+1−p
+, 0 < p < 1, a > 0, 0 < b < 1.
+(120)
+f (p; a, b) = 1 +
+p
+b
+Fig. 8 shows the graph of f (p; a, b) for various values of the parameters a and b. As you can see, the
+parameter a makes the soft labels over-confident when a < 1, leading to an underestimation of the
+Bayes error, and under-confident when a > 1, causing an overestimation. On the other hand, setting
+b to values other than 0.5 results in asymmetric, skewed corruption.
+We conducted the same experiment as in Fig. 4a for various values of a and b. The results are shown
+in Fig. 9. Our calibration-based estimators consistently succeed in preventing over- or underestimation of the Bayes error across all sets of parameter values.
+
+29
+
+1.0
+
+1.0
+
+0.8
+
+0.8
+
+0.6
+
+0.6
+
+f(p; a, b)
+
+f(p; a, b)
+
+Published as a conference paper at ICLR 2026
+
+0.4
+0.2
+0.0
+0.0
+
+0.4
+0.2
+
+0.2
+
+0.4
+
+p
+
+0.6
+
+0.8
+
+0.0
+0.0
+
+1.0
+
+1.0
+
+1.0
+
+0.8
+
+0.8
+
+0.6
+
+0.6
+
+0.4
+0.2
+0.0
+0.0
+
+0.6
+
+0.8
+
+1.0
+
+0.8
+
+1.0
+
+0.8
+
+1.0
+
+0.2
+0.2
+
+0.4
+
+p
+
+0.6
+
+0.8
+
+0.0
+0.0
+
+1.0
+
+0.2
+
+0.4
+
+p
+
+0.6
+
+(d) a = 2, b = 0.7
+
+1.0
+
+1.0
+
+0.8
+
+0.8
+
+0.6
+
+0.6
+
+f(p; a, b)
+
+f(p; a, b)
+
+p
+
+0.4
+
+(c) a = 0.4, b = 0.7
+
+0.4
+0.2
+0.0
+0.0
+
+0.4
+
+(b) a = 2, b = 0.5
+
+f(p; a, b)
+
+f(p; a, b)
+
+(a) a = 0.4, b = 0.5
+
+0.2
+
+0.4
+0.2
+
+0.2
+
+0.4
+
+p
+
+0.6
+
+0.8
+
+0.0
+0.0
+
+1.0
+
+(e) a = 0.4, b = 0.9
+
+0.2
+
+0.4
+
+p
+
+0.6
+
+(f) a = 2, b = 0.9
+
+Figure 8: The corruption function f (p; a, b) for various parameters a and b.
+
+30
+
+an
+
+2
+
+0
+
+0
+
+Estimated Bayes error (%)
+
+2
+
+(e) a = 0.4, b = 0.9
+
+31
+r
+rru d
+pte
+iso d
+ton
+ic
+his
+t10
+his
+t25
+his
+t5
+his 0
+t10
+0
+be
+ta
+co
+
+an
+ha
+co rd
+rru
+pte
+iso d
+ton
+ic
+his
+t10
+his
+t25
+his
+t5
+his 0
+t10
+0
+be
+ta
+
+Estimated Bayes error (%)
+4
+
+r
+rru d
+pte
+iso d
+ton
+ic
+his
+t10
+his
+t25
+his
+t5
+his 0
+t10
+0
+be
+ta
+
+4
+
+co
+
+6
+cle
+
+cle
+an
+h
+co ard
+rru
+pte
+iso d
+ton
+ic
+his
+t10
+his
+t25
+his
+t5
+his 0
+t10
+0
+be
+ta
+
+6
+
+ha
+
+0
+
+an
+
+2
+
+Estimated Bayes error (%)
+
+4
+
+cle
+
+Estimated Bayes error (%)
+8
+
+ha
+
+8
+
+Estimated Bayes error (%)
+
+cle
+an
+h
+co ard
+rru
+pte
+iso d
+ton
+ic
+his
+t10
+his
+t25
+his
+t5
+his 0
+t10
+0
+be
+ta
+
+6
+
+an
+
+Estimated Bayes error (%)
+8
+
+cle
+
+h
+co ard
+rru
+pte
+iso d
+ton
+ic
+his
+t10
+his
+t25
+his
+t5
+his 0
+t10
+0
+be
+ta
+
+cle
+
+Published as a conference paper at ICLR 2026
+
+15.0
+
+12.5
+
+10.0
+7.5
+
+5.0
+
+2.5
+
+0.0
+
+(a) a = 0.4, b = 0.5
+(b) a = 2, b = 0.5
+
+17.5
+15.0
+12.5
+10.0
+7.5
+5.0
+2.5
+0.0
+
+(c) a = 0.4, b = 0.7
+(d) a = 2, b = 0.7
+
+17.5
+15.0
+12.5
+10.0
+7.5
+5.0
+2.5
+0.0
+
+(f) a = 2, b = 0.9
+
+Figure 9: The estimated Bayes error for the synthetic dataset with various corruption parameters a
+and b.
+
+Published as a conference paper at ICLR 2026
+
+D.2
+
+V IOLATION OF THE ASSUMPTION OF T HEOREM 3
+
+In Section 3, we presented Theorem 3, which provides a theoretical guarantee for our Bayes error
+estimator based on isotonic calibration when the corruption is noisy. This result assumes that the
+derivative of the function f satisfies f ′ ≥ c for some strictly positive constant c. Theoretically, it is
+still unclear what happens when this assumption is violated, i.e., when f ′ can be arbitrarily close to
+zero. Here we empirically investigate the effects of such a violation using synthetic data.
+D.2.1
+
+E XPERIMENTAL SETTINGS
+
+We draw n = 10000 data points {xi }ni=1 from a Gaussian mixture PX = 0.6 · P0 + 0.4 · P1 ,
+where P0 = N ((0, 0), I2 ), P1 = N ((2, 2), I2 ).11 For each data point xi , we generate its soft
+label η̃i by sampling m = 3, 5, 10, 25, 50, 100 hard labels from the corrupted posterior distribution
+Bern(f (η(xi ); a, b)) 12 and taking their average. In other words, we obtain the soft label for xi as
+a draw from Binom(m, f (η(xi ); a, b)) divided by m. by drawing from Binom(m, f (η(xi ); a, b))
+and dividing the result by m. By changing the number m of hard labels, we can create different
+noise levels σ = O( √1m ): the smaller m gets, the greater the noise level becomes. We consider two
+sets of corruption parameters: (a, b) = (2, 0.5) and (a, b) = (0.4, 0.5). As we saw in Appendix D.1,
+the former corresponds to under-confident soft labels, and the latter corresponds to over-confident
+soft labels. Note that the former satisfies the assumption of Theorem 3 while the latter does not, i.e.,
+the derivative f ′ can be arbitrarily small. You can see this visually in Fig. 8. Then, we estimate the
+n
+Bayes error from these corrupted soft labels {η̃i }i=1 using the following methods (which we used
+in Section 4.1):
+d∗ (η̃1:n ).
+(i) corrupted: the estimator with corrupted soft labels, i.e., Err
+(ii) The estimator with soft labels obtained by calibrating the corrupted soft labels. We use
+the following calibration algorithms: isotonic calibration (isotonic), uniform-mass histogram binning with 10, 25, 50 and 100 bins (hist10, hist25, hist50 and hist100),
+and beta calibration (beta).
+As in Section 4, we use 1000 bootstrap resamples to compute a 95% confidence interval for each
+method.
+D.2.2
+
+R ESULTS
+
+Fig. 10 shows the estimated Bayes error for various numbers m of hard labels per data point. The
+black dashed lines indicate the Bayes error estimated with clean soft labels, which is expected
+to be a good approximation of the true Bayes error. All the non-parametric calibration methods
+(isotonic and hist*) perform similarly. However, parametric beta calibration (beta) performs
+poorly.
+Particularly, when (a, b) = (0.4, 0.5) and the assumption of Theorem 3 is violated, the more we
+add hard labels per data point the worse the estimation performance gets even though the noise
+level decreases. In the large-m (i.e., small noise level) regime, beta calibration goes “too far” and
+consistently overestimates the Bayes error. On the other hand, isotonic calibration and histogram
+binning perform consistently well, even for relatively small m. When (a, b) = (2, 0.5) and the
+assumption of Theorem 3 is satisfied, the performance of all the methods tends to improve as the
+noise level decreases. However, isotonic calibration and histogram binning still outperform beta
+calibration, especially for small m.
+These results suggest that isotonic calibration and histogram binning are relatively robust to corruption functions with small derivative, whereas beta calibration is not. It is interesting that beta
+calibration performs so poorly when it is a well-specified parametric model in a sense, i.e., the corruption function f is an inverse function of the beta calibration map. This fact suggests that choosing
+appropriate calibration methods, such as isotonic calibration, is crucial in our algorithm design.
+Another interesting thing is that corrupted’s performance becomes worse as the number m of
+hard labels per data point increases when (a, b) = (2, 0.5). This would be because, as we sample
+11
+12
+
+This is the same distribution as we used in Section 4.1.
+Bern(p) is the Bernoulli distribution with mean p.
+
+32
+
+Published as a conference paper at ICLR 2026
+
+Estimated Bayes error (%)
+
+20
+
+15
+
+10
+corrupted
+isotonic
+hist10
+hist25
+hist50
+hist100
+beta
+
+5
+
+0
+
+0
+
+20
+
+40
+
+60
+
+Number of hard labels
+
+80
+
+100
+
+(a) a = 2, b = 0.5
+
+12
+
+Estimated Bayes error (%)
+
+10
+8
+6
+corrupted
+isotonic
+hist10
+hist25
+hist50
+hist100
+beta
+
+4
+2
+0
+
+0
+
+20
+
+40
+
+60
+
+Number of hard labels
+
+80
+
+100
+
+(b) a = 0.4, b = 0.5
+
+Figure 10: The Bayes error estimated by directly using corrupted soft labels (corrupted) and by
+calibrating them (others) for various numbers m of hard labels per data point. The 95% bootstrap
+confidence intervals are shown as shaded regions around each line. The black dashed lines indicate
+the Bayes error estimated with clean soft labels, which is expected to be a good approximation of
+the true Bayes error.
+
+more hard labels, the resulting soft labels are pulled towards the corrupted posterior mean, which
+makes them more biased. This result highlights the need to calibrate soft labels.
+33
+
+Published as a conference paper at ICLR 2026
+
+D.3
+
+F URTHER EXPERIMENTS
+
+In this section, we present additional details and results of the experiments mentioned in Section 4.2.
+D.3.1
+
+ICLR PEER - REVIEW DATASETS
+
+We put together new datasets, which consist of n = 32, 829 instances of peer-review results for the
+past ICLR conferences. Peer-review can be considered as a binary classification task (accept/reject).
+We used our datasets to estimate the Bayes error of the ICLR reviews, which is the probability that
+the ideal, most competent possible reviewer mistakenly rejects a good paper or accepts a bad paper.
+It can be regarded as representing the inherent difficulty of the review task.
+For each paper submission xi , we utilized the OpenReview API to retrieve:
+(j)
+
+• Scores si
+
+(j)
+
+and confidences ci
+
+by the reviewers (j = 1, . . . , #reviewers)
+
+• The final decision yi : accept (yi = 1) or reject (yi = 0)
+P
+
+The averaged score si is calculated as si =
+
+(j) (j)
+
+j ci si
+P (j)
+j ci
+
+. We can then obtain a soft label η̃i for xi by
+
+normalizing the averaged score si to fit into [0, 1]. Of course, this soft label η̃i should be considered
+as corrupted, so we apply isotonic calibration (and other calibration algorithms) before using them
+to estimate the Bayes error.
+We merged data from ICLR 2017–2025 to construct a dataset consisting of n = 32, 829 examples,
+each of which has a corrupted soft label (i.e., normalized average score) and a single hard label (i.e.,
+final decision) for calibration. We also conducted experiments with single-year datasets (ICLR2017,
+. . . , ICLR2025).
+D.3.2
+
+VARIANTS OF BETA CALIBRATION
+
+Beta calibration is a calibration method with three adjustable parameters a, b, m, and this is what
+we have been using as beta since the initial submission. The beta-* variants are beta calibration
+with restricted parameters, which were also mentioned in the original beta calibration paper (Kull
+et al., 2017):
+• beta-am: a and m are adjustable; b is fixed to b = a.
+• beta-ab: a and b are adjustable; m is fixed to m = 1/2.
+• beta-a: only a is adjustable; b, m is fixed to b = a, m = 1/2.
+D.3.3
+
+R ESULTS
+
+The full results are shown in Fig. 11p. For ChaosNLI datasets (SNLI, MNLI, AbductiveNLI), their
+GitHub repository provides predictions of some pre-trained models. As a reference value, we show
+the best error rates among them as the dashed horizontal lines in Figures 11d to 11f. A problem
+in these experiments is that, especially for real-world (non-synthetic) datasets, it is hard to decide
+which calibration algorithm is the best, since the true Bayes error is unknown. We will solve this
+problem in Appendix D.4.
+
+34
+
+rru
+p
+iso ted
+ton
+his ic
+t1
+his 0
+t2
+his 5
+t
+his 50
+t10
+0
+b
+be eta
+tabe am
+taa
+be b
+taa
+pla
+tt
+
+co
+
+rru
+p
+iso ted
+ton
+his ic
+t1
+his 0
+t2
+his 5
+t
+his 50
+t10
+0
+b
+be eta
+tabe am
+taa
+be b
+taa
+pla
+tt
+
+co
+
+Estimated Bayes error (%)
+40
+
+30
+
+20
+
+10
+
+0
+
+Estimated Bayes error (%)
+rru
+p
+iso ted
+ton
+his ic
+t1
+his 0
+t2
+his 5
+t
+his 50
+t10
+0
+b
+be eta
+tabe am
+taa
+be b
+taa
+pla
+tt
+
+co
+
+co
+rru
+p
+iso ted
+ton
+his ic
+t1
+his 0
+t2
+his 5
+t
+his 50
+t10
+0
+b
+be eta
+tabe am
+taa
+be b
+taa
+pla
+tt
+
+Estimated Bayes error (%)
+17.5
+
+15.0
+
+12.5
+
+10.0
+
+7.5
+
+5.0
+
+2.5
+
+0.0
+
+Estimated Bayes error (%)
+
+co
+rru
+p
+iso ted
+ton
+his ic
+t1
+his 0
+t2
+his 5
+t
+his 50
+t10
+0
+b
+be eta
+tabe am
+taa
+be b
+taa
+pla
+tt
+
+co
+rru
+p
+iso ted
+ton
+his ic
+t1
+his 0
+t2
+his 5
+t
+his 50
+t10
+0
+b
+be eta
+tabe am
+taa
+be b
+taa
+pla
+tt
+
+Estimated Bayes error (%)
+3.5
+3.0
+2.5
+2.0
+1.5
+1.0
+0.5
+0.0
+
+Estimated Bayes error (%)
+
+rru
+p
+iso ted
+ton
+his ic
+t1
+his 0
+t2
+his 5
+t
+his 50
+t10
+0
+b
+be eta
+tabe am
+taa
+be b
+taa
+pla
+tt
+
+co
+
+cle
+a
+co ha n
+rru rd
+iso pted
+to
+his nic
+t
+his 10
+t
+hi 25
+his st50
+t10
+0
+be beta
+tabe am
+ta
+be -ab
+tapla a
+tt
+
+Estimated Bayes error (%)
+17.5
+15.0
+12.5
+10.0
+7.5
+5.0
+2.5
+0.0
+
+Estimated Bayes error (%)
+
+Published as a conference paper at ICLR 2026
+
+(g) ICLR2017–2025
+
+35
+
+0.5
+
+0.4
+
+0.3
+
+0.2
+
+0.1
+
+0.0
+
+(a) Synthetic (BCa)
+12
+
+(b) CIFAR-10
+
+10
+8
+
+6
+
+4
+
+2
+
+0
+
+(c) Fashion-MNIST
+(d) SNLI
+
+14
+12
+10
+8
+6
+4
+2
+0
+
+(e) MNLI
+(f) AbductiveNLI
+
+40
+
+30
+
+20
+
+10
+
+0
+
+(h) ICLR2017
+
+Figure 11: Estimated Bayes error across various calibration algorithms and datasets.
+
+rru
+p
+iso ted
+ton
+his ic
+t1
+his 0
+t2
+his 5
+t
+his 50
+t10
+0
+b
+be eta
+tabe am
+taa
+be b
+taa
+pla
+tt
+
+co
+
+rru
+p
+iso ted
+ton
+his ic
+t1
+his 0
+t2
+his 5
+t
+his 50
+t10
+0
+b
+be eta
+tabe am
+taa
+be b
+taa
+pla
+tt
+
+co
+
+Estimated Bayes error (%)
+40
+
+30
+
+20
+
+10
+
+0
+
+Estimated Bayes error (%)
+rru
+p
+iso ted
+ton
+his ic
+t1
+his 0
+t2
+his 5
+t
+his 50
+t10
+0
+b
+be eta
+tabe am
+taa
+be b
+taa
+pla
+tt
+
+co
+
+rru
+p
+iso ted
+ton
+his ic
+t1
+his 0
+t2
+his 5
+t
+his 50
+t10
+0
+b
+be eta
+tabe am
+taa
+be b
+taa
+pla
+tt
+
+co
+
+Estimated Bayes error (%)
+40
+
+30
+
+20
+
+10
+
+0
+
+Estimated Bayes error (%)
+
+co
+rru
+p
+iso ted
+ton
+his ic
+t1
+his 0
+t2
+his 5
+t
+his 50
+t10
+0
+b
+be eta
+tabe am
+taa
+be b
+taa
+pla
+tt
+
+co
+rru
+p
+iso ted
+ton
+his ic
+t1
+his 0
+t2
+his 5
+t
+his 50
+t10
+0
+b
+be eta
+tabe am
+taa
+be b
+taa
+pla
+tt
+
+Estimated Bayes error (%)
+40
+
+30
+
+20
+
+10
+
+0
+
+Estimated Bayes error (%)
+
+rru
+p
+iso ted
+ton
+his ic
+t1
+his 0
+t2
+his 5
+t
+his 50
+t10
+0
+b
+be eta
+tabe am
+taa
+be b
+taa
+pla
+tt
+
+co
+
+rru
+p
+iso ted
+ton
+his ic
+t1
+his 0
+t2
+his 5
+t
+his 50
+t10
+0
+b
+be eta
+tabe am
+taa
+be b
+taa
+pla
+tt
+
+co
+
+Estimated Bayes error (%)
+40
+
+30
+
+20
+
+10
+
+0
+
+Estimated Bayes error (%)
+
+Published as a conference paper at ICLR 2026
+
+(o) ICLR2024
+
+36
+
+40
+
+30
+
+20
+
+10
+0
+
+(i) ICLR2018
+40
+
+(j) ICLR2019
+
+30
+
+20
+
+10
+
+0
+
+(k) ICLR2020
+(l) ICLR2021
+
+40
+
+30
+
+20
+
+10
+
+0
+
+(m) ICLR2022
+(n) ICLR2023
+
+40
+
+30
+
+20
+
+10
+
+0
+
+(p) ICLR2025
+
+Figure 11: Estimated Bayes error across various calibration algorithms and datasets (continued).
+
+Published as a conference paper at ICLR 2026
+
+D.4
+
+E VALUATING CALIBRATION ALGORITHMS AGAINST REAL - WORLD DATASETS WITH
+F EE B EE
+
+In this section, we present the full details and results of the FeeBee experiment described in Section 4.3. We first review FeeBee (Renggli et al., 2021), a real-world evaluation framework for Bayes
+error estimators. Then, we present experimental results of various calibration algorithms evaluated
+using FeeBee.
+D.4.1
+
+R EVIEW OF F EE B EE
+
+In the long history of the field of Bayes error estimation, evaluation of estimators on real-world
+datasets has been a challenging task. For synthetic datasets, one can easily compute exact or approximate Bayes error rates; however, for real-world datasets, it is practically impossible to obtain
+ground-truth Bayes error rates as they depend on the unknown data distribution. Of course, it is
+trivial to obtain a lower bound and an upper bound of the Bayes error rate: if we have a classifier
+with error rate E on a dataset, then the Bayes error rate should be somewhere between 0 and E.
+However, such bounds are not informative enough. For example, constant estimators that always
+return any value between 0 and E are technically valid from this perspective, but they are obviously
+useless in practice.
+To address this issue, Renggli et al. (2021) proposed an evaluation framework called FeeBee. The
+key idea of FeeBee is to generate a series of datasets from a given real-world dataset by injecting
+various levels of synthetic label noise. To be more specific, for a noise level ρ ∈ [0, 1], FeeBee
+generates a new dataset by replacing each original label Y with a uniformly random label U with
+probability ρ:
+Yρ := Z · U + (1 − Z) · Y ,
+(121)
+where Z ∼ Bernoulli(ρ). Importantly, there is a simple relationship between the Bayes error rates
+Err∗ on the original dataset and Err∗ρ on the noise-injected dataset:
+Err∗ρ = ρ ·
+
+1
++ (1 − ρ) · Err∗ .
+2
+
+(122)
+
+Since 0 ≤ Err∗ ≤ E, we can derive the following bounds on Err∗ρ :
+L(ρ) :=
+
+ρ
+ρ
+≤ Err∗ρ ≤ + (1 − ρ)E =: U (ρ).
+2
+2
+
+(123)
+
+Based on this observation, FeeBee first generates many noise-injected datasets with different noise
+levels ρ ∈ [0, 1], and then evaluates a given Bayes error estimator on each of them. Ideally, the
+d∗ should lie within the bounds [L(ρ), U (ρ)] given in (123). If the estimates
+resulting estimates Err
+ρ
+fall outside the bounds, we penalize the estimator by the amount of violation. By aggregating the
+penalties over all noise levels, we can obtain a single score for the estimator on the given real-world
+dataset:
+Z 1 
+
+
+ 
+d∗ − U (ρ) + L(ρ) − Err
+d∗
+FeeBee :=
+Err
+dρ,
+(124)
+ρ
+ρ
++
+
+0
+
++
+
+where (x)+ := max{x, 0}. In practice, the integral can be approximated by a finite sum: for a
+sufficiently large N ∈ N, the approximate FeeBee score can be computed as
+N 
+
+
+ 
+1 X [
+∗
+[
+FeeBee ≈
+Err∗ρi − U (ρi ) + L(ρi ) − Err
+,
+(125)
+ρi
+N + 1 i=0
++
++
+where ρi := Ni (i = 0, 1, . . . , N ). The lower the FeeBee score is, the better the estimator is. FeeBee
+provides a practical way to evaluate Bayes error estimators on real-world datasets without requiring
+knowledge of the true Bayes error rates.
+D.4.2
+
+C OMPARING CALIBRATION ALGORITHMS USING F EE B EE
+
+Here, we present experimental results where various calibration algorithms are evaluated using the
+FeeBee framework. We use the following real-world datasets: CIFAR-10/CIFAR-10H, FashionMNIST/Fashion-MNIST-H, SNLI, MNLI, AbductiveNLI, ICLR2017–2025, ICLR2017, . . . , and
+37
+
+Published as a conference paper at ICLR 2026
+
+Table 2: FeeBee scores of calibration algorithms across real-world datasets (lower is better). The
+best scores for each dataset are highlighted in bold, and the rank within each column is shown in
+parentheses.
+Dataset
+Algorithm
+
+CIFAR-10
+
+Fashion-MNIST
+
+SNLI
+
+MNLI
+
+AbductiveNLI
+
+isotonic
+hist-10
+hist-25
+hist-50
+hist-100
+beta
+beta-am
+beta-ab
+beta-a
+platt
+
+0.00307 (3)
+0.00318 (4)
+0.00253 (1)
+0.00322 (5)
+0.00329 (6)
+0.02396 (8)
+0.02401 (10)
+0.02335 (7)
+0.02400 (9)
+0.00278 (2)
+
+0.00240 (1)
+0.00250 (2)
+0.00825 (6)
+0.00329 (4)
+0.00373 (5)
+0.08796 (8)
+0.09055 (10)
+0.08737 (7)
+0.08878 (9)
+0.00262 (3)
+
+0.00292 (2)
+0.00283 (1)
+0.00356 (4)
+0.00520 (5)
+0.00714 (6)
+0.01392 (8)
+0.01452 (9)
+0.01476 (10)
+0.01370 (7)
+0.00305 (3)
+
+0.00147 (2)
+0.00210 (5)
+0.00322 (7)
+0.00421 (9)
+0.00666 (10)
+0.00380 (8)
+0.00208 (4)
+0.00143 (1)
+0.00223 (6)
+0.00154 (3)
+
+0.00118 (2)
+0.00143 (3)
+0.00362 (4)
+0.00558 (5)
+0.00813 (6)
+0.05400 (9)
+0.05204 (8)
+0.04949 (7)
+0.05537 (10)
+0.00081 (1)
+
+Dataset
+Algorithm
+
+ICLR2017-2025
+
+ICLR2017
+
+ICLR2018
+
+ICLR2019
+
+ICLR2020
+
+isotonic
+hist-10
+hist-25
+hist-50
+hist-100
+beta
+beta-am
+beta-ab
+beta-a
+platt
+
+0.00013 (5)
+0.00011 (3)
+0.00016 (7)
+0.00033 (9)
+0.00056 (10)
+0.00012 (4)
+0.00014 (6)
+0.00010 (2)
+0.00017 (8)
+0.00001 (1)
+
+0.00508 (7)
+0.00469 (6)
+0.01086 (8)
+0.01829 (9)
+0.02915 (10)
+0.00109 (2)
+0.00120 (3)
+0.00082 (1)
+0.00200 (5)
+0.00135 (4)
+
+0.00166 (6)
+0.00232 (7)
+0.00517 (8)
+0.00863 (9)
+0.01586 (10)
+0.00060 (2)
+0.00062 (3)
+0.00049 (1)
+0.00097 (5)
+0.00067 (4)
+
+0.00120 (6)
+0.00160 (7)
+0.00352 (8)
+0.00720 (9)
+0.01114 (10)
+0.00039 (2)
+0.00035 (1)
+0.00108 (5)
+0.00066 (4)
+0.00059 (3)
+
+0.00085 (5)
+0.00106 (6)
+0.00137 (8)
+0.00162 (9)
+0.00181 (10)
+0.00108 (7)
+0.00078 (4)
+0.00076 (3)
+0.00056 (2)
+0.00030 (1)
+
+Algorithm
+
+ICLR2021
+
+ICLR2022
+
+ICLR2023
+
+ICLR2024
+
+ICLR2025
+
+isotonic
+hist-10
+hist-25
+hist-50
+hist-100
+beta
+beta-am
+beta-ab
+beta-a
+platt
+
+0.00098 (6)
+0.00156 (7)
+0.00183 (8)
+0.00388 (9)
+0.00621 (10)
+0.00042 (4)
+0.00026 (3)
+0.00019 (2)
+0.00017 (1)
+0.00046 (5)
+
+0.00064 (6)
+0.00090 (7)
+0.00205 (8)
+0.00386 (9)
+0.00684 (10)
+0.00023 (3)
+0.00031 (5)
+0.00021 (2)
+0.00010 (1)
+0.00029 (4)
+
+0.00034 (6)
+0.00074 (7)
+0.00143 (8)
+0.00265 (9)
+0.00509 (10)
+0.00030 (5)
+0.00020 (2)
+0.00021 (3)
+0.00008 (1)
+0.00023 (4)
+
+0.00022 (6)
+0.00044 (7)
+0.00090 (8)
+0.00133 (9)
+0.00270 (10)
+0.00005 (2)
+0.00006 (3)
+0.00003 (1)
+0.00006 (4)
+0.00011 (5)
+
+0.00024 (6)
+0.00042 (7)
+0.00060 (8)
+0.00093 (9)
+0.00158 (10)
+0.00009 (3)
+0.00015 (5)
+0.00007 (2)
+0.00007 (1)
+0.00011 (4)
+
+Dataset
+
+ICLR2025. For each dataset, we compare the FeeBee scores of the following calibration algorithms: isotonic calibration (isotonic), histogram binning (hist-10, hist-25, hist-50
+and hist-100), full three-parameter beta calibration (beta), beta calibration with b = a
+(beta-am), beta calibration with m = 12 (beta-ab), beta calibration with b = a, m = 12
+(beta-a), and Platt scaling (platt). We set N = 100 for the approximation of FeeBee scores.
+Choosing E To compute the FeeBee scores, we need to choose a classifier error rate E for each
+dataset. For image classification datasets (CIFAR-10 & Fashion-MNIST), we use the error rates
+of Vision Transformer (ViT) models as we have seen in Section 4. For natural language inference
+datasets (SNLI, MNLI & AbductiveNLI), the ChaosNLI GitHub repository provides predictions of
+some pre-trained models. We use the best error rates among them as E. For the ICLR peer-review
+datasets, we do not have any pre-trained models, so we simply set E to the overall acceptance rate,
+which is the error rate of a trivial reviewer who rejects any given paper no matter what.
+Results
+
+The full results are shown in Table 2.
+
+38
+
+Published as a conference paper at ICLR 2026
+
+D.5
+
+O RDER BREAKAGE
+
+Theorem 2 and Theorem 3 assume that the corruption function f is order-preserving although the
+latter theorem allows random noise to be added after the order-preserving transformation. To analyze
+how much the estimation performance degrades when the order-preserving assumption is violated,
+we conducted experiments on synthetic datasets where we can control the degree of order breakage.
+Let f be the corruption function used in Section 4. We define a new, non-order-preserving corruption
+fσ as follows:
+fσ (η) = sigmoid(logit(f (η)) + z), where z ∼ N (0, σ 2 ).
+(126)
+Here, σ controls the amount of fluctuation added after the order-preserving transformation f . By increasing σ, we can increase the degree of order breakage. We first consider the case where corrupted
+soft labels are obtained as η̃i = fσ (ηi ). We also consider the “non-monotonic skew + random noise”
+setting, i.e., we obtain corrupted soft labels as an average of m independent hard labels sampled from
+posteriors skewed by the above non-order-preserving corruption:
+m
+
+η̃i =
+(j)
+
+where yi
+
+1 X (j)
+y ,
+m j=1 i
+
+∼ Bernoulli (fσ (ηi )) ,
+
+(127)
+z ∼ N (0, σ 2 ).
+
+(128)
+
+To quantify the degree of order breakage, we use the Kendall tau (Kendall, 1938) between ηi and
+fσ (ηi ). The Kendall tau or Kendall’s rank correlation coefficient is a non-parametric measure of
+ordinal correspondence or monotonicity between two variables. It takes values in [−1, 1]. If the
+relationship between two variables is completely increasing, the Kendall tau becomes 1. If they
+are in a completely decreasing relationship, it takes a value of −1. Given the Kendall tau τ , the
+probability of order breakage (in our case, the frequency that we have ηi ≤ ηj , fσ (ηi ) > fσ (ηj ) or
+vice versa for a randomly picked pair i < j) can be obtained as 1−τ
+2 .
+We conducted experiments as below using the same Gaussian mixture model as in Section 4. For
+various order breakage levels σ = 10−10 , 10−9 , . . . , 100 , we estimated the Bayes error from a
+dataset containing n = 10, 000 corrupted soft labels generated as η̃i = fσ (ηi ) or from m = 50 hard
+labels sampled from posteriors skewed by fσ . Fig. 12 shows the estimated Bayes error as a function
+of the Kendall tau between ηi and fσ (ηi ). The black dashed line indicates the Bayes error estimated
+using the clean/true soft labels and is supposed to be a good approximation of the true Bayes error.
+As expected, the estimation performance degrades as the degree of order breakage increases (i.e., as
+the Kendall tau decreases). However, in the noiseless setting (Fig. 12a), all the estimators produced
+estimates almost indistinguishable from the true Bayes error when the Kendall tau is sufficiently
+large (say, when τ ≥ 0.95 or when the order breakage probability is less than 2.5%). For the noisy
+setting (Fig. 12b), the results are a bit different. Overall, the estimation performance improves as
+the Kendall tau increases, but for beta calibration and its variants, the estimates never get very close
+to the true Bayes error even when the Kendall tau is nearly 1. Other calibration methods, including
+isotonic calibration, produced estimates fairly close to the true Bayes error (but not as close as in the
+noiseless setting) for sufficiently high Kendall tau values.
+
+39
+
+Published as a conference paper at ICLR 2026
+
+17.5
+
+Estimated Bayes error (%)
+
+15.0
+12.5
+corrupted
+isotonic
+hist10
+hist25
+hist50
+hist100
+beta
+beta-am
+beta-ab
+beta-a
+platt
+
+10.0
+7.5
+5.0
+2.5
+0.0
+
+0.75
+
+0.80
+
+0.85
+
+0.90
+
+0.95
+
+Kendall's rank correlation
+
+1.00
+
+(a) Non-order-preserving corruption without additional noise.
+
+17.5
+
+Estimated Bayes error (%)
+
+15.0
+12.5
+corrupted
+isotonic
+hist10
+hist25
+hist50
+hist100
+beta
+beta-am
+beta-ab
+beta-a
+platt
+
+10.0
+7.5
+5.0
+2.5
+0.0
+
+0.75
+
+0.80
+
+0.85
+
+0.90
+
+0.95
+
+Kendall's rank correlation
+
+1.00
+
+(b) Non-order-preserving corruption with additional noise, i.e., the case where corrupted soft labels
+are obtained by averaging m = 50 independent hard labels sampled from posteriors skewed by the
+non-order-preserving corruption.
+
+Figure 12: Kendall tau and order breakage on synthetic logit Gaussian datasets with and without
+binomial noise.
+
+40
+
+

@@ -1,0 +1,2833 @@
+Evaluating Bayes Error Estimators on
+Real-World Datasets with FeeBee
+
+arXiv:2108.13034v2 [cs.LG] 5 Nov 2021
+
+Cedric Renggli∗
+ETH Zurich
+
+Luka Rimanic∗
+ETH Zurich
+
+Nora Hollenstein
+University of Copenhagen
+
+Ce Zhang
+ETH Zurich
+
+Abstract
+The Bayes error rate (BER) is a fundamental concept in machine learning that
+quantifies the best possible accuracy any classifier can achieve on a fixed probability
+distribution. Despite years of research on building estimators of lower and upper
+bounds for the BER, these were usually compared only on synthetic datasets with
+known probability distributions, leaving two key questions unanswered: (1) How
+well do they perform on realistic, non-synthetic datasets?, and (2) How practical
+are they? Answering these is not trivial. Apart from the obvious challenge of
+an unknown BER for real-world datasets, there are two main aspects any BER
+estimator needs to overcome in order to be applicable in real-world settings: (1)
+the computational and sample complexity, and (2) the sensitivity and selection of
+hyper-parameters. In this work, we propose FeeBee, the first principled framework
+for analyzing and comparing BER estimators on modern real-world datasets with
+unknown probability distribution. We achieve this by injecting a controlled amount
+of label noise and performing multiple evaluations on a series of different noise
+levels, supported by a theoretical result which allows drawing conclusions about the
+evolution of the BER. By implementing and analyzing 7 multi-class BER estimators
+on 6 commonly used datasets of the computer vision and NLP domains, FeeBee
+allows a thorough study of these estimators, clearly identifying strengths and
+weaknesses of each, whilst being easily deployable on any future BER estimator.
+
+1
+
+Introduction
+
+The Bayes error rate (BER) [5] is a fundamental concept of machine learning (ML) which quantifies
+the “irreducible error” of a given task, corresponding to the error rate of a Bayes optimal classifier.
+Given a dataset representative for a task, knowing its exact BER yields the best accuracy any machine
+learning model could achieve. Being such a fundamental quantity, BER estimators have been applied
+to a diverse range of applications, from performing feature selection [17, 18], exploring the feature
+space or behaviour of intermediate representations in trained networks [18], assessing the quality of
+security defences against ML-based attacks [4], to estimating the feasibility of a ML application given
+a target accuracy prior to its development [15]. In the asymptotic regime, in which one can access
+an infinite amount of data, one could use a consistent classifier such as k-nearest neighbor (kNN)
+to estimate the BER [5]. Over the last 50 years, coming up with practical Bayes error estimators
+in the finite-data regime has been a never ending pursuit of the ML community: from Fukunaga’s
+early effort back in 1975 [10] to Sekeh et al.’s recent effort just last year in 2020 [18] and a diverse
+collection of other Bayes error estimators [1, 2, 6, 11, 14, 16].
+Despite this wide range of real-world applications and the large number of estimators, there exists a
+technical gap: BER estimators have only been evaluated and compared on simple synthetic datasets
+for which the true BER can be calculated. This results in a lack of understanding of the performance
+and practicality of BER estimators in real-world scenarios. First, all these synthetic datasets are
+∗
+
+Equal contribution. Contact: cedric.renggli@inf.ethz.ch or luka.rimanic@inf.ethz.ch.
+
+35th Conference on Neural Information Processing Systems (NeurIPS 2021) Track on Datasets and Benchmarks.
+
+constructed with simple data generative processes, which can be very different from real-world
+datasets that are diverse in their modalities (e.g., images, text, tabular data) and data distributions.
+Second, many BER estimators consist of a hyper-parameter tuning mechanism that relies on the true
+BERs of synthetic datasets [5, 11, 20], which are in practice not available for real-world datasets.
+Third, real-world datasets can often take advantage of pre-trained feature transformations which can
+lead to improving convergence rates at the cost of a slight grow of the BER [16]. Such a behavior is
+also hard to explore on synthetic datasets.
+In this paper, we present FeeBee, which, to our best knowledge, is the first evaluation framework of
+BER estimators on realistic, non-synthetic datasets. The goal of FeeBee is to enable a systematic
+study of the performance and practicality of BER estimators in more realistic scenarios. Designing
+FeeBee is challenging — after all, how can we compare BER estimators without knowing the true
+BER? FeeBee’s idea is to go beyond simply evaluating an estimator at a single point — instead,
+evaluate it on a series of points, for which we know the relative relationship among their BERs.
+At its core, FeeBee injects label noise to existing datasets, and using a simple but novel technical
+result, it estimates the corresponding BER on different noise levels to measure to what degree a
+BER estimator under/overestimates. The FeeBee framework allows us to systematically evaluate
+BER estimators. Especially, we focus on two main reasons that hamper the applications of BER
+estimators in real-world scenarios: (i) difficulty of choosing correct hyper-parameters and a feature
+transformation, and (ii) computational and data efficiency. Our key contributions can be summarized
+as follows:
+• We propose FeeBee, the first principled and practical framework for comparing different BER
+estimators by reasoning about the evolution of the true (unknown) BER rather than evaluating
+the BER as a single value.
+• We open-source and deploy FeeBee on 6 well-established, real-world, computer vision and text
+classification benchmark datasets, on which we systematically evaluate a range of 7 existing
+BER estimators. The framework can easily be extended with new BER estimators.2
+• We perform further studies in order to understand the behavior of certain BER estimators, as
+well as studying the potential of simple (scaled) classifiers to be used as BER estimators.
+Moving forward. Evaluating BER estimators on real-world datasets is a fundamentally challenging
+problem. FeeBee provides, to our best knowledge, the first attempt to tackling this problem. We see
+our contributions as moving away from the synthetic setting by using realistic, well-known datasets
+for which we are not aware of the true BER. We are aware that this framework is only a step towards
+covering all the real-world scenarios. Therefore, we hope that FeeBee can help open up future
+research endeavors towards understanding the behavior of BER estimators on real-world datasets,
+whilst motivating the development of alternative evaluation frameworks and new BER estimators,
+followed by further real-world applications of the BER.
+
+2
+
+Preliminaries
+
+In this section, we give a short overview over the technical terms and the notation used throughout
+this paper. Let X be the feature space and Y be the label space, with C = |Y|. Let X, Y be random
+variables taking values in X and Y, respectively. We denote their joint distribution by p(X, Y ) ∼ D,
+often using the simplified notation p(x, y) = p(X = x,Y = y). We define ηy (x) = p(y|x) when C > 2,
+and η(x) = p(1|x) when C = 2, in which case we assume Y = {0, 1}.
+Bayes error. Bayes optimal classifier is the classifier that achieves the lowest error rate among all
+possible classifiers from X to Y, with respect to D. Its error rate is called the Bayes error rate (BER)
+∗
+∗
+∗
+and we denote it, depending on the context, by RD
+or RX,Y
+, often abbreviated to RX
+when Y is
+(2)
+clear from the context. It can be expressed as
+z
+
+}|
+
+{
+
+∗
+RX
+= EX 1 − max ηy (x) .
+
+
+
+y∈Y | {z }
+
+(1)
+
+(1)
+
+|
+
+{z
+
+(3)
+
+}
+
+When examining BER estimators, we only consider methods which are capable of estimating the
+BER for multi-class classification problems (C ≥ 2), and divide them into three categories, based on
+2
+
+Accessible via: https://github.com/DS3Lab/feebee.
+
+2
+
+different parts of Equation 1: density estimators that estimate (1), divergence estimators that address
+(2), and estimators built around the k-nearest neighbors algorithm, which focus on (3). In Section 4.1
+we distill each of these groups in detail.
+Synthetic vs non-synthetic regimes. In previous work, even though BER estimators were sometimes applied on real-world datasets (e.g., as a utility for feature reduction strategies, or for quantifying
+layer-to-layer change in convolutional neural networks, both in [18]), their theoretical properties were
+tested only on synthetic datasets [5, 6, 11, 12, 18, 20]. Upon knowing the underlying probability
+distribution, the true BER can then either be computed directly (e.g., [5, 20]), or through a simulation,
+such as Monte Carlo method [18]. These synthetic datasets often assume Gaussian distributions [11,
+12, 20], over small dimensions (at most 8 in [11, 12, 18]). Since a BER estimator is usually constructed based on strong theoretical guarantees in the asymptotic regimes, for each such synthetic
+dataset one can usually find a set of hyper-parameters which make the estimator predict the true BER
+reasonably well. However, in order to be able to compare BER estimators, a useful framework needs
+to give them a chance to be wrong. Therefore, comparing them on synthetic datasets would not yield
+transferable insights towards real-world, non-synthetic datasets, since they perform well on synthetic
+datasets, whereas in practice, predicting the true BER is notoriously hard.
+
+3
+
+Evaluation Framework
+
+Given a dataset D containing n i.i.d. samples from p(X, Y ), a BER estimator m provides us an
+∗
+estimation of the lower bound `D,m and the upper bound uD,m of the unknown BER RD
+. In the
+following, we also assume that we are aware of the state-of-the-art performance (SOTA) of applying
+∗
+machine learning on this dataset: sD ≥ RD
+≥ 0. The goal of our evaluation framework is to come
+up with some metrics to measure the quality of the lower bound `D,m and the upper bound uD,m :
+∆
+
+LD (m) ∈ [0, 1] = Sub-optimality of LB estimator `D,m ; lower the better
+∆
+
+UD (m) ∈ [0, 1] = Sub-optimality of UB estimator uD,m ; lower the better
+What is a good evaluation framework? In this paper, we consider two natural key requirements that
+we believe need to be satisfied when evaluating BER estimators. First, if the estimator predicts exactly
+∗
+the BER RD
+for both the lower and the upper bound, then it should hold that LD (m) = UD (m) = 0.
+Second, any lower-bound estimate that satisfies `D,m > sD is clearly wrong, whereas any upperbound estimate that satisfies uD,m > sD is clearly outperformed by u = sD , SOTA itself. In
+particular, a good framework should penalize these two cases.
+Challenges of evaluating BER estimators at a single point. The key challenge of evaluating
+∗
+BER estimators on real-world datasets is that the true BER RD
+is unknown and we only have access
+to the SOTA sD . We first show that simply evaluating BER estimators using sD is challenging in
+∗
+meeting these two natural requirements. The first baseline would use the SOTA as the proxy of RD
+:
+LD (m) = |sD − `D,m |,
+
+UD (m) = |uD,m − sD |.
+
+∗
+This does not satisfy our first requirement — an “ideal” estimator that always outputs RD
+would have
+∗
+non-zero sub-optimality as long as sD 6= RD
+.
+
+We could construct another baseline inspired by the fact that `D,m = 0 and uD,m = sD are true
+bounds and assign them zero sub-optimality:
+LD (m) = |`D,m |,
+
+UD (m) = |uD,m − sD |.
+
+It satisfies that predicting `D,m = 0 and uD,m = sD gives a perfect score. However, the true BER
+∗
+RD
+has a non-zero score as soon as it differs from sD , again contradicting the first requirement.
+(ii) One could attempt at penalizing intervals that are certainly sub-optimal, for example by
+LD (m) = 1{`D,m >sD } ,
+
+UD (m) = 1{uD,m >sD } .
+
+However, this is not distinguishable enough as both the estimator that predicts `D,m = uD,m = 0
+and `D,m = uD,m = sD have perfect score, whereas it is obvious that even though an estimator that
+always predicts 0 gives a valid lower bound, it is completely non-informative.
+3
+
+Figure 1: Evaluation Methodology for estimating the lower bound (left) and the upper bound (right).
+Evaluating through a series of points. In order to overcome the above limitation, FeeBee injects
+different levels of label noise and measures how an estimator follows the evolution of the BER, as
+illustrated in Figure 1. For each sample, with probability ρ ∈ [0, 1] we flip the label, in which case
+we choose a label uniformly at random. The following result quantifies the increase in the BER.
+Lemma 3.1. Let Yρ be a random variable defined on Y by setting Yρ = Z · U (Y) + (1 − Z) · Y,
+where U is a uniform variable taking values in Y, and Z is a Bernoulli variable with probability
+∗
+∗
+∗
+0 ≤ ρ ≤ 1, both independent of X and Y . Then RX,Y
+= RX,Y
++ ρ(1 − 1/C − RX,Y
+).
+ρ
+P ROOF: Let p(X, Yρ ) be the corresponding joint distribution on X × Y for the random variables X
+and Yρ , simplified as pρ (x, y). Note that
+ρ
+pρ (y|x) = pρ (y|x, Z = 0) p(Z = 0) + pρ (y|x, Z = 1) p(Z = 1) = (1 − ρ)p(y|x) + .
+C
+|
+{z
+}
+|
+{z
+}
+p(y|x)
+
+Thus,
+
+p(U =y)
+
+
+
+
+
+∗
+RX,Y
+= EX 1 − max pρ (y|x) = 1 − EX max (1 − ρ)p(y|x) + ρ/C
+ρ
+y∈Y
+
+y∈Y
+
+∗
+∗
+= 1 − ρ/C − (1 − ρ)EX max p(y|x) = RX,Y
++ ρ(1 − 1/C − RX,Y
+).
+y∈Y
+
+We remark that Yρ ∈ Y, where ρ corresponds to the probability of randomly changing the original
+∗
+∗
+label to a random value in Y and note that Lemma 3.1 implies that 1 − 1/C ≥ RX,Y
+≥ RX,Y
+. As a
+ρ
+∗
+∗
+direct consequence of Lemma 3.1, using the SOTA as an upper bound for RX , and RX ≥ 0 as the
+∗
+lower bound, we can define the valid bounds on RX,Y
+:
+ρ
+`D (ρ) = ρ(1 − 1/C), uD (ρ) = sD + ρ(1 − 1/C − sD ),
+∗
+yielding RX,Y
+∈
+[`
+D (ρ), uD (ρ)]. For a fixed method m, we can estimate the lower bound `D,m (ρ)
+ρ
+and the upper bound uD,m (ρ) using any BER estimation method on a manipulated dataset Dρ
+obtained by taking ρ · n samples out of D, and randomly changing their labels, whilst keeping the
+other (1 − ρ) · n samples intact. Notice that our evaluation framework needs to change the label on
+all the data points (i.e. in both the training and test sets). For those estimators that predict only a
+single value, i.e., try to estimate the exact BER, we set both `D,m (ρ) and uD,m (ρ) to that estimate.
+As illustrated in Figure 1, in order to define the error of a given method m on the modified dataset Dρ ,
+we can estimate four areas with respect to the curves: the area where m clearly under/overestimates
+the Bayes error lower/upper bound. More formally, for a given method m we define the lower BER
+estimator score LD (m) and the upper BER estimator score UD (m) by
+LD (m) =LD,. (m) + LD,/ (m), UD (m) = UD,. (m) + UD,/ (m),
+Z 1
+2C
+LD,/ (m) =
+1{`D,m (ρ)<`D (ρ)} (`D (ρ) − `D,m (ρ))dρ,
+C − 1 ρ=0
+Z 1
+2C
+LD,. (m) =
+1{`D,m (ρ)>uD (ρ)} (`D,m (ρ) − uD (ρ))dρ,
+C − 1 ρ=0
+Z 1
+2C
+UD,/ (m) =
+1{uD,m (ρ)<`D (ρ)} (`D (ρ) − uD,m (ρ))dρ,
+C − 1 ρ=0
+Z 1
+2C
+UD,. (m) =
+1{uD,m (ρ)>uD (ρ)} (uD,m (ρ) − uD (ρ))dρ.
+C − 1 ρ=0
+4
+
+Table 1: Datasets and state-of-the-art performance on classification tasks. Raw features and thus their
+dimensionality for NLP tasks do not exist.
+Dimension
+
+Classes C
+
+Train / Test Samples
+
+SOTA %
+
+MNIST
+CIFAR10
+CIFAR100
+
+784
+3072
+3072
+
+10
+10
+100
+
+60K / 10K
+50K / 10K
+50K / 10K
+
+0.13 [3]
+0.5 [8]
+3.92 [9]
+
+IMDB
+SST2
+YELP
+
+N/A
+N/A
+N/A
+
+2
+2
+5
+
+25K / 25K
+67K / 872
+500K / 50K
+
+3.79 [21]
+3.2 [21]
+27.80 [21]
+
+Name
+
+Notation . and / reflects the corresponding upper-left and bottom-right triangles in Figure 1. The
+scaling constant is chosen in the way that the random classifier, the one that chooses a label uniformly
+at random, satisfies LD (m) = UD (m) = 1. We will use BER estimator scores LD (m), UD (m) to
+assess the performance of existing methods on real-world datasets. We estimate the expectation and
+standard deviation of the score SD (m) by sampling linearly 10 values for ρ and constructing at least
+5 random datasets Dρ for every sampled ρ.
+Discussion. Going back to the two requirements laid down at the beginning of this section, both are
+clearly satisfied: (i) Lemma 3.1 and the construction of the areas (see Figure 1) prove that predicting
+∗
+`D,m (ρ) = uD,m (ρ) = RD
+always yields LD (m) = UD (m) = 0. In that case the method m is
+ρ
+an optimal lower/upper-bound estimate. (ii) Estimators that consistently predict `D,m (ρ) = 0 and
+uD,m (ρ) = sD clearly have LD (m) > 0 and UD (m) > 0. Furthermore, for two methods m and
+m0 , E [LD (m)] < E [LD (m0 )] implies that m yields a better lower-bound estimate compared to m0 ,
+whereas E [UD (m0 )] > E [UD (m)] implies that m yields a better upper-bound estimate compared to
+m0 , in expectation. This allows one to compare two estimators even when they produce valid bounds.
+Limitations. The main limitation we see in FeeBee is the need of having a relatively strong
+SOTA value. Note that having no SOTA value would allow even random classifier to satisfy
+LD,. (m) = UD,. (m) = 0. In that sense, for FeeBee to give valuable insights, we need SOTA to be
+close to BER to have a wide range of possible values for the areas. We examine this in Section 4.3.
+
+4
+
+Analysis of Existing Estimators
+
+In this section, we use our FeeBee framework to conduct a systematic study of a diverse range of
+BER estimators over a collection of real-world datasets.
+4.1
+
+Setup
+
+Datasets. We perform the evaluation on two data modalities that are ubiquitous in modern machine
+learning — visual classification tasks and text classification tasks, over 6 well-established real-world
+datasets presented in Table 1. The first group consists of visual classification tasks, including MNIST
+and CIFAR10/CIFAR100. The second group consists of standard text classification tasks, where we
+focus on IMDB, SST2, and YELP. Table 1 presents the details of the involved datasets. The splits for
+all datasets except YELP3 are taken from Tensorflow Datasets4 . The SOTA values, especially for the
+NLP tasks, may sometimes differ as different sources provide values on slightly different splits. A
+key assumption we made when choosing relevant datasets is that we assume that both the train and
+test dataset originate from the same distribution. With that in mind, we rule out datasets for which
+this is clearly known not to be true, such as ImageNet [13].
+Feature transformations. BER estimators are usually tested on synthetic data of often small
+dimension. By testing each estimator on raw data, we observe that on real-world datasets having a
+transformation that adequately transforms the space and/or reduces the dimension is necessary for
+every method. We report the results on the raw features (i.e., pixel values) for the vision datasets in
+Appendix B.1, omitting NLP tasks in this evaluation as there exists no completely raw representation.
+Even though applying a transformation might increase the BER [16], it is often supported by theory,
+e.g., for kNN-Extrapolate [19] and for kNN [16], by improving convergence. Therefore, we deploy
+each estimator on a collection of feature transformations, presented in Tables 6 and 7 in Appendix A.
+3
+4
+
+https://www.yelp.com/dataset.
+https://www.tensorflow.org/datasets/catalog/overview.
+
+5
+
+Table 2: Overview of BER estimators and their hyper-parameters.
+Estimator
+
+Parameter
+
+GHP
+
+Values
+
+None
+
+DE-kNN,1NN-kNN
+
+k
+
+[2, 100]
+
+Gaussian KDE
+
+B
+
+{0.0025, 0.05, 0.1, 0.25, 0.5}
+
+k; dist
+
+[1, 10]; {cosine, L2 }
+
+1NN / kNN / kNN-LOO/ kNN-Extrapolate
+
+BER estimators. The BER estimators implemented initially in our framework can be divided into
+three groups, motivated by three different parts of Equation 1.
+(1) Density estimators. Both methods in this group use the full test set with labels to estimate the
+class posterior, repeated once again for the same test set, but this time without the labels. This
+allows one to sample the feature space accordingly and get an estimate of the expectation over X .
+(DE-kNN) This method estimates the per-class posterior ηy for all y ∈ Y, by counting the fraction
+ky /k of samples with that specific label amongst the k nearest neighbors, in expectation over the
+feature space [12]. One uses the full test set only to estimate an upper bound by the leave-one-out
+(LOO) technique, and an optimistic lower bound by the re-substitution technique [11]. (KDE) This
+method estimates the class prior by first taking a fraction of per-class samples in the full test set.
+Using a kernel density approach, the class likelihood is then estimated using all the samples per class
+separately. Finally, by using the Bayes formula, one can derive the posterior density per class, which
+is used as the lower and upper bound.
+(2) Divergence estimator. (GHP) This estimator uses the generalized Henze-Penrose divergence [18]
+between every pair of ηi and ηj , to get a provably valid estimator of the BER in the asymptotic regime.
+The estimation of the divergence can be further utilized to get an upper/lower-bound estimate of the
+BER. Implementation-wise, using only a single set of samples, one first constructs the minimum
+spanning tree (MST) over the fully connected graph over all the samples, with edges being defined
+through Euclidean distances, and then uses the number of dichotomous edges to estimate the BER,
+noting that GHP and kNN-LOO (introduced below) have similar computational complexity.
+(3) kNN classifier accuracy. (1NN-kNN) The approach by Devijver [6] aims at estimating the 1NN
+classifier accuracy by using the k-nearest-neighbor information. InPorder to get an unbiased estimator
+1
+of the 1NN classifier accuracy, in [6] it is proposed using k(k−1)
+y∈Y ky (k − ky ) as the estimator,
+where k is the hyper-parameter of the method. This approach is very similar to DE-kNN, with the
+difference that we are not estimating ηy based on a test set, but directly the 1NN classifier accuracy.
+Samples are usually used twice through the resubstitution technique in order to get the 1NN classifier
+accuracy. (kNN-Extrapolate) One major caveat of bounding the BER by any kNN accuracy method
+lies in the fact that the bounds hold only in the asymptotic regime. As an attempt to surpass this
+limitation, Snapp and Xu [20] extrapolate the convergence values of kNN for different number
+of training samples by assuming probability densities with uniformly bounded partial derivatives
+up through order N . However, this requires the number of samples to be exponential in the input
+dimension and, hence, is challenging to generalize it to representations of higher dimension on
+real-world datasets. (1NN) Inspired by Cover and Hart
+r[5], we define
+bX,1NN := (RX )n,1 / 1 +
+R
+
+1−
+
+C(RX )n,1 
+,
+C −1
+
+(2)
+
+where (RX )n,k is the validation error of a kNN classifier (with n training samples). The main
+motivation comes from the fact that in the asymptotic regime, i.e. for n = ∞, Cover and Hart [5]
+proved that the RHS of Equation 2 serves as a lower bound of the BER. (kNN) For k > 1 and C > 2
+there is no known bound as strong as for k = 1. However, we can still use the same bound even for
+k > 1, even though it is less
+tight, with a further
+Devroye [7] when C = 2, yielding
+q improvement by
+C(RX )n,k 
+
+,
+C > 2, k > 1,
+(RX )n,k / 1 + 1 − C−1
+p
+bX,kNN =
+R
+(3)
+(R
+)
+/(1
++
+2/k),
+C
+= 2, k = 2,
+X n,k
+
+p
+
+(RX )n,k /(1 + 1/k),
+C = 2, k > 2.
+(kNN-LOO) When one wants to omit splitting the dataset into test and train sets, the kNN classifier
+accuracy can be reported using a leave-one-out approach. In this work we simply use this estimator
+for a fair comparison with certain non-scalable methods, noting that this approach is typically not
+computationally feasible in practice.
+6
+
+Table 3: LD (m) (upper part) and UD (m) (lower part): The optimal values per method.
+Dataset
+
+DE-kNN
+
+KDE
+
+GHP
+
+1NN-kNN
+
+1NN
+
+kNN
+
+kNN-LOO
+
+kNN_Ext
+
+MNIST
+CIFAR10
+CIFAR100
+IMDB
+SST2
+YELP
+
+0.11
+0.14
+0.27
+0.42
+-
+
+0.41
+0.36
+0.31
+0.49
+0.49
+0.20
+
+0.03
+0.07
+0.20
+0.16
+0.44
+-
+
+0.07
+0.10
+0.29
+0.31
+0.38
+-
+
+0.02
+0.05
+0.14
+0.25
+0.32
+0.03
+
+0.02
+0.03
+0.06
+0.25
+0.29
+0.00
+
+0.03
+0.03
+0.07
+0.15
+0.34
+-
+
+0.28
+0.34
+0.22
+0.25
+0.47
+-
+
+MNIST
+CIFAR10
+CIFAR100
+IMDB
+SST2
+YELP
+
+0.11
+0.15
+0.28
+0.43
+-
+
+0.41
+0.36
+0.31
+0.49
+0.49
+0.20
+
+0.33
+0.39
+0.55
+0.51
+0.73
+-
+
+0.22
+0.26
+0.36
+0.39
+0.42
+-
+
+0.32
+0.37
+0.49
+0.60
+0.63
+0.38
+
+0.09
+0.15
+0.31
+0.43
+0.48
+0.25
+
+0.11
+0.17
+0.37
+0.34
+0.57
+-
+
+0.37
+0.20
+0.21
+0.28
+0.61
+-
+
+Computational feasibility. Some BER estimators are not suitable for very large datasets for two
+reasons: (1) algorithmic or (2) space (i.e., memory) complexity. We restrict the memory and
+compute time available to run the described evaluation for a single combination of dataset, estimator,
+transformation and set of hyper-parameters to 45GB and 24h respectively on 4 CPU nodes and access
+to a single NVIDIA GeForce RTX 2080 Ti GPU. Out of 2376 combinations, 103 ran out of memory
+and 60 ran out of time (e.g., for high dimensional representations such as BoW, or large datasets such
+as the test sets of IMDB or YELP).
+Hyper-parameters. We define a meaningful range of hyper-parameters per method in Table 2. The
+list was manually curated during the evaluation process by shrinking the range of possible values to
+get the best possible set of hyper-parameters per dataset and per method. For every combination of
+dataset and feature transformation, we evaluate each method for every value of the hyper-parameter.
+Experiment protocol. In order to estimate the quantities described in Section 3, we run every
+combination of (1) dataset, (2) pre-trained transformations available for the data modality, (3)
+estimator, and (4) the values of their hyper-parameter, multiple times with different random seeds.
+The code to reproduce all the results along with a public colab that was used to analyze the results
+are available in the public repository under https://github.com/DS3Lab/feebee. We perform
+5 independent runs for YELP and 10 independent runs for all other datasets. We sample 11 values
+linearly between 0.0 and 1.0 for the fraction of label noise ρ. We omit reporting derivations of the
+estimated mean quantities in all tables and plots with more than two lines, as we observe that the
+variance mostly lies near zero (except for the kNN-Extrapolate method).
+4.2
+
+Main Results
+
+We now dive into the analysis by examining each presented BER estimator using FeeBee, noting that
+in each plot a solid line represents an upper bound, whereas a dashed line represents a lower bound.
+Analysis of LD (m) and UD (m). The main quantities that FeeBee reports are LD (m) and UD (m).
+In Table 3 we list the optimal scores LD (m) and UD (m) per method and per dataset, meaning that
+for each m, each dataset and each score, we choose a transformations and hyper-parameters that
+minimize that score. Further details can be found in Tables 9–20 in Appendix B.2, where we report all
+the corresponding individual areas LD,/ , LD,. , UD,/ and UD,. , with further example plots presented
+in Figure 8 in Appendix B.3.
+For LD (m) we observe that 1NN, kNN, kNN-LOO and GHP are consistently outperforming all the
+other methods, with either kNN or kNN-LOO being the best choice on each dataset. It is important
+to note that the main contribution to LD (m) in the case of 1NN, kNN, kNN-LOO and GHP comes
+from LD,. (m), whereas for DE-kNN, KDE and kNN-Extrapolate there is significant contribution
+from LD,/ (m). This yields that the first group will only get better as more transformations become
+available (by reducing the bias that a transformation introduces), whereas the second group provides
+less informative lower-bound estimators. For UD (m), we see that there is no method that consistently
+outperforms the others. Out of the well-performing methods on LD (m), 1NN and GHP are tangibly
+inferior to kNN and kNN-LOO, noting similarly as above that the main contribution for these methods
+comes from UD,. (m) which will decrease with better feature transformations.
+7
+
+IMDB - Optim. L
+
+Gaussian KDE
+1NN
+
+kNN-LOO
+1NN-kNN
+
+0.5
+0.4
+0.3
+0.2
+L = 0.41
+0.1
+L = 0.02
+0.0
+0.2 0.4 0.6 0.8 1.0
+0.0
+
+0.4
+0.2
+0.0
+0.0
+
+Label noise
+
+1.0
+0.8
+
+L = 0.31
+
+Estimate
+
+0.6
+
+MNIST - Optim. L
+
+Estimate
+
+Estimate
+
+0.8
+
+0.4
+
+0.6
+
+Label noise
+
+0.6
+U = 0.21
+
+0.4
+0.2
+
+L = 0.15
+
+0.2
+
+CIFAR100 - Optim. U
+
+U = 0.55
+
+0.8
+
+1.0
+
+0.0
+0.0
+
+0.2
+
+GHP
+kNN_Extrapolate
+0.4 0.6 0.8 1.0
+
+Label noise
+
+Figure 2: Plotting two methods where one of them has low and the other has high (left, middle)
+LD (m), or (right) UD (m), confirming that numerical values correspond to estimator’s quality. The
+shaded area represents the 95% quantiles.
+Table 4: `D,m (0) vs LD (m): The difference between the optimal LD (m) and the LD (m) that is
+calculated for hyper-parameters and transformations that minimize `D,m (0).
+Dataset
+
+DE-kNN
+
+KDE
+
+GHP
+
+1NN-kNN
+
+1NN
+
+k>1 NN
+
+kNN-LOO
+
+kNN_Ext
+
+MNIST
+CIFAR10
+CIFAR100
+IMDB
+SST2
+YELP
+
+0.24
+0.21
+0.10
+0.00
+-
+
+0.59
+0.64
+0.69
+0.01
+0.50
+0.09
+
+0.00
+0.00
+0.00
+0.00
+0.01
+-
+
+0.56
+0.52
+0.30
+0.26
+0.20
+-
+
+0.00
+0.00
+0.00
+0.01
+0.00
+0.00
+
+0.06
+0.11
+0.05
+0.14
+0.11
+0.00
+
+0.04
+0.10
+0.02
+0.20
+0.09
+-
+
+0.37
+0.42
+0.59
+0.33
+0.30
+-
+
+We also note that BER estimators are often performing better on certain type of feature transformations, as seen in Tables 9–20 in the supplementary materials. E.g., 1NN and kNN perform
+better on pre-trained embeddings (supporting [16]), whereas kNN-Extrapolate performs best under
+transformations that reduce the dimension, such as a low-dimensional PCA (supporting [19]).
+Numerical values and estimator’s quality. A key question is whether the numerical quantities
+correspond to the performance: does a lower LD (m) imply a better lower-bound estimator? For
+simplicity, in Figure 2 we plot over 3 different dataset, 2 methods each such that one has a high score
+and the other has a low score and see that their ability to follow the evolution of the BER differs.
+We provide full graphs of each methods over all datasets in Appendix B.2, positively answering the
+above question.
+Minimizing `D,m (0) vs minimizing LD (m). As described in Section 3, whilst an estimator that
+always predicts zero gives a valid lower bound, its behavior is non-informative. However, for some
+methods tuning for `D,m (0) might be (close to) optimal for LD (m). Thus, in Table 4, for each
+method and over each dataset we report the difference in the optimal LD (m), i.e. the best hyperparameters and the best transformation, and the one chosen by hyper-parameters and transformation
+that minimize `D,m (0). We observe that 1NN and GHP are the only ones that are fully robust in the
+sense that choosing the best hyper-parameters and transformation for `D,m (0) yields close to optimal
+LD (m), whereas for every other method we can find examples in which the choice based on `D,m (0)
+is significantly suboptimal for LD (m).
+4.3
+
+Further Discussion
+
+Influence of SOTA. In general, we observe that our framework works when the SOTA value is
+not too weak. This can be seen by comparing the results on YELP (SOTA error of 27.80%) vs
+other datasets (SOTA errors of at most 3.92%). For example, on YELP kNN has LD (m) = 0.0
+(see Table 3), whilst clearly having difficulties in following the BER evolution (see Figure 7a in
+Appendix B.2, top-right). A stronger SOTA would detect such difficulties for kNN on YELP through
+a non-zero LD (m). Other datasets involved in this framework satisfy that these have been intensively
+studied by the research community, particularly in the last few years, resulting in strong SOTA values.
+8
+
+kNN
+kNN_Extrapolate
+
+AR
+CIF
+
+LP
+
+10
+
+LP
+YE
+
+0
+10
+AR
+CIF
+
+CIF
+
+AR
+
+10
+
+0.0
+
+YE
+
+0.1
+
+0
+
+U
+
+L
+
+0.2
+
+0.5
+0.4
+0.3
+0.2
+0.1
+
+10
+
+0.3
+
+kNN-LOO
+1NN-kNN
+
+AR
+
+Gaussian KDE
+DE-kNN
+
+CIF
+
+1NN
+GHP
+
+Figure 3: Sensitivity of FeeBee with respect to changes in the SOTA values for (left) LD (m), and
+(right) UD (m). Strong SOTA values are robust to changes (CIFAR10, CIFAR100), whereas weak
+SOTA values suffer from greater uncertainty (YELP).
+Sensitivity to changes in SOTA. In order to study FeeBee’s robustness with respect to changes
+in SOTA values, we perform additional experiments by altering SOTA. In Figure 3 we show
+three examples in which SOTA values inserted into the framework are SOTA ± δ· SOTA, for
+δ ∈ {0, 0.05, 0.1, 0.25}, which, we believe, represent realistic improvements in the near future. On
+datasets which have strong SOTAs (all but YELP), we see that modifying the values has almost
+no impact on FeeBee’s insights (kNN and kNN-LOO perform best on CIFAR10 and CIFAR100,
+followed by 1NN and GHP, cf. Table 3). By comparing CIFAR10 and CIFAR100 we see that the
+robustness is further improved with stronger SOTA values. Therefore, we conclude that FeeBee is
+rather robust to small changes in the values when SOTA is relatively strong. On the other hand, when
+the SOTA value is weak, as in the case of YELP, Figure 3 implies that the sensitive of SOTA value
+starts to increase, introducing significantly more uncertainty than in the other datasets. However, we
+remark that the insights are still useful and preserved even in this difficult case.
+Alternative flipping strategies. One could create noisy labels in many different ways. For example,
+by assigning different flipping probabilities to different classes, or by conditioning on certain features
+and flipping differently on these features (e.g., different probabilities for day vs night images). In most
+of these cases one could produce an analogue of Lemma 3.1 which would provide foundations for an
+alternative framework. However, each such method would put certain constraints on the applicable
+datasets which makes the task of constructing a framework inherently more difficult. Having in mind
+that FeeBee in this simplest form is already successful in distinguishing existing estimators, and our
+belief that it will stay successful in the future, we opt for using the simplest such framework.
+GHP vs 1NN. When looking at the derivation of both the upper and lower bounds of GHP (Theorem
+1 in [18]), we see that, asymptotically, this method averages the number of dichotomous edges
+connecting a sample from two different classes, on the minimum spanning tree (MST) that is
+connecting all the samples in Euclidean space. The 1NN-LOO estimator implicitly performs the
+same task over the 1-nearest-neighbor graph, instead of the MST. Intuitively, the 1-nearest-neighbor
+graph should lead to a slightly lower error rate when compared to the MST. In particular, 1NN-LOO
+should outperform GHP if the feature transformation forms well-separable clusters of samples from
+the same class. Nevertheless, showing this is beyond the scope of this work and left for future work.
+kNN estimator for k > 1. Due to its success in minimizing LD (m), whilst being inferior to 1NN
+and GHP in choosing hyper-parameters and transformations based on `D,m (0), we further examine
+the kNN estimator. In Figure 4a we plot 1NN and kNN for k ∈ {3, 5, 7, 9} on two representing
+datasets and over transformations that are minimizing LD (m), with corresponding values in Table 5.
+We see that increasing k increases LD,/ (m), which makes kNN a worse lower-bound BER estimator
+since it provides a less informative lower bound. We believe that the reason for such a behavior lies
+in the fact that for k > 1 the only relevant bounds are given in the case when C = 2, by Devroye [7],
+whereas for C > 2 and k > 1 there are no known bounds as strong as the one of Cover and Hart [5]
+for k = 1. This results in a larger gap between the BER and the lower bound in the asymptotic
+regime. In the finite regime, at the moment this is mitigated by the bias that feature transformations
+introduce, however, in the future we expect this bias to decrease and, thus, kNN might further suffer
+from these loose bounds.
+9
+
+k=9
+
+k=7
+
+k=5
+
+CIFAR10 - EfficientNetB7
+
+k=1
+
+1NN
+
+IMDB - USE
+
+0.5
+
+0.8
+
+0.2
+
+0.3
+0.2
+0.1
+
+0.0
+0.0
+
+0.2
+
+0.4
+
+0.6
+
+Label noise
+
+0.8
+
+1.0
+
+LR (0.8)
+
+0.6
+
+Estimate
+
+0.4
+
+LR (0.95)
+
+YELP - USE
+
+0.8
+
+0.4
+
+0.6
+
+Estimate
+
+Estimate
+
+k=3
+
+0.0
+0.0
+
+0.2
+
+0.4
+
+0.6
+
+Label noise
+
+0.8
+
+1.0
+
+0.4
+0.2
+0.0
+0.0
+
+0.2
+
+0.4
+
+0.6
+
+Label noise
+
+0.8
+
+1.0
+
+(b)
+
+(a)
+
+Figure 4: (a) kNN estimator for k > 1: Increasing k increases LD,/ (kN N ). (b) Logistic regression
+(LR) as BER estimator: Larger scaling decreases UD (m) further, but increases LD,/ (m).
+Table 5: Impact of k > 1 and LR Model with different constants vs 1NN.
+Dataset
+
+Method
+
+Transformation
+
+UD,. (m)
+
+LD (m)
+
+LD,. (m)
+
+LD,/ (m)
+
+CIFAR10
+
+1NN
+3NN
+5NN
+7NN
+9NN
+
+EfficientNet-B7
+EfficientNet-B7
+EfficientNet-B7
+EfficientNet-B7
+EfficientNet-B7
+
+0.37
+0.28
+0.21
+0.18
+0.16
+
+0.05
+0.04
+0.11
+0.14
+0.16
+
+0.05
+0.01
+0.01
+0.01
+0.01
+
+0.00
+0.03
+0.11
+0.14
+0.15
+
+IMDB
+
+1NN
+3NN
+5NN
+7NN
+9NN
+
+USE
+USE
+USE
+USE
+USE
+
+0.60
+0.52
+0.48
+0.45
+0.43
+
+0.26
+0.30
+0.27
+0.26
+0.25
+
+0.25
+0.12
+0.14
+0.15
+0.16
+
+0.01
+0.17
+0.13
+0.11
+0.09
+
+YELP
+
+1NN
+LR Model (0.8)
+LR Model (0.95)
+
+USE
+USE
+USE
+
+0.38
+0.10
+0.10
+
+0.03
+0.08
+0.06
+
+0.03
+0.00
+0.05
+
+0.00
+0.08
+0.01
+
+Improved upper bounds. In Table 3, we see that BER estimators are better at minimizing LD (m)
+than UD (m). Even though any classifier can be used as an upper-bound BER estimator, to the best of
+our knowledge, the estimators 1NN and kNN from Equations 2 and 3 are the only classifier-based
+estimators for which one has theoretical guarantees ([5] for 1NN and [7] for kNN) for the lower
+bound on the BER. However, one can construct a lower-bound estimator by scaling the accuracy of
+the estimator by some constant c ∈ (0, 1). We test the simplest such estimator – logistic regression
+(LR) on top of the frozen representations, and several scaling constants. In Figure 4b we observe that
+even though LR yields a significantly better estimator of the upper bound than 1NN, it has worse
+LD (m) even for the best scaling constant. Furthermore, we note that increasing the scaling, in order
+to reduce LD,. (m), further increases LD,/ (m), yielding a less informative lower-bound estimator,
+also visible in Table 5.
+
+5
+
+Conclusion
+
+In this work, we introduced FeeBee, the first system to systematically evaluate lower and upper
+bound estimators of the BER on real-world data. By providing a thorough analysis of existing
+estimators using FeeBee, we observe that GHP and 1NN are consistently outperforming the other
+lower bound estimators whilst enabling easy hyper-parameter selection on a single point estimate. We
+also observe that currently there does not exist an estimator that is able to simultaneously outperform
+other estimators on both lower and upper bound. We are open-sourcing the framework which is easily
+extendable with any new BER estimator, and hope to further motivate and enable progress in building
+better and more practical methods in the future.
+
+10
+
+Acknowledgements
+CZ and the DS3Lab gratefully acknowledge the support from the Swiss National Science Foundation (Project
+Number 200021_184628, and 197485), Innosuisse/SNF BRIDGE Discovery (Project Number 40B2-0_187132),
+European Union Horizon 2020 Research and Innovation Programme (DAPHNE, 957407), Botnar Research
+Centre for Child Health, Swiss Data Science Center, Alibaba, Cisco, eBay, Google Focused Research Awards,
+Kuaishou Inc., Oracle Labs, Zurich Insurance, and the Department of Computer Science at ETH Zurich.
+
+References
+[1]
+[2]
+
+[3]
+[4]
+[5]
+[6]
+[7]
+[8]
+[9]
+[10]
+[11]
+
+[12]
+[13]
+
+[14]
+
+[15]
+
+[16]
+[17]
+[18]
+[19]
+[20]
+[21]
+
+V. Berisha et al. “Empirically Estimable Classification Bounds Based on a Nonparametric
+Divergence Measure”. In: IEEE Transactions on Signal Processing 64.3 (2016), pp. 580–591.
+L. J. Buturovic and M. Z. Markovic. “Improving k-nearest neighbor Bayes error estimates”. In:
+Proceedings., 11th IAPR International Conference on Pattern Recognition. Vol.II. Conference
+B: Pattern Recognition Methodology and Systems. 1992, pp. 470–473.
+A. Byerly, T. Kalganova, and I. Dear. “No Routing Needed Between Capsules”. In: Neurocomputing (2021).
+G. Cherubin. “Bayes, not Naïve: Security Bounds on Website Fingerprinting Defenses”. In:
+Proceedings on Privacy Enhancing Technologies 4 (2017), pp. 135–151.
+T. M. Cover and P. A. Hart. “Nearest neighbor pattern classification”. In: IEEE Transactions
+on Information Theory 13.1 (1967), pp. 21–27.
+P. A. Devijver. “A multiclass, k-NN approach to Bayes risk estimation”. In: Pattern Recognition
+Letters 3.1 (1985), pp. 1–6.
+L. Devroye. “On the asymptotic probability of error in nonparametric discrimination”. In: The
+Annals of Statistics 9.6 (1981), pp. 1320–1327.
+A. Dosovitskiy et al. “An image is worth 16x16 words: Transformers for image recognition at
+scale”. In: arXiv preprint arXiv:2010.11929 (2020).
+P. Foret et al. “Sharpness-aware Minimization for Efficiently Improving Generalization”. In:
+International Conference on Learning Representations. 2020.
+K. Fukunaga and L. Hostetler. “k-nearest-neighbor Bayes-risk estimation”. In: IEEE Transactions on Information Theory 21.3 (1975), pp. 285–293.
+K. Fukunaga and D. M. Hummels. “Bayes Error Estimation Using Parzen and k-NN Procedures”. en. In: IEEE Transactions on Pattern Analysis and Machine Intelligence 9.5 (May
+1987), pp. 634–643.
+K. Fukunaga and D. Kessell. “Nonparametric Bayes error estimation using unclassified samples”. In: IEEE Transactions on Information Theory 19.4 (1973), pp. 434–440.
+A. Krizhevsky, I. Sutskever, and G. E. Hinton. “Imagenet classification with deep convolutional
+neural networks”. In: Advances in Neural Information Processing Systems 25 (2012), pp. 1097–
+1105.
+T. Pham-Gia, N. Turkkan, and A. Bekker. “Bounds for the Bayes Error in Classification: A
+Bayesian Approach Using Discriminant Analysis”. In: Statistical Methods & Applications
+16.1 (June 2007), pp. 7–26.
+C. Renggli et al. “Ease.ml/snoopy in Action: Towards Automatic Feasibility Analysis for
+Machine Learning Application Development”. In: Proceedings of the VLDB Endowment 13.12
+(2020).
+L. Rimanic et al. “On Convergence of Nearest Neighbor Classifiers over Feature Transformations”. In: Advances in Neural Information Processing Systems. Vol. 33. 2020.
+G. Saon and M. Padmanabhan. “Minimum Bayes error feature selection for continuous speech
+recognition”. In: Advances in Neural Information Processing Systems 13 (2000), pp. 800–806.
+S. Y. Sekeh, B. L. Oselio, and A. O. Hero. “Learning to bound the multi-class Bayes error”. In:
+IEEE Transactions on Signal Processing (2020).
+R. R. Snapp, D. Psaltis, and S. S. Venkatesh. “Asymptotic slowing down of the nearest-neighbor
+classifier”. In: Advances in Neural Information Processing Systems. 1991, pp. 932–938.
+R. R. Snapp and T. Xu. “Estimating the Bayes risk from sample data”. In: Advances in Neural
+Information Processing Systems. 1996, pp. 232–238.
+Z. Yang et al. “Xlnet: Generalized autoregressive pretraining for language understanding”. In:
+Advances in Neural Information Processing Systems. 2019, pp. 5754–5764.
+11
+
+A
+
+Feature Transformations
+
+We report all feature transformations along with their sources and dimensionalities applied to computer
+vision and NLP datasets in Table 6 and Table 7 respectively. All transformations can be found using
+their name and the corresponding source5 .
+Table 6: Feature transformations for images as features.
+Transformation
+
+Source
+
+Raw
+PCA (d=32)
+PCA (d=64)
+PCA (d=128)
+NCA (d=64)
+AlexNet(d=4096)
+GoogleNet (d=1024)
+VGG16 (d=4096)
+VGG19 (d=4096)
+ResNet50-V2 (d=2048)
+ResNet101-V2 (d=2048)
+ResNet152-V2 (d=2048)
+InceptionV3 (d=2048)
+EfficientNet-B0 (d=1280)
+EfficientNet-B1 (d=1280)
+EfficientNet-B2 (d=1408)
+EfficientNet-B3 (d=1536)
+EfficientNet-B4 (d=1792)
+EfficientNet-B5 (d=2048)
+EfficientNet-B6 (d=2304)
+EfficientNet-B7 (d=2560)
+
+scikit-learn
+scikit-learn
+scikit-learn
+scikit-learn
+PyTorch-Hub
+PyTorch-Hub
+PyTorch-Hub
+PyTorch-Hub
+TF-Hub
+TF-Hub
+TF-Hub
+TF-Hub
+TF-Hub
+TF-Hub
+TF-Hub
+TF-Hub
+TF-Hub
+TF-Hub
+TF-Hub
+TF-Hub
+
+MNIST
+
+CIFAR10
+
+CIFAR100
+
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+
+Table 7: Feature transformations for natural language as features.
+Transformation
+
+Source
+
+BOW
+BOW-TFIDF
+PCA (d=8)
+PCA (d=16)
+PCA (d=32)
+PCA (d=64)
+PCA (d=128)
+ELMO (d=1024)
+NNLM-EN (d=50)
+NNLM-EN-WITH-NORMALIZATION (d=50)
+NNLM-EN (d=128)
+NNLM-EN–WITH-NORMALIZATION (d=128)
+Universal Sentence Encoder (USE) (d=512)
+BERT-Base (d=678)
+
+scikit-learn
+scikit-learn
+scikit-learn
+scikit-learn
+scikit-learn
+scikit-learn
+scikit-learn
+TF-Hub
+TF-Hub
+TF-Hub
+TF-Hub
+TF-Hub
+TF-Hub
+PyTorch-Hub
+
+5
+
+IMDB
+
+SST2
+
+YELP
+
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+3
+
+7
+7
+7
+7
+7
+7
+7
+3
+3
+3
+3
+3
+3
+3
+
+TensorFlow Hub: https://tfhub.dev, PyTorch Hub: https://pytorch.org/hub, and scikit-learn:
+https://scikit-learn.org/.
+
+12
+
+B
+
+Extended Results
+
+B.1
+
+No Transformation / Raw
+
+To see the impact of choosing the best feature transformation per method, we report the results on
+the raw features (i.e., pixel values) for the vision datasets in Figure 5 and Table 8, nothing that NLP
+datasets do not come with any natural raw representations. For the method achieving good lower and
+upper bounds (i.e., kNN and GHP), we see that for both CIFAR variants, they constantly overestimate
+both the upper and lower bound. For the other methods, selecting the best hyper-parameters leads to
+non-informative variants.
+
+Optim. U (m) Optim. L (m)
+Estimate
+Estimate
+
+1NN
+GHP
+
+Gaussian KDE
+DE-kNN
+
+MNIST
+
+1.0
+
+1.0
+
+kNN
+kNN_Extrapolate
+
+CIFAR10
+
+1.0
+
+0.5
+
+0.5
+
+0.5
+
+0.0
+1.0
+
+0.0
+1.0
+
+0.0
+1.0
+
+0.5
+
+0.5
+
+0.5
+
+0.0
+0.0
+
+0.5
+
+Label noise
+
+0.0
+1.0 0.0
+
+0.5
+
+Label noise
+
+0.0
+1.0 0.0
+
+kNN-LOO
+1NN-kNN
+
+CIFAR100
+
+0.5
+
+Label noise
+
+1.0
+
+Figure 5: Computer vision datasets on raw features.
+Figure 6: Evolution of the BER for selecting hyper-parameters only on the raw pixels that minimize
+(top row, each) LD (m) and (bottom row, each) UD (m).
+
+Table 8: LD (m) and UD (m): The optimal values per method on raw pixel values.
+DE-kNN
+
+KDE
+
+GHP
+
+1NN-kNN
+
+1NN
+
+kNN
+
+kNN-LOO
+
+kNN_Ext
+
+MNIST
+CIFAR10
+CIFAR100
+
+0.12
+0.47
+0.49
+
+0.64
+0.83
+0.98
+
+0.03
+0.55
+0.66
+
+0.07
+0.45
+0.49
+
+0.02
+0.46
+0.54
+
+0.02
+0.39
+0.53
+
+0.03
+0.46
+0.61
+
+0.50
+0.69
+0.71
+
+MNIST
+CIFAR10
+CIFAR100
+
+0.12
+0.47
+0.49
+
+0.64
+0.83
+0.98
+
+0.34
+0.85
+0.89
+
+0.22
+0.48
+0.49
+
+0.32
+0.79
+0.84
+
+0.09
+0.75
+0.84
+
+0.11
+0.80
+0.88
+
+0.43
+0.66
+0.65
+
+13
+
+B.2
+
+Optimal LD (m) and UD (m).
+
+In this section we provide additional visualizations to support the findings in Section 4.2, completing
+Figure 2. We observe that 1NN, kNN, kNN-LOO and GHP closely follow the evolution of the
+BER and that for them the main contributions to LD (m) and UD (m) come from LD,. (m) and
+UD,. (m). This will be improved as more transformations become available, thus reducing the bias.
+For DE-kNN, KDE and kNN-Extrapolate we clearly see difficulties in following the evolution of the
+BER, often visualized in the bottom-right corner, resulting in large LD,/ (m) and/or UD,/ (m).
+
+Optim. U (m) Optim. L (m)
+Estimate
+Estimate
+
+1NN
+GHP
+1.0
+
+Gaussian KDE
+DE-kNN
+
+MNIST
+
+kNN
+kNN_Extrapolate
+
+CIFAR10
+
+1.0
+
+1.0
+
+0.5
+
+0.5
+
+0.5
+
+0.0
+1.0
+
+0.0
+1.0
+
+0.0
+1.0
+
+0.5
+
+0.5
+
+0.5
+
+0.0
+0.0
+
+0.5
+
+Label noise
+
+0.0
+1.0 0.0
+
+0.5
+
+Label noise
+
+0.0
+1.0 0.0
+
+kNN-LOO
+1NN-kNN
+
+CIFAR100
+
+0.5
+
+Label noise
+
+1.0
+
+Optim. U (m) Optim. L (m)
+Error
+Error
+
+(a) Computer vision datasets.
+
+IMDB
+
+SST2
+
+0.4
+
+0.4
+
+0.2
+
+0.2
+
+0.0
+
+0.0
+
+0.4
+
+0.4
+
+0.2
+
+0.2
+
+0.0
+0.0
+
+0.5
+
+Label noise
+
+YELP
+0.5
+0.0
+0.5
+
+0.0
+1.0 0.0
+
+0.5
+
+Label noise
+
+0.0
+1.0 0.0
+
+0.5
+
+Label noise
+
+1.0
+
+(b) NLP datasets.
+
+Figure 7: Evolution of the BER for selecting hyper-parameters and transformations that minimize
+(top row, each) LD (m) and (bottom row, each) UD (m).
+
+14
+
+B.3
+
+Further Example Plots
+
+In this section we present example plots produced by FeeBee. For simplicity, we focus only on
+two datasets and two methods. In order to have comparable lower and upper bounds, we fix the
+transformation in each figure.
+We observe that 1NN performs better than kNN-Extrapolate for the lower bound, clearly following
+the evolution of the BER. We also observe that for both the lower bound is always below upper bound.
+
+kNN_Extrapolate
+
+0.8
+
+0.8
+
+0.6
+
+0.6
+
+Estimate
+
+Estimate
+
+CIFAR10 - RAW
+
+0.4
+0.2
+0.0
+0.0
+
+1NN
+
+CIFAR10 - EfficientNetB7
+
+0.4
+0.2
+
+0.2
+
+0.4
+
+0.6
+
+Label noise
+
+0.8
+
+1.0
+
+0.0
+0.0
+
+0.2
+
+0.4
+
+0.6
+
+Label noise
+
+0.8
+
+1.0
+
+0.8
+
+1.0
+
+(a)
+
+kNN_Extrapolate
+
+0.5
+
+IMDB - NNLM-EN (d=50)
+
+0.4
+
+Estimate
+
+Estimate
+
+IMDB - USE
+
+0.5
+
+0.4
+0.3
+0.2
+0.1
+0.0
+0.0
+
+1NN
+
+0.3
+0.2
+0.1
+
+0.2
+
+0.4
+
+0.6
+
+Label noise
+
+0.8
+
+1.0
+
+0.0
+0.0
+
+0.2
+
+0.4
+
+0.6
+
+Label noise
+
+(b)
+
+Figure 8: Example plots of LD (m) and UD (m) for (a) CIFAR10 over raw and EfficientNetB7, and
+(b) IMDB over NNLM-EN (d = 50) and USE.
+
+15
+
+C
+
+Tables
+
+In this section we provide tables with optimal values of scores LD (m) and UD (m), for every dataset
+and every method, reporting the hyper-parameters and transformation that yield that score, together
+with the upper (LD,. , UD,. ) and lower areas (LD,/ , UD,/ ) that contribute to the scores.
+C.1
+
+Optimal LD (m).
+Table 9: MNIST - Optimal LD (m)
+
+.
+
+Method
+
+Variant
+
+Transformation
+
+LD (m)
+
+LD,/ (m)
+
+LD,. (m)
+
+kNN
+1NN
+kNN-LOO
+GHP
+1NN-kNN
+DE-kNN
+kNN_Extrapolate
+Gaussian KDE
+
+dist=cosine, k=2
+dist=cosine
+dist=cosine, k=2
+default
+dist=cosine, k=21
+dist=squared_l2, k=15
+dist=cosine, k=10
+B=0.05
+
+NCA (d=64)
+NCA (d=64)
+NCA (d=64)
+PCA (d=32)
+PCA (d=32)
+PCA (d=32)
+PCA (d=32)
+VGG16
+
+0.02
+0.02
+0.03
+0.03
+0.07
+0.11
+0.28
+0.41
+
+0.00
+0.01
+0.01
+0.00
+0.02
+0.05
+0.15
+0.18
+
+0.01
+0.01
+0.02
+0.02
+0.05
+0.06
+0.13
+0.23
+
+Method
+
+Variant
+
+Transformation
+
+LD (m)
+
+LD,/ (m)
+
+LD,. (m)
+
+kNN-LOO
+kNN
+1NN
+GHP
+1NN-kNN
+DE-kNN
+kNN_Extrapolate
+Gaussian KDE
+
+dist=squared_l2, k=3
+dist=squared_l2, k=3
+dist=squared_l2
+default
+dist=squared_l2, k=22
+dist=squared_l2, k=18
+dist=squared_l2, k=3
+B=0.1
+
+EfficientNet-B3
+EfficientNet-B2
+EfficientNet-B7
+EfficientNet-B4
+EfficientNet-B7
+EfficientNet-B7
+PCA (d=32)
+ResNet152-V2
+
+0.03
+0.03
+0.05
+0.07
+0.10
+0.14
+0.34
+0.36
+
+0.01
+0.01
+0.00
+0.00
+0.02
+0.04
+0.23
+0.19
+
+0.02
+0.02
+0.05
+0.07
+0.08
+0.11
+0.11
+0.18
+
+Table 10: CIFAR10 - Optimal LD (m)
+
+.
+
+Table 11: CIFAR100 - Optimal LD (m)
+
+.
+
+Method
+
+Variant
+
+Transformation
+
+LD (m)
+
+LD,/ (m)
+
+LD,. (m)
+
+kNN
+kNN-LOO
+1NN
+GHP
+kNN_Extrapolate
+DE-kNN
+1NN-kNN
+Gaussian KDE
+
+dist=cosine, k=5
+dist=cosine, k=6
+dist=cosine
+default
+dist=squared_l2, k=1
+dist=squared_l2, k=4
+dist=squared_l2, k=12
+B=0.1
+
+EfficientNet-B5
+EfficientNet-B6
+EfficientNet-B7
+EfficientNet-B7
+PCA (d=32)
+EfficientNet-B7
+EfficientNet-B7
+VGG19
+
+0.06
+0.07
+0.14
+0.20
+0.22
+0.27
+0.29
+0.31
+
+0.01
+0.01
+0.00
+0.00
+0.17
+0.10
+0.10
+0.18
+
+0.05
+0.07
+0.14
+0.20
+0.05
+0.18
+0.19
+0.14
+
+Method
+
+Variant
+
+Transformation
+
+LD (m)
+
+LD,/ (m)
+
+LD,. (m)
+
+kNN-LOO
+GHP
+kNN
+1NN
+kNN_Extrapolate
+1NN-kNN
+Gaussian KDE
+
+dist=squared_l2, k=1
+default
+dist=cosine, k=9
+dist=squared_l2
+dist=squared_l2, k=6
+dist=cosine, k=4
+B=0.0025
+
+USE
+USE
+USE
+USE
+PCA (d=16)
+PCA (d=32)
+PCA (d=8)
+
+0.15
+0.16
+0.25
+0.25
+0.25
+0.31
+0.49
+
+0.01
+0.01
+0.09
+0.01
+0.19
+0.09
+0.29
+
+0.14
+0.16
+0.16
+0.24
+0.06
+0.22
+0.20
+
+Table 12: IMDB - Optimal LD (m)
+
+.
+
+16
+
+Table 13: SST2 -. Optimal LD (m)
+LD (m)
+
+LD,/ (m)
+
+LD,. (m)
+
+0.29
+0.32
+0.34
+0.38
+0.42
+0.44
+0.47
+0.49
+
+0.08
+0.02
+0.10
+0.20
+0.17
+0.01
+0.29
+0.24
+
+0.20
+0.30
+0.24
+0.18
+0.25
+0.42
+0.18
+0.25
+
+LD (m)
+
+LD,/ (m)
+
+LD,. (m)
+
+0.00
+0.03
+0.20
+
+0.00
+0.00
+0.06
+
+0.00
+0.03
+0.14
+
+Method
+
+Variant
+
+Transformation
+
+kNN
+1NN
+kNN-LOO
+1NN-kNN
+DE-kNN
+GHP
+kNN_Extrapolate
+Gaussian KDE
+
+dist=cosine, k=10
+dist=cosine
+dist=cosine, k=7
+dist=cosine, k=3
+dist=squared_l2, k=4
+default
+dist=squared_l2, k=2
+B=0.0025
+
+BOW-TFIDF
+ELMO
+USE
+ELMO
+NNLM-EN-NORM (d=128)
+USE
+PCA (d=8)
+PCA (d=16)
+
+Table 14: YELP - Optimal LD (m)
+Method
+
+. kNN
+
+1NN
+Gaussian KDE
+
+Variant
+
+Transformation
+
+dist=squared_l2, k=9
+dist=squared_l2
+B=0.05
+
+USE
+USE
+NNLM-EN (d=50)
+
+17
+
+C.2
+
+Optimal UD (m).
+Table 15: MNIST - Optimal UD (m)
+
+.
+
+Method
+
+Variant
+
+Transformation
+
+UD (m)
+
+UD,/ (m)
+
+UD,. (m)
+
+kNN
+kNN-LOO
+DE-kNN
+1NN-kNN
+1NN
+GHP
+kNN_Extrapolate
+Gaussian KDE
+
+dist=cosine, k=10
+dist=cosine, k=10
+dist=squared_l2, k=16
+dist=cosine, k=3
+dist=cosine
+default
+dist=cosine, k=10
+B=0.05
+
+NCA (d=64)
+NCA (d=64)
+PCA (d=32)
+NCA (d=64)
+NCA (d=64)
+PCA (d=32)
+PCA (d=128)
+VGG16
+
+0.09
+0.11
+0.11
+0.22
+0.32
+0.33
+0.37
+0.41
+
+0.00
+0.00
+0.04
+0.12
+0.00
+0.00
+0.16
+0.18
+
+0.09
+0.11
+0.07
+0.09
+0.32
+0.33
+0.21
+0.23
+
+Method
+
+Variant
+
+Transformation
+
+UD (m)
+
+UD,/ (m)
+
+UD,. (m)
+
+DE-kNN
+kNN
+kNN-LOO
+kNN_Extrapolate
+1NN-kNN
+Gaussian KDE
+1NN
+GHP
+
+dist=squared_l2, k=18
+dist=cosine, k=10
+dist=cosine, k=10
+dist=squared_l2, k=3
+dist=squared_l2, k=3
+B=0.1
+dist=cosine
+default
+
+EfficientNet-B7
+EfficientNet-B7
+EfficientNet-B4
+PCA (d=32)
+EfficientNet-B7
+ResNet152-V2
+EfficientNet-B7
+EfficientNet-B4
+
+0.15
+0.15
+0.17
+0.20
+0.26
+0.36
+0.37
+0.39
+
+0.04
+0.00
+0.00
+0.04
+0.12
+0.19
+0.00
+0.00
+
+0.11
+0.15
+0.17
+0.16
+0.14
+0.18
+0.37
+0.39
+
+Method
+
+Variant
+
+Transformation
+
+UD (m)
+
+UD,/ (m)
+
+UD,. (m)
+
+kNN_Extrapolate
+DE-kNN
+Gaussian KDE
+kNN
+1NN-kNN
+kNN-LOO
+1NN
+GHP
+
+dist=cosine, k=7
+dist=squared_l2, k=4
+B=0.1
+dist=cosine, k=10
+dist=squared_l2, k=3
+dist=cosine, k=10
+dist=cosine
+default
+
+PCA (d=32)
+EfficientNet-B6
+VGG19
+EfficientNet-B7
+EfficientNet-B7
+EfficientNet-B6
+EfficientNet-B7
+EfficientNet-B7
+
+0.21
+0.28
+0.31
+0.31
+0.36
+0.37
+0.49
+0.55
+
+0.02
+0.09
+0.18
+0.00
+0.14
+0.00
+0.00
+0.00
+
+0.19
+0.19
+0.14
+0.31
+0.22
+0.37
+0.49
+0.55
+
+Table 16: CIFAR10 - Optimal UD (m)
+
+.
+
+Table 17: CIFAR100 - Optimal UD (m)
+
+.
+
+Table 18: IMDB - Optimal UD (m)
+
+.
+
+Method
+
+Variant
+
+Transformation
+
+UD (m)
+
+UD,/ (m)
+
+UD,. (m)
+
+kNN_Extrapolate
+kNN-LOO
+1NN-kNN
+kNN
+Gaussian KDE
+GHP
+1NN
+
+dist=squared_l2, k=6
+dist=squared_l2, k=9
+dist=cosine, k=2
+dist=squared_l2, k=9
+B=0.0025
+default
+dist=squared_l2
+
+PCA (d=16)
+USE
+PCA (d=32)
+USE
+PCA (d=8)
+USE
+USE
+
+0.28
+0.34
+0.39
+0.43
+0.49
+0.51
+0.60
+
+0.03
+0.00
+0.29
+0.00
+0.29
+0.00
+0.00
+
+0.25
+0.34
+0.10
+0.43
+0.20
+0.51
+0.60
+
+18
+
+Table 19: SST2 - Optimal UD (m)
+
+.
+
+Method
+
+Variant
+
+Transformation
+
+1NN-kNN
+DE-kNN
+kNN
+Gaussian KDE
+kNN-LOO
+kNN_Extrapolate
+1NN
+GHP
+
+dist=cosine, k=2
+dist=squared_l2, k=2
+dist=cosine, k=10
+B=0.0025
+dist=cosine, k=10
+dist=squared_l2, k=2
+dist=cosine
+default
+
+NNLM-EN (d=128)
+USE
+BOW-TFIDF
+PCA (d=16)
+USE
+USE
+ELMO
+ELMO
+
+UD (m)
+
+UD,/ (m)
+
+UD,. (m)
+
+0.42
+0.43
+0.48
+0.49
+0.57
+0.61
+0.63
+0.73
+
+0.29
+0.27
+0.00
+0.24
+0.00
+0.49
+0.00
+0.00
+
+0.13
+0.17
+0.48
+0.25
+0.57
+0.12
+0.63
+0.73
+
+Table 20: YELP - Optimal UD (m)
+Method
+
+. Gaussian KDE
+kNN
+1NN
+
+Variant
+
+Transformation
+
+B=0.05
+dist=cosine, k=10
+dist=squared_l2
+
+NNLM-EN (d=50)
+USE
+USE
+
+19
+
+UD (m)
+
+UD,/ (m)
+
+UD,. (m)
+
+0.20
+0.25
+0.38
+
+0.06
+0.00
+0.00
+
+0.14
+0.24
+0.38
+
+

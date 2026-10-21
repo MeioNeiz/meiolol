@@ -1,0 +1,698 @@
+arXiv:2607.04782v1 [cs.LG] 6 Jul 2026
+
+Predicting Drafted Deck Strength for
+“Magic: the Gathering”
+Tomas Rigaux
+
+Hisashi Kashima
+
+Grad. School of Informatics
+Kyoto University
+Kyoto, Japan
+tomas@rigaux.com
+
+Grad. School of Informatics
+Kyoto University
+Kyoto, Japan
+kashima@i.kyoto-u.ac.jp
+
+Abstract—Many real-world games do not admit a fixed, compact rule set: instead, their dynamics are defined by interactions
+among a large and often evolving collection of game pieces,
+making general-purpose policy learning impractical. Magic: the
+Gathering (MTG) exemplifies this setting, where the cards themselves define and alter gameplay rules, strategic constraints, and
+long-term outcomes, while the pool of available cards is everchanging. We study Draft, a constrained deck-building format of
+MTG in which eight players make 39–45 sequential selections
+from semi-random packs to construct a 40-card deck under
+partial information. By isolating the card selection process from
+gameplay, Draft provides a tractable yet non-trivial setting for
+studying decision-making driven by combinatorial card synergies. We propose an encoder-based model that produces setcontextualized card embeddings to encode the draft decision
+sequence, with a consistent improvement over linear baselines
+on large-scale real-world data, establishing a first learned benchmark for outcome prediction in MTG Draft. Our code is available
+at github.com/akulen/MtGDraftEncoder.
+Index Terms—Machine Learning, Card Games, Magic: the
+Gathering, Neural Networks, Game AI, Transformers.
+
+I. I NTRODUCTION
+Complex games have long served as useful benchmarks for
+evaluating the capabilities of learning agents, as they offer
+clearly defined rules and measurable objectives. Collectible
+card games extend the scope as they allow for the rule set
+to be altered. The game pieces are a growing collection of
+cards, each with the ability to introduce novel mechanics,
+modify existing rules, or combine with previous cards to recontextualize their utility. As a result, learning a single, global
+policy that fully captures the game is impractical: mastery
+requires continual adaptation to new content and the ability
+to encode generic game pieces and how they change the game
+rules.
+In this work, we focus on Magic: The Gathering (MTG),
+a game with thousands of new cards released every year,
+and some of the most complex rules in games. We restrict
+our attention to the Draft format, a variant we describe in
+Section II, full of highly non-local decisions: the value of
+a card depends not only on its intrinsic properties, but also
+on previously selected cards, the previously seen cards that
+This work was supported by JST BOOST, Grant Number JPMJBS2407 and
+JST CREST, Grant Number JPMJCR21D1.
+
+could wheel back, and signals from passed cards giving noisy
+information about the draft choices made by the other drafters.
+We use the outcome of games subsequent to the Draft as an
+evaluation metric, making our approach outcome-driven.
+Limited work exists on applying machine learning methods
+to MTG in general, mostly limited to predicting human pick
+choices. While such approaches provide useful signals, they
+limit themselves to descriptive modeling of player behavior. In
+contrast, our goal is to directly predict draft outcomes: given
+a partial or complete draft sequence, we estimate the expected
+win-rate of the resulting deck in subsequent games.
+We summarize our contributions as follows:
+1) A procedure to transform raw card features into contextualized embeddings given a draft environment.
+2) DraftEncoder, an encoder-based architecture designed to
+model drafting as a sequence of combinatorial decisions,
+updating card embeddings dynamically as the draft progresses, in order to reason about both local card quality
+and global deck composition.
+3) An evaluation of our model and linear baselines on
+large-scale real-world draft data from MTG Arena and
+17Lands [1], which we believe is the first benchmark
+for predicting MTG draft performance from draft data.
+II. M AGIC : THE G ATHERING (MTG)
+MTG is the oldest collectible card game, providing a rich
+history of cards and ways to play, all of which consist of
+building a deck following some rules, then playing with that
+deck against other players.
+Drafting process. During a draft, up to 8 players are
+arranged around a table, and they open a pack each, containing
+a fixed amount of cards (varying between 13 and 15 depending
+on the drafted expansion). From their pack they select exactly
+one card, pass the remaining cards to the player on their
+left, and repeat this process until all cards have been picked.
+Then this process is repeated two more times with new packs,
+alternating the passing direction from right to left. From the
+perspective of a single player, the draft can be viewed as
+a sequence of K ∈ {39, 42, 45} decisions, where at step k
+the player chooses one card from an ever changing candidate
+set of size varying between 1 and 15. A choice is informed
+
+©2026 IEEE. Personal use of this material is permitted. Permission from IEEE must be obtained for all other uses, in any current or future media, including
+reprinting/republishing this material for advertising or promotional purposes, creating new collective works, for resale or redistribution to servers or lists, or
+reuse of any copyrighted component of this work in other works.
+
+TABLE I
+MTG E XPANSION DATA F ROM 17L ANDS [1], LISTING THE NUMBER OF
+DISTINCT CARDS , THE PACK SIZE , AND NUMBER OF SAMPLE DRAFTS .
+Exp.
+
+Cards
+
+Pack
+
+Drafts
+
+Exp.
+
+Cards
+
+Pack
+
+Drafts
+
+MOM
+WOE
+LCI
+MKM
+OTJ
+BLB
+
+346
+329
+291
+326
+381
+276
+
+15
+14
+15
+13
+14
+13
+
+149,475
+125,403
+100,720
+115,779
+148,496
+115,580
+
+DSK
+FDN
+DFT
+TDM
+FIN
+EOE
+
+286
+286
+286
+286
+363
+321
+
+14
+14
+14
+14
+14
+13
+
+128,212
+104,245
+101,519
+77,374
+110,565
+79,246
+
+by previously selected cards, as well as on implicit signals
+inferred from which cards remain available in later picks.
+Once all cards have been picked, they are used to construct
+a deck containing at least 40 cards, usually including around
+17 extra basic lands.
+Draft representation. We model a draft for one player
+as a sequence D = (((pk,i )i , ck ))K
+k=1 , where (pk,i )i are the
+available cards at pick k and ck is the selected card.
+17Lands draft data. We use draft data collected from MTG
+Arena via the 17Lands project [1], summarized in Table I,
+which aggregates anonymized draft logs from players across
+a range of skill levels (The average win rate is typically
+around 55%, inflated by self-selection bias). Each draft record
+contains the full sequence of observed packs and picks by an
+individual player, the player rank1 , and the number of wins
+and losses.
+Outcome definition. We observe the win-rate of the drafted
+deck as our measured outcome, stored as the raw number of
+wins and losses (W, L). For the data we used, drafted decks
+are played until either 7 wins or 3 losses are reached. As a
+result, the observed proportion of wins is a censored estimate
+of the deck’s true win-rate pwin .
+Learning objective. Given a partial or complete draft
+sequence D≤k in the expansion E, we aim to learn a function
+predicting the true win-rate: fE (D≤k ) → pwin ∈ [0, 1].
+
+an input string of unspecified length into a single embedding
+of size 768. As drafting is a sequential process where each
+decision is highly conditional on both previous decision and
+previous potential decisions (which cards were in the passed
+packs), a model based on transformer architectures initially
+introduced by Vaswani et al. [6] seems natural.
+IV. O UR MODEL : D RAFT E NCODER
+To predict a draft outcome, we first use a Transformer Encoder architecture to produce card embeddings contextualized
+by the current draft expansion and player rank. Then, the draft
+state embeddings for each pick are initialized with those card
+embeddings. Finally, another attention mechanism updates the
+draft state embeddings using the information from previous
+picks. We give an overview of this process in Figure 1.
+Card Features
+text (+ meta)
+
+Rank
+
+Output Win
+Probabilities
+
+FiLM
+conditioning
+
+Embedding
+
+Predictor
+Head
+
+(0)
+
+h·
+
+Multi-Head
+Attention
+
+(N
+
+hk,iD
+
+)
+
+(N
+
+sk D
+
+)
+
++
+
++
+
+Feed
+Forward
+
+Feed
+Forward
+
++
+
++
+
+Multi-Head
+Attention
+
+Multi-Head
+Attention
+
+RoPE
+
+ck
+
++
+NE ×
+Feed
+Forward
++
+
+(NE )
+
+h·
+
+(0)
+
+×ND
+
+(0)
+
+hk,i
+
+sk
+
+Packs
+
+Picks
+
+III. R ELATED W ORK
+Models for card game drafts. Prior work [2], [3] on
+modeling drafting decisions in Magic: the Gathering has
+primarily focused on estimating pick order from human draft
+data. Bertram et al. [3] studies optimal card representations
+for draft pick prediction in MTG draft logs. However, this
+approach focuses on predicting individual picks rather than
+modeling downstream deck performance or win-rate. Some
+work exists for deriving a drafting policy combined with a
+playing policy for Hearthstone [4], but relies on being able to
+simulate the simpler gameplay.
+Natural Language Processing. Converting textual data
+to a vector of real values is a recurring task in machine
+learning. For our work, we use a pre-trained model, EmbeddingGemma [5], that uses a transformer encoder to encode
+1 Player rank (among null, bronze, silver, gold, platinum,
+diamond, and mythic) is a matchmaking tool on MTG Arena, to estimate
+a combination of player skill and experience in a given draft expansion.
+
+Fig. 1.
+Overview of DraftEncoder’s full architecture. The main block
+on the left encodes cards in a given expansion setting as described in
+(N )
+Subsection IV-A, and is iterated NE times to output hc E for each card
+c. The main block on the right uses these card encodings to encode the draft
+process as described in Subsection IV-B, and is iterated ND times to output
+(N )
+the final draft states sk D for each pick step k. The packs pk,· are used
+to select the relevant card states initially, and the picks ck are used at each
+iteration (as the red box labeled ck ) to choose the appropriate embedding to
+update the draft states.
+
+A. Encoding Cards
+To construct card features, we convert all the information in
+a card into a string (see Fig. 2) and use EmbeddingGemma [5]
+(T )
+to convert it to a static embedding vector Ec of size dt =
+768. To evaluate the model comprehension, we also compute
+(N )
+statistical features Ec
+for each card, following the META
+
+[NAME] Quantum Riddler
+[MC] {3}{U}{U} [CMC] 5 [COLOR] U
+
+Those encodings are updated with a bidirectional pre-norm
+Transformer encoder block, first updating the pack cards:
+
+[TYPE] Creature [SUBTYPE] Sphinx
+[RARITY] mythic
+[KEYWORDS] Flying, Warp
+[EFFECTS] Flying <NL> When this
+creature enters, draw a card. <NL>
+As long as you have one or fewer cards
+in hand, if you would draw one or more
+cards, you draw that many cards plus
+one instead. <NL> Warp {1}{U}
+[P/T] 4/6
+
+Fig. 2. To prepare the oracle string of a card, we concatenate the applying
+information among: Name, Costs, Rarity, Types, Power/Toughness/Loyalty,
+Keywords, and Effects; taken from the updated oracle version found on
+Scryfall [7]. If a card has more than one face, we include them both, indicated
+with the tag [FACE_<i>].
+
+features of Bertram et al. [3] (i.e. the average card win rate
+when it is in the opening hand, drawn, tutored, in the deck,
+in the sideboard, or seen during the game). In our results, we
+indicate when a model concatenates these META features to
+the textual features.
+We reduce the dimension of the initial card features using a
+linear layer, a LeakyReLU non-linearity, and a dropout layer.
+
+
+h
+i
+
+I
+h̄(0)
+Ec(T ) ||Ec(N ) + bI
+c = DO LeakyReLU W
+To let player rank condition card evaluation, we learn an
+embedding vector for each rank, feed it through a two-layer
+Multi-Layer Perceptron (MLP) to get two vectors γ, β ∈ Rd .
+We use each dimension of those vectors to alter the matching dimension of the card features individually, following
+the FiLM layer (Feature-wise Linear Modulation) of Perez
+et al. [8], to control mean and variance, yielding our initial
+(0)
+card embeddings h· :
+γ ∗ (r), β(r) = MLP(xr )
+
+γ(r) = 1 + 0.1 tanh(γ ∗ (r))
+
+(0)
+h(0)
+c = γ(r) ⊙ h̄c + β(r)
+(0)
+hc
+
+should encode absolute information about card c,
+contextualized by the skill level of the drafting player, and
+optionally by empirical meta-stats about that card in the
+currently drafted expansion, but is mostly agnostic relative to
+other cards in the same expansion. To update this encoding
+with the context of the current expansion and other cards that
+could be drafted with it, we implement a standard encoderonly architecture in which each card attends to other cards
+in the same expansion. This consists of NE residual attention
+(N )
+layers, producing contextualized card embeddings hc E .
+B. Encoding draft picks
+The sequence of information gained during a draft and the
+decisions taken is encoded using two types of tokens:
+• Pack cards: For each pack card pk,i , we keep track of
+our evaluation of that card relative to the previous picks,
+(0)
+(N )
+starting with the feature vector hk,i = hpk,iE .
+• Draft state: We also track the current state of the draft
+after k picks, starting by only considering the picked
+(0)
+(N )
+cards in isolation with the feature vector sk = hpk,cEk
+
+(n+1)
+
+= hk,i + DO(Attn(R(LN(hk,i )), R(s1...k ), s1...k ))
+
+(n+1)
+
+= h̄k,i
+
+h̄k,i
+hk,i
+
+(n)
+
+(n)
+
+(n+1)
+
+(n)
+
+(n+1)
+
++ DO(MLP(LN(h̄k,i
+
+(n)
+
+)))
+
+applying a rotary positional encoding [9] R to the query and
+key, before updating the draft states:
+s̄k
+
+(n+1)
+
+= sk + DO(Attn(hk,ck , hk,·
+
+(n+1)
+
+= s̄k
+
+sk
+
+(n)
+
+(n+1)
+
+(n+1)
+
+(n+1)
+
+(n+1)
+
++ DO(MLP(LN(s̄k
+
+(n+1)
+
+, hk,·
+
+))
+
+)))
+
+(n+1)
+
+to obtain sk
+.
+(N )
+After ND such updates, we obtain final draft states sk D ,
+that we concatenate to the rank embeddings xr and feed
+through an MLP with 3 layers, LeakyReLU activations, and
+a final sigmoid to output after each pick a win-rate between
+0 and 1.
+C. Training metric
+As our target outcome is biased to have at most 7 wins
+and 3 losses, we train our model with an appropriate Negative
+Log-Likelihood (NLL) loss.
+
+h
+i
+
+− log 6+L p7 (1 − p)L
+if W = 7,
+6
+h
+i
+ℓ(pi ; W, L) =
+
+− log W +2 pW (1 − p)3
+if L = 3,
+2
+L(p, W, L) =
+
+K
+X
+i
+i=1
+
+K
+
+ℓ(pi ; W, L)
+
+We weight later predictions higher as they were made with
+more information, and p is the win-rate predicted by the model.
+V. E XPERIMENTAL S ETUP
+A. Experiments
+Predictive accuracy. We first evaluate our model on predicting draft outcomes using the same expansions it was
+trained on. We only use BLB, FDN, and TDM for this experiment, split temporally using the last 6 weeks of data into
+chunks of 2 weeks assigned to training, validation, and testing
+chronologically, for around 120,000 training drafts.
+New expansion and cards generalization. We also evaluated the ability of our model to generalize to unseen expansions and cards. To do so, we trained and validated on the
+last 4 weeks of every expansion listed in Table I except FDN,
+and evaluated on the last 2 weeks of FDN, for around 400,000
+training drafts. Then, we fine-tune each model using the first
+four days of data of FDN.
+B. Evaluated Models
+We compare DraftEncoder against these baselines:
+• H EURISTIC , that computes and outputs the average "in
+deck" win rate from 17Lands of the best 23 picked cards.
+• LR, a linear regression, using the features of the first
+i picked cards and an embedding player rank vector to
+predict the win rate after i picks.
+
+Spearman
+
+0.200
+0.175
+0.150
+
+TABLE II
+S PEARMAN COEFFICIENT WHEN TESTED ON THE LAST TWO WEEKS OF
+FDN AND TRAINED ON ALL OTHER EXPANSIONS , AND FINE - TUNED ON
+THE FIRST FOUR DAYS OF FDN.
+
+Heuristic
+DraftEncoder+Meta
+DraftEncoder
+LR
+LR+Meta
+
+0.125
+
+Model
+
+Test loss (Spearman ρ)
+No fine-tuning
+Four days
+
+0.100
+
+Heuristic
+LR
+LR+Meta
+
+0.1391 ± 0.0203
+0.0690 ± 0.0031
+0.0886 ± 0.0074
+
+–
+0.0694 ± 0.0041
+0.0898 ± 0.0081
+
+DraftEncoder
+DraftEncoder+Meta
+
+0.0879 ± 0.0131
+0.1529 ± 0.0262
+
+0.1641 ± 0.0318
+0.1809 ± 0.0381
+
+0.075
+
+5
+
+10
+
+15
+
+20
+
+25
+
+Pick number
+
+30
+
+35
+
+40
+
+Fig. 3. Spearman ρ across pick number, on BLB, FDN, and TDM. Shaded
+bands show ± standard deviation over 3 seeds.
+
+We train the linear regression and our model for 100 epochs,
+with an inner dimension of 64, NE = 10, ND = 5, 2 attention
+heads, a batch size of 256, optimizing with AdamW [10], and
+a peak learning rate of 1e-4.
+VI. R ESULTS
+We report, as mean ± standard deviation over 3 random
+seeds for the epoch with the best validation loss, the Spearman’s rank correlation coefficient between the predicted winrates and the observed (biased) win-rates WW+L 2 . We use rank
+correlation since we care about relative deck strength rather
+than calibrated probability estimates. Our models were coded
+in Jax [11] and Equinox [12], and trained on 4 Nvidia RTX
+A5000 GPUs, using around an hour per seed.
+As seen in Fig. 3, DraftEncoder is able to use its non-linear
+architecture to outperform the baselines. Although DraftEncoder has slightly worse predictions for the first pick, it quickly
+grows to almost twice the rank correlation of the baselines, and
+is close to reaching the saturation value of around 0.23. Adding
+meta features consistently improves performance, which we
+assume means our model is able to learn enough about the
+cards from the training outcomes alone.
+However, as shown in Table II, the model struggles to
+generalize to new sets, without having access to the meta
+features, only matching the performance of the linear model
+without meta features (and falling short of the heuristic, which
+has implicit access to meta statistics for the full expansion), but
+does manage to be competitive with the linear model with meta
+features. Fine-tuning using the first four days of data lowers
+the importance of the meta features a lot, as DraftEncoder
+then outperforms an untuned DraftEncoder+Meta, and is only
+worse than the tuned version by 10%. This shows that our
+model can learn a lot with only a few days of data, making it
+useful and relevant early in the lifespan of a newly released
+expansion.
+2 We note that the label noise inherent to the sampled data limits the
+achievable correlation of any model. The correlation between a true win rate
+probability p ∼ N (0.53, 0.05) (calibrated to match the observed distribution
+via simulation) and an observed win-rate generated with i.i.d. Bernoulli trials
+with success probability p under a 7-win/3-loss stopping rule is around 0.23
+
+VII. C ONCLUSION
+In this work, we introduced DraftEncoder, the first learned
+benchmark for predicting Magic: the Gathering draft outcomes. Our model outperforms baselines by nearly 2× in rank
+correlation, and approaches the estimated noise ceiling of 0.23
+imposed by sampling noise inherent to the collected data.
+The main remaining challenge to address is generalization
+to unseen expansions and cards, though fine-tuning on as
+little as four days of initial data largely closes the gap to
+meta-augmented models, suggesting that our model learns
+transferable draft representations that adapt quickly to new
+cards. Future work could explore incorporating gameplay
+simulation or a stronger natural language processing (NLP) of
+the cards, potentially including a fine-tuned rather than frozen
+text encoder.
+R EFERENCES
+[1] 17Lands, “A Large-Scale Dataset of MTG Drafts and Games,” 2026.
+[2] H. N. Ward, B. Mills, D. J. Brooks, D. Troha, and A. S. Khakhalin,
+“AI solutions for drafting in Magic: the Gathering,” in 2021 IEEE
+Conference on Games (CoG). IEEE, 2021, pp. 1–8.
+[3] T. Bertram, J. Fürnkranz, and M. Müller, “Learning With Generalised
+Card Representations for “Magic: The Gathering”,” in 2024 IEEE
+Conference on Games (CoG). IEEE, 2024, pp. 1–8.
+[4] C. Xiao, Y. Zhang, X. Huang, Q. Huang, J. Chen, and c. Sun, “Mastering
+Strategy Card Game (Hearthstone) with Improved Techniques,” in 2023
+IEEE Conference on Games (CoG), 2023, pp. 1–8.
+[5] H. S. Vera, S. Dua, B. Zhang, D. Salz, R. Mullins, S. R. Panyam et al.,
+“EmbeddingGemma: Powerful and Lightweight Text Representations,”
+CoRR, vol. abs/2509.20354, 2025, arXiv: 2509.20354.
+[6] A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez
+et al., “Attention is All you Need,” in Advances in Neural Information
+Processing Systems 30: Annual Conference on Neural Information
+Processing Systems 2017, December 4-9, 2017, Long Beach, CA, USA,
+I. Guyon, U. v. Luxburg, S. Bengio, H. M. Wallach, R. Fergus, S. V. N.
+Vishwanathan et al., Eds., 2017, pp. 5998–6008.
+[7] Scryfall, “A Continuously Updated MtG Card Dataset,” 2026.
+[8] E. Perez, F. Strub, H. de Vries, V. Dumoulin, and A. Courville, “FiLM:
+Visual Reasoning with a General Conditioning Layer,” Proceedings of
+the AAAI Conference on Artificial Intelligence, vol. 32, no. 1, Apr. 2018.
+[9] J. Su, M. Ahmed, Y. Lu, S. Pan, W. Bo, and Y. Liu, “RoFormer: Enhanced transformer with Rotary Position Embedding,” Neurocomputing,
+vol. 568, p. 127063, 2024.
+[10] I. Loshchilov and F. Hutter, “Decoupled Weight Decay Regularization,”
+in 7th International Conference on Learning Representations, ICLR
+2019, New Orleans, LA, USA, May 6-9, 2019. OpenReview.net, 2019.
+[11] J. Bradbury, R. Frostig, P. Hawkins, M. J. Johnson, Y. Katariya,
+C. Leary et al., “JAX: composable transformations of Python+NumPy
+programs,” 2018. [Online]. Available: http://github.com/jax-ml/jax
+[12] P. Kidger and C. Garcia, “Equinox: neural networks in JAX via
+callable PyTrees and filtered transformations,” Differentiable Programming workshop at Neural Information Processing Systems 2021, 2021.
+
+

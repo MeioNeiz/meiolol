@@ -1,0 +1,2868 @@
+IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE
+
+1
+
+The Shape of Learning Curves: a Review
+
+arXiv:2103.10948v2 [cs.LG] 5 Nov 2022
+
+Tom Viering, Marco Loog
+Abstract—Learning curves provide insight into the dependence of a learner’s generalization performance on the training set size. This
+important tool can be used for model selection, to predict the effect of more training data, and to reduce the computational complexity
+of model training and hyperparameter tuning. This review recounts the origins of the term, provides a formal definition of the learning
+curve, and briefly covers basics such as its estimation. Our main contribution is a comprehensive overview of the literature regarding
+the shape of learning curves. We discuss empirical and theoretical evidence that supports well-behaved curves that often have the
+shape of a power law or an exponential. We consider the learning curves of Gaussian processes, the complex shapes they can display,
+and the factors influencing them. We draw specific attention to examples of learning curves that are ill-behaved, showing worse learning
+performance with more training data. To wrap up, we point out various open problems that warrant deeper empirical and theoretical
+investigation. All in all, our review underscores that learning curves are surprisingly diverse and no universal model can be identified.
+Index Terms—Learning curve, training set size, supervised learning, classification, regression.
+
+F
+
+1
+
+I NTRODUCTION
+
+T
+
+1.1
+
+Outline
+
+The next section starts off with a definition of learning
+curves and discusses how to estimate them in practice. It
+also briefly considers so-called feature curves, which offer a
+complementary view. Section 3 covers the use of learning
+curves, such as the insight into model selection they can
+give us, and how they are employed, for instance, in metalearning and reducing the cost of labeling or computation. Section 4 considers evidence supporting well-behaved
+learning curves: curves that generally show improved performance with more training data. We review the parametric
+models that have been studied empirically and cover the
+theoretical findings in favor of some of these. Many of the
+‚
+‚
+
+T. Viering is with Delft University of Technology, the Netherlands.
+E-mail: t.j.viering@tudelft.nl
+M. Loog is with Delft University of Technology, the Netherlands, and with
+the University of Copenhagen, Denmark.
+
+Manuscript received 2021
+
+0.4
+
+error rate
+on testset
+
+HE more often we are confronted with a particular
+problem to solve, the better we typically get at it. The
+same goes for machines. A learning curve is an important,
+graphical representation that can provide insight into such
+learning behavior by plotting generalization performance
+against the number of training examples. Two example
+curves are shown in Figure 1.
+We review learning curves in the context of standard
+supervised learning problems such as classification and
+regression. The primary focus is on the shapes that learning
+curves can take on. We make a distinction between wellbehaved learning curves that show improved performance
+with more data and ill-behaved learning curves that, perhaps surprisingly, do not. We discuss theoretical and empirical evidence in favor of different shapes, underlying
+assumptions made, how knowledge about those shapes can
+be exploited, and further results of interest. In addition,
+we provide the necessary background to interpret and use
+learning curves as well as a comprehensive overview of the
+important research directions.
+
+50
+
+100
+
+n (training set size)
+
+Figure 1: Two crossing learning curves. Red starts at a
+lower error, while blue reaches a lower error rate given
+enough data. One number summaries cannot characterize
+such behaviors. For more details see Section 2.4 and 3.1.
+more theoretical results in the literature have been derived
+particularly for Gaussian process regression as its learning
+curve is more readily analyzed analytically. Section 5 is
+primarily devoted to those specific results. Section 6 then
+follows with an overview of important cases of learning
+curves that do not behave well and considers possible
+causes. We believe that especially this section shows that our
+understanding of the behavior of learners is more limited
+than one might expect. Section 7 provides an extensive
+discussion. It also concludes our review. The remainder of
+the current section goes into the origins and meanings of the
+term “learning curve” and its synonyms.
+1.2
+
+Learning Curve Origins and Meanings
+
+With his 1885 book Über das Gedächtnis [1], Ebbinghaus is
+generally considered to be the first to employ and qualitatively describe learning curves. These curves report on
+the number of repetitions it takes a human to perfectly
+memorize an increasing number of meaningless syllables.
+Such learning curves have found widespread application
+for predicting human productivity, and are the focus of
+previous surveys on learning curves [2], [3].
+
+IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE
+
+While Ebbinghaus is the originator of the learning curve
+concept, it should be noted that the type of curves from [1],
+[2], [3] are importantly different from the curves central to
+this review. In the machine learning setting, we typically
+care about the generalization performance, i.e., the learner’s
+performance on new and unseen data. Instead, Ebbinghaus’s
+subject goal is to recite exactly that string of syllables that
+has been provided to him. Similarly, studies of human
+productivity focus on the speed and cost of repetitions of
+the same task. This means in a way that the performance on
+the training set is considered. This measure is also called
+the resubstitution or apparent error in classification [4],
+[5], [6]. Indeed, as most often is the case for the training
+error as well, memorization performance gets worse as the
+amount of training data increases, i.e., it is more difficult to
+memorize an increasing number of syllables.
+The term learning curve considered in this review is
+different from the curve that displays the training error—
+or the value of any objective function—as a function of
+the number of epochs or iterations used for optimization.
+Especially in the neural network literature, this is what the
+learning curve often signifies1 [7], [8], [9]. What it has in
+common with those of Ebbinghaus is that the performance
+is plotted against the number of times that (part of) the
+data has been revisited, which corresponds directly to the
+number of repetitions in [1]. These curves, used to monitor
+the optimality of a learner in the training phase, are also
+referred to as training curves and this terminology can be
+traced back to [10]. We use training curve exclusively to refer
+to these curves that visualize performance during training.
+Many researchers and practitioners, however, use the term
+learning curve instead of training curve [8], which, at times,
+may lead to confusion.
+In the machine learning literature synonyms for learning
+curve are error curve, experience curve, improvement curve and
+generalization curve [8], [11], [12]. Improvement curve can
+be traced back to a 1897 study, on learning the telegraphic
+language [13]. Generalization curve was first used in machine learning in 1990 [11], [12]. Decades earlier, the term
+was already used to indicate the plot of the intensity of an
+animal’s response against stimulus size [14]. Learning curve
+or, rather, its German equivalent was not used as an actual
+term in the original work of Ebbinghaus [1]. The English
+variant seems to appear 18 years later, in 1903 [15]. Lehrkurve
+follows a year after [16].
+We traced back the first mention of learning curve in
+connection to learning machines to a discussion in an 1957
+issue of Philosophy [17]. A year later, Rosenblatt, in his
+famous 1958 work [18], uses learning curves in the analysis
+of his perceptron. Following this review’s terminology, he
+uses this term to refer to a training curve. Foley [19] was
+possibly the first to use a learning curve, as it is defined in
+this review, in an experimental setting such as is common
+nowadays. The theoretical study of learning curves for
+supervised learners dates back at least to 1965 [20].
+
+1. It should be noted that such plots have to be interpreted with care,
+as the number of optimization steps or similar quantities can dependent
+on the training set size, the batch size, etc. Precise specifications are key
+therefore.
+
+2
+
+2
+
+D EFINITION , E STIMATION , F EATURE C URVES
+
+This section makes the notion of a learning curve more
+precise and describes how learning curves can be estimated
+from data. We give some recommendations when it comes
+to plotting learning curves and summarizing them. Finally,
+feature curves offer a view on learners that is complementary to that of learning curves. These and combined
+learning-feature curves are covered at the end of this section.
+2.1
+
+Definition of Learning Curves
+
+Let Sn indicate a training set of size n, which acts as input
+to some learning algorithm A. In standard classification and
+regression, Sn consists of px, yq pairs, where x P Rd is the ddimensional input vector (i.e., the features, measurements,
+or covariates) and y is the corresponding output (e.g. a class
+label or regression target). X denotes the input space and
+Y the output space. The px, yq pairs of the training set are
+i.i.d. samples of an unknown probability distribution PXY
+over X ˆ Y . Predictors h come from the hypothesis class
+H, which contains all models that can be returned by the
+learner A. An example of a hypothesis class is the set of all
+linear models th : x ÞÑ a T x ` b|a P Rd , b P Ru.
+When h is evaluated on a sample x, its prediction for
+the corresponding y is given by ŷ “ hpxq. The performance
+of a particular hypothesis h is measured by a loss function
+L that compares y to ŷ. Examples are the squared loss for
+regression, where Y Ă R and Lsq py, ŷq “ py ´ ŷq2 and the
+zero-one loss for (binary) classification L01 py, ŷq “ 21 p1 ´ yŷq
+when Y “ t´1, `1u.
+The typical goal is that our predictor performs well on
+average on all new and unseen observations. Ideally, this
+is measured by the expected loss or risk R over the true
+distribution PXY :
+ż
+Rphq “ Lpy, hpxqqdPpx, yq.
+(1)
+Here, as in most that follows, we omit the subscript XY.
+Now, an individual learning curve considers a single
+training set Sn for every n and calculates its corresponding
+risk Rp ApSn qq as a function of n. Note that training sets can
+be partially ordered, meaning Sn´1 Ă Sn . However, a single
+Sn may deviate significantly from the expected behavior.
+Therefore, we are often interested in an averaging over
+many different sets Sn , and ideally the expectation
+R̄n p Aq “
+
+E Rp ApSn qq.
+
+Sn „ P n
+
+(2)
+
+The plot of R̄n p Aq against the training set size n gives us the
+(expected) learning curve. From this point onward, when
+we talk about the learning curve, this is what is meant.
+The preceding learning curve is defined for a single
+problem P. Sometimes we wish to study how a model
+performs over a range of problems or, more generally, a
+full distribution P over problems. The learning curve that
+considers such averaged performance is referred to as the
+problem-average (PA) learning curve:
+R̄PA
+n p Aq “ E R̄n p Aq.
+P„P
+
+(3)
+
+The general term problem-average was coined in [21]. PA
+learning curves make sense for Bayesian approaches in
+
+IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE
+
+3
+
+particular, where an assumed prior over possible problems
+often arises naturally. As GP’s are Bayesian, their PA curve
+is frequently studied, see Section 5. The risk integrated over
+the prior, in the Bayesian literature, is also called the Bayes
+risk, integrated risk, or preposterior risk [22, page 195].
+The term preposterior signifies that, in principle, we can
+determine this quantity without observing any data.
+In semi-supervised learning [23] and active learning [24],
+it can be of additional interest to study the learning behavior
+as a function of the number of unlabeled and actively selected
+samples, respectively.
+
+be able to exploit the special structure of the assumed
+problem prior. This is the case, for instance, with Gaussian
+process regression, where problem averages can sometimes
+be computed with no additional cost (Section 5).
+
+2.2
+
+Estimating Learning Curves
+
+In practice, we merely have a finite sample from P and we
+cannot measure Rphq or consider all possible training sets
+sampled from P. We can only get an estimate of the learning
+curve. Popular approaches are to use a hold-out dataset or
+k-fold cross validation for this [25], [26], [27], [28] as also
+apparent from the Weka documentation [29] and Scikitlearn implementation [30]. Using cross validation, k folds
+are generated from the dataset. For each split, a training set
+and a test set are formed. The size of the training set Sn is
+varied over a range of values by removing samples from
+the originally formed training set. For each size the learning
+algorithm is trained and the performance is measured on
+the test fold. The process is repeated for all k folds, leading
+to k individual learning curves. The final estimate is their
+average. The variance of the estimated curve can be reduced
+by carrying out the k-fold cross validation multiple times
+[31]. This is done, for instance, in [25], [26], [27], [32].
+Using cross validation to estimate the learning curve
+has some drawbacks. For one, when making the training
+set smaller, not using the discarded samples for testing
+seems wasteful. Also note that the training fold size limits
+the range of the estimated learning curve, especially if k is
+small. Directly taking a random training set of the preferred
+size and leaving the remainder as a test set can be a good
+alternative. This can be repeated to come to an averaged
+learning curve. This recipe—employed, for instance in [32],
+[33]—allows for easy use of any range of n, leaving no
+sample unused. Note that the test risks are not independent
+for this approach. Alternatively, drawing samples from the
+data with replacement can also be used to come to to
+variable sized training sets (e.g. similar to bootstrapping
+[34], [35]). For classification, often a learning curve is made
+with stratified training sets to reduce the variance further.
+A learner A often depends on hyperparameters. Tuning
+once and fixing them to create the learning curve will result
+in suboptimal curves, since the optimal hyperparameter
+values can strongly depend on n. Therefore, ideally, the
+learner should internally use cross validation (or the like)
+to tune hyperparameters for each training set it receives.
+An altogether different way to learning curve estimation
+is to assume an underlying parametric model for the learning curve and fit this to the learning curves estimates obtained via approaches described previously. The approach is
+not widespread under practitioners, but is largely confined
+to the research work that studies and exploits the general
+shape of learning curves (see Subsection 4.1).
+Finally, note that all of the foregoing pertains to PA
+learning curves as well. In that setting, we may occasionally
+
+2.3
+
+Plotting Considerations
+
+When plotting the learning curve, it can be useful to consider logarithmic axes. Plotting n linearly may mask small
+but non-trivial gains [36]. Also from a computational standpoint it often makes sense to have n traverse a logarithmic
+scale [37] (see also Subsection 3.2). A log-log or semi-log
+plot can be useful if we expect the learning curve to display
+power-law or exponential behavior (Section 4), as the curve
+becomes straight in that case. In such a plot, it can also be
+easier to discern small deviation from such behavior. Finally,
+it is common to use error bars to indicate the standard
+deviation over the folds to give an estimate of the variability
+of the individual curves.
+2.4
+
+Summarizing Learning Curves
+
+It may be useful at times, to summarize learning curves into
+a single number. A popular metric to that end is the area
+under the learning curve (AULC) [38], [39], [40] (see [41] for
+early use). To compute this metric, one needs to settle at a
+number of sample sizes. One then averages the performance
+at all those sample sizes to get to the area of the learning
+curve. The AULC thus makes the curious assumption that
+all sample sizes are equally likely.
+Important information can get lost when summarizing.
+The measure is, for instance, not able to distinguish between
+two methods whose learning curves cross (Figure 1), i.e.,
+where the one method is better in the small sample regime,
+while the other is in the large sample setting. Others have
+proposed to report the asymptotic value of the learning
+curve and the number of samples to reach it [42] or the
+exponent of the power-law fit [43].
+Depending on the application at hand, particularly in
+view of the large diversity in learning curve shapes, these
+summaries are likely inadequate. Recently, [44] suggested
+to summarize using all fit parameters, which should suffice
+for most applications. However, we want to emphasize
+one should try multiple parametric models and report the
+parameters of the best fit and the fit quality (e.g. MSE).
+2.5
+
+Fitting Considerations
+
+Popular parametric forms for fitting learning curves are
+given in Table 1 and their performance is discussed in
+Section 4.1. Here, we make a few general remarks.
+Some works [45], [46], [47], [48] seem to perform simple
+least squares fitting on log-values in order to fit power laws
+or exponentials. If, however, one would like to find the
+optimal parameters in the original space in terms of the
+mean squared error, non-linear curve fitting is necessary
+(for example using Levenberg–Marquardt [49]). Then again,
+assuming Gaussian errors in the original space may be questionable, since the loss is typically non-negative. Therefore,
+confidence intervals, hypothesis tests, and p-values should
+be interpreted with care.
+
+IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE
+
+4
+
+For many problems, one should consider a model that
+allows for nonzero asymptotic error (like POW3 and EXP3
+in Table 1). Also, often the goal is to interpolate or extrapolate to previously unseen training set sizes. This is a
+generalization task and we have to deal with the problems
+that this may entail, such as overfitting to learning curve
+data [49], [50]. Thus, learning curve data should also be split
+in train and test sets for a fair evaluation.
+
+different training set sizes. Another option is to make a 3D
+plot—e.g. a surface plot—or a 2D image of the performance
+against both n and d directly. Instead of the number of
+features any other complexity measure can be used.
+Figure 2a shows such a plot for pseudo-Fisher’s linear
+discriminant (PFLD; see Section 6.2) when varying both n
+and d1 . Taking a section of this surface, we obtain either a
+learning curve in Figure 2b (horizontal, fixed d) or a feature
+curve in Figure 2c (vertical, fixed n). Figure 2a gives a more
+complete view of the interaction between n and d. In Figure
+2d we can see that the optimal d1 depends on n. Likewise,
+for this model, there is an optimal n for each d1 , i.e., the
+largest possible value of n is not necessarily the best.
+Duin [63] is possibly the first to include such 3D plot,
+though already since the work of Hughes [51], figures that
+combine multiple learning or feature curves have been
+used, see for example [69], [70], and for combinations with
+complexity curves see [53], [54], [71], [72]. More recently,
+[56], [73] gives 2D images of the performance of deep neural
+networks as a function of both model and training set size.
+
+2.6
+
+Feature Curves and Complexity
+
+The word feature refers to the d measurements that constitutes an input vector x. A feature curve is obtained by
+plotting the performance of a machine learning algorithm
+A against the varying number of measurements it is trained
+on [51], [52]. To be a bit more specific, let ς d1 be a procedure
+that selects d1 of the original d features, hence reducing the
+dimensionality of the data to d1 . A feature curve is then
+obtained by plotting R̄p Apς d1 pSn qqq versus d1 , while n is
+now the quantity that is fixed. As such, it gives a view
+complementary to the learning curve.
+The selection of d1 features as carried out by means of ς d1 ,
+can be performed in various ways. Sometimes features have
+some sort of inherent ordering. In other cases PCA or feature
+selection can provide such ordering. When no ordering
+can be assumed, ς d1 samples d1 random features from the
+data—possibly even with replacement. In this scenario, it
+is sensible to construct a large number of different feature
+curves, based on different random subsets, and report their
+average as the final curve.
+Typically, an increase in the number of input dimensions
+means that the complexity of the learner also increases.
+As such it can, more generally, be of interest to plot performance against any actual, approximate, or substitute
+measure of the complexity. Instead of changing the dimensionality, changing parameters of the learner, such as
+the smoothness of a kernel or the amount of filters in a
+CNN, can also be used to vary the complexity to obtain
+similar curves [51], [53], [54], [55], [56]. Such curves are
+sometimes called complexity curves [55], parameter curves [57]
+or generalization curves [58].
+One of the better known phenomena of feature curves
+is the so-called peaking phenomenon (also the peak effect,
+peaking or Hughes phenomenon [4], [59], [60], [61]). The
+peaking phenomenon of feature curves is related to the
+curse of dimensionality and illustrates that adding features
+may actually degrade the performance of a classifier, leading to the classical U-shaped feature curve. Behavior more
+complex than the simple U-shape has been observed as well
+[62], [63], [64] and has recently been referred to as double
+descent [65] (see Figure 2a). This is closely related to peaking
+of (ill-behaving) learning curves (Subsection 6.2).
+2.7
+
+Combined Feature and Learning Curves
+
+Generally, the performance of a learner A is not influenced
+independently by the the number of training samples n and
+the number of features d. In fact, several theoretical works
+suggest that the fraction α “ nd is essential (see, e.g. [66],
+[67], [68]). Because of the feature-sample interaction, it can
+be insightful to plot multiple learning curves for a variable
+number of input dimensions or multiple feature curves for
+
+3
+
+G ENERAL P RACTICAL U SAGE
+
+The study of learning curves has both practical and research/theoretical value. While we do not necessarily aim
+to make a very strict separation between the two, more
+emphasis is put on the latter further on. This section focuses
+on part of the former and covers the current, most important
+uses of learning curves when it comes to applications, i.e.,
+model selection and extrapolation to reduce data collection
+and computational costs. For a valuable, complementary
+review that delves specifically into how learning curves are
+deployed for decision making, we refer to [74].
+3.1
+
+Better Model Selection and Crossing Curves
+
+Machine learning as a field has shifted more and more to
+benchmarking learning algorithms, e.g., in the last 20 years,
+more than 2000 benchmark datasets have been created (see
+[75] for an overview). These benchmarks are often set up
+as competitions [76] and investigate which algorithms are
+better or which novel procedure outperforms existing ones
+[36]. Typically, a single number, summarizing performance,
+is used as evaluation measure.
+A recent meta-analysis indicates that the most popular
+measures are accuracy, the F-measure, and precision [77]. An
+essential issue these metrics ignore is that sample size can
+have a large influence on the relative ranking of different
+learning algorithms. In a plot of learning curves this would
+be visible as a crossing of the different curves (see Figure 1).
+In that light, it is beneficial if benchmarks consider multiple
+sample sizes, to get a better picture of the strengths and
+weaknesses of the approaches. The learning curve provides
+a concise picture of this sample size dependent behavior.
+Crossing curves have also been referred to as the scissor
+effect and have been investigated since the 1970s [70], [78],
+[79] (see also [80]). Contrary to such evidence, there are
+papers that suggest that learning curves do not cross [81],
+[82]. [36] calls into question the claim of [81] as the datasets
+may be too small to find the crossing point. The latter
+claim by [82] is specific to deep learning, where, perhaps,
+exceptions may occur that are currently not understood.
+
+IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE
+
+5
+
+(a) contour plot of error rate
+
+100
+
+(c) feature curve
+
+0.35 100
+
+optimal n
+n = 50
+
+90
+
+90
+0.3
+
+80
+0.25
+
+70
+60
+
+Double Descent
+
+80
+
+70
+
+60
+
+50
+
+d'
+
+d'
+
+0.2
+50
+
+40
+
+0.15
+
+40
+
+30
+
+30
+0.1
+
+20
+
+20
+0.05
+
+10
+
+20
+
+40
+
+60
+
+80
+
+100
+
+120
+
+140
+
+10
+
+0
+
+160
+
+0.1
+
+(b) learning curve
+
+0.5
+
+0.3
+
+0.4
+
+(d) curve routes
+
+100
+
+Peaking
+
+optimal d'
+d' = 70
+
+0.4
+
+80
+
+0.3
+
+60
+
+d'
+
+error rate
+
+0.2
+
+error rate
+
+n
+
+0.2
+
+40
+
+0.1
+
+20
+
+optimal d'
+learning curve d' = 70
+optimal n
+feature curve n = 50
+
+0
+20
+
+40
+
+60
+
+80
+
+100
+
+120
+
+140
+
+n
+
+160
+
+40
+
+80
+
+120
+
+160
+
+n
+
+Figure 2: (a) Image of the error for varying sample size n and dimensionality d1 , for the pseudo-Fisher learning algorithm
+(without intercept) on a toy dataset with two Gaussian classes having identity covariance matrices. Their means are a
+distance of 6 apart in 100 dimensions, with every dimension adding a same amount to the overall distance. (b) By fixing
+d1 and varying n, i.e., taking a horizontal section, we obtain a learning curve (red). We also show the curve where d1 is
+chosen optimally for each n (blue). (c) This plot is rotated by 90 degrees. By fixing n and varying d1 , i.e., a vertical section,
+we obtain a feature curve (purple). We also show the curve where the optimal n is chosen for each d1 (yellow). (d) Here we
+show the paths taken through the image to obtain the curves. The learning curve and feature curves are the straight lines,
+while the curves that optimize n or d1 take other paths. The largest n and d are not always optimal. We note that Section 6
+covers learning curves that do not necessarily improve with more data. Section 6.2 discusses peaking (displayed here).
+Perhaps the most convincing evidence for crossing
+curves is given in [36]. The paper compares logistic regression and decision trees on 36 datasets. In 15 of the 36 cases
+the learning curves cross. This may not always be apparent,
+however, as large sample sizes may be needed to find the
+crossing point. In the paper, the complex model (decision
+tree) is better for large sample sizes, while the simple model
+(logistic regression) is better for small ones. Similarly, Strang
+et al. [83] performed a large-scale meta-learning study on
+294 datasets, comparing linear versus nonlinear models,
+and found evidence that non-linear methods are better
+when datasets are large. Ng and Jordan [28] found, when
+comparing naive Bayes to logistic regression, that in 7 out
+of 15 datasets considered the learning curves crossed. [45],
+[84], [85], [86], [87] provide further evidence.
+
+Also using learning curves, [36] finds that, besides sample size, separability of the problem can be an indicator
+of which algorithm will dominate the other in terms of
+the learning curve. Beyond that, the learning curve, when
+plotted together with the training error of the algorithm can
+be used to detect whether a learner is overfitting [4], [5],
+[57], [88]. Besides sample size, dimensionality seems also an
+important factor to determine whether linear or non-linear
+methods will dominate [83]. To that end, learning curves
+combined with feature curves may offer further insights.
+3.2
+
+Extrapolation to Reduce Data Collection Costs
+
+When collecting data is time-consuming, difficult, or otherwise expensive the possibility to accurately extrapolate
+a learner’s learning curve can be useful. Extrapolations
+
+IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE
+
+6
+
+(typically base on some parametric learning curve model,
+see Subsection 4.1) give an impression beforehand of how
+many examples to collect to come to a specific performance
+and allows one to judge when data collection can be stopped
+[46]. Examples of such practice can, for instance, be found
+in machine translation [50] and medical applications [25],
+[26], [32]. Last [48] quantifies potential savings assuming a
+fixed cost per collected sample and per generalization error.
+Extrapolating the learning curve using some labeled data,
+the point at which it is not worth anymore to label more
+data can be determined and data collection stopped.
+Determining a minimal sample size is called sample
+size determination. For usual statistical procedures this is
+done through what is called a power calculation [89]. For
+classifiers, sample size determination using a power calculation is unfeasible according to [25], [26]. John and Langley
+[90] illustrate that a power calculations that ignores the
+machine learning model indeed fails to accurately predict
+the minimal sample size.
+Sample size determination can be combined with metalearning, which uses experience on previous datasets to
+inform decisions on new datasets. To that end, [91] builds
+a small learning curve on a new and unseen dataset and
+compares it to a database of previously collected learning
+curves to determine the minimum sample size.
+
+Table 1: Parametric learning curve models. Note that some
+curves model performance increase rather than loss decease.
+The first column gives the abbreviation used and the number of parameters. Bold and asterisk marks the paper this
+model came out as the best fit.
+
+3.3
+
+Speeding Up Training and Tuning
+
+Learning curves can be used to reduce computation time
+and memory with regards to training models, model selection and hyperparameter tuning.
+To speed up training, so-called progressive sampling [37]
+uses a learning curve to determine if less training data
+can reach adequate performance. If the slope of the curve
+becomes too flat, learning is stopped, making training potentially much faster. It is recommended to use a geometric
+series for n to reduce computational complexity.
+Several variations on progressive sampling exist. John
+and Langley [90] proposes the notion of probably close enough
+where a power-law fit is used to determine if the learner is
+so-called epsilon-close to the asymptotic performance. [92]
+gives a rigorous decision theoretic treatment of the topic.
+By assigning costs to computation times and performances,
+they estimate what should be done to minimize the expected
+costs. Progressive sampling also has been adapted to the
+setting of active learning [93]. [91] combines meta-learning
+with progressive sampling to obtain a further speedup.
+To speed up model selection, [94] compares initial learning curves to a database of learning curves to predict which
+of two classifiers will perform best on a new dataset. This
+can be used to avoid costly evaluations using cross validation. Leite and Brazdil [95] propose an iterative process that
+predicts the required sample sizes, builds learning curves,
+and updates the performance estimates in order to compare
+two classifiers. Rijn et al. [96] extend the technique to rank
+many machine learning models according to their predicted
+performance, tuning their approach to come to an acceptable
+answer in as little time as possible. [97] does not resort to
+meta-learning, and instead uses partial learning curves to
+speed up model selection. This simpler approach can also
+already lead to significantly improved run times.
+
+Reference
+
+Formula
+
+Used in
+
+POW2
+POW3
+LOG2
+EXP3
+EXP2
+LIN2
+VAP3
+MMF4
+WBL4
+EXP4
+EXPP3
+POW4
+ILOG2
+EXPD3
+
+an´b
+
+[46]* [49] [47] [48]
+[49]* [50]* [45] [103]
+[47]* [46] [49] [48] [103]
+[103]* [50]
+[46] [47] [48]
+[46] [47] [48] [103]
+[49]
+[49]
+[49]
+[50]
+[50]
+[50]
+[50]
+[104]
+
+an´b ` c
+´a logpnq ` c
+a expp´bnq ` c
+a expp´bnq
+´an ` b
+exppa ` b{n ` c logpnqq
+pab ` cnd q{pb ` nd q
+c ´ b expp´and q
+c ´ expp´anα ` bq
+c ´ expppn ´ bqα q
+c ´ p´an ` bq´α
+c ´ pa{ logpnqq
+c ´ pc ´ aq expp´bnq
+
+With regards to hyperparameter tuning, already in 1994
+Cortes et al. [45] devised an extrapolation scheme for learning curves, based on the fitting of power laws, to determine
+if it is worth to fully train a neural network. In the deep
+learning era, this has received renewed attention. [98] extrapolates the learning curve to optimize hyperparameters.
+[44] takes this a step further and actually optimize several
+design choices, such as data augmentation. One obstacle
+for such applications is that it remains unclear when the
+learning curve has which shape.
+
+4
+
+W ELL -B EHAVED L EARNING C URVES
+
+We deem a learning curve well-behaved if it shows improved performance with increased training sample sizes,
+i.e., R̄n p Aq ě R̄n`1 p Aq for all n. In slightly different settings,
+learners that satisfy this property are called smart [99, page
+106] and monotone [100].
+There is both experimental and theoretical evidence for
+well-behaved curves. In the case of large deep learning models, empirical evidence often seems to point to power-law
+behavior specifically. For problems with binary features and
+decision trees, exponential curves cannot be ruled out, however. There generally is no definitive empirical evidence that
+power laws models are essentially better. Theory does often
+point to power-law behavior, but showcases exponentials as
+well. The most promising theoretical works characterizing
+the shape are [101] and [102]. Theoretical PA curves are
+provably monotone, given the problem is well-specified and
+a Bayesian approaches is used. They favor exponential and
+power-law shapes as well.
+4.1
+
+In-Depth Empirical Studies of Parametric Fits
+
+Various works have studied the fitting of empirical learning
+curves and found that they typically can be modelled with
+function classes depending on few parameters. Table 1 provides a comprehensive overview of the parametric models
+studied in machine learning, models for human learning
+in [3] may offer further candidates. Two of the primary
+objectives in studies of fitting learning curves are how well
+
+IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE
+
+7
+
+a model interpolates an empirical learning curve over an
+observed range of training set sizes and how well it can
+extrapolate beyond that range.
+Studies investigating these parametric forms often find
+the power law with offset (POW3 in the table) to offer a good
+fit. The offset makes sure that a non-zero asymptotic error
+can be properly modeled, which seems a necessity in any
+challenging real-world setting. Surprisingly, even though
+Frey and Fisher [46] do not include this offset c and use
+POW2, they find for decision trees that on 12 out of 14
+datasets they consider, the power law fits best. Gu et al. [49]
+extend this work to datasets of larger sizes and, next to decision trees, also uses logistic regression as a learner. They use
+an offset in their power law and consider other functional
+forms, notably, VAP, MMF, and WBL. For extrapolation, the
+power law with bias performed the best overall. Also Last
+[48] trains decision trees and finds the power law to perform
+best. Kolachina et al. [50] give learning curves for machine
+translation in terms of BLUE score for 30 different settings.
+Their study considers several parametric forms (see Table 1)
+but also they find that the power law is to be preferred.
+Boonyanunta and Zeephongsekul [104] perform no
+quantitative comparison and instead postulate that a differential equation models learning curves, leading them to
+an exponential form, indicated by EXPD in the table. [105]
+empirically finds exponential behavior of the learning curve
+for a perceptron trained with backpropagation on a toy
+problem with binary inputs, but neither performs an in
+depth comparison. In addition, the experimental setup is
+not described precisely enough: for example, it is not clear
+how step sizes are tuned or if early stopping is used.
+Three studies find more compelling evidence for deviations from the power law. The first, [106], can be seen as
+an in-depth extension of [105]. They train neural networks
+on four synthetic datasets and compare the learning curves
+using the r2 goodness of fit. Two synthetic problems are
+linearly separable, the others require a hidden layer, and
+all can be modeled perfectly by the network. Whether a
+problem was linearly separable or not doesn’t matter for the
+shape of the curve. For the two problems involving binary
+features exponential learning curves were found, whereas
+problems with real-valued features a power law gave the
+best fit. However, they also note, that it is not always clear
+that one fit is significantly better than the other.
+The second study, [47], evaluates a diverse set of learners
+on four datasets and shows the logarithm (LOG2) provides
+the best fit. The author has some reservations about the
+results and mentions that the fit focuses on the first part
+of the curve as a reason that the power law may seem to
+perform worse, besides that POW3 was also not included.
+Given that many performance measures are bounded, parametric models that increase or decrease beyond any limit
+should eventually give an arbitrarily bad fit for increasing
+n. As such, LOG2 is anyway suspect.
+The third study, [103], considers only the performance
+of the fit on training data, e.g. already observed learning
+curves points. They do only use learning curve models with
+a maximum of three parameters. They employs a total of 121
+datasets and use C4.5 for learning. In 86 cases, the learning
+curve shape fits well with one of the functional forms, in 64
+cases EXP3 gave the lowest overall MSE, in 13 it was POW3.
+
+A signed rank test shows that the exponential outperforms
+all others models mentioned for [103] in Table 1. Concluding, the first and last work provide strong evidence against
+the power law in certain settings.
+Finally, in what is probably the most extensive learning
+curve study to date [107], the authors find power laws to
+often provide good fits though not necessarily preferable to
+some of the other models. In particular, for larger data sets,
+all four 4-parameter models from Table 1 often perform on
+par, but MMF4 and WBL4 outperform EXP4 and POW4 if
+enough curve data is used for fitting.
+4.2
+
+Power Laws and Eye-balling Deep Net Results
+
+Studies of learning curves of deep neural networks mostly
+claim to find power-law behavior. However, initial works
+offer no quantitative comparisons to other parametric forms
+and only consider plots of the results, calling into question
+the reliability of such claims. Later contributions find powerlaw behavior over many orders of magnitude of data, offering somewhat stronger empirical evidence.
+Sun et al. [108] state that their mean average precision
+performance on a large-scale internal Google image dataset
+increases logarithmically in dataset size. This claim is called
+into question by [98] and we would agree: there seems to be
+little reason to believe this increase follows a logarithm. Like
+for [47], that also finds that the logarithm fit well, one should
+remark that the performance in terms of mean average precision is always bounded from above and therefore the log
+model should eventually break. As opposed to [108], [109]
+does observe diminishing returns in a similar large-scale
+setting. [110] also studies large-scale image classification
+and find learning curves that level off more clearly in terms
+of accuracy over orders of magnitudes. They presume that
+this is due to the maximum accuracy being reached, but note
+that this cannot explain the observations on all datasets. In
+the absence of any quantitative analysis, these results are
+possibly not more than suggestive of power-law behavior.
+Hestness et al. [98] observe power laws over multiple
+orders of magnitude of training set sizes for a broad range
+of domains: machine translation (error rate), language modeling (cross entropy), image recognition (top-1 and top5 error rate, cross entropy) and speech recognition (error
+rate). Its exponent was found to be between ´0.07 and
+´0.35 and mostly depends on the domain. Architecture and
+optimizer primarily determine the multiplicative constant.
+For small sample sizes, however, the power law supposedly
+does not hold anymore, as the neural network converges
+to a random guessing solutions. In addition, one should
+note that that the work does not consider any competing
+models nor does it provide an analysis of the goodness of
+fit. Moreover, to uncover the power law, significant tuning
+of the hyperparameters and model size per sample size
+is necessary, otherwise deviations occur. Interestingly, [44]
+investigates robust curve fitting for the error rate using the
+power law with offset and find exponents of size ´0.3 and
+´0.7, thus of larger magnitude than [98].
+Kaplan et al. [111] and Rosenfeld et al. [73] also rely on
+power laws for image classification and natural language
+processing and remarks similar to those we made about [98]
+apply. [111] finds that if the model size and computation
+
+IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE
+
+8
+
+time are increased together with the sample size, that the
+learning curve has this particular behavior. If either is too
+small this pattern disappears. They find that the test loss
+also behaves as a power law as function of model size and
+training time and that the training loss can also be modeled
+in this way. [73] reports that the test loss behaves as a power
+law in sample size when model size is fixed and vice versa.
+Both provide models of the generalization error that can
+be used to extrapolate performances to unseen sample and
+model sizes and that may reduce the amount of tuning
+required to get to optimal learning curves. Some recent
+additions to this quickly expanding field are [112] and [113].
+On the whole, given the level of validation provided in
+these works (e.g. no statistical tests or alternative parametric
+models, etc.), power laws can currently not be considered
+more than a good candidate learning curve model.
+
+the VC dimension). The result of arbitrarily slow learning is,
+partially, a refinement of the no free lunch theorem of [99,
+Section 7.2] and concerns, for example, hypothesis classes
+that encompass all measurable functions. These results are a
+strengthening of a much earlier observation by Cover [125].
+
+4.3
+
+What Determines the Parameters of the Fit?
+
+Next to the parametric form as such, researchers have investigated what determines the parameters of the fits. [25],
+[45], and [44] provide evidence that the asymptotic value
+of the power law and its exponent could be related. Singh
+[47] investigates the relation between dataset and classifier
+but does not find any effect. They do find that the neural
+networks and the support vector machine (SVM) are more
+often well-described by a power law and that decision trees
+are best predicted by a logarithmic model. Only a limited
+number of datasets and models was tested however. Perlich
+et al. [36] find that the Bayes error is indicative of whether
+the curves of decision trees and logistic regression will cross
+or not. In case the Bayes error is small, decision trees will
+often be superior for large sample sizes. All in all, there are
+few results of this type and most are quite preliminary.
+4.4
+
+Shape Depends on Hypothesis Class
+
+Turning to theoretical evidence, results from learning theory,
+especially in the form of Probably Approximately Correct
+(PAC) bounds [114], [115], have been referred to to justify
+power-law shapes in both the separable and non-separable
+case [44]. The PAC model is, however, pessimistic since
+it considers the performance on a worst-case distribution
+P, while the behavior on the actual fixed P can be much
+more favorable (see, for instance, [116], [117], [118], [119],
+[120]). Even more problematic, the worst-case distribution
+considered by PAC is not fixed, and can depend on the
+training size n, while for the learning curve P is fixed. Thus
+the actual curve can decrease much faster than the bound
+(e.g. exponential) [101]. The curve only has to be beneath the
+bound but can still also show strange behavior (wiggling).
+A more fitting approach, pioneered by Schuurmans
+[121], [122] and inspired by the findings in [106], does
+characterize the shape of the learning curve for a fixed
+unknown P. This has also been investigated in [123], [124]
+for specific learners. Recently, Bousquet et al. [101] gave
+a full characterization of all learning curve shapes for
+the realizable case and optimal learners. This last work
+shows that optimal learners can have only three shapes:
+an exponential shape, a power-law shape, or a learning
+curve that converges arbitrarily slow. The optimal shape is
+determined by novel properties of the hypothesis class (not
+
+4.5
+
+Shape Depends on the Problem
+
+There are a number of papers that find evidence for the
+power-law shape under various assumptions. We also discuss work that finds exponential curves.
+A first provably exponential learning curve can be traced
+back to the famous work on one-nearest neighbor (1NN)
+classifier [126] by Cover and Hart. They point out that, in a
+two-class problem, if the classes are far enough apart, 1NN
+only misclassifies samples from one class if all n training
+samples are from the other. Given equal priors, one can
+show R̄n p A1NN q “ 2´n . This suggests that if a problem is
+well-separated, classifiers can converge exponentially fast.
+Peterson [127] studied 1NN for a two-class problem where
+PX is uniform on r0, 1s and PY|X equals x for one of the
+two classes. In that case of class overlap the curve equals
+1
+3n`5
+3 ` 2pn`1qpn`2qpn`3q , thus we have a slower power law.
+Amari [128], [129] studies (PA) learning curves for a
+basic algorithm, the Gibbs learning algorithm, in terms of
+the cross entropy. The latter is equal to the logistic loss in
+the two-class setting and underlies logistic regression. [128]
+refers to it as the entropic error or entropy loss. The Gibbs
+algorithm AG is a stochastic learner that assumes a prior
+over all models considered and, at test time, samples from
+the posterior defined through the training data, to come to
+a prediction [68], [130]. Separable data is assumed and the
+model samples are therefore taken from version space [68].
+For AG , the expected cross entropy, R̄CE , can be shown to
+decompose using a property of the conditional probability
+[128]. Let ppSn q be the probability of selecting a classifier
+from the prior that classifies all samples in Sn correctly.
+Assume, in addition, that Sn Ă Sn`1 . Then, while for general
+losses we end up with an expectation that is generally hard
+to analyze [131], the expected cross entropy simplifies into
+the difference of two expectations [128]:
+R̄CE
+n p A G q “ ESn „ P log ppSn q ´ ESn`1 „ P log ppSn`1 q.
+
+(4)
+
+Under some additional assumptions, which ensure that the
+prior is not singular, the behavior asymptotic in n can be
+fully characterized. Amari [128] then demonstrates that
+ˆ ˙
+1
+d
+`
+o
+,
+(5)
+R̄CE
+p
+A
+q
+«
+G
+n
+n
+n
+where d is the number of parameters.
+Amari and Murata [132] extend this work and consider
+labels generated by a noisy process, allowing for class
+overlap. Besides Gibbs, they study algorithms based on
+maximum likelihood estimation and the Bayes posterior
+distribution. They find for Bayes and maximum likelihood
+d
+that the entropic generalization error behaves as H0 ` 2n
+,
+d
+while the training error behaves as H0 ´ 2n , where H0 is
+the best possible cross entropy loss. For Gibbs, the error
+behaves as H0 ` nd , and the training error as H0 . In case
+of model mismatch, the maximum likelihood solution can
+also be analyzed. In that setting, the number of parameters
+
+IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE
+
+9
+
+d changes to a quantity indicating the number of effective
+parameters and H0 becomes the loss of the model closest to
+the groundtruth density in terms of KL-divergence.
+In a similar vein, Amari et al. [131] analyze the 0-1 loss,
+i.e., the error rate, under a so-called annealed approximation
+[67], [68], which approximates the aforementioned hard-toanalyze risk. Four settings are considered, two of which are
+similar to those in [128], [129], [132]. The variation in them
+stems from differences in assumptions about how the labeling is realized, ranging from a unique, completely deterministic labeling function to multiple, stochastic labelings.
+Possibly the most interesting result is for the realizable case
+where multiple parameter settings give the correct outcome
+or, more precisely, where this set has nonzero measure. In
+that case, the asymptotic behavior is described as a power
+law with an exponent of ´2. Note that this is essentially
+faster than what the typical PAC bounds can provide, which
+are exponents of ´1 and ´ 21 (a discussion of those results
+is postponed to section 7.3). This possibility of a more rich
+analysis is sometimes mentioned as one of the reasons for
+studying learning curves [68], [119], [133].
+For some settings, exact results can be obtained. If
+one considers a 2D input space where the marginal PX
+is a Gaussian distribution with mean zero and identity
+covariance, and one assumes a uniform prior over the true
+linear labeling function, the PA curve for the zero one loss
+2
+, while, the
+can exactly be computed to be of the form 3n
+1
+annealed approximation gives n [131].
+Schwartz et al. [134] use tools similar to Amari’s to study
+the realizable case where all variables (features and labels)
+are binary and Bayes rule is used. Under their approximations, the PA curve can be completely determined from
+a histogram of generalization errors of models sampled
+from the prior. For large sample sizes, the theory predicts
+that the learning curve actually has an exponential shape.
+The exponent depends on the gap in generalization error
+between the best and second best model. In the limit of a
+gap of zero size, the shape reverts to a power law. The same
+technique is used to study learning curves that can plateau
+before dropping off a second time [135]. [136] proposes
+extensions dealing with label noise. [133] casts some doubt
+on the accuracy of these approximations and the predictions
+of the theory of Schwartz et al. indeed deviate quite a bit
+from their simulations on toy data.
+Recently, [102] presented a simple classification setup on
+a countably infinite input space for which the Bayes error
+equals zero. The work shows that the learning curve behavior crucially depends on the distribution assumed over
+the discrete feature space and most often shows power-law
+behavior. More importantly, it demonstrates how exponents
+other than the expected ´1 or ´ 21 can emerge, which could
+explain the diverse exponents mentioned in Section 4.2.
+
+that the learning curve for individual problems can go up,
+even if the problem is well-specified, as the work covered in
+Section 6.7 points out. Thus, if we only evaluate in terms of
+the learning curve of a single problem, using all data is not
+always the rational strategy.
+It may be of interest to note here that, next to Bayes’
+rule, there are other ways of consistently updating one’s
+belief—in particular, so-called probability kinematics—that
+allow for an alternative decision theoretic setting in which a
+total evidence theorem also applies [140].
+Of course, in reality, our model probably has some misspecification, which is a situation that has been considered
+for Gaussian process models and Bayesian linear regression.
+Some of the unexpected behavior this can lead to is covered
+in Subsection 6.5 for PA curves and Subsection 6.6 for the
+regular learning curve. Next, however, we cover further
+results in the well-behaved setting. We do this, in fact,
+specifically for Gaussian processes.
+
+4.6
+
+Monotone Shape if Well-Specified (PA)
+
+The PA learning curve is monotone if the prior and likelihood model are correct and Bayesian inference is employed.
+This is a consequence of the total evidence theorem [137],
+[138], [139]. It states, informally, that one obtains the maximum expected utility by taking into account all observations. However, a monotone PA curve does not rule out
+
+5
+
+G AUSSIAN P ROCESS L EARNING C URVES
+
+In Gaussian process (GP) regression [141], it is especially
+the PA learning curve (Subsection 2.1) for the squared loss,
+under the assumption of a Gaussian likelihood, that has
+been studied extensively. A reason for this is that many
+calculations simplify in this setting. We cover various approximations, bounds, and ways to compute the PA curve.
+We also discuss assumptions and their corresponding learning curve shapes and cover the factors that affect the shape.
+It appears difficult to say something universally about the
+shape, besides that it cannot decrease faster than Opn´1 q
+asymptotically. The fact that these PA learning curves are
+monotone in the correctly specified setting can, however,
+be exploited to derive generalization bounds. We briefly
+cover those as well. This section is limited to correctly
+specified, well-behaved curves, Subsection 6.5 is devoted to
+ill-behaved learning curves for misspecified GPs.
+The main quantity that is visualized in the PA learning
+curve of GP regression is the Bayes risk or, equivalently,
+the problem averaged squared error. In the well-specified
+case, this is equal to the posterior variance σ˚2 [141, Equation (2.26)] [142],
+T
+σ˚2 “ kpx˚ , x˚ q ´ k˚
+pKpXn , Xn q ` σ2 I q´1 k˚ .
+
+(6)
+
+Here k is the covariance function or kernel of the GP,
+KpXn , Xn q is the n ˆ n kernel matrix of the input training
+set Xn , where K lm pXn , Xn q “ kpxl , xm q. Similarly, k˚ is the
+vector where the lth component is kpxl , x˚ q. Finally, σ is the
+noise level assumed in the Gaussian likelihood.
+The foregoing basically states that the averaging over all
+possible problems P (as defined by the GP prior) and all
+possible output training samples is already taken care of by
+Equation (6). Exploiting this equality, what is then left to do
+to get to the PA learning curve is an averaging over all test
+points x˚ according to their marginal PX and an averaging
+over all possible input training samples Xn .
+Finally, for this section, it turns out to be convenient to
+introduce a notion of PA learning curves in which only the
+averaging over different input training sets Xn P X n has not
+been carried out yet. We denote this by RPA pXn q and we will
+not mention the learning algorithm A (GP regression).
+
+IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE
+
+5.1
+
+Fixed Training Set and Asymptotic Value
+
+The asymptotic value of the learning curve and the value
+of the PA curve for a fixed training set can be expressed in
+terms of the eigendecomposition of the covariance function.
+This decomposition is often used when approximating or
+bounding GPs’ learning curves [142], [143], [144].
+With PX be the marginal density and kpx, x1 q the covariance function. The eigendecomposition constitutes all
+eigenfunctions φi and eigenvalues λi that solve for
+ż
+kpx, x1 qφpxqdPX pxq “ λφpx1 q.
+(7)
+Usually, the eigenfunctions are chosen so that
+ż
+φi pxqφj pxqdPX pxq “ δij ,
+
+(8)
+
+where δij is Kronecker’s delta [141]. The eigenvalues are
+non-negative and assumed sorted from large to small (λ1 ě
+λ2 ě . . .). Depending on PX and the covariance function
+k, the spectrum of eigenvalues may be either degenerate,
+meaning there may be finite nonzero eigenvalues, or nondegenerate in which case there are infinite nonzero eigenvalues. For some, analytical solutions to the eigenvalues
+and functions are known, e.g. for the squared exponential
+covariance function and Gaussian PX . For other cases the
+eigenfunctions and eigenvalues can be approximated [141].
+Now, take Λ the diagonal matrix with λi on the diagonal
+and let Φli “ φi pxl q, where each xl comes from the training
+matrix Xn . The dependence on the training set is indicated
+by Φ “ ΦpXn q. For a fixed training set, the squared loss over
+all problems can then be written as
+RPA pXn q “ TrpΛ´1 ` σ´2 ΦpXn qT ΦpXn qq´1 ,
+
+(9)
+
+which is exact [143]. The only remaining average to compute
+to come to a PA learning curve is with respect to Xn . This
+last average is typically impossible to calculate analytically
+(see [141, p. 168] for an exception). This leads one to consider
+the approximations and bounds covered in Section 5.3.
+The asymptotic value of the PA learning curve is [145]
+8
+ÿ
+λi τ
+,
+R̄PA
+“
+8
+τ ` λi
+
+(10)
+
+i“1
+
+where convergence is in probability and almost sure for
+degenerate kernels. Moreover, it is assumed that σ2 “ nτ for
+a constant τ, which means that the noise level grows with
+the sample size. The assumption seems largely a technical
+one and Le Gratiet and Garnier [145] claim this assumption
+can still be reasonable in specific settings.
+5.2
+
+Two Regimes, Effect of Length Scale on Shape
+
+For many covariance functions (or kernels), there is a characteristic length scale l that determines the distance in
+feature space one after which the regression function can
+change significantly. Williams and Vivarelli [142] make the
+qualitative observation that this lead the PA curve to often
+have two regimes: initial and asymptotic. If the length scale
+of the GP is not too large, the initial decrease of the learning
+curve is approximately linear in n (initial regime). They
+explain that, initially, the training points are far apart, and
+
+10
+
+thus they can almost be considered as being observed in
+isolation. Therefore, each training point reduces the posterior variance by the same amount, and thus the decrease
+is initially linear. However, when n is larger, training points
+get closer together and their reductions in posterior variance
+interact. Then reduction is not linear anymore because an
+additional point will add less information than the previous
+points. Thus there is an effect of diminishing returns and the
+decrease gets slower: the asymptotic regime [142], [143].
+The smaller the length scale, the longer the initial linear
+trend, because points are comparatively further apart [142],
+[143]. Williams and Vivarelli further find that changing the
+length scale effectively rescales the amount of training data
+in the learning curve for a uniform marginal PX . Furthermore, they find that a higher noise level and smoother covariance functions results in earlier reaching of the assymptotic regime for the uniform distribution. It remains unclear
+how these results generalize to other marginal distributions.
+Sollich and Halees [143] note that in the asymptotic
+regime, the noise level has a large influence on the shape
+of the curve since here the error is reduced by averaging
+out noise, while in the non-asymptotic regime the noise
+level hardly plays a role. They always assume that the noise
+level is much smaller than the prior variance (the expected
+fluctuations of the function before observing any samples).
+Under that assumption, they compare the error of the GP
+with the noise level to determine the regime: if the error is
+smaller than the noise, it indicates that one is reaching the
+asymptotic regime.
+5.3
+
+Approximations and Bounds
+
+A simple approximation to evaluate the expectation with
+respect to the training set from Equation 9 is to replace the
+matrix ΦpXn qT ΦpXn q by its expected value nI (this is the
+expected value due to Equation 8). This results in
+R̄PA
+n «
+
+8
+ÿ
+
+λi σ2
+.
+2
+σ ` nλi
+i“1
+
+(11)
+
+The approximation, which should be compared to Equation
+(10), is shown to be an upper bound on the training loss
+and a lower bound on the PA curve [146]. From asymptotic
+arguments, it can be concluded that the PA curve cannot
+decrease faster than n1 for large n [141, p. 160]. Since asymptotically the training and test error coincide, Opper and
+Vivarelli [146] expect this approximation to give the correct
+asymptotic value, which, indeed, is the case [145].
+The previous approximation works well for the asymptotic regime but for non-asymptotic cases it is not accurate.
+Sollich [147] aims to approximate the learning curve in such
+a way that it can characterizes both regimes well. To that
+end, he, also in collaboration with Halees [143], introduces
+three approximations based on a study of how the matrix
+inverse in Equation (9) changes when n is increased. He
+derives recurrent relations that can be solved and lead to
+upper and lower approximations that typically enclose the
+learning curve. The approximations have a form similar to
+those in Equation (11). While [147] initially hypothesized
+these approximations could be actual bounds on the learning curve, Sollich and Halees [143] gave several counter
+examples and disproved this claim.
+
+IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE
+
+11
+
+For the noiseless case, in which σ “ 0, Michelli and
+Wahba [148] give a lower bound for RPA pXn q, which in turn
+provides a lower bound on the learning curve:
+
+As an illustration: the squared exponential covariance
+induces a process that is very smooth as all orders of
+derivatives exist. The smoothness of the so-called modified
+Bessel covariance function [141] is determined by its order k,
+which relates to the order in the Sacks-Ylvisaker conditions
+as s “ k ´ 1. If k “ 1, the covariance function leads to a
+process that is not even once differentiable. In the limit of
+k Ñ 8, it converges to the squared exponential covariance
+function [141], [142]. For the roughest case k “ 1 the learning
+curve behaves asymptotically as Opn´1{2 q. For the smoother
+SE covariance function the rate is Opn´1 logpnqq [152]. For
+other rates see [141, Chapter 7] and [142].
+In particular cases, the approximations in [143] can have
+stronger implications for the rate of decay. If the eigenvalues decrease as a power law λi „ i´r , in the asymptotic
+2
+regime ( R̄PA
+n ! σ ), the upper and lower approximations
+coincide and predict that the learning curve shape is given
+by pn{σ2 q´pr´1q{r . For example, for covariance function of
+the classical Ornstein–Uhlenbeck process, i.e., kpx, x1 q “
+1
+exp ´ |x´` x | with ` the length scale, we have λi „ i´2 . The
+eigenvalues of the squared exponential covariance function
+decay faster than any power law. Taking r Ñ 8, this
+2
+implies a shape of the form σn . These approximation are
+indeed in agreement with known exact results [143]. In the
+2
+initial regime ( R̄PA
+n " σ ), if one takes σ Ñ 0 the lower
+´p
+approximation gives n r´1q . In this case, the suggested
+curve for the Ornstein–Uhlenbeck process takes on the form
+n´1 , which agrees with exact calculations as well. In the
+initial regime for the squared exponential, no direct shape
+can be computed without additional assumptions. Assuming d “ 1, a uniform input distribution, and large n, the
+2
+approximation suggests a shape of the form ne´cn for some
+constant c [143], which is faster even than exponential.
+
+R̄PA
+n ě
+
+8
+ÿ
+
+λi .
+
+(12)
+
+i“n`1
+
+Plaskota [149] extends this result to take into account noise
+in the GP and Sollich and Halees [143] provide further
+extensions that hold under less stringent assumptions. Using a finite-dimensional basis, [150] develops a method
+to approximate GPs that scales better in n and finds an
+upper bound. The latter immediately implies a bound on
+the learning curve as well.
+Several alternative approximations exist. For example,
+Särkkä [151] uses numerical integration to approximate the
+learning curve, for which the eigenvalues do not need to
+be known at all. Opper [152] gives an upper bound for
+the entropic loss using techniques from statistical physics
+and derives the asymptotic shape of this bound for Wiener
+processes for which kpx, x1 q “ minpx, x1 q and the squared
+exponential covariance function. [143] notes that in case the
+entropic loss is small it approximates the squared error of
+the GP, thus for large n this also implies a bound on the
+learning curve.
+5.4
+
+Limits of the Eigenvalue Spectrum
+
+Sollich and Halees [143] also explore what the limits are
+of bounds and approximations based on the eigenvalue
+spectrum. They create problems that have equal spectra but
+different learning curves, indicating that learning curves
+cannot be predicted reliably based on eigenvalues alone.
+Some works rely on more information than just the spectrum, such as [142], [150] whose bounds also depend on
+integrals involving the weighted and squared versions of
+the covariance function. Sollich and Halees also shows several examples where the lower bounds from [146] and [149]
+can be arbitrarily loose, but at the same time cannot be significantly tightened. Also their own approximation, which
+empirically is found to be the best, cannot be further refined.
+These impossibility results leads them to question the use of
+the eigenvalue spectrum to approximate the learning curve
+and what further information may be valuable.
+Malzahn and Opper [153] re-derive the approximation
+from [143] using a different approach. Their variational
+framework may provide more accurate approximations to
+the learning curve, presumably also for GP classification
+[141], [143]. It has also been employed, among others, to
+estimate the variance of PA learning curves [154], [155].
+5.5
+
+Smoothness and Asymptotic Decay
+
+The smoothness of a GP can, in 1D, be characterized by the
+Sacks-Ylvisaker conditions [156]. These conditions capture
+an aspect of the smoothness of a process in terms of its
+derivatives. The order s used in these regularity conditions
+indicates, roughly, that the sth derivative of the stochastic
+process exists, while the ps ` 1qth does not. Under these
+conditions, Ritter [157] showed that the asymptotic decay
+rate of the PA learning curve is of order Opn´p2s`1q{p2s`2q q.
+Thus the smoother the process the faster the decay rate.
+
+5.6
+
+Bounds through Monotonicity
+
+Subsection 4.6 indicated that the PA learning curve is always monotone if the problem is well specified. Therefore,
+under the assumption of a well-specified GP, its learning
+curve is monotone when its average is considered over all
+possible training sets (as defined by the correctly specified prior). As it turns out, however, this curve is already
+monotone before averaging over all possible training sets,
+as long as the smaller set is contained in the larger, i.e.,
+RPA pXn q ě RPA pXn`1 q for all Xn Ă Xn`1 . This is because
+the GP’s posterior variance decreases with every addition of
+a training object. This can be proven from standard results
+on the conditioning a multivariate Gaussians [142]. Such
+sample-based monotonicity of the posterior variance can
+generally be obtained if the likelihood function is modeled
+by an exponential family and a corresponding conjugate
+prior is used [158].
+Williams and Vivarelli [142] use this result to construct
+bounds on the learning curve. The key idea is to take the
+n training points and treat them as n training sets of just a
+single point. Each one gives an estimate of generalization error for the test points (Equation 6). Because the error always
+decreases when increasing the training set, the minimum
+over all train points creates a bound on the error for the
+whole training set for the test point. The minimizer is the
+closest training point.
+
+IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE
+
+6.1
+
+Phase Transitions
+
+As for physical systems, in a phase transition, particular
+learning curve properties change relatively abruptly, (almost) discontinuously. Figure 3 under (6.1) gives an example of how this can manifest itself. In learning, techniques
+from statistical physics can be employed to model and
+analyze these transitions, where it typically is studied in
+the limit of large samples and high input dimensionality
+[68]. Most theoretical insights are limited to relatively simple
+learners, like the perceptron, and often apply to PA curves.
+Let us point out that abrupt changes also seem to occur
+in human learning curves [13], [163], in particular when
+
+error / sq. loss
+
+(PA) error
+
+Dipping (6.3)
+
+Monotonicity (6.4)
+
+error
+
+sq. loss
+
+log n
+
+n
+
+GP Regression (6.5)
+
+Bayesian Regression (6.6)
+
+log n
+
+n
+
+Perfect Prior (6.7)
+
+Making Monotone (6.8)
+
+MODEL MISSPECIFICIED
+
+abs. loss
+
+sq. loss
+
+It is important to understand that learning curves do not
+always behave well and that this is not necessarily an
+artifact of the finite sample or the way an experiment is
+set up. Deterioration with more training data can obviously
+occur when considering the curve Rp ApSn qq for a particular
+training set, because for every n, we can be unlucky with our
+draw of Sn . That ill-behavior can also occur in expectation,
+i.e., for R̄n p Aq, may be less obvious.
+In the authors’ experience, most researchers expect
+improved performance of their learner with more data.
+Less anecdotal evidence can be found in literature. [115,
+page 153] states that when n surpasses the VC-dimension,
+the curve must start decreasing. [21, Subsection 9.6.7] claims
+that for many real-world problems they decay monotonically. [159] calls it expected that performance improves
+with more data and [49] makes a similar claim, [160] and
+[161] consider it conventional wisdom, and [104] considers
+it widely accepted. Others assume well-behaved curves [37],
+which means that curves are smooth and monotone [162].
+Note that a first example of nonmonotonic behavior had
+actually already been given in 1989 [62], which we further
+cover in Section 6.2.
+Before this section addresses actual bad behavior, we
+cover phase transitions, which are at the brink of becoming
+ill-behaved. Possible solutions to nonmonotonic behavior
+are discussed at the end. Figure 3 provides an overview
+of types of ill-behaved learning curve shapes with subsection references. The code reproducing these curves (all
+based on actual experiments) can be retrieved from https:
+//github.com/tomviering/ill-behaved-learning-curves.
+
+n
+
+PFLD
+error
+
+I LL -B EHAVED L EARNING C URVES
+
+Peaking (6.2)
+
+n
+
+PA sq. loss
+
+6
+
+Phase Transition (6.1)
+
+NLL
+
+To compute the a bound on the generalization error,
+one needs to consider the expectation w.r.t. PX . In order to
+keep the analysis tractable, Williams and Vivarelli [142] limit
+themselves to 1D input spaces where PX is uniform and
+perform the integration numerically. They further refine the
+technique to training sets of two points as well, and, find
+that as expected the bounds become tighter, since larger
+training sets imply better generalization. Sollich and Halees
+[143] extend their technique to non-uniform 1D PX . By
+considering training points in a ball of radius ρ around
+a test point, Lederer et al. [144] derive a similar bound
+that converges to the correct asymptotic value. In contrast,
+the original bound from [142] becomes looser as n grows.
+Experimentally, [144] shows that under a wide variety of
+conditions their bound is relatively tight.
+
+12
+
+n
+
+Wrapper
+
+n
+
+Figure 3: Qualitative overview of various learning curve
+shapes placed in different categories with references to their
+corresponding subsections. All have the sample size n on
+the horizontal axis. Dotted lines indicate the transition from
+under to overparametrized models. Abbreviations; error:
+classification error; sq. loss: squared loss; NLL: negative log
+likelihood; abs. loss: absolute loss; PA indicates the problemaverage learning curve is shown.
+
+the task is complex and has a hierarchical structure [164].
+A first mention of the occurrence of phase transitions,
+explicitly in the context of learning curves, can be found
+in [165]. It indicates the transition from memorization to
+generalization, which occurs, roughly, around the time that
+the full capacity of the learner has been used. Györgyi
+[166] provides a first, more rigorous demonstration within
+the framework of statistical physics—notably, the so-called
+thermodynamic limit [68]. In this setting, actual transitions
+happen for single-layer perceptrons where weights take on
+binary values only.
+The perceptron and its thermodynamic limit are considered in many later studies as well. The general finding
+is that, when using discrete parameter values—most often
+binary weights, phase transitions can occur [133], [167],
+[168]. The behavior is often characterized by long plateaus
+where the perceptron cannot learn at all (usually in the
+overparametrized, memorization phase, where n ă d) and
+has random guessing performance, until a point where the
+perceptron starts to learn (at n ą d, the underparametrized
+regime) at which a jump occurs to non-trivial performance.
+Phase transitions are also found in two-layer networks
+
+IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE
+
+13
+
+with binary weights and activations [168], [169], [170]. This
+happens for the so-called parity problem where the aim
+is to detect the parity of a binary string [171] for which
+Opper [172] found phase transitions in approximations of
+the learning curve. Learning curve bounds may display
+phase transitions as well [119], [173], though [133], [173]
+question whether these will also occur in the actual learning
+curve. Both Sompolinsky [174] and Opper [172] note that
+the sharp phase transitions predicted by theory, will be more
+gradual in real-world settings. Indeed, when studying this
+literature, one should be careful in interpreting theoretical
+results, as the transitions may occur only under particular
+assumptions or in limiting cases.
+For unsupervised learning, phase transitions have been
+shown to occur as well [175], [176] (see the latter for additional references). Ipsen and Hansen [177] extend these
+analyses to PCA with missing data. They also show phase
+transitions in experiments on real-world data sets. [178]
+provides one of the few real application papers where a
+distinct, intermediate plateau is visible in the learning curve.
+For Figure 3 under (6.1), we constructed a simple phase
+transition based on a two-class classification problem, y P
+t`1, ´1u, with the first 99 features standard normal and
+y
+the 100th feature set to 100 . PFLD’s performance shows a
+transition at n “ 100 for the error rate.
+
+error when n increases. The third term measures the quality
+of the estimated eigenvalues of the covariance matrix. This
+term increases the error when n increases, because more
+eigenvalues need to be estimated at the same time if n
+grows, reducing the quality of their overall estimation.
+These eigenvalues are often small and as the model depends
+on their inverse, small estimation errors can have a large
+effect, leading to a large instability [71] and peak in the
+learning curve around n « d. Using an analysis similar
+to [80], [181] studies the peaking phenomenon in semisupervised learning (see [23]) and shows that unlabeled data
+can both mitigate or worsen it.
+Peaking of the PFLD can be avoided through regularization, e.g. by adding λI to the covariance matrix [71], [80].
+The performance of the model is, however, very sensitive
+to the correct tuning of the ridge parameter λ [71], [182].
+Assuming the data is isotropic, [183] shows that peaking
+disappears for the optimal setting of the regularization parameter. Other, more heuristic solutions change the training
+procedure altogether, e.g., [184] uses an iterative procedure
+that decides which objects PFLD should be trained on, as
+such reducing n and removing the peak. [185] adds copies
+of objects with noise, increasing n, or increases the dimensionality by adding noise features, increasing d. Experiments
+show this can remove the peak and improve performance.
+Duin [63] illustrates experimentally that the SVM may
+not suffer from peaking in the first place. Opper [172]
+suggests a similar conclusion based on a simplistic thought
+experiment. For specific learning problems, both [66] and
+[167] already give a theoretical underpinning for the absence
+of double descent for the perceptron of optimal (or maximal)
+stability, which is a classifier closely related to the SVM.
+Opper [186] studies the behavior of the SVM in the thermodynamic limit which does not show peaking either. Spigler
+et al. [187] show, however, that double descent for feature
+curves can occur using the (squared) hinge loss, where the
+peak is typically located at an n ą d.
+Further insight of when peaking can occur may be
+gleaned from recent works like [188] and [189], which perform a rigorous analysis of the case of Fourier Features with
+PFLD using random matrix theory. Results should, however,
+be interpreted with care as these are typically derived in
+an asymptotic setting where both n and d (or some more
+appropriate measure of complexity) go to infinity, i.e., a setting similar to the earlier mentioned thermodynamic limit.
+Furthermore, [190] shows that a peak can occur where the
+training set size n equals the input dimensionality d, but also
+when n matches the number of parameters of the learner,
+depending on the latter’s degree of nonlinearity. Multiple
+peaks are also possible for n ă d [183].
+
+6.2
+
+Peaking and Double Descent
+
+The term peaking indicates that the learning curve takes on
+a maximum, typically in the form of a cusp, see Figure 3
+under (6.2). Unlike many other ill behaviors, peaking can
+occur in the realizable setting. Its cause seems related to instability of the model. This peaking should not be confused
+with peaking for feature curves as covered in Subsection 2.6,
+which is related to the curse of dimensionality. Nevertheless,
+the same instability that causes peaking in learning curves
+can also lead to a peak in feature curves, see Figure 2.
+The latter phenomenon has gained quite some renewed
+attention under the name double descent [65].
+By now, the term (sample-wise) double descent has
+become a term for the peak in the learning curve for
+deep neural networks [56], [179]. Related terminologies are
+model-wise double descent, that describe a peak in the plot
+of performance versus model size, and epoch-wise double
+descent, that shows a peak in the training curve [56].
+Peaking was first observed for the pseudo-Fisher’s linear
+discriminant (PFLD) [62] and has been studied already for
+quite some time [180]. The PFLD is the classifier minimizing
+the squared loss, using minimum-norm or ridgeless linear
+regression based on the pseudo-inverse. PFLD often peaks
+at d « n, both for the squared loss and classification error.
+A first theoretical model explaining this behavior in the
+thermodynamical limit is given in [66]. In such works,
+originating from statistical physics, the usual quantity of
+interest is α “ nd that controls the relative sizes for d and
+n going to infinity [67], [68], [130].
+Raudys and Duin [80] investigate this behavior in the
+finite sample setting where each class is a Gaussian. They
+approximately decompose the generalization error in three
+terms. The first term measures the quality of the estimated
+means and the second the effect of reducing the dimensionality due to the pseudo-inverse. These terms reduce the
+
+6.3
+
+Dipping and Objective Mismatch
+
+In dipping, the learning curve may initially improve with
+more samples, but the performance eventually deteriorates
+and never recovers, even in the limit of infinite data [191],
+see Figure 3 below (6.3). Thus the best expected performance
+is reached at a finite training set size. By constructing
+an explicit problem [99, page 106], Devroye et al. already
+showed that the nearest neighbor classifier is not always
+smart, meaning its learning curve can go up locally. A
+
+IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE
+
+density
+
+0.5
+0.25
+0
+-3
+
+-2
+
+-1
+
+0
+
+1
+
+2
+
+3
+
+x
+
+Figure 4: A two-class problem that dips for various linear
+classifiers (cf. [191]). The sample data (the two ˙s) shows
+that, with small samples, the linear model with optimal
+error rate can be obtained. However, due to the surrogate
+loss typically optimized, the decision boundary obtained in
+the infinite sample limit is around the suboptimal x “ 0.
+similar claim is made for kernel rules [99, Problems 6.14
+and 6.15]. A 1D toy problem for which many well-known
+linear classifiers (e.g., SVM, logistic regression, LDA, PFLD)
+dip is given in Figure 4. In a different context, Ben-David et
+al. [192] provide an even stronger example where all linear
+classifiers optimizing a convex surrogate loss converge in
+the limit to the worst possible classifier for which the error
+rate approaches 1. Another example, Lemma 15.1 in [99],
+gives an insightful case of dipping for likelihood estimation.
+What is essential for dipping to occur is that the classification problem at hand is misspecified, and that the learner
+optimizes something else than the evaluation metric of the
+learning curve. Such objective misspecification is standard
+since many evaluation measures such as error rate, AUC,
+F-measure, and so on, are notoriously hard to optimize
+(cf. e.g., [115, page 119] [193]). If classification-calibrated loss
+functions are used and the hypothesis class is rich enough
+to contain the true model, then minimizing the surrogate
+loss will also minimize the error rate [192], [194]. As such,
+consistent learners, that deliver asymptotically optimal performance by definition, cannot have learning curves that
+keep increasing monotonically and, therefore, cannot dip.
+Other works also show dipping of some sort. For example, Frey and Fisher [46] fit C4.5 to a synthetic dataset that
+has binary features for which the parity of all features determines the label. When fitting C4.5 the test error increases
+with the amount of training samples. They attribute this to
+the fact that the C4.5 is using a greedy approach to minimize
+the error, and thus is closely related to objective misspecification. Brumen et al. [103] also shows an ill-behaving curve
+of C4.5 that seems to go up. They note that 34 more curves
+could not be fitted well using their parametric models,
+where possibly something similar is going on. In [195], we
+find another potential example of dipping as, in Figure 6,
+the accuracy goes down with increasing sample sizes.
+Anomaly or outlier detection using k-nearest neighbors
+(kNN) can also shows dipping behavior [161] (referred to as
+gravity defying learning curves). Also here is a mismatch
+between the objective that is evaluated with, i.e., the AUC,
+and kNN that does not optimize the AUC. Hess and Wei [32]
+also show kNN learning curves that deteriorate in terms of
+AUC in the standard supervised setting.
+Also in active learning [24] for classification, where the
+test error rate is often plotted against the size of the (actively
+sampled) training set, learning curves are regularly reported
+to dip [196], [197]. In that case, active learners provide
+optimal performance for a number of labeled samples that
+
+14
+
+is smaller than the complete training set. This could be
+interpreted as a great success for active learning. It implies
+that even in regular supervised learning, one should maybe
+use an active learner to pick a subset from one’s complete
+training set, as this can improve performance. It cannot be
+ruled out, therefore, that the active learner uses an objective
+that matches better with the evaluation measure [198].
+Meng and Xie [160] construct a dipping curve in the
+context of time series modeling with ordinary least squares.
+In their setting, they use an adequate parametric model,
+but the distribution of the noise changes every time step,
+which leads least squares to dipping. In this case, using the
+likelihood to fit the model resolves the non-monotonicity.
+Finally, so-called negative transfer [199], as it occurs in
+transfer learning and domain adaptation [200], [201], can be
+interpreted as dipping as well. In this case, more source data
+deteriorates performance on the target and the objective
+mismatch stems from the combined training from source
+and target data instead of the latter only.
+6.4
+
+Risk Monotonicity and ERM
+
+Several novel examples of non-monotonic behavior for density estimation, classification, and regression by means of
+standard empirical risk minimization (ERM) are shown in
+[202]. Similar to dipping, the squared loss increases with n,
+but in contrast does eventually recover, see Figure 3 under
+(6.4). However, these examples cannot be explained either
+in terms of dipping or peaking. Dipping is ruled out as, in
+ERM, the learner optimizes the loss that is used for evaluation. In addition, non-monotonicity can be demonstrated for
+any n and so there is no direct link with the capacity of the
+learner, ruling out an explanation in terms of peaking.
+Proofs of non-monotonicity are given for squared, absolute, and hinge loss. It is demonstrated that likelihood
+estimators suffer the same deficiency. Two learners are reported that are provably monotonic: mean estimation based
+on the L2 loss and the memorize algorithm. The latter algorithm does not really learn but outputs the majority voted
+classification label of each object if it has been seen before.
+Memorize is not PAC learnable [68], [115], illustrating that
+monotonicity and PAC are essentially different concepts.
+Here, we like to mention [203], which shows generalization
+even beyond memorization of the finite training data.
+It is shown experimentally that regularization can actually worsen the non-monotonic behavior. In contrast, Nakkiran [183] shows that optimal tuning of the regularization
+parameter can guarantee monotonicity in certain settings.
+A final experiment from [202] shows a surprisingly jagged
+learning curve for the absolute loss, see Figure 3 under (6.4).
+6.5
+
+Misspecified Gaussian Processes
+
+Gaussian process misspecification has been studied in the
+regression setting where the so-called teacher model provides the data, while the student model learns, assuming a
+covariance or noise model different from the teacher. If they
+are equal, the PA curve is monotone (Section 4.6).
+Sollich [204] analyzes the PA learning curve using the
+eigenvalue decomposition earlier covered. He assumes both
+student and teacher use kernels with the same eigenfunctions but possibly differing eigenvalues. Subsequently,
+
+IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE
+
+15
+
+he considers various synthetic distributions for which the
+eigenfunctions and eigenvalues can be computed analytically and finds that for a uniform distribution on the vertices
+of a hypercube, multiple overfitting maxima and plateaus
+may be present in the learning curve (see Figure 3 under
+(6.5)), even if the student uses the teacher noise level. For
+a uniform distribution in one dimension, there may be
+arbitrarily many overfitting maxima if the student has a
+small enough noise level. In addition the convergence rates
+change and may become logarithmically slow.
+The above analysis is extended by Sollich in [205], where
+hyperparameters such as length scale and noise level, are
+now optimized during learning based on evidence maximization. Among others, he finds that for the hypercube the
+arbitrary many overfitting maxima do not arise anymore
+and the learning curve becomes monotone. All in all, Sollich concludes that optimizing the hyperparameters using
+evidence maximization can alleviate non-monotonicity.
+
+probabilities of 31 or 23 and the loss must increase. Eventually,
+
+6.6
+
+Misspecified Bayesian Regression
+
+Grünwald and Van Ommen [206] show that a (hierarchical)
+Bayesian linear regression model can give a broad peak in
+the learning curve of the squared risk, see Figure 3 under
+(6.6). This can happen if the homogeneous noise assumption
+is violated, while the estimator is otherwise consistent.
+Specifically, let data be generated as follows. For each
+sample, a fair coin is flipped. Heads means the sample is
+generated according to the ground truth probabilistic model
+contained in the hypothesis class. Misspecification happens
+when the coin comes up tails and a sample is generated in a
+fixed location without noise.
+The peak in the learning curve cannot be explained by
+dipping, peaking or known sensitivity of the squared loss to
+outliers according to Grünwald and Van Ommen. The peak
+in the learning curve is fairly broad and occurs in various
+experiments. As also no approximations are to blame, the
+authors conclude that Bayes’ rule is really at fault as it
+cannot handle the misspecification. The non-monotonicity
+can happen if the probabilistic model class is not convex.
+Following their analysis, a modified Bayes rule is introduced, in which the likelihood is raised to some power
+η. The parameter η cannot be learned in a Bayesian way,
+leading to their SafeBayes approach. Their technique alleviates the broad peak in the learning curve and is empirically
+shown to make the curves generally more well-behaved.
+6.7
+
+with n Ñ 8, the optimal loss is recovered, forming a
+bump in the learning curve. Note that this construction is
+rather versatile and can create non-monotonic behavior for
+practically any Bayesian estimation task. In a similar way,
+any type of regularization can lead to comparable learning
+curve shapes (see also [100], [202] and Subsection 6.4).
+An related example can be found in [158]. It shows that
+the posterior variance can also increase for a single problem,
+unless the likelihood belongs to the exponential family and
+a conjugate prior is used. GPs fall in this last class.
+6.8
+
+Monotonicity: a General Fix?
+
+This section has noted a few particular approaches to restore monotonicity of a learning curve. One may wonder,
+however, whether generally applicable approaches exist that
+can turn any learner into a monotone one. A first attempt
+is made in [208] which proposes a wrapper that, with
+high probability, makes any classifier monotone in terms
+of the the error rate. The main idea is to consider n as a
+variable over which model selection is performed. When n
+is increased, a model trained with more data is compared
+to the previously best model on validation data. Only if the
+new model is judged to be significantly better—following a
+hypothesis test, the older model is discarded. If the original
+learning algorithm is consistent and if the size of the validation data grows, the resulting algorithm is consistent as
+well. It is empirically observed that the monotone version
+may learn more slowly, giving rise to the question whether
+there always will be a trade-off between monotonicity and
+speed (refer to the learning curve in Figure 3 under (6.8)).
+[209] extended this idea, proposing two algorithms that
+do not need to set aside validation data while guaranteeing
+monotonicity. To this end they assume that the Rademacher
+complexity of the hypothesis class composited with the loss
+is finite. This allows them to determine when to switch to
+a model trained with more data. In contrast to [208], they
+argue that their second algorithm does not learn slower,
+as its generalization bound coincides with a known lower
+bound of regular supervised learning.
+Recently, [210] proved that, in terms of the 0-1 loss, any
+learner can be turned into a monotonic one. It extends a
+result obtained in [211], disproving a conjecture by Devroye
+et al. [99, page 109] that universally consistent monotone
+classifiers do not exist.
+
+The Perfect Prior
+
+As we have seen in Subsection 4.6, the PA learning
+curve is always monotone if the problem is well specified
+and a Bayesian decision theoretical approach is followed.
+Nonetheless, the fact that the PA curve is monotone does not
+mean that the curve for every individual problem is. [207]
+offers an insightful example (see also Figure 3 beneath (6.7)):
+consider a fair coin and let us estimate its probability p of
+heads using Bayes’ rule. We measure performance using the
+negative log-likelihood on an unseen coin flip and adopt a
+uniform Beta(1,1) prior on p. This prior, i.e., without any
+training samples, already achieves the optimal loss since
+it assigns the same probability to heads and tails. After a
+single flip, n “ 1, the posterior is updated and leads to a
+
+7
+
+D ISCUSSION AND C ONCLUSION
+
+Though there is some empirical evidence that for large deep
+learners, especially in the big data regime, learning curves
+behave like power laws, such conclusions seem premature.
+For other learners results are mixed. Exponential shapes
+cannot be ruled out and there are various models that can
+perform on par with power laws. Theory, on the other
+hand, often points in the direction of power laws and also
+supports exponential curves. GP learning curves have been
+analyzed for several special cases, but their general shape
+remains hard to characterize and offers rich behavior such as
+different regimes. Ill-behaved learning curves illustrate that
+various shapes are possible that are hard to characterize.
+
+IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE
+
+16
+
+What is perhaps most surprising is that these behaviors can
+even occur in the well-specified case and realizable setting.
+It should be clear that, currently, there is no theory that
+covers all these different aspects.
+Roughly, our review sketches the following picture.
+Much of the work on learning curves seems scattered and
+incidental. Starting with Hughes, Foley, and Raudys, some
+initial contributions appeared around 1970. The most organized efforts, starting around 1990, come from the field
+of statistical physics, with important contributions from
+Amari, Tishby, Opper, and others. These efforts have found
+their continuation within GP regression, to which Opper
+again contributed significantly. For GPs, Sollich probably
+offered some of the most complete work.
+The usage of the learning curve as an tool for the analysis of learning algorithms has varied throughout the past
+decades. In line with Langley, Perlich, Hoiem, et al. [36], [42],
+[44], we would like to suggest a more consistent use. We
+specifically agree with Perlich et al. [36] that without a study
+of the learning curves, claims of superiority of one approach
+over the other are perhaps only valid for very particular
+sample sizes. Reporting learning curves in empirical studies
+can also help the field to move away from its fixation on
+bold numbers, besides accelerating learning curve research.
+In the years to come, we expect investigations of parametric models and their performance in terms of extrapolation. Insights into these problems become more and
+more important—particularly within the context of deep
+learning—to enable the intelligent use of computational resources. In the remainder, we highlight some specific aspects
+that we see as important.
+
+at every n. Given that this noise model is not bounded—
+while a typical loss cannot become negative, this choice
+seems disputable. At the very least, derived confidence
+intervals and p-values should be taken with a grain of salt.
+In fact, fitting can often fail, but this is not always
+reported in literature. In one of the few studies, [107], where
+this is at all mentioned, 2% of the fits were discarded. Therefore, further investigations into how to robustly fit learning
+curve models from small amounts of curve data seems
+promising to investigate. In addition, a probabilistic model
+with assumptions that more closely match the intended use
+of the learning curve seems also worthwhile.
+
+7.1
+
+Averaging Curves and The Ideal Parametric Model
+
+Especially for extrapolation, a learning curve should be predictable, which, in turn, asks for good parametric model. It
+seems impossible to find a generally applicable, parametric
+model that covers all aspects of the shape, in particular illbehaving curves. Nevertheless, we can try to find a model
+class that would give us sufficient flexibility and extrapolative power. Power laws and exponentials should probably
+be part of that class, but does that suffice?
+To get close to the true learning curve, some studies average hundreds or thousands of individual learning curves
+[26], [28]. Averaging can mask interesting characteristics
+of individual curves [6], [212]. This has been extensively
+debated in psychonomics, where cases have been made for
+exponentially shaped individual curves, but power-law-like
+average curves [213], [214]. In applications, we may need
+to be able to model individual, single-training-set curves
+or curves that are formed on the basis of relatively small
+samples. As such, we see potential in studying and fitting
+individual curves to better understanding their behavior.
+7.2
+
+How to Robustly Fit Learning Curves
+
+A technical problem that has received little attention (except
+in [44], [107]) is how to properly fit a learning curve model.
+As far as current studies at all mention how the fitting is
+carried out, they often seem to rely on simple least squares
+fitting of log values, assuming independent Gaussian noise
+
+7.3
+
+Bounds and Alternative Statistics
+
+One should be careful in interpreting theoretical results
+when it comes to the shape of learning curves. Generalization bounds, such as those provided by PAC, that hold
+uniformly over all P may not correctly characterize the
+curve shape. Similarly, a strictly decreasing bounds does
+not imply monotone learning curves, and thus does not rule
+out ill-behavior. We merely know that the curve lies under
+the bound, but this leaves room for strange behavior. Furthermore, PA learning curves, which require an additional
+average over problems, can show behavior substantially
+different from those for a single problem, because here
+averaging can also mask characteristics.
+Another incompatibility between typical generalization
+bounds and learning curves is that the former are constructed to hold with high probability with respect to the
+sampling of the training set, while the latter look at the
+mean performance over all training sets. Though bounds
+of one type can be transformed into the other [215], this
+conversion can change the actually shape of the bound,
+thus such high probability bounds may also not correctly
+characterize learning curve shape for this reason.
+The preceding can also be a motivation to actually study
+learning curves for statistics other than the average. For
+example, in Equation 2, instead of the expectation we could
+look at the curves of the median or other percentiles. These
+quantities are closer related to high probability learning
+bounds. Of course, we would not have to choose the one
+learning curve over the other. They offer different types of
+information and, depending on our goal, may be worthwhile to study next to each other. Along the same line of
+thought, we could include quartiles in our plots, rather than
+the common error bars based on the standard deviation.
+Ultimately, we could even try to visualize the full loss
+distribution at every sample size n and, potentially, uncover
+behavior much more rich and unexpected.
+A final estimate that we think should be investigates
+more extensively is the training loss. Not only can this quantity aid in identifying overfitting and underfitting issues [4],
+[212], but it is a quantity that is interesting to study as such
+or, say, in combination with the true risk. Their difference, a
+simple measure of overfitting, could, for example, turn out
+to behave more regular than the two individual measures.
+7.4
+
+Research into Ill-Behavior and Meta-learning
+
+We believe better understanding is needed regarding the occurrence of peaking, dipping, and otherwise non-monotonic
+
+IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE
+
+or phase-transition-like behavior: when and why does this
+happen? Certainly, a sufficiently valid reason to investigate
+these phenomena is to quench one’s scientific curiosity. We
+should also be careful, however, not to mindlessly dismiss
+such behavior as mere oddity. Granted, these uncommon
+and unexpected learning curves have often been demonstrated in artificial or unrealistically simple settings, but this
+is done to make at all insightful that there is a problem.
+The simple fact is that, at this point, we do not know
+what role these phenomena play in real-world problems.
+[107] shared a database of learning curves for 20 learners
+on 246 datasets. These questions concerning curious curves
+can now be investigated in more detail, possibly even in
+automated fashion. Given the success of meta-learning
+using learning curves this seems a promising possibility.
+Such meta-learning studies on large amounts of datasets
+could, in addition, shed more light on what determines
+the parameters of learning curve models, a topic that has
+been investigated relatively little up to now. Predicting these
+parameters robustly from very few points along the learning
+curve will prove valuable for virtually all applications.
+
+17
+
+R EFERENCES
+[1]
+[2]
+[3]
+[4]
+[5]
+[6]
+[7]
+[8]
+[9]
+[10]
+[11]
+
+7.5
+
+Open Theoretical Questions
+
+[12]
+
+There are two specific theoretical questions that we would
+like to ask. Both are concerned with the monotonicity.
+One interesting question that remains is whether monotonic learners can be created for losses other than 01, unbounded ones in particular. Specifically, we wonder
+whether maximum likelihood estimators for well-specified
+models behave monotonically. Likelihood estimation, being
+a century-old, classical technique [216], has been heavily
+studied, both theoretically and empirically. In much of the
+theory developed, the assumption that one is dealing with
+a correctly specified model is common, but we are not
+aware of any results that demonstrate that better models are
+obtained with more data. The question is interesting because
+this estimator has been extensively studied already and still
+plays a central role in statistics and abutting fields.
+Secondly, as ERM remains one of the primary inductive principles in machine learning, another question that
+remains interesting—and which was raised in [202], [210] as
+well, is when ERM will result in monotonic curves?
+
+[21]
+[22]
+
+7.6
+
+[23]
+[24]
+
+Concluding
+
+More than a century of learning curve research has brought
+us quite some insightful and surprising results. What is
+more striking however, at least to us, is that there is still
+so much that we actually do not understand about learning
+curve behavior. Most theoretical results are restricted to relatively basic learners, while much of the empirical research
+that has been carried out is quite limited in scope. In the
+foregoing, we identified some specific challenges already,
+but we are convinced that many more open and interesting
+problems can be discovered. In this, the current review
+should help both as a guide and as a reference.
+
+[13]
+[14]
+[15]
+[16]
+[17]
+[18]
+[19]
+[20]
+
+[25]
+[26]
+[27]
+[28]
+[29]
+[30]
+
+Acknowledgments
+
+[31]
+
+We would like to thank Peter Grünwald, Alexander Mey,
+Jesse Krijthe, Robert-Jan Bruintjes, Elmar Eisemann and
+three anonymous reviewers for their valueable input.
+
+[32]
+
+H. Ebbinghaus, Über das Gedächtnis: Untersuchungen zur experimentellen Psychologie. Duncker & Humblot, 1885.
+L. E. Yelle, “The learning curve: Historical review and comprehensive survey,” Decision sciences, vol. 10, no. 2, pp. 302–328, 1979.
+M. J. Anzanello and F. S. Fogliatto, “Learning curve models
+and applications: Literature review and research directions,” Int.
+Journal of Industr. Ergonomics, vol. 41, no. 5, pp. 573–583, 2011.
+A. K. Jain et al., “Statistical pattern recognition: A review,” IEEE
+Trans Pattern Anal. Mach. Intell., vol. 22, no. 1, pp. 4–37, 2000.
+M. Loog, “Supervised classification: Quite a brief overview,” in
+Machine Learning Techniques for Space Weather. Elsevier, 2018, pp.
+113–145.
+R. A. Schiavo and D. J. Hand, “Ten more years of error rate
+research,” Int. Stat. Rev., vol. 68, no. 3, pp. 295–310, 2000.
+T. Domhan et al., “Speeding up automatic hyperparameter optimization of deep neural networks by extrapolation of learning
+curves,” in IJCAI, 2015.
+C. Perlich, “Learning curves in machine learning,” in Encyclopedia
+of Machine Learning, C. Sammut and G. I. Webb, Eds. Springer,
+2010, pp. 577–488.
+C. Sammut and G. I. Webb, Encyclopedia of machine learning.
+Springer Science & Business Media, 2011.
+M. Osborne, “A modification of veto logic for a committee of
+threshold logic units and the use of 2-class classifiers for function
+estimation,” Ph.D. dissertation, Oregon State University, 1975.
+L. E. Atlas et al., “Training connectionist networks with queries
+and selective sampling,” in NeurIPS, 1990, pp. 566–573.
+H. Sompolinsky et al., “Learning from examples in large neural
+networks,” Phys. Rev. Lett., vol. 65, no. 13, p. 1683, 1990.
+W. L. Bryan and N. Harter, “Studies in the physiology and
+psychology of the telegraphic language,” Psychol. Rev., vol. 4,
+no. 1, p. 27, 1897.
+K. W. Spence, “The differential response in animals to stimuli
+varying within a single dimension.” Psychol. Rev., vol. 44, no. 5,
+p. 430, 1937.
+E. J. Swift, “Studies in the psychology and physiology of learning,” Am. J. Psychol., vol. 14, no. 2, pp. 201–251, 1903.
+O. Lipmann, “Der einfluss der einzelnen wiederholungen auf
+verschieden starke und verschieden alte associationen,” Z. Psychol. Physiol. Si., vol. 35, pp. 195–233, 1904.
+A. Ritchie, “Thinking and machines,” Philos., vol. 32, no. 122, p.
+258, 1957.
+F. Rosenblatt, “The perceptron: a probabilistic model for information storage and organization in the brain.” Psychol. Rev., vol. 65,
+no. 6, p. 386, 1958.
+D. H. Foley, “Considerations of Sample and Feature Size,” IEEE
+T. Inform. Theory, vol. 18, no. 5, pp. 618–626, 1972.
+T. M. Cover, “Geometrical and statistical properties of systems of
+linear inequalities with applications in pattern recognition,” IEEE
+Trans. Electron., vol. 14, no. 3, pp. 326–334, 1965.
+R. O. Duda et al., Pattern classification. John Wiley & Sons, 2012.
+K. P. Murphy, Machine learning: a probabilistic perspective. MIT
+Press, 2012.
+O. Chapelle et al., Semi-Supervised Learning. The MIT Press, 2010.
+B. Settles, “Active learning literature survey,” University of
+Wisconsin-Madison, Dept. of CS, Tech. Rep., 2009.
+S. Mukherjee et al., “Estimating dataset size requirements for
+classifying dna microarray data,” J. Comput. Biol., vol. 10, no. 2,
+pp. 119–142, 2003.
+R. L. Figueroa et al., “Predicting sample size required for classification performance,” BMC Med.Inform.Decis, vol. 12, no. 1, p. 8,
+2012.
+A. N. Richter and T. M. Khoshgoftaar, “Learning curve estimation
+with large imbalanced datasets,” in ICMLA, 2019, pp. 763–768.
+A. Y. Ng and M. I. Jordan, “On discriminative vs. generative
+classifiers: A comparison of logistic regression and naive bayes,”
+in NeurIPS, 2002, pp. 841–848.
+https://waikato.github.io/weka-wiki/experimenter/learning
+curves/.
+https://github.com/scikit-learn/scikit-learn/blob/0fb307bf3/
+sklearn/model selection/ validation.py#L1105.
+J.-H. Kim, “Estimating classification error rate: Repeated crossvalidation, repeated hold-out and bootstrap,” Comput. Stat. Data
+An., vol. 53, no. 11, pp. 3735–3745, 2009.
+K. R. Hess and C. Wei, “Learning curves in classification with
+microarray data,” Semin. Oncol., vol. 37, no. 1, pp. 65–68, 2010.
+
+IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE
+
+[33]
+[34]
+[35]
+[36]
+[37]
+[38]
+[39]
+[40]
+[41]
+[42]
+[43]
+[44]
+[45]
+[46]
+[47]
+[48]
+[49]
+[50]
+[51]
+[52]
+[53]
+[54]
+[55]
+[56]
+[57]
+[58]
+[59]
+[60]
+
+[61]
+
+[62]
+[63]
+[64]
+[65]
+
+http://prtools.tudelft.nl/.
+B. Efron, “Estimating the error rate of a prediction rule: improvement on cross-validation,” JASA, vol. 78, no. 382, p. 316, 1983.
+A. K. Jain et al., “Bootstrap techniques for error estimation,” IEEE
+Trans Pattern Anal. Mach. Intell., no. 5, pp. 628–633, 1987.
+C. Perlich et al., “Tree Induction vs. Logistic Regression: A
+Learning-Curve Analysis,” JMLR, vol. 4, no. 1, pp. 211–255, 2003.
+F. Provost et al., “Efficient progressive sampling,” in ACM
+SIGKDD, 1999, pp. 23–32.
+E. Perez and L. A. Rendell, “Using multidimensional projection
+to find relations,” in ML Proc. Elsevier, 1995, pp. 447–455.
+D. Mazzoni and K. Wagstaff, “Active learning in the presence of
+unlabelable examples,” NASA/JPL, Tech. Rep., 2004.
+B. Settles and M. Craven, “An analysis of active learning strategies for sequence labeling tasks,” in EMNLP, 2008, pp. 1070–1079.
+E. E. Ghiselli, “A comparison of methods of scoring maze and
+discrimination learning,” J.Gen.Psychol., vol. 17, no. 1, p. 15, 1937.
+P. Langley, “Machine Learning as an Experimental Science,”
+Mach. Learn., vol. 3, no. 1, pp. 5–8, 1988.
+N. Bertoldi et al., “Evaluating the learning curve of domain
+adaptive statistical machine translation systems,” in Workshop on
+Statistical Machine Translation, 2012, pp. 433–441.
+D. Hoiem et al., “Learning curves for analysis of deep networks,”
+in ICML. PMLR, 2021, pp. 4287–4296.
+C. Cortes et al., “Learning curves: Asymptotic values and rate of
+convergence,” in NeurIPS, 1994, pp. 327–334.
+L. J. Frey and D. H. Fisher, “Modeling decision tree performance
+with the power law.” in AISTATS, 1999.
+S. Singh, “Modeling performance of different classification methods: deviation from the power law,” Project Report, Department of
+CS, Vanderbilt University, 2005.
+M. Last, “Predicting and optimizing classifier utility with the
+power law,” in ICDMW. IEEE, 2007, pp. 219–224.
+B. Gu et al., “Modelling classification performance for large data
+sets,” in Int.Conf.on Web-Age Inf.Manage. Springer, 2001, p. 317.
+P. Kolachina et al., “Prediction of Learning Curves in Machine
+Translation,” in ACL, Jeju Island, Korea, 2012, pp. 22–30.
+G. Hughes, “On the mean accuracy of statistical pattern recognizers,” IEEE Trans. IT, vol. 14, no. 1, pp. 55–63, 1968.
+A. Jain and B. Chandrasekaran, “Dimensionality and Sample
+Size Considerations in Pattern Recognition Practice,” Handbook
+of Statistics, vol. 2, pp. 835–855, 1982.
+S. Raudys and A. Jain, “Small sample size effects in statistical
+pattern recognition: recommendations for practitioners,” IEEE
+Trans Pattern Anal. Mach. Intell., vol. 13, no. 3, pp. 252–264, 1991.
+R. P. Duin et al., “Experiments with a featureless approach to
+pattern recognition,” Pattern Recognit. Lett., vol. 18, no. 11-13, pp.
+1159–1166, 1997.
+L. Torgo, “Kernel regression trees,” in ECML, 1997, pp. 118–127.
+P. Nakkiran et al., “Deep double descent: Where bigger models
+and more data hurt,” in ICLR, 2019.
+R. Duin and D. Tax, “Statistical pattern recognition,” in Handbook
+Of Pattern Recognition And Computer Vision, C. H. Chen and P. S. P.
+Wang, Eds. World Scientific, 2005, pp. 3–24.
+L. Chen et al., “Multiple descent: Design your own generalization
+curve,” arXiv:2008.01036, 2020.
+J. M. Van Campenhout, “On the peaking of the hughes mean
+recognition accuracy: the resolution of an apparent paradox,”
+IEEE T Syst. Man Cy., vol. 8, no. 5, pp. 390–395, 1978.
+A. K. Jain and B. Chandrasekaran, “Dimensionality and sample
+size considerations in pattern recognition practice,” in Handbook
+of statistics, P. Krishnaiah and L. Kanal, Eds. Elsevier, 1982, vol. 2,
+ch. 39, pp. 835–855.
+S. Raudys and V. Pikelis, “On dimensionality, sample size, classification error, and complexity of classification algorithm in
+pattern recognition,” IEEE Trans Pattern Anal. Mach. Intell., no. 3,
+pp. 242–252, 1980.
+F. Vallet et al., “Linear and nonlinear extension of the pseudoinverse solution for learning boolean functions,” Europhys. Lett.,
+vol. 9, no. 4, p. 315, 1989.
+R. P. Duin, “Classifiers in almost empty spaces,” in ICPR, vol. 15,
+no. 2, 2000, pp. 1–7.
+A. Zollanvari et al., “A theoretical analysis of the peaking phenomenon in classification,” Journal of Classification, pp. 1–14, 2019.
+M. Belkin et al., “Reconciling modern machine-learning practice
+and the classical bias–variance trade-off,” PNAS, vol. 116, no. 32,
+pp. 15 849–15 854, 2019.
+
+18
+
+[66]
+[67]
+[68]
+[69]
+[70]
+[71]
+[72]
+[73]
+[74]
+[75]
+[76]
+[77]
+[78]
+[79]
+[80]
+[81]
+[82]
+[83]
+[84]
+[85]
+[86]
+[87]
+[88]
+[89]
+[90]
+[91]
+[92]
+[93]
+[94]
+[95]
+[96]
+[97]
+
+M. Opper et al., “On the ability of the optimal perceptron to
+generalise,” J. Phys. A, vol. 23, no. 11, p. L581, 1990.
+T. L. Watkin et al., “The statistical mechanics of learning a rule,”
+Rev. Mod. Phys., vol. 65, no. 2, p. 499, 1993.
+A. Engel and C. Van den Broeck, Statistical mechanics of learning.
+Cambridge University Press, 2001.
+A. K. Jain and W. G. Waller, “On the optimal number of features
+in the classification of multivariate gaussian data,” Pattern Recognit., vol. 10, no. 5-6, pp. 365–374, 1978.
+R. P. W. Duin, “On the accuracy of statistical pattern recognizers,”
+Ph.D. dissertation, Technische Hogeschool Delft, 1978.
+M. Skurichina and R. P. Duin, “Stabilizing classifiers for very
+small sample sizes,” in ICPR, vol. 2. IEEE, 1996, pp. 891–896.
+R. Duin, “On the choice of smoothing parameters for parzen
+estimators of probability density functions,” IEEE T Comput.,
+vol. 25, no. 11, pp. 1175–1179, 1976.
+J. S. Rosenfeld et al., “A constructive prediction of the generalization error across scales,” arXiv:1909.12673, 2019.
+F. Mohr and J. N. van Rijn, “Learning curves for decision making in supervised machine learning–a survey,” arXiv:2201.12150,
+2022.
+https://paperswithcode.com/sota.
+D. Sculley et al., “Winner’s curse? on pace, progress, and empirical rigor,” in ICLR, 2018.
+K. Blagec et al., “A critical analysis of metrics used for measuring
+progress in artificial intelligence,” arXiv:2008.02577, 2020.
+S. Raudys, “On the problems of sample size in pattern recognition (in Russian),” in 2nd All-Union Conf. on Stat. Meth. in Contr.
+Theory. Nauka, 1970.
+L. Kanal and B. Chandrasekaran, “On dimensionality and sample
+size in statistical pattern classification,” Pattern Recognit., vol. 3,
+no. 3, pp. 225–234, 1971.
+S. Raudys and R. Duin, “Expected classification error of the
+Fisher linear classifier with pseudo-inverse covariance matrix,”
+Pattern Recognit. Lett., vol. 19, no. 5-6, pp. 385–392, 1998.
+R. Kohavi, “Scaling up the accuracy of naive-bayes classifiers: A
+decision-tree hybrid.” in Kdd, vol. 96, 1996, pp. 202–207.
+J. Bornschein et al., “Small data, big decisions: Model selection in
+the small-data regime,” arXiv:2009.12583, 2020.
+B. Strang et al., “Don’t rule out simple models prematurely: a
+large scale benchmark comparing linear and non-linear classifiers
+in openml,” in IDA. Springer, 2018, pp. 303–315.
+N. Mørch et al., “Nonlinear versus linear models in functional
+neuroimaging: Learning curves and generalization crossover,” in
+IPMI. Springer, 1997, pp. 259–270.
+J. W. Shavlik et al., “Symbolic and neural learning algorithms: An
+experimental comparison,” Mach. Learn., vol. 6, no. 2, pp. 111–
+143, 1991.
+P. Domingos and M. Pazzani, “On the optimality of the simple
+bayesian classifier under zero-one loss,” Mach. Learn., vol. 29, no.
+2-3, pp. 103–130, 1997.
+C. Harris-Jones and T. L. Haines, “Sample size and misclassification: Is more always better,” AMS Center for Advanced Technologies,
+1997.
+R. Duin and E. Pekalska, Pattern Recognition: Introduction and
+Terminology. 37 Steps, 2016.
+S. Jones et al., “An introduction to power and sample size
+estimation,” Emerg. Med. J., vol. 20, no. 5, p. 453, 2003.
+G. H. John and P. Langley, “Static versus dynamic sampling for
+data mining.” in KDD, vol. 96, 1996, pp. 367–370.
+R. Leite and P. Brazdil, “Improving progressive sampling via
+meta-learning on learning curves,” in ECML. Springer, 2004,
+pp. 250–261.
+C. Meek et al., “The learning-curve sampling method applied to
+model-based clustering,” JMLR, vol. 2, no. Feb, pp. 397–418, 2002.
+K. Tomanek and U. Hahn, “Approximating learning curves for
+active-learning-driven annotation,” in LREC, vol. 8, 2008, pp.
+1319–1324.
+R. Leite and P. Brazdil, “Predicting relative performance of classifiers from samples,” in ICML, Bonn, Germany, 2005, pp. 497–503.
+——, “An iterative process for building learning curves and
+predicting relative performance of classifiers,” in Portuguese Conference on Artificial Intelligence. Springer, 2007, pp. 87–98.
+J. N. van Rijn et al., “Fast algorithm selection using learning
+curves,” in LNCS, vol. 9385. Springer, oct 2015, pp. 298–309.
+F. Mohr and J. N. van Rijn, “Fast and informative model selection
+using learning curve cross-validation,” arXiv:2111.13914, 2021.
+
+IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE
+
+19
+
+J. Hestness et al., “Deep Learning Scaling is Predictable, Empirically,” arXiv:1712.00409, 2017.
+[99] L. Devroye et al., A Probabilistic Theory of Pattern Recognition. New
+York, NY, USA: Springer, 1996, vol. 31.
+[100] T. Viering et al., “Open problem: Monotonicity of learning,” in
+Conference on Learning Theory, 2019, pp. 3198–3201.
+[101] O. Bousquet et al., “A theory of universal learning,”
+arXiv:2011.04483, 2020.
+[102] M. Hutter, “Learning curve theory,” arXiv:2102.04074, 2021.
+[103] B. Brumen et al., “Best-fit learning curve model for the c4. 5
+algorithm,” Informatica, vol. 25, no. 3, pp. 385–399, 2014.
+[104] N. Boonyanunta and P. Zeephongsekul, “Predicting the relationship between the size of training sample and the predictive
+power of classifiers,” in KES. Springer, 2004, pp. 529–535.
+[105] S. Ahmad and G. Tesauro, “Study of scaling and generalization
+in neutral networks,” Neural Netw., vol. 1, no. 1, p. 3, 1988.
+[106] D. Cohn and G. Tesauro, “Can neural networks do better than the
+vapnik-chervonenkis bounds?” in NeurIPS, 1991, pp. 911–917.
+[107] F. Mohr et al., “LCDB 1.0: An extensive learning curves database
+for classification tasks,” in ECML, 2022, p. accepted.
+[108] C. Sun et al., “Revisiting Unreasonable Effectiveness of Data in
+Deep Learning Era,” in ICCV, 2017, pp. 843–852.
+[109] A. Joulin et al., “Learning visual features from large weakly
+supervised data,” in ECCV. Springer, 2016, pp. 67–84.
+[110] D. Mahajan et al., “Exploring the limits of weakly supervised
+pretraining,” in ECCV, 2018, pp. 181–196.
+[111] J. Kaplan et al., “Scaling laws for neural language models,”
+arXiv:2001.08361, 2020.
+[112] M. A. Gordon et al., “Data and parameter scaling laws for neural
+machine translation,” in EMNLP, 2021, pp. 5915–5922.
+[113] X. Zhai et al., “Scaling vision transformers,” in CVPR, 2022, pp.
+12 104–12 113.
+[114] V. Vapnik, Estimation of Dependences Based on Empirical Data Berlin.
+Springer, 1982.
+[115] S. Shalev-Shwartz and S. Ben-David, Understanding machine learning: From theory to algorithms. Cambridge university press, 2014.
+[116] W. L. Buntine, “A critique of the valiant model.” in IJCAI, 1989,
+pp. 837–842.
+[117] W. E. Sarrett and M. J. Pazzani, “Average case analysis of
+empirical and explanation-based learning algorithms,” Dept. of
+Information & CS, UC Irvine, Tech. Rep. 89-35, 1989.
+[118] D. Haussler and M. Warmuth, “The probably approximately correct (pac) and other learning models,” in Foundations of Knowledge
+Acquisition. Springer, 1993, pp. 291–312.
+[119] D. Haussler et al., “Rigorous learning curve bounds from statistical mechanics [longer version],” Mach. Learn., vol. 25, no. 2-3, pp.
+195–236, 1996.
+[120] J. Hestness et al., “Deep learning scaling is predictable, empirically,” arXiv:1712.00409, 2017.
+[121] D. Schuurmans, “Characterizing rational versus exponential
+learning curves,” in EuroCOLT. Springer, 1995, pp. 272–286.
+[122] ——, “Characterizing rational versus exponential learning
+curves,” journal of computer and system sciences, vol. 55, no. 1, pp.
+140–160, 1997.
+[123] H. Gu and H. Takahashi, “Exponential or polynomial learning
+curves? case-based studies,” Neural Comput., vol. 12, no. 4, pp.
+795–809, 2000.
+[124] ——, “How bad may learning curves be?” IEEE Trans Pattern
+Anal. Mach. Intell., vol. 22, no. 10, pp. 1155–1167, 2000.
+[125] T. M. Cover, “Rates of convergence for nearest neighbor procedures,” in Hawaii Int. Conf. on Systems Sci., vol. 415, 1968.
+[126] T. Cover and P. Hart, “Nearest neighbor pattern classification,”
+IEEE Trans. IT, vol. 13, no. 1, pp. 21–27, 1967.
+[127] D. Peterson, “Some convergence properties of a nearest neighbor
+decision rule,” IEEE Trans. IT, vol. 16, no. 1, pp. 26–31, 1970.
+[128] S.-i. Amari, “A universal theorem on learning curves,” Neural
+Netw., vol. 6, no. 2, pp. 161–166, jan 1993.
+[129] S. Amari, “Universal property of learning curves under entropy
+loss,” in IJCNN, vol. 2, 1992, pp. 368–373 vol.2.
+[130] M. Opper and D. Haussler, “Calculation of the learning curve of
+bayes optimal classification algorithm for learning a perceptron
+with noise,” in COLT, vol. 91, 1991, pp. 75–87.
+[131] S.-i. Amari et al., “Four types of learning curves,” Neural Comput.,
+vol. 4, no. 4, pp. 605–618, 1992.
+[132] S.-i. Amari and N. Murata, “Statistical Theory of Learning Curves
+under Entropic Loss Criterion,” Neural Comput., vol. 5, no. 1, pp.
+140–153, 1993.
+
+[133] H. S. Seung et al., “Statistical mechanics of learning from examples,” Phys. Rev. A, vol. 45, no. 8, p. 6056, 1992.
+[134] D. B. Schwartz et al., “Exhaustive Learning,” Neural Comput.,
+vol. 2, no. 3, pp. 374–385, 1990.
+[135] N. Tishby et al., “Consistent inference of probabilities in layered
+networks: Predictions and generalization,” in IJCNN, vol. 2, 1989,
+pp. 403–409.
+[136] E. Levin et al., “A statistical approach to learning and generalization in layered neural networks,” COLT, vol. 78, p. 245, 1989.
+[137] L. J. Savage, The foundations of statistics. John Wiley, Inc., 1954.
+[138] I. J. Good, “On the principle of total evidence,” Br. J. Philos. Sci.,
+vol. 17, no. 4, pp. 319–321, 1967.
+[139] P. D. Grünwald and J. Y. Halpern, “When ignorance is bliss,” in
+UAI, 2004, pp. 226–234.
+[140] P. R. Graves, “The total evidence theorem for probability kinematics,” Philos. Sci., vol. 56, no. 2, pp. 317–324, 1989.
+[141] C. E. Rasmussen and C. K. I. Williams, Gaussian processes for
+machine learning. MIT Press, 2006.
+[142] C. K. I. Williams and F. Vivarelli, “Upper and Lower Bounds on
+the Learning Curve for Gaussian Processes,” Mach. Learn., vol. 40,
+no. 1, pp. 77–102, 2000.
+[143] P. Sollich and A. Halees, “Learning curves for Gaussian process regression: Approximations and bounds,” Neural Comput.,
+vol. 14, no. 6, pp. 1393–1428, 2002.
+[144] A. Lederer et al., “Posterior Variance Analysis of Gaussian
+Processes with Application to Average Learning Curves,”
+arXiv:1906.01404, 2019.
+[145] L. Le Gratiet and J. Garnier, “Asymptotic analysis of the learning
+curve for Gaussian process regression,” Mach. Learn., vol. 98,
+no. 3, pp. 407–433, 2015.
+[146] M. Opper and F. Vivarelli, “General Bounds on Bayes Errors for
+Regression with Gaussian Processes,” in NeurIPS, 1998, p. 302.
+[147] P. Sollich, “Learning Curves for Gaussian Processes,” in NeurIPS,
+Denver, Colorado, USA, 1998, pp. 344–350.
+[148] C. A. Michelli and G. Wahba, “Design problems for optimal
+surface interpolation,” Approx. Theory Appl., pp. 329–348, 1981.
+[149] L. Plaskota, Noisy information and computational complexity. Cambridge University Press, 1996, vol. 95, no. 55.
+[150] G. F. Trecate et al., “Finite-dimensional approximation of gaussian
+processes,” NeurIPS, no. n 3, pp. 218–224, 1999.
+[151] S. Särkkä, “Learning curves for gaussian processes via numerical
+cubature integration,” in ICANN. Springer, 2011, pp. 201–208.
+[152] M. Opper, “Regression with Gaussian processes: Average case
+performance,” Theoretical aspects of neural computation: A multidisciplinary perspective, pp. 17–23, 1997.
+[153] D. Malzahn and M. Opper, “Learning curves for gaussian
+processes regression: A framework for good approximations,”
+NeurIPS, 2001.
+[154] ——, “Learning curves for Gaussian processes models: Fluctuations and Universality,” in LNCS, vol. 2130. Springer, 2001, pp.
+271–276.
+[155] ——, “A variational approach to learning curves,” in NeurIPS,
+2001, pp. 463–469.
+[156] K. Ritter et al., “Multivariate integration and approximation for
+random fields satisfying sacks-ylvisaker conditions,” Ann. Appl.
+Prob., vol. 5, no. 2, pp. 518–540, 1995.
+[157] K. Ritter, “Almost optimal differentiation using noisy data,” J. of
+Approx. Theory, vol. 86, no. 3, pp. 293–309, 1996.
+[158] M. F. Al-Saleh and F. A. Masoud, “A note on the posterior
+expected loss as a measure of accuracy in bayesian methods,”
+Appl. Math. Comput., vol. 134, no. 2-3, pp. 507–514, 2003.
+[159] D. M. Tax and R. P. Duin, “Learning curves for the analysis of
+multiple instance classifiers,” in SSSPR. Springer, 2008, p. 724.
+[160] X. L. Meng and X. Xie, “I Got More Data, My Model is More
+Refined, but My Estimator is Getting Worse! Am I Just Dumb?”
+Econometric Reviews, vol. 33, no. 1-4, pp. 218–250, 2014.
+[161] K. M. Ting et al., “Defying the gravity of learning curve: a
+characteristic of nearest neighbour anomaly detectors,” Mach.
+Learn., vol. 106, no. 1, pp. 55–91, 2017.
+[162] G. M. Weiss and A. Battistin, “Generating well-behaved learning
+curves: An empirical study,” in ICDATA, 2014.
+[163] W. L. Bryan and N. Harter, “Studies on the telegraphic language:
+the acquisition of a hierarchy of habits,” Psychol. Rev., vol. 6, no. 4,
+p. 345, 1899.
+[164] G. Vetter et al., “Phase transitions in learning,” J Mind and Behav.,
+pp. 335–350, 1997.
+
+[98]
+
+IEEE TRANSACTIONS ON PATTERN ANALYSIS AND MACHINE INTELLIGENCE
+
+20
+
+[165] S. Patarnello and P. Carnevali, “Learning networks of neurons
+with boolean logic,” Europhys. Lett., vol. 4, no. 4, p. 503, 1987.
+[166] G. Györgyi, “First-order transition to perfect generalization in
+a neural network with binary synapses,” Phys. Rev. A, vol. 41,
+no. 12, pp. 7097–7100, 1990.
+[167] T. L. H. Watkin et al., “The Statistical Mechanics of Learning a
+Rule,” Rev. Mod. Phys., vol. 65, no. 2, pp. 499–556, 1993.
+[168] K. Kang et al., “Generalization in a two-layer neural network,”
+Phys. Rev. E, vol. 48, no. 6, p. 4805, 1993.
+[169] M. Opper, “Statistical Mechanics of Learning : Generalization,”
+The Handbook of Brain Theory and Neural Networks, p. 20, 1995.
+[170] H. Schwarze and J. A. Hertz, “Statistical Mechanics of Learning
+in a Large Committee Machine,” NeurIPS, pp. 523–530, 1993.
+[171] D. Hansel et al., “Memorization without generalization in a
+multilayered neural network,” Europhys. Lett., vol. 20, no. 5, pp.
+471–476, 1992.
+[172] M. Opper, “Learning to generalize,” Frontiers of Life, vol. 3, no.
+part 2, pp. 763–775, 2001.
+[173] H. Seung, “Annealed theories of learning,” CTP-PRSRI Joint
+Workshop on Theoretical Physics. Singapore, World Scientific, 1995.
+[174] H. Sompolinsky, “Theoretical issues in learning from examples,”
+in NEC Research Symposium, 1993, pp. 217–237.
+[175] M. Biehl and A. Mietzner, “Statistical mechanics of unsupervised
+learning,” Europhys. Lett., vol. 24, no. 5, p. 421, 1993.
+[176] D. C. Hoyle and M. Rattray, “Statistical mechanics of learning
+multiple orthogonal signals: asymptotic theory and fluctuation
+effects,” Phys. Rev. E, vol. 75, no. 1, p. 016101, 2007.
+[177] N. Ipsen and L. K. Hansen, “Phase transition in PCA with
+missing data: Reduced signal-to-noise ratio, not sample size!” in
+ICML, 2019, pp. 2951–2960.
+[178] R. A. Bhat et al., “Adapting predicate frames for urdu propbanking,” in Workshop on Language Technology for Closely Related
+Languages and Language Variants, 2014, pp. 47–55.
+[179] P. Nakkiran, “More data can hurt for linear regression: Samplewise double descent,” arXiv:1912.07242, 2019.
+[180] M. Loog et al., “A brief prehistory of double descent,” PNAS, vol.
+117, no. 20, pp. 10 625–10 626, 2020.
+[181] J. H. Krijthe and M. Loog, “The peaking phenomenon in semisupervised learning,” in S+SSPR. Springer, 2016, pp. 299–309.
+[182] V. Tresp, “The equivalence between row and column linear
+regression,” Siemens, Tech. Rep., 2002.
+[183] P. Nakkiran et al., “Optimal regularization can mitigate double
+descent,” arXiv:2003.01897, 2020.
+[184] R. P. W. Duin, “Small sample size generalization,” in SCIA.
+Springer, 1995, pp. 1–8.
+[185] M. Skurichina and R. P. W. Duin, “Regularisation of Linear
+Classifiers by Adding Redundant Features,” Pattern Anal. Appl.,
+vol. 2, no. 1, pp. 44–52, 1999.
+[186] M. Opper and R. Urbanczik, “Universal learning curves of support vector machines,” Phys.Rev.Lett., vol. 86, no. 19, p. 4410, 2001.
+[187] S. Spigler et al., “A jamming transition from under-to overparametrization affects generalization in deep learning,” J Phys.
+A, vol. 52, no. 47, p. 474001, 2019.
+[188] M. S. Advani and A. M. Saxe, “High-dimensional dynamics of
+generalization error in neural networks,” arXiv:1710.03667, 2017.
+[189] T. Hastie et al., “Surprises in high-dimensional ridgeless least
+squares interpolation,” arXiv:1903.08560, 2019.
+[190] S. d’Ascoli et al., “Triple descent and the two kinds of overfitting:
+Where & why do they appear?” arXiv:2006.03509, 2020.
+[191] M. Loog and R. P. W. Duin, “The dipping phenomenon,” in
+S+SSPR, Hiroshima, Japan, 2012, pp. 310–317.
+[192] S. Ben-david et al., “Minimizing the misclassification error rate
+using a surrogate convex loss,” ICML, pp. 1863–1870, 2012.
+[193] M. Loog et al., “On measuring and quantifying performance:
+Error rates, surrogate loss, and an example in semi-supervised
+learning,” in Handbook of PR and CV. World Scientific, 2016.
+[194] P. L. Bartlett et al., “Large margin classifiers: convex loss, low
+noise, and convergence rates,” in NeurIPS, 2004, pp. 1173–1180.
+[195] J. Vanschoren et al., “Learning from the past with experiment
+databases,” in Pacif.Rim Int.Conf.on AI. Springer, 2008, p. 485.
+[196] G. Schohn and D. Cohn, “Less is more: Active learning with
+support vector machines,” in ICML, vol. 2, no. 4, 2000, p. 6.
+[197] K. Konyushkova et al., “Introducing geometry in active learning
+for image segmentation,” in CVPR, 2015, pp. 2974–2982.
+[198] M. Loog and Y. Yang, “An empirical investigation into the
+inconsistency of sequential active learning,” in ICPR, 2016, pp.
+210–215.
+
+[199] Z. Wang et al., “Characterizing and avoiding negative transfer,”
+in CVPR, 2019, pp. 11 293–11 302.
+[200] K. Weiss et al., “A survey of transfer learning,” J. Big Data, vol. 3,
+no. 1, p. 9, 2016.
+[201] W. M. Kouw and M. Loog, “A review of domain adaptation
+without target labels,” IEEE Trans Pattern Anal. Mach. Intell., 2019.
+[202] M. Loog et al., “Minimizers of the empirical risk and risk monotonicity,” in NeurISP, 2019, pp. 7478–7487.
+[203] A. Power et al., “Grokking: Generalization beyond overfitting on
+small algorithmic datasets,” arXiv:2201.02177, 2022.
+[204] P. Sollich, “Gaussian Process Regression with Mismatched Models,” in NeurIPS, 2002, pp. 519–526.
+[205] ——, “Can Gaussian Process Regression Be Made Robust Against
+Model Mismatch?” in Deterministic and Statistical Methods in
+Machine Learning, 2004, pp. 199–210.
+[206] P. Grünwald and T. van Ommen, “Inconsistency of bayesian
+inference for misspecified linear models, and a proposal for
+repairing it,” Bayesian Anal., vol. 12, no. 4, pp. 1069–1103, 2017.
+[207] P. D. Grünwald and W. Kotłowski, “Bounds on individual risk
+for log-loss predictors,” JMLR, vol. 19, pp. 813–816, 2011.
+[208] T. J. Viering et al., “Making learners (more) monotone,” in IDA.
+Springer, 2020, pp. 535–547.
+[209] Z. Mhammedi and H. Husain, “Risk-monotonicity in statistical
+learning,” arXiv:2011.14126, 2020.
+[210] O. J. Bousquet et al., “Monotone learning,” in COLT, 2022, pp.
+842–866.
+[211] V. Pestov, “A universally consistent learning rule with a universally monotone error,” JMLR, vol. 23, no. 157, pp. 1–27, 2022.
+[212] D. J. Hand, Construction and assessment of classification rules. Wiley, 1997.
+[213] R. B. Anderson and R. D. Tweney, “Artifactual power curves in
+forgetting,” Mem. Cognition, vol. 25, no. 5, pp. 724–730, 1997.
+[214] A. Heathcote et al., “The power law repealed: The case for an
+exponential law of practice,” Psychon. B. Rev., vol. 7, no. 2, pp.
+185–207, 2000.
+[215] A. Mey, “A note on high-probability versus in-expectation
+guarantees of generalization bounds in machine learning,”
+arXiv:2010.02576, 2020.
+[216] S. M. Stigler, “The epic story of maximum likelihood,” Stat. Sci.,
+vol. 22, no. 4, pp. 598–620, 2007.
+
+Tom Viering received the MSc degree in computer science from the Delft University of Technology in 2016 and is currently a PhD student in the Pattern Recognition Laboratory there.
+His principal research interests are statistical
+learning theory and its application to problems
+such as active learning, domain adaptation, and
+semi-supervised learning. Other topics that interest him are non-monotonicity of learning, interpretable machine learning, generative models, online learning and deep learning.
+
+Marco Loog received an MSc degree in mathematics from Utrecht University and a PhD degree
+from the Image Sciences Institute. He worked as
+a scientist at the IT University of Copenhagen,
+the University of Copenhagen, and Nordic Bioscience. He now is at Delft University of Technology to research and to teach. Marco is an honorary professor at the University of Copenhagen.
+His principal research interest is with supervised
+learning in all sorts of shapes and sizes.
+
+

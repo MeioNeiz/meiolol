@@ -1,0 +1,1559 @@
+Published as a conference paper at ICLR 2024
+
+E XPLORING THE CLOUD OF FEATURE INTERACTION
+SCORES IN A R ASHOMON SET
+
+arXiv:2305.10181v2 [cs.LG] 12 Feb 2024
+
+Sichao Li, Rong Wang, Quanling Deng & Amanda S. Barnard
+School of Computing
+Australian National University
+{sichao.li,rong.wang,quanling.deng,amanda.s.barnard}@anu.edu.au
+
+A BSTRACT
+Interactions among features are central to understanding the behavior of machine
+learning models. Recent research has made significant strides in detecting and
+quantifying feature interactions in single predictive models. However, we argue
+that the feature interactions extracted from a single pre-specified model may not be
+trustworthy since: a well-trained predictive model may not preserve the true feature
+interactions and there exist multiple well-performing predictive models that differ
+in feature interaction strengths. Thus, we recommend exploring feature interaction
+strengths in a model class of approximately equally accurate predictive models.
+In this work, we introduce the feature interaction score (FIS) in the context of a
+Rashomon set, representing a collection of models that achieve similar accuracy
+on a given task. We propose a general and practical algorithm to calculate the
+FIS in the model class. We demonstrate the properties of the FIS via synthetic
+data and draw connections to other areas of statistics. Additionally, we introduce
+a Halo plot for visualizing the feature interaction variance in high-dimensional
+space and a swarm plot for analyzing FIS in a Rashomon set. Experiments with
+recidivism prediction and image classification illustrate how feature interactions
+can vary dramatically in importance for similarly accurate predictive models. Our
+results suggest that the proposed FIS can provide valuable insights into the nature
+of feature interactions in machine learning models.
+
+1
+
+M OTIVATION AND PRIOR WORK
+
+Understanding the behavior of machine learning models is receiving considerable attention. Many
+researchers seek to identify what features are important and to describe their effects. Recently, several
+works have taken one step further from explaining feature attribution towards interaction attribution.
+This shift aims to explore the interplay between features and uncover how their interactions shape
+the behavior of the model. Such interaction occurs when the influence of one feature, denoted as
+xi , on the model’s prediction can not be decomposed into a sum of subfunctions that do not involve
+the corresponding feature Sorokina et al. (2008); Friedman & Popescu
+P (2008); Lou et al. (2013);
+Tsang et al. (2021), denoted as X \i , statistically defined as: f ̸= i∈I fi (X \i ). For example,
+there exists feature interaction effects in sin(·) function between x1 and x2 , where sin(x1 + x2 ) ̸=
+f1 (x2 ) + f2 (x1 ). Higher-order interactions among features are defined similarly. The feature
+interaction can provide a more comprehensive and accurate understanding of the underlying factors
+driving model predictions, leading to robust and improved models; prominent applications include
+recommendation systems Guo et al. (2017); Tsang et al. (2020a), DNA sequence analysis and
+modelling Greenside et al. (2018), and text-image information retrieval Wang et al. (2019).
+Existing approaches that detect and explain the feature interactions mainly include (a) traditional
+statistical approaches such as analysis of variance (ANOVA) and H-statistics Fisher (1992); Mandel (1961); Friedman & Popescu (2008); Greenwell et al. (2018) and (b) more recent machine
+learning model-based methods such as Additive Groves (AG) Sorokina et al. (2008). AG is a
+non-parametric method of identifying interactions by imposing structural constraints on an additive
+model of regression trees that compare the performance of unrestricted and restricted prediction
+models. LASSO-based methods Bien et al. (2013) select interactions by shrinking the coefficients
+of insignificant terms to zero. Specifically, neural network-based models, e.g. feed-forward neural
+1
+
+Published as a conference paper at ICLR 2024
+
+Pp
+(a) A linear model y =
+i wi ∗ xi shows no
+feature interaction (left); see e.g. Sorokina et al.
+(2008).
+P A neural network with activation layer y =
+α( pi wi ∗ xi ) shows feature interaction (right).
+
+(b) The x-axis shows the FIS for the feature set I in
+each model f while the y-axis shows the expected
+loss of the model in the model class. The FISC
+range is highlighted in blue.
+
+Figure 1: Two accurate models with different feature interactions and an illustration of FIS in a
+hypothetical Rashomon set R(ϵ, f ∗ , F).
+
+networks, Bayesian neural networks and convolutional neural networks, are utilized to examine the
+weight matrices Tsang et al. (2021); Singh et al. (2019); Cui et al. (2020). Several more advanced
+explainable frameworks have been proposed to capture feature interactions from well-defined models,
+e.g. Shapley Taylor Interaction Index (STI) Grabisch & Roubens (1999); Sundararajan et al. (2020),
+Integrated Hessians (IH) Janizek et al. (2021) and Archipelago Tsang et al. (2020b).
+Limitations of previous work Previous works can be summarized as detecting and explaining
+feature interaction effects in a single trained model f . Here, we argue that the high accuracy of a welltrained model can not guarantee the preservation of true√feature interactions. As a simple
+example,
+√
+b2 −4ac
+b2 −4ac
+we consider the two error-free models f1 (a, b, c) = −b+ 2a
+and f2 (a, b, c) = −b− 2a
+for
+finding a root of the quadratic equation ax2 + bx + c = 0; the input variables a, b, and c exhibit
+different feature interactions in these two models as there is a sign difference in the numerator.
+See Fig. 1(a) for another general example where a well-performing linear model with no feature
+interaction might be modelled using a deep neural network with the same model performance but
+with feature interaction. A detailed proof of concept is provided in Appendix B.
+In general, for a given task, there exists a class of equally accurate models that lead to different
+feature interactions. To address the identified limitations, one potential solution is to analyze the
+feature interaction in a set of well-performing models. Emerging research Rudin (2019); Fisher et al.
+(2019); Dong & Rudin (2020); Li & Barnard (2022a) has demonstrated the necessity of examining
+feature importance not just within a single well-trained model but across a set of high-performing
+models, but none of these works delved into a comprehensive analysis of feature interactions 1 .
+Our contributions In this paper, we study feature interaction and demonstrate that investigating
+feature interactions in a single model may fall short of accurately identifying the complex relationships
+between features. A more meaningful approach involves exploring feature interactions within a class
+of models. Our primary contributions can be summarized as:
+• We introduce feature interaction score (FIS) as a means to quantify the feature interaction
+strength in a pre-specified predictive model. In Sec. 2.1 and Sec. 4.1, we establish and
+validate the connection between FIS and the existing literature.
+• We consider FIS in a model set and introduce FIS cloud (FISC) in Sec. 2.1. We demonstrate
+in Sec. 4 how feature interactions contribute to predictions and how feature interactions can
+vary across models with reasonable and explainable accurate predictions in terms of FIS.
+• We present a non-linear example in multilayer perceptron (MLP) to mathematically characterize the Rashomon set and FISC. For the general case, we propose a greedy search
+algorithm to explore FIS and to characterize FISC in a Rashomon set with two novel
+visualization tools, namely Halo and swarm plots.
+1
+
+More related works are discussed in the Supplementary Material
+
+2
+
+Published as a conference paper at ICLR 2024
+
+2
+
+F EATURE INTERACTION SCORE AND THE CLOUD OF SCORES
+
+The terms “statistical interaction”, “feature interaction”, and “variable interaction” in the literature
+are highly related (Tsang et al., 2021; Greenwell et al., 2018; Sorokina et al., 2008; Tsang et al.,
+2020b). Here, we use the term “feature interaction” and “feature interaction score" to indicate a
+statistical non-additive interaction of features in a model. In general, we use bold lowercase letters
+such as v to represent a vector and vi denotes its i-th element. Let the bold uppercase letters such as
+A denote a matrix with a[i,j] being its i-th row and j-th column entry. The vectors a[i,·] and a[·,j]
+are its i-th row and j-th column, respectively. Let (X, y) ∈ Rn×(p+1) denote the dataset where
+X = [x[·,1] , x[·,2] , ..., x[·,p] ] is a n × p covariate input matrix and y is a n-length output vector. Let
+I be a subset of feature indices: I ⊂ {1, 2, ..., p} and its cardinality is denoted by |I|. All possible
+subsets are referred as I = {I | I ⊂ {1, 2, ..., p}}. In the context of no ambiguity, we drop the square
+brackets on the vector and simply use xs to denote the feature. X \s is the input matrix when the
+feature of interest (denoted as s here) is replaced by an independent variable. Let f : Rn×p → Rn be
+a predictive model and L : (f (X), y) → R be the loss P
+function. The expected loss and empirical
+n
+loss are defined as Lexp = E[L(f (X), y)] and Lemp = i=1 L(f (x[i,·] ), yi ), respectively.
+2.1
+
+D EFINITIONS
+
+Mask-based Rashomon set Our goal is to explore feature interactions in a set of well-performing
+models, also known as a Rashomon set (Fisher et al., 2019). For a given pre-specified class of
+predictive models F ⊂ {f | f : X → y}, the Rashomon set is defined as
+R(ϵ, f ∗ , F) = {f ∈ F | E[L(f (X), y)] ≤ E[L(f ∗ (X), y)] + ϵ},
+(1)
+∗
+where f is a trained model (or reference model), and ϵ > 0 is a pre-defined acceptable loss tolerance.
+In view of the existence of equivalent simple and complex models discussed in Semenova et al.
+(2022), one way to characterize a model is to concatenate a layer, denoted as m ∈ R, into a backbone
+model. That is,
+∀f ∈ F with E[L(f (X), y)], ∃m s.t. E[L(f ◦ m(X), y)] ≤ E[L(f ∗ (X), y)] + ϵ.
+(2)
+With this “input pre-processing" layer, we refer to the resulting Rashonmon set as the Mask-based
+Rashomon set and claim that there always exists an alternative for any model in the Rashomon set,
+logically expressed as: ∀f ∈ F (E[L(f (X), y)] → (∃m (E[L(f ∗ ◦ m(X), y)] ≃ E[L(f (X), y)]).
+See Appendix A for the detailed natural deduction.
+Feature interaction score (FIS) The common way to quantify feature interaction based on the
+statistical non-additivity Lou et al. (2013) is to measure the performance change of feature importance
+from the baseline (Sundararajan et al., 2017; Janizek et al., 2021). The performance change can
+be decomposed into main feature effects and feature interaction effects. Several feature attribution
+methods have identified the necessity of a baseline value representing a lack of information when
+generating explanations. We refer to individual feature effects which do not interact with other features
+as the main effect. Inspired by model reliance and similar methods Fisher et al. (2019); Zhu et al.
+(2015); Gregorutti et al. (2017) that measure the change in the loss by replacing the variable of interest
+with a new random independent variable, we denote by φi (f ) = E[L(f (X \i ), y)] − E[L(f (X), y)]
+and φI (f ) = E[L(f (X \I ), y)] − E[L(f (X), y)] as the main effect and joint effect respectively.
+Herein, E[L(f (X), y)] is the baseline effect that provides interpretability. In practice, we usually
+permute the features of interest multiple times to achieve a similar measurement (Datta et al., 2016).
+With this in mind, the FIS is defined as the difference between the loss change of replacing multiple
+features simultaneously and the sum of the loss change of replacing multiple features individually:
+X
+F ISI (f ) = φI (f ) −
+φi (f ).
+(3)
+i∈I
+
+Feature interaction score cloud (FISC) We can generate the set of FISs as: F ISI (f ) =
+{F ISI1 (f ), F ISI2 (f ), ..., F ISI2p (f )}. Thus, the FIS of certain feature set I in the Rashomon set
+R(ϵ, f ∗ , F) is given by F ISCI (R) = {F ISI (f ) : f ∈ R}, illustrated in Fig. 1 (b). We refer to the
+set of FISs with respect to a feature set in a model class as FISC. This cloud of scores has the range
+[F ISCI (R)min , F ISCI (R)max ] = [minf ∈R F ISI (f ), maxf ∈R F ISI (f )].
+(4)
+The complete set of FISs in a Rashomon set is F ISCI (R) = {F ISI (f ) : f ∈ R}.
+3
+
+Published as a conference paper at ICLR 2024
+
+2.2
+
+R ELATION TO EXISTING FEATURE INTERACTION ATTRIBUTION APPROACH
+
+Since FISC focuses on explaining feature interactions across a set of models rather than a single
+model, existing explainable methods for a single model should be viewed as a special case of our
+framework. We demonstrate that the state-of-the-art (SOTA) ArchDetect method Tsang et al.
+(2020b) can be derived from our approach; see Appendix C.
+
+3
+
+C OMPUTATIONAL CHALLENGES OF FISC
+
+The first challenge is establishing the theoretical upper and lower bound of FISC for non-linear
+models characterized by uncertain, potentially non-convex loss functions. The second challenge
+arises from the NP-hard nature of searching the Rashomon set defined by hypothesis space Semenova
+et al. (2022); Hsu & Calmon (2022). We first show that it is possible to find the boundary of FISC
+under certain assumptions and conditions in Sec. 3.1, aligning with previous work in this area (Fisher
+et al., 2019; Dong & Rudin, 2020). Then we present a sampling algorithm for more general scenarios
+in Sec. 3.2, where model structures and loss functions might be uncertain. This approach enables us
+to empirically approximate the FISC.
+3.1
+
+A N EXAMPLE APPLICATION OF FISC IN MULTILAYER PERCEPTRON (MLP)
+
+Here, we consider a non-trivial MLP with a sigmoid activation function as an example. Let f : X →
+y be a predictive model defined as
+1
++ b.
+(5)
+T
+1 + e−β X
+p
+The expected RMSE loss is E[L(f (X), y)] = E[ (y − f (X))2 ] that is mathematically equivalent to E[y − f (X)] or E[f (X) − y]. For simplicity, we consider the case E[y − f (X)] to
+derive the condition on the mask m to characterize the Rashomon set. Without loss of generality, we assume α > 0 and a scaling on ϵ by α. We further introduce an assumption2 that
+f (X) = αT
+
+−mT ·β T X
+
+e
+]}. Invoking Eq. 2, this assumption allows us to derive
+ϵ ≤ min{E[ 1+e−m1T ·βT X ], E[ 1+e
+−mT ·β T X
+the following inequality
+
+h  1 + ϵ + ϵe−βT X i
+h  1 − ϵ − ϵe−βT X i
+T
+T
+E ln −βT X
+≤
+E[(β
+X)m
+]
+≤
+E
+ln −βT X
+,
+T
+T
+e
++ ϵ + ϵe−β X
+e
+− ϵ − ϵe−β X
+
+(6)
+
+which gives the condition on m that characterises the mask-based Rashomon set. We refer to
+Appendix D for its derivation.
+3.2
+
+G REEDY SEARCH FOR EMPIRICAL FISC LOWER AND UPPER BOUNDS
+
+Unfortunately, due to the nonlinear nature of FIS, it is difficult to get a closed-form expression of the
+exact hypothetical bounds in general, especially when f and L functions vary. Here we propose a
+general way to sample from the Rashomon set and approximate the range of FISs. The RMSE loss
+function and a pairwise feature interaction I = {i, j} are chosen to illustrate the idea, as RMSE will
+show the connection between our method and ArchDetect in Archipelago.
+3.2.1
+
+S AMPLING FROM A MASK - BASED R ASHOMON SET
+
+Instead of searching for all possible models, we sample models from the mask-based Rashomon set
+by concatenating a multi-valued mask m = {m1 , m2 , · · · , mp } into a backbone f , resulting in a
+new model Mm = f ◦ m. We can sample the Rashomon set by exploring different m such that
+R(ϵ, f, F) = {Mm ∈ F | E[L(Mm (X), y)] ≤ E[L(f (X), y)] + ϵ}.
+
+(7)
+
+All models are characterized by m and only masks that potentially affect the FIS are of interest.
+Redundant models such as the composition of identity functions can be ignored to save resources.
+2
+
+A smaller ϵ means a smaller Rashomon set with models closer to the reference well-trained model f ∗ .
+
+4
+
+Published as a conference paper at ICLR 2024
+
+We illustrate this through a one-layer mask, denoted by mI with the component of feature xi :
+
+mi i ∈ I,
+(8)
+(mI )i =
+1 i∈
+/ I.
+The FIS defined in Eq. 3 with the above setting can be rewritten as:
+X
+F ISI (MmI ) = φI (MmI ) −
+φi (MmI ).
+(9)
+i∈I
+
+In practice, instead of calculating all possible I, we can calculate all main effects in the feature
+space {Mmi ∈ F | Q
+φi (Mmi )}pi=1 first and then inversely calculate any order of interaction by
+decomposing mI = i∈I mi .
+3.2.2
+
+G REEDY SEARCH ALGORITHM
+
+To search all possible (mi )pi=1 for features’ main effects within the Rashomon set, we propose a
+greedy search algorithm. For each feature’s main effect φi (Mmi ), we set two p-length vectors
+of ones mi+ and mi− for upper bound search and for lower bound search, as both actions can
+increase loss values if the model f is well-trained. During the search process, we set a uniform
+learning rate to regulate the quantity of models generated for all dimensions. Higher learning rates
+lead to a reduced number of models. The searching process continues until the loss condition
+is not satisfied Mmi ∈
+/ F. This condition is imposed on the loss difference, denoted as ϕi =
+E[L(Mmi (X), y)] − E[L(f (X), y)]. Here, each mask corresponds to a concatenated model,
+resulting in an associated loss value. Any mask mi during training meets Mmi ∈ F and is
+one of the target models for feature xi in R(ϵ, f ∗ , F). Finally, we can obtain a model class with
+main effects {Mmi ∈ F | φi (Mmi )}pi=1 , and calculate any order of feature interaction scores:
+F ISI (R) = {F ISI (MmI ) : MmI ∈ R} with Eq. 9; see the pseudocode in Algorithm 1.
+3.2.3
+
+T HE INFLUENCE OF JOINT EFFECTS ON THE BOUNDARY OF THE R ASHOMON SET
+
+When searching for all main effects of features in the Rashomon set through the loss difference, we
+isolate the feature of interest and record the loss difference to ensure the Rashomon set condition. In
+theory, the joint effects of features should be the sum of main effects of features when there is no
+feature interaction. If the sum of the main effects is less than ϵ, then the joint effect would also be less
+than ϵ. However, in reality, the presence of feature interaction causes the joint effects to surpass the
+boundary. This motivates us to study the influences of interaction and the extent to which it varies.
+
+Algorithm 1 Greedy search algorithm
+Require: learning rate > 0 ∧ ϵ ≥ 0
+Ensure: L(f ◦ m(X), y) ≤ L(f ∗ (X), y) + ϵ
+m+ = 1pi=1 , m− = 1pi=1 , counter = 0
+lossref ⇐ L(f ∗ (X), y)
+while counter ≤ 4 do
+if searching for the upper bound of m then
+m′ + ⇐ Copy(m+ )
+m′ + [s] ⇐ m′ + [s] + learning rate
+ϕs ⇐ L(f ∗ ◦ m′ + (X s ), y) − lossref
+if ϕs ≤ ϵ then
+m+ ⇐ m′ +
+else
+learning rate ⇐ learning rate × 0.1
+counter ⇐ counter + 1
+else searching for the lower bound of m
+m′ − ⇐ Copy(m− )
+m′ − [s] ⇐ m′ − [s] − learning rate
+ϕs ⇐ L(f ∗ ◦ m′ − (X s ), y) − lossref
+if ϕs ≤ ϵ then
+m− ⇐ m′ −
+else
+learning rate ⇐ learning rate × 0.1
+counter ⇐ counter + 1
+
+Figure 2: Exploring feature interaction of
+function f = xi + xj + xi ∗ xj and f =
+xi +xj +xk +xi ∗xj ∗xk in Rashomon set. The
+data points are sampled from both functions.
+Exploring ϕi and ϕj separatelyP
+enables us to
+draw red circles representing i∈I ϕi = ϵ,
+where ϵ is the radius, e.g. ϵ = 0.1 can be potentially expressed by ϕi = 0.01 and ϕj = 0.09;
+a detailed example is provided in Appendix F.
+From inner to outer, the radii are 0.1, 0.2, and
+0.3, respectively and the corresponding joint
+effects ϵ̃ can be calculated by ϕi,j and ϕi,j,k ,
+from which we plot the blue curves. This can
+be achieved in 2D (left) and higher dimensions,
+e.g. 3D (right).
+5
+
+Published as a conference paper at ICLR 2024
+
+(a) x0 and x1
+
+(b) x0 and x2
+
+(c) x0 and x3
+
+(d) x1 and x2
+
+Figure 3: Pairwise Halo plot from FISC applied to an MLP trained from NID setting. The ground
+V
+V
+P40
+truth interaction defined in function f (x) = (x; {x∗0 , x∗1 } ∪ x′2 ) + (x; {x∗i }30
+i=11 ) +
+j=1 xj from
+left to right are: true, true, false, true, respectively.
+Halo plot A Halo plot fixes the sum of main effects within the boundary of P
+the Rashomon set and
+visualizes the change in the joint effect. The fixed loss change is formulated as: i∈I ϕi (Mmi , f ) =
+t, where t ∈ (0, ϵ] to ensure the loss condition. Then we map an n-sphere with radius t and plot
+corresponding empirical loss ϕi,j (Mmi,j , f ) : E[L(Mmi,j (X), y)] − E[L(f (X), y)], from which
+we can directly visualize how the joint effect varies and affects the Rashomon set boundary. Any
+order of interaction Halo plot can be similarly derived and two simple examples are used to illustrate
+the idea when |I| = 2 (2D) and |I| = 3 (3D) in Fig. 10. For higher order interaction visualizations,
+we discussed in Appendix E.
+Computational time Our framework effectively addresses the computational expense associated
+with calculating interactions, eliminating the need to calculate all pairs, especially in scenarios
+involving higher-order interactions. By performing a single-time search for all main effects and
+subsequently calculating the desired interactions, the proposed algorithm significantly reduces
+computational complexity. Specifically, a subset of FISC range P
+[F ISCI (R)min , F ISCI (R)max ]
+bounded by t can be approximated using representative points on i∈I ϕi (Mmi , f ) = t. Collecting
+ordered pairs S = {(ϕi x, ϕj y) | (x, y) ∈ R, 0.1 ≤ x, y ≤ 0.9, x+y = 1} is sufficient to characterize
+pairwise interactions, which requires |S| × 22 calculations. Similarly, any order of interaction requires
+|S| × 2|I| model predictions.
+
+4
+
+E XPERIMENTS
+
+In order to showcase the practical value of FISC, we have set two primary objectives and they are: (a)
+to demonstrate the concept of FISC using a well-trained model that overlooks true feature interactions,
+and (b) to examine the impact of feature interactions and explore the variation in FIS on accurate
+model predictions from our greedy sampling method. In the experiments below, we identify the main
+feature effects within the Rashomon set and calculate the FIS and FISC using representative models,
+followed by visualizations using Halo and swarm plots. Noted that the meaning of axis in Halo
+plots refers to Sec. 3.2.3.
+4.1
+
+Q UANTITATIVE COMPARISON AND EXTENSION
+
+Synthetic Validation In order to validate the performance of FIS, we use SOTA Tsang et al. (2020b)
+to generate ground truth feature interactions and apply our framework to the synthetic functions in
+Table 1 in the same context. The interaction detection area under the curve (AUC) on these functions
+from different baseline methods is provided in Tables 1 and 2. As the relation to ArchDetect
+provided in Appendix C, our FIS is designed under certain conditions to detect the interactions of
+their proposed contexts and the results are as expected. More details can be found in the original
+paper (Tsang et al., 2020b).
+Exploring FISC from an accurate MLP relying on “inaccurate” interactions The above
+accuracy is based on the knowledge of given functions, but in practice, we usually have a dataset with
+unknown functional relationships. This prompts us to consider how we account for the performance
+of a well-trained model that achieves high accuracy in making predictions, yet fails to preserve
+6
+
+Published as a conference paper at ICLR 2024
+
+ground truth interactions with FISC. In this study, we conduct a general black box explanation task.
+Specifically, we utilize a dataset generated by a model F4 (assuming unknown to us) and train an
+MLP using the same neural interaction detection (NID) setting.
+Table 1: Functions with ground truth interactions, where x∗ =
+[1, 1, 1..., 1] ∈ R40 , x′ = [−1, V
+−1, −1..., −1] ∈ R40 and z[i] =
+xi is a key-value pair function. (x; z) is defined as 1 if index of
+x belongs to any keys of function z, otherwise −1.
+P10 P10
+P20 P30
+P40
+F1 (x) =
+xi xj + i=11 j=21 xi xj + k=1 xk
+V i=1 ∗j=1
+V
+P
+40
+F2 (x) = (x; {xi }20
+(x; {x∗i }30
+i=1 ) +
+i=11 ) +
+j=1 xj
+P
+V
+V
+40
+∗ 30
+)
++
+x
+}
+)
++
+(x;
+{x
+F3 (x) = (x; {x′i }20
+i=1
+V i i=11∗ 30 j=1Pj40
+V
+∗
+∗
+′
+F4 (x) = (x; {x1 , x2 } ∪ x3 ) + (x; {xi }i=11 ) + j=1 xj
+Table 2: Comparison of pairwise feature interaction detection
+AUC. FIS is set in the same context to detect feature interactions.
+
+Figure 4: Pairwise Halo:
+‘prior’ and ‘juvenile’ (top); and
+triplewise Halo: ‘prior’, ‘juvenile’ and ‘charge’ (bottom).
+
+Method
+Two-way ANOVA
+Neural Interaction Detection
+Shapley Interaction Index
+Shapley Taylor Interaction Index
+ArchDetect
+FIS in the context (this work)
+
+F1
+1.0
+0.94
+1.0
+1.0
+1.0
+1.0
+
+F2
+0.51
+0.52
+0.50
+0.50
+1.0
+1.0
+
+F3
+0.51
+0.48
+0.50
+0.50
+1.0
+1.0
+
+F4
+0.55
+0.56
+0.51
+0.51
+1.0
+1.0
+
+Table 3: Model class reliance (MCR) comparison between results from VIC (right column under
+each feature) and results in bold from our greedy search algorithm (left column under each feature).
+MCR
+AVG(MCR)
+MAX(MCR+)
+MIN(MCR-)
+(MCR+)-(MCR-)
+
+Age
+1.113 1.021
+1.141 1.060
+1.072 0.987
+0.068 0.073
+
+Race
+0.969 1.013
+1.007 1.037
+0.919 0.994
+0.088 0.043
+
+Prior
+1.330 1.048
+1.372 1.116
+1.123 0.988
+0.249 0.129
+
+Gender
+0.951 1.009
+0.986 1.032
+0.900 0.989
+0.086 0.043
+
+Juvenile
+1.367 1.038
+1.390 1.097
+1.278 0.992
+0.112 0.105
+
+Charge
+1.065 1.004
+1.095 1.021
+1.004 0.990
+0.091 0.031
+
+Based on the ranking metrics AUC of the receiver operating characteristic curve (ROC), the MLP
+achieves an interaction detection accuracy of 56%. The trained MLP is set as the reference model
+and we explore FISC in the Rashomon set with t = [0.2ϵ, 0.4ϵ, 0.6ϵ, 0.8ϵ, ϵ] respectively, to observe
+that the range of each pairwise feature interaction exceeds the threshold extracted above; see Fig. 3
+and Fig. 5(a). This provides insights into the role of FISC in bridging the gap between unknown
+ground truth function f and a well-trained model that fails to preserve true feature interactions. The
+potential loss of feature interaction preservation in a model can be mitigated by other models in the
+Rashomon set. In this case, one can conclude that there always exists a model in the Rashomon set in
+which certain features interact.
+4.2
+
+R ECIDIVISM PREDICTION
+
+The use of the COMPAS score, as reported by the ProPublica news organization, has been instrumental
+in examining its applicability in proprietary recidivism prediction, as evidenced by previous studies
+(Flores et al., 2016; Rudin et al., 2020). However, it has been demonstrated that interpreting a
+pre-specified model has its limitations, as exemplified by the Rashomon set (Fisher et al., 2019; Dong
+& Rudin, 2020). While the Rashomon set has been studied, the significance of feature interactions
+within the set has not yet been explored.
+4.2.1
+
+C OMPARISON WITH EXISTING RELEVANT LITERATURE
+
+Feature importance comparison-variable importance cloud (VIC) Given the absence of an
+identical task in existing literature, we adopt the experiment settings utilized in prior research Dong &
+Rudin (2020) that aligns with our research focus. We use the dataset of 7,214 defendants in Broward
+7
+
+Published as a conference paper at ICLR 2024
+
+(a) Swarm plot of FISC from MLP
+
+(b) Swarm plot of FISC from a logistic classifier
+
+Figure 5: Illustration of FISC using swarm plots, where the black vertical line is the threshold and
+the yellow star is the reference FIS. Each point in the plot is coloured based on loss value.
+County, Florida Washington (2018), the same logistic model, and set ϵ = 0.05. To guarantee a
+fair and unbiased comparison, we explore the Rashomon set using our greedy search algorithm and
+evaluate the feature importance (main effect in our definition) using model class reliance, which is
+the range of feature importance values in the Rashomon set. The resulting outcomes are presented in
+Table 3 and it demonstrates the promising range of feature importance in a general case. Although
+the feature importance is not the focus of our study, it’s still worthy of further work. Dong Dong &
+Rudin (2020) proposed the information compensation structure and stated that information loss in
+“prior” was most efficiently compensated by ‘juvenile’, but the underlying reason was missing. We
+find that VIC can not capture the higher-order information compensation structure.
+Table 4: Comparison of FISC calculated from different sampling methods (partial). We use vs to
+denote the interaction pairs and best results are highlighted in bold.
+
+Interaction pairs
+
+AWP sampling
+F ISmin F ISmax
+
+Greedy sampling (ours)
+F ISmin F ISmax
+
+Random sampling
+F ISmin
+F ISmax
+
+age vs race
+age vs prior
+age vs gender
+age vs juvenilecrime
+age vs currentcharge
+
+-0.00026
+-0.00017
+-0.00011
+-0.00019
+-0.0003
+
+-0.00089
+-0.00122
+-0.00178
+-0.00167
+-0.00257
+
+-8.04E-06
+-1.02E-05
+-1.99E-05
+-1.31E-05
+-1.24E-05
+
+0.000113
+0.00014
+0.000135
+0.000139
+0.000351
+
+0.002069
+0.001975
+0.001341
+0.002496
+0.00268
+
+6.32E-06
+1.19E-05
+1.68E-05
+8.15E-06
+1.61E-05
+
+FISC calculated from different sampling methods-AWP and random sampling Due to the
+limited availability of relevant sampling benchmarks in the current literature, we established an
+evaluation framework by considering two well-accepted methods as baselines: sampling from
+adversarial weight perturbations (AWP) Wu et al. (2020); Tsai et al. (2021) and sampling with
+different weight initialization seeds Li & Barnard (2022a); Semenova et al. (2019). Together with our
+introduced greedy algorithm, we utilized these methods to sample models from the Rashomon set. We
+adopt an MLP as the reference model and keep it consistent among all methods. With set ϵ = 0.05,
+we constructed the Rashomon set and calculated the corresponding FISC, partial results presented
+in Table. 4. It is clear that our approach explored a broader range of FISC in comparison to the
+alternatives. Complete results are provided in Appendix H, with separate swarm plot visualizations.
+Going beyond the literature The logistic model from Dong & Rudin (2020) is not optimal so
+we train and improve the model as in Appendix G. We apply FISC to this model with settings
+t = [0.2ϵ, 0.4ϵ, 0.6ϵ, 0.8ϵ, ϵ], and the results are shown in Fig. 5(b). From the Fig. 5(b) we observe
+that the interaction of ‘prior’ and ‘juvenile’ or ‘prior’ and ‘charge’ can be extended to a similar
+extent. However, the compensation structure proposed by VIC fails to acknowledge the potential of
+the latter interaction. Additionally, we provide confirmation and explanation for their statement, as
+the latter case necessitates a greater loss change (indicated by a darker red color) compared to the
+8
+
+Published as a conference paper at ICLR 2024
+
+Figure 6: The utility of FISC in an image classification task. From left to right: the original segmented
+image, top 5 main effect segmentations for accurate dog predictions by the transformer (coloured
+in blue), top 5 important interacted segmentations for accurate dog predictions by the transformer
+(coloured in red), and top 5 important interacted segmentations for accurate cat predictions by the
+transformer (coloured in purple).
+former, thereby facilitating easier compensation. We present the pairwise interaction and a triplewise
+interaction in Fig. 4, allowing us to observe the reliance on higher-order interactions. For instance, we
+observe that the decrease in reliance on the feature interaction ‘prior’ and ‘juvenile’ (x-y plane) can
+be compensated by the interaction between ‘juvenile’ and ‘charge’ (y-z plane) or ‘prior’ and ‘charge’
+(x-z plane). Likewise, the color scheme depicted in the figure conveys equivalent information.
+4.3
+
+F EATURE INTERACTION IN IMAGE CLASSIFICATION WITH FISC
+
+Over the past decade, large and pre-trained transformer architectures have achieved SOTA performance on a wide variety of tasks (Sarzynska-Wawer et al., 2021; Dosovitskiy et al., 2021). Here
+we aim to study how a large-scale model relies on feature interactions and how reasonably accurate
+predictions can differ in terms of their variances in FIS. We adopt the pre-trained SOTA vision
+transformer ViT-B-16 developed in Dosovitskiy et al. (2021); Paszke et al. (2019) with a top-5
+accuracy of 95.32% on ImageNet and we chose an image from the COCO dataset that encompasses
+two objects, a cat and a dog, sharing similar visual characteristicsLin et al. (2014). The 3 primary
+predictions from the model classifying the image ranks as: Pekinese 0.49, Japanese spaniel 0.16, and
+Tiger cat 0.06. The model identifies the image as resembling a dog more than a cat.
+The image is segmented as features by the quickshift method Vedaldi & Soatto (2008), following the
+protocol Tsang et al. (2020b) shown in Fig. 6(a). We use FISC to explain the interaction effects. The
+top 5 important segmentations are coloured blue in Fig. 6(b), where importance increases according
+to colour lightness. The most important part of the image is the forehead of the dog. A similar
+observation is reported in (Tsang et al., 2020b). Considering the joint effect resulting in the dog
+classification, the top 5 crucial pairwise interactions are given in Fig. 6(c). Notably, the lightest
+component interacts with other components more than once. Results shows that the model relies
+heavily on single forehead segmentation to predict a dog, but this segmentation is disappearing in the
+top 5 features for predicting a dog relying on interactions. If our objective is to classify the image as a
+cat, our findings suggest in Fig. 6(d) that the model would rely on both the dog and cat segmentations.
+
+5
+
+D ISCUSSION
+
+The motivation behind the development of FIS and FISC is to explain feature interaction in a model
+class, rather than focusing on a specific model. In this study, we highlight that feature interaction
+can vary significantly across models with similar performance. This work initializes the exploration
+of feature interaction in a Rashomon set. By leveraging the FISC, we approach the true feature
+interaction from a set of well-trained models. The variation of FIS allows for the explanation of
+diverse models that rely on distinct feature interactions and this property holds significant potential
+for selecting models that exhibit the desired feature interaction dependency, illustrated in synthetic
+validation, recidivism prediction and image classification with promising results. Further exploration
+of feature interaction with other ways of characterizing the Rashomon set is subject to future work.
+Additionally, we have developed a visualization tool that effectively illustrates the joint effect on the
+Rashomon set exploration and we adopt swarm plots to depict the variability of FISs in a model class.
+These tools has the potential to inspire future investigations in various domains. Our code is readily
+available and will be made publicly accessible upon acceptance.
+9
+
+Published as a conference paper at ICLR 2024
+
+R EFERENCES
+Jacob Bien, Jonathan Taylor, and Robert Tibshirani. A lasso for hierarchical interactions. Annals of
+statistics, 41(3):1111, 2013.
+Tianyu Cui, Pekka Marttinen, and Samuel Kaski. Learning global pairwise interactions with Bayesian
+neural networks. ECAI, 2020.
+Anupam Datta, Shayak Sen, and Yair Zick. Algorithmic transparency via quantitative input influence:
+Theory and experiments with learning systems. In 2016 IEEE symposium on security and privacy
+(SP), pp. 598–617. IEEE, 2016.
+Jiayun Dong and Cynthia Rudin. Exploring the cloud of variable importance for the set of all good
+models. Nature Machine Intelligence, 2(12):810–824, 2020.
+Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas
+Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit,
+and Neil Houlsby. An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale.
+ICLR, 2021.
+Christopher Eames and M Saiful Islam. Ion intercalation into two-dimensional transition-metal
+carbides: global screening for new high-capacity battery materials. Journal of the American
+Chemical Society, 136(46):16270–16276, 2014. doi: 10.1021/ja508154e.
+Aaron Fisher, Cynthia Rudin, and Francesca Dominici. All models are Wrong, but Many are Useful:
+Learning a Variable’s Importance by Studying an Entire Class of Prediction Models Simultaneously.
+J. Mach. Learn. Res., 20(177):1–81, 2019.
+Ronald Aylmer Fisher. Statistical methods for research workers. Springer, 1992.
+Anthony W Flores, Kristin Bechtel, and Christopher T Lowenkamp. False positives, False negatives,
+and False analyses: A rejoinder to "Machine Bias: There’s software used across the country to
+predict future criminals. and it’s biased against blacks". Fed. Probation, 80:38, 2016.
+Jerome H Friedman and Bogdan E Popescu. Predictive learning via rule ensembles. The annals of
+applied statistics, pp. 916–954, 2008.
+Yury Gogotsi and Babak Anasori. The rise of MXenes. ACN Nano, 23(8):8491–8494, 2019. doi:
+10.1021/acsnano.9b06394.
+Yury Gogotsi and Qing Huang. Mxenes: two-dimensional building blocks for future materials and
+devices, 2021.
+Michel Grabisch and Marc Roubens. An axiomatic approach to the concept of interaction among
+players in cooperative games. International Journal of game theory, 28:547–565, 1999.
+Peyton Greenside, Tyler Shimko, Polly Fordyce, and Anshul Kundaje. Discovering epistatic feature
+interactions from neural network models of regulatory DNA sequences. Bioinformatics, 34(17):
+i629–i637, 2018.
+Brandon M Greenwell, Bradley C Boehmke, and Andrew J McCarthy. A simple and effective
+model-based variable importance measure. arXiv preprint arXiv:1805.04755, 2018.
+Baptiste Gregorutti, Bertrand Michel, and Philippe Saint-Pierre. Correlation and variable importance
+in random forests. Statistics and Computing, 27:659–678, 2017.
+Huifeng Guo, Ruiming TANG, Yunming Ye, Zhenguo Li, and Xiuqiang He. DeepFM: A FactorizationMachine based Neural Network for CTR prediction. In Proceedings of the Twenty-Sixth International Joint Conference on Artificial Intelligence, IJCAI-17, pp. 1725–1731, 2017. doi:
+10.24963/ijcai.2017/239. URL https://doi.org/10.24963/ijcai.2017/239.
+Hsiang Hsu and Flavio Calmon. Rashomon capacity: A metric for predictive multiplicity in classification. Advances in Neural Information Processing Systems, 35:28988–29000, 2022.
+10
+
+Published as a conference paper at ICLR 2024
+
+Joseph D Janizek, Pascal Sturmfels, and Su-In Lee. Explaining explanations: Axiomatic feature
+interactions for deep networks. The Journal of Machine Learning Research, 22(1):4687–4740,
+2021.
+Sichao Li and Amanda Barnard. Variance tolerance factors for interpreting neural networks. arXiv
+preprint arXiv:2209.13858, 2022a.
+Sichao Li and Amanda S Barnard. Inverse design of MXenes for high-capacity energy storage
+materials using multi-target machine learning. Chemistry of Materials, 34(11):4964–4974, 2022b.
+doi: 10.1021/acs.chemmater.2c00200.
+Tsung-Yi Lin, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr
+Dollár, and C Lawrence Zitnick. Microsoft coco: Common objects in context. In Computer Vision–
+ECCV 2014: 13th European Conference, Zurich, Switzerland, September 6-12, 2014, Proceedings,
+Part V 13, pp. 740–755. Springer, 2014.
+Yin Lou, Rich Caruana, Johannes Gehrke, and Giles Hooker. Accurate intelligible models with
+pairwise interactions. In Proceedings of the 19th ACM SIGKDD international conference on
+Knowledge discovery and data mining, pp. 623–631, 2013.
+John Mandel. Non-additivity in two-way analysis of variance. Journal of the American Statistical
+Association, 56(296):878–888, 1961.
+Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan,
+Trevor Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, Alban Desmaison, Andreas
+Kopf, Edward Yang, Zachary DeVito, Martin Raison, Alykhan Tejani, Sasank Chilamkurthy,
+Benoit Steiner, Lu Fang, Junjie Bai, and Soumith Chintala. Pytorch: An imperative style, highperformance deep learning library. In Advances in Neural Information Processing Systems 32, pp.
+8024–8035. Curran Associates, Inc., 2019. URL http://papers.neurips.cc/paper/
+9015-pytorch-an-imperative-style-high-performance-deep-learning-library.
+pdf.
+Cynthia Rudin. Stop explaining black box machine learning models for high stakes decisions and use
+interpretable models instead. Nature machine intelligence, 1(5):206–215, 2019.
+Cynthia Rudin, Caroline Wang, and Beau Coker. The age of secrecy and unfairness in recidivism
+prediction. Harvard Data Science Review, 2(1):1, 2020.
+Justyna Sarzynska-Wawer, Aleksander Wawer, Aleksandra Pawlak, Julia Szymanowska, Izabela
+Stefaniak, Michal Jarkiewicz, and Lukasz Okruszek. Detecting formal thought disorder by deep
+contextualized word representations. Psychiatry Research, 304:114135, 2021.
+Lesia Semenova, Cynthia Rudin, and Ronald Parr. A study in rashomon curves and volumes: A
+new perspective on generalization and model simplicity in machine learning. arXiv preprint
+arXiv:1908.01755, 4, 2019.
+Lesia Semenova, Cynthia Rudin, and Ronald Parr. On the existence of simpler machine learning
+models. In 2022 ACM Conference on Fairness, Accountability, and Transparency, pp. 1827–1858,
+2022.
+Chandan Singh, W. James Murdoch, and Bin Yu. Hierarchical interpretations for neural network
+predictions. In International Conference on Learning Representations, 2019. URL https:
+//openreview.net/forum?id=SkEqro0ctQ.
+Daria Sorokina, Rich Caruana, Mirek Riedewald, and Daniel Fink. Detecting statistical interactions
+with additive groves of trees. In Proceedings of the 25th international conference on Machine
+learning, pp. 1000–1007, 2008.
+Mukund Sundararajan, Ankur Taly, and Qiqi Yan. Axiomatic attribution for deep networks. In
+International conference on machine learning, pp. 3319–3328. PMLR, 2017.
+Mukund Sundararajan, Kedar Dhamdhere, and Ashish Agarwal. The Shapley Taylor interaction
+index. In International conference on machine learning, pp. 9259–9268. PMLR, 2020.
+11
+
+Published as a conference paper at ICLR 2024
+
+Yu-Lin Tsai, Chia-Yi Hsu, Chia-Mu Yu, and Pin-Yu Chen. Formalizing generalization and adversarial
+robustness of neural networks to weight perturbations. Advances in Neural Information Processing
+Systems, 34:19692–19704, 2021.
+
+Michael Tsang, Dehua Cheng, Hanpeng Liu, Xue Feng, Eric Zhou, and Yan Liu. Feature interaction
+interpretability: A case for explaining ad-recommendation systems via neural interaction detection.
+In International Conference on Learning Representations, 2020a. URL https://openreview.
+net/forum?id=BkgnhTEtDS.
+
+Michael Tsang, Sirisha Rambhatla, and Yan Liu. How does this interaction affect me? Interpretable
+attribution for feature interactions. Advances in neural information processing systems, 33:6147–
+6159, 2020b.
+
+Michael Tsang, Dehua Cheng, and Yan Liu. Detecting Statistical Interactions from Neural Network
+Weights. ICLR, 2021.
+
+Andrea Vedaldi and Stefano Soatto. Quick shift and kernel methods for mode seeking. In Computer
+Vision–ECCV 2008: 10th European Conference on Computer Vision, Marseille, France, October
+12-18, 2008, Proceedings, Part IV 10, pp. 705–718. Springer, 2008.
+
+Zihao Wang, Xihui Liu, Hongsheng Li, Lu Sheng, Junjie Yan, Xiaogang Wang, and Jing Shao.
+Camp: Cross-Modal Adaptive Message Passing for Text-Image Retrieval. In Proceedings of the
+IEEE/CVF International Conference on Computer Vision (ICCV), October 2019.
+
+Anne L Washington. How to argue with an algorithm: Lessons from the compas-propublica debate.
+Colo. Tech. LJ, 17:131, 2018.
+
+Dongxian Wu, Shu-Tao Xia, and Yisen Wang. Adversarial weight perturbation helps robust generalization. Advances in Neural Information Processing Systems, 33:2958–2969, 2020.
+
+Ruoqing Zhu, Donglin Zeng, and Michael R Kosorok. Reinforcement learning trees. Journal of the
+American Statistical Association, 110(512):1770–1784, 2015.
+
+A
+
+U NVEILING THE M ASK -BASED S AMPLING R ASHOMON S ET
+
+As stated that it’s always easier to find an accurate but complex model, it refers to a model with
+more complex structures. It’s safely claimed that concatenating layers into a backbone model
+increases the complexity and therefore we logically demonstrated that such a model with more
+mask layers can achieve similar or better performance. Then we applied propositional logic to
+prove, for any model in the Rashomon set, we can find an alternative by adding mask layers into
+the reference model (same as the backbone model). Our aim can be mathematically represented as:
+12
+
+Published as a conference paper at ICLR 2024
+
+∀f ∈ F (E[L(f (X), y)] → (∃m (E[L(f ∗ ◦ m(X), y)] ≃ E[L(f (X), y)]) with details below:
+1
+
+∀f ∈ F (E[L(f (X), y)] → E[L(f (X), y)] ≤ EL(f ∗ (X), y) + ϵ)
+
+2
+
+∀f ∈ F (E[L(f (X), y)] → ∃m (E[L(f ◦ m(X), y)] ≤ E[L(f (X), y)]))
+
+3
+
+f ′ (E[L(f ′ (X), y)] → E[L(f ′ (X), y)] ≤ E[L(f ∗ (X), y)] + ϵ)
+
+4
+
+(E[L(f ′ (X), y)] → ∃m (E[L(f ′ ◦ m(X), y)] ≤ E[L(f ′ (X), y)]))
+
+5
+
+E[L(f ′ (X), y)]
+
+6
+
+E[L(f ′ (X), y)] ≤ E[L(f ∗ (X), y)] + ϵ)
+
+→-E, 3, 5
+
+7
+
+∃m (E[L(f ∗ ◦ m(X), y)] ≤ E[L(f ∗ (X), y)])
+
+→-E, 4, 5
+
+8
+
+m′ E[L(f ∗ ◦ m′ (X), y)] ≃ E[L(f ∗ (X), y)]
+
+9
+
+E[L(f ′ (X), y)] ≤ E[L(f ∗ ◦ m′ (X), y)] + ϵ
+
+R, 6, 8
+
+10
+
+E[L(f ′ (X), y)] ≤ E[L(f ′ (X), y)] + ϵ
+
+Logic, 6, 8
+
+11
+
+∃m E[L(f ∗ ◦ m(X), y)] ≃ EL(f ′ (X), y)
+
+∃-I, 9, 10
+
+12
+13
+14
+
+∃m (E[L(f ∗ ◦ m(X), y)] ≃ EL(f ′ (X), y)
+E[L(f ′ (X), y)] → ∃m (EL(f ∗ ◦ m(X), y) ≃ E[L(f ′ (X), y)]
+∀f ∈ F (E[L(f (X), y)] → (∃m (E[L(f ∗ ◦ m(X), y)] ≃ E[L(f (X), y)])
+
+B
+
+A DDITIONAL PROOF OF CONCEPT
+
+B.1
+
+P ROBLEM SETTING
+
+∃-E, 7, 8–11
+→-I, 5–12
+∀-I, 3, 13
+
+To illustrate the idea, we designed an additional experiment in the synthetic dataset and solved the
+quadratic problem. The problem is to train a model to solve the quadratic equation ax2 + bx + c = 0,
+where the variables a, b, and c are inputs and x1 and x2 are
+the outputs. Based on mathematical
+√
+b2 −4ac
+.
+principles, two error-free models can be found as x = −b± 2a
+Given the function, we randomly sampled 12,000 data points from the uniform distribution a, b, c ∼
+U(0, 1) with fixed seed as input and calculated outputs accordingly. It’s noted that the outputs might
+be complex numbers. The train/test/validation set is split as 0.8/0.1/0.1. The regression problem can
+be fit using different types of models. Here we applied a traditional artificial neural network and
+achieved mse 0.3353 in the training set.
+
+Figure 7: Left: Prediction VS Ground Truth. Right: Learning curve.
+
+13
+
+Published as a conference paper at ICLR 2024
+
+(a) Feature importance in the Rashomon set
+
+(b) FIS in the Rashomon set
+
+Figure 8: Results from a set of models sampled from the well-trained neural network.
+
+B.2
+
+G ROUND TRUTH INTERACTIONS
+√
+
+2
+
+b −4ac
+The given function f ∗ = −b± 2a
+can be seen as an ideal model with E[L(f ∗ (X))] = 0, which
+corresponds to a true feature interaction. The expected FIS of a, b can be calculated as follows:
+
+F ISa,b (f ∗ ) =φa,b (f ∗ ) − (φa (f ∗ ) + φb (f ∗ ))
+(10)
+∗
+∗
+∗
+=E[L(f (X \{a,b} ))] − E[L(f (X \{a} ))] − E[L(f (X \{b} ))]
+n
+n
+n
+X
+X
+X
+≃
+(f ∗ (X \{a,b} ) − y)2 −
+(f ∗ (X \{a} ) − y)2 −
+(f ∗ (X \{b} ) − y)2
+i=1
+
+i=1
+
+i=1
+
+Where n is the number of samples and interaction between b, c and a, c can be calculated in the same
+way. The interaction values are absolute to indicate the strength. The interaction values are absolute
+to indicate the strength, summarized in the Table. 5.
+Table 5: Ground truth of feature importance and interaction
+
+B.3
+
+φa (f ∗ )
+
+φb (f ∗ )
+
+φc (f ∗ )
+
+φa,b (f ∗ )
+
+φa,c (f ∗ )
+
+φb,c (f ∗ )
+
+116.4602
+
+24.2023
+
+0.2924
+
+21.2866
+
+1.3813
+
+0.5945
+
+A PPROXIMATED FISC
+
+Now, assume that we do not have an optimal model in the real-world and our objective is to train
+a model to fit the data, the regression problem is fitted using a simple neural network and achieved
+MSE=0.33 in the test set. The learning curve and prediction versus ground truth are illustrated in
+Fig. 7. After training the model, we applied the FISC to it and plotted the swarm plots, which are
+provided in Fig. 8. Each point in the swarm plot represents an FIS value from a specific model.
+when we consider the leftmost point among the feature pair a, b, it implies that there exists a model
+with a lower FIS for a, b compared to a, c. This means that there was a model trained that happened
+to have a lower FIS for a, b than b, c using the same dataset with promising loss. This observation
+contradicts the truth interaction calculated previously. However, through the analysis of FISC, we
+found that the range of FIS values for each feature pair covers the truth interaction. By examining
+the statistics of the results, we can approach true feature interactions, which will be the focus of our
+further work.
+14
+
+Published as a conference paper at ICLR 2024
+
+C
+
+R ELATION TO A R C H D E T E C T
+
+The framework ArchDetectTsang et al. (2020b) uses hiδhj to detect the interaction existence δ
+defined as
+δ = f (x∗{i,j} + x\{i,j} ) + f (x′{i,j} + x\{i,j} )
+− f (x′{i} + x∗{j} + x\{i,j} ) − f (x′{j} + x∗{i} + x\{i,j} )
+
+(11)
+
+∗
+
+based on mixed partial derivatives, where f is a black box model, x represents the sample we
+want to explain and x′ represents a neutral reference sample, which is often zero vectors. If δ > 0,
+then interaction exists, otherwise not. The author claimed 100% accuracy in a synthetic dataset
+and defined the feature interaction strength as the square of hiδhj . Here we show that for any
+model Mm in the model class, the FIS value is equivalent to δ under conditions that the loss is set
+as p
+RMSE. In our setting, for any model Mm , the expected RMSE loss is E[L(MmI (X), y)] =
+E[ (y − MmI (X))2 ]. For simplicity, we consider E[y−MmI (X)] (meaning assuming the model
+approximate the true solutions from either below or above). For I = {i, j} and ∀Mmij ∈ R(ϵ, g, F),
+following the definition, we can derive
+F ISI (MmI ) = (E[Mmi,j (X \{i,j} )] + E[Mmi,j (X)]
+− E[Mmij (X \{i} )] − E[Mmi,j (X \{j} )]),
+
+(12)
+
+which is mathematically equivalent to (11) in view of the decomposition of the interaction into four
+terms.
+
+D
+
+D ERIVATION OF THE UPPER AND LOWER BOUND OF FISC IN MLP
+
+D.0.1
+
+C HARACTERIZING THE M ASK - BASED R ASHOMON SET
+
+We first apply the mask m = {m1 , m2 , ..., , mp } to the reference model as Mm = f ◦ m. To
+characterize the mask-based Rashomon set, the goal is to find the conditions for m such that:
+E[L(Mm (X))] ≤ E[L(f (X))] + ϵ.
+
+(13)
+
+After applying the above settings, we can rewrite Eq. 13 as:
+1
+1
+1
+T
+E[y − αT
++ b] ≤ E[y − αT
++ b] + ϵ.
+T X + b] − ϵ ≤ E[y − α
+T
+T ·β T X
+−β
+−m
+1+e
+1+e
+1 + e−β X
+Without loss of generality, we assume α > 0 and a scaling on ϵ by α. This can be simplified to
+1
+1
+1
+E[
+] ≤ E[
+] + ϵ.
+(14)
+T X ] − ϵ ≤ E[
+T
+T ·β T X
+−β
+−m
+1+e
+1+e
+1 + e−β X
+−mT ·β T X
+
+e
+With further assumption3 that ϵ ≤ min{E[ 1+e−m1T ·βT X ], E[ 1+e
+]}, this inequality is re−mT ·β T X
+duced to
+h  1 − ϵ − ϵe−βT X i
+h  1 + ϵ + ϵe−βT X i
+T
+T
+≤
+E[(β
+X)m
+]
+≤
+E
+ln −βT X
+, (15)
+E ln −βT X
+T
+T
+e
++ ϵ + ϵe−β X
+e
+− ϵ − ϵe−β X
+which gives the condition on m that characterises the mask-based Rashomon set.
+
+D.0.2
+
+C ALCULATING THE EXPECTED FISC LOWER AND UPPER BOUNDS
+
+With the above setting, we calculate the FIS:
+1
+1
+F ISI (Mm ) = E[y − (αT
++ b)] − E[y − (αT
++ b)]−
+−mT ·β T X \i,j
+−mT ·β T X
+1
++
+e
+1+e
+1
+1
+(E[y − (αT
++ b)] − E[y − (αT
++ b)]+
+T
+−mT ·β T X \i
+−m
+1 + e T ·β X
+1+e
+1
+1
+E[y − (αT
++ b)] − E[y − (αT
++ b)]). (16)
+T
+−mT ·β T X \j
+−m
+1 + e T ·β X
+1+e
+3
+
+A smaller ϵ means a smaller Rashomon set with models closer to the reference well-trained model fref .
+
+15
+
+Published as a conference paper at ICLR 2024
+
+Figure 9: Left: 3-D halo plot. Right: 4-D halo plot
+
+To find the minimum and maximum values of FIS, we apply the condition (domain) Eq. 6 and the
+I (Mm )
+critical point (when m = m⋆ such that F IS∂m
+= 0) of the function F ISI (Mm ). We denote
+T
+
+m1 =
+
+ 1 − ϵ − ϵe−β X 
+1
+ln
+,
+T
+T
+e−β X + ϵ + ϵe−β X
+βT X
+
+T
+
+m2 =
+
+ 1 + ϵ + ϵe−β X 
+1
+ln
+. (17)
+T
+T
+e−β X − ϵ − ϵe−β X
+βT X
+
+Now, one can denote
+F ISmin := inf F ISI (Mm ) = min{F ISI (Mm1 ), F ISI (Mm2 ), F ISI (Mm⋆ )},
+m
+
+F ISmax := sup F ISI (Mm ) = max{F ISI (Mm1 ), F ISI (Mm2 ), F ISI (Mm⋆ )}.
+
+(18)
+
+m
+
+The range of FISC is then characterized as [F ISCI (R)min , F ISCI (R)max ] = [F ISmin , F ISmax ].
+I (Mm )
+Remark. The exact critical point m = m⋆ such that F IS∂m
+= 0 is difficult to obtain as it
+requires solutions involving a polynomial of degree seven and exponential/logarithmic functions.
+However, this can be approximately by root-finding algorithms such as Newton’s method. Another
+approximation is to use a first-order Taylor expansion of F ISI (Mm ) at m = 1. The analytical
+expression is still extremely complicated, posing difficulties in finding extreme values of FIS, so we
+obtain this critical point by a root-finding algorithm. We present a generic method in Sec. 3.2.
+
+E
+
+H IGHER ORDER INTERACTION VISUALIZATION DISCUSSION
+
+In our paper, we provide visualizations of pairwise interaction in halo plot and swarm plot, and
+triplewise interaction in halo plot. These two-level interactions are the most studied in the literature
+and higher-order interactions are sometimes considered redundant in terms of attribution (Bien et al.,
+2013; Dong & Rudin, 2020). Theoretically, halo plot and swarm plot can visualize any order of
+interactions and swarm plots can visualize any order of interactions empirically. However, visualizing
+higher-dimensional spaces (>3) can be challenging due to the limitations of human perception, which
+makes directly visualizing higher-order interactions using halo plots not feasible.
+We acknowledge this limitation and offer suggestions for users who insist visualizing higher-order
+interactions (>3) using halo plots. To visualize higher-order interactions (>3) in halo plots, we can
+apply some commonly used higher-order visualization methods, e.g., encoding color information as
+4th dimension and applying dimensionality reduction. To demonstrate this, we provided an example
+of visualizing 4-way interactions. The experiment is based on the recidivism prediction in Sec. 4. On
+the existence of 3-way interaction visualization, we encoded color as 4th feature, where lighter colors
+indicate the larger interactions, as shown in Fig. 9.
+16
+
+Published as a conference paper at ICLR 2024
+
+Figure 10: Exploring feature interaction of function f = xi + xj + xi ∗ xj in the Rashomon set.
+From inner to outer, the radii are 0.1, 0.2, 0.3, 0.4, and 0.5, respectively.
+
+F
+
+I LLUSTRATION OF H A L O PLOT WITH A CONCRETE EXAMPLE
+
+Following the setting in the main text that function is f = xi + xj + xi ∗ xj and ϵ = 0.1. We
+choose a scenario when the main effect of feature xi is ϕi = 0.01 and the main effect of feature xj
+is ϕj = 0.09. Given ϕi = 0.01, we can derive the following with Mean Squared Error (MSE) loss
+function
+ϕi = L(f ◦ mi (X) − L(f (X))
+= (y − (mi xi + xj + mi xi ∗ xj ))2 − (y − (xi + xj + xi ∗ xj ))2
+= 0.01.
+
+(19)
+
+Similarly,
+ϕj = L(f ◦ mj (X) − L(f (X))
+= (y − (xi + mj xj + xi ∗ mj xj ))2 − (y − (xi + xj + xi ∗ xj ))2
+= 0.09.
+2
+
+(20)
+2
+
+Considering variables sampling from the normal distribution xi ∼ N (µ, σ ) ; xj ∼ N (µ, σ ) and
+y is ground truth from the function. We can determine two possible values for mi , namely 0.95
+and 1.05, as well as two possible values for mj , namely 0.85 and 1.15. From these options, we
+can identify four potential sets that guarantee the sum of main effects to be ϵ = 0.1: (mi , mj ) =
+(0.95, 0.85), (0.95, 1.15), (1.05, 0.85), (1.05, 1.15). Next, we proceed to compute ϕi,j = (y −
+(mi xi + mj xj + mi xi ∗ mj xj ))2 − (y − (xi + xj + xi ∗ xj ))2 using the aforementioned sets. These
+calculations allow us to generate four values of ϵ̃, which can be plotted along a circle with a radius of
+ϵ. Following the above procedure, we collected 9 ordered pairs {(ϕi ∗ x, ϕj ∗ y) | (x, y) ∈ R, 0.1 ≤
+x, y ≤ 0.9, x + y = 1} and plotted 36 points, shown in Fig. 10.
+
+G
+
+O PTIMIZING THE REGRESSOR FROM VIC
+
+We downloaded the public code from https://zenodo.org/record/4065582#
+.ZGIHVHZBzHI and extracted model parameters from the logistic model in VIC. We realized
+that the model can be optimized further and showed the comparison between two models in loss vs
+individual masks of each feature in Fig. 11.
+
+H
+
+C OMPLETE RESULTS FROM THREE SAMPLING METHODS
+
+Due to the page limitation, here we provided the complete results from three sampling methods:
+sampling from adversarial weight perturbations (AWP), sampling with different weight initialization
+seeds and greedy search approach, summarized in Table 6. To provide a more comprehensive
+understanding of FISC, swarm plots are displayed below. In these plots, each data point represents
+17
+
+Published as a conference paper at ICLR 2024
+
+Figure 11: Left: greedy search algorithm applied in a logistic classifier extracted from VIC Dong
+& Rudin (2020). Right: greedy algorithm applied in another optimal logistic classifier. The x-axis
+refers to individual masks while the y-axis represents the loss change from the base model.
+Table 6: Comparison of FISC calculated from different sampling methods (complete). We use vs to
+denote the interaction pairs and best results are highlighted in bold.
+
+Interaction pairs
+
+AWP sampling
+F ISmin F ISmax
+
+Greedy sampling
+F ISmin F ISmax
+
+Random sampling
+F ISmin
+F ISmax
+
+age vs race
+age vs prior
+age vs gender
+age vs juvenilecrime
+age vs currentcharge
+race vs prior
+race vs gender
+race vs juvenilecrime
+race vs currentcharge
+prior vs gender
+prior vs juvenilecrime
+prior vs currentcharge
+gender vs juvenilecrime
+gender vs currentcharge
+juvenilecrime vs currentcharge
+
+-0.00026
+-0.00017
+-0.00011
+-0.00019
+-0.0003
+-0.00029
+-0.0002
+-0.00019
+-0.00034
+-0.00018
+-0.00019
+-0.00029
+-0.00012
+-0.00035
+-0.00022
+
+-0.00089
+-0.00122
+-0.00178
+-0.00167
+-0.00257
+-0.00151
+-0.00224
+-0.00851
+-0.00719
+-0.0006
+-0.0068
+-0.00423
+-0.00828
+-0.01362
+-0.00917
+
+-8.04E-06
+-1.02E-05
+-1.99E-05
+-1.31E-05
+-1.24E-05
+-1.23E-05
+-9.43E-06
+-2.13E-05
+-1.87E-05
+-1.58E-05
+-2.06E-05
+-2.23E-05
+-1.24E-05
+-2.01E-05
+-2.14E-05
+
+0.000113
+0.00014
+0.000135
+0.000139
+0.000351
+0.000225
+0.000158
+0.000189
+0.00027
+0.000191
+0.00022
+0.00022
+0.000148
+0.000211
+0.000498
+
+0.002069
+0.001975
+0.001341
+0.002496
+0.00268
+0.006728
+0.000606
+0.001587
+0.002191
+0.002526
+0.002592
+0.002219
+0.000754
+0.003708
+0.000693
+
+6.32E-06
+1.19E-05
+1.68E-05
+8.15E-06
+1.61E-05
+1.81E-05
+1.34E-05
+1.13E-05
+1.43E-05
+2.50E-05
+1.91E-05
+2.16E-05
+1.04E-05
+1.61E-05
+2.28E-05
+
+a FIS derived from the sampled models, without absolute value transformation, as this comparison
+more directly illustrates the distribution of FISC across different sampling methods.
+
+I
+
+A N APPLICATION IN REAL - WORLD DATASET
+
+To illustrate the usage of FISC, we applied our method to MXenes, an early transition metal carbides
+with two-dimensional (2D) structures exhibiting metallic conductivity and hydrophilicity. These
+materials are denoted by Mn+1 Xn Tx , with M representing an early transition metal such as Sc or Ti,
+X signifying either Carbon (C) or Nitrogen (N) and functional groups T (e.g., O, F, OH) for surface
+termination Gogotsi & Anasori (2019); Gogotsi & Huang (2021). By intercalating different ions and
+molecules like Li+ and K+ , MXenes’ electrochemical attributes such as voltage, induced charge and
+capacity can be modulated, serving as a potential battery material.
+We used a dataset that contains 360 compounds intercalated with Li+ , Na+ , K+ , and Mg2+ ions from
+Eames & Islam (2014); Li & Barnard (2022b). We represented the dataset by their categories, for
+instance, category Z encoded by 0–3 to describe Li, Na, K, and Mg, respectively, aiming to discover
+the interactions between structures. The dataset is split 90/10 for training/testing. We trained 3 MLPs
+for predicting their 3 properties: voltage, induced charge and capacity, individually. The R2 for each
+reference model on testing set is reported in Figs. 15, 16, 17. We searched the Rashomon set based
+18
+
+Published as a conference paper at ICLR 2024
+
+Figure 12: FISC from our greedy sampling method
+
+Figure 13: FISC from AWP sampling method
+
+19
+
+Published as a conference paper at ICLR 2024
+
+Figure 14: FISC from random sampling method
+on the well-trained reference models with ϵ = 0.05 and corresponding swarm plots are provided in
+Figs. 15, 16, 17.
+The results reveal a noteworthy observation: FIS exhibits a broad range when category Z is involved
+in interactions during the prediction of induced charge. This aligns with our common knowledge,
+given that ions, which form the category Z, are the cause of induced charge. These insightful results
+offer a more comprehensive understanding of feature interactions within the Rashomon set and
+potentially guide researchers in making informed decisions for future research.
+
+20
+
+Published as a conference paper at ICLR 2024
+
+Figure 15: FISC from charge prediction. The R2 of the reference model (depicted by the yellow star)
+achieves 0.98 on the testing set.
+
+Figure 16: FISC from voltage prediction. The R2 of the reference model (depicted by the yellow
+star) achieves 0.71 on the testing set.
+
+21
+
+Published as a conference paper at ICLR 2024
+
+Figure 17: FISC from capacity prediction. The R2 of the reference model (depicted by the yellow
+star) achieves 0.90 on the testing set.
+
+22
+
+

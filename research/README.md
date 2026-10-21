@@ -47,6 +47,13 @@ Area: which areas/ page the tag's findings go to (blank on a sub-tag: its parent
 | `web/template` | | HTML generation, templating languages, components |
 | `web/wasm` | | wasm, JS interop, client-side rendering |
 | `ops/io` | | disk IO on the box: schedulers, ionice, cgroup io controls, block volume limits |
+| `method/tabular` | | modern tabular learners: tabular foundation models, TabM, RealMLP, GBDT, factorisation machines |
+| `method/ensemble` | | ensembles and stacking: seeds, bagging, snapshot, hyper-ensembles, ensemble selection, stacked generalisation |
+| `method/interpret` | | explaining a model: GA2M/EBM, neural additive models, functional ANOVA, interaction detection, Shapley interactions |
+| `method/pretrain` | | self-supervised and transferred representations: masked picks, contrastive, LLM and text-derived entity embeddings |
+| `method/causal` | | selection and confounding in observational game data: pick selection, counter-pick response, double ML, natural experiments |
+| `method/dynamics` | | non-stationary strengths: patches, metas, Kalman and random-walk ratings, change points |
+| `method/ceiling` | | how predictable an outcome can be: irreducible error, noise ceilings, matchmaking's effect on predictability |
 
 ## Areas
 

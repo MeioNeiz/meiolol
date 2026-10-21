@@ -1,0 +1,1482 @@
+Error-controlled non-additive interaction discovery in machine
+learning models
+Winston Chen1† , Yifan Jiang2† , William Stafford Noble3 , Yang Young Lu2*
+1 Computer Science and Engineering Division, University of Michigan, Ann Arbor,
+
+Michigan, USA.
+
+arXiv:2408.17016v2 [cs.LG] 13 Feb 2025
+
+2 Cheriton School of Computer Science, University of Waterloo, Waterloo, Ontario,
+
+Canada.
+3 Department of Genome Sciences and Paul G. Allen School of Computer Science and
+
+Engineering, University of Washington, Seattle, Washington, USA.
+
+*Corresponding author(s). E-mail(s): yanglu@uwaterloo.ca;
+Contributing authors: chenwt@umich.edu; yifan.jiang@uwaterloo.ca;
+william-noble@uw.edu;
+† These authors contributed equally to this work.
+Abstract
+Machine learning (ML) models are powerful tools for detecting complex patterns within data, yet their
+“black box” nature limits their interpretability, hindering their use in critical domains like healthcare
+and finance. To address this challenge, interpretable ML methods have been developed to explain
+how features influence model predictions. However, these methods often focus on univariate feature
+importance, overlooking the complex interactions between features that ML models are capable of
+capturing. Recognizing this limitation, recent efforts have aimed to extend these methods to discover
+feature interactions, but existing approaches struggle with robustness and error control, especially
+under data perturbations.
+In this study, we introduce Diamond, a novel method for trustworthy feature interaction discovery.
+Diamond uniquely integrates the model-X knockoffs framework to control the false discovery rate
+(FDR), ensuring that the proportion of falsely discovered interactions remains low. A key innovation
+in Diamond is its non-additivity distillation procedure, which refines existing interaction importance
+measures to distill non-additive interaction effects, ensuring that FDR control is maintained. This
+approach addresses the limitations of off-the-shelf interaction measures, which, when used naively, can
+lead to inaccurate discoveries. Diamond’s applicability spans a wide range of ML models, including
+deep neural networks, transformer models, tree-based models, and factorization-based models. Our
+empirical evaluations on both simulated and real datasets across various biomedical studies demonstrate Diamond’s utility in enabling more reliable data-driven scientific discoveries. This method
+represents a significant step forward in the deployment of ML models for scientific innovation and
+hypothesis generation.
+Keywords: Explainable AI, Interpretable AI, Interaction Detection, False Discovery Rate, Knockoffs
+
+1 Introduction
+Machine learning (ML) has emerged as a critical tool in many application domains, largely due to
+its ability to detect subtle relationships and patterns within complex data (Obermeyer and Emanuel,
+
+1
+
+2016). While the complexity of ML models contributes to their power, it also makes them challenging
+to interpret, leaving users with few clues about the mechanisms underlying a given model’s outputs.
+Consequently, this “black box” nature of ML models, particularly deep neural networks, has hindered
+their applicability in error-intolerant domains like healthcare and finance. Stakeholders such as clinicians
+need to understand why and how the models make predictions before making important decisions, such as
+disease diagnosis (Lipton, 2018). Importantly, without providing insight into their internal mechanisms,
+ML models cannot be effectively used for making data-driven scientific discoveries, which are crucial for
+gaining human-understandable insights and driving successful innovation (Agrawal et al, 2024).
+To enhance the interpretability of ML models for better data-driven scientific discoveries, interpretable
+ML methods have been developed to elucidate the internal mechanisms of these models (Samek et al,
+2021). These methods help to elucidate how individual features influence prediction outcomes by assigning
+an importance score to each feature so that higher scores indicate greater relevance to the prediction
+(Simonyan et al, 2013; Shrikumar et al, 2017; Lundberg and Lee, 2017; Sundararajan et al, 2017; Lu
+et al, 2021a). However, these univariate interpretations overlook a primary advantage of ML models: their
+ability to model complex interactions between features in a data-driven way. In fact, input features usually
+do not work individually within an ML model but cooperate with other features to make inferences jointly
+(Tsang et al, 2018a). For example, it is well established in biology that genes do not operate in isolation
+but work together in co-regulated pathways with additive, cooperative, or competitive interactions (Lu
+and Noble, 2021). Additionally, gene-gene, gene-disease, gene-drug, and gene-environment interactions
+are critical in explaining genetic mechanisms, diseases, and drug effects (Watson, 2022).
+Recognizing the limitations of univariate interpretations, efforts have been made to extend interpretable ML methods to discover interactions among features. These methods attribute the prediction
+influence to feature pairs and then rank candidate feature pairs from a trained ML model, with highly
+ranked pairs indicating higher importance (Tsang et al, 2018a,b; Cui et al, 2019; Lundberg et al, 2020;
+Janizek et al, 2021; Sundararajan et al, 2020; Chang et al, 2022; Lerman et al, 2021; Zhang et al, 2021).
+However, it is important to note that these approaches characterize feature pairs where both features
+are individually important for a model’s prediction, rather than capturing the synergistic or interaction
+effects between the two features (Tsang et al, 2021) (see the detailed explanation in Sec.4.2). Furthermore, the induced ranked list of feature pairs must be cut off at a certain confidence level for use in
+scientific discovery and hypothesis validation (Tsang et al, 2018a). However, selecting this threshold is
+typically under user control and must be set arbitrarily. Worse still, existing methods are sensitive to
+perturbations, in the sense that even imperceivable perturbations of the input data may lead to dramatic
+changes in the importance ranking (Ghorbani et al, 2019; Kindermans et al, 2019; Lu et al, 2021b).
+From a practitioner’s perspective, a given set of discovered feature interactions is scientifically valuable
+only if a systematic strategy exists to prioritize and select relevant interactions in a robust and errorcontrolled manner, even in the presence of noise. Although many methods have been developed for
+feature interaction discovery, we are not aware of any previous attempts to conduct discovery while
+explicitly estimating and controlling the discovery error. Without this, accurate and reliable findings
+cannot be achieved. In this study, we introduce an error-controlled interaction discovery method named
+Diamond (Discovering interactions in machine learning models with a controlled error rate). Here, the
+error is quantified by the false discovery rate (FDR) (Benjamini and Hochberg, 1995), which informally
+represents the expected proportion of falsely discovered interactions among all discovered interactions.
+A false discovery is a feature interaction that is discovered but not truly relevant.
+Three components of Diamond are novel (Fig. 1). First, Diamond achieves FDR control by leveraging
+the model-X knockoffs framework (Barber and Candès, 2015; Candès et al, 2018). The core idea of
+this framework is to generate dummy features that perfectly mimic the empirical dependence structure
+among the original features while being conditionally independent of the response given the original
+features. Second, we discover that naively using off-the-shelf feature interaction importance measures
+cannot correctly control the FDR.
+To address this issue, we distill non-additive interaction effects from the interaction importance
+measures reported by existing methods, ensuring FDR control at the target level. Third, Diamond is
+applicable to a wide range of ML models, including deep neural networks (DNNs), Kolmogorov-Arnold
+networks (KANs) (Liu et al, 2024), transformer models (Gorishniy et al, 2021), tree-based models, and
+factorization-based models.
+
+2
+
+We have applied Diamond to various simulated and real datasets to demonstrate its empirical utility.
+Practically speaking, Diamond paves the way for the wider deployment of machine learning models in
+scientific discovery and hypothesis generation.
+
+3
+
+Fig. 1: Overview of Diamond. (a) Diamond achieves false discovery rate (FDR) control by leveraging
+knockoffs – dummy features that perfectly mimic the empirical dependence structure among the original
+features but are conditionally independent of the response given the original features. (b) Diamond
+trains generic ML models using both the original features and their knockoff counterparts as inputs.
+Diamond quantifies feature interactions from trained ML models and produces a ranked list of these
+interactions with estimated FDR, allowing users to confidently determine a cutoff threshold based on
+their desired confidence level. (c) Existing feature importance measures are unable to directly capture
+non-additive interactions. Geometrically, the marginal or interaction importance reported by current
+interpretation methods correspond to the projection of the total contribution to the prediction onto a
+one-dimensional feature axis or a two-dimensional feature-feature plane. Non-additive effects, however,
+represent the difference between the interaction effects and the marginal effects. These non-additive
+effects can manifest as either synergistic or repressive interactions. (d) Diamond distills non-additive
+effects from the interaction importance measures reported by existing methods, thereby maintaining
+FDR control at the target level. The distillation procedure is designed to remove both label-dependent
+marginal effects and label-independent feature biases from the reported feature interactions, leaving only
+the label-dependent non-additive interaction effects.
+4
+
+2 Results
+2.1 Diamond overview
+Consider a prediction task where we have n independent and identically distributed (i.i.d.) samples
+n
+n
+X = {xi }i=1 ∈ Rn×p and Y = {yi }i=1 ∈ Rn×1 , denoting the data matrix with p-dimensional features
+and the corresponding response, respectively. The response of the prediction task can be categorical
+labels such as disease status or numerical measurements such as body mass index, and the features could
+include gene expression data, microbial taxa abundance profiles, and more. The prediction task can be
+described using an ML model f : Rp 7→ R that maps from the input x ∈ Rp to the response y ∈ R.
+When modeling the task, the function f learns the dependence structure of Y on X, enabling effective
+prediction with the fitted ML model.
+In this study, we focus on interpreting the fitted ML model for data-driven scientific discovery by
+identifying the non-additive feature interactions that contribute most to the model’s predictions. We say
+that I ⊂ {1, · · · , p} is a non-additive interaction of function f if and only if f cannot be decomposed into
+an addition of |I| subfunctions fi , each of which
+excludes a corresponding
+interaction feature (Sorokina
+
+P
+et al, 2008; Tsang et al, 2018a), i.e., f (x) ̸= i∈I fi x{1,··· ,p}\i . For example, the multiplication between
+two features xi and xj is a non-additive interaction because it cannot be decomposed into a sum of
+univariate functions, i.e., f (xi , xj ) = xi xj ̸= fi (xj ) + fj (xi ). On the other hand, log(xi xj ) is considered
+to be an additive interaction because it can be decomposed in the logarithmic space, i.e., f (xi , xj ) =
+log(xi xj ) = log(xj ) + log(xi ). Assume that there exists a group of interactions S = {I1 , I2 , · · · } such
+that, conditional on interactions S, the response Y is independent of interactions in the complement
+S c = {1, · · · , p} × {1, · · · , p}\S. In this setting, our goal is to accurately discover feature interactions in
+S without erroneously reporting too many incorrect interactions in S c .
+Diamond is designed to discover feature interactions from fitted ML models while maintaining a
+controlled FDR (Benjamini and Hochberg, 1995). For a set of feature interactions Sb ⊂ {1, · · · , p} ×
+{1, · · · , p} discovered by some interaction detection method, the FDR is defined as:
+FDR = E[FDP] with FDP =
+
+|Sb ∩ S c |
+.
+|b
+S|
+
+Commonly used procedures, such as the Benjamini–Hochberg procedure (Benjamini and Hochberg, 1995),
+achieve FDR control by working with p-values computed against some null hypothesis. In the interaction
+discovery setting, for each feature interaction, one tests the significance of the statistical association
+between the specific interaction and the response, either jointly or marginally, and obtains a p-value under
+the null hypothesis that the interaction is irrelevant. These p-values are then used to rank the features
+for FDR control. However, controlling FDR in generic machine learning models, especially deep learning
+models, is challenging because, to our knowledge, the field lacks a method for producing meaningful pvalues that reflect interaction importance. To bypass the use of p-values but still achieve FDR control, we
+draw inspiration from the model-X knockoffs framework (Barber and Candès, 2015; Candès et al, 2018).
+The core idea of knockoffs is to generate dummy features that perfectly mimic the empirical dependence
+structure among the original features but are conditionally independent of the response given the original
+features. These knockoff features can then be used as a control by comparing the feature importance
+between the original features and their knockoff counterparts to estimate FDR (Fig. 1a).
+Diamond trains a generic ML model that takes as input an augmented data matrix (X, X̃) ∈ Rn×2p ,
+created by concatenating the data matrix X ∈ Rn×p with its knockoffs X̃ ∈ Rn×p along the feature axis.
+After training, Diamond quantifies feature interactions by interpreting the trained model and produces a
+ranked list of these interactions (Fig. 1b). However, existing feature importance measures cannot directly
+capture non-additive interactions. Geometrically, the marginal or interaction importance reported by
+current interpretation methods correspond to the projection of the total contribution to the prediction
+onto a one-dimensional feature axis or a two-dimensional feature-feature plane. Non-additive effects,
+however, represent the difference between the interaction effects and the marginal effects (Fig. 1c). Hence,
+Diamond distills non-additive interaction effects from the reported interaction importance measures
+from existing methods, thereby maintaining FDR control at the target level. The distillation process is
+designed to remove both label-dependent marginal effects and label-independent feature biases from the
+reported feature interactions, leaving only the label-dependent non-additive interaction effects (Fig. 1d).
+5
+
+2.2 Diamond discovers FDR-controlled interactions on simulated datasets
+
+Fig. 2: Evaluating Diamond for FDR control on simulated datasets. (a) The evaluation is
+based on a test suite of 10 data-generating simulation functions proposed by Tsang et al (2018a). (b)
+The reported interaction importance from existing methods in simulation function F1 reveals a clear
+distribution disparity between original-only interactions and those involving knockoffs. The distilled
+non-additive interactions help mitigate distributional disparities. (c) Baseline methods fail to correctly
+control the FDR, thereby rendering the reported high power and AUROC invalid. (d) Diamond identifies
+important non-additive interactions with controlled FDR, compatible with various ML models. The nonadditivity distillation procedure is critical; without it, the FDR cannot be controlled. Even in scenarios of
+model misspecification, such as using convolutional neural networks for tabular data, Diamond maintains
+FDR control, albeit with a loss of power.
+
+We started by evaluating the performance of Diamond on simulated datasets, assessing its ability to
+identify important non-additive interactions while controlling the FDR. We benchmarked Diamond on a
+
+6
+
+test suite of 10 simulated datasets generated by different simulation functions proposed by Tsang et al
+(2018a). These datasets contain a mixture of univariate functions and multivariate interactions, exhibiting
+varied order, strength, and nonlinearity (Fig. 2a). Since our goal is to detect pairwise interactions,
+high-order interaction functions (e.g., F (x1 , x2 , x3 ) = x1 x2 x3 ) are decomposed into pairwise interactions
+(e.g., (x1 , x2 ), (x1 , x3 ), and (x2 , x3 )) to serve as the ground truth.
+Following the settings used in Tsang et al (2018a), we employed a sample size of n = 20, 000, equally
+divided into training and test sets. In addition, the number of features is set at p = 30, and all features
+are sampled randomly from a continuous uniform distribution, U (0, 1). Only the first 10 out of 30 features
+contribute to the corresponding response, while the remaining features serve as noise to increase the task’s
+complexity. For robustness, we repeated the experiment 20 times for each simulated dataset using different
+random seeds. Each repetition involved data generation, knockoff generation using KnockoffsDiagnostics
+(Blain et al, 2024), ML model training, and interaction-wise FDR estimation. For all simulation settings,
+we reported the mean performance with 95% confidence intervals, fixing the target FDR level at q = 0.2.
+Our analysis shows that Diamond consistently identifies important non-additive interactions with
+controlled FDR across all ML models (Fig. 2d). Under controlled FDR, the multi-layer perceptron
+(MLP) and Feature Tokenizer Transformer (FT-Transformer) models (Gorishniy et al, 2021) demonstrate
+better performance in identifying important interactions than other ML models, as measured by the
+statistical power and the area under the receiver operating characteristic curve (AUROC). This superior
+performance is attributed to the inclusion of a knockoff-tailored plugin pairwise-coupling layer design
+(Lu et al, 2018), which has been shown to maximize statistical power (See details in Sec. A.1). It is
+important to note that certain ML models, such as convolutional neural networks, are not well-suited
+for modeling tabular data due to their design for capturing local patterns in images or text. Even in the
+presence of model misspecification, Diamond maintains FDR control, albeit with a loss of power. This
+highlights Diamond’s robustness and its broad applicability across various ML models.
+We discovered that the proposed non-additivity distillation (Sec 4.2) is critical; without it, the FDR
+cannot be controlled by naively using reported interaction importance values from existing methods (Fig.
+2d and Fig. A.2). To gain insight into the FDR control failure in the absence of non-additivity distillation,
+we conducted a qualitative comparison assessing interaction importance before and after distillation using
+the simulation function F1 (Fig. 2b and Fig. A.3). The primary cause of the FDR control failure appears
+to lie in the distributional disparity between original-only interactions (i.e., interactions involving two
+features from the original feature set rather than knockoffs) and interactions involving knockoffs. This
+observation suggests a violation of the knockoff filter’s assumption in controlling the FDR (See discussion
+in Sec 4.2). The proposed non-additivity distillation procedure mitigates the disparity by extracting nonadditive interaction effects from the reported interaction importance measures, thereby enhancing the
+utility of knockoff-involving interactions as a negative control for FDR estimation.
+Finally, we verified whether alternative baseline methods can accurately identify important nonadditive interactions with controlled FDR (Fig. 2c). We compared three baseline methods for FDR
+estimation: two relying on permutation-based interaction-wise p-values, combined with the BenjaminiHochberg and the Benjamini-Yekutieli procedures respectively, and one that represents interaction-wise
+FDR as an aggregation of feature-wise FDR (See details in Sec. 4.7). Our analysis reveals that none of
+these baseline methods effectively control the FDR. This greatly reduces the utility of these methods,
+despite their reported high power and AUROC.
+
+7
+
+2.3 Diamond is robust to various knockoffs and importance measures
+MLP +
+KnockoffGAN
+
+MLP +
+Deep knockoffs
+
+MLP +
+VAE knockoffs
+
+F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
+
+F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
+
+F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
+
+F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
+
+b
+
+MLP +
+Permuted features
+
+DIAMOND w/ different knockoffs
+
+MLP +
+Expected Hessian
+
+MLP +
+Integrated Hessian
+
+MLP +
+Model-specific measure
+
+F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
+
+F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
+
+F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
+
+AUROC
+w/ calibration
+
+c
+
+Power
+w/ calibration
+
+Power
+w/ calibration
+
+FDR
+w/ calibration
+
+FDR
+w/ calibration
+
+FDR
+w/ calibration
+
+Power
+w/ calibration
+
+AUROC
+w/ calibration
+
+MLP +
+KnockoffsDiagnostics
+
+AUROC
+w/ calibration
+
+a
+
+F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
+
+DIAMOND w/ invalid knockoffs
+
+DIAMOND w/ different importance measures
+
+Fig. 3: Evaluating Diamond for robustness on simulated datasets. (a) Diamond demonstrates
+robustness across knockoffs generated by various methods, including KnockoffsDiagnostics, KnockoffGAN, Deep knockoffs, and VAE knockoffs. (b) Diamond maintains FDR control when paired with
+invalid knockoffs, generated by independently permuting each feature across samples, albeit at the cost
+of reduced power. (c) Diamond demonstrates robustness across methodologically different interaction
+importance measures: Expected Hessian, Integrated Hessian, and model-specific measures.
+
+The design of Diamond incorporates several key components, including knockoff generation and interaction importance measures. To demonstrate the robustness of Diamond in FDR control, we conducted
+a control study where we modified Diamond by replacing these two components with alternative solutions. Specifically, we considered two variants of Diamond using the MLP model. In the first setting, we
+replaced KnockoffsDiagnostics with three alternatives: KnockoffGAN (Jordon et al, 2018), Deep knockoffs (Romano et al, 2020) or VAE knockoffs (Liu and Zheng, 2018), while keeping the MLP model and
+the interaction importance measure (i.e., Expected Hessian (Erion et al, 2021)) unchanged. In the second setting, we replaced the interaction importance measure, Expected Hessian, with two alternatives:
+Integrated Hessian (Janizek et al, 2021) and a model-specific interaction importance measure derived
+from the MLP weights (See details in Sec. A.2), while keeping the MLP model and the knockoff generation unchanged. For each variant, we applied Diamond to the test suite of 10 simulated datasets using
+the same settings.
+The results indicate that Diamond is robust to various knockoff designs and importance measures.
+In the first study, our analysis shows that Diamond consistently discovers important non-additive interactions with controlled FDR across various knockoff designs (Fig. 3a). Despite the methodological
+differences in knockoff generation between KnockoffsDiagnostics, KnockoffGAN, Deep knockoffs, and
+VAE knockoffs, Diamond achieves comparable statistical power and AUROC in each case. This result
+demonstrates the Diamond’s stability in identifying important interactions in knockoff-based FDR estimation. Furthermore, it is worth noteworthy that Diamond is robust even when the knockoffs are poorly
+generated. Specifically, we generated invalid knockoffs by independently permuting each feature across
+samples, thereby violating the definition of knockoffs outlined in Sec. 4.1. Our analysis demonstrates that
+even in this extreme scenario, Diamond maintains FDR control, albeit with reduced power (Fig. 3b).
+In the second study, our analysis shows that Diamond robustly identifies FDR-controlled non-additive
+interactions across a range of interaction importance measures (Fig. 3c). Despite the methodological differences between Expected Hessian, Integrated Hessian, and model-specific measures, which
+involve mechanistic disparities in elucidating the relationships between features and responses, Diamond
+achieves valid FDR control while maintaining reasonably good statistical power and AUROC. This result
+demonstrates Diamond’s flexibility in identifying interactions based on various importance measures.
+Finally, it is worth mentioning that regardless of the knockoff generation and interaction importance
+measures we used, there is room for improvement in achieving better statistical power while maintaining
+
+8
+
+controlled FDR. Diamond tends to be conservative by overestimating the FDR, suggesting that an
+improved FDR control procedure could potentially boost statistical power.
+
+2.4 Diamond identifies interactions to explain disease progression
+
+Fig. 4: Evaluating Diamond on a real diabetes dataset. (a) Each feature contributes differently
+to predicting disease progression, as measured by the Expected Gradient scores in the MLP model. (b)
+Diamond is compared against three baseline methods. The blue stars indicate interactions supported
+by literature evidence, referenced by the accompanying PubMed identifiers. (c) Diamond is used with
+various ML models to identify important non-additive interactions. Each possible interaction is measured
+by the minimum FDR threshold cutoff at which it is selected, with the top interaction annotated.
+It is worth mentioning that two marginally important features do not necessarily result in important
+interactions, as anticipated in Diamond’s design. (d) The top interaction, between body mass index and
+serum triglycerides level, is qualitatively evaluated from three aspects: the marginal importance measure,
+the interaction importance measure, and the contribution of the marginal importance measures to the
+interaction importance measure.
+
+We then evaluated the performance of Diamond on a real dataset (Efron et al, 2004), assessing its ability
+to identify important interactions in the progression of disease. We used a quantitative study with n = 442
+diabetes patients, each characterized by 10 standardized baseline features, including age, sex, body mass
+index, average blood pressure, and six blood serum measurements (Fig. 4a). The task is to construct
+an ML model to predict the response of interest, which is a quantitative measure of disease progression
+9
+
+one year after the baseline. We considered different types of ML models: MLP, FT-Transformer, KAN,
+LightGBM, XGBoost, and factorization machines (FM). We assessed the trained ML model using 5-fold
+cross-validation and selected the one with the best performance for model interpretation and interaction
+discovery. For robustness, we repeated each experiment 20 times using different random seeds. Each
+repetition involved knockoff generation, ML model training, and interaction-wise FDR estimation.
+Our analysis shows that Diamond identifies the important interaction between body mass index
+(BMI) and serum triglycerides level (STL) across three different ML models (Fig. 4c). We investigated
+the identified interaction via literature search and found that high BMI and high STL are associated with
+an increased risk of diabetes, as reported by multiple studies (Garbuzova et al, 2023; Zhao et al, 2020;
+Huang et al, 2021). The literature evidence is further supported by the qualitative evaluation (Fig. 4d).
+Specifically, we examined the identified interactions from three perspectives: the marginal importance
+measure, the interaction importance measure, and the contribution of the marginal importance measures
+to the interaction importance measure. This analysis showed that high BMI and high STL contribute to
+more severe progression of diabetes. Meanwhile, higher STL further reinforces the contribution of BMI
+to the progression of diabetes synergistically.
+Unlike other ML models, the FT-Transformer identifies two distinct interactions: the interaction
+between blood pressure and high-density lipoproteins, and the interaction between age and sex. We
+investigated the identified interactions through a literature search and found that high-density lipoprotein
+levels are positively associated with hypertension in individuals with elevated levels of circulating CD34positive cells (Shimizu et al, 2017). We also found that the prevalence of diabetes varies by sex, with
+men typically being diagnosed at a younger age and lower BMI, while young women with diabetes are
+currently less likely than men to receive treatment (Kautzky-Willer et al, 2023).
+Finally, we find that Diamond does not necessarily report a lower FDR for interactions composed
+of two marginally important features. All 10 baseline features from diabetes patients are effective in
+predicting disease progression, as measured by the Expected Gradient scores in the MLP model (Fig. 4a).
+Among these features, in addition to BMI and STL, blood pressure, blood sugar level, and high-density
+lipoproteins are more predictive than others. It is important to note that Diamond still associates most
+interactions composed of these highly predictive features with a high FDR threshold.
+
+10
+
+2.5 Diamond investigates enhancer activity in Drosophila embryos
+
+Fig. 5: Evaluating Diamond on a real Drosophila enhancer dataset. (a) Each feature contributes
+differently to predicting enhancer status, as measured by the Expected Gradient scores in the MLP
+model. (b) Diamond is compared against three baseline methods. The annotated transcription factors
+are labeled by their UniProt identifiers. The red stars indicate well-characterized physical interactions in
+early Drosophila embryos as ground truth. The blue stars indicate interactions supported by literature
+evidence, referenced by the accompanying PubMed identifiers. (c) Diamond is used with various ML
+models to identify important non-additive interactions. Each possible interaction is measured by the
+minimum FDR threshold cutoff at which it is selected, with the top five interaction annotated. The top
+interactions reported by the MLP model are qualitatively evaluated from three aspects: the contribution
+of feature values to the (d) marginal and (e) interaction importance measure, and (f ) the contribution
+of the marginal importance measures to the interaction importance measure.
+
+11
+
+We then evaluated the performance of Diamond on a Drosophila enhancer dataset (Basu et al, 2018)
+to investigate the relationship between enhancer activity and DNA occupancy for transcription factor
+(TF) binding and histone modifications in Drosophila embryos. We used a quantitative study of DNA
+occupancy for 23 TFs and 13 histone modifications with the enhancer status labeled for 7, 809 genomic
+sequence samples from blastoderm Drosophila embryos (Fig. 4a). The enhancer status for each sequence is
+binarized as the response, depending on whether the sequence drives patterned expression in blastoderm
+embryos. To predict the enhancer status, the maximum value of normalized fold-enrichment (Li et al,
+2008) of ChIP-seq and ChIP-chip assays for each TF or histone modification served as our features.
+We considered different types of ML models: MLP, FT-Transformer, KAN, LightGBM, XGBoost, and
+FM. We assessed the trained ML model using 5-fold cross-validation and selected the one with the
+best performance for model interpretation and interaction discovery. For robustness, we repeated the
+experiment 20 times using different random seeds. Each repetition involved knockoff generation, ML
+model training, and interaction-wise FDR estimation.
+We started by comparing the identified interactions against a list of well-characterized physical interactions in the early Drosophila embryos, collected by Basu et al (2018). These interactions have been
+identified over decades and have been confirmed to play a critical role in regulating spatial and temporal patterning (Rivera-Pomar and Jackle, 1996). If Diamond is successful in identifying important
+interactions while controlling the FDR, then the identified interactions should considerably overlap with
+these previously reported physical interactions. Meanwhile, it is important to acknowledge that this list
+of interactions, proposed years ago, represents only a partial set of the true interactions. Therefore, a
+detected interaction not appearing in the list does not necessarily indicate it is incorrect. Our results
+show that three of the top five interactions reported by Diamond are included in the ground truth list for
+MLP and tree-based models, four out of five for FM, and all five for the FT-Transformer (Fig. 5c). The
+only exception is KAN, which reported all but one interactions at the same FDR levels. In comparison,
+the baseline methods exhibit significantly different behaviors (Fig. 5b). Two baseline methods, which are
+based on permutation-based interaction-wise p-values combined with the Benjamini-Hochberg and the
+Benjamini-Yekutieli procedures respectively, reported no ground truth interactions among its top five
+identifications. Another method, which aggregates feature-wise FDR, reported ground truth interactions
+along with a large number of non-ground truth interactions.
+Next, we investigated the identified interactions that are not included in the ground truth list. For
+example, we investigated the interaction between the TFs Snail (UniProt ID: P08044) and Twist (UniProt
+ID: P10627) identified by Diamond+MLP through databases containing assorted experimentally verified
+interactions (Liska et al, 2022) and literature (Ip et al, 1992). Research indicates that Snail represses
+Twist targets because their target sequences are very similar, and their binding is mutually exclusive.
+This literature evidence is further supported by a qualitative evaluation (Fig. 5d-f, Fig. A.4, Fig. A.5,
+and Fig. A.6). Specifically, we examined the Snail–Twist interaction in terms of the contribution of
+feature values to the enhancer status prediction, observing that high Twist expression suppresses the
+contribution of Snail to enhancer activation.
+Furthermore, we investigated the remaining identifications that lack supporting ground truth or
+literature evidence. We discovered that these interactions can be logically explained through transitive
+effects. Specifically, even without a direct interaction between TF1 and TF3, we might still expect a
+strong interaction between them if solid interactions exist between TF1 and TF2 and between TF2 and
+TF3. On this basis, for example, the interaction between the TFs Twist (UniProt ID: P10627) and
+Zeste (UniProt ID: P09956), identified by Diamond+MLP, can be classified as a transitive interaction,
+supported by experimentally validated interactions (Yevshin et al, 2016): (1) the interaction between
+Twist and Ultrabithorax (UniProt ID: P83949), Decapentaplegic (UniProt ID: P07713), Pho (UniProt
+ID: Q8ST83), Raf (UniProt ID: P11346), Psc (UniProt ID: P35820), Trr (UniProt ID: Q8IRW8) and (2)
+the interaction between these proteins and Zeste. Analogously, the interaction between the TFs Twist
+(UniProt ID: P10627) and Dichaete (UniProt ID: Q24533), identified by Diamond together with two treebased models, can also be supported by transitive interactions (Yevshin et al, 2016): (1) the interaction
+between Twist and Pho, Raf, Psc, Trr, Myc (UniProt ID: Q9W4S7), Trx (UniProt ID: P20659 ) and (2)
+the interaction between these proteins and Dichaete.
+Finally, Diamond is able to identify non-additive interactions with various interactive patterns (Fig.
+5d-f ). Among the top five interactions reported by Diamond with MLP, the Zelda–Twist interaction,
+the Bicoid–Twist interaction, and the Krueppel–Twist interaction exhibit synergistic effects. The high
+
+12
+
+expression of both TFs in these interactions reinforces the contribution of each individual factor to
+enhancer activation. In contrast, the Snail–Twist interaction, which was mentioned earlier, exhibits
+repressive effects, where high expression of one TF suppresses the contribution of the other to enhancer
+activation. Lastly, the Twist–Zeste interaction exhibits alternative effects, where high expression of either
+TF enhances the contribution of each to enhancer activation.
+
+2.6 Diamond understands mortality risk factors in health outcomes
+
+Fig. 6: Evaluating Diamond on a real mortality risk dataset. (a) Each feature contributes differently to predicting the mortality status, as measured by the Expected Gradient scores. It is worth
+mentioning that two marginally important features do not necessarily result in important interactions,
+as anticipated in Diamond’s design. (b) Diamond is used with the MLP model to identify important
+non-additive interactions and is compared against other baseline methods. Each possible interaction
+is measured by the minimum FDR threshold cutoff at which it is selected, with the top five interaction annotated. The blue stars indicate interactions supported by literature evidence, referenced by the
+accompanying PubMed identifiers. The survival loss function for predicting mortality restricts the modeling to DNNs, and we use MLP specifically due to memory limitations with other DNN models. The
+top interactions reported by Diamond are qualitatively evaluated from three aspects: the contribution of
+feature values to the (c) marginal and (d) interaction importance measure, and (e) the contribution of
+the marginal importance measures to the interaction importance measure.
+
+We lastly evaluated the performance of Diamond on a real mortality risk dataset (Cox et al, 1997) to
+investigate the relationship between mortality risk factors and long-term health outcomes within the US
+population. We used a mortality dataset from the National Health and Nutrition Examination Survey
+(NHANES I) and NHANES I Epidemiologic Follow-up Study (NHEFS). The dataset incorporates 35
+clinical and laboratory measurements from 14, 407 US participants between 1971 and 1974 (Fig. 6a).
+Note that some of the features are presented categorically, which makes model’s trained from this data
+challenging to interpret. We addressed this problem by converting each categorical feature into a list of
+binary features using one-hot encoding. The dataset also reports the mortality status of participants as of
+
+13
+
+1992, with 4, 785 individuals known to have passed away before 1992. The task is to construct an MLPbased model to predict mortality status using a survival loss function. We assessed the trained model
+using 5-fold cross-validation and selected the one with the best performance for model interpretation and
+interaction discovery. For robustness, we repeated the experiment 20 times using different random seeds.
+Each repetition involved knockoff generation, ML model training, and interaction-wise FDR estimation.
+Given the absence of ground truth interactions for this task, we began by evaluating the interactions
+identified by Diamond through literature support. Our analysis shows that three of the top ten selected
+interactions are directly supported by existing literature (Fig. 6b). For example, we investigated the
+interaction between sex and sedimentation rate (SR) and found that, although a high SR is strongly
+associated with a higher risk of overall mortality, this association can be attenuated by sex (Fest et al,
+2019). Additionally, we investigated the interaction between creatinine and the blood urea nitrogen
+(BUN) identified by Diamond. Research indicates that the BUN/creatinine ratio is recognized to have a
+nonlinear association with all-cause mortality and a linear association with cancer mortality (Shen et al,
+2022). The literature evidence is further supported by qualitative evaluation (Fig. 6c-e). Specifically,
+we examined the BUN-creatinine interaction in terms of the contribution of feature values to mortality
+status prediction, observing that when the creatinine level exceeds a certain level, a high BUN level
+further increases the mortality risk. In contrast, the baseline methods display significantly different
+behavior, reporting an overwhelming number of interactions at the significant FDR level, which appears
+to overestimate false positives.
+Finally, we probed into the remaining identifications that lack supporting literature evidence. As in the
+Drosophila analysis, we discovered that these interactions can be logically explained through transitive
+effects. For example, the interaction between BUN and potassium can be justified by combining the
+following two established facts: (1) BUN level is indicative of chronic kidney disease development (Collins
+et al, 2017), and (2) Patients with chronic kidney diseases show a progressively increasing mortality rate
+with abnormal potassium levels (Seki et al, 2019). Additionally, the interaction between BUN and SR
+reflects the fact that (1) The creatinine level and SR are strongly associated to clinical pathology types
+and prognosis of patients (Liang et al, 2017), and (2) Creatinine and BUN have a nonlinear association
+(Shen et al, 2022).
+
+3 Discussion
+In this study, we aim to enable rigorous data-driven scientific discoveries, which are crucial in the present
+of massive data sets. For this purpose, we propose Diamond, an error-controlled interaction discovery
+method designed to work with a variety of ML models. The key novelties of Diamond are threefold. First,
+Diamond achieves FDR control using carefully designed knockoffs, without relying on p-values, which are
+often difficult to obtain in generic ML models. Second, Diamond distills non-additive interaction effects,
+thereby maintaining FDR control at the target level. This non-additivity distillation step is critical
+because naive application of off-the-shelf feature interaction importance measures fail to control the FDR
+in this setting. Third, Diamond is versatile in discovering important non-additive interactions across a
+wide range of ML models, different knockoff designs, and various interaction importance measures, all
+while guaranteeing FDR control. We have applied Diamond to various simulated and real datasets to
+demonstrate its empirical utility, proving it to be the only valid solution for error-controlled data-driven
+scientific discovery compared to other alternative methods.
+Methodologically, our approach provides a path toward enhancing transparency in complex ML models. The complexity of ML models has long posed a tradeoff between predictability and interpretability.
+Specifically, sophisticated ML models such as DNNs excel at detecting subtle relationships and patterns
+within complex data. However, their “black-box” nature poses challenges in mission-critical domains
+where error tolerance is minimal. By providing FDR control in this setting, we can better understand
+why and how models make predictions, thereby enabling more effective use of ML models to gain
+human-understandable insights. Diamond can help diagnose potential biases in ML models, contributing
+positively to the integrity, accountability, and fairness required when employing AI technologies.
+Lastly, this study highlights several promising directions for future research. First, we observe that
+Diamond tends to be conservative. This suggests a future direction for improvement in enhancing statistical power through further refinement of the FDR estimation process. Previous efforts, like the
+knockoff-tailored plugin pairwise-coupling layer in MLP models, have shown superior performance in
+
+14
+
+statistical power Lu et al (2018). However, these previously described methods are specific to certain
+types of ML models and may not be generally applicable to all generic ML models, indicating the need
+for improvement to broaden their applicability.
+Secondly, we observe that Diamond cannot distinguish between direct interactions and interactions
+caused by transitive effects. In reality, the former is scientifically more interesting than the latter, though
+both fit the definition of non-additive interactions. Specifically, even without a direct interaction between
+two features, we might still expect a strong interaction between them if solid interactions exist individually between each of these features and a third feature. Though transitive interactions are non-additive,
+for the purpose of scientific discovery, a potential research direction is to identify FDR-controlled direct
+interactions exclusively, using a causal inference framework (Luo et al, 2020). Thirdly, we observe that
+different ML models exhibit different levels of performance in identifying important interactions. Briefly,
+models with stronger modeling capabilities, such as transformer models, are better at identifying important interactions compared to models with weaker capabilities, such as FMs and CNNs. As independent
+studies have highlighted, the sensitivity of interaction detection depends on the importance measures
+of the interactions, which are critically influenced by the quality of the model (Adebayo et al, 2018). A
+potential research direction is to automatically determine the best ML models for interaction detection,
+rather than focusing solely on modeling accuracy.
+Finally, this study primarily focuses on discovering pairwise interactions. While detecting pairwise
+interactions holds practical significance in various biological contexts, the discovery of higher-order interactions can naturally provide deeper insights for explaining genetic mechanisms, diseases, and drug effects
+in healthcare domains. This problem is highly challenging in practice due to the exponentially large
+search space. A potential research direction for future studies is to effectively reduce the search space to
+generalize Diamond for practical discovery of higher-order interactions.
+In conclusion, Diamond enables error-controlled detection of non-additive feature interactions in the
+context of a variety of ML models. The versatility and flexibility of Diamond make it widely applicable
+in high-stakes and error-intolerant domains where interpretability and statistical rigor are needed. The
+robustness against misspecified ML models and low-quality knockoffs ensures the reliability of Diamond,
+even when erroneously applied in extreme cases. We believe that this powerful tool will pave the way for
+the broader deployment of machine learning models in scientific discovery and hypothesis validation.
+
+4 Methods
+4.1 FDR control with the knockoffs
+Diamond achieves FDR control by leveraging the model-X knockoffs framework (Barber and Candès,
+2015; Candès et al, 2018), which was proposed in the setting of error-controlled feature selection. The
+core idea of knockoffs is to generate dummy features that perfectly mimic the empirical dependence
+structure among the original features but are conditionally independent of the response given the original
+features. Briefly speaking, the knockoff filter achieves FDR control in two steps: (1) construction of
+knockoff features and (2) filtering using knockoff statistics.
+For the first step, the knockoff features are defined as follows:
+Definition 1 (Model-X knockoff (Candès et al, 2018)). The model-X knockoff features for the family of
+random features X = (X1 , . . . , Xp ) are a new family of random features X̃ = (X̃1 , . . . , X̃p ) that satisfy
+two properties:
+d
+
+1. (X, X̃)swap(S) = (X, X̃) for any subset S ⊂ {1, . . . , p}, where swap(S) means swapping Xj and X̃j for
+d
+
+|=
+
+each j ∈ S and = denotes equal in distribution, and
+2. X̃ Y|X, i.e., X̃ is independent of response Y given feature X.
+According to Definition 1, the construction of the knockoffs must be independent of the response Y.
+Thus, if we can construct a set X̃ of model-X knockoff features properly, then by comparing the original
+features with these control features, FDR can be controlled at target level q. In the Gaussian setting,
+i.e., X ∼ N (0, Σ) with covariance matrix Σ ∈ Rp×p , the model-X knockoff features can be constructed
+easily:
+
+(1)
+X̃|X ∼ N X−diag{s}Σ−1 X, 2diag{s} − diag{s}Σ−1 diag{s}
+
+15
+
+where diag{s} is a diagonal matrix with all components of s being positive such that the conditional
+covariance matrix in Equation 1 is positive definite. As a result, the original features and the model-X
+knockoff features constructed by Equation 1 have the following joint distribution:
+  
+
+0
+Σ
+Σ − diag{s}
+(X, X̃) ∼ N
+,
+(2)
+0
+Σ − diag{s}
+Σ
+With the constructed knockoff X̃, feature importances are quantified by computing the knockoff
+statistics Wj = gj (Zj , Z̃j ) for 1 ≤ j ≤ p, where Zj and Z̃j represent feature importance measures for the
+j-th feature Xj and its knockoff counterpart X̃j , respectively, and gj (·, ·) is an antisymmetric function
+satisfying gj (Zj , Z̃j ) = −gj (Z̃j , Zj ). The knockoff statistics Wj should satisfy a coin-flip property such
+ej only changes the sign of Wj but
+that swapping an arbitrary pair Xj and its knockoff counterpart X
+keeps the signs of other Wk (k ̸= j) unchanged (Candès et al, 2018). A desirable property for knockoff
+statistics Wj ’s is that important features are expected to have large absolute values, whereas unimportant
+ones should have small symmetric values around 0.
+Finally, the absolute values of the knockoff statistics |Wj |’s are sorted in decreasing order, and FDRcontrolled features are
+n selected whose Wj ’s exceed
+o some threshold T . In particular, the choice of threshold
+T follows T = min t ∈ W,
+
+1+|{j:Wj ≤−t}|
+≤q
+|{j:Wj ≥t}|
+
+where W = {|Wj | : 1 ≤ j ≤ p} \ {0} is the set of unique
+
+nonzero values from |Wj |’s and q ∈ (0, 1) is the desired FDR level specified by the user.
+
+4.2 Measuring non-additive interaction effect
+As a key precursor to FDR estimation, Diamond quantifies feature interactions from trained ML models
+and produces a ranked list of these interactions, with higher-ranked interactions indicating greater importance. For notational simplicity, we use indices for both original features and knockoffs as {1, 2, · · · , 2p},
+with {1, · · · , p} and {p + 1, · · · , 2p} corresponding to the original features and their respective knockoff
+2p
+counterparts. Here, we define E2D = [eij ]i,j=1 ∈ R2p×2p as a reported interaction importance measure
+from existing methods. There are many feature interaction importance measures available for E2D , each
+attributing the prediction influence to feature pairs in different ways. However, it is important to note
+that such measures favor pairs where both features are simultaneously important for a model’s prediction, rather than capturing the true non-additive interaction effects between the two features (Tsang
+et al, 2021). Further supported by simulation studies (Fig. 2c), we observed that many feature interaction importance measures tend to assign higher interaction scores to two marginally important but
+non-interacting features compared to two random ones, even though neither pair has a real interaction,
+leading to the failure of FDR control.
+The direct reason for the interaction importance measure falling short in controlling FDR is its violation of the knockoff filter’s assumption. Specifically, the knockoff filter requires that the importance
+scores of knockoff-involving interactions and false interactions have a similar distribution. To resolve
+this issue, we introduce a non-additivity distillation procedure to be applied on top of existing interaction importance measures. Specifically, we consider that a reported interaction importance measure from
+existing methods comprises a mixture of several factors: label-dependent marginal effects for individual
+features, label-independent feature biases, independent random noise, and potential non-additive interaction effects between feature pairs. Thus, the reported interaction between features i and j is represented
+as:
+eij = sij + gi (ei ) + gj (ej ) + b(Iij ) + εij
+(3)
+where εij ∈ R is random noise independent of both features and predictions, eij ∈ R and ei , ej ∈ R are
+reported pairwise and univariate feature importance measures that are dependent on the model’s predictions, respectively. The functions gi , gj : R 7→ R adapt univariate feature importance to be compatible
+with feature interaction importance. The function b : R2p 7→ R models the feature-specific biases that
+2p
+are independent of the model’s predictions, where Iij ∈ {0, 1} indicates the presence of feature i and
+j. Our goal is to identify sij , the potential non-additive interaction effects between features i and j.
+We formulate the identification of interaction effects sij as the residuals of a regression task:
+min
+
+b,g1 ,g2 ,···
+
+X
+
+2
+
+wij · ∥eij − gi (ei ) − gj (ej ) − b(Iij )∥
+
+i<j
+
+16
+
+(4)
+
+where wij > 0 is the conditional probability of being either original-only (i.e., i, j ≤ p) or knockoffinvolving (i.e., i > p or j > p) feature pairs given two univariate feature importance measures ei and
+ej , estimated by a logistic regression model (Freedman and Berk, 2008). The rationale is based on the
+important observation that most feature pairs do not exhibit non-additive interactions, especially those
+involving knockoff features. Therefore, we want to focus more on potential non-additive interactions
+that have large univariate feature importance, as important interactions naturally consist of significant
+marginal features. In this study, we parameterize the functions b : R2p 7→ R and gi , gj : R 7→ R using
+generalized additive models and optimize Eq. 4 using the pyGAM library (Serven and Brummitt, 2018).
+
+4.3 FDR control for interactions
+After calculating the non-additive interaction effects using Eq. 4, we denote the resultant set of interaction
+effects as Γ = {sij |i < j, i ̸= j − p}. We arrange Γ in decreasing order and select interactions for which
+the interaction effect, Γj , exceeds some threshold, T . This selection ensures that the chosen interactions
+adhere to a desired FDR level q ∈ (0, 1).
+However, a point of complexity is introduced due to the heterogeneous interactions, which include
+original-only and knockoff-involving interactions. The latter further comprises original-knockoff, knockofforiginal, and knockoff-knockoff interactions. Following the strategy outlined by Walzthoeni et al (2012),
+the threshold T is determined by:
+
+
+
+| {j : Γj ≥ t, j ∈ K} | − 2 · | {j : Γj ≥ t, j ∈ KK} |
+T = min t ∈ T ,
+≤q
+| {j : Γj ≥ t, j ∈
+/ K and j ∈
+/ KK} |
+
+
+(5)
+
+where K and KK respectively denote the sets of interactions that include at least one knockoff feature
+and both knockoff features, while T refers to the set of unique nonzero values present in Γ. Refer to Sec.
+A.4 for more detailed description of FDR estimation.
+
+4.4 ML models
+Diamond is designed to be compatible with a wide range of ML models. To demonstrate the broad
+applicability of Diamond, we use it in conjunction with machine learning models from methodologically
+distinct categories, including DNN models, Kolmogorov-Arnold networks (KANs) (Liu et al, 2024), treebased models, and factorization-based models.
+For DNNs, we selected three representative models: multi-layer perceptron (MLP), convolutional
+neural network (CNN), and transformer models. It is worth noting that CNNs are not well-suited for
+modeling tabular data and are included here as an example of model misspecification. We configured
+a pyramid-shaped MLP model with the exponential linear unit activation and four hidden layers, each
+having neuron sizes of 2p, p, p/2, and p/4 respectively, where p denotes the input dimensionality. We
+configured a CNN model consisting of two convolutional layers. The first layer has one input channel
+and 32 output channels, while the second layer has 32 input channels and 64 output channels, followed
+by max pooling. Batch normalization and ReLU activation are applied after each convolution. The
+output is then flattened and passed through two fully connected layers, mapping to 128 units before
+reaching the output dimension. For transformer models, we used FT-Transformer (Gorishniy et al, 2021),
+a model specifically designed for tabular data. By default, it consists of 6 layers, 8 attention heads, a
+32-dimensional feedforward network, and a 0.1 dropout rate. All DNN models follow the guidance of
+Lu et al (2018) and include a plugin pairwise-coupling layer, connecting each original feature with its
+knockoff counterpart in a pairwise fashion to maximize statistical power (See details in Sec. A.1).
+For KANs, we configured a two-layer model, with a hidden layer of width p/2, followed by a mapping
+to the output dimension. For tree-based models, we employed two widely used gradient-boosted decision
+tree representatives—XGBoost (Chen and Guestrin, 2016) and LightGBM (Ke et al, 2017). We used the
+implementations provided by the two libraries with default settings. For factorization-based models, we
+used a widely adopted representative method—Factorization machines (FM) (Rendle, 2010). We used
+2-Way FM implemented in the xLearn library (Ma, 2019) with default settings, which models up to
+second-order feature interactions.
+
+17
+
+4.5 Model interpretation
+Diamond utilizes representative importance measures to interpret the trained ML models and elucidate
+the relationship between features and responses. For DNN and KAN models, we employed a representative model-agnostic interaction importance measure, Expected Hessian (Erion et al, 2021), to clarify
+the relationships between features and responses without making assumptions about any specific model
+architecture (See details in Sec. A.3). To demonstrate Diamond’s flexibility, we also used Integrated
+Hessian (Janizek et al, 2021), another state-of-the-art, model-agnostic interaction importance measure,
+alongside a model-specific interaction importance measure derived from the model weights, specifically
+designed for the MLP architecture (See details in Sec. A.2). Both model-agnostic interaction importance measures, Expected Hessian and Integrated Hessian, are computed using the Path-Explain library
+(Janizek et al, 2021).
+For tree-based models such as XGBoost and LightGBM, we used TreeSHAP (Lundberg et al, 2020),
+a Shapley value-based interpretation method specifically designed for tree-based ML models, to clarify
+the relationships between features and responses. We used the implementation provided by the SHAP
+library (Lundberg and Lee, 2017) to calculate both univariate and pairwise feature importance. For
+factorization-based models, since 2-Way FM is explicitly modeled as the weighted sum of univariate and
+pairwise feature interactions, we used the learned coefficients of these interactions as the corresponding
+importance measures.
+
+4.6 Knockoff generation
+Diamond relies on knockoffs to control the FDR. It is worth mentioning that conventional knockoffs are
+limited to Gaussian settings, which may not be applicable in many practical scenarios. In this study,
+we focused on the state-of-the-art knockoff design without assuming any specific feature distribution.
+In particular, we considered commonly-used non-Gaussian knockoff generation methods such as KnockoffsDiagnostics (Blain et al, 2024), KnockoffGAN (Jordon et al, 2018), Deep knockoffs (Romano et al,
+2020), and VAE knockoffs (Liu and Zheng, 2018). Furthermore, to assess Diamond’s robustness in the
+presence of poorly generated knockoffs, we created invalid knockoffs by independently permuting each
+feature across samples, thus violating the definition of knockoffs outlined in Sec. 4.1.
+
+4.7 Alternative FDR estimation methods
+We evaluate the performance of Diamond in comparison to three baseline methods. For the first two
+baseline methods, we employ a permutation-based approach to calculate the interaction-wise FDR.
+Specifically, this involves using a previously described permutation procedure tailored for neural networks to assess the significance of interactions and calculate permutation p-values (Cui et al, 2022). The
+permutation p-values are combined with the Benjamini–Hochberg procedure (Benjamini and Hochberg,
+1995) or the Benjamini-Yekutieli procedure (Benjamini and Yekutieli, 2001) to estimate the FDR. The
+difference between the Benjamini–Hochberg procedure and the Benjamini-Yekutieli procedure is that
+the former assumes the p-values are independent or positively dependent, while the latter imposes no
+assumptions on the dependencies among p-values.
+For the second baseline method, we consider an ensemble-based approach that represents interactionwise FDR as the aggregation of feature-wise FDR. This approach follows the intuition that an important
+feature interaction is composed of important univariate features. Specifically, we use a previously
+described knockoff-based procedure tailored for neural networks to estimate the feature-wise FDR of each
+univariate feature (Lu et al, 2018). We then approximate the interaction-wise FDR as the maximum of
+the two comprising univariate feature-wise FDRs.
+
+4.8 Code and data availability
+The software implementation and all models described in this study are available at https://github.
+com/batmen-lab/diamond. All public datasets used for evaluating the models are available at https:
+//github.com/batmen-lab/diamond/data.
+
+18
+
+Declarations
+• The research is supported by the Canadian NSERC Discovery Grant RGPIN-03270-2023.
+• The authors declare that they have no conflict of interest.
+• There is no ethics approval and consent to participate involved in this study.
+• There is no consent for publication involved in this study.
+• Author contribution: W.C. and Y.J. implemented the code and did the analysis. W.C. and Y.J. set up
+and preprocessed the datasets. W.C., Y.J. and Y.L. prepared the figures. Y.L. wrote the manuscript.
+All authors participated the discussion. All authors reviewed the manuscript.
+
+References
+Adebayo J, Gilmer J, Muelly M, et al (2018) Sanity checks for saliency maps. Advances in Neural
+Information Processing Systems 31
+Agrawal A, McHale J, Oettl A (2024) Artificial intelligence and scientific discovery: A model of prioritized
+search. Research Policy 53(5):104989
+Barber RF, Candès EJ (2015) Controlling the false discovery rate via knockoffs. The Annals of Statistics
+43(5):2055–2085
+Basu S, Kumbier K, Brown JB, et al (2018) Iterative random forests to discover predictive and stable
+high-order interactions. Proceedings of the National Academy of Sciences 115(8):1943–1948
+Benjamini Y, Hochberg Y (1995) Controlling the false discovery rate: a practical and powerful approach
+to multiple testing. Journal of the Royal Statistical Society Series B 57:289–300
+Benjamini Y, Yekutieli D (2001) The control of the false discovery rate in multiple testing under
+dependency. The Annals of Statistics 29:1165–1188
+Blain A, Thirion B, Linhart J, et al (2024) When knockoffs fail: diagnosing and fixing non-exchangeability
+of knockoffs. arXiv preprint arXiv:240706892
+Candès EJ, Fan Y, Janson L, et al (2018) Panning for gold: Model-X knockoffs for high-dimensional
+controlled variable selection. Journal of the Royal Statistical Society: Series B (Statistical Methodology)
+80(3):551–577
+Chang C, Caruana R, Goldenberg A (2022) NODE-GAM: Neural generalized additive model for
+interpretable deep learning. International Conference on Learning Representations
+Chen T, Guestrin C (2016) XGBoost: A scalable tree boosting system. In: ACM SIGKDD International
+Conference on Knowledge Discovery and Data Mining. ACM, New York, NY, USA, KDD ’16, pp
+785–794
+Collins AJ, Pitt B, Reaven N, et al (2017) Association of serum potassium with all-cause mortality in
+patients with and without heart failure, chronic kidney disease, and/or diabetes. American Journal of
+Nephrology 46(3):213–221
+Cox CS, Feldman JJ, Golden CD, et al (1997) Plan and operation of the NHANES I Epidemiologic
+Followup Study, 1992. Vital and health statistics Ser 1, Programs and collection procedures
+Cui T, Marttinen P, Kaski S (2019) Recovering pairwise interactions using neural networks. arXiv
+preprint arXiv:190108361
+Cui T, El Mekkaoui K, Reinvall J, et al (2022) Gene–gene interaction detection with deep learning.
+Communications Biology 5(1):1238
+Efron B, Hastie T, Johnstone I, et al (2004) Least angle regression. The Annals of Statistics 32(2):407–499
+
+19
+
+Erion G, Janizek JD, Sturmfels P, et al (2021) Improving performance of deep learning models with
+axiomatic attribution priors and expected gradients. Nature Machine Intelligence 3(7):620–631
+Fest J, Ruiter R, Mooijaart S, et al (2019) Erythrocyte sedimentation rate as an independent prognostic marker for mortality: a prospective population-based cohort study. Journal of Internal Medicine
+285(3):341–348
+Freedman DA, Berk RA (2008) Weighting regressions by propensity scores. Evaluation Review 32(4):392–
+409
+Garbuzova EV, Shcherbakova LV, Rymar OD, et al (2023) Triglycerides, obesity and education status
+are associated with the risk of developing Type 2 Diabetes in young adults, cohort study. Journal of
+Personalized Medicine 13(9):1403
+Garson GD (1991) Interpreting neural-network connection weights. AI Expert 6(4):46–51
+Ghorbani A, Abid A, Zou J (2019) Interpretation of neural networks is fragile. In: Proceedings of the
+AAAI Conference on Artificial Intelligence, pp 3681–3688
+Gorishniy Y, Rubachev I, Khrulkov V, et al (2021) Revisiting deep learning models for tabular data.
+Advances in Neural Information Processing Systems 34:18932–18943
+Huang X, Li G, Xu B, et al (2021) Lower baseline serum triglyceride levels are associated with higher
+decrease in body mass index after laparoscopy sleeve gastrectomy among obese patients. Frontiers in
+Endocrinology 12:633856
+Ip YT, Park RE, Kosman D, et al (1992) The dorsal gradient morphogen regulates stripes of rhomboid expression in the presumptive neuroectoderm of the drosophila embryo. Genes & Development
+6(9):1728–1739
+Janizek JD, Sturmfels P, Lee SI (2021) Explaining explanations: Axiomatic feature interactions for deep
+networks. Journal of Machine Learning Research 22:104:1–104:54
+Jordon J, Yoon J, van der Schaar M (2018) KnockoffGAN: Generating knockoffs for feature selection
+using generative adversarial networks. In: International Conference on Learning Representations
+Kautzky-Willer A, Leutner M, Harreiter J (2023) Sex differences in type 2 diabetes. Diabetologia
+66(6):986–1002
+Ke G, Meng Q, Finley T, et al (2017) LightGBM: A highly efficient gradient boosting decision tree.
+Advances in Neural Information Processing Systems 30
+Kindermans PJ, Hooker S, Adebayo J, et al (2019) The (un)reliability of saliency methods. Explainable
+AI: Interpreting, explaining and visualizing deep learning pp 267–280
+Lerman S, Venuto C, Kautz H, et al (2021) Explaining local, global, and higher-order interactions in
+deep learning. In: International Conference on Computer Vision, pp 1224–1233
+Li XY, MacArthur S, Bourgon R, et al (2008) Transcription factors bind thousands of active and inactive
+regions in the Drosophila blastoderm. PLoS Biology 6(2):e27
+Liang H, Xin M, Zhao L, et al (2017) Serum creatinine level and ESR values associated to clinical
+pathology types and prognosis of patients with renal injury caused by ANCA-associated vasculitis.
+Experimental and Therapeutic Medicine 14(6):6059–6063
+Lipton ZC (2018) The mythos of model interpretability: In machine learning, the concept of interpretability is both important and slippery. Queue 16(3):31–57
+
+20
+
+Liska O, Bohár B, Hidas A, et al (2022) TFLink: an integrated gateway to access transcription factor–
+target gene interactions for multiple species. Database 2022:baac083
+Liu Y, Zheng C (2018) Auto-encoding knockoff generator for FDR controlled variable selection. arXiv
+preprint arXiv:180910765
+Liu Z, Wang Y, Vaidya S, et al (2024) KAN: Kolmogorov-arnold networks. arXiv preprint
+arXiv:240419756
+Lu YY, Noble WS (2021) A wider field of view to predict expression. Nature Methods 18(10):1155–1156
+Lu YY, Fan Y, Lv J, et al (2018) DeepPINK: reproducible feature selection in deep neural networks. In:
+Advances in Neural Information Processing Systems
+Lu YY, Guo W, Xing X, et al (2021a) DANCE: Enhancing saliency maps using decoys. In: International
+Conference on Machine Learning
+Lu YY, Yu TC, Bonora G, et al (2021b) ACE: Explaining cluster from an adversarial perspective. In:
+International Conference on Machine Learning
+Lundberg SM, Lee SI (2017) A unified approach to interpreting model predictions. Advances in Neural
+Information Processing Systems
+Lundberg SM, Erion G, Chen H, et al (2020) From local explanations to global understanding with
+explainable AI for trees. Nature Machine Intelligence 2(1):56–67
+Luo Y, Peng J, Ma J (2020) When causal inference meets deep learning. Nature Machine Intelligence
+2(8):426–427
+Ma C (2019) xLearn python library. https://xlearn-doc.readthedocs.io/
+Obermeyer Z, Emanuel EJ (2016) Predicting the future–big data, machine learning, and clinical medicine.
+The New England Journal of Medicine 375(13):1216
+Rendle S (2010) Factorization machines. In: IEEE International Conference on Data Mining (ICDM),
+IEEE, pp 995–1000
+Rivera-Pomar R, Jackle H (1996) From gradients to stripes in drosophila embryogenesis: filling in the
+gaps. Trends in Genetics 12(11):478–483
+Romano Y, Sesia M, Candès E (2020) Deep knockoffs. Journal of the American Statistical Association
+115(532):1861–1872
+Samek W, Montavon G, Lapuschkin S, et al (2021) Explaining deep neural networks and beyond: A
+review of methods and applications. Proceedings of the IEEE 109(3):247–278
+Seki M, Nakayama M, Sakoh T, et al (2019) Blood urea nitrogen is independently associated with renal
+outcomes in Japanese patients with stage 3–5 chronic kidney disease: a prospective observational study.
+BMC Nephrology 20:1–10
+Serven D, Brummitt C (2018) pyGAM: Generalized additive models in python. https://doi.org/10.5281/
+zenodo.1208723, URL https://doi.org/10.5281/zenodo.1208723
+Shen S, Yan X, Xu B (2022) The blood urea nitrogen/creatinine (BUN/cre) ratio was U-shaped associated
+with all-cause mortality in general population. Renal Failure 44(1):184–190
+Shimizu Y, Sato S, Koyamatsu J, et al (2017) Association between high-density lipoprotein-cholesterol
+and hypertension in relation to circulating CD34-positive cell levels. Journal of Physiological
+Anthropology 36:1–7
+21
+
+Shrikumar A, Greenside P, Shcherbina A, et al (2017) Learning important features through propagating
+activation differences. In: International Conference on Machine Learning
+Simonyan K, Vedaldi A, Zisserman A (2013) Deep inside convolutional networks: Visualising image
+classification models and saliency maps. arXiv preprint arXiv:13126034
+Sorokina D, Caruana R, Riedewald M, et al (2008) Detecting statistical interactions with additive groves
+of trees. In: International Conference on Machine learning, pp 1000–1007
+Sundararajan M, Taly A, Yan Q (2017) Axiomatic attribution for deep networks. In: International
+Conference on Machine Learning
+Sundararajan M, Dhamdhere K, Agarwal A (2020) The shapley taylor interaction index. In: International
+Conference on Machine Learning, PMLR, pp 9259–9268
+Tsang M, Cheng D, Liu Y (2018a) Detecting statistical interactions from neural network weights.
+International Conference on Learning Representations
+Tsang M, Liu H, Purushotham S, et al (2018b) Neural interaction transparency (NIT): Disentangling
+learned interactions for improved interpretability. Advances in Neural Information Processing Systems
+31
+Tsang M, Enouen J, Liu Y (2021) Interpretable artificial intelligence through the lens of feature
+interaction. arXiv preprint arXiv:210303103
+Walzthoeni T, Claassen M, Leitner A, et al (2012) False discovery rate estimation for cross-linked peptides
+identified by mass spectrometry. Nature Methods 9(9):901–903
+Watson DS (2022) Interpretable machine learning for genomics. Human Genetics 141(9):1499–1513
+Yevshin I, Sharipov R, Valeev T, et al (2016) GTRD: a database of transcription factor binding sites
+identified by ChIP-seq experiments. Nucleic Acids Research p gkw951
+Zhang H, Xie Y, Zheng L, et al (2021) Interpreting multivariate shapley interactions in DNNs. In:
+Proceedings of the AAAI Conference on Artificial Intelligence, pp 10877–10886
+Zhao H, Zheng C, Gan K, et al (2020) High body mass index and triglycerides help protect against
+osteoporosis in patients with type 2 diabetes mellitus. Journal of Diabetes Research 2020(1):1517879
+
+22
+
+A Appendix
+A.1 Knockoff-tailored multi-layer perceptron model
+
+Fig. A.1: Illustration of knockoff-tailored MLP model.
+
+By following the guidance of Lu et al (2018), Diamond utilizes a knockoff-tailored multi-layer perceptron
+(MLP) model that includes a plugin pairwise-coupling layer, connecting each original feature with its
+knockoff counterpart in a pairwise fashion to maximize statistical power. Specifically, the model takes
+as input an augmented data matrix (X, X̃) ∈ Rn×2p , created by concatenating the original data matrix
+X ∈ Rn×p with its knockoffs X̃ ∈ Rn×p . The augmented data matrix is fed to an off-the-shelf MLP model
+through a plugin pairwise-coupling layer composed of p filters, encapsulated by F = (F1 , · · · , Fp ) ∈ Rp ,
+where each j-th filter connects feature Xj and its knockoff counterpart X̃j , as shown in Fig. A.1.
+The filter weights, Z ∈ Rp and Z̃ ∈ Rp are initialized identically and engage in a competitive dynamic
+via pairwise connections during the DNN training. Additionally, we employ a linear activation function
+in the pairwise-coupling layer to stimulate competition between different features. The outputs of the
+filters are subsequently channeled into an MLP model that learns to map to the response Y. In this
+study, we chose an MLP architecture with the exponential linear unit (ELU) activation function and
+four hidden layers. Letting L be the number of hidden layers and pl denote the number of neurons in the
+l-th layer of the MLP — where p0 = p — we accordingly define the weight matrices of the input layer,
+hidden layers, and the output layer in the MLP as W(0) ∈ Rp×p1 , W(l) ∈ Rpl ×pl+1 , W(L) ∈ RpL ×1 ,
+respectively. With these notations, the response Y is expressed as follows:
+h(0) = F,
+
+
+
+h(l) = ELU W(l−1) h(l−1) + b(l−1) , for l = 1, · · · , L
+
+(6)
+
+Y = W(L) h(L) + b(L)
+where ELU(·) refers the ELU function, and b(l) ∈ Rpl signifies the bias vector in the l-th layer. While
+we use this specific model, Diamond’s overall process is versatile and fully applicable to any off-the-shelf
+DNN architecture.
+
+A.2 Model-specific interaction importance measure
+The model-specific interaction importance measure is based on the knockoff-tailored MLP model design
+and notation described in Sec. A.1, Given the pairwise-coupling layer weights: Z ∈ Rp and Z̃ ∈ Rp
+as well as the MLP weights in the l-th layer: W(l) , the model-specific interaction importance measure
+decomposes into two factors: (1) the relative importance between the original feature and its knockoff
+counterpart, encoded by concatenated filter weights ZAgg = (Z, Z̃) ∈ R2p , and (2) the relative importance
+
+23
+
+among all p features, encoded by the weight matrix W(0) ∈ Rp×p1 and the aggregated weights WAgg =
+Q
+L
+(i)
+∈ Rp1 . (See Garson (1991) for theoretical insights regarding WAgg .)
+i=1 W
+Inspired by Tsang et al (2018a), we define the model-specific interaction importance as:
+
+
+T
+Agg
+e2D
+WiINT ⊙ ZAgg
+WjINT WAgg
+ij = Zi
+j
+
+(7)
+
+T
+
+T
+
+where WINT = (W(0) , W(0) )T ∈ R2p×p1 and WjINT ∈ Rp1 denotes the j-th row of WINT .
+Following Lu et al (2018), we define the model-specific univariate feature importance as:
+
+
+2p
+= (Z ⊙ W1D , Z̃ ⊙ W1D )
+E1D = e1D
+j
+j=1
+
+(8)
+
+where W1D = W(0) WAgg ∈ Rp and ⊙ denotes entry-wise matrix multiplication.
+
+A.3 Model-agnostic interaction importance measure
+The model-agnostic interaction importance measure aims to elucidate the relationships between feature
+pairs and responses without making assumptions about any specific model architecture. Specifically,
+we employ two state-of-the-art model-agnostic interaction importance measures—Integrated Hessian
+(Janizek et al, 2021) and Expected Hessian (Erion et al, 2021).
+The Integrated Hessian interaction importance (Janizek et al, 2021) is defined as:
+e2D
+ij =
+
+XZ
+x∈X
+
+x′
+
+(xi − x′i )(xj − x′j ) ×
+
+Z 1 Z 1
+β=0
+
+αβ∇2i,j Y(x′ + αβ(x − x′ ))dαdβdx′
+
+(9)
+
+α=0
+
+where ∇2i,j Y(x) calculates the second derivative of the response Y with respect to the i-th and j-th
+feature of sample x to be explained. The corresponding univariate feature importance measure, which is
+compatible with the Integrated Hessian, is Integrated Gradient (Sundararajan et al, 2017):
+e1D
+i =
+
+XZ
+x∈X
+
+x′
+
+(xi − x′i ) ×
+
+Z 1
+
+∇i Y(x′ + α(x − x′ ))dαdx′
+
+(10)
+
+α=0
+
+where ∇i Y(x) calculates the first-order derivative of Y with respect to the i-th feature of input x.
+The Expected Hessian interaction importance (Erion et al, 2021) is defined as:
+e2D
+ij =
+
+X
+
+
+
+Eα∼U (0,1),β∼U (0,1),x′ ∈X (xi − x′i )(xj − x′j )αβ∇2i,j Y(x′ + αβ(x − x′ ))
+
+(11)
+
+x∈X
+
+where U (0, 1) indicates the uniform distribution. The corresponding univariate feature importance
+measure, which is compatible with the Expected Hessian, is Expected Gradient (Erion et al, 2021):
+e1D
+i =
+
+X
+
+Eα∼U (0,1),x′ ∈X [(xi − x′i )α∇i Y(x′ + α(x − x′ ))]
+
+(12)
+
+x∈X
+
+A.4 FDR estimation
+We estimate the FDR for non-additive interactions by following the strategy proposed by Walzthoeni
+et al (2012), which was originally designed to estimate the FDR for cross-linked peptide detection.
+Despite the conceptually different application backgrounds, the FDR estimation for cross-linked peptide
+detection and non-additive interaction detection are essentially analogous. Specifically, in the context of
+cross-linked peptide detection, there is no ground truth for false positive cross-linked peptides. Therefore,
+researchers developed methods to determine the FDR of detected cross-linked peptides in a data-driven
+way, even when the ground truth is not known. Researchers relied on a target-decoy strategy, where
+verifiably incorrect decoy sequences are appended to the target-sequence database used by the search
+
+24
+
+engine. The rate of false positive hits mapping to the target database is then estimated based on the
+number of hits mapping to the decoy database. Here, the decoys are conceptually analogous to the
+knockoffs. By examining the cross-link detections, four different, equally likely cases can be observed: TT, T-D, D-T and D-D, where T denotes a target hit and D denotes a decoy hit. The key idea proposed
+by Walzthoeni et al (2012) is to use decoy cross-links (i.e., T-D, D-T and D-D) to estimate the FDR.
+Now we adopt the strategy proposed by Walzthoeni et al (2012) to our setting. They calculated the
+expected number of false positive interactions by separately estimating the counts of different types of
+false interactions. Specifically, three (not necessarily mutually exclusive) types of false interactions are
+distinguished below. Type TC–!TC interactions involve one correct target feature and one feature that
+is not a correct target feature. Type !TC–!TC interactions consist of two features, neither of which are
+correct target features. Type K–K interactions consist of two features that are both knockoff features
+(this type can be directly counted). Note that type K–K interactions are a subset of type !TC–!TC
+interactions, as knockoff features are not correct target features.
+Given a set of detected interactions exceeding a certain score threshold, the total number of false
+positives #(FP) in this set can be decomposed as follows:
+#(FP) = #(FPTC–!TC ) + #(FP!TC–!TC )
+
+(13)
+
+The expected count of each false positive type given the knockoff counts can be estimated as follows:
+
+b [#(FPTC–!TC )] = #(KnockoffTC–!TC ) × rTC–!TC
+E
+b [#(FP!TC–!TC )] = #(Knockoff!TC–!TC ) × r!TC–!TC
+E
+
+(14)
+
+where #(Knockoffy ) denotes the number of knockoff-involving interactions of type y, and ry represents
+the respective original-knockoff frequencies. For TC–!TC and !TC–!TC interactions we have originalknockoff frequencies rTC–!TC of 1 : 1 and r!TC–!TC of 1 : 3. The original-knockoff frequencies result from
+the combinatorial composition of the individual types. For example, the type !TC–!TC comprises four
+distinct, equally probable cases: O–O, O–K, K–O, and K–K, where O and K denote original and knockoff
+features, respectively. The ratio between original-original interactions and knockoff-involving interactions
+is therefore 1 : 3. In comparison, the type TC–!TC only has two equally probable cases: TC-original
+and TC-knockoff, which reflects a 1 : 1 ratio for this type.
+However, the number of false positives cannot be determined directly because #(KnockoffTC–!TC )
+and #(Knockoff!TC–!TC ) are not explicitly measurable. Although knockoff-involving interactions can be
+identified by the presence of at least one knockoff feature, it is generally not possible to categorize
+them as either type TC–!TC or !TC–!TC, because original features cannot be definitively classified
+as correct or incorrect. Therefore, #(KnockoffTC–!TC ) and #(Knockoff!TC–!TC ) have to be estimated
+from the subset of knockoff-involving interactions constituted by two knockoff features (i.e., K–K).
+Specifically, the expected count of !TC–!TC can be estimated from K–K interactions as follows because
+the random interactions are distributed equally among the knockoff-involving types O–K, K–O, and K–K:
+
+b [#(Knockoff!TC–!TC )] = 3 × #(KnockoffK–K )
+E
+
+(15)
+
+Considering that the total number of knockoff-involving interactions #(Knockoff) is the sum of
+#(KnockoffTC–!TC ) and #(Knockoff!TC–!TC ), it further follows:
+
+b [#(KnockoffTC–!TC )] = #(Knockoff) − 3 × #(KnockoffK–K )
+E
+
+(16)
+
+The expected number of false positives can now be estimated using the knockoff-involving identification calculations from Eq. 15 and Eq. 16: By plugging these estimates into Eq. 14 and using the results
+to compute the total number of false positives in Eq. 13, we have
+
+b [#(FP)] = #(Knockoff) − 2 × #(KnockoffK–K )
+E
+
+25
+
+(17)
+
+A.5 Simulated dataset
+Following Tsang et al (2018a), we use simulation datasets to evaluate Diamond. 10 simulation functions
+(described in Tab. A.1) are used to generate the simulation datasets.
+
+Table A.1: A test suite of data-generating simulation functions proposed by Tsang
+et al (2018a).
+ID
+F1
+F2
+F3
+F4
+F5
+
+√
+
+Simulation Function
+
+q
+
+x7
+− x2 x7
+x8
+q
+x
+x7
+−1
+x
+x
+9
+π 1 2 2|x3 | − sin (0.5x4 ) + log(|x3 + x5 | + 1) − 1+|x | 1+|x
+− x2 x7
+10
+8|
+2|x4 |
+1
+2
+2
+2
+2
+exp |x1 − x2 | + |x2 x3 | − x3
++ log(x4 + x5 + x7 + x8 ) + x9 + 1+x
+2
+10
+2|x4 |
+1
+2
+2
+2
+2
+2
+exp |x1 − x2 | + |x2 x3 | − x3
++ (x1 x4 ) + log(x4 + x5 + x7 + x8 ) + x9 + 1+x
+2
+10
+p
+1
++
+exp(x
++
+x
+)
++
+|x
++
+x
+|
++
+x
+x
+x
+4
+5
+6
+7
+8
+9
+10
+2
+2
+2
+1+x1 +x2 +x3
+
+π x1 x2
+
+2x3 − sin−1 (x4 ) + log(x3 + x5 ) − xx9
+
+10
+
+p
+
+F7
+
+q
+x28 + x29 + x210
+P
+|x7 |
+(arctan(x1 ) + arctan(x2 ))2 + max(x3 x4 + x6 , 0) − 1+(x x 1x x x )2 + ( 1+|x
+)5 + 10
+i=1 xi
+|
+
+F8
+F9
+F10
+
+x3 +x4 +x5 +x7 + sin(x sin(x + x )) + arccos(0.9x )
+6
+x1 x2 + 2x3 +x5 +x
+7
+8
+9
+10
+p +2
+1
+tanh(x1 x2 + x3 x4 ) |x5 | + exp(x5 + x6 ) + log((x6 x7 x8 )2 + 1) + x9 x10 + 1+|x
+10 |
+sinh(x1 + x2 ) + arccos(tanh(x3 + x5 + x7 )) + cos(x4 + x5 ) + sec(x7 x9 )
+
+F6
+
+exp(|x1 x2 | + 1) − exp(|x3 + x4 | + 1) + cos(x5 + x6 − x8 ) +
+4 5 6 7 8
+
+9
+
+Following the settings used in Tsang et al (2018a), we employed a sample size of n = 20, 000, equally
+divided into training and test sets. In addition, the number of features is set at p = 30, and all features
+are sampled randomly from a continuous uniform distribution, U (0, 1). Only the first 10 out of 30 features
+contribute to the corresponding response, while the remaining features serve as noise to increase the task’s
+complexity. For robustness, we repeated the experiment 20 times for each simulated dataset using different
+random seeds. Each repetition involved data generation, knockoff generation using KnockoffsDiagnostics
+(Blain et al, 2024), ML model training, and interaction-wise FDR estimation. For all simulation settings,
+we reported the mean performance with 95% confidence intervals, fixing the target FDR level at q = 0.2.
+We discovered that the proposed non-additivity distillation procedure is essential; without it, the FDR
+cannot be controlled by naively using reported interaction importance from existing methods (Fig. A.2).
+To gain insight into the FDR control failure, we conducted a qualitative comparison assessing interaction
+importance before and after non-additivity distillation using the simulation function F1 across different
+ML models (Fig. A.3). The primary cause of the FDR control failure lies in the distribution disparity
+between original-only interactions and those involving knockoffs. This suggests a violation of the knockoff
+filter’s assumption in controlling FDR. The proposed non-additivity distillation procedure mitigates
+the disparity by extracting non-additive interaction effects from the reported interaction importance
+measures, thereby enhancing the utility of knockoff-involving interactions as a negative control for FDR
+estimation.
+
+26
+
+Multi-Layer
+Perceptron
+
+Feature Tokenizer
+Transformer
+
+Kolmogorov-Arnold
+Network
+
+Convolutional
+Neural Network
+
+LightGBM
+
+XGBoost
+
+Factorization
+Machines
+
+F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
+
+F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
+
+F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
+
+F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
+
+F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
+
+F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
+
+F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
+
+Multi-Layer
+Perceptron
+
+Feature Tokenizer
+Transformer
+
+Kolmogorov-Arnold
+Network
+
+Convolutional
+Neural Network
+
+LightGBM
+
+XGBoost
+
+Factorization
+Machines
+
+F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
+
+F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
+
+F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
+
+F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
+
+F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
+
+F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
+
+F1 F2 F3 F4 F5 F6 F7 F8 F9 F10
+
+FDR
+w/ calibration
+
+Power
+w/ calibration
+
+AUROC
+w/ calibration
+
+a
+
+FDR
+w/o calibration
+
+Power
+w/o calibration
+
+AUROC
+w/o calibration
+
+b
+
+Fig. A.2: Evaluation of Diamond without non-additivity distillation on simulated datasets.
+(a) Diamond with the proposed non-additivity distillation procedure effectively controls the FDR across
+all ML models. (b) Diamond without the proposed non-additivity distillation procedure fails to control
+the FDR.
+
+27
+
+Fig. A.3: The non-additivity distillation procedure mitigates the disparity between originalonly interactions and those involving knockoffs. (a) The reported interaction importance from
+existing methods reveals a clear disparity in the distribution of interaction importance between originalonly interactions and those involving knockoffs, on simulation function F1 . The distilled non-additive
+interactions help mitigate distributional disparities. (b) The reported interaction importance from existing methods shows a clear disparity in the cumulative density function between original-only interactions
+and those involving knockoffs.
+
+28
+
+A.6 Real experiments
+
+Fig. A.4: Evaluating Diamond on a real Drosophila enhancer dataset with FT-Transformer
+models. (a) Diamond is applied with FT-Transformer model to identify important non-additive interactions. Each possible interaction is measured by the minimum FDR threshold cutoff at which it is
+selected, with the top five interaction annotated. The annotated transcription factors are labeled by their
+UniProt identifiers. The red stars indicate well-characterized interactions in early Drosophila embryos
+as ground truth. (b) The top interactions reported by the MLP model are qualitatively evaluated from
+three aspects: the contribution of feature values to the marginal and interaction importance measure,
+and the contribution of the marginal importance measures to the interaction importance measure.
+
+Fig. A.5: Evaluating Diamond on a real Drosophila enhancer dataset with LightGBM models. (a) Diamond is applied with LightGBM model to identify important non-additive interactions. Each
+possible interaction is measured by the minimum FDR threshold cutoff at which it is selected, with the
+top five interaction annotated. The annotated transcription factors are labeled by their UniProt identifiers. The red stars indicate well-characterized interactions in early Drosophila embryos as ground truth.
+(b) The top interactions reported by the MLP model are qualitatively evaluated from three aspects: the
+contribution of feature values to the marginal and interaction importance measure, and the contribution
+of the marginal importance measures to the interaction importance measure.
+
+29
+
+Fig. A.6: Evaluating Diamond on a real Drosophila enhancer dataset with XGBoost models.
+(a) Diamond is applied with XGBoost model to identify important non-additive interactions. Each
+possible interaction is measured by the minimum FDR threshold cutoff at which it is selected, with the top
+five interaction annotated. The annotated transcription factors are labeled by their UniProt identifiers.
+The red stars indicate well-characterized interactions in early Drosophila embryos as ground truth. (b)
+The top interactions reported by the MLP model are qualitatively evaluated from three aspects: the
+contribution of feature values to the marginal and interaction importance measure, and the contribution
+of the marginal importance measures to the interaction importance measure.
+
+30
+
+

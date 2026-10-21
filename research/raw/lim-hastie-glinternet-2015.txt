@@ -1,0 +1,2609 @@
+arXiv:1308.2719v1 [stat.ME] 12 Aug 2013
+
+Learning interactions through hierarchical
+group-lasso regularization
+Michael Lim
+
+Trevor Hastie
+
+August 14, 2013
+
+Abstract
+We introduce a method for learning pairwise interactions in a manner that satisfies strong hierarchy: whenever an interaction is estimated to be nonzero, both its associated main effects are also included
+in the model. We motivate our approach by modeling pairwise interactions for categorical variables with arbitrary numbers of levels,
+and then show how we can accommodate continuous variables and
+mixtures thereof. Our approach allows us to dispense with explicitly
+applying constraints on the main effects and interactions for identifiability, which results in interpretable interaction models. We compare
+our method with existing approaches on both simulated and real data,
+including a genome wide association study, all using our R package
+glinternet.
+
+1
+
+Introduction
+
+Given an observed response and explanatory variables, we expect interactions to be present if the response cannot be explained by additive functions
+of the variables. The following definition makes this more precise.
+Definition 1. When a function f (x, y) cannot be expressed as g(x) + h(y)
+for some functions g and h, we say that there is an interaction in f between
+x and y.
+Interactions of single nucleotide polymorphisms (SNPs) are thought to
+play a role in cancer [Schwender and Ickstadt, 2008] and other diseases.
+Modeling interactions has also served the recommender systems community
+well: latent factor models (matrix factorization) aim to capture user-item
+interactions that measure a user’s affinity for a particular item, and are the
+1
+
+state of the art in predictive power [Koren, 2009]. In lookalike-selection, a
+problem that is of interest in computational advertising, one looks for features that most separates a group of observations from its complement, and
+it is conceivable that interactions among the features can play an important
+role.
+There are many challenges, the first of which is a problem of scalability.
+Even with 10,000 variables, we are already looking at a 50 × 106 -dimensional
+space of possible interaction pairs. Complicating the matter are spurious
+correlations amongst the variables, which makes learning even harder. Finally, in some applications, sample sizes are relatively small and the signal
+to noise ratio is low. For example, genome wide association studies (GWAS)
+can involve hundreds of thousands or millions of variables, but only several
+thousand observations. Since the number of interactions is on the order of
+the square of the number of variables, computational considerations quickly
+become an issue.
+Finding interactions is an example of the “p > n” problem where there
+are more features or variables than observations. A popular approach in
+supervised learning problems of this type is to use regularization, such as
+adding a squared L2 penalty of the form kβk22 or a L1 penalty of the form
+kβk1 to the coefficients. The latter type of penalty has been the focus of
+much research since its introduction in [Tibshirani, 1996], and is called the
+lasso. One of the reasons for the lasso’s popularity is that it does variable
+selection: it sets some coefficients exactly to zero. There is a group analogue
+to the lasso, called the group-lasso [Yuan and Lin, 2006], that sets groups
+of variables to zero. The idea behind our method is to set up main effects
+and interactions (to be defined later) as a group of variables, and then we
+perform selection via the group-lasso.
+Discovering interactions is an area of active research; see, for example, [Bien et al, 2013] and [Chen et al., 2011]. In this paper, we introduce
+glinternet, a method for learning first-order interactions that can be applied to categorical variables with arbitrary numbers of levels, continuous
+variables, and combinations of the two. Our approach consists of two phases:
+a screening stage (for large problems) that gives a candidate set of main effects and interactions, followed by variable selection on the candidate set
+with the group-lasso. We introduce two screening procedures, the first of
+which is inspired by our observation that boosting with depth-2 trees naturally gives rise to an interaction selection process that enforces hierarchy:
+an interaction cannot be chosen until a split has been made on its associated
+main effect. The second method is an adaptive procedure that is based on
+the strong rules [Tibshirani et al, 2012] for discarding predictors in lasso2
+
+type problems. We show in Section 3 how the group-lasso penalty naturally
+enforces strong hierarchy in the resulting solutions.
+We can now give an overview of our method:
+1. If required, screen the variables to get a candidate set C of interactions
+and their associated main effects. Otherwise, take C to consist of all
+main effects and pairwise interactions.
+2. Fit a group-lasso on C with a grid of values for the regularization
+parameter. Start with λ = λmax for which all estimates are zero.
+As we decrease λ, we allow more terms to enter the model, and we
+stop once a user-specified number of interactions have been discovered.
+Alternatively, we can choose λ using any model selection technique
+such as cross validation.
+
+1.1
+
+A simulated example
+
+As a first example, we perform 100 simulations with 500 3-level categorical
+variables and 800 quantitative observations. There are 10 main effects and
+10 interactions in the ground truth, and the noise level is chosen to give a
+signal to noise ratio of one. We run glinternet without any screening, and
+stop after ten interactions have been found. The average false discovery rate
+and standard errors are plotted as a function of the number of interactions
+found in Figure 1.
+
+1.2
+
+Organization of the paper
+
+The rest of the paper is organized as follows. Section 2 introduces basic
+notions and notation. In section 3, we introduce the group-lasso and how it
+fits into our framework for finding interactions. We also show how glinternet is equivalent to an overlapping grouped lasso. We discuss screening in
+Section 4, and give several examples with both synthetic and real datasets
+in Section 7 before going into algorithmic details in Section 8. We conclude
+with a discussion in Section 9.
+
+2
+
+Background and notation
+
+We use the random variables Y to denote the response, F to denote a
+categorical feature, and Z to denote a continuous feature. We use L to
+denote the number of levels that F can take. For simplicity of notation we
+3
+
+0.3
+●
+
+False discovery rate
+
+●
+
+0.2
+
+●
+
+●
+
+0.1
+●
+
+●
+
+●
+●
+
+0.0 ●
+
+●
+
+0
+
+1
+
+2
+
+3
+
+●
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10
+
+Number of interactions found
+
+Figure 1: False discovery rate vs number of discovered interactions
+will use the first L positive integers to represent these L levels, so that F
+takes values in the set {i ∈ Z : 1 ≤ i ≤ L}. Each categorical variable has an
+associated random variable X ∈ RL with a 1 that indicates which level F
+takes, and 0 everywhere else.
+When there are p categorical (or continuous) features, we will use subscripts to index them, i.e. F1 , . . . , Fp . Boldface font will always be reserved
+for vectors or matrices that comprise of realizations of these random variables. For example, Y is the n-vector of observations of the random variable
+Y , F is the n-vector of realizations of the random variable F , and Z is the
+n-vector of realizations of the random variable Z. Similarly, X is a n × L
+indicator matrix whose i-th row consists of a 1 in the Fi -th column and 0
+everywhere else. We use a n × (Li · Lj ) indicator matrix Xi:j to represent
+the interaction Fi : Fj . We will write
+Xi:j = Xi ∗ Xj ,
+
+(1)
+
+where the first Lj columns of Xi:j are obtained by taking the elementwise
+products between the first column of Xi and the columns of Xj , and likewise
+for the other columns. For example,
+
+ 
+ 
+
+a b
+e f
+ae af be bf
+∗
+=
+.
+(2)
+c d
+g h
+cg ch dg dh
+
+4
+
+2.1
+
+Definition of interaction for categorical variables
+
+To see how Definition 1 applies to this setting, let E(Y |F1 = i, F2 = j) = µij ,
+the conditional mean of Y given that F1 takes level i, and F2 takes level j.
+There are 4 possible cases:
+1. µij = µ (no main effects, no interactions)
+2. µij = µ + θ1i (one main effect F1 )
+3. µij = µ + θ1i + θ2j (two main effects)
+ij
+4. µij = µ + θ1i + θ2j + θ1:2
+(main effects and interaction)
+
+Note that all but the first case is overparametrized, and the usual procedure is to impose sum constraints on the main effects and interactions:
+L1
+X
+
+θ1i = 0,
+
+i=1
+
+L2
+X
+θ2j = 0
+
+(3)
+
+j=1
+
+and
+L1
+X
+ij
+θ1:2
+= 0 for fixed j,
+
+L2
+X
+ij
+θ1:2
+= 0 for fixed i.
+
+i=1
+
+j=1
+
+(4)
+
+In what follows, θi , i = 1, · · · , p, will represent the main effect coefficients, and θi:j will denote the interaction coefficients. We will use the terms
+“main effect coefficients” and “main effects” interchangeably, and likewise
+for interactions.
+
+2.2
+
+Weak and strong hierarchy
+
+An interaction model is said to obey strong hierarchy if an interaction can
+be present only if both of its main effects are present. Weak hierarchy is
+obeyed as long as either of its main effects are present. Since main effects
+as defined above can be viewed as deviations from the global mean, and
+interactions are deviations from the main effects, it rarely make sense to
+have interactions without main effects. This leads us to prefer interaction
+models that are hierarchical. We will see in Section 3 that glinternet
+produces estimates that obey strong hierarchy.
+
+5
+
+2.3
+
+First order interaction model
+
+Our model for a quantitative response Y is given by
+Y =µ+
+
+p
+X
+
+Xi θi +
+
+i=1
+
+X
+
+Xi:j θi:j + 
+
+(5)
+
+i<j
+
+where  ∼ N (0, σ 2 ). For binary responses, we have
+logit(P(Y = 1|X)) = µ +
+
+p
+X
+
+Xi θi +
+
+i=1
+
+X
+
+Xi:j θi:j .
+
+(6)
+
+i<j
+
+We fit these models by minimizing an appropriate choice of loss function
+L. Because the models are still overparametrized, we impose the relevant
+constraints for the coefficients θ (see (3) and (4)). We can thus cast the
+problem of fitting a first-order interaction model as an optimization problem
+with constraints:
+argminµ,θ L(Y, Xi:i≤p , Xi:j ; µ, θ)
+
+(7)
+
+subject to the relevant constraints. L can be any loss function, typically
+squared error loss for the quantitative response model given by
+2
+
+p
+
+X
+X
+1
+L(Y, Xi:i≤p , Xi:j ; µ, θ) =
+Y−µ·1−
+Xi θi +
+Xi:j θi:j
+2
+i=1
+
+i<j
+
+,
+
+(8)
+
+2
+
+and logistic loss for the binomial response model given by
+
+L(Y, Xi:i≤p , Xi:j ; µ, θ) = − YT (µ · 1 +
+
+p
+X
+
+
+− 1T log 1 + exp(µ · 1 +
+
+X i θi +
+
+X
+
+Xi:j θi:j )
+
+i=1
+
+i<j
+
+p
+X
+
+X
+
+i=1
+
+
+X i θi +
+
+Xi:j θi:j ) , (9)
+
+i<j
+
+where the log and exp are taken component-wise. Notice that the optimization problem (7) does not impose any hierarchical constraints on the
+coefficients θ, so that its solutions may obey neither weak nor strong hierarchy. This need not be a problem, although it is our contention that some
+kind of hierarchy is more natural.
+6
+
+2.4
+
+Group-lasso and overlapped group-lasso
+
+Since glinternet’s workhorse is the group-lasso, we briefly introduce it
+here. We refer the reader to [Yuan and Lin, 2006] for more technical details.
+The group-lasso can be thought of as a more general version of the wellknown lasso. Suppose there are p groups of variables (possibly of different
+sizes), and let the feature matrix for group i be denoted by Xi . Let Y
+denote the vector of observations. The group-lasso obtains the estimates β̂j
+as the solution to
+p
+
+p
+
+j=1
+
+j=1
+
+X
+X
+1
+argminµ,β kY − µ · 1 −
+Xj βj k22 + λ
+γj kβj k2 .
+2
+
+(10)
+
+Note that if each group consists of only one variable, this reduces to the
+lasso criterion. In our application, each indicator matrix X will represent a
+group. The group-lasso applied to the X’s intuitively selects those variables
+that have strong overall contribution from all the levels toward explaining
+the response by setting some of the β’s to 0. If an estimate β̂i is nonzero,
+then all its components are usually nonzero.
+The parameter λ controls the amount of regularization, with larger values
+implying more regularization. The γ’s allow each group to be penalized to
+different extents; we set them all equal to 1 (see Section 8). To solve (10),
+we start with λ large enough so that all estimates are zero. Decreasing λ
+along a grid of values results in a path of solutions, from which an optimal
+λ can be chosen by cross validation or some model selection procedure.
+The Karush-Kuhn-Tucker (KKT) optimality conditions for the grouplasso are simple to compute and check. For group i, they are
+kXTi (Y − Ŷ)k2 < γi λ
+
+if β̂i = 0
+
+(11)
+
+kXTi (Y − Ŷ)k2 = γi λ
+
+if β̂i 6= 0.
+
+(12)
+
+The group-lasso is commonly fit with some form of gradient descent, and
+convergence can be confirmed by checking the KKT conditions. Details of
+the algorithm we use can be found in Section 8.
+The overlapped group-lasso is a variant of the group-lasso where the
+groups of variables are allowed to have overlaps, i.e. some variables can
+show up in more than one group. However, each time a variable shows up
+in a group, it gets a new coefficient. For example, if a variable is included
+in 3 groups, then it has 3 coefficients that need to be estimated.
+
+7
+
+3
+
+Methodology and results
+
+We want to fit the first order interaction model in a way that obeys strong
+hierarchy. We show in Section 3.1 how this can be achieved by adding
+an overlapped group-lasso penalty to the objective in (7). We then show
+how this optimization problem can be conveniently solved via a group-lasso
+without overlaps.
+
+3.1
+
+Strong hierarchy through overlapped group-lasso
+
+Adding an overlapped group-lasso penalty to (7) is one way of obtaining
+solutions that satisfy the strong hierarchy property. The results that follow
+hold for both squared error and logistic loss, but we focus on the former for
+clarity.
+Consider the case where there are two categorical variables F1 and F2
+with L1 and L2 levels respectively. Their indicator matrices are given by X1
+and X2 . We solve
+ 2
+α̃1
+1
+argminµ,α,α̃
+Y − µ · 1 − X1 α1 − X2 α2 − [X1 X2 X1:2 ]  α̃2 
+2
+α1:2
+2
+
+q
+(13)
++ λ kα1 k2 + kα2 k2 + L2 kα̃1 k22 + L1 kα̃2 k22 + kα1:2 k22
+
+
+subject to
+L
+1
+X
+
+α1i = 0,
+
+i=1
+
+L
+2
+X
+
+α2j = 0,
+
+j=1
+
+L
+1
+X
+i=1
+
+α̃1i = 0,
+
+L
+2
+X
+
+α̃2j = 0
+
+(14)
+
+j=1
+
+and
+L1
+X
+i=1
+
+ij
+α1:2
+= 0 for fixed j,
+
+L2
+X
+
+ij
+α1:2
+= 0 for fixed i.
+
+(15)
+
+j=1
+
+Notice that Xi , i = 1, 2 each have two different
+coefficient vectors αi and
+p
+α̃i , resulting in an overlapped penalty. The L2 kα̃1 k22 + L1 kα̃2 k22 + kα1:2 k22
+ˆ1 =
+term results in estimates that satisfy strong hierarchy, because either α̃
+ˆ
+α̃2 = α̂1:2 = 0 or all are nonzero, i.e. interactions are always present with
+both main effects.
+
+8
+
+The constants L1 and L2 are chosen to put α̃1 , α̃2 , and α1:2 on the same
+scale. To motivate this, note that we can write
+X1 α̃1 = X1:2 [α̃1 , . . . , α̃1 ]T ,
+| {z }
+
+(16)
+
+L2 copies
+
+and similarly for X2 α̃2 . We now have a representation for α̃1 and α̃2 with
+respect to the space defined by X1:2 , so that they are “comparable” to α1:2 .
+We then have
+k[α̃1 , . . . , α̃1 ]k22 = L2 kα̃1 k22
+| {z }
+
+(17)
+
+L2 copies
+
+and likewise for α̃2 . More details are given in Section 3.2 below.
+The actual main effects and interactions can be recovered as
+ˆ1
+θ̂1 = α̂1 + α̃
+ˆ2
+θ̂2 = α̂2 + α̃
+
+(18)
+
+θ̂1:2 = α̂1:2 .
+
+(20)
+
+(19)
+
+Because of the strong hierarchy property mentioned above, we also have
+θ̂1:2 6= 0 =⇒ θ̂1 6= 0 and θ̂2 6= 0.
+
+(21)
+
+The overlapped group-lasso with constraints is conceptually simple, but
+care must be taken in how we parametrize the constraints. This is especially so because we penalize the coefficients, and any representation of
+the problem that does not preserve symmetry will result in unequal penalization schemes for the coefficients. The problem becomes more tedious
+as the number of variables and levels grows. We now show how to solve
+the overlapped group-lasso problem by solving an equivalent unconstrained
+group-lasso problem. This is advantageous because
+1. the problem can be represented in a symmetric way, thus avoiding the
+need for careful choices of parametrization, and
+2. we only have to fit a group-lasso without constraints on the coefficients,
+which is a well-studied problem.
+
+9
+
+3.2
+
+Equivalence with unconstrained group-lasso
+
+We show that the overlapped group-lasso above can be solved with a simple
+group-lasso. We will need two Lemmas. The first shows that because we
+fit an intercept in the model, the estimated coefficients β̂ for categorical
+variables will have mean zero.
+Lemma 1. Let X be an indicator matrix. Then the solution β̂ to
+argminµ,β
+
+1
+kY − µ · 1 − Xβk22 + λkβk2
+2
+
+(22)
+
+satisfies
+¯
+β̂ = 0.
+
+(23)
+
+The same is true for logistic loss.
+Proof. Because X is an indicator matrix, each row consists of exactly a
+single 1 (all other entries 0), so that
+X · c1 = c1
+
+(24)
+
+for any constant c. It follows that if µ̂ and β̂ are solutions, then so are µ̂ + c1
+¯
+and β̂ − c1. But the norm kβ̂ − c1k2 is minimized for c = β̂.
+The next Lemma states that if we include two intercepts in the model,
+one penalized and the other unpenalized, then the penalized intercept will
+be estimated to be zero. This is because we can achieve the same fit with a
+lower penalty by taking µ ←− µ + µ̃.
+Lemma 2. The optimization problem
+argminµ,µ̃,β
+
+1
+kY − µ · 1 − µ̃ · 1 − . . .k22 + λ
+2
+
+q
+kµ̃k22 + kβk22
+
+(25)
+
+ˆ = 0 for all λ > 0. The same result holds for logistic loss.
+has solution µ̃
+The next theorem shows how the overlapped group-lasso in Section 3.1
+reduces to a group-lasso.
+Theorem 1. Solving the constrained optimization problem (13) - (15) in
+Section 3.1 is equivalent to solving the unconstrained problem
+argminµ,β
+
+1
+kY − µ · 1 − X1 β1 − X2 β2 − X1:2 β1:2 k22 + λ (kβ1 k2 + kβ2 k2 + kβ1:2 k2 ) .(26)
+2
+10
+
+Proof. We need to show that the group-lasso objective can be equivalently
+written as an overlapped group-lasso with the appropriate constraints on
+the parameters. We begin by rewriting (13) as
+ 2
+µ̃
+ α̃1 
+1
+
+argminµ,µ̃,α,α̃
+Y − µ · 1 − X1 α1 − X2 α2 − [1 X1 X2 X1:2 ] 
+ α̃2 
+2
+α1:2
+ 2
+
+q
++ λ kα1 k2 + kα2 k2 + L1 L2 kµ̃k22 + L2 kα̃1 k22 + L1 kα̃2 k22 + kα1:2 k22 .
+
+
+(27)
+ˆ = 0. Therefore we have not changed the
+By Lemma 2, we will estimate µ̃
+solutions in any way.
+Lemma 1 shows that the first two constraints in (14) are satisfied by the
+estimated main effects β̂1 and β̂2 . We now show that
+q
+(28)
+kβ1:2 k2 = L1 L2 kµ̃k22 + L2 kα̃1 k22 + L1 kα̃2 k22 + kα1:2 k22
+where the α̃1 , α̃2 , and α1:2 satisfy the constraints in (14) and (15).
+For fixed levels i and j, we can decompose β1:2 (see [Scheffe, 1959]) as
+ij
+·j
+ij
+·j
+··
+i·
+··
+··
+i·
+··
+β1:2
+= β1:2
++ (β1:2
+− β1:2
+) + (β1:2
+− β1:2
+) + (β1:2
+− β1:2
+− β1:2
++ β1:2
+(29)
+)
+ij
+.
+≡ µ̃ + α̃1i + α̃2j + α1:2
+
+(30)
+
+It follows that the whole (L1 L2 )-vector β1:2 can be written as
+β1:2 = 1µ̃ + Z1 α̃1 + Z2 α̃2 + α1:2 ,
+where Z1 is a L1 L2 × L1 indicator matrix of the form
+
+
+1L2 ×1
+0
+···
+0
+ 0
+1L2 ×1 · · ·
+0 
+
+
+
+
+.
+.
+ 0
+.
+0
+0 
+0
+0
+0 1L2 ×1
+|
+{z
+}
+
+(31)
+
+(32)
+
+L1 columns
+
+and Z2 is a L1 L2 × L2 indicator matrix of the form
+
+
+
+ IL2 ×L2
+
+
+L1 copies  ... 
+
+
+IL2 ×L2
+11
+
+(33)
+
+It follows that
+Z1 α̃1 = (α̃11 , . . . , α̃11 , α̃12 , . . . , α̃12 , . . . , α̃1L1 , . . . , α̃1L1 )T
+| {z } | {z }
+|
+{z
+}
+
+(34)
+
+Z2 α̃2 = (α̃21 , . . . , α̃2L2 , α̃21 , . . . , α̃2L2 , . . . , α̃21 , . . . , α̃2L2 )T .
+
+(35)
+
+L2 copies
+
+L2 copies
+
+L2 copies
+
+and
+
+Note that α̃1 , α̃2 , and α1:2 , by definition, satisfy the constraints (14) and
+(15). This can be used to show, by direct calculation, that the four additive
+components in (31) are mutually orthogonal, so that we can write
+kβ1:2 k22 = k1µ̃k22 + kZ1 α̃1 k22 + kZ2 α̃2 k22 + kα1:2 k22
+=
+
+L1 L2 kµ̃k22 + L2 kα̃1 k22 + L1 kα̃2 k22 + kα1:2 k22 .
+
+(36)
+(37)
+
+We have shown that the penalty in the group-lasso problem is equivalent
+to the penalty in the constrained overlapped group-lasso. It remains to
+show that the loss functions in both problems are also the same. Since
+X1:2 Z1 = X1 and X1:2 Z2 = X2 , this can be seen by a direct computation:
+X1:2 β1:2 = X1:2 (1µ̃ + Z1 α̃1 + Z2 α̃2 + α1:2 )
+
+(38)
+
+= 1µ̃ + X1 α̃1 + X2 α̃2 + X1:2 α1:2
+
+
+µ̃
+ α̃1 
+
+= [1 X1 X2 X1:2 ] 
+ α̃2 
+α1:2
+
+(39)
+(40)
+
+Theorem 1 shows that we can use the group-lasso to obtain estimates that
+satisfy strong hierarchy, without solving the overlapped group-lasso with
+constraints. The theorem also shows that the main effects and interactions
+can be extracted with
+ˆ1
+θ̂1 = β̂1 + α̃
+ˆ2
+θ̂2 = β̂2 + α̃
+
+(42)
+
+θ̂1:2 = α̂1:2 .
+
+(43)
+
+(41)
+
+We discuss the properties of the glinternet estimates in the next section.
+
+12
+
+3.3
+
+Properties of the glinternet estimators
+
+While glinternet treats the problem as a group-lasso, examining the
+equivalent overlapped group-lasso version makes it easier to draw insights
+about the behaviour of the method under various scenarios. Recall that the
+overlapped penalty for two variables is given by
+q
+(44)
+kα1 k2 + kα2 k2 + L2 kα̃1 k22 + L1 kα̃2 k22 + kα1:2 k22 .
+If the ground truth is additive, i.e. α1:2 = 0, then α̃1 and α̃2 will be estimated
+to be zero. This is because for L1 , L2 ≥ 2 and a, b ≥ 0, we have
+p
+L2 a2 + L1 b2 ≥ a + b.
+(45)
+Thus it is advantageous to place all the main effects in α1 and α2 , because
+doing so results in a smaller penalty. Therefore, if the truth has no interactions, then glinternet picks out only main effects.
+If an interaction was present (α1:2 > 0), the derivative of the penalty
+term with respect to α1:2 is
+α1:2
+p
+.
+2
+L2 kα̃1 k2 + L1 kα̃2 k22 + kα1:2 k22
+
+(46)
+
+The presence of main effects allows this derivative to be smaller, thus allowing the algorithm to pay a smaller penalty (as compared to no main effects
+present) for making α̂1:2 nonzero. This shows interactions whose main effects
+are also present are discovered before pure interactions.
+
+3.4
+
+Interaction between a categorical variable and a continuous variable
+
+We describe how to extend Theorem 1 to interaction between a continuous
+variable and a categorical variable.
+Consider the case where we have a categorical variable F with L levels,
+and a continuous variable Z. Let µi = E[Y |F = i, Z = z]. There are four
+cases:
+• µi = µ (no main effects, no interactions)
+• µi = µ + θ1i (main effect F )
+• µi = µ + θ1i + θ2 z (two main effects)
+i z (main effects and interaction)
+• µi = µ + θ1i + θ2 z + θ1:2
+
+13
+
+As before, we impose the constraints
+overlapped group-lasso of the form
+
+PL
+
+i
+i=1 θ1 = 0 and
+
+PL
+
+i
+i=1 θ1:2 = 0.
+
+An
+
+
+ 2
+α̃1
+1
+argminµ,α,α̃
+Y − µ · 1 − Xα1 − Zα2 − [X Z (X ∗ Z)]  α̃2 
+2
+α1:2
+ 2
+
+q
+(47)
++ λ kα1 k2 + kα2 k2 + kα̃1 k22 + Lkα̃2 k22 + kα1:2 k22
+subject to
+L
+X
+i=1
+
+α1i = 0,
+
+L
+X
+
+α̃1i = 0,
+
+i=1
+
+L
+X
+
+i
+α1:2
+=0
+
+(48)
+
+i=1
+
+allows us to obtain estimates of the interaction term that satisfy strong
+hierarchy. This is again due to the nature of the square root term in the
+penalty. The actual main effects and interactions can be recovered as
+ˆ1
+θ̂1 = α̂1 + α̃
+ˆ2
+θ̂2 = α̂2 + α̃
+
+(49)
+
+θ̂1:2 = α̂1:2 .
+
+(51)
+
+(50)
+
+We have the following extension of Theorem 1:
+Theorem 2. Solving the constrained overlapped group-lasso above is equivalent to solving
+argminµ,β
+
+1
+kY − µ · 1 − Xβ1 − Zβ2 − (X ∗ [1
+2
+
+Z])β1:2 k22 + λ (kβ1 k2 + kβ2 k2 + kβ1:2 k2 ) .(52)
+
+Proof. We proceed as in the proof of Theorem 1 and introduce an additional
+parameter µ̃ into the overlapped objective:
+ 2
+µ̃
+ α̃1 
+1
+
+argminµ,µ̃,α,α̃
+Y − µ · 1 − Xα1 − Zα2 − [1 X Z (X ∗ Z)] 
+ α̃2 
+2
+α1:2
+2
+
+
+q
++ λ kα1 k2 + kα2 k2 + Lkµ̃k22 + kα̃1 k22 + Lkα̃2 k22 + kα1:2 k22
+(53)
+
+
+ˆ =0
+As before, this does not change the solutions because we will have µ̃
+(see Lemma 2).
+14
+
+Decompose the 2L-vector β1:2 into
+
+
+η1
+,
+η2
+
+(54)
+
+where η1 and η2 both have dimension L × 1. Apply the anova decomposition
+to both to obtain
+η1i = η1· + (η1i − η1· )
+
+(55)
+
+µ̃ + α̃1i
+
+(56)
+
+η2i = η2· + (η2i − η2· )
+
+(57)
+
+≡
+and
+
+≡
+
+i
+α̃2 + α1:2
+.
+
+(58)
+
+P
+i
+Note that α̃1 is a (L × 1)-vector that satisfies L
+i=1 α̃2 = 0, and likewise for
+α1:2 . This allows us to write
+
+ 
+
+µ̃ · 1L×1
+α̃1
+β1:2 =
++
+(59)
+α̃2 · 1L×1
+α1:2
+It follows that
+kβ1:2 k22 = Lkµ̃k22 + kα̃1 k22 + Lkα̃2 k22 + kα1:2 k22 ,
+
+(60)
+
+which shows that the penalties in both problems are equivalent. A direct
+computation shows that the loss functions are also equivalent:
+(X ∗ [1
+
+(X ∗ Z)]β1:2
+(61)
+ 
+
+
+µ̃ · 1L×1
+α̃1
++
+(62)
+= [X (X ∗ Z)]
+α̃2 · 1L×1
+α1:2
+= µ̃ · 1 + Xα̃1 + Zα̃2 + (X ∗ Z)α1:2 .
+(63)
+
+Z])β1:2 = [X
+
+Theorem 2 allows us to accomodate interactions between continuous
+and categorical variables by simply parametrizing the interaction term as
+X ∗ [1 Z], where X is the indicator matrix representation for categorical
+variables that we have been using all along. We then proceed as before with
+a group-lasso.
+
+15
+
+3.5
+
+Interaction between two continuous variables
+
+We have seen that the appropriate representations for the interaction terms
+are
+• X1 ∗ X2 = X1:2 for categorical variables
+• X ∗ [1 Z] = [X
+tinuous variable.
+
+(X ∗ Z)] for one categorical variable and one con-
+
+How should we represent the interaction between two continuous variables?
+Let Z1 and Z2 be two continuous variables. One might guess by now that
+the appropriate form of the interaction term is given by
+Z1:2 = [1
+= [1
+
+Z1 ] ∗ [1
+
+Z2 ]
+
+(64)
+
+Z1
+
+(Z1 ∗ Z2 )].
+
+(65)
+
+Z2
+
+This is indeed the case. A linear interaction model for Z1 and Z2 is given
+by
+E[Y |Z1 = z1 , Z2 = z2 ] = µ + θ1 z1 + θ2 z2 + θ1:2 z1 z2 .
+
+(66)
+
+Unlike the previous cases where there were categorical variables, there are
+no constraints on any of the coefficients. It follows that the overlapped
+group-lasso
+ 2
+µ̃
+ α̃1 
+1
+
+argminµ,µ̃,α,α̃
+Y − µ · 1 − Z1 α1 − Z2 α2 − [1 Z1 Z2 (Z1 ∗ Z2 )] 
+ α̃2 
+2
+α1:2
+2
+
+
+q
+(67)
++ λ kα1 k2 + kα2 k2 + kµ̃k22 + kα̃1 k22 + kα̃2 k22 + kα1:2 k22
+
+
+is trivially equivalent to
+argminµ,β
+
+1
+kY − µ · 1 − Z1 β1 − Z2 β2 − ([1
+2
+
+Z1 ] ∗ [1
+
+Z2 ])β1:2 k22 + λ (kβ1 k2 + kβ2 k2 + kβ1:2 k2 ) ,(68)
+
+ˆ = 0.
+with the β’s taking the place of the α’s. Note that we will have µ̃
+
+16
+
+4
+
+Variable screening
+
+ 
+p
+groups of variables.
+2
+Even for moderate p (∼ 105 ), we will require some form of screening to
+reduce the dimension of the interaction search space. We have argued that
+models satisfying hierarchy make sense, so that it is natural to consider
+screening devices that hedge on the presence of main effects. We discuss
+two screening methods in this section: gradient boosting, and an adaptive
+screen based on the strong rules of [Tibshirani et al, 2012]. We describe the
+boosting approach first.
+glinternet works by solving a group-lasso with p+
+
+4.1
+
+Screening with boosted trees
+
+AdaBoost [Freund and Schapire, 1995] and gradient boosting [Friedman,
+2000] are effective approaches to building ensembles of weak learners such
+as decision trees. One of the advantages of trees is that they are able to
+model nonlinear effects and high-order interactions. For example, a depth-2
+tree essentially represents an interaction between the variables involved in
+the two splits, which suggests that boosting with depth-2 trees is a way
+of building a first-order interaction model. Note that the interactions are
+hierarchical, because in finding the optimal first split, the boosting algorithm
+is looking for the best main effect. The subsequent split is then made,
+conditioned on the first split.
+If we boost with T trees, then we end up with a model that has at most
+T interaction pairs. The following diagram gives a schematic of the boosting
+iterations with categorical variables.
+
++
+
+F1
+{1}
+
+F2
+{1,2}
+
+
+
+~
+
+{1,3}
+
+}
+
+
+
+
+
+F23
+
+{3}
+
+{3}
+
+"
+
+(69)
+
+F11
+{2}
+
+{2,3}
+
+~
+
+{1,2}
+
+#
+
+In the first tree, levels 2 and 3 of F1 are not involved in the interaction
+with F2 . Therefore each tree in the boosted model does not represent an
+interaction among all the levels of the two variables, but only among a
+subset of the levels. To enforce the full interaction structure, one could use
+17
+
+fully-split trees, but we do not develop this approach for two reasons. First,
+boosting is a sequential procedure and is quite slow even for moderately sized
+problems. Using fully split trees will further degrade its runtime. Second, in
+variables with many levels, it is reasonable to expect that the interactions
+only occur among a few of the levels. If this were true, then a complete
+interaction that is weak for every combination of levels might be selected
+over a strong partial interaction. But it is the strong partial interaction that
+we are interested in.
+Boosting is feasible because it is a greedy algorithm. If p is the number of
+variables, an exhaustive search involves O(p2 ) variables, whereas boosting
+operates with O(p). To use the boosted model as a screening device for
+interaction candidates, we take the set of all unique interactions from the
+collection of trees. For example, in our schematic above, we would add F1:2
+and F11:23 to our candidate set of interactions.
+In our experiments, using boosting as a screen did not perform as well
+as we hoped. There is the issue of selecting tuning parameters such as the
+amount of shrinkage and the number of trees to use. Lowering the shrinkage
+and increasing the number of trees improves false discovery rates, but at
+a significant cost to speed. In the next section, we describe a screening
+approach that is based on computing inner products that is efficient and
+that can be integrated with the strong rules for the group lasso.
+
+4.2
+
+An adaptive screening procedure
+
+The strong rules [Tibshirani et al, 2012] for lasso-type problems are effective
+heuristics for discarding large numbers of variables that are likely to be
+redundant. As a result, the strong rules can dramatically speed up the
+convergence of algorithms because they can concentrate on a smaller set
+(we call this the strong set) of variables that are more likely to be nonzero.
+The strong rules are not safe, however, meaning that it is possible that some
+of the discarded variables are actually supposed to be nonzero. Because of
+this, after our algorithm has converged on the strong set, we have to check
+the KKT conditions on the discarded set. Those variables that do not satisfy
+the conditions then have to be added to the current set of nonzero variables,
+and we fit on this expanded set. This happens rarely in our experience,
+i.e. the discarded variables tend to remain zero after the algorithm has
+converged on the strong set, which means we rarely have to do multiple
+rounds of fitting for any given value of the regularization paramter λ.
+The strong rules for the group-lasso involve computing si = kXTi (Y −
+Ŷ)k2 for every group of variables Xi , and then discarding a group i if si <
+18
+
+ 
+p
+2λcurrent −λprevious . If this is feasible for all p+
+groups, then there is no
+2
+need for screening; we simply fit the group-lasso on those groups that pass
+the strong rules filter. Otherwise, we approximate this by screening only on
+the groups that correspond to main effects. We then take the candidate set
+of interactions to consist of all pairwise interactions between the variables
+that passed this screen. Note that because the KKT conditions for group i
+are (see Section 2.4)
+si < λ
+
+if β̂i = 0
+
+(70)
+
+si = λ if β̂i 6= 0,
+
+(71)
+
+we will have already computed the si for the strong rules from checking
+the KKT conditions for the solutions at the previous λ. This allows us to
+integrate screening with the strong rules in an efficient manner. An example
+will illustrate.
+Suppose we have 10,000 variables (∼ 50 × 106 possible interactions), but
+we are computationally limited to a group-lasso with 106 groups. Assume
+we have the fit for λ = λk , and want to move on to λk+1 . Let rλk =
+Y − Ŷλk denote the current residual. At this point, the variable scores si =
+kXTi rλk k2 have already been computed from checking the KKT conditions at
+the solutions for λk . We restrict ourselves to the 10,000 variables, and take
+λ
+the 100 with the highest scores. Denote this set by T100k+1 . The candidate
+λ
+set of variables for the group-lasso is then given by T100k+1 together with the
+λ
+pairwise interactions between all 10,000 variables and T100k+1 . Because this
+gives a candidate set with about 100 × 10, 000 = 106 terms, the compuation
+is now feasible. We then compute the group-lasso on this candidate set, and
+repeat the procudure with the new residual rλk +1 .
+This screen is easy to compute since it is based on inner products. Moreover, they can be computed in parallel. The procedure also integrates well
+with the strong rules by reusing inner products computed from the fit for a
+previous λ.
+
+5
+
+Related work and approaches
+
+We describe some past and related approaches to discovering interactions.
+We give a short synopsis of how they work, and say why they are inadequate
+for our purposes. The method most similar to ours is hierNet.
+
+19
+
+5.1
+
+Logic regression [Ruczinski I, 2003]
+
+Logic regression finds boolean combinations of variables that have high predictive power of the response variable. For example, a combination might
+look like
+(F1 and F3 ) or F5 .
+
+(72)
+
+This is an example of an interaction that is of higher-order than what glinternet handles, and is an appealing aspect of logic regression. However,
+logic regression does not accomodate continuous variables or categorical variables with more than two levels. We do not make comparisons with logic
+regression in our simulations for this reason.
+
+5.2
+
+Composite absolute penalties [Zhao et al., 2009]
+
+Like glinternet, this is also a penalty-based approach. CAP employs
+penalties of the form
+k(βi , βj )kγ1 + kβj kγ2
+
+(73)
+
+where γ1 > 1. Such a penalty ensures that β̂i 6= 0 whenever β̂j 6= 0. It
+is possible that β̂i 6= 0 but β̂j = 0. In other words, the penalty makes
+β̂j hierarchically dependent on β̂i : it can only be nonzero after β̂i becomes
+nonzero. It is thus possible to use CAP penalties to build interaction models
+that satisfy hierarchy. For example, a penalty of the form k(θ1 , θ2 , θ1:2 )k2 +
+kθ1:2 k2 will result in estimates that satisfy θ̂1:2 6= 0 =⇒ θ̂1 6= 0 and θ̂2 6= 0.
+We can thus build a linear interaction model for two categorical variables
+by solving
+argminµ,θ
+
+1
+kY − µ · 1 − X1 θ1 − X2 θ2 − X1:2 θ1:2 k22 + λ(k(θ1 , θ2 , θ1:2 )k2 + kθ1:2 k2 )(74)
+2
+
+subject to (3) and (4). We see that the CAP approach differs from glinternet in that we have to solve a constrained optimization problem which
+is considerably more complicated, thus making it unclear if CAP will be
+computationally feasible for larger problems. The form of the penalties are
+also different: the interaction coefficient in CAP is penalized twice, whereas
+glinternet penalizes it once. It is not obvious what the relationship between the two algorithms’ solutions would be.
+
+20
+
+5.3
+
+hierNet [Bien et al, 2013]
+
+This is a method that, like glinternet, seeks to find interaction estimates
+that obey hierarchy with regularization. The optimization problem that
+hierNet solves is
+n
+
+argminµ,β,θ
+
+1X
+1
+λ
+(yi − µ − xTi β − xTi θxi )2 + λ1T (β + + β − ) + kθk1 (75)
+2
+2
+2
+i=1
+
+subject to
+θ = θT , kθj k1 ≤ βj+ + βj− , βj+ ≥ 0, βj− ≥ 0.
+
+(76)
+
+The main effects are represented by β, and interactions are given by θ.
+The first constraint enforces symmetry in the interaction coefficients. βj+
+and βj− are the positive and negative parts of βj , and are given by βj+ =
+max(0, βj ) and βj− = − min(0, βj ) respectively. The constraint kθj k1 ≤
+βj+ + βj− implies that if some components of the j-th row of θ are estimated
+to be nonzero, then the main effect βj will also be estimated to be nonzero.
+Since θj corresponds to interactions between the j-th variable and all the
+other variables, this implies that the solutions to the hierNet objective satisfy
+weak hierarchy. One can think of βj+ + βj− as a budget for the amount of
+interactions that are allowed to be nonzero.
+The hierNet objective can be modified to obtain solutions that satisfy
+strong hierarchy, which makes it in principle comparable to glinternet.
+Currently, hierNet is only able to accomodate binary and continuous variables, and is practically limited to fitting models with fewer than 1000 variables.
+
+6
+
+Simulation study
+
+We perform simulations to see if glinternet is competitive with existing
+methods. hierNet is a natural benchmark because it also tries to find interactions subject to hierarchical constraints. Because hierNet only works with
+continuous variables and 2-level categorical variables, we include gradient
+boosting as a competitor for the scenarios where hierNet cannot be used.
+
+6.1
+
+False discovery rates
+
+We simulate 4 different setups:
+
+21
+
+1. Truth obeys strong hierarchy. The interactions are only among pairs
+of nonzero main effects.
+2. Truth obeys weak hierarchy. Each interaction has only one of its main
+effects present.
+3. Truth is anti-hierarchical. The interactions are only among pairs of
+main effects that are not present.
+4. Truth is pure interaction. There are no main effects present, only
+interactions.
+Each case is generated with n = 500 observations and p = 30 continuous
+variables, with a signal to noise ratio of 1. Where applicable, there are 10
+main effects and/or 10 interactions in the ground truth. The interaction and
+main effect coefficients are sampled from N (0, 1), so that the variance in the
+observations should be split equally between main effects and interactions.
+Boosting is done with 5000 depth-2 trees and a learning rate of 0.001.
+Each tree represents a candidate interaction, and we can compute the improvement to fit due to this candidate pair. Summing up the improvement
+over the 5000 trees gives a score for each interaction pair, which can then
+be used to order the pairs. We then compute the false discovery rate as a
+function of rank. For glinternet and hierNet, we obtain a path of solutions and compute the false discovery rate as a function of the number of
+interactions discovered. The default setting for hierNet is to impose weak
+hierarchy, and we use this except in the cases where the ground truth has
+strong hierarchy. In these cases, we set hierNet to impose strong hierarchy.
+We also set “diagonal=FALSE” to disable quadratic terms.
+We plot the average false discovery rate with standard error bars as a
+function of the number of predicted interactions in Figure 2. The results are
+from 100 simulation runs. We see that glinternet is competitive with hierNet when the truth obeys strong or weak hierarchy, and does better when
+the truth is anti-hierarchical. This is expected because hierNet requires
+the presence of main effects as a budget for interactions, whereas glinternet can still esimate an interaction to be nonzero even though none of its
+main effects are present. Boosting is not competitive, especially in the antihierarchical case. This is because the first split in a tree is effectively looking
+for a main effect.
+Both glinternet and hierNet perform comparably in these simulations. If
+all the variables are continuous, there do not seem to be compelling reasons
+to choose one over the other.
+22
+
+Weak hierarchy
+1.2
+
+1.0
+
+1.0
+
+0.8
+
+0.8
+
+0.6
+●
+
+●
+
+●
+
+●
+
+●
+
+●
+●
+
+●
+
+●
+
+False discovery rate
+
+False discovery rate
+
+Strong hierarchy
+1.2
+
+method
+
+●
+●
+●
+
+0.4
+
+●
+
+●
+
+●
+
+●
+●
+
+boosting
+glinternet
+hierNet
+
+●
+●
+●
+●
+
+0.2
+
+●
+
+●
+
+●
+
+0.0 ●
+
+●
+
+●
+
+0.2
+
+●
+
+6
+
+7
+
+8
+
+9
+
+10
+
+0
+
+●
+●
+
+1
+
+●
+●
+
+2
+
+Number of predicted interactions
+
+●
+
+●
+
+boosting
+
+●
+
+●
+
+●
+
+glinternet
+
+●
+
+hierNet
+
+●
+
+●
+
+●
+
+●
+●
+
+●
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10
+
+Number of predicted interactions
+
+Anti hierarchy
+
+Pure interaction
+
+1.2
+
+1.2
+
+1.0
+
+●
+
+●
+
+●
+
+●
+
+●
+
+1.0
+●
+
+●
+
+●
+
+●
+
+●
+
+0.8
+
+0.8
+
+●
+
+●
+●
+
+0.6
+●
+
+●
+
+●
+
+●
+
+method
+●
+
+0.4
+
+●
+
+False discovery rate
+
+False discovery rate
+
+●
+
+●
+
+−0.4
+5
+
+●
+
+●
+
+0.0 ●
+
+4
+
+●
+
+●
+
+●
+●
+
+●
+●
+
+3
+
+●
+
+●
+
+−0.4
+2
+
+●
+
+method
+
+−0.2
+
+1
+
+●
+
+0.4
+
+−0.2
+
+0
+
+●
+
+0.6
+
+●
+●
+●
+●
+●
+●
+
+●
+
+●
+
+●
+
+●
+
+●
+
+●
+
+●
+●
+●
+
+boosting
+glinternet
+hierNet
+
+●
+
+0.2
+●
+
+●
+
+0.6
+
+●
+●
+
+method
+
+●
+●
+
+0.4
+
+●
+
+●
+●
+●
+
+●
+
+●
+●
+
+●
+
+0.2
+
+●
+●
+
+●
+
+●
+
+●
+
+●
+
+●
+●
+
+●
+
+●
+
+1
+
+2
+
+3
+
+4
+
+●
+
+●
+●
+
+●
+
+0.0 ●
+
+●
+
+●
+
+0.0 ●
+
+●
+
+−0.2
+
+●
+●
+
+−0.2
+
+−0.4
+
+−0.4
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10
+
+0
+
+Number of predicted interactions
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10
+
+Number of predicted interactions
+
+Figure 2: Simulation results for continuous variables: Average false discovery rate and standard errors from 100 simulation runs.
+
+23
+
+●
+
+boosting
+
+●
+
+glinternet
+
+●
+
+hierNet
+
+●
+
+Log scale
+●
+●
+
+100
+●
+
+Best timing (seconds) from 10 runs
+
+Best timing (seconds) from 10 runs
+
+200
+
+method
+glinternet
+hierNet
+
+100
+
+●
+
+method
+glinternet
+
+●
+
+hierNet
+
+●
+
+1
+●
+
+●
+●
+●
+
+●
+●
+●
+
+0
+
+●
+
+●
+●
+
+●
+
+●
+
+●
+
+2040
+
+80
+
+160
+
+320
+
+640
+
+●
+
+●
+
+●
+
+2040
+
+Number of variables
+
+80
+
+160
+
+320
+
+640
+
+Number of variables
+
+Figure 3: Left: Best wallclock time over 10 runs for discovering 10 interactions. Right: log scale.
+
+6.2
+
+Feasibility
+
+To the best of our knowledge, hierNet is the only readily available package for
+learning interactions among continuous variables in a hierarchical manner.
+Therefore it is natural to use hierNet as a speed benchmark. We generate
+data in which the ground truth has strong hierarchy as in Section 6.1, but
+with n = 1000 quantitative observations and p = 20, 40, 80, 160, 320, 640
+continuous variables. We set each method to find 10 interactions. While
+hierNet does not allow the user to specify the number of interactions to
+discover, we get around this by fitting a path of values, then selecting the
+regularization parameter that corresponds to 10 nonzero estimated interactions. We then refit hierNet along a path that terminates with this choice of
+parameter, and time this run. Both software packages are compiled with the
+same options. Figure 3 shows the best time recorded for each method over
+10 runs. These simulations were timed on a Intel Core-i7 3930K processor.
+
+24
+
+7
+
+Real data examples
+
+We compare the performance of glinternet on several prediction problems. The competitor methods used are gradient boosting, lasso, ridge regression, and hierNet where feasible. In all situations, we determine the
+number of trees in boosting by first building a model with a large number
+of trees, typically 5000 or 10000, and then selecting the number that gives
+the lowest cross-validated error. We use a learning rate of 0.001, and we do
+not subsample the data since the sample sizes are small in all the cases.
+The methods are evaluated on three measures:
+1. missclassification error, or 0-1 loss
+2. area under the receiver operating characteristic (ROC) curve, or auc
+P
+3. cross entropy, given by − n1 ni=1 [yi log(ŷi ) + (1 − yi ) log(1 − ŷi )].
+
+7.1
+
+South African heart disease data
+
+The data consists of 462 males from a high risk region for heart disease
+in South Africa. The task is to predict which subjects had coronary heart
+disease using risk factors such as cumulative tobacco, blood pressure, and
+family history of heart disease. We randomly split the data into 362-100
+train-test examples, and tuned each method on the training data using 10fold cross validation before comparing the prediction performance on the
+held out test data. This splitting process was carried out 20 times, and
+Figure 4 summarizes the results. The methods are all comparable, with no
+distinct winner.
+
+7.2
+
+Spambase
+
+This is the Spambase data taken from the UCI Machine Learning Repository. There are 4601 binary observations indicating whether an email is
+spam or non-spam, and 57 integer-valued variables. All the features are logtransformed by log(1 + x) before applying the methods. We split the data
+into a training set consisting of 3065 observations and a test set consisting of
+1536 observations. The methods are tuned on the training set using 10-fold
+cross validation before predicting on the test set. The results are shown in
+Figure 5.
+
+25
+
+Performance over 20 train/test splits of the data
+0.30
+
+●
+●
+
+0−1 loss
+
+0.25
+
+0.20
+0.90
+●
+
+0.85
+
+type
+auc
+
+0.80
+
+test
+train
+
+0.75
+0.70
+●
+●
+
+cross entropy
+
+0.6
+
+0.5
+●
+
+boosting
+
+glinternet
+
+hierNet
+
+lasso
+
+ridge
+
+Figure 4: Performance of methods on 20 train-test splits of the South African
+heart disease data.
+0.06
+
+0−1 loss
+
+0.04
+
+0.02
+
+0.00
+1.00
+
+0.75
+type
+auc
+
+0.50
+
+test
+train
+
+0.25
+
+0.00
+0.20
+cross entropy
+
+0.15
+0.10
+0.05
+0.00
+boosting
+
+glinternet
+
+hierNet
+
+lasso
+
+ridge
+
+Figure 5: Performance on the Spambase data.
+26
+
+7.3
+
+Dorothea
+
+Dorothea is one of the 5 datasets from the NIPS 2003 Feature Learning Challenge, where the goal is to predict if a chemical molecule will bind to a receptor target. There are 100000 binary features that describe three-dimensional
+properties of the molecules, half of which are probes that have nothing to do
+with the response. The training, validation, and test sets consist of 800, 350,
+and 800 observations respectively. More details about how the data were
+prepared can be found at http://archive.ics.uci.edu/ml/datasets/Dorothea.
+We run glinternet with screening on 1000 main effects, which results
+in about 100 million candidate interaction pairs. The validation set was used
+to tune all the methods. We then predict on the test set with the chosen
+models and submitted the results online for scoring. The best model chosen by glinternet made use of 93 features, compared with the 9 features
+chosen by L1 -penalized logistic regression (lasso). Figure 6 summarizes the
+performance for each method. We see that glinternet has a slight advantage over the lasso, indicating that interactions might be important for this
+problem. Boosting did not perform well in our false discovery rate simulations, which could be one of the reasons why it does not do well here despite
+taking interactions into account.
+
+7.4
+
+Genome-wide association study
+
+We use the simulated rheumatoid arthritis data (replicate 1) from Problem
+3 in Genetic Analysis Workshop 15. Affliction status was determined by a
+genetic/environmental model to mimic the familial pattern of arthritis; full
+details can be found in [Miller et al., 2007]. The authors simulated a large
+population of nuclear families consisting of two parents and two offspring.
+We are then provided with 1500 randomly chosen families with an affected
+sibling pair (ASP), and 2,000 unaffected families as a control group. For
+the control families, we only have data from one randomly chosen sibling.
+Therefore we also sample one sibling from each of the 1,500 ASPs to obtain
+1,500 cases.
+There are 9,187 single nucleotide polymorphism (SNP) markers on chromosomes 1 through 22 that are designed to mimic a 10K SNP chip set, and
+a dense set of 17,820 SNPs on chromosome 6 that approximate the density
+of a 300K SNP set. Since 210 of the SNPs on chromosome 6 are found in
+both the dense and non-dense sets, we made sure to include them only once
+in our analysis. This gives us a total of 9187 − 210 + 17820 = 26797 SNPs,
+
+27
+
+Dataset: dorothea
+1.00
+
+0.75
+
+auc
+
+0.50
+
+0.25
+type
+0.00
+
+test
+train
+validation
+
+0.4
+
+balanced error
+
+0.3
+
+0.2
+
+0.1
+
+0.0
+boosting
+
+glinternet
+
+lasso
+
+ridge
+
+Figure 6: Performance on dorothea
+all of which are 3-level categorical variables.
+We are also provided with phenotype data, and we include sex, age,
+smoking history, and the DR alleles from father and mother in our analysis. Sex and smoking history are 2-level categorical variables, while age is
+continuous. Each DR allele is a 3-level categorical variable, and we combine
+the father and mother alleles in an unordered way to obtain a 6-level DR
+variable. In total, we have 26,801 variables and 3,500 training examples.
+We run glinternet (without screening) on a grid of values for λ that
+starts with the empty model. The first two variables found are main effects:
+• SNP6 305
+• denseSNP6 6873
+Following that, an interaction denseSNP6 6881:denseSNP6 6882 gets picked
+up. We now proceed to analyze this result.
+Two of the interactions listed in the answer sheet provided with the data
+are: locus A with DR, and locus C with DR. There is also a main effect
+from DR. The closest SNP to the given position of locus A is SNP16 31
+on chromosome 16, so we take this SNP to represent locus A. The given
+position for locus C corresponds to denseSNP6 3437, and we use this SNP
+28
+
+for locus C. While it looks like none of the true variables are to be found in
+the list above, these discovered variables have very strong association with
+the true variables.
+If we fit a linear logistic regression model with our first discovered pair
+denseSNP6 6881:denseSNP6 6882, the main effect denseSNP6 6882 and the
+interaction terms are both significant:
+Df
+
+Dev
+
+1
+2
+1
+
+1.61
+1255.68
+5.02
+
+NULL
+denseSNP6 6881
+denseSNP6 6882
+denseSNP6 6881:denseSNP6 6882
+
+Resid. Dev
+4780.4
+4778.7
+3523.1
+3518.0
+
+P(> χ2 )
+0.20386
+<2e-16
+0.02508
+
+Table 1: Anova for linear model fitted to first interaction term that was
+discovered.
+A χ2 test for independence between denseSNP6 6882 and DR gives a
+p-value of less than 1e-15, so that glinternet has effectively selected an
+interaction with DR. However, denseSNP6 6881 has little association with
+loci A and C. The question then arises as to why we did not find the true
+interactions with DR. To investigate, we fit a linear logistic regression model
+separately to each of the two true interaction pairs. In both cases, the main
+effect DR is significant (p-value < 1e − 15), but the interaction term is not:
+
+NULL
+SNP16 31
+DR
+SNP16 31:DR
+NULL
+denseSNP6 3437
+DR
+denseSNP6 3437:DR
+
+Df
+
+Dev
+
+2
+5
+10
+
+3.08
+2383.39
+9.56
+
+2
+5
+8
+
+1.30
+2384.18
+5.88
+
+Resid. Dev
+4780.4
+4777.3
+2393.9
+2384.3
+4780.4
+4779.1
+2394.9
+2389.0
+
+P(> χ2 )
+0.2147
+<2e-16
+0.4797
+0.5223
+<2e-16
+0.6604
+
+Table 2: Anova for linear logistic regression done separately on each of the
+two true interaction terms.
+Therefore it is somewhat unsurprising that glinternet did not pick
+these interactions.
+29
+
+This example also illustrates how the the group-lasso penalty in glinternet helps in discovering interactions (see Section 3.3). We mentioned
+above that denseSNP6 6881:denseSNP6 6882 is significant if fit by itself in
+a linear logistic model (Table 1). But if we now fit this interaction in the
+presence of the two main effects SNP6 305 and denseSNP6 6873, it is not
+significant:
+Df
+
+Dev
+
+2
+2
+4
+
+2140.18
+382.61
+3.06
+
+NULL
+SNP6 305
+denseSNP6 6873
+denseSNP6 6881:denseSNP6 6882
+
+Resid. Dev
+4780.4
+2640.2
+2257.6
+2254.5
+
+P(> χ2 )
+<2e-16
+<2e-16
+0.5473
+
+This suggests that fitting the two main effects fully has explained away
+most of the effect from the interaction. But because glinternet regularizes
+the coefficients of these main effects, they are not fully fit, and this allows
+glinternet to discover the interaction.
+The anova analyses above suggest that the true interactions are difficult
+to find in this GWAS dataset. Despite having to search through a space of
+about 360 million interaction pairs, glinternet was able to find variables
+that are strongly associated with the truth. This illustrates the difficulty of
+the interaction-learning problem: even if the computational challenges are
+met, the statistical issues are perhaps the dominant factor.
+
+8
+
+Algorithm details
+
+We describe the algorithm used in glinternet for solving the group-lasso
+optimization problem. Since the algorithm applies to the group-lasso in
+general and not specifically for learning interactions, we will use Y as before
+to denote the n-vector of observed responses, but X = [X1 X2 . . . Xp ]
+will now denote a generic feature matrix whose columns fall into p groups.
+
+8.1
+
+Defining the group penalties γ
+
+Recall that the group-lasso solves the optimization problem
+argminβ L(Y, X; β) + λ
+
+p
+X
+i=1
+
+30
+
+γi kβi k2 ,
+
+(77)
+
+where L(Y, X; β) is the negative log-likelihood function. This is given by
+1
+kY − Xβk22
+2n
+
+(78)
+
+
+1 T
+Y (Xβ) − 1T log(1 + exp(Xβ))
+n
+
+(79)
+
+L(Y, X; β) =
+for squared error loss, and
+L(Y, X, β) = −
+
+for logistic loss (log and exp are taken component-wise). Each βi is a vector
+of coefficients for group i. When each group consists of only one variable,
+this reduces to the lasso.
+The γi allow us to penalize some groups more (or less) than others.
+We want to choose the γi so that if the signal were pure noise, then all the
+groups are equally likely to be nonzero. Because the quantity kXTi (Y− Ŷ)k2
+determines whether the group Xi is zero or not (see the KKT conditions
+(11)), we define γi via a null model as follows. Let  ∼ (0, I). Then we have
+γi2 = EkXTi k22
+
+(80)
+
+tr XTi Xi
+kXi k2F .
+
+(81)
+
+=
+=
+
+(82)
+
+Therefore we take γi = kXi kF , the frobenius norm of the matrix Xi . In the
+case where the Xi are orthonormal matrices with pi columns, we recover
+√
+γi = pi , which is the value proposed in [Yuan and Lin, 2006]. In our case,
+the indicator matrices for categorical variables all have frobenius norm equal
+√
+to n, so we can simply take γi = 1 for all i. The case where continuous
+variables are present is not as straightforward, but we can normalize all the
+groups to have frobenius norm one, which then allows us to take γi = 1 for
+i = 1, . . . , p.
+
+8.2
+
+Fitting the group-lasso
+
+Fast iterative soft thresholding (FISTA) [Beck and Teboulle, 2009] is a popular approach for computing the lasso estimates. This is essentially a first
+order method with Nesterov style acceleration through the use of a momentum factor. Because the group-lasso can be viewed as a more general version
+of the lasso, it is unsurprising that FISTA can be adapted for the group-lasso
+with minimal changes. This gives us important advantages:
+1. FISTA is a generalized gradient method, so that there is no Hessian
+involved
+31
+
+2. virtually no change to the algorithm when going from squared error
+loss to logistic loss
+3. gradient computation and parameter updates can be parallelized
+4. can take advantage of adaptive momentum restart heuristics.
+Adaptive momentum restart was introduced in [O’Donoghue and Candes,
+2012] as a scheme to counter the “rippling” behaviour often observed with
+accelerated gradient methods. They demonstrated that adaptively restarting the momentum factor based on a gradient condition can dramatically
+speed up the convergence rate of FISTA. The intuition is that we should
+reset the momentum to zero whenever the gradient at the current step and
+the momentum point in different directions. Because the restart condition
+only requires a vector multiplication with the gradient (which has already
+been computed), the added computational cost is negligible. The FISTA
+algorithm with adaptive restart is given below.
+Algorithm 1: FISTA with adaptive restart
+input : Initialized parameters β (0) , feature matrix X, observations
+Y, regularization parameter λ, step size s.
+output: β̂
+Initialize x(0) = β (0) and ρ0 = 1.
+for k = 0, 1, . . . , do
+g (k) = −XT (Y − Xβ (k) );
+
+
+sλ
+x(k+1) = 1 − kβ (k) −sg
+(k) k
+2
+
++
+
+
+β (k) − sg (k) ;
+
+ρk = (β (k) − x(k+1) )T (x(k+1) − x(k) ) > 0 ? 1 : ρk ;
+q
+ρk+1 = (1 + 1 + 4ρ2k )/2;
+−1 (k+1)
+β (k+1) = x(k+1) + ρρkk+1
+(x
+− x(k) );
+
+end
+At each iteration, we take a step in the direction of the gradient with step
+size s. We can get an idea of what s should be by looking at the majorized
+objective function about a fixed point β0 :
+p
+
+X
+1
+kβi k2 . (83)
+M (β) = L(Y, X; β0 ) + (β − β0 ) g(β0 ) + kβ − β0 k22 + λ
+2s
+T
+
+i=1
+
+32
+
+Here, g(β0 ) is the gradient of the negative log-likelihood L(Y, X; β) evaluated at β0 . Majorization-minimization schemes for convex optimization
+choose s sufficiently small so that the LHS of (83) is upper bounded by the
+RHS. One strategy is to start with a large step size, then backtrack until
+this condition is satisfied. We use an approach that is mentioned in [Becker
+et al., 2011] that adaptively initializes the step size with
+s=
+
+kβ (k) − β (k−1) k2
+.
+kgk − gk−1 k2
+
+(84)
+
+We then backtrack from this initialized value if necessary by multiplying s
+with some 0 < α < 1. The interested reader may refer to [Simon et al., 2013]
+for more details about majorization-minimization schemes for the grouplasso.
+
+9
+
+Discussion
+
+We introduced glinternet, a method for learning linear interaction models
+that satisfy strong hierarchy. We demonstrated that the method is comparable with past approaches, but has the added advantage of being able to
+accomodate both categorical and continuous variables on a larger scale. We
+illustrated the method with several examples using real and simulated data,
+and also showed that glinternet can be applied to genome wide association studies.
+glinternet is available on CRAN as a package for the statistical software R.
+
+33
+
+References
+[Beck and Teboulle, 2009] Beck, A. and Teboulle, M. (2009). A fast iterative
+shrinkage-thresholding algorithm for linear inverse problems. SIAM J.
+Img. Sci., 2(1):183–202.
+[Becker et al., 2011] Becker, S., Candes, E., and Grant, M. (2011). Templates for convex cone problems with applications to sparse signal recovery. Mathematical Programming Computation, 3(3):165–218.
+[Bien et al, 2013] Bien et al, J. (2013). A lasso for hierarchical interactions.
+The Annals of Statistics.
+[Chen et al., 2011] Chen, C., Schwender, H., Keith, J., Nunkesser, R.,
+Mengersen, K., and Macrossan, P. (2011). Methods for identifying snp
+interactions: A review on variations of logic regression, random forest and
+bayesian logistic regression. Computational Biology and Bioinformatics,
+IEEE/ACM Transactions on, 8(6):1580 –1591.
+[Freund and Schapire, 1995] Freund, Y. and Schapire, R. E. (1995). A
+decision-theoretic generalization of on-line learning and an application
+to boosting. In Proceedings of the Second European Conference on Computational Learning Theory, EuroCOLT ’95, pages 23–37, London, UK,
+UK. Springer-Verlag.
+[Friedman, 2000] Friedman, J. H. (2000). Greedy Function Approximation:
+A Gradient Boosting Machine. In Annals of Statistics, volume 29, pages
+1189–1232.
+[Koren, 2009] Koren, Y. (2009). Collaborative filtering with temporal dynamics. In Proceedings of the 15th ACM SIGKDD international conference on Knowledge discovery and data mining (KDD’09).
+[Miller et al., 2007] Miller, M., Li, M., Lind, G., and Jang, S.-Y. (2007).
+Problem 3: Simulated rheumatoid arthritis data. BMC Proceedings 1
+(Suppl1):S4.
+[O’Donoghue and Candes, 2012] O’Donoghue, B. and Candes, E. (2012).
+Adaptive restart for accelerated gradient schemes. Foundations of Computational Mathematics.
+[Ruczinski I, 2003] Ruczinski I, Kooperberg C, L. M. (2003). Logic regression. Journal of Computational and Graphical Statistics, 12(3):475–511.
+34
+
+[Scheffe, 1959] Scheffe, L. (1959). The Analysis of Variance. Wiley.
+[Schwender and Ickstadt, 2008] Schwender, H. and Ickstadt, K. (2008).
+Identification of snp interactions using logic regression. Biostatistics,
+9(1):187–198.
+[Simon et al., 2013] Simon, N., Friedman, J., Hastie, T., and Tibshirani, R.
+(2013). A sparse-group lasso. Journal of Computational and Graphical
+Statistics, 22(2):231–245.
+[Tibshirani, 1996] Tibshirani, R. (1996). Regression shrinkage and selection
+via the lasso. Journal of the Royal Statistical Society - Series B: Statistical
+Methodology, 58(1):267–288.
+[Tibshirani et al, 2012] Tibshirani et al, R. (2012). Strong rules for discarding predictors in lasso-type problems. Journal of the Royal Statistical
+Society: Series B (Statistical Methodology).
+[Yuan and Lin, 2006] Yuan, M. and Lin, Y. (2006). Model selection and
+estimation in regression with grouped variables. Journal of the Royal
+Statistical Society - Series B: Statistical Methodology, 68(1):49–67.
+[Zhao et al., 2009] Zhao, P., Rocha, G., and Yu, B. (2009). Grouped and
+hierarchical model selection through composite absolute penalties. The
+Annals of Statistics, 37 (6A):3468–3497.
+
+35
+
+

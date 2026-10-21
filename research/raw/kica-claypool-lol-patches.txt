@@ -1,0 +1,1003 @@
+Nerfs, Buffs and Bugs – Analysis of the Impact of
+Patching on League of Legends
+Artian Kica, Andrew La Manna, Lindsay O’Donnell, Tom Paolillo and Mark Claypool
+Computer Science Department, Worcester Polytechnic Institute, Worcester, MA, USA
+email: claypool@cs.wpi.edu
+
+gaming history [5]. Competitive LoL matches require close
+collaboration amongst teams of players (typically five on each
+side), with players choosing and playing avatars (champions)
+in a specific role (e.g., healer, fighter) to help the team.
+
+Abstract—While traditional software patches primarily fix
+bugs, modern online computer games use patches to change
+gameplay, as well. Despite the importance of gameplay changes
+for both game players and game designers, to the best of our
+knowledge, there are no published results nor available 3rd party
+Websites that analyze game data and patch data. We analyzed
+the effects of patches on gameplay in League of Legends (LoL),
+a popular online game created by Riot Games. Our methods: a)
+harvested all available patch data – over 160 patches with over
+7700 changes – classifying patches based on a novel taxonomy; b)
+gathered game statistics from over 11,000 players in over 465,000
+games; and c) analyzed both the patch data and game data, with
+emphasis on correlations. In addition, we developed a publicly
+accessible Web site that allows for interactive exploration of the
+game data and patch data. Analysis of the data shows that Riot
+patches LoL gameplay an average of twice each day, about ten
+times more often than Riot patches LoL bugs. Patches tend to
+keep all player-chosen champions close to a win rate of 50%.
+While most patch gameplay changes can be categorized and
+even quantified numerically, the impact of combined changes
+are not always straightforward and interpretation of patch text
+is required in order to understand the full impact.
+
+Since it’s release in 2009, LoL has been patched over 160
+times,1 an average of about 1.5 patches per month. LoL uses
+both traditional software patches (that both fix and improve
+software) as well as modern game patches (that release new
+game content and adjust game balance). These patches have
+introduced significant amounts of new game content, roughly
+doubling the number of champion choices available to players
+since release, and altering the game balance for active players.
+Adding game content and changing game balance this way is
+critically important to game designers, since it keeps the game
+fresh for current players, and players since game balance has a
+major impact on game enjoyment [6]. Despite this importance,
+there has been little formal analysis of the effects of patching
+on gameplay, thus presenting an opportunity to better understand, and perhaps improve, modern game patching.
+
+Keywords—Game Analytics, Co-op, Game Balance, Patch
+
+Riot Games provides access to extensive data on previously
+played LoL games through an online database.2 There are
+numerous 3rd party Websites that use the Riot database to
+present game data that is helpful to both players and game
+designers. For example, two popular Web sites, LolKing3 and
+OP.GG,4 provide data on in-game choices players make and
+their impacts on winning/losing games. While many players
+may only wish to know about the latest (patched) game
+version, studying past patch changes can help players and
+game designers predict how current patch changes might affect
+the game.
+
+I. I NTRODUCTION
+Traditionally, computer games were released with all major
+content and game features in place and, hopefully, most bugs
+removed. If fixes or improvements were needed, well-known
+software engineering techniques called patching was used to
+apply new computer code/data to the game. However, while
+traditional patching was used primarily to fix bugs or improve
+performance, many modern games use patching to adjust
+game balance and add content to the game. In fact, many
+games are intentionally released without all game content in
+place and even without all gameplay elements fully vetted.
+Game patches are subsequently pushed out, changing the game
+with additional game content, adjusting the games rules and
+tilting the game balance – all of which effectively changes the
+gameplay for current players.
+
+Unfortunately, to the best of our knowledge, there are no 3rd
+party sites that have historical game data going back more than
+a few months, nor are there 3rd party sites that analyze patch
+content in any quantifiable way. Lacking from all 3rd party
+LoL sites, and published literature for all games, is analysis
+correlating game data with patch changes in order to better
+understand the implications that patches have on the game.
+As-is, 3rd party Websites require users to manually correlate
+game data with patch data, if patch data is even provided, and
+
+A popular example of just such a game is League of
+Legends (LoL, Riot Games, 2009). LoL is perhaps the most
+popular computer game in the world based on hours played per
+month [1], with 27 million players each day and 7.5 million
+simultaneous players at peak times [2]. As part of the eSports
+scene, LoL is lucrative business for some players, too, with a
+professional player circuit and tournaments with prize pools
+over $2 million [3], [4] USD, among the largest in competitive
+
+1 http://leagueoflegends.wikia.com/wiki/Patch
+2 https://developer.riotgames.com/
+3 http://www.lolking.net/
+4 http://www.op.gg/
+
+1
+
+make it impossible to do correlations for historic game data.
+
+II. BACKGROUND AND R ELATED W ORK
+
+In order to analyze the effects of patching on League of Legends gameplay, we first developed a method to gather a large,
+random sample of game data from the Riot game database.
+Our gathering process yielded data on over 11,000 players
+in over 450,000 ranked games from Seasons 4–6. We also
+developed a method to harvest and classify LoL patch notes,
+devising a novel taxonomy of the types of changes relevant to
+both software fixes and improvements and gameplay changes.
+Using our method, we extracted and classified all available
+LoL patch notes from pre-release Alpha through Season 6,
+yielding over 7000 patch notes from 164 patches. In order to
+allow for interactive exploration of the patch data in relation
+to the game data, we developed a novel Web site5 that enables
+users to select LoL avatars and investigate how patch changes
+have impacted their performances over time.
+
+This section provides background information on LoL (Section II-A) and patching (Section II-B), particularly as is relates
+to LoL, and summarizes the lack of related work on analyzing
+game patches (Section II-C).
+A. League of Legends
+League of Legends (LoL) is a multi-player online battle
+arena (MOBA) game where players are matched into two
+opposing teams. While there are several game variants for
+casual players, most competitive (also called ranked) matches
+and all professional matches are played on a standard game
+map with 5 players on each side. The objective is to destroy
+the opposing team’s headquarters. Once matched to a team,
+each player chooses one out of 1286 different characters, called
+champions, to control during the game. Gameplay consists of
+controlling the champion to fight opponent champions as well
+as other lesser monsters on the game map, ideally working
+cooperatively with teammates. Champions vary in their ingame abilities (e.g., method of attack, types of spells) and
+attributes (e.g., amount of damage, rate of attack) and are
+enhanced by skills and items gained during the game.
+
+Our analysis of game data shows the win rates for champions chosen by players to be mostly normally distributed
+around 50%, but with fewer than expected champions much
+higher or much lower than this rate, probably due to patching.
+Champion picks are not at all equal, with a heavy skew for
+the most popular champions. Ban rates are even more skewed,
+with a small percentage of champions being banned the most.
+
+In ranked matches, before the game starts, players alternate picking champions and there can only be one of each
+champion type - i.e., there are 10 unique champions each
+game. Before champion selection, each team bans 3 different
+champions, prohibiting either team from choosing them for the
+game - i.e., there are 6 unique champions banned each game.
+
+Our analysis of patch data shows a fairly steady rate of
+changes which would not be expected for a mature, stable
+game. The majority of changes are not fixes or visual improvements, however, but are changes to the gameplay itself
+in the form of adjusting balance and adding new content.
+Correlating game data with patch data shows changes are
+indeed designed to adjust win rates for champions with a lower
+than average win rate while reducing win rates for those with a
+higher than average win rate. However, more detailed analysis
+also shows that simply counting patch changes does not always
+accurately predict the effects on win rates.
+
+The best LoL teams are those whose players cooperate well,
+with players using their champions for different positions on
+the team (e.g., a tank to absorb damage or a healer to aid
+wounded allies). In fact, Riot designs champions with specific
+team roles in mind. The most basic roles include damage
+dealers, tanks (those who can take a lot of damage), and utility
+(healing friendly champions or controlling enemy champions).
+Some champions can fulfill multiple roles depending on how
+they are played and the in-game items purchased.
+
+Our work makes several key contributions: 1) aggregate
+analysis of the most important in-game statistics for LoL
+players, accompanied by a Web site that enables interactive
+exploration. While other 3rd party Web sites have similar
+information, we are the first to provide such information
+in a historic context; 2) comprehensive classification of all
+LoL patch notes, categorized into a taxonomy that allows
+for exploring the relationship between the kind of patch and
+the effects on gameplay; and 3) analysis of the correlations
+between patch data and gameplay.
+
+League of Legends only allows players to compete against
+other players in the same geographic region. Regions include
+Brazil, Europe East and West, Japan, Latin America North
+and South, North America, Oceania, Russia, and Turkey.
+Competitive players are ranked into tiers of Bronze, Silver,
+Gold, Platinum and Diamond with 5 divisions in each tier.
+The vast majority of ranked players are in the Bronze through
+Platinum tiers. The top two tiers, Master and Challenger, have
+one division each, and Challenger has the best 200 players in
+a geographic region.
+
+The rest of this paper is organized as follows: Section II
+describes background and related work; Section III details
+our methodology for gathering patch and game data for LoL;
+Section IV presents the LoL Crawler Website for interactive
+exploration of LoL patches and game data; Section V analyzes
+the gathered data; and Section VI summarizes our conclusions
+and provides for some possible future work.
+
+B. Patching
+In computer games, “patching” is the process of changing an
+existing game. While there are thousands of changes made to a
+
+5 http://lolcrawler.cs.wpi.edu/
+
+6 As of February 2016, the time of this study.
+
+2
+
+game before it is released, after release the changes are added
+on top of the existing game from the player’s perspective,
+hence the name patch.
+
+returned as plain text in JavaScript Object Notation (JSON)
+format.
+The API provides complete data on previously played
+ranked games for all players from Season 4 onward,8 and
+includes information on champions picked and banned as well
+as the champions that won.9
+
+Many modern day games develop internally until a playable
+version of the game can be played externally, but that game
+version does necessarily have all planned game content. The
+intent of the developers is to release the game externally,
+then patch the game with both fixes to problems as they are
+revealed, as well as add additional content as the player base
+grows.
+
+Since the default key used for API access only allows for a
+maximum of 10 requests every 10 seconds and 500 requests
+every 10 minutes, Riot approved our request for a production
+key that enables 3000 requests every 10 seconds and 180,000
+requests every 10 minutes.
+
+For League of Legends, patches contain new game content,
+balance changes, bug fixes, or technology improvements [7].
+While bug fixes and technology improvements are likely
+welcomed by nearly all players, new game content and balance
+changes are different. Effectively, new game content in the
+form of (for LoL) new champions, new items, new abilities
+and even new game maps, requires a player to re-learn aspects
+of the game that s/he may have already mastered. Balance
+changes are typically somewhat easier since the gameplay
+remains the same, just the relative effectiveness of different
+actions changes, but still require the player to adjust his/her
+play.
+
+The API provides no built-in functionality for extracting a
+random game nor even a game with specific attributes in mind
+(e.g., player ranking). Nor is retrieving the full population of
+games feasible given that there are over 1.5 million players
+on the North American server alone, many with hundreds and
+even thousands of matches in their histories. Instead, a novel
+method to gather a representative sample from the population
+of all ranked games is needed.
+
+There has also been research on traditional software patches,
+e.g., [9], but not as the patches relate to games and not with
+any analysis of the effects of the patches on players/users.
+
+Our approach to sampling proceeds with “seed” players –
+25 players, one from each division from each tier10 – randomly
+selected from players listed at LolKing,11 a 3rd party Web site
+that lists all players by tier and division. The LoL API provides
+the history of ranked matches for each seed player which
+is used to collect additional id’s of players that competed
+with the seed player in a ranked game, hence likely have
+similar rankings. The process is repeated until there are enough
+unique players selected. From these players, game histories are
+combined, duplicate ids removed, and a random sampling of
+games chosen from this combined pool.
+
+There is some published research on data analytics,
+e.g., [10], an important area for game development, but
+none of it has focused on analyzing patches for games nor
+downloadable game content.
+
+Once the list of games is compiled, the full match details
+can be pulled from the Riot API. In our case, we extracted
+champion data – winners, losers (both of which were “picked”)
+and those banned.
+
+C. Related Work
+While there is considerable research on the use of patches
+to address software security, e.g., [8], such patches do not
+typically enhance the software with new features.
+
+B. Gathering Patch Data
+
+III. M ETHODOLOGY
+
+Unlike LoL game data obtained through the Riot API,
+patch notes are not provided in any structured form. Instead,
+patch notes are released as human-readable text. Fortunately,
+formatting and language is fairly consistent across patches in
+relation to the type of change, allowing some automation to
+categorize the patches.
+
+Our methodology to analyze the effects of patching on LoL
+gameplay is as follows:
+1) Gather data on LoL games (see Section III-A).
+2) Harvest data on LoL patches (see Section III-B).
+3) Build a Web site to allow for interactive exploratory
+analysis (see Section IV).
+4) Analyze the data (see Section V).
+
+After manually examining the patches, we created a taxonomy for classifying the individual patch notes, depicted in
+Figure 1. Each patch note is one change to the game and is
+classified into one of the leaves in the taxonomy.
+
+A. Gathering Game Data
+Riot Games provides access to their game database through
+their Application Programming Interface (API),7 a method to
+access structured game data in a secure and reliable way. Once
+a developer key is obtained (free with any LoL user account),
+access is gained through HTTP GET requests with the output
+
+8 Prior to Season 4, game data is incomplete and win rates for champions
+cannot be computed.
+9 Additional game data is available, e.g., gold earned, but gathering and
+analysis is left as future work.
+10 Excluding Master and Challenger, since the vast majority of players are
+in Bronze – Platinum.
+11 http://www.lolking.net/
+
+7 https://developer.riotgames.com/
+
+3
+
+whether such a term is a nerf or buff depends upon the context.
+Quality of life changes do not have consistent language to help
+with categorization. Utility changes occur most often when a
+champion is reworked (i.e., the abilities of the champion are
+significantly changed), but still lack keywords that can aid in
+categorization. The terms “fix(ed)” and “bug” signify a bug fix
+and the terms “visual,” “animation,” and “update(d)” generally
+signify a visual update.
+Figure 1. Patch Taxonomy. Leaves are the final classification for each patch
+note.
+
+In our classification, false negatives occur when a change
+is not detected and no categorization is made. False positives
+occur when a change is detected but is incorrectly categorized.
+True positives occur when a change is detected and correctly
+categorized.
+
+Broadly, there are three main types of patch notes/changes:
+Bug fixes – bug fixes correct inadvertent mistakes in the
+game (e.g., bug fixed where interrupting player action
+would render champion unable to cast spells).
+• Visual – visual changes modify the look of the game
+of either the map and/or a champion, including graphics,
+skins or other animations (e.g., new visual particles added
+to a spell).
+• Gameplay – gameplay changes affect the champions and
+their interactions.
+•
+
+We obtained all available patch notes from the League of
+Legends Wiki,12 a community-edited resource with information on each champion based on patches released by Riot. For
+each champion, we extracted the patch note text, categorized
+it and stored it in a local database for analysis.
+Categorization then used pre-determined keywords for automatic classification for bug fixes, visual changes and numeric
+gameplay changes. Automatic classification of quality of life
+and utility gameplay changes was not done as this greatly increased false positives, while the resulting false negatives were
+easier to catch manually. The final manual categorization step
+classified any remaining unclassified changes and corrected
+any mistakes made.
+
+For issues related to game balance, gameplay changes are of
+the most interest. Gameplay changes can be further categorized
+as:
+Numeric – Numeric changes are quantified modifications
+to game statistics for champions (e.g., amount of damage
+dealt per attack).
+• Utility – Utility changes affect how a champion’s ability
+interacts with other aspects of the game (e.g., an added
+effect to slow an opponent hit by a spell).
+• Quality of Life – Quality of life changes affect the ease
+of use of a champion (e.g., an added visual indicator to
+better determine where a spell will hit).
+•
+
+IV. L O L C RAWLER W EB S ITE
+In order to allow for interactive exploration of the game
+data – specifically, the champion win, pick and ban rates – and
+the patch notes, we implemented a Web site that provides for
+manual analysis of our gathered data. Our publicly accessible
+Web site:
+http://lolcrawler.cs.wpi.edu/
+
+Each gameplay change can be further identified based on
+the effect the change has in terms of the champion’s relative
+strength:
+
+is called LoL Crawler. It allows users to select a champion
+and then simultaneously graphs game rates versus patch for
+that champion and links the graph to champion patch notes.
+Lol Crawler is implemented in PHP, nodeJS13 and C#.
+
+Buff – A buff increases the strength of a champion (e.g.,
+base armor increased from 19 to 23).
+• Nerf – A nerf decreases the strength of a champion (e.g.,
+spell radius reduced from 350 to 300).
+• Neutral – A neutral change is neither clearly a nerf nor a
+buff (e.g., base damage changed from 100 at level 1 and
+500 at level 3 to 150 at level 1 and 450 at level 3 – the
+ability is being buffed at level 1 (going from 100 to 150
+damage), but also nerfed at level 3 (going from 500 to
+450 damage)).
+•
+
+The LoL Crawler home page provides a brief overview text
+of the site at the top of the page and in the middle presents
+a scrollable list of champions, shown with their images and
+names. This champion list is a selection interface similar to
+that used by players in the LoL client to choose a champion
+before a game starts, so should be familiar to many users.
+Selecting one of the champion images/names takes the user
+the data page for that champion, depicted in Figure 2. The top
+of the page shows a graph of the champion rates. The x-axis
+is the patch and the y-axis is the rate (percent). Win rate, pick
+rate and ban rate are selectable on the right, toggling them on
+and off (in Figure 2, they are all on). The x-axis is scaled to
+
+From visual inspection, gameplay changes are the most
+frequent, followed by visual updates and then bug fixes. For
+gameplay changes, numeric changes are the most frequent, followed by utility changes and quality of life changes. Numeric
+changes to gameplay can often be detected from words such as
+“increased,” “reduced” and “modified” followed by a number –
+
+12 http://leagueoflegends.com/wikia.com/
+13 https://nodejs.org/en/
+
+4
+
+Cumulative Distribution
+
+1
+0.9
+0.8
+0.7
+0.6
+0.5
+0.4
+0.3
+0.2
+0.1
+0
+
+Pick
+Ban
+Win
+
+0
+
+20
+
+40
+
+60
+
+80
+
+100
+
+Rate (percent)
+Figure 3. Win, pick and ban rates for all champions calculated for each patch.
+
+choices – specifically, the win rate, pick rate and ban rate
+for each champion, computed separately for each patch (e.g.,
+win rate for the champion Darius for patch number 157 is
+computed from the number of patch 157 games Darius won
+and the total number of patch 157 games Darius played).
+
+Figure 2. Champion data page from the LoL Crawler Web site.
+
+Figure 3 depicts a graph with the cumulative distribution
+functions for each rate, computed as a percentage calculated
+for each champion for each patch. The x-axis is the percentage
+and the y-axis is the cumulative distribution. From the graph,
+the win rates are centered around 50%, which makes sense
+since in a given game, half the champions win and half lose.
+Note, the individual champion win rates are not all the same
+– if they were, they would all have the same rate shown as
+a vertical line at 50%. Instead, the bulk of the distribution is
+between 45-55%, with the “S” shape suggesting the values are
+normally distributed.
+
+show a reduced number of patches to aid readability but is
+scrollable (left and right) over the full set of patches.
+The bottom half of the page shows the patch notes, indicating the patch version number and the champion-specific
+patch notes each contains. Our patch note categorization (see
+Section III-B) is also shown along with the accompanying text.
+Hovering over a data point provides more information about
+the resulting rates from that patch by showing a tooltip above
+that point. Clicking on a data point scrolls the patch text to
+the location of the corresponding changes.
+
+To test for normality, Figure 4 depicts a quantile-quantile
+(Q-Q) plot comparing the win rate distribution to a normal
+distribution. The x-axis is the normal distribution quantile (zscore) and the y-axis is the win rate. The sorted win rate values
+are plotted as points, with the diagonal line being y = x. In
+a Q-Q plot, if the distributions are similar, the points will lie
+upon the line.
+
+V. A NALYSIS
+This section first analyzes the game data gathered through
+the Riot API (Section V-A) and the patch data gathered
+through our classification process (Section V-B), then explores
+relationships between the two (Section V-B).
+
+In the case of Figure 4, the data does look normal and the
+probability plot correlation coefficient is 0.991. However, the
+tails of the distribution do not fit a normal distribution as well
+as the rest of the distribution, where there are fewer win rates
+than would appear normally. Riot has most likely intentionally
+addresses outliers by keeping champions from having significantly higher win rates (too strong) or significantly lower win
+rates (too weak) than a 50% average.
+
+A. Game Data
+We applied our sampling process (see Section III-A) using
+the LoL North American geographic region, resulting in
+465,000 ranked games from Season 4 to the start of Season 6
+(v6.1) randomly selected from the combined history of about
+11,000 players. Each game provided the 10 unique champions
+picked, which champions won and which lost, as well as the
+6 unique champions that were banned. In total, the process
+yielded statistics on nearly 7.5 million champions in games.
+
+The pick rate distribution in Figure 3 is more skewed than
+the win rate distribution. The pick rates range from about 5%
+for half of the distribution to over 20% for top 2% of the
+distribution. The top 5 pick rates are for the champion Lucien
+for patches 126 (v4.8), 127 (v4.9), 134 (v4.16), 135 (v4.17),
+
+From the data gathered, we computed the most fundamental
+statistics on the selection and then effectiveness of player
+
+5
+
+Cumulative Distribution
+
+Win Rate (percent)
+
+80
+70
+60
+50
+40
+30
+20
+-4 -3 -2 -1 0 1 2 3 4
+
+1
+0.9
+0.8
+0.7
+0.6
+0.5
+0.4
+0.3
+0.2
+0.1
+0
+
+Bug Fix
+Visual
+Gameplay
+0
+
+Z Score
+
+Pick Rate
+0.3 %
+6.1 %
+8.1 %
+6.8
+50.2 %
+
+Win Rate
+49.0 %
+50.9 %
+49.7 %
+49.8 %
+50.3 %
+50.3 %
+
+Pick Rate
+4.3 %
+9.0 %
+7.5 %
+11.4 %
+10.0 %
+4.6 %
+
+80
+
+100
+
+B. Patch Data
+
+Ban Rate
+0.0 %
+0.5 %
+4.9 %
+12.4
+94 %
+
+In total, as of the time of our analysis in February 2016, LoL
+had 164 patches with 7710 patch notes/changes. The automatic
+part of our system classified 67% of all changes with a true
+positive rate of 63.2%, a false negative rate of 33.0%, and
+a false positive rate of 3.8%. The precision and recall were
+94.3% and 65.7%, respectively. Manual inspection fixed the
+miss-classified patches and classified the remaining 33% of
+the patch notes. No new false negatives or false positives were
+revealed and all true positives were confirmed.
+
+TABLE II
+S UMMARY STATISTICS OF RATES FOR CHAMPION ROLES .
+Role
+Assassin
+Fighter
+Mage
+Marksman
+Support
+Tank
+
+60
+
+Figure 5. Cumulative distribution of taxonomy level 1 changes.
+
+TABLE I
+S UMMARY STATISTICS FOR RATES .
+Win Rate
+23.3 %
+49.8 %
+49.6 %
+3.4
+67.7 %
+
+40
+
+Number of Changes
+
+Figure 4. Graphical normality test (Q-Q plot) for win rate distribution.
+
+Statistic
+Min
+Median
+Mean
+Std Dev
+Max
+
+20
+
+Ban Rate
+6.9 %
+5.8 %
+3.8 %
+1.8 %
+6.1 %
+3.8 %
+
+LoL was in Alpha and Beta testing from February 2009
+until its official release in July 2010. Since then, there has
+been approximately one competitive season each calendar year
+(i.e., Season 5 ended November 2015).
+Major changes in LoL gameplay is from additional content
+in the form of new champions. While no patches after the
+Alpha and Beta seasons have added more than one champion
+at a time, the number of champions released has varied widely
+with season (year). Early seasons released more champions, as
+often as one champion every two weeks, while more recent
+seasons released fewer than one champion a month on average.
+As of February 2016, there were 128 champions total.
+
+and 164 (v6.1).
+The ban rate distribution in Figure 3 has the most skew,
+where 70% of the champions have a ban rate under 1%, but
+the top 2% of champions have a ban rate over 40%. The top
+5 ban rates are for the champions Jax for patch 128 (v4.10),
+Sejuani for patches 147 (v5.8) and 148 (v5.9) and Darius for
+patches 157 (v5.18) and 158 (v5.19).
+
+Figure 5 depicts a cumulative distribution function (CDF)
+of the top level – Bug Fix, Gameplay, Visual – changes to
+LoL based on our taxonomy (see Figure 1). The x-axis is the
+number of changes in a patch and the y-axis is the cumulative
+distribution. There are three trendlines, one for each type of
+patch change. Bug fixes, the most common patch in traditional
+software, are in the obvious minority for LoL with a median
+of only 2 bug fixes per patch. Visual changes to the game are
+only somewhat more common, with a median of 5 changes
+per patch. Contrast that with gameplay changes where the
+distribution is significantly shifted to the right, with a median
+of 34 changes per patch.
+
+Table I provides the summary statistics for the rates.
+LoL is a cooperative game where champions are designed
+to be played with a set team role during combat.14 Table II
+provides the summary statistics for the rates from Figure 3
+broken down into the designated champion roles. Win rates are
+near 50% for all champions, with Fighters slightly higher and
+Assassins slightly lower. Perhaps correspondingly, Assassins
+have the lowest pick rate. The Marksman has the highest pick
+rate and the lowest ban rate.
+
+Figure 6 depicts a CDF of the second level gameplay –
+Numeric, Utility, Quality of Life – changes to LoL from
+
+14 https://support.riotgames.com/hc/en-us/articles/
+201752864-Choosing-the-Right-Champion
+
+6
+
+Cumulative Distribution
+
+1
+0.9
+0.8
+0.7
+0.6
+0.5
+0.4
+0.3
+0.2
+0.1
+0
+
+Quality of Life
+Utility
+Numeric
+0
+
+20
+
+40
+
+60
+
+80
+
+100
+
+Figure 7. Number of changes versus win rate. Number of changes is count of
+patch notes applied to champion, win rate is computed after patch is applied.
+
+Number of Changes
+Figure 6. Cumulative distribution of taxonomy level 2 changes.
+
+TABLE III
+S UMMARY STATISTICS OF PATCH DATA .
+Change
+Gameplay
+Visual
+Bug fix
+Numeric
+Utility
+Quality of Life
+Buff
+Nerf
+Neutral
+
+Min
+0
+0
+0
+0
+0
+0
+0
+0
+0
+
+Median
+34
+5
+2
+26
+6
+2
+16
+18
+3
+
+Mean
+39
+7
+4
+28
+8
+3
+19
+19
+4
+
+Std Dev
+29
+6
+4
+23
+8
+3
+19
+12
+5
+
+Max
+223
+34
+24
+184
+46
+13
+159
+57
+24
+Figure 8. Buffs minus nerfs versus win rate. Count of buffs and nerfs extracted
+from patch notes, win rate is computed after patch is applied.
+
+our taxonomy (see Figure 1). The x-axis is the number of
+changes in a patch and the y-axis is the cumulative distribution.
+There are three trendlines, one for each type of gameplay
+patch change. Quality of life changes are the rarest, perhaps
+because these are the most significant since they modify how a
+champion is played, and have a median of 2 changes per patch.
+Utility changes are more common with a median of 6 changes
+per patch. Numeric changes are the most common, perhaps
+because they are the easiest to code, and have a median of 26
+changes per patch.
+
+a scatter plot of the win rate against the number of changes
+for that champion. A best-fit quadratic regression for the data
+shows that as the win rate moves farther from 50% the number
+of changes in that patch for that champion increases.
+There are several outliers in Figure 8 that are of interest with
+more in-depth analysis. Using our interactive LoL Crawler
+Website (see Section IV), the specific nerfs and buffs in
+the patch notes can be examined in conjunction with the
+subsequent win rate.
+
+Analysis of third level – Buff, Nerf, Neutral – changes to
+LoL from our taxonomy (see Figure 1) shows nerfs and buffs
+are equally plentiful, with far fewer neutral changes.
+
+The point marked A in Figure 8 represents the champion
+Urgot for patch 134 (v4.15), where he had a decrease in win
+rate of 29.5% even though the patch contained 8 buffs. Before
+this patch, Urgot was an unpopular champion, with low win
+rates and pick rates. His pick rate doubled from 0.5% to 1%
+after this patch due to a minor rework containing several buffs
+and a bug fix. The influx of players that chose him after the
+patch likely had not previously played Urgot regularly, who is
+an somewhat odd and difficult to play champion, most likely
+causing his win rate to drop, despite the buffs.
+
+Table III provides the patch data summary statistics.
+C. Combined
+As mentioned in Section V-A, the win rate distribution may
+intentionally have a restricted spread because Riot attempts to
+keep overall champion win rates as close to 50% as possible.
+Any win rate higher than 50% implies that the champion is
+giving the player an advantage (a dominant strategy) while
+any win rate lower than 50% implies the champion is giving
+the player a disadvantage (a dominated strategy). In order to
+maintain balance, Riot may choose to appropriately nerf and
+buff champions to keep win rates near 50%. Figure 7 depicts
+
+Points B represents the champion Gangplank for patch 154
+(v5.14), where he received a large rework of his abilities.
+Many of the changes were small nerfs to attributes such as
+armor and health that likely did not have a large effect on win
+
+7
+
+distributed but with fewer win rates much higher or lower than
+50% than expected. Pick rates and ban rates are significantly
+skewed, reflecting the disparate popularity of champions and
+perceived strength of opposing champions, respectively.
+
+rate. Many large neutral changes to his abilities altered how
+they fundamentally worked. From the patch wording, it was
+unknown whether these changes would be a net positive or
+negative, hence they were classified as neutral. However, the
+new abilities turned out to be effective and synergistic with
+one another, leading to an increase in win rate.
+
+Analyzing patch data for more than 160 patches with over
+7700 patch notes shows gameplay changes dominate, being
+5-10x more numerous than bug fixes or visual changes to the
+game. On average, LoL has about 75 gameplay changes each
+month and only 4 bug fixes each month. Most (70%) of the
+gameplay changes are numeric increases (buffs) or decreases
+(nerfs) to champion abilities, but there are utility changes that
+make a champion easier to use and even quality of life changes
+that completely rework a champion. LoL has added over 40
+completely new champions since the first season.
+
+Point C represents the champion Kalista for patch 157
+(v5.17) where she received three nerfs. Her win rate increased
+by 4.9% with no real explanation, as the nerfs were unambiguously negative. The most likely explanation is that changes to
+other champions caused the increase in win rate. For example,
+buffs were made to several Fighter champions that excel at
+killing Marksmen, such as Kalista, but Kalista is better than
+most other Marksmen at escaping, perhaps explaining why her
+win rate went up relatively to others, despite the nerfs.
+
+Analysis of game and patch data shows champions with win
+rates further from 50% are patched most, with buffs used to
+increase a champion’s win rate or nerfs used to decrease it.
+Interactive examination of game data and patch data illustrates
+the impact of neutral changes, visual updates and bug fixes as
+well as champion reworks. Use of the Web site, as well as the
+analysis in the paper, should be useful for LoL players and
+game designers that want to better understand how current
+and future patches affect champions and gameplay.
+
+VI. C ONCLUSION
+While traditional software patches typically only fixed bugs
+or tweaked performance, modern computer games often use
+software packages to adjust gameplay and even release more
+game content. League of Legends (LoL, Riot Games, 2009),
+one of the most popular online computer games in the world,
+uses software patches to add new player avatars (champions)
+and change the game balance for avatar combat.
+
+Future work could include study of other LoL game modes
+(e.g., Dominion) and additional analysis of other objective
+game data available from Riot, such as individual champion
+statistics (e.g., kills/deaths/assists) and in-game currency and
+items. Other future work could analyze patch data in relation
+to game data for other games – those in the same genre as
+LoL are Defense of the Ancients (Valve, 2013) or Heroes of
+the Storm (Blizzard, 2015), but other game genres (e.g., first
+person shooter games) may use game patches differently.
+
+Despite the importance of game balance to player satisfaction [6], there has been little analysis of the effects of
+LoL patches on gameplay. Existing 3rd party Web sites allow
+players to examine champion statistics for the most recent
+LoL patch, but do not provide for inspection of patch effects
+over time. Prior research has analyzed the impact of software
+patches, but primarily for traditional software and in relation
+to software security. To the best of our knowledge, there are no
+publications nor 3rd party Web sites that analyze LoL patches
+in conjunction with their impact on champion performance.
+
+R EFERENCES
+[1] Raptr - The Offical Blog, “Most Played Games: November 2015,” Online
+at: http://goo.gl/bVytCX, Dec. 2015, retrieved June 22, 2016.
+[2] Riot Games, “Our Games,” Online at: http://www.riotgames.com/
+our-games, retrieved June 22, 2016.
+[3] E-Sports Earnings, “League of Legends 2014 World Championships,”
+Online at: http://goo.gl/xsivWG, retrieved June 22, 2016.
+[4] ——, “League of Legends 2015 World Championships,” Online at:
+http://goo.gl/dqf5Fk, retrieved June 22, 2016.
+[5] ——, “Largest Overall Prize Pools in eSports,” Online at: http://www.
+esportsearnings.com/tournaments, retrieved June 22, 2016.
+[6] M. Claypool, J. Decelle, G. Hall, and L. O’Donnell, “Surrender at 20?
+Matchmaking in League of Legends,” in the IEEE Games, Entertainment, Media Conference (GEM), Toronto, Canada, Oct. 2015.
+[7] League of Legends Wiki, “Patch,” Online at: http://leagueoflegends.
+wikia.com/wiki/Patch, retrieved June 22, 2016.
+[8] A. Arora, R. Krishnan, R. Telang, and Y. Yang, “An Empirical Analysis
+of Software Vendors’ Patch Release Behavior: Impact of Vulnerability
+Disclosure,” Information Systems Resarch, vol. 21, no. 1, 2010.
+[9] G. Schryen, “A Comprehensive and Comparative Analysis of the Patching Behavior of Open Source and Closed Source Software Vendors,” in
+Proceedings of the IEEE IMF, Stutgart, Germany, Sep. 2009.
+[10] K. Hullett, N. Nagappan, E. Schuh, and J. Hopson, “Data Analytics for
+Game Development: NIER Track,” in the IEEE International Conference
+on Software Engineering (ICSE), Honolulu, HI, USA, May 2011.
+
+To analyze the impact of patching on League of Legends,
+our project gathered and analyzed over two years of LoL
+game data and over eight years of LoL patch data. Gathering
+game data required development of a methodology to obtain
+a random sample of LoL games from Riot and gathering
+patch data used a novel automatic classification technique to
+categorize patch notes from text Web pages. The game data
+was deconstructed into the most fundamental game attributes
+for LoL players – champion win rates, champion pick rates
+and champion ban rates. The patch data was categorized using
+a novel taxonomy that identifies patches based on their kind of
+change to a LoL champion and the relative change. In addition,
+we designed and developed a publicly available Web site15 that
+allows for interactive exploration of game data and patch data
+for individual champions.
+Analyzing game data for 128 unique champions played by
+more than 11,000 players in over 465,000 ranked games shows
+champion win rates are tightly clustered around 50%, normally
+15 http://lolcrawler.cs.wpi.edu/
+
+8
+
+

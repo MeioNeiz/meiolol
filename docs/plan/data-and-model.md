@@ -63,6 +63,10 @@ reasons; the app shows champion and aggregate stats only)
 
 ## Neural nets
 
+Superseded as the programme by docs/plan/lab-frontier.md (21 Oct); below is the 14 Oct
+state.
+
+
 Neural nets paused (14 Oct): big, small, set and embedding nets only draw level with
 ratings at 2253Z, and research (draft-predictor-methods, gnn-match-outcome) puts the
 lever in data volume. Next net run: one rerun of the reference nets on the next re-pin

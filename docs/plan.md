@@ -58,6 +58,8 @@ today's model; the draft's "Rammus into high AD/AP" check.
   what is built and tested, the real champ select run
 - docs/plan/data-and-model.md: what ~800k games support (comp leans, kit groups, model
   work), data and ops proposal, neural nets
+- docs/plan/lab-frontier.md: gpu-box experiment programme (21 Oct): draft ceiling, the
+  internal teacher model, ensembles, explaining it, causal and patch tests
 - docs/plan/ops.md: crawler speed, traffic, storage and hosts, hosting reference
 - docs/plan/decisions.md: Jacob's decisions (J, Q, G ids), open decisions, ruled out
 - docs/plan/how-we-work.md: sessions, team size, unattended runs

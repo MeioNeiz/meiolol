@@ -1,0 +1,2408 @@
+Published as a conference paper at ICLR 2023
+
+I S THE PERFORMANCE OF MY DEEP NETWORK TOO
+GOOD TO BE TRUE ? A DIRECT APPROACH TO ESTIMATING THE BAYES ERROR IN BINARY CLASSIFICATION
+
+arXiv:2202.00395v2 [cs.LG] 13 Mar 2023
+
+Takashi Ishida1,2 Ikko Yamane3
+Gang Niu2 Masashi Sugiyama2,1
+1
+The University of Tokyo 2 RIKEN
+
+Nontawat Charoenphakdee1∗
+3
+
+ENSAI/CREST
+
+A BSTRACT
+There is a fundamental limitation in the prediction performance that a machine
+learning model can achieve due to the inevitable uncertainty of the prediction target.
+In classification problems, this can be characterized by the Bayes error, which is the
+best achievable error with any classifier. The Bayes error can be used as a criterion
+to evaluate classifiers with state-of-the-art performance and can be used to detect
+test set overfitting. We propose a simple and direct Bayes error estimator, where we
+just take the mean of the labels that show uncertainty of the class assignments. Our
+flexible approach enables us to perform Bayes error estimation even for weakly
+supervised data. In contrast to others, our method is model-free and even instancefree. Moreover, it has no hyperparameters and gives a more accurate estimate of
+the Bayes error than several baselines empirically. Experiments using our method
+suggest that recently proposed deep networks such as the Vision Transformer may
+have reached, or is about to reach, the Bayes error for benchmark datasets. Finally,
+we discuss how we can study the inherent difficulty of the acceptance/rejection
+decision for scientific articles, by estimating the Bayes error of the ICLR papers
+from 2017 to 2023.
+
+1
+
+I NTRODUCTION
+
+Comparing the prediction performance of a deep neural network with the state-of-the-art (SOTA)
+performance is a common approach to validating advances brought by a new proposal in machine
+learning research. By definition, SOTA performance such as error or 1−AUC1 monotonically
+decreases over time, but there is a fundamental limitation in the prediction performance that a
+machine learning model can achieve. Hence, it is important to figure out how close the current SOTA
+performance is to the underlying best performance achievable (Theisen et al., 2021). For example,
+Henighan et al. (2020) studied the scaling law (Kaplan et al., 2020) of Transformers (Vaswani et al.,
+2017) by distinguishing the reducible and irreducible errors.
+In classification problems, one way to characterize the irreducible part is the Bayes error (Cover
+& Hart, 1967; Fukunaga, 1990), which is the best achievable expected error with any measurable
+function. The Bayes error will become zero in the special case where class distributions are completely
+separable, but in practice, we usually deal with complex distributions with some class overlap.
+Natural images tend to have a lower Bayes error (e.g., 0.21% test error on MNIST (LeCun et al.,
+1998) in Wan et al. (2013)), while medical images tend to have a higher Bayes error, since even
+medical technologists can disagree on the ground truth label (Sasada et al., 2018). If the current
+model’s performance has already achieved the Bayes error, it is meaningless to aim for further error
+improvement. We may even find out that the model’s error has exceeded the Bayes error. This may
+imply test set overfitting (Recht et al., 2018) is taking place. Knowing the Bayes error will be helpful
+to avoid such common pitfalls.
+Estimating the Bayes error has been a topic of interest in the research community (Fukunaga &
+Hostetler, 1975; Fukunaga, 1990; Devijver, 1985; Berisha et al., 2016; Noshad et al., 2019; Michelucci
+∗
+1
+
+Currently at Preferred Networks.
+AUC stands for “Area under the ROC Curve.”
+
+1
+
+Published as a conference paper at ICLR 2023
+
+et al., 2021; Theisen et al., 2021). To the best of our knowledge, all previous papers have proposed
+ways to estimate the Bayes error from a dataset consisting of pairs of instances and their hard labels.
+When instances and hard labels are available, one can also train a supervised classifier, which is
+known to approach the Bayes classifier (that achieves the Bayes error) with sufficient training data
+provided that the model is correctly specified.
+This is an interesting research problem from the point of view of Vapnik’s principle2 (Vapnik, 2000)
+since we can derive the Bayes error from the Bayes classifier (and the underlying distribution) while
+we cannot recover the Bayes classifier from the knowledge of the Bayes error, which is just a scalar.
+How can we take full advantage of this property? While the Bayes error is usually defined as the best
+achievable expected error with any measurable function, it is known to be equivalent to the expectation
+of the minimum of class-posteriors with respect to classes for binary classification. Inspired by
+Vapnik’s principle, our main idea is to skip the intermediate step of learning a function model, and
+we directly approximate the minimum of the class-posteriors by using soft labels (corresponding to
+the class probability) or uncertainty labels (corresponding to the class uncertainty). 3
+Our proposed method has two benefits. Firstly, our method is model-free. Since we do not learn a
+model, we can escape the curse of dimensionality, while dealing with high-dimensional instances
+would cause issues such as overfitting if we were to train a model. High dimensionality may cause
+performance deterioration for other Bayes error estimation methods (Berisha et al., 2016; Noshad
+et al., 2019) due to divergence estimation. We experimentally show how our method can more
+accurately estimate the Bayes error than baselines that utilize instances and soft labels. Our modelfree method is also extremely fast since we do not have any hyperparameters to tune nor a function
+model to train.
+The second benefit is a more practical one: our method is completely instance-free. Suppose our
+final goal is to estimate the Bayes error instead of training a classifier. In that case, we do not need
+to collect instance-label pairs, and it may be less costly to collect soft/uncertainty labels without
+instances. Dealing with instances can cause privacy issues, and it can be expensive due to data storage
+costs especially when they are high-dimensional or can come in large quantities. It may lead to
+security costs to protect instances from a data breach. As an example of an instance-free scenario,
+we can consider doctors who are diagnosing patients by inspecting symptoms and asking questions,
+without explicitly collecting or storing the patients’ data in the database. In this scenario, the hospital
+will only have the decisions and confidence of doctors, which can be used as soft labels.
+The contributions of the paper is as follows. We first propose a direct way to estimate the Bayes error
+from soft (or uncertainty) labels without a model nor instances. We show that our estimator is unbiased
+and consistent. In practice, collecting soft/uncertainty labels can be difficult since the labelling process
+can become noisy. We propose a modified estimator that is still unbiased and consistent even when
+the soft labels are contaminated with zero-mean noise. We also show that our approach can be
+applied to other classification problems, such as weakly supervised learning (Sugiyama et al., 2022).
+Finally, we show the proposed methods’ behavior through various experiments. Our results suggest
+that recently proposed deep networks such as the Vision Transformer (Dosovitskiy et al., 2021) has
+reached or is about to reach the Bayes error for benchmark datasets, such as CIFAR-10H (Peterson
+et al., 2019) and Fashion-MNIST-H (which is a new dataset we present; explained in Sec. 5.3). We
+also demonstrate how our proposed method can be used to estimate the Bayes error for academic
+conferences such as ICLR, by regarding them as an accept/reject binary classification problem.
+
+2
+
+BACKGROUND
+
+Before we discuss our setup, we will review ordinary binary classification from positive and negative
+data and binary classification from positive-confidence data in this section.
+Learning from positive-negative data Suppose a pair of d-dimensional instance x ∈ Rd and
+its class label y ∈ {+1, −1} follows an unknown probability distribution with probability density
+2
+
+The Vapnik’s principle is known as the following: “When solving a given problem, try to avoid solving a
+more general problem as an intermediate step.” (Sec. 1.2 of Vapnik, 2000)
+3
+An uncertainty label is 1 subtracted by the dominant class posterior. We will discuss how to obtain soft
+labels in practice in Sec. 3.
+
+2
+
+Published as a conference paper at ICLR 2023
+
+function p(x, y). The goal of binary classification is to train a binary classifier g : Rd → R so that
+the following classification risk R(g) will be minimized: R(g) = Ep(x,y) [`(yg(x))], where ` is a
+margin-based surrogate loss function such as the logistic loss `L (z) = log(1 + exp(−z)) or the
+squared loss `S (z) = (z − 1)2 . The classification error is R01 (g) = Ep(x,y) [`01 (yg(x))], where
+we use the zero-one loss `01 , which takes 0 when y · g(x) > 0 and 1 otherwise. In empirical risk
+minimization, the following estimator of R(g) is often used:
+Pn
+R̂(g) = n1 i=1 `(yi g(xi )),
+(1)
+i.i.d.
+
+where {(xi , yi )}ni=1 ∼ p(x, y).
+In this paper, our focus is not on the classifier itself but on the value of R01 (g) when a good classifier
+is learned. This can be nicely captured by the notion of the Bayes error, defined as follows:
+Definition 2.1. (Mohri et al., 2018) The Bayes error is the infimum of the classification risk with
+respect to all measurable functions: β = inf g : Rd →R, measurable Ep(x,y) [`01 (yg(x))].
+Learning from positive-confidence data In positive-confidence classification (Ishida et al., 2018;
+n+
+Shinoda et al., 2020), we only have access to positive data equipped with confidence {(xi , ri )}i=1
+,
+where xi is a positive instance drawn independently from p(x | y = +1) and ri is the positive
+confidence given by ri = p(y = +1|xi ). Since we only have positive instances, we cannot directly
+minimize Eq. (1). However, Ishida et al. (2018) showed that the following theorem holds.
+Theorem 2.2. (Ishida et al., 2018) The classification risk can be expressed as
+h
+i
+R(g) = π+ E+ `(g(x)) + 1−r(x)
+(2)
+r(x) `(−g(x))
+if we have r(x) = p(y = +1|x) 6= 0 for all x sampled from p(x). E+ is the expectation over the
+positive density p(x|y = +1) and π+ = p(y = +1).
+Since the expectation is over p(x|y = +1), we do not have to prepare negative data. Although π+
+is usually unknown, we do not need this knowledge since π+ can be regarded as a proportional
+constant when minimizing Eq. (2). Hence, we can see how learning a classifier is possible in this
+weakly-supervised setup, but is estimating the Bayes error also possible? We will study this problem
+further in Sec. 4.
+
+3
+
+E STIMATION WITH ORDINARY DATA
+
+In this section, we propose our direct approach to Bayes error estimation.
+Clean soft labels First of all, it is known that the Bayes error can be rewritten as follows (Devroye
+et al., 1996; Mohri et al., 2018):
+β = Ex∼p(x) [min{p(y = +1 | x), p(y = −1 | x)}] .
+(3)
+This means that we can express the Bayes error β without explicitly involving the classifier g.
+If we assume that we have soft labels, which are {ci }ni=1 , where ci = p(y = +1 | xi ) and
+i.i.d.
+
+{xi }ni=1 ∼ p(x), we can construct an extremely straightforward estimator for the Bayes error:
+Pn
+β̂ = n1 i=1 min{ci , 1 − ci }.
+(4)
+In fact, Eq. (4) is just the empirical version of Eq. (3). However, the significance lies in the observation
+that this can be performed in a model-free and instance-free fashion, since taking the averages of the
+smaller one out of ci and 1 − ci in Eq. (4) does not require model training and does not involve xi .
+Note that we can further weaken the supervision by sampling uncertainty labels, i.e., c0i =
+miny∈{±1} p(y | xi ). Practically, this would mean that the label provider does not need to reveal the soft label. Although the two are similar, we can see how uncertainty labels are weaker by the
+fact that we cannot recover p(y = +1 | x) from miny∈{±1} p(y | x)4 . Furthermore, we can recover
+π+ = p(y = +1) by the expectation of soft labels Ep(x) [p(y = +1 | x)] = π+ , but π+ cannot be
+recovered by averaging uncertainty labels.
+Our estimator enjoys the following theoretical properties.
+4
+
+For example, if miny∈{±1} p(y | x) = 0.1, we do not know whether p(y = +1 | x) is 0.9 or 0.1.
+
+3
+
+Published as a conference paper at ICLR 2023
+
+Proposition 3.1. β̂ is an unbiased estimator of the Bayes error.
+Proposition 3.2. For any δ > 0, with probability at least 1 − δ, we have, |β̂ − β| ≤
+
+q
+
+1
+2
+8n log δ .
+
+The proofs are shown in App. C.1 and App. C.2, respectively. This implies that β̂ is a consistent
+estimator to the Bayes error, i.e., ∀ > 0, limn→∞ P (|β̂ − β| ≥ ) = 0. The rate of convergence is
+√
+|β̂ − β| = OP (1/ n), where OP is the stochastic big-O notation, cf. App. D. This rate is the same
+as classifier training and is the optimal parametric rate (Mendelson, 2008) although our method can
+be regarded as non-parametric. We are also free from the curse of dimensionality since the instance
+dimension d does not appear in the bound.
+Noisy soft labels So far, our discussions were based on an assumption that soft (or uncertainty)
+labels is precisely the class-posterior ci (or c0i ). Since this may not be satisfied in practice, we consider
+a situation where noise ξi is added to the class-posterior values. We observe noisy soft labels {ui }ni=1
+where ui = ci + ξi . Since we ask labellers to give us a probability, a constraint is 0 ≤ ui ≤ 1, and
+we assume E[ξi |ci ] = 0. If we naively use these noisy versions, our estimator becomes
+Pn
+(5)
+β̃ = n1 i=1 [min (ui , 1 − ui )] .
+However, we can show the following negative result.
+Theorem 3.3. β̃ is generally a biased estimator of the Bayes error: E
+
+i.i.d.
+
+{(ci ,ξi )}n
+i=1 ∼ p(c,ξ)
+
+[β̃] 6= β.
+
+This is basically due to the noise inside the nonlinear min operation. We show the proof in App. C.3.
+This issue can be fixed if we have an additional binary signal that shows if the instance is
+likely to be more positive or negative. Formally, if we have access to sign labels, i.e., si =
+−
+n+
+− ns
+s
+sign [p(y = +1|xi ) − 0.5] ∀i ∈ {1, 2, . . . , n}, we can divide {ui }ni=1 into {u+
+i }i=1 and {ui }i=1
+−
+depending on the sign label, with n = n+
+s + ns . Then we can construct the following estimator:
+P +
+
+ Pn−
+ns
++
+−
+s
+1
+−
+u
++
+u
+.
+(6)
+β̂Noise = n1
+i=1
+i
+i=1 i
+With this modified estimator β̂Noise , we can show the following propositions.
+Proposition 3.4. β̂Noise is an unbiased estimator of the Bayes error.
+The proof is shown in App. C.5. The proof itself is simple, but the main idea lies in where we
+modified the estimator from Eq. (4) to avoid dealing with the noise inside the min operator, by
+utilizing the additional information of si .
+q
+1
+log 2δ .
+Proposition 3.5. For any δ > 0, with probability at least 1 − δ, we have, |β̂Noise − β| ≤ 2n
+The proof is shown in App. C.6. This implies that β̂Noise is a consistent estimator to the Bayes error,
+√
+i.e., for ∀ > 0, limn→∞ P (|β̂Noise − β| ≥ ) = 0. The rate of convergence is OP (1/ n).
+In practice, one idea of obtaining soft labels is to ask many labellers to give a hard label for each
+instance and then use the proportion of the hard labels as a noisy soft label. This is the main
+idea which we use later on in Sec. 5.2 with CIFAR-10H (Peterson et al., 2019). For simplicity,
+suppose that
+Pmwe have m labels for every instance i, and ui is the sample average of those labels:
+1
+ui = m
+j=1 1[yi,j = 1], where yi,j is the jth hard label for the ith instance and 1 denotes
+the indicator function. This satisfies our assumptions for noisy soft labels since 0 ≤ ui ≤ 1 and
+E[ξi | ci ] = 0 for any m ∈ N. If in practice we do not have access to sign labels, we cannot use the
+unbiased estimator β̂Noise and we have no choice but to use the biased estimator β̃. However, in the
+following proposition, we show that the bias can be bounded with respect to m.
+Proposition 3.6. The estimator β̃ is asymptotically unbiased, i.e., |β − E[ e
+β]| ≤ 2√1m +
+p
+√
+log(2n m)/(2m), where m is the number of labellers for each of the n instances.
+p
+The proof is shown in App. C.4. The rate of convergence is O( log(2nm)/m).
+4
+
+Published as a conference paper at ICLR 2023
+
+Hard labels Surprisingly, we can regard the usual hard labels as a special case of noisy soft labels.
+This enables us to estimate the Bayes error with hard labels and sign labels. To see why this is
+the case, we consider a specific type of noise: ξi is 1 − p(y = +1 | xi ) w.p. p(y = +1 | xi ) and
+−p(y = +1 | xi ) w.p. 1−p(y = +1 | xi ). Since ui = ci +ξi , this implies ui = 1 w.p. p(y = +1|xi )
+and ui = 0 w.p. p(y = −1|xi ). We can easily confirm that our assumptions for noisy soft labels are
+satisfied: 0 ≤ ξi ≤ 1 and E[ξi | ci ] = 0.
+If we assign y = +1 for ui = 1 and y = −1 for ui = 0, this will be equivalent to providing a hard
+label based on a Bernoulli distribution Be(p(y = +1|xi )) for an instance xi sampled from p(x).
+This corresponds to the usual data generating process in supervised learning.
+
+4
+
+E STIMATION WITH POSITIVE - CONFIDENCE DATA
+
+In this section, we move our focus to the problem of estimating the Bayes error with positiveconfidence (Pconf) data (Sec. 2). First, we show the following theorem.
+Theorem 4.1. The Bayes error can be expressed with positive-confidence data and class prior:
+
+h
+
+i
+1
+βPconf := π+ 1 − E+ max 0, 2 − r(x)
+= β.
+(7)
+Recall that E+ is Ep(x|y=+1) and r(x) = p(y = +1|x). The proof is shown in App. C.7. Based on
+Theorem 4.1, we can derive the following estimator:
+
+
+
+Pn+
+max 0, 2 − r1i
+,
+(8)
+β̂Pconf = π+ 1 − n1+ i=1
+where ri = p(y = +1|xi ) for xi ∼ p(x|y = +1), and n+ is the number of Pconf data. We can
+estimate the Bayes error in an instance-free fashion, even if we do not have any ri from the negative
+distribution. All we require is instance-free positive data and π+ . A counter-intuitive point of Eq. (8)
+is that we can throw away ri when ri < 0.5, due to the max operation. If the labeler is confident that
+ri < 0.5, we do not need the specific value of ri . Note that in practice, ri = 0 may occur for positive
+samples. This will cause an issue for classifier training (since Eq. (2) will diverge), but such samples
+can be ignored in Bayes error estimation (due to the max in Eq. (8)).
+As discussed in Sec. 2, π+ was unnecessary when learning a Pconf classifier, but it is necessary for
+Bayes error estimation. Fortunately, this is available from other sources depending on the task, e.g.,
+market share, government statistics, or other domain knowledge (Quadrianto et al., 2009; Patrini
+et al., 2014). Instead of the Bayes error itself, we may be interested in the following: 1) the relative
+comparison between the Bayes error and the classifier’s error, 2) whether the classifier’s error has
+exceeded the Bayes error or not. In these cases, π+ is unnecessary since we can divide both errors
+(Eq. (8) and empirical version of Eq. (2) by π+ without changing the order of the two.
+We can derive the following two propositions.
+Proposition 4.2. β̂Pconf is an unbiased estimator of the Bayes error.
+r
+Proposition 4.3. For any δ > 0, with probability at least 1−δ, we have, |β̂Pconf −β| ≤
+
+2
+π+
+2
+2n+ log δ .
+
+The proofs are shown in App. C.8 and App. C.9, respectively. This implies that the estimator β̂Pconf
+is consistent to the Bayes
+√ error, i.e., for ∀ > 0, limn→∞ P (|β̂Pconf − β| ≥ ) = 0. The rate of
+convergence is OP (1/ n+ ). We can also see that the upper bound in Prop. 4.3 is equivalent to the
+upper bound in Prop. 3.2 when the data is balanced, i.e., π+ = 0.5.
+
+5
+
+E XPERIMENTS
+
+In this section, we first perform synthetic experiments to investigate the behavior of our methods.
+Then, we use benchmark datasets to compare the estimated Bayes error with SOTA classifiers. Finally,
+we show a real-world application by estimating the Bayes error for ICLR papers. 5
+5
+
+Our code will be available at https://github.com/takashiishida/irreducible.
+
+5
+
+Published as a conference paper at ICLR 2023
+
+Proposed method
+Ensemble
+Hard classifier
+Hard classifier-BER
+Soft classifier
+Soft classifier-BER
+
+25
+20
+15
+10
+5
+0
+
+2
+
+4
+
+8
+
+16 32 64 128 256 512 1028
+
+Proposed method
+Ensemble
+Hard classifier
+Hard classifier-BER
+Soft classifier
+Soft classifier-BER
+
+30
+25
+20
+
+25
+20
+
+15
+
+15
+
+10
+
+10
+
+5
+
+5
+
+0
+
+2
+
+4
+
+(a) Setup A
+
+8
+
+Proposed method
+Ensemble
+Hard classifier
+Hard classifier-BER
+Soft classifier
+Soft classifier-BER
+
+30
+
+0
+
+16 32 64 128 256 512 1028
+
+(b) Setup B
+
+Proposed method
+Ensemble
+Hard classifier
+Hard classifier-BER
+Soft classifier
+Soft classifier-BER
+
+25
+20
+15
+10
+5
+
+2
+
+4
+
+8
+
+16 32 64 128 256 512 1028
+
+(c) Setup C
+
+0
+
+2
+
+4
+
+8
+
+16 32 64 128 256 512 1028
+
+(d) Setup D
+
+Figure 1: Comparison of the proposed method (blue) with the true Bayes error (black), a recent
+Bayes error estimator “Ensemble” (orange) (Noshad et al., 2019), and the test error of a multilayer
+perceptron (hard labels: green, soft labels: purple). We also use the classifier’s probabilistic output
+and plug it into the Bayes error equation in Eq. (3), shown as “Classifier-BER” (hard labels: red, soft
+labels: brown). The vertical/horizontal axis is the test error or estimated Bayes error/# of training
+samples per class, respectively. Instance-free data was used for Bayes error estimation, while fully
+labelled data was used for training classifiers. We plot the mean and standard error for 10 trials.
+
+(w/o noise)
+(w/ noise)
+Noise (w/ noise)
+
+16
+14
+
+22
+20
+18
+
+12
+10
+
+16
+
+8
+
+14
+
+6
+
+Figure 2: Bayes error with and without noise
+on the labels, with mean and standard error for
+10 trials. The vertical/horizontal axis is the estimated Bayes error/the number of samples. With
+noisy labels, the estimation tends to become inaccurate with a larger standard error. With more
+samples, the difference between clean labels becomes smaller, but a small bias remains. With
+our modified estimator, the bias vanishes.
+
+(w/o noise)
+(w/ noise)
+Noise (w/ noise)
+
+2
+
+4
+
+8 16 32 64 128 256 512 1028
+
+(a) Setup A
+
+5.1
+
+12
+
+2
+
+4
+
+8 16 32 64 128 256 512 1028
+
+(b) Setup B
+
+I LLUSTRATION
+
+Positive-negative data Setup: We use two Gaussian distributions to construct a binary classification dataset. We then derive the positive-class posterior analytically for each data and use it as our
+label. We use Eq. (4) to estimate the Bayes error. We change the number of training samples per
+class (2, 4, 8, . . . , 1028) to observe how quickly we can approach the true Bayes error. We perform
+experiments with four setups (A, B, C, and D) and the details are explained after Sec. 6. To compare
+with the true Bayes error of the setup, we take the average of c(x) for 10, 000 samples. We expect this
+to be a good substitute because we are using the analytically derived class posteriors for the soft labels.
+Although our problem setting does not require instances, we also compare with a recent Bayes error estimator that uses instances and hard labels (Noshad et al., 2019) and classifiers trained from instances
+and hard labels. We train a multi-layer perceptron model with two hidden layers (500 units each,
+followed by BatchNorm (Ioffe & Szegedy, 2015) and ReLU (Nair & Hinton, 2010)). We use the following cross-entropy loss: −1[yi = +1] log p̂θ (y = +1|xi )− 1[yi = −1] log p̂θ (y = −1|xi ), where
+p̂θ (y|x) is the probabilistic output of the trained classifier and θ represents the model parameters. We
+chose the cross entropy loss because it is a proper scoring rule (Kull & Flach, 2015). We use stochastic
+gradient descent for 150 epochs with a learning rate of 0.005 and momentum of 0.9. We also compare
+with another baseline (“classifier-BER”), where we plug in p̂θ (y|x) to Eq. (3). Finally, we add a
+stronger baseline “soft classifier” which utilizes soft labels. If the soft label is ri for sample xi , then
+the cross-entropy loss is modified as follows: −ri log p̂θ (y = +1|xi ) − (1 − ri ) log p̂θ (y = −1|xi ).
+Results: We construct a dataset with the same underlying distribution ten times and report the means
+and standard error for the final epoch in Fig. 1. We can see how the estimated Bayes error is relatively
+accurate even when we have few samples. The benefit against classifier training is clear: the MLP
+model requires much more samples before the test error approaches the Bayes error. The classifier is
+slightly better when it can use soft labels but is not as good as our proposed method. It is interesting
+how the “hard classifier-BER” tends to underestimate the Bayes error (except Fig. 1d). This can be
+explained by the overconfidence of neural networks (Guo et al., 2017), which will lead to a small
+miny∈{±1} p̂(y|x). This underestimation does not occur with “soft classifier-BER,” implying that
+there are less room to be overconfident when we learn with the modified cross-entropy loss.
+6
+
+Published as a conference paper at ICLR 2023
+
+16
+
+estimated Bayes error (PN)
+estimated Bayes error (Pconf)
+
+14
+
+Figure 3: Estimated Bayes error with PN
+(positive and negative) and Pconf (positiveconfidence). The vertical/horizontal axis is the
+estimated Bayes error/number of samples. We
+plot the mean and standard error for 10 trials. The difference between the two becomes
+smaller as we increase the number of training
+samples.
+
+estimated Bayes error (PN)
+estimated Bayes error (Pconf)
+
+20
+18
+
+12
+
+16
+
+10
+
+14
+
+8
+
+12
+
+4
+
+8
+
+16
+
+32
+
+64 128 256 512 1028
+
+(a) Setup A
+
+4
+
+8
+
+16
+
+32
+
+64 128 256 512 1028
+
+(b) Setup B
+
+Positive-negative data with noise Setup: Next, we perform experiments when we have noise
+on the labels. We follow the assumption in Sec. 3, and we design the noise to have mean 0 and
+the label to be between 0 and 1 after adding this noise, to be a valid probability. For this purpose,
+we add noise to the underlying class posterior and use a truncated Gaussian distribution p(z) with
+standard deviation 0.4. We truncate the left tail {z ∈ R|z ≤ µ − min(1 − µ, µ − 0)} and the right
+tail {z ∈ R|z ≥ µ + min(1 − µ, µ − 0)} where µ ∈ [0, 1] is the mean of the distribution, i.e., the
+true class posterior. We compare three estimators: 1) Original estimator β̂ in Eq. (4) with clean labels,
+2) original estimator β̃ in Eq. (4) with noisy labels, and 3) proposed estimator β̂Noise in Eq. (6) with
+noisy labels. We repeat the experiment 10 times with different data realizations. Results: The mean
+and standard error for 10 trials are shown in Fig. 2, for varying number of training samples. As
+expected, using noisy soft labels lead to worse results for β̃, as we can see with the larger standard
+errors. Increasing the sample size is effective to some degree, but the bias does not vanish. However,
+if we use a modified estimator β̂Noise , the bias vanishes completely and works well even with noise.
+Positive-confidence data Setup: Similarly, we perform experiments for positive-confidence
+(Pconf) data. The data is generated so that the class prior π+ is 0.5, and we assume this information is available. We only use the confidence of data from the positive distribution and do not
+use the confidence of data from the negative distribution. We use this data to estimate β̂Pconf and
+compare it with the β̂ derived earlier. Results: We report the mean and standard error for 10 trials in
+Fig. 3. Although Bayes error estimation tends to be inaccurate with Pconf data for fewer samples, the
+difference between the two disappears with more samples.
+5.2
+
+E XPERIMENTS WITH BENCHMARK DATASETS : CIFAR-10
+
+Setup: We use CIFAR-10 (C10) (Krizhevsky, 2009), ciFAIR-10 (C10F) (Barz & Denzler, 2020),
+CIFAR-10.1 (C10.1) (Recht et al., 2018), and CIFAR-10H (C10H) (Peterson et al., 2019). C10 is an
+image dataset of 10 classes: airplane, automobile, bird, cat, deer, dog, frog, horse, ship, and truck.
+However, the test set in C10 is known to include complete duplicates and near-duplicates from the
+training dataset. C10F replaces the duplicates in the test set with a different image. C10.1 is a new
+test set to evaluate C10 classifiers. It ensures the underlying distribution to be as close to the original
+distribution as possible, but it does not include any images from the original test set. C10H is a dataset
+with additional human annotations for the C10 test set. Each image in the test set has class labels
+annotated by around 50 different human labelers. We can take the proportion to construct soft labels
+that we will use for Bayes error estimation. Although these datasets are originally multi-class setups
+with 10 classes, we re-construct binary datasets in the following four ways: animals vs. artifacts, land
+vs. other (water/sky), odd vs. even, and first five vs. last five. See the details after Sec. 6.
+We compare the estimated Bayes error β̂ with the base model of Vision Transformer (Dosovitskiy
+et al., 2021) with 16 × 16 input patch size (ViT B/16), DenseNet169 (Huang et al., 2017), ResNet50
+(He et al., 2016), and VGG11 (Simonyan & Zisserman, 2015). For ViT B/16, we downloaded the
+official pretrained model (Dosovitskiy et al., 2021) and used the implementation by Jeon (2020) to
+fine-tune on C10. For others, we use the models provided in Phan (2021), which are trained on C10.
+Although these are ten-class classifiers, we transform them into binary classifiers by swapping the
+predictions into positive and negative based on the setups (details shown after Sec. 6). For example, a
+prediction of “cat” would be swapped with a positive label in “animals vs. artifacts”.
+7
+
+Published as a conference paper at ICLR 2023
+
+Error (%)
+
+2
+1
+
+Figure 4: Comparing the estimated Bayes error with four classifiers and two setups (Figures 4a, 4b). Although it seems that ViT B/16
+has surpassed the Bayes error for all four setups for CIFAR-10 (C10), ciFAIR-10 (C10F),
+and CIFAR-10.1 (C10.1), it is still comparable
+or larger than the Bayes error for CIFAR-10H
+(C10H). In Sec. 5.2, we discuss how this has to
+be investigated carefully. The black error bar for
+the Bayes error is the 95% confidence interval.
+The black error bar for the C10H is the standard
+error for sampling test labels 20 times.
+
+2
+estimated Bayes error
+
+Vision Transformer B/16
+
+DenseNet169
+
+0
+
+ResNet50
+
+(a) Animals vs. artifacts
+
+4
+
+VGG11
+
+estimated Bayes error
+
+Vision Transformer B/16
+
+DenseNet169
+
+ResNet50
+
+VGG11
+
+0
+
+C-10
+C-10F
+C-10.1
+C-10H
+
+6
+Error (%)
+
+C-10
+C-10F
+C-10.1
+C-10H
+
+3
+
+(b) Land vs. other
+
+Results: We compare the estimated Bayes error β̂ with classifier training in Fig. 4. As expected,
+the test error (shown in light blue) is lower for newer network architectures, with ViT achieving the
+lowest test error. An interesting observation is that the test error of ViT has exceeded the estimated
+Bayes error in all four setups, which theoretically should not take place. We first suspected that ViT’s
+error is too low (overfitting to the test set; Sec. B) but found out this is not necessarily the case. We
+investigated the degree of overfitting to the test set by performing experiments with C10F and C10.1.
+The former dataset excludes the duplicated images between training and test set, and the latter dataset
+is a fresh test set that is designed to be close to the original distribution of C10. The test error for
+the C10F dataset becomes slightly worse and much worse for C10.1. This is what we expected and
+implies that overfitting to the test set may be happening to some degree. However, ViT’s error is still
+below the estimated Bayes error even for C10.1.
+To explain why ViT’s error is still below the estimated Bayes error, we discuss the discrepancy
+between the underlying p(y|x) for C10 and C10H. C10 is constructed with a three-step procedure:
+first, collect images by searching for specific terms in search engines, downscale them to 32 × 32
+(Torralba et al., 2008), and finally ask labelers to filter out mislabelled images (Krizhevsky, 2009).
+On the other hand, C10H constructs the labels by asking labelers to choose the correct class out of ten
+classes after seeing each downscaled image of C10. This makes it visually harder for human labellers.
+Hence, the labelling process will become less confident, and this may lead to a higher entropy of the
+distribution of the human labels. According to Eq. (4), this will lead to an overestimation of β̂.
+To adjust for the distribution discrepancy, we also plot the test errors when we sample a test label for
+each sample from the C10H dataset (repeated 20 times) and show this in Fig. 4 with pink. Note that
+this generally will not go below the estimated Bayes error. For example, consider an extreme case
+with zero test error for the original test set. If a test sample has p(y = +1|x) = 0.8 in C10H, then it
+will incur an error of 0.2 on average for the new test labels. After adjusting for the discrepancy, we
+can see how the test error of ViT is on par with or slightly higher than the estimated Bayes error. This
+implies that we have reached (or is about to reach) the Bayes error for C10H.
+5.3
+
+E XPERIMENTS WITH BENCHMARK DATASETS : FASHION -MNIST
+
+Setup: To our knowledge there is only one large-scale dataset with over 10 annotations per sample
+(Peterson et al., 2019), which we used in Sec. 5.2. Hence, it would be beneficial to construct
+another benchmark dataset with multiple annotations. We collected multiple annotations for each
+test image in Fashion-MNIST (Xiao et al., 2017). Similar to CIFAR-10H, we name our dataset as
+Fashion-MNIST-H. See our data collection details in App. E.
+Since aiming for SOTA performance on Fashion-MNIST is less common in our community compared
+with CIFAR-10, we simply chose ResNet-18 (He et al., 2016) for our model architecture. We trained
+for 100 epochs with batch size 128, learning rate 0.001 on the original labels (no data augmentation)
+and reconstructed the 10-class predictions into binary predictions by grouping shirt, dress, coat,
+pullover, and t-shirt/top as the positive class, and the other 5 categories as the negative class.
+Results: We compared the binary predictions with a test label sampled from the multiple annotations
+(repeated 10 times) and derived the error, which is basically the same procedure of the pink bar in
+Fig. 4. The error was 3.852% (± 0.041%), where the percentage in the parentheses is the standard
+8
+
+Published as a conference paper at ICLR 2023
+
+error. On the other hand, the estimated Bayes error was 3.478% (± 0.079%), where the percentage
+in the parentheses is the 95% confidence interval. We can see how the estimated Bayes error is
+higher than the results for CIFAR-10H in Fig. 4, implying that Fashion-MNIST is more difficult than
+CIFAR-10. This is intuitive as the 28 × 28 grayscale images are ambiguous while the original 51 × 73
+PNG image is much more clear, e.g., see Fig. 1 in Xiao et al. (2017), and also consistent with the
+results in Theisen et al. (2021). The ResNet-18 error is approaching the estimated Bayes error, but
+may still have room for small improvement. Since we made a simple choice of model architecture,
+we may be able to close this gap by other architectures that are more suited for Fashion-MNIST
+images, adding data augmentation, and trying extensive hyper-parameter tuning.
+5.4
+
+E XPERIMENTS WITH REAL - WORLD DATASETS : ACADEMIC PAPER CLASSIFICATION
+
+We consider an accept/reject binary classification task for ICLR papers and estimate the Bayes error
+for this task. We believe this is an interesting real-world application because it may be used as a tool
+to help us gain a deeper understanding of the trends/characteristics of academic conferences.
+Setup: We used the OpenReview API to get data from ICLR 2017 to 2023. We removed papers
+that do not have a decision, e.g., withdrawn or desk-rejected papers. This real-world application
+is interesting because we have access to expert soft labels, i.e., the recommendation scores of the
+reviewers. We P
+can derive aP
+weighted average of the scores based on the confidence provided by
+the reviewer, ( i ci · si )/( i ci ), where ci is the confidence and si is the score for reviewer i,
+respectively. In ICLR, this average is between 1 and 10 and is not a probability. Fortunately, we also
+have access to the hard label (final decision) for each paper which we can use for calibration. We
+used Platt scaling (Platt et al., 1999) with the hard labels so that we have a calibrated score between 0
+and 1. Then we use our proposed estimator to derive the Bayes error for each year of ICLR.
+Assumptions of the data generation process: First, a reviewer provides a score between 0 and 1 for each paper. Then the Area Chair (or
+SAC/PC) samples a binary label (accept/reject) based on a Bernoulli
+distribution with the score provided by the reviewers. We feel this is
+realistic since the AC usually accepts/rejects papers with very high/low
+average scores while the AC puts more effort into papers with borderline
+scores meaning that papers close to borderline can end up both ways.
+These are the papers responsible for raising the Bayes error. Our motivation for deriving Bayes error estimates for conference venues is to
+investigate this kind of intrinsic difficulty.
+
+ICLR’s Bayes error
+2017 6.8%(±1.0%)
+2018 8.7%(±0.9%)
+2019 7.9%(±0.7%)
+2020 8.8%(±0.5%)
+2021 9.3%(±0.5%)
+2022 9.6%(±0.5%)
+2023 8.0%(±0.4%)
+
+Results: From Table 1, we can see that the Bayes error is stable to some Table 1: Parenthesis is
+extent and there are no disruptive changes over the years, e.g., Bayes 95% confidence interval.
+error is not doubling or tripling. We can also confirm that Bayes error for
+ICLR paper accept/reject prediction is higher than the other benchmark experiments with CIFAR-10
+and Fashion-MNIST, which is expected since understanding the value of a paper is much more
+difficult than identifying dogs, cars, t-shirts, etc.
+This example demonstrates the benefit of our instance-free approach. At least at the time of writing,
+we do not rely on state-of-the-art ML to review papers submitted to academic conferences/journals.
+Even if we wanted to, it is not clear what the features would be. Since new papers are reviewed based
+on the novelty compared to all previous papers, how to handle this is nontrivial. This implies we
+cannot easily use instance-based Bayes error estimators. It also demonstrates a real-world situation
+where we can directly sample soft labels from experts instead of collecting multiple hard labels.
+
+6
+
+C ONCLUSIONS
+
+We proposed a model-free/instance-free Bayes error estimation method that is unbiased and consistent.
+We showed how we can estimate it with uncertainty labels, noisy soft labels, or positive-confidence.
+In experiments, we demonstrated how Bayes error estimation can be used to compare with the SOTA
+performance for benchmark datasets, and how it can be used to study the difficulty of datasets,
+e.g., paper selection difficulty. Although we did not detect strong evidence of test set overfitting in
+Secs. 5.2 and 5.3, we are interested in investigating other benchmark datasets in the future.
+9
+
+Published as a conference paper at ICLR 2023
+
+E THICS STATEMENT
+Constructing soft labels may rely on collecting human annotations. This may potentially have a
+negative impact, e.g., cost of the annotations. We are hoping to lower the cost of annotations in our
+future work. We will only publish our annotations we collected in Sec. 5.3 in a way that does not
+contain any private information, e.g., only the category counts for each images and drop all other
+worker-related information.
+
+R EPRODUCIBILITY STATEMENT
+We will upload the code for implementing our proposed methods and labels of Fashion-MNIST-H in
+https://github.com/takashiishida/irreducible.
+Synthetic experiments: In the synthetic experiments, we used four setups: A, B, C, and D. A and B
+are 2-dimensional anisotropic setups and is borrowed from the first two synthetic datasets in Ishida
+et al. (2018), where the code is provided in https://github.com/takashiishida/pconf.
+C is a 10-dimensional isotropic setup with means µ+ = [0, . . . , 0]> and µ− = [1, . . . , 1]> with
+identity matrices for the covariance matrices. D is the same as C except that the dimension is doubled
+to 20.
+We used https://github.com/mrtnoshad/Bayes_Error_Estimator for the ensemble method (Noshad et al., 2019). To make it advantageous for this baseline, we used KNN for
+bw_selection when we had 16 or more samples per class but used manual when we had less
+than 16. We partially used https://github.com/takashiishida/flooding for training
+classifiers in synthetic experiments with Gaussian distributions.
+Benchmark experiments: We used data and code provided in https://cvjena.github.
+io/cifair/ for ciFAIR-10 (Barz & Denzler, 2020). We used data and code provided
+in https://github.com/jcpeterson/cifar-10h for CIFAR-10H (Peterson et al.,
+2019). We used data and code provided in https://github.com/modestyachts/
+CIFAR-10.1 for CIFAR-10.1 (Recht et al., 2019) and PyTorch wrapper provided in
+https://github.com/kharvd/cifar-10.1-pytorch.
+We used data provided
+in https://www.cs.toronto.edu/~kriz/cifar.html for CIFAR-10.
+We used
+https://github.com/huyvnphan/PyTorch_CIFAR10 for VGG11, ResNet50, and
+DenseNet169 models trained on CIFAR-10. We used the ResNet-18 implementation provided in
+https://github.com/rasbt/deeplearning-models. We used https://github.
+com/jeonsworld/ViT-pytorch to fine-tune ViT and downloaded pretrained weights from
+https://console.cloud.google.com/storage/browser/vit_models;tab=
+objects?pli=1&prefix=&forceOnObjectsSortingFiltering=false.
+We are not aware of any personally identifiable information or offensive content in the datasets we
+used. We also collected annotations by using Amazon Mechanical Turk (Buhrmester et al., 2016).
+We explained the details of how we collected the annotations in Sec. 5.3, and we plan to remove all
+personally identifiable information when we publish the data.
+The details of the two (or four) binary datasets that are used in Sec. 5.2 (or App. 8) are as follows.
+• Animals vs. artifacts: we divide the dataset into cat, deer, dog, frog, and horse for the
+positive class and plane, car, ship, truck, and bird for the negative class.
+• Land vs. other (water/sky): we divide the dataset into car, truck, cat, deer, dog, horse for the
+positive class and plane, ship, bird, and frog for the negative class.
+• Odd vs. even: we divide the dataset into odd and even class numbers, with plane, bird, deer,
+frog, and ship for the positive class and car, cat, dog, horse, and truck for the negative class.
+• First five vs. last five: we divide the dataset into the first five and last five classes based on
+the class number, with plane, car, bird, cat, and deer for the positive class and dog, frog,
+horse, ship, and truck for the negative class.
+Real-world experiments: We used the OpenReview API (https://docs.openreview.
+net/) and openreview-py (https://pypi.org/project/openreview-py/) to collect
+reviewers’ scores for papers from ICLR 2017 to ICLR 2023.
+10
+
+Published as a conference paper at ICLR 2023
+
+All of our experiments were conducted with a single Mac Studio except when we trained ResNet-18
+in Sec. 5.3 and fine-tuned ViT in Sec. 5.2, which was when we utilized Google Colab Pro+ in
+https://colab.research.google.com.
+
+ACKNOWLEDGEMENTS
+We thank Taiji Suzuki, Hiroshi Kera, Futoshi Futami, and Toshihiro Kamishima for the helpful
+discussions. TI was supported by JST, ACT-X Grant Number JPMJAX2005, Japan. IY acknowledges
+the support of the ANR as part of the “Investissements d’avenir” program, reference ANR-19-P3IA0001 (PRAIRIE 3IA Institute). MS was supported by JST CREST Grant Number JPMJCR18A2.
+
+R EFERENCES
+Han Bao, Gang Niu, and Masashi Sugiyama. Classification from pairwise similarity and unlabeled
+data. In ICML, 2018.
+Björn Barz and Joachim Denzler. Do we train on test data? Purging CIFAR of near-duplicates.
+Journal of Imaging, 6:41, 2020.
+Visar Berisha, Alan Wisler, Alfred O. Hero, and Andreas Spanias. Empirically estimable classification
+bounds based on a nonparametric divergence measure. IEEE Transactions on Signal Processing,
+64:580 – 591, 2016.
+Lucas Beyer, Olivier J Hénaff, Alexander Kolesnikov, Xiaohua Zhai, and Aäron van den Oord. Are
+we done with imagenet? arXiv preprint arXiv:2006.07159, 2020.
+Michael Buhrmester, Tracy Kwang, and Samuel D Gosling. Amazon’s mechanical turk: A new
+source of inexpensive, yet high-quality data? American Psychological Association, 2016.
+O. Chapelle, B. Schölkopf, and A. Zien (eds.). Semi-Supervised Learning. MIT Press, Cambridge,
+Massachusetts, USA, 2006.
+Thomas Cover and Peter Hart. Nearest neighbor pattern classification. IEEE transactions on
+information theory, 13(1):21–27, 1967.
+Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. ImageNet: A large-scale
+hierarchical image database. In CVPR, 2009.
+Pierre A. Devijver. A multiclass, k-NN approach to Bayes risk estimation. Pattern Recognition
+Letters, 3:1 – 6, 1985.
+Luc Devroye, László Györfi, and Gábor Lugosi. A Probabilistic Theory of Pattern Recognition.
+Springer, 1996.
+Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas
+Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit,
+and Neil Houlsby. An image is worth 16x16 words: Transformers for image recognition at scale.
+In ICLR, 2021.
+M. C. du Plessis, G. Niu, and M. Sugiyama. Analysis of learning from positive and unlabeled data.
+In NeurIPS, 2014.
+Keinosuke Fukunaga. Introduction to Statistical Pattern Recognition. Academic Press, 2nd edition,
+1990.
+Keinosuke Fukunaga and Larry D. Hostetler. k-nearest-neighbor Bayes-risk estimation. IEEE
+Transactions on Information Theory, 21:285 – 293, 1975.
+Chuan Guo, Geoff Pleiss, Yu Sun, and Kilian Q. Weinberger. On calibration of modern neural
+networks. In ICML, 2017.
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image
+recognition. In CVPR, 2016.
+11
+
+Published as a conference paper at ICLR 2023
+
+Tom Henighan, Jared Kaplan, Mor Katz, Mark Chen, Christopher Hesse, Jacob Jackson, Heewoo
+Jun, Tom B. Brown, Prafulla Dhariwal, Scott Gray, Chris Hallacy, Benjamin Mann, Alec Radford, Aditya Ramesh, Nick Ryder, Daniel M. Ziegler, John Schulman, Dario Amodei, and Sam
+McCandlish. Scaling laws for autoregressive generative modeling. In arXiv:2010.14701v2, 2020.
+Gao Huang, Zhuang Liu, Laurens van der Maaten, and Kilian Q. Weinberger. Densely connected
+convolutional networks. In CVPR, 2017.
+Sergey Ioffe and Christian Szegedy. Batch normalization: Accelerating deep network training by
+reducing internal covariate shift. In ICML, 2015.
+Takashi Ishida, Gang Niu, and Masashi Sugiyama. Binary classification from positive-confidence
+data. In NeurIPS, 2018.
+Eunkwang Jeon. Vision transformer. https://github.com/jeonsworld/ViT-pytorch,
+2020. Accessed: 2021-10-01.
+Jared Kaplan, Sam McCandlish, Tom Henighan, Tom B Brown, Benjamin Chess, Rewon Child, Scott
+Gray, Alec Radford, Jeffrey Wu, and Dario Amodei. Scaling laws for neural language models. In
+arXiv:2001.08361, 2020.
+Douwe Kiela, Max Bartolo, Yixin Nie, Divyansh Kaushik, Atticus Geiger, Zhengxuan Wu, Bertie
+Vidgen, Grusha Prasad, Amanpreet Singh, Pratik Ringshia, Zhiyi Ma, Tristan Thrush, Sebastian
+Riedel, Zeerak Waseem, Pontus Stenetorp, Robin Jia, Mohit Bansal, Christopher Potts, and Adina
+Williams. Dynabench: Rethinking benchmarking in NLP. In NAACL, 2021.
+Diederik P. Kingma and Prafulla Dhariwal. Glow: Generative flow with invertible 1 × 1 convolutions.
+In NeurIPS, 2018.
+Alex Krizhevsky. Learning multiple layers of features from tiny images. Technical report, University
+of Toronto, 2009.
+Meelis Kull and Peter Flach. Novel decompositions of proper scoring rules for classification: Score
+adjustment as precursor to calibration. In Joint European Conference on Machine Learning and
+Knowledge Discovery in Databases, pp. 68–85. Springer, 2015.
+Yann LeCun, Léon Bottou, Yoshua Bengio, and Patrick Haffner. Gradient-based learning applied to
+document recognition. Proceedings of the IEEE, 86(11):2278–2324, 1998.
+Patrick Lewis, Pontus Stenetorp, and Sebastian Riedel. Question and answer test-train overlap in
+open-domain question answering datasets. In EACL, 2020.
+Gang Li, Jan Zrimec, Boyang Ji, Jun Geng, Johan Larsbrink, Aleksej Zelezniak, Jens Nielsen,
+and Martin KM Engqvist. Performance of regression models as a function of experiment noise.
+Bioinformatics and Biology Insights, 15:1–10, 2021.
+Nan Lu, Gang Niu, Aditya Krishna Menon, and Masashi Sugiyama. On the minimal supervision for
+training any binary classifier from only unlabeled data. In ICLR, 2019.
+Horia Mania, John Miller, Ludwig Schmidt, Moritz Hardt, and Benjamin Recht. Model similarity
+mitigates test set overuse. In NeurIPS, 2019.
+Shahar Mendelson. Lower bounds for the empirical minimization algorithm. IEEE Transactions on
+Information Theory, 54(8):3797–3803, 2008.
+Umberto Michelucci, Michela Sperti, Dario Piga, Francesca Venturini, and Marco A. Deriu. A
+model-agnostic algorithm for Bayes error determination in binary classification. arXiv preprint
+arXiv:2107.11609, 2021.
+Mehryar Mohri, Afshin Rostamizadeh, and Ameet Talwalkar. Foundations of Machine Learning.
+MIT Press, 2nd edition, 2018.
+Vinod Nair and Geoffrey E Hinton. Rectified linear units improve restricted boltzmann machines. In
+ICML, 2010.
+12
+
+Published as a conference paper at ICLR 2023
+
+Morteza Noshad, Li Xu, and Alfred Hero. Learning to benchmark: Determining best achievable
+misclassification error from training data. In arXiv:1909.07192, 2019.
+Giorgio Patrini, Richard Nock, Paul Rivera, and Tiberio Caetano. (almost) no label no cry. In
+NeurIPS, 2014.
+Joshua C. Peterson, Ruairidh M. Battleday, Thomas L. Griffiths, and Olga Russakovsky. Human
+uncertainty makes classification more robust. In ICCV, 2019.
+Huy Phan. Pytorch_cifar10. https://github.com/huyvnphan/PyTorch_CIFAR10,
+2021. Accessed: 2021-10-01.
+John Platt et al. Probabilistic outputs for support vector machines and comparisons to regularized
+likelihood methods. Advances in large margin classifiers, 10(3):61–74, 1999.
+Novi Quadrianto, Alex J Smola, Tiberio S Caetano, and Quoc V Le. Estimating labels from label
+proportions. Journal of Machine Learning Research, 10(10), 2009.
+Benjamin Recht, Rebecca Roelofs, Ludwig Schmidt, and Vaishaal Shankar. Do CIFAR-10 classifiers
+generalize to CIFAR-10? In arXiv:1806.00451, 2018.
+Benjamin Recht, Rebecca Roelofs, Ludwig Schmidt, and Vaishaal Shankar. Do ImageNet classifiers
+generalize to ImageNet? In ICML, 2019.
+Cedric Renggli, Luka Rimanic, Nora Hollenstein, and Ce Zhang. Evaluating Bayes error estimators
+on real-world datasets with FeeBee. In NeurIPS Datasets and Benchmarks track, 2021.
+Rebecca Roelofs, Vaishaal Shankar, Benjamin Recht, Sara Fridovich-Keil, Moritz Hardt, John Miller,
+and Ludwig Schmidt. A meta-analysis of overfitting in machine learning. In NeurIPS, 2019.
+Tomoya Sakai, Marthinus Christoffel du Plessis, Gang Niu, and Masashi Sugiyama. Semi-supervised
+classification based on classification from positive and unlabeled data. In ICML, 2017.
+Keiko Sasada, Noriko Yamamoto, Hiroki Masuda, Yoko Tanaka, Ayako Ishihara, Yasushi Takamatsu,
+Yutaka Yatomi, Waichiro Katsuda, Issei Sato, Hirotaka Matsui, and on behalf of the Kyushu
+regional department of the Japanese Society of Laboratory Hematology. Inter-observer variance
+and the need for standardization in the morphological classification of myelodysplastic syndrome.
+Leukemia Research, 69:54–59, 2018.
+Salimeh Yasaei Sekeh, Brandon Oselio, and Alfred O. Hero. Learning to bound the multi-class Bayes
+error. IEEE Transactions on Signal Processing, 68:3793 – 3807, 2020.
+Vaishaal Shankar, Rebecca Roelofs, Horia Mania, Alex Fang, Benjamin Recht, and Ludwig Schmidt.
+Evaluating machine accuracy on imagenet. In ICML, 2020.
+Kazuhiko Shinoda, Hirotaka Kaji, and Masashi Sugiyama. Binary classification from positive data
+with skewed confidence. In IJCAI, 2020.
+Karen Simonyan and Andrew Zisserman. Very deep convolutional networks for large-scale image
+recognition. In ICLR, 2015.
+Masashi Sugiyama, Han Bao, Takashi Ishida, Nan Lu, Tomoya Sakai, and Gang Niu. Machine
+Learning from Weak Supervision: An Empirical Risk Minimization Approach. MIT Press, 2022.
+Ryan Theisen, Huan Wang, Lav R. Varshney, Caiming Xiong, and Richard Socher. Evaluating
+state-of-the-art classification models against Bayes optimality. In NeurIPS, 2021.
+Antonio Torralba, Rob Fergus, and William T. Freeman. 80 million tiny images: a large dataset for
+non-parametric object and scene recognition. IEEE Transactions on Pattern Analysis and Machine
+Intelligence, 30:1958–1970, 2008.
+Vladimir N. Vapnik. The nature of statistical learning theory. Springer, New York, USA, 2nd edition,
+2000.
+13
+
+Published as a conference paper at ICLR 2023
+
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz
+Kaiser, and Illia Polosukhin. Attention is all you need. In NeurIPS, 2017.
+Li Wan, Matthew Zeiler, Sixin Zhang, Yann Le Cun, and Rob Fergus. Regularization of neural
+networks using dropconnect. In ICML, 2013.
+Jiaheng Wei, Zhaowei Zhu, Hao Cheng, Tongliang Liu, Gang Niu, and Yang Liu. Learning with
+noisy labels revisited: A study using real-world human annotations. In ICLR, 2022.
+Roman Werpachowski, András György, and Csaba Szepesvári. Detecting overfitting via adversarial
+examples. In NeurIPS, 2019.
+Han Xiao, Kashif Rasul, and Roland Vollgraf. Fashion-MNIST: a novel image dataset for benchmarking machine learning algorithms. arXiv preprint arXiv:1708.07747, 2017.
+Chhavi Yadav and Léon Bottou. Cold case: The lost MNIST digits. In NeurIPS, 2019.
+Sangdoo Yun, Seong Joon Oh, Byeongho Heo, Dongyoon Han, Junsuk Choe, and Sanghyuk Chun.
+Re-labeling imagenet: from single to multi-labels, from global to localized labels. In CVPR, 2021.
+Zhi-Hua Zhou. A brief introduction to weakly supervised learning. National science review, 5(1):
+44–53, 2018.
+
+14
+
+Published as a conference paper at ICLR 2023
+
+A
+
+S UMMARY OF THE PROPOSED METHODS
+
+Our proposed method can be summarized into two steps as shown in the following table.
+Table 2: A summary of our proposed methods.
+Situation
+
+Step 1: collect data
+
+Clean soft labels
+
+{ci }n
+i=1
+
+Uncertainty labels
+
+{c0i }n
+i=1
+
+Noisy soft labels
+
+{(ui , si )}n
+i=1
+
+Multiple hard labels
+
+{yi,j }m
+j=1 for i ∈ [n]
+
+Positive confidence
+
+{ri }n
+i=1 and π+
+
+B
+
+Step 2: estimate Bayes error
+P
+β̂ = n1 n
+i=1 min{ci , 1 − ci }
+P
+0
+β̂ = n1 n
+i=1 ci
+P +
+
+Pn−
+ns
++
+−
+s
+β̂Noise = n1
+i=1 (1 − ui ) +
+i=1 ui
+P
+P
+1
+β̃ = n1 i min{ui , 1 − ui } where ui = m
+j 1[yi,j = 1]
+
+
+
+Pn+
+max 0, 2 − r1i
+β̂Pconf = π+ 1 − n1+ i=1
+
+R ELATED WORK
+
+Bayes error estimation has been a topic of interest for nearly half a century (Fukunaga & Hostetler,
+1975). Several works have derived upper and lower bounds of the Bayes error and proposed ways
+to estimate those bounds. Various f -divergences, such as the Bhattacharyya distance (Fukunaga,
+1990) or the Henze-Penrose divergence (Berisha et al., 2016; Sekeh et al., 2020), were studied. Other
+approaches include Noshad et al. (2019), which directly estimated the Bayes error with f -divergence
+representation instead of using a bound, and Theisen et al. (2021), which computed the Bayes error
+of generative models learned using normalizing flows (Kingma & Dhariwal, 2018). Michelucci et al.
+(2021) proposed a method to estimate the Bayes error and the best possible AUC for categorical
+features. More recently, Renggli et al. (2021) proposed a method to evaluate Bayes error estimators
+on real-world datasets, for which we usually do not have access to the true Bayes error.
+All of these works that estimate the Bayes error are based on instance-label pairs. Not only do
+they require instances, but they also usually have a model, which may need careful tuning of
+hyperparameters to avoid overfitting. Li et al. (2021) proposed to estimate the maximal performance
+for regression problems, while we focus on the classification problem.
+Weakly supervised learning tries to learn with a weaker type of supervision, e.g., semi-supervised
+learning (Chapelle et al., 2006; Sakai et al., 2017), positive-unlabeled learning (du Plessis et al.,
+2014), similar-unlabeled learning (Bao et al., 2018), unlabeled-unlabeled learning (Lu et al., 2019),
+and others (Zhou, 2018; Sugiyama et al., 2022).
+On the other hand, the focus of most previous works on estimating the Bayes error is on ordinary
+classification problems with full supervision. To our knowledge, Bayes error estimation for weakly
+supervised data has not been studied. We discussed how our formulation introduced in this paper is
+flexible and can be extended to weakly supervised learning in Sec. 4.
+Overfitting to the test dataset is one of the issues that concerns the machine learning community
+(Mania et al., 2019; Werpachowski et al., 2019; Kiela et al., 2021). Models can overfit to the test
+dataset by training on the test set, explicitly or implicitly. Barz & Denzler (2020) reported that 3% of
+the test data in CIFAR-10 has duplicates and near-duplicates in the training set. Lewis et al. (2020)
+studied popular open-domain question answering datasets and reported that 30% of test questions
+have a near-duplicate in the training data. These are examples of when we may explicitly train on the
+test set. Barz & Denzler (2020) and Lewis et al. (2020) showed how removing the duplicates will
+lead to substantially worse results.
+Overfitting to the test set can also happen implicitly because research is conducted on the same test
+data that is public for many years (often with a fixed train/test partition), in contrast to how engineers
+in industry can sample fresh unseen data for evaluation. Recht et al. (2018) constructed CIFAR-10.1,
+an alternative unseen test set for CIFAR-10 classifiers and showed how deep learning models became
+worse with respect to the test error, with a 4% to 10% increase. Yadav & Bottou (2019) and Recht
+15
+
+Published as a conference paper at ICLR 2023
+
+et al. (2019) showed similar results for MNIST (LeCun et al., 1998) and ImageNet (Deng et al.,
+2009), respectively. With closer inspection, however, Recht et al. (2019) discussed how the accuracy
+improvement proportional to that in the original test set was observed in the new test set, for both
+CIFAR-10 and ImageNet. Roelofs et al. (2019) studied Kaggle competition datasets by comparing
+accuracies based on a public test set (which is used repeatedly by practitioners) and a private test set
+(which is used to determine the final rankings), but found little evidence of overfitting.
+Constructing new test datasets is one way to examine the degree of overfitting to the test dataset. In
+Sec. 5, we discussed how estimating the Bayes error can be another way to detect overfitting to the
+test dataset. If models have lower test error than the estimated Bayes error, that is a strong signal
+for this type of overfitting. We compared the test error of recent classifiers with the estimated Bayes
+error in Sec. 5.
+
+C
+
+P ROOFS
+
+C.1
+
+P ROOF OF P ROPOSITION 3.1
+
+Proof.
+"
+E
+
+i.i.d.
+
+{xi }n
+i=1 ∼ p(x)
+
+[β̂] = E
+
+i.i.d.
+
+{xi }n
+i=1 ∼ p(x)
+
+#
+n
+1X
+[min {p(y = +1|xi ), p(y = −1|xi )}]
+n i=1
+
+(9)
+
+n
+
+1X
+=
+Ex ∼p(x) [min {p(y = +1|xi ), p(y = −1|xi )}]
+n i=1 i
+
+(10)
+
+n
+
+=
+
+1X
+β
+n i=1
+
+(11)
+
+= β.
+
+C.2
+
+(12)
+
+P ROOF OF P ROPOSITION 3.2
+
+Proof. Since 0 ≤ min[p(y = +1|x), p(y = −1|x)] ≤ 0.5, we can use the Hoeffding’s inequality as
+follows:
+2n2
+P (|β̂ − β| ≥ ) ≤ 2 exp − 2
+1
+
+!
+= 2 exp(−8n2 ).
+
+(13)
+
+2
+
+Therefore, for any δ > 0, with probability at least 1 − δ, we have,
+r
+|β̂ − β| ≤
+
+16
+
+1
+2
+log .
+8n
+δ
+
+(14)
+
+Published as a conference paper at ICLR 2023
+
+P ROOF THAT β̃ IS A BIASED ESTIMATOR
+
+C.3
+Proof.
+
+"
+E
+
+i.i.d.
+
+{ci ,ξi }n
+i=1 ∼ p(c,ξ)
+
+[β̃] = E
+
+i.i.d.
+
+{ci ,ξi }n
+i=1 ∼ p(c,ξ)
+
+#
+n
+1X
+[min {ui , 1 − ui }]
+n i=1
+
+(15)
+
+n
+
+=
+
+1X
+E(ci ,ξi )∼p(c,ξ) [min{ui , 1 − ui }]
+n i=1
+
+(16)
+
+6=
+
+n
+
+
+1X
+Eci ∼p(c) min{Eξi ∼p(ξ|ci ) [ui ], 1 − Eξi ∼p(ξ|ci ) [ui ]}
+n i=1
+
+(17)
+
+n
+
+1X
+=
+Ec ∼p(c) [min{ci , 1 − ci }]
+n i=1 i
+
+(18)
+
+n
+
+=
+
+1X
+Ex ∼p(x) [min{p(y = 1|xi ), p(y = −1|xi )}]
+n i=1 i
+
+=
+
+1X
+β=β
+n i=1
+
+(19)
+
+n
+
+C.4
+
+(20)
+
+P ROOF OF P ROPOSITION 3.6
+
+For simplicity, suppose that we have m labels for every sample i, and ui is the sample average of
+those labels:
+m
+
+ui =
+
+1 X
+1[yi,j = 1].
+m j=1
+
+Since 1[yi,j = 1] ∈ [0, 1], using Hoeffding’s inequality, we get
+" n
+#
+[
+Pr
+{|ui − ci | ≥ } | ci
+≤
+
+i=1
+n
+X
+
+Pr[|ui − ci | ≥  | ci ] (union bound)
+
+(21)
+
+(22)
+(23)
+
+i=1
+
+2m2
+≤ 2n exp −
+(1 − 0)2
+
+= 2n exp −2m2 .
+
+
+
+
+for any  > 0. In other words, for any δ 0 > 0, with probability at least 1 − δ 0 , we have
+r
+1
+2n
+|ui − ci | <
+log 0 =: 0 (δ 0 )
+2m
+δ
+
+(24)
+(25)
+
+(26)
+
+for all i = 1, . . . , n. Note that
+βi := min{ci , 1 − ci }
+= min{E[ui | ci ], E[1 − ui | ci ]}
+≥ E[min{ui , 1 − ui } | ci ]
+≥ E[β̃ | ci ].
+
+(27)
+(28)
+(29)
+(30)
+
+17
+
+Published as a conference paper at ICLR 2023
+
+The conditional bias can be bounded as
+" n
+#
+1X
+βi − E[β̃ | ci ] = βi − E
+min {ui , 1 − ui } | ci
+n i=1
+
+(31)
+
+n
+
+=
+
+1X
+E [min{ci , 1 − ci } − min{ui , 1 − ui } | ci ]
+n i=1
+
+(32)
+
+n
+
+1X
+Pr[|ui − ci | ≥ 0 (δ 0 ) | ci ]E[min{ci , 1 − ci } − min{ui , 1 − ui } | ci , |ui − ci | ≥ 0 (δ 0 )]
+n i=1
+(33)
+n
+1X
+Pr[|ui − ci | < 0 (δ 0 ) | ci ]E[min{ci , 1 − ci } − min{ui , 1 − ui } | ci , |ui − ci | < 0 (δ 0 )]
++
+n i=1
+(34)
+n
+1X
+Pr[|ui − ci | ≥ 0 (δ) | ci ](1/2 − 0)
+≤
+(35)
+n i=1
+=
+
+n
+
+1X
+Pr[|ui − ci | < 0 (δ 0 ) | ci ](min{ci , 1 − ci } − min{ci − 0 (δ 0 ), 1 − ci − 0 (δ 0 )})
++
+n i=1
+(36)
+≤ δ 0 /2 + 0 (δ 0 ),
+
+(37)
+
+where the last line follows from Eq. (26. Eq. (36 holds because min{ci , 1−ci } ∈ [0, 1/2], min{ui , 1−
+ui } ∈ [0, 1/2], and |ui − ci | < 0 (δ 0 ) implies that ui > ci − 0 (δ 0 ) and 1 − ui > 1 − ci − 0 (δ 0 ).
+Further taking the expectation on both sides, we get a bound on the bias:
+β − E[β̃] = E[βi − E[β̃ | ci ]]
+
+(38)
+
+0
+
+(39)
+
+0
+
+0
+
+≤ δ /2 +  (δ )
+r
+2n
+1
+0
+log 0 .
+= δ /2 +
+2m
+δ
+
+(40)
+
+Setting δ 0 to m−1/2 yields
+e ≤ √1 +
+β − E[β]
+2 m
+C.5
+
+r
+
+√
+1
+log(2n m) = O
+2m
+
+r
+
+log(2nm)
+m
+
+!
+.
+
+(41)
+
+P ROOF OF P ROPOSITION 3.4
+
+Proof. β̂Noise can be expressed as
+n
+
+1X
+β̂Noise =
+{1[ci ≥ 0.5](1 − ui ) + 1[ci < 0.5]ui }.
+n i=1
+
+(42)
+
+Recall that ui = ci + ξi . Hence, we have
+n
+
+
+1 X
+E
+[1[ci ≥ 0.5](1 − ui )] + E
+[1[ci < 0.5]ui ]
+i.i.d.
+i.i.d.
+n
+n
+{ci ,ξi }i=1 ∼ p(r,ξ)
+{ci ,ξi }i=1 ∼ p(r,ξ)
+n i=1
+(43)
+n
+
+1X
+E
+[1[ci ≥ 0.5](1 − ci ) − E
+=
+[1[ci ≥ 0.5]ξi ]
+i.i.d.
+i.i.d.
+{ci ,ξi }n
+{ci ,ξi }n
+n i=1
+i=1 ∼ p(r,ξ)
+i=1 ∼ p(r,ξ)
+
++E
+[
+1
+[c
+<
+0.5]c
+]
++
+E
+[
+1
+[c
+<
+0.5]ξ
+]
+.
+i.i.d.
+i.i.d.
+i
+i
+i
+i
+n
+n
+
+E[β̂Noise ] =
+
+{ci ,ξi }i=1 ∼ p(r,ξ)
+
+{ci ,ξi }i=1 ∼ p(r,ξ)
+
+(44)
+18
+
+Published as a conference paper at ICLR 2023
+
+The second term in Eq. (44) is,
+
+E
+
+i.i.d.
+
+{ci ,ξi }n
+i=1 ∼ p(r,ξ)
+
+[1[ci ≥ 0.5]ξi ] =
+
+Z Z
+
+1[ci ≥ 0.5] · ξi · p(ci , ξi )dci dξi
+ξi p(ξi |ci )dξi p(ci )dci
+
+=
+
+(45)
+
+
+
+Z
+
+Z
+
+(46)
+
+c ≥0.5
+
+Zi
+
+E[ξi |ci ]p(ci )dci
+
+=
+
+(47)
+
+ci ≥0.5
+
+= 0.
+
+(48)
+
+Similarly, the fourth term in Eq. (44) becomes zero. Then,
+
+E[β̂Noise ] =
+
+n
+
+1 X
+Eci ∼p(c) [1[ci ≥ 0.5](1 − ci ) + Eci ∼p(c) [1[ci < 0.5]ci ]
+n i=1
+
+(49)
+
+n
+
+=
+
+C.6
+
+1X
+Ec ∼p(c) [min{ci , 1 − ci }]
+n i=1 i
+
+(50)
+
+= Ec∼p(c) [min{c, 1 − c}]
+
+(51)
+
+= Ex∼p(x) [min{p(y = 1|x), p(y = −1|x)}]
+
+(52)
+
+= β.
+
+(53)
+
+P ROOF OF P ROPOSITION 3.5
+
+Proof. β̂Noise can be expressed as
+n
+
+β̂Noise =
+
+1X
+b̌i ,
+n i=1
+
+(54)
+
+where
+b̌i := 1[ci ≥ 0.5] · (1 − ui ) + 1[ci < 0.5] · ui .
+
+(55)
+
+Since we can derive that 0 ≤ b̌i ≤ 1, we can again use the Hoeffding’s inequality:
+
+
+
+2n2
+= 2 exp −2n2 .
+P (|β̂Noise − β| ≥ ) ≤ 2 exp −
+2
+(1 − 0)
+
+(56)
+
+Therefore, for any δ > 0, with probability at least 1 − δ, we have,
+r
+|β̂Noise − β| ≤
+
+19
+
+1
+2
+log .
+2n
+δ
+
+(57)
+
+Published as a conference paper at ICLR 2023
+
+C.7
+
+P ROOF OF T HEOREM 4.1
+
+Proof.
+β = Ep(x) [min{p(y = +1|x), p(y = −1|x)}]
+Z
+= min{p(y = +1|x), p(y = −1|x)}p(x)dx
+Z
+π+ p(x|y = +1)
+= min{p(y = +1|x), p(y = −1|x)}
+dx
+p(y = +1|x)
+Z
+π+ p(x|y = +1)
+= min{p(y = +1|x), 1 − p(y = +1|x)}
+dx
+p(y = +1|x)
+
+
+Z
+1 − p(y = +1|x)
+= min 1,
+π+ p(x|y = +1)dx
+p(y = +1|x)
+
+
+
+1 − r(x)
+= π+ E+ min 1,
+r(x)
+
+
+
+
+1
+= π+ 1 + E+ min 0,
+−2
+r(x)
+
+C.8
+
+(58)
+(59)
+(60)
+(61)
+(62)
+(63)
+(64)
+
+P ROOF OF P ROPOSITION 4.2
+
+Proof.
+
+
+
+n
+1
+π+ X
+E
+max
+0,
+2
+−
+(65)
+i.i.d.
++
+{xi }n
+n i=1
+r(xi )
+i=1 ∼ p(x|y=+1)
+
+
+
+
+1
+(66)
+= π+ 1 − E+ max 0, 2 −
+r(x)
+
+
+
+
+1
+= π+ 1 + E+ min 0,
+−2
+(67)
+r(x)
+
+
+
+β
+= π+ 1 +
+−1
+(68)
+π+
+=β
+(69)
+In the
+we used max{a, b} = − min{−a, −b}. In the fourth equality, we used
+h third
+n equality, oi
+[β̂Pconf ] = π+ −
+
+E
+
+= πβ+ − 1 which can be derived from Eq. (64).
+
+1
+−2
+E+ min 0, r(x)
+
+C.9
+
+P ROOF OF P ROPOSITION 4.3
+
+We can rewrite β̂Pconf as
+β̂Pconf =
+
+
+
+n+ 
+1 X
+1
+π+ − π+ max 0, 2 −
+n+ i=1
+r(xi )
+
+(70)
+
+
+
+Although 1/r(xi ) is not bounded, since 0 ≤ π+ − π+ max 0, 2 − r(x1 i ) ≤ π+ , we can use the
+Hoeffding’s inequality to derive,
+
+P (|β̂Pconf − β| ≥ ) ≤ 2 exp
+
+−2n2
+2
+π+
+
+
+(71)
+
+Therefore, for any δ > 0, with probability at least 1 − δ we have,
+r
+|β̂Pconf − β| ≤
+20
+
+2
+π+
+2
+log .
+2n
+δ
+
+(72)
+
+Published as a conference paper at ICLR 2023
+
+D
+
+S TOCHASTIC BIG -O NOTATION
+
+Suppose {Xn } (n = 1, 2, . . .) is a sequence of random variables and {an } (n = 1, 2, . . .) is a
+sequence of positive numbers, respectively. We say Xn = Op (an ) when for all  > 0, there exists
+n|
+C ∈ R and finite N such that for all n > N , P ( |X
+an > C) < .
+
+E
+
+DATA COLLECTION
+
+We chose the Fashion-MNIST dataset (Xiao et al., 2017) as a more challenging dataset. This is a 10
+class classification dataset with small fashion images with categories such as dress, bag, and sneaker. 6
+We used Amazon Mechanical Turk (Buhrmester et al., 2016) to collect multiple annotations per each
+image in the test dataset with 10,000 images. We designed the task so that the worker is instructed to
+annotate 10 randomly chosen fashion images, with a multiple choice of 10 labels. We showed several
+correct images for each of categories in the beginning of the task, so that the worker can have a good
+understanding of each labels. For each task with 10 image annotations, we paid $0.06 or $0.08 to
+the worker. We removed the duplicates when the same worker provide a label for the same image
+more than once. We further removed the annotation when the worker provided an answer within 30
+seconds, which we considered as too short, e.g., when we performed the task, it took us 45 seconds
+when we skipped reading the instructions. After removing the shorter ones, the mean and median
+answering time was about 147 and 78 seconds, respectively. Finally, we ended up with around 67
+annotations per image. The least number was 53 and the largest number was 79 annotations. By
+following the naming convention of CIFAR-10H, we call this dataset as Fashion-MNIST-H.
+
+F
+
+F ULL RESULTS FOR S EC . 5.1 AND S EC . 5.2
+
+In Sec. 5.1 and Sec. 5.2, we only showed two setups for each set of experiments. In this section, we
+show all four setups.
+Proposed method
+Ensemble
+Hard classifier
+Hard classifier-BER
+Soft classifier
+Soft classifier-BER
+
+25
+20
+15
+10
+
+Proposed method
+Ensemble
+Hard classifier
+Hard classifier-BER
+Soft classifier
+Soft classifier-BER
+
+30
+25
+20
+
+25
+20
+
+15
+
+15
+
+10
+
+10
+
+5
+
+5
+
+5
+
+0
+
+0
+
+0
+
+2
+
+4
+
+8
+
+16 32 64 128 256 512 1028
+
+(a) Setup A
+
+2
+
+4
+
+8
+
+Proposed method
+Ensemble
+Hard classifier
+Hard classifier-BER
+Soft classifier
+Soft classifier-BER
+
+30
+
+16 32 64 128 256 512 1028
+
+(b) Setup B
+
+Proposed method
+Ensemble
+Hard classifier
+Hard classifier-BER
+Soft classifier
+Soft classifier-BER
+
+25
+20
+15
+10
+5
+
+2
+
+4
+
+8
+
+16 32 64 128 256 512 1028
+
+(c) Setup C
+
+0
+
+2
+
+4
+
+8
+
+16 32 64 128 256 512 1028
+
+(d) Setup D
+
+Figure 5: Comparison of the proposed method (blue) with the true Bayes error (black), a recent
+Bayes error estimator “Ensemble” (orange) (Noshad et al., 2019), and the test error of a multilayer
+perceptron (hard labels: green, soft labels: purple). We also use the classifier’s probabilistic output
+and plug it into the Bayes error equation in Eq. (3), shown as “Classifier-BER” (hard labels: red, soft
+labels: brown). The vertical/horizontal axis is the test error or estimated Bayes error/# of training
+samples per class, respectively. Instance-free data was used for Bayes error estimation, while fully
+labelled data was used for training classifiers. We plot the mean and standard error for 10 trials.
+
+6
+
+Other popular datasets such as CIFAR-100 (Krizhevsky, 2009) and ImageNet (Deng et al., 2009) are
+problematic because they are known to be essentially multi-label classification datasets rather than single-label
+(Shankar et al., 2020; Beyer et al., 2020; Yun et al., 2021; Wei et al., 2022). Since the Bayes error is defined for
+the single-labeled case, this means we have to define a similar but different and novel concept that corresponds
+to the lowest error for multi-label classification if we want to estimate the best possible performance on datasets
+such as CIFAR-100 and ImageNet. This is definitely an interesting direction to pursue in the future, but is out of
+the scope of the current paper since we are focusing on the Bayes error.
+
+21
+
+Published as a conference paper at ICLR 2023
+
+(w/o noise)
+(w/ noise)
+Noise (w/ noise)
+
+16
+14
+
+22
+
+8
+
+(w/o noise)
+(w/ noise)
+Noise (w/ noise)
+
+20
+
+6
+
+18
+
+12
+10
+
+16
+
+8
+
+14
+
+6
+
+2
+
+4
+
+8 16 32 64 128 256 512 1028
+
+12
+
+4.0
+
+(w/o noise)
+(w/ noise)
+Noise (w/ noise)
+
+7
+
+3.0
+
+4
+
+8 16 32 64 128 256 512 1028
+
+2.0
+
+4
+
+1.5
+
+(a) Setup A
+
+2
+
+Noise (w/ noise)
+
+2.5
+
+5
+
+1.0
+
+3
+
+2
+
+(w/o noise)
+(w/ noise)
+
+3.5
+
+0.5
+
+2
+
+4
+
+8 16 32 64 128 256 512 1028
+
+(b) Setup B
+
+0.0
+
+2
+
+4
+
+(c) Setup C
+
+8 16 32 64 128 256 512 1028
+
+(d) Setup D
+
+Figure 6: Bayes error with and without noise on the labels, with mean and standard error for 10
+trials. The vertical/horizontal axis is the estimated Bayes error/the number of samples. With noisy
+labels, the estimation tends to become inaccurate with a larger standard error. With more samples,
+the difference between clean labels becomes smaller, but a small bias remains. With our modified
+estimator, the bias vanishes.
+
+16
+
+estimated Bayes error (PN)
+estimated Bayes error (Pconf)
+
+14
+
+10
+
+estimated Bayes error (PN)
+estimated Bayes error (Pconf)
+
+20
+18
+
+12
+
+8
+
+16
+
+10
+
+14
+
+8
+8
+
+16
+
+32
+
+64 128 256 512 1028
+
+3
+2
+
+8
+
+16
+
+(a) Setup A
+
+32
+
+3
+
+64 128 256 512 1028
+
+estimated Bayes error (PN)
+estimated Bayes error (Pconf)
+
+4
+
+6
+
+1
+
+4
+4
+
+5
+
+7
+5
+
+12
+4
+
+estimated Bayes error (PN)
+estimated Bayes error (Pconf)
+
+9
+
+4
+
+8
+
+(b) Setup B
+
+16
+
+32
+
+64 128 256 512 1028
+
+0
+
+4
+
+(c) Setup C
+
+8
+
+16
+
+32
+
+64 128 256 512 1028
+
+(d) Setup D
+
+Figure 7: Estimated Bayes error with PN (positive and negative) and Pconf (positive-confidence).
+The vertical/horizontal axis is the estimated Bayes error/number of samples. We plot the mean and
+standard error for 10 trials. The difference between the two becomes smaller as we increase the
+number of training samples.
+
+2
+
+5.0
+
+estimated Bayes error
+
+Vision Transformer B/16
+
+DenseNet169
+
+ResNet50
+
+0.0
+
+VGG11
+
+estimated Bayes error
+
+(c) Setup C
+
+Vision Transformer B/16
+
+DenseNet169
+
+(b) Setup B
+
+ResNet50
+
+0
+
+7.5
+2.5
+
+VGG11
+
+estimated Bayes error
+
+Vision Transformer B/16
+
+DenseNet169
+
+ResNet50
+
+0
+
+VGG11
+
+estimated Bayes error
+
+(a) Setup A
+
+Vision Transformer B/16
+
+DenseNet169
+
+ResNet50
+
+VGG11
+
+0
+
+2
+
+4
+
+C-10
+C-10F
+C-10.1
+C-10H
+
+10.0
+Error (%)
+
+1
+
+4
+
+C-10
+C-10F
+C-10.1
+C-10H
+
+6
+Error (%)
+
+Error (%)
+
+2
+
+C-10
+C-10F
+C-10.1
+C-10H
+
+6
+Error (%)
+
+C-10
+C-10F
+C-10.1
+C-10H
+
+3
+
+(d) Setup D
+
+Figure 8: Comparing the estimated Bayes error with four classifiers and four setups (Figures 8a,
+8b, 8c, and 8d). Although it seems that ViT B/16 has surpassed the Bayes error for all four setups
+for CIFAR-10 (C10), ciFAIR-10 (C10F), and CIFAR-10.1 (C10.1), it is still comparable or larger
+than the Bayes error for CIFAR-10H (C10H). In Sec. 5.2, we discuss how this has to be investigated
+carefully. The black error bar for the Bayes error is the 95% confidence interval. The black error bar
+for the C10H is the standard error for sampling test labels 20 times.
+
+22
+
+

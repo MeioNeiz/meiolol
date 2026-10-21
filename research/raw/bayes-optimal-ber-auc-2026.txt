@@ -1,0 +1,4920 @@
+Bayes-Optimal BER and AUC:
+Estimation and Evaluation of Estimators
+Ryota Ushio1,2
+
+arXiv:2609.02304v1 [cs.LG] 2 Sep 2026
+
+1
+
+Takashi Ishida2,1
+
+Masashi Sugiyama2,1
+
+Graduate School of Frontier Sciences, The University of Tokyo, Tokyo, Japan
+2
+RIKEN AIP, Tokyo, Japan
+{ushio@ms.,ishida@,sugi@}k.u-tokyo.ac.jp
+
+Abstract
+A fundamental quantity in machine learning is the optimal performance achievable
+by any model on a given task. Estimating this quantity allows us to distinguish
+the irreducible part of the error from a deficiency of the model, telling us how
+much room for improvement remains. Recent work has shown that the Bayes
+error, or equivalently the optimal accuracy, can be estimated from soft labels in
+binary classification. However, accuracy is often a poor summary of performance
+in settings with severe class imbalance or noisy annotations, where metrics such
+as the balanced error rate (BER) and the area under the ROC curve (AUC) are
+more appropriate. We address this gap with two complementary contributions.
+(i) Estimation. We propose soft-label-based estimators for the optimal BER and
+AUC. We first consider the clean setting in which true soft labels and the class
+prior are known, and then extend the estimators to a more realistic setting in
+which the class prior is unknown and the observed soft labels are corrupted by
+an unknown order-preserving transformation, possibly followed by additive noise.
+In the latter setting, we approximately recover the clean soft labels via isotonic
+regression with auxiliary hard labels, estimate the class prior with a clipped mean
+of the hard labels, and derive finite-sample error bounds for the resulting plug-in
+estimators. (ii) Evaluation. Since the optimum is unobservable on real datasets,
+evaluating any such estimator is itself nontrivial. We extend the FeeBee framework,
+originally proposed for evaluating Bayes-error estimators, to the optimal BER
+and AUC. The resulting procedure provides practical evaluation scores without
+requiring knowledge of the optimum, and applies to any estimator of the optimal
+BER or AUC, not only our proposed ones. Experiments on synthetic and real-world
+datasets validate both the estimators and the evaluation procedure.
+
+1
+
+Introduction
+
+An integral part of machine learning workflows is evaluating models using performance metrics.
+Of natural interest, then, is the Bayes-optimal performance, i.e., the best value achievable by any
+model on a given task. This quantity represents the irreducible component of the error and helps us
+separate a deficiency of the current model from the inherent difficulty of the task. In practice, when
+the gap between current and optimal performance is small, it tells us that not much room is left for
+improvement and that further training of the current model or training of larger models is unlikely
+to help. This is particularly important in the era of large-scale machine learning models, which
+often require a huge amount of computational resources to train and have a significant environmental
+impact (Strubell et al., 2020; Luccioni et al., 2023). Moreover, recent work suggests that estimation
+of the Bayes-optimal performance can be useful for detecting data contamination (Ishida et al., 2026).
+We focus on binary classification in this paper. Given a binary classifier h : X → {0, 1}, the
+most commonly used metric to measure its performance is the error rate Err(h) := P (h(x) ̸= y)
+Preprint.
+
+or the accuracy 1 − Err(h), where (x, y) is drawn from an unknown joint distribution P over the
+space X of input features and the set {0, 1} of class labels. When the class posterior, described by
+η(x) := P (y = 1 | x), is genuinely uncertain, even a perfect predictor cannot avoid misclassification
+due to the stochasticity of the labels. The lowest achievable error rate Err∗ := inf h:X →{0,1} Err(h),
+also known as the Bayes error, therefore quantifies the inherent label uncertainty and is determined
+by the underlying data distribution.
+Estimation of the Bayes error has a long history in the literature. While most existing methods use
+n
+input-label pairs {(xi , yi )}i=1 (Fukunaga & Hostetler, 1975; Devijver, 1985; Berisha et al., 2014;
+Moon et al., 2018; Noshad et al., 2019; Theisen et al., 2021), a recent line of work suggests another
+approach that estimates the Bayes error from soft labels ηi = η(xi ), i = 1, . . . , n (Ishida et al.,
+2023; Jeong et al., 2023; Ushio et al., 2026). A soft label ηi represents class membership as a
+probability value in [0, 1] unlike a binary hard label yi ∈ {0, 1}. This soft-label-based approach does
+not need access to the input features xi , which makes it suitable for privacy-sensitive applications
+and also allows it to bypass the curse of dimensionality. Also, it does not make the distributional
+assumptions often imposed by the methods based on input-label pairs, such as lower/upper bounds on
+the probability density function or Lipschitzness of the density. Early work typically assumes that the
+true soft labels ηi or their high-quality estimates are available, e.g., by averaging many independent
+annotations per instance (Ishida et al., 2023; Jeong et al., 2024), which might be unrealistic in practice.
+More recent work (Ushio et al., 2026) relaxed this assumption by allowing the soft labels to be
+corrupted by unknown order-preserving transformations.
+However, the error rate is a poor summary of performance under class imbalance or label noise,
+which are both common in practice, and other metrics such as the balanced error rate (BER) and the
+area under the ROC curve (AUC) are often preferred in such settings (Ling & Li, 1998; Gu et al.,
+2009; Menon et al., 2013, 2015; van Rooyen et al., 2015; Menon et al., 2018; Charoenphakdee et al.,
+2019). Concretely, the BER of a classifier h : X → {0, 1} is the average of the in-class error rates,
+i.e., BER(h) := (FPR(h) + FNR(h))/2, where FPR(h) := P (h(x) = 1 | y = 0) and FNR(h) :=
+P (h(x) = 0 | y = 1) are the false positive and false negative rates (Menon et al., 2015). The AUC of
+a score-based classifier f : X → R that predicts h(x) = 1 [f (x) ≥ 0] is the frequency that a random
+positive instance x+ ∼ P (x | y = 1) is ranked
+above a random negative instance x− ∼ P (x | y = 0),
+
+with ties counted at 1/2: AUC(f ) := E 1 [f (x+ ) > f (x− )] + 21 1 [f (x+ ) = f (x− )] , where 1 [·]
+denotes the indicator function (Clémençon et al., 2008; Menon et al., 2015). Under severe class
+imbalance, a trivial classifier that always predicts the majority class can achieve a near-zero error rate
+while learning nothing from data, and hence the error rate is not helpful. BER remains informative
+even under class imbalance by averaging the per-class error rates (Menon et al., 2013). AUC is also a
+preferred metric under class imbalance, as it summarizes the trade-off between true- and false-positive
+rates over all decision thresholds (Ling & Li, 1998; Fawcett, 2006; Gu et al., 2009). Moreover, BER
+and AUC are popular metrics under label noise due to their robustness; e.g., their optimizers remain
+unchanged under noisy labels (Menon et al., 2015; van Rooyen et al., 2015).
+Our contribution Despite the practical importance of BER and AUC, the estimation of their
+Bayes-optimal values, i.e., BER∗ := inf h:X →{0,1} BER(h) and AUC∗ := supf :X →R AUC(f ),
+remains underexplored. The first part of our contribution fills this gap by proposing soft-label-based
+estimators of BER∗ and AUC∗ . We start with the clean setting similar to the work by Ishida et al.
+(2023) for the Bayes error, in which the true soft labels ηi are available (Section 2). Then, inspired
+by Ushio et al. (2026), we extend the estimators to a more realistic setting where the soft labels are
+only observed through some unknown order-preserving corruption, possibly followed by additive
+noise (Section 3). Unlike the Bayes error, the optimal BER and AUC depend on the class prior
+θ := P (y = 1) (0 < θ < 1). We first assume that θ is known for simplicity and then handle the
+unknown-prior case.
+A separate question is how to evaluate an estimator of BER∗ or AUC∗ on real datasets. This is
+challenging because, for real-world datasets, the underlying data distribution is unknown and does
+not reveal the ground-truth optimal values. For the Bayes error, Renggli et al. (2021) proposed
+FeeBee, which sidesteps this issue with a simple idea of injecting label noise. In the second part
+of our contribution, we extend this idea to the optimal BER and AUC (Section 4). Specifically, we
+first derive a simple closed-form relationship between the original optima and their noise-injected
+counterparts. Then, we propose scores for evaluating estimators of BER∗ and AUC∗ based on the
+derived relationship. The procedure can be applied to any estimator of BER∗ or AUC∗ , not only the
+2
+
+ones we propose. Our proposed method allows us to evaluate Bayes-optimal BER/AUC estimators
+on real-world datasets without knowledge of the true optima.
+
+2
+
+Estimation from clean soft labels
+
+In this section, we first show that the optimal BER and AUC can be expressed as expectations
+of certain functions of the class posterior η(x) (Lemmas 2.1 and 2.2). This reveals that, for each
+of BER and AUC, there are two different natural choices of unbiased estimators of the optimum.
+We discuss data-dependent criteria (or discriminants) for choosing between them in Section 2.1.
+Next, in Section 2.2, we present an efficient O(n log n) time algorithm for computing the proposed
+optimal AUC estimator and AUC discriminant, which would otherwise take Θ(n2 ) time. Finally in
+Section 2.5, we discuss the case where the class prior θ is unknown.
+h
+i
+h
+i
+(1)
+(2)
+Lemma 2.1. The optimal BER can be expressed as BER∗ = E ϕBER (η(x)) = E ϕBER (η(x)) ,
+o
+o
+n
+n
+(1)
+(2)
+where ϕBER (z) = 12 min zθ , 1−z
+and ϕBER (z) = 1 − 12 max zθ , 1−z
+1−θ
+1−θ .
+Lemma 2.2. h Let x′ be an i
+i.i.d. copyh of x.
+Then, ithe optimal AUC is given by
+(1)
+(2)
+(1)
+AUC∗ = E ϕAUC (η(x), η(x′ )) = E ϕAUC (η(x), η(x′ )) , where ϕAUC (z1 , z2 ) = 1 −
+(2)
+1
+1
+2θ(1−θ) min {z1 (1 − z2 ), z2 (1 − z1 )} and ϕAUC (z1 , z2 ) = 2θ(1−θ) max {z1 (1 − z2 ), z2 (1 − z1 )}.
+
+Remark 2.3. Clémençon et al. (2008, Example 1) mentioned the former expression of AUC∗ =
+(1)
+E[ϕAUC (η(x), η(x′ ))] but without a proof. We state the full proof for the sake of completeness
+(Appendix A.1).
+2.1
+
+Unbiased estimators: Min formula vs. max formula
+
+In hLemma 2.1, we
+BER can be expressed in two different ways: BER∗ =
+i saw that
+h the best possible
+i
+(1)
+(2)
+E ϕBER (η(x)) = E ϕBER (η(x)) . This naturally leads to two different unbiased estimators
+\∗ := 1 Pn ϕ(1) (ηi ) and BER
+\∗ := 1 Pn ϕ(2) (ηi ). We call BER
+\∗ the min
+of BER∗ : BER
+1
+2
+1
+i=1 BER
+i=1 BER
+n
+n
+(1)
+(2)
+∗
+\
+formula for BER because ϕBER uses the min operation, and BER2 the max formula because ϕBER
+uses the max operation. Similarly, Lemma 2.2 suggests two different unbiased estimators of the
+P
+(1)
+2
+\∗ :=
+optimal AUC, namely the min formula AUC
+1
+i<j ϕAUC (ηi , ηj ) and the max formula
+n(n−1)
+P
+P
+(2)
+2
+\∗ :=
+AUC
+2
+i<j denotes the summation over all pairs of indices
+i<j ϕAUC (ηi , ηj ), where
+n(n−1)
+
+2
+1
+(i, j) ∈ {1, . . . , n} | i < j .
+Thus, a natural question is: Which estimator, the min formula or the max formula, is better? Two
+unbiased estimators are usually compared in terms of their variances; the one with a smaller variance
+is considered better (Lehmann & Casella, 1998). Therefore, we want to be able to guess which
+estimator has a smaller variance for a given data distribution.
+To this end, for each of BER and AUC, we define a discriminant that indicates which estimator, the min formula or the max formula, has a smaller variance. The discriminant for BER
+is defined as ∆BER := (1 − 2θ) E [(η(x) − θ) |η(x) − θ|]. For AUC, we define ∆AUC :=
+(1 − 2θ) E [(η(x) − θ) |η(x) − η(x′ )|], where x′ is an i.i.d. copy of x. The following theorem
+suggests that the sign of each discriminant can be used to choose the better estimator.
+Theorem 2.4.
+h
+i
+h
+i
+\∗ ≤ Var BER
+\∗ if and only if ∆BER ≥ 0.
+(i) For all n ∈ N, we have Var BER
+1
+2
+h
+i
+\∗ <
+(ii) Assume that the random variable η(x) is not a.s. constant. Then, we have Var AUC
+1
+h
+i
+\∗ for all n ≥ 2 if and only if ∆AUC ≥ 0.
+Var AUC
+2
+1 Naively, AUC
+\∗ and AUC
+\∗ seem to require Θ(n2 ) time to compute due to this double summation. However, we will
+1
+2
+
+show that they can be computed in O(n log n) time later in Section 2.2.
+
+3
+
+b BER :=
+In practice, the discriminants can be unbiasedly estimated from soft labels as ∆
+Pn
+P
+P
+n
+1−2θ
+1−2θ
+2
+b
+i=1 (ηi − θ) |ηi − θ| and ∆AUC := n(n−1)
+i=1
+j: j̸=i (ηi − θ) |ηi − ηj |, and we can
+n
+choose between the min formula and the max formula based on the signs of these estimates, i.e.,
+b BER ) and sign(∆
+b AUC ).3
+sign(∆
+Theoretically, some sufficient conditions can be shown for ∆BER ≥ 0 and ∆AUC ≥ 0, i.e., the min
+formulas to be better estimators. An obvious sufficient condition is that the two classes are balanced,
+i.e., θ = 12 . Another condition is that the Bayes error Err∗ is small enough, or in other words, the
+inherent label uncertainty of the data distribution is sufficiently low. See Proposition A.8 for the
+formal statement and proof.
+In the rest of this paper, our theoretical results are stated mainly for the min formula estimators unless
+\∗ and AUC
+\∗ for brevity. However,
+explicitly stated otherwise, and we denote them just by BER
+similar results also hold for the max formula estimators.
+2.2
+
+\∗
+Near-linear time algorithm for computing AUC
+
+\∗ , AUC
+\∗ and ∆
+b AUC involve summation over all pairs of indices (i, j), so a
+The definitions of AUC
+1
+2
+naive algorithm would take Θ(n2 ) time to compute each of them. This can be a significant bottleneck,
+or even prohibitive, for large-scale datasets. This computational challenge is common for many
+\∗ , AUC
+\∗ and ∆
+b AUC are examples of
+U-statistics (Hoeffding, 1948) of degree 2 or higher. AUC
+1
+2
+degree-two U-statistics and are no exception. The literature has addressed this challenge typically by
+using Monte-Carlo approximation of original U-statistics, which are called incomplete U-statistics
+(Blom, 1976; Clémençon et al., 2016; Lee, 2019). This approach reduces the number of terms to be
+added up and thus the computational cost, but it inevitably introduces additional variance.
+\∗ ,
+Fortunately, however, it turns out that AUC
+1
+Algorithm 2.1: An efficient algorithm for comput\∗ and ∆
+b
+AUC
+have
+special
+structures
+that
+\∗
+AUC
+2
+ing AUC
+1
+enable efficient computation without relying on
+∗
+\ input Soft labels η , . . . , η , class prior θ
+approximation. For example, the exact AUC
+1
+n
+1
+can be computed in O(n log n) time in the worst
+η(1) , . . . , η(n) ← sort η1 , . . . , ηn in ascending order
+SUM ← 0
+case by Algorithm 2.1; the proof is given in ThePREFIX ← 0
+orem A.13. We also provide O(n log n)-time
+for j = 2 to n do
+∗
+\ (Algoalgorithms for exactly computing AUC
+2
+PREFIX ← PREFIX + η(j−1)
+b AUC (Algorithm A.1) in the
+rithm A.2) and ∆
+SUM ← SUM + (1 − η(j) ) · PREFIX
+end for
+appendices.
+SUM
+output 1 − n(n−1)θ(1−θ)
+
+2.3
+
+Clipping the AUC estimator
+
+Another minor note about the estimation of AUC∗ : although the true value AUC∗ lies between 0.5
+\∗ and AUC
+\∗ can fall outside
+and 1 for any data distribution, it is possible that the estimates AUC
+1
+2
+4
+the valid range [0.5, 1] in rare events. To address this issue, we can simply clip the raw esti^∗ := clip1 (AUC
+\∗ ) =
+mates to the valid range [0.5, 1]. We denote the clipped estimators by AUC
+k
+0.5
+k
+\∗ }}, k = 1, 2. Here, clipb (z) = min {b, max {a, z}} represents the operamin{1, max{0.5, AUC
+k
+a
+tion that clips its argument to the interval [a, b]. It is straightforward to verify that each clipped estima^∗ −AUC∗ | ≤ |AUC
+\∗ −AUC∗ |.
+tor is always more accurate than the unclipped counterpart, i.e., |AUC
+k
+
+k
+
+^∗ and denote it
+Again, we present our theoretical analysis mainly for the min formula estimator AUC
+1
+^∗ for brevity, but the arguments for AUC
+^∗ are similar. Note that the BER estimators do
+just by AUC
+2
+\∗ , BER
+\∗ lie in [0, 0.5].
+not require clipping as both the true value BER∗ and the estimates BER
+1
+
+2
+
+2 Despite the double summation, ∆
+b
+
+AUC can be computed in O(n log n) time as shown in Algorithm A.1 in the appendix.
+3 It is also possible to construct Wald-type statistical hypothesis tests on the signs of ∆
+BER and ∆AUC based on the
+
+b BER and ∆
+b AUC ; see Appendix A.2.1 for details about the AUC case.
+asymptotic normality of ∆
+
+4 For example, imagine that we draw a tiny sample of size n = 2, which happens to be {η , η } = 1 , 1 . Then, we
+1 2
+2 2
+1
+\∗ = 1 −
+have AUC
+, which is less than 0.5 unless θ = 0.5.
+1
+
+8θ(1−θ)
+
+4
+
+2.4
+
+Estimation error bounds
+
+Our estimators of the optimal BER and AUC enjoy the following finite-sample bounds on their
+estimation errors.
+q
+\∗ − BER∗ | ≤ log(2/δ) .
+Theorem 2.5. For any δ > 0, with probability at least 1 − δ, we have |BER
+8n
+q
+log(2/δ)
+∗
+∗
+^ − AUC | ≤
+Theorem 2.6. For any δ > 0, with probability at least 1 − δ, we have |AUC
+θ(1−θ)n .
+Remark 2.7. Theorem 2.5 simply follows from the Hoeffding bound. Theorem 2.6 needs a more
+careful analysis: while we can use basic tools like Hoeffding’s inequality (11) for U-statistics or the
+1 √
+bounded difference inequality, such tools lead to a bound of stochastic order Op ( θ(1−θ)
+). The
+n
+1
+constant factor θ(1−θ)
+blows up under severe class imbalance, i.e., when θ is close to 0 or 1. We
+instead employ the Bernstein-type inequality (13) for U-statistics to improve the θ-dependence to
+√ 1
+, resulting in the bound in Theorem 2.6. See Appendix A.4 for details.
+θ(1−θ)
+
+2.5
+
+Unknown class prior
+
+So far, we have assumed that the class prior θ = P (y = 1) is known. When the classPprior is
+n
+unknown, we can still estimate it from the soft labels simply by the sample mean η̄ := n1 i=1 ηi 5
+\∗ and
+since we have E [ηi ] = θ. However, using η̄ directly in place of θ in the definitions of BER
+^∗ may cause numerical instability or even zero division since both estimators involve division by
+AUC
+θ and 1 − θ. A simple solution to this problem is to use a clipped version of η̄: θbε := clip1−ε
+(η̄) =
+ε
+min {1 − ε, max {ε, η̄}}, where ε ∈ (0, 21 ) is some clipping threshold.
+With a fixed threshold ε, however, we must choose ε carefully so that 0 < ε < min {θ, 1 − θ};
+otherwise, our clipped estimator θbε and the resulting plug-in estimators for BER∗ and AUC∗ will
+be statistically inconsistent and suffer from bias that never vanishes as n → ∞. Such a choice of ε
+requires certain prior knowledge of θ. We can bypass this issue by using a vanishing threshold τn
+that depends on the sample size n and tends to zero as n increases. For our theoretical analysis, we
+set the threshold as follows.
+Assumption 2.8. The clipping threshold is set to τn = nc for some constant 0 < c < 12 .
+The error of the resulting class prior estimator θbτn is bounded as follows.
+2
+
+(2 log(2/δ)+3c)
+Lemma 2.9. Under Assumption 2.8, for any δ > 0 and n ≥ 18θ(1−θ)
+log(2/δ) , with probability at
+q
+8θ(1−θ)
+log(2/δ)
+least 1 − δ, we have |θbτn − θ| ≤
+.
+n
+
+\∗
+We can now estimate BER∗ and AUC∗ by plugging in θbτn in place of θ in the definitions of BER
+^∗ . Let us abuse the notation a bit and denote these plug-in estimators by BER
+\∗ (θbτ ) and
+and AUC
+n
+
+^∗ (θbτ ), respectively. It can be shown that they are statistically consistent. More specifically, the
+AUC
+n
+following finite-sample error bounds hold; see Theorems A.22 and A.23 for the proofs.
+Theorem 2.10. Under Assumption 2.8, forqany δ > 0, each of the following holds with probability
+at
+q
+2 log(4/δ)
+log(4/δ)
+∗ b
+∗
+∗ b
+∗
+17
+\
+^
+least 1 − δ: BER (θτ ) − BER ≤
+and AUC (θτ ) − AUC ≤ 10
+.
+n
+
+8
+
+θ(1−θ)n
+
+n
+
+θ(1−θ)n
+
+Also, these estimators are asymptotically unbiased; see Propositions A.24 and A.25.
+
+3
+
+Estimation from corrupted soft labels
+
+In practice, clean soft labels ηi = P (y = 1 | x = xi ) may be unavailable. If the data generation
+process allows repeated sampling of class labels for the same input xi , it is still possible to approximate
+5 Jeong et al. (2024) proposed to estimate the class prior by 1
+n
+
+Pn
+
+i=1 1 [ηi ≥ 0.5] in their discussion of the soft-label-based
+estimation of the FPR and FNR of the Bayes optimal classifier (i.e., the classifier h∗ (x) = 1 [η(x) ≥ 1/2] that achieves
+the Bayes error rate Err∗ ). However, it is easy to construct examples where their estimator becomes biased and statistically
+inconsistent (see Example A.19).
+
+5
+
+ηi = E [y | x = xi ] by the average of the sampled labels, in which case the resulting plug-in Bayes
+error estimator has been shown to be asymptotically unbiased (Ishida et al., 2023; Ushio et al., 2026).
+However, it is often difficult to obtain more than one class label per input due to various reasons.
+For example, the construction of image classification datasets, e.g., CIFAR-10 (Krizhevsky, 2009),
+typically proceeds as follows: first, images are retrieved from the web by searching with keywords
+associated with each class name; then, human annotators filter out images that are irrelevant to the
+class; finally, the images are downsampled to a fixed resolution. As such, each class label is associated
+with the original high-resolution image before downsampling. Although it is possible to collect
+multiple class labels for each low-resolution image after downsampling as in the CIFAR-10H dataset
+(Peterson et al., 2019), the downsampling process makes the class posterior distribution much more
+uncertain than that of the original high-resolution image, distorting the soft label estimates.
+A natural way to model such situations is to assume that we have access to a single class label
+yi ∈ {0, 1} plus a corrupted soft label ξi = f (ηi ) ∈ [0, 1], instead of the clean soft label ηi , for each
+input xi (Ushio et al., 2026). Here, the corrupted soft label ξi is the clean soft label ηi skewed by
+some unknown increasing transformation f : [0, 1] → [0, 1]. In the CIFAR-10/10H example above,
+ξi is the class posterior of the low-resolution image, which can be obtained by averaging the labels
+from CIFAR-10H, and yi is the class label from CIFAR-10.
+Here, we consider the problem of estimating the optimal BER and AUC from a dataset of n pairs
+(ξ1 , y1 ), . . . , (ξn , yn ). We first describe an algorithm based on isotonic regression (Ayer et al., 1955)
+to recover the clean soft labels from the corrupted ones. Next, we discuss the estimation of the class
+prior. Then, we present finite-sample error bounds for the resulting plug-in estimators. Finally, we
+extend these bounds to a noisy setting where the observed soft labels may not preserve the ordering
+of the clean soft labels.
+Recovery of soft labels To approximately recover the
+clean soft labels η1 , . . . , ηn , we adopt an approach based
+on isotonic regression, which was originally proposed by
+Ushio et al. (2026) in the context of Bayes error estimation.
+Isotonic regression is one of the most widely used methods for calibrating classifier outputs to produce reliable
+probability estimates (Zadrozny & Elkan, 2002), but here
+we use it for calibrating the corrupted soft labels. Then
+the calibrated soft labels can be used as estimates of the
+clean soft labels.
+
+(i)
+(iii)
+
+(ii)
+
+A technical description of the algorithm is as follows. We
+first sort the soft labels ξ1 , . . . , ξn in ascending order, and
+let (j) denote the index of the j-th smallest of them, i.e., Figure 1: Illustration of the use of isoξ(1) ≤ · · · ≤ ξ(n) . Then we use the pool adjacent violator tonic regression to recover clean soft
+algorithm (PAVA; Ayer et al., 1955) to find the monotonic labels from pairs (ξ1 , y1 ), . . . , (ξn , yn )
+sequence ηb(1) ≤ · · · ≤ ηb(n) that best fits the correspond- of corrupted soft labels and class labels.
+ing class labels y(1) , . . . , y(n) in the least squares sense: (i) Plot the points (ξi , yi ). (ii) Find the
+2
+Pn
+minηb(1) ≤···≤bη(n) n1 i=1 y(i) − ηb(i) . Each resulting ηbi non-decreasing function that best fits the
+is expected to approximate the true clean soft label ηi . See points. (iii) Use the fitted function valalso Figure 1. Assuming standard sorting algorithms with ues as estimates of the clean soft labels.
+is
+worst-case time complexity of O(n log n), this algorithm Roughly speaking, the fitted function−1
+expected
+to
+approximate
+the
+inverse
+f
+runs in O(n log n) time in total, since the PAVA part takes
+only O(n) time (Best & Chakravarti, 1990; Busing, 2022). of the unknown skew function f .
+Estimation of class prior As the BER and AUC estimators introduced in Section 2 involve the
+unknown class prior θ, it needs to be estimated from data. Note that Ushio et al. (2026) did not
+discuss this problem since their Bayes error estimator did not depend on the class prior.
+P
+P
+Since θ = E [y] = E [η(x)], two natural candidate estimators of θ are n1 i yi and n1 i ηbi . Interestingly, however, it turns out that they are actually no different from each other. Indeed, we
+2
+have ηb + t1 ∈ Mn for any t ∈ R.6 So by the optimality of b
+η, t 7→ 21 ∥y − (ηb + t1)∥2 achieves
+6 1 denotes the all-one vector.
+
+6
+
+2
+
+d
+= ηb⊤ 1 − y ⊤ 1 = 0, which
+its minimum at t = 0. Therefore, we have 12 dt
+∥y − (ηb + t1)∥2
+t=0
+P
+P
+implies n1 i yi = n1 i ηbi . Similarly to Section 2.5, we use a clipped version of this estimator:
+P
+P
+n 1
+n 1
+θ̃τn := clip1−τ
+( n i yi ) = clip1−τ
+( n i ηbi ), where the clipping threshold τn is set according to
+τn
+τn
+Assumption 2.8. This estimator θ̃τn converges to θ at rate √1n (see Lemma B.1).
+
+Estimation error bounds Now we can estimate BER∗ and AUC∗ by plugging in ηb and θ̃τn in
+\∗ and AUC
+^∗ . Let us denote these plugplace of η and θ, respectively, in the definitions of BER
+\∗ ( b
+^∗ ( b
+η, θ̃τn ) and AUC
+η, θ̃τn ). They enjoy the following finite-sample error
+in estimators by BER
+bounds, where ≲ represents an inequality up to some constant not depending on n, θ or δ.
+Theorem 3.1. Under Assumption 2.8, for any δ ∈ (0, 1), each of 
+the following holds with
+q
+log(5/δ)
+1
+1
+\∗ ( b
+probability at least 1 − δ:
+BER
+η, θ̃τn ) − BER∗ ≲ min{θ,1−θ}
++
+and
+1/3
+n
+n
+
+
+q
+1
+1
+^∗ ( b
+AUC
+η, θ̃τn ) − AUC∗ ≲ θ(1−θ)
+.
++ log(5/δ)
+n
+n1/3
+Noisy corruption model Theorem 3.1 can be extended to the case where the corruption involves
+additive noise, i.e., ξi = f (ηi ) + εi . Formally, we consider the following corruption model.
+Assumption 3.2 (Noisy corruption model). Corrupted soft labels ξi ∈ [0, 1] are generated as
+ξi = f (ηi ) + εi . Here, the skew function f : [0, 1] → [0, 1] is differentiable with f ′ ≥ γ for
+some constant γ > 0 and satisfies f (0) = 0 and f (1) = 1. Also, given η1 , . . . , ηn , εi is a zeromean random variable with variance at most σ 2 . We further assume that ε1 , . . . , εn , y1 , . . . , yn are
+conditionally independent given η1 , . . . , ηn .
+The following counterpart of Theorem 3.1 holds in this noisy setting. This result is similar to
+Theorem 3 of Ushio et al. (2026).
+Theorem 3.3. Under Assumption 2.8 and Assumption 3.2, for any δ ∈ (0, 1), each of the following
+holds with probability at least 1 − δ:
+!
+r
+σ
+1
+1
+log(5/δ)
+∗
+∗
+\
++ 1/3 +
+,
+BER ( b
+η, θ̃τn ) − BER ≲
+min {θ, 1 − θ} γ
+n
+n
+!
+r
+1
+σ
+1
+log(5/δ)
+∗
+∗
+^ (b
+AUC
+η, θ̃τn ) − AUC ≲
++ 1/3 +
+.
+θ(1 − θ) γ
+n
+n
+A simple example of this model is when the corrupted soft labels are obtained by averaging multiple
+hard labels drawn from a corrupted Bernoulli distribution. That is, for each i = 1, . . . , n, we
+(1)
+(m)
+independently draw m hard labels yi , . . . , yi from a Bernoulli distribution whose mean is f (ηi )
+Pm (j)
+1
+rather than ηi . We then obtain the noisy corrupted soft label ξi = m
+j=1 yi by averaging these
+hard labels. In this case, ξi = f (ηi ) + εi , where εi has mean zero and standard deviation at most
+√
+σ = 1/(2 m). Therefore, the preceding bounds give estimation errors of order m−1/2 + n−1/3 .
+The additional m−1/2 term diminishes as the number m of hard labels increases.
+
+4
+
+Real-world evaluation of optimal performance estimators
+
+So far, we have discussed estimators of the optimal BER and AUC values and their theoretical
+guarantees. However, how can we empirically evaluate the performance of these estimators on
+real-world datasets? This is a non-trivial question because the true values of BER∗ and AUC∗ are
+unobservable for real-world data distributions. In this section, we first briefly review FeeBee (Renggli
+et al., 2021), an existing evaluation framework for estimators of the Bayes error Err∗ . Then, we draw
+inspiration from FeeBee to propose a method to evaluate estimators of the optimal BER and AUC.
+Review of FeeBee The simplest way to evaluate Bayes error estimators on a real-world dataset
+would be to compare the estimates with the error rate u of the best available classifier on the dataset.
+7
+
+Since we have a trivial bound 0 ≤ Err∗ ≤ u on the Bayes error, we can at least rule out estimators
+returning values greater than u. However, such a naive method is not very helpful because we
+cannot tell which of two estimators is better if both of them return estimates within the range [0, u].
+Moreover, this approach cannot rule out an obviously useless estimator that always returns some
+constant between 0 and u.
+The key idea of FeeBee is to inject label noise of a controlled level ν ∈ [0, 1) into the dataset. The
+injected noise increases the Bayes error Err∗ν for the noise-injected distribution, which gives us
+another set of bounds L(ν) ≤ Err∗ν ≤ U (ν). We can then estimate Err∗ν for the noise-injected dataset
+d∗ satisfies the bounds. Repeating this process for many different
+and test whether the estimate Err
+ν
+noise levels ν and aggregating the results, we can obtain a single score for the estimator.
+Bounds on the optimal BER and AUC for noise-injected distributions In our proposed evaluation
+framework for the optimal BER and AUC, we inject label noise into the original distribution as
+follows: for a fixed noise level ν ∈ [0, 1), with probability ν, each original label y is replaced with
+an independent random label w ∈ {0, 1} with a fixed mean β ∈ (0, 1). The resulting noisy label
+is given by yν := (1 − z) · y + z · w, where z ∈ {0, 1} is an independent random variable with
+mean ν. The class posterior for the noisy distribution is then related to the original posterior η(x) by
+P(yν = 1 | x) = λν (η(x)), where λν (t) := (1 − ν)t + νβ. Our noise model coincides with that of
+the original FeeBee when β = 12 , but we allow β to be chosen arbitrarily in (0, 1).
+The following theorem characterizes the optimal BER and AUC for the noise-injected distribution.
+λν (2θ(1−θ)t+θ 2 )−λν (θ)2
+Theorem 4.1. For t ∈ [0, 12 ], define Fν (t) :=
+. For any noise level ν ∈ [0, 1),
+2λν (θ)(1−λν (θ))
+the optimal BER and AUC for the noise-injected distribution are given by BER∗ν = Fν (BER∗ ) and
+AUC∗ν = 1 − Fν (1 − AUC∗ ), respectively.
+Theorem 4.1 expresses the optimal BER value BER∗ν for the noisy distribution as an increasing
+function of BER∗ , and thus induces bounds on BER∗ν as follows. Let uBER be any upper bound on
+the optimal BER value BER∗ for the original distribution (e.g., the lowest BER achieved by existing
+classifiers). Then, for each noise level ν ∈ [0, 1), BER∗ν must fall between LBER (ν) := Fν (0) and
+UBER (ν) := Fν (uBER ). Similarly, the optimal AUC value AUC∗ν for the noisy distribution must
+satisfy LAUC (ν) := 1 − Fν (1 − lAUC ) ≤ AUC∗ν ≤ UAUC (ν) := 1 − Fν (0), where lAUC is any
+lower bound on the optimal AUC value AUC∗ for the original distribution.
+Computing scores for BER and AUC Based on these bounds, we propose to evaluate estimators
+of the optimal BER on real-world datasets as follows. We first generate N noise-injected datasets
+with different noise levels νi := i−1
+N (i = 1, . . . , N ) and evaluate a given estimator on each of
+∗
+\
+them to obtain estimates
+BERνi . Then, the estimator’s score sβ fori noise mean β is computed
+PN h \∗
+1
+\∗ )+ , where (x)+ := max{x, 0}.
+as sβ := N i=1 (BERνi − UBER (νi ))+ + (LBER (νi ) − BER
+νi
+The idea is that if the estimates fall outside their corresponding bounds [LBER (νi ), UBER (νi )], we
+penalize the estimator by the amount of violation; then the score is obtained by aggregating the
+penalties over all noise levels. The lower the score is, the better the estimator is. Note that the
+score sβ depends on the choice of β. Thus, how to choose β is an interesting question; possible
+choices include β = 12 (the same as the original FeeBee) and β = θ, in which case Fν reduces
+simply to Fν (t) = (1 − ν)t + ν2 . Another option is averaging sβ over many different β values. In the
+experiments in Section 5.2, we will see that the last option aligns best with variance estimates, which
+suggests that it is a reasonable choice.7
+The score for AUC can be computed in the same way by replacing LBER and UBER with LAUC and
+UAUC , respectively. This provides a practical way to evaluate estimators of the optimal BER and
+AUC on real-world datasets without requiring knowledge of the true optima. Note that the class prior
+θ has to be estimated from the data in order to compute the bounds. In many scenarios where the
+dataset contains hard labels yi ∈ {0, 1}, this can be done by simply using their sample mean.
+Bias sensitivity Without knowledge of the true optimal BER and AUC values, another way to
+assess the quality of an estimator is to compute the bootstrap variance of the estimator. However, the
+7 This might be analogous to AUC, which aggregates performance over different classification thresholds.
+
+8
+
+Optimal AUC
+
+Optimal BER
+
+1.00
+
+0.10
+
+0.05
+
+0.00
+ea
+
+Cl
+
+n
+
+f.
+f.
+on )
+on )
+-c aw r-c ted
+r
+r
+de ( nde bra
+Un
+U ali
+(c
+
+f.
+f.
+on )
+on )
+-c aw r-c ted
+r
+ve (r
+ve a
+O
+O libr
+a
+(c
+
+0.98
+0.96
+0.94
+ea
+
+Cl
+
+n
+
+f.
+f.
+on )
+on )
+r-c raw er-c ted
+e
+(
+a
+d
+d r
+Un
+Un alib
+(c
+
+(a) BER
+
+f.
+f.
+on )
+on )
+r-c raw er-c ted
+e
+(
+a
+v
+v
+O
+O libr
+a
+(c
+
+(b) AUC
+
+Figure 2: The estimated optimal BER and AUC values with 95% bootstrap CIs on synthetic data; the
+dashed lines mark the ground-truth optimal values computed in closed form.
+bootstrap variance only accounts for the variance of the estimator and does not reflect the estimator’s
+bias. By contrast, our score can reflect certain types of estimator bias; see Appendix C.2 for details.
+Roughly speaking, any bias larger than the interval width UBER (ν) − LBER (ν) produces a positive
+penalty in expectation even if the estimator has zero variance. The interval width scales as 1 − ν and
+thus approaches zero as ν → 1. Therefore, for example, any constant additive bias that persists across
+noise levels is expected to be detected at a sufficiently large noise level. In this way, aggregating
+bound violations over different noise levels provides a meaningful signal of estimator quality.
+
+5
+
+Experiments
+
+Here, we present experimental results to support our theoretical results. Further experimental details
+and additional results can be found in Appendix E.
+5.1
+
+Estimation on synthetic data
+
+We first demonstrate the effectiveness of the proposed estimators by a simple experiment with
+synthetic data. Similarly to Ushio et al. (2026), we draw n = 10,000 points from a two-dimensional
+Gaussian mixture with class prior θ = 0.2. We consider three settings: a clean one where the true
+soft labels ηi are given, and two corrupted ones where the observed corrupted soft labels ξi are
+either under-confident (pulled toward 0.5) or over-confident (pushed toward 0 or 1). We use the
+inverses of beta-calibration maps (Kull et al., 2017) as the underlying skew functions f following
+Ushio et al. (2026). For each setting and metric, we report the point estimate and 95% bootstrap
+confidence interval (CI) of the proposed estimator, namely, the estimator of Section 2 applied to ηi in
+the clean setting (clean), and the estimator of Section 3 based on isotonic regression in the corrupted
+settings (calibrated). For the corrupted settings, we also report a naive baseline (raw) that applies
+\∗ or AUC
+^∗ to the raw, uncalibrated ξi . In all cases, the class prior θ is treated as unknown and
+BER
+estimated from the data, as described earlier in Sections 2 and 3. We use the discriminant-based
+rules of Section 2.1 to pick between the min and max formulae on each sample. We also report the
+ground-truth optimal values, which can be computed in closed form using Proposition D.1 under this
+Gaussian-mixture setting.
+Figure 2 shows the results. The outputs by the proposed estimators (blue bars) were clustered near
+the ground-truth values (dashed lines) for both BER and AUC while the naive baselines on corrupted
+soft labels (orange bars) had deviations an order of magnitude larger than the CI width, showing that
+the isotonic calibration of Section 3 plays an essential role in correcting the soft label corruption.
+5.2
+
+Real-data experiment: Discriminants and evaluation scores
+
+We then perform estimation on different real-world datasets of soft labels from various domains to
+support (i) our discriminant theory in Section 2.1 and (ii) our proposed evaluation method in Section 4.
+Here we only discuss the results for BER (Table 1a), but the results are qualitatively similar for AUC
+(Table 1b). First, on each dataset we tested which of the min/max formula estimators had smaller
+bootstrap variance estimates and then we compared this with the sign of the empirical discriminants.
+9
+
+b BER , ∆
+b AUC : the empirical
+Table 1: Min vs. max formula estimators of BER∗ and AUC∗ . ∆
+discriminants ± its bootstrap standard errors; ∆SE, ∆Score: the max − min gaps in the bootstrap
+standard error and evaluation score.
+(a) BER
+∆Score
+b BER
+∆
+
+∆SE
+
++0.0093 ± 0.0009
+(+0.00 ± 9.12) × 10−5
++0.0136 ± 0.0023
++0.0063 ± 0.0020
+(+1.75 ± 4.14) × 10−4
++0.0114 ± 0.0003
+
++2.62 × 10−5
+
+Dataset
+CIFAR-10
+Fashion-MNIST
+SNLI
+MNLI
+AbductiveNLI
+ICLR 2017–2026
+
+−4.03 × 10−5
++0.0044
++0.0047
++1.71 × 10−4
++0.0027
+
+β = 0.5
+
+β=θ
+
+β averaged
+
+−0.0068
++6.76 × 10−5
+−0.0545
+−0.0433
++4.32 × 10−4
+−0.0011
+
+−2.53 × 10−4
+
++0.4236
++0.4332
++0.3868
++0.3567
++0.6099
++0.4380
+
++8.71 × 10−5
+−0.0319
+−0.0210
++7.52 × 10−4
++0.0331
+
+(b) AUC
+∆Score
+b AUC
+∆
+
+∆SE
+
++0.0094 ± 0.0009
+(+0.00 ± 5.09) × 10−5
++0.0182 ± 0.0018
++0.0091 ± 0.0014
+(+1.10 ± 2.91) × 10−4
++0.0076 ± 0.0002
+
++2.08 × 10−4
+
+Dataset
+CIFAR-10
+Fashion-MNIST
+SNLI
+MNLI
+AbductiveNLI
+ICLR 2017–2026
+
++5.83 × 10−5
++0.0151
++0.0144
++3.19 × 10−4
++0.0011
+
+β = 0.5
+
+β=θ
+
+β averaged
+
+−0.0272
+−1.75 × 10−4
+−0.2275
+−0.1951
++7.99 × 10−4
+−0.0048
+
+−5.34 × 10−4
+
++0.4168
++0.4364
++0.1608
++0.1773
++0.4303
++0.2072
+
+−1.85 × 10−4
+−0.0820
+−0.0503
++0.0012
++0.0530
+
+b BER and ∆SE columns of Table 1a, which aligns well with our theory
+The result is shown in the ∆
+that the sign of the discriminant can predict which estimator has smaller variance. The only sign
+b is close to zero.
+mismatch is on Fashion-MNIST, where ∆
+Next, we computed our evaluation score for each of the min/max estimators using the following
+choices of the parameter β: (i) β = 0.5, (ii) β = θ (estimated class prior), and (iii) average of the
+scores sβ over β ∈ {0.1, 0.2, . . . , 0.9}, which are shown on the right side of Table 1a. We then
+compared them with the difference of bootstrapped standard errors. The results indicate that the
+scores averaged over different β values are far more consistent with the variance estimates than the
+scores at individual values (β = 0.5 or β = θ). Note that this agreement does not imply that our
+score can be replaced by bootstrap variance estimates. As mentioned in Section 4, estimator bias can
+affect our score even when estimator variance remains unchanged. Bootstrap variance estimates, in
+contrast, quantify only estimator variance.
+
+6
+
+Conclusion
+
+We studied the estimation of the Bayes-optimal BER and AUC, motivated by their practical importance. We proposed soft-label-based estimators which can be computed efficiently, and analyzed their
+theoretical properties. Our estimators handle not only clean soft labels but also corrupted soft labels,
+which makes them more practical. We also proposed a practical evaluation procedure for assessing
+the quality of estimators of the optimal BER and AUC without knowledge of the true optima.
+Here, we mention some limitations of our work: our corruption model (Section 3) is quite simple
+and may not capture the full complexity of all possible data generation processes in practice. For
+example, it does not cover arbitrary instance-dependent corruption, which would require additional
+structure to recover the individual clean posterior values. Future work includes extending our results
+to other metrics popular under class imbalance or label noise, such as the F-measure (Gu et al., 2009;
+Parambath et al., 2014; Natarajan et al., 2015; Narasimhan et al., 2015). Most of such metrics are
+non-decomposable, i.e., their dataset-level values cannot be written as averages over individual data
+points, making their Bayes-optimal values harder to analyze and estimate. Another natural direction
+is multi-class BER: especially, the corrupted case requires an appropriate multi-class corruption
+model, which is not trivial to design.
+10
+
+References
+Ayer, M., Brunk, H. D., Ewing, G. M., Reid, W. T., and Silverman, E. An empirical distribution
+function for sampling with incomplete information. The Annals of Mathematical Statistics, pp.
+641–647, 1955.
+Berisha, V., Wisler, A., Hero, A. O., and Spanias, A. Empirically estimable classification bounds
+based on a new divergence measure. arXiv preprint arXiv:1412.6534, 2014.
+Best, M. J. and Chakravarti, N. Active set algorithms for isotonic regression; a unifying framework.
+Mathematical Programming, 47(1):425–439, 1990.
+Blom, G. Some properties of incomplete U-statistics. Biometrika, pp. 573–580, 1976.
+Busing, F. M. Monotone regression: A simple and fast O(n) PAVA implementation. Journal of
+Statistical Software, 102:1–25, 2022.
+Callaert, H. and Veraverbeke, N. The order of the normal approximation for a studentized U-statistic.
+The Annals of Statistics, pp. 194–200, 1981.
+Charoenphakdee, N., Lee, J., and Sugiyama, M. On symmetric losses for learning from corrupted
+labels. In International Conference on Machine Learning, pp. 961–970. PMLR, 2019.
+Clémençon, S., Lugosi, G., and Vayatis, N. Ranking and empirical minimization of U-statistics. The
+Annals of Statistics, 36(2):844–874, 2008.
+Clémençon, S., Colin, I., and Bellet, A. Scaling-up empirical risk minimization: Optimization of
+incomplete U -statistics. Journal of Machine Learning Research, 17(76):1–36, 2016.
+Devijver, P. A. A multiclass, k-NN approach to Bayes risk estimation. Pattern Recognition Letters, 3
+(1):1–6, 1985.
+Fawcett, T. An introduction to ROC analysis. Pattern Recognition Letters, 27(8):861–874, 2006.
+Fukunaga, K. and Hostetler, L. k-nearest-neighbor Bayes-risk estimation. IEEE Transactions on
+Information Theory, 21(3):285–293, 1975.
+Gu, Q., Zhu, L., and Cai, Z. Evaluation measures of the classification performance of imbalanced
+data sets. In International Symposium on Intelligence Computation and Applications, pp. 461–471.
+Springer, 2009.
+Hoeffding, W. A class of statistics with asymptotically normal distribution. The Annals of Mathematical Statistics, 19(3):293–325, 1948.
+Hoeffding, W. Probability inequalities for sums of bounded random variables. Journal of the
+American Statistical Association, 58(301):13–30, 1963.
+Ishida, T., Yamane, I., Charoenphakdee, N., Niu, G., and Sugiyama, M. Is the performance of my
+deep network too good to be true? A direct approach to estimating the Bayes error in binary
+classification. In International Conference on Learning Representations, 2023.
+Ishida, T., Lodkaew, T., and Yamane, I. CapBencher: Give your LLM benchmark a built-in alarm for
+test-set overfitting. In Forty-third International Conference on Machine Learning, 2026.
+Jeong, M., Cardone, M., and Dytso, A. Demystifying the optimal performance of multi-class
+classification. In Thirty-seventh Conference on Neural Information Processing Systems, 2023.
+Jeong, M., Cardone, M., and Dytso, A. Data-driven estimation of the false positive rate of the Bayes
+binary classifier via soft labels. In 2024 IEEE International Symposium on Information Theory
+(ISIT), pp. 368–373. IEEE, 2024.
+Krizhevsky, A. Learning multiple layers of features from tiny images. Technical report, University of
+Toronto, 2009.
+11
+
+Kull, M., Silva Filho, T., and Flach, P. Beta calibration: A well-founded and easily implemented
+improvement on logistic calibration for binary classifiers. In Artificial Intelligence and Statistics,
+pp. 623–631. PMLR, 2017.
+Lee, A. J. U-statistics: Theory and Practice. Routledge, 2019.
+Lehmann, E. L. and Casella, G. Theory of Point Estimation. Springer, 1998.
+Ling, C. X. and Li, C. Data mining for direct marketing: Problems and solutions. In The Fourth
+International Conference on Knowledge Discovery and Data Mining, volume 98, pp. 73–79, 1998.
+Luccioni, A. S., Viguier, S., and Ligozat, A.-L. Estimating the carbon footprint of BLOOM, a 176B
+parameter language model. Journal of Machine Learning Research, 24(253):1–15, 2023.
+Menon, A., Narasimhan, H., Agarwal, S., and Chawla, S. On the statistical consistency of algorithms
+for binary classification under class imbalance. In International Conference on Machine Learning,
+pp. 603–611. PMLR, 2013.
+Menon, A., van Rooyen, B., Ong, C. S., and Williamson, B. Learning from corrupted binary labels
+via class-probability estimation. In International Conference on Machine Learning, pp. 125–134.
+PMLR, 2015.
+Menon, A. K., van Rooyen, B., and Natarajan, N. Learning from binary labels with instance-dependent
+noise. Machine Learning, 107(8):1561–1595, 2018.
+Moon, K. R., Sricharan, K., Greenewald, K., and Hero III, A. O. Ensemble estimation of information
+divergence. Entropy, 20(8):560, 2018.
+Narasimhan, H., Kar, P., and Jain, P. Optimizing non-decomposable performance measures: A tale of
+two classes. In International Conference on Machine Learning, pp. 199–208. PMLR, 2015.
+Natarajan, N., Koyejo, O., Ravikumar, P., and Dhillon, I. S. Optimal decision-theoretic classification
+using non-decomposable performance metrics. arXiv preprint arXiv:1505.01802, 2015.
+Nie, Y., Zhou, X., and Bansal, M. What can we learn from collective human opinions on natural
+language inference data? In Proceedings of the 2020 Conference on Empirical Methods in Natural
+Language Processing (EMNLP). Association for Computational Linguistics, 2020.
+Noshad, M., Xu, L., and Hero, A. Learning to benchmark: Determining best achievable misclassification error from training data. arXiv preprint arXiv:1909.07192, 2019.
+Parambath, S. A., Usunier, N., and Grandvalet, Y. Optimizing F-measures by cost-sensitive classification. Advances in Neural Information Processing Systems, 27, 2014.
+Peterson, J. C., Battleday, R. M., Griffiths, T. L., and Russakovsky, O. Human uncertainty makes
+classification more robust. In Proceedings of the IEEE/CVF International Conference on Computer
+Vision, pp. 9617–9626, 2019.
+Renggli, C., Rimanic, L., Hollenstein, N., and Zhang, C. Evaluating Bayes error estimators on
+real-world datasets with FeeBee. In Thirty-fifth Conference on Neural Information Processing
+Systems Datasets and Benchmarks Track (Round 2), 2021.
+Strubell, E., Ganesh, A., and McCallum, A. Energy and policy considerations for modern deep
+learning research. Proceedings of the AAAI Conference on Artificial Intelligence, 34(09):13693–
+13696, 2020.
+Theisen, R., Wang, H., Varshney, L. R., Xiong, C., and Socher, R. Evaluating state-of-the-art
+classification models against Bayes optimality. Advances in Neural Information Processing
+Systems, 34:9367–9377, 2021.
+Ushio, R., Ishida, T., and Sugiyama, M. Practical estimation of the optimal classification error with
+soft labels and calibration. In The Fourteenth International Conference on Learning Representations, 2026.
+12
+
+van Rooyen, B., Menon, A. K., and Williamson, R. C. An average classification algorithm. arXiv
+preprint arXiv:1506.01520, 2015.
+Virtanen, P., Gommers, R., Oliphant, T. E., Haberland, M., Reddy, T., Cournapeau, D., Burovski, E.,
+Peterson, P., Weckesser, W., Bright, J., van der Walt, S. J., Brett, M., Wilson, J., Millman, K. J.,
+Mayorov, N., Nelson, A. R. J., Jones, E., Kern, R., Larson, E., Carey, C. J., Polat, İ., Feng, Y.,
+Moore, E. W., VanderPlas, J., Laxalde, D., Perktold, J., Cimrman, R., Henriksen, I., Quintero,
+E. A., Harris, C. R., Archibald, A. M., Ribeiro, A. H., Pedregosa, F., van Mulbregt, P., and SciPy
+1.0 Contributors. SciPy 1.0: Fundamental algorithms for scientific computing in Python. Nature
+Methods, 17:261–272, 2020. doi: 10.1038/s41592-019-0686-2.
+Xiao, H., Rasul, K., and Vollgraf, R. Fashion-MNIST: A novel image dataset for benchmarking
+machine learning algorithms, 2017.
+Zadrozny, B. and Elkan, C. Transforming classifier scores into accurate multiclass probability
+estimates. In Proceedings of the Eighth ACM SIGKDD International Conference on Knowledge
+Discovery and Data Mining, pp. 694–699, 2002.
+Zhou, X., Nie, Y., and Bansal, M. Distributed NLI: Learning to predict human opinion distributions
+for language reasoning. In Findings of the Association for Computational Linguistics: ACL 2022.
+Association for Computational Linguistics, 2022.
+
+13
+
+A
+
+Supplementary for Section 2
+
+A.1
+
+Deriving the Optimal BER and AUC
+
+Here, we prove Lemmas 2.1 and 2.2 that gives the expressions for the optimal BER and AUC.
+h
+i
+h
+i
+(1)
+(2)
+Lemma 2.1. The optimal BER can be expressed as BER∗ = E ϕBER (η(x)) = E ϕBER (η(x)) ,
+o
+o
+n
+n
+(1)
+(2)
+1
+z 1−z
+where ϕBER (z) = 12 min zθ , 1−z
+and
+ϕ
+(z)
+=
+1
+−
+max
+,
+BER
+1−θ
+2
+θ 1−θ .
+Proof. For any hclassifier h : X →
+h its false negative rate
+i {0, 1},
+i and false positive rate can be
+
+1−η(x)
+expressed as E η(x)
+θ 1 [h(x) = 0] and E
+1−θ 1 [h(x) = 1] , respectively, by Bayes’ theorem.
+Therefore, we have
+
+
+1
+η(x)
+1 − η(x)
+BER(h) = E
+1 [h(x) = 0] +
+1 [h(x) = 1] ,
+2
+θ
+1−θ
+
+which is minimized by taking h(x) = 1 [η(x) ≥ θ]. This gives the optimal BER as
+
+
+
+h
+i
+η(x) 1 − η(x)
+1
+(1)
+∗
+,
+= E ϕBER (η(x)) .
+BER = E min
+2
+θ
+1−θ
+Next, since E [η(x)] = θ, we have
+
+
+
+
+
+
+
+η(x) 1 − η(x)
+η(x) 1 − η(x)
+η(x) 1 − η(x)
+,
++ max
+,
+=E
++
+= 2.
+E min
+θ
+1−θ
+θ
+1−θ
+θ
+1−θ
+h
+i
+(2)
+This implies BER∗ = E ϕBER (η(x)) .
+Lemma 2.2. h Let x′ be an i.i.d.
+copyh of x.
+Then, ithe optimal AUC is given by
+i
+(1)
+(2)
+(1)
+∗
+′
+AUC = E ϕAUC (η(x), η(x )) = E ϕAUC (η(x), η(x′ )) , where ϕAUC (z1 , z2 ) = 1 −
+(2)
+1
+1
+2θ(1−θ) min {z1 (1 − z2 ), z2 (1 − z1 )} and ϕAUC (z1 , z2 ) = 2θ(1−θ) max {z1 (1 − z2 ), z2 (1 − z1 )}.
+
+Proof. Fix any scoring function f : X → R. One can replace the expectation with respect to the
+class-conditional distributions with the expectation with respect to the marginal distribution by Bayes’
+theorem:
+
+
+1
+AUC(f ) = Ex+ ∼P1 1 [f (x+ ) > f (x− )] + 1 [f (x+ ) = f (x− )]
+2
+x− ∼P0
+
+
+
+1
+1
+=
+Ex,x′ ∼PX η(x)(1 − η(x′ )) 1 [f (x) > f (x′ )] + 1 [f (x) = f (x′ )] .(1)
+θ(1 − θ)
+2
+Noting x and x′ are independent and identically distributed, we may exchange them to get
+
+
+
+1
+1
+′
+′
+′
+E η(x )(1 − η(x)) 1 [f (x) < f (x )] + 1 [f (x) = f (x )] .
+AUC(f ) =
+θ(1 − θ)
+2
+
+(2)
+
+Adding (1) and (2), we obtain
+
+1
+AUC(f ) =
+E η(x)(1 − η(x′ )) 1 [f (x) > f (x′ )]
+2θ(1 − θ)
+η(x)(1 − η(x′ )) + η(x′ )(1 − η(x))
++
+1 [f (x) = f (x′ )]
+2
+
+
++ η(x′ )(1 − η(x)) 1 [f (x) < f (x′ )] .
+
+Since η(x)(1 − η(x′ )) < η(x′ )(1 − η(x)) ⇐⇒ η(x) < η(x′ ) (and similarly for the other direction),
+the expression inside the expectation is maximized by taking f = η (or any strictly increasing
+transformation of η). and thus the maximum AUC is given by
+h
+i
+1
+(2)
+AUC∗ =
+E [max {η(x)(1 − η(x′ )), η(x′ )(1 − η(x))}] = E ϕAUC (η(x), η(x′ )) .
+2θ(1 − θ)
+14
+
+h
+i
+(1)
+To prove AUC∗ = E ϕAUC (η(x), η(x′ )) , observe that
+E [min {η(x)(1 − η(x′ )), η(x′ )(1 − η(x))} + max {η(x)(1 − η(x′ )), η(x′ )(1 − η(x))}]
+= E [η(x)(1 − η(x′ )) + η(x′ )(1 − η(x))]
+= 2θ(1 − θ).
+Here, we used E [η(x)] = θ and the independence of x and x′ .
+A.2
+
+Discriminants for BER and AUC
+
+First, we recall the definitions of the discriminants for BER and AUC. Let ζ := η(x)−θ be the centered
+version of the class posterior. The discriminant for BER is defined as ∆BER := (1 − 2θ) E [ζ |ζ|].
+For AUC, we define ∆AUC := (1 − 2θ) E [ζ |ζ − ζ ′ |], where ζ ′ := η(x′ ) − θ is an i.i.d. copy of ζ.
+Now we prove Theorem 2.4, which we restate below:
+Theorem 2.4.
+h
+i
+h
+i
+\∗ ≤ Var BER
+\∗ if and only if ∆BER ≥ 0.
+(i) For all n ∈ N, we have Var BER
+1
+2
+h
+i
+\∗ <
+(ii) Assume that the random variable η(x) is not a.s. constant. Then, we have Var AUC
+1
+h
+i
+\∗ for all n ≥ 2 if and only if ∆AUC ≥ 0.
+Var AUC
+2
+We first prove the BER part:
+i
+i
+h
+h
+\∗ ≤ Var BER
+\∗ if and only if ∆BER ≥ 0.
+Proposition A.1. For all n ∈ N, we have Var BER
+1
+2
+Proposition A.1 follows immediately from the next lemma.
+\∗ and BER
+\∗ is given
+Lemma A.2. The variance gap between the two minimum BER estimators BER
+1
+2
+by
+h
+i
+h
+i
+1 − 2θ
+\∗ − Var BER
+\∗ =
+E [ζ|ζ|] .
+Var BER
+2
+1
+2
+4θ (1 − θ)2 n
+Proof. Throughout the proof, we abuse the notation and write η = η(x) for brevity. Let
+M := max {η(1 − θ), θ(1 − η)} ,
+
+m := min {η(1 − θ), θ(1 − η)} .
+
+Noting that
+i
+1h
+{η(1 − θ) + θ(1 − η)} + |η − θ| ,
+2
+i
+1h
+{η(1 − θ) + θ(1 − η)} − |η − θ| ,
+m=
+2
+
+M=
+
+it holds that
+
+Var [M ] − Var [m] = Cov [η(1 − θ) + θ(1 − η), |η − θ|]
+= Cov [(1 − 2θ)η + θ, |η − θ|]
+= (1 − 2θ) Cov [η − θ, |η − θ|]
+= (1 − 2θ) Cov [ζ, |ζ|] .
+
+Since ζ is a zero-mean random variable, we have Cov [ζ, |ζ|] = E [ζ|ζ|]. Also observe that
+(2)
+(1)
+1
+1
+ϕBER (η) = 2θ(1−θ)
+m and ϕBER (η) = 1 − 2θ(1−θ)
+M . Hence, we obtain
+h
+i
+h
+i
+
+h
+i
+h
+i
+\∗ − Var BER
+\∗ = 1 Var ϕ(2) (η) − Var ϕ(1) (η)
+Var BER
+2
+1
+BER
+BER
+n
+1
+= 2
+(Var [M ] − Var [m])
+4θ (1 − θ)2 n
+1 − 2θ
+= 2
+E [ζ|ζ|] .
+4θ (1 − θ)2 n
+
+15
+
+Next, we prove the AUC part of Theorem 2.4 (restated as Proposition A.6). Recall that ζ := η(x) − θ,
+ζ ′ := η(x′ ) − θ. ζ and ζ ′ are i.i.d. random variables with mean 0.
+\∗ and
+Lemma A.3. The difference between the variances of the two maximum AUC estimators AUC
+1
+∗
+\ is given by
+AUC
+2
+h
+i
+h
+i
+\∗ − Var AUC
+\∗ =
+Var AUC
+2
+1
+
+1 − 2θ
+1
+E [ζ|ζ − ζ ′ |] − 2
+E [ζζ ′ |ζ − ζ ′ |] .
+θ2 (1 − θ)2 n
+θ (1 − θ)2 n(n − 1)
+
+Proof. Throughout the proof, we abuse the notation and write η = η(x) and η ′ = η(x′ ) for brevity.
+Let
+M (z, w) := max {z(1 − w), w(1 − z)} ,
+
+m(z, w) := min {z(1 − w), w(1 − z)} ,
+
+and define
+M1 := E [M (η, η ′ ) | η] ,
+
+m1 := E [m(η, η ′ ) | η] .
+
+By the general theory of U-statistics (Hoeffding, 1948), we have
+
+
+X
+2
+2
+Var 
+M (ηi , ηj ) =
+(2(n − 2) Var [M1 ] + Var [M (η, η ′ )]) ,
+n(n − 1) i<j
+n(n − 1)
+
+
+X
+2
+2
+Var 
+m(ηi , ηj ) =
+(2(n − 2) Var [m1 ] + Var [m(η, η ′ )]) .
+n(n − 1) i<j
+n(n − 1)
+Noting that
+i
+1h
+{η(1 − η ′ ) + η ′ (1 − η)} + |η − η ′ | ,
+2
+i
+1h
+′
+m(η, η ) =
+{η(1 − η ′ ) + η ′ (1 − η)} − |η − η ′ | ,
+2
+
+M (η, η ′ ) =
+
+we have
+i
+1h
+{η(1 − θ) + θ(1 − η)} + E [|η − η ′ | | η] ,
+2
+i
+1h
+m1 =
+{η(1 − θ) + θ(1 − η)} − E [|η − η ′ | | η] .
+2
+
+M1 =
+
+Therefore, it holds that
+Var [M1 ] − Var [m1 ] = Cov [η(1 − θ) + θ(1 − η), E [|η − η ′ | | η]]
+= Cov [(1 − 2θ)η + θ, E [|η − η ′ | | η]]
+= (1 − 2θ) Cov [η, E [|η − η ′ | | η]]
+= (1 − 2θ) Cov [η, |η − η ′ |]
+= (1 − 2θ) Cov [ζ, |ζ − ζ ′ |]
+and
+Var [M (η, η ′ )] − Var [m(η, η ′ )] = Cov [η(1 − η ′ ) + η ′ (1 − η), |η − η ′ |]
+= Cov [(1 − 2θ)(ζ + ζ ′ ) − 2ζζ ′ + 2θ(1 − θ), |ζ − ζ ′ |]
+= (1 − 2θ) Cov [(ζ + ζ ′ ), |ζ − ζ ′ |] − 2 Cov [ζζ ′ , |ζ − ζ ′ |]
+= 2(1 − 2θ) Cov [ζ, |ζ − ζ ′ |] − 2 Cov [ζζ ′ , |ζ − ζ ′ |] .
+16
+
+Combining these results, we obtain
+i
+i
+h
+h
+\∗
+\∗ − Var AUC
+Var AUC
+1
+2
+
+
+
+
+
+X
+X
+1
+2
+2
+Var 
+= 2
+M (ηi , ηj ) − Var 
+m(ηi , ηj )
+4θ (1 − θ)2
+n(n − 1) i<j
+n(n − 1) i<j
+h
+i
+2
+1
+′
+′
+′
+′
+2(n
+−
+2)
+·
+(1
+−
+2θ)
+Cov
+[ζ,
+|ζ
+−
+ζ
+|]
++
+2(1
+−
+2θ)
+Cov
+[ζ,
+|ζ
+−
+ζ
+|]
+−
+2
+Cov
+[ζζ
+,
+|ζ
+−
+ζ
+|]
+= 2
+4θ (1 − θ)2 n(n − 1)
+h
+i
+1
+1
+′
+′
+′
+= 2
+(n
+−
+1)
+·
+(1
+−
+2θ)
+Cov
+[ζ,
+|ζ
+−
+ζ
+|]
+−
+Cov
+[ζζ
+,
+|ζ
+−
+ζ
+|]
+.
+θ (1 − θ)2 n(n − 1)
+Finally, since both ζ and ζζ ′ have zero means, we have Cov [ζ, |ζ − ζ ′ |] = E [ζ|ζ − ζ ′ |] and
+Cov [ζζ ′ , |ζ − ζ ′ |] = E [ζζ ′ |ζ − ζ ′ |]. Now the lemma has been proved.
+i
+h√ 
+2
+\∗ − AUC∗ .
+:= Var
+Remark A.4 (Asymptotic variance difference). Let σi,n
+n AUC
+i
+Lemma A.3 implies that8
+n→∞
+
+2
+2
+σ2,n
+− σ1,n
+−−−−→
+
+Lemma A.5. We have
+
+1 − 2θ
+θ2 (1 − θ)2
+
+E [ζ|ζ − ζ ′ |] .
+
+E [ζζ ′ |ζ − ζ ′ |] < 0
+
+unless ζ is a.s. constant.
+Proof. If ζζ ′ > 0, we have |ζ − ζ ′ | < |ζ| + |ζ ′ | and hence ζζ ′ |ζ − ζ ′ | < ζζ ′ (|ζ| + |ζ ′ |). On the other
+hand, if ζζ ′ ≤ 0, it holds that |ζ − ζ ′ | = |ζ| + |ζ ′ | and thus ζζ ′ |ζ − ζ ′ | = ζζ ′ (|ζ| + |ζ ′ |). Therefore,
+we always have ζζ ′ |ζ − ζ ′ | ≤ ζζ ′ (|ζ| + |ζ ′ |) and the equality holds only when ζζ ′ ≤ 0.
+Taking the expectation on both sides, we obtain
+E [ζζ ′ |ζ − ζ ′ |] ≤ E [ζζ ′ (|ζ| + |ζ ′ |)]
+= E [ζ ′ ] E [ζ|ζ|] + E [ζ] E [ζ ′ |ζ ′ |]
+= 0.
+Here, we used the independence of ζ and ζ ′ as well as their zero means.
+To see that the strict inequality holds, note that
+P (ζζ ′ |ζ − ζ ′ | ̸= ζζ ′ (|ζ| + |ζ ′ |)) = P (ζζ ′ > 0)
+= P ((ζ > 0 and ζ ′ > 0) or (ζ < 0 and ζ ′ < 0))
+2
+
+2
+
+= P (ζ > 0) + P (ζ < 0) .
+2
+
+2
+
+We must have P (ζ > 0) + P (ζ < 0) > 0, since otherwise ζ would be a.s. constant. Therefore, we
+have a non-zero probability that ζζ ′ |ζ − ζ ′ | disagrees with ζζ ′ (|ζ| + |ζ ′ |), which implies the strict
+inequality.
+We can now prove the desired result, i.e., the AUC part of Theorem 2.4, by combining Lemma A.3
+and Lemma A.5.
+Proposition A.6. Assume that the random
+is not
+h
+ivariable η(x)
+h
+i a.s. constant, and define ∆AUC :=
+∗
+∗
+′
+\ < Var AUC
+\ holds for all n ≥ 2 if and only if
+(1 − 2θ) E [ζ|ζ − ζ |]. Then, Var AUC
+1
+
+2
+
+∆AUC ≥ 0.
+i
+h
+i
+h
+\∗ −Var AUC
+\∗ > 0. Conversely,
+Proof. If ∆AUC ≥ 0, then Lemmas A.3 and A.5 gives Var AUC
+2
+1
+if ∆AUC < 0, we have
+
+h
+i
+h
+i
+\∗ − Var AUC
+\∗ = ∆AUC < 0,
+lim n Var AUC
+2
+1
+n→∞
+θ2 (1 − θ)2
+h
+i
+h
+i
+\∗ > Var AUC
+\∗ for sufficiently large n.
+and therefore we will end up with Var AUC
+1
+
+2
+
+
+
+d
+8 Also, it can be shown that √n AUC
+2 ) for each i = 1, 2 (Hoeffding, 1948).
+\∗ − AUC∗ −
+→ N (0, limn→∞ σi,n
+i
+
+17
+
+A.2.1
+
+How to choose the better estimator based on data
+
+′
+Define h(x, y) := 1−2θ
+2 (x + y)|x − y|, so that we have ∆AUC = E [h(η − θ, η − θ)]. Given a
+n
+sample {ηi }i=1 , let
+X
+1
+h̄i :=
+h(ηi − θ, ηj − θ)
+n−1
+j: j̸=i
+
+b AUC and vbAUC as
+for each i ∈ {1, . . . , n}. Define ∆
+n
+1X
+b
+∆AUC :=
+h̄i .
+n i=1
+
+(3)
+
+b AUC is clearly an unbiased estimator of ∆AUC . Therefore, we can use the sign of ∆
+b AUC as a
+Then, ∆
+\∗ and AUC
+\∗ : we choose AUC
+\∗ if ∆
+b AUC ≥ 0, and
+data-dependent criterion to choose between AUC
+1
+2
+1
+∗
+\ if b
+choose AUC
+∆AUC < 0.
+2
+b AUC . by the general
+Moreover, we can test the sign of ∆AUC based on the asymptotic normality of ∆
+theory of U-statistics of order two (Callaert & Veraverbeke, 1981), we have
+b AUC − ∆AUC d
+∆
+p
+−
+→ N (0, 1),
+vbAUC /n
+where
+vbAUC :=
+
+n
+2
+4(n − 1) X 
+b AUC .
+h̄
+−
+∆
+i
+(n − 2)2 i=1
+
+(4)
+
+Based on this asymptotic normality, we can construct a Wald-type hypothesis test for the sign of
+∆AUC :
+H0 : ∆AUC < 0
+
+vs.
+
+H1 : ∆AUC ≥ 0.
+
+We define the test statistic as
+b AUC
+∆
+TAUC := p
+vbAUC /n
+and reject H0 if TAUC ≥ zα , where zα is the upper α-quantile of the standard normal distribution.
+The p-value of this test is given by 1 − Φ(TAUC ), where Φ is the cumulative distribution function of
+the standard normal distribution. We can also consider the converse test
+H0 : ∆AUC ≥ 0
+
+vs.
+
+H1 : ∆AUC < 0,
+
+by rejecting H0 if TAUC ≤ z1−α . The p-value of this test is given by Φ(TAUC ).
+A.2.2
+
+b AUC and vbAUC
+Efficient computation of ∆
+
+b AUC and vbAUC would take O(n2 ) time due to the double summation. However,
+Naively, computing ∆
+we can construct an O(n log n)-time algorithm, which is based on the following theorem.
+Theorem A.7. For each j ∈ {1, . . . , n}, let (j) denote the index of the j-th
+in
+ smallest element
+n
+{η1 , . . . , ηn }, i.e., η(1) ≤ · · · ≤ η(n) , and let Si be the i-th prefix sum of (η(j) − θ)2 j=1 , i.e.,
+Pi
+Si := j=1 (η(j) − θ)2 . Then, h̄(i) can be expressed as
+h̄(i) =
+
+
+1 − 2θ 
+(2i − n)(η(i) − θ)2 + Sn − 2Si .
+2(n − 1)
+18
+
+(5)
+
+b AUC and vbAUC
+Algorithm A.1 An O(n log n)-time algorithm for computing ∆
+input Soft labels η1 , . . . , ηn , class prior θ
+η(1) , . . . , η(n) ← sort η1 , . . . , ηn in ascending order
+S0 ← 0
+for i = 1 to n do
+Si ← Si−1 + (η(i) − θ)2
+end for
+for i = 1 to n do 
+
+1−2θ
+h̄(i) ← 2(n−1)
+(2i − n)(η(i) − θ)2 + Sn − 2Si
+end for
+b AUC ← 1 Pn h̄i
+∆
+i=1
+n
+
+2
+4(n−1) Pn
+b AUC
+vbAUC ← (n−2)2 i=1 h̄i − ∆
+b AUC , vbAUC
+output ∆
+:= η(i) − θ. Then
+Proof. For ease of notation, let ai := 2(n−1)
+1−2θ h̄(i) and ζi
+X
+ai =
+(ζi + ζj )|ζi − ζj |
+j:j̸=i
+
+X
+X
+=
+(ζi + ζj )(ζi − ζj ) +
+(ζi + ζj )(ζj − ζi )
+j<i
+
+=
+
+X
+
+j>i
+
+ζi2 − ζj2
+
+
+
++
+
+j<i
+
+X
+
+X
+
+ζj2 +
+
+j<i
+
+X
+
+
+
+j>i
+
+= (i − 1)ζi2 −
+Observe that
+
+ζj2 − ζi2
+X
+
+ζj2 − (n − i)ζi2 .
+
+j>i
+
+ζj2 = Si−1 = Si − ζi2 ,
+
+j<i
+
+X
+
+ζj2 = Sn − Si .
+
+j>i
+
+Hence, we have
+ai = (2i − n)ζi2 + Sn − 2Si ,
+which completes the proof.
+b AUC and vbAUC in O(n log n) time, as shown in
+Theorem A.7 gives an algorithm that computes ∆
+Algorithm A.1. The steps are as follows:
+1. Sort η1 , . . . , ηn in ascending order to obtain η(1) , . . . , η(n) : O(n log n) time, assuming
+standard sorting algorithms such as Mergesort.
+2. Compute the prefix sums S1 , . . . , Sn : O(n) time in total.
+3. For each i = 1, . . . , n, compute h̄(i) using (5): constant time for each i, hence O(n) time in
+total.
+b AUC and vbAUC by (3) and (4): O(n) time.
+4. Compute ∆
+A.2.3
+
+Sufficient conditions for non-negative discriminants
+
+Here, we discuss some sufficient conditions for ∆BER , ∆AUC ≥ 0.
+Proposition A.8. Assume that the random variable η(x) is not a.s. constant. Then, we have
+∆BER ≥ 0 and ∆AUC ≥ 0 if one of the following conditions holds:
+(i) The two classes are balanced, i.e., θ = 12 .
+(ii) The law of η(x) is symmetric around its mean θ (which may or may not be equal to 12 ).
+19
+
+(iii) The Bayes error satisfies Err∗ ≤ δθ , where δθ > 0 is a certain constant depending only on
+θ.
+(i) is trivial by the definitions of ∆BER and ∆AUC . In what follows, we prove the rest of Proposition A.8. Specifically, (ii) follows from Lemma A.9; we prove (iii) as Lemma A.11.
+Lemma A.9. Assume that the distribution of ζ is symmetric around 0, i.e., ζ and −ζ are identically
+distributed. Then, we have the following: (i) E [ζ|ζ|] = 0 and (ii) E [ζ|ζ − ζ ′ |] = 0.
+Proof.
+
+(i) By symmetry, we have
+E [ζ|ζ|] = E [−ζ| − ζ|] = − E [ζ|ζ|] ,
+which implies E [ζ|ζ|] = 0.
+
+(ii) By symmetry, (ζ, ζ ′ ) and (−ζ, −ζ ′ ) are identically distributed, and hence
+E [ζ|ζ − ζ ′ |] = E [−ζ| − ζ + ζ ′ |] = − E [ζ|ζ − ζ ′ |] .
+Therefore, we have E [ζ|ζ − ζ ′ |] = 0.
+Example A.10. Consider the following two-point distribution:
+
+η(x) = a with probability p,
+η(x) = b with probability 1 − p,
+where 0 ≤ a < b ≤ 1 and 0 < p < 1. Then, we have θ = E [η(x)] = ap + b(1 − p), and it can be
+shown that
+∆BER = ∆AUC = (b − a)2 p(1 − p) · (1 − 2θ)(2p − 1).
+Since the two discriminants coincide in this case, let us write ∆ := ∆BER = ∆AUC for ease of
+notation. Two immediate observations are:
+(i) If θ = 12 , we have ∆ = 0. This is consistent with Proposition A.8 (i).
+(ii) If p = 12 , we have ∆ = 0 no matter how we choose a and b. This is the symmetric case in
+Proposition A.8 (ii).
+In general, the sign of ∆ coincides with that of
+
+
+
+∆
+1
+a+b
+= θ−
+θ−
+4(b − a)p(1 − p)
+2
+2
+since 4(b − a)p(1 − p) > 0.9 Therefore, we have ∆ < 0 if
+
+
+
+
+1 a+b
+1 a+b
+,
+,
+min
+< θ < max
+2
+2
+2
+2
+and ∆ ≥ 0 otherwise. Some concrete examples are as follows:
+
+(6)
+
+(iii) For distributions with a + b = 1, including the Bernoulli case (a = 0, b = 1), we have
+2
+∆ = 4(b − a)p(1 − p) · θ − 21 ≥ 0 regardless of p. In particular, ∆ > 0 if θ ̸= 12 .
+(iv) To see that ∆ can indeed be negative, let a = 0.1 and b = 0.7. Then, any p ∈ ( 13 , 21 ) satisfies
+(6) and hence gives ∆ < 0.
+While Example A.10 (iii) is very simple, it has an interesting implication for a wider class of
+distributions; that is, it suggests that we have ∆BER , ∆AUC ≥ 0 for any distribution with a sufficiently
+low label uncertainty (e.g., small Bayes error). The rationale is as follows. We have seen that
+∆BER = ∆AUC > 0 holds for any Bernoulli distribution with mean θ ̸= 21 . Since ∆BER and ∆AUC
+are continuous as a functional of η(x)’s law (with respect to, e.g., the topology of weak convergence
+or Wasserstein distance), we can expect that they remain positive for any distribution sufficiently close
+to a Bernoulli distribution with mean θ. As Bernoulli distributions are the most “certain” distributions,
+being close to a Bernoulli distribution means that the distribution contains only a small amount of
+label uncertainty. Lemma A.11 formalizes this intuition.
+9 Note that a+b is the class prior θ = ap + b(1 − p) for p = 1 .
+2
+2
+
+20
+
+Lemma A.11. We have ∆BER ≥ 0 and ∆AUC ≥ 0 for any distribution whose Bayes error Err∗ and
+class prior θ satisfies
+1
+Err∗ ≤ min {θ, 1 − θ} |1 − 2θ|.
+4
+Proof. First, we prove the claim for ∆BER . Let h(x) = x|x| for x ∈ [−θ, 1 − θ]. Then, we have
+|h′ (x)| = 2|x| ≤ 2 max{θ, 1 − θ}, and hence h is 2 max{θ, 1 − θ}-Lipschitz continuous with respect
+to 1-norm. Therefore, for any [0, 1]-valued random variable z, we have
+|E [h(ζ)] − E [h(z − θ)]| ≤ 2 max {θ, 1 − θ} E [|ζ − (z − θ)|]
+= 2 max {θ, 1 − θ} E [|η(x) − z|] .
+
+(7)
+
+Now, take z to be a random variable whose conditional distribution given η(x) is a Bernoulli
+distribution with mean η(x).10 Then, z is a Bernoulli random variable with mean θ. Noting that
+E [|η(x) − z| | η(x)] = 2η(x)(1 − η(x)), we have
+|E [h(ζ)] − E [h(z − θ)]| ≤ 4 max {θ, 1 − θ} E [η(x)(1 − η(x))]
+≤ 4 max {θ, 1 − θ} E [min{η(x), 1 − η(x)}]
+= 4 max {θ, 1 − θ} Err∗ .
+
+(8)
+
+Observe that (1 − 2θ) E [h(ζ)] = ∆BER and that (1 − 2θ) E [h(z − θ)] = θ(1 − θ)|1 − 2θ|2 (by
+Example A.10 (iii)). Hence, (8) implies
+∆BER ≥ θ(1 − θ)|1 − 2θ|2 − 4 max {θ, 1 − θ} |1 − 2θ|Err∗
+
+
+1
+∗
+= 4 max {θ, 1 − θ} |1 − 2θ|
+min {θ, 1 − θ} |1 − 2θ| − Err ,
+4
+which is non-negative if
+Err∗ ≤
+
+1
+min {θ, 1 − θ} |1 − 2θ|.
+4
+
+The proof for ∆AUC is similar. Let h(x, y) = 12 (x + y)|x − y| for x, y ∈ [−θ, 1 − θ]. Then, we
+have ∥∇h(x, y)∥∞ = max{|x|, |y|} ≤ max{θ, 1 − θ}, and hence h is max{θ, 1 − θ}-Lipschitz
+continuous with respect to 1-norm. Therefore, for any [0, 1]-valued random variable z and its i.i.d.
+copy z ′ , we have
+|E [h(ζ, ζ ′ )] − E [h(z − θ, z ′ − θ)]| ≤ max {θ, 1 − θ} E [|ζ − (z − θ)| + |ζ ′ − (z ′ − θ)|]
+= 2 max {θ, 1 − θ} E [|η(x) − z|] .
+
+(9)
+
+Notice that the right-hand side of (9) exactly matches that of (7). Hence, the rest of the proof is
+almost identical.
+Remark A.12.
+• It is possible to derive similar sufficient conditions in terms of the optimal
+BER or AUC instead of the Bayes error.
+• This lemma implies that we can choose the constant δθ in Proposition A.8 (iii) to be
+1
+if θ < 12 ,
+ 4 θ(1 − 2θ)
+δθ = ∞
+if θ = 12 ,
+1
+1
+4 (1 − θ)(2θ − 1) if θ > 2 ,
+which might not be optimal.
+10 Let
+
+u ∼ Unif([0, 1]) be independent of η(x), and define z
+E [1 [u ≤ η(x)] | η(x)] = η(x), hence z | η(x) ∼ Bernoulli(η(x)).
+
+21
+
+:= 1 [u ≤ η(x)].
+
+Then, E [z | η(x)] =
+
+Algorithm A.2 An O(n log n)-time algorithm for estimating AUC∗ with the max formula
+input Soft labels η1 , . . . , ηn , class prior θ
+η(1) , . . . , η(n) ← sort η1 , . . . , ηn in ascending order
+SUM ← 0
+PREFIX ← 0
+for j = 2 to n do
+PREFIX ← PREFIX + 1 − η(j−1)
+SUM ← SUM + η(j) · PREFIX
+end for
+SUM
+output n(n−1)θ(1−θ)
+
+A.3
+
+\∗
+Near-Linear Time Algorithm for Computing the Max Formula AUC
+2
+
+\∗ or
+In Section 2.2, we presented an O(n log n)-time algorithm for computing the min formula AUC
+1
+the optimal AUC. Here we provide the proof of the correctness and time complexity of Algorithm 2.1.
+\∗ in O(n log n) time in the worst case, assuming any
+Theorem A.13. Algorithm 2.1 computes AUC
+1
+standard sorting algorithm with O(n log n) worst-case time complexity (e.g., Mergesort).
+Proof. First, we prove the correctness of Algorithm 2.1. Observe that min {a(1 − b), b(1 − a)} =
+min {a, b} (1 − max {a, b}). Since η(1) , . . . , η(n) are sorted in ascending order, we have
+X
+X
+
+min η(i) (1 − η(j) ), η(j) (1 − η(i) ) =
+η(i) (1 − η(j) )
+i<j
+
+i<j
+
+=
+
+n
+X
+
+"
+(1 − η(j) )
+
+j=2
+
+j−1
+X
+
+#
+η(i) .
+
+i=1
+
+At the j-th iteration of the for loop in Algorithm 2.1, the variable PREFIX stores the prefix sum
+Pj−1
+\∗
+i=1 η(i) . Therefore, Algorithm 2.1 correctly computes AUC1 .
+For the time complexity analysis, Algorithm 2.1 first sorts η1 , . . . , ηn , which takes O(n log n) time
+by assumption. Then, the for loop iterates only Θ(n) times, and each iteration takes a constant time.
+Therefore, the total worse-case time complexity of Algorithm 2.1 is O(n log n).
+\∗ can also be computed in O(n log n) time by a similar algorithm, as
+The max-based estimator AUC
+2
+shown in Algorithm A.2.
+\∗ in O(n log n) time in the worst case, assuming
+Theorem A.14. Algorithm A.2 computes AUC
+2
+any standard comparison-based sorting algorithm with O(n log n) worst-case time complexity (e.g.,
+Mergesort).
+Proof. We prove the correctness of Algorithm A.2. Observe that max {a(1 − b), b(1 − a)} =
+max {a, b} (1 − min {a, b}). Since η(1) , . . . , η(n) are sorted in ascending order, we have
+X
+\∗ =
+n(n − 1)θ(1 − θ)AUC
+max {ηi (1 − ηj ), ηj (1 − ηi )}
+2
+i<j
+
+=
+
+X
+
+=
+
+X
+
+
+max η(i) (1 − η(j) ), η(j) (1 − η(i) )
+
+i<j
+
+η(j) (1 − η(i) )
+
+i<j
+
+=
+
+j−1
+n X
+X
+
+η(j) (1 − η(i) )
+
+j=2 i=1
+
+=
+
+n
+X
+
+"
+η(j)
+
+j=2
+
+j−1
+X
+i=1
+
+22
+
+#
+(1 − η(i) )
+
+At the j-th iteration of the for loop in Algorithm A.2, the variable PREFIX stores the prefix sum
+Pj−1
+\∗
+i=1 η(i) . Therefore, Algorithm A.2 correctly computes AUC .
+For the time complexity analysis, Algorithm A.2 first sorts η1 , . . . , ηn , which takes O(n log n) time
+by assumption. Then, the for loop iterates Θ(n) times, and each iteration takes a constant time.
+Therefore, the total worse-case time complexity of Algorithm A.2 is O(n log n).
+b AUC in O(n log n) time is
+Remark A.15. The algorithm for computing the discriminant estimator ∆
+shown in Algorithm A.1.
+A.4
+A.4.1
+
+Estimation Error Bounds for Estimators Based on Clean Soft Labels
+Preliminaries: Hoeffding’s and Bernstein’s inequalities for U-statistics
+
+U-statistics are a broad class of statistics introduced by Hoeffding (1948). Let ϕ : Rd → R be a
+function that is symmetric, i.e., invariant to permutations of its d arguments. Given n ≥ d i.i.d.
+observations Z1 , . . . , Zn , consider the estimator
+ −1
+X
+n
+Un :=
+ϕ(Zi1 , . . . , Zid ).
+(10)
+d
+1≤i1 <...<id ≤n
+
+Un is called a U-statistic with a kernel ϕ of degree d.
+For d = 1, Un is simply an average of i.i.d. random variables, so the standard concentration
+inequalities such as the famous Hoeffding’s inequality can be used to analyze its deviation from the
+mean. However, for d ≥ 2, the summands in (10) are no longer independent. Nonetheless, in the
+same paper as the one that introduced his famous concentration inequality for sums of independent
+random variables, Hoeffding (1963) established a similar concentration bound for U-statistics: if the
+kernel ϕ is bounded in an interval [a, b], then for any ε > 0,
+
+
+2(n/d)ε2
+P (|Un − E [Un ]| > ε) ≤ 2 exp −
+.
+(11)
+(b − a)2
+Or equivalently, for any δ ∈ (0, 1), with probability at least 1 − δ, it holds that
+s
+log(2/δ)
+|Un − E [Un ]| ≤ (b − a)
+.
+2n/d
+
+(12)
+
+One thing to note is that, although we can also apply McDiarmid’s inequality (also known as the
+bounded difference inequality) to obtain
+a similar concentration bound, Hoeffding’s bound (12) is
+√
+tighter by a multiplicative factor of d.
+Hoeffding (1963) also provided a Bernstein-type concentration bound for U-statistics, which
+takes into account the variance of the kernel: if the kernel ϕ is bounded as |ϕ(Z1 , . . . , Zd ) −
+E [ϕ(Z1 , . . . , Zd )] | ≤ c, for any ε > 0, we have
+
+
+(n/d)ε2
+P (|Un − E [Un ]| > ε) ≤ 2 exp −
+,
+(13)
+2 (σ 2 + cε/3)
+where σ 2 := Var [ϕ(Z1 , . . . , Zd )] is the variance of the kernel. It also can be rewritten as a tail bound:
+for any δ ∈ (0, 1), with probability at least 1 − δ, it holds that
+s
+2σ 2 log(2/δ) 2c log(2/δ)
+|Un − E [Un ]| ≤
++
+.
+(14)
+n/d
+3(n/d)
+Bernstein-type bounds (13), (14) are often tighter than Hoeffding-type bounds (11), (12) when the
+standard deviation σ is much smaller than the width b − a of the kernel’s range.
+A.4.2
+
+Proofs of the estimation error bounds
+n
+
+In the simplest setting of this paper where clean soft labels {ηi }i=1 are available and the class
+\∗ and AUC
+\∗ can be seen as U-statistics of degrees d = 1, 2,
+prior θ is known, our estimators BER
+23
+
+respectively, with bounded kernels. Thus, the above concentration inequalities can be applied to
+obtain the bounds (Theorems 2.5 and 2.6) on the estimation errors of these estimators.
+\∗ is a straightforward application of the Hoeffding bound (12), so we focus on
+The bound for BER
+\∗ case in what follows. The kernel
+the AUC
+(1)
+
+ϕAUC (z1 , z2 ) = 1 −
+
+1
+min {z1 (1 − z2 ), z2 (1 − z1 )}
+2θ(1 − θ)
+
+1
+takes values between a = 1 − 8θ(1−θ)
+and b = 1, so we can use the Hoeffding bound (12) to obtain
+the following result:
+r
+1
+log(2/δ)
+∗
+∗
+\
+AUC − AUC ≤
+with probability at least 1 − δ.
+8θ(1 − θ)
+n
+
+\∗ , the
+The θ-dependence of the right-hand side comes from the fact that, unlike in the case of BER
+1
+(1)
+range b − a = 8θ(1−θ) of the kernel ϕ depends on the class prior θ. Under severe class imbalance
+1
+where θ → 0 (or 1), the factor 8θ(1−θ)
+blows up at the rate of O(1/θ) (or O(1/(1 − θ))).
+√
+We can mitigate this issue and slow down the blow-up rate to O(1/ θ) by using the Bernstein bound
+(14) instead of the Hoeffding bound. The resulting bound is stated in Theorem 2.6.
+(1)
+
+Lemma A.16. The variance of the kernel ϕAUC is bounded as
+h
+i
+1
+(1)
+Var ϕAUC (η(x), η(x′ )) ≤
+.
+16θ(1 − θ)
+Proof. Let m := min {η(x)(1 − η(x′ )), η(x′ )(1 − η(x))}. Then, we have 0 ≤ m ≤ 14 and E [m] =
+2θ(1 − θ)(1 − AUC∗ ) ≤ θ(1 − θ). So it follows that
+  1
+1
+Var [m] ≤ E m2 ≤ E [m] ≤ θ(1 − θ).
+4
+4
+Therefore, we have
+h
+i
+(1)
+Var ϕAUC (η(x), η(x′ )) =
+
+1
+1
+Var [m] ≤
+.
+4θ2 (1 − θ)2
+16θ(1 − θ)
+
+(1)
+
+Lemma A.17. The kernel ϕAUC is bounded as
+h
+i
+(1)
+(1)
+ϕAUC (η(x), η(x′ )) − E ϕAUC (η(x), η(x′ )) ≤
+
+1
+.
+8θ(1 − θ)
+
+Proof. Continuing from the proof of Lemma A.16, m = min {η(x)(1 − η(x′ )), η(x′ )(1 − η(x))}
+is bounded as 0 ≤ m ≤ 14 , and its mean satisfies E [m] = 2θ(1 − θ)(1 − AUC∗ ) ∈ [0, θ(1 − θ)].
+Thus, we have m − E [m] ≤ 41 and E [m] − m ≤ θ(1 − θ) ≤ 14 , which implies
+h
+i
+(1)
+(1)
+ϕAUC (η(x), η(x′ )) − E ϕAUC (η(x), η(x′ )) =
+
+1
+1
+|m − E [m]| ≤
+.
+2θ(1 − θ)
+8θ(1 − θ)
+
+Lemma A.18. For any δ ∈ (0, 1) and n ≥ log(2/δ)
+9θ(1−θ) , with probability at least 1 − δ, it holds that
+s
+^∗ − AUC∗ ≤ AUC
+\∗ − AUC∗ ≤
+AUC
+
+24
+
+log(2/δ)
+.
+θ(1 − θ)n
+
+Proof. With Lemmas A.16 and A.17 proven above, we are now ready to apply the Bernstein bound
+\∗ . As a result, for any δ ∈ (0, 1), with probability at least 1 − δ, we have
+(14) to the estimator AUC
+s
+log(2/δ)
+log(2/δ)
+∗
+∗
+\ − AUC ≤
+AUC
++
+.
+4θ(1 − θ)n 6θ(1 − θ)n
+Furthermore, the first term dominates the second term since n ≥ log(2/δ)
+9θ(1−θ) , so the above bound can be
+simplified as
+s
+\∗ − AUC∗ ≤
+AUC
+
+log(2/δ)
+.
+θ(1 − θ)n
+
+^∗ − AUC∗ ≤ AUC
+\∗ − AUC∗ by the definition of the
+Finally, the claim follows as we have AUC
+^∗ .
+clipped estimator AUC
+Theorem 2.6. For any δ > 0, with probability at least 1 − δ, we have
+s
+log(2/δ)
+∗
+∗
+^
+AUC − AUC ≤
+.
+θ(1 − θ)n
+log(2/δ)
+, then the claim trivially holds because (RHS) =
+Proof. If n < 4 θ(1−θ)
+
+q
+
+log(2/δ)
+1
+θ(1−θ)n > 2 and the
+
+log(2/δ)
+left-hand side is at most 12 . If n ≥ 4 θ(1−θ)
+, then the claim follows from Lemma A.18.
+
+A.5
+A.5.1
+
+Unknown Class Prior
+Failure of the estimator by Jeong et al. (2024)
+
+Jeong et al. (2024) discussed the estimation of the FPR and FNR
+the Bayes optimal classifier
+Pof
+n
+from soft labels, and they proposed to estimate the class prior by n1 i=1 1 [ηi ≥ 0.5]. However, this
+estimator relies on the naive assumption that P (y = 1) = P (η(x) ≥ 0.5). It is easy to construct
+examples where this assumption does not hold.
+Example A.19. Consider a simple distribution over X × Y = {x0 } × {0, 1} where P (y = 0) =
+P (y = 1) = 0.5. Then, P (y = 1) = 0.5 and P (η(x) ≥ 0.5) = P (0.5 ≥ 0.5) = 1 does not match.
+In this case, the estimator by Jeong et al. (2024) always returns 1 however large the sample size is,
+while the true class prior is 0.5. Therefore, their estimator is biased and statistically inconsistent.
+Also, it is trivial to extend this example to allow X to have multiple (or even infinitely many) elements
+with various η(x) values.
+A.5.2
+
+Clipped estimator of the class prior and plug-in estimators
+
+Here, we first show that using Hoeffding’s inequality to bound |θbτn − θ| (Lemma A.20) results in
+1 √
+a estimation error bound for the BER estimator of order Op ( θ(1−θ)
+) (Theorem A.21). Then, by
+n
+employing Bernstein’s inequality instead of Hoeffding’s inequality (Lemma 2.9), we improve the
+θ-dependence to Op ( √ 1
+) (Theorem A.22). After that, a similar result for the AUC estimator
+θ(1−θ)n
+
+(Theorem A.23) is presented. Finally, we prove the lemmas used in the proofs of these theorems.
+Lemma A.20. UnderqAssumption 2.8, for any δ ∈ (0, 1) and n ≥ 1, with probability at least 1 − δ,
+we have |θbτ − θ| ≤ 2 log(2/δ) .
+n
+
+n
+
+Proof. We decompose the estimation error as
+n
+|θbτn − θ| ≤ |clip1−τ
+(η̄) − η̄| + |η̄ − θ|.
+τn
+
+By Hoeffding’s inequality, the second term is bounded as
+r
+log(2/δ)
+|η̄ − θ| ≤
+2n
+25
+
+with probability at least 1 − δ. The first term is the error due to clipping, which is at most τn = nc .
+q
+log(2/δ)
+2c2
+c
+For all n ≥ n0 := ⌈ log(
+⌉,
+we
+have
+≤
+and hence
+2
+n
+2n
+δ)
+r
+log(2/δ)
+b
+.
+|θτn − θ| ≤ 2
+2n
+Finally, the proof is completed by noting that the above inequality holds for all n ≥ 1 because n0 = 1
+for any δ ∈ (0, 1) and c ∈ (0, 12 ).
+Theorem A.21. For any ε > 0, it holds that
+
+
+
+
+2
+2 2
+\∗ (θbτ ) − BER∗ > ε ≤ 4 exp − nθ (1 − θ) ε .
+P BER
+n
+8
+Or equivalently, for any δ ∈ (0, 1), with probability at least 1 − δ,
+r
+1
+8 log(4/δ)
+∗ b
+∗
+\
+BER (θτn ) − BER ≤
+.
+θ(1 − θ)
+n
+Proof. We have
+
+
+
+
+
+
+\∗ (θ) − BER∗ > ε +P BER
+\∗ (θbτ ) − BER∗ > ε ≤ P BER
+\∗ (θbτ ) − BER
+\∗ (θ) > ε .
+P BER
+n
+n
+2
+2
+The first term is bounded by Hoeffding’s inequality (11) as
+
+
+
+\∗ (θ) − BER∗ > ε ≤ 2 exp −2nε2 .
+P BER
+2
+As for the second term, we use Lemma A.26 to obtain
+
+
+
+ε
+1
+ε
+∗ b
+∗
+\
+\
+b
+P BER (θτn ) − BER (θ) >
+θτ − θ >
+,
+≤P
+2
+θ(1 − θ) n
+2
+which can be further bounded by Lemma A.20 as
+
+
+
+P
+
+θ(1 − θ)
+θbτn − θ >
+ε
+2
+
+
+
+ n
+≤ 2 exp −
+
+
+
+2 
+
+θ(1−θ)
+ε
+2
+
+2
+
+
+
+
+
+
+nθ2 (1 − θ)2 ε2
+= 2 exp −
+.
+8
+
+
+2
+2 2
+ε
+, and thus
+Since 0 < θ(1 − θ) ≤ 14 , we have exp(−2nε2 ) ≤ exp − nθ (1−θ)
+8
+
+
+
+
+2
+2 2
+\∗ (θbτ ) − BER∗ > ε ≤ 4 exp − nθ (1 − θ) ε .
+P BER
+n
+8
+
+The following lemma is similar to Lemma A.20, but it gives a tighter bound especially under severe
+class imbalance, i.e., when θ is close to 0 or 1.
+2
+
+(2 log(2/δ)+3c)
+Lemma 2.9. Under Assumption 2.8, for any δ > 0 and n ≥ 18θ(1−θ)
+log(2/δ) , with probability at
+q
+least 1 − δ, we have |θbτn − θ| ≤ 8θ(1−θ)nlog(2/δ) .
+
+Proof. The proof is similar to that of Lemma A.20, but we use Bernstein’s inequality instead of
+Hoeffding’s inequality. Since η is a [0, 1]-valued random variable with mean θ, its variance is at
+most that of a Bernoulli random variable with the same mean, that is, θ(1 − θ). Also, |η − θ| ≤
+max {θ, 1 − θ} ≤ 1. Hence by Bernstein’s inequality, with probability at least 1 − δ, we have
+r
+2θ(1 − θ) log(2/δ) 2 log(2/δ)
+|η̄ − θ| ≤
++
+.
+n
+3n
+26
+
+and thus
+n
+|θbτn − θ| ≤ |clip1−τ
+(η̄) − η̄| + |η̄ − θ|
+τn
+c
+≤ + |η̄ − θ|
+n
+r
+2θ(1 − θ) log(2/δ) 2 log(2/δ) + 3c
+≤
++
+.
+n
+3n
+2
+
+(2 log(2/δ)+3c)
+If n ≥ 18θ(1−θ)
+log(2/δ) , the first term dominates the second term, and hence the above inequality is
+simplified as
+r
+2θ(1 − θ) log(2/δ)
+|θbτn − θ| ≤ 2
+.
+n
+
+Theorem A.22. Under Assumption 2.8, for any δ > 0, the following holds with probability at least
+1 − δ:
+s
+17 2 log(4/δ)
+∗ b
+∗
+\
+.
+BER (θτn ) − BER ≤
+8
+θ(1 − θ)n
+log(4/δ)
+Proof. Fix an arbitrary δ ∈ (0, 1). If n < 4 θ(1−θ)
+, then the claim trivially holds because (RHS) >
+q
+log(4/δ)
+4 log(4/δ)
+1
+1
+θ(1−θ)n > 2 and the left-hand side is at most 2 . Therefore, we assume n ≥ θ(1−θ) from now
+on.
+
+By Theorem 2.5, we have the following with probability at least 1 − 2δ :
+r
+log(4/δ)
+∗
+∗
+\
+BER (θ) − BER ≤
+.
+8n
+Next, observe
+
+
+2
+
+(2 log(4/δ) + 3c)
+≤
+18θ(1 − θ) log(4/δ)
+
+
+2
+3c
+2 + 2 log
+log(4/δ)
+2
+
+18θ(1 − θ) log(4/δ)
+2
+3c
+2 + 2 log
+2
+log(4/δ)
+=
+·
+18
+θ(1 − θ)
+log(4/δ)
+< 0.53
+θ(1 − θ)
+≤ n.
+
+
+It follows that with probability at least 1 − 2δ , the gap between the plug-in estimator and the estimator
+with the true class prior can be bounded by Lemmas A.26 and 2.9 as
+1
+θbτ − θ
+θ(1 − θ) n
+r
+1
+8θ(1 − θ) log(4/δ)
+≤
+θ(1 − θ)
+n
+s
+8 log(4/δ)
+=
+.
+θ(1 − θ)n
+
+\∗ (θbτ ) − BER
+\∗ (θ) ≤
+BER
+n
+
+Combining these two inequalities by union bound, with probability at least 1 − δ, we have
+s
+r
+log(4/δ)
+8 log(4/δ)
+\∗ (θbτ ) − BER∗ ≤
+BER
++
+.
+n
+8n
+θ(1 − θ)n
+27
+
+We can further use 0 < θ(1 − θ) ≤ 14 to simplify the right-hand side as
+s
+s
+s
+r
+log(4/δ)
+8 log(4/δ)
+2 log(4/δ)
+1 2 log(4/δ)
++
+≤
++2
+8n
+θ(1 − θ)n
+8 θ(1 − θ)n
+θ(1 − θ)n
+s
+17 2 log(4/δ)
+,
+=
+8
+θ(1 − θ)n
+which completes the proof.
+Theorem A.23. Under Assumption 2.8, for any δ > 0, the following holds with probability at least
+1 − δ:
+s
+^∗ (θbτ ) − AUC∗ ≤ 10
+AUC
+n
+
+log(4/δ)
+.
+θ(1 − θ)n
+
+log(4/δ)
+, then the claim follows trivially because (RHS) = 10
+Proof. First, if n < 18θ(1−θ)
+
+q
+
+log(4/δ)
+θ(1−θ)n >
+√
+18 log(4/δ)
+5 2
+1
+1
+3 > 2 and the left-hand side is at most 2 . Therefore, we assume n ≥
+θ(1−θ) in the following.
+
+By Theorem 2.6, with probability at least 1 − 2δ , we have
+s
+log(4/δ)
+1
+∗
+∗
+\ (θ) − AUC ≤
+AUC
+≤ .
+θ(1 − θ)n
+2
+In this event, we have
+1
+\∗ (θbτ ) − AUC
+\∗ (θ) ≤ 1/2 + 1/2 |θbτ − θ| =
+AUC
+|θbτn − θ|.
+n
+n
+b
+b
+b
+θτn (1 − θτn )
+θτn (1 − θbτn )
+by Lemma A.28. Also, by Lemma A.30, with probability at least 1 − 2δ , it holds that
+s
+1
+2 log(4/δ)
+b
+.
+|θτn − θ| ≤ 6
+θ(1 − θ)n
+θbτn (1 − θbτn )
+Therefore, by union bound, with probability at least 1 − δ, we have
+\∗ (θbτ ) − AUC∗
+^∗ (θbτ ) − AUC∗ ≤ AUC
+AUC
+n
+n
+\∗ (θbτ ) − AUC
+\∗ (θ) − AUC∗ + AUC
+\∗ (θ)
+≤ AUC
+n
+s
+s
+log(4/δ)
+2 log(4/δ)
+≤
++6
+θ(1 − θ)n
+θ(1 − θ)n
+s
+log(4/δ)
+< 10
+.
+θ(1 − θ)n
+
+\∗ (θbτ ) is
+Proposition A.24. The mean squared error of BER
+n
+
+2 
+C
+\∗ (θbτ ) − BER∗
+E BER
+≤
+,
+n
+θ(1 − θ)n
+
+(15)
+
+\∗ (θbτ ) is asymptotically
+where C > 0 is a constant that does not depend on θ or n. Therefore BER
+n
+unbiased.
+28
+
+
+82
+Proof. Take any ε > 0 and let δ := 4 exp −Kθ(1 − θ)nε2 , where K = 2·17
+2 is a constant. By
+applying Theorem A.22 with the above δ, we have
+
+
+
+\∗ (θbτ ) − BER∗ > ε ≤ 4 exp −Kθ(1 − θ)nε2 .
+P BER
+n
+Integrating the above tail bound over all ε > 0 gives
+
+
+2  Z ∞  
+2
+∗ b
+∗
+∗ b
+∗
+\
+\
+E BER (θτn ) − BER
+=
+P
+BER (θτn ) − BER
+> ε dε
+Z0 ∞ 
+
+\∗ (θbτ ) − BER∗ > √ε dε
+=
+P BER
+n
+Z0 ∞
+≤
+4 exp (−Kθ(1 − θ)nε) dε
+0
+
+=
+
+4/K
+,
+θ(1 − θ)n
+
+4
+which proves (15) with C = K
+.
+
+Asymptotic unbiasedness follows from
+i
+h
+i
+h
+\∗ (θbτ ) − BER∗
+\∗ (θbτ ) − BER∗ ≤ E BER
+E BER
+n
+n
+s 
+2 
+
+∗ b
+∗
+\
+≤ E BER (θτn ) − BER
+s
+≤
+
+C
+θ(1 − θ)n
+
+n→∞
+
+−−−−→ 0.
+
+\∗ (θbτ ) is
+Proposition A.25. The mean squared error of AUC
+n
+
+2 
+C
+\∗ (θbτ ) − AUC∗
+E AUC
+≤
+,
+n
+θ(1 − θ)n
+\∗ (θbτ ) is asymptotically
+where C > 0 is a constant that does not depend on θ or n. Therefore AUC
+n
+unbiased.
+Proof. We omit the proof as it is almost the same as the one of Proposition A.24.
+In the following, we prove the lemmas used in the proof of Theorems A.22 and A.23.
+Lemma A.26. For any θ′ ∈ (0, 1), we have
+\∗ (θ′ ) − BER
+\∗ (θ) ≤
+BER
+
+1
+|θ′ − θ| .
+θ(1 − θ)
+
+Proof. Fix an arbitrary η ∈ [0, 1] and let
+N (θ) := min {η(1 − θ), θ(1 − η)} ,
+
+D(θ) := θ(1 − θ).
+
+Then, we have
+
+min
+
+η 1−η
+,
+θ 1−θ
+
+
+=
+
+N (θ)
+.
+D(θ)
+
+Observe that any θ′ ∈ (0, 1) satisfies
+N (θ′ ) N (θ)
+1
+−
+≤
+(D(θ′ ) |N (θ′ ) − N (θ)| + N (θ′ ) |D(θ′ ) − D(θ)|)
+D(θ′ )
+D(θ)
+D(θ)D(θ′ )
+29
+
+and that
+
+|N (θ′ ) − N (θ)| ≤ |θ′ − θ| ,
+
+|D(θ′ ) − D(θ)| ≤ |θ′ − θ| .
+
+Therefore, we have
+N (θ′ ) N (θ)
+D(θ′ ) + N (θ′ ) ′
+2
+≤
+−
+|θ − θ| ≤
+|θ′ − θ| ,
+′
+D(θ )
+D(θ)
+D(θ)D(θ′ )
+D(θ)
+where we used the fact that N (θ′ ) ≤ D(θ′ ) for the last inequality.
+Using the above inequality, we obtain
+
+
+
+
+n
+X
+ηi 1 − ηi
+ηi 1 − η i
+\∗ (θ′ ) − BER
+\∗ (θ) ≤ 1
+min
+,
+−
+min
+BER
+,
+2n i=1
+θ′ 1 − θ′
+θ 1−θ
+n
+
+1 X
+2
+≤
+|θ′ − θ|
+2n i=1 θ(1 − θ)
+=
+
+1
+|θ′ − θ| .
+θ(1 − θ)
+
+Remark A.27. In Lemma A.26, we could have simply used the fact that θ 7→ min
+1
+-Lipschitz to obtain
+min{θ,1−θ}2
+
+\∗
+
+n
+
+η 1−η
+θ , 1−θ
+
+o
+
+is
+
+\∗
+
+1
+′
+BER (θ′ ) − BER (θ) ≤ min{θ,1−θ}
+2 |θ − θ|, but it would have
+
+given a worse θ-dependence.
+Lemma A.28. For any θ′ ∈ (0, 1), it holds that
+\∗ (θ′ ) − AUC
+\∗ (θ) ≤
+AUC
+
+\∗ (θ) − AUC∗
+1/2 + AUC
+θ′ (1 − θ′ )
+
+|θ′ − θ| .
+
+Proof. We first show that
+\∗ (θ′ ) − AUC
+\∗ (θ) ≤
+AUC
+
+\∗ (θ)
+1 − AUC
+θ′ (1 − θ′ )
+
+|θ′ − θ| .
+
+(16)
+
+\∗ (θ) = 1, (16) trivially holds because we also have AUC
+\∗ (θ′ ) = 1. If AUC
+\∗ (θ) < 1, we
+If AUC
+have
+\∗ (θ′ )
+θ(1 − θ)
+1 − AUC
+−1 = ′
+−1
+∗
+θ
+(1 − θ′ )
+\
+1 − AUC (θ)
+θ′ (1 − θ′ ) − θ(1 − θ)
+θ′ (1 − θ′ )
+|θ′ − θ|
+≤ ′
+,
+θ (1 − θ′ )
+where the last inequality follows from the fact that x ∈ (0, 1) 7→ x(1 − x) is 1-Lipschitz. Now, (16)
+\∗ (θ)|.
+follows by multiplying both sides by |1 − AUC
+=
+
+Next, observe that the AUC of the trivial scoring function f (x) ≡ 0 is
+
+
+1
+1
+AUC(f ) = E 1 [0 > 0] + 1 [0 = 0] = ,
+2
+2
+and hence the maximum AUC over all scoring functions satisfies AUC∗ ∈ [ 12 , 1]. Using this fact, we
+have
+\∗ (θ) ≤ |1 − AUC∗ | + AUC
+\∗ (θ) − AUC∗ ≤ 1 + AUC
+\∗ (θ) − AUC∗ .
+1 − AUC
+2
+Combining this with (16), we obtain the desired result.
+30
+
+Remark A.29. In Lemma A.28, we could have argued more simply by using
+
+1
+1
+θ ′ (1−θ ′ ) − θ(1−θ)
+
+≤
+
+1
+′
+θ ′ (1−θ ′ )θ(1−θ) |θ − θ|, but it would have given a worse θ-dependence in the final result.
+log(2/δ)
+Lemma A.30. Suppose Assumption 2.8 holds. Then, for any δ ∈ (0, 1) and n ≥ 18θ(1−θ)
+, with
+
+probability at least 1 − δ, it holds that
+1
+θbτn (1 − θbτn )
+
+s
+|θbτn − θ| ≤ 6
+
+2 log(2/δ)
+.
+θ(1 − θ)n
+
+log(2/δ)
+Proof. Some calculation shows that any c ∈ (0, 12 ), δ ∈ (0, 1) and θ ∈ (0, 1) satisfy 18θ(1−θ)
+≥
+(2 log(2/δ)+3c)2
+18θ(1−θ) log(2/δ) . Therefore, by Lemma 2.9, with probability at least 1 − δ, we have
+
+r
+|θbτn − θ| ≤
+
+8θ(1 − θ) log(2/δ)
+.
+n
+
+(17)
+
+log(2/δ)
+, it follows that
+Since n ≥ 18θ(1−θ)
+
+s
+p
+|θbτn − θ| ≤ 8θ(1 − θ) log(2/δ) ·
+
+θ(1 − θ)
+2θ(1 − θ)
+≤
+,
+18 log(2/δ)
+3
+
+which implies
+1
+θbτn (1 − θbτn ) ≥ θ(1 − θ) − |θbτn − θ| ≥ θ(1 − θ).
+3
+Therefore, again by (17), we have
+s
+r
+1
+8θ(1
+−
+θ)
+log(2/δ)
+2 log(2/δ)
+3
+=6
+.
+|θbτn − θ| ≤
+θ(1 − θ)
+n
+θ(1 − θ)n
+θbτn (1 − θbτn )
+
+B
+
+Supplementary for Section 3
+2
+
+(2 log(2/δ)+3c)
+Lemma B.1. Under Assumption 2.8, for any δ ∈ (0, 1) and n ≥ 18θ(1−θ)
+log(2/δ) , with probability
+q
+at least 1 − δ, we have |θ̃τn − θ| ≤ 8θ(1−θ)nlog(2/δ) .
+
+Proof. The proof is almost identical to that of Lemma 2.9.
+Lemma B.2. For any z = (z1 , . . . , zn ) ∈ [0, 1]n and w = (w1 , . . . , wn ) ∈ [0, 1]n , we have
+v
+u n
+u1 X
+1
+∗
+∗
+\
+\
+t
+BER (w) − BER (z) ≤
+(wi − zi )2 ,
+2 min {θ, 1 − θ} n i=1
+v
+u n
+u1 X
+1
+\∗ (w) − AUC
+\∗ (z) ≤
+t
+AUC
+(wi − zi )2 .
+θ(1 − θ) n i=1
+
+(18)
+
+(19)
+
+n
+o
+Proof. To prove (18), observe that the function z ∈ [0, 1] 7→ min zθ , 1−z
+is (min {θ, 1 − θ})−1 1−θ
+Lipschitz. Hence, we have
+
+
+
+
+n
+X
+wi 1 − wi
+zi 1 − zi
+\∗ (w) − BER
+\∗ (z) ≤ 1
+BER
+min
+,
+− min
+,
+2n i=1
+θ 1−θ
+θ 1−θ
+n
+1
+1X
+|wi − zi |
+2 min {θ, 1 − θ} n i=1
+v
+u n
+u1 X
+1
+t
+≤
+(wi − zi )2 ,
+2 min {θ, 1 − θ} n i=1
+
+≤
+
+31
+
+where the last inequality follows from Jensen’s inequality.
+Next, we prove (19). Observe that (z1 , z2 ) ∈ [0, 1]2 7→ z1 (1 − z2 ) is 1-Lipschitz with respect to
+1-norm. From this, we see that (z1 , z2 ) ∈ [0, 1]2 7→ min {z1 (1 − z2 ), z2 (1 − z1 )} is also 1-Lipschitz.
+Therefore,
+\∗ (w) − AUC
+\∗ (z)
+AUC
+X
+1
+≤
+|min {wi (1 − wj ), wj (1 − wi )} − min {zi (1 − zj ), zj (1 − zi )}|
+θ(1 − θ)n(n − 1) i<j
+≤
+
+X
+1
+(|wi − zi | + |wj − zj |) .
+θ(1 − θ)n(n − 1) i<j
+
+For ease of notation, let ∆i = |wi − zi | for each i = 1, . . . , n. Then, we have
+
+
+n
+n
+n
+X
+X
+1 X X
+(|wi − zi | + |wj − zj |) =
+(∆i + ∆j ) −
+(2∆i )
+2
+i<j
+i=1 j=1
+i=1
+=
+
+n
+n
+X
+X
+1
+∆i −
+∆i
+· 2n
+2
+i=1
+i=1
+
+= (n − 1)
+
+n
+X
+
+∆i .
+
+i=1
+
+Therefore, we get
+v
+u n
+u1 X
+1
+1
+∗
+∗
+\
+\
+t
+AUC (w) − AUC (z) ≤
+∆i ≤
+∆2 .
+θ(1 − θ)n i=1
+θ(1 − θ) n i=1 i
+n
+X
+
+The second inequality is again due to Jensen’s inequality. Now the proof is complete.
+Lemma B.3 (Ushio et al. (2026)). Let Mn = {u ∈ Rn | u1 ≤ · · · ≤ un } be the set
+of non-decreasing sequences of length n, and for constants a < b, let Mn (a, b) =
+{u ∈ Rn | a ≤ u1 ≤ · · · ≤ un ≤ b}.
+Let µ ∈ [0, 1]n be an unknown mean vector, which might not belong to Mn (0, 1). Given a random
+n
+vector y = (y1 , . . . , yn ) ∈ {0, 1} of n independent binary observations with mean E [y] = µ, let
+b be the isotonic regression estimator of µ, i.e.,
+µ
+b := arg min ∥y − u∥22 .
+µ
+u∈Mn
+
+Then, for any δ ∈ (0, 1), with probability at least 1 − δ, we have
+1
+1
+2
+b − µ∥22 ≤
+∥µ
+min
+∥u − µ∥2 +
+n
+u∈Mn (0,1) n
+
+C
++
+n1/3
+
+r
+
+2 log(1/δ)
+n
+
+!2
+,
+
+where C is an absolute constant.
+Lemma B.4. Assume the skew function f is increasing. Then, for any δ ∈ (0, 1), with probability at
+least 1 − δ, we have
+v
+r
+u n
+u1 X
+2 log(1/δ)
+C
+2
+t
+(b
+ηi − ηi ) ≤ 1/3 +
+.
+n i=1
+n
+n
+Proof. By applying Lemma B.3 for µ = (η(1) , . . . , η(n) ), with conditional probability at least 1 − δ
+given (η1 , . . . , ηn ), we have
+!2
+r
+n
+n
+2
+1X
+1X
+C
+2 log(1/δ)
+2
+(b
+η i − ηi ) ≤
+min
+ui − η(i) +
++
+.
+n i=1
+n
+u∈Mn (0,1) n
+n1/3
+i=1
+32
+
+Since f is increasing and ξ(1) = f (η(1) ) ≤ · · · ≤ ξ(n) = f (η(n) ), we have η(1) ≤ · · · ≤ η(n) ,
+i.e., (η(1) , . . . , η(n) ) ∈ Mn . Therefore, the first term on the right-hand side is equal to zero. This
+completes the proof.
+Theorem 3.1. Under Assumption 2.8, for any δ ∈ (0, 1), each of the following holds with probability
+at least 1 − δ:
+!
+r
+log(5/δ)
+1
+1
+∗
+∗
+\
+BER ( b
+η, θ̃τn ) − BER ≲
++
+min {θ, 1 − θ} n1/3
+n
+and
+^∗ ( b
+AUC
+η, θ̃τn ) − AUC∗ ≲
+
+1
+θ(1 − θ)
+
+r
+
+1
+
++
+
+n1/3
+
+log(5/δ)
+n
+
+!
+.
+
+Proof. BER case. By the same argument as in the proof of Lemma A.26 and Theorem A.22, with
+probability at least 1 − 45 δ, we have
+s
+17 2 log(5/δ)
+∗
+∗
+∗
+∗
+\
+\
+\
+BER ( b
+η, θ̃τn ) − BER ( b
+η, θ) + BER (η, θ) − BER ≤
+8
+θ(1 − θ)n
+r
+17
+2 log(5/δ)
+≤
+.
+8 min {θ, 1 − θ}
+n
+Also, by Lemmas B.2 and B.4, with probability at least 1 − 51 δ,
+1
+BER ( b
+η, θ) − BER (η, θ) ≤
+2 min {θ, 1 − θ}
+\∗
+
+\∗
+
+C
++
+n1/3
+
+r
+
+2 log(5/δ)
+n
+
+!
+
+Therefore, we have the following with probability at least 1 − δ:
+\∗ ( b
+BER
+η, θ̃τn ) − BER∗
+\∗ (η, θ) − BER∗
+\∗ ( b
+\∗ ( b
+\∗ (η, θ) + BER
+\∗ ( b
+η, θ̃τn ) − BER
+η, θ) − BER
+≤ BER
+η, θ) + BER
+!
+r
+r
+17
+1
+2 log(5/δ)
+C
+2 log(5/δ)
+≤
++
++
+8 min {θ, 1 − θ}
+n
+2 min {θ, 1 − θ} n1/3
+n
+!
+r
+1
+C
+21 2 log(5/δ)
+=
++
+.
+1/3
+2 min {θ, 1 − θ} n
+4
+n
+log(5/δ)
+^∗ ( b
+AUC case. First, suppose that 2 ≤ n < 18θ(1−θ)
+. Since both AUC
+η, θ̃τn ) and AUC∗ belong
+to [ 12 , 1], we have
+1
+^∗ ( b
+AUC
+η, θ̃τn ) − AUC∗ ≤ .
+2
+log(5/δ)
+On the other hand, since n < 18θ(1−θ)
+and θ(1 − θ) ≤ 14 , we have
+!
+r
+r
+1
+1
+log(5/δ)
+1
+θ(1 − θ)
++
+>
+θ(1 − θ) n1/3
+n
+θ(1 − θ)
+18
+
+=p
+√
+≥
+
+1
+18θ(1 − θ)
+
+2
+.
+3
+
+3
+Therefore, the claimed bound holds in this case with the hidden constant at most 2√
+.
+2
+
+33
+
+log(5/δ)
+It remains to consider the large-n case: n ≥ 18θ(1−θ)
+. Let
+X
+1
+1
+A(θ) :=
+, B(η) :=
+min {ηi (1 − ηj ), ηj (1 − ηi )} .
+θ(1 − θ)
+n(n − 1) i<j
+log(5/δ)
+Then, since n ≥ 18θ(1−θ)
+, by the same argument as the proof of Lemma A.30, with probability at
+least 1 − 52 δ, both (20) and (21) hold:
+
+A(θ̃τn ) − A(θ)
+A(θ)
+
+θ̃τn (1 − θ̃τn ) − θ(1 − θ)
+
+=
+
+θ̃τn (1 − θ̃τn )
+θ̃τn − θ
+
+≤
+
+θ̃τn (1 − θ̃τn )
+s
+2 log(5/δ)
+≤6
+,
+θ(1 − θ)n
+A(θ̃τn ) =
+
+(20)
+
+1
+3
+≤
+.
+θ(1 − θ)
+θ̃τn (1 − θ̃τn )
+
+(21)
+
+Also, by Lemmas B.2 and B.4, with probability at least 1 − 51 δ,
+v
+r
+u n
+u1 X
+2 log(5/δ)
+C
+2
+t
+(b
+ηi − ηi ) ≤ 1/3 +
+.
+|B( b
+η) − B(η)| ≤
+n i=1
+n
+n
+Therefore, we have
+\∗ ( b
+\∗ (η, θ)
+AUC
+η, θ̃τ ) − AUC
+n
+
+= A(θ̃τn )B( b
+η) − A(θ)B(η)
+≤ A(θ̃τn ) |B( b
+η) − B(η)| + A(θ)B(η) ·
+3
+≤
+θ(1 − θ)
+
+C
++
+n1/3
+
+r
+
+2 log(5/δ)
+n
+
+A(θ̃τn ) − A(θ)
+A(θ)
+s
+
+!
+
+\∗ (η, θ)) · 6
++ (1 − AUC
+
+2 log(5/δ)
+.
+θ(1 − θ)n
+
+log(5/δ)
+> log(5/δ)
+Also, by the assumption that n ≥ 18θ(1−θ)
+9θ(1−θ) , we can apply Lemma A.18 to obtain that
+with probability at least 1 − 25 δ,
+s
+log(5/δ)
+\∗ (η, θ) − AUC∗ ≤
+AUC
+.
+θ(1 − θ)n
+
+Combining these results, with probability at least 1 − δ, we have
+^∗ ( b
+AUC
+η, θ̃τn ) − AUC∗
+\∗ ( b
+≤ AUC
+η, θ̃τn ) − AUC∗
+\∗ ( b
+\∗ (η, θ) + AUC
+\∗ (η, θ) − AUC∗
+≤ AUC
+η, θ̃τn ) − AUC
+s
+s
+!
+! s
+r
+C
+2 log(5/δ)
+log(5/δ)
+2 log(5/δ)
+log(5/δ)
+3
+∗
++
++ 1 − AUC +
+·6
++
+≤
+θ(1 − θ) n1/3
+n
+θ(1 − θ)n
+θ(1 − θ)n
+θ(1 − θ)n
+!
+r
+r
+√
+3
+C
+2 log(5/δ)
+3 2 + 3 log(5/δ)
+≤
++
++
+,
+θ(1 − θ) n1/3
+n
+2θ(1 − θ)
+n
+q
+log(5/δ)
+log(5/δ)
+18 log(5/δ)
+1
+where the last inequality follows from AUC∗ ≥ 12 , θ(1−θ)n
+≤ 3√
+θ(1−θ)n (by n ≥
+θ(1−θ) ),
+2
+p
+and θ(1 − θ) ≥ 2θ(1 − θ). Now the claim has been proved.
+34
+
+Noisy corruption model Theorem 3.3 is proved by using the following lemma instead of
+Lemma B.4 in the proof of Theorem 3.1. This lemma is the counterpart of Lemma B.4 in the
+noisy setting.
+Lemma B.5. Under Assumption 3.2, for any δ ∈ (0, 1), with probability at least 1 − δ, we have
+v
+r
+u n
+u1 X
+√
+log(2/δ)
+σ
+C
+2
+t
+(b
+ηi − ηi ) ≤ + 1/3 + (1 + 2)
+.
+n i=1
+γ
+n
+n
+Proof. By applying Lemma B.3 for µ = (η(1) , . . . , η(n) ), with conditional probability at least 1−δ/2
+given η1 , . . . , ηn , ε1 , . . . , εn , we have
+!2
+r
+n
+n
+2
+1X
+C
+2 log(2/δ)
+1X
+2
++
+(b
+η i − ηi ) ≤
+min
+ui − η(i) +
+.
+(22)
+n i=1
+n
+u∈Mn (0,1) n
+n1/3
+i=1
+We then proceed to bound the first term on the right-hand side of (22). Under the assumption, f is
+invertible, and f −1 is also differentiableand increasing. Since f −1 is increasing and ξ(1) ≤ · · · ≤
+ξ(n) , we have f −1 (ξ(1) ), . . . , f −1 (ξ(n) ) ∈ Mn (0, 1). Therefore, we have
+n
+n
+n
+1X
+1 X −1
+1 X −1
+(ui − η(i) )2 ≤
+(f (ξ(i) ) − η(i) )2 =
+(f (ξi ) − ηi )2 .
+n
+n
+u∈Mn (0,1) n
+i=1
+i=1
+i=1
+
+min
+
+Now, let Di := (f −1 (ξi ) − ηi )2 . The mean value theorem and the assumption that f ′ ≥ γ imply that
+Di = f −1 (f (ηi ) + εi ) − f −1 (f (ηi ))
+
+2
+
+≤
+
+ε2i
+γ2
+
+2
+
+and hence E [Di | η1 , . . . , ηn ] ≤ σγ 2 . Also, since Di ∈ [0, 1], Var [Di | η1 , . . . , ηn ] ≤
+
+
+2
+E Di2 | η1 , . . . , ηn ≤ E [Di | η1 , . . . , ηn ] ≤ σγ 2 . Moreover, D1 , . . . , Dn are conditionally independent given η1 , . . . , ηn . Therefore, by Bernstein’s inequality, we have
+!2
+r
+r
+n
+1X
+σ2
+σ
+2(σ 2 /γ 2 ) log(2/δ) 2 log(2/δ)
+log(2/δ)
+Di ≤ 2 +
++
+≤
++
+n i=1
+γ
+n
+3n
+γ
+n
+with conditional probability at least 1 − δ/2 given η1 , . . . , ηn . Therefore, with probability at least
+1 − δ, we have
+v
+v
+!2
+!2
+u
+r
+r
+u n
+u σ
+u1 X
+log(2/δ)
+2 log(2/δ)
+C
+2
+t
+t
+(b
+η i − ηi ) ≤
++
++
++
+n i=1
+γ
+n
+n
+n1/3
+r
+r
+σ
+log(2/δ)
+C
+2 log(2/δ)
+≤ +
++ 1/3 +
+γ
+n
+n
+n
+r
+√
+σ
+C
+log(2/δ)
+= + 1/3 + (1 + 2)
+.
+γ
+n
+n
+
+C
+
+Supplementary for Section 4
+
+C.1
+
+Proof of Theorem 4.1
+
+Here we prove Theorem 4.1, which gives the exact expressions of the optimal BER and AUC values
+for the noise-injected distribution.
+λν (2θ(1−θ)t+θ 2 )−λν (θ)2
+Theorem 4.1. For t ∈ [0, 12 ], define Fν (t) :=
+. For any noise level ν ∈ [0, 1),
+2λν (θ)(1−λν (θ))
+the optimal BER and AUC for the noise-injected distribution are given by BER∗ν = Fν (BER∗ ) and
+AUC∗ν = 1 − Fν (1 − AUC∗ ), respectively.
+35
+
+The BER part is proved in Theorem C.2 and the AUC part is proved in Theorem C.4.
+Lemma C.1. The optimal BER value can be written as
+BER∗ =
+
+
+1
+E [min {η(x), θ}] − θ2 .
+2θ(1 − θ)
+
+Proof.
+
+
+
+1
+η(x) 1 − η(x)
+E min
+,
+(Lemma 2.1)
+2
+θ
+1−θ
+1
+=
+E [min {η(x)(1 − θ), θ(1 − η(x))}]
+2θ(1 − θ)
+1
+=
+E [min {η(x), θ} − θη(x)]
+2θ(1 − θ)
+
+1
+E [min {η(x), θ}] − θ2 ,
+=
+2θ(1 − θ)
+where we used E [η(x)] = θ in the last step.
+BER∗ =
+
+Theorem C.2. For any noise level ν ∈ [0, 1), the optimal BER for the noise-injected distribution is
+given by
+BER∗ν = Fν (BER∗ ).
+Proof. Applying Lemma C.1 to the noisy distribution (and recalling that we assumed λν (θ) ∈ (0, 1)),
+we have
+E [min {λν (η(x)), λν (θ)}] − λν (θ)2
+.
+BER∗ν =
+2λν (θ)(1 − λν (θ))
+Since λν is non-decreasing and affine, we can write
+E [min {λν (η(x)), λν (θ)}] = E [λν (min {η(x), θ})] = λν (E [min {η(x), θ}]).
+Now, using Lemma C.1 again for the clean distribution, we have
+E [min {η(x), θ}] = 2θ(1 − θ)BER∗ + θ2
+which gives
+λν
+BER∗ν =
+
+
+2θ(1 − θ)BER∗ + θ2 − λν (θ)2
+,
+2λν (θ)(1 − λν (θ))
+
+which proves the theorem.
+Lemma C.3. The optimal AUC value can be written as
+AUC∗ = 1 −
+
+
+1
+E [min {η(x), η(x′ )}] − θ2 ,
+2θ(1 − θ)
+
+where x′ is an i.i.d. copy of x.
+Proof.
+1
+E [min {η(x)(1 − η(x′ )), η(x′ )(1 − η(x))}]
+2θ(1 − θ)
+1
+=
+E [min {η(x), η(x′ )} − η(x)η(x′ )]
+2θ(1 − θ)
+
+1
+=
+E [min {η(x), η(x′ )}] − θ2 ,
+2θ(1 − θ)
+
+1 − AUC∗ =
+
+(Lemma 2.2)
+
+where we used E [η(x)] = E [η(x′ )] = θ and the independence of x and x′ in the last step.
+Theorem C.4. For any noise level ν ∈ [0, 1), the optimal AUC for the noise-injected distribution is
+given by
+AUC∗ν = 1 − Fν (1 − AUC∗ ).
+36
+
+Proof. The proof is analogous to that of Theorem C.2. Applying Lemma C.3 to the noisy distribution,
+we have
+E [min {λν (η(x)), λν (η(x′ ))}] − λν (θ)2
+1 − AUC∗ν =
+.
+2λν (θ)(1 − λν (θ))
+Since λν is non-decreasing and affine, we can write
+E [min {λν (η(x)), λν (η(x′ ))}] = E [λν (min {η(x), η(x′ )})] = λν (E [min {η(x), η(x′ )}]).
+Now, using Lemma C.3 again for the clean distribution, we have
+E [min {η(x), η(x′ )}] = 2θ(1 − θ)(1 − AUC∗ ) + θ2
+which gives
+λν
+1 − AUC∗ν =
+
+
+2θ(1 − θ)(1 − AUC∗ ) + θ2 − λν (θ)2
+,
+2λν (θ)(1 − λν (θ))
+
+which proves the theorem.
+C.2
+
+Bias sensitivity
+
+Here we show that our score can reflect certain types of estimator bias, unlike bootstrap variance.
+Theoretical analysis The following proposition roughly states that any bias larger than the interval
+width UBER (ν) − LBER (ν) produces a positive expected penalty. This is in contrast to the bootstrap
+variance, which does not change if a constant is added to the estimator. Here we discuss the BER
+case, but the same argument also applies to AUC by replacing uBER with 1 − lAUC .
+h
+i
+\∗ at noise
+\∗ − BER∗ denote the bias of the estimator BER
+Proposition C.5. Let biasν = E BER
+ν
+
+ν
+
+ν
+
+level ν. Then
+
+
+
+  h
+i
+uBER
+\∗ − UBER (ν) + LBER (ν) − BER
+\∗
+E BER
+≥ |biasν | −
+(1 − ν) ,
+ν
+ν
+K
++
++
++
+n
+o
+where K := min 1, β(1−β)
+∈ (0, 1].
+θ(1−θ)
+Proof. Let d(z1 , z2 ) = |z1 − z2 | and Iν = [LBER (ν), UBER (ν)]. Then, the pointwise penalty
+\∗ − UBER (ν))+ + (LBER (ν) − BER
+\∗ )+ at noise level ν is precisely d(BER
+\∗ , Iν ) :=
+(BER
+ν
+ν
+ν
+\∗ , a). By the convexity of d(·, Iν ) and Jensen’s inequality, the expected pointwise
+inf a∈Iν d(BER
+ν
+penalty is bounded as
+h 
+i
+ h
+i
+
+\∗ , Iν ≥ d E BER
+\∗ , Iν .
+E d BER
+(23)
+ν
+ν
+\∗ is bounded as follows:11
+On the other hand, since BER∗ν ∈ Iν , the bias of the estimator BER
+ν
+ h
+i
+
+ h
+i
+
+\∗ , BER∗ ≤ d E BER
+\∗ , Iν + UBER (ν) − LBER (ν).
+|biasν | = d E BER
+(24)
+ν
+ν
+ν
+The interval width UBER (ν) − LBER (ν) is bounded as
+UBER (ν) − LBER (ν) = Fν (uBER ) − Fν (0)
+(1 − ν)θ(1 − θ)uBER
+=
+λν (θ)(1 − λν (θ))
+(1 − ν)θ(1 − θ)uBER
+≤
+min {θ(1 − θ), β(1 − β)}
+uBER
+=
+(1 − ν).
+K
+Combining (23), (24), and (25), we conclude that
+h 
+i h
+i
+\∗ , Iν ≥ |biasν | − uBER (1 − ν) .
+E d BER
+ν
+K
++
+
+(25)
+
+11 This follows from the following fact: let (Z, d) be a metric space and let A ⊂ Z. For any z ∈ Z and a ∈ A, we have
+
+d(z, a) ≤ d(z, A) + diam(A), where d(z, A) = inf a′ ∈A d(z, a′ ) and diam(A) = supa1 ,a2 ∈A d(a1 , a2 ).
+
+37
+
+Thus, for each noise level ν, a bias larger than uBER
+K (1 − ν) produces a positive expected penalty.
+Moreover, since uBER
+(1
+−
+ν)
+→
+0
+as
+ν
+→
+1,
+any
+fixed nonzero additive bias that persists across
+K
+noise levels is expected to be detected at a sufficiently large noise level. It is worth noting that this is
+not a universal guarantee: a bias that shrinks sufficiently fast as ν → 1 may remain undetected.
+Proposition C.5 quantifies the pointwise penalty for each noise level, and we can use it to discuss
+the overall score aggregated over different noise levels. As a simple example, consider an idealized
+version of sβ , obtained by replacing the finite average over N noise levels with an integral (informally,
+N → ∞):
+Z 1 
+Z 1 
+
+
+
+ 
+∗
+∗
+∗
+\
+\
+\
+sβ =
+d BERν , Iν dν =
+BERν − UBER (ν) + LBER (ν) − BERν
+dν.
+0
+
++
+
+0
+
++
+
+The result above implies that the expected score is bounded as
+Z 1h
+i
+uBER
+E [sβ ] ≥
+|biasν | −
+(1 − ν) dν.
+K
++
+0
+For example, if |biasν | ≥ B ≥ 0 for all ν ∈ [0, 1), the expected score is lower-bounded by an
+increasing function of B as
+(
+K
+B 2 if B ≤ uBER
+K ,
+(26)
+E [sβ ] ≥ 2uBERuBER
+B − 2K
+otherwise.
+Empirical analysis We also present an experiment using synthetic data with controlled bias. We
+drew n = 10,000 points from a one-dimensional two-component Gaussian mixture with means −0.5
+and 0.5, unit variances, and class prior θ = 0.5. For each point, we computed the clean soft label ηi
+using the closed form obtained from the Gaussian PDF. √
+By Proposition D.1, the true optimal values
+are BER∗ = Φ(−1/2) ≈ 0.308538 and AUC∗ = Φ(1/ 2) ≈ 0.760250.
+We repeated the experiment 100 times. In each trial, we computed the min formula estimators
+at N = 100 noise levels. To change the bias without changing the variance, we defined shifted
+(b)
+(0)
+(b)
+(0)
+\∗ := BER
+\∗ − b and AUC
+\∗ := AUC
+\∗ + b. Because
+estimators at each noise level ν as BER
+ν
+ν
+ν
+ν
+the same constant is added to or subtracted from the estimate in every trial, these changes do not
+change the variance of either estimator. We used b ∈ {0, 0.01, 0.02, 0.05, 0.10, 0.15} and the same
+samples for every value of b. The parameters uBER and lAUC were both set to 0.5. We computed the
+scores sβ for β = 0.5 and the average scores over β ∈ {0.1, . . . , 0.9}.
+Figure 3 reports averages over the 100 trials (blue and orange solid curves) along with the theoretical
+lower bounds in (26) (blue and orange dotted curves). All standard errors of the scores were below
+2.8 × 10−5 . The standard deviations (SDs) of the BER estimates and AUC estimates were 0.001241
+and 0.001370, respectively, for every value of b (as expected, since the variance was kept constant). In
+contrast, the score averaged over β increased monotonically with b, from 0 to 0.029953 for BER and
+from 0 to 0.040368 for AUC. These results show that, unlike the standard deviations, our evaluation
+score successfully reflects the increase in bias even when the estimator variance is unchanged.
+
+D
+
+Closed-form expressions for the optimal BER and AUC under Gaussian
+mixture models with a shared covariance matrix
+
+Here, we derive the closed-form expressions for the optimal BER and AUC used as reference values
+in the Gaussian-mixture experiments of Appendix E.
+Suppose X = Rd and that the class-conditional distributions are given by Gaussian distributions with
+a shared covariance matrix:
+x | {y = 0} ∼ N (µ0 , Σ),
+
+x | {y = 1} ∼ N (µ1 , Σ),
+
+where µ0 , µ1 ∈ Rd and Σ ∈ Rd×d is a positive definite matrix. For k ∈ {0, 1}, let pk (x) denote the
+class-conditional density function of x given y = k:
+
+
+1
+1
+⊤ −1
+pk (x) =
+exp
+−
+(x
+−
+µ
+)
+Σ
+(x
+−
+µ
+)
+.
+k
+k
+2
+(2π)d/2 det(Σ)1/2
+38
+
+FeeBee score
+
+0.030
+0.025
+
+Score ( = 0.5)
+Lower bound ( = 0.5)
+Score (averaged over )
+Lower bound (averaged over )
+
+Score ( = 0.5)
+Lower bound ( = 0.5)
+Score (averaged over )
+Lower bound (averaged over )
+
+0.04
+FeeBee score
+
+0.035
+
+0.020
+0.015
+0.010
+
+0.03
+0.02
+0.01
+
+0.005
+
+0.00
+
+0.000
+
+0.000 0.025 0.050 0.075 0.100 0.125 0.150
+Injected bias magnitude
+
+0.000 0.025 0.050 0.075 0.100 0.125 0.150
+Injected bias magnitude
+(a) BER
+
+(b) AUC
+
+Figure 3: Our evaluation scores versus injected bias magnitude for BER and AUC. Points show
+averages over 100 trials. Their 95% Monte Carlo confidence intervals are smaller than the markers.
+The blue curves use β = 0.5, whereas the orange curves average the scores over β ∈ {0.1, . . . , 0.9}.
+The blue and orange dotted curves show the theoretical lower bounds in (26) for the corresponding β
+settings, evaluated at B = b. Both scores increase monotonically with the injected bias (although the
+estimator standard deviations remain unchanged).
+The goal of this section is to prove the following proposition, which gives closed-form expressions
+for the optimal BER and AUC under this setting.
+Proposition D.1. Under the shared-covariance Gaussian mixture model described above, the optimal
+BER and AUC are given by
+
+
+
+
+J
+J
+BER∗ = Φ −
+, AUC∗ = Φ √
+,
+2
+2
+where
+Φ is the cumulative distribution function of the standard normal distribution and J :=
+p
+(µ1 − µ0 )⊤ Σ−1 (µ1 − µ0 ) is the Mahalanobis distance between µ0 and µ1 .
+To prove Proposition D.1, define the score function f ∗ : X → R as
+
+
+p1 (x)
+µ0 + µ1
+∗
+⊤ −1
+f (x) := log
+= (µ1 − µ0 ) Σ
+x−
+.
+p0 (x)
+2
+
+(27)
+
+Proof. We first consider the nondegenerate case J > 0. We begin by proving the formula for
+BER∗ . We saw in the proof of Lemma 2.1 that the BER-optimal classifier is given by h∗BER (x) =
+1 [η(x) ≥ θ]. Since the posterior probability η(x) can be expressed as
+η(x) =
+
+θp1 (x)
+,
+θp1 (x) + (1 − θ)p0 (x)
+
+the condition η(x) ≥ θ is equivalent to p1 (x) ≥ p0 (x), which is in turn equivalent to f ∗ (x) ≥ 0.
+The class-conditional distributions of the score f ∗ (x) are given by
+
+
+ 2
+
+J2 2
+J
+∗
+∗
+2
+f (x) | {y = 0} ∼ N − , J , f (x) | {y = 1} ∼ N
+,J .
+(28)
+2
+2
+Therefore, the within-class error rates of h∗BER are given by
+
+
+J
+FPR(h∗BER ) = P (f ∗ (x) ≥ 0 | y = 0) = Φ −
+,
+2
+
+
+J
+FNR(h∗BER ) = P (f ∗ (x) < 0 | y = 1) = Φ −
+,
+2
+39
+
+and hence the optimal BER is given by
+
+
+1
+J
+BER∗ = (FPR(h∗BER ) + FNR(h∗BER )) = Φ −
+.
+2
+2
+Next, we prove the AUC case. In the proof of Lemma 2.2, we showed that the maximum AUC is
+attained by choosing a scoring function to be any strictly increasing transformation of η(x). The
+scoring function f ∗ defined in (27) is an instance of such scores; to see this, note that
+θ−1 − 1
+f ∗ (x) = log
+,
+η(x)−1 − 1
+which is strictly increasing in η(x). Thus, f ∗ achieves the maximum AUC.
+Now, let x+ ∼ P (x | y = 1) and x− ∼ P (x | y = 0) be independent. Using the class-conditional
+distributions of f ∗ (x) given in (28), we obtain
+
+f ∗ (x+ ) − f ∗ (x− ) ∼ N J 2 , 2J 2
+and hence the maximum AUC is given by
+1
+AUC∗ = P (f ∗ (x+ ) > f ∗ (x− )) + P (f ∗ (x+ ) = f ∗ (x− ))
+2
+= P (f ∗ (x+ ) − f ∗ (x− ) > 0) + 0
+
+
+J
+=Φ √
+.
+2
+It remains to consider the degenerate case J = 0, in which f ∗ remains optimal. Since Σ is
+positive definite, J = 0 implies µ0 = µ1 and that the optimal classifier always predicts h∗ (x) =
+1 [f ∗ (x) ≥ 0] = 1 [0 √
+≥ 0] = 1. Hence, BER∗ = (1 + 0)/2 = Φ(−J/2). Similarly, we have
+AUC∗ = 1/2 = Φ(J/ 2) when J = 0 because f ∗ (x+ ) − f ∗ (x− ) = 0 − 0 = 0 almost surely. This
+completes the proof.
+
+E
+
+Experiments
+
+Here, we provide details on the experiments we conducted in Section 5. Our experiment
+code is based on that of Ushio et al. (2026), available at https://github.com/RyotaUshio/
+bayes-error-estimation and licensed under the MIT License.
+E.1
+
+Estimation on synthetic data
+
+This appendix provides the full setup for the synthetic-data experiment of Section 5.1.
+Data generation We follow the synthetic-data protocol of Ushio et al. (2026). Inputs xi ∈ R2 are
+drawn from a two-component Gaussian mixture with means (0, 0) and (2, 2), identity covariances,
+and mixture weights (0.8, 0.2), so that the class prior is θ = 0.2. For each xi , the clean soft label
+ηi = P (y = 1 | x = xi ) is computed in closed form from the mixture density, and a binary label yi is
+sampled from Bernoulli(ηi ). We use n = 10,000 samples. In this model, the q
+optimal values can be
+
+computed analytically using Proposition D.1. The Mahalanobis distance J is (2, 2)⊤ I2−1 (2, 2) =
+√
+√
+2 2, where I2 is the 2 × 2 identity matrix. Thus, BER∗ = Φ(− 2) ≈ 0.07865 and AUC∗ =
+Φ(2) ≈ 0.97725. The dashed lines in Figure 2 mark these values as references.
+
+The corruption map f : [0, 1] → [0, 1] used here is the inverse beta-calibration (Kull et al., 2017) map
+also used in the experiments by Ushio et al. (2026),
+1
+f (η; a, b) =
+,
+(29)
+
+1/a
+
+1−η
+1−b
+1+ η
+b
+parameterised by (a, b). The three regimes used in Figure 2 correspond to (a, b) = (1, 0.5), (1.5, 0.5),
+and (0.5, 0.5), respectively. Setting a > 1 produces under-confident soft labels (pulled toward 0.5),
+and a < 1 produces over-confident soft labels (pushed toward 0 or 1). The choice b = 0.5 keeps the
+corruption symmetric about 0.5.
+40
+
+Compared estimators
+
+For each metric, we compare the following estimates. For the clean setting,
+\∗ or AUC
+^∗ directly to the soft labels ηi as discussed in Section 2
+we simply apply the estimator BER
+(Clean). For the corrupted settings (under- or over-confidence), we evaluate two estimators:
+• Corrupted, calibrated (Section 3): fit isotonic regression (Ayer et al., 1955) of yi on ξi to
+\∗ or AUC
+\∗ to ηbi .
+obtain ηbi , then apply BER
+\∗ or AUC
+\∗ directly to the corrupted soft
+• Corrupted, raw (naive baseline): apply BER
+labels ξi without recalibration.
+The class prior θ is treated as unknown and estimated from the given data, namely, by the sample
+mean of the soft labels ηi in the clean setting and that of the hard labels yi in the corrupted settings.
+We use the rule of Section 2.1 to pick between the min and max formulae on each resample.
+Bootstrap confidence intervals We compute 95% confidence intervals using the bias-corrected
+accelerated (BCa) bootstrap with 1,000 resamples, as implemented by scipy.stats.bootstrap in
+SciPy 1.15.3 (Virtanen et al., 2020).
+E.2
+
+Real-data experiment: Discriminants and evaluation scores
+
+Here we describe the detailed setup for the experiment on real-world datasets presented in Section 5.2.
+E.2.1
+
+Datasets
+
+In our experiments, we used the following datasets from various domains, including computer vision,
+natural language processing and academic peer-review.
+CIFAR-10 We used the test set of CIFAR-10 (Krizhevsky, 2009) with soft labels from CIFAR-10H
+(Peterson et al., 2019).12 Following Ishida et al. (2023); Ushio et al. (2026), the original 10 classes
+were reorganized into two classes (animal vs. non-animal) by treating bird, cat, deer, dog, frog and
+horse as positive and the rest as negative.
+Fashion-MNIST We also used the Fashion-MNIST dataset (Xiao et al., 2017) and its soft-labeled
+counterpart, Fashion-MNIST-H (Ishida et al., 2023).13 As in CIFAR-10, we followed Ishida et al.
+(2023); Ushio et al. (2026) and relabeled the original 10 classes into two classes: positive (T-shirt/top,
+pullover, dress, coat and shirt) and negative (the rest).
+ChaosNLI We used a natural language processing dataset called ChaosNLI (Nie et al., 2020; Zhou
+et al., 2022).14 It contains 100 hard labels per data point, which can be used to construct soft labels
+by taking their average. It consists of three sub-datasets: SNLI (n = 1, 514), MNLI (n = 1, 599) and
+AbductiveNLI (n = 1, 532).
+ICLR 2017-2026 peer-review datasets Ushio et al. (2026) collected n = 32, 829 instances of
+reviewer scores and confidences from the 2017-2025 ICLR conferences using the OpenReview API.
+Then they used them to construct a dataset consisting of pairs of a soft and hard label. Specifically,
+for each submitted paper xi , they first calculated the averaged score weighted by the confidences,
+and then obtained a corrupted soft label η̃i by normalizing the averaged score si into [0, 1]. The hard
+label is simply the final decision for the paper, i.e., accept (yi = 1) or reject (yi = 0). In this paper,
+we followed the same procedure to collect the 2017-2026 ICLR peer-review data (note that the 2026
+data was not available at the time of Ushio et al. (2026)).
+12We were unable to find an explicit license stated for CIFAR-10, but it is widely used in the research community and is
+generally considered to be in the public domain. CIFAR-10H is licensed under BY-NC-SA 4.0.
+13 Fashion-MNIST is MIT-licensed. Fashion-MNIST-H is distributed as a part of their GPL-3.0 repository https://
+github.com/ishida-lab/irreducible, but no separate data-specific license is stated.
+14 Available at https://github.com/easonnie/ChaosNLI and distributed under the CC BY-NC 4.0 license.
+
+41
+
+E.2.2
+
+Experiment setup
+
+For each metric (BER, AUC) and each dataset of Appendix E.2.1, we evaluate three quantities: the
+\∗ or AUC
+\∗ ), the max formula (BER
+\∗ or AUC
+\∗ ), and the empirical discriminant
+min formula (BER
+1
+1
+2
+2
+b BER or ∆
+b AUC ).
+(∆
+Bootstrap point estimate, CI, and SE. For each of the three estimators we report the point estimate,
+the bootstrap standard error, and a 95% bias-corrected accelerated (BCa) bootstrap confidence interval,
+all computed with 1,000 resamples using scipy.stats.bootstrap in SciPy 1.15.3 (Virtanen et al.,
+2020).
+Evaluation score sβ . For the min and max formula estimators, we additionally compute the score
+sβ of Section 4. sβ is computed with N = 100 different noise levels νi = (i − 1)/N ∈ [0, 1) for
+i = 1, . . . , N . The upper bound uBER on BER∗ (resp. the lower bound lAUC on AUC∗ ) is set to its
+theoretical limit 0.5 on every dataset. We compare three choices for the noise mean β: (i) β = 0.5,
+recovering the original FeeBee setting of Renggli et al. (2021); (ii) β = θ, the estimated class prior;
+and (iii) the average of sβ over the grid β ∈ {0.1, . . . , 0.9}.
+E.3
+
+Approximately monotone corruption
+
+Here, we present an additional experiment with synthetic data to investigate how the performance
+of our isotonic-regression-based estimator degrades when the corruption is only approximately
+monotone.
+E.3.1
+
+Experimental setup
+
+Following the experimental protocol in Appendix D.5 of Ushio et al. (2026), we isolated order
+breakage by starting from the under-confident inverse-beta-calibration map f of (29) with parameters
+(a, b) = (1.5, 0.5) and adding Gaussian noise on the logit scale:
+ξi = sigmoid (logit(f (ηi )) + zi ) ,
+
+zi ∼ N (0, σ 2 )
+
+Consequently, the corruption used here is nearly monotone but not exactly monotone. The parameter
+σ controls how far the corruption departs from monotonicity.
+We used the same two-dimensional Gaussian mixture as in Section 5.1. We used a grid σ ∈
+{0, 0.05, 0.1, 0.2, 0.4, 0.8, 1.6}. For each σ, we used the proposed isotonic-regression-based estimator to compute the BER∗ and AUC∗ estimates. We also computed the Kendall rank correlation τ
+and q = (1 − τ )/2. The quantity q corresponds to the fraction of reversed pairs. We repeated each
+setting on 30 independently
+sampled datasets. By Proposition D.1, the ground-truth optimal values
+√
+are BER∗ = Φ(− 2) = 0.078650 and AUC∗ = Φ(2) = 0.977250.
+E.3.2
+
+Results
+
+Figure 4 shows the results. The estimates remain close to the ground-truth values as the pairwise
+order-reversal rate increases to 2.44%. Over this range, the 95% Monte Carlo confidence intervals
+(CIs) contain the ground-truth values. At q = 4.85% or higher, no CI contains the corresponding
+population value, and the deviations become substantially larger as q increases. Overall, introducing
+a small amount of rank violation translated to a mild increase in estimation error although the error
+increased progressively as the order-reversal rate grew.
+E.4
+
+Compute resources
+
+All of the experiments presented in this paper were conducted on the CPU of a single Apple MacBook
+Pro (M1 chip, 16GB RAM).
+
+42
+
+0.16
+
+1.00
+
+0.14
+0.98
+
+0.10
+
+Estimate
+
+Estimate
+
+0.12
+
+0.08
+0.06
+0.04
+
+0.96
+
+0.94
+
+0.92
+
+0.02
+0.00
+0.0
+
+2.5
+5.0
+7.5
+10.0 12.5 15.0
+Pairwise order-reversal rate q (%)
+
+0.90
+0.0
+
+17.5
+
+(a) BER
+
+2.5
+5.0
+7.5
+10.0 12.5 15.0
+Pairwise order-reversal rate q (%)
+
+17.5
+
+(b) AUC
+
+Figure 4: Estimates of BER∗ and AUC∗ under increasing violations of order preservation. The
+horizontal axis represents the mean pairwise order-reversal rate q = (1 − τ )/2. The points and error
+bars indicate means and 95% Monte Carlo CIs over 30 independent datasets. Note that the error bars
+are smaller than the marker size for most points. The dotted lines indicate the ground-truth optimal
+values.
+
+43
+
+

@@ -1,0 +1,1816 @@
+1
+
+Simplified Kalman filter for online rating:
+one-fits-all approach
+Leszek Szczecinski
+
+and Raphaëlle Tihon
+
+arXiv:2104.14012v1 [stat.ML] 28 Apr 2021
+
+Abstract
+In this work, we deal with the problem of rating in sports, where the skills of the players/teams are inferred
+from the observed outcomes of the games. Our focus is on the online rating algorithms which estimate the skills
+after each new game by exploiting the probabilistic models of the relationship between the skills and the game
+outcome. We propose a Bayesian approach which may be seen as an approximate Kalman filter and which is
+generic in the sense that it can be used with any skills-outcome model and can be applied in the individual- as
+well as in the group-sports. We show how the well-know algorithms (such as the Elo, the Glicko, and the TrueSkill
+algorithms) may be seen as instances of the one-fits-all approach we propose. In order to clarify the conditions
+under which the gains of the Bayesian approach over the simpler solutions can actually materialize, we critically
+compare the known and the new algorithms by means of numerical examples using the synthetic as well as the
+empirical data.
+
+I. I NTRODUCTION
+The rating of the players is one of the fundamental problem in sport analytics and consists in assigning
+each player a real value called a skill. In this work we are interested in the rating algorithms that can
+be systematically derived from the probabilistic models which describe i) how the the skills affect the
+outcomes of the games, as well as ii) how the skills evolve in time, i.e., characterize the skills dynamics.
+Using the probabilistic models, the forecasting of the game outcomes is naturally derived from the rating.
+Once the models are chosen, the rating boils down to inferring the unknown skills from the observed
+games outcomes. This is essentially a parameter estimation problem which has been largely addressed in
+the literature. In particular, using a static model for the skills, that is, assuming that the skills do not vary
+in time, the problem consists in solving a non-linear regression problem and the main issue then is to
+define a suitable skills-outcome model.
+The most popular skills-outcome models are obtained from the pairwise comparison framework which
+is well known in the psychometrics literature [2], [3]. For binary games (win/loss), the Thurston model [4]
+and Bradley-Terry model [5] are the most popular. Their extensions to the ternary games (win/loss/draw)
+were proposed in [6] and [7]; these are particular cases of ordinal variable models [8] that may may be
+applied in multi-level games as done e.g., in [9] and [10].
+Alternative approach focuses on modelling directly the game points (e.g., goals) using predefined
+distributions; the Poisson distribution is the most popular in this case [11]; similarly, the points difference
+can be modelled using, e.g., the Skellam, [12] or the Weibull [13] distributions.
+The very meaning of the skills may be also redefined and instead of a scalar, the player may be assigned
+two values corresponding to offensive and defensive skills [11], [14], [15]; further, considering the homefield advantage (HFA), three or four distinct parameters per player may be defined [11], [16], although
+recent results indicate that this may lead to over-fitting [17], [18].
+The various skills-outcome model we mention above, invariably assume that the outcome of the game
+depends (via a non-linear function) on a linear combination of the skills of the participating players, this
+1
+
+L. Szczecinski is with Institut National de la Recherche Scientifique, Montreal, Canada. e-mail: leszek@emt.inrs.ca.
+R. Tihon is with University of Montreal, Canada. e-mail: raphael.tihon@umontreal.ca.
+1
+We will talk about players but the team sports are of course treated in the same way. In fact, the examples we provide come from
+team-sports but the advantage of talking about players is that it allows us to discuss the issue of gathering players in groups which face each
+other, as done e.g., in eSports [1].
+
+2
+
+assumption is also used in the case when the multiple players are gathered in two groups facing each
+other in a game [1]. This general approach will be also used as a basis for our work.
+Each of these skills-outcome models can be combined with the models describing how the skills evolve
+in time. With that regard, the most popular is modelling of the skills via first-order Markov Gaussian
+processes, e.g., [19], [20], [9], [21], [22], [23], [1], [24], [14], [25]. This formulation is then exploited
+to derive the on-line rating algorithms in two recursive steps: first, at a time t, the posterior distribution
+of the skills is found using all observations up to time t; more precisely, to simplify the problem, the
+Gaussian approximation of the latter is obtained. Next, the posterior distribution from the time t, is used
+as a prior in the time t + 1. This approach should be seen as a generalization of the Kalman filtering to
+the non-Gaussian models characteristic of the rating problems [19].
+Most of the works we cited above and which consider the skills’ dynamics, focused on the estimation of
+the skills with a moderate number of players, the case which is typical in sport leagues (e.g., in football,
+hockey, American football, etc). In such a case, the approximate (Gaussian) posterior distribution of the
+skills can be fully defined by the mean vector and by the covariance matrix.
+On the other hand, for large number of players (e.g., thousands of chess players or millions of
+eSports players), it is considered unfeasible and further approximations are introduced by considering
+only a diagonal covariance matrix, equivalent to assuming that the skills are, a posteriori, Gaussian and
+independent. This approach was proposed to rate the chess players (the Glicko algorithm [21]) as well as
+for the rating in eSports (the TrueSkill algorithm, [1]).
+However, the Glicko and the TrueSkill algorithms are derived i) from different skills-outcome models,2
+and ii) using different approximation principles. Thus, not only it may be difficult to see them as instances
+of a more general approach but, more importantly, they cannot be straightforwardly reused to obtain new
+online ratings if we would like to change the skills-outcome model.
+This latter fact stays very much in contrast with the approach of [19] which is general in its formulation
+so, under mild conditions, it can be applied to any skills-outcomes model. However, since the focus of
+[19] and other works which followed its path, was not on the large problems, the derivations did not
+leverage the simplifying assumptions on which rely the TrueSkill and Glicko algorithms.
+In our work we thus want to take advantage of both worlds: we will exploit the independence assumption
+on which [21] and [1] are built, and the estimation principle underlying the Kalman filter which was used
+in [19]. Furthermore, we will also consider new simplifying assumptions about the posterior distributions
+of the skills; this will lead to different simplified versions of the Kalman filter.
+The goal of this work is thus threefold:
+• We will show how the online rating algorithms can be derived for any skills-outcome model and
+may be applied equally well to estimate the skills of the players in individual sports (as in the Glicko
+algorithms) or the skills of the players withing a group (as in the True-Skill algorithm). We will also
+consider different level of simplification when dealing with the skills’ dynamics.
+• Using this generic algorithmic framework, we will be able not only to derive new algorithms, but
+also to compare and understand the similarities/differences between the known online rating such as
+the Elo [26], the Glicko [21], or the TrueSkill [1] algorithms.
+• By mean of numerical examples, we will provide an insight into the advantages of the simplified
+versions of the rating algorithms, and indicate under which conditions the simple rating algorithm
+may perform equally well as the more complex ones.
+The paper is organized as follows: the model underlying the rating is shown in Sec. II. The on-line
+rating algorithms are derived in a general context in Sec. III using different approximations of the posterior
+distribution. In Sec. IV, the popular scalar skills-outcome model are used to derive new rating algorithms
+which are then compared to the algorithms from the literature. Numerical examples are shown in Sec. V
+and conclusions are draws in Sec. VI.
+2
+
+Glicko uses the Bradley-Terry model [5], while TrueSkill uses the Thurston model [4].
+
+3
+
+II. M ODEL
+We consider the case when the players indexed with m ∈ {1, . . . , M} participate in the games indexed
+with t ∈ {1, . . . , T }, where the number of games, T , is finite (as in sport seasons) or infinite (as in
+non-stop competitions, such as eSports).
+We consider one-on-one games: in the simplest case it means that the “home” player it plays against
+the “away” player jt , where it , jt ∈ {1, . . . , M}. The outcomes of the game t, denoted by yt , belong to
+an ordinal set Y. For example, if yt is the difference between the game-points (such as goals), we have
+Y = {. . . −3, −2, −1, 0, 1, 2, . . .} so the ordinal variables are naturally encoded into integers. On the other
+hand, in ternary-outcome games, we may assign yt = 0 if the player it loses the game, yt = 2 if she wins
+the game, and yt = 1 if the game ends in a draw, i.e., Y = {0, 1, 2}. The very notion of the home/away
+players is useful when dealing with the home-field advantage (HFA) typically encountered in sports but
+it also helps us to ground the meaning of the game outcome: even in the absence of the HFA, for the
+outcome yt = 0 to be meaningful, we must decide which player lost (the home player in our notation for
+ternary-outcome games).
+In a more general setup, the game may implicate two groups of players whose indices are defined by
+the sets It = {it,1 , it,2 , . . . , it,F } (these are indices of the “home” players) and Jt = {jt,1 , jt,2 , . . . , jt,F }
+(indices of the “away” players). While the number of players in each group, F , is assumed to be constant,
+this is done merely to simplify the notation and other cases are possible. For example, the groups in
+eSports are formed on the fly and they do not always have the same number of players, nor even the
+same number of players in both groups playing against each other [1]. The process of defining which
+players take part in the game t, i.e., how the indices it , jt (or the sets It and Jt ) are defined, is called a
+scheduling.
+The above notation applies directly if we replace the notion of “player” with “team”; but then, of
+course, the general case of groups defined by It and Jt is not necessary. For the rest of the work we only
+refer to players which is a more general case to deal with.
+In its simplest form, the rating consists in assigning the player m the value θt,m , called a skill; this is
+done after observing the outcomes of the games up to time t, which we denote as y t = {y t−1 , yt }. We
+index the skills with t because we assume that they may vary in time.
+The probabilistic perspective we will adopt relies on the model relating the skills θ t = [θt,1 , . . . , θt,M ]T
+to y t ; it comprises i) the skills-outcome model, which makes explicit the relationship between the skills
+θ t and the outcome yt at time t, as well as ii) the model describing the evolution of the skills in time,
+i.e., the skills’ dynamics.
+The problem of finding the skills-outcome model has been treated extensively in the literature often
+exploitng the link with the problem of pairwise comparison well studied in psychometry [4], [5]. This is
+also where most of the efforts are concentrated in the rating literature and many models have been alrady
+proposed and studied. On the other hand, the modelling of the dynamics of the skills is less diversified
+and mainly focuses on applying the particular skills-outcome model in the dynamic context.
+Skills-outcome model
+The skills-outcome model defines the probability of the outcome conditioned on the skills, Pr {yt |θ t },
+and most often is defined by combing the non-linear scalar function and the linear function of the skills,
+i.e.,
+Pr {yt |θ t } = L(zt /s; yt ),
+
+T
+T
+zt = xT
+t,h θ t − xt,a θ t = xt θ t ,
+
+(1)
+(2)
+
+where the role of s > 0 is to scale the values the skills; xt,h = [xt,h,1 , . . . , xt,h,M ]T is the home scheduling
+vector, defined as follows: xt,h,m = 1 if the player m is a home player, i.e., m ∈ It , and xt,h,m = 0,
+otherwise. The away scheduling vector is defined correspondingly for the away players.
+
+4
+
+For example, if M = 10, and xt,h = [0, 0, 0, 1, 0, 0, 1, 0, 0, 0]T, and xt,a = [0, 0, 1, 0, 0, 0, 0, 0, 0, 1]T, it
+means that, at time t, the game involves the home players It = {4, 7} and away players Jt = {3, 10}.
+Then, the combined scheduling vector xt = xt,h − xt,a is given by xt = [0, 0, −1, 1, 0, 0, 1, 0, 0, −1]T.
+Of course, we do not suggest that the vector product(s) in (2) should be actually implemented; it is
+just a convenient notation expressing the fact that zt is the difference between the sum of the skills of the
+home players and the sum of the skills of the away players.
+As for the function L(z; y) it should be defined taking into account the structure of the space of
+outcomes Y. For example, in the binary games, Y = {0, 1}, we often use
+(
+F (z)
+if y = 1 (home win)
+L(z; y) =
+,
+(3)
+F (−z) if y = 0 (away win)
+where 0 ≤ F (z) ≤ 1 is a non-decreasing function. This corresponds to the assumption that increasing the
+difference between the skills, zt , corresponds to the increased probability of the home win and, of course,
+decreased probability of the away win. More on that in Sec. IV.
+Skills’ dynamics
+The temporal evolution of the skills is often modelled as a damped random walk
+θ t = βt θ t−1 + ut ǫt ,
+
+(4)
+
+where ut is the vector comprised of independent, zero-mean, unitary-variance, random Gaussian variables,
+so ǫt has the meaning of the variance of the random increment in skills from time t − 1 to t: it is assumed
+to be the same for all the player. For example, [21] uses
+
+ǫt = τ (t) − τ (t − 1) ǫ,
+(5)
+
+where τ (t) is the time (e.g., measured in days) at which the game indexed with t is played, and ǫ is the
+per-time unit increase of the variance.
+The autoregression parameter 0 < βt ≤ 1 models the decrease of the skills in time (in absence of game
+outcomes). While βt = 1 is used in most of the previous works we cite, βt < 1 was also used, e.g., in
+[24], [14], [25], and to take into account the time we may define it as
+βt = β (τ (t)−τ (t−1)) ,
+
+(6)
+
+where, again β is the per-time decrease of the skills.
+The relationship (4) may be presented as
+f (θ t |θ t−1 ) = N (θ t ; βt θ t−1 , Iǫt ),
+
+(7)
+
+where I is the identity matrix and
+
+
+1
+T −1
+N (θ; µ, V ) = p
+exp − (θ − µ) V (θ − µ)
+2
+det(2πV )
+1
+
+(8)
+
+is the multivariate Gaussian probability density function (PDF) with the mean vector µ and the covariance
+matrix V .
+As an alternative to (7) we may also assume that the skills in θ t (conditioned on θ t−1 ) are correlated,
+i.e., the covariance matrix has non-zero off-diagonal elements. This is done, e.g., in [22], [14] in order to
+ensure that 1T θ t = Const., i.e., that the skills at a given time t, sum up to the same constant.
+However, a direct consequence of the correlation between the skills is that, the outcome yt will affect
+not only the skills of the players involved in the game at time t but also of all other players. This may
+result in rating which is slightly counter-intuitive but also, in the case of eSports, when the pool of the
+players is not predefined, this model may be difficult to justify.
+
+5
+
+We will thus use the model (7) but we emphasize that our goal is not to justify particular assumptions
+underlying the skills-outcome model or the models for the skills’ dynamics. We rather want to present a
+common framework which will i) show the relationship between the algorithms already known from the
+literature, and ii) allow us to create new online rating algorithms in a simple/transparent manner.
+III. E STIMATION OF THE SKILLS
+If we suppose momentarily that the skills do not vary in time, i.e., θ t = θ (or ǫ = 0), the problem of
+finding the skills may be formulated under the maximum likelihood (ML) principle
+T
+n
+o
+Y
+θ̂ = argmax Pr y T |θ = argmax
+L(zt /s; yt)
+θ
+
+= argmax
+θ
+
+θ
+
+T
+X
+
+(9)
+
+t=1
+
+ℓ(zt /s; yt ),
+
+(10)
+
+t=1
+
+where ℓ(zt /s; yt) = log L(zt /s; yt ) is the log-likelihood, and we assumed that the observations yt , when
+conditioned on the skills’ difference, zt , are independent.
+The solution (9) can be found uniquely if the log-likelihood ℓ(xT
+t θ/s; yt ) is a concave function of θ
+which holds if ℓ(z; yt ) is concave in z. This is the “mild” condition we referred to in Sec. I and, in the
+rest of the work, we assume that this condition is satisfied.3
+Unlike the ML approach which finds a point estimate of the skills θ̂, the Bayesian approach consists
+in finding the posterior distribution of the skills f (θ|y T ). But, because finding the distributions is usually
+intractable, they are often assumed to belong to a particular parametrically defined family and the Gaussian
+approximation is often adopted
+f (θ|y T ) ≈ N (θ; µ̂, V̂ ),
+
+(11)
+
+where, to find µ̂ we should calculate the mean from the posterior distribution f (θ|y T ). This also may be
+difficult, so we may prefer to set µ̂ = θ̂, where θ̂ is the mode of the distribution f (θ|y T ) ∝ Pr{y T |θ}f (θ),
+and where f (θ) reflect a priori knowledge about θ. For the non-informative prior f (θ) the mode θ̂
+coincides with (9).
+While the problem of finding the posterior distribution of the skills is more general that finding the
+point estimate of the skills, with the model (11), the mean µ̂ may be treated as the maximum a posteriori
+(MAP) point estimate, and the covariance V̂ expresses the uncertainity of the MAP estimation.
+A. Online rating
+The Bayesian approach to the online rating consists in finding the distribution of the skills θ t conditioned
+on the games’ outcomes y t , i.e.,
+Z
+f (θ t |y t ) = f (θ t |yt−1 , yt ) ∝ Pr {yt |θ t } f (θ t , θ t−1 |y t−1 , ) dθt−1
+(12)
+Z
+(13)
+= Pr {yt |θ t } f (θ t |θt−1 )f (θ t−1 |y t−1 ) dθ t−1 ,
+where we exploited the Markovian property of (7), i.e., the knowledge of θ t−1 is sufficient to characterize
+the distribution of θ t .
+The relationship (13) allows us to calculate the distribution f (θ t |y t ) recursively, i.e., from f (θ t−1 |yt−1 ).
+This is what the online rating is actually about: as soon as the game outcomes become available, we
+estimate the (distribution of the) skills by exploiting the previously obtained estimation results. Such
+3
+
+For that, it is necessary that ∀z, L′′ (z; y)L(z; y) ≤ [L′ (z; y)]2 .
+
+6
+
+recursive calculation of the posterior distribution from (13) has been already dealt with, e.g., in [19], [9]
+which also recognized that the formulation (13) underlies the well known Kalman filtering [27, Ch. 12-13].
+In order to make (13) tractable, [19] (and many works that followed) rely on a Gaussian parametric
+representation of f (θt |y t ), akin to (11), i.e., f˜(θ t |y t ) = N (θt ; µt , V t ) which allows us to implement the
+approximate version of (13) as
+Z
+(14)
+fˆ(θ t |y t ) = Pr {yt |θ t } f (θt |θ t−1 )f˜(θ t−1 |y t−1 ) dθ t−1 ,
+h
+i
+f˜(θ t |y t ) ∝ P fˆ(θ t |yt ) ,
+(15)
+
+where P[f (θ)] is the operator projecting f (θ) on the space of Gaussian distribution, of which we consider
+the following possible forms with varying degree of simplification
+
+
+matrix-covariance model
+ N (θ t , µt , V t )
+˜
+f (θ t |y t ) = N (θ t , µt , diag(v t )) vector-covariance model ,
+(16)
+
+ N (θ , µ , v I)
+scalar-covariance model
+t
+t t
+
+where diag(v) is the diagonal matrix with diagonal elements gathered in the vector v. The vector- and
+scalar-covariance models are particularly suited for online rating when the number of players, M, is
+large, because we only need to estimate a vector/scalar instead of M × M covariance matrix. The vectorcovariance model is the basis for the derivation of the TrueSkill and Glicko algorithms.
+The scalar-covariance model may be found in [28] (with an additional assumption of the variance being
+constant) and is justified in the sports where players are uniformly scheduled to play throughout the season.
+Then, at any point of time, the number of games played is similar for all players so we can expect that
+the uncertainty (expressed by the variance) be similar for all the posterior estimates. On the other hand,
+in eSports, there may be significant differences between the number of games played by different players;
+in particular, the players who are new to the game should be characterised by a larger uncertainty then
+those who have been playing for a long time, and thus the scalar-covariance model may be inadequate.
+The projection in (15) is done by finding f˜(θ t |y t ) which minimizes the Kullback-Leibler (KL) distance
+to the projection argument fˆ(θ t |yt ); this is done using the following.
+Proposition 1. The parameters of the distribution (16), f˜(θ t |y t ), closest to fˆ(θ t |y t ) (in the sense of the
+KL distance), should be set as follows:
+µt = E[θ t |y t ]
+
+(17)
+T
+
+V t = E[(θ t − µt )(θ t − µt ) |y t ]
+
+(18)
+
+v t = di(V t )
+(19)
+1 T
+1 vt,
+(20)
+vt =
+M
+where di(V ) extracts the diagonal from the matrix V , and vt in (20) calculates the arithmetic average
+of the elements in v t .
+Proof. Appendix A
+So, to implement the projection P[·], and irrespectively which covariance model in (16) we decide to
+use, we must first calculate (exactly or approximately) the mean (17) and the covariance (18) from the
+distribution f (θ t |y t ). In the case of the vector (respectively, the scalar)-covariance model, we obtain the
+vector v t (respectively, the scalar vt ) from the covariance matrix, via (19) (respectively, via (20)).
+The algorithm based on the matrix-covariance model will be called a Kalman Filter (KF) rating and
+we show it in Sec. III-B. We will use it in Sec. III-C to show how the Simplified Kalman Filter (SKF)
+rating, based on the vector/scalar-covariance models may be obtained.
+
+7
+
+B. Kalman filter
+The integral in (14) is calculated from (8) and (7) as4
+Z
+f (θ t |θ t−1 )f˜(θ t−1 |yt−1 ) dθ t−1 = N (θ t ; βt µt−1 , V t ),
+
+(21)
+
+where
+
+V t = βt2 V t−1 + ǫt I
+is the covariances matrix of the skills at time t estimated from the observation y t−1 .
+Using (21) and (1) in (14) yields
+
+fˆ(θ t |y t ) ∝ exp Q(θ t )
+1
+T −1
+Q(θ) = ℓ(xT
+t θ/s; yt ) − (θ − βt µt−1 ) V t (θ − βt µt−1 )
+2
+and thus, by finding its mode
+µt = argmax Q(θ)
+
+(22)
+
+(23)
+(24)
+
+(25)
+
+θ
+
+and the inverse of the negated Hessian, V t = [−∇2θ Q(θ)]−1 |θ=µt , we obtain the approximate solution to
+the projection
+P[fˆ(θ t |y t )] = N (θ t ; µt , V t ).
+
+(26)
+
+We have to solve (25) and this may be done by replacing ℓ(xT
+t θ/s; yt ) with a quadratic approximation
+ 1
+
+T
+T
+T
+ℓ̃(xT
+θ − θ o + (θ − θ o )T ∇2θ ℓ(xT
+t θ/s; yt ) ≈ ℓ(xt θ o /s; yt ) + [∇θ ℓ(xt θ o /s; yt )]
+t θ o /s; yt ) θ − θ o ,
+2
+(27)
+obtained by developing ℓ(xT
+t θ; yt ) via Taylor series around θ o , where the gradient and the Hessian of
+T
+ℓ(xt θ; yt ) are calculated as
+1
+T
+∇θ ℓ(xT
+t θ; yt ) = g(xt θ/s; yt )xt
+s
+1
+T
+T
+∇2θ ℓ(xT
+t θ; yt ) = − 2 h(xt θ/s; yt )xt xt ,
+s
+with the first- and the second derivatives of the scalar function ℓ(z; yt ) denoted as
+
+(28)
+(29)
+
+d
+ℓ(z; yt ),
+(30)
+dz
+d2
+(31)
+h(z; yt ) = − 2 ℓ(z; yt );
+dz
+we note that h(z; yt ) > 0 because ℓ(z; yt ) is concave in z.
+Replacing ℓ(·; yt) with ℓ̃(·; yt) in (24), the mode (25) is obtained when the gradient of Q(θ) goes to
+zero, i.e.,
+
+
+1
+1
+−1
+T
+T
+∇θ Q(θ)|θ=µt ≈ g(xT
+µt − βt µt−1 = 0, (32)
+t θ o /s; yt )xt − 2 h(xt θ o /s; yt )xt xt µt − θ o − V t
+s
+s
+g(z; yt ) =
+
+4
+
+We use the relationship N (θ; µ1 , V 1 )N (θ; µ2 , V 2 ) = N (θ; µ3 , V 3 )N (µ1 ; µ2 ; V 1 + V 2 ) [29, Ch. 8.4].
+
+8
+
+which is solved by
+
+where
+
+i
+h
+
+1
+1
+−1
+T
+T
+T
+µt = V t xt g(xt θ o /s; yt ) + 2 h(xt θ o /s; yt)xt θ o + V t βt µt−1 ,
+s
+s
+1
+−1 −1
+T
+T
+h(x
+θ
+/s;
+y
+)x
+x
++
+V
+o
+t
+t
+t
+t
+t
+s2
+h(xT
+t θ o /s; yt )
+V
+= V t − V t xt xT
+,
+t
+t
+2
+s + h(xT
+t θ o /s; yt )ωt
+
+Vt=
+
+(33)
+
+(34)
+(35)
+
+ωt = xT
+t V t xt , and (35) is obtained via matrix inversion lemma [27, Sec. 4.11].
+Combining (35) with (33) yields
+µt = βt µt−1 + V t xt
+
+T
+T
+sg(xT
+t θ o /s; yt ) + h(xt θ o /s; yt )xt (θ o − βt µt−1 )
+.
+s2 + h(xT
+t θ o /s; yt )ωt
+
+(36)
+
+After this first update, a further refinement may be obtained by alternating between (36) and the reassignment θ o ← µt but, of course, it is much easier to use just one iteration with θ o = βt µt−1 , which yields
+a simple update of the skills’ mean and covariance matrix, and that defines the KF rating:
+V t ← βt2 V t−1 + ǫt I
+
+ωt ← xT
+t V t xt
+gt ← g(βt xT
+t µt−1 /s; yt )
+ht ← h(βt xT
+t µt−1 /s; yt )
+
+sgt
+µt ← βt µt−1 + V t xt 2
+s + ht ωt
+T
+ht ← h(βt xt µt /s; yt )
+ht
+,
+V t ← V t − V t xt xT
+t Vt 2
+s + ht ωt
+
+(37)
+(38)
+(39)
+(40)
+(41)
+(42)
+(43)
+
+where (43) is obtained from (35) by setting θ o ← βt µt . On the other hand, since we are in the realm of
+approximations, we might also use θ o = βt µt−1 in (35), which amounts to ignoring/removing (42); this
+is what we do in the rest of this work.
+The initialization is done by V 0 ← v0 I, where v0 is the prior variances of the skills.
+C. Simplified Kalman Filters and Stochastic Gradient
+We can now translate (37)-(43) taking into account the fact that the matrices are diagonal, i.e., by
+replacing V t with diag(v t ); this yields the following equations of the vector-covariance Simplified Kalman
+Filter (vSKF) rating:
+v t ← βt2 v t−1 + ǫt 1
+(44)
+X
+ωt ←
+(45)
+vt,m
+m∈{It ,Jt }
+
+gt ← g(βt xT
+t µt−1 /s; yt )
+
+ht ← h(βt xT
+t µt−1 /s; yt )
+
+sgt
+µt ← βt µt−1 + v t ⊙ xt 2
+s + ht ωt
+
+
+ht
+v t ← v t ⊙ 1 − v t ⊙ |xt | 2
+,
+s + ht ωt
+
+(46)
+(47)
+(48)
+(49)
+
+9
+
+where ⊙ denotes the element-by-element multiplication, and the initialization is done as v 0 ← v0 1.
+In particular, exploiting the form of the scheduling vector xt (with elements xt,m ∈ {−1, 0, 1}), we see
+that the players who are not involved in the game (m ∈
+/ {It , Jt } and thus xt,m = 0), are updated as
+µt,m = βt µt−1,m ,
+vt,m = βt2 vt−1,m + ǫt .
+
+(50)
+(51)
+
+Most often βt = 1 will be used and then the means of the skills do not change, but the variance grows
+with t. This is compatible with the intuition we have about the rating procedure: the players not involved
+in the game should not change their mean (remember, the mean is approximated by the mode, thus it
+should be interpreted as the ML estimate of the skill), while the growing variance corresponds to increased
+uncertainty about the skills’ values due to passed time.
+It is worthwhile to note that a similar algorithm was proposed in [30] for ℓ(z; y) being a quadratic
+function, i.e., in the context in which the Kalman algorithm is conventionally used.
+As for the scalar-covariance model, we have to replace v t with vt 1 in the vSKF rating, which will
+yield the following equations of the scalar-covariance Simplified Kalman Filter (sSKF) rating:
+v t ← βt2 vt−1 + ǫt
+ωt ← 2F v t
+
+(52)
+(53)
+
+ht ← h(βt xT
+t µt−1 /s; yt )
+
+(55)
+
+gt ← g(βt xT
+t µt−1 /s; yt )
+
+sgt
+µt ← βt µt−1 + vt xt 2
+s + ht ωt
+
+
+ht
+ωt
+,
+vt ← v t 1 −
+M s2 + ht ωt
+
+(54)
+(56)
+(57)
+
+where F = |It | = |Jt| and the initialization requires setting v0 .
+Another simplification is obtained if we assume that the variance v t is constant across time t, i.e., vt = v,
+as done also in [28]. We obtain then the fixed-variance Simplified Kalman Filter (fSKF)
+gt ← g(βt xT
+t µt−1 /s; yt )
+
+(58)
+
+sgt
+µt ← βt µt−1 + vxt 2
+,
+s + ht 2F v
+
+(60)
+
+ht ← h(βt xT
+t µt−1 /s; yt )
+
+(59)
+
+where the initialization requires setting v.
+All the Simplified Kalman Filter (SKF) rating algorithm adjust the mean in the direction of the gradient,
+gt , of the log-likelihood ℓ(zt /s; yt); they differ in the way the adjustment step is calculated from the
+previous results which mostly depends on the the second-order derivative, ht .
+And finally, ignoring ht , (60) may be written as
+µt ← µt−1 + v/sxt gt ,
+
+(61)
+
+which is the same as the stochastic gradient (SG) algorithm with the adaptation step being proportional
+to v, the latter has the meaning of the posterior variance of the skills (which we suppose to be known).
+As we will see, depending on the model, ignoring ht may make sense. In particular, using the BradleyTerry or the Davidson models, we obtain lim|z|→∞ h(z; yt ) = 0, see (72) and (76). That is, for large
+differences between the skills, the second derivative of ℓ(z; yt ), may indeed be close to zero.
+At this point it is useful to comment on the use of the scale. While in practice, s = 400, e.g., [31],
+[32], [33] or s = 600 [34] were applied, the value of s is entirely arbitrary and, actually, irrelevant from
+the algorithmic point of view, as stated in the following:
+
+10
+
+Proposition 2. We denote by µt (s, v0 , ǫ) and by V t (s, v0 , ǫ) the mean and the covariance matrix of the
+skills obtained using the KF algorithm with the scale s, and initialization parameters v0 and ǫ. Then
+µt (s, s2 v0 , s2 ǫ) = sµt (1, v0 , ǫ)
+V t (s, s2 v0 , s2 ǫ) = s2 V t (1, v0 , ǫ).
+
+(62)
+(63)
+
+For the vSKF algorithm we will obtain v t (s, s2 v0 , s2 ǫ) = s2 v t (1, v0 , ǫ) while for the sSKF algorithm,
+vt (s, s2 v0 , s2 ǫ) = s2 vt (1, v0 , ǫ), where v t and vt are shown to depend on v0 and ǫ. On the other hand, for
+the fSKF and the SG, the mean depends solely on v and thus we obtain µt (s, s2 v) = sµt (1, v).
+Proof. See Appendix B.
+Proposition 2 simply says that the scale, s, is not identifiable from the data so we can ignore it, e.g., use
+s = 1 (which simplifies the notation) and adjust only the parameters β, ǫ, and v0 . The scale may be then
+included in the final results by multiplying the means µt (by s) and the co-/variances V t , v t , or vt (by
+s2 ).
+Nevertheless, by introducing the scale we are able to compare our rating algorithms with those that can
+be found in the literature.
+In particular, we can rewrite (61)
+µt ← µt−1 + Ksxt gt ,
+
+(64)
+
+where we use v = Ks2 with K being the adaptation step defined for the scale s = 1. Since K should be
+seen as the variance v, it clarifies the well-known variable-step strategy in the SG adaptation, where the
+step K is decreased after many games are played: this is when the posterior variance decreases.
+IV. F ROM SKILLS - OUTCOME MODELS TO NEW ONLINE RATINGS
+We will turn to the popular skills-outcome models that has been often used and find the functions
+g(z; yt ) and h(z; yt ) which must be used in the KF and the SKF algorithms
+• Thurston model [4] (binary games) uses yt = 0 for the away win and yt = 1 for the home win:
+
+
+
+
+L(z; yt ) = Φ (z) I yt = 1 + Φ (−z) I yt = 0 ,
+(65)
+
+
+
+
+g(z; yt ) = V (z)I yt = 1 − V (−z)I yt = 0 ,
+(66)
+
+
+
+
+h(z; yt ) = W (z)I yt = 1 + W (−z)I yt = 0 ,
+(67)
+Rz
+where Φ(z) = −∞ N (t) dt, N (t) = N (t; 0, 1), and
+N (z)
+,
+Φ z
+
+W (z) = −V ′ (z) = V (z) z + V (z) .
+V (z) =
+
+•
+
+Bradley-Terry model [5] (binary games), with yt = 0 (away win) and yt = 1 (home win)
+ 
+
+ 
+
+L(z; yt ) = FL z I yt = 1 + FL − z I yt = 0 ,
+
+g(z; yt ) = ln 10 yt − FL (z) ,
+h(z; yt ) = (ln 10)2 FL (z)FL (−z),
+
+(68)
+
+(69)
+
+(70)
+(71)
+(72)
+
+where we use the logistic function
+FL (z) =
+
+1
+.
+1 + 10−z
+
+(73)
+
+11
+
+•
+
+Davidson draw model [7], [35] with yt = 0 (away win), and yt = 1 (draw), and yt = 2 (home win)
+p
+
+
+
+
+
+
+L(z; yt ) = FD (−z)I yt = 0 + κ FD (−z)FD (z)I yt = 1 + FD (z)I yt = 2 ,
+(74)
+
+g(z; yt ) = 2 ln 10 ŷt − GD (z)
+(75)
+z
+−z
+κ10 + 4 + κ10
+,
+(76)
+h(z; yt ) = (ln 10)2
+(10z + κ + 10−z )2
+where ŷt = 12 y may be treated as the “score” of the game, and
+10z
+FD (z) = −z
+,
+10 + κ + 10z
+10z + κ/2
+GD (z) = −z
+.
+10 + κ + 10z
+
+(77)
+(78)
+
+Note that setting κ = 0, i.e., removing the possibility of draws, we obtain FL (z) = GD (z/2), i.e., we
+recover the equations of the Bradley-Terry model with halved scale. A simple, but less obvious
+observation is that, setting κ = 2, we obtain GD (z) = FL (z) and thus g(z; yt ) in (71) is half of (75).
+A direct consequence, observed in [35], is that, even if the Bradley-Terry and the Davidson models
+are different, their SG updates (61) may be identical.
+A. Comparison with TrueSkill algorithm
+The TrueSkill algorithms is derived assuming that, for given skills θ t , the outcome, yt , is obtained by
+discretization of a variable dt = zt + ut = xT
+t θ t + ut , i.e.,
+
+
+yt = I dt ≥ 0 ,
+(79)
+
+where ut is a zero-mean Gaussian variance with variance σ 2 . Thus, Pr {yt = y|zt } = L(zt /σ; y), where
+L(·, ·) is given by the Thurston equation (65). So while σ 2 is the variance of the variable ut , we may also
+treat σ as the scale in the Thurston model.5
+Considering the binary games, the TrueSkill algorithm, described in [36] and [1] for two players, may
+be summarized as follows (for m ∈ {it , jt }):
+v t ← v t−1 + ǫ1,
+ωt ← vt,it + v t,jt ,
+p
+σ̃t ← σ 1 + ωt /σ 2 ,
+
+(80)
+(81)
+(82)
+
+g̃t ← g(xT
+t µt−1 /σ̃t ; yt ),
+h̃t ← h(xT
+t µt−1 /σ̃t ; yt ),
+
+µt,m ← µt−1,m + xt,m vt,m
+
+σ2
+
+vt,m h̃t 
+,
+vt,m ← vt,m 1 − 2
+σ + ωt
+
+(83)
+(84)
+p
+
+g̃t σ
+,
+1 + ωt /σ 2
+
+(85)
+(86)
+
+where h(·; ·) and g(·; ·) are derived in (65)-(69) for the Thurston model.
+The differences with the vSKF algorithm are p
+the following: i) the scale used to calculate the fist and
+the second derivatives is increased by the factor 1 + ωt /σ 2 , and ii) the denominator of the update terms
+in (85) and (86) is not affected by ht as it is the case in the corresponding equations (48) and (49) of the
+vSKF algorithm. In particular, knowing that ωt ht ≤ ωt , we see that the posterior variance vt,m decreases
+faster in the vSKF algorithm than it does in the TrueSkill algorithm.
+5
+
+To be more precise, the variance σ 2 in the TrueSkill algorithm is proportional to the number of players in the team, F .
+
+12
+
+Numerical examples shown in Sec. V will allow us to asses the impact of these differences between
+the algorithms.
+B. Comparison with Glicko algorithm
+The Glicko algorithm, defined for two players in [21, Eqs. (9)-(10)] may be formulated using our
+notation as follows (for m ∈ {it , jt }):
+v t ← v t−1 + ǫt 1,
+ωt ← v t,it + v t,jt ,
+σ̃t,m ← σr(ωt − v t,m ),
+
+(87)
+(88)
+(89)
+
+g̃t,m ← g xT
+t µt−1 /σ̃t,m ; yt )
+
+h̃t,m ← h xT
+µ
+/σ̃
+;
+y
+t,m
+t
+t t−1
+
+µt,m ← µt−1,m + v t,m xt,m
+vt,m ← v t,m
+
+(90)
+(91)
+
+σ̃t,m g̃t,m
+,
+2
+σ̃t,m + vt,m h̃t,m
+
+2
+σ̃t,m
+
+(92)
+
+,
+
+(93)
+
+va
+,
+σ2
+
+(94)
+
+2
++ v t,m h̃t,m
+σ̃t,m
+
+where
+r(v) =
+
+r
+
+1+
+
+a = 3 ln2 10/π 2 is the factor which allows us to approximate the logistic distribution with the Gaussian
+distributions (see discussion in Sec. V-A), and g(z; yt ) and h(z; yt ) are defined for the Bradley-Terry
+model, respectively, in (71) and (72).
+The difference between gt , ht in the vSKF rating (based on the Bradley-Terry model) and g̃t,m , h̃t,m in
+the Glicko algorithm, is due to the presence of the factor r(ωt − v t,m ) which multiplies the scale in (89).
+However, this factor tends to unity when the variance of the opposing players decreases, as it is the case
+after convergence. Then, we may use g̃t,m ≈ gt and h̃t,m ≈ ht .
+Further, if we use v t,m instead of ωt in the denominator of the mean (48) and of the variance (49)
+updates in the vSKF algorithm, we will obtain, respectively, the Glicko updates of the mean, (92) and of
+the variance, (93). But, because v t,m < ωt , the update step size is always larger in the Glicko algorithm
+comparing to the vSKF algorithm.
+To asses the impact of the above differences on the performance we will evaluate the Glicko algorithm
+using numerical examples in Sec. V.
+C. Comparison with Elo algorithm
+Considering again the binary games and using the Bradley-Terry model, the SG update (64) may be
+written as
+
+µt ← µt−1 + K̃sxt yt − FL (zt ) ,
+(95)
+
+where K̃ absorbs the term ln 10 from (71), and we recognize (95) as the well-known Elo rating algorithm.
+The fact that the Elo algorithm may be seen as the SG update in the Bradly-Terry model has been already
+noted before, e.g., in [37], [35], [18].
+On the other hand, using the Thurston model and after simple algebraic transformations of (66) we
+obtain the following SG update:
+
+µt ← µt−1 + Ksxt yt − Φ(zt ) ξ(zt ),
+(96)
+
+13
+
+
+
+where ξ(z) = N (z)/ Φ(z)Φ(−z)] .
+Since ξ(z) is not constant, i.e., it depends on z, (96) is not the same as the Elo rating algorithm proposed
+initially by [26] under the following form:
+
+µt ← µt−1 + Ksxt yt − Φ(zt ) .
+(97)
+
+In other words, the original version of the Elo algorithm (97) does not implement the SG update in
+the Thurston model. We indicate it merely for completeness of the analysis because, nowadays, the Elo
+algorithm is practically always used with the Bradley-Terry model as defined in (95).
+
+V. N UMERICAL EXAMPLES
+We will proceed in two steps. First, in order to assess the effect of approximations, we will use the
+synthetic data generated using the predefined skills-outcome models and the Gaussian random walk for
+skills dynamics defined in Sec. II. In this way, knowing exactly the model underlying the data and using
+it for the derivation of the algorithm, the eventual differences between the algorithms will be due to the
+approximations. Further the effect of the model mismatch may be also assessed using the algorithms based
+on the model different from the one used to generate the data.
+The insight obtained from the synthetic examples will allow us to interpret the results obtained from
+empirical data.
+A. Synthetic data
+We suppose there are M players in the pool and every “day” (or any other time unit) there are J = M/2
+games with random scheduling; the season lasts D days. The time dependence required by (5) is defined
+as τ (1) = τ (2) = . . . = τ (J) = 0, τ (J + 1) = τ (J + 2) = . . . = τ (2J) = 1 etc. The number of games in
+the season is equal to T = DJ. We use M = 20 (J = 10) and D = 100, thus T = 1000.6
+To generate the sequence of skills θ t , t = 1, . . . , T we draw θ0,m from a zero-mean, unit-variance
+Gaussian distribution; the remaining skills are obtaied using (7) with β̂ = 0.998 and ǫ̂ = 1 − β̂ 2 . In this
+2
+way we guarantee that E[θt,m ] = 0 and E[θt,m
+] = 1. To evaluate how the perturbation of the skills affects
+the algorithms, after the day dswitch = 40, we remove the first mswitch = 5 players, which are already
+in the game, and replace them with new players whose skills θdswitch ,m are generated from zero-mean,
+unit-variance Gaussian distribution; for d > dswitch we use again the random walk (7). Such a “switch”
+scenario loosely reflects the case of new players joining the online games7 andallows us to evaluate how
+the algorithms deal with abrupt changes of the skills.
+The algorithms adjust to this “switch” by zeroing the means and adjusting the variances of the newly
+arrived players, that is, setting µt−1,m ← 0, vt−1,m ← v0 , m = 1, . . . , mswitch , where t = Mdswitch /2. For
+the KF rating we also have to zero the covariances, Vt−1,m,l ← 0, m = 1, . . . , mswitch , ∀l, while in the
+sSKF rating we recalculate the average variance as vt−1 ← vt−1 + (v0 − vt−1 )mswitch /M.
+The results of binary games, yt , are generated with the probability defined by the Thurston model,
+i.e., the probability of the home win is defined by
+pt = Pr {yt = 1} = Φ(xT
+t θ t /σ),
+
+(98)
+
+where σ 2 may be interpreted as the variance of the Gaussian noise added to difference between the skills
+before the discretization defined in (79). Thus, increasing σ the observations becomex more “noisy”. Most
+of the results are shown for σ = 1 and later we will asses the impact of larger σ.
+6
+This bears a resemblance to a “typical” football season where, on average each team plays once per week. In practice, of course, the
+number of weeks, D, cannot be too large, e.g., D < 40.
+7
+The analogy is admittedly of limited scope because the online games do not care about the total number of players, M , to be constant.
+On the other hand, we do care, because we want to be able apply the KF rating as defined in Sec. III-B
+
+14
+
+ε
+ε
+ε
+
+= 0.004
+= 0.008
+
+g replacements
+β = 0.98
+d
+
+ε
+ε
+ε
+
+= 0.98
+= 0.998
+= 1.0
+
+−1
+
+β
+β
+β
+
+= 0.001
+= 0.002
+= 0.004
+
+= 0.98
+= 0.998
+= 1.0
+
+−1
+
+Dd
+
+10
+
+Dd
+
+10
+
+β
+β
+β
+
+= 0.002
+
+0
+
+20
+
+40
+
+d
+a)
+
+60
+
+PSfrag replacements
+100
+β = 0.98
+d
+
+80
+
+0
+
+20
+
+40
+
+d
+b)
+
+60
+
+80
+
+100
+
+Fig. 1. Average KL divergence for different values of β and ǫ used in the KF rating algorithm based on a) the Thurston model and b) the
+Bradley-Terry model. The loosely dashed lines indicate the median and the third quartile (only for β = 1 and a) ǫ = 0.004, b) ǫ = 0.002).
+
+The performance of the algorithm is measured by the KL divergence between the actual distribution of
+the games outcomes (defined by pt ) and the estimated distribution (defined by L(βt xT
+t µt−1 /s; 1))
+Dt = pt log
+
+pt
+1 − pt
++ (1 − pt ) log
+T
+L(βt xt µt−1 /s; 1)
+L(βt xT
+t µt−1 /s; 0)
+
+(99)
+
+that can be evaluated here because we know how data is generated.
+Of course, Dt obtained from randomly generated data is also random, so we show in Fig. 1 its mean
+obtained from 5000 simulation runs of the KF rating algorithm based on the Thurston as well as on the
+Bradley-Terry models, for different values of β and ǫ, with s = σ, and v0 = 1. Note that, for the Thurston
+model, using v0 = 1 and s = σ, the same model is used for the data generation and for the rating.
+To smooth the results, we show the average of all the results obtained in the same day d. We observe
+that the performance of the algorithm depends on β being close to the actual value in the data-generation
+model: once β is suitably chosen, the effect of ǫ is of lesser importance. Nonetheless, the best mean
+performance is obtained with ǫ = ǫ̂ = 0.004 (for the Thurston model) and ǫ = 0.002 (for the BradleyTerry model). These parameters will be also used in other algorithms.
+To put this (rather limited) importance of ǫ into perspective, we also show in Fig. 1 the median and
+the third quartile (loosely dashed lines, for β = 1 and the optimal value of ǫ): it indicates that there is
+more variability due to the randomness of the metric Dd than due to the change in ǫ.
+To answer the question why, using two different models (Thurston and Bradley-Terry) practically the
+same results are obtained in Fig. 1a and Fig. 1b, we first note that the logistic distribution (underlying the
+Bradley-Terry model with the scale sL ) has the variance equal to s2L /a (where a ≈ 1.6, is defined after (94)),
+while the Gaussian distribution (underpinning the Thurston model with the scale sG ) has the√
+variance s2G .
+By equalizing the second moments of both distributions we obtain the relationship sL = sG a ≈ 1.3sG .
+In other words,
+√ the Thurston model may be approximated with the Bradley-Terry model if we increase
+the scale by a.
+On the other hand, from Proposition 2 we know that we may turn
+√ the table: we might keep the scale
+sL = 1 and then multiply the parameters v0 and ǫ by the factor 1/ a ≈ 0.78; since it is close to one, the
+effect of using the same scale and parameters in different models is merely visible. Nonetheless, using
+a value of ǫ ≈ 0.5ǫ̂ improves (slightly) the performance. The only remaining element which should be
+adjusted is the initial uncertainty defined by the variance v0 ; in the rest of this work, for the Bradley-Terry
+
+15
+
+2 × 10−1
+
+2 × 10−1
+
+KF
+v-SKF
+s-SKF
+f-SKF, v = 0.1
+f-SKF, v = 0.2
+SG, K = 0.1
+SG, K = 0.15
+
+6 × 10−2
+
+10−1
+
+Dd
+
+Dd
+
+10−1
+
+6 × 10−2
+
+4 × 10−2
+3 × 10−2
+
+KF
+v-SKF
+s-SKF
+f-SKF, v = 0.05
+f-SKF, v = 0.1
+SG, K = 0.05
+SG, K = 0.1
+
+4 × 10−2
+0
+
+20
+
+40
+
+d
+a)
+
+60
+
+80
+
+100
+
+3 × 10−2
+
+0
+
+20
+
+40
+
+d
+b)
+
+60
+
+80
+
+Fig. 2. The average KL divergence, when using the KF, the vSKF, the sSKF, the fSKF and the SG rating algorithms; β = 1 and a) the
+Thurston model with ǫ = 0.004 and v0 = 1; b) the Bradley-Terry model with ǫ = 0.002 and v0 = 0.5.
+
+model we will use v0 = 0.5.
+So, not very surprisingly, the similarity of the results for two different models is explained by the
+similarity of the models which happens due to our decision to use base-10 logarithm in the logistic
+function (73).
+We implement all the rating algorithms we proposed and comparing them in Fig. 2 we observe that:
+• Without surprise, the KF ensures the best performance for both, the initialization phase (after d = 1),
+and the post-switch phase (after d = 40).
+• Rather surprisingly, the vSKF and the KF ratings performs quasi-identically which suggests that the
+posterior correlation between the skills is not relevant even if the number of players in our example
+is moderate.
+• The sSKF rating performs very well in the initialization phase because all the players have roughly
+the same variance and this is the assumption underpinning the algorithm. On the other hand, in the
+post-switch phase the variance of the players is disparate and then the convergence speed decreases.
+• In the fSKF algorithm we may appreciate the trade-off: to increase the convergence speed we need
+larger v, while the performance after convergence is improved with smaller v. The value v which
+ensures the best performance after convergence may be deduced from the sSKF algorithm, where
+we have obtained vT ≈ 0.1 for the Thurston model and vT ≈ 0.8 for the Bradley-Terry model. Note
+again, that this stays in line with the argument of matching the Gaussian and the
+√ logistic distributions:
+the relation between the posterior variances after convergence is close to 1/ a.
+• The SG shares the drawbacks of the fSKF rating: larger K improves the convergence speed at the
+expense of poorer performance after convergence. Note again the halving of the step size, K, for the
+Bradley-Terry model: remember, K has the meaning of the variance and thus the same principle of
+matching the logistic and the Gaussian distributions we mentioned above applies.
+Overall, the important conclusions are:
+• The vSKF algorithm is the best candidate for simple rating: it exploits the temporal model in the
+data and does not suffer loss comparing to the KF rating,
+• Opting for further simplifications leads to some loss where, despite its simplicity, the SG rating offers
+the performance comparable to other SKF ratings, and
+• The model mismatch (applying the algorithms based on the Bradley-Terry model to the data generated
+using the Thurston model, see Fig. 1b) does not affect the performance in any significant manner. And
+
+100
+
+16
+
+v-SKF
+
+Glicko
+TrueSkill
+
+Dd
+
+10−1
+
+0
+
+20
+
+40
+
+d
+
+60
+
+80
+
+100
+
+Fig. 3. The average (solid line) and median (loosely dashed line) KL divergence, when using the vSKF (ǫ = 0.004 and v0 = 1), the
+TrueSkill (ǫ = 0.004 and v0 = 1) and the Glicko (ǫ = 0.002 and v0 = 0.5) rating algorithms; β = 1.
+
+while at first it may appear counter-intuitive, we should note that the performance of the algorithms
+is not evaluated by their ability to estimate the skills, θ t , but rather by their predictive capability.
+Thus, using the Bradley-Terry model, the estimate µt may be, indeed, far from the actual value of
+θ t , because a different model if fitted to the data, but the prediction is little affected.
+We apply now the TrueSkill and the Glicko algorithms to the same data set and show the results in Fig. 3,
+where we observe that the Glicko and the vSKF algorithms yield practically indistinguishable results. This
+observations stays in line with the similarity of both algorithms which we observed in Sec. IV-B.
+On the other hand, the TrueSkill algorithms, despite of being based on the same (Thurston) model
+which was used for data generation, suffers a small loss after convergence. This can be attributed to the
+adaptation step being increased comparing to the vSKF algorithm as we already noted in Sec. IV-A. To
+put this difference in performance into perspective, we show also the median curve of the metrics; since
+the latter is much further from the mean than the differences among the algorithms, the “loss” of the
+TrueSkill may have no practical importance.
+Before moving to the empirical data, we show in Fig. 4 the results of the vSKF and the SG ratings
+obtained for different values of σ = s. Instead of the metric (99), which we will not be able to calculate
+in the empirical data, we show here the log-score
+X 
+
+LSt = −
+I yt = y ℓ(xT
+(100)
+t µt−1 /s; y),
+y∈Y
+
+where Y is the set of possible game outcomes.
+We see that increasing σ, i.e., making the results more “noisy”, the advantage of exploiting the temporal
+relationship between the skills is lost and the results obtained using the vSKF rating are very similar to
+those yield by the SG rating. This leads to a cautionary note: if the uncertainty in the observations (that
+is, the “noise”) is large, the simple algorithms (such a the SG rating) may provide satisfactory results.
+B. Empirical data
+We consider now the empirical results from
+• The ice-hockey games in the National Hockey Ligue (NHL) in the seasons 2005/06 – 2014/15 except
+for the short season 2012/13. In this pre-expansion period, there were M = 30 teams and the rules
+
+17
+
+0.7
+
+σ=3
+σ=2
+
+0.6
+0.5
+
+v-SKF
+SG
+
+Dd
+
+σ=1
+
+0.4
+
+σ = 0.5
+
+0.3
+0
+
+20
+
+40
+
+60
+
+d
+
+80
+
+100
+
+Fig. 4. The average log-score obtained using for the Thurston model and the vSKF (ǫ = 0.004 and v0 = 1) and the SG (K = 0.15σ)
+ratings for different observation noise levels σ. The black horizontal line indicates the value H = − log 0.5 ≈ 0.69 which is the entropy of
+uniformly distributed binary variable, see (106).
+
+leading to the draws were kept the same.8 We can thus treat the games as binary if we use the final
+result, or as ternary (i.e., with draws) if we use the regulation-time results (before overtime/shootouts).
+Each team plays 82 games so there are T = 1230 = 41M games in each season.
+• The football games of the English Premier Ligue (EPL) seasons 2009/10 – 2018/19. There are
+M = 20 teams, each playing 38 games, thus T = 380.
+• The Americal footbal games of the National Football Ligue (NFL) in the seasons 2009/10 – 2018/19.
+There are M = 32 teams, each playing 16 games, so T = 256.
+In the team games, the HFA is present and, in the rating methods it is customary to take it into account
+by artificially “boosting” the skill of the home player (here, team): in all the functions taking zt /s as the
+argument we will rather use zt /s + η, e.g., in (1) we use L(zt /s + η; yt ) instead of L(zt /s; yt ). The HFA
+boost, η, must be found from data as we show in the following; note also that η does not depend on the
+scale s.
+To consider the “initialization” period we average (100) over the first tinit games
+t
+
+LSinit =
+
+init
+1 X
+
+tinit t=1
+
+LSt ,
+
+(101)
+
+where, tinit = 4M, which means that, in the first tinit games, each team played, on average, 8 times.
+The performance after “convergence” is evaluated by averaging (100) over the second half of the season
+2
+LSfinal =
+T
+
+T
+X
+
+LSt .
+
+(102)
+
+t=T /2+1
+
+Further, we take the mean of (101) and (102) over all seasons considered.
+We will use the Bradley-Terry model in the binary games (in the NHL) and the HFA-boost parameter
+8
+
+Starting with the 2005/06 season, draws are not allowed and are resolved through shootouts if the game was tied in the overtime. Starting
+with the season 2015/16 the number of skaters in the overtime was changed from four to three.
+
+18
+
+(v0 , ǫ)
+v-SKF LSinit
+LSfinal
+(K)
+SG
+LSinit
+LSfinal
+H
+
+NHL
+Bradley-Terry
+η = 0.08
+(0.01, 3 · 10−5 )
+0.688
+0.678
+(0.01)
+0.688
+0.678
+0.688
+
+NHL
+EPL
+NFL
+Davidson
+Davidson
+Davidson
+η = 0.05, κ = 0.63 η = 0.10, κ = 0.67 η = 0.06, κ = 5.5 · 10−3
+(0.003, 3 · 10−5 )
+(0.04, 10−7)
+(0.02, 10−4 )
+1.063
+1.055
+0.679
+1.064
+0.974
+0.640
+(0.003)
+(0.015)
+(0.015)
+1.063
+1.052
+0.678
+1.064
+0.976
+0.641
+1.071
+1.061
+0.700
+
+TABLE I
+L OG - SCORE OBTAINED IN THE NHL, THE NFL, AND THE EPL GAMES USING THE THE V SKF AND THE SG ALGORITHMS ( THE KF AND
+THE KF RATINGS YIELD THE SAME RESULTS ). T HE ENTROPY, H , CALCULATED FROM (106) IS SHOWN AS A REFERENCE . T HE
+B RADLEY-T ERRY MODEL CORRESPONDS TO THE BINARY GAMES ( IN NHL), WHILE THE DAVIDSON MODEL TAKES INTO ACCOUNT THE
+TERNARY OUTCOMES . D UE TO A VERY SMALL FREQUENCY OF DRAWS IN THE NFL, THE RESULTS ARE PRACTICALLY BINARY BUT THE
+PRESENCE OF THE DRAWS AFFECTS THE ENTROPY WHICH EXCEEDS THE LIMIT FOR THE BINARY VARIABLE .
+
+η is evaluated as [35]
+η = log10
+
+f1
+,
+f0
+
+(103)
+
+where fy is the estimated frequency of the game outcome y ∈ Y. Here, from the nine NHL seasons under
+study we obtain f0 ≈ 0.45 and f1 ≈ 0.55, and thus η = 0.08.
+For the ternary games we use the Davidson model (74)-(76), and we estimate the home- and the draw
+parameters, η and κ, using the strategy shown in [35], [38]
+1
+f2
+log10 ,
+2
+f0
+f1
+,
+κ= √
+f0 f2
+η=
+
+(104)
+(105)
+
+where, as before, fy are the frequencies of the events y ∈ {0, 1, 2} estimated from the games in all seasons
+considered. These are i) for the NHL: f0 ≈ 0.33, f1 ≈ 0.24, and f2 ≈ 0.43, ii) for the EPL: f0 ≈ 0.29,
+f1 ≈ 0.25, and f2 ≈ 0.46, and iii) for the NFL: f0 ≈ 0.43, f1 ≈ 0.003, and f2 ≈ 0.57. The corresponding
+values of η and κ are shown in Table I.
+We consistently use β = 1 and s = 1; the parameters v0 , ǫ (for the vSKF algorithm), and the update
+step K (for the SG algorithm) which yield the best results are shown them in Table I; they were found
+by scanning the space of admissible values.
+The log-score results shown in Table I may be compared to the log-score of the prediction based on
+the frequencies of the events yt , i.e.,
+X
+H=−
+fy log fy ,
+(106)
+y∈Y
+
+which is the entropy calculated from the estimated frequencies.
+The conclusions drawn from the synthetic data also hold here: the performance of the vSKF and the
+KF algorithms is virtually the same. The SG rating is taken as the representative of other simplified
+algorithms.
+We observe in Table I that the predictions in the NHL are merely better than the entropy and, referring
+to Fig. 4 we might attribute it to the “noisy” game outcomes, which would also explain why the results
+produced by the vSKF and the SG algorithms are virtually the same, and why we cannot see any differences
+even in the initialization phase of the algorithm.
+
+19
+
+Chelsea
+
+0.3
+0.2
+
+μτ
+
+0.1
+0.0
+−0.1
+
+Aston Villa
+Sunderland
+
+Wolves
+
+−0.2
+Portsmouth
+
+−0.3
+50
+
+100
+
+τ
+
+150
+
+200
+
+250
+
+Fig. 5. Evolution of the (selected) means µτ indexed with the time-stamp τ (t) in the 2009-10 EPL season obtained using the vSKF (solid
+lines) and the SG (dashed lines) rating algorithms.
+
+By the same token, we can say that the noise decreases in NFL results, and more so in the EPL ones:
+so we can distinguish between the performance of the initialization and after the convergences. Yet, the
+improvement due to the use of the vSKF and the KF algorithms is still negligible. This also can be
+intuitively understood from the parameters we found to minimize the average log-score. Note that, for the
+EPL we use the variance v0 = 0.04 and s = 1, but, applying Proposition 2 we might equally well use
+v0 = 1 and s = 5; the latter scenario may be related to a model with large outcome noise σ as shown in
+Fig. 4.
+The difference between the vSKF and the SG algorithms may be also appreciated by inspecting the
+temporal evolution of µt , shown in Fig. 5 and obtained for the 2009/10 EPL season. While the differences
+in the log-score results shown in Table I are rather small, we can appreciate that the skills estimated using
+the vSKF converge very fast to the final values (after 50 days, approx.), to which the SG rating also
+converges but the time required is longer (200 days, approx.); this effect is particularly notable for the
+teams with extreme values of the means, that is, for very strong, as well as very weak teams.
+VI. C ONCLUSIONS
+In this work we propose a class of online Bayesian rating algorithms for one-on-one games which
+can be used with any skills-outcome model and which encompasses the case of the group sports, a case
+typically encountered in eSports. By using various simplifications to represent the posterior covariance
+matrix in the Gaussian distributions, we obtain different algorithm in the same class.
+Deriving such a generic algorithms should not only streamline the passage from the skills-outcome
+model to the actual online algorithm but also provides a fresh insight into the relationship between the
+existing rating methods such as the Elo, the Glicko and the TrueSkill algorithms. Their differences and
+similarities are discussed and we demonstrate that, the Glicko and the TrueSkill algorithms may be seen
+as instances of our generic algorithms. This is an interesting observation in its own right as it unifies the
+view on these two popular algorithms, which, even if derived from different principles, are now shown
+in a common framework. We also provide a new insight into the interpretation of the Elo algorithm.
+We show numerical examples applied to the synthetic– and the empirical data, which provide guidelines
+about the conditions under which the algorithms should be used. In particular, our results indicate that
+the differences between the KF rating (with a full representation of the covariance matrix) and the vSKF
+rating (only diagonal of the covariance is preserved) are negligible. The vSKF is, in fact, very similar to
+the Glicko and the TrueSkill algorithms.
+
+20
+
+We show that further simplification of the covariance matrix may be counterproductive and the simple,
+stochastic gradient (SG) rating may be then a competitive solution, even though it cannot be treated as
+a Bayesian algorithm as it only provides the point estimate of the skills. The simple SG-based rating is
+indeed appealing and particularly useful in very noisy data, i.e., when the prediction of the game outcomes
+cannot be reliably inferred from the estimated skills.
+These observations, made in the synthetic setup are then confirmed in empirical data, where we analyse
+the game results from the professional hockey, the American football, and the association football games.
+Indeed, the differences between the vSKF and the SG results are, at best, small but notable (in football,
+where the data is relatively not noisy) and, at worst, negligible (in hockey, where the game outcomes are
+very noisy). In fact, the very concept of observational noise in the sport outcomes received very little
+attention in the literature and we believe studying it in more depth is an interesting research venue.
+Overall conclusion regarding the applicability of the algorithms is that, in reliable (not noisy) data,
+the online Bayesian rating algorithm may provide improved convergence, and potential skill-tracking
+capability. On the other hand, the reality of sport competition outcomes may not conform to these
+requirements and, when dealing with the noisy observations, the simple algorithms, such as the Elo
+rating (which is a an instantiation of the SG rating) may be equally useful.
+A PPENDIX A
+P ROOF OF P ROPOSITION 1
+Our goal is to find the Gaussion distribution f˜(θ) = N (θ; µ, V ) under the form (16) minimizing the
+KL divergence with a given distribution f (θ)
+Z
+
+f (θ)
+˜
+DKL f ||f = f (θ) log
+dθ
+(107)
+f˜(θ)
+Z
+1
+1
+f (θ)(θ − µ)T V −1 (θ − µ) dθ.
+(108)
+∝ log det(2πV ) +
+2
+2
+
+Gradient of (108) with respect to µ is zeroed for µ = E[θ], and this, irrespectively of the form of V ,
+this proves (17). This is a well-known result, as well, as the one which says that, to minimize (108) we
+also have to use V = Cov[θ] = E[(θ − µ)T (θ − µ)], this is the claim in (18).
+Now assume that we use the vector-covariance model, i.e., we have to find f˜(θ) = N (θ; µ, diag(v)).
+Then, (108) becomes
+M
+M
+X
+ 1X
+Var[θm ]
+˜
+DKL f ||f ∝
+log vm +
+,
+2 m=1
+2vm
+m=1
+
+(109)
+
+where Var[θm ] is the variance of θm .
+Zeroing the derivative of (109) with respect to vm yields vm = Var[θm ], that is, v = di(Cov[θ]) which
+proves (19).
+Finally, if we adopt scalar-covariance model f˜(θ) = N (θ; µ, vI), (109) becomes
+M
+ M
+1 X
+˜
+DKL f ||f ∝
+Var[θm ],
+log v +
+2
+2v m=1
+PM
+whose derivative with respect to v is zeroed if v = M1
+m=1 Var[θm ], and this proves (20).
+
+(110)
+
+A PPENDIX B
+P ROOF OF P ROPOSITION 2
+ˇ
+For brevity, let us use the symbol (·) to denote only the scaled variables, e.g., V̌ ≡ V (s, s2 v0 , s2 ǫ); the
+unscaled ones are used without the symbols, e.g., V ≡ V (1, v0 , ǫ).
+
+21
+
+The proof is done by induction: by construction, the initialization satisfied the Proposition, i.e., V̌ 0 =
+s2 I = s2 V 0 , and we suppose that V̌ t−1 = s2 V t−1 and µ̌t−1 = sµt−1 hold. Then we must have
+ˇ
+T
+2
+βt xT
+t µ̌t−1 = sβt xt µt−1 , and gt and ht are not affected by scaling. Then we also have V t = βt V̌ t−1 +
+s2 ǫt I = s2 V t and ω̌t = s2 ωt , so (41) may be written as
+sgt
+(111)
+µ̌t = βt µ̌t−1 + Vˇ t xt 2
+s + ht ω̌t
+sgt
+= βt sµt−1 + s2 V t xt 2
+= sµt ,
+(112)
+s + s2 ht ωt
+and (43), as
+ht
+ˇ
+V̌ t = Vˇ t−1 + Vˇ t−1 xt xT
+t V t−1 2
+s + ht ω̌t
+ht
+= s2 V t .
+= s2 V t−1 + s4 V t−1 xt xT
+t V t−1 2
+s + s2 ht ωt
+
+(113)
+(114)
+
+This ends the proof for the KF algorithm. By extension all other algorithms derived from the KF algorithm
+must satisfy the claims of Proposition 2, which may be also proven with the steps shown above applied
+to the vSKF, sSKF, and fSKF algorithms.
+R EFERENCES
+[1] R. Herbrich and T. Graepel, “TrueSkill(TM): A Bayesian skill rating system,” Tech. Rep., January 2006. [Online]. Available:
+https://www.microsoft.com/en-us/research/publication/trueskilltm-a-bayesian-skill-rating-system-2/
+[2] H. David, The Method of Paired Comparison. Charles Griffin & Co. Ltd., 1963.
+[3] M. Cattelan, “Models for paired comparison data: A review with emphasis on dependent data,” Statist. Sci., vol. 27, no. 3, pp. 412–433,
+08 2012.
+[4] L. L. Thurston, “A law of comparative judgement,” Psychological Review, vol. 34, pp. 273–286, 1927.
+[5] R. A. Bradley and M. E. Terry, “Rank analysis of incomplete block designs: 1 the method of paired comparisons,” Biometrika, vol. 39,
+no. 3-4, pp. 324–345, 1952.
+[6] P. V. Rao and L. L. Kupper, “Ties in paired-comparison experiments: A generalization of the Bradley-Terry
+model,” Journal of the American Statistical Association, vol. 62, no. 317, pp. 194–204, 1967. [Online]. Available:
+https://amstat.tandfonline.com/doi/abs/10.1080/01621459.1967.10482901
+[7] R. R. Davidson, “On extending the Bradley-Terry model to accommodate ties in paired comparison experiments,” Journal of the
+American Statistical Association, vol. 65, no. 329, pp. 317–328, 1970. [Online]. Available: http://www.jstor.org/stable/2283595
+[8] A. Agresti, “Analysis of ordinal paired comparison data,” Journal of the Royal Statistical Society: Series C (Applied Statistics),
+vol. 41, no. 2, pp. 287–297, 1992. [Online]. Available: https://rss.onlinelibrary.wiley.com/doi/abs/10.2307/2347562
+[9] L. Fahrmeir and G. Tutz, “Dynamic stochastic models for time-dependent ordered paired comparison systems,” Journal of the American
+Statistical Association, vol. 89, no. 428, pp. 1438–1449, 1994. [Online]. Available: http://dx.doi.org/10.1093/biomet/39.3-4.324
+[10] J. Goddard, “Regression models for forecasting goals and match results in association football,” International Journal of Forecasting,
+vol. 21, no. 2, pp. 331 – 340, 2005. [Online]. Available: http://www.sciencedirect.com/science/article/pii/S0169207004000676
+[11] M. J. Maher, “Modelling association football scores,” Statistica Neerlandica, vol. 36, no. 3, pp. 109–118, 1982. [Online]. Available:
+https://onlinelibrary.wiley.com/doi/abs/10.1111/j.1467-9574.1982.tb00782.x
+[12] D. Karlis and I. Ntzoufras, “Bayesian modelling of football outcomes: using the Skellam’s distribution for the goal difference,” IMA
+Journal of Management Mathematics, vol. 20, no. 2, pp. 133–145, 09 2008. [Online]. Available: https://doi.org/10.1093/imaman/dpn026
+[13] G. Boshnakov, T. Kharrat, and I. G. McHale, “A bivariate Weibull count model for forecasting association
+football scores,” International Journal of Forecasting, vol. 33, no. 2, pp. 458 – 466, 2017. [Online]. Available:
+http://www.sciencedirect.com/science/article/pii/S0169207017300018
+[14] A. A. Manderson, K. Murray, and B. A. Turlach, “Dynamic Bayesian forecasting of AFL match results using the Skellam
+distribution,” Australian & New Zealand Journal of Statistics, vol. 60, no. 2, pp. 174–187, 2018. [Online]. Available:
+https://onlinelibrary.wiley.com/doi/abs/10.1111/anzs.12225
+[15] E. Wheatcroft, “A profitable model for predicting the over/under market in football,” International Journal of Forecasting, vol. 36,
+no. 3, pp. 916 – 932, 2020. [Online]. Available: http://www.sciencedirect.com/science/article/pii/S0169207019302559
+[16] A. Y. C. Kuk, “Modelling paired comparison data with large numbers of draws and large variability of draw percentages among
+players,” Journal of the Royal Statistical Society. Series D (The Statistician), vol. 44, no. 4, pp. 523–528, 1995. [Online]. Available:
+http://www.jstor.org/stable/2348900
+[17] C. Ley, T. V. de Wiele, and H. V. Eetvelde, “Ranking soccer teams on the basis of their current strength: A
+comparison of maximum likelihood approaches,” Statistical Modelling, vol. 19, no. 1, pp. 55–73, 2019. [Online]. Available:
+https://doi.org/10.1177/1471082X18817650
+[18] J. Lasek and M. Gagolewski, “Interpretable sports team rating models based on the gradient descent algorithm,” International Journal
+of Forecasting, 2020. [Online]. Available: http://www.sciencedirect.com/science/article/pii/S0169207020301849
+
+22
+
+[19] L. Fahrmeir, “Posterior mode estimation by extended Kalman filtering for multivariate dynamic generalized linear models,” Journal of the
+American Statistical Association, vol. 87, no. 418, pp. 501–509, 1992. [Online]. Available: https://www.jstor.org/stable/pdf/2290283.pdf
+[20] M. E. Glickman, “Paired comparison models with time-varying parameters,” Ph.D. dissertation, Harvard University, 1993.
+[21] ——, “Parameter estimation in large dynamic paired comparison experiments,” Journal of the Royal Statistical Society: Series C
+(Applied Statistics), vol. 48, no. 3, pp. 377–394, 1999. [Online]. Available: http://dx.doi.org/10.1111/1467-9876.00159
+[22] L. Knorr-Held, “Dynamic rating of sports teams,” Journal of the Royal Statistical Society. Series D (The Statistician), vol. 49, no. 2,
+pp. 261–276, 2000. [Online]. Available: http://www.jstor.org/stable/2680975
+[23] L. Held and R. Vollnhals, “Dynamic rating of European football teams,” IMA Journal of Management Mathematics, vol. 16, no. 2,
+pp. 121–130, Jan. 2005. [Online]. Available: https://doi.org/10.1093%2Fimaman%2Fdpi004
+[24] S. J. Koopman and R. Lit, “A dynamic bivariate Poisson model for analysing and forecasting match results in the English premier
+league,” J. R. Statist. Soc. A, vol. 178, pp. 167–186, 2015.
+[25] ——, “Forecasting football match results in national league competitions using score-driven time series
+models,” International Journal of Forecasting, vol. 35, no. 2, pp. 797 – 809, 2019. [Online]. Available:
+http://www.sciencedirect.com/science/article/pii/S0169207018302048
+[26] A. E. Elo, The Rating of Chess Players, Past and Present. Ishi Press International, 2008.
+[27] T. K. Moon and W. C. Stirling, Mathematical Methods and Algorithms for Signal Processing. Prentice Hall, 2000.
+[28] M. Ingram, “How to extend Elo: a Bayesian perspective,” Journal of Quantitative Analysis in Sports, 2021.
+[29] D. Barber, Bayesian reasoning and Machine Learning. Cambridge University Press, 2012.
+[30] C. Paleologu, J. Benesty, and S. Ciochină, “Study of the general Kalman filter for echo cancellation,” IEEE Trans. Audio, Speech,
+Lang. Process., vol. 21, no. 8, pp. 1539–1549, 2013.
+[31] FIDE, “Internation chess federation: ratings change calculator,” 2019. [Online]. Available: https://ratings.fide.com/calculator rtd.phtml
+[32] “World football Elo ratings,” 2020. [Online]. Available: https://www.eloratings.net/
+[33] FiveThirtyEight.
+(2020)
+How
+our
+NFL
+predictions
+work.
+[Online].
+Available:
+https://fivethirtyeight.com/methodology/how-our-nfl-predictions-work/
+[34] FIFA. (2018) Fédération international de football association: men’s ranking procedure. [Online]. Available:
+https://www.fifa.com/fifa-world-ranking/procedure/
+[35] L. Szczecinski and A. Djebbi, “Understanding draws in Elo rating algorithm,” J. Quant. Anal. Sports, vol. 16, no. 3, pp. 211–220,
+2020.
+[36] “Trueskill ratings system,” 2020. [Online]. Available: https://www.microsoft.com/en-us/research/project/trueskill-ranking-system/
+[37] F. J. Király and Z. Qian, “Modelling Competitive Sports: Bradley-Terry-Elo Models for Supervised and On-Line Learning of Paired
+Competition Outcomes,” arXiv e-prints, p. arXiv:1701.08055, Jan 2017.
+[38] L. Szczecinski, “Elo-mov rating algorithm: Generalization of the elo algorithm by modelling the discretized margin of victory,” 2020.
+
+

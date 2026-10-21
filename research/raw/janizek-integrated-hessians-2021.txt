@@ -1,0 +1,4389 @@
+arXiv:2002.04138v3 [cs.LG] 30 Jun 2020
+
+Explaining Explanations: Axiomatic Feature
+Interactions for Deep Networks
+
+Joseph D. Janizek∗
+Paul G. Allen School of Computer Science
+University of Washington
+Seattle, WA 98144
+jjanizek@cs.washington.edu
+
+Pascal Sturmfels ∗
+Paul G. Allen School of Computer Science
+University of Washington
+Seattle, WA 98144
+psturm@cs.washington.edu
+
+Su-In Lee ∗
+Paul G. Allen School of Computer Science
+University of Washington
+Seattle, WA 98144
+suinlee@cs.washington.edu
+
+Abstract
+Recent work has shown great promise in explaining neural network behavior. In
+particular, feature attribution methods explain which features were most important
+to a model’s prediction on a given input. However, for many tasks, simply knowing
+which features were important to a model’s prediction may not provide enough
+insight to understand model behavior. The interactions between features within the
+model may better help us understand not only the model, but also why certain features are more important than others. In this work, we present Integrated Hessians2 :
+an extension of Integrated Gradients that explains pairwise feature interactions in
+neural networks. Integrated Hessians overcomes several theoretical limitations of
+previous methods to explain interactions, and unlike such previous methods is not
+limited to a specific architecture or class of neural network. Additionally, we find
+that our method is faster than existing methods when the number of features is
+large, and outperforms previous methods on existing quantitative benchmarks.
+
+1
+
+Introduction and Prior Work
+
+Deep neural networks are one of the most popular classes of machine learning model. They have
+achieved state-of-the-art performance in problem domains ranging from natural language processing
+to image recognition [12, 27]. They have even outperformed other non-linear model types on
+structured tabular data [63]. Because neural networks have been traditionally difficult to interpret
+compared to simpler model classes, gaining a better understanding of their predictions is desirable for
+a variety of reasons. To the extent that these algorithms are used in automated decisions impacting
+humans, explanations may be legally required [61]. When used in high stakes applications, it is
+essential to ensure that models are making safe decisions for the right reasons [20]. During model
+development, interpretability methods can help debug undesirable model behavior [73].
+Feature attribution: There have been a large number of recent approaches to interpret deep neural
+networks, ranging from methods that aim to distill complex models into more simple models
+[76, 82, 57], to methods that aim to identify the most important concepts learned by a network
+∗
+2
+
+These authors contributed equally to this work and are listed alphabetically.
+Code available at https://github.com/suinleelab/path_explain
+
+Preprint. Under review.
+
+[33, 54, 53, 18, 16, 50]. One of the best-studied sets of approaches is known as feature attribution
+methods [4, 64, 46, 59]. These approaches explain a model’s prediction by assigning credit to each
+input feature based on how much it influenced that prediction. Although these approaches help
+practitioners understand which features are important, they do not explain why certain features are
+important or how features interact in a model. In order to develop a richer understanding of model
+behavior, it is therefore desirable to develop methods to explain not only feature attributions but
+also feature interactions. For example, in Figure 1, we show that word-level interactions can help us
+distinguish why deeper, more expressive neural networks outperform simpler ones on language tasks.
+Feature interaction: There are several existing methods that explain feature interactions in neural
+networks. Cui et al. [8] propose a method to explain global interactions in Bayesian Neural Networks
+(BNN) by examining pairs of features that have large second-order derivatives at the input. Neural
+Interaction Detection is a method that detects statistical interactions between features by examining
+the weight matrices of feed-forward neural networks [77]. Furthermore, several authors have proposed
+domain-specific methods for finding interactions in the area of deep learning for genomics [38, 25].
+For example, Deep Feature Interaction Maps detect interactions between two features by calculating
+the change in the attribution of one feature incurred by changing the value of the second [25]. Singh
+et al. [66] propose a generalization of Contextual Decomposition [51] that can explain interactions
+for feed-forward and convolutional architectures. In game theory literature, Grabisch and Roubens
+[24] propose the Shapley Interaction Index, which allocates credit to interactions between players in
+a coalitional game by considering all possible subsets of players.
+Limitations of Prior Approaches: While previous approaches have taken important steps towards
+understanding feature interaction in neural networks, all suffer from practical limitations, including
+being limited to specific types of architectures. Neural Interaction Detection only applies to feedforward neural network architectures, and can not be used on networks with convolutions, recurrent
+units, or self-attention. Contextual Decomposition has been applied to LSTMs, feed-forward neural
+networks and convolutional networks, but to our knowledge is not straightforward to apply to more
+recent innovations in deep learning, such as self-attention layers. The approach suggested by Cui
+et al. [8] is limited in that it requires the use of Bayesian Neural Networks; it is unclear how to apply
+the method to standard neural networks. Deep Feature Interaction Maps only work when the input
+features for a model have a small number of discrete values (such as genomic sequence data). The
+Shapley Interaction Index, like the Shapley Value, is NP-hard to compute exactly [15].
+Furthermore, most existing methods to detect interactions do not satisfy the common-sense axioms
+that have been proposed by feature attribution methods [73, 46]. This leads these previous approaches
+being provably unable to find learned interactions, or more generally finding counter-intuitive
+interactions (see section 4). Existing methods that do satisfy such axioms, such as those based on the
+Shapley Interaction Index [24, 13], are computationally inefficient to compute or even approximate.
+Our Contributions: (1) We propose an approach to quantify pairwise feature interactions that can
+be applied to any neural network architecture; (2) We identify several common-sense axioms that
+feature-level interactions should satisfy and show that our proposed method satisfies them; (3) We
+provide a principled way to compute interactions in ReLU-based networks, which are piece-wise
+linear and have zero second derivatives; (4) We evaluate our method against existing methods and
+show that it better identifies interactions in simulated data.
+
+2
+
+Explaining Explanations with Integrated Hessians
+
+To derive our feature interaction values, we start by considering Integrated Gradients (IG), proposed
+by Sundararajan et al. [73]. We represent our model as a function f : Rd 7→ R.2 . For a function f (x),
+the IG attribution for the ith feature is defined as:
+Z 1
+∂f (x0 + α(x − x0 ))
+0
+φi (x) = (xi − xi ) ×
+dα,
+(1)
+∂xi
+α=0
+where x is the sample we would like to explain and x0 is a baseline value. Although f is often a neural
+network, the only requirement in order to compute attribution values is that f be differentiable along
+2
+
+In the case of multi-output models, such as multi-class classification problems, we assume the function is
+indexed into the correct output class.
+
+2
+
+Interactions learned by a CNN
+trained from scratch
+
+this, movie, was,
+not
+not
+not
+
+bad
+
+this, movie, was,
+bad
+bad
+bad
+
+is
+
+was,
+bad
+not,
+bad
+
+not,
+bad
+
+0.0015
+0.0010
+0.0005
+0.0000
+0.0005
+0.0010
+0.0015
+
+d
+
+not
+
+m
+
+th
+
+this,
+bad
+
+ba
+
+0.4
+
+was,
+not
+
+t
+
+0.2
+
+d
+
+t
+
+not,
+bad
+
+was
+
+m
+
+w
+
+0.0
+
+this, movie,
+was
+was
+
+as
+
+not,
+bad
+
+was,
+bad
+
+this,
+not
+
+movie, movie, movie,
+was
+not
+bad
+
+w
+
+bad
+
+this, movie, was,
+bad
+bad
+bad
+
+ov
+
+was,
+not
+
+as
+
+this, movie, was,
+not
+not
+not
+
+ie
+
+not
+
+th
+
+was
+
+this, movie,
+was
+was
+
+this,
+
+movie movie
+
+ie
+
+0.2
+
+this, this,
+movie was
+
+this
+
+ov
+
+movie, movie, movie,
+was
+not
+bad
+
+no
+
+0.4
+
+Interaction Value
+
+this,
+bad
+
+is
+
+this,
+not
+
+Interaction Value
+
+this,
+
+movie movie
+
+this,
+was
+
+ba
+
+this,
+movie
+
+this
+
+no
+
+Interactions learned by a pre-trained
+transformer architecture
+
+Figure 1: Interactions help us understand why certain models perform better than others. Here, we
+examine interactions on the sentence “this movie was not bad." We compare two models trained
+to do sentiment analysis on the Stanford Sentiment dataset: a pre-trained transformer, DistilBERT
+(left), which predicts positive with 98.2% confidence, and a convolutional neural network trained
+from scratch (right), which predicts negative with 97.6% confidence. The transformer picks up on
+negation patterns: “not bad” has a positive interaction, despite the word “bad” being negative. The
+CNN mostly picks up on negative interactions like “movie not” and “movie bad”.
+the path from x0 to x. Our key insight is that the IG value for a differentiable model f : Rd 7→ R is
+itself a differentiable function φi : Rd 7→ R. This means that we can apply IG to itself in order to
+explain how much feature j impacted the importance of feature i:
+Γi,j (x) = φj (φi (x))
+
+(2)
+
+For i 6= j, we can derive that:
+Γi,j (x) = (xi − x0i )(xj − x0j ) ×
+
+Z 1 Z 1
+αβ
+β=0
+
+α=0
+
+∂ 2 f (x0 + αβ(x − x0 ))
+dαdβ
+∂xi ∂xj
+
+(3)
+
+In the case of i = j, the formula Γi,i (x) has an additional first-order term. We interpret Γi,j (x) as
+the explanation of the importance of feature i in terms of the input value of feature j. In practice,
+choosing a single baseline value can be challenging [35, 71, 70]. In such cases, we average over
+multiple baselines from the training set, as in Erion et al. [17]. We leave the derivation of the full
+formula, the baselines we choose and how we approximate the integral in practice to the appendix.
+2.1
+
+Fundamental Axioms for Interaction Values
+
+Sundararajan et al. [73]
+Pshowed that, among other theoretical properties, IG satisfies the completeness
+axiom, which states: i φi (x) = f (x) − f (x0 ). Although we leave the derivation to the appendix,
+we can show the following two equalities, which are immediate consequences of completeness:
+XX
+i
+
+Γi,j (x) = f (x) − f (x0 )
+
+(4)
+
+X
+
+(5)
+
+j
+
+Γi,i (x) = φi (x) −
+
+Γi,j (x)
+
+j6=i
+
+We call equation (4) the interaction completeness axiom: the sum of the Γi,j (x) terms adds up to
+the difference between the output of f at x and at the baseline x0 . This axiom lends itself to another
+natural interpretation of Γi,j (x): as the interaction between features i and j. That is, it represents
+the contribution that the pair of features i and j together add to the output f (x) − f (x0 ). Satisfying
+3
+
+interaction completeness is important because it demonstrates a relationship between model output
+and interaction values. Without this axiom, it is unclear how to interpret the scale of interactions.
+Equation (5) provides a way to interpret the self-interaction term Γi,i (x): it is the main effect of
+feature i after interactions with all other features have been subtracted away. We note that equation (5)
+also implies the following, intuitive property about the main effect: if Γi,j = 0 for all j 6= i, or in the
+degenerate case where i is the only feature, we have Γi,i = φi (x). We call this the self completeness
+axiom. Satisfying self-completeness is important because it provides a guarantee that the main effect
+of feature i equals its feature attribution value if that feature interacts with no other features.
+IG satisfies several other common-sense axioms such as sensitivity and linearity. We discuss generalizations of these axioms to interaction values (interaction sensitivity and interaction linearity) and
+demonstrate that Integrated Hessians satisfies said axioms in the appendix. We do observe one additional property here, which we call interaction symmetry: that for any i, j, we have Γi,j (x) = Γj,i (x).
+It is straightforward to show that existing neural networks and their activation functions have continuous second partial derivatives, which implies that Integrated Hessians satisfies interaction symmetry.3
+
+3
+
+Smoothing ReLU Networks
+
+One major limitation that has not been discussed in previous approaches to interaction detection in
+neural networks is related to the fact that many popular neural network architectures use the ReLU
+activation function, ReLU(x) = max(0, x). Neural networks that use ReLU are piecewise linear and
+have second partial derivatives equal to zero in all places. Previous second-order approaches (based
+on the Hessian) fail to detect any interaction in ReLU-based networks.
+Fortunately, the ReLU activation function has a smooth approximation – the SoftPlus function:
+SoftPlusβ (x) = β1 log(1 + e−βx ). SoftPlus more closely approximates the ReLU function as β
+increases, and has well-defined higher-order derivatives. Furthermore, Dombrowski et al. [14] have
+proved that both the outputs and first-order feature attributions of a model are minimally perturbed
+when ReLU activations are replaced by SoftPlus activations in a trained network. Therefore, we can
+apply Integrated Hessians on a network with ReLU activations by first replacing ReLU with SoftPlus.
+We note that no re-training is necessary for this approach.
+In addition to being twice differentiable and allowing us to calculate interaction values in ReLU
+networks, replacing ReLU with SoftPlus leads to other desirable behavior for calculating interaction
+values. We show that smoothing a neural network (decreasing the value of β in the SoftPlus activation
+function) lets us accurately approximate the Integrated Hessians value with fewer gradient calls.
+Theorem 1. For a one-layer neural network with softplusβ non-linearity, fβ (x) = softplusβ (wT x),
+and d input features, we can bound the number of interpolation points k needed to approximate the
+2
+Integrated Hessians to a given error tolerance  by k ≤ O( dβ ).
+Proof of Theorem 1 is contained in the appendix. In addition to the proof for the single-layer case,
+in the appendix we also show empirical results that many-layered neural networks display the same
+property. Finally, we demonstrate the intuition behind these results. As we replace ReLU with
+SoftPlus, the decision surface of the network is smoothed - see Figure 2 and Dombrowski et al. [14].
+We can see that the gradients tend to all have more similar direction along the path from reference to
+foreground sample once the network has been smoothed with SoftPlus replacement.
+
+4
+
+Explanation of XOR function
+
+To understand why feature interactions can be more informative than feature attributions, we take the
+case where we have two binary features and a neural network representing an XOR function. This
+network has a large output when either is on alone, but a low magnitude output when both features
+are either on or off (Figure 3, left).
+When we explain the network using Integrated Gradients with the zeros baseline, we see that samples
+where both features are on and samples where both features are off get identical attributions (see
+Figure 3, middle). Integrated Hessians, however, differentiates between these two samples by
+3
+
+We discuss the special case of the ReLU activation function in Section 3.
+
+4
+
+Margin ur ace or O
+
+eural
+Margin et
+ur or
+ace or O
+
+Margin ur ace or O
+
+eural
+
+Integrated
+Gradients Attributions
+eural et
+or
+Integrated Gradients Attributions
+A=1,
+A=0, B=0
+A=1, B=1
+A=0, B=1
+B=0
+
+et or
+
+Integrated Gradients Attributions
+A=1, B=1
+
+A=0, B=0
+
+5.48
+
+Feature
+A
+= 1,B
+B=1
+
+B
+
+B
+
+ur
+e
+
+at
+
+ur
+e
+at
+
+Fe
+
+ur
+e
+
+at
+
+A = 0,
+Fe
+Feature
+B
+Feature A
+atAurFeature
+Integrated
+Hessians
+Interactions
+atur
+B = 0Feature BFe
+eA
+eA
+A=1, B=1
+A=0, B=0
+
+Fe
+
+B
+
+-5.48
+
+Feature A
+
+-5.48
+0.0
+
+Feature B
+
+Feature A Feature B
+
+Feature A
+
+Feature A
+
+A=0, B=0
+
+Feature A
+
+Feature B
+
+0.0
+0.0
+
+0.0
+0.0
+
+Feature A
+
+0.0
+
+Feature A
+
+Feature
+A = B1,
+
+B
+=1
+0.0
+
+Feature B
+
+A=1,
+A=0, B=1
+B=0
+Feature B
+
+Feature A
+
+Feature B
+
+-5.48
+5.48
+0.0
+
+5.48
+-5.48
+0.0
+
+Feature A
+
+Feature B
+
+-5.48
+0.0
+
+5.48
+0.0
+
+Feature A
+
+Feature B
+
+Feature B
+
+identifying the negative interaction that occurs between the two features when they are both on
+(Figure 3, right). Therefore the interactions are usefully able to distinguish between (0,0), which has
+an output of 0 because it is identical to the baseline, and (1,1), which has an output of 0 because both
+features are on, which on their own should increase the model output, but in interaction with each
+other cancel out the positive effects and drive the model’s output back to the baseline.
+This example also illustrates a problem with methods like Cui et al. [8], which use the input Hessian
+without integrating over a path. In Figure 3, we see that the function is saturated at all points on
+the data manifold, meaning the elements of the Hessian will be 0 for all samples. In contrast, by
+integrating between the baseline and the samples, Integrated Hessians is capable of correctly detecting
+the negative interaction between the two features.
+
+5
+
+Empirical Evaluation
+
+In this section, we empirically evaluate our method against existing methods, inspired by recent literature on quantitatively evaluating feature attribution methods [1, 35, 28, 83, 43]. We compare against
+four existing methods: the Shapley Interaction Index [24], Generalized Contextual Decomposition
+[66], Neural Interaction Detection [77], and using the Hessian at the input sample [8].
+5.1
+
+Computation time
+
+First we compare the computation time of each method. We explain interactions in a 5 layer neural
+network with softplus activation and 128 units per layer. We run each method on models with 5,
+50 and 500 input features, and run each method on 1000 samples. Because computing the Shapley
+Interaction Index is NP-hard in the general case [15], we instead compare against a monte-carlo
+estimation of the Shapley Interaction Index with 200 samples, analogous to how the Shapley Value is
+5
+
+Feature A Feature B Feature A Feature B
+
+0.0
+
+Feature B
+
+Feature A
+A Feature
+Feature A
+Feature
+A
+Feature BB
+Feature A
+B Feature
+Feature
+BB Feature
+
+0.0
+
+A
+
+-5.48
+
+5.48
+0.0
+
+Feature
+FeatureBB
+A=1,
+Feature
+AA B=1
+Feature
+
+0.0
+0.0
+A=1, B=1
+5.48
+
+-5.48
+
+Feature A
+
+Feature B
+
+A = 1,
+B
+=1
+Integrated
+Hessians Interactions
+0.0
+0.0
+5.48Hessians -5.48
+Integrated
+Interactions5.48
+-5.48
+0.0
+0.0
+0.0
+0.0
+-5.48
+5.48
+
+B
+
+Feature A
+
+5.48
+
+0.01,
+A=
+B=1
+
+Fe
+
+0.0ture0.0
+
+A
+
+0.0
+
+ur
+e
+
+A = 0,
+B=0
+
+Fea
+
+ture
+
+0.0
+
+A = 1,
+B=1
+
+Integrated Hessians Interactions
+
+0.0
+
+Feature A
+Feature B
+A=0, B=0
+
+at
+
+A = 1,
+B=1
+
+A=1, B=1
+
+A=0, B=0
+
+Fea
+
+Feature B
+
+Integrated Hessians
+0.0
+0.0 Interactions
+
+Feature A Feature B
+
+A
+
+Feature A
+
+B
+
+B
+ur
+e
+at
+Fe
+
+B
+
+ur
+e
+
+ture
+
+at
+
+Fea
+
+0.0
+
+0.0 B
+Feature
+A B=1
+Feature
+A=1,
+0.0
+0.0
+A=0,
+B=0
+
+Figure 3: (Left) The margin surface for a neural network representing an XOR function. (Middle) The
+Integrated Gradients feature 0.0
+attributions
+samples,
+the first where both features are turned off,
+0.0 for two 5.48
+-5.48
+and the second A
+where
+= 1,both features are turned on. Both get identical Integrated Gradients attributions.
+B
+= 1 Hessians feature
+(Right) The
+Integrated
+interactions
+for
+0.0
+0.0
+5.48the same two samples. We see that the
+-5.48
+Integrated Hessians values, but not the Integrated Gradients values, differentiate the two samples.
+Fe
+
+A = 0,
+B=0
+
+0.0
+
+A = 0,
+B=0
+
+ture
+Feature B
+A
+
+Feature A
+
+Feature A Feature B
+
+Model Output
+
+ture
+A
+
+Fea
+
+0.0
+
+A=1, B=1
+
+ur
+e
+
+Model Output
+
+0.0
+
+A = 0,
+B=0
+
+Fea
+
+A=0, B=0
+
+Fe
+
+Integrated Gradients Attributions
+
+at
+
+et or
+
+A = 0,
+B=0
+
+A = 0,
+B=0
+
+A=1, B=1
+
+A=0, B=0
+
+Integrated Hessians Interactions
+Integrated Hessians Interactions
+
+0.0 A
+0.0 B
+Feature
+Feature
+A=0, B=0
+Feature A Feature
+Feature AB Feature
+Feature A
+B Feature B
+
+Integrated Gradients Attributions
+
+Fe
+
+eural
+
+et or
+
+Feature A Feature B
+
+Margin ur ace or O
+
+eural
+
+Model Output Model Output
+
+Margin ur ace or O
+
+Model Output
+Model Output
+Model Output
+
+0.0
+0.010 smooths
+0.0the 0.0
+0.0
+0.0
+Figure 2: Replacing ReLU activations with SoftPlusβ activations 0.0
+with β =
+decision
+Margin ur ace
+or O tend
+eural
+Integrated
+Gradients
+Attributions
+Margin
+ur or
+ace
+or O
+eural
+et
+or along
+Integrated path.
+Gradients Attributions
+surface of a neural network:
+gradients
+to et
+be
+more
+homogeneous
+the integration
+A=1,
+B=1
+A=0, B=0
+A=1, B=1
+A=0,
+B=0
+Orange arrows show the gradient vectors at each point along the path
+theB reference
+(green
+to
+0.0 Afrom
+Feature
+Feature
+Feature
+Feature
+0.0x)
+0.0
+0.0
+Feature A
+Feature B
+Feature
+AA Feature
+BB
+the input (blue dots). ReLUs can cause small bends in the output space with aberrant gradients.
+
+A=1, B=1
+
+Feature A
+
+Feature B
+
+5.48
+
+-5.48
+
+-5.48
+
+5.48
+
+Feature A
+
+Feature B
+
+Figure 4: Left: The time each methods takes to compute all pairwise interactions on 1000 samples
+with d features, as a function of d. Existing methods are fast when d is small, but scale poorly
+compared to our proposed method or using the input Hessian directly. Right: Benchmarking our
+methods against others using a modified version of Remove and Retrain [28] on simulated interactions.
+Our method identifies the most important interactions more quickly than all existing methods except
+the approximate Shapley Interaction Index, which is much more computationally expensive.
+estimated in Kononenko et al. [37]. Even using a small number of samples, this was unable to be run
+to completion for the 500 feature case and would take an estimated 1000 hours to complete. For
+each method, we compute all pairwise interactions: d2 interactions for d features. The results are
+displayed in Figure 4 on the left.
+While our method is slower than existing methods for a small number of features, as the number of
+features grows, our method becomes more tractable than existing methods. This is because other
+methods require at least O(d2 ) separate forward passes of the model to compute the interactions,
+which is non-trivial to parallelize. However, back-propagating the Hessian through the model is easy
+to do in parallel on a GPU: such functionality already exists in modern deep learning frameworks.
+5.2
+
+Quantitative comparison of interaction detection with other methods
+
+To compare each method, we use the Remove and Retrain benchmark introduced in Hooker et al.
+[28]. The benchmark compares feature attributions by progressively ablating the most important
+features in each sample - ranked according to each attribution method - then retraining the model on
+the ablated data and measuring the performance drop. The attribution method that incurs the fastest
+drop in performance is the one that most quickly identifies the most predictive features in the data.
+We generate a simulated regression task with 10 features where each feature is drawn independently
+from N (0, 1). The label is an additive sum of 20 interactions with random coefficients normalized
+to sum to 1, drawn without replacement from all possible pairs of features. A 3-layer neural
+network’s predictions achieve over 0.99 correlation with the true label. We leave further details about
+experimental setup, as well as how we “remove” an interaction between two features to the appendix.
+We compare each of the five interaction methods using Remove and Retrain on five different interaction types: gtanhsum (xi , xj ) = tanh(xi + xj ), gcossum (xi , xj ) = cos(xi + xj ), gmultiply (xi , xj ) =
+xi ∗ xj , gmax (xi , xj ) = max(xi , xj ) and gmin (xi , xj ) = min(xi , xj ). The results for gtanhsum are
+displayed in Figure 4 on the right. Our method most quickly identifies the largest interactions in
+the data, as demonstrated by the fastest increase in error. We include the remaining results in the
+appendix, but note here that our method outperforms all existing methods on all interaction types.
+In addition to the Remove and Retrain benchmark, we also directly measured the rank correlation
+between different interaction methods and the true interactions in two synthetic datasets. The label
+for the first dataset was the sum of all of the multiplicative pairwise interactions, while the label for
+the second was the sum of pairwise min/max functions. The features for both datasets were five
+independent Gaussian features. We found that the interactions attained using Integrated Hessians
+consistently outperformed the other methods, and include details in the appendix. Finally, we tested
+6
+
+our approach using the “Sanity Checks” proposed in [1] to ensure that our interaction attributions
+were sensitive to network and data randomization, and found that our method passed both sanity
+checks (see appendix for more details).
+
+6
+
+Applications of Integrated Hessians
+
+6.1
+
+NLP
+
+In the past decade, neural networks have been the go-to model for language tasks, from convolutional
+[34] to recurrent [74]. More recently large, pre-trained transformer architectures [55, 12] have
+achieved state of the art performance on a wide variety of tasks. Some previous work has suggested
+looking at the internal weights of the attention mechanisms in attention-based models [21, 40, 42, 79].
+However, more recent work has suggested that looking at attention weights may not be a reliable
+way to interpret models with attention layers [62, 29, 5]. To overcome this, feature attributions have
+been applied to text classification models to understand which words most impacted the classification
+[44, 39]. However, these methods do not explain how words interact with their surrounding context.
+We download pre-trained weights for DistilBERT [60] from the HuggingFace Transformers library
+[81]. We fine-tune the model on the Stanford Sentiment Treebank dataset [69] in which the task
+is to predict whether or not a movie review has positive or negative sentiment. After 3 epochs of
+fine-tuning, DistilBERT achieves a validation accuracy of 0.9071 (0.9054 TPR / 0.9089 TNR).4 We
+leave further fine-tuning details to the appendix.
+In Figure 5, we show interactions generated by Integrated Hessians and attributions generated by
+Integrated Gradients on an example drawn from the validation set. The figure demonstrates that
+DistilBERT has learned intuitive interactions that would not be revealed from feature attributions
+alone. For example, a word like “painfully," which might have a negative connotation on its own,
+has a large positive interaction with the word “funny" in the phrase “painfully funny." In Figure 1,
+we demonstrate how interactions can help us understand one reason why a fine-tuned DistilBERT
+model outperforms a simpler model: a convolutional neural network (CNN) that gets an accuracy
+of 0.82 on the validation set. DistilBERT picks up on positive interactions between negation words
+(“not”) and negative adjectives (“bad”) that a CNN fails to fully capture. Finally, in Figure 5, we
+use interaction values to reveal saturation effects: many negative adjectives describing the same
+noun interact positively. Although this may seem counter-intuitive at first, it reflects the structure of
+language. If a phrase has only one negative adjective, it stands out as the word that makes the phrase
+negative. At some point, however, describing a noun with more and more negative adjectives makes
+any individual negative adjective less important towards classifying that phrase as negative.
+6.2
+
+Drug combination response prediction
+
+In the domain of anti-cancer drug combination response prediction, plotting Integrated Hessians
+helps us to glean biological insights into the process we are modeling. We consider one of the
+largest publicly-available datasets measuring drug combination response in acute myeloid leukemia
+[78]. Each one of 12,362 samples consists of the measured response of a 2-drug pair tested in
+the cancer cells of a patient. The 1,235 input features are split between features describing the
+drug combinations and features describing the cancerous cells, which we modeled using the neural
+architectures described in Hao et al. [26] and Preuer et al. [56].
+According to the first-order explanations, the presence or absence of the drug Venetoclax in the drug
+combination is the most important feature. We can also easily see that first-order explanations are
+inadequate in this case – while the presence of Venetoclax is generally predictive of a more responsive
+drug combination, the amount of positive response to Venetoclax is predicted to vary across samples
+(see Figure 6, top left).
+Integrated Hessians gives us the insight that some of this variability can be attributed to the drug
+Venetoclax is combined with. We can see that the model has learned a strong negative interaction
+between Venetoclax and Artemisinin (see Figure 6, middle), which we can confirm matches the
+4
+This performance does not represent state of the art, nor is sentiment analysis representative of the full
+complexity of existing language tasks. However, our focus in this paper is on explanation and this task is easy to
+fine-tune without needing to extensively search over hyper-parameters.
+
+7
+
+a
+
+painfully funny
+
+ode
+
+to bad
+
+behavior
+
+Word-level attributions
+
+movie
+
+a
+
+bad
+
+, terrible , awful
+
+, horrible
+
+ntera tions it t e
+a
+ord movie
+
+bad
+
+, terrible
+
+, horrible movie
+
+ttribution alue
+
+a
+painfully
+
+painfully
+
+funny
+
+a
+painfully
+
+a
+funny
+
+a
+ode
+
+a
+painfully
+funny
+funny
+
+funny
+ode
+
+a
+bad
+
+a
+behavior
+
+ttributio
+
+painfully
+ode
+
+funny
+ode
+
+to
+
+a
+to
+
+painfully
+to
+
+funny
+to
+
+ode
+to
+
+a
+bad
+
+painfully
+bad
+
+funny
+bad
+
+ode
+bad
+
+funny
+to
+
+funny
+bad
+
+funny
+funny
+behavior
+
+ode
+to
+
+ode
+bad
+
+ode
+behavior
+
+ode
+
+to
+bad
+
+to
+behavior
+
+to
+
+to
+bad
+
+bad
+behavior
+
+a
+painfully funny
+ode
+to
+bad
+behavior behavior behavior behavior behavior behavior behavior
+behavior
+
+d
+ba
+
+alue
+
+horrible
+7
+
+ovie
+
+bad, terrible (1, 3)
+bad, awful (1, 5)
+bad, horrible (1, 7)
+terrible, awful (3, 5)
+
+terrible, horrible (3, 7)
+awful, horrible (5, 7)
+0.0000 0.0025 0.0050 0.0075 0.0100 0.0125 0.0150 0.0175 0.0200
+
+or
+
+bad
+
+bad
+
+behavior
+
+tera tio
+
+a bad , terrible , awful ,
+01 2 3
+5
+
+vi
+
+e
+
+to
+
+Interaction Value
+
+ha
+
+to
+
+y
+nn
+fu
+
+ode
+
+od
+
+funny
+
+be
+
+pa
+
+in
+
+fu
+
+lly
+
+a
+
+painfully
+
+alue
+
+a
+ode
+
+a
+
+a
+
+ntera tion
+
+ode
+
+bad
+
+a
+to
+
+painfully painfully painfully painfully painfully painfully
+funny
+ode
+to
+bad
+behavior
+
+Interactions Between Negative
+d ectives
+
+a
+
+, awful
+
+Attribution to
+
+Venetoclax-Artemisinin
+
+Attribution to Venotoclax
+
+Interaction Between Venetoclax
+and Artemisinin
+
+Venetoclax
+Interactions
+Figure 5: Left: Interactions in text reveal learned patterns such
+as the phrase "painfully
+funny" having
+0.0005
+positive interaction despite the word "painfully" having
+negative attribution. These interactions
+0.15
+0.0000
+are not evident from attributions alone. Right: Interactions
+help us reveal
+an unintuitive pattern
+0.10
+-0.0005
+in language models: saturation. Although the word "movie" interacts negatively with all negative
+0.05
+-0.0010
+modifying adjectives, those negative adjectives themselves
+all interact positively.
+The more negative
+-0.0015
+0.00
+adjectives are in the sentence, the less each individual negative adjective matters
+towards the overall
+-0.0020
+classification of the sentence.
+-0.05
+-0.0025
+
+0.15
+0.10
+0.05
+0.00
+-0.05
+Venetoclax Venetoclax
+Not Present
+Present
+
+Venetoclax-Artemisinin
+Interactions
+0.0005
+0.0000
+-0.0005
+-0.0010
+-0.0015
+-0.0020
+-0.0025
+Artemisinin Artemisinin
+Not Present
+Present
+
+Artemisinin Artemisinin
+Not Present
+Present
+
+Venetoclax-Artemisinin Interactions
+Interaction Between Venetoclax
+and Artemisinin
+
+Attribution to Venotoclax
+
+Attribution to
+Venetoclax
+
+Interaction Between Venetoclax
+and Artemisinin
+
+Venetoclax Venetoclax
+Not Present
+Present
+
+0.001
+
+0.
+
+0.0
+
+0.2
+0.0
+
+-0.001
+-0.2
+-0.002
+
+-0.00
+
+-0.
+-0.
+-0.
+
+-0.
+
+-0.2
+
+0.0
+
+Kegg Cancer Pathwa
+
+0.2
+
+0.
+
+x ression
+
+Interaction Between Venetoclax
+and Artemisinin
+
+Venetoclax-Artemisinin Interactions
+0.001
+
+0. Venetoclax. Middle: Venetoclax interactions with
+Figure 6: Left: Integrated Gradients values for
+Artemisinin across0.0all samples. Right: Venetoclax
+0.2 and Artemisinin interaction is driven by expression
+of genes in cancer samples.
+0.0
+-0.001
+-0.2
+-0.002
+
+-0.
+
+ground truth ascertained from additional external
+data (p = 2.31 × 10−4 , see appendix for details
+-0.
+-0.
+-0.
+0.2 0.
+of calculation).-0.00
+Finally,
+we -0.2
+can0.0gain
+insight into the variability in the interaction values between
+Kegg Cancer Pathwa x ression
+Venetoclax and Artemisinin by plotting them against the expression level of a pathway containing
+cancer genes (see Figure 6, bottom). We see that patients with higher expression of this pathway tend
+to have a more negative interaction (sub-additive response) than patients with lower expression of
+this pathway. Integrated Hessians helps us understand the interactions between drugs in our model,
+as well as what genetic factors influence this interaction.
+
+7
+
+Conclusion
+
+In this work we propose a novel method to explain feature interactions in neural networks. The
+interaction values we propose have two natural interpretations: (1) as the combined effect of two
+features to the output of a model, and (2) as the explanation of one feature’s importance in terms of
+another. Our method provably satisfies common-sense axioms that previous methods do not - and
+outperforms previous methods in practice at identifying known interactions on simulated data.
+8
+
+Additionally, we demonstrate how to glean interactions from neural networks trained with a ReLU
+activation function which has no second-derivative. In accordance with recent work, we show why
+replacing the ReLU activation function with the softplus activation function at explanation time is
+both intuitive and efficient.
+Finally, we perform several experiments to reveal the utility of our method, from understanding
+performance gaps between model classes to discovering patterns a model has learned on highdimensional data. We conclude that although feature attribution methods provide valuable insight
+into model behavior, such methods by no means end the discussion on interpretability. Rather, they
+encourage further work in deeper understanding model behavior.
+
+9
+
+Broader Impact
+We have shown that our proposed technique, Integrated Hessians, is capable of offering significant
+insight into the behavior of neural networks. As such, it has the potential to significantly impact
+a wide variety of stakeholders – ranging from industry practitioners attempting to debug neural
+networks for deployment to individual consumers looking to understand why a particular algorithmic
+decision impacted them. While our theoretical and empirical results have conclusively demonstrated
+the technical soundness of our method, it is instructive to consider some of the specific cases where a
+method like ours could be used in order to understand the possible social impacts.
+We first consider the case of a scientist using our method to gain mechanistic insight into a biological
+process by modeling their data with a neural network. Since this data is typically high-dimensional
+with correlated features and large amounts of noise and batch effects, it is possible that the model
+depends more on spurious correlates than actual causally-meaningful features. If the neural network
+learns confounded relationships, the feature attributions and feature interactions our method reveals
+for this network will reflect that confounding. While this is not a technical weakness of our method,
+it is a very real possibility that it could have negative impact in practical deployment if scientists
+misunderstand how the feature interaction values relate to the data generating process. The feature
+interactions are causal with respect to the model, but not necessarily with respect to the true data
+generating process. This potential misunderstanding highlights the importance of educating users to
+this risk, which we will aim to do with example notebooks and tutorials in the open source repository
+for our code.
+We next consider the case of a loan applicant who wants to understand why their loan application
+was accepted or denied. In this scenario, both the applicant and the lender stand to benefit from our
+approach. The lender is able to make their most accurate “black box” models compliant with the
+GDPR’s “right to an explanation,” while the loan applicant is able to gain detailed insight into the
+reasons their loans was accepted or denied. In this application, there is a high degree of financial
+incentive for malicious use. For example, one could imagine a lender who wanted to hide the fact
+that their model unfairly depends on protected characteristics like race or gender. It has previously
+been shown that first-order interpretability methods (like LIME, SHAP, and Integrated Gradients) are
+subject to adversarial manipulation, and it is likely that our interaction method is also vulnerable in
+this way [22, 68]. Therefore, there is a necessity to either make sure the explanations are deployed
+by trustworthy individuals (e.g. impartial auditors rather than stakeholders), or to deploy feature
+explanation and interaction tools in conjunction with other tools that can modify underlying models
+to ensure robustness to this sort of adversarial attack [6].
+In all of the discussed cases, we see that our technique has the potential to benefit a wide variety of
+stakeholders if used properly. We can also see the importance of helping potential users understand
+how to properly and safely use our method.
+
+10
+
+References
+[1] J. Adebayo, J. Gilmer, M. Muelly, I. Goodfellow, M. Hardt, and B. Kim. Sanity checks for
+saliency maps. In Advances in Neural Information Processing Systems, pages 9505–9515, 2018.
+[2] M. Ancona, E. Ceolini, C. Öztireli, and M. Gross. Towards better understanding of gradientbased attribution methods for deep neural networks. arXiv preprint arXiv:1711.06104, 2017.
+[3] A. G. Bartel, J. T. Chen, R. H. Peter, V. S. Behar, Y. Kong, and R. G. Lester. The significance
+of coronary calcification detected by fluoroscopy: a report of 360 patients. Circulation, 49(6):
+1247–1253, 1974.
+[4] A. Binder, G. Montavon, S. Lapuschkin, K.-R. Müller, and W. Samek. Layer-wise relevance
+propagation for neural networks with local renormalization layers. In International Conference
+on Artificial Neural Networks, pages 63–71. Springer, 2016.
+[5] G. Brunner, Y. Liu, D. Pascual, O. Richter, M. Ciaramita, and R. Wattenhofer. On identifiability
+in transformers. arXiv preprint, 2019.
+[6] J. Chen, X. Wu, V. Rastogi, Y. Liang, and S. Jha. Robust attribution regularization. In Advances
+in Neural Information Processing Systems, pages 14300–14310, 2019.
+[7] D. Croft, A. F. Mundo, R. Haw, M. Milacic, J. Weiser, G. Wu, M. Caudy, P. Garapati, M. Gillespie, M. R. Kamdar, et al. The reactome pathway knowledgebase. Nucleic acids research, 42
+(D1):D472–D477, 2014.
+[8] T. Cui, P. Marttinen, and S. Kaski. Recovering pairwise interactions using neural networks.
+arXiv preprint arXiv:1901.08361, 2019.
+[9] R. Das, I. Turkoglu, and A. Sengur. Effective diagnosis of heart disease through neural networks
+ensembles. Expert systems with applications, 36(4):7675–7680, 2009.
+[10] R. Detrano, E. E. Salcedo, R. E. Hobbs, and J. Yiannikas. Cardiac cinefluoroscopy as an inexpensive aid in the diagnosis of coronary artery disease. The American Journal of Cardiology, 57
+(13):1041 – 1046, 1986. ISSN 0002-9149. doi: https://doi.org/10.1016/0002-9149(86)90671-5.
+URL http://www.sciencedirect.com/science/article/pii/0002914986906715.
+[11] R. Detrano, A. Janosi, W. Steinbrunn, M. Pfisterer, J.-J. Schmid, S. Sandhu, K. H. Guppy, S. Lee,
+and V. Froelicher. International application of a new probability algorithm for the diagnosis of
+coronary artery disease. The American journal of cardiology, 64(5):304–310, 1989.
+[12] J. Devlin, M.-W. Chang, K. Lee, and K. Toutanova. Bert: Pre-training of deep bidirectional
+transformers for language understanding. arXiv preprint arXiv:1810.04805, 2018.
+[13] K. Dhamdhere, A. Agarwal, and M. Sundararajan. The shapley taylor interaction index. arXiv
+preprint arXiv:1902.05622, 2019.
+[14] A.-K. Dombrowski, M. Alber, C. Anders, M. Ackermann, K.-R. Müller, and P. Kessel. Explanations can be manipulated and geometry is to blame. In Advances in Neural Information
+Processing Systems, pages 13567–13578, 2019.
+[15] E. Elkind, L. A. Goldberg, P. W. Goldberg, and M. Wooldridge. On the computational complexity of weighted voting games. Annals of Mathematics and Artificial Intelligence, 56(2):
+109–131, 2009.
+[16] D. Erhan, Y. Bengio, A. Courville, and P. Vincent. Visualizing higher-layer features of a deep
+network. University of Montreal, 1341(3):1, 2009.
+[17] G. Erion, J. D. Janizek, P. Sturmfels, S. Lundberg, and S.-I. Lee. Learning explainable models
+using attribution priors. arXiv preprint arXiv:1906.10670, 2019.
+[18] R. Fong and A. Vedaldi. Net2vec: Quantifying and explaining how concepts are encoded by
+filters in deep neural networks. In Proceedings of the IEEE conference on computer vision and
+pattern recognition, pages 8730–8738, 2018.
+11
+
+[19] R. C. Fong and A. Vedaldi. Interpretable explanations of black boxes by meaningful perturbation.
+In Proceedings of the IEEE International Conference on Computer Vision, pages 3429–3437,
+2017.
+[20] J. R. Geis, A. P. Brady, C. C. Wu, J. Spencer, E. Ranschaert, J. L. Jaremko, S. G. Langer,
+A. Borondy Kitts, J. Birch, W. F. Shields, et al. Ethics of artificial intelligence in radiology:
+summary of the joint European and North American multisociety statement. Radiology, 293(2):
+436–440, 2019.
+[21] R. Ghaeini, X. Z. Fern, and P. Tadepalli. Interpreting recurrent and attention-based neural
+models: a case study on natural language inference. arXiv preprint arXiv:1808.03894, 2018.
+[22] A. Ghorbani, A. Abid, and J. Zou. Interpretation of neural networks is fragile. In Proceedings
+of the AAAI Conference on Artificial Intelligence, volume 33, pages 3681–3688, 2019.
+[23] X. Glorot and Y. Bengio. Understanding the difficulty of training deep feedforward neural
+networks. In Proceedings of the thirteenth international conference on artificial intelligence
+and statistics, pages 249–256, 2010.
+[24] M. Grabisch and M. Roubens. An axiomatic approach to the concept of interaction among
+players in cooperative games. International Journal of game theory, 28(4):547–565, 1999.
+[25] P. Greenside, T. Shimko, P. Fordyce, and A. Kundaje. Discovering epistatic feature interactions
+from neural network models of regulatory dna sequences. Bioinformatics, 34(17):i629–i637,
+2018.
+[26] J. Hao, Y. Kim, T.-K. Kim, and M. Kang. Pasnet: pathway-associated sparse deep neural
+network for prognosis prediction from high-throughput data. BMC bioinformatics, 19(1):1–13,
+2018.
+[27] K. He, X. Zhang, S. Ren, and J. Sun. Deep residual learning for image recognition. In
+Proceedings of the IEEE conference on computer vision and pattern recognition, pages 770–
+778, 2016.
+[28] S. Hooker, D. Erhan, P.-J. Kindermans, and B. Kim. A benchmark for interpretability methods in
+deep neural networks. In Advances in Neural Information Processing Systems, pages 9734–9745,
+2019.
+[29] S. Jain and B. C. Wallace. Attention is not explanation. arXiv preprint arXiv:1902.10186, 2019.
+[30] M. Kanehisa et al. The kegg database. In Novartis Foundation Symposium, pages 91–100.
+Wiley Online Library, 2002.
+[31] A. Kapishnikov, T. Bolukbasi, F. Viégas, and M. Terry. Segment integrated gradients: Better
+attributions through regions. arXiv preprint arXiv:1906.02825, 2019.
+[32] M. Keith, A. Jameson, W. Van Straten, M. Bailes, S. Johnston, M. Kramer, A. Possenti,
+S. Bates, N. Bhat, M. Burgay, et al. The high time resolution universe pulsar survey–i. system
+configuration and initial discoveries. Monthly Notices of the Royal Astronomical Society, 409
+(2):619–627, 2010.
+[33] B. Kim, M. Wattenberg, J. Gilmer, C. Cai, J. Wexler, F. Viegas, and R. Sayres. Interpretability
+beyond feature attribution: Quantitative testing with concept activation vectors (tcav). arXiv
+preprint arXiv:1711.11279, 2017.
+[34] Y. Kim. Convolutional neural networks for sentence classification.
+arXiv:1408.5882, 2014.
+
+arXiv preprint
+
+[35] P.-J. Kindermans, S. Hooker, J. Adebayo, M. Alber, K. T. Schütt, S. Dähne, D. Erhan, and
+B. Kim. The (un) reliability of saliency methods. In Explainable AI: Interpreting, Explaining
+and Visualizing Deep Learning, pages 267–280. Springer, 2019.
+[36] D. P. Kingma and J. Ba. Adam: A method for stochastic optimization. arXiv preprint
+arXiv:1412.6980, 2014.
+12
+
+[37] I. Kononenko et al. An efficient explanation of individual classifications using game theory.
+Journal of Machine Learning Research, 11(Jan):1–18, 2010.
+[38] P. K. Koo, P. Anand, S. B. Paul, and S. R. Eddy. Inferring sequence-structure preferences of
+rna-binding proteins with convolutional residual networks. bioRxiv, page 418459, 2018.
+[39] V. Lai, J. Z. Cai, and C. Tan. Many faces of feature importance: Comparing built-in and post-hoc
+feature importance in text classification. arXiv preprint arXiv:1910.08534, 2019.
+[40] J. Lee, J.-H. Shin, and J.-S. Kim. Interactive visualization and manipulation of attention-based
+neural machine translation. In Proceedings of the 2017 Conference on Empirical Methods in
+Natural Language Processing: System Demonstrations, pages 121–126, 2017.
+[41] J. T. Leek and J. D. Storey. Capturing heterogeneity in gene expression studies by surrogate
+variable analysis. PLOS Genetics, 3(9):1–12, 09 2007. doi: 10.1371/journal.pgen.0030161.
+URL https://doi.org/10.1371/journal.pgen.0030161.
+[42] Z. Lin, M. Feng, C. N. d. Santos, M. Yu, B. Xiang, B. Zhou, and Y. Bengio. A structured
+self-attentive sentence embedding. arXiv preprint arXiv:1703.03130, 2017.
+[43] Z. Q. Lin, M. J. Shafiee, S. Bochkarev, M. S. Jules, X. Y. Wang, and A. Wong. Explaining with
+impact: A machine-centric strategy to quantify the performance of explainability algorithms.
+arXiv preprint arXiv:1910.07387, 2019.
+[44] F. Liu and B. Avci. Incorporating priors with feature attribution on text classification. arXiv
+preprint arXiv:1906.08286, 2019.
+[45] W. Liu, Y. Zhang, C.-M. Yu, Q.-W. Ji, M. Cai, Y.-X. Zhao, and Y.-J. Zhou. Current understanding
+of coronary artery calcification. Journal of geriatric cardiology: JGC, 12(6):668, 2015.
+[46] S. M. Lundberg and S.-I. Lee. A unified approach to interpreting model predictions. In Advances
+in neural information processing systems, pages 4765–4774, 2017.
+[47] S. M. Lundberg, G. Erion, H. Chen, A. DeGrave, J. M. Prutkin, B. Nair, R. Katz, J. Himmelfarb,
+N. Bansal, and S.-I. Lee. From local explanations to global understanding with explainable ai
+for trees. Nature Machine Intelligence, 2(1):56–67, 2020. doi: 10.1038/s42256-019-0138-9.
+URL https://doi.org/10.1038/s42256-019-0138-9.
+[48] R. J. Lyon, B. Stappers, S. Cooper, J. Brooke, and J. Knowles. Fifty years of pulsar candidate
+selection: from simple filters to a new principled real-time classification approach. Monthly
+Notices of the Royal Astronomical Society, 459(1):1104–1123, 2016.
+[49] A. H. Maas and Y. E. Appelman. Gender differences in coronary heart disease. Netherlands
+Heart Journal, 18(12):598–603, 2010.
+[50] A. Mahendran and A. Vedaldi. Understanding deep image representations by inverting them.
+In Proceedings of the IEEE conference on computer vision and pattern recognition, pages
+5188–5196, 2015.
+[51] W. J. Murdoch, P. J. Liu, and B. Yu. Beyond word importance: Contextual decomposition to
+extract interactions from lstms. arXiv preprint arXiv:1801.05453, 2018.
+[52] D. Nishimura. Biocarta. Biotech Software & Internet Report: The Computer Software Journal
+for Scient, 2(3):117–120, 2001.
+[53] C. Olah, A. Mordvintsev, and L. Schubert. Feature visualization. Distill, 2(11):e7, 2017.
+[54] C. Olah, A. Satyanarayan, I. Johnson, S. Carter, L. Schubert, K. Ye, and A. Mordvintsev. The
+building blocks of interpretability. Distill, 3(3):e10, 2018.
+[55] M. E. Peters, M. Neumann, M. Iyyer, M. Gardner, C. Clark, K. Lee, and L. Zettlemoyer. Deep
+contextualized word representations. arXiv preprint arXiv:1802.05365, 2018.
+13
+
+[56] K. Preuer, R. P. I. Lewis, S. Hochreiter, A. Bender, K. C. Bulusu, and G. Klambauer.
+DeepSynergy: predicting anti-cancer drug synergy with Deep Learning. Bioinformatics,
+34(9):1538–1546, 12 2017. ISSN 1367-4803. doi: 10.1093/bioinformatics/btx806. URL
+https://doi.org/10.1093/bioinformatics/btx806.
+[57] N. Puri, P. Gupta, P. Agarwal, S. Verma, and B. Krishnamurthy. Magix: Model agnostic globally
+interpretable explanations. arXiv preprint arXiv:1706.07160, 2017.
+[58] P. Ramachandran, B. Zoph, and Q. V. Le. Searching for activation functions. arXiv preprint
+arXiv:1710.05941, 2017.
+[59] M. T. Ribeiro, S. Singh, and C. Guestrin. " why should i trust you?" explaining the predictions of
+any classifier. In Proceedings of the 22nd ACM SIGKDD international conference on knowledge
+discovery and data mining, pages 1135–1144, 2016.
+[60] V. Sanh, L. Debut, J. Chaumond, and T. Wolf. Distilbert, a distilled version of bert: smaller,
+faster, cheaper and lighter. arXiv preprint arXiv:1910.01108, 2019.
+[61] A. D. Selbst and J. Powles. Meaningful information and the right to explanation. International
+Data Privacy Law, 7(4):233–242, 12 2017. ISSN 2044-3994. doi: 10.1093/idpl/ipx022. URL
+https://doi.org/10.1093/idpl/ipx022.
+[62] S. Serrano and N. A. Smith. Is attention interpretable? arXiv preprint arXiv:1906.03731, 2019.
+[63] I. Shavitt and E. Segal. Regularization learning networks: deep learning for tabular datasets. In
+Advances in Neural Information Processing Systems, pages 1379–1389, 2018.
+[64] A. Shrikumar, P. Greenside, and A. Kundaje. Learning important features through propagating activation differences. In Proceedings of the 34th International Conference on Machine
+Learning-Volume 70, pages 3145–3153. JMLR. org, 2017.
+[65] K. Simonyan, A. Vedaldi, and A. Zisserman. Deep inside convolutional networks: Visualising
+image classification models and saliency maps. arXiv preprint arXiv:1312.6034, 2013.
+[66] C. Singh, W. J. Murdoch, and B. Yu. Hierarchical interpretations for neural network predictions.
+arXiv preprint arXiv:1806.05337, 2018.
+[67] S. Singla, E. Wallace, S. Feng, and S. Feizi. Understanding impacts of high-order loss approximations and features in deep learning interpretation. arXiv preprint arXiv:1902.00407,
+2019.
+[68] D. Slack, S. Hilgard, E. Jia, S. Singh, and H. Lakkaraju. Fooling lime and shap: Adversarial
+attacks on post hoc explanation methods. In Proceedings of the AAAI/ACM Conference on AI,
+Ethics, and Society, pages 180–186, 2020.
+[69] R. Socher, A. Perelygin, J. Wu, J. Chuang, C. D. Manning, A. Y. Ng, and C. Potts. Recursive
+deep models for semantic compositionality over a sentiment treebank. In Proceedings of the
+2013 conference on empirical methods in natural language processing, pages 1631–1642, 2013.
+[70] P. Sturmfels, S. Lundberg, and S.-I. Lee. Visualizing the impact of feature attribution baselines.
+Distill, 5(1):e22, 2020.
+[71] M. Sundararajan and A. Najmi. The many shapley values for model explanation. arXiv preprint
+arXiv:1908.08474, 2019.
+[72] M. Sundararajan and A. Taly. A note about: Local explanation methods for deep neural networks
+lack sensitivity to parameter values. arXiv preprint arXiv:1806.04205, 2018.
+[73] M. Sundararajan, A. Taly, and Q. Yan. Axiomatic attribution for deep networks. In Proceedings
+of the 34th International Conference on Machine Learning-Volume 70, pages 3319–3328. JMLR.
+org, 2017.
+[74] M. Sundermeyer, R. Schlüter, and H. Ney. Lstm neural networks for language modeling. In
+Thirteenth annual conference of the international speech communication association, 2012.
+14
+
+[75] I. Sutskever, J. Martens, G. Dahl, and G. Hinton. On the importance of initialization and
+momentum in deep learning. In International conference on machine learning, pages 1139–
+1147, 2013.
+[76] S. Tan, R. Caruana, G. Hooker, P. Koch, and A. Gordo. Learning global additive explanations
+for neural nets using model distillation. arXiv preprint arXiv:1801.08640, 2018.
+[77] M. Tsang, D. Cheng, and Y. Liu. Detecting statistical interactions from neural network weights.
+arXiv preprint arXiv:1705.04977, 2017.
+[78] J. W. Tyner, C. E. Tognon, D. Bottomly, B. Wilmot, S. E. Kurtz, S. L. Savage, N. Long, A. R.
+Schultz, E. Traer, M. Abel, et al. Functional genomic landscape of acute myeloid leukaemia.
+Nature, 562(7728):526–531, 2018.
+[79] Y. Wang, M. Huang, X. Zhu, and L. Zhao. Attention-based lstm for aspect-level sentiment
+classification. In Proceedings of the 2016 conference on empirical methods in natural language
+processing, pages 606–615, 2016.
+[80] D. S. Wishart, Y. D. Feunang, A. C. Guo, E. J. Lo, A. Marcu, J. R. Grant, T. Sajed, D. Johnson,
+C. Li, Z. Sayeeda, et al. Drugbank 5.0: a major update to the drugbank database for 2018.
+Nucleic acids research, 46(D1):D1074–D1082, 2018.
+[81] T. Wolf, L. Debut, V. Sanh, J. Chaumond, C. Delangue, A. Moi, P. Cistac, T. Rault, R. Louf,
+M. Funtowicz, and J. Brew. Huggingface’s transformers: State-of-the-art natural language
+processing. ArXiv, abs/1910.03771, 2019.
+[82] M. Wu, M. C. Hughes, S. Parbhoo, M. Zazzi, V. Roth, and F. Doshi-Velez. Beyond sparsity:
+Tree regularization of deep models for interpretability. In Thirty-Second AAAI Conference on
+Artificial Intelligence, 2018.
+[83] C.-K. Yeh, C.-Y. Hsieh, A. Suggala, D. I. Inouye, and P. K. Ravikumar. On the (in) fidelity
+and sensitivity of explanations. In Advances in Neural Information Processing Systems, pages
+10965–10976, 2019.
+
+15
+
+Appendix
+A
+
+Deriving Interaction Values
+
+In this section, we expand the derivation of the Integrated Hessians formula, further discuss relevant
+axioms that interaction values should satisfy, and how we compute Integrated Hessians in practice.
+A.1
+
+The Integrated Hessians Formula
+
+Here we derive the formula for Integrated Hessians from it’s definition: Γi,j (x) = φj (φi (x)). We
+start by expanding out φj using the definition of Integrated Gradients:
+
+Γi,j (x) := (xj − x0j ) ×
+
+Z 1
+
+∂φi (x0 + β(x − x0 ))
+dβ
+∂xj
+β=0
+
+(6)
+
+∂φi
+(x), and we first assume that i 6= j
+We consider the function ∂x
+j
+
+∂φi
+(x) =
+∂xj
+!
+Z 1
+∂
+∂f (x0 + α(x − x0 ))
+0
+(xi − xi ) ×
+dα =
+∂xj
+∂xi
+α=0
+!
+Z 1
+∂
+∂f (x0 + α(x − x0 ))
+0
+(xi − xi ) ×
+dα =
+∂xi
+α=0 ∂xj
+Z 1
+∂ 2 f (x0 + α(x − x0 ))
+(xi − x0i ) ×
+α
+dα
+∂xi ∂xj
+α=0
+
+(7)
+(8)
+
+(9)
+(10)
+
+where we’ve assume that the function f satisfies the conditions for the Leibniz Integral Rule (so
+that integration and differentiation are interchangeable). These conditions require that the derivative
+2
+∂f
+f
+of f , ∂x
+and its second derivative function ∂x∂i ∂x
+are continuous over x in the integration region,
+i
+j
+and that the bounds of integration are constant with respect to x. It’s easy to see that the bounds
+of integration are constant with respect to x. It is also straightforward to see that common neural
+network activation functions - for example, sigmoid(x) = 1+e1−x , softplusβ (x) = β1 log(1 + e−βx ),
+or gelu(x) = xΦ(x) where Φ(x) is the cumulative distribution function of the normal distribution - have continuous first and second partial derivatives, which implies compositions
+of these functions have continuous first and second partial derivatives as well. Although this
+is not the case with the ReLU activation function, we discuss replacing it with softplus in the main text.
+We can proceed by plugging equation 10 into the original definition of Γi,j (x):
+Z 1
+∂φi (x0 + β(x − x0 ))
+Γi,j (x) := (xj − x0j ) ×
+dβ =
+∂xj
+β=0
+(11)
+Z 1
+Z 1
+2
+0
+0
+0
+0
+∂ f (x + α(x − β(x − x ) − x ))
+(xj − x0j ) ×
+(x0i − β(xi − x0i ) − x0i )
+α
+dαdβ =
+∂xi ∂xj
+β=0
+α=0
+(12)
+Z 1 Z 1
+2
+0
+0
+∂ f (x + αβ(x − x ))
+(xj − x0j )(xi − x0i )
+αβ
+dαdβ (13)
+∂xi ∂xj
+β=0 α=0
+where all we’ve done is re-arrange terms.
+Deriving Γi,i (x) proceeds similarly:
+16
+
+∂
+∂xi
+
+∂φi
+(x) =
+∂xi
+(14)
+! Z
+!
+Z 1
+1
+0
+0
+0
+∂f (x + α(x − x ))
+∂f (x + α(x − x0 ))
+∂
+0
+0
+(xi − xi ) ×
+dα + (xi − xi ) ×
+dα =
+∂xi
+∂xi
+∂xi
+α=0
+α=0
+(15)
+Z 1
+Z 1
+2
+0
+0
+0
+∂ f (x + α(x − x0 ))
+∂f (x + α(x − x ))
+α
+dα + (xi − x0i ) ×
+dα
+∂xi
+∂xi ∂xj
+α=0
+α=0
+(16)
+
+using the chain rule. After similar re-arrangement, we can arrive at:
+Z 1 Z 1
+Z 1 Z 1
+∂f (x0 + αβ(x − x0 ))
+∂ 2 f (x0 + αβ(x − x0 ))
+αβ
+Γi,i (x) = (xi − x0i )
+dαdβ + (xi − x0i )2 ×
+dαdβ
+∂xi
+∂xi ∂xj
+β=0 α=0
+β=0 α=0
+(17)
+A.2
+
+Baselines and Expected Hessians
+
+Several existing feature attribution methods have pointed out the need to explain relative to a baseline
+value that represents a lack of information that the explanations are relative to [73, 64, 4, 46]. However,
+more recent work has pointed out that choosing a single baseline value to represent lack of information
+can be challenging in certain domains [35, 31, 72, 2, 19, 70]. As an alternative, Erion et al. [17]
+proposed an extension of IG called Expected Gradients (EG), which samples many baseline inputs
+from the training set. We can therefore apply EG to itself to get Expected Hessians.
+#
+"
+∂ 2 f (x0 + αβ(x − x0 ))
+EG
+0
+0
+(18)
+Γi,j (x) = Eαβ∼U (0,1)×U (0,1),x0 ∼D (xi − xi )(xj − xj )αβ
+∂dxi ∂dxj
+"
+#
+0
+0
+∂ 2 f (x0 + αβ(x − x0 ))
+EG
+0 ∂f (x + αβ(x − x ))
+0 2
+Γi,i (x) = Eαβ∼U (0,1)×U (0,1),x0 ∼D (xi − xi )
++ (xi − xi ) αβ
+∂xi
+∂dxi ∂dxj
+(19)
+where the expectation is over x0 ∼ D for an underlying data distribution D, α ∼ U (0, 1) and
+β ∼ U (0, 1). This formulation can be useful in the case where there does not exist a single, natural
+baseline. The derivation for Expected Hessians follows identical steps as the derivation for Integrated
+Hessians while observing that the integrals can be viewed as integrating over the product of two
+uniform distributions αβ ∼ U (0, 1) × U (0, 1). We use Integrated Hessians for all of the examples in
+the main text - however, the additional examples shown in the appendix use the Expected Hessians
+formulation.
+A.3
+
+Axioms Satisfied by Integrated Hessians
+
+A.3.1
+
+Self and Interaction Completeness
+
+The proof that Integrated Hessians satisfies the axioms interaction completeness and self completeness
+are straightforward to show, but we include the step-by-step derivation here. First, we note that
+φi (x0 ) = 0 for any i because x0i − x0i = 0. Then, by completeness of Integrated Gradients, we have
+that:
+X
+Γi,j (x) = φi (x) − φi (x0 ) = φi (x)
+(20)
+j
+
+Re-arrangement gives us the self completeness axioms:
+Γi,i (x) = φi (x) if Γi,j (x) = 0, ∀j 6= i
+17
+
+(21)
+
+Since Integrated Gradients satisfies completeness, we have:
+X
+φi (x) = f (x) − f (x0 )
+
+(22)
+
+i
+
+Making the appropriate substitution from equation 20 shows the interaction completeness axiom:
+XX
+Γi,j (x) = f (x) − f (x0 )
+(23)
+i
+
+A.3.2
+
+j
+
+Sensitivity
+
+Integrated Gradients satisfies an axiom called sensitivity, which can be phrased as follows. Given
+an input x and a baseline x0 , if xi = x0i for all i except j where xj 6= x0j and if f (x) 6= f (x0 ), then
+φj (x) 6= 0. Specifically, by completeness we know that φj (x) = f (x) − f (x0 ). Intuitively, this is
+saying that if only one feature differs between the baseline and the input and changing that feature
+changes the output, then the amount the output changes should be equal to the importance of that
+feature.
+We can extend this axiom to the interaction case by considering the case when two features differ
+from the baseline. We call this axiom interaction sensitivity, and can be described as follows. If an
+input x and a baseline x0 are equal everywhere except xi 6= x0i and xj 6= x0j , and if f (x) 6= f (x0 ),
+then: Γi,i (x) + Γj,j (x) + 2Γi,j (x) = f (x) − f (x0 ) 6= 0 and Γ`,k = 0 for all `, k 6= i, j. Intuitively,
+this says that if the only features that differ from the baseline are i and j, then the difference in the
+output f (x) − f (x0 ) must be solely attributable to the main effects of i and j plus the interaction
+between them. This axiom holds simply by applying interaction completeness and observing that
+Γ`,k (x) = 0 if x` = x0` or xk = x0k .
+
+A.3.3
+
+Implementation Invariance
+
+The implementation invariance axiom, described in the original paper, states the following. For two
+models f and g such that f = g, then φi (x; f ) = φi (x; g) for all features i and all points x regardless
+of how f and g are implemented. Although it seems trivial, this axiom does not necessarily hold
+for attribution methods that use the implementation or structure of the network in order to generate
+attributions. Critically, this axiom also does not hold for the interaction method proposed by Tsang
+et al. [77], which looks at the first layer of a feed forward neural network. Two networks may
+represent exactly the same function but differ greatly in their first layer.
+This axiom is trivially seen to hold for Integrated Hessians since it holds for Integrated Gradients.
+However, this axiom is desirable because without it, it may mean that attributions/interactions are
+encoding information about unimportant aspects of model structure rather than the actual decision
+surface of the model.
+A.3.4
+
+Linearity
+
+Integrated Gradients satisfies an axiom called linearity, which can be described as follows. Given two
+networks f and g, consider the output of the weighted ensemble of the two networks af (x) + bg(x).
+Then the attribution φi (x; af + bg) of the weighted ensemble equals the weighted sum of attributions
+aφi (x; f ) + bφi (x; g) for all features i and samples x. This axiom is desirable because it preserves
+linearity within a network, and allows easy computation of attributions for network ensembles.
+We can generalize linearity to interactions using the interaction linearity axiom: Γi,j (x; af + bg) =
+aΓi,j (x; f ) + bΓi,j (x; g) for any i, j and all points x. Given that Γi,j is composition of linear
+functions φi , φj in terms of the parameterized networks f and g, it itself is a linear function of the
+networks and therefore Integrated Hessians satisfies interaction linearity.
+18
+
+A.3.5
+
+Symmetry-Preserving
+
+We say that two features xi and xj are symmetric with respect to f if swapping them does not change
+the output of f anywhere. That is, f (· · · , xi , · · · , xj , · · · ) = f (· · · , xj , · · · , xi , · · · ). The original
+paper shows that Integrated Gradients is symmetry-preserving, that is, if xi and xj are symmetric
+with respect to f , and if xi = xj and x0i = x0j for some input x and baseline x0 , then φi (x) = φj (x).
+We can make the appropriate generalization to interaction values: if the same conditions as above
+hold, then Γk,i (x) = Γk,j (x) for any feature xk . This axiom holds since, again Γk,i (x) = φi (φk (x))
+and φi , φj are symmetry-preserving. This axiom is desirable because it says that if two features are
+functionally equivalent to a model, then they must interact the same way with respect to that model.
+A.4
+
+Approximating Integrated Hessians in Practice
+
+To compute Integrated Gradients in practice, Sundararajan et al. [73] introduce the following discrete
+sum approximation:
+
+φ̂i (x) = (xi − x0i ) ×
+
+k
+X
+∂f (x0 + ` (x − x0 ))
+k
+
+∂xi
+
+`=1
+
+×
+
+1
+k
+
+(24)
+
+where k is the number of points used to approximate the integral. To compute Integrated Hessians,
+we introduce a similar discrete sum approximation:
+
+Γ̂i,j (x) = (xi − x0i )(xj − x0j ) ×
+
+k X
+m
+X
+`
+`=l p=1
+
+k
+
+×
+
+p
+∂f (x0 + ( k` × m
+)(x − x0 ))
+p
+1
+×
+×
+m
+∂xi ∂xj
+km
+
+(25)
+
+Typically, it is easiest to compute this quantity when k = m and the number of samples drawn is
+thus a perfect square - however, when a non-square number of samples is desired we can generate a
+number of sample points from the product distribution of two uniform distributions such that the
+number is the largest perfect square above the desired number of samples, and index the sorted
+samples appropriately to get the desired number. The above formula omits the first-order term in
+Γi,i (x) but it can be computed using the same principle.
+Expected Hessians has a similar, if slightly easier form:
+
+0
+0
+Γ̂EG
+i,j (x) = (xi − xi )(xj − xj )
+
+k
+X
+
+ζ` ×
+
+`
+
+∂f (x0 + ζ` (x − x0 )) 1
+×
+∂xi ∂xj
+k
+
+(26)
+
+where ζ` is the `th sample from the product distribution of two uniform distributions. We find that
+in general that less than 300 samples are required for any given problem to approximately satisfy
+interaction completeness. For most problems, a number far less than 300 suffices (e.g. around 50)
+although this is model and data dependent: larger models and higher-dimensional data generally
+require more samples than smaller models and lower-dimensional data.
+
+B
+
+Comparing Against Existing Methods
+
+In this section, we further discuss the relationship between our method and six existing methods:
+• Integrated Hessians: the method we propose in this paper.
+• Input Hessian: simply use the hessian at the input instance. Using the input hessian at a
+particular instance to measure the interaction values is the natural generalization of using
+the gradient to measure the importance of individual features, as done by [65].
+19
+
+• Contextual Decomposition (CD): this method was introduced by Murdoch et al. [51] for
+LSTMs and extended to feed-forward and convolutional architectures by Singla et al. [67].
+We focus on the generalized version introduced by the latter.
+• Neural Interaction Detection (NID): introduced by Tsang et al. [77], this method generated
+interactions by inspecting the weights of the first layer of a feed-forward neural network.
+• Shapley Interaction Index (SII): this method, introduced by Grabisch and Roubens [24], is a
+way to allocate credit in coalitional game theory. It can be used to explain interactions in
+neural networks similarly to how the Shapley value is used to explain attributions in [46].
+• Group Expected Hessian (GEH): this method aggregates the input hessian over many
+samples with respect to a bayesian neural network. It was introduced in Cui et al. [8].
+• Deep Feature Interaction Maps (DFIM): this method determines interactions by seeing how
+much attributions change when features are perturbed, and was introduced by Greenside
+et al. [25].
+We first discuss the practical considerations regarding each method, and then evaluate whether or not
+each method satisfies the axioms we identified in the previous section.
+B.1
+
+Practical Considerations
+
+In this section we describe four properties desirable properties that interaction methods may or may
+not satisfy:
+• Local: a method is local if it operates at the level of individual predictions, as opposed
+to methods that are global, which operate over the entire dataset. Which is better is task
+dependent, but local methods are often more flexible because they can be aggregated globally
+[47].
+• Architecture Agnostic: a method is architecture agnostic if it can be applied to any neural
+network architecture.
+• Data Agnostic: a method is data agnostic if it can be applied to any type of data, no matter
+the structure.
+• Higher-Order Interactions: this paper primarily discusses interactions between pairs of
+features. However, some existing methods are able to generate interactions between groups
+of features larger than 2. Those methods that do are said to be able to generate higher-order
+interactions.
+In Table 1, we compare which methods satisfy which properties. We note that GEH and DFIM
+are not architecture or data agnostic, respectively. Therefore, we do not include them in empirical
+comparisons, as they cannot be run on feed-forward neural networks with arbitrary data. We also
+note that our method does not generate higher-order interactions. Although in principle one generate
+kth order interactions by recursively applying integrated gradients to itself k times, we do not discuss
+doing so in this paper.
+B.2
+
+Theoretical Considerations
+
+In this section, we evaluate which methods satisfy the axioms we presented in the previous section.
+The results are presented in Table 2. We note that Integrated Hessians and the Shapley Interaction
+Index share many theoretical properties, except that the Shapley Interaction Index trades completeness
+for the recursive axioms, which state that higher order interactions should be recursively defined from
+lower order interactions. Whether or not this is preferable to satisfying completeness seems subjective.
+The hessian satisfies implementation invariance for the same reason that our method does: it only
+relies on the value of the network function and its derivatives. The hessian also satisfies linearity
+since the derivative is a linear operator. However, second derivatives are not symmetry preserving for
+general functions (this is easy to see by considering the multiplication of two variables). Contextual
+decomposition is symmetry preserving by definition, but fails on implementation invariance due to
+the way it splits the bias.
+20
+
+Interaction Method
+
+Local
+
+Input Hessian
+Integrated Hessians (ours)
+CD [66]
+NID [77]
+SII [24]
+GEH [8]
+DFIM [25]
+
+X
+X
+X
+X
+X
+X
+
+Architecture
+Agnostic
+X
+X
+∼*
+X
+X
+
+Data
+Agnostic
+X
+X
+X
+X
+X
+X
+
+Higher-Order
+Interactions
+X
+X
+X
+
+X
+
+Table 1: Comparing the practical properties of existing interaction methods. Because GEH and
+DFIM are not architecture or data agnostic respectively, we omit them from empirical comparisons.
+*Contextual Decomposition was originally introduced for LSTMs in Murdoch et al. [51], and
+generalized to feed-forward and convolutional architectures in Singh et al. [66]. However, the method
+has yet to be adapted to other architectures such as transformers [12].
+Interaction Method
+
+Interaction
+Completeness
+
+Interaction
+Sensitivity
+
+X
+
+X
+∼**
+
+Input Hessian
+Integrated Hessians (ours)
+CD [66]
+NID [77]
+SII [24]
+GEH [8]
+DFIM [25]
+
+X
+
+Implementation
+Invariant
+X
+X
+
+Symmetry
+Preserving
+
+X
+X
+∼***
+
+X
+
+X
+X
+
+∼***
+
+Interaction
+Linearity
+X
+X
+
+Recursive
+Axioms*
+
+X
+X
+∼***
+
+X
+
+Table 2: Comparing the theoretical guarantees of existing interaction methods. We define each axiom
+in the appendix. *The recursive axioms are discussed in Grabisch and Roubens [24] and guarantee
+that higher-order interactions satisfy a specific recurrence relation. **Contextual Decomposition
+does not satisfy the exact sensitivity axiom we present in the appendix, but it does guarantee that
+features equal to 0 will have zero interaction with any other feature. ***Whether or not Deep Feature
+Interaction Maps satisfies these properties relies on the underlying feature attribution method used: if
+the underlying method satisfies the properties, so does DFIM.
+
+B.3
+
+Quantitative Evaluations
+
+In this section, we elaborate on the quantitative comparisons presented in the main text. We also
+mention here that we do not compare against GEH and DFIM, because they are not applicable to
+feed-forward neural networks with continuous data.
+B.3.1
+
+Remove and Retrain
+
+The Remove and Retrain benchmark first starts with a trained network on a given dataset. It ranks the
+features most important for prediction on every sample in the dataset according to a given feature
+attribution method. Using the ranking, it iteratively ablates the most important features in each
+sample and then re-trains the model on the ablated data. In order to run this method, it is necessary to
+be able to ablate a feature, which the original paper does by mean or zero imputation [28]. However,
+this presents a problem when trying to compare methods that explain interactions between features
+rather than attributions to features.
+Unlike ablating features, it is not straightforward to ablate an interaction between two features.
+Ablating the both of the features in the interaction doesn’t work, because it mixes main effects
+with interactions. Consider the function f (x1 , x2 , x3 , x4 ) = x1 + x2 + 0.1 ∗ x3 ∗ x4 . For
+f (1.0, 1.0, 1.0, 1.0) = 2.1, the largest and only interaction is between x3 and x4 . However, ablating
+the pair x1 , x2 would incur a larger performance hit because the features x1 and x2 have larger main
+effects than x3 and x4 .
+
+21
+
+Instead, we opt to generate simulated data where the interactions are known, and then ablate the
+interactions in the labels directly. We generate a simulated regression task with 10 features where
+each feature is drawn independently from N (0, 1). The label is an additive sum of 20 interactions
+with random coefficients, drawn without replacement from all possible pairs of features. That is, for
+some specified interaction function g, we generate the label y as:
+20
+X
+
+αi g(xi,1 , xi,2 )
+
+i=1
+
+where xi,1 , xi,2 are the pair of features chosen to be part of the ith interaction and αi are random
+coefficients drawn from a uniform distribution and normalized to sum to 1:
+20
+X
+
+αi = 1
+
+i=1
+
+To ablate an interaction, we multiply the interaction in the label with gaussian noise, which ensures
+ablating the largest interactions adds the most amount of noise the the label. For example, let
+f (x1 , x2 , x3 ) = 0.5 ∗ g(x1 , x2 ) + 0.3g(x1 , x3 ). To ablate the interaction between x1 and x2 , we
+compute the ablated label fˆ(x1 , x2 , x3 ) =  ∗ 0.5 ∗ g(x1 , x2 ) + 0.3g(x1 , x3 ) where  ∼ N (0, 1).
+The interaction method that identifies the largest interactions in the data will add the largest amount
+of random noise into the label, thus increasing error the fastest.
+On the simulated data mentioned in the main text, we train a 3 layer neural network with 64 hidden
+units each and ReLU activation. It achieves near-perfect performance on the simulated regression
+task: explaining over 99% of variance in the label. For each progressive ablation of an interaction,
+we retrain the network 5 times and re-evaluate performance. We then plot the mean and standard
+deviation of performance on a held-out set, as recommended by the original paper [28]. In the
+main-text, we showed the results for gtanhsum (xi , xj ) = tanh(xi + xj ). We show results for the four
+additional interaction types here:
+• gcossum (xi , xj ) = cos(xi + xj )
+• gmultiply (xi , xj ) = xi ∗ xj
+• gmaximum (xi , xj ) = max(xi , xj )
+• gminimum (xi , xj ) = min(xi , xj )
+The results are shown in Figure 7. They show that our method consistently outperforms all methods
+except the monte-carlo estimation of the Shapley Interaction Index, which it performs just as well as
+our method. We note here that, as discussed in the main text, our method is much more computationally tractable than the Shapley Interaction Index, even using monte-carlo estimation. We also
+note here that Neural Interaction Detection [77] is not a local interaction method; rather, it detects
+interactions globally. To compare against it, we simply ablate the top-ranked interaction globally in
+all samples.
+B.3.2
+
+Rank Correlation and Sanity Checks
+
+We also quantitatively compared our method to other approaches by directly measuring the rank
+correlation between the true interactions and the interactions detected by each approach. We were
+able to do this because our data were synthetic. We created two synthetic datasets, both sharing
+the same set of features. The synthetic features consisted of five 0-mean unit-variance independent
+Gaussian random variables. For the first dataset (Multiplicative Interactions), the synthetic label
+was the sum of each of the ten possible pairwise multiplicative interactions between features with
+coefficients ranging in magnitude from 10 to 1:
+y = 10x1 x2 − 9x1 x3 + 8x1 x4 + · · · − 1x4 x5 .
+
+(27)
+
+For the second dataset (Min/Max Interactions), the synthetic label was the sum of each of ten pairwise
+interactions, where each was a scalar coefficient times a pairwise minimum or maximum function:
+y = 10 × max(x1 , x2 ) − 9 × min(x1 , x3 ) + 8 × min(x1 , x4 ) − · · · + max(x4 , x5 ).
+22
+
+(28)
+
+Figure 7: Additional comparisons against existing methods on known simulated interactions. The
+charts plot the mean and standard deviation across 5 re-trainings of the model as a function of ablated
+interactions. Our method (in blue) outperforms all existing methods on all interaction types.
+
+Interaction Method
+Integrated Hessians (ours)
+SII [24]
+Hessian [8]
+NID [77]
+CD [66]
+
+Multiplicative
+(Global)
+1.000
+1.000
+1.000
+0.855
+0.794
+
+Multiplicative
+(Local)
+0.991
+0.992
+0.008
+n/a
+0.002
+
+Non-Multiplicative
+(Global)
+1.000
+1.000
+1.000
+0.878
+-0.285
+
+Non-Multiplicative
+(Local)
+0.313
+0.271
+-0.086
+n/a
+0.000
+
+Table 3: Rank correlation between each interaction detection method and true model interactions,
+both locally and globally for two different interaction types (multiplicative and non-multiplicative).
+
+For each dataset, we trained a neural network with two hidden layers and Tanh non-linearities until
+convergence (validation set > R2 : 0.99). For all methods where local attributions could be attained
+(Integrated Hessians, Inputs * Hessian, CD, SII), we compared the true interaction contribution for
+each sample to the interaction detected by each attribution method. To translate local interactions
+into global interactions, we simply took the global interaction to be the average magnitude of
+interactions across all samples [47, 8]. Due to the small number of features (5) it was feasible to
+exhaustively compute the Shapley Interaction Index. We found that for both the multiplicative and
+non-multiplicative interactions, both globally and locally, Integrated Hessians was consistently the
+top performing method along with the Shapley Interaction Index (see Table 3).
+Finally, to ensure that our interaction attributions were sensitive to network and data randomization,
+we tested our approach using the “Sanity Checks” proposed in [1]. Using the same data and network
+architecture described in the previous experiment, we first fit a network and found the interactions
+using Integrated Hessians. We then compared the rank correlation of these interactions with the
+interactions attained from explaining (a) a network with randomly initialized weights and (b) a
+network trained to convergence on the training set on data where the labels are shuffled at random
+23
+
+(but the features are the same). We found that in both settings, the Spearman correlation between the
+true and randomized interactions was 0.
+
+C
+
+Effects of Smoothing ReLU Networks
+
+C.1
+
+Proof of Theorem 1
+
+Theorem 2. For a one-layer neural network with softplusβ non-linearity, fβ (x) = softplusβ (wT x),
+and d input features, we can bound the number of interpolation points k needed to approximate the
+2
+Integrated Hessians to a given error tolerance  by k ≤ O( dβ ).
+Proof. As pointed out in Sundararajan et al. [73] and Sturmfels et al. [70], completeness can be
+used to assess the convergence of the approximation. We first show that decreasing β improves
+convergence for Integrated Gradients. In order to accurately calculate the Integrated Gradients value
+Φ for a feature i, we want to be able to bound the error between the approximate computation and
+exact value. The exact value is given as:
+0
+
+Φi (θ, x, x ) = (xi − x0i ) ×
+
+Z 1
+
+∂f (x0 (1 − α) + xα)
+dα.
+∂xi
+α=0
+
+(29)
+
+To simplify notation, we can define the partial derivative that we want to integrate over in the ith
+(x)
+coordinate as gi (x) = ∂F
+∂xi :
+0
+
+Φi (θ, x, x ) = (xi − x0i ) ×
+
+Z 1
+
+gi (x0 α + x(1 − α))dα.
+
+(30)
+
+α=0
+
+Since the single layer neural network with softplus activation is monotonic along the path, the error
+in the approximate integral can be lower bounded by the left Riemann sum Lk :
+k−1
+
+kx − x0 k X
+i
+Lk =
+gi (x0 + (x − x0 )) ≤
+k
+k
+i=0
+
+Z 1
+
+gi (x0 α + x(1 − α))dα.
+
+(31)
+
+α=0
+
+and can likewise be upper-bounded by the right Riemann sum Rk :
+Z 1
+
+k
+
+gi (x0 α + x(1 − α))dα ≤ Rk =
+
+α=0
+
+i
+kx − x0 k X
+gi (x0 + (x − x0 )).
+k
+k
+i=1
+
+(32)
+
+We can then bound the magnitude of the error between the Riemann sum and the true integral by the
+difference between the right and left sums:
+ ≤ |Rk − Lk | =
+
+kx − x0 k2
+|gi (x) − gi (x0 )|.
+k
+
+(33)
+
+By the mean value theorem, we know that for some η ∈ [0, 1] and z = x0 +η(x−x0 ), gi (x)−gi (x0 ) =
+∇x gi (z)> (x − x0 ). Therefore:
+≤
+
+kx − x0 k
+∇x gi (z)> (x − x0 ).
+k
+
+(34)
+
+Rewriting in terms of the original function, we have:
+d
+
+≤
+
+kx − x0 k X
+k
+j=0
+
+
+
+
+∂ 2 f (z)
+(xj − x0j ) .
+∂xi xj
+
+24
+
+(35)
+
+We can then consider the gradient vector of gi (x):
+
+
+T
+T
+βw1 eβw x
+βw0 eβw x
+,
+,
+·
+·
+·
+∇x gi (x) =
+(eβwT x + 1)2 (eβwT x + 1)2
+
+(36)
+
+where each coordinate is maximized at the zeros input vector, and takes a maximum value of βwi /4.
+We can therefore bound the error in convergence as:
+
+d 
+kx − x0 k X βkwk∞
+≤
+(xj − x0j ) .
+(37)
+k
+4
+j=0
+Ignoring the dependency on path length and the magnitude of the weights of the neural network, we
+see that:
+ 
+dβ
+k≤O
+.
+(38)
+
+This demonstrates that the number of interpolation points k necessary to achieve a set error rate 
+decreases as the activation function is smoothed (the value of β is decreased). While this proof
+only bounds the error in the approximation of the integral for a single feature, we get the error in
+completeness by multiplying by an additional factor of d features.
+We can extend the same proof to the Integrated Hessians values. We first consider the error for
+estimating off diagonal terms Γi,j , i 6= j. The true value we are trying to approximate is given as:
+Z
+∂ 2 f (x0 + αβ(x − x0 ))
+Γij = (xi − x0i )(xj − x0j ) ×
+dαdβ
+(39)
+∂xi ∂xj
+αβ
+2
+
+(x)
+For the sake of notation, we can say hij (x) = ∂∂xFi ∂x
+. Assuming that we are integrating from the
+j
+all-zeros baseline as suggested in Sundararajan et al. [73], since hij (x) = is monotonic on either
+interval from the 0 baseline, we can again bound the error in the double integral by the magnitude of
+the difference in the left and right Riemann sums:
+
+≤
+
+k
+k
+k−1 k−1
+kx − x0 k22 X X
+ij
+ij
+kx − x0 k22 X X
+hij (x0 + (x − x0 )) −
+hij (x0 + (x − x0 ))
+2
+k
+k
+k
+k
+j=1 i=1
+j=0 i=0
+
+(40)
+
+k−1
+k−1
+X
+X
+
+
+i
+kx − x0 k22
+hij (x0 + √ (x − x0 )) − hij (x0 ) + 2
+hij (x) + 2
+hij (x0 )
+k
+k
+i=1
+i=1
+
+(41)
+
+≤
+
+We can then again use monotonicity over the interval to say that hij (x0 + √ik (x − x0 )) < hij (x),
+which gives us:
+(2k − 1)kx − x0 k22
+≤
+hij (x) − hij (x0 )
+(42)
+k
+By the mean value theorem, we know that for some β ∈ [0, 1], hij (x)−hij (x0 ) = ∇x hij (β)> (x−x0 ).
+Substituting gives us:
+(2k − 1)kx − x0 k22
+≤
+∇x hij (β)> (x − x0 )
+(43)
+k
+We can then consider the elements of the gradient vector:
+
+
+
+
+T
+T
+T
+T
+β 2 wi wj w1 eβw x eβw x − 1
+β 2 wi wj w2 eβw x eβw x − 1
+∇x hij (x) = −
+,−
+,··· .
+(eβwT x + 1)3
+(eβwT x + 1)3
+
+(44)
+
+For the univariate version of each coordinate, we can maximize the function by taking the derivative
+with respect to x and setting it equal to 0.
+
+
+β 2 eβx eβx − 1
+d
+β 3 eβx (−4eβx + e2βx + 1)
+−
+=
+=0
+(45)
+βx
+3
+dx
+(e + 1)
+(eβx + 1)4
+25
+
+We can see that this equation holds only when (−4eβx + e2βx + 1) = 0, and
+√ can solve it by finding
+the roots of this quadratic equation, which occur when x = β1 log(2 ± 3). When we plug that
+back in, we find the absolute value of the function in that coordinate takes a maximum value of
+β√2
+. Therefore, for a given set of fixed weights of the network, we can see that the coordinate-wise
+6 3
+maximum magnitude of ∇x hij , ∝ β 2 , and that the number of interpolation points necessary to reach
+a desired level of error in approximating the double integral decreases as β is decreased. Again
+ignoring the fixed weights and path length, the number of interpolation points necessary is bounded
+by:
+
+k≤O
+
+
+dβ 2
+.
+k
+
+(46)
+
+For the i = j terms (main effect terms) the error will have another additive factor of β. This is
+because there is an added term to the main effect equal to:
+Z 1 Z 1
+∂f (x0 + αβ(x − x0 ))
+(xi − x0i )
+dαdβ
+(47)
+∂xi
+β=0 α=0
+When we bound the error in this approximate integral by the difference between the double left sum
+and double right sum, we get that:
+(2k − 1)kx − x0 k22
+≤
+gi (x) − gi (x0 )
+(48)
+k
+Following the exact same steps as in Equation 33 through Equation 37, we can then show the bound
+on the error of the on-diagonal terms will have an additional term that is ∝ β. Due to the axiom of
+interaction completeness, the error bound of the entire convergence can be obtained by adding up all
+of the individual terms, incurring another factor of d2 in the bound.
+
+C.2
+
+SoftPlus Smoothing Empirically Improves Convergence
+
+In addition to theoretically analyzing the effects of smoothing the activation functions of a single-layer
+neural network on the convergence of the approximately calculation of Integrated Gradients and
+Integrated Hessians, we also wanted to empirically analyze the same phenomenon in deeper networks.
+We assessed this by creating two networks: one with 5 hidden layers of 50 nodes, and a second
+with 10 hidden layers of 50 nodes. These networks were then randomly initialized using the Xavier
+Uniform intialization scheme [23]. We created 10 samples to explain, each with 100 features drawn
+at random from the standard normal distribution. To evaluate the convergence of our approximate
+Integrated Hessians values, we plot the interaction completeness error (the difference between the
+sum of the Integrated Hessians value and the difference of the function output at a sample and the
+function output at the zeros baseline). We plot the completeness error as a fraction of the magnitude
+of the function output. As we decrease the value of β, we smooth the activations, and we can see that
+the number of interpolations required to converge decreases (see Figure 8 and Figure 9). We note that
+the randomly initialized weights of each network are held constant and the only thing changed is the
+value of β in the activation function.
+
+D
+
+Details on the Sentiment Analysis Task
+
+D.1
+
+Fine-Tuning DistilBERT
+
+As mentioned in the main text, we download pre-trained weights for DistilBERT, a pre-trained
+language model introduced in Sanh et al. [60], from the HuggingFace Transformers library [81]. We
+fine-tune the model on the Stanford Sentiment Treebank dataset introduced by Socher et al. [69].
+We fine-tune for 3 epochs using a batch size of 32 and a learning rate of 0.00003. We use a a max
+sequence length of 128 tokens, and the Adam algorithm for optimization [36]. We tokenize using
+the HuggingFace build-in tokenizer, which does so in an uncased fashion. We did not search for
+these hyper-parameters - rather, they were the defaults presented for fine-tuning in the HuggingFace
+repository. We find that they work adequately for our purposes, and didn’t attempt to search through
+more hyper-parameters.
+26
+
+Random Feed Forward Neural Network, 5 layers
+
+Int. Hess. MSE Completeness as Fraction of Output
+
+0.30
+
+b = 20
+b = 10
+b=5
+b=1
+
+0.25
+0.20
+0.15
+0.10
+0.05
+0.00
+0
+
+50
+
+100
+
+150
+
+Number of Interpolation Points
+
+200
+
+Figure 8: 5-Layer Network Results. Interaction completeness error (difference between model output
+and sum of Integrated Hessians values) decreases more quickly with number of interpolation points
+as the β parameter for the softplus activation function is decreased (as the function is smoothed).
+Results are averaged over 10 samples with 100 features for a neural network with 5 hidden layers of
+50 nodes each.
+
+Random Feed Forward Neural Network, 10 layers
+
+Int. Hess. MSE Completeness as Fraction of Output
+
+0.030
+
+b = 20
+b = 10
+b=5
+b=1
+
+0.025
+0.020
+0.015
+0.010
+0.005
+0.000
+0
+
+50
+
+100
+150
+Number of Interpolation Points
+
+200
+
+Figure 9: 10-Layer Network Results. We can see that decreasing β has an even more dramatic effect
+on convergence in this case when the network is deeper than in the 5-layer case. Again, this result
+shows that the interaction completeness error decreases more quickly with number of interpolation
+points as the activation function is smoothed. Results are averaged over 10 samples with 100 features
+for a neural network with 10 hidden layers of 50 nodes each.
+
+27
+
+D.2
+
+Training a CNN
+
+The convolutional neural network that we compare to in the main text is one we train from scratch
+on the same dataset. We randomly initialize 32-dimensional embeddings and use a max sequence
+length of 52. First, we apply dropout to the embeddings with dropout rate 0.5. The network itself
+is composed of 1D convolutions with 32 filters of size 3 and 32 filters of size 8. Each filter size is
+applied separately to the embedding layer, after which max pooling with a stride of 2 is applied and
+then the output of both convolutions is concatenated together and fed through a dropout layer with a
+dropout rate of 0.5 during training. A hidden layer of size 50 follows the dropout, finally followed by
+a linear layer generating a scalar prediction that the sigmoid function is applied to.
+We train with a batch size of 128 for 2 epochs and use a learning rate of 0.001. We optimize using the
+Adam algorithm with the default hyper-parameters [36]. Since this model was not pre-trained on a
+large language corpus and lacks the expressive power of a deep transformer, it is unable to capture
+patterns like negation that a fine-tuned DistilBERT does.
+
+D.3
+
+Generating Attributions and Interactions
+
+In order to generate attributions and interactions, we use Integrated Gradients and Integrated Hessians
+with the zero-embedding - the embedding produced by the all zeros vector, which normally encodes
+the padding token - as a baseline. Because embedding layers are not differentiable, we generate
+attributions and interactions to the word embeddings and then sum over the embedding dimension to
+get word-level attributions and interactions, as done in Sundararajan et al. [73]. When computing
+attributions and interactions, we use 256 background samples. Because DistilBERT uses the GeLU
+activation function [58], which has continuous first and second partial derivatives, there is no need to
+use the softplus replacement. When we plot interactions, we avoid plotting the main-effect terms in
+order to better visualize the interactions between words.
+
+D.4
+
+Additional Examples of Interactions
+
+Here we include additional examples of interactions learned on the sentiment analysis task. First
+we expand upon the idea of saturation in natural language, displayed in Figure 10. We display
+interactions learned by a fine-tuned DistilBERT on the following sentences: “a bad movie” (negative
+with 0.9981 confidence), “a bad, terrible movie” (negative with 0.9983 confidence), “a bad, terrible,
+awful movie” (negative with 0.9984 confidence) and “a bad, terrible, awful, horrible movie” (negative
+with 0.9984 confidence). The confidence of the network saturates: a network output only gets so
+negative before it begins to flatten. However, the number of negative adjectives in the sentence
+increases. This means a sensible network would spread the same amount of credit (because the
+attributions sum to the saturated output) across a larger number of negative words, which is exactly
+what DistilBERT does. However, this means that each word gets less negative attribution than it
+would if it was on its own. Thus, the negative words have positive interaction effects, which is exactly
+what we see from the figure.
+In Figure 11, we give another example of the full interaction matrix on a sentence from the validation
+set. In Figure 12, we give an example of how explaining the importance of a particular word can
+understand whether that word is important because of its main effect or because of its surrounding
+context. We show additional examples from the validation set in Figures 13, 14, 15, 16, 17. We
+note that while some interactions make intuitive sense to humans (“better suited” being negative or
+“good script” being positive), there are many other examples of interactions that are less intuitive.
+These interactions may indicate that the Stanford Sentiment Treebank dataset does not fully capture
+the expressive power of language (e.g. it doesn’t have enough samples to fully represent all of the
+possible interactions in language), or it may indicate that the model has learned higher order effects
+that cannot be explained by pairwise interactions alone.
+28
+
+a bad , terrible movie
+0 1
+2 3
+4
+Selected Interactions
+
+Selected Interactions
+
+a bad movie
+0 1
+2
+a, movie (0, 2)
+
+bad, movie (1, 2)
+
+a, bad (0, 1)
+
+0.06
+
+0.05
+
+0.04
+
+0.03
+
+0.02
+
+0.01
+
+bad, movie (1, 4)
+
+terrible, movie (3, 4)
+
+bad, terrible (1, 3)
+
+0.00
+
+0.035
+
+Interaction Value
+
+0.025
+
+0.020
+
+0.015
+
+0.010
+
+0.005 0.000
+
+Interaction Value
+
+a bad , terrible , awful movie
+0 1 2 3
+4 5
+6
+
+a bad , terrible , awful , horrible movie
+0 1 2 3
+4 5
+6 7
+8
+
+bad, terrible (1, 3)
+
+bad, terrible (1, 3)
+
+Selected Intertactions
+
+Selected Interactions
+
+0.030
+
+bad, awful (1, 5)
+bad, movie (1, 6)
+terrible, awful (3, 5)
+terrible, movie (3, 6)
+awful, movie (5, 6)
+
+bad, awful (1, 5)
+bad, horrible (1, 7)
+terrible, awful (3, 5)
+terrible, horrible (3, 7)
+awful, horrible (5, 7)
+bad, movie (1, 8)
+terrible, movie (3, 8)
+awful, movie (5, 8)
+horrible, movie (7, 8)
+
+0.03
+
+0.02
+
+0.01
+
+0.00
+
+0.04
+
+0.01
+
+0.03
+
+0.02
+
+0.01
+
+0.00
+
+0.01
+
+0.02
+
+Interaction Value
+
+Interaction Value
+
+Figure 10: The effects of increasing saturation. As we add more negative adjectives to describe
+the word “movie”, those negative adjectives interact more and more positively, even though those
+words interact negatively with the word they are describing. This is because each individual negative
+adjective has less impact on the overall negativity of the sentence the more negative adjectives there
+are.
+
+beautifully
+
+observed
+
+0.8
+
+0.6
+
+, miraculously
+0.4
+
+0.2
+
+unsentimental
+
+0.0
+
+0.2
+
+comedy
+
+0.4
+
+- drama
+
+0.6
+
+.
+
+0.8
+
+Attribution Value
+0.15
+
+beautifully,
+observed
+
+beautifully
+
+beautifully,
+,
+
+beautifully,
+beautifully,
+miraculously unsentimental
+
+beautifully,
+comedy
+
+beautifully,
+-
+
+beautifully,
+drama
+
+beautifully,
+.
+
+observed,
+,
+
+observed,
+observed,
+miraculously unsentimental
+
+observed,
+comedy
+
+observed,
+-
+
+observed,
+drama
+
+observed,
+.
+
+,,
+,,
+miraculously unsentimental
+
+,,
+comedy
+
+,,
+-
+
+,,
+drama
+
+,,
+.
+
+0.10
+
+observed
+
+beautifully,
+observed
+
+,
+
+beautifully,
+,
+
+observed,
+,
+
+observed,
+miraculously
+
+,,
+miraculously
+
+beautifully,
+
+observed,
+
+,,
+
+comedy
+
+beautifully,
+comedy
+
+observed,
+comedy
+
+,,
+comedy
+
+miraculously, unsentimental,
+comedy
+comedy
+
+-
+
+beautifully,
+-
+
+observed,
+-
+
+,,
+-
+
+miraculously, unsentimental,
+-
+
+comedy,
+-
+
+drama
+
+beautifully,
+drama
+
+observed,
+drama
+
+,,
+drama
+
+miraculously, unsentimental,
+drama
+drama
+
+comedy,
+drama
+
+-,
+drama
+
+.
+
+beautifully,
+.
+
+observed,
+.
+
+,,
+.
+
+miraculously, unsentimental,
+.
+.
+
+comedy,
+.
+
+-,
+.
+
+,
+
+y
+
+-
+
+miraculously
+
+miraculously, miraculously, miraculously, miraculously, miraculously,
+unsentimental
+comedy
+drama
+.
+
+miraculously,
+
+unsentimental,unsentimental,unsentimental,unsentimental,
+comedy
+drama
+.
+
+unsentimental unsentimental unsentimental unsentimental unsentimental
+
+comedy,
+-
+
+comedy,
+drama
+
+comedy,
+.
+
+-,
+drama
+
+-,
+.
+
+0.00
+
+Interaction Value
+
+beautifully,
+miraculously
+
+ed
+
+0.05
+
+0.05
+
+drama,
+.
+
+co
+
+nt
+
+.
+
+a
+am
+
+ed
+m
+
+en
+im
+
+ul
+ac
+
+se
+
+0.15
+
+un
+
+ir
+m
+
+dr
+
+l
+ta
+
+y
+sl
+ou
+
+rv
+se
+ob
+
+be
+
+au
+
+tif
+
+ul
+
+ly
+
+0.10
+drama,
+.
+
+Figure 11: An example from the Stanford Sentiment Analysis Treebank validation set. Interactions
+highlight intuitive patterns in text, such as phrases like "beautifully observed" and "miraculously
+unsentimental" being strongly positive interactions.
+
+29
+
+Word-level attributions:
+zhang . . . has
+
+done
+
+an
+
+amazing
+
+job of getting
+
+realistic
+
+performances
+
+from his mainly
+
+nonprofessional
+
+realistic
+
+performances
+
+from his mainly
+
+nonprofessional cast
+
+0.1
+
+0.0
+
+cast
+
+.
+
+Explaining the importance of "nonprofessional":
+zhang . . . has
+
+done
+
+an
+
+amazing
+
+job of getting
+
+0.3
+
+0.2
+
+0.1
+
+0.2
+
+.
+
+0.3
+
+Attribution/Interaction Value
+
+Figure 12: An example from the Stanford Sentiment Analysis Treebank validation set. This example
+shows that the word "nonprofessional" has a main effect that is negative, but the surrounding context
+outweights the main effect and makes the overall attribution positive.
+looks and
+
+feels
+
+like a
+
+0.10
+
+project better
+
+0.05
+
+suited for the
+
+0.00
+
+small
+
+0.05
+
+screen
+
+.
+
+0.10
+
+Attribution Value
+
+Strongest Interacting Pairs
+
+looks and feels like a project better suited for the small screen .
+0
+1
+2
+3 45
+6
+7
+8 9 10
+11
+12
+better, suited (6, 7)
+feels, like (2, 3)
+and, like (1, 3)
+like, a (3, 4)
+like, better (3, 6)
+0.06
+
+0.04
+
+0.02
+
+0.00
+
+0.02
+
+0.04
+
+Interaction Value
+
+Figure 13: An example from the Stanford Sentiment Analysis Treebank validation set. This example
+highlights the phrase “better suited” being strongly negative, which is very intuitive. However,
+some of the other interactions are slightly less intuitive and may indicate lack of training data or
+higher-order interactions beyond word pairs.
+it confirms fincher's
+
+status
+
+know
+
+service
+
+0.3
+
+- how
+
+to the
+
+0.2
+
+0.1
+
+as
+
+a
+
+film maker
+
+of psychological
+0.0
+
+0.1
+
+who
+
+artfully bends
+
+technical
+
+insight .
+0.2
+
+0.3
+
+Attribution Value
+
+Strongest Interacting Pairs
+
+it confirms fincher's status as a film maker who artfully bends
+01
+2
+3
+4 56 7
+8
+9
+10
+technical know - how to the service of psychological insight .
+11
+12
+13 14 15 16 17
+18 19
+21
+20
+artfully, technical (9, 11)
+confirms, fincher's (1, 2)
+as, who (4, 8)
+a, the (5, 16)
+it, fincher's (0, 2)
+film, who (6, 8)
+fincher's, who (2, 8)
+a, film (5, 6)
+0.06
+
+0.04
+
+0.02
+
+0.00
+
+0.02
+
+0.04
+
+0.06
+
+0.08
+
+Interaction Value
+
+Figure 14: Another example from the Stanford Sentiment Analysis Treebank validation set. Notice
+how the strongest interact pairs may not necessarily be adjacent words, e.g. “artfully” and “technical”.
+
+30
+
+this is a
+
+0.4
+
+good script , good dialogue
+
+, funny
+
+0.3
+
+0.1
+
+0.2
+
+0.1
+
+0.0
+
+even
+
+0.2
+
+for adults
+
+0.3
+
+.
+
+0.4
+
+Attribution Value
+
+Strongest Interacting Pairs
+
+this is a good script , good dialogue , funny even for adults .
+0
+1 23
+4
+56
+7
+89
+10
+11 12
+13
+a, good (2, 3)
+good, script (3, 4)
+a, , (2, 5)
+good, , (3, 5)
+good, good (3, 6)
+0.10
+
+0.05
+
+0.00
+
+0.05
+
+0.10
+
+Interaction Value
+
+Figure 15: An example from the Stanford Sentiment Analysis Treebank validation set. Interestingly,
+the phrase “a good” has a negative interaction. This may indicate saturation effects, higher order
+effects, or that the model has simply learned an unintuitive pattern.
+
+prurient
+
+playthings
+0.15
+
+aside
+
+, there's
+
+0.10
+
+0.05
+
+little to love
+0.00
+
+about
+
+0.05
+
+this english trifle .
+
+0.10
+
+0.15
+
+Attribution Value
+
+Strongest Interacting Pairs
+
+prurient playthings aside , there's little to love about this english trifle .
+5
+6 7
+8
+9
+10
+11 12
+0
+1
+2
+34
+little, love (5, 7)
+little, about (5, 8)
+this, . (9, 12)
+there's, love (4, 7)
+this, english (9, 10)
+0.08
+
+0.06
+
+0.04
+
+0.02
+
+0.00
+
+0.02
+
+0.04
+
+Interaction Value
+
+Figure 16: An example from the Stanford Sentiment Analysis Treebank validation set. This example
+shows some very intuitive negative interactions among the phrase “there’s little to love”. Interestingly,
+“this english” has a positive interaction: perhaps the dataset has a bias for english movies?
+
+31
+
+it proves
+
+quite compelling as
+0.2
+
+an
+
+0.1
+
+intense
+0.0
+
+, brooding character
+0.1
+
+study
+
+.
+
+0.2
+
+Attribution Value
+
+Strongest Interacting Pairs
+
+it proves quite compelling as an intense , brooding character study .
+01
+2
+3
+4 5 6
+78
+9
+10
+11
+quite, compelling (2, 3)
+proves, quite (1, 2)
+study, . (10, 11)
+compelling, as (3, 4)
+intense, study (6, 10)
+0.06
+
+0.04
+
+0.02
+
+0.00
+
+0.02
+
+0.04
+
+0.06
+
+0.08
+
+Interaction Value
+
+Figure 17: An example from the Stanford Sentiment Analysis Treebank validation set. This one also
+shows intuitive patterns, e.g. “quite compelling” being strongly positive.
+
+E
+
+Additional Experiments
+
+E.1
+
+Heart disease prediction
+
+Here we aggregate interactions learned from many samples in a clinical dataset and use the interactions
+to reveal global patterns. We examine the Cleveland heart disease dataset [11, 9]. After preprocessing,
+the dataset contains 298 patients with 13 associated features, including demographic information like
+age and gender and clinical measurements such as systolic blood pressure and serum cholesterol. The
+task is to predict whether or not a patient has coronary artery disease. The list of features, which we
+reproduce here, is from [11], the original paper introducing the dataset:
+1. Age of patient (mean: 54.5 years ± standard deviation: 9.0)
+2. Gender (202 male, 96 female)
+3. Resting systolic blood pressure (131.6 mm Hg ± 17.7)
+4. Cholesterol (246.9 mg/dl ± 51.9)
+5. Whether or not a patient’s fasting blood sugar was above 120 mg/dl (44 yes)
+6. Maximum heart rate achieved exercise (149.5 bpm ± 23.0)
+7. Whether or not a patient has exercise-induced angina (98 yes)
+8. Excercise-induced ST-segment depression (1.05 mm ± 1.16)
+9. Number of major vessels appearing to contain calcium as revealed by cinefluoroscopy (175
+patients with 0, 65 with 1, 38 with 2, 20 with 3)
+10. Type of pain a patient experienced if any (49 experienced typical anginal pain, 84 experienced
+atypical anginal pain, 23 experienced non-anginal pain and 142 patients experienced no
+chest pain)
+11. Slope of peak exercise ST segment (21 patients had upsloping segments, 138 had flat
+segments, 139 had downsloping segments)
+12. Whether or not a patient had thallium defects as revealed by scintigraphy (2 patients with no
+information available, 18 with fixed defects, 115 with reversible defects and 163 with no
+defects)
+13. Classification of resting electrocardiogram (146 with normal resting ecg, 148 with an ST-T
+wave abnormality, and 4 with probable or definite left centricular hypertrophy)
+We split the data into 238 patients for training (of which 109 have coronary artery disease) and 60 for
+testing (of which 28 have coronary artery disease). We use a two layer neural network with 128 and
+32
+
+Features Important to Predicting Coronary Artery Disease
+number of major vessels containing calcium
+
+High
+
+is male
+experienced atypical angina
+downsloping peak excercise ST
+Feature Value
+
+thalassemia reversible defect
+st depression induced by exercise
+experienced no chest pain
+no thalassemia (normal blood flow)
+experienced non-anginal pain
+max. achieved heart rate
+
+Low
+0.4
+
+0.2
+
+0.0
+
+0.2
+
+0.4
+
+Attribution Value
+
+Figure 18: A summary of which features were most important towards predicting heart disease. A
+positive attribution value indicates increased risk of heart disease (negative value indicates decreased
+risk of heart disease). The features are ordered by largest mean absolute magnitude over the dataset.
+For binary features, high (yellow) indicates true while low (green) indicates false. For example, for
+the feature “experienced atypical angina”, yellow means the patient did experience atypical angina
+and green means the patient did not.
+
+64 hidden units, respectively, with softplus activation after each layer. We optimize using gradient
+descent (processing the entire training set in a single batch) with an initial learning rate of 0.1 that
+decays exponentially with a rate 0.99 after each epoch. We use nesterov momentum with β = 0.9
+[75]. After training for 200 epochs, the network achieves a held-out accuracy of 0.8667 with 0.8214
+true positive rate and 0.9062 true negative rate. We note that the hyper-parameters chosen here were
+not carefully tuned on a validation set - they were simply those that seemed converge to a reasonable
+performance on the training set. Our focus is not state of the art prediction or comparing model
+performances, but rather interpreting patterns a reasonable model learns.
+To generate attributions and interactions for this dataset, we use Expected Gradients and Expected
+Hessians with the training set forming the background distribution. We use 200 samples to compute
+both attributions and interactions, although we note this number is probably larger than necessary but
+was easy to compute due to the small size of the dataset.
+Figure 18 shows which features were most important towards predicting heart disease aggregated
+over the entire dataset, as well as the trend of importance values. Interestingly, the model learns some
+strangely unintuitive trends: if a patient doesn’t experience chest pain, they are more likely to have
+heart disease than if they experience anginal chest pain! This could indicate problems with the way
+certain features were encoded, or perhaps dataset bias. Figure 19 demonstrates an interaction learned
+by the network between maximum heart rate achieved and gender, and Figure 20 demonstrates an
+interaction between exercise-induced ST-segment depression and number of major vessels appearing
+to contain calcium.
+In Figure 21, we examine the interactions with a feature describing the number of major coronary
+arteries with calcium accumulation (0 to 3), as determined by cardiac cinefluoroscopy [10]. Previous
+research has shown that this technique is a reliable way to gauge calcium build-up in major blood
+vessels, and serves as a strong predictor of coronary artery disease [10, 3, 45]. Our model correctly
+learns that more coronary arteries with evidence of calcification indicate increased risk of disease.
+Additionally, Integrated Hessians reveals that our model learns a negative interaction between the
+number of coronary arteries with calcium accumulation and female gender. This supports the
+well-known phenomenon of under-recognition of heart disease in women – at the same levels of
+cardiac risk factors, women are less likely to have clinically manifest coronary artery disease [49].
+
+33
+
+Interaction: max. achieved heart rate x
+gender
+
+Attribution to max. achieved heart rate
+
+Interaction between maximum achieved heart rate and gender
+0.15
+
+0.10
+
+0.05
+
+0.00
+
+0.05
+
+0.10
+75
+
+100
+
+125
+
+150
+
+175
+
+0.010
+0.005
+0.000
+0.005
+0.010
+0.015
+0.020
+
+200
+
+75
+
+Female
+
+100
+
+125
+
+150
+
+175
+
+200
+
+Maximum heart rate
+achieved during exercise
+
+Maximum heart rate
+achieved during exercise
+
+Male
+
+Figure 19: An interaction learned by the model between maximum achieved heart rate during exercise
+and the gender of the patient. In general, achieving a higher heart rate during exercise indicated lower
+risk of heart disease - but the model learns that this pattern stronger for men than it is for women.
+
+0.20
+0.15
+0.10
+0.05
+0.00
+0.05
+0.10
+0
+
+2
+
+4
+
+6
+
+Interaction: ST-depression x
+num. major vessels containing calcium
+
+Attribution to ST-depression
+
+0.25
+
+3
+0.02
+0.00
+2
+
+0.02
+0.04
+
+1
+
+0.06
+0.08
+
+0
+
+0.10
+0
+
+Excercise-induced ST-segment
+depression (1mm = 0.1mV)
+
+2
+
+4
+
+6
+
+Number of Major Vessels Containing Calcium
+
+Interaction between excercise-induced ST-segment depression
+and number of major vessels containing calcium
+
+Excercise-induced ST-segment
+depression (1mm = 0.1mV)
+
+Figure 20: An interaction learned between ST-segment depression and number of major vessels
+appearing to contain calcium. The interaction seems to indicate that if a patient has many vessels
+appearing to contain calcium, then st-segment depression is less important toward driving risk,
+probably because the number of major vessels containing calcium becomes the main risk driver.
+E.2
+
+Pulsar star prediction
+
+In this section, we use a physics dataset to confirm that a model has learned global pattern that is
+visible in the training data. We utilize the HRTU2 dataset, curated by Lyon et al. [48] and originally
+gathered by Keith et al. [32]. The task is to predict whether or not a particular signal measured from
+a radio telescope is a pulsar star or generated from radio frequency interference (e.g. background
+noise). The features include statistical descriptors of measurements made from the radio telescope.
+The dataset contains 16,259 examples generated through radio frequency interference and 1,639
+examples that are pulsars. The dataset we use has 4 statistical descriptors - mean, standard deviation,
+skewness and kurtosis - of two measurements relating to pulsar stars: the integrated pulse profile (IP)
+and the dispersion-measure signal-to-noise ratio curve (DM-SNR), for a total of 8 features. The
+integrated pulse profile measures how much signal the supposed pulsar star gives off as a function of
+phase of the pulsar: as pulsars rotate, they emit radiation from their magnetic poles, which sweep
+over the earth periodically. We can measure the radiation over time using a radio telescope and
+aggregating measurements over phase to get the integrated pulse profile. Signals that are pulsars stars
+should in theory have stronger, more peaked integrated pulse profiles than those generated from
+radio frequency interference. The DM-SNR curve measures how much phase correction changes
+34
+
+Interaction between number of major vessels containing
+calcium and patient gender
+Interaction: num. major vessels
+containing calium and gender
+
+Attribution to # of major vessels
+cotnaining calcium
+
+0.5
+0.4
+0.3
+0.2
+0.1
+0.0
+0.1
+
+0.04
+
+0.02
+
+0.00
+
+0.02
+
+0.04
+
+0.06
+
+0.2
+0
+
+1
+
+2
+
+2
+
+0
+
+# of major vessels containing calcium
+
+Female
+
+1
+
+2
+
+3
+
+# of major vessels containing calcium
+
+Male
+
+Figure 21: Left: Expected Gradients feature importance of the number of major vessels with
+accumulation of calcium as indicated by cardiac cinefluoroscopy. More vessels with calcium build-up
+indicated increased risk. Right: Expected Hessians feature interactions between patient gender
+and the number of major vessels containing calcium. When the Expected Hessians interactions
+are aggregated across the dataset, they reveal that our model has learned that women with calcium
+deposition in one coronary artery are less likely than men to be diagnosed with coronary artery
+disease.
+
+the signal-to-noise ratio in the measured signal. Since pulsars are far away, their radio emissions
+get dispersed as they travel from the star to earth: low frequencies get dispersed more than high
+frequencies (e.g. they arrive later). Phase correction attempts to re-sync the frequencies; however,
+no amount of phase correction should help peak a signal if the signal was generated from radio
+frequency interference rather than a legitimate pulsar.
+On this task, we use a two-layer neural network with 32 hidden units in both layers and the softplus
+activation function after each layer. We optimize using stochastic gradient descent with a batch size
+of 256. We use an initial learning rate of 0.1 that decays with a rate of 0.96 every batch. We use
+nesterov momentum as well with β = 0.9 [75]. We train for 10 epochs and use a class-weight ratio
+of 1:3 negative to positive to combat the imbalance in the training dataset. Again, we note that
+these hyper-parameters are not necessarily optimal but were simply chosen because they produced
+reasonable convergence on the training set. We split the data into 14,318 training examples (1,365
+are pulsars) and 3,580 testing examples (274 are pulsars), and achieve a held out test accuracy of 0.98
+(0.86 TPR and 0.99 TNR).
+To generate attributions and interactions for this dataset, we use Expected Gradients and Expected
+Hessians with the training set forming the background distribution. We use 200 samples to compute
+both attributions and interactions, although, as also noted on the previous section about the heart
+disease task, 200 samples was probably larger than necessary. In Figure 22, we examine the interaction
+between two key features in the dataset: kurtosis of the integrated profile, which we abbreviate as
+kurtosis (IP), and standard deviation of the dispersion-measure signal-to-noise ratio curve, which
+we abbreviate as standard deviation (DM-SNR). The bottom of Figure 22 shows that kurtosis (IP) is
+a highly predictive feature, while standard deviation (DM-SNR) is less predictive. However, in the
+range where kurtosis (IP) is roughly between 0 and 2, standard deviation (DM-SNR) helps distinguish
+between a concentration of negative samples at standard deviation (DM-SNR) < 40. We can verify
+that the model we’ve trained correctly learns this interaction. By plotting the interaction values
+learned by the model against the value of kurtosis (IP), we can see a peak positive interaction for
+points in the indicated range and with high standard deviation (DM-SNR). Interaction values show us
+that the model has successfully learned the expected pattern: that standard deviation (DM-SNR) has
+the most discriminative power when kurtosis (IP) is in the indicated range.
+35
+
+Attribution to Kurtosis (IP)
+
+0.5
+0.4
+0.3
+0.2
+0.1
+0.0
+0.1
+
+Standard Deviation of the DM-SNR Curve
+
+2
+
+0
+
+2
+
+4
+
+70
+0.15
+60
+0.10
+50
+0.05
+40
+0.00
+30
+0.05
+20
+0.10
+
+6
+
+2
+
+Kurtosis of the Integrated Profile
+
+0
+
+2
+
+4
+
+6
+
+Standard Deviation of the DM-SNR Curve
+
+Interaction: Kurtosis (IP) x SD (DM-SNR)
+
+Interaction Between Kurtosis of the Integrated Profile
+and Standard Devation of the DM-SNR Curve
+
+Kurtosis of the Integrated Profile
+
+Plot of Kurtosis (IP) vs. SD (DM-SNR)
+Background Noise
+Pulsar Star
+
+100
+
+80
+
+60
+
+40
+
+20
+
+2
+
+0
+
+2
+
+4
+
+6
+
+8
+
+Kurtosis of the Integrated Profile
+
+Figure 22: Top Left: Attributions to kurtosis (IP) generated by expected gradients. Top Right: The
+model learns a peak positive interaction when kurtosis (IP) is in the range [0, 2]. Bottom: A plot of
+the training data along the axes of the two aforementioned features, colored by class label. Although
+kurtosis (IP) seems to be the more predictive feature, in the highlighted band the standard deviation
+(DM-SNR) provides useful additional information: larger standard deviation (DM-SNR) implies
+higher likelihood of being a pulsar star.
+
+F
+
+Details for anti-cancer drug combination response prediction
+
+F.1
+
+Data description
+
+As mentioned in the main text, our dataset consists of 12,362 samples (available from
+http://www.vizome.org/). Each sample consists of the measured response of a 2-drug pair tested in
+the cancer cells of a patient [78]. The 2-drug combination was described with both a drug identity
+indicator and a drug target indicator. For each sample, the drug identity indicator is a vector xid ∈ R46
+where each element represents one of the 46 anti-cancer drugs present in the data, and takes a value
+of 0 if the corresponding drug is not present in the combination and a value of 1 if the corresponding
+drug is present in the combination. Therefore, for each sample, xid will have 44 elements equal
+to 0 and 2 elements equal to 1. This is the most compact possible representation for the 2-drug
+combinations. The drug target indicator is a vector xtarget ∈ R112 where each element represents
+one of the 112 unique molecular targets of the anti-cancer drugs in the dataset. Each entry in this
+vector is equal to 0 if neither drug targets the given molecule, equal to 1 if one of the drugs in the
+combination targets the given molecule, and equal to 2 if both drugs target the molecule. The targets
+were compiled using the information available on DrugBank [80]. The ex vivo samples of each
+patient’s cancer was described using gene expression levels for each gene in the transcriptome, as
+measured by RNA-seq, xRNA ∈ R15377 . Before training, the data was split into two parts – 80% of
+36
+
+𝑥(,'
+
+Sparse Pathway Connections
+[𝑥#$ , 𝑥&'()*& ]
+
+…
+
+Pathway Embedding / Drug Inputs
+Dense Connections
+
+…
+
+…
+
+HIDDEN LAYER 1, 500 Nodes
+
+Dense Connections
+
+…
+
+…
+
+Hidden Layer 2, 250 Nodes
+
+Dense Connections
+Scalar Output, Drug Response
+
+Figure 23: Neural network architecture for anti-cancer drug combination response prediction. We
+learn an embedding from all RNA-seq gene expression features (xRNA ) to KEGG pathways by sparsely
+connecting the inputs only to nodes corresponding to the pathways of which they are members. When
+we calculate feature attributions and interactions, we attribute to the layer that contains the raw drug
+inputs and the learned pathway embeddings (layer boxed with dashed blue line).
+samples were used for model training, and an additional 20% were used as a held-out validation set
+to determine when the model had been trained for a sufficient number of epochs.
+F.2
+
+RNA-seq preprocessing
+
+The cancerous cells in each sample were described using RNA-seq data – measurements of the
+expression level of each gene in the sample. We describe here the preprocessing steps used to remove
+batch effects while preserving biological signal. We first converted raw transcript counts to fragments
+per kilobase of exon model per million mapped reads (FPKM), a measure that is known to better
+reflect the molar amount of each transcript in the original sample than raw counts. FPKM accounts
+for this by normalizing the counts for different genes according to the length of transcript, as well as
+for the total number of reads included in the sample []. The equation for FPKM is given as:
+Xi × 109
+,
+(49)
+N li
+where Xi is the vector containing the number of raw counts for a particular transcript i across all
+samples, li is the effective length of that transcript, and N represents the total number of counts.
+After converting raw counts to FPKM, we opt to consider only the protein-coding part of the transcriptome by removing all non-protein-coding transcripts from the dataset. Protein-coding transcripts
+were determined according to the list provided by the HUGO Gene Nomenclature Committee
+(https://www.genenames.org/download/statistics-and-files/). In addition to non-protein-coding transcripts, we also removed any transcript that was not observed in > 70% of samples. Transcripts are
+then log2 transformed and made 0-mean unit variance. Finally, the ComBat tool (a robust empirical
+Bayes regression implemented as part of the sva R package) was used to correct for batch effects
+[41].
+FPKM =
+
+F.3
+
+Model and training description
+
+To model the data, we combined the successful approaches of Preuer et al. [56] and Hao et al. [26].
+Our network architecture is a simple feed-forward network (Figure 23), as in Preuer et al. [56], where
+there were two hidden layers of 500 and 250 nodes respectively, both with Tanh activation. In order
+to improve performance and interpretability, we followed Hao et al. [26] in learning a pathway-level
+embedding of the gene expression data. The RNA-seq data, xRNA ∈ R15377 , was sparsely connected
+to a layer of 1077 nodes, where each node corresponded to a single pathway from KEGG, BioCarta,
+or Reactome [30, 52, 7]. We made this embedding non-linear by following the sparse connections
+with a Tanh activation function. The non-linear pathway embeddings were then concatenated to
+37
+
+the drug identity indicators and the drug target indicators, and these served as inputs to the densely
+connected layers.We trained the network to optimize a mean squared error loss function, and used
+the Adam optimizer in PyTorch with default hyperparameters and a learning rate equal to 10−5 [36].
+We stopped the training when mean squared error on the held-out validation set failed to improve
+over 10 epochs, and found that the network reached an optimum at 200 epochs. For the sake of easier
+calculation and more human-intuitive attribution, we attribute the model’s output to the layer with the
+pathway embedding and drug inputs, rather than to the raw RNA-seq features and drug inputs (see
+Figure 23).
+For this experiment, we calculated all explanations and interactions using the Integrated Gradients
+and Integrated Hessians approach using the all zeros vector as reference and k > 256 interpolation
+points.
+F.4
+
+Biological interaction calculation
+
+To evaluate how well the interactions detected by Integrated Hessians match with the ground truth for
+biological drug-drug interactions in this dataset, we can use additional single drug response data that
+our model was not given access to in order to calculate biological synergy. Drug synergy is the degree
+of extra-additive or sub-additive response observed when two drugs are combined as compared to the
+additive response that would be expected if there were no interaction between the two compounds.
+The drug response for a single drug is measured as IC50single , or the dose of that single drug necessary
+to kill half of the cells in an ex vivo sample. The drug response for a drug combination is measured
+as IC50combination , or the dose of an equimolar combination of two drugs necessary to kill half of the
+cells in an ex vivo sample. The drug synergy between two drugs a and b can be calculated using the
+CI, or combination index:
+CIa,b =
+
+IC50combination
+IC50combination
+a
+b
+.
++
+single
+IC50single
+IC50
+a
+b
+
+(50)
+
+For CI, a value greater than 1 indicates anti-synergy (negative interaction) while a value less than 1
+indicates synergy (positive interaction). While our model was trained solely to predict IC50combination ,
+we can see how well the model learned true biological interactions by using the additional single drug
+response data to calculate synergy for particular samples. As described in the main text, when we
+calculated CI values for all samples in which the combination of Venetoclax and Artemisinin was
+tested, then binarized the samples into synergistic and anti-synergistic, we can see that the Integrated
+Hessians values were higher in the truly synergistic group than in the truly anti-synergistic group
+(p = 2.31 × 10−4 ). We note that this is particularly remarkable, given that the model had no access
+to single drug data whatsoever.
+
+38
+
+

@@ -1,0 +1,51 @@
+# meiolol pick order check (2026-10-21, repo 3664821, data/snap/meiolol.db, 87,766 queue 420 matches)
+
+## Query 1: participant order (slot = index in info.participants) per team, as positions
+with t as (select match_id, team_id, group_concat(position) ord from participants ordered by slot group by match_id, team_id) select ord, count(*) ...
+TOP,JUNGLE,MIDDLE,BOTTOM,UTILITY|175281
+JUNGLE,MIDDLE,BOTTOM,UTILITY|56
+TOP,JUNGLE,MIDDLE,BOTTOM|54
+TOP,JUNGLE,MIDDLE,UTILITY|30
+TOP,JUNGLE,BOTTOM,UTILITY|30
+team-sides total: 175532
+
+## Query 2: ban pickTurn range per team (match-v5 info.teams[].bans[].pickTurn)
+team 100: pickTurn min 1 max 5, bans 414943
+team 200: pickTurn min 6 max 10, bans 415122
+
+## Excerpt: riotapi-schema openapi-3.0.0.yml (commit b5a159ab), match-v5.BanDto
+    match-v5.BanDto:
+      type: object
+      title: BanDto
+      properties:
+        championId:
+          type: integer
+          format: int32
+          x-type: int
+          x-enum: champion
+        pickTurn:
+          type: integer
+          format: int32
+          x-type: int
+      required:
+        - championId
+        - pickTurn
+
+## Excerpt: src/lcu/session.zig (LCU /lol-champ-select/v1/session as the app parses it)
+const Action = struct {
+    actorCellId: i64 = -1,
+    championId: ?i64 = null,
+    type: []const u8 = "",
+    completed: bool = false,
+    isAllyAction: bool = false,
+};
+
+const Session = struct {
+    localPlayerCellId: i64 = -1,
+    myTeam: []const Member = &.{},
+    theirTeam: []const Member = &.{},
+    actions: []const []const Action = &.{},
+    bans: struct {
+        myTeamBans: []const i64 = &.{},
+        theirTeamBans: []const i64 = &.{},
+    } = .{},

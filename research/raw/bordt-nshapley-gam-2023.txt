@@ -1,0 +1,8531 @@
+From Shapley Values to Generalized Additive Models and back
+
+arXiv:2209.04012v3 [cs.LG] 23 Feb 2023
+
+Sebastian Bordt
+Department of Computer Science
+University of Tübingen
+
+Ulrike von Luxburg
+Department of Computer Science and Tübingen AI Center
+University of Tübingen
+
+Abstract
+In explainable machine learning, local posthoc explanation algorithms and inherently interpretable models are often seen as competing approaches. This work offers a partial reconciliation
+between the two by establishing a correspondence
+between Shapley Values and Generalized Additive Models (GAMs). We introduce n-Shapley
+Values, a parametric family of local post-hoc explanation algorithms that explain individual predictions with interaction terms up to order n. By
+varying the parameter n, we obtain a sequence
+of explanations that covers the entire range from
+Shapley Values up to a uniquely determined decomposition of the function we want to explain.
+The relationship between n-Shapley Values and
+this decomposition offers a functionally-grounded
+characterization of Shapley Values, which highlights their limitations. We then show that nShapley Values, as well as the Shapley Taylorand Faith-Shap interaction indices, recover GAMs
+with interaction terms up to order n. This implies
+that the original Shapely Values recover GAMs
+without variable interactions. Taken together, our
+results provide a precise characterization of Shapley Values as they are being used in explainable
+machine learning. They also offer a principled interpretation of partial dependence plots of Shapley
+Values in terms of the underlying functional decomposition. A package for the estimation of different interaction indices is available at https:
+//github.com/tml-tuebingen/nshap.
+
+1
+
+INTRODUCTION
+
+Local post-hoc explanation algorithms and inherently interpretable models are two of the most prominent approaches
+Proceedings of the 26th International Conference on Artificial Intelligence and Statistics (AISTATS) 2023, Valencia, Spain. PMLR:
+Volume 206. Copyright 2023 by the author(s).
+
+in explainable machine learning (Molnar, 2020; Holzinger
+et al., 2022). Despite a number of arguments about their relative benefits, the differences and similarities between these
+two approaches remain largely unresolved Rudin (2019). In
+the current literature, post-hoc explanations and inherently
+interpretable models are often framed as different concepts,
+with research papers, book chapters, and tutorials divided
+along these lines (Lundberg et al., 2020; Molnar, 2020;
+Lakkaraju et al., 2020). We take a different perspective and
+highlight the similarities between post-hoc explanations and
+interpretable models. We do so for the particular case of
+Shapley Values, a prominent feature attribution method, and
+GAMs, a popular class of interpretable models.
+Post-hoc explanations with Shapley Values. The seminal work by Lundberg and Lee (2017) introduced the
+SHAP feature attributions. These are based on the literature
+on Shapley Values in game theory. The authors showed
+that for linear functions f (x) = wT x and statistically independent features, the SHAP attributions take the form
+Φi = wi (xi − E(xi )), thus establishing a link between the
+post-hoc explanation method and a very simple type of interpretable model. This work has inspired a whole branch
+of literature on explainable machine learning. Most relevant
+to us are Shapley Interaction Values (Lundberg et al., 2020),
+which extend Shapley Values with local interaction effects
+between pairs of features.
+An important building block of our work is the generalization of Shapley Interaction Values towards n-Shapley
+Values, a novel type of Shapley-based post-hoc explanation that is able to incorporate arbitrarily many variable
+interactions. Similarly to the Shapley Taylor- (Sundararajan
+et al., 2020) and the Faith-Shap interaction index (Tsai et al.,
+2022), n-Shapley Values are a parametric family of local
+post-hoc explanation algorithms that explain individual predictions with interaction terms up to order n. As n increases,
+the explanations become more complex and expressive and
+are able to faithfully explain more complex models.
+Generalized Additive Models (GAMs hereafter) are a popular class of interpretable models with a restricted form of
+non-linearity (Hastie and Tibshirani, 1990; Caruana et al.,
+2015; Agarwal et al., 2021a). Traditionally, GAMs are
+allowed to exhibit (arbitrary) non-linearity in individual
+
+From Shapley Values to Generalized Additive Models and back
+
+features, but no interaction between features is allowed.
+GA2 Ms (Lou et al., 2012) relax this restriction and allow
+for interaction between pairs of features. Conceptually, it
+is straightforward to extend GAMs with interaction effects
+of any desired order n (this comes, however, at the cost of
+human interpretability). Important to us, the model class of
+GAMs suffers from an identification problem. As soon as
+we introduce variable interactions, the way in which a given
+function can be written as a GAM is no longer uniquely
+determined Lengerich et al. (2020).
+Shapley-based explanations faithfully explain GAMs.
+In this work, we show that different kinds of Shapley-based
+post-hoc explanations (Lundberg and Lee, 2017; Lundberg
+et al., 2020; Sundararajan et al., 2020; Tsai et al., 2022) are
+completely faithful to GAMs: if the function to be explained
+is a GAM, then the explanations recover its individual nonlinear component functions. We link the order of the GAM
+– the maximum degree of variable interaction that is present
+in a function – with the order of an explanation that we use
+to explain that function. If the order of the explanation is
+at least as large as the maximum variable interaction that
+is (locally) present in the model, then the explanations are
+guaranteed to recover a faithful representation of the function as a GAM. This result applies to the newly proposed
+n-Shapley Values, as well as to the Shapley Taylor- and
+Faith-Shap interaction indices. As a special case, our results imply that the interventional SHAP feature attributions
+(Lundberg and Lee, 2017; Janzing et al., 2020) are perfectly
+faithful to GAMs without variable interactions, even if the
+features are arbitrarily dependent.
+What is more, we show that Shapley-based post-hoc explanations of any function implicitly solve the problem of
+representing the function as a GAM (potentially with variable interactions of very high order). This means that our
+results provide insights into the mechanics of Shapley Values not only if the function to be explained is a lower-order
+GAM, but any (learned) function, for example a neural network. Concretely, we identify a necessary and sufficient
+regularity condition – subset compliance – under which a
+value function gives rise to a well-defined functional decomposition of the function that we attempt to explain. Because
+this decomposition connects Shapley Values with GAMs,
+we term it the Shapley-GAM.
+Taken together, our results offer a precise functionallygrounded analysis of Shapley Values, one of the most
+widely used approaches in explainable machine learning
+(Doshi-Velez and Kim, 2017). They also highlight the peculiar properties of these explanations, and the way in which
+they are different from other feature attribution methods
+(Covert et al., 2021; Krishna et al., 2022). For example,
+contrary to popular belief, Shapley Values only depend on
+the coordinates of the point that we attempt to explain, but
+not on the local neighbourhood of that point. This in turn
+implies that the explanations are unrelated to the gradient
+
+and do not perform any kind of local function approximation
+(Han et al., 2022).
+We consider n-Shapley Values to be a useful tool for practitioners who want to debug black-box models. Moreover,
+we introduce a novel method to plot feature attributions of
+higher order that is consistent with the underlying theory (depicted, for example, in Figure 1). We also introduce a way
+to estimate the amount of variable interaction that is necessary to represent a given function. Finally, we study the link
+between accuracy and the average degree of variable interaction present in different standard classifiers (Section 7).
+
+2
+
+RELATED WORK
+
+Shapley Values. The seminal paper by Lundberg and Lee
+(2017) has led to a line of work that investigates the usage
+of Shapley Values in explainable machine learning (Chen
+et al., 2020; Heskes et al., 2020; Slack et al., 2020; Albini et al., 2022). Shapley Values originate in a literature
+on economic game theory (Shapley, 1953), and our work
+builds on a particular paper from this literature, namely the
+seminal work by Grabisch (1997) on additive set functions.
+The idea to extend Shapley Interaction Values towards nShapley Values is closely related to other approaches that
+also extend the Shapley Value (Grabisch, 1997; Lundberg
+et al., 2020; Sundararajan et al., 2020; Tsai et al., 2022).
+The efficient computation of Shapley Values is a topic of
+ongoing research interest (Lundberg et al., 2020; Jethani
+et al., 2021). Our results also relate to the debate about the
+choice of value function (Sundararajan and Najmi, 2020;
+Janzing et al., 2020). Shapley Values have been explored
+in various tasks with human decision makers, a topic about
+which there is much debate (Kumar et al., 2020).
+Generalized Additive Models. Generalized additive models originate in statistics (Hastie and Tibshirani, 1990) and
+have recently become popular in combination with trees
+(Lou et al., 2012, 2013) and neural networks (Agarwal et al.,
+2021a). On tabular data sets, interpretable GAMs with
+few interactions (Caruana et al., 2015) can often achieve
+competitive accuracy, which has led to an active line of research on these models (Wang et al., 2022; Lengerich et al.,
+2022). From a statistical perspective, the decomposition of
+a function as a GAM is underdetermined, which has led to
+the development of additional uniqueness criteria such as
+functional ANOVA (Hooker, 2007; Lengerich et al., 2020).
+Explainable Machine Learning. Shapley Values are one
+of many different feature attribution methods (Ribeiro et al.,
+2016; Sundararajan et al., 2017; Kommiya Mothilal et al.,
+2021) about which there is a large literature (Lee et al., 2019;
+Garreau and von Luxburg, 2020; Slack et al., 2021; Covert
+et al., 2021; Krishna et al., 2022; Han et al., 2022) and much
+debate (Lipton, 2018; Rudin, 2019; Bordt et al., 2022). Considerable debate also exists around the question whether
+there is an accuracy-explainability trade-off or a cost of us-
+
+Sebastian Bordt, Ulrike von Luxburg
+
+ing interpretable models (Rudin, 2019; Moshkovitz et al.,
+2020). Apart from GAMs, there are many other interpretable models such as rule lists (Wang and Rudin, 2015)
+and sparse decision trees (Lin et al., 2020). Since our work
+is exclusively focused on Shapley Values and GAMs, we
+do not offer a comprehensive review of the literature on
+explainable machine learning. This can be found in many
+other places (Molnar, 2020; Samek et al., 2021; Holzinger
+et al., 2022; Rudin et al., 2022).
+
+3
+
+BACKGROUND AND NOTATION
+
+We consider data points x ∈ Rd with d features, and a
+function f : Rd → R whose behavior we want to explain.
+We consider the local post-hoc explanation setting with
+feature attributions: For a point x ∈ Rd , our goal is to
+explain which input features (or combinations thereof) were
+most influential in determining the “decision” f (x). In order
+to do so, we assign real numbers to input features and their
+combinations. The higher the absolute value of this number,
+the more influential the feature is considered to be (for an
+illustration consider Figure 1).
+In what follows, we denote [n] = {1, . . . , n} and use
+subsets of coordinates S = {s1 , . . . , sn } ⊂ [d] to index
+both data points xS = (xs1 , . . . , xsn ) and collections of
+functions fS (xS ) = fxs1 ,...,xsn (xs1 , . . . , xsn ) where we
+assume the ordering s1 < · · · < sn .
+3.1
+
+Value Functions and Shapley Values
+
+For a data point x ∈ Rd , a subset of coordinates S ⊂ [d],
+and a function f , the value function v(x, S) is supposed to
+quantify how much the features that are present in S contribute towards the prediction f (x). Two important value
+functions are the observational SHAP value function Lundberg and Lee (2017)
+v(x, S) = Ez∼D [f (z) | xS ]
+
+(1)
+
+and the interventional SHAP value function (Chen et al.,
+2020; Janzing et al., 2020)
+v(x, S) = Ez∼D [f (z) | do(xS )] .
+
+(2)
+
+Shapley Values, denoted by Φi (x), are obtained from the
+value function via the well-known Shapley formula (Shapley, 1953). We first introduce the Shapley Interaction Index
+(Grabisch and Roubens, 1999), given by ∆S (x) =
+X
+T ⊂[d]\S
+
+(d − |T | − |S|)!|T |! X
+(−1)|S|−|L| v(x, L ∪ T ).
+(d − |S| + 1)!
+L⊂S
+
+(3)
+The Shapley Value Φi (x) of feature i at x is then simply
+given by ∆i (x). Importantly, different value functions give
+rise to different Shapley Values, so that there effectively
+exists a multiplicity of possible Shapley Values, depending
+
+on our choice of value function (Sundararajan and Najmi,
+2020). The popular KernelSHAP algorithm (Lundberg and
+Lee, 2017) approximates Shapley Values with respect to
+the interventional SHAP value function. The corresponding
+attributions are also known as the SHAP feature attributions.
+The following regularity condition, satisfied by both (1) and
+(2), will guarantee that the value function gives rise to a
+well-defined functional decomposition of the function that
+we attempt to explain.
+Definition 1 (Subset-Compliant Value Function). We say
+that v(x, S) is a subset-compliant value function for f :
+Rd → R if v(x, [d]) = f (x) and if the value v(x, S) depends only on those coordinates of x that are indexed by
+S. For a subset-compliant value function, we also write
+v(x, S) = v(xS , S).
+3.2
+
+Generalized Additive Models
+
+We employ the following definition of a generalized additive
+model (GAM) of order n.
+Definition 2 (Generalized Additive Model of order n). We
+say that f : Rd → R is a generalized additive model of
+order n if f can be written in the form
+X
+f (x) =
+fS (xS )
+(4)
+S⊂[d], |S|≤n
+
+In words, the function f can be described as a simple sum
+with interaction terms of at most n variables at a time. The
+individual functions fS are called component functions of
+f . GAMs with few interactions (n = 1, 2, 3) are often
+considered interpretable and called Glassbox-GAMs (Lou
+et al., 2012; Caruana et al., 2015). The reason for this is that
+the feature-wise shape functions f1 , . . . , fd can be easily
+visualized, see for example Figure 4.
+If we allow for interactions of arbitrary order, that is n = d,
+then every function can be written as a GAM. However, it
+is a well-known fact that representing an arbitrary function
+according to (4) is under-determined: Many such representations might be possible for the same function. Any such
+representation is called a functional decomposition of f .
+This non-identifiability has led to the development of additional criteria on the decomposition, such as functional
+ANOVA, that resolve the identification problem (Hooker,
+2007; Lengerich et al., 2020).
+
+4
+
+FROM SHAPLEY VALUES TO
+GENERALIZED ADDITIVE MODELS
+
+We now introduce n-Shapley Values, a parametric family of
+local-post hoc explanation algorithms that extends Shapley
+Values (Lundberg and Lee, 2017) and Shapley Interaction
+Values (Lundberg et al., 2020). We then show that every
+subset-compliant value function implicitly provides a functional decomposition of the function that we attempt to
+
+Shapley Interaction Values
+
+4-Shapley Values
+
+AG
+E
+CO P
+W
+SC
+HL
+MA
+OC R
+C
+PO P
+B
+RE P
+L
+WK P
+HP
+SE
+RA X
+C1
+P
+
+Feature Attribution
+
+0.6
+
+AG
+E
+CO P
+W
+SC
+H
+MA L
+OC R
+C
+PO P
+B
+RE P
+L
+WK P
+HP
+SE
+RA X
+C1
+P
+
+From Shapley Values to Generalized Additive Models and back
+
+Shapley Values
+
+Shapley-GAM
+
+0.4
+0.2
+0.0
+−0.2
+
+Main
+
+2nd order
+
+3rd order
+
+4th
+
+5th
+
+6th
+
+7th
+
+8th
+
+AG
+E
+CO P
+W
+SC
+H
+MA L
+OC R
+C
+PO P
+B
+RE P
+L
+WK P
+HP
+SE
+RA X
+C1
+P
+
+AG
+E
+CO P
+W
+SC
+HL
+MA
+OC R
+C
+PO P
+B
+RE P
+L
+WK P
+HP
+SE
+RA X
+C1
+P
+
+−0.4
+
+9th
+
+10th order
+
+Figure 1: n-Shapley Values generate a sequence of explanations of increasing complexity, ranging from the original Shapley
+Values to the Shapley-GAM. From left to right: Shapley Values (n = 1), Shapley Interaction Values (n = 2), 4-Shapley
+Values (n = 4) and the Shapley-GAM (n = d). In each plot, we distributed the higher-order interaction effects uniformly
+onto all involved features (as justified by Theorem 6). Taking into account the signs of the attributions, the different
+contributions to each of the bars sum to the Shapley Value of that feature (Equation (13)). Taking the overall sum over all
+bars for all features recovers the prediction f (x). See Appendix Section B for more details regarding this visualization.
+In this example, the function f is a random forest on the Folktables Income classification task, the data point is the first
+observation in our test set, and we used the value function of interventional SHAP.
+explain. Due to its connection with Shapley Values, we denominate this decompositions the Shapley-GAM. We then
+show that for n = d, n-Shapley Values are equal to this
+decomposition.
+4.1
+
+n-Shapley Values
+
+The definition of n-Shapley Values relates to the function f
+that we want to explain implicitly via the value function.
+Definition 3 (n-Shapley Values). Fix a function
+f : Rd → R. Let v(x, S) be a value function for f .
+n-Shapley Values ΦnS provide an an attribution to all
+groups of at most n features at a time, that is for all sets
+S ⊂ [d] with |S| ≤ n. We define them recursively, starting
+from the original Shapley Values at n = 1 up to n = d, by
+
+∆S
+if |S| = n
+
+
+
+
+
+X
+ΦnS =
+Φn−1
++ Bn−|S|
+∆S∪K if |S| < n.
+
+S
+
+
+
+K⊂[d]\S
+
+|K|+|S|=n
+
+(5)
+The coefficients Bn that balance the different terms are the
+Bernoulli numbers (see Appendix A). All terms except the
+Bernoulli numbers additionaly depend on the point x.
+While this definition might seem rather abstract, n-Shapley
+Values are actually a straightforward extension of Shapley
+Interaction Values (Lundberg et al., 2020). These correspond to the case n = 2. The original Shapley Values
+correspond to the case n = 1. Similar to the original Shapley Values, n-Shapley Values are additive and always sum
+
+to the function value f (x) (when summed over all subsets
+S ⊂ [d]) of size ≤ n).1 The overall intuition behind the
+recursive definition of n-Shapley Values is that starting from
+the original Shapley Values at n = 1, we successively add
+higher-order variable interactions to the explanations.
+n-Shapley Values give rise to a sequence of explanations of
+increasing complexity, ranging from the original Shapley
+Values up to a functional decomposition of the function that
+we attempt to explain (see Theorem 4 below). Figure 1 depicts such a sequence of explanations for a random forest on
+the Folktables Income classification task (Ding et al., 2021).
+To visualize the n-Shapley Values, we evenly distribute all
+higher-order interactions onto the involved features. As we
+detail in Appendix B, this technique is justified by the recursive relationship between n-Shapley Values of different
+order. Note that n-Shapley Values of higher order are different from those of lower order only if the function that we
+attempt to explain actually contains higher-order variable
+interactions (this intuition will be made precise in Section
+6). For this reason, n-Shapley Values can be used as a tool
+to assess the amount of variable interaction that is present
+in a given black-box predictor. For the random forest, we
+can see from the rightmost part of Figure 1 that it relies on
+very high degrees of variable interaction (for a quantitative
+analysis, see Section 7).
+
+1
+
+The proof of Proposition 12 in the Appendix shows that the
+Bernoulli numbers are exactly the coefficients that balance equation (5) in this way.
+
+Sebastian Bordt, Ulrike von Luxburg
+
+Feature Attribution
+
+Shapley Values
+
+Shapley Interaction Values
+
+4-Shapley Values
+
+Shapley-GAM
+
+0.1
+0.0
+−0.1
+0
+
+2
+
+0
+
+Value of Feature AGEP
+
+2
+
+0
+
+Value of Feature AGEP
+
+2
+
+Value of Feature AGEP
+
+0
+
+2
+
+Value of Feature AGEP
+
+Figure 2: As n → d, the n-Shapley Values provide increasingly precise representations of the component functions fS of the
+Shapley-GAM. This figure depicts partial dependence plots of Φ1AGEP (Shapley Values, n = 1), Φ2AGEP (Shapley Interaction
+Values, n = 2), Φ4AGEP (4-Shapley Values, n = 4) and Φ10
+AGEP (Shapley-GAM, n = d). The leftmost partial dependence plot
+is the usual plot that is often used in order to visualize Shapley Values (Lundberg et al., 2020) (the plot depicts the original
+Shapley Values for the observations in the test set). It takes the often observed form where the Shapley Values are scattered
+around an overall functional relationship. Theorem 4 and Theorem 6 make this intuition precise by specifying how the
+Shapley Values are related to the component functions of the Shapley-GAM. The middle and right plots illustrate that as
+we move towards higher-order explanations, interaction effects can be appropriately represented. As a consequence, the
+partial dependence plots of individual feature attributions approach the component functions of the Shapley-GAM. In this
+example, the function f is a kNN classifier on the Folktables Income classification task. Appendix Figure K.8 depicts the
+partial dependence plots of all other features.
+4.2
+
+The Shapley-GAM
+
+The following Theorem 4 shows two things. First, a subsetcompliant value function gives rise to a well-defined functional decomposition. Second, d-Shapley Values are equal
+to this decomposition. The transformation of the value function that defines the decomposition is well-known as the
+Harsanyi Dividend (Harsanyi, 1982) or Möbius transform.
+Theorem 4 (d-Shapley Values provide a functional
+decomposition of f ). Fix a function f : Rd → R. Let
+v(x, S) be a subset-compliant value function for f . Then
+the d-Shapley Values represent the function f as a specific
+GAM that we denominate the Shapley-GAM. It is given by
+X
+
+f (x) =
+
+fS (xS )
+
+(6)
+
+have to be subsumed into lower-order effects, which implies
+in turn that the lower-order components of the explanations
+become more distinct (middle parts of Figure 2). For n = d,
+all possible variable interactions can be represented in the
+explanations, which implies that d-Shapley Values become
+well-defined functions of the respective features (rightmost
+plot in Figure 2).
+n-Shapley Values depend on the value function, and so
+does the associated functional decomposition. For the observational and interventional SHAP value functions, the
+functional decompositions are given as follows.
+Corollary 5 (Observational and Interventional SHAP). For
+the observational SHAP value function (1), the component
+functions of the Shapley-GAM are given by f∅ = E[f ],
+fi (xi ) = E[f |xi ] − E[f ]
+
+S⊂[d]
+
+with component functions
+f∅ = v(∅) and
+
+fS (xS ) = ΦdS (x)
+
+fi,j (x) = E[f |xi , xj ] − E[f |xi ] − E[f |xj ] + E[f ]
+(9)
+X
+|S|−|L|
+fS (xS ) =
+(−1)
+E[f |xL ].
+
+(7)
+
+L⊂S
+
+where
+ΦdS (x) =
+
+X
+
+(−1)|S|−|L| v(xL , L).
+
+(8)
+
+L⊂S
+
+For intuition about Theorem 4, consider Figure 2. It is a
+well-known fact that the Shapley Value of feature i not only
+depends on the value of that feature, but also on the values of
+the other features of x (compare the leftmost partial dependence plot in Figure 2). The reason for this is that Shapley
+Values subsume higher-order variable interactions into the
+attributions of individual features (according to formula (11),
+as we will see below). Now, as we successively increase n,
+more and more variable interactions are appropriately represented in the explanations. This means that they no longer
+
+For the interventional SHAP value function, the component
+functions are given by the same expression, but with the
+conditional expectations replaced by the causal do-operator.
+As will see below (Theorem 7), there is actually a one-toone relationship between subset-compliant value functions
+and different functional decompositions of f .
+
+5
+
+FROM GENERALIZED ADDITIVE
+MODELS TO SHAPLEY VALUES
+
+In the previous section, we have seen that Shapley Values
+give rise to a functional decomposition of the original func-
+
+From Shapley Values to Generalized Additive Models and back
+
+Main
+
+2nd order
+
+3rd order
+
+4th
+
+5th
+
+6th
+
+7th
+
+8th
+
+9th
+
+10th order
+
+Figure 3: Visualizing the Shapley-GAM of interventional SHAP. Figures depict d-Shapley Values, visualized as in Figure 1.
+Different functions on different data sets require a different degree of variable interaction. (Left) A GAM without variable
+interactions on the German Credit data set. (Middle Left) A gradient boosted tree on the California Housing data set.
+(Middle Right) A kNN classifier on the Folktables Travel data set. (Right) The 8-dimensional checkerboard function (14).
+Additional figures for more data points and classifiers can be found in Appendix K.
+tion (via the associated value function). In this section, we
+show that the original Shapley Values as well as n-Shapley
+Values of any order are linear combinations of the component functions of this decomposition. This provides a
+novel motivation for Shapley Values that does not require
+value functions or the Shapley formula. This alternative
+motivation of Shapley Values is equivalent to the original
+motivation via value functions: For every functional decomposition of f , there is a corresponding subset-compliant
+value function v such that the Shapley Values derived from
+the decomposition and v are equal (and vice-versa).
+5.1
+
+Shapley Values from the Shapley-GAM
+
+Theorem 6 specifies the way in which the different component functions of the Shapley-GAM give rise to n-Shapley
+Values.
+Theorem 6 P
+(n-Shapley Values from the Shapley-GAM).
+Let f (x) = S⊂[d] fS (xS ) be the decomposition of f provided by the Shapley-GAM, and let ΦnS (x) be the n-Shapley
+Values of f . Then, it holds that
+X
+ΦnS = fS +
+Cn−|S|,|K| fS∪K
+(10)
+K⊂[d]\S
+n+1≤|S|+|K|
+
+ Bk
+Pn
+with coefficients Cn,m = k=0 nk 1+m−k
+. Specifically,
+the Shapley Value of feature i is given by
+Φ1i = fi + · · · +
+
+1
+k+1
+
+X
+
+fS∪{i} + · · · +
+
+S⊂[d]\{i},|S|=k
+
+1
+f[d]
+d
+(11)
+
+where all terms additionally depend on the point x.
+
+Theorem 6 specifies how higher-order variable interactions
+that are present in f are subsumed into lower-order explanations. In the case of the original Shapley Values, this
+is particularly intuitive: Higher-order effects are evenly
+distributed among the involved features.2 Theorem 6 also
+specifies what information about the function f is and is not
+contained in Shapley Values. We see that different functions
+f can give rise to the same n-Shapley Values as long as
+n < d (Grabisch, 2016). We also see that it is impossible
+to tell from individual Shapley Values whether the model
+consists of main effects or complex variable interactions.
+Furthermore, a feature can have zero attribution although it
+appears in multiple interaction effects with different signs.
+For a bit more intuition about the Shapley-GAM, Figure
+3 illustrates the Shapley-GAM of interventional SHAP for
+different functions. A main point is that different predictors
+require a different degree of variable interaction in order to
+be represented as a GAM. By definition, a Glassbox-GAM
+(leftmost part of Figure 3) does not require any variable
+interaction. The other extreme is the k-dimensional checkerboard function (14) (rightmost part of Figure 3), which only
+consists of interaction terms of order k. Many learned functions such gradient boosted trees (Figure 3, middle left) and
+the k-Nearest Neighbor (kNN) classifier (Figure 3, middle
+right) lie in between. Overall, there is a significant amount
+of variation between different methods and problems. This
+is also illustrated in many additional figures in Appendix K.
+For a quantitative analysis, see Section 7.
+2
+For individual value functions, equation (11) is known in the
+literature on economic game theory (Grabisch, 1997)[Theorem 1].
+Variants of it were independently re-discovered in Keevers (2020),
+Herren and Hahn (2022) and Hiabu et al. (2023).
+
+Sebastian Bordt, Ulrike von Luxburg
+
+5.2
+
+From Functional Decompositions to
+Subset-Compliant Value Functions
+
+We have show that every subset-compliant value function
+corresponds to a functional decomposition of f . We now
+show that the reverse is also true, that is every functional
+decomposition of f corresponds to a subset-compliant value
+function. The transformation that defines the value function
+is also known as the Zeta transform.
+Theorem 7 (From Generalized
+Additive Models to Value
+P
+Functions). Let f (x) = S⊂[d] gS (x) be any functional
+decomposition of f . Define the subset-compliant value function
+X
+v(x, S) =
+gL (x).
+(12)
+L⊂S
+
+Then the functional decomposition gS is the Shapley-GAM
+with respect to the value function (12).
+Taken together, Theorem 4 and Theorem 7 establish a bijection between subset-compliant value functions and functional decompositions of f . In a sense, this implies that
+every functional decomposition implicitly corresponds to a
+notion of feature attribution via its associated value function
+and the Shapley formula (or, more directly, via equation
+(11) which is just the same).
+
+6
+
+RECOVERY
+
+In this section, we connect Shapley Values with interpretable
+models by showing that n-Shapley Values, as well as the
+Shapley Taylor- and Faith-Shap interaction indices, recover
+GAMs. In order for this to be the case, the order of the explanation has to be at least as large as the order of the GAM.
+Theorem 8 (Shapley-based Explanations Recover GAMs).
+Let f be a generalized additive model of order n. Assume
+that either
+(a) the value function is given by observational SHAP
+and the individual features are independent random
+variables, or
+(b) the value function is given by interventional SHAP.
+Then, n-Shapley Values, as well as the Shapley Taylor- and
+Faith-Shap interaction indices of order n, recover a representation of f as a GAM. In fact, all the interaction indices
+are equal to each other and given by
+ΦnS (x) = fS (xS )
+where fS are the component functions of the Shapley-GAM.
+Theorem 8 implies that the SHAP feature attributions recover GAMs without variable interactions and that Shapley
+Interaction Values recover GAMs with interactions of at
+
+most two variables at a time. Unlike our previous results,
+Theorem 8 depends on the choice of the value function.
+This is because the recovery property holds if (1) the interaction index can be written like in equation (10), and (2) the
+Shapley-GAM is a GAM or order n — and the second point
+depends on the value function.
+As it turns out, the independence assumption in part (a)
+of Theorem 8 is indeed necessary (see Appendix D). This
+is interesting insofar as it establishes the usefulness of the
+interventional SHAP value function from a purely statistical
+perspective, that is without any causal motivation (for a
+discussion about the differences between observational and
+interventional SHAP, see also Chen et al. (2020)).
+Figure 4 (Top) illustrates the recovery result for a GAM
+without variable interactions. For this example, we explicitly resort to the default implementation of the Kernel SHAP
+algorithm, in order to see whether there is any significant approximation error (Kernel SHAP approximates the Shapley
+Values of the interventional SHAP value function). The top
+part of Figure 4 depicts the shape curve of the feature POWPUMA in the GAM (blue curve), as well as the associated
+Kernel SHAP values (red dots). The Kernel SHAP values
+lie almost exactly on the shape curve of the GAM, which
+means that the recovery property holds fairly precisely, at
+least in this simple example.
+
+7 IS THERE AN ACCURACYCOMPLEXITY TRADE-OFF?
+In the previous sections, we have outlined the connections
+between Shapley Values and GAMs on a theoretical level.
+In this section, as well as in the next section, we turn to
+more practical concerns. In this section, we investigate the
+number of variable interactions that are present in various
+standard classifiers. In order to do so, we rely on a number
+of low-dimensional data sets on which we can reliably estimate the Shapley-GAM decompositions of the different
+learned predictors (compare Section 8). It is interesting to
+compare this against the accuracy: Because models with
+more variable interactions can represent strictly more functions than models with less variable interactions, it is natural
+to suspect that more accurate classifiers might exhibit higher
+degrees of variable interaction (Dziugaite et al., 2020).
+We suggest to measure the extent of variable interaction that
+is present in a given classifier with the following quantity
+
+
+
+
+.
+X
+X
+|S| · |fS (xS )|
+|fS (xS )| .
+E 
+E 
+x∼D
+
+S⊂[d]
+
+x∼D
+
+S⊂[d]
+
+(13)
+where fS are the component functions of the Shapley-GAM
+decomposition of f , using interventional SHAP.
+Figure 4 (Middle) illustrates the relationship between the
+predictive accuracy and our measure (13) for different pre-
+
+From Shapley Values to Generalized Additive Models and back
+
+dictors f . The figure depicts four different kinds of classifiers: A Glassbox-GAM without variable interactions (Nori
+et al., 2019), a gradient boosted tree (Chen and Guestrin,
+2016), a random forest, and a kNN classifier (Pedregosa
+et al., 2011). We compare these classifiers on four different
+data sets: Folktables Travel and Income (Ding et al., 2021),
+Iris, and German Credit. Details on the data sets and training
+procedures are in Appendix J.
+As far as accuracy is concerned, we see from Figure 4 that
+GAMs without variable interactions perform fairly well
+against the more complicated classifiers — a fact that has
+often been observed in the literature (Caruana et al., 2015;
+Agarwal et al., 2021a). On the more complex data sets,
+however, there is usually a model with variable interactions
+and slightly better accuracy3 As far as the degree of variable
+interaction is concerned, we see that there is a large amount
+of variation in between the different classifier.
+Especially interesting is the kNN classifier. It tends to perform worse in terms of accuracy than the interpretable GAM,
+but exhibits very high degree of variable interaction. Observe that the kNN classifier can also be considered interpretable (by explaining the workings of the classifier and
+providing the k data points that are responsible for the classification). Therefore, this example shows that a high degree
+of variable interaction in the Shapley-GAM does not imply
+that a function is hard to explain per se.
+
+Figure 4: Top: Shapley Values recover GAMs without variable interactions (Theorem 8). To create this figure, we first
+trained a GAM on the Folktables Travel data set using the
+InterpretML package (Nori et al., 2019). We then computed
+the Kernel SHAP values for the decision function of the
+GAM using the shap package (Lundberg and Lee, 2017).
+For the feature POWPUMA, the Figure depicts the groundtruth variable effect in the GAM in blue, and the associated
+Kernel SHAP values for data points from the test set as red
+dots. We see that the red dots lie on the blue line, that is
+Kernel SHAP recovers the component function of the GAM.
+Middle: The average degree of variable interaction (13)
+in the Shapley-GAM of interventional SHAP for various
+standard classifiers. The figure depicts predictive accuracy
+versus the average degree of variable interaction. Bottom:
+Estimating higher-order variable interactions requires precise evaluations of the value function. A simple way to study
+this is by estimating the k-dimensional checkerboard function (14). Left: 3-way variable interactions can be precisely
+estimated. Right: 7-way variable interactions can be reliably
+detected, but precise estimation requires prohibitively many
+samples.
+
+This simple empirical investigation suggests that the relation between accuracy and the average degree of variable
+interaction in the Shapley-GAM is nuanced: While some
+degree of interaction seems necessary in order to achieve
+competitive accuracy, some classifiers seem to exhibit more
+interaction than that. In some cases, the correlation might
+even be negative (as for the kNN classifier).
+
+8
+
+COMPUTATION AND ESTIMATION
+
+We now turn to the practical question of computing nShapley Values. In this work, we take the trivial approach
+and simply evaluate the value function for all possible subsets S ⊂ [d], then combine the respective terms according
+to Definition 3. A Python package to compute n-Shapley
+Values, as well as the Shapley Taylor- and Faith-Shap interaction indices, is available https://github.com/
+tml-tuebingen/nshap. Even for the original Shapley Values, it is well-known that the number of required
+evaluations of the value function grows exponentially in the
+number of features. For this reason, there exist efficient
+approximations such as Kernel SHAP, as well as efficient
+implementations for certain function classes such as tree
+based models (Lundberg and Lee, 2017). We hold that
+3
+The InterpretML package (Nori et al., 2019) allows to include
+interactions between pairs of variables which reportedly allows to
+be on par with black-box models on many data sets. Compare also
+(Lou et al., 2012).
+
+Sebastian Bordt, Ulrike von Luxburg
+
+such computationally efficient approximations are also be
+possible for n-Shapley Values.
+Instead of focusing on the well-known computational aspect
+of the problem, we want to focus on the estimation aspect
+which seems much less studied. Note that n-Shapley Values
+are a statistic that is subject to sampling variation. The same
+is true for our visualizations (as in Figure 1), which are
+summary statistics of n-Shapley Values. This is because
+both the observational and the interventional SHAP value
+function require to estimate an expectation.
+We now asses with a simple empirical analysis up to
+which order interaction effects can be estimated in practice. We consider the k-dimensional checkerboard function
+Bk : [0, 1]d → {0, 1} given by
+(
+Pk
+0 if i=0 b(λ · xi )c mod 2 = 0
+Bk (x1 , . . . , xd ) =
+1 otherwise
+(14)
+where λ > 2 parameterizes the number of checkers along
+each axis. If data points are uniformly distributed in the
+unit cube [0, 1]d , then the Shapely-GAM of interventional
+SHAP of Bk is given by the single k-th order interaction
+effect fx1 ,...,xk (x1 , . . . , xk ) = Bk (x1 , . . . , xk , 0, . . . , 0).
+The question now is how precisely we have to estimate the
+expectation Ez∼D [f (z) | do(xS )] if we want to precisely
+estimate a kth-order interaction effect.
+The bottom part of Figure 4 depicts the result of estimating
+10-Shapley Values when the underlying function is the 3or 7-dimensional checkerboard function, respectively. The
+x-axis depicts the number of samples used to estimate the
+value function, ranging from 100 to 1 000 000. The y-axis
+depicts the order of the estimated effects, with confidence
+bands that account for 5 randomly sampled data sets. From
+the figure, we observe that if the number of samples is small
+in relation to the magnitude of the interaction effect, then
+the estimation results in spurious lower-order effects. For
+k = 3, these effects vanish with sufficiently many samples,
+which means that the checkerboard function is precisely
+estimated. For k = 7, the presence of the higher-order
+interaction effect can be reliably detected, but not precisely
+estimated given reasonably many samples.
+In this simple analysis, we see that interaction effects of order larger that 2 can be precisely estimated given sufficiently
+many samples. We also see that functions with high-order
+interactions are difficult to estimate and can result in artifacts. Figures for all interaction orders k = 2, . . . , 10 and a
+discussion of the precision of the depicted visualizations of
+n-Shapley Values can be found in Appendix C.
+
+9
+
+DISCUSSION
+
+This work provides a functionally-grounded characterization of Shapley Values as they are being used in explainable
+
+machine learning (Doshi-Velez and Kim, 2017). Explainable machine learning is often believed to be an important component in societal applications of machine learning
+(Wachter et al., 2017; Kaminski and Urban, 2021; Kästner
+et al., 2021). At the same time, current approaches face a
+lot of criticism, for example because they are non-robust or
+unable to provide the desired level of model understanding
+(as well as for a variety of other concerns) (Lipton, 2018;
+Kumar et al., 2020; Slack et al., 2020; Bordt et al., 2022).
+In this situation, we believe that a precise understanding of
+the mechanics of popular explainability methods, such as
+the one presented in this work, is a good first step toward an
+informed discussion of what we can and cannot achieve.
+Some of our results stand in contrast to conventional wisdom around Shapley Values, and offer a novel perspective
+on local-post hoc explanation algorithms. For example, we
+have seen that Shapley Values depend on the coordinates
+of the point that we attempt to explain, but not on the local neighbourhood of that point — the recovery example
+with the step function in Figure 4 suggests that this is also
+the case for the approximations of the Shapley Value that
+are used in practice. We have further seen that the original
+Shapley Values are able to faithfully explain non-linear functions, as long as the non-linearity is restricted to the specific
+form permitted by GAMs. As such, our results highlight
+the differences between Shapley Values and other feature
+attribution methods, for example those that are related to the
+gradient (Garreau and von Luxburg, 2020; Agarwal et al.,
+2021b), and those that perform local function approximation
+(Han et al., 2022).
+The demonstrated connections between value functions and
+functional decompositions effectively link the literature on
+feature attributions with the tools developed in the statistics literature on functional decompositions (Hooker, 2007;
+Lengerich et al., 2020). This raises the question of whether
+criteria for functional decompositions can be useful to understand feature attributions. Here, two concurrent works
+made significant contributions: Hiabu et al. (2023) show that
+the value function of interventional SHAP can be motivated
+with a causal assumption on the associated functional decomposition. Herren and Hahn (2022) outline connections
+between observational SHAP and functional ANOVA.
+While our work gives a functionally-grounded analysis of
+Shapley Values for any function, as well as recovery guarantees for Shapley Values and GAMs, we do not claim
+that Shapley Values are an appropriate post-hoc explanation
+method for any function (Kumar et al., 2021; Tan et al.,
+2022). Instead, the purpose of our work is to highlight the
+connections between a post-hoc explanation method and a
+class of interpretable models. Overall, however, we believe
+that many properties of Shapley Values have the potential to
+be more clearly understood using our perspective of functional decompositions.
+
+From Shapley Values to Generalized Additive Models and back
+
+Acknowledgements
+This work was done in part while Sebastian was visiting the
+Simons Institute for the Theory of Computing. Sebastian
+would like to thank Rich Caruana, Gyorgy Turan, Michal
+Moshkovitz and Tosca Lechner for many fruitful discussions
+about variable interactions. The authors would also like to
+thank Markus Scheuer and René Gy for linking Lemma 10
+to the literature on Bernoulli numbers, and the anonymous
+reviewers whose comments helped to improve this paper.
+This work has been supported by the German Research
+Foundation through the Cluster of Excellence “Machine
+Learning – New Perspectives for Science" (EXC 2064/1
+number 390727645), the BMBF Tübingen AI Center (FKZ:
+01IS18039A), and the International Max Planck Research
+School for Intelligent Systems (IMPRS-IS).
+References
+R. Agarwal, L. Melnick, N. Frosst, X. Zhang, B. Lengerich,
+R. Caruana, and G. E. Hinton. Neural additive models: Interpretable machine learning with neural nets. In
+NeurIPS, 2021a.
+S. Agarwal, S. Jabbari, C. Agarwal, S. Upadhyay, S. Wu,
+and H. Lakkaraju. Towards the unification and robustness
+of perturbation and gradient based explanations. In ICML,
+2021b.
+E. Albini, J. Long, D. Dervovic, and D. Magazzeni. Counterfactual shapley additive explanations. In ACM FAccT,
+2022.
+S. Bordt, M. Finck, E. Raidl, and U. von Luxburg. Post-hoc
+explanations fail to achieve their purpose in adversarial
+contexts. In ACM FAccT, 2022.
+R. Caruana, Y. Lou, J. Gehrke, P. Koch, M. Sturm, and
+N. Elhadad. Intelligible models for healthcare: Predicting
+pneumonia risk and hospital 30-day readmission. In ACM
+SIGKDD Conference on Knowledge Discovery and Data
+Mining, 2015.
+H. Chen, J. D. Janizek, S. Lundberg, and S.-I. Lee. True
+to the model or true to the data?
+arXiv preprint
+arXiv:2006.16234, 2020.
+T. Chen and C. Guestrin. XGBoost: A scalable tree boosting
+system. In ACM SIGKDD Conference on Knowledge
+Discovery and Data Mining, 2016.
+I. Covert, S. Lundberg, and S. Lee. Explaining by removing:
+A unified framework for model explanation. JMLR, 2021.
+F. Ding, M. Hardt, J. Miller, and L. Schmidt. Retiring adult:
+New datasets for fair machine learning. In NeurIPS, 2021.
+F. Doshi-Velez and B. Kim. Towards a rigorous science of interpretable machine learning. arXiv preprint
+arXiv:1702.08608, 2017.
+G. K. Dziugaite, S. Ben-David, and D. M. Roy. Enforcing interpretability and its statistical impacts: Trade-offs
+
+between accuracy and interpretability. arXiv preprint
+arXiv:2010.13764, 2020.
+D. Garreau and U. von Luxburg. Explaining the explainer:
+A first theoretical analysis of lime. In AISTATS, 2020.
+H. Gould and J. Quaintance. Bernoulli numbers and a new
+binomial transform identity. J. Integer Seq., 2014.
+M. Grabisch. K-order additive discrete fuzzy measures and
+their representation. Fuzzy sets and systems, 1997.
+M. Grabisch. Bases and transforms of set functions. In On
+Logical, Algebraic, and Probabilistic Aspects of Fuzzy
+Set Theory. Springer, 2016.
+M. Grabisch and M. Roubens. An axiomatic approach to
+the concept of interaction among players in cooperative
+games. International Journal of game theory, 1999.
+R. Gy. Combinatorial identity involving bernoulli numbers.
+Mathematics Stack Exchange, 2022. URL https://
+math.stackexchange.com/q/4520567.
+T. Han, S. Srinivas, and H. Lakkaraju. Which explanation
+should i choose? a function approximation perspective
+to characterizing post hoc explanations. arXiv preprint
+arXiv:2206.01254, 2022.
+J. C. Harsanyi. A simplified bargaining model for the nperson cooperative game. In Papers in game theory.
+Springer, 1982.
+T. Hastie and R. Tibshirani. Generalized Additive Models.
+Chapman Hall & CRC. 1990.
+A. Herren and P. R. Hahn. Statistical aspects of SHAP: Functional ANOVA for model interpretation. arXiv preprint
+arXiv:2208.09970, 2022.
+T. Heskes, E. Sijben, I. G. Bucur, and T. Claassen. Causal
+shapley values: Exploiting causal knowledge to explain
+individual predictions of complex models. In NeurIPS,
+2020.
+M. Hiabu, J. T. Meyer, and M. N. Wright. Unifying local and
+global model explanations by functional decomposition
+of low dimensional structures. In AISTATS, 2023.
+A. Holzinger, R. Goebel, R. Fong, T. Moon, K.-R. Müller,
+and W. Samek. xxai-beyond explainable artificial intelligence. In International Workshop on Extending Explainable AI Beyond Deep Models and Classifiers. Springer,
+2022.
+G. Hooker. Generalized functional anova diagnostics for
+high-dimensional functions of dependent variables. Journal of Computational and Graphical Statistics, 2007.
+D. Janzing, L. Minorics, and P. Blöbaum. Feature relevance
+quantification in explainable ai: A causal problem. In
+AISTATS, 2020.
+N. Jethani, M. Sudarshan, I. C. Covert, S.-I. Lee, and R. Ranganath. Fastshap: Real-time shapley value estimation. In
+ICLR, 2021.
+
+Sebastian Bordt, Ulrike von Luxburg
+
+M. Kaminski and J. Urban. The right to contest ai. Columbia
+Law Review, 2021.
+
+S. M. Lundberg and S.-I. Lee. A unified approach to interpreting model predictions. NeurIPS, 2017.
+
+L. Kästner, M. Langer, V. Lazar, A. Schomäcker, T. Speith,
+and S. Sterz. On the relation of trust and explainability:
+Why to engineer for trustworthiness. In IEEE 29th International Requirements Engineering Conference Workshops (REW), 2021.
+
+S. M. Lundberg, G. Erion, H. Chen, A. DeGrave, J. M.
+Prutkin, B. Nair, R. Katz, J. Himmelfarb, N. Bansal, and
+S.-I. Lee. From local explanations to global understanding with explainable ai for trees. Nature machine intelligence, 2020.
+
+T. L. Keevers. A power series expansion of feature importance. Technical report, 2020.
+
+C. Molnar. Interpretable machine learning. Lulu.com, 2020.
+
+R. Kommiya Mothilal, D. Mahajan, C. Tan, and A. Sharma.
+Towards unifying feature attribution and counterfactual
+explanations: Different means to the same end. In
+AAAI/ACM Conference on AI, Ethics, and Society (AIES),
+2021.
+S. Krishna, T. Han, A. Gu, J. Pombra, S. Jabbari, S. Wu, and
+H. Lakkaraju. The disagreement problem in explainable
+machine learning: A practitioner’s perspective. arXiv
+preprint arXiv:2202.01602, 2022.
+I. Kumar, C. Scheidegger, S. Venkatasubramanian, and
+S. Friedler. Shapley residuals: Quantifying the limits
+of the shapley value for explanations. NeurIPS, 2021.
+I. E. Kumar, S. Venkatasubramanian, C. Scheidegger, and
+S. Friedler. Problems with shapley-value-based explanations as feature importance measures. In ICML, 2020.
+H. Lakkaraju, J. Adebayo, and S. Singh. Explaining machine learning predictions: State-of-the-art, challenges,
+opportunities. Tutorial at NeurIPS, 2020.
+E. Lee, D. Braines, M. Stiffler, A. Hudler, and D. Harborne.
+Developing the sensitivity of lime for better machine
+learning explanation. In Artificial Intelligence and Machine Learning for Multi-Domain Operations Applications, 2019.
+B. Lengerich, S. Tan, C.-H. Chang, G. Hooker, and R. Caruana. Purifying interaction effects with the functional
+anova: An efficient algorithm for recovering identifiable
+additive models. In AISTATS, 2020.
+B. J. Lengerich, R. Caruana, M. E. Nunnally, and M. Kellis.
+Death by round numbers and sharp thresholds: How to
+avoid dangerous ai ehr recommendations. medRxiv, 2022.
+J. Lin, C. Zhong, D. Hu, C. Rudin, and M. Seltzer. Generalized and scalable optimal sparse decision trees. In ICML,
+2020.
+Z. C. Lipton. The mythos of model interpretability: In
+machine learning, the concept of interpretability is both
+important and slippery. Queue, 2018.
+Y. Lou, R. Caruana, and J. Gehrke. Intelligible models for
+classification and regression. In ACM SIGKDD Conference on Knowledge Discovery and Data Mining, 2012.
+Y. Lou, R. Caruana, J. Gehrke, and G. Hooker. Accurate
+intelligible models with pairwise interactions. In ACM
+SIGKDD Conference on Knowledge Discovery and Data
+Mining, 2013.
+
+M. Moshkovitz, S. Dasgupta, C. Rashtchian, and N. Frost.
+Explainable k-means and k-medians clustering. In ICML,
+2020.
+H. Nori, S. Jenkins, P. Koch, and R. Caruana. Interpretml:
+A unified framework for machine learning interpretability.
+arXiv preprint arXiv:1909.09223, 2019.
+F. Pedregosa, G. Varoquaux, A. Gramfort, V. Michel,
+B. Thirion, O. Grisel, M. Blondel, P. Prettenhofer,
+R. Weiss, V. Dubourg, J. Vanderplas, A. Passos, D. Cournapeau, M. Brucher, M. Perrot, and E. Duchesnay. Scikitlearn: Machine learning in Python. JMLR, 2011.
+M. T. Ribeiro, S. Singh, and C. Guestrin. Why should i trust
+you? explaining the predictions of any classifier. In ACM
+SIGKDD Conference on Knowledge Discovery and Data
+Mining, 2016.
+C. Rudin. Stop explaining black box machine learning
+models for high stakes decisions and use interpretable
+models instead. Nature Machine Intelligence, 2019.
+C. Rudin, C. Chen, Z. Chen, H. Huang, L. Semenova, and
+C. Zhong. Interpretable machine learning: Fundamental
+principles and 10 grand challenges. Statistics Surveys,
+2022.
+W. Samek, G. Montavon, S. Lapuschkin, C. J. Anders, and
+K.-R. Müller. Explaining deep neural networks and beyond: A review of methods and applications. Proceedings
+of the IEEE, 109(3):247–278, 2021.
+L. Shapley. A value for n-person games., 1953.
+D. Slack, S. Hilgard, E. Jia, S. Singh, and H. Lakkaraju.
+Fooling lime and shap: Adversarial attacks on post hoc
+explanation methods. In AAAI/ACM Conference on AI,
+Ethics, and Society, 2020.
+D. Slack, A. Hilgard, S. Singh, and H. Lakkaraju. Reliable
+post hoc explanations: Modeling uncertainty in explainability. In NeurIPS, 2021.
+M. Sundararajan and A. Najmi. The many shapley values
+for model explanation. In ICML, 2020.
+M. Sundararajan, A. Taly, and Q. Yan. Axiomatic attribution
+for deep networks. In ICML, 2017.
+M. Sundararajan, K. Dhamdhere, and A. Agarwal. The
+shapley taylor interaction index. In ICML, 2020.
+Y. S. Tan, A. Agarwal, and B. Yu. A cautionary tale on
+fitting decision trees to data from additive models: generalization lower bounds. In AISTATS, 2022.
+
+From Shapley Values to Generalized Additive Models and back
+
+C.-P. Tsai, C.-K. Yeh, and P. Ravikumar. Faith-shap:
+The faithful shapley interaction index. arXiv preprint
+arXiv:2203.00870, 2022.
+S. Wachter, B. Mittelstadt, and C. Russell. Counterfactual
+explanations without opening the black box: Automated
+decisions and the gdpr. Harv. JL & Tech., 31:841, 2017.
+F. Wang and C. Rudin. Falling rule lists. In AISTATS, 2015.
+Z. J. Wang, A. Kale, H. Nori, P. Stella, M. E. Nunnally,
+D. H. Chau, M. Vorvoreanu, J. Wortman Vaughan, and
+R. Caruana. Interpretability, then what? editing machine
+learning models to reflect human knowledge and values.
+In ACM SIGKDD Conference on Knowledge Discovery
+and Data Mining, 2022.
+
+Sebastian Bordt, Ulrike von Luxburg
+
+A
+
+n-Shapley Values
+
+This section details the properties of n-Shapley Values.
+A.1
+
+Bernoulli numbers
+
+The Bernoulli numbers1 Bn are defined by B0 = 1 and
+
+n 
+X
+n+1
+k
+
+k=0
+
+Bk = 0 ∀n ≥ 1.
+
+(15)
+
+In this paper, the Bernoulli numbers arise as the coefficients that make n-Shapley Values sum to the prediction (Proposition
+12). In fact, equation (15) arises directly from the proof of Proposition 12. The Bernoulli numbers can be computed
+recursively by re-writing into (15)
+
+
+n−1
+−1 X
+n+1
+Bn =
+Bk
+∀n ≥ 1.
+(16)
+n+1
+k
+k=0
+
+In a certain sense, the entire combinatorics around n-Shapley Values relies on the properties of the Bernoulli numbers. In
+particular, the proofs of Theorem 4 and Theorem 6 rely on the following two Lemmas.
+Lemma 9. For all n ≥ 1, it holds that
+
+n
+X
+
+ 
+n
+−1
+Bk
+=
+.
+n−k+1 k
+n+1
+
+(17)
+
+ 
+
+n 
+−1
+n
+1 X n+1
+B0
+Bk
+=
+=
+Bk −
+n−k+1 k
+n+1
+n+1
+n+1
+k
+
+(18)
+
+k=1
+
+Proof. We re-arrange the sum to get
+n
+X
+k=1
+
+k=0
+
+where the second equality follows from (15).
+Lemma 10. For all n, m ≥ 0, it holds that
+n X
+m   
+X
+n m
+k=0 l=0
+
+k
+
+l
+
+
+1
+
+(n − k)!(m − l)!
+(−1)l Bk+l =
+
+(n + m − k − l + 1)!
+0
+
+if n = 0
+(19)
+otherwise.
+
+Lemma 10 follows from standard results for the Bernoulli numbers (Gould and Quaintance, 2014)[Theorem 2]. A proof is
+contained in Appendix I.
+A.2
+
+Additivity and Efficiency
+
+From the recursive definition of the n-Shapley Values in Definition 3, a straightforward calculation shows that
+n−|S|
+
+ΦnS (x) =
+
+X
+
+X
+
+Bk ∆S∪K (x)
+
+(20)
+
+k=0 K⊂[d]\S, |K|=k
+
+which is an alternative non-recursive definition of n-Shapley Values.
+
+1
+An introduction and discussion about Bernoulli numbers can be found, for example, in the corresponding Wikipedia article at
+https://en.wikipedia.org/wiki/Bernoulli_number.
+
+From Shapley Values to Generalized Additive Models and back
+
+n
+Bn
+
+0
+
+1
+
+2
+
+1
+
+−1
+2
+
+1
+6
+
+3
+
+4
+
+0
+
+−1
+30
+
+5
+
+6
+
+0
+
+1
+42
+
+7
+
+8
+
+0
+
+−1
+30
+
+9
+
+10
+
+0
+
+5
+66
+
+11
+
+12
+
+0
+
+−691
+2730
+
+13
+
+14
+
+0
+
+7
+6
+
+15
+
+16
+
+0
+
+−3617
+510
+
+17
+
+18
+
+19
+
+0
+
+43867
+798
+
+0
+
+Table A.1: The first 20 Bernoulli numbers.
+Proposition 11 (Additivity). For all 1 ≤ n ≤ d and all f, g : Rn → R, we have
+ΦnS (x; f + g) = ΦnS (x; f ) + ΦnS (x; g).
+
+(21)
+
+Proof. By definition, ΦnS is linear in ∆S , and ∆S is linear in the value function v. Therefore, the linearity of ΦnS in f
+follows from the linearity of v in f , i.e. from the fact that vf +g (x, S) = vf (x, S) + vg (x, S).
+Proposition 12 (Efficiency). For all 1 ≤ n ≤ d, it holds that
+X
+
+ΦnS (x) = v([d]) − v(∅).
+
+(22)
+
+S⊂[d]
+1≤|S|≤n
+
+Proof. For n = 1, the statement follows from the efficiency of the original Shapley Values. We assume that the statement
+holds for n − 1 and re-arrange the sum
+X
+
+ΦnS (x) =
+
+S⊂[d]
+1≤|S|≤n
+
+X
+
+X
+
+ΦnS (x) +
+
+S⊂[d]
+1≤|S|<n
+
+ΦnS (x)
+
+S⊂[d]
+|S|=n
+
+
+=
+
+X
+S⊂[d]
+1≤|S|<n
+
+=
+
+
+
+
+ n−1
+ΦS (x) + Bn−|S|
+
+
+X
+
+X
+
+Φn−1
+(x) +
+S
+
+S⊂[d]
+1≤|S|≤n−1
+
+X
+
+
+X
+
+∆S∪K (x) +
+∆S (x)
+
+S⊂[d]
+|S|=n
+
+K⊂[d]\S
+|K|+|S|=n
+
+X
+
+Bn−|S| ∆S∪K (x) +
+
+S⊂[d]
+K⊂[d]\S
+1≤|S|<n |K|+|S|=n
+
+X
+
+(23)
+
+∆S (x).
+
+S⊂[d]
+|S|=n
+
+Notice that the first term is equivalent to v([d]) − v(∅) by the induction hypothesis. It remains to show that
+X
+
+X
+
+Bn−|S| ∆S∪K (x) +
+
+S⊂[d]
+K⊂[d]\S
+1≤|S|<n |K|+|S|=n
+
+X
+
+∆S (x) = 0.
+
+(24)
+
+S⊂[d]
+|S|=n
+
+Notice that both sums are over sets of length n. In the first sum, each sets occurs multiple times. In the second sum, each set
+occurs exactly once. By counting the occurrences of each set in the first sum we see that (24) holds if
+n−1
+X
+
+ 
+n
+Bn−s
++ 1 = 0.
+s
+s=1
+
+(25)
+
+If we set B0 = 1, this holds if and only if
+n−1
+X
+k=0
+
+Bk
+
+ 
+n
+= 0,
+k
+
+(26)
+
+which is the defining property of the Bernoulli numbers (15). In summary, we see that the Bernoulli numbers are the
+coefficients that balance the terms in the first sum in equation (24).
+
+Sebastian Bordt, Ulrike von Luxburg
+n-Shapley Values
+
+n-Shapley Values
+
+n-Shapley Values
+0.2
+
+0.2
+0.1
+0.0
+
+0.0
+
+−0.1
+
+n-Shapley Values
+0.2
+
+0.2
+
+0.1
+
+0.1
+
+n-Shapley Values
+
+0.3
+
+0.2
+
+0.1
+
+0.0
+
+0.0
+
+−0.1
+
+−0.1
+
+0.0
+
+(a) Example 1
+
+(d) Example 4
+
+ture
+4
+
+ture
+3
+
+Fea
+
+ture
+2
+
+Fea
+
+ture
+1
+
+Fea
+
+Fea
+
+ture
+4
+Fea
+
+ture
+3
+
+ture
+2
+
+Fea
+
+ture
+1
+
+(c) Example 3
+
+Fea
+
+Fea
+
+ture
+4
+Fea
+
+ture
+3
+Fea
+
+ture
+2
+
+ture
+1
+
+(b) Example 2
+
+Fea
+
+Fea
+
+ture
+4
+
+ture
+3
+
+Fea
+
+Fea
+
+ture
+2
+Fea
+
+ture
+1
+Fea
+
+ture
+4
+
+ture
+3
+
+Fea
+
+ture
+2
+
+Fea
+
+Fea
+
+Fea
+
+ture
+1
+
+−0.1
+
+(e) Example 5
+
+Figure B.1: Examples that illustrate the proposed visualization technique for n-Shapley Values.
+A.3
+
+Relationship Between n-Shapley Values of Different Order
+
+The following proposition is a straightforward extension of Theorem 6.
+n
+Proposition 13 (Relationship Between n-Shapley Values of Different Order). For m ≤ n, let Φm
+S and ΦS be the m- and
+n-Shapley Values, respectively. Then, the m-Shapley Values can be computed from the n-Shapley Values by
+X
+n
+Φm
+βm−|S|,|K| ΦnS∪K (x).
+(27)
+S (x) = ΦS +
+K⊂[d]\S,
+m−|S|<|K|≤n−|S|
+
+Specifically, it holds that
+Φ1i = Φni +
+
+1X n
+1
+Φi,j + · · · +
+2
+n
+j6=i
+
+X
+
+ΦnK∪i
+
+(28)
+
+K⊂[d]\{i}
+|K|=n−1
+
+which is the basis for the visualizations in the paper.
+Proof. The proposition follows from the counting argument used in the proof of Theorem 6.
+
+B
+
+Visualizing n-Shapley Values
+
+Due to the large number of terms involved in n-Shapley Values of higher order, visualizing these explanations is difficult.
+However, Proposition 13 (which is really a variant of Theorem 6) states that higher-order variable interactions in n-Shapley
+Values are related to the original Shapley Values via a simple lump-sum formula. This gives rise to the idea of simply
+visualizing, for each feature, the respective components of the sum.
+To illustrate this idea, let us consider a simple example. Let us begin with four different features and the usual Shapley
+Values. Say the first two features have attribution zero, the third feature has attribution 0.2, and the fourth feature has
+attribution −0.1. These Shapley Values can be visualized as usual, depicted in Figure B.1a. Now, let us add a second-order
+interaction effect, say Φ22,3 = 0.1. Because this interaction effect would ultimately be added to the attributions of feature 2
+and feature 3 with a factor of 12 , let us simply add two corresponding bars to the attributions of these features, with the color
+indicating that it is a second-order effect. From the resulting Figure B.1b, it can then be seen that we have two main effects
+and a single positive interaction effect between features 2 and 3. If there were another interaction effect, say Φ23,4 = −0.1,
+we would proceed in the same way, taking care of the sign. From the resulting Figure B.1c, it can be seen that there are
+two main effects and a number of second-order interactions. With higher-order interactions we proceed accordingly, as
+illustrated for Φ32,3,4 = 0.1 (Figure B.1d) and Φ41,2,3,4 = −0.1 (Figure B.1d).
+Note that while this form of visualization faithfully depicts the relative magnitude of the different variable interactions, it is
+in general not possible to tell from the figures which variables interact with each other, for example when there are a number
+of different second-order effects.
+
+C
+
+Estimating n-Shapley Values
+
+Here we collect some additional details regarding the estimation of n-Shapley Values. We note that the discussion here is
+not exhaustive. Our objective is to (1) raise awareness for the fact that computing n-Shapley Values incurs an estimation
+
+100
+
+0
+0
+0
+0
+100 10 00 100 00 000 00
+1
+
+100
+
+5d Checkerboard Function
+
+100
+
+1.0
+0.9
+0.8
+0.7
+0.6
+0.5
+0.4
+0.3
+0.2
+0.1
+0.0
+
+0
+0
+0
+0
+100 10 00 100 00 000 00
+1
+
+100
+
+0
+0
+0
+0
+100 10 00 100 00 000 00
+1
+
+Number of points sampled
+Main
+
+2nd order
+
+3rd order
+
+1.0
+0.9
+0.8
+0.7
+0.6
+0.5
+0.4
+0.3
+0.2
+0.1
+0.0
+
+100
+
+1.0
+0.9
+0.8
+0.7
+0.6
+0.5
+0.4
+0.3
+0.2
+0.1
+0.0
+
+6th
+
+7th
+
+0
+0
+0
+0
+100 10 00 100 00 000 00
+1
+
+Number of points sampled
+
+1.0
+0.9
+0.8
+0.7
+0.6
+0.5
+0.4
+0.3
+0.2
+0.1
+0.0
+
+0
+0
+0
+0
+100 10 00 100 00 000 00
+1
+
+5th
+
+7d Checkerboard Function
+
+100
+
+10d Checkerboard Function
+
+100
+
+Number of points sampled
+4th
+
+0
+0
+0
+0
+100 10 00 100 00 000 00
+1
+
+Number of points sampled
+
+0
+0
+0
+0
+100 10 00 100 00 000 00
+1
+
+9d Checkerboard Function
+
+4d Checkerboard Function
+
+100
+
+Number of points sampled
+
+Order of estimated effects
+
+Order of estimated effects
+
+8d Checkerboard Function
+
+0
+0
+0
+0
+100 10 00 100 00 000 00
+1
+
+6d Checkerboard Function
+
+100
+
+Number of points sampled
+
+1.0
+0.9
+0.8
+0.7
+0.6
+0.5
+0.4
+0.3
+0.2
+0.1
+0.0
+
+1.0
+0.9
+0.8
+0.7
+0.6
+0.5
+0.4
+0.3
+0.2
+0.1
+0.0
+
+Number of points sampled
+
+Order of estimated effects
+
+Order of estimated effects
+
+Number of points sampled
+
+1.0
+0.9
+0.8
+0.7
+0.6
+0.5
+0.4
+0.3
+0.2
+0.1
+0.0
+
+3d Checkerboard Function
+
+Order of estimated effects
+
+1.0
+0.9
+0.8
+0.7
+0.6
+0.5
+0.4
+0.3
+0.2
+0.1
+0.0
+
+Order of estimated effects
+
+2d Checkerboard Function
+
+Order of estimated effects
+
+1.0
+0.9
+0.8
+0.7
+0.6
+0.5
+0.4
+0.3
+0.2
+0.1
+0.0
+
+Order of estimated effects
+
+Order of estimated effects
+
+From Shapley Values to Generalized Additive Models and back
+
+0
+0
+0
+0
+100 10 00 100 00 000 00
+1
+
+Number of points sampled
+8th
+
+9th
+
+10th order
+
+Figure B.2: Estimating higher-order variable interactions requires precise evaluations of the value function. A simple way to
+study this is by estimating the k-dimensional checkerboard function (14). Compare Figure 4 in the main paper.
+
+problem, and (2) ensure that the results presented in the main paper are precisely estimated and not statistical artifacts.
+Figure B.2 depicts the result of estimating the k-dimensional checkerboard function (14) for all values k = 2, . . . , 10
+(compare Section 8 in the main paper). As already discussed in the main paper, we can see from the figure that estimation
+becomes gradually harder as we increase the order of interaction.
+In Figure C.3, we assess the degree up to which our visualizations are effected by the presence of spurious interaction effect
+of intermediate order, as observed when estimating a checkerboard function with too few samples. The figure visualizes
+the Shapley-GAM decomposition of a kNN classifier on the Folktables Travel data set, estimated with 500, 5000 and
+133549 samples per evaluation of the value function, respectively. By comparing the left and middle part of Figure C.3
+(estimation with 500 and 5000 samples, respectively), we see that 500 samples are to few and result in the presence of
+spurious interaction effects, for example of of order 4 and 5. This can be seen from the fact that some of these effects vanish
+as we increase the number of samples. By comparing the middle and right part of Figure C.3 (estimation with 5000 and
+133549 samples, respectively), we see that estimation with 5000 samples is already quite precise for this kNN classifier.
+This can be seen from the fact that significantly increasing the number of samples does not have any significant effect on the
+
+Sebastian Bordt, Ulrike von Luxburg
+Shapey-GAM, 500 Samples
+
+Shapey-GAM, 5000 Samples
+
+Shapey-GAM, 133549 Samples
+
+0.1
+
+0.1
+
+0.1
+
+0.0
+
+0.0
+
+0.0
+
+−0.1
+
+−0.1
+
+−0.1
+
+−0.2
+
+−0.2
+
+−0.2
+
+2nd order
+
+3rd order
+
+4th
+
+5th
+
+6th
+
+PO
+
+PO
+
+PO
+
+Main
+
+JW
+TR
+WP
+UM
+PU A
+MA
+AG
+EP
+OC
+CP
+PO
+VP
+I
+SC P
+HL
+SE
+X
+RE
+LP
+CIT
+
+0.2
+
+JW
+TR
+WP
+UM
+PU A
+MA
+AG
+EP
+OC
+CP
+PO
+VP
+I
+SC P
+HL
+SE
+X
+RE
+LP
+CIT
+
+0.2
+
+JW
+TR
+WP
+UM
+PU A
+MA
+AG
+EP
+OC
+C
+PO P
+VP
+I
+SC P
+HL
+SE
+X
+RE
+LP
+CIT
+
+0.2
+
+7th
+
+8th
+
+9th
+
+10th order
+
+Figure C.3: Estimating higher-order interactions with too few samples can result in spurious interaction effects of intermediate
+order. These effects are also visible in our visualizations. Left: Estimation with 500 samples per evaluation of the value
+function results in spurious interaction effects. Middle: This can be seen from the fact that parts of the estimated effects
+vanish if we increase the number of samples to 5000 per evaluation of the value function. Right: Using all 133549
+observations in the training data per evaluation of the value function, we get almost the same visualization as for 5000
+samples. The function in this example is a kNN classifier and the data set is the Folktables Travel data set.
+visualization.2
+Table K.2 depicts the individual terms that underlie the visualization in Figure C.3. From Table K.2, we see that main
+effects are precisely estimated even with 500 samples. However, many relatively small higher-order coefficients are not very
+precisely estimated even for N = 5000. Note that the latter point is not in contrast to the fact that Figure C.3 is precisely
+estimated for N = 5000. Figure C.3 depicts summary statistics that are more precisely estimated than the individual
+components.
+
+D
+
+The Statistical Independence Assumption for Observational SHAP is Necessary
+
+In this section we give a simple example to demonstrate that the assumption of independent random variables for the
+observational SHAP value function in Theorem 8 is indeed necessary.
+Consider the GAM of order 1
+f (x1 , x2 ) = x1 + x2 .
+Assume that x1 and x2 are correlated normal random variables
+ 
+  
+
+x1
+0
+1, ρ
+∼N
+,
+x2
+0
+ρ, 1
+with 0 ≤ ρ ≤ 1. We have
+E[x2 |x1 ] = ρx1 .
+A simple calculation shows that the Shapley-GAM of observational SHAP is given by
+f∅ = 0,
+
+f1 (x1 ) = (1 + ρ)x1 ,
+
+f2 (x2 ) = (1 + ρ)x2 ,
+
+f (x1 , x2 ) = −ρ(x1 + x2 ).
+
+According to Theorem 6, the observational SHAP values are then given by
+ρ
+ρ
+Φ1 = (1 + )x1 − x2 ,
+2
+2
+
+ρ
+ρ
+Φ2 = (1 + )x2 − x1 .
+2
+2
+
+Clearly, recovery does not hold: Despite the fact that the underlying function is a GAM of order 1, the Shapley-GAM is a
+GAM of order 2. The Shapley Values also depend on both coordinates – hence they are not well-defined functions of the
+individual coordinates.
+2
+
+This could of course be discussed much more rigorously.
+
+From Shapley Values to Generalized Additive Models and back
+
+In contrast, the Shapley-GAM of the interventional SHAP value function is given by
+f∅ = 0,
+
+f1 (x1 ) = x1 ,
+
+f2 (x2 ) = x2 .
+
+Moreover, the interventional SHAP values are given by
+Φ 1 = x1 ,
+
+Φ2 = x 2 ,
+
+that is recovery holds with the interventional SHAP value function (as guaranteed by Theorem 8).
+
+E
+
+Proof of Theorem 4
+
+Proof of Theorem 4. We are going to show that
+X
+
+ΦdS (x) =
+
+(−1)|S|−|L| v(xL , L).
+
+(29)
+
+L⊂S
+
+Note that the RHS evaluates the value function v only for sets L ⊂ S. From the assumption that the value function is
+subset-compliant, it follows that the RHS is a well-defined function of xS . According to Proposition 12 (efficiency), the
+d-Shapley Values sum to v(x) − v(∅) which implies the Theorem.
+To show (29), we consider the non-recursive definition of n-Shapley Values 20 and then substitute the definition of ∆S (x)
+from Definition 3.
+d−|S|
+
+ΦdS (x) =
+
+X
+
+X
+
+Bk ∆S∪K (x)
+
+k=0 K⊂[d]\S, |K|=k
+d−|S|
+
+=
+
+X
+
+X
+
+k=0 K⊂[d]\S, |K|=k
+
+=
+
+X
+
+Bk
+
+X
+
+X
+
+K⊂[d]\S
+
+T ⊂[d]\(S∪K)
+
+T ⊂[d]\(S∪K)
+
+B|K|
+
+(d − |T | − |S| − |K|)!|T |!
+(d − |S| − |K| + 1)!
+
+(d − |T | − |S| − |K|)!|T |!
+(d − |S| − |K| + 1)!
+
+X
+
+X
+
+(−1)|S|+|K|−|L| v(x, L ∪ T ).
+
+(30)
+
+L⊂S∪K
+
+(−1)|S|+|K|−|L| v(x, L ∪ T ).
+
+L⊂S∪K
+
+Where the last equation follows from the realization that we are summing over all possible subsets of [d] \ S.
+In equation (30), we are summing over the value of the same sets multiple times. Let us fix a set M = L ∪ T and count how
+often it occurs in the sum. First note that v(x, M ) occurs exactly once for every set K, namely by choosing T = M \(S ∪K)
+and L = M ∩ (S ∪ K). Since the coefficients do not only depend on the size of K, but also on |T | and |L|, let us partition
+the set K = K1 ∪ K2 = {K ∩ M } ∪ {K \ M }. Let n1 = |M \ S| and n2 = |[d] \ (S ∪ M )| denote the maximum sizes of
+both partitions. With this counting argument, we arrive at
+(−1)|S|−|M |
+
+X
+
+X
+
+B|K1 |+|K2 |
+
+K1 ⊂M \S K2 ⊂[d]\(S∪M )
+
+(n2 − |K2 |)!(n1 − |K1 |)!
+(−1)|K2 |
+(n1 + n2 − |K1 | − |K2 | + 1)!
+
+(31)
+
+occurrences of the term v(x, M ). Notice that equation (31) is equal to
+(−1)|S|−|M |
+
+n1 X
+n2   
+X
+n1
+n2
+k1 =0 k2 =0
+
+k1
+
+(n2 − k2 )!(n1 − k1)!
+(−1)k2 Bk1 +k2
+k2 (n1 + n2 − k1 − k2 + 1)!
+
+(32)
+
+The desired result now follows from the properties of the Bernoulli numbers. In particular, since M ⊂ S ⇐⇒ n1 = 0, we
+see from Lemma 10 that (32) equals (−1)|S|−|M | if M ⊂ S and 0 otherwise. Comparing the terms for all possible sets
+M ⊂ [d], we see that (30) equals (29).
+Note that if we fix the point x, then the Shapley-GAM at x is equivalent to the Moebious transform of the measure v(x, ·).
+From this perspective, Theorem 4 can be seen as an application of Theorem 2 in Grabisch (1997).
+
+Sebastian Bordt, Ulrike von Luxburg
+
+F
+
+Proof of Theorem 6
+
+Proof of Theorem 6. According to Theorem 4, the d-Shapley Values can be written as
+ΦdS (x) = fS (x)
+
+(33)
+
+where fS (x) are the component functions of the Shapley-GAM. Hence, the d-Shapley Values are a linear combination of
+the component functions of the Shapley-GAM. From the recursive definition of the n-Shapley Values, we see that
+X
+
+ΦnS (x) = Φn+1
+(x) − B1+n−|S|
+S
+
+Φn+1
+S∪K (x)
+
+(34)
+
+K⊂[d]\S,|K|+|S|=n+1
+
+that is the n-Shapley Values are a linear combination of the terms involved in the n + 1-Shapley Values. By induction, we
+see that the n-Shapley Values are linear combinations of the component functions of the Shapley-GAM.
+It remains to determine the coefficients Cn,m . We present a counting argument that is based on the recurrence relation (34).
+In this counting argument, we first determine the coefficients Dn,m where the first index corresponds to the distance between
+|S| and the order of the Shapley Values, and the second index corresponds to the different between the size of the interaction
+effect and the order of the Shapley Values. Suppose that we are computing n-Shapley Values. If we use equation (34) to
+proceed recursively from d-Shapley Values to n-Shapley Values, then the first time that the component function fS∪K is
+being added to Φm
+S is during the computation of the (|S| + |K| − 1)-Shapley Values. According to equation (34), the linear
+coefficient will simply be D|K|−1,1 = −B|K| . The second time that the component function fS∪K is being added to Φm
+S is
+during the computation of the (|S| + |K| − 2)-Shapley Values. This is because we have previously added −B1 fS∪K to all
+
+the terms of order |S| + |K| − 1 that are a subset of S ∪ K. There are |K|
+such terms, and we are now adding all of them
+1
+to fS , using the coefficient −B|K|−1 . This means that we arrive at a total coefficient of
+
+
+
+|K|
+B1 .
+1
+
+(35)
+
+
+ 
+   
+|K|
+|K|
+|K|
+2
+B1 − B|K|−2
+B2 − B|K|−2
+B1
+B1 .
+1
+2
+2
+1
+
+(36)
+
+D|K|−2,2 = −B|K| + B|K|−1
+By a similar argument we arrive at a coefficient of
+
+D|K|−3,3 = −B|K| + B|K|−1
+
+for the (|S| + |K| − 3)-Shapley Values. In general, that is when we compute n-Shapley Values, the component function
+fS∪K is being added to ΦnS once for every possible pathway that goes from a set of order n + 1 to the set S ∪ K by
+successively adding different numbers of elements. For k ≥ 1, let
+(
+Pk =
+
+k
+X
+
+(p1 , . . . , pk ) ∈ Nk≥0
+
+)
+pi = k
+
+and pi = 0 =⇒ (pj = 0 ∀j > i)
+
+(37)
+
+i=1
+
+
+be the set of pathways of length k. This means that we have P1 = (1) ,
+
+P2 = (2, 0), (1, 1) ,
+
+P3 = (3, 0, 0), (2, 1, 0), (1, 2, 0), (1, 1, 1) ,
+
+P4 = (4, 0, 0, 0), (3, 1, 0, 0), (2, 2, 0, 0), (2, 1, 1, 0),
+
+(38)
+
+(1, 3, 0, 0), (1, 2, 1, 0), (1, 1, 2, 0), (1, 1, 1, 1)
+and so on. By accounting for the coefficients Bk and the signs along each path, the coefficients can be written as
+Dn,m =
+
+X
+(p1 ,...,pm )∈Pm
+
+(−1)
+
+Pm
+
+i=1 sign(pi )
+
+Pi−1 
+
+
+m
+Y
+n+m
+m − j=1 pj
+Bn+p1
+B pi
+n + p1
+pi
+i=2
+
+
+
+(39)
+
+From Shapley Values to Generalized Additive Models and back
+
+From this, we derive the special case
+Pi−1 
+ 
+
+m
+Y
+m
+m − j=1 pj
+B p1
+B pi
+i1
+pi
+i=2
+(p1 ,...,pm )∈Pm
+P
+
+
+m
+i−1
+X
+Y
+Pm
+m − j=1 pj
+=
+(−1) i=1 sign(pi )
+B pi
+pi
+i=1
+
+D0,m =
+
+X
+
+(−1)
+
+Pm
+
+i=1 sign(pi )
+
+(p1 ,...,pm )∈Pm
+
+= −Bm −
+
+m−1
+X
+
+ap1
+
+p1 =1
+
+ 
+m
+p1
+
+X
+
+(−1)
+
+Pm−p1
+i=1
+
+sign(pi )
+
+m−p
+Y1
+
+
+Bp̂j
+
+j=1
+
+(p̂1 ,...,p̂m−p1 )∈Pm−p1
+
+Pj−1 
+m − i1 − s=1 p̂s
+p̂j
+
+ 
+m−1
+X
+m
+= −Bm −
+ap1
+β0,m−p1
+p1
+p =1
+
+(40)
+
+1
+
+m−1
+X
+
+ 
+m
+1
+= −Bm −
+ap1
+p1 m − p1 + 1
+p1 =1
+
+
+m
+X
+Bk
+m
+=−
+m−k+1 k
+k=1
+
+=
+
+1
+m+1
+
+where the last equality is due to Lemma 9. Now, this implies that
+|S|
+
+∆S (x) = ΦS (x) = fS (x) +
+
+X
+
+D0,|K| fS∪K (x) =
+
+K⊂[d]\S, |K|≥1
+
+X
+K⊂[d]\S
+
+1
+fS∪K (x)
+1 + |K|
+
+(41)
+
+which is a version of Theorem 1 in Grabisch (1997). Using (41) and the explicit formula for n-Shapley Values (20), we get
+n−|S|
+
+ΦnS (x) =
+
+X
+
+X
+
+Bk ∆S∪K (x)
+
+k=0 K⊂[d]\S, |K|=k
+
+(42)
+
+n−|S|
+
+=
+
+X
+
+X
+
+Bk
+
+k=0 K⊂[d]\S, |K|=k
+
+X
+T ⊂[d]\(S∪K)
+
+1
+fS∪K∪T (x)
+1 + |T |
+
+From which we see that the component function fS∪K̃ is being added to ΦnS (x) exactly
+n−|S| 
+
+Cn−|S|,|K̃| =
+
+X
+
+k=0
+
+
+n − |S|
+Bk
+k
+1 + |K̃| − k
+
+(43)
+
+times which concludes the proof.
+
+G
+
+Proof of Theorem 7
+
+Proof of Theorem 7. According to Theorem 4, the Shapley-GAM decomposition is given by
+fS (x) =
+
+X
+L⊂S
+
+(−1)|S|−|L| v(xL , L).
+
+(44)
+
+Sebastian Bordt, Ulrike von Luxburg
+
+By substituting the definition of the value function (12)
+fS (x) =
+
+X
+
+(−1)|S|−|L| v(xL , L)
+
+L⊂S
+
+=
+
+X
+
+(−1)|S|−|L|
+
+gT (x)
+
+T ⊂L
+
+L⊂S
+
+=
+
+X
+
+X X
+
+gT (x)(−1)|S|−|L|
+
+(45)
+
+L⊂S T ⊂L
+
+=
+
+X
+
+gT (x)
+
+T ⊂S
+
+X
+
+(−1)|S|−|L|−|T |
+
+L⊂S\T
+
+= gS (x)
+Where we have re-arranged the sum to count the number of occurrences of the set T , and then used the fact that inner sum
+averages to zero except for T = S.
+
+H
+
+Proof of Theorem 8
+
+We show a slightly more general result than what is stated in the main paper. In fact, we show that recovery holds for all
+interaction indices that can be written as
+X
+ISn (x) = fS (x) +
+Cn,|S|,|K| fS∪K (x)
+∀S ⊆ [d], |S| ≤ n
+(46)
+K⊂[d]\S
+n+1≤|S|+|K|
+
+where fS (x) are the component functions of the Shapley-GAM and Cn,|S|,|K| ∈ R are coefficients that depend on the
+interaction index. n-Shapley Values can be written like this according to Theorem 6. For the Faith-Shap interaction index,
+this representation is given in Theorem 19 in Tsai et al. (2022)
+Faith-ShapnS (x) = fS (x) +
+
+X
+
+ |S|+|K|−1
+n
+|S|
+|S|
+n
+(−1)n−|S|
+ fS∪K (x)
+n + |S| |S|+|K|+n−1
+
+∀|S| ≤ n.
+
+(47)
+
+n+|S|
+
+K⊂[d]\S
+n+1≤|S|+|K|
+
+Also the Shapley Taylor interaction index (Sundararajan et al., 2020) can, due to its symmetry, be written as
+
+
+if |S| < n
+fS (x)
+P
+Shapley-TaylornS (x) =
+1
+fS∪K (x) if |S| = n.
+
+K⊂[d]\S
+fS (x) +
+(|S|+|K|
+|K| )
+n+1≤|S|+|K|
+Proof of Theorem 8. We assume that the function f can be written as a GAM of order n, that is
+X
+f (x) =
+gS (xS ).
+
+(48)
+
+(49)
+
+S⊂[d], |S|≤n
+
+Notice that this GAM is not necessarily the Shapley-GAM, but just some way to write the function f as a GAM. Let fS be
+the component functions of the Shapley-GAM. Now, n-Shapley Values, the Faith-Shap interaction index, as well as the
+Shapley Taylor interaction index, can be written as a linear combination of the component functions of the Shapley-GAM
+ISn (x) = fS (xS ) +
+
+X
+
+Cn−|S|,|K| fS∪K (xS∪K )
+
+(50)
+
+K⊂[d]\S, |S|+|K|>n
+
+where the specific linear coefficients Cn,m depend on the interaction index (Theorem 6, equation (47), equation (48)).
+According to equation (50), the interaction index equals fS (xS ) plus some weighted components of the Shapley-GAM of
+order greater than n. As a consequence, it remains to show is that the Shapley-GAM is a GAM of order n (then the second
+sum vanishes and we arrive at ISn (x) = fS (xS ) which is what we want to show).
+
+From Shapley Values to Generalized Additive Models and back
+
+It remains to show that the Shapley-GAM is a GAM of order n. According to Theorem 4, the component functions of the
+Shapley-GAM are given by
+X
+fS (x) =
+(−1)|S|−|L| v(xL , L).
+(51)
+L⊂S
+
+We want to show that the component functions of degree greater than n vanish. Let us first consider observational SHAP.
+Here we have
+X
+X
+(−1)|S|−|L| v(xL , L) =
+(−1)|S|−|L| E[f (x)|xL ]
+L⊂S
+
+L⊂S
+
+
+=
+
+X
+
+(−1)|S|−|L| E 
+
+L⊂S
+
+=
+
+X
+
+gT (xT ) xL 
+
+T ⊂[d], |T |≤n
+
+(−1)
+
+L⊂S
+
+=
+
+
+X
+X
+
+|S|−|L|
+
+(52)
+
+E [gT (xT )|xL ]
+
+T ⊂[d], |T |≤n
+
+X
+
+X
+
+(−1)|S|−|L| E [gT (xT )|xL ]
+
+T ⊂[d], |T |≤n L⊂S
+
+Consider the inner sum. If |S| > n, we can always pick an element i ∈ S \ T and write
+
+X
+
+
+(−1)|S|−|L| E [gT (xT )|xL ] − E gT (xT )|xL∪{i}
+
+(53)
+
+L⊂S\{i}
+
+If the input features are independent, then gT (xT ) and xi are independent, from which we get by the properties of the
+conditional expectation that
+
+
+E gT (xT )|xL∪{i} = E [gT (xT )|xL ]
+(54)
+It follows that the inner sum is zero for all sets T , and that the component functions of the Shapley-GAM of degree greater
+than n are equal to zero, too.
+Let us now consider interventional SHAP. Just as for observational SHAP, we arrive at equation (53) using the linearity of
+the expectation operator. Hence, we require that
+
+
+E gT (xT )|do(xL∪{i} ) = E [gT (xT )|do(xL )]
+(55)
+which follows from the properties of the causal do-operator. Intuitively, since gT does not depend on the value of feature i,
+intervening on that feature has no effect.
+
+I
+
+Proof of Lemma 10
+
+Proof. Let us first consider the case n = 0. For n = 0 and m = 0, we have
+  
+0 0
+(0 − 0)!(0 − 0)!
+(−1)0 B0 = 1.
+0 0 (0 + 0 − 0 − 0 + 1)!
+For n = 0 and m ≥ 1, we have
+
+m  
+m 
+X
+1 X m+1
+m
+1
+l
+(−1) Bl =
+(−1)l Bl
+l (m − l + 1)
+m+1
+l
+l=0
+l=0
+
+
+
+m 
+X
+−2
+m+1
+m+1
+=
+B1 +
+m+1
+1
+l
+
+(56)
+
+(57)
+
+l=0
+
+= −2B1 + 0 = 1.
+where we used (15) and the fact that the odd Bernoulli numbers vanish except for n = 1. For m = 0 and n ≥ 1, we also
+have from (15)
+
+n  
+n 
+X
+n
+1
+1 X n+1
+0
+(−1) Bk =
+Bk = 0.
+(58)
+k (n − k + 1)
+n+1
+k
+k=0
+
+k=0
+
+Sebastian Bordt, Ulrike von Luxburg
+
+It remains to show the general case n, m ≥ 1. According to a derivation by Gy (2022), the problem in this case is equivalent
+to
+ 
+ 
+n
+m
+X
+X
+Bn+l+1 m
+Bm+k+1 n
+1
+
+(−1)n
++ (−1)m
+=−
+(59)
+n+l+1 l
+m+k+1 k
+(n
++
+m
++
+1) n+m
+m
+l=0
+k=0
+Now, Theorem 2 in Gould and Quaintance (2014) with s = 1 states that for any sequence of numbers (an )n≥0 , it holds that
+m  
+X
+m an+k+1
+k=0
+
+k
+
+n+k+1
+
+=
+
+n
+X
+
+n−k
+
+(−1)
+
+k=0
+
+ 
+(−1)n+1 a0
+n bm+k+1
+
++
+k m + k + 1 (m + n + 1) m+n
+n
+
+(60)
+
+where the sequence (bn )n≥0 is the binomial transform of the sequence (an )n≥0 , given by
+bn =
+
+n  
+X
+n
+k=0
+
+k
+
+ak .
+
+(61)
+
+Setting an = Bn , we have from (15) that the binomial transform of the Bernoulli numbers is simply
+bn =
+
+n  
+X
+n
+
+k
+
+k=0
+
+Bk = (−1)n Bn
+
+(62)
+
+where the factor (−1)n takes care of the special case n = 1. Using (60) with an = Bn and bn = (−1)n Bn , we get
+(−1)
+
+n
+
+m  
+X
+m Bn+k+1
+k=0
+
+k
+
+n+k+1
+
+=−
+
+n
+X
+
+ 
+n Bm+k+1
+1
+
+(−1)
+−
+k m + k + 1 (m + n + 1) m+n
+n
+m
+
+k=0
+
+where we multiplied both sides with (−1)n . This is the same as (59) which concludes the proof.
+
+(63)
+
+From Shapley Values to Generalized Additive Models and back
+
+J
+
+Datasets and Models
+
+In our experiments, we use the following data sets and models.
+J.1
+
+Datasets
+
+Folktables Income. Folktables is a Python package that provides access to data sets derived from recent US Censuses
+https://github.com/zykls/folktables. We used this package to obtain the data from the 2016 Census in
+California. The machine learning problem is the ACSIncome prediction task, that is to predict whether an individual’s
+income is above $50,000, based on 10 personal characteristics (Ding et al., 2021). The data set contains of 152 149
+observations.
+Folktables Travel Time. Folktables is a Python package that provides access to data sets derived from recent US Censuses
+https://github.com/zykls/folktables. We used this package to obtain the data from the 2016 Census in
+California. The machine learning problem is the ACSTravelTime prediction task, that is to predict whether an individual has
+to commute to work longer than 20 minutes, based on 10 personal characteristics (Ding et al., 2021). The data set contains
+133 549 observations.
+German Credit. The German Credit Data set is a data set with 20 different features on individual’s credit history and
+personal characteristic. The machine learning problem is to predict credit risk in binary form. We obtained the data set from
+the UCI machine learning repository and reduced the number of features to 10 without any observed drop in accuracy. The
+data set contains 1000 observations.
+California Housing. The California Housing data set was derived from the 1990 U.S. census. The regression problem is to
+predict the median house value, based on 8 characteristics. We obtained the data set form the scikit-learn library. The
+data set contains 20 640 observations.
+Iris. The Iris data set is a simple flower data set. The machine learning problem is to classify whether the flower is of a
+particular kind or not, based on 4 different features. We obtained the data set form the scikit-learn library. The data
+set contains 150 observations.
+J.2
+
+Models
+
+Glassbox-GAM. We train the Glassbox-GAMs with the interpretML library (Nori et al., 2019) and default parameters
+(no interactions).
+Gradient Boosted Tree. We use the xgboost library (Chen and Guestrin, 2016) and train with 100 trees per model. This
+setting allows to achieve competitive accuracy for gradient boosted trees.
+Random Forest. We use the scikit-learn library (Pedregosa et al., 2011) and train with 100 trees per forest. This
+setting allows to achieve competitive accuracy for random forests.
+k-Nearest Neighbor. We use the scikit-learn library (Pedregosa et al., 2011). The hyperparameter k was chosen with
+cross-validation to be 30, 80, 25, 10, 1 for the data sets as listed above.
+
+Sebastian Bordt, Ulrike von Luxburg
+
+K
+
+Additional Plots and Figures
+
+K.1
+
+Folktables Income
+
+K.1.1
+
+Glassbox-GAM
+Shapley Values
+
+Shapley Interaction Values
+
+3-Shapley Values
+
+4-Shapley Values
+
+5-Shapley Values
+
+6-Shapley Values
+
+7-Shapley Values
+
+8-Shapley Values
+
+9-Shapley Values
+
+Shapley-GAM
+
+Feature Attribution
+
+1.0
+0.5
+0.0
+−0.5
+−1.0
+−1.5
+
+Feature Attribution
+
+1.0
+0.5
+0.0
+−0.5
+−1.0
+
+Main
+
+2nd order
+
+3rd order
+
+4th
+
+5th
+
+6th
+
+7th
+
+8th
+
+EP
+CO
+W
+SC
+HL
+MA
+R
+OC
+C
+PO P
+BP
+RE
+L
+WK P
+HP
+SE
+X
+RA
+C1
+P
+
+AG
+
+EP
+CO
+W
+SC
+HL
+MA
+R
+OC
+C
+PO P
+BP
+RE
+L
+WK P
+HP
+SE
+X
+RA
+C1
+P
+
+AG
+
+EP
+CO
+W
+SC
+HL
+MA
+R
+OC
+C
+PO P
+BP
+RE
+L
+WK P
+HP
+SE
+X
+RA
+C1
+P
+
+AG
+
+EP
+CO
+W
+SC
+HL
+MA
+R
+OC
+C
+PO P
+BP
+RE
+L
+WK P
+HP
+SE
+X
+RA
+C1
+P
+
+AG
+
+AG
+
+EP
+CO
+W
+SC
+HL
+MA
+R
+OC
+C
+PO P
+BP
+RE
+L
+WK P
+HP
+SE
+X
+RA
+C1
+P
+
+−1.5
+
+9th
+
+10th order
+
+Figure K.4: n-Shapley Values for a Glassbox-GAM and the first observation in our test set of the Folktables Income data set.
+K.1.2
+
+Gradient Boosted Tree
+Shapley Values
+
+Shapley Interaction Values
+
+3-Shapley Values
+
+4-Shapley Values
+
+5-Shapley Values
+
+6-Shapley Values
+
+7-Shapley Values
+
+8-Shapley Values
+
+9-Shapley Values
+
+Shapley-GAM
+
+Feature Attribution
+
+0.4
+0.3
+0.2
+0.1
+0.0
+−0.1
+−0.2
+
+Feature Attribution
+
+0.4
+0.3
+0.2
+0.1
+0.0
+−0.1
+
+Main
+
+2nd order
+
+3rd order
+
+4th
+
+5th
+
+6th
+
+7th
+
+8th
+
+9th
+
+EP
+CO
+W
+SC
+HL
+MA
+R
+OC
+C
+PO P
+BP
+RE
+L
+WK P
+HP
+SE
+X
+RA
+C1
+P
+
+AG
+
+EP
+CO
+W
+SC
+HL
+MA
+R
+OC
+C
+PO P
+BP
+RE
+L
+WK P
+HP
+SE
+X
+RA
+C1
+P
+
+AG
+
+EP
+CO
+W
+SC
+HL
+MA
+R
+OC
+C
+PO P
+BP
+RE
+L
+WK P
+HP
+SE
+X
+RA
+C1
+P
+
+AG
+
+EP
+CO
+W
+SC
+HL
+MA
+R
+OC
+C
+PO P
+BP
+RE
+L
+WK P
+HP
+SE
+X
+RA
+C1
+P
+
+AG
+
+AG
+
+EP
+CO
+W
+SC
+HL
+MA
+R
+OC
+C
+PO P
+BP
+RE
+L
+WK P
+HP
+SE
+X
+RA
+C1
+P
+
+−0.2
+
+10th order
+
+Figure K.5: n-Shapley Values for a Gradient Boosted Tree and the first observation in our test set of the Folktables Income
+data set.
+
+From Shapley Values to Generalized Additive Models and back
+
+K.1.3
+
+Random Forest
+
+Feature Attribution
+
+0.6
+
+Shapley Values
+
+Shapley Interaction Values
+
+3-Shapley Values
+
+4-Shapley Values
+
+5-Shapley Values
+
+6-Shapley Values
+
+7-Shapley Values
+
+8-Shapley Values
+
+9-Shapley Values
+
+Shapley-GAM
+
+0.4
+0.2
+0.0
+−0.2
+−0.4
+
+Feature Attribution
+
+0.6
+0.4
+0.2
+0.0
+−0.2
+
+Main
+
+2nd order
+
+3rd order
+
+4th
+
+5th
+
+6th
+
+7th
+
+8th
+
+EP
+CO
+W
+SC
+HL
+MA
+R
+OC
+C
+PO P
+BP
+RE
+L
+WK P
+HP
+SE
+X
+RA
+C1
+P
+
+AG
+
+EP
+CO
+W
+SC
+HL
+MA
+R
+OC
+C
+PO P
+BP
+RE
+L
+WK P
+HP
+SE
+X
+RA
+C1
+P
+
+AG
+
+EP
+CO
+W
+SC
+HL
+MA
+R
+OC
+C
+PO P
+BP
+RE
+L
+WK P
+HP
+SE
+X
+RA
+C1
+P
+
+AG
+
+EP
+CO
+W
+SC
+HL
+MA
+R
+OC
+C
+PO P
+BP
+RE
+L
+WK P
+HP
+SE
+X
+RA
+C1
+P
+
+AG
+
+AG
+
+EP
+CO
+W
+SC
+HL
+MA
+R
+OC
+C
+PO P
+BP
+RE
+L
+WK P
+HP
+SE
+X
+RA
+C1
+P
+
+−0.4
+
+9th
+
+10th order
+
+Figure K.6: n-Shapley Values for a Random Forest and the first observation in our test set of the Folktables Income data set.
+K.1.4
+
+k-Nearest Neighbor
+Shapley Values
+
+Shapley Interaction Values
+
+3-Shapley Values
+
+4-Shapley Values
+
+5-Shapley Values
+
+6-Shapley Values
+
+7-Shapley Values
+
+8-Shapley Values
+
+9-Shapley Values
+
+Shapley-GAM
+
+Feature Attribution
+
+0.4
+
+0.2
+
+0.0
+
+−0.2
+
+Feature Attribution
+
+0.4
+
+0.2
+
+0.0
+
+Main
+
+2nd order
+
+3rd order
+
+4th
+
+5th
+
+6th
+
+7th
+
+8th
+
+9th
+
+EP
+CO
+W
+SC
+HL
+MA
+R
+OC
+C
+PO P
+BP
+RE
+L
+WK P
+HP
+SE
+X
+RA
+C1
+P
+
+AG
+
+EP
+CO
+W
+SC
+HL
+MA
+R
+OC
+C
+PO P
+BP
+RE
+L
+WK P
+HP
+SE
+X
+RA
+C1
+P
+
+AG
+
+EP
+CO
+W
+SC
+HL
+MA
+R
+OC
+C
+PO P
+BP
+RE
+L
+WK P
+HP
+SE
+X
+RA
+C1
+P
+
+AG
+
+EP
+CO
+W
+SC
+HL
+MA
+R
+OC
+C
+PO P
+BP
+RE
+L
+WK P
+HP
+SE
+X
+RA
+C1
+P
+
+AG
+
+AG
+
+EP
+CO
+W
+SC
+HL
+MA
+R
+OC
+C
+PO P
+BP
+RE
+L
+WK P
+HP
+SE
+X
+RA
+C1
+P
+
+−0.2
+
+10th order
+
+Figure K.7: n-Shapley Values for a kNN classifier and the first observation in our test set of the Folktables Income data set.
+
+Shapley Values
+
+Feature Attribution
+Feature Attribution
+
+Shapley Interaction Values
+
+0.0
+
+0
+
+2
+
+0
+
+Feature Attribution
+
+2
+
+0
+
+2
+
+0
+
+2
+
+Value of Feature AGEP
+
+Value of Feature AGEP
+
+Value of Feature AGEP
+
+Value of Feature AGEP
+
+Shapley Values
+
+Shapley Interaction Values
+
+4-Shapley Values
+
+Shapley-GAM
+
+0.1
+0.0
+−0.1
+
+0
+
+1
+
+2
+
+0
+
+1
+
+2
+
+0
+
+1
+
+2
+
+0
+
+1
+
+2
+
+Value of Feature COW
+
+Value of Feature COW
+
+Value of Feature COW
+
+Value of Feature COW
+
+Shapley Values
+
+Shapley Interaction Values
+
+4-Shapley Values
+
+Shapley-GAM
+
+0.2
+0.0
+−0.2
+−4
+
+−2
+
+0
+
+−4
+
+Value of Feature SCHL
+Shapley Values
+
+−2
+
+0
+
+−4
+
+Value of Feature SCHL
+
+−2
+
+0
+
+−4
+
+Value of Feature SCHL
+
+Shapley Interaction Values
+
+−2
+
+0
+
+Value of Feature SCHL
+
+4-Shapley Values
+
+Shapley-GAM
+
+0.05
+0.00
+−0.05
+−0.5
+
+0.0
+
+0.5
+
+1.0
+
+Shapley Values
+
+0.2
+
+−0.5
+
+0.0
+
+0.5
+
+1.0
+
+−0.5
+
+Value of Feature MAR
+
+0.0
+
+0.5
+
+1.0
+
+−0.5
+
+Value of Feature MAR
+
+Shapley Interaction Values
+
+0.0
+
+0.5
+
+1.0
+
+Value of Feature MAR
+
+4-Shapley Values
+
+Shapley-GAM
+
+0.1
+0.0
+−0.1
+−1
+
+0
+
+1
+
+2
+
+Value of Feature OCCP
+
+Feature Attribution
+
+Shapley-GAM
+
+−0.1
+
+Value of Feature MAR
+
+Shapley Values
+
+−1
+
+0
+
+1
+
+2
+
+Value of Feature OCCP
+
+−1
+
+0
+
+1
+
+Value of Feature OCCP
+
+Shapley Interaction Values
+
+2
+
+−1
+
+0
+
+1
+
+Value of Feature OCCP
+
+4-Shapley Values
+
+2
+
+Shapley-GAM
+
+0.05
+0.00
+−0.05
+−0.10
+0
+
+1
+
+2
+
+Value of Feature POBP
+
+Feature Attribution
+
+4-Shapley Values
+
+0.1
+
+Feature Attribution
+
+Feature Attribution
+
+Sebastian Bordt, Ulrike von Luxburg
+
+Shapley Values
+
+3
+
+0
+
+1
+
+2
+
+Value of Feature POBP
+
+3
+
+0
+
+1
+
+2
+
+Value of Feature POBP
+
+Shapley Interaction Values
+
+3
+
+0
+
+1
+
+2
+
+Value of Feature POBP
+
+4-Shapley Values
+
+3
+
+Shapley-GAM
+
+0.0
+−0.1
+−0.2
+
+0
+
+1
+
+2
+
+Value of Feature RELP
+
+3
+
+0
+
+1
+
+2
+
+Value of Feature RELP
+
+3
+
+0
+
+1
+
+2
+
+Value of Feature RELP
+
+3
+
+0
+
+1
+
+2
+
+Value of Feature RELP
+
+3
+
+Figure K.8: Partial dependence plots for the kNN classifier on the Folktables Income data set (compare Figure 2 in the main
+paper). Depicted are the partial dependence plots of Φni for n = {1, 2, 4, 10} and 7 different features.
+
+From Shapley Values to Generalized Additive Models and back
+
+Glassbox-GAM
+Shapley Values
+
+Shapley Interaction Values
+
+3-Shapley Values
+
+4-Shapley Values
+
+5-Shapley Values
+
+6-Shapley Values
+
+7-Shapley Values
+
+8-Shapley Values
+
+9-Shapley Values
+
+Shapley-GAM
+
+JW
+T
+PO R
+W
+PU P
+M
+AG A
+E
+OC P
+C
+PO P
+VP
+SC IP
+HL
+SE
+X
+RE
+LP
+CIT
+
+K.2.1
+
+JW
+T
+PO R
+WP
+PU
+M
+AG A
+E
+OC P
+C
+PO P
+VP
+SC IP
+HL
+SE
+X
+RE
+LP
+CIT
+
+Folktables Travel
+
+Feature Attribution
+
+K.2
+
+0.4
+
+0.2
+
+0.0
+
+Feature Attribution
+
+−0.2
+
+0.4
+
+0.2
+
+0.0
+
+Main
+
+2nd order
+
+3rd order
+
+4th
+
+5th
+
+6th
+
+7th
+
+8th
+
+9th
+
+JW
+T
+PO R
+W
+PU P
+M
+AG A
+E
+OC P
+C
+PO P
+VP
+SC IP
+HL
+SE
+X
+RE
+LP
+CIT
+
+JW
+T
+PO R
+W
+PU P
+M
+AG A
+E
+OC P
+C
+PO P
+VP
+SC IP
+HL
+SE
+X
+RE
+LP
+CIT
+
+JW
+T
+PO R
+W
+PU P
+M
+AG A
+E
+OC P
+C
+PO P
+VP
+SC IP
+HL
+SE
+X
+RE
+LP
+CIT
+
+−0.2
+
+10th order
+
+Figure K.9: n-Shapley Values for a Glassbox-GAM and the first observation in our test set of the Folktables Travel data set.
+
+Shapley Values
+
+Shapley Interaction Values
+
+3-Shapley Values
+
+4-Shapley Values
+
+5-Shapley Values
+
+6-Shapley Values
+
+7-Shapley Values
+
+8-Shapley Values
+
+9-Shapley Values
+
+Shapley-GAM
+
+JW
+T
+PO R
+W
+PU P
+M
+AG A
+E
+OC P
+C
+PO P
+VP
+SC IP
+HL
+SE
+X
+RE
+LP
+CIT
+
+Feature Attribution
+
+0.3
+
+Gradient Boosted Tree
+
+JW
+T
+PO R
+WP
+PU
+M
+AG A
+E
+OC P
+C
+PO P
+VP
+SC IP
+HL
+SE
+X
+RE
+LP
+CIT
+
+K.2.2
+
+0.2
+0.1
+0.0
+−0.1
+−0.2
+
+Feature Attribution
+
+0.3
+0.2
+0.1
+0.0
+−0.1
+
+Main
+
+2nd order
+
+3rd order
+
+4th
+
+5th
+
+6th
+
+7th
+
+8th
+
+9th
+
+JW
+T
+PO R
+W
+PU P
+M
+AG A
+E
+OC P
+C
+PO P
+VP
+SC IP
+HL
+SE
+X
+RE
+LP
+CIT
+
+JW
+T
+PO R
+W
+PU P
+M
+AG A
+E
+OC P
+C
+PO P
+VP
+SC IP
+HL
+SE
+X
+RE
+LP
+CIT
+
+JW
+T
+PO R
+W
+PU P
+M
+AG A
+E
+OC P
+C
+PO P
+VP
+SC IP
+HL
+SE
+X
+RE
+LP
+CIT
+
+−0.2
+
+10th order
+
+Figure K.10: n-Shapley Values for a Gradient Boosted Tree and the first observation in our test set of the Folktables Travel
+data set.
+
+Sebastian Bordt, Ulrike von Luxburg
+
+Shapley Values
+
+Shapley Interaction Values
+
+3-Shapley Values
+
+4-Shapley Values
+
+5-Shapley Values
+
+6-Shapley Values
+
+7-Shapley Values
+
+8-Shapley Values
+
+9-Shapley Values
+
+Shapley-GAM
+
+JW
+T
+PO R
+W
+PU P
+M
+AG A
+E
+OC P
+C
+PO P
+VP
+SC IP
+HL
+SE
+X
+RE
+LP
+CIT
+
+Random Forest
+
+JW
+T
+PO R
+WP
+PU
+M
+AG A
+E
+OC P
+C
+PO P
+VP
+SC IP
+HL
+SE
+X
+RE
+LP
+CIT
+
+K.2.3
+
+Feature Attribution
+
+0.4
+
+0.2
+
+0.0
+
+−0.2
+
+0.2
+
+0.0
+
+Main
+
+2nd order
+
+3rd order
+
+4th
+
+5th
+
+6th
+
+7th
+
+8th
+
+9th
+
+JW
+T
+PO R
+W
+PU P
+M
+AG A
+E
+OC P
+C
+PO P
+VP
+SC IP
+HL
+SE
+X
+RE
+LP
+CIT
+
+JW
+T
+PO R
+W
+PU P
+M
+AG A
+E
+OC P
+C
+PO P
+VP
+SC IP
+HL
+SE
+X
+RE
+LP
+CIT
+
+−0.2
+
+JW
+T
+PO R
+W
+PU P
+M
+AG A
+E
+OC P
+C
+PO P
+VP
+SC IP
+HL
+SE
+X
+RE
+LP
+CIT
+
+Feature Attribution
+
+0.4
+
+10th order
+
+Figure K.11: n-Shapley Values for a Random Forest and the first observation in our test set of the Folktables Travel data set.
+
+Shapley Values
+
+Shapley Interaction Values
+
+3-Shapley Values
+
+4-Shapley Values
+
+5-Shapley Values
+
+6-Shapley Values
+
+7-Shapley Values
+
+8-Shapley Values
+
+9-Shapley Values
+
+Shapley-GAM
+
+JW
+T
+PO R
+W
+PU P
+M
+AG A
+E
+OC P
+C
+PO P
+VP
+SC IP
+HL
+SE
+X
+RE
+LP
+CIT
+
+k-Nearest Neighbor
+
+JW
+T
+PO R
+WP
+PU
+M
+AG A
+E
+OC P
+C
+PO P
+VP
+SC IP
+HL
+SE
+X
+RE
+LP
+CIT
+
+K.2.4
+
+Feature Attribution
+
+0.2
+0.1
+0.0
+−0.1
+−0.2
+
+Feature Attribution
+
+0.2
+0.1
+0.0
+−0.1
+
+Main
+
+2nd order
+
+3rd order
+
+4th
+
+5th
+
+6th
+
+7th
+
+8th
+
+9th
+
+JW
+T
+PO R
+W
+PU P
+M
+AG A
+E
+OC P
+C
+PO P
+VP
+SC IP
+HL
+SE
+X
+RE
+LP
+CIT
+
+JW
+T
+PO R
+W
+PU P
+M
+AG A
+E
+OC P
+C
+PO P
+VP
+SC IP
+HL
+SE
+X
+RE
+LP
+CIT
+
+JW
+T
+PO R
+W
+PU P
+M
+AG A
+E
+OC P
+C
+PO P
+VP
+SC IP
+HL
+SE
+X
+RE
+LP
+CIT
+
+−0.2
+
+10th order
+
+Figure K.12: n-Shapley Values for a kNN classifier and the first observation in our test set of the Folktables Travel data set.
+
+Feature Attribution
+
+From Shapley Values to Generalized Additive Models and back
+Shapley Values
+
+Shapley Interaction Values
+
+4-Shapley Values
+
+Shapley-GAM
+
+0.25
+0.00
+−0.25
+−0.50
+
+Feature Attribution
+
+0
+
+1
+
+Feature Attribution
+Feature Attribution
+
+0
+
+Shapley Values
+
+1
+
+2
+
+3
+
+Feature JWTR
+
+0
+
+1
+
+2
+
+3
+
+Feature JWTR
+
+Shapley Interaction Values
+
+0
+
+1
+
+2
+
+3
+
+Feature JWTR
+
+4-Shapley Values
+
+Shapley-GAM
+
+0.1
+0.0
+−0.1
+−1
+
+0
+
+1
+
+2
+
+Feature POWP
+
+−2
+
+Shapley Values
+
+−1
+
+0
+
+1
+
+2
+
+Feature POWP
+
+−2
+
+−1
+
+0
+
+1
+
+2
+
+Feature POWP
+
+Shapley Interaction Values
+
+−2
+
+−1
+
+0
+
+1
+
+2
+
+1
+
+2
+
+Feature POWP
+
+4-Shapley Values
+
+Shapley-GAM
+
+0.2
+0.1
+0.0
+−0.1
+
+−2
+
+−1
+
+0
+
+1
+
+2
+
+Feature PUMA
+
+−2
+
+Shapley Values
+
+−1
+
+0
+
+1
+
+2
+
+Feature PUMA
+
+−2
+
+−1
+
+0
+
+1
+
+2
+
+Feature PUMA
+
+Shapley Interaction Values
+
+−2
+
+−1
+
+0
+
+Feature PUMA
+
+4-Shapley Values
+
+Shapley-GAM
+
+0.0
+−0.1
+−0.2
+−2
+
+Feature Attribution
+
+3
+
+0.2
+
+−2
+
+−1
+
+0
+
+1
+
+2
+
+Feature AGEP
+
+−2
+
+Shapley Values
+
+0.10
+
+−1
+
+0
+
+1
+
+2
+
+Feature AGEP
+
+−2
+
+−1
+
+Shapley Interaction Values
+
+0
+
+1
+
+2
+
+Feature AGEP
+
+−2
+
+−1
+
+4-Shapley Values
+
+0
+
+1
+
+2
+
+Feature AGEP
+Shapley-GAM
+
+0.05
+0.00
+−0.05
+−1
+
+Feature Attribution
+
+2
+
+Feature JWTR
+
+0
+
+1
+
+2
+
+Feature OCCP
+
+−1
+
+Shapley Values
+
+0
+
+1
+
+2
+
+Feature OCCP
+
+−1
+
+Shapley Interaction Values
+
+0
+
+1
+
+2
+
+Feature OCCP
+
+−1
+
+4-Shapley Values
+
+0
+
+1
+
+2
+
+Feature OCCP
+Shapley-GAM
+
+0.05
+0.00
+−0.05
+
+Feature Attribution
+
+−2
+
+−1
+
+0
+
+1
+
+Feature POVPIP
+Shapley Values
+
+−2
+
+−1
+
+0
+
+1
+
+Feature POVPIP
+
+−2
+
+Shapley Interaction Values
+
+−1
+
+0
+
+1
+
+Feature POVPIP
+
+−2
+
+4-Shapley Values
+
+−1
+
+0
+
+Feature POVPIP
+
+1
+
+Shapley-GAM
+
+0.05
+0.00
+−0.05
+−4
+
+−2
+
+Feature SCHL
+
+0
+
+−4
+
+−2
+
+Feature SCHL
+
+0
+
+−4
+
+−2
+
+Feature SCHL
+
+0
+
+−4
+
+−2
+
+Feature SCHL
+
+0
+
+Figure K.13: Partial dependence plots for the random forest on the Folktables Travel data set. Depicted are the partial
+dependence plots of Φni for n = {1, 2, 4, 10} and 7 different features.
+
+Sebastian Bordt, Ulrike von Luxburg
+
+German Credit
+
+Feature Attribution
+
+0.8
+
+Glassbox-GAM
+Shapley Values
+
+Shapley Interaction Values
+
+3-Shapley Values
+
+4-Shapley Values
+
+5-Shapley Values
+
+6-Shapley Values
+
+7-Shapley Values
+
+8-Shapley Values
+
+9-Shapley Values
+
+Shapley-GAM
+
+Ac
+co
+Du unt
+rat
+His ion
+to
+Pu ry
+rpo
+Am se
+o
+Sa unt
+vin
+Em gs
+plo
+Ra y
+Ho te
+us
+Pro ing
+pe
+rty
+
+K.3.1
+
+Ac
+co
+Du unt
+rat
+His ion
+to
+Pu ry
+rpo
+Am se
+o
+Sa unt
+vin
+Em gs
+plo
+Ra y
+Ho te
+us
+Pro ing
+pe
+rty
+
+K.3
+
+0.6
+
+0.4
+
+0.2
+
+0.0
+
+Feature Attribution
+
+0.8
+
+0.6
+
+0.4
+
+0.2
+
+Main
+
+2nd order
+
+3rd order
+
+4th
+
+5th
+
+6th
+
+7th
+
+8th
+
+9th
+
+Ac
+co
+Du unt
+rat
+His ion
+to
+Pu ry
+rpo
+Am se
+ou
+Sa nt
+vin
+Em gs
+plo
+Ra y
+Ho te
+us
+Pro ing
+pe
+rty
+
+Ac
+co
+Du unt
+rat
+His ion
+to
+Pu ry
+rpo
+Am se
+ou
+Sa nt
+vin
+Em gs
+plo
+Ra y
+Ho te
+us
+Pro ing
+pe
+rty
+
+Ac
+co
+Du unt
+rat
+His ion
+to
+Pu ry
+rpo
+Am se
+o
+Sa unt
+vin
+Em gs
+plo
+Ra y
+Ho te
+us
+Pro ing
+pe
+rty
+
+0.0
+
+10th order
+
+Figure K.14: n-Shapley Values for a Glassbox-GAM and the first observation in our test set of the German Credit data set.
+
+Shapley Values
+
+Shapley Interaction Values
+
+3-Shapley Values
+
+4-Shapley Values
+
+5-Shapley Values
+
+6-Shapley Values
+
+7-Shapley Values
+
+8-Shapley Values
+
+9-Shapley Values
+
+Shapley-GAM
+
+Ac
+co
+Du unt
+rat
+His ion
+t
+Pu ory
+rpo
+Am se
+o
+Sa unt
+vin
+Em gs
+plo
+Ra y
+Ho te
+us
+Pro ing
+pe
+rty
+
+Gradient Boosted Tree
+
+Ac
+co
+Du unt
+rat
+His ion
+t
+Pu ory
+rpo
+Am se
+o
+Sa unt
+vin
+Em gs
+plo
+Ra y
+Ho te
+us
+Pro ing
+pe
+rty
+
+K.3.2
+
+Feature Attribution
+
+0.3
+0.2
+0.1
+0.0
+−0.1
+−0.2
+
+Feature Attribution
+
+0.3
+0.2
+0.1
+0.0
+−0.1
+
+Main
+
+2nd order
+
+3rd order
+
+4th
+
+5th
+
+6th
+
+7th
+
+8th
+
+9th
+
+Ac
+co
+Du unt
+rat
+His ion
+t
+Pu ory
+rpo
+Am se
+o
+Sa unt
+vin
+Em gs
+plo
+Ra y
+Ho te
+us
+Pro ing
+pe
+rty
+
+Ac
+co
+Du unt
+rat
+His ion
+t
+Pu ory
+rpo
+Am se
+o
+Sa unt
+vin
+Em gs
+plo
+Ra y
+Ho te
+us
+Pro ing
+pe
+rty
+
+Ac
+co
+Du unt
+rat
+His ion
+t
+Pu ory
+rpo
+Am se
+o
+Sa unt
+vin
+Em gs
+plo
+Ra y
+Ho te
+us
+Pro ing
+pe
+rty
+
+−0.2
+
+10th order
+
+Figure K.15: n-Shapley Values for a Gradient Boosted Tree and the first observation in our test set of the German Credit
+data set.
+
+From Shapley Values to Generalized Additive Models and back
+
+Shapley Values
+
+Shapley Interaction Values
+
+3-Shapley Values
+
+4-Shapley Values
+
+5-Shapley Values
+
+6-Shapley Values
+
+7-Shapley Values
+
+8-Shapley Values
+
+9-Shapley Values
+
+Shapley-GAM
+
+Ac
+co
+Du unt
+rat
+His ion
+t
+Pu ory
+rpo
+Am se
+o
+Sa unt
+vin
+Em gs
+plo
+Ra y
+Ho te
+us
+Pro ing
+pe
+rty
+
+Random Forest
+
+Ac
+co
+Du unt
+rat
+His ion
+t
+Pu ory
+rpo
+Am se
+ou
+Sa nt
+vin
+Em gs
+plo
+Ra y
+Ho te
+us
+Pro ing
+pe
+rty
+
+K.3.3
+
+Feature Attribution
+
+0.20
+0.15
+0.10
+0.05
+0.00
+−0.05
+
+Feature Attribution
+
+0.20
+0.15
+0.10
+0.05
+0.00
+
+Main
+
+2nd order
+
+3rd order
+
+4th
+
+5th
+
+6th
+
+7th
+
+8th
+
+9th
+
+Ac
+co
+Du unt
+rat
+His ion
+t
+Pu ory
+rpo
+Am se
+o
+Sa unt
+vin
+Em gs
+plo
+Ra y
+Ho te
+us
+Pro ing
+pe
+rty
+
+Ac
+co
+Du unt
+rat
+His ion
+t
+Pu ory
+rpo
+Am se
+ou
+Sa nt
+vin
+Em gs
+plo
+Ra y
+Ho te
+us
+Pro ing
+pe
+rty
+
+Ac
+co
+Du unt
+rat
+His ion
+t
+Pu ory
+rpo
+Am se
+ou
+Sa nt
+vin
+Em gs
+plo
+Ra y
+Ho te
+us
+Pro ing
+pe
+rty
+
+−0.05
+
+10th order
+
+Figure K.16: n-Shapley Values for a Random Forest and the first observation in our test set of the German Credit data set.
+
+Shapley Values
+
+Shapley Interaction Values
+
+3-Shapley Values
+
+4-Shapley Values
+
+5-Shapley Values
+
+6-Shapley Values
+
+7-Shapley Values
+
+8-Shapley Values
+
+9-Shapley Values
+
+Shapley-GAM
+
+Ac
+co
+Du unt
+rat
+His ion
+t
+Pu ory
+rpo
+Am se
+o
+Sa unt
+vin
+Em gs
+plo
+Ra y
+Ho te
+us
+Pro ing
+pe
+rty
+
+Ac
+co
+Du unt
+rat
+His ion
+t
+Pu ory
+rpo
+Am se
+o
+Sa unt
+vin
+Em gs
+plo
+Ra y
+Ho te
+us
+Pro ing
+pe
+rty
+
+Feature Attribution
+
+K.3.4 k-Nearest Neighbor
+
+0.2
+
+0.1
+
+0.0
+
+Feature Attribution
+
+−0.1
+
+0.2
+
+0.1
+
+0.0
+
+Main
+
+2nd order
+
+3rd order
+
+4th
+
+5th
+
+6th
+
+7th
+
+8th
+
+9th
+
+Ac
+co
+Du unt
+rat
+His ion
+t
+Pu ory
+rpo
+Am se
+o
+Sa unt
+vin
+Em gs
+plo
+Ra y
+Ho te
+us
+Pro ing
+pe
+rty
+
+Ac
+co
+Du unt
+rat
+His ion
+t
+Pu ory
+rpo
+Am se
+o
+Sa unt
+vin
+Em gs
+plo
+Ra y
+Ho te
+us
+Pro ing
+pe
+rty
+
+Ac
+co
+Du unt
+rat
+His ion
+t
+Pu ory
+rpo
+Am se
+o
+Sa unt
+vin
+Em gs
+plo
+Ra y
+Ho te
+us
+Pro ing
+pe
+rty
+
+−0.1
+
+10th order
+
+Figure K.17: n-Shapley Values for a kNN classifier and the first observation in our test set of the German Credit data set.
+
+Feature Attribution
+
+Sebastian Bordt, Ulrike von Luxburg
+
+Shapley Values
+
+Shapley Interaction Values
+
+−0.5
+−1
+
+0
+
+Feature Attribution
+Feature Attribution
+
+1
+
+−1
+
+1
+
+−1
+
+0
+
+Value of Feature Account
+
+Shapley Interaction Values
+
+1
+
+−1
+
+0
+
+Value of Feature Account
+
+4-Shapley Values
+
+1
+
+Shapley-GAM
+
+0.5
+0.0
+−0.5
+−1
+
+0
+
+1
+
+2
+
+3
+
+−1
+
+0
+
+1
+
+2
+
+Value of Feature Duration
+
+Shapley Values
+
+3
+
+−1
+
+0
+
+1
+
+2
+
+Value of Feature Duration
+
+Shapley Interaction Values
+
+3
+
+−1
+
+0
+
+1
+
+2
+
+Value of Feature Duration
+
+4-Shapley Values
+
+3
+
+Shapley-GAM
+
+1.0
+0.5
+0.0
+−0.5
+
+−2
+
+−1
+
+0
+
+1
+
+−2
+
+Value of Feature History
+
+Feature Attribution
+
+0
+
+Value of Feature Account
+
+Shapley Values
+
+Value of Feature Duration
+
+−1
+
+0
+
+1
+
+−2
+
+Value of Feature History
+
+Shapley Values
+
+−1
+
+0
+
+1
+
+−2
+
+Value of Feature History
+
+Shapley Interaction Values
+
+−1
+
+0
+
+1
+
+Value of Feature History
+
+4-Shapley Values
+
+Shapley-GAM
+
+0.0
+−0.5
+−1
+
+0
+
+1
+
+Value of Feature Purpose
+
+Feature Attribution
+
+Shapley-GAM
+
+0.0
+
+Value of Feature Account
+
+2
+
+−1
+
+0
+
+1
+
+Value of Feature Purpose
+
+Shapley Values
+
+2
+
+−1
+
+0
+
+1
+
+Value of Feature Purpose
+
+Shapley Interaction Values
+
+2
+
+−1
+
+0
+
+1
+
+Value of Feature Purpose
+
+4-Shapley Values
+
+2
+
+Shapley-GAM
+
+1.0
+0.5
+0.0
+0
+
+2
+
+4
+
+Value of Feature Amount
+
+0
+
+2
+
+4
+
+Value of Feature Amount
+
+Shapley Values
+
+0.25
+
+0
+
+2
+
+Value of Feature Amount
+
+Shapley Interaction Values
+
+4
+
+0
+
+2
+
+Value of Feature Amount
+
+4-Shapley Values
+
+4
+
+Shapley-GAM
+
+0.00
+−0.25
+−0.50
+
+Feature Attribution
+
+Feature Attribution
+
+4-Shapley Values
+
+0.5
+
+0
+
+0.4
+
+1
+
+0
+
+1
+
+0
+
+1
+
+0
+
+1
+
+Value of Feature Savings
+
+Value of Feature Savings
+
+Value of Feature Savings
+
+Value of Feature Savings
+
+Shapley Values
+
+Shapley Interaction Values
+
+4-Shapley Values
+
+Shapley-GAM
+
+0.2
+0.0
+−0.2
+−2
+
+−1
+
+0
+
+1
+
+Value of Feature Employ
+
+−2
+
+−1
+
+0
+
+1
+
+Value of Feature Employ
+
+−2
+
+−1
+
+0
+
+1
+
+Value of Feature Employ
+
+−2
+
+−1
+
+0
+
+1
+
+Value of Feature Employ
+
+Figure K.18: Partial dependence plots for the Glassbox-GAM without interaction terms on the German Credit data set.
+Depicted are the partial dependence plots of Φni for n = {1, 2, 4, 10} and 7 different features.
+
+From Shapley Values to Generalized Additive Models and back
+
+California Housing
+
+K.4.1
+
+Glassbox-GAM
+
+Feature Attribution
+
+K.4
+
+Shapley Values
+
+Shapley Interaction Values
+
+3-Shapley Values
+
+4-Shapley Values
+
+5-Shapley Values
+
+6-Shapley Values
+
+7-Shapley Values
+
+Shapley-GAM
+
+0.5
+
+0.0
+
+−0.5
+
+Feature Attribution
+
+−1.0
+
+0.5
+
+0.0
+
+−0.5
+
+Main
+
+2nd order
+
+3rd order
+
+5th
+
+6th
+
+8th
+
+Ro
+om
+s
+Be
+drm
+Po
+s
+pu
+lat
+io
+Av
+eO n
+ccu
+p
+La
+titu
+de
+Lo
+ng
+itu
+de
+
+c
+
+Av
+e
+
+Av
+e
+
+ge
+
+dIn
+
+eA
+
+Me
+
+Ho
+
+Av
+e
+
+7th
+
+us
+
+Ro
+om
+s
+Be
+drm
+Po
+s
+pu
+lat
+io
+Av
+eO n
+cc
+La up
+titu
+de
+Lo
+ng
+itu
+de
+
+c
+
+ge
+
+dIn
+
+eA
+
+Me
+
+us
+
+Av
+e
+
+Av
+e
+
+Av
+e
+
+4th
+
+Ho
+
+Ro
+om
+s
+Be
+drm
+Po
+s
+pu
+lat
+io
+Av
+eO n
+ccu
+p
+La
+titu
+de
+Lo
+ng
+itu
+de
+
+c
+
+ge
+
+dIn
+
+eA
+
+Me
+
+us
+Ho
+
+Ro
+om
+s
+Be
+drm
+Po
+s
+pu
+lat
+io
+Av
+eO n
+cc
+La up
+titu
+de
+Lo
+ng
+itu
+de
+
+Av
+e
+
+Av
+e
+
+ge
+eA
+
+Me
+
+Ho
+
+us
+
+dIn
+
+c
+
+−1.0
+
+9th
+
+10th order
+
+Figure K.19: n-Shapley Values for a Glassbox-GAM and the first observation in our test set of the California Housing data
+set.
+K.4.2
+
+Gradient Boosted Tree
+Shapley Values
+
+Shapley Interaction Values
+
+3-Shapley Values
+
+4-Shapley Values
+
+5-Shapley Values
+
+6-Shapley Values
+
+7-Shapley Values
+
+Shapley-GAM
+
+Feature Attribution
+
+2
+1
+0
+−1
+−2
+
+Feature Attribution
+
+2
+1
+0
+−1
+
+Main
+
+2nd order
+
+3rd order
+
+4th
+
+5th
+
+6th
+
+7th
+
+Me
+dIn
+c
+Ho
+us
+eA
+ge
+Av
+eR
+oo
+ms
+Av
+eB
+ed
+rm
+Po
+s
+pu
+lat
+io
+Av
+eO n
+cc
+La up
+titu
+de
+Lo
+ng
+itu
+de
+
+Me
+dIn
+c
+Ho
+us
+eA
+ge
+Av
+eR
+oo
+ms
+Av
+eB
+ed
+rm
+Po
+s
+pu
+lat
+io
+Av
+eO n
+cc
+La up
+titu
+de
+Lo
+ng
+itu
+de
+
+Me
+dIn
+c
+Ho
+us
+eA
+ge
+Av
+eR
+oo
+ms
+Av
+eB
+ed
+rm
+Po
+s
+pu
+lat
+io
+Av
+eO n
+cc
+La up
+titu
+de
+Lo
+ng
+itu
+de
+
+Me
+
+dIn
+c
+Ho
+us
+eA
+ge
+Av
+eR
+oo
+ms
+Av
+eB
+ed
+rm
+Po
+s
+pu
+lat
+io
+Av
+eO n
+cc
+La up
+titu
+de
+Lo
+ng
+itu
+de
+
+−2
+
+8th
+
+9th
+
+10th order
+
+Figure K.20: n-Shapley Values for a Gradient Boosted Tree and the first observation in our test set of the California Housing
+data set.
+
+Sebastian Bordt, Ulrike von Luxburg
+
+K.4.3
+
+Random Forest
+Shapley Values
+
+Shapley Interaction Values
+
+3-Shapley Values
+
+4-Shapley Values
+
+5-Shapley Values
+
+6-Shapley Values
+
+7-Shapley Values
+
+Shapley-GAM
+
+Feature Attribution
+
+0.75
+0.50
+0.25
+0.00
+−0.25
+−0.50
+−0.75
+
+Feature Attribution
+
+0.75
+0.50
+0.25
+0.00
+−0.25
+−0.50
+
+Main
+
+2nd order
+
+3rd order
+
+5th
+
+6th
+
+Ro
+om
+s
+Be
+drm
+Po
+s
+pu
+lat
+io
+Av
+eO n
+ccu
+p
+La
+titu
+de
+Lo
+ng
+itu
+de
+
+c
+
+Av
+e
+
+Av
+e
+
+ge
+eA
+
+dIn
+
+8th
+
+us
+
+Me
+
+Av
+e
+
+7th
+
+Ho
+
+Ro
+om
+s
+Be
+drm
+Po
+s
+pu
+lat
+io
+Av
+eO n
+cc
+La up
+titu
+de
+Lo
+ng
+itu
+de
+
+c
+
+ge
+
+dIn
+
+eA
+
+Me
+
+us
+
+Av
+e
+
+Av
+e
+
+Av
+e
+
+4th
+
+Ho
+
+Ro
+om
+s
+Be
+drm
+Po
+s
+pu
+lat
+io
+Av
+eO n
+ccu
+p
+La
+titu
+de
+Lo
+ng
+itu
+de
+
+c
+
+ge
+
+dIn
+
+eA
+
+Me
+
+us
+Ho
+
+Ro
+om
+s
+Be
+drm
+Po
+s
+pu
+lat
+io
+Av
+eO n
+cc
+La up
+titu
+de
+Lo
+ng
+itu
+de
+
+Av
+e
+
+Av
+e
+
+ge
+eA
+
+Me
+
+Ho
+
+us
+
+dIn
+
+c
+
+−0.75
+
+9th
+
+10th order
+
+Figure K.21: n-Shapley Values for a Random Forest and the first observation in our test set of the California Housing data
+set.
+K.4.4
+
+k-Nearest Neighbor
+Shapley Values
+
+Shapley Interaction Values
+
+3-Shapley Values
+
+4-Shapley Values
+
+5-Shapley Values
+
+6-Shapley Values
+
+7-Shapley Values
+
+Shapley-GAM
+
+Feature Attribution
+
+0.50
+0.25
+0.00
+−0.25
+−0.50
+−0.75
+
+Feature Attribution
+
+0.50
+0.25
+0.00
+−0.25
+−0.50
+
+4th
+
+3rd order
+
+5th
+
+6th
+
+7th
+
+8th
+
+Me
+dIn
+c
+Ho
+us
+eA
+ge
+Av
+eR
+oo
+ms
+Av
+eB
+ed
+rm
+Po
+s
+pu
+lat
+io
+Av
+eO n
+ccu
+p
+La
+titu
+de
+Lo
+ng
+itu
+de
+
+2nd order
+
+Me
+dIn
+c
+Ho
+us
+eA
+ge
+Av
+eR
+oo
+ms
+Av
+eB
+ed
+rm
+Po
+s
+pu
+lat
+io
+Av
+eO n
+cc
+La up
+titu
+de
+Lo
+ng
+itu
+de
+
+Me
+dIn
+c
+Ho
+us
+eA
+ge
+Av
+eR
+oo
+ms
+Av
+eB
+ed
+rm
+Po
+s
+pu
+lat
+io
+Av
+eO n
+cc
+La up
+titu
+de
+Lo
+ng
+itu
+de
+
+Main
+
+Me
+dIn
+c
+Ho
+us
+eA
+ge
+Av
+eR
+oo
+ms
+Av
+eB
+ed
+rm
+Po
+s
+pu
+lat
+io
+Av
+eO n
+cc
+La up
+titu
+de
+Lo
+ng
+itu
+de
+
+−0.75
+
+9th
+
+10th order
+
+Figure K.22: n-Shapley Values for a kNN classifier and the first observation in our test set of the California Housing data set.
+
+Feature Attribution
+
+From Shapley Values to Generalized Additive Models and back
+
+Shapley Values
+
+2
+
+Shapley Interaction Values
+
+0
+0
+
+2
+
+0
+
+Feature Attribution
+Feature Attribution
+Feature Attribution
+
+2
+
+0
+
+Value of Feature MedInc
+
+Shapley Values
+
+2
+
+0
+
+2
+
+Value of Feature MedInc
+
+Value of Feature MedInc
+
+4-Shapley Values
+
+Shapley-GAM
+
+Shapley Interaction Values
+
+0.2
+0.0
+−0.2
+−1
+
+0
+
+1
+
+Value of Feature HouseAge
+
+2
+
+−1
+
+0
+
+1
+
+Value of Feature HouseAge
+
+Shapley Values
+
+2
+
+−1
+
+0
+
+1
+
+Value of Feature HouseAge
+
+Shapley Interaction Values
+
+2
+
+−1
+
+0
+
+1
+
+Value of Feature HouseAge
+
+4-Shapley Values
+
+2
+
+Shapley-GAM
+
+1.0
+0.5
+0.0
+−0.5
+
+0
+
+5
+
+10
+
+0
+
+5
+
+10
+
+0
+
+5
+
+10
+
+0
+
+5
+
+10
+
+Value of Feature AveRooms
+
+Value of Feature AveRooms
+
+Value of Feature AveRooms
+
+Value of Feature AveRooms
+
+Shapley Values
+
+Shapley Interaction Values
+
+4-Shapley Values
+
+Shapley-GAM
+
+0.0
+−0.2
+−0.4
+
+0
+
+5
+
+10
+
+15
+
+Feature Attribution
+
+Value of Feature AveBedrms
+
+Feature Attribution
+
+Shapley-GAM
+
+1
+
+Value of Feature MedInc
+
+Feature Attribution
+
+4-Shapley Values
+
+Shapley Values
+
+0
+
+5
+
+10
+
+15
+
+Value of Feature AveBedrms
+
+0
+
+5
+
+10
+
+15
+
+Value of Feature AveBedrms
+
+Shapley Interaction Values
+
+0
+
+5
+
+10
+
+15
+
+Value of Feature AveBedrms
+
+4-Shapley Values
+
+Shapley-GAM
+
+0.2
+
+0.0
+0
+
+2
+
+4
+
+0
+
+2
+
+4
+
+0
+
+2
+
+4
+
+0
+
+2
+
+4
+
+Value of Feature Population
+
+Value of Feature Population
+
+Value of Feature Population
+
+Value of Feature Population
+
+Shapley Values
+
+Shapley Interaction Values
+
+4-Shapley Values
+
+Shapley-GAM
+
+0.5
+0.0
+−0.1
+
+0.0
+
+0.1
+
+0.2
+
+−0.1
+
+0.0
+
+0.1
+
+0.2
+
+−0.1
+
+0.0
+
+0.1
+
+0.2
+
+−0.1
+
+0.0
+
+0.1
+
+0.2
+
+Value of Feature AveOccup
+
+Value of Feature AveOccup
+
+Value of Feature AveOccup
+
+Value of Feature AveOccup
+
+Shapley Values
+
+Shapley Interaction Values
+
+4-Shapley Values
+
+Shapley-GAM
+
+2
+
+0
+
+−2
+
+−1
+
+0
+
+1
+
+2
+
+Value of Feature Latitude
+
+−1
+
+0
+
+1
+
+2
+
+Value of Feature Latitude
+
+−1
+
+0
+
+1
+
+2
+
+Value of Feature Latitude
+
+−1
+
+0
+
+1
+
+2
+
+Value of Feature Latitude
+
+Figure K.23: Partial dependence plots for the gradient boosted tree on the California Housing data set. Depicted are the
+partial dependence plots of Φni for n = {1, 2, 4, 10} and 7 different features.
+
+Sebastian Bordt, Ulrike von Luxburg
+
+Subset S
+(0,)
+(1,)
+(2,)
+(3,)
+(4,)
+(5,)
+(6,)
+(7,)
+(8,)
+(9,)
+(0, 1)
+(0, 2)
+(0, 3)
+(0, 4)
+(0, 5)
+(0, 6)
+(0, 7)
+(0, 8)
+(0, 9)
+(1, 2)
+(1, 3)
+(1, 4)
+(1, 5)
+(1, 6)
+(1, 7)
+(1, 8)
+(1, 9)
+(2, 3)
+(2, 4)
+(2, 5)
+(2, 6)
+(2, 7)
+(2, 8)
+(2, 9)
+(3, 4)
+(3, 5)
+(3, 6)
+(3, 7)
+(3, 8)
+(3, 9)
+(4, 5)
+(4, 6)
+(4, 7)
+(4, 8)
+(4, 9)
+(5, 6)
+(5, 7)
+(5, 8)
+(5, 9)
+(6, 7)
+(6, 8)
+(6, 9)
+(7, 8)
+(7, 9)
+(8, 9)
+(0, 1, 2)
+(0, 1, 3)
+(0, 1, 4)
+(0, 1, 5)
+(0, 1, 6)
+(0, 1, 7)
+(0, 1, 8)
+(0, 1, 9)
+(0, 2, 3)
+(0, 2, 4)
+(0, 2, 5)
+(0, 2, 6)
+(0, 2, 7)
+(0, 2, 8)
+(0, 2, 9)
+(0, 3, 4)
+(0, 3, 5)
+...
+
+N=500
+0.1128
+0.0005
+-0.1248
+0.0227
+-0.0041
+-0.0123
+0.0845
+0.2357
+0.0280
+0.0197
+-0.0023
+0.0059
+-0.0146
+0.0089
+0.0038
+-0.0244
+-0.0452
+-0.0032
+-0.0043
+-0.0012
+-0.0004
+-0.0006
+-0.0060
+0.0027
+0.0093
+-0.0017
+0.0048
+0.0029
+-0.0419
+-0.0128
+0.0389
+0.0752
+-0.0031
+0.0151
+-0.0112
+0.0006
+-0.0068
+-0.0286
+-0.0135
+0.0038
+-0.0016
+-0.0279
+-0.0100
+-0.0019
+-0.0091
+0.0026
+0.0084
+-0.0000
+0.0015
+-0.0551
+-0.0132
+-0.0053
+-0.0125
+-0.0102
+0.0052
+-0.0058
+0.0018
+-0.0000
+0.0070
+0.0060
+-0.0039
+0.0073
+-0.0003
+0.0038
+-0.0274
+0.0088
+-0.0042
+0.0233
+0.0043
+-0.0298
+0.0149
+0.0019
+...
+
+N=5000
+0.1144
+-0.0006
+-0.1117
+0.0283
+-0.0020
+-0.0189
+0.1003
+0.2478
+0.0329
+0.0238
+-0.0020
+0.0005
+-0.0128
+0.0102
+0.0140
+-0.0242
+-0.0416
+-0.0028
+-0.0055
+-0.0009
+0.0003
+0.0011
+-0.0000
+0.0024
+0.0102
+0.0020
+0.0032
+-0.0006
+-0.0534
+-0.0095
+0.0286
+0.0695
+-0.0044
+0.0039
+-0.0093
+0.0058
+-0.0116
+-0.0298
+-0.0165
+-0.0036
+0.0069
+-0.0295
+-0.0070
+-0.0037
+-0.0116
+0.0083
+0.0152
+0.0055
+0.0044
+-0.0603
+-0.0174
+-0.0140
+-0.0102
+-0.0151
+0.0014
+-0.0026
+0.0028
+-0.0030
+-0.0005
+0.0024
+-0.0024
+0.0007
+-0.0006
+0.0031
+-0.0141
+0.0062
+0.0006
+0.0242
+0.0023
+-0.0249
+0.0078
+-0.0023
+...
+
+N=133 549
+0.1165
+0.0022
+-0.1098
+0.0281
+-0.0018
+-0.0200
+0.0982
+0.2505
+0.0347
+0.0241
+-0.0032
+-0.0025
+-0.0126
+0.0102
+0.0141
+-0.0213
+-0.0426
+-0.0038
+-0.0071
+-0.0022
+0.0007
+-0.0011
+0.0004
+0.0014
+0.0079
+0.0007
+0.0027
+-0.0016
+-0.0547
+-0.0115
+0.0290
+0.0677
+-0.0070
+0.0031
+-0.0091
+0.0055
+-0.0099
+-0.0304
+-0.0181
+-0.0041
+0.0071
+-0.0298
+-0.0079
+-0.0043
+-0.0122
+0.0079
+0.0157
+0.0045
+0.0041
+-0.0581
+-0.0182
+-0.0126
+-0.0127
+-0.0161
+-0.0004
+-0.0014
+0.0020
+-0.0021
+-0.0013
+0.0030
+-0.0015
+0.0014
+-0.0009
+0.0030
+-0.0079
+0.0081
+-0.0006
+0.0275
+0.0055
+-0.0216
+0.0091
+-0.0014
+...
+
+Subset S
+...
+(2, 7, 8, 9)
+(3, 4, 5, 6)
+(3, 4, 5, 7)
+(3, 4, 5, 8)
+(3, 4, 5, 9)
+(3, 4, 6, 7)
+(3, 4, 6, 8)
+(3, 4, 6, 9)
+(3, 4, 7, 8)
+(3, 4, 7, 9)
+(3, 4, 8, 9)
+(3, 5, 6, 7)
+(3, 5, 6, 8)
+(3, 5, 6, 9)
+(3, 5, 7, 8)
+(3, 5, 7, 9)
+(3, 5, 8, 9)
+(3, 6, 7, 8)
+(3, 6, 7, 9)
+(3, 6, 8, 9)
+(3, 7, 8, 9)
+(4, 5, 6, 7)
+(4, 5, 6, 8)
+(4, 5, 6, 9)
+(4, 5, 7, 8)
+(4, 5, 7, 9)
+(4, 5, 8, 9)
+(4, 6, 7, 8)
+(4, 6, 7, 9)
+(4, 6, 8, 9)
+(4, 7, 8, 9)
+(5, 6, 7, 8)
+(5, 6, 7, 9)
+(5, 6, 8, 9)
+(5, 7, 8, 9)
+(6, 7, 8, 9)
+(0, 1, 2, 3, 4)
+(0, 1, 2, 3, 5)
+(0, 1, 2, 3, 6)
+(0, 1, 2, 3, 7)
+(0, 1, 2, 3, 8)
+(0, 1, 2, 3, 9)
+(0, 1, 2, 4, 5)
+(0, 1, 2, 4, 6)
+(0, 1, 2, 4, 7)
+(0, 1, 2, 4, 8)
+(0, 1, 2, 4, 9)
+(0, 1, 2, 5, 6)
+(0, 1, 2, 5, 7)
+(0, 1, 2, 5, 8)
+(0, 1, 2, 5, 9)
+(0, 1, 2, 6, 7)
+(0, 1, 2, 6, 8)
+(0, 1, 2, 6, 9)
+(0, 1, 2, 7, 8)
+(0, 1, 2, 7, 9)
+(0, 1, 2, 8, 9)
+(0, 1, 3, 4, 5)
+(0, 1, 3, 4, 6)
+(0, 1, 3, 4, 7)
+(0, 1, 3, 4, 8)
+(0, 1, 3, 4, 9)
+(0, 1, 3, 5, 6)
+(0, 1, 3, 5, 7)
+(0, 1, 3, 5, 8)
+(0, 1, 3, 5, 9)
+(0, 1, 3, 6, 7)
+(0, 1, 3, 6, 8)
+(0, 1, 3, 6, 9)
+(0, 1, 3, 7, 8)
+(0, 1, 3, 7, 9)
+...
+
+N=500
+...
+0.0043
+-0.0101
+0.0045
+-0.0020
+-0.0064
+0.0097
+-0.0058
+0.0032
+0.0007
+0.0041
+0.0006
+0.0052
+-0.0024
+-0.0044
+-0.0023
+-0.0007
+-0.0010
+0.0035
+-0.0034
+-0.0019
+0.0018
+-0.0052
+-0.0025
+-0.0019
+-0.0027
+-0.0017
+-0.0004
+-0.0000
+0.0017
+-0.0005
+0.0007
+-0.0041
+-0.0038
+0.0013
+-0.0003
+0.0022
+0.0042
+0.0004
+0.0018
+0.0014
+0.0007
+0.0006
+0.0051
+0.0016
+0.0005
+0.0022
+0.0026
+0.0025
+0.0013
+0.0012
+0.0017
+0.0005
+-0.0003
+0.0008
+0.0003
+0.0004
+-0.0004
+0.0013
+0.0017
+0.0028
+0.0032
+-0.0005
+-0.0012
+0.0018
+0.0003
+-0.0012
+0.0011
+0.0020
+-0.0000
+0.0015
+-0.0003
+...
+
+N=5000
+...
+0.0009
+-0.0143
+-0.0030
+-0.0053
+-0.0049
+0.0076
+-0.0058
+0.0018
+-0.0011
+0.0003
+0.0013
+0.0059
+-0.0011
+-0.0023
+-0.0014
+-0.0031
+-0.0007
+0.0027
+-0.0052
+-0.0011
+0.0014
+-0.0020
+-0.0001
+0.0005
+0.0009
+0.0005
+-0.0004
+-0.0003
+0.0005
+-0.0005
+-0.0000
+-0.0024
+-0.0046
+-0.0009
+0.0003
+0.0005
+0.0010
+0.0010
+0.0004
+0.0006
+-0.0004
+0.0012
+0.0013
+0.0011
+-0.0011
+0.0005
+-0.0002
+0.0023
+-0.0001
+0.0011
+-0.0008
+-0.0010
+-0.0008
+-0.0001
+-0.0010
+-0.0008
+-0.0006
+0.0002
+0.0009
+0.0010
+-0.0004
+-0.0006
+0.0000
+-0.0006
+-0.0001
+-0.0000
+0.0002
+-0.0004
+0.0007
+-0.0003
+-0.0010
+...
+
+N=133 549
+...
+0.0005
+-0.0135
+-0.0049
+-0.0047
+-0.0054
+0.0079
+-0.0047
+0.0017
+-0.0011
+0.0004
+0.0021
+0.0071
+-0.0000
+-0.0019
+-0.0011
+-0.0024
+-0.0005
+0.0034
+-0.0045
+-0.0004
+0.0003
+-0.0037
+0.0007
+0.0004
+0.0016
+0.0010
+0.0000
+0.0011
+0.0006
+0.0005
+-0.0001
+-0.0012
+-0.0039
+-0.0007
+0.0004
+0.0003
+0.0003
+0.0012
+0.0002
+0.0012
+-0.0001
+0.0015
+0.0013
+0.0010
+-0.0009
+0.0008
+-0.0000
+0.0038
+0.0003
+0.0017
+-0.0006
+-0.0008
+-0.0001
+-0.0003
+-0.0005
+-0.0006
+-0.0003
+-0.0007
+-0.0001
+0.0010
+-0.0000
+-0.0001
+0.0003
+-0.0003
+0.0000
+0.0002
+0.0009
+-0.0002
+0.0004
+0.0001
+-0.0004
+...
+
+Subset S
+...
+(1, 2, 5, 6, 7, 8, 9)
+(1, 3, 4, 5, 6, 7, 8)
+(1, 3, 4, 5, 6, 7, 9)
+(1, 3, 4, 5, 6, 8, 9)
+(1, 3, 4, 5, 7, 8, 9)
+(1, 3, 4, 6, 7, 8, 9)
+(1, 3, 5, 6, 7, 8, 9)
+(1, 4, 5, 6, 7, 8, 9)
+(2, 3, 4, 5, 6, 7, 8)
+(2, 3, 4, 5, 6, 7, 9)
+(2, 3, 4, 5, 6, 8, 9)
+(2, 3, 4, 5, 7, 8, 9)
+(2, 3, 4, 6, 7, 8, 9)
+(2, 3, 5, 6, 7, 8, 9)
+(2, 4, 5, 6, 7, 8, 9)
+(3, 4, 5, 6, 7, 8, 9)
+(0, 1, 2, 3, 4, 5, 6, 7)
+(0, 1, 2, 3, 4, 5, 6, 8)
+(0, 1, 2, 3, 4, 5, 6, 9)
+(0, 1, 2, 3, 4, 5, 7, 8)
+(0, 1, 2, 3, 4, 5, 7, 9)
+(0, 1, 2, 3, 4, 5, 8, 9)
+(0, 1, 2, 3, 4, 6, 7, 8)
+(0, 1, 2, 3, 4, 6, 7, 9)
+(0, 1, 2, 3, 4, 6, 8, 9)
+(0, 1, 2, 3, 4, 7, 8, 9)
+(0, 1, 2, 3, 5, 6, 7, 8)
+(0, 1, 2, 3, 5, 6, 7, 9)
+(0, 1, 2, 3, 5, 6, 8, 9)
+(0, 1, 2, 3, 5, 7, 8, 9)
+(0, 1, 2, 3, 6, 7, 8, 9)
+(0, 1, 2, 4, 5, 6, 7, 8)
+(0, 1, 2, 4, 5, 6, 7, 9)
+(0, 1, 2, 4, 5, 6, 8, 9)
+(0, 1, 2, 4, 5, 7, 8, 9)
+(0, 1, 2, 4, 6, 7, 8, 9)
+(0, 1, 2, 5, 6, 7, 8, 9)
+(0, 1, 3, 4, 5, 6, 7, 8)
+(0, 1, 3, 4, 5, 6, 7, 9)
+(0, 1, 3, 4, 5, 6, 8, 9)
+(0, 1, 3, 4, 5, 7, 8, 9)
+(0, 1, 3, 4, 6, 7, 8, 9)
+(0, 1, 3, 5, 6, 7, 8, 9)
+(0, 1, 4, 5, 6, 7, 8, 9)
+(0, 2, 3, 4, 5, 6, 7, 8)
+(0, 2, 3, 4, 5, 6, 7, 9)
+(0, 2, 3, 4, 5, 6, 8, 9)
+(0, 2, 3, 4, 5, 7, 8, 9)
+(0, 2, 3, 4, 6, 7, 8, 9)
+(0, 2, 3, 5, 6, 7, 8, 9)
+(0, 2, 4, 5, 6, 7, 8, 9)
+(0, 3, 4, 5, 6, 7, 8, 9)
+(1, 2, 3, 4, 5, 6, 7, 8)
+(1, 2, 3, 4, 5, 6, 7, 9)
+(1, 2, 3, 4, 5, 6, 8, 9)
+(1, 2, 3, 4, 5, 7, 8, 9)
+(1, 2, 3, 4, 6, 7, 8, 9)
+(1, 2, 3, 5, 6, 7, 8, 9)
+(1, 2, 4, 5, 6, 7, 8, 9)
+(1, 3, 4, 5, 6, 7, 8, 9)
+(2, 3, 4, 5, 6, 7, 8, 9)
+(0, 1, 2, 3, 4, 5, 6, 7, 8)
+(0, 1, 2, 3, 4, 5, 6, 7, 9)
+(0, 1, 2, 3, 4, 5, 6, 8, 9)
+(0, 1, 2, 3, 4, 5, 7, 8, 9)
+(0, 1, 2, 3, 4, 6, 7, 8, 9)
+(0, 1, 2, 3, 5, 6, 7, 8, 9)
+(0, 1, 2, 4, 5, 6, 7, 8, 9)
+(0, 1, 3, 4, 5, 6, 7, 8, 9)
+(0, 2, 3, 4, 5, 6, 7, 8, 9)
+(1, 2, 3, 4, 5, 6, 7, 8, 9)
+(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+
+N=500
+...
+0.0029
+0.0005
+0.0061
+0.0062
+0.0002
+0.0015
+0.0002
+0.0025
+-0.0038
+0.0039
+0.0059
+-0.0042
+-0.0007
+-0.0046
+0.0012
+0.0014
+-0.0021
+0.0037
+0.0018
+0.0002
+-0.0002
+0.0015
+0.0005
+-0.0004
+0.0025
+-0.0013
+0.0037
+0.0009
+0.0018
+0.0014
+0.0000
+0.0030
+-0.0009
+0.0052
+-0.0010
+-0.0013
+0.0007
+-0.0013
+0.0003
+0.0010
+-0.0006
+-0.0007
+-0.0001
+-0.0002
+0.0006
+-0.0005
+0.0012
+-0.0005
+-0.0010
+0.0009
+-0.0007
+-0.0010
+-0.0131
+-0.0018
+-0.0073
+0.0039
+0.0011
+0.0018
+-0.0021
+-0.0036
+-0.0021
+-0.0023
+-0.0008
+-0.0063
+0.0012
+0.0012
+-0.0017
+0.0003
+-0.0000
+-0.0003
+-0.0041
+0.0005
+
+N=5000
+...
+-0.0003
+-0.0032
+0.0051
+0.0014
+0.0002
+0.0015
+-0.0026
+0.0026
+0.0007
+0.0042
+0.0022
+-0.0016
+0.0013
+-0.0029
+0.0018
+0.0009
+-0.0027
+0.0021
+-0.0006
+0.0002
+-0.0006
+0.0018
+0.0010
+0.0013
+0.0014
+0.0001
+0.0016
+0.0008
+0.0009
+0.0010
+0.0006
+0.0017
+-0.0002
+0.0014
+0.0006
+0.0003
+0.0003
+0.0008
+0.0017
+0.0005
+0.0007
+0.0005
+0.0008
+0.0010
+0.0001
+0.0015
+0.0004
+0.0002
+0.0002
+0.0004
+0.0007
+0.0008
+-0.0081
+0.0002
+-0.0006
+0.0040
+0.0000
+0.0036
+-0.0014
+-0.0048
+-0.0039
+-0.0018
+-0.0013
+-0.0024
+0.0000
+-0.0003
+-0.0008
+-0.0004
+-0.0019
+-0.0017
+-0.0008
+0.0012
+
+N=133 549
+...
+-0.0009
+-0.0035
+0.0049
+-0.0009
+0.0009
+0.0008
+-0.0004
+0.0016
+-0.0002
+0.0036
+0.0013
+-0.0010
+0.0008
+-0.0015
+0.0008
+0.0011
+-0.0019
+0.0014
+-0.0015
+-0.0001
+-0.0012
+-0.0001
+-0.0003
+0.0003
+0.0005
+-0.0003
+-0.0005
+-0.0009
+-0.0002
+-0.0002
+0.0001
+0.0002
+0.0000
+0.0004
+-0.0001
+-0.0000
+-0.0004
+-0.0006
+0.0006
+-0.0001
+-0.0000
+0.0002
+0.0002
+0.0001
+-0.0007
+0.0003
+0.0001
+-0.0001
+0.0002
+-0.0000
+0.0001
+0.0006
+-0.0069
+0.0013
+0.0015
+0.0042
+0.0014
+0.0014
+0.0005
+-0.0048
+-0.0038
+-0.0002
+0.0003
+-0.0003
+0.0010
+0.0002
+0.0005
+0.0004
+-0.0009
+-0.0010
+-0.0022
+-0.0002
+
+Table K.2: The individual terms of the Shapley-GAM decomposition of a kNN classifier on the Folktables Travel data set.
+The table depicts a number of selected terms of the full decomposition, estimated with 500, 5000 and 133549 samples per
+evaluation of the value function. The depicted terms are visualized in Figure C.3. From the table, we see that many relatively
+small higher-order coefficients are not very precisely estimated for N = 5000, whereas the overall sums (visualized in
+Figure C.3) are.
+
+
