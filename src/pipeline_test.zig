@@ -208,7 +208,8 @@ test "fixture games to stats, curves and the website" {
         // every view, the champion pages per role, and a tab after Matchups
         .{ "patch/patch.html", &.{ "<h1>Patch 15.13: what changed</h1>", "Too early to tell: 0 champion roles" } },
         .{ "all/patch.html", &.{ "<h1>Patch 15.13: what changed</h1>", "across all regions" } },
-        .{ "champion/darius.html", &.{"Patch 15.13 against 15.12: too early to tell, too few games on 15.13 so far. <a href=\"../patch.html\">Patch changes</a>"} },
+        // Its region's, whatever the period: the region pick shows every region's
+        .{ "champion/darius.html", &.{ "<div data-by-view><div data-view=\"0 1\"><p class=\"since muted\">Patch 15.13 against 15.12: too early to tell, too few games on 15.13 so far. <a href=\"../patch/patch.html\">Patch changes</a>", "<div data-view=\"2 3\" hidden><p class=\"since muted\">Patch 15.13 against 15.12: too early to tell, too few games on 15.13 so far. <a href=\"../all/patch/patch.html\">Patch changes</a>" } },
         .{ "champions.html", &.{"Matchups</a>\n<a href=\"patch.html\">Patch changes</a>"} },
         .{ "index.html", &.{"New patch: <a href=\"patch/patch.html\">what changed in 15.13 since 15.12</a>."} },
         // Champion table and page: raw win rate on the table's track, every lane opponent
@@ -266,8 +267,14 @@ test "fixture games to stats, curves and the website" {
         // A pick the current patch has few games of: the previous patch's build, no link
         // to the thin page (builds.zig pick)
         .{ "champion/ahri.html", &.{"<b>Most played build</b> <span class=\"muted\">patch 15.12 (15.13: 3 games so far), in EUW"} },
-        .{ "learn.html", &.{"From patch 15.13's ranked games"} },
-        .{ "daily.html", &.{"From patch 15.13's ranked solo games"} },
+        .{ "learn.html", &.{"From ranked games in EUW on patch 15.13"} },
+        // Spread bars, pool and its section follow the view
+        .{ "champions.html", &.{"games on it in any role, last 30 days (none under 20"} },
+        .{ "patch/champions.html", &.{"games on it in any role, patch 15.13 (none under 20"} },
+        .{ "all/pool.html", &.{"players across all regions so far)"} },
+        // The pool section's, one per view (the fixture has no mains)
+        .{ "champion/darius.html", &.{"<div data-by-view><div data-view=\"0\"></div><div data-view=\"1\" hidden></div><div data-view=\"2\" hidden></div><div data-view=\"3\" hidden></div></div>"} },
+        .{ "daily.html", &.{"From ranked solo games in EUW on patch 15.13"} },
     };
     for (pages) |pg| {
         const path = try std.fs.path.join(arena, &.{ out, pg[0] });

@@ -50,7 +50,7 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool, l: *const l
         \\</form>
         \\<div id="results" data-to-site="{up}" data-query="{query}"></div>
         \\<p class="muted">A player's main is their most played champion, from {source}
-        \\({players} players so far); they play another when it has at least a tenth of their
+        \\({players} players {in} so far); they play another when it has at least a tenth of their
         \\main's games or points. "59% (28%)": 59% of the main's players play it, 28% of other players do.
         \\Listed are those played most beyond their usual share (small groups count for less),
         \\from {min} players per main. Lane numbers are points of win chance beyond what the two
@@ -72,8 +72,9 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool, l: *const l
     try html.foot(w, pg);
 }
 
-/// Champion page: who mains `ch` and what else they play
-pub fn section(site: *const Site, w: *Writer, p: *const pool.Pool, ch: Champ) !void {
+/// Champion page: who mains `ch` in `region` and what else they play; `l` marks those
+/// harder or easier to pick up
+pub fn section(site: *const Site, w: *Writer, p: *const pool.Pool, l: *const learning.Learning, ch: Champ, region: html.Region) !void {
     if (p.players == 0) return;
     const m: pool.Main = for (p.mains) |m| {
         if (m.id == ch.id) break m;
@@ -81,15 +82,15 @@ pub fn section(site: *const Site, w: *Writer, p: *const pool.Pool, ch: Champ) !v
     try tpl.render(w, "<h2>Players who main {name} also play</h2>\n", .{ .name = ch.name });
     if (m.players < p.min_players) {
         try tpl.render(w,
-            \\<p class="note">Not enough players yet: {players} with {name} as their most played champion so far; lists start at {min}.</p>
+            \\<p class="note">Not enough players yet: {players} {in} with {name} as their most played champion so far; lists start at {min}.</p>
             \\
-        , .{ .players = m.players, .name = ch.name, .min = p.min_players });
+        , .{ .players = m.players, .in = region.in(), .name = ch.name, .min = p.min_players });
         return;
     }
     try tpl.render(w,
-        \\<p class="muted">{players} players main {name}, from {source}: the share of them who play each champion (of other players in brackets), those played most beyond their usual share first.</p>
+        \\<p class="muted">{players} players {in} main {name}, from {source}: the share of them who play each champion (of other players in brackets), those played most beyond their usual share first.</p>
         \\
-    , .{ .players = m.players, .name = ch.name, .source = sourceText(p) });
+    , .{ .players = m.players, .in = region.in(), .name = ch.name, .source = sourceText(p) });
     try w.writeAll("<div class=\"card\"><ul class=\"also\">\n");
     if (m.also.len == 0) try w.writeAll("<li class=\"muted\">No champion stands out yet</li>\n");
     for (m.also[0..@min(m.also.len, also_shown)]) |a| {
@@ -103,7 +104,7 @@ pub fn section(site: *const Site, w: *Writer, p: *const pool.Pool, ch: Champ) !v
             .players = m.players,
             .share = 100 * @as(f64, @floatFromInt(a.together)) / @as(f64, @floatFromInt(m.players)),
             .base = 100 * a.base,
-            .kind = if (kindNote(site, a.id)) |k| tpl.t(" <span class=\"role\">{k}</span>", .{ .k = k }) else null,
+            .kind = if (kindNote(l, a.id)) |k| tpl.t(" <span class=\"role\">{k}</span>", .{ .k = k }) else null,
         });
     }
     try tpl.renderPart(w,
@@ -114,8 +115,8 @@ pub fn section(site: *const Site, w: *Writer, p: *const pool.Pool, ch: Champ) !v
 }
 
 /// "harder to pick up" when the champion's gap stands out (learning.zig)
-fn kindNote(site: *const Site, id: u32) ?[]const u8 {
-    const g = (site.learning.get(id) orelse return null).gap orelse return null;
+fn kindNote(l: *const learning.Learning, id: u32) ?[]const u8 {
+    const g = (l.get(id) orelse return null).gap orelse return null;
     return switch (g.kind) {
         .harder => "harder to pick up",
         .easier => "easier to pick up",

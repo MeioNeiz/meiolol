@@ -38,7 +38,7 @@ pub fn page(w: *Writer, info: prose.Info) Writer.Error!void {
         \\<ul id="lanes" class="dd-lanes"></ul>
         \\<p id="share-row"><button type="button" id="share">Share result</button> <span id="share-note" class="muted"></span></p>
         \\<details class="dd-how"><summary>How these facts are read</summary>
-        \\<p class="muted">From patch {patch}'s ranked solo games, whichever patch the game was
+        \\<p class="muted">From ranked solo games in EUW on patch {patch}, whichever patch the game was
         \\played on. The hidden slot is the pick the rest of the draft explains best, by its
         \\matchups and teammates more than its strength on the patch. A draft leans to a side only when our model is 95% sure it is not even;
         \\otherwise it reads "close". A lane or option's usual gold at 14 minutes is always

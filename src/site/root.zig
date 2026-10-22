@@ -132,10 +132,11 @@ pub const Champ = struct {
     games: u64,
 };
 
-/// A view's players' win rates and learning, as its own load makes them
+/// A view's players' win rates, learning and pool, as its own load makes them
 pub const ByView = struct {
     spread: spread.Spread,
     learning: learning.Learning,
+    pool: pool.Pool,
 };
 
 /// One view's data, loaded once (`load`), and what every page of it renders from
@@ -174,6 +175,8 @@ pub const Site = struct {
     curves_prev: ?core.curvesfile.Curves = null,
     /// The view's region, current patch against the previous one (Options.prev_patch)
     patchday: ?patchday.PatchDay = null,
+    /// The root view's only, for the champion pages: every region's
+    patchday_all: ?patchday.PatchDay = null,
     /// Every view's (html.View.index), so the switches skip matchups without a page
     view_curves: *const [html.View.count]?core.curvesfile.Curves,
     /// Every view's builds (html.View.index); the 30-day views link to their patch view's

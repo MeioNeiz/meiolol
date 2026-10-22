@@ -556,10 +556,13 @@ rank, role and opponent; bans; each view's curve gold at 14) and data/filters.js
 its game's rank, the median ladder tier of its players: Riot's ban order doesn't say
 reliably which player banned. static/filters.js sums the picked slices and redraws
 the tiles, opponent table, early-data note and header switches. Blocks made per view
-(players' win rates, builds strip, how hard to pick up) are written once per view in a
-`data-by-view` group (champion.zig variant; the root view's from Site.by_view) and
-filters.js shows the picks' view's; a single platform takes all regions', the rank pick
-changes none of them. The pool section stays all-time (mastery is lifetime). Gold at 14 is the
+(players' win rates, builds strip, how hard to pick up, the pool section, the patch
+"since" line) are written once per view in a `data-by-view` group (champion.zig
+variant; the root view's from Site.by_view, the since line's every-region one from
+Site.patchday_all) and filters.js shows the picks' view's; a single platform takes all
+regions', the rank pick changes none of them. The pool section's pool is its region's
+over every patch (mastery is lifetime), its "harder to pick up" notes its period's; the
+since line is whole patches, so one per region. Gold at 14 is the
 curve's estimate when the filters are a view (any rank, or Diamond+), else the plain
 average. Other views link in with their filters in the query (html.View.query:
 ?region=all&period=patch), and the filters point the nav links into the matching view.

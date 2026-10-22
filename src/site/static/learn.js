@@ -798,7 +798,7 @@ class Practice {
     const [, level, what] = LEVELS[levelIndex(d.difficulty)];
     const n = (state.levels[d.difficulty] || 0) + (mine === null ? 1 : 0);
     const drill = n <= LEVEL_SIZE ? `: drill ${n} of ${LEVEL_SIZE}` : "";
-    $("p-about").textContent = `${level}, ${what.toLowerCase()}${drill} · patch ${d.patch}${tier}`;
+    $("p-about").textContent = `${level}, ${what.toLowerCase()}${drill} · EUW, patch ${d.patch}${tier}`;
     for (const t of [0, 1]) {
       const yours = t === d.hidden_team;
       $(`p-side-${t}`).textContent =

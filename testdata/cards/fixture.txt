@@ -1,38 +1,38 @@
 == top blind, before any pick
 top
-- Malphite | 20k mastery points; strong in top this patch
+- Malphite | 20k mastery points; strong in top (test)
 - Garen | 150k mastery points
 - Sett | 80k mastery points
 - Ornn | 9k mastery points
 == top, their Darius is in
 top; opponent Darius (guessed)
-- Malphite | vs Darius: +193 gold at 14 min (601 games) | 20k mastery points; strong in top this patch
+- Malphite | vs Darius: +193 gold at 14 min (601 games) | 20k mastery points; strong in top (test)
 - Sett | vs Darius: -204 gold at 14 min (554 games) | 80k mastery points
 - Garen | vs Darius: -601 gold at 14 min (559 games) | 150k mastery points
 - Ornn | vs Darius: -317 gold at 14 min (537 games) | 9k mastery points
 == top, hovering Garen into Darius
 top, hovering Garen; opponent Darius (guessed)
 At 14 min Garen is typically 601 gold behind Darius (8 games in 10 between -1049 and -125) and ahead in 2% of 559 games (All games, last 30 days).
-- Malphite | vs Darius: +193 gold at 14 min (601 games) | 20k mastery points; strong in top this patch
+- Malphite | vs Darius: +193 gold at 14 min (601 games) | 20k mastery points; strong in top (test)
 - Sett | vs Darius: -204 gold at 14 min (554 games) | 80k mastery points
 - Garen | vs Darius: -601 gold at 14 min (559 games) | 150k mastery points
 - Ornn | vs Darius: -317 gold at 14 min (537 games) | 9k mastery points
 == top, locked Malphite
 top, locked Malphite; opponent Darius (guessed)
 At 14 min Malphite is typically 193 gold ahead of Darius (8 games in 10 between -283 and +644) and ahead in 68% of 601 games (All games, last 30 days).
-- Malphite | vs Darius: +193 gold at 14 min (601 games) | 20k mastery points; strong in top this patch; pairs well with Vi
+- Malphite | vs Darius: +193 gold at 14 min (601 games) | 20k mastery points; strong in top (test); pairs well with Vi
 - Sett | vs Darius: -204 gold at 14 min (554 games) | 80k mastery points; good into Ahri; pairs well with Jinx
 - Garen | vs Darius: -601 gold at 14 min (559 games) | 150k mastery points; hard into Ahri; pairs well with Orianna
 - Ornn | vs Darius: -317 gold at 14 min (537 games) | 9k mastery points; hard into Ahri; pairs well with Vi
 == mid, opponents' positions guessed
 mid, hovering Ahri; opponent Syndra (guessed)
 At 14 min Ahri is typically 226 gold behind Syndra (8 games in 10 between -708 and +289) and ahead in 31% of 208 games (Gold to Emerald, last 30 days).
-- Viktor | vs Syndra: +164 gold at 14 min (605 games) | 30k mastery points; strong in mid this patch; good into Lee Sin
+- Viktor | vs Syndra: +164 gold at 14 min (605 games) | 30k mastery points; strong in mid (test); good into Lee Sin
 - Ahri | vs Syndra: -226 gold at 14 min (208 games) | 212k mastery points
 - Orianna | vs Syndra: -62 gold at 14 min (546 games) | 41k mastery points; pairs well with Jinx
 == mid, pool champion banned and one taken
 mid; opponent Syndra (guessed)
-- Viktor | vs Syndra: +164 gold at 14 min (605 games) | 30k mastery points; strong in mid this patch
+- Viktor | vs Syndra: +164 gold at 14 min (605 games) | 30k mastery points; strong in mid (test)
 - Orianna | vs Syndra: -62 gold at 14 min (546 games) | 41k mastery points
 - Zed | vs Syndra: -35 gold at 14 min (626 games)
 == bot, one champion in the pool: widened
@@ -43,7 +43,7 @@ bot, hovering Jinx
 - Ezreal
 == top, pickable limits the pool
 top
-- Malphite | 20k mastery points; strong in top this patch
+- Malphite | 20k mastery points; strong in top (test)
 - Garen | 150k mastery points
 - Ornn | 9k mastery points
 == support, no mastery at all
@@ -54,6 +54,6 @@ support
 - Karma | pairs well with Kai'Sa
 == jungle, pool all in other roles
 jungle
-- Vi | strong in jungle this patch
+- Vi | strong in jungle (test)
 - Viego
 - Lee Sin

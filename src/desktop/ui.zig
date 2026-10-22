@@ -140,7 +140,10 @@ fn card(c: *const Card, stats: *const core.Stats) void {
     if (c.options.len == 0) para(@src(), "No champion you can pick has enough games in this role.", .{}, .{});
     for (c.options, 0..) |o, i| option(i, o, stats, o.champion == c.me);
     if (c.options.len > 0) {
-        para(@src(), "Several options, not one answer: lane numbers are averages over many players.", .{}, .{ .muted = true, .small = true });
+        // The app's data is EUW's (deploy/web-loop.sh desktop_files)
+        para(@src(), "Several options, not one answer: lane numbers are averages over many players in EUW{s}{s}.", .{
+            if (c.period.len > 0) ", " else "", c.period,
+        }, .{ .muted = true, .small = true });
     }
 }
 
@@ -203,7 +206,7 @@ fn chart(m: lanecard.Matchup) void {
 }
 
 fn chartCaption(m: lanecard.Matchup, period: []const u8) void {
-    para(@src(), "Gold, you minus them: average line, middle half of games shaded. {s}, {s}, {d} games.", .{
+    para(@src(), "Gold, you minus them: average line, middle half of games shaded. {s}, EUW, {s}, {d} games.", .{
         m.bracket.label(), period, m.games,
     }, .{ .muted = true, .small = true });
 }

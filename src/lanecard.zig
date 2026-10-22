@@ -324,7 +324,7 @@ fn options(arena: std.mem.Allocator, in: Input, opp: ?Opponent, bracket: Bracket
         list = buf[0..len];
     }
 
-    // Strong this patch only says something when it sets an option apart
+    // Strong in the role only says something when it sets an option apart
     var strong: usize = 0;
     for (list) |s| strong += @intFromBool(isStrong(s));
     const show_strong = 2 * strong < list.len;
@@ -408,7 +408,7 @@ fn reasons(arena: std.mem.Allocator, in: Input, s: core.Suggestion, opp: ?Oppone
         if (opp != null and r.kind == .enemy and r.champion == opp.?.champion) continue;
         const name = stats.nameOf(r.champion);
         const text = switch (r.kind) {
-            .base => if (r.pp > 0 and show_strong) try std.fmt.allocPrint(arena, "strong in {s} this patch", .{in.role.label()}) else continue,
+            .base => if (r.pp > 0 and show_strong) try std.fmt.allocPrint(arena, "strong in {s}{f}", .{ in.role.label(), core.score.When{ .label = stats.patch } }) else continue,
             .ally => if (r.pp > 0) try std.fmt.allocPrint(arena, "pairs well with {s}", .{name}) else continue,
             .enemy => try std.fmt.allocPrint(arena, "{s} into {s}", .{ if (r.pp > 0) "good" else "hard", name }),
         };

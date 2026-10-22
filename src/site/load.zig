@@ -163,6 +163,8 @@ pub fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Opt
                 for (html.View.all, by) |v, *b| b.* = .{
                     .spread = try spread.make(arena, &people.pool.spread[v.index()], &site.stats, .{}),
                     .learning = try learning.build(arena, &people.learning[@backingInt(v.period)], &site.stats, .{}),
+                    // Options.euw_only tallies EUW's alone
+                    .pool = try pool.make(arena, &people.pool, @min(@backingInt(v.region), people.pool.games.len - 1), &site.stats, .{}),
                 };
                 site.by_view = by;
             }
@@ -297,39 +299,56 @@ test patchMix {
 /// The view's patch day (Options.prev_patch): its champions' win rates from both
 /// patches' stats, kept in the views file (Part.prev), with the lane numbers and
 /// matchups from its region's patch curves. A 30-day view builds its region's current
-/// patch stats for it
+/// patch stats for it. The root view also makes every region's, for the champion pages'
+/// region pick (Site.patchday_all)
 fn loadPatchDay(site: *Site, db: store.Db, all_opts: Options, extras: *Extras, old: ?*const Parts, phases: *Phases) !void {
     const prev = all_opts.prev_patch orelse return;
-    const arena = site.arena;
     const view = site.view;
+    var keep = true;
+    site.patchday = try regionPatchDay(site, db, all_opts, extras, old, phases, prev, view, &keep);
+    if (view.index() == 0 and !all_opts.euw_only) {
+        const all: html.View = .{ .region = .all, .period = view.period };
+        site.patchday_all = try regionPatchDay(site, db, all_opts, extras, old, phases, prev, all, &keep);
+    }
+    phases.mark(if (keep) "patch day kept" else "patch day");
+}
+
+/// `v`'s patch day, its wins from `old`'s Part.prev for v when current; `keep` false
+/// when made here
+fn regionPatchDay(site: *Site, db: store.Db, all_opts: Options, extras: *Extras, old: ?*const Parts, phases: *Phases, prev: []const u8, v: html.View, keep: *bool) !patchday.PatchDay {
+    const arena = site.arena;
     var label_buf: [core.statsfile.patch_len]u8 = undefined;
     const cur = try stats.label(&label_buf, all_opts.patches);
-    const kept = try Parts.of(old, patchday.Wins, .prev, view, arena);
-    const keep = if (kept) |k| std.mem.eql(u8, k.prev_patch, prev) and std.mem.eql(u8, k.cur_patch, cur) else false;
-    const wins = if (keep) kept.? else blk: {
+    const kept = try Parts.of(old, patchday.Wins, .prev, v, arena);
+    const current = if (kept) |k| std.mem.eql(u8, k.prev_patch, prev) and std.mem.eql(u8, k.cur_patch, cur) else false;
+    const wins = if (current) kept.? else blk: {
         if (old) |o| if (o.strict) return error.ViewsMismatch;
+        keep.* = false;
+        const platforms = switch (v.region) {
+            .euw => all_opts.platforms,
+            .all => all_opts.all_platforms,
+        };
         const games = try extras.partialsFor(site.gpa, site.io, db, phases);
-        const prev_stats = try patchStats(site, db, &.{prev}, games);
-        const cur_stats = if (view.period == .patch) site.stats else try patchStats(site, db, all_opts.patches, games);
+        const prev_stats = try patchStats(site, db, &.{prev}, platforms, games);
+        const cur_stats = if (std.meta.eql(v, site.view) and v.period == .patch) site.stats else try patchStats(site, db, all_opts.patches, platforms, games);
         break :blk try patchday.championWins(arena, &prev_stats, &cur_stats, .{});
     };
-    const pv = (html.View{ .region = view.region, .period = .patch }).index();
-    site.patchday = try patchday.withCurves(
+    const pv = (html.View{ .region = v.region, .period = .patch }).index();
+    return patchday.withCurves(
         arena,
         wins,
         if (extras.curves_prev[pv]) |*c| c else null,
         if (extras.curves[pv]) |*c| c else null,
         .{},
     );
-    phases.mark(if (keep) "patch day kept" else "patch day");
 }
 
-/// The view's region's stats over `patches`, all of each
-fn patchStats(site: *Site, db: store.Db, patches: []const []const u8, games: ?*const partials.Store) !Stats {
+/// `platforms`' stats over `patches`, all of each
+fn patchStats(site: *Site, db: store.Db, patches: []const []const u8, platforms: []const []const u8, games: ?*const partials.Store) !Stats {
     var built = if (games) |g|
-        try stats.buildFrom(site.gpa, db, g, patches, site.opts.platforms, 0)
+        try stats.buildFrom(site.gpa, db, g, patches, platforms, 0)
     else
-        try stats.buildSince(site.gpa, db, patches, site.opts.platforms, 0);
+        try stats.buildSince(site.gpa, db, patches, platforms, 0);
     defer built.builder.deinit();
     var label_buf: [core.statsfile.patch_len]u8 = undefined;
     var model: Writer.Allocating = .init(site.arena);

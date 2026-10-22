@@ -496,7 +496,7 @@ const Review = (() => {
     const svg = laneSvg(`${stat} difference by minute, you minus your lane opponent`, "You", "Opponent", shown.map((q) => [q[0], q[2]]), shown.map((q) => q[1]), l[stat]);
     if (svg) fig.insertAdjacentHTML("afterbegin", svg);
     fig.append(el("figcaption", "", c
-      ? `You minus your lane opponent. Typical: ${champName(g.champion)} vs ${champName(g.opponent)}, ${c.bracket}${c.pooled ? " (too few games at your rank)" : ""}, patch ${c.patch}, ${plural(c.games, `${g.queue === undefined || g.queue === SOLO ? "" : "solo/duo "}game`)}${thin ? ". More data needed" : ""}.`
+      ? `You minus your lane opponent. Typical: ${champName(g.champion)} vs ${champName(g.opponent)}, ${c.bracket}${c.pooled ? " (too few games at your rank)" : ""}, EUW, patch ${c.patch}, ${plural(c.games, `${g.queue === undefined || g.queue === SOLO ? "" : "solo/duo "}game`)}${thin ? ". More data needed" : ""}.`
       : `No typical game yet for ${champName(g.champion)} vs ${champName(g.opponent)} in this role: only your game is shown.`));
     return fig;
   }

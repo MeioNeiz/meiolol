@@ -210,7 +210,7 @@ test "views: a tree each, switches between them, shared pages once" {
         "<form class=\"search\" action=\"../your.html\"",
         "<script src=\"../review.js\" defer></script>",
         "<script src=\"../home.js\" data-root=\"../\" defer></script>",
-        "against 2 ranked games",
+        "against ranked games in EUW on that game's patch",
     }) |s| try std.testing.expect(std.mem.indexOf(u8, home, s) != null);
     try std.testing.expect(std.mem.indexOf(u8, home, "class=\"subbar\"") == null);
     const your = try read(arena, out, "your.html");

@@ -133,7 +133,17 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
             try opps.append(a, .{ .other = other, .games = e.games, .wins = e.wins, .strength = ratio(oc.wins, oc.games) });
         }
         if (site.lean) |l| try lean_line.line(w, l, ch.id, ch.name, r, "../method.html#lean");
-        try patch_page.since(site, w, ch, r, "../");
+        if (site.patchday) |*pd| {
+            try w.writeAll("<div data-by-view>");
+            for ([_]html.Region{ .euw, .all }) |region| {
+                const views = [_]html.View{ .{ .region = region, .period = .days30 }, .{ .region = region, .period = .patch } };
+                const p_day = if (region == .euw) pd else if (site.patchday_all) |*all| all else continue;
+                try variant(w, &views);
+                try patch_page.since(site, w, p_day, region, ch, r, try std.mem.concat(a, u8, &.{ "../", views[1].dir() }));
+                try w.writeAll("</div>");
+            }
+            try w.writeAll("</div>\n");
+        }
         try w.writeAll("<div data-by-view>");
         for (html.View.all) |v| {
             try variant(w, &.{v});
@@ -144,7 +154,16 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
         try opponentTable(site, w, ch, r, cr, opponentK(st, r), usualK(st, r), opps.items);
         try tpl.renderPart(w, "</section>\n", .{});
     }
-    try pool_page.section(site, w, &site.pool, ch);
+    // Pool by region, its "harder to pick up" notes by period
+    if (site.by_view.len > 0) {
+        try w.writeAll("<div data-by-view>");
+        for (html.View.all, site.by_view) |v, *b| {
+            try variant(w, &.{v});
+            try pool_page.section(site, w, &b.pool, &b.learning, ch, v.region);
+            try w.writeAll("</div>");
+        }
+        try w.writeAll("</div>\n");
+    }
     // Every region's (learning.zig): one per period
     if (site.by_view.len > 0) {
         try w.writeAll("<div data-by-view>");

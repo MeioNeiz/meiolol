@@ -178,7 +178,7 @@ pub fn write(site: *const Site, w: *Writer, facts: *const learn.Facts) !void {
         \\
     );
     if (site.games < early_games) try tpl.render(w,
-        \\<p class="note">Early data: {games} games on patch {patch} so far, so some examples
+        \\<p class="note">Early data: {games} games in EUW on patch {patch} so far, so some examples
         \\are chance.</p>
         \\
     , .{ .games = site.games, .patch = site.patch });
@@ -274,7 +274,7 @@ fn practiceSection(w: *Writer, patch: []const u8) !void {
         \\<p id="p-real" class="muted small"></p>
         \\<p id="p-done" class="note level-done" hidden></p>
         \\<p><button type="button" id="p-next" class="primary">Next draft</button></p>
-        \\<p class="muted small">From patch {patch}'s ranked games: how drafts like this tend
+        \\<p class="muted small">From ranked games in EUW on patch {patch}: how drafts like this tend
         \\to go, not what anyone should pick.</p>
         \\</section>
         \\</div>

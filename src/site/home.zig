@@ -9,7 +9,6 @@ const tpl = html.tpl;
 
 const root = @import("root.zig");
 const Site = root.Site;
-const thousands = root.thousands;
 
 /// The home page: the lookup, and a game review of the example player's that steps
 /// through its biggest moments (static/home.js, from data/your-example.json). Not a
@@ -42,8 +41,8 @@ pub fn writeIndex(site: *const Site, w: *Writer) !void {
         \\<li><b>3</b><span>Open any game for its review</span></li>
         \\</ol>
         \\<p class="sub-links"><a href="{example}">See an example review →</a><a href="{method}">How the numbers are made</a><a href="{download}">Coming: a champ select helper for Windows</a></p>
-        \\<p class="fine">Free, no sign-up. Solo/duo, flex, draft and Swiftplay games. Measured
-        \\against {games} ranked games in EUW, {when}.</p>
+        \\<p class="fine">Free, no sign-up. Solo/duo, flex, draft and Swiftplay games. Each lane
+        \\measured against ranked games in EUW on that game's patch.</p>
         \\</div>
         \\<div id="demo" class="panel demo" hidden>
         \\<div class="panel-h"><b>Example: one real game, reviewed</b><span class="live"><i></i>playing through its key moments</span></div>
@@ -82,8 +81,6 @@ pub fn writeIndex(site: *const Site, w: *Writer) !void {
         .example = html.Link{ .root = up, .path = "your.html#example" },
         .method = html.Link{ .root = up, .path = "method.html" },
         .download = html.Link{ .root = up, .path = "download.html" },
-        .games = try thousands(site.arena, site.games),
-        .when = site.when,
         .daily = html.Link{ .root = up, .path = "daily.html" },
         .learn = html.Link{ .root = up, .path = "learn.html" },
         .patch_day = tpl.when(site.opts.prev_patch != null, tpl.t(

@@ -15,7 +15,8 @@ pub fn page(w: *Writer, info: prose.Info) Writer.Error!void {
         \\<h1>Review your games</h1>
         \\<p class="lead">Every recent game, reviewed like a chess game: your team's win
         \\chance minute by minute, the moments that moved it, what each death cost, and your
-        \\lane against the typical game in the same matchup at your rank. Solo/duo, flex,
+        \\lane against the typical game in the same matchup at your rank, in EUW on that game's
+        \\patch. Solo/duo, flex,
         \\draft and Swiftplay.</p>
         \\<form id="lookup" class="search" role="search">
         \\<input id="riot-id" name="id" placeholder="Riot ID, like Name#EUW" aria-label="Riot ID, as Name#TAG" autocomplete="off" spellcheck="false" required>

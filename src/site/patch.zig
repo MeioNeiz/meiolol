@@ -253,10 +253,9 @@ const Signed = struct {
     }
 };
 
-/// A champion page's line in role `r`: this patch against the previous one, the root
-/// view's region
-pub fn since(site: *const Site, w: *Writer, ch: Champ, r: core.Role, to_view: []const u8) !void {
-    const pd = if (site.patchday) |*p| p else return;
+/// A champion page's line in role `r`: this patch against the previous one in `region`
+/// (`pd`, that region's). `to_view`: to the view whose patch page it links
+pub fn since(site: *const Site, w: *Writer, pd: *const PatchDay, region: html.Region, ch: Champ, r: core.Role, to_view: []const u8) !void {
     const o = pd.opts;
     const m = pd.champion(ch.id, r) orelse {
         if (early(pd)) try tpl.render(w,
@@ -269,7 +268,7 @@ pub fn since(site: *const Site, w: *Writer, ch: Champ, r: core.Role, to_view: []
     try tpl.renderPart(w, "<p class=\"since muted\">Patch {cur} against {prev}, {in}: {verdict}, {now} games won against {then}", .{
         .cur = pd.cur_patch,
         .prev = pd.prev_patch,
-        .in = site.view.region.in(),
+        .in = region.in(),
         .verdict = if (!clear) "no clear change" else if (m.win.z > 0) "won more often" else "won less often",
         .now = tpl.call(winOf, .{m.win.cur}),
         .then = tpl.call(winOf, .{m.win.prev}),

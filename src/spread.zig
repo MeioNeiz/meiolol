@@ -1,6 +1,6 @@
 //! Players' win rates on a champion: how widely they spread, for the champion pages.
-//! Each player's ranked solo games on the champion in the crawl (all roles, all
-//! patches), counted once they have min_games. A fixed-width picture that doesn't
+//! Each player's ranked solo games on the champion in the crawl (all roles; a view's
+//! region and period, pool.zig), counted once they have min_games. A fixed-width picture that doesn't
 //! narrow as players come in: bar heights are shares of the tallest bin.
 //!
 //! With 10 to 20 games a player's rate swings on luck alone (docs/learned.md: on EUW

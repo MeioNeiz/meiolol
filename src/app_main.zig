@@ -260,9 +260,9 @@ const App = struct {
     }
 
     fn printHeader(app: App, loaded: Loaded) !void {
-        try app.out.print("stats {s}: patch {s}, {d} games, {d} champions\n", .{
+        try app.out.print("stats {s}:{f}, {d} games, {d} champions\n", .{
             std.fs.path.basename(loaded.path),
-            loaded.stats.patch,
+            core.score.When{ .label = loaded.stats.patch },
             loaded.stats.games,
             loaded.stats.n,
         });

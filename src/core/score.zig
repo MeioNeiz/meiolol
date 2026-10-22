@@ -143,8 +143,21 @@ pub fn recommend(
     return out[0..len];
 }
 
+/// The stats file's games after a reason, from its label (Stats.patch): "on patch
+/// 16.21", "in the last 30 days", any other " (label)"
+pub const When = struct {
+    label: []const u8,
+
+    pub fn format(x: When, w: *std.Io.Writer) std.Io.Writer.Error!void {
+        if (x.label.len == 0) return;
+        if (std.ascii.isDigit(x.label[0])) return w.print(" on patch {s}", .{x.label});
+        if (std.mem.startsWith(u8, x.label, "last ")) return w.print(" in the {s}", .{x.label});
+        try w.print(" ({s})", .{x.label});
+    }
+};
+
 /// "+2.1% vs Darius (top)", "+1.4% with Lulu (support, hover)", "+0.8% strong in mid
-/// this patch"
+/// on patch 16.21"
 pub fn describe(
     stats: *const Stats,
     r: Reason,
@@ -152,9 +165,10 @@ pub fn describe(
 ) std.Io.Writer.Error!void {
     try w.print("{s}{d:.1}% ", .{ if (r.pp >= 0) "+" else "", r.pp });
     switch (r.kind) {
-        .base => try w.print("{s} in {s} this patch", .{
+        .base => try w.print("{s} in {s}{f}", .{
             if (r.pp >= 0) "strong" else "weak",
             r.role.label(),
+            When{ .label = stats.patch },
         }),
         .ally, .enemy => {
             try w.print("{s} {s} ({s}{s}", .{
