@@ -28,24 +28,38 @@ program or giving some players an advantage that others would not otherwise have
 de-anonymising "players who cannot reasonably be identified from visible information";
 increase, not decrease, the diversity of decisions; give several choices, don't remove
 decisions; every new feature is audited through the product's page. One product per key.
+The personal key covers "just the developer or a small private community", but no text
+exempts it from these rules. Riot removes features by announcement and lets no app keep
+them (research/questions/league-tools-riot-removals.md): so far identity in a live
+lobby and live in-game help, never champ select suggestions, draft win rates or
+post-game review. Anything in game or automated is the likely next cut, private tier
+included.
 
 Paid extras are public features behind a payment, so they follow the public rules.
 The private tier is "more depth, numbers and unfinished features for testers", not
 "information the game hides". Same framing as paid tiers at Porofessor, Blitz,
-Mobalytics (research: league-apps-feature-matrix once written).
+Mobalytics (research/questions/league-apps-feature-matrix.md); their paid tiers sell
+little that is "op" (no ads, favourites, dashboards, high-elo builds, AI review), and
+iTero, LoLDraftAI and Team Advisor show draft win % with no Riot pushback so far.
 - No tier, ever: other players' identities or stats in ranked solo/duo champ select
-  (the client hides them; reading them anyway is de-anonymising), anything the game
-  doesn't show during a game (enemy cooldown or jungle timers), auto pick, ban, lock or
-  dodge, MMR calculators
+  (hidden since 12.22; reading them anyway is de-anonymising), streamer-mode players
+  anywhere live (17 Oct 2025), enemy ult timers (13 Mar 2025) and all enemy cooldowns,
+  power spike alerts and "gank top now" prompts (27 Aug 2025), ads in game, on loading
+  screens or in the client (29 May 2025), augment win rates, auto accept, pick, ban,
+  lock or dodge, MMR calculators
 - Private only: win chance as a percentage, "+X%" and single-pick rankings, raw model
   scores, experimental models beside the shipped one, all of Jacob's list in queues
   where names are visible (normals, flex: check in a real capture), player scouting
   from the loading screen on (names are visible there)
 - Public: docs/production-key.md "Product rules" (3 to 5 options with reasons, words
   not percentages, no names or stats of others in ranked solo/duo champ select)
-- Open (AC0, Jacob): the application should mention a closed tester group with extra
-  features, since features are audited and the key covers the described use. Recommend
-  yes, worded as testers trying features before they go public
+- Open (AC0, Jacob), two ways to cover the private tier: (a) the production
+  application mentions a closed tester group trying features before they go public
+  (recommended: one product, one key, honest); (b) the private tier is the registered
+  personal app (MEIOLOL 890240, "small private community") making its own calls on the
+  personal key, so production-key data doesn't feed a product Riot didn't review.
+  Riot Sign On needs a production key, so either way the private tier uses our own
+  login
 
 ## Jacob's list by edition (19 Oct list)
 
@@ -98,6 +112,13 @@ The /p/ pages (accounts.md AC3). First candidates, cheapest first: the draft tes
 (admin only today, site.md "Draft tester"), win chance and raw scores beside the public
 wording on champion and matchup pages, experimental models (J15's labelled
 experiments), all regions and patches without the public page-weight cuts.
+
+Private ideas from the feature survey (league-apps-feature-matrix), after the above:
+loading-screen scouting of the lane opponent and the rest (mainstream; names are
+visible there), the group's pooled stats and leaderboard, a Discord bot, game-start
+alerts for friends, model-driven post-game review. Public counterparts: opt-in sharing
+of your own stats (OP.GG's verified link), post-game review as facts, progress between
+games.
 
 ## Status (22 Oct)
 
