@@ -1,0 +1,526 @@
+              How Capacity Limits of Attention Influence Information
+                                               Visualization Effectiveness
+                                                         Steve Haroz and David Whitney
+
+
+
+
+        Fig. 1. These images each have one colored square that is unique within that image. How long does it take you to find each? How
+        many color categories are there in each panel? Why does grouping make both tasks substantially easier?
+
+        Abstract—In this paper, we explore how the capacity limits of attention influence the effectiveness of information visualizations. We
+        conducted a series of experiments to test how visual feature type (color vs. motion), layout, and variety of visual elements impacted
+        user performance. The experiments tested users’ abilities to (1) determine if a specified target is on the screen, (2) detect an odd-
+        ball, deviant target, different from the other visible objects, and (3) gain a qualitative overview by judging the number of unique
+        categories on the screen. Our results show that the severe capacity limits of attention strongly modulate the effectiveness of
+        information visualizations, particularly the ability to detect unexpected information. Keeping in mind these capacity limits, we
+        conclude with a set of design guidelines which depend on a visualization’s intended use.
+        Index Terms—Perception, attention, color, motion, user study, nominal axis, layout, goal-oriented design.
+
+
+
+1    INTRODUCTION                                                           measuring these limitations in the context of data visualization is
+                                                                            therefore fundamental and necessary to achieve the goal of
+An information visualization designer aims to present the maximum           conveying information via the human visual system.
+amount of data without overwhelming the user with complexity and                Using a visualization should provide information faster or more
+information-overload. The components arranged to form a GUI or              broadly compared with serially inspecting the raw data in the form of
+visualization are visual features – the properties of any image that the    a table or database [9]. A perceptual hindrance that restricts a user to
+brain is capable of encoding and integrating into a coherent percept        serially inspecting each visualized element rather than enabling a
+[1]. Examples that apply to visualization include position, color, size,    rapid summary perception of the whole scene would make the
+orientation, texture [2], and motion [3–5]. The designer’s role is to       visualization hardly better than a simple table. It is therefore critical
+effectively associate these visual features with corresponding              to understand how the capacity limits of attention impact various
+dimensions or categories in the underlying data [6].                        visualization tasks.
+    Unfortunately, the speed and capacity of human attention for                To study the effect of these limits, we tested the effect of two
+these visual features are severely limited [7], [8] and these limits        types of arrangements or layouts on user performance in visual
+may influence the effectiveness of information visualizations.              search and subitizing (or rapid counting [10]) experiments. We also
+Exceeding the limits of visual attention markedly impairs both the          examined how performance in these experiments is influenced by
+accuracy and timing of one’s response to a visual scene (Fig. 1). This      user goals and the variety of a visualization’s visual features. To
+consequence may seem intuitive (e.g., the benefit of grouping in Fig.       measure maximum performance, the experiments all had subjects
+1 might seem obvious), however visualizations often violate or              fully attending to one task as opposed to dividing attention with a
+ignore this intuition in part because it has not been formalized or         peripheral display [11].
+empirically tested in visualization-relevant tasks. Characterizing and          We ran three experiments with the similar stimuli that used either
+                                                                            colored or moving features. Each experiment’s task, however,
+                                                                            corresponded to a different, commonly performed visualization task:
+• Steve Haroz is with University of California, Davis, e-mail:                  • Detect a unique target with a known appearance (e.g., find
+    sharoz@ucdavis.edu, website: http://steveharoz.com                               the red object)
+• David Whitney is with University of California, Berkeley, e-mail:             • Detect a unique target with an unknown appearance (e.g.,
+    dwhitney@berkeley.edu, website: http://whitneylab.berkeley.edu                   find a unique or oddball target)
+Manuscript received 31 March 2012; accepted 1 August 2012; posted online        • Determine and compare the number of visual categories (e.g.
+14 October 2012; mailed on 5 October 2012.                                           determine extent of heterogeneity or consistency)
+For information on obtaining reprints of this article, please send          The latter two tasks are of particular interest, as performing them by
+e-mail to: tvcg@computer.org.                                               browsing a table or running a database query is difficult. For
+                                                                            example, finding the hour of the day that you receive the most or
+Fig. 2. (Top) All of the colors and motion types used in the stimuli. The saturation is enhanced in the figures, as the actual colors were more
+isoluminant. (Bottom) A comparison of the grouped and random layouts for differing variety amounts. Each variety amount (except 1) had 16
+possible grouped layouts (manually created by the authors). Each variety had a different number of squares in any given stimulus.
+fewest emails would be nontrivial without some sort of graphical
+display. Such tasks which assume no prior knowledge of where to
+look or what to look for are where information visualization excels.
+    One of our primary goals was to quantify the influence of a
+grouped arrangement compared with a random arrangement (e.g.,
+Fig. 1) on visual search and subitizing tasks. We hypothesized that
+the effect would vary by task and would modulate the impact of
+capacity limits, so each experiment separately tested both layouts. To
+show that these effects were consistent across visual feature, we
+tested both color and motion. Several studies have investigated the      Fig. 3. A demostration of the textured motion used in the experiments.
+impact of variance and grouping on visual search. Duncan and             The texture moves, but the square’s position never changes. All
+Humphreys showed that visual search of a known target (or one of         motions cycled at 1 Hz.
+two known targets) can be impacted by variance among even a small
+number of objects [12]. Treisman found that increasing the
+attentional demand by searching for a conjunction of visual features     of data elements but differing arrangements (correlation with the
+increases the adverse impact of more groups [13]. In the context of      spatial axes or grouping algorithm) and amounts of variety
+HCI and visualization, the spatial and sizing consequences of            (categorical detail).
+grouping have been proposed as models for design and evaluation              For the color trials, each square had one of the eight highly
+[14], [15]. Furthermore, Tatu et al [16] examined how grouping in        discriminable colors in Fig. 2. The large number of easily
+scatter plots influences preference (grouped displays are preferred),    discriminable colors is what makes color such a frequent and
+but preference and performance (an operational measure of                effective tool for visualization [17], [18]. For the motion trials, each
+visualization effectiveness) are not necessarily equivalent. We aim to   square acted as an aperture onto a monochromatic tiled texture (Fig.
+extend these investigations of search, attention, and capacity and       3) which moved using one of the motions in Fig. 2. The number of
+present our findings in the context of information visualization.        motions was limited to six to ensure easy discrimination of each type
+    For each experiment and each block, we tested how the variety of     of motion. The texture was the same for all squares but varied
+a feature (color or motion) affected performance. This property          between trials. All of the textures had the same number of black and
+corresponds to the number of categories or discrete steps of a           white pixels, so overall brightness did not vary.
+nominal axis that are displayed in a visualization. While showing the        As the top of Fig. 2 shows, the stimuli had a limited number of
+largest amount of detail or dynamic range for each data axis is ideal,   colors or motions. The subset of colors or motions was randomized
+we tested whether adding more detail can actually reduce someone’s       for each trial. We refer to the number of colors or motions in each
+ability to utilize any of the information.                               stimulus (not including a search target) as the amount of ‘variety’.
+                                                                         Furthermore, the experiments were divided into grouped layouts and
+2   EXPERIMENT STIMULI                                                   random layouts (bottom of Fig. 2). For the grouped layouts, all
+                                                                         squares of a particular color or motion were grouped into a single
+All three experiments used the same stimuli. They consisted of an 8      cluster. The sizes of the groups varied within a given display, so the
+x 8 grid of 64 squares centered on a gray background (similar to Fig.    size of an individual group provided no information about the
+1). The number of squares remained constant for all of the               number of groups. The random layouts assigned a color or motion to
+experiments to emulate simple visualizations with the same number        each square using a 1/n random distribution. For both layouts each
+color or motion was present on at least four squares.
+   All of the experiments were divided into four blocks:
+    • Color – Grouped
+    • Color – Random
+    • Motion – Grouped
+    • Motion – Random
+The order of these blocks was balanced between subjects such that
+each block went first and last at least once.
+   The experiment application was written in XAML and C# for the
+Windows Presentation Framework. The motion component was an
+HLSL shader that independently applied a transform in texture-space
+to each textured square. The experiments were conducted on a 24
+inch iMac (using the built-in LCD monitor) running Windows 7 via
+Boot Camp.                                                                  Fig. 4. The procedure for the visual search experiments. The target
+   The subjects performed the experiment in a dark room to avoid            and a progress bar were shown to the subject (the oddball experiment
+external visual distractions. They maintained a distance of 22.4            only had a progress bar). A blank gray screen was presented to avoid
+inches (57 cm) from the screen via a chinrest. The stimulus was 12.7        any aftereffects or apparent motion. Finally the stimulus was displayed
+inches (32 cm) tall and wide. It consequently encompassed 32.3° of          while awaiting the subject’s response.
+visual angle, while the squares were each 3.7° due to the small gaps
+between them.                                                               target without needing to check the entire screen for confirmation.
+   For all the results with response time (RT) analyses, trials with an         Variety: For color and grouped motion, the variety count had
+absent target (50%) or that had an incorrect response were not used.        almost no impact on performance. The random motion block’s RTs
+                                                                            appeared to increase until 3 varieties and then plateau thereafter like
+3     VISUAL SEARCH: FIND A KNOWN TARGET                                    the other blocks.
+                                                                                Subject: Though between-subject variability was significant, all
+The first experiment was the simplest and served primarily as a
+                                                                            subjects had the same trend of results (Fig. 5 error bars).
+control. The aim was to simulate the task of finding a known target.
+                                                                                A purely horizontal slope implies that the visual system can
+Realistic examples include finding a Green Party region on an
+                                                                            detect the presence of a target in parallel irrespective of the number
+election map, finding a large file in a directory treemap, or finding
+                                                                            of varieties. Duncan and Humphreys’ study [12] found a very small
+rain in a weather visualization. In these scenarios, the user knows the
+                                                                            performance cost of a few milliseconds per additional category. Our
+appearance of the target (perhaps via a legend) and is searching for
+                                                                            results suggest that this cost remains minimal for a large number of
+its presence.
+                                                                            objects.
+3.1    Methods
+                                                                            4     VISUAL SEARCH: FIND THE ODDBALL
+Five subjects participated in this experiment. Two were female. All
+                                                                            This variant of the visual search experiment served to test users’
+were either graduate students in psychology or computer science or
+                                                                            ability to detect something odd or out of place. It is analogous to
+trained university staff.                                                   finding a unique element in a visualization without knowing to look
+    As Fig. 4 shows, each trial began by displaying a square with the
+                                                                            for it. Examples include noticing that one file’s icon is different
+target visual feature in the center of the screen. A progress bar for the
+                                                                            compared with its neighbors in a file manager or detecting an oddly
+elapsed number of trials was also displayed. A one second pause (a          behaving port in a network security visualization. This type of
+gray screen) was then displayed to prevent any aftereffects or
+                                                                            scenario is where visualizations can be most useful because if the
+apparent motion. Then the stimulus was presented. Using the
+                                                                            user knows what to search for, a simple database query may yield
+keyboard, the subject responded whether the target was present or           faster and more accurate results. Detecting a unique element—an
+absent. Answers and response times were recorded.
+                                                                            oddball, however, is nontrivial to query.
+    For each block, each variety count (number of colors/motions in
+the stimulus) had 40 trials. In half of the trials, a random square was
+replaced by the target, whereas the other trials had no target. Each of     4.1    Methods
+the experiment’s color blocks had 280 (7 * 40) trials, and each             Five subjects participated in this experiment. Four were female. All
+motion block had 200 (5 * 40) trials for a total of 960 trials per          were either graduate or post-graduate students in psychology or
+subject (4,800 total trials). The trials were randomly ordered within       trained university staff.
+each block, which began with five practice trials.                              The experiment was identical to the known-target experiment
+                                                                            shown in Fig. 4, but the target was not shown (only the progress bar
+3.2    Results                                                              was visible). Subjects were told simply to detect if a unique square
+                                                                            was present. As in the known-target experiment, each subject
+The results in Fig. 5 show several trends (ANOVA results included):
+                                                                            performed 960 trials (4,800 total trials).
+   Accuracy was over 95% for all blocks and did not diminish with
+higher variety counts.
+   Visual feature: Color had a trend for lower RTs compared with            4.2    Results
+motion for grouped – F(1,3) = 921, p<0.0001 – and random – F(1,3)           The results in Fig. 6 show several trends (ANOVA results included):
+= 41, p<0.01. This effect was not unexpected and reaffirms that                Accuracy: In contrast to the known-target search experiment,
+visual feature can impact user performance.                                 accuracy in finding the oddball was significantly affected by the
+   Layout: The grouped layout performed slightly better than the            amount of variety. Although the grouped layouts showed little
+random layout for color – F(1,4) = 65, p<0.001 – and motion –               performance degradation with increased variation, the random
+F(1,3) = 19, p<0.05. Size pop-out (when a distinct object                   layouts had a marked decline as variation increased.
+perceptually stands out from its surroundings [1]) was possibly the            Visual feature: Color again had consistently lower RTs than
+reason because the grouped layout had no other groups as small as           motion for grouped – F(1,4) = 120, p<0.0001 – and random – F(1,4)
+the target (1 square). For the grouped layout, detecting if a square        = 101, p<0.0001. Nevertheless, they both showed similar trends
+was unique amongst its immediate neighbors could confirm it as a            despite the differing scales.
+                             Known Target Search - Response Time                                   Known Target Search - Accuracy
+                                                                                              1
+                      2000
+                                                                                             0.9
+
+
+
+
+Response Time (ms)
+                      1500
+                                                                                             0.8                                                                                Color Grouped
+
+                      1000                                                         Correct                                                                                      Color Random
+                                                                                             0.7                                                                                Motion Grouped
+                                                                                                                                                                                Motion Random
+                       500                                                                   0.6
+
+
+                         0                                                                   0.5
+                             1       2   3          4       5        6       7                     1                        2        3      4      5           6           7
+                                                 Variety                                                                                 Variety
+
+Fig. 5. Experiment 1 results: visual search for a known target. (Left) The RTs of the visual search experiment as a function of the variety of
+features (e.g., the number of colors or motion directions visible). Only correct responses for present targets were used in the calculation. (Right)
+The accuracy was consistently above 95%. Error bars show the inter-subject standard deviation.
+
+
+
+                             Oddball Search - Response Time                                        Oddball Search - Accuracy
+                                                                                              1
+                      8000
+                                                                                             0.9
+
+
+
+
+ Response Time (ms)
+                      6000
+                                                                                             0.8
+
+                                                                                   Correct
+                                                                                                                                                                               Color Grouped
+                      4000
+                                                                                             0.7                                                                               Color Random
+                                                                                                                                                                               Motion Grouped
+                      2000                                                                   0.6                                                                               Motion Random
+
+
+                         0                                                                   0.5
+                             1       2   3          4        5       6       7                     1                        2        3      4      5           6           7
+                                                 Variety                                                                                 Variety
+
+Fig. 6. Experiment 2 results: visual search for an oddball target. (Left) RTs plotted as a function of the variety of features. Only correct responses
+for present targets were used in the calculation. Note that the variety of features has little influence on the RTs for grouped layouts, while the RTs
+for random layouts clearly grow with more variety. (Right) Accuracy for the grouped layouts was consistently over 90%, whereas the accuracy for
+random layouts dropped significantly as variety increased. Error bars show the inter-subject standard deviation.
+
+
+
+                             Oddball Search - Color - Random Layout                                                                 Oddball Search - Motion - Random Layout
+                      4000
+
+                                                                                 Global                                     8000                                                         Global
+                      3000                                                       Variety                                                                                                 Variety
+
+
+
+
+Response Time (ms)                                                                                     Response Time (ms)
+                                                                                        1                                                                                                       1
+                                                                                                                            6000
+                                                                                        2                                                                                                       2
+                      2000                                                              3                                                                                                       3
+                                                                                        4                                   4000                                                                4
+                                                                                        5                                                                                                       5
+                      1000                                                              6                                   2000
+                                                                                        7
+
+                        0                                                                                                       0
+                                 1           2                   3       4                                                               1             2                   3      4
+                                                 Local Variety                                                                                             Local Variety
+
+Fig. 7. Local vs global variety. These plots show the effect of local variety on performance under different amounts of global variety. Local variety
+is the number of colors or motions immediately adjacent to the target, whereas global variety is the total number of colors or motions on the
+screen. The horizontal slopes show the lack of impact of local variety on user performance.
+                                                               Color                                    Motion
+                                 3500                                                8000
+
+                                 3000                                                7000
+
+
+
+
+Time for Correct Answers (ms)
+                                                                                     6000
+                                 2500
+                                                                                                                                       Grouped (Known Target)
+                                                                                     5000
+                                 2000                                                                                                  Random (Known Target)
+                                                                                     4000                                              Grouped (Oddball)
+                                 1500
+                                                                                     3000                                              Random (Oddball)
+                                 1000
+                                                                                     2000
+                                  500                                                1000
+
+                                    0                                                   0
+                                        1     2       3           4      5   6   7          1      2         3       4        5
+                                                               Variety                                    Variety
+
+Fig. 8. The figure shows the response times for the visual search experiments with known and oddball targets and groups them by visual feature.
+In spite of their different scales, the same trend is clear – variety of visual features has little influence on RT when subjects know the target in
+advance or have a grouped layout. That is, targets are relatively easy to find when they are predefined or when the distractors are grouped.
+Finding an unknown target in a random layout, on the other hand, becomes significantly more difficult with increased variety. From this
+information, we can infer that tasks requiring users to find oddball targets among ungrouped layouts (a likely occurrence with scatter plots,
+treemaps, or connectivity graphs) would make for an ineffective visualization design.
+
+    Layout: The grouped layout performed significantly better in RT                  information about the gist of a visualization (was the market, on
+and accuracy for both color – F(1,6) = 109, p<0.0001 – and motion –                  average, up or down in Fig. 11), or they may need to estimate the
+F(1,4) = 117, p<0.0001. In the grouped blocks, subjects were capable                 variety of types of information (how many unique file types are in a
+of detecting the target without influence from the amount of variety.                tree map? Or, how much variance is there in a map of the market—
+Increasing the variety in the random layouts markedly impaired                       was the market mixed today, or was it homogeneously down?). The
+performance.                                                                         task in our experiment was to subitize (or rapidly count [10]) the
+    Variety: For the grouped blocks, the variety amount did not                      relative number of categories in a pair of stimuli.
+affect RT or accuracy. Conversely, the random blocks showed a                            Understanding the overall structure and number of categories in a
+clear dependence on the number of visual features used – F(1,4) =                    dataset is yet another task which would be difficult without a visual
+22, p<0.05                                                                           aid (e.g., finding how many file types are in a directory is trivial with
+    Subject: Though the between-subject variability was significant,                 a nested tree map visualization). Yet even these aids are not always
+all subjects had the same trend of results (Fig. 6 error bars).                      particularly helpful, as many have experienced struggling to
+    Local vs. global variety: We sought to examine whether the                       understand the overall message of a display with a confusing layout
+performance difference was caused by variety in the whole scene or                   or too many visual categories. This struggle highlights the fact that it
+immediately surrounding the target. To calculate local variety, we                   is unknown how overall qualitative comprehension is affected by
+counted the number of colors or motions in the eight squares                         layout or visual feature variety. This experiment sought to provide
+surrounding the target. Fig. 7 shows the RTs for the random layouts                  some insight on the matter. Practical examples are available
+plotted by local and global variety. The grouped layouts showed no                   however. The NewsMap (http://newsmap.jp) in Fig. 12 shows an
+effect from either type of variety.                                                  example of similar information being either easy or difficult to
+    The strong distinction between Experiments 1 and 2, searching                    discern depending on the layout. When the grouping deteriorates,
+for a known target versus an oddball target, is apparent in Fig. 8.                  even a basic gist (or ensemble percept [21], [22]) of the most
+Corroborating the results of Nothdurft [19], color and motion show                   significant news category becomes difficult. Likewise in the file
+the same pattern. The variety of visual features does not strongly                   treemap in Fig. 13, using colors to categorize too many types of files
+impact performance when the search target is known, but has a                        makes the information seem too overwhelming to even examine a
+dramatic effect when the search target is not known (is an oddball).                 subset. By reducing or more compactly binning the amount of
+Interestingly, grouping the features mostly compensates for this                     information, the user may actually have a more efficient or accurate
+difference, creating a large performance gap between grouped and                     perceptual representation of the display.
+random layouts for the oddball search. The implication is that
+subjects are switching from a parallel process in the known-target                   5.1    Methods
+and grouped odd-ball tasks to a serial process dependent on the
+number of features. A possible explanation is that the subjects were                 Five subjects participated in this experiment. Three were female. All
+performing a series of Boolean map filters [20] to detect global                     were either graduate or post-graduate students in psychology or
+uniqueness only for the random oddball search. How much a target                     computer science or trained university staff.
+popped-out from its neighbors (due to lack of surrounding variety)                       Fig. 9 shows the procedure for the subitizing task. We presented
+had no impact on performance. This process would be repeated until                   two different stimuli sequentially for 500 ms with a one second blank
+the search yields no similar squares. These Boolean map filters                      gray screen in between. The amount of variety in the two displays
+would be applied sequentially for each variety until a unique target                 differed by one, and the order of smaller and larger displays was
+was found.                                                                           randomized. The probability of the first or second interval having
+                                                                                     more variety was even. The experiment had a two-interval forced
+                                                                                     choice (2IFC) design, so the subjects simply responded via the
+5                               SUBITIZING: LIMITED CAPACITY                         keyboard as to which interval had more variety. Due to the timed
+The goal of this experiment was to understand how visual                             nature of the procedure, only the accuracy was recorded. Each
+complexity affects a user’s ability to grasp aspects of the global                   subject performed 880 trials (4,400 total trials).
+structure of a display. For example, users may need to extract
+                                                                                  structure of a visualization is important, a high-capacity visual
+                                                                                  feature and strong element clustering are critical.
+                                                                                      Subject: Though the between-subject variability was significant,
+                                                                                  all subjects had the same trend of results (Fig. 10 error bars).
+                                                                                      Edwards and Greenwood [25] performed a similar 2IFC
+                                                                                  experiment of subitizing motion presented via random dot stimuli
+                                                                                  (rather than moving texture patches). Their experiment, however,
+                                                                                  used the same number of elements for each variety on the display.
+                                                                                  Consequently, the quantity of any one feature type informed as to the
+                                                                                  number of variants in the stimulus. We therefor purposefully varied
+                                                                                  the quantity in this and the other experiments. Our subitizing motion
+Fig. 9. The trial time course for the subitizing experiment. The first            results corroborated theirs, demonstrating that the capacity limits are
+stimulus was presented for 500 ms followed by a 1000 millisecond                  based on the global or scene-wide information rather than the
+gray screen and then the second stimulus for 500 ms. The subjects                 properties of a single element.
+then responded in a two-interval-forced-choice which of the two                       While our experiment focused on the accuracy of a quick
+intervals had more variety (e.g., more colors). Since the timing was              glimpse, Watson et al [26] performed similar subitizing experiments
+dictated by the procedure, only accuracy was recorded rather than                 examining how reaction time varied when unconstrained. Combined,
+RTs.                                                                              our accuracy results and their response time results show an overall
+                                                                                  degradation of performance without grouping.
+
+5.2         Results                                                               6     INFORMATION VISUALIZATION GUIDELINES
+Fig. 10 shows the results trends (ANOVA results included below):                  There are several particular results from our experiments that can
+    Accuracy and Variety: In contrast to the other experiments,                   inform visualization design:
+none of the blocks could maintain a high accuracy as variety
+increased. All accuracies were nearly 100% for one variety but                    6.1    Grouping greatly helps for some but not all tasks
+followed a marked, sigmoidal fall-off as variety increased. As
+additional detail was added, the subjects’ ability to understand the              When searching for an unknown oddball target—a target that may or
+structure was severely impaired – F(1,4) = 96, p<0.005.                           may not, ostensibly, pop-out—the correlation between the spatial
+    Visual feature: Using 80% accuracy as a benchmark, the                        and visual feature axes is pivotal. High correlation speeds search; a
+capacity for color variety across subjects was significantly higher at            cluttered randomly organized arrangement impairs search for the
+nearly double that of motion for grouped (F[1,4] = 44, p<0.0001)                  target. The degree to which the targets pop-out in Fig. 1 and Fig. 12
+and random layout (F[1,4] = 18, p<0.001). This result is not                      is modulated by the extent to which all the other colors are grouped.
+surprising. Although the attentional capacity of motion with respect                  Though the uses of information visualization can vary widely, we
+variety and layout has little research, color is known to have a high             recommend prioritizing the tasks for which visualizations greatly
+capacity [23], [24].                                                              outperform raw data (tables and databases). Extracting summary or
+    Layout: Again using 80% accuracy as a benchmark, the grouped                  contextual information, such as how much variety or how many
+layout had roughly 60% higher capacity for color (F[1,5] = 44,                    categories of information are present is difficult with a spreadsheet,
+p<0.0001) and motion (F[1,3] = 18, p<0.001). A possible                           and doing so with a visualization relies on attention and visual
+explanation is that visual working memory operates over or is                     memory, necessitating spatial grouping by visual feature. By
+modulated by grouped features. When the layout is complex, more                   incorporating visual feature into a visualization’s layout algorithm,
+cognitive resources are required thereby leaving less available for               observers could better judge overall qualitative characteristics of the
+visual feature information. Irrespective of the psychological                     display, such as whether the market had an overall gain or loss or
+explanation, the data shows that if understanding the overall                     how the success was distributed across industries (Fig. 11), or which
+
+
+                      Subitizing Accuracy - Color                                       Subitizing Accuracy - Motion
+             1                                                               1
+
+
+            0.9                                                             0.9
+                                                                                                                                      Color Grouped
+                                                                                                                                      Color Random
+            0.8                                                             0.8
+
+  Correct                                                         Correct
+                                                                                                                                      Motion Grouped
+            0.7                                                             0.7                                                       Motion Random
+
+
+            0.6                                                             0.6
+
+
+            0.5                                                             0.5
+                  1    2       3          4       5         6                     1          2            3         4      5
+                            Variety (n vs n+1)                                                   Variety (n vs n+1)
+
+Fig. 10. The accuracy results of the subitizing experiment follow sigmoidal shape. The variety amount on the horizontal axis is the smaller of the
+two stimuli (1 means a comparison between 1 and 2 or 2 and 1). All layouts have nearly 100% accuracy for a comparison with one variety, and
+accuracy falls towards chance (50%) as variety increases. Grouping the features (color or motion) has a dramatic improvement on performance.
+Error bars show the inter-subject standard deviation.
+industry had the most variance in performance.                             discriminable categorical dimension. However, for a scalar, rather
+    This principle is a matter of prioritization, as optimizations for     than categorical, dimension, the discriminability of the features can
+different visual features will likely conflict with each other. A color-   be an additional limiting factor. Further, data sets often represent
+focused layout would likely yield extreme aspect ratios which could        multiple dimensions using more than one feature at a time (e.g.,
+hinder performance on size oriented tasks [27]. A visualization            color and size). Examining and understanding how such multiplexing
+designer must therefore prioritize the visual feature that benefits the    may limit capacity and search in the context of common
+more important tasks.                                                      visualization tasks could help the community understand how to
+                                                                           more effectively visualize multiple dimensions.
+6.2    If you cannot group, change the task
+Knowing a target’s appearance in advance dramatically improves             8     CONCLUSION
+accuracy and speed of target detection. Knowing to look for a red or       We have three main conclusions: (1) Grouping is far more beneficial
+rightward moving object drastically improves user performance,             for oddball search compared with known-target search. (2)
+even within a highly variable display, suggesting that guided search       Accessing overall information (like heterogeneity or number of
+is an important factor [8], [28]. The intuitive implication is that a      categories) is better for grouped displays. (3) For difficult tasks, aim
+legend, key, or any mechanism that helps a user know the visual            to reduce variety in the entire view rather than optimizing small
+appearance of a sought after data element greatly simplifies locating      regions.
+it.                                                                            The implication is that the strict limits of attention have profound
+                                                                           effects on the ability of observers to extract information from
+6.3    When there are many categories: Less is more                        displays. Even performance with a visual feature like color,
+                                                                           commonly thought of as ‘pre-attentive’, can be adversely effected by
+A compromise must be made between the number of nominal                    tasks or arrangements that put a heavy demand on attention and
+categories and the perceptual complexity of a visualization. Design        capacity. Together, there is an interaction between perceptual and
+options are still available if a high number of nominal categories is      cognitive limits and task demands. Accounting for these interactions
+needed. Though not always feasible, the spatial axes can be assigned       can help design more efficient and effective visualizations.
+to data dimensions that correlate with the visual feature’s dimension
+[16]. As a result, the feature categories would become more spatially
+grouped and user performance would be less limited by the capacity.        ACKNOWLEDGMENTS
+Because correlation is not always known, a perhaps more                    We would like to thank our experiment participants.
+deterministic alternative is to limit the visualization to only show a
+couple of categories at a time (Fig. 13). The user would be required       REFERENCES
+to interact to see different categories, but the limited information on
+the display could be analyzed within the limits of attention, enabling     [1]  A. Treisman, “A feature-integration theory of attention,” Cognitive
+more efficient comprehension of the visualization.                              Psychology, vol. 12, no. 1, pp. 97-136, Jan. 1980.
+                                                                           [2] J. Bertin, Semiology of graphics : diagrams, networks, maps. University
+                                                                                of Wisconsin Press, 1983.
+6.4    Assigning a visual feature to a data dimension                      [3] D. DiBiase, A. M. MacEachren, J. B. Krygier, and C. Reeves,
+We chose color and motion because we expected their performance                 “Animation and the role of map design in scientific visualization,”
+and capacity to be fairly different (high for color and low for                 Cartography and Geographic Information Systems, vol. 19, no. 4, pp.
+motion), and our result confirmed that hypothesis. Features should be           201-214, 265-266, 1992.
+chosen with care; features like color that have higher capacity should     [4] L. Bartram, C. Ware, and T. Calvert, “Moticons: detection, distraction
+be reserved for data with high dynamic range or many categories.                and task,” International Journal of Human-Computer Studies, vol. 58,
+                                                                                no. 5, pp. 515-545, May 2003.
+6.5    Evaluation                                                          [5] D. E. Huber and C. G. Healey, “Visualizing Data with Motion,” in
+                                                                                IEEE Visualization 2005 - (VIS’05), 2005, pp. 67-67.
+Visual search for a known target is not always a sufficient test of        [6] W. S. Cleveland and R. McGill, “Graphical perception and graphical
+visualization effectiveness. Though it may help assess how quickly              methods for analyzing scientific data,” Science (New York, N.Y.), vol.
+certain kinds of information are conveyed in a visualization, it                229, no. 4716, pp. 828-33, Aug. 1985.
+provides little or no information about the influence of capacity and      [7] T. S. Horowitz and J. M. Wolfe, “Visual search has no memory,”
+other limits of attention. Evaluations of visualizations should make            Nature, vol. 394, no. 6693, pp. 575-577, 1998.
+certain to test user performance for more attentionally demanding          [8] J. M. Wolfe and T. S. Horowitz, “What attributes guide the deployment
+user goals. While we used oddball and subitizing tasks to examine               of visual attention and how do they do it?,” Nature reviews.
+attention capacity, other attentional limitations (e.g., the spatial and        Neuroscience, vol. 5, no. 6, pp. 495-501, Jun. 2004.
+temporal resolution of attention [29], [30]) should be investigated        [9] J.-D. Fekete, J. J. V. Wijk, J. T. Stasko, and C. North, “The Value of
+depending on the users’ goals. For example, if comparison between               Information Visualization,” Information Visualization, vol. 4950, pp. 1-
+two datasets is the aim of a visualization, the impact of visual short          18, 2008.
+term memory (e.g., change blindness, the inability to detect               [10] E. L. Kaufman and M. W. Lord, “The discrimination of visual number,”
+differences between spatially or temporally adjacent scenes [31],               The American journal of psychology, vol. 62, no. 4, pp. 498-525, Oct.
+[32]) should be mitigated [33], [34]. This effect can be                        1949.
+operationalized using visual short-term memory tasks including             [11] J. Somervell, D. S. Mccrickard, C. North, and M. Shukla, “An
+change detection [23], [24]. A limit on our ability to attend to                Evaluation of Information Visualization in Attention-Limited
+multiple locations is another example of a potential hurtle for                 Environments,” in VISSYM 2002, 2002, pp. 211-216.
+visualizations. A visualization that incorporates animations or            [12] J. Duncan and G. W. Humphreys, “Visual search and stimulus
+moving objects should take into account the limits of human multiple            similarity,” Psychological Review, vol. 96, no. 3, pp. 433-458, 1989.
+object tracking [35]. In general, visualization designers need to test     [13] A. Treisman, “Perceptual grouping and attention in visual search for
+visualizations not only for simple pre-attentive tasks but also for             features and for objects,” Journal of Experimental Psychology Human
+tasks which are limited by attention.                                           Perception and Performance, vol. 8, no. 2, pp. 194-214, 1982.
+                                                                           [14] S. Haroz and K.-L. Ma, “Natural Visualizations,” in Eurovis 2006,
+7     FUTURE WORK                                                               2006, pp. 43-50.
+We showed the performance impact of grouping on a single, highly           [15] R. Rosenholtz, N. R. Twarog, N. Schinkel-Bielefeld, and M.
+     Wattenberg, “An intuitive model of perceptual grouping for HCI                    motion signals,” Journal of vision, vol. 9, no. 1, pp. 40.1-15, Jan. 2009.
+     design,” in Proceedings of the 27th international conference on Human        [26] D. G. Watson, E. A. Maylor, and L. A. M. Bruce, “The efficiency of
+     factors in computing systems - CHI ’09, 2009, p. 1331.                            feature-based subitization and counting.,” Journal of Experimental
+[16] A. Tatu, P. Bak, E. Bertini, D. Keim, and J. Schneidewind, “Visual                Psychology: Human Perception and Performance, vol. 31, no. 6, pp.
+     quality metrics and human perception,” in Proceedings of the                      1449-1462, 2005.
+     International Conference on Advanced Visual Interfaces - AVI ’10,            [27] N. Kong, J. Heer, and M. Agrawala, “Perceptual guidelines for creating
+     2010, p. 49.                                                                      rectangular treemaps.,” IEEE transactions on visualization and
+[17] C. Ware and J. C. Beatty, “Using color dimensions to display data                 computer graphics, vol. 16, no. 6, pp. 990-8, Jan. 2010.
+     dimensions,” Human Factors, vol. 30, no. 2, pp. 127-142, 1988.               [28] J. M. Wolfe, “Guided search 2.0: a revised model of visual search,”
+[18] C. G. Healey, “Choosing effective colours for data visualization,” in             Psychonomic Bulletin & Review, vol. 1, no. 2, pp. 202-238, 1994.
+     Proceedings of Seventh Annual IEEE Visualization ’96, 1996, pp. 263-         [29] J. Intriligator and J. P. Cavanagh, “The Spatial Resolution of Visual
+     270,.                                                                             Attention,” Cognitive Psychology, vol. 43, no. 3, pp. 171-216, 2001.
+[19] H. C. Nothdurft, “The role of features in preattentive vision: comparison    [30] A. O. Holcombe, “Seeing slow and seeing fast: two limits on
+     of orientation, motion and color cues.,” Vision Research, vol. 33, no. 14,        perception.,” Trends in cognitive sciences, vol. 13, no. 5, pp. 216-21,
+     pp. 1937-1958, 1993.                                                              May 2009.
+[20] L. Huang and H. Pashler, “A Boolean map theory of visual attention,”         [31] R. A. Rensink, J. K. O’Regan, and J. J. Clark, “To See or not to See:
+     Psychological Review, vol. 114, no. 3, pp. 599-631, 2007.                         The Need for Attention to Perceive Changes in Scenes,” Psychological
+[21] D. Ariely, “Seeing Sets: Representation by Statistical Properties,”               Science, vol. 8, no. 5, pp. 368-373, Sep. 1997.
+     Psychological Science, vol. 12, no. 2, pp. 157-162, Mar. 2001.               [32] D. J. Simons and R. A. Rensink, “Change blindness: past, present, and
+[22] S. C. Chong and A. Treisman, “Representation of statistical                       future,” Trends in cognitive sciences, vol. 9, no. 1, pp. 16-20, Jan. 2005.
+     properties.,” Vision Research, vol. 43, no. 4, pp. 393-404, 2003.            [33] L. Nowell, E. Hetzler, and T. Tanasse, Change blindness in information
+[23] G. A. Alvarez and P. Cavanagh, “The capacity of visual short-term                 visualization: a case study. IEEE, 2001, pp. 15-22.
+     memory is set both by visual information load and by number of               [34] S. Haroz and K. Heitmann, “Seeing the difference between
+     objects,” Psychological Science, vol. 15, no. 2, pp. 106-11, Feb. 2004.           cosmological simulations,” IEEE computer graphics and applications,
+[24] S. J. Luck and E. K. Vogel, “The capacity of visual working memory                vol. 28, no. 5, pp. 37-45, Sep. 2008.
+     for features and conjunctions,” Nature, vol. 390, no. 6657, pp. 279-81,      [35] Z. W. Pylyshyn and R. W. Storm, “Tracking multiple independent
+     Nov. 1997.                                                                        targets : Evidence for a parallel tracking mechanism,” Spatial Vision,
+[25] J. A. Greenwood and M. Edwards, “The detection of multiple global                 vol. 3, no. 3, pp. 179-197, 1988.
+     directions: capacity limits with spatially segregated and transparent-
+
+
+
+
+Fig. 11. In visualizing a stockmarket using a sorted squarified treemap (left), the impact of prioritizing aspect ratio is a scattering of the colored
+rectangles. By prioritizing color and size (right), better visual grouping occurs, and more trends can be found by users. In these two stock market
+visualizations, company capital corresponds to size, color is a function of intraday percent change, and the stocks are segmented by industry.
+This is a similar approach used by smartmoney.com. Can you tell which industry performed best? Or worst? (hint: the two visualization use the
+same data)
+Fig. 12. The left image with news from multiple countries is technically presenting more information to the user. Yet the complexity of the layout
+severely degrades basic information (which news category is most prevalent?). On the right the grouping that occurs when only one country is
+selected simplifies any analysis of the proportions between news categories. Though they both have the same number of categories and (due to
+screen real estate) are only capable of utilizing the same fixed area for stories, the right image appears more streamlined and useful.
+
+
+
+
+Fig. 13. (left) This image of WinDirStat shows a complex arrangement of many types of files. Trying to grasp the number of categories present or
+their relative organization relative to each other is difficult unless attention is focused on a single variant of a feature (attend to green) or the
+filtration is performed for the user (right).
+

@@ -1,0 +1,233 @@
+# una.im | What is popover=hint?
+
+<https://www.una.im/popover-hint>
+
+[
+
+Home
+
+](https://www.una.im/)
+
+[Home](https://www.una.im/) [Blog](https://www.una.im/blog) [Speaking](https://www.una.im/speaking) [About](https://www.una.im/about) [RSS](https://www.una.im/rss.xml)
+
+# What is popover=hint?
+
+Published on July 7, 2025
+
+If you’ve been following along with advancements in HTML, such as the new [popover](https://developer.chrome.com/blog/introducing-popover-api) API, you may have noticed that a new popover type (`hint`) recently landed in Chrome 133 (January 2025). But what exactly does it do?
+
+> The short answer is: `popover="hint"` allows you to open an unrelated `hint` popover without closing other popovers in the stack. This means you can have an existing stack of `auto` popovers remain open while still displaying a `hint` popover.
+
+You often see this sort of behavior in tooltips that might contain additional information, or link previews. An example is the profile preview card on Twitter when you hover over someone’s profile picture in the Twitter timeline, or the list of folks who liked a post on Facebook when you hover over the “Comments” button. If you had another popover open, such as the Facebook chat in the bottom right corner of the web UI, `popover="hint"` is ideal because opening the hint popover wouldn’t close the other one.
+
+### The three types of popovers [#](https://www.una.im/popover-hint#the-three-types-of-popovers)
+
+|  | `popover=auto` | `popover=manual` | `popover=hint` |
+| --- | --- | --- | --- |
+| Light dismiss (via click-away or `esc` key) | Yes | No | Yes |
+| Closes other `popover=auto` elements when opened | Yes | No | No |
+| Closes other `popover=hint` elements when opened | Yes | No | Yes |
+| Closes other `popover=manual` elements when opened | No | No | No |
+| Can open and close popover with JS (`showPopover()` or `hidePopover()`) | Yes | Yes | Yes |
+| Default focus management for next tab stop | Yes | Yes | Yes |
+| Can hide or toggle with `popovertargetaction` | Yes | Yes | Yes |
+| Can open within parent `popover` to keep parent open | Yes | Yes | Yes |
+
+### Demo time [#](https://www.una.im/popover-hint#demo-time)
+
+In the following demo there are two popovers: one opens on the three-dot menu, and the other when you show interest in the comments link. The menu popover is an **auto** popover and the comment popover is a **hint** popover.
+
+```
+<div id="popover--comments" popover="hint">
+ ...
+</div>
+
+...
+<button popovertarget="popover--comments">24 comments</button>
+...
+```
+
+See demo [on Codepen.](https://codepen.io/una/pen/yyNoZmO/4b9e73301afcbd2a93197ad41dea29cb)
+
+> But wait, didn’t clicking on the `hint` popover close the `auto` one?
+
+Yes, very astute! Because you’re inducing an action (click), it activates the light-dismiss of the `auto` popover. This is almost certainly not what you want when you’re creating a `hint` popover.
+
+> The truth is, `popover="hint"` only gets us part of the way there.
+
+For the rest, you’ll need to write some JavaScript event listeners (for now…).
+
+```
+const hintBtn = document.querySelector("#hint-popover-btn");
+const hintPopover = document.querySelector("#hint-popover");
+
+// Mouse (hover) events
+hintBtn.addEventListener("mouseenter", (event) => {
+  hintPopover.showPopover();
+});
+
+// Adding a timeout delay in this one for users to have time to interact before the popover hides
+hintBtn.addEventListener("mouseleave", (event) => {
+  setTimeout(
+    () => {
+      if (! hintPopover.matches(':hover')) {
+        hintPopover.hidePopover()
+      }
+    }
+  , 100);
+});
+
+// Keyboard (tab) events
+hintBtn.addEventListener("focus", (event) => {
+  hintPopover.showPopover();
+});
+
+hintBtn.addEventListener("blur", (event) => {
+  hintPopover.hidePopover();
+});
+
+// No support for touch events
+```
+
+Now, invoking the comment popover:
+
+1.  Doesn’t close the menu popover (preserves its open state)
+2.  Is opened via hover (does not require click)
+
+_But wait that’s not all!_
+
+**We also want this to work on a link** (not just a button). `popovertarget` only supports `button` elements for the invoker. But in practice, a hint popover is often applied to a link, which provides dual interactions.
+
+For example, clicking through the “24 comments” link would show the comments, but “showing interest” in it (i.e. hovering or focusing) would preview who had commented on it. Since we’re writing JavaScript to open and close the popover, this is now possible.
+
+See demo [on Codepen.](https://codepen.io/una/pen/bNbQqyq)
+
+To make this more declarative, and more accessible (I didn’t factor in multiple hover targets in the code above, for example), what we really need are [interest invokers](https://open-ui.org/components/interest-invokers.explainer/).
+
+## Interest invokers [#](https://www.una.im/popover-hint#interest-invokers)
+
+Interest invokers are currently an experimental API that you can try out by turning on the _#experimental-web-plaform-features_ flag in Chrome Canary.
+
+> “Rather than being activated via a click on the element, this API uses a lighter way for the user to “show interest” in an element without fully activating it.” See [explainer](https://open-ui.org/components/interest-invokers.explainer/)
+
+This means, that rather than requiring a button click, you can hover with a mouse, tab to on keyboard, or show interest via a _to be determined behavior_ on mobile (but likely long press may be one of the form factors).
+
+Unlike standard popovers, which can only be triggered with a button, you can apply an `[interestfor]` on a link as well, enabling that link to have a dual-action (click through on click/enter, and show the interest popover on hover/focus).
+
+**⚠️ Note:** `[interestfor]` is still an experimental API. There was a recent [syntax change](https://github.com/whatwg/html/issues/11312), renaming `[interesttarget]` to `[interestfor]` to better align with command invokers. The associated CSS properties were also updated. There is currently also a big [open issue](https://github.com/whatwg/html/issues/11058) around handling touch events for interest invokers. If you want this feature to land, you can add your voice now.
+
+### Let’s see it in action [#](https://www.una.im/popover-hint#lets-see-it-in-action)
+
+Now, we can get the exact same effect as above, without any JavaScript, in a way that’s built in to the browser’s native rendering engine.
+
+```
+<div id="popover--comments" popover="hint">
+ ...
+</div>
+
+...
+<a interestfor="popover--comments" href="#">24 comments</a>
+...
+```
+
+```
+[interestfor] {
+  /* make this animate in and out a little faster than the default */
+  interest-show-delay: 0.1s;
+  interest-hide-delay: 0.1s;
+}
+```
+
+And that’s really it!
+
+See demo [on Codepen.](https://codepen.io/una/pen/JoooGBo)
+
+I’ve got a few more interest invoker demos in this [Codepen collection](https://codepen.io/collection/yyYkkB) that will get updated as the spec evolves and the behavior is finalized. Much more to come!
+
+To learn more about `[interestfor]` and new properties that come along with it, such as `interest-delay`, check out my talk from Google I/O at 39:00, but keep in mind, the rename happened after this event, so the **property names have changed**.
+
+## Conclusion [#](https://www.una.im/popover-hint#conclusion)
+
+_TLDR; `popover=hint` (Chromium 133+) and `[interestfor]` (behind a flag in Canary) are about to make building layered UI elements that are currently really hard to implement _much_ easier._
+
+Learn more:
+
+-   [`popover=hint` post by Mason Freed and Keith Cirkel (implementors of the feature)](https://developer.chrome.com/blog/popover-hint)
+-   [Popover API docs on MDN](https://developer.mozilla.org/en-US/docs/Web/API/Popover_API)
+-   [More of my interest invoker demos on Codepen](https://codepen.io/collection/yyYkkB)
+
+Thank you to [Scott O’Hara](https://www.scottohara.me/) for the accessibility review of the demo in this post!
+
+[
+
+70 likes18 reposts1 replies
+
+](https://bsky.app/profile/una.im/post/3ltfkbaxw7k2k)
+
+Join the conversation by [replying on Bluesky](https://bsky.app/profile/una.im/post/3ltfkbaxw7k2k).
+
+[
+
+Nmn @nmn.sh
+
+](https://bsky.app/profile/did:plc:ynfpfmi4joni5yp4xi4svne6)[
+
+What is the touchscreen story atm?
+
+1
+
+0
+
+0
+
+](https://bsky.app/profile/did:plc:ynfpfmi4joni5yp4xi4svne6/post/3lts2fkryoc2o)
+
+[
+
+Una Kravets @una.im
+
+](https://bsky.app/profile/did:plc:kesmfbtx2loscqj7ktw5shtt)[
+
+TBD (see note/ linked issue)
+
+1
+
+0
+
+1
+
+](https://bsky.app/profile/did:plc:kesmfbtx2loscqj7ktw5shtt/post/3lts3ea4hlc2h)
+
+[
+
+Nmn @nmn.sh
+
+](https://bsky.app/profile/did:plc:ynfpfmi4joni5yp4xi4svne6)[
+
+I need to do some write ups to help push this along a bit more. I’ve sunk many months of my life into this interaction pattern!
+
+1
+
+0
+
+3
+
+](https://bsky.app/profile/did:plc:ynfpfmi4joni5yp4xi4svne6/post/3lts3wvyvuc2o)
+
+[
+
+Una Kravets @una.im
+
+](https://bsky.app/profile/did:plc:kesmfbtx2loscqj7ktw5shtt)[
+
+Do you have a preference on any of the current proposed options?
+
+0
+
+0
+
+0
+
+](https://bsky.app/profile/did:plc:kesmfbtx2loscqj7ktw5shtt/post/3lts3zcvyqk2h)
+
+© 2026 Una Kravets 🦄 | [Get in touch](mailto:una.kravets@gmail.com?subject=Hello%20There!&body=Hi%20Una,%20so%20I%20was%20looking%20at%20your%20blog%20and...) | [Colophon](https://www.una.im/colophon)

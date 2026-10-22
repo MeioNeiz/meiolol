@@ -1,0 +1,1262 @@
+Data is Personal: Attitudes and Perceptions
+of Data Visualization in Rural Pennsylvania
+
+arXiv:1901.01920v1 [cs.HC] 7 Jan 2019
+
+Evan M. Peck
+Bucknell University
+evan.peck@bucknell.edu
+
+Sofia E. Ayuso
+Bucknell University
+sea018@bucknell.edu
+
+Omar El-Etr
+Bucknell University
+omar.eletr@bucknell.edu
+
+ABSTRACT
+Many of the guidelines that inform how designers create data
+visualizations originate in studies that unintentionally exclude populations that are most likely to be among the “data
+poor”. In this paper, we explore which factors may drive attention and trust in rural populations with diverse economic
+and educational backgrounds - a segment that is largely underrepresented in the data visualization literature. In 42 semistructured interviews in rural Pennsylvania (USA), we find
+that a complex set of factors intermix to inform attitudes
+and perceptions about data visualization - including educational background, political affiliation, and personal experience. The data and materials for this research can be found
+at https://osf.io/uxwts/
+CCS CONCEPTS
+• Human-centered computing → Visualization theory, concepts and paradigms;
+KEYWORDS
+information visualization, data, information literacy, rural
+1
+
+Figure 1: We interviewed 42 community members in rural
+PA about their perceptions of data visualization. Above:
+Lewisburg Farmers market - one of our interview sites
+
+INTRODUCTION
+
+Access to data can provide insight into our political, social,
+and physical environment. Following the development of
+web-based creation tools [7, 50, 51, 59], the recent prevalence
+of data visualization on the web has ushered in new-found
+hope for broadly accessible, engaging visualizations that can
+empower everyday people to understand and reason with
+data [57]. But what are the implications for people that do not
+pay attention to or understand this data?
+Despite the emergence of data on the web, people often
+do not maximize these new opportunities for engagement [8,
+35, 36], with potentially dire consequences [10]. Yu contends
+that the “information poor” are disadvantaged in many dimensions that can fundamentally alter their engagement with
+society - lack of economic resources, basic literacy and skills,
+necessary service infrastructure, among others [61, 62].
+Rural people are particularly vulnerable to information
+paucity due to economic and infrastructure challenges [10].
+In comparison to their urban or suburban counterparts, rural
+populations tend to see gaps in education, income, device
+
+availability, and internet access [25, 45, 46]. For example, Burrell remarks that digital inequality in rural regions is fundamentally a matter of exclusion [10].
+Initiatives to broaden the accessibility of visualization are
+hardly novel. However, while traditional efforts to improve
+information and visualization literacy typically focus on education initiatives [1, 19, 20], rural education faces infrastructure and funding challenges that make large-scale changes
+unlikely for the near future. As information visualization
+continues to serve as a mediator for everyday people to understand how data describes and dictates their lives, it becomes
+important to question whether findings formed in laboratory
+settings still apply to audiences in hard-to-access communities that with diverse economic and educational backgrounds.
+In this paper, we share the results of 42 interviews with
+residents of rural Pennsylvania about their attitudes towards
+data visualization in an effort to begin articulating the factors that drive both perceptions of data, as well as attention
+towards data visualizations.
+
+PREPRINT, PREPRINT, PREPRINT
+2
+
+BACKGROUND
+
+Communicating data to audiences with diverse backgrounds
+comes with a variety of challenges. Encounters with data can
+be manipulated by several factors, including experience or
+education [15, 22, 23, 37, 41, 44, 56], biases [4, 36, 42, 44, 55, 58],
+and attention [14, 31]. Kennedy and Hall consider that several
+different attitudes may mediate interaction with data - about
+subject matter, source or original location, and self-perceived
+skills to decode visualizations [31]. Our focus on people in rural settings is motivated by the population’s absence in the visualization literature, and that gaps in education, income, and
+literacy [10, 25] may impact perceptions of data visualizations.
+Which visualizations do people understand?
+Accounting for a person’s prior experience with data visualization is a challenge that can undermine even the most
+basic attempts to communicate data [9, 38, 39, 41]. Visualization literacy most often refers to the capability of a person
+“to read, comprehend, and interpret” graphs [38]. While education is often pointed to as a driver of poor visualization
+literacy, new graphic representations that are not accompanied by training can cause problems for people regardless of
+their background [15, 23, 37, 41]. Most attempts at making
+data visualizations more broadly accessible focus on various
+components of education [19, 20]. For example, Ruchikachorn
+and Mueller promote literacy through morphing one design
+into another [49] and Alper et al. created a tablet-based web
+application to teach data visualization to K-12 students [1].
+Lack of familiarity may also drive surprising results within
+the data visualization community. In one telling example,
+graphs were used to communicate information between doctors and patients. Hakone et al. found that pie charts that
+sampled temporal dimensions were more effective at communicating change-over-time data when compared to temporal
+area charts among older patients [24].
+Which visualizations do people pay attention to?
+While data visualization research typically investigates people who have already engaged with a graph, it is also critical
+to identify obstacles that impede interest or attention towards
+data in the first place. These issues arise more dramatically
+in the web’s attention economy, where websites may have
+as little as 50 milliseconds to make a positive impression on
+users [40], and opinions about infographics may be formed
+within 500 ms [27]. How can we drive attention to data without
+compromising the integrity of the data?
+In the context of data visualization, the answer to what
+drives attention is multifaceted and difficult to summarize succinctly. For example, there have been renewed efforts in understanding the impact of emotion on data visualization [28],
+
+Evan M. Peck, Sofia E. Ayuso, and Omar El-Etr
+as well as emotion in data visualization [8, 31]. These investigations often center around the value of visually rich representations of information (such as infographics), even if
+some forms distort or distract from the data. Pictographs and
+isotypes have studied within the context of helping communicate Bayesian reasoning [43], eliciting empathy [8], and
+improving engagement [26]. Focusing on indices of recall and
+recognition, Borkin et al. investigates the topic of memorability within the context of data visualizations [5, 6], following
+a study by Bateman et al. [3]. The core takeaway is that graph
+titles and visual embellishments may facilitate long-term retention that extend beyond in-the-moment understanding.
+A balance is needed, however, to avoid skewing data, as biases that have been well-studied in the psychology literature
+are increasingly found to play a role in how people understand
+data in visualizations [4, 36, 42, 44, 55, 58]. It is an important
+step to articulate how these biases manifest themselves not
+just at a broad, generalized level, but also with underrepresented populations, which may differ in their educational and
+socioeconomic profiles.
+Finally, there has been an emerging body of work that situates data visualization more specifically within the web’s
+attention economy. Kim et al. found that visualizing personal
+and social predictions of data on the web can positively impact
+the recall and comprehension of that data [33, 34]. Relevant to
+this work, a sequence of research by Kim et al. and Hullman
+et al. used simple analogies of physical measurements to aid
+in the understanding of abstract values [30, 32]. These studies
+suggest that presenting data in a personal, familiar manner
+may yield positive benefits to more diverse web audiences.
+Why might rural populations be different?
+Technological barriers and the “digital divide” remain as important, ongoing issues in rural America, where economic
+and infrastructure obstacles can fundamentally undermine
+the impact of emerging visualization tools and platforms [10,
+45, 46, 53]. For example, research has found that financial
+factors in low-income communities often point to differences
+in access to devices - people with lower incomes tend to be
+more reliant on phones or public computers as their primary
+access points to the internet [53, 54]. Device constraints result in a host of problems for interactive data visualization,
+which often depend on screen real estate and mouse-based
+interaction [12, 17, 18, 48]. In addition, internet access may be
+intermittent, expensive, or unreliable, which can impact access to information resources. These challenges are mirrored
+in rural, central Pennsylvania (the focus of our study), where
+user access to high-speed internet can not be an assumption,
+and the long decline of the coal industry has brought with it
+gaps in income and education [13, 21, 52, 60].
+Overcoming visualization literacy is a challenge in all contexts, but rural environments introduce additional constraints.
+
+Data is Personal
+
+PREPRINT, PREPRINT, PREPRINT
+
+Rural adult literacy programs face barriers due to financial
+resources and geographic isolation, resulting in less than 5
+percent of the population being served by adult education
+programs [60]. As a result, large-scale education initiatives
+that necessitate widespread adoption and implementation
+may not be possible.
+Together, these factors can drive inequality in the access of
+understandable data, and as a result, contribute to information
+inequality and “the information poor” [10, 61, 62]. Despite rural populations’ under-representation in the data visualization
+literature, groups that mirror those in rural Pennsylvania compose of nearly 60 million people in the United States. It is with
+this in mind that we focus on understanding which factors
+drive attention towards (and away from) data visualizations.
+3
+
+STUDY: INTERVIEWS IN RURAL PA
+
+We performed a series of interviews with community members in central Pennsylvania with the goal of capturing initial
+perceptions of data visualization.
+
+Participants
+We interviewed 42 participants from three locations:
+• Staff members at a local university (13). Participants
+largely identified as working in food services as cashier,
+line server, prep kitchen, or management.
+• Employees at a local construction site (5). Participants
+largely identified as working in demolition or labor.
+• Visitors of a local farmers market (24). Participants were
+diverse in their backgrounds and occupations.
+For each participant, we collected their age, school district,
+political affiliation (“very liberal”(1) to “very conservative”(7)),
+familiarity with graphs and charts, educational background,
+and the extent to which they had been personally impacted by
+drugs and/or addiction (see Figure 2). Of the 28 participants
+that offered optional information about family income, 12
+reported combined family incomes of less than $45,000 a year.
+7 reported family incomes of more than $85,000 per year.
+
+Stimuli
+
+Procedure
+
+To create a basis for discussion, we selected 10 different data
+visualizations that broadly involve the impact of drugs in the
+United States (Figure 4). These charts were chosen to represent a diverse set of features, including form, visual appeal,
+and source (Table 1). For the context of this study, we define
+source as the location in which the chart was discovered, not
+the origin of the data. Each chart was presented to participants
+in color on individual sheets of paper.
+
+We followed a semi-structured interview process that varied depending on participant responses. Below, we give an
+overview of the interview structure, as well as the number of
+participants that were asked each question.
+
+Participant Demographic Information (N = 42)
+
+Political Identity
+
+8
+
+9
+
+Personal Impact of Drug Abuse
+
+AGE
+
+0
+
+Very
+Liberal
+
+Very
+Conservative
+
+0
+
+Very Low
+(None)
+
+Education
+
+Doctorate degree
+
+Professional degree
+Postgraduate (Masters)
+
+75+
+
+Very High
+
+Age Range
+
+• If line graphs were ranked differently, why? (N=35)
+• If maps were ranked differently, why? (N=22)
+• If infographics were ranked differently, why? (N=16)
+
+65-74
+55-64
+45-54
+
+Bachelor's degree
+Associate degree
+
+Some college credit
+
+35-44
+
+High school graduate
+
+25-34
+18-24
+
+Some high school
+
+0
+
+10
+
+0
+
+1. Introduction and consent.
+2. Graphs presentation and ranking. The 10 graphs in Figure 4
+were presented on 10 sheets of paper. Participants were given
+as much time as needed to consider them before responding to
+the following prompt: “Based on how useful they are to you,
+arrange the graphs from most useful to least useful”. The framing of this prompt is critical and can guide participants in a
+number of directions. Based on a series of pilots, we found that
+‘useful’ was most successful in encouraging participants to
+express their own values in the context of data visualizations.
+Depending on the rankings that the participants gave, we introduced a number of follow-up questions. The most common
+were prompted by similar graphs that were ranked differently:
+
+10
+
+Figure 2: Demographics of the community members we interviewed. Our participants represented diverse educational
+backgrounds and ages.
+
+3. Sources are revealed: The sources of the graphs were revealed on the paper (Table 1). The researcher provided a brief
+background of unfamiliar sources (e.g. “The National Vital
+Statistics System is part of the U.S. government’s Centers for
+Disease Control and Prevention (CDC)”). After revealing the
+sources, participants were asked if they would like to change
+their rankings, as well as their rationale.
+4. Demographics questions: Demographics were collected after
+the interview to prevent priming participant responses.
+
+PREPRINT, PREPRINT, PREPRINT
+
+Evan M. Peck, Sofia E. Ayuso, and Omar El-Etr
+
+Interviews typically lasted approximately 15 minutes. Participants were given $10 as compensation. This study was
+approved by the IRB at Bucknell University.
+4
+
+ANALYSIS
+
+To associate responses with graphs, we use a process that is
+informed by the abbreviated version of grounded theory [11].
+Instead of using existing visualization literature or theory to
+pre-generate a set of codes and themes, the research team
+generated codes and themes by systematically going through
+the interview transcriptions. We use this particular process in
+order to mitigate the influence of assumptions from previous
+visualization research onto our group of participants. Our
+process was as follows:
+(1) Following the completion of interviews, transcripts
+were segmented to reflect the interview structure. Coding was performed section-by-section and further organized by graph.
+(2) Two members of the research team iteratively analyzed
+the the transcripts, generating codes and themes until
+it was believed that a saturation point was reached.
+(3) Independently, two additional members of the research
+team used these codes to label all 42 transcripts. During
+this process, they generated new codes in order to best
+capture responses.
+(4) This data was returned to the two members of our research team described in (2), who revised the codes and
+themes based on this input.
+The aggregated tallies of these codes, as well as the material of our study, can be found in our open repository: https:
+//osf.io/uxwts/. When interpreting the number of instances of
+each code throughout the paper, it’s important to remember
+that due to the semi-structured nature of our interviews, many
+participants did not make direct comments about most graphs.
+Dist. of Participant Rankings per Graph
+A
+
+B
+
+C
+
+D
+
+E
+
+Count Per Ranking
+
+10
+
+0
+G
+
+H
+
+I
+
+J
+
+10
+5
+0
+
+1
+
+5
+
+10 1
+
+5
+
+10 1
+
+5
+
+10 1
+
+5
+
+10 1
+
+5
+
+To give an overview of participant rankings after viewing
+the 10 data visualizations, Figure 3 shows the distribution
+of initial rankings of each graph. The most common codes
+associated with graphs across our interviews are as follows:
+Colorful (29) , Confusing (29), Clear (26), Simple (26), Relatable
+(21), Attractive (20), Informative (19), Cluttered (17)
+At this high level, we broadly see themes of simplicity, clarity, and aesthetics that align with other categorizations in data
+visualization [27, 31]. While tensions between highly stylized
+visualizations that emphasize engagement and minimal designs that prioritize understanding echo ‘chart junk’ debates
+that have simmered for years in the HCI and visualization
+communities [3, 5, 6], we observed trends among our participants that suggest they gravitated towards straightforward
+visual encodings. Simple bar graphs (Graphs A, B) and line
+graphs (Graph I) emerged as among our more highly ranked
+charts. For example:
+“I think the ones with the pictures or the bars and fewer lines
+would probably make sense to more people, and the more details
+you get probably it get more convoluted to people” – P2, 35-44
+year old, college degree
+We resist sharing over-aggregated views of the data at this
+juncture for a simple reason - the distribution of rankings in
+Figure 3 demonstrates diverse viewpoints that could be easily
+hidden within summary views. As a simple example, we found
+that perceptions of clarity typically did not refer to a deep
+understanding of the data, but an ability to quickly extract
+the gist of the data, which often involved factors independent
+of the visual encoding. For P7, clarity was topical in nature,
+telegraphed by the visual presence of a brain representing
+addiction in Graph J:
+“...if you’re just walking past, and you see it and you say ‘oh that
+has to do with the brain; I wanna stop and read that’. But you
+know like with this one [points to Graph G], you just say ‘oh
+yeah it goes up; it goes down” - P7, 55-64 year old, high school
+graduate
+Comparisons between the two line graphs - Graph G and
+Graph I - demonstrate how critiques of clarity and aesthetics
+often blurred together for our participants. 16 participants
+identified color as a distinguishing factor in their prioritization of Graph I over Graph G (Table 1), but they were often
+ambiguous as to whether color referenced general appeal or
+an improved visual encoding.
+
+5
+
+F
+
+Rankings Overview: Clarity, Simplicity, and Color
+
+10
+
+Participant Rank
+
+Figure 3: Distribution of rankings given to each chart. While
+graphs provoked diverse opinions, infographics yielded the
+most polarized responses from participants (Graphs F and J)
+
+“Color. The color makes it stand out more” – P17, 25-34 years
+old, high school graduate
+This value is likely inflated due to a question in which participants compared
+the two lines graphs - 16 of the mentions are about Graph I
+
+Data is Personal
+
+PREPRINT, PREPRINT, PREPRINT
+
+Figure 4: The graphs shown to participants. Each graph was presented on an independent sheet of paper
+
+#
+A
+
+Topic
+Severity of cannabis vs.
+other drugs
+B Comparison of drug, vehicle,
+and firearm deaths over time
+C Drug use in ‘street’ youths
+vs. youths in households
+D Overdose deaths involving
+opioids by county
+E Opioid overdose prevention
+indicators for PA counties
+F Overdose increase from pain
+medication
+G Drug overdoses over time
+
+Type
+Bar
+Bar / Line
+
+Found on (Source)
+Perceptions (Code Frequency)
+National Institute on Drug Relatable(4), Informative(2)
+Abuse (NIDA)
+BreitBart
+Confusing(2), Informative(2)
+
+Map
+
+National Institute on Drug
+Abuse (NIDA)
+The Economist
+
+Heat map
+
+Drexel University
+
+Isotype
+
+Infographic AgriMed (Medical Cannabis)
+Line
+
+National Vital Statistics
+System (NVSS) - CDC
+The New York Times
+
+Simple(3), Not trusted(3), Clear(2), Relatable(2)
+Clear(4), Attractive(3), Confusing(3),
+Cluttered(3), Simple(3), Relatable(3)
+Cluttered(8),
+Confusing(8),
+Clear(4),
+Colorful(4), Informative(4)
+Attractive(5), Confusing(5), Simple(4)
+Confusing(6), Simple(3), Cluttered(2),
+Intriguing(2)
+Clear(4), Colorful(3), Relatable(3), Simple(3)
+
+H Overdose deaths by country Map
+(15-to-44-year olds)
+I Overdose death rates over Line
+Business Insider
+Colorful(16),
+Attractive(6),
+Clear(6),
+time
+Simple(5)
+J The science of drug abuse
+Infographic Alternatives in Treatment Informative(4), Attractive(3), Relatable(3)
+(Rehab Center)
+Table 1: Graphs were chosen for representing diverse styles and sources. Codes are derived from interviews. When
+interpreting frequencies, recall that many participants chose to only comment on a select group of graphs
+
+PREPRINT, PREPRINT, PREPRINT
+While the terms ‘confusing’ and ‘cluttered’ were commonly
+used to critique data visualizations (29 and 17 times, respectively), many participants struggled to articulate any further
+reason why they disliked a particular chart. In the following
+sections, we will look into individual factors that help lend
+insight into these unspoken values and perceptions of data
+visualizations.
+Data is Personal
+Regardless of style, clarity, or ease-of-understanding, our interviews served as a reminder that data can be intimate and
+personal, and that those ties may supersede many other dimensions of design. We found more than 20 instances in which
+participants referenced a relatable component of the graph’s
+content (the code relatability). Consider the following participants discussing why they valued Graph J - our only chart
+that makes reference to alcohol:
+“Information about alcohol right there [in Graph J]. I was a functioning alcoholic. The most important person in my life is an
+alcoholic. Right now that’s important to me” – P14, 65-74 year
+old, college graduate
+“Well [Graph J] obviously gets me because I drink and smoke.”
+– P30, 25-34 year old, some high school but no diploma
+Like much of America, the opioid crisis has been especially
+destructive in central Pennsylvania - a region that has experienced economic hardship in some sectors alongside the
+decline of the coal industry. Our participants were no exception, and the importance of communicating the dangers of
+opioids emerged repeatedly during our interviews.
+“I have a few friends that died [from drug overdoses] so [Graph
+F] made me put it that way” – P29, 25-34 year old, high school
+graduate
+“I picked [Graph E] because this has different counties. And you
+can see which counties have the most opioids... I put [Graph G]
+because it’s a line graph and once again it points out that opioid
+is the number one cause of death...basically what it comes down
+to is that opioids is the number one killer in Pennsylvania” –
+P34, 25-34 year old, high school graduate
+“As for some of the other [graphs], I happen to know quite a
+few people who unfortunately happen to have an issue with
+opioids... and it’s something you consider... are you going to see
+that person tomorrow or not?” – P30, 25-34 year old with some
+high school, but no diploma
+Personal experiences not only molded perceptions of graphs
+that contained opioid data, but also graphs that did not reference opioids. P20 said the following about disliking Graph J:
+“Because [Graph J] doesn’t show anything on it about opioids
+and I think that is one of the biggest problems. It shows marijuana, crack cocaine, cigarettes and alcohol. You don’t see many
+
+Evan M. Peck, Sofia E. Ayuso, and Omar El-Etr
+people dying from that.” – P20, 18-24 year old with some high
+school, but no diploma
+At the conclusion of the interview, participants were asked
+to rate on a 1-to-7 scale how they have been personally impacted by drug abuse (either themselves or people they care
+for). 22 of our 42 participants responded with a 5 or higher,
+including 8 participants responding with a 7 out of 7 (Figure 2).
+For most of our participants, these experiences were unspoken and not captured by our interviews. And yet, for those
+that were impacted so significantly, it is possible that they
+trumped every other factor we analyze in this paper.
+Geographical Information: Where am I in the data?
+In our stimuli, we presented two maps (D and H) - both of
+which were identical in many factors . Perceptions of maps
+were diverse, with some participants believing them to be
+clear (coded 8 times) or simple (6) representations of data and
+others believing them to be confusing (5) or cluttered (5).
+“The ones with the picture of the map, that’s kind of a cluster. To
+me, I just want to pick it up and read it. I do not want to have
+to just looks and see, follow the arrows to the different colored
+areas” - P16, 45-54 year old, college degree
+However, the notion of the personal manifested itself again
+in perceptions of these graphs. When participants commented
+about the geographical data, we found at 6 instances in which
+conversation focused on locations where they either live currently (looking for ‘home’) or had lived previously:
+“This one was interesting because I used to live in West Virginia
+... and drugs were becoming very bad in that area ... so I guess
+with seeing the states and where problems are kind of caught
+my eye.” - P25, 45-54 years old, high school graduate
+“It’s just a little more congested; it’s easier to read the others vs
+trying to pinpoint where in a state I would be” - P6, 45-54 year
+old, Associate’s degree
+“I think in this one, Pennsylvania stuck out more to me than this
+one.” - P20, 18-24 year old, college student
+“These two [maps] are probably here because I like them less. It’s
+the whole country; it’s so huge. You naturally look at your state.
+It’s too busy. I’m not that thrilled with those.” – P37, 65-74 year
+old, high school graduate
+These perceptions held for graphs with any indications
+of geography. For example, although both line graphs were
+about drug abuse in the United States, Graph I was more
+clearly marked with the title “Overdose Death Rates in America”, leading to this exchange:
+It’s important to note that these maps were designed to be interactive, so
+while we can comment on perceptions about the static version of these
+images, user comments may not translate to interactive versions.
+
+Data is Personal
+“[I ranked Graph I higher] just for the simple fact that I live in
+America so I thought it was pretty relevant... more than the other
+one [Graph G].” - P27, 25-34 year old, high school graduate
+Finally, even for graphs which were largely disliked by participants, finding a reference to their personal context made a
+dramatic impact in their ranking. Consider P37’s justification
+for giving Graph E’s county heat map a high ranking (our
+lowest ranked graph among participants):
+“It has my own county in it. If this would have been like all the
+countries of the world or something, I really wouldn’t have been
+interested in it because it just affects me personally. So I think
+because it is something that I can personally relate to.” – P37,
+65-74 year old, high school graduate
+While national trends with larger sample sizes may more
+accurately communicate drug use and abuse in the United
+States, our participants’ focus on their local region may have
+design implications for rural populations (and perhaps more
+broadly).
+Social Framing: Will this help other people?
+Despite our prompt, we found that a couple of participants
+oriented their comments in a more external, social framing.
+Instead of ranking charts and graphs based on which forms
+were most effective to them, these participants were concerned about the effectiveness of charts and graphs for other
+people. For example, while P4 personally gravitated towards
+infographics, they worried that other people would not:
+“A lot of times, I think, infographics are taken less seriously than
+a ‘straight chart’ because they’re a newer way of visualizing.
+That’s helpful in getting your attention, but that’s what made
+them fall [in my rankings]” – P4, 25-34 year old, college degree
+Similarly, P31 - a school principal - ranked infographics the
+highest because of a belief that the graphical nature would be
+more effective for students and their parents:
+“I ranked them based on the fact that I am a [school] principal
+and [which graphs] I would be wanting to show to my kids and
+parents; It was based on the information that’s provided, and
+then also the appeal; the visual aspect of it and what is going
+to engage them” – P31, 35-44 year old, postgraduate degree
+While this framing differed from the task we provided, we
+should consider that the effect was amplified given the topic at
+hand. Many participants likely see the impact of opioid abuse
+directly in their home communities. As a result, the urgency of
+communicating that information locally may be heightened.
+Infographics: Clarity and Novelty
+Infographics have historically been a divisive mode of data
+communication, and our interviews were no exception - Graph
+J received the most polarizing rankings of any chart (Figure 3).
+
+PREPRINT, PREPRINT, PREPRINT
+As the codes in Table 1 reveal, participants who had positive
+feelings about infographics (Graphs F and J) found them to
+be clear (5), simple (5), and attractive (8), aligning with previous analyses of infographics [27]. However, participants
+that were critical of infographics were more diverse in their
+rationales, often struggling to articulate why they placed it so
+low in their rankings. Those participants called them “boring”,
+“bizarre like a science fiction comic book”, “childlike”, and “not
+serious” (among others).
+“I just don’t like that graph because it reminds me of something
+you would see in a magazine and not necessarily something you
+would see in a science article.” – P41, 18-24 year old, college
+graduate
+“It’s like the guy had access to pictures and he didn’t know when
+to stop” – P33, 45-54 year old, postgraduate degree
+Additionally, P8 commented that being “older” made it
+harder to understand “new” information visualizations such
+as infographics: “My mind has to study it harder”. While we did
+not observe this sentiment as a consistent trend in older participants, work by Harrison et al. found that infographics were
+often rated lower by older people [28]. More broadly, these
+perceptions seem to align with observations about novices
+encountering data visualizations [15, 23, 37, 41], even as the
+infographics themselves may be designed for simplicity.
+Statistical familiarity: To further investigate factors that
+may impact perceptions of infographics, participants who
+ranked F and J significantly differently were asked about the
+distinction they made. While some participants found Graph
+F to be simple (4), others found it confusing (5). One possible explanation may be related to statistical familiarity and
+comfort that comes from exposure through formal education.
+Consider the rationale given by P16:
+“This one over here [Graph F] has a needle, but understanding
+315% or 285% - that’s not realistic to me. I’m used to 10-100
+percent.” - P16, 45-54 year old, college degree
+While P16 was a college-educated member of the community, the other three participants who commented on the
+confusing nature of Graph F were not. By contrast, all four
+participants who commented on the simplicity of the same
+graph either held a college degree (3) or frequently interacted
+with numerical data in their work (an office manager).
+Why don’t people change their rankings?
+After the sources of each data visualization were revealed
+(listed in Table 1), participants were given an opportunity to
+change their rankings. However, 25 of 42 participants opted
+to keep their initial rankings. We found that the rationale of
+22 participants could be described in four categories:
+
+PREPRINT, PREPRINT, PREPRINT
+• Source is irrelevant (9): expressed that the source does
+not impact the data and/or presentation.
+• Ranked on other criteria (5): expressed that their initial
+ranking was based on other criteria (visuals, interest)
+and that criteria had not changed.
+• No reason (4): could not (or was not willing to) articulate
+any reason for maintaining their rankings
+• All sources are trusted (3): perceived that all sources
+were equally trustworthy.
+
+Evan M. Peck, Sofia E. Ayuso, and Omar El-Etr
+Reluctance to change: Related to the observations above,
+5 of 22 participants expressed attitudes suggesting that they
+would not change their rankings, regardless of what new
+information was introduced to them:
+“I did it based on how they were easiest to read and comprehend,
+so it doesn’t really matter the source as far as when you are able
+to read it and comprehend it. Whether it’s a ‘business’ one or a
+‘treatment’ one, I don’t think it really matters that much” – P2,
+35-44 year old, college degree
+Taken together, these perceptions suggest that the final
+rankings in this study may not reflect participant rankings
+had they been given source information in advance. For example, when asked why he did not change his rankings, P15
+revealed he “doesn’t often change his mind”. This attitude may
+reflect an anchoring effect, in which the first information that
+people see can dramatically impact later answers. For some
+participants, this effect held even as people simultaneously
+expressed beliefs about the importance of the source of data.
+Consider P8, who opted not to change her ranking:
+“With the social media, the way it is today, it’s hard to trust a lot
+of information because you could put anything on anything; and
+just because it’s there doesn’t mean it’s accurate or it’s truthful”
+- P8, 55-64 year old high school graduate.
+
+Figure 5: More educated participants were more likely to
+change their rankings after seeing the graph’s source
+
+Education: The decision not to change rankings aligned the
+educational background of our participants (Fig. 5). Of the
+25 participants who maintained their rankings, 52% (13 out
+of 25) never received post-secondary education (partial or
+completed). In contrast, only 1 out of the 17 participants who
+changed their rankings fell into the same category. While we
+hesitate to offer conclusions based on this sample, it reinforces
+observations that results from studies sampling educated participants may not generalize to other populations.
+Objectivity of data: 12 of 22 participants that did not change
+their ranking either expressed beliefs that the source of the
+data visualization is irrelevant or that all sources were equal.
+“I think that information is information no matter from where
+it comes from.” – P20, 18-24 year old with some college credit,
+no degree
+“The origin doesn’t really matter to me, it’s just the information
+they are giving you. If it’s not clear and not concise I don’t care
+where it came from” - P14, 65-74 year old, college degree
+The idea that “information is information” may suggest
+that people subscribe an objective characteristic not only to
+data, but also to visualization designs that communicate data.
+
+Anchoring and priming effects have only more recently
+been studied in the context of data visualization, focusing
+primarily on the perceptual level [28, 55]. However, if these
+observations generalize, it may have design implications for
+the communication of source information.
+Why do people change their rankings?
+17 of 42 participants changed their rankings after the sources
+of the data visualizations were revealed. Not surprisingly,
+these participants placed a greater emphasis on the validity
+of sources in comparison to their counterparts:
+“Just because it looks good doesn’t mean that the information
+is right, and it is more important to have the right information”
+- P18, 18-24 year old, some high school but no diploma
+“For me, I don’t trust things if I don’t know where it comes from.”
+- P4, 25-34 year old, college graduate.
+Figure 6 shows the distribution of ranking changes by graph.
+The graphs most commonly ranked higher - C: National Institute on Drug Abuse (NIDA), E: Drexel University, and G:
+National Vital Statistics System (NVSS) - all came from academic or government sources that were heavily criticized in
+the first set of rankings. For example, C: NIDA’s depiction
+of bar graphs uses crude images such as alcohol bottles or
+cigarettes was perceived to be ‘childlike’, ‘not serious’, and
+‘lacking credibility’. However, once the source was revealed,
+8 out of 17 participants ranked them higher.
+
+Data is Personal
+
+PREPRINT, PREPRINT, PREPRINT
+
+12.5
+10.0
+7.5
+5.0
+2.5
+0.0
+12.5
+10.0
+7.5
+5.0
+2.5
+0.0
+
+E
+
+G
+
+A
+
+Rank Change vs. Political Identity
+H
+
+C
+
+E
+
+G
+
+A
+
+H
+
+D
+
+J
+
+I
+
+F
+
+B
+
+10
+5
+0
+
+D
+
+J
+
+I
+
+F
+
+B
+
+Rank Change
+
+Count Per Rank Change
+
+Dist. of Ranking Changes per Graph
+C
+
+−5
+
+10
+5
+0
+−5
+
+-5 0 5
+
+-5 0 5
+
+-5 0 5
+
+-5 0 5
+
+-5 0 5
+
+Lib.
+
+Neutral
+
+Cons. Lib.
+
+Change in Ranking After Seeing Sources
+
+Figure 6: Distribution of how participants changed their
+rankings for each graph (N=17). Positive shifts indicate
+improved changes in rankings. Charts are ordered based on
+mean improvement in rankings.
+
+Similar to NIDA and NVSS, a chart from Drexel University
+E: Drexel was initially perceived to be the most confusing of all
+of our charts, but received a positive ranking alteration from
+8 participants after the source was revealed. In this case, it’s
+unclear whether Drexel’s standing as an academic institution
+or its position as a familiar entity (Drexel is located in Pennsylvania) was the driving force with participants. Locality
+of source played a significant factor for at least one of our
+participants in their assessment of The New York Times:
+“I don’t read this newspaper, but even if I did like this picture, I still
+won’t buy the newspaper because I don’t live in New York; The
+Sunbury paper, that’s close to here. Then I would read it, but I still
+won’t read that one” – P7, 45-55 year old, Associate’s degree
+P7’s perspective alone is clearly not enough to make generalizing claims. However, given the value that participants
+placed on personal associations throughout our study, investigating the degree to which people prioritize visualizations
+from local sources may offer valuable insight into how attention may be allocated towards (or away from) data.
+Trust and Political Identity
+While most participants valued governmental sources, notions of trust and distrust varied significantly between individuals. Consider the contrasting attitudes expressed by two
+participants’ about the Center for Disease Control.
+“I would never trust something from a drug company or Breitbart,
+and I would always trust something from the CDC or NIH” –
+P35, 75+ year old, Ph.D., identifies as very liberal.
+“I don’t trust the CDC. I believe they hide stuff.” – P16, 45-54
+year old, Bachelor’s degree, identifies as very conservative.
+
+Neutral
+
+Cons. Lib.
+
+Neutral
+
+Cons. Lib.
+
+Neutral
+
+Cons. Lib.
+
+Neutral
+
+Cons.
+
+Political Identity
+
+Figure 7: We found that rank changes in graphs tended to
+align with political identity in three of our graphs: H (The
+New York Times), F (AgriMed), B (Breitbart). Positive rank
+changes indicate improved changes in rankings.
+
+While these perceptions were not widespread among conservative participants, other graphs demonstrated a more partisan divide. H: The New York Times, F: AGRiMED, and B: Breitbart all exemplified clearer trends that aligned with political
+identity (Figure 7). Breitbart, for example, is a far-right news
+outlet that expectantly drew lower rankings from participants
+who identified as liberals. Surprisingly, we saw similar trends
+with AGRiMED, a licensed medical cannabis cultivation company - liberal participants were more likely to drop their ranking of the data visualization. Participants did not provide political affiliation information until after completing the interview.
+While these results are not surprising [2, 47], we must consider how political biases and beliefs may negate the impact
+of even the most lauded institutions for data visualization
+design and implementation, such as The New York Times.
+5
+
+DISCUSSION
+
+In this study, we focused on how people in rural Pennsylvania allocate their attention towards or away from data visualizations - a decision-making process that precedes the
+sensemaking processes that are more often studied in the data
+visualization literature. Unfortunately, studies of this nature
+often leave us with more questions than answers.
+Our 42 interviews revealed a complex tapestry of motivations, preferences, and beliefs that impacted the way that
+participants prioritized data visualizations. We saw that participants valued clarity and simplicity, at times gravitating
+towards simple bar graphs and line charts. Other participants
+assigned high value to color and visual appeal. We found that
+highly educated people were more likely to value the source
+of a data visualization, and that trust can align with political
+identity. Each of these factors warrant more investigation,
+but here we will focus on the most dominant theme in our
+analysis - the impact of personal experience.
+
+PREPRINT, PREPRINT, PREPRINT
+Visualizations are Personal
+The most recurring theme in our analysis were decisions
+framed or driven by personal experience. People that were
+impacted by abuse or addiction gravitated towards graphs
+that represented those substances. People often determined
+the quality of a graph containing geographical information
+based on how easy or difficult it was to find their home state.
+Other people tended to value graphs not based on their own
+understanding, but on the graph’s perceived efficacy at communicating to other people. Finally, one participant even suggested that they would pay more attention to visualizations
+from local news sources than national ones.
+Accounting for these factors will likely be critical in order
+to educate the general public through data visualizations, begging the question how can we design systems that align with the
+personal experiences of our audience? There has been recent
+work in information visualization that paints with a broad
+stroke in this direction - from using more concrete analogies
+of distance [30, 32] to equipping interactive visualizations
+with search bars to enable the pursuit of personal goals [16].
+The additional challenge posed in this research is that personal framings may fundamentally alter attention towards or
+away from a visualization before those interactions occur. For
+people to engage with data, it may be necessary to not only
+provide mechanisms that allow people to explore personal dimensions of data, but to make sure those personal dimensions
+are front-and-center in first encounters with a visualization.
+The reluctance of people to change their rankings, coupled
+with perceptions of data objectivity (“information is information”), also suggest that first exposures to data may be
+critical. This presents a particularly challenging problem for
+designers as recent literature finds that people can be easily
+manipulated by a visualization’s title alone [36]. However,
+given the prevalence of misinformation, these observations
+leave us with more important questions: How can platforms
+ensure that the first data visualization a person sees is a reliable
+one? How can we design data visualizations that are capable of
+altering previously formed impressions?
+Finally, the demographic indicators (in education and political identity) that aligned with participant priorities serve as a
+reminder that data visualization studies performed primarily
+with highly educated students may not generalize to the larger
+public, echoing similar observations in psychology [29].
+Limitations
+Our observations should be understood within the design of
+our interviews - 42 participants reflecting on 10 graphs, many
+at a local farmers market. It is unclear how representative
+our sample is of hard-to-access, marginalized communities
+in the United States. While factors of age, family income, and
+educational backgrounds roughly reflected our expectations
+
+Evan M. Peck, Sofia E. Ayuso, and Omar El-Etr
+for the region, political affiliations skewed more liberal than
+voting records would suggest.
+The findings in this paper should be replicated with controlled studies, different populations, and larger sample sizes.
+Additionally, the framing of “how useful are these visualizations?” should be contrasted with other framings (“how
+effective?” or “how interesting?”). Further research in this
+direction will need to carefully target groups that are difficult
+to access through traditional means of recruitment.
+Broader Impacts
+We have motivated this paper with the goal of communicating
+data to groups that are underrepresented in the visualization
+literature. However, research that articulates methods of communication to underrepresented groups also has the danger
+of providing a road map for manipulation through misinformation. We find this potential outcome deeply unsettling, but
+also one that is already steeped in reality through the infrastructure and incentive-structures of our online systems. For
+example, people may first see a visualization in social media
+or search results that are devoid of clear source information,
+or recommended based on our political affiliations. Our hope
+is that this research can be used to rethink the design of our
+information systems to combat misinformation rather than
+amplify it.
+ACKNOWLEDGMENTS
+The authors would like to thank Owais Gilani (Bucknell University), Aaron Quigley (University of St. Andrews), and Jennifer Silva (Bucknell University) for their guidance at various
+points of this project.
+REFERENCES
+[1] Basak Alper, Nathalie Henry Riche, Fanny Chevalier, Jeremy Boy, and
+Metin Sezgin. 2017. Visualization Literacy at Elementary School. In
+Proceedings of the 2017 CHI Conference on Human Factors in Computing
+Systems - CHI ’17. 5485–5497. https://doi.org/10.1145/3025453.3025877
+[2] Kevin Arceneaux, Martin Johnson, and Chad Murphy. 2012. Polarized
+political communication, oppositional media hostility, and selective
+exposure. The Journal of Politics 74, 1 (2012), 174–186.
+[3] Scott Bateman, Regan L Mandryk, Carl Gutwin, Aaron Genest,
+David Mcdine, and Christopher Brooks. 2010. Useful Junk? The
+Effects of Visual Embellishment on Comprehension and Memorability of Charts. In Proceedings of the 2010 CHI Conference
+on Human Factors in Computer Systems - CHI 2010. 2573–2582.
+https://doi.org/10.1145/1753326.1753716
+[4] Michael A. Bedek, Alexander Nussbaumer, and Dietrich Albert Luca
+Huszar. 2017. Discovering Cognitive Biases in a Visual Analytics
+Environment. IEEE VIS 2017 Workshop: Dealing with Cognitive Biases
+in Visualisations (2017).
+[5] Michelle A. Borkin, Zoya Bylinskii, Nam Wook Kim, Constance May
+Bainbridge, Chelsea S Yeh, Daniel Borkin, Hanspeter Pfister, and Aude
+Oliva. 2016. Beyond Memorability: Visualization Recognition and
+Recall. IEEE Transactions on Visualization and Computer Graphics 22,
+1 (2016), 519–528. https://doi.org/10.1109/TVCG.2015.2467732
+
+Data is Personal
+[6] Michelle A Borkin, Azalea A Vo, Zoya Bylinskii, Phillip Isola, Shashank
+Sunkavalli, Aude Oliva, and Hanspeter Pfister. 2013. What makes a visualization memorable? IEEE Transactions on Visualization and Computer
+Graphics 19, 12 (2013), 2306–15. https://doi.org/10.1109/TVCG.2013.234
+[7] Michael Bostock, Vadim Ogievetsky, and Jeffrey Heer. 2011.
+D3 data-driven documents.
+IEEE Transactions on Visualization and Computer Graphics 17, 12 (2011), 2301–2309.
+https://doi.org/10.1109/TVCG.2011.185
+[8] Jeremy Boy, Anshul Vikram Pandey, John Emerson, Margaret Satterthwaite, Oded Nov, and Enrico Bertini. 2017. Showing People Behind Data.
+In Proceedings of the 2017 CHI Conference on Human Factors in Computing
+Systems - CHI ’17. 5462–5474. https://doi.org/10.1145/3025453.3025512
+[9] Jeremy Boy, Ronald A. Rensink, Enrico Bertini, and Jean Daniel Fekete.
+2014. A principled way of assessing visualization literacy. IEEE
+Transactions on Visualization and Computer Graphics 20, 12 (2014),
+1963–1972. https://doi.org/10.1109/TVCG.2014.2346984
+Thinking relationally about digital in[10] Jenna Burrell. 2018.
+equality in rural regions of the U.S. First Monday 23, 6 (2018).
+https://doi.org/10.5210/fm.v23i6.8376
+[11] Kathy Charmaz and Linda Liska Belgrave. 2007. Grounded theory. The
+Blackwell encyclopedia of sociology (2007).
+[12] Luca Chittaro. 2006. Visualizing information on mobile devices.
+Computer 39, 3 (2006), 40–45.
+[13] C.A. Christofides, Pats Neelakantan, and Todd Behr. 2006. Examining
+the Rural-Urban Income Gap. Technical Report. Center for Rural
+Pennyslvania.
+[14] Evanthia Dimara, Anastasia Bezerianos, and Pierre Dragicevic.
+2017. The Attraction Effect in Information Visualization. IEEE
+Transactions on Visualization and Computer Graphics 23, 1 (2017),
+471–480. https://doi.org/10.1109/TVCG.2016.2598594
+[15] Micheline Elias and Anastasia Bezerianos. 2011. Exploration views:
+Understanding dashboard creation and customization for visualization
+novices. In Lecture Notes in Computer Science, Vol. 6949 LNCS. 274–291.
+https://doi.org/10.1007/978-3-642-23768-3_23 arXiv:9780201398298
+[16] Mi Feng, Cheng Deng, Evan M. Peck, and Lane Harrison. 2018. The
+Effects of Adding Search Functionality to Interactive Visualizations
+on the Web. In Proceedings of the 2018 CHI Conference on Human Factors
+in Computing Systems (CHI ’18). ACM, New York, NY, USA, Article 137,
+13 pages. https://doi.org/10.1145/3173574.3173711
+[17] Anindya Ghose, Avi Goldfarb, and Sang Pil Han. 2012. How is the
+mobile Internet different? Search costs and local activities. Information
+Systems Research 24, 3 (2012), 613–631.
+[18] Kaushik Ghosh, Tapan S Parikh, and Apala Lahiri Chavan. 2003.
+Design considerations for a financial management system for rural,
+semi-literate users. In CHI’03 Extended Abstracts on Human Factors in
+Computing Systems. ACM, 824–825.
+[19] John K Gilbert. 2005. Visualization: A metacognitive skill in science and
+science education. In Visualization in Science Education. Springer, 9–27.
+[20] John K Gilbert. 2008. Visualization: An emergent field of practice and
+enquiry in science education. In Visualization: Theory and Practice in
+Science Education. Springer, 3–24.
+[21] Amy K Glasmeier, Chris Benner, and Chandrani Ohdedar. 2008.
+Broadband Internet Use in Rural Pennsylvania. Technical Report. The
+Center for Rural Pennsylvania.
+[22] Lars Grammel. 2012. User interfaces supporting information visualization
+novices in visualization construction. Ph.D. Dissertation. RWTH Aachen
+University. http://dspace.library.uvic.ca:8080/handle/1828/4359
+[23] Lars Grammel, Melanie Tory, and Margaret Anne Storey. 2010. How
+information visualization novices construct visualizations. IEEE
+Transactions on Visualization and Computer Graphics 16, 6 (2010),
+943–952. https://doi.org/10.1109/TVCG.2010.164
+
+PREPRINT, PREPRINT, PREPRINT
+[24] Anzu Hakone, Lane Harrison, Alvitta Ottley, Nathan Winters,
+Caitlin Gutheil, Paul K.J. Han, and Remco Chang. 2017. PROACT:
+Iterative Design of a Patient-Centered Visualization for Effective
+Prostate Cancer Health Risk Communication. IEEE Transactions
+on Visualization and Computer Graphics 23, 1 (2017), 601–610.
+https://doi.org/10.1109/TVCG.2016.2598588
+[25] Sherry Hamby, Elizabeth Taylor, Alli Smith, Kimberly Mitchell, and
+Lisa Jones. 2018. Technology in Rural Appalachia: Cultural Strategies
+of Resistance and Navigation. International Journal of Communication
+12 (2018), 1248–1268. http://ijoc.org.
+[26] Steve Haroz, Robert Kosara, and Steven L Franconeri. 2015. ISOTYPE
+Visualization - Working Memory, Performance, and Engagement
+with Pictographs. In Proceedings of the 33rd Annual ACM Conference
+on Human Factors in Computing Systems - CHI ’15. 1191–1200.
+https://doi.org/10.1145/2702123.2702275
+[27] Lane Harrison, Katharina Reinecke, and Remco Chang. 2015. Infographic aesthetics: Designing for the first impression. In Proceedings
+of the SIGCHI Conference on Human Factors in Computing Systems - CHI
+’15. ACM, 1187–1190.
+[28] Lane Harrison, Drew Skau, Steven Franconeri, Aidong Lu, and Remco
+Chang. 2013. Influencing visual judgment through affective priming.
+In Proceedings of the SIGCHI Conference on Human Factors in Computing
+Systems - CHI ’13. 2949–2958. https://doi.org/10.1145/2470654.2481410
+[29] Joseph Henrich, Steven J Heine, and Ara Norenzayan. 2010. Most
+people are not WEIRD. Nature 466, 7302 (2010), 29.
+[30] Jessica Hullman, Yea-Seul Kim, Francis Nguyen, Lauren Speers, and
+Maneesh Agrawala. 2018. Improving Comprehension of Measurements
+Using Concrete Re-Expression Strategies. In Proceedings of the 2018
+CHI Conference on Human Factors in Computing Systems - CHI ’18. 1–12.
+https://doi.org/10.1145/3173574.3173608
+[31] Helen Kennedy and Rosemary Lucy Hill. 2018. The feeling of numbers:
+Emotions in everyday engagements with data and their visualisation.
+Sociology 52, 4 (2018), 830–848.
+[32] Yea-Seul Kim, Jessica Hullman, and Maneesh Agrawala. 2016. Generating Personalized Spatial Analogies for Distances and Areas. Proceedings
+of the 2016 CHI Conference on Human Factors in Computing Systems
+- CHI ’16 (2016), 38–48. https://doi.org/10.1145/2858036.2858440
+[33] Yea-Seul Kim, Katharina Reinecke, and Jessica Hullman. 2017.
+Explaining the Gap. In Proceedings of the 2017 CHI Conference
+on Human Factors in Computing Systems - CHI ’17. 1375–1386.
+https://doi.org/10.1145/3025453.3025592
+[34] Yea Seul Kim, Katharina Reinecke, and Jessica Hullman. 2018.
+Data Through Others’ Eyes: The Impact of Visualizing Others’
+Expectations on Visualization Interpretation. IEEE Transactions
+on Visualization and Computer Graphics 24, 1 (2018), 760–769.
+https://doi.org/10.1109/TVCG.2017.2745240
+[35] Laura M. Koesten, Emilia Kacprzak, Jenifer F. A. Tennison, and Elena
+Simperl. 2017. The Trials and tribulations of working with structured
+data- A study on information seeking behavior. In Proceedings of the
+2017 CHI Conference on Human Factors in Computing Systems - CHI ’17.
+1277–1289. https://doi.org/10.1145/3025453.3025838
+[36] Ha-kyung Kong, Zhicheng Liu, and Karrie Karahalios. 2018. Frames and
+Slants in Titles of Visualizations on Controversial Topics. In Proceedings
+of the 2018 CHI Conference on Human Factors in Computing Systems
+- CHI ’18. 438:1—-438:12. https://doi.org/10.1145/3173574:3174012
+[37] Sukwon Lee, Sung Hee Kim, Ya Hsin Hung, Heidi Lam, Youn Ah Kang,
+and Ji Soo Yi. 2016. How do People Make Sense of Unfamiliar Visualizations?: A Grounded Model of Novice’s Information Visualization
+Sensemaking. IEEE Transactions on Visualization and Computer Graphics
+22, 1 (2016), 499–508. https://doi.org/10.1109/TVCG.2015.2467195
+[38] Sukwon Lee, Sung-Hee Kim, and Bum Chul Kwon. 2017. VLAT: Development of a visualization literacy assessment test. IEEE Transactions
+
+PREPRINT, PREPRINT, PREPRINT
+on Visualization and Computer Graphics 23, 1 (2017), 551–560.
+[39] Ralph Lengler. 2006. Identifying the competencies of ’Visual Literacy’
+- A prerequisite for knowledge visualization. In Proceedings of the
+International Conference on Information Visualisation. 232–236.
+https://doi.org/10.1109/IV.2006.60
+[40] Gitte Lindgaard, Gary Fernandes, Cathy Dudek, and J. Brown. 2006.
+Attention web designers: You have 50 milliseconds to make a good first
+impression! Behaviour & Information Technology 25, 2 (2006), 115–126.
+https://doi.org/10.1080/01449290500330448
+[41] Adam V. Maltese, Joseph A Harsh, and Dubravka Svetina. 2015. Data
+visualization literacy: Investigating data interpretation along the
+novice–expert continuum. Journal of College Science Teaching 45, 1
+(2015), 83–83. https://doi.org/10.2505/4/jcst15_045_01_84
+[42] Hamid Mansoor and Lane Harrison. 2017. Data Visualization Literacy
+and Visualization Biases : Cases for Merging Parallel Threads. IEEE VIS
+2017 Workshop: Dealing with Cognitive Biases in Visualisations (2017).
+[43] Alvitta Ottley, Evan M Peck, Lane T Harrison, Daniel Afergan, Caroline
+Ziemkiewicz, Holly A Taylor, Paul KJ Han, and Remco Chang. 2016.
+Improving Bayesian reasoning: The effects of phrasing, visualization,
+and spatial ability. IEEE Transactions on Visualization and Computer
+Graphics 22, 1 (2016), 529–538.
+[44] Paul Parsons. 2017. Promoting Representational Fluency for Cognitive
+Bias Mitigation in Information Visualization. IEEE VIS 2017 Workshop:
+Dealing with Cognitive Biases in Visualisations (2017).
+[45] Andrew Perrin. 2017.
+Digital gap between rural
+and nonrural America persists | Pew Research Center.
+https://www.pewresearch.org/fact-tank/2017/05/19/
+digital-gap-between-rural-and-nonrural-america-persists/
+[46] Lee Rainie, Pavani Reddy, and Peter Bell. 2004.
+Rural
+Areas and the Internet | Pew Research Center.
+http:
+//www.pewinternet.org/2004/02/17/rural-areas-and-the-internet/
+[47] Pew Research. 2014. Further Decline in Credibility Ratings for Most
+News Organizations.
+http://www.people-press.org/2012/08/16/
+further-decline-in-credibility-ratings-for-most-news-organizations/
+/
+[48] Jonathan C Roberts, Panagiotis D Ritsos, Sriram Karthik Badam,
+Dominique Brodbeck, Jessie Kennedy, and Niklas Elmqvist. 2014.
+Visualization beyond the desktop–the next big thing. IEEE Computer
+Graphics and Applications 34, 6 (2014), 26–34.
+[49] Puripant Ruchikachorn and Klaus Mueller. 2015. Learning visualizations by analogy: Promoting visual literacy through visualization
+morphing. IEEE Transactions on Visualization and Computer Graphics
+21, 9 (2015), 1028–1044. https://doi.org/10.1109/TVCG.2015.2413786
+[50] Arvind Satyanarayan, Dominik Moritz, Kanit Wongsuphasawat, and
+Jeffrey Heer. 2017. Vega-lite: A grammar of interactive graphics. IEEE
+Transactions on Visualization and Computer Graphics 23, 1 (2017),
+341–350.
+[51] Arvind Satyanarayan, Ryan Russell, Jane Hoffswell, and Jeffrey Heer.
+2016. Reactive vega: A streaming dataflow architecture for declarative
+interactive visualization. IEEE Transactions on Visualization and
+Computer Graphics 22, 1 (2016), 659–668.
+[52] Christina Simeone, Theodora Okiro, and Deshaun Bennett. 2018.
+Reimagining Pennsylvania’s Coal Communities. Technical Report.
+Kleinman Center for Energy Policy, University of Pennsylvania. https:
+//kleinmanenergy.upenn.edu/sites/default/files/proceedingsreports/
+ReimaginingPennsylvaniasCoalCommunities{_}0.pdf
+[53] Aaron Smith. 2013. Technology Adoption by Lower Income Populations
+| Pew Research Center.
+http://www.pewinternet.org/2013/10/08/
+technology-adoption-by-lower-income-populations/
+[54] Eric Tsetsi and Stephen A. Rains. 2017. Smartphone Internet access and
+use: Extending the digital divide and usage gap. Mobile Media & Communication 2013 (2017), 1–17. https://doi.org/10.1177/2050157917708329
+
+Evan M. Peck, Sofia E. Ayuso, and Omar El-Etr
+[55] André Calero Valdez, Martina Ziefle, and Michael Sedlmair. 2018.
+Priming and Anchoring Effects in Visualization. IEEE Transactions
+on Visualization and Computer Graphics 24, 1 (2018), 584–594.
+https://doi.org/10.1109/TVCG.2017.2744138
+[56] Calero Valdez, Martina Ziefle, and Michael Sedlmair. 2017. A
+Framework for Studying Biases in Visualization Research. IEEE VIS
+2017 Workshop: Dealing with Cognitive Biases in Visualisations (2017).
+[57] Fernanda B Viegas and Martin Wattenberg. 2006. Communicationminded visualization: A call to action. IBM Systems Journal 45, 4 (2006),
+801.
+[58] Emily Wall, Leslie M Blaha, Celeste Lyn Paul, Kristin Cook, and Alex
+Endert. 2017. Four perspectives on human bias in visual analytics.
+IEEE VIS 2017 Workshop: Dealing with Cognitive Biases in Visualisations
+October (2017).
+[59] Kanit Wongsuphasawat, Dominik Moritz, Anushka Anand, Jock
+Mackinlay, Bill Howe, and Jeffrey Heer. 2016. Voyager: Exploratory
+analysis via faceted browsing of visualization recommendations. IEEE
+Transactions on Visualization & Computer Graphics 22, 1 (2016), 649–658.
+[60] Wenfan Yan. 2006. Adult Education in Rural Pennsylvania. Technical
+Report. The Center for Rural Pennyslvania.
+[61] Liangzhi Yu. 2010. How poor informationally are the information poor?
+Journal of Documentation 66, 6 (2010), 906–933. https://doi.org/10.1108/
+00220411011087869 arXiv:http://dx.doi.org/10.1108/BIJ-10-2012-0068
+[62] Liangzhi Yu. 2011. The divided views of the information and
+digital divides: A call for integrative theories of information inequality. Journal of Information Science 37, 6 (2011), 660–679.
+https://doi.org/10.1177/0165551511426246
+
+

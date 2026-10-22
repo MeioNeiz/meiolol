@@ -28,6 +28,94 @@ window, to scope the rework in docs/plan.md "Now" item 3. Line numbers are at 55
   a browser QA script). About 8-10 days of foundation, then pages move as the planned
   design work touches them.
 
+## 22 Oct update: all Zig, guardrails, tooling
+
+Jacob 22 Oct: write all the front end in Zig, drop the JS; the UI is "WAAAAY too wordy";
+wants it engaging, space efficient, clear, not overwhelming, good colour; region picker
+buttons tiny. Research: research/questions/zig-only-frontend.md, ui-tooling.md,
+ui-guardrails.md. Inventory of every script: docs/js-inventory.md. Live audit:
+docs/ui-audit.md.
+
+### Zero JS is not possible; no feature code in JS is
+
+- No browser lets wasm touch the DOM, and no proposal would change that; a JS loader is
+  the floor. Zig 0.17's externref is half-working and goes in 0.18; zjb no longer
+  compiles; every Zig wasm UI found (Zig's own std docs, Ziex) keeps 1,000+ lines of JS.
+  Wasm-driven DOM costs 1.4-10x vanilla's first paint for no gain on our pages.
+- The inventory: of 4,887 public lines, ~48% is work Zig should do on the server
+  (filters maths, review, Daily, Pool), 13% plain HTML/CSS, 6% client maths, 33% glue.
+- So the route is hypermedia, not wasm: every feature is a Zig tpl component rendered
+  as a page or a fragment by `meiolol render` (already renders any path on request);
+  one generic runtime, `static/m.js` (~250 lines, written once, tested, no per-page
+  code), reads attributes the Zig components write:
+  - `data-get`/`data-target`: fetch an HTML fragment, swap it in (filters, Pool,
+    review, search suggestions); forms are plain GET first, so no JS still works
+  - `data-poll` (Your games), `data-store` (Daily/Learn progress, view memory),
+    `data-sort` (DOM reorder plus aria-sort), `data-wasm` (draft scorer and Learn
+    practice: Zig maths returning tpl HTML, the only wasm)
+  - dialogs, popovers, accordions: HTML only (`commandfor`, `popover`, `details name`,
+    Safari 26.2+); no radio or `:has()` state hacks (fail WCAG 4.1.2)
+- Deletes: the filters.js copies of Zig maths (the worst bug class here), the 183 KB gz
+  filters JSON per champion visit, review.js/your.js/daily.js/pool.js renderers,
+  chart.wasm, five `el()` helpers and the formatting drift. ~885 lines of glue become
+  the one runtime.
+- Costs: a round trip per filter click (measure on a phone first); fragment load on the
+  renderer; Your games API answers HTML; nothing offline (fine, the scorer is wasm).
+- Changes to Option A: step 4 (one JS core) becomes the generic runtime; step 5 (wasm
+  redraws) becomes server fragments; steps 1-3, 6, 7 stand.
+
+### Guardrails: design-ideas.md rules made checkable
+
+The principles are right; nothing enforces them, so every feature drifts. Measured on
+meio.lol at 390 px: region options 40x26 px (`.region-list a { padding: 4px 10px }` at
+12.5 px, desktop sizing, no control token, no check); Darius page 1,154 words and 453
+text nodes under 12 px; every champions-index control under 44 px tall.
+
+| Rule | Threshold | Checked by |
+| --- | --- | --- |
+| Tap targets (phone) | warn under 44 px hit area, error under 24 | qa.sh |
+| Text size | none under 11 px; 5 sizes, all tokens | CSS test, qa.sh |
+| Words per page (phone, visible) | champion page 400 (now 1,154); others set at redesign | qa.sh |
+| Labels | chips, buttons, headers 2 words, 16 chars; headings 6 words | comptime in ui.zig |
+| Help text | one line visible; more in details or a definition toggletip | comptime, rubric |
+| Disclosure | one "how" link per section, 2 levels at most | qa.sh |
+| Numbers need no tooltip | column terms as dotted-underline toggletips, tap not hover | rubric |
+| One answer per row/card | row type has exactly one `answer` cell | ui.zig API |
+| Colour | only from tokens; diverging scale plus one accent; one legend component | CSS test, rubric |
+| Second cue | a coloured cell needs a sign, bar or bold | comptime in the cell |
+| Precision | one formatter per stat kind (1 dp rates, 12.3k counts, one minus sign) | unit test |
+| Answer first | phone chrome 70 px or less; first answer visible at 390x844 | qa.sh |
+| Personal | visitor's champion, region, rank first where known | rubric |
+
+Each check starts as a warning, existing hits get fixed, then it becomes an error;
+exceptions carry a reason (GitLab, Polaris practice). The word and label numbers are
+ours, not from a source: confirm them on the redesigned champion page first.
+
+### Tooling
+
+- `meiolol dev` gallery page: every ui.zig component in each state, phone and desktop
+  side by side; the one list every check runs over (Primer's pattern)
+- deploy/qa.sh (Playwright on the Mac, not in ci): every page type and the gallery,
+  widths swept 320-1280: overflow of viewport and parent, overlap, text size, tap
+  targets, word count, console errors, failed requests, axe with target-size on, ARIA
+  snapshot as text
+- Screenshots: main against the working tree in one run, shown to the reviewer, never
+  stored baselines or a gate (Primer switched its gate off; baselines rot)
+- Zig tests in ci: CSS token/size/layer lint, JS id check
+- Review: a session that didn't write the page scores qa.sh screenshots against a short
+  rubric (answer first, said twice, colour meaning, words); authors praise their own UI
+
+### Order
+
+1. qa.sh with the guardrail measurements as warnings, plus the gallery page: gives the
+   baseline numbers and catches regressions during the rest
+2. Tokens and CSS layers (Option A step 2) with control sizes: fixes the tap targets
+   site-wide in one place
+3. ui.zig components with the comptime guardrails, and m.js; champion page first:
+   filters as fragments (deletes the filters.js twins), words to 400
+4. The other pages as the design steps reach them; audit top 10 (docs/ui-audit.md)
+   folds into each page's move
+
 ## 1. How a page is produced
 
 ### Writing HTML

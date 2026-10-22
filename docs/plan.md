@@ -36,8 +36,11 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
    app development, wants time on it soon): scoped in docs/frontend-rework.md,
    recommends Option A (ui.zig components, CSS tokens and layers, one JS core, hashed
    assets, wasm for the filters redraw, Playwright QA at 390/1280 px; ~8-10 days
-   foundation, pages move with design steps 4-9). Waits on Jacob: A or not, and whether
-   "app" means the site or the desktop window (dvui, shares nothing with the site)
+   foundation, pages move with design steps 4-9). 22 Oct update in the same doc: no
+   feature code in JS (Zig fragments from meiolol render plus one generic runtime; zero
+   JS is impossible, wasm only for maths), guardrails from design-ideas.md made checkable
+   (words, tap targets, colour), qa.sh and a gallery first. Waits on Jacob: go or not,
+   and whether "app" means the site or the desktop window (dvui)
 4. Next on the site, by size of win: Learn redesign (docs/learn-proposal.md), design
    build order 4-6 (docs/design-ideas.md), per-matchup builds (vsbuilds notes), Daily
    Draft pick verdicts (daily notes); Jacob's answers to the night's questions first

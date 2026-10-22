@@ -1,0 +1,931 @@
+                          EMBARKING ON A
+                     Common
+                          NE W JOURNEY in Dashboard Design
+                             PITFALLS
+
+
+                                           by
+
+
+                                           Stephen Few
+                                           Principal, Perceptual Edge
+                                           February 2006
+
+
+
+SPECIAL ADDENDUM
+
+
+
+
+Avoid the Pitfalls
+with ProClarity
+                                                                                                                                TABLE OF CONTENTS
+
+                                                                                                                               Executive Summary ......................................................................................................1
+                                                                                                                               Introduction ....................................................................................................................2
+                                                                                                                               What Is a Dashboard? ..................................................................................................2
+                                                                                                                               What Is So Hard about Designing Dashboards? ................................................2
+                                                                                                                               13 Common Pitfalls in Dashboard Design ...........................................................3
+                                                                                                                                  Pitfall #1: Exceeding the Boundaries of a Single Screen ............................4
+                                                                                                                                  Pitfall #2: Supplying Inadequate Context for the Data...............................5
+                                                                                                                                  Pitfall #3: Displaying Excessive Detail or Precision .......................................5
+                                                                                                                                  Pitfall #4: Expressing Measures Indirectly .......................................................6
+                                                                                                                                  Pitfall #5: Choosing Inappropriate Media of Display ...................................8
+                                                                                                                                  Pitfall #6: Introducing Meaningless Variety ....................................................9
+                                                                                                                                  Pitfall #7: Using Poorly Designed Display Media ..........................................9
+                                                                                                                                  Pitfall #8: Encoding Quantitative Data Inaccurately ................................. 10
+                                                                                                                                  Pitfall #9: Arranging the Data Poorly .............................................................. 11
+                                                                                                                                  Pitfall #10: Ineﬀectively Highlighting What’s Important ......................... 12
+                                                                                                                                  Pitfall #11: Cluttering the Screen with Useless Decoration.................... 12
+                                                                                                                                  Pitfall #12: Misusing or Overusing Color....................................................... 13
+                                                                                                                                  Pitfall #13: Designing an Unappealing Visual Display ............................. 14
+                                                                                                                               The Key to Dashboard Eﬀectiveness ................................................................... 15
+                                                                                                                               About the Author ....................................................................................................... 16
+
+                                                                                                                               Addendum from ProClarity Corporation
+                                                                                                                               Avoid the Common Pitfalls of Dashboard Design with ProClarity ........... 17
+                                                                                                                                 Avoid Pitfall #1 with ProClarity Custom Templates ................................... 17
+                                                                                                                                 Avoid Pitfall #4 with ProClarity KPI Designer .............................................. 19
+                                                                                                                                 Avoid Pitfall #5 with ProClarity Charts and Formatting Options ......... 25
+                                                                                                                                 Avoid Pitfall #8 (Encoding Quantitative Data Inaccurately) with
+                                                                                                                                 ProClarity Chart Properties ................................................................................ 26
+                                                                                                                                 Summary .................................................................................................................. 28
+
+
+
+
+                   This white paper is for informational purposes only. PROCLARITY MAKES NO WARRANTIES, EXPRESS OR IMPLIED, IN THIS
+                   DOCUMENT. It may not be duplicated, reproduced, or transmitted in whole or in part without the express permission of the
+                   ProClarity Corporation, 500 South 10th Street, Boise, Idaho 83702. For more information, contact ProClarity: info@proclarity.
+                   com; Phone: 208-343-1630. All rights reserved. All opinions and estimates herein constitute our judgment as of this date and
+                   are subject to change without notice.
+
+
+
+
+© 2005 ProClarity Corporation. All rights reserved. No portion of this report may be reproduced or stored in any form without prior written permission.                                                                         www.proclarity.com
+EXECUTIVE SUMMARY
+Dashboards have become a popular means to deliver important information at a glance, but this potential is rarely realized.
+Even the best dashboard software in the world will not produce a useful dashboard if it doesn’t incorporate eﬀective visual
+design. Any dashboard that fails to deliver the information that people need clearly and quickly will never be used, no matter
+how cute its gauges, meters, and traﬃc lights. Eﬀective dashboards are the product of informed visual design.
+
+Based on his new book, Information Dashboard Design: The Eﬀective Visual Display of Data, Stephen Few will lead you through
+a quick tour of the 13 most common pitfalls in the visual design of dashboards. Knowing what doesn’t work will help you
+avoid the problems that resign most dashboards to the trash heap.
+
+You Will Learn:
+  • What dashboards are, what they should do, and why they’re important
+  • The primary goals and challenges of dashboard design
+  • The 13 most common mistakes in the visual design of dashboards
+  • The importance of designing dashboards that are aligned with the way people see and think
+
+ProClarity sponsored this white paper to help people better understand the concept of a business intelligence dashboard
+and how to eﬀectively present quantitative information in general or while using ProClarity business intelligence solutions.
+
+
+
+
+© 2005 Perceptual Edge                                                                   1
+INTRODUCTION
+Despite their tremendous popularity and potential, many and perhaps most dashboard implementations fail miserably. A
+dashboard’s entire purpose is to communicate important information clearly, accurately, and eﬃciently, but most dashboards
+say too little, and what they do say requires far too much eﬀort to discern. This is a failure more of design than technology.
+Fundamentally, it is a failure of visual design.
+
+Browsing the many examples of dashboards that can be found on the Internet, especially on the sites of companies that
+market dashboard software, you will ﬁnd a bevy of ﬂashy displays showing oﬀ cute gauges, meters, and traﬃc lights, but
+rarely will you ﬁnd dashboards that really communicate. The reason examples like this dominate is simple: ﬂash sells. But
+does it work? The ﬁrst day that you put a dashboard of this type in front of real business people, they’ll “ooooo and ahhhhhh,”
+delighted by its video-gamish appeal, but by the end of the week its superﬁcial luster will fade and they’ll stop looking at it
+altogether if it fails to give them the information they need in a manner that is clear, accurate, and easy to monitor at a glance.
+
+In my work as an information design consultant, teacher, and writer, I’ve focused a great deal on dashboards in the last two
+years. In the course of this work, I’ve identiﬁed a list of the 13 most common pitfalls in the visual design of dashboards that
+you should avoid if you want yours to communicate eﬀectively. Before we launch into this, however, let’s get our terminology
+straight.
+
+
+WHAT IS A DASHBOARD?
+I began working with what we today call dashboards long before we started calling them by this name. About two years ago,
+I decided to pay special attention to the unique opportunities that dashboards provide for business communication and the
+unique challenges that they present in visual information design. I became frustrated immediately however, by the fact that a
+great deal was being said about them—especially a great deal of marketing hype—but no one was actually saying what they
+were. It’s easy to claim that you have the best dashboard software when you haven’t bothered to deﬁne what a dashboard
+is. I decided that a good working deﬁnition was needed, so I did some research and spent many hours thinking about it, and
+then oﬀered one of my own that was originally published in the March 2004 edition of Intelligent Enterprise magazine in an
+article entitled “Dashboard Confusion.” Here it is:
+
+                 A dashboard is a visual display of the most important information needed to achieve one or more objectives,
+                 consolidated and arranged on a single screen so the information can be monitored at a glance.
+
+I’ve attempted to provide a deﬁnition that distinguishes dashboards from other displays that also combine multiple pieces
+of information on a computer screen, as well as one that does not too narrowly limit the information that can be displayed or
+the viewing audience it can serve.
+
+Dashboards consolidate onto a single screen the sometimes disparate information that someone needs to monitor to do a
+job. This single-screen display need not be comprehensive in and of itself, but it must provide the overview that is needed
+to know when action is required, and ideally should provide an easy gateway to any additional information that is needed
+to determine the precise action that is appropriate. Dashboards tend to be highly visual (that is, graphical) in the way they
+present information, not because it is cute or entertaining, but because when presented properly, pictures of data can be
+scanned and understood much faster than the same data presented as text.
+
+
+WHAT IS SO HARD ABOUT DESIGNING DASHBOARDS?
+I spend a great deal of my time teaching people how to communicate quantitative business data eﬀectively in the form
+of graphs—a skill set that is not common, despite the huge production of graphs in business today. The type of graphical
+communication that is typically required in business is not diﬃcult to learn how to do, but it doesn’t come naturally.
+Designing individual graphs is simple compared to designing entire dashboards. Trying to get all that information on a single
+screen in a way that doesn’t end up looking like a cluttered mess isn’t easy. If you think it is, chances are you haven’t actually
+tried to do it.
+
+
+
+
+© 2005 Perceptual Edge                                                                            2
+                                Figure 1: The greatest challenge of dashboard design involves squeezing all of that
+                                  information on a single screen in a way that doesn’t result in a cluttered mess.
+
+
+Dashboards that communicate clearly, accurately, and eﬃciently are the result of careful and informed visual design. Given
+the purpose that dashboards serve, as deﬁned above, they must be designed to support the following process of visual
+monitoring:
+
+    1.      See the big picture.
+    2.      Focus in on the speciﬁc items of information that need attention.
+    3.      Quickly drill into additional information that is needed to take action.
+
+Step #3 can be supported through convenient links to additional information, but steps #1 and #2 require visual design
+that allows viewers to scan a great deal of information quickly to get an overview, easily recognize those items that demand
+attention, and then get enough information about those items to assess the potential need for a response. To achieve this
+end, it helps to recognize and avoid the common mistakes in dashboard design that often get in the way.
+
+
+13 COMMON PITFALLS IN DASHBOARD DESIGN
+Knowing what to avoid isn’t everything, but it’s a good start. Here’s a list of the 13 mistakes that I’ll describe in detail:
+
+   1.       Exceeding the boundaries of a single screen
+   2.       Supplying inadequate context for the data
+   3.       Displaying excessive detail or precision
+   4.       Expressing measures indirectly
+   5.       Choosing inappropriate media of display
+   6.       Introducing meaningless variety
+   7.       Using poorly designed display media
+   8.       Encoding quantitative data inaccurately
+   9.       Arranging the data poorly
+   10.      Ineﬀectively highlighting what’s important
+   11.      Cluttering the screen with useless decoration
+   12.      Misusing or overusing color
+   13.      Designing an unappealing visual display
+
+Let’s dive in. Every one of these pitfalls is illustrated with an example from an actual dashboard that I found on the Web site of
+a software vendor, with the one exception of pitfall #4.
+
+
+
+
+© 2005 Perceptual Edge                                                                                 3
+PITFALL #1: EXCEEDING THE BOUNDARIES OF A SINGLE SCREEN
+Something powerful happens when information is seen together, at the same time. Not only does this provide convenience
+for viewers and save them valuable time, it also paints a complete picture that can bring to light important connections that
+might not be visible otherwise. Something critical is sacriﬁced when the viewer must lose sight of some data in order to scroll
+down or over, or move from screen to screen to see the rest. Part of the problem is that we can only hold a few chunks of
+information at a time in short-term memory. Relying on the mind’s eye to retain a visualization that is no longer visible is a
+limited venture. One of the great beneﬁts of a dashboard is the simultaneity of vision, the ability to see everything you need
+at once.
+
+Besides designing a dashboard that requires scrolling around to see everything, data is often fragmented into separate
+screens. The dashboard below fragments the data that a sales executive might need to monitor into tiny slices selected
+through the use of radio buttons or list boxes. For instance, to see the seven major metrics that are displayed in the upper left
+corner of the screen, the viewer must select and view them separate, never together. The same is true for product revenue,
+regional revenue, etc. With this design, the viewer can never compare the performance of products or regions, which is a
+common need. Splitting the big picture into a series of separate small pictures is a mistake when seeing the big picture is
+worthwhile.
+
+
+
+
+                         Figure 2: This sales dashboard fragments the data into many slices by requiring the viewer to
+                                        select individual pieces without any means to see the whole.
+
+
+
+
+© 2005 Perceptual Edge                                                                              4
+PITFALL #2: SUPPLYING INADEQUATE CONTEXT FOR THE DATA
+As a means to monitor what’s going on in the business, dashboards are usually populated predominantly with quantitative
+measures of what’s currently going on. Measures of what’s going on in the business, however, rarely do well as a solo act;
+they need a good supporting cast to get their message across. To state that quarter-to-date sales total $736,502 without any
+context means little. Compared to what? Is this good or bad? How good or bad? Are we on track? Is this better than before?
+The right context for the key measures makes the diﬀerence between numbers that just sit there on the screen and those
+that enlighten and inspire action.
+
+Measures of what’s currently going can be enriched by providing one or more comparative measures, such as a target or
+some history, as well as a quick visual means for assessing the measure’s qualitative state (for example, good, satisfactory, or
+bad).
+
+As an example, the gauge below could have easily incorporated useful context, but it falls far short of its potential. Other than
+estimating that net income is around $3.5 million, this gauge tells us nothing.
+
+
+
+
+                                     Figure 3: Typical dashboard display media often provide little
+                                       if any useful context for the measures that they present.
+
+
+A quantitative scale on a graph, such as the one suggested by the tick marks around this gauge, are meant to help us
+interpret the measure, but it can only do so eﬀectively if the scale is labeled with numbers. Beginning from the lower left
+where the beginning of this scale is labeled $2M, can you ﬁgure out what each of the major tick marks represents? I can’t. Is
+this amount of income good? A great deal of space is used by these gauges to tell us far too little. Much richer information
+can be displayed in a way that need not overwhelm the viewer with much, but just enough to make the data meaningful.
+
+
+PITFALL #3: DISPLAYING EXCESSIVE DETAIL OR PRECISION
+To support the purpose of rapid monitoring, dashboards should never display information that is more detailed or precise
+than necessary. To do so would force the viewer to process levels of data that are irrelevant to the task at hand. Too much
+detail or measures that are expressed too precisely (for example, $3,848,305.93 rather than $3,848,306 or perhaps even
+$3.8M) just slow them down without beneﬁt.
+
+Examine the two sections in the example below that I’ve enclosed in red rectangles. The lower right section displays from four
+to ten decimal digits for each measure, which might be useful in some contexts, but doubtfully on a dashboard. The upper
+highlighted section displays time down to the level of seconds, which seems excessive in this context. With a dashboard,
+every unnecessary piece of information results in wasted time, which is intolerable when time is deﬁnitely of the essence.
+
+
+
+
+© 2005 Perceptual Edge                                                                             5
+                           Figure 4: This dashboard displays levels of detail and precision that are excessive.
+
+PITFALL #4: EXPRESSING MEASURES INDIRECTLY
+To express measures appropriately, you must understand exactly what viewers need to see and how they plan to use the
+information. For a measure to be meaningful, viewers must know what is being measured and the units in which the measure
+is being expressed. A measure is poorly expressed if it fails to directly, clearly, and eﬃciently communicate the meaning that
+the dashboard viewer must discern. If the dashboard viewer only needs to know by how much actual revenue diﬀers from
+budgeted revenue, rather than displaying the actual revenue amount of $76,934 and the budgeted revenue amount of
+$85,000 and leaving it to the viewer to calculate the diﬀerence, why not display the variance amount directly? Also, in many
+cases, rather than displaying the variance amount as -$8,066, for instance, it would be more direct to simply express the
+variance as a percentage, such as -10%. A percentage more clearly focuses attention on the variance itself, rather than the raw
+diﬀerence (such as in dollars).
+
+Percentages also make it easier to compare the variances of multiple items when their actual values diﬀer signiﬁcantly in
+scale, such as the variances of actual from budgeted expenses for several departments, each with it own budget. A small
+department’s over-budget amount of $5,000 could be more troubling than a large department’s over-budget amount of
+$50,000, but this might only be obvious if the variance were expressed as a percentage.
+
+The variance graph below illustrates this point. Even though its purpose is to display the degree to which actual revenue
+varies from planned revenue, you must work harder than necessary to discern this information.
+
+
+
+
+© 2005 Perceptual Edge                                                                            6
+                                Figure 5: This graph failes to express the variance amount directly.
+
+The variance could, however, be displayed more directly and vividly by encoding budgeted revenue as a reference line of 0%
+and the variance as a line that meanders above and below budget, expressed in units of positive and negative percentages.
+
+
+
+
+                                Figure 6: This graph directly expresses the variance between actual
+                                and budgeted revenue, making it much easier to see and evaluate.
+
+
+
+
+© 2005 Perceptual Edge                                                                         7
+PITFALL #5: CHOOSING INAPPROPRIATE MEDIA OF DISPLAY
+This is one of the most common design mistakes that I encounter, not just on dashboards, but in all forms of data
+presentation. Using a graph when a table of numbers would work better and vice versa is a frequent mistake, but what is
+more common and egregious is use of the wrong type of graph for the data and its message.
+
+Without the value labels on the pie chart below, which was excerpted from a dashboard, you would only be able to
+discern that opportunities rated as “Fair” represent the largest group, those rated as “Field Sales – Very High” represent a
+miniscule group, and the other ratings are roughly the equal in size. If you must read the numbers to determine how the
+slices of a pie chart relate to one another, you might as well use a table instead. We use graphs when the picture itself
+reveals something important that couldn’t be communicated as well be a table of numbers. The slices of this pie cannot
+be interpreted in a useful way without reading the associated numbers, so what use is the picture?
+
+
+
+
+                                          Figure 7: A pie chart often does a poor job of showing how
+                                             individual items relate to one another and the whole.
+
+The bar graph below, however, tells the same story as the pie chart above, but does so clearly, because it is a better
+medium of display for this information.
+
+
+
+
+                         Figure 8: This bar graph is the appropriate choice for quickly communicating the relationship
+                                 between these individual items as they relate to one another and the whole.
+
+
+
+
+© 2005 Perceptual Edge                                                                               8
+PITFALL #6: INTRODUCING MEANINGLESS VARIETY
+This mistake is closely tied to the one we just examined. I’ve found that people often hesitate to use the same medium of
+display (bar chart, etc.) multiple times on a dashboard out of what I assume is a sense that viewers will get bored with the
+sameness. Variety might be the spice of life, but if it is introduced on a dashboard for its own sake, the display suﬀers. You
+should always select the means of display that works best, even if that results in a dashboard that is ﬁlled with nothing but
+multiple instances of the same type of graph. If you are giving viewers the information that they desperately need to do their
+jobs, the data won’t bore them if it’s all displayed in the same way, but they will deﬁnitely get aggravated if you force them
+to work harder than necessary to get the information that they need due to unnecessary variety. In fact, consistency in the
+means of display whenever appropriate allows viewers to use the same perceptual strategy for interpreting the data, which
+saves them time and energy. The dashboard below illustrates variety gone amok.
+
+
+
+
+                         Figure 9: The display media on this dashboard appear to have been chosen for the sake of variety
+                            rather than based on clear choices of the most appropriate medium for each type of data.
+
+
+PITFALL #7: USING POORLY DESIGNED DISPLAY MEDIA
+Once you’ve chosen the right means to display the information and its message, you must also design the components of
+that display to communicate clearly and eﬃciently, without any distraction.
+
+The graph below illustrates several design problems to hinder communication:
+
+    •     The bars’ colors are distractingly bright.
+    •     The 3-D eﬀect makes the bars hard to read.
+    •     The purpose of the graph is to compare actual to budgeted revenue for each of the four regions, but something
+          about its design makes this diﬃcult. Given its purpose, the bars for actual and budgeted revenues for each region
+          should have been placed next to one another to make it easier to compare them.
+
+Simple design mistakes like this can signiﬁcantly undermine the success of a dashboard.
+
+
+
+
+© 2005 Perceptual Edge                                                                              9
+                                      Figure 10: This graph, taken from a dashboard, illustrates
+                                       several problems in design that hinder communication.
+
+PITFALL #8: ENCODING QUANTITATIVE DATA INACCURATELY
+When you use a graph to communicate quantitative data, the values are encoded in the form of visual objects, such as the
+bars on the graph below. These visual objects should accurately encode the values so you can compare them to one another
+as a means to compare the values and understand the relationships.
+
+Sometimes graphical representations of quantitative data are actually mis-designed in ways that inaccurately display the
+quantities. The quantitative scale along the vertical axis was improperly set for a graph that encodes data in the form of bars.
+The length of a bar represents its quantitative value. The bars that represent revenue and costs for the month of January
+suggest that revenue was about four times costs. An examination of the scale, however, reveals the error of this natural
+assumption: revenue is actually less than double the costs.
+
+
+
+
+                                       Figure 11: The heights of the bars in this graph do not
+                                            accurately encode the values they represent.
+
+
+
+
+© 2005 Perceptual Edge                                                                           10
+PITFALL #: ARRANGING THE DATA POORLY
+When designing a dashboard, you cannot put the pieces of information together in any old way that they seem to ﬁt. If a
+dashboard isn’t organized with appropriate placement of information based on importance and desired viewing sequence,
+along with visual design that segregates data into meaningful groups without fragmenting it into a confusing labyrinth, the
+result is a cluttered mess. The goal is not simply to make the dashboard look good, but to arrange the data in a manner that
+ﬁts the way it’s used. The most important data ought to be prominent. Data that requires immediate attention ought to stand
+out. Data that should be compared ought to be arranged and visually designed to encourage comparisons.
+
+Notice on the dashboard below that the most prominent position—the top left—is used to display the vendor’s logo and
+navigational controls. What a waste of prime real estate! As you scan down the screen, the next information you see is a meter
+that presents the average order size. It’s possible that average order size might be someone’s primary interest, but unlikely
+that out of all the information that appears on this dashboard, this is the most important. Notice also that the line graph in
+the top center position displays the historical trend of order size, which logically relates to the average order size data that
+appears in the meter on the left, so why isn’t it next to the meter so their relationship can be easily seen? This dashboard lacks
+an appropriate visual balance based on the nature and importance of the data.
+
+
+
+
+                         Figure 12: This dashboard exhibits organization that is haphazard and ill suited to its use.
+
+
+
+
+© 2005 Perceptual Edge                                                                              11
+PITFALL #10: INEFFECTIVELY HIGHLIGHTING WHAT’S IMPORTANT
+Take a look at the dashboard below to see what catches your eye.
+
+
+
+
+                         Figure 13: With everything visually prominent, this dashboard gives your eyes no clue where to focus.
+
+
+If you’re like me, because everything in this dashboard is visually prominent and vying for your attention, nothing in
+particular grabs your attention. When this happens the dashboard has failed. You should be able to look at a dashboard and
+have your eyes immediately drawn to the information that is most important. When everything is visually prominent, nothing
+stands out. All of the data displayed on a dashboard ought to be important, but not all data are equally important. When you
+are monitoring the business, your eyes must be drawn to those items that most need your attention right now.
+
+The logo and navigation controls (the buttons on the left) are prominent, both as a result of their position on the screen and
+the use of strong borders, but they aren’t data and should therefore be subdued. Then there are the graphs, where the data
+resides, but all the data is equally bold and colorful, leaving us with a wash of sameness and no clue where to focus.
+
+
+PITFALL #11: CLUTTERING THE SCREEN WITH USELESS DECORATION
+Due to their visual nature, dashboards tend to get dressed up by their designers in silly ways. I say “silly” because the
+decoration that ﬁnds it way onto many dashboards, often to make it look like something it isn’t (such as an automobile
+dashboard), becomes an absurd distraction from the task at hand. Dashboards found on vendor Web sites are especially
+prone to this error. I get the impression that vendors either hope that we’ll be impressed by their artistry or assume that the
+decorative ﬂourishes are necessary to keep us entertained. I assure you, however, that even people who enjoy the decoration
+upon ﬁrst sight will grow weary of it in a short time.
+
+The makers of the dashboard below did an exceptional job of making it look like an electronic control panel. If the purpose
+were to train people in the use of an actual control board by simulating its use, then this would be great, but that isn’t the
+purpose of a dashboard. Notice the vertically-oriented meters in the center that are designed to look like LED (light-emitting
+diode) displays and the time period selector that looks like a manual switch. Graphics dedicated to this end are pure
+decoration, visual content that the viewer must process to get to the data.
+
+
+
+
+© 2005 Perceptual Edge                                                                                 12
+                                   Figure 14: This dashboard suﬀers from useless decoration; visual
+                                    ﬂourishes that serve merely to distract for its actual purpose.
+
+
+
+
+PITFALL #12: MISUSING OR OVERUSING COLOR
+Color can be used in powerful ways to highlight data, encode data, or create a relationship between individual items on a
+dashboard, but it is commonly over-used and misused. Color choices must made thoughtfully, based on an understanding
+of how people perceive color and the signiﬁcance of color diﬀerences. Some colors are hot and demand our attention while
+others are cooler and less visible. When any color appears as a contrast to the norm, our eyes pay attention and our brains
+attempt to assign meaning to that diﬀerence. When colors in two diﬀerent displays are the same we are tempted to relate
+them to one another. We merrily assume that we can use colors like red, yellow and green to assign important meanings to
+data, but in doing so we exclude the 10% of males and 1% of females who are color blind.
+
+A common problem is the use of too many colors, especially bright colors. Because dashboards are often densely packed
+with information, the visual content must be kept as simple as possible. The use of too many colors can be visually assaulting.
+When overused, color loses its power to highlight what’s most important.
+
+The graph below, taken from a dashboard, misuses color in several ways but there is one problem that stands out as most
+egregious. What is the meaning of the separate color for each bar? The correct answer is that the colors mean nothing. There
+is no reason to assign diﬀerent colors to the bars for they are already labeled along the Y axis. Nevertheless, time is wasted
+as our brains—whether consciously or unconsciously—search for the nonexistent meaning of these diﬀerences. It is best to
+keep colors subdued and neutral, except when you are using color to highlight something as especially important.
+
+
+
+
+© 2005 Perceptual Edge                                                                          13
+                                       Figure 15: This graph illustrates a gratuitous use of color.
+
+
+PITFALL #13: DESIGNING AN UNAPPEALING VISUAL DISPLAY
+Not being one to mince words for the sake of propriety, let me say that some dashboards are just plain ugly. When we see
+them we’re inclined to avert our eyes. Hardly the reaction you want from a screen that is supposed to regularly supply people
+with important information. You might have assumed from my earlier warning against decoration that I have no concern for
+dashboard aesthetics, but that is not the case. When a dashboard is unattractive—unpleasant to look at—the viewer is put in
+a frame of mind that is not conducive to its eﬀective use. I’m not advocating that we add touches to make dashboards pretty,
+but rather that we attractively display the data itself without adding anything whatsoever. There is a diﬀerence.
+
+It appears that the person who created the dashboard below made an attempt to make it look nice, but just didn’t have the
+visual design skills necessary to succeed. In an eﬀort to ﬁll up the space, some sections such as the graph at the bottom right
+were simply stretched. Although shades of graph can be used eﬀectively as the background color of graphs, this particular
+shade is too dark. The image that appears under the title “Manufacturing” is clearly an attempt to redeem the dreary
+dashboard with a splash of decoration, but even it is rather ugly.
+
+
+
+
+                             Figure 16: This dashboard, despite the eﬀorts of its designer, is just plain ugly.
+
+
+
+© 2005 Perceptual Edge                                                                             14
+THE KEY TO DASHBOARD EFFECTIVENESS
+Visual communication is only eﬀective when it is aligned with the way people see and think. Put diﬀerently, to work
+eﬀectively, we must primarily understand people, not computers. Business intelligence can only be achieved by applying
+technology to the needs of business in ways that engage and stimulate the most valuable resource of the business: human
+intelligence.
+
+Henry David Thoreau once penned the same word three times in succession to emphasize an important quality of life that
+applies to design as well: “Simplify, simplify, simplify!” I don’t always get it right, but I strive to live my life and to design all
+forms of communication according to Thoreau’s sage advice to keep things simple. Elegance in communication is often
+achieved through simplicity of design. Too often we smear a thick layer of gaudy makeup over data in an eﬀort to impress or
+entertain, rather than to communicate the truth of the matter in the clearest possible way. When designing dashboards, you
+must include only the information that you absolutely need, you must condense it in ways that don’t decrease its meaning,
+and you must display it using visual display mechanisms that can be easily read and understood, even when quite small.
+Keep these principles in mind and you’ll be oﬀ to a good start.
+
+Note: The content of this white paper is based on a chapter in the new book Information Dashboard Design: The Eﬀective Visual
+Communication of Data, Stephen Few, O’Reilly Media, 2006. Whereas this white paper features pitfalls to be avoided, the book
+goes on to explain what can be done to design dashboards that communicate information clearly and at a glance.
+
+
+
+
+© 2005 Perceptual Edge                                                                        15
+                         ABOUT THE AUTHOR
+
+                         Stephen Few has 24 years of experience as an IT innovator,
+                         consultant, and educator, specializing in business
+                         intelligence and information design. Today, as principal
+                         of the consultancy Perceptual Edge, he focuses on data
+                         visualization for the eﬀective analysis and communication
+                         of quantitative business information. He writes the monthly
+                         data visualization column in DM Review, speaks frequently
+                         at conferences like those oﬀered by The Data Warehousing
+                         Institute (TDWI) and DCI, and teaches in the MBA program
+                         at the University of California in Berkeley. He is also the
+                         author of the books Show Me the Numbers: Designing Tables
+                         and Graphs to Enlighten and Information Dashboard Design:
+                         The Eﬀectual Visual Display of Data. More information about
+                         his current work can be found at www.perceptualedge.com.
+
+
+
+
+© 2005 Perceptual Edge                        16
+                   PROCLARITY ADDENDUM: AVOID THE COMMON PITFALLS OF DASHBOARD DESIGN WITH PROCLARITY ANALYTICS 6
+
+                   In his white paper, “Common Pitfalls in Dashboard Design,” Stephen Few leads the reader through the 13 most common
+                   pitfalls in the visual design of dashboards. Knowing these pitfalls and how to avoid them is one step in the process of
+                   designing eﬀective dashboards. Having the tools that enable a dashboard designer to apply lessons learned from these
+                   pitfalls is another important element in dashboard design. The ProClarity Dashboard provides the features and the ﬂexibility
+                   that allow for eﬀective visual design. As you will see in the following examples, ProClarity Analytics 6 can enable dashboard
+                   designers to avoid some of the most common pitfalls in dashboard design.
+
+                   AVOID PITFALL #1 (EXCEEDING THE BOUNDARIES OF A SINGLE SCREEN) WITH PROCLARITY CUSTOM TEMPLATES
+                   In his white paper, Stephen Few cautions that a dashboard should not exceed the boundary of a single screen. This is because
+                   the dashboard needs to paint a complete picture that brings to light important connections that might not be visible if users
+                   have to scroll down. ProClarity dashboards oﬀer the ability for users to create custom, ﬁxed-size dashboard templates. This
+                   allows dashboard authors to create dashboard pages to ﬁt a given screen resolution, guaranteeing that dashboards will not
+                   exceed the boundaries of a single screen.
+
+                   Design for the Appropriate Screen Resolution
+                   ProClarity dashboard templates are ﬁxed in size and speciﬁed in pixels. Before starting on dashboard design, you should have
+                   a good feel for your users’ screen resolution settings. If your organization has standardized on a single screen resolution, you
+                   can easily create dashboard templates that will work well for that resolution.
+
+                   However, many organizations have a wide variety of screen resolutions to take into consideration. Some departments may
+                   have large, high-resolution workstation monitors while the remote employees may have laptops with signiﬁcantly smaller,
+                   lower resolution screens. In this case, you should design templates for the lowest resolution to ensure that the dashboard will
+                   be displayed properly on all computer screens. Or, you can design your dashboard templates for one particular resolution
+                   and advise the end users on the proper resolution to use to best view the dashboard.
+
+                   Create Custom Templates
+                   Before discussing custom templates, we should ﬁrst understand the structure of a ProClarity dashboard. ProClarity
+                   dashboards consist of pages, groups, and views, as shown in Figure A-1. The page boundary is shown in blue, and additional
+                   pages are represented by tabs across the top of the dashboard. The displayed page consists of two groups, as shown in red.
+                   The top group, or Group 1, consists of three views. The bottom group, or Group 2, consists of a single view. View boundaries
+                   are shown in green.
+
+
+
+
+                                                                                   Figure A-1: ProClarity Dashboards consists of pages, groups, and views.
+
+
+
+© 2005 ProClarity Corporation. All rights reserved. No portion of this report may be reproduced or stored in any form without prior written permission.   17   www.proclarity.com
+                   Dashboard authors can create custom, ﬁxed-size templates for pages and groups. Dashboard templates are managed in the
+                   Dashboard Studio. To launch the Dashboard Studio, click on the “Dashboard Studio” link in the dashboard toolbar, as shown
+                   in Figure A-2.
+
+
+
+
+                                                                        Figure A-2: The Dashboard Studio may be launched from the ProClarity Dashboard.
+
+
+                   In the Dashboard Studio, select Templates from the Tools menu to launch the Template Manager as shown in Figure A-3.
+
+
+
+
+                                                                                          Figure A-3: The Dashboard Studio includes a Template Manager.
+
+
+
+                   A sample page template is shown in Figure A-4. The page templates establish how the groups are displayed on the page.
+                   Each gray box in the “Layout” pane represents a group.
+
+
+
+
+                                       Figure A-4: The designer may select an existing group template, edit a group template, or create a new group template.
+
+                   Dashboard authors can select an existing page template, edit an existing template, or create a new template. The page
+                   template editor shown in Figure A-5 allows dashboard designers to specify how the groups will be arranged on the page.
+                   Note that there are no pixel sizes shown in the page template; pixel sizes are speciﬁed on a view-by-view basis in the group
+                   templates.
+
+
+
+© 2005 ProClarity Corporation. All rights reserved. No portion of this report may be reproduced or stored in any form without prior written permission.   18   www.proclarity.com
+                                                   Figure A-5: The page template editor allows the designer to select how groups are arranged on the screen.
+
+                   A sample group template is shown in Figure A-6. The group template displayed in the Layout pane consists of two stacked
+                   views. The view width and height (in pixels) are shown for each group. In this case, each view is 800 pixels wide and 280 pixels
+                   high. One might think that a dashboard page with the layout shown in Figure A-6 would be suitable for 800 by 600 screen
+                   resolution, but this is not the case! The screen real estate required by the Web browser and the dashboard toolbar must be
+                   taken into account. This particular dashboard page would likely require a screen resolution of 1280 by 1024 to safely display
+                   without scroll bars. Some experimentation will be required to ﬁgure out how to account for the extra pixel space required by
+                   your organization’s standard conﬁguration of Internet Explorer.
+
+
+
+
+                                                             Figure A-6: A sample group template showing view width and height (in pixels) for each group.
+
+
+                   AVOID PITFALL #4 (EXPRESSING MEASURES INDIRECTLY) WITH PROCLARITY KPI DESIGNER
+                   In his description of Pitfall #4, Few states, “A measure is poorly expressed if it fails to directly, clearly, and eﬃciently
+                   communicate the meaning that the dashboard viewer must discern.” To design eﬀective dashboard visualizations, the
+                   dashboard designer should know exactly what the users need to see and how they intend to use the information.
+
+                   Example: Budget Variance
+                   Consider Few’s example of a chart that is intended to convey the variance between budget and actual amounts, as shown in
+                   Figure A-7. Recall that what the users really need to know is how far above or below the budget they are. With the line chart
+                   in Figure A-7, it is relatively diﬃcult to determine how far the actual values are above or below budget.
+
+
+
+
+© 2005 ProClarity Corporation. All rights reserved. No portion of this report may be reproduced or stored in any form without prior written permission.   19   www.proclarity.com
+                                                      Figure A-7: This line chart makes it diﬃcult to determine the relationship between budget and actual.
+
+
+                   To determine budget variance, users must:
+                     • Refer to the legend to ﬁnd out which series shows actual and which shows budget
+                     • Read the left axis to ﬁnd out the approximate value of each series
+                     • Subtract the two values to get the absolute diﬀerence
+                     • Divide the absolute diﬀerence from budget to get a rough idea of the variance percentage
+
+
+                   The budget variance is better expressed directly as a percentage. Now consider the line chart in Figure A-8. This line chart has
+                   a single data series that represents percentage variance from budget. This chart makes it very clear how far actual values are
+                   above or below budget, and it eliminates the manual calculations that the chart in Figure A-7 requires.
+
+
+
+
+                                                      Figure A-8: This budget variance line chart clearly displays the relationship between actual and budget.
+
+
+
+
+© 2005 ProClarity Corporation. All rights reserved. No portion of this report may be reproduced or stored in any form without prior written permission.   20   www.proclarity.com
+                   The variance calculation in Figure A-8 was creating using the ProClarity KPI Designer. The KPI Designer simpliﬁes the process
+                   of creating calculated measures, such as Percent Variance, by walking the user through the setup with a wizard that creates
+                   the calculation.
+
+                   ProClarity KPI Designer
+                   The KPI Designer is launched within the ProClarity Professional client by clicking on the KPI Designer toolbar button as shown
+                   in Figure A-9.
+
+
+
+
+                                                                 Figure A-9: The ProClarity KPI Designer is launched from the ProClarity Professional client.
+
+
+                   The KPI Designer wizard starts with a welcome screen, followed by a list of KPI templates. The template we used to create
+                   the variance calculation is called “Percent Markup,” as shown in Figure A-10. A help link (“How can I use this KPI?”) is provided
+                   for each KPI to explain the formula and how it may be used. The formula for the budget variance is quite simple: ([Actual]
+                   – [Budget]) / [Budget].
+
+
+
+
+                                                                    Figure A-10: ProClarity KPI templates include the template used for budget variance.
+
+                   NOTE: ProClarity KPIs are based on XML templates, so they are extensible. The “Percent Markup” template may be renamed
+                   “Variance %” and the wizard screens modiﬁed, if desired. Please refer to the ProClarity SDK for more information.
+
+
+
+
+© 2005 ProClarity Corporation. All rights reserved. No portion of this report may be reproduced or stored in any form without prior written permission.   21    www.proclarity.com
+                   The KPI Designer wizard walks users through selecting which measure in the OLAP cube represents actual amount and which
+                   measure represents budget. Figure A-11 shows how we selected the actual amount measure to represent revenue in our KPI.
+
+
+
+
+                                                           Figure A-11: The KPI Designer wizard makes it easy to select the measure that represents revenue.
+
+                   Recall that our KPI formula uses a budget amount. Figure A-12 shows how we selected the budget measure to represent this
+                   value.
+
+
+
+
+                                                    Figure A-12: The KPI Designer allows us to select the budget measure to represent the budgeted amount.
+
+
+
+                   Now that we have selected a KPI template and the measures to represent the values in the KPI formula, we need to name the
+                   KPI, determine the display format, and save it, as shown in Figure A-13.
+
+
+
+
+© 2005 ProClarity Corporation. All rights reserved. No portion of this report may be reproduced or stored in any form without prior written permission.   22   www.proclarity.com
+                                                          Figure A-13: As a last step, the KPI Designer wizard prompts users to name, format, and save the KPI.
+
+
+                   Once complete, a new KPI can be used to create a chart such as the budget variance chart shown in Figure A-14.
+
+
+
+
+                                                         Figure A-14: This budget variance chart clearly displays the relationship between actual and budget.
+
+                   When Magnitude is Important
+                   The magnitude of the actual and budget amounts may be important. For example, a 10% variance above budget may not be
+                   signiﬁcant if the actual amount is only $1,000. But it may be very signiﬁcant if the actual amount is $1,000,000. In this case,
+                   two stacked line charts may be used to display both the variance percentage and variance amount as shown in Figure A-15.
+                   Here, the variance is shown as a percentage in the upper chart, and in dollar amounts in the lower chart.
+
+
+
+
+© 2005 ProClarity Corporation. All rights reserved. No portion of this report may be reproduced or stored in any form without prior written permission.   23      www.proclarity.com
+                                                                 Figure A-15: Stacked charts may be used to display both percentage and amount variance.
+
+
+
+                   Chart Selection and Formatting
+                   Stephen Few asserts that several common pitfalls in dashboard design may be avoided with proper chart selection and
+                   formatting. Two such pitfalls are:
+                      • Pitfall #5: Inappropriate Media of Display – selecting the wrong type of graph for the data and its message
+                      • Pitfall #8: Encoding quantitative data inaccurately – graphical representations of data that inaccurately displays the
+                        quantity
+
+                   ProClarity includes a wide array of business charts and formatting options that allow the dashboard designer to select the
+                   right chart for the right job. The next section will give a brief introduction on how to apply chart formatting with ProClarity to
+                   avoid some of the pitfalls described above.
+
+
+                   AVOID PITFALL #5 (INAPPROPRIATE MEDIA OF DISPLAY) WITH PROCLARITY CHARTS AND FORMATTING OPTIONS
+                   Knowing which graph type to apply to a particular dataset that best communicates the intended message is a skill that does
+                   not come naturally to many people. Volumes have been written by experts such as Stephen Few to help dashboard designers
+                   learn this skill.
+
+                   ProClarity oﬀers the standard business charts and subsequent formatting options needed to use appropriate graph and chart
+                   types to convey information. As shown in Figure A-16, a pie chart can be used to display sales amount broken out by state.
+                   However, depending on what needs to be conveyed, this may not be the best chart type to display sales comparisons.
+
+
+
+
+© 2005 ProClarity Corporation. All rights reserved. No portion of this report may be reproduced or stored in any form without prior written permission.   24   www.proclarity.com
+                                                       Figure A-16: This pie chart is likely not the best graph to show the relationships between the data series.
+
+                   Assuming that the relationship between the data values for each state is important, a better chart type to use is a horizontal
+                   bar chart, as shown in Figure A-17. This particular chart makes it easy to see both how the states compare with each other
+                   and sales amounts.
+
+
+
+
+                                          Figure A-17: A horizontal bar chart communicates the relationships between data series more clearly and eﬀectively.
+
+                   Available Chart Types
+                   ProClarity includes a variety of standard business charts from which to choose, including:
+                     • Area
+                     • Bar (vertical and horizontal)
+                     • Line
+                     • Point
+                     • Pie
+
+
+
+
+© 2005 ProClarity Corporation. All rights reserved. No portion of this report may be reproduced or stored in any form without prior written permission.   25   www.proclarity.com
+                   Chart types may be speciﬁed from various menus in the ProClarity Professional client. By right-clicking on a ProClarity chart,
+                   users can launch the Chart Properties dialog box shown in Figure A-18. In addition to allowing users to select chart types, the
+                   Chart Properties dialog box contains many useful formatting options, some of which we will apply to avoid another common
+                   pitfall.
+
+
+
+
+                                                         Figure A-18: The Chart Properties dialog box allows users to adjust chart types to suit their needs.
+
+
+
+                   AVOID PITFALL #8 (ENCODING QUANTITATIVE DATA INACCURATELY) WITH PROCLARITY CHART PROPERTIES
+                   Visual data should be encoded to accurately reﬂect the values and relationships of visual objects. Data can be misrepresented
+                   by the scaling and alignment of the axes that represent the values. To illustrate this, an example from Few’s white paper is
+                   replicated in ProClarity and shown in Figure A-19.
+
+
+
+
+                             Figure A-19: Scaling and alignment settings cause this bar chart to inaccurately represent the relationship between sales and cost.
+
+
+                   In the bar chart shown in Figure A-19, the left axis represents the magnitude of the sales and cost measures. The relationship
+                   between sales and cost should be obvious from the relative size of the bars, but this is not the case. For example, the pair of
+                   bars for Dec-01 (far right side of the chart) seem to indicate that sales (in blue) is nearly double that of cost (yellow). However,
+                   the actual values are roughly $11M and $9M, a diﬀerence of less than 20%. The alignment of the left axis is the problem here.
+                   Instead of starting with zero, it starts with $5M.
+
+
+
+
+© 2005 ProClarity Corporation. All rights reserved. No portion of this report may be reproduced or stored in any form without prior written permission.   26    www.proclarity.com
+                   To correctly align the left axis, open the Chart Properties dialog box by right-clicking on the chart. Select “Left Axis” in the left
+                   pane of the dialog box and then select the “Left Axis Scaling” tab as shown in Figure A-20. The “automatic” scaling property
+                   will select the appropriate axis scaling in most cases.
+
+
+
+
+                                                                                 Figure A-20: Select “Automatic” axis scaling to properly align the left axis.
+
+
+                   By applying the automatic scaling property to the chart, we get a more accurate representation of the information, as shown
+                   in Figure A-21.
+
+
+
+
+                                        Figure A-21: The left axis in this chart starts at zero and more accurately shows the relationship between sales and cost.
+
+                   If more ﬁne-grained control is needed, minimum and maximum axis values may be selected. Use with caution! Selecting
+                   manual axis limits is a recipe for creating misleading charts, as the manual setting will not readjust as data values are
+                   changed. Selecting the automatic scaling is the best way to ensure proper axis alignment.
+
+
+
+
+© 2005 ProClarity Corporation. All rights reserved. No portion of this report may be reproduced or stored in any form without prior written permission.   27     www.proclarity.com
+                   SUMMARY
+                   Designing eﬀective dashboards requires an understanding of eﬀective visual design. Furthermore, dashboard software
+                   should enable designers to create highly eﬀective dashboards by providing the features and ﬂexibility that allow designers
+                   to apply lessons learned in eﬀective visual design. ProClarity Analytics 6 may by used to help apply those lessons and avoid
+                   some of the most common pitfalls in dashboard design.
+
+                   For more information on ProClarity Analytics 6, and how to use ProClarity to create highly eﬀective dashboards, please visit
+                   the following resources.
+                     • Analytic Dashboards Toolkit available at the ProClarity BI Resource Center:
+                         http://www.proclarity.com/sqlserver2005/ toolkit_analytic_dashboards.asp
+                     • Courses available through ProClarity University: http://www.proclarity.com/training/
+                     • Information about ProClarity Dashboard Server: http://www.proclarity.com/products/dashboards.asp
+
+
+
+
+© 2005 ProClarity Corporation. All rights reserved. No portion of this report may be reproduced or stored in any form without prior written permission.   28   www.proclarity.com
+                   PROCLARITY CORPORATION
+
+                   Americas Headquarters
+                   500 South 10th Street
+                   Boise, ID 83702
+                   T 208.344.1630
+                   F 208.343.6128
+
+                   EMEA Headquarters
+                   De Waterman 7-b
+                   5215 MX ‘s-Hertogenbosch
+                   The Netherlands
+                   T +31 (73) 681.0800
+                   F +31 (73) 681.0801
+
+                   For More Information
+                   T 208.344.1630
+                   F 208.343.6128
+                   E-mail: info@proclarity.com
+                   Web site: www.proclarity.com
+
+
+
+
+                   ProClarity is a leading provider of business intelligence
+                   (BI) software that empowers users to visualize and explore
+                   multi-dimensional data, perform root-cause analysis of
+                   business information and monitor organizational
+                   performance. ProClarity leverages the power of the Micro-
+                   soft business intelligence platform to provide end-to-end,
+                   enterprise-class reporting and analytics solutions with
+                   multiple deployment options that enable
+                   organizations to make faster, smarter decisions.
+                   Headquartered in Boise, Idaho, ProClarity has regional sales
+                   and services oﬃces throughout North America, Europe and
+                   Asia-Paciﬁc. Founded in 1995, ProClarity supports more
+                   than 2,000 customers globally including AT&T,
+                   Barnes & Noble, Ericsson, Hewlett-Packard, The Home
+                   Depot, Pennzoil-Quaker State, Reckitt Benckiser, Roche,
+                   Siemens, USDA, Verizon and Wells Fargo.
+
+
+
+
+© 2005 ProClarity Corporation. All rights reserved. No portion of this report may be reproduced or stored in any form without prior written permission.   www.proclarity.com
+

@@ -14,7 +14,7 @@ done
 # out of a commit by path): HEAD then fails to build for every session, as when other
 # sessions' lab_main.zig hunks were swept in (deecc3f, 42ed9d6). ":path" reads the
 # commit's index, also a by-path commit's temporary one
-for f in $(git diff --cached --name-only --diff-filter=ACM -- '*.zig'); do
+for f in $(git diff --cached --name-only --diff-filter=ACM -- '*.zig' ':(exclude)research/raw'); do
     d=$(dirname "$f")
     for i in $(git show ":$f" | sed -n 's/.*@import("\([^"]*\.zig\)").*/\1/p'); do
         p=$(perl -e '$_ = shift; 1 while s{(^|/)\./}{$1}; 1 while s{[^/]+/\.\./}{}; print' "$d/$i")

@@ -1,0 +1,297 @@
+                                                                                 eprints@whiterose.ac.uk
+                                                                            https://eprints.whiterose.ac.uk
+                                                      Universities of Leeds, Sheffield and York
+
+
+Deposited via The University of Sheffield.
+
+White Rose Research Online URL for this paper:
+https://eprints.whiterose.ac.uk/id/eprint/116991/
+
+Version: Accepted Version
+
+Proceedings Paper:
+Walsh, T., Kapfhammer, G.A. and McMinn, P.S. (2017) ReDeCheck: An Automatic Layout
+Failure Checking Tool for Responsively Designed Web Pages. In: ISSTA 2017
+Proceedings of the 26th ACM SIGSOFT International Symposium on Software Testing and
+Analysis. International Symposium on Software Testing and Analysis (ISSTA 2017), 10-14
+Jul 2017, Santa Barbara, California. ACM, pp. 360-363. ISBN: 978-1-4503-5076-1.
+
+https://doi.org/10.1145/3092703.3098221
+
+
+
+
+Reuse
+Items deposited in White Rose Research Online are protected by copyright, with all rights reserved unless
+indicated otherwise. They may be downloaded and/or printed for private study, or other acts as permitted by
+national copyright laws. The publisher or other rights holders may allow further reproduction and re-use of
+the full text version. This is indicated by the licence information on the White Rose Research Online record
+for the item.
+
+Takedown
+If you consider content in White Rose Research Online to be in breach of UK law, please notify us by
+emailing eprints@whiterose.ac.uk including the URL of the record and the reason for the withdrawal request.
+       ReDeCheck: An Automatic Layout Failure Checking Tool for
+                  Responsively Designed Web Pages
+                 Thomas A. Walsh                             Gregory M. Kapfhammer                                  Phil McMinn
+            University of Sheﬃeld, UK                            Allegheny College, USA                       University of Sheﬃeld, UK
+
+ABSTRACT                                                                         the user’s device, resizing and rearranging the content to best ﬁt the
+Since people frequently access websites with a wide variety of de-               screen according to three core concepts: ﬂuid grids, ﬂexible media,
+vices (e.g., mobile phones, laptops, and desktops), developers need              and media queries [11]. Fluid grids and ﬂexible media use relative
+frameworks and tools for creating layouts that are useful at many                sizing to scale web elements to the particular device, thus ensuring
+viewport widths. While responsive web design (RWD) principles                    that they are rendered within their containers. Media queries allow
+and frameworks facilitate the development of such sites, there is                developers to apply diﬀerent styling rules depending on the char-
+a lack of tools supporting the detection of failures in their layout.            acteristics of the current device — most commonly the width of the
+Since the quality assurance process for responsively designed web-               device or browser, known as the viewport width. Many front-end
+sites is often manual, time-consuming, and error-prone, this paper               frameworks, such as Bootstrap [14] and Foundation [13], provide
+presents ReDeCheck, an automated layout checking tool that alerts                RWD features, thereby giving developers the building blocks with
+developers to both potential unintended regressions in responsive                which they can create web pages that are responsive.
+layout and common types of layout failure. In addition to sum-                   Challenges Addressed. Given the complex interplay between web
+marizing ReDeCheck’s beneﬁts, this paper explores two diﬀerent                   elements and layout rules evident in responsive web pages, imple-
+usage scenarios for this tool that is publicly available on GitHub.              menting them can be diﬃcult, leading to developers introducing
+                                                                                 undesirable visual eﬀects into their pages. Figure 1 presents an
+CCS CONCEPTS                                                                     example of a responsive layout failure (RLF) in a production web
+•Software and its engineering → Software defect analysis;                        page: at wide viewport widths (i.e., parts (a) and (c)) the carousel of
+                                                                                 language options ﬁts easily within the page, whereas at narrower
+KEYWORDS                                                                         widths (i.e., parts (b) and (d)) it protrudes outside of the viewport,
+                                                                                 making the right scroll arrow unclickable and negatively impacting
+Responsive web design, presentation failures, layout failures.
+                                                                                 the page’s functionality. Since RLFs often occur intermittently at
+ACM Reference format:                                                            unpredictable and occasionally small ranges of viewport widths,
+Thomas A. Walsh, Gregory M. Kapfhammer, and Phil McMinn. 2017. Re-               detecting them is challenging. Moreover, this detection process is
+DeCheck: An Automatic Layout Failure Checking Tool for Responsively
+                                                                                 often a manual one in which a developer “spotchecks” a web page at
+Designed Web Pages. In Proceedings of International Symposium on Software
+Testing and Analysis, California, USA, July 10–14, 2017 (ISSTA 2017), 5 pages.
+                                                                                 certain viewport widths (e.g., 320 pixels for an iPhone, 768 pixels
+DOI: 10.1145/3092703.3098221                                                     for tablets, and 1024 pixels for laptops), an undertaking that is labor
+                                                                                 intensive and error prone as certain RLFs can be easy to overlook.
+1     INTRODUCTION                                                               Since it is challenging to spotcheck a page at every viewport width,
+While a recent study by the Pew Research Center found that 95% of                developers may miss layout failures that go on to production.
+Americans currently own a cellphone of some kind, the same report                The Tool. The ReDeCheck tool (Responsive Design Checker, pro-
+also revealed that 80% of US adults use a desktop or a laptop and                nounced “Ready Check”), presented in this paper, helps web de-
+50% have a tablet [1]. Results like these, which mirror those of                 velopers implement responsively designed web pages that exhibit
+several other regions of the world [15], mean that web developers                correct layout at diﬀerent viewport widths. ReDeCheck features
+must design websites that have aesthetically pleasing and functional             two distinct modes for automatically checking a responsive web
+layouts on a wide variety of devices. Providing a quality experience             page’s layout: regression checking and common failure detection.
+to end users can lead to increased revenue [7] and brand loyalty [4],            Regression checking compares the responsive layout of the latest
+along with enhanced search engine rankings [5]. Conversely, a poor               and previous versions of a web page and reports to the user a list of
+page layout could lead to negative user experiences, particularly                potential regression layout issues [19]. Common failure detection
+on mobile devices, causing the majority of users to simply leave                 analyzes the layout of the latest version of a web page and checks
+the page [7], leading to the potential for lost revenue [9].                     for a number of common types of RLF [18]. ReDeCheck is well doc-
+Envisioned Users. Aiming to capitalize on the numerous beneﬁts                   umented and currently available on GitHub, under an open-source
+attributed to supporting users on a wide variety of devices, many                license, for evaluation and extension [20]. It is platform indepen-
+web developers have adopted responsive web design (RWD). This                    dent and compatible with a range of frequently used web browsers.
+helps them in creating web pages that give an enhanced user ex-                  Evaluation Results. We have conducted experiments to evaluate
+perience regardless of the device being used to view the page [11].              both of ReDeCheck’s modes. The results show that the tool can
+Properly designed RWD-based sites achieve this by “responding” to                accurately detect the majority of potential layout issues between
+                                                                                 diﬀerent versions of a page when in regression checking mode [19].
+ISSTA 2017, California, USA
+2017. 978-1-4503-5076-1/17/07. . . $15.00                                        When targeting speciﬁc layout failure types, the tool detected fail-
+DOI: 10.1145/3092703.3098221                                                     ures in popular websites such as Duolingo and Consumer Reports —
+ISSTA 2017, July 10–14, 2017, California, USA                               Thomas A. Walsh, Gregory M. Kapfhammer, and Phil McMinn
+
+                                                                                      Regression Checking           Common Failure Checking
+
+                                                                                          W           W′                          W
+
+
+                                                                                                           Model Extractor
+
+
+                                                                                         RLG          RLG′                    RLG
+
+
+           (a) 1298 pixels ✓                   (b) 983 pixels ✗                        Model Comparator             Common Failure Detector
+
+                                                                                               Freg                           Fcom
+                     (c) 1298 pixels (zoomed) ✓
+                                                                                                           Report Generator
+
+
+
+                      (d) 983 pixels (zoomed) ✗                                               Report                     Report       SSS
+
+                                                                          Figure 2: The high-level structure of the ReDeCheck tool. To
+                                                                          the left of the dashed vertical line, the modules support re-
+                    (e) ReDeCheck failure report                          gression checking, to the right, common failure checking.
+Figure 1: Screenshots of Duolingo, where a carousel of lan-               of HTML elements as the viewport expands and contracts. For
+guages is correctly centered and with arrows on each side                 example, two elements could be rendered one above the other
+(parts (a) and (c)), before the carousel protrudes outside the            at narrow viewport widths, but side by side on wider viewports
+viewport as the width narrows, obscuring the right-hand ar-               with increased horizontal space. Furthermore, some elements may
+row (parts (b) and (d)). Finally, part (e) shows a report, pro-           only be visible at certain viewport widths. The model extractor
+duced by the ReDeCheck tool, that highlights the failure, us-             module is responsible for extracting the RLG of a speciﬁed web
+ing the dashed and solid red boxes, to the developer.                     page, rendering it in a browser and inspecting its layout at a series
+in addition to outperforming tool-supported manual spotchecking           of viewport widths via the document object model (DOM).
+methods. The tool is also fast, running in less than two minutes on          ReDeCheck picks sample widths by applying uniform sampling
+most of the studied pages, making it feasible for developers to inte-     (e.g., at 60 pixel intervals) and boundary sampling, which involves
+grate it into their responsive web design toolbox [18]. Finally, this     searching the page’s stylesheet for the breakpoints at which the
+paper’s case studies show how a developer can use ReDeCheck’s             layout is intended to change. This two-part combined approach
+failure reports, like the excerpted one in Figure 1(e), to diagnose       thereby obtains as representative a sample as possible. The layouts
+and repair mistakes in a web page’s responsive layout.                    at the chosen widths are then analyzed sequentially to model the re-
+                                                                          sponsive layout. If diﬀerence(s) are found between two consecutive
+2   THE REDECHECK TOOL                                                    layouts, the tool conducts a binary search to ﬁnd the exact viewport
+ReDeCheck is an automated layout checking tool, providing two             width at which the layout changes, repeating the process until all
+diﬀerent forms of developer support. In regression checking mode it       layouts are analyzed. ReDeCheck uses Selenium [2] to drive a
+compares the responsive layouts of two versions of a web page (i.e.,      browser and render the page; Selenium’s support of many browsers
+before and after a developer’s code modiﬁcation), reporting a list of     enables ReDeCheck to integrate into a developer’s environment.
+layout diﬀerences that are potential issues of which the developer           In regression checking mode with input web pages W and W ′ ,
+may be unaware [19]. The common failure detection mode takes the          ReDeCheck begins by extracting RLGs for both to produce RLG and
+latest version of a web page as input and analyzes its responsive         RLG ′ . The model comparator module then compares RLG and RLG ′
+layout, checking for diﬀerent types of common layout failures             using a pairwise matching approach to produce a set of diﬀerences
+that stem from the improper application of RWD principles and             that could be regression failures, Freg . Before outputting a report,
+were identiﬁed through analysis of RWD in practice [18]. These            the report generator module analyses Freg to determine the nature
+types are, namely, element collision (two elements overlapping),          of the failures and the viewport widths at which they are visible.
+element protrusion and viewport protrusion (elements overﬂowing              When detecting common layout failures in a single web page W ,
+their container or the viewport, respectively), small-range layouts       only one model, RLG, is extracted and analysed by the common
+(layouts only applied for a very small number of viewport widths)         failure detector module to check for the presence of the diﬀerent
+and incorrectly wrapping elements (elements forced onto a new row         types of responsive layout failures. The report generator then pro-
+due to a lack of horizontal space). Figure 2 shows ReDeCheck’s            duces a textual report describing the detected failures, Fcom (i.e., the
+structure: to the left of the dashed vertical line, the modules support   type of failure, the elements involved, and the range of viewport
+regression checking, to the right, common failure checking.               widths at which the failure manifests) accompanied by a set of
+   At the core of the ReDeCheck tool is a representation of the           screenshots, S, showing each detected failure with the oﬀending
+dynamic layout of a web page called the responsive layout graph           HTML elements highlighted. A developer can then inspect each of
+(RLG), which models both the changing visibility and alignment            the individual failure reports. If the report shows an evident RLF
+ReDeCheck: An Automatic Layout Failure Checking Tool for Responsively Designed . . .                            ISSTA 2017, July 10–14, 2017, California, USA
+
+    Table 1: Empirical evaluation results for ReDeCheck.
+      (a) Regression Checking              (b) Common Failure Checking
+              TP   TN   FP   FN   Recall           TP    FP   NOI   Viewports   RLFs
+      Total   80   12    0    8    90.9%   Total   196   48    83         137     33
+
+
+(i.e., a true positive (TP)) then the developer can debug and ﬁx the
+issue. If no failure is visible (i.e., a false positive (FP)) then no action
+is required. Finally, if there is no visual failure but — at the level
+of DOM coordinates — the elements are, for example, overlapping,
+the developer may want to investigate further as these could be evi-                    Differing bounds for /NAV/UL/LI[1] - /NAV/UL/LI[2] (leftOf, topAlign, bottomAlign):
+                                                                                        Original : 768 -> 1300
+dence of an underlying structural defect that may manifest visually                     Modified : 766 -> 1300
+in the future. We refer to these as non-observable issues (NOIs).
+                                                                                       Figure 3: The original version of getbootstrap.com (top-left),
+    ReDeCheck is publicly available as an open-source tool on
+                                                                                       the incrementally modiﬁed version (top-right), and a snip-
+GitHub [20]; there is extensive documentation on how to install and
+                                                                                       pet of the report produced by ReDeCheck (bottom).
+run the tool and interpret its results. Each of the tool’s modules are
+documented, allowing researchers and developers to understand its                         While the majority of the generated reports were true positives,
+design and implementation in Java. The tool also contains a suite                      Table 1b reveals that ReDeCheck produced some FP and NOI re-
+of JUnit tests. Finally, ReDeCheck is extensible, supporting the                       ports. For instance, when the tool incorrectly classiﬁed three ele-
+addition of new failure checkers in the common failure detector.                       ments in one page as a “row”, it identiﬁed alignment shifts in these
+                                                                                       elements as a wrapping failure when they were not. ReDeCheck re-
+3     APPLYING THE TOOL                                                                ported NOIs when it detected signiﬁcant changes in the DOM that
+Using a variety of pages that were in production use, both of Re-                      were not visible in the page’s layout. For example, the tool reported
+DeCheck’s modes have been subjected to empirical study to evalu-                       a layout failure for elements that protruded invisibly out of their
+ate their eﬀectiveness. This section summarises the methodology                        container. While NOIs are not failures per-se, it is appropriate for
+and ﬁndings of these studies, additionally presenting two case stud-                   ReDeCheck to report them as they may manifest as layout failures
+ies showing how ReDeCheck detects and reports layout failures.                         in future versions of the web page. Moreover, instead of studying
+                                                                                       each of the generated reports, a developer using ReDeCheck could
+3.1     Experimental Studies                                                           visit every distinct viewport range highlighted by the tool. Since
+                                                                                       Table 1b shows that the tool reported 137 diﬀerent viewport ranges
+Table 1a furnishes the results from the evaluation of ReDeCheck’s
+                                                                                       for the 33 distinct RLFs, a developer would only have to study, on av-
+regression checking mode. Using simple code modiﬁcation oper-
+                                                                                       erage, 4.2 viewport widths to ﬁnd each distinct RLF. Full evaluation
+ators that change, for instance, the width, margin or padding of
+                                                                                       details and further RLF examples can be found in reference [18].
+elements, we used a tool to create 20 incrementally modiﬁed ver-
+sions of ﬁve responsive pages, for a total of 100 modiﬁed web pages.
+                                                                                       3.2    Case Studies
+This empirical study revealed that ReDeCheck was capable of de-
+tecting a majority of such layout changes, achieving 91% recall [19].                  Regression checking. Figure 3 presents an example from one of
+While 15 false negatives were observed, the relevant code modi-                        the web pages in our ﬁrst empirical study, getbootstrap.com. In the
+ﬁcations minimally changed the web page in a way that did not                          original version shown on the top-left, the navigation links are
+inﬂuence the RLG created by ReDeCheck. As such, it is unlikely                         rendered in a vertical dropdown list at narrow viewport widths
+that these changes represented failures, limiting any shortcomings                     before being displayed as a horizontal navigation bar at viewport
+of ReDeCheck. Overall, these results indicate that the tool can                        widths of 768 pixels and wider. However, following a small change
+detect subtle variations in web page layout and notify developers of                   to the style rules of the web page, for a couple of viewport widths
+potential layout issues. For more details, please read reference [19].                 (i.e., 766–767 pixels) the web page renders the navigation links in
+   To investigate the prevalence of the ﬁve common types of RLFs                       a row rather than a column, defeating the point of implementing
+in real-world web pages and evaluate ReDeCheck’s ability to de-                        a drop-down navigation list and producing a far less professional
+tect them, we ran the tool on a corpus of 26 randomly collected                        aesthetic, as shown in the top-right screenshot of this ﬁgure.
+web pages of varying complexity and domain. ReDeCheck found                                Since the failure is only observable at a couple of viewport widths,
+RLFs of all ﬁve common types. Well over half of the web pages,                         it could lie dormant. For example, if developers only checked the
+including well-known ones such as Duolingo and Consumer Reports,                       layout at 768 pixels — as many do since this width is advocated by
+contained RLFs [18]. Since these pages were all in production use                      numerous RWD tools (e.g., [8, 21]) — they would be unaware that
+and, we surmise, already subject to extensive testing, this result em-                 the web page now contained this failure. The report snippet shown
+phasises the importance and real-world relevance of the presented                      at the bottom of this ﬁgure inducates that ReDeCheck detects
+tool, further underscoring the beneﬁts of using ReDeCheck’s au-                        this potential issue and alerts the developer to its presence. It also
+tomated layout checkers. This empirical study also revealed that                       provides useful diagnostic information, such as the viewport widths
+ReDeCheck outperformed several spotchecking approaches. For                            at which the page’s layout has changed and the elements involved,
+instance, a manual spotcheck missed Duolingo’s layout failure, as                      allowing the developer to ascertain if a failure is actually evident.
+highlighted in Figure 1, illustrating the error-prone nature of cur-                       In the case of the web page in Figure 3, the textual report would
+rent industrial quality assurance practices for responsive pages.                      alert the developer to a change in the alignment constraint between
+ISSTA 2017, July 10–14, 2017, California, USA                               Thomas A. Walsh, Gregory M. Kapfhammer, and Phil McMinn
+
+
+LI[1] and LI[2] (i.e., the “Getting Started” and “CSS” links in the     Galen [17] is a responsive layout testing framework with which
+header): LI[1] is aligned to the left of LI[2] and they are both top    a developer describes the intended layout of a page, verifying it
+and bottom aligned for a diﬀerent range of viewport widths. Origi-      at chosen viewport resolution(s). Unlike ReDeCheck, this tool
+nally, the layout is evident for viewport widths of 768 pixels and      requires the developer to write tests with one or more oracles.
+higher (denoted by “768 -> 1300”). Following the code modiﬁcation,
+the layout instead begins at 766 pixels, motivating a developer to      5     CONCLUSIONS AND FUTURE WORK
+change the page’s style rules to ensure that the navigation links are   The paper presents ReDeCheck, a tool that uses automatic lay-
+correctly rendered in a single column as was intended, restoring a      out checking to improve the quality assurance process for respon-
+professional look and feel to the web site. Since the current failure   sively designed web pages. Supporting two checking modes, Re-
+reports include DOM references, and therefore may be hard to in-        DeCheck can detect both potential unintended regressions in lay-
+terpret, further engineering is required to make them more useful       out and a set of common layout failures often observed in responsive
+for developers, which we plan to undertake as part of future work.      pages. In addition to summarizing recent experimental studies of
+Common failure detection. Figure 1(e) gives a failure report            ReDeCheck, the paper presents case studies that illustrate how
+screenshot of Duolingo produced by ReDeCheck during our sec-            the automatically constructed failure reports help developers un-
+ond evaluation of the tool. The solid red box highlights the faulty     derstand and repair layout problems. Platform independent and
+carousel as it protrudes outside of the viewport window (denoted        compatible with a range of web browsers (e.g., Chrome, Firefox,
+by a dashed red line), making the carousel diﬃcult to use as the        Safari, and PhantomJS), ReDeCheck is well documented and cur-
+right-hand arrow is obscured from view. This is an example of a         rently available on GitHub under an open-source license [20], thus
+web page providing a good browsing experience on smartphones            supporting use by practitioners and further study by researchers.
+and laptops, but neglecting devices with viewport widths in be-            In future work, we plan to improve the report generation module
+tween, such as tablets. Violating a core principle of RWD — that a      so that it outputs an interactive and easy-to-interpret report in
+page should provide a suitable experience regardless of the viewport    which the most “important” RLFs are presented ﬁrst. We also intend
+width at which it is viewed — this failure reduces functionality.       to enable ReDeCheck to handle dynamic pages that use JavaScript
+   By detecting this issue and highlighting the oﬀending elements       and to check the layout of entire sites, rather than just individual
+with coloured boxes, ReDeCheck clearly alerts the developer to          pages. We will also extend the regression checking mode so that it
+both the presence and nature of the problem. In this instance, the      allows developers to check a page’s layout in two diﬀerent browsers,
+developer would investigate the carousel’s style rules, modifying       thereby enabling the detection of responsive XBIs. Finally, to ensure
+them so that this element scales down its width in accordance with      that developers adopt and integrate our tool into their development
+the viewport, thereby ensuring the arrow is not obscured at the         suites, we plan to create browser plugins for ReDeCheck.
+highlighted width. Without ReDeCheck’s assistance a developer
+                                                                        REFERENCES
+would not only have to inspect the web page at one of the faulty
+                                                                         [1] Pew research center: Mobile fact sheet. http://www.pewinternet.org/fact-
+viewport widths, but also manually check the layout with suﬃcient            sheet/mobile/.
+care so as to notice the failure — neither of which is guaranteed.       [2] Selenium: Web browser automation http://www.seleniumhq.org/.
+                                                                         [3] A. Alameer, S. Mahajan, and W. G. Halfond. Detecting and localizing interna-
+4   RELATED WORK                                                             tionalization presentation failures in web applications. In Proc. of 9th ICST.
+                                                                         [4] D. Cyr, M. Head, and A. Ivanov. Design aesthetics leading to m-loyalty in mobile
+To the best of our knowledge, ReDeCheck is the ﬁrst tool that                commerce. Inf. Manag., 43(8), 2006.
+automatically checks a responsive web page; previous research            [5] C. Dougherty. Google adds ‘mobile friendliness’ to its search criteria. The New
+                                                                             York Times, 2015.
+prototypes for web testing have targeted orthogonal problems. X-         [6] S. Hallé, N. Bergeron, F. Guerin, G. L. Breton, and O. Beroual. Declarative layout
+Pert [16] and gwali [3] used the same concept of relative layout             constraints for testing web applications. J. Log. Algebr. Meth. Program., 85, 2016.
+                                                                         [7] R. Hof. Google research: No mobile site = lost customers. Forbes, 2012.
+to detect cross-browser inconsistencies (XBIs) and international-        [8] M. Kersley. Responsive design testing http://mattkersley.com/responsive/.
+ization presentation failures (IPFs), respectively. WebSee [10] and      [9] W. Li, M. J. Harrold, and C. Görg. Detecting user-visible failures in AJAX web
+Wraith [12] adopt a diﬀerent approach, using image compari-                  applications by analyzing users’ interaction behaviors. In Proc. of 25th ASE, 2010.
+                                                                        [10] S. Mahajan and W. G. Halfond. WebSee: A tool for debugging HTML presentation
+son to report presentation failures to the user. Cornipickle [6]             failures. In Proc. of the 8th ICST, 2015.
+supports user-deﬁned layout constraints describing how the web          [11] E. Marcotte. Responsive Web Design. A Book Apart, 2014.
+page should look, alerting the user if any of the constraints are not   [12] BBC News. Wraith https://github.com/bbc-news/wraith/.
+                                                                        [13] ZURB Corporation. Foundation http://foundation.zurb.com/.
+met. Yet, none of these tools speciﬁcally address the challenges        [14] M. Otto and J. Thornton. Bootstrap: Mobile-ﬁrst and responsive front-end
+associated with automated responsive web page checking. Unlike               framework http://getbootstrap.com/.
+                                                                        [15] J. Poushter. Smartphone ownership and Internet usage continues to climb in
+ReDeCheck’s failure checking mode, they also require an oracle.              emerging economies. In Pew Research Cener – Global Attitudes and Trends, 2016.
+    Developers also have access to many tools for testing respon-       [16] S. Roy Choudhary, M. R. Prasad, and A. Orso. X-PERT: Accurate identiﬁcation
+sively designed web pages. Most modern browsers come with a                  of cross-browser issues in web applications. In Proc. of the 35th ICSE, 2013.
+                                                                        [17] I. Shubin. Galen framework http://galenframework.com/.
+“responsive mode” that renders the current page at the developer’s      [18] T. A. Walsh, G. M. Kapfhammer, and P. McMinn. Automated layout detection
+chosen resolution. Multi-screenshot tools (e.g., [8]) give developers        for responsive web pages without an explicit oracle. In Proc. of ISSTA, 2017.
+a simple overview of a page’s responsive behaviour by rendering         [19] T. A. Walsh, P. McMinn, and G. M. Kapfhammer. Automatic detection of potential
+                                                                             layout faults following changes to responsive web pages. In Proc. of 30th ASE.
+it at a series of common viewport widths, while others (e.g., [21])     [20] T. A. Walsh, P. McMinn, and G. M. Kapfhammer.                         ReDeCheck.
+provide the option to tune the display to a speciﬁc resolution, en-          https://github.com/redecheck/redecheck/.
+                                                                        [21] M. Wassermann. Viewport resizer http://lab.maltewassermann.com/viewport-
+abling ﬁne-grained checking. While these tools are useful, they still        resizer/.
+require the developer to study the page at each resolution. Finally,
+

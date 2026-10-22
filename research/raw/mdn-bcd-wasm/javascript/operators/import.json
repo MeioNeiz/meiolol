@@ -1,0 +1,285 @@
+{
+  "javascript": {
+    "operators": {
+      "import": {
+        "__compat": {
+          "mdn_url": "https://developer.mozilla.org/docs/Web/JavaScript/Reference/Operators/import",
+          "spec_url": "https://tc39.es/ecma262/multipage/ecmascript-language-expressions.html#sec-import-calls",
+          "tags": [
+            "web-features:js-modules"
+          ],
+          "support": {
+            "bun": {
+              "version_added": "1.0.0"
+            },
+            "chrome": {
+              "version_added": "63"
+            },
+            "chrome_android": "mirror",
+            "deno": {
+              "version_added": "1.0",
+              "notes": "Bundled Deno applications (using `deno compile`) do not support dynamic imports"
+            },
+            "edge": "mirror",
+            "firefox": {
+              "version_added": "67"
+            },
+            "firefox_android": "mirror",
+            "nodejs": [
+              {
+                "version_added": "13.2.0",
+                "notes": "Dynamic `import` can be used in either CommonJS or ES module files, to import either CommonJS or ES module files. See Node's [ECMAScript Modules documentation](https://nodejs.org/api/esm.html#esm_import_expressions) for more details."
+              },
+              {
+                "version_added": "12.17.0",
+                "version_removed": "13.0.0",
+                "notes": "Dynamic `import` can be used in either CommonJS or ES module files, to import either CommonJS or ES module files. See Node's [ECMAScript Modules documentation](https://nodejs.org/api/esm.html#esm_import_expressions) for more details."
+              }
+            ],
+            "oculus": "mirror",
+            "opera": "mirror",
+            "opera_android": "mirror",
+            "safari": {
+              "version_added": "11.1"
+            },
+            "safari_ios": "mirror",
+            "samsunginternet_android": "mirror",
+            "webview_android": "mirror",
+            "webview_ios": "mirror"
+          },
+          "status": {
+            "experimental": false,
+            "standard_track": true,
+            "deprecated": false
+          }
+        },
+        "worker_support": {
+          "__compat": {
+            "description": "Available in workers",
+            "spec_url": [
+              "https://tc39.es/ecma262/multipage/ecmascript-language-expressions.html#sec-import-calls",
+              "https://html.spec.whatwg.org/multipage/webappapis.html#integration-with-the-javascript-module-system"
+            ],
+            "tags": [
+              "web-features:js-modules-workers"
+            ],
+            "support": {
+              "bun": {
+                "version_added": "1.0.0"
+              },
+              "chrome": {
+                "version_added": "80"
+              },
+              "chrome_android": "mirror",
+              "deno": {
+                "version_added": "1.0"
+              },
+              "edge": "mirror",
+              "firefox": {
+                "version_added": "114"
+              },
+              "firefox_android": "mirror",
+              "nodejs": [
+                {
+                  "version_added": "13.2.0"
+                },
+                {
+                  "version_added": "12.17.0",
+                  "version_removed": "13.0.0"
+                }
+              ],
+              "oculus": "mirror",
+              "opera": "mirror",
+              "opera_android": "mirror",
+              "safari": {
+                "version_added": "15"
+              },
+              "safari_ios": "mirror",
+              "samsunginternet_android": "mirror",
+              "webview_android": "mirror",
+              "webview_ios": "mirror"
+            },
+            "status": {
+              "experimental": false,
+              "standard_track": true,
+              "deprecated": false
+            }
+          }
+        },
+        "defer": {
+          "__compat": {
+            "description": "`import.defer()`",
+            "mdn_url": "https://developer.mozilla.org/docs/Web/JavaScript/Reference/Operators/import/defer",
+            "spec_url": "https://tc39.es/proposal-defer-import-eval/#sec-left-hand-side-expressions",
+            "tags": [
+              "web-features:import-defer"
+            ],
+            "support": {
+              "chrome": {
+                "version_added": false
+              },
+              "chrome_android": "mirror",
+              "edge": "mirror",
+              "firefox": {
+                "version_added": "preview",
+                "flags": [
+                  {
+                    "type": "preference",
+                    "name": "javascript.options.experimental.defer_import_eval",
+                    "value_to_set": "true"
+                  }
+                ]
+              },
+              "firefox_android": "mirror",
+              "oculus": "mirror",
+              "opera": "mirror",
+              "opera_android": "mirror",
+              "safari": {
+                "version_added": "preview"
+              },
+              "safari_ios": "mirror",
+              "samsunginternet_android": "mirror",
+              "webview_android": "mirror",
+              "webview_ios": "mirror"
+            },
+            "status": {
+              "experimental": true,
+              "standard_track": true,
+              "deprecated": false
+            }
+          }
+        },
+        "http_errors_not_cached": {
+          "__compat": {
+            "description": "Loading is retriable (HTTP errors are not cached)",
+            "spec_url": "https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-single-module-script",
+            "tags": [
+              "web-features:retriable-module-loading"
+            ],
+            "support": {
+              "chrome": {
+                "version_added": "156"
+              },
+              "chrome_android": "mirror",
+              "edge": "mirror",
+              "firefox": {
+                "version_added": "155"
+              },
+              "firefox_android": "mirror",
+              "oculus": "mirror",
+              "opera": "mirror",
+              "opera_android": "mirror",
+              "safari": {
+                "version_added": "preview"
+              },
+              "safari_ios": "mirror",
+              "samsunginternet_android": "mirror",
+              "webview_android": "mirror",
+              "webview_ios": "mirror"
+            },
+            "status": {
+              "experimental": false,
+              "standard_track": true,
+              "deprecated": false
+            }
+          }
+        },
+        "import_source": {
+          "__compat": {
+            "description": "`import.source()`",
+            "mdn_url": "https://developer.mozilla.org/docs/Web/JavaScript/Reference/Operators/import/source",
+            "spec_url": "https://tc39.es/proposal-source-phase-imports/#sec-left-hand-side-expressions",
+            "support": {
+              "bun": {
+                "version_added": false
+              },
+              "chrome": {
+                "version_added": false
+              },
+              "chrome_android": "mirror",
+              "deno": {
+                "version_added": false
+              },
+              "edge": "mirror",
+              "firefox": {
+                "version_added": "153"
+              },
+              "firefox_android": "mirror",
+              "nodejs": {
+                "version_added": "24.0.0"
+              },
+              "oculus": "mirror",
+              "opera": "mirror",
+              "opera_android": "mirror",
+              "safari": {
+                "version_added": false
+              },
+              "safari_ios": "mirror",
+              "samsunginternet_android": "mirror",
+              "webview_android": "mirror",
+              "webview_ios": "mirror"
+            },
+            "status": {
+              "experimental": true,
+              "standard_track": true,
+              "deprecated": false
+            }
+          }
+        },
+        "options_parameter": {
+          "__compat": {
+            "description": "The `options` parameter",
+            "spec_url": "https://tc39.es/ecma262/multipage/ecmascript-language-expressions.html#sec-import-calls",
+            "support": {
+              "bun": {
+                "version_added": "1.1.5"
+              },
+              "chrome": {
+                "version_added": "91"
+              },
+              "chrome_android": "mirror",
+              "deno": {
+                "version_added": "1.17"
+              },
+              "edge": "mirror",
+              "firefox": {
+                "version_added": "138"
+              },
+              "firefox_android": "mirror",
+              "nodejs": [
+                {
+                  "version_added": "17.5.0"
+                },
+                {
+                  "version_added": "16.15.0",
+                  "version_removed": "17.0.0"
+                },
+                {
+                  "version_added": "16.14.0",
+                  "version_removed": "16.15.0",
+                  "partial_implementation": true,
+                  "notes": "The second parameter no longer throws a parser error, but the `--experimental-json-modules` flag is still needed to load JSON modules."
+                }
+              ],
+              "oculus": "mirror",
+              "opera": "mirror",
+              "opera_android": "mirror",
+              "safari": {
+                "version_added": "15"
+              },
+              "safari_ios": "mirror",
+              "samsunginternet_android": "mirror",
+              "webview_android": "mirror",
+              "webview_ios": "mirror"
+            },
+            "status": {
+              "experimental": false,
+              "standard_track": true,
+              "deprecated": false
+            }
+          }
+        }
+      }
+    }
+  }
+}
