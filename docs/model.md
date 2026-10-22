@@ -5003,6 +5003,85 @@ Reading:
   only as the changed list. Rerun by day since patch as 16.21 fills
 - Rerun: the SQL in docs/plan/patch-transfer.md "Step 0"
 
+### Lab frontier wave 1, 2026-10-22 (docs/plan/lab-frontier.md)
+
+Phase 0 and wave 1 of the frontier programme. Dev only, no test look.
+
+P1, seat stats for every game (3091e18): the box keeps match summaries ~2 days before
+the archive takes them, so `seat-stats` on a snapshot's raw.db covered its newest games
+only (1007Z: ~24% of seats; profile models then fall back to ratings without a word).
+lab/summaries.zig reads raw.db, then the raw archive's summaries files (complete from
+the first export, 12 Oct); `seat-stats` and `comp-stats` take ARCHIVE and the weekly
+snapshot passes it to both. P4: netcheck and champcomp already write per-game preds.tsv
+keyed by match id (fold, match_id, y, cand, seeds, ens), so ensembles read those.
+
+A2, ensemble selection over the 1320Z preds (py/xcheck/ensel.py; 380,144 games, the
+"Nets on the shipped model" runs and the set nets on additive v2 of 18 Oct, pulled to
+data/runs, spec and output in data/runs/ensel-1320Z/). 12 members: win-draft, additive
+v2, set net + embedding on v2 (setid-wa), set net on v2, bigres on v2, set net +
+embedding, set net, cross set net, big, bigres (all on win-draft), champcomp and
+champcomp with kit groups. Weights fitted forward: block b (folds 2-5, dev-val) is scored
+with weights fitted on the blocks before it; nets with sealed seeds are picked on dev
+seeds and scored with sealed ones. Logit space. Milli-nats vs setid-wa (sealed), the best
+single model, on 320,122 games:
+
+| method | pooled | fold 2 | 3 | 4 | 5 | dev-val | loss | accuracy |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| win-draft (shipped) | +1.79 ± 0.23 | +1.78 | +1.86 | +1.78 | +2.17 | +1.45 | 0.68654 | 54.5% |
+| additive v2 | +0.70 ± 0.11 | +0.59 | +0.72 | +1.20 | +0.58 | +0.50 | 0.68545 | 54.9% |
+| setid-wa | 0 | | | | | | 0.68475 | 55.1% |
+| best single, chosen forward | 0 (always setid-wa) | | | | | | 0.68475 | 55.1% |
+| greedy (Caruana, 20 bags) | -0.11 ± 0.08 | -0.14 | -0.03 | -0.00 | -0.02 | -0.30 | 0.68464 | 55.2% |
+| logistic stack on logits | -0.49 ± 0.09 | -0.42 | -0.42 | -0.47 | -0.12 | -0.88 | 0.68426 | 55.2% |
+
+Stack weights hardly move between blocks (dev-val: setid-wa +0.68, bigres-wa +0.30,
+setid-wd +0.26, big +0.18, bigres-wd +0.16, champcomp with groups +0.35, plain
+champcomp +0.01, additive v2 -0.31, win-draft -0.41, set-wd -0.23; sum 1.00). The
+negative offsets mean the residual nets are under-scaled: the stack turns their residual
+up, which a convex blend (greedy) cannot. The kit-group champcomp keeps weight next to
+every net. So stacking is worth ~0.5 milli-nats here, in the -0.3 to -0.8 the research
+expected; against the shipped model the stack is -2.28.
+
+B1, draft ceiling by variance accounting (py/xcheck/ceiling.py, provisional): held-out
+residuals r = y - p, cells of four blocks (champion-role, ally role pairs, lane
+matchups, cross-role enemy pairs); per block the summed within-cell residual covariance
+(S_c^2 - sum r^2) over its expected size, solved jointly as games sharing a pair cell
+share its two mains. Milli-nats a perfect estimate of each block would still gain
+(V/8), blocks 2-5 and dev-val, 20 Bernoulli nulls:
+
+| model | main | ally | lane | cross | total | null sd of total |
+| --- | --- | --- | --- | --- | --- | --- |
+| win-draft | -0.01 | 0.93 | 0.53 | 1.09 | 2.54 | 0.35 |
+| additive v2 | -0.14 | 1.49 | 0.48 | 1.85 | 3.68 | 0.60 |
+| setid-wa | -0.08 | 1.17 | 0.33 | 1.33 | 2.74 | 0.64 |
+| stack | -0.00 | 0.66 | 0.30 | 0.83 | 1.78 | 0.57 |
+
+Reading, with care: mains are used up in every model; what is left sits in ally pairs
+and cross-role enemy pairs, lane matchups little. Total s ~0.12-0.17 left on top of the
+model's ~0.25, so a draft-only ceiling near s 0.28-0.29 (~56%) at perfect knowledge of
+~250k pair cells, which ~1M games can't estimate. Not yet a gate: the null sd is
+0.35-0.64 per model, the planted 10% flips came back 0.78-2.15 against 1.14-2.36
+expected, and additive v2 shows more left than win-draft though it predicts 1.1 better
+(the estimate also counts the model's own cell noise, and v2's pairs are less shrunk).
+Rerun on the new pin with ~2x the games.
+
+B4, how much of each site table is signal (py/xcheck/reliability.py, 1320Z, 800,354
+played games, descriptive): per band of cell games, the true spread tau by method of
+moments and split-half reliability (halves hashed by game, Spearman-Brown), which agree:
+
+| table | games in the cell | cells | tau | reliability |
+| --- | --- | --- | --- | --- |
+| champion-role | 500-2,000 / 2,000+ | 169 / 334 | 3.8 / 1.5 pp | 0.77 / 0.93 |
+| lane matchup (raw rate) | 50-150 / 150-500 / 500-2,000 / 2,000+ | 7,004 / 5,220 / 3,516 / 584 | 3.6 / 2.9 / 2.5 / 2.2 pp | 0.31 / 0.44 / 0.68 / 0.83 |
+| bot-support duo | 50-150 / 150-500 / 500-2,000 / 2,000+ | 933 / 692 / 501 / 178 | 4.3 / 3.4 / 2.4 / 2.2 pp | 0.36 / 0.51 / 0.67 / 0.86 |
+
+A matchup's raw win rate at the median cell (~80 games over 30 days) is about a third
+signal, two thirds luck; half and half near 300 games. Rare cells spread more (off-role
+picks, odd matchups), so one pooled tau understates them. The site already shrinks
+matchup "vs usual" by a per-role method-of-moments k (site/champion.zig usualK) and fades
+under 10 games: B4 confirms that design rather than changing it. One patch alone (16.19
+here, ~1/3 of the games) halves most cells' reliability.
+
 ## Shipped model, 2026-10-17
 
 `score.Options` defaults (app suggest, site draft tester, Daily Draft, pool, matchup and

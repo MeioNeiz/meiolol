@@ -25,6 +25,20 @@ How to write a line:
 
 ## Win
 
+- 2026-10-22 (early): Blending several of our draft models predicts the winner a little
+  better than the best one alone: a weighted mix that turns the neural nets' corrections
+  up beats the best single model (a set net on additive v2) by 0.49 ± 0.09 milli-nats a
+  game, in every block, and the shipped model by 2.3. A plain average barely helps
+  (0.11). Sure: 320k held-out dev games of the 1320Z folds, weights fitted only on older
+  blocks, sealed seeds scored. Site: nothing yet (several nets to ship). Evidence:
+  docs/model.md "Lab frontier wave 1"
+- 2026-10-22: A matchup's win rate over the site's usual 30 days and ~80 games is about
+  a third real and two thirds luck; it takes ~300 games to be half real and ~800 for two
+  thirds. Duos are the same; a champion's own rate in the role is 0.77 real at 500-2,000
+  games and 0.93 above. Sure: split halves of 800k games (1320Z) agree with the method of
+  moments in every band. Site: matchup "vs usual" and sorting already shrink by a k
+  estimated this way and fade under 10 games; keep it. Evidence: docs/model.md "Lab
+  frontier wave 1"
 - 2026-10-20 (early): What a team comp and its champion pairs add beyond each
   champion's own strength does not show in how the game stands at 10 to 20 minutes
   (gold, objectives, towers): it shows only in who wins. So we can't use the in-game
