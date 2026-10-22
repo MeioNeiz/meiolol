@@ -9,12 +9,12 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Area | Covers | Questions | Sources | Findings |
 | --- | --- | --- | --- | --- |
-| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 9 | 248 | 1214 |
+| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 9 | 249 | 1215 |
 | [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 4 | 154 | 573 |
 | [data](areas/data.md) | what the Riot API serves and how to crawl it | 3 | 163 | 404 |
 | [stats](areas/stats.md) | estimation and recommendation methods | 25 | 325 | 2309 |
-| [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 9 | 280 | 1270 |
-| [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 7 | 151 | 579 |
+| [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 9 | 282 | 1288 |
+| [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 7 | 152 | 580 |
 | [code](areas/code.md) | how we write code: Zig practice, idiom and style from docs and respected projects | 9 | 174 | 1966 |
 
 ## Questions
@@ -84,12 +84,12 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Status | Pri. | Question | Claims | Sources | Searches | Leads |
 | --- | --- | --- | --- | --- | --- | --- |
-| active | now | [Section by section, what do the leading sites show on champion and matchup pages that meio.lol lacks, and where is our layout less space-efficient or clearer than theirs?](questions/champion-matchup-gap.md): Section by section, what do the leading sites show on champion and matchup pages that meio.lol lacks, and where is our layout less space-efficient or clearer than theirs? | - | 27 | 2 (thin) | 6 |
+| answered | now | [Section by section, what do the leading sites show on champion and matchup pages that meio.lol lacks, and where is our layout less space-efficient or clearer than theirs?](questions/champion-matchup-gap.md): Section by section, what do the leading sites show on champion and matchup pages that meio.lol lacks, and where is our layout less space-efficient or clearer than theirs? | 15 strong, 3 moderate, 3 contested | 30 | 2 (thin) | 7 |
 | answered | now | [How do the best dense stat sites lay out many numbers readably, and what should meio.lol steal?](questions/dense-stat-layout.md): How dense stat sites (League and outside) lay out many numbers readably, and which ideas fit meio.lol's pages | 10 strong, 5 moderate, 1 contested | 36 | 4 (growing) | 7 |
 | answered | now | [What should meiolol's site show first and how should it present numbers so players and Riot reviewers trust and use it?](questions/site-design.md): What the site leads with and how it shows numbers, spread and thin data, for players and for Riot's production key reviewers | 11 strong, 7 moderate | 22 | 0 |  |
 | answered | now | [How do design systems keep a UI terse, uncluttered, clear and consistently coloured as many contributors add to it, and which of those rules can be checked automatically?](questions/ui-guardrails.md): How do design systems keep a UI terse, uncluttered, clear and consistently coloured as many contributors add to it, and which of those rules can be checked automatically? | 10 strong, 1 moderate, 1 contested | 37 | 26 (growing) | 10 |
 | answered | now | [What tooling lets meiolol's agents write and check better UI without a Node build step: layout and visual checks, component gallery, design token lints, accessibility?](questions/ui-tooling.md): What tooling lets meiolol's agents write and check better UI without a Node build step: layout and visual checks, component gallery, design token lints, accessibility? | 7 strong, 3 moderate | 21 | 18 (saturated) | 4 |
-| answered | now | [Can meiolol's browser code be all Zig (wasm) plus HTML and CSS, with no hand-written JS, and what would remain, cost and break?](questions/zig-only-frontend.md): Can meiolol's browser code be all Zig (wasm) plus HTML and CSS, with no hand-written JS, and what would remain, cost and break? | 14 strong, 4 moderate | 35 | 38 (growing) | 16 |
+| answered | now | [Can meiolol's browser code be all Zig (wasm) plus HTML and CSS, with no hand-written JS, and what would remain, cost and break?](questions/zig-only-frontend.md): Can meiolol's browser code be all Zig (wasm) plus HTML and CSS, with no hand-written JS, and what would remain, cost and break? | 15 strong, 5 moderate | 36 | 38 (growing) | 16 |
 | answered | soon | [Which GUI library fits a small Windows desktop window built in Zig 0.16 from macOS?](questions/zig-gui-options.md): Which GUI library fits a small Windows desktop window built in Zig 0.16 from macOS? | 5 strong, 3 moderate | 14 | 10 (saturated) | 4 |
 | answered | soon | [Could a Zig library or framework replace meiolol's hand-written w.print HTML and vanilla JS, and what would it give us?](questions/zig-web-ui.md): Could a Zig library or framework replace meiolol's hand-written w.print HTML and vanilla JS, and what would it give us? | 2 strong, 8 moderate, 3 weak | 10 | 4 (growing) |  |
 | decided | now | [How should meiolol's own Zig HTML template and component layer look?](questions/zig-html-templates.md): Syntax, escaping, composition and checks for our own small Zig HTML layer, shared by the static site and wasm | 8 strong, 8 moderate | 11 | 4 (slowing) | 3 |
@@ -122,6 +122,6 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 ## Health
 
-- 66 questions, 1007 sources, 7792 findings
-- Open leads: 272 (`josearch leads`)
-- Lint: 10 errors, 5 warnings (`josearch lint`)
+- 66 questions, 1009 sources, 7810 findings
+- Open leads: 273 (`josearch leads`)
+- Lint: 0 errors, 5 warnings (`josearch lint`)

@@ -1,0 +1,114 @@
+# On Random Numbers
+
+<https://matklad.github.io/2023/01/04/on-random-numbers.html>
+
+[matklad](https://matklad.github.io/)[About](https://matklad.github.io/about.html)[Links](https://matklad.github.io/links.html)[Blogroll](https://matklad.github.io/blogroll.html)
+
+# On Random Numbers
+
+Jan 4, 2023
+
+This is a short post which decomposes “random numbers” topic into principal components and maps them to Rust ecosystem.
+
+## [True Randomness](https://matklad.github.io/2023/01/04/on-random-numbers.html#True-Randomness)
+
+For cryptographic purposes (eg, generating a key pair for public key cryptography), you want to use real random numbers, derived from genuinely stochastic physical signals (hardware random number generator, keyboard input, etc). The shape of the API here is:
+
+```
+fn fill_buffer_with_random_data(buf: &mut [u8])
+```
+
+As this fundamentally requires talking to some physical devices, this task is handled by the operating system. Different operating systems provide different APIs, covering which is beyond the scope of this article (and my own knowledge).
+
+In Rust, [`getrandom`](https://lib.rs/getrandom) crate provides a cross-platform wrapper for this functionality.
+
+It is a major deficiency of Rust standard library that this functionality is not exposed there. Getting cryptographically secure random data is in the same class of OS services as getting the current time or reading standard input. Arguably, it’s even more important, as most applications for this functionality are security-critical.
+
+## [Pseudorandom Number Generator](https://matklad.github.io/2023/01/04/on-random-numbers.html#Pseudorandom-Number-Generator)
+
+For various non-cryptographic randomized algorithms, you want to start with a fixed, deterministic `seed`, and generate a stream of numbers, statistically indistinguishable from random. The shape of the API here is:
+
+```
+fn random_u32(state: &mut f64) -> u32
+```
+
+There are many different algorithms to do that. [`fastrand`](https://lib.rs/fastrand) crate implements something sufficiently close to the state of the art.
+
+Alternatively, a good-enough PRNG can be implemented in 9 lines of code:
+
+```
+pub fn random_numbers(seed: u32) -> impl Iterator<Item = u32> {
+  let mut random = seed;
+  std::iter::repeat_with(move || {
+    random ^= random << 13;
+    random ^= random >> 17;
+    random ^= random << 5;
+    random
+  })
+}
+```
+
+This code was lifted from Rust’s standard library ([source](https://github.com/rust-lang/rust/blob/1.55.0/library/core/src/slice/sort.rs#L559-L573)).
+
+The best way to seed a PRNG is usually by using a fixed constant. If you absolutely need _some_ amount of randomness in the seed, you can use the following hack:
+
+```
+pub fn random_seed() -> u64 {
+  std::hash::Hasher::finish(&std::hash::BuildHasher::build_hasher(
+    &std::collections::hash_map::RandomState::new(),
+  ))
+}
+```
+
+In Rust, hash maps include some amount of randomization to avoid exploitable pathological behavior due to collisions. The above snippet extracts that randomness.
+
+## [Non-Uniformly Distributed Random Numbers, Uniformly Distributed Random Non-Numbers.](https://matklad.github.io/2023/01/04/on-random-numbers.html#Non-Uniformly-Distributed-Random-Numbers-Uniformly-Distributed-Random-Non-Numbers)
+
+Good PRNG gives you a sequence of `u32` numbers where each number is as likely as every other one. You can convert that to a number from 0 to 10 with `random_u32() % 10`. This will be good enough for most purposes, but will fail rigorous statistical tests. Because 232 isn’t evenly divisible by 10, 0 would be ever so slightly more frequent than `9`. There is an algorithm to do this correctly (if `random_u32()` is very large, and falls into the literal remainder after dividing 232 by 10, throw it away and try again).
+
+Sometimes you want to use `random_u32()` to generate other kinds of random things, like a random point on a 3D sphere, or a random permutation. There are also algorithms for that.
+
+Sphere: generate random point in the unit cube; if it is also in the unit ball, project it onto the surface, otherwise throw it away and try again.
+
+Permutation: naive algorithm of selecting a random element to be the first, then selecting a random element among the rest to be the second, etc, works.
+
+There are libraries which provide collections of such algorithms. For example, `fastrand` includes most common ones, like generating numbers in range, generating floating point numbers or shuffling slices.
+
+`rand` includes more esoteric cases line the aforementioned point on a sphere or a normal distribution.
+
+## [Ambient Global Source Of Random Numbers](https://matklad.github.io/2023/01/04/on-random-numbers.html#Ambient-Global-Source-Of-Random-Numbers)
+
+It is customary to expect existence of a global random number generator seeded for you. This is an anti-pattern — in the overwhelming majority of cases, passing a random number generator explicitly leads to better software. In particular, this is a requirement for deterministic tests.
+
+In any case, this functionality can be achieved by storing a state of PRNG in a thread local:
+
+```
+use std::cell::Cell;
+
+pub fn thread_local_random_u32() -> u32 {
+  thread_local! {
+      static STATE: Cell<u64> = Cell::new(random_seed())
+  }
+  STATE.with(|cell| {
+    let mut state = cell.get();
+    let result = random_u32(&mut state);
+    cell.set(state);
+    result
+  })
+}
+```
+
+## [rand](https://matklad.github.io/2023/01/04/on-random-numbers.html#rand)
+
+[`rand`](https://lib.rs/rand) is an umbrella crate which includes all of the above. `rand` also provides flexible trait-based “plugin” interface, allowing you to mix and match different combinations of PRNGs and algorithms. User interface of `rand` is formed primarily by extension traits.
+
+## [Kinds Of Randomness](https://matklad.github.io/2023/01/04/on-random-numbers.html#Kinds-Of-Randomness)
+
+Circling back to the beginning of the post, it is very important to distinguish between the two use-cases:
+
+-   using unpredictable data for cryptography
+-   using statistically uniform random data for stochastic algorithms
+
+Although the two use-cases both have “randomness” in their name, they are disjoint, and underlying algorithms and APIs don’t have anything in common. They are physically different: one is a syscall, another is a pure function mapping integers to integers.
+
+[Fix typo](https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-01-04-on-random-numbers.dj)[Subscribe](https://matklad.github.io/feed.xml)[All posts](https://matklad.github.io/)[Get in touch](mailto:aleksey.kladov+blog@gmail.com)[matklad](https://github.com/matklad)

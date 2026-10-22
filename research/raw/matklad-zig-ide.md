@@ -1,0 +1,159 @@
+# How a Zig IDE Could Work
+
+<https://matklad.github.io/2023/02/10/how-a-zig-ide-could-work.html>
+
+[matklad](https://matklad.github.io/)[About](https://matklad.github.io/about.html)[Links](https://matklad.github.io/links.html)[Blogroll](https://matklad.github.io/blogroll.html)
+
+# How a Zig IDE Could Work
+
+Feb 10, 2023
+
+Zig is a very interesting language from an IDE point of view. Some aspects of it are friendly to IDEs, like a very minimal and simple-to-parse syntax (Zig can even be _correctly_ lexed line-by-line, very cool!), the absence of syntactic macros, and ability to do a great deal of semantic analysis on a file-by-file basis, in parallel. On the other hand, `comptime`. I accidentally spent some time yesterday thinking about how to build an IDE for that, this post is a result.
+
+## [How Does the Zig Compiler Work?](https://matklad.github.io/2023/02/10/how-a-zig-ide-could-work.html#How-Does-the-Zig-Compiler-Work)
+
+It’s useful to discuss a bit how the compiler works today. For something more thorough, refer to this excellent series of posts: [https://mitchellh.com/zig](https://mitchellh.com/zig).
+
+First, each Zig file is parsed into an AST. Delightfully, parsing doesn’t require any context whatsoever, it’s a pure `[]const u8 -> Ast` function, and the resulting AST is just a piece of data.
+
+After parsing, the AST is converted to an intermediate representation, Zir. This is where Zig diverges a bit from more typical statically compiled languages. Zir actually resembles something like Python’s bytecode — an intermediate representation that an interpreter for a dynamically-typed language would use. That’s because it _is_ an interpreter’s IR — the next stage would use Zir to evaluate comptime.
+
+Let’s look at an example:
+
+```
+fn generic_add(comptime T: type, lhs: T, rhs: T) T {
+    return lhs + rhs;
+}
+```
+
+Here, the Zir for `generic_add` would encode addition as a typeless operation, because we don’t know types at this point. In particular, `T` can be whatever. When the compiler would _instantiate_ `generic_add` with different `T`s, like `generic_add(u32, ...)`, `generic_add(f64, ...)`, it will re-use the same Zir for different instantiations. That’s the two purposes of Zir: to directly evaluate code at compile time, and to serve as a template for monomorphization.
+
+The next stage is where the magic happens — the compiler partially evaluates dynamically typed Zir to convert it into a fairly standard statically typed IR. The process starts at the `main` function. The compiler more or less tries to evaluate the Zir. If it sees something like `90 + 2`, it directly evaluates that to `92`. For something which can’t be evaluated at compile time, like `a + 2` where `a` is a runtime variable, the compiler generates typed IR for addition (as, at this point, we already know the type of `a`).
+
+When the compiler sees something like
+
+```
+const T = u8;
+const x = generic_add(T, a, b);
+```
+
+the compiler monomorphizes the generic call. It checks that all comptime arguments (`T`) are fully evaluated, and starts partial evaluation of the called function, with comptime parameters fixed to particular values (this of course is memoized).
+
+The whole process is lazy — only things transitively used from main are analyzed. Compiler won’t complain about something like
+
+```
+fn unused() void {
+    1 + "";
+}
+```
+
+This looks perfectly fine at the Zir level, and the compiler will not move beyond Zir unless the function is actually called somewhere.
+
+## [And an IDE?](https://matklad.github.io/2023/02/10/how-a-zig-ide-could-work.html#And-an-IDE)
+
+IDE adds several dimensions to the compiler:
+
+-   works with incomplete and incorrect code
+-   works with code which rapidly changes over time
+-   gives results immediately, there is no edit/compile cycle
+-   provides source to source transformations
+
+The hard bit is the combination of rapid changes and immediate results. This is usually achieved using some smart, language-specific combination of
+
+-   Incrementality: although changes are frequent and plentiful, they are local, and it is often possible to re-use large chunks of previous analysis.
+    
+-   Laziness: unlike a compiler, an IDE does not need full analysis results for the entirety of the codebase. Usually, analysis of the function which is currently being edited is the only time-critical part, everything else can be done asynchronously, later.
+    
+
+This post gives an overview of some specific fruitful combinations of the two ideas:
+
+[https://rust-analyzer.github.io/blog/2020/07/20/three-architectures-for-responsive-ide.html](https://rust-analyzer.github.io/blog/2020/07/20/three-architectures-for-responsive-ide.html)
+
+How can we apply the ideas to Zig? Let’s use this as our running example:
+
+```
+fn guinea_pig(comptime T: type, foo: Foo) void {
+    foo.<complete here>;
+
+    helper(T).<here>;
+
+    var t: T = undefined;
+    t.<and here>;
+}
+```
+
+There are two, separate interesting questions to ask here:
+
+-   what result do we even want here?
+-   how to achieve that given strict performance requirements?
+
+## [Just Compile Everything](https://matklad.github.io/2023/02/10/how-a-zig-ide-could-work.html#Just-Compile-Everything)
+
+It’s useful to start with a pedantically correct approach. Let’s run our usual compilation (recursively monomorphizing called functions starting from the `main`). The result would contain a bunch of different monomorphizations of `guinea_pig`, for different values of `T`. For each _specific_ monomorphization it’s now clear what is the correct answer. For the unspecialized case as written in the source code, the IDE can now show something reasonable by combining partial results from each monomorphization.
+
+There are several issues with this approach.
+
+_First_, collecting the _full_ set of monomorphizations is not well-defined in the presence of conditional compilation. Even if you run the “full” compilation starting from main, today compiler assumes some particular environment (eg, Windows or Linux), which doesn’t give you a full picture. There’s a fascinating issue about multibuilds — making the compiler process all combinations of conditional compilation flags at the same time: [zig#3028](https://github.com/ziglang/zig/issues/3028). With my IDE writer hat on, I really hope it gets in, as it will move IDE support from inherently heuristic territory, to something where, in principle, there’s a correct result (even if it might not be particularly easy to compute).
+
+The _second_ problem is that this probably is going to be much too slow. If you think about IDE support for the first time, a very tantalizing idea is to try to lean just into incremental compilation. Specifically, you can imagine a compiler that maintains fully type-checked and resolved view of the code at all times. If a user edits something, the compiler just incrementally changes what needs to be changed. So the trick for IDE-grade interactive performance is just to implement sufficiently advanced incremental compilation.
+
+The problem with sufficiently incremental compiler is that even the perfect incrementality, which does the minimal required amount of work, will be slow in a non-insignificant amount of cases. The nature of code is that a small change to the source in a single place might lead to a large change to resolved types all over the project. For examples, changing the name of some popular type invalidates all the code that uses this type. That’s the fundamental reason why IDEs try hard to maintain the ability to _not_ analyze everything.
+
+On the other hand, at the end of the day you’ll have to do this work at least by the time you run the tests. And Zig’s compiler is written from the ground up to be very incremental and very fast, so perhaps this will be good enough? My current gut feeling is that the answer is no — even if you _can_ re-analyze everything in, say, 100ms, that’ll still require burning the battery for essentially useless work. Usually, there’s a lot more atomic small edits for a single test run.
+
+The _third_ problem with the approach of collecting all monomorphizations is that it simply does not work if the function isn’t actually called, yet. Which is common in incomplete code that is being written, exactly the use-case where the IDE is most useful!
+
+## [Compile Only What We Need](https://matklad.github.io/2023/02/10/how-a-zig-ide-could-work.html#Compile-Only-What-We-Need)
+
+Thinking about the “full” approach more, it feels like it could be, at least in theory, optimized somewhat. Recall that in this approach we have a graph of function instantiations, which starts at the root (`main`), and contains various monomorphizations of `guinea_pig` on paths reachable from the root.
+
+It is clear we actually don’t need the full graph to answer queries about instantiations of `guinea_pig`. For example, if we have something like
+
+```
+fn helper() i32 {
+    ...
+}
+```
+
+and the `helper` does not (transitively) call `guinea_pig`, we can avoid looking into its body, as the signature is enough to analyze everything else.
+
+More precisely, given the graph of monomorphizations, we can select minimal subgraph which includes all paths from `main` to `guinea_pig` instantiations, as well as all the functions whose bodies we need to process to understand their signatures. My intuition is that the size of that subgraph is going to be much smaller than the whole thing, and, in principle, an algorithm which would analyze only that subgraph should be speedy enough in practice.
+
+The problem though is that, as far as I know, it’s not possible to understand what belongs to the subgraph without analyzing the whole thing! In particular, using compile-time reflection our `guinea_pig` can be called through something like `comptime "guinea" ++ "_pig"`. It’s impossible to infer the call graph just from Zir.
+
+And of course this does not help the case where the function isn’t called at all.
+
+## [Abstract Comptime Interpretation](https://matklad.github.io/2023/02/10/how-a-zig-ide-could-work.html#Abstract-Comptime-Interpretation)
+
+It is possible to approach
+
+```
+fn guinea_pig(comptime T: type, foo: Foo) void {
+    foo.<complete here>;
+
+    helper(T).<here>;
+
+    var t: T = undefined;
+    t.<and here>;
+}
+```
+
+from a different direction. What if we just treat this function as the root of our graph? We can’t do that exactly, because it has some comptime parameters. But we _can_ say that we have some opaque values for the parameters: `T = opaquevalue`. Of course, we won’t be able to fully evaluate everything and things like `if (T == int)` would probably need to propagate opaqueness. At the same time, something like the result of `BoundedArray(opaque)` would still be pretty useful for an IDE.
+
+I am wondering if there’s even perhaps some compilation-time savings in this approach? My understanding (which might be very wrong!) is that if a generic function contains something like `90 + 2`, this expression would be comptime-evaluated anew for every instantiation. In theory, what we could do is to partially evaluate this function substituting opaque values for comptime parameters, and then, for any specific instantiation, we can use the result of this partial evaluation as a template. Not sure what that would mean precisely though: it definitely would be more complicated than just substituting `T`s in the result.
+
+## [What is to Be Done?](https://matklad.github.io/2023/02/10/how-a-zig-ide-could-work.html#What-is-to-Be-Done)
+
+Ast and Zir infra is good. It is per-file, so it naturally just works in an IDE.
+
+[Multibuilds](https://github.com/ziglang/zig/issues/3028) are important. I am somewhat skeptical that they’ll actually fly, and it’s not a complete game over if they don’t (Rust has the same problem with conditional compilation, and it does create fundamental problems for both the users and authors of IDEs, but the end result is still pretty useful). Still, if Zig does ship multibuilds, that’d be awesome.
+
+Given the unused function problem, I think it’s impossible to avoid at least some amount of abstract interpretation, so `Sema` has to learn to deal with opaque values.
+
+With abstract interpretation machinery in place, it can be used as a first, responsive layer of IDE support.
+
+Computing the full set of monomorphizations in the background can be used to augment these limited synchronous features with precise results asynchronously. Though, this might be tough to express in existing editor UIs. Eg, the goto definition result is now an asynchronous stream of values.
+
+Discussion on [/r/zig](https://old.reddit.com/r/Zig/comments/10ysssh/blog_post_how_a_zig_ide_could_work/).
+
+[Fix typo](https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-02-10-how-a-zig-ide-could-work.dj)[Subscribe](https://matklad.github.io/feed.xml)[All posts](https://matklad.github.io/)[Get in touch](mailto:aleksey.kladov+blog@gmail.com)[matklad](https://github.com/matklad)

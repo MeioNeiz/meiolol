@@ -564,6 +564,17 @@ Next:
 3. Renderer boot after a box reboot never verified on the box (only locally); with
    data/views.bin it should listen and serve within seconds
 
+## Code safety (2026-10-22, Zig tutor and memory review)
+
+- Three memory-safety bugs in 1,253 commits (eade8d7 arena use-after-free, 6ebb450
+  `undefined` optional, 8198138 i16 negate); both silent ones in the lab, built
+  ReleaseFast. Run the lab tests in Debug or ReleaseSafe before long runs; keep shipped
+  binaries ReleaseSafe (ReleaseFast measured ~15% on `meiolol eval`, box jobs disk-bound).
+  A proven CPU-bound box loop gets `@setRuntimeSafety(false)` locally, not the binary
+- Rate limiter records a request into several windows one after another: an OOM midway
+  leaves some counted. Reserve first, then infallible updates (docs/zig/memory.md 5.7).
+  Next tutor exercise after rawpack and chart_wasm (b5f1215)
+
 ## Ideas not started (concept extensions, 2026-10-11)
 
 Jungle routes and gank timing from positions; region styles (KR vs EUW per matchup);
