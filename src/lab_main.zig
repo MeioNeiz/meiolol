@@ -67,13 +67,15 @@ const usage =
     \\  mastery-pre SNAP ARCHIVE        each ranked participant's latest archived mastery
     \\                                  fetch before game start: SNAP/mastery_pre.tsv
     \\                                  (lab/mastery_pre.zig; zstd on PATH)
-    \\  seat-stats SNAP [DDRAGON]       each ranked seat's end-of-game damage dealt and
-    \\                                  taken, CC, healing from raw.db, resists and range
-    \\                                  from DDRAGON/<patch>/{champion,item}.json:
+    \\  seat-stats SNAP [DDRAGON [ARCHIVE]]  each ranked seat's end-of-game damage dealt
+    \\                                  and taken, CC, healing from raw.db then the raw
+    \\                                  archive, resists and range from
+    \\                                  DDRAGON/<patch>/{champion,item}.json:
     \\                                  SNAP/seat_stats.tsv (lab/seatstats.zig); rows load it
-    \\  comp-stats SNAP DDRAGON         more per seat (vision, objectives, waveclear, fights,
-    \\                                  roams, item flags) and team objectives from raw.db:
-    \\                                  SNAP/comp_stats.tsv, comp_teams.tsv (lab/compstats.zig)
+    \\  comp-stats SNAP DDRAGON [ARCHIVE]  more per seat (vision, objectives, waveclear,
+    \\                                  fights, roams, item flags) and team objectives, same
+    \\                                  sources: SNAP/comp_stats.tsv, comp_teams.tsv
+    \\                                  (lab/compstats.zig)
     \\  nn-export SNAP                  every game as tensors for the draft nets: SNAP/nn/
     \\                                  (lab/nnexport.zig: champions, splits, folds, aux
     \\                                  targets, fit-only norms)
@@ -175,19 +177,25 @@ pub fn main(init: std.process.Init) !u8 {
         });
         return 0;
     }
-    if (std.mem.eql(u8, cmd, "comp-stats") and argv.len == 4) {
-        const n = try compstats.run(init.gpa, init.io, argv[2], argv[3]);
+    if (std.mem.eql(u8, cmd, "comp-stats") and (argv.len == 4 or argv.len == 5)) {
+        const n = try compstats.run(init.gpa, init.io, argv[2], argv[3], if (argv.len == 5) argv[4] else null);
         std.log.info("comp-stats: {d} seats ({d} with item flags), {d} teams from {d} of {d} games' " ++
-            "summaries; {d} unreadable, {d} seats with another champion left out", .{
-            n.seats, n.with_items, n.teams, n.docs, n.games, n.bad_docs, n.mismatch,
+            "summaries ({d} from the archive); {d} unreadable, {d} seats with another champion left out", .{
+            n.seats, n.with_items, n.teams, n.docs, n.games, n.from_archive, n.bad_docs, n.mismatch,
         });
         return 0;
     }
     if (std.mem.eql(u8, cmd, "seat-stats") and argv.len >= 3) {
-        const n = try seatstats.run(init.gpa, init.io, argv[2], if (argv.len >= 4) argv[3] else null);
+        const n = try seatstats.run(
+            init.gpa,
+            init.io,
+            argv[2],
+            if (argv.len >= 4) argv[3] else null,
+            if (argv.len >= 5) argv[4] else null,
+        );
         std.log.info("seat-stats: {d} lines ({d} with Data Dragon values) from {d} of {d} games' " ++
-            "summaries; {d} unreadable, {d} seats with another champion left out", .{
-            n.lines, n.with_static, n.docs, n.games, n.bad_docs, n.mismatch,
+            "summaries ({d} from the archive); {d} unreadable, {d} seats with another champion left out", .{
+            n.lines, n.with_static, n.docs, n.games, n.from_archive, n.bad_docs, n.mismatch,
         });
         return 0;
     }
@@ -461,6 +469,7 @@ test {
     _ = mastery_pre;
     _ = seatstats;
     _ = compstats;
+    _ = @import("lab/summaries.zig");
     _ = nnexport;
     _ = protocol;
     _ = rows;

@@ -1,5 +1,6 @@
-//! What each player did in a game (`meiolol-lab seat-stats SNAP [DDRAGON]`; api.SeatStat,
-//! which mirrors SeatStat here). From SNAP/raw.db's riot_match summaries to
+//! What each player did in a game (`meiolol-lab seat-stats SNAP [DDRAGON [ARCHIVE]]`;
+//! api.SeatStat, which mirrors SeatStat here). From match summaries (lab/summaries.zig:
+//! SNAP/raw.db, then the raw archive) to
 //! SNAP/seat_stats.tsv: match_id, slot, then the SeatStat columns in enum order, nan when
 //! unknown; one line per queue 420 participant whose summary exists and names the same
 //! champion. rows.zig reads it into Row.stats (fill); no line = unknown.
@@ -14,6 +15,7 @@
 const std = @import("std");
 const store = @import("store");
 const par = @import("../par.zig");
+const summaries = @import("summaries.zig");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const log = std.log.scoped(.seatstats);
@@ -47,8 +49,6 @@ pub const header = blk: {
     for (@typeInfo(SeatStat).@"enum".field_names) |name| h = h ++ "\t" ++ name;
     break :blk h ++ "\n";
 };
-const ranked_solo = 420;
-
 fn at(s: SeatStat) usize {
     return @backingInt(s);
 }
@@ -128,6 +128,8 @@ pub const Summary = struct {
     games: usize = 0,
     /// Of them, with a raw summary
     docs: usize = 0,
+    /// Of docs, from the raw archive (not in raw.db)
+    from_archive: usize = 0,
     /// Summaries that failed to decompress or parse
     bad_docs: usize = 0,
     lines: usize = 0,
@@ -137,10 +139,8 @@ pub const Summary = struct {
     with_static: usize = 0,
 };
 
-/// Champion ids of a game by slot, 0 for none
-const Game = struct { champions: [10]u32 = @splat(0), done: bool = false };
-
-pub fn run(gpa: Allocator, io: Io, snap: []const u8, ddragon: ?[]const u8) !Summary {
+/// ARCHIVE: the raw archive, for games whose summary has left the box's raw.db
+pub fn run(gpa: Allocator, io: Io, snap: []const u8, ddragon: ?[]const u8, archive_dir: ?[]const u8) !Summary {
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
@@ -153,28 +153,8 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8, ddragon: ?[]const u8) !Summ
     }
     if (ddragon) |dir| try loadPatches(gpa, arena, io, dir, &dd);
 
-    var games: std.StringHashMapUnmanaged(Game) = .empty;
+    var games = try summaries.loadGames(gpa, arena, snap);
     defer games.deinit(gpa);
-    {
-        const path = try std.fs.path.joinZ(arena, &.{ snap, "meiolol.db" });
-        const db = try store.sqlite.Db.openReadOnly(path);
-        defer db.close();
-        var q = try db.prepare(
-            \\SELECT p.match_id, p.slot, p.champion_id
-            \\FROM participants p JOIN matches m USING (match_id) WHERE m.queue_id = ?
-        );
-        defer q.deinit();
-        try q.bind(.{ranked_solo});
-        while (try q.step()) {
-            const g = try games.getOrPut(gpa, q.bytes(0));
-            if (!g.found_existing) {
-                g.key_ptr.* = try arena.dupe(u8, q.bytes(0));
-                g.value_ptr.* = .{};
-            }
-            const slot = q.int(1);
-            if (slot >= 0 and slot < 10) g.value_ptr.champions[@intCast(slot)] = @intCast(q.int(2));
-        }
-    }
     sum.games = games.count();
 
     const cwd = Io.Dir.cwd();
@@ -189,55 +169,11 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8, ddragon: ?[]const u8) !Summ
         const w = &fw.interface;
         try w.writeAll(header);
 
-        const path = try std.fs.path.joinZ(arena, &.{ snap, "raw.db" });
-        const db = try store.sqlite.Db.openReadOnly(path);
-        defer db.close();
-        var q = try db.prepare("SELECT key, body FROM raw_docs WHERE source = 'riot_match'");
-        defer q.deinit();
-        try q.bind(.{});
-
-        var batch_arena: std.heap.ArenaAllocator = .init(gpa);
-        defer batch_arena.deinit();
         const b = try gpa.create(Batch);
         defer gpa.destroy(b);
-        b.* = .{ .dd = &dd };
-        var more = true;
-        while (more) {
-            _ = batch_arena.reset(.retain_capacity);
-            const ba = batch_arena.allocator();
-            var n: usize = 0;
-            while (n < Batch.len) {
-                more = try q.step();
-                if (!more) break;
-                const g = games.getEntry(q.bytes(0)) orelse continue;
-                if (g.value_ptr.done) continue;
-                g.value_ptr.done = true;
-                b.keys[n] = g.key_ptr.*;
-                b.champions[n] = g.value_ptr.champions;
-                b.bodies[n] = try ba.dupe(u8, q.bytes(1));
-                n += 1;
-            }
-            b.n = n;
-            try par.forEach(io, n, b, Batch.body);
-            for (b.keys[0..n], b.out[0..n], b.ok[0..n]) |key, seats, ok| {
-                sum.docs += 1;
-                if (!ok) {
-                    sum.bad_docs += 1;
-                    continue;
-                }
-                for (seats, 0..) |s, slot| switch (s) {
-                    .none => {},
-                    .mismatch => sum.mismatch += 1,
-                    .stats => |st| {
-                        try w.print("{s}\t{d}", .{ key, slot });
-                        for (st) |x| try w.print("\t{d}", .{x});
-                        try w.writeByte('\n');
-                        sum.lines += 1;
-                        sum.with_static += @intFromBool(!std.math.isNan(st[at(.attack_range)]));
-                    },
-                };
-            }
-        }
+        b.* = .{ .dd = &dd, .io = io, .w = w, .sum = &sum };
+        const counts = try summaries.each(gpa, io, snap, archive_dir, &games, b);
+        sum.from_archive = counts.from_archive;
         try w.flush();
     }
     try cwd.rename(tmp_path, cwd, out_path, io);
@@ -247,14 +183,37 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8, ddragon: ?[]const u8) !Summ
 const Seat = union(enum) { none, mismatch, stats: Stats };
 
 const Batch = struct {
-    const len = 4096;
     dd: *const Patches,
-    n: usize = 0,
-    keys: [len][]const u8 = undefined,
-    champions: [len][10]u32 = undefined,
-    bodies: [len][]const u8 = undefined,
-    out: [len][10]Seat = undefined,
-    ok: [len]bool = undefined,
+    io: Io,
+    w: *Io.Writer,
+    sum: *Summary,
+    docs: []const summaries.Doc = &.{},
+    out: [summaries.batch_len][10]Seat = undefined,
+    ok: [summaries.batch_len]bool = undefined,
+
+    pub fn batch(b: *Batch, docs: []const summaries.Doc) !void {
+        b.docs = docs;
+        try par.forEach(b.io, docs.len, b, body);
+        const sum = b.sum;
+        for (docs, b.out[0..docs.len], b.ok[0..docs.len]) |d, seats, ok| {
+            sum.docs += 1;
+            if (!ok) {
+                sum.bad_docs += 1;
+                continue;
+            }
+            for (seats, 0..) |s, slot| switch (s) {
+                .none => {},
+                .mismatch => sum.mismatch += 1,
+                .stats => |st| {
+                    try b.w.print("{s}\t{d}", .{ d.key, slot });
+                    for (st) |x| try b.w.print("\t{d}", .{x});
+                    try b.w.writeByte('\n');
+                    sum.lines += 1;
+                    sum.with_static += @intFromBool(!std.math.isNan(st[at(.attack_range)]));
+                },
+            };
+        }
+    }
 
     fn body(b: *Batch, i: usize) !void {
         b.out[i] = @splat(.none);
@@ -262,7 +221,8 @@ const Batch = struct {
         var arena: std.heap.ArenaAllocator = .init(std.heap.smp_allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        const json = store.raw.decompress(a, b.bodies[i]) catch return;
+        const d = b.docs[i];
+        const json = d.json(a) catch return;
         const doc = std.json.parseFromSliceLeaky(Doc, a, json, .{ .ignore_unknown_fields = true }) catch return;
         b.ok[i] = true;
         const minutes = val(doc.info.gameDuration) / 60;
@@ -270,7 +230,7 @@ const Batch = struct {
         for (doc.info.participants) |p| {
             if (p.participantId < 1 or p.participantId > 10) continue;
             const slot = p.participantId - 1;
-            const want = b.champions[i][slot];
+            const want = d.champions[slot];
             if (want == 0) continue;
             b.out[i][slot] = if (want != p.championId) .mismatch else .{ .stats = seat(p, minutes, dd) };
         }
@@ -456,7 +416,7 @@ test "summaries to seat_stats.tsv and back" {
         \\"3111":{"stats":{"FlatSpellBlockMod":25}},"3340":{"stats":{}}}}
     });
 
-    const sum = try run(gpa, io, snap, dd);
+    const sum = try run(gpa, io, snap, dd, null);
     try testing.expectEqual(Summary{ .games = 3, .docs = 2, .bad_docs = 1, .lines = 2, .mismatch = 1, .with_static = 2 }, sum);
     const out = try Io.Dir.cwd().readFileAlloc(io, try arena.print("{s}/{s}", .{ snap, file_name }), arena, .limited(1 << 20));
     try testing.expectEqualStrings(header ++

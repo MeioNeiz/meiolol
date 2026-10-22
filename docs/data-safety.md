@@ -273,8 +273,9 @@ Modelling copies of the box data (meiolol-lab; docs/model.md "Shared protocol"):
 - mastery_pre.tsv and mastery_pre_pool.tsv (`meiolol-lab mastery-pre SNAP ARCHIVE`):
   pre-game mastery joined from the raw archive, keyed by hashed match id and slot only, written inside the
   snapshot dir, so it stays within the snapshot's rules and goes when the snapshot does
-- seat_stats.tsv (`meiolol-lab seat-stats SNAP`): per-seat end-of-game numbers from the
-  snapshot's own raw.db, keyed by hashed match id and slot, no player ids; same rules
+- seat_stats.tsv, comp_stats.tsv (`meiolol-lab seat-stats`, `comp-stats`): per-seat
+  end-of-game numbers from the snapshot's raw.db and the raw archive's summaries, keyed by
+  hashed match id and slot, no player ids; same rules
 
 ### Raw archive
 

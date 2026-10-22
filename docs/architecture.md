@@ -307,11 +307,13 @@ mastery_pre_pool.tsv, from the same fetches: match_id, slot, champion, pool (the
 champions with most points, `champion:points,...`), the pool the app would see; `meiolol
 eval --replay` reads it.
 
-`meiolol-lab seat-stats SNAP [DDRAGON]` (src/lab/seatstats.zig) adds seat_stats.tsv: per
-queue 420 seat, what the player did (api.SeatStat), for comp features. Header line, then
-match_id, slot, 17 f32 columns in SeatStat order, `nan` unknown; no line when the game
-has no raw summary or the summary names another champion. From raw.db's riot_match
-summaries (parallel decode, par.zig): minutes (gameDuration / 60), damage dealt to and
+`meiolol-lab seat-stats SNAP [DDRAGON [ARCHIVE]]` (src/lab/seatstats.zig) adds
+seat_stats.tsv: per queue 420 seat, what the player did (api.SeatStat), for comp
+features. Header line, then match_id, slot, 17 f32 columns in SeatStat order, `nan`
+unknown; no line when the game has no raw summary or the summary names another champion.
+From raw.db's riot_match summaries, then the raw archive's (src/lab/summaries.zig: the
+box keeps summaries ~2 days, so raw.db alone covers only a snapshot's newest games;
+parallel decode, par.zig): minutes (gameDuration / 60), damage dealt to and
 taken from champions by type, damageSelfMitigated, timeCCingOthers,
 challenges.enemyChampionImmobilizations, totalHeal (includes heals on teammates),
 totalHealsOnTeammates, totalDamageShieldedOnTeammates, damageDealtToBuildings. From Data

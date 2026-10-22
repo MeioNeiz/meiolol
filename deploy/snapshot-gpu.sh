@@ -169,7 +169,7 @@ a=$(sqlite3 "file:$out/meiolol.db?mode=ro" "SELECT count(*) FROM participants WH
 rm -rf "$work"
 log "checks passed"
 
-log "split, legendaries, seat stats, pack, mastery-pre"
+log "split, legendaries, seat and comp stats, pack, mastery-pre"
 nice -n 10 "$bin/meiolol-lab-snapshot" split "$out" > /dev/null
 nice -n 10 "$bin/meiolol-snapshot" legendaries --data "$out" --platform all
 versions=$(curl -sf https://ddragon.leagueoflegends.com/api/versions.json) || die "Data Dragon versions.json unreachable"
@@ -185,12 +185,15 @@ for patch in $patches; do
             || die "Data Dragon $v $f.json"
     done
 done
+# Summaries leave the box's raw.db for the archive after ~2 days: read both
+arch=/mnt/wsl/archive/meiolol-raw
 if [[ -d "$out/ddragon" ]]; then
-    nice -n 10 "$bin/meiolol-lab-snapshot" seat-stats "$out" "$out/ddragon"
+    nice -n 10 "$bin/meiolol-lab-snapshot" seat-stats "$out" "$out/ddragon" "$arch"
+    nice -n 10 "$bin/meiolol-lab-snapshot" comp-stats "$out" "$out/ddragon" "$arch"
 else
     nice -n 10 "$bin/meiolol-lab-snapshot" seat-stats "$out"
 fi
 nice -n 10 "$bin/meiolol-lab-snapshot" pack "$out"
-nice -n 10 "$bin/meiolol-lab-snapshot" mastery-pre "$out" /mnt/wsl/archive/meiolol-raw
+nice -n 10 "$bin/meiolol-lab-snapshot" mastery-pre "$out" "$arch"
 chmod -R go+rX "$out"
 log "made $name ($(du -sh "$out" | cut -f1))"
