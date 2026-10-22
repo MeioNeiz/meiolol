@@ -7,6 +7,10 @@ aims, kept apart:
 2. Understand why drafts win (main, pair, comp effects; what is causal; what moves over
    time), so the shipped model and the site's reasons are right, not just accurate
 
+Both serve the data edge (J24, docs/plan.md "Our edge"): what moves across patches,
+seasons and ranks is found here, then used by the site's estimate and the shipped model
+(estimates.md E3-E5, E11).
+
 Research behind each item: research/questions/frontier-experiments.md and its six
 children (ceiling, tabular-ensembles, interactions, causal, dynamics, pretrain). Items
 cite them as [ceiling C10] etc. Everything runs on the protocol in docs/model.md

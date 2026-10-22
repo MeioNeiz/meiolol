@@ -1,4 +1,10 @@
-# Plan: data modes and the estimate mode
+# Plan: the data edge (data modes and the estimate mode)
+
+This is the product's edge (J24, docs/plan.md "Our edge"): no other stat site
+understands its numbers patch by patch, season by season and rank by rank. They show a
+raw window; we show every window, honest about its scope, plus an estimate that uses
+what we have learnt about how patches, seasons and ranks move numbers, and the models
+are built on the same understanding.
 
 Jacob 22 Oct (J23): every block should respect the filters it sits under, or say
 clearly that it doesn't. Pages keep the raw modes, last 30 days and the newest patch,
@@ -28,6 +34,9 @@ research/questions/patch-transfer.md and curve-statistics-method.md; partial poo
   learned.md 13 Oct). A rank's estimate is every rank's number plus a shrunk rank
   deviation. That is more accurate than the rank's own thin games, and it lets every
   block follow the rank pick
+- Seasons are bigger boundaries: the preseason patch reworks items, objectives and
+  the map at once, so more champions move and by more. The same patch-transfer method
+  applies with a looser prior; how much carries over is measured, not assumed
 - The raw windows stay. They are what happened, and that is what makes the estimate
   checkable
 
@@ -103,10 +112,22 @@ research/questions/patch-transfer.md and curve-statistics-method.md; partial poo
   quality)
 - E9 Explain: a "how this was made" line per number (Trust rules) and a method page
   section with E2's daily scores per mode. Done before Meio becomes the default
+- E10 History views, "show it all": any past patch, a season, and a champion's or
+  matchup's number over patches as a line with each patch's range, from E7's cubes (a
+  past patch is a sum of its days). Where the estimate moved a number at a boundary,
+  say why ("changed in 16.21", "season start"). Today the crawl holds 16.19 (thin) to
+  16.21; seasons need either time or a backfill (patch-transfer.md "Older patches",
+  Jacob's call after the key). Done when the champion page's period pick lists every
+  patch we hold and the trend chart (site.md CH) reads from cubes
+- E11 Models on the same understanding: the draft model, the app's reasons and the
+  Daily Draft use E3-E5's terms (patch offset with the changed-champion prior, rank
+  bracket, later region and season), so the site and the app agree on every number and
+  the model gains what the windows can't give it. Measured in docs/model.md like any
+  model change; lab-frontier.md and patch-transfer.md are where the terms are proved
 
 Order: E1 now. E7 next, as the base: on its own it fixes the matchup builds strip per
 period and rank in every block. Then E2, then E3-E5 as each passes the gate, then E9 and
-the default switch (E0b).
+the default switch (E0b). E10 follows E7; E11 follows each estimate that passes E2.
 
 ## Status
 
@@ -121,7 +142,5 @@ the default switch (E0b).
 ## Later
 
 - Region per region (E3's g term), once Jacob wants it
-- The draft model and the app's reasons from the same estimates, so the site and the
-  app agree on every number
 - Lean per period, once one patch has enough games past 20 min (today one daily file,
   1.19M games)

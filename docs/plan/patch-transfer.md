@@ -5,7 +5,9 @@ from the previous one; learn how champions change between patches so a new patch
 learnt faster; evaluate a model only on what it is used for (newest-patch games); with
 few new games, maybe spend them on evaluation rather than training. Research:
 research/questions/patch-transfer.md (and frontier-dynamics). Replaces nothing in
-lab-frontier.md: this is E2-E5 made concrete.
+lab-frontier.md: this is E2-E5 made concrete. Part of the data edge (J24,
+docs/plan/estimates.md): what we learn here about how patches and seasons move numbers
+is what the site's estimate and the models stand on.
 
 ## What we know (21 Oct)
 

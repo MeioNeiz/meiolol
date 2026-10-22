@@ -75,6 +75,11 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
   (old patch moved by the changes, every rank adjusted to the one picked), name to pick;
   trust first, so how it is made must be plain. Rank picks use all data plus how ranks
   differ, not only that rank's games. Per region later. docs/plan/estimates.md
+- J24 (22 Oct) Understanding the data is the product's edge over every other stat site:
+  patch by patch, season by season, rank by rank. Show every view (30 days and newest
+  patch were only the start), each honest about its scope, plus our estimate from every
+  game; build the models on the same understanding so they beat anyone's. A lens for
+  every plan step: docs/plan.md "Our edge", docs/plan/estimates.md
 - nn on the GPU: planned, not now
 - Q1 Rewrite the application around game review of your own games, lane curves as the
   benchmark; squads worded as planned, or out until built
