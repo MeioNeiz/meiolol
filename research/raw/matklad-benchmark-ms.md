@@ -1,0 +1,20 @@
+# Benchmark In Milliseconds
+
+<https://matklad.github.io/2026/10/05/benchmark-milliseconds.html>
+
+[matklad](https://matklad.github.io/)[About](https://matklad.github.io/about.html)[Links](https://matklad.github.io/links.html)[Blogroll](https://matklad.github.io/blogroll.html)
+
+# Benchmark In Milliseconds
+
+Oct 5, 2026
+
+How long should a micro benchmark run? My rule of thumb is to tweak the input size until the benchmark takes about 300ms, for the following reasons:
+
+-   Milliseconds are integers ranging from 1 to 999. Enough precision to notice even a small improvement, and easy to scan visually. No need for different units or floating points (compare `1.31s` with `239ms`).
+-   Anything faster than, say, `10ms` risks being skewed by fixed costs (e.g, interpreter startup). Hundreds of milliseconds is an eternity for a computer, usually enough to make one-off overheads irrelevant without using fancier (= less robust) techniques to explicitly account for them.
+-   For a human, hundreds of milliseconds is fast, but noticeable. Pushing numbers into human-perceptible range allows me to use my intuitive sense of time and speed, it doesn’t rely exclusively on numeracy. It’s plain fun to see, as a result of optimization work, how a previously lagging CLI command becomes “instant”.
+-   But anything longer than a second makes _iterating_ on the benchmark slower than it needs to be. Running a benchmark 10 times in a row to eyeball variance should be fast!
+
+The imminently-to-be-stated assumption here is that the purpose of benchmarking isn’t so much a precise measurement of performance, but rather providing the author with enough intuition to make a correct decision.
+
+[Fix typo](https://github.com/matklad/matklad.github.io/edit/master/content/posts/2026-10-05-benchmark-milliseconds.dj)[Subscribe](https://matklad.github.io/feed.xml)[All posts](https://matklad.github.io/)[Get in touch](mailto:aleksey.kladov+blog@gmail.com)[matklad](https://github.com/matklad)

@@ -1,0 +1,308 @@
+# Devlog ⚡ Zig Programming Language
+
+<https://ziglang.org/devlog/2024/>
+
+[Download & Documentation](https://ziglang.org/download/) [Introduction](https://ziglang.org/intro/) [News](https://ziglang.org/news/) [Zig Software Foundation](https://ziglang.org/zsf/) [Devlog](https://ziglang.org/devlog/2026/) [Source](https://codeberg.org/ziglang/zig) [Community](https://ziglang.org/community)
+
+# Devlog
+
+This page contains a curated list of recent changes to main branch Zig.
+
+Also available as an [RSS feed](https://ziglang.org/devlog/index.xml).
+
+This page contains entries for the year 2024. Other years are available in [the Devlog archive page](https://ziglang.org/devlog/).
+
+December 25, 2024
+
+# [For Christmas: Self-Referential Global Values](https://ziglang.org/devlog/2024/#2024-12-25)
+
+Author: Matthew Lugg
+
+I recently took it upon myself to tackle [issue #131](https://github.com/ziglang/zig/issues/131). This has been a long-standing bug in the compiler, dating way back to the earliest days of the C++ bootstrap compiler: it was the 9th oldest open issue in the Zig repository! Essentially, fixing it allows you to write code like this:
+
+```
+const S = struct { ptr: *const S, x: u32 };
+
+// `foo` contains a pointer to itself
+const foo: S = .{ .ptr = &foo, .x = 123 };
+
+// Or:
+
+// `a` contains a pointer to `b`, and...
+// `b` contains a pointer to `a`
+const a: S = .{ .ptr = &b, .x = 123 };
+const b: S = .{ .ptr = &a, .x = 456 };
+```
+
+Previously, both of the examples above would have failed with a “dependency loop detected” error; now, they compile just as you expect (and the same works if they’re declared `var`, of course).
+
+This issue had been open for so long because it actually requires a non-trivial extension to the compiler: separating semantic analysis for the _type_ and _value_ of container-level declarations. This is complicated further by the fact that some global declarations might not have a type annotation, and that some (such as `extern` declarations) have a _type_ but no _value_. It also interacts with the work-in-progress incremental compilation feature in non-trivial ways, so we had to make sure we got that right. All in all, this resulted in a [pretty bulky diff](https://github.com/ziglang/zig/pull/22303) to the compiler.
+
+Regardless, the point is, this now works on Zig `master`! If you have a use case for it, feel free to give it a try – and please do open an issue if you encounter any problems along the way.
+
+Merry Christmas to those who celebrate!
+
+November 19, 2024
+
+# [Zig Bootstrap Porting Progress](https://ziglang.org/devlog/2024/#2024-11-19)
+
+Author: Alex Rønne Petersen
+
+The [zig-bootstrap](https://github.com/ziglang/zig-bootstrap) project makes it possible to produce a Zig compiler to run on (almost) any target with minimal system dependencies on the build machine. As part of my recent port work on Zig, I made it a goal to get zig-bootstrap working on as many of our supported cross-compilation target triples (`zig targets | jq -r .libc[]`) as reasonably possible. I’m happy to report that this effort is now complete.
+
+At time of writing, the list of target triples supported by zig-bootstrap is as follows:
+
+-   `aarch64-linux-(gnu,musl)`
+-   `aarch64-macos-none`
+-   `aarch64-windows-gnu`
+-   `aarch64_be-linux-(gnu,musl)`
+-   `arm[eb]-linux-(gnu,musl)eabi[hf]`
+-   `loongarch64-linux-(gnu,gnusf,musl)`
+-   `mips[el]-linux-(gnu,musl)eabi[hf]`
+-   `mips64[el]-linux-(gnu,musl)abi(64,n32)`
+-   `powerpc-linux-(gnu,musl)eabi[hf]`
+-   `powerpc64-linux-musl`
+-   `powerpc64le-linux-(gnu,musl)`
+-   `riscv(32,64)-linux-(gnu,musl)`
+-   `s390x-linux-(gnu,musl)`
+-   `thumb[eb]-linux-musleabi[hf]`
+-   `thumb-windows-gnu`
+-   `x86-linux-(gnu,musl)`
+-   `x86-windows-gnu`
+-   `x86_64-linux-(gnu,musl)[x32]`
+-   `x86_64-macos-none`
+-   `x86_64-windows-gnu`
+
+[The latest list can be found here.](https://github.com/ziglang/zig-bootstrap/blob/master/README.md#supported-triples)
+
+If you’ve been itching to run Zig on some unusual or obscure target, please take zig-bootstrap for a spin and see how it works for you. If you run into any build issues, please report those on the [zig-bootstrap](https://github.com/ziglang/zig-bootstrap) repository; issues with running the built compiler should be reported on [ziglang/zig](https://github.com/ziglang/zig).
+
+November 04, 2024
+
+# [The Unreasonable Effectiveness of Naming Integers](https://ziglang.org/devlog/2024/#2024-11-04)
+
+Author: Andrew Kelley
+
+Lately my Zig code has started to look like this in all my projects:
+
+```
+/// Uniquely identifies a section index across all objects. Each Object has a section_start field.
+/// By subtracting that value from this one, the Object section index is obtained.
+const SectionIndex = enum(u32) {
+    _,
+};
+
+/// Index into object_function_imports
+pub const ObjectFunctionImportIndex = enum(u32) {
+    _,
+};
+
+/// Index into `object_global_imports`
+pub const ObjectGlobalImportIndex = enum(u32) {
+    _,
+};
+
+/// Index into object_table_imports.
+pub const ObjectTableImportIndex = enum(u32) {
+    _,
+};
+
+/// Index into `function_imports`.
+pub const FunctionImportIndex = enum(u32) {
+    _,
+};
+
+/// Index into `global_imports`.
+pub const GlobalImportIndex = enum(u32) {
+    _,
+};
+
+/// Index into `table_imports`.
+pub const TableImportIndex = enum(u32) {
+    _,
+};
+
+/// Index into `memory_imports`.
+pub const MemoryImportIndex = enum(u32) {
+    _,
+};
+
+/// Index into `output_globals`.
+pub const GlobalIndex = enum(u32) {
+    _,
+};
+
+/// Index into `functions`.
+pub const FunctionIndex = enum(u32) {
+    _,
+};
+
+/// Index into object_functions
+pub const ObjectFunctionIndex = enum(u32) {
+    _,
+
+    pub fn toOptional(i: ObjectFunctionIndex) OptionalObjectFunctionIndex {
+        const result: OptionalObjectFunctionIndex = @enumFromInt(@intFromEnum(i));
+        assert(result != .none);
+        return result;
+    }
+};
+
+/// Index into object_functions, or null.
+pub const OptionalObjectFunctionIndex = enum(u32) {
+    none = std.math.maxInt(u32),
+    _,
+
+    pub fn unwrap(i: OptionalObjectFunctionIndex) ?ObjectFunctionIndex {
+        if (i == .none) return null;
+        return @enumFromInt(@intFromEnum(i));
+    }
+};
+```
+
+It’s uncanny how effective it is to avoid bugs by simply naming integers and thereby giving Zig’s type system a chance to catch mistakes. It’s extremely annoying and time consuming to troubleshoot this kind of mistake at runtime, but it’s _trivial_ to solve when you get a compile error from a type mismatch.
+
+November 01, 2024
+
+# [Anonymous Struct Types Removed](https://ziglang.org/devlog/2024/#2024-11-01)
+
+Author: Matthew Lugg
+
+Rejoice, ye faithful; the days of undocumented structural aggregate types are over!
+
+Until recently, Zig had the notion of an “anonymous struct type”. When you wrote `.{ .x = 123 }` with no [result type](https://ziglang.org/documentation/master/#Result-Types), it would give this value an “anonymous struct” type, which is a special kind of struct which can coerce to other types based on _structure_ rather than identity. In other words, this worked:
+
+```
+test "coerce anonymous struct" {
+    const foo = .{ .x = 123 };
+    const S = struct { x: ?u32 };
+    // It's true that `@TypeOf(foo) != S`, and yet...
+    const bar: S = foo; // ...this works!
+    try std.testing.expect(bar.x.? == 123);
+}
+const std = @import("std");
+```
+
+A little bit of trivia: this existed because a long time ago, Zig didn’t actually have the concept of a “result type”, so _all_ type annotations worked via coercions like that!
+
+I [proposed removing this system](https://github.com/ziglang/zig/issues/16865) last year, and finally got around to [actually doing it](https://github.com/ziglang/zig/pull/21817) last week. You can still write `.{ .x = 123 }` without a result type, but it’s given a “normal” struct type, with no magical coercions allowed. So now, the above code example fails just like you’d expect:
+
+```
+example.zig:5:20: error: expected type 'example.test.coerce anonymous struct.S', found 'example.test.coerce anonymous struct__struct_90'
+    const bar: S = foo; // ...this works!
+                   ^~~
+example.zig:2:18: note: struct declared here
+    const foo = .{ .x = 123 };
+                ~^~~~~~~~~~~~
+example.zig:3:15: note: struct declared here
+    const S = struct { x: ?u32 };
+              ^~~~~~~~~~~~~~~~~~
+```
+
+Good riddance!
+
+October 29, 2024
+
+# [File Watching Implemented for kqueue](https://ziglang.org/devlog/2024/#2024-10-29)
+
+Author: Andrew Kelley
+
+I knocked out [#20599](https://github.com/ziglang/zig/issues/20599) on a plane ride last week (coincidentally on the way to a [KQ tournament](https://bumblebeargames.com/pages/bumblebash-5)), so if you’re tracking master branch, you can now use the `zig build --watch` feature on macOS, FreeBSD, OpenBSD, NetBSD, DragonFlyBSD, and Haiku.
+
+This feature tracks all file system inputs, automatically repeating invalidated build steps. It can be quite handy when refactoring a codebase using a terminal-based workflow since it means seeing instant feedback when any build inputs - source code or otherwise - are updated.
+
+KQueue allows placing a watch on an open directory handle, but the event does not indicate the name of the changed file within any given directory. This is no problem for the Zig Build System. If any directory that contains watched files are triggered, the respective steps are invalidated, and then those steps use fstat to determine if the cached artifacts are still valid.
+
+October 06, 2024
+
+# [CI Coverage Added for Incremental Compilation](https://ziglang.org/devlog/2024/#2024-10-06)
+
+Author: Matthew Lugg
+
+Over the last few months, myself and Jakub have been working hard on incremental compilation, where the compiler can “remember” parts of a previous build and only re-compile the code that changed. We just hit an important milestone here: **our CI test suite [now includes](https://github.com/ziglang/zig/pull/21518) our “incremental compilation” tests!** This set of tests is small right now, but will grow rapidly as we fix bugs and, eventually, fuzz test the implementation.
+
+You can find all our incremental compilation test cases [here](https://github.com/ziglang/zig/tree/148b5b4c7806a694084f1e6f9514b0333cb75c6a/test/incremental). The CI runs all of them on `x86_64-linux` with the self-hosted x86\_64 backend, as well as on a few targets with the C backend (`-ofmt=c`). It’s approaching the point where you _can_ start to use incremental compilation in some very basic cases; for instance, I’ve recently managed to perform an incremental update on [Andrew’s Tetris clone](https://github.com/andrewrk/tetris).
+
+If you’re using a `master` build of Zig on Linux on x86\_64, you can try playing with incremental compilation **right now** with this command:
+
+```
+zig build -fincremental --watch
+```
+
+(Make sure your `Step.Compile` has `.use_llvm = false, .use_lld = false`, so Zig doesn’t try to use LLVM!)
+
+Beware, though, that you’ll run into bugs pretty quickly, including false positive compile errors and even miscompilations; use at your own risk.
+
+September 30, 2024
+
+# [New Devlog Structure](https://ziglang.org/devlog/2024/#2024-09-30)
+
+Author: Loris Cro
+
+The devlog has switched to a per-year pre-sharded structure to avoid the issue of having a page that grows indefinitely.
+
+**NOTE:** the RSS feed link has not changed. No action needed from RSS feed consumers. Cached links to older entries might become stale, but new entries from now on will have the correct link.
+
+If you want to get a similar setup going for your personal blog, check out [https://github.com/kristoff-it/zine-devlog-examples](https://github.com/kristoff-it/zine-devlog-examples)
+
+September 24, 2024
+
+# [loongarch64 added to the download page](https://ziglang.org/devlog/2024/#2024-09-24)
+
+Author: Andrew Kelley
+
+Thanks to contributions from [YANG Xudong](https://github.com/yxd-ym) and [Alex Rønne Petersen](https://www.alexrp.com/), along with [upgrading to LLVM 19](https://github.com/ziglang/zig/commit/c6ad4521c77372cb52adfb9a52b0854d830fed9c), loongarch64 support in Zig is progressed enough that [zig-bootstrap](https://github.com/ziglang/zig-bootstrap) works for this target. In celebration, I have added loongarch64-linux to [the download page](https://ziglang.org/download/).
+
+September 16, 2024
+
+# [2024-09-16](https://ziglang.org/devlog/2024/#2024-09-16)
+
+Author: Andrew Kelley
+
+I’ve been porting stb\_truetype.h to Zig on the side. Check out this snippet:
+
+```
+{
+    float sum = 0;
+    for (i=0; i < result->w; ++i) {
+      float k;
+      int m;
+      sum += scanline2[i];
+      k = scanline[i] + sum;
+      k = (float) STBTT_fabs(k)*255 + 0.5f;
+      m = (int) k;
+      if (m > 255) m = 255;
+      result->pixels[j*result->stride + i] = (unsigned char) m;
+    }
+}
+```
+
+⬇️
+
+```
+{
+    var sum: f32 = 0;
+    for (scanline, scanline2, result.pixels[j*result.stride..][0..result.w]) |s, s2, *p| {
+        sum += s2;
+        p.* = @min(@abs(s + sum)*255 + 0.5, 255);
+    }
+}
+```
+
+Ahh, much better.
+
+September 11, 2024
+
+# [Zig tokenizer updated to use labeled switch statements](https://ziglang.org/devlog/2024/#2024-09-11)
+
+Author: Andrew Kelley
+
+Now that Matthew landed [labeled switch continue syntax](https://github.com/ziglang/zig/pull/21257), it’s time to start using it.
+
+[Eric Petersen swooped in for a first-time contribution](https://github.com/ziglang/zig/pull/21367), updating Zig’s tokenizer to use the new syntax, measuring a 13% wall time performance increase for the `zig ast-check` command:
+
+This line of code tickles me:
+
+```
+state: switch (State.start) {
+```

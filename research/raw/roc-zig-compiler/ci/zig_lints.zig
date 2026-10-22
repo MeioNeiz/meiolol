@@ -1,0 +1,840 @@
+const std = @import("std");
+
+const Allocator = std.mem.Allocator;
+const PathList = std.ArrayList([]u8);
+
+const max_file_bytes: usize = 16 * 1024 * 1024;
+
+const TermColor = struct {
+    pub const red = "\x1b[0;31m";
+    pub const green = "\x1b[0;32m";
+    pub const reset = "\x1b[0m";
+};
+
+pub fn main(init: std.process.Init) !void {
+    const io = init.io;
+    // This tool stays standalone (no build_options wiring), so unlike the
+    // first-party DebugAllocators behind -Ddebug-gpa-traces it keeps std's
+    // default allocation-site traces; it allocates too little to matter.
+    var gpa_impl = std.heap.DebugAllocator(.{}){};
+    defer _ = gpa_impl.deinit();
+    const gpa = gpa_impl.allocator();
+
+    var stdout_buffer: [4096]u8 = undefined;
+    var stdout_state = std.Io.File.stdout().writer(io, &stdout_buffer);
+    const stdout = &stdout_state.interface;
+
+    var found_errors = false;
+
+    // Lint 1: Check for separator comments (// ====, // ----, // ────, etc.)
+    try stdout.print("Checking for separator comments...\n", .{});
+
+    {
+        var zig_files: PathList = .empty;
+        defer freePathList(&zig_files, gpa);
+
+        // Scan src/, build.zig, and test/ (not ci/ since zig_lints.zig mentions the pattern)
+        try walkTree(gpa, io, "src", &zig_files);
+        try walkTree(gpa, io, "test", &zig_files);
+
+        // Add build.zig directly
+        try zig_files.append(gpa, try gpa.dupe(u8, "build.zig"));
+
+        for (zig_files.items) |file_path| {
+            const errors = try checkSeparatorComments(gpa, io, file_path);
+            defer gpa.free(errors);
+
+            if (errors.len > 0) {
+                try stdout.print("{s}", .{errors});
+                found_errors = true;
+            }
+        }
+
+        if (found_errors) {
+            try stdout.print("\n", .{});
+            try stdout.print("Horizontal line separator comments are not allowed (e.g. // ====, // ----, // ────).\n", .{});
+            try stdout.print("Do not attempt to work around this by using different characters. Just don't put horizontal lines in the code.\n", .{});
+            try stdout.print("\n", .{});
+            try stdout.flush();
+            std.process.exit(1);
+        }
+    }
+
+    // Lint 2: Check for non-exhaustive switch prongs
+    try stdout.print("Checking for non-exhaustive switch prongs...\n", .{});
+
+    {
+        var switch_files: PathList = .empty;
+        defer freePathList(&switch_files, gpa);
+
+        try walkTree(gpa, io, "src", &switch_files);
+        try walkTree(gpa, io, "test", &switch_files);
+        try walkTree(gpa, io, "ci", &switch_files);
+        try switch_files.append(gpa, try gpa.dupe(u8, "build.zig"));
+
+        for (switch_files.items) |file_path| {
+            const errors = try checkElseSwitchProngs(gpa, io, file_path);
+            defer gpa.free(errors);
+
+            if (errors.len > 0) {
+                try stdout.print("{s}", .{errors});
+                found_errors = true;
+            }
+        }
+
+        if (found_errors) {
+            try stdout.print("\n", .{});
+            try stdout.print("Switches must list every case instead of using an else prong, except for literal and error switches.\n", .{});
+            try stdout.print("\n", .{});
+            try stdout.flush();
+            std.process.exit(1);
+        }
+    }
+
+    // Lint 3: Check for pub declarations without doc comments
+    try stdout.print("Checking for pub declarations without doc comments...\n", .{});
+
+    var zig_files: PathList = .empty;
+    defer freePathList(&zig_files, gpa);
+
+    try walkTree(gpa, io, "src", &zig_files);
+
+    for (zig_files.items) |file_path| {
+        const errors = try checkPubDocComments(gpa, io, file_path);
+        defer gpa.free(errors);
+
+        if (errors.len > 0) {
+            try stdout.print("{s}", .{errors});
+            found_errors = true;
+        }
+    }
+
+    if (found_errors) {
+        try stdout.print("\n", .{});
+        try stdout.print("Please add doc comments to the spots listed above, they make the code easier to understand for everyone.\n", .{});
+        try stdout.print("\n", .{});
+        try stdout.flush();
+        std.process.exit(1);
+    }
+
+    // Lint 4: Check first-party DebugAllocator stack trace wiring.
+    try stdout.print("Checking DebugAllocator stack trace wiring...\n", .{});
+
+    {
+        var debug_allocator_files: PathList = .empty;
+        defer freePathList(&debug_allocator_files, gpa);
+
+        try walkTree(gpa, io, "src", &debug_allocator_files);
+        try debug_allocator_files.append(gpa, try gpa.dupe(u8, "build.zig"));
+
+        for (debug_allocator_files.items) |file_path| {
+            const errors = try checkDebugAllocatorConfig(gpa, io, file_path);
+            defer gpa.free(errors);
+
+            if (errors.len > 0) {
+                try stdout.print("{s}", .{errors});
+                found_errors = true;
+            }
+        }
+
+        if (found_errors) {
+            try stdout.print("\n", .{});
+            try stdout.print("First-party DebugAllocator instances must use build_options.debug_gpa_stack_trace_frames.\n", .{});
+            try stdout.print("This keeps leak detection and allocator safety enabled while avoiding allocation-site stack traces unless -Ddebug-gpa-traces is passed.\n", .{});
+            try stdout.print("\n", .{});
+            try stdout.flush();
+            std.process.exit(1);
+        }
+    }
+
+    // Lint 5: Check for hash maps keyed by dense compiler IDs.
+    try stdout.print("Checking for ID-keyed hash maps...\n", .{});
+
+    {
+        var dense_id_files: PathList = .empty;
+        defer freePathList(&dense_id_files, gpa);
+
+        try walkTree(gpa, io, "src", &dense_id_files);
+        try walkTree(gpa, io, "test", &dense_id_files);
+        try dense_id_files.append(gpa, try gpa.dupe(u8, "build.zig"));
+
+        for (dense_id_files.items) |file_path| {
+            const errors = try checkDenseIdHashMaps(gpa, io, file_path);
+            defer gpa.free(errors);
+
+            if (errors.len > 0) {
+                try stdout.print("{s}", .{errors});
+                found_errors = true;
+            }
+        }
+
+        if (found_errors) {
+            try stdout.print("\n", .{});
+            try stdout.print("Compiler IDs are dense indices into an owning store; hashing them adds unnecessary work and allocation.\n", .{});
+            try stdout.print("Use collections.DenseMap for a dynamic ID-keyed column, or put a parallel column directly on the owning store.\n", .{});
+            try stdout.print("If the key is structural rather than a dense index, name it Key instead of Id.\n", .{});
+            try stdout.print("\n", .{});
+            try stdout.flush();
+            std.process.exit(1);
+        }
+    }
+
+    // Lint 6: Check that developer-diagnostic variables are read only through base.dev_diagnostics.
+    try stdout.print("Checking developer-diagnostic environment reads...\n", .{});
+
+    {
+        var dev_diagnostic_names = try devDiagnosticNames(gpa, io);
+        defer freePathList(&dev_diagnostic_names, gpa);
+
+        var dev_diagnostic_files: PathList = .empty;
+        defer freePathList(&dev_diagnostic_files, gpa);
+
+        try walkTree(gpa, io, "src", &dev_diagnostic_files);
+
+        for (dev_diagnostic_files.items) |file_path| {
+            if (std.mem.eql(u8, file_path, dev_diagnostics_path) or isTestPath(file_path)) continue;
+            const source = (try readSourceFileIfExists(gpa, io, file_path)) orelse continue;
+            defer gpa.free(source);
+
+            var errors: std.ArrayList(u8) = .empty;
+            defer errors.deinit(gpa);
+            try appendDevDiagnosticNameErrors(gpa, &errors, file_path, source, dev_diagnostic_names.items);
+
+            if (errors.items.len > 0) {
+                try stdout.print("{s}", .{errors.items});
+                found_errors = true;
+            }
+        }
+
+        if (found_errors) {
+            try stdout.print("\n", .{});
+            try stdout.print("Developer-diagnostic environment variables are read only through base.dev_diagnostics,\n", .{});
+            try stdout.print("so a compiler built without developer diagnostics never reads them.\n", .{});
+            try stdout.print("\n", .{});
+            try stdout.flush();
+            std.process.exit(1);
+        }
+    }
+
+    // Lint 7: Check for top level comments in new Zig files
+    try stdout.print("Checking for top level comments in new Zig files...\n", .{});
+
+    var new_zig_files = try getNewZigFiles(gpa, io);
+    defer {
+        for (new_zig_files.items) |path| {
+            gpa.free(path);
+        }
+        new_zig_files.deinit(gpa);
+    }
+
+    if (new_zig_files.items.len == 0) {
+        try stdout.print("{s}[OK]{s} All lints passed!\n", .{ TermColor.green, TermColor.reset });
+        try stdout.flush();
+        return;
+    }
+
+    var failed_files: PathList = .empty;
+    defer freePathList(&failed_files, gpa);
+
+    for (new_zig_files.items) |file_path| {
+        if (!try fileHasTopLevelComment(gpa, io, file_path)) {
+            try stdout.print("Error: {s} is missing top level comment (//!)\n", .{file_path});
+            try failed_files.append(gpa, try gpa.dupe(u8, file_path));
+        }
+    }
+
+    if (failed_files.items.len > 0) {
+        try stdout.print("\n", .{});
+        try stdout.print("The following files are missing a top level comment:\n", .{});
+        for (failed_files.items) |path| {
+            try stdout.print("    {s}\n", .{path});
+        }
+        try stdout.print("\n", .{});
+        try stdout.print("Add a //! comment that explains the purpose of the file BEFORE any other code.\n", .{});
+        try stdout.flush();
+        std.process.exit(1);
+    }
+
+    try stdout.print("{s}[OK]{s} All lints passed!\n", .{ TermColor.green, TermColor.reset });
+    try stdout.flush();
+}
+
+fn walkTree(allocator: Allocator, io: std.Io, dir_path: []const u8, zig_files: *PathList) !void {
+    var dir = try std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true });
+    defer dir.close(io);
+
+    var it = dir.iterate();
+    while (try it.next(io)) |entry| {
+        if (entry.kind == .sym_link) continue;
+
+        const next_path = try std.fs.path.join(allocator, &.{ dir_path, entry.name });
+
+        if (entry.kind == .directory) {
+            // Skip .zig-cache directories
+            if (std.mem.eql(u8, entry.name, ".zig-cache")) {
+                allocator.free(next_path);
+                continue;
+            }
+            defer allocator.free(next_path);
+            try walkTree(allocator, io, next_path, zig_files);
+        } else if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".zig")) {
+            try zig_files.append(allocator, next_path);
+        } else {
+            allocator.free(next_path);
+        }
+    }
+}
+
+fn checkSeparatorComments(allocator: Allocator, io: std.Io, file_path: []const u8) ![]u8 {
+    const source = (try readSourceFileIfExists(allocator, io, file_path)) orelse return try allocator.dupe(u8, "");
+    defer allocator.free(source);
+
+    var errors: std.ArrayList(u8) = .empty;
+    errdefer errors.deinit(allocator);
+
+    var line_num: usize = 1;
+    var lines = std.mem.splitScalar(u8, source, '\n');
+
+    while (lines.next()) |line| {
+        defer line_num += 1;
+
+        // Trim leading whitespace
+        const trimmed = std.mem.trimStart(u8, line, " \t");
+
+        // Check if line starts with // and is a separator comment
+        // Separator comments are lines like "// ====", "// ----", "// ────────"
+        // We detect them by checking if, after the //, the line consists only of
+        // whitespace, separator characters, and letters (for section titles)
+        if (std.mem.startsWith(u8, trimmed, "//")) {
+            const after_slashes = trimmed[2..];
+            if (isSeparatorComment(after_slashes)) {
+                const msg = try std.fmt.allocPrint(allocator, "{s}:{d}: horizontal line separator comment not allowed\n", .{ file_path, line_num });
+                defer allocator.free(msg);
+                try errors.appendSlice(allocator, msg);
+            }
+        }
+    }
+
+    return errors.toOwnedSlice(allocator);
+}
+
+fn checkElseSwitchProngs(allocator: Allocator, io: std.Io, file_path: []const u8) ![]u8 {
+    const source = (try readSourceFileIfExists(allocator, io, file_path)) orelse return try allocator.dupe(u8, "");
+    defer allocator.free(source);
+
+    var tree = try std.zig.Ast.parse(allocator, source, .{ .mode = .zig });
+    defer tree.deinit(allocator);
+
+    var errors: std.ArrayList(u8) = .empty;
+    errdefer errors.deinit(allocator);
+
+    for (tree.nodes.items(.tag), 0..) |tag, node_usize| {
+        if (tag != .@"switch" and tag != .switch_comma) continue;
+
+        const node: std.zig.Ast.Node.Index = @fromBackingInt(@intCast(node_usize));
+        const switch_node = tree.fullSwitch(node) orelse unreachable;
+        var else_offset: ?usize = null;
+        var has_literal_case = false;
+        var has_error_case = false;
+
+        for (switch_node.ast.cases) |case_node| {
+            const case = tree.fullSwitchCase(case_node) orelse unreachable;
+            if (case.ast.values.len == 0) {
+                else_offset = tree.tokens.items(.start)[tree.firstToken(case_node)];
+                continue;
+            }
+
+            for (case.ast.values) |value| {
+                const first_token = tree.firstToken(value);
+                const last_token = tree.lastToken(value);
+                if (std.mem.eql(u8, tree.tokenSlice(first_token), "error")) {
+                    has_error_case = true;
+                }
+                for (first_token..last_token + 1) |token| {
+                    const token_tag = tree.tokens.items(.tag)[token];
+                    if (token_tag == .number_literal or
+                        token_tag == .char_literal or
+                        token_tag == .string_literal or
+                        token_tag == .multiline_string_literal_line)
+                    {
+                        has_literal_case = true;
+                    }
+                }
+            }
+        }
+
+        if (else_offset) |offset| {
+            if (!has_literal_case and !has_error_case) {
+                const msg = try std.fmt.allocPrint(
+                    allocator,
+                    "{s}:{d}: switch else prong must be exhaustive\n",
+                    .{ file_path, lineNumber(source, offset) },
+                );
+                defer allocator.free(msg);
+                try errors.appendSlice(allocator, msg);
+            }
+        }
+    }
+
+    return errors.toOwnedSlice(allocator);
+}
+
+/// Checks if a line (after the //) is a horizontal line separator comment.
+/// These are lines consisting of repeated separator characters (=, -, ─)
+/// with optional whitespace and a section title between them.
+/// Examples that should match:
+///   " ===="
+///   " ===== Section ====="
+///   " ----"
+///   " ---- Title ----"
+///   " ──────────"
+/// Examples that should NOT match:
+///   " 2. Stdout contains "=====""
+///   " This is a normal comment about ===="
+///   " --something"
+///   " ┌─────────────┐"  (box art with corners)
+///   " └───────┬─────┘"  (box art with corners)
+fn isSeparatorComment(after_slashes: []const u8) bool {
+    // Trim whitespace
+    const content = std.mem.trim(u8, after_slashes, " \t");
+    if (content.len == 0) return false;
+
+    // Check for box-drawing horizontal line (U+2500 "─", encoded as 0xE2 0x94 0x80 in UTF-8).
+    // Only flag if the line has 4+ consecutive ─ but NO box-drawing corners/intersections
+    // (┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼ │ etc.), which would indicate it's part of a diagram.
+    if (std.mem.find(u8, content, "\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80") != null) {
+        if (!containsBoxDrawingCorner(content)) return true;
+    }
+
+    // For ASCII separators, must contain 4+ repeated chars and start with them
+    const sep_char: u8 = if (std.mem.find(u8, content, "====") != null)
+        '='
+    else if (std.mem.find(u8, content, "----") != null)
+        '-'
+    else
+        return false;
+
+    // Must start with the separator character
+    if (content[0] != sep_char) return false;
+
+    // Find where the leading separator chars end
+    var i: usize = 0;
+    while (i < content.len and content[i] == sep_char) : (i += 1) {}
+
+    // Everything after leading separators should be whitespace, letters, or trailing separators
+    while (i < content.len) : (i += 1) {
+        const c = content[i];
+        if (c == sep_char or c == ' ' or c == '\t' or (c >= 'A' and c <= 'Z') or (c >= 'a' and c <= 'z')) {
+            continue;
+        }
+        // Found a character that's not allowed in separator comments
+        return false;
+    }
+
+    return true;
+}
+
+/// Returns true if the content contains any box-drawing corner or intersection
+/// character (anything in the U+2500 block that isn't U+2500 "─" itself).
+/// These characters (┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼ │ etc.) indicate the line is part
+/// of a diagram, not a separator.
+fn containsBoxDrawingCorner(content: []const u8) bool {
+    var i: usize = 0;
+    while (i + 2 < content.len) : (i += 1) {
+        if (content[i] == 0xE2 and content[i + 1] == 0x94) {
+            // U+2500 block: 0xE2 0x94 0x80-0xBF
+            // U+2500 (─) is 0x80—skip it, everything else is a corner/intersection
+            if (content[i + 2] != 0x80) return true;
+            i += 2; // skip the rest of this UTF-8 sequence
+        } else if (content[i] == 0xE2 and content[i + 1] == 0x95) {
+            // U+2540-U+257F block: 0xE2 0x95 0x80-0xBF (double-line box drawing)
+            return true;
+        }
+    }
+    return false;
+}
+
+fn checkPubDocComments(allocator: Allocator, io: std.Io, file_path: []const u8) ![]u8 {
+    const source = (try readSourceFileIfExists(allocator, io, file_path)) orelse return try allocator.dupe(u8, "");
+    defer allocator.free(source);
+
+    var errors: std.ArrayList(u8) = .empty;
+    errdefer errors.deinit(allocator);
+
+    var line_num: usize = 1;
+    var prev_line: []const u8 = "";
+    var lines = std.mem.splitScalar(u8, source, '\n');
+
+    while (lines.next()) |line| {
+        defer {
+            prev_line = line;
+            line_num += 1;
+        }
+
+        // Check if line starts with "pub " (no leading whitespace - only top-level declarations)
+        if (!std.mem.startsWith(u8, line, "pub ")) continue;
+
+        // Check if previous line is a doc comment (allow indented doc comments)
+        const prev_trimmed = std.mem.trimStart(u8, prev_line, " \t");
+        if (std.mem.startsWith(u8, prev_trimmed, "///")) continue;
+
+        // Skip exceptions: init, deinit, @import, and pub const re-exports
+        // Note: "pub.*fn init\(" in bash matches "init" anywhere in function name
+        if (std.mem.find(u8, line, "fn init") != null) continue;
+        if (std.mem.find(u8, line, "fn deinit") != null) continue;
+        if (std.mem.find(u8, line, "@import") != null) continue;
+
+        // Check for pub const re-exports (e.g., "pub const Foo = bar.Baz;")
+        if (isReExport(line)) continue;
+
+        const msg = try std.fmt.allocPrint(allocator, "{s}:{d}: pub declaration without doc comment `///`\n", .{ file_path, line_num });
+        defer allocator.free(msg);
+        try errors.appendSlice(allocator, msg);
+    }
+
+    return errors.toOwnedSlice(allocator);
+}
+
+fn checkDebugAllocatorConfig(allocator: Allocator, io: std.Io, file_path: []const u8) ![]u8 {
+    const source = (try readSourceFileIfExists(allocator, io, file_path)) orelse return try allocator.dupe(u8, "");
+    defer allocator.free(source);
+
+    var errors: std.ArrayList(u8) = .empty;
+    errdefer errors.deinit(allocator);
+
+    var rest = source[0..];
+    var base: usize = 0;
+    while (std.mem.find(u8, rest, "DebugAllocator(")) |relative_index| {
+        const absolute_index = base + relative_index;
+        defer {
+            const next_start = relative_index + "DebugAllocator(".len;
+            base += next_start;
+            rest = rest[next_start..];
+        }
+
+        if (isLineComment(source, absolute_index)) continue;
+
+        const end = debugAllocatorInvocationEnd(source, absolute_index);
+        const invocation = source[absolute_index..end];
+        if (std.mem.find(u8, invocation, "debug_gpa_stack_trace_frames") != null) continue;
+
+        const msg = try std.fmt.allocPrint(
+            allocator,
+            "{s}:{d}: DebugAllocator config must use build_options.debug_gpa_stack_trace_frames\n",
+            .{ file_path, lineNumber(source, absolute_index) },
+        );
+        defer allocator.free(msg);
+        try errors.appendSlice(allocator, msg);
+    }
+
+    return errors.toOwnedSlice(allocator);
+}
+
+fn checkDenseIdHashMaps(allocator: Allocator, io: std.Io, file_path: []const u8) ![]u8 {
+    const source = readSourceFile(allocator, io, file_path) catch |err| switch (err) {
+        error.FileNotFound => return try allocator.dupe(u8, ""),
+        else => return err,
+    };
+    defer allocator.free(source);
+
+    var errors: std.ArrayList(u8) = .empty;
+    errdefer errors.deinit(allocator);
+
+    try appendDenseIdHashMapErrors(allocator, &errors, file_path, source, "HashMap(");
+    try appendDenseIdHashMapErrors(allocator, &errors, file_path, source, "HashMapUnmanaged(");
+
+    return errors.toOwnedSlice(allocator);
+}
+
+fn appendDenseIdHashMapErrors(
+    allocator: Allocator,
+    errors: *std.ArrayList(u8),
+    file_path: []const u8,
+    source: []const u8,
+    comptime marker: []const u8,
+) !void {
+    var rest = source[0..];
+    var base: usize = 0;
+    while (std.mem.find(u8, rest, marker)) |relative_index| {
+        const absolute_index = base + relative_index;
+        const key_start = absolute_index + marker.len;
+        defer {
+            base = key_start;
+            rest = source[key_start..];
+        }
+
+        if (isLineComment(source, absolute_index)) continue;
+
+        const key = denseIdHashMapKey(source, key_start) orelse continue;
+
+        const msg = try std.fmt.allocPrint(
+            allocator,
+            "{s}:{d}: ID-keyed hash map `{s}` must be a dense column\n",
+            .{ file_path, lineNumber(source, absolute_index), key },
+        );
+        defer allocator.free(msg);
+        try errors.appendSlice(allocator, msg);
+    }
+}
+
+fn denseIdHashMapKey(source: []const u8, key_start: usize) ?[]const u8 {
+    const comma = std.mem.findScalarPos(u8, source, key_start, ',') orelse return null;
+    const key = std.mem.trim(u8, source[key_start..comma], " \t\r\n");
+    // An anonymous struct key is structural, whatever its first field is.
+    if (std.mem.startsWith(u8, key, "struct")) return null;
+    return if (std.mem.endsWith(u8, key, "Id")) key else null;
+}
+
+fn debugAllocatorInvocationEnd(source: []const u8, start: usize) usize {
+    const open_paren = std.mem.findScalarPos(u8, source, start, '(') orelse return lineEnd(source, start);
+
+    var depth: usize = 0;
+    var i = open_paren;
+    while (i < source.len) : (i += 1) {
+        switch (source[i]) {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if (depth == 0) return i + 1;
+            },
+            else => {},
+        }
+    }
+
+    return lineEnd(source, start);
+}
+
+fn isLineComment(source: []const u8, offset: usize) bool {
+    const start = lineStart(source, offset);
+    const end = lineEnd(source, offset);
+    const line = std.mem.trimStart(u8, source[start..end], " \t");
+    return std.mem.startsWith(u8, line, "//");
+}
+
+fn lineStart(source: []const u8, offset: usize) usize {
+    var start = offset;
+    while (start > 0 and source[start - 1] != '\n') : (start -= 1) {}
+    return start;
+}
+
+fn lineEnd(source: []const u8, offset: usize) usize {
+    return std.mem.findScalarPos(u8, source, offset, '\n') orelse source.len;
+}
+
+fn lineNumber(source: []const u8, offset: usize) usize {
+    return std.mem.count(u8, source[0..offset], "\n") + 1;
+}
+
+/// The file that declares every developer-diagnostic environment variable.
+const dev_diagnostics_path = "src/base/dev_diagnostics.zig";
+
+/// Every `ROC_` string literal in `dev_diagnostics_path`, quotes included:
+/// the names of the developer-diagnostic environment variables.
+fn devDiagnosticNames(allocator: Allocator, io: std.Io) !PathList {
+    const source = try readSourceFile(allocator, io, dev_diagnostics_path);
+    defer allocator.free(source);
+
+    var names: PathList = .empty;
+    errdefer freePathList(&names, allocator);
+
+    var tokenizer = std.zig.Tokenizer.init(source);
+    var token = tokenizer.next();
+    while (token.tag != .eof) : (token = tokenizer.next()) {
+        if (token.tag != .string_literal) continue;
+        const text = source[token.loc.start..token.loc.end];
+        if (std.mem.startsWith(u8, text, "\"ROC_")) try names.append(allocator, try allocator.dupe(u8, text));
+    }
+    return names;
+}
+
+/// Whether a source file holds only tests, which set these variables for the
+/// compiler they run.
+fn isTestPath(file_path: []const u8) bool {
+    return std.mem.find(u8, file_path, "/test/") != null or std.mem.endsWith(u8, file_path, "_test.zig");
+}
+
+fn appendDevDiagnosticNameErrors(
+    allocator: Allocator,
+    errors: *std.ArrayList(u8),
+    file_path: []const u8,
+    source: [:0]const u8,
+    names: []const []u8,
+) !void {
+    var tokenizer = std.zig.Tokenizer.init(source);
+    var token = tokenizer.next();
+    while (token.tag != .eof) : (token = tokenizer.next()) {
+        if (token.tag != .string_literal) continue;
+        const text = source[token.loc.start..token.loc.end];
+        for (names) |name| {
+            if (!std.mem.eql(u8, text, name)) continue;
+            const msg = try std.fmt.allocPrint(
+                allocator,
+                "{s}:{d}: developer-diagnostic variable {s} must be read through base.dev_diagnostics\n",
+                .{ file_path, lineNumber(source, token.loc.start), name },
+            );
+            defer allocator.free(msg);
+            try errors.appendSlice(allocator, msg);
+        }
+    }
+}
+
+fn isReExport(line: []const u8) bool {
+    // Match pattern: pub const X = lowercase.something;
+    // This detects re-exports like "pub const Foo = bar.Baz;"
+    if (!std.mem.startsWith(u8, line, "pub const ")) return false;
+
+    // Find the '=' sign
+    const eq_pos = std.mem.find(u8, line, "=") orelse return false;
+    const after_eq = std.mem.trimStart(u8, line[eq_pos + 1 ..], " \t");
+
+    // Check if it starts with a lowercase letter (module reference)
+    if (after_eq.len == 0) return false;
+    const first_char = after_eq[0];
+    if (first_char < 'a' or first_char > 'z') return false;
+
+    // Check if it contains a dot and ends with semicolon (but not a function call)
+    if (std.mem.find(u8, after_eq, ".") == null) return false;
+    if (std.mem.find(u8, after_eq, "(") != null) return false;
+    if (!std.mem.endsWith(u8, std.mem.trimEnd(u8, after_eq, " \t"), ";")) return false;
+
+    return true;
+}
+
+fn getNewZigFiles(allocator: Allocator, io: std.Io) !PathList {
+    var result: PathList = .empty;
+    errdefer {
+        for (result.items) |path| {
+            allocator.free(path);
+        }
+        result.deinit(allocator);
+    }
+
+    // Run git diff to get new files
+    const run_result = std.process.run(allocator, io, .{
+        .argv = &.{ "git", "diff", "--name-only", "--diff-filter=A", "origin/main", "HEAD", "--", "src/" },
+    }) catch {
+        // Git not available or not in a repo - return empty list
+        return result;
+    };
+    defer allocator.free(run_result.stdout);
+    defer allocator.free(run_result.stderr);
+
+    if (run_result.term != .exited or run_result.term.exited != 0) return result;
+    const output = run_result.stdout;
+
+    // Parse output line by line
+    var lines = std.mem.splitScalar(u8, output, '\n');
+    while (lines.next()) |line| {
+        if (line.len == 0) continue;
+        if (!std.mem.endsWith(u8, line, ".zig")) continue;
+
+        try result.append(allocator, try allocator.dupe(u8, line));
+    }
+
+    return result;
+}
+
+fn fileHasTopLevelComment(allocator: Allocator, io: std.Io, file_path: []const u8) !bool {
+    // A file can be deleted after `git diff` lists it; skip it in that case.
+    const source = (try readSourceFileIfExists(allocator, io, file_path)) orelse return true;
+    defer allocator.free(source);
+
+    return std.mem.find(u8, source, "//!") != null;
+}
+
+fn readSourceFile(allocator: Allocator, io: std.Io, path: []const u8) std.Io.Dir.ReadFileAllocError![:0]u8 {
+    return try std.Io.Dir.cwd().readFileAllocOptions(
+        io,
+        path,
+        allocator,
+        .limited(max_file_bytes),
+        std.mem.Alignment.of(u8),
+        0,
+    );
+}
+
+fn readSourceFileIfExists(allocator: Allocator, io: std.Io, path: []const u8) std.Io.Dir.ReadFileAllocError!?[:0]u8 {
+    return readSourceFile(allocator, io, path) catch |err| switch (err) {
+        error.FileNotFound => null,
+        error.Canceled,
+        error.InputOutput,
+        error.SystemResources,
+        error.IsDir,
+        error.ConnectionResetByPeer,
+        error.NotOpenForReading,
+        error.SocketUnconnected,
+        error.WouldBlock,
+        error.AccessDenied,
+        error.LockViolation,
+        error.Unexpected,
+        error.FileTooBig,
+        error.NoSpaceLeft,
+        error.DeviceBusy,
+        error.PermissionDenied,
+        error.NoDevice,
+        error.FileBusy,
+        error.ProcessFdQuotaExceeded,
+        error.SystemFdQuotaExceeded,
+        error.PathAlreadyExists,
+        error.SymLinkLoop,
+        error.NotDir,
+        error.ReadOnlyFileSystem,
+        error.NetworkNotFound,
+        error.NameTooLong,
+        error.BadPathName,
+        error.PipeBusy,
+        error.AntivirusInterference,
+        error.FileLocksUnsupported,
+        error.OutOfMemory,
+        error.StreamTooLong,
+        => return err,
+    };
+}
+
+fn freePathList(list: *PathList, allocator: Allocator) void {
+    for (list.items) |path| {
+        allocator.free(path);
+    }
+    list.deinit(allocator);
+}
+
+test "dense ID hash map lint recognizes qualified and multiline keys" {
+    const source =
+        \\var a: std.AutoHashMap(Ast.LocalId, void);
+        \\var b: std.AutoHashMap(
+        \\    NodeId,
+        \\    u32,
+        \\);
+        \\var c: std.AutoHashMap(Ast.LocalIdx, void);
+        \\var d: std.AutoHashMap(StructuralKey, void);
+    ;
+
+    const first = std.mem.find(u8, source, "HashMap(").?;
+    try std.testing.expectEqualStrings("Ast.LocalId", denseIdHashMapKey(source, first + "HashMap(".len).?);
+
+    const second = std.mem.findPos(u8, source, first + 1, "HashMap(").?;
+    try std.testing.expectEqualStrings("NodeId", denseIdHashMapKey(source, second + "HashMap(".len).?);
+
+    const third = std.mem.findPos(u8, source, second + 1, "HashMap(").?;
+    try std.testing.expect(denseIdHashMapKey(source, third + "HashMap(".len) == null);
+
+    const fourth = std.mem.findPos(u8, source, third + 1, "HashMap(").?;
+    try std.testing.expect(denseIdHashMapKey(source, fourth + "HashMap(".len) == null);
+}
+
+test "developer-diagnostic lint flags string literals naming a variable, not comments" {
+    const source =
+        \\// Prints when ROC_PACK_STATS is set.
+        \\const a = std.c.getenv("ROC_PACK_STATS");
+        \\const b = std.c.getenv("ROC_CACHE_DIR");
+        \\const c = dev_diagnostics.isSet(.pack_stats);
+    ;
+    var name = "\"ROC_PACK_STATS\"".*;
+    const names = [_][]u8{&name};
+
+    var errors: std.ArrayList(u8) = .empty;
+    defer errors.deinit(std.testing.allocator);
+    try appendDevDiagnosticNameErrors(std.testing.allocator, &errors, "x.zig", source, &names);
+
+    try std.testing.expectEqualStrings("x.zig:2: developer-diagnostic variable \"ROC_PACK_STATS\" must be read through base.dev_diagnostics\n", errors.items);
+}

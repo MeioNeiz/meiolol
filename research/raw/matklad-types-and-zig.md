@@ -1,0 +1,215 @@
+# Types and the Zig Programming Language
+
+<https://matklad.github.io/2023/08/09/types-and-zig.html>
+
+[matklad](https://matklad.github.io/)[About](https://matklad.github.io/about.html)[Links](https://matklad.github.io/links.html)[Blogroll](https://matklad.github.io/blogroll.html)
+
+# Types and the Zig Programming Language
+
+Aug 9, 2023
+
+Notes on less-than-obvious aspects of Zig’s type system and things that surprised me after diving deeper into the language.
+
+## [Nominal Types](https://matklad.github.io/2023/08/09/types-and-zig.html#Nominal-Types)
+
+Zig has a nominal type system despite the fact that types lack names. A struct type is declared by `struct { field: T }`. It’s anonymous; an explicit assignment is required to name the type:
+
+```
+const S = struct {
+  field: T,
+};
+```
+
+Still, the type system is nominal, not structural. The following does not compile:
+
+```
+fn f() struct { f: i32 } {
+  return .{ .f = 92 };
+}
+
+fn g(s: struct { f: i32 }) void {
+  _ = s;
+}
+
+pub fn main() void {
+  g(f()); // <- type mismatch
+}
+```
+
+The following does:
+
+```
+const S = struct { f: i32 };
+
+fn f() S {
+  return .{ .f = 92 };
+}
+
+fn g(s: S) void {
+  _ = s;
+}
+
+pub fn main() void {
+  g(f());
+}
+```
+
+One place where Zig is structural are anonymous struct literals:
+
+```
+pub fn main() void {
+  const x                      = .{ .foo = 1 };
+  const y: struct { foo: i32 } = x;
+  comptime assert(@TypeOf(x) != @TypeOf(y));
+}
+```
+
+Types of `x` and `y` are different, but `x` can be coerced to `y`.
+
+In other words, Zig structs are anonymous and nominal, but anonymous structs are structural!
+
+## [No Unification](https://matklad.github.io/2023/08/09/types-and-zig.html#No-Unification)
+
+Simple type inference for an expression works by first recursively inferring the types of subexpressions, and then deriving the result type from that. So, to infer types in `foo().bar()`, we first derive the type of `foo()`, then lookup method `bar` on that type, and use the return type of the method.
+
+More complex type inference works through so called unification algorithm. It starts with a similar recursive walk over the expression tree, but this walk doesn’t infer types directly, but rather assigns a type variable to each subexpression, and generates equations relating type variables. So the result of this first phase look like this:
+
+```
+x = y
+Int = y
+```
+
+Then, in the second phase the equations are solved, yielding, in this case, `x = Int` and `y = Int`.
+
+Usually languages with powerful type systems have unification somewhere, though often unification is limited in scope (for example, Kotlin infers types statement-at-a-time).
+
+It is curious that Zig doesn’t do unification, type inference is a simple single-pass recursion (or at least it should be, I haven’t looked at how it is actually implemented). So, anytime there’s a generic function like `fn reverse(comptime T: type, xs: []T) void`, the call site has to pass the type in explicitly:
+
+```
+pub fn main() void {
+  var xs: [3]i32 = .{1, 2, 3};
+  reverse(i32, &xs);
+}
+```
+
+Does it mean that you have to pass the types all the time? Not really! In fact, the only place which feels like a burden are functions in `std.mem` module which operate on slices, but that’s just because slices are builtin types (a kind of pointer really) without methods. The thing is, when you call a method on a “generic type”, its type parameters are implicitly in scope, and don’t have to be specified. Study this example:
+
+```
+const std = @import("std");
+const assert = std.debug.assert;
+
+pub fn Slice(comptime T: type) type {
+  return struct {
+    ptr: [*]T,
+    len: usize,
+
+    fn init(ptr: [*]T, len: usize) @This() {
+      return .{ .ptr = ptr, .len = len };
+    }
+
+    fn reverse(slice: @This()) void{
+      ...
+    }
+  };
+}
+
+pub fn main() void {
+  var xs: [3]i32 = .{1, 2, 3};
+  var slice = Slice(i32).init(&xs, xs.len);
+
+  slice.reverse(); // <- look, no types!
+}
+```
+
+There’s a runtime parallel here. At runtime, there’s a single dynamic dispatch, which prioritizes dynamic type of the first argument, and multiple dynamic dispatch, which can look at dynamic types of all arguments. Here, at compile time, the type of the first argument gets a preferential treatment. And, similarly to runtime, this covers 80% of use cases! Though, I’d love for things like `std.mem.eql` to be actual methods on slices…
+
+## [Mandatory Function Signatures](https://matklad.github.io/2023/08/09/types-and-zig.html#Mandatory-Function-Signatures)
+
+One of the best tricks a language server can pull off for as-you-type analysis is skipping bodies of the functions in dependencies. This works as long as the language requires complete signatures. In functional languages, it’s customary to make signatures optional, which precludes this crucial optimization. As per [_Modularity Of Lexical Analysis_](https://matklad.github.io/2023/08/01/on-modularity-of-lexical-analysis.html), this has repercussions for all of:
+
+-   incremental compilation,
+-   parallel compilation,
+-   robustness to errors.
+
+I always assumed that Zig with its crazy `comptime` requires autopsy. But that’s not actually the case! Zig doesn’t have `decltype(auto)`, signatures are always explicit!
+
+Let’s look at, e.g., `std.mem.bytesAsSlice`:
+
+```
+fn bytesAsSlice(
+  comptime T: type,
+  bytes: anytype,
+) BytesAsSliceReturnType(T, @TypeOf(bytes)) {
+```
+
+Note how the return type is not `anytype`, but the actual, real thing. You could write complex computations there, but you can’t look inside the body. Of course, it also is possible to write `fn foo() @TypeOf(bar()) {`, but that feels like a fair game — `bar()` will be evaluated at compile time. In other words, only bodies of functions invoked at comptime needs to be looked at by a language server. This potentially improves performance for this use-case quite a bit!
+
+It’s useful to contrast this with Rust. There, you could write
+
+```
+fn sneaky() -> impl Sized {
+  0i32
+}
+```
+
+Although it feels like you are stating the interface, it’s not really the case. Auto traits like `Send` and `Sync` leak, and that can be detected by downstream code and lead to, e.g., different methods being called via `Deref`\-based specialization depending on `: Send` being implemented:
+
+```
+struct X<T>(T);
+
+impl<T: Send> X<T> {
+  fn foo(&self) -> i32 { todo!() }
+}
+
+struct Y;
+impl Y {
+  fn foo(&self) -> String { todo!() }
+}
+
+impl<T> std::ops::Deref for X<T> {
+  type Target = Y;
+  fn deref(&self) -> &Y { todo!() }
+}
+
+fn f() -> impl Sized {
+  ()
+//  std::rc::Rc::new(())
+}
+
+fn main() {
+  let x = X(f());
+  let t = x.foo(); // <- which `foo`?
+  // The answer is inside f's body!
+}
+```
+
+Zig is much more strict here, you have to fully name the return type (the name doesn’t have to be pretty, take a second look at `bytesAsSlice`). But its not perfect, a genuine leakage happens with inferred error types (`!T` syntax). A bad example would look like this:
+
+```
+fn f() !void {
+   // Mystery!
+}
+
+pub fn main() !void {
+  f() catch |err| {
+    comptime assert(
+      @typeInfo(@TypeOf(err)).ErrorSet.?.len == 1,
+    );
+  };
+}
+```
+
+Here, to check `main`, we actually do need to dissect `f`’s body, we can’t treat the error union abstractly. When the compiler analyzes `main`, it needs to stop to process `f` signature (which is very fast, as it is very short) and then `f`’s body (this part could be quite slow, there might be a lot of code behind that `Mystery`)! It’s interesting to ponder alternative semantics, where, during type checking, inferred types are treated abstractly, and error exhastiveness is a separate late pass in the compiler. That way, compiler only needs `f`’s signature to check `main`. And that means that bodies of `main` and `f` could be checked in parallel.
+
+That’s all for today! The type system surprising I’ve found so far are:
+
+-   Nominal type system despite notable absence of names of types.
+    
+-   Unification-less generics which don’t incur unreasonable annotation burden due to methods “closing over” generic parameters.
+    
+-   Explicit signatures with no [Voldemort types](https://wiki.dlang.org/Voldemort_types) with a notable exception of error unions.
+    
+
+Discussion on [ziggit.dev](https://ziggit.dev/t/types-and-the-zig-programming-language/1430).
+
+[Fix typo](https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-08-09-types-and-zig.dj)[Subscribe](https://matklad.github.io/feed.xml)[All posts](https://matklad.github.io/)[Get in touch](mailto:aleksey.kladov+blog@gmail.com)[matklad](https://github.com/matklad)

@@ -1,0 +1,126 @@
+const std = @import("std");
+const builtin = @import("builtin");
+const build_options = @import("build_options");
+const known = @import("known_folders");
+const super = @import("super");
+const logging = @import("cli/logging.zig");
+const check_exe = @import("cli/check.zig");
+const fmt_exe = @import("cli/fmt.zig");
+const lsp_exe = @import("cli/lsp.zig");
+
+pub const known_folders_config = known.KnownFolderConfig{
+    .xdg_force_default = true,
+    .xdg_on_mac = true,
+};
+
+pub const std_options: std.Options = .{
+    .log_level = if (build_options.verbose_logging)
+        .debug
+    else
+        std.log.default_level,
+    .logFn = logging.logFn,
+};
+
+var lsp_mode = false;
+
+pub fn panic(
+    msg: []const u8,
+    trace: ?*std.builtin.StackTrace,
+    ret_addr: ?usize,
+) noreturn {
+    if (lsp_mode) {
+        std.log.err("\n{s}\n\n{?f}", .{ msg, trace });
+    }
+
+    blk: {
+        var writer = if (!lsp_mode)
+            std.Io.File.stderr().writerStreaming(std.Options.debug_io, &.{})
+        else
+            logging.log_writer;
+        const w = &writer.interface;
+        w.print("\n{s}\n", .{msg}) catch {};
+        if (builtin.strip_debug_info) {
+            w.print("Unable to dump stack trace: debug info stripped\n", .{}) catch {};
+            break :blk;
+        }
+
+        if (builtin.zig_version.minor != 15) {
+            std.debug.writeCurrentStackTrace(.{ .first_address = ret_addr }, .{
+                .writer = w,
+                .mode = .no_color,
+            }) catch |err| {
+                w.print("Unable to dump stack trace: {t}\n", .{err}) catch {};
+                break :blk;
+            };
+        }
+    }
+
+    if (builtin.mode == .debug) @breakpoint();
+    std.process.exit(1);
+}
+
+pub const Command = enum {
+    check,
+    fmt,
+    lsp,
+    help,
+    version,
+};
+
+pub fn main(init: std.process.Init) !void {
+    const io = init.io;
+    const gpa = init.gpa;
+
+    logging.setup(io, gpa, init.environ_map);
+
+    const args = init.minimal.args.toSlice(init.arena.allocator()) catch oom();
+
+    if (args.len < 2) fatalHelp();
+
+    const cmd = std.meta.stringToEnum(Command, args[1]) orelse {
+        std.debug.print("unrecognized subcommand: '{s}'\n\n", .{args[1]});
+        fatalHelp();
+    };
+
+    if (cmd == .lsp) lsp_mode = true;
+
+    _ = switch (cmd) {
+        .check => check_exe.run(io, gpa, args[2..]),
+        .fmt => fmt_exe.run(io, gpa, args[2..]),
+        .lsp => lsp_exe.run(io, gpa, args[2..]),
+        .help => fatalHelp(),
+        .version => printVersion(),
+    } catch |err| fatal("unexpected error: {t}\n", .{err});
+}
+
+fn fatal(comptime fmt: []const u8, args: anytype) noreturn {
+    std.debug.print(fmt, args);
+    std.process.exit(1);
+}
+
+fn oom() noreturn {
+    fatal("oom\n", .{});
+}
+
+fn printVersion() noreturn {
+    std.debug.print("{s}\n", .{build_options.version});
+    std.process.exit(0);
+}
+
+fn fatalHelp() noreturn {
+    fatal(
+        \\Usage: superhtml COMMAND [OPTIONS]
+        \\
+        \\Commands:
+        \\  check         Check documents for errors.
+        \\  fmt           Format documents.
+        \\  lsp           Start the Language Server.
+        \\  help          Show this menu and exit.
+        \\  version       Print the version and exit.
+        \\
+        \\General Options:
+        \\  --help, -h        Print command specific usage.
+        \\  --syntax-only     Disable HTML element and attribute validation.
+        \\
+    , .{});
+}

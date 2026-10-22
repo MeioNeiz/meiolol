@@ -18,10 +18,6 @@ Area: which areas/ page the tag's findings go to (blank on a sub-tag: its parent
 | Tag | Area | Covers |
 | --- | --- | --- |
 | `tools` | product | existing pick and draft tools (sites, overlays, open-source projects) |
-| `tools/paid` | | what tools charge for: tiers, prices, what sits behind the paywall |
-| `tools/accounts` | | logins and identity in tools: RSO, own accounts, friends, groups, roles, sharing |
-| `tools/removed` | | features Riot made tools remove or change, with dates (champ select names, timers, Vanguard, memory) |
-| `tools/phase` | | which game phase a feature serves: lobby, champ select, loading, in game, post game, between games |
 | `method` | stats | recommendation and win-prediction methods, models, features |
 | `data` | data | Riot API, match data, sampling, patches, rate limits |
 | `draft` | product | draft theory: counters, synergy, roles, comps, how much draft matters |
@@ -41,6 +37,16 @@ Area: which areas/ page the tag's findings go to (blank on a sub-tag: its parent
 | `render` | ops | when pages are built: static generation, on-demand rendering, caching, ISR |
 | `ops` | ops | hosting, object storage, backups off-site, free tiers, prices, provider terms |
 | `lab` | stats | LLM agents that run modelling experiments: loops, tools, search, tracking, guards |
+| `zig` | code | writing good Zig: practice and idiom from the official docs, std and respected projects; see zig/* |
+| `zig/style` | | naming, file and module layout, formatting, comments and doc comments |
+| `zig/memory` | | allocators, ownership, arenas, defer and errdefer, static allocation, containers |
+| `zig/errors` | | error sets, error handling, diagnostics, panics |
+| `zig/safety` | | assertions, undefined behaviour, build modes, safety checks, invariants |
+| `zig/comptime` | | comptime, generics, type functions, anytype, reflection |
+| `zig/api` | | API and interface design: init and deinit, options structs, decl literals, vtables, std.Io |
+| `zig/test` | | tests, testing allocator, fuzzing, snapshot and simulation testing |
+| `zig/perf` | | data-oriented design, memory layout, SoA, SIMD, hot loops |
+| `zig/build` | | build.zig, modules, packages, cross-compilation, C interop |
 | `ux/charts` | | chart design, axes, chart types |
 | `ux/uncertainty` | | showing spread, error bars, sample size, thin data |
 | `ux/colour` | | colour, colour-blind, contrast |
@@ -48,8 +54,13 @@ Area: which areas/ page the tag's findings go to (blank on a sub-tag: its parent
 | `ux/layout` | | navigation, page structure, what goes first |
 | `ux/features` | | what competitor tools show and how |
 | `ux/density` | | dense tables and number layout: colour-scaled cells, bars or sparklines in cells, small multiples |
+| `tools/paid` | | what tools charge for: tiers, prices, what sits behind the paywall |
+| `tools/accounts` | | logins and identity in tools: RSO, own accounts, friends, groups, roles, sharing |
+| `tools/removed` | | features Riot made tools remove or change, with dates (champ select names, timers, Vanguard, memory) |
+| `tools/phase` | | which game phase a feature serves: lobby, champ select, loading, in game, post game, between games |
 | `web/template` | | HTML generation, templating languages, components |
 | `web/wasm` | | wasm, JS interop, client-side rendering |
+| `web/qa` | | checking UI: visual regression, layout assertions, accessibility checks, CSS lints, component galleries, agents judging UI |
 | `ops/io` | | disk IO on the box: schedulers, ionice, cgroup io controls, block volume limits |
 | `method/tabular` | | modern tabular learners: tabular foundation models, TabM, RealMLP, GBDT, factorisation machines |
 | `method/ensemble` | | ensembles and stacking: seeds, bagging, snapshot, hyper-ensembles, ensemble selection, stacked generalisation |
@@ -71,3 +82,4 @@ Generated pages in areas/ gather each area's questions, sources and findings by 
 | `stats` | estimation and recommendation methods |
 | `ui` | the website and app UI: design, charts, templating, wasm, desktop GUI |
 | `ops` | hosting, storage, rendering and SEO, toolchain |
+| `code` | how we write code: Zig practice, idiom and style from docs and respected projects |

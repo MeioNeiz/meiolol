@@ -1,0 +1,455 @@
+# Data Oriented Parallel Value Interner
+
+<https://matklad.github.io/2023/04/23/data-oriented-parallel-value-interner.html>
+
+[matklad](https://matklad.github.io/)[About](https://matklad.github.io/about.html)[Links](https://matklad.github.io/links.html)[Blogroll](https://matklad.github.io/blogroll.html)
+
+# Data Oriented Parallel Value Interner
+
+Apr 23, 2023
+
+In this post, I will present a theoretical design for an interner. It should be fast, but there will be no benchmarks as I haven’t implemented the thing. So it might actually be completely broken or super slow for one reason or another. Still, I think there are a couple of neat ideas, which I would love to call out.
+
+The context for the post is [this talk](https://www.youtube.com/watch?v=AqDdWEiSwMM) by Andrew Kelley, which notices that it’s hard to reconcile interning and parallel compilation. This is something I have been thinking about a lot in the context of rust-analyzer, which relies heavily on pointers, atomic reference counting and indirection to make incremental and parallel computation possible.
+
+And yes, interning (or, more generally, assigning unique identities to things) is a big part of that.
+
+Usually, compilers intern strings, but we will be interning trees today. Specifically, we will be looking at something like a [`Value`](https://github.com/ziglang/zig/blob/b95cdf0aeb4d4d31c0b6a54302ef61baec8f6773/src/value.zig#L20) type from the Zig compiler. In a simplified RAII style it could look like this:
+
+```
+const Value = union(enum) {
+    // A bunch of payload-less variants.
+    u1_type,
+    u8_type,
+    i8_type,
+
+    // A number.
+    u64: u64,
+
+    // A declaration.
+    // Declarations and types are also values in Zig.
+    decl: DeclIndex,
+
+    // Just some bytes for a string.
+    bytes: []u8,
+
+    // The interesting case which makes it a tree.
+    // This is how struct instances are represented.
+    aggregate: []Value,
+};
+
+const DeclIndex = u32;
+```
+
+Such values are individually heap-allocated and in general are held behind pointers. Zig’s compiler adds a couple of extra tricks to this structure, like not overallocating for small enum variants:
+
+```
+const Value = struct {
+    payload: *Payload
+}
+
+// Payload is an "abstract" type:
+// There's some data following the `tag`,
+// whose type and size is determined by
+// this `tag`.
+const Payload = struct {
+    tag: Tag,
+
+    pub const U64 = struct {
+        base: Payload,
+        data: u64,
+    };
+
+    pub const Decl = struct {
+        base: Payload,
+        decl: DeclIndex,
+    };
+}
+```
+
+But how do we intern this stuff, such that:
+
+-   values are just `u32` rather than full pointers,
+-   values are deduplicated,
+-   and this whole construct works efficiently even if there are multiple threads using our interner simultaneously?
+
+Let’s start with concurrent `SegmentedList`:
+
+```
+fn SegmentList(comptime T: type) type {
+    return struct {
+        echelons: [31]?[*]T,
+    };
+}
+```
+
+Segmented list is like `ArrayList` with an extra super power that pushing new items does not move/invalidate old ones. In normal `ArrayList`, when the backing storage fills up, you allocate a slice twice as long, copy over the elements from the old slice and then destroy it. In `SegmentList`, you leave the old slice where it is, and just allocate a new one.
+
+Now, as we are writing an interner and want to use `u32` for an index, we know that we need to store `1<<32` items max. But that means that we’ll need at most 31 segments for our `SegmentList`:
+
+```
+[1 << 0]T
+[1 << 1]T
+[1 << 2]T
+...
+[1 << 31]T
+```
+
+So we can just “pre-allocate” array of 31 _pointers_ to the segments, hence
+
+```
+echelons: [31]?[*]T,
+```
+
+If we want to be more precise with types, we can even use a tuple whose elements are nullable pointers to arrays of power-of-two sizes:
+
+```
+fn SegmentList(comptime T: type) type {
+    return struct {
+        echelons: std.meta.Tuple(get_echelons(31, T)),
+    };
+}
+
+fn get_echelons(
+    comptime level: usize,
+    comptime T: type,
+) []const type {
+    if (level == 0) return &.{ ?*[1]T };
+    return get_echelons(level - 1, T) ++ .{ ?*[1 << level]T };
+}
+```
+
+Indexing into such an echeloned array is still O(1). Here’s how echelons look in terms of indexes
+
+```
+0                      = 1  total
+1 2                    = 3  total
+3 4 5 6                = 7  total
+7 8 9 10 11 12 13 14   = 15 total
+```
+
+The first `n` echelons hold `2**n - 1` elements. So, if we want to find the `i`th item, we first find the echelon it is in, by computing the nearest smaller power of two of `i + 1`, and then index into the echelon with `i - (2**n - 1)`, give or take a `+1` here or there.
+
+```
+// Warning: untested, probably has a couple of bugs.
+
+pub fn get(self: Self, index: u32) *const T {
+    const e = self.get_echelon(index);
+    const i = index - (1 << e - 1);
+    return &self.echelons[e].?[i];
+}
+
+fn get_echelon(index: u32) u5 {
+    @ctz(std.math.floorPowerOfTwo(index + 1));
+}
+```
+
+Note that we pre-allocate an array of pointers to segments, but not the segments themselves. Pointers are nullable, and we allocate new segments lazily, when we actually write to the corresponding indexes. This structure is very friendly to parallel code. Reading items works because items are never reallocated. Lazily allocating new echelons is easy, because the position of the pointer is fixed. That is, we can do something like this to insert an item at position `i`:
+
+1.  compute the echelon index
+2.  `@atomicLoad(.Acquire)` the pointer
+3.  if the pointer is null
+    -   allocate the echelon
+    -   `@cmpxchgStrong(.Acquire, .Release)` the pointer
+    -   free the redundant echelon if exchange failed
+4.  insert the item
+
+Notice how we don’t need any locks or even complicated atomics, at the price of sometimes doing a second redundant allocation.
+
+One thing this data structure is bad at is doing bounds checks and tracking which items are actually initialized. For the interner use-case, we will rely on an invariant that we always use indexes provided to use by someone else, such that possession of the index signifies that:
+
+-   the echelon holding the item is allocated
+-   the item itself is initialized
+-   there’s the relevant happens-before established
+
+If, instead, we manufacture an index out of thin air, we might hit all kinds of nasty behavior without any bullet-proof way to check that.
+
+Okay, now that we have this `SegmentList`, how would we use them?
+
+Recall that our simplified value is
+
+```
+const Value = union(enum) {
+    // A bunch of payload-less variants.
+    u1_type,
+    u8_type,
+    i8_type,
+
+    // A number.
+    u64: u64,
+
+    // A declaration.
+    // Declarations and types are also values in Zig.
+    decl: Decl,
+
+    // Just some bytes for a string.
+    bytes: []u8,
+
+    // The interesting case which makes it a tree.
+    // This is how struct instances are represented.
+    aggregate: []Value,
+};
+
+// Index of a declaration.
+const Decl = u32;
+```
+
+Of course we will struct-of-array it now, to arrive at something like this:
+
+```
+const Value = u32;
+
+const Tag = enum(u8) {
+    u1_type, u8_type, i8_type,
+    u64, decl, bytes, aggregate,
+};
+
+const ValueTable = struct {
+    tag: SegmentList(Tag),
+    data: SegmentList(u32),
+
+    u64: SegmentList(u64),
+    aggregate: SegmentList([]Value),
+    bytes: SegmentList([]u8),
+};
+```
+
+A `Value` is now an index. This index works for two fields of `ValueTable`, `tag` and `data`. That is, the index addresses five bytes of payload, which is all that is needed for small values. For large tags like `aggregate`, the `data` field stores an index into the corresponding payload `SegmentList`.
+
+That is, every value allocates a `tag` and `data` elements, but only actual `u64`s occupy a slot in `u64` `SegmentList`.
+
+So now we can write a `lookup` function which takes a value index and reconstructs a value from pieces:
+
+```
+const ValueFull = union(enum) {
+    u1_type,
+    u8_type,
+    i8_type,
+    u64: u64,
+    decl: Decl,
+    bytes: []u8,
+    aggregate: []Value,
+};
+
+fn lookup(self: Self, value: Value) ValueFull {
+    const tag = self.tag.get(value);
+    switch (tag) {
+        .aggregate => return ValueFull{
+            .aggregate = self.aggregate.get(self.data(value)),
+        },
+    }
+}
+```
+
+Note that here `ValueFull` is non-owning type, it is a _reference_ into the actual data. Note as well that aggregates now store a slice of indexes, rather than a slice of pointers.
+
+Now let’s deal with creating and interning values. We start by creating a `ValueFull` using data owned by us (e.g. if we are creating an aggregate, we may use a stack-allocated array as a backing store for `[]Value` slice). Then we ask `ValueTable` to intern the data:
+
+```
+fn intern(self: *Self, value_full: ValueFull) Value {
+}
+```
+
+If the table already contains an equal value, its index is returned. Otherwise, the table _copies_ `ValueFull` data such that it is owned by the table itself, and returns a freshly allocated index.
+
+For bookkeeping, we’ll need a hash table with existing values and a counter to use for a fresh index, something like this:
+
+```
+const ValueTable = struct {
+    value_set: AutoHashMapUnmanaged(Value, void),
+    value_count: u32,
+    tag: SegmentList(Tag),
+    index: SegmentList(u32),
+
+    u64_count: u32,
+    u64: SegmentList(u64),
+
+    aggregate_count: u32,
+    aggregate: SegmentList([]Value),
+
+    bytes_count: u32,
+    bytes: SegmentList([]u8),
+
+    pub fn intern(self: *Self, value_full: ValueFull) Value {
+        ...
+    }
+};
+```
+
+Pay attention to `_count` fields — we have `value_count` guarding the `tag` and `index`, and separate counts for specific kinds of values, as we don’t want to allocate, e.g. an `u64` for _every_ value.
+
+Our hashmap is actually a set which stores `u32` integers, but uses `ValueFull` to do a lookup: when we consider interning a new `ValueFull`, we don’t know its index yet. Luckily, `getOrPutAdapted` API provides the required flexibility. We can use it to compare a `Value` (index) and a `ValueFull` by hashing a `ValueFull` and doing component-wise comparisons in the case of a collision.
+
+Note that, because of interning, we can also hash `ValueFull` efficiently! As any subvalues in `ValueFull` are guaranteed to be already interned, we can rely on shallow hash and hash only child value’s indexes, rather than their data.
+
+This is a nice design for a single thread, but how do we make it thread safe? The straightforward solution would be to slap a mutex around the logic in `intern`.
+
+This actually is not as bad as it seems, as we’d need a lock only in `intern`, and `lookup` would work without any synchronization whatsoever. Recall that obtaining an index of a value is a proof that the value was properly published. Still, we expect to intern a lot of values, and that mutex is all but guaranteed to become a point of contention. And some amount of contention is inevitable here — if two threads try to intern two identical values, we _want_ them to clash, communicate, and end up with a single, shared value.
+
+There’s a rather universal recipe for dealing with contention — you can shard the data. In our case, rather than using something like
+
+```
+mutex: Mutex,
+value_set: AutoHashMapUnmanaged(Value, void),
+```
+
+we can do
+
+```
+mutex: [16]Mutex,
+value_set: [16]AutoHashMapUnmanaged(Value, void),
+```
+
+That is, we create not one, but sixteen hashmaps, and use, e.g., lower 4 bits of the hash to decide which mutex and hashmap to use. Depending on the structure of the hashmap, such locks could even be pushed as far as individual buckets.
+
+This doesn’t solve all our contention problems — now that several threads can simultaneously intern values (as long as they are hashed into different shards) we have to make all `count` variables atomic. So we essentially moved the single global point of contention from a mutex to `value_count` field, which is incremented for every interned value.
+
+We can apply the sharding trick again, and shard all our `SegmentList`s. But that would mean that we have to dedicate some bits from `Value` index to the shard number, and to waste some extra space for non-perfectly balanced shards.
+
+There’s a better way — we can amortize atomic increments by allowing each thread to bulk-allocate indexes. That is, if a thread wants to allocate a new value, it atomically increments `value_count` by, say, `1024`, and uses those indexes for the next thousand allocations. In addition to `ValueTable`, each thread now gets its own distinct `LocalTable`:
+
+```
+const LocalTable = struct {
+    global: *ValueTable,
+
+    // Invariant: if any `index % 1024 == 0`,
+    // it's time to visit `global` to
+    // refill our budget via atomic fetchAndAdd.
+    value_index: u32,
+    u64_index: u32,
+    aggregate_index: u32,
+    bytes_index: u32,
+};
+```
+
+An attentive reader would notice a bonus here: in this setup, a thread allocates a contiguous chunk of values. It is reasonable to assume that values allocated together would also be used together, so we potentially increase future spatial locality here.
+
+Putting everything together, the pseudo-code for interning would look like this:
+
+```
+fn intern(table: *LocalTable, value_full: ValueFull) Value {
+    const hash = shallow_hash(value_full);
+
+    // Find & lock the shard.
+    const shard = hash & 0xF;
+    let mutex = &table.global.mutex[shard];
+    let value_set = &table.global.value_set[shard]
+
+    mutex.lock();
+    defer mutex.unlock();
+
+    // Either find that this value has been interned already...
+    const gop = value_set.get_or_put(hash, value_full, ...);
+    if (gop.found_existing) return got.key_ptr.*;
+
+    // ... or proceed to allocate a new index for it
+
+    if (table.tag_index & 0xFF == 0) {
+        // Run out of indexes, refill our budget!
+        table.tag_index = @atomicRmw(
+            u32, &table.global.value_count,
+            .Add, 0xFF,
+            .Relaxed,
+        );
+    }
+
+    // Assign the index to the new value
+    // and put it into the hash map.
+    const value = table.tag_index;
+    table.tag_index += 1;
+    gop.key_ptr.* = value;
+
+    // Now initialize the value.
+    // Note that we still hold shard's mutex at this point.
+
+    switch (value_full) {
+        .aggregate => |fields| {
+            // Initialize the tag, common for all values.
+            table.global.tag.set(value, .aggregate);
+
+            // Allocate tag-specific data using
+            // the same atomic add trick.
+            if (table.aggregate_index & 0xFF == 0) {
+                table.aggregate_index = @atomicRmw(
+                    u32, &table.global.aggregate_count,
+                    .Add, 0xFF,
+                    .Relaxed,
+                );
+            }
+            const index = table.aggregate_index;
+            table.aggregate_index += 1;
+
+            // Make it possible to find tag-specific data
+            // from the value index.
+            table.global.index.set(value, index);
+
+            // `value_full` is borrowed, so we must
+            // create a copy that we own.
+            const fields_owned = allocator.dup(fields)
+                catch unreachable;
+
+            table.global.aggregate.set(index, fields_owned);
+        }
+    }
+
+    return value;
+}
+
+// Code for assigning an index of a SegmentList.
+// Shard's mutex guarantees exclusive access to the index.
+// Accesses to the echelon might race though.
+fn set(list: SegmentList(T), index: u32, value: T) {
+    const e = list.get_echelon(index);
+    const i = index - ((1 << e) - 1);
+
+    var echelon = @atomicLoad(?[*]T, &list.echelons[e], .Acquire);
+    if (echelon == null) {
+        // Race with other threads to allocate the echelon.
+        const echelon_new = allocator.alloc(T, 1 << e)
+            catch unreachable;
+
+        const modified = @cmpxchgStrong(
+            ?[*]T, &list.echelons[e],
+            null, echelon_new,
+            .Release, .Acquire,
+        );
+
+        if (modified) |echelon_modified| {
+            // Another thread won, free our useless allocation.
+            echelon = echelon_modified
+            allocator.free(echelon_new);
+        } else {
+            echelon = echelon_new;
+        }
+    }
+
+    echelon.?[i] = value;
+}
+```
+
+Note that it is important that we _don’t_ release the mutex immediately after assigning the index for a value, but rather keep it locked all the way until we fully copied thee value into the `ValueTable`. If we release the lock earlier, a different thread which tries to intern the same value would get the correct index, but would risk accessing partially-initialized data. This can be optimized a bit by adding value-specific lock (or rather, a [`Once`](https://github.com/ziglang/zig/blob/b95cdf0aeb4d4d31c0b6a54302ef61baec8f6773/lib/std/once.zig)). So we use the shard lock to assign an index, then release the shard lock, and use value-specific lock to do the actual (potentially slow) initialization.
+
+And that’s all I have for today! Again, I haven’t implemented this, so I have no idea how fast or slow it actually is. But the end result looks rather beautiful, and builds upon many interesting ideas:
+
+-   `SegmentList` allows to maintain index stability despite insertions.
+    
+-   There will be at most 31 echelons in a `SegmentList`, so you can put pointers to them into an array, removing the need to synchronize to read an echelon.
+    
+-   With this setup, it becomes easy to initialize a new echelon with a single CAS.
+    
+-   Synchronization is required only when creating a new item. If you trust indexes, you can use them to carry happens-before.
+    
+-   In a struct-of-arrays setup for enums, you can save space by requiring that an array for a specific variant is just as long as it needs to be.
+    
+-   One benefit of interning trees is that hash function becomes a shallow operation.
+    
+-   Optimal interners use hashmaps in a fancy way, where the key is not what you actually store in the hashmap. I have two related posts about that, [_Fast and Simple Rust Interner_](https://matklad.github.io/2020/03/22/fast-simple-rust-interner.html) and [_Call Site Dependency Injection_](https://matklad.github.io/2020/12/28/csdi.html).
+    
+-   Sharding is an effective way to reduce contention if you are dealing with something like a shared hashmap.
+    
+-   For counters, one alternative to sharding is batching up the increments.
+    
+
+Discussion on [/r/Zig](https://old.reddit.com/r/Zig/).
+
+[Fix typo](https://github.com/matklad/matklad.github.io/edit/master/content/posts/2023-04-23-data-oriented-parallel-value-interner.dj)[Subscribe](https://matklad.github.io/feed.xml)[All posts](https://matklad.github.io/)[Get in touch](mailto:aleksey.kladov+blog@gmail.com)[matklad](https://github.com/matklad)

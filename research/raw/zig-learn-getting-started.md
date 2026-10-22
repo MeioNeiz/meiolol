@@ -1,0 +1,185 @@
+# Getting Started ⚡ Zig Programming Language
+
+<https://ziglang.org/learn/getting-started/>
+
+[Download](https://ziglang.org/download/) [Learn](https://ziglang.org/learn/) [News](https://ziglang.org/news/) [Zig Software Foundation](https://ziglang.org/zsf/) [Devlog](https://ziglang.org/devlog/2026/) [Source](https://codeberg.org/ziglang/zig) [Join a Community](https://ziglang.org/community)
+
+[← Back to **Learn**](https://ziglang.org/learn/)
+
+# Getting Started
+
+-   Tagged release or development build?
+-   Installing Zig
+    -   [Direct download](https://ziglang.org/learn/getting-started/#direct)
+        -   Setting up PATH on Windows
+        -   Setting up PATH on Linux, macOS, BSD
+    -   [Package managers](https://ziglang.org/learn/getting-started/#managers)
+        -   Windows
+        -   macOS
+        -   Linux
+    -   [Building from source](https://ziglang.org/learn/getting-started/#source)
+-   Recommended tools
+    -   Syntax Highlighters and LSP
+-   Run Hello World
+-   Next steps
+
+# Tagged release or development build?
+
+In general, tagged releases are more practical for projects that have dependencies and benefit from stability, while development builds are for people who want to help participate in the development of the Zig project.
+
+Zig installations are self-contained archives that can be placed anywhere in your system. Multiple versions of Zig coexist without issue.
+
+# Installing Zig
+
+## Direct download
+
+This is the most straight-forward way of obtaining Zig: grab a Zig bundle for your platform from the [Downloads](https://ziglang.org/download/) page, extract it in a directory and add it to your `PATH` to be able to call `zig` from any location.
+
+### Setting up PATH on Windows
+
+To setup your path on Windows run **one** of the following snippets of code in a Powershell instance. Choose if you want to apply this change on a system-wide level (requires running Powershell with admin privileges) or just for your user, and **make sure to change the snippet to point at the location where your copy of Zig lies**. The `;` before `C:` is not a typo.
+
+System wide (**admin** Powershell):
+
+```
+[Environment]::SetEnvironmentVariable(
+   "Path",
+   [Environment]::GetEnvironmentVariable("Path", "Machine") + ";C:\your-path\zig-windows-x86_64-your-version",
+   "Machine"
+)
+```
+
+User level (Powershell):
+
+```
+[Environment]::SetEnvironmentVariable(
+   "Path",
+   [Environment]::GetEnvironmentVariable("Path", "User") + ";C:\your-path\zig-windows-x86_64-your-version",
+   "User"
+)
+```
+
+After you’re done, restart your Powershell instance.
+
+### Setting up PATH on Linux, macOS, BSD
+
+Add the location of your zig binary to your PATH environment variable.
+
+This is generally done by adding an export line to your shell startup script (`.profile`, `.zshrc`, …)
+
+```
+export PATH=$PATH:~/path/to/zig
+```
+
+After you’re done, either `source` your startup file or restart your shell.
+
+## Package managers
+
+### Windows
+
+**WinGet**  
+Zig is available on [WinGet](https://github.com/microsoft/winget-pkgs/tree/master/manifests/z/zig/zig).
+
+```
+winget install -e --id zig.zig
+```
+
+**Chocolatey**  
+Zig is available on [Chocolatey](https://chocolatey.org/packages/zig).
+
+```
+choco install zig
+```
+
+**Scoop**  
+Zig is available on [Scoop](https://scoop.sh/#/apps?q=zig&id=7e124d6047c32d426e4143ab395d863fc9d6d491).
+
+```
+scoop install zig
+```
+
+Latest [dev build](https://scoop.sh/#/apps?q=zig&id=921df07e75042de645204262e784a17c2421944c):
+
+```
+scoop bucket add versions
+scoop install versions/zig-dev
+```
+
+### macOS
+
+**Homebrew**  
+Latest tagged release:
+
+```
+brew install zig
+```
+
+**MacPorts**
+
+```
+sudo port install zig
+```
+
+### Linux
+
+Zig is also present in many package managers for Linux.
+
+## Building from source
+
+See [README.md](https://codeberg.org/ziglang/zig#building-from-source).
+
+# Recommended tools
+
+## Syntax Highlighters and LSP
+
+All major text editors have syntax highlight support for Zig. Some bundle it, some others require installing a plugin.
+
+If you’re interested in a deeper integration between Zig and your editor, checkout [zigtools/zls](https://github.com/zigtools/zls).
+
+If you’re interested in what else is available, checkout the [Tools](https://ziglang.org/learn/tools/) section.
+
+# Run Hello World
+
+If you completed the installation process correctly, you should now be able to invoke the Zig compiler from your shell.  
+Let’s test this by creating your first Zig program!
+
+Navigate to your projects directory and run:
+
+```
+mkdir hello-world
+cd hello-world
+zig init
+```
+
+This should output:
+
+```
+info: created build.zig
+info: created build.zig.zon
+info: created src/main.zig
+info: created src/root.zig
+info: see `zig build --help` for a menu of options
+```
+
+Running `zig build run` should then compile the executable and run it, ultimately resulting in:
+
+```
+All your codebase are belong to us.
+Run `zig build test` to run the tests.
+```
+
+Congratulations, you have a working Zig installation!
+
+# Next steps
+
+**Check out other resources present in the [Learn](https://ziglang.org/learn/) section**, make sure to find the Documentation for your version of Zig (note: nightly builds should use `master` docs) and consider giving [zig.guide](https://zig.guide/) a read.
+
+Zig is a young project and unfortunately we don’t have yet the capacity to produce extensive documentation and learning materials for everything, so you should consider [joining one of the existing Zig communities](https://ziglang.org/community/) to get help when you get stuck, as well as checking out initiatives like [Zig SHOWTIME](https://zig.show/).
+
+Finally, if you enjoy Zig and want to help speed up the development, [consider donating to the Zig Software Foundation](https://ziglang.org/zsf/)
+
+.
+
+This page is also available in the following languages:  
+
+[English (original)](https://ziglang.org/learn/getting-started/) [Español](https://ziglang.org/es-AR/learn/getting-started/) [Русский](https://ziglang.org/ru-RU/learn/getting-started/) [Italiano](https://ziglang.org/it-IT/learn/getting-started/) [Deutsch](https://ziglang.org/de-DE/learn/getting-started/) [Українська](https://ziglang.org/uk-UA/learn/getting-started/) [日本語](https://ziglang.org/ja-JP/learn/getting-started/) [中文](https://ziglang.org/zh-CN/learn/getting-started/) [한국어](https://ziglang.org/ko-KR/learn/getting-started/)

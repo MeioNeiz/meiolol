@@ -9,12 +9,13 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Area | Covers | Questions | Sources | Findings |
 | --- | --- | --- | --- | --- |
-| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 8 | 187 | 865 |
-| [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 3 | 126 | 501 |
-| [data](areas/data.md) | what the Riot API serves and how to crawl it | 3 | 162 | 403 |
-| [stats](areas/stats.md) | estimation and recommendation methods | 25 | 324 | 2307 |
-| [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 5 | 137 | 524 |
-| [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 7 | 98 | 452 |
+| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 9 | 248 | 1214 |
+| [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 4 | 154 | 573 |
+| [data](areas/data.md) | what the Riot API serves and how to crawl it | 3 | 163 | 404 |
+| [stats](areas/stats.md) | estimation and recommendation methods | 25 | 325 | 2309 |
+| [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 9 | 280 | 1270 |
+| [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 7 | 151 | 579 |
+| [code](areas/code.md) | how we write code: Zig practice, idiom and style from docs and respected projects | 9 | 174 | 1966 |
 
 ## Questions
 
@@ -24,11 +25,12 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | --- | --- | --- | --- | --- | --- | --- |
 | answered | soon | [What does Coach Rogue teach about champion select, counter picks, champion pools, runes and builds, and where does it agree or clash with meiolol's data and recommender?](questions/coach-draft-advice.md): What does Coach Rogue teach about champion select, counter picks, champion pools, runes and builds, and where does it agree or clash with meiolol's data and recommender? | 5 strong, 4 moderate, 2 weak, 1 contested | 9 | 2 (thin) |  |
 | answered | soon | [What do the big League tools show a first-time visitor, and what brings players back (accounts, progress, habit, notifications)?](questions/competitor-first-visit-returning.md): What do the big League tools show a first-time visitor, and what brings players back (accounts, progress, habit, notifications)? | 5 strong, 6 moderate | 13 | 2 (thin) | 1 |
+| answered | soon | [Feature by feature, what do existing League apps and sites offer in each game phase, what is paid, how do accounts work, and what did Riot make them remove?](questions/league-apps-feature-matrix.md): Feature by feature, what do existing League apps and sites offer in each game phase, what is paid, how do accounts work, and what did Riot make them remove? | 16 strong, 3 moderate | 68 | 61 (growing) | 29 |
 | answered | soon | [What do League of Legends players search for most, and which of those searches could meiolol answer better than existing sites?](questions/search-demand.md): What do League of Legends players search for most, and which of those searches could meiolol answer better than existing sites? | 9 strong, 5 moderate, 3 weak | 24 | 14 (growing) | 1 |
 | answered | soon | [How do good teaching products and coaches teach a skill like drafting, and what should meio.lol's Learn copy?](questions/teach-draft.md): How do good teaching products and coaches teach a skill like drafting, and what should meio.lol's Learn copy? | 10 strong, 4 moderate | 17 | 15 (growing) | 2 |
 | answered | later | [Is farm value flat while kill value and kill rate rise with game time, so ganking and grouping beat farming from about level 8 or 20 minutes, as Coach Rogue's Moneyball video claims?](questions/kill-vs-farm-value.md): Is farm value flat while kill value and kill rate rise with game time, so ganking and grouping beat farming from about level 8 or 20 minutes, as Coach Rogue's Moneyball video claims? | 6 strong, 4 moderate, 1 weak, 3 contested | 16 | 2 (thin) | 1 |
 | decided | soon | [What League of Legends third-party tools exist, what do they do with match data, and where are the gaps?](questions/league-tools-landscape.md): What League of Legends third-party tools exist, what do they do with match data, and where are the gaps? | 8 strong, 7 moderate, 3 weak | 32 | 33 (saturated) | 12 |
-| decided | soon | [What do ranked and casual League players want from third-party tools that they don't get today?](questions/player-tool-needs.md): What do ranked and casual League players want from third-party tools that they don't get today? | 7 strong, 4 moderate, 2 contested | 13 | 33 (growing) | 8 |
+| decided | soon | [What do ranked and casual League players want from third-party tools that they don't get today?](questions/player-tool-needs.md): What do ranked and casual League players want from third-party tools that they don't get today? | 7 strong, 4 moderate, 2 contested | 14 | 33 (growing) | 6 |
 | decided | soon | [What kinds of third-party League tools does Riot encourage, feature or partner with, and what is it moving against?](questions/riot-appreciated-tools.md): What kinds of third-party League tools does Riot encourage, feature or partner with, and what is it moving against? | 9 strong, 2 moderate | 18 | 13 (growing) | 4 |
 
 ### policy
@@ -36,7 +38,8 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | Status | Pri. | Question | Claims | Sources | Searches | Leads |
 | --- | --- | --- | --- | --- | --- | --- |
 | answered | now | [How can players look themselves up and opt into Squads without RSO, and what do Riot policy and GDPR require for storing and showing player data?](questions/identity-and-privacy.md): How can players look themselves up and opt into Squads without RSO, and what do Riot policy and GDPR require for storing and showing player data? | 10 strong, 1 moderate, 2 weak, 1 contested | 21 | 16 (growing) | 1 |
-| answered | soon | [Would Riot grant meiolol a production API key, and what does the application need?](questions/riot-production-key.md): Would Riot grant meiolol a production API key, and what does the application need? | 9 strong, 5 moderate, 2 contested | 55 | 52 (saturated) | 3 |
+| answered | soon | [What has Riot made League tools remove or change, when, and what does that predict for new features?](questions/league-tools-riot-removals.md): What has Riot made League tools remove or change, when, and what does that predict for new features? | 7 strong, 4 moderate | 23 | 0 |  |
+| answered | soon | [Would Riot grant meiolol a production API key, and what does the application need?](questions/riot-production-key.md): Would Riot grant meiolol a production API key, and what does the application need? | 9 strong, 5 moderate, 2 contested | 55 | 52 (saturated) | 1 |
 | answered | soon | [How do lookup sites and the Riot API treat streamer mode and other players' Riot IDs on public pages?](questions/streamer-mode-names.md): How do lookup sites and the Riot API treat streamer mode and other players' Riot IDs on public pages? | - | 9 | 12 (saturated) |  |
 
 ### data
@@ -81,8 +84,12 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Status | Pri. | Question | Claims | Sources | Searches | Leads |
 | --- | --- | --- | --- | --- | --- | --- |
-| answered | now | [How do the best dense stat sites lay out many numbers readably, and what should meio.lol steal?](questions/dense-stat-layout.md): How dense stat sites (League and outside) lay out many numbers readably, and which ideas fit meio.lol's pages | 10 strong, 5 moderate, 1 contested | 36 | 4 (growing) | 8 |
+| active | now | [Section by section, what do the leading sites show on champion and matchup pages that meio.lol lacks, and where is our layout less space-efficient or clearer than theirs?](questions/champion-matchup-gap.md): Section by section, what do the leading sites show on champion and matchup pages that meio.lol lacks, and where is our layout less space-efficient or clearer than theirs? | - | 27 | 2 (thin) | 6 |
+| answered | now | [How do the best dense stat sites lay out many numbers readably, and what should meio.lol steal?](questions/dense-stat-layout.md): How dense stat sites (League and outside) lay out many numbers readably, and which ideas fit meio.lol's pages | 10 strong, 5 moderate, 1 contested | 36 | 4 (growing) | 7 |
 | answered | now | [What should meiolol's site show first and how should it present numbers so players and Riot reviewers trust and use it?](questions/site-design.md): What the site leads with and how it shows numbers, spread and thin data, for players and for Riot's production key reviewers | 11 strong, 7 moderate | 22 | 0 |  |
+| answered | now | [How do design systems keep a UI terse, uncluttered, clear and consistently coloured as many contributors add to it, and which of those rules can be checked automatically?](questions/ui-guardrails.md): How do design systems keep a UI terse, uncluttered, clear and consistently coloured as many contributors add to it, and which of those rules can be checked automatically? | 10 strong, 1 moderate, 1 contested | 37 | 26 (growing) | 10 |
+| answered | now | [What tooling lets meiolol's agents write and check better UI without a Node build step: layout and visual checks, component gallery, design token lints, accessibility?](questions/ui-tooling.md): What tooling lets meiolol's agents write and check better UI without a Node build step: layout and visual checks, component gallery, design token lints, accessibility? | 7 strong, 3 moderate | 21 | 18 (saturated) | 4 |
+| answered | now | [Can meiolol's browser code be all Zig (wasm) plus HTML and CSS, with no hand-written JS, and what would remain, cost and break?](questions/zig-only-frontend.md): Can meiolol's browser code be all Zig (wasm) plus HTML and CSS, with no hand-written JS, and what would remain, cost and break? | 14 strong, 4 moderate | 35 | 38 (growing) | 16 |
 | answered | soon | [Which GUI library fits a small Windows desktop window built in Zig 0.16 from macOS?](questions/zig-gui-options.md): Which GUI library fits a small Windows desktop window built in Zig 0.16 from macOS? | 5 strong, 3 moderate | 14 | 10 (saturated) | 4 |
 | answered | soon | [Could a Zig library or framework replace meiolol's hand-written w.print HTML and vanilla JS, and what would it give us?](questions/zig-web-ui.md): Could a Zig library or framework replace meiolol's hand-written w.print HTML and vanilla JS, and what would it give us? | 2 strong, 8 moderate, 3 weak | 10 | 4 (growing) |  |
 | decided | now | [How should meiolol's own Zig HTML template and component layer look?](questions/zig-html-templates.md): Syntax, escaping, composition and checks for our own small Zig HTML layer, shared by the static site and wasm | 8 strong, 8 moderate | 11 | 4 (slowing) | 3 |
@@ -99,8 +106,22 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | decided | now | [How do servers that hold large in-memory data built from a database deploy new code quickly, without rebuilding that data on every restart?](questions/fast-deploy-data-servers.md): How do servers that hold large in-memory data built from a database deploy new code quickly, without rebuilding that data on every restart? | 7 strong, 1 moderate, 1 contested | 7 | 8 (growing) | 5 |
 | decided | soon | [How do sites prerender pages by popularity and invalidate cached pages when code or data changes?](questions/render-cache-invalidation.md): How do sites prerender pages by popularity and invalidate cached pages when code or data changes? | 5 strong, 1 moderate | 8 | 4 (growing) | 2 |
 
+### code
+
+| Status | Pri. | Question | Claims | Sources | Searches | Leads |
+| --- | --- | --- | --- | --- | --- | --- |
+| answered | soon | [How do the Zig std and respected projects design APIs and interfaces: init and deinit, options structs, decl literals, vtables, std.Io readers and writers?](questions/zig-api-design.md): How do the Zig std and respected projects design APIs and interfaces: init and deinit, options structs, decl literals, vtables, std.Io readers and writers? | 16 strong | 70 | 5 (slowing) | 3 |
+| answered | soon | [How should a Zig project structure build.zig, modules, packages, C interop and cross-compilation?](questions/zig-build.md): How should a Zig project structure build.zig, modules, packages, C interop and cross-compilation? | 15 strong, 1 contested | 40 | 1 (thin) | 1 |
+| answered | soon | [When and how should Zig code use comptime: generics, type functions, anytype, reflection, and where do respected projects stop?](questions/zig-comptime.md): When and how should Zig code use comptime: generics, type functions, anytype, reflection, and where do respected projects stop? | 13 strong, 1 moderate, 1 weak, 1 contested | 41 | 3 (growing) | 4 |
+| answered | soon | [How should Zig code handle errors and enforce invariants: error sets, diagnostics, assertions, panics, undefined behaviour and build modes?](questions/zig-errors-safety.md): How should Zig code handle errors and enforce invariants: error sets, diagnostics, assertions, panics, undefined behaviour and build modes? | 18 strong, 1 moderate, 1 contested | 65 | 2 (thin) | 2 |
+| answered | soon | [What makes Zig code good, according to the official docs, the std library and well-respected Zig projects?](questions/zig-good-practice.md): What makes Zig code good, according to the official docs, the std library and well-respected Zig projects? | 3 strong, 5 unsupported | 40 | 17 (slowing) | 8 |
+| answered | soon | [How should Zig code allocate, own and free memory: allocator choice, arenas, defer and errdefer, static allocation, containers?](questions/zig-memory.md): How should Zig code allocate, own and free memory: allocator choice, arenas, defer and errdefer, static allocation, containers? | 17 strong, 1 moderate, 2 contested | 69 | 7 (growing) | 3 |
+| answered | soon | [How do respected Zig projects write fast code: data-oriented design, memory layout, SoA, SIMD, avoiding allocation in hot paths?](questions/zig-perf.md): How do respected Zig projects write fast code: data-oriented design, memory layout, SoA, SIMD, avoiding allocation in hot paths? | 13 strong, 1 moderate, 1 contested | 44 | 3 (growing) | 4 |
+| answered | soon | [How do the Zig docs and respected projects name, lay out, format and comment Zig code?](questions/zig-style.md): How do the Zig docs and respected projects name, lay out, format and comment Zig code? | 13 strong, 2 contested | 43 | 2 (thin) | 3 |
+| answered | soon | [How do the Zig docs and respected projects test Zig code: unit tests, testing allocator, fuzzing, snapshot and simulation testing?](questions/zig-testing.md): How do the Zig docs and respected projects test Zig code: unit tests, testing allocator, fuzzing, snapshot and simulation testing? | 13 strong, 1 moderate | 54 | 1 (thin) | 4 |
+
 ## Health
 
-- 51 questions, 673 sources, 4715 findings
-- Open leads: 180 (`josearch leads`)
-- Lint: 0 errors, 3 warnings (`josearch lint`)
+- 66 questions, 1007 sources, 7792 findings
+- Open leads: 272 (`josearch leads`)
+- Lint: 10 errors, 5 warnings (`josearch lint`)

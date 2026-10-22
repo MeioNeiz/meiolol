@@ -1,0 +1,617 @@
+# Devlog ⚡ Zig Programming Language
+
+<https://ziglang.org/devlog/2025/>
+
+[Download & Documentation](https://ziglang.org/download/) [Introduction](https://ziglang.org/intro/) [News](https://ziglang.org/news/) [Zig Software Foundation](https://ziglang.org/zsf/) [Devlog](https://ziglang.org/devlog/2026/) [Source](https://codeberg.org/ziglang/zig) [Community](https://ziglang.org/community)
+
+# Devlog
+
+This page contains a curated list of recent changes to main branch Zig.
+
+Also available as an [RSS feed](https://ziglang.org/devlog/index.xml).
+
+This page contains entries for the year 2025. Other years are available in [the Devlog archive page](https://ziglang.org/devlog/).
+
+October 15, 2025
+
+# [Async DNS Resolution](https://ziglang.org/devlog/2025/#2025-10-15)
+
+Author: Andrew Kelley
+
+Without libc in the picture, DNS resolution is a happy async utopia. We can blast out multiple queries and handle responses as they arrive, using standard system primitives such as file descriptors and `poll`.
+
+Perturbingly, a pernicious pair of party poopers plot to puncture perfection:
+
+1.  The libc API for DNS resolution is `getaddrinfo`, which is ass.
+2.  Operating systems hide important details such as the configured nameservers behind libc, so you have to use it.
+
+For example, if you bypass libc on a glibc system in order to get the good API, then you end up with people complaining that your application does not integrate properly with [NSS](https://sourceware.org/glibc/manual/).
+
+But `getaddrinfo` is crap! It blocks until _all_ the DNS queries return, so the best you can do is run it in a utility thread and then wait until it’s done. And even then there’s a footgun… it reads `environ` so if any code anywhere in the process calls `setenv` then you have corrupt memory access. This alone makes me not take POSIX seriously. If they want to regain my respect they have to fix this along with making `close` infallible. Rumor has it they made `close` fallible because they thought that was an appropriate place to rewind tape drives. 🤦
+
+Anyway, thankfully some systems have non-standard alternatives that support asynchrony and cancellation:
+
+-   glibc has `getaddrinfo_a` / `gai_cancel`
+-   Windows has `GetAddrInfoExW` / `GetAddrInfoExCancel`
+-   OpenBSD has `getaddrinfo_async` / `asr_abort`
+-   macOS has `CFHostStartInfoResolution` / `CFHostCancelInfoResolution`
+-   FreeBSD has `dnsres_getaddrinfo`, but no cancellation support
+
+And that’s it. If your OS is not in this list, your DNS resolution API is crap! Fix it!
+
+I didn’t take advantage any of those APIs yet, but I did implement the case without pesky libc. I want to share that code here because it’s a pretty nifty example of the new `std.Io` interface in action:
+
+```
+pub const ConnectError = LookupError || IpAddress.ConnectError;
+
+pub fn connect(
+    host_name: HostName,
+    io: Io,
+    port: u16,
+    options: IpAddress.ConnectOptions,
+) ConnectError!Stream {
+    var connect_many_buffer: [32]ConnectManyResult = undefined;
+    var connect_many_queue: Io.Queue(ConnectManyResult) = .init(&connect_many_buffer);
+
+    var connect_many = io.async(connectMany, .{ host_name, io, port, &connect_many_queue, options });
+    var saw_end = false;
+    defer {
+        connect_many.cancel(io);
+        if (!saw_end) while (true) switch (connect_many_queue.getOneUncancelable(io)) {
+            .connection => |loser| if (loser) |s| s.close(io) else |_| continue,
+            .end => break,
+        };
+    }
+
+    var aggregate_error: ConnectError = error.UnknownHostName;
+
+    while (connect_many_queue.getOne(io)) |result| switch (result) {
+        .connection => |connection| if (connection) |stream| return stream else |err| switch (err) {
+            error.SystemResources,
+            error.OptionUnsupported,
+            error.ProcessFdQuotaExceeded,
+            error.SystemFdQuotaExceeded,
+            error.Canceled,
+            => |e| return e,
+
+            error.WouldBlock => return error.Unexpected,
+
+            else => |e| aggregate_error = e,
+        },
+        .end => |end| {
+            saw_end = true;
+            try end;
+            return aggregate_error;
+        },
+    } else |err| switch (err) {
+        error.Canceled => |e| return e,
+    }
+}
+
+pub const ConnectManyResult = union(enum) {
+    connection: IpAddress.ConnectError!Stream,
+    end: ConnectError!void,
+};
+
+/// Asynchronously establishes a connection to all IP addresses associated with
+/// a host name, adding them to a results queue upon completion.
+pub fn connectMany(
+    host_name: HostName,
+    io: Io,
+    port: u16,
+    results: *Io.Queue(ConnectManyResult),
+    options: IpAddress.ConnectOptions,
+) void {
+    var canonical_name_buffer: [max_len]u8 = undefined;
+    var lookup_buffer: [32]HostName.LookupResult = undefined;
+    var lookup_queue: Io.Queue(LookupResult) = .init(&lookup_buffer);
+    var group: Io.Group = .init;
+
+    group.async(io, lookup, .{ host_name, io, &lookup_queue, .{
+        .port = port,
+        .canonical_name_buffer = &canonical_name_buffer,
+    } });
+
+    while (lookup_queue.getOne(io)) |dns_result| switch (dns_result) {
+        .address => |address| group.async(io, enqueueConnection, .{ address, io, results, options }),
+        .canonical_name => continue,
+        .end => |lookup_result| {
+            results.putOneUncancelable(io, .{
+                .end = if (group.wait(io)) lookup_result else |err| err,
+            });
+            return;
+        },
+    } else |err| switch (err) {
+        error.Canceled => |e| {
+            group.cancel(io);
+            results.putOneUncancelable(io, .{ .end = e });
+        },
+    }
+}
+```
+
+This code has the following properties:
+
+-   It asynchronously sends out DNS queries to each configured nameserver
+-   As each response comes in, it immediately, asynchronously tries to TCP connect to the returned IP address.
+-   Upon the first successful TCP connection, all other in-flight connection attempts are canceled, including DNS queries.
+-   Regardless of whether `Io` is implemented via threads, or via an event loop, this code behaves optimally.
+-   The code also works when using single-threaded, blocking `Io` even though the operations happen sequentially.
+-   No heap allocation.
+
+I’m pleased that, on top of all this, it reads like standard, idiomatic Zig code. We still use all the reguar control flow: `try`, `defer`, `while`, etc.
+
+The code is flat, not much nesting. And just like non-async code, we can insert `try foo` almost anywhere and rest assured that the same resource management patterns have the error handling taken care of.
+
+So hopefully that gives you a taste of what these changes bring to the table:
+
+[std: Introduce Io Interface](https://github.com/ziglang/zig/pull/25592)
+
+October 09, 2025
+
+# [no-matrix build option](https://ziglang.org/devlog/2025/#2025-10-09)
+
+Author: Andrew Kelley
+
+I added a new build option, `-Dno-matrix`, which makes it so that using `zig build test-std` or `zig build test-behavior` it only runs the default, native target tests. This is handy when you already know it’s going to be in a failing state for a while and you’re working on a big change.
+
+In particular, it combines with `--watch` and `-fincremental` to make the development loop instant. This is huge for me since I work on the standard library often. Previously, I would run `zig test lib/std.zig` in order to get this effect, but since it takes a few seconds to compile, I would try to fix all the errors before rerunning the command. This worked okay to amortize the cost, but now I just press save in vim and the new errors are literally on my screen in the blink of an eye.
+
+So here’s the full build command I’ve been enjoying:
+
+```
+zig build test-std -Dno-matrix --watch -fincremental
+```
+
+July 23, 2025
+
+# [New Aarch64 Backend](https://ziglang.org/devlog/2025/#2025-07-23)
+
+Author: Andrew Kelley & Jacob Young
+
+Jacob [upstreamed his new backend yesterday](https://github.com/ziglang/zig/pull/24536).
+
+```
+    275 src/codegen/aarch64/Mir.zig
+    138 src/codegen/aarch64/abi.zig
+  11799 src/codegen/aarch64/encoding.zig
+  10981 src/codegen/aarch64/Select.zig
+    905 src/codegen/aarch64/Disassemble.zig
+   1653 src/codegen/aarch64/Assemble.zig
+    194 src/codegen/aarch64.zig
+  25945 total
+```
+
+It’s passing 1547/1960 (79%) of the behavior tests compared to the LLVM backend.
+
+Although it will grow in size as it approaches completion, it is considerably less logic than the x86 backend:
+
+```
+     608 src/arch/x86_64/abi.zig
+     904 src/arch/x86_64/bits.zig
+  194471 src/arch/x86_64/CodeGen.zig
+     507 src/arch/x86_64/Disassembler.zig
+     980 src/arch/x86_64/Emit.zig
+    2790 src/arch/x86_64/encoder.zig
+    1072 src/arch/x86_64/Encoding.zig
+    2700 src/arch/x86_64/encodings.zon
+     689 src/arch/x86_64/Lower.zig
+    2152 src/arch/x86_64/Mir.zig
+  206873 total
+```
+
+In terms of binary size, it adds about 330KB (2%) to the compiler executable.
+
+Jacob made some pretty neat architectural decisions with this one. For instance, it uses the actual machine code instruction encoding for the compiler’s internal MIR structure. This means that instruction encoding is done on the N codegen threads instead of the 1 linker thread.
+
+All of the previous backends used a shared two-pass liveness analysis. This new backend has its own similar bespoke two-pass liveness analysis, except that the second pass also happens to generate all of the Mir in reverse at the same time! Besides cutting down on the number of passes that need to iterate over each function, making this backend speedier than other backends at generating code, this will allow backend-specific instruction lowerings that match multiple Air instructions to affect liveness and cause earlier instructions to become unused and end up not producing any code. This means that none of the incredibly complex deferred value tracking from the x86\_64 backend is needed, allowing the tracking state machine to be vastly simplified.
+
+It’s not quite an apples-to-apples comparison due to missing features, but so far it is significantly faster than the x86 backend:
+
+```
+Benchmark 1 (117 runs): zig build-exe hello.zig -fno-llvm -OReleaseSmall -target x86_64-linux
+  measurement          mean ± σ            min … max           outliers         delta
+  wall_time          42.7ms ± 5.03ms    34.2ms … 54.1ms          0 ( 0%)        0%
+  peak_rss            110MB ±  580KB     109MB …  111MB          0 ( 0%)        0%
+  cpu_cycles          115M  ± 2.50M      110M  …  122M           0 ( 0%)        0%
+  instructions        167M  ± 11.4K      167M  …  167M           0 ( 0%)        0%
+  cache_references   7.64M  ± 80.4K     7.45M  … 7.86M           0 ( 0%)        0%
+  cache_misses       1.18M  ± 37.9K     1.10M  … 1.29M           1 ( 1%)        0%
+  branch_misses       885K  ± 11.2K      859K  …  911K           0 ( 0%)        0%
+Benchmark 2 (156 runs): zig build-exe hello.zig -fno-llvm -OReleaseSmall -target aarch64-linux
+  measurement          mean ± σ            min … max           outliers         delta
+  wall_time          32.1ms ± 4.22ms    23.7ms … 44.2ms          0 ( 0%)        ⚡- 24.8% ±  2.6%
+  peak_rss            103MB ±  663KB     101MB …  105MB          7 ( 4%)        ⚡-  6.5% ±  0.1%
+  cpu_cycles         40.8M  ± 1.17M     37.8M  … 43.5M           0 ( 0%)        ⚡- 64.6% ±  0.4%
+  instructions       50.9M  ± 9.49K     50.9M  … 50.9M           0 ( 0%)        ⚡- 69.5% ±  0.0%
+  cache_references   2.58M  ± 52.4K     2.49M  … 2.85M           1 ( 1%)        ⚡- 66.2% ±  0.2%
+  cache_misses        454K  ± 22.9K      413K  …  512K           0 ( 0%)        ⚡- 61.6% ±  0.6%
+  branch_misses       274K  ± 3.13K      268K  …  283K           1 ( 1%)        ⚡- 69.0% ±  0.2%
+```
+
+As for machine code quality, it’s too early to make reasonable comparisons, but suffice to say it’s looking quite promising! We’ll make another devlog entry when it’s capable of compiling more complex projects.
+
+June 30, 2025
+
+# [Zig Roadmap 2026](https://ziglang.org/devlog/2025/#2025-06-30)
+
+Author: Loris Cro
+
+We scheduled a new Zig SHOWTIME episode for July 2nd to talk with Andrew about the Zig roadmap for 2026.
+
+For more information check out [https://zig.show/episodes/41/](https://zig.show/episodes/41/)
+
+June 14, 2025
+
+# [Parallel Self-Hosted Code Generation](https://ziglang.org/devlog/2025/#2025-06-14)
+
+Author: Matthew Lugg
+
+Less than a week ago, we finally turned on the x86\_64 backend by default for Debug builds on Linux and macOS. Today, we’ve got a big performance improvement to it: we’ve parallelized the compiler pipeline even more!
+
+These benefits do not affect the LLVM backend, because it uses a lot more shared state; in fact, it is still limited to one thread, where every other backend was able to use two threads even before this change. But for the self-hosted backends, machine code generation is essentially an isolated task, so we can run it in parallel with everything else, and even run multiple code generation jobs in parallel with one another. The generated machine code then all gets glued together on the linker thread at the end. This means we end up with one thread performing semantic analysis, arbitrarily many threads performing code generation, and one thread performing linking. Parallelizing this phase is particularly beneficial because instruction selection for x86\_64 is incredibly complex due to the architecture’s huge variety of extensions and instructions.
+
+This worked culminated in a [pull request](https://github.com/ziglang/zig/pull/24124), created by myself and Jacob, which was merged a couple of days ago. It was a fair amount of work, because a lot of internal details of the compiler pipeline needed reworking to completely isolate machine code generation from the linker. But it was all worth it in the end for the performance gains! Using the self-hosted x86\_64 backend, we saw anywhere from 5% through to 50% improvements in wall-clock time for compiling Zig projects. For example, Andrew reports being able to build the Zig compiler itself (excluding linking LLVM, which would add a couple of seconds to the time) in 10 seconds or less:
+
+```
+Benchmark 1 (32 runs): [... long command to build compiler with old compiler ...]
+  measurement          mean ± σ            min … max           outliers         delta
+  wall_time          13.8s  ± 71.4ms     13.7s … 13.8s           0 ( 0%)        0%
+  peak_rss           1.08GB ± 18.3MB    1.06GB … 1.10GB          0 ( 0%)        0%
+  cpu_cycles          109G  ± 71.2M      109G  …  109G           0 ( 0%)        0%
+  instructions        240G  ± 48.3M      240G  …  240G           0 ( 0%)        0%
+  cache_references   6.42G  ± 7.31M     6.41G  … 6.42G           0 ( 0%)        0%
+  cache_misses        450M  ± 1.02M      449G  …  451G           0 ( 0%)        0%
+  branch_misses       422M  ±  783K      421M  …  423M           0 ( 0%)        0%
+Benchmark 2 (34 runs): [... long command to build compiler with new compiler ...]
+  measurement          mean ± σ            min … max           outliers         delta
+  wall_time         10.00s  ± 32.2ms     9.96s … 10.0s           0 ( 0%)        ⚡- 27.4% ±  0.9%
+  peak_rss           1.35GB ± 18.6MB    1.34GB … 1.37GB          0 ( 0%)        💩+ 25.7% ±  3.9%
+  cpu_cycles         95.1G  ±  371M     94.8G  … 95.5G           0 ( 0%)        ⚡- 12.8% ±  0.6%
+  instructions        191G  ± 7.30M      191G  …  191G           0 ( 0%)        ⚡- 20.6% ±  0.0%
+  cache_references   5.93G  ± 33.3M     5.90G  … 5.97G           0 ( 0%)        ⚡-  7.5% ±  0.9%
+  cache_misses        417M  ± 4.55M      412M  …  421M           0 ( 0%)        ⚡-  7.2% ±  1.7%
+  branch_misses       391M  ±  549K      391M  …  392M           0 ( 0%)        ⚡-  7.3% ±  0.4%
+```
+
+As another data point, I measure a 30% improvement in the time taken to build a simple “Hello World”:
+
+```
+Benchmark 1 (15 runs): /home/mlugg/zig/old-master/build/stage3/bin/zig build-exe hello.zig
+  measurement          mean ± σ            min … max           outliers         delta
+  wall_time           355ms ± 4.04ms     349ms …  361ms          0 ( 0%)        0%
+  peak_rss            138MB ±  359KB     138MB …  139MB          0 ( 0%)        0%
+  cpu_cycles         1.61G  ± 16.4M     1.59G  … 1.65G           0 ( 0%)        0%
+  instructions       3.20G  ± 57.8K     3.20G  … 3.20G           0 ( 0%)        0%
+  cache_references    113M  ±  450K      112M  …  113M           0 ( 0%)        0%
+  cache_misses       10.5M  ±  122K     10.4M  … 10.8M           0 ( 0%)        0%
+  branch_misses      9.73M  ± 39.2K     9.67M  … 9.79M           0 ( 0%)        0%
+Benchmark 2 (21 runs): /home/mlugg/zig/master/build/stage3/bin/zig build-exe hello.zig
+  measurement          mean ± σ            min … max           outliers         delta
+  wall_time           244ms ± 4.35ms     236ms …  257ms          1 ( 5%)        ⚡- 31.5% ±  0.8%
+  peak_rss            148MB ±  909KB     146MB …  149MB          2 (10%)        💩+  7.3% ±  0.4%
+  cpu_cycles         1.47G  ± 12.5M     1.45G  … 1.49G           0 ( 0%)        ⚡-  8.7% ±  0.6%
+  instructions       2.50G  ±  169K     2.50G  … 2.50G           1 ( 5%)        ⚡- 22.1% ±  0.0%
+  cache_references    106M  ±  855K      105M  …  108M           1 ( 5%)        ⚡-  5.6% ±  0.4%
+  cache_misses       9.67M  ±  145K     9.35M  … 10.0M           2 (10%)        ⚡-  8.3% ±  0.9%
+  branch_misses      9.23M  ± 78.5K     9.09M  … 9.39M           0 ( 0%)        ⚡-  5.1% ±  0.5%
+```
+
+By the way, I’m a real sucker for some good `std.Progress` output, so I can’t help but mention how much I enjoy just _watching_ the compiler now, and seeing all the work that it’s doing:
+
+Even with these numbers, we’re still far from done in the area of compiler performance. Future improvements to our self-hosted linkers, as well as in the code which emits a function into the final binary, could help to speed up linking, which is now sometimes the bottleneck of compilation speed (you can actually see this bottleneck in the asciinema above). We also want to [improve the quality of the machine code we emit](https://github.com/ziglang/zig/issues/24144), which not only makes Debug binaries perform better, but (perhaps counterintutively) should further speed up linking. Other performance work on our radar includes decreasing the amount of work the compiler does at the very end of compilation (its “flush” phase) to eliminate another big chunk of overhead, and (in the more distant future) parallelizing semantic analysis.
+
+Perhaps most significantly of all, incremental compilation – which has been a long-term investment of the Zig project for many years – is getting pretty close to being turned on by default in some cases, which will allow small changes to [rebuild in milliseconds](https://www.youtube.com/clip/Ugkxjn7L0hEfN1XLfH1soaUdCksG3FvJkXIS). By the way, remember that you can try out incremental compilation and start reaping its benefits _right now_, as long as you’re okay with possible compiler bugs! Check out [the tracking issue](https://github.com/ziglang/zig/issues/21165) if you want to learn more about that.
+
+That’s enough rambling – I hope y’all are as excited about these improvements as we are. Zig’s compilation speed is the best it’s ever been, and hopefully the worst it’ll ever be again ;)
+
+June 08, 2025
+
+# [Self-Hosted x86 Backend is Now Default in Debug Mode](https://ziglang.org/devlog/2025/#2025-06-08)
+
+Author: Andrew Kelley
+
+Now, when you target x86\_64, by default, Zig will use its own x86 backend rather than using LLVM to lower a bitcode file to an object file.
+
+The default is not changed on Windows yet, because more COFF linker work needs to be done first.
+
+The x86 backend is now passing 1987 behavior tests, versus 1980 passed by the LLVM backend. In reality there are 2084 behavior tests, but the extra ones there are generally redundant with LLVM’s own test suite for its own x86 backend, so we only run those when testing with self-hosted x86. Anyway, my point is that Zig’s x86 backend is now _more robust_ than its LLVM backend in terms of implementing the Zig language.
+
+Why compete with LLVM on code generation? There are [a handful of reasons](https://ziggit.dev/t/can-someone-explain-why-zig-is-moving-away-from-llvm-but-in-simple-way/1226/6?u=andrewrk), but mainly, because we can dramatically outperform LLVM at compilation speed.
+
+```
+Benchmark 1 (6 runs): zig build-exe hello.zig -fllvm
+  measurement          mean ± σ            min … max           outliers         delta
+  wall_time           918ms ± 32.8ms     892ms …  984ms          0 ( 0%)        0%
+  peak_rss            214MB ±  629KB     213MB …  215MB          0 ( 0%)        0%
+  cpu_cycles         4.53G  ± 12.7M     4.52G  … 4.55G           0 ( 0%)        0%
+  instructions       8.50G  ± 3.27M     8.50G  … 8.51G           0 ( 0%)        0%
+  cache_references    356M  ± 1.52M      355M  …  359M           0 ( 0%)        0%
+  cache_misses       75.6M  ±  290K     75.3M  … 76.1M           0 ( 0%)        0%
+  branch_misses      42.5M  ± 49.2K     42.4M  … 42.5M           0 ( 0%)        0%
+Benchmark 2 (19 runs): zig build-exe hello.zig
+  measurement          mean ± σ            min … max           outliers         delta
+  wall_time           275ms ± 4.94ms     268ms …  283ms          0 ( 0%)        ⚡- 70.1% ±  1.7%
+  peak_rss            137MB ±  677KB     135MB …  138MB          0 ( 0%)        ⚡- 36.2% ±  0.3%
+  cpu_cycles         1.57G  ± 9.60M     1.56G  … 1.59G           0 ( 0%)        ⚡- 65.2% ±  0.2%
+  instructions       3.21G  ±  126K     3.21G  … 3.21G           1 ( 5%)        ⚡- 62.2% ±  0.0%
+  cache_references    112M  ±  758K      110M  …  113M           0 ( 0%)        ⚡- 68.7% ±  0.3%
+  cache_misses       10.5M  ±  102K     10.4M  … 10.8M           1 ( 5%)        ⚡- 86.1% ±  0.2%
+  branch_misses      9.22M  ± 52.0K     9.14M  … 9.31M           0 ( 0%)        ⚡- 78.3% ±  0.1%
+```
+
+For a larger project like the Zig compiler itself, it takes the time down from 75 seconds to 20 seconds.
+
+We’re _only just getting started_. We’ve already started work [fully parallelizing code generation](https://asciinema.org/a/722533). We’re also just a few linker enhancements and bug fixes away from making incremental compilation stable and robust in combination with this backend. There is still low hanging fruit for improving the generated x86 code quality. And we’re looking at aarch64 next - work that is expected to be accelerated thanks to our new Legalize pass.
+
+The CI has finished building the respective commit, so you can try this out yourself by fetching the latest master branch build from [the download page](https://ziglang.org/download/).
+
+Finally, here’s a gentle reminder that Zig Software Foundation is a 501(c)(3) non-profit that funds its development with donations from generous people like you. If you like what we’re doing, please [help keep us financially sustainable](https://ziglang.org/zsf/)!
+
+June 06, 2025
+
+# [Intro to the Zig Build System Video](https://ziglang.org/devlog/2025/#2025-06-06)
+
+Author: Loris Cro
+
+I’ve released a few days ago a new video on YouTube where I show how to get started with the Zig build system for those who have not grokked it yet.
+
+In the video I show how to create a package that exposes a Zig module and then how to import that module in another Zig project. After June I will add more videos to the series in order to cover more of the build system.
+
+Here’s the video: [https://youtu.be/jy7w\_7JZYyw](https://youtu.be/jy7w_7JZYyw)
+
+May 20, 2025
+
+# [FreeBSD and NetBSD Cross-Compilation Support](https://ziglang.org/devlog/2025/#2025-05-20)
+
+Author: Alex Rønne Petersen
+
+Pull requests [#23835](https://github.com/ziglang/zig/pull/23835) and [#23913](https://github.com/ziglang/zig/pull/23913) have now been merged. This means that, using `zig cc` or `zig build`, you can now build binaries targeting FreeBSD 14.0.0+ and NetBSD 10.1+ from any machine, just as you’ve been able to for Linux, macOS, and Windows for a long time now.
+
+This builds on the [strategy](https://github.com/ziglang/libc-abi-tools) we were already using for glibc and will soon be using for other targets as well. For any given FreeBSD/NetBSD release, we build libc and related libraries for every supported target, and then extract public symbol information from the resulting ELF files. We then combine all that information into a very compact `abilists` file that gets shipped with Zig. Finally, when the user asks to link libc while cross-compiling, we load the `abilists` file and build a stub library for each constituent libc library (`libc.so`, `libm.so`, etc), making sure that it accurately reflects the symbols provided by libc for the target architecture and OS version, and has the expected [soname](https://en.wikipedia.org/wiki/Soname). This is all quite similar to how the [llvm-ifs tool](https://llvm.org/docs/CommandGuide/llvm-ifs.html) works.
+
+We currently import [crt0](https://en.wikipedia.org/wiki/Crt0) code from the latest known FreeBSD/NetBSD release and manually apply any patches needed to make it work with any OS version that we support cross-compilation to. This is necessary because the OS sometimes changes the crt0 ABI. We’d like to eventually [reimplement the crt0 code in Zig](https://github.com/ziglang/zig/issues/23875).
+
+We also ship FreeBSD/NetBSD system and libc headers with the Zig compiler. Unlike the stub libraries we produce, however, we always import headers from the latest version of the OS. This is because it would be far too space-inefficient to ship separate headers for every OS version, and we realistically don’t have the time to audit the headers on every import and add appropriate version guards to all new declarations. The good news, though, is that we do accept patches to add version guards when necessary; we’ve already had many contributions of this sort in our imported glibc headers.
+
+Please take this for a spin and report any bugs you find!
+
+We would like to also add support for [OpenBSD libc](https://github.com/ziglang/zig/issues/2878) and [Dragonfly BSD libc](https://github.com/ziglang/zig/issues/23880), but because these BSDs cannot be conveniently cross-compiled from Linux, we need motivated users of them to chip in. Besides those, we are also looking into [SerenityOS](https://github.com/ziglang/zig/issues/23879), [Android](https://github.com/ziglang/zig/issues/23906), and [Fuchsia](https://github.com/ziglang/zig/issues/23877) libc support.
+
+April 09, 2025
+
+# [Website updated to Zine 0.10.0](https://ziglang.org/devlog/2025/#2025-04-09)
+
+Author: Loris Cro
+
+The official Zig website now builds using standalone Zine. A lot of code got rewritten so if you see regressions on the website, please open an issue. Regressions only please, thanks!
+
+Normally a Zine update would not be worthy of a devlog entry, but the recent update to it was pretty big as Zine went from being a funky Zig build script to a standalone executable. If you were interested in Zine before but never got the time to try it out, this milestone is a great moment to [give it a shot](https://zine-ssg.io/). Run `zine init` to get a sample website that also implements a devlog for you out of the box.
+
+P.S. I’ve also added dates to each entry on the page, people were asking for this for a while :^)
+
+March 03, 2025
+
+# [Release Tag Status Update](https://ziglang.org/devlog/2025/#2025-03-03)
+
+The 0.14.0 release is coming shortly. We didn’t get the release notes done yet, and I’m calling it a day.
+
+Tomorrow morning I’ll make the tag, kick off the CI, and then work to finish the release notes while it builds.
+
+I know there were a lot of things that sadly didn’t make the cut. Let’s try to get them into 0.14.1 or 0.15.0. Meanwhile, there are a ton of major and minor enhancements that have already landed, and will debut tomorrow.
+
+February 24, 2025
+
+# [Improved UBSan Error Messages](https://ziglang.org/devlog/2025/#2025-02-24)
+
+Author: David Rubin
+
+Lately, I’ve been extensively working with C interop, and one thing that’s been sorely missing is clear error messages from UBSan. When compiling C with `zig cc`, Zig provides better defaults, including implicitly enabling `-fsanitize=undefined`. This has been great for catching subtle bugs and makes working with C more bearable. However, due to the lack of a UBSan runtime, all undefined behavior was previously caught with a `trap` instruction.
+
+For example, consider this example C program:
+
+```
+#include <stdio.h>
+
+int foo(int x, int y) {
+    return x + y;
+}
+
+int main() {
+    int result = foo(0x7fffffff, 0x7fffffff);
+    printf("%d\n", result);
+}
+```
+
+Running this with `zig cc` used to result in an unhelpful error:
+
+```
+$ zig run test.c -lc
+fish: Job 1, 'zig run empty.c -lc' terminated by signal SIGILL (Illegal instruction)
+```
+
+Not exactly informative! To understand what went wrong, you’d have to run the executable in a debugger. Even then, tracking down the root cause could be daunting. Many newcomers ran into this `Illegal instruction` error without realizing that UBSan was enabled by default, leading to confusion. This issue was common enough to warrant a dedicated [Wiki page](https://github.com/ziglang/zig/wiki/zig-cc-compatibility-with-clang#ubsan-and-sigill-illegal-instruction).
+
+With the new [UBSan runtime merged](https://github.com/ziglang/zig/pull/22488), the experience has completely changed. Now instead of an obscure `SIGILL`, you get a much more helpful error message:
+
+```
+$ zig run test.c -lc
+thread 208135 panic: signed integer overflow: 2147483647 + 2147483647 cannot be represented in type 'int'
+/home/david/Code/zig/build/test.c:4:14: 0x1013e41 in foo (test.c)
+    return x + y;
+             ^
+/home/david/Code/zig/build/test.c:8:18: 0x1013e63 in main (test.c)
+    int result = foo(0x7fffffff, 0x7fffffff);
+                 ^
+../sysdeps/nptl/libc_start_call_main.h:58:16: 0x7fca4c42e1c9 in __libc_start_call_main (../sysdeps/x86/libc-start.c)
+../csu/libc-start.c:360:3: 0x7fca4c42e28a in __libc_start_main_impl (../sysdeps/x86/libc-start.c)
+???:?:?: 0x1013de4 in ??? (???)
+???:?:?: 0x0 in ??? (???)
+fish: Job 1, 'zig run test.c -lc' terminated by signal SIGABRT (Abort)
+```
+
+Now, not only do we see _what_ went wrong (signed integer overflow), but we also see _where_ it happened – two critical pieces of information that were previously missing.
+
+## Remaining Limitations
+
+While the new runtime vastly improves debugging, there are still two features that LLVM’s UBSan runtime provides which ours doesn’t support yet:
+
+1.  In C++, UBSan can detect when an object’s vptr indicates the wrong dynamic type or when its lifetime hasn’t started. Supporting this would require replicating the Itanium C++ ABI, which isn’t worth the extreme complexity.
+2.  Currently, the runtime doesn’t show the exact locations of attributes like `assume_aligned` and `__nonnull`. This should be relatively straightforward to add, and contributions are welcome!
+
+If you’ve ever been frustrated by cryptic `SIGILL` errors while trying out Zig, this update should make debugging undefined behavior a lot easier!
+
+February 07, 2025
+
+# [No-Libc Zig Now Outperforms Glibc Zig](https://ziglang.org/devlog/2025/#2025-02-07)
+
+Author: Andrew Kelley
+
+Alright, I know I’m supposed to be focused on issue triage and merging PRs for the upcoming release this month, but in my defense, I do some of my best work while procrastinating.
+
+Jokes aside, this week we had CI failures due to Zig’s debug allocator creating too many memory mappings. This was interfering with Jacob’s work on the x86 backend, so I spent the time to [rework the debug allocator](https://github.com/ziglang/zig/pull/20511#issuecomment-2638356298).
+
+Since this was a chance to eliminate the dependency on a compile-time known page size, I based my work on contributor archbirdplus’s patch to add runtime-known page size support to the Zig standard library. With this change landed, it means Zig finally works on Asahi Linux. My fault for originally making page size compile-time known. Sorry about that!
+
+Along with detecting page size at runtime, the new implementation no longer memsets each page to 0xaa bytes then back to 0x00 bytes, no longer searches when freeing, and no longer depends on a treap data structure. Instead, the allocation metadata is stored inline, on the page, using a pre-cached lookup table that is computed at compile-time:
+
+```
+/// This is executed only at compile-time to prepopulate a lookup table.
+fn calculateSlotCount(size_class_index: usize) SlotIndex {
+    const size_class = @as(usize, 1) << @as(Log2USize, @intCast(size_class_index));
+    var lower: usize = 1 << minimum_slots_per_bucket_log2;
+    var upper: usize = (page_size - bucketSize(lower)) / size_class;
+    while (upper > lower) {
+        const proposed: usize = lower + (upper - lower) / 2;
+        if (proposed == lower) return lower;
+        const slots_end = proposed * size_class;
+        const header_begin = mem.alignForward(usize, slots_end, @alignOf(BucketHeader));
+        const end = header_begin + bucketSize(proposed);
+        if (end > page_size) {
+            upper = proposed - 1;
+        } else {
+            lower = proposed;
+        }
+    }
+    const slots_end = lower * size_class;
+    const header_begin = mem.alignForward(usize, slots_end, @alignOf(BucketHeader));
+    const end = header_begin + bucketSize(lower);
+    assert(end <= page_size);
+    return lower;
+}
+```
+
+It’s pretty nice because you can tweak some global constants and then get optimal slot sizes. That assert at the end means if the constraints could not be satisfied you get a compile error. Meanwhile in C land, equivalent code has to resort to handcrafted lookup tables. Just look at the top of malloc.c from musl:
+
+```
+const uint16_t size_classes[] = {
+	1, 2, 3, 4, 5, 6, 7, 8,
+	9, 10, 12, 15,
+	18, 20, 25, 31,
+	36, 42, 50, 63,
+	72, 84, 102, 127,
+	146, 170, 204, 255,
+	292, 340, 409, 511,
+	584, 682, 818, 1023,
+	1169, 1364, 1637, 2047,
+	2340, 2730, 3276, 4095,
+	4680, 5460, 6552, 8191,
+};
+```
+
+Not nearly as nice to experiment with different size classes. The water’s warm, Rich, come on in! 😛
+
+Anyway, as a result of reworking this allocator, not only does it work with runtime-known page size, and avoid creating too many memory mappings, it also performs significantly better than before. The motivating test case for these changes was this degenerate ast-check task, with a debug compiler:
+
+```
+Benchmark 1 (3 runs): master/bin/zig ast-check ../lib/compiler_rt/udivmodti4_test.zig
+  measurement          mean ± σ            min … max           outliers         delta
+  wall_time          22.8s  ±  184ms    22.6s  … 22.9s           0 ( 0%)        0%
+  peak_rss           58.6MB ± 77.5KB    58.5MB … 58.6MB          0 ( 0%)        0%
+  cpu_cycles         38.1G  ± 84.7M     38.0G  … 38.2G           0 ( 0%)        0%
+  instructions       27.7G  ± 16.6K     27.7G  … 27.7G           0 ( 0%)        0%
+  cache_references   1.08G  ± 4.40M     1.07G  … 1.08G           0 ( 0%)        0%
+  cache_misses       7.54M  ± 1.39M     6.51M  … 9.12M           0 ( 0%)        0%
+  branch_misses       165M  ±  454K      165M  …  166M           0 ( 0%)        0%
+Benchmark 2 (3 runs): branch/bin/zig ast-check ../lib/compiler_rt/udivmodti4_test.zig
+  measurement          mean ± σ            min … max           outliers         delta
+  wall_time          20.5s  ± 95.8ms    20.4s  … 20.6s           0 ( 0%)        ⚡- 10.1% ±  1.5%
+  peak_rss           54.9MB ±  303KB    54.6MB … 55.1MB          0 ( 0%)        ⚡-  6.2% ±  0.9%
+  cpu_cycles         34.8G  ± 85.2M     34.7G  … 34.9G           0 ( 0%)        ⚡-  8.6% ±  0.5%
+  instructions       25.2G  ± 2.21M     25.2G  … 25.2G           0 ( 0%)        ⚡-  8.8% ±  0.0%
+  cache_references   1.02G  ±  195M      902M  … 1.24G           0 ( 0%)          -  5.8% ± 29.0%
+  cache_misses       4.57M  ±  934K     3.93M  … 5.64M           0 ( 0%)        ⚡- 39.4% ± 35.6%
+  branch_misses       142M  ±  183K      142M  …  142M           0 ( 0%)        ⚡- 14.1% ±  0.5%
+```
+
+I didn’t stop there, however. Even though I had release tasks to get back to, this left me _itching_ to make a fast allocator - one that was designed for multi-threaded applications built in ReleaseFast mode.
+
+It’s a tricky problem. A fast allocator needs to avoid contention by storing thread-local state, however, it does not directly learn when a thread exits, so one thread must periodically attempt to reclaim another thread’s resources. There is also the producer-consumer pattern - one thread only allocates while one thread only frees. A naive implementation would never reclaim this memory.
+
+Inspiration struck, and [200 lines of code later](https://github.com/ziglang/zig/blob/42dbd35d3e16247ee68d7e3ace0da3778a1f5d37/lib/std/heap/SmpAllocator.zig) I had a working implementation… after Jacob helped me find a couple logic bugs.
+
+I created [Where in the World Did Carmen’s Memory Go?](https://github.com/andrewrk/CarmensPlayground) and used it to test a couple specific usage patterns. Idea here is to over time collect a robust test suite, do fuzzing, benchmarking, etc., to make it easier to try out new Allocator ideas in Zig.
+
+After getting good scores on those contrived tests, I turned to the real world use cases of the Zig compiler itself. Since it can be built with and without libc, it’s a great way to test the performance delta between the two.
+
+Here’s that same degenerate case above, but with a release build of the compiler - glibc zig vs no libc zig:
+
+```
+Benchmark 1 (32 runs): glibc/bin/zig ast-check ../lib/compiler_rt/udivmodti4_test.zig
+  measurement          mean ± σ            min … max           outliers         delta
+  wall_time           156ms ± 6.58ms     151ms …  173ms          4 (13%)        0%
+  peak_rss           45.0MB ± 20.9KB    45.0MB … 45.1MB          1 ( 3%)        0%
+  cpu_cycles          766M  ± 10.2M      754M  …  796M           0 ( 0%)        0%
+  instructions       3.19G  ± 12.7      3.19G  … 3.19G           0 ( 0%)        0%
+  cache_references   4.12M  ±  498K     3.88M  … 6.13M           3 ( 9%)        0%
+  cache_misses        128K  ± 2.42K      125K  …  134K           0 ( 0%)        0%
+  branch_misses      1.14M  ±  215K      925K  … 1.43M           0 ( 0%)        0%
+Benchmark 2 (34 runs): SmpAllocator/bin/zig ast-check ../lib/compiler_rt/udivmodti4_test.zig
+  measurement          mean ± σ            min … max           outliers         delta
+  wall_time           149ms ± 1.87ms     146ms …  156ms          1 ( 3%)        ⚡-  4.9% ±  1.5%
+  peak_rss           39.6MB ±  141KB    38.8MB … 39.6MB          2 ( 6%)        ⚡- 12.1% ±  0.1%
+  cpu_cycles          750M  ± 3.77M      744M  …  756M           0 ( 0%)        ⚡-  2.1% ±  0.5%
+  instructions       3.05G  ± 11.5      3.05G  … 3.05G           0 ( 0%)        ⚡-  4.5% ±  0.0%
+  cache_references   2.94M  ± 99.2K     2.88M  … 3.36M           4 (12%)        ⚡- 28.7% ±  4.2%
+  cache_misses       48.2K  ± 1.07K     45.6K  … 52.1K           2 ( 6%)        ⚡- 62.4% ±  0.7%
+  branch_misses       890K  ± 28.8K      862K  … 1.02M           2 ( 6%)        ⚡- 21.8% ±  6.5%
+```
+
+Outperforming glibc!
+
+And finally here’s the entire compiler building itself:
+
+```
+Benchmark 1 (3 runs): glibc/bin/zig build -Dno-lib -p trash
+  measurement          mean ± σ            min … max           outliers         delta
+  wall_time          12.2s  ± 99.4ms    12.1s  … 12.3s           0 ( 0%)        0%
+  peak_rss            975MB ± 21.7MB     951MB …  993MB          0 ( 0%)        0%
+  cpu_cycles         88.7G  ± 68.3M     88.7G  … 88.8G           0 ( 0%)        0%
+  instructions        188G  ± 1.40M      188G  …  188G           0 ( 0%)        0%
+  cache_references   5.88G  ± 33.2M     5.84G  … 5.90G           0 ( 0%)        0%
+  cache_misses        383M  ± 2.26M      381M  …  385M           0 ( 0%)        0%
+  branch_misses       368M  ± 1.77M      366M  …  369M           0 ( 0%)        0%
+Benchmark 2 (3 runs): SmpAllocator/fast/bin/zig build -Dno-lib -p trash
+  measurement          mean ± σ            min … max           outliers         delta
+  wall_time          12.2s  ± 49.0ms    12.2s  … 12.3s           0 ( 0%)          +  0.0% ±  1.5%
+  peak_rss            953MB ± 3.47MB     950MB …  957MB          0 ( 0%)          -  2.2% ±  3.6%
+  cpu_cycles         88.4G  ±  165M     88.2G  … 88.6G           0 ( 0%)          -  0.4% ±  0.3%
+  instructions        181G  ± 6.31M      181G  …  181G           0 ( 0%)        ⚡-  3.9% ±  0.0%
+  cache_references   5.48G  ± 17.5M     5.46G  … 5.50G           0 ( 0%)        ⚡-  6.9% ±  1.0%
+  cache_misses        386M  ± 1.85M      384M  …  388M           0 ( 0%)          +  0.6% ±  1.2%
+  branch_misses       377M  ±  899K      377M  …  378M           0 ( 0%)        💩+  2.6% ±  0.9%
+```
+
+I feel that this is a key moment in the Zig project’s trajectory. [This last piece of the puzzle](https://github.com/ziglang/zig/pull/22808) marks the point at which the language and standard library has become _strictly better_ to use than C and libc.
+
+While other languages build on top of libc, Zig instead has conquered it!
+
+January 24, 2025
+
+# [LLDB Fork for Zig](https://ziglang.org/devlog/2025/#2025-01-24)
+
+Author: Alex Rønne Petersen
+
+One of the major things [Jacob](https://github.com/jacobly0) has been working on is good debugging support for Zig. This includes an [LLDB fork](https://github.com/jacobly0/llvm-project/tree/lldb-zig) with enhancements for the Zig language, and is primarily intended for use with Zig’s self-hosted backends. With the self-hosted x86\_64 backend becoming much more usable in the upcoming 0.14.0 release, I decided to type up a [wiki page](https://github.com/ziglang/zig/wiki/LLDB-for-Zig) with instructions for building and using the fork.
+
+If you’re already trying out Zig’s self-hosted backend in your workflow, please take the LLDB fork for a spin and see how it works for you.

@@ -1,0 +1,44 @@
+.{
+    .name = .zls,
+    // Remove `-dev` when tagging a new ZLS release and add it back on the next development cycle.
+    .version = "0.18.0-dev",
+    // Specifies the minimum Zig version that is required to compile and test ZLS.
+    // Must be a Zig version that is downloadable from https://ziglang.org/download/ or a mirror.
+    //
+    // Whenever this version is increased, run the following command:
+    // ```bash
+    // nix flake update --commit-lock-file
+    // ```
+    // If you do not use Nix, a ZLS maintainer can take care of this.
+    .minimum_zig_version = "0.17.0",
+    // Must be kept in sync with the `deps.nix` for the Nix flake.
+    // If you do not use Nix, a ZLS maintainer can take care of this.
+    .dependencies = .{
+        .known_folders = .{
+            .url = "https://github.com/ziglibs/known-folders/archive/6da0d0c41b78b9ed2d34fa364fcb81b5ebece6c4.tar.gz",
+            .hash = "known_folders-0.0.0-Fy-PJiDLAAB98m3uYUzatrTb2mO2fpvwx2zpSroEtfbO",
+        },
+        .diffz = .{
+            .url = "https://github.com/ziglibs/diffz/archive/aac8aa99c436ab8277b0711922aad062c0167b12.tar.gz",
+            .hash = "diffz-0.0.1-G2tlISvOAQDORzPTSxDgiKwlHuADKeJMdJrw4kRfLufj",
+        },
+        .lsp_kit = .{
+            .url = "https://github.com/zigtools/lsp-kit/archive/3e1058db66079911fdde82f833fdce6856e0a706.tar.gz",
+            .hash = "lsp_kit-0.1.0-bi_PL9o2DADHS1PDra3MGz1MXnsboN_ewNvrc419z7Fb",
+        },
+        .tracy = .{
+            .url = "https://github.com/wolfpld/tracy/archive/refs/tags/v0.14.1.tar.gz",
+            .hash = "N-V-__8AAAZPdAGoNF3-tqKYHjTOa5QQ02rEWNvkDr-Vpl0C",
+            .lazy = true,
+        },
+    },
+    .paths = .{
+        "src",
+        "build.zig",
+        "build.zig.zon",
+        "LICENSE",
+        "README.md",
+        "schema.json",
+    },
+    .fingerprint = 0xa66330b97eb969ae, // Changing this has security and trust implications.
+}
