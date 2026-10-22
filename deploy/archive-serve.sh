@@ -16,6 +16,12 @@ name() { [[ "$arg" =~ ^raw-[0-9]+-[0-9]+\.db$ ]] || { echo "bad export name" >&2
 file() { if [[ -f "$out/$arg.zst" ]]; then echo "$out/$arg.zst"; else echo "$out/$arg"; fi; }
 case "${cmd:-}" in
     export)
+        # One at a time: a dropped ssh leaves its export running here, and the gpu-box's
+        # retry deleted that one's .tmp files as left by a failed export (pack NotAPack,
+        # UNIQUE archive_exports.name; 20 and 22 Oct). The retry now waits, then exports
+        # the next window
+        exec 9> data/.archive-export.lock
+        flock 9
         made=$(nice -n 10 ionice -c 3 bin/meiolol raw-export --data data --out "$out")
         echo "$made"
         # Packed here, once: -9 is 39% under the export's gzip bodies for ~60 s of one

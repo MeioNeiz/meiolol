@@ -288,7 +288,9 @@ src/lab/archive.zig, deploy/archive-pull.sh, systemd user timer meiolol-archive-
   from its first document (~1 GB), to data/archive-out/raw-FROM-TO.db, as stored (real
   ids: the salt never comes to the box). The gpu-box's key in ~/.ssh/authorized_keys
   may only run deploy/archive-serve.sh (export, list, send, got, ack, forgotten,
-  status)
+  status). Exports and their packs run one at a time (data/.archive-export.lock): an
+  ssh dropped on the home link leaves its export running on the box, and a retry waits
+  for it, then exports the next window
 - Packed for the trip (18 Oct): right after each export, archive-serve.sh runs `raw-export
   --pack NAME --level 9` (nice): NAME.zst, a rawpack stream (src/store/rawpack.zig: the
   same rows, bodies gunzipped, counts and a hash at the end) through zstd -9 -T1. It is
