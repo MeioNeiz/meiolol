@@ -1,0 +1,663 @@
+# Darius Top Build Guide - Runes, Items, and Stats Patch 26.21 - Blitz.gg
+
+<https://blitz.gg/lol/champions/Darius/build/top?matchup=Garen>
+
+We value your privacy
+We and our partners store and/or access information on a device, such as cookies and process personal data, such as unique identifiers and standard information sent by a device for personalised advertising and content, advertising and content measurement, audience research and services development. With your permission we and our partners may use precise geolocation data and identification through device scanning. You may click to consent to our and our 1750 partners’ processing as described above. Alternatively you may click to refuse to consent or access more detailed information and change your preferences before consenting. Please note that some processing of your personal data may not require your consent, but you have a right to object to such processing. Your preferences will apply to this website only and will be stored in IABGPP_HDR_GppString cookie for 13 months. You can change your preferences or withdraw your consent at any time by returning to this site and clicking the "Privacy" button at the bottom of the webpage.
+Please note that this website/app uses one or more Google services and may gather and store information including but not limited to your visit or usage behaviour. You may click to grant or deny consent to Google and its third-party tags to use your data for below specified purposes in below Google consent section.
+MORE OPTIONS
+AGREE
+League of Legends
+Teamfight Tactics
+VALORANT
+Counter-Strike 2
+Deadlock
+Fortnite
+Escape From Tarkov
+Apex Legends
+Marvel Rivals
+Search Profiles (Name#Tag), Champions, etc.
+⌘
+K
+Go Ad-Free
+Log In
+Download Blitz
+Home
+Champions
+Tier List
+League Classic
+ARAM Mayhem
+Arena
+News
+League of Legends
+Champions
+Darius Top Build
+Darius Top Build, Runes, Items, and Stats - Patch 26.21 (Emerald+)
+
+Recommended Darius Top runes, items, skill order, and build stats for Emerald+ on Patch 26.21.
+
+Data updated 1 minute ago.
+
+Build
+ARAM Mayhem
+ARAM
+URF
+Arena
+Pro Builds
+One Tricks
+New
+Counters
+Synergies
+Abilities
+Emerald+
+World
+Garen
+Patch: 26.21
+Tier
+Win Rate
+50.8%
+Win Rate Change
++1.2%
+Pick rate
+3.7%
+Ban rate
+7.2%
+Matches
+12,410
+Best
+Win Rate
+Common
+Emerald+ Builds
+
+Bruiser
+
+10,865 GAMES
+51%
+
+AD
+
+2,936 GAMES
+52%
+
+Tank
+
+2,431 GAMES
+48%
+Matchup Builds (vs Garen)
+VS
+
+Bruiser
+
+621 GAMES
+52%
+VS
+
+AD
+
+134 GAMES
+50%
+Darius OTP Builds
+EUW
+
+care #ywnn
+
+MASTER 253 LP
+KR
+
+GoRo #2699
+
+MASTER 245 LP
+Pro Builds
+EUW
+
+Adam
+
+VS
+EUW
+
+Adam
+
+VS
+EUW
+
+Adam
+
+VS
+EUW
+
+Adam
+
+VS
+EUW
+
+Adam
+
+VS
+EUW
+
+Adam
+
+VS
+EUW
+
+Adam
+
+VS
+EUW
+
+Adam
+
+VS
+EUW
+
+Adam
+
+VS
+EUW
+
+Adam
+
+VS
+EUW
+
+Adam
+
+VS
+EUW
+
+Adam
+
+VS
+EUW
+
+Adam
+
+VS
+EUW
+
+Adam
+
+VS
+EUW
+
+Adam
+
+VS
+EUW
+
+Adam
+
+VS
+EUW
+
+Ragner
+
+VS
+BR
+
+Tay
+
+VS
+BR
+
+Ayel
+
+VS
+KR
+
+Wayward
+
+VS
+EUW
+
+R4VEN
+
+VS
+EUW
+
+Carlsen
+
+VS
+EUW
+
+R4VEN
+
+VS
+EUW
+
+Comp
+
+VS
+KR
+
+Wayward
+
+VS
+KR
+
+Wayward
+
+VS
+KR
+
+Wayward
+
+VS
+EUW
+
+Carlsen
+
+VS
+EUW
+
+Carlsen
+
+VS
+KR
+
+Wayward
+
+VS
+KR
+
+Wayward
+
+VS
+EUW
+
+Carlsen
+
+VS
+KR
+
+Cube
+
+VS
+KR
+
+Wayward
+
+VS
+KR
+
+Wayward
+
+VS
+EUW
+
+Comp
+
+VS
+EUW
+
+Color
+
+VS
+KR
+
+Wayward
+
+VS
+KR
+
+Wayward
+
+VS
+KR
+
+Wayward
+
+VS
+NA
+
+Doxa
+
+VS
+Patch: 26.21
+Runes
+51%
+7,562 GAMES
+52%
+3,128 GAMES
+Summoner Spells
+51%
+8,000 GAMES
+51%
+2,171 GAMES
+Items
+Starting Items
+Build Order
+Completed Items
+Situational Items
+Ability Max Order
+63%
+
+2,954 GAMES
+
+Q
+E
+W
+1
+W
+2
+Q
+3
+E
+4
+Q
+5
+Q
+6
+R
+7
+Q
+8
+E
+9
+Q
+10
+E
+11
+R
+12
+E
+13
+E
+14
+W
+15
+W
+16
+R
+17
+W
+18
+W
+Damage Breakdown
+77% AD
+22% True
+Item Performance
+Item Builder
+Min pick rate
+ITEM	
+WRI
+	PRE-BUY WR	WIN RATE	PICK RATE
+	PURCHASES
+
+Dead Man's Plate
+	
++0.53
+	
+53.8%
+	
+54.3%
+	
+17.4%
+	
+6,035
+
+
+Youmuu's Ghostblade
+	
++1.64
+	
+50.6%
+	
+52.2%
+	
+17.3%
+	
+5,991
+
+
+Stridebreaker
+	
+-1.13
+	
+51.5%
+	
+50.4%
+	
+12.0%
+	
+4,147
+
+
+Death's Dance
+	
++0.05
+	
+55.8%
+	
+55.9%
+	
+11.5%
+	
+3,975
+
+
+Sterak's Gage
+	
++0.88
+	
+55.0%
+	
+55.9%
+	
+11.1%
+	
+3,857
+
+
+Force of Nature
+	
++0.18
+	
+53.8%
+	
+54.0%
+	
+9.8%
+	
+3,416
+
+
+Spear of Shojin
+	
+-1.54
+	
+55.7%
+	
+54.1%
+	
+5.1%
+	
+1,761
+
+
+Trinity Force
+	
++1.32
+	
+52.5%
+	
+53.8%
+	
+3.7%
+	
+1,277
+
+
+Randuin's Omen
+	
++0.81
+	
+51.9%
+	
+52.7%
+	
+2.7%
+	
+934
+
+
+Black Cleaver
+	
+-0.52
+	
+52.3%
+	
+51.8%
+	
+2.3%
+	
+790
+
+
+Thornmail
+	
+-0.97
+	
+53.0%
+	
+52.0%
+	
+1.1%
+	
+367
+
+
+Kaenic Rookern
+	
++1.62
+	
+54.4%
+	
+56.0%
+	
+0.8%
+	
+275
+
+
+Maw of Malmortius
+	
++2.47
+	
+54.3%
+	
+56.8%
+	
+0.7%
+	
+236
+
+
+Jak'Sho, The Protean
+	
++3.30
+	
+54.3%
+	
+57.6%
+	
+0.6%
+	
+210
+
+
+Spirit Visage
+	
+-0.71
+	
+58.9%
+	
+58.2%
+	
+0.5%
+	
+184
+Darius Top Build Guide
+
+Darius Top is A Tier with a 50.8% win rate, 3.7% pick rate, and 7.2% ban rate across 12,410 Emerald+ matches in the World region on Patch 26.21.
+
+The recommended core item build is Plated Steelcaps → Youmuu's Ghostblade → Dead Man's Plate. Conqueror is the recommended primary rune keystone. Cho'Gath is one of the more difficult matchups.
+
+Review Darius counters, synergies, and abilities for more matchup and champion details.
+
+#
+Key Insights
+If 
+R
+ kills its target, Darius can recast it for 20 seconds. At max rank, the cooldown is reset instead.
+Q
+'s outer ring applies 
+P
+, deals bonus damage, and heals for 13% missing HP per enemy champion hit, up to 3 champions hit.
+W
+ resets Darius's auto attack.
+#
+Strengths
+Best with items that enhance his dueling power, tankiness, and team fight presence.
+Can animation cancel 
+W
+'s with other abilities to speed up his damage output.
+Can survive and outplay ganks/skirmishes with 
+Q
+'s heal.
+Has a strong level 2/3 with 
+W
+ and 
+Q
+. At level 6, he can 100-0 with 
+R
+.
+P
+ and 
+W
+ make Darius one of the strongest level 1 champions.
+#
+Weaknesses
+Can be kited very easily by mobile champions or ones who outrange him.
+Completely immobile, leaving him vulnerable to ganks.
+Needs a lead to stay ahead, and falls off if he doesn't get one.
+Not effective in teamfights without 
+P
+ and takes too long to stack it.
+Similar Champions
+
+A few champions that are similar playstyle to Darius.
+
+Urgot
+Dr. Mundo
+Trundle
+Nasus
+Udyr
+Mordekaiser
+COMPANY
+About Us
+Partnerships
+Careers
+Contact Support
+Privacy Policy
+SOCIALS
+X/Twitter
+Discord
+Facebook
+Instagram
+TikTok
+GAMES
+League of Legends
+Teamfight Tactics
+VALORANT
+Counter-Strike 2
+Deadlock
+Fortnite
+Escape From Tarkov
+Apex Legends
+Marvel Rivals
+Made with Lots of Love and Tilt in Brazil
+English
+Terms of Service
+Privacy Policy
+Remove Ads with Premium

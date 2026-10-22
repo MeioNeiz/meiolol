@@ -10,7 +10,8 @@ docs/design-ideas.md, measured layout, colour by impact, build order. Done: buil
 order 1-3 (9ed5c1f, d0026ff): scale tokens in style.css, tierlist.wrColour steps with
 the thin-data cut and step-4 chip (dropped 20 Oct, Jacob: "they just look weird"; step 4 is now plain vivid text) (champions index, matchups index, vs usual, champion
 win rate tile), matchup win rate, gold and lead table in ink; wrap 1,560, header 48,
-29 px table rows (1080p champions table 17 to 26 rows). Next: build order 4 (opponent
+29 px table rows (1080p champions table 17 to 26 rows; live 22 Oct: 41 px, 19 rows,
+CH8). Next (steps CH4, CH8, CH7 below): build order 4 (opponent
 tiles 76 px, 0 of 41 on a 1080p screen still), 5 (heat cells, pick/ban bars), 6
 (header row, phone filters button); Your games game scale (2.5, 5, 10, 15 points) not
 wired yet. Done 20 Oct (research review, f9's list): colour key under the champions
@@ -184,144 +185,150 @@ champion, "Ahri vs Zed" or a Riot ID).
 
 ## Champion page
 
-Jacob 19 Oct: more like lolalytics, better use of space; lane opponents are too hard to
-see all at once; builds, skill order and runes on the first screen. Then more useful
-than lolalytics: our own edge is the lane curves, early/late lean, "Into which teams"
-(data-and-model.md step 2) and the player's own record when looked up.
-- Done 22 Oct (Jacob: two filter sets, dropdowns "I really don't like"): one filter
-  row in the subbar on every Champions page (html.zig switches): region chip opening a
-  grid, period 30 days | current patch (older patches dropped from the UI, data kept:
-  merging them saves ~7% of a filter file), rank Plat+ | Emerald+ | Diamond+ | Master+;
-  greyed outside champion pages. Opponents select now Common | All on the table; footer
-  follows the filters. Next: phone takes 3 subbar rows (tabs, region and period, rank)
-- Done 20 Oct (night run, champion): lane opponents as one grid of tiles, all on
-  screen (desktop 11 a row, phone 4), sortable by name, win rate, vs usual, gold at 14
-  and games; win rates on the champions table's track and colours; "+2.1 vs usual":
-  the matchup's rate against usual, where usual is the champion's role rate moved by
-  the opponent's on the log-odds scale, pulled toward 0 by k games a role (champion.zig
-  usualK; learned.md 2026-10-20), its 8-in-10 range on hover. Left: under a filter
-  other than the root view, filters.js reuses the root view's opponent strengths (the
-  filter data has only this champion's games); the matchup page's delta (below)
-- Done 20 Oct (night run, builds, 3d2d7e6): builds on the first screen. Each role
-  section's "Build:" link line is now a strip of the most played choice per kind from
-  the patch view's builds file (no per-seat table needed): rune page, shards, spells,
-  start, boots, first 3 items, levels 1-3, skill priority; each with games, share and,
-  from 100 games, "% won" (past-games fact, most played not ranked, no pick wording);
-  greyed under 400 games; says its scope and that the page's filters don't change it;
-  links the full build page. New builds kind skill_start (first three skill-ups), on
-  the build page too. Next: grey or hide the strip when a filter moves away from the
-  patch view's region (filters.js); full 1-18 skill sequence (a packed u32 key, 2 bits
-  a level, would fit the builds Key)
-- Done 20 Oct (night run, mbuilds, 03361b3): rune pages drawn as the in-game page (every
-  rune of both trees, chosen ones lit, shard rows with CommunityDragon icons) in the
-  strip (two grid rows beside the other kinds) and on the build page (4 most played pages
-  as cards). The builds file carries the rune trees (`trees`). Per-matchup builds done
-  (Matchup page below)
-- Done 20 Oct (morning run, builds, J13): pick and win rate per rune. New builds kinds
-  rune (each of a page's six runes) and shard ([row, id]), role-wide only. Build page:
-  every rune players took, laid out as in game, share and win rate under each, most
-  played lit and highest win rate ringed per row (trees with a rune on 2%+); replaces
-  the keystone and shard tables. Highest win rate everywhere (J13 follow-up, Jacob: "use
-  our understanding of data"): the option whose win rate, pulled toward its slot's by k
-  games (k per kind from how much options really differ, method of moments over the
-  whole builds file at write time: File.shrink, builds.zig Spread; docs/learned.md
-  Items) and taken at the low end of its range, is highest, among options with 100+
-  games; a strict 2-SE lead test would mark under 1% of slots, so none. Tagged on rune page cards (that
-  page shown even outside the top 4), table rows, and under each strip cell ("Highest
-  win rate" with its value; for a rune page on the same trees, blue rings on the most
-  played page). Unchosen runes less dim. Wording: "most played", "highest win rate",
-  never "best". Needs the next builds run on the box (old files: tables as before).
-  Per matchup too (Jacob: "game count, wr, pr"): rune and shard in matchup_kinds (runes
-  under 1% of the pair's players left out of the file), "Runes in this matchup" under
-  the matchup strip; game count (950, 9.5k) under each rune on both pages. Next:
-  Jacob's look; watch the matchup builder's pruning floor and file size on the next run
-  Every rune row with a win rate rings one (Jacob 20 Oct: "every row should have the win
-  rate thing"): a row's only rune with 100+ games is its highest; 59 of 147 rows on 10
-  pages had none, 44 of them such rows. Rows with no rune at 100+ games stay unringed
-- Ban impact (J20, Jacob 20 Oct: "pbr" means a PBI-style score, "the most optimal ban in
-  terms of pick rate and win rate"). Done 20 Oct (morning run, bans): core/banimpact.zig,
-  games won above the role's average per 10,000 games the champion was not banned, edge
-  x pick rate when not banned, whole numbers (lolalytics' PBI, (win - average) x 100 x
-  pick / (100 - ban), is this count unlabelled; Jacob wanted a scale a reader can
-  picture; per 1,000 most rows read 0.0 to 0.4), with the win rate pulled
-  toward the role's average by k games (method of moments per role, as usualK; 500 to 750 on
-  the EUW snapshot), so a thin champion's lucky edge can't count in full
-  (research/questions/ban-impact-score.md). An "Influence" column (first "Ban impact",
-  renamed 20 Oct: Jacob wanted a word without "ban") on champions.html and the role pages
-  beside win rate, pick, ban and games, sortable (table.js); title gives
-  its two parts (edge after pulling, pick rate when not banned); below 0 dim; footnote
-  explains it. Wording: "influence", never "best ban" or a win rate gain. Reusable:
-  Prior.of(stats, role) then score(wins, picked, banned, total), for the picker's ban
-  options (B3, Q3: plan/app.md); the app's stats.bin has no ban counts yet (needs a
-  per-champion banned count in statsfile, or champions.json). Next: Jacob's look; per
-  opponent (bans into your pool's hard lanes, B3) and per rank filter (filters.zig has
-  bans by rank)
+Goal (Jacob 19 Oct, 22 Oct): match LoLalytics and the other leaders on content and
+density, then beat them with what only we have (lane curves, vs usual, early/late lean,
+pick-up difficulty, the player's own record). Gap list, measurements and target layout:
+docs/champion-matchup.md (research champion-matchup-gap C1-C18). Darius at 1920x1080
+today: first lane opponent at y 1,203, 72 numbers on the first screen, 4,074 px tall
+with Top and Jungle stacked; LoLalytics shows the whole build in one 330 px panel there.
+If the front end rework (frontend-rework.md Option A) goes ahead, the build panel and
+opponent grid are its first components.
 
-- Undecided, for Jacob (not built; Coach Rogue research 20 Oct,
-  research/questions/coach-draft-advice.md): a blind-safe score per champion (fits any
-  ally and holds up into any enemy comp: low spread across comp leans, with J2's low end
-  of win); build blocks with rune rows split by melee or ranged lane opponent, the first
-  three items as one sequence instead of separate slots, and purchases split by gold
-  lead at purchase (wording stays "most played", never "best")
+### Steps
+
+- CH0 Jacob's choices: (a) one role on screen at a time, as tabs with the role's share
+  (every leader does; recommended) or stacked as now; (b) the build panel's default:
+  most played, with highest win rate as the toggle (recommended; LoLalytics defaults to
+  highest win); (c) a tier letter per champion or not (LoLalytics, U.GG, OP.GG all show
+  one; ours would come from the pulled win rate); (d) trends by patch or by day;
+  (e) left from 20 Oct (Coach Rogue research): a blind-safe score, rune rows split by
+  melee or ranged opponent, purchases split by gold lead
+- CH1 First screen. Hero line with role tabs and share, one stat strip (win rate, rank
+  in role, pick, ban, games, patch change, early lean as a word with the gold), then
+  the build panel from today's kinds; the histogram and both prose paragraphs move
+  below the opponents. Done when Darius at 1920x1080 shows strip and build panel above
+  y 700 and opponent tiles start on the first screen; on the phone the strip and the
+  panel's first row are inside 844 px. Start: src/site/champion.zig, src/site/builds.zig
+  (strip), style.css. Design build order 7. Blocks: CH0 (a)
+- CH2 Builds data. New kinds: items 4, 5 and 6 (nth finished item, any path), the full
+  skill order 1-18 (packed key, 2 bits a level), median purchase minute per item;
+  spells and the new kinds in the matchup builder's kinds too. Done when the box's
+  builds run writes them (file size and run time noted here) and the build page lists
+  them. Start: src/builds.zig (Kind, Builder.vs), src/site/builds.zig. Blocks: a builds
+  run on the box
+- CH3 Build panel, full. Items 4, 5 and 6 as the top 3 options each (games, % won from
+  100 games), the 4x18 skill grid, start, core 3, boots, both rune trees lit, and the
+  most played | highest win rate toggle. One component used by the champion page, the
+  build page's top and the matchup page (MU1). Done when Darius and Kai'Sa show it at
+  1920 and 390 px; pipeline_test checks its sections. Needs CH2
+- CH4 Opponents. Compact tiles (76 px, unit words once in a legend row; design build
+  order 4), all 40 on screen; tabs over the same grid: Lane, vs Jungle, vs Mid, vs Bot,
+  vs Support, Duos, from statsfile enemy and ally pairs (vs usual from both champions'
+  role rates on the log-odds scale, pulled by k as usualK; thin data fades). Done when
+  Darius shows six tabs with games on each tile; no data work needed. Wording "duo",
+  never "best duo". Start: src/site/champion.zig, src/core/statsfile.zig
+- CH5 Over time and by game length. Win rate and pick rate over the last 6 patches with
+  rank in role, and win rate by game length (5 buckets with games), as two small charts
+  side by side; the early lean and patch paragraphs shrink to one line each. Done when
+  Darius shows both and the length chart agrees with the early lean (learned.md).
+  Start: a new tally by duration_s bucket per champion role (src/stats.zig rows carry
+  it), src/site/champion.zig
+- CH6 Build page compact. Tables at content width (numbers beside the name, not 1,000
+  px away), the method paragraph a one-line link, items by slot and skill order tables
+  from CH2. Done when no Darius Top build table is wider than ~900 px at 1920 and the
+  runes start under y 300
+- CH7 Phone. Subbar's three rows into one (a filters button; design build order 6),
+  histogram folded. Done when Darius at 390x844 has its stat strip and build panel on
+  the first screen
+- CH8 Champions index. Rows at 29 px (said done 20 Oct, but live rows are 41 px, 19 on a
+  1080p screen), patch change under the win rate (design build order 5), and
+  ui-audit.md's index items (sort key, Min games knobs folded)
+- CH9 Clarity: docs/ui-audit.md "Champion page" items (colour against copy, one win
+  rate legend, the sort key on opponents and "also play", one number format)
+
+### Status
+
+- Filters: one row in the subbar on every Champions page (region grid, 30 days | patch,
+  Plat+ to Master+), greyed where a page lacks them; footer follows them (22 Oct)
+- Opponent grid with vs usual (champion.zig usualK; learned.md 2026-10-20) and the
+  builds strip from the patch view's builds file (greyed under 400 games; the page's
+  filters don't change it); under a filter other than the root view, filters.js reuses
+  the root view's opponent strengths
+- Build page: rune pages drawn as in game, per-rune pick and win rate, "highest win
+  rate" marks (pulled by k per kind, File.shrink, builds.zig Spread; learned.md Items),
+  never "best"
+- Influence column on champions and role tables (core/banimpact.zig;
+  research/questions/ban-impact-score.md)
+
+### Later
+
+- Influence per opponent (bans into your pool's hard lanes, B3) and per rank filter
+- Grey the builds strip when a filter leaves the patch view's region (filters.js)
+- Objectives secured and won, end-of-game stats ranked in the role (LoLalytics only)
+- Build variants (Kai'Sa AP, U.GG's tabs) as clusters of item paths
 
 ## Matchup page
 
-Jacob 19 Oct: a stat screen like lolalytics' matchup view, laid out as the champion
-page but matchup focused (win rate, games, leads at set minutes, builds and runes that
-do well here); the curves take far too much space (one compact chart, the rest folded);
-the champion pool block much more useful. More specifics on why a champion does well
-here (where the lead comes from: level 2/6 spikes, kills vs cs, first item timing, the
-leans and kit kinds that apply), not only that it does; the same normalised delta as
-the champion page.
-Done 20 Oct: first screen is tiles (win rate, vs usual as the champion page's, games,
-gold at 14, share ahead), a Gold/XP/CS table at 5/10/14/20 min and "Where the lead comes
-from" facts (gold at 14 split into CS at ~20 gold each and the rest, when half the gap
-is there, early kills, level 6 and first item timing, win share ahead/behind) beside one
-chart with Gold/Experience/CS tabs. Next: level 2 timing (curves format: a header field
-and a box rebuild of the curves), builds and runes that do well here (the patch view's
-builds file), the leans and kit kinds that apply, the champion pool block, then maybe
-fold the Lane and game table, which now repeats the facts.
-Jacob 20 Oct: still "ridiculously long and unwieldy" (2,570 px desktop, 4,490 phone on
-Kai'Sa vs Jinx; gold at 14 shown five times). A first reshape (a5d03b7) folded the look
-back under "More detail"; Jacob: "pressing buttons to see more info is awful", the fold
-"so many words, no balance, boring". Now (20 Oct) a dashboard, nothing folded, numbers
-and marks over sentences: the headline (win rate here against x's usual, then the lane
-line; descriptive, production-key.md product rules), five tiles, then cards: gold curve
-beside "Head to head" (mirrored bars, x blue #3f97ee left, y red #f0596b right, passing
-the dataviz palette checks on --panel: wins, ahead at 14, wins when ahead, kills by phase,
-level 6 and first item medians); XP and CS curves, win rate by gold at 10 min (matchup
-over all lanes in the role, hollow under 200 games; 15 min in the dots' titles), by rank
-and mastery (the mastery toggle became two rows); the build and every rune, with runes
-whose pick share is 10+ points from x's usual (builds.runeShifts) as Taken more / less.
-The minute table went into the curves' hover titles (lanechart tips, one column a
-minute); lanechart takes a size so the small curves keep readable text. Win rate does
-not enter runeShifts: shrunk by k ~6,245, no rune in any of 2,002 EUW 16.20 matchups
-moves 2 points. One game count on screen (the tile; the curve caption says its own count
-is games with timelines), thousands separators (QA, meiolol-33). Checked at 1440, 1280
-and 390 px. Next: Jacob's look.
-Per-matchup builds (Jacob 20 Oct: "Kaisa Jinx, I still can't see runes and items of the
-specific matchup"). Done 20 Oct (night run, vsbuilds, dd987a7, 1ea4ce3): builds counted
-per lane opponent (Builder.vs: own key budget and pruning floor; runes, shards, start,
-boots, first 2 and 3 items, skills), File.matchups for pairs with 300+ games (EUW 1,902
-pairs, file 5.6 MB; every region 7,047, 12.5 MB), and a "Most played build in this
-matchup" strip on the matchup page under the first screen ("same as usual" on cells
-that match the role-wide most played; live on Kai'Sa vs Jinx, 3,341 games). Matchup key
-budget 1 << 22 (floor 1, 1.1 GB, 6.5 min on the box; 1 << 20 let the floor reach 12).
-Done 20 Oct (morning, builds): when every cell is "same as usual" the strip folds to
-one line saying so (details, cells inside); 390 px checked. Next: a link to the
-matchup build from the champion page's opponents grid;
-maybe its own file if the site build's parse time grows (pages are static, so no page
-pays for its size).
-Already planned: pool first in the picker (B2), then bans from the pool's hard lanes
-(B3, Q3); public form waits on J2 (decisions.md). Patch day (B4, z 2.58).
-Matchup index: Jacob 20 Oct "unusable" (10k-item two-column bullet list). Done 20 Oct
-(5682adf): role tabs (all roles while searching), one sortable table per role: both
-champions with icons linking to each side's page, win rate track, vs usual, gold at 14,
-games; each pair from the side that won more; rows only from the lowest Min games floor
-keeping 5,000 or fewer (50 now: 4.4 MB, 315 KB gzip). Next: J11 (gold under 200 at 14
-reads even, now coloured by sign); leaner rows (short icon paths, or rows drawn by JS
-from JSON) to list thinner matchups; a search for one champion could flip its pairs to
-its side; phone hides icons (names only) to keep Games on screen.
+Goal (Jacob 19-20 Oct, 22 Oct): a stat screen like LoLalytics' matchup view, laid out
+as the champion page, without folds. No leader has a real matchup page: theirs is the
+build page filtered to an opponent with no lane stats (docs/champion-matchup.md), so our
+curves and head to head are ahead. Gaps: the pair's build in full, a visible way to
+switch opponent, a first screen spent on one big chart of a nearly flat line.
+
+### Steps
+
+- MU1 The pair's build in full: CH3's panel refiltered to the pair (spells, items 4 to
+  6, skill order from CH2's matchup kinds), cells matching the role-wide most played
+  marked small ("as usual") instead of whole cards; options under 100 games hidden,
+  under 400 grey, never a win rate on fewer than 100 (LoLalytics and OP.GG print 100%
+  on 2 to 4 games). Done when Kai'Sa vs Jinx shows spells and items 4 to 6 for the
+  pair. Needs CH2, CH3. Watch the matchup builder (key budget 1 << 22: 1.1 GB, 6.5 min
+  on the box) and the file (12.5 MB every region)
+- MU2 Opponent strip under the header: x's lane opponents sorted by games, icon and x's
+  win rate, the current one lit, a search; replaces "Change opponent" (the swap stays).
+  Done when another opponent is one click from the first screen; the strip scrolls on
+  the phone. Start: src/site/matchup.zig
+- MU3 First screen. Header one line, the five tiles as one strip, then the build panel,
+  then gold, XP and CS as three ~240 px charts beside head to head; the gold axis fits
+  the average and middle half to 20 minutes, not ±3,000. Done when at 1920x1080 the
+  strip, the panel and the charts' tops are on the first screen; phone gold chart at
+  container width (ui-audit 7). Design build order 8
+- MU4 Bot lane supports: on bot matchups x's and y's supports (ally pairs), each with
+  games and vs usual; support matchups show their ADCs. Nobody else shows this. Done
+  when Kai'Sa vs Jinx lists both. Data exists (statsfile ally)
+- MU5 Win rate by game length for the pair (300+ games, 3 buckets) beside win rate by
+  gold at 10. Shares CH5's tally
+- MU6 Level 2 time and first blood for the pair in head to head (curves format: header
+  fields and a box rebuild of the curves)
+- MU7 Clarity: docs/ui-audit.md "Matchup page" items (one game count on screen, one
+  "usual" with the champion page, gold line not in accent violet); runes section
+  without the empty right 40%
+- MU8 Matchups index: J11 (under 200 gold at 14 reads even, now coloured by sign);
+  leaner rows (short icon paths, or rows from JSON) to list thinner matchups; a search
+  for one champion flips its pairs to its side; phone drops icons to keep Games
+
+### Status
+
+- Dashboard since 20 Oct: headline, five tiles, gold curve beside head to head
+  (mirrored bars, x #3f97ee, y #f0596b), XP and CS curves, win rate by gold at 10, by
+  rank and mastery, the build, every rune with Taken more / less (builds.runeShifts; win
+  rate left out: shrunk by k ~6,245, no rune moves 2 points)
+- Per-matchup builds: Builder.vs counts runes, shards, start, boots, core 2 and 3,
+  skills per lane opponent; File.matchups for pairs with 300+ games (EUW 1,902 pairs,
+  5.6 MB); a strip folds to one line when every cell is as usual
+- Matchups index: role tabs, one sortable table per role, rows from the lowest Min
+  games floor keeping 5,000 or fewer (50 now: 4.4 MB, 315 KB gzip)
+
+### Later
+
+- Two or three generated lines on how the lane goes, from the facts we have (where the
+  lead comes from, item and level 6 timing), always with numbers; no leader has free
+  matchup tips (Mobalytics charges)
+- The leans and kit kinds that apply (data-and-model.md step 2); the champion pool block
+- A link from the champion page's opponent tiles to the pair's build; its own builds
+  file if the site build's parse time grows
+- Pool first in the picker (B2), bans from the pool's hard lanes (B3, Q3); public form
+  waits on J2 (decisions.md); patch day (B4, z 2.58)
 
 ## Pool page
 

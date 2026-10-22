@@ -1,0 +1,865 @@
+# Darius Counters 26.21 – METAsrc LoL
+
+<https://www.metasrc.com/lol/champions/darius/counters>
+
+METAsrc
+Legacy Theme
+Report a Bug
+Ranked
+26.21
+Home
+Champions
+Tier Lists
+Comps
+Databases
+Counter Picker
+Darius Counters
+ 
+League of Legends
+ 
+Patch 26.21
+ 
+Top
+P
+Q
+W
+E
+R
+
+Darius is ranked S+ Tier and has a 50.20% win rate in LoL Patch 26.21. We've analyzed 121,445 Darius games to compile the highest win rate League of Legends Darius counters guide with counter picks, matchup stats, and winning options.
+
+Ranked
+ARAM: Mayhem
+Arena
+ARAM
+More
+Patch 26.21
+All Regions
+All Ranks
+Summary Text
+Build Style:
+Recommended
+Select a counter build
+Select a duo build
+Tier:
+S+
+Win %:
+50.20%
+Pick %:
+8.61%
+Role %:
+81.44%
+Ban %:
+14.15%
+KDA:
+1.77
+Games:
+121,445
+Score:
+65.23
+Advertisement
+Build
+Runes
+Info
+Counters
+Synergies
+Stats
+Darius Matchups
+Top
+Jungle
+Mid
+ADC
+Support
+Strong Against
+Strong Against
+
+Darius counters champions such as K'Sante, Yasuo, and Fiora.
+
+Win %
+Games
+56%
+1.6K
+54%
+2.6K
+53%
+2K
+53%
+1.5K
+Win %
+Games
+52%
+1.9K
+52%
+5.9K
+52%
+2.1K
+52%
+1.7K
+Even Against
+Even Against
+
+These champions are evenly matched against Darius.
+
+Win %
+Games
+51%
+5.8K
+51%
+3.7K
+51%
+5.9K
+51%
+2.4K
+Win %
+Games
+50%
+2.4K
+50%
+3.2K
+50%
+2.9K
+49%
+3.7K
+Weak Against
+Weak Against
+
+Darius struggles against champions like Teemo, Yorick, and Sett.
+
+Win %
+Games
+46%
+4.6K
+46%
+2.2K
+48%
+7.5K
+48%
+3.6K
+Win %
+Games
+48%
+2.1K
+48%
+3.5K
+49%
+2.7K
+49%
+1.7K
+Champion
+	
+Win %
+	
+Games
+
+
+Sett
+	
+47.54%
+-2.66%
+	
+7471
+
+
+Garen
+	
+50.86%
++0.65%
+	
+5942
+
+
+Yone
+	
+52.29%
++2.08%
+	
+5854
+
+
+Mordekaiser
+	
+50.99%
++0.78%
+	
+5817
+
+
+Teemo
+	
+45.93%
+-4.28%
+	
+4627
+
+
+Aatrox
+	
+50.90%
++0.70%
+	
+3709
+
+
+Jax
+	
+49.19%
+-1.02%
+	
+3690
+
+
+Volibear
+	
+47.77%
+-2.44%
+	
+3561
+
+
+Malphite
+	
+48.40%
+-1.81%
+	
+3465
+
+
+Nasus
+	
+49.94%
+-0.27%
+	
+3218
+
+
+Renekton
+	
+49.69%
+-0.52%
+	
+2890
+
+
+Dr. Mundo
+	
+48.53%
+-1.67%
+	
+2662
+
+
+Yasuo
+	
+54.38%
++4.18%
+	
+2624
+
+
+Illaoi
+	
+50.12%
+-0.08%
+	
+2424
+
+
+Pantheon
+	
+50.67%
++0.47%
+	
+2376
+
+
+Tryndamere
+	
+50.75%
++0.54%
+	
+2276
+
+
+Gangplank
+	
+50.59%
++0.39%
+	
+2204
+
+
+Yorick
+	
+46.04%
+-4.16%
+	
+2159
+
+
+Cho'Gath
+	
+48.19%
+-2.01%
+	
+2131
+
+
+Irelia
+	
+51.76%
++1.56%
+	
+2125
+
+
+Fiora
+	
+53.03%
++2.83%
+	
+2012
+
+
+Sion
+	
+52.43%
++2.23%
+	
+1913
+
+
+Jayce
+	
+50.25%
++0.04%
+	
+1825
+
+
+Akali
+	
+51.53%
++1.32%
+	
+1733
+
+
+Tahm Kench
+	
+48.98%
+-1.22%
+	
+1719
+
+
+Shen
+	
+49.13%
+-1.07%
+	
+1667
+
+
+K'Sante
+	
+56.06%
++5.86%
+	
+1600
+
+
+Ornn
+	
+49.50%
+-0.71%
+	
+1598
+
+
+Heimerdinger
+	
+47.53%
+-2.67%
+	
+1521
+
+
+Zaahen
+	
+50.36%
++0.16%
+	
+1517
+
+
+Olaf
+	
+52.62%
++2.41%
+	
+1509
+
+
+Gnar
+	
+51.68%
++1.48%
+	
+1455
+
+
+Urgot
+	
+46.13%
+-4.08%
+	
+1407
+
+
+Ambessa
+	
+54.27%
++4.07%
+	
+1334
+
+
+Camille
+	
+53.10%
++2.89%
+	
+1324
+
+
+Kayle
+	
+46.65%
+-3.55%
+	
+1299
+
+
+Trundle
+	
+49.57%
+-0.63%
+	
+1281
+
+
+Gwen
+	
+50.04%
+-0.16%
+	
+1247
+
+
+Riven
+	
+50.16%
+-0.04%
+	
+1230
+
+
+Kennen
+	
+51.28%
++1.08%
+	
+1172
+
+
+Vayne
+	
+48.94%
+-1.26%
+	
+1132
+
+
+Gragas
+	
+51.76%
++1.56%
+	
+1022
+
+
+Singed
+	
+49.06%
+-1.15%
+	
+1007
+
+
+Warwick
+	
+48.56%
+-1.64%
+	
+801
+
+
+Kled
+	
+50.21%
++0.00%
+	
+727
+
+
+Rumble
+	
+51.22%
++1.01%
+	
+697
+
+
+Wukong
+	
+45.44%
+-4.76%
+	
+658
+
+
+Quinn
+	
+49.76%
+-0.44%
+	
+627
+
+
+Darius
+	
+50.00%
+-0.20%
+	
+620
+
+
+Varus
+	
+51.00%
++0.80%
+	
+500
+
+
+Vladimir
+	
+45.84%
+-4.36%
+	
+421
+
+
+Poppy
+	
+53.31%
++3.11%
+	
+287
+
+
+Udyr
+	
+59.23%
++9.02%
+	
+233
+
+
+Aurora
+	
+51.33%
++1.12%
+	
+226
+
+
+Maokai
+	
+44.34%
+-5.86%
+	
+212
+
+
+Anivia
+	
+51.46%
++1.25%
+	
+206
+
+
+Kalista
+	
+54.41%
++4.21%
+	
+204
+
+
+Ryze
+	
+52.58%
++2.37%
+	
+194
+
+
+Corki
+	
+52.57%
++2.37%
+	
+175
+
+
+Fiddlesticks
+	
+52.53%
++2.33%
+	
+158
+
+
+Cassiopeia
+	
+50.68%
++0.47%
+	
+148
+
+
+Zac
+	
+54.55%
++4.34%
+	
+143
+Overall
+Performance
+Combat
+Defense
+Utility
+Objectives
+Income
+Lane Control
+Darius
+Top
+vs
+Sett
+Top
+47.5%
+-2.7%
+Win Rate
+0.0%
+100.0%
+52.5%
++0.7%
+169.8
+-5.8
+CS
+147.5
+220.0
+160.2
+-3.6
+1.66
+-0.11
+KDA
+1.41
+2.68
+1.71
++0.01
+12.0K
+-48.8
+Gold
+10.3K
+13.5K
+12.0K
+-33.8
+93.5
+-4.8
+CS at 15
+81.6
+117.0
+88.8
+-2.5
+5905
+-54
+Gold at 15
+5009
+6478
+5946
+-6
+3:39
++0:09
+First Level 2
+2:18
+4:25
+3:37
+-0:09
+16.3%
++0.6%
+First Blood
+0.0%
+100.0%
+26.9%
++6.3%
+Matchup Summary
+
+In the matchup of Darius Top versus Sett Top Lane, we have statistically analyzed 7471 matches to determine which champion has the winning edge in Ranked. Their respective Win Rates against each other are 47.54% Darius and 52.46% Sett, with Sett having an advantage of 4.91%.
+
+Darius outperforms Sett on CS (169.76) and CS at 15 (93.49). Sett outperforms Darius on KDA (1.71), Gold at 15 (5946), First Level 2 (3:37), and First Blood (26.9%).
+
+Latest News
+League of Legends Patch 26.21 Preview
+Meta Impact
+OCT 21, 2026
+·
+METAsrc Maxwell
+PATCH 26.21
+META ANALYSIS
+Patch 26.21 brings a massive balance pass for Summoner's Rift outliers, Mayhem headliners, and returning Classic champions.
+AP Sion Mid Guide
+League Classic Build, Runes and Masteries
+JUL 22, 2026
+·
+METAsrc Hamilton
+LEAGUE CLASSIC
+MID
+A data-backed League Classic Sion mid guide, from prepared AP picks and roaming to the separate off-role Cannibalism path.
+League of Legends Patch 26.14 Preview
+Meta Impact
+JUL 14, 2026
+·
+METAsrc Maxwell
+PATCH 26.14
+META PREVIEW
+SUMMONER'S RIFT
+A Patch 26.14 meta preview for League of Legends, focused on the champion, item, ARAM: Mayhem, and Arena changes most likely to move the meta.
+VIEW ALL
+METAsrc Network
+League of Legends
+Teamfight Tactics
+METAsrc News
+LoL Modes
+Ranked
+ARAM: Mayhem
+Arena
+ARAM
+League Classic
+LoL Ranked Content
+Home
+Champions
+Tier Lists
+Comps
+Counter Picker
+
+Copyright 2026 METASRC LLC
+
+www.metasrc.com isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.
+
+Made with ♥ in Boulder, CO
+
+Terms and Conditions
+Privacy Policy
+ 
+
+Welcome to metasrc
+
+metasrc asks for your consent to use your personal data to:
+Personalised advertising and content, advertising and content measurement, audience research and services development
+Store and/or access information on a device
+Learn more
+
+Your personal data will be processed and information from your device (cookies, unique identifiers, and other device data) may be stored by, accessed by and shared with 628 partners, or used specifically by this site. We and our partners may use precise geolocation data. List of partners.
+
+Some vendors may process your personal data on the basis of legitimate interest, which you can object to by managing your options below. Look for a link at the bottom of this page or in the site menu to manage or withdraw consent in privacy and cookie settings.
+
+Consent
+
+Do not consent
+
+Manage options
+
+# After clicking Garen in the list (same page, 22 Oct 2026)
+## tab Overall
+Lane Control
+Darius
+Top
+vs
+Garen
+Top
+50.9%
++0.7%
+Win Rate
+0.0%
+100.0%
+49.1%
+-2.2%
+184.8
++9.3
+CS
+147.5
+220.0
+183.3
+-9.2
+1.82
++0.05
+KDA
+1.41
+2.68
+1.67
+-0.18
+12.4K
++300.7
+Gold
+10.3K
+13.5K
+12.2K
+-413.9
+104.5
++6.2
+CS at 15
+81.6
+117.0
+94.1
+-7.0
+6062
++103
+Gold at 15
+5009
+6478
+5699
+-208
+3:21
+-0:09
+First Level 2
+2:18
+4:25
+3:27
+-0:06
+16.9%
++1.2%
+First Blood
+0.0%
+100.0%
+14.2%
++2.4%
+Matchup Summary
+
+In the matchup of Darius Top versus Garen Top Lane, we have statistically analyzed 5942 matches to determine which champion has the winning edge in Ranked. Their respective Win Rates against each other are 50.86% Darius and 49.14% Garen, with Darius having an advantage of 1.72%.
+
+Darius outperforms Garen on CS (184.80), KDA (1.82), Gold (12.4K), CS at 15 (104.48), Gold at 15 (6062), First Level 2 (3:21), and First Blood (16.9%). Garen does not outperform Darius on any stats.
+
+

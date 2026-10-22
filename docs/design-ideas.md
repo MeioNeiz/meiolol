@@ -142,6 +142,9 @@ single games; raw, the team's state not held unless stated.
 
 ## Per page (ranked; source in brackets, slugs in research/sources/)
 
+Champion and matchup pages against LoLalytics and the others (content, first screen,
+target layout, 22 Oct): docs/champion-matchup.md; steps CH and MU in docs/plan/site.md.
+
 Champions index
 1. Win rate as a heat cell (fills above), vivid colour at 5.5+ points; sorted column band
    (finviz-map, ugg-darius-matchups)

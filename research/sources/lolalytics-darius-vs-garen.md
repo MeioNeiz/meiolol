@@ -3,9 +3,9 @@ title: 'LoLalytics: Darius vs Garen build (matchup page)'
 url: https://lolalytics.com/lol/darius/vs/garen/build/
 kind: docs
 commit: 
-for: [league-tools-landscape]
-looked: 2026-10-11
-depth: docs (whole rendered page, text only)
+for: [league-tools-landscape, champion-matchup-gap]
+looked: 2026-10-22
+depth: docs (whole rendered page; 22 Oct: screenshots at 1920x1080 and 390x844, rendered text with positions)
 relevance: high
 grade: B/fair
 description: A LoLalytics matchup page (patch 16.20, Emerald+): what a leading stats site shows for one lane matchup, and which numbers need timeline data
@@ -42,11 +42,56 @@ timeline-derived (gold at 15, lane diffs, power curves)?
 - [market] Cross-links sister sites (pros.lol, XDX.gg) and Mobalytics as "friends". ^f8
   > Quality alternative Darius build stats and more from our friends at Mobalytics.
 
+### 22 Oct: layout and how it differs from the champion page (for champion-matchup-gap)
+
+Raw: lolalytics-darius-vs-garen.2026-10-22.md (text), .dom-1920x1080.txt and
+.dom-390x844.txt (rendered text with page y, x, font size). Screenshots in the session
+scratchpad shots/lolalytics/darius-vs-garen-*.png.
+
+- [ux/layout] Opponent choice: the sticky filter bar gains a VS block after the patch tile:
+  a swap arrow, the opponent's portrait with its own six role tiles (Garen top 91.2%) and an
+  X to drop back to the champion page. Lane and opponent lane are URL parameters (lane,
+  vslane). Getting here is by clicking a counter card or a strip portrait; no search box
+  for the opponent seen. (seen in screenshot darius-vs-garen-1920-fold.png) ^f9
+  > y=89 x=950 9px: 91.2%
+  > y=66 x=1153 12px: X
+- [ux/features] Hero (y 140 to 440): both portraits with a swap arrow, the stock photo, the
+  prose with win rate, delta vs the average opponent and normalised delta, and only a
+  two-figure box: Win Rate and Games. The two deltas exist only in the prose. ^f10
+  > Darius wins against Garen 56.03% of the time which is 8.1% different against Garen than the average opponent
+  > y=348 x=1011 16px: 780
+- [ux/features] Same build block as the champion page, filtered to the matchup, fully on the
+  first screen (y 525 to 855), then the same item, skill and rune tables below; summoner
+  spell strip starts at y 975. ^f11
+  > y=659 x=526 14px: Summoner Spells
+- [ux/uncertainty] On 780 matchup games the Highest Win Build picks thin options and shows
+  them like solid ones: core first item 73.17% on 41 games, an Item 4 choice at 100% on 4
+  games, in the same green as 66.04% on 106. ^f12
+  > y=809 x=730 12px: 73.17
+  > y=825 x=964 12px: 4
+- [ux/uncertainty] Winning Items, sorted by win rate, leads with five items at 100.00% on 2
+  games each. ^f13
+  > Winning Items Win Rate Pick Rate Games Time 100.00 0.26 2 33 100.00 0.26 2 22
+- [ux/features] Dropped from the champion page: the counters and synergy strips, the
+  trend legend and four daily charts, and Game Length Distribution. Kept and matchup
+  specific: objectives Secure/Yield (Blue Side 37.56% of games here vs 48.37% on the
+  champion page) and Win Rate vs Game Length (y 2156). Kept but champion-wide: Best on
+  Darius, the leaderboard, the player base quadrant and Darius Stats (same values as the
+  champion page within rounding). Page height 5,240 px vs 5,682. ^f14
+  > | Blue Side | 37.56 | 60.41 |
+  > y=2156 x=1281 16px: Win Rate vs Game Length
+- [ux/features] Checked, not there (22 Oct, full render): no lane stats of any kind (gold,
+  XP or CS difference at any minute, first blood share in lane, solo kills), no matchup
+  tips or difficulty, no power-spike or level comparison, no opponent's build. ^f15
+- [ux/density] First screen at 1920x1080: about 68 numeric figures (count of number-only
+  text nodes above y 1080); phone 390x844 about 25, page 10,846 px tall. ^f16
+  > garen/build/ at viewport 1920x1080, 2026-10-22 ... height 5240
+
 ## Read
 
 - Whole rendered page text
+- 22 Oct: screenshots (1920x1080, 390x844, whole page) and rendered-text dumps
 
 ## Not read
 
-- Charts if any (win rate by game length) not captured in text
-- lolalytics.com/lol/darius/counters/ (counter list)
+- Counter list: noted separately, [[lolalytics-darius-counters]]

@@ -3,9 +3,9 @@ title: 'DeepLoL: Darius top build (patch 16.20)'
 url: https://www.deeplol.gg/champions/darius/build/top
 kind: docs
 commit: 
-for: [dense-stat-layout]
-looked: 2026-10-20
-depth: docs (rendered text, fold and full-page screenshots)
+for: [dense-stat-layout, champion-matchup-gap]
+looked: 2026-10-22
+depth: docs (rendered text, fold and full-page screenshots; 22 Oct re-read of the text, patch 16.21)
 relevance: medium
 grade: C/fair
 description: DeepLoL champion build page: builds as tabs with games and win rate, skill order grid, then three side-by-side tables (weak against, strong against, good synergy) sorted by win rate with games beside
@@ -30,6 +30,13 @@ Why: a smaller OP.GG-style site; how its matchup tables handle thin data.
 - [ux/uncertainty] Synergy column adds a signed difference, again led by the smallest samples (Skarner, 42 games, +16.8%). ^f4
   > Skarner 42 66.7% +16.8%
 - [ux/colour] Win rates two-colour only: red below 50%, blue above, no neutral band and no step for size (seen in screenshot deeplol-darius-full.png). ^f5
+- [ux/layout] No counter or matchup page: /champions/darius/counter/top lands on the build
+  page, whose Weak against, Strong against and Good synergy tables are the only matchup
+  content; no lane stats, tips or per-opponent page (plain-text capture 22 Oct,
+  patch 16.21, not snapshotted). ^f6
+- [ux/uncertainty] Failure: the default filter (EUW, Emerald, current patch) leaves 697
+  Darius top games, so whole tables run on 4 to 41 games per opponent (Garen 12 games at
+  75.0%, Lissandra 5 at 20.0%) (plain-text capture 22 Oct, not snapshotted). ^f7
 
 ## Read
 

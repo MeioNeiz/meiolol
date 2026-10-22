@@ -1,0 +1,1899 @@
+Rendered text of https://lolalytics.com/lol/darius/vs/garen/build/ at viewport 390x844, 2026-10-22: one text node per line as y=<page px from top> x=<px> <font size>: <text>.  height 10846
+y=48 x=392 24px: vs
+y=53 x=920 11px: ?
+y=56 x=335 13px: Patch
+y=59 x=735 12px: Average Emerald+ Win Rate:
+y=59 x=882 12px: 51.28
+y=59 x=908 12px: %
+y=66 x=683 12px: X
+y=69 x=920 11px: ?
+y=72 x=333 16px: 16.21
+y=75 x=704 12px: Emerald+ Champions Analysed:
+y=75 x=869 12px: 2,996,011
+y=89 x=18 9px: top
+y=89 x=58 9px: 82.8%
+y=89 x=98 9px: 15.3%
+y=89 x=140 9px: 1.0%
+y=89 x=180 9px: 0.2%
+y=89 x=220 9px: 0.6%
+y=89 x=261 8.5px: EMERALD+
+y=89 x=440 9px: top
+y=89 x=480 9px: 91.2%
+y=89 x=522 9px: 0.7%
+y=89 x=562 9px: 7.7%
+y=89 x=602 9px: 0.2%
+y=89 x=642 9px: 0.2%
+y=113 x=12 12px: LoL
+y=113 x=34 12px: Tier List
+y=113 x=85 12px: Darius
+y=113 x=121 12px: Build
+y=113 x=157 12px: Darius
+y=113 x=190 12px: vs
+y=113 x=207 12px: Garen
+y=113 x=237 12px: Build
+y=177 x=179 24px: vs
+y=274 x=86 24px: Darius vs Garen Build
+y=311 x=51 18px: Darius top vs Garen top Build & Runes
+y=342 x=12 14px: Darius
+y=342 x=12 14px: 56.03% of the time which is 8.1% different against
+y=342 x=51 14px: wins against
+y=342 x=139 14px: Garen
+y=363 x=12 14px: than the average opponent. After normalising both champions win rates
+y=363 x=121 14px: Garen
+y=384 x=256 14px: Darius
+y=384 x=295 14px: wins against
+y=405 x=12 14px: Garen
+y=405 x=12 14px: 5.68% different than would be expected. Below is a detailed breakdown of the
+y=426 x=167 14px: Darius
+y=426 x=206 14px: build & runes against
+y=426 x=337 14px: Garen
+y=426 x=372 14px: .
+y=468 x=136 16px: 56.03
+y=468 x=171 16px: %
+y=468 x=225 16px: 780
+y=491 x=135 12px: Win Rate
+y=491 x=219 12px: Games
+y=529 x=4 16px: Darius
+y=529 x=48 16px: vs
+y=529 x=71 16px: Garen
+y=529 x=111 16px: Build
+y=529 x=166 16px: Darius
+y=529 x=210 16px: Leaderboard
+y=529 x=316 16px: Darius
+y=529 x=360 16px: Counters
+y=529 x=440 16px: Darius
+y=529 x=485 16px: ProBuilds
+y=589 x=55 12px: Highest Win Build
+y=589 x=240 12px: Most Common Build
+y=628 x=27 14px: Primary Runes
+y=628 x=174 14px: Secondary
+y=628 x=300 14px: Stat Mods
+y=740 x=243 11px: ?
+y=750 x=158 12px: 59.07
+y=750 x=184 12px: % Win Rate
+y=767 x=170 12px: 540 Games
+y=787 x=225 11px: ?
+y=791 x=157 14px: Skill Order
+y=821 x=75 10px: 1
+y=821 x=132 10px: 4
+y=821 x=151 10px: 5
+y=821 x=189 10px: 7
+y=821 x=227 10px: 9
+y=827 x=54 12px: Q
+y=851 x=94 10px: 2
+y=851 x=320 10px: 14
+y=851 x=339 10px: 15
+y=857 x=53 12px: W
+y=881 x=113 10px: 3
+y=881 x=208 10px: 8
+y=881 x=244 10px: 10
+y=881 x=282 10px: 12
+y=881 x=301 10px: 13
+y=887 x=54 12px: E
+y=911 x=170 10px: 6
+y=911 x=263 10px: 11
+y=917 x=54 12px: R
+y=937 x=129 12px: 66.25
+y=937 x=155 12px: % Win Rate
+y=937 x=212 12px: 80 Games
+y=957 x=135 11px: ?
+y=961 x=57 14px: Skill Priority
+y=961 x=237 14px: Summoner Spells
+y=1001 x=38 14px: Q
+y=1001 x=104 14px: E
+y=1001 x=168 14px: W
+y=1023 x=34 12px: 56.9
+y=1023 x=54 12px: % Win Rate
+y=1023 x=111 12px: 703 Games
+y=1023 x=231 12px: 60
+y=1023 x=243 12px: % Win Rate
+y=1023 x=299 12px: 30 Games
+y=1055 x=154 14px: Starting Items
+y=1117 x=126 12px: 56.71
+y=1117 x=152 12px: % Win Rate
+y=1117 x=209 12px: 686 Games
+y=1141 x=70 14px: Core Build
+y=1141 x=272 14px: Item 4
+y=1172 x=283 12px: OR
+y=1199 x=18 12px: 73.17
+y=1199 x=44 12px: %
+y=1199 x=84 12px: 56.25
+y=1199 x=110 12px: %
+y=1199 x=150 12px: 61.67
+y=1199 x=176 12px: %
+y=1199 x=246 12px: 100
+y=1199 x=263 12px: %
+y=1199 x=306 12px: 66.04
+y=1199 x=332 12px: %
+y=1215 x=28 12px: 41
+y=1215 x=94 12px: 96
+y=1215 x=157 12px: 180
+y=1215 x=255 12px: 4
+y=1215 x=314 12px: 106
+y=1239 x=82 14px: Item 5
+y=1239 x=272 14px: Item 6
+y=1270 x=60 12px: OR
+y=1270 x=125 12px: OR
+y=1270 x=250 12px: OR
+y=1270 x=315 12px: OR
+y=1297 x=19 12px: 84.21
+y=1297 x=45 12px: %
+y=1297 x=84 12px: 65.57
+y=1297 x=110 12px: %
+y=1297 x=149 12px: 64.81
+y=1297 x=174 12px: %
+y=1297 x=209 12px: 64.71
+y=1297 x=235 12px: %
+y=1297 x=274 12px: 64.29
+y=1297 x=300 12px: %
+y=1297 x=341 12px: 62.5
+y=1297 x=362 12px: %
+y=1313 x=30 12px: 19
+y=1313 x=94 12px: 61
+y=1313 x=159 12px: 54
+y=1313 x=220 12px: 17
+y=1313 x=284 12px: 14
+y=1313 x=352 12px: 8
+y=1390 x=16 12px: Summoner
+y=1406 x=29 12px: Spells
+y=1459 x=22 12px: Win Rate
+y=1460 x=96 12px: 55.47
+y=1460 x=150 12px: 57.21
+y=1460 x=204 12px: 60.00
+y=1460 x=261 12px: 0.00
+y=1460 x=309 12px: 100.00
+y=1475 x=21 12px: Pick Rate
+y=1476 x=99 12px: 69.1
+y=1476 x=150 12px: 26.67
+y=1476 x=207 12px: 3.85
+y=1476 x=261 12px: 0.26
+y=1476 x=315 12px: 0.13
+y=1491 x=32 9px: Games
+y=1492 x=102 9px: 539
+y=1492 x=156 9px: 208
+y=1492 x=213 9px: 30
+y=1492 x=269 9px: 2
+y=1492 x=323 9px: 1
+y=1537 x=64 12px: Starting Items
+y=1537 x=245 12px: Starting Item Sets
+y=1603 x=25 12px: Starting
+y=1619 x=18 12px: Items Sets
+y=1653 x=272 12px: x
+y=1653 x=280 12px: 2
+y=1672 x=22 12px: Win Rate
+y=1673 x=96 12px: 56.71
+y=1673 x=150 12px: 48.65
+y=1673 x=204 12px: 57.14
+y=1673 x=258 12px: 60.00
+y=1673 x=312 12px: 66.67
+y=1673 x=366 12px: 50.00
+y=1673 x=420 12px: 50.00
+y=1673 x=471 12px: 100.00
+y=1688 x=21 12px: Pick Rate
+y=1689 x=96 12px: 87.95
+y=1689 x=153 12px: 9.49
+y=1689 x=210 12px: 0.9
+y=1689 x=261 12px: 0.64
+y=1689 x=315 12px: 0.38
+y=1689 x=369 12px: 0.26
+y=1689 x=423 12px: 0.26
+y=1689 x=477 12px: 0.13
+y=1704 x=32 9px: Games
+y=1705 x=102 9px: 686
+y=1705 x=159 9px: 74
+y=1705 x=215 9px: 7
+y=1705 x=269 9px: 5
+y=1705 x=323 9px: 3
+y=1705 x=377 9px: 2
+y=1705 x=431 9px: 2
+y=1705 x=485 9px: 1
+y=1750 x=49 12px: Early Items (10 min)
+y=1750 x=231 12px: Early Item Sets (10 min)
+y=1790 x=16 12px: Early Items
+y=1806 x=25 12px: (10 min)
+y=1834 x=22 12px: Win Rate
+y=1834 x=96 12px: 56.84
+y=1834 x=150 12px: 55.06
+y=1834 x=204 12px: 62.78
+y=1834 x=258 12px: 55.05
+y=1834 x=312 12px: 61.92
+y=1834 x=366 12px: 56.67
+y=1834 x=420 12px: 50.53
+y=1834 x=474 12px: 55.47
+y=1834 x=528 12px: 50.62
+y=1834 x=582 12px: 56.54
+y=1834 x=636 12px: 61.80
+y=1834 x=690 12px: 53.49
+y=1834 x=744 12px: 60.94
+y=1850 x=21 12px: Pick Rate
+y=1850 x=93 12px: 173.46
+y=1850 x=150 12px: 77.31
+y=1850 x=204 12px: 39.62
+y=1850 x=258 12px: 39.36
+y=1850 x=312 12px: 38.72
+y=1850 x=366 12px: 38.46
+y=1850 x=420 12px: 36.54
+y=1850 x=474 12px: 31.67
+y=1850 x=531 12px: 30.9
+y=1850 x=582 12px: 30.38
+y=1850 x=636 12px: 22.82
+y=1850 x=690 12px: 22.05
+y=1850 x=744 12px: 16.41
+y=1866 x=32 9px: Games
+y=1866 x=99 9px: 1,353
+y=1866 x=156 9px: 603
+y=1866 x=210 9px: 309
+y=1866 x=264 9px: 307
+y=1866 x=318 9px: 302
+y=1866 x=372 9px: 300
+y=1866 x=426 9px: 285
+y=1866 x=480 9px: 247
+y=1866 x=534 9px: 241
+y=1866 x=588 9px: 237
+y=1866 x=642 9px: 178
+y=1866 x=696 9px: 172
+y=1866 x=750 9px: 128
+y=1912 x=34 12px: Item
+y=1923 x=40 20px: 1
+y=1958 x=22 12px: Win Rate
+y=1958 x=96 12px: 49.24
+y=1958 x=150 12px: 63.09
+y=1958 x=204 12px: 54.29
+y=1958 x=258 12px: 73.17
+y=1958 x=312 12px: 57.89
+y=1958 x=366 12px: 12.50
+y=1958 x=420 12px: 66.67
+y=1958 x=474 12px: 50.00
+y=1958 x=531 12px: 0.00
+y=1958 x=585 12px: 0.00
+y=1974 x=21 12px: Pick Rate
+y=1974 x=96 12px: 42.18
+y=1974 x=150 12px: 38.21
+y=1974 x=207 12px: 8.97
+y=1974 x=261 12px: 5.26
+y=1974 x=315 12px: 2.44
+y=1974 x=369 12px: 1.03
+y=1974 x=423 12px: 0.38
+y=1974 x=477 12px: 0.26
+y=1974 x=531 12px: 0.26
+y=1974 x=585 12px: 0.13
+y=1990 x=32 9px: Games
+y=1990 x=102 9px: 329
+y=1990 x=156 9px: 298
+y=1990 x=213 9px: 70
+y=1990 x=267 9px: 41
+y=1990 x=321 9px: 19
+y=1990 x=377 9px: 8
+y=1990 x=431 9px: 3
+y=1990 x=485 9px: 2
+y=1990 x=539 9px: 2
+y=1990 x=593 9px: 1
+y=2003 x=32 12px: Time
+y=2003 x=103 12px: 11
+y=2003 x=157 12px: 13
+y=2003 x=211 12px: 13
+y=2003 x=265 12px: 12
+y=2003 x=319 12px: 12
+y=2003 x=373 12px: 12
+y=2003 x=427 12px: 13
+y=2003 x=481 12px: 18
+y=2003 x=535 12px: 13
+y=2003 x=592 12px: 9
+y=2058 x=31 12px: Boots
+y=2094 x=22 12px: Win Rate
+y=2094 x=96 12px: 56.21
+y=2094 x=150 12px: 56.79
+y=2094 x=204 12px: 53.16
+y=2094 x=258 12px: 60.00
+y=2094 x=309 12px: 100.00
+y=2094 x=369 12px: 0.00
+y=2110 x=21 12px: Pick Rate
+y=2110 x=96 12px: 78.46
+y=2110 x=150 12px: 10.38
+y=2110 x=204 12px: 10.13
+y=2110 x=261 12px: 0.64
+y=2110 x=315 12px: 0.26
+y=2110 x=369 12px: 0.13
+y=2126 x=32 9px: Games
+y=2126 x=102 9px: 612
+y=2126 x=159 9px: 81
+y=2126 x=213 9px: 79
+y=2126 x=269 9px: 5
+y=2126 x=323 9px: 2
+y=2126 x=377 9px: 1
+y=2139 x=32 12px: Time
+y=2139 x=103 12px: 10
+y=2139 x=157 12px: 17
+y=2139 x=211 12px: 12
+y=2139 x=268 12px: 6
+y=2139 x=319 12px: 18
+y=2139 x=373 12px: 18
+y=2184 x=34 12px: Item
+y=2195 x=40 20px: 2
+y=2230 x=22 12px: Win Rate
+y=2230 x=96 12px: 56.90
+y=2230 x=150 12px: 61.67
+y=2230 x=204 12px: 52.73
+y=2230 x=258 12px: 70.00
+y=2230 x=312 12px: 47.83
+y=2230 x=366 12px: 66.67
+y=2230 x=420 12px: 63.64
+y=2230 x=474 12px: 45.45
+y=2230 x=528 12px: 37.50
+y=2230 x=582 12px: 25.00
+y=2230 x=633 12px: 100.00
+y=2230 x=693 12px: 0.00
+y=2230 x=744 12px: 50.00
+y=2246 x=21 12px: Pick Rate
+y=2246 x=96 12px: 44.62
+y=2246 x=150 12px: 23.08
+y=2246 x=207 12px: 7.05
+y=2246 x=261 12px: 6.41
+y=2246 x=315 12px: 2.95
+y=2246 x=369 12px: 1.92
+y=2246 x=423 12px: 1.41
+y=2246 x=477 12px: 1.41
+y=2246 x=531 12px: 1.03
+y=2246 x=585 12px: 0.51
+y=2246 x=639 12px: 0.26
+y=2246 x=693 12px: 0.26
+y=2246 x=747 12px: 0.26
+y=2262 x=32 9px: Games
+y=2262 x=102 9px: 348
+y=2262 x=156 9px: 180
+y=2262 x=213 9px: 55
+y=2262 x=267 9px: 50
+y=2262 x=321 9px: 23
+y=2262 x=375 9px: 15
+y=2262 x=429 9px: 11
+y=2262 x=483 9px: 11
+y=2262 x=539 9px: 8
+y=2262 x=593 9px: 4
+y=2262 x=647 9px: 2
+y=2262 x=701 9px: 2
+y=2262 x=755 9px: 2
+y=2275 x=32 12px: Time
+y=2275 x=103 12px: 19
+y=2275 x=157 12px: 20
+y=2275 x=211 12px: 20
+y=2275 x=265 12px: 19
+y=2275 x=319 12px: 19
+y=2275 x=373 12px: 20
+y=2275 x=427 12px: 19
+y=2275 x=481 12px: 20
+y=2275 x=535 12px: 19
+y=2275 x=589 12px: 23
+y=2275 x=643 12px: 16
+y=2275 x=697 12px: 21
+y=2275 x=751 12px: 18
+y=2320 x=34 12px: Item
+y=2331 x=40 20px: 3
+y=2366 x=22 12px: Win Rate
+y=2366 x=96 12px: 58.10
+y=2366 x=150 12px: 66.04
+y=2366 x=204 12px: 68.09
+y=2366 x=258 12px: 59.57
+y=2366 x=312 12px: 57.14
+y=2366 x=366 12px: 60.00
+y=2366 x=417 12px: 100.00
+y=2366 x=474 12px: 75.00
+y=2366 x=531 12px: 0.00
+y=2366 x=582 12px: 50.00
+y=2366 x=633 12px: 100.00
+y=2366 x=687 12px: 100.00
+y=2366 x=741 12px: 100.00
+y=2382 x=21 12px: Pick Rate
+y=2382 x=96 12px: 22.95
+y=2382 x=150 12px: 13.59
+y=2382 x=204 12px: 12.05
+y=2382 x=258 12px: 12.05
+y=2382 x=315 12px: 2.69
+y=2382 x=369 12px: 1.28
+y=2382 x=423 12px: 0.51
+y=2382 x=477 12px: 0.51
+y=2382 x=531 12px: 0.26
+y=2382 x=585 12px: 0.26
+y=2382 x=639 12px: 0.13
+y=2382 x=693 12px: 0.13
+y=2382 x=747 12px: 0.13
+y=2398 x=32 9px: Games
+y=2398 x=102 9px: 179
+y=2398 x=156 9px: 106
+y=2398 x=213 9px: 94
+y=2398 x=267 9px: 94
+y=2398 x=321 9px: 21
+y=2398 x=375 9px: 10
+y=2398 x=431 9px: 4
+y=2398 x=485 9px: 4
+y=2398 x=539 9px: 2
+y=2398 x=593 9px: 2
+y=2398 x=647 9px: 1
+y=2398 x=701 9px: 1
+y=2398 x=755 9px: 1
+y=2411 x=32 12px: Time
+y=2411 x=103 12px: 25
+y=2411 x=157 12px: 25
+y=2411 x=211 12px: 25
+y=2411 x=265 12px: 25
+y=2411 x=319 12px: 26
+y=2411 x=373 12px: 25
+y=2411 x=427 12px: 28
+y=2411 x=481 12px: 26
+y=2411 x=535 12px: 26
+y=2411 x=589 12px: 22
+y=2411 x=643 12px: 26
+y=2411 x=697 12px: 26
+y=2411 x=751 12px: 21
+y=2456 x=34 12px: Item
+y=2467 x=40 20px: 4
+y=2502 x=22 12px: Win Rate
+y=2502 x=96 12px: 65.57
+y=2502 x=150 12px: 64.81
+y=2502 x=204 12px: 54.35
+y=2502 x=258 12px: 55.56
+y=2502 x=312 12px: 84.21
+y=2502 x=366 12px: 25.00
+y=2502 x=420 12px: 87.50
+y=2502 x=474 12px: 40.00
+y=2502 x=528 12px: 80.00
+y=2502 x=582 12px: 40.00
+y=2502 x=636 12px: 66.67
+y=2502 x=687 12px: 100.00
+y=2502 x=741 12px: 100.00
+y=2518 x=21 12px: Pick Rate
+y=2518 x=99 12px: 7.82
+y=2518 x=153 12px: 6.92
+y=2518 x=210 12px: 5.9
+y=2518 x=261 12px: 4.62
+y=2518 x=315 12px: 2.44
+y=2518 x=369 12px: 1.03
+y=2518 x=423 12px: 1.03
+y=2518 x=477 12px: 0.64
+y=2518 x=531 12px: 0.64
+y=2518 x=585 12px: 0.64
+y=2518 x=639 12px: 0.38
+y=2518 x=693 12px: 0.38
+y=2518 x=747 12px: 0.26
+y=2534 x=32 9px: Games
+y=2534 x=105 9px: 61
+y=2534 x=159 9px: 54
+y=2534 x=213 9px: 46
+y=2534 x=267 9px: 36
+y=2534 x=321 9px: 19
+y=2534 x=377 9px: 8
+y=2534 x=431 9px: 8
+y=2534 x=485 9px: 5
+y=2534 x=539 9px: 5
+y=2534 x=593 9px: 5
+y=2534 x=647 9px: 3
+y=2534 x=701 9px: 3
+y=2534 x=755 9px: 2
+y=2547 x=32 12px: Time
+y=2547 x=103 12px: 29
+y=2547 x=157 12px: 29
+y=2547 x=211 12px: 29
+y=2547 x=265 12px: 30
+y=2547 x=319 12px: 31
+y=2547 x=373 12px: 32
+y=2547 x=427 12px: 28
+y=2547 x=481 12px: 29
+y=2547 x=535 12px: 30
+y=2547 x=589 12px: 31
+y=2547 x=643 12px: 33
+y=2547 x=697 12px: 28
+y=2547 x=751 12px: 26
+y=2592 x=34 12px: Item
+y=2603 x=40 20px: 5
+y=2638 x=22 12px: Win Rate
+y=2638 x=96 12px: 64.71
+y=2638 x=150 12px: 57.14
+y=2638 x=204 12px: 64.29
+y=2638 x=258 12px: 50.00
+y=2638 x=312 12px: 62.50
+y=2638 x=366 12px: 50.00
+y=2638 x=420 12px: 66.67
+y=2638 x=474 12px: 50.00
+y=2638 x=525 12px: 100.00
+y=2638 x=585 12px: 0.00
+y=2638 x=636 12px: 50.00
+y=2638 x=687 12px: 100.00
+y=2638 x=741 12px: 100.00
+y=2654 x=21 12px: Pick Rate
+y=2654 x=99 12px: 2.18
+y=2654 x=153 12px: 1.79
+y=2654 x=207 12px: 1.79
+y=2654 x=261 12px: 1.54
+y=2654 x=315 12px: 1.03
+y=2654 x=369 12px: 0.77
+y=2654 x=423 12px: 0.38
+y=2654 x=477 12px: 0.26
+y=2654 x=531 12px: 0.26
+y=2654 x=585 12px: 0.26
+y=2654 x=639 12px: 0.26
+y=2654 x=693 12px: 0.13
+y=2654 x=747 12px: 0.13
+y=2670 x=32 9px: Games
+y=2670 x=105 9px: 17
+y=2670 x=159 9px: 14
+y=2670 x=213 9px: 14
+y=2670 x=267 9px: 12
+y=2670 x=323 9px: 8
+y=2670 x=377 9px: 6
+y=2670 x=431 9px: 3
+y=2670 x=485 9px: 2
+y=2670 x=539 9px: 2
+y=2670 x=593 9px: 2
+y=2670 x=647 9px: 2
+y=2670 x=701 9px: 1
+y=2670 x=755 9px: 1
+y=2683 x=32 12px: Time
+y=2683 x=103 12px: 34
+y=2683 x=157 12px: 33
+y=2683 x=211 12px: 34
+y=2683 x=265 12px: 34
+y=2683 x=319 12px: 33
+y=2683 x=373 12px: 36
+y=2683 x=427 12px: 35
+y=2683 x=481 12px: 31
+y=2683 x=535 12px: 32
+y=2683 x=589 12px: 32
+y=2683 x=643 12px: 28
+y=2683 x=697 12px: 36
+y=2683 x=751 12px: 31
+y=2730 x=25 12px: Popular
+y=2746 x=31 12px: Items
+y=2774 x=22 12px: Win Rate
+y=2774 x=96 12px: 60.12
+y=2774 x=150 12px: 50.58
+y=2774 x=204 12px: 60.70
+y=2774 x=258 12px: 62.12
+y=2774 x=312 12px: 58.31
+y=2774 x=366 12px: 61.02
+y=2774 x=420 12px: 71.17
+y=2774 x=474 12px: 54.22
+y=2774 x=528 12px: 55.13
+y=2774 x=582 12px: 65.00
+y=2774 x=636 12px: 53.33
+y=2774 x=690 12px: 26.67
+y=2774 x=744 12px: 57.14
+y=2790 x=21 12px: Pick Rate
+y=2790 x=96 12px: 62.05
+y=2790 x=150 12px: 44.36
+y=2790 x=204 12px: 43.72
+y=2790 x=258 12px: 42.31
+y=2790 x=312 12px: 39.36
+y=2790 x=366 12px: 22.69
+y=2790 x=420 12px: 14.23
+y=2790 x=474 12px: 10.64
+y=2790 x=535 12px: 10
+y=2790 x=585 12px: 5.13
+y=2790 x=639 12px: 1.92
+y=2790 x=693 12px: 1.92
+y=2790 x=750 12px: 0.9
+y=2806 x=32 9px: Games
+y=2806 x=102 9px: 484
+y=2806 x=156 9px: 346
+y=2806 x=210 9px: 341
+y=2806 x=264 9px: 330
+y=2806 x=318 9px: 307
+y=2806 x=372 9px: 177
+y=2806 x=426 9px: 111
+y=2806 x=483 9px: 83
+y=2806 x=537 9px: 78
+y=2806 x=591 9px: 40
+y=2806 x=645 9px: 15
+y=2806 x=699 9px: 15
+y=2806 x=755 9px: 7
+y=2819 x=32 12px: Time
+y=2819 x=103 12px: 21
+y=2819 x=157 12px: 12
+y=2819 x=211 12px: 23
+y=2819 x=265 12px: 14
+y=2819 x=319 12px: 25
+y=2819 x=373 12px: 27
+y=2819 x=427 12px: 18
+y=2819 x=481 12px: 14
+y=2819 x=535 12px: 29
+y=2819 x=589 12px: 17
+y=2819 x=643 12px: 32
+y=2819 x=697 12px: 29
+y=2819 x=751 12px: 31
+y=2866 x=24 12px: Winning
+y=2882 x=31 12px: Items
+y=2910 x=22 12px: Win Rate
+y=2910 x=93 12px: 100.00
+y=2910 x=147 12px: 100.00
+y=2910 x=201 12px: 100.00
+y=2910 x=255 12px: 100.00
+y=2910 x=309 12px: 100.00
+y=2910 x=366 12px: 75.00
+y=2910 x=420 12px: 71.17
+y=2910 x=474 12px: 65.00
+y=2910 x=528 12px: 62.12
+y=2910 x=582 12px: 61.02
+y=2910 x=636 12px: 60.70
+y=2910 x=690 12px: 60.12
+y=2910 x=744 12px: 60.00
+y=2926 x=21 12px: Pick Rate
+y=2926 x=99 12px: 0.26
+y=2926 x=153 12px: 0.26
+y=2926 x=207 12px: 0.26
+y=2926 x=261 12px: 0.26
+y=2926 x=315 12px: 0.26
+y=2926 x=369 12px: 0.51
+y=2926 x=420 12px: 14.23
+y=2926 x=477 12px: 5.13
+y=2926 x=528 12px: 42.31
+y=2926 x=582 12px: 22.69
+y=2926 x=636 12px: 43.72
+y=2926 x=690 12px: 62.05
+y=2926 x=747 12px: 0.64
+y=2942 x=32 9px: Games
+y=2942 x=107 9px: 2
+y=2942 x=161 9px: 2
+y=2942 x=215 9px: 2
+y=2942 x=269 9px: 2
+y=2942 x=323 9px: 2
+y=2942 x=377 9px: 4
+y=2942 x=426 9px: 111
+y=2942 x=483 9px: 40
+y=2942 x=534 9px: 330
+y=2942 x=588 9px: 177
+y=2942 x=642 9px: 341
+y=2942 x=696 9px: 484
+y=2942 x=755 9px: 5
+y=2955 x=32 12px: Time
+y=2955 x=103 12px: 33
+y=2955 x=157 12px: 22
+y=2955 x=211 12px: 23
+y=2955 x=265 12px: 16
+y=2955 x=319 12px: 28
+y=2955 x=373 12px: 32
+y=2955 x=427 12px: 18
+y=2955 x=481 12px: 17
+y=2955 x=535 12px: 14
+y=2955 x=589 12px: 27
+y=2955 x=643 12px: 23
+y=2955 x=697 12px: 21
+y=2955 x=751 12px: 35
+y=3002 x=38 12px: All
+y=3018 x=31 12px: Items
+y=3046 x=22 12px: Win Rate
+y=3046 x=96 12px: 55.16
+y=3046 x=150 12px: 55.14
+y=3046 x=204 12px: 54.94
+y=3046 x=258 12px: 51.06
+y=3046 x=312 12px: 56.65
+y=3046 x=366 12px: 54.44
+y=3046 x=420 12px: 57.84
+y=3046 x=474 12px: 56.19
+y=3046 x=528 12px: 60.34
+y=3046 x=582 12px: 61.35
+y=3046 x=636 12px: 60.12
+y=3046 x=690 12px: 56.24
+y=3046 x=744 12px: 59.44
+y=3062 x=21 12px: Pick Rate
+y=3062 x=93 12px: 274.74
+y=3062 x=147 12px: 188.33
+y=3062 x=201 12px: 145.38
+y=3062 x=255 12px: 108.72
+y=3062 x=312 12px: 88.72
+y=3062 x=366 12px: 85.26
+y=3062 x=420 12px: 84.23
+y=3062 x=474 12px: 78.72
+y=3062 x=528 12px: 68.21
+y=3062 x=582 12px: 62.69
+y=3062 x=636 12px: 62.05
+y=3062 x=690 12px: 56.54
+y=3062 x=751 12px: 55
+y=3078 x=32 9px: Games
+y=3078 x=99 9px: 2,143
+y=3078 x=153 9px: 1,469
+y=3078 x=207 9px: 1,134
+y=3078 x=264 9px: 848
+y=3078 x=318 9px: 692
+y=3078 x=372 9px: 665
+y=3078 x=426 9px: 657
+y=3078 x=480 9px: 614
+y=3078 x=534 9px: 532
+y=3078 x=588 9px: 489
+y=3078 x=642 9px: 484
+y=3078 x=696 9px: 441
+y=3078 x=750 9px: 429
+y=3091 x=32 12px: Time
+y=3091 x=103 12px: 10
+y=3091 x=157 12px: 17
+y=3091 x=214 12px: 2
+y=3091 x=265 12px: 14
+y=3091 x=376 12px: 6
+y=3091 x=427 12px: 19
+y=3091 x=481 12px: 10
+y=3091 x=535 12px: 19
+y=3091 x=589 12px: 20
+y=3091 x=643 12px: 21
+y=3091 x=697 12px: 18
+y=3091 x=754 12px: 9
+y=3136 x=28 12px: Overview
+y=3136 x=124 12px: Level 6+
+y=3136 x=215 12px: Level 10+
+y=3136 x=313 12px: Level 15+
+y=3174 x=108 12px: Skill Priority
+y=3174 x=273 12px: Win
+y=3174 x=329 12px: Pick
+y=3203 x=347 12px: 90.2
+y=3211 x=291 12px: 56.9
+y=3219 x=77 14px: Q
+y=3219 x=143 14px: E
+y=3219 x=207 14px: W
+y=3221 x=351 9px: 703
+y=3243 x=354 12px: 9
+y=3251 x=291 12px: 47.1
+y=3259 x=77 14px: Q
+y=3259 x=141 14px: W
+y=3259 x=209 14px: E
+y=3261 x=353 9px: 70
+y=3283 x=350 12px: 0.8
+y=3291 x=291 12px: 50.0
+y=3299 x=75 14px: W
+y=3299 x=143 14px: Q
+y=3299 x=209 14px: E
+y=3301 x=355 9px: 6
+y=3327 x=5 12px: Lvl
+y=3327 x=34 12px: Win
+y=3327 x=85 12px: Pick
+y=3327 x=134 12px: Win
+y=3327 x=185 12px: Pick
+y=3327 x=234 12px: Win
+y=3327 x=285 12px: Pick
+y=3327 x=334 12px: Win
+y=3327 x=385 12px: Pick
+y=3334 x=72 12px: Q
+y=3334 x=171 12px: W
+y=3334 x=273 12px: E
+y=3334 x=372 12px: R
+y=3357 x=76 12px: 24.2
+y=3357 x=172 12px: 75.3
+y=3357 x=271 12px: 0.5
+y=3357 x=372 12px: 0
+y=3359 x=5 20px: 1
+y=3364 x=28 12px: 60.8
+y=3364 x=124 12px: 54.9
+y=3364 x=223 12px: 0.0
+y=3364 x=319 12px: 0.0
+y=3373 x=80 9px: 189
+y=3373 x=176 9px: 587
+y=3373 x=276 9px: 4
+y=3373 x=372 9px: 0
+y=3397 x=81 12px: 59
+y=3397 x=172 12px: 15.1
+y=3397 x=268 12px: 25.9
+y=3397 x=372 12px: 0
+y=3399 x=5 20px: 2
+y=3404 x=28 12px: 53.3
+y=3404 x=124 12px: 62.7
+y=3404 x=220 12px: 58.4
+y=3404 x=319 12px: 0.0
+y=3413 x=80 9px: 460
+y=3413 x=176 9px: 118
+y=3413 x=272 9px: 202
+y=3413 x=372 9px: 0
+y=3437 x=76 12px: 17.6
+y=3437 x=175 12px: 9.6
+y=3437 x=268 12px: 72.8
+y=3437 x=372 12px: 0
+y=3439 x=5 20px: 3
+y=3444 x=28 12px: 59.9
+y=3444 x=124 12px: 54.7
+y=3444 x=220 12px: 55.3
+y=3444 x=319 12px: 0.0
+y=3453 x=80 9px: 137
+y=3453 x=178 9px: 75
+y=3453 x=272 9px: 568
+y=3453 x=372 9px: 0
+y=3477 x=76 12px: 97.8
+y=3477 x=175 12px: 1.2
+y=3477 x=276 12px: 1
+y=3477 x=372 12px: 0
+y=3479 x=5 20px: 4
+y=3484 x=28 12px: 56.1
+y=3484 x=124 12px: 44.4
+y=3484 x=220 12px: 62.5
+y=3484 x=319 12px: 0.0
+y=3493 x=80 9px: 763
+y=3493 x=180 9px: 9
+y=3493 x=276 9px: 8
+y=3493 x=372 9px: 0
+y=3517 x=76 12px: 98.8
+y=3517 x=175 12px: 0.8
+y=3517 x=271 12px: 0.3
+y=3517 x=367 12px: 0.1
+y=3519 x=5 20px: 5
+y=3524 x=28 12px: 56.2
+y=3524 x=124 12px: 50.0
+y=3524 x=223 12px: 0.0
+y=3524 x=314 12px: 100.0
+y=3533 x=80 9px: 771
+y=3533 x=180 9px: 6
+y=3533 x=276 9px: 2
+y=3533 x=372 9px: 1
+y=3557 x=79 12px: 0.1
+y=3557 x=180 12px: 0
+y=3557 x=276 12px: 0
+y=3557 x=364 12px: 99.9
+y=3559 x=5 20px: 6
+y=3564 x=26 12px: 100.0
+y=3564 x=127 12px: 0.0
+y=3564 x=223 12px: 0.0
+y=3564 x=316 12px: 56.0
+y=3573 x=84 9px: 1
+y=3573 x=180 9px: 0
+y=3573 x=276 9px: 0
+y=3573 x=368 9px: 779
+y=3719 x=20 12px: Click Keystones Below to Filter Builds
+y=3748 x=21 12px: Overview
+y=3748 x=100 12px: Highest Win Rune Page
+y=3748 x=252 12px: Most Picked Rune Page
+y=3813 x=15 12px: Win Rate
+y=3814 x=79 12px: 50.0
+y=3814 x=108 12px: 100.0
+y=3814 x=145 12px: 0.0
+y=3814 x=174 12px: 59.1
+y=3814 x=301 12px: 40.0
+y=3814 x=407 12px: 48.9
+y=3814 x=481 12px: 50.0
+y=3829 x=14 12px: Pick Rate
+y=3830 x=82 12px: 0.3
+y=3830 x=113 12px: 0.4
+y=3830 x=145 12px: 0.1
+y=3830 x=174 12px: 69.2
+y=3830 x=304 12px: 0.6
+y=3830 x=407 12px: 29.1
+y=3830 x=484 12px: 0.3
+y=3845 x=24 9px: Games
+y=3846 x=87 9px: 2
+y=3846 x=118 9px: 3
+y=3846 x=150 9px: 1
+y=3846 x=178 9px: 540
+y=3846 x=309 9px: 5
+y=3846 x=410 9px: 227
+y=3846 x=489 9px: 2
+y=3890 x=15 12px: Win Rate
+y=3891 x=81 12px: 100.0
+y=3891 x=126 12px: 58.9
+y=3891 x=166 12px: 100.0
+y=3891 x=213 12px: 100.0
+y=3891 x=259 12px: 25.0
+y=3891 x=348 12px: 66.7
+y=3891 x=433 12px: 48.2
+y=3891 x=478 12px: 100.0
+y=3891 x=568 12px: 0.0
+y=3906 x=14 12px: Pick Rate
+y=3907 x=87 12px: 0.1
+y=3907 x=126 12px: 69.6
+y=3907 x=172 12px: 0.3
+y=3907 x=219 12px: 0.1
+y=3907 x=261 12px: 0.5
+y=3907 x=351 12px: 1.2
+y=3907 x=433 12px: 27.9
+y=3907 x=484 12px: 0.1
+y=3907 x=568 12px: 0.1
+y=3922 x=24 9px: Games
+y=3923 x=92 9px: 1
+y=3923 x=130 9px: 543
+y=3923 x=177 9px: 2
+y=3923 x=224 9px: 1
+y=3923 x=267 9px: 4
+y=3923 x=356 9px: 9
+y=3923 x=437 9px: 218
+y=3923 x=489 9px: 1
+y=3923 x=573 9px: 1
+y=3967 x=15 12px: Win Rate
+y=3968 x=84 12px: 58.4
+y=3968 x=126 12px: 61.9
+y=3968 x=172 12px: 0.0
+y=3968 x=219 12px: 0.0
+y=3968 x=259 12px: 50.0
+y=3968 x=351 12px: 0.0
+y=3968 x=391 12px: 49.3
+y=3968 x=436 12px: 0.0
+y=3968 x=523 12px: 50.0
+y=3983 x=14 12px: Pick Rate
+y=3984 x=84 12px: 52.1
+y=3984 x=126 12px: 17.8
+y=3984 x=172 12px: 0.1
+y=3984 x=219 12px: 0.1
+y=3984 x=261 12px: 0.5
+y=3984 x=351 12px: 0.1
+y=3984 x=391 12px: 28.8
+y=3984 x=436 12px: 0.1
+y=3984 x=526 12px: 0.3
+y=3999 x=24 9px: Games
+y=4000 x=88 9px: 406
+y=4000 x=130 9px: 139
+y=4000 x=177 9px: 1
+y=4000 x=224 9px: 1
+y=4000 x=267 9px: 4
+y=4000 x=356 9px: 1
+y=4000 x=394 9px: 225
+y=4000 x=441 9px: 1
+y=4000 x=531 9px: 2
+y=4044 x=15 12px: Win Rate
+y=4045 x=84 12px: 64.3
+y=4045 x=126 12px: 66.7
+y=4045 x=169 12px: 58.9
+y=4045 x=219 12px: 0.0
+y=4045 x=259 12px: 66.7
+y=4045 x=304 12px: 0.0
+y=4045 x=348 12px: 25.0
+y=4045 x=391 12px: 50.0
+y=4045 x=433 12px: 49.8
+y=4045 x=481 12px: 50.0
+y=4060 x=14 12px: Pick Rate
+y=4061 x=87 12px: 1.8
+y=4061 x=129 12px: 0.8
+y=4061 x=169 12px: 67.4
+y=4061 x=219 12px: 0.1
+y=4061 x=261 12px: 0.4
+y=4061 x=304 12px: 0.1
+y=4061 x=351 12px: 1.0
+y=4061 x=394 12px: 0.5
+y=4061 x=433 12px: 27.6
+y=4061 x=484 12px: 0.3
+y=4076 x=24 9px: Games
+y=4077 x=90 9px: 14
+y=4077 x=134 9px: 6
+y=4077 x=172 9px: 526
+y=4077 x=224 9px: 1
+y=4077 x=267 9px: 3
+y=4077 x=309 9px: 1
+y=4077 x=356 9px: 8
+y=4077 x=399 9px: 4
+y=4077 x=437 9px: 215
+y=4077 x=489 9px: 2
+y=4136 x=15 12px: Win Rate
+y=4136 x=126 12px: 47.8
+y=4136 x=348 12px: 56.9
+y=4136 x=433 12px: 60.4
+y=4136 x=481 12px: 45.5
+y=4136 x=610 12px: 100.0
+y=4136 x=655 12px: 66.7
+y=4152 x=14 12px: Pick Rate
+y=4152 x=126 12px: 25.8
+y=4152 x=348 12px: 37.2
+y=4152 x=436 12px: 6.8
+y=4152 x=484 12px: 1.4
+y=4152 x=616 12px: 0.1
+y=4152 x=658 12px: 0.4
+y=4168 x=24 9px: Games
+y=4168 x=130 9px: 201
+y=4168 x=352 9px: 290
+y=4168 x=439 9px: 53
+y=4168 x=486 9px: 11
+y=4168 x=621 9px: 1
+y=4168 x=663 9px: 3
+y=4213 x=15 12px: Win Rate
+y=4213 x=84 12px: 48.7
+y=4213 x=124 12px: 100.0
+y=4213 x=346 12px: 100.0
+y=4213 x=391 12px: 57.5
+y=4213 x=436 12px: 0.0
+y=4213 x=481 12px: 66.7
+y=4213 x=523 12px: 55.6
+y=4213 x=565 12px: 61.1
+y=4213 x=698 12px: 25.0
+y=4229 x=14 12px: Pick Rate
+y=4229 x=84 12px: 25.3
+y=4229 x=129 12px: 0.1
+y=4229 x=351 12px: 0.4
+y=4229 x=391 12px: 42.8
+y=4229 x=436 12px: 0.1
+y=4229 x=484 12px: 0.4
+y=4229 x=526 12px: 1.2
+y=4229 x=565 12px: 26.7
+y=4229 x=700 12px: 0.5
+y=4245 x=24 9px: Games
+y=4245 x=88 9px: 197
+y=4245 x=134 9px: 1
+y=4245 x=356 9px: 3
+y=4245 x=394 9px: 334
+y=4245 x=441 9px: 1
+y=4245 x=489 9px: 3
+y=4245 x=531 9px: 9
+y=4245 x=569 9px: 208
+y=4245 x=706 9px: 4
+y=4290 x=15 12px: Win Rate
+y=4290 x=81 12px: 100.0
+y=4290 x=129 12px: 0.0
+y=4290 x=169 12px: 27.3
+y=4290 x=391 12px: 50.0
+y=4290 x=433 12px: 60.0
+y=4290 x=481 12px: 59.6
+y=4290 x=523 12px: 72.0
+y=4290 x=565 12px: 61.7
+y=4290 x=613 12px: 60.0
+y=4290 x=652 12px: 100.0
+y=4306 x=14 12px: Pick Rate
+y=4306 x=87 12px: 0.3
+y=4306 x=129 12px: 0.3
+y=4306 x=172 12px: 1.4
+y=4306 x=394 12px: 0.3
+y=4306 x=436 12px: 0.6
+y=4306 x=484 12px: 6.0
+y=4306 x=526 12px: 3.2
+y=4306 x=565 12px: 18.1
+y=4306 x=616 12px: 0.6
+y=4306 x=658 12px: 0.1
+y=4322 x=24 9px: Games
+y=4322 x=92 9px: 2
+y=4322 x=134 9px: 2
+y=4322 x=175 9px: 11
+y=4322 x=399 9px: 2
+y=4322 x=441 9px: 5
+y=4322 x=486 9px: 47
+y=4322 x=529 9px: 25
+y=4322 x=569 9px: 141
+y=4322 x=621 9px: 5
+y=4322 x=663 9px: 1
+y=4382 x=15 12px: Win Rate
+y=4382 x=97 12px: 59.3
+y=4382 x=170 12px: 55.9
+y=4382 x=244 12px: 66.7
+y=4382 x=318 12px: 55.6
+y=4382 x=391 12px: 66.7
+y=4382 x=464 12px: 66.7
+y=4382 x=538 12px: 59.3
+y=4382 x=611 12px: 69.7
+y=4382 x=684 12px: 54.7
+y=4398 x=14 12px: Pick Rate
+y=4398 x=100 12px: 3.5
+y=4398 x=170 12px: 96.2
+y=4398 x=246 12px: 0.4
+y=4398 x=318 12px: 95.8
+y=4398 x=394 12px: 3.8
+y=4398 x=467 12px: 0.4
+y=4398 x=538 12px: 14.5
+y=4398 x=614 12px: 4.2
+y=4398 x=684 12px: 81.3
+y=4414 x=24 9px: Games
+y=4414 x=103 9px: 27
+y=4414 x=174 9px: 750
+y=4414 x=252 9px: 3
+y=4414 x=321 9px: 747
+y=4414 x=397 9px: 30
+y=4414 x=472 9px: 3
+y=4414 x=542 9px: 113
+y=4414 x=617 9px: 33
+y=4414 x=688 9px: 634
+y=5069 x=76 14px: Objective
+y=5069 x=216 14px: Secure
+y=5069 x=315 14px: Yield
+y=5088 x=209 12px: %
+y=5088 x=244 12px: Win %
+y=5088 x=302 12px: %
+y=5088 x=337 12px: Win %
+y=5104 x=78 12px: Blue Side
+y=5104 x=199 12px: 37.56
+y=5104 x=246 12px: 60.41
+y=5120 x=80 12px: Red Side
+y=5120 x=199 12px: 62.44
+y=5120 x=246 12px: 53.39
+y=5136 x=75 12px: First Blood
+y=5136 x=199 12px: 51.15
+y=5136 x=246 12px: 62.41
+y=5136 x=292 12px: 48.85
+y=5136 x=338 12px: 49.34
+y=5152 x=74 12px: First Tower
+y=5152 x=199 12px: 56.67
+y=5152 x=246 12px: 74.43
+y=5152 x=292 12px: 42.69
+y=5152 x=338 12px: 31.53
+y=5168 x=68 12px: First Inhibitor
+y=5168 x=199 12px: 50.77
+y=5168 x=246 12px: 91.16
+y=5168 x=292 12px: 37.44
+y=5168 x=344 12px: 8.9
+y=5184 x=73 12px: First Herald
+y=5184 x=199 12px: 50.26
+y=5184 x=246 12px: 68.11
+y=5184 x=292 12px: 44.49
+y=5184 x=338 12px: 42.36
+y=5200 x=74 12px: First Baron
+y=5200 x=199 12px: 43.21
+y=5200 x=246 12px: 83.09
+y=5200 x=292 12px: 36.67
+y=5200 x=338 12px: 25.87
+y=5216 x=74 12px: First Drake
+y=5216 x=199 12px: 53.97
+y=5216 x=246 12px: 66.03
+y=5216 x=295 12px: 45.9
+y=5216 x=338 12px: 44.13
+y=5232 x=51 12px: First Drake & Herald
+y=5232 x=199 12px: 30.13
+y=5232 x=246 12px: 76.17
+y=5232 x=292 12px: 23.46
+y=5232 x=338 12px: 36.61
+y=5248 x=71 12px: Dragon Soul
+y=5248 x=199 12px: 20.13
+y=5248 x=246 12px: 90.45
+y=5248 x=292 12px: 12.82
+y=5248 x=346 12px: 14
+y=5264 x=82 12px: Air Soul
+y=5264 x=202 12px: 3.21
+y=5264 x=250 12px: 100
+y=5264 x=295 12px: 2.56
+y=5264 x=348 12px: 5
+y=5280 x=64 12px: Chemtech Soul
+y=5280 x=202 12px: 3.21
+y=5280 x=256 12px: 0
+y=5280 x=295 12px: 2.31
+y=5280 x=348 12px: 0
+y=5296 x=76 12px: Earth Soul
+y=5296 x=202 12px: 3.72
+y=5296 x=249 12px: 93.1
+y=5296 x=295 12px: 2.44
+y=5296 x=338 12px: 10.53
+y=5312 x=80 12px: Fire Soul
+y=5312 x=202 12px: 2.56
+y=5312 x=253 12px: 80
+y=5312 x=295 12px: 1.92
+y=5312 x=346 12px: 20
+y=5328 x=69 12px: Hextech Soul
+y=5328 x=202 12px: 3.59
+y=5328 x=256 12px: 0
+y=5328 x=295 12px: 1.92
+y=5328 x=348 12px: 0
+y=5344 x=75 12px: Water Soul
+y=5344 x=202 12px: 3.85
+y=5344 x=256 12px: 0
+y=5344 x=295 12px: 1.67
+y=5344 x=348 12px: 0
+y=5392 x=71 14px: Normalised Champion Ranked Player Base
+y=5409 x=35 10px: 2
+y=5426 x=8 12px: Depth (Games per player)
+y=5442 x=114 12px: Niche
+y=5442 x=266 12px: Popular
+y=5484 x=35 10px: 1
+y=5484 x=41 10px: 1
+y=5495 x=27 10px: 0.9
+y=5508 x=27 10px: 0.8
+y=5517 x=102 12px: Unpopular
+y=5517 x=271 12px: Broad
+y=5522 x=27 10px: 0.7
+y=5539 x=27 10px: 0.6
+y=5559 x=27 10px: 0.5
+y=5565 x=205 10px: 1
+y=5571 x=43 10px: 0.1
+y=5571 x=91 10px: 0.2
+y=5571 x=119 10px: 0.3
+y=5571 x=205 10px: 1
+y=5571 x=253 10px: 2
+y=5571 x=281 10px: 3
+y=5589 x=102 12px: Breadth (How much a champion is picked)
+y=5626 x=114 16px: Win Rate vs Game Length
+y=5665 x=15 10px: 80
+y=5691 x=15 10px: 75
+y=5717 x=15 10px: 70
+y=5743 x=15 10px: 65
+y=5768 x=15 10px: 60
+y=5794 x=15 10px: 55
+y=5827 x=25 10px: 0-15
+y=5827 x=78 10px: 15-20
+y=5827 x=133 10px: 20-25
+y=5827 x=188 10px: 25-30
+y=5827 x=243 10px: 30-35
+y=5827 x=298 10px: 35-40
+y=5827 x=357 10px: 40+
+y=5862 x=114 16px: Game Length Distribution
+y=5896 x=15 10px: 30
+y=5922 x=15 10px: 25
+y=5948 x=15 10px: 20
+y=5973 x=15 10px: 15
+y=5999 x=15 10px: 10
+y=6025 x=20 10px: 5
+y=6051 x=20 10px: 0
+y=6063 x=25 10px: 0-15
+y=6063 x=78 10px: 15-20
+y=6063 x=133 10px: 20-25
+y=6063 x=188 10px: 25-30
+y=6063 x=243 10px: 30-35
+y=6063 x=298 10px: 35-40
+y=6063 x=357 10px: 40+
+y=6719 x=133 20px: Best on
+y=6719 x=201 20px: Darius
+y=6747 x=95 20px: Last 7 Day Performance
+y=6787 x=121 24px: 56.6
+y=6787 x=161 24px: % Win Rate
+y=6831 x=13 14px: Analyzing
+y=6831 x=13 14px: players worldwide over the last 7 days. The average rank of these top
+y=6831 x=75 14px: 4,841
+y=6831 x=111 14px: games played by the top
+y=6831 x=265 14px: 549
+y=6831 x=290 14px: Darius
+y=6873 x=13 14px: Darius
+y=6873 x=52 14px: players was
+y=6873 x=129 14px: Grandmaster
+y=6873 x=210 14px: .
+y=6910 x=13 14px: Taking into account win rate and summoner rank
+y=6910 x=13 14px: is ranked
+y=6910 x=322 14px: Darius
+y=6931 x=57 14px: 55
+y=6931 x=74 14px: amongst all champions in the hands of an expert.
+y=6968 x=13 14px: Maximum 50 summoners are used per region with a minimum of Diamond IV and 50 gam
+y=6989 x=13 14px: to be eligible.
+y=6989 x=306 14px: Darius
+y=7073 x=111 20px: Darius
+y=7073 x=167 20px: Leaderboard
+y=7114 x=141 12px: Name
+y=7114 x=231 12px: Win
+y=7114 x=276 12px: Games
+y=7142 x=23 12px: 1
+y=7142 x=116 12px: RaiderGO#R1GO
+y=7142 x=231 12px: 67%
+y=7142 x=285 12px: 133
+y=7154 x=67 10px: CH
+y=7161 x=344 8.5px: kr
+y=7186 x=23 12px: 2
+y=7186 x=129 12px: jinshi#may
+y=7186 x=231 12px: 68%
+y=7186 x=288 12px: 72
+y=7198 x=66 10px: GM
+y=7205 x=344 8.5px: br
+y=7230 x=23 12px: 3
+y=7230 x=108 12px: Takiya Genji#GATus
+y=7230 x=231 12px: 65%
+y=7230 x=285 12px: 134
+y=7242 x=67 10px: CH
+y=7249 x=344 8.5px: vn
+y=7274 x=23 12px: 4
+y=7274 x=81 12px: PREDADOR NATURAL#BBZAO
+y=7274 x=231 12px: 59%
+y=7274 x=288 12px: 51
+y=7286 x=67 10px: CH
+y=7293 x=344 8.5px: br
+y=7318 x=23 12px: 5
+y=7318 x=96 12px: windows security#mcsft
+y=7318 x=231 12px: 56%
+y=7318 x=288 12px: 50
+y=7330 x=67 10px: CH
+y=7337 x=341 8.5px: euw
+y=7362 x=23 12px: 6
+y=7362 x=106 12px: Atomic NoXuS#Love
+y=7362 x=231 12px: 62%
+y=7362 x=285 12px: 141
+y=7374 x=69 10px: M
+y=7381 x=341 8.5px: euw
+y=7406 x=23 12px: 7
+y=7406 x=126 12px: 불이과 #KR1
+y=7406 x=231 12px: 59%
+y=7406 x=285 12px: 117
+y=7418 x=67 10px: CH
+y=7425 x=344 8.5px: kr
+y=7450 x=23 12px: 8
+y=7450 x=109 12px: BW NomNom#SSS
+y=7450 x=231 12px: 64%
+y=7450 x=288 12px: 50
+y=7462 x=67 10px: CH
+y=7469 x=345 8.5px: tr
+y=7494 x=23 12px: 9
+y=7494 x=105 12px: go fight enemy#6767
+y=7494 x=231 12px: 72%
+y=7494 x=288 12px: 92
+y=7506 x=69 10px: M
+y=7513 x=341 8.5px: euw
+y=7538 x=23 12px: 10
+y=7538 x=104 12px: bronha games#chupt
+y=7538 x=231 12px: 63%
+y=7538 x=285 12px: 112
+y=7550 x=66 10px: GM
+y=7557 x=344 8.5px: br
+y=7582 x=23 12px: 11
+y=7582 x=132 12px: Aitch#Are
+y=7582 x=231 12px: 61%
+y=7582 x=285 12px: 176
+y=7594 x=69 10px: M
+y=7601 x=341 8.5px: euw
+y=7626 x=23 12px: 12
+y=7626 x=109 12px: Alpha Theta#EUNE
+y=7626 x=231 12px: 62%
+y=7626 x=285 12px: 213
+y=7638 x=69 10px: M
+y=7645 x=339 8.5px: eune
+y=7669 x=82 16px: Click For Full
+y=7669 x=174 16px: Darius
+y=7669 x=218 16px: Leaderboard
+y=7731 x=121 20px: Darius
+y=7731 x=176 20px: Resources
+y=7775 x=13 16px: Pros.lol
+y=7799 x=13 14px: Check out the latest
+y=7799 x=13 14px: from the worlds top pro players.
+y=7799 x=134 14px: Darius
+y=7799 x=173 14px: Probuilds
+y=7857 x=13 16px: XDX.gg
+y=7881 x=13 14px: Lighting fast summoner profiles can be found at the new dedicated site
+y=7902 x=97 14px: XDX.gg
+y=7902 x=139 14px: .
+y=7939 x=13 16px: Mobalytics
+y=7963 x=13 14px: Quality alternative
+y=7963 x=13 14px: and more from our friends at Mobalytics.
+y=7963 x=131 14px: Darius
+y=7963 x=170 14px: build stats
+y=8047 x=144 20px: Darius
+y=8047 x=199 20px: Stats
+y=8090 x=75 14px: Physical Damage:
+y=8090 x=212 14px: 17,823
+y=8092 x=295 11px: 34 / 112
+y=8114 x=90 14px: Magic Damage:
+y=8114 x=223 14px: 60
+y=8116 x=289 11px: 109 / 112
+y=8138 x=99 14px: True Damage:
+y=8138 x=215 14px: 5,186
+y=8140 x=295 11px: 11 / 112
+y=8162 x=97 14px: Total Damage:
+y=8162 x=212 14px: 23,070
+y=8164 x=295 11px: 85 / 112
+y=8186 x=90 14px: Damage Taken:
+y=8186 x=212 14px: 33,811
+y=8188 x=295 11px: 34 / 112
+y=8210 x=132 14px: Healing:
+y=8210 x=215 14px: 8,712
+y=8212 x=295 11px: 38 / 112
+y=8234 x=151 14px: Kills:
+y=8234 x=218 14px: 7.47
+y=8236 x=295 11px: 11 / 112
+y=8258 x=136 14px: Deaths:
+y=8258 x=218 14px: 6.48
+y=8260 x=295 11px: 53 / 112
+y=8282 x=134 14px: Assists:
+y=8282 x=218 14px: 4.25
+y=8284 x=289 11px: 104 / 112
+y=8306 x=92 14px: Max Kill Spree:
+y=8306 x=218 14px: 3.58
+y=8308 x=300 11px: 6 / 112
+y=8330 x=150 14px: Gold:
+y=8330 x=212 14px: 12,464
+y=8332 x=295 11px: 21 / 112
+y=8354 x=94 14px: Minions Killed:
+y=8354 x=212 14px: 203.38
+y=8356 x=295 11px: 39 / 112
+y=8378 x=118 14px: Jungle CS:
+y=8378 x=218 14px: 3.59
+y=8380 x=295 11px: 46 / 112
+y=8432 x=114 18px: LoL Champion Builds
+y=8473 x=29 12px: Darius
+y=8473 x=29 12px: vs Akali Build
+y=8473 x=62 12px: vs Aatrox Build
+y=8473 x=146 12px: •
+y=8473 x=161 12px: Darius
+y=8473 x=195 12px: vs Ahri Build
+y=8473 x=267 12px: •
+y=8473 x=282 12px: Darius
+y=8503 x=55 12px: •
+y=8503 x=68 12px: Darius
+y=8503 x=101 12px: vs Akshan Build
+y=8503 x=187 12px: •
+y=8503 x=200 12px: Darius
+y=8503 x=234 12px: vs Alistar Build
+y=8503 x=315 12px: •
+y=8503 x=328 12px: Darius
+y=8533 x=29 12px: vs Ambessa Build
+y=8533 x=29 12px: vs Anivia Build
+y=8533 x=122 12px: •
+y=8533 x=137 12px: Darius
+y=8533 x=171 12px: vs Amumu Build
+y=8533 x=262 12px: •
+y=8533 x=277 12px: Darius
+y=8563 x=55 12px: •
+y=8563 x=68 12px: Darius
+y=8563 x=101 12px: vs Annie Build
+y=8563 x=178 12px: •
+y=8563 x=190 12px: Darius
+y=8563 x=224 12px: vs Aphelios Build
+y=8563 x=315 12px: •
+y=8563 x=328 12px: Darius
+y=8593 x=29 12px: vs Ashe Build
+y=8593 x=29 12px: vs Aurora Build
+y=8593 x=100 12px: •
+y=8593 x=114 12px: Darius
+y=8593 x=147 12px: vs Aurelion Sol Build
+y=8593 x=260 12px: •
+y=8593 x=274 12px: Darius
+y=8623 x=29 12px: vs Bel'Veth Build
+y=8623 x=55 12px: •
+y=8623 x=70 12px: Darius
+y=8623 x=103 12px: vs Azir Build
+y=8623 x=174 12px: •
+y=8623 x=189 12px: Darius
+y=8623 x=222 12px: vs Bard Build
+y=8623 x=297 12px: •
+y=8623 x=312 12px: Darius
+y=8653 x=29 12px: vs Brand Build
+y=8653 x=102 12px: •
+y=8653 x=119 12px: Darius
+y=8653 x=153 12px: vs Blitzcrank Build
+y=8653 x=257 12px: •
+y=8653 x=275 12px: Darius
+y=8683 x=29 12px: vs Caitlyn Build
+y=8683 x=55 12px: •
+y=8683 x=68 12px: Darius
+y=8683 x=101 12px: vs Braum Build
+y=8683 x=182 12px: •
+y=8683 x=195 12px: Darius
+y=8683 x=228 12px: vs Briar Build
+y=8683 x=301 12px: •
+y=8683 x=313 12px: Darius
+y=8713 x=29 12px: vs Cassiopeia Build
+y=8713 x=94 12px: •
+y=8713 x=111 12px: Darius
+y=8713 x=144 12px: vs Camille Build
+y=8713 x=235 12px: •
+y=8713 x=252 12px: Darius
+y=8743 x=55 12px: •
+y=8743 x=68 12px: Darius
+y=8743 x=101 12px: vs Cho'Gath Build
+y=8743 x=194 12px: •
+y=8743 x=207 12px: Darius
+y=8743 x=240 12px: vs Corki Build
+y=8743 x=315 12px: •
+y=8743 x=328 12px: Darius
+y=8773 x=29 12px: vs Diana Build
+y=8773 x=29 12px: vs Dr. Mundo Build
+y=8773 x=104 12px: •
+y=8773 x=119 12px: Darius
+y=8773 x=153 12px: vs Draven Build
+y=8773 x=239 12px: •
+y=8773 x=255 12px: Darius
+y=8803 x=29 12px: vs Evelynn Build
+y=8803 x=55 12px: •
+y=8803 x=69 12px: Darius
+y=8803 x=102 12px: vs Ekko Build
+y=8803 x=177 12px: •
+y=8803 x=191 12px: Darius
+y=8803 x=224 12px: vs Elise Build
+y=8803 x=298 12px: •
+y=8803 x=312 12px: Darius
+y=8833 x=29 12px: vs Fiddlesticks Build
+y=8833 x=99 12px: •
+y=8833 x=115 12px: Darius
+y=8833 x=148 12px: vs Ezreal Build
+y=8833 x=231 12px: •
+y=8833 x=247 12px: Darius
+y=8863 x=29 12px: vs Galio Build
+y=8863 x=55 12px: •
+y=8863 x=70 12px: Darius
+y=8863 x=103 12px: vs Fiora Build
+y=8863 x=179 12px: •
+y=8863 x=194 12px: Darius
+y=8863 x=227 12px: vs Fizz Build
+y=8863 x=297 12px: •
+y=8863 x=312 12px: Darius
+y=8893 x=83 12px: •
+y=8893 x=96 12px: Darius
+y=8893 x=129 12px: vs Gangplank Build
+y=8893 x=230 12px: •
+y=8893 x=242 12px: Darius
+y=8893 x=275 12px: vs Garen Build
+y=8893 x=352 12px: •
+y=8923 x=29 12px: Darius
+y=8923 x=29 12px: vs Graves Build
+y=8923 x=62 12px: vs Gnar Build
+y=8923 x=134 12px: •
+y=8923 x=146 12px: Darius
+y=8923 x=180 12px: vs Gragas Build
+y=8923 x=263 12px: •
+y=8923 x=275 12px: Darius
+y=8953 x=55 12px: •
+y=8953 x=68 12px: Darius
+y=8953 x=101 12px: vs Gwen Build
+y=8953 x=178 12px: •
+y=8953 x=191 12px: Darius
+y=8953 x=224 12px: vs Hecarim Build
+y=8953 x=315 12px: •
+y=8953 x=328 12px: Darius
+y=8983 x=29 12px: vs Heimerdinger Build
+y=8983 x=29 12px: vs Illaoi Build
+y=8983 x=145 12px: •
+y=8983 x=160 12px: Darius
+y=8983 x=193 12px: vs Hwei Build
+y=8983 x=269 12px: •
+y=8983 x=284 12px: Darius
+y=9013 x=29 12px: vs Janna Build
+y=9013 x=55 12px: •
+y=9013 x=69 12px: Darius
+y=9013 x=102 12px: vs Irelia Build
+y=9013 x=177 12px: •
+y=9013 x=191 12px: Darius
+y=9013 x=224 12px: vs Ivern Build
+y=9013 x=299 12px: •
+y=9013 x=313 12px: Darius
+y=9043 x=90 12px: •
+y=9043 x=104 12px: Darius
+y=9043 x=138 12px: vs Jarvan IV Build
+y=9043 x=236 12px: •
+y=9043 x=250 12px: Darius
+y=9043 x=284 12px: vs Jax Build
+y=9043 x=351 12px: •
+y=9073 x=29 12px: Darius
+y=9073 x=62 12px: vs Jayce Build
+y=9073 x=136 12px: •
+y=9073 x=148 12px: Darius
+y=9073 x=182 12px: vs Jhin Build
+y=9073 x=249 12px: •
+y=9073 x=261 12px: Darius
+y=9073 x=294 12px: vs Jinx Build
+y=9103 x=29 12px: •
+y=9103 x=29 12px: vs Karma Build
+y=9103 x=40 12px: Darius
+y=9103 x=73 12px: vs Kai'Sa Build
+y=9103 x=158 12px: •
+y=9103 x=175 12px: Darius
+y=9103 x=208 12px: vs Kalista Build
+y=9103 x=295 12px: •
+y=9103 x=311 12px: Darius
+y=9133 x=92 12px: •
+y=9133 x=104 12px: Darius
+y=9133 x=137 12px: vs Karthus Build
+y=9133 x=223 12px: •
+y=9133 x=235 12px: Darius
+y=9133 x=269 12px: vs Kassadin Build
+y=9163 x=29 12px: •
+y=9163 x=29 12px: vs Kayn Build
+y=9163 x=40 12px: Darius
+y=9163 x=73 12px: vs Katarina Build
+y=9163 x=168 12px: •
+y=9163 x=183 12px: Darius
+y=9163 x=217 12px: vs Kayle Build
+y=9163 x=296 12px: •
+y=9163 x=312 12px: Darius
+y=9193 x=84 12px: •
+y=9193 x=98 12px: Darius
+y=9193 x=131 12px: vs Kennen Build
+y=9193 x=218 12px: •
+y=9193 x=232 12px: Darius
+y=9193 x=265 12px: vs Kha'Zix Build
+y=9193 x=351 12px: •
+y=9223 x=29 12px: Darius
+y=9223 x=29 12px: vs Kog'Maw Build
+y=9223 x=62 12px: vs Kindred Build
+y=9223 x=159 12px: •
+y=9223 x=178 12px: Darius
+y=9223 x=211 12px: vs Kled Build
+y=9223 x=291 12px: •
+y=9223 x=310 12px: Darius
+y=9253 x=29 12px: vs LeBlanc Build
+y=9253 x=106 12px: •
+y=9253 x=123 12px: Darius
+y=9253 x=156 12px: vs K'Sante Build
+y=9253 x=249 12px: •
+y=9253 x=265 12px: Darius
+y=9283 x=55 12px: •
+y=9283 x=68 12px: Darius
+y=9283 x=102 12px: vs Lee Sin Build
+y=9283 x=188 12px: •
+y=9283 x=202 12px: Darius
+y=9283 x=235 12px: vs Leona Build
+y=9283 x=314 12px: •
+y=9283 x=328 12px: Darius
+y=9313 x=29 12px: vs Lillia Build
+y=9313 x=97 12px: •
+y=9313 x=109 12px: Darius
+y=9313 x=142 12px: vs Lissandra Build
+y=9313 x=239 12px: •
+y=9313 x=251 12px: Darius
+y=9313 x=285 12px: vs Locke Build
+y=9343 x=29 12px: •
+y=9343 x=29 12px: vs Lux Build
+y=9343 x=39 12px: Darius
+y=9343 x=72 12px: vs Lucian Build
+y=9343 x=156 12px: •
+y=9343 x=170 12px: Darius
+y=9343 x=203 12px: vs Lulu Build
+y=9343 x=275 12px: •
+y=9343 x=290 12px: Darius
+y=9373 x=55 12px: •
+y=9373 x=71 12px: Darius
+y=9373 x=105 12px: vs Malphite Build
+y=9373 x=201 12px: •
+y=9373 x=217 12px: Darius
+y=9373 x=250 12px: vs Malzahar Build
+y=9373 x=350 12px: •
+y=9403 x=29 12px: Darius
+y=9403 x=29 12px: vs Mel Build
+y=9403 x=62 12px: vs Maokai Build
+y=9403 x=149 12px: •
+y=9403 x=165 12px: Darius
+y=9403 x=198 12px: vs Master Yi Build
+y=9403 x=297 12px: •
+y=9403 x=312 12px: Darius
+y=9433 x=76 12px: •
+y=9433 x=89 12px: Darius
+y=9433 x=122 12px: vs Milio Build
+y=9433 x=193 12px: •
+y=9433 x=206 12px: Darius
+y=9433 x=239 12px: vs Miss Fortune Build
+y=9433 x=352 12px: •
+y=9463 x=29 12px: Darius
+y=9463 x=62 12px: vs Mordekaiser Build
+y=9463 x=174 12px: •
+y=9463 x=188 12px: Darius
+y=9463 x=221 12px: vs Morgana Build
+y=9463 x=314 12px: •
+y=9463 x=328 12px: Darius
+y=9493 x=29 12px: vs Naafiri Build
+y=9493 x=107 12px: •
+y=9493 x=119 12px: Darius
+y=9493 x=152 12px: vs Nami Build
+y=9493 x=227 12px: •
+y=9493 x=239 12px: Darius
+y=9493 x=273 12px: vs Nasus Build
+y=9493 x=352 12px: •
+y=9523 x=29 12px: Darius
+y=9523 x=29 12px: vs Nidalee Build
+y=9523 x=62 12px: vs Nautilus Build
+y=9523 x=158 12px: •
+y=9523 x=175 12px: Darius
+y=9523 x=208 12px: vs Neeko Build
+y=9523 x=294 12px: •
+y=9523 x=311 12px: Darius
+y=9553 x=96 12px: •
+y=9553 x=108 12px: Darius
+y=9553 x=142 12px: vs Nilah Build
+y=9553 x=214 12px: •
+y=9553 x=226 12px: Darius
+y=9553 x=260 12px: vs Nocturne Build
+y=9553 x=352 12px: •
+y=9583 x=29 12px: Darius
+y=9583 x=29 12px: vs Orianna Build
+y=9583 x=62 12px: vs Nunu & Willump Build
+y=9583 x=191 12px: •
+y=9583 x=203 12px: Darius
+y=9583 x=236 12px: vs Olaf Build
+y=9583 x=302 12px: •
+y=9583 x=314 12px: Darius
+y=9613 x=98 12px: •
+y=9613 x=110 12px: Darius
+y=9613 x=143 12px: vs Ornn Build
+y=9613 x=213 12px: •
+y=9613 x=225 12px: Darius
+y=9613 x=259 12px: vs Pantheon Build
+y=9613 x=352 12px: •
+y=9643 x=29 12px: Darius
+y=9643 x=29 12px: vs Qiyana Build
+y=9643 x=62 12px: vs Poppy Build
+y=9643 x=141 12px: •
+y=9643 x=155 12px: Darius
+y=9643 x=188 12px: vs Pyke Build
+y=9643 x=261 12px: •
+y=9643 x=275 12px: Darius
+y=9673 x=29 12px: vs Rammus Build
+y=9673 x=55 12px: •
+y=9673 x=67 12px: Darius
+y=9673 x=101 12px: vs Quinn Build
+y=9673 x=177 12px: •
+y=9673 x=189 12px: Darius
+y=9673 x=222 12px: vs Rakan Build
+y=9673 x=301 12px: •
+y=9673 x=314 12px: Darius
+y=9703 x=105 12px: •
+y=9703 x=118 12px: Darius
+y=9703 x=151 12px: vs Rek'Sai Build
+y=9703 x=237 12px: •
+y=9703 x=251 12px: Darius
+y=9703 x=284 12px: vs Rell Build
+y=9703 x=351 12px: •
+y=9733 x=29 12px: Darius
+y=9733 x=62 12px: vs Renata Glasc Build
+y=9733 x=175 12px: •
+y=9733 x=187 12px: Darius
+y=9733 x=221 12px: vs Renekton Build
+y=9733 x=315 12px: •
+y=9733 x=328 12px: Darius
+y=9763 x=29 12px: vs Rengar Build
+y=9763 x=109 12px: •
+y=9763 x=121 12px: Darius
+y=9763 x=155 12px: vs Riven Build
+y=9763 x=229 12px: •
+y=9763 x=242 12px: Darius
+y=9763 x=275 12px: vs Rumble Build
+y=9793 x=29 12px: •
+y=9793 x=29 12px: vs Sejuani Build
+y=9793 x=41 12px: Darius
+y=9793 x=74 12px: vs Ryze Build
+y=9793 x=152 12px: •
+y=9793 x=170 12px: Darius
+y=9793 x=203 12px: vs Samira Build
+y=9793 x=294 12px: •
+y=9793 x=311 12px: Darius
+y=9823 x=96 12px: •
+y=9823 x=108 12px: Darius
+y=9823 x=141 12px: vs Senna Build
+y=9823 x=219 12px: •
+y=9823 x=230 12px: Darius
+y=9823 x=264 12px: vs Seraphine Build
+y=9853 x=29 12px: •
+y=9853 x=29 12px: vs Shen Build
+y=9853 x=39 12px: Darius
+y=9853 x=72 12px: vs Sett Build
+y=9853 x=141 12px: •
+y=9853 x=155 12px: Darius
+y=9853 x=189 12px: vs Shaco Build
+y=9853 x=269 12px: •
+y=9853 x=283 12px: Darius
+y=9883 x=55 12px: •
+y=9883 x=67 12px: Darius
+y=9883 x=100 12px: vs Shyvana Build
+y=9883 x=189 12px: •
+y=9883 x=201 12px: Darius
+y=9883 x=235 12px: vs Singed Build
+y=9883 x=316 12px: •
+y=9883 x=328 12px: Darius
+y=9913 x=29 12px: vs Sion Build
+y=9913 x=96 12px: •
+y=9913 x=110 12px: Darius
+y=9913 x=143 12px: vs Sivir Build
+y=9913 x=215 12px: •
+y=9913 x=228 12px: Darius
+y=9913 x=262 12px: vs Skarner Build
+y=9913 x=351 12px: •
+y=9943 x=29 12px: Darius
+y=9943 x=29 12px: vs Soraka Build
+y=9943 x=62 12px: vs Smolder Build
+y=9943 x=161 12px: •
+y=9943 x=179 12px: Darius
+y=9943 x=212 12px: vs Sona Build
+y=9943 x=293 12px: •
+y=9943 x=311 12px: Darius
+y=9973 x=95 12px: •
+y=9973 x=110 12px: Darius
+y=9973 x=143 12px: vs Swain Build
+y=9973 x=225 12px: •
+y=9973 x=240 12px: Darius
+y=9973 x=273 12px: vs Sylas Build
+y=9973 x=351 12px: •
+y=10003 x=29 12px: Darius
+y=10003 x=29 12px: vs Taliyah Build
+y=10003 x=62 12px: vs Syndra Build
+y=10003 x=145 12px: •
+y=10003 x=157 12px: Darius
+y=10003 x=191 12px: vs Tahm Kench Build
+y=10003 x=301 12px: •
+y=10003 x=313 12px: Darius
+y=10033 x=95 12px: •
+y=10033 x=111 12px: Darius
+y=10033 x=144 12px: vs Talon Build
+y=10033 x=224 12px: •
+y=10033 x=240 12px: Darius
+y=10033 x=273 12px: vs Taric Build
+y=10033 x=350 12px: •
+y=10063 x=29 12px: Darius
+y=10063 x=29 12px: vs Tristana Build
+y=10063 x=62 12px: vs Teemo Build
+y=10063 x=151 12px: •
+y=10063 x=169 12px: Darius
+y=10063 x=202 12px: vs Thresh Build
+y=10063 x=292 12px: •
+y=10063 x=311 12px: Darius
+y=10093 x=29 12px: vs Tryndamere Build
+y=10093 x=99 12px: •
+y=10093 x=113 12px: Darius
+y=10093 x=147 12px: vs Trundle Build
+y=10093 x=234 12px: •
+y=10093 x=248 12px: Darius
+y=10123 x=55 12px: •
+y=10123 x=70 12px: Darius
+y=10123 x=104 12px: vs Twisted Fate Build
+y=10123 x=219 12px: •
+y=10123 x=234 12px: Darius
+y=10123 x=268 12px: vs Twitch Build
+y=10123 x=350 12px: •
+y=10153 x=29 12px: Darius
+y=10153 x=29 12px: vs Varus Build
+y=10153 x=62 12px: vs Udyr Build
+y=10153 x=137 12px: •
+y=10153 x=152 12px: Darius
+y=10153 x=185 12px: vs Urgot Build
+y=10153 x=264 12px: •
+y=10153 x=279 12px: Darius
+y=10183 x=29 12px: vs Vel'Koz Build
+y=10183 x=55 12px: •
+y=10183 x=67 12px: Darius
+y=10183 x=101 12px: vs Vayne Build
+y=10183 x=177 12px: •
+y=10183 x=189 12px: Darius
+y=10183 x=223 12px: vs Veigar Build
+y=10183 x=301 12px: •
+y=10183 x=313 12px: Darius
+y=10213 x=95 12px: •
+y=10213 x=109 12px: Darius
+y=10213 x=143 12px: vs Vex Build
+y=10213 x=209 12px: •
+y=10213 x=223 12px: Darius
+y=10213 x=256 12px: vs Vi Build
+y=10213 x=314 12px: •
+y=10213 x=328 12px: Darius
+y=10243 x=29 12px: vs Viego Build
+y=10243 x=101 12px: •
+y=10243 x=114 12px: Darius
+y=10243 x=147 12px: vs Viktor Build
+y=10243 x=224 12px: •
+y=10243 x=237 12px: Darius
+y=10243 x=271 12px: vs Vladimir Build
+y=10273 x=29 12px: •
+y=10273 x=29 12px: vs Wukong Build
+y=10273 x=39 12px: Darius
+y=10273 x=72 12px: vs Volibear Build
+y=10273 x=161 12px: •
+y=10273 x=175 12px: Darius
+y=10273 x=208 12px: vs Warwick Build
+y=10273 x=299 12px: •
+y=10273 x=313 12px: Darius
+y=10303 x=99 12px: •
+y=10303 x=113 12px: Darius
+y=10303 x=146 12px: vs Xayah Build
+y=10303 x=224 12px: •
+y=10303 x=237 12px: Darius
+y=10303 x=271 12px: vs Xerath Build
+y=10303 x=351 12px: •
+y=10333 x=29 12px: Darius
+y=10333 x=29 12px: vs Yone Build
+y=10333 x=62 12px: vs Xin Zhao Build
+y=10333 x=153 12px: •
+y=10333 x=165 12px: Darius
+y=10333 x=198 12px: vs Yasuo Build
+y=10333 x=274 12px: •
+y=10333 x=287 12px: Darius
+y=10363 x=29 12px: vs Yuumi Build
+y=10363 x=55 12px: •
+y=10363 x=67 12px: Darius
+y=10363 x=100 12px: vs Yorick Build
+y=10363 x=176 12px: •
+y=10363 x=188 12px: Darius
+y=10363 x=221 12px: vs Yunara Build
+y=10363 x=302 12px: •
+y=10363 x=314 12px: Darius
+y=10393 x=91 12px: •
+y=10393 x=107 12px: Darius
+y=10393 x=141 12px: vs Zaahen Build
+y=10393 x=230 12px: •
+y=10393 x=247 12px: Darius
+y=10393 x=280 12px: vs Zac Build
+y=10393 x=350 12px: •
+y=10423 x=29 12px: Darius
+y=10423 x=62 12px: vs Zed Build
+y=10423 x=128 12px: •
+y=10423 x=140 12px: Darius
+y=10423 x=174 12px: vs Zeri Build
+y=10423 x=241 12px: •
+y=10423 x=253 12px: Darius
+y=10423 x=287 12px: vs Ziggs Build
+y=10453 x=29 12px: •
+y=10453 x=29 12px: vs Zyra Build
+y=10453 x=39 12px: Darius
+y=10453 x=73 12px: vs Zilean Build
+y=10453 x=154 12px: •
+y=10453 x=169 12px: Darius
+y=10453 x=202 12px: vs Zoe Build
+y=10453 x=271 12px: •
+y=10453 x=286 12px: Darius
+y=10739 x=4 12px: LoLalytics isn't endorsed by Riot Games and doesn't reflect the views or opinion
+y=10787 x=311 12px: Privacy Policy
+y=10803 x=4 12px: Update consent preferences

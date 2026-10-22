@@ -42,9 +42,12 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
    design-ideas.md made checkable
    (words, tap targets, colour), qa.sh and a gallery first. Waits on Jacob: go or not,
    and whether "app" means the site or the desktop window (dvui)
-4. Next on the site, by size of win: Learn redesign (docs/learn-proposal.md), design
-   build order 4-6 (docs/design-ideas.md), per-matchup builds (vsbuilds notes), Daily
-   Draft pick verdicts (daily notes); Jacob's answers to the night's questions first
+4. Next on the site, by size of win: champion and matchup pages to the leaders' level
+   (Jacob 22 Oct: "match" LoLalytics; gaps, measurements and target layout in
+   docs/champion-matchup.md): site.md CH0 (Jacob's choices), CH1-CH9, MU1-MU8, first
+   CH1 first screen, CH2-CH3 build panel with items 4-6 and the skill grid, CH4
+   opponents by every role and duos (data exists); Learn redesign
+   (docs/learn-proposal.md), Daily Draft pick verdicts (daily notes)
 5. Application: Jacob checks the 18 Oct draft text and pastes (production-key.md);
    screenshots, video and LCU list need his real champ select run (app.md APP1);
    docs/privacy-rules.md lists what the text and privacy page must still match (J10)
