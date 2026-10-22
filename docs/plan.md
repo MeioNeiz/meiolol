@@ -73,7 +73,7 @@ today's model; the draft's "Rammus into high AD/AP" check.
 - docs/plan/site.md: the website by page (Your games, Daily Draft, Learn, search,
   champion, matchup, draft tester) and polish before the production review
 - docs/plan/app.md: the two desktop apps (public and private), the policy line between
-  them, Jacob's champ select list by edition, steps APP1-APP8
+  them, Jacob's champ select list by edition, in-game companion, steps APP1-APP9
 - docs/plan/accounts.md: logins, roles (public, paid, private, admin, owner),
   sessions, nginx gate, desktop device tokens, payments later, steps AC0-AC7
 - docs/plan/data-and-model.md: what ~800k games support (comp leans, kit groups, model

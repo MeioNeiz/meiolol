@@ -64,6 +64,12 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
   own account; friends a tier below admin who can't break anything. Roles (later the
   same day): public, paid, private, admin, owner (Jacob). Plans:
   docs/plan/accounts.md, docs/plan/app.md; open points in accounts.md AC0
+- J22 (22 Oct) Private tool: everything Riot allows; no ads in game, no auto accept,
+  pick or ban (not wanted). Not built in any tier: names or stats of others in ranked
+  solo/duo champ select, streamer-mode players, live enemy cooldowns, live alerts and
+  prompts (unfair advantage over other players, Vanguard risk to friends' accounts, the
+  key at stake). In game means an info panel through the game (app.md "In-game
+  companion")
 - nn on the GPU: planned, not now
 - Q1 Rewrite the application around game review of your own games, lane curves as the
   benchmark; squads worded as planned, or out until built

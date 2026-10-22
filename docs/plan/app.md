@@ -77,8 +77,8 @@ Champ select, updating live as champions are hovered and locked. P = public, X =
 | After picks: comp notes, strengths, early/late, which champion carries, matchup info | yes, words | yes, with numbers |
 | Who (as a player) will carry | no | loading screen on, or where names are visible |
 | Team win chance | words, after the held-out look (data-and-model.md step 1) | percentage |
-| In game: what each player plays | research question first | from the loading screen |
-| In game: reactive advice | no (riot-appreciated-tools C9; players reject it, player-tool-needs C2) | no |
+| In game: info panel through the game ("In-game companion" below) | later, after the private one proves it | yes |
+| In game: alerts, prompts, enemy cooldowns | no | no |
 
 ## Steps
 
@@ -105,6 +105,36 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
 - APP7 Private: scouting where names are visible (needs APP1's queue facts and AC6 for
   "me"), percentages, experimental models
 - APP8 Champion icons and window icon (Data Dragon art is allowed, logos not)
+- APP9 In-game companion, private first (below). Against the mock's Live Client Data
+  (deploy/mock-cs.sh full-game), then a real capture (APP1's in-game reply)
+
+## In-game companion
+
+Jacob 22 Oct (J22): the app shows info that helps throughout the game. A panel the
+player looks at, never a notification that tells them what to do: Riot's 27 Aug 2025
+guidelines ban power spike alerts ("X champion has hit level 6"), decision prompts
+("Gank top lane now!") and enemy ability or summoner spell cooldowns
+(research/sources/overwolf-aug-2025-riot-guidelines.md). Big apps still show objective
+timers, gold leads, benchmarks against your tier and teammates' ult timers
+(league-apps-feature-matrix C3).
+
+Data: Live Client Data API (127.0.0.1:2999, read-only, every few seconds) plus our
+curves, stats and builds files. Shown, updated as the game goes:
+- Your lane against the typical game in this matchup at this minute (gold, XP, cs from
+  the curves; the site's matchup chart with a "you are here" line): our own angle,
+  nobody else has per-minute matchup benchmarks
+- Team gold and kill lead; objective timers (dragon, baron, herald, grubs, inhibitors)
+  from the event feed
+- Win chance by minute: private as a percentage, public in words or not at all
+  (riot-appreciated-tools C9: reactive advice unapproved; check before public)
+- Builds: what usually works against their comp and your lane opponent's items so far
+  (private with win rates, public as options); your items vs the usual path
+- Static reference opened by the player, not pushed: the matchup's level 6 and item
+  spikes, cooldown sheet at ranks (knowledge, not tracking)
+- Teammates' ult timers only if the API gives them (allowed; enemy ones are not)
+After the game, the same panel becomes the review: the turning minute, deaths and what
+they cost, spikes and windows compared with the curve (Your games already does most of
+this on the site)
 
 ## Private site
 
