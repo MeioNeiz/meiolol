@@ -6,8 +6,12 @@
 # MESSAGE (each round's outcome, so health.sh can say why acks stopped)
 set -euo pipefail
 cd "$HOME/ml/meiolol"
-# raw-export at idle IO priority, as web-loop.sh's batch: a catch-up's exports, packs and
-# prunes halved the crawler's matches while they ran (19 Oct)
+# raw-export at low IO priority: a catch-up's exports, packs and prunes halved the
+# crawler's matches while they ran (19 Oct). Idle class (web-loop.sh's batch) only for the
+# pack, which reads the export alone: mq-deadline holds an idle read up to 10 s while the
+# crawler reads, and export, ack and prune write raw.db, so they held its write lock
+# through those waits (22 Oct: a prune's incremental vacuum held it 25 min, the crawler's
+# writer and the next export stuck on database busy)
 out=data/archive-out
 read -r cmd arg arg2 _ <<< "${SSH_ORIGINAL_COMMAND:-}"
 name() { [[ "$arg" =~ ^raw-[0-9]+-[0-9]+\.db$ ]] || { echo "bad export name" >&2; exit 2; }; }
@@ -22,7 +26,7 @@ case "${cmd:-}" in
         # the next window
         exec 9> data/.archive-export.lock
         flock 9
-        made=$(nice -n 10 ionice -c 3 bin/meiolol raw-export --data data --out "$out")
+        made=$(nice -n 10 ionice -c 2 -n 7 bin/meiolol raw-export --data data --out "$out")
         echo "$made"
         # Packed here, once: -9 is 39% under the export's gzip bodies for ~60 s of one
         # core an hour of exports (docs/data-safety.md "Raw archive"); a failed pack
@@ -61,11 +65,11 @@ case "${cmd:-}" in
         ;;
     ack)
         name
-        nice -n 10 ionice -c 3 bin/meiolol raw-export --data data --out "$out" --ack "$arg"
+        nice -n 10 ionice -c 2 -n 7 bin/meiolol raw-export --data data --out "$out" --ack "$arg"
         # The prune takes minutes after a backlog, and a long silent ssh from the gpu-box
         # can die ("message authentication code incorrect", 14-17 Oct): detached, one at a
         # time (a skipped one's rows go with the next ack's)
-        setsid -f flock -n data/.archive-prune.lock nice -n 10 ionice -c 3 \
+        setsid -f flock -n data/.archive-prune.lock nice -n 10 ionice -c 2 -n 7 \
             bin/meiolol raw-export --data data --prune >> data/archive-prune.log 2>&1 < /dev/null
         ;;
     forgotten)

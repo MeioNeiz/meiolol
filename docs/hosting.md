@@ -54,7 +54,9 @@ accounts may use Always Free only in the home region).
 - Disk scheduler: mq-deadline on trial since 15 Oct 11:35 UTC, set at runtime only
   (`echo none | sudo tee /sys/block/sda/queue/scheduler` reverts; a reboot does too).
   Under the image's `none`, ionice does nothing. Why and numbers:
-  research/questions/box-io-priority.md
+  research/questions/box-io-priority.md. Under mq-deadline an idle-class read waits up to
+  10 s behind the crawler's, so nothing holding a database write lock runs idle class
+  (22 Oct: an idle prune held raw.db's for 25 min); those use `ionice -c 2 -n 7`
 - crawl.args (2026-10-18): `--proxy 10.0.0.3:8092 --timelines 50 --timelines-priority 100
   --timeline-min-s 900 --raw-timeline-days 3650
   --raw-match-days 0 --raw-valve-free-gb 10 --keep-days 0 --ladder-per-hour 500
