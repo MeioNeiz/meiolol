@@ -43,7 +43,8 @@ fn parse(in: []const u8) ?lanechart.Chart {
     if (lens[3] > max_minutes or lens[4] > max_minutes or lens[5] > max_minutes) return null;
     var at: usize = 24;
     const words = 2 * lens[3] + lens[4] + lens[5];
-    const text = lens[0] + lens[1] + lens[2];
+    // In u64: a u32 sum of three untrusted lengths can wrap and pass the size check
+    const text = @as(u64, lens[0]) + lens[1] + lens[2];
     if (in.len != at + 4 * words + text) return null;
     const int = struct {
         fn f(bytes: []const u8, i: *usize) i32 {

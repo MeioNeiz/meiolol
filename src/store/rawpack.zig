@@ -16,6 +16,9 @@ const std = @import("std");
 const Io = std.Io;
 
 pub const magic = "meiolol-rawpack 1\n";
+/// Riot bodies are at most 16 MiB (riot/client.zig readBody); a corrupt length must
+/// not make the reader reserve gigabytes before the hash check at the end
+pub const max_field = 64 << 20;
 
 pub const Kind = enum(u8) { summary = 's', timeline = 't', mastery = 'm', end = 'e' };
 pub const Encoding = enum(u8) { plain = 0, stored = 1 };
@@ -103,7 +106,8 @@ pub const Writer = struct {
 
     fn bytes(p: *Writer, s: []const u8) !void {
         var b: [4]u8 = undefined;
-        std.mem.writeInt(u32, &b, std.math.cast(u32, s.len) orelse return error.PackFieldTooLong, .little);
+        if (s.len > max_field) return error.PackFieldTooLong;
+        std.mem.writeInt(u32, &b, @intCast(s.len), .little);
         p.hash.update(&b);
         p.hash.update(s);
         try p.w.writeAll(&b);
@@ -225,6 +229,7 @@ pub const Reader = struct {
         const lb = p.r.takeArray(4) catch return error.PackCut;
         p.hash.update(lb);
         const len = std.mem.readInt(u32, lb, .little);
+        if (len > max_field) return error.BadPack;
         const start = p.buf.items.len;
         try p.buf.resize(p.gpa, start + len);
         p.r.readSliceAll(p.buf.items[start..]) catch return error.PackCut;
@@ -280,4 +285,34 @@ test "pack round trip, and a cut or edited pack fails" {
         _ = (re.next() catch |e| break e) orelse break error.NoError;
     };
     try testing.expectEqual(error.PackHashDiffers, eerr);
+}
+
+test "every cut is PackCut; a corrupt length fails before allocating" {
+    const gpa = testing.allocator;
+    var out: Io.Writer.Allocating = .init(gpa);
+    defer out.deinit();
+    var w = try Writer.begin(&out.writer);
+    try w.doc(.summary, .{ .key = "EUW1_1", .fetched_at = 10, .encoding = .plain, .body = "{\"a\":1}" });
+    try w.mastery(.{ .puuid = "p2", .platform = "EUW1", .fetched_at = 14, .champions = 0, .data = "" });
+    try w.end();
+    const bytes = out.written();
+    for (magic.len..bytes.len) |len| {
+        var in: Io.Reader = .fixed(bytes[0..len]);
+        var r = try Reader.init(gpa, &in);
+        defer r.deinit();
+        const err = while (true) {
+            _ = (r.next() catch |e| break e) orelse break error.NoError;
+        };
+        try testing.expectEqual(error.PackCut, err);
+    }
+
+    const bad = try gpa.dupe(u8, bytes);
+    defer gpa.free(bad);
+    // The body's length: after tag, key (4 + 6), fetched_at and encoding
+    std.mem.writeInt(u32, bad[magic.len + 1 + 4 + 6 + 8 + 1 ..][0..4], 0xF000_0000, .little);
+    var in: Io.Reader = .fixed(bad);
+    var r = try Reader.init(gpa, &in);
+    defer r.deinit();
+    try testing.expectError(error.BadPack, r.next());
+    try testing.expect(r.buf.capacity < 1024);
 }
