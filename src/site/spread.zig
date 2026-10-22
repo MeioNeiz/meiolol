@@ -20,12 +20,13 @@ fn x(pct: u32) f64 {
     return slot / 2 + slot * @as(f64, @floatFromInt(pct)) / 10;
 }
 
-pub fn section(w: *Writer, s: *const spread.Spread, ch: Champ, region: html.Region) !void {
+/// `period`: "last 30 days", "patch 16.21"
+pub fn section(w: *Writer, s: *const spread.Spread, ch: Champ, region: html.Region, period: []const u8) !void {
     if (s.min_players == 0) return;
     const c = s.get(ch.id) orelse spread.Champion{ .id = ch.id, .players = 0, .bins = @splat(0), .p25 = 0, .p50 = 0, .p75 = 0, .shape = @splat(0) };
     if (c.players < s.min_players) {
         try tpl.render(w,
-            \\<p class="muted small">Players' win rates on {name}: more data needed ({players} {noun} {in} with {min}+ games on it, {need} needed).</p>
+            \\<p class="muted small">Players' win rates on {name}: more data needed ({players} {noun} {in} with {min}+ games on it, {period}; {need} needed).</p>
             \\
         , .{
             .name = ch.name,
@@ -33,6 +34,7 @@ pub fn section(w: *Writer, s: *const spread.Spread, ch: Champ, region: html.Regi
             .noun = if (c.players == 1) "player" else "players",
             .in = region.in(),
             .min = s.min_games,
+            .period = period,
             .need = s.min_players,
         });
         return;
@@ -65,7 +67,7 @@ pub fn section(w: *Writer, s: *const spread.Spread, ch: Champ, region: html.Regi
         \\<line class="half" x1="{lo}" x2="{hi}" y1="52" y2="52"></line><circle cx="{med}" cy="52" r="2.5"></circle>
         \\<text x="{zero}" y="61">0%</text><text x="{fifty}" y="61">50%</text><text x="{hundred}" y="61">100%</text>
         \\</svg>
-        \\<small>Middle half of players: {p25}% to {p75}%. {players} players {in} with {min}+ games on {name} (all patches); in 10 games, luck alone moves a win rate by about 15 points.</small></div>
+        \\<small>Middle half of players: {p25}% to {p75}%. {players} players {in} with {min}+ games on {name}, {period}; in 10 games, luck alone moves a win rate by about 15 points.</small></div>
         \\
     , .{
         .lo = x(c.p25),
@@ -80,5 +82,6 @@ pub fn section(w: *Writer, s: *const spread.Spread, ch: Champ, region: html.Regi
         .in = region.in(),
         .min = s.min_games,
         .name = ch.name,
+        .period = period,
     });
 }

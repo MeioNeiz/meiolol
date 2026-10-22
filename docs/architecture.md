@@ -452,16 +452,18 @@ Memory: one hash map of distinct options (~50 B each) capped by --max-keys (defa
 totals never. Per game an arena reset, like curves. Measured on 3.8k EUW 16.20 games
 (1.7k timelines): 1 s, 29 MB RSS, 25k options, 1.1 MB JSON; ~0.25 ms per timeline, so
 a full EUW patch (~400k) is a couple of minutes on a fast disk; on the micro the
-first run took ~7.5 ms a game (docs/backlog.md "Builds"). deploy/web-loop.sh runs EUW and all
-regions for the current patch daily and on a new patch, both from one pass over the
-timelines (`builds --site`, builds.buildEach), in the background at nice 10 (log
-data/builds.log); the next site build picks them up.
+first run took ~7.5 ms a game (docs/backlog.md "Builds"). deploy/web-loop.sh runs
+`builds --site` daily and on a new patch: EUW and all regions, the current patch and
+the last 30 days (data/export/recent-builds.json, all-recent-builds.json; no matchups),
+from one pass over the timelines (builds.buildEach, a stats.Slice per file), in the
+background at nice 10 (log data/builds.log); the next site build picks them up. Names
+and icons come from the patch's Data Dragon, so an item removed since has none.
 
-`meiolol site` reads the current patch's two files: a page per champion and role in the
-patch views (patch/build/<slug>-<role>.html, all/patch/...) when the role has 10%+ of
-the champion's games in the file; champion pages show the most played choice per kind
-in each role section (builds.strip) and link to it (the
-30-day views into their region's patch view; switches fall back to the champion page).
+`meiolol site` reads the four files, one per view: a page per champion and role in
+each view (build/<slug>-<role>.html, patch/build/..., all/...) when the role has 10%+ of
+the champion's games in the file; champion pages carry each view's most played choice
+per kind in each role section (builds.strip, one variant per view, below) and link to
+that view's page. Matchup pages show their region's patch builds.
 Rows most played first, never by win rate, no "best" or "recommended": games and share
 on every row, a win rate only from 100 games and always with its 95% range (±1.96 SE),
 rows under 400 greyed, a "more data needed" note under 400 for the champion-role. Item,
@@ -520,7 +522,8 @@ losses (docs/learned.md). Per champion, all roles: new (under 30k) against pract
 (100k+), 200+ games each; the gap's average over champions, and harder or easier when the
 gap is 2 standard errors off it; the table sorts by the gap pulled toward the average by
 the between-champion spread over its own noise. `meiolol site` writes data/learning.json
-(pool.js lines), a section on each champion page and a table on pool.html. Partials:
+(pool.js lines), a section on each champion page and a table on pool.html, both over
+the view's period (all regions). Partials:
 learning.bin (Views partials); the database path joins participants to mastery.
 
 ## Recommender (src/core/score.zig)
@@ -552,7 +555,11 @@ rank, role and opponent; bans; each view's curve gold at 14) and data/filters.js
 (players per role, for pick rates; games by rank, for ban rates). A ban counts under
 its game's rank, the median ladder tier of its players: Riot's ban order doesn't say
 reliably which player banned. static/filters.js sums the picked slices and redraws
-the tiles, opponent table, early-data note and header switches. Gold at 14 is the
+the tiles, opponent table, early-data note and header switches. Blocks made per view
+(players' win rates, builds strip, how hard to pick up) are written once per view in a
+`data-by-view` group (champion.zig variant; the root view's from Site.by_view) and
+filters.js shows the picks' view's; a single platform takes all regions', the rank pick
+changes none of them. The pool section stays all-time (mastery is lifetime). Gold at 14 is the
 curve's estimate when the filters are a view (any rank, or Diamond+), else the plain
 average. Other views link in with their filters in the query (html.View.query:
 ?region=all&period=patch), and the filters point the nav links into the matching view.

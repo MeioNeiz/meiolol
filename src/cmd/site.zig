@@ -80,7 +80,7 @@ const SiteFlags = struct {
         return .{
             .out_dir = f.out orelse try std.fs.path.join(arena, &.{ c.data_dir, "site" }),
             .patches = chosen,
-            .since_ms = now_ms - 30 * std.time.ms_per_day,
+            .since_ms = now_ms - main.recent_days * std.time.ms_per_day,
             .all_platforms = every.items,
             .contact = contact,
             .riot_txt = f.riot_txt,
@@ -103,9 +103,9 @@ const SiteFlags = struct {
                 try curvesPath(arena, c.data_dir, chosen, true),
             },
             .builds = .{
-                null,
+                try main.recentBuildsPath(arena, c.data_dir, false),
                 try buildsPath(arena, c.data_dir, chosen, false),
-                null,
+                try main.recentBuildsPath(arena, c.data_dir, true),
                 try buildsPath(arena, c.data_dir, chosen, true),
             },
             .prev_patch = if (prev) |p| p[0] else null,

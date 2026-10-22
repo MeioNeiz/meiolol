@@ -132,6 +132,12 @@ pub const Champ = struct {
     games: u64,
 };
 
+/// A view's players' win rates and learning, as its own load makes them
+pub const ByView = struct {
+    spread: spread.Spread,
+    learning: learning.Learning,
+};
+
 /// One view's data, loaded once (`load`), and what every page of it renders from
 /// (`renderPage`, `renderShared`): the static build and the request renderer (`Loaded`)
 /// share one function per page type
@@ -179,6 +185,8 @@ pub const Site = struct {
     pool: pool.Pool = .{},
     learning: learning.Learning = .{},
     spread: spread.Spread = .{},
+    /// The root view's only, for the champion pages: every view's (html.View.index)
+    by_view: []const ByView = &.{},
     /// Data and script files in the view's directory
     files: []const File = &.{},
     /// The shared view's files at the site root (Daily Draft, Learn)
@@ -238,6 +246,14 @@ pub const Site = struct {
         return switch (s.view.period) {
             .days30 => "last 30 days",
             .patch => s.when,
+        };
+    }
+
+    /// Period `p`'s games in running text: "last 30 days", "patch 16.21"
+    pub fn periodText(s: *const Site, p: html.Period) []const u8 {
+        return switch (p) {
+            .days30 => "last 30 days",
+            .patch => s.arena.print("patch {s}", .{s.patch}) catch s.patch,
         };
     }
 
@@ -405,7 +421,7 @@ fn pagePathsMin(site: *const Site, min_games: u32) ![]const []const u8 {
     };
     try list.append(a, "matchup/index.html");
     if (site.curves) |*c| try matchup.paths(site, c, &list, min_games);
-    if (site.view.period == .patch) if (site.view_builds[site.view.index()]) |*b| try builds_page.paths(site, b, &list);
+    if (site.view_builds[site.view.index()]) |*b| try builds_page.paths(site, b, &list);
     try list.append(a, "pool.html");
     try list.append(a, patch_page.path);
     return list.items;
@@ -428,10 +444,8 @@ pub fn renderPage(site: *const Site, w: *Writer, path: []const u8) !bool {
     } else if (strip(path, "matchup/", ".html")) |s| {
         return matchup.route(site, w, if (site.curves) |*c| c else return false, s);
     } else if (eql(u8, path, builds_page.index_path)) {
-        if (site.view.period != .patch) return false;
         try builds_page.writeIndex(site, w, if (site.view_builds[site.view.index()]) |*b| b else return false);
     } else if (strip(path, "build/", ".html")) |s| {
-        if (site.view.period != .patch) return false;
         return builds_page.route(site, w, if (site.view_builds[site.view.index()]) |*b| b else return false, s);
     } else if (eql(u8, path, "pool.html")) {
         try pool_page.writePage(site, w, &site.pool, &site.learning);

@@ -2,9 +2,9 @@
 //! champion at the time. Players new to a champion (under 30k points) against practised
 //! ones (100k+): every champion has a gap (practised players are often better players
 //! too), so a champion is harder or easier to pick up only when its gap is clearly off
-//! the average one (docs/learned.md, Player). Every region's games, whatever the view:
-//! a champion's difficulty hardly depends on the region, and one region's games are too
-//! few to tell most champions apart.
+//! the average one (docs/learned.md, Player). Every region's games, whatever the view's
+//! region (a champion's difficulty hardly depends on it, and one region's games are too
+//! few to tell most champions apart); the view's period's, as the rest of its pages.
 //!
 //! Points at the time: the player's mastery row (one per player, refetched monthly) for
 //! games that start after its fetch. Games on the champion between the fetch and the
@@ -187,17 +187,16 @@ fn pairLanes(arena: Allocator, map: *GoldMap, match_id: []const u8, lanes: anyty
     }
 }
 
-/// Every ranked solo game after its player's mastery fetch, into out[i] for the platforms
-/// of sets[i]
-fn tallyDb(gpa: Allocator, db: store.Db, st: *const Stats, sets: []const []const []const u8, out: []Tally) !void {
+/// Every ranked solo game after its player's mastery fetch, into out[i] for slices[i]
+fn tallyDb(gpa: Allocator, db: store.Db, st: *const Stats, slices: []const stats.Slice, out: []Tally) !void {
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    const platform_json = try stats.setsJson(arena, sets);
+    const platform_json = try stats.Slice.platformsJson(arena, slices);
     const gold = try goldMap(arena, db, platform_json);
     var q = try db.prepare(
         \\SELECT pa.match_id, pa.slot, pa.champion_id, pa.win, m.platform, m.game_start,
-        \\  ma.data, ma.fetched_at
+        \\  m.patch, ma.data, ma.fetched_at
         \\FROM matches m CROSS JOIN participants pa USING (match_id)
         \\  CROSS JOIN mastery ma ON ma.puuid = pa.puuid
         \\WHERE m.queue_id = ? AND m.remake = 0
@@ -217,6 +216,7 @@ fn tallyDb(gpa: Allocator, db: store.Db, st: *const Stats, sets: []const []const
             win: bool,
             platform: []const u8,
             start: i64,
+            patch: []const u8,
             data: []const u8,
             fetched_at: i64,
         });
@@ -228,7 +228,7 @@ fn tallyDb(gpa: Allocator, db: store.Db, st: *const Stats, sets: []const []const
             (if (r.slot >= 0 and r.slot < 10) slots[@intCast(r.slot)] else null)
         else
             null;
-        const in = stats.setsWith(sets, r.platform);
+        const in = stats.Slice.of(slices, r.platform, r.start, r.patch);
         for (out, 0..) |*t, i| {
             if (in & (@as(u32, 1) << @intCast(i)) != 0) t.add(c, bin, r.win, g);
         }
@@ -236,14 +236,14 @@ fn tallyDb(gpa: Allocator, db: store.Db, st: *const Stats, sets: []const []const
 }
 
 /// tallyDb from the views partials, with the bins masteryTallies found
-fn tallyPartials(gpa: Allocator, games: *const partials.Store, st: *const Stats, sets: []const []const []const u8, out: []Tally) !void {
+fn tallyPartials(gpa: Allocator, games: *const partials.Store, st: *const Stats, slices: []const stats.Slice, out: []Tally) !void {
     const bins_of = &(games.learning orelse return error.NoMastery);
-    const masks = try games.setMasks(gpa, sets);
-    defer gpa.free(masks);
+    var masks = try games.sliceMasks(gpa, slices);
+    defer masks.deinit(gpa);
     const lanes = try games.codesIn(gpa, &.{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" });
     defer gpa.free(lanes);
     for (games.sorted) |g| {
-        const in = masks[g.platform];
+        const in = masks.of(g);
         if (in == 0) continue;
         for (g.players) |p| {
             const k = p.puuid orelse continue;
@@ -279,16 +279,16 @@ fn laneGold(g: *const partials.Game, lanes: []const bool, slot: i8) ?i32 {
     return null;
 }
 
-/// Tallies for each of `sets` (platform lists); with `from`, the games from the views
-/// partials, after their masteryTallies. Free with freeTallies
-pub fn tallyWith(gpa: Allocator, db: store.Db, st: *const Stats, sets: []const []const []const u8, from: ?*const partials.Store) ![]Tally {
-    const out = try gpa.alloc(Tally, sets.len);
+/// Tallies for each of `slices`; with `from`, the games from the views partials, after
+/// their masteryTallies. Free with freeTallies
+pub fn tallyWith(gpa: Allocator, db: store.Db, st: *const Stats, slices: []const stats.Slice, from: ?*const partials.Store) ![]Tally {
+    const out = try gpa.alloc(Tally, slices.len);
     var made: usize = 0;
     errdefer freeTallies(gpa, out[0..made]);
-    while (made < sets.len) : (made += 1) out[made] = try .init(gpa, st.n);
+    while (made < slices.len) : (made += 1) out[made] = try .init(gpa, st.n);
     if (from) |p| {
-        try tallyPartials(gpa, p, st, sets, out);
-    } else try tallyDb(gpa, db, st, sets, out);
+        try tallyPartials(gpa, p, st, slices, out);
+    } else try tallyDb(gpa, db, st, slices, out);
     return out;
 }
 
@@ -493,7 +493,7 @@ test "db: games after the player's fetch, by the points then" {
     try b.write(&aw.writer, "16.20");
     const st: Stats = try .parse(arena, aw.written());
 
-    const ts = try tallyWith(gpa, db, &st, &.{&.{"EUW1"}}, null);
+    const ts = try tallyWith(gpa, db, &st, &.{.{ .platforms = &.{"EUW1"} }}, null);
     defer freeTallies(gpa, ts);
     const t = ts[0];
     try testing.expectEqual(2, t.games);

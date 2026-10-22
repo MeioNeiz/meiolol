@@ -177,35 +177,42 @@ pub fn contribution(st: *const Stats, plays: []const Play, rule: Rule) ?Contribu
 
 /// Every player's ranked solo champions, from the matches crawled so far (all patches: a
 /// pool changes more slowly than a patch), into out[i] for the platforms of sets[i], in
-/// one pass; each player's win rate on each champion into spreads[i]
+/// one pass; each player's win rate on each champion in slices[i]'s games into spreads[i]
 pub fn tallyGames(
     gpa: Allocator,
     db: store.Db,
     st: *const Stats,
     sets: []const []const []const u8,
+    slices: []const stats.Slice,
     out: []Tally,
     spreads: []spread.Tally,
 ) !void {
-    const platform_json = try stats.setsJson(gpa, sets);
+    var platforms: std.ArrayList([]const u8) = .empty;
+    defer platforms.deinit(gpa);
+    for (sets) |s| try platforms.appendSlice(gpa, s);
+    for (slices) |s| try platforms.appendSlice(gpa, s.platforms);
+    const platform_json = try std.json.Stringify.valueAlloc(gpa, platforms.items, .{});
     defer gpa.free(platform_json);
+    // Grouped by whether a game is from the slices' one start (the site's views: every
+    // game or the last 30 days'), so a row's start stands in as that start or just before
+    var recent_ms: i64 = 0;
+    for (slices) |s| recent_ms = @max(recent_ms, s.since_ms);
+    for (slices) |s| std.debug.assert(s.since_ms == 0 or s.since_ms == recent_ms);
     // CROSS JOIN: matches first, in table order. Walking the puuid index instead reads
     // participants pages at random, 6x slower. By champion within a player, as the old
     // GROUP BY puuid, champion gave: the first of tied top champions is the main
     var q = try db.prepare(
-        \\SELECT p.puuid, m.platform, p.champion_id, count(*), sum(p.win)
+        \\SELECT p.puuid, m.platform, p.champion_id, m.patch, m.game_start >= ?, count(*),
+        \\  sum(p.win)
         \\FROM matches m CROSS JOIN participants p USING (match_id)
         \\WHERE m.queue_id = ? AND m.remake = 0 AND p.puuid IS NOT NULL
         \\  AND m.platform IN (SELECT value FROM json_each(?))
-        \\GROUP BY 1, 2, 3 ORDER BY 1, 3
+        \\GROUP BY 1, 2, 3, 4, 5 ORDER BY 1, 3
     );
     defer q.deinit();
-    try q.bind(.{ stats.ranked_solo, platform_json });
-    const plays = try gpa.alloc(std.ArrayList(Play), sets.len);
-    @memset(plays, .empty);
-    defer {
-        for (plays) |*p| p.deinit(gpa);
-        gpa.free(plays);
-    }
+    try q.bind(.{ recent_ms, stats.ranked_solo, platform_json });
+    var plays: Plays = try .init(gpa, sets.len, slices.len);
+    defer plays.deinit(gpa);
     var current: std.ArrayList(u8) = .empty;
     defer current.deinit(gpa);
     while (try q.step()) {
@@ -213,32 +220,21 @@ pub fn tallyGames(
             puuid: []const u8,
             platform: []const u8,
             champion_id: u32,
+            patch: []const u8,
+            recent: bool,
             games: u32,
             wins: u32,
         });
         if (!std.mem.eql(u8, r.puuid, current.items)) {
-            for (out, spreads, plays) |*t, *s, *p| {
-                addPlayer(st, t, s, p.items);
-                p.clearRetainingCapacity();
-            }
+            plays.flush(st, out, spreads);
             current.clearRetainingCapacity();
             try current.appendSlice(gpa, r.puuid);
         }
-        const in = stats.setsWith(sets, r.platform);
         const play: Play = .{ .champion = r.champion_id, .weight = r.games, .wins = r.wins };
-        for (plays, 0..) |*p, i| {
-            if (in & (@as(u32, 1) << @intCast(i)) == 0) continue;
-            // The same champion on another of the set's platforms
-            for (p.items) |*have| {
-                if (have.champion == play.champion) {
-                    have.weight += play.weight;
-                    have.wins += play.wins;
-                    break;
-                }
-            } else try p.append(gpa, play);
-        }
+        const start = if (r.recent) recent_ms else recent_ms - 1;
+        try plays.add(gpa, play, stats.setsWith(sets, r.platform), stats.Slice.of(slices, r.platform, start, r.patch));
     }
-    for (out, spreads, plays) |*t, *s, p| addPlayer(st, t, s, p.items);
+    plays.flush(st, out, spreads);
 }
 
 /// tallyGames from the views partials: the same players and plays, grouped by PUUID key
@@ -248,22 +244,28 @@ pub fn tallyGamesFrom(
     games: *const partials.Store,
     st: *const Stats,
     sets: []const []const []const u8,
+    slices: []const stats.Slice,
     out: []Tally,
     spreads: []spread.Tally,
 ) !void {
     const masks = try games.setMasks(gpa, sets);
     defer gpa.free(masks);
-    const Row = struct { key: partials.Key, champion: u32, platform: partials.Code, win: bool };
+    var slice_masks = try games.sliceMasks(gpa, slices);
+    defer slice_masks.deinit(gpa);
+    const Row = struct { key: partials.Key, champion: u32, sets: u32, slices: u32, win: bool };
     var rows: std.ArrayList(Row) = .empty;
     defer rows.deinit(gpa);
     for (games.sorted) |g| {
-        if (masks[g.platform] == 0) continue;
+        const in_sets = masks[g.platform];
+        const in_slices = slice_masks.of(g);
+        if (in_sets | in_slices == 0) continue;
         for (g.players) |p| {
             const k = p.puuid orelse continue;
             try rows.append(gpa, .{
                 .key = k,
                 .champion = std.math.cast(u32, p.champion) orelse return error.Unrepresentable,
-                .platform = g.platform,
+                .sets = in_sets,
+                .slices = in_slices,
                 .win = p.win,
             });
         }
@@ -274,41 +276,72 @@ pub fn tallyGamesFrom(
             return a.champion < b.champion;
         }
     }.f);
-    const plays = try gpa.alloc(std.ArrayList(Play), sets.len);
-    @memset(plays, .empty);
-    defer {
-        for (plays) |*p| p.deinit(gpa);
-        gpa.free(plays);
-    }
+    var plays: Plays = try .init(gpa, sets.len, slices.len);
+    defer plays.deinit(gpa);
     var at: usize = 0;
     while (at < rows.items.len) {
         const k = rows.items[at].key;
         var end = at;
         while (end < rows.items.len and rows.items[end].key.eql(k)) end += 1;
-        for (plays) |*p| p.clearRetainingCapacity();
         for (rows.items[at..end]) |r| {
-            const in = masks[r.platform];
-            for (plays, 0..) |*p, i| {
-                if (in & (@as(u32, 1) << @intCast(i)) == 0) continue;
-                // By champion, so the same champion on another platform is the last one
-                if (p.items.len > 0 and p.items[p.items.len - 1].champion == r.champion) {
-                    const have = &p.items[p.items.len - 1];
-                    have.weight += 1;
-                    have.wins += @intFromBool(r.win);
-                } else try p.append(gpa, .{ .champion = r.champion, .weight = 1, .wins = @intFromBool(r.win) });
-            }
+            try plays.add(gpa, .{ .champion = r.champion, .weight = 1, .wins = @intFromBool(r.win) }, r.sets, r.slices);
         }
-        for (out, spreads, plays) |*t, *s, p| addPlayer(st, t, s, p.items);
+        plays.flush(st, out, spreads);
         at = end;
     }
 }
 
-fn addPlayer(st: *const Stats, t: *Tally, s: *spread.Tally, plays: []const Play) void {
-    t.add(st, plays, .games);
-    for (plays) |p| {
-        if (st.index(p.champion)) |c| s.add(c, p.weight, p.wins, .{});
+/// One player's plays per pool set and per spread slice, until flush
+const Plays = struct {
+    sets: []std.ArrayList(Play),
+    slices: []std.ArrayList(Play),
+
+    fn init(gpa: Allocator, sets: usize, slices: usize) !Plays {
+        const s = try gpa.alloc(std.ArrayList(Play), sets);
+        errdefer gpa.free(s);
+        const sl = try gpa.alloc(std.ArrayList(Play), slices);
+        @memset(s, .empty);
+        @memset(sl, .empty);
+        return .{ .sets = s, .slices = sl };
     }
-}
+
+    fn deinit(p: *Plays, gpa: Allocator) void {
+        for (p.sets) |*l| l.deinit(gpa);
+        for (p.slices) |*l| l.deinit(gpa);
+        gpa.free(p.sets);
+        gpa.free(p.slices);
+    }
+
+    /// `play` into the sets and slices whose bits are set in `sets` and `slices`
+    fn add(p: *Plays, gpa: Allocator, play: Play, sets: u32, slices: u32) !void {
+        for (p.sets, 0..) |*l, i| if (sets & (@as(u32, 1) << @intCast(i)) != 0) try merge(gpa, l, play);
+        for (p.slices, 0..) |*l, i| if (slices & (@as(u32, 1) << @intCast(i)) != 0) try merge(gpa, l, play);
+    }
+
+    /// Rows come by champion within a player, so the same champion (on another
+    /// platform, patch or start) is the last one
+    fn merge(gpa: Allocator, l: *std.ArrayList(Play), play: Play) !void {
+        if (l.items.len > 0 and l.items[l.items.len - 1].champion == play.champion) {
+            const have = &l.items[l.items.len - 1];
+            have.weight += play.weight;
+            have.wins += play.wins;
+        } else try l.append(gpa, play);
+    }
+
+    /// The player's plays into the tallies, then cleared for the next player
+    fn flush(p: *Plays, st: *const Stats, out: []Tally, spreads: []spread.Tally) void {
+        for (out, p.sets) |*t, *l| {
+            t.add(st, l.items, .games);
+            l.clearRetainingCapacity();
+        }
+        for (spreads, p.slices) |*s, *l| {
+            for (l.items) |play| {
+                if (st.index(play.champion)) |c| s.add(c, play.weight, play.wins, .{});
+            }
+            l.clearRetainingCapacity();
+        }
+    }
+};
 
 /// Champions a player has not played for this long are not in their pool: mastery
 /// points are lifetime
@@ -385,30 +418,38 @@ fn freeTallies(gpa: Allocator, ts: []Tally) void {
     gpa.free(ts);
 }
 
-/// Tallies for each of `sets` (platform lists), two passes over the database in all
-pub fn tally(gpa: Allocator, db: store.Db, st: *const Stats, sets: []const []const []const u8) !Tallies {
-    return tallyWith(gpa, db, st, sets, null);
+/// Tallies for each of `sets` (platform lists), and players' win rates in each of
+/// `slices`' games, two passes over the database in all
+pub fn tally(gpa: Allocator, db: store.Db, st: *const Stats, sets: []const []const []const u8, slices: []const stats.Slice) !Tallies {
+    return tallyWith(gpa, db, st, sets, slices, null);
 }
 
 /// As tally; with `from`, games from the views partials and only the mastery rows
 /// changed since they were read
-pub fn tallyWith(gpa: Allocator, db: store.Db, st: *const Stats, sets: []const []const []const u8, from: ?*partials.Store) !Tallies {
+pub fn tallyWith(
+    gpa: Allocator,
+    db: store.Db,
+    st: *const Stats,
+    sets: []const []const []const u8,
+    slices: []const stats.Slice,
+    from: ?*partials.Store,
+) !Tallies {
     const games = try initTallies(gpa, st.n, sets.len);
     errdefer freeTallies(gpa, games);
     const mastery = try initTallies(gpa, st.n, sets.len);
     errdefer freeTallies(gpa, mastery);
-    const spreads = try gpa.alloc(spread.Tally, sets.len);
+    const spreads = try gpa.alloc(spread.Tally, slices.len);
     var made: usize = 0;
     errdefer {
         for (spreads[0..made]) |*s| s.deinit(gpa);
         gpa.free(spreads);
     }
-    while (made < sets.len) : (made += 1) spreads[made] = try .init(gpa, st.n);
+    while (made < slices.len) : (made += 1) spreads[made] = try .init(gpa, st.n);
     if (from) |p| {
-        try tallyGamesFrom(gpa, p, st, sets, games, spreads);
+        try tallyGamesFrom(gpa, p, st, sets, slices, games, spreads);
         try p.masteryTallies(db, st, sets, mastery);
     } else {
-        try tallyGames(gpa, db, st, sets, games, spreads);
+        try tallyGames(gpa, db, st, sets, slices, games, spreads);
         try tallyMastery(gpa, db, st, sets, mastery);
     }
     return .{ .games = games, .mastery = mastery, .spread = spreads };
@@ -834,7 +875,7 @@ test "mastery: points as weight, stale and small champions left out" {
             puuid, p[0], now, p[1].len, store.Blob{ .bytes = blob },
         });
     }
-    var both = try tally(gpa, db, &st, &.{ &.{"EUW1"}, &.{ "EUW1", "KR" } });
+    var both = try tally(gpa, db, &st, &.{ &.{"EUW1"}, &.{ "EUW1", "KR" } }, &.{});
     defer both.deinit(gpa);
     try testing.expectEqual(2, both.mastery[1].players);
     const t = both.mastery[0];
@@ -846,7 +887,7 @@ test "mastery: points as weight, stale and small champions left out" {
     try testing.expectEqual(0, t.plays[st.index(4).?]);
 }
 
-test "games: one pass for several platform sets, a champion summed across platforms" {
+test "games: one pass for several platform sets, a champion summed across platforms; spreads by slice" {
     const gpa = testing.allocator;
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
@@ -866,8 +907,15 @@ test "games: one pass for several platform sets, a champion summed across platfo
             \\VALUES (?,0,100,'a',?,'TOP',1)
         , .{ id, champ });
     }
-    var t = try tally(gpa, db, &st, &.{ &.{"EUW1"}, &.{ "EUW1", "KR" } });
+    // Spreads: every game, and from game 6 (KR's only: 5 games of champion 1, too few)
+    const slices = [_]stats.Slice{
+        .{ .platforms = &.{ "EUW1", "KR" } },
+        .{ .platforms = &.{ "EUW1", "KR" }, .since_ms = 6 },
+    };
+    var t = try tally(gpa, db, &st, &.{ &.{"EUW1"}, &.{ "EUW1", "KR" } }, &slices);
     defer t.deinit(gpa);
+    try testing.expectEqual(1, t.spread[0].players[st.index(1).? * 101 + 100]);
+    for (t.spread[1].players) |n| try testing.expectEqual(0, n);
     try testing.expectEqual(0, t.games[0].players); // 6 games: too new to say
     const all = t.games[1];
     try testing.expectEqual(1, all.players);

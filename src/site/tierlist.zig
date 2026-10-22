@@ -384,7 +384,6 @@ pub fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {
     if (role) |r| {
         try tpl.render(w, "<h1>{role} lane champions</h1>\n", .{ .role = roleName(r) });
     } else try tpl.render(w, "<h1>Champions</h1>\n", .{});
-    const patch_view: html.View = .{ .region = site.view.region, .period = .patch };
     try tpl.render(w,
         \\<p class="muted"><b>{games}</b> Platinum+ ranked solo/duo games {in}, {when}.{builds}</p>
         \\
@@ -392,9 +391,9 @@ pub fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {
         .games = try thousands(a, site.games),
         .in = site.view.region.in(),
         .when = site.when,
-        .builds = if (site.view_builds[patch_view.index()] != null) tpl.t(" <a href=\"{href}\">Builds for patch {patch}</a>.", .{
-            .href = try std.mem.concat(a, u8, &.{ root, site.view.up(), patch_view.dir(), builds_page.index_path }),
-            .patch = site.patch,
+        .builds = if (site.view_builds[site.view.index()] != null) tpl.t(" <a href=\"{href}\">Builds, {period}</a>.", .{
+            .href = try std.mem.concat(a, u8, &.{ root, builds_page.index_path }),
+            .period = site.period(),
         }) else null,
     });
     try earlyNote(site, w, false);

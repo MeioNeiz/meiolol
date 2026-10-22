@@ -2,7 +2,8 @@
 //! most played first, never ranked by win rate or called "best" (docs/concept.md,
 //! docs/production-key.md). Every row shows games and pick share; a win rate only with
 //! rate_games behind it and always with its 95% range; rows under solid_games greyed.
-//! Pages live in the patch views; the 30-day views link to them.
+//! Pages in every view with a builds file: a patch's, or the last 30 days' (builds
+//! --site); champion pages show each view's strip as their filters pick it.
 
 const std = @import("std");
 const core = @import("core");
@@ -46,45 +47,54 @@ pub fn shown(f: *const File, champion: u32, r: Role) ?File.Build {
     return b;
 }
 
-/// The patch view of the site view's region, where build pages are
+/// The patch view of the site view's region, whose builds matchup pages show
 fn patchView(site: *const Site) html.View {
     return .{ .region = site.view.region, .period = .patch };
 }
 
-/// A strip's build: the current patch's, or the previous patch's while the current one
-/// has under solid_games of it and the previous more (a new patch's first days)
+/// "patch 16.21" or "last 30 days": a builds file's games in a view of `period`
+fn periodText(a: std.mem.Allocator, f: *const File, period: html.Period) ![]const u8 {
+    return switch (period) {
+        .patch => a.print("patch {s}", .{f.label}),
+        .days30 => f.label,
+    };
+}
+
+/// A strip's build: the view's, or in a patch view the previous patch's while the
+/// current one has under solid_games of it and the previous more (a new patch's first
+/// days)
 const Picked = struct {
     f: *const File,
     b: File.Build,
+    period: html.Period,
     /// The current patch's games of it when the previous patch's is shown
     newer: ?u64 = null,
 
-    /// "patch 16.21", or "patch 16.20 (16.21: 57 games so far)"
-    fn patch(p: Picked, site: *const Site) ![]const u8 {
-        const n = p.newer orelse return site.arena.print("patch {s}", .{p.f.label});
+    /// "patch 16.21", "patch 16.20 (16.21: 57 games so far)", "last 30 days"
+    fn when(p: Picked, site: *const Site) ![]const u8 {
+        const n = p.newer orelse return periodText(site.arena, p.f, p.period);
         return site.arena.print("patch {s} ({s}: {s} game{s} so far)", .{ p.f.label, site.patch, try root.thousands(site.arena, n), plural(n) });
     }
 };
 
-fn pick(site: *const Site, get: anytype, args: anytype) ?Picked {
-    const pv = patchView(site);
-    const cur = pickFrom(&site.view_builds[pv.index()], get, args);
-    const prev = pickFrom(&site.view_builds_prev[pv.index()], get, args) orelse return cur;
-    const c = cur orelse return .{ .f = prev.f, .b = prev.b, .newer = 0 };
+fn pick(site: *const Site, v: html.View, get: anytype, args: anytype) ?Picked {
+    const cur = pickFrom(&site.view_builds[v.index()], v.period, get, args);
+    const prev = pickFrom(&site.view_builds_prev[v.index()], v.period, get, args) orelse return cur;
+    const c = cur orelse return .{ .f = prev.f, .b = prev.b, .period = prev.period, .newer = 0 };
     if (c.b.games >= solid_games or prev.b.games <= c.b.games) return c;
-    return .{ .f = prev.f, .b = prev.b, .newer = c.b.games };
+    return .{ .f = prev.f, .b = prev.b, .period = prev.period, .newer = c.b.games };
 }
 
-fn pickFrom(slot: *const ?File, get: anytype, args: anytype) ?Picked {
+fn pickFrom(slot: *const ?File, period: html.Period, get: anytype, args: anytype) ?Picked {
     const f = if (slot.*) |*f| f else return null;
-    return .{ .f = f, .b = @call(.auto, get, .{f} ++ args) orelse return null };
+    return .{ .f = f, .b = @call(.auto, get, .{f} ++ args) orelse return null, .period = period };
 }
 
 fn getVs(f: *const File, x: u32, r: Role, y: u32) ?File.Build {
     return f.getVs(x, r, y);
 }
 
-/// A page per champion and role with enough of the champion's games (patch views only)
+/// A page per champion and role with enough of the champion's games
 pub fn paths(site: *const Site, f: *const File, list: *std.ArrayList([]const u8)) !void {
     try list.append(site.arena, index_path);
     for (site.champs) |ch| for (Role.all) |r| {
@@ -98,20 +108,21 @@ pub const index_path = "build/index.html";
 /// Every champion and role with a build page, by role
 pub fn writeIndex(site: *const Site, w: *Writer, f: *const File) !void {
     const a = site.arena;
-    const title = try a.print("Builds, patch {s} | meiolol", .{f.label});
-    const desc = try a.print("Runes, items and skill order per champion and role in ranked solo/duo {s}, patch {s}.", .{ site.view.region.in(), f.label });
+    const period = try periodText(a, f, site.view.period);
+    const title = try a.print("Builds, {s} | meiolol", .{period});
+    const desc = try a.print("Runes, items and skill order per champion and role in ranked solo/duo {s}, {s}.", .{ site.view.region.in(), period });
     var p = site.page(title, desc, index_path, .champions);
-    // Builds are per patch: a view without them switches to its champions list
+    // A view without builds switches to its champions list
     for (html.View.all, &p.counterparts.?) |v, *there| {
-        if (v.period != .patch or site.view_builds[v.index()] == null)
+        if (site.view_builds[v.index()] == null)
             there.* = try std.mem.concat(a, u8, &.{ v.dir(), "champions.html" });
     }
     try html.head(w, p);
     try tpl.render(w,
-        \\<h1>Builds, patch {patch}</h1>
-        \\<p class="muted">What players take per champion and role: ranked solo/duo {in}, patch {patch}, {ranks}. A role is listed when it has a tenth or more of the champion's games.</p>
+        \\<h1>Builds, {period}</h1>
+        \\<p class="muted">What players take per champion and role: ranked solo/duo {in}, {period}, {ranks}. A role is listed when it has a tenth or more of the champion's games.</p>
         \\
-    , .{ .patch = f.label, .in = site.view.region.in(), .ranks = try rankLabel(a, f.min_tier) });
+    , .{ .period = period, .in = site.view.region.in(), .ranks = try rankLabel(a, f.min_tier) });
     for (Role.all) |r| {
         var any = false;
         for (site.champs) |ch| any = any or shown(f, ch.id, r) != null;
@@ -143,27 +154,22 @@ pub fn route(site: *const Site, w: *Writer, f: *const File, rest: []const u8) !b
     return true;
 }
 
-/// Champion page, in `r`'s section: the most played choice of each kind with its games,
-/// share and win rate (a past-games fact, the build page's framing), and a link to the
-/// build page, in this view or its patch view. Builds follow the patch view, not the
-/// page's filters. `from`: the champion page's path
-pub fn strip(site: *const Site, w: *Writer, ch: Champ, r: Role, from: []const u8) !void {
-    const pv = patchView(site);
-    const picked = pick(site, shown, .{ ch.id, r }) orelse return;
+/// Champion page, in `r`'s section: view `v`'s most played choice of each kind with its
+/// games, share and win rate (a past-games fact, the build page's framing), and a link to
+/// v's build page; false when v has none. `from`: the champion page's path, at the site
+/// root
+pub fn strip(site: *const Site, w: *Writer, ch: Champ, r: Role, from: []const u8, v: html.View) !bool {
+    const picked = pick(site, v, shown, .{ ch.id, r }) orelse return false;
     const f = picked.f;
     const b = picked.b;
-    const to = try path(site.arena, ch, r);
     // The previous patch's build has no page
-    const href: ?html.Link = if (picked.newer != null) null else if (site.view.period == .patch)
-        .{ .root = site.toRoot(from), .path = to }
-    else
-        .{ .root = site.toShared(from), .up = pv.dir(), .path = to };
+    const href: ?html.Link = if (picked.newer != null) null else .{ .root = site.toShared(from), .up = v.dir(), .path = try path(site.arena, ch, r) };
     try tpl.renderPart(w,
-        \\<div class="bstrip"><p class="bhead"><b>Most played build</b> <span class="muted">{patch}, {in}, {ranks}: {games} game{s}; the filters above don't change it.</span>{link}</p>
+        \\<div class="bstrip"><p class="bhead"><b>Most played build</b> <span class="muted">{when}, {in}, {ranks}: {games} game{s}.</span>{link}</p>
         \\<div class="bks">
     , .{
-        .patch = try picked.patch(site),
-        .in = pv.region.in(),
+        .when = try picked.when(site),
+        .in = v.region.in(),
         .ranks = try rankLabel(site.arena, f.min_tier),
         .games = try root.thousands(site.arena, b.games),
         .s = plural(b.games),
@@ -178,6 +184,7 @@ pub fn strip(site: *const Site, w: *Writer, ch: Champ, r: Role, from: []const u8
     try top(site.arena, w, f, b, null, .skill_start, "Levels 1-3");
     try top(site.arena, w, f, b, null, .skills, "Skill priority");
     try w.writeAll("</div></div>\n");
+    return true;
 }
 
 /// Matchup page: what `x` players took against `y` in `r` (File.matchups), each cell
@@ -186,7 +193,7 @@ pub fn strip(site: *const Site, w: *Writer, ch: Champ, r: Role, from: []const u8
 /// Nothing when the pair has too few games for the file. `from`: the page's path
 pub fn vsStrip(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ, from: []const u8) !void {
     const pv = patchView(site);
-    const picked = pick(site, getVs, .{ x.id, r, y.id }) orelse return;
+    const picked = pick(site, pv, getVs, .{ x.id, r, y.id }) orelse return;
     const f = picked.f;
     const b = picked.b;
     const usual = f.get(x.id, r);
@@ -203,7 +210,7 @@ pub fn vsStrip(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ, from:
     , .{
         .games = try root.thousands(site.arena, b.games),
         .s = plural(b.games),
-        .patch = try picked.patch(site),
+        .patch = try picked.when(site),
         .in = pv.region.in(),
         .ranks = try rankLabel(site.arena, f.min_tier),
         .link = tpl.when(href != null, tpl.t(" <a href=\"{href}\">{x}'s full {lane} build</a>", .{ .href = href orelse html.Link{ .root = "", .path = "" }, .x = x.name, .lane = root.roleName(r) })),
@@ -641,23 +648,24 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
     const a = site.arena;
     const page_path = try path(a, ch, r);
     const ranks = try rankLabel(a, f.min_tier);
-    const title = try a.print("{s} {s} build: runes, items, skill order, patch {s} | meiolol", .{
-        ch.name, root.roleName(r), f.label,
+    const period = try periodText(a, f, site.view.period);
+    const title = try a.print("{s} {s} build: runes, items, skill order, {s} | meiolol", .{
+        ch.name, root.roleName(r), period,
     });
     const role = try std.ascii.allocLowerString(a, root.roleName(r));
-    const desc = try a.print("What players take on {s} in the {s} role in ranked solo/duo {s}, patch {s}: rune pages, summoner spells, starting items, boots, first items and skill order, with games and win rates.", .{
-        ch.name, role, site.view.region.in(), f.label,
+    const desc = try a.print("What players take on {s} in the {s} role in ranked solo/duo {s}, {s}: rune pages, summoner spells, starting items, boots, first items and skill order, with games and win rates.", .{
+        ch.name, role, site.view.region.in(), period,
     });
     var p = site.page(title, desc, page_path, .champions);
     const champ_path = try a.print("champion/{s}.html", .{ch.slug});
     for (html.View.all, &p.counterparts.?) |v, *there| {
-        const has = v.period == .patch and if (site.view_builds[v.index()]) |*o| shown(o, ch.id, r) != null else false;
+        const has = if (site.view_builds[v.index()]) |*o| shown(o, ch.id, r) != null else false;
         if (!has) there.* = try std.mem.concat(a, u8, &.{ champ_path, v.query() });
     }
     try html.head(w, p);
     try tpl.render(w,
         \\<div class="hero"><img src="{icon}" alt="" width="72" height="72"><div><h1>{name} {role} build</h1>
-        \\<p class="muted">What players take on {name} in the {lower} role: ranked solo/duo {in}, patch {patch}, {ranks}. {games} game{s}{rate}.</p></div></div>
+        \\<p class="muted">What players take on {name} in the {lower} role: ranked solo/duo {in}, {period}, {ranks}. {games} game{s}{rate}.</p></div></div>
         \\
     , .{
         .icon = site.icon(ch),
@@ -665,7 +673,7 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
         .role = root.roleName(r),
         .lower = role,
         .in = site.view.region.in(),
-        .patch = f.label,
+        .period = period,
         .ranks = ranks,
         .games = try root.thousands(a, b.games),
         .s = plural(b.games),

@@ -27,9 +27,9 @@
 # Daily, `meiolol eval` (docs/model.md) appends a line to data/eval-history.tsv (model
 # accuracy vs data volume) and leaves its report in data/eval-latest.md. Read-only on the
 # DB. One at a time with the admin page's Run eval (src/admin_api.zig): both flock
-# data/eval.lock. Builds (`meiolol builds`, EUW and every region, current patch) the same
-# way: on a new patch, then every 6 h for its first 3 days, then daily; the next site
-# build picks the files up.
+# data/eval.lock. Builds (`meiolol builds --site`, EUW and every region, current patch and
+# last 30 days) the same way: on a new patch, then every 6 h for its first 3 days, then
+# daily; the next site build picks the files up.
 # Daily, `meiolol lean` (every region, last 30 days; docs/model.md "Early and late
 # champions") the same way: data/lean.tsv, the champion pages' early or late line.
 # Daily, the admin Draft tester's models refit on every played game into data/tester/:
@@ -298,8 +298,8 @@ run_daily() {
     [[ -n "$daily_pid" ]] && kill -0 "$daily_pid" 2> /dev/null && return 1
     if [[ -n "$patch" ]] && { [[ "$patch" != "$builds_patch" ]] || (( now - last_builds >= $(builds_every "$patch") )); }; then
         last_builds=$now builds_patch=$patch
-        # EUW's and every region's files from one read of the timelines (two passes until
-        # 18 Oct, the second 15 min)
+        # EUW's and every region's files, patch and 30 days, from one read of the timelines
+        # (two passes until 18 Oct, the second 15 min)
         batch bin/meiolol builds --patch "$patch" --site > data/builds.log 2>&1 &
     elif [[ -n "$prev_patch" && "$prev_patch" != "$prev_curves_patch" ]]; then
         prev_curves_patch=$prev_patch

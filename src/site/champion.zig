@@ -86,7 +86,15 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
     });
     try earlyNote(site, w, true);
     try filterBar(site, w, ch);
-    try spread_page.section(w, &site.spread, ch, site.view.region);
+    if (site.by_view.len > 0) {
+        try w.writeAll("<div data-by-view>");
+        for (html.View.all, site.by_view) |v, *b| {
+            try variant(w, &.{v});
+            try spread_page.section(w, &b.spread, ch, v.region, site.periodText(v.period));
+            try w.writeAll("</div>");
+        }
+        try w.writeAll("</div>\n");
+    }
     if (n_roles == 0) try tpl.render(w, "<p>No games yet.</p>\n", .{});
 
     for (roles[0..n_roles]) |r| {
@@ -126,12 +134,28 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
         }
         if (site.lean) |l| try lean_line.line(w, l, ch.id, ch.name, r, "../method.html#lean");
         try patch_page.since(site, w, ch, r, "../");
-        try builds_page.strip(site, w, ch, r, path);
+        try w.writeAll("<div data-by-view>");
+        for (html.View.all) |v| {
+            try variant(w, &.{v});
+            _ = try builds_page.strip(site, w, ch, r, path, v);
+            try w.writeAll("</div>");
+        }
+        try w.writeAll("</div>\n");
         try opponentTable(site, w, ch, r, cr, opponentK(st, r), usualK(st, r), opps.items);
         try tpl.renderPart(w, "</section>\n", .{});
     }
     try pool_page.section(site, w, &site.pool, ch);
-    try learning_page.section(site, w, &site.learning, ch);
+    // Every region's (learning.zig): one per period
+    if (site.by_view.len > 0) {
+        try w.writeAll("<div data-by-view>");
+        for ([_]html.Period{ .days30, .patch }) |period| {
+            const views = [_]html.View{ .{ .region = .euw, .period = period }, .{ .region = .all, .period = period } };
+            try variant(w, &views);
+            try learning_page.section(site, w, &site.by_view[views[0].index()].learning, ch, site.periodText(period));
+            try w.writeAll("</div>");
+        }
+        try w.writeAll("</div>\n");
+    }
     try tpl.render(w,
         \\<p class="muted small">Win rates are raw: no pulling toward 50%, fainter under {full} games; coloured on a scale twice as wide as the champions table's (a matchup's rate is mostly the opponent's strength), a dot on 25% to 75%. Vs usual: how much more or less often than usual the champion won in the matchup, in points, after allowing for the opponent's own win rate in the role (against a strong opponent it usually wins less), pulled toward 0 the fewer the games so a thin matchup stays quiet; the matchup page has the numbers behind it. Hardest first, and sorting by win rate, use the win rate pulled toward the champion's own in the role, the more so the fewer the games, so a few lucky games can't top the list. Gold at {minute} min is the lane curve's estimate, then where 8 games in 10 end (10th to 90th percentile); + when the champion is ahead, in plain ink (gold is not a win rate), fainter under {full} games; for filters other than a region and period above, the plain average of the games picked. <a href="../method.html">Method</a>.</p>
         \\<script src="../table.js" defer></script>
@@ -139,6 +163,18 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
         \\
     , .{ .minute = core.curvesfile.lane_minute, .full = core.curvesfile.full_games });
     try html.foot(w, p);
+}
+
+/// Opens a variant of a [data-by-view] group for `views`: static/filters.js shows the one
+/// for its picks' view; as written, the root view's
+fn variant(w: *Writer, views: []const html.View) !void {
+    try w.writeAll("<div data-view=\"");
+    for (views, 0..) |v, i| try w.print("{s}{d}", .{ if (i == 0) "" else " ", v.index() });
+    try w.writeAll("\"");
+    for (views) |v| {
+        if (v.index() == 0) break;
+    } else try w.writeAll(" hidden");
+    try w.writeAll(">");
 }
 
 /// 1 -> "st", 12 -> "th", 22 -> "nd"

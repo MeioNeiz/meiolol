@@ -135,6 +135,60 @@ pub fn setsWith(sets: []const []const []const u8, platform: []const u8) u32 {
     return mask;
 }
 
+/// The games a tally counts: on these platforms, started from since_ms (Riot ms; 0: any),
+/// on these patches (empty: any). The site's views as lolalytics' filters: a region over
+/// the last 30 days or the current patch
+pub const Slice = struct {
+    platforms: []const []const u8,
+    since_ms: i64 = 0,
+    patches: []const []const u8 = &.{},
+
+    /// Every slice's platforms as one JSON array, for json_each
+    pub fn platformsJson(gpa: std.mem.Allocator, slices: []const Slice) ![]u8 {
+        var all: std.ArrayList([]const u8) = .empty;
+        defer all.deinit(gpa);
+        for (slices) |s| try all.appendSlice(gpa, s.platforms);
+        return std.json.Stringify.valueAlloc(gpa, all.items, .{});
+    }
+
+    /// Bit i set when slices[i] counts games on `platform`
+    pub fn platformMask(slices: []const Slice, platform: []const u8) u32 {
+        var mask: u32 = 0;
+        for (slices, 0..) |s, i| {
+            for (s.platforms) |p| {
+                if (std.mem.eql(u8, p, platform)) mask |= @as(u32, 1) << @intCast(i);
+            }
+        }
+        return mask;
+    }
+
+    /// Bit i set when slices[i] counts games on `patch`
+    pub fn patchMask(slices: []const Slice, patch: []const u8) u32 {
+        var mask: u32 = 0;
+        for (slices, 0..) |s, i| {
+            const in = s.patches.len == 0 or for (s.patches) |p| {
+                if (std.mem.eql(u8, p, patch)) break true;
+            } else false;
+            if (in) mask |= @as(u32, 1) << @intCast(i);
+        }
+        return mask;
+    }
+
+    /// Bit i set when slices[i] counts a game started at `start_ms`
+    pub fn sinceMask(slices: []const Slice, start_ms: i64) u32 {
+        var mask: u32 = 0;
+        for (slices, 0..) |s, i| {
+            if (start_ms >= s.since_ms) mask |= @as(u32, 1) << @intCast(i);
+        }
+        return mask;
+    }
+
+    /// Bit i set when slices[i] counts the game
+    pub fn of(slices: []const Slice, platform: []const u8, start_ms: i64, patch: []const u8) u32 {
+        return platformMask(slices, platform) & sinceMask(slices, start_ms) & patchMask(slices, patch);
+    }
+};
+
 /// "16.20" as 16020, for ordering and comparing patches cheaply
 pub fn patchKey(patch: []const u8) u32 {
     var it = std.mem.splitScalar(u8, patch, '.');
@@ -529,4 +583,16 @@ test "patch order and label" {
     var buf: [statsfile.patch_len]u8 = undefined;
     try testing.expectEqualStrings("16.9-16.20", try label(&buf, &.{ "16.20", "16.9", "16.19" }));
     try testing.expectEqualStrings("16.20", try label(&buf, &.{"16.20"}));
+}
+
+test "slice masks: platform, start and patch" {
+    const slices = [_]Slice{
+        .{ .platforms = &.{"EUW1"} },
+        .{ .platforms = &.{ "EUW1", "KR" }, .since_ms = 1000 },
+        .{ .platforms = &.{"KR"}, .patches = &.{"16.21"} },
+    };
+    try testing.expectEqual(0b011, Slice.of(&slices, "EUW1", 1000, "16.20"));
+    try testing.expectEqual(0b001, Slice.of(&slices, "EUW1", 999, "16.21"));
+    try testing.expectEqual(0b110, Slice.of(&slices, "KR", 2000, "16.21"));
+    try testing.expectEqual(0b000, Slice.of(&slices, "NA1", 2000, "16.21"));
 }

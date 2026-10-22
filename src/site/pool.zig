@@ -20,8 +20,8 @@ const also_shown = 6;
 
 pub fn sourceText(p: *const pool.Pool) []const u8 {
     return switch (p.source) {
-        .games => "their ranked solo games in our sample",
-        .mastery => "their champion mastery",
+        .games => "their ranked solo games in our sample, every patch",
+        .mastery => "their champion mastery, all time",
     };
 }
 

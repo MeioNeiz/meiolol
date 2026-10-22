@@ -74,6 +74,24 @@ pub const Player = struct {
 
 pub const Ban = struct { team: i16, champion: i32 };
 
+/// Store.sliceMasks: each slice's platform and patch bits by string code
+pub const SliceMasks = struct {
+    slices: []const stats.Slice,
+    platform: []u32,
+    patch: []u32,
+
+    /// Bit i set when slices[i] counts `g`
+    pub fn of(m: SliceMasks, g: *const Game) u32 {
+        const in = m.platform[g.platform] & m.patch[g.patch];
+        return if (in == 0) 0 else in & stats.Slice.sinceMask(m.slices, g.start);
+    }
+
+    pub fn deinit(m: *SliceMasks, gpa: Allocator) void {
+        gpa.free(m.platform);
+        gpa.free(m.patch);
+    }
+};
+
 pub const Game = struct {
     id: []const u8,
     rowid: i64,
@@ -334,6 +352,20 @@ pub const Store = struct {
         masks[0] = 0;
         for (s.strings.keys(), masks[1..]) |name, *m| m.* = stats.setsWith(sets, name);
         return masks;
+    }
+
+    /// stats.Slice.of for this store's games; free with SliceMasks.deinit
+    pub fn sliceMasks(s: *const Store, gpa: Allocator, slices: []const stats.Slice) !SliceMasks {
+        const platform = try gpa.alloc(u32, s.strings.count() + 1);
+        errdefer gpa.free(platform);
+        const patch = try gpa.alloc(u32, s.strings.count() + 1);
+        platform[0] = 0;
+        patch[0] = stats.Slice.patchMask(slices, "");
+        for (s.strings.keys(), platform[1..], patch[1..]) |name, *pl, *pa| {
+            pl.* = stats.Slice.platformMask(slices, name);
+            pa.* = stats.Slice.patchMask(slices, name);
+        }
+        return .{ .slices = slices, .platform = platform, .patch = patch };
     }
 
     fn path(s: *Store, comptime fmt: []const u8, args: anytype) ![]const u8 {

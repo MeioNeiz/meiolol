@@ -19,6 +19,8 @@ const Games = main.Games;
 const curvesPath = main.curvesPath;
 const recentCurvesPath = main.recentCurvesPath;
 const buildsPath = main.buildsPath;
+const recentBuildsPath = main.recentBuildsPath;
+const recent_days = main.recent_days;
 const newestPatch = main.newestPatch;
 
 pub const usage_curves =
@@ -167,7 +169,8 @@ pub const usage_builds =
     \\              --out FILE       default DIR/export/builds-<patch>.json
     \\                               (all-builds-... with --platform all)
     \\              --site           the files the site reads, in one pass over the
-    \\                               timelines: EUW and every platform, default paths
+    \\                               timelines: EUW and every platform, the patch and
+    \\                               the last 30 days (no matchups), default paths
     \\
 ;
 
@@ -202,26 +205,32 @@ pub fn cmdBuilds(c: *Cmd) !u8 {
     o.patches = if (g.patches.items.len > 0) g.patches.items else try newestPatch(c.arena, db, if (site_files) &.{"EUW1"} else o.platforms);
     var label_buf: [core.statsfile.patch_len]u8 = undefined;
     const label = try stats.label(&label_buf, o.patches);
-    const Target = struct { platforms: []const []const u8, path: []const u8 };
+    const recent_ms = std.Io.Clock.real.now(io).toMilliseconds() - recent_days * std.time.ms_per_day;
+    const recent_label = std.fmt.comptimePrint("last {d} days", .{recent_days});
+    const Target = struct { set: builds.Set, label: []const u8, path: []const u8 };
     const targets: []const Target = if (site_files) &.{
-        .{ .platforms = &.{"EUW1"}, .path = try buildsPath(c.arena, c.data_dir, o.patches, false) },
-        .{ .platforms = every.items, .path = try buildsPath(c.arena, c.data_dir, o.patches, true) },
+        .{ .set = .{ .slice = .{ .platforms = &.{"EUW1"}, .patches = o.patches } }, .label = label, .path = try buildsPath(c.arena, c.data_dir, o.patches, false) },
+        .{ .set = .{ .slice = .{ .platforms = every.items, .patches = o.patches } }, .label = label, .path = try buildsPath(c.arena, c.data_dir, o.patches, true) },
+        // The champion pages' 30-day views; matchup pages show the patch's
+        .{ .set = .{ .slice = .{ .platforms = &.{"EUW1"}, .since_ms = recent_ms }, .matchups = false }, .label = recent_label, .path = try recentBuildsPath(c.arena, c.data_dir, false) },
+        .{ .set = .{ .slice = .{ .platforms = every.items, .since_ms = recent_ms }, .matchups = false }, .label = recent_label, .path = try recentBuildsPath(c.arena, c.data_dir, true) },
     } else &.{
-        .{ .platforms = o.platforms, .path = out orelse try buildsPath(c.arena, c.data_dir, o.patches, g.every_platform) },
+        .{ .set = .{ .slice = .{ .platforms = o.platforms, .patches = o.patches } }, .label = label, .path = out orelse try buildsPath(c.arena, c.data_dir, o.patches, g.every_platform) },
     };
+    // Names and icons from the patch's Data Dragon: an item gone since has none
     const data = try ddragon.buildData(gpa, c.arena, io, o.patches[0]);
 
-    var sets: [2][]const []const u8 = undefined;
-    for (targets, 0..) |t, i| sets[i] = t.platforms;
-    var bs: [2]builds.Builder = undefined;
+    var sets: [4]builds.Set = undefined;
+    for (targets, 0..) |t, i| sets[i] = t.set;
+    var bs: [4]builds.Builder = undefined;
     try builds.buildEach(gpa, io, db, &data, o, sets[0..targets.len], bs[0..targets.len]);
     defer for (bs[0..targets.len]) |*b| b.deinit();
     for (targets, bs[0..targets.len]) |t, *b| {
         if (b.games == 0) {
-            std.log.err("{s}: no ranked solo games on patch {s}", .{ t.path, label });
+            std.log.err("{s}: no ranked solo games, {s}", .{ t.path, t.label });
             return error.NoMatches;
         }
-        const f = try b.file(c.arena, &data, label, o.min_tier orelse "", o.rows);
+        const f = try b.file(c.arena, &data, t.label, o.min_tier orelse "", o.rows);
         var file = try std.Io.Dir.cwd().createFileAtomic(io, t.path, .{ .make_path = true, .replace = true });
         defer file.deinit(io);
         var buf: [64 * 1024]u8 = undefined;
@@ -229,8 +238,8 @@ pub fn cmdBuilds(c: *Cmd) !u8 {
         try std.json.Stringify.value(f, .{}, &w.interface);
         try w.interface.flush();
         try file.replace(io);
-        std.log.info("{s}: patch {s}, {d} games ({d} with timelines), {d} champion roles, {d} options held, {d} matchups, {d} matchup options held", .{
-            t.path, label, b.games, b.timelines, f.builds.len, b.options.count(), f.matchups.len, if (b.vs) |v| v.options.count() else 0,
+        std.log.info("{s}: {s}, {d} games ({d} with timelines), {d} champion roles, {d} options held, {d} matchups, {d} matchup options held", .{
+            t.path, t.label, b.games, b.timelines, f.builds.len, b.options.count(), f.matchups.len, if (b.vs) |v| v.options.count() else 0,
         });
         // docs/learned.md keeps these: how much options of a kind really differ
         for (f.shrink) |x| std.log.info("{s}: k {d:.0}, in matchups {d:.0}", .{ @tagName(x.kind), x.k, x.vs });
@@ -266,7 +275,7 @@ pub fn cmdPool(c: *Cmd) !u8 {
     var model: std.Io.Writer.Allocating = .init(arena);
     try r.builder.write(&model.writer, try stats.label(&label_buf, chosen));
     const st: core.Stats = try .parse(arena, model.written());
-    var t = try pool.tally(gpa, db, &st, &.{platforms});
+    var t = try pool.tally(gpa, db, &st, &.{platforms}, &.{});
     defer t.deinit(gpa);
     const p = try pool.make(arena, &t, 0, &st, .{});
 

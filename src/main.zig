@@ -306,6 +306,14 @@ pub fn recentCurvesPath(arena: std.mem.Allocator, data_dir: []const u8, every: b
     return arena.print("{s}/export/{s}recent-curves.bin", .{ data_dir, allPrefix(every) });
 }
 
+/// The site's 30-day views reach back this far
+pub const recent_days = 30;
+
+/// `meiolol builds --site`'s last recent_days, for the 30-day views
+pub fn recentBuildsPath(arena: std.mem.Allocator, data_dir: []const u8, every: bool) ![]const u8 {
+    return arena.print("{s}/export/{s}recent-builds.json", .{ data_dir, allPrefix(every) });
+}
+
 /// Where `meiolol builds` writes by default; the site reads the newest patch's
 pub fn buildsPath(arena: std.mem.Allocator, data_dir: []const u8, chosen: []const []const u8, every: bool) ![]const u8 {
     var label_buf: [core.statsfile.patch_len]u8 = undefined;

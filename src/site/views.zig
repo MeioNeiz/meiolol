@@ -153,6 +153,7 @@ pub const Loaded = struct {
                 .pool = s.pool,
                 .learning = s.learning,
                 .spread = s.spread,
+                .by_view = s.by_view,
             });
             if (s.patchday) |pd| try writePart(w, &aw, keys, .prev, v, patchday.Wins{
                 .prev_patch = pd.prev_patch,
@@ -253,6 +254,7 @@ pub const PeoplePart = struct {
     pool: pool.Pool,
     learning: learning.Learning,
     spread: spread.Spread,
+    by_view: []const root.ByView,
 };
 
 /// The shared view's

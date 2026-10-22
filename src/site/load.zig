@@ -147,15 +147,25 @@ pub fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Opt
             site.pool = p.pool;
             site.spread = p.spread;
             site.learning = p.learning;
+            site.by_view = p.by_view;
             phases.mark("people kept");
         } else {
             const people = loading.people.?;
             const set = @backingInt(view.region);
-            if (set >= people.learning.len) return error.NoView;
+            if (set >= people.pool.games.len) return error.NoView;
             site.pool = try pool.make(arena, &people.pool, set, &site.stats, .{});
-            site.spread = try spread.make(arena, &people.pool.spread[set], &site.stats, .{});
-            // Every region's, whatever the view (learning.zig)
-            site.learning = try learning.make(arena, &people.learning[people.learning.len - 1], &site.stats, .{});
+            site.spread = try spread.make(arena, &people.pool.spread[view.index()], &site.stats, .{});
+            // Every region's, whatever the view's region (learning.zig)
+            site.learning = try learning.make(arena, &people.learning[@backingInt(view.period)], &site.stats, .{});
+            // The champion pages' filters pick a view: each one's, as its own load makes them
+            if (view.index() == 0) {
+                const by = try arena.alloc(root.ByView, html.View.count);
+                for (html.View.all, by) |v, *b| b.* = .{
+                    .spread = try spread.make(arena, &people.pool.spread[v.index()], &site.stats, .{}),
+                    .learning = try learning.build(arena, &people.learning[@backingInt(v.period)], &site.stats, .{}),
+                };
+                site.by_view = by;
+            }
         }
         if (shared) {
             if (try Parts.ofFor(old, DailyPart, .daily, view, arena, champs_key)) |d| {

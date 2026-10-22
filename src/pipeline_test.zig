@@ -94,6 +94,11 @@ test "fixture games to stats, curves and the website" {
     const builds_json = try std.json.Stringify.valueAlloc(arena, build_file, .{});
     try tmp.dir.writeFile(io, .{ .sub_path = "builds.json", .data = builds_json });
     const builds_path = try std.fs.path.join(arena, &.{ dir, "builds.json" });
+    // The 30-day views' (builds --site): the same games
+    var recent_builds = build_file;
+    recent_builds.label = "last 30 days";
+    try tmp.dir.writeFile(io, .{ .sub_path = "recent-builds.json", .data = try std.json.Stringify.valueAlloc(arena, recent_builds, .{}) });
+    const recent_builds_path = try std.fs.path.join(arena, &.{ dir, "recent-builds.json" });
     // The previous patch's: Ahri mid with more games than the current patch's few,
     // so its strips show it; Darius's stay on the current patch
     var prev_builds = build_file;
@@ -163,7 +168,7 @@ test "fixture games to stats, curves and the website" {
         .updated = "1 January 2026",
         // No daily: puzzles need three other options for a slot, more than 10 champions
         .curves = @splat(curves_path),
-        .builds = .{ null, builds_path, null, builds_path },
+        .builds = .{ recent_builds_path, builds_path, recent_builds_path, builds_path },
         .prev_patch = prev_patch,
         .curves_prev = .{ null, prev_curves_path, null, prev_curves_path },
         .builds_prev = .{ null, prev_builds_path, null, prev_builds_path },
@@ -186,6 +191,8 @@ test "fixture games to stats, curves and the website" {
         "privacy.html",
         "patch/build/darius-top.html",
         "all/patch/build/darius-top.html",
+        "build/darius-top.html",
+        "all/build/darius-top.html",
     }) |page| {
         const path = try std.fs.path.join(arena, &.{ out, page });
         std.Io.Dir.cwd().access(io, path, .{}) catch |err| {
@@ -225,11 +232,13 @@ test "fixture games to stats, curves and the website" {
         // levels (learn.js draws them)
         .{ "learn.html", &.{ "<section id=\"puzzles\" data-view=\"puzzles\">", "<script type=\"application/json\" id=\"puzzle-data\">[{\"id\":\"know\"", "\"id\":\"luck\"", "<ol class=\"pz-list nojs\">", "<section id=\"practice\" data-view=\"practice\">", "<div class=\"lesson-nav\"></div>", "id=\"p-levels\"", "<article class=\"card lesson\" id=\"lesson-roles\"" } },
         .{ "matchup/index.html", &.{ "data-min-search", "<tr class=\"bx thin\" data-games=\"3\" data-name=\"", "<section data-min-group data-r=\"top\" id=\"top\"><h2>Top ", "<nav class=\"tabs mu-roles\" aria-label=\"Role\"><a href=\"#all\">All roles</a><a href=\"#top\">Top</a>", "<table class=\"tl mu-table\" id=\"mu-top\" data-sortable>", "<option selected>50</option>", " vs usual", "</b></span></td><td class=\"opt\" data-v=\"", "<p class=\"wr-key\">" } },
-        // Champion page: the patch view's most played choice per kind, few games so no
-        // win rate, then the build page
-        .{ "champion/darius.html", &.{ "href=\"../patch/build/darius-top.html\"", "<div class=\"bstrip\">", "Most played build</b>", "the filters above don't change it", "<div class=\"bk runes thin\"><span>Runes</span>", "<div class=\"rp\"><div class=\"rt\"><img class=\"rh on\" src=\"https://example.com/8000.png\" alt=\"Precision\"", "<img class=\"on\" src=\"https://example.com/8242.png\" alt=\"Unflinching\"", "<div class=\"rt rs\" title=\"Most played stat shards\">", "<span>Levels 1-3</span>", "<span>Skill priority</span>", "players took this\">3 games · 100%</small>" } },
+        // Champion page: each view's most played choice per kind, few games so no win
+        // rate, then that view's build page; filters.js shows the one its picks select
+        .{ "champion/darius.html", &.{ "<div data-by-view><div data-view=\"0\"><div class=\"bstrip\"><p class=\"bhead\"><b>Most played build</b> <span class=\"muted\">last 30 days, in EUW, Platinum IV and up: 3 games.</span> <a href=\"../build/darius-top.html\">", "<div data-view=\"1\" hidden><div class=\"bstrip\"><p class=\"bhead\"><b>Most played build</b> <span class=\"muted\">patch 15.13, in EUW, Platinum IV and up: 3 games.</span> <a href=\"../patch/build/darius-top.html\">", "href=\"../all/build/darius-top.html\"", "<div class=\"bk runes thin\"><span>Runes</span>", "<div class=\"rp\"><div class=\"rt\"><img class=\"rh on\" src=\"https://example.com/8000.png\" alt=\"Precision\"", "<img class=\"on\" src=\"https://example.com/8242.png\" alt=\"Unflinching\"", "<div class=\"rt rs\" title=\"Most played stat shards\">", "<span>Levels 1-3</span>", "<span>Skill priority</span>", "players took this\">3 games · 100%</small>" } },
         .{ "patch/build/darius-top.html", &.{ "<th>Levels 1 to 3</th>", "<div class=\"rpages\">", "<div class=\"rpc thin\"><span class=\"tags\"><span class=\"tag mp\">most played</span></span><div class=\"rp\">", "<div class=\"rx\">", "<span class=\"rc on\" title=\"Conqueror: 3 games, 100.0%\">", "<span class=\"rc off\" title=\"Adaptive force: 0 games, 0.0%\">", "Most played rune pages first. Share of 3 players.", "the highest win rate among options with 100+ games once each is pulled toward the average by k games" } },
-        .{ "champion/darius.html", &.{"win rates on Darius: more data needed (0 players in EUW with 10+ games on it, 20 needed)."} },
+        .{ "champion/darius.html", &.{ "<div data-view=\"0\"><p class=\"muted small\">Players' win rates on Darius: more data needed (0 players in EUW with 10+ games on it, last 30 days; 20 needed).", "<div data-view=\"3\" hidden><p class=\"muted small\">Players' win rates on Darius: more data needed (0 players across all regions with 10+ games on it, patch 15.13; 20 needed).", "<div data-view=\"0 2\"></div><div data-view=\"1 3\" hidden></div>" } },
+        .{ "build/darius-top.html", &.{ "ranked solo/duo in EUW, last 30 days, Platinum IV and up. 3 games.", "<title>Darius Top build: runes, items, skill order, last 30 days | meiolol</title>" } },
+        .{ "champions.html", &.{"<a href=\"build/index.html\">Builds, last 30 days</a>."} },
         // Filters: the champion's counts by region, rank, patch, role and opponent, its
         // bans and each view's curve gold, the players per role for pick rates, and the
         // bar that sums them, written as the root view. One page per champion: the other
@@ -738,7 +747,7 @@ fn timelineOutputs(arena: std.mem.Allocator, io: std.Io, db: store.Db, tmp: std.
     return out;
 }
 
-test "fixture games to builds: EUW and every region from one pass, game counts" {
+test "fixture games to builds: EUW and every region, patch and recent, from one pass" {
     const gpa = testing.allocator;
     const io = testing.io;
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
@@ -750,13 +759,19 @@ test "fixture games to builds: EUW and every region from one pass, game counts" 
     try fillGames(arena, db, 40, true);
     const both: []const []const u8 = &.{ "EUW1", "NA1" };
     const o: builds.Options = .{ .patches = &.{patch}, .platforms = both, .min_tier = null };
-    var each: [2]builds.Builder = undefined;
-    try builds.buildEach(gpa, io, db, &build_data, o, &.{ &.{"EUW1"}, both }, &each);
+    // An hour apart: the third set (a 30-day view's) from game 20, any patch
+    var each: [3]builds.Builder = undefined;
+    try builds.buildEach(gpa, io, db, &build_data, o, &.{
+        .{ .slice = .{ .platforms = &.{"EUW1"}, .patches = &.{patch} } },
+        .{ .slice = .{ .platforms = both, .patches = &.{patch} } },
+        .{ .slice = .{ .platforms = both, .since_ms = start_ms + 20 * std.time.ms_per_hour }, .matchups = false },
+    }, &each);
     defer for (&each) |*b| b.deinit();
     try testing.expectEqual(30, each[0].games);
     try testing.expectEqual(40, each[1].games);
     try testing.expectEqual(27, each[1].timelines);
-    for (each, [_][]const []const u8{ &.{"EUW1"}, both }) |b, platforms| {
+    try testing.expectEqual(20, each[2].games);
+    for (each[0..2], [_][]const []const u8{ &.{"EUW1"}, both }) |b, platforms| {
         var alone = try builds.build(gpa, io, db, &build_data, .{ .patches = &.{patch}, .platforms = platforms, .min_tier = null });
         defer alone.deinit();
         try testing.expectEqual(alone.games, b.games);

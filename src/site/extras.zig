@@ -8,6 +8,7 @@ const html = @import("html.zig");
 const pool = @import("../pool.zig");
 const learning = @import("../learning.zig");
 const builds = @import("../builds.zig");
+const stats = @import("../stats.zig");
 const lean = @import("../lean.zig");
 const partials = @import("../partials.zig");
 
@@ -26,8 +27,8 @@ pub const Extras = struct {
     builds: [html.View.count]?builds.File = @splat(null),
     builds_prev: [html.View.count]?builds.File = @splat(null),
     lean: ?lean.File = null,
-    /// Pool and learning tallies by html.Region, on the first view's load: all patches,
-    /// so both periods share them, and one pass over the database serves every view
+    /// Pool and learning tallies, on the first view's load: one pass over the database
+    /// serves every view
     people: ?People = null,
     /// `site --views`: the views partials' directory (data/partials), whose games the
     /// loads read instead of the database's tables; null: the database
@@ -102,18 +103,34 @@ pub const Extras = struct {
             &.{opts.platforms}
         else
             &.{ opts.platforms, opts.all_platforms };
+        var spreads: [html.View.count]stats.Slice = undefined;
+        for (html.View.all, &spreads) |v, *s| s.* = viewSlice(opts, v.region, v.period);
+        var learnings: [2]stats.Slice = undefined;
+        for ([_]html.Period{ .days30, .patch }, &learnings) |period, *s| s.* = viewSlice(opts, .all, period);
         const ids = try gpa.dupe(u32, st.ids);
         errdefer gpa.free(ids);
         // Learning after pool: it reads the bins pool's mastery pass finds
-        var pools = try pool.tallyWith(gpa, db, st, sets, e.games);
+        var pools = try pool.tallyWith(gpa, db, st, sets, &spreads, e.games);
         errdefer pools.deinit(gpa);
-        const learnt = try learning.tallyWith(gpa, db, st, sets, e.games);
+        const learnt = try learning.tallyWith(gpa, db, st, &learnings, e.games);
         e.people = .{ .ids = ids, .pool = pools, .learning = learnt };
         if (e.games) |g| log.info("partials: {d} mastery rows, {d} read", .{ g.counts.mastery, g.counts.mastery_read });
         return &e.people.?;
     }
 };
 
+/// A view's games, for the people tallies; every region is EUW's with Options.euw_only
+fn viewSlice(opts: Options, region: html.Region, period: html.Period) stats.Slice {
+    return .{
+        .platforms = if (region == .euw or opts.euw_only) opts.platforms else opts.all_platforms,
+        .since_ms = if (period == .days30) opts.since_ms else 0,
+        .patches = if (period == .patch) opts.patches else &.{},
+    };
+}
+
+/// Pools by region over every patch (a pool changes more slowly than a patch; mastery is
+/// lifetime), players' win rates by html.View.index, learning by html.Period (every
+/// region's games, learning.zig)
 pub const People = struct {
     /// Stats champion ids, which the tallies index by
     ids: []u32,

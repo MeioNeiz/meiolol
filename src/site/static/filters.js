@@ -2,7 +2,8 @@
 // row per region, patch, 30-day flag, rank, role and lane opponent with games, wins and
 // gold at 14, plus bans by the game's rank; data/filters.json has players per role and
 // games by rank for pick and ban rates. This sums the rows the picks select and redraws
-// each role's tiles and opponent table, the scope lines and the early-data note. The
+// each role's tiles and opponent table, the scope lines and the early-data note, and
+// shows the blocks written per view for the picks' view. The
 // picks are the subbar's region, period and rank links (html.zig switches) and each
 // opponent table's Common/All; the page as written is their defaults (the root view).
 // Picks live in the URL so a view can be shared; the views' own links use the same keys
@@ -226,10 +227,26 @@ const HARDEST = "hardest first";
     keep();
   });
 
+  // Blocks written once per view (champion.zig variant: players' win rates, builds,
+  // learning): the picks' view's; a region without its own takes every region's. The
+  // rank pick doesn't change them
+  const groups = [...document.querySelectorAll("[data-by-view]")];
+  const hasView = (el, i) => el.dataset.view.split(" ").includes(String(i));
+  function showVariants(f) {
+    const period = f.period === "days30" ? 0 : 1;
+    const wanted = f.region === home ? [period, 2 + period] : [2 + period, period];
+    for (const g of groups) {
+      const kids = [...g.children];
+      const i = wanted.find((i) => kids.some((el) => hasView(el, i)));
+      for (const el of kids) el.hidden = !hasView(el, i);
+    }
+  }
+
   function apply() {
     const fresh = isDefault(f);
     history.replaceState(null, "", location.pathname + query(f) + location.hash);
     drawSwitches(f);
+    showVariants(f);
     const view = viewOf(f);
     // Nav links (Champions, Matchups, Pool) into the view the filters are on
     if (view && typeof meioView === "function") meioView(view.dir);
