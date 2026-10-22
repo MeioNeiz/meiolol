@@ -236,7 +236,7 @@ test "fixture games to stats, curves and the website" {
         // views link to it with their filters, and its switches set them
         .{ "data/filters/darius.json", &.{ "\"platforms\":[\"EUW1\"]", "\"rows\":[[", "\"bans\":[", "\"gold\":{\"EUW1|days30|\":[" } },
         .{ "data/filters.json", &.{ "\"roles\":[\"top\"", "\"slots\":[[" } },
-        .{ "champion/darius.html", &.{ "class=\"filter-bar\"", "data-src=\"../data/filters/darius.json\"", "<option value=\"EUW1\" selected>EUW</option>", "filters.js", "data-id=\"", "data-tile=\"pick\"", "data-early=\"", "href=\"../champion/darius.html?region=all\" data-region=\"all\"" } },
+        .{ "champion/darius.html", &.{ "data-filters data-src=\"../data/filters/darius.json\"", "data-region=\"EUW1\"", "data-min=\"0\"", "filters.js", "data-id=\"", "data-tile=\"pick\"", "data-early=\"", "href=\"../champion/darius.html?region=all\" data-region=\"all\"" } },
         .{ "all/patch/role/top.html", &.{"href=\"../../../champion/darius.html?region=all&amp;period=patch\""} },
         .{ "all/matchup/top/mordekaiser-vs-darius.html", &.{"href=\"../../../champion/darius.html?region=all\""} },
         // Lane curves: the estimate (curvefit.zig) on the page, k on the method page

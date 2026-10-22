@@ -34,6 +34,12 @@ const min_opponent_games = 10;
 /// for: the Opponents filter's default, "Seen in 1%+ of games"
 const min_opponent_share = 0.01;
 
+comptime {
+    for (html.ranks[1..], [_][]const u8{ "EMERALD", "DIAMOND", "MASTER" }) |r, tier| {
+        std.debug.assert(std.mem.eql(u8, filters.tiers[std.fmt.parseInt(usize, r[0], 10) catch unreachable], tier));
+    }
+}
+
 const Opponent = struct {
     other: Champ,
     games: u32,
@@ -43,7 +49,8 @@ const Opponent = struct {
 };
 
 /// One page per champion, from the root view (EUW, 30 days) at the site root; its
-/// filters (filterBar) show the other views and any other region, rank or patch
+/// filters (the subbar's picks, filterBar's data) show the other views and any other
+/// region or rank
 pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
     const a = site.arena;
     const st = &site.stats;
@@ -156,79 +163,18 @@ fn roleLinks(w: *Writer, roles: []const Role) !void {
     }
 }
 
-/// Filter bar (filters.zig, static/filters.js), set to the page as written (the root
-/// view); disabled until the script has the champion's filter data
+/// Where static/filters.js finds the champion's filter data; the picks themselves are the
+/// subbar's (html.zig switches), set to the page as written (the root view)
 fn filterBar(site: *const Site, w: *Writer, ch: Champ) !void {
-    const region = site.opts.platforms[0];
     try tpl.render(w,
-        \\<div class="filter-bar" data-src="../data/filters/{slug}.json" data-meta="../data/filters.json" data-champions="../data/champions.json" data-ddragon="{ddragon}" data-id="{id}" data-region="{region}" data-current="{patch}"><label>Region <select data-f="region" disabled><option value="all">All regions</option>{regions}</select></label>
-        \\<label>Rank <select data-f="rank" disabled><option value="" selected>All (Platinum+ games)</option>{ranks}</select></label>
-        \\<label>Period <select data-f="period" disabled><option value="days30" selected>Last 30 days</option>{patches}</select></label>
-        \\<label>Opponents <select data-f="min" disabled>{mins}</select></label>
-        \\<button class="link" data-reset hidden>Reset</button></div>
+        \\<div hidden data-filters data-src="../data/filters/{slug}.json" data-meta="../data/filters.json" data-champions="../data/champions.json" data-ddragon="{ddragon}" data-id="{id}" data-region="{region}"></div>
         \\
     , .{
         .slug = ch.slug,
         .ddragon = site.ddragon_version,
         .id = ch.id,
-        .region = region,
-        .patch = site.patch,
-        .regions = tpl.each(site.opts.all_platforms, region, regionOption),
-        .ranks = tpl.call(rankOptions, .{site.arena}),
-        .patches = tpl.each(site.filter.patches, site.filter.current, patchOption),
-        .mins = tpl.call(minOptions, .{}),
+        .region = site.opts.platforms[0],
     });
-}
-
-fn regionOption(current: []const u8, w: *Writer, pl: []const u8) !void {
-    try tpl.render(w, "<option value=\"{pl}\"{selected}>{name}</option>", .{
-        .pl = pl,
-        .selected = tpl.flag(std.mem.eql(u8, pl, current), "selected"),
-        .name = platformName(pl),
-    });
-}
-
-/// From Platinum: the crawl samples Platinum IV+ players, so a lower tier's players are
-/// only teammates in those games and "Gold+" would read as more than it holds
-fn rankOptions(w: *Writer, a: std.mem.Allocator) !void {
-    for (filters.tiers, 0..) |t, i| {
-        if (i < filters.lowest_offered) continue;
-        try tpl.render(w, "<option value=\"{i}\">{initial}{rest}{plus} players</option>", .{
-            .i = i,
-            .initial = t[0..1],
-            .rest = try std.ascii.allocLowerString(a, t[1..]),
-            .plus = tpl.when(i + 1 < filters.tiers.len, "+"),
-        });
-    }
-}
-
-fn patchOption(current: []const []const u8, w: *Writer, pa: []const u8) !void {
-    const is_current = for (current) |c| {
-        if (std.mem.eql(u8, c, pa)) break true;
-    } else false;
-    try tpl.render(w, "<option value=\"patch:{pa}\">Patch {pa}{days}</option>", .{
-        .pa = pa,
-        .days = tpl.when(!is_current, " (last 30 days)"),
-    });
-}
-
-fn minOptions(w: *Writer) !void {
-    const mins = [_][2][]const u8{
-        .{ "0", "All" },        .{ "5", "5+ games" },     .{ "10", "10+ games" },            .{ "20", "20+ games" },
-        .{ "50", "50+ games" }, .{ "100", "100+ games" }, .{ "p1", "Seen in 1%+ of games" }, .{ "p2", "Seen in 2%+ of games" },
-    };
-    for (mins) |m| try tpl.render(w, "<option value=\"{v}\"{selected}>{label}</option>", .{
-        .v = m[0],
-        .selected = tpl.flag(std.mem.eql(u8, m[0], "p1"), "selected"),
-        .label = m[1],
-    });
-}
-
-/// "EUW1" -> "EUW", "EUN1" -> "EUNE", as static/filters.js platformName
-fn platformName(p: []const u8) []const u8 {
-    const names = [_][2][]const u8{ .{ "EUN1", "EUNE" }, .{ "LA1", "LAN" }, .{ "LA2", "LAS" }, .{ "OC1", "OCE" } };
-    for (names) |n| if (std.mem.eql(u8, n[0], p)) return n[1];
-    return std.mem.trimEnd(u8, p, "0123456789");
 }
 
 /// Games to stabilise (k) for a lane opponent's win rate in role r: game-to-game variance
@@ -359,6 +305,7 @@ fn opponentTable(site: *const Site, w: *Writer, ch: Champ, r: Role, cr: core.sta
     }
     try tpl.renderPart(w,
         \\<div class="tl-bar"><h3 class="opp-h">Lane opponents <span class="muted">{n}, hardest first</span></h3>
+        \\<nav class="switch" aria-label="Opponents" hidden><a aria-current="page" data-min="p1" title="Opponents in 1%+ of {name}'s games in the role">Common</a><a href="?min=0" data-min="0">All</a></nav>
         \\<input type="search" placeholder="Search opponent" data-filter="opp-{slug}" aria-label="Search opponent"></div>
         \\<div class="og-wrap"><table class="og" id="opp-{slug}" data-sortable data-k="{k:.0}" data-ka="{ka:.0}">
         \\<thead><tr><th class="l" data-sort="text">Name</th><th data-sort="num" title="{name}'s win rate in the matchup; sorts with few games pulled toward {name}'s own">Win rate</th><th data-sort="num" title="Points more or less than {name} usually wins against an opponent this strong">Vs usual</th><th data-sort="num" title="Lane curve estimate: {name} minus the opponent">Gold at {minute}</th><th data-sort="num">Games</th></tr></thead>

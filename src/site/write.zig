@@ -175,7 +175,9 @@ test "views: a tree each, switches between them, shared pages once" {
     const tiers = try read(arena, out, "all/champions.html");
     for ([_][]const u8{
         "<a href=\"../all/patch/champions.html\" data-period=\"patch\">Patch 16.20</a>",
-        "<a href=\"../champions.html\" data-region=\"euw\">EUW</a>",
+        "<a href=\"../champions.html\" data-region=\"EUW1\">EUW</a>",
+        "<a aria-disabled=\"true\" title=\"Champion pages only\" data-region=\"KR\">KR</a>",
+        "<a aria-disabled=\"true\" title=\"Champion pages only\" data-rank=\"6\">Diamond+</a>",
         "href=\"../style.css\"",
         "href=\"../daily.html\"",
         "href=\"../champion/a.html?region=all\"",
@@ -184,7 +186,10 @@ test "views: a tree each, switches between them, shared pages once" {
     const champ = try read(arena, out, "champion/a.html");
     for ([_][]const u8{
         "<a href=\"../champion/a.html?period=patch\" data-period=\"patch\">Patch 16.20</a>",
-        "<a aria-current=\"page\" data-region=\"euw\">EUW</a>",
+        "<a aria-current=\"page\" data-region=\"EUW1\">EUW</a>",
+        "<a href=\"../champion/a.html?region=KR\" data-region=\"KR\">KR</a>",
+        "<a href=\"../champion/a.html?rank=6\" data-rank=\"6\">Diamond+</a>",
+        "<span data-foot>in EUW, last 30 days",
         "href=\"../style.css\"",
         "<a href=\"../champions.html\" aria-current=\"page\" data-view>",
     }) |s| try std.testing.expect(std.mem.indexOf(u8, champ, s) != null);

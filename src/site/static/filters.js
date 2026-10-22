@@ -1,14 +1,15 @@
-// Champion page filters (root.zig filterBar, filters.zig). The champion's filter data has
-// one row per region, patch, 30-day flag, rank, role and lane opponent with games, wins
-// and gold at 14, plus bans by the game's rank; data/filters.json has players per role
-// and games by rank for pick and ban rates. This sums the rows the bar picks and
-// redraws each role's tiles and opponent table, the early-data note and the header
-// switches. The page as written is the bar's defaults (the root view), put back as it
-// was on Reset. Picks live in the URL so a view can be shared; the views' own links use
-// the same keys (html.View.query). The URL's picks always win. A page opened with none
-// takes the last view visited (as the menu does) and the rank and opponents picks kept in
-// this browser; one opened from another page of the site (search.js marks the tab) with
-// only some takes the kept picks for the rest.
+// Champion page filters (champion.zig, filters.zig). The champion's filter data has one
+// row per region, patch, 30-day flag, rank, role and lane opponent with games, wins and
+// gold at 14, plus bans by the game's rank; data/filters.json has players per role and
+// games by rank for pick and ban rates. This sums the rows the picks select and redraws
+// each role's tiles and opponent table, the scope lines and the early-data note. The
+// picks are the subbar's region, period and rank links (html.zig switches) and each
+// opponent table's Common/All; the page as written is their defaults (the root view).
+// Picks live in the URL so a view can be shared; the views' own links use the same keys
+// (html.View.query). The URL's picks always win. A page opened with none takes the last
+// view visited (as the menu does) and the rank and opponents picks kept in this browser;
+// one opened from another page of the site (search.js marks the tab) with only some
+// takes the kept picks for the rest.
 "use strict";
 
 // As root.zig opponentTable: by the win rate pulled toward the champion's own in the role
@@ -16,7 +17,7 @@
 const HARDEST = "hardest first";
 
 (async () => {
-  const bar = document.querySelector(".filter-bar[data-src]");
+  const bar = document.querySelector("[data-filters]");
   if (!bar) return;
   let data, meta, champs;
   try {
@@ -29,13 +30,21 @@ const HARDEST = "hardest first";
   }
   const byId = new Map(champs.champions.map((c) => [c.id, c]));
   const self = byId.get(Number(bar.dataset.id));
-  const field = (f) => bar.querySelector(`[data-f="${f}"]`);
   const titleCase = (s) => s.charAt(0) + s.slice(1).toLowerCase();
   const current = meta.current.length === 1 ? meta.current[0] : null;
   const home = bar.dataset.region;
 
   const defaults = { region: home, rank: "", period: "days30", min: "p1" };
-  const selects = { region: field("region"), rank: field("rank"), period: field("period"), min: field("min") };
+  const controls = {
+    region: [...document.querySelectorAll(".subbar [data-region]")],
+    rank: [...document.querySelectorAll(".subbar [data-rank]")],
+    period: [...document.querySelectorAll(".subbar [data-period]")],
+    min: [...document.querySelectorAll("main [data-min]")],
+  };
+  // A link's pick; null when there is none (no single current patch)
+  const valueOf = (k, a) =>
+    k !== "period" ? a.dataset[k] : a.dataset.period !== "patch" ? "days30" : current ? `patch:${current}` : null;
+  const offered = (k, v) => controls[k].some((a) => valueOf(k, a) === v);
   // "period=patch" from the views' links: the current patch, whichever it is now
   const fromUrl = (k, v) => (k === "period" && v === "patch" && current ? `patch:${current}` : v);
   const toUrl = (k, v) => (k === "period" && current && v === `patch:${current}` ? "patch" : v);
@@ -43,7 +52,7 @@ const HARDEST = "hardest first";
   const KEEP = "champion-filters";
   const kept = {};
   try {
-    const none = Object.keys(selects).every((k) => !params.has(k));
+    const none = Object.keys(defaults).every((k) => !params.has(k));
     if (none || sessionStorage.getItem("meio-in") === "1") {
       const k = JSON.parse(localStorage.getItem(KEEP));
       for (const f of ["rank", "min"]) if (typeof k?.[f] === "string") kept[f] = k[f];
@@ -52,16 +61,17 @@ const HARDEST = "hardest first";
     if (v?.startsWith("all/")) kept.region = "all";
     if (v?.endsWith("patch/") && current) kept.period = `patch:${current}`;
   } catch {}
+  const f = {};
+  for (const k of Object.keys(defaults)) {
+    const want = fromUrl(k, params.get(k) ?? kept[k] ?? defaults[k]);
+    f[k] = offered(k, want) ? want : defaults[k];
+  }
   const keep = () => {
     try {
-      localStorage.setItem(KEEP, JSON.stringify({ rank: selects.rank.value, min: selects.min.value }));
+      localStorage.setItem(KEEP, JSON.stringify({ rank: f.rank, min: f.min }));
     } catch {}
   };
-  for (const [k, s] of Object.entries(selects)) {
-    const want = fromUrl(k, params.get(k) ?? kept[k] ?? defaults[k]);
-    s.value = [...s.options].some((o) => o.value === want) ? want : defaults[k];
-    s.disabled = false;
-  }
+  for (const a of controls.min) a.closest("nav").hidden = false;
 
   const scope = document.querySelector("[data-scope]");
   const early = document.querySelector("[data-early]");
@@ -93,9 +103,9 @@ const HARDEST = "hardest first";
         },
       };
     });
-  const original = { scope: scope?.textContent, early: early?.innerHTML, earlyHidden: early?.hidden };
+  const foot = document.querySelector("[data-foot]");
+  const original = { scope: scope?.textContent, early: early?.innerHTML, earlyHidden: early?.hidden, foot: foot?.textContent };
 
-  const picks = () => Object.fromEntries(Object.entries(selects).map(([k, s]) => [k, s.value]));
   const isDefault = (f) => Object.keys(defaults).every((k) => f[k] === defaults[k]);
   const query = (f) => {
     const q = new URLSearchParams();
@@ -168,48 +178,56 @@ const HARDEST = "hardest first";
       : `last 30 days, patches ${span[0]} ${span.length === 2 ? "and" : "to"} ${span[span.length - 1]}`;
   const when = (f) => (f.period === "days30" ? days30 : `patch ${f.period.slice(6)}`);
 
+  const where = (f) => (f.region === "all" ? "across all regions" : `in ${platformName(f.region)}`);
+  const tier = (f) => `${titleCase(meta.tiers[Number(f.rank)])}${Number(f.rank) + 1 < meta.tiers.length ? "+" : ""}`;
+
   function scopeText(f) {
-    const where = f.region === "all" ? "across all regions" : `in ${platformName(f.region)}`;
-    const ranks = f.rank === "" ? "Platinum+ games" : `${titleCase(meta.tiers[Number(f.rank)])}${Number(f.rank) + 1 < meta.tiers.length ? "+" : ""} players`;
-    return `${where}, ${when(f)}, ${ranks}`;
+    return `${where(f)}, ${when(f)}, ${f.rank === "" ? "Platinum+ games" : `${tier(f)} players`}`;
   }
 
-  // Region and period switches in the header: the one the filters are on is current;
-  // a click sets the bar instead of loading the page again
+  // As the footer (root.zig sharedPage); under a rank, games by their players' middle rank
+  function footText(f, games) {
+    return `${where(f)}, ${when(f)}, ${games.toLocaleString("en-GB")} ${f.rank === "" ? "" : `${tier(f)} `}games`;
+  }
+
+  // The picks: the current one of each without a link, the others linking to the page
+  // with that pick (a click sets it instead of loading the page again)
   // Relative, so the site also works from disk; "?" alone still drops the picks
   const file = location.pathname.split("/").pop();
-  const switches = [...document.querySelectorAll(".subbar .filters a[data-region], .subbar .filters a[data-period]")];
-  const switchPick = (a) =>
-    a.dataset.region
-      ? ["region", a.dataset.region === "all" ? "all" : home]
-      : ["period", a.dataset.period === "patch" && current ? `patch:${current}` : "days30"];
+  const regionName = document.querySelector(".subbar details.regions summary");
   function drawSwitches(f) {
-    for (const a of switches) {
-      const [k, v] = switchPick(a);
-      if (f[k] === v) {
-        a.setAttribute("aria-current", "page");
-        a.removeAttribute("href");
-      } else {
-        a.removeAttribute("aria-current");
-        a.href = file + (query({ ...f, [k]: v }) || "?");
+    for (const [k, links] of Object.entries(controls)) {
+      for (const a of links) {
+        const v = valueOf(k, a);
+        if (v === null) {
+          a.setAttribute("aria-disabled", "true");
+          a.removeAttribute("href");
+        } else if (f[k] === v) {
+          a.setAttribute("aria-current", "page");
+          a.removeAttribute("href");
+        } else {
+          a.removeAttribute("aria-current");
+          a.href = file + (query({ ...f, [k]: v }) || "?");
+        }
       }
     }
+    if (regionName) regionName.textContent = f.region === "all" ? "All regions" : platformName(f.region);
   }
-  for (const a of switches) {
-    a.addEventListener("click", (e) => {
-      const [k, v] = switchPick(a);
-      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || ![...selects[k].options].some((o) => o.value === v)) return;
-      e.preventDefault();
-      selects[k].value = v;
-      apply();
-      keep();
-    });
-  }
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest?.(".subbar a, main a[data-min]");
+    const k = a && Object.keys(controls).find((k) => k in a.dataset);
+    if (!k || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return;
+    e.preventDefault();
+    const v = valueOf(k, a);
+    if (v === null) return;
+    a.closest("details")?.removeAttribute("open");
+    f[k] = v;
+    apply();
+    keep();
+  });
 
   function apply() {
-    const f = picks();
     const fresh = isDefault(f);
-    bar.querySelector("[data-reset]").hidden = fresh;
     history.replaceState(null, "", location.pathname + query(f) + location.hash);
     drawSwitches(f);
     const view = viewOf(f);
@@ -217,6 +235,7 @@ const HARDEST = "hardest first";
     if (view && typeof meioView === "function") meioView(view.dir);
     if (scope) scope.textContent = fresh ? original.scope : scopeText(f);
     const sums = fresh ? null : sum(f);
+    if (foot) foot.textContent = fresh ? original.foot : footText(f, sums.games);
     if (early) {
       if (fresh) {
         early.innerHTML = original.early;
@@ -445,26 +464,15 @@ const HARDEST = "hardest first";
     return td;
   }
 
-  // "Show them" under an opponent table: every opponent, through the Opponents filter
+  // "Show them" under an opponent table: every opponent, as its All
   for (const s of sections) {
     s.el.addEventListener("click", (e) => {
       if (!e.target.closest?.("[data-show-all]")) return;
-      selects.min.value = "0";
+      f.min = "0";
       apply();
       keep();
     });
   }
-  for (const s of Object.values(selects)) {
-    s.addEventListener("change", () => {
-      apply();
-      keep();
-    });
-  }
-  bar.querySelector("[data-reset]").addEventListener("click", () => {
-    for (const [k, s] of Object.entries(selects)) s.value = defaults[k];
-    apply();
-    keep();
-  });
   apply();
 })();
 

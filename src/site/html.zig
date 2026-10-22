@@ -103,6 +103,10 @@ pub const Page = struct {
     nav: Nav = .none,
     /// Current patch, for the period switch
     patch: []const u8,
+    /// Every platform crawled, for the region pick; champion pages offer them all
+    regions: []const []const u8 = &.{},
+    /// The platform of the root view (EUW)
+    home: []const u8 = "EUW1",
     /// Footer: "in EUW, last 30 days, 5,123 games"
     data: []const u8,
     /// Preview: unlisted for search engines, with a banner saying so
@@ -273,38 +277,82 @@ pub const logo =
     \\<svg width="20" height="20" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#8b7cf6"/><path d="M6 21.5 11.5 14l5 4.5L26 7" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16.5" cy="18.5" r="2.6" fill="#f5c451"/></svg>
 ;
 
-/// Region and period switches; data-region, data-period: what filters.js sets on a click
+/// Rank picks: tier index as filters.zig tiers ("" all games: the crawl samples
+/// Platinum IV+ players, so its lobbies are Platinum+); higher tiers are too thin to offer
+pub const ranks = [_][2][]const u8{ .{ "", "Plat+" }, .{ "5", "Emerald+" }, .{ "6", "Diamond+" }, .{ "7", "Master+" } };
+
+/// "EUW1" -> "EUW", "EUN1" -> "EUNE", as static/filters.js platformName
+pub fn platformName(p: []const u8) []const u8 {
+    const names = [_][2][]const u8{ .{ "EUN1", "EUNE" }, .{ "LA1", "LAN" }, .{ "LA2", "LAS" }, .{ "OC1", "OCE" } };
+    for (names) |n| if (std.mem.eql(u8, n[0], p)) return n[1];
+    return std.mem.trimEnd(u8, p, "0123456789");
+}
+
+/// Region, period and rank picks; data-region, data-period, data-rank: what filters.js
+/// sets on a click. Champion pages (no view) take every pick; other pages only the
+/// views', the rest greyed
 fn switches(w: *Writer, p: Page) Writer.Error!void {
-    const paths = p.counterparts.?;
     const v = p.view orelse View.all[0];
-    try w.writeAll("<div class=\"filters\">\n");
-    const groups = [_]struct { []const u8, [2]View, [2][2][]const u8 }{
-        .{ "Region", .{ .{ .region = .euw, .period = v.period }, .{ .region = .all, .period = v.period } }, .{ .{ "EUW", "" }, .{ "All regions", "" } } },
-        .{ "Period", .{ .{ .region = v.region, .period = .days30 }, .{ .region = v.region, .period = .patch } }, .{ .{ "30 days", "" }, .{ "Patch ", p.patch } } },
+    const live = p.view == null;
+    try tpl.renderPart(w,
+        \\<div class="filters">
+        \\<details class="regions"><summary aria-label="Region">{region}</summary><div class="region-list">
+        \\
+    , .{ .region = if (v.region == .all) "All regions" else platformName(p.home) });
+    const views = [_]struct { View, []const u8, []const u8 }{
+        .{ .{ .region = .all, .period = v.period }, "all", "All regions" },
+        .{ .{ .region = .euw, .period = v.period }, p.home, platformName(p.home) },
     };
-    for (groups, 0..) |g, i| {
-        try tpl.renderPart(w, "<nav class=\"switch\" aria-label=\"{label}\">", .{ .label = g[0] });
-        for (g[1], g[2]) |to, label| {
-            const here = to.index() == v.index();
-            try tpl.render(w, "<a{current}{href} {data}=\"{value}\">{label}{patch}</a>", .{
-                .current = tpl.flag(here, "aria-current=\"page\""),
-                .href = tpl.when(!here, tpl.attr("href", toSite(p, paths[to.index()]))),
-                .data = tpl.trusted(if (i == 0) "data-region" else "data-period"),
-                .value = if (i == 0) @tagName(to.region) else @tagName(to.period),
-                .label = label[0],
-                .patch = label[1],
-            });
-        }
-        try w.writeAll("</nav>\n");
+    for (views) |e| try viewLink(w, p, e[0], v, "data-region", e[1], e[2], "");
+    for (p.regions) |pl| {
+        if (std.mem.eql(u8, pl, p.home)) continue;
+        try pick(w, p, live, "data-region", pl, platformName(pl), "region");
     }
-    try w.writeAll("</div>\n");
+    try w.writeAll("</div></details>\n<nav class=\"switch\" aria-label=\"Period\">");
+    for ([_]Period{ .days30, .patch }) |pe| {
+        const to: View = .{ .region = v.region, .period = pe };
+        try viewLink(w, p, to, v, "data-period", @tagName(pe), if (pe == .days30) "30 days" else "Patch ", if (pe == .days30) "" else p.patch);
+    }
+    try w.writeAll("</nav>\n<nav class=\"switch\" aria-label=\"Rank\">");
+    try w.writeAll("<a aria-current=\"page\" data-rank=\"\" title=\"Every game we crawl: Platinum IV+ players' lobbies\">Plat+</a>");
+    for (ranks[1..]) |r| try pick(w, p, live, "data-rank", r[0], r[1], "rank");
+    try w.writeAll("</nav>\n</div>\n");
+}
+
+/// A pick no view has: on a champion page a link with it (filters.js takes the click),
+/// elsewhere greyed
+fn pick(w: *Writer, p: Page, live: bool, comptime data: []const u8, value: []const u8, label: []const u8, comptime key: []const u8) Writer.Error!void {
+    if (live) {
+        try tpl.render(w, "<a href=\"{to}?" ++ key ++ "={value}\" " ++ data ++ "=\"{value}\">{label}</a>", .{
+            .to = toSite(p, p.counterparts.?[0]),
+            .value = value,
+            .label = label,
+        });
+    } else {
+        try tpl.render(w, "<a aria-disabled=\"true\" title=\"Champion pages only\" " ++ data ++ "=\"{value}\">{label}</a>", .{
+            .value = value,
+            .label = label,
+        });
+    }
+}
+
+/// A pick that is a view: a link to the page's counterpart there, current when it is `v`
+fn viewLink(w: *Writer, p: Page, to: View, v: View, comptime data: []const u8, value: []const u8, label: []const u8, tail: []const u8) Writer.Error!void {
+    const here = to.index() == v.index();
+    try tpl.render(w, "<a{current}{href} " ++ data ++ "=\"{value}\">{label}{tail}</a>", .{
+        .current = tpl.flag(here, "aria-current=\"page\""),
+        .href = tpl.when(!here, tpl.attr("href", toSite(p, p.counterparts.?[to.index()]))),
+        .value = value,
+        .label = label,
+        .tail = tail,
+    });
 }
 
 pub fn foot(w: *Writer, p: Page) Writer.Error!void {
     try tpl.renderPart(w,
         \\</main>
         \\<footer><div class="wrap">
-        \\<p>Ranked solo/duo {data}. Updated daily.</p>
+        \\<p>Ranked solo/duo <span data-foot>{data}</span>. Updated daily.</p>
         \\<p><a href="{privacy}">Privacy</a> · <a href="{terms}">Terms</a> ·
         \\<a href="{method}">Method</a> · <a href="{download}">Desktop app</a></p>
         \\<p class="legal">{legal}</p>

@@ -221,6 +221,8 @@ pub const Site = struct {
             .description = description,
             .nav = nav,
             .patch = s.patch,
+            .regions = s.opts.all_platforms,
+            .home = s.opts.platforms[0],
             .data = s.arena.print("{s}, {s}, {s} games{s}", .{
                 s.view.region.in(),
                 s.when,

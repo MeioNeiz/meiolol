@@ -188,6 +188,12 @@ Jacob 19 Oct: more like lolalytics, better use of space; lane opponents are too 
 see all at once; builds, skill order and runes on the first screen. Then more useful
 than lolalytics: our own edge is the lane curves, early/late lean, "Into which teams"
 (data-and-model.md step 2) and the player's own record when looked up.
+- Done 22 Oct (Jacob: two filter sets, dropdowns "I really don't like"): one filter
+  row in the subbar on every Champions page (html.zig switches): region chip opening a
+  grid, period 30 days | current patch (older patches dropped from the UI, data kept:
+  merging them saves ~7% of a filter file), rank Plat+ | Emerald+ | Diamond+ | Master+;
+  greyed outside champion pages. Opponents select now Common | All on the table; footer
+  follows the filters. Next: phone takes 3 subbar rows (tabs, region and period, rank)
 - Done 20 Oct (night run, champion): lane opponents as one grid of tiles, all on
   screen (desktop 11 a row, phone 4), sortable by name, win rate, vs usual, gold at 14
   and games; win rates on the champions table's track and colours; "+2.1 vs usual":
