@@ -4,7 +4,7 @@ url: https://developer.riotgames.com/policies/general
 kind: docs
 commit:
 for: [riot-production-key, identity-and-privacy]
-looked: 2026-10-11
+looked: 2026-10-22
 depth: docs (whole page)
 relevance: high
 grade: A/fair
@@ -51,6 +51,17 @@ Why: which policy lines a champ select pick recommender must satisfy for a produ
   > Products cannot de-anonymize players who cannot reasonably be identified from visible information.
 - [privacy] Checked, not there: no rule on player consent, opt-in, ownership checks,
   retention or deletion requests on this page. ^f11
+
+- [policy] [tools/paid] No ads in Riot properties: in game, loading screens or the Riot
+  Client (the May 2025 rule, [[overwolf-riot-creators-response#^f1]]). ^f12
+  > You may not place advertisements in Riot properties, which include in-game, loading screens, and the Riot Client.
+- [policy] [tools/paid] Paid products need a free tier, transformative content and no
+  gouging. ^f13
+  > You must have a free tier of access for players, which may include advertising
+  > Your content must be transformative if you are charging players for it
+- [policy] (inferred) "All products must be registered and audited" ([[riot-policies-general#^f3]])
+  has no key-type carve-out, so the game integrity section binds personal-key products
+  too. ^f14
 
 ## Read
 

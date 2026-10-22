@@ -3,9 +3,9 @@ title: DraftGap (vigovlugt/draftgap) README, FAQ and data pipeline
 url: https://github.com/vigovlugt/draftgap
 kind: project
 commit: 872c6d5cebfec186fdebb14005fd42b2bf84ad22
-for: [riot-production-key, curve-statistics-method]
+for: [riot-production-key, curve-statistics-method, league-apps-feature-matrix]
 looked: 2026-10-11
-depth: code (README, FAQ dialog, dataset riot.ts and lolalytics; issue list; core draft analysis, ratings, risk level)
+depth: code (README, FAQ dialog, dataset riot.ts and lolalytics; issue list; core draft analysis, ratings, risk level; desktop LCU integration main.rs, LolClientContext.tsx, lcu-api.ts)
 relevance: medium
 grade: B/fair
 description: Open-source stats-based champ select pick recommender (web + Tauri desktop, LCU sync); data from Lolalytics, not Riot API
@@ -65,10 +65,37 @@ Why: closest open-source precedent to meiolol (desktop app syncing with champ se
   k = luck variance / talent variance gives for small win-rate effects (inferred:
   sd of true matchup deviation 1.5 points gives k = 0.25 / 0.015^2, about 1100). ^f12
 
+- [tools/phase] [method] Champ select: the Tauri desktop app finds the League client by
+  reading the LeagueClientUx process command line (PowerShell Get-CimInstance on Windows,
+  ps elsewhere) for the app port and remoting auth token, then calls the local LCU over
+  HTTPS with basic auth user "riot". `apps/frontend/src-tauri/src/main.rs` ^f13
+  > let port_regex = "--app-port=([0-9]+)";
+  > let password_regex = "--remoting-auth-token=([a-zA-Z0-9_-]+)";
+- [tools/phase] Read-only LCU use: four GET endpoints only (champ select session, current
+  summoner, grid champions, pickable champion ids); no write, hover or lock call.
+  `apps/frontend/src-tauri/src/main.rs` ^f14
+  > get_lcu_response(&state, "lol-champ-select/v1/session").await
+  > get_lcu_response(&state, "lol-champ-select/v1/pickable-champion-ids").await
+- [tools/phase] [ux/features] Champ select: polls every 500 ms in champ select, 1 s in the
+  main menu, 2 s when the client is not found. `LolClientContext.tsx` ^f15
+  > [ClientState.InChampSelect]: 500,
+- [tools/phase] [ux/features] Champ select: syncs both teams' picks with assigned roles,
+  shows allies' hover intent (pick intent of other allies), and greys champions the player
+  does not own. `LolClientContext.tsx` ^f16
+  > selection.championPickIntent &&
+  > const ownedChampions = await getPickableChampionIds();
+- [ux/features] An import of the client's favourite champions per position exists but is
+  disabled (prompt kept repeating). `LolClientContext.tsx` ^f17
+  > // Disabled: favourites import prompt repeats, likely because WebView2 drops recent localStorage writes.
+- [tools/accounts] Checked, not there: no login, account or sign-in code in the frontend;
+  identity is only the local client's current summoner, used to reset filters on the
+  player's own pick. ^f18
+
 ## Read
 
 - `packages/core/src/draft/analysis.ts` (analyzeMatchups), `rating/ratings.ts`, `risk/risk-level.ts`
 - `README.md`, `FAQDialog.tsx`, `apps/dataset/src/riot.ts`, `lolalytics/index.ts` head; titles of all 16 issues, bodies of #8, #12, #20 (technical, nothing on policy)
+- `apps/frontend/src-tauri/src/main.rs`, `src/contexts/LolClientContext.tsx`, `src/api/lcu-api.ts` (2026-10-22, for league-apps-feature-matrix)
 
 ## Not read
 

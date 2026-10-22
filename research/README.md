@@ -18,6 +18,10 @@ Area: which areas/ page the tag's findings go to (blank on a sub-tag: its parent
 | Tag | Area | Covers |
 | --- | --- | --- |
 | `tools` | product | existing pick and draft tools (sites, overlays, open-source projects) |
+| `tools/paid` | | what tools charge for: tiers, prices, what sits behind the paywall |
+| `tools/accounts` | | logins and identity in tools: RSO, own accounts, friends, groups, roles, sharing |
+| `tools/removed` | | features Riot made tools remove or change, with dates (champ select names, timers, Vanguard, memory) |
+| `tools/phase` | | which game phase a feature serves: lobby, champ select, loading, in game, post game, between games |
 | `method` | stats | recommendation and win-prediction methods, models, features |
 | `data` | data | Riot API, match data, sampling, patches, rate limits |
 | `draft` | product | draft theory: counters, synergy, roles, comps, how much draft matters |

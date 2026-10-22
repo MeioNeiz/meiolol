@@ -4,7 +4,7 @@ url: https://developer.riotgames.com/docs/portal
 kind: docs
 commit:
 for: [riot-production-key]
-looked: 2026-10-11
+looked: 2026-10-22
 depth: docs (Product Registration, API Keys, Rate Limiting)
 relevance: high
 grade: A/fair
@@ -51,6 +51,20 @@ Why: the official registration flow, what reviewers look for, key types.
 - [policy] Each project registered and approved separately. ^f11
   > If you are working on multiple projects, you should register each one separately and each one needs to be individually approved for a separate production API key.
 - [policy] Checked, not there: no field-by-field list of the registration form; no riot.txt detail on this page. ^f12
+
+- [policy] Personal key scope: just the developer or a small private community; acceptable
+  uses include bots for voice servers and personal projects not meant for production. ^f13
+  > Personal API keys should be used for products that are intended for just the developer or a small private community.
+  > bots for streaming sites, boards, voice com servers, etc.
+  > projects meant for personal usage and not production
+- [policy] Every product owner, any key type, is expected to know the policies; breaches
+  can bring punitive action. ^f14
+  > every product owner (developer) will be expected to have read and understood our policies.
+  > Failure to adhere to these policies may lead to punitive actions
+- [policy] (inferred) Nothing on this page exempts personal-key products from the general
+  or game integrity policies; a key type changes rate limits and audience, not which
+  features are allowed. A private "op" tool for friends is a small private community
+  use, but its features must still pass the same rules as a public one. ^f15
 
 ## Read
 
