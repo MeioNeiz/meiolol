@@ -291,7 +291,7 @@ Impossible now:
 - Shares with the site: data and maths only (lanecard.zig, core.score, curves files),
   and Riot boilerplate text. No HTML, CSS, JS, tokens or chart code.
 - Jacob's 19 Oct list (docs/plan/app.md) wants every role, hovers, bans, pool, comp
-  notes, champion icons (not done: "champion icons, window icon" in app.md "Not yet").
+  notes, champion icons (not done: app.md APP8).
   That is a dashboard-sized UI; in dvui each layout, icon and table is hand-placed Zig.
 - So: the site's CSS/JS/templates are not what slows app work today. If Jacob's "app
   development" means the desktop, the pain there is dvui, a separate decision. If it

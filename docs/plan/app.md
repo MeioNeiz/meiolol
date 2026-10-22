@@ -1,121 +1,132 @@
-# Plan: desktop app
+# Plan: desktop apps
 
-No release date: "after Riot's production review" (J7). How it is built:
-docs/architecture.md "Desktop window"; `zig build desktop-shot` for PNGs.
+Two editions from one codebase (Jacob 22 Oct, J21): a public app that fits what Riot
+reviews, and a private one for Jacob and his friends behind accounts
+(docs/plan/accounts.md). Public release: no date, "after Riot's production review" (J7).
+How it is built: docs/architecture.md "App" and "Desktop window"; `zig build
+desktop-shot` for PNGs.
 
-## Jacob's list (19 Oct)
+## Two editions
 
-Champ select, updating live as champions are hovered and locked:
-- Options for every role, not only yours
-- Pick options given what people hover
-- Ban options from hovers
-- Ban options from the champions people are most likely to play: rank them by
-  core.banimpact (J20, the site's "Influence" column), several with games, never auto
-- Champions and team comps from what people play and how they have done recently
-- Options from a chosen pool
-- Aware of pick order (Jacob 19 Oct: "they haven't picked top yet, what is good"): when
-  the enemy has not picked your lane, blind-safe options (J2: best low end of win
-  against an average pick, few hard counters, lane gold as a reason); once they have,
-  counters to their pick; same per role for allies still to pick. Show which mode an
-  option comes from ("safe blind" / "into Darius")
-Once all are picked:
-- Team comp: what is strong, notes
-- Who is strong, who is good early and late, who will carry, matchup info
-In game: the same, plus what each player plays
+- Build option `-Dedition=public|private`. Private features live in their own modules,
+  imported only under a comptime check, so the public exe holds none of their code or
+  strings (Riot may look at it; friends' features shouldn't leak through it)
+- Both share the poller, the lane card, data files, signing and updates. The private
+  edition reads extra data files (e.g. raw model outputs) that only /p/desktop/ serves
+- deploy/desktop-release.sh builds, fuzzes and signs both; each has its own update
+  channel: public /desktop/ (after the key), private /p/desktop/ (device token, AC4).
+  Today's admin-gated exe becomes the private edition
+- The public edition is built and shot from now on, for the application's screenshots,
+  even while only the private one is downloaded
 
-## Policy check per item (docs/production-key.md "Product rules")
+## Policy line
 
-Ranked solo/duo champ select allows no other players' names or stats, no per-teammate
-judgements, 3 to 5 options with reasons, no "best pick" or "+X% win rate" wording.
-- Fine (champion and aggregate stats): every role, hovers, live updates, bans from
-  hovers, your own pool, comp notes, early/late, matchup info, which champion carries
-  this comp
-- Not in ranked solo/duo champ select: bans from what the enemy players play, comps
-  from what your team plays and their recent form, who (as a player) will carry. Maybe
-  in normals or flex, and after champ select: check policy before building
-- In game: research says reactive in-game advice is now unapproved (research
-  riot-appreciated-tools C9) and players reject live help (player-tool-needs C2); a
-  loading-screen view of who plays what needs a josearch question first
-- Comp win chance: words, not a percentage, while "no public draft win chance" holds;
-  comp-lean reasons only once the held-out look passes (data-and-model.md step 1)
+Riot's general policies apply to every product, whoever its users are
+(research/sources/riot-policies-general.md): no unfair advantage, "like a cheating
+program or giving some players an advantage that others would not otherwise have"; no
+de-anonymising "players who cannot reasonably be identified from visible information";
+increase, not decrease, the diversity of decisions; give several choices, don't remove
+decisions; every new feature is audited through the product's page. One product per key.
 
-## Built and tested
+So the private tier is "more depth, numbers and unfinished features for testers", not
+"information the game hides". Same framing as paid tiers at Porofessor, Blitz,
+Mobalytics (research: league-apps-feature-matrix once written).
+- No tier, ever: other players' identities or stats in ranked solo/duo champ select
+  (the client hides them; reading them anyway is de-anonymising), anything the game
+  doesn't show during a game (enemy cooldown or jungle timers), auto pick, ban, lock or
+  dodge, MMR calculators
+- Private only: win chance as a percentage, "+X%" and single-pick rankings, raw model
+  scores, experimental models beside the shipped one, all of Jacob's list in queues
+  where names are visible (normals, flex: check in a real capture), player scouting
+  from the loading screen on (names are visible there)
+- Public: docs/production-key.md "Product rules" (3 to 5 options with reasons, words
+  not percentages, no names or stats of others in ranked solo/duo champ select)
+- Open (AC0, Jacob): the application should mention a closed tester group with extra
+  features, since features are audited and the key covers the described use. Recommend
+  yes, worded as testers trying features before they go public
 
-- Lane card built. First Windows run 2026-10-14 on the gpu-box (Windows 11 Pro, two
-  1080p screens at 100%; docs/review-shots/windows-desktop-window.png): opens, per
-  monitor DPI aware, fonts crisp, resizes and closes cleanly; D3DCOMPILER_47.dll is in
-  System32 on Windows 10/11. Idle 0.3% of a core (2911db5). Memory ~470 MB private with
-  EUW recent-curves (158 MB; whole files held, the all-region one is 288 MB)
-- Admin download (J19): /admin/desktop/meiolol-desktop.zip, button in the admin header
-  and, for Jacob (admin page visited in that browser), on the site's download page.
-  The zip is the exe and update.key; the app updates itself (Jacob 20 Oct 09:05): at
-  start and every 3 h it fetches the current stats and curves and a new exe from
-  /admin/desktop/ when their hashes change, swaps data in while open and the exe on the
-  next start (architecture.md "Desktop window"). Since 21 Oct only
-  deploy/desktop-release.sh ships an exe (release checks, fuzzing, ReleaseSafe, signed
-  with the offline release key); each web round (web-loop.sh desktop_files) publishes
-  the released exe, the data and update.signed (signed with the box's data key).
-  Behind the admin gate until the key: the zip's key opens that directory only
-  (hosting.md)
-- Mock champ select from the Mac (20 Oct): `deploy/mock-cs.sh [SCENARIO] [--window]`
-  starts a mock League client playing a scripted champ select and game (scenarios:
-  full-game, laner-locked-first, trade, dodge, aram, blind-normal; `list`) and runs
-  `meiolol-app watch` against it, or with --window the desktop window on the Mac (SDL3
-  dev build, `brew install sdl3`). --speed X, --manual (Enter per step), --loop. The
-  mock also serves the in-game Live Client Data API (port 2999) and the end of game
-  stats block, for whatever comes after champ select; no in-game view is built. Every
-  scenario runs in `zig build test`. Shots: docs/review-shots/mock-mid-blind.png, mock-top-vs-darius.png. How it works:
-  docs/architecture.md "App"
+## Jacob's list by edition (19 Oct list)
 
-- Lane card scenes (20 Oct): testdata/cards/scenes.json, ten champ selects (blind,
-  counter, locked, guessed positions, bans, pickable, widened pool, no mastery).
-  `meiolol-app cards [FILE]` prints each card as text against real stats and curves:
-  run it before and after a recommender change and diff. `zig build test` shows the
-  same scenes on a synthetic fixture (src/cardscenes.zig) against
-  testdata/cards/fixture.txt (a change fails with the diff command; cp to accept), and
-  checks 400 random drafts: options from the pool when it has 3+, else widened; 3 to 5
-  (fewer only when fewer exist); never banned, taken or unpickable; no "%", "win" or
-  "best" in reasons; filled-up options play the role (10%+ of their games)
-- Expertise (20 Oct): the pool is ranked by the draft plus the player's own mastery
-  points (lanecard.Expertise.fitted, from `meiolol eval --replay`: docs/model.md "Pool
-  and expertise replay"); the window's "Rank by your mastery points" box turns it off
-  (not kept across restarts yet); `meiolol-app cards --expertise off` for diffs
+Champ select, updating live as champions are hovered and locked. P = public, X = private.
 
-## Next
+| Item | P | X |
+| --- | --- | --- |
+| Options for every role, not only yours | yes | yes |
+| Pick options from hovers | yes | yes |
+| Ban options from hovers | yes | yes |
+| Bans from what people are likely to play, ranked by core.banimpact (J20), several with games, never auto | champion stats only | plus the enemies' own pools where names are visible |
+| Champions and comps from what people play and their recent form | no | where names are visible; ranked solo/duo: no |
+| Options from a chosen pool | yes | yes |
+| Pick order aware: blind-safe until the enemy picks your lane (J2), then counters; same for allies still to pick; label the mode ("safe blind" / "into Darius") | yes | yes, with the scores |
+| After picks: comp notes, strengths, early/late, which champion carries, matchup info | yes, words | yes, with numbers |
+| Who (as a player) will carry | no | loading screen on, or where names are visible |
+| Team win chance | words, after the held-out look (data-and-model.md step 1) | percentage |
+| In game: what each player plays | research question first | from the loading screen |
+| In game: reactive advice | no (riot-appreciated-tools C9; players reject it, player-tool-needs C2) | no |
 
-- Expertise bonus richer (Jacob 20 Oct: "a calculated bonus based on as much stats as we
-  can, not just a simple bonus"): today one fitted beta per tenfold mastery points. Next:
-  per-champion slope shrunk to the role's (d1: per-champion gap real, true sd ~2 points),
-  recent games and win rate on the champion, games in the role, rank, time since last
-  played; each term kept only if `meiolol eval --replay` shows it beats the error bar.
-  Open items: data/team/2026-10-20-pooltest/notes.md
-- Mock client vs a real capture: once session-real.json comes, diff its shape against
-  the mock's (`meiolol-app get /lol-champ-select/v1/session` on each) and fix the mock;
-  same for a real Live Client Data reply and eog-stats-block (all synthetic now). Check
-  in a real trade that pick actions keep the first champion (the mock and session.zig's
-  lock check now assume so)
-- Lane gold colour: lanecard.zig colours by sign alone (Sett "-8 gold at 14 min" red in
-  the mock run), architecture.md says only 2 SE from even; one of them is wrong
+## Steps
 
-- Jacob, in a real champ select (also needed for the application's screenshots and
-  LCU list), from C:\Users\jacob\meiolol-desktop-test (exe, meiolol-app.exe,
-  stats-all.bin, v5 recent-curves.bin): open meiolol-desktop.exe and run
-  `meiolol-app.exe session --save session-real.json`, then copy that file to
-  testdata/lcu/session-real.json (check mastery and ranked replies parse)
-- Not checked: 150% scaling (set a display to 150% and open the exe) and the card itself
-- Updater checked on Windows (gpu-box, 20 Oct, admin zip in a fresh folder): stats and
-  curves arrive and match update.json. The exe swap failed there: std's rename opens the
-  source for writing, which a running exe refuses (FileBusy); update.zig renames it with
-  MoveFileExW, checked swapping on Windows. A second exe update in one session waits for
-  a restart (the running image is then the .old.exe, which Windows won't replace).
-  Exes from before the fix never swap themselves: download the zip once more
-- Started from WSL (ssh), the exe can't open a window (D3D11 "not currently available",
-  session 0) and panics; start it in Jacob's session via a one-off `schtasks /it` task
-- Not yet: your own record in the matchup (concept part 6; LCU match history, needs a
-  real reply to fix the schema), champion icons, window icon (title bar shows dvui's),
-  the public download (after the key, in this order: drop the admin gate and the key,
-  and sign the exe, as SmartScreen warns on unsigned ones in a zip or an installer
-  alike; then a per-user install, perhaps the exe installing itself to %LOCALAPPDATA%
-  with a Start menu entry). A signed exe should also check the new exe's signature
-  before swapping, not only the hash from the same server
+Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's common.md).
+
+- APP1 Real champ select capture (Jacob, blocks the queue checks and the application's
+  screenshots): from C:\Users\jacob\meiolol-desktop-test open meiolol-desktop.exe, run
+  `meiolol-app.exe session --save session-real.json` in a ranked solo/duo and a normal
+  champ select, copy to testdata/lcu/. Then diff against the mock (`meiolol-app get
+  /lol-champ-select/v1/session` on each), fix the mock, and record which identity fields
+  each queue gives. Same for a real Live Client Data reply and eog-stats-block. Check in
+  a real trade that pick actions keep the first champion (mock and session.zig assume so)
+- APP2 Editions in the build: `-Dedition`, module split, both in `zig build ci`, release
+  script builds and signs both. Done when the public exe's strings hold no private
+  module names (a ci check)
+- APP3 Every role and pick order (both editions): the card per role, blind-safe vs
+  counter mode with its label, allies still to pick. Builds on lanecard.zig and
+  core.score; cardscenes fixture extended per mode. Mock scenarios first, real capture
+  after
+- APP4 Hovers: picks and bans from hovered champions, live (both editions)
+- APP5 Ban options by ban impact (both; private adds pools where names are visible)
+- APP6 After picks: comp view (notes, early/late, carry, matchups); public in words,
+  private with numbers
+- APP7 Private: scouting where names are visible (needs APP1's queue facts and AC6 for
+  "me"), percentages, experimental models
+- APP8 Champion icons and window icon (Data Dragon art is allowed, logos not)
+
+## Private site
+
+The /p/ pages (accounts.md AC3). First candidates, cheapest first: the draft tester
+(admin only today, site.md "Draft tester"), win chance and raw scores beside the public
+wording on champion and matchup pages, experimental models (J15's labelled
+experiments), all regions and patches without the public page-weight cuts.
+
+## Status (22 Oct)
+
+- Public-shaped lane card for your role, ranked by draft plus your mastery points
+  (lanecard.Expertise.fitted; "Rank by your mastery points" box, not kept across
+  restarts). Card rules tested over 400 random drafts and ten scenes
+  (testdata/cards/scenes.json, `meiolol-app cards [FILE] [--expertise off]`, fixture
+  testdata/cards/fixture.txt): run cards before and after a recommender change and diff
+- Windows (gpu-box, 14 Oct, Windows 11, 1080p at 100%): per monitor DPI aware, crisp,
+  resizes and closes cleanly; idle 0.3% of a core; ~470 MB private with EUW
+  recent-curves. Not checked: 150% scaling. From WSL over ssh the window can't open
+  (session 0): start it in Jacob's session with a one-off `schtasks /it` task
+- Admin download and self-update (J19, signed exe and data, release script only):
+  architecture.md "Desktop window", hosting.md "Desktop app files". Exes from before
+  the MoveFileExW fix (20 Oct) never swap themselves; a second exe update in one session
+  waits for a restart
+- Mock champ select on the Mac: `deploy/mock-cs.sh [SCENARIO] [--window]` (scenarios
+  `list`; also serves Live Client Data on 2999 and the end of game block; no in-game
+  view built). Every scenario runs in `zig build test`
+
+## Later
+
+- Expertise bonus richer (Jacob 20 Oct: "a calculated bonus based on as much stats as
+  we can"): per-champion slope shrunk to the role's, recent games and win rate on the
+  champion, games in the role, rank, time since last played; keep a term only if
+  `meiolol eval --replay` beats the error bar. Notes:
+  data/team/2026-10-20-pooltest/notes.md
+- Lane gold colour: lanecard.zig colours by sign alone, architecture.md says only 2 SE
+  from even; one is wrong (also an open question in decisions.md)
+- Your own record in the matchup (concept part 6; LCU match history, needs a real reply)
+- Public download, after the key, in order: the public channel (APP2), Authenticode
+  signing (SmartScreen warns on unsigned exes, in a zip or an installer alike), per-user
+  install (%LOCALAPPDATA%, Start menu entry)
 - dvui: pin PR #1012 (0.17.x branch) until it merges

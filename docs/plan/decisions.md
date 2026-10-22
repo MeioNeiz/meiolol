@@ -59,6 +59,10 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
   won above the role's average per 10,000 games it was not banned, whole numbers (Jacob:
   "a different scale to lolalytics but just something smart"; PBI turned out to be this
   count unlabelled; per 1,000 most rows read 0.0 to 0.4)
+- J21 (22 Oct) Two apps and accounts: a public app in line with Riot's rules and a
+  private, fuller one ("op" app and site) for Jacob and friends. Proper logins: Jacob's
+  own admin account; friends a tier below admin who can't break anything. Plans:
+  docs/plan/accounts.md, docs/plan/app.md; open points in accounts.md AC0
 - nn on the GPU: planned, not now
 - Q1 Rewrite the application around game review of your own games, lane curves as the
   benchmark; squads worded as planned, or out until built

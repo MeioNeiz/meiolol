@@ -1,8 +1,9 @@
 # Plan
 
-Updated 2026-10-20. This file is the index: the goal, what to do now, and one file per
+Updated 2026-10-22. This file is the index: the goal, what to do now, and one file per
 area under docs/plan/. Read Now, then only the area you work on. Close or add items in
-the area file; keep Now short (pointers, not detail).
+the area file; keep Now short (pointers, not detail). How area files are written:
+"Writing plan files" below.
 
 ## Goal: production key
 
@@ -41,10 +42,12 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
    build order 4-6 (docs/design-ideas.md), per-matchup builds (vsbuilds notes), Daily
    Draft pick verdicts (daily notes); Jacob's answers to the night's questions first
 5. Application: Jacob checks the 18 Oct draft text and pastes (production-key.md);
-   screenshots, video and LCU list need his real champ select run (app.md "Next");
+   screenshots, video and LCU list need his real champ select run (app.md APP1);
    docs/privacy-rules.md lists what the text and privacy page must still match (J10)
-6. Draft tester and desktop items from Jacob's 19 Oct list (site.md, app.md), desktop
-   after the real champ select run, with the policy check in app.md
+6. Accounts and two apps (J21, 22 Oct): admin and friend logins, then a public app and
+   a private, fuller one. accounts.md AC1-AC3 can start now (Jacob: AC0 and the nginx
+   OK); app.md APP2-APP4 against the mock, APP1 (real capture) is Jacob's. Draft tester
+   moves to the private site (app.md "Private site")
 7. Comp leans: held-out look ~24 Oct, then champion pages and reasons:
    data-and-model.md
 8. Training across patches (Jacob 21 Oct, 16.21 out): docs/plan/patch-transfer.md.
@@ -61,8 +64,10 @@ today's model; the draft's "Rammus into high AD/AP" check.
 
 - docs/plan/site.md: the website by page (Your games, Daily Draft, Learn, search,
   champion, matchup, draft tester) and polish before the production review
-- docs/plan/app.md: desktop app, Jacob's champ select list with a policy check per item,
-  what is built and tested, the real champ select run
+- docs/plan/app.md: the two desktop apps (public and private), the policy line between
+  them, Jacob's champ select list by edition, steps APP1-APP8
+- docs/plan/accounts.md: logins, roles (admin, friend), sessions, nginx gate, desktop
+  device tokens, steps AC0-AC6
 - docs/plan/data-and-model.md: what ~800k games support (comp leans, kit groups, model
   work), data and ops proposal, neural nets
 - docs/plan/lab-frontier.md: gpu-box experiment programme (21 Oct): draft ceiling, the
@@ -76,3 +81,19 @@ today's model; the draft's "Rammus into high AD/AP" check.
 - docs/plan/how-we-work.md: sessions, team size, unattended runs
 - docs/backlog.md: older next steps by area (11-17 Oct); check before acting, move what
   you pick up into an area file
+
+## Writing plan files
+
+For the next session, which reads only Now and one area file:
+- Area file shape (app.md and accounts.md are the model): intro with the goal and
+  decision ids; Steps, ranked, each with an id (APP3, AC1), what, "done when", where to
+  start (files) and what blocks it; Jacob's choices as a step of their own (AC0);
+  Status, under ~10 lines, pointing at architecture.md or hosting.md for how things
+  work; Later
+- How something works goes in architecture.md, hosting.md or the area's reference doc,
+  not the plan. History goes to git log: a finished step is deleted, leaving a Status
+  line only if a later reader needs it
+- Commit messages start with the step id when there is one (`git log --grep AC1`)
+- To convert: site.md, ops.md, data-and-model.md, lab-frontier.md, patch-transfer.md,
+  libraries.md; install history (old shas, nginx .bak names) in hosting.md and
+  your-games.md "Deploy" to docs/archive/install-log.md
