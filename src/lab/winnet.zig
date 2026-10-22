@@ -64,6 +64,9 @@ pub const usage =
     \\                                  on test and test minus SNAP/test-exclude.tsv;
     \\                                  ledgered in SNAP/test-looks.tsv first)
     \\                                  --fraction X (nested share of fit games)
+    \\                                  --window newest:N|oldest:N|spread:N (each dev
+    \\                                  block fits on N games: its newest, its oldest,
+    \\                                  or a hashed share over every day; drift vs noise)
     \\                                  --resample N (A/A noise floor: fit on a seeded
     \\                                  random 90% of the fit games, the same for the
     \\                                  candidate; scored games unchanged)
@@ -123,6 +126,7 @@ pub const Options = struct {
     seeds: []const u32 = &.{1},
     blocks: []const Block = &.{ .dev, .f1, .f2, .f3, .f4, .f5 },
     fraction: f64 = 1,
+    window: ?Window = null,
     /// --split random:SEED: LoLDraftAI's random tenth instead of the blocks
     split_seed: ?u32 = null,
     /// --resample N: fit games and the candidate's on a seeded random share (A/A runs)
@@ -246,6 +250,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         };
         spec.filter = if (filter) |*f| f else null;
         spec.resample = opts.resample;
+        if (opts.window) |win| try win.apply(gpa, data.games, c, &spec, opts.fraction, w);
         try runBlock(gpa, io, &data, players, c, spec, b, opts, if (gpu) |*g| g else null, out, w, &pooled);
         if (opts.fit_preds) for (0..cross_folds) |f| {
             var sf = spec;
@@ -328,6 +333,8 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             o.ldai = true;
         } else if (std.mem.eql(u8, k, "--fraction")) {
             o.fraction = try std.fmt.parseFloat(f64, v);
+        } else if (std.mem.eql(u8, k, "--window")) {
+            o.window = try Window.parse(v);
         } else if (std.mem.eql(u8, k, "--shuffle-ids")) {
             o.shuffle_ids = try std.fmt.parseInt(u32, v, 10);
         } else if (std.mem.eql(u8, k, "--fit-preds")) {
@@ -353,11 +360,14 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
     // A test look is one run of the declared model on all its fit games
     if (std.mem.indexOfScalar(Block, o.blocks, .final) != null) {
         if (o.blocks.len != 1) return error.TestBlockAlone;
-        for ([_][]const u8{ "--split", "--filter", "--fraction", "--resample", "--shuffle-ids", "--fit-preds" }) |k| if (set.contains(k)) return error.NotForTest;
+        for ([_][]const u8{ "--split", "--filter", "--fraction", "--window", "--resample", "--shuffle-ids", "--fit-preds" }) |k| if (set.contains(k)) return error.NotForTest;
     }
+    if (o.window != null and o.split_seed != null) return error.WindowNeedsBlocks;
+    // spread's share is of the block's fit games, not of a fraction of them
+    if (o.window != null and o.fraction != 1) return error.WindowWithFraction;
     if (o.emb_freeze and o.emb_init == null) return error.FreezeWithoutInit;
     // An export is a model to use: the real profiles and labels, every fit game
-    if (o.export_net and (o.net != .set or o.set.control != .none or o.resample != null or o.fraction != 1 or o.shuffle_ids != null)) return error.ExportNeedsPlainSet;
+    if (o.export_net and (o.net != .set or o.set.control != .none or o.resample != null or o.fraction != 1 or o.window != null or o.shuffle_ids != null)) return error.ExportNeedsPlainSet;
     if (o.net == .set and o.emb_init != null) return error.EmbInitNotForSet;
     if (isBig(o.net)) {
         if (o.emb_init != null) return error.EmbInitNotForBig;
@@ -395,6 +405,10 @@ const Spec = struct {
     resample: ?u32 = null,
     /// --fit-preds: fit without this cross-fit fifth of the fit games, score that fifth
     fifth: ?u8 = null,
+    /// --window: fit games start at or after this
+    since: i64 = std.math.minInt(i64),
+    /// --window spread: nested share of the fit games (inFraction's hash)
+    share: f64 = 1,
 
     fn fits(s: Spec, c: harness.Cuts, g: rows.Game, fraction: f64) bool {
         if (s.fifth) |f| if (crossFold(g) == f) return false;
@@ -403,7 +417,8 @@ const Spec = struct {
 
     fn fitsAll(s: Spec, c: harness.Cuts, g: rows.Game, fraction: f64) bool {
         if (s.filter) |f| if (!f.keep(g)) return false;
-        if (!harness.inFraction(g, fraction)) return false;
+        if (!harness.inFraction(g, @min(fraction, s.share))) return false;
+        if (g.start < s.since) return false;
         if (s.resample) |r| if (!inResample(g, r)) return false;
         if (s.random) |seed| return devEra(c, g) and !randsplit.inTest(g, seed);
         if (s.final) return harness.visible(.final, c, g) and g.start < s.before;
@@ -422,6 +437,43 @@ const Spec = struct {
     /// The random split's games: played, not test
     fn devEra(c: harness.Cuts, g: rows.Game) bool {
         return !g.is_test and g.duration_s >= harness.min_duration_s and g.start < c.test_;
+    }
+};
+
+/// --window: every block fits on the same number of games, taken as its newest, its
+/// oldest or spread over all its days, so equal-N fits tell drift (newest wins) from noise
+const Window = struct {
+    kind: enum { newest, oldest, spread },
+    n: usize,
+
+    fn parse(v: []const u8) !Window {
+        const colon = std.mem.indexOfScalar(u8, v, ':') orelse return error.BadWindow;
+        return .{
+            .kind = std.meta.stringToEnum(@FieldType(Window, "kind"), v[0..colon]) orelse return error.BadWindow,
+            .n = try std.fmt.parseInt(usize, v[colon + 1 ..], 10),
+        };
+    }
+
+    /// Narrows `spec` to N of its fit games; a block with fewer is an error
+    fn apply(win: Window, gpa: std.mem.Allocator, games: []const rows.Game, c: harness.Cuts, spec: *Spec, fraction: f64, w: *Io.Writer) !void {
+        if (spec.random != null or spec.final) return error.WindowNeedsBlocks;
+        var starts: std.ArrayList(i64) = .empty;
+        defer starts.deinit(gpa);
+        for (games) |g| if (spec.fitsAll(c, g, fraction)) try starts.append(gpa, g.start);
+        const n = starts.items.len;
+        if (n < win.n) {
+            try w.print("# --window {s}:{d}: the block has {d} fit games\n", .{ @tagName(win.kind), win.n, n });
+            try w.flush();
+            return error.WindowTooBig;
+        }
+        std.mem.sort(i64, starts.items, {}, std.sort.asc(i64));
+        switch (win.kind) {
+            // Ties at the threshold keep a few more than N
+            .newest => spec.since = starts.items[n - win.n],
+            .oldest => spec.before = if (win.n == n) spec.before else starts.items[win.n],
+            .spread => spec.share = @as(f64, @floatFromInt(win.n)) / @as(f64, @floatFromInt(n)),
+        }
+        try w.print("# window {s}:{d} of {d} fit games\n", .{ @tagName(win.kind), win.n, n });
     }
 };
 
@@ -1496,6 +1548,53 @@ test "test block: fits every played game before the test cut, scores the played 
     try testing.expectEqualSlices(Block, &.{.final}, o.blocks);
     try testing.expectError(error.TestBlockAlone, parseOptions(arena.allocator(), &.{ "--blocks", "test,1" }));
     try testing.expectError(error.NotForTest, parseOptions(arena.allocator(), &.{ "--blocks", "test", "--resample", "1" }));
+    try testing.expectError(error.NotForTest, parseOptions(arena.allocator(), &.{ "--blocks", "test", "--window", "newest:10" }));
+    try testing.expectError(error.WindowWithFraction, parseOptions(arena.allocator(), &.{ "--window", "spread:10", "--fraction", "0.5" }));
+    try testing.expectError(error.BadWindow, parseOptions(arena.allocator(), &.{ "--window", "latest:10" }));
+    const win = (try parseOptions(arena.allocator(), &.{ "--window", "oldest:500000" })).window.?;
+    try testing.expectEqual(500000, win.n);
+    try testing.expectEqual(.oldest, win.kind);
+}
+
+test "window: each kind keeps N of the block's fit games, newest and oldest by start" {
+    const c: harness.Cuts = .{ .dev = 10_000, .test_ = 20_000, .bounds = @splat(0) };
+    var games: [1000]rows.Game = undefined;
+    for (&games, 0..) |*g, i| g.* = .{
+        .match_id = "",
+        .start = @intCast(i * 13),
+        .patch = 0,
+        .platform = @intCast(i % 3),
+        .is_test = false,
+        .teams = @splat(@splat(0)),
+        .winner = 0,
+        .duration_s = 1800,
+    };
+    const base: Spec = .{ .before = 8_000, .lo = 8_000, .hi = 10_000, .dev = false };
+    var all: usize = 0;
+    for (games) |g| all += @intFromBool(base.fits(c, g, 1));
+    var discard: Io.Writer.Allocating = .init(testing.allocator);
+    defer discard.deinit();
+    for ([_]@FieldType(Window, "kind"){ .newest, .oldest, .spread }) |kind| {
+        var spec = base;
+        try (Window{ .kind = kind, .n = 200 }).apply(testing.allocator, &games, c, &spec, 1, &discard.writer);
+        var n: usize = 0;
+        var lo: i64 = std.math.maxInt(i64);
+        var hi: i64 = 0;
+        for (games) |g| if (spec.fits(c, g, 1)) {
+            n += 1;
+            lo = @min(lo, g.start);
+            hi = @max(hi, g.start);
+        };
+        switch (kind) {
+            .newest, .oldest => try testing.expectEqual(200, n),
+            .spread => try testing.expect(n > 150 and n < 250),
+        }
+        if (kind == .newest) try testing.expect(lo > 4_000);
+        if (kind == .oldest) try testing.expect(hi < 4_000);
+        if (kind == .spread) try testing.expect(lo < 500 and hi > 7_500);
+    }
+    var spec = base;
+    try testing.expectError(error.WindowTooBig, (Window{ .kind = .newest, .n = all + 1 }).apply(testing.allocator, &games, c, &spec, 1, &discard.writer));
 }
 
 test {
