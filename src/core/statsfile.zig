@@ -167,7 +167,7 @@ pub const Stats = struct {
         const games = readU32(bytes, &pos);
         const patch_field = bytes[pos..][0..patch_len];
         pos += patch_len;
-        const patch_end = std.mem.indexOfScalar(u8, patch_field, 0) orelse patch_len;
+        const patch_end = std.mem.findScalar(u8, patch_field, 0) orelse patch_len;
         const patch = patch_field[0..patch_end];
 
         if (bytes.len - pos < 4 * n) return error.Truncated;
@@ -211,7 +211,7 @@ pub const Stats = struct {
 
     /// Champion index (0..n) for a Riot champion id
     pub fn index(s: *const Stats, id: u32) ?usize {
-        return std.mem.indexOfScalar(u32, s.ids, id);
+        return std.mem.findScalar(u32, s.ids, id);
     }
 
     pub fn name(s: *const Stats, i: usize) []const u8 {
@@ -272,7 +272,7 @@ pub const Stats = struct {
             if (std.mem.startsWith(u8, n, q)) {
                 prefix = i;
                 prefix_count += 1;
-            } else if (std.mem.indexOf(u8, n, q) != null) {
+            } else if (std.mem.find(u8, n, q) != null) {
                 sub = i;
                 sub_count += 1;
             }
@@ -410,6 +410,17 @@ test "parse rejects bad files" {
     try testing.expectEqualStrings("16.19-16.20", s.patch);
     var failing: std.Io.Writer = .failing;
     try testing.expectError(error.PatchTooLong, b.write(&failing, "16.19-16.20-16.21"));
+}
+
+test "parse rejects every truncation" {
+    const gpa = testing.allocator;
+    var b: Builder = try .init(gpa, test_champions[0..3]);
+    defer b.deinit();
+    const bytes = try writeToAlloc(gpa, &b, "16.20");
+    defer gpa.free(bytes);
+    for (0..bytes.len) |len| {
+        try testing.expectError(error.Truncated, Stats.parse(gpa, bytes[0..len]));
+    }
 }
 
 test "builder rejects duplicate ids" {
