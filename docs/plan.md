@@ -44,10 +44,11 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
 5. Application: Jacob checks the 18 Oct draft text and pastes (production-key.md);
    screenshots, video and LCU list need his real champ select run (app.md APP1);
    docs/privacy-rules.md lists what the text and privacy page must still match (J10)
-6. Accounts and two apps (J21, 22 Oct): admin and friend logins, then a public app and
-   a private, fuller one. accounts.md AC1-AC3 can start now (Jacob: AC0 and the nginx
-   OK); app.md APP2-APP4 against the mock, APP1 (real capture) is Jacob's. Draft tester
-   moves to the private site (app.md "Private site")
+6. Accounts and two apps (J21, 22 Oct): roles public, paid, private, admin, owner;
+   owner and private logins first, then a public app and a private, fuller one.
+   accounts.md AC1-AC3 can start now (Jacob: AC0 and the nginx OK); app.md APP2-APP4
+   against the mock, APP1 (real capture) is Jacob's. Draft tester moves to the private
+   site (app.md "Private site")
 7. Comp leans: held-out look ~24 Oct, then champion pages and reasons:
    data-and-model.md
 8. Training across patches (Jacob 21 Oct, 16.21 out): docs/plan/patch-transfer.md.
@@ -66,8 +67,8 @@ today's model; the draft's "Rammus into high AD/AP" check.
   champion, matchup, draft tester) and polish before the production review
 - docs/plan/app.md: the two desktop apps (public and private), the policy line between
   them, Jacob's champ select list by edition, steps APP1-APP8
-- docs/plan/accounts.md: logins, roles (admin, friend), sessions, nginx gate, desktop
-  device tokens, steps AC0-AC6
+- docs/plan/accounts.md: logins, roles (public, paid, private, admin, owner),
+  sessions, nginx gate, desktop device tokens, payments later, steps AC0-AC7
 - docs/plan/data-and-model.md: what ~800k games support (comp leans, kit groups, model
   work), data and ops proposal, neural nets
 - docs/plan/lab-frontier.md: gpu-box experiment programme (21 Oct): draft ceiling, the

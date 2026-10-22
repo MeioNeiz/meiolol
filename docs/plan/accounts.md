@@ -1,24 +1,38 @@
 # Plan: accounts and tiers
 
-Jacob 22 Oct (J21): proper logins. His own admin account; friends get accounts a tier
-below admin, so they can't break anything but get the private app and a fuller site.
+Jacob 22 Oct (J21): proper logins. His own owner account; friends get private accounts
+below admin, so they can't break anything but get the private app and a fuller site;
+paid accounts later.
 Two apps follow from it: docs/plan/app.md. Policy lines for the private tier: app.md
 "Policy line".
 
 ## Roles
 
+Jacob 22 Oct: five, in order, each with everything the one before has.
+
 | Role | Gets | Never |
 | --- | --- | --- |
-| public (no login) | the site, the public app once released | anything below |
-| friend | private site pages (/p/), private app download and updates, read-only admin views Jacob opens to them | actions, logs, accounts, settings, raw data |
-| admin | everything: /admin/, actions, accounts, releases | |
+| public | the site, the public app once released (no login; a free signed-in account may come later, same role) | anything below |
+| paid | extras in the public site and app, within the public product rules (app.md "Policy line") | private pages, private app |
+| private | Jacob's friends and testers: private site pages (/p/), private app, read-only admin views opened to them | actions, logs, accounts, settings, raw data |
+| admin | /admin/, ops actions (crawl, site build, eval), manage public, paid and private accounts, desktop releases | other admins or the owner, irreversible things below |
+| owner | Jacob only: everything, plus admins, keys and secrets, billing, data deletion and restores, the Riot application | |
 
-- One capability table in code (e.g. src/auth/roles.zig: view_private, view_admin,
-  run_actions, manage_accounts, download_private_app), every route checks a capability,
-  never a role name. Adding a tier later is one row
-- "Can't break stuff" = friends have no write route at all, not hidden buttons. The box's
+- One capability table in code (e.g. src/auth/roles.zig: view_paid, view_private,
+  view_admin, run_actions, manage_accounts, manage_admins, manage_billing, delete_data,
+  download_private_app); every route checks a capability, never a role name. Adding or
+  splitting a tier is one row
+- Accounts change only roles below their own: admins can't make, edit or disable
+  admins or the owner. Exactly one owner, changed only with `meiolol account` over ssh
+- "Can't break stuff" = no write route below admin at all, not hidden buttons. The box's
   admin API keeps its own token check (hosting.md "Admin API"), which nginx only adds
-  for admin sessions
+  for admin and owner sessions
+- Paid and private differ in kind, not just level: paid is the paying public, so its
+  extras must pass Riot's rules for a public product; private is a closed tester group
+  and may hold things not (yet) fit for the public. A paid feature usually starts
+  private
+- Paid needs the production key first: Riot allows monetising only once the product is
+  Approved or Acknowledged, with a free tier (riot-policies-general ^f5)
 
 ## Design (recommended; AC0 confirms)
 
@@ -33,8 +47,8 @@ Two apps follow from it: docs/plan/app.md. Policy lines for the private tier: ap
 - Sessions: 32 random bytes in cookie `__Host-meiolol` (Secure, HttpOnly, SameSite=Lax),
   stored as SHA-256 with expiry (30 days, renewed on use). Sign out everywhere on the
   account page. Writes need header X-Meiolol-Action: 1, as the admin API does today
-- Admin second factor: TOTP (std HMAC; works with any authenticator app); passkeys later
-  if wanted
+- Second factor for admin and owner: TOTP (std HMAC; works with any authenticator app);
+  passkeys later if wanted
 - Login limits in memory: per username and overall, slower after 5 fails. No IPs stored
   (traffic logs keep none either)
 - nginx: `auth_request /_auth` on /admin/ (needs view_admin) and /p/ (needs
@@ -58,19 +72,19 @@ Two apps follow from it: docs/plan/app.md. Policy lines for the private tier: ap
 Each step ends tested and deployed; nginx and systemd changes on jomify need Jacob's OK
 (how-we-work.md).
 
-- AC0 Jacob decides: the policy framing (app.md "Policy line"), role names (friend?
-  tester?), TOTP for admin yes or no, who gets the first friend accounts
+- AC0 Jacob decides: the policy framing (app.md "Policy line"), TOTP for admin and
+  owner yes or no, who gets the first private accounts, whether anyone else will be admin
 - AC1 Accounts core in `meiolol api`: accounts.db schema and migration, argon2id,
   sessions, invites, /auth/login, /auth/logout, /auth/me, /auth/join, /_auth, the CLI.
   Tests: a route x role matrix (every route, every role, expected status), cookie flags,
   constant-time compares, invite reuse and expiry, lockout; fuzz the login body parser.
   Done when the matrix passes and `meiolol account` works against a scratch DB
-- AC2 Admin login live: /login page (src/site, no framework), nginx auth_request on
-  /admin/ with admin role, "Signed in as" in the admin header, sign out. Done when Jacob
-  signs in with his own account and the basic auth is only the fallback
-- AC3 Friend tier: /p/ space (first pages: app.md "Private site"), invites, account page
+- AC2 Owner login live: /login page (src/site, no framework), nginx auth_request on
+  /admin/ for admin and owner, "Signed in as" in the admin header, sign out. Done when
+  Jacob signs in with his own account and the basic auth is only the fallback
+- AC3 Private tier: /p/ space (first pages: app.md "Private site"), invites, account page
   (password, devices, sign out everywhere), admin Accounts tab (list, invite, role,
-  disable). Done when a test friend account reaches /p/ and gets 403 on every /admin/
+  disable). Done when a test private account reaches /p/ and gets 403 on every /admin/
   route and action
 - AC4 Desktop sign in: login screen in the app, device tokens, update gate by token,
   update.key retired. Done when a fresh install signs in, updates, and a revoked device
@@ -80,6 +94,10 @@ Each step ends tested and deployed; nginx and systemd changes on jomify need Jac
 - AC6 Later: friends link their Riot ID (profile icon check, as Remove a Riot ID does);
   friends' groups become Squads (backlog.md "Your games and Squads") for the private
   tier first
+- AC7 Paid, after the key: payments (a merchant of record such as Paddle or Lemon
+  Squeezy handles UK and EU VAT; Stripe leaves that to us), terms and refunds, the
+  privacy page's billing section, role set and cleared from the payment webhook, owner
+  billing view. Paid extras go in the public exe, unlocked by the signed-in account
 
 ## Not doing
 

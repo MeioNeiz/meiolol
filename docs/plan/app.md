@@ -1,10 +1,11 @@
 # Plan: desktop apps
 
 Two editions from one codebase (Jacob 22 Oct, J21): a public app that fits what Riot
-reviews, and a private one for Jacob and his friends behind accounts
-(docs/plan/accounts.md). Public release: no date, "after Riot's production review" (J7).
-How it is built: docs/architecture.md "App" and "Desktop window"; `zig build
-desktop-shot` for PNGs.
+reviews, and a private one for the private, admin and owner roles (Jacob's friends and
+testers; docs/plan/accounts.md). Paid accounts (later) get extras in the public
+edition, within the public rules. Public release: no date, "after Riot's production
+review" (J7). How it is built: docs/architecture.md "App" and "Desktop window";
+`zig build desktop-shot` for PNGs.
 
 ## Two editions
 
@@ -28,7 +29,8 @@ de-anonymising "players who cannot reasonably be identified from visible informa
 increase, not decrease, the diversity of decisions; give several choices, don't remove
 decisions; every new feature is audited through the product's page. One product per key.
 
-So the private tier is "more depth, numbers and unfinished features for testers", not
+Paid extras are public features behind a payment, so they follow the public rules.
+The private tier is "more depth, numbers and unfinished features for testers", not
 "information the game hides". Same framing as paid tiers at Porofessor, Blitz,
 Mobalytics (research: league-apps-feature-matrix once written).
 - No tier, ever: other players' identities or stats in ranked solo/duo champ select
