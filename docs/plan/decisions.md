@@ -70,6 +70,11 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
   prompts (unfair advantage over other players, Vanguard risk to friends' accounts, the
   key at stake). In game means an info panel through the game (app.md "In-game
   companion")
+- J23 (22 Oct) Every block respects the filters it sits under or says clearly that it
+  doesn't. Three data modes: last 30 days, newest patch, and an estimate from every game
+  (old patch moved by the changes, every rank adjusted to the one picked), name to pick;
+  trust first, so how it is made must be plain. Rank picks use all data plus how ranks
+  differ, not only that rank's games. Per region later. docs/plan/estimates.md
 - nn on the GPU: planned, not now
 - Q1 Rewrite the application around game review of your own games, lane curves as the
   benchmark; squads worded as planned, or out until built

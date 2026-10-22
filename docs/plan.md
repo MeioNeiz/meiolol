@@ -61,7 +61,10 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
 8. Training across patches (Jacob 21 Oct, 16.21 out): docs/plan/patch-transfer.md.
    16.21's first day moved champions 0.75 pp (patched ones 1.9 pp); arms, newest-only
    rolling evaluation, train-vs-eval curve; needs a drafts pin with 16.21
-9. Our Zig "libraries" toward what the Rust crates give (Jacob 21 Oct), checks outside
+9. Data modes (J23, 22 Oct): every block respects its filters or is marked (E1, cheap,
+   now); then day cubes as storage (E7), a public truth test (E2) and "Meio", one
+   estimate per number from every game: docs/plan/estimates.md
+10. Our Zig "libraries" toward what the Rust crates give (Jacob 21 Oct), checks outside
    ci: desktop releases signed, fuzzed and ReleaseSafe done; next HTTP server limits,
    backend fuzzing, TSan, one `net` module: docs/plan/libraries.md
 
@@ -82,6 +85,8 @@ today's model; the draft's "Rammus into high AD/AP" check.
   internal teacher model, ensembles, explaining it, causal and patch tests
 - docs/plan/patch-transfer.md: training on old patches for the newest, evaluated on
   the newest only (21 Oct)
+- docs/plan/estimates.md: data modes (30 days, newest patch, an estimate from every
+  game), scope chips, day cubes, rank respected everywhere (22 Oct)
 - docs/plan/libraries.md: our Zig pieces toward Rust-crate quality, with fuzzing and
   ThreadSanitizer outside ci (21 Oct)
 - docs/plan/ops.md: crawler speed, traffic, storage and hosts, hosting reference
