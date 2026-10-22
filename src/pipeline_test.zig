@@ -213,7 +213,7 @@ test "fixture games to stats, curves and the website" {
         // Hardest first by the rate shrunk with the role's k; opponents under 1% of the
         // champion's games hidden by default (the Opponents filter's p1). Rank filter from
         // Platinum, the tier the crawl samples
-        .{ "champion/darius.html", &.{ "data-sortable data-k=\"", "<option value=\"p1\" selected>", "<option value=\"\" selected>All (Platinum+ games)</option><option value=\"4\">Platinum+ players</option>", "Challenger players</option>", "last 30 days, patch 15.13, Platinum+ games</span>" } },
+        .{ "champion/darius.html", &.{ "data-sortable data-k=\"", "<a aria-current=\"page\" data-min=\"p1\"", "<a href=\"../champion/darius.html?rank=7\" data-rank=\"7\">Master+</a>", "last 30 days, patch 15.13, Platinum+ games</span>" } },
         .{ "champions.html", &.{"Platinum+ ranked solo/duo games in EUW, last 30 days, patch 15.13."} },
         .{ "index.html", &.{"<a href=\"download.html\">Coming: a champ select helper for Windows</a>"} },
         // Daily Draft: a recent game, read in words (no draft win chance,
@@ -283,7 +283,8 @@ test "fixture games to stats, curves and the website" {
         const path = try std.fs.path.join(arena, &.{ out, "matchup/top/mordekaiser-vs-darius.html" });
         const html = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 20));
         try testing.expect(std.mem.indexOf(u8, html, "whoever is ahead wins") == null);
-        try testing.expectEqual(std.mem.count(u8, html, "<details class=\"pick\">"), std.mem.count(u8, html, "<details"));
+        const pickers = std.mem.count(u8, html, "<details class=\"pick\">") + std.mem.count(u8, html, "<details class=\"regions\">");
+        try testing.expectEqual(pickers, std.mem.count(u8, html, "<details"));
     }
     // table.js finds each search's, minimum's and rare button's table by id: every target on
     // the page
