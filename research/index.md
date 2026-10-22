@@ -11,7 +11,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | --- | --- | --- | --- | --- |
 | [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 8 | 187 | 865 |
 | [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 3 | 126 | 501 |
-| [data](areas/data.md) | what the Riot API serves and how to crawl it | 3 | 161 | 398 |
+| [data](areas/data.md) | what the Riot API serves and how to crawl it | 3 | 162 | 403 |
 | [stats](areas/stats.md) | estimation and recommendation methods | 25 | 324 | 2307 |
 | [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 5 | 137 | 524 |
 | [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 7 | 98 | 452 |
@@ -43,7 +43,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Status | Pri. | Question | Claims | Sources | Searches | Leads |
 | --- | --- | --- | --- | --- | --- | --- |
-| answered | now | [How do we find the most newest-patch ranked games per Riot API call?](questions/crawl-discovery.md): Which players to scan for match ids so the key's budget goes on newest-patch ranked games | 1 strong, 3 moderate | 3 | 3 (slowing) |  |
+| answered | now | [How do we find the most newest-patch ranked games per Riot API call?](questions/crawl-discovery.md): Which players to scan for match ids so the key's budget goes on newest-patch ranked games | 1 strong, 3 moderate | 4 | 3 (slowing) |  |
 | answered | soon | [Which queues and modes does match-v5 serve, with timelines, and what are their queue ids?](questions/match-v5-queues.md): Which queues and modes does match-v5 serve, with timelines, and what are their queue ids? | 4 strong, 4 moderate, 1 weak | 9 | 3 (slowing) | 1 |
 | decided | soon | [What can the Riot API provide beyond match summaries to power a data-hungry learning or fun tool?](questions/riot-api-data-depth.md): What can the Riot API provide beyond match summaries to power a data-hungry learning or fun tool? | 5 strong, 4 moderate, 1 contested | 9 | 7 (slowing) |  |
 
@@ -101,6 +101,6 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 ## Health
 
-- 51 questions, 672 sources, 4710 findings
+- 51 questions, 673 sources, 4715 findings
 - Open leads: 180 (`josearch leads`)
 - Lint: 0 errors, 3 warnings (`josearch lint`)

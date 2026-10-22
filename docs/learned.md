@@ -865,3 +865,11 @@ How to write a line:
   subtracted per cell, control on the same cells); later days not yet measured. Models:
   nothing changed yet; docs/plan/patch-transfer.md. Evidence: docs/model.md "Patch
   16.21's first day"
+- 2026-10-22: On a patch's first day most players have not played it yet, so asking for
+  a random player's games mostly finds nothing: of players checked on 16.21's first day
+  75 to 89% had no game on it, while those who had one had 1.6 to 3.5 more. Players just
+  seen in a new game are the best bet (3.1 to 3.5 new games per call), and the ladder's
+  "played since" signal only works once it is measured from a check after the patch
+  (americas went from 0.3 to 1.9 new games per call). Sure: crawl counts per hour, all
+  four regions, 16.21 day one. Crawler: snowball and patch-start reset since 3648361
+  and 044f5fa. Evidence: research/sources/patch-day-discovery-measured.md

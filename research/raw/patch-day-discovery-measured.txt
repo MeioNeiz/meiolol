@@ -1,0 +1,24 @@
+Patch 16.21 day one, match id yield by source (meiolol crawl, counts only)
+
+Players scanned since patch start (3+ h after), 16.21 games stored before their scan:
+region | scanned | none | one | two | three+ | mean | mean extra among those with one+
+americas | 17133 | 15309 | 634 | 502 | 688 | 0.27 | 1.57
+asia | 25243 | 18852 | 1258 | 1399 | 3734 | 1.01 | 2.98
+europe | 17589 | 14585 | 625 | 452 | 1927 | 0.67 | 2.94
+sea | 28709 | 23516 | 619 | 990 | 3584 | 0.82 | 3.52
+scanned since patch start: americas 17,133 (89% none, +1.57), asia 25,243 (75%, +2.98), europe 17,589 (83%, +2.94), sea 28,709 (82%, +3.52)
+
+Players scanned 21:35 to 21:45 UTC (after f823e7b), by class, players / 16.21 games / with none:
+americas ladder-post 265 / 200 / 199; europe ladder-post 78 / 264 / 27; asia 161 / 446 / 0; sea 170 / 336 / 2
+265 americas active scans in 10 min, 199 with no 16.21 game; hour after 3648361: americas active 1870 calls, 770 new
+
+Crawl report, 22:06 to 23:07 UTC (3648361), ids calls/new:
+americas active 1870/770 | asia active 460/1742 | europe active 340/1403 | sea active 326/530 snowball 344/1077
+sea snowball 344 calls 1077 new (22:06 to 23:07); 480 calls 1694 new (23:12 to 00:13); asia 45 calls 151 new
+
+Crawl report, 23:12 to 00:13 UTC (044f5fa), ids calls/new:
+americas active 810/1522 | asia active 765/1335 snowball 45/151 | europe active 350/1233 | sea snowball 480/1694
+23:12 to 00:13: americas active 810 calls 1522 new; all regions ~3000 req/h, no idle, no spare-budget timelines; 142,890 matches/day
+
+Ladder sightings of americas pending players at 23:00 UTC:
+pending americas rows: rank_seen_at min 1792587598, max 1792611293 at 23:00 UTC

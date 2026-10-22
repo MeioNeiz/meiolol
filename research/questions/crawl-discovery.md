@@ -31,7 +31,13 @@ patch's start, every call goes on newest-patch games.
 
 ## Open
 
-- Patch day itself and other platforms: unmeasured; watch the crawl report's ids/new.
+- Patch day: measured on 16.21 day one ([[patch-day-discovery-measured]]): most players
+  have not played the patch (^f1), pre-patch ladder baselines mislead (^f2), the
+  participant snowball gives 3+ ids per call (^f3). The crawler resets baselines at each
+  patch start, falls back to the snowball, then spare-budget timelines (3648361,
+  044f5fa); the minute report splits ids calls/new by source. Open: active rows with a
+  pending count of 1 may yield less than the snowball (asia active 1.7 vs snowball 3.4,
+  00:13 UTC); ordering by expected yield untested.
 - Ladder refresh rate vs writes: a faster refresh gives fresher signal but more writer
   load; measure on the A1.
 - Participants (no ladder counts) and sampling (--player-sample 16 limits the pool).

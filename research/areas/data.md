@@ -8,7 +8,7 @@ what the Riot API serves and how to crawl it
 
 | Status | Pri. | Question | Claims | Sources | Searches | Leads |
 | --- | --- | --- | --- | --- | --- | --- |
-| answered | now | [How do we find the most newest-patch ranked games per Riot API call?](../questions/crawl-discovery.md): Which players to scan for match ids so the key's budget goes on newest-patch ranked games | 1 strong, 3 moderate | 3 | 3 (slowing) |  |
+| answered | now | [How do we find the most newest-patch ranked games per Riot API call?](../questions/crawl-discovery.md): Which players to scan for match ids so the key's budget goes on newest-patch ranked games | 1 strong, 3 moderate | 4 | 3 (slowing) |  |
 | answered | soon | [Which queues and modes does match-v5 serve, with timelines, and what are their queue ids?](../questions/match-v5-queues.md): Which queues and modes does match-v5 serve, with timelines, and what are their queue ids? | 4 strong, 4 moderate, 1 weak | 9 | 3 (slowing) | 1 |
 | decided | soon | [What can the Riot API provide beyond match summaries to power a data-hungry learning or fun tool?](../questions/riot-api-data-depth.md): What can the Riot API provide beyond match summaries to power a data-hungry learning or fun tool? | 5 strong, 4 moderate, 1 contested | 9 | 7 (slowing) |  |
 
@@ -121,6 +121,7 @@ what the Riot API serves and how to crawl it
 | [LoLDraftAI draft analysis page](../sources/loldraftai-draft.md) | LoLDraftAI web draft board, Oct 2026: empty blue and red sides, Suggest button, flex-pick and keystone-aware options, a 16-step guided tour, sign in, 7-day trial for the full pool | docs | data market ux/features ux/layout | skimmed (page text and tour) | medium | B/weak | 5/5 | 2026-10-17 |
 | [LoLDraftAI public monorepo archive (May 2025 state)](../sources/loldraftai.md) | Public archive of LoLDraftAI: deep learning draft win predictor trained on Riot API ranked matches, with desktop app | project | data method policy stats tools | code (README, data-collection rate limiter, desktop footer, blog posts, apps/machine-learning model, data prep, training) | high | C/fair | 29/31 | 2026-10-11 `10e7e2f86a0a0d0efb71ea3e3b128a96cd89d105` |
 | [Lu, Liu, Dong, Gu, Gama, Zhang 2018: Learning under Concept Drift, A Review](../sources/lu-concept-drift-review.md) | IEEE TKDE 2018 review (Gama among authors) of drift detection, understanding and adaptation: retrain on a window, ensembles for recurring drift, partial model updates for regional drift | paper | data method stats | skimmed (abstract, 1, 2.2 drift types, 4 severity, 5 adaptation) | medium | A/fair | 5/6 | 2026-10-12 |
+| [Match id yield per call on patch 16.21 day one, by scan source (our measurement, 2026-10-21)](../sources/patch-day-discovery-measured.md) | Crawl log counts and database checks of how many new 16.21 match ids each kind of match id call found on the patch's first day, all four regions | dataset | data | ran | high | B/strong | 5/5 | 2026-10-21 `044f5fa` |
 | [Maymin 2018: An open-sourced optical tracking and advanced eSports analytics platform for League of Legends (Sloan)](../sources/maymin-lol-optical-tracking.md) | Maymin's Sloan 2018 paper (precursor of his 2021 JQAS "Smart kills and worthless deaths"); spectator-scraped solo queue games, a per-minute logistic win model, kills and deaths split by win probability change | paper | data method stats | docs (sections 1-4, tables 3-6) | medium | C/weak | 6/7 | 2026-10-13 |
 | [Measured match-v5 match and timeline responses (EUW, 2026-10-11)](../sources/riot-timeline-measured.md) | Our own measurement of one ranked EUW match and its timeline: sizes, frames, event mix, rate headers | dataset | data | ran (2 successful GETs plus one 429, personal key, gzip) | high | B/strong | 10/10 | 2026-10-11 |
 | [Measured match-v5 per-queue lists, summaries and timelines (EUW, 2026-10-11)](../sources/match-v5-queues-measured.md) | Our own probe of which queue ids match-v5 lists and serves with timelines, and how Arena and ARAM summaries differ | dataset | data queues | ran (188 GETs, personal key, europe routing; lists per queue, one summary and timeline per found queue) | high | B/strong | 11/12 | 2026-10-11 |
@@ -180,7 +181,7 @@ what the Riot API serves and how to crawl it
 
 ## Findings by tag
 
-### data: Riot API, match data, sampling, patches, rate limits (363)
+### data: Riot API, match data, sampling, patches, rate limits (368)
 
 - [[agarwala-pearce-2014#^f1]] [data] 40,000 matches from one patch (Oct to Dec 2014), All Pick and Captain's Mode, no leavers, mixed skill; hero profiles from about 1,500 pro games on DatDota. (C/fair, verified)
 - [[akhmedov-dota-ml-2021#^f3]] [data] Rows are overlapping windows of L lagged steps per game; 3,833 rows by 70 columns, split at random 80/20, so near-identical windows of one game land in both train and test. Sections V-B, VI (D/weak, verified)
@@ -444,6 +445,11 @@ what the Riot API serves and how to crawl it
 - [[opgg-darius-counters#^f2]] [data] (inferred) Lane kill rate and first tower time need match-v5 timeline events (kill and building events with timestamps), so op.gg crawls timelines at scale. (B/fair, unquoted)
 - [[optmatch-2020#^f4]] [data] Datasets: Dota2 50,000 games, 10,815 players; LoL 187,588 games, 139 champions, 43,706 players; NBA 3,342; Fever Basketball (3v3) 851,648 games, 33,873 players. Table 1 (B/fair, verified)
 - [[overwolf-porofessor#^f3]] [tools] [data] During the match: jungle and objective timers, live team gold difference, and each player's gold, CS and wards at 10 and 20 minutes with graphs. (B/fair, verified)
+- [[patch-day-discovery-measured#^f1]] [data] On a patch's first day most players have not played it: of players scanned 3+ h after the patch began, 75 to 89% had no game on it; those with one had 1.6 to 3.5 more. (B/strong, verified)
+- [[patch-day-discovery-measured#^f2]] [data] Ladder growth counted from a scan or sighting before the patch mostly finds older-patch games: americas active-list scans found no 16.21 game for 75% of players, and never scanned players' growth (from their first sighting) gave 0.41 new ids per call. (B/strong, verified)
+- [[patch-day-discovery-measured#^f3]] [data] Players who appear in a newly stored match and played since their last scan (snowball) give 3.1 to 3.5 new ids per call on day one. (B/strong, verified)
+- [[patch-day-discovery-measured#^f4]] [data] With pre-patch baselines reset and never scanned players moved to the stale tier, americas active scans rose to 1.9 new ids per call and the crawl from ~116k to ~143k matches/day (pre-patch ~165k). (B/strong, verified)
+- [[patch-day-discovery-measured#^f5]] [data] The ladder refresh (every 12 h, 500 pages per hour per platform) leaves gaps of hours with no new sightings: americas rows were last sighted 12:59 to 19:34 UTC, then nothing until the next pass. (B/strong, verified)
 - [[patch-jump-16-21-measured#^f4]] [data] The new patch's first day is a different platform mix (KR and VN2 heavy), so pooled-platform comparisons inflate the control. (B/strong, verified)
 - [[pletinka-dota-timeslice-2025#^f1]] [data] Data: 12,000 pro games of patch 7.37 from OpenDota; games under 20 or over 60 minutes dropped, 11,267 parsed replays at 30-second resolution. Sections 3.1, 3.5 (D/weak, verified)
 - [[porofessor-faq#^f1]] [data] Stats use all normal and ranked 5v5 games from the last 30 days, via the Riot API. (B/fair, verified)

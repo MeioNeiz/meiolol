@@ -2164,3 +2164,4 @@
 {"t": "fetch", "date": "2026-10-21", "url": "https://www.cis.upenn.edu/~mkearns/papers/cv.pdf", "slug": "kearns-1996-cv-split", "file": "raw/kearns-1996-cv-split.txt", "sha": "a42052e742c7", "key": "cis.upenn.edu/~mkearns/papers/cv.pdf"}
 {"t": "search", "date": "2026-10-21", "where": "web", "query": "Kearns bound error cross validation training-test split fraction", "for": "patch-transfer", "new": 1}
 {"t": "fetch", "date": "2026-10-21", "url": "https://meio.lol/lab/patch-jump-16-21", "slug": "patch-jump-16-21-measured", "file": "raw/patch-jump-16-21-measured.txt", "sha": "2c89c48692a2", "key": "meio.lol/lab/patch-jump-16-21"}
+{"t": "fetch", "date": "2026-10-22", "url": "https://github.com/MeioNeiz/meiolol/commit/044f5fa", "slug": "patch-day-discovery-measured", "file": "raw/patch-day-discovery-measured.txt", "sha": "82b1fd71b2f1", "key": "github.com/MeioNeiz/meiolol"}
