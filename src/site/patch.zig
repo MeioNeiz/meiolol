@@ -33,12 +33,12 @@ pub fn early(p: *const PatchDay) bool {
 pub fn writePage(site: *const Site, w: *Writer) !void {
     const a = site.arena;
     const pd = site.patchday orelse {
-        const pg = site.page("Patch changes | meiolol", "How champions and lane matchups changed from the previous patch.", path, .patch);
+        const pg = try site.page("Patch changes | meiolol", "How champions and lane matchups changed from the previous patch.", path, .patch);
         try html.head(w, pg);
         try tpl.render(w, "<h1>Patch changes</h1>\n<p>No earlier patch in the data yet to compare with.</p>\n", .{});
         return html.foot(w, pg);
     };
-    const pg = site.page(
+    const pg = try site.page(
         try a.print("Patch {s} against {s}: what changed | meiolol", .{ pd.cur_patch, pd.prev_patch }),
         try a.print("Champions and lane matchups whose win rate or lane gold changed clearly from patch {s} to {s}, with the games behind each.", .{ pd.prev_patch, pd.cur_patch }),
         path,

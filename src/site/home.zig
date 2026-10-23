@@ -14,7 +14,7 @@ const Site = root.Site;
 /// through its biggest moments (static/home.js, from data/your-example.json). Not a
 /// stats page, so no region or period switches
 pub fn writeIndex(site: *const Site, w: *Writer) !void {
-    var p = site.page(
+    var p = try site.page(
         "meiolol: game review for League of Legends",
         "Look yourself up: every recent game reviewed like a chess game. Your team's win chance minute by minute, the moments that moved it, what each death cost, and your lane against the typical game at your rank. Free, no sign-up.",
         "index.html",

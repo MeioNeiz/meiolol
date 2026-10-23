@@ -105,7 +105,7 @@ fn rate(n: Counts) f64 {
 /// Plain, not a link: in a lesson, a tappable champion reads as an answer to pick
 fn champ(w: *Writer, ctx: Ctx, ch: Champ) !void {
     try tpl.render(w, "<span class=\"champ\"><img src=\"{icon}\" alt=\"\" loading=\"lazy\" width=\"32\" height=\"32\">{name}</span>", .{
-        .icon = ctx.site.icon(ch),
+        .icon = try ctx.site.icon(ch),
         .name = ch.name,
     });
 }
@@ -145,7 +145,7 @@ fn pctOf(n: Counts) u32 {
 
 pub fn write(site: *const Site, w: *Writer, facts: *const learn.Facts) !void {
     const a = site.arena;
-    const p = site.sharedPage(
+    const p = try site.sharedPage(
         "Learn from real games | meiolol",
         "League of Legends puzzles from real ranked games: guess, then see the numbers. " ++
             "Plus short lessons and practice drafts for new players.",

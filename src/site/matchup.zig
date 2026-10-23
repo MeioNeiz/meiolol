@@ -113,7 +113,7 @@ pub fn route(site: *const Site, w: *Writer, curves: *const Curves, rest: []const
 /// rest are on each champion's page
 pub fn writeIndex(site: *const Site, w: *Writer, curves: ?*const Curves) !void {
     const a = site.arena;
-    const p = site.page(
+    const p = try site.page(
         if (curves) |c| try a.print("Lane matchups, {s} | meiolol", .{try period(a, c)}) else "Lane matchups | meiolol",
         "Every lane matchup by role: win rate, against usual, gold at 14 minutes and games, each linking to how it unfolds minute by minute.",
         "matchup/index.html",
@@ -277,8 +277,8 @@ fn indexRow(ctx: struct { *const Site, Role, u32 }, w: *Writer, e: IndexEntry) !
         .hidden = tpl.flag(e.games < default, "hidden"),
         .x_href = (try path(a, r, e.x, e.y))["matchup/".len..],
         .y_href = (try path(a, r, e.y, e.x))["matchup/".len..],
-        .x_icon = site.icon(e.x),
-        .y_icon = site.icon(e.y),
+        .x_icon = try site.icon(e.x),
+        .y_icon = try site.icon(e.y),
         // Sorts by usual + vs usual: the rate pulled toward usual by its games
         .wr = tpl.call(tierlist.trackCell, .{ root.ratio(o.wins, o.games), o.usual + o.d.mean, o.games, tierlist.matchup_span, try a.print("{d} games in the stats", .{o.games}), @as(?[]const u8, null) }),
         .vs = o.d.mean,
@@ -339,7 +339,7 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
         x.name, y.name, lane,
     });
     const page_path = try path(a, r, x, y);
-    var p = site.page(title, desc, page_path, .matchups);
+    var p = try site.page(title, desc, page_path, .matchups);
     p.index = v.games() >= site.opts.index_min_games;
     for (html.View.all, site.view_curves, &p.counterparts.?) |view, *other, *there| {
         const has = if (other.*) |*o| o.get(r, .all, x.id, y.id) != null else false;
@@ -355,8 +355,8 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
         \\
     , .{
         .chip = site.chip(site.regionDim(site.view.region), try periodDim(site, curves), .plat),
-        .x_icon = site.icon(x),
-        .y_icon = site.icon(y),
+        .x_icon = try site.icon(x),
+        .y_icon = try site.icon(y),
         .swap = swap,
         .x = x.name,
         .y = y.name,
@@ -398,14 +398,14 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     try splits(w, curves, vs, r, x, y);
     try tpl.renderPart(w, "</div>\n", .{});
     try builds.vsStrip(site, w, r, x, y, page_path);
-    const to_site = site.toShared(page_path);
+    const to_site = try site.toShared(page_path);
     try tpl.render(w,
         \\<p class="muted"><a href="{x_href}">{x}</a> · <a href="{y_href}">{y}</a> · <a href="{up}method.html">Method</a></p>
         \\
     , .{
-        .x_href = site.champHref(x, to_site),
+        .x_href = try site.champHref(x, to_site),
         .x = x.name,
-        .y_href = site.champHref(y, to_site),
+        .y_href = try site.champHref(y, to_site),
         .y = y.name,
         .up = to_site,
     });
@@ -461,7 +461,7 @@ fn pickItem(ctx: PickCtx, w: *Writer, o: Other) !void {
         .current = tpl.when(o.ch.id == ctx.current.id, " current"),
         .aria = tpl.flag(o.ch.id == ctx.current.id, "aria-current=\"page\""),
         .href = try file(ctx.site.arena, x, y),
-        .icon = ctx.site.icon(o.ch),
+        .icon = try ctx.site.icon(o.ch),
         .name = o.ch.name,
         .games = o.games,
     });

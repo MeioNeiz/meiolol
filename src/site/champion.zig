@@ -58,11 +58,11 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
     const title = try a.print("{s} win rate, lane opponents and curves | meiolol", .{ch.name});
     const desc = try a.print("{s} in ranked solo queue by region, rank and patch: win rate with how sure it is, every lane opponent and lane curves.", .{ch.name});
     const path = try a.print("champion/{s}.html", .{ch.slug});
-    var p = site.sharedPage(title, desc, .champions);
+    var p = try site.sharedPage(title, desc, .champions);
     p.root = "../";
     p.counterparts = @as([html.View.count][]const u8, undefined);
     for (html.View.all, &p.counterparts.?) |v, *there| there.* = try std.mem.concat(a, u8, &.{ path, v.query() });
-    p.canonical = site.canonical("", path);
+    p.canonical = try site.canonical("", path);
     try html.head(w, p);
 
     var roles: [Role.count]Role = undefined;
@@ -79,7 +79,7 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
         \\<div class="hero"><img src="{icon}" alt="" width="64" height="64"><div><h1>{name}</h1><p class="muted">Ranked solo/duo <span data-scope>{in}, {when}, Platinum+ games</span>.{plays}</p></div></div>
         \\
     , .{
-        .icon = site.icon(ch),
+        .icon = try site.icon(ch),
         .name = ch.name,
         .in = site.view.region.in(),
         .when = site.when,
@@ -464,7 +464,7 @@ fn opponentLink(w: *Writer, site: *const Site, ch: Champ, other: Champ, r: Role)
     try tpl.render(w, "<a class=\"champ box\" href=\"../{path}\" title=\"{ch} vs {name}\"><img src=\"{icon}\" alt=\"\" loading=\"lazy\" width=\"32\" height=\"32\">{name}</a>", .{
         .path = try matchup.path(site.arena, r, ch, other),
         .ch = ch.name,
-        .icon = site.icon(other),
+        .icon = try site.icon(other),
         .name = other.name,
     });
 }

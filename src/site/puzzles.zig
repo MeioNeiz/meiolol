@@ -349,8 +349,8 @@ fn lanePuzzle(site: *const Site) !?Puzzle {
     };
     // By name, so the answer is not always the same button
     const other_first = std.mem.lessThan(u8, b.other.name, b.lead.name);
-    const lead_choice: Choice = .{ .t = b.lead.name, .icon = site.icon(b.lead) };
-    const other_choice: Choice = .{ .t = b.other.name, .icon = site.icon(b.other) };
+    const lead_choice: Choice = .{ .t = b.lead.name, .icon = try site.icon(b.lead) };
+    const other_choice: Choice = .{ .t = b.other.name, .icon = try site.icon(b.other) };
     const choices = try a.dupe(Choice, if (other_first)
         &.{ other_choice, lead_choice }
     else

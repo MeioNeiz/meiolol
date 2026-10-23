@@ -36,7 +36,7 @@ pub fn sourceText(p: *const pool.Pool) []const u8 {
 
 /// With the learning-curve table under the picker (site/learning.zig)
 pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool, l: *const learning.Learning) !void {
-    const pg = site.page(
+    const pg = try site.page(
         "Champion pool | meiolol",
         "Pick the champions you main: what their players also play, how hard each champion is to pick up, and which do well where your main struggles.",
         "pool.html",

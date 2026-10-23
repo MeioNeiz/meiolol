@@ -121,7 +121,7 @@ pub fn writeIndex(site: *const Site, w: *Writer, f: *const File) !void {
     const period = try periodText(a, f, site.view.period);
     const title = try a.print("Builds, {s} | meiolol", .{period});
     const desc = try a.print("Runes, items and skill order per champion and role in ranked solo/duo {s}, {s}.", .{ site.view.region.in(), period });
-    var p = site.page(title, desc, index_path, .champions);
+    var p = try site.page(title, desc, index_path, .champions);
     // A view without builds switches to its champions list
     for (html.View.all, &p.counterparts.?) |v, *there| {
         if (site.view_builds[v.index()] == null)
@@ -144,7 +144,7 @@ pub fn writeIndex(site: *const Site, w: *Writer, f: *const File) !void {
                 \\<li><a class="champ" href="{href}"><img src="{icon}" alt="" loading="lazy" width="32" height="32">{name}</a> <span class="muted">{games}</span></li>
             , .{
                 .href = try a.print("{s}-{s}.html", .{ ch.slug, root.roleSlug(r) }),
-                .icon = site.icon(ch),
+                .icon = try site.icon(ch),
                 .name = ch.name,
                 .games = b.games,
             });
@@ -173,7 +173,7 @@ pub fn strip(site: *const Site, w: *Writer, ch: Champ, r: Role, from: []const u8
     const f = picked.f;
     const b = picked.b;
     // The previous patch's build has no page
-    const href: ?html.Link = if (picked.newer != null) null else .{ .root = site.toShared(from), .up = v.dir(), .path = try path(site.arena, ch, r) };
+    const href: ?html.Link = if (picked.newer != null) null else .{ .root = try site.toShared(from), .up = v.dir(), .path = try path(site.arena, ch, r) };
     try tpl.renderPart(w,
         \\<div class="bstrip"><p class="bhead"><b>Most played build</b> {chip} <span class="muted">{when}, {in}, {ranks}: {games} game{s}.</span>{link}</p>
         \\<div class="bks">
@@ -212,9 +212,9 @@ pub fn vsStrip(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ, from:
     const href: ?html.Link = if (picked.newer != null or shown(f, x.id, r) == null) null else blk: {
         const to = try path(site.arena, x, r);
         break :blk if (site.view.period == .patch)
-            .{ .root = site.toRoot(from), .path = to }
+            .{ .root = try site.toRoot(from), .path = to }
         else
-            .{ .root = site.toShared(from), .up = pv.dir(), .path = to };
+            .{ .root = try site.toShared(from), .up = pv.dir(), .path = to };
     };
     try tpl.renderPart(w,
         \\<div class="mu-build"><section class="mu-card"><h2>Most played build {chip}</h2><p class="mu-note">{games} game{s}, {patch}, {in}, {ranks}.{link}</p>
@@ -669,7 +669,7 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
     const desc = try a.print("What players take on {s} in the {s} role in ranked solo/duo {s}, {s}: rune pages, summoner spells, starting items, boots, first items and skill order, with games and win rates.", .{
         ch.name, role, site.view.region.in(), period,
     });
-    var p = site.page(title, desc, page_path, .champions);
+    var p = try site.page(title, desc, page_path, .champions);
     const champ_path = try a.print("champion/{s}.html", .{ch.slug});
     for (html.View.all, &p.counterparts.?) |v, *there| {
         const has = if (site.view_builds[v.index()]) |*o| shown(o, ch.id, r) != null else false;
@@ -682,7 +682,7 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
         \\
     , .{
         .chip = site.chip(site.regionDim(site.view.region), try periodDim(a, f, site.view.period), rankDim(f.min_tier)),
-        .icon = site.icon(ch),
+        .icon = try site.icon(ch),
         .name = ch.name,
         .role = root.roleName(r),
         .lower = role,
@@ -749,11 +749,11 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
     try w.writeAll("<h2>Skill priority</h2>\n");
     try table(w, f, b, .skills, "Order", "players with a match timeline who reached level 11");
     try table(w, f, b, .skill_start, "Levels 1 to 3", "players with a match timeline");
-    const to_site = site.toShared(page_path);
+    const to_site = try site.toShared(page_path);
     try tpl.render(w,
         \\<p class="muted"><a href="{champ}">{name}</a> · <a href="{site}method.html#builds">How builds are counted</a></p>
         \\
-    , .{ .champ = site.champHref(ch, to_site), .name = ch.name, .site = to_site });
+    , .{ .champ = try site.champHref(ch, to_site), .name = ch.name, .site = to_site });
     try html.foot(w, p);
 }
 

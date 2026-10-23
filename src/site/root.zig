@@ -205,26 +205,26 @@ pub const Site = struct {
     filter: filters.Made = .{},
 
     /// A page of the view at `path` within it
-    pub fn page(s: *const Site, title: []const u8, description: []const u8, path: []const u8, nav: html.Nav) html.Page {
-        var p = s.sharedPage(title, description, nav);
+    pub fn page(s: *const Site, title: []const u8, description: []const u8, path: []const u8, nav: html.Nav) !html.Page {
+        var p = try s.sharedPage(title, description, nav);
         p.view = s.view;
         p.counterparts = @as([html.View.count][]const u8, undefined);
         for (html.View.all, &p.counterparts.?) |v, *there| {
-            there.* = std.mem.concat(s.arena, u8, &.{ v.dir(), path }) catch path;
+            there.* = try std.mem.concat(s.arena, u8, &.{ v.dir(), path });
         }
-        p.root = s.toRoot(path);
-        p.canonical = s.canonical(s.view.dir(), path);
+        p.root = try s.toRoot(path);
+        p.canonical = try s.canonical(s.view.dir(), path);
         return p;
     }
 
     /// `origin/dir/path`; null without Options.origin
-    pub fn canonical(s: *const Site, dir: []const u8, path: []const u8) ?[]const u8 {
+    pub fn canonical(s: *const Site, dir: []const u8, path: []const u8) !?[]const u8 {
         const origin = s.opts.origin orelse return null;
-        return std.mem.concat(s.arena, u8, &.{ origin, "/", dir, path }) catch null;
+        return try std.mem.concat(s.arena, u8, &.{ origin, "/", dir, path });
     }
 
     /// A page at the site root, written once (from html.View.shared)
-    pub fn sharedPage(s: *const Site, title: []const u8, description: []const u8, nav: html.Nav) html.Page {
+    pub fn sharedPage(s: *const Site, title: []const u8, description: []const u8, nav: html.Nav) !html.Page {
         return .{
             .title = title,
             .description = description,
@@ -232,12 +232,12 @@ pub const Site = struct {
             .patch = s.patch,
             .regions = s.opts.all_platforms,
             .home = s.opts.platforms[0],
-            .data = s.arena.print("{s}, {s}, {f} games{s}", .{
+            .data = try s.arena.print("{s}, {s}, {f} games{s}", .{
                 s.view.region.in(),
                 s.when,
                 Thousands{ .n = s.games },
-                if (s.patch_mix.len > 0) s.arena.print(" ({s})", .{s.patch_mix}) catch "" else "",
-            }) catch "",
+                if (s.patch_mix.len > 0) try s.arena.print(" ({s})", .{s.patch_mix}) else "",
+            }),
             .public = s.opts.public,
         };
     }
@@ -279,36 +279,36 @@ pub const Site = struct {
     }
 
     /// From `path` up to its view's root
-    pub fn toRoot(s: *const Site, path: []const u8) []const u8 {
+    pub fn toRoot(s: *const Site, path: []const u8) ![]const u8 {
         const depth = std.mem.count(u8, path, "/");
-        const out = s.arena.alloc(u8, 3 * depth) catch return "";
+        const out = try s.arena.alloc(u8, 3 * depth);
         for (0..depth) |i| @memcpy(out[3 * i ..][0..3], "../");
         return out;
     }
 
     /// From `path` to the site root, where the shared pages are
-    pub fn toShared(s: *const Site, path: []const u8) []const u8 {
-        return std.mem.concat(s.arena, u8, &.{ s.toRoot(path), s.view.up() }) catch "";
+    pub fn toShared(s: *const Site, path: []const u8) ![]const u8 {
+        return std.mem.concat(s.arena, u8, &.{ try s.toRoot(path), s.view.up() });
     }
 
-    pub fn icon(s: *const Site, ch: Champ) []const u8 {
+    pub fn icon(s: *const Site, ch: Champ) ![]const u8 {
         return s.arena.print(
             "https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png",
             .{ s.ddragon_version, ch.key },
-        ) catch "";
+        );
     }
 
     /// To the champion's page (one per champion, at the site root), its filters set to
     /// this view. `to_site`: from the linking page to the site root. Raw: escape it
-    pub fn champHref(s: *const Site, ch: Champ, to_site: []const u8) []const u8 {
-        return s.arena.print("{s}champion/{s}.html{s}", .{ to_site, ch.slug, s.view.query() }) catch "";
+    pub fn champHref(s: *const Site, ch: Champ, to_site: []const u8) ![]const u8 {
+        return s.arena.print("{s}champion/{s}.html{s}", .{ to_site, ch.slug, s.view.query() });
     }
 
     /// A champion link as the main link of a row or tile (class bx) that it covers whole
     pub fn champBox(s: *const Site, w: *Writer, ch: Champ, to_site: []const u8) !void {
         try tpl.render(w, "<a class=\"champ box\" href=\"{href}\"><img src=\"{icon}\" alt=\"\" loading=\"lazy\" width=\"32\" height=\"32\">{name}</a>", .{
-            .href = s.champHref(ch, to_site),
-            .icon = s.icon(ch),
+            .href = try s.champHref(ch, to_site),
+            .icon = try s.icon(ch),
             .name = ch.name,
         });
     }
@@ -408,7 +408,7 @@ pub fn sitemap(site: *const Site) ![]const u8 {
     if (site.view.index() == 0) try paths.appendSlice(a, &shared_pages);
     for (paths.items) |path| {
         // Paths are slugs and fixed names: nothing XML needs escaped
-        try out.print(a, "<url><loc>{s}</loc></url>\n", .{site.canonical(site.view.dir(), path).?});
+        try out.print(a, "<url><loc>{s}</loc></url>\n", .{(try site.canonical(site.view.dir(), path)).?});
     }
     try out.appendSlice(a, "</urlset>\n");
     return out.items;
@@ -480,7 +480,7 @@ pub fn renderShared(site: *const Site, w: *Writer, path: []const u8) !bool {
     };
     for (fixed) |f| {
         if (!std.mem.eql(u8, path, f[0])) continue;
-        const p = site.sharedPage(try site.arena.print("{s} | meiolol", .{f[1]}), f[2], f[3]);
+        const p = try site.sharedPage(try site.arena.print("{s} | meiolol", .{f[1]}), f[2], f[3]);
         try html.head(w, p);
         try f[4](w, site.info());
         if (f[3] == .method) try evalchart.section(w, site.eval);
