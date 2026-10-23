@@ -83,8 +83,6 @@ const usage =
     \\  rows SNAP_DIR                   load the model rows, print outcome counts and means
     \\  pack SNAP_DIR                   write the model rows as column files in SNAP_DIR/pack,
     \\                                  which every command then loads instead of SQLite
-    \\  enemy SNAP_DIR [PREDS_DIR]      base, additive and pairwise champion-role models on the
-    \\                                  continuous outcomes (lab/enemy.zig); markdown table
     \\  pairs BASE REF [PREDS...]       paired MSE gains of prediction TSVs on shared rows,
     \\                                  % of BASE's MSE, intervals vs REF clustered by game
     \\  lanebuckets SNAP BASE A B       A's gain over B by lane pair train games (lab/lanebuckets.zig)
@@ -312,18 +310,6 @@ pub fn main(init: std.process.Init) !u8 {
         var buf: [4096]u8 = undefined;
         var stdout = std.Io.File.stdout().writer(init.io, &buf);
         try pairs.run(init.gpa, init.io, argv[2..], &stdout.interface);
-        try stdout.interface.flush();
-        return 0;
-    }
-    if (std.mem.eql(u8, cmd, "enemy") and argv.len >= 3) {
-        var legendaries = try rows.loadLegendaries(init.gpa, init.io, argv[2]);
-        defer legendaries.deinit(init.gpa);
-        var data = try rows.load(init.gpa, argv[2], &legendaries);
-        defer data.deinit();
-        var buf: [4096]u8 = undefined;
-        var stdout = std.Io.File.stdout().writer(init.io, &buf);
-        try rows.summary(&data, &stdout.interface);
-        try enemy.run(init.gpa, init.io, &data, .{ .preds_dir = if (argv.len >= 4) argv[3] else null }, &stdout.interface);
         try stdout.interface.flush();
         return 0;
     }
