@@ -30,12 +30,30 @@ const cand = @import("cand");
 const rows = @import("rows.zig");
 const protocol = @import("protocol.zig");
 const harness = @import("harness.zig");
+const winnet = @import("winnet.zig");
 const gates = @import("gates.zig");
 const mastery_pre = @import("mastery_pre.zig");
 const nn = @import("nn");
 const par = @import("../par.zig");
 
 const Io = std.Io;
+const Spec = winnet.Spec;
+const FitKeep = winnet.FitKeep;
+const candBlue = winnet.candBlue;
+const candCross = winnet.candCross;
+const Pooled = winnet.Pooled;
+const Vocab = winnet.Vocab;
+const EmbTable = winnet.EmbTable;
+const EmbInit = winnet.EmbInit;
+const n_platforms = winnet.n_platforms;
+const logit = nn.logit;
+const loss1 = nn.logLoss;
+const sigmoid = winnet.sigmoid;
+const secondsSince = winnet.secondsSince;
+const meanLoss = winnet.meanLoss;
+const pairedGain = winnet.pairedGain;
+const auc = winnet.auc;
+const refitSteps = winnet.refitSteps;
 
 pub const usage =
     \\  playernet SNAP [OPT VALUE]...   player-history net residual on the -Dcand
@@ -148,8 +166,6 @@ pub const Options = struct {
 pub const Block = enum { dev, f1, f2, f3, f4, f5 };
 const n_folds = harness.folds;
 const val_share = 0.1;
-const n_platforms = 16;
-
 pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []const []const u8) !u8 {
     if (argv.len < 1) {
         std.debug.print("usage:\n{s}", .{usage});
@@ -520,144 +536,6 @@ const Scale = struct {
     }
 };
 
-/// Fit on dev-visible games before `before`; score dev-val (dev) or dev-visible games in
-/// [lo, hi)
-const Spec = struct {
-    before: i64,
-    lo: i64,
-    hi: i64,
-    dev: bool,
-    resample: ?u32 = null,
-
-    fn fits(s: Spec, c: harness.Cuts, g: rows.Game, fraction: f64) bool {
-        if (s.resample) |r| if (!harness.inResample(g.start, g.platform, r)) return false;
-        return harness.inFraction(g, fraction) and harness.visible(.dev, c, g) and g.start < s.before;
-    }
-
-    fn scores(s: Spec, c: harness.Cuts, g: rows.Game) bool {
-        if (s.dev) return harness.scored(.dev, c, g);
-        return harness.visible(.dev, c, g) and harness.inRegion(c, g) and g.start >= s.lo and g.start < s.hi;
-    }
-};
-
-/// The candidate's fit games: the spec's, older than `before` (the inner fit)
-const FitKeep = struct {
-    spec: Spec,
-    c: harness.Cuts,
-    fraction: f64,
-    before: i64 = std.math.maxInt(i64),
-    without: ?u8 = null,
-
-    pub fn keep(k: FitKeep, g: rows.Game) bool {
-        if (k.without) |f| if (crossFold(g) == f) return false;
-        return k.spec.fits(k.c, g, k.fraction) and g.start < k.before;
-    }
-};
-
-/// Training offsets come from candidates fitted without the game (winnet's resid): an
-/// in-sample offset is more confident than the out-of-sample one it is scored with
-const cross_folds = 5;
-
-fn crossFold(g: rows.Game) u8 {
-    var h = std.hash.Wyhash.init(0xc705);
-    h.update(std.mem.asBytes(&g.start));
-    h.update(std.mem.asBytes(&g.platform));
-    return @intCast(h.final() % cross_folds);
-}
-
-fn candCross(gpa: std.mem.Allocator, d: *const rows.Data, players: []const harness.Players, keep: FitKeep, games: []const u32, want: []bool, out: []f32) !void {
-    for (0..cross_folds) |f| {
-        @memset(want, false);
-        for (games) |gi| want[gi] = crossFold(d.games[gi]) == f;
-        var k = keep;
-        k.without = @intCast(f);
-        try candBlue(gpa, d, players, k, want, out);
-    }
-}
-
-/// The candidate fitted on the games `keep` accepts: blue's chance per data game index,
-/// written for the games `want` marks only
-fn candBlue(gpa: std.mem.Allocator, d: *const rows.Data, players: []const harness.Players, keep: FitKeep, want: []const bool, out: []f32) !void {
-    const k = api.outcomeIndex(.win);
-    var v = try harness.buildTrainWhere(gpa, d, players, keep);
-    defer v.deinit();
-    const n_seeds: u64 = if (@hasDecl(cand, "seeded") and cand.seeded) 3 else 1;
-    const sum = try gpa.alloc(f64, d.games.len);
-    defer gpa.free(sum);
-    const cnt = try gpa.alloc(u32, d.games.len);
-    defer gpa.free(cnt);
-    @memset(sum, 0);
-    @memset(cnt, 0);
-    for (1..n_seeds + 1) |seed| {
-        var m = try harness.fit(cand, gpa, &v.train, .{ .seed = seed });
-        defer cand.deinit(&m, gpa);
-        for (d.rows) |r| {
-            if (!want[r.game]) continue;
-            const g = d.games[r.game];
-            const q = harness.query(cand.scope, g, players[r.game], r, false);
-            const p: f64 = cand.predict(&m, &q)[k];
-            sum[r.game] += if (r.side == 0) p else 1 - p;
-            cnt[r.game] += 1;
-        }
-    }
-    for (out, sum, cnt) |*o, s, n| if (n > 0) {
-        o.* = @floatCast(s / @as(f64, @floatFromInt(n)));
-    };
-}
-
-const Pooled = struct {
-    ys: std.ArrayList(f32) = .empty,
-    cand: std.ArrayList(f32) = .empty,
-    ens: std.ArrayList(f32) = .empty,
-
-    fn deinit(p: *Pooled, gpa: std.mem.Allocator) void {
-        p.ys.deinit(gpa);
-        p.cand.deinit(gpa);
-        p.ens.deinit(gpa);
-    }
-};
-
-/// Dense champion-role ids from fit games: min_games or more get their own, others their
-/// role's (0..4)
-const Vocab = struct {
-    map: std.AutoHashMapUnmanaged(u64, u32) = .empty,
-    n: u32 = 5,
-
-    fn init(gpa: std.mem.Allocator, d: *const rows.Data, fit: []const u32, min_games: u32) !Vocab {
-        var counts: std.AutoHashMapUnmanaged(u64, u32) = .empty;
-        defer counts.deinit(gpa);
-        for (fit) |gi| for (d.games[gi].teams) |team| for (team, 0..) |champion, role| {
-            const e = try counts.getOrPutValue(gpa, key(champion, role), 0);
-            e.value_ptr.* += 1;
-        };
-        var keys: std.ArrayList(u64) = .empty;
-        defer keys.deinit(gpa);
-        var it = counts.iterator();
-        while (it.next()) |e| if (e.value_ptr.* >= min_games) try keys.append(gpa, e.key_ptr.*);
-        std.mem.sort(u64, keys.items, {}, std.sort.asc(u64));
-        var v: Vocab = .{};
-        for (keys.items) |kk| {
-            try v.map.put(gpa, kk, v.n);
-            v.n += 1;
-        }
-        return v;
-    }
-
-    fn deinit(v: *Vocab, gpa: std.mem.Allocator) void {
-        v.map.deinit(gpa);
-    }
-
-    fn id(v: *const Vocab, champion: u32, role: usize) u32 {
-        return v.map.get(key(champion, role)) orelse @intCast(role);
-    }
-};
-
-fn key(champion: u32, role: usize) u64 {
-    return (@as(u64, champion) << 3) | role;
-}
-
-const logit = nn.logit;
-
 /// One game as the net sees it: slots blue by role, then red
 /// DIR/net-BLOCK-PART.bin: per game, little-endian 4-byte values: ids u32[10] (slots blue
 /// top..support then red; 0 = rare or unseen champion-role), x f32[10][n_feat] (scaled as
@@ -717,9 +595,8 @@ fn netGames(gpa: std.mem.Allocator, d: *const rows.Data, raw: []const [n_feat]f3
     const out = try gpa.alloc(NetGame, games.len);
     for (out, games) |*o, gi| {
         const g = d.games[gi];
-        o.* = .{ .ids = undefined, .x = undefined, .platform = g.platform, .y = if (g.winner == 0) 1 else 0, .off = logit(off[gi]) };
+        o.* = .{ .ids = vocab.ids(g), .x = undefined, .platform = g.platform, .y = if (g.winner == 0) 1 else 0, .off = logit(off[gi]) };
         for (0..10) |slot| {
-            o.ids[slot] = vocab.id(g.teams[slot / 5][slot % 5], slot % 5);
             const ri = row_of[gi][slot];
             o.x[slot] = if (ri == no_row) @splat(0) else scale.apply(raw[ri], on);
         }
@@ -806,7 +683,7 @@ fn runBlock(
     defer scored.deinit(gpa);
     for (d.games, 0..) |g, i| {
         if (spec.fits(c, g, opts.fraction)) try fit.append(gpa, @intCast(i));
-        if (spec.scores(c, g)) try scored.append(gpa, @intCast(i));
+        if (spec.scores(c, g, opts.fraction)) try scored.append(gpa, @intCast(i));
     }
     const fit_starts = try gpa.alloc(i64, fit.items.len);
     defer gpa.free(fit_starts);
@@ -1016,11 +893,6 @@ fn blockName(b: Block) []const u8 {
     };
 }
 
-fn secondsSince(io: Io, t0: Io.Timestamp) f64 {
-    const ns = t0.durationTo(Io.Clock.awake.now(io)).toNanoseconds();
-    return @as(f64, @floatFromInt(ns)) / 1e9;
-}
-
 fn summaryHead(w: *Io.Writer) !void {
     try w.writeAll("| net | games | log loss | cand log loss | vs cand, nats/game (negative: net better) | AUC | cand AUC | epochs | val log loss | offset weight |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n");
 }
@@ -1029,43 +901,6 @@ fn summaryRow(gpa: std.mem.Allocator, w: *Io.Writer, label: []const u8, ys: []co
     const g = pairedGain(ys, pc, pn);
     try w.print("| {s} | {d} | {d:.5} | {d:.5} | {d:.5} ± {d:.5} | {d:.4} | {d:.4} |", .{ label, ys.len, meanLoss(ys, pn), meanLoss(ys, pc), -g.mean, 1.96 * g.se, try auc(gpa, ys, pn), try auc(gpa, ys, pc) });
     if (f) |x| try w.print(" {d:.2} | {d:.5} | {d:.3} |\n", .{ x.epochs, x.val_loss, x.offset_weight }) else try w.writeAll(" | | |\n");
-}
-
-const loss1 = nn.logLoss;
-
-fn meanLoss(ys: []const f32, p: []const f32) f64 {
-    return nn.meanLogLoss(f32, ys, p);
-}
-
-const Gain = struct { mean: f64, se: f64 };
-
-/// Candidate's loss minus the net's, per game (clustered by game); positive: net better
-fn pairedGain(ys: []const f32, pc: []const f32, pn: []const f32) Gain {
-    var s: f64 = 0;
-    var s2: f64 = 0;
-    for (ys, pc, pn) |y, a, b| {
-        const x = loss1(y, a) - loss1(y, b);
-        s += x;
-        s2 += x * x;
-    }
-    const n: f64 = @floatFromInt(@max(ys.len, 1));
-    const mean = s / n;
-    return .{ .mean = mean, .se = @sqrt(@max(s2 / n - mean * mean, 0) / @max(n - 1, 1)) };
-}
-
-/// Over both sides' rows, as the harness scores rows; ties share their rank
-fn auc(gpa: std.mem.Allocator, ys: []const f32, p: []const f32) !f64 {
-    const both = try gpa.alloc(f32, 4 * ys.len);
-    defer gpa.free(both);
-    const y2 = both[0 .. 2 * ys.len];
-    const p2 = both[2 * ys.len ..];
-    for (ys, p, 0..) |y, q, i| {
-        y2[2 * i] = y;
-        p2[2 * i] = q;
-        y2[2 * i + 1] = 1 - y;
-        p2[2 * i + 1] = 1 - q;
-    }
-    return nn.auc(f32, gpa, y2, p2);
 }
 
 const Sets = struct {
@@ -1079,60 +914,6 @@ const Sets = struct {
     vocab_inner: *const Vocab,
     vocab_all: *const Vocab,
 };
-
-/// Pretrained champion-role vectors (pretrain.zig's emb-<block>-s<seed>.tsv: champion,
-/// role, fit games, then d values; champion 0 is the role's shared vector)
-const EmbTable = struct {
-    map: std.AutoHashMapUnmanaged(u64, []f32) = .empty,
-    arena: std.heap.ArenaAllocator,
-
-    fn load(gpa: std.mem.Allocator, io: Io, dir: []const u8, block: Block, seed: u32, d: u32) !EmbTable {
-        var t: EmbTable = .{ .arena = .init(gpa) };
-        errdefer t.arena.deinit();
-        const a = t.arena.allocator();
-        const text = for ([_]u32{ seed, 1 }) |s| {
-            const path = try std.fmt.allocPrint(a, "{s}/emb-{s}-s{d}.tsv", .{ dir, blockName(block), s });
-            break Io.Dir.cwd().readFileAlloc(io, path, a, .limited(64 << 20)) catch |e| switch (e) {
-                error.FileNotFound => continue,
-                else => return e,
-            };
-        } else return error.EmbFileNotFound;
-        var lines = std.mem.tokenizeScalar(u8, text, '\n');
-        _ = lines.next();
-        while (lines.next()) |line| {
-            var it = std.mem.tokenizeScalar(u8, line, '\t');
-            const champion = try std.fmt.parseInt(u32, it.next() orelse return error.EmbFormat, 10);
-            const role = try std.fmt.parseInt(u3, it.next() orelse return error.EmbFormat, 10);
-            _ = it.next() orelse return error.EmbFormat;
-            const v = try a.alloc(f32, d);
-            for (v) |*x| x.* = try std.fmt.parseFloat(f32, it.next() orelse return error.EmbFormat);
-            if (it.next() != null) return error.EmbDim;
-            try t.map.put(a, key(champion, role), v);
-        }
-        return t;
-    }
-
-    fn deinit(t: *EmbTable) void {
-        t.arena.deinit();
-    }
-
-    /// Each vocab id's vector: its champion-role's, else its role's shared one; role
-    /// embeddings stay 0
-    fn apply(t: *const EmbTable, v: *const Vocab, s: *const Shape, p: []f32) !void {
-        for (0..5) |role| {
-            const x = t.map.get(key(0, role)) orelse return error.EmbMissingRole;
-            @memcpy(s.e.row(p, role), x);
-        }
-        var it = v.map.iterator();
-        while (it.next()) |e| {
-            const x = t.map.get(e.key_ptr.*) orelse t.map.get(key(0, e.key_ptr.* & 7)).?;
-            @memcpy(s.e.row(p, e.value_ptr.*), x);
-        }
-        @memset(s.r.of(p), 0);
-    }
-};
-
-const EmbInit = struct { table: *const EmbTable, vocab: *const Vocab };
 
 /// The parameters: platform intercepts, the offset's weight and hidden biases (no
 /// decay); champion-role and role embeddings (emb_wd); hidden weights (hidden x input,
@@ -1216,10 +997,6 @@ fn backwardSlot(n: *const Net, g: *const NetGame, slot: usize, v: Slot, df: f32,
     }
 }
 
-fn sigmoid(x: f32) f32 {
-    return nn.sigmoid(x);
-}
-
 fn gameLogit(n: *const Net, g: *const NetGame, f: [10]f32) f32 {
     var s: f32 = 0;
     for (f, 0..) |x, slot| s += if (slot < 5) x else -x;
@@ -1268,11 +1045,6 @@ const Work = struct {
 
 const Trained = struct { net: Net, steps: u64, epochs: f64, val_loss: f64 };
 
-/// Steps for the refit on n games: a tenth more games, a tenth more epochs
-fn refitSteps(epochs: f64, n: usize, batch: u32) u64 {
-    return nn.refitSteps(epochs, 1.1, n, batch);
-}
-
 /// train's side of nn.fit
 const NetFit = struct {
     n: *Net,
@@ -1316,7 +1088,10 @@ fn train(gpa: std.mem.Allocator, opts: Options, seed: u32, n_ids: u32, games: []
         return e;
     };
     errdefer n.deinit(gpa);
-    if (emb_init) |ei| try ei.table.apply(ei.vocab, &n.s, n.p);
+    if (emb_init) |ei| {
+        try ei.table.apply(ei.vocab, n.s.e, n.p);
+        @memset(n.s.r.of(n.p), 0);
+    }
     const w: Work = try .init(gpa, &n.s);
     defer w.deinit(gpa);
     const gr = try n.s.ps.alloc(gpa);
@@ -1361,7 +1136,7 @@ fn train(gpa: std.mem.Allocator, opts: Options, seed: u32, n_ids: u32, games: []
 
 fn fitNet(gpa: std.mem.Allocator, io: Io, opts: Options, seed: u32, s: Sets) !Fitted {
     const t0 = Io.Clock.awake.now(io);
-    var table: ?EmbTable = if (opts.emb_init) |dir| try .load(gpa, io, dir, s.block, seed, opts.emb) else null;
+    var table: ?EmbTable = if (opts.emb_init) |dir| try .load(gpa, io, dir, blockName(s.block), seed, opts.emb) else null;
     defer if (table) |*t| t.deinit();
     const init_inner: ?EmbInit = if (table) |*t| .{ .table = t, .vocab = s.vocab_inner } else null;
     const init_all: ?EmbInit = if (table) |*t| .{ .table = t, .vocab = s.vocab_all } else null;
