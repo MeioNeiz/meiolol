@@ -106,7 +106,7 @@ pub const Client = struct {
     /// PUUID, a 403 on every host, which stopped the crawler for hours as a rejected key)
     fn fromRiot(body: []const u8) bool {
         const t = std.mem.trimStart(u8, body, " \t\r\n");
-        return t.len > 0 and t[0] == '{' and std.mem.indexOf(u8, t, "\"status_code\"") != null;
+        return t.len > 0 and t[0] == '{' and std.mem.find(u8, t, "\"status_code\"") != null;
     }
 
     /// The proxy answers as Riot would, except: 503 when the crawler's tries ran out,
@@ -190,7 +190,7 @@ pub const Client = struct {
 
     /// The path for logs, except where it holds a Riot ID: then the endpoint's name
     fn logged(path: []const u8, method: []const u8) []const u8 {
-        return if (std.mem.indexOf(u8, path, "/by-riot-id/") != null) method else path;
+        return if (std.mem.find(u8, path, "/by-riot-id/") != null) method else path;
     }
 
     fn once(c: *Client, limiter: *Limiter, uri: std.Uri, method: []const u8, backoff: i64) !Response {

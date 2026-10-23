@@ -231,12 +231,12 @@ test "candidates per role: games of that role, Gold to Emerald first, never forg
         .{ .puuid = "top-gold", .position = "MIDDLE", .tier = "GOLD", .games = 1 },
     };
     for (0..3) |i| {
-        const id = try std.fmt.allocPrint(arena, "EUW1_{d}", .{i});
+        const id = try arena.print("EUW1_{d}", .{i});
         try db.run("INSERT INTO matches VALUES (?, 'test', 'EUW1', 420, '16.20', '16.20.1', ?, 1800, 100, 0)", .{ id, @as(i64, @intCast(i)) });
         try db.run("INSERT INTO timeline.timelines VALUES (?, 0, 0, x'')", .{id});
     }
     for (rows, 0..) |r, slot| for (0..r.games) |i| {
-        const id = try std.fmt.allocPrint(arena, "EUW1_{d}", .{if (std.mem.eql(u8, r.position, "MIDDLE")) 2 - i else i});
+        const id = try arena.print("EUW1_{d}", .{if (std.mem.eql(u8, r.position, "MIDDLE")) 2 - i else i});
         try db.run(
             \\INSERT INTO participants (match_id, slot, team_id, puuid, champion_id, position, win, tier)
             \\VALUES (?, ?, 100, ?, 1, ?, 1, ?)

@@ -140,7 +140,7 @@ test "reads ahead of a pass on a file database, and stops wherever the pass does
     var ins = try db.prepare("INSERT INTO timeline.t VALUES (?, zeroblob(10000))");
     defer ins.deinit();
     var buf: [16]u8 = undefined;
-    for (0..3000) |i| try ins.exec(.{try std.fmt.bufPrint(&buf, "EUW1_{d}", .{i})});
+    for (0..3000) |i| try ins.exec(.{try std.mem.print(&buf, "EUW1_{d}", .{i})});
     const o: Options = .{
         .list = "SELECT match_id, rowid FROM timeline.t WHERE rowid > ? ORDER BY match_id",
         .reads = &.{ "SELECT data FROM timeline.t WHERE match_id = ?1", "SELECT data FROM timeline.t WHERE rowid = ?2" },

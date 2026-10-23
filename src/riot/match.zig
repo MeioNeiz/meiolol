@@ -251,7 +251,7 @@ pub const Rows = struct {
         if (winners != 1) winner = null;
         const remake = isRemake(doc);
 
-        const platform_id = info.platformId orelse id[0 .. std.mem.indexOfScalar(u8, id, '_') orelse id.len];
+        const platform_id = info.platformId orelse id[0 .. std.mem.findScalar(u8, id, '_') orelse id.len];
         try rows.trim.exec(.{ id, info.participants.len });
         try rows.unban.exec(.{id});
         try rows.match.exec(.{

@@ -75,7 +75,7 @@ pub const Bucket = struct {
         var parts = std.mem.tokenizeScalar(u8, spec, ',');
         while (parts.next()) |part| {
             if (n == max_windows) break;
-            const colon = std.mem.indexOfScalar(u8, part, ':') orelse return error.BadSpec;
+            const colon = std.mem.findScalar(u8, part, ':') orelse return error.BadSpec;
             const trimmed = std.mem.trim(u8, part[0..colon], " ");
             parsed[n] = .{
                 .limit = try std.fmt.parseInt(u32, trimmed, 10),
@@ -112,7 +112,7 @@ pub const Bucket = struct {
     fn syncCounts(b: *Bucket, gpa: Allocator, counts: []const u8, now: i96) !void {
         var parts = std.mem.tokenizeScalar(u8, counts, ',');
         while (parts.next()) |part| {
-            const colon = std.mem.indexOfScalar(u8, part, ':') orelse continue;
+            const colon = std.mem.findScalar(u8, part, ':') orelse continue;
             const seen = std.fmt.parseInt(u32, std.mem.trim(u8, part[0..colon], " "), 10) catch continue;
             const secs = std.fmt.parseInt(u32, std.mem.trim(u8, part[colon + 1 ..], " "), 10) catch continue;
             for (b.windows.items) |*w| {

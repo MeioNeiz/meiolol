@@ -98,7 +98,7 @@ pub fn riotIds(arena: Allocator, body: []const u8) ![]const Named {
         const tag = p.riotIdTagline orelse "";
         o.* = .{
             .puuid = p.puuid,
-            .riot_id = if (name.len == 0 or tag.len == 0) null else try std.fmt.allocPrint(arena, "{s}#{s}", .{ name, tag }),
+            .riot_id = if (name.len == 0 or tag.len == 0) null else try arena.print("{s}#{s}", .{ name, tag }),
         };
     }
     return out;
@@ -137,14 +137,14 @@ pub const CurveSet = struct {
 
     /// u16 parts: a patch from Riot's gameVersion can't overflow it
     fn patchNum(p: []const u8) ?u32 {
-        const dot = std.mem.indexOfScalar(u8, p, '.') orelse return null;
+        const dot = std.mem.findScalar(u8, p, '.') orelse return null;
         const major = std.fmt.parseInt(u16, p[0..dot], 10) catch return null;
         const minor = std.fmt.parseInt(u16, p[dot + 1 ..], 10) catch return null;
         return @as(u32, major) * 100 + minor;
     }
 
     pub fn patchRange(label: []const u8) ?[2]u32 {
-        if (std.mem.indexOfScalar(u8, label, '-')) |dash| {
+        if (std.mem.findScalar(u8, label, '-')) |dash| {
             return .{ patchNum(label[0..dash]) orelse return null, patchNum(label[dash + 1 ..]) orelse return null };
         }
         const p = patchNum(label) orelse return null;
@@ -598,7 +598,7 @@ const Fight = struct {
 };
 
 fn involved(me: u8, killer: u8, assists: []const u8) bool {
-    return killer == me or std.mem.indexOfScalar(u8, assists, me) != null;
+    return killer == me or std.mem.findScalar(u8, assists, me) != null;
 }
 
 fn yourMoments(arena: Allocator, s: Summary, slot: u8, t: timeline.Timeline, chance: []const u16) ![]const Moment {
@@ -694,8 +694,8 @@ fn yourMoments(arena: Allocator, s: Summary, slot: u8, t: timeline.Timeline, cha
             // Voidgrubs a few seconds apart are one moment
             const last = &out.items[out.items.len - 1];
             if (last.ours == ours and e.t_ms - @as(i64, last.end_s) * 1000 < death_window_ms and std.mem.startsWith(u8, last.objective.?, label)) {
-                const n = if (std.mem.indexOf(u8, last.objective.?, " x")) |x| try std.fmt.parseInt(u32, last.objective.?[x + 2 ..], 10) else 1;
-                last.objective = try std.fmt.allocPrint(arena, "{s} x{d}", .{ label, n + 1 });
+                const n = if (std.mem.find(u8, last.objective.?, " x")) |x| try std.fmt.parseInt(u32, last.objective.?[x + 2 ..], 10) else 1;
+                last.objective = try arena.print("{s} x{d}", .{ label, n + 1 });
                 last.end_s = seconds(e.t_ms);
                 last.with_you = last.with_you or with_you;
                 last.after = around(chance, e.t_ms, e.t_ms)[1];
@@ -831,16 +831,16 @@ fn objectivesBy(arena: Allocator, t: timeline.Timeline, team: i64, from_ms: i64,
         }
     }
     for (labels.items, counts.items) |*l, n| if (n > 1) {
-        l.* = try std.fmt.allocPrint(arena, "{s} x{d}", .{ l.*, n });
+        l.* = try arena.print("{s} x{d}", .{ l.*, n });
     };
     return labels.items;
 }
 
 fn buildingLabel(arena: Allocator, building: []const u8, lane: []const u8, tower: []const u8) ![]const u8 {
     const where: []const u8 = if (std.mem.eql(u8, lane, "TOP_LANE")) "Top" else if (std.mem.eql(u8, lane, "MID_LANE")) "Mid" else if (std.mem.eql(u8, lane, "BOT_LANE")) "Bot" else "Base";
-    if (std.mem.eql(u8, building, "INHIBITOR_BUILDING")) return std.fmt.allocPrint(arena, "{s} inhibitor", .{where});
+    if (std.mem.eql(u8, building, "INHIBITOR_BUILDING")) return arena.print("{s} inhibitor", .{where});
     const which: []const u8 = if (std.mem.eql(u8, tower, "OUTER_TURRET")) "outer" else if (std.mem.eql(u8, tower, "INNER_TURRET")) "inner" else if (std.mem.eql(u8, tower, "BASE_TURRET")) "base" else if (std.mem.eql(u8, tower, "NEXUS_TURRET")) return "Nexus tower" else "";
-    return std.fmt.allocPrint(arena, "{s} {s} tower", .{ where, which });
+    return arena.print("{s} {s} tower", .{ where, which });
 }
 
 fn monsterLabel(monster: []const u8, subtype: []const u8) ?[]const u8 {
@@ -1200,8 +1200,8 @@ test "a real timeline from both sides, with and without a curve" {
     // 0:00 is the champions alone, not a flat 50
     try testing.expect(blue.win_chance[0] > 0 and blue.win_chance[0] < 100);
     const json = try std.json.Stringify.valueAlloc(arena, blue, .{});
-    const start = try std.fmt.allocPrint(arena, "\"win_chance\":[{d},", .{blue.win_chance[0]});
-    try testing.expect(std.mem.indexOf(u8, json, start) != null);
+    const start = try arena.print("\"win_chance\":[{d},", .{blue.win_chance[0]});
+    try testing.expect(std.mem.find(u8, json, start) != null);
     const turn = blue.turning.?;
     try testing.expectEqual(turn.minute, red.turning.?.minute);
     try testing.expectEqual(turn.taken.len, red.turning.?.lost.len);

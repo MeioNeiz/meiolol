@@ -104,7 +104,7 @@ pub const Fetcher = struct {
                             \\UPDATE challenges SET state = CASE WHEN icon IS NULL THEN 'failed'
                             \\  ELSE 'mismatch' END WHERE riot_id = ?
                         , .{key[verify_prefix.len..]});
-                    } else if (std.mem.indexOfScalar(u8, key, '#') == null) {
+                    } else if (std.mem.findScalar(u8, key, '#') == null) {
                         try f.db.run("UPDATE players SET error = ? WHERE puuid = ?", .{ @errorName(err), key });
                     }
                 },
@@ -115,7 +115,7 @@ pub const Fetcher = struct {
 
     fn job(f: *Fetcher, arena: Allocator, key: []const u8) !void {
         if (std.mem.startsWith(u8, key, verify_prefix)) return f.verify(arena, key[verify_prefix.len..]);
-        const puuid = if (std.mem.indexOfScalar(u8, key, '#') != null)
+        const puuid = if (std.mem.findScalar(u8, key, '#') != null)
             try f.resolve(arena, key) orelse return
         else
             key;
@@ -136,7 +136,7 @@ pub const Fetcher = struct {
 
     /// Riot ID -> account and platform; null when Riot has no such account
     fn account(f: *Fetcher, arena: Allocator, riot_id: []const u8) !?Account {
-        const hash = std.mem.indexOfScalar(u8, riot_id, '#').?;
+        const hash = std.mem.findScalar(u8, riot_id, '#').?;
         const body = try f.keep(arena, try endpoints.accountByRiotId(try f.route(@tagName(account_route)), account_route, riot_id[0..hash], riot_id[hash + 1 ..])) orelse
             return null;
         const a = try endpoints.parse(endpoints.Account, arena, body);
@@ -360,7 +360,7 @@ pub fn syncForgotten(gpa: Allocator, io: std.Io, db: store.Db, dir_path: []const
         while (lines.next()) |line| {
             const puuid = std.mem.trim(u8, line, " \t");
             // PUUIDs only: never contain '#', so comments and Riot IDs are skipped
-            if (puuid.len == 0 or std.mem.indexOfScalar(u8, puuid, '#') != null) continue;
+            if (puuid.len == 0 or std.mem.findScalar(u8, puuid, '#') != null) continue;
             if (try db.scalar("SELECT 1 FROM blocked WHERE puuid = ?", .{puuid}) != null) continue;
             try cache.forget(db, puuid, now);
             added += 1;
@@ -473,7 +473,7 @@ fn newestFirst(ids: [][]const u8) void {
             return number(a) > number(b);
         }
         fn number(id: []const u8) u64 {
-            const sep = std.mem.lastIndexOfScalar(u8, id, '_') orelse return 0;
+            const sep = std.mem.findScalarLast(u8, id, '_') orelse return 0;
             return std.fmt.parseInt(u64, id[sep + 1 ..], 10) catch 0;
         }
     }.newer);

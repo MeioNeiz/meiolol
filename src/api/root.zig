@@ -135,7 +135,7 @@ pub fn loadCurveSet(arena: Allocator, io: Io, dir_path: []const u8) !game.CurveS
     // Item lists change little between patches: the newest curves patch's serves all
     if (set.files.len > 0) {
         const label = set.files[0].label;
-        const patch = label[if (std.mem.indexOfScalar(u8, label, '-')) |d| d + 1 else 0..];
+        const patch = label[if (std.mem.findScalar(u8, label, '-')) |d| d + 1 else 0..];
         if (ddragon.legendaries(arena, io, patch)) |ids| {
             set.legendaries = ids;
         } else |err| log.warn("legendary items for {s}: {t}; first items left out", .{ patch, err });
@@ -234,7 +234,7 @@ fn handle(ctx: *Context, request: *std.http.Server.Request) !void {
     defer arena_state.deinit();
     const arena = arena_state.allocator();
     const target = request.head.target;
-    const q = std.mem.indexOfScalar(u8, target, '?') orelse target.len;
+    const q = std.mem.findScalar(u8, target, '?') orelse target.len;
     const path = target[0..q];
     const query = if (q < target.len) target[q + 1 ..] else "";
     const method = request.head.method;
@@ -334,7 +334,7 @@ fn intParam(arena: Allocator, query: []const u8, name: []const u8, max: u32) !?u
 pub fn param(arena: Allocator, query: []const u8, name: []const u8) !?[]const u8 {
     var it = std.mem.splitScalar(u8, query, '&');
     while (it.next()) |pair| {
-        const eq = std.mem.indexOfScalar(u8, pair, '=') orelse continue;
+        const eq = std.mem.findScalar(u8, pair, '=') orelse continue;
         if (!std.mem.eql(u8, pair[0..eq], name)) continue;
         const v = try arena.dupe(u8, pair[eq + 1 ..]);
         return std.Uri.percentDecodeInPlace(v);
@@ -345,7 +345,7 @@ pub fn param(arena: Allocator, query: []const u8, name: []const u8) !?[]const u8
 /// The lower case Riot ID key from ?id=Name#TAG
 fn riotIdParam(arena: Allocator, query: []const u8) !?[]const u8 {
     const id = try param(arena, query, "id") orelse return null;
-    const hash = std.mem.lastIndexOfScalar(u8, id, '#') orelse return null;
+    const hash = std.mem.findScalarLast(u8, id, '#') orelse return null;
     const buf = try arena.alloc(u8, id.len);
     return cache.riotIdKey(buf, id[0..hash], id[hash + 1 ..]);
 }
@@ -512,7 +512,7 @@ fn report(ctx: *Context, arena: Allocator, db: store.Db, puuid: []const u8, rank
             log.warn("{s}: timeline {t}", .{ r.match_id, err });
             break :blk null;
         } else null;
-        const platform = r.match_id[0 .. std.mem.indexOfScalar(u8, r.match_id, '_') orelse 0];
+        const platform = r.match_id[0 .. std.mem.findScalar(u8, r.match_id, '_') orelse 0];
         try inputs.append(arena, .{
             .summary = summary,
             .slot = r.slot,
@@ -609,12 +609,12 @@ test "games: a visit refreshes after refresh_after_s, a check after check_after_
 
     const visit = try games(&ctx, arena, db, "id=A%231");
     try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM jobs", .{}));
-    try std.testing.expect(std.mem.indexOf(u8, visit.body, "\"state\":\"ready\"") != null);
-    try std.testing.expect(std.mem.indexOf(u8, visit.body, try arena.print("\"check_at\":{d}", .{now - 60})) != null);
+    try std.testing.expect(std.mem.find(u8, visit.body, "\"state\":\"ready\"") != null);
+    try std.testing.expect(std.mem.find(u8, visit.body, try arena.print("\"check_at\":{d}", .{now - 60})) != null);
 
     const check = try games(&ctx, arena, db, "id=A%231&refresh=1");
     try std.testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM jobs WHERE key = 'p'", .{}));
-    try std.testing.expect(std.mem.indexOf(u8, check.body, "\"state\":\"queued\"") != null);
+    try std.testing.expect(std.mem.find(u8, check.body, "\"state\":\"queued\"") != null);
 
     try db.run("DELETE FROM jobs", .{});
     try db.run("UPDATE players SET refreshed = ?", .{now - 30});

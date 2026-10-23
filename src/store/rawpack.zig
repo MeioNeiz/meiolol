@@ -277,7 +277,7 @@ test "pack round trip, and a cut or edited pack fails" {
 
     const edited = try testing.allocator.dupe(u8, bytes);
     defer testing.allocator.free(edited);
-    edited[std.mem.indexOf(u8, edited, "\"a\":1").? + 4] = '2';
+    edited[std.mem.find(u8, edited, "\"a\":1").? + 4] = '2';
     var ein: Io.Reader = .fixed(edited);
     var re = try Reader.init(testing.allocator, &ein);
     defer re.deinit();

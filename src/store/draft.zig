@@ -175,7 +175,7 @@ pub const Builder = struct {
             remake: i64,
             duration_s: i64,
         });
-        if (std.mem.indexOfScalar(i64, &queues, m.queue) == null) return false;
+        if (std.mem.findScalar(i64, &queues, m.queue) == null) return false;
         if (m.remake != 0) return false;
         const winner = m.winner orelse return false;
         if (winner != 100 and winner != 200) return false;

@@ -23,7 +23,7 @@ pub const Proxy = struct {
 
     /// "10.0.0.3:8092"
     pub fn listen(p: *Proxy, address: []const u8) !Io.net.Server {
-        const colon = std.mem.lastIndexOfScalar(u8, address, ':') orelse return error.BadAddress;
+        const colon = std.mem.findScalarLast(u8, address, ':') orelse return error.BadAddress;
         const port = std.fmt.parseInt(u16, address[colon + 1 ..], 10) catch return error.BadAddress;
         const ip = try Io.net.IpAddress.parse(address[0..colon], port);
         const server = try ip.listen(p.io, .{ .reuse_address = true });
@@ -57,7 +57,7 @@ pub const Proxy = struct {
             return request.respond("", .{ .status = .not_found });
         }
         const rest = target[prefix.len..];
-        const slash = std.mem.indexOfScalar(u8, rest, '/') orelse return request.respond("", .{ .status = .bad_request });
+        const slash = std.mem.findScalar(u8, rest, '/') orelse return request.respond("", .{ .status = .bad_request });
         const route = rest[0..slash];
         const i = Limiters.index(route) orelse return request.respond("", .{ .status = .bad_request });
         var method: ?[]const u8 = null;
@@ -107,6 +107,6 @@ test "proxy answers as Riot would, through the route's limiter" {
     defer c.deinit();
     const body = (try c.get("europe", "/lol/match/v5/matches/EUW1_1", "match")).?;
     defer gpa.free(body);
-    try std.testing.expect(std.mem.indexOf(u8, body, "EUW1_1") != null);
+    try std.testing.expect(std.mem.find(u8, body, "EUW1_1") != null);
     try std.testing.expectEqual(null, try c.get("europe", "/nothing", "x"));
 }

@@ -43,7 +43,7 @@ pub const platforms = [_]Platform{
 
 /// Platform of a match id ("KR_7012345678" -> KR)
 pub fn platformOf(match_id: []const u8) ?Platform {
-    return platform(match_id[0 .. std.mem.indexOfScalar(u8, match_id, '_') orelse return null]);
+    return platform(match_id[0 .. std.mem.findScalar(u8, match_id, '_') orelse return null]);
 }
 
 /// "EUW1" -> EUW1

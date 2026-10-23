@@ -257,7 +257,7 @@ pub const Crawler = struct {
         try c.limiters.save(&aw.writer, std.Io.Clock.real.now(c.io).toMilliseconds());
         const path = try std.fs.path.join(c.gpa, &.{ c.opts.data_dir, windows_file });
         defer c.gpa.free(path);
-        const tmp = try std.fmt.allocPrint(c.gpa, "{s}.tmp", .{path});
+        const tmp = try c.gpa.print("{s}.tmp", .{path});
         defer c.gpa.free(tmp);
         const cwd = std.Io.Dir.cwd();
         try cwd.writeFile(c.io, .{ .sub_path = tmp, .data = aw.written() });
@@ -667,7 +667,7 @@ pub const Patches = struct {
 
     /// "16.20" -> 16020; 0 when not a patch. u16 parts: Riot's gameVersion can't overflow it
     pub fn code(patch: []const u8) u32 {
-        const dot = std.mem.indexOfScalar(u8, patch, '.') orelse return 0;
+        const dot = std.mem.findScalar(u8, patch, '.') orelse return 0;
         const major = std.fmt.parseInt(u16, patch[0..dot], 10) catch return 0;
         const minor = std.fmt.parseInt(u16, patch[dot + 1 ..], 10) catch return 0;
         return @as(u32, major) * 1000 + minor;
@@ -1540,7 +1540,7 @@ pub const Compact = struct {
 fn wholeDoc(body: []const u8) bool {
     const t = std.mem.trim(u8, body, " \t\r\n");
     if (t.len < 2 or t[0] != '{' or t[t.len - 1] != '}') return false;
-    return std.mem.indexOf(u8, t, "\"matchId\":\"") != null;
+    return std.mem.find(u8, t, "\"matchId\":\"") != null;
 }
 
 /// Timeline JSON -> gzipped compact blob, allocated with `gpa`
@@ -1802,9 +1802,9 @@ test "skipped timelines: long ranked matches without a timeline or queue row, ne
     try plan.bind(.{ 10000, 0, europe, ep.ranked_solo, 900, 10 });
     var uses_start = false;
     while (try plan.step()) {
-        if (std.mem.indexOf(u8, plan.bytes(3), "matches_start") != null) uses_start = true;
+        if (std.mem.find(u8, plan.bytes(3), "matches_start") != null) uses_start = true;
         // Rows in game_start order straight from the index
-        try std.testing.expect(std.mem.indexOf(u8, plan.bytes(3), "TEMP B-TREE") == null);
+        try std.testing.expect(std.mem.find(u8, plan.bytes(3), "TEMP B-TREE") == null);
     }
     try std.testing.expect(uses_start);
 }
