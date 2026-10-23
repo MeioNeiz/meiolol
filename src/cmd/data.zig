@@ -139,18 +139,11 @@ pub fn cmdRekey(c: *Cmd) !u8 {
             fake_api = true;
         } else return error.Usage;
     }
-    // As forget: the box holds meiolol.db, the web server api.db
-    const cwd = std.Io.Dir.cwd();
-    const crawl_path = try std.fs.path.join(c.arena, &.{ c.data_dir, "meiolol.db" });
-    const api_path = try std.fs.path.joinZ(c.arena, &.{ c.data_dir, "api.db" });
-    const db: ?store.Db = if (cwd.access(io, crawl_path, .{})) |_| try c.open() else |_| null;
-    defer if (db) |d| d.close();
-    const api_db: ?store.Db = if (cwd.access(io, api_path, .{})) |_| try api.cache.open(api_path) else |_| null;
-    defer if (api_db) |d| d.close();
-    if (db == null and api_db == null) {
-        std.log.err("{s} holds neither meiolol.db nor api.db", .{c.data_dir});
-        return 1;
-    }
+    const dbs: Dbs = try .open(c);
+    defer dbs.close();
+    const db = dbs.crawl;
+    const api_db = dbs.api;
+    if (db == null and api_db == null) return 1;
     var listed: std.ArrayList([]const u8) = .empty;
     var probes: []const []const u8 = &.{};
     if (db) |d| {
@@ -244,6 +237,31 @@ fn rekeyApply(c: *Cmd, db: ?store.Db, api_db: ?store.Db, plan: *const rekey.Plan
     }
     return 0;
 }
+
+/// What `forget` and `rekey` work on: the box holds the crawler databases, the web server
+/// the Your games cache. Whichever this data directory has, never creating the other;
+/// neither is logged
+const Dbs = struct {
+    crawl: ?store.Db,
+    api: ?store.Db,
+
+    fn open(c: *Cmd) !Dbs {
+        const io = c.init.io;
+        const cwd = std.Io.Dir.cwd();
+        const crawl_path = try std.fs.path.join(c.arena, &.{ c.data_dir, "meiolol.db" });
+        const api_path = try std.fs.path.joinZ(c.arena, &.{ c.data_dir, "api.db" });
+        const crawl: ?store.Db = if (cwd.access(io, crawl_path, .{})) |_| try c.open() else |_| null;
+        errdefer if (crawl) |d| d.close();
+        const api_db: ?store.Db = if (cwd.access(io, api_path, .{})) |_| try api.cache.open(api_path) else |_| null;
+        if (crawl == null and api_db == null) std.log.err("{s} holds neither meiolol.db nor api.db", .{c.data_dir});
+        return .{ .crawl = crawl, .api = api_db };
+    }
+
+    fn close(d: Dbs) void {
+        if (d.crawl) |x| x.close();
+        if (d.api) |x| x.close();
+    }
+};
 
 pub const usage_backup =
     \\  backup      consistent copy of tables and compact timelines (docs/data-safety.md)
@@ -371,19 +389,11 @@ pub fn cmdForget(c: *Cmd) !u8 {
     defer limiter.deinit();
     var client: ?riot.client.Client = null;
     defer if (client) |*cl| cl.deinit();
-    // The box holds the crawler databases, the web server the Your games cache; open
-    // whichever this data directory has, never creating the other
-    const cwd = std.Io.Dir.cwd();
-    const crawl_path = try std.fs.path.join(arena, &.{ c.data_dir, "meiolol.db" });
-    const api_path = try std.fs.path.joinZ(arena, &.{ c.data_dir, "api.db" });
-    const db: ?store.Db = if (cwd.access(io, crawl_path, .{})) |_| try c.open() else |_| null;
-    defer if (db) |d| d.close();
-    const api_db: ?store.Db = if (cwd.access(io, api_path, .{})) |_| try api.cache.open(api_path) else |_| null;
-    defer if (api_db) |d| d.close();
-    if (db == null and api_db == null) {
-        std.log.err("{s} holds neither meiolol.db nor api.db", .{c.data_dir});
-        return 1;
-    }
+    const dbs: Dbs = try .open(c);
+    defer dbs.close();
+    const db = dbs.crawl;
+    const api_db = dbs.api;
+    if (db == null and api_db == null) return 1;
     var live: forget.Removed = .{};
     var scrubbed: forget.Removed = .{};
     var erased: std.ArrayList([]const u8) = .empty;
