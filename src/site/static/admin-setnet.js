@@ -9,8 +9,8 @@
 // profile, the role's embedding row), or one profile trait zeroed across a team. Those
 // parts don't add up to the whole (the net isn't additive); the seeds' spread is the range
 
-// EUW1's index in the lab's platform list (protocol.platformIds, riot/endpoints.zig); the
-// additive model's export scores on EUW1's side term
+// EUW1's index in the lab's platform list (protocol.platformIds, riot/endpoints.zig) for
+// files without their `platforms`; the additive model's export scores on EUW1's side term
 const SETNET_EUW = 6;
 // Largest |logit diff| between the page's draft model and the nets' fitted base on their
 // reference games: the export leaves out pair cells on fewer than 20 games
@@ -29,6 +29,7 @@ function setNet(S) {
   const ids = new Map(S.ids.map(x => [x.champion + ":" + x.role, x.id]));
   const profs = new Map(S.profiles.map(x => [x.champion + ":" + x.role, x.z]));
   const zero = new Array(np).fill(0);
+  const euw = S.platforms ? S.platforms.indexOf("EUW1") : SETNET_EUW;
   // One slot's input: z profile, role one-hot, embedding row (an empty slot or an unknown
   // champion-role: zero profile and the role's row, as an average pick)
   const input = (id, r) => {
@@ -67,7 +68,7 @@ function setNet(S) {
     });
   };
   // teams[side][role]: champion id, 0 empty; edit(xs) may change the slot inputs in place
-  const logit = (teams, base, platform = SETNET_EUW, edit = null) => {
+  const logit = (teams, base, platform = euw, edit = null) => {
     const xs = teams.flatMap(t => t.map((id, r) => input(id, r)));
     if (edit) edit(xs);
     const [fb, fr] = f(xs);
@@ -77,7 +78,7 @@ function setNet(S) {
   const roleRow = (xs, s) => {
     for (let k = 0; k < emb; k++) xs[s][np + 5 + k] = p[L.e + (s % 5) * emb + k];
   };
-  return { seed: S.seed, S, emb, logit, roleRow, features: S.features };
+  return { seed: S.seed, S, emb, euw, logit, roleRow, features: S.features };
 }
 
 // The file's reference games through this page's forward pass: max |logit diff|
@@ -92,7 +93,7 @@ function setNets(files) {
   const nets = files.map(setNet).filter(Boolean);
   if (!nets.length) return null;
   const sig = x => 1 / (1 + Math.exp(-x));
-  const chance = (teams, base, edit) => nets.map(n => sig(n.logit(teams, base, SETNET_EUW, edit)));
+  const chance = (teams, base, edit) => nets.map(n => sig(n.logit(teams, base, n.euw, edit)));
   const mean = a => a.reduce((s, x) => s + x, 0) / a.length;
   return {
     nets,
@@ -124,7 +125,7 @@ function setNets(files) {
         const ps = chance(teams, base, xs => { for (let r = 0; r < 5; r++) xs[side * 5 + r][i] = 0; });
         traits.push({ side, feature: name, words: SETNET_TRAITS[name] || name, ...part(ps) });
       }));
-      const identity = nets[0].emb ? part(nets.map(n => sig(n.logit(teams, base, SETNET_EUW, xs => xs.forEach((_, s) => n.roleRow(xs, s)))))) : null;
+      const identity = nets[0].emb ? part(nets.map(n => sig(n.logit(teams, base, n.euw, xs => xs.forEach((_, s) => n.roleRow(xs, s)))))) : null;
       return { ...part(full.map(() => sig(base))), picks, traits, identity };
     },
   };
@@ -143,7 +144,7 @@ function setNetBase(m, teams) {
 function setNetBaseCheck(net, m) {
   let worst = 0, games = 0;
   for (const r of net.nets[0].S.refs) {
-    if (r.platform !== SETNET_EUW) continue;
+    if (r.platform !== net.nets[0].euw) continue;
     worst = Math.max(worst, Math.abs(setNetBase(m, r.teams) - r.offset));
     games++;
   }

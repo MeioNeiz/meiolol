@@ -24,6 +24,7 @@ const Date = @import("date.zig").Date;
 const tsvlog = @import("tsvlog.zig");
 const analysis = @import("analysis.zig");
 const fitted = @import("fitted.zig");
+const draftfile = @import("draftfile.zig");
 const score = core.score;
 const Role = core.Role;
 
@@ -38,6 +39,12 @@ pub const Options = struct {
     test_platform: ?[]const u8 = null,
     /// The protocol's cuts from a wider scan (analysis.protocolCuts); null: from these games
     cuts: ?Cuts = null,
+    /// Score the protocol's dev-val window instead of test, fitting below the dev cut: a
+    /// lab model can be checked here without a test look
+    dev: bool = false,
+    /// Lab set nets (seeds of one export, draftfile.SetNet) scored as a correction on the
+    /// shipped model, one more row; each must have seen no game from the scored window on
+    setnets: []const draftfile.SetNet = &.{},
 };
 
 const Game = stats.Row;
@@ -81,8 +88,12 @@ pub fn run(
     try w.print(". Train: oldest {d} ({f} to {f}). ", .{
         train.len, Date.fromMs(train[0].start), Date.fromMs(train[train.len - 1].start),
     });
-    try w.print("Test: newest {d} ({f} to {f}).\n\n", .{
-        tests.len, Date.fromMs(tests[0].start), Date.fromMs(tests[tests.len - 1].start),
+    try w.print("{s}: {s}{d} ({f} to {f}).\n\n", .{
+        if (opts.dev) "Dev-val" else "Test",
+        if (opts.dev) "the protocol's dev-val window, no test game scored, " else "newest ",
+        tests.len,
+        Date.fromMs(tests[0].start),
+        Date.fromMs(tests[tests.len - 1].start),
     });
 
     const tuned = try tune(gpa, io, champs, train, opts.folds, w);
@@ -112,7 +123,9 @@ pub fn run(
     const joint_w = try fitJoint(gpa, &full.stats, train, tuned.joint_l2);
     defer gpa.free(joint_w);
     const joint: Predictor = .{ .label = "joint ratings (logistic)", .kind = .{ .joint = joint_w } };
-    const predictors = [_]Predictor{
+    var predictors: std.ArrayList(Predictor) = .empty;
+    defer predictors.deinit(gpa);
+    try predictors.appendSlice(gpa, &.{
         .{ .label = "coin flip (50%)", .kind = .coin },
         .{ .label = "blue side rate", .kind = .{ .side = blue_rate } },
         base_only,
@@ -123,7 +136,10 @@ pub fn run(
         weighted,
         empirical,
         joint,
-    };
+    });
+    var nets: ?SetNets = if (opts.setnets.len > 0) try .init(gpa, opts.setnets, platforms, &shipped.stats, if (opts.dev) parts.cuts.dev else parts.cuts.test_) else null;
+    defer if (nets) |*x| x.deinit(gpa);
+    if (nets) |*x| try predictors.append(gpa, .{ .label = "current model + set net (lab)", .kind = .{ .setnet = x } });
     const eb = score.empiricalPriors(&full.stats, eb_min_games);
     try w.print("## Full draft, held-out games\n\nEmpirical-Bayes priors from train (cells " ++
         "with {d}+ games): base {f}, duo {f}, lane {f}, other matchups {f}.\n\n", .{
@@ -133,7 +149,7 @@ pub fn run(
         Prior{ .games = eb.lane },
         Prior{ .games = eb.matchup },
     });
-    try fullDraft(gpa, &full.stats, tests, &predictors, 3, w);
+    try fullDraft(gpa, &full.stats, tests, predictors.items, 3, w);
 
     try w.print("\nCalibration by decile of prediction, {s}:\n\n", .{empirical.label});
     try calibration(gpa, &full.stats, tests, empirical, w);
@@ -186,7 +202,7 @@ pub fn run(
         .tests = tests.len,
         .gold = gold,
     };
-    for ([_]Predictor{ predictors[0], base_only, model, empirical, joint }, &line.results) |p, *out| {
+    for ([_]Predictor{ predictors.items[0], base_only, model, empirical, joint }, &line.results) |p, *out| {
         const r = try evaluate(gpa, &full.stats, tests, p);
         defer gpa.free(r.p);
         out.* = .{ .log_loss = r.m.log_loss, .auc = r.m.auc };
@@ -674,9 +690,10 @@ pub fn cutsOf(starts: []const i64, shares: struct { test_: f64 = test_share, dev
 }
 
 pub const Split = struct {
-    /// Every game older than the test cut, on any platform
+    /// Every game older than the test cut (dev: the dev cut), on any platform
     train: []const Game,
-    /// From the test cut on: every platform, or the region's games only
+    /// From the test cut on (dev: the dev-val window): every platform, or the region's
+    /// games only
     tests: []const Game,
     /// From the played games of every platform
     cuts: Cuts,
@@ -701,11 +718,13 @@ pub fn split(gpa: std.mem.Allocator, games: []Game, platforms: []const []const u
     defer starts.deinit(gpa);
     for (games) |g| if (g.duration_s >= min_duration_s) try starts.append(gpa, g.start);
     const cuts = opts.cuts orelse try cutsOf(starts.items, .{ .test_ = opts.test_share });
+    const cut = if (opts.dev) cuts.dev else cuts.test_;
     var n_train: usize = 0;
-    while (games[n_train].start < cuts.test_) n_train += 1;
+    while (games[n_train].start < cut) n_train += 1;
     var tests_list: std.ArrayList(Game) = .empty;
     errdefer tests_list.deinit(gpa);
     for (games[n_train..]) |g| {
+        if (opts.dev and g.start >= cuts.test_) break;
         if (test_platform == null or g.platform == test_platform.?) try tests_list.append(gpa, g);
     }
     if (tests_list.items.len == 0) return error.TooFewGames;
@@ -832,6 +851,7 @@ const Predictor = struct {
         /// Default options on this stats file (one with its fitted model), whatever
         /// stats file it is given
         shipped: *const core.Stats,
+        setnet: *const SetNets,
     },
 
     /// Per stats file: empirical priors become concrete options
@@ -852,7 +872,49 @@ const Predictor = struct {
             .model => |o| score.draftWin(st, o, g.teams),
             .weighted => |x| sigmoid(dot(x.w, features(score.draftTerms(st, x.opts, g.teams)))),
             .shipped => |x| score.draftWin(x, .{}, g.teams),
+            .setnet => |x| x.predict(g),
         };
+    }
+};
+
+/// Set net seeds on the shipped model's logit, as the admin Draft tester shows them: blue's
+/// chance the mean of the seeds'. The nets were fitted on a lab candidate's logit (additive
+/// v2 with damage mix and side terms), so on the shipped one this is the port's test
+const SetNets = struct {
+    nets: []const draftfile.SetNet,
+    shipped: *const core.Stats,
+    /// Per net, eval platform index -> the net's
+    plat: [][]u8,
+
+    /// cut: the scored window's start
+    fn init(gpa: std.mem.Allocator, nets: []const draftfile.SetNet, platforms: []const []const u8, shipped: *const core.Stats, cut: i64) !SetNets {
+        const plat = try gpa.alloc([]u8, nets.len);
+        var done: usize = 0;
+        errdefer {
+            for (plat[0..done]) |x| gpa.free(x);
+            gpa.free(plat);
+        }
+        for (nets, plat) |*n, *out| {
+            // 0: a file from before fit_newest was written
+            if (n.f.fit_newest == 0 or n.f.fit_newest >= cut) return error.SetNetSawScoredGames;
+            out.* = try gpa.alloc(u8, platforms.len);
+            done += 1;
+            for (platforms, out.*) |id, *o| o.* = n.platform(id) orelse return error.SetNetPlatformUnknown;
+        }
+        return .{ .nets = nets, .shipped = shipped, .plat = plat };
+    }
+
+    fn deinit(s: *SetNets, gpa: std.mem.Allocator) void {
+        for (s.plat) |x| gpa.free(x);
+        gpa.free(s.plat);
+    }
+
+    fn predict(s: *const SetNets, g: Game) f64 {
+        const q = score.draftWin(s.shipped, .{}, g.teams);
+        const base = @log(q / (1 - q));
+        var p: f64 = 0;
+        for (s.nets, s.plat) |*n, pl| p += sigmoid(n.logit(g.teams, pl[g.platform], base));
+        return p / @as(f64, @floatFromInt(s.nets.len));
     }
 };
 
@@ -1407,4 +1469,34 @@ test "split: one time cut over every platform from the played games, ties to the
     try std.testing.expectEqual(s.cuts, r.cuts);
     try std.testing.expectEqual(s.train.len, r.train.len);
     for (r.tests) |g| try std.testing.expectEqual(1, g.platform);
+
+    // dev: fit below the dev cut, score dev-val only, the same cuts
+    var d = try split(gpa, &games, &platforms, .{ .dev = true });
+    defer d.deinit(gpa);
+    try std.testing.expectEqual(s.cuts, d.cuts);
+    for (d.train) |g| try std.testing.expect(g.start < s.cuts.dev);
+    for (d.tests) |g| try std.testing.expect(g.start >= s.cuts.dev and g.start < s.cuts.test_);
+    try std.testing.expectEqual(s.train.len, d.train.len + d.tests.len);
+}
+
+test "set nets: refused when they saw the scored window or lack a platform" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const gpa = std.testing.allocator;
+    const file =
+        \\{{"format":"meiolol-setnet","version":1,"fit_newest":{d},"platforms":["NA1","EUW1"],
+        \\"phi":1,"rho":1,"emb":0,"cross":false,"n_prof":1,
+        \\"layout":{{"in":6,"rin":1,"c":0,"a":2,"b1":3,"cb":4,"e":5,"w1":5,"v":11,"out":12,"len":13}},
+        \\"params":[0.1,0.2,0.9,0,0,1,0,0,0,0,0,1,0.5],"ids":[],"profiles":[],"refs":[]}}
+    ;
+    const net: draftfile.SetNet = try .parse(arena, try arena.print(file, .{1000}));
+    const st: core.Stats = undefined;
+    var ok: SetNets = try .init(gpa, &.{net}, &.{ "EUW1", "NA1" }, &st, 1001);
+    defer ok.deinit(gpa);
+    try std.testing.expectEqualSlices(u8, &.{ 1, 0 }, ok.plat[0]);
+    try std.testing.expectError(error.SetNetSawScoredGames, SetNets.init(gpa, &.{net}, &.{"EUW1"}, &st, 1000));
+    const old: draftfile.SetNet = try .parse(arena, try arena.print(file, .{0}));
+    try std.testing.expectError(error.SetNetSawScoredGames, SetNets.init(gpa, &.{old}, &.{"EUW1"}, &st, 1001));
+    try std.testing.expectError(error.SetNetPlatformUnknown, SetNets.init(gpa, &.{net}, &.{ "EUW1", "KR" }, &st, 1001));
 }

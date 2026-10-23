@@ -4,6 +4,7 @@
 const std = @import("std");
 const stats = @import("../stats.zig");
 const eval = @import("../eval.zig");
+const draftfile = @import("../draftfile.zig");
 const ddragon = @import("../ddragon.zig");
 const replay = @import("../replay.zig");
 const objectives = @import("../objectives.zig");
@@ -55,6 +56,12 @@ pub const usage_eval =
     \\                               alone with every --platform pooled
     \\              --history FILE   append one TSV line (date, sizes, log loss and AUC
     \\                               per model) for the accuracy-vs-data curve
+    \\              --dev            score the protocol's dev-val window, fitting below
+    \\                               the dev cut (no test game scored)
+    \\              --setnet FILE    a lab set net seed (setnet-s<seed>.json, netcheck
+    \\                               --export 1; repeat for more seeds) as a correction
+    \\                               on the current model, one more row; it must have
+    \\                               seen no game of the scored window
     \\              --replay         only the pool and expertise replay, on a snapshot
     \\                               with mastery_pre.tsv and mastery_pre_pool.tsv
     \\                               (meiolol-lab mastery-pre); fits lanecard.Expertise
@@ -66,6 +73,7 @@ pub fn cmdEval(c: *Cmd) !u8 {
     var o: eval.Options = .{};
     var history: ?[]const u8 = null;
     var replay_only = false;
+    var setnets: std.ArrayList(draftfile.SetNet) = .empty;
     while (c.next()) |_| {
         if (try g.parse(c) or try heldOut(c, &o)) continue;
         if (c.is("--folds")) {
@@ -75,9 +83,17 @@ pub fn cmdEval(c: *Cmd) !u8 {
             history = try c.value();
         } else if (c.is("--replay")) {
             replay_only = true;
+        } else if (c.is("--dev")) {
+            o.dev = true;
+        } else if (c.is("--setnet")) {
+            const bytes = try std.Io.Dir.cwd().readFileAlloc(c.init.io, try c.value(), c.arena, .limited(64 << 20));
+            try setnets.append(c.arena, try .parse(c.arena, bytes));
         } else return error.Usage;
     }
+    o.setnets = setnets.items;
+    // The history is the daily's test-window line of the shipped models
     if (replay_only and history != null) return error.Usage;
+    if (history != null and (o.dev or o.setnets.len > 0)) return error.Usage;
     const io = c.init.io;
     const db = try c.open();
     defer db.close();
