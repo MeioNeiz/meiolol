@@ -18,6 +18,7 @@ pub const learning = @import("learning.zig");
 pub const spread = @import("spread.zig");
 pub const patchday = @import("patchday.zig");
 pub const eval = @import("eval.zig");
+pub const fitted = @import("fitted.zig");
 pub const outcomes = @import("outcomes.zig");
 pub const objectives = @import("objectives.zig");
 pub const winchance = @import("winchance.zig");

@@ -1,4 +1,4 @@
-//! `meiolol-lab effects SNAP`: the shrunk additive draft model (lab/additive.zig) on
+//! `meiolol-lab effects SNAP`: the shrunk additive draft model (src/additive.zig) on
 //! netcheck's blocks (dev-val and win-comp's 5 forward folds, every fit from the block's
 //! fit games only), paired per game with the -Dcand candidate (win-ratings) fitted on the
 //! same games. Variants nest families of terms, so each family's held-out gain shows;
@@ -20,7 +20,7 @@ const rows = @import("rows.zig");
 const protocol = @import("protocol.zig");
 const harness = @import("harness.zig");
 const seatstats = @import("seatstats.zig");
-const additive = @import("additive.zig");
+const additive = @import("../additive.zig");
 const addinputs = @import("addinputs.zig");
 const par = @import("../par.zig");
 const winnet = @import("winnet.zig");

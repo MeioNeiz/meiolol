@@ -20,6 +20,7 @@ src/
   pool.zig           Pool: who mains X also plays Y, hard-lane options, ban fallback
   learning.zig       how hard champions are to pick up: win rate by mastery points
   stats.zig          model file from the matches table (`meiolol stats`)
+  fitted.zig         the draft model in it (additive v2 on its games; additive.zig fits)
   partials.zig       views partials (data/partials): the views write's games and mastery
                      contributions kept between writes ("Views partials")
   eval.zig           draft model on held-out newer games (`meiolol eval`, docs/model.md)
@@ -265,7 +266,10 @@ when Riot rejects the key; deploy/box.sh's restart loop stops on it.
 ## Model file (src/core/statsfile.zig)
 
 The contract between backend and app: `MEIOSTAT` v1, champion-role games/wins plus
-dense ally and enemy pair tables per role pair (~12 MB). Format spelled out at the top
+dense ally and enemy pair tables per role pair (~12 MB). v2 adds the fitted draft model
+(src/fitted.zig: additive v2 on the file's own played games, f16, both orientations,
++6 MB raw, ~+0.7 MB gzipped), which core.score drafts with; the site's views and
+`meiolol stats` write v2, every other builder v1. Format spelled out at the top
 of statsfile.zig; bump the version on any change. Written by `meiolol stats` (default:
 newest patch; `--patch 16.19,16.20` for several; `--platform` picks platforms, default
 EUW1, since the site says EUW) to data/export/stats-<patch>.bin. Only ranked solo
@@ -532,7 +536,9 @@ DraftGap-style additive log-odds: champion base rating plus synergy with allies 
 matchups against enemies, each pair smoothed toward what the two base ratings predict
 (prior games, default 1000), so sparse pairs contribute ~0. Unknown roles (enemies in
 ranked) inferred by brute force over role permutations using play rates. Returns
-several options with reasons. A trained model replaces this later behind the same API.
+several options with reasons. From 23 Oct a stats file with a fitted model (v2) scores
+drafts with that instead (additive v2: each block's shrinkage estimated, not a fixed
+prior; Options.fitted); page rates (roleWin, duoPp, matchupPp) keep the counts.
 draftTerms/draftWin score a full draft (eval, Daily Draft). How well it predicts:
 docs/model.md.
 

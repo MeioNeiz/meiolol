@@ -2783,7 +2783,7 @@ look. Unit: win percentage points at 50% (logit x 25); gold for gold at 14.
 
 #### One shrunk additive draft model
 
-`meiolol-lab effects SNAP` (src/lab/effects.zig on src/lab/additive.zig). Blue's logit =
+`meiolol-lab effects SNAP` (src/lab/effects.zig on src/src/additive.zig). Blue's logit =
 platform side + champion strength per role (blue minus red) + 10 ally role-pair blocks
 (one cell per champion pair) + 25 enemy role-pair blocks (my role r x their role q) +
 win-comp's damage mix (blue minus red (f - 0.5)^2, profiles from the fit games, own rows
@@ -2879,7 +2879,7 @@ run low: ally pairs planted at 2 pp came out 1.21 on average (0.6x; 1 of 10 inte
 covered 2), at 4 pp 2.99 (0.75x, 0 of 10), lane matchups at 2 pp 0.9x. So read the ally
 and matchup sds as lower bounds and their upper ends as too low, by up to ~1.7x for the
 ally blocks (bottom-support 1.21 may be ~2 pp). Cause (unit plant, 20k games, one pair
-block; test "planted pair sd: gaussian recovered ..." in src/lab/additive.zig, 4 seeds per
+block; test "planted pair sd: gaussian recovered ..." in src/src/additive.zig, 4 seeds per
 row in the numbers below, one in the test): the known downward bias of Laplace-type variance estimates on binary outcomes
 with few games per cell, not the diagonal posterior. The same block planted on a
 gaussian outcome comes back at 0.97-1.04x at 6-180 games per cell; on win it comes back
@@ -4810,7 +4810,7 @@ Reading (dev, no test look):
   are `--cross 0`
 
 On additive v2 as the base (src/lab/cand/win-additive, d968495: additive v2's full model
-as a candidate, a copy of lab/additive.zig and addinputs' mix; reproduces `effects --param
+as a candidate, a copy of src/additive.zig and addinputs' mix; reproduces `effects --param
 v2` within 1e-6 on all 60,022 fold 1 games, fit 8.8 s on 300k games). Declared before any
 run on it: same rule as above (sealed seeds 4-6 with 2.1x, resamples 1 and 2, permuted
 control). Development (seeds 1-3, run 20261018T014345Z-nd-setid-wa, Mac; reported, not
@@ -5094,6 +5094,29 @@ for a new champion or a one-trick favourite a tier list should show strength at 
 mastery. Next: the refit itself (strength with seat log mastery in the model, not this
 correction) on the new pin, and the slope's own interval; the lane card's expertise
 bonus counts this twice for one-trick champions.
+
+## Shipped model, 2026-10-23: additive v2 in the stats file
+
+Drafts (app suggest, the site's draft helper, Daily Draft, Learn, lane cards, pool) now
+score with additive v2 without its damage mix (src/fitted.zig on src/additive.zig, moved
+out of the lab), fitted on each stats file's own played games (15:00+) and written into
+it as statsfile v2: f16 logits, pair cells under 20 games 0 (the lab export's floor),
+no side term. Each site view fits its own (4 fits a site round; 878k games: +18 s and a
+744 MB peak on the Mac); `meiolol stats` too. Page rates (roleWin, duoPp, matchupPp)
+keep the counts; score.Options.fitted false gives the 17 Oct counts model. The desktop
+copy is stripped back to v1 (deploy/web-loop.sh strip_fitted) until a desktop release
+reads v2.
+
+Eval on snap-20261018T1007Z's database (877,814 games, every platform, test 131,746
+newest, 15 to 18 Oct), shipped form against the counts model: log loss 0.6860 against
+0.6864, -0.00036 ± 0.00021, AUC 0.567 against 0.566, accuracy 54.8% against 54.6%. The
+same fit unfloored with its platform side terms: -0.0007 ± 0.0002, so the floor and the
+side cost ~0.0003 (side alone ~0.0001: blue side rate vs coin); floors 0 and 5 were
+being measured at handover. Pick metric: winners' picks rank 0.670 vs losers' 0.648
+(counts 0.682 vs 0.664), AUC 0.522 both. From 23 Oct the daily eval's "current model"
+and eval-history's ll_current are this model; ll_counts, d_current_counts and
+ci_current_counts keep the counts model beside it. The damage mix (~0.7 milli-nats more
+in the lab) needs per-champion-role profiles on the box (seat stats decision).
 
 ## Shipped model, 2026-10-17
 

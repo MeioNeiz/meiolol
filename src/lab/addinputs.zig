@@ -1,4 +1,4 @@
-//! Fit inputs of the additive draft model (lab/additive.zig), shared by `effects` and
+//! Fit inputs of the additive draft model (src/additive.zig), shared by `effects` and
 //! `draft --export --model additive` so the shipped model is the one evaluated: outcomes,
 //! a game's rows, and win-comp's damage mix
 
@@ -6,7 +6,7 @@ const std = @import("std");
 const api = @import("api");
 const rows = @import("rows.zig");
 const seatstats = @import("seatstats.zig");
-const A = @import("additive.zig");
+const A = @import("../additive.zig");
 
 /// win-comp's mix term (cand/win-comp teamForms): per champion-role, magic share of
 /// champion damage and damage per minute, means over won and lost rows separately, each

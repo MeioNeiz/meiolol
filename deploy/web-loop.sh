@@ -122,6 +122,18 @@ storage_scan() {
 # 22 Oct. The zip people download is the exe and that key as update.key: the app fetches
 # its data on first start and keeps it and itself current. All made again when an input
 # changed, the curves' .gz only when they did
+# Released exes from before 23 Oct read stats files v1 only: the fitted draft model
+# (src/core/statsfile.zig v2, its last 2 x (5n + 50n^2) bytes) stays out of theirs.
+# Drop this after the next deploy/desktop-release.sh
+strip_fitted() {
+    local f=$1 n keep
+    [[ $(od -An -tu4 -j8 -N4 "$f" | tr -d ' ') == 2 ]] || return 0
+    n=$(od -An -tu4 -j12 -N4 "$f" | tr -d ' ')
+    keep=$(( $(wc -c < "$f") - 2 * (5 * n + 50 * n * n) ))
+    { printf 'MEIOSTAT\001\000\000\000'; tail -c +13 "$f" | head -c $((keep - 12)); } > "$f.v1"
+    mv "$f.v1" "$f"
+}
+
 desktop_files() {
     local d=data/desktop.new inputs
     [[ -f release/meiolol-desktop.exe && -f data/export/recent-curves.bin && -n "$patch" ]] \
@@ -134,6 +146,7 @@ desktop_files() {
         rm -rf "$d"
         return 1
     fi
+    strip_fitted "$d/stats.bin"
     # The curves by size and time, not content: 80 MB to read every round
     inputs=$(sha256sum "$d/stats.bin" release/meiolol-desktop.exe release/meiolol-desktop.json \
         desktop.token | cut -d' ' -f1 && stat -c '%s %Y' data/export/recent-curves.bin \

@@ -5,6 +5,7 @@ const store = @import("store");
 const core = @import("core");
 const statsfile = core.statsfile;
 const partials = @import("partials.zig");
+const fitted = @import("fitted.zig");
 const Role = core.Role;
 
 const log = std.log.scoped(.stats);
@@ -42,7 +43,7 @@ pub const PatchGames = struct {
 /// remakes, a winner, all ten positions) into a builder made from the champions table.
 /// Caller owns the builder.
 pub fn build(gpa: std.mem.Allocator, db: store.Db, chosen: []const []const u8, platforms: []const []const u8) !Built {
-    return buildSince(gpa, db, chosen, platforms, 0);
+    return buildSince(gpa, db, chosen, platforms, 0, false);
 }
 
 pub const Built = struct {
@@ -50,19 +51,24 @@ pub const Built = struct {
     summary: Summary,
 };
 
-/// As build, games started from `since_ms` (Unix ms) only
+/// As build, games started from `since_ms` (Unix ms) only; `fit`: with the draft model
+/// fitted on them (fitted.zig), what the site and app score with
 pub fn buildSince(
     gpa: std.mem.Allocator,
     db: store.Db,
     chosen: []const []const u8,
     platforms: []const []const u8,
     since_ms: i64,
+    fit: bool,
 ) !Built {
     const champs = try champions(gpa, db);
     defer freeChampions(gpa, champs);
     var b: statsfile.Builder = try .init(gpa, champs);
     errdefer b.deinit();
-    const summary = try scan(gpa, db, chosen, platforms, since_ms, BuilderSink{ .b = &b });
+    var games: fitted.Games = .{ .gpa = gpa };
+    defer games.deinit();
+    const summary = try scan(gpa, db, chosen, platforms, since_ms, BuilderSink{ .b = &b, .games = if (fit) &games else null });
+    try games.attachTo(&b);
     return .{ .builder = b, .summary = summary };
 }
 
@@ -74,20 +80,26 @@ pub fn buildFrom(
     chosen: []const []const u8,
     platforms: []const []const u8,
     since_ms: i64,
+    fit: bool,
 ) !Built {
     const champs = try champions(gpa, db);
     defer freeChampions(gpa, champs);
     var b: statsfile.Builder = try .init(gpa, champs);
     errdefer b.deinit();
-    const summary = try scanFrom(gpa, games, chosen, platforms, since_ms, BuilderSink{ .b = &b });
+    var played: fitted.Games = .{ .gpa = gpa };
+    defer played.deinit();
+    const summary = try scanFrom(gpa, games, chosen, platforms, since_ms, BuilderSink{ .b = &b, .games = if (fit) &played else null });
+    try played.attachTo(&b);
     return .{ .builder = b, .summary = summary };
 }
 
 const BuilderSink = struct {
     b: *statsfile.Builder,
+    games: ?*fitted.Games = null,
 
     fn add(s: BuilderSink, r: Row) !void {
         s.b.addGame(r.teams, r.winner);
+        if (s.games) |g| try g.add(r.teams, r.winner, r.platform, r.duration_s);
     }
 };
 

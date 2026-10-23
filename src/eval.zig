@@ -22,6 +22,7 @@ const par = @import("par.zig");
 const Date = @import("date.zig").Date;
 const tsvlog = @import("tsvlog.zig");
 const analysis = @import("analysis.zig");
+const fitted = @import("fitted.zig");
 const score = core.score;
 const Role = core.Role;
 
@@ -92,10 +93,14 @@ pub fn run(
     for (train) |g| blue_wins += @floatFromInt(1 - @as(u2, g.winner));
     const blue_rate = blue_wins / @as(f64, @floatFromInt(train.len));
 
-    const current: score.Options = .{};
-    const previous: score.Options = .{ .base_prior_games = 1000, .prior_games = 1000, .weights = .{} };
+    // The site's and app's: additive v2 in the stats file (fitted.zig), from 23 Oct
+    var shipped: Model = try .buildShipped(gpa, champs, train);
+    defer shipped.deinit(gpa);
+    const counts_opts: score.Options = .{ .fitted = false };
+    const previous: score.Options = .{ .base_prior_games = 1000, .prior_games = 1000, .weights = .{}, .fitted = false };
     const base_only: Predictor = .{ .label = "champion base only", .kind = .{ .base = previous } };
-    const model: Predictor = .{ .label = "current model", .kind = .{ .model = current } };
+    const model: Predictor = .{ .label = "current model (additive v2)", .kind = .{ .shipped = &shipped.stats } };
+    const counts: Predictor = .{ .label = "counts model (17 Oct)", .kind = .{ .model = counts_opts } };
     const before: Predictor = .{ .label = "previous model (1000/1000)", .kind = .{ .model = previous } };
     const tuned_priors: Predictor = .{ .label = "tuned priors", .kind = .{ .model = tuned.opts } };
     const weighted: Predictor = .{ .label = "tuned + term weights", .kind = .{ .weighted = .{
@@ -111,6 +116,7 @@ pub fn run(
         .{ .label = "blue side rate", .kind = .{ .side = blue_rate } },
         base_only,
         model,
+        counts,
         before,
         tuned_priors,
         weighted,
@@ -144,7 +150,7 @@ pub fn run(
         var tests_np: std.ArrayList(Game) = .empty;
         defer tests_np.deinit(gpa);
         for (tests) |g| if (g.patch == newest) try tests_np.append(gpa, g);
-        const subset = [_]Predictor{ base_only, model, tuned_priors, empirical };
+        const subset = [_]Predictor{ base_only, counts, tuned_priors, empirical };
         try fullDraft(gpa, &sp.stats, tests_np.items, &subset, 1, w);
         try w.writeAll("\nSame test games, trained on every patch:\n\n");
         try fullDraft(gpa, &full.stats, tests_np.items, &subset, 1, w);
@@ -157,7 +163,7 @@ pub fn run(
         if (own.items.len > 0 and own.items.len < train.len) {
             var m: Model = try .build(gpa, champs, own.items, null);
             defer m.deinit(gpa);
-            const subset = [_]Predictor{ base_only, model, empirical };
+            const subset = [_]Predictor{ base_only, counts, empirical };
             try w.print("\nTrained on {s} games only ({d}):\n\n", .{ platforms[tp], own.items.len });
             try fullDraft(gpa, &m.stats, tests, &subset, 1, w);
             try w.print("\nTrained on every platform ({d}):\n\n", .{train.len});
@@ -194,6 +200,12 @@ pub fn run(
         line.tunedw = .{ .log_loss = tw.m.log_loss, .auc = tw.m.auc };
         line.eb_vs_base = pairedDiff(eb_r.p, base.p, tests);
         line.tunedw_vs_base = pairedDiff(tw.p, base.p, tests);
+        const cur = try evaluate(gpa, &full.stats, tests, model);
+        defer gpa.free(cur.p);
+        const old = try evaluate(gpa, &full.stats, tests, counts);
+        defer gpa.free(old.p);
+        line.counts = .{ .log_loss = old.m.log_loss, .auc = old.m.auc };
+        line.current_vs_counts = pairedDiff(cur.p, old.p, tests);
     }
 
     try w.writeAll("\n## Pick metric\n\n");
@@ -201,7 +213,7 @@ pub fn run(
         "percentile of the champion actually picked among candidates (1 = model's top).\n\n");
     try w.writeAll("| model | picks ranked | winners' mean pct | losers' mean pct | " ++
         "AUC pct vs win | win rate, picks in model's top 10% |\n| --- | --- | --- | --- | --- | --- |\n");
-    for ([_]Predictor{ model, tuned_priors, empirical }, 0..) |p, i| {
+    for ([_]Predictor{ model, counts, empirical }, 0..) |p, i| {
         const r = try pickMetric(gpa, io, &full.stats, tests, p, opts.pick_min_games, w);
         if (i == 0) line.pick = r;
     }
@@ -211,7 +223,7 @@ pub fn run(
 
     try w.writeAll("\n## Learning curve\n\nSame test games, models from the newest N train games.\n\n");
     try w.writeAll("Log loss, and AUC for empirical Bayes:\n\n| train games | base only | " ++
-        "current | tuned priors | tuned + weights | empirical Bayes | joint ratings | AUC (EB) |\n");
+        "counts (17 Oct) | tuned priors | tuned + weights | empirical Bayes | joint ratings | AUC (EB) |\n");
     try w.writeAll("| --- | --- | --- | --- | --- | --- | --- | --- |\n");
     var size: usize = 250;
     while (true) : (size *= 2) {
@@ -223,7 +235,7 @@ pub fn run(
         defer gpa.free(jw);
         try w.print("| {d} |", .{n});
         var eb_auc: f64 = 0;
-        for ([_]Predictor{ base_only, model, tuned_priors, weighted, empirical, .{
+        for ([_]Predictor{ base_only, counts, tuned_priors, weighted, empirical, .{
             .label = "joint",
             .kind = .{ .joint = jw },
         } }) |p| {
@@ -259,6 +271,9 @@ pub const History = struct {
     tunedw_vs_base: analysis.Gain = undefined,
     /// The current model's picks
     pick: PickResult = undefined,
+    /// The counts model, current until 23 Oct, and the current one's paired gain over it
+    counts: Result = undefined,
+    current_vs_counts: analysis.Gain = undefined,
 
     // Columns only ever added at the end (tsvlog)
     pub const header = "date\tplatforms\ttest_platform\tgames\ttrain\ttest\t" ++
@@ -266,7 +281,8 @@ pub const History = struct {
         "auc_base\tauc_current\tauc_eb\tauc_joint\t" ++
         "gold_test\tll_eb_gold_subset\tll_gold\tauc_gold\t" ++
         "ll_tunedw\tauc_tunedw\td_eb_base\tci_eb_base\td_tunedw_base\tci_tunedw_base\t" ++
-        "pick_top10\tpick_top10_win\tpick_auc\n";
+        "pick_top10\tpick_top10_win\tpick_auc\t" ++
+        "ll_counts\tauc_counts\td_current_counts\tci_current_counts\n";
 
     pub fn write(h: History, w: *std.Io.Writer, date: []const u8) !void {
         try w.print("{s}\t{d}\t{s}\t{d}\t{d}\t{d}", .{
@@ -279,7 +295,9 @@ pub const History = struct {
         } else try w.writeAll("\t0\t\t\t");
         try w.print("\t{d:.5}\t{d:.4}", .{ h.tunedw.log_loss, h.tunedw.auc });
         for ([_]analysis.Gain{ h.eb_vs_base, h.tunedw_vs_base }) |d| try w.print("\t{d:.5}\t{d:.5}", .{ d.mean, d.half_width });
-        try w.print("\t{d}\t{d:.4}\t{d:.4}\n", .{ h.pick.top_n, h.pick.top_win, h.pick.auc });
+        try w.print("\t{d}\t{d:.4}\t{d:.4}", .{ h.pick.top_n, h.pick.top_win, h.pick.auc });
+        const c = h.current_vs_counts;
+        try w.print("\t{d:.5}\t{d:.4}\t{d:.5}\t{d:.5}\n", .{ h.counts.log_loss, h.counts.auc, c.mean, c.half_width });
     }
 };
 
@@ -715,12 +733,31 @@ pub const Model = struct {
         games: []const Game,
         skip: ?Fold,
     ) !Model {
+        return buildWith(gpa, champs, games, skip, false);
+    }
+
+    /// As the site and app get it: with the draft model fitted on `games` (fitted.zig)
+    pub fn buildShipped(gpa: std.mem.Allocator, champs: []const core.statsfile.Champion, games: []const Game) !Model {
+        return buildWith(gpa, champs, games, null, true);
+    }
+
+    fn buildWith(
+        gpa: std.mem.Allocator,
+        champs: []const core.statsfile.Champion,
+        games: []const Game,
+        skip: ?Fold,
+        fit: bool,
+    ) !Model {
         var b: core.statsfile.Builder = try .init(gpa, champs);
         defer b.deinit();
+        var played: fitted.Games = .{ .gpa = gpa };
+        defer played.deinit();
         for (games, 0..) |g, i| {
             if (skip) |f| if (i % f.folds == f.k) continue;
             b.addGame(g.teams, g.winner);
+            if (fit) try played.add(g.teams, g.winner, g.platform, g.duration_s);
         }
+        try played.attachTo(&b);
         var aw: std.Io.Writer.Allocating = .init(gpa);
         defer aw.deinit();
         try b.write(&aw.writer, "eval");
@@ -791,6 +828,9 @@ const Predictor = struct {
         joint: []const f64,
         /// Draft terms plus lane gold, weighted (goldStack)
         gold: struct { opts: score.Options, gm: *const lanegold.Model, w: Weights },
+        /// Default options on this stats file (one with its fitted model), whatever
+        /// stats file it is given
+        shipped: *const core.Stats,
     },
 
     /// Per stats file: empirical priors become concrete options
@@ -810,6 +850,7 @@ const Predictor = struct {
             .base => |o| sigmoid(score.draftTerms(st, o, g.teams).base),
             .model => |o| score.draftWin(st, o, g.teams),
             .weighted => |x| sigmoid(dot(x.w, features(score.draftTerms(st, x.opts, g.teams)))),
+            .shipped => |x| score.draftWin(x, .{}, g.teams),
         };
     }
 };
@@ -1149,8 +1190,13 @@ fn pickMetric(
     min_games: u32,
     w: *std.Io.Writer,
 ) !PickResult {
+    var pst = st;
     var candidates = switch (pr.on(st).kind) {
         .model => |o| o,
+        .shipped => |x| blk: {
+            pst = x;
+            break :blk score.Options{};
+        },
         else => unreachable,
     };
     candidates.min_games = min_games;
@@ -1194,7 +1240,7 @@ fn pickMetric(
     };
     try par.forEach(io, games.len, Rank{
         .gpa = gpa,
-        .st = st,
+        .st = pst,
         .games = games,
         .candidates = candidates,
         .ranked = ranked,

@@ -4,7 +4,7 @@
 //! ally role-pair blocks + 15 identified matchup blocks + win-comp's damage mix, each
 //! block a random effect with its own variance (MacKay's fixed point), fitted by block
 //! Gauss-Seidel Newton steps.
-//! A copy, as a candidate imports only std and api: keep in step with lab/additive.zig
+//! A copy, as a candidate imports only std and api: keep in step with src/additive.zig
 //! (key, cells, build, fit, predict; logistic only, no weights or warm start) and
 //! lab/addinputs.zig (Mix, fullVariant(true, 1))
 

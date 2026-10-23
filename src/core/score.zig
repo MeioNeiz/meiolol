@@ -61,6 +61,11 @@ pub const Options = struct {
     weights: TermWeights = .{ .base = 0.943, .duo = 0.765, .lane = 2.025, .matchup = 1.009 },
     /// Reasons worth less than this many percentage points are left out
     min_reason_pp: f64 = 0.1,
+    /// Drafts score with the stats file's fitted model when it has one (statsfile version
+    /// 2): its terms replace the smoothed counts, priors and weights. min_games, role
+    /// inference and reasons' games still read the counts; page rates (roleWin, duoPp,
+    /// matchupPp) always do
+    fitted: bool = true,
 };
 
 pub const Reason = struct {
@@ -111,7 +116,7 @@ pub fn recommend(
 
     // Everything that does not involve my pick
     var fixed: f64 = 0;
-    const wb = opts.weights.base;
+    const wb = ctx.weights().base;
     for (allies, 0..) |a, i| {
         fixed += wb * a.base;
         for (allies[i + 1 ..]) |b| fixed += ctx.duo(a, b);
@@ -185,20 +190,20 @@ pub fn describe(
 
 /// Stats pages: champion `c`'s winrate in role `r`, smoothed toward 50%, 0..1
 pub fn roleWin(stats: *const Stats, opts: Options, c: usize, r: Role) f64 {
-    const ctx: Context = .{ .stats = stats, .opts = opts };
+    const ctx: Context = .counts(stats, opts);
     return sigmoid(ctx.base(c, r));
 }
 
 /// Stats pages: percentage points `c` in `r` gains alongside ally `a` in `ar`, beyond
 /// what the two champions' own ratings predict, in an otherwise even game
 pub fn duoPp(stats: *const Stats, opts: Options, r: Role, c: usize, ar: Role, a: usize) f64 {
-    const ctx: Context = .{ .stats = stats, .opts = opts };
+    const ctx: Context = .counts(stats, opts);
     return evenPp(ctx.duo(ctx.place(c, r), ctx.place(a, ar)));
 }
 
 /// Stats pages: as duoPp, against enemy `e` in `er`
 pub fn matchupPp(stats: *const Stats, opts: Options, r: Role, c: usize, er: Role, e: usize) f64 {
-    const ctx: Context = .{ .stats = stats, .opts = opts };
+    const ctx: Context = .counts(stats, opts);
     return evenPp(ctx.matchup(ctx.place(c, r), ctx.place(e, er)));
 }
 
@@ -206,7 +211,7 @@ pub fn matchupPp(stats: *const Stats, opts: Options, r: Role, c: usize, er: Role
 /// a draft's logit is the sum of its terms (the admin Draft tester's file, draftmodel.zig)
 pub fn baseLogit(stats: *const Stats, opts: Options, c: usize, r: Role) f64 {
     const ctx: Context = .{ .stats = stats, .opts = opts };
-    return opts.weights.base * ctx.base(c, r);
+    return ctx.weights().base * ctx.base(c, r);
 }
 
 /// Allies `c` in `r` and `a` in `ar` (different roles), as baseLogit
@@ -271,7 +276,8 @@ pub fn draftTerms(stats: *const Stats, opts: Options, teams: [2][5]u32) DraftTer
 
 /// Side 0's win chance for a full draft, 0..1 (see draftTerms)
 pub fn draftWin(stats: *const Stats, opts: Options, teams: [2][5]u32) f64 {
-    return sigmoid(draftTerms(stats, opts, teams).weighted(opts.weights));
+    const ctx: Context = .{ .stats = stats, .opts = opts };
+    return sigmoid(draftTerms(stats, opts, teams).weighted(ctx.weights()));
 }
 
 /// Standard error of draftTerms' weighted log-odds under the model's own assumptions:
@@ -279,7 +285,7 @@ pub fn draftWin(stats: *const Stats, opts: Options, teams: [2][5]u32) f64 {
 /// summed as independent. Says how sure the model is given its priors, not how well it
 /// predicts games
 pub fn draftSe(stats: *const Stats, opts: Options, teams: [2][5]u32) f64 {
-    const w = opts.weights;
+    const w = (Context{ .stats = stats, .opts = opts }).weights();
     const termVar = struct {
         fn f(weight: f64, n: u32, k: f64) f64 {
             return weight * weight * 4 / (@as(f64, @floatFromInt(n)) + k);
@@ -430,7 +436,23 @@ const Context = struct {
     ally_buf: [4]Placed = undefined,
     enemy_buf: [5]Placed = undefined,
 
+    fn counts(stats: *const Stats, opts: Options) Context {
+        var o = opts;
+        o.fitted = false;
+        return .{ .stats = stats, .opts = o };
+    }
+
+    fn fitted(ctx: *const Context) bool {
+        return ctx.opts.fitted and ctx.stats.fitted_bytes != null;
+    }
+
+    /// A fitted model's terms are on the logit scale already
+    fn weights(ctx: *const Context) TermWeights {
+        return if (ctx.fitted()) .{} else ctx.opts.weights;
+    }
+
     fn base(ctx: *const Context, c: usize, r: Role) f64 {
+        if (ctx.fitted()) return ctx.stats.fittedBase(r, c).?;
         const k = ctx.opts.base_prior_games;
         const cr = ctx.stats.champRole(r, c);
         return logit((@as(f64, @floatFromInt(cr.wins)) + 0.5 * k) /
@@ -458,23 +480,25 @@ const Context = struct {
 
     fn duoDelta(ctx: *const Context, a: Placed, b: Placed) f64 {
         if (a.role == b.role) return 0;
+        if (ctx.fitted()) return ctx.stats.fittedAlly(a.role, b.role, a.c, b.c).?;
         const pair = ctx.stats.ally(a.role, b.role, a.c, b.c);
         return pairDelta(pair, a.base + b.base, ctx.opts.duo_prior_games orelse ctx.opts.prior_games);
     }
 
     /// From `a`'s side
     fn matchupDelta(ctx: *const Context, a: Placed, e: Placed) f64 {
+        if (ctx.fitted()) return ctx.stats.fittedEnemy(a.role, e.role, a.c, e.c).?;
         const pair = ctx.stats.enemy(a.role, e.role, a.c, e.c);
         const k = if (a.role == e.role) ctx.opts.lane_prior_games else ctx.opts.matchup_prior_games;
         return pairDelta(pair, a.base - e.base, k orelse ctx.opts.prior_games);
     }
 
     fn duo(ctx: *const Context, a: Placed, b: Placed) f64 {
-        return ctx.opts.weights.duo * ctx.duoDelta(a, b);
+        return ctx.weights().duo * ctx.duoDelta(a, b);
     }
 
     fn matchup(ctx: *const Context, a: Placed, e: Placed) f64 {
-        const w = if (a.role == e.role) ctx.opts.weights.lane else ctx.opts.weights.matchup;
+        const w = if (a.role == e.role) ctx.weights().lane else ctx.weights().matchup;
         return w * ctx.matchupDelta(a, e);
     }
 
@@ -583,7 +607,7 @@ const Context = struct {
         const Term = struct { reason: Reason, x: f64 };
         var terms: [1 + 4 + 5]Term = undefined;
         var n: usize = 0;
-        terms[n] = .{ .x = ctx.opts.weights.base * me.base, .reason = .{
+        terms[n] = .{ .x = ctx.weights().base * me.base, .reason = .{
             .kind = .base,
             .champion = me.id,
             .role = role,

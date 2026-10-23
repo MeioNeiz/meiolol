@@ -25,6 +25,12 @@ How to write a line:
 
 ## Win
 
+- 2026-10-23: Suggestions and the draft helper now judge picks with a model that learns
+  how much each kind of pair (duo, lane opponent, other matchup) really matters instead
+  of one fixed rule, and it predicts held-out games slightly better than the old one
+  (54.8% against 54.6% right). Sure: 131,746 newest games of the 1007Z database,
+  -0.00036 ± 0.00021 nats a game. Site: live for drafts; page win rates unchanged.
+  Evidence: docs/model.md "Shipped model, 2026-10-23"
 - 2026-10-22 (early): Blending several of our draft models predicts the winner a little
   better than the best one alone: a weighted mix that turns the neural nets' corrections
   up beats the best single model (a set net on additive v2) by 0.49 ± 0.09 milli-nats a

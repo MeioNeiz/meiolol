@@ -185,7 +185,7 @@ pub const Params = struct {
     temperature: f64 = 1,
 };
 
-/// Pair cells (the additive model's, lab/additive.zig v2, and the shipped model's duos and
+/// Pair cells (the additive model's, src/additive.zig v2, and the shipped model's duos and
 /// matchups, draftmodel.zig): one cell per pair of champions,
 /// allies in roles r < q, or a matchup of blue's role r against red's role q (r <= q; red's
 /// r against blue's q is the same cell negated; a same-role matchup one cell per unordered

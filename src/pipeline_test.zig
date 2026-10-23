@@ -200,6 +200,12 @@ test "fixture games to stats, curves and the website" {
             return err;
         };
     }
+    // The draft helper's model file carries the fitted draft model (fitted.zig)
+    {
+        const bytes = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "data/stats.bin" }), arena, .limited(64 << 20));
+        const helper: core.Stats = try .parse(arena, bytes);
+        try testing.expect(helper.fitted_bytes != null);
+    }
     // Build page: three games, so no bare win rates; the champion page (root view) links
     // into the patch view's
     const pages = [_]struct { []const u8, []const []const u8 }{

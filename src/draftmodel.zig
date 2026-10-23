@@ -1,5 +1,6 @@
-//! `meiolol draft-model`: the shipped draft model (core.score with its default options, as
-//! the site and app score drafts) on every played game in the database, every platform and
+//! `meiolol draft-model`: the shipped draft model (core.score with its default options on a
+//! stats file with its fitted model, fitted.zig, as the site and app score drafts) on every
+//! played game in the database, every platform and
 //! patch, as the admin Draft tester's draft-model.json and draft-ref.json (draftfile.zig,
 //! docs/model.md "Draft model file"). Daily on the box (deploy/web-loop.sh), so the tester
 //! follows the data without the lab; `meiolol-lab draft --export` writes the same files
@@ -48,7 +49,7 @@ pub fn run(gpa: std.mem.Allocator, io: std.Io, db: store.Db, dir: []const u8, w:
 
     const champs = try stats.champions(gpa, db);
     defer stats.freeChampions(gpa, champs);
-    var full = try eval.Model.build(gpa, champs, games, null);
+    var full = try eval.Model.buildShipped(gpa, champs, games);
     defer full.deinit(gpa);
     const st = &full.stats;
     const info = try champions(arena, st, games);
@@ -96,8 +97,8 @@ fn champions(arena: std.mem.Allocator, st: *const core.Stats, games: []const Gam
 
 const role_names = [n_role][]const u8{ "top", "jungle", "middle", "bottom", "support" };
 
-/// Every term as the file's (weights folded in): b the weighted base, sd from the smoothed
-/// rate's binomial variance; allies r < q; matchups of role r against role q (r < q) from
+/// Every term as core.score reads it from the fitted model: b the strength, sd from the
+/// smoothed rate's binomial variance (rough: the fit's own is not kept); allies r < q; matchups of role r against role q (r < q) from
 /// r's side, the scorer negating red's r against blue's q; lane opponents once per
 /// unordered pair, the lower champion id's side. Pairs never seen add 0 either way
 fn params(arena: std.mem.Allocator, st: *const core.Stats) !df.Params {
@@ -113,7 +114,7 @@ fn params(arena: std.mem.Allocator, st: *const core.Stats) !df.Params {
             .role = @backingInt(r),
             .games = n.games,
             .b = @floatCast(score.baseLogit(st, opts, c, r)),
-            .sd = @floatCast(opts.weights.base / @sqrt((games + k) * p * (1 - p))),
+            .sd = @floatCast(1 / @sqrt((games + k) * p * (1 - p))),
         });
     };
     var groups: std.ArrayList(df.PairGroup) = .empty;
@@ -167,7 +168,7 @@ fn devScore(
 ) !df.Dev {
     var older: usize = 0;
     while (games[older].start < cuts.dev) older += 1;
-    var m = try eval.Model.build(gpa, champs, games[0..older], null);
+    var m = try eval.Model.buildShipped(gpa, champs, games[0..older]);
     defer m.deinit(gpa);
     var points: std.ArrayList(df.Point) = .empty;
     var la: f64 = 0;
@@ -176,7 +177,7 @@ fn devScore(
         if (g.start >= cuts.test_) break;
         const y = g.winner == 0;
         const pa = score.draftWin(&m.stats, opts, g.teams);
-        const pb = df.sigmoid(opts.weights.base * score.draftTerms(&m.stats, opts, g.teams).base);
+        const pb = df.sigmoid(score.draftTerms(&m.stats, opts, g.teams).base);
         la -= @log(if (y) pa else 1 - pa);
         lb -= @log(if (y) pb else 1 - pb);
         try points.append(arena, .{ .p = pa, .y = y });
@@ -211,7 +212,7 @@ test "the file scores fixture drafts as core.score" {
             g.teams[s][r] = champs[rnd.uintLessThan(usize, champs.len)].id;
         };
     }
-    var m = try eval.Model.build(gpa, &champs, games, null);
+    var m = try eval.Model.buildShipped(gpa, &champs, games);
     defer m.deinit(gpa);
     const info = try champions(arena, &m.stats, games);
     const sc = try df.Scorer.init(arena, try params(arena, &m.stats), 0, &info);

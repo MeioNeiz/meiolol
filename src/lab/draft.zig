@@ -1,6 +1,6 @@
 //! `meiolol-lab draft`: a win model as a draft tester, and its export for the admin page's
 //! draft board (docs/model.md "Draft model file"): the compiled-in candidate's, or with
-//! --model additive the shrunk additive model (lab/additive.zig, effects' "full", v2).
+//! --model additive the shrunk additive model (src/additive.zig, effects' "full", v2).
 //! Fits once on every played game in the snapshot. Scores come from the exported
 //! parameters through draftfile.zig's Scorer, the reference the page's JS must match.
 
@@ -12,7 +12,7 @@ const store = @import("store");
 const rows = @import("rows.zig");
 const harness = @import("harness.zig");
 const protocol = @import("protocol.zig");
-const additive = @import("additive.zig");
+const additive = @import("../additive.zig");
 const addinputs = @import("addinputs.zig");
 const df = @import("../draftfile.zig");
 

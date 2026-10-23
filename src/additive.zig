@@ -17,7 +17,7 @@
 //! Cheap at use time: ~80 table lookups per draft, no GPU
 
 const std = @import("std");
-const par = @import("../par.zig");
+const par = @import("par.zig");
 
 pub const n_role = 5;
 pub const n_platforms = 16;

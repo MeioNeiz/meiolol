@@ -9,12 +9,19 @@
 //!   enemy [5][5][n][n] Counts: c1 in r1 against c2 in r2; wins = c1's side won.
 //!     Includes r1 == r2, the lane opponents
 //! Roles in core.Role order. Counts is (games u32, wins u32).
+//!
+//! Version 2 adds a fitted draft model after the counts (Builder.fitted; the backend's
+//! fitted.zig, additive v2): f16 logits, strength [5][n], then ally [5][5][n][n] and enemy
+//! [5][5][n][n] laid out as the counts. Ally both orderings; enemy from c1's side, both
+//! orderings, so a pair's term is one read. f16 (error ~1e-4 logit) halves what the
+//! draft helper downloads. Files without one stay version 1
 
 const std = @import("std");
 const Role = @import("roles.zig").Role;
 
 pub const magic = "MEIOSTAT";
 pub const version: u32 = 1;
+pub const version_fitted: u32 = 2;
 pub const patch_len = 16;
 const header_len = magic.len + 4 + 4 + 4 + patch_len;
 const n_roles = Role.count;
@@ -34,6 +41,8 @@ pub const Builder = struct {
     champ_role: []Counts,
     ally: []Counts,
     enemy: []Counts,
+    /// Written as version 2 when set: fittedLen(n) logits (see the format above), owned
+    fitted: ?[]f32 = null,
 
     pub fn init(gpa: std.mem.Allocator, champions: []const Champion) !Builder {
         if (champions.len > max_champs) return error.TooManyChampions;
@@ -79,6 +88,7 @@ pub const Builder = struct {
         b.gpa.free(b.champ_role);
         b.gpa.free(b.ally);
         b.gpa.free(b.enemy);
+        if (b.fitted) |f| b.gpa.free(f);
         b.* = undefined;
     }
 
@@ -116,7 +126,7 @@ pub const Builder = struct {
     pub fn write(b: *const Builder, w: *std.Io.Writer, patch: []const u8) !void {
         if (patch.len > patch_len) return error.PatchTooLong;
         try w.writeAll(magic);
-        try w.writeInt(u32, version, .little);
+        try w.writeInt(u32, if (b.fitted != null) version_fitted else version, .little);
         try w.writeInt(u32, @intCast(b.ids.len), .little);
         try w.writeInt(u32, b.games, .little);
         try w.writeAll(patch);
@@ -129,8 +139,30 @@ pub const Builder = struct {
         try w.writeSliceEndian(Counts, b.champ_role, .little);
         try w.writeSliceEndian(Counts, b.ally, .little);
         try w.writeSliceEndian(Counts, b.enemy, .little);
+        if (b.fitted) |f| {
+            if (f.len != fittedLen(b.ids.len)) return error.FittedSize;
+            for (f) |x| try w.writeInt(u16, @bitCast(@as(f16, @floatCast(x))), .little);
+        }
     }
 };
+
+/// Logits in a fitted section for n champions
+pub fn fittedLen(n: usize) usize {
+    return n_roles * n + 2 * n_roles * n_roles * n * n;
+}
+
+/// Where a fitted section's ally and enemy blocks start, in logits
+pub fn fittedAllyAt(n: usize) usize {
+    return n_roles * n;
+}
+
+pub fn fittedEnemyAt(n: usize) usize {
+    return n_roles * n + n_roles * n_roles * n * n;
+}
+
+pub fn fittedPair(n: usize, r1: usize, r2: usize, c1: usize, c2: usize) usize {
+    return pairIndex(n, r1, r2, c1, c2);
+}
 
 fn pairIndex(n: usize, r1: usize, r2: usize, c1: usize, c2: usize) usize {
     return ((r1 * n_roles + r2) * n + c1) * n + c2;
@@ -147,6 +179,8 @@ pub const Stats = struct {
     champ_role_bytes: []const u8,
     ally_bytes: []const u8,
     enemy_bytes: []const u8,
+    /// Version 2's fitted section, fittedLen(n) little-endian f16
+    fitted_bytes: ?[]const u8 = null,
 
     pub const ParseError = error{
         BadMagic,
@@ -161,7 +195,8 @@ pub const Stats = struct {
         if (bytes.len < header_len) return error.Truncated;
         if (!std.mem.eql(u8, bytes[0..magic.len], magic)) return error.BadMagic;
         var pos: usize = magic.len;
-        if (readU32(bytes, &pos) != version) return error.UnsupportedVersion;
+        const v = readU32(bytes, &pos);
+        if (v != version and v != version_fitted) return error.UnsupportedVersion;
         const n: usize = readU32(bytes, &pos);
         if (n > max_champs) return error.TooManyChampions;
         const games = readU32(bytes, &pos);
@@ -188,7 +223,8 @@ pub const Stats = struct {
 
         const role_len = n_roles * n * counts_len;
         const pair_len = n_roles * n_roles * n * n * counts_len;
-        const want = role_len + 2 * pair_len;
+        const fitted_len = if (v == version_fitted) 2 * fittedLen(n) else 0;
+        const want = role_len + 2 * pair_len + fitted_len;
         if (bytes.len - pos < want) return error.Truncated;
         if (bytes.len - pos > want) return error.SizeMismatch;
         return .{
@@ -200,6 +236,7 @@ pub const Stats = struct {
             .champ_role_bytes = bytes[pos..][0..role_len],
             .ally_bytes = bytes[pos + role_len ..][0..pair_len],
             .enemy_bytes = bytes[pos + role_len + pair_len ..][0..pair_len],
+            .fitted_bytes = if (fitted_len > 0) bytes[pos + role_len + 2 * pair_len ..][0..fitted_len] else null,
         };
     }
 
@@ -242,6 +279,24 @@ pub const Stats = struct {
     /// c1 in r1 against c2 in r2; wins = c1's side won
     pub fn enemy(s: *const Stats, r1: Role, r2: Role, c1: usize, c2: usize) Counts {
         return readCounts(s.enemy_bytes, s.pair(r1, r2, c1, c2));
+    }
+
+    /// The fitted model's strength of c in r (logit); null without a fitted section
+    pub fn fittedBase(s: *const Stats, r: Role, c: usize) ?f32 {
+        const f = s.fitted_bytes orelse return null;
+        return readF16(f, @as(usize, @backingInt(r)) * s.n + c);
+    }
+
+    /// The fitted model's term for allies c1 in r1 and c2 in r2
+    pub fn fittedAlly(s: *const Stats, r1: Role, r2: Role, c1: usize, c2: usize) ?f32 {
+        const f = s.fitted_bytes orelse return null;
+        return readF16(f, fittedAllyAt(s.n) + s.pair(r1, r2, c1, c2));
+    }
+
+    /// The fitted model's term for c1 in r1 against c2 in r2, on c1's team's logit
+    pub fn fittedEnemy(s: *const Stats, r1: Role, r2: Role, c1: usize, c2: usize) ?f32 {
+        const f = s.fitted_bytes orelse return null;
+        return readF16(f, fittedEnemyAt(s.n) + s.pair(r1, r2, c1, c2));
     }
 
     fn pair(s: *const Stats, r1: Role, r2: Role, c1: usize, c2: usize) usize {
@@ -315,6 +370,11 @@ fn normalise(buf: []u8, s: []const u8) []const u8 {
 fn readU32(bytes: []const u8, pos: *usize) u32 {
     defer pos.* += 4;
     return std.mem.readInt(u32, bytes[pos.*..][0..4], .little);
+}
+
+fn readF16(bytes: []const u8, i: usize) f32 {
+    const h: f16 = @bitCast(std.mem.readInt(u16, bytes[2 * i ..][0..2], .little));
+    return h;
 }
 
 fn readCounts(bytes: []const u8, i: usize) Counts {
@@ -402,8 +462,10 @@ test "parse rejects bad files" {
     copy[0] = 'X';
     try testing.expectError(error.BadMagic, Stats.parse(gpa, copy));
     copy[0] = 'M';
-    copy[8] = 2;
+    copy[8] = 3;
     try testing.expectError(error.UnsupportedVersion, Stats.parse(gpa, copy));
+    copy[8] = 2;
+    try testing.expectError(error.Truncated, Stats.parse(gpa, copy));
     copy[8] = 1;
     var s: Stats = try .parse(gpa, copy);
     defer s.deinit(gpa);
@@ -421,6 +483,34 @@ test "parse rejects every truncation" {
     for (0..bytes.len) |len| {
         try testing.expectError(error.Truncated, Stats.parse(gpa, bytes[0..len]));
     }
+}
+
+test "fitted section round trip and truncation" {
+    const gpa = testing.allocator;
+    var b: Builder = try .init(gpa, test_champions[0..3]);
+    defer b.deinit();
+    b.addGame(.{ .{ 266, 145, 64, 0, 0 }, .{ 0, 0, 0, 0, 0 } }, 0);
+    const f = try gpa.alloc(f32, fittedLen(3));
+    for (f, 0..) |*x, i| x.* = @floatFromInt(i);
+    b.fitted = f;
+    const bytes = try writeToAlloc(gpa, &b, "16.20");
+    defer gpa.free(bytes);
+    var s: Stats = try .parse(gpa, bytes);
+    defer s.deinit(gpa);
+    try testing.expectEqual(1, s.champRole(.top, 0).games);
+    try testing.expectEqual(@as(f32, 3 + 1), s.fittedBase(.jungle, 1).?);
+    try testing.expectEqual(f[fittedAllyAt(3) + pairIndex(3, 0, 2, 1, 2)], s.fittedAlly(.top, .middle, 1, 2).?);
+    try testing.expectEqual(f[fittedEnemyAt(3) + pairIndex(3, 4, 1, 2, 0)], s.fittedEnemy(.utility, .jungle, 2, 0).?);
+    for (0..bytes.len) |len| {
+        try testing.expectError(error.Truncated, Stats.parse(gpa, bytes[0..len]));
+    }
+    gpa.free(b.fitted.?);
+    b.fitted = null;
+    const v1 = try writeToAlloc(gpa, &b, "16.20");
+    defer gpa.free(v1);
+    var s1: Stats = try .parse(gpa, v1);
+    defer s1.deinit(gpa);
+    try testing.expectEqual(null, s1.fittedBase(.top, 0));
 }
 
 test "builder rejects duplicate ids" {
