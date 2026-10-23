@@ -70,7 +70,18 @@ mount=$(dirname "$archive")
 use() { df --output=pcent "$1" | tail -n 1 | tr -dc '0-9'; }
 arch=-
 mountpoint -q "$mount" && arch=$(use "$mount")
-box_ssh disk "c$(use /mnt/c),wsl$(use /),arch$arch" || log "disk report failed"
+# The logins backup (meiolol-accounts-pull, deploy/accounts-pull.sh) rides along: its
+# last run, or its newest copy, so the box's health check sees it stop. Not the copy's age
+# alone: the 6 h timer doesn't count while the PC sleeps
+accounts=${ACCOUNTS_DIR:-/mnt/wsl/archive/meiolol-accounts}
+acct=ok
+if ! systemctl --user is-active -q meiolol-accounts-pull.timer; then acct=off
+elif [[ $(systemctl --user show -p Result --value meiolol-accounts-pull.service) != success ]]; then
+    acct=fail
+elif [[ -z $(find "$accounts" -maxdepth 1 -name 'accounts-*.db' -mmin -4320 2> /dev/null) ]]; then
+    acct=old
+fi
+box_ssh disk "c$(use /mnt/c),wsl$(use /),arch$arch,acct$acct" || log "disk report failed"
 [[ -d "$archive" ]] || die "$archive missing: archive disk not attached"
 touch "$awake"
 

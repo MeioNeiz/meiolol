@@ -156,7 +156,8 @@ the SQLite header and opens a copy (an empty one fails: the owner always exists)
 keeps /mnt/wsl/archive/meiolol-accounts/accounts-DATE.db (mode 600; the directory made
 once as root, since the partition's top is root's: `wsl.exe -u root -e install -d -m 700 -o
 jmu -g jmu /mnt/wsl/archive/meiolol-accounts`), the newest 14 dates (privacy page: a deleted login leaves the backups within 14 days). Log
-~/ml/accounts-pull.log on the gpu-box. api.db (Your games' cache, refetchable) is not
+~/ml/accounts-pull.log on the gpu-box; each archive pull reports its state to the box
+for Health alerts. api.db (Your games' cache, refetchable) is not
 backed up.
 
 Restore: `ssh gpu-box`, pick a file; on jomify `sudo systemctl stop meiolol-api`, copy
@@ -189,6 +190,7 @@ deploy/health.sh runs on the box and prints one line per problem:
 | backup | unit `meiolol-backup` not active, or newest state snapshot older than 26h |
 | gpu-box | no raw archive ack for 12h (ACK_H): PC off, asleep or WSL down; first export never acked; one export unacked for 12h while others are acked (see archive-pull.log on the gpu-box) |
 | gpu-box disks | C: (holds the WSL disk) or the WSL disk or the archive partition at 85%, or the partition not attached; reported by each archive pull |
+| gpu-box logins backup | the last accounts pull failed, its timer is not running, or the newest copy is over 3 days old; reported by each archive pull |
 | raw held | free disk above the raw valve under 3 days of raw (bytes sent to the gpu-box over the last 24 h, data/archive-sent.log): what an outage of the gpu-box can last before the valve drops unarchived raw; exports waiting on the box shown apart |
 | gpu-box archive | last pull reported a failure (data/gpu-box.pull, written by archive-serve.sh report): cause and since when, pushed once per failure |
 | raw valve | the disk valve dropped raw the archive never got in the last 24 h (raw-export --status drops_24h, data/raw-dropped.log) |
