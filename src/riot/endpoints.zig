@@ -41,6 +41,14 @@ pub const platforms = [_]Platform{
     .{ .id = "VN2", .host = "vn2", .region = .sea },
 };
 
+/// Every platform's id: --platform all, the site's all- files
+pub const platform_ids: []const []const u8 = ids: {
+    var ids: [platforms.len][]const u8 = undefined;
+    for (&ids, platforms) |*id, p| id.* = p.id;
+    const final = ids;
+    break :ids &final;
+};
+
 /// Platform of a match id ("KR_7012345678" -> KR)
 pub fn platformOf(match_id: []const u8) ?Platform {
     return platform(match_id[0 .. std.mem.findScalar(u8, match_id, '_') orelse return null]);
