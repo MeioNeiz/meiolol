@@ -11,6 +11,7 @@ const core = @import("core");
 const rows = @import("rows.zig");
 const seatstats = @import("seatstats.zig");
 const eval = @import("../eval.zig");
+const protocol = @import("protocol.zig");
 
 /// dev: fit on dev-visible games, score dev-val. final: fit on every game before the
 /// test cut, score test (one look per final model, ledgered)
@@ -209,6 +210,18 @@ pub const min_duration_s = eval.min_duration_s;
 pub fn played(g: rows.Game) bool {
     return g.duration_s >= min_duration_s;
 }
+
+/// protocol.home_platform's index in protocol.platformIds: its games' platform byte
+pub const home_index: u8 = for (protocol.platformIds(), 0..) |id, i| {
+    if (std.mem.eql(u8, id, protocol.home_platform)) break i;
+} else @compileError("home_platform is not a platform");
+
+/// buildTrainBy's keep for every played game, test games included
+pub const Played = struct {
+    pub fn keep(_: Played, g: rows.Game) bool {
+        return played(g);
+    }
+};
 
 pub fn visible(p: Phase, c: Cuts, g: rows.Game) bool {
     if (g.is_test or !played(g)) return false;

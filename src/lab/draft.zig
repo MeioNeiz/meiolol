@@ -150,7 +150,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     // Unused here, but the packed rows only load when they match
     var data = try rows.loadSnap(gpa, io, snap);
     defer data.deinit();
-    const eu = euIndex();
+    const eu = harness.home_index;
     var champs = try loadChampions(gpa, arena, snap, &data);
 
     var cm: ?cand.Model = null;
@@ -226,11 +226,6 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     return 0;
 }
 
-fn euIndex() u8 {
-    for (protocol.platformIds(), 0..) |id, i| if (std.mem.eql(u8, id, protocol.home_platform)) return @intCast(i);
-    unreachable;
-}
-
 /// "--role mid --ally top=Lee Sin" -> ["--role", "mid", "--ally", "top=Lee Sin"]: values
 /// may hold spaces, so split only before "--"
 fn splitFlags(arena: std.mem.Allocator, line: []const u8) ![]const []const u8 {
@@ -257,39 +252,13 @@ fn loadChampions(gpa: std.mem.Allocator, arena: std.mem.Allocator, snap: []const
     return c;
 }
 
-/// Games over before 15:00 left out, as the harness fits (docs/model.md "Rows")
-fn trainOf(a: std.mem.Allocator, d: *const rows.Data) !api.Train {
-    const players = try harness.gamePlayers(a, d);
-    const index = try a.alloc(u32, d.games.len);
-    var games: std.ArrayList(api.Game) = .empty;
-    for (d.games, players, index) |g, pl, *ix| {
-        if (g.duration_s < harness.min_duration_s) continue;
-        ix.* = @intCast(games.items.len);
-        try games.append(a, .{ .start = g.start, .patch = g.patch, .platform = g.platform, .teams = g.teams, .ranks = pl.ranks, .exp = pl.exp });
-    }
-    var out: std.ArrayList(api.Row) = .empty;
-    for (d.rows) |r| {
-        if (d.games[r.game].duration_s < harness.min_duration_s) continue;
-        try out.append(a, .{
-            .game = index[r.game],
-            .side = r.side,
-            .role = @fromBackingInt(@backingInt(r.role)),
-            .champion = r.champion,
-            .rank = r.rank_start,
-            .exp = harness.experience(r),
-            .y = r.y,
-            .stats = r.stats,
-        });
-    }
-    return .{ .games = games.items, .rows = out.items };
-}
-
 /// A tool, not an evaluation: every game that lasted 15:00, test games included
 fn fitAll(gpa: std.mem.Allocator, d: *const rows.Data) !cand.Model {
-    var arena_state: std.heap.ArenaAllocator = .init(gpa);
-    defer arena_state.deinit();
-    const t = try trainOf(arena_state.allocator(), d);
-    return harness.fit(cand, gpa, &t, .{});
+    const players = try harness.gamePlayers(gpa, d);
+    defer gpa.free(players);
+    var train = try harness.buildTrainBy(gpa, d, players, harness.Played{}, false);
+    defer train.deinit();
+    return harness.fit(cand, gpa, &train.train, .{});
 }
 
 /// The additive model fitted on the games in `fit`, its damage mix from their rows

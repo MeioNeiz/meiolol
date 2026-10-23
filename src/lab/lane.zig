@@ -51,17 +51,12 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
 
     var data = try rows.loadSnap(gpa, io, snap);
     defer data.deinit();
-    const eu = euIndex();
+    const eu = harness.home_index;
 
     const players = try harness.gamePlayers(gpa, &data);
     defer gpa.free(players);
     // A tool, not an evaluation: every game that reached 15:00 minutes, test games included
-    const Played = struct {
-        pub fn keep(_: @This(), g: rows.Game) bool {
-            return harness.played(g);
-        }
-    };
-    var train = try harness.buildTrainBy(gpa, &data, players, Played{}, false);
+    var train = try harness.buildTrainBy(gpa, &data, players, harness.Played{}, false);
     defer train.deinit();
     const t = &train.train;
     var m = try harness.fit(cand, gpa, t, .{});
@@ -120,11 +115,6 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         .dev = &dev,
     }, champions, dir, w);
     return 0;
-}
-
-fn euIndex() u8 {
-    for (protocol.platformIds(), 0..) |id, i| if (std.mem.eql(u8, id, protocol.home_platform)) return @intCast(i);
-    unreachable;
 }
 
 /// The candidate refitted on dev's visible games, scored on dev-val per lane outcome

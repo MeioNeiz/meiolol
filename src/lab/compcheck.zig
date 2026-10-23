@@ -740,9 +740,7 @@ fn lopsided(u: Unit) bool {
 fn byPlatform(gpa: std.mem.Allocator, d: *const rows.Data, units: []const Unit, res: Res, in_a: []bool, in_b: []bool, w: *Io.Writer) !void {
     const min_games = 2000;
     const ids = protocol.platformIds();
-    const eu: u8 = for (ids, 0..) |id, i| {
-        if (std.mem.eql(u8, id, protocol.home_platform)) break @intCast(i);
-    } else unreachable;
+    const eu = harness.home_index;
     var games: [ids.len]usize = @splat(0);
     for (units) |u| if (u.side == 0) {
         games[d.games[u.game].platform] += 1;
