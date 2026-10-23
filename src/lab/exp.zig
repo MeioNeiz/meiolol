@@ -1,8 +1,8 @@
 //! `meiolol-lab exp`: one lab-agent run of the candidate compiled in (-Dcand, docs/
 //! lab-agent.md). Runs in a deploy/lab-run.sh run dir, which gets summary.md, dev.tsv,
 //! result.tsv (the run's runs.tsv row) and the candidate's effects-<name>.tsv tables;
-//! the snapshot's lab dir (LAB/<snapshot>/) gets runs.tsv, the ladder's looks.tsv and
-//! best-<target>[-<scope>].tsv, and finals.tsv. Last stdout line: RESULT ..., what the agent reads
+//! the snapshot's lab dir (LAB/<snapshot>/) gets runs.tsv and finals.tsv. Last stdout
+//! line: RESULT ..., what the agent reads
 
 const std = @import("std");
 const api = @import("api");
@@ -137,27 +137,25 @@ fn run(
     });
     defer dev.deinit(gpa);
     const dev_target = try summary(gpa, io, d, &dev, args);
-    try writePreds(gpa, io, d, &dev, "dev.tsv");
+    try writePreds(io, d, &dev, "dev.tsv");
     const h = try human(gpa, d, &dev, k, dev_target);
     const effect_files = try writeEffects(gpa, arena, io, args.snap, dev.effects);
 
     // No selection window since the one global cut (2253Z): no ladder looks
-    const verdict: ?harness.Verdict = null;
-    const looks: usize = 0;
     const header = "run\tcampaign\ttarget\tscope\tdev_n\tdev_diff\tdev_half\tselect\tlooks\thyp\tfraction\tdesc" ++
         "\tcategory\tremoved_pct\tremoved_half\terr_base\terr_cand\tunit\teffects\n";
     const line = try std.fmt.allocPrint(arena, "{s}\t{s}\t{t}\t{t}\t{d}\t{d:.5}\t{d:.5}\t{s}\t{d}\t{s}\t{d}\t{s}\t{s}\t{d:.3}\t{d:.3}\t{s}\t{s}\t{s}\t{s}\n", .{
         args.run,                                    args.campaign,     args.target,                                     cand.scope,
-        dev_target.n,                                dev_target.diff,   dev_target.half,                                 verdictName(verdict),
-        looks,                                       args.hyp,          args.fraction,                                   args.desc,
+        dev_target.n,                                dev_target.diff,   dev_target.half,                                 "-",
+        0,                                           args.hyp,          args.fraction,                                   args.desc,
         category(args.target),                       h.removed_pct,     h.removed_half,                                  try errText(arena, args.target, h.err_base),
         try errText(arena, args.target, h.err_cand), unit(args.target), if (effect_files.len > 0) effect_files else "-",
     });
     try appendLine(io, try std.fs.path.join(arena, &.{ dir, "runs.tsv" }), header, line);
     try Io.Dir.cwd().writeFile(io, .{ .sub_path = "result.tsv", .data = try std.mem.concat(arena, u8, &.{ header, line }) });
     try w.print("RESULT run={s} scope={t} target={t} dev={d:.5}±{d:.5} n={d} ({s}) select={s}", .{
-        args.run,                                                         cand.scope,           args.target, dev_target.diff, dev_target.half, dev_target.n,
-        if (dev_target.beats()) "beats baseline" else "not beyond noise", verdictName(verdict),
+        args.run,                                                         cand.scope, args.target, dev_target.diff, dev_target.half, dev_target.n,
+        if (dev_target.beats()) "beats baseline" else "not beyond noise", "-",
     });
     // Human units for the run's finding (docs/lab-brief.md "Findings")
     try w.print(" removed={d:.2}%±{d:.2}", .{ h.removed_pct, h.removed_half });
@@ -168,10 +166,9 @@ fn run(
         unit(args.target),
     });
     try w.print(" effects={s}", .{if (effect_files.len > 0) effect_files else "none"});
-    if (verdict) |v| if (v == .new_best) try w.print(" gain={d:.5}±{d:.5}", .{ v.new_best.diff, v.new_best.half });
     // Smallest gain this dev set would show 80% of the time: (1.96 + 0.84) / 1.96 half
     if (dev_target.half > 1e-9 and std.math.isFinite(dev_target.half)) try w.print(" mde={d:.5}", .{dev_target.half * 1.43});
-    try w.print(" looks={d}/{d}\n", .{ looks, harness.look_budget });
+    try w.print(" looks=0/{d}\n", .{harness.look_budget});
 }
 
 /// The admin page groups runs by model category
@@ -324,15 +321,6 @@ fn clean(arena: std.mem.Allocator, names: *const std.AutoHashMapUnmanaged(u32, [
     return out.items;
 }
 
-fn verdictName(v: ?harness.Verdict) []const u8 {
-    const x = v orelse return "-";
-    return switch (x) {
-        .new_best => "new-best",
-        .no_change => "no-change",
-        .budget_spent => "budget-spent",
-    };
-}
-
 /// summary.md: dev per outcome, then the target sliced by role, patch and rank tier
 fn summary(gpa: std.mem.Allocator, io: Io, d: *const rows.Data, s: *const harness.Scores, args: Args) !harness.Paired {
     var aw: Io.Writer.Allocating = .init(gpa);
@@ -400,8 +388,7 @@ fn sliceRow(w: *Io.Writer, name: []const u8, p: harness.Paired) !void {
 }
 
 /// The shared prediction file format (docs/model.md): match_id, slot, outcome, y, pred
-fn writePreds(gpa: std.mem.Allocator, io: Io, d: *const rows.Data, s: *const harness.Scores, path: []const u8) !void {
-    _ = gpa;
+fn writePreds(io: Io, d: *const rows.Data, s: *const harness.Scores, path: []const u8) !void {
     var file = try Io.Dir.cwd().createFile(io, path, .{});
     defer file.close(io);
     var buf: [64 * 1024]u8 = undefined;
@@ -438,16 +425,6 @@ fn testPreds(gpa: std.mem.Allocator, io: Io, d: *const rows.Data, players: []con
     try w.print("RESULT preds rows={d} file=preds.tsv\n", .{s.row.len});
 }
 
-fn countLines(gpa: std.mem.Allocator, io: Io, path: []const u8) !usize {
-    const text = Io.Dir.cwd().readFileAlloc(io, path, gpa, .limited(16 << 20)) catch |err| switch (err) {
-        error.FileNotFound => return 0,
-        else => return err,
-    };
-    defer gpa.free(text);
-    const n = std.mem.count(u8, text, "\n");
-    return if (n > 0) n - 1 else 0;
-}
-
 fn appendLine(io: Io, path: []const u8, header: []const u8, line: []const u8) !void {
     var file = try Io.Dir.cwd().createFile(io, path, .{ .truncate = false });
     defer file.close(io);
@@ -457,47 +434,6 @@ fn appendLine(io: Io, path: []const u8, header: []const u8, line: []const u8) !v
     try fw.seekTo(len);
     if (len == 0) try fw.interface.writeAll(header);
     try fw.interface.writeAll(line);
-    try fw.interface.flush();
-}
-
-/// The ladder per target and scope: a post-game or internal candidate sees more than
-/// champ select may, so it never sets the bar for champ-select ones. The look budget is
-/// shared
-fn bestName(arena: std.mem.Allocator, target: api.Outcome) ![]const u8 {
-    return switch (cand.scope) {
-        .champ_select => std.fmt.allocPrint(arena, "best-{t}.tsv", .{target}),
-        .post_game, .internal => std.fmt.allocPrint(arena, "best-{t}-{t}.tsv", .{ target, cand.scope }),
-    };
-}
-
-/// best-<target>[-<scope>].tsv: "run\t<id>" then one prediction per selection row; null until a
-/// candidate beats the baseline
-fn readBest(gpa: std.mem.Allocator, io: Io, path: []const u8, n: usize) !?[]f64 {
-    const text = Io.Dir.cwd().readFileAlloc(io, path, gpa, .limited(64 << 20)) catch |err| switch (err) {
-        error.FileNotFound => return null,
-        else => return err,
-    };
-    defer gpa.free(text);
-    var lines = std.mem.tokenizeScalar(u8, text, '\n');
-    _ = lines.next();
-    const out = try gpa.alloc(f64, n);
-    errdefer gpa.free(out);
-    var i: usize = 0;
-    while (lines.next()) |line| : (i += 1) {
-        if (i >= n) return error.SelectionRowsChanged;
-        out[i] = try std.fmt.parseFloat(f64, line);
-    }
-    if (i != n) return error.SelectionRowsChanged;
-    return out;
-}
-
-fn writeBest(io: Io, path: []const u8, run_id: []const u8, preds: []const [api.outcome_count]f64, k: usize) !void {
-    var file = try Io.Dir.cwd().createFile(io, path, .{});
-    defer file.close(io);
-    var buf: [64 * 1024]u8 = undefined;
-    var fw = file.writer(io, &buf);
-    try fw.interface.print("run\t{s}\n", .{run_id});
-    for (preds) |p| try fw.interface.print("{d}\n", .{p[k]});
     try fw.interface.flush();
 }
 
