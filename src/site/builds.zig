@@ -87,7 +87,7 @@ const Picked = struct {
     /// "patch 16.21", "patch 16.20 (16.21: 57 games so far)", "last 30 days"
     fn when(p: Picked, site: *const Site) ![]const u8 {
         const n = p.newer orelse return periodText(site.arena, p.f, p.period);
-        return site.arena.print("patch {s} ({s}: {s} game{s} so far)", .{ p.f.label, site.patch, try root.thousands(site.arena, n), plural(n) });
+        return site.arena.print("patch {s} ({s}: {f} game{s} so far)", .{ p.f.label, site.patch, root.Thousands{ .n = n }, plural(n) });
     }
 };
 
@@ -182,18 +182,18 @@ pub fn strip(site: *const Site, w: *Writer, ch: Champ, r: Role, from: []const u8
         .when = try picked.when(site),
         .in = v.region.in(),
         .ranks = try rankLabel(site.arena, f.min_tier),
-        .games = try root.thousands(site.arena, b.games),
+        .games = root.Thousands{ .n = b.games },
         .s = plural(b.games),
         .link = tpl.when(href != null, tpl.t(" <a href=\"{href}\">Full build: runes, items and skill order</a>", .{ .href = href orelse html.Link{ .root = "", .path = "" } })),
     });
-    try top(site.arena, w, f, b, null, .runes, "Runes");
-    if (f.trees.len == 0) try top(site.arena, w, f, b, null, .shards, "Shards");
-    try top(site.arena, w, f, b, null, .spells, "Spells");
-    try top(site.arena, w, f, b, null, .start, "Start");
-    try top(site.arena, w, f, b, null, .boots, "Boots");
-    try top(site.arena, w, f, b, null, .core3, "First 3 items");
-    try top(site.arena, w, f, b, null, .skill_start, "Levels 1-3");
-    try top(site.arena, w, f, b, null, .skills, "Skill priority");
+    try top(w, f, b, null, .runes, "Runes");
+    if (f.trees.len == 0) try top(w, f, b, null, .shards, "Shards");
+    try top(w, f, b, null, .spells, "Spells");
+    try top(w, f, b, null, .start, "Start");
+    try top(w, f, b, null, .boots, "Boots");
+    try top(w, f, b, null, .core3, "First 3 items");
+    try top(w, f, b, null, .skill_start, "Levels 1-3");
+    try top(w, f, b, null, .skills, "Skill priority");
     try w.writeAll("</div></div>\n");
     return true;
 }
@@ -221,20 +221,20 @@ pub fn vsStrip(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ, from:
         \\<div class="bks">
     , .{
         .chip = chip,
-        .games = try root.thousands(site.arena, b.games),
+        .games = root.Thousands{ .n = b.games },
         .s = plural(b.games),
         .patch = try picked.when(site),
         .in = pv.region.in(),
         .ranks = try rankLabel(site.arena, f.min_tier),
         .link = tpl.when(href != null, tpl.t(" <a href=\"{href}\">{x}'s full {lane} build</a>", .{ .href = href orelse html.Link{ .root = "", .path = "" }, .x = x.name, .lane = root.roleName(r) })),
     });
-    try top(site.arena, w, f, b, usual, .runes, "Runes");
-    if (f.trees.len == 0) try top(site.arena, w, f, b, usual, .shards, "Shards");
-    try top(site.arena, w, f, b, usual, .start, "Start");
-    try top(site.arena, w, f, b, usual, .boots, "Boots");
-    try top(site.arena, w, f, b, usual, .core2, "First 2 items");
-    try top(site.arena, w, f, b, usual, .core3, "First 3 items");
-    try top(site.arena, w, f, b, usual, .skills, "Skill priority");
+    try top(w, f, b, usual, .runes, "Runes");
+    if (f.trees.len == 0) try top(w, f, b, usual, .shards, "Shards");
+    try top(w, f, b, usual, .start, "Start");
+    try top(w, f, b, usual, .boots, "Boots");
+    try top(w, f, b, usual, .core2, "First 2 items");
+    try top(w, f, b, usual, .core3, "First 3 items");
+    try top(w, f, b, usual, .skills, "Skill priority");
     try w.writeAll("</div></section>\n");
     if (f.trees.len > 0 and b.get(.rune) != null) {
         const shifts = try runeShifts(site.arena, b, usual);
@@ -370,7 +370,7 @@ fn pct(n: u32, all: u32) f64 {
 /// usual" when it is also `usual`'s most played. Below it the option with the highest
 /// win rate (highest()) when that is another one; a rune page on the same trees as
 /// its runes ringed in the most played page
-fn top(a: std.mem.Allocator, w: *Writer, f: *const File, b: File.Build, usual: ?File.Build, kind: Kind, comptime title: []const u8) !void {
+fn top(w: *Writer, f: *const File, b: File.Build, usual: ?File.Build, kind: Kind, comptime title: []const u8) !void {
     const rows = b.get(kind) orelse return;
     if (rows.options.len == 0) return;
     const o = rows.options[0];
@@ -387,8 +387,8 @@ fn top(a: std.mem.Allocator, w: *Writer, f: *const File, b: File.Build, usual: ?
         .same = tpl.when(sameTop(rows, usual, kind), tpl.t(" <em class=\"muted\">same as usual</em>", .{})),
         .value = tpl.call(cell, .{ f, b, kind, o.v, if (ringed) other.?.v else null }),
         .share = pct(o.games, rows.games),
-        .all = try root.thousands(a, rows.games),
-        .games = try root.thousands(a, o.games),
+        .all = root.Thousands{ .n = rows.games },
+        .games = root.Thousands{ .n = o.games },
         .rate = tpl.when(o.games >= rate_games, tpl.t("<br>{wr:.1}% won{also}", .{
             .wr = pct(o.wins, o.games),
             .also = tpl.when(hi != null and hi.? == 0, tpl.t(", the highest win rate", .{})),
@@ -399,7 +399,7 @@ fn top(a: std.mem.Allocator, w: *Writer, f: *const File, b: File.Build, usual: ?
             .label = if (ringed) "Highest win rate page: blue rings" else "Highest win rate",
             .value = tpl.when(!ringed, tpl.t("<div class=\"bv\">{v}</div>", .{ .v = tpl.call(value, .{ f, kind, h.v, true }) })),
             .wr = pct(h.wins, h.games),
-            .games = try root.thousands(a, h.games),
+            .games = root.Thousands{ .n = h.games },
             .share = pct(h.games, rows.games),
         }) else null,
     });
@@ -525,8 +525,6 @@ fn runeStats(w: *Writer, f: *const File, b: File.Build, short: bool) !bool {
     if (f.trees.len == 0) return false;
     const rows = b.get(.rune) orelse return false;
     if (rows.options.len == 0) return false;
-    var buf: [512]u8 = undefined;
-    var fba: std.heap.FixedBufferAllocator = .init(&buf);
     const vs = b.opponent != 0;
     const k_rune = f.shrinkK(.rune, vs);
     const Shown = struct { tree: ddragon.Tree, keystones: u32, most: u32 };
@@ -591,10 +589,10 @@ fn runeStats(w: *Writer, f: *const File, b: File.Build, short: bool) !bool {
         \\<p class="muted caption">Under each rune: share of {games} players, win rate (from {rated} games), then games. <span class="key mp"></span> most played in its row{hw}.</p>
         \\
     , .{
-        .games = try root.thousands(fba.allocator(), rows.games),
+        .games = root.Thousands{ .n = rows.games },
         .rated = rate_games,
         .hw = if (k_rune) |k| tpl.t(", <span class=\"key hw\"></span> highest win rate in its row among runes with {rated}+ games, each pulled toward the row's by {k} games (how much runes really differ, from every champion{vs}) and taken at the low end of its range", .{
-            .k = try root.thousands(fba.allocator(), @intFromFloat(@round(k))),
+            .k = root.Thousands{ .n = @round(k) },
             .rated = rate_games,
             .vs = tpl.when(vs, " in its matchups"),
         }) else null,
@@ -691,7 +689,7 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
         .in = site.view.region.in(),
         .period = period,
         .ranks = ranks,
-        .games = try root.thousands(a, b.games),
+        .games = root.Thousands{ .n = b.games },
         .s = plural(b.games),
         .rate = tpl.when(b.games >= rate_games, tpl.t(", win rate {wr}", .{
             .wr = tpl.call(winRate, .{ b.games, b.wins }),
@@ -728,8 +726,8 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
         .hw = tpl.when(f.shrink.len > 0, tpl.t(", and the highest win rate among options with {rated}+ games once each is pulled toward the average by k games (k from how much options of a kind really differ across every champion{ks}) and taken at the low end of its range, so a few lucky games can't top it. None on boots and finished items: their win rates mostly say how the game was going when they were bought (nobody finishes Mejai's in a game they're losing)", .{
             .rated = rate_games,
             .ks = if (f.shrinkK(.rune, false)) |kr| if (f.shrinkK(.start, false)) |ki| tpl.t(": {r} for a rune, {i} for starting items", .{
-                .r = try root.thousands(site.arena, @intFromFloat(@round(kr))),
-                .i = try root.thousands(site.arena, @intFromFloat(@round(ki))),
+                .r = root.Thousands{ .n = @round(kr) },
+                .i = root.Thousands{ .n = @round(ki) },
             }) else null else null,
         })),
     });

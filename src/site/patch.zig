@@ -60,8 +60,8 @@ pub fn writePage(site: *const Site, w: *Writer) !void {
         .cur = pd.cur_patch,
         .prev = pd.prev_patch,
         .in = site.view.region.in(),
-        .cur_games = try root.thousands(a, pd.cur_games),
-        .prev_games = try root.thousands(a, pd.prev_games),
+        .cur_games = root.Thousands{ .n = pd.cur_games },
+        .prev_games = root.Thousands{ .n = pd.prev_games },
         .role_games = o.min_role_games,
         .pair_games = o.min_pair_games,
         .z = o.z,
@@ -108,26 +108,13 @@ fn byAheadDelta(_: void, x: ChampionMove, y: ChampionMove) bool {
 fn winOf(w: *Writer, c: core.curvesfile.Counts) !void {
     if (c.games == 0) return rateOf(w, c);
     try tierlist.wrText(w, root.ratio(c.wins, c.games), @intCast(c.games));
-    try w.print(" of {f}", .{Thousands{ .n = c.games }});
+    try w.print(" of {f}", .{root.Thousands{ .n = c.games }});
 }
 
 fn rateOf(w: *Writer, c: core.curvesfile.Counts) !void {
     try root.pct(w, c.wins, c.games);
-    try w.print(" of {f}", .{Thousands{ .n = c.games }});
+    try w.print(" of {f}", .{root.Thousands{ .n = c.games }});
 }
-
-/// root.thousands without an allocator
-const Thousands = struct {
-    n: u64,
-    pub fn format(t: Thousands, w: *Writer) Writer.Error!void {
-        var buf: [20]u8 = undefined;
-        const digits = std.fmt.bufPrint(&buf, "{d}", .{t.n}) catch unreachable;
-        for (digits, 0..) |c, i| {
-            if (i > 0 and (digits.len - i) % 3 == 0) try w.writeByte(',');
-            try w.writeByte(c);
-        }
-    }
-};
 
 /// "0.8 to 3.8 points", the size of the gap either way
 fn gap(w: *Writer, r: Rate, z: f64) !void {
@@ -242,7 +229,7 @@ fn goldDelta(m: MatchupMove) i32 {
 fn goldCell(w: *Writer, gold: ?patchday.GoldMove) !void {
     const g = gold orelse return w.writeAll("about the same");
     try w.print("{f} then {f} at {d} min ({f} and {f} games)", .{
-        Signed{ .v = g.prev }, Signed{ .v = g.cur }, g.minute, Thousands{ .n = g.prev_n }, Thousands{ .n = g.cur_n },
+        Signed{ .v = g.prev }, Signed{ .v = g.cur }, g.minute, root.Thousands{ .n = g.prev_n }, root.Thousands{ .n = g.cur_n },
     });
 }
 

@@ -30,14 +30,14 @@ const new_text = "under 30k mastery points on it";
 const practised_text = "100k+";
 
 /// `period`: "last 30 days", "patch 16.21"
-fn footnote(site: *const Site, w: *Writer, l: *const Learning, period: []const u8) !void {
+fn footnote(w: *Writer, l: *const Learning, period: []const u8) !void {
     try tpl.render(w, "<p class=\"muted\">From {games} ranked solo games in every region we crawl, {period}, where we know the player's mastery " ++
         "points on the champion at the time: their mastery, looked up after the game, when no later game on " ++
         "that champion came before the lookup. Practised players are often better players overall, so every " ++
         "champion shows a gap ({mean:.1} points on average); a champion is harder or easier to pick up only " ++
         "when its gap is clearly bigger or smaller than that, by more than chance in its games could give. " ++
         "Gold is the laner's total gold minus their lane opponent's at {minute} minutes.</p>\n", .{
-        .games = try root.thousands(site.arena, l.games),
+        .games = root.Thousands{ .n = l.games },
         .period = period,
         .mean = l.mean_pp,
         .minute = learning.gold_minute,
@@ -103,7 +103,7 @@ pub fn section(site: *const Site, w: *Writer, l: *const Learning, ch: Champ, per
         });
     }
     try w.writeAll("</tbody></table></div>\n");
-    try footnote(site, w, l, site.periodText(period));
+    try footnote(w, l, site.periodText(period));
 }
 
 /// Every region's games (src/learning.zig), any rank
@@ -174,5 +174,5 @@ pub fn table(site: *const Site, w: *Writer, l: *const Learning) !void {
     }
     try w.writeAll("</tbody></table></div>\n");
     try tpl.render(w, "<script src=\"{up}table.js\" defer></script>\n", .{ .up = site.view.up() });
-    try footnote(site, w, l, site.period());
+    try footnote(w, l, site.period());
 }

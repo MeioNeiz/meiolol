@@ -5,6 +5,7 @@
 const std = @import("std");
 const core = @import("core");
 const html = @import("html.zig");
+const Thousands = @import("root.zig").Thousands;
 const tpl = html.tpl;
 const lean = @import("../lean.zig");
 const scope = @import("scope.zig");
@@ -22,20 +23,6 @@ fn noun(r: Role) []const u8 {
         .utility => "support",
     };
 }
-
-/// 12,345
-const Thousands = struct {
-    n: u64,
-
-    pub fn format(t: Thousands, w: *Writer) Writer.Error!void {
-        var buf: [24]u8 = undefined;
-        const digits = std.fmt.bufPrint(&buf, "{d}", .{t.n}) catch unreachable;
-        for (digits, 0..) |c, i| {
-            if (i > 0 and (digits.len - i) % 3 == 0) try w.writeByte(',');
-            try w.writeByte(c);
-        }
-    }
-};
 
 /// 95% range of an effect, rounded as its value
 const Shown = struct { v: i64, pm: i64 };

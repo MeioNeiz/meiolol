@@ -73,7 +73,7 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool, l: *const l
         .up = site.view.up(),
         .query = site.view.query(),
         .source = sourceText(p),
-        .players = try root.thousands(site.arena, p.players),
+        .players = root.Thousands{ .n = p.players },
         .min = p.min_players,
         .in = site.view.region.in(),
         .when = site.when,

@@ -631,8 +631,8 @@ fn tiles(site: *const Site, w: *Writer, v: View, r: Role, x: Champ, y: Champ, wh
         .dash = tpl.when(!has_gold, "-"),
         .cs = if (cs_gold) |c| tpl.t("about {c} of it from CS", .{ .c = tpl.call(signed, .{c}) }) else null,
         .ahead = tpl.call(percent, .{ lane.ahead, lane.games }),
-        .lane_games = try root.thousands(site.arena, lane.games),
-        .games = try root.thousands(site.arena, o.games),
+        .lane_games = root.Thousands{ .n = lane.games },
+        .games = root.Thousands{ .n = o.games },
         .when = when,
     });
 }
@@ -734,26 +734,12 @@ fn splitRow(w: *Writer, label: []const u8, v: View) !void {
         .thin_c = tpl.when(thin(v), " thin"),
         .colour = tierlist.wrColour(p, tierlist.matchup_span),
         .x_wins = v.wins(),
-        .games = Count{ .n = v.games() },
+        .games = root.Thousands{ .n = v.games() },
         .rate = tpl.call(percent, .{ v.wins(), v.games() }),
         .gold = tpl.when(has_gold, tpl.call(signed, .{v.estimate(.gold, i).mean})),
         .dash = tpl.when(!has_gold, "-"),
     });
 }
-
-/// 26568 as "26,568"
-const Count = struct {
-    n: u64,
-
-    pub fn format(c: Count, w: *Writer) Writer.Error!void {
-        var buf: [24]u8 = undefined;
-        const digits = std.fmt.bufPrint(&buf, "{d}", .{c.n}) catch unreachable;
-        for (digits, 0..) |d, i| {
-            if (i > 0 and (digits.len - i) % 3 == 0) try w.writeByte(',');
-            try w.writeByte(d);
-        }
-    }
-};
 
 /// "50.3%"; "-" without games
 fn pct1(w: *Writer, part: u32, whole: u32) !void {
@@ -976,7 +962,7 @@ fn caption(w: *Writer, v: View, base: ?View, prev: ?Prev, when: []const u8, lane
         .base = tpl.when(!own, tpl.t("all {lane} lanes (few games here)", .{ .lane = lane })),
         .ended = tpl.when(last > surrender_minute, tpl.t(" <span class=\"k end\"></span>{m} min, after it only games still going", .{ .m = surrender_minute })),
         .prev = if (prev) |pv| tpl.t(" <span class=\"k prev\"></span>patch {patch}", .{ .patch = pv.patch }) else null,
-        .games = Count{ .n = v.games() },
+        .games = root.Thousands{ .n = v.games() },
         .when = when,
     });
 }

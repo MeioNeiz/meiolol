@@ -127,7 +127,7 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
             .won = tpl.when(rank == null, "of games won"),
             .pick = tpl.call(pct, .{ cr.games, site.games }),
             .ban = tpl.call(pct, .{ ch.banned, site.games }),
-            .games = try root.thousands(site.arena, cr.games),
+            .games = root.Thousands{ .n = cr.games },
         });
 
         var opps: std.ArrayList(Opponent) = .empty;

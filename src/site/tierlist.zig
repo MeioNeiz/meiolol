@@ -19,7 +19,7 @@ const roleSlug = @import("root.zig").roleSlug;
 const roleName = @import("root.zig").roleName;
 const roleIcons = @import("root.zig").roleIcons;
 const roleIcon = @import("root.zig").roleIcon;
-const thousands = @import("root.zig").thousands;
+const Thousands = @import("root.zig").Thousands;
 
 /// Below this share of all games a champion's row is a rare pick, listed on request
 const min_pick_rate = 0.004;
@@ -388,7 +388,7 @@ pub fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {
         \\<p class="muted"><b>{games}</b> Platinum+ ranked solo/duo games {in}, {when}.{builds}</p>
         \\
     , .{
-        .games = try thousands(a, site.games),
+        .games = Thousands{ .n = site.games },
         .in = site.view.region.in(),
         .when = site.when,
         .builds = if (site.view_builds[site.view.index()] != null) tpl.t(" <a href=\"{href}\">Builds, {period}</a>.", .{

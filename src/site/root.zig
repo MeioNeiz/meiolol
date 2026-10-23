@@ -232,10 +232,10 @@ pub const Site = struct {
             .patch = s.patch,
             .regions = s.opts.all_platforms,
             .home = s.opts.platforms[0],
-            .data = s.arena.print("{s}, {s}, {s} games{s}", .{
+            .data = s.arena.print("{s}, {s}, {f} games{s}", .{
                 s.view.region.in(),
                 s.when,
-                thousands(s.arena, s.games) catch "",
+                Thousands{ .n = s.games },
                 if (s.patch_mix.len > 0) s.arena.print(" ({s})", .{s.patch_mix}) catch "" else "",
             }) catch "",
             .public = s.opts.public,
@@ -572,20 +572,22 @@ pub fn roleIcon(w: *Writer, r: Role) !void {
 }
 
 /// 26568 as "26,568"
-pub fn thousands(a: std.mem.Allocator, n: u64) ![]const u8 {
-    const digits = try std.fmt.allocPrint(a, "{d}", .{n});
-    var out: std.ArrayList(u8) = .empty;
-    for (digits, 0..) |c, i| {
-        if (i > 0 and (digits.len - i) % 3 == 0) try out.append(a, ',');
-        try out.append(a, c);
-    }
-    return out.items;
-}
+pub const Thousands = struct {
+    n: u64,
 
-test thousands {
-    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-    defer arena.deinit();
-    try std.testing.expectEqualStrings("26,568", try thousands(arena.allocator(), 26568));
-    try std.testing.expectEqualStrings("999", try thousands(arena.allocator(), 999));
-    try std.testing.expectEqualStrings("1,000,000", try thousands(arena.allocator(), 1_000_000));
+    pub fn format(t: Thousands, w: *Writer) Writer.Error!void {
+        var buf: [20]u8 = undefined;
+        const digits = buf[0..std.fmt.printInt(&buf, t.n, 10, .lower, .{})];
+        for (digits, 0..) |c, i| {
+            if (i > 0 and (digits.len - i) % 3 == 0) try w.writeByte(',');
+            try w.writeByte(c);
+        }
+    }
+};
+
+test Thousands {
+    var buf: [16]u8 = undefined;
+    for ([_]struct { u64, []const u8 }{ .{ 26568, "26,568" }, .{ 999, "999" }, .{ 1_000_000, "1,000,000" } }) |c| {
+        try std.testing.expectEqualStrings(c[1], try std.mem.print(&buf, "{f}", .{Thousands{ .n = c[0] }}));
+    }
 }
