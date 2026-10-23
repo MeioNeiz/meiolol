@@ -316,16 +316,12 @@ const App = struct {
         }
     }
 
-    fn connect(app: App, arena: std.mem.Allocator) !lcu.Client {
-        const found = try lcu.lockfile.discover(arena, app.io, app.args.lockfile);
-        return .{ .gpa = app.gpa, .io = app.io, .credentials = found.credentials };
-    }
-
     fn connectOrExit(app: App) lcu.Client {
-        return app.connect(app.arena) catch |err| switch (err) {
+        const credentials = lcu.lockfile.discover(app.arena, app.io, app.args.lockfile) catch |err| switch (err) {
             error.ClientNotRunning => fail("League client not running", .{}),
             else => fail("cannot find the League client: {t}", .{err}),
         };
+        return .{ .gpa = app.gpa, .io = app.io, .credentials = credentials };
     }
 
     fn get(app: App) !void {

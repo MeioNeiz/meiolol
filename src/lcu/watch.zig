@@ -56,8 +56,8 @@ pub const Watch = struct {
     pub fn step(w: *Watch, arena: std.mem.Allocator) !Step {
         if (w.client == null) {
             w.conn = .init(w.gpa);
-            const found = try lcu.lockfile.discover(w.conn.?.allocator(), w.io, w.lockfile);
-            w.client = .{ .gpa = w.gpa, .io = w.io, .credentials = found.credentials };
+            const credentials = try lcu.lockfile.discover(w.conn.?.allocator(), w.io, w.lockfile);
+            w.client = .{ .gpa = w.gpa, .io = w.io, .credentials = credentials };
         }
         const client = w.client.?;
 

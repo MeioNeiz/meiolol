@@ -25,18 +25,6 @@ pub fn get(
     password: []const u8,
     path: []const u8,
 ) !Response {
-    return getTrusting(gpa, io, port, password, path, riot_root_pem);
-}
-
-/// `get` with another root certificate, for testing against a local server
-pub fn getTrusting(
-    gpa: std.mem.Allocator,
-    io: std.Io,
-    port: u16,
-    password: []const u8,
-    path: []const u8,
-    root_pem: []const u8,
-) !Response {
     const address: std.Io.net.IpAddress = .{ .ip4 = .loopback(port) };
     const stream = address.connect(io, .{ .mode = .stream }) catch |err| switch (err) {
         error.ConnectionRefused => return error.ClientNotRunning,
@@ -49,7 +37,7 @@ pub fn getTrusting(
     };
     defer stream.close(io);
 
-    var bundle = try rootBundle(gpa, io, root_pem);
+    var bundle = try rootBundle(gpa, io, riot_root_pem);
     defer bundle.deinit(gpa);
     var bundle_lock: std.Io.RwLock = .init;
 

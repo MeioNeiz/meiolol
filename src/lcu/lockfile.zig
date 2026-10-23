@@ -6,8 +6,6 @@ const builtin = @import("builtin");
 pub const Credentials = struct {
     port: u16,
     password: []const u8,
-    /// From the lockfile; the process list does not give it
-    pid: ?u32 = null,
     /// Plain HTTP, no certificate: only a mock client (deploy/mock-cs.sh) through an
     /// override lockfile ending `:http`. The real client always speaks HTTPS
     plain: bool = false,
@@ -23,7 +21,7 @@ pub const default_paths: []const []const u8 = switch (builtin.os.tag) {
 pub fn parse(content: []const u8) !Credentials {
     var it = std.mem.splitScalar(u8, std.mem.trim(u8, content, " \t\r\n"), ':');
     _ = it.next() orelse return error.BadLockfile;
-    const pid = it.next() orelse return error.BadLockfile;
+    _ = it.next() orelse return error.BadLockfile;
     const port = it.next() orelse return error.BadLockfile;
     const password = it.next() orelse return error.BadLockfile;
     if (password.len == 0) return error.BadLockfile;
@@ -31,7 +29,6 @@ pub fn parse(content: []const u8) !Credentials {
     return .{
         .port = std.fmt.parseInt(u16, port, 10) catch return error.BadLockfile,
         .password = password,
-        .pid = std.fmt.parseInt(u32, pid, 10) catch null,
         .plain = std.mem.eql(u8, protocol, "http"),
     };
 }
@@ -60,38 +57,27 @@ fn argValue(line: []const u8, key: []const u8) ?[]const u8 {
     return rest[0..end];
 }
 
-pub const Source = enum { override, lockfile, process_list };
-
-pub const Found = struct {
-    credentials: Credentials,
-    source: Source,
-    /// The lockfile read, when there was one
-    path: ?[]const u8 = null,
-};
-
 /// `override` (from --lockfile or MEIOLOL_LOCKFILE) wins; else the default install
 /// path; else the running client's command line. Strings are allocated in `arena`.
-pub fn discover(arena: std.mem.Allocator, io: std.Io, override: ?[]const u8) !Found {
+pub fn discover(arena: std.mem.Allocator, io: std.Io, override: ?[]const u8) !Credentials {
     if (override) |path| {
         const content = readSmall(arena, io, path) catch |err| switch (err) {
             error.FileNotFound => return error.ClientNotRunning,
             else => return err,
         };
-        return .{ .credentials = try parse(content), .source = .override, .path = path };
+        return parse(content);
     }
     for (default_paths) |path| {
         const content = readSmall(arena, io, path) catch continue;
         const creds = parse(content) catch continue;
-        if (creds.plain) continue;
-        return .{ .credentials = creds, .source = .lockfile, .path = path };
+        if (!creds.plain) return creds;
     }
     // The process list costs ~1.5 s of CPU on Windows (PowerShell); pollers call this
     // every second while the client is closed
     if (builtin.os.tag == .windows and !windowsProcessRunning("LeagueClientUx.exe"))
         return error.ClientNotRunning;
     const listing = processList(arena, io) catch return error.ClientNotRunning;
-    const creds = parseCommandLine(listing) orelse return error.ClientNotRunning;
-    return .{ .credentials = creds, .source = .process_list };
+    return parseCommandLine(listing) orelse error.ClientNotRunning;
 }
 
 fn readSmall(arena: std.mem.Allocator, io: std.Io, path: []const u8) ![]u8 {
@@ -163,7 +149,6 @@ test "parse lockfile" {
     const c = try parse("LeagueClient:21876:54321:AbC-dEf_123:https\n");
     try testing.expectEqual(54321, c.port);
     try testing.expectEqualStrings("AbC-dEf_123", c.password);
-    try testing.expectEqual(21876, c.pid.?);
     try testing.expect(!c.plain);
     try testing.expect((try parse("LeagueClient:1:2:pw:http")).plain);
     try testing.expectError(error.BadLockfile, parse(""));
