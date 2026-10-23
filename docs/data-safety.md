@@ -239,7 +239,7 @@ are overwritten. Logs counts only, never the PUUID or Riot ID.
 
 Modelling copies of the box data (meiolol-lab; docs/model.md "Shared protocol"):
 
-- Made on the gpu-box (18 Oct; deploy/snapshot.sh, weekly from launchd on the Mac,
+- Made on the gpu-box (18 Oct; deploy/snapshot.sh, daily from launchd on the Mac,
   runs deploy/snapshot-gpu.sh there): `meiolol restore` from its backup mirror (the
   mirror's lock held), plus what backups leave out, from the box over the gpu-box's
   backup key (backup-serve.sh snapshot-extra, nice + ionice, ~5 GB of temp files and
@@ -268,7 +268,10 @@ Modelling copies of the box data (meiolol-lab; docs/model.md "Shared protocol"):
   never on the box.
   Without it a hash can't be linked back to a PUUID; with it only by hashing candidates
 - Disposable: a snapshot is deleted from the Mac and the gpu-box when a newer one
-  replaces it, so an erasure reaches analysis copies within one snapshot cycle. Not in
+  replaces it (snapshot.sh prune, after each fetch; by hand before 23 Oct, when four
+  were on each host), so an erasure reaches analysis copies within a day. Open: prune
+  keeps docs/golden.tsv's snapshot (snap-20261012T2055Z) for golden.sh, which this
+  rule doesn't allow for long. Not in
   git, not published
 - mastery_pre.tsv and mastery_pre_pool.tsv (`meiolol-lab mastery-pre SNAP ARCHIVE`):
   pre-game mastery joined from the raw archive, keyed by hashed match id and slot only, written inside the

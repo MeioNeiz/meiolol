@@ -89,6 +89,16 @@ people, unconfirmed and bots. Next, only if needed:
   incorrect", 14-17 Oct)
 - Alerts and backups: decisions.md "Open decisions" (ntfy topic, Mac watch job)
 - Crawl floor Gold IV once the key's rate allows (Q4)
+- Incremental snapshots (Jacob 23 Oct: "adding to the data rather than copying it"):
+  daily since 23 Oct, but each make still restores the whole mirror, anonymises,
+  splits and packs (~70 min on the gpu-box, ~22 GB new on each host) though nearly every
+  game was in the one before. Instead keep one anonymised copy on the gpu-box and append
+  each backup segment's new rows hashed with the same salt, plus the late-changing
+  columns and the tables backups leave out (snapshot-extra); a fixed id per day's state
+  for runs that must not move (split by date cut-off, not a new dir); Mac copy by
+  rsync onto the last. Check first: anonymise and split assume a full rebuild (row
+  order, split.tsv over all games, pack and seat stats rebuilt whole), and erasure must
+  still reach the copy (forget applied to it, as to the mirrors)
 
 ## Deploys
 

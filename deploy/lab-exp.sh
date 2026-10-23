@@ -26,8 +26,9 @@
 #                                                  scores) to RUN/preds.tsv, to check a port
 #
 # TARGET: win gold14 lanediff14 cs10 deaths15 first_item. Env: LAB_HOST (gpu-box),
-# LAB_SNAP (snap-20261012T2055Z, in ~/ml/snaps on the host), LAB_BUDGET_S (600 s of
-# running time; killed at twice that; paused time while League is open doesn't count),
+# LAB_SNAP (the host's newest in ~/ml/snaps; deploy/snapshot.sh prunes older ones daily,
+# and a campaign's ladder is per snapshot), LAB_BUDGET_S (600 s of running time; killed
+# at twice that; paused time while League is open doesn't count),
 # LAB_ROOT (ml/lab under the host's home; another root keeps smoke tests off the ladder),
 # LAB_CANDS (campaign dirs; default src/lab/cand here), LAB_MAX_RUNS (per campaign; unset:
 # no cap)
@@ -40,25 +41,27 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 . "$ROOT/deploy/lib.sh"
 HOST=${LAB_HOST:-gpu-box}
-SNAP=${LAB_SNAP:-snap-20261012T2055Z}
 BUDGET=${LAB_BUDGET_S:-600}
 MAX_RUNS=${LAB_MAX_RUNS:-}
 LAB_ROOT=${LAB_ROOT:-ml/lab}
 TARGETS="win gold14 lanediff14 cs10 deaths15 first_item"
-LAB=$LAB_ROOT/$SNAP
 CANDS=src/lab/cand
 # Where campaigns live: an agent session works outside the shared checkout (docs/
 # lab-brief.md), so it can't touch other sessions' files
 CAND_ROOT=${LAB_CANDS:-$ROOT/$CANDS}
+on() {
+    if [[ "$HOST" == mac ]]; then (cd && bash -c "$*"); else ssh "$HOST" "$*"; fi
+}
+
+# mastery_pre.tsv is a make's last step: one still building has none
+SNAP=${LAB_SNAP:-$(on "ls ml/snaps/snap-*T*Z/mastery_pre.tsv" | awk -F/ '{ print $(NF-1) }' \
+    | sort | tail -n 1)}
+LAB=$LAB_ROOT/$SNAP
 # Expands on the host, in the run's job.sh
 # shellcheck disable=SC2088
 SNAP_PATH="~/ml/snaps/$SNAP"
 # shellcheck disable=SC2088
 LAB_PATH="~/$LAB_ROOT"
-
-on() {
-    if [[ "$HOST" == mac ]]; then (cd && bash -c "$*"); else ssh "$HOST" "$*"; fi
-}
 
 usage() {
     usage_of "$0"

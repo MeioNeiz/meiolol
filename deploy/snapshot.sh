@@ -7,17 +7,18 @@
 #   deploy/snapshot.sh make            new ~/ml/snaps/snap-STAMP on the gpu-box, then fetch
 #   deploy/snapshot.sh fetch NAME      the gpu-box's NAME to data/NAME here
 #   deploy/snapshot.sh tick            hourly (launchd): fetch what waits, make when due
-#   deploy/snapshot.sh prune KEEP      delete every other snap-* here and on the gpu-box
+#   deploy/snapshot.sh prune           delete older snap-* here and on the gpu-box
 #   deploy/snapshot.sh schedule install|uninstall   the hourly tick
 #
-# Due: Sundays from 07:00 (after the day's 04:00 UTC backup has reached the mirror), or
-# any day once the newest is 8 days old; a failed make waits 6 h before the next try. A
+# Due daily from 07:00 once the newest predates the day's 04:00 UTC backup (a snapshot
+# holds games up to the last backup); a failed make waits 6 h before the next try. A
 # gpu-box asleep, without its lab partition, with League open or a mirror over a day old
-# skips the tick. A snapshot not yet fetched here waits in ~/.cache/meiolol-snapshot/pending
+# skips the tick. A snapshot not yet fetched here waits in
+# ~/.cache/meiolol-snapshot/pending. Each fetch prunes: older snapshots go, but
+# docs/golden.tsv's and any a run that hasn't ended names
 #
 # Builds from committed HEAD in a temp tree (other sessions edit the shared checkout).
-# The lab agent's snapshot is LAB_SNAP in deploy/lab-exp.sh: move it to the new one
-# before prune. Env: SNAP_GPU (gpu-box)
+# Env: SNAP_GPU (gpu-box)
 set -euo pipefail
 # launchd's login bash finds Homebrew's zig (0.16) first and no wz: the pinned 0.17 and
 # wz live in ~/.local/bin
@@ -104,7 +105,8 @@ fetch_snap() {
     # Same path on both hosts, so deploy/lab-run.sh can place a run on either
     mkdir -p ~/ml/snaps && ln -sfn "$ROOT/data/$name" ~/ml/snaps/"$name"
     [[ -f "$STATE/pending" ]] && sed -i '' "/^$name\$/d" "$STATE/pending"
-    log "done: $name. Next: LAB_SNAP in deploy/lab-exp.sh, then deploy/snapshot.sh prune $name"
+    log "done: $name"
+    prune
     return 0
 }
 
@@ -115,34 +117,61 @@ tick() {
     mkdir "$STATE/lock" 2> /dev/null || return 0
     # shellcheck disable=SC2064 # expand now; EXIT, as die exits
     trap "rmdir '$STATE/lock'" EXIT
-    local name newest age failed
+    local name newest failed backup
     for name in $(cat "$STATE/pending" 2> /dev/null); do fetch_snap "$name" || break; done
     # The gpu-box's: it builds them, and a Mac copy may lag
     newest=$(ssh -o ConnectTimeout=10 -o BatchMode=yes "$GPU" \
         "find ml/snaps/ -maxdepth 1 -type d -name 'snap-*T*Z'" 2> /dev/null | sort | tail -n 1) || return 0
     newest=${newest##*/snap-}
-    age=$(( $(date -u +%s) - $(date -j -u -f %Y%m%dT%H%MZ "${newest:-19700101T0000Z}" +%s) ))
     failed=$(( $(date +%s) - $(stat -f %m "$STATE/failed" 2> /dev/null || echo 0) ))
     (( failed > 6 * 3600 )) || return 0
-    if (( age > 8 * 86400 )) || { (( $(date +%u) == 7 && 10#$(date +%H) >= 7 )) && (( age > 3 * 86400 )); }; then
+    backup=$(date -u +%Y%m%dT0400Z)
+    if (( 10#$(date +%H) >= 7 )) && [[ "${newest:-0}" < "$backup" ]]; then
         touch "$STATE/failed"
         ( make_snap ) && rm -f "$STATE/failed"
     fi
 }
 
+# Snapshots named by runs that haven't ended on a host (deploy/lab-run.sh state_cmd: no
+# exit or stopped, process group alive or not started yet)
+# shellcheck disable=SC2016 # expands on the host
+BUSY='cd && for d in ml/runs/*/; do
+    [[ -f $d/exit || -f $d/stopped ]] && continue
+    pg=$(cat $d/job.pgid 2> /dev/null)
+    [[ -z $pg ]] || kill -0 -- -$pg 2> /dev/null || continue
+    grep -ohE "snap-[0-9]{8}T[0-9]{4}Z" $d/job.sh 2> /dev/null; done; true'
+
+here() {
+    find "$ROOT/data" -maxdepth 1 -type d -name 'snap-*T*Z' | sed 's|.*/||' \
+        | grep -E '^snap-[0-9]{8}T[0-9]{4}Z$'
+}
+
+# Deletes snap-STAMP dirs older than the newest the Mac has in full, on both hosts; keeps
+# docs/golden.tsv's (golden.sh reruns its references on them) and busy ones. Hand-made
+# copies (snap, snap-3c) don't match
 prune() {
-    local keep=$1
-    [[ "$keep" =~ ^snap-[0-9]{8}T[0-9]{4}Z$ ]] || die "KEEP: snap-STAMP"
-    [[ -d "$ROOT/data/$keep" ]] || die "no data/$keep here"
-    ssh "$GPU" "test -d ml/snaps/$keep" || die "no ml/snaps/$keep on $GPU"
-    grep -q "LAB_SNAP:-$keep" "$ROOT/deploy/lab-exp.sh" || die "LAB_SNAP isn't $keep yet"
-    # Only snap-STAMP dirs: data/ also holds hand-made copies (snap, snap-3c)
-    find "$ROOT/data" -maxdepth 1 -type d -regex '.*/snap-[0-9]\{8\}T[0-9]\{4\}Z' \
-        ! -name "$keep" -print -exec rm -rf {} +
-    find ~/ml/snaps -maxdepth 1 -type l -name 'snap-*T*Z' ! -name "$keep" -delete \
-        2> /dev/null || true
-    ssh "$GPU" "find ml/snaps -maxdepth 1 -type d -name 'snap-*T*Z' ! -name '$keep' -print \
-        -exec rm -rf {} +"
+    local keep spare s
+    keep=$(here | grep -vxF -f <(cat "$STATE/pending" 2> /dev/null) | sort | tail -n 1)
+    [[ -n "$keep" ]] || return 0
+    ssh "$GPU" "test -d ml/snaps/$keep" || { log "prune: no $keep on $GPU"; return 0; }
+    spare=$({
+        awk -F'\t' '!/^#/ && $2 { print "snap-" $2 }' "$ROOT/docs/golden.tsv"
+        bash -c "$BUSY"
+        ssh "$GPU" "$BUSY"
+    }) || { log "prune: can't list runs"; return 0; }
+    old() {
+        grep -E '^snap-[0-9]{8}T[0-9]{4}Z$' | while read -r s; do
+            [[ "$s" < "$keep" ]] && ! grep -qxF "$s" <<< "$spare" && echo "$s"
+        done
+    }
+    for s in $(here | old); do
+        log "prune $s here"
+        rm -rf "${ROOT:?}/data/$s" ~/ml/snaps/"$s"
+    done
+    for s in $(ssh "$GPU" 'ls ml/snaps' | old); do
+        log "prune $s on $GPU"
+        ssh "$GPU" "rm -rf ml/snaps/$s"
+    done
 }
 
 schedule() {
@@ -164,6 +193,6 @@ case "${1:-}" in
     fetch) (( $# == 2 )) || usage; fetch_snap "$2" || die "$GPU unreachable" ;;
     tick) tick ;;
     schedule) schedule "${2:-}" ;;
-    prune) (( $# == 2 )) || usage; prune "$2" ;;
+    prune) prune ;;
     *) usage ;;
 esac

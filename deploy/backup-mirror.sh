@@ -25,13 +25,22 @@ sha() {
 umask 077
 mkdir -p "$dir/state" "$dir/segments" "$dir/mastery"
 chmod 700 "$dir"
-# No flock on macOS; a lock left by a killed run expires after 6 h
+# No flock on macOS. A run killed without its trap (a WSL restart, 23 Oct) leaves the
+# lock: stale once its owner is gone, the pid dead or from another boot; one without an
+# owner file (being taken, or older than owner files) after 6 h. snapshot-gpu.sh takes
+# the same lock
+boot_id() { cat /proc/sys/kernel/random/boot_id 2> /dev/null || sysctl -n kern.boottime; }
 lock=$dir/.lock
 if ! mkdir "$lock" 2> /dev/null; then
-    [[ -n $(find "$lock" -maxdepth 0 -mmin +360) ]] || exit 0
-    touch "$lock"
+    if read -r pid boot 2> /dev/null < "$lock/owner"; then
+        [[ "$boot" != "$(boot_id)" ]] || ! kill -0 "$pid" 2> /dev/null || exit 0
+    else
+        [[ -n $(find "$lock" -maxdepth 0 -mmin +360) ]] || exit 0
+    fi
+    log "stale lock taken over"
 fi
-trap 'rmdir "$lock" 2> /dev/null || true' EXIT
+echo "$$ $(boot_id)" > "$lock/owner"
+trap 'rm -rf "$lock"' EXIT
 
 serve list > "$dir/.list"
 manifest=$dir/.manifest

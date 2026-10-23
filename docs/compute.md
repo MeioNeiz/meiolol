@@ -357,6 +357,29 @@ WSL2 takes half the PC's memory by default (15 GB). C:\Users\jacob\.wslconfig se
 Linux cache goes back to Windows). Before: .wslconfig.bak-2026-10-12. Takes effect after
 `wsl --shutdown` and a restart.
 
+## Disk resets
+
+The lab disk (Crucial P3 2 TB, CT2000P3PSSD8, firmware P9CR40A: QLC, no DRAM; Windows
+disk 2, RaidPort2) holds /mnt/wsl/archive and /mnt/wsl/lab, so snapshots, runs, the
+backup mirror and the raw archive all write to it. Under heavy writes it stops answering
+and Windows resets it (System log, stornvme 129 "Reset to device, \Device\RaidPort2"):
+~45 resets 17-23 Oct, all during snapshot builds or archive and lab work. Most pass; some
+hang the PC, which then reboots with no bugcheck (Kernel-Power 41, EventLog 6008):
+snapshot builds at 07:39 and 19:50 on 23 Oct (4 min into the restore), 20 Oct 23:15, and
+19 Oct 21:21 (bugcheck 0x139 after resets). Not memory: WSL is capped at 24 GB, the
+pagefile peaked at 67 MB, no resource exhaustion events.
+
+Limits since 23 Oct (deploy/wsl, installed by deploy/gpu-box.sh install as root):
+- at most 32 commands of 512 KB in flight to the disk (were 1584 of 1.25 MB), so none
+  waits long behind the queue
+- writeback at 128 MB, writers blocked past 512 MB unwritten (were 10% and 20% of 24 GB,
+  ~4.6 GB flushed in bursts)
+- Windows: PCIe Link State Power Management off on AC (was Moderate; `powercfg
+  /setacvalueindex SCHEME_CURRENT SUB_PCIEXPRESS ASPM 1` to undo)
+
+Still worth doing at the PC: Crucial Storage Executive for newer firmware, and a heatsink
+or airflow on the drive. Check resets since: System log, stornvme 129, Kernel-Power 41.
+
 ## Threads in our code
 
 src/par.zig: `par.forEach(io, n, ctx, body)` runs body once per index on the Io thread
@@ -398,15 +421,17 @@ first.
 ### 2. Data for models (with meiolol-2a, who owns snapshots)
 
 - Snapshot cadence (done, 2026-10-13; built on the gpu-box since 18 Oct): `deploy/
-  snapshot.sh make` on the Mac, weekly via an hourly launchd tick (due Sundays from
-  07:00, after the 04:00 UTC backup reaches the mirror; skipped while the gpu-box is
-  asleep or League is open), runs deploy/snapshot-gpu.sh there: restore from the
-  backup mirror plus what backups leave out from the box (backup-serve.sh
-  snapshot-extra: 4.3 GB sent, ~5 GB box temp, 34 min), checks, anonymise, split,
+  snapshot.sh make` on the Mac, daily via an hourly launchd tick (due from 07:00 once
+  the newest predates the 04:00 UTC backup, so a snapshot holds games to that morning;
+  weekly until 23 Oct; skipped while the gpu-box is asleep or League is open), runs
+  deploy/snapshot-gpu.sh there: restore from the backup mirror plus what backups leave
+  out from the box (backup-serve.sh snapshot-extra: 4.3 GB sent, ~5 GB box temp, 34
+  min), checks, anonymise, split,
   legendaries, pack, mastery-pre, then rsync to the Mac over the LAN. 18 Oct run
   (snap-20261018T1007Z): 78 min end to end, 70 on the gpu-box. Before: box VACUUM INTO
-  ~23 GB streamed to the Mac, ~21 GB rsynced on to the gpu-box. `prune KEEP` once
-  LAB_SNAP moves
+  ~23 GB streamed to the Mac, ~21 GB rsynced on to the gpu-box. Each fetch prunes
+  older snapshots on both hosts, but docs/golden.tsv's and any a run that hasn't ended
+  names; LAB_SNAP defaults to the newest
 - Packed rows (done, 2026-10-12): `meiolol-lab pack SNAP` writes rows.Data as
   fixed-width column files in SNAP/pack/ (docs/architecture.md "Packed rows"); rows.load
   reads them when they match the snapshot, else SQLite, so every lab command gets it.

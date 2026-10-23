@@ -44,13 +44,30 @@ restored=$work/restored
 extra=$work/extra
 mkdir -p "$raw" "$extra"
 
-# The mirror's own lock (backup-mirror.sh): no scrub or rotation under the restore
-mkdir "$mirror/.lock" 2> /dev/null || die "backup mirror busy: try again later"
-trap 'cleanup; rmdir "$mirror/.lock" 2> /dev/null || true' EXIT
+# The mirror's own lock (backup-mirror.sh, same stale rule): no scrub or rotation under
+# the restore. An hourly mirror run holds it a minute or two
+lock=$mirror/.lock
+boot=$(cat /proc/sys/kernel/random/boot_id)
+got=
+for _ in $(seq 60); do
+    if mkdir "$lock" 2> /dev/null; then got=1; break; fi
+    if read -r pid b 2> /dev/null < "$lock/owner"; then
+        if [[ "$b" != "$boot" ]] || ! kill -0 "$pid" 2> /dev/null; then
+            log "stale mirror lock taken over"
+            got=1
+            break
+        fi
+    elif [[ -n $(find "$lock" -maxdepth 0 -mmin +360) ]]; then got=1; break
+    fi
+    sleep 30
+done
+[[ -n $got ]] || die "backup mirror busy for 30 min: try again later"
+echo "$$ $boot" > "$lock/owner"
+trap 'cleanup; rm -rf "$lock"' EXIT
 log "restore from $mirror (mirrored $(date -u -r "$mirror/.mirrored" +%FT%TZ))"
 nice -n 10 "$bin/meiolol-snapshot" restore --from "$mirror" --data "$restored" > "$work/restore.log" 2>&1 \
     || { tail -n 5 "$work/restore.log"; die "restore failed"; }
-rmdir "$mirror/.lock"
+rm -rf "$lock"
 trap cleanup EXIT
 day=$(sqlite3 "file:$restored/meiolol.db?mode=ro" "SELECT coalesce(max(day), 0) FROM rank_history")
 
