@@ -142,6 +142,27 @@ segment 000002 had copied it (Key switch, below). 000002 on both mirrors blanked
 same way on 18 Oct (980 PUUIDs); a second restore then had no unexplained difference in
 any of the seven tables (participants: 49 exempt, the rest the same).
 
+### Logins backup
+
+The web server's accounts.db (logins: emails or usernames, argon2id password hashes,
+roles, session and invite hashes; docs/plan/accounts.md) to the gpu-box every 6 h:
+meiolol-accounts-pull.timer runs deploy/accounts-pull.sh, which asks host
+meiolol-accounts (gpu-box key ~/.ssh/meiolol_accounts; on jomify user meiolol's
+authorized_keys, forced command `sudo -n /usr/local/bin/meiolol-accounts-send`, one line
+in /etc/sudoers.d/meiolol-accounts-send). That script (deploy/accounts-send.sh, installed
+by `deploy/jomify.sh install accounts-send`) runs `meiolol account backup` as
+meiolol-api: VACUUM INTO, so the copy is consistent while the API runs. The pull checks
+the SQLite header and opens a copy (an empty one fails: the owner always exists), then
+keeps /mnt/wsl/archive/meiolol-accounts/accounts-DATE.db (mode 600), the newest 14
+dates (privacy page: a deleted login leaves the backups within 14 days). Log
+~/ml/accounts-pull.log on the gpu-box. api.db (Your games' cache, refetchable) is not
+backed up.
+
+Restore: `ssh gpu-box`, pick a file; on jomify `sudo systemctl stop meiolol-api`, copy
+it to /var/lib/meiolol-api/accounts.db (owner meiolol-api, mode 600), delete
+accounts.db-wal and -shm there, `sudo systemctl start meiolol-api`. Sessions in the
+copy still work; logins made since are gone (remake with `meiolol account`).
+
 ## Desktop signing keys
 
 The desktop app trusts two Ed25519 public keys built into it (src/desktop/sign.zig).

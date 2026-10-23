@@ -345,7 +345,7 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\Logging in sets one cookie, which keeps you logged in for 30 days and does nothing
         \\else; we store only a one-way hash of it. Nothing is ever sent to your email
         \\address. To delete your account, write to the address below and we remove it and
-        \\its sessions.</p>
+        \\its sessions. Copies in our backups are gone within 14 days.</p>
         \\<h2>The desktop app</h2>
         \\<p>The desktop app is not released yet. When it is, it will read champ select from
         \\the League client running on your own PC and show lane information on screen. It

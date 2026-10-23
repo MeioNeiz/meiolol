@@ -48,7 +48,8 @@ who is the controller of the data described here. Contact: privacy@meio.lol.
 
 - No public accounts, no advertising, no analytics trackers; logins (one session cookie)
   only for people we invite: email or username, password hash, role, created and last
-  used, deleted on request (`meiolol account delete`)
+  used, deleted on request (`meiolol account delete`); backups (gpu-box, 14 days)
+  age it out within 14 days
 - The public pages show champion and aggregate statistics, and Daily Draft games with
   players shown only as seats (no names); a player's games, with the Riot IDs of the
   players in them, appear only when someone looks up their Riot ID

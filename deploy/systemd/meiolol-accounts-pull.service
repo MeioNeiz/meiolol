@@ -1,0 +1,8 @@
+[Unit]
+Description=meiolol logins backup from the web server (deploy/accounts-pull.sh, gpu-box)
+# Beside the backup mirror, not on the WSL disk
+ConditionPathIsMountPoint=/mnt/wsl/archive
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'exec %h/ml/bin/accounts-pull.sh /mnt/wsl/archive/meiolol-accounts %h/ml/bin/meiolol >> %h/ml/accounts-pull.log 2>&1'

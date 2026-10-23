@@ -7,7 +7,7 @@
 # working tree.
 #
 #   deploy/jomify.sh drift                 installed vs HEAD, per piece
-#   deploy/jomify.sh install traffic|cache-version|training-receive
+#   deploy/jomify.sh install traffic|cache-version|training-receive|accounts-send
 #   deploy/jomify.sh install api [REV]     Your games API binary (docs/your-games.md)
 #
 # api: built from a clean checkout of REV (default HEAD) for x86_64 musl, the old binary
@@ -19,7 +19,7 @@ set -euo pipefail
 HOST=${JOMIFY_HOST:-jomify}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 RECORD=/usr/local/share/meiolol/installed
-PIECES=(traffic cache-version training-receive)
+PIECES=(traffic cache-version training-receive accounts-send)
 # A piece's repo file (macOS bash 3.2: no associative arrays); installed as
 # /usr/local/bin/meiolol-PIECE
 src() {
@@ -27,6 +27,7 @@ src() {
         traffic) echo deploy/traffic.sh ;;
         cache-version) echo deploy/cache-version-receive.sh ;;
         training-receive) echo deploy/training-receive.sh ;;
+        accounts-send) echo deploy/accounts-send.sh ;;
     esac
 }
 UNITS=(meiolol-traffic.service meiolol-traffic.timer)
@@ -120,9 +121,9 @@ case "${1:-}" in
     drift) drift ;;
     install)
         case "${2:-}" in
-            traffic | cache-version | training-receive) install_script "$2" ;;
+            traffic | cache-version | training-receive | accounts-send) install_script "$2" ;;
             api) install_api "${3:-}" ;;
-            *) echo "usage: deploy/jomify.sh install traffic|cache-version|training-receive|api [REV]"; exit 2 ;;
+            *) echo "usage: deploy/jomify.sh install traffic|cache-version|training-receive|accounts-send|api [REV]"; exit 2 ;;
         esac
         ;;
     *) echo "usage: deploy/jomify.sh drift|install PIECE"; exit 2 ;;

@@ -18,10 +18,11 @@ set -euo pipefail
 HOST=${GPU_HOST:-gpu-box}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 . "$ROOT/deploy/lib.sh"
-SCRIPTS=(lab-watch.sh archive-pull.sh backup-mirror.sh)
+SCRIPTS=(lab-watch.sh archive-pull.sh backup-mirror.sh accounts-pull.sh)
 UNITS=(meiolol-lab-watch.service meiolol-archive-pull.service meiolol-archive-pull.timer
-    meiolol-backup-mirror.service meiolol-backup-mirror.timer)
-TIMERS=(meiolol-archive-pull.timer meiolol-backup-mirror.timer)
+    meiolol-backup-mirror.service meiolol-backup-mirror.timer meiolol-accounts-pull.service
+    meiolol-accounts-pull.timer)
+TIMERS=(meiolol-archive-pull.timer meiolol-backup-mirror.timer meiolol-accounts-pull.timer)
 ETC=(sysctl.d/60-meiolol-disk.conf udev/rules.d/60-meiolol-disk.rules)
 # Root without a PATH: commands by full path
 WSL_ROOT="/mnt/c/Windows/System32/wsl.exe -u root -e"

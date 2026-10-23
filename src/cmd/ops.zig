@@ -70,6 +70,8 @@ pub const usage_account =
     \\              links            sign-up links and how often each was used
     \\              revoke-links     every sign-up link stops working
     \\              list
+    \\              backup           a consistent copy of accounts.db on stdout (VACUUM INTO;
+    \\                               deploy/accounts-pull.sh, docs/data-safety.md)
     \\
 ;
 
@@ -78,11 +80,11 @@ pub fn cmdAccount(c: *Cmd) !u8 {
     const io = c.init.io;
     const arena = c.arena;
     const verb = c.next() orelse return error.Usage;
-    const Verb = enum { add, password, role, disable, enable, delete, invite, reset, list, link, links, @"revoke-links" };
+    const Verb = enum { add, password, role, disable, enable, delete, invite, reset, list, link, links, @"revoke-links", backup };
     const v = std.meta.stringToEnum(Verb, verb) orelse return error.Usage;
     var name_buf: [accounts.username_max]u8 = undefined;
     const name: []const u8 = switch (v) {
-        .invite, .list, .link, .links, .@"revoke-links" => "",
+        .invite, .list, .link, .links, .@"revoke-links", .backup => "",
         else => accounts.username(&name_buf, c.next() orelse return error.Usage) orelse {
             std.log.err("username: 2 to 64 letters, digits and . _ - @ +", .{});
             return 2;
@@ -175,6 +177,17 @@ pub fn cmdAccount(c: *Cmd) !u8 {
             }
         },
         .@"revoke-links" => try accounts.revokeLinks(db),
+        .backup => {
+            const tmp = try arena.printSentinel("{s}/accounts.db.backup", .{c.data_dir}, 0);
+            const cwd = std.Io.Dir.cwd();
+            cwd.deleteFile(io, tmp) catch |err| switch (err) {
+                error.FileNotFound => {},
+                else => return err,
+            };
+            try db.run("VACUUM INTO ?", .{tmp});
+            defer cwd.deleteFile(io, tmp) catch {};
+            try out.writeAll(try cwd.readFileAlloc(io, tmp, arena, .limited(1 << 30)));
+        },
     }
     return 0;
 }

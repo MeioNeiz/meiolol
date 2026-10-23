@@ -1,0 +1,10 @@
+[Unit]
+Description=meiolol logins backup every 6 hours (meiolol-accounts-pull.service, gpu-box)
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=6h
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
