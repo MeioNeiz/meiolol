@@ -101,7 +101,6 @@ pub fn buildSets(gpa: std.mem.Allocator, d: *const rows.Data, ids: *const Ids, k
             .enemies = undefined,
             .enemy_roles = undefined,
             .allies = undefined,
-            .ally_roles = undefined,
             .y = @floatCast((y - mean.*) / sd.*),
         };
         var complete = true;
@@ -116,7 +115,6 @@ pub fn buildSets(gpa: std.mem.Allocator, d: *const rows.Data, ids: *const Ids, k
             if (role == @backingInt(r.role)) continue;
             if (ri == std.math.maxInt(u32)) complete = false else {
                 e.allies[a] = ids.get(d.rows[ri].champion, @intCast(role));
-                e.ally_roles[a] = @intCast(role);
             }
             a += 1;
         }

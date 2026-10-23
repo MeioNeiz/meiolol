@@ -360,7 +360,7 @@ test "threaded fit matches the serial fit to rounding" {
     const train = try gpa.alloc(fm.Example, 3000);
     defer gpa.free(train);
     for (train) |*e| {
-        e.* = .{ .me = r.uintLessThan(u16, n), .role = r.uintLessThan(u3, 5), .platform = r.uintLessThan(u8, 3), .enemies = undefined, .enemy_roles = .{ 0, 1, 2, 3, 4 }, .allies = undefined, .ally_roles = undefined, .y = r.floatNorm(f32) };
+        e.* = .{ .me = r.uintLessThan(u16, n), .role = r.uintLessThan(u3, 5), .platform = r.uintLessThan(u8, 3), .enemies = undefined, .enemy_roles = .{ 0, 1, 2, 3, 4 }, .allies = undefined, .y = r.floatNorm(f32) };
         for (&e.enemies) |*x| x.* = r.uintLessThan(u16, n);
         for (&e.allies) |*x| x.* = r.uintLessThan(u16, n);
         e.y += @as(f32, @floatFromInt(e.me % 5)) * 0.3;

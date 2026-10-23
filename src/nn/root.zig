@@ -51,8 +51,6 @@ pub const Param = params.Param;
 pub const Init = params.Init;
 
 pub const fit = train.fit;
-pub const FitConfig = train.Config;
-pub const FitResult = train.Result;
 pub const stepsPerEpoch = train.stepsPerEpoch;
 pub const refitSteps = train.refitSteps;
 

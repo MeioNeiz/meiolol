@@ -14,7 +14,6 @@ pub const Api = struct {
     cuInit: *const fn (c_uint) callconv(.c) Result,
     cuDeviceGet: *const fn (*Device, c_int) callconv(.c) Result,
     cuDeviceGetName: *const fn ([*]u8, c_int, Device) callconv(.c) Result,
-    cuDeviceTotalMem_v2: *const fn (*usize, Device) callconv(.c) Result,
     cuDevicePrimaryCtxRetain: *const fn (*Context, Device) callconv(.c) Result,
     cuCtxSetCurrent: *const fn (Context) callconv(.c) Result,
     cuCtxSynchronize: *const fn () callconv(.c) Result,
@@ -43,7 +42,7 @@ pub const Api = struct {
     pub fn load() !Api {
         const h = std.c.dlopen("libcuda.so.1", .{ .LAZY = true }) orelse return error.NoLibcuda;
         var api: Api = undefined;
-        inline for (comptime std.meta.fieldNames(Api)) |name| {
+        inline for (@typeInfo(Api).@"struct".field_names) |name| {
             const p = std.c.dlsym(h, name) orelse return error.MissingCudaSymbol;
             @field(api, name) = @ptrCast(@alignCast(p));
         }

@@ -40,7 +40,6 @@ pub const Example = struct {
     enemies: [5]u16,
     enemy_roles: [5]u3,
     allies: [4]u16,
-    ally_roles: [4]u3,
     y: f32,
 };
 
@@ -222,7 +221,7 @@ pub fn fitEpochs(gpa: std.mem.Allocator, cfg: Config, n: usize, train: []const E
     return f.model;
 }
 
-pub fn mse(m: *const Model, set: []const Example) f64 {
+fn mse(m: *const Model, set: []const Example) f64 {
     var s: f64 = 0;
     for (set) |*e| {
         const r = m.predict(e) - e.y;
@@ -234,7 +233,7 @@ pub fn mse(m: *const Model, set: []const Example) f64 {
 /// Starts b at each champion-role's shrunk mean residual and pl at each platform-role's
 /// (on what b leaves): Adam then refines instead of walking there from 0, which early
 /// stopping on a drifting validation slice would cut short
-pub fn warmStart(gpa: std.mem.Allocator, m: *Model, train: []const Example) !void {
+fn warmStart(gpa: std.mem.Allocator, m: *Model, train: []const Example) !void {
     const prior = 50;
     const sum = try gpa.alloc(f64, @max(m.b.len, m.pl.len));
     defer gpa.free(sum);
