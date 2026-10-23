@@ -61,8 +61,8 @@ Jacob 22 Oct: five, in order, each with everything the one before has.
   the account page), sent as `Authorization: Bearer`; nginx checks it with the same
   /_auth. Replaces the shared update.key (hosting.md "Desktop app files"), which is
   rotated out once every install has a device token
-- Break-glass: `meiolol account add|role|invite|reset|disable|list` on jomify over ssh;
-  the old basic auth stays on /admin/ for a week after AC2, then goes
+- Break-glass: `meiolol account` on jomify over ssh (hosting.md "Logins"); the basic auth
+  went with AC2 (23 Oct), as the CLI can reset any login
 - Privacy: friends are data subjects; the privacy page gets an accounts section before
   anyone outside Jacob has one (what is kept, deletion on request: `meiolol account
   delete` also drops the linked PUUID link)
@@ -90,6 +90,11 @@ Each step ends tested and deployed; nginx and systemd changes on jomify need Jac
   role has run_actions and admin.js hides the controls. accounts.db joins the web
   server's backup. Done when
   Jacob signs in with his own account and the basic auth is only the fallback
+  Done 23 Oct: live on meio.lol (account 'jacob', owner); admins join through a sign-up
+  link (email plus a shared password, Jacob 23 Oct; `meiolol account link admin`),
+  tested live: logged out redirects, admin sees /admin/ and live data but gets 403 on
+  actions, owner runs them, the desktop key still opens /admin/desktop/. accounts.db
+  is not backed up yet (nor is api.db)
 - AC3 Private tier: /p/ space (first pages: app.md "Private site"), invites, account page
   (password, devices, sign out everywhere), admin Accounts tab (list, invite, role,
   disable). Done when a test private account reaches /p/ and gets 403 on every /admin/

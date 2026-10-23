@@ -184,7 +184,7 @@ nginx caches each encoding apart, and answers a directory URL without its slash 
   views.bin and serves in 1.3 s (file in page cache) to 16.6 s (evicted, as after a
   boot); swaps 1.4-16.6 s; renderer stopped by hand: a warmed page ANY-HIT, an unwarmed
   one 503
-- Training view (/admin/training/, same basic auth as /admin/; data for the admin Models
+- Training view (/admin/training/, same login as /admin/; data for the admin Models
   tab): lab runs of the Mac and the gpu-box (staged over ssh, home network only), learned.md,
   model.md, campaigns, uploaded by deploy/lab-push.sh (launchd, every 30 s when changed). Served from
   /var/www/meiolol-training/current (symlink; outside /var/www/meiolol, whose uploads
@@ -192,7 +192,7 @@ nginx caches each encoding apart, and answers a directory URL without its slash 
   command /usr/local/bin/meiolol-training-receive (deploy/training-receive.sh, reinstall
   by hand when it changes: tar on stdin, swapped in atomically). Not rrsync: macOS's
   openrsync is refused by it. nginx before: /home/ubuntu/meiolol.conf.bak-training
-- Site traffic (/admin/ops/traffic.json, same basic auth): meiolol has its own nginx access
+- Site traffic (/admin/ops/traffic.json, same login): meiolol has its own nginx access
   log, /var/log/nginx/meiolol.access.log, format meiolol_noip (JSON lines: time, status,
   method, uri without query, bytes, request time, render cache, referer, user agent; no
   IP addresses, so none are kept or derived; /api/ stays unlogged). deploy/traffic.sh
@@ -209,10 +209,10 @@ nginx caches each encoding apart, and answers a directory URL without its slash 
   apps from before 21 Oct), stats.bin, recent-curves.bin, the exe, .gz copies;
   deploy/web-loop.sh desktop_files from the box's release/ (deploy/desktop-release.sh),
   manifest signed with ml/meiolol/desktop-data.key, mode 600, copy in vault
-  meiolol/desktop): `satisfy any` of the admin
-  basic auth or an auth_request to internal /_meiolol_desktop_key, which answers 204
-  when X-Meiolol-Desktop equals the key in /etc/nginx/meiolol-desktop-key.conf (root
-  only), else 403; the key opens this directory only. Key: box ml/meiolol/desktop.token
+  meiolol/desktop): an auth_request to internal
+  /_meiolol_desktop_key, which answers 204 when X-Meiolol-Desktop equals the key in
+  /etc/nginx/meiolol-desktop-key.conf (root only), else asks /auth/check/
+  download_private_app (a login with the private tier or above); the key opens this directory only. Key: box ml/meiolol/desktop.token
   (64 hex, made by web-loop.sh if missing), shipped in the zip as update.key. Rotate:
   new token on the box, the same in the conf, `nginx -t`, reload; old zips stop
   updating. nginx before: /etc/nginx/meiolol.conf.bak-2026-10-20-desktop
@@ -223,13 +223,22 @@ nginx caches each encoding apart, and answers a directory URL without its slash 
   health-check: fixed commands, one at a time across both instances via
   data/admin-action.lock, each logged to data/admin-actions.log; eval-run shares
   data/eval.lock with web-loop.sh's daily eval and is refused under MEIOLOL_NO_EVAL).
-  Layers: basic auth at nginx; nginx adds X-Meiolol-Admin from
+  Layers: a login with view_admin (Logins below); nginx adds X-Meiolol-Admin from
   /etc/nginx/meiolol-admin-token.conf (root only) and clears it on public @render
   requests; the box compares it in constant time with ml/meiolol/admin.token (64 hex,
   read per request, so rotate by rewriting both and reloading nginx); without a match
   the routes do not exist (same 404/405 as any path). Actions also need the request
-  header X-Meiolol-Action: 1, which a cross-site form cannot send. 8091 takes only the
+  header X-Meiolol-Action: 1, which a cross-site form cannot send, and X-Meiolol-Role
+  (nginx, from the login check) with run_actions: the owner only. 8091 takes only the
   web server
+- Logins (since 23 Oct, docs/plan/accounts.md; src/api/accounts.zig, roles.zig):
+  `meiolol api` answers /auth/ (nginx location /auth/, unlogged, 4 KB bodies) from
+  /var/lib/meiolol-api/accounts.db. nginx auth_request /_meiolol_admin (/auth/check/
+  view_admin) guards /admin/, /admin/api/, /admin/ops/ and /admin/training/; no
+  login sends a page to /login.html?next=, a lower role gets 403. The basic auth
+  (meiolol-api.htpasswd) is no longer used. Accounts by hand: `sudo -u meiolol-api
+  meiolol account ... --data /var/lib/meiolol-api` on jomify (list, reset, link,
+  revoke-links, delete). nginx before: /etc/nginx/meiolol.conf.bak-pre-accounts
 
 ### Deploy events
 

@@ -205,6 +205,7 @@ are overwritten. Logs counts only, never the PUUID or Riot ID.
 | raw archive (gpu-box) | ingest leaves out documents naming a forgotten PUUID; each pull runs `meiolol-lab archive-forget` for PUUIDs new on the box's list, which drops every archived summary, timeline and mastery line naming them (hashed with the salt) |
 | raw exports (box, data/archive-out) | short-lived: deleted on ack; an export holds what raw.db held when it was made |
 | Your games (api.db on the web server) | `forget --data /var/lib/meiolol-api` there: `api.cache.forget` deletes the player, their Riot ID in every cached match (`match_names` by PUUID hash) and adds them to `blocked` |
+| Logins (accounts.db on the web server) | `sudo -u meiolol-api meiolol account delete NAME --data /var/lib/meiolol-api` there: the account, its sessions and its reset invites (privacy page "Accounts") |
 | analysis snapshots (Mac, gpu-box) | re-erased when made, hashed, deleted when replaced (Analysis snapshots, below) |
 
 - Suppression: the crawler skips PUUIDs in `forgotten` on ladder and mastery and stores
