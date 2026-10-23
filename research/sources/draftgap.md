@@ -3,9 +3,9 @@ title: DraftGap (vigovlugt/draftgap) README, FAQ and data pipeline
 url: https://github.com/vigovlugt/draftgap
 kind: project
 commit: 872c6d5cebfec186fdebb14005fd42b2bf84ad22
-for: [riot-production-key, curve-statistics-method, league-apps-feature-matrix]
+for: [riot-production-key, curve-statistics-method, league-apps-feature-matrix, desktop-app-layout]
 looked: 2026-10-11
-depth: code (README, FAQ dialog, dataset riot.ts and lolalytics; issue list; core draft analysis, ratings, risk level; desktop LCU integration main.rs, LolClientContext.tsx, lcu-api.ts)
+depth: code (README, FAQ dialog, dataset riot.ts and lolalytics; issue list; core draft analysis, ratings, risk level; desktop LCU integration main.rs, LolClientContext.tsx, lcu-api.ts; layout: App.tsx, TeamSidebar, Pick, DraftTable, RatingText, rating colours, Tauri window)
 relevance: medium
 grade: B/fair
 description: Open-source stats-based champ select pick recommender (web + Tauri desktop, LCU sync); data from Lolalytics, not Riot API
@@ -90,6 +90,43 @@ Why: closest open-source precedent to meiolol (desktop app syncing with champ se
 - [tools/accounts] Checked, not there: no login, account or sign-in code in the frontend;
   identity is only the local client's current summoner, used to reset filters on the
   player's own pick. ^f18
+
+- [ux/desktop] Desktop app window opens at 1600 x 850, resizable. `apps/frontend/src-tauri/tauri.conf.json` ^f19
+  > "height": 850, "resizable": true, "title": "DraftGap", "width": 1600,
+- [ux/desktop] Wide layout is three columns, ally team, main view, enemy team, in a 1 : 4
+  : 1 grid. `apps/frontend/src/App.tsx` ^f20
+- [ux/desktop] Below Tailwind's lg width (1024 px) the three columns collapse to one, with
+  a footer of three buttons (ally, draft, opponent) to switch between them. `apps/frontend/src/App.tsx` ^f21
+  > theme={ mobileTab() === view ? "primary" : "secondary" }
+- [ux/desktop] Each team column: a thin damage-type bar on top (AD red, AP blue, true
+  white), then the team's estimated win rate in big type that counts up and recolours
+  on change, then five equal pick slots. `apps/frontend/src/components/draft/TeamSidebar.tsx` ^f22
+  > {capitalize(props.team)} estimated winrate
+- [ux/desktop] A pick slot is the champion's centred splash art as background with dark
+  gradients top and bottom, name top left in upper case, role icons bottom right with
+  each likely role's probability (over 5%) and click to lock a role; a hovered (not yet
+  locked) champion shows greyed. Empty slots read "PICK 1".. `apps/frontend/src/components/draft/Pick.tsx` ^f23
+  > filter: pick().hoverKey ? "grayscale(1)" : undefined,
+- [ux/desktop] Keyboard on a hovered slot: b opens the champion on a stats site, r or
+  Delete clears it, f opens its analysis. `apps/frontend/src/components/draft/Pick.tsx` ^f24
+  > if (e.key === "b") {
+- [ux/desktop] The main view's Draft tab is one sortable table of suggestions: favourite
+  star, Role, Champion, optional Champions / Matchups / Duos columns, Winrate, and an
+  analyse action; tabs above switch to Draft Analysis (and Builds, beta). Search, team
+  selector, role filter and filters sit in one row above the table. `apps/frontend/src/components/draft/DraftTable.tsx` ^f25
+  > header: "Winrate",
+  > header: "Matchups",
+- [ux/colour] Win rates are coloured on a six-step scale: under 45% red (#ff4e50), under
+  48.5% pink, under 51.5% white, under 53% light blue, under 55% blue (#3273fa), above
+  that orange (#ff9b00), the U.GG-style tier colours. `apps/frontend/src/utils/rating.ts` ^f26
+  > if (winrate < 0.45) {
+  > --color-winrate-volxd: #ff9b00;
+- [ux/uncertainty] Any rate from under 1,000 games gets a small yellow warning triangle
+  with a tooltip giving the sample size. `apps/frontend/src/components/common/RatingText.tsx` ^f27
+  > <Show when={props.games !== undefined && props.games < 1000}>
+- [ux/colour] Team colours: ally blue #3b82f6, opponent red #ef4444, on near-black
+  (#101010 main, #141414 team columns). `apps/frontend/src/index.css` ^f28
+  > --color-ally: #3b82f6;
 
 ## Read
 

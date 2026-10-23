@@ -3,7 +3,7 @@ title: OP.GG for Desktop on the Overwolf app store
 url: https://www.overwolf.com/app/opgg-electron-app
 kind: docs
 commit: 
-for: [league-apps-feature-matrix]
+for: [league-apps-feature-matrix, desktop-app-layout]
 looked: 2026-10-22
 depth: docs (whole listing)
 relevance: high
@@ -52,6 +52,33 @@ which op.gg/desktop ([[opgg-desktop]]) gives only as overlay names.
 - [policy] (inferred) "Real-time danger alerts" from the AI Agent sit close to Riot's ban
   on notifications that dictate action from game state ([[overwolf-riot-compliance#^f4]]);
   what it really alerts on is unverified. ^f8
+
+- [ux/desktop] Champ select (2026): a three-column board, "My team" left (five rows:
+  champion icon, name, role; your row marked ME; empty rows "Choosing ADC"), "Enemy
+  team" right mirrored, bans as small icons at the foot of each column; the middle has
+  tabs Lane tiers, Counters, Team. The Counters view for your role ("Counter picks MID
+  vs Annie") is two lists side by side, "Good picks" headed in blue and "Bad picks" in
+  red, each row icon, name, WR and Kills %, eight rows; "Recommended MID" and "Win rate
+  by length" panels sit below (seen in screenshot overwolf-opgg-champselect.webp). ^f9
+- [ux/desktop] Window chrome: a far-left rail of game icons (LoL, TFT, Valorant...), a
+  top tab bar My profile, Live (New), Champions, Overlays, AI Agent, spell-key setting
+  (D / F) top right; dark grey, purple accent (seen in screenshot overwolf-opgg-champselect.webp). ^f10
+- [ux/desktop] Older 2023 layout (v19): a left nav column (Live Game: Multi-Search,
+  Champion, In-Game; Champions: Tiers, Combo Videos, OP Champions; TFT), with the
+  live lobby as five tall player columns side by side: rank chip, champion portrait
+  with level, name, ladder rank and LP, win / loss bar and %, two role icons with
+  share and win rate, then "Recently Played" (ten KDA rows, red loss / blue win, time
+  ago) and "Most Played Champions" (KDA ratio coloured, win % red / blue, games). The
+  own column is outlined in purple (seen in screenshot overwolf-opgg-multisearch.jpg). ^f11
+- [ux/desktop] Build page in the same shell: role tabs, region, tier and patch dropdowns
+  on top; rune page cards as radio columns with W/R and games; item builds as rows with
+  W/R, P/R and games; "Weak Against" and "Strong Against" as horizontal icon strips
+  with W/R in red or blue (seen in screenshot overwolf-opgg-build.jpg). ^f12
+- [ux/desktop] In game: two small rounded panels at screen edges with a hotkey line
+  (Alt + Caps Lock): Item Build (recommended path with WR and PR chips, two other
+  builds) on the left, Live Stats (gold over time vs average line chart, CS/min and
+  Gold/min with green deltas) on the right; timers on the minimap (seen in screenshot
+  overwolf-opgg-ingame.webp). ^f13
 
 ## Read
 

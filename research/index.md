@@ -9,11 +9,11 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Area | Covers | Questions | Sources | Findings |
 | --- | --- | --- | --- | --- |
-| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 9 | 249 | 1215 |
+| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 9 | 254 | 1233 |
 | [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 4 | 154 | 573 |
 | [data](areas/data.md) | what the Riot API serves and how to crawl it | 3 | 163 | 404 |
 | [stats](areas/stats.md) | estimation and recommendation methods | 26 | 340 | 2443 |
-| [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 9 | 282 | 1288 |
+| [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 10 | 289 | 1374 |
 | [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 7 | 152 | 580 |
 | [code](areas/code.md) | how we write code: Zig practice, idiom and style from docs and respected projects | 9 | 174 | 1966 |
 
@@ -94,6 +94,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | answered | soon | [Which GUI library fits a small Windows desktop window built in Zig 0.16 from macOS?](questions/zig-gui-options.md): Which GUI library fits a small Windows desktop window built in Zig 0.16 from macOS? | 5 strong, 3 moderate | 14 | 10 (saturated) | 4 |
 | answered | soon | [Could a Zig library or framework replace meiolol's hand-written w.print HTML and vanilla JS, and what would it give us?](questions/zig-web-ui.md): Could a Zig library or framework replace meiolol's hand-written w.print HTML and vanilla JS, and what would it give us? | 2 strong, 8 moderate, 3 weak | 10 | 4 (growing) |  |
 | decided | now | [How should meiolol's own Zig HTML template and component layer look?](questions/zig-html-templates.md): Syntax, escaping, composition and checks for our own small Zig HTML layer, shared by the static site and wasm | 8 strong, 8 moderate | 11 | 4 (slowing) | 3 |
+| decided | soon | [How do League desktop companions lay out champ select, loading screen, in-game and post-game windows, and what makes them readable at a glance?](questions/desktop-app-layout.md): How do League desktop companions lay out champ select, loading screen, in-game and post-game windows, and what makes them readable at a glance? | 8 strong, 13 moderate | 18 | 13 (slowing) |  |
 
 ### ops
 
@@ -123,6 +124,6 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 ## Health
 
-- 67 questions, 1024 sources, 7944 findings
+- 68 questions, 1029 sources, 8045 findings
 - Open leads: 280 (`josearch leads`)
 - Lint: 0 errors, 5 warnings (`josearch lint`)

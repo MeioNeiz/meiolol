@@ -3,7 +3,7 @@ title: Porofessor.gg on the Overwolf app store
 url: https://www.overwolf.com/app/trebonius-porofessor.gg
 kind: docs
 commit: 
-for: [league-tools-landscape]
+for: [league-tools-landscape, desktop-app-layout]
 looked: 2026-10-11
 depth: docs (whole listing)
 relevance: high
@@ -42,9 +42,47 @@ stats it already shows.
 - [market] (inferred) The @10/@20 per-player stats mean Porofessor already reads timelines (or live game data) at scale, but uses them for scouting the people in this game, not for teaching a matchup. ^f6
 - [learning] [ux/features] Checked, not there: no matchup guide, no "how this lane usually goes minute by minute", no power-spike content. ^f7
 
+- [ux/desktop] Champ select window: a separate dark window beside the client (logo, Discord,
+  help, settings, minimise, close), wide, about 1.8:1 and roughly as tall as the client. Top half: five ally cards in a
+  row, one column per player (name, champion win rate with KDA, rank, main role icon,
+  12 hour and 30 day games and wins, tag pills), plus a sixth column at the right for the
+  player's own champion runes with arrows and "Export runes to LoL". Bottom half: enemy
+  picks as they lock, one card per champion (popularity, win rate, main roles, "Is
+  countered by:" with five champion icons). Footer: three boxes (Did you know?, Average
+  Team Damage / min as blue vs red bars, Team comp analysis tags). Ally names show, so the shot predates the 2022 solo/duo name hiding (seen in screenshot
+  overwolf-porofessor-champselect.jpg). ^f8
+- [ux/desktop] In game the same layout opens as an overlay over the game (Show / Hide Ctrl
+  + X; tabs Overview and Live Charts): two rows of five player cards, ally row then
+  enemy row, and a right column with the own champion's build (starting, core, boots,
+  end items, level 1-2-3, skill order, See More) over a team comp analysis of the enemy
+  team (Good dive, Good engage, Good CC) (seen in screenshot overwolf-porofessor-ingame.jpg). ^f9
+- [ux/desktop] Hover explains: a tag hover shows a tooltip with the tag in its colour and
+  the reason with the number in bold ("High Damage: This player deals high damage per
+  minute (22.7% top damage per minute with Zed)"); hovering a rank emblem shows season
+  and split history (seen in screenshot overwolf-porofessor-ingame-tooltips.jpg). ^f10
+- [ux/desktop] Newer cards (2026) add past-season rank badges under the name, and
+  mid-card one of the three rings is coloured by value (33.3% red, 50.9% orange)
+  (seen in screenshot overwolf-porofessor-ingame-tooltips.jpg). ^f11
+- [ux/desktop] Ally ult timers are portraits with seconds above and HP / mana bars;
+  jungle timers are numbers on the minimap; the live stats overlay is six rows with
+  deltas vs tier (seen in screenshot overwolf-porofessor-overlay.jpg). ^f12
+- [ux/desktop] The main app (between games) has a top nav Profile, Champions, Meta,
+  Matches, Rankings with back and forward arrows and a breadcrumb; the profile groups
+  personal ratings, player tags and a performance radar vs the tier average (seen in
+  screenshot overwolf-porofessor-profile.jpg). ^f13
+- [ux/desktop] Tier list: icon and list toggle, role icon filter, dropdowns (All
+  champions, VS, Platinum+, All regions, Ranked), rows with a coloured tier letter and
+  rates as short coloured bars over the number (seen in screenshot
+  overwolf-porofessor-tierlist.jpg). ^f14
+- [needs] Recent reviews praise breadth and low PC load, not layout: 4 / 5 from 322
+  ratings. ^f15
+  > the app does everything you need and it does not consume your pc even a bit
+- [ux/desktop] Ships two builds, an Overwolf client and an Electron standalone (99.7 MB), per the listing's App Info. ^f16
+
 ## Read
 
 - Whole listing
+- Gallery screenshots (23 Oct): raw/overwolf-porofessor-*.jpg
 
 ## Not read
 

@@ -3,7 +3,7 @@ title: Mobalytics Desktop on the Overwolf app store
 url: https://www.overwolf.com/app/mobalytics
 kind: docs
 commit: 
-for: [league-apps-feature-matrix]
+for: [league-apps-feature-matrix, desktop-app-layout]
 looked: 2026-10-22
 depth: docs (whole listing, 6 reviews shown)
 relevance: high
@@ -56,6 +56,44 @@ Why: Mobalytics' desktop app feature list per phase, its size and its ratings.
   listing text is stale or the feature is narrower than it reads. ^f9
 - [tools/phase] Checked, not there: no champion pick suggestion in champ select in this
   listing (builds only); no friends, groups or login named. ^f10
+
+- [ux/desktop] Main window: a thin icon rail on the left (sections), a top bar with game
+  switcher, summoner search with region, Resources, Community, Overlays, then Get Plus,
+  help, settings, language; a phase stepper (three circles) and a big yellow PLAY
+  button top right; a "Cheat Sheet" column (an objective for this game, e.g. "Duels,
+  Improve Fighting", with checkable goals and a game plan by phase) docked on the right
+  of every phase screen (seen in screenshot overwolf-mobalytics-desktop-postgame.webp). ^f11
+- [ux/desktop] Live Companion in champ select: tabs "Summoners Insights" and "Recommended
+  Build", team bars for damage type (AP vs AD) and team power spikes (Early, Mid, Late)
+  across the top, rune tree and core items below with "Import to client" (seen in
+  screenshot overwolf-mobalytics-desktop-companion.jpg). ^f12
+- [ux/desktop] Pre-game player cards (Live Companion): your team as a column of wide cards
+  on the left, enemy team as a narrower mirrored column beside it with role icons
+  between the two, so lane opponents face each other row by row. Each card: champion
+  portrait with spells and runes, name and rank badge (M1, D2), "Top stats 1289 games
+  50%" and "Champ stats 149 52%", win rates coloured (green high, red low), and grey
+  playstyle chips (Fatigue, Hot Streak, Closer, Annie Main, Cautious). A right column
+  holds damage type distribution bars, champion power spikes (your laner vs theirs, three
+  coloured bars Early Mid Late), team power spikes, and "Playing against" tips (seen in
+  screenshot overwolf-mobalytics-desktop-cards.webp). ^f13
+- [ux/colour] Mobalytics' playstyle chips are uncoloured grey text chips, unlike
+  Porofessor's green / orange / red outlines; colour sits on the win rates only (seen in
+  screenshot overwolf-mobalytics-desktop-cards.webp). ^f14
+- [ux/desktop] In game: a centred "Game Summary" overlay, enemy team left and your team
+  right, five rows of lane pairs with role icons in the middle column, each side's gold
+  and a gold difference chip (green +4.8 K for the leader), team totals with a green vs
+  red bar at the foot, and Early Mid Late power spike bars per team on top; a separate
+  compact column panel at the right edge (portrait, ult, spell timers) and an item
+  completion toast top right (seen in screenshot overwolf-mobalytics-desktop-ingame.jpg). ^f15
+- [ux/desktop] Post game: "Match Details" with tabs Performance Overview and Game Stats, a
+  row of five award cards (Highest CS, Best DMG, MVP, Best Gold, Highest KDA), then the
+  two teams side by side as mirrored rows by lane (blue left, red right, Victory /
+  Defeat chips), each row: portrait, name, rank, KDA, CS (per min), KP, items, placement
+  chip (MVP, 2nd, 10th), with role icons in the centre column (seen in screenshot
+  overwolf-mobalytics-desktop-postgame.webp). ^f16
+- [needs] The few reviews praise builds and depth, not layout; one finds LoL "OK, nothing
+  special". ^f17
+  > for tft app is good for league it is OK, nothing special
 
 ## Read
 

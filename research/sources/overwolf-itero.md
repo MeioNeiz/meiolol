@@ -3,7 +3,7 @@ title: The iTero AI Coach on the Overwolf app store (v3.11.7, Oct 2026)
 url: https://www.overwolf.com/app/itero_gaming-itero_drafting_coach
 kind: project
 commit: 
-for: [league-apps-feature-matrix]
+for: [league-apps-feature-matrix, desktop-app-layout]
 looked: 2026-10-22
 depth: docs (store listing, whole page)
 relevance: high
@@ -43,6 +43,29 @@ Why: iTero's features per phase, its paid tier and reach, beyond [[itero-home]].
   > lots of updated rune pages/item build for the specific situation instead of the standard builds u get with other apps
 - [tools/accounts] Checked, not there: no mention of sign-in, Riot Sign On, friends or groups on the listing; Overwolf's own boilerplate says no sign-in is required to use apps. ^f9
   > You’re not required to sign in to use apps, and you could opt out from data collection.
+
+- [ux/desktop] Draft window (2025, patch 15.13): a phase stepper across the top (Planning
+  ... Finalizing), enemy picks as a right-hand column of five rows (portrait, role icon,
+  name, a score 0.7 to 4.1 coloured teal high, amber mid, red low), and the main panel
+  with tabs Builds, Strengths, Weaknesses: three numbered build rows (runes, items,
+  spells) each with a "Push Build" button; "Team Scaling Advantage" below as three rows
+  (Early 15-26 min, Mid 27-32, Late 33+) with a score each; a "Build pushed!" toast
+  (seen in screenshot overwolf-itero-draft.jpg). ^f10
+- [ux/desktop] Draft recommendations: five champion portraits in a row, each with a
+  score (4.4 to 4.8) under it, the chosen one outlined teal; a breakdown table of the
+  factors (Lane Counter 1.07x, Average Counter, Team's AD Ratio, Champion Win Rate,
+  Average Synergy) with value and sub-score; three text cards below, "Laning phase",
+  "Scaling", "Key pair", each two to four sentences of advice (seen in screenshot
+  overwolf-itero-recommendations.jpg). ^f11
+- [ux/desktop] Lobby scouting: five player cards side by side (tabs Player Scouting and
+  Game Data; Show/Hide Alt+1), each with Champion / Overall toggle, name, rank, W-L and
+  % for champion and overall (teal, amber or red), then rated attributes as rows of ten
+  dots coloured by level: Laning Phase (Lvl 1 Invades, Aggression, Survivability,
+  Roaming, Farming) and Mid Game (Farming, Fighting, Towers, Epic Monsters, Vision)
+  (seen in screenshot overwolf-itero-scouting.jpg). ^f12
+- [ux/desktop] In game: a narrow panel listing ten champions as five lane rows with gold
+  per player and the difference in the middle coloured to the leading side, team totals
+  on top; small CS/min and timer chips above (seen in screenshot overwolf-itero-ingame.jpg). ^f13
 
 ## Read
 

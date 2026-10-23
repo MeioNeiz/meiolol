@@ -3,7 +3,7 @@ title: How to Use the Mobalytics Overlay + Live Companion (Nov 2020 guide)
 url: https://mobalytics.gg/blog/lol-how-to-use-mobalytics-live-companion/
 kind: docs
 commit: 
-for: [league-apps-feature-matrix]
+for: [league-apps-feature-matrix, desktop-app-layout]
 looked: 2026-10-22
 depth: docs (overlay section and Live Companion section to team analysis)
 relevance: high
@@ -63,6 +63,23 @@ before Riot's 2022 to 2025 restrictions; a baseline for what was later removed.
 - [tools/accounts] [ux/features] Team power spikes and averages pitched for organised
   play and Clash, to share with teammates. ^f10
   > This widget is especially useful in organized competitive play and Clash so be sure to give your teammates the scoop to help you play optimally.
+
+- [ux/desktop] The in-game overlay is opened from the scoreboard: hold Tab and a purple
+  section appears on the left; Tab + Q, W, E, S switch between player stats, game
+  overview, matchup info and settings. ^f11
+  > Just press Tab to open your scoreboard and you’ll see a purple section on the left side of your screen.
+  > Tab + W = Game Overview
+- [ux/desktop] Overlay settings: pop-up position, scale and transparency. ^f12
+  > You’ll also find options for scaling (make the Overlay tools bigger or smaller) and transparency (allows you to make the windows see-through or more opaque)
+- [ux/desktop] Champ select: players on the left, a long scrolling column of builds,
+  matchup advice and team stats on the right; hover a badge to learn it, click a player
+  for a profile summary, a second icon for side by side comparison. ^f13
+  > let’s dive into the right side of the Live Companion’s Pre Game!
+  > To learn about any badge, just hover it for more information!
+- [ux/desktop] Mobalytics admits the companion can overwhelm and suggests a second monitor
+  or phone for it. ^f14
+  > It can be overwhelming at first but remember that you don’t need to use _every_ widget _every_ match.
+  > we also recommend using it alongside a second monitor or on your phone
 
 ## Read
 

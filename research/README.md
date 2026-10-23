@@ -53,6 +53,7 @@ Area: which areas/ page the tag's findings go to (blank on a sub-tag: its parent
 | `ux/trust` | | what makes players trust or distrust numbers |
 | `ux/layout` | | navigation, page structure, what goes first |
 | `ux/features` | | what competitor tools show and how |
+| `ux/desktop` | | desktop companion windows: window sizes, per-phase screens, player and champion cards, overlays, tags |
 | `ux/density` | | dense tables and number layout: colour-scaled cells, bars or sparklines in cells, small multiples |
 | `tools/paid` | | what tools charge for: tiers, prices, what sits behind the paywall |
 | `tools/accounts` | | logins and identity in tools: RSO, own accounts, friends, groups, roles, sharing |

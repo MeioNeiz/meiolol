@@ -3,7 +3,7 @@ title: LoLDraftAI draft analysis page
 url: https://loldraftai.com/draft
 kind: docs
 commit: 
-for: [competitor-first-visit-returning]
+for: [competitor-first-visit-returning, desktop-app-layout]
 looked: 2026-10-17
 depth: skimmed (page text and tour)
 relevance: medium
@@ -34,6 +34,12 @@ Why: first visit to an ML draft tool, and its onboarding.
   > Full champion pool unlocked
 - [data] Says model freshness: updated 17 October on patch 16.20, a few days' delay after patches. ^f5
   > Last model update: October 17 on patch 16.20.
+
+- [ux/desktop] Board at 1440 px: a toolbar row (Reset Draft, Swap Sides, Draft Order, How
+  to use, Tutorial, Start Live Tracking), a "NEXT PICK: BLUE TEAM" banner, then three
+  columns: BLUE SIDE (five role-icon slots stacked) left, a searchable champion icon grid
+  with role filter buttons in the middle, RED SIDE mirrored right, each side tinted its
+  colour (seen in screenshot loldraftai-draft.png, 23 Oct). ^f6
 
 ## Read
 
