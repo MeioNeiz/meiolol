@@ -124,7 +124,6 @@ pub const usage_admin =
     \\              storage growth (appends DIR/admin-history.tsv), ingest mix, queues
     \\              --out DIR        default DIR/admin
     \\              --log FILE       crawler log (default DIR/crawl.log)
-    \\              --days N         history shown (default 7)
     \\              --disk "S U A"   data disk size, used, available in bytes
     \\              --health TEXT    deploy/health.sh output
     \\
@@ -140,8 +139,6 @@ pub fn cmdAdmin(c: *Cmd) !u8 {
             out = try c.value();
         } else if (c.is("--log")) {
             log_path = try c.value();
-        } else if (c.is("--days")) {
-            o.days = try c.int(u32);
         } else if (c.is("--disk")) {
             var words = std.mem.tokenizeScalar(u8, try c.value(), ' ');
             var d: [3]u64 = undefined;

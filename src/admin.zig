@@ -19,13 +19,14 @@ const Io = std.Io;
 const Region = ep.Region;
 const regions = std.enums.values(Region);
 
+/// Days of crawl and upload history shown
+const days_shown: u32 = 7;
+
 pub const Options = struct {
     out_dir: []const u8,
     data_dir: []const u8,
     /// The crawler's log, read from its last `log_tail` bytes
     crawl_log: []const u8,
-    /// Days of crawl and upload history shown
-    days: u32 = 7,
     now_s: i64,
     /// `df -B1 --output=size,used,avail` of the data disk, as the web loop passes it
     disk: ?[3]u64 = null,
@@ -114,13 +115,13 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
     try appendHistory(arena, io, history_path, o, counts, files);
     const history = try tail(arena, io, history_path, history_lines);
 
-    const window_start = o.now_s - @as(i64, o.days) * 86400;
+    const window_start = o.now_s - @as(i64, days_shown) * 86400;
     var key_problems: std.ArrayList(KeyProblem) = .empty;
     const crawl = try crawlSeries(arena, io, o.crawl_log, window_start, o.now_s, bucket_s, log_tail, &key_problems);
     const kp = key_problems.items;
     const page = .{
         .now = o.now_s,
-        .days = o.days,
+        .days = days_shown,
         .health = o.health,
         .disk = o.disk,
         .platforms = ep.platforms,
