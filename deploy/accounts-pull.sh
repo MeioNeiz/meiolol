@@ -15,7 +15,7 @@ umask 077
 mkdir -p "$dir"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-ssh -n -o BatchMode=yes -o ServerAliveInterval=30 meiolol-accounts > "$tmp/accounts.db"
+ssh -nT -o BatchMode=yes -o ServerAliveInterval=30 meiolol-accounts > "$tmp/accounts.db"
 if [[ $(head -c 15 "$tmp/accounts.db") != "SQLite format 3" ]]; then
     log "FAILED: not a SQLite file ($(wc -c < "$tmp/accounts.db") bytes)"
     exit 1
