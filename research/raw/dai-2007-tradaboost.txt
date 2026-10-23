@@ -1,0 +1,991 @@
+Boosting for Transfer Learning
+
+Wenyuan Dai
+dwyak@apex.sjtu.edu.cn
+Department of Computer Science and Engineering, Shanghai Jiao Tong University, China
+Qiang Yang
+qyang@cse.ust.hk
+Deptarment of Computer Science, Hong Kong University of Science and Technology, Hong Kong
+Gui-Rong Xue
+grxue@apex.sjtu.edu.cn
+Yong Yu
+yyu@apex.sjtu.edu.cn
+Department of Computer Science and Engineering, Shanghai Jiao Tong University, China
+
+Abstract
+Traditional machine learning makes a basic assumption: the training and test data
+should be under the same distribution.
+However, in many cases, this identicaldistribution assumption does not hold. The
+assumption might be violated when a task
+from one new domain comes, while there
+are only labeled data from a similar old
+domain. Labeling the new data can be
+costly and it would also be a waste to
+throw away all the old data. In this paper, we present a novel transfer learning
+framework called TrAdaBoost, which extends
+boosting-based learning algorithms (Freund
+& Schapire, 1997). TrAdaBoost allows users
+to utilize a small amount of newly labeled
+data to leverage the old data to construct a
+high-quality classiﬁcation model for the new
+data. We show that this method can allow
+us to learn an accurate model using only a
+tiny amount of new data and a large amount
+of old data, even when the new data are not
+suﬃcient to train a model alone. We show
+that TrAdaBoost allows knowledge to be effectively transferred from the old data to the
+new. The eﬀectiveness of our algorithm is analyzed theoretically and empirically to show
+that our iterative algorithm can converge well
+to an accurate model.
+Appearing in Proceedings of the 24 th International Conference on Machine Learning, Corvallis, OR, 2007. Copyright
+2007 by the author(s)/owner(s).
+
+1. Introduction
+A fundamental assumption in classiﬁcation learning is
+that the data distributions of training and test sets
+should be identical. When the assumption does not
+hold, traditional classiﬁcation methods might perform
+worse. However, in practice, this assumption may not
+always hold. For example, in Web mining, the Web
+data used in training a Web-page classiﬁcation model
+can be easily out-dated when applied to the Web sometime later, because the topics on the web change frequently. Often, new data are expensive to label and
+thus their quantities are limited due to cost issues.
+How to accurately classify the new test data by making the maximum use of the old data becomes a critical
+problem.
+Although the training data are more or less out-dated,
+there are certain parts of the data that can still be
+reused. That is, knowledge learned from this part of
+the data can still be of use in training a classiﬁer for
+the new data. To ﬁnd out which those data are, we
+employ a small amount of labeled new data, called
+same-distribution training data, to help vote on the
+usefulness of each of the old data instance. Because
+some of the old training data might be out-dated and
+be under a diﬀerent distribution from the new data, we
+call them diﬀ-distribution training data. Our goal is
+to learn a high-quality classiﬁcation model using both
+the same-distribution and diﬀ-distribution data. This
+learning process corresponds to transferring knowledge
+learned from the old data to new situations – an instance of transfer learning.
+In this paper, we try to develop a general framework
+for transfer learning based on (Freund & Schapire,
+1997), and analyze the correctness of the general model
+
+Boosting for Transfer Learning
+
+using the Probability Approximately Correct (PAC)
+theory. Our key idea is to use boosting to ﬁlter out
+the diﬀ-distribution training data that are very diﬀerent from the same-distribution data by automatically
+adjusting the weights of training instances. The remaining diﬀ-distribution data are treated as the additional training data which greatly boost the conﬁdence
+of the learned model even when the same-distribution
+training data are scarce. Our experimental results
+support our conjecture that the boosting-based framework, which we implement in an algorithm known as
+TrAdaBoost, is a high-performance and simple transfer learning algorithm. Our theoretical analysis also
+conﬁrms that our boosting learning method converges
+well to the desired model.
+
+Our problem setting can also be considered as learning
+with auxiliary data, where the labeled diﬀ-distribution
+data are treated as the auxiliary data. In previous
+works, Wu and Dietterich (2004) proposed an image
+classiﬁcation algorithm using both inadequate training
+data and plenty of low quality auxiliary data. They
+demonstrated some improvement by using the auxiliary data. However, they did not give a quantitative
+study using diﬀerent auxiliary examples. Liao et al.
+(2005) improved learning with auxiliary data using active learning. Rosenstein et al. (2005) proposed a
+hierarchical Naive Bayes approach for transfer learning using auxiliary data, and discussed when transfer
+learning would improve the performance and when decrease.
+
+The rest of the paper is organized as follows. In Section 2, we discuss the related works. In Section 3, we
+present our formal deﬁnitions for the problem and the
+framework. We present a theoretical analysis in Section 4 to show the properties of our transfer learning
+framework. Our experimental results and discussion
+are shown in Section 5. Section 6 concludes the whole
+paper and gives some future works.
+
+Another closely related task is learning under sample
+selection bias (Zadrozny, 2004) or covariate shift (Shimodaira, 2000), which deals with the case when all the
+same-distribution data are unlabeled. In the Novelprize work, Heckman (1979) investigated correcting
+sample selection bias in econometrics. Bickel and
+Scheﬀer (2007) studied the sample selection bias problem in the spam ﬁltering domain. Other researches
+addressing on correcting sample selection bias include
+(Dudı́k et al., 2006; Huang et al., 2007) etc.
+
+2. Related Work
+Transfer learning is what happens when someone ﬁnds
+it much easier to learn to play chess having already
+learned to play checkers, or to recognize tables having already learned to recognize chairs; or to learn
+Spanish having already learned Italian1 . Recently,
+transfer learning has been recognized as an important topic in machine learning research. Several researchers have proposed new approaches to solve the
+problems of transfer learning. Early transfer learning
+works raised some important issues, such as learning
+how to learn (Schmidhuber, 1994), learning one more
+thing (Thrun & Mitchell, 1995), multi-task learning
+(Caruana, 1997). A related topic is multi-task learning whose objective is to discover the common knowledge in multiple tasks. This common knowledge belongs to almost all the tasks, and is helpful for solving
+a new task. Ben-David and Schuller (2003) provided
+a theoretical justiﬁcation for multi-task learning. In
+contrast, we address on the single-task learning problem, but the distributions of the training and test data
+diﬀer from each other. DauméIII and Marcu (2006)
+have studied the domain-transfer problem in statistical
+natural language processing, using a speciﬁc Gaussian
+model. In this paper, we try to develop a transfer classiﬁcation framework under the PAC learning model.
+1
+
+http://www.cs.berkeley.edu/˜russell/ebtl/
+
+3. Transfer Learning through
+TrAdaBoost
+To enable transfer learning, we use part of the labeled
+training data that have the same distribution as the
+test data to play a role in building the classiﬁcation
+model. We call these training data same-distribution
+training data. The quantity of these same-distribution
+training data is often inadequate to train a good classiﬁer for the test data. The training data, whose distribution may diﬀer from the test data, perhaps because
+they are out-dated, are called diﬀ-distribution training
+data. These data are assumed to be abundant, but the
+classiﬁers learned from these data cannot classify the
+test data well due to diﬀerent data distributions.
+More formally, let Xs be the same-distribution instance space, Xd be the diﬀ-distribution instance space,
+and Y = {0, 1} be the set of category labels. A concept is a boolean function c mapping from X to Y ,
+where X = Xs ∪ Xd . The test data set is denoted
+by S = {(xti )}, where xti ∈ Xs (i = 1, . . . , k). Here,
+k is the size of the test set S which is unlabeled.
+The training data set T ⊆ {X × Y } is partitioned
+into two labeled sets Td , and Ts . Td represents the
+diﬀ-distribution training data that Td = {(xdi , c(xdi ))},
+where xdi ∈ Xd (i = 1, . . . , n). Ts represents the samedistribution training data that Ts = {(xsj , c(xsj ))},
+
+Boosting for Transfer Learning
+
+where xsj ∈ Xs (j = 1, . . . , m). n and m are the
+sizes of Td and Ts , respectively. c(x) returns the label for the data instance x. The combined training set
+T = {(xi , c(xi ))} is deﬁned as follows
+ d
+xi , i = 1, . . . , n;
+xi =
+xsi , i = n + 1, . . . , n + m.
+Here, Td corresponds to some labeled data from an
+old domain that we try to reuse as much as we can;
+however we do not know which part of Td is useful to
+us. What we can do is to label a small amount of data
+from the new domain and call it Ts , and then use these
+data to ﬁnd out the useful part of Td . The problem
+that we are trying to solve is: given a small number of
+labeled same-distribution training data Ts , many diﬀdistribution training data Td and some unlabeled test
+data S, the objective is to train a classiﬁer ĉ : X → Y
+that minimizes the prediction error on the unlabeled
+data set S.
+We now present our Transfer AdaBoost learning
+framework TrAdaBoost, which extends AdaBoost for
+transfer learning. AdaBoost (Freund & Schapire,
+1997) is a learning framework which aims to boost
+the accuracy of a weak learner by carefully adjusting
+the weights of training instances and learn a classiﬁer accordingly. However, AdaBoost is similar to most
+traditional machine learning methods by assuming the
+distributions of the training and test data to be identical. In our extension to AdaBoost, AdaBoost is still
+applied to same-distribution training data to build the
+base of the model. But, for diﬀ-distribution training instances, when they are wrongly predicted due
+to distribution changes by the learned model, these
+instances could be those that are the most dissimilar
+to the same-distribution instances. Thus, in our extension, we add a mechanism to decrease the weights
+of these instances in order to weaken their impacts.
+A formal description of the framework is given in Algorithm 1. As can be seen from the algorithm, in each iteration round, if a diﬀ-distribution training instance is
+mistakenly predicted, the instance may likely conﬂict
+with the same-distribution training data. Then, we decrease its training weight to reduce its eﬀect through
+multiplying its weight by β |ht (xi )−c(xi )| . Note that
+β |ht (xi )−c(xi )| ∈ (0, 1]. Thus, in the next round, the
+misclassiﬁed diﬀ-distribution training instances, which
+are dissimilar to the same-distribution ones, will aﬀect
+the learning process less than the current round. After several iterations, the diﬀ-distribution training instances that ﬁt the same-distribution ones better will
+have larger training weights, while the diﬀ-distribution
+training instances that are dissimilar to the samedistribution ones will have lower weights. The in-
+
+Algorithm 1 TrAdaBoost
+Input the two labeled data sets Td and Ts , the unlabeled data set S, a base learning algorithm Learner,
+and the maximum number of iterations N .
+Initialize the initial weight vector, that w1 =
+1
+). We allow the users to specify the
+(w11 , . . . , wn+m
+initial values for w1 .
+For t = 1, . . . , N
+n+m
+1. Set pt = wt /( i=1 wit ).
+2. Call Learner, providing it the combined training
+set T with the distribution pt over T and the unlabeled data set S. Then, get back a hypothesis
+ht : X → Y (or [0, 1] by conﬁdence).
+3. Calculate the error of ht on Ts :
+t =
+
+n+m
+
+
+wit · |ht (xi ) − c(xi )|
+.
+n+m
+t
+i=n+1 wi
+i=n+1
+
+
+4. Set βt = t /(1 − t ) and β = 1/(1 + 2 ln n/N ).
+Note that, t is required to be less than 1/2.
+5. Update the new weight vector:
+ t |ht (xi )−c(xi )|
+wi β
+,
+1≤i≤n
+t+1
+wi =
+t −|ht (xi )−c(xi )|
+wi βt
+, n+1≤i≤n+m
+Output the hypothesis
+
+N
+N
+− 12
+−ht (x)
+1,
+β
+≥
+β
+t
+t
+t=N/2
+t=N/2
+hf (x) =
+0, otherwise
+
+stances with large training weights will intent to help
+the learning algorithm to train better classiﬁers.
+
+4. Theoretical Analysis of TrAdaBoost
+In the last section, we have presented the transfer classiﬁcation learning framework. In this section, we theoretically analyze our framework in terms of its convergence property, and show why the framework is able
+to learn knowledge even when the domain distributions are not identical. Our analysis extends the theory of AdaBoost (Freund & Schapire, 1997). Due to
+the limitation of space, we will only give a sketch of
+the analysis. The details are given in a long version.
+Let lit = |ht (xi )−c(xi )| (i = 1, . . . , n and t = 1, . . . , N )
+be the loss of the training instance xi suﬀered by
+the hypothesis ht . The distribution dt is the training
+weight vector with respect to Td in the tth iteration,
+
+Boosting for Transfer Learning
+
+n
+that dti = wit /( j=1 wjt ), (i = 1, . . . , n). The training
+by TrAdaBoost through
+loss with respect to T
+d suﬀered
+N n
+N iterations is Ld = t=1 i=1 dti lit . The training loss
+with respect to an instance xi (i = 1, . . . , n) suﬀered by
+N
+TrAdaBoost through N iterations is L(xi ) = t=1 lit .
+In the following, the theoretical conclusions with respect to TrAdaBoost are presented. Theorem 1 discusses the convergence property of TrAdaBoost. Theorem 2 analyzes the average weighted training loss on
+diﬀ-distribution data Td . Theorem 3 shows the prediction error on the same-distribution data Ts . Note that,
+TrAdaBoost optimizes the average weighted training
+loss on Td and the prediction error on Ts , simultaneously. Finally, Theorem 4 gives an alternative
+upper-bound of the generalization error on the samedistribution data.
+Theorem 1 In TrAdaBoost, when the number of iterations is N , we have
+
+L(xi )
+2 ln n ln n
+Ld
+≤ min
++
++
+.
+(1)
+1≤i≤n N
+N
+N
+N
+Theorem 1 can also be found in (Freund & Schapire,
+1997) together with its proof. It indicates that the
+average training loss (Ld /N ) through N iterations on
+the diﬀ-distribution
+training data Td is not much (at
+
+2 ln n/N + ln n/N ) larger than the average
+most
+training loss of the instance whose average training
+loss is minimum (that is, min1≤i≤n L(xi )/N ). From
+Equation (1), we can also ﬁnd the convergence rate of
+TrAdaBoost
+over the diﬀ-distribution training data Td
+
+is O( ln n/N ) in the worst case.
+Theorem 2 In TrAdaBoost, pti denotes the weight
+of thetraining instance xi , which is deﬁned as pt =
+n+m
+wt /( i=1 wit ). Then,
+N
+n
+t t
+t=N/2
+i=1 pi li
+= 0.
+(2)
+lim
+N →∞
+N − N/2
+Theorem 2 can be derived from Theorem 1. Due to
+the limitation of space, we omit the proof of Theorem
+2 here. Intuitively, Equation (2) indicates that the average weighted training loss suﬀered by TrAdaBoost on
+the diﬀ-distribution training data Td from the N/2 th
+iteration to the N th converges to zero. That is the
+reason we vote the hypothesis ht from the N/2 th
+iteration to the N th in Algorithm 1. Therefore,
+TrAdaBoost is able to reduce the average weighted
+training loss on the diﬀ-distribution data.
+Theorem 3 below shows that TrAdaBoost preserves the
+similar error-convergence property as the AdaBoost algorithm (Freund & Schapire, 1997)
+
+Theorem 3 Let I = {i : hf (xi ) = c(xi ) and n + 1 ≤
+i ≤ n + m}. The prediction error on the samedistribution training data Ts suﬀered by the ﬁnal hypothesis hf is deﬁned as  = Prx∈Ts [hf (x) = c(x)] =
+|I|/m. Then,
+ ≤ 2N/2
+
+N
+
+
+
+t (1 − t ).
+
+(3)
+
+t=N/2
+
+When t < 0.5, the prediction error of the ﬁnal hypothesis hf on the same-distribution training data Ts
+becomes increasingly smaller after each iteration.
+From Theorems 2 and 3, two conclusions can be
+reached. First, based on Theorem 3, the ﬁnal hypothesis hf produced by TrAdaBoost increasingly reduces the error on the same-distribution training data.
+Second, based on Theorem 2, the weighted average
+training loss in the diﬀ-distribution part gradually converges to zero. Therefore, TrAdaBoost minimizes both
+the error on the same-distribution training data and
+the weighted average loss on the diﬀ-distribution training data simultaneously. Intuitively, it can be understood that TrAdaBoost ﬁrst performs its learning on
+the same-distribution training data, and then chooses
+the most helpful diﬀ-distribution training data, on condition that they do not result in more average training
+loss, as additional training data.
+We wish to understand why TrAdaBoost theoretically
+improves the implementation of AdaBoost with the
+combined training set T . In fact, TrAdaBoost does
+not guarantee to always improve AdaBoost, since the
+quality of diﬀ-distribution training data is not certain.
+The goal of TrAdaBoost, shown by Theorems 2 and
+3, is to reduce the weighted training error on the diﬀdistribution data, while still preserving the properties
+of AdaBoost. The diﬀ-distribution data after reweighting are used as the additional data which might be
+helpful for training a good prediction model.
+All the above analysis focused on the error on the
+training data and did not address any generalization issues. In Theorem 4, we give an alternative
+upper-bound of the generalization error on the samedistribution data.
+Theorem 4 Let dVC be the VC-dimension of the hypothesis space, the generalization error on the samedistribution data, with high probability, is at most
+
+N dVC
++O
+(4)
+m
+Here, N is the number of iterations, m is the size of the
+
+Boosting for Transfer Learning
+
+same-distribution training data Ts , and  is the error
+on the same-distribution training data from hf .
+The conclusion given by Theorem 4 is the same as
+what has been shown in (Schapire, 1999). Theorem
+4 presents an upper-bound of the generalization error
+on the same-distribution data. The upper-bound in
+Equation (4) shows that the generalization error depends on the same-distribution training error , the
+VC-dimension of the hypothesis space dVC , the number of iterations N , and the size m of same-distribution
+training set. From Equation (4), it can be found that
+if the size m of the same-distribution training data is
+small, TrAdaBoost may easily overﬁt when the number of iterations N becomes large. However, as we will
+show in the experiments, TrAdaBoost does not overﬁt
+as easily as it is shown theoretically.
+
+5. Experimental Evaluation
+5.1. Data Sets
+In order to evaluate the properties of our framework,
+we performed the experiments on three text data sets
+(20 Newsgroups2 , SRAA3 , Reuters-215784 ) and one
+none-text data set (the mushroom data set from the
+UCI machine learning repository5 ). We also split and
+revised the data sets to ﬁt our transfer learning scenario, to make the distributions of the diﬀ-distribution
+data Td and same-distribution data Ts ∪ S diﬀerent.
+All three text data sets have hierarchical structures.
+For example, the 20 Newsgroups corpus contains seven
+top categories. Under the top categories, there are 20
+subcategories. We deﬁne the tasks as top-categoryclassiﬁcation problems. When we split the data to
+generate diﬀ-distribution and same-distribution sets,
+the data are split based on subcategories instead of
+based on random splitting. Then, the two data sets
+contain data in diﬀerent subcategories. Their distributions also diﬀer as a result. For the mushroom data set,
+since it does not have hierarchy, we split the data set
+based on the feature stalk-shape. The diﬀ-distribution
+data set consists of all the instances whose stalks are
+enlarging, while the same-distribution data set consists of the instances abouttapering mushrooms. Then,
+the two sets contain examples from diﬀerent types of
+mushrooms, which makes the distributions diﬀerent.
+Table 1 shows the description for each data set. The
+ﬁrst three data sets are from the 20 Newsgroups data
+2
+
+http://people.csail.mit.edu/jrennie/20Newsgroups/
+http://www.cs.umass.edu/˜mccallum/code-data.html
+4
+http://www.daviddlewis.com/resources/testcollections/
+5
+http://www.ics.uci.edu/˜mlearn/MLRepository.html
+3
+
+Table 1. The descriptions of the data sets for transfer classiﬁcation
+Data Set
+
+KL-divergence
+
+rec vs talk
+rec vs sci
+sci vs talk
+auto vs aviation
+real vs simulated
+orgs vs people
+orgs vs places
+people vs places
+edible vs poisonous
+
+1.102
+1.021
+0.854
+1.126
+1.048
+0.303
+0.329
+0.307
+1.315
+
+|Td |
+3,669
+3,961
+3,374
+8,000
+8,000
+1,016
+1,079
+1,239
+4,608
+
+Size
+|Ts ∪ S|
+3,561
+3,965
+3,828
+8,000
+8,000
+1,046
+1,080
+1,210
+3,516
+
+set; the next two are from the SRAA corpus; the next
+three are from the Reuters-21578 text collection; the
+last data set is generated by the mushroom data set.
+The name of the data set rec vs talk indicates that
+all the positive instances are from the category rec,
+while negative ones from talk. The other data sets
+are named in the same way. The diﬀ-distribution and
+same-distribution data sets are split based on subcategories. KL-divergence (Kullback & Leibler, 1951)
+on the feature space between each corresponding diﬀdistribution and same-distribution sets is presented in
+this table. It can be seen that the KL-divergences
+for all the data sets are much larger than the samedistribution case in which the KL-divergence should
+be close to zero.
+5.2. Comparison Methods
+In the experiments, we use Support Vector Machines
+(Boser et al., 1992; Joachims, 1999) as the basic learners in TrAdaBoost. SVMlight (Joachims, 2002) with
+linear kernel is applied in the experiments to implement the SVM and TSVM classiﬁers. Furthermore, we
+also added some constraints to the basic learners to
+avoid the case of training weights being unbalanced.
+When training SVM, we always balance the overall
+training weights between positive and negative examples. The constraints designed for TSVM (Joachims,
+1999) have also been applied to the basic learners. The
+weights of unlabeled data are set to the default values
+of SVMlight .
+Four baseline methods are implemented using
+SVMlight as shown in Table 2. Besides the baselines,
+we also compare TrAdaBoost with the method developed for learning with auxiliary data proposed by Wu
+and Dietterich (2004), which is denoted as AUX. The
+parameter C p /C a (as used in (Wu & Dietterich, 2004))
+is set to 4 after tuning.
+Our framework TrAdaBoost with SVM and TSVM as
+the basic learners has been performed in the experiments. We denote them as TrAdaBoost(SVM) and
+
+Boosting for Transfer Learning
+people vs places
+0.45
+
+Table 2. The descriptions of baseline methods
+
+TrAdaBoost(SVM)
+SVM
+SVMt
+
+0.40
+
+SVM
+SVMt
+TSVM
+TSVMt
+
+Training Data
+labeled
+unlabeled
+Ts
+∅
+Ts ∪ Td
+∅
+Ts
+S
+Ts ∪ Td
+S
+
+Test Data
+
+Basic Learner
+
+0.35
+
+S
+S
+S
+S
+
+SVM
+SVM
+TSVM
+TSVM
+
+0.30
+
+Error Rate
+
+Baseline
+
+0.25
+0.20
+0.15
+0.10
+
+Table 3. The error rates when supervised learning
+Data Set
+rec vs talk
+rec vs sci
+sci vs talk
+auto vs aviation
+real vs simulated
+orgs vs people
+orgs vs places
+people vs places
+edible vs poisonous
+
+SVM
+0.222
+0.240
+0.234
+0.131
+0.140
+0.494
+0.423
+0.412
+0.127
+
+SVMt
+0.127
+0.164
+0.177
+0.192
+0.219
+0.285
+0.440
+0.255
+0.135
+
+AUX
+0.127
+0.153
+0.173
+0.188
+0.210
+0.287
+0.433
+0.257
+0.082
+
+TrAdaBoost(SVM)
+0.080
+0.097
+0.125
+0.096
+0.119
+0.280
+0.315
+0.216
+0.071
+
+TrAdaBoost(TSVM). In the following, we will use SVM,
+TSVM, TrAdaBoost(SVM) and so on to represent the
+various implementations of the classiﬁers. The experimental results of AdaBoost are not given here, since it
+is found in our experiments that AdaBoost can hardly
+improve the generalization error of SVM on all the data
+sets.
+5.3. Experimental Results
+Each same-distribution data set is split into two sets: a
+same-distribution training set Ts and a test set S. Table 3 presents the experimental results of SVM, SVMt,
+AUX and TrAdaBoost(SVM) when the ratio between
+same-distribution and diﬀ-distribution training data
+is 0.01. Table 4 presents the experimental results of
+TSVM, TSVMt and TrAdaBoost(TSVM) when there are
+very few same-distribution training instances (one positive and one negative). The performance in error rate
+was the average of 10 repeats by random. The number
+of iterations is set to 100.
+From Tables 3 and 4, we can see that the error rates
+given by TrAdaBoost(SVM) (or TrAdaBoost(TSVM))
+are strictly lower than those given by SVM (or TSVM),
+SVMt (or TSVMt) and AUX. Intuitively, this is true
+because SVM is not a learning technique designed
+
+Table 4. The error rates when semi-supervised learning
+Data Set
+rec vs talk
+rec vs sci
+sci vs talk
+auto vs aviation
+real vs simulated
+orgs vs people
+orgs vs places
+people vs places
+edible vs poisonous
+
+TSVM
+0.059
+0.067
+0.173
+0.043
+0.144
+0.358
+0.424
+0.307
+0.439
+
+TSVMt
+0.040
+0.062
+0.106
+0.103
+0.131
+0.292
+0.436
+0.225
+0.179
+
+TrAdaBoost(TSVM)
+0.021
+0.013
+0.075
+0.038
+0.102
+0.248
+0.304
+0.179
+0.160
+
+0.05
+
+0
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.5
+
+Ratio between Same−Distribution and Diff−Distribution Training Data
+
+Figure 1. The error rate curves on people vs places data
+set for three classiﬁers TrAdaBoost(SVM), SVM and SVMt
+
+for transfer classiﬁcation, but TrAdaBoost is. However, as several researchers have noted, transfer learning does not always reduce the generalization error
+and sometimes even lower the performance on the
+test set (e.g. Caruana (1997)). They call the phenomenon that transfer learning lower the original performance negative transfer. Although in our experiments, TrAdaBoost always gives better or comparative
+performances than the baselines, TrAdaBoost does not
+guarantee to improve the basic learner either.
+In Figure 1, we focus on the people vs places
+data set. The ratio between same-distribution and
+diﬀ-distribution training examples is gradually increased from 0.01 to 0.5.
+It can be seen that
+TrAdaBoost(SVM) always improves the performance of
+SVMt. TrAdaBoost(SVM) also outperforms SVM, when
+the ratio is not very large (i.e. less than 0.1). But,
+when the ratio is larger than 0.2, the performance of
+TrAdaBoost(SVM) is a little worse than SVM, but still
+comparative. We believe that diﬀ-distribution training
+data contain not only good knowledge, but also noisy
+data. When there are too few same-distribution training data to train a good classiﬁer, the useful knowledge from diﬀ-distribution training data may help the
+learner, while the noisy part of the data does not aﬀect
+the learner too much.
+From Figure 1, we can see that a main contribution
+of TrAdaBoost is in situations when the ratio between
+same-distribution and diﬀ-distribution training data is
+less than 0.1. When the ratio is greater than 0.2, the
+same-distribution training data might be suﬃcient for
+supervised learning. However, labeling such amount
+of same-distribution data are quite expensive.
+Figure 2 presents the error rates on another data
+set orgs vs places. The curves are quite diﬀerent
+from those in Figure 1. In Figure 2, the improvement of TrAdaBoost is much smaller, because the diﬀdistribution training data in orgs vs places data
+set are not as good for transfer learning the same-
+
+Boosting for Transfer Learning
+orgs vs places
+
+sorted by KL-divergence in increasing order from left
+to right. In this ﬁgure, the rate of improvement by
+TrAdaBoost(SVM) over SVMt increases along with the
+increment of KL-divergence, by and large. However,
+the improvement over SVM seems irregular.
+
+0.45
+TrAdaBoost(SVM)
+SVM
+SVMt
+
+0.40
+
+Error Rate
+
+0.35
+0.30
+0.25
+0.20
+0.15
+0.10
+0.05
+
+0
+
+0.1
+
+0.2
+
+0.3
+
+0.4
+
+0.5
+
+Ratio between Same−Distribution and Diff−Distribution Training Data
+
+Figure 2. The error rate curves on orgs vs places data
+set for three classiﬁers TrAdaBoost(SVM), SVM and SVMt
+
+people vs places
+0.28
+0.01
+0.02
+0.03
+0.04
+0.05
+0.10
+0.20
+0.30
+0.40
+0.50
+
+0.26
+0.24
+
+Error Rate
+
+0.22
+0.20
+0.18
+0.16
+0.14
+0.12
+0.10
+0.08
+0
+
+10
+
+20
+
+30
+
+40
+50
+60
+Number of Iterations
+
+70
+
+80
+
+90
+
+100
+
+Figure 3. Iteration curves by error rate on the people vs
+places data set, where diﬀerent curves indicate the cases
+under diﬀerent ratios between same-distribution and diﬀdistribution training data
+
+distribution knowledge. The evidence is that the error
+rate curve of SVMt in Figure 2 is a bit worse than that
+in Figure 1. SVMt is a straightforward learning method
+based on both same-distribution and diﬀ-distribution
+training data. The performance of SVMt in Figure 2
+indicates the quality of diﬀ-distribution training data
+is low. Due to the low quality of the diﬀ-distribution
+training data, TrAdaBoost(SVM) can only give comparable results with SVM on the orgs vs places data
+set.
+Figure 3 shows the error rate results as a function of
+the number of iterations on the people vs places
+data set. Although the curves are not quite smooth,
+they converge well, which accords with the theoretical analysis in Section 4 and the past results about
+AdaBoost (Schapire et al., 1997). But, this is accompanied with a low rate of convergence. In Figure 3,
+TrAdaBoost does not converge well until at least 50
+iterations.
+Finally, we test how the diﬀerence in the distribution
+between training and test data inﬂuence the performance of TrAdaBoost. For each data set, we calculate
+the KL-divergence as well as the relative improvement
+by error rate reduction between TrAdaBoost(SVM) and
+SVM (or SVMt) in Figure 4. The data sets have been
+
+Regarding the reason to the relative improvement by
+TrAdaBoost(SVM) over SVM being irregular, we observed that, when the number of iterations is set to
+1, TrAdaBoost(SVM) becomes SVMt. In our opinion, the main improvement of TrAdaBoost(SVM) is
+based on SVMt. SVM only considers the information from same-distribution data, which is diﬀerent
+from TrAdaBoost(SVM) and SVMt. Thus, we believe
+it is not easy to ﬁnd the relation between the distribution distance and the relative improvement by
+TrAdaBoost(SVM) over SVM.
+
+6. Conclusions and Future Work
+In this paper, we proposed a novel framework
+TrAdaBoost for transferring knowledge from one distribution to another by boosting a basic learner. The
+basic idea is to select the most useful diﬀ-distribution
+instances as additional training data for predicting the
+labels of same-distribution techniques. The theoretical analysis shows that TrAdaBoost ﬁrst obeys the
+same-distribution training data, and then chooses the
+most helpful diﬀ-distribution training instances as additional training data. Moreover, in our experiments,
+TrAdaBoost also demonstrates better transfer ability
+than traditional learning techniques. In almost all situations, TrAdaBoost gives better performance than
+the baseline methods.
+We note that although we have proved the convergence of the prediction error on the same-distribution
+data, the improvement that we obtain is sensitive to
+the quality (or KL-divergence) of diﬀ-distribution examples. This issue needs further
+ understanding. Also,
+the rate of convergence (O( ln n/N )) of TrAdaBoost
+may be slow. In addition, TrAdaBoost is able to transfer knowledge from only one distribution at one time,
+and cannot deal with multiple diﬀerent distributions
+simultaneously. In the future, we will try to extend
+the framework to address these issues.
+
+Acknowledgements
+Wenyuan Dai, Gui-Rong Xue and Yong Yu are supported by a grant from National Natural Science Foundation of China (NO. 60473122). Qiang Yang is supported by a grant from Hong Kong research grant
+(HK-RGC 621606). We thank the anonymous reviewers for their greatly helpful comments.
+
+Boosting for Transfer Learning
+80%
+
+60%
+
+SVM
+SVMt
+
+40%
+
+20%
+
+0
+
+orgs vs people
+
+people vs places
+
+orgs vs places
+
+sci vs talk
+
+rec vs sci
+
+real vs simulated
+
+rec vs talk
+
+auto vs aviation edible vs poisonous
+
+Figure 4. Error rate reductions on all data sets sorted by KL-divergence in increasing order from left to right
+
+References
+Ben-David, S., & Schuller, R. (2003). Exploiting task
+relatedness for multiple task learning. Proceedings of
+the Sixteenth Annual Conference on Learning Theory.
+Bickel, S., & Scheﬀer, T. (2007). Dirichlet-enhanced
+spam ﬁltering based on biased samples. In Advances
+in neural information processing systems 19.
+Boser, B. E., Guyon, I., & Vapnik, V. (1992). A training algorithm for optimal margin classiﬁers. Proceedings of the Fifth Annual Workshop on Computational Learning Theory.
+Caruana, R. (1997). Multitask learning.
+Learning, 28(1), 41–75.
+
+Machine
+
+DauméIII, H., & Marcu, D. (2006). Domain adaptation for statistical classiﬁers. Journal of Artiﬁcial
+Intelligence Research, 26, 101–126.
+Dudı́k, M., Schapire, R., & Phillips, S. (2006). Correcting sample selection bias in maximum entropy
+density estimation. In Advances in neural information processing systems 18.
+Freund, Y., & Schapire, R. E. (1997). A decisiontheoretic generalization of on-line learning and an
+application to boosting. Journal of Computer and
+System Sciences, 55(1), 119–139.
+Heckman, J. J. (1979). Sample selection bias as a speciﬁcation error. Econometrica, 47, 153–161.
+Huang, J., Smola, A., Gretton, A., Borgwardt, K. M.,
+& Schölkopf, B. (2007). Correcting sample selection bias by unlabeled data. In Advances in neural
+information processing systems 19.
+Joachims, T. (1999). Transductive inference for text
+classiﬁcation using support vector machines. Proceedings of Sixteenth International Conference on
+Machine Learning.
+Joachims, T. (2002). Learning to classify text using
+support vector machines. Dissertation, Kluwer.
+
+Kullback, S., & Leibler, R. A. (1951). On information
+and suﬃciency. Annals of Mathematical Statistics,
+22(1), 79–86.
+Liao, X., Xue, Y., & Carin, L. (2005). Logistic regression with an auxiliary data source. Proceedings
+of the Twenty-Second International Conference on
+Machine Learning.
+Rosenstein, M. T., Marx, Z., Kaelbling, L. P., & Dietterich, T. G. (2005). To transfer or not to transfer.
+Proceedings of NIPS 2005 Workshop on Inductive
+Transfer: 10 Years Later.
+Schapire, R. E. (1999). A brief introduction to boosting. Proceedings of the Sixteenth International Joint
+Conference on Artiﬁcial Intelligence.
+Schapire, R. E., Freund, Y., Bartlett, P., & Lee, W. S.
+(1997). Boosting the margin: A new explanation
+for the eﬀectiveness of voting methods. Proceedings
+of the Fourteenth International Conference on Machine Learning.
+Schmidhuber, J. (1994). On learning how to learn
+learning strategies (Technical Report FKI-198-94).
+Fakultat fur Informatik.
+Shimodaira, H. (2000). Improving predictive inference
+under covariate shift by weighting the log-likelihood
+function. Journal of Statistical Planning and Inference, 90, 227–244.
+Thrun, S., & Mitchell, T. M. (1995). Learning one
+more thing. Proceedings of the Fourteenth International Joint Conference on Artiﬁcial Intelligence.
+Wu, P., & Dietterich, T. G. (2004). Improving svm
+accuracy by training on auxiliary data sources. Proceedings of the Twenty-First International Conference on Machine Learning.
+Zadrozny, B. (2004). Learning and evaluating classiﬁers under sample selection bias. Proceedings of the
+Twenty-First International Conference on Machine
+Learning.
+
+

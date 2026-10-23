@@ -72,9 +72,10 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
    site (app.md "Private site")
 7. Comp leans: held-out look ~24 Oct, then champion pages and reasons:
    data-and-model.md
-8. Training across patches (Jacob 21 Oct, 16.21 out): docs/plan/patch-transfer.md.
-   16.21's first day moved champions 0.75 pp (patched ones 1.9 pp); arms, newest-only
-   rolling evaluation, train-vs-eval curve; needs a drafts pin with 16.21
+8. Training across patches (Jacob 21 and 23 Oct): docs/plan/patch-transfer.md. Score
+   only newest-patch games, replayed day by day (every game was once newest-patch);
+   pooled stationary part plus shrunk per-patch champion-role part; ratings then net
+   arms. PT0 is Jacob's (backfill, protocol v3 everywhere); PT1 episode pin next
 9. The data edge (J23, J24): every block respects its filters or is marked (E1, cheap,
    now); then day cubes as storage (E7) so any patch, season, rank and region is a sum,
    a public truth test (E2) and "Meio", one estimate per number from every game, patch
@@ -123,6 +124,6 @@ For the next session, which reads only Now and one area file:
   not the plan. History goes to git log: a finished step is deleted, leaving a Status
   line only if a later reader needs it
 - Commit messages start with the step id when there is one (`git log --grep AC1`)
-- To convert: site.md, ops.md, data-and-model.md, lab-frontier.md, patch-transfer.md,
+- To convert: site.md, ops.md, data-and-model.md, lab-frontier.md,
   libraries.md; install history (old shas, nginx .bak names) in hosting.md and
   your-games.md "Deploy" to docs/archive/install-log.md
