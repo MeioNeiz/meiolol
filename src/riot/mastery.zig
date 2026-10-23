@@ -74,7 +74,7 @@ pub fn decode(arena: Allocator, blob: []const u8, fetched_at: i64) ![]Entry {
             .champion = std.math.cast(u32, champion) orelse return error.BadMastery,
             .level = std.math.cast(u32, try r.varint()) orelse return error.BadMastery,
             .points = std.math.cast(u32, try r.varint()) orelse return error.BadMastery,
-            .last_play = fetched_at - @as(i64, @intCast(try r.varint())) * 3600,
+            .last_play = fetched_at - @as(i64, std.math.cast(u32, try r.varint()) orelse return error.BadMastery) * 3600,
         };
     }
     if (r.pos != blob.len) return error.BadMastery;
@@ -139,4 +139,7 @@ test "fixture round trip" {
     };
     try testing.expect(found);
     try testing.expectError(error.BadMastery, decode(arena, blob[0 .. blob.len - 1], fetched_at));
+    // Hours since last play of 2^64 - 1
+    const huge = "\x01\x01\x01\x01\x01\xff\xff\xff\xff\xff\xff\xff\xff\xff\x01";
+    try testing.expectError(error.BadMastery, decode(arena, huge, fetched_at));
 }
