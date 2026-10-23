@@ -11,7 +11,8 @@
 //! (seconds before it), note, phase (gameflow), timer (champ select phase), session
 //! (false: champ select without a session, as between phases), positions, intent,
 //! hover, lock, ban ({cell: name}), swap ([cell, cell]: a trade), game ({time, gold,
-//! scores {cell: {k, d, a, cs, level}}, events [Live Client events]}), win, expect
+//! scores {cell: {k, d, a, cs, level, items (their price)}}, events [Live Client
+//! events]}), win, expect
 //! (what `zig build test` checks the watch saw, see mock_test in this file).
 
 const std = @import("std");
@@ -37,6 +38,8 @@ pub const Cell = struct {
     assists: i64 = 0,
     cs: i64 = 0,
     level: i64 = 1,
+    /// Price of the items held, served as one made-up item
+    items: i64 = 0,
 };
 
 pub const Scenario = struct {
@@ -283,6 +286,7 @@ pub const State = struct {
                 if (sc.get("a")) |x| c.assists = x.integer;
                 if (sc.get("cs")) |x| c.cs = x.integer;
                 if (sc.get("level")) |x| c.level = x.integer;
+                if (sc.get("items")) |x| c.items = x.integer;
             }
         }
         if (g.get("events")) |v| for (v.array.items) |ev| {
@@ -582,8 +586,10 @@ const LivePlayer = struct {
     scores: Scores,
     skinID: u32 = 0,
     team: []const u8,
-    items: []const u32 = &.{},
+    items: []const LiveItem = &.{},
 };
+
+const LiveItem = struct { itemID: u32 = 0, displayName: []const u8 = "Mock items", price: i64, count: i64 = 1, slot: u32 = 0 };
 
 fn playerList(a: std.mem.Allocator, s: *const Scenario, st: *const State) ![]LivePlayer {
     const out = try a.alloc(LivePlayer, 10);
@@ -600,6 +606,7 @@ fn playerList(a: std.mem.Allocator, s: *const Scenario, st: *const State) ![]Liv
             .summonerName = try std.fmt.allocPrint(a, "{s}#{s}", .{ game_name, local_tag }),
             .scores = .{ .assists = c.assists, .creepScore = c.cs, .deaths = c.deaths, .kills = c.kills },
             .team = if (i < 5) "ORDER" else "CHAOS",
+            .items = if (c.items > 0) try a.dupe(LiveItem, &.{.{ .price = c.items }}) else &.{},
         };
     }
     return out;
@@ -694,6 +701,7 @@ pub const Mock = struct {
 const testing = std.testing;
 const core = @import("core");
 const Watch = @import("watch.zig").Watch;
+const livedata = @import("live.zig");
 
 // Each scenario through lcu.Watch, as `meiolol-app watch` and the window poll it,
 // checking each step's `expect`: phase (the gameflow phase watch reports), between
@@ -847,6 +855,11 @@ fn checkServed(m: *Mock, ex: std.json.ObjectMap, lcu_port: u16, live_port: u16) 
         const g = try std.json.parseFromSliceLeaky(Game, a, resp.body, .{ .ignore_unknown_fields = true });
         if (want.object.get("players")) |n| try testing.expectEqual(@as(usize, @intCast(n.integer)), g.allPlayers.len);
         if (want.object.get("events")) |n| try testing.expectEqual(@as(usize, @intCast(n.integer)), g.events.Events.len);
+        // What the in-game panel reads of it
+        const parsed = try livedata.parse(a, resp.body);
+        if (want.object.get("me")) |n| try testing.expectEqualStrings(n.string, parsed.me().?.champion);
+        if (want.object.get("item_gold")) |n| try testing.expectEqual(n.integer, parsed.me().?.item_gold);
+        if (want.object.get("objectives")) |n| try testing.expectEqual(@as(usize, @intCast(n.integer)), parsed.events.len);
     }
     if (ex.get("eog")) |want| {
         const resp = try https.getPlain(testing.allocator, testing.io, lcu_port, m.password, "/lol-end-of-game/v1/eog-stats-block");

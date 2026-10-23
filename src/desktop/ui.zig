@@ -12,6 +12,8 @@ const Icons = @import("icons.zig").Icons;
 const w = @import("widgets.zig");
 const lane = @import("lane.zig");
 const teams = @import("teams.zig");
+const game = @import("game.zig");
+const ingame = @import("../ingame.zig");
 const palette = w.palette;
 
 pub const title = "meiolol";
@@ -42,6 +44,8 @@ pub const Status = union(enum) {
     /// Champ select without assigned positions (blind pick, ARAM)
     no_role,
     select: *const Select,
+    /// In a game with Live Client Data up
+    in_game: *const ingame.InGame,
 };
 
 /// From the update thread (update.zig), under the content
@@ -82,6 +86,15 @@ pub fn frame(v: View) void {
             const ctx: w.Ctx = .{ .stats = v.stats.?, .icons = v.icons, .edition = v.edition, .wide = wide };
             if (wide) wideSelect(ctx, s) else narrowSelect(ctx, s);
         },
+        // The public edition gets the panel once the private one has proved it
+        .in_game => |g| if (v.edition == .private) {
+            const ctx: w.Ctx = .{ .stats = v.stats.?, .icons = v.icons, .edition = v.edition, .wide = wide };
+            if (wide) game.wide(ctx, g) else game.narrow(ctx, g);
+        } else {
+            var body = dvui.box(@src(), .{ .dir = .vertical }, .{ .expand = .both, .padding = .all(16) });
+            defer body.deinit();
+            w.para(@src(), "In game. The board comes back in your next champ select.", .{}, .{});
+        },
         else => {
             var body = dvui.box(@src(), .{ .dir = .vertical }, .{ .expand = .both, .padding = .all(16) });
             defer body.deinit();
@@ -105,7 +118,7 @@ fn message(v: View) void {
         .client_error => |e| w.para(@src(), "League client not reachable ({s}); retrying.", .{e}, .{}),
         .waiting => w.para(@src(), "The board shows in champ select: both teams, your lane, options and bans.", .{}, .{}),
         .no_role => w.para(@src(), "This champ select has no assigned positions, so there is no lane to show.", .{}, .{}),
-        .select => {},
+        .select, .in_game => {},
     }
 }
 
@@ -130,6 +143,7 @@ fn header(v: View) void {
             .waiting => |phase| phase,
             .no_role => "champ select",
             .select => |s| s.board.stage,
+            .in_game => "In game",
         };
         dvui.labelNoFmt(@src(), state, .{}, .{ .gravity_y = 0.5, .color_text = .{ .color = w.text().opacity(0.7) }, .padding = .{ .x = 6, .w = 6 } });
     }
@@ -138,6 +152,15 @@ fn header(v: View) void {
         .ban => w.chip(@src(), "Your ban", palette.turn, 1),
         .pick => w.chip(@src(), "Your pick", palette.turn, 1),
     };
+    if (v.status == .in_game) {
+        var buf: [16]u8 = undefined;
+        dvui.labelNoFmt(@src(), ingame.clock(&buf, v.status.in_game.time), .{}, .{
+            .gravity_x = 1,
+            .gravity_y = 0.5,
+            .font = dvui.themeGet().font_title,
+            .color_text = .{ .color = w.text().opacity(0.8) },
+        });
+    }
     if (v.status == .select) {
         const c = &v.status.select.card;
         dvui.label(@src(), "EUW · {s}", .{if (c.period.len > 0) c.period else "no curves"}, .{
@@ -156,6 +179,7 @@ const step_names = [_][]const u8{ "Lobby", "Champ select", "In game", "Post game
 fn stepper(s: Status) void {
     const now: ?Step = switch (s) {
         .select, .no_role => .champ_select,
+        .in_game => .in_game,
         .waiting => |phase| if (std.mem.eql(u8, phase, "In game") or std.mem.eql(u8, phase, "Reconnect"))
             .in_game
         else if (std.mem.eql(u8, phase, "Post game"))

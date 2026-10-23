@@ -142,10 +142,7 @@ pub const Card = struct {
 pub fn build(arena: std.mem.Allocator, in: Input) !Card {
     const stats = in.stats;
     const opp = opponent(in);
-    const bracket: Bracket = if (in.tier) |t|
-        if (curvesfile.tierRank(t)) |r| Bracket.ofRank(r) else .all
-    else
-        .all;
+    const bracket = bracketOf(in.tier);
     var card: Card = .{
         .role = in.role,
         .me = in.me,
@@ -204,10 +201,16 @@ fn opponent(in: Input) ?Opponent {
     return null;
 }
 
-const Found = struct { view: View, bracket: Bracket };
+/// The curves' bracket for a visible solo tier ("GOLD"); all ranks when unknown
+pub fn bracketOf(tier: ?[]const u8) Bracket {
+    const t = tier orelse return .all;
+    return if (curvesfile.tierRank(t)) |r| Bracket.ofRank(r) else .all;
+}
+
+pub const Found = struct { view: View, bracket: Bracket };
 
 /// The player's bracket once it has thin_games games, else all ranks
-fn view(c: *const Curves, role: Role, bracket: Bracket, me: u32, them: u32) ?Found {
+pub fn view(c: *const Curves, role: Role, bracket: Bracket, me: u32, them: u32) ?Found {
     if (bracket != .all) if (c.get(role, bracket, me, them)) |v| {
         if (v.games() >= thin_games) return .{ .view = v, .bracket = bracket };
     };
@@ -215,7 +218,7 @@ fn view(c: *const Curves, role: Role, bracket: Bracket, me: u32, them: u32) ?Fou
     return .{ .view = v, .bracket = .all };
 }
 
-fn matchup(arena: std.mem.Allocator, v: View, bracket: Bracket) !Matchup {
+pub fn matchup(arena: std.mem.Allocator, v: View, bracket: Bracket) !Matchup {
     const floor = @max(1, @min(min_minute_games, v.games()));
     var points: std.ArrayList(Point) = .empty;
     for (0..v.minutes()) |i| {
@@ -275,7 +278,7 @@ fn percent(part: u32, whole: u32) u32 {
     return @intFromFloat(@round(100 * @as(f64, @floatFromInt(part)) / @as(f64, @floatFromInt(whole))));
 }
 
-fn period(arena: std.mem.Allocator, c: *const Curves) ![]const u8 {
+pub fn period(arena: std.mem.Allocator, c: *const Curves) ![]const u8 {
     const label = c.patch();
     if (label.len > 0 and std.ascii.isDigit(label[0])) return std.fmt.allocPrint(arena, "patch {s}", .{label});
     return label;

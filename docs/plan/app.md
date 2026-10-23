@@ -121,8 +121,13 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
 - APP10 Loading screen cards (Window layout below): ten cards, champion-only facts in
   the public edition; private adds player scouting (APP7)
 - APP11 Post game view: verdict line, gold difference chart, lane rows (below)
-- APP9 In-game companion, private first (below). Against the mock's Live Client Data
-  (deploy/mock-cs.sh full-game), then a real capture (APP1's in-game reply)
+- APP9 In-game companion, private first (below). First pass done (23 Oct, against the
+  mock and a synthetic reply): score and team item gold, mirrored lane rows with gold
+  differences, your lane's CS and item gold against the matchup at this minute with the
+  dot on the gold chart, respawn timers after a kill, team gold through the game. Left:
+  check APP1's real reply (item `price` total or combine cost; creepScore exact or in
+  tens; KillerName as the Riot ID game name; position blank in any queue), win chance
+  by minute (private, statemodel.zig), builds against their comp, a small hotkey panel
 
 ## Window layout
 
@@ -143,8 +148,10 @@ CommunityDragon champion-icons/<id>.png into data/icons, gitignored).
 - Loading screen (APP10): Porofessor's 2 x 5 cards, ally row over enemy row, fixed card
   order (champion, record, then pills), hover for the reason and number. Player pills
   ("on a streak", "main") private only and only where names are visible
-- In game (APP9): a small panel, hidden by default, hotkey; mirrored lane rows (our icon,
-  gold delta, their icon), team gold bar, your lane against the curve
+- In game (APP9, built in the main window: desktop/game.zig): score strip and team item
+  gold bar, five mirrored lane rows (our icon, gold delta, their icon) left; your lane
+  against the curve, respawns and team gold through the game right. Narrow: one column,
+  rows without names. Later a small panel, hidden by default, hotkey
 - Post game (APP11): verdict sentence and award chips, gold difference area (blue over
   red), mirrored lane rows, detail behind tabs; no dense tables
 
@@ -207,8 +214,8 @@ games.
   the MoveFileExW fix (20 Oct) never swap themselves; a second exe update in one session
   waits for a restart
 - Mock champ select on the Mac: `deploy/mock-cs.sh [SCENARIO] [--window]` (scenarios
-  `list`; also serves Live Client Data on 2999 and the end of game block; no in-game
-  view built). Every scenario runs in `zig build test`
+  `list`; also serves Live Client Data on 2999, item gold per player, and the end of
+  game block). Every scenario runs in `zig build test`
 
 ## Later
 

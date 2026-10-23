@@ -23,7 +23,7 @@ pub fn panel(ctx: Ctx, c: *const lanecard.Card, mode: board.Mode) void {
         w.para(@src(), "{s}", .{c.sentence}, .{ .muted = thin });
     }
     if (c.matchup) |m| {
-        chart(m);
+        chart(m, null);
         w.para(@src(), "Gold, you minus them: average line, middle half of games shaded. {s}, EUW, {s}, {d} games.", .{
             m.bracket.label(), c.period, m.games,
         }, .{ .muted = true, .small = true });
@@ -90,15 +90,22 @@ fn title(ctx: Ctx, c: *const lanecard.Card, mode: board.Mode) void {
     if (c.opponent) |o| w.champIcon(@src(), ctx, o.champion, .{ .size = 22, .border = palette.enemy, .dim = o.guessed });
 }
 
+/// In game: where the player's lane is now
+pub const Marker = struct { minute: f64, gold: f64 };
+
 /// Gold difference by minute: the estimate as a line, the middle half of games as a
-/// band, zero as a rule
-fn chart(m: lanecard.Matchup) void {
+/// band, zero as a rule, and in game a dot for now
+pub fn chart(m: lanecard.Matchup, marker: ?Marker) void {
     if (m.points.len < 2) return;
     var lo: f64 = 0;
     var hi: f64 = 0;
     for (m.points) |p| {
         lo = @min(lo, @as(f64, @floatFromInt(p.p25)));
         hi = @max(hi, @as(f64, @floatFromInt(p.p75)));
+    }
+    if (marker) |k| {
+        lo = @min(lo, k.gold);
+        hi = @max(hi, k.gold);
     }
     const span = @max(@abs(lo), @abs(hi), 500);
     const step: f64 = if (span > 2000) 1000 else 500;
@@ -141,10 +148,21 @@ fn chart(m: lanecard.Matchup) void {
         zero.point(x_axis.max.?, 0);
         zero.stroke(1, w.text().opacity(0.35));
     }
-    var line = plot.line();
-    defer line.deinit();
-    for (m.points) |p| line.point(@floatFromInt(p.minute), @floatFromInt(p.mean));
-    line.stroke(2, line_color);
+    {
+        var line = plot.line();
+        defer line.deinit();
+        for (m.points) |p| line.point(@floatFromInt(p.minute), @floatFromInt(p.mean));
+        line.stroke(2, line_color);
+    }
+    const k = marker orelse return;
+    const at = plot.dataToScreen(.{ .x = @min(k.minute, x_axis.max.?), .y = k.gold });
+    var path: dvui.Path.Builder = .init(dvui.currentWindow().lifo());
+    defer path.deinit();
+    const r = 5 * dvui.windowNaturalScale();
+    path.addArc(at, r, std.math.pi * 2, 0, true);
+    const color = if (k.gold >= 0) palette.ally else palette.enemy;
+    path.build().fillConvex(.{ .color = .{ .color = color } });
+    path.build().stroke(.{ .thickness = 1.5 * dvui.windowNaturalScale(), .closed = true, .color = .{ .color = dvui.Color.white } });
 }
 
 fn signed(gpa: std.mem.Allocator, tick: f64) std.mem.Allocator.Error![]const u8 {

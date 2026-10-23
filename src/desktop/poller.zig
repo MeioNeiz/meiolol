@@ -10,6 +10,7 @@ const core = @import("core");
 const lcu = @import("../lcu/root.zig");
 const lanecard = @import("../lanecard.zig");
 const board = @import("../board.zig");
+const ingame = @import("../ingame.zig");
 const Icons = @import("icons.zig").Icons;
 const icons_path = @import("icons.zig").lcu_path;
 const datafiles = @import("../datafiles.zig");
@@ -231,6 +232,8 @@ const Poller = struct {
     own: ?Own = null,
     /// What the last tick saw, for key()
     fingerprint: u64 = 0,
+    /// This game's team gold so far; a new game starts it again
+    history: std.ArrayList(ingame.Sample) = .empty,
 
     const Own = struct {
         mastery: []lanecard.Mastery,
@@ -238,6 +241,7 @@ const Poller = struct {
     };
 
     fn deinit(p: *Poller) void {
+        p.history.deinit(p.own_arena.child_allocator);
         p.watch.deinit();
         p.own_arena.deinit();
     }
@@ -261,7 +265,7 @@ const Poller = struct {
         switch (s) {
             .waiting => |phase| h.update(phase),
             .client_error => |e| h.update(e),
-            .select => h.update(std.mem.asBytes(&p.fingerprint)),
+            .select, .in_game => h.update(std.mem.asBytes(&p.fingerprint)),
             else => {},
         }
         return h.final();
@@ -270,7 +274,13 @@ const Poller = struct {
     fn tick(p: *Poller, arena: std.mem.Allocator, data: *const Data) !ui.Status {
         const cs = switch (try p.watch.step(arena)) {
             .phase => |phase| {
-                p.forgetOwn();
+                // Live Client Data is up once the game has loaded; until then, waiting
+                if (std.mem.eql(u8, phase, "InProgress")) {
+                    if (p.inGame(arena, data)) |g| return .{ .in_game = g } else |err| switch (err) {
+                        error.OutOfMemory => return err,
+                        else => {},
+                    }
+                } else p.forgetOwn();
                 return .{ .waiting = phaseLabel(phase) };
             },
             .between => return .{ .waiting = "Champ select" },
@@ -305,37 +315,68 @@ const Poller = struct {
             .expertise = if (by_mastery) .fitted else null,
         });
         sel.board = try board.build(arena, &data.stats, .{}, cs, &sel.card);
-        p.fetchIcons(sel);
+        var want: Want = .{};
+        for ([_][]const board.Seat{ sel.board.allies, sel.board.enemies }) |seats| for (seats) |s| {
+            want.add(s.slot.champion);
+            for (s.ideas) |c| want.add(c);
+        };
+        for (sel.board.my_bans) |c| want.add(c);
+        for (sel.board.their_bans) |c| want.add(c);
+        for (sel.board.ban_options) |o| want.add(o.champion);
+        for (sel.card.options) |o| want.add(o.champion);
+        if (sel.card.opponent) |o| want.add(o.champion);
+        want.add(sel.card.me);
+        p.fetchIcons(want.list[0..want.n]);
         return .{ .select = sel };
     }
 
-    /// Icons for every champion the select shows, from the client. Fetched outside the
-    /// mutex, added under it; a new icon changes the fingerprint so the window redraws
-    fn fetchIcons(p: *Poller, sel: *const ui.Select) void {
-        const client = p.watch.client orelse return;
-        var want: [64]u32 = undefined;
-        var n: usize = 0;
-        const add = struct {
-            fn f(list: *[64]u32, len: *usize, c: u32) void {
-                if (c == 0 or len.* == list.len) return;
-                if (std.mem.indexOfScalar(u32, list[0..len.*], c) != null) return;
-                list[len.*] = c;
-                len.* += 1;
-            }
-        }.f;
-        for ([_][]const board.Seat{ sel.board.allies, sel.board.enemies }) |seats| for (seats) |s| {
-            add(&want, &n, s.slot.champion);
-            for (s.ideas) |c| add(&want, &n, c);
-        };
-        for (sel.board.my_bans) |c| add(&want, &n, c);
-        for (sel.board.their_bans) |c| add(&want, &n, c);
-        for (sel.board.ban_options) |o| add(&want, &n, o.champion);
-        for (sel.card.options) |o| add(&want, &n, o.champion);
-        if (sel.card.opponent) |o| add(&want, &n, o.champion);
-        add(&want, &n, sel.card.me);
+    /// The game's own server; the mock serves it in plain HTTP, as the client
+    fn inGame(p: *Poller, arena: std.mem.Allocator, data: *const Data) !*const ingame.InGame {
+        const client = p.watch.client.?;
+        const live = lcu.live;
+        const resp = if (client.credentials.plain)
+            try lcu.https.getPlain(client.gpa, io, live.port, "", live.path)
+        else
+            try lcu.https.get(client.gpa, io, live.port, "", live.path);
+        defer client.gpa.free(resp.body);
+        if (resp.status / 100 != 2) return error.HttpStatus;
+        const game = try live.parse(arena, resp.body);
+        if (p.own == null) p.own = p.loadOwn(client);
+        const g = try arena.create(ingame.InGame);
+        g.* = try ingame.build(arena, &data.stats, if (data.curves) |*c| c else null, game, p.own.?.tier);
+        p.fingerprint = std.hash.Wyhash.hash(1, resp.body);
+        const gpa = p.own_arena.child_allocator;
+        const last: ?ingame.Sample = if (p.history.items.len > 0) p.history.items[p.history.items.len - 1] else null;
+        if (last != null and game.time < last.?.time) p.history.clearRetainingCapacity();
+        if (last == null or p.history.items.len == 0 or game.time >= last.?.time + ingame.sample_every) {
+            try p.history.append(gpa, g.sample());
+        }
+        g.history = try arena.dupe(ingame.Sample, p.history.items);
+        var want: Want = .{};
+        for (g.rows) |r| for ([_]?ingame.Seat{ r.ours, r.theirs }) |s| if (s) |seat| want.add(seat.champion);
+        p.fetchIcons(want.list[0..want.n]);
+        return g;
+    }
 
+    /// Champions to fetch icons for, each once
+    const Want = struct {
+        list: [64]u32 = undefined,
+        n: usize = 0,
+
+        fn add(w: *Want, c: u32) void {
+            if (c == 0 or w.n == w.list.len) return;
+            if (std.mem.indexOfScalar(u32, w.list[0..w.n], c) != null) return;
+            w.list[w.n] = c;
+            w.n += 1;
+        }
+    };
+
+    /// Icons from the client. Fetched outside the mutex, added under it; a new icon
+    /// changes the fingerprint so the window redraws
+    fn fetchIcons(p: *Poller, want: []const u32) void {
+        const client = p.watch.client orelse return;
         var got: u32 = 0;
-        for (want[0..n]) |c| {
+        for (want) |c| {
             shared.mutex.lockUncancelable(io);
             const wanted = shared.icons.?.wanted(c);
             shared.mutex.unlock(io);

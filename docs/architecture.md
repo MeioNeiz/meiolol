@@ -830,8 +830,17 @@ level still pickable.
   widened to every pickable champion below 3 options; 3-5 shown, each with lane gold vs
   the opponent (green/red only when 2 SE from even and not mostly baseline), mastery and
   team-fit facts, never win-chance numbers. Riot boilerplate in the footer
+- In game (APP9, private edition; ingame.zig, desktop/game.zig): in InProgress the
+  poller reads Live Client Data (lcu/live.zig: 127.0.0.1:2999 allgamedata, Riot's root,
+  plain for the mock) each tick. Rows by position (blank ones inferred as in champ
+  select), gold from each player's item prices (the game shows only your own), score
+  and respawns from the event feed (dragon 5 min, elder 6, Baron 6, inhibitor 5, only
+  after a kill), my lane's CS and item gold against the matchup's curve at this whole
+  minute (p10/p25/p75/p90 in words). The poller keeps the team gold every 20 s of game
+  time for the chart (new game: game time goes back)
 - `zig build desktop-shot -- --stats F --curves F [--out DIR] [--min-games N]`: the
-  window's states (fixture champ selects in desktop_shot.zig) as PNGs at 100%, 150% and
+  window's states (fixture champ selects in desktop_shot.zig, in game from
+  testdata/lcu/live-allgamedata.json) as PNGs at 100%, 150% and
   full height, drawn by desktop/raster.zig (premultiplied "over" blending, top-left
   fill rule); no screen or client needed. `zig build ci` compiles both. Test data
   (data/desktop, gitignored): `deploy/box.sh run stats --platform all --out FILE` on the

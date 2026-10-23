@@ -14,10 +14,11 @@ const lanecard = @import("lanecard.zig");
 const board = @import("board.zig");
 const lcu = @import("lcu/root.zig");
 const Icons = @import("desktop/icons.zig").Icons;
+const ingame = @import("ingame.zig");
 
 const Shot = struct {
     name: []const u8,
-    status: union(enum) { plain: ui.Status, select: Scene },
+    status: union(enum) { plain: ui.Status, select: Scene, game: Game },
 };
 
 /// A champ select by champion names. Enemies are locked; a trailing "?" hides the
@@ -37,6 +38,12 @@ const Scene = struct {
     phase: []const u8 = "BAN_PICK",
     mastery: []const struct { []const u8, u32 } = &.{},
     tier: ?[]const u8 = null,
+};
+
+/// A Live Client Data reply from a file, as the poller would read it in game
+const Game = struct {
+    path: []const u8 = lcu.live.fixture_path,
+    tier: ?[]const u8 = "GOLD",
 };
 
 const mid_mastery = .{ .{ "Ahri", 212_000 }, .{ "Syndra", 64_000 }, .{ "Orianna", 41_000 }, .{ "Viktor", 30_500 }, .{ "Lux", 12_000 } };
@@ -98,6 +105,7 @@ const shots = [_]Shot{
         .their_bans = &.{ "Briar", "Smolder", "Mel", "Viego", "Ezreal" },
         .mastery = &.{ .{ "Jinx", 90_000 }, .{ "Caitlyn", 40_000 }, .{ "Ezreal", 22_000 } },
     } } },
+    .{ .name = "in-game", .status = .{ .game = .{} } },
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -160,6 +168,13 @@ pub fn main(init: std.process.Init) !void {
                 sel.board = try board.build(a, &stats, opts, cs, &sel.card);
                 break :blk .{ .select = sel };
             },
+            .game => |gm| blk: {
+                const body = try cwd.readFileAlloc(io, gm.path, a, limit);
+                const g = try a.create(ingame.InGame);
+                g.* = try ingame.build(a, &stats, if (curves) |*c| c else null, try lcu.live.parse(a, body), gm.tier);
+                g.history = try history(a, g);
+                break :blk .{ .in_game = g };
+            },
         };
         // Wide at 100% and 150%, as tall as everything (no scrolling), narrow, and the
         // public edition beside the private one
@@ -176,6 +191,23 @@ pub fn main(init: std.process.Init) !void {
             std.debug.print("{s}\n", .{name});
         }
     }
+}
+
+/// A made-up game so far that ends where the reply is: even early, a swing, then the lead
+fn history(a: std.mem.Allocator, g: *const ingame.InGame) ![]const ingame.Sample {
+    var out: std.ArrayList(ingame.Sample) = .empty;
+    const end = g.sample();
+    var t: f32 = 0;
+    while (t <= end.time) : (t += ingame.sample_every) {
+        const x = t / end.time;
+        const swing = 900 * @sin(x * 2 * std.math.pi) * (1 - x);
+        try out.append(a, .{
+            .time = t,
+            .team = @intFromFloat(@as(f32, @floatFromInt(end.team)) * x * x + swing),
+            .lane = if (end.lane) |l| @intFromFloat(@as(f32, @floatFromInt(l)) * x) else null,
+        });
+    }
+    return out.items;
 }
 
 fn champion(stats: *const core.Stats, name: []const u8) !u32 {

@@ -1,0 +1,1065 @@
+{
+ "_comment": "Synthetic allgamedata at 12:22, shaped from Riot's Live Client Data docs (no real capture yet, APP1): me Orianna mid (ORDER) vs Syndra; the in-game panel's tests and desktop-shot read it",
+ "activePlayer": {
+  "abilities": {},
+  "championStats": {
+   "currentHealth": 1210.0
+  },
+  "currentGold": 412.7,
+  "fullRunes": {},
+  "level": 10,
+  "riotId": "MockPlayer#EUW",
+  "riotIdGameName": "MockPlayer",
+  "riotIdTagLine": "EUW",
+  "summonerName": "MockPlayer#EUW",
+  "teamRelativeColors": true
+ },
+ "allPlayers": [
+  {
+   "championName": "Darius",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Doran's Blade",
+     "itemID": 1055,
+     "price": 450,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 0
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Black Cleaver",
+     "itemID": 3071,
+     "price": 3000,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 1
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Boots",
+     "itemID": 1001,
+     "price": 300,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 2
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Stealth Ward",
+     "itemID": 3340,
+     "price": 0,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 3
+    }
+   ],
+   "level": 10,
+   "position": "TOP",
+   "rawChampionName": "game_character_displayname_Darius",
+   "rawSkinName": "",
+   "respawnTimer": 0.0,
+   "riotId": "Player0#EUW",
+   "riotIdGameName": "Player0",
+   "riotIdTagLine": "EUW",
+   "runes": {
+    "keystone": {
+     "displayName": "",
+     "id": 8214
+    },
+    "primaryRuneTree": {
+     "id": 8200
+    },
+    "secondaryRuneTree": {
+     "id": 8300
+    }
+   },
+   "scores": {
+    "assists": 0,
+    "creepScore": 88,
+    "deaths": 2,
+    "kills": 1,
+    "wardScore": 9.5
+   },
+   "skinID": 0,
+   "summonerName": "Player0#EUW",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "Flash"
+    },
+    "summonerSpellTwo": {
+     "displayName": "Teleport"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "Vi",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Scorchclaw Pup",
+     "itemID": 1103,
+     "price": 450,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 0
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Caulfield's Warhammer",
+     "itemID": 3133,
+     "price": 1050,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 1
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Pickaxe",
+     "itemID": 1037,
+     "price": 875,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 2
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Boots",
+     "itemID": 1001,
+     "price": 300,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 3
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Oracle Lens",
+     "itemID": 3364,
+     "price": 0,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 4
+    }
+   ],
+   "level": 9,
+   "position": "JUNGLE",
+   "rawChampionName": "game_character_displayname_Vi",
+   "rawSkinName": "",
+   "respawnTimer": 0.0,
+   "riotId": "Player1#EUW",
+   "riotIdGameName": "Player1",
+   "riotIdTagLine": "EUW",
+   "runes": {
+    "keystone": {
+     "displayName": "",
+     "id": 8214
+    },
+    "primaryRuneTree": {
+     "id": 8200
+    },
+    "secondaryRuneTree": {
+     "id": 8300
+    }
+   },
+   "scores": {
+    "assists": 3,
+    "creepScore": 64,
+    "deaths": 1,
+    "kills": 2,
+    "wardScore": 9.5
+   },
+   "skinID": 0,
+   "summonerName": "Player1#EUW",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "Flash"
+    },
+    "summonerSpellTwo": {
+     "displayName": "Teleport"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "Orianna",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Doran's Ring",
+     "itemID": 1056,
+     "price": 400,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 0
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Lost Chapter",
+     "itemID": 3802,
+     "price": 1200,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 1
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Blasting Wand",
+     "itemID": 1026,
+     "price": 850,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 2
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Boots",
+     "itemID": 1001,
+     "price": 300,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 3
+    },
+    {
+     "canUse": false,
+     "consumable": true,
+     "count": 2,
+     "displayName": "Control Ward",
+     "itemID": 2055,
+     "price": 75,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 4
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Stealth Ward",
+     "itemID": 3340,
+     "price": 0,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 5
+    }
+   ],
+   "level": 10,
+   "position": "MIDDLE",
+   "rawChampionName": "game_character_displayname_Orianna",
+   "rawSkinName": "",
+   "respawnTimer": 0.0,
+   "riotId": "MockPlayer#EUW",
+   "riotIdGameName": "MockPlayer",
+   "riotIdTagLine": "EUW",
+   "runes": {
+    "keystone": {
+     "displayName": "",
+     "id": 8214
+    },
+    "primaryRuneTree": {
+     "id": 8200
+    },
+    "secondaryRuneTree": {
+     "id": 8300
+    }
+   },
+   "scores": {
+    "assists": 1,
+    "creepScore": 92,
+    "deaths": 1,
+    "kills": 2,
+    "wardScore": 9.5
+   },
+   "skinID": 0,
+   "summonerName": "MockPlayer#EUW",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "Flash"
+    },
+    "summonerSpellTwo": {
+     "displayName": "Teleport"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "Jinx",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Doran's Blade",
+     "itemID": 1055,
+     "price": 450,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 0
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Cloak of Agility",
+     "itemID": 1018,
+     "price": 600,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 1
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Dagger",
+     "itemID": 1042,
+     "price": 250,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 2
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Boots",
+     "itemID": 1001,
+     "price": 300,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 3
+    },
+    {
+     "canUse": false,
+     "consumable": true,
+     "count": 1,
+     "displayName": "Health Potion",
+     "itemID": 2003,
+     "price": 50,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 4
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Stealth Ward",
+     "itemID": 3340,
+     "price": 0,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 5
+    }
+   ],
+   "level": 8,
+   "position": "BOTTOM",
+   "rawChampionName": "game_character_displayname_Jinx",
+   "rawSkinName": "",
+   "respawnTimer": 0.0,
+   "riotId": "Player3#EUW",
+   "riotIdGameName": "Player3",
+   "riotIdTagLine": "EUW",
+   "runes": {
+    "keystone": {
+     "displayName": "",
+     "id": 8214
+    },
+    "primaryRuneTree": {
+     "id": 8200
+    },
+    "secondaryRuneTree": {
+     "id": 8300
+    }
+   },
+   "scores": {
+    "assists": 1,
+    "creepScore": 79,
+    "deaths": 1,
+    "kills": 0,
+    "wardScore": 9.5
+   },
+   "skinID": 0,
+   "summonerName": "Player3#EUW",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "Flash"
+    },
+    "summonerSpellTwo": {
+     "displayName": "Teleport"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "Thresh",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Solstice Sleigh",
+     "itemID": 3876,
+     "price": 400,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 0
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Ruby Crystal",
+     "itemID": 1028,
+     "price": 400,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 1
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Boots",
+     "itemID": 1001,
+     "price": 300,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 2
+    },
+    {
+     "canUse": false,
+     "consumable": true,
+     "count": 1,
+     "displayName": "Control Ward",
+     "itemID": 2055,
+     "price": 75,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 3
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Oracle Lens",
+     "itemID": 3364,
+     "price": 0,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 4
+    }
+   ],
+   "level": 7,
+   "position": "UTILITY",
+   "rawChampionName": "game_character_displayname_Thresh",
+   "rawSkinName": "",
+   "respawnTimer": 0.0,
+   "riotId": "Player4#EUW",
+   "riotIdGameName": "Player4",
+   "riotIdTagLine": "EUW",
+   "runes": {
+    "keystone": {
+     "displayName": "",
+     "id": 8214
+    },
+    "primaryRuneTree": {
+     "id": 8200
+    },
+    "secondaryRuneTree": {
+     "id": 8300
+    }
+   },
+   "scores": {
+    "assists": 3,
+    "creepScore": 12,
+    "deaths": 2,
+    "kills": 0,
+    "wardScore": 9.5
+   },
+   "skinID": 0,
+   "summonerName": "Player4#EUW",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "Flash"
+    },
+    "summonerSpellTwo": {
+     "displayName": "Teleport"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "Ornn",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Doran's Shield",
+     "itemID": 1054,
+     "price": 450,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 0
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Sunfire Aegis",
+     "itemID": 3068,
+     "price": 2700,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 1
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Stealth Ward",
+     "itemID": 3340,
+     "price": 0,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 2
+    }
+   ],
+   "level": 10,
+   "position": "TOP",
+   "rawChampionName": "game_character_displayname_Ornn",
+   "rawSkinName": "",
+   "respawnTimer": 0.0,
+   "riotId": "Player5#EUW",
+   "riotIdGameName": "Player5",
+   "riotIdTagLine": "EUW",
+   "runes": {
+    "keystone": {
+     "displayName": "",
+     "id": 8214
+    },
+    "primaryRuneTree": {
+     "id": 8200
+    },
+    "secondaryRuneTree": {
+     "id": 8300
+    }
+   },
+   "scores": {
+    "assists": 0,
+    "creepScore": 81,
+    "deaths": 1,
+    "kills": 2,
+    "wardScore": 9.5
+   },
+   "skinID": 0,
+   "summonerName": "Player5#EUW",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "Flash"
+    },
+    "summonerSpellTwo": {
+     "displayName": "Teleport"
+    }
+   },
+   "team": "CHAOS"
+  },
+  {
+   "championName": "Wukong",
+   "isBot": false,
+   "isDead": true,
+   "items": [
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Gustwalker Hatchling",
+     "itemID": 1102,
+     "price": 450,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 0
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Black Cleaver",
+     "itemID": 3071,
+     "price": 3000,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 1
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Oracle Lens",
+     "itemID": 3364,
+     "price": 0,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 2
+    }
+   ],
+   "level": 9,
+   "position": "JUNGLE",
+   "rawChampionName": "game_character_displayname_MonkeyKing",
+   "rawSkinName": "",
+   "respawnTimer": 18.4,
+   "riotId": "Player6#EUW",
+   "riotIdGameName": "Player6",
+   "riotIdTagLine": "EUW",
+   "runes": {
+    "keystone": {
+     "displayName": "",
+     "id": 8214
+    },
+    "primaryRuneTree": {
+     "id": 8200
+    },
+    "secondaryRuneTree": {
+     "id": 8300
+    }
+   },
+   "scores": {
+    "assists": 2,
+    "creepScore": 70,
+    "deaths": 2,
+    "kills": 1,
+    "wardScore": 9.5
+   },
+   "skinID": 0,
+   "summonerName": "Player6#EUW",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "Flash"
+    },
+    "summonerSpellTwo": {
+     "displayName": "Teleport"
+    }
+   },
+   "team": "CHAOS"
+  },
+  {
+   "championName": "Syndra",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Doran's Ring",
+     "itemID": 1056,
+     "price": 400,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 0
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Lost Chapter",
+     "itemID": 3802,
+     "price": 1200,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 1
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Boots",
+     "itemID": 1001,
+     "price": 300,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 2
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Amplifying Tome",
+     "itemID": 1052,
+     "price": 400,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 3
+    },
+    {
+     "canUse": false,
+     "consumable": true,
+     "count": 1,
+     "displayName": "Health Potion",
+     "itemID": 2003,
+     "price": 50,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 4
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Stealth Ward",
+     "itemID": 3340,
+     "price": 0,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 5
+    }
+   ],
+   "level": 9,
+   "position": "MIDDLE",
+   "rawChampionName": "game_character_displayname_Syndra",
+   "rawSkinName": "",
+   "respawnTimer": 0.0,
+   "riotId": "Player7#EUW",
+   "riotIdGameName": "Player7",
+   "riotIdTagLine": "EUW",
+   "runes": {
+    "keystone": {
+     "displayName": "",
+     "id": 8214
+    },
+    "primaryRuneTree": {
+     "id": 8200
+    },
+    "secondaryRuneTree": {
+     "id": 8300
+    }
+   },
+   "scores": {
+    "assists": 1,
+    "creepScore": 84,
+    "deaths": 2,
+    "kills": 1,
+    "wardScore": 9.5
+   },
+   "skinID": 0,
+   "summonerName": "Player7#EUW",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "Flash"
+    },
+    "summonerSpellTwo": {
+     "displayName": "Teleport"
+    }
+   },
+   "team": "CHAOS"
+  },
+  {
+   "championName": "Caitlyn",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Doran's Blade",
+     "itemID": 1055,
+     "price": 450,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 0
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "The Collector",
+     "itemID": 6676,
+     "price": 3000,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 1
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Stealth Ward",
+     "itemID": 3340,
+     "price": 0,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 2
+    }
+   ],
+   "level": 9,
+   "position": "BOTTOM",
+   "rawChampionName": "game_character_displayname_Caitlyn",
+   "rawSkinName": "",
+   "respawnTimer": 0.0,
+   "riotId": "Player8#EUW",
+   "riotIdGameName": "Player8",
+   "riotIdTagLine": "EUW",
+   "runes": {
+    "keystone": {
+     "displayName": "",
+     "id": 8214
+    },
+    "primaryRuneTree": {
+     "id": 8200
+    },
+    "secondaryRuneTree": {
+     "id": 8300
+    }
+   },
+   "scores": {
+    "assists": 1,
+    "creepScore": 85,
+    "deaths": 0,
+    "kills": 2,
+    "wardScore": 9.5
+   },
+   "skinID": 0,
+   "summonerName": "Player8#EUW",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "Flash"
+    },
+    "summonerSpellTwo": {
+     "displayName": "Teleport"
+    }
+   },
+   "team": "CHAOS"
+  },
+  {
+   "championName": "Leona",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Solstice Sleigh",
+     "itemID": 3876,
+     "price": 400,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 0
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Boots",
+     "itemID": 1001,
+     "price": 300,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 1
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Chain Vest",
+     "itemID": 1031,
+     "price": 800,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 2
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "Oracle Lens",
+     "itemID": 3364,
+     "price": 0,
+     "rawDescription": "",
+     "rawDisplayName": "",
+     "slot": 3
+    }
+   ],
+   "level": 7,
+   "position": "UTILITY",
+   "rawChampionName": "game_character_displayname_Leona",
+   "rawSkinName": "",
+   "respawnTimer": 0.0,
+   "riotId": "Player9#EUW",
+   "riotIdGameName": "Player9",
+   "riotIdTagLine": "EUW",
+   "runes": {
+    "keystone": {
+     "displayName": "",
+     "id": 8214
+    },
+    "primaryRuneTree": {
+     "id": 8200
+    },
+    "secondaryRuneTree": {
+     "id": 8300
+    }
+   },
+   "scores": {
+    "assists": 4,
+    "creepScore": 15,
+    "deaths": 1,
+    "kills": 0,
+    "wardScore": 9.5
+   },
+   "skinID": 0,
+   "summonerName": "Player9#EUW",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "Flash"
+    },
+    "summonerSpellTwo": {
+     "displayName": "Teleport"
+    }
+   },
+   "team": "CHAOS"
+  }
+ ],
+ "events": {
+  "Events": [
+   {
+    "EventID": 0,
+    "EventName": "GameStart",
+    "EventTime": 0.04
+   },
+   {
+    "EventID": 1,
+    "EventName": "MinionsSpawning",
+    "EventTime": 65.0
+   },
+   {
+    "EventID": 2,
+    "EventName": "FirstBlood",
+    "EventTime": 251.3,
+    "Recipient": "MockPlayer"
+   },
+   {
+    "EventID": 3,
+    "EventName": "ChampionKill",
+    "EventTime": 251.3,
+    "KillerName": "MockPlayer",
+    "VictimName": "Player7",
+    "Assisters": [
+     "Player1"
+    ]
+   },
+   {
+    "EventID": 4,
+    "EventName": "DragonKill",
+    "EventTime": 331.8,
+    "DragonType": "Fire",
+    "Stolen": "False",
+    "KillerName": "Player1",
+    "Assisters": [
+     "Player2"
+    ]
+   },
+   {
+    "EventID": 5,
+    "EventName": "HordeKill",
+    "EventTime": 402.6,
+    "Stolen": "False",
+    "KillerName": "Player6",
+    "Assisters": []
+   },
+   {
+    "EventID": 6,
+    "EventName": "TurretKilled",
+    "EventTime": 640.2,
+    "TurretKilled": "Turret_T2_C_05_A",
+    "KillerName": "MockPlayer",
+    "Assisters": []
+   },
+   {
+    "EventID": 7,
+    "EventName": "DragonKill",
+    "EventTime": 652.0,
+    "DragonType": "Earth",
+    "Stolen": "False",
+    "KillerName": "Player6",
+    "Assisters": [
+     "Player7"
+    ]
+   },
+   {
+    "EventID": 8,
+    "EventName": "TurretKilled",
+    "EventTime": 690.5,
+    "TurretKilled": "Turret_T1_R_03_A",
+    "KillerName": "Minion_T2L1S0N0",
+    "Assisters": []
+   },
+   {
+    "EventID": 9,
+    "EventName": "TurretKilled",
+    "EventTime": 721.9,
+    "TurretKilled": "Turret_T2_L_03_A",
+    "KillerName": "Player0",
+    "Assisters": []
+   },
+   {
+    "EventID": 10,
+    "EventName": "ChampionKill",
+    "EventTime": 735.0,
+    "KillerName": "Player1",
+    "VictimName": "Player6",
+    "Assisters": [
+     "Player0"
+    ]
+   }
+  ]
+ },
+ "gameData": {
+  "gameMode": "CLASSIC",
+  "gameTime": 742.5,
+  "mapName": "Map11",
+  "mapNumber": 11,
+  "mapTerrain": "Default"
+ }
+}

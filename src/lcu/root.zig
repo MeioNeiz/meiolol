@@ -6,6 +6,7 @@ pub const lockfile = @import("lockfile.zig");
 pub const https = @import("https.zig");
 pub const session = @import("session.zig");
 pub const me = @import("me.zig");
+pub const live = @import("live.zig");
 pub const Watch = @import("watch.zig").Watch;
 pub const Record = @import("record.zig").Record;
 pub const mock = @import("mock.zig");
