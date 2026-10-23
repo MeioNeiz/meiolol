@@ -16,7 +16,7 @@ pub const Suggestion = score.Suggestion;
 pub const Reason = score.Reason;
 pub const recommend = score.recommend;
 
-/// Riot requires this on every page and in the app (docs/production-key.md)
+/// Riot requires this visible to players: every site page (docs/production-key.md)
 pub const boilerplate = "meiolol isn't endorsed by Riot Games and doesn't reflect the " ++
     "views or opinions of Riot Games or anyone officially involved in producing or " ++
     "managing Riot Games properties. Riot Games, and all associated properties are " ++

@@ -118,7 +118,6 @@ pub fn frame(v: View) void {
     if (v.note == .restart) {
         w.para(@src(), "A new version of meiolol is downloaded: it starts the next time you open the app.", .{}, .{ .muted = true, .small = true });
     }
-    footer();
 }
 
 fn message(v: View) void {
@@ -306,15 +305,4 @@ fn narrowSelect(ctx: w.Ctx, s: *const Select) void {
         .picks => centre(ctx, s),
         .them => teams.column(ctx, &s.board, .theirs),
     }
-}
-
-fn footer() void {
-    var tl = dvui.textLayout(@src(), .{}, .{
-        .expand = .horizontal,
-        .background = true,
-        .color_fill = .{ .color = palette.bar },
-        .padding = .{ .x = 14, .y = 6, .w = 14, .h = 6 },
-    });
-    defer tl.deinit();
-    tl.addText(core.boilerplate, .{ .font = w.tiny(), .color_text = .{ .color = w.text().opacity(0.4) } });
 }

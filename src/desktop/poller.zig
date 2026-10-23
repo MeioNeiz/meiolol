@@ -30,7 +30,7 @@ const Shared = struct {
     data: ?*Data = null,
     /// Set by the update thread when new files are on disk; the poller loads them
     fresh: std.atomic.Value(bool) = .init(false),
-    /// The update thread's note for the footer, under the mutex
+    /// The update thread's note under the board, under the mutex
     note: ui.Note = .none,
     /// Grows as the poller fetches icons from the client, under the mutex
     icons: ?Icons = null,

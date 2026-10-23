@@ -26,7 +26,8 @@ Uncertain, leaning approvable; the wait is the real cost.
   or GIFs of champ select, demo video, download page, Privacy Policy, Terms of Service
 - `riot.txt` at the site root with the string Riot gives; their checker uses the
   `python-requests/2.11.1` user agent, so the host must not block it
-- Boilerplate, visible on site and in app: "meiolol isn't endorsed by Riot Games and
+- Boilerplate, visible to players: on the site (every page footer, Terms); not in the
+  desktop app, either edition (Jacob, 23 Oct): "meiolol isn't endorsed by Riot Games and
   doesn't reflect the views or opinions of Riot Games or anyone officially involved in
   producing or managing Riot Games properties. Riot Games, and all associated properties
   are trademarks or registered trademarks of Riot Games, Inc."
