@@ -676,12 +676,18 @@ pub const Patches = struct {
 
     const Start = struct { patch: u32 = 0, start_s: i64 = 0 };
 
-    /// "16.20" -> 16020; 0 when not a patch
+    /// "16.20" -> 16020; 0 when not a patch. u16 parts: Riot's gameVersion can't overflow it
     pub fn code(patch: []const u8) u32 {
         const dot = std.mem.indexOfScalar(u8, patch, '.') orelse return 0;
-        const major = std.fmt.parseInt(u32, patch[0..dot], 10) catch return 0;
-        const minor = std.fmt.parseInt(u32, patch[dot + 1 ..], 10) catch return 0;
-        return major * 1000 + minor;
+        const major = std.fmt.parseInt(u16, patch[0..dot], 10) catch return 0;
+        const minor = std.fmt.parseInt(u16, patch[dot + 1 ..], 10) catch return 0;
+        return @as(u32, major) * 1000 + minor;
+    }
+
+    test code {
+        try std.testing.expectEqual(16020, code("16.20"));
+        try std.testing.expectEqual(0, code("16"));
+        try std.testing.expectEqual(0, code("99999999.1"));
     }
 
     fn index(platform: []const u8) ?usize {

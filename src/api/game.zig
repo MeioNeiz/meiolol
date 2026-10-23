@@ -135,11 +135,12 @@ pub const CurveSet = struct {
         return best;
     }
 
+    /// u16 parts: a patch from Riot's gameVersion can't overflow it
     fn patchNum(p: []const u8) ?u32 {
         const dot = std.mem.indexOfScalar(u8, p, '.') orelse return null;
-        const major = std.fmt.parseInt(u32, p[0..dot], 10) catch return null;
-        const minor = std.fmt.parseInt(u32, p[dot + 1 ..], 10) catch return null;
-        return major * 100 + minor;
+        const major = std.fmt.parseInt(u16, p[0..dot], 10) catch return null;
+        const minor = std.fmt.parseInt(u16, p[dot + 1 ..], 10) catch return null;
+        return @as(u32, major) * 100 + minor;
     }
 
     pub fn patchRange(label: []const u8) ?[2]u32 {
@@ -1107,6 +1108,7 @@ test "curve set picks the covering file, else the newest" {
     try testing.expectEqualStrings("16.19-16.20", set.forPatch("16.19").?.label);
     try testing.expectEqualStrings("16.18", set.forPatch("16.18").?.label);
     try testing.expectEqualStrings("16.19-16.20", set.forPatch("16.21").?.label);
+    try testing.expectEqualStrings("16.19-16.20", set.forPatch("99999999.1").?.label);
     try testing.expect((CurveSet{}).forPatch("16.20") == null);
 }
 
