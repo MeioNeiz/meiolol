@@ -657,13 +657,9 @@ fn hasTableIn(db: Db, name: []const u8) !bool {
     return (try db.scalar("SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?", .{name}) orelse 0) > 0;
 }
 
-/// Erase `puuid` from every backup file under `dir` (forget --backups)
-pub fn scrub(arena: std.mem.Allocator, io: Io, dir: []const u8, puuid: []const u8, now: i64) !forget.Removed {
-    return scrubMany(arena, io, dir, &.{puuid}, now);
-}
-
-/// As scrub, every file opened once for all of `puuids`
-pub fn scrubMany(arena: std.mem.Allocator, io: Io, dir: []const u8, puuids: []const []const u8, now: i64) !forget.Removed {
+/// Erase `puuids` from every backup file under `dir` (forget --backups), each file
+/// opened once
+pub fn scrub(arena: std.mem.Allocator, io: Io, dir: []const u8, puuids: []const []const u8, now: i64) !forget.Removed {
     var total: forget.Removed = .{};
     if (puuids.len == 0) return total;
     for ([_][]const u8{ "state", "segments", "mastery" }) |sub| {
@@ -718,7 +714,7 @@ pub fn tendMirror(
         try applied.put(arena, p, {});
         try fresh.append(arena, p);
     }
-    const removed = try scrubMany(arena, io, dir, fresh.items, now);
+    const removed = try scrub(arena, io, dir, fresh.items, now);
     if (fresh.items.len > 0) {
         // Only once every file is scrubbed: a crash before this repeats the scrub
         var out: std.Io.Writer.Allocating = .init(arena);
@@ -839,7 +835,7 @@ test "backup then restore round trip, incremental segments, scrub" {
         defer db.close();
         _ = try forget.forget(db, "p1", day, .record);
     }
-    const scrubbed = try scrub(arena, io, out, "p1", day);
+    const scrubbed = try scrub(arena, io, out, &.{"p1"}, day);
     try testing.expectEqual(2, scrubbed.participants);
     try testing.expectEqual(2, scrubbed.rank_history);
     try testing.expectEqual(1, scrubbed.mastery);

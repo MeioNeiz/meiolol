@@ -418,7 +418,7 @@ pub fn cmdForget(c: *Cmd) !u8 {
         }
         live.add(try forget.forget(d, puuid, now, .record));
         try erased.append(arena, puuid);
-        if (backups) |dir| scrubbed.add(try backup.scrub(arena, io, dir, puuid, now));
+        if (backups) |dir| scrubbed.add(try backup.scrub(arena, io, dir, &.{puuid}, now));
     }
     if (ids.len > 0) {
         std.log.info("{d} of {d} erased, {d} already forgotten; live rows: players {d}, " ++
