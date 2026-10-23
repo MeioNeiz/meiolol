@@ -116,8 +116,8 @@ research/questions/patch-transfer.md and curve-statistics-method.md; partial poo
   matchup's number over patches as a line with each patch's range, from E7's cubes (a
   past patch is a sum of its days). Where the estimate moved a number at a boundary,
   say why ("changed in 16.21", "season start"). Today the crawl holds 16.19 (thin) to
-  16.21; seasons need time (no backfill, J25). Done when the champion page's period pick lists every
-  patch we hold and the trend chart (site.md CH) reads from cubes
+  16.21; seasons need time (no backfill, J25). Done when the champion page's period
+  pick lists every patch we hold and the trend chart (site.md CH) reads from cubes
 - E11 Models on the same understanding: the draft model, the app's reasons and the
   Daily Draft use E3-E5's terms (patch offset with the changed-champion prior, rank
   bracket, later region and season), so the site and the app agree on every number and
