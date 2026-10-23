@@ -16,6 +16,7 @@ const store = @import("store");
 const core = @import("core");
 const stats = @import("stats.zig");
 const logreg = @import("logreg.zig");
+const sigmoid = logreg.sigmoid;
 const lanegold = @import("lanegold.zig");
 const experience = @import("experience.zig");
 const par = @import("par.zig");
@@ -1323,10 +1324,6 @@ fn roleInference(st: *const core.Stats, games: []const Game, w: *std.Io.Writer) 
         try w.print(" {s} {d:.1}%", .{ r.label(), 100 * @as(f64, @floatFromInt(c[0])) / @as(f64, @floatFromInt(c[1])) });
     }
     try w.writeAll("\n");
-}
-
-pub fn sigmoid(x: f64) f64 {
-    return 1 / (1 + @exp(-x));
 }
 
 /// Prior strength in games; "off" for the grid's no-terms value

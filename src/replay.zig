@@ -160,7 +160,7 @@ pub fn run(
         const p = try gpa.alloc(f64, test_seats.items.len);
         for (test_seats.items, p) |ts, *q| {
             const g = tests[ts.game];
-            q.* = eval.sigmoid(row(v, terms[ts.game], g, ts.seat).dot(wts));
+            q.* = logreg.sigmoid(row(v, terms[ts.game], g, ts.seat).dot(wts));
         }
         var ll: f64 = 0;
         for (test_seats.items, p) |ts, q| ll += analysis.logLoss(q, ts.seat.won(tests[ts.game]));
@@ -184,7 +184,7 @@ pub fn run(
                 try gap(w, fitted, &.{.top});
                 try w.print(" (total points: {d:.4} a tenfold)", .{ex[1]});
             },
-            .bands => for (ex) |b| try w.print(" {d:.1}", .{100 * (eval.sigmoid(b) - 0.5)}),
+            .bands => for (ex) |b| try w.print(" {d:.1}", .{100 * (logreg.sigmoid(b) - 0.5)}),
         }
         try w.writeAll(" |\n");
     }
@@ -274,7 +274,7 @@ fn row(v: Variant, t: score.DraftTerms, g: Game, seat: Seat) logreg.Row {
 fn gap(w: *Io.Writer, e: lanecard.Expertise, roles: []const Role) !void {
     for (roles) |r| {
         const d = e.logit(r, 300_000) - e.logit(r, 10_000);
-        try w.print(" {d:.1}", .{100 * (eval.sigmoid(d) - 0.5)});
+        try w.print(" {d:.1}", .{100 * (logreg.sigmoid(d) - 0.5)});
     }
 }
 

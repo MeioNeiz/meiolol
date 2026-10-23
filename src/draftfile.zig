@@ -6,6 +6,7 @@
 
 const std = @import("std");
 const Date = @import("date.zig").Date;
+const sigmoid = @import("logreg.zig").sigmoid;
 
 const Io = std.Io;
 
@@ -415,10 +416,6 @@ pub const Chance = struct {
         return .{ .p = 1 - c.p, .lo = 1 - c.hi, .hi = 1 - c.lo };
     }
 };
-
-pub fn sigmoid(x: f64) f64 {
-    return 1 / (1 + @exp(-x));
-}
 
 pub const Draft = struct {
     role: usize,

@@ -18,6 +18,7 @@
 
 const std = @import("std");
 const par = @import("par.zig");
+const sigmoid = @import("logreg.zig").sigmoid;
 
 pub const n_role = 5;
 pub const n_platforms = 16;
@@ -314,10 +315,6 @@ pub const Fit = struct {
         gpa.free(f.h);
     }
 };
-
-fn sigmoid(x: f64) f64 {
-    return 1 / (1 + @exp(-x));
-}
 
 /// weights: per game multipliers (bootstrap), null for 1; warm: a fit of the same problem
 /// to start from (theta and variances)

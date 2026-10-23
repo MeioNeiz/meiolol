@@ -14,6 +14,7 @@ const eval = @import("eval.zig");
 const analysis = @import("analysis.zig");
 const riot = @import("riot/root.zig");
 const df = @import("draftfile.zig");
+const logreg = @import("logreg.zig");
 const Time = @import("date.zig").Time;
 
 const score = core.score;
@@ -178,7 +179,7 @@ fn devScore(
         if (g.start >= cuts.test_) break;
         const y = g.winner == 0;
         const pa = score.draftWin(&m.stats, opts, g.teams);
-        const pb = df.sigmoid(score.draftTerms(&m.stats, opts, g.teams).base);
+        const pb = logreg.sigmoid(score.draftTerms(&m.stats, opts, g.teams).base);
         la -= @log(if (y) pa else 1 - pa);
         lb -= @log(if (y) pb else 1 - pb);
         try points.append(arena, .{ .p = pa, .y = y });
