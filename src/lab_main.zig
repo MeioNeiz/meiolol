@@ -27,6 +27,7 @@ const style = @import("lab/style.zig");
 const compcheck = @import("lab/compcheck.zig");
 const champcomp = @import("lab/champcomp.zig");
 const champgroups = @import("lab/champgroups.zig");
+const pairprior = @import("lab/pairprior.zig");
 const events = @import("lab/events.zig");
 const winnet = @import("lab/winnet.zig");
 const effects = @import("lab/effects.zig");
@@ -91,7 +92,7 @@ const usage =
     \\                                  same way: --devices cpu1,cpu,gpu --scales
     \\                                  1,4,16,64 --epochs 2 --sweep 0 --limit 0
     \\
-++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage ++ compcheck.usage ++ champcomp.usage ++ champgroups.usage ++ events.usage ++ stack.usage ++ curve.usage ++ winnet.usage ++ pretrain.usage ++ playernet.usage ++ synth.usage ++ health.usage ++ effects.usage ++ eventvalue.usage ++ stateexport.usage ++ compare.usage ++ looks.usage;
+++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage ++ compcheck.usage ++ champcomp.usage ++ champgroups.usage ++ events.usage ++ stack.usage ++ curve.usage ++ winnet.usage ++ pretrain.usage ++ playernet.usage ++ synth.usage ++ health.usage ++ effects.usage ++ pairprior.usage ++ eventvalue.usage ++ stateexport.usage ++ compare.usage ++ looks.usage;
 
 pub fn main(init: std.process.Init) !u8 {
     flushDenormals();
@@ -324,6 +325,9 @@ pub fn main(init: std.process.Init) !u8 {
     if (std.mem.eql(u8, cmd, "state-export")) {
         return stateexport.main(init.gpa, init.io, argv[2..]);
     }
+    if (std.mem.eql(u8, cmd, "pairprior")) {
+        return pairprior.main(init.gpa, arena, init.io, argv[2..]);
+    }
     if (std.mem.eql(u8, cmd, "effects")) {
         return effects.main(init.gpa, arena, init.io, argv[2..]);
     }
@@ -428,6 +432,7 @@ test {
     _ = @import("lab/comps.zig");
     _ = champcomp;
     _ = champgroups;
+    _ = pairprior;
     _ = events;
     _ = winnet;
     _ = pretrain;
