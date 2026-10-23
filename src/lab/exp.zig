@@ -59,9 +59,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, home: ?[]c
             "no final or preds (src/lab/api.zig)\n", .{});
         return 2;
     }
-    var legendaries = try rows.loadLegendaries(gpa, io, args.snap);
-    defer legendaries.deinit(gpa);
-    var data = try rows.load(gpa, args.snap, &legendaries);
+    var data = try rows.loadSnap(gpa, io, args.snap);
     defer data.deinit();
     const players = try harness.gamePlayers(gpa, &data);
     defer gpa.free(players);

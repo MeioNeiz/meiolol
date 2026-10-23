@@ -72,9 +72,7 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8) !Summary {
     const arena = arena_state.allocator();
     var sum: Summary = .{};
 
-    var legendaries = try rows.loadLegendaries(gpa, io, snap);
-    defer legendaries.deinit(gpa);
-    var data = try rows.load(gpa, snap, &legendaries);
+    var data = try rows.loadSnap(gpa, io, snap);
     defer data.deinit();
     sum.games = data.games.len;
     var index: std.AutoHashMapUnmanaged(u64, u32) = .empty;

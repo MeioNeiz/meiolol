@@ -186,7 +186,7 @@ pub fn main(init: std.process.Init) !u8 {
         return 0;
     }
     if (std.mem.eql(u8, cmd, "nn-export") and argv.len >= 3) {
-        var data = try loadData(init, argv[2]);
+        var data = try rows.loadSnap(init.gpa, init.io, argv[2]);
         defer data.deinit();
         const c = try harness.cuts(init.gpa, &data);
         var e = try nnexport.build(init.gpa, &data, c);
@@ -234,7 +234,7 @@ pub fn main(init: std.process.Init) !u8 {
             var buf: [128]u8 = @splat(0);
             std.log.info("device: {s}", .{try gpu.?.name(&buf)});
         }
-        var data = try loadData(init, argv[2]);
+        var data = try rows.loadSnap(init.gpa, init.io, argv[2]);
         defer data.deinit();
         var buf: [4096]u8 = undefined;
         var stdout = std.Io.File.stdout().writer(init.io, &buf);
@@ -264,7 +264,7 @@ pub fn main(init: std.process.Init) !u8 {
         }
         var gpu: ?cuda.Gpu = null;
         if (std.mem.findScalar(draftnet.Device, opts.devices, .gpu) != null) gpu = try cuda.Gpu.init(ptx);
-        var data = try loadData(init, argv[2]);
+        var data = try rows.loadSnap(init.gpa, init.io, argv[2]);
         defer data.deinit();
         var buf: [4096]u8 = undefined;
         var stdout = std.Io.File.stdout().writer(init.io, &buf);
@@ -349,7 +349,7 @@ pub fn main(init: std.process.Init) !u8 {
         return 0;
     }
     if (std.mem.eql(u8, cmd, "rows") and argv.len >= 3) {
-        var data = try loadData(init, argv[2]);
+        var data = try rows.loadSnap(init.gpa, init.io, argv[2]);
         defer data.deinit();
         var buf: [4096]u8 = undefined;
         var stdout = std.Io.File.stdout().writer(init.io, &buf);
@@ -464,12 +464,6 @@ fn parseList(comptime T: type, arena: std.mem.Allocator, text: []const u8) ![]co
         else => try std.fmt.parseInt(T, s, 10),
     });
     return out.items;
-}
-
-fn loadData(init: std.process.Init, snap: []const u8) !rows.Data {
-    var legendaries = try rows.loadLegendaries(init.gpa, init.io, snap);
-    defer legendaries.deinit(init.gpa);
-    return rows.load(init.gpa, snap, &legendaries);
 }
 
 /// The snapshot salt: SALT_FILE or ~/.config/meiolol/snap-salt (docs/data-safety.md);

@@ -187,9 +187,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         var lw = Io.File.stdout().writer(io, &lb);
         _ = try looks.record(gpa, io, Io.Dir.cwd(), snap, "compcheck", argv, &lw.interface);
     }
-    var legendaries = try rows.loadLegendaries(gpa, io, snap);
-    defer legendaries.deinit(gpa);
-    var data = try rows.load(gpa, snap, &legendaries);
+    var data = try rows.loadSnap(gpa, io, snap);
     defer data.deinit();
     const players = try harness.gamePlayers(gpa, &data);
     defer gpa.free(players);

@@ -269,9 +269,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     const w = &stdout.interface;
 
     const data_path = if (try synth.parseArg(snap)) |pa| pa.path else snap;
-    var legendaries = try rows.loadLegendaries(gpa, io, snap);
-    defer legendaries.deinit(gpa);
-    var data = try rows.load(gpa, snap, &legendaries);
+    var data = try rows.loadSnap(gpa, io, snap);
     defer data.deinit();
     const d = &data;
     const players = try harness.gamePlayers(gpa, d);

@@ -900,9 +900,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         return 2;
     };
     const snap = argv[0];
-    var legendaries = try rows.loadLegendaries(gpa, io, snap);
-    defer legendaries.deinit(gpa);
-    var data = try rows.load(gpa, snap, &legendaries);
+    var data = try rows.loadSnap(gpa, io, snap);
     defer data.deinit();
     if (!anyStats(&data)) return error.NoSeatStats;
     const players = try harness.gamePlayers(gpa, &data);

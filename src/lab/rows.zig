@@ -52,6 +52,13 @@ fn loadPlain(
     return pack.loadRepacking(gpa, io, snap, legendaries);
 }
 
+/// load with SNAP/legendaries.tsv
+pub fn loadSnap(gpa: std.mem.Allocator, io: std.Io, snap: []const u8) !Data {
+    var legendaries = try loadLegendaries(gpa, io, snap);
+    defer legendaries.deinit(gpa);
+    return load(gpa, snap, &legendaries);
+}
+
 /// SNAP/legendaries.tsv (patch, item id; meiolol-3c writes it), empty when missing
 pub fn loadLegendaries(gpa: std.mem.Allocator, io: std.Io, snap: []const u8) !std.AutoHashMapUnmanaged(u64, void) {
     var set: std.AutoHashMapUnmanaged(u64, void) = .empty;

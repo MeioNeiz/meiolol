@@ -49,9 +49,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     const w = &out_file.interface;
     defer w.flush() catch {};
 
-    var legendaries = try rows.loadLegendaries(gpa, io, snap);
-    defer legendaries.deinit(gpa);
-    var data = try rows.load(gpa, snap, &legendaries);
+    var data = try rows.loadSnap(gpa, io, snap);
     defer data.deinit();
     const eu = euIndex();
 
