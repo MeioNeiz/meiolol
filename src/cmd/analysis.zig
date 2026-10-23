@@ -5,6 +5,7 @@ const std = @import("std");
 const stats = @import("../stats.zig");
 const eval = @import("../eval.zig");
 const draftfile = @import("../draftfile.zig");
+const looks = @import("../lab/looks.zig");
 const ddragon = @import("../ddragon.zig");
 const replay = @import("../replay.zig");
 const objectives = @import("../objectives.zig");
@@ -61,7 +62,9 @@ pub const usage_eval =
     \\              --setnet FILE    a lab set net seed (setnet-s<seed>.json, netcheck
     \\                               --export 1; repeat for more seeds) as a correction
     \\                               on the current model, one more row; it must have
-    \\                               seen no game of the scored window
+    \\                               seen no game of the scored window. On test (no
+    \\                               --dev) only with --test-look, which counts a look
+    \\                               in DATA/test-looks.tsv (docs/plan/lab-frontier.md P3)
     \\              --replay         only the pool and expertise replay, on a snapshot
     \\                               with mastery_pre.tsv and mastery_pre_pool.tsv
     \\                               (meiolol-lab mastery-pre); fits lanecard.Expertise
@@ -74,6 +77,7 @@ pub fn cmdEval(c: *Cmd) !u8 {
     var history: ?[]const u8 = null;
     var replay_only = false;
     var setnets: std.ArrayList(draftfile.SetNet) = .empty;
+    var test_look = false;
     while (c.next()) |_| {
         if (try g.parse(c) or try heldOut(c, &o)) continue;
         if (c.is("--folds")) {
@@ -85,6 +89,8 @@ pub fn cmdEval(c: *Cmd) !u8 {
             replay_only = true;
         } else if (c.is("--dev")) {
             o.dev = true;
+        } else if (c.is("--test-look")) {
+            test_look = true;
         } else if (c.is("--setnet")) {
             const bytes = try std.Io.Dir.cwd().readFileAlloc(c.init.io, try c.value(), c.arena, .limited(64 << 20));
             try setnets.append(c.arena, try .parse(c.arena, bytes));
@@ -94,6 +100,8 @@ pub fn cmdEval(c: *Cmd) !u8 {
     // The history is the daily's test-window line of the shipped models
     if (replay_only and history != null) return error.Usage;
     if (history != null and (o.dev or o.setnets.len > 0)) return error.Usage;
+    // A lab model on the test window is a test look: declared, then counted
+    if (test_look != (o.setnets.len > 0 and !o.dev)) return error.Usage;
     const io = c.init.io;
     const db = try c.open();
     defer db.close();
@@ -101,6 +109,7 @@ pub fn cmdEval(c: *Cmd) !u8 {
     const chosen = if (g.patches.items.len > 0) g.patches.items else try stats.patches(c.arena, db, platforms);
     var buf: [64 * 1024]u8 = undefined;
     var stdout = std.Io.File.stdout().writer(io, &buf);
+    if (test_look) _ = try looks.record(c.init.gpa, io, std.Io.Dir.cwd(), c.data_dir, "eval", c.args, &stdout.interface);
     if (replay_only) {
         try replay.run(c.init.gpa, io, db, c.data_dir, chosen, platforms, o, &stdout.interface);
         try stdout.interface.flush();
