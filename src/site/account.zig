@@ -62,8 +62,9 @@ pub fn join(w: *Writer, _: prose.Info) Writer.Error!void {
     );
 }
 
-/// The signed-in account: who, a new password, sign out here or everywhere. account.js
-/// fills #me from /auth/me and sends anyone signed out to the login page
+/// The signed-in account: who, a new password, its desktop apps, sign out here or
+/// everywhere. account.js fills #me from /auth/me and #devices from /auth/devices, and
+/// sends anyone signed out to the login page
 pub fn account(w: *Writer, _: prose.Info) Writer.Error!void {
     try w.writeAll(
         \\<div class="prose">
@@ -77,9 +78,13 @@ pub fn account(w: *Writer, _: prose.Info) Writer.Error!void {
         \\<button type="submit" class="primary">Change password</button>
         \\<p id="auth-msg" class="note" role="alert" hidden></p>
         \\</form>
+        \\<h2>Desktop apps</h2>
+        \\<p class="muted">Each copy of the meiolol app signed in to this account. Remove one to stop it updating.</p>
+        \\<ul id="devices"><li class="muted">Loading…</li></ul>
         \\<h2>Sign out</h2>
         \\<p class="auth-out"><button type="button" data-out="">Log out</button>
         \\<button type="button" data-out="all">Log out everywhere</button></p>
+        \\<p class="muted">Everywhere includes your desktop apps.</p>
         \\<p class="muted">See the <a href="privacy.html#accounts">privacy policy</a>.</p>
         \\</div>
         \\<script src="account.js" defer></script>

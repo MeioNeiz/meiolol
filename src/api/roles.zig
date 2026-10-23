@@ -44,6 +44,13 @@ pub const Capability = enum {
     pub fn parse(name: []const u8) ?Capability {
         return std.meta.stringToEnum(Capability, name);
     }
+
+    /// What a desktop app's token is good for (accounts.zig devices): the app's own
+    /// downloads. Pages and controls need a browser login, so a token copied off a
+    /// friend's PC opens nothing else
+    pub fn forDevices(cap: Capability) bool {
+        return cap == .download_private_app;
+    }
 };
 
 /// The lowest role holding each capability. Jacob 23 Oct: admins see the admin pages and

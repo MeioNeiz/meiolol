@@ -15,6 +15,14 @@
 //!                         role has CAP (roles.zig); 401 without a session, 403 without CAP
 //!   POST /auth/password   {"password","new"}: a new password for the signed-in account;
 //!                         signs it out everywhere else
+//!   POST /auth/device     {"username","password","name"}: {"token",...} for the
+//!                         desktop app (AC4), checked and throttled as a login; needs
+//!                         download_private_app. No cookie: the app sends the token as
+//!                         Authorization: Bearer, which check/CAP (Capability.forDevices
+//!                         only), me and logout (ends that device) accept, nothing else
+//!   GET  /auth/devices    the signed-in account's:
+//!                         {"devices":[{"id","name","created","last_used"}]}
+//!   POST /auth/revoke     {"id"}: ends one of them
 //!
 //! With manage_accounts, on accounts whose role the signed-in one may manage
 //! (Role.canManage), else 403:
@@ -66,6 +74,18 @@ pub const schema =
     \\) WITHOUT ROWID;
     \\CREATE INDEX IF NOT EXISTS sessions_account ON sessions(account);
     \\
+    \\-- The desktop app's sign-ins, one per install. hash: SHA-256 of the bearer token.
+    \\-- Renewed as sessions are, so last used = expires - 90 days, to the day
+    \\CREATE TABLE IF NOT EXISTS devices (
+    \\    id INTEGER PRIMARY KEY,
+    \\    hash BLOB NOT NULL UNIQUE,
+    \\    account INTEGER NOT NULL,
+    \\    name TEXT NOT NULL,
+    \\    created INTEGER NOT NULL,
+    \\    expires INTEGER NOT NULL
+    \\);
+    \\CREATE INDEX IF NOT EXISTS devices_account ON devices(account);
+    \\
     \\-- One use. account NULL: makes a new account with `role`; else sets that account's
     \\-- password (a reset). by: who made it
     \\CREATE TABLE IF NOT EXISTS invites (
@@ -103,6 +123,10 @@ const session_s: i64 = 30 * 24 * 60 * 60;
 /// A session's expiry moves forward at most once a day, so a busy one writes little
 const renew_after_s: i64 = 24 * 60 * 60;
 const invite_s: i64 = 7 * 24 * 60 * 60;
+/// A desktop app unused this long signs in again
+const device_s: i64 = 90 * 24 * 60 * 60;
+pub const max_devices = 10;
+const device_name_max = 64;
 const token_bytes = 32;
 pub const token_len = b64.Encoder.calcSize(token_bytes);
 pub const Token = [token_len]u8;
@@ -217,7 +241,8 @@ pub fn setDisabled(db: Db, id: i64, disabled: bool) !void {
     if (disabled) try endAll(db, id);
 }
 
-/// The account, its sessions and its reset invites: nothing of it stays (a friend's erasure)
+/// The account, its sessions, desktop apps and reset invites: nothing of it stays (a
+/// friend's erasure)
 pub fn remove(db: Db, id: i64) !void {
     try db.begin();
     errdefer db.rollback();
@@ -256,11 +281,20 @@ pub fn startSession(db: Db, io: Io, account: i64, now: i64) !Token {
 /// The signed-in account, its session renewed; null for a missing, expired or disabled
 /// one. Strings in `arena`
 pub fn session(db: Db, arena: Allocator, token: []const u8, now: i64) !?Account {
+    return holder(db, arena, .sessions, token, now);
+}
+
+/// The account a desktop app's token signs in, renewed as a session is; null for a
+/// missing, expired or revoked one, or a disabled account. Strings in `arena`
+pub fn device(db: Db, arena: Allocator, token: []const u8, now: i64) !?Account {
+    return holder(db, arena, .devices, token, now);
+}
+
+fn holder(db: Db, arena: Allocator, comptime table: enum { sessions, devices }, token: []const u8, now: i64) !?Account {
+    const lifetime = if (table == .sessions) session_s else device_s;
     const h = tokenHash(token);
-    var q = try db.prepare(
-        \\SELECT a.id, a.username, a.role, s.expires FROM sessions s JOIN accounts a ON a.id = s.account
-        \\WHERE s.hash = ? AND s.expires > ? AND a.disabled = 0
-    );
+    var q = try db.prepare("SELECT a.id, a.username, a.role, s.expires FROM " ++ @tagName(table) ++
+        " s JOIN accounts a ON a.id = s.account WHERE s.hash = ? AND s.expires > ? AND a.disabled = 0");
     defer q.deinit();
     try q.bind(.{ Blob{ .bytes = &h }, now });
     if (!try q.step()) return null;
@@ -268,8 +302,8 @@ pub fn session(db: Db, arena: Allocator, token: []const u8, now: i64) !?Account 
     const a: Account = .{ .id = r.id, .username = try arena.dupe(u8, r.username), .role = Role.parse(r.role) orelse return error.BadRole };
     const expires = r.expires;
     q.reset();
-    if (now + session_s - expires >= renew_after_s) {
-        try db.run("UPDATE sessions SET expires = ? WHERE hash = ?", .{ now + session_s, Blob{ .bytes = &h } });
+    if (now + lifetime - expires >= renew_after_s) {
+        try db.run("UPDATE " ++ @tagName(table) ++ " SET expires = ? WHERE hash = ?", .{ now + lifetime, Blob{ .bytes = &h } });
         try db.run("UPDATE accounts SET last_seen = ? WHERE id = ?", .{ now, a.id });
     }
     return a;
@@ -280,8 +314,41 @@ pub fn endSession(db: Db, token: []const u8) !void {
     try db.run("DELETE FROM sessions WHERE hash = ?", .{Blob{ .bytes = &h }});
 }
 
+/// Sessions and desktop apps both
 pub fn endAll(db: Db, account: i64) !void {
     try db.run("DELETE FROM sessions WHERE account = ?", .{account});
+    try db.run("DELETE FROM devices WHERE account = ?", .{account});
+}
+
+/// error.TooManyDevices past max_devices live ones
+pub fn startDevice(db: Db, io: Io, account: i64, name: []const u8, now: i64) !Token {
+    try db.run("DELETE FROM devices WHERE account = ? AND expires <= ?", .{ account, now });
+    const live = try db.scalar("SELECT count(*) FROM devices WHERE account = ?", .{account}) orelse 0;
+    if (live >= max_devices) return error.TooManyDevices;
+    const t = try newToken(io);
+    const h = tokenHash(&t);
+    try db.run("INSERT INTO devices (hash, account, name, created, expires) VALUES (?, ?, ?, ?, ?)", .{ Blob{ .bytes = &h }, account, name, now, now + device_s });
+    try db.run("UPDATE accounts SET last_seen = ? WHERE id = ?", .{ now, account });
+    return t;
+}
+
+pub fn endDevice(db: Db, token: []const u8) !void {
+    const h = tokenHash(token);
+    try db.run("DELETE FROM devices WHERE hash = ?", .{Blob{ .bytes = &h }});
+}
+
+/// False when the account has no device `id`
+pub fn revokeDevice(db: Db, account: i64, id: i64) !bool {
+    try db.run("DELETE FROM devices WHERE id = ? AND account = ?", .{ id, account });
+    return db.changes() > 0;
+}
+
+/// The app's name for itself, printable ASCII only, else a stand-in
+fn deviceName(name: []const u8) []const u8 {
+    const n = std.mem.trim(u8, name, " ");
+    if (n.len == 0 or n.len > device_name_max) return "desktop app";
+    for (n) |ch| if (!std.ascii.isPrint(ch)) return "desktop app";
+    return n;
 }
 
 /// account null: an invite for a new account with `role`; else a reset of that
@@ -418,6 +485,8 @@ pub const In = struct {
     query: []const u8 = "",
     /// The session cookie's token, when it is well formed
     token: ?[]const u8 = null,
+    /// A desktop app's token from Authorization: Bearer, when well formed
+    bearer: ?[]const u8 = null,
     /// X-Meiolol-Action: 1
     action: bool = false,
     body: []const u8 = "",
@@ -455,6 +524,7 @@ pub const Service = struct {
             .path = target["/auth/".len..q],
             .query = if (q < target.len) target[q + 1 ..] else "",
             .token = if (cookieToken(request)) |t| try arena.dupe(u8, t) else null,
+            .bearer = if (header(request, "authorization")) |v| if (bearerToken(v)) |t| try arena.dupe(u8, t) else null else null,
             .action = if (header(request, "x-meiolol-action")) |v| std.mem.eql(u8, v, "1") else false,
         };
         if (in.method == .POST and in.action) {
@@ -472,17 +542,17 @@ pub const Service = struct {
 
     pub fn route(s: *Service, arena: Allocator, in: In, now: i64) !Out {
         const post = in.method == .POST;
-        const Route = enum { login, logout, me, join, signup, password, accounts, invite, role, disable, reset };
+        const Route = enum { login, logout, me, join, signup, password, device, devices, revoke, accounts, invite, role, disable, reset };
         const not_found: Out = .{ .status = .not_found, .body = errorJson("not found") };
         if (std.mem.startsWith(u8, in.path, "check/")) {
             if (in.method != .GET) return notAllowed();
             const cap = Capability.parse(in.path["check/".len..]) orelse return .{ .status = .not_found, .body = errorJson("no such capability") };
             const a = try s.signedIn(arena, in, now) orelse return .{ .status = .unauthorized };
-            if (!a.role.can(cap)) return .{ .status = .forbidden };
+            if (!a.role.can(cap) or in.bearer != null and !cap.forDevices()) return .{ .status = .forbidden };
             return .{ .status = .no_content, .user = a.username, .role = a.role };
         }
         const r = std.meta.stringToEnum(Route, in.path) orelse return not_found;
-        if (post != (r != .me and r != .accounts)) return notAllowed();
+        if (post != (r != .me and r != .accounts and r != .devices)) return notAllowed();
         if (post and !in.action) return .{ .status = .forbidden, .body = errorJson("missing X-Meiolol-Action") };
         return switch (r) {
             .login => s.login(arena, in, now),
@@ -494,6 +564,17 @@ pub const Service = struct {
             .join => s.join(arena, in, now),
             .signup => s.signup(arena, in, now),
             .password => s.password(arena, in, now),
+            .device => s.newDevice(arena, in, now),
+            .devices, .revoke => {
+                const db = try open(s.db_path);
+                defer db.close();
+                const token = in.token orelse return .{ .status = .unauthorized, .body = errorJson("not signed in") };
+                const a = try session(db, arena, token, now) orelse return .{ .status = .unauthorized, .body = errorJson("not signed in") };
+                if (r == .devices) return .{ .status = .ok, .body = try devicesJson(db, arena, a.id, now) };
+                const b = parseBody(struct { id: i64 }, arena, in.body) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with id") };
+                if (!try revokeDevice(db, a.id, b.id)) return .{ .status = .not_found, .body = errorJson("no such device") };
+                return .{ .status = .ok, .body = "{\"ok\":true}" };
+            },
             .accounts, .invite, .role, .disable, .reset => {
                 const db = try open(s.db_path);
                 defer db.close();
@@ -509,31 +590,32 @@ pub const Service = struct {
         };
     }
 
+    /// By the bearer token when there is one, else the cookie
     fn signedIn(s: *Service, arena: Allocator, in: In, now: i64) !?Account {
-        const token = in.token orelse return null;
+        if (in.bearer == null and in.token == null) return null;
         const db = try open(s.db_path);
         defer db.close();
-        return session(db, arena, token, now);
+        if (in.bearer) |t| return device(db, arena, t, now);
+        return session(db, arena, in.token.?, now);
     }
 
-    fn login(s: *Service, arena: Allocator, in: In, now: i64) !Out {
-        const Body = struct { username: []const u8, password: []const u8 };
-        const b = parseBody(Body, arena, in.body) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with username and password") };
-        const wrong: Out = .{ .status = .unauthorized, .body = errorJson("wrong username or password") };
-        var name_buf: [username_max]u8 = undefined;
-        const name = username(&name_buf, b.username) orelse return wrong;
-        const wait = s.throttle.wait(s.io, name, now);
-        if (wait > 0) return .{ .status = .too_many_requests, .body = try std.json.Stringify.valueAlloc(arena, .{ .@"error" = "too many tries", .retry_s = wait }, .{}) };
+    const Checked = union(enum) { account: Stored, refused: Out };
 
-        const db = try open(s.db_path);
-        defer db.close();
+    /// A login's username and password: the account, or the answer refusing it. Fails
+    /// count against the username (Throttle)
+    fn credentials(s: *Service, db: Db, arena: Allocator, name_in: []const u8, password_in: []const u8, now: i64) !Checked {
+        const wrong: Checked = .{ .refused = .{ .status = .unauthorized, .body = errorJson("wrong username or password") } };
+        var name_buf: [username_max]u8 = undefined;
+        const name = username(&name_buf, name_in) orelse return wrong;
+        const wait = s.throttle.wait(s.io, name, now);
+        if (wait > 0) return .{ .refused = try tooMany(arena, wait) };
         const stored = try find(db, arena, name);
         const ok = if (stored) |a|
-            !a.disabled and try s.hasher.verify(s.gpa, s.io, a.hash, b.password)
+            !a.disabled and try s.hasher.verify(s.gpa, s.io, a.hash, password_in)
         else blk: {
             // As long as a real check, so timing doesn't tell which usernames exist
             var out: [128]u8 = undefined;
-            _ = try s.hasher.hash(s.gpa, s.io, b.password, &out);
+            _ = try s.hasher.hash(s.gpa, s.io, password_in, &out);
             break :blk false;
         };
         if (!ok) {
@@ -541,13 +623,48 @@ pub const Service = struct {
             return wrong;
         }
         s.throttle.succeeded(s.gpa, s.io, name);
-        const a = stored.?;
+        return .{ .account = stored.? };
+    }
+
+    fn login(s: *Service, arena: Allocator, in: In, now: i64) !Out {
+        const Body = struct { username: []const u8, password: []const u8 };
+        const b = parseBody(Body, arena, in.body) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with username and password") };
+        const db = try open(s.db_path);
+        defer db.close();
+        const a = switch (try s.credentials(db, arena, b.username, b.password, now)) {
+            .account => |a| a,
+            .refused => |out| return out,
+        };
         const t = try startSession(db, s.io, a.id, now);
         return .{ .status = .ok, .body = try accountJson(arena, .{ .id = a.id, .username = a.username, .role = a.role }), .set_cookie = try sessionCookie(arena, &t) };
     }
 
+    /// A login for the desktop app: its token instead of a cookie
+    fn newDevice(s: *Service, arena: Allocator, in: In, now: i64) !Out {
+        const Body = struct { username: []const u8, password: []const u8, name: []const u8 = "" };
+        const b = parseBody(Body, arena, in.body) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with username and password") };
+        const db = try open(s.db_path);
+        defer db.close();
+        const a = switch (try s.credentials(db, arena, b.username, b.password, now)) {
+            .account => |a| a,
+            .refused => |out| return out,
+        };
+        if (!a.role.can(.download_private_app)) return .{ .status = .forbidden, .body = errorJson("this account cannot use the desktop app yet") };
+        const t = startDevice(db, s.io, a.id, deviceName(b.name), now) catch |err| switch (err) {
+            error.TooManyDevices => return .{ .status = .conflict, .body = errorJson(std.fmt.comptimePrint("{d} apps are signed in already: remove one on your account page", .{max_devices})) },
+            else => return err,
+        };
+        return .{ .status = .ok, .body = try std.json.Stringify.valueAlloc(arena, .{ .token = &t, .username = a.username, .role = @tagName(a.role) }, .{}) };
+    }
+
     fn logout(s: *Service, arena: Allocator, in: In, now: i64) !Out {
         const out: Out = .{ .status = .ok, .body = "{\"ok\":true}", .set_cookie = cookie_name ++ "=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax" };
+        if (in.bearer) |t| {
+            const db = try open(s.db_path);
+            defer db.close();
+            try endDevice(db, t);
+            return .{ .status = .ok, .body = out.body };
+        }
         const token = in.token orelse return out;
         const db = try open(s.db_path);
         defer db.close();
@@ -611,7 +728,7 @@ pub const Service = struct {
         if (!isEmail(name)) return .{ .status = .bad_request, .body = errorJson("enter your email address") };
         const key = try arena.print("signup:{s}", .{token[0..8]});
         const wait = s.throttle.wait(s.io, key, now);
-        if (wait > 0) return .{ .status = .too_many_requests, .body = try std.json.Stringify.valueAlloc(arena, .{ .@"error" = "too many tries", .retry_s = wait }, .{}) };
+        if (wait > 0) return tooMany(arena, wait);
 
         const db = try open(s.db_path);
         defer db.close();
@@ -644,7 +761,7 @@ pub const Service = struct {
         defer db.close();
         const a = try session(db, arena, token, now) orelse return .{ .status = .unauthorized, .body = errorJson("not signed in") };
         const wait = s.throttle.wait(s.io, a.username, now);
-        if (wait > 0) return .{ .status = .too_many_requests, .body = try std.json.Stringify.valueAlloc(arena, .{ .@"error" = "too many tries", .retry_s = wait }, .{}) };
+        if (wait > 0) return tooMany(arena, wait);
         const stored = try find(db, arena, a.username) orelse return error.Unexpected;
         if (!try s.hasher.verify(s.gpa, s.io, stored.hash, b.password)) {
             try s.throttle.failed(s.gpa, s.io, a.username, now);
@@ -713,6 +830,24 @@ fn accountsJson(db: Db, arena: Allocator, actor: Account) ![]const u8 {
     var give: std.ArrayList([]const u8) = .empty;
     for (std.enums.values(Role)) |role| if (actor.role.canManage(role)) try give.append(arena, @tagName(role));
     return std.json.Stringify.valueAlloc(arena, .{ .accounts = rows.items, .roles = give.items }, .{});
+}
+
+fn tooMany(arena: Allocator, wait: i64) !Out {
+    return .{ .status = .too_many_requests, .body = try std.json.Stringify.valueAlloc(arena, .{ .@"error" = "too many tries", .retry_s = wait }, .{}) };
+}
+
+/// Live ones, oldest first
+fn devicesJson(db: Db, arena: Allocator, account: i64, now: i64) ![]const u8 {
+    const Row = struct { id: i64, name: []const u8, created: i64, last_used: i64 };
+    var rows: std.ArrayList(Row) = .empty;
+    var q = try db.prepare("SELECT id, name, created, expires FROM devices WHERE account = ? AND expires > ? ORDER BY id");
+    defer q.deinit();
+    try q.bind(.{ account, now });
+    while (try q.step()) {
+        const r = q.row(struct { id: i64, name: []const u8, created: i64, expires: i64 });
+        try rows.append(arena, .{ .id = r.id, .name = try arena.dupe(u8, r.name), .created = r.created, .last_used = r.expires - device_s });
+    }
+    return std.json.Stringify.valueAlloc(arena, .{ .devices = rows.items }, .{});
 }
 
 fn notAllowed() Out {
@@ -785,6 +920,13 @@ fn cookieToken(request: *Request) ?[]const u8 {
     return null;
 }
 
+/// "Bearer TOKEN", the scheme in any case
+fn bearerToken(value: []const u8) ?[]const u8 {
+    const scheme = "bearer ";
+    if (value.len < scheme.len or !std.ascii.eqlIgnoreCase(value[0..scheme.len], scheme)) return null;
+    return parseToken(std.mem.trim(u8, value[scheme.len..], " "));
+}
+
 fn cookieValue(cookies: []const u8) ?[]const u8 {
     var parts = std.mem.splitScalar(u8, cookies, ';');
     while (parts.next()) |part| {
@@ -850,6 +992,23 @@ const Fixture = struct {
         const path = try f.arena().print("check/{s}", .{cap});
         return (try f.service.route(f.arena(), .{ .method = .GET, .path = path, .token = token }, now)).status;
     }
+
+    fn device(f: *Fixture, name: []const u8, password: []const u8, at: i64) !Out {
+        const body = try std.json.Stringify.valueAlloc(f.arena(), .{ .username = name, .password = password, .name = "Jacob's PC" }, .{});
+        return f.service.route(f.arena(), .{ .method = .POST, .path = "device", .action = true, .body = body }, at);
+    }
+
+    /// A desktop app's token for `role`'s account
+    fn pair(f: *Fixture, role: Role) ![]const u8 {
+        const out = try f.device(@tagName(role), try f.arena().print("password-{t}", .{role}), now);
+        try testing.expectEqual(Status.ok, out.status);
+        return (try std.json.parseFromSliceLeaky(struct { token: []const u8 }, f.arena(), out.body, .{ .ignore_unknown_fields = true })).token;
+    }
+
+    fn checkDevice(f: *Fixture, bearer: []const u8, cap: []const u8, at: i64) !Status {
+        const path = try f.arena().print("check/{s}", .{cap});
+        return (try f.service.route(f.arena(), .{ .method = .GET, .path = path, .bearer = bearer }, at)).status;
+    }
 };
 
 test "check: every capability against every role, and without a session" {
@@ -877,7 +1036,7 @@ test "routes: methods and the action header" {
     defer f.deinit();
     const a = f.arena();
     const now = Fixture.now;
-    for ([_][]const u8{ "login", "logout", "join" }) |p| {
+    for ([_][]const u8{ "login", "logout", "join", "device", "revoke" }) |p| {
         try testing.expectEqual(Status.method_not_allowed, (try f.service.route(a, .{ .method = .GET, .path = p }, now)).status);
         try testing.expectEqual(Status.forbidden, (try f.service.route(a, .{ .method = .POST, .path = p }, now)).status);
     }
@@ -984,6 +1143,111 @@ test "join: an invite makes one account, once; a reset invite sets a password" {
     try testing.expect(std.mem.find(u8, r.body, "\"role\":\"admin\"") != null);
     try testing.expectEqual(Status.unauthorized, (try f.service.route(a, .{ .method = .GET, .path = "me", .token = old }, now)).status);
     try testing.expectEqual(Status.ok, (try f.login("admin", "a new one!")).status);
+}
+
+test "device: a desktop app's token passes the download check only, for roles that have it" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    for (std.enums.values(Role)) |role| {
+        if (!role.can(.download_private_app)) {
+            const out = try f.device(@tagName(role), try f.arena().print("password-{t}", .{role}), Fixture.now);
+            try testing.expectEqual(Status.forbidden, out.status);
+            continue;
+        }
+        const token = try f.pair(role);
+        for (std.enums.values(Capability)) |cap| {
+            const want: Status = if (role.can(cap) and cap.forDevices()) .no_content else .forbidden;
+            try testing.expectEqual(want, try f.checkDevice(token, @tagName(cap), Fixture.now));
+        }
+        // Never as a cookie, nor on the account's own routes
+        try testing.expectEqual(Status.unauthorized, try f.check(token, "download_private_app"));
+        for ([_][]const u8{ "devices", "accounts" }) |p| {
+            try testing.expectEqual(Status.unauthorized, (try f.service.route(f.arena(), .{ .method = .GET, .path = p, .bearer = token }, Fixture.now)).status);
+        }
+        try testing.expectEqual(Status.unauthorized, (try f.service.route(f.arena(), .{ .method = .POST, .path = "password", .action = true, .bearer = token, .body = "{\"password\":\"x\",\"new\":\"long enough\"}" }, Fixture.now)).status);
+    }
+    try testing.expectEqual(0, try f.db.scalar("SELECT count(*) FROM devices WHERE name != 'Jacob''s PC'", .{}));
+}
+
+test "device: wrong passwords throttled with logins; list, revoke, sign out, expiry, the cap" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    const a = f.arena();
+    const now = Fixture.now;
+    try testing.expectEqual(Status.unauthorized, (try f.device("private", "guess", now)).status);
+    for (1..Throttle.free_fails) |_| _ = try f.login("private", "guess");
+    try testing.expectEqual(Status.too_many_requests, (try f.device("private", "password-private", now)).status);
+    f.service.throttle.succeeded(testing.allocator, testing.io, "private");
+
+    const app = try f.pair(.private);
+    const me = try f.service.route(a, .{ .method = .GET, .path = "me", .bearer = app }, now);
+    try testing.expect(std.mem.find(u8, me.body, "\"username\":\"private\"") != null);
+    const cookie = try f.signIn(.private);
+    const list = try f.service.route(a, .{ .method = .GET, .path = "devices", .token = cookie }, now);
+    try testing.expectEqualStrings("{\"devices\":[{\"id\":1,\"name\":\"Jacob's PC\",\"created\":1800000000,\"last_used\":1800000000}]}", list.body);
+
+    // Another account's device can't be revoked; its own can, and stops at once
+    try testing.expectEqual(Status.not_found, (try postAs(&f, try f.signIn(.admin), "revoke", .{ .id = 1 })).status);
+    try testing.expectEqual(Status.no_content, try f.checkDevice(app, "download_private_app", now));
+    try testing.expectEqual(Status.ok, (try postAs(&f, cookie, "revoke", .{ .id = 1 })).status);
+    try testing.expectEqual(Status.unauthorized, try f.checkDevice(app, "download_private_app", now));
+    try testing.expectEqual(Status.not_found, (try postAs(&f, cookie, "revoke", .{ .id = 1 })).status);
+
+    // The app signing out ends its token only, and sets no cookie
+    const app2 = try f.pair(.private);
+    const out = try f.service.route(a, .{ .method = .POST, .path = "logout", .action = true, .bearer = app2, .token = cookie }, now);
+    try testing.expectEqual(null, out.set_cookie);
+    try testing.expectEqual(Status.unauthorized, try f.checkDevice(app2, "download_private_app", now));
+    try testing.expectEqual(Status.no_content, try f.check(cookie, "view_private"));
+
+    // 90 days unused; renewed when used
+    const app3 = try f.pair(.private);
+    try testing.expectEqual(Status.no_content, try f.checkDevice(app3, "download_private_app", now + 60 * 86400));
+    try testing.expectEqual(Status.no_content, try f.checkDevice(app3, "download_private_app", now + 140 * 86400));
+    try testing.expectEqual(Status.unauthorized, try f.checkDevice(app3, "download_private_app", now + 240 * 86400));
+
+    for (0..max_devices) |_| _ = try f.pair(.admin);
+    try testing.expectEqual(Status.conflict, (try f.device("admin", "password-admin", now)).status);
+    // Expired ones make room
+    try testing.expectEqual(Status.ok, (try f.device("admin", "password-admin", now + device_s)).status);
+}
+
+test "device: password changes, disabling and deleting end the account's apps" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    const id = (try find(f.db, f.arena(), "private")).?.id;
+    const app = try f.pair(.private);
+    try setDisabled(f.db, id, true);
+    try testing.expectEqual(Status.unauthorized, try f.checkDevice(app, "download_private_app", Fixture.now));
+    try setDisabled(f.db, id, false);
+    try testing.expectEqual(Status.unauthorized, try f.checkDevice(app, "download_private_app", Fixture.now));
+
+    const app2 = try f.pair(.private);
+    try testing.expectEqual(Status.ok, (try postAs(&f, try f.signIn(.private), "password", .{ .password = "password-private", .new = "brand new one" })).status);
+    try testing.expectEqual(Status.unauthorized, try f.checkDevice(app2, "download_private_app", Fixture.now));
+
+    _ = try f.device("private", "brand new one", Fixture.now);
+    try remove(f.db, id);
+    try testing.expectEqual(0, try f.db.scalar("SELECT count(*) FROM devices", .{}));
+}
+
+test bearerToken {
+    const t: Token = @splat('A');
+    try testing.expectEqualStrings(&t, bearerToken("Bearer " ++ t).?);
+    try testing.expectEqualStrings(&t, bearerToken("bearer  " ++ t ++ " ").?);
+    try testing.expectEqual(null, bearerToken("Basic " ++ t));
+    try testing.expectEqual(null, bearerToken("Bearer short"));
+    try testing.expectEqual(null, bearerToken("Bearer"));
+}
+
+test deviceName {
+    try testing.expectEqualStrings("my pc", deviceName(" my pc "));
+    try testing.expectEqualStrings("desktop app", deviceName(""));
+    try testing.expectEqualStrings("desktop app", deviceName("tab\there"));
+    try testing.expectEqualStrings("desktop app", deviceName(&@as([device_name_max + 1]u8, @splat('x'))));
 }
 
 test "one owner" {

@@ -233,7 +233,9 @@ nginx caches each encoding apart, and answers a directory URL without its slash 
   web server
 - Logins (since 23 Oct, docs/plan/accounts.md; src/api/accounts.zig, roles.zig):
   `meiolol api` answers /auth/ (nginx location /auth/, unlogged, 4 KB bodies) from
-  /var/lib/meiolol-api/accounts.db. nginx auth_request /_meiolol_admin (/auth/check/
+  /var/lib/meiolol-api/accounts.db; desktop apps sign in with POST /auth/device and
+  send their token as Authorization: Bearer, good for /auth/check/download_private_app
+  only (accounts.md AC4). nginx auth_request /_meiolol_admin (/auth/check/
   view_admin) guards /admin/, /admin/api/, /admin/ops/ and /admin/training/; no
   login sends a page to /login.html?next=, a lower role gets 403. The basic auth
   (meiolol-api.htpasswd) is no longer used. /account.html: own password, log out

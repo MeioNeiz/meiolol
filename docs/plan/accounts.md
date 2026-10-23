@@ -110,6 +110,15 @@ Each step ends tested and deployed; nginx and systemd changes on jomify need Jac
 - AC4 Desktop sign in: login screen in the app, device tokens, update gate by token,
   update.key retired. Done when a fresh install signs in, updates, and a revoked device
   stops updating within one check
+  24 Oct, server side: POST /auth/device (a login, throttled the same, for roles with
+  download_private_app) gives a token the app sends as Authorization: Bearer; accounts.db
+  devices table (hash only, 90 days unused, 10 per account); /auth/check/CAP takes it
+  for Capability.forDevices only (download_private_app: a copied token opens no page), as
+  do /auth/me and /auth/logout; the account page lists and removes them; log out
+  everywhere, password changes, reset, disable and delete end them. nginx needs no change:
+  /admin/desktop/'s key check falls through to /auth/check/download_private_app with the
+  request's headers. Next: the app's side (sign-in form, device.token), then the
+  cut-over (Jacob: release, then the key leaves nginx and the zip)
 - AC5 Private edition channel: /p/desktop/ serves the private exe and its data; the
   release script builds both editions (app.md "Two editions")
 - AC6 Later: friends link their Riot ID (profile icon check, as Remove a Riot ID does);

@@ -38,6 +38,25 @@
         me.append(i ? " · " : " ", Object.assign(document.createElement("a"), { href, textContent: text }));
       }
     }).catch(() => { me.textContent = "Can't reach the server. Try again in a moment."; });
+    const list = document.getElementById("devices");
+    const day = s => new Date(s * 1000).toLocaleDateString();
+    const load = () => fetch("/auth/devices", { credentials: "same-origin", cache: "no-store" }).then(async r => {
+      if (!r.ok) throw new Error(r.status);
+      const items = (await r.json()).devices;
+      list.replaceChildren(...items.map(d => {
+        const li = document.createElement("li");
+        const remove = Object.assign(document.createElement("button"), { type: "button", textContent: "Remove" });
+        remove.addEventListener("click", async () => {
+          remove.disabled = true;
+          await post("revoke", { id: d.id }).catch(() => {});
+          load();
+        });
+        li.append(`${d.name}, signed in ${day(d.created)}, last used ${day(d.last_used)} `, remove);
+        return li;
+      }));
+      if (!items.length) list.replaceChildren(Object.assign(document.createElement("li"), { className: "muted", textContent: "None yet: sign in from the app." }));
+    }).catch(() => { list.replaceChildren(Object.assign(document.createElement("li"), { className: "muted", textContent: "Can't load them right now." })); });
+    load();
     for (const b of document.querySelectorAll("[data-out]")) {
       b.addEventListener("click", async () => {
         await fetch("/auth/logout" + (b.dataset.out ? "?all=1" : ""), { method: "POST", headers: { "X-Meiolol-Action": "1" }, credentials: "same-origin" }).catch(() => {});

@@ -59,10 +59,10 @@ pub const usage_account =
     \\              --data /var/lib/meiolol-api. Roles: public paid private admin owner.
     \\              Passwords come from stdin, e.g. read -rs P; printf %s "$P" | ...
     \\              add NAME ROLE    a new account
-    \\              password NAME    a new password; signs it out everywhere
+    \\              password NAME    a new password; signs it out everywhere, desktop apps too
     \\              role NAME ROLE
     \\              disable NAME     and signs it out everywhere; enable NAME undoes it
-    \\              delete NAME      the account, its sessions and invites (erasure)
+    \\              delete NAME      the account, its sessions, apps and invites (erasure)
     \\              invite ROLE      a one-use link for a new account (7 days)
     \\              reset NAME       a one-use link to set NAME's password (7 days)
     \\              link ROLE        a sign-up link for many: email plus the shared password
@@ -70,6 +70,7 @@ pub const usage_account =
     \\              links            sign-up links and how often each was used
     \\              revoke-links     every sign-up link stops working
     \\              list
+    \\              devices NAME     its signed-in desktop apps (password or disable ends them)
     \\              backup           a consistent copy of accounts.db on stdout (VACUUM INTO;
     \\                               deploy/accounts-pull.sh, docs/data-safety.md)
     \\
@@ -80,7 +81,7 @@ pub fn cmdAccount(c: *Cmd) !u8 {
     const io = c.init.io;
     const arena = c.arena;
     const verb = c.next() orelse return error.Usage;
-    const Verb = enum { add, password, role, disable, enable, delete, invite, reset, list, link, links, @"revoke-links", backup };
+    const Verb = enum { add, password, role, disable, enable, delete, invite, reset, list, devices, link, links, @"revoke-links", backup };
     const v = std.meta.stringToEnum(Verb, verb) orelse return error.Usage;
     var name_buf: [accounts.username_max]u8 = undefined;
     const name: []const u8 = switch (v) {
@@ -165,6 +166,15 @@ pub fn cmdAccount(c: *Cmd) !u8 {
             while (try q.step()) {
                 const r = q.row(struct { username: []const u8, role: []const u8, disabled: bool, created: i64, last_seen: ?i64 });
                 try out.print("{s}\t{s}\t{s}\tcreated {d}\tlast seen {?d}\n", .{ r.username, r.role, if (r.disabled) "disabled" else "active", r.created, r.last_seen });
+            }
+        },
+        .devices => {
+            var q = try db.prepare("SELECT id, name, created, expires FROM devices WHERE account = ? ORDER BY id");
+            defer q.deinit();
+            try q.bind(.{found.?.id});
+            while (try q.step()) {
+                const r = q.row(struct { id: i64, name: []const u8, created: i64, expires: i64 });
+                try out.print("{d}\t{s}\tcreated {d}\texpires {d}{s}\n", .{ r.id, r.name, r.created, r.expires, if (r.expires <= now) " (expired)" else "" });
             }
         },
         .links => {
