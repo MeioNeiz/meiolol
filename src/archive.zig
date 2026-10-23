@@ -545,27 +545,21 @@ pub const Status = struct {
 };
 
 /// Read-only (the health check runs it beside acks, exports and the crawler's prune):
-/// no DDL, so tables an older box never made read as nothing yet
+/// no DDL, so a box that never exported reads as nothing (`ddl` makes every table at once)
 pub fn status(db: store.Db, now_s: i64) !Status {
     var out: Status = .{ .since_ack_s = null, .unacked = 0, .oldest_unacked_s = null, .since_drop_s = null, .drops_24h = 0 };
     if (!try hasTable(db, "archive_exports")) return out;
-    const drops = try hasTable(db, "archive_dropped");
-    const last = if (!drops)
-        try int(db, "SELECT coalesce(max(acked_at), -1) FROM raw.archive_exports", .{})
-    else
-        try int(db,
-            \\SELECT coalesce(max(acked_at), -1) FROM raw.archive_exports
-            \\WHERE name NOT IN (SELECT name FROM raw.archive_dropped WHERE kind = 'export')
-        , .{});
+    const last = try int(db,
+        \\SELECT coalesce(max(acked_at), -1) FROM raw.archive_exports
+        \\WHERE name NOT IN (SELECT name FROM raw.archive_dropped WHERE kind = 'export')
+    , .{});
     const oldest = try int(db, "SELECT coalesce(min(made_at), -1) FROM raw.archive_exports WHERE acked_at IS NULL", .{});
+    const dropped = try int(db, "SELECT coalesce(max(at), -1) FROM raw.archive_dropped", .{});
     out.since_ack_s = if (last < 0) null else now_s - last;
     out.unacked = try int(db, "SELECT count(*) FROM raw.archive_exports WHERE acked_at IS NULL", .{});
     out.oldest_unacked_s = if (oldest < 0) null else now_s - oldest;
-    if (drops) {
-        const dropped = try int(db, "SELECT coalesce(max(at), -1) FROM raw.archive_dropped", .{});
-        out.since_drop_s = if (dropped < 0) null else now_s - dropped;
-        out.drops_24h = try int(db, "SELECT count(*) FROM raw.archive_dropped WHERE at > ?", .{now_s - std.time.s_per_day});
-    }
+    out.since_drop_s = if (dropped < 0) null else now_s - dropped;
+    out.drops_24h = try int(db, "SELECT count(*) FROM raw.archive_dropped WHERE at > ?", .{now_s - std.time.s_per_day});
     return out;
 }
 
