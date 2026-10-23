@@ -377,8 +377,19 @@ Limits since 23 Oct (deploy/wsl, installed by deploy/gpu-box.sh install as root)
 - Windows: PCIe Link State Power Management off on AC (was Moderate; `powercfg
   /setacvalueindex SCHEME_CURRENT SUB_PCIEXPRESS ASPM 1` to undo)
 
-Still worth doing at the PC: Crucial Storage Executive for newer firmware, and a heatsink
-or airflow on the drive. Check resets since: System log, stornvme 129, Kernel-Power 41.
+Likely cause, not proven: no TRIM ever reaches it. `wsl --mount` passes the bare disk
+without discard (/sys/block/sde/queue/discard_max_bytes 0; fstrim never ran), so every
+block a snapshot, run or pull ever wrote stays in use to the drive, which then has
+little fast cache and long clean-up stalls. Fits the timing: the System log goes back to
+April and the first reset is 18 Oct 01:55, an hour after the lab partition was made and
+snapshots and runs moved onto it. Not the connection: PCIe 4.0 x4 as rated, no WHEA
+errors in 30 days. Ways out: the lab data in a VHDX on the P3 (WSL's own VHDX passes
+discard: / is mounted with it), or empty the partitions, let Windows trim the space
+(format), then copy back; fewer writes (incremental snapshots) slow the build-up.
+
+Still worth doing at the PC: Crucial Storage Executive for newer firmware (it also shows
+total writes and health), and a heatsink or airflow on the drive. Check resets since:
+System log, stornvme 129, Kernel-Power 41.
 
 ## Threads in our code
 
