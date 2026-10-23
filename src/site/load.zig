@@ -356,9 +356,9 @@ fn loadDaily(site: *Site, db: store.Db, games: ?*const partials.Store, phases: *
     const arena = site.arena;
     const io = site.io;
     const opts = site.opts;
+    const day: u32 = @intCast(@divFloor(std.Io.Clock.real.now(io).toSeconds(), std.time.s_per_day));
     var files: std.ArrayList(File) = .empty;
     if (opts.daily_dir) |d| {
-        const day: u32 = @intCast(@divFloor(std.Io.Clock.real.now(io).toSeconds(), std.time.s_per_day));
         const daily_files = daily.update(arena, io, db, &site.stats, .{
             .dir = d,
             .patches = opts.patches,
@@ -387,7 +387,6 @@ fn loadDaily(site: *Site, db: store.Db, games: ?*const partials.Store, phases: *
     }
     phases.mark("daily");
     // After the Daily Draft, so practice leaves out the games behind its puzzles
-    const day: u32 = @intCast(@divFloor(std.Io.Clock.real.now(io).toSeconds(), std.time.s_per_day));
     if (learn.build(arena, io, db, games, &site.stats, if (site.curves) |*c| c else null, .{
         .patches = opts.patches,
         .platforms = opts.platforms,
