@@ -64,7 +64,7 @@ pub fn summarise(arena: Allocator, body: []const u8) !Summary {
             .hash = hashPuuid(hash, p.puuid orelse ""),
             .team = p.teamId,
             .position = p.teamPosition orelse "",
-            .champion = @intCast(p.championId),
+            .champion = std.math.cast(u32, p.championId) orelse return error.BadMatch,
             .win = p.win,
             .kills = p.kills orelse 0,
             .deaths = p.deaths orelse 0,
@@ -1088,6 +1088,9 @@ test "riot ids by slot, seats name only those known" {
     try testing.expect(players[1].riot_id == null and players[1].you and !players[0].you);
     try testing.expect(players[9].riot_id == null);
     try testing.expectEqual(s.players[9].champion, players[9].champion);
+
+    const odd = try std.mem.replaceOwned(u8, arena, body, "\"championId\":122", "\"championId\":-1");
+    try testing.expectError(error.BadMatch, summarise(arena, odd));
 }
 
 test weekStart {
