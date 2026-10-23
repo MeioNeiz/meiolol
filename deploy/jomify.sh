@@ -31,8 +31,10 @@ src() {
     esac
 }
 UNITS=(meiolol-traffic.service meiolol-traffic.timer)
-# What the API binary is built from, for drift: a change elsewhere doesn't change it
-API_PATHS=(src/api src/core)
+# What the API binary is built from, for drift: src/api, src/core and src/api's direct
+# imports (a deeper import's change goes unflagged)
+API_PATHS=(src/api src/core src/httpd.zig src/riot src/curves.zig src/date.zig src/ddragon.zig
+    src/livestate.zig src/statemodel.zig src/winchance.zig)
 
 remote_hash() { ssh "$HOST" "sha256sum $1 2> /dev/null | cut -d' ' -f1"; }
 head_hash() { git -C "$ROOT" show "HEAD:$1" | shasum -a 256 | cut -d' ' -f1; }

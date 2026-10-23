@@ -202,19 +202,7 @@ pub fn requests(
             else => return log.debug("closing connection: {t}", .{err}),
         };
         conn.expire(io, limits.handle);
-        // std's respond() asserts a POST states its body length; a bare `curl -X POST`
-        // states none, which would crash the server. No length and no chunking means no
-        // body (RFC 9112 6.3)
-        if (request.head.transfer_encoding == .none and request.head.content_length == null) {
-            request.head.content_length = 0;
-        }
-        const refused: ?std.http.Status = if (request.head.transfer_encoding != .none)
-            .length_required
-        else if (request.head.content_length.? > limits.body)
-            .payload_too_large
-        else
-            null;
-        if (refused) |status| {
+        if (admit(&request, limits.*)) |status| {
             request.respond("", .{ .status = status, .keep_alive = false }) catch return;
             return linger(io, conn, &conn_reader.interface);
         }
@@ -230,6 +218,23 @@ pub fn requests(
             return;
         };
     }
+}
+
+/// Readies a received head for handle(), or the status to refuse it with
+pub fn admit(request: *Request, limits: Limits) ?std.http.Status {
+    const head = &request.head;
+    if (head.transfer_encoding != .none) return .length_required;
+    // std's respond() asserts a POST states its body length; a bare `curl -X POST`
+    // states none, which would crash the server. No length and no chunking means no
+    // body (RFC 9112 6.3)
+    const length = head.content_length orelse 0;
+    head.content_length = length;
+    if (length > limits.body) return .payload_too_large;
+    // respond() drains a body the handler left unread, and asserts it arrived whole: one
+    // cut short (the client's close, or the watchdog's) would crash the server. Closing
+    // after the answer skips the drain
+    if (length > 0) head.keep_alive = false;
+    return null;
 }
 
 /// After an answer to a request we didn't read: closing with unread bytes would reset
@@ -324,6 +329,20 @@ test "an oversize head or body is refused and the server stays up" {
     try t.ask("POST / HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n", "411");
     try t.ask("GET / HTTP/9.9\r\nHost: x\r\n\r\n", "400");
     try t.ask("POST / HTTP/1.1\r\nHost: x\r\nContent-Length: 16\r\n\r\n0123456789abcdef", "200");
+}
+
+test "a body cut short and left unread is answered and the server stays up" {
+    const io = Test.io;
+    var t: Test = undefined;
+    try t.start();
+    defer t.stop();
+    const c = try t.connect();
+    defer c.close(io);
+    try Test.send(c, "POST / HTTP/1.1\r\nHost: x\r\nContent-Length: 10\r\n\r\nabc");
+    try c.shutdown(io, .send);
+    var got: [256]u8 = undefined;
+    try std.testing.expectStringStartsWith(try Test.reply(c, &got), "HTTP/1.1 200");
+    try t.ok();
 }
 
 test "a slow or idle client is cut off and the server stays up" {
