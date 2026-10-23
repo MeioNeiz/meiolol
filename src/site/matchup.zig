@@ -351,7 +351,7 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
         \\<div class="hero"><img src="{x_icon}" alt="" width="72" height="72"><a class="swap" href="{swap}" title="Swap sides: {y} vs {x}" aria-label="Swap sides: {y} vs {x}">⇄</a><img src="{y_icon}" alt="" width="72" height="72"><div><h1>{x} vs {y}</h1>
         \\<p class="muted">{chip} From {x}'s side: {lane} lane, ranked solo/duo {region}, {when}, Platinum+.</p></div></div>
         \\<nav class="mu-nav" aria-label="Other matchups"><a class="btn" href="{swap}">⇄ From {y}'s side</a>
-        \\{opponents}{champions}</nav>
+        \\{champions}{opponents}</nav>
         \\
     , .{
         .chip = site.chip(site.regionDim(site.view.region), try periodDim(site, curves), .plat),
@@ -363,8 +363,8 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
         .lane = lane,
         .region = site.view.region.in(),
         .when = try scope(site, curves),
-        .opponents = tpl.call(picker, .{ site, curves, r, x, y, Pick.opponent }),
-        .champions = tpl.call(picker, .{ site, curves, r, y, x, Pick.champion }),
+        .opponents = tpl.call(opponentStrip, .{ site, curves, r, x, y }),
+        .champions = tpl.call(picker, .{ site, curves, r, x, y }),
     });
     if (v.games() < thin_games) {
         try tpl.render(w,
@@ -412,58 +412,96 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     try html.foot(w, p);
 }
 
-const Pick = enum { opponent, champion };
+/// y's other lane opponents with a page as a closed list, most games first, each from
+/// that champion's side against y: "Change champion" swaps x
+fn picker(w: *Writer, site: *const Site, curves: *const Curves, r: Role, x: Champ, y: Champ) !void {
+    const list = try others(site, curves, r, y);
+    if (list.len < 2) return;
+    try tpl.render(w,
+        \\<details class="pick"><summary>Change champion <span class="muted">{n}</span></summary><ul class="pick-list">
+        \\{items}</ul></details>
+        \\
+    , .{ .n = list.len, .items = tpl.each(list, .{ site, x, y }, pickItem) });
+}
 
-/// A closed list of `fixed`'s other lane matchups with a page, most games first, each
-/// keeping fixed's side as on this page: "Change opponent" swaps y (fixed is x),
-/// "Change champion" swaps x (fixed is y)
-fn picker(w: *Writer, site: *const Site, curves: *const Curves, r: Role, fixed: Champ, current: Champ, pick: Pick) !void {
-    const a = site.arena;
+const Other = struct { ch: Champ, games: u32 };
+
+fn moreGames(_: void, p_: Other, q: Other) bool {
+    return p_.games > q.games;
+}
+
+/// `fixed`'s lane opponents with a page in r, most games (the curves') first
+fn others(site: *const Site, curves: *const Curves, r: Role, fixed: Champ) ![]Other {
     var list: std.ArrayList(Other) = .empty;
     for (curves.curves) |c| {
         const h = c.header;
         if (h.role != @backingInt(r) or !isPage(h)) continue;
         const id = if (h.a == fixed.id) h.b else if (h.b == fixed.id) h.a else continue;
-        try list.append(a, .{ .ch = champ(site, id) orelse continue, .games = h.games });
+        try list.append(site.arena, .{ .ch = champ(site, id) orelse continue, .games = h.games });
     }
-    if (list.items.len < 2) return;
-    std.mem.sort(Other, list.items, {}, struct {
-        fn f(_: void, p_: Other, q: Other) bool {
-            return p_.games > q.games;
-        }
-    }.f);
-    try tpl.render(w,
-        \\<details class="pick"><summary>{label} <span class="muted">{n}</span></summary><ul class="pick-list">
-        \\{items}</ul></details>
-        \\
-    , .{
-        .label = switch (pick) {
-            .opponent => "Change opponent",
-            .champion => "Change champion",
-        },
-        .n = list.items.len,
-        .items = tpl.each(list.items, PickCtx{ .site = site, .fixed = fixed, .current = current, .pick = pick }, pickItem),
-    });
+    std.mem.sort(Other, list.items, {}, moreGames);
+    return list.items;
 }
 
-const Other = struct { ch: Champ, games: u32 };
-const PickCtx = struct { site: *const Site, fixed: Champ, current: Champ, pick: Pick };
-
-fn pickItem(ctx: PickCtx, w: *Writer, o: Other) !void {
-    const x, const y = switch (ctx.pick) {
-        .opponent => .{ ctx.fixed, o.ch },
-        .champion => .{ o.ch, ctx.fixed },
-    };
+fn pickItem(ctx: struct { *const Site, Champ, Champ }, w: *Writer, o: Other) !void {
+    const site, const x, const y = ctx;
     try tpl.render(w,
         \\<li class="bx{current}"{aria}><a class="box" href="{href}"><img src="{icon}" alt="" loading="lazy" width="32" height="32">{name}</a> <span class="muted">{games}</span></li>
         \\
     , .{
-        .current = tpl.when(o.ch.id == ctx.current.id, " current"),
-        .aria = tpl.flag(o.ch.id == ctx.current.id, "aria-current=\"page\""),
-        .href = try file(ctx.site.arena, x, y),
-        .icon = try ctx.site.icon(o.ch),
+        .current = tpl.when(o.ch.id == x.id, " current"),
+        .aria = tpl.flag(o.ch.id == x.id, "aria-current=\"page\""),
+        .href = try file(site.arena, o.ch, y),
+        .icon = try site.icon(o.ch),
         .name = o.ch.name,
         .games = o.games,
+    });
+}
+
+/// x's lane opponents with a page as one scrolling row under the header, most games
+/// first: icon and x's win rate against each (the stats, as the tiles), y lit and
+/// scrolled into view; the search hides the others, Enter opens the first left
+fn opponentStrip(w: *Writer, site: *const Site, curves: *const Curves, r: Role, x: Champ, y: Champ) !void {
+    const list = try others(site, curves, r, x);
+    if (list.len == 0) return;
+    for (list) |*o| o.games = site.stats.enemy(r, r, x.c, o.ch.c).games;
+    std.mem.sort(Other, list, {}, moreGames);
+    try tpl.render(w,
+        \\<div class="mu-opps"><input type="search" placeholder="Opponent" aria-label="Search {x}'s opponents"><ul aria-label="{x}'s {lane} lane opponents, most games first">
+        \\{items}</ul></div>
+        \\
+    , .{
+        .x = x.name,
+        .lane = root.roleName(r),
+        .items = tpl.each(list, .{ site, r, x, y }, opponentItem),
+    });
+    try w.writeAll(
+        \\<script>(()=>{const s=document.currentScript.previousElementSibling,q=s.querySelector("input"),l=s.querySelector("ul"),c=l.querySelector("[aria-current]");
+        \\if(c)l.scrollLeft=c.offsetLeft-(l.clientWidth-c.offsetWidth)/2;const k=(t)=>t.toLowerCase().replace(/[^a-z0-9]/g,"");
+        \\q.addEventListener("input",()=>{const v=k(q.value);for(const li of l.children)li.hidden=!k(li.dataset.name).includes(v);l.scrollLeft=0});
+        \\q.addEventListener("keydown",(e)=>{const a=[...l.children].find((li)=>!li.hidden);if(e.key==="Enter"&&a&&q.value.trim())location.href=a.querySelector("a").href})})()</script>
+        \\
+    );
+}
+
+fn opponentItem(ctx: struct { *const Site, Role, Champ, Champ }, w: *Writer, o: Other) !void {
+    const site, const r, const x, const y = ctx;
+    const e = site.stats.enemy(r, r, x.c, o.ch.c);
+    const current = o.ch.id == y.id;
+    try tpl.render(w,
+        \\<li data-name="{name}"><a href="{href}"{aria} title="{title}"><img src="{icon}" alt="{name}" loading="lazy" width="32" height="32"><b style="--c:{colour};opacity:{fade:.2}">{wr}</b></a></li>
+        \\
+    , .{
+        .name = o.ch.name,
+        .href = try file(site.arena, x, o.ch),
+        .aria = tpl.flag(current, "aria-current=\"page\""),
+        .title = try site.arena.print("{s} vs {s}: {s} wins {d:.1}% in {f} games", .{
+            x.name, o.ch.name, x.name, 100 * root.ratio(e.wins, e.games), root.Thousands{ .n = e.games },
+        }),
+        .wr = tpl.call(pct1, .{ e.wins, e.games }),
+        .icon = try site.icon(o.ch),
+        .colour = tierlist.wrColour(root.ratio(e.wins, e.games), tierlist.matchup_span),
+        .fade = curvesfile.fade(e.games),
     });
 }
 

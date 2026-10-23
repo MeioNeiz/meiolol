@@ -254,6 +254,21 @@ tr.thin td { color: var(--muted); }
 .pick-list a { display: inline-flex; align-items: center; gap: 6px; color: var(--text); min-width: 0; }
 .pick-list img { width: 24px; height: 24px; border-radius: 5px; }
 .pick-list .current a { color: var(--accent); font-weight: 600; }
+/* Opponent strip (matchup.zig opponentStrip): one row that scrolls sideways */
+.mu-opps { flex: 1 1 480px; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.mu-opps input { width: 110px; flex: none; }
+.mu-opps ul {
+  display: flex; gap: 2px; min-width: 0; overflow-x: auto; position: relative;
+  list-style: none; margin: 0; padding: 0 0 2px; scrollbar-width: thin;
+}
+.mu-opps a {
+  display: grid; justify-items: center; gap: 1px; width: 46px; padding: 3px 0 2px;
+  border: 1px solid transparent; border-radius: 8px; text-decoration: none;
+}
+.mu-opps a:hover { background: var(--panel); border-color: var(--line-2); }
+.mu-opps a[aria-current] { background: var(--panel); border-color: var(--accent); }
+.mu-opps img { width: 32px; height: 32px; border-radius: 6px; }
+.mu-opps b { font-size: 11px; font-weight: 600; color: var(--c); }
 /* SVG text scales with the chart: capped width keeps it near 15px on desktop, and phones
    get bigger units so it stays near 8.5px */
 .chart { margin: 0; max-width: 800px; }
