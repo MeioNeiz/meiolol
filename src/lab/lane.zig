@@ -13,6 +13,7 @@ const rows = @import("rows.zig");
 const harness = @import("harness.zig");
 const protocol = @import("protocol.zig");
 const lf = @import("../lanefile.zig");
+const Date = @import("../date.zig").Date;
 
 const Io = std.Io;
 
@@ -112,7 +113,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         // "--export ." from a deploy/lab-run.sh run dir: the run is the dir's name
         .run = std.fs.path.basename(if (std.mem.eql(u8, dir, ".")) try std.process.currentPathAlloc(io, arena) else dir),
         .snapshot = std.fs.path.basename(snap),
-        .newest_game = try lf.dayOf(arena, newest),
+        .newest_game = try arena.print("{f}", .{Date.fromMs(newest)}),
         .training_games = t.games.len,
         .patch = try lf.patchLabel(arena, ex.patch),
         .oldest_patch = range[0],

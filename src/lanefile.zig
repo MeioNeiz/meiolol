@@ -247,13 +247,6 @@ pub fn patchRange(arena: std.mem.Allocator, games: anytype) ![2][]const u8 {
     return .{ try patchLabel(arena, lo), try patchLabel(arena, hi) };
 }
 
-pub fn dayOf(arena: std.mem.Allocator, ms: i64) ![]const u8 {
-    const es: std.time.epoch.EpochSeconds = .{ .secs = @intCast(@divFloor(ms, 1000)) };
-    const yd = es.getEpochDay().calculateYearDay();
-    const md = yd.calculateMonthDay();
-    return arena.print("{d}-{d:0>2}-{d:0>2}", .{ yd.year, md.month.numeric(), md.day_index + 1 });
-}
-
 /// DIR/lane-model.json and DIR/lane-ref.json. References: per role the 4 most played
 /// pairs, one of their champions into an opponent with no pair cell, and an unknown champion
 pub fn write(arena: std.mem.Allocator, io: Io, sc: *const Scorer, meta: Meta, champions: []const ChampionOut, dir: []const u8, w: *Io.Writer) !void {

@@ -19,6 +19,7 @@ const digest = @import("riot/digest.zig");
 const protocol = @import("lab/protocol.zig");
 const harness = @import("lab/harness.zig");
 const lf = @import("lanefile.zig");
+const Date = @import("date.zig").Date;
 
 const n_lane = lf.n_lane;
 const no_row = std.math.maxInt(u32);
@@ -85,9 +86,9 @@ pub fn run(gpa: std.mem.Allocator, io: std.Io, db: store.Db, dir: []const u8, w:
     const range = try lf.patchRange(arena, d.games);
     try lf.write(arena, io, &sc, .{
         .name = team2.name,
-        .run = try arena.print("{s} {d:0>2}:{d:0>2}Z", .{ try lf.dayOf(arena, now_ms), @as(u64, @intCast(@mod(@divFloor(now_ms, 3_600_000), 24))), @as(u64, @intCast(@mod(@divFloor(now_ms, 60_000), 60))) }),
+        .run = try arena.print("{f} {d:0>2}:{d:0>2}Z", .{ Date.fromMs(now_ms), @as(u64, @intCast(@mod(@divFloor(now_ms, 3_600_000), 24))), @as(u64, @intCast(@mod(@divFloor(now_ms, 60_000), 60))) }),
         .snapshot = "box database",
-        .newest_game = try lf.dayOf(arena, d.starts[d.starts.len - 1]),
+        .newest_game = try arena.print("{f}", .{Date.fromMs(d.starts[d.starts.len - 1])}),
         .training_games = d.games.len,
         .patch = try lf.patchLabel(arena, ex.patch),
         .oldest_patch = range[0],

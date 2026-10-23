@@ -5,6 +5,7 @@
 //! on the share patch (Champions.countShares).
 
 const std = @import("std");
+const Date = @import("date.zig").Date;
 
 const Io = std.Io;
 
@@ -636,7 +637,7 @@ pub fn exportFiles(
             .name = src.name,
             .run = src.run,
             .snapshot = src.snapshot,
-            .newest_game = try dayOf(arena, src.newest_start),
+            .newest_game = try arena.print("{f}", .{Date.fromMs(src.newest_start)}),
             .training_games = src.training_games,
             .patch = try patchLabel(arena, champs.patch),
             .patch_games = champs.patch_total / 2,
@@ -758,13 +759,6 @@ pub fn firstOther(champs: *const Champions, teams: *const [2][n_role]u32) u32 {
 /// stats.patchKey back to "16.21"
 pub fn patchLabel(arena: std.mem.Allocator, key: u32) ![]const u8 {
     return arena.print("{d}.{d}", .{ key / 1000, key % 1000 });
-}
-
-pub fn dayOf(arena: std.mem.Allocator, ms: i64) ![]const u8 {
-    const es: std.time.epoch.EpochSeconds = .{ .secs = @intCast(@divFloor(ms, 1000)) };
-    const yd = es.getEpochDay().calculateYearDay();
-    const md = yd.calculateMonthDay();
-    return arena.print("{d}-{d:0>2}-{d:0>2}", .{ yd.year, md.month.numeric(), md.day_index + 1 });
 }
 
 test "play shares: the newest patch with enough games, else the newest" {
