@@ -162,7 +162,7 @@ fn option(ctx: Ctx, i: usize, o: lanecard.Option, current: bool) void {
         dvui.label(@src(), "{d:.1}%", .{100 * o.win}, .{
             .gravity_x = 1,
             .font = dvui.themeGet().font_heading,
-            .color_text = .{ .color = if (o.win >= 0.5) palette.ahead else palette.behind },
+            .color_text = .{ .color = w.rateColour(o.win) },
             .padding = .{},
         });
         dvui.labelNoFmt(@src(), "team", .{}, .{ .gravity_x = 1, .font = w.tiny(), .color_text = .{ .color = w.text().opacity(0.5) }, .padding = .{} });
@@ -175,20 +175,23 @@ fn option(ctx: Ctx, i: usize, o: lanecard.Option, current: bool) void {
         dvui.label(@src(), "{s}", .{ctx.stats.nameOf(o.champion)}, .{ .font = dvui.themeGet().font_heading, .padding = .{} });
         if (current) w.chip(@src(), "your pick", dvui.themeGet().color(.highlight, .fill), 0);
     }
-    var tl = dvui.textLayout(@src(), .{}, .{ .expand = .horizontal, .background = false, .padding = .{} });
-    defer tl.deinit();
-    const text = w.text();
     if (o.lane) |l| {
         const color: dvui.Color = switch (l.lean) {
             .ahead => palette.ahead,
             .behind => palette.behind,
-            .unclear => text,
+            .unclear => w.text(),
         };
-        tl.addText(l.text, .{ .color_text = .{ .color = color.opacity(l.strength) }, .font = w.small() });
-        if (o.reasons.len > 0) tl.addText("\n", .{});
+        w.para(@src(), "{s}", .{l.text}, .{ .small = true, .color = color.opacity(l.strength) });
     }
+    if (o.reasons.len == 0) return;
+    var fb = w.pills(@src(), 0);
+    defer fb.deinit();
     for (o.reasons, 0..) |r, j| {
-        if (j > 0) tl.addText(" · ", .{ .color_text = .{ .color = text.opacity(0.5) }, .font = w.small() });
-        tl.addText(r, .{ .color_text = .{ .color = text.opacity(0.8) }, .font = w.small() });
+        const tone: w.Tone = if (j < o.tones.len) switch (o.tones[j]) {
+            .neutral => .neutral,
+            .good => .good,
+            .bad => .bad,
+        } else .neutral;
+        w.pill(@src(), r, tone, j);
     }
 }

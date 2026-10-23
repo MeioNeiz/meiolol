@@ -18,7 +18,22 @@ pub fn column(ctx: Ctx, b: *const board.Board, side: Side) void {
     // Both columns can share a parent (the narrow layout): one box each keeps ids apart
     var box = dvui.box(@src(), .{ .dir = .vertical }, .{ .id_extra = @backingInt(side), .expand = .horizontal });
     defer box.deinit();
-    w.heading(@src(), if (side == .mine) "Your team" else "Enemy team", color);
+    {
+        var row = dvui.box(@src(), .{ .dir = .horizontal }, .{ .expand = .horizontal });
+        defer row.deinit();
+        w.heading(@src(), if (side == .mine) "Your team" else "Enemy team", color);
+        if (ctx.private()) if (b.draft) |d| {
+            // The team's draft score in big type on top, as DraftGap and LoLDraftAI
+            const win = if (side == .mine) d.win else 1 - d.win;
+            dvui.label(@src(), "{d:.0}%", .{100 * win}, .{
+                .gravity_x = 1,
+                .gravity_y = 0.5,
+                .font = dvui.themeGet().font_title.withSize(dvui.themeGet().font_title.size + 4),
+                .color_text = .{ .color = w.rateColour(win) },
+                .margin = .{ .y = 6 },
+            });
+        };
+    }
     for (seats, 0..) |s, i| seat(ctx, i, s, side);
     if (side == .theirs and seats.len > 0) {
         w.para(@src(), "Enemy positions are hidden: roles with ? are guesses from what each champion usually plays.", .{}, .{ .muted = true, .small = true });
@@ -62,6 +77,12 @@ fn seat(ctx: Ctx, i: usize, s: board.Seat, side: Side) void {
         });
     }
     if (sl.champion != 0 and s.games > 0) fact(ctx, s);
+    if (sl.champion != 0 and s.role != null and s.games < w.few_games) {
+        var fb = w.pills(@src(), 0);
+        defer fb.deinit();
+        var buf: [32]u8 = undefined;
+        w.pill(@src(), std.fmt.bufPrint(&buf, "few games: {d}", .{s.games}) catch "few games", .caution, 0);
+    }
     if (s.ideas.len > 0) ideas(ctx, s.ideas);
 }
 
@@ -72,7 +93,7 @@ fn fact(ctx: Ctx, s: board.Seat) void {
     var nbuf: [16]u8 = undefined;
     const str, const color = if (ctx.private()) .{
         std.fmt.bufPrint(&buf, "{d:.1}% in {s} · {s} games", .{ 100 * s.win, role, w.compact(&nbuf, s.games) }) catch "",
-        if (s.win >= 0.5) palette.ahead else palette.behind,
+        w.rateColour(s.win),
     } else if (s.win >= 0.515) .{
         std.fmt.bufPrint(&buf, "strong in {s} now", .{role}) catch "", palette.ahead,
     } else if (s.win <= 0.485) .{
@@ -119,7 +140,7 @@ pub fn draft(ctx: Ctx, b: *const board.Board) void {
         // A log-odds standard error near 50% is about a quarter of it in win chance
         dvui.label(@src(), "{d:.0}% for your team, ±{d:.0}", .{ 100 * d.win, 100 * d.se / 4 }, .{
             .font = dvui.themeGet().font_heading,
-            .color_text = .{ .color = if (d.win >= 0.5) palette.ahead else palette.behind },
+            .color_text = .{ .color = w.rateColour(d.win) },
             .padding = .{},
         });
         dvui.label(@src(), "{d} v {d} champions{s}", .{ d.picks[0], d.picks[1], if (d.hovers > 0) ", hovers count" else "" }, .{

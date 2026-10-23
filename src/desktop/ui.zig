@@ -120,15 +120,19 @@ fn header(v: View) void {
     defer bar.deinit();
     dvui.labelNoFmt(@src(), title, .{}, .{ .font = dvui.themeGet().font_title, .gravity_y = 0.5, .padding = .{ .w = 8 } });
     if (v.edition == .private) w.chip(@src(), "private", palette.private, 0);
-    const state: []const u8 = switch (v.status) {
-        .no_data => "no data",
-        .no_client => "client closed",
-        .client_error => "client error",
-        .waiting => |phase| phase,
-        .no_role => "champ select",
-        .select => |s| s.board.stage,
-    };
-    dvui.labelNoFmt(@src(), state, .{}, .{ .gravity_y = 0.5, .color_text = .{ .color = w.text().opacity(0.7) }, .padding = .{ .x = 6, .w = 6 } });
+    if (dvui.windowRect().w >= wide_from) {
+        stepper(v.status);
+    } else {
+        const state: []const u8 = switch (v.status) {
+            .no_data => "no data",
+            .no_client => "client closed",
+            .client_error => "client error",
+            .waiting => |phase| phase,
+            .no_role => "champ select",
+            .select => |s| s.board.stage,
+        };
+        dvui.labelNoFmt(@src(), state, .{}, .{ .gravity_y = 0.5, .color_text = .{ .color = w.text().opacity(0.7) }, .padding = .{ .x = 6, .w = 6 } });
+    }
     if (v.status == .select) switch (v.status.select.board.turn) {
         .none => {},
         .ban => w.chip(@src(), "Your ban", palette.turn, 1),
@@ -143,6 +147,43 @@ fn header(v: View) void {
             .color_text = .{ .color = w.text().opacity(0.55) },
         });
     }
+}
+
+const Step = enum { lobby, champ_select, in_game, post_game };
+const step_names = [_][]const u8{ "Lobby", "Champ select", "In game", "Post game" };
+
+/// Where the player is in a game's phases, as iTero and Mobalytics show it
+fn stepper(s: Status) void {
+    const now: ?Step = switch (s) {
+        .select, .no_role => .champ_select,
+        .waiting => |phase| if (std.mem.eql(u8, phase, "In game") or std.mem.eql(u8, phase, "Reconnect"))
+            .in_game
+        else if (std.mem.eql(u8, phase, "Post game"))
+            .post_game
+        else if (std.mem.eql(u8, phase, "Lobby") or std.mem.eql(u8, phase, "In queue") or std.mem.eql(u8, phase, "Match found"))
+            .lobby
+        else
+            null,
+        else => null,
+    };
+    var row = dvui.box(@src(), .{ .dir = .horizontal }, .{ .gravity_y = 0.5, .margin = .{ .x = 10 } });
+    defer row.deinit();
+    for (step_names, 0..) |name, i| {
+        const on = now != null and @backingInt(now.?) == i;
+        if (i > 0) dvui.labelNoFmt(@src(), "›", .{}, .{ .id_extra = i, .color_text = .{ .color = w.text().opacity(0.3) }, .padding = .{ .x = 4, .w = 4 } });
+        dvui.labelNoFmt(@src(), name, .{}, .{
+            .id_extra = i,
+            .color_text = .{ .color = if (on) w.text() else w.text().opacity(0.4) },
+            .font = if (on) dvui.themeGet().font_heading else dvui.themeGet().font_body,
+            .padding = .{ .x = 2, .w = 2 },
+        });
+    }
+    if (s == .select) dvui.labelNoFmt(@src(), s.select.board.stage, .{}, .{
+        .color_text = .{ .color = w.text().opacity(0.55) },
+        .font = w.small(),
+        .gravity_y = 0.5,
+        .padding = .{ .x = 10 },
+    });
 }
 
 /// Teams in columns either side, lane panel in the middle, bans and draft under it
@@ -193,14 +234,37 @@ fn centre(ctx: w.Ctx, s: *const Select) void {
     if (!banning) teams.banOptions(ctx, &s.board);
 }
 
+const Tab = enum { us, picks, them };
+/// The narrow window's tab, kept between champ selects
+var tab: Tab = .picks;
+
+/// One column: a switcher between our team, the picks and theirs (DraftGap's footer tabs
+/// under 1024 px, research/questions/desktop-app-layout.md C15), picks first
 fn narrowSelect(ctx: w.Ctx, s: *const Select) void {
+    {
+        var bar = dvui.box(@src(), .{ .dir = .horizontal, .equal_space = true }, .{ .expand = .horizontal, .padding = .{ .x = 12, .y = 8, .w = 12 } });
+        defer bar.deinit();
+        const names = [_][]const u8{ "Your team", "Picks", "Enemy team" };
+        for (names, 0..) |name, i| {
+            const on = @backingInt(tab) == i;
+            if (dvui.button(@src(), name, .{}, .{
+                .id_extra = i,
+                .expand = .horizontal,
+                .style = if (on) .highlight else .control,
+                .corners = .all(0),
+                .margin = .{},
+            })) tab = @fromBackingInt(@intCast(i));
+        }
+    }
     var scroll = dvui.scrollArea(@src(), .{}, .{ .expand = .both });
     defer scroll.deinit();
     var body = dvui.box(@src(), .{ .dir = .vertical }, .{ .expand = .horizontal, .padding = .all(12) });
     defer body.deinit();
-    centre(ctx, s);
-    teams.column(ctx, &s.board, .mine);
-    teams.column(ctx, &s.board, .theirs);
+    switch (tab) {
+        .us => teams.column(ctx, &s.board, .mine),
+        .picks => centre(ctx, s),
+        .them => teams.column(ctx, &s.board, .theirs),
+    }
 }
 
 fn footer() void {

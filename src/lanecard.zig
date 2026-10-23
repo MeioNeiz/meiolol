@@ -109,7 +109,11 @@ pub const Option = struct {
     lane: ?LaneFact,
     /// Plain facts: mastery, team fit
     reasons: []const []const u8,
+    /// One per reason: how the window colours its pill
+    tones: []const Tone = &.{},
 };
+
+pub const Tone = enum { neutral, good, bad };
 
 pub const LaneFact = struct {
     /// "vs Syndra: +120 gold at 14 min (1234 games)"
@@ -334,12 +338,14 @@ fn options(arena: std.mem.Allocator, in: Input, opp: ?Opponent, bracket: Bracket
 
     const out = try arena.alloc(Option, list.len);
     for (list, out) |s, *o| {
+        const rs = try reasons(arena, in, s, opp, show_strong);
         o.* = .{
             .champion = s.champion,
             .mastery = masteryOf(in.mastery, s.champion),
             .win = s.win,
             .lane = if (opp) |p| try laneFact(arena, in, s.champion, p.champion, bracket) else null,
-            .reasons = try reasons(arena, in, s, opp, show_strong),
+            .reasons = rs.text,
+            .tones = rs.tones,
         };
     }
     return out;
@@ -396,15 +402,19 @@ fn laneFact(arena: std.mem.Allocator, in: Input, me: u32, them: u32, bracket: Br
     };
 }
 
-fn reasons(arena: std.mem.Allocator, in: Input, s: core.Suggestion, opp: ?Opponent, show_strong: bool) ![]const []const u8 {
+const Reasons = struct { text: []const []const u8, tones: []const Tone };
+
+fn reasons(arena: std.mem.Allocator, in: Input, s: core.Suggestion, opp: ?Opponent, show_strong: bool) !Reasons {
     const stats = in.stats;
     var out: std.ArrayList([]const u8) = .empty;
+    var tones: std.ArrayList(Tone) = .empty;
     const points = masteryOf(in.mastery, s.champion);
     if (points > 0) {
         var aw: std.Io.Writer.Allocating = .init(arena);
         try compact(&aw.writer, points);
         try aw.writer.writeAll(" mastery points");
         try out.append(arena, aw.written());
+        try tones.append(arena, .neutral);
     }
     for (s.reasons()) |r| {
         if (out.items.len == max_reasons) break;
@@ -417,8 +427,9 @@ fn reasons(arena: std.mem.Allocator, in: Input, s: core.Suggestion, opp: ?Oppone
             .enemy => try std.fmt.allocPrint(arena, "{s} into {s}", .{ if (r.pp > 0) "good" else "hard", name }),
         };
         try out.append(arena, text);
+        try tones.append(arena, if (r.pp > 0) .good else .bad);
     }
-    return out.items;
+    return .{ .text = out.items, .tones = tones.items };
 }
 
 /// 950, 12k, 1.2M

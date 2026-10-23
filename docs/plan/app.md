@@ -100,19 +100,53 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
 - APP2 Editions in the build: `-Dedition`, module split, both in `zig build ci`, release
   script builds and signs both. Done when the public exe's strings hold no private
   module names (a ci check)
-- APP3 Every role and pick order (both editions): the card per role, blind-safe vs
-  counter mode with its label, allies still to pick. Builds on lanecard.zig and
-  core.score; cardscenes fixture extended per mode. Mock scenarios first, real capture
-  after
-- APP4 Hovers: picks and bans from hovered champions, live (both editions)
-- APP5 Ban options by ban impact (both; private adds pools where names are visible)
+- APP3 Every role and pick order (both editions). Done: the board (Window layout
+  below) with the mode chip and ideas for allies still to pick. Left: switch the lane
+  panel to any ally's role (click a seat), and the blind-safe ranking itself (J2:
+  options that hold up against the role's likely picks, not the average)
+- APP4 Hovers: picks and bans from hovered champions, live (both editions). The board
+  shows ally hovers and intents and counts them in the draft; left: an enemy's hover
+  never shows, so nothing to do there; check ban hovers in a real capture (APP1)
+- APP5 Ban options: first pass done (board.zig: ban impact in roles the enemy hasn't
+  filled, never an ally's hover; the desktop stats file has no ban counts, so impact is
+  per all games). Left: ban counts in the desktop stats file, my lane first while my
+  opponent is unknown; private adds pools where names are visible
 - APP6 After picks: comp view (notes, early/late, carry, matchups); public in words,
-  private with numbers
+  private with numbers. Damage split bar needs damage type per champion in the stats
+  file
 - APP7 Private: scouting where names are visible (needs APP1's queue facts and AC6 for
   "me"), percentages, experimental models
-- APP8 Champion icons and window icon (Data Dragon art is allowed, logos not)
+- APP8 Window icon (champion icons done: from the client, desktop/icons.zig; Data
+  Dragon art is allowed, logos not)
+- APP10 Loading screen cards (Window layout below): ten cards, champion-only facts in
+  the public edition; private adds player scouting (APP7)
+- APP11 Post game view: verdict line, gold difference chart, lane rows (below)
 - APP9 In-game companion, private first (below). Against the mock's Live Client Data
   (deploy/mock-cs.sh full-game), then a real capture (APP1's in-game reply)
+
+## Window layout
+
+Jacob 23 Oct: Porofessor-style. Research: research/questions/desktop-app-layout.md (17
+sources, screenshots of Porofessor, Blitz, Mobalytics, U.GG, OP.GG, iTero, DraftGap).
+One window, 1120 x 720, a phase stepper on top (Lobby, Champ select, In game, Post game);
+under 900 px one column. `zig build desktop-shot -- --stats F --curves F --icons
+data/icons` renders every scene wide, at 150%, narrow and public (icons for the Mac:
+CommunityDragon champion-icons/<id>.png into data/icons, gitignored).
+- Champ select (built, src/desktop/ui.zig, teams.zig, lane.zig): our seats left, theirs
+  right (icon, role or guessed role, state, win rate in the role, "few games" under 1000,
+  ideas), the team's draft score on top of each column (private); the lane panel in the
+  middle (mode chip, chart, 3 to 5 option cards with reason pills, private team %), then
+  the draft bar (private), bans and ban options (first while banning). Narrow: Your team
+  / Picks / Enemy team tabs, Picks first
+- Colour: win rates on fixed steps (widgets.rateColour), reason pills coloured by meaning
+  with the words always on them (green good, red bad, orange caution, grey neutral)
+- Loading screen (APP10): Porofessor's 2 x 5 cards, ally row over enemy row, fixed card
+  order (champion, record, then pills), hover for the reason and number. Player pills
+  ("on a streak", "main") private only and only where names are visible
+- In game (APP9): a small panel, hidden by default, hotkey; mirrored lane rows (our icon,
+  gold delta, their icon), team gold bar, your lane against the curve
+- Post game (APP11): verdict sentence and award chips, gold difference area (blue over
+  red), mirrored lane rows, detail behind tabs; no dense tables
 
 ## In-game companion
 
@@ -158,7 +192,8 @@ games.
 
 ## Status (22 Oct)
 
-- Public-shaped lane card for your role, ranked by draft plus your mastery points
+- Champ select board around the lane card (Window layout); lane card for your role,
+  ranked by draft plus your mastery points
   (lanecard.Expertise.fitted; "Rank by your mastery points" box, not kept across
   restarts). Card rules tested over 400 random drafts and ten scenes
   (testdata/cards/scenes.json, `meiolol-app cards [FILE] [--expertise off]`, fixture

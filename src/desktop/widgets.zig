@@ -27,6 +27,7 @@ pub const palette = struct {
     pub const ahead: dvui.Color = .fromHex("#4fb37a");
     pub const behind: dvui.Color = .fromHex("#d0605e");
     pub const turn: dvui.Color = .fromHex("#d8b25a");
+    pub const caution: dvui.Color = .fromHex("#e0913a");
     pub const private: dvui.Color = .fromHex("#7a5cc4");
     pub const bar: dvui.Color = .fromHex("#141518");
     pub const card: dvui.Color = .fromHex("#25272c");
@@ -182,4 +183,47 @@ pub fn roleName(r: core.Role) []const u8 {
         .bottom => "Bot",
         .utility => "Support",
     };
+}
+
+/// Win rates on fixed steps, as DraftGap's scale (research/questions/desktop-app-layout.md
+/// C9): the same rate is always the same colour, whatever else is on screen
+pub fn rateColour(win: f64) dvui.Color {
+    if (win < 0.47) return palette.behind;
+    if (win < 0.49) return palette.behind.opacity(0.75);
+    if (win <= 0.51) return text().opacity(0.8);
+    if (win <= 0.53) return palette.ahead.opacity(0.8);
+    return palette.ahead;
+}
+
+/// Under this many games a rate gets the "few games" pill (DraftGap marks under 1,000)
+pub const few_games = 1000;
+
+pub const Tone = enum { neutral, good, bad, caution };
+
+/// Porofessor's tags: a short outlined pill coloured by meaning, words always beside the
+/// colour (research/questions/desktop-app-layout.md C3)
+pub fn pill(src: std.builtin.SourceLocation, str: []const u8, tone: Tone, id_extra: usize) void {
+    const color: dvui.Color = switch (tone) {
+        .neutral => text().opacity(0.55),
+        .good => palette.ahead,
+        .bad => palette.behind,
+        .caution => palette.caution,
+    };
+    dvui.labelNoFmt(src, str, .{}, .{
+        .id_extra = id_extra,
+        .border = .all(1),
+        .color_border = .{ .color = color.opacity(0.8) },
+        .color_text = .{ .color = if (tone == .neutral) text().opacity(0.8) else color },
+        .background = true,
+        .color_fill = .{ .color = color.opacity(0.08) },
+        .corners = .all(8),
+        .padding = .{ .x = 7, .y = 1, .w = 7, .h = 1 },
+        .margin = .{ .w = 4, .h = 4 },
+        .font = tiny(),
+    });
+}
+
+/// Pills that wrap onto more lines when the row is full
+pub fn pills(src: std.builtin.SourceLocation, id_extra: usize) *dvui.FlexBoxWidget {
+    return dvui.flexbox(src, .{ .justify_content = .start }, .{ .id_extra = id_extra, .expand = .horizontal, .margin = .{ .y = 3 } });
 }
