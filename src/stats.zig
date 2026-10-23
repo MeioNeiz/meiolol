@@ -6,6 +6,7 @@ const core = @import("core");
 const statsfile = core.statsfile;
 const partials = @import("partials.zig");
 const fitted = @import("fitted.zig");
+const additive = @import("additive.zig");
 const Role = core.Role;
 
 const log = std.log.scoped(.stats);
@@ -43,7 +44,7 @@ pub const PatchGames = struct {
 /// remakes, a winner, all ten positions) into a builder made from the champions table.
 /// Caller owns the builder.
 pub fn build(gpa: std.mem.Allocator, db: store.Db, chosen: []const []const u8, platforms: []const []const u8) !Built {
-    return buildSince(gpa, db, null, chosen, platforms, 0, false);
+    return buildSince(gpa, db, null, chosen, platforms, 0, .none);
 }
 
 pub const Built = struct {
@@ -51,9 +52,12 @@ pub const Built = struct {
     summary: Summary,
 };
 
+/// The draft model a stats file carries (fitted.zig): none (version 1), additive v2 (what
+/// the site and app score with), or v2 with pair cells that borrow strength (A4, lab)
+pub const Fit = enum { none, v2, pair_prior };
+
 /// As build, games started from `since_ms` (Unix ms) only, from the views partials when
-/// `from` is given (champions still from db); `fit`: with the draft model fitted on them
-/// (fitted.zig), what the site and app score with
+/// `from` is given (champions still from db), with the draft model `fit` fitted on them
 pub fn buildSince(
     gpa: std.mem.Allocator,
     db: store.Db,
@@ -61,7 +65,7 @@ pub fn buildSince(
     chosen: []const []const u8,
     platforms: []const []const u8,
     since_ms: i64,
-    fit: bool,
+    fit: Fit,
 ) !Built {
     const champs = try champions(gpa, db);
     defer freeChampions(gpa, champs);
@@ -69,7 +73,10 @@ pub fn buildSince(
     errdefer b.deinit();
     var played: fitted.Games = .{ .gpa = gpa };
     defer played.deinit();
-    const sink: BuilderSink = .{ .b = &b, .games = if (fit) &played else null };
+    const classes = if (fit == .pair_prior) try kitClasses(gpa, db) else null;
+    defer if (classes) |x| gpa.free(x);
+    played.classes = classes;
+    const sink: BuilderSink = .{ .b = &b, .games = if (fit != .none) &played else null };
     const summary = if (from) |games|
         try scanFrom(gpa, games, chosen, platforms, since_ms, sink)
     else
@@ -345,6 +352,22 @@ pub fn champions(gpa: std.mem.Allocator, db: store.Db) ![]statsfile.Champion {
     }
     if (list.items.len == 0) return error.NoChampions;
     return list.toOwnedSlice(gpa);
+}
+
+/// Every champion's kit class for additive.Parents: its Data Dragon tags
+pub fn kitClasses(gpa: std.mem.Allocator, db: store.Db) ![]additive.KitClass {
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+    var ids: std.ArrayList(u32) = .empty;
+    var tags: std.ArrayList([]const u8) = .empty;
+    var q = try db.prepare("SELECT id, coalesce(tags, '') FROM champions");
+    defer q.deinit();
+    while (try q.step()) {
+        const r = q.row(struct { id: i64, tags: []const u8 });
+        try ids.append(arena.allocator(), @intCast(r.id));
+        try tags.append(arena.allocator(), try arena.allocator().dupe(u8, r.tags));
+    }
+    return additive.KitClass.fromTags(gpa, ids.items, tags.items);
 }
 
 pub fn freeChampions(gpa: std.mem.Allocator, champs: []const statsfile.Champion) void {

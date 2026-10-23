@@ -220,7 +220,7 @@ fn loadBase(site: *Site, db: store.Db, all_opts: Options, phases: *Phases, games
         try g.patches(arena, site.opts.platforms)
     else
         try stats.patches(arena, db, site.opts.platforms);
-    var built = try stats.buildSince(site.gpa, db, games, site.opts.patches, site.opts.platforms, site.since_ms, true);
+    var built = try stats.buildSince(site.gpa, db, games, site.opts.patches, site.opts.platforms, site.since_ms, .v2);
     phases.mark("stats");
     defer built.builder.deinit();
     if (built.summary.games == 0) return error.NoMatches;
@@ -337,7 +337,7 @@ fn regionPatchDay(site: *Site, db: store.Db, all_opts: Options, extras: *Extras,
 
 /// `platforms`' stats over `patches`, all of each
 fn patchStats(site: *Site, db: store.Db, patches: []const []const u8, platforms: []const []const u8, games: ?*const partials.Store) !Stats {
-    var built = try stats.buildSince(site.gpa, db, games, patches, platforms, 0, false);
+    var built = try stats.buildSince(site.gpa, db, games, patches, platforms, 0, .none);
     defer built.builder.deinit();
     var label_buf: [core.statsfile.patch_len]u8 = undefined;
     var model: Writer.Allocating = .init(site.arena);

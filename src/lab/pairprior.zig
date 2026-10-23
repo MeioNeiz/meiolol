@@ -93,6 +93,9 @@ const Variant = struct {
     rank: u32 = 0,
     /// Factor entries' prior sd, fixed; 0: MacKay, capped
     fac_sd: f64 = 0,
+    /// additive.zig's Parents (the shipped form of pair+kit:tag, its parent steps halved
+    /// when they raise the loss) instead of this file's fit
+    ship: bool = false,
 };
 
 /// pooled: the same two champions in any slot share a parent; shuf: a slot's own
@@ -120,6 +123,8 @@ fn parseVariant(label: []const u8) !Variant {
         } else if (std.mem.eql(u8, head, "pair")) {
             v.pair = true;
             if (f.next()) |m| v.pair_mode = std.meta.stringToEnum(PairMode, m) orelse return error.BadVariant;
+        } else if (std.mem.eql(u8, head, "ship")) {
+            v.ship = true;
         } else if (std.mem.eql(u8, head, "rank")) {
             v.rank = try std.fmt.parseInt(u32, f.next() orelse return error.BadVariant, 10);
             if (f.next()) |x| v.fac_sd = try std.fmt.parseFloat(f64, x);
@@ -787,6 +792,30 @@ fn predictShipped(p: *const A.Problem, s: ?*const Struct, f: *const Fitted, g: *
     return x;
 }
 
+/// predictShipped for additive.zig's fit with Problem.parents
+fn predictShippedA(p: *const A.Problem, f: *const A.Fit, g: *const A.GameIn) f64 {
+    const pa = &p.parents.?;
+    var x: f64 = 0;
+    var buf: [2]Cell = undefined;
+    for (A.g_main..A.g_ally) |gr| {
+        const n = cellsOf(gr, &g.teams, &buf);
+        for (buf[0..n]) |cl| if (p.keys.get(cl.key)) |j| {
+            x += cl.x * toF16(f.theta[j]);
+        };
+    }
+    for (slots) |sl| {
+        const n = cellsOf(sl.group, &g.teams, &buf);
+        for (buf[0..n]) |cl| {
+            var v = pa.value(f.parent, sl.group, @intCast(cl.key >> 24 & 0xffffff), @intCast(cl.key & 0xffffff));
+            if (p.keys.get(cl.key)) |j| if (p.count[j] >= ship_floor) {
+                v += f.theta[j];
+            };
+            x += cl.x * toF16(v);
+        }
+    }
+    return x;
+}
+
 fn toF16(x: f64) f64 {
     return @as(f16, @floatCast(x));
 }
@@ -1115,6 +1144,7 @@ const TaskOut = struct {
     n_kit: usize = 0,
     n_pair: usize = 0,
     n_fac: usize = 0,
+    halvings: u32 = 0,
 };
 
 fn runBlock(
@@ -1128,6 +1158,7 @@ fn runBlock(
     opts: Options,
     tags: [2]*const KitMap,
     champions: []const u32,
+    classes: []const A.KitClass,
     seen: ?*const Seen,
     dir: Io.Dir,
     sums: [][6]Sums,
@@ -1243,8 +1274,10 @@ fn runBlock(
         outs: []TaskOut,
         scored: []const A.GameIn,
         shipped: bool,
+        classes: []const A.KitClass,
         fn one(x: @This(), i: usize) !void {
             const t = x.tasks[i];
+            if (t.variant) |v| if (v.ship) return x.ship(i);
             var st: ?Struct = null;
             defer if (st) |*s| s.deinit(x.gpa);
             if (t.variant) |v| st = try buildStruct(x.gpa, x.p, .{ .kit = t.kit, .pair = v.pair, .pair_mode = v.pair_mode, .perm = t.perm, .rank = v.rank, .fac_sd = v.fac_sd });
@@ -1260,11 +1293,35 @@ fn runBlock(
                 .n_fac = if (sp) |s| s.n_fac else 0,
             };
         }
+
+        fn ship(x: @This(), i: usize) !void {
+            var q = x.p.*;
+            q.parents = null;
+            try q.addParents(x.gpa, x.classes);
+            defer q.parents.?.deinit(x.gpa);
+            const pa = &q.parents.?;
+            var af = try A.fit(x.gpa, &q, .{}, null, null);
+            defer af.deinit(x.gpa);
+            const pred = try x.gpa.alloc(f64, x.scored.len);
+            for (x.scored, pred) |*g, *o| o.* = sigmoid(if (x.shipped) predictShippedA(&q, &af, g) else A.predict(&q, &af, g));
+            var f: Fitted = .{
+                .theta = try x.gpa.dupe(f64, af.theta),
+                .kit = try x.gpa.dupe(f64, af.parent[0..pa.n_kit]),
+                .pair = try x.gpa.dupe(f64, af.parent[pa.n_kit..]),
+                .fac = try x.gpa.alloc(f64, 0),
+                .sigma2 = af.sigma2,
+                .kit_s2 = undefined,
+                .pair_s2 = .{ af.parent_s2[A.n_groups], af.parent_s2[A.n_groups + 1] },
+                .fac_s2 = @splat(0),
+            };
+            for (&f.kit_s2, slots) |*v, sl| v.* = af.parent_s2[sl.group];
+            x.outs[i] = .{ .pred = pred, .fit = f, .n_kit = pa.n_kit, .n_pair = pa.group.len - pa.n_kit, .halvings = af.parent_halvings };
+        }
     };
     var at: usize = 0;
     while (at < tasks.len) : (at += opts.threads) {
         const n = @min(opts.threads, tasks.len - at);
-        try par.forEach(io, n, Ctx{ .gpa = gpa, .p = &p, .tasks = tasks[at..][0..n], .outs = outs[at..][0..n], .scored = scored_in, .shipped = opts.shipped }, Ctx.one);
+        try par.forEach(io, n, Ctx{ .gpa = gpa, .p = &p, .tasks = tasks[at..][0..n], .outs = outs[at..][0..n], .scored = scored_in, .shipped = opts.shipped, .classes = classes }, Ctx.one);
     }
     if (block == opts.blocks[0]) {
         // fitAll without structure must be additive.fit
@@ -1292,7 +1349,7 @@ fn runBlock(
         const label = if (t.variant) |v| v.label else "v2";
         const mean = s.d / nsc;
         const se = @sqrt(@max(s.d2 / nsc - mean * mean, 0) / @max(nsc - 1, 1));
-        try w.print("  {s:<28} loss {d:.5}  vs v2 {d:.3} +- {d:.3} mnats  ({d} kit, {d} pair, {d} factor params)\n", .{ label, s.loss / nsc, mean * 1000, 1.96 * se * 1000, o.n_kit, o.n_pair, o.n_fac });
+        try w.print("  {s:<28} loss {d:.5}  vs v2 {d:.3} +- {d:.3} mnats  ({d} kit, {d} pair, {d} factor params; {d} halvings)\n", .{ label, s.loss / nsc, mean * 1000, 1.96 * se * 1000, o.n_kit, o.n_pair, o.n_fac, o.halvings });
         const f = &o.fit.?;
         // Spreads per slot, pp at 50%: v2's own cells, then the parts'
         for (slots, 0..) |sl, slot| {
@@ -1419,6 +1476,11 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     defer tag.deinit(gpa);
     var tag_shuf = try tagMap(gpa, arena, io, snap, true);
     defer tag_shuf.deinit(gpa);
+    // The tag map as additive.KitClass (role-free: role 0's entries)
+    var class_list: std.ArrayList(A.KitClass) = .empty;
+    var tit = tag.class.iterator();
+    while (tit.next()) |e| if (e.key_ptr.* & 7 == 0) try class_list.append(arena, .{ .id = @intCast(e.key_ptr.* >> 3), .class = e.value_ptr.* });
+    const classes = class_list.items;
     var champ_set: std.AutoArrayHashMapUnmanaged(u32, void) = .empty;
     for (data.games) |g| for (g.teams) |t| for (t) |ch| try champ_set.put(arena, ch, {});
     const champions = try arena.dupe(u32, champ_set.keys());
@@ -1444,7 +1506,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     for (opts.blocks) |b| {
         var block_arena: std.heap.ArenaAllocator = .init(gpa);
         defer block_arena.deinit();
-        try runBlock(gpa, block_arena.allocator(), io, &data, in, c, b, opts, .{ &tag, &tag_shuf }, champions, if (seen) |*x| x else null, dir, sums, w, &sfw.interface);
+        try runBlock(gpa, block_arena.allocator(), io, &data, in, c, b, opts, .{ &tag, &tag_shuf }, champions, classes, if (seen) |*x| x else null, dir, sums, w, &sfw.interface);
     }
 
     // Pools: development folds 1-2, sealed folds 3-5, dev-val; milli-nats vs v2
@@ -1639,4 +1701,68 @@ test "pairprior: shipped form is the fit less its side term, thin own parts drop
     g.teams[1][1] = 1002;
     try testing.expect(p.keys.get(key(A.enemyGroup(0, 1), 1001, 1002)) == null);
     try testing.expect(predictShipped(&p, &st, &f, &g) != predictShipped(&p, null, &f, &g));
+}
+
+fn modClasses(gpa: Allocator, m: *const KitMap) ![]A.KitClass {
+    var classes: std.ArrayList(A.KitClass) = .empty;
+    var it = m.class.iterator();
+    while (it.next()) |e| try classes.append(gpa, .{ .id = @intCast(e.key_ptr.* >> 3), .class = e.value_ptr.* });
+    return classes.toOwnedSlice(gpa);
+}
+
+test "pairprior: additive.zig's Parents unguarded are pair+kit exactly" {
+    const gpa = testing.allocator;
+    var m = try modMap(gpa, 30);
+    defer m.deinit(gpa);
+    const games = try synthGames(gpa, 20_000, 30, .{ .sd = 0.25, .kit = &m, .seed = 5 }, 2);
+    defer gpa.free(games);
+    var p = try A.build(gpa, .logistic, addinputs.fullVariant(true, 0), games);
+    defer p.deinit(gpa);
+    var st = try buildStruct(gpa, &p, .{ .kit = &m, .pair = true });
+    defer st.deinit(gpa);
+    var lab = try fitAll(gpa, &p, &st, quick, 1);
+    defer lab.deinit(gpa);
+    const classes = try modClasses(gpa, &m);
+    defer gpa.free(classes);
+    try p.addParents(gpa, classes);
+    var unguarded = quick;
+    unguarded.parent_guard = false;
+    var ship = try A.fit(gpa, &p, unguarded, null, null);
+    defer ship.deinit(gpa);
+    // The kit parents carry the plant, so the comparison covers their steps
+    var kit_sd: f64 = 0;
+    for (slots) |sl| kit_sd = @max(kit_sd, @sqrt(ship.parent_s2[sl.group]));
+    try testing.expect(kit_sd > 0.05);
+    for (lab.theta, ship.theta) |a, b| try testing.expectApproxEqAbs(a, b, 1e-9);
+    for (games[0..100]) |*g| {
+        const want = predict(&p, &st, &lab, g);
+        try testing.expectApproxEqAbs(want, A.predict(&p, &ship, g), 1e-9);
+    }
+}
+
+test "pairprior: dense pairs run the lab's parent steps away, not additive.zig's halved ones" {
+    const gpa = testing.allocator;
+    var m = try modMap(gpa, 12);
+    defer m.deinit(gpa);
+    const games = try synthGames(gpa, 8_000, 12, .{ .sd = 0.3, .kit = &m, .seed = 4 }, 8);
+    defer gpa.free(games);
+    var p = try A.build(gpa, .logistic, addinputs.fullVariant(true, 0), games);
+    defer p.deinit(gpa);
+    var st = try buildStruct(gpa, &p, .{ .kit = &m, .pair = true });
+    defer st.deinit(gpa);
+    var lab = try fitAll(gpa, &p, &st, quick, 1);
+    defer lab.deinit(gpa);
+    const classes = try modClasses(gpa, &m);
+    defer gpa.free(classes);
+    try p.addParents(gpa, classes);
+    var ship = try A.fit(gpa, &p, quick, null, null);
+    defer ship.deinit(gpa);
+    var lab_max: f64 = 0;
+    var ship_max: f64 = 0;
+    for (lab.theta, ship.theta) |a, b| {
+        lab_max = @max(lab_max, @abs(a));
+        ship_max = @max(ship_max, @abs(b));
+    }
+    try testing.expect(lab_max > 100);
+    try testing.expect(ship_max < 2 and ship.parent_halvings > 0);
 }

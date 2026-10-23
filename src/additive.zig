@@ -207,6 +207,8 @@ pub const Problem = struct {
     keys: std.AutoHashMapUnmanaged(u64, u32),
     /// Param index -> key, for tables
     key_of: []u64,
+    /// Pair cells shrunk toward parents instead of 0 (addParents)
+    parents: ?Parents = null,
 
     pub fn n_params(p: *const Problem) usize {
         return p.param_start[n_groups];
@@ -217,8 +219,165 @@ pub const Problem = struct {
         gpa.free(p.count);
         gpa.free(p.key_of);
         p.keys.deinit(gpa);
+        if (p.parents) |*x| x.deinit(gpa);
+    }
+
+    /// Identified matchups only (Variant.matchupGroups)
+    pub fn addParents(p: *Problem, gpa: std.mem.Allocator, classes: []const KitClass) !void {
+        std.debug.assert(p.variant.matchup and p.parents == null);
+        p.parents = try .init(gpa, p, classes);
     }
 };
+
+/// A champion's kit class for Parents: role-free (Data Dragon tags, KitClass.fromTags)
+pub const KitClass = struct {
+    id: u32,
+    class: u16,
+
+    /// Classes by the sorted distinct tag strings ("Fighter,Tank")
+    pub fn fromTags(gpa: std.mem.Allocator, ids: []const u32, tags: []const []const u8) ![]KitClass {
+        const sorted = try gpa.dupe([]const u8, tags);
+        defer gpa.free(sorted);
+        std.mem.sort([]const u8, sorted, {}, struct {
+            fn lt(_: void, a: []const u8, b: []const u8) bool {
+                return std.mem.lessThan(u8, a, b);
+            }
+        }.lt);
+        var n: usize = 0;
+        for (sorted) |t| {
+            if (n > 0 and std.mem.eql(u8, sorted[n - 1], t)) continue;
+            sorted[n] = t;
+            n += 1;
+        }
+        const out = try gpa.alloc(KitClass, ids.len);
+        for (ids, tags, out) |id, t, *o| {
+            const i = for (sorted[0..n], 0..) |x, i| {
+                if (std.mem.eql(u8, x, t)) break i;
+            } else unreachable;
+            o.* = .{ .id = id, .class = @intCast(i) };
+        }
+        return out;
+    }
+};
+
+/// Pair cells that borrow strength (docs/model.md "Pair cells that borrow strength (A4)",
+/// the lab's pairprior `pair+kit:tag`): a pair cell's value is its own part plus two
+/// parents it shares with other cells, so a thin cell is shrunk toward them, not 0:
+/// the same two champions in any slot of the kind (one table over the 10 ally blocks,
+/// unordered; one over the 15 matchup blocks, from the lower id's side), and a kit-class
+/// pair per block (signed as the cell; a same-role matchup of one class has none).
+/// Parents are random effects with MacKay variances (kit: one per block; pair: one per
+/// kind), fitted with the cells; a cell the fit games never had still gets its parents
+pub const Parents = struct {
+    /// Per param (pair cells only, else none): its kit and pair parent and their signs
+    kit_of: []u32,
+    kit_sign: []f32,
+    pair_of: []u32,
+    pair_sign: []f32,
+    /// Kit parents are 0..n_kit, pair parents n_kit..
+    n_kit: u32,
+    /// Per parent: its variance group (kit: the block's group; pair: n_groups ally,
+    /// n_groups + 1 matchups)
+    group: []u8,
+    index: std.AutoHashMapUnmanaged(u64, u32),
+    class: std.AutoHashMapUnmanaged(u32, u16),
+    /// The class of champions `class` doesn't know
+    none: u16,
+
+    pub const none_idx = std.math.maxInt(u32);
+
+    fn init(gpa: std.mem.Allocator, p: *const Problem, classes: []const KitClass) !Parents {
+        const np = p.n_params();
+        var x: Parents = .{
+            .kit_of = try gpa.alloc(u32, np),
+            .kit_sign = try gpa.alloc(f32, np),
+            .pair_of = try gpa.alloc(u32, np),
+            .pair_sign = try gpa.alloc(f32, np),
+            .n_kit = 0,
+            .group = &.{},
+            .index = .empty,
+            .class = .empty,
+            .none = 0,
+        };
+        errdefer x.deinit(gpa);
+        @memset(x.kit_of, none_idx);
+        @memset(x.pair_of, none_idx);
+        for (classes) |c| {
+            try x.class.put(gpa, c.id, c.class);
+            x.none = @max(x.none, c.class + 1);
+        }
+        var group: std.ArrayList(u8) = .empty;
+        defer group.deinit(gpa);
+        const lo = p.param_start[g_ally];
+        const hi = p.param_start[g_offset];
+        // Kit parents first, so they are 0..n_kit
+        for ([_]bool{ true, false }) |kit| {
+            for (lo..hi) |j| {
+                const cl = cellOf(p, j);
+                const pa = (if (kit) x.kitKey(cl.group, cl.a, cl.b) else pairKey(cl.group, cl.a, cl.b)) orelse continue;
+                const e = try x.index.getOrPut(gpa, pa[0]);
+                if (!e.found_existing) {
+                    e.value_ptr.* = @intCast(group.items.len);
+                    const grp: usize = if (kit) cl.group else if (cl.group < g_enemy) n_groups else n_groups + 1;
+                    try group.append(gpa, @intCast(grp));
+                }
+                if (kit) {
+                    x.kit_of[j] = e.value_ptr.*;
+                    x.kit_sign[j] = pa[1];
+                } else {
+                    x.pair_of[j] = e.value_ptr.*;
+                    x.pair_sign[j] = pa[1];
+                }
+            }
+            if (kit) x.n_kit = @intCast(group.items.len);
+        }
+        x.group = try group.toOwnedSlice(gpa);
+        return x;
+    }
+
+    pub fn deinit(x: *Parents, gpa: std.mem.Allocator) void {
+        gpa.free(x.kit_of);
+        gpa.free(x.kit_sign);
+        gpa.free(x.pair_of);
+        gpa.free(x.pair_sign);
+        gpa.free(x.group);
+        x.index.deinit(gpa);
+        x.class.deinit(gpa);
+    }
+
+    fn classOf(x: *const Parents, id: u32) u16 {
+        return x.class.get(id) orelse x.none;
+    }
+
+    fn kitKey(x: *const Parents, g: usize, a: u32, b: u32) ?struct { u64, f32 } {
+        const ka = x.classOf(a);
+        const kb = x.classOf(b);
+        const gr = groupRoles(g);
+        if (gr.ally or gr.r != gr.q) return .{ key(64 + g, ka, kb), 1 };
+        if (ka == kb) return null;
+        return .{ key(64 + g, @min(ka, kb), @max(ka, kb)), if (ka < kb) 1 else -1 };
+    }
+
+    fn pairKey(g: usize, a: u32, b: u32) ?struct { u64, f32 } {
+        if (a == b) return null;
+        if (g < g_enemy) return .{ key(128, @min(a, b), @max(a, b)), 1 };
+        return .{ key(129, @min(a, b), @max(a, b)), if (a < b) 1 else -1 };
+    }
+
+    /// The parents' part of pair cell (g, a, b), oriented as the cell's key
+    pub fn value(x: *const Parents, parent: []const f64, g: usize, a: u32, b: u32) f64 {
+        var v: f64 = 0;
+        if (x.kitKey(g, a, b)) |k| if (x.index.get(k[0])) |i| {
+            v += k[1] * parent[i];
+        };
+        if (pairKey(g, a, b)) |k| if (x.index.get(k[0])) |i| {
+            v += k[1] * parent[i];
+        };
+        return v;
+    }
+};
+
+pub const n_parent_groups = n_groups + 2;
 
 /// Fixed params: platform side 0..n_platforms, then cont features
 const fixed_params = n_platforms + n_cont;
@@ -320,6 +479,9 @@ pub const Config = struct {
     prior_scale: ?[]const f64 = null,
     /// The offset groups' variance, fixed instead of estimated
     offset_sigma2: ?f64 = null,
+    /// Problem.parents' steps halved while they raise the penalised loss (false: the lab
+    /// pairprior's steps as they were frozen)
+    parent_guard: bool = true,
 };
 
 pub const Fit = struct {
@@ -331,10 +493,16 @@ pub const Fit = struct {
     h: []f64,
     /// gaussian: residual variance
     noise: f64,
+    /// Problem.parents' values and variances (by Parents.group)
+    parent: []f64 = &.{},
+    parent_s2: [n_parent_groups]f64 = @splat(0),
+    /// Parent steps halved to keep the loss from rising (0 on real games so far)
+    parent_halvings: u32 = 0,
 
     pub fn deinit(f: *Fit, gpa: std.mem.Allocator) void {
         gpa.free(f.theta);
         gpa.free(f.h);
+        gpa.free(f.parent);
     }
 };
 
@@ -357,10 +525,38 @@ pub fn fit(gpa: std.mem.Allocator, p: *const Problem, cfg: Config, weights: ?[]c
     defer gpa.free(c);
     var sigma2: [n_groups]f64 = @splat(cfg.sigma2_init);
     var noise: f64 = 1;
+    const pa: ?*const Parents = if (p.parents) |*x| x else null;
+    const n_par = if (pa) |x| x.group.len else 0;
+    const parent = try gpa.alloc(f64, n_par);
+    errdefer gpa.free(parent);
+    const parent_h = try gpa.alloc(f64, n_par);
+    defer gpa.free(parent_h);
+    const parent_g = try gpa.alloc(f64, n_par);
+    defer gpa.free(parent_g);
+    var parent_s2: [n_parent_groups]f64 = @splat(cfg.sigma2_init);
+    @memset(parent, 0);
+    @memset(parent_h, 1);
+    // Parent steps: per pair cell, its summed gradient, curvature and change
+    const cell_lo = p.param_start[g_ally];
+    const cell_hi = if (pa != null) p.param_start[g_offset] else cell_lo;
+    const cell_g = try gpa.alloc(f64, cell_hi - cell_lo);
+    defer gpa.free(cell_g);
+    const cell_h = try gpa.alloc(f64, cell_g.len);
+    defer gpa.free(cell_h);
+    const cell_d = try gpa.alloc(f64, cell_g.len);
+    defer gpa.free(cell_d);
+    const pair_entries = p.entries[p.group_start[g_ally]..p.group_start[g_offset]];
+    const eta_try = try gpa.alloc(f64, if (pa != null) ng else 0);
+    defer gpa.free(eta_try);
+    var halvings: u32 = 0;
     if (warm) |w| {
         @memcpy(theta, w.theta);
         sigma2 = w.sigma2;
         noise = w.noise;
+        if (w.parent.len == n_par) {
+            @memcpy(parent, w.parent);
+            parent_s2 = w.parent_s2;
+        }
     } else {
         if (cfg.prior_mean) |m| @memcpy(theta, m) else @memset(theta, 0);
         if (p.kind == .gaussian) {
@@ -378,6 +574,15 @@ pub fn fit(gpa: std.mem.Allocator, p: *const Problem, cfg: Config, weights: ?[]c
     if (cfg.offset_sigma2) |v| @memset(sigma2[g_offset..], v);
     @memset(eta, 0);
     for (p.entries) |e| eta[e.game] += e.x * theta[e.param];
+    if (pa) |x| {
+        // A warm start's parents
+        for (cell_d, cell_lo..) |*d, j| {
+            d.* = 0;
+            if (x.kit_of[j] != Parents.none_idx) d.* += x.kit_sign[j] * parent[x.kit_of[j]];
+            if (x.pair_of[j] != Parents.none_idx) d.* += x.pair_sign[j] * parent[x.pair_of[j]];
+        }
+        for (pair_entries) |e| eta[e.game] += e.x * cell_d[e.param - cell_lo];
+    }
 
     const passes = if (cfg.estimate) cfg.outer * cfg.inner + cfg.final else cfg.final + cfg.inner;
     var pass: u32 = 0;
@@ -386,21 +591,7 @@ pub fn fit(gpa: std.mem.Allocator, p: *const Problem, cfg: Config, weights: ?[]c
             const lo = p.param_start[g];
             const hi = if (g == g_fixed) fixed_params else p.param_start[g + 1];
             if (hi <= lo) continue;
-            // Working residual and curvature per game
-            for (p.games, eta, r, c, 0..) |gm, e, *ri, *ci, i| {
-                const w: f64 = if (weights) |ws| ws[i] * gm.weight else gm.weight;
-                switch (p.kind) {
-                    .logistic => {
-                        const q = sigmoid(e);
-                        ri.* = w * (gm.y - q);
-                        ci.* = w * q * (1 - q);
-                    },
-                    .gaussian => {
-                        ri.* = w * (gm.y - e) / noise;
-                        ci.* = w / noise;
-                    },
-                }
-            }
+            working(p, weights, noise, eta, r, c);
             @memset(grad[lo..hi], 0);
             @memset(h[lo..hi], 0);
             const es = p.entries[p.group_start[g]..p.group_start[g + 1]];
@@ -417,6 +608,63 @@ pub fn fit(gpa: std.mem.Allocator, p: *const Problem, cfg: Config, weights: ?[]c
                 grad[j] = step;
             }
             for (es) |e| eta[e.game] += e.x * grad[e.param];
+        }
+        if (pa) |x| {
+            // Kit parents, then pair parents: one diagonal Newton step each on their
+            // cells' summed gradient and curvature
+            const steps = [_]struct { []const u32, []const f32, usize, usize }{
+                .{ x.kit_of, x.kit_sign, 0, x.n_kit },
+                .{ x.pair_of, x.pair_sign, x.n_kit, n_par },
+            };
+            for (steps) |st| {
+                if (st[3] <= st[2]) continue;
+                working(p, weights, noise, eta, r, c);
+                @memset(cell_g, 0);
+                @memset(cell_h, 0);
+                for (pair_entries) |e| {
+                    cell_g[e.param - cell_lo] += e.x * r[e.game];
+                    cell_h[e.param - cell_lo] += e.x * e.x * c[e.game];
+                }
+                const of = st[0][cell_lo..cell_hi];
+                const sign = st[1][cell_lo..cell_hi];
+                @memset(parent_g[st[2]..st[3]], 0);
+                @memset(parent_h[st[2]..st[3]], 0);
+                for (of, sign, cell_g, cell_h) |k, sg, gj, hj| {
+                    if (k == Parents.none_idx) continue;
+                    parent_g[k] += sg * gj;
+                    parent_h[k] += hj;
+                }
+                var prior_before: f64 = 0;
+                for (st[2]..st[3]) |k| {
+                    const lam = 1 / parent_s2[x.group[k]];
+                    parent_h[k] += lam;
+                    parent_g[k] = (parent_g[k] - lam * parent[k]) / parent_h[k];
+                    prior_before += 0.5 * lam * parent[k] * parent[k];
+                }
+                for (of, sign, cell_d) |k, sg, *d| d.* = if (k == Parents.none_idx) 0 else sg * parent_g[k];
+                // The parents of one step share game sides (a team's 10 ally pairs), so
+                // the diagonal step overshoots where data outweighs the prior (dense
+                // pairs: a 12-champion test ran to 150 logits). Halved until the
+                // penalised loss doesn't rise; fits on real games don't halve
+                const before = if (cfg.parent_guard) loss(p, weights, noise, eta) + prior_before else 0;
+                var scale: f64 = 1;
+                // Past 30 halvings the step is ~0: taken as is
+                for (0..31) |i| {
+                    @memcpy(eta_try, eta);
+                    for (pair_entries) |e| eta_try[e.game] += scale * e.x * cell_d[e.param - cell_lo];
+                    var prior_after: f64 = 0;
+                    for (st[2]..st[3]) |k| {
+                        const t = parent[k] + scale * parent_g[k];
+                        prior_after += 0.5 / parent_s2[x.group[k]] * t * t;
+                    }
+                    const after = if (cfg.parent_guard) loss(p, weights, noise, eta_try) + prior_after else 0;
+                    if (!cfg.parent_guard or after <= before + 1e-9 * @abs(before) or i == 30) break;
+                    scale /= 2;
+                    halvings += 1;
+                }
+                for (st[2]..st[3]) |k| parent[k] += scale * parent_g[k];
+                @memcpy(eta, eta_try);
+            }
         }
         const last_inner = (pass + 1) % cfg.inner == 0;
         if (cfg.estimate and pass < cfg.outer * cfg.inner and last_inner) {
@@ -437,6 +685,19 @@ pub fn fit(gpa: std.mem.Allocator, p: *const Problem, cfg: Config, weights: ?[]c
                 const floor = cfg.sigma2_floor * (if (p.kind == .gaussian) noise else 1);
                 sigma2[g] = if (gam > 1e-9) @max(ss / gam, floor) else floor;
             }
+            if (pa) |x| {
+                var ss: [n_parent_groups]f64 = @splat(0);
+                var gam: [n_parent_groups]f64 = @splat(0);
+                for (parent, parent_h, x.group) |t, hk, g| {
+                    ss[g] += t * t;
+                    gam[g] += 1 - 1 / (parent_s2[g] * hk);
+                }
+                const floor = cfg.sigma2_floor * (if (p.kind == .gaussian) noise else 1);
+                for (&parent_s2, ss, gam) |*v, sg, gm| {
+                    if (gm == 0 and sg == 0) continue;
+                    v.* = if (gm > 1e-9) @max(sg / gm, floor) else floor;
+                }
+            }
             if (p.kind == .gaussian) {
                 var s: f64 = 0;
                 var wsum: f64 = 0;
@@ -456,7 +717,38 @@ pub fn fit(gpa: std.mem.Allocator, p: *const Problem, cfg: Config, weights: ?[]c
     for (1..n_groups) |g| if (p.param_start[g + 1] <= p.param_start[g]) {
         sigma2[g] = 0;
     };
-    return .{ .theta = theta, .sigma2 = sigma2, .gamma = gamma, .h = h, .noise = noise };
+    return .{ .theta = theta, .sigma2 = sigma2, .gamma = gamma, .h = h, .noise = noise, .parent = parent, .parent_s2 = parent_s2, .parent_halvings = halvings };
+}
+
+/// The fit games' negative log likelihood (gaussian: up to a constant)
+fn loss(p: *const Problem, weights: ?[]const f32, noise: f64, eta: []const f64) f64 {
+    var s: f64 = 0;
+    for (p.games, eta, 0..) |gm, e, i| {
+        const w: f64 = if (weights) |ws| ws[i] * gm.weight else gm.weight;
+        s += w * switch (p.kind) {
+            .logistic => @max(e, 0) - gm.y * e + std.math.log1p(@exp(-@abs(e))),
+            .gaussian => (gm.y - e) * (gm.y - e) / (2 * noise),
+        };
+    }
+    return s;
+}
+
+/// Working residual and curvature per game
+fn working(p: *const Problem, weights: ?[]const f32, noise: f64, eta: []const f64, r: []f64, c: []f64) void {
+    for (p.games, eta, r, c, 0..) |gm, e, *ri, *ci, i| {
+        const w: f64 = if (weights) |ws| ws[i] * gm.weight else gm.weight;
+        switch (p.kind) {
+            .logistic => {
+                const q = sigmoid(e);
+                ri.* = w * (gm.y - q);
+                ci.* = w * q * (1 - q);
+            },
+            .gaussian => {
+                ri.* = w * (gm.y - e) / noise;
+                ci.* = w / noise;
+            },
+        }
+    }
 }
 
 fn meanOf(cfg: Config, j: usize) f64 {
@@ -563,6 +855,9 @@ pub fn predict(p: *const Problem, f: *const Fit, g: *const GameIn) f64 {
         const n = cells(gr, &g.teams, &buf, p.variant.matchup, g.offset);
         for (buf[0..n]) |cl| {
             if (p.keys.get(cl[0])) |j| x += cl[1] * f.theta[j];
+            if (p.parents) |*pa| if (gr >= g_ally and gr < g_offset) {
+                x += cl[1] * pa.value(f.parent, gr, @intCast(cl[0] >> 24 & 0xffffff), @intCast(cl[0] & 0xffffff));
+            };
         }
     }
     return x;
@@ -828,4 +1123,65 @@ test "prior mean and scale: cells without data stay at the mean, a looser cell m
     var loose = try fit(gpa, &p, cfg, null, null);
     defer loose.deinit(gpa);
     try testing.expect(@abs(loose.theta[j]) > 1.5 * @abs(plain.theta[j]));
+}
+
+test "kit classes: one per distinct tag string, in sorted order" {
+    const gpa = testing.allocator;
+    const k = try KitClass.fromTags(gpa, &.{ 1, 2, 3, 4 }, &.{ "Tank", "Fighter,Tank", "Tank", "Mage" });
+    defer gpa.free(k);
+    try testing.expectEqual(2, k[0].class);
+    try testing.expectEqual(0, k[1].class);
+    try testing.expectEqual(2, k[2].class);
+    try testing.expectEqual(1, k[3].class);
+}
+
+test "parents: counters planted in every slot reach a slot the pair never met in" {
+    const gpa = testing.allocator;
+    var rng: std.Random.DefaultPrng = .init(5);
+    const rnd = rng.random();
+    // 14 flex champions, 10 a game in any roles; champion a beats b by d[a][b] wherever
+    // they meet as enemies (sd 0.3, 1 beats 2 by 0.5), but 1 and 2 never meet top vs
+    // jungle. (With every champion in every game, d would be champion strength only)
+    var d: [15][15]f64 = @splat(@splat(0));
+    for (1..15) |a| for (a + 1..15) |b| {
+        d[a][b] = rnd.floatNorm(f64) * 0.3;
+        d[b][a] = -d[a][b];
+    };
+    d[1][2] = 0.5;
+    d[2][1] = -0.5;
+    const games = try gpa.alloc(GameIn, 40_000);
+    defer gpa.free(games);
+    for (games) |*g| {
+        g.* = .{ .teams = undefined, .platform = 0, .y = 0 };
+        while (true) {
+            var pick: [14]u32 = undefined;
+            for (&pick, 0..) |*x, i| x.* = @intCast(1 + i);
+            rnd.shuffle(u32, &pick);
+            for (0..2) |s| for (0..n_role) |r| {
+                g.teams[s][r] = pick[s * n_role + r];
+            };
+            const t = g.teams;
+            const top_jg = (t[0][0] == 1 and t[1][1] == 2) or (t[0][0] == 2 and t[1][1] == 1) or
+                (t[1][0] == 1 and t[0][1] == 2) or (t[1][0] == 2 and t[0][1] == 1);
+            if (!top_jg) break;
+        }
+        var eta: f64 = 0;
+        for (g.teams[0]) |a| for (g.teams[1]) |b| {
+            eta += d[a][b];
+        };
+        g.y = if (rnd.float(f64) < sigmoid(eta)) 1 else 0;
+    }
+    var p = try build(gpa, .logistic, Variant.mains().matchupGroups(), games);
+    defer p.deinit(gpa);
+    try testing.expect(p.keys.get(key(enemyGroup(0, 1), 1, 2)) == null);
+    var classes: [14]KitClass = undefined;
+    for (&classes, 0..) |*c, i| c.* = .{ .id = @intCast(1 + i), .class = 0 };
+    try p.addParents(gpa, &classes);
+    var f = try fit(gpa, &p, quick, null, null);
+    defer f.deinit(gpa);
+    // The top vs jungle cell alone: 1 against 2 there, from the top side
+    const v = p.parents.?.value(f.parent, enemyGroup(0, 1), 1, 2);
+    try testing.expect(v > 0.2 and v < 0.7);
+    // Reversed roles read the same parent with the sign of the lower id's side
+    try testing.expectApproxEqAbs(-v, p.parents.?.value(f.parent, enemyGroup(0, 1), 2, 1), 1e-12);
 }

@@ -165,15 +165,21 @@ pub const usage_stats =
     \\              --platform P     Riot platform id, repeatable or comma separated
     \\                               (default EUW1; "all" for every platform in
     \\                               riot/endpoints.zig)
+    \\              --pair-prior     pair cells borrow strength (A4, lab; not shipped)
     \\
 ;
 
 pub fn cmdStats(c: *Cmd) !u8 {
     var g: Games = .{};
     var out: ?[]const u8 = null;
+    var fit: stats.Fit = .v2;
     while (c.next()) |_| {
         if (try g.parse(c)) continue;
-        if (c.is("--out")) out = try c.value() else return error.Usage;
+        if (c.is("--out")) {
+            out = try c.value();
+        } else if (c.is("--pair-prior")) {
+            fit = .pair_prior;
+        } else return error.Usage;
     }
     const io = c.init.io;
     const db = try c.open();
@@ -185,7 +191,7 @@ pub fn cmdStats(c: *Cmd) !u8 {
     const path = out orelse
         try c.arena.print("{s}/export/stats-{s}.bin", .{ c.data_dir, label });
 
-    var r = try stats.buildSince(c.init.gpa, db, null, chosen, platforms, 0, true);
+    var r = try stats.buildSince(c.init.gpa, db, null, chosen, platforms, 0, fit);
     defer r.builder.deinit();
     if (r.summary.games == 0) {
         std.log.err("no complete ranked solo games on patch {s}", .{label});

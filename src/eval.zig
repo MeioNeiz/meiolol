@@ -24,6 +24,7 @@ const Date = @import("date.zig").Date;
 const tsvlog = @import("tsvlog.zig");
 const analysis = @import("analysis.zig");
 const fitted = @import("fitted.zig");
+const additive = @import("additive.zig");
 const draftfile = @import("draftfile.zig");
 const score = core.score;
 const Role = core.Role;
@@ -45,6 +46,9 @@ pub const Options = struct {
     /// Lab set nets (seeds of one export, draftfile.SetNet) scored as a correction on the
     /// shipped model, one more row; each must have seen no game from the scored window on
     setnets: []const draftfile.SetNet = &.{},
+    /// One more row: the current model with pair cells that borrow strength (fitted.zig's
+    /// kit classes, A4), a lab model until shipped
+    pair_prior: bool = false,
 };
 
 const Game = stats.Row;
@@ -140,6 +144,14 @@ pub fn run(
     var nets: ?SetNets = if (opts.setnets.len > 0) try .init(gpa, opts.setnets, platforms, &shipped.stats, if (opts.dev) parts.cuts.dev else parts.cuts.test_) else null;
     defer if (nets) |*x| x.deinit(gpa);
     if (nets) |*x| try predictors.append(gpa, .{ .label = "current model + set net (lab)", .kind = .{ .setnet = x } });
+    var pair_prior: ?Model = null;
+    defer if (pair_prior) |*m| m.deinit(gpa);
+    if (opts.pair_prior) {
+        const classes = try stats.kitClasses(gpa, db);
+        defer gpa.free(classes);
+        pair_prior = try .buildWith(gpa, champs, train, null, classes);
+        try predictors.append(gpa, .{ .label = "current model, pair cells borrow strength (lab)", .kind = .{ .shipped = &pair_prior.?.stats } });
+    }
     const eb = score.empiricalPriors(&full.stats, eb_min_games);
     try w.print("## Full draft, held-out games\n\nEmpirical-Bayes priors from train (cells " ++
         "with {d}+ games): base {f}, duo {f}, lane {f}, other matchups {f}.\n\n", .{
@@ -753,29 +765,33 @@ pub const Model = struct {
         games: []const Game,
         skip: ?Fold,
     ) !Model {
-        return buildWith(gpa, champs, games, skip, false);
+        return buildWith(gpa, champs, games, skip, null);
     }
 
     /// As the site and app get it: with the draft model fitted on `games` (fitted.zig)
     pub fn buildShipped(gpa: std.mem.Allocator, champs: []const core.statsfile.Champion, games: []const Game) !Model {
-        return buildWith(gpa, champs, games, null, true);
+        return buildWith(gpa, champs, games, null, &.{});
     }
 
+    /// classes: null, no fitted model; else fitted, with pair parents if not empty
     fn buildWith(
         gpa: std.mem.Allocator,
         champs: []const core.statsfile.Champion,
         games: []const Game,
         skip: ?Fold,
-        fit: bool,
+        classes: ?[]const additive.KitClass,
     ) !Model {
         var b: core.statsfile.Builder = try .init(gpa, champs);
         defer b.deinit();
         var played: fitted.Games = .{ .gpa = gpa };
         defer played.deinit();
+        if (classes) |c| if (c.len > 0) {
+            played.classes = c;
+        };
         for (games, 0..) |g, i| {
             if (skip) |f| if (i % f.folds == f.k) continue;
             b.addGame(g.teams, g.winner);
-            if (fit) try played.add(g.teams, g.winner, g.platform, g.duration_s);
+            if (classes != null) try played.add(g.teams, g.winner, g.platform, g.duration_s);
         }
         try played.attachTo(&b);
         var aw: std.Io.Writer.Allocating = .init(gpa);
