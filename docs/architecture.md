@@ -848,32 +848,32 @@ level still pickable.
   widened to every pickable champion below 3 options; 3-5 shown, each with lane gold vs
   the opponent (green/red only when 2 SE from even and not mostly baseline), mastery and
   team-fit facts, never win-chance numbers. Riot boilerplate in the footer
-- In game (APP9, private edition; ingame.zig, desktop/game.zig): in InProgress the
-  poller reads Live Client Data (lcu/live.zig: 127.0.0.1:2999 allgamedata, Riot's root,
-  plain for the mock) each tick. Rows by position (blank ones inferred as in champ
-  select), gold from each player's item prices (the game shows only your own), score
-  and respawns from the event feed (dragon 5 min, elder 6, Baron 6, inhibitor 5, only
-  after a kill), my lane's CS and item gold against the matchup's curve at this whole
-  minute (p10/p25/p75/p90 in words). The poller keeps the team gold every 20 s of game
-  time for the chart (new game: game time goes back)
+- In game (APP9, private edition; ingame.zig, desktop/private/game.zig): in InProgress
+  the poller reads Live Client Data (lcu/live.zig: 127.0.0.1:2999 allgamedata, Riot's
+  root, plain for the mock) each tick. Rows by position (blank ones inferred as in champ
+  select), gold from each player's item prices (the game shows only your own), score and
+  respawns from the event feed (dragon 5 min, elder 6, Baron 6, inhibitor 5, only after
+  a kill), my lane's CS and item gold against the matchup's curve at this whole minute
+  (p10/p25/p75/p90 in words). The poller keeps the team gold every 20 s of game time for
+  the chart (new game: game time goes back)
 - Loading screen (APP10; loading.zig, desktop/loadscreen.zig): the poller keeps the
   last champ select's seats and draft (seats_arena) and in GameStart builds ten cards
   from them; nothing shows when it saw no champ select
-- Post game (APP11; postgame.zig, desktop/post.zig): in PreEndOfGame and EndOfGame the
-  poller reads the end of game block (lcu/eog.zig) and builds the view with the game's
-  gold samples and the positions the last in-game tick saw; tier and mastery are kept
-  from champ select through the game until the next lobby
-- Practice (private edition; practice.zig, desktop/practice.zig): the header's Practice
-  button, whenever the client is not in champ select or a game, gives a bar to set
-  screen (champ select, loading, in game, post game), stage, role, pick place, a random
-  draft (locked, champions by games in each role), bans, minute, lead and result. Seats
-  and bans open a champion picker (search, most played in the role first); a lane
+- Post game (APP11; postgame.zig, desktop/post.zig, rows.zig as in game): in
+  PreEndOfGame and EndOfGame the poller reads the end of game block (lcu/eog.zig) and
+  builds the view with the game's gold samples and the positions the last in-game tick
+  saw; tier and mastery are kept from champ select through the game until the next lobby
+- Practice (private edition; practice.zig, desktop/private/practice.zig): the header's
+  Practice button, whenever the client is not in champ select or a game, gives a bar to
+  set screen (champ select, loading, in game, post game), stage, role, pick place, a
+  random draft (locked, champions by games in each role), bans, minute, lead and result.
+  Seats and bans open a champion picker (search, most played in the role first); a lane
   option hovers it as my pick, a second click locks; an idea fills that ally; a ban
   option is my ban. The setup (under the poller's mutex) becomes a mock client state
   (lcu/mock.zig's reply builders, no server) read back through session/live/eog parse
-  and the same builders, so hidden enemy hovers and turns behave as in a real select;
-  in picks it is always my turn (locked seats picked before me). Game numbers are made
-  up from the minute and lead. Each change bumps a counter the poller waits on
+  and the same builders, so hidden enemy hovers and turns behave as in a real select; in
+  picks it is always my turn (locked seats picked before me). Game numbers are made up
+  from the minute and lead. Each change bumps a counter the poller waits on
   (futexWaitTimeout, else 1 s), so a click redraws without a client round trip. A real
   champ select or game takes over until it ends. Icons need the client open, else
   initials

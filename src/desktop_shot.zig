@@ -18,7 +18,7 @@ const ingame = @import("ingame.zig");
 const postgame = @import("postgame.zig");
 const loading = @import("loading.zig");
 const practice = @import("practice.zig");
-const practice_ui = @import("desktop/practice.zig");
+const practice_ui = @import("desktop/private/practice.zig");
 
 const Shot = struct {
     name: []const u8,

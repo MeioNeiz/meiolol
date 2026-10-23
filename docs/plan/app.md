@@ -9,9 +9,10 @@ review" (J7). How it is built: docs/architecture.md "App" and "Desktop window";
 
 ## Two editions
 
-- Build option `-Dedition=public|private`. Private features live in their own modules,
-  imported only under a comptime check, so the public exe holds none of their code or
-  strings (Riot may look at it; friends' features shouldn't leak through it)
+- Build option `-Dedition=public|private`. Private features live in their own modules
+  (src/desktop/private/), called only under a comptime check, so the public exe holds
+  none of their code or strings (Riot may look at it; friends' features shouldn't leak
+  through it); ci checks it (APP2)
 - Both share the poller, the lane card, data files, signing and updates. The private
   edition reads extra data files (e.g. raw model outputs) that only /p/desktop/ serves
 - deploy/desktop-release.sh builds, fuzzes and signs both; each has its own update
@@ -97,9 +98,13 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
   records which identity fields each queue fills in. First real check of Live Client
   Data's certificate: a "live client data: <error>" line in record's output means
   https.get needs another root for port 2999
-- APP2 Editions in the build: `-Dedition`, module split, both in `zig build ci`, release
-  script builds and signs both. Done when the public exe's strings hold no private
-  module names (a ci check)
+- APP2 Editions in the build: done 24 Oct. `-Dedition=public|private`; private-only UI
+  lives in src/desktop/private/ (in-game panel, practice) and every call into it, and
+  every `ctx.private()` branch, sits behind widgets.private_code, comptime false in the
+  public exe, so none of it is compiled in. `zig build ci` builds both and runs
+  deploy/check-edition.sh: no desktop/private/ path (dvui's @src() leaves one per
+  module with widgets) in the public exe, every one in the private exe (else the check
+  is blind). A new private module goes in desktop/private/. Release script: AC5
 - APP3 Every role and pick order (both editions). Done: the board (Window layout
   below) with the mode chip and ideas for allies still to pick. Left: switch the lane
   panel to any ally's role (click a seat), and the blind-safe ranking itself (J2:

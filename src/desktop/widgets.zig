@@ -7,6 +7,10 @@ const core = @import("core");
 const icons = @import("icons.zig");
 const board = @import("../board.zig");
 
+/// False in the public exe: no private-edition code is compiled into it, desktop/private/
+/// above all (deploy/check-edition.sh). The shots and the dev window carry both editions
+pub const private_code = !@import("build_options").public;
+
 pub const Ctx = struct {
     stats: *const core.Stats,
     icons: *const icons.Icons,
@@ -14,8 +18,9 @@ pub const Ctx = struct {
     /// Wide layout: teams beside the lane panel
     wide: bool,
 
-    pub fn private(c: Ctx) bool {
-        return c.edition == .private;
+    /// Inline: comptime false in the public exe, so what it guards is never compiled
+    pub inline fn private(c: Ctx) bool {
+        return private_code and c.edition == .private;
     }
 };
 

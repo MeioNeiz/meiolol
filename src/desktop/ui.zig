@@ -12,10 +12,10 @@ const Icons = @import("icons.zig").Icons;
 const w = @import("widgets.zig");
 const lane = @import("lane.zig");
 const teams = @import("teams.zig");
-const game = @import("game.zig");
+const game = @import("private/game.zig");
 const post = @import("post.zig");
 const loadscreen = @import("loadscreen.zig");
-const practice = @import("practice.zig");
+const practice = @import("private/practice.zig");
 const loading = @import("../loading.zig");
 const ingame = @import("../ingame.zig");
 const postgame = @import("../postgame.zig");
@@ -31,6 +31,7 @@ const wide_from = 900;
 const side_width = 270;
 
 pub const Edition = board.Edition;
+pub const private_code = w.private_code;
 
 /// Champ select as shown: the lane card and the board around it
 pub const Select = struct {
@@ -90,14 +91,14 @@ pub fn frame(v: View) void {
         .style = .window,
     });
     defer root.deinit();
-    practice.begin(v.practice);
+    if (w.private_code) practice.begin(v.practice);
     const wide = dvui.windowRect().w >= wide_from;
     header(v);
-    if (v.stats) |stats| {
+    if (w.private_code) if (v.stats) |stats| {
         const ctx: w.Ctx = .{ .stats = stats, .icons = v.icons, .edition = v.edition, .wide = wide };
         practice.bar(ctx);
-    }
-    defer if (v.stats) |stats| practice.picker(.{ .stats = stats, .icons = v.icons, .edition = v.edition, .wide = wide });
+    };
+    defer if (w.private_code) if (v.stats) |stats| practice.picker(.{ .stats = stats, .icons = v.icons, .edition = v.edition, .wide = wide });
 
     switch (v.status) {
         .select => |s| {
@@ -105,13 +106,15 @@ pub fn frame(v: View) void {
             if (wide) wideSelect(ctx, s) else narrowSelect(ctx, s);
         },
         // The public edition gets the panel once the private one has proved it
-        .in_game => |g| if (v.edition == .private) {
+        .in_game => |g| {
             const ctx: w.Ctx = .{ .stats = v.stats.?, .icons = v.icons, .edition = v.edition, .wide = wide };
-            if (wide) game.wide(ctx, g) else game.narrow(ctx, g);
-        } else {
-            var body = dvui.box(@src(), .{ .dir = .vertical }, .{ .expand = .both, .padding = .all(16) });
-            defer body.deinit();
-            w.para(@src(), "In game. The board comes back in your next champ select.", .{}, .{});
+            if (ctx.private()) {
+                if (wide) game.wide(ctx, g) else game.narrow(ctx, g);
+            } else {
+                var body = dvui.box(@src(), .{ .dir = .vertical }, .{ .expand = .both, .padding = .all(16) });
+                defer body.deinit();
+                w.para(@src(), "In game. The board comes back in your next champ select.", .{}, .{});
+            }
         },
         .loading => |l| loadscreen.view(.{ .stats = v.stats.?, .icons = v.icons, .edition = v.edition, .wide = wide }, l),
         .post_game => |p| {
@@ -156,7 +159,7 @@ fn header(v: View) void {
     dvui.labelNoFmt(@src(), title, .{}, .{ .font = dvui.themeGet().font_title, .gravity_y = 0.5, .padding = .{ .w = 8 } });
     if (v.edition == .private) w.chip(@src(), "private", palette.private, 0);
     // Testers first, as the in-game panel
-    if (v.edition == .private and v.stats != null and (v.practice != null and v.practice.?.setup.* != null or !live(v.status))) practice.toggle(@src());
+    if (w.private_code and v.edition == .private and v.stats != null and (v.practice != null and v.practice.?.setup.* != null or !live(v.status))) practice.toggle(@src());
     if (dvui.windowRect().w >= wide_from) {
         stepper(v.status);
     } else {

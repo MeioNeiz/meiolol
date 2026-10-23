@@ -6,7 +6,7 @@ const dvui = @import("dvui");
 const lanecard = @import("../lanecard.zig");
 const board = @import("../board.zig");
 const w = @import("widgets.zig");
-const practice = @import("practice.zig");
+const practice = @import("private/practice.zig");
 const Ctx = w.Ctx;
 const palette = w.palette;
 
@@ -173,7 +173,7 @@ fn signed(gpa: std.mem.Allocator, tick: f64) std.mem.Allocator.Error![]const u8 
 fn option(ctx: Ctx, i: usize, o: lanecard.Option, current: bool) void {
     var box = w.card(@src(), i, if (current) dvui.themeGet().color(.highlight, .fill) else null, .horizontal);
     defer box.deinit();
-    if (practice.editing() and dvui.clicked(box.data(), .{})) practice.take(o.champion);
+    if (w.private_code and practice.editing() and dvui.clicked(box.data(), .{})) practice.take(o.champion);
     w.champIcon(@src(), ctx, o.champion, .{ .size = 44 });
     if (ctx.private()) {
         // Testers: the draft model's team win chance with this pick, at the right

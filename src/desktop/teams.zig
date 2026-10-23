@@ -7,7 +7,7 @@ const dvui = @import("dvui");
 const core = @import("core");
 const board = @import("../board.zig");
 const w = @import("widgets.zig");
-const practice = @import("practice.zig");
+const practice = @import("private/practice.zig");
 const Ctx = w.Ctx;
 const palette = w.palette;
 
@@ -87,7 +87,7 @@ fn seat(ctx: Ctx, i: usize, s: board.Seat, side: Side) void {
     }
     if (s.ideas.len > 0) ideas(ctx, s.ideas, s.role);
     // Last, so an idea's own click goes to the idea
-    if (practice.editing() and dvui.clicked(box.data(), .{})) {
+    if (w.private_code and practice.editing() and dvui.clicked(box.data(), .{})) {
         if (side == .theirs) practice.open(.{ .enemy = @intCast(i) }) else if (s.role) |r| practice.open(.{ .ally = r });
     }
 }
@@ -116,7 +116,7 @@ fn ideas(ctx: Ctx, list: []const u32, role: ?core.Role) void {
     for (list, 0..) |c, i| {
         var icon = dvui.box(@src(), .{}, .{ .id_extra = i });
         w.champIcon(@src(), ctx, c, .{ .size = 26 });
-        if (practice.editing() and dvui.clicked(icon.data(), .{})) if (role) |r| practice.fill(.{ .ally = r }, c);
+        if (w.private_code and practice.editing() and dvui.clicked(icon.data(), .{})) if (role) |r| practice.fill(.{ .ally = r }, c);
         icon.deinit();
         _ = dvui.spacer(@src(), .{ .id_extra = i, .min_size_content = .{ .w = 4 } });
     }
@@ -180,7 +180,7 @@ pub fn banOptions(ctx: Ctx, b: *const board.Board) void {
     for (b.ban_options, 0..) |o, i| {
         var box = w.card(@src(), i, null, .horizontal);
         defer box.deinit();
-        if (practice.editing() and dvui.clicked(box.data(), .{})) practice.ban(o.champion);
+        if (w.private_code and practice.editing() and dvui.clicked(box.data(), .{})) practice.ban(o.champion);
         w.champIcon(@src(), ctx, o.champion, .{ .size = 32 });
         var col = dvui.box(@src(), .{ .dir = .vertical }, .{ .expand = .horizontal, .margin = .{ .x = 8 }, .gravity_y = 0.5 });
         defer col.deinit();

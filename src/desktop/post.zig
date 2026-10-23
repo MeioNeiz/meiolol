@@ -6,7 +6,7 @@ const std = @import("std");
 const dvui = @import("dvui");
 const postgame = @import("../postgame.zig");
 const w = @import("widgets.zig");
-const game = @import("game.zig");
+const rows = @import("rows.zig");
 const Ctx = w.Ctx;
 const palette = w.palette;
 
@@ -19,11 +19,11 @@ pub fn wide(ctx: Ctx, p: *const postgame.PostGame) void {
     {
         var left = dvui.box(@src(), .{ .dir = .vertical }, .{ .expand = .both, .margin = .{ .w = 10 } });
         defer left.deinit();
-        rows(ctx, p);
+        lanes(ctx, p);
     }
     var right = dvui.box(@src(), .{ .dir = .vertical }, .{ .expand = .both, .margin = .{ .x = 10 } });
     defer right.deinit();
-    game.teamGold(p.history);
+    rows.teamGold(p.history);
     damage(ctx, p);
 }
 
@@ -33,8 +33,8 @@ pub fn narrow(ctx: Ctx, p: *const postgame.PostGame) void {
     var col = dvui.box(@src(), .{ .dir = .vertical }, .{ .expand = .horizontal, .padding = .all(12) });
     defer col.deinit();
     summary(ctx, p);
-    game.teamGold(p.history);
-    rows(ctx, p);
+    rows.teamGold(p.history);
+    lanes(ctx, p);
     damage(ctx, p);
 }
 
@@ -90,7 +90,7 @@ fn award(ctx: Ctx, i: usize, a: postgame.Award) void {
     dvui.labelNoFmt(@src(), ctx.stats.nameOf(a.champion), .{}, .{ .font = w.small(), .color_text = .{ .color = team.lighten(10) }, .padding = .{} });
 }
 
-fn rows(ctx: Ctx, p: *const postgame.PostGame) void {
+fn lanes(ctx: Ctx, p: *const postgame.PostGame) void {
     {
         var head = dvui.box(@src(), .{ .dir = .horizontal }, .{ .expand = .horizontal, .margin = .{ .y = 8, .h = 2 } });
         defer head.deinit();
@@ -99,7 +99,7 @@ fn rows(ctx: Ctx, p: *const postgame.PostGame) void {
     }
     for (p.rows, 0..) |r, i| {
         var bufs: [2][64]u8 = undefined;
-        var views: [2]?game.SeatView = .{ null, null };
+        var views: [2]?rows.SeatView = .{ null, null };
         for ([_]?postgame.Seat{ r.ours, r.theirs }, &views, &bufs) |s_or, *v, *buf| {
             const s = s_or orelse continue;
             var dbuf: [16]u8 = undefined;
@@ -110,7 +110,7 @@ fn rows(ctx: Ctx, p: *const postgame.PostGame) void {
                 std.fmt.bufPrint(buf, "{d}/{d}/{d} · {d}", .{ s.kills, s.deaths, s.assists, s.cs });
             v.* = .{ .champion = s.champion, .me = s.me, .line = line catch "" };
         }
-        game.mirrored(ctx, i, r.role, views[0], views[1], r.goldDiff());
+        rows.mirrored(ctx, i, r.role, views[0], views[1], r.goldDiff());
     }
     w.para(@src(), "{s}Between the rows: gold earned over the game, you minus them.", .{
         if (ctx.wide) "" else "Kills/deaths/assists · cs. ",

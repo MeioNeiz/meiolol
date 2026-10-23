@@ -151,7 +151,13 @@ pub fn build(b: *std.Build) void {
             ci.dependOn(&b.addExecutable(.{ .name = name, .root_module = mod }).step);
         }
     }
-    for ([_]Edition{ .private, .public }) |e| if (desktopExe(b, windows, .Debug, 0, e)) |exe| ci.dependOn(&exe.step);
+    if (desktopExe(b, windows, .Debug, 0, .public)) |public| if (desktopExe(b, windows, .Debug, 0, .private)) |private| {
+        const editions = b.addSystemCommand(&.{"deploy/check-edition.sh"});
+        editions.addFileArg(public.getEmittedBin());
+        editions.addFileArg(private.getEmittedBin());
+        editions.setCwd(b.path("."));
+        ci.dependOn(&editions.step);
+    };
     if (shot) |exe| ci.dependOn(&exe.step);
     ci.dependOn(&mock_exe.step);
     // Debug: ci only needs it to compile, and ReleaseFast spends up to a minute in LLVM
@@ -325,13 +331,19 @@ fn desktopExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lan
             },
         }),
     });
-    const options = b.addOptions();
-    options.addOption(u64, "desktop_version", version);
-    options.addOption(bool, "public", edition == .public);
-    exe.root_module.addOptions("build_options", options);
+    exe.root_module.addOptions("build_options", desktopOptions(b, version, edition));
     exe.root_module.addWin32ResourceFile(.{ .file = b.path("src/desktop/meiolol.rc") });
     exe.subsystem = .windows;
     return exe;
+}
+
+/// The exe's release and edition. Private compiles both editions' code in (the edition
+/// shown is a runtime choice), public only its own (src/desktop/widgets.zig private_code)
+fn desktopOptions(b: *std.Build, version: u64, edition: Edition) *std.Build.Step.Options {
+    const options = b.addOptions();
+    options.addOption(u64, "desktop_version", version);
+    options.addOption(bool, "public", edition == .public);
+    return options;
 }
 
 /// The desktop window through dvui's SDL3 backend (src/desktop_dev.zig), for trying it
@@ -352,6 +364,7 @@ fn desktopDev(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lan
             .{ .name = "dvui", .module = dvui.module("dvui_sdl3") },
         },
     });
+    mod.addOptions("build_options", desktopOptions(b, 0, .private));
     // dvui's macOS monitor helper (Objective-C) needs these at link time
     if (target.result.os.tag == .macos) {
         mod.linkFramework("AppKit", .{});
@@ -379,7 +392,7 @@ fn desktopShot(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.la
         .imports = &.{.{ .name = "dvui", .module = dvui_mod }},
     });
     dvui_mod.addImport("backend", raster);
-    return b.addExecutable(.{
+    const exe = b.addExecutable(.{
         .name = "meiolol-desktop-shot",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/desktop_shot.zig"),
@@ -392,6 +405,8 @@ fn desktopShot(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.la
             },
         }),
     });
+    exe.root_module.addOptions("build_options", desktopOptions(b, 0, .private));
+    return exe;
 }
 
 /// Templates that must not compile (src/tpl/compile_errors.zig), each built on its own and

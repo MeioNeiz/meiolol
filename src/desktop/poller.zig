@@ -226,7 +226,7 @@ fn poll(gpa: std.mem.Allocator) void {
         const setup = shared.practice;
         shared.mutex.unlock(io);
         // A practice change alone needs no round trip to the client
-        const practice_only = gen != seen_gen and setup != null and shared.data != null;
+        const practice_only = ui.private_code and gen != seen_gen and setup != null and shared.data != null;
         seen_gen = gen;
         var status: ?ui.Status = null;
         if (!practice_only) {
@@ -241,7 +241,7 @@ fn poll(gpa: std.mem.Allocator) void {
             status = s;
         }
         var practicing = false;
-        if (setup != null and !live) if (shared.data) |d| {
+        if (ui.private_code and setup != null and !live) if (shared.data) |d| {
             if (p.practiceStatus(arena.allocator(), d, setup.?, gen)) |s| {
                 status = s;
                 practicing = true;
