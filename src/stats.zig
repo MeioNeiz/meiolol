@@ -186,12 +186,13 @@ pub const Slice = struct {
     }
 };
 
-/// "16.20" as 16020, for ordering and comparing patches cheaply
+/// "16.20" as 16020, for ordering and comparing patches cheaply. u16 parts, as
+/// crawl.Patches.code: a match stored from a bogus gameVersion can't overflow it
 pub fn patchKey(patch: []const u8) u32 {
     var it = std.mem.splitScalar(u8, patch, '.');
-    const major = std.fmt.parseInt(u32, it.next() orelse "", 10) catch 0;
-    const minor = std.fmt.parseInt(u32, it.next() orelse "", 10) catch 0;
-    return major * 1000 + minor;
+    const major = std.fmt.parseInt(u16, it.next() orelse "", 10) catch 0;
+    const minor = std.fmt.parseInt(u16, it.next() orelse "", 10) catch 0;
+    return @as(u32, major) * 1000 + minor;
 }
 
 /// Every valid game (as for `build`) started from `since_ms` (0: any) to
@@ -562,6 +563,13 @@ test "build counts valid games only" {
     var kr = try build(gpa, db, &.{"16.20"}, &.{"KR"});
     defer kr.builder.deinit();
     try testing.expectEqual(1, kr.summary.games);
+}
+
+test patchKey {
+    try testing.expectEqual(16020, patchKey("16.20"));
+    try testing.expectEqual(16000, patchKey("16"));
+    // A bogus gameVersion is stored as its patch: no overflow
+    try testing.expectEqual(1, patchKey("99999999.1"));
 }
 
 test "patch order and label" {
