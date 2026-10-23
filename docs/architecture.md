@@ -856,10 +856,25 @@ level still pickable.
   poller reads the end of game block (lcu/eog.zig) and builds the view with the game's
   gold samples and the positions the last in-game tick saw; tier and mastery are kept
   from champ select through the game until the next lobby
+- Practice (private edition; practice.zig, desktop/practice.zig): the header's Practice
+  button, whenever the client is not in champ select or a game, gives a bar to set
+  screen (champ select, loading, in game, post game), stage, role, pick place, a random
+  draft (locked, champions by games in each role), bans, minute, lead and result. Seats
+  and bans open a champion picker (search, most played in the role first); a lane
+  option hovers it as my pick, a second click locks; an idea fills that ally; a ban
+  option is my ban. The setup (under the poller's mutex) becomes a mock client state
+  (lcu/mock.zig's reply builders, no server) read back through session/live/eog parse
+  and the same builders, so hidden enemy hovers and turns behave as in a real select;
+  in picks it is always my turn (locked seats picked before me). Game numbers are made
+  up from the minute and lead. Each change bumps a counter the poller waits on
+  (futexWaitTimeout, else 1 s), so a click redraws without a client round trip. A real
+  champ select or game takes over until it ends. Icons need the client open, else
+  initials
 - `zig build desktop-shot -- --stats F --curves F [--out DIR] [--min-games N]`: the
   window's states (fixture champ selects in desktop_shot.zig, the loading screen
   from one, in game and post
-  game from testdata/lcu/live-allgamedata.json and eog-stats-block.json) as PNGs at 100%, 150% and
+  game from testdata/lcu/live-allgamedata.json and eog-stats-block.json, practice from a
+  seeded random draft, picker open in one) as PNGs at 100%, 150% and
   full height, drawn by desktop/raster.zig (premultiplied "over" blending, top-left
   fill rule); no screen or client needed. `zig build ci` compiles both. Test data
   (data/desktop, gitignored): `deploy/box.sh run stats --platform all --out FILE` on the

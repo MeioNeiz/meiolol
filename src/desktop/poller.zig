@@ -3,7 +3,8 @@
 //! that reads the League client once a second and publishes what to show; the UI thread
 //! only draws it. Read-only GETs, as `meiolol-app watch`. An update thread keeps the
 //! data and the exe current from meio.lol (update.zig); new data is swapped in by the
-//! poller between ticks.
+//! poller between ticks. Practice (practice.zig) is built here too, from the window's
+//! setup, whenever the client is not in champ select or a game.
 
 const std = @import("std");
 const core = @import("core");
@@ -13,6 +14,7 @@ const board = @import("../board.zig");
 const ingame = @import("../ingame.zig");
 const postgame = @import("../postgame.zig");
 const loading = @import("../loading.zig");
+const practice = @import("../practice.zig");
 const Icons = @import("icons.zig").Icons;
 const icons_path = @import("icons.zig").lcu_path;
 const datafiles = @import("../datafiles.zig");
@@ -34,6 +36,12 @@ const Shared = struct {
     note: ui.Note = .none,
     /// Grows as the poller fetches icons from the client, under the mutex
     icons: ?Icons = null,
+    /// The window's practice draft, under the mutex; null while practice is off
+    practice: ?practice.Setup = null,
+    /// Bumped by the window on each practice change; the poller waits on it
+    practice_gen: std.atomic.Value(u32) = .init(0),
+    /// `status` is the practice draft's, under the mutex
+    practicing: bool = false,
 };
 
 /// Stats and curves with the memory they live in
@@ -164,23 +172,40 @@ pub fn frame() void {
         .failed => if (stats == null) shared.note else .none,
         .none, .downloading, .restart => shared.note,
     };
-    ui.frame(.{ .status = shared.status, .stats = stats, .icons = &shared.icons.?, .edition = edition, .note = note });
+    ui.frame(.{
+        .status = shared.status,
+        .stats = stats,
+        .icons = &shared.icons.?,
+        .edition = edition,
+        .note = note,
+        .practice = .{ .setup = &shared.practice, .shown = shared.practicing, .changed = practiceChanged },
+    });
 }
 
-fn publish(status: ui.Status, arena: std.heap.ArenaAllocator) void {
+/// From the window, holding the mutex (it draws with it held)
+fn practiceChanged() void {
+    _ = shared.practice_gen.fetchAdd(1, .release);
+    io.futexWake(u32, &shared.practice_gen.raw, 1);
+}
+
+fn publish(status: ui.Status, arena: std.heap.ArenaAllocator, practicing: bool) void {
     shared.mutex.lockUncancelable(io);
     const old = shared.arena;
     shared.status = status;
     shared.arena = arena;
+    shared.practicing = practicing;
     shared.mutex.unlock(io);
     if (old) |o| o.deinit();
     wake();
 }
 
 fn poll(gpa: std.mem.Allocator) void {
-    var p: Poller = .{ .watch = .init(gpa, io, lockfile), .own_arena = .init(gpa), .seats_arena = .init(gpa) };
+    var p: Poller = .{ .watch = .init(gpa, io, lockfile), .own_arena = .init(gpa), .seats_arena = .init(gpa), .practice_arena = .init(gpa) };
     defer p.deinit();
     var shown: u64 = 0;
+    var seen_gen: u32 = 0;
+    // The client is in champ select or a game: that shows, practice waits
+    var live = false;
     while (!shared.quit.load(.acquire)) {
         // The UI may still draw a card made from the old data until the publish below
         // replaces it, so the old data goes only after that
@@ -196,17 +221,44 @@ fn poll(gpa: std.mem.Allocator) void {
             }
         }
         var arena: std.heap.ArenaAllocator = .init(gpa);
-        const status = if (shared.data) |d| p.tick(arena.allocator(), d) catch |err| switch (err) {
-            error.OutOfMemory => return,
-            else => p.disconnect(err),
-        } else ui.Status.no_data;
-        const key = p.key(status);
-        if (key != shown) {
-            shown = key;
-            publish(status, arena);
+        const gen = shared.practice_gen.load(.acquire);
+        shared.mutex.lockUncancelable(io);
+        const setup = shared.practice;
+        shared.mutex.unlock(io);
+        // A practice change alone needs no round trip to the client
+        const practice_only = gen != seen_gen and setup != null and shared.data != null;
+        seen_gen = gen;
+        var status: ?ui.Status = null;
+        if (!practice_only) {
+            const s = if (shared.data) |d| p.tick(arena.allocator(), d) catch |err| switch (err) {
+                error.OutOfMemory => return,
+                else => p.disconnect(err),
+            } else ui.Status.no_data;
+            live = switch (s) {
+                .select, .loading, .in_game, .post_game => true,
+                else => false,
+            };
+            status = s;
+        }
+        var practicing = false;
+        if (setup != null and !live) if (shared.data) |d| {
+            if (p.practiceStatus(arena.allocator(), d, setup.?, gen)) |s| {
+                status = s;
+                practicing = true;
+            } else |err| switch (err) {
+                error.OutOfMemory => return,
+                else => std.log.err("practice: {t}", .{err}),
+            }
+        };
+        if (status) |s| {
+            const key = p.key(s, practicing);
+            if (key != shown) {
+                shown = key;
+                publish(s, arena, practicing);
+            } else arena.deinit();
         } else arena.deinit();
         if (old) |d| freeData(gpa, d);
-        std.Io.sleep(io, .fromSeconds(1), .awake) catch {};
+        io.futexWaitTimeout(u32, &shared.practice_gen.raw, gen, .{ .duration = .{ .raw = .fromSeconds(1), .clock = .awake } }) catch {};
     }
 }
 
@@ -227,6 +279,9 @@ const Poller = struct {
     /// Positions the last in-game tick saw, for the post game
     hints: [10]postgame.Hint = undefined,
     n_hints: usize = 0,
+    /// Mastery and tier for practice, loaded once per client connection
+    practice_arena: std.heap.ArenaAllocator,
+    practice_own: ?Own = null,
 
     const Own = struct {
         mastery: []lanecard.Mastery,
@@ -236,6 +291,7 @@ const Poller = struct {
     fn deinit(p: *Poller) void {
         p.history.deinit(p.own_arena.child_allocator);
         p.seats_arena.deinit();
+        p.practice_arena.deinit();
         p.watch.deinit();
         p.own_arena.deinit();
     }
@@ -248,6 +304,8 @@ const Poller = struct {
     fn disconnect(p: *Poller, err: anyerror) ui.Status {
         p.watch.disconnect();
         p.forgetOwn();
+        _ = p.practice_arena.reset(.retain_capacity);
+        p.practice_own = null;
         return switch (err) {
             error.ClientNotRunning => .no_client,
             else => .{ .client_error = @errorName(err) },
@@ -255,9 +313,10 @@ const Poller = struct {
     }
 
     /// Changes whenever what the status shows would
-    fn key(p: *const Poller, s: ui.Status) u64 {
+    fn key(p: *const Poller, s: ui.Status, practicing: bool) u64 {
         var h: std.hash.Wyhash = .init(0);
         h.update(@tagName(s));
+        h.update(&.{@intFromBool(practicing)});
         switch (s) {
             .waiting => |phase| h.update(phase),
             .client_error => |e| h.update(e),
@@ -303,7 +362,7 @@ const Poller = struct {
         };
         const role = cs.my_role orelse return .no_role;
 
-        if (p.own == null) p.own = p.loadOwn(p.watch.client.?);
+        if (p.own == null) p.own = loadOwn(p.own_arena.allocator(), p.watch.client.?);
         const own = p.own.?;
         const pool = p.watch.pool;
         const by_mastery = ui.by_mastery.load(.acquire);
@@ -333,18 +392,46 @@ const Poller = struct {
         p.seats = try loading.seatsOf(p.seats_arena.allocator(), &sel.board);
         p.draft = sel.board.draft;
         var want: Want = .{};
-        for ([_][]const board.Seat{ sel.board.allies, sel.board.enemies }) |seats| for (seats) |s| {
-            want.add(s.slot.champion);
-            for (s.ideas) |c| want.add(c);
-        };
-        for (sel.board.my_bans) |c| want.add(c);
-        for (sel.board.their_bans) |c| want.add(c);
-        for (sel.board.ban_options) |o| want.add(o.champion);
-        for (sel.card.options) |o| want.add(o.champion);
-        if (sel.card.opponent) |o| want.add(o.champion);
-        want.add(sel.card.me);
+        want.addSelect(sel);
         p.fetchIcons(want.list[0..want.n]);
         return .{ .select = sel };
+    }
+
+    /// The practice draft on its screen, built as a real one would be
+    fn practiceStatus(p: *Poller, arena: std.mem.Allocator, data: *const Data, setup: practice.Setup, gen: u32) !ui.Status {
+        if (p.practice_own == null) if (p.watch.client) |c| {
+            p.practice_own = loadOwn(p.practice_arena.allocator(), c);
+        };
+        const own: Own = p.practice_own orelse .{ .mastery = &.{}, .tier = null };
+        const by_mastery = ui.by_mastery.load(.acquire);
+        const built = try practice.build(arena, .{
+            .stats = &data.stats,
+            .curves = if (data.curves) |*c| c else null,
+            .mastery = own.mastery,
+            .tier = own.tier,
+            .expertise = if (by_mastery) .fitted else null,
+        }, setup);
+        var h: std.hash.Wyhash = .init(3);
+        h.update(std.mem.asBytes(&gen));
+        h.update(std.mem.asBytes(&by_mastery));
+        p.fingerprint = h.final();
+        var want: Want = .{};
+        for (setup.mine) |s| want.add(s.champion);
+        for (setup.theirs) |s| want.add(s.champion);
+        for (setup.my_bans ++ setup.their_bans) |c| want.add(c);
+        const status: ui.Status = switch (built) {
+            .select => |s| blk: {
+                const sel = try arena.create(ui.Select);
+                sel.* = .{ .card = s.card, .board = s.board };
+                want.addSelect(sel);
+                break :blk .{ .select = sel };
+            },
+            .loading => |l| .{ .loading = try dupe(arena, l) },
+            .in_game => |g| .{ .in_game = try dupe(arena, g) },
+            .post_game => |pg| .{ .post_game = try dupe(arena, pg) },
+        };
+        p.fetchIcons(want.list[0..want.n]);
+        return status;
     }
 
     /// The game's own server; the mock serves it in plain HTTP, as the client
@@ -358,7 +445,7 @@ const Poller = struct {
         defer client.gpa.free(resp.body);
         if (resp.status / 100 != 2) return error.HttpStatus;
         const game = try live.parse(arena, resp.body);
-        if (p.own == null) p.own = p.loadOwn(client);
+        if (p.own == null) p.own = loadOwn(p.own_arena.allocator(), client);
         const g = try arena.create(ingame.InGame);
         g.* = try ingame.build(arena, &data.stats, if (data.curves) |*c| c else null, game, p.own.?.tier);
         p.fingerprint = std.hash.Wyhash.hash(1, resp.body);
@@ -380,13 +467,19 @@ const Poller = struct {
         return g;
     }
 
+    fn dupe(arena: std.mem.Allocator, v: anytype) !*const @TypeOf(v) {
+        const out = try arena.create(@TypeOf(v));
+        out.* = v;
+        return out;
+    }
+
     fn postGame(p: *Poller, arena: std.mem.Allocator, data: *const Data) !*const postgame.PostGame {
         const client = p.watch.client.?;
         const body = try client.getOk(lcu.eog.path);
         defer client.gpa.free(body);
         const e = try lcu.eog.parse(arena, body);
         if (e.players.len == 0) return error.NoPlayers;
-        if (p.own == null) p.own = p.loadOwn(client);
+        if (p.own == null) p.own = loadOwn(p.own_arena.allocator(), client);
         const pg = try arena.create(postgame.PostGame);
         pg.* = try postgame.build(arena, .{
             .stats = &data.stats,
@@ -414,6 +507,19 @@ const Poller = struct {
             w.list[w.n] = c;
             w.n += 1;
         }
+
+        fn addSelect(w: *Want, sel: *const ui.Select) void {
+            for ([_][]const board.Seat{ sel.board.allies, sel.board.enemies }) |seats| for (seats) |s| {
+                w.add(s.slot.champion);
+                for (s.ideas) |c| w.add(c);
+            };
+            for (sel.board.my_bans) |c| w.add(c);
+            for (sel.board.their_bans) |c| w.add(c);
+            for (sel.board.ban_options) |o| w.add(o.champion);
+            for (sel.card.options) |o| w.add(o.champion);
+            if (sel.card.opponent) |o| w.add(o.champion);
+            w.add(sel.card.me);
+        }
     };
 
     /// Icons from the client. Fetched outside the mutex, added under it; a new icon
@@ -438,8 +544,7 @@ const Poller = struct {
     }
 
     /// Whatever fails to load is left out: the card works without it
-    fn loadOwn(p: *Poller, client: lcu.Client) Own {
-        const a = p.own_arena.allocator();
+    fn loadOwn(a: std.mem.Allocator, client: lcu.Client) Own {
         var own: Own = .{ .mastery = &.{}, .tier = null };
         if (client.getOk(lcu.me.paths.mastery)) |body| {
             defer client.gpa.free(body);

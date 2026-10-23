@@ -595,6 +595,7 @@ test {
     _ = @import("ingame.zig");
     _ = @import("postgame.zig");
     _ = @import("loading.zig");
+    _ = @import("practice.zig");
     _ = @import("desktop/icons.zig");
     _ = @import("desktop/install.zig");
     _ = update;

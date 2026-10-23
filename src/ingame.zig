@@ -113,6 +113,23 @@ pub const Sample = struct {
 
 pub const sample_every = 20;
 
+/// A made-up game so far that ends at `end`: even early, a swing, then the lead (the
+/// shots and practice, which have no game to sample)
+pub fn madeUp(a: std.mem.Allocator, end: Sample) ![]const Sample {
+    var out: std.ArrayList(Sample) = .empty;
+    var t: f32 = 0;
+    while (t <= end.time) : (t += sample_every) {
+        const x = t / end.time;
+        const swing = 900 * @sin(x * 2 * std.math.pi) * (1 - x);
+        try out.append(a, .{
+            .time = t,
+            .team = @intFromFloat(@as(f32, @floatFromInt(end.team)) * x * x + swing),
+            .lane = if (end.lane) |l| @intFromFloat(@as(f32, @floatFromInt(l)) * x) else null,
+        });
+    }
+    return out.items;
+}
+
 pub const InGame = struct {
     time: f64,
     rows: [Role.count]Row,

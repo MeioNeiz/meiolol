@@ -17,10 +17,20 @@ const Icons = @import("desktop/icons.zig").Icons;
 const ingame = @import("ingame.zig");
 const postgame = @import("postgame.zig");
 const loading = @import("loading.zig");
+const practice = @import("practice.zig");
+const practice_ui = @import("desktop/practice.zig");
 
 const Shot = struct {
     name: []const u8,
-    status: union(enum) { plain: ui.Status, select: Scene, loading: Scene, game: Game, post: Post },
+    status: union(enum) { plain: ui.Status, select: Scene, loading: Scene, game: Game, post: Post, practice: Practice },
+};
+
+/// A random practice draft (the same one for the same stats file), on `screen`
+const Practice = struct {
+    screen: practice.Screen = .select,
+    /// My seat and the enemy's last two left to pick
+    open: bool = false,
+    picker: ?practice.Target = null,
 };
 
 /// A champ select by champion names. Enemies are locked; a trailing "?" hides the
@@ -126,6 +136,10 @@ const shots = [_]Shot{
     } } },
     .{ .name = "in-game", .status = .{ .game = .{} } },
     .{ .name = "post-game", .status = .{ .post = .{} } },
+    .{ .name = "practice", .status = .{ .practice = .{ .open = true } } },
+    .{ .name = "practice-picker", .status = .{ .practice = .{ .open = true, .picker = .{ .ally = .middle } } } },
+    .{ .name = "practice-game", .status = .{ .practice = .{ .screen = .game } } },
+    .{ .name = "practice-post", .status = .{ .practice = .{ .screen = .post } } },
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -167,7 +181,28 @@ pub fn main(init: std.process.Init) !void {
         defer frame_arena.deinit();
         const a = frame_arena.allocator();
         const opts: core.Options = .{ .min_games = min_games };
+        var setup: ?practice.Setup = null;
         const status: ui.Status = switch (shot.status) {
+            .practice => |pr| blk: {
+                var st: practice.Setup = .{ .screen = pr.screen };
+                var prng: std.Random.DefaultPrng = .init(7);
+                st.randomise(&stats, prng.random());
+                if (pr.open) {
+                    st.mine[@backingInt(st.role)] = .{};
+                    st.theirs[3] = .{};
+                    st.theirs[4] = .{};
+                }
+                setup = st;
+                practice_ui.open(pr.picker orelse .{ .ally = .top });
+                if (pr.picker == null) practice_ui.close();
+                const in: practice.Input = .{ .stats = &stats, .curves = if (curves) |*c| c else null, .tier = "GOLD" };
+                break :blk switch (try practice.build(a, in, st)) {
+                    .select => |sel| .{ .select = try dupe(a, ui.Select{ .card = sel.card, .board = sel.board }) },
+                    .loading => |l| .{ .loading = try dupe(a, l) },
+                    .in_game => |g| .{ .in_game = try dupe(a, g) },
+                    .post_game => |pg| .{ .post_game = try dupe(a, pg) },
+                };
+            },
             .plain => |s| s,
             .loading => |scene| blk: {
                 const cs = try champSelect(a, &stats, scene);
@@ -200,7 +235,7 @@ pub fn main(init: std.process.Init) !void {
                 const body = try cwd.readFileAlloc(io, gm.path, a, limit);
                 const g = try a.create(ingame.InGame);
                 g.* = try ingame.build(a, &stats, if (curves) |*c| c else null, try lcu.live.parse(a, body), gm.tier);
-                g.history = try history(a, g.sample());
+                g.history = try ingame.madeUp(a, g.sample());
                 break :blk .{ .in_game = g };
             },
             .post => |pg| blk: {
@@ -210,7 +245,7 @@ pub fn main(init: std.process.Init) !void {
                     .stats = &stats,
                     .curves = if (curves) |*c| c else null,
                     .eog = e,
-                    .history = try history(a, .{ .time = @floatFromInt(e.length), .team = pg.team, .lane = pg.lane }),
+                    .history = try ingame.madeUp(a, .{ .time = @floatFromInt(e.length), .team = pg.team, .lane = pg.lane }),
                     .tier = pg.tier,
                 });
                 break :blk .{ .post_game = p };
@@ -227,26 +262,19 @@ pub fn main(init: std.process.Init) !void {
         };
         for (sizes) |sz| {
             const name = try a.print("{s}/{s}{s}.png", .{ out_dir, shot.name, sz[0] });
-            try render(gpa, io, .{ .status = status, .stats = &stats, .icons = &icons, .edition = sz[1] }, sz[3], sz[2], name);
+            const hook: ?practice_ui.Hook = if (setup != null) .{ .setup = &setup, .shown = true, .changed = noop } else null;
+            try render(gpa, io, .{ .status = status, .stats = &stats, .icons = &icons, .edition = sz[1], .practice = hook }, sz[3], sz[2], name);
             std.debug.print("{s}\n", .{name});
         }
     }
 }
 
-/// A made-up game so far that ends at `end`: even early, a swing, then the lead
-fn history(a: std.mem.Allocator, end: ingame.Sample) ![]const ingame.Sample {
-    var out: std.ArrayList(ingame.Sample) = .empty;
-    var t: f32 = 0;
-    while (t <= end.time) : (t += ingame.sample_every) {
-        const x = t / end.time;
-        const swing = 900 * @sin(x * 2 * std.math.pi) * (1 - x);
-        try out.append(a, .{
-            .time = t,
-            .team = @intFromFloat(@as(f32, @floatFromInt(end.team)) * x * x + swing),
-            .lane = if (end.lane) |l| @intFromFloat(@as(f32, @floatFromInt(l)) * x) else null,
-        });
-    }
-    return out.items;
+fn noop() void {}
+
+fn dupe(a: std.mem.Allocator, v: anytype) !*const @TypeOf(v) {
+    const out = try a.create(@TypeOf(v));
+    out.* = v;
+    return out;
 }
 
 fn champion(stats: *const core.Stats, name: []const u8) !u32 {

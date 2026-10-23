@@ -15,6 +15,7 @@ const teams = @import("teams.zig");
 const game = @import("game.zig");
 const post = @import("post.zig");
 const loadscreen = @import("loadscreen.zig");
+const practice = @import("practice.zig");
 const loading = @import("../loading.zig");
 const ingame = @import("../ingame.zig");
 const postgame = @import("../postgame.zig");
@@ -75,6 +76,8 @@ pub const View = struct {
     icons: *const Icons,
     edition: Edition,
     note: Note = .none,
+    /// Null where there is no poller (the shots)
+    practice: ?practice.Hook = null,
 };
 
 /// For dvui.Window.init
@@ -87,8 +90,14 @@ pub fn frame(v: View) void {
         .style = .window,
     });
     defer root.deinit();
+    practice.begin(v.practice);
     const wide = dvui.windowRect().w >= wide_from;
     header(v);
+    if (v.stats) |stats| {
+        const ctx: w.Ctx = .{ .stats = stats, .icons = v.icons, .edition = v.edition, .wide = wide };
+        practice.bar(ctx);
+    }
+    defer if (v.stats) |stats| practice.picker(.{ .stats = stats, .icons = v.icons, .edition = v.edition, .wide = wide });
 
     switch (v.status) {
         .select => |s| {
@@ -146,6 +155,8 @@ fn header(v: View) void {
     defer bar.deinit();
     dvui.labelNoFmt(@src(), title, .{}, .{ .font = dvui.themeGet().font_title, .gravity_y = 0.5, .padding = .{ .w = 8 } });
     if (v.edition == .private) w.chip(@src(), "private", palette.private, 0);
+    // Testers first, as the in-game panel
+    if (v.edition == .private and v.stats != null and (v.practice != null and v.practice.?.setup.* != null or !live(v.status))) practice.toggle(@src());
     if (dvui.windowRect().w >= wide_from) {
         stepper(v.status);
     } else {
@@ -185,6 +196,14 @@ fn header(v: View) void {
             .color_text = .{ .color = w.text().opacity(0.55) },
         });
     }
+}
+
+/// The client's own champ select or game: practice can't start over it
+fn live(s: Status) bool {
+    return switch (s) {
+        .select, .loading, .in_game, .post_game => true,
+        else => false,
+    };
 }
 
 const Step = enum { lobby, champ_select, in_game, post_game };

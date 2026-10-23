@@ -135,6 +135,10 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
   /lol-end-of-game/v1/eog-stats-block (lcu/eog.zig; positions from detectedTeamPosition,
   else the last in-game tick, else inferred). Left: check APP1's real block; tabs
   (fighting, farming, vision); our draft call against the result
+- APP12 Practice, first pass done (23 Oct, private; Jacob: "test out different drafts
+  and see more of the UI before even getting into a lobby"): architecture.md "Desktop
+  window". Left: Jacob's try on the PC; Data Dragon icons when the client is closed;
+  a saved draft or two; the in-game and post game numbers are made up, not a replay
 - APP9 In-game companion, private first (below). First pass done (23 Oct, against the
   mock and a synthetic reply): score and team item gold, mirrored lane rows with gold
   differences, your lane's CS and item gold against the matchup at this minute with the
