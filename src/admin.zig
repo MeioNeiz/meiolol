@@ -126,10 +126,7 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
         .platforms = ep.platforms,
         .files = files,
         .counts = counts,
-        .queues = .{
-            .match = try groups(arena, db, "SELECT status, count(*) FROM match_queue GROUP BY 1 ORDER BY 2 DESC"),
-            .timeline = try groups(arena, db, "SELECT region || ' ' || status, count(*) FROM timeline_queue GROUP BY 1 ORDER BY 1"),
-        },
+        .queues = try queues(arena, db),
         .players = try playersByRegion(arena, db, count(counts, "players")),
         .ladder = try ladderTiers(arena, db),
         .by_patch = try groups(arena, db, "SELECT patch, count(*) FROM matches GROUP BY 1 ORDER BY 1 DESC LIMIT 8"),
@@ -270,6 +267,15 @@ fn appendHistory(arena: std.mem.Allocator, io: Io, path: []const u8, o: Options,
 
 const Group = struct { key: []const u8, n: i64 };
 
+const Queues = struct { match: []Group, timeline: []Group };
+
+fn queues(arena: std.mem.Allocator, db: store.Db) !Queues {
+    return .{
+        .match = try groups(arena, db, "SELECT status, count(*) FROM match_queue GROUP BY 1 ORDER BY 2 DESC"),
+        .timeline = try groups(arena, db, "SELECT region || ' ' || status, count(*) FROM timeline_queue GROUP BY 1 ORDER BY 1"),
+    };
+}
+
 fn groups(arena: std.mem.Allocator, db: store.Db, sql: []const u8) ![]Group {
     var q = try db.prepare(sql);
     defer q.deinit();
@@ -378,18 +384,8 @@ fn draftMix(arena: std.mem.Allocator, db: store.Db, stored_day: ?u64) !DraftMix 
             minutes: ?i64,
         });
         mix.rows += 1;
-        const p = try platforms.getOrPut(arena, row.platform);
-        if (!p.found_existing) {
-            p.key_ptr.* = try arena.dupe(u8, row.platform);
-            p.value_ptr.* = 0;
-        }
-        p.value_ptr.* += 1;
-        const pt = try patches.getOrPut(arena, row.patch);
-        if (!pt.found_existing) {
-            pt.key_ptr.* = try arena.dupe(u8, row.patch);
-            pt.value_ptr.* = 0;
-        }
-        pt.value_ptr.* += 1;
+        try bump(arena, &platforms, row.platform);
+        try bump(arena, &patches, row.patch);
         if (ep.platform(row.platform)) |pl| {
             const d = try days.getOrPut(arena, row.day);
             if (!d.found_existing) d.value_ptr.* = @splat(@splat(0));
@@ -412,6 +408,16 @@ fn draftMix(arena: std.mem.Allocator, db: store.Db, stored_day: ?u64) !DraftMix 
     mix.platforms = try sorted(arena, platforms);
     mix.patches = try sorted(arena, patches);
     return mix;
+}
+
+/// `key` is the statement's: duped when new
+fn bump(arena: std.mem.Allocator, m: *std.StringArrayHashMapUnmanaged(i64), key: []const u8) !void {
+    const e = try m.getOrPut(arena, key);
+    if (!e.found_existing) {
+        e.key_ptr.* = try arena.dupe(u8, key);
+        e.value_ptr.* = 0;
+    }
+    e.value_ptr.* += 1;
 }
 
 fn sorted(arena: std.mem.Allocator, m: std.StringArrayHashMapUnmanaged(i64)) ![]Group {
@@ -593,10 +599,7 @@ pub fn liveJson(arena: std.mem.Allocator, io: Io, db: store.Db, l: Live) ![]cons
         .services = l.services,
         .health = l.health,
         .crawl = try crawlSeries(arena, io, crawl_log, l.now_s - live_window_s, l.now_s, live_step_s, 4 << 20, null),
-        .queues = .{
-            .match = try groups(arena, db, "SELECT status, count(*) FROM match_queue GROUP BY 1 ORDER BY 2 DESC"),
-            .timeline = try groups(arena, db, "SELECT region || ' ' || status, count(*) FROM timeline_queue GROUP BY 1 ORDER BY 1"),
-        },
+        .queues = try queues(arena, db),
         .disk = l.disk,
         .files = try fileSizes(arena, io, l.data_dir),
         .actions = try actionLog(arena, io, try std.fs.path.join(arena, &.{ l.data_dir, action_log })),
