@@ -1,5 +1,5 @@
-//! `meiolol curves`, `builds`, `pool`, `lean`, `draft-model`, `lane-model`: the files the site
-//! and the admin tester read
+//! `meiolol curves`, `builds`, `lean`, `draft-model`, `lane-model`: the files the site and
+//! the admin tester read
 
 const std = @import("std");
 const core = @import("core");
@@ -7,7 +7,6 @@ const ddragon = @import("../ddragon.zig");
 const stats = @import("../stats.zig");
 const curves = @import("../curves.zig");
 const builds = @import("../builds.zig");
-const pool = @import("../pool.zig");
 const lean = @import("../lean.zig");
 const draftmodel = @import("../draftmodel.zig");
 const lanemodel = @import("../lanemodel.zig");
@@ -240,50 +239,6 @@ pub fn cmdBuilds(c: *Cmd) !u8 {
         // docs/learned.md keeps these: how much options of a kind really differ
         for (f.shrink) |x| std.log.info("{s}: k {d:.0}, in matchups {d:.0}", .{ @tagName(x.kind), x.k, x.vs });
     }
-    return 0;
-}
-
-pub const usage_pool =
-    \\  pool        write what players of each champion also play (pool.zig), as JSON
-    \\              --patch P        as for stats (matchups); pools use every patch
-    \\              --platform P     as for stats
-    \\              --out FILE       default DIR/export/pool.json
-    \\
-;
-
-pub fn cmdPool(c: *Cmd) !u8 {
-    var g: Games = .{};
-    var out: ?[]const u8 = null;
-    while (c.next()) |_| {
-        if (try g.parse(c)) continue;
-        if (c.is("--out")) out = try c.value() else return error.Usage;
-    }
-    const gpa = c.init.gpa;
-    const io = c.init.io;
-    const arena = c.arena;
-    const db = try c.open();
-    defer db.close();
-    const platforms = g.platformIds();
-    const chosen = if (g.patches.items.len > 0) g.patches.items else try newestPatch(arena, db, platforms);
-    var r = try stats.build(gpa, db, chosen, platforms);
-    defer r.builder.deinit();
-    var label_buf: [core.statsfile.patch_len]u8 = undefined;
-    var model: std.Io.Writer.Allocating = .init(arena);
-    try r.builder.write(&model.writer, try stats.label(&label_buf, chosen));
-    const st: core.Stats = try .parse(arena, model.written());
-    var t = try pool.tally(gpa, db, &st, &.{platforms}, &.{}, null);
-    defer t.deinit(gpa);
-    const p = try pool.make(arena, &t, 0, &st, .{});
-
-    const path = out orelse try std.fs.path.join(arena, &.{ c.data_dir, "export", "pool.json" });
-    var file = try std.Io.Dir.cwd().createFileAtomic(io, path, .{ .make_path = true, .replace = true });
-    defer file.deinit(io);
-    var buf: [64 * 1024]u8 = undefined;
-    var w = file.file.writer(io, &buf);
-    try pool.writeJson(&w.interface, p);
-    try w.interface.flush();
-    try file.replace(io);
-    std.log.info("{s}", .{path});
     return 0;
 }
 

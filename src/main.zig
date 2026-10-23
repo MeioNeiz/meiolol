@@ -67,7 +67,6 @@ const usage = usage_head ++
     cmd_crawl.usage_stats ++
     cmd_sitedata.usage_curves ++
     cmd_sitedata.usage_builds ++
-    cmd_sitedata.usage_pool ++
     cmd_analysis.usage_eval ++
     cmd_analysis.usage_legendaries ++
     cmd_analysis.usage_winchance ++
@@ -133,7 +132,6 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "stats", cmd_crawl.cmdStats },
     .{ "curves", cmd_sitedata.cmdCurves },
     .{ "builds", cmd_sitedata.cmdBuilds },
-    .{ "pool", cmd_sitedata.cmdPool },
     .{ "eval", cmd_analysis.cmdEval },
     .{ "legendaries", cmd_analysis.cmdLegendaries },
     .{ "objectives", cmd_analysis.cmdObjectives },
@@ -255,7 +253,7 @@ pub const all_platforms: []const []const u8 = ids: {
     break :ids &final;
 };
 
-/// --patch and --platform: the games stats, curves, pool and eval read
+/// --patch and --platform: the games stats, curves and eval read
 pub const Games = struct {
     patches: std.ArrayList([]const u8) = .empty,
     platforms: std.ArrayList([]const u8) = .empty,

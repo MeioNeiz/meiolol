@@ -45,10 +45,6 @@ pub const Kind = enum {
     skills,
     /// Ability slots of the first three skill-ups (levels 1 to 3)
     skill_start,
-
-    pub fn fromTimeline(k: Kind) bool {
-        return @backingInt(k) >= @backingInt(Kind.start);
-    }
 };
 
 pub const max_values = 8;
