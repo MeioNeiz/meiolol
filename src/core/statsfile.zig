@@ -92,7 +92,7 @@ pub const Builder = struct {
         b.* = undefined;
     }
 
-    /// teams[side][@intFromEnum(role)] = champion id; `winner` is the winning side index.
+    /// teams[side][@backingInt(role)] = champion id; `winner` is the winning side index.
     /// Unknown champion ids are skipped (do not crash).
     pub fn addGame(b: *Builder, teams: [2][5]u32, winner: u1) void {
         const n = b.ids.len;

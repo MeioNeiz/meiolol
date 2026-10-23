@@ -72,7 +72,7 @@ pub fn verifyExe(public: [32]u8, sig_hex: []const u8, version: u64, sha256_hex: 
 
 fn exeMessage(buf: []u8, version: u64, sha256_hex: []const u8, bytes: u64) ![]const u8 {
     if (sha256_hex.len != 64) return error.BadSignature;
-    return std.fmt.bufPrint(buf, exe_context ++ "{d} {s} {d}", .{ version, sha256_hex, bytes });
+    return std.mem.print(buf, exe_context ++ "{d} {s} {d}", .{ version, sha256_hex, bytes });
 }
 
 /// Every failure is error.BadSignature: the app only needs to know it was refused

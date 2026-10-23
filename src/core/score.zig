@@ -132,10 +132,10 @@ pub fn recommend(
         const id = stats.ids[c];
         const games = stats.champRole(draft.role, c).games;
         if (games < opts.min_games) continue;
-        if (std.mem.indexOfScalar(u32, draft.bans, id) != null) continue;
+        if (std.mem.findScalar(u32, draft.bans, id) != null) continue;
         for (draft.allies) |p| if (p.champion == id) continue :candidates;
         for (draft.enemies) |p| if (p.champion == id) continue :candidates;
-        if (draft.pool) |pool| if (std.mem.indexOfScalar(u32, pool, id) == null) continue;
+        if (draft.pool) |pool| if (std.mem.findScalar(u32, pool, id) == null) continue;
 
         const s = ctx.suggestion(c, draft.role, allies, enemies, fixed);
         if (len < out.len) {
@@ -246,7 +246,7 @@ pub const DraftTerms = struct {
     }
 };
 
-/// teams[side][@intFromEnum(role)] = champion id, every role known; champions the stats
+/// teams[side][@backingInt(role)] = champion id, every role known; champions the stats
 /// file does not know add nothing
 pub fn draftTerms(stats: *const Stats, opts: Options, teams: [2][5]u32) DraftTerms {
     const ctx: Context = .{ .stats = stats, .opts = opts };

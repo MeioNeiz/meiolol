@@ -37,8 +37,8 @@ pub const InitOptions = struct {
 };
 
 pub fn init(opts: InitOptions) !Raster {
-    const w: u32 = @intFromFloat(@round(opts.size.w * opts.scale));
-    const h: u32 = @intFromFloat(@round(opts.size.h * opts.scale));
+    const w: u32 = @round(opts.size.w * opts.scale);
+    const h: u32 = @round(opts.size.h * opts.scale);
     const screen: Image = .{ .pixels = try opts.allocator.alloc(u8, w * h * 4), .width = w, .height = h };
     @memset(screen.pixels, 0);
     return .{
@@ -124,10 +124,10 @@ pub fn drawClippedTriangles(
             std.mem.swap(dvui.Vertex, &a, &b);
             area = -area;
         }
-        const x0: i32 = @intFromFloat(@floor(@max(x_lo, @min(a.pos.x, b.pos.x, c.pos.x))));
-        const y0: i32 = @intFromFloat(@floor(@max(y_lo, @min(a.pos.y, b.pos.y, c.pos.y))));
-        const x1: i32 = @intFromFloat(@ceil(@min(x_hi, @max(a.pos.x, b.pos.x, c.pos.x))));
-        const y1: i32 = @intFromFloat(@ceil(@min(y_hi, @max(a.pos.y, b.pos.y, c.pos.y))));
+        const x0: i32 = @floor(@max(x_lo, @min(a.pos.x, b.pos.x, c.pos.x)));
+        const y0: i32 = @floor(@max(y_lo, @min(a.pos.y, b.pos.y, c.pos.y)));
+        const x1: i32 = @ceil(@min(x_hi, @max(a.pos.x, b.pos.x, c.pos.x)));
+        const y1: i32 = @ceil(@min(y_hi, @max(a.pos.y, b.pos.y, c.pos.y)));
         const ca = color(a.col);
         const cb = color(b.col);
         const cc = color(c.col);
@@ -154,7 +154,7 @@ pub fn drawClippedTriangles(
                 const d: Vec = .{ @floatFromInt(dst[0]), @floatFromInt(dst[1]), @floatFromInt(dst[2]), @floatFromInt(dst[3]) };
                 const out = src * @as(Vec, @splat(255)) + d * @as(Vec, @splat(1 - src[3]));
                 const px: [4]f32 = out;
-                for (dst, px) |*o, f| o.* = @intFromFloat(std.math.clamp(@round(f), 0, 255));
+                for (dst, px) |*o, f| o.* = @round(std.math.clamp(f, 0, 255));
             }
         }
     }
@@ -193,14 +193,14 @@ fn sample(tex: dvui.Texture, u: f32, v: f32) Vec {
     const fx = u * @as(f32, @floatFromInt(tex.width)) - 0.5;
     const fy = v * @as(f32, @floatFromInt(tex.height)) - 0.5;
     if (tex.interpolation == .nearest) {
-        return texel(tex, @intFromFloat(@round(fx)), @intFromFloat(@round(fy)));
+        return texel(tex, @round(fx), @round(fy));
     }
     const x0 = @floor(fx);
     const y0 = @floor(fy);
     const tx: Vec = @splat(fx - x0);
     const ty: Vec = @splat(fy - y0);
-    const ix: i64 = @intFromFloat(x0);
-    const iy: i64 = @intFromFloat(y0);
+    const ix: i64 = @trunc(x0);
+    const iy: i64 = @trunc(y0);
     const one: Vec = @splat(1);
     const top = texel(tex, ix, iy) * (one - tx) + texel(tex, ix + 1, iy) * tx;
     const bottom = texel(tex, ix, iy + 1) * (one - tx) + texel(tex, ix + 1, iy + 1) * tx;

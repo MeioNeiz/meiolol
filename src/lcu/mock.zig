@@ -147,7 +147,6 @@ pub const Scenario = struct {
             450 => .{ .game = "ARAM", .map = 12, .queue_type = "ARAM_UNRANKED_5x5" },
             420 => .{ .game = "CLASSIC", .map = 11, .queue_type = "RANKED_SOLO_5x5" },
             440 => .{ .game = "CLASSIC", .map = 11, .queue_type = "RANKED_FLEX_SR" },
-            430 => .{ .game = "CLASSIC", .map = 11, .queue_type = "NORMAL" },
             else => .{ .game = "CLASSIC", .map = 11, .queue_type = "NORMAL" },
         };
     }
@@ -176,7 +175,7 @@ pub const Event = struct {
     /// Other keys as the scenario gives them (KillerName, DragonType, ...)
     extra: ?std.json.ObjectMap = null,
 
-    pub fn jsonStringify(e: Event, w: anytype) !void {
+    pub fn jsonStringify(e: Event, w: *std.json.Stringify) !void {
         try w.beginObject();
         try w.objectField("EventID");
         try w.write(e.EventID);
@@ -329,7 +328,7 @@ const local_tag = "MOCK";
 
 /// The LCU reply for `path` (query ignored) in state `st`, allocated in `a`
 pub fn lcu(a: std.mem.Allocator, s: *const Scenario, st: *const State, target: []const u8) !Reply {
-    const path = target[0 .. std.mem.indexOfScalar(u8, target, '?') orelse target.len];
+    const path = target[0 .. std.mem.findScalar(u8, target, '?') orelse target.len];
     const eql = std.mem.eql;
     if (eql(u8, path, "/lol-gameflow/v1/gameflow-phase")) return json(a, st.phase);
     if (eql(u8, path, "/lol-gameflow/v1/session")) {
@@ -442,7 +441,7 @@ fn session(a: std.mem.Allocator, s: *const Scenario, st: *const State) !struct {
             .nameVisibilityType = if (me) "VISIBLE" else "HIDDEN",
             .puuid = if (me) "mock-puuid" else "",
             .summonerId = if (me) 1 else 0,
-            .obfuscatedPuuid = if (me) "" else try std.fmt.allocPrint(a, "mock-obfuscated-{d}", .{cell}),
+            .obfuscatedPuuid = if (me) "" else try a.print("mock-obfuscated-{d}", .{cell}),
             .team = if (ally) 1 else 2,
         };
         if (ally) my[cell] = m else their[cell - 5] = m;
@@ -528,7 +527,7 @@ fn endOfGame(a: std.mem.Allocator, s: *const Scenario, st: *const State) !struct
         .players = try a.dupe(Player, players[i * 5 ..][0..5]),
     };
     return .{
-        .gameLength = @intFromFloat(st.game_time),
+        .gameLength = @trunc(st.game_time),
         .gameMode = m.game,
         .queueType = m.queue_type,
         .localPlayer = players[s.local_cell],
@@ -555,7 +554,7 @@ const Team = struct { teamId: u32, isPlayerTeam: bool, isWinningTeam: bool, play
 
 /// The Live Client Data API (port 2999 in a real game) reply for `target`
 pub fn live(a: std.mem.Allocator, s: *const Scenario, st: *const State, target: []const u8) !Reply {
-    const path = target[0 .. std.mem.indexOfScalar(u8, target, '?') orelse target.len];
+    const path = target[0 .. std.mem.findScalar(u8, target, '?') orelse target.len];
     if (!std.mem.eql(u8, st.phase, "GameStart") and !std.mem.eql(u8, st.phase, "InProgress")) return not_found;
     const prefix = "/liveclientdata/";
     if (!std.mem.startsWith(u8, path, prefix)) return not_found;
@@ -614,15 +613,15 @@ fn playerList(a: std.mem.Allocator, s: *const Scenario, st: *const State) ![]Liv
     const out = try a.alloc(LivePlayer, 10);
     for (out, st.cells, 0..) |*p, c, i| {
         const name = s.nameOf(c.champion);
-        const game_name = if (i == s.local_cell) local_name else try std.fmt.allocPrint(a, "Player{d}", .{i});
+        const game_name = if (i == s.local_cell) local_name else try a.print("Player{d}", .{i});
         p.* = .{
             .championName = name,
-            .rawChampionName = try std.fmt.allocPrint(a, "game_character_displayname_{s}", .{name}),
+            .rawChampionName = try a.print("game_character_displayname_{s}", .{name}),
             .level = c.level,
             .position = try std.ascii.allocUpperString(a, c.position),
-            .riotId = try std.fmt.allocPrint(a, "{s}#{s}", .{ game_name, local_tag }),
+            .riotId = try a.print("{s}#{s}", .{ game_name, local_tag }),
             .riotIdGameName = game_name,
-            .summonerName = try std.fmt.allocPrint(a, "{s}#{s}", .{ game_name, local_tag }),
+            .summonerName = try a.print("{s}#{s}", .{ game_name, local_tag }),
             .scores = .{ .assists = c.assists, .creepScore = c.cs, .deaths = c.deaths, .kills = c.kills },
             .team = if (i < 5) "ORDER" else "CHAOS",
             .items = if (c.items > 0) try a.dupe(LiveItem, &.{.{ .price = c.items }}) else &.{},
@@ -699,7 +698,7 @@ pub const Mock = struct {
 
     fn authorised(m: *Mock, r: *std.http.Server.Request) bool {
         var buf: [256]u8 = undefined;
-        const plain = std.fmt.bufPrint(&buf, "riot:{s}", .{m.password}) catch return false;
+        const plain = std.mem.print(&buf, "riot:{s}", .{m.password}) catch return false;
         var enc_buf: [400]u8 = undefined;
         const want = std.base64.standard.Encoder.encode(&enc_buf, plain);
         var it = r.iterateHeaders();
@@ -713,7 +712,7 @@ pub const Mock = struct {
 
     /// `LeagueClient:PID:PORT:PASSWORD:http` for lockfile.discover's override
     pub fn lockfile(m: *const Mock, buf: []u8, port: u16) ![]const u8 {
-        return std.fmt.bufPrint(buf, "LeagueClient:0:{d}:{s}:http", .{ port, m.password });
+        return std.mem.print(buf, "LeagueClient:0:{d}:{s}:http", .{ port, m.password });
     }
 };
 
@@ -738,7 +737,7 @@ test "scenarios through the watch" {
         if (!std.mem.endsWith(u8, e.name, ".json") or std.mem.eql(u8, e.name, champions_file)) continue;
         var arena: std.heap.ArenaAllocator = .init(gpa);
         defer arena.deinit();
-        const path = try std.fmt.allocPrint(arena.allocator(), "testdata/lcu/scenarios/{s}", .{e.name});
+        const path = try arena.allocator().print("testdata/lcu/scenarios/{s}", .{e.name});
         checked += try runScenario(arena.allocator(), path);
     }
     try testing.expect(checked >= 10);

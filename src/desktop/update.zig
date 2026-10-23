@@ -95,7 +95,7 @@ pub fn run(o: Options) !Result {
         else
             continue;
         const local = switch (kind) {
-            .stats => try std.fmt.allocPrint(arena, "stats-{s}.bin", .{manifest.patch}),
+            .stats => try arena.print("stats-{s}.bin", .{manifest.patch}),
             .curves => f.name,
             .exe => o.exe.?,
         };
@@ -106,14 +106,18 @@ pub fn run(o: Options) !Result {
         }
         if (u.hash(local)) |have| {
             if (std.ascii.eqlIgnoreCase(&have.hex, f.sha256)) continue;
-        } else |err| if (err != error.FileNotFound) return err;
+        } else |err| switch (err) {
+            error.FileNotFound => {},
+            else => return err,
+        }
 
         // After a swap in this session the running image is old_exe, which Windows won't
         // delete or replace: the new exe waits for a restart
-        if (kind == .exe) o.dir.deleteFile(o.io, old_exe) catch |err| {
-            if (err != error.FileNotFound) continue;
+        if (kind == .exe) o.dir.deleteFile(o.io, old_exe) catch |err| switch (err) {
+            error.FileNotFound => {},
+            else => continue,
         };
-        const part = try std.fmt.allocPrint(arena, "{s}.part", .{local});
+        const part = try arena.print("{s}.part", .{local});
         try u.download(f.name, part);
         const got = u.hash(part) catch |err| {
             o.dir.deleteFile(o.io, part) catch {};
@@ -139,7 +143,6 @@ pub fn run(o: Options) !Result {
     return result;
 }
 
-/// Digits and dots only: it becomes part of a file name
 extern "kernel32" fn MoveFileExW(
     from: [*:0]const u16,
     to: [*:0]const u16,
@@ -149,7 +152,7 @@ extern "kernel32" fn MoveFileExW(
 /// std's rename opens the source for writing too, which the running exe refuses
 /// (FileBusy, checked on Windows 11); MoveFileExW asks for delete access only
 fn renameExe(arena: std.mem.Allocator, o: Options, from: []const u8, to: []const u8) !void {
-    if (builtin.os.tag != .windows) return o.dir.rename(from, o.dir, to, o.io);
+    if (builtin.target.os.tag != .windows) return o.dir.rename(from, o.dir, to, o.io);
     var buf: [Io.Dir.max_path_bytes]u8 = undefined;
     const dir = buf[0..try o.dir.realPath(o.io, &buf)];
     const wide = std.unicode.wtf8ToWtf16LeAllocZ;
@@ -159,6 +162,7 @@ fn renameExe(arena: std.mem.Allocator, o: Options, from: []const u8, to: []const
     if (!MoveFileExW(from_w, to_w, replace_existing).toBool()) return error.RenameFailed;
 }
 
+/// Digits and dots only: it becomes part of a file name
 fn validPatch(patch: []const u8) bool {
     if (patch.len == 0 or patch.len > 16) return false;
     for (patch) |c| if (!std.ascii.isDigit(c) and c != '.') return false;
@@ -172,7 +176,7 @@ const Updater = struct {
 
     fn get(u: *Updater, name: []const u8, w: *Io.Writer) !void {
         var url_buf: [512]u8 = undefined;
-        const url = try std.fmt.bufPrint(&url_buf, "{s}{s}", .{ u.o.base, name });
+        const url = try std.mem.print(&url_buf, "{s}{s}", .{ u.o.base, name });
         const res = try u.http.fetch(.{
             .location = .{ .url = url },
             .response_writer = w,
@@ -326,7 +330,7 @@ test "update fetches changed files, swaps the exe, then has nothing to do" {
     var serving = try io.concurrent(TestServer.serve, .{ &ts, &server });
     defer serving.cancel(io);
     var base_buf: [64]u8 = undefined;
-    const base = try std.fmt.bufPrint(&base_buf, "http://127.0.0.1:{d}/d/", .{server.socket.address.getPort()});
+    const base = try std.mem.print(&base_buf, "http://127.0.0.1:{d}/d/", .{server.socket.address.getPort()});
     var o: Options = .{
         .gpa = std.testing.allocator,
         .io = io,

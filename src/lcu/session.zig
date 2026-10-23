@@ -261,7 +261,7 @@ fn containsPick(picks: []const Pick, champion: u32) bool {
 
 fn addBan(arena: std.mem.Allocator, bans: *std.ArrayList(u32), raw: ?i64) !void {
     const c = id(raw) orelse return;
-    if (std.mem.indexOfScalar(u32, bans.items, c) == null) try bans.append(arena, c);
+    if (std.mem.findScalar(u32, bans.items, c) == null) try bans.append(arena, c);
 }
 
 /// "ChampSelect", "Lobby", "None", ...
@@ -299,7 +299,7 @@ pub fn intersectPool(
     const p = pickable orelse return if (owned) |o| try arena.dupe(u32, o) else null;
     const o = owned orelse return try arena.dupe(u32, p);
     var out: std.ArrayList(u32) = .empty;
-    for (p) |c| if (std.mem.indexOfScalar(u32, o, c) != null) try out.append(arena, c);
+    for (p) |c| if (std.mem.findScalar(u32, o, c) != null) try out.append(arena, c);
     return out.items;
 }
 
@@ -453,7 +453,7 @@ test "redact removes identities" {
     defer arena_state.deinit();
     const arena = arena_state.allocator();
     const fixture = try readFixture(arena);
-    try testing.expect(std.mem.indexOf(u8, fixture, "SyntheticLocal") != null);
+    try testing.expect(std.mem.find(u8, fixture, "SyntheticLocal") != null);
     const out = try redact(arena, fixture);
     const gone = [_][]const u8{
         "SyntheticLocal",
@@ -463,7 +463,7 @@ test "redact removes identities" {
         "synthetic.jwt",
     };
     for (gone) |needle| {
-        try testing.expect(std.mem.indexOf(u8, out, needle) == null);
+        try testing.expect(std.mem.find(u8, out, needle) == null);
     }
     try testing.expect(std.mem.indexOf(u8, out, "\"hidden\"") != null);
     const event =

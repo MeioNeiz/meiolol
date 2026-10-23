@@ -226,7 +226,7 @@ pub fn main(init: std.process.Init) !void {
             .{ "-narrow", .private, 1, .{ .w = 440, .h = 1500 } },
         };
         for (sizes) |sz| {
-            const name = try std.fmt.allocPrint(a, "{s}/{s}{s}.png", .{ out_dir, shot.name, sz[0] });
+            const name = try a.print("{s}/{s}{s}.png", .{ out_dir, shot.name, sz[0] });
             try render(gpa, io, .{ .status = status, .stats = &stats, .icons = &icons, .edition = sz[1] }, sz[3], sz[2], name);
             std.debug.print("{s}\n", .{name});
         }

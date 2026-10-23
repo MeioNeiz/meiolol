@@ -250,7 +250,7 @@ pub const Cmd = struct {
         };
         var lines = std.mem.tokenizeAny(u8, text, "\r\n");
         while (lines.next()) |line| {
-            const eq = std.mem.indexOfScalar(u8, line, '=') orelse continue;
+            const eq = std.mem.findScalar(u8, line, '=') orelse continue;
             if (std.mem.eql(u8, std.mem.trim(u8, line[0..eq], " "), name)) {
                 return std.mem.trim(u8, line[eq + 1 ..], " \"'");
             }

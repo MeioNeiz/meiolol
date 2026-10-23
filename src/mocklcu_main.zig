@@ -103,7 +103,7 @@ pub fn main(init: std.process.Init) !void {
                     .float => |x| x,
                     else => 0,
                 };
-                const ns: i96 = @intFromFloat(secs / speed * std.time.ns_per_s);
+                const ns: i96 = @trunc(secs / speed * std.time.ns_per_s);
                 try io.sleep(.fromNanoseconds(ns), .awake);
             }
             _ = try m.advance();
@@ -126,7 +126,7 @@ pub fn main(init: std.process.Init) !void {
     }
     if (hold) |secs| {
         std.debug.print("scenario done; serving {d} s more\n", .{secs});
-        try io.sleep(.fromNanoseconds(@intFromFloat(secs * std.time.ns_per_s)), .awake);
+        try io.sleep(.fromNanoseconds(@trunc(secs * std.time.ns_per_s)), .awake);
         return;
     }
     std.debug.print("scenario done; still serving, Ctrl+C to stop\n", .{});
