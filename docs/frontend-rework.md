@@ -28,6 +28,15 @@ window, to scope the rework in docs/plan.md "Now" item 3. Line numbers are at 55
   a browser QA script). About 8-10 days of foundation, then pages move as the planned
   design work touches them.
 
+## 23 Oct: the pain is both site and desktop
+
+Jacob 23 Oct: "app" in the 20 Oct ask means both the site and the desktop window. So the
+goal is one UI for both, and the desktop toolkit is no longer a separate later choice:
+the 1-2 day WebView2 spike against dvui ("Recommendation") runs early, before ui.zig
+components are built, since its answer decides whether they must also draw in dvui.
+WebView2 would host the same tpl components, CSS and ui.wasm; dvui would need every
+component twice.
+
 ## 22 Oct update: all Zig, guardrails, tooling
 
 Jacob 22 Oct: write all the front end in Zig, drop the JS; the UI is "WAAAAY too wordy";

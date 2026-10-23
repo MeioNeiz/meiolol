@@ -54,8 +54,9 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
    feature code in Zig (zero JS is impossible; zjb bridge patched for 0.17, a tpl island
    spike ran with a 5-line loader; server fragments for big data), guardrails from
    design-ideas.md made checkable
-   (words, tap targets, colour), qa.sh and a gallery first. Waits on Jacob: go or not,
-   and whether "app" means the site or the desktop window (dvui)
+   (words, tap targets, colour), qa.sh and a gallery first. Jacob 23 Oct: the pain is
+   both the site and the desktop window, so one UI for both; the WebView2 spike against
+   dvui moves into the order (doc's "23 Oct"). Waits on Jacob: go or not
 4. Next on the site, by size of win: champion and matchup pages to the leaders' level
    (Jacob 22 Oct: "match" LoLalytics; gaps, measurements and target layout in
    docs/champion-matchup.md): site.md CH0 (Jacob's choices), CH1-CH9, MU1-MU8, first
