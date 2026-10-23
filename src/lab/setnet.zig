@@ -18,6 +18,8 @@ const rows = @import("rows.zig");
 const seatstats = @import("seatstats.zig");
 const winnet = @import("winnet.zig");
 const gates = @import("gates.zig");
+const protocol = @import("protocol.zig");
+const draftfile = @import("../draftfile.zig");
 const nn = @import("nn");
 const cand = @import("cand");
 
@@ -602,27 +604,20 @@ pub fn fit(gpa: std.mem.Allocator, io: Io, opts: winnet.Options, seed: u32, s: w
 }
 
 /// --export 1: one seed's dev fit as DIR/setnet-s<seed>.json (format meiolol-setnet,
-/// version 1). A game's logit is gameLogit over forward: params are flat
-/// (offsets in `layout`); a slot's input is its champion-role's z profile (zeros when
-/// not in `profiles`), the role one-hot and, with emb > 0, the embedding row of its
-/// vocab id (`ids`, else the role's 0..4). `refs`: the first scored games' inputs and
-/// logits, for a reader to check itself against
+/// version 1; draftfile.SetNetFile). A game's logit is gameLogit over forward: params are
+/// flat (offsets in `layout`); a slot's input is its champion-role's z profile (zeros when
+/// not in `profiles`), the role one-hot and, with emb > 0, the embedding row of its vocab
+/// id (`ids`, else the role's 0..4). `refs`: the first scored games' inputs and logits,
+/// for a reader to check itself against. Stops unless draftfile.SetNet, reading the file
+/// back, matches the net on up to check_games scored games within check_tolerance
 fn writeExport(gpa: std.mem.Allocator, io: Io, opts: winnet.Options, seed: u32, n: *const Net, p: *const Profiles, s: winnet.Sets, scored: []const SetGame, w: *const Work) !void {
     var arena_state = std.heap.ArenaAllocator.init(gpa);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    const Id = struct { champion: u32, role: u8, id: u32 };
-    const Prof = struct { champion: u32, role: u8, z: [n_prof]f32 };
-    const Ref = struct { teams: [2][5]u32, platform: u8, offset: f32, logit: f32 };
-    var ids: std.ArrayList(Id) = .empty;
+    var ids: std.ArrayList(ExportId) = .empty;
     var vit = s.vocab_all.map.iterator();
     while (vit.next()) |e| try ids.append(arena, .{ .champion = @intCast(e.key_ptr.* >> 3), .role = @intCast(e.key_ptr.* & 7), .id = e.value_ptr.* });
-    std.mem.sort(Id, ids.items, {}, struct {
-        fn lt(_: void, a: Id, b: Id) bool {
-            return a.id < b.id;
-        }
-    }.lt);
-    var profs: std.ArrayList(Prof) = .empty;
+    var profs: std.ArrayList(ExportProf) = .empty;
     var pit = p.index.iterator();
     while (pit.next()) |e| {
         const role: usize = @intCast(e.key_ptr.* & 7);
@@ -633,23 +628,52 @@ fn writeExport(gpa: std.mem.Allocator, io: Io, opts: winnet.Options, seed: u32, 
         }
         try profs.append(arena, .{ .champion = @intCast(e.key_ptr.* >> 3), .role = @intCast(role), .z = z });
     }
-    std.mem.sort(Prof, profs.items, {}, struct {
-        fn lt(_: void, a: Prof, b: Prof) bool {
+    const teams = try arena.alloc([2][5]u32, scored.len);
+    for (teams, s.idx.scored) |*t, gi| t.* = s.d.games[gi].teams;
+    var newest: i64 = 0;
+    for (s.idx.fit) |gi| newest = @max(newest, s.d.games[gi].start);
+    const json = try exportJson(arena, n, ids.items, profs.items, scored, teams, w, .{ .seed = seed, .fit_games = s.idx.fit.len, .fit_newest = newest });
+    const worst = try checkExport(arena, json, n, scored, teams, w);
+    std.debug.print("netcheck: seed {d}: export read back through draftfile.SetNet on {d} scored games, max |logit diff| {e:.1}\n", .{ seed, @min(scored.len, check_games), worst });
+    if (!(worst <= check_tolerance)) return error.ExportCheckFailed;
+    const name = try arena.print("setnet-s{d}.json", .{seed});
+    try Io.Dir.cwd().writeFile(io, .{ .sub_path = try std.fs.path.join(arena, &.{ opts.out, name }), .data = json });
+}
+
+const ExportId = struct { champion: u32, role: u8, id: u32 };
+const ExportProf = struct { champion: u32, role: u8, z: [n_prof]f32 };
+const ExportMeta = struct { seed: u32, fit_games: usize, fit_newest: i64 };
+const check_games = 500;
+/// As draft --export's check of its scorer: f32 net, f64 reader, ~1e-6 apart
+const check_tolerance = 1e-4;
+
+/// The file's JSON; ids and profs are sorted in place (vocab id, then champion-role)
+fn exportJson(arena: std.mem.Allocator, n: *const Net, ids: []ExportId, profs: []ExportProf, scored: []const SetGame, teams: []const [2][5]u32, w: *const Work, meta: ExportMeta) ![]u8 {
+    std.mem.sort(ExportId, ids, {}, struct {
+        fn lt(_: void, a: ExportId, b: ExportId) bool {
+            return a.id < b.id;
+        }
+    }.lt);
+    std.mem.sort(ExportProf, profs, {}, struct {
+        fn lt(_: void, a: ExportProf, b: ExportProf) bool {
             return a.champion * 8 + a.role < b.champion * 8 + b.role;
         }
     }.lt);
+    const Ref = struct { teams: [2][5]u32, platform: u8, offset: f32, logit: f32 };
     const n_refs = @min(scored.len, 200);
     const refs = try arena.alloc(Ref, n_refs);
-    for (refs, scored[0..n_refs], s.idx.scored[0..n_refs]) |*r, *g, gi| {
-        r.* = .{ .teams = s.d.games[gi].teams, .platform = g.g.platform, .offset = g.g.off, .logit = gameLogit(n, g, forward(n, g, w, 1, null)) };
+    for (refs, scored[0..n_refs], teams[0..n_refs]) |*r, *g, t| {
+        r.* = .{ .teams = t, .platform = g.g.platform, .offset = g.g.off, .logit = gameLogit(n, g, forward(n, g, w, 1, null)) };
     }
     const l = &n.s;
     const file = .{
         .format = "meiolol-setnet",
         .version = 1,
         .candidate = if (@hasDecl(cand, "name")) cand.name else "cand",
-        .seed = seed,
-        .fit_games = s.idx.fit.len,
+        .seed = meta.seed,
+        .fit_games = meta.fit_games,
+        .fit_newest = meta.fit_newest,
+        .platforms = protocol.platformIds(),
         .phi = l.phi,
         .rho = l.rho,
         .emb = l.emb,
@@ -658,13 +682,23 @@ fn writeExport(gpa: std.mem.Allocator, io: Io, opts: winnet.Options, seed: u32, 
         .features = std.enums.values(Feature),
         .layout = .{ .in = l.in, .rin = l.rin, .c = l.c.offset, .a = l.a.offset, .b1 = l.b1.offset, .cb = l.cb.offset, .e = l.e.offset, .w1 = l.w1.offset, .v = l.v.offset, .out = l.out.offset, .len = l.ps.len },
         .params = n.p,
-        .ids = ids.items,
-        .profiles = profs.items,
+        .ids = ids,
+        .profiles = profs,
         .refs = refs,
     };
-    const json = try std.json.Stringify.valueAlloc(arena, file, .{});
-    const name = try arena.print("setnet-s{d}.json", .{seed});
-    try Io.Dir.cwd().writeFile(io, .{ .sub_path = try std.fs.path.join(arena, &.{ opts.out, name }), .data = json });
+    return std.json.Stringify.valueAlloc(arena, file, .{});
+}
+
+/// Max |logit diff| between the file read back (draftfile.SetNet: profiles and ids by
+/// champion-role) and the net's own forward pass on the first check_games scored games
+fn checkExport(arena: std.mem.Allocator, json: []const u8, n: *const Net, scored: []const SetGame, teams: []const [2][5]u32, w: *const Work) !f64 {
+    const sn: draftfile.SetNet = try .parse(arena, json);
+    var worst: f64 = sn.checkRefs();
+    for (scored[0..@min(scored.len, check_games)], teams[0..@min(scored.len, check_games)]) |*g, t| {
+        const want = gameLogit(n, g, forward(n, g, w, 1, null));
+        worst = @max(worst, @abs(sn.logit(t, g.g.platform, g.g.off) - want));
+    }
+    return worst;
 }
 
 /// --dump 1 (meiolol-58's PyTorch cross-check): one set of a block as the net sees it.
@@ -904,4 +938,55 @@ test "dump: the net's inputs per game, z as f32 and a tsv line each" {
     try testing.expect(std.mem.startsWith(u8, lines.next().?, "EUW1_2\t"));
     try testing.expect(std.mem.startsWith(u8, lines.next().?, "EUW1_1\t"));
     try testing.expect(lines.next() == null);
+}
+
+test "export: the file read back through draftfile.SetNet scores as the net" {
+    var arena_state = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const n_champs = 6;
+    const n_ids = 5 + 5 * n_champs;
+    var opts: winnet.Options = .{ .net = .set, .emb = 3 };
+    opts.set = .{ .phi = 6, .rho = 5, .ids = true };
+    var rng: std.Random.DefaultPrng = .init(5);
+    const r = rng.random();
+    var n: Net = try .init(testing.allocator, try .init(testing.allocator, opts, n_ids), r);
+    defer n.deinit(testing.allocator);
+    for (n.s.out.of(n.p)) |*x| x.* = r.floatNorm(f32);
+    n.s.a.at(n.p, 0).* = 0.9;
+    for (n.s.c.of(n.p)) |*x| x.* = 0.1 * r.floatNorm(f32);
+    const w: Work = try .init(testing.allocator, &n.s);
+    defer w.deinit(testing.allocator);
+    // Champion k + 1 in role q: vocab id 5 + 5k + q and a profile; the last champion has
+    // neither (the role's row, zero profile), as an average pick
+    var ids: [5 * (n_champs - 1)]ExportId = undefined;
+    var profs: [5 * (n_champs - 1)]ExportProf = undefined;
+    for (0..n_champs - 1) |k| for (0..5) |q| {
+        ids[k * 5 + q] = .{ .champion = @intCast(k + 1), .role = @intCast(q), .id = @intCast(5 + 5 * k + q) };
+        profs[k * 5 + q] = .{ .champion = @intCast(k + 1), .role = @intCast(q), .z = undefined };
+        for (&profs[k * 5 + q].z) |*x| x.* = r.floatNorm(f32);
+    };
+    var games: [40]SetGame = undefined;
+    var teams: [40][2][5]u32 = undefined;
+    for (&games, &teams) |*g, *t| {
+        g.* = .{ .g = .{ .ids = undefined, .platform = r.uintLessThan(u8, 15), .y = 0, .off = r.floatNorm(f32) }, .z = undefined };
+        for (0..10) |slot| {
+            const q = slot % 5;
+            const k = r.uintLessThan(usize, n_champs);
+            t[slot / 5][q] = @intCast(k + 1);
+            const known = k < n_champs - 1;
+            g.g.ids[slot] = if (known) @intCast(5 + 5 * k + q) else @intCast(q);
+            g.z[slot] = if (known) profs[k * 5 + q].z else @splat(0);
+        }
+    }
+    // Unsorted on the way in, as the hash maps hand them over
+    r.shuffle(ExportId, &ids);
+    const json = try exportJson(arena, &n, &ids, &profs, &games, &teams, &w, .{ .seed = 1, .fit_games = 40, .fit_newest = 9 });
+    try testing.expect(try checkExport(arena, json, &n, &games, &teams, &w) < 1e-5);
+    const sn: draftfile.SetNet = try .parse(arena, json);
+    try testing.expectEqual(@as(i64, 9), sn.f.fit_newest);
+    try testing.expectEqual(@as(?u8, 6), sn.platform("EUW1"));
+    // A changed parameter is caught
+    n.s.out.of(n.p)[0] += 0.01;
+    try testing.expect(try checkExport(arena, json, &n, &games, &teams, &w) > 1e-4);
 }

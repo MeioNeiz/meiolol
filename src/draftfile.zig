@@ -753,6 +753,121 @@ pub fn firstOther(champs: *const Champions, teams: *const [2][n_role]u32) u32 {
     return 0;
 }
 
+/// setnet-s<seed>.json (format meiolol-setnet, version 1; lab/setnet.zig writeExport):
+/// one seed's set net, a correction on a base model's blue logit. fit_newest and
+/// platforms are absent from files before 23 Oct (0 and empty)
+pub const SetNetFile = struct {
+    format: []const u8,
+    version: u32,
+    candidate: []const u8 = "",
+    seed: u32 = 0,
+    fit_games: usize = 0,
+    /// Unix ms of the newest game the net or its profiles saw
+    fit_newest: i64 = 0,
+    /// Platform ids in the order of the c intercepts
+    platforms: []const []const u8 = &.{},
+    phi: usize,
+    rho: usize,
+    emb: usize,
+    cross: bool,
+    n_prof: usize,
+    features: []const []const u8 = &.{},
+    layout: struct { in: usize, rin: usize, c: usize, a: usize, b1: usize, cb: usize, e: usize, w1: usize, v: usize, out: usize, len: usize },
+    params: []const f32,
+    ids: []const struct { champion: u32, role: u8, id: u32 },
+    profiles: []const struct { champion: u32, role: u8, z: []const f32 },
+    refs: []const struct { teams: [2][n_role]u32, platform: u8, offset: f32, logit: f32 },
+};
+
+/// The set net's reference forward pass, the one admin-setnet.js must match:
+/// logit = (f(blue, red) - f(red, blue)) / 2 + c[platform] + a * base. A slot's input is
+/// its champion-role's z profile (zeros without one), its role one-hot and the
+/// embedding row of its id (the role's row 0..4 without one), as for an average pick
+pub const SetNet = struct {
+    f: SetNetFile,
+    ids: std.AutoHashMapUnmanaged(u64, u32) = .empty,
+    profiles: std.AutoHashMapUnmanaged(u64, []const f32) = .empty,
+    n_platforms: usize,
+
+    pub fn parse(arena: std.mem.Allocator, json: []const u8) !SetNet {
+        const f = try std.json.parseFromSliceLeaky(SetNetFile, arena, json, .{ .ignore_unknown_fields = true });
+        if (!std.mem.eql(u8, f.format, "meiolol-setnet") or f.version != 1) return error.NotSetNet;
+        const l = f.layout;
+        const n_ids = if (f.emb > 0) (l.w1 - l.e) / f.emb else 0;
+        const ok = l.len == f.params.len and l.in == f.n_prof + n_role + f.emb and
+            l.rin == f.phi * @as(usize, if (f.cross) 2 else 1) and f.phi <= max_units and l.in <= max_in and
+            l.c < l.a and f.platforms.len <= l.a - l.c and l.a < l.b1 and l.b1 + f.phi <= l.cb and l.cb + f.rho <= l.e and
+            l.w1 + f.phi * l.in <= l.v and l.v + f.rho * l.rin <= l.out and l.out + f.rho <= l.len and
+            (f.emb == 0 or n_ids >= n_role);
+        if (!ok) return error.BadSetNetShape;
+        var n: SetNet = .{ .f = f, .n_platforms = l.a - l.c };
+        for (f.ids) |x| {
+            if (x.role >= n_role or (f.emb > 0 and x.id >= n_ids)) return error.BadSetNetShape;
+            try n.ids.put(arena, Champions.key(x.champion, x.role), x.id);
+        }
+        for (f.profiles) |x| {
+            if (x.role >= n_role or x.z.len != f.n_prof) return error.BadSetNetShape;
+            try n.profiles.put(arena, Champions.key(x.champion, x.role), x.z);
+        }
+        for (f.refs) |r| if (r.platform >= n.n_platforms) return error.BadSetNetShape;
+        return n;
+    }
+
+    /// Index of a platform id among the c intercepts; null when the file has no list or
+    /// not that platform
+    pub fn platform(n: *const SetNet, id: []const u8) ?u8 {
+        for (n.f.platforms, 0..) |p, i| if (std.mem.eql(u8, p, id)) return @intCast(i);
+        return null;
+    }
+
+    /// Blue's logit for teams (0 empty) on a platform index (below n_platforms), given the
+    /// base's blue logit
+    pub fn logit(n: *const SetNet, teams: [2][n_role]u32, plat: u8, base: f64) f64 {
+        const f = &n.f;
+        const p = f.params;
+        const l = f.layout;
+        var t: [2][max_units]f64 = @splat(@splat(0));
+        var x: [max_in]f64 = undefined;
+        for (0..2) |side| for (0..n_role) |r| {
+            const id = teams[side][r];
+            const k = Champions.key(id, r);
+            const z: []const f32 = if (id != 0) n.profiles.get(k) orelse &.{} else &.{};
+            for (x[0..f.n_prof], 0..) |*o, i| o.* = if (z.len > 0) z[i] else 0;
+            for (x[f.n_prof..][0..n_role], 0..) |*o, i| o.* = @floatFromInt(@intFromBool(i == r));
+            const row: usize = if (id != 0) n.ids.get(k) orelse r else r;
+            for (x[f.n_prof + n_role ..][0..f.emb], p[l.e + row * f.emb ..][0..f.emb]) |*o, e| o.* = e;
+            for (t[side][0..f.phi], 0..) |*o, j| {
+                var s: f64 = p[l.b1 + j];
+                for (x[0..l.in], p[l.w1 + j * l.in ..][0..l.in]) |xi, w| s += w * xi;
+                o.* += @max(s, 0) / n_role;
+            }
+        };
+        var fs: [2]f64 = undefined;
+        for (&fs, 0..) |*out, o| {
+            var rin: [2 * max_units]f64 = undefined;
+            @memcpy(rin[0..f.phi], t[o][0..f.phi]);
+            if (f.cross) @memcpy(rin[f.phi..][0..f.phi], t[1 - o][0..f.phi]);
+            out.* = 0;
+            for (0..f.rho) |j| {
+                var s: f64 = p[l.cb + j];
+                for (rin[0..l.rin], p[l.v + j * l.rin ..][0..l.rin]) |ri, w| s += w * ri;
+                if (s > 0) out.* += p[l.out + j] * s;
+            }
+        }
+        return (fs[0] - fs[1]) / 2 + p[l.c + plat] + p[l.a] * base;
+    }
+
+    /// The file's reference games through logit: max |logit diff|
+    pub fn checkRefs(n: *const SetNet) f64 {
+        var worst: f64 = 0;
+        for (n.f.refs) |r| worst = @max(worst, @abs(n.logit(r.teams, r.platform, r.offset) - r.logit));
+        return worst;
+    }
+};
+
+const max_units = 256;
+const max_in = 512;
+
 /// stats.patchKey back to "16.21"
 pub fn patchLabel(arena: std.mem.Allocator, key: u32) ![]const u8 {
     return arena.print("{d}.{d}", .{ key / 1000, key % 1000 });
@@ -907,4 +1022,35 @@ test "scorer: team term on the damage-weighted magic share" {
     // Red top empty: the role average, magic 0.45 on damage 15
     teams[1][0] = 0;
     try std.testing.expectApproxEqAbs(-2 * (0.09 - 0.0025), sc.compOf(teams), 1e-6);
+}
+
+test "set net file: the documented forward pass on a hand-sized net" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    // One profile trait, phi 1, rho 1, no embedding, within-team only: u = relu(z),
+    // t = sum u / 5, f = 0.5 relu(t); platform c [0.1, 0.2], offset weight 0.9
+    const json =
+        \\{"format":"meiolol-setnet","version":1,"seed":1,"fit_newest":5,"platforms":["NA1","EUW1"],
+        \\"phi":1,"rho":1,"emb":0,"cross":false,"n_prof":1,"features":["magic"],
+        \\"layout":{"in":6,"rin":1,"c":0,"a":2,"b1":3,"cb":4,"e":5,"w1":5,"v":11,"out":12,"len":13},
+        \\"params":[0.1,0.2,0.9,0,0,1,0,0,0,0,0,1,0.5],"ids":[],
+        \\"profiles":[{"champion":7,"role":0,"z":[2]},{"champion":8,"role":0,"z":[-1]}],
+        \\"refs":[{"teams":[[7,0,0,0,0],[8,0,0,0,0]],"platform":1,"offset":0.5,"logit":0.75}]}
+    ;
+    const n: SetNet = try .parse(arena, json);
+    try std.testing.expectEqual(@as(?u8, 1), n.platform("EUW1"));
+    try std.testing.expectEqual(@as(?u8, null), n.platform("KR"));
+    try std.testing.expect(n.checkRefs() < 1e-6);
+    var teams: [2][n_role]u32 = .{ .{ 7, 0, 0, 0, 0 }, .{ 8, 0, 0, 0, 0 } };
+    // f(blue) 0.5 * 2 / 5 = 0.2, f(red) 0: 0.1 + 0.2 + 0.9 * 0.5
+    try std.testing.expectApproxEqAbs(@as(f64, 0.75), n.logit(teams, 1, 0.5), 1e-6);
+    // Teams and base swapped: everything flips but the platform intercept
+    std.mem.swap([n_role]u32, &teams[0], &teams[1]);
+    try std.testing.expectApproxEqAbs(@as(f64, 2 * 0.2 - 0.75), n.logit(teams, 1, -0.5), 1e-6);
+    // An empty slot and a champion with no profile in the role are average picks (zero
+    // profile): 0.1 + 0.1 + 0.9 * 0.5 on platform 0
+    try std.testing.expectApproxEqAbs(@as(f64, 0.65), n.logit(.{ .{ 7, 0, 0, 0, 0 }, .{ 0, 0, 0, 0, 0 } }, 0, 0.5), 1e-6);
+    try std.testing.expectApproxEqAbs(@as(f64, 0.65), n.logit(.{ .{ 7, 0, 0, 0, 0 }, .{ 9, 0, 0, 0, 0 } }, 0, 0.5), 1e-6);
+    try std.testing.expectError(error.NotSetNet, SetNet.parse(arena, "{\"format\":\"meiolol-draft-model\",\"version\":1,\"phi\":1,\"rho\":1,\"emb\":0,\"cross\":false,\"n_prof\":1,\"layout\":{\"in\":6,\"rin\":1,\"c\":0,\"a\":2,\"b1\":3,\"cb\":4,\"e\":5,\"w1\":5,\"v\":11,\"out\":12,\"len\":13},\"params\":[],\"ids\":[],\"profiles\":[],\"refs\":[]}"));
 }
