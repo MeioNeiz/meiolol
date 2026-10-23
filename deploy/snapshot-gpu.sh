@@ -33,10 +33,12 @@ mountpoint -q /mnt/wsl/lab || die "/mnt/wsl/lab not mounted"
 [[ -f "$mirror/.mirrored" ]] || die "no backup mirror at $mirror"
 out=$snaps/$name
 [[ -e "$out" ]] && die "$out exists"
-# Real ids: owner only, gone on any exit
+# Real ids: owner only, gone on any exit. A crash or a stop skips the trap and leaves an
+# earlier build's copy (~24 GB); builds run one at a time (snapshot.sh's unit), so any
+# other is stale
 umask 077
 work=$snaps/.$name-real
-rm -rf "$work"
+rm -rf "$snaps"/.snap-*-real
 mkdir -p "$work"
 trap 'rm -rf "$work"' EXIT
 raw=$work/$name
