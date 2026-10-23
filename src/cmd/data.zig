@@ -177,11 +177,11 @@ pub fn cmdRekey(c: *Cmd) !u8 {
         std.log.warn("RIOT_API_KEY_OLD not set and nothing erased: not checking the keys", .{});
         return try rekeyApply(c, db, api_db, &.{}, dry_run);
     };
-    var old_limiter: riot.ratelimit.Limiter = try .init(gpa, io);
+    var old_limiter: riot.ratelimit.Limiter = try .init(gpa, io, riot.ratelimit.personal_key);
     defer old_limiter.deinit();
     var old: riot.client.Client = .init(gpa, io, old_key, &old_limiter);
     defer old.deinit();
-    var new_limiter: riot.ratelimit.Limiter = try .init(gpa, io);
+    var new_limiter: riot.ratelimit.Limiter = try .init(gpa, io, riot.ratelimit.personal_key);
     defer new_limiter.deinit();
     var new: riot.client.Client = .init(gpa, io, new_key, &new_limiter);
     defer new.deinit();
@@ -388,7 +388,7 @@ pub fn cmdForget(c: *Cmd) !u8 {
         return error.Usage;
     }
     const now = std.Io.Clock.real.now(io).toSeconds();
-    var limiter: riot.ratelimit.Limiter = try .init(c.init.gpa, io);
+    var limiter: riot.ratelimit.Limiter = try .init(c.init.gpa, io, riot.ratelimit.personal_key);
     defer limiter.deinit();
     var client: ?riot.client.Client = null;
     defer if (client) |*cl| cl.deinit();

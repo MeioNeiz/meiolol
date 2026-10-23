@@ -51,7 +51,7 @@ pub fn build(b: *std.Build) void {
         run.addPassthruArgs();
         b.step(e.name, b.fmt("Run {s} ({s})", .{ e.name, e.about })).dependOn(&run.step);
     }
-    for ([_]*std.Build.Module{ m.backend, m.app, m.core, m.store, m.tpl }) |mod| {
+    for ([_]*std.Build.Module{ m.backend, m.app, m.core, m.store, m.tpl, m.net }) |mod| {
         const t = b.addTest(.{ .root_module = mod, .filters = test_filters });
         test_step.dependOn(&b.addRunArtifact(t).step);
     }
@@ -176,7 +176,7 @@ pub fn build(b: *std.Build) void {
     const tsan_filters: []const []const u8 = if (test_filters.len > 0) test_filters else &.{
         "par.test", "ahead.test", "httpd.test", "proxy.test", "ratelimit.test", "idle keep-alive", "pipeline_test",
     };
-    for ([_]*std.Build.Module{ backend_tsan.backend, backend_tsan.store }) |t| {
+    for ([_]*std.Build.Module{ backend_tsan.backend, backend_tsan.store, backend_tsan.net }) |t| {
         t.sanitize_thread = true;
         backend_check.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = t, .filters = tsan_filters })).step);
     }
@@ -203,6 +203,7 @@ pub fn build(b: *std.Build) void {
 const Modules = struct {
     core: *std.Build.Module,
     tpl: *std.Build.Module,
+    net: *std.Build.Module,
     store: *std.Build.Module,
     backend: *std.Build.Module,
     app: *std.Build.Module,
@@ -221,6 +222,13 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
     // HTML templates checked at compile time: std only, library-grade (src/tpl/root.zig)
     const tpl = b.createModule(.{
         .root_source_file = b.path("src/tpl/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // HTTP pieces std leaves out (rate limits): std only, library-grade (src/net/root.zig)
+    const net = b.createModule(.{
+        .root_source_file = b.path("src/net/root.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -253,6 +261,7 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
             .{ .name = "core", .module = core },
             .{ .name = "store", .module = store },
             .{ .name = "tpl", .module = tpl },
+            .{ .name = "net", .module = net },
         },
         .link_libc = true,
     });
@@ -305,7 +314,7 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
     chart_wasm.rdynamic = true;
     backend.addAnonymousImport("chart.wasm", .{ .root_source_file = chart_wasm.getEmittedBin() });
 
-    return .{ .core = core, .tpl = tpl, .store = store, .backend = backend, .app = app };
+    return .{ .core = core, .tpl = tpl, .net = net, .store = store, .backend = backend, .app = app };
 }
 
 /// The desktop window (src/desktop_main.zig): dvui with its Direct3D 11 backend, tree-sitter

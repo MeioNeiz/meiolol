@@ -68,7 +68,7 @@ pub const Fetcher = struct {
         if (!gop.found_existing) {
             const r = try f.gpa.create(Route);
             errdefer f.gpa.destroy(r);
-            r.limiter = try .init(f.gpa, f.io);
+            r.limiter = try .init(f.gpa, f.io, riot.ratelimit.personal_key);
             r.client = if (f.opts.proxy) |base| .initProxy(f.gpa, f.io, base) else .init(f.gpa, f.io, f.opts.key, &r.limiter);
             gop.value_ptr.* = r;
         }

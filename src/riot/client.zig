@@ -206,16 +206,16 @@ pub const Client = struct {
         const status: u16 = @backingInt(response.head.status);
 
         // Header slices die once the body reader starts, so use them now
-        var h: Limiter.Headers = .{};
+        var h: Limiter.Reported = .{};
         var retry_after: ?u32 = null;
         var limit_type: []const u8 = "service";
         var it = response.head.iterateHeaders();
         while (it.next()) |header| {
             const eql = std.ascii.eqlIgnoreCase;
-            if (eql(header.name, "x-app-rate-limit")) h.app_limit = header.value;
-            if (eql(header.name, "x-app-rate-limit-count")) h.app_count = header.value;
-            if (eql(header.name, "x-method-rate-limit")) h.method_limit = header.value;
-            if (eql(header.name, "x-method-rate-limit-count")) h.method_count = header.value;
+            if (eql(header.name, "x-app-rate-limit")) h.global_limit = header.value;
+            if (eql(header.name, "x-app-rate-limit-count")) h.global_count = header.value;
+            if (eql(header.name, "x-method-rate-limit")) h.key_limit = header.value;
+            if (eql(header.name, "x-method-rate-limit-count")) h.key_count = header.value;
             if (eql(header.name, "x-rate-limit-type")) limit_type = header.value;
             if (eql(header.name, "retry-after")) {
                 retry_after = std.fmt.parseInt(u32, header.value, 10) catch null;
@@ -225,7 +225,7 @@ pub const Client = struct {
         if (status == 429) {
             const wait: u32 = retry_after orelse @intCast(backoff);
             log.warn("429 ({s}) on {s}, waiting {d}s", .{ limit_type, logged(uri.path.percent_encoded, method), wait });
-            const scope: Limiter.Scope = if (std.mem.eql(u8, limit_type, "method")) .method else .app;
+            const scope: Limiter.Scope = if (std.mem.eql(u8, limit_type, "method")) .key else .global;
             try limiter.block(scope, method, wait);
         }
 

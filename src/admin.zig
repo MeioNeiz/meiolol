@@ -10,7 +10,7 @@ const std = @import("std");
 const store = @import("store");
 const date = @import("date.zig");
 const ep = @import("riot/endpoints.zig");
-const Limiter = @import("riot/ratelimit.zig").Limiter;
+const ratelimit = @import("riot/ratelimit.zig");
 const tsvlog = @import("tsvlog.zig");
 const tpl = @import("tpl");
 const status = @import("status.zig");
@@ -147,7 +147,7 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
         .storage = try storage(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "storage.tsv" })),
         .backups = try backups(arena, io, o.backups_dir orelse try std.fs.path.join(arena, &.{ o.data_dir, "..", "backups" })),
         .riot = .{
-            .app_limit = Limiter.app_default,
+            .app_limit = ratelimit.personal_key,
             // None seeded: the limiter learns them from Riot's headers
             .method_limits = struct {}{},
             .crawl_args = std.mem.trim(u8, try readHead(arena, io, o.crawl_args orelse

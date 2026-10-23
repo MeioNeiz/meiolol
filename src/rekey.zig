@@ -174,7 +174,7 @@ const Keys = struct {
     limiter: riot.ratelimit.Limiter,
 
     fn init(k: *Keys, new_encryption: u8) !void {
-        k.limiter = try .init(testing.allocator, testing.io);
+        k.limiter = try .init(testing.allocator, testing.io, riot.ratelimit.personal_key);
         for (&k.fakes, &k.clients, [2]u8{ 0, new_encryption }) |*f, *c, e| {
             f.* = try .init(testing.allocator, testing.io, 0);
             f.encryption = e;
