@@ -18,7 +18,7 @@ const sign = @import("sign.zig");
 pub const default_base = "https://meio.lol/admin/desktop/";
 pub const key_file = "update.key";
 pub const old_exe = "meiolol-desktop.old.exe";
-const exe_name = "meiolol-desktop.exe";
+pub const exe_name = "meiolol-desktop.exe";
 const key_header = "x-meiolol-desktop";
 
 const Manifest = struct {
@@ -128,9 +128,9 @@ pub fn run(o: Options) !Result {
             return error.HashMismatch;
         }
         if (kind == .exe) {
-            try renameExe(arena, o, local, old_exe);
+            try renameExe(arena, o.io, o.dir, local, old_exe);
             o.dir.rename(part, o.dir, local, o.io) catch |err| {
-                renameExe(arena, o, old_exe, local) catch {};
+                renameExe(arena, o.io, o.dir, old_exe, local) catch {};
                 return err;
             };
             result.exe = true;
@@ -151,13 +151,13 @@ extern "kernel32" fn MoveFileExW(
 
 /// std's rename opens the source for writing too, which the running exe refuses
 /// (FileBusy, checked on Windows 11); MoveFileExW asks for delete access only
-fn renameExe(arena: std.mem.Allocator, o: Options, from: []const u8, to: []const u8) !void {
-    if (builtin.target.os.tag != .windows) return o.dir.rename(from, o.dir, to, o.io);
+pub fn renameExe(arena: std.mem.Allocator, io: Io, dir: Io.Dir, from: []const u8, to: []const u8) !void {
+    if (builtin.target.os.tag != .windows) return dir.rename(from, dir, to, io);
     var buf: [Io.Dir.max_path_bytes]u8 = undefined;
-    const dir = buf[0..try o.dir.realPath(o.io, &buf)];
+    const path = buf[0..try dir.realPath(io, &buf)];
     const wide = std.unicode.wtf8ToWtf16LeAllocZ;
-    const from_w = try wide(arena, try std.fs.path.join(arena, &.{ dir, from }));
-    const to_w = try wide(arena, try std.fs.path.join(arena, &.{ dir, to }));
+    const from_w = try wide(arena, try std.fs.path.join(arena, &.{ path, from }));
+    const to_w = try wide(arena, try std.fs.path.join(arena, &.{ path, to }));
     const replace_existing = 1;
     if (!MoveFileExW(from_w, to_w, replace_existing).toBool()) return error.RenameFailed;
 }

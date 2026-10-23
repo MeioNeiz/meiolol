@@ -5,6 +5,8 @@ const std = @import("std");
 const dvui = @import("dvui");
 const ui = @import("desktop/ui.zig");
 const poller = @import("desktop/poller.zig");
+const setup = @import("desktop/setup.zig");
+const build_options = @import("build_options");
 
 pub const dvui_app: dvui.App = .{
     .config = .{ .options = .{
@@ -35,8 +37,10 @@ pub fn main(init: std.process.Init) !void {
     dvui.App.main_init = init;
     // Logs reach the console when started from one
     dvui.Backend.Common.windowsAttachConsole() catch {};
-    const class = win32.L("DvuiWindow");
-    backend.RegisterClass(class, .{}) catch win32.panicWin32("RegisterClass", win32.GetLastError());
+    if (setup.atStart(init, build_options.desktop_version) == .exit) return;
+    const class = setup.window_class;
+    const icon = win32.LoadIconW(win32.GetModuleHandleW(null), @ptrFromInt(1)); // meiolol.rc
+    backend.RegisterClass(class, .{ .icon = icon }) catch win32.panicWin32("RegisterClass", win32.GetLastError());
     const opts = dvui_app.config.get();
     dvui.io = init.io;
 
@@ -84,8 +88,8 @@ fn waitMessage(micros: u32) bool {
 }
 fn start(_: *dvui.Window) !void {
     const init = dvui.App.main_init orelse return error.NoProcessInit;
-    const options = @import("build_options");
-    try poller.start(init, null, wakeUi, options.desktop_version, if (options.public) .public else .private);
+    const edition: ui.Edition = if (build_options.public) .public else .private;
+    try poller.start(init, null, wakeUi, build_options.desktop_version, edition);
 }
 
 fn wakeUi() void {

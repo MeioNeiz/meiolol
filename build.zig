@@ -312,6 +312,7 @@ fn desktopExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lan
     options.addOption(u64, "desktop_version", version);
     options.addOption(bool, "public", edition == .public);
     exe.root_module.addOptions("build_options", options);
+    exe.root_module.addWin32ResourceFile(.{ .file = b.path("src/desktop/meiolol.rc") });
     exe.subsystem = .windows;
     return exe;
 }

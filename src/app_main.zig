@@ -596,6 +596,7 @@ test {
     _ = @import("postgame.zig");
     _ = @import("loading.zig");
     _ = @import("desktop/icons.zig");
+    _ = @import("desktop/install.zig");
     _ = update;
     std.testing.refAllDecls(lcu);
 }

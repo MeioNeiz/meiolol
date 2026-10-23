@@ -116,8 +116,9 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
   file
 - APP7 Private: scouting where names are visible (needs APP1's queue facts and AC6 for
   "me"), percentages, experimental models
-- APP8 Window icon (champion icons done: from the client, desktop/icons.zig; Data
-  Dragon art is allowed, logos not)
+- APP8 Icons done: champion icons from the client (desktop/icons.zig; Data Dragon art
+  is allowed, Riot logos not); the app's own is the site favicon's M (23 Oct, exe,
+  shortcut and window)
 - APP10 Loading screen cards, first pass done (23 Oct): in GameStart the window shows
   the last champ select's ten seats as cards (loading.zig, desktop/loadscreen.zig): role
   (guessed with ?), pills for strong or weak in the role, few games, ahead, even or
@@ -228,6 +229,10 @@ games.
   architecture.md "Desktop window", hosting.md "Desktop app files". Exes from before
   the MoveFileExW fix (20 Oct) never swap themselves; a second exe update in one session
   waits for a restart
+- Installs itself (23 Oct): the zip's exe moves into %LOCALAPPDATA%\Programs\meiolol
+  with a Start menu shortcut (Windows search finds it) and an Apps list entry with
+  Uninstall; one copy at a time. Checked on the gpu-box: install, second start, install
+  over an open copy, uninstall
 - Mock champ select on the Mac: `deploy/mock-cs.sh [SCENARIO] [--window]` (scenarios
   `list`; also serves Live Client Data on 2999, item gold per player, and the end of
   game block). Every scenario runs in `zig build test`
@@ -243,6 +248,6 @@ games.
   from even; one is wrong (also an open question in decisions.md)
 - Your own record in the matchup (concept part 6; LCU match history, needs a real reply)
 - Public download, after the key, in order: the public channel (APP2), Authenticode
-  signing (SmartScreen warns on unsigned exes, in a zip or an installer alike), per-user
-  install (%LOCALAPPDATA%, Start menu entry)
+  signing (SmartScreen warns on unsigned exes, in a zip or an installer alike); the
+  per-user install is done (23 Oct, architecture.md "Desktop window")
 - dvui: pin PR #1012 (0.17.x branch) until it merges
