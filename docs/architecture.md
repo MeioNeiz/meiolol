@@ -193,6 +193,13 @@ routing value, so one thread per bucket, each with its own HTTP client, limiter 
 DB connection it only reads with: 4 regional + 15 platform threads. Platform to region
 map: `platforms` in src/riot/endpoints.zig.
 
+Race checks, by hand after a threading change (not in ci): `zig build backend-check` runs
+the tests that start threads (par, store/ahead, httpd, the proxy, ratelimit, the API's
+keep-alive test, the site pipeline) under ThreadSanitizer, about a minute once built. The
+crawler's own threads need a run: `zig build backend-tsan`, then `TSAN_OPTIONS=log_path=F
+RIOT_API_KEY=fake zig-out/tsan/meiolol crawl --data EMPTY_DIR --fake-api 20 --hours 0.025
+--proxy 127.0.0.1:18092` (a few curls at the proxy meanwhile); no F.* file after is clean
+
 One writer thread (src/riot/writer.zig) makes every crawler write. Workers parse and
 compress outside any lock and queue owned jobs (at most 128 waiting, then they block);
 the writer applies whatever has queued in one transaction, a savepoint per job, so a

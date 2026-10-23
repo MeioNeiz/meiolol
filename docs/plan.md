@@ -88,7 +88,7 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
    and 8 feed it
 10. Our Zig "libraries" toward what the Rust crates give (Jacob 21 Oct), checks outside
    ci: desktop releases signed, fuzzed and ReleaseSafe done, HTTP server limits done
-   23 Oct; next backend fuzzing, TSan, one `net` module: docs/plan/libraries.md
+   23 Oct, backend TSan 24 Oct (no races); next backend fuzzing, one `net` module: docs/plan/libraries.md
 
 Others own: the TW2 mastery retry (meiolol-8f); neural nets vs
 today's model; the draft's "Rammus into high AD/AP" check.

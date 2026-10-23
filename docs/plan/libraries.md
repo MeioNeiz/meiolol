@@ -27,6 +27,12 @@ that slow everyday development).
   120 s): API 128 connections, 16 KB, idle 60 s, head 30 s, handler 60 s; serve 256,
   handler 180 s; proxy 64, no body, no idle or handler timeout (the API keeps pooled
   connections there; a request waits for a Riot slot)
+- ThreadSanitizer over the backend (24 Oct): `zig build backend-check` (par.zig,
+  store/ahead.zig, httpd's watchdog and slot table, the proxy, ratelimit, the API's
+  keep-alive test and the site pipeline's parallel load and filters) and a 90 s fake
+  crawl of the TSan build with the proxy serving (`zig build backend-tsan`; how to run:
+  architecture.md "Crawler"). No races found. TSan works on macOS with 0.17 (a planted
+  race is reported)
 
 ## Next, by how exposed the code is
 
@@ -35,8 +41,7 @@ that slow everyday development).
    decode (riot/timeline.zig, digest.zig), API request handling (api/root.zig), rawpack.
    Same pattern: a fuzz test from a good fixture (core/fuzz.zig mutate), searched in a
    step outside ci, e.g. before a crawler or API change, or nightly on the gpu-box
-3. ThreadSanitizer over the parallel code (par.zig, store/ahead.zig, the crawler's
-   threads): a step like desktop-check, run by hand after a threading change
+3. ThreadSanitizer: done 24 Oct (above)
 4. One library-grade `net` module (like tpl/ and nn/: std only, own tests, a worked
    example in its header): the server limits, LCU TLS (lcu/https.zig), the rate limiter
    (riot/ratelimit.zig), signing (desktop/sign.zig). A Zig upgrade's std.http and

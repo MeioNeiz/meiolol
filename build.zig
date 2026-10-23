@@ -163,6 +163,23 @@ pub fn build(b: *std.Build) void {
     ci.dependOn(lint(b, "perl", "for f in deploy/*.pl; do perl -c \"$f\" 2> /dev/null || { perl -c \"$f\"; exit 1; }; done"));
     ci.dependOn(lint(b, "node", "for f in src/site/static/*.js deploy/training/*.js deploy/*.js; do node --check \"$f\" || exit 1; done"));
 
+    // The backend's threads under ThreadSanitizer, by hand after a threading change (not
+    // in ci: slow). The tests that run threads; -Dtest-filter picks others
+    const backend_tsan = modules(b, target, .Debug);
+    const backend_check = b.step("backend-check", "Backend tests that run threads, under ThreadSanitizer");
+    const tsan_filters: []const []const u8 = if (test_filters.len > 0) test_filters else &.{
+        "par.test", "ahead.test", "httpd.test", "proxy.test", "ratelimit.test", "idle keep-alive", "pipeline_test",
+    };
+    for ([_]*std.Build.Module{ backend_tsan.backend, backend_tsan.store }) |t| {
+        t.sanitize_thread = true;
+        backend_check.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = t, .filters = tsan_filters })).step);
+    }
+    // The crawler's threads need a run: zig-out/tsan/meiolol crawl --fake-api (libraries.md)
+    b.step("backend-tsan", "meiolol under ThreadSanitizer in zig-out/tsan").dependOn(&b.addInstallArtifact(
+        b.addExecutable(.{ .name = "meiolol", .root_module = backend_tsan.backend }),
+        .{ .dest_dir = .{ .override = .{ .custom = "tsan" } } },
+    ).step);
+
     // Desktop release checks (deploy/desktop-release.sh), slower than ci so not in it:
     // core and app tests under ThreadSanitizer, and their fuzz tests searched for --fuzz=N
     // inputs (plain `zig build test` runs each fuzz test once)
