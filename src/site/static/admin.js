@@ -23,7 +23,7 @@ const BAD = "#e66767";
 const TABS = [
   ["overview", "Overview"], ["crawler", "Crawler"], ["riot", "Riot API"], ["storage", "Storage"],
   ["ingest", "Ingest"], ["models", "Models"], ["traffic", "Traffic"],
-  ["deploys", "Deploys"], ["logs", "Logs"], ["ops", "Controls"],
+  ["deploys", "Deploys"], ["logs", "Logs"], ["accounts", "Accounts"], ["ops", "Controls"],
 ];
 // Tabs whose charts follow the time range switch
 const TIMED = new Set(["overview", "crawler", "riot"]);
@@ -775,7 +775,7 @@ function render(keep) {
   controls.append(desktopLink());
   controls.append(el("button", { type: "button", class: "ghost", title: "Fetch everything now", onclick: () => refreshAll() }, "Refresh"));
   if (ME) controls.append(el("span", { class: "me", title: `Signed in as ${ME.username} (${ME.role})` },
-    el("span", { class: "who" }, ME.username), el("button", { type: "button", onclick: logOut }, "Log out")));
+    el("a", { class: "who", href: "/account.html" }, ME.username), el("button", { type: "button", onclick: logOut }, "Log out")));
   top.append(controls);
   const nav = el("nav", { class: "tabs", "aria-label": "Sections" });
   TABS.forEach(([k, label], i) => nav.append(el("a", { href: "#" + k, "aria-current": k === ui.tab ? "page" : null, title: `${label} (${i + 1})`, onclick: ev => { ev.preventDefault(); setTab(k); } }, label)));
@@ -2390,6 +2390,7 @@ function hourBins(times, from, counts) {
 }
 
 let logTimer = null;
+VIEWS.accounts = accountsView;
 VIEWS.logs = body => logViewer(section(body, "Logs", "Box logs with player names, ids and match ids removed. Times in UK time (the box logs UTC). Filter is case-insensitive."));
 // The box logs UTC ("2026-10-17 18:52:27", "2026-10-17T18:52:14Z", Python's ",823"):
 // leading stamps to UK time, as the rest of the panel

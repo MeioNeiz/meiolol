@@ -99,6 +99,9 @@ Each step ends tested and deployed; nginx and systemd changes on jomify need Jac
   (password, devices, sign out everywhere), admin Accounts tab (list, invite, role,
   disable). Done when a test private account reaches /p/ and gets 403 on every /admin/
   route and action
+  23 Oct: /auth/password, /auth/accounts, invite, role, disable, reset (route x role
+  tests); /account.html (password, log out everywhere; devices wait for AC4); the admin
+  Accounts tab. Left: the /p/ space (nginx, Jacob's OK) and its first page
 - AC4 Desktop sign in: login screen in the app, device tokens, update gate by token,
   update.key retired. Done when a fresh install signs in, updates, and a revoked device
   stops updating within one check

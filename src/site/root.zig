@@ -482,6 +482,7 @@ pub fn renderShared(site: *const Site, w: *Writer, path: []const u8) !bool {
         .{ "login.html", "Log in", "Log in to meiolol.", .none, account_page.login },
         .{ "signup.html", "Make your account", "Make a meiolol account from a sign-up link.", .none, account_page.signup },
         .{ "join.html", "Set up your login", "Set up a meiolol login from an invite link.", .none, account_page.join },
+        .{ "account.html", "Your account", "Your meiolol login: password and sign out.", .none, account_page.account },
     };
     for (fixed) |f| {
         if (!std.mem.eql(u8, path, f[0])) continue;

@@ -155,7 +155,7 @@ button.ghost:hover, .chips button:hover { color: var(--text); }
   display: inline-flex; align-items: center; font-size: 12px; color: var(--muted); background: var(--panel);
   border: 1px solid var(--line); border-radius: 999px; padding-left: 10px; overflow: hidden;
 }
-.me .who { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.me .who { color: inherit; text-decoration: none; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .me button {
   font: inherit; color: var(--muted); background: none; border: 0; border-left: 1px solid var(--line);
   margin-left: 8px; padding: 3px 10px; cursor: pointer;
@@ -204,6 +204,13 @@ button.action {
 button.action:hover:not(:disabled) { border-color: var(--accent); }
 button.action.danger { color: var(--bad); border-color: rgba(255, 107, 107, 0.4); }
 button.action:disabled { opacity: 0.5; cursor: not-allowed; }
+.invite { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 14px; }
+.invite input { flex: 1 1 320px; min-width: 0; font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.invite select, .invite input, td select {
+  font: inherit; font-size: 13px; color: var(--text); background: var(--panel-2); border: 1px solid var(--axis);
+  border-radius: 8px; padding: 5px 8px;
+}
+.invite-link .invite { margin-bottom: 4px; }
 .result { margin-top: 10px; border-left: 3px solid var(--line); padding: 4px 10px; }
 .result.good { border-left-color: var(--good); }
 .result.bad { border-left-color: var(--bad); }

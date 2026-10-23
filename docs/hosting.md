@@ -236,9 +236,11 @@ nginx caches each encoding apart, and answers a directory URL without its slash 
   /var/lib/meiolol-api/accounts.db. nginx auth_request /_meiolol_admin (/auth/check/
   view_admin) guards /admin/, /admin/api/, /admin/ops/ and /admin/training/; no
   login sends a page to /login.html?next=, a lower role gets 403. The basic auth
-  (meiolol-api.htpasswd) is no longer used. Accounts by hand: `sudo -u meiolol-api
-  meiolol account ... --data /var/lib/meiolol-api` on jomify (list, reset, link,
-  revoke-links, delete). nginx before: /etc/nginx/meiolol.conf.bak-pre-accounts
+  (meiolol-api.htpasswd) is no longer used. /account.html: own password, log out
+  everywhere. The admin page's Accounts tab (manage_accounts) lists logins, makes invite
+  and reset links, changes roles and disables, below the signed-in role only. Accounts by
+  hand: `sudo -u meiolol-api meiolol account ... --data /var/lib/meiolol-api` on jomify
+  (list, reset, link, revoke-links, delete; the owner only here). nginx before: /etc/nginx/meiolol.conf.bak-pre-accounts
 
 ### Deploy events
 

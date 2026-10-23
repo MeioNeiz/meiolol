@@ -1,5 +1,6 @@
-//! Log in, sign up and invite pages (docs/plan/accounts.md): forms that static/account.js
-//! sends to /auth/ (src/api/accounts.zig). Left out of the sitemap and never indexed
+//! Log in, sign up, invite and account pages (docs/plan/accounts.md): forms that
+//! static/account.js sends to /auth/ (src/api/accounts.zig). Left out of the sitemap and
+//! never indexed
 
 const std = @import("std");
 const prose = @import("prose.zig");
@@ -54,6 +55,31 @@ pub fn join(w: *Writer, _: prose.Info) Writer.Error!void {
         \\<button type="submit" class="primary">Save</button>
         \\<p id="auth-msg" class="note" role="alert" hidden></p>
         \\</form>
+        \\<p class="muted">See the <a href="privacy.html#accounts">privacy policy</a>.</p>
+        \\</div>
+        \\<script src="account.js" defer></script>
+        \\
+    );
+}
+
+/// The signed-in account: who, a new password, sign out here or everywhere. account.js
+/// fills #me from /auth/me and sends anyone signed out to the login page
+pub fn account(w: *Writer, _: prose.Info) Writer.Error!void {
+    try w.writeAll(
+        \\<div class="prose">
+        \\<h1>Your account</h1>
+        \\<p id="me" class="muted">Loading…</p>
+        \\<h2>Change your password</h2>
+        \\<form id="auth" class="auth-form" data-kind="password">
+        \\<label>Current password<input name="password" type="password" autocomplete="current-password" required></label>
+        \\<label>New password<input name="new" type="password" autocomplete="new-password" minlength="8" required>
+        \\<span class="hint">8 or more characters. Your other devices are signed out</span></label>
+        \\<button type="submit" class="primary">Change password</button>
+        \\<p id="auth-msg" class="note" role="alert" hidden></p>
+        \\</form>
+        \\<h2>Sign out</h2>
+        \\<p class="auth-out"><button type="button" data-out="">Log out</button>
+        \\<button type="button" data-out="all">Log out everywhere</button></p>
         \\<p class="muted">See the <a href="privacy.html#accounts">privacy policy</a>.</p>
         \\</div>
         \\<script src="account.js" defer></script>

@@ -13,6 +13,17 @@
 //!                         link, whose password is the link's shared one; signs in
 //!   GET  /auth/check/CAP  204 with X-Meiolol-User and X-Meiolol-Role when the session's
 //!                         role has CAP (roles.zig); 401 without a session, 403 without CAP
+//!   POST /auth/password   {"password","new"}: a new password for the signed-in account;
+//!                         signs it out everywhere else
+//!
+//! With manage_accounts, on accounts whose role the signed-in one may manage
+//! (Role.canManage), else 403:
+//!
+//!   GET  /auth/accounts   {"accounts":[...],"roles":[roles it may give]}
+//!   POST /auth/invite     {"role"}: {"invite":TOKEN}, a one-use link for a new account
+//!   POST /auth/role       {"username","role"}
+//!   POST /auth/disable    {"username","disabled"}: disabling signs it out everywhere
+//!   POST /auth/reset      {"username"}: {"invite":TOKEN}, a one-use link to set its password
 
 const std = @import("std");
 const Io = std.Io;
@@ -461,7 +472,7 @@ pub const Service = struct {
 
     pub fn route(s: *Service, arena: Allocator, in: In, now: i64) !Out {
         const post = in.method == .POST;
-        const Route = enum { login, logout, me, join, signup };
+        const Route = enum { login, logout, me, join, signup, password, accounts, invite, role, disable, reset };
         const not_found: Out = .{ .status = .not_found, .body = errorJson("not found") };
         if (std.mem.startsWith(u8, in.path, "check/")) {
             if (in.method != .GET) return notAllowed();
@@ -471,7 +482,7 @@ pub const Service = struct {
             return .{ .status = .no_content, .user = a.username, .role = a.role };
         }
         const r = std.meta.stringToEnum(Route, in.path) orelse return not_found;
-        if (post != (r != .me)) return notAllowed();
+        if (post != (r != .me and r != .accounts)) return notAllowed();
         if (post and !in.action) return .{ .status = .forbidden, .body = errorJson("missing X-Meiolol-Action") };
         return switch (r) {
             .login => s.login(arena, in, now),
@@ -482,6 +493,19 @@ pub const Service = struct {
             },
             .join => s.join(arena, in, now),
             .signup => s.signup(arena, in, now),
+            .password => s.password(arena, in, now),
+            .accounts, .invite, .role, .disable, .reset => {
+                const db = try open(s.db_path);
+                defer db.close();
+                const token = in.token orelse return .{ .status = .unauthorized, .body = errorJson("not signed in") };
+                const actor = try session(db, arena, token, now) orelse return .{ .status = .unauthorized, .body = errorJson("not signed in") };
+                if (!actor.role.can(.manage_accounts)) return .{ .status = .forbidden, .body = errorJson("your role cannot manage accounts") };
+                return switch (r) {
+                    .accounts => .{ .status = .ok, .body = try accountsJson(db, arena, actor) },
+                    .invite => s.newInvite(db, arena, in, actor, now),
+                    else => s.manage(db, arena, in, actor, r == .role, r == .disable, now),
+                };
+            },
         };
     }
 
@@ -608,7 +632,88 @@ pub const Service = struct {
         const t = try startSession(db, s.io, id, now);
         return .{ .status = .ok, .body = try accountJson(arena, .{ .id = id, .username = name, .role = link.role }), .set_cookie = try sessionCookie(arena, &t) };
     }
+
+    /// The old password again, counted as a login try: a borrowed session can't take
+    /// the account over
+    fn password(s: *Service, arena: Allocator, in: In, now: i64) !Out {
+        const Body = struct { password: []const u8, new: []const u8 };
+        const b = parseBody(Body, arena, in.body) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with password and new") };
+        const token = in.token orelse return .{ .status = .unauthorized, .body = errorJson("not signed in") };
+        if (!passwordOk(b.new)) return .{ .status = .bad_request, .body = errorJson("password must be 8 to 256 characters") };
+        const db = try open(s.db_path);
+        defer db.close();
+        const a = try session(db, arena, token, now) orelse return .{ .status = .unauthorized, .body = errorJson("not signed in") };
+        const wait = s.throttle.wait(s.io, a.username, now);
+        if (wait > 0) return .{ .status = .too_many_requests, .body = try std.json.Stringify.valueAlloc(arena, .{ .@"error" = "too many tries", .retry_s = wait }, .{}) };
+        const stored = try find(db, arena, a.username) orelse return error.Unexpected;
+        if (!try s.hasher.verify(s.gpa, s.io, stored.hash, b.password)) {
+            try s.throttle.failed(s.gpa, s.io, a.username, now);
+            return .{ .status = .forbidden, .body = errorJson("wrong current password") };
+        }
+        s.throttle.succeeded(s.gpa, s.io, a.username);
+        var phc_buf: [128]u8 = undefined;
+        try setPassword(db, a.id, try s.hasher.hash(s.gpa, s.io, b.new, &phc_buf));
+        const t = try startSession(db, s.io, a.id, now);
+        return .{ .status = .ok, .body = try accountJson(arena, a), .set_cookie = try sessionCookie(arena, &t) };
+    }
+
+    fn newInvite(s: *Service, db: Db, arena: Allocator, in: In, actor: Account, now: i64) !Out {
+        const b = parseBody(struct { role: []const u8 }, arena, in.body) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with role") };
+        const role = Role.parse(b.role) orelse return .{ .status = .bad_request, .body = errorJson("no such role") };
+        if (!actor.role.canManage(role)) return .{ .status = .forbidden, .body = errorJson("your role cannot give that role") };
+        const t = try makeInvite(db, s.io, role, null, actor.username, now);
+        return .{ .status = .ok, .body = try std.json.Stringify.valueAlloc(arena, .{ .invite = &t }, .{}) };
+    }
+
+    /// role, disable or reset on one account
+    fn manage(s: *Service, db: Db, arena: Allocator, in: In, actor: Account, set_role: bool, disable: bool, now: i64) !Out {
+        const Body = struct { username: []const u8, role: []const u8 = "", disabled: bool = false };
+        const b = parseBody(Body, arena, in.body) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with username") };
+        var name_buf: [username_max]u8 = undefined;
+        const name = username(&name_buf, b.username) orelse return .{ .status = .not_found, .body = errorJson("no such account") };
+        const target = try find(db, arena, name) orelse return .{ .status = .not_found, .body = errorJson("no such account") };
+        const cannot: Out = .{ .status = .forbidden, .body = errorJson("your role cannot manage that account") };
+        if (!actor.role.canManage(target.role)) return cannot;
+        const ok: Out = .{ .status = .ok, .body = "{\"ok\":true}" };
+        if (set_role) {
+            const role = Role.parse(b.role) orelse return .{ .status = .bad_request, .body = errorJson("no such role") };
+            if (!actor.role.canManage(role)) return .{ .status = .forbidden, .body = errorJson("your role cannot give that role") };
+            try setRole(db, target.id, role);
+            return ok;
+        }
+        if (disable) {
+            try setDisabled(db, target.id, b.disabled);
+            return ok;
+        }
+        const t = try makeInvite(db, s.io, target.role, target.id, actor.username, now);
+        return .{ .status = .ok, .body = try std.json.Stringify.valueAlloc(arena, .{ .invite = &t }, .{}) };
+    }
 };
+
+/// Every account, each marked with whether `actor` may manage it; and the roles it may
+/// give, lowest first
+fn accountsJson(db: Db, arena: Allocator, actor: Account) ![]const u8 {
+    const Row = struct { username: []const u8, role: []const u8, created: i64, last_seen: ?i64, disabled: bool, manage: bool };
+    var rows: std.ArrayList(Row) = .empty;
+    var q = try db.prepare("SELECT username, role, created, last_seen, disabled FROM accounts ORDER BY id");
+    defer q.deinit();
+    try q.bind(.{});
+    while (try q.step()) {
+        const r = q.row(struct { username: []const u8, role: []const u8, created: i64, last_seen: ?i64, disabled: bool });
+        const role = Role.parse(r.role) orelse return error.BadRole;
+        try rows.append(arena, .{
+            .username = try arena.dupe(u8, r.username),
+            .role = @tagName(role),
+            .created = r.created,
+            .last_seen = r.last_seen,
+            .disabled = r.disabled,
+            .manage = actor.role.canManage(role),
+        });
+    }
+    var give: std.ArrayList([]const u8) = .empty;
+    for (std.enums.values(Role)) |role| if (actor.role.canManage(role)) try give.append(arena, @tagName(role));
+    return std.json.Stringify.valueAlloc(arena, .{ .accounts = rows.items, .roles = give.items }, .{});
+}
 
 fn notAllowed() Out {
     return .{ .status = .method_not_allowed, .body = errorJson("method not allowed") };
@@ -960,6 +1065,104 @@ test "signup: the link and its shared password make accounts; wrong ones are slo
     f.service.throttle.succeeded(testing.allocator, testing.io, try a.print("signup:{s}", .{link[0..8]}));
     try testing.expectEqual(Status.bad_request, (try signup(&f, try T.body(a, &link, "y@mail.com", "shared secret"))).status);
     try testing.expectError(error.BadRole, makeLink(f.db, testing.io, .owner, "x", "owner", now));
+}
+
+/// A manager route's answer for the account signed in with `token`
+fn postAs(f: *Fixture, token: ?[]const u8, path: []const u8, body: anytype) !Out {
+    const b = try std.json.Stringify.valueAlloc(f.arena(), body, .{});
+    return f.service.route(f.arena(), .{ .method = .POST, .path = path, .action = true, .token = token, .body = b }, Fixture.now);
+}
+
+test "manage: every route against every role, on every role" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    const a = f.arena();
+    for (std.enums.values(Role)) |actor| {
+        const token = try f.signIn(actor);
+        const list = try f.service.route(a, .{ .method = .GET, .path = "accounts", .token = token }, Fixture.now);
+        if (!actor.can(.manage_accounts)) {
+            try testing.expectEqual(Status.forbidden, list.status);
+            try testing.expectEqual(Status.forbidden, (try postAs(&f, token, "invite", .{ .role = "public" })).status);
+            try testing.expectEqual(Status.forbidden, (try postAs(&f, token, "reset", .{ .username = "public" })).status);
+            continue;
+        }
+        try testing.expectEqual(Status.ok, list.status);
+        for (std.enums.values(Role)) |target| {
+            const want: Status = if (actor.canManage(target)) .ok else .forbidden;
+            try testing.expectEqual(want, (try postAs(&f, token, "invite", .{ .role = @tagName(target) })).status);
+            try testing.expectEqual(want, (try postAs(&f, token, "reset", .{ .username = @tagName(target) })).status);
+            try testing.expectEqual(want, (try postAs(&f, token, "disable", .{ .username = @tagName(target), .disabled = false })).status);
+            // Its own role again: allowed exactly when the account is
+            try testing.expectEqual(want, (try postAs(&f, token, "role", .{ .username = @tagName(target), .role = @tagName(target) })).status);
+        }
+    }
+    for ([_][]const u8{ "invite", "role", "disable", "reset" }) |p| {
+        try testing.expectEqual(Status.unauthorized, (try postAs(&f, null, p, .{ .username = "public", .role = "public" })).status);
+        try testing.expectEqual(Status.forbidden, (try f.service.route(a, .{ .method = .POST, .path = p, .token = try f.signIn(.owner) }, Fixture.now)).status);
+        try testing.expectEqual(Status.method_not_allowed, (try f.service.route(a, .{ .method = .GET, .path = p }, Fixture.now)).status);
+    }
+    try testing.expectEqual(Status.unauthorized, (try f.service.route(a, .{ .method = .GET, .path = "accounts" }, Fixture.now)).status);
+    try testing.expectEqual(Status.method_not_allowed, (try f.service.route(a, .{ .method = .POST, .path = "accounts", .action = true }, Fixture.now)).status);
+}
+
+test "manage: what each change does" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    const a = f.arena();
+    const admin = try f.signIn(.admin);
+    const list = try f.service.route(a, .{ .method = .GET, .path = "accounts", .token = admin }, Fixture.now);
+    try testing.expect(std.mem.find(u8, list.body, "\"roles\":[\"public\",\"paid\",\"private\"]") != null);
+    try testing.expect(std.mem.find(u8, list.body, "{\"username\":\"owner\",\"role\":\"owner\",\"created\":1800000000,\"last_seen\":null,\"disabled\":false,\"manage\":false}") != null);
+
+    // An admin can't lift a friend to its own level, nor give a role it doesn't manage
+    try testing.expectEqual(Status.forbidden, (try postAs(&f, admin, "role", .{ .username = "private", .role = "admin" })).status);
+    try testing.expectEqual(Status.bad_request, (try postAs(&f, admin, "role", .{ .username = "private", .role = "king" })).status);
+    try testing.expectEqual(Status.not_found, (try postAs(&f, admin, "role", .{ .username = "nobody", .role = "paid" })).status);
+    const friend = try f.signIn(.private);
+    try testing.expectEqual(Status.ok, (try postAs(&f, admin, "role", .{ .username = "private", .role = "paid" })).status);
+    try testing.expectEqual(Status.forbidden, try f.check(friend, "view_private"));
+    try testing.expectEqual(Status.ok, (try postAs(&f, admin, "role", .{ .username = "private", .role = "private" })).status);
+
+    try testing.expectEqual(Status.ok, (try postAs(&f, admin, "disable", .{ .username = "private", .disabled = true })).status);
+    try testing.expectEqual(Status.unauthorized, try f.check(friend, "view_private"));
+    try testing.expectEqual(Status.unauthorized, (try f.login("private", "password-private")).status);
+    try testing.expectEqual(Status.ok, (try postAs(&f, admin, "disable", .{ .username = "private", .disabled = false })).status);
+    try testing.expectEqual(Status.ok, (try f.login("private", "password-private")).status);
+
+    const inv = try postAs(&f, admin, "invite", .{ .role = "private" });
+    const t = (try std.json.parseFromSliceLeaky(struct { invite: []const u8 }, a, inv.body, .{})).invite;
+    try testing.expectEqual(1, try f.db.scalar("SELECT count(*) FROM invites WHERE by = 'admin'", .{}));
+    const joined = try postAs(&f, null, "join", .{ .invite = t, .username = "pal", .password = "long enough" });
+    try testing.expect(std.mem.find(u8, joined.body, "\"role\":\"private\"") != null);
+
+    const reset = try postAs(&f, admin, "reset", .{ .username = "Pal" });
+    const rt = (try std.json.parseFromSliceLeaky(struct { invite: []const u8 }, a, reset.body, .{})).invite;
+    try testing.expectEqual(Status.ok, (try postAs(&f, null, "join", .{ .invite = rt, .password = "pal's new one" })).status);
+    try testing.expectEqual(Status.ok, (try f.login("pal", "pal's new one")).status);
+}
+
+test "password: the old one first, then every other session ends" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    const other = try f.signIn(.private);
+    const here = try f.signIn(.private);
+    try testing.expectEqual(Status.unauthorized, (try postAs(&f, null, "password", .{ .password = "password-private", .new = "brand new one" })).status);
+    try testing.expectEqual(Status.forbidden, (try postAs(&f, here, "password", .{ .password = "wrong", .new = "brand new one" })).status);
+    try testing.expectEqual(Status.bad_request, (try postAs(&f, here, "password", .{ .password = "password-private", .new = "short" })).status);
+    const out = try postAs(&f, here, "password", .{ .password = "password-private", .new = "brand new one" });
+    try testing.expectEqual(Status.ok, out.status);
+    for ([_][]const u8{ other, here }) |old| try testing.expectEqual(Status.unauthorized, try f.check(old, "view_paid"));
+    try testing.expectEqual(Status.no_content, try f.check(cookieValue(out.set_cookie.?).?, "view_private"));
+    try testing.expectEqual(Status.unauthorized, (try f.login("private", "password-private")).status);
+    try testing.expectEqual(Status.ok, (try f.login("private", "brand new one")).status);
+
+    // Wrong old passwords count as failed logins
+    const t = try f.signIn(.admin);
+    for (0..Throttle.free_fails) |_| _ = try postAs(&f, t, "password", .{ .password = "guess", .new = "brand new one" });
+    try testing.expectEqual(Status.too_many_requests, (try postAs(&f, t, "password", .{ .password = "password-admin", .new = "brand new one" })).status);
 }
 
 test cookieValue {

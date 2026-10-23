@@ -402,7 +402,7 @@ test "fixture games to stats, curves and the website" {
     }
     try testing.expect(checked > 50);
     // The account pages (site/account.zig): rendered on request only, never indexed
-    for ([_][]const u8{ "login.html", "signup.html", "join.html" }) |p| {
+    for ([_][]const u8{ "login.html", "signup.html", "join.html", "account.html" }) |p| {
         const page = try loaded.get(arena, p) orelse return error.TestUnexpectedResult;
         try testing.expect(std.mem.find(u8, page, "<meta name=\"robots\" content=\"noindex\">") != null);
         try testing.expect(std.mem.find(u8, page, "<form id=\"auth\" class=\"auth-form\" data-kind=\"") != null);
