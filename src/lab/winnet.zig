@@ -18,12 +18,6 @@
 //! All antisymmetric: logit = (f(blue, red) - f(red, blue)) / 2 + c[platform] (+ offset).
 //! Writes DIR/folds.tsv (per seed and block, plus the seed-averaged `ens`) and
 //! DIR/preds.tsv (per game); gains paired per game (= clustered by game)
-//! LoLDraftAI's evaluation beside ours (lab/randsplit.zig, dev only): --split random:SEED
-//! replaces the blocks by one, fitted on the non-test games before the selection cut
-//! outside that seed's random tenth and scored on the whole tenth, every platform, as
-//! LoLDraftAI (preds.tsv's match_id prefix gives EUW1 alone); --filter ldai drops
-//! LoLDraftAI's 15-minute filtered games from fit and scored games of any block
-//! (SNAP/ldai_filter.tsv, meiolol-lab ldai-filter)
 
 const std = @import("std");
 const api = @import("api");
@@ -31,7 +25,6 @@ const cand = @import("cand");
 const rows = @import("rows.zig");
 const protocol = @import("protocol.zig");
 const harness = @import("harness.zig");
-const randsplit = @import("randsplit.zig");
 const draftnet = @import("draftnet.zig");
 const gates = @import("gates.zig");
 const setnet = @import("setnet.zig");
@@ -79,8 +72,6 @@ pub const usage =
     \\                                  --shuffle-ids SEED (control: training games'
     \\                                  champion rows permuted, labels and offsets kept)
     \\                                  --threads N --out DIR
-    \\                                  --split random:SEED (one block, LoLDraftAI's
-    \\                                  random tenth) --filter ldai (its filters)
     \\
 ;
 
@@ -127,8 +118,6 @@ pub const Options = struct {
     blocks: []const Block = &.{ .dev, .f1, .f2, .f3, .f4, .f5 },
     fraction: f64 = 1,
     window: ?Window = null,
-    /// --split random:SEED: LoLDraftAI's random tenth instead of the blocks
-    split_seed: ?u32 = null,
     /// --resample N: fit games and the candidate's on a seeded random share (A/A runs)
     resample: ?u32 = null,
     /// --fit-preds 1: also score every block's fit games, each from a fit without its
@@ -141,15 +130,13 @@ pub const Options = struct {
     /// champion-id rows (all 10 seats together) permuted across its games, labels and
     /// offsets kept, scored games untouched: a residual net can then only recalibrate
     shuffle_ids: ?u32 = null,
-    /// --filter ldai: LoLDraftAI's 15-minute filters on fit and scored games
-    ldai: bool = false,
     /// CPU threads for small and resid fits (one seed per thread) and big on the CPU
     threads: u32 = 3,
     out: []const u8 = ".",
     set: setnet.Config = .{},
 };
 
-pub const Block = enum { dev, f1, f2, f3, f4, f5, random, final };
+pub const Block = enum { dev, f1, f2, f3, f4, f5, final };
 const val_share = 0.1;
 pub const n_platforms = 16;
 
@@ -177,8 +164,6 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     defer gpa.free(players);
     std.debug.assert(protocol.platformIds().len <= n_platforms);
     const c = try harness.cuts(gpa, &data);
-    var filter: ?randsplit.Filter = if (opts.ldai) try randsplit.loadFilter(gpa, io, snap) else null;
-    defer if (filter) |*f| f.deinit(gpa);
 
     try Io.Dir.cwd().createDirPath(io, opts.out);
     var dir = try Io.Dir.cwd().openDir(io, opts.out, .{});
@@ -222,9 +207,6 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     try w.print("options: emb {d} hidden {d} depth {d} dropout {d} wd {d} emb_wd {d} lr {d} clip {d} batch {d} evals {d} patience {d} min_games {d} emb_init {s} emb_freeze {}\n\n", .{
         opts.emb, opts.hidden, opts.depth, opts.dropout, opts.wd, opts.emb_wd orelse opts.wd, opts.lr, opts.clip, opts.batch, opts.evals, opts.patience, opts.min_games, opts.emb_init orelse "-", opts.emb_freeze,
     });
-    if (opts.split_seed != null or opts.ldai) {
-        try w.print("split: {s}{s}; dev only, the test set untouched\n\n", .{ if (opts.split_seed != null) "LoLDraftAI's random tenth" else "time", if (opts.ldai) ", LoLDraftAI's filters" else "" });
-    }
     try w.flush();
 
     // A test look counts once the test games are read, so the ledger line comes first
@@ -241,14 +223,12 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         var spec: Spec = switch (b) {
             .dev => .{ .before = c.dev, .lo = c.dev, .hi = c.test_, .dev = true },
             .final => .{ .before = c.test_, .lo = c.test_, .hi = std.math.maxInt(i64), .dev = false, .final = true, .exclude = if (exclude) |*e| e else null },
-            .random => .{ .before = c.test_, .lo = 0, .hi = 0, .dev = false, .random = opts.split_seed.? },
             // The shared folds (harness.Cuts, win-comp's foldAblation blocks)
             else => blk: {
                 const f = c.fold(@backingInt(b));
                 break :blk .{ .before = f.lo, .lo = f.lo, .hi = f.hi, .dev = false };
             },
         };
-        spec.filter = if (filter) |*f| f else null;
         spec.resample = opts.resample;
         if (opts.window) |win| try win.apply(gpa, data.games, c, &spec, opts.fraction, w);
         try runBlock(gpa, io, &data, players, c, spec, b, opts, if (gpu) |*g| g else null, out, w, &pooled);
@@ -323,14 +303,8 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             else if (std.mem.eql(u8, s, "test"))
                 .final
             else
-                @fromBackingInt(@intCast(try std.fmt.parseInt(u3, s, 10))));
+                try foldBlock(s));
             o.blocks = out.items;
-        } else if (std.mem.eql(u8, k, "--split")) {
-            if (!std.mem.startsWith(u8, v, "random:")) return error.UnknownSplit;
-            o.split_seed = try std.fmt.parseInt(u32, v["random:".len..], 10);
-        } else if (std.mem.eql(u8, k, "--filter")) {
-            if (!std.mem.eql(u8, v, "ldai")) return error.UnknownFilter;
-            o.ldai = true;
         } else if (std.mem.eql(u8, k, "--fraction")) {
             o.fraction = try std.fmt.parseFloat(f64, v);
         } else if (std.mem.eql(u8, k, "--window")) {
@@ -353,16 +327,11 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             o.out = v;
         } else if (!try setnet.parseOption(&o.set, k, v)) return error.UnknownOption;
     }
-    if (o.split_seed != null) {
-        if (set.contains("--blocks")) return error.SplitReplacesBlocks;
-        o.blocks = &.{.random};
-    }
     // A test look is one run of the declared model on all its fit games
     if (std.mem.indexOfScalar(Block, o.blocks, .final) != null) {
         if (o.blocks.len != 1) return error.TestBlockAlone;
-        for ([_][]const u8{ "--split", "--filter", "--fraction", "--window", "--resample", "--shuffle-ids", "--fit-preds" }) |k| if (set.contains(k)) return error.NotForTest;
+        for ([_][]const u8{ "--fraction", "--window", "--resample", "--shuffle-ids", "--fit-preds" }) |k| if (set.contains(k)) return error.NotForTest;
     }
-    if (o.window != null and o.split_seed != null) return error.WindowNeedsBlocks;
     // spread's share is of the block's fit games, not of a fraction of them
     if (o.window != null and o.fraction != 1) return error.WindowWithFraction;
     if (o.emb_freeze and o.emb_init == null) return error.FreezeWithoutInit;
@@ -389,9 +358,14 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
     return o;
 }
 
+fn foldBlock(s: []const u8) !Block {
+    const n = try std.fmt.parseInt(u3, s, 10);
+    if (n > harness.folds) return error.BadBlock;
+    return @fromBackingInt(n);
+}
+
 /// Fit on dev-visible games before `before`; score dev-val (dev) or dev-visible games in
-/// [lo, hi). random: LoLDraftAI's split instead (randsplit.zig); filter: its filters.
-/// final: fit on every played game before the test cut, score the test games
+/// [lo, hi). final: fit on every played game before the test cut, score the test games
 const Spec = struct {
     before: i64,
     lo: i64,
@@ -400,8 +374,6 @@ const Spec = struct {
     final: bool = false,
     /// final: also scored without these (an earlier snapshot's looks saw them)
     exclude: ?*const looks.Exclude = null,
-    random: ?u32 = null,
-    filter: ?*const randsplit.Filter = null,
     resample: ?u32 = null,
     /// --fit-preds: fit without this cross-fit fifth of the fit games, score that fifth
     fifth: ?u8 = null,
@@ -416,27 +388,18 @@ const Spec = struct {
     }
 
     fn fitsAll(s: Spec, c: harness.Cuts, g: rows.Game, fraction: f64) bool {
-        if (s.filter) |f| if (!f.keep(g)) return false;
         if (!harness.inFraction(g, @min(fraction, s.share))) return false;
         if (g.start < s.since) return false;
         if (s.resample) |r| if (!inResample(g, r)) return false;
-        if (s.random) |seed| return devEra(c, g) and !randsplit.inTest(g, seed);
         if (s.final) return harness.visible(.final, c, g) and g.start < s.before;
         return harness.visible(.dev, c, g) and g.start < s.before;
     }
 
     fn scores(s: Spec, c: harness.Cuts, g: rows.Game, fraction: f64) bool {
         if (s.fifth) |f| return crossFold(g) == f and s.fitsAll(c, g, fraction);
-        if (s.filter) |f| if (!f.keep(g)) return false;
-        if (s.random) |seed| return devEra(c, g) and randsplit.inTest(g, seed);
         if (s.dev) return harness.scored(.dev, c, g);
         if (s.final) return harness.scored(.final, c, g);
         return harness.visible(.dev, c, g) and harness.inRegion(c, g) and g.start >= s.lo and g.start < s.hi;
-    }
-
-    /// The random split's games: played, not test
-    fn devEra(c: harness.Cuts, g: rows.Game) bool {
-        return !g.is_test and g.duration_s >= harness.min_duration_s and g.start < c.test_;
     }
 };
 
@@ -456,7 +419,7 @@ const Window = struct {
 
     /// Narrows `spec` to N of its fit games; a block with fewer is an error
     fn apply(win: Window, gpa: std.mem.Allocator, games: []const rows.Game, c: harness.Cuts, spec: *Spec, fraction: f64, w: *Io.Writer) !void {
-        if (spec.random != null or spec.final) return error.WindowNeedsBlocks;
+        if (spec.final) return error.WindowNeedsBlocks;
         var starts: std.ArrayList(i64) = .empty;
         defer starts.deinit(gpa);
         for (games) |g| if (spec.fitsAll(c, g, fraction)) try starts.append(gpa, g.start);
@@ -842,7 +805,7 @@ fn runBlock(
         try out.cand.print("{s}\t0\twin\t{d}\t{d:.6}\t{s}\n", .{ g.match_id, ys[i], pc[i], name });
         try out.net.print("{s}\t0\twin\t{d}\t{d:.6}\t{s}\n", .{ g.match_id, ys[i], ens[i], name });
     }
-    if (!spec.dev and !spec.final and spec.random == null) {
+    if (!spec.dev and !spec.final) {
         try pooled.ys.appendSlice(gpa, ys);
         try pooled.cand.appendSlice(gpa, pc);
         try pooled.ens.appendSlice(gpa, ens);
@@ -875,7 +838,6 @@ fn blockName(b: Block) []const u8 {
         .f3 => "3",
         .f4 => "4",
         .f5 => "5",
-        .random => "random",
         .final => "test",
     };
 }
