@@ -46,11 +46,12 @@ const probe_s = 600;
 /// Matches stored before start that the participant snowball still reads
 const snowball_backlog = 5000;
 const all_regions = std.enums.values(ep.Region);
+/// How far back match ids are collected
+const since_days = 14;
 
 pub const Options = struct {
     data_dir: []const u8,
     key: []const u8,
-    since_days: i64 = 14,
     /// Match ids only from the first game seen on each platform's newest patch (still
     /// at most since_days back); matches of older patches get no timeline
     patch_only: bool = false,
@@ -60,10 +61,6 @@ pub const Options = struct {
     /// the writer's queue and matches wait behind it
     ladder_per_hour: u32 = 0,
     recheck_s: i64 = 12 * 3600,
-    /// Scan first the players whose ladder wins + losses grew since their last scan,
-    /// most new games first; then the stalest as before. Needs a ladder refreshed more
-    /// often than players are rescanned to see who has played
-    active_first: bool = true,
     mastery: bool = true,
     /// The participant pass's first pass after start covers games from this many days
     /// back, not one week (a one-time sweep); refreshes stay weekly. 0: one week
@@ -830,7 +827,7 @@ const RegionCrawler = struct {
             rc.backfill_before = now * 1000;
             rc.backfill_walk_at = now;
         }
-        const floor = (now - c.opts.since_days * std.time.s_per_day) * 1000;
+        const floor = (now - since_days * std.time.s_per_day) * 1000;
         var arena: std.heap.ArenaAllocator = .init(c.gpa);
         defer arena.deinit();
         const a = arena.allocator();
@@ -980,7 +977,7 @@ const RegionCrawler = struct {
         }
         try filters.append(a, null);
         switch (which) {
-            .useful => if (c.opts.active_first) {
+            .useful => {
                 var s = try rc.b.db.prepare(new_games);
                 defer s.deinit();
                 for (filters.items) |platform| {
@@ -1081,7 +1078,7 @@ const RegionCrawler = struct {
     fn scanPlayer(rc: *RegionCrawler, p: Player) !void {
         const c = rc.b.c;
         const end = rc.b.now();
-        var start_time = @max(p.checked_at orelse 0, end - c.opts.since_days * 86400);
+        var start_time = @max(p.checked_at orelse 0, end - since_days * 86400);
         if (c.opts.patch_only) start_time = @max(start_time, rc.patches.start(p.platform) orelse 0);
         var start: u32 = 0;
         while (true) : (start += 100) {

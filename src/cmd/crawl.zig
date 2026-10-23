@@ -15,11 +15,8 @@ const newestPatch = main.newestPatch;
 pub const usage_crawl =
     \\  crawl       crawl ranked solo games (needs RIOT_API_KEY in env or .env)
     \\              --hours H        stop after H hours (default: run until stopped)
-    \\              --since-days N   how far back to collect match ids (default 14)
     \\              --patch-only     match ids only from each platform's newest patch;
     \\                               older patches' matches get no timeline
-    \\              --no-active-first  scan stalest players first, not those the
-    \\                               ladder shows played since their last scan
     \\              --no-mastery     skip champion mastery
     \\              --mastery-sweep-days N  the first participant mastery pass after
     \\                               start covers games N days back, not 7 (one-time
@@ -86,12 +83,8 @@ pub fn cmdCrawl(c: *Cmd) !u8 {
             o.participant_players = false;
         } else if (c.is("--hours")) {
             o.hours = try c.float();
-        } else if (c.is("--since-days")) {
-            o.since_days = try c.int(i64);
         } else if (c.is("--patch-only")) {
             o.patch_only = true;
-        } else if (c.is("--no-active-first")) {
-            o.active_first = false;
         } else if (c.is("--ladder-refresh-hours")) {
             o.ladder_refresh_s = try c.int(i64) * 3600;
         } else if (c.is("--ladder-refresh-days")) {
