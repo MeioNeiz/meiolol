@@ -935,7 +935,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     }
     if (opts.drop) {
         var nbuf: [64]u8 = undefined;
-        for (1..A.n_groups) |g| {
+        for (1..A.g_offset) |g| {
             const label = try arena.print("full-without-{s}", .{A.groupName(&nbuf, g)});
             for (label) |*ch| if (ch.* == ' ') {
                 ch.* = '_';

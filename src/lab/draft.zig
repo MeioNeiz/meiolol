@@ -325,7 +325,7 @@ fn paramsOfAdditive(arena: std.mem.Allocator, p: *const additive.Problem, f: *co
     var groups: std.ArrayList(PairGroup) = .empty;
     var cells: std.ArrayList(PairCell) = .empty;
     var nbuf: [64]u8 = undefined;
-    for (A.g_ally..A.n_groups) |g| {
+    for (A.g_ally..A.g_offset) |g| {
         const lo = p.param_start[g];
         const hi = p.param_start[g + 1];
         if (hi == lo) continue;

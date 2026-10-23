@@ -3,6 +3,8 @@
 //!   platform side + sum over roles of champion strength (blue minus red)
 //!   + 10 ally role-pair blocks + 15 matchup blocks (one cell per champion pair)
 //!   + continuous comp features (blue minus red)
+//!   + on games flagged `offset` (the latest patch's, lab/patchdays.zig), a champion-role
+//!     offset per role: the patch's own shift, shrunk to 0 (docs/plan/patch-transfer.md)
 //! A matchup (role r vs role q, r <= q) is one cell per pair of champions, from the r
 //! side: blue gains it when blue has the r champion, loses it when red has; a same-role
 //! matchup is one cell per unordered pair, signed. The older parametrisation (25 enemy
@@ -27,12 +29,13 @@ pub const n_cont = 4;
 pub const n_ally = 10;
 pub const n_enemy = 25;
 /// 0 fixed (platform side, comp features), 1..5 champion strength by role, then ally
-/// pairs (r < q), then enemy pairs (my role r, their role q)
-pub const n_groups = 1 + n_role + n_ally + n_enemy;
+/// pairs (r < q), then enemy pairs (my role r, their role q), then patch offsets by role
+pub const n_groups = 1 + n_role + n_ally + n_enemy + n_role;
 pub const g_fixed = 0;
 pub const g_main = 1;
 pub const g_ally = g_main + n_role;
 pub const g_enemy = g_ally + n_ally;
+pub const g_offset = g_enemy + n_enemy;
 
 pub const role_names = [n_role][]const u8{ "top", "jungle", "middle", "bottom", "support" };
 
@@ -52,7 +55,7 @@ pub fn enemyGroup(r: usize, q: usize) usize {
 
 /// A pair group's roles: allies in r < q, or a matchup (my role r, their role q)
 pub fn groupRoles(g: usize) struct { ally: bool, r: usize, q: usize } {
-    std.debug.assert(g >= g_ally and g < n_groups);
+    std.debug.assert(g >= g_ally and g < g_offset);
     if (g >= g_enemy) return .{ .ally = false, .r = (g - g_enemy) / n_role, .q = (g - g_enemy) % n_role };
     var k: usize = 0;
     for (0..n_role) |a| for (a + 1..n_role) |b| {
@@ -62,10 +65,11 @@ pub fn groupRoles(g: usize) struct { ally: bool, r: usize, q: usize } {
     unreachable;
 }
 
-/// "champion top", "ally jungle-middle", "jungle vs their middle"
+/// "champion top", "ally jungle-middle", "jungle vs their middle", "offset top"
 pub fn groupName(buf: []u8, g: usize) []const u8 {
     if (g == g_fixed) return "fixed";
     if (g < g_ally) return std.mem.print(buf, "champion {s}", .{role_names[g - g_main]}) catch unreachable;
+    if (g >= g_offset) return std.mem.print(buf, "offset {s}", .{role_names[g - g_offset]}) catch unreachable;
     if (g < g_enemy) {
         var k: usize = 0;
         for (0..n_role) |a| for (a + 1..n_role) |b| {
@@ -104,8 +108,16 @@ pub const Variant = struct {
         return v;
     }
 
+    /// Every group but the patch offsets
     pub fn all() Variant {
-        return .{ .groups = (@as(u64, 1) << n_groups) - 1, .cont = (1 << n_cont) - 1 };
+        return .{ .groups = (@as(u64, 1) << g_offset) - 1, .cont = (1 << n_cont) - 1 };
+    }
+
+    /// The patch offsets on, for games flagged GameIn.offset
+    pub fn withOffsets(v: Variant) Variant {
+        var o = v;
+        for (g_offset..n_groups) |g| o = o.with(g);
+        return o;
     }
 
     /// Every ally block and the 15 matchup blocks (enemy r <= q), identified
@@ -131,6 +143,8 @@ pub const GameIn = struct {
     /// Blue minus red
     cont: [n_cont]f32 = @splat(0),
     weight: f32 = 1,
+    /// The patch offset groups' cells apply (the latest patch's games)
+    offset: bool = false,
 };
 
 const Entry = struct { game: u32, param: u32, x: f32 };
@@ -141,10 +155,11 @@ fn key(g: usize, a: u32, b: u32) u64 {
 
 /// The cells a game side touches in group g, as (key, sign); at most 2 for every group
 /// but fixed. matchup: a same-role enemy block has one signed cell per unordered pair
-/// (none for a mirror)
-fn cells(g: usize, t: *const [2][n_role]u32, out: *[2]struct { u64, f32 }, matchup: bool) usize {
-    if (g < g_ally) {
-        const r = g - g_main;
+/// (none for a mirror). offset: the game takes the patch offsets
+fn cells(g: usize, t: *const [2][n_role]u32, out: *[2]struct { u64, f32 }, matchup: bool, offset: bool) usize {
+    if (g < g_ally or g >= g_offset) {
+        if (g >= g_offset and !offset) return 0;
+        const r = if (g < g_ally) g - g_main else g - g_offset;
         out[0] = .{ key(g, t[0][r], 0), 1 };
         out[1] = .{ key(g, t[1][r], 0), -1 };
         return 2;
@@ -226,7 +241,7 @@ pub fn build(gpa: std.mem.Allocator, kind: Kind, variant: Variant, games: []cons
         group_start[g] = @intCast(n_entries);
         if (!variant.has(g)) continue;
         for (games) |*gm| {
-            const n = cells(g, &gm.teams, &buf, variant.matchup);
+            const n = cells(g, &gm.teams, &buf, variant.matchup, gm.offset);
             for (buf[0..n]) |c| {
                 const e = try keys.getOrPut(gpa, c[0]);
                 if (!e.found_existing) {
@@ -262,7 +277,7 @@ pub fn build(gpa: std.mem.Allocator, kind: Kind, variant: Variant, games: []cons
         std.debug.assert(at == group_start[g]);
         if (!variant.has(g)) continue;
         for (games, 0..) |*gm, gi| {
-            const n = cells(g, &gm.teams, &buf, variant.matchup);
+            const n = cells(g, &gm.teams, &buf, variant.matchup, gm.offset);
             for (buf[0..n]) |c| {
                 const pi = keys.get(c[0]).?;
                 entries[at] = .{ .game = @intCast(gi), .param = pi, .x = c[1] };
@@ -298,6 +313,13 @@ pub const Config = struct {
     sigma2_floor: f64 = 1e-8,
     /// false: keep the given variances (a refit with them fixed)
     estimate: bool = true,
+    /// Per param: the prior's centre (a warm start's old fit, by key), 0 when null; the
+    /// fit starts there and variances are estimated from theta - mean
+    prior_mean: ?[]const f64 = null,
+    /// Per param: its group's prior variance times this (looser for patched champions)
+    prior_scale: ?[]const f64 = null,
+    /// The offset groups' variance, fixed instead of estimated
+    offset_sigma2: ?f64 = null,
 };
 
 pub const Fit = struct {
@@ -340,7 +362,7 @@ pub fn fit(gpa: std.mem.Allocator, p: *const Problem, cfg: Config, weights: ?[]c
         sigma2 = w.sigma2;
         noise = w.noise;
     } else {
-        @memset(theta, 0);
+        if (cfg.prior_mean) |m| @memcpy(theta, m) else @memset(theta, 0);
         if (p.kind == .gaussian) {
             var s: f64 = 0;
             var s2: f64 = 0;
@@ -353,6 +375,7 @@ pub fn fit(gpa: std.mem.Allocator, p: *const Problem, cfg: Config, weights: ?[]c
             for (&sigma2) |*x| x.* = cfg.sigma2_init * noise;
         }
     }
+    if (cfg.offset_sigma2) |v| @memset(sigma2[g_offset..], v);
     @memset(eta, 0);
     for (p.entries) |e| eta[e.game] += e.x * theta[e.param];
 
@@ -385,10 +408,11 @@ pub fn fit(gpa: std.mem.Allocator, p: *const Problem, cfg: Config, weights: ?[]c
                 grad[e.param] += e.x * r[e.game];
                 h[e.param] += e.x * e.x * c[e.game];
             }
-            const lam = if (g == g_fixed) cfg.fixed_l2 else 1 / sigma2[g];
+            const lam_g = if (g == g_fixed) cfg.fixed_l2 else 1 / sigma2[g];
             for (lo..hi) |j| {
+                const lam = lam_g / scaleOf(cfg, j);
                 h[j] += lam;
-                const step = (grad[j] - lam * theta[j]) / h[j];
+                const step = (grad[j] - lam * (theta[j] - meanOf(cfg, j))) / h[j];
                 theta[j] += step;
                 grad[j] = step;
             }
@@ -401,12 +425,14 @@ pub fn fit(gpa: std.mem.Allocator, p: *const Problem, cfg: Config, weights: ?[]c
                 const lo = p.param_start[g];
                 const hi = p.param_start[g + 1];
                 if (hi <= lo) continue;
-                const lam = 1 / sigma2[g];
+                if (g >= g_offset and cfg.offset_sigma2 != null) continue;
                 var ss: f64 = 0;
                 var gam: f64 = 0;
                 for (lo..hi) |j| {
-                    ss += theta[j] * theta[j];
-                    gam += 1 - lam / h[j];
+                    const s = scaleOf(cfg, j);
+                    const d = theta[j] - meanOf(cfg, j);
+                    ss += d * d / s;
+                    gam += 1 - 1 / (sigma2[g] * s * h[j]);
                 }
                 const floor = cfg.sigma2_floor * (if (p.kind == .gaussian) noise else 1);
                 sigma2[g] = if (gam > 1e-9) @max(ss / gam, floor) else floor;
@@ -425,13 +451,20 @@ pub fn fit(gpa: std.mem.Allocator, p: *const Problem, cfg: Config, weights: ?[]c
     }
     var gamma: [n_groups]f64 = @splat(0);
     for (1..n_groups) |g| {
-        const lam = 1 / sigma2[g];
-        for (p.param_start[g]..p.param_start[g + 1]) |j| gamma[g] += 1 - lam / h[j];
+        for (p.param_start[g]..p.param_start[g + 1]) |j| gamma[g] += 1 - 1 / (sigma2[g] * scaleOf(cfg, j) * h[j]);
     }
     for (1..n_groups) |g| if (p.param_start[g + 1] <= p.param_start[g]) {
         sigma2[g] = 0;
     };
     return .{ .theta = theta, .sigma2 = sigma2, .gamma = gamma, .h = h, .noise = noise };
+}
+
+fn meanOf(cfg: Config, j: usize) f64 {
+    return if (cfg.prior_mean) |m| m[j] else 0;
+}
+
+fn scaleOf(cfg: Config, j: usize) f64 {
+    return if (cfg.prior_scale) |s| s[j] else 1;
 }
 
 /// Block variances corrected by simulation. Laplace-type estimates of a random effect's
@@ -527,7 +560,7 @@ pub fn predict(p: *const Problem, f: *const Fit, g: *const GameIn) f64 {
     var buf: [2]struct { u64, f32 } = undefined;
     for (1..n_groups) |gr| {
         if (!p.variant.has(gr)) continue;
-        const n = cells(gr, &g.teams, &buf, p.variant.matchup);
+        const n = cells(gr, &g.teams, &buf, p.variant.matchup, g.offset);
         for (buf[0..n]) |cl| {
             if (p.keys.get(cl[0])) |j| x += cl[1] * f.theta[j];
         }
@@ -570,7 +603,7 @@ fn synth(gpa: std.mem.Allocator, kind: Kind, n_games: usize, n_champ: u32, s_mai
             eta -= mains[r * n_champ + (g.teams[1][r] - 1 - r * 1000)];
         }
         var buf: [2]struct { u64, f32 } = undefined;
-        const nc = cells(planted, &g.teams, &buf, false);
+        const nc = cells(planted, &g.teams, &buf, false, false);
         for (buf[0..nc]) |cl| {
             const a: u32 = @intCast(cl[0] >> 24 & 0xffffff);
             const b: u32 = @intCast(cl[0] & 0xffffff);
@@ -641,7 +674,8 @@ test "group names" {
     try testing.expectEqualStrings("ally jungle-middle", groupName(&buf, allyGroup(1, 2)));
     try testing.expectEqualStrings("bottom vs their support", groupName(&buf, enemyGroup(3, 4)));
     try testing.expectEqualStrings("champion support", groupName(&buf, g_main + 4));
-    try testing.expectEqual(n_groups, enemyGroup(4, 4) + 1);
+    try testing.expectEqual(g_offset, enemyGroup(4, 4) + 1);
+    try testing.expectEqualStrings("offset support", groupName(&buf, n_groups - 1));
     const al = groupRoles(allyGroup(1, 2));
     try testing.expect(al.ally and al.r == 1 and al.q == 2);
     const en = groupRoles(enemyGroup(3, 4));
@@ -708,4 +742,90 @@ test "identified matchups: a planted matchup's sd comes back as the block sd" {
     try testing.expectApproxEqAbs(0.2 * @sqrt(2.0), @sqrt(g.sigma2[enemyGroup(2, 2)]), 0.05);
     // 10 champions: 45 unordered pairs
     try testing.expectEqual(45, q.param_start[enemyGroup(2, 2) + 1] - q.param_start[enemyGroup(2, 2)]);
+}
+
+test "patch offsets: a shift planted on flagged games comes back, unflagged games add none" {
+    const gpa = testing.allocator;
+    var rng: std.Random.DefaultPrng = .init(21);
+    const rnd = rng.random();
+    var mains: [n_role][8]f64 = undefined;
+    for (&mains) |*m| for (m) |*x| {
+        x.* = rnd.floatNorm(f64) * 0.2;
+    };
+    // Odd games are the new patch, where top champion 1 gains 0.6 logit
+    const games = try gpa.alloc(GameIn, 40_000);
+    defer gpa.free(games);
+    for (games, 0..) |*g, i| {
+        g.* = .{ .teams = undefined, .platform = 0, .y = 0, .offset = i % 2 == 1 };
+        var eta: f64 = 0.05;
+        for (0..2) |s| for (0..n_role) |r| {
+            const c = rnd.uintLessThan(u32, 8);
+            g.teams[s][r] = @intCast(1 + r * 1000 + c);
+            const sign: f64 = if (s == 0) 1 else -1;
+            eta += sign * mains[r][c];
+            if (g.offset and r == 0 and c == 0) eta += sign * 0.6;
+        };
+        g.y = if (rnd.float(f64) < sigmoid(eta)) 1 else 0;
+    }
+    var p = try build(gpa, .logistic, Variant.mains().withOffsets(), games);
+    defer p.deinit(gpa);
+    var f = try fit(gpa, &p, quick, null, null);
+    defer f.deinit(gpa);
+    const j = p.keys.get(key(g_offset, 1, 0)).?;
+    try testing.expectApproxEqAbs(0.6, f.theta[j], 0.15);
+    // A role's strengths are known up to a constant (blue minus red): centred
+    var centre: f64 = 0;
+    for (mains[0]) |x| centre += x / 8;
+    try testing.expectApproxEqAbs(mains[0][0] - centre, f.theta[p.keys.get(key(g_main, 1, 0)).?], 0.1);
+    var other: f64 = 0;
+    for (p.param_start[g_offset]..p.n_params()) |k| {
+        if (k != j) other = @max(other, @abs(f.theta[k]));
+    }
+    try testing.expect(other < 0.15);
+    // Off the flagged games the offset doesn't apply
+    var g = games[0];
+    g.teams[0][0] = 1;
+    g.teams[1][0] = 2;
+    const off = predict(&p, &f, &g);
+    g.offset = true;
+    const red = f.theta[p.keys.get(key(g_offset, 2, 0)).?];
+    // Plus the other roles' offsets, shrunk to ~0
+    try testing.expectApproxEqAbs(f.theta[j] - red, predict(&p, &f, &g) - off, 1e-3);
+    // No flagged game: no offset cells
+    for (games) |*x| x.offset = false;
+    var q = try build(gpa, .logistic, Variant.mains().withOffsets(), games);
+    defer q.deinit(gpa);
+    try testing.expectEqual(q.param_start[g_offset], q.n_params());
+}
+
+test "prior mean and scale: cells without data stay at the mean, a looser cell moves further" {
+    const gpa = testing.allocator;
+    const games = try synth(gpa, .logistic, 6_000, 8, 0.4, allyGroup(0, 1), 0, 9);
+    defer gpa.free(games);
+    var p = try build(gpa, .logistic, Variant.mains(), games);
+    defer p.deinit(gpa);
+    const np = p.n_params();
+    const mean = try gpa.alloc(f64, np);
+    defer gpa.free(mean);
+    @memset(mean, 0.3);
+    const zero = try gpa.alloc(f32, games.len);
+    defer gpa.free(zero);
+    @memset(zero, 0);
+    var held = try fit(gpa, &p, .{ .outer = 3, .prior_mean = mean }, zero, null);
+    defer held.deinit(gpa);
+    for (held.theta) |t| try testing.expectApproxEqAbs(0.3, t, 1e-9);
+
+    const scale = try gpa.alloc(f64, np);
+    defer gpa.free(scale);
+    @memset(scale, 1);
+    const j = p.param_start[g_main];
+    scale[j] = 100;
+    const tight: Config = .{ .estimate = false, .sigma2_init = 0.0005 };
+    var plain = try fit(gpa, &p, tight, null, null);
+    defer plain.deinit(gpa);
+    var cfg = tight;
+    cfg.prior_scale = scale;
+    var loose = try fit(gpa, &p, cfg, null, null);
+    defer loose.deinit(gpa);
+    try testing.expect(@abs(loose.theta[j]) > 1.5 * @abs(plain.theta[j]));
 }

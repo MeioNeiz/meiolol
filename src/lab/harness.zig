@@ -175,6 +175,72 @@ fn playedCuts(gpa: std.mem.Allocator, d: *const rows.Data) !eval.Cuts {
     return eval.cutsOf(starts.items, .{});
 }
 
+/// docs/plan/patch-transfer.md's evaluation: latest-patch games scored by day since the
+/// patch went live on their platform (its first game of the patch there, played or not),
+/// each day by a fit on every game before that day's first scored game (one time cut, any
+/// platform or patch). dev: test games are neither fitted nor scored; final: both
+pub const PatchDays = struct {
+    latest: u32,
+    /// Per game: day since the patch on its platform; null for another patch, a game under
+    /// 15:00 or (dev) a test game
+    day: []?u16,
+    /// Day d's cut: its first scored game's start; maxInt for a day with none
+    cut: []i64,
+
+    pub const buckets = [_][]const u8{ "0", "1", "2-3", "4-7", "8+" };
+
+    pub fn bucket(day: u16) usize {
+        return switch (day) {
+            0 => 0,
+            1 => 1,
+            2...3 => 2,
+            4...7 => 3,
+            else => 4,
+        };
+    }
+
+    /// latest: the patch key (stats.patchKey), null for the newest played game's
+    pub fn init(gpa: std.mem.Allocator, d: *const rows.Data, p: Phase, latest: ?u32) !PatchDays {
+        const patch = latest orelse blk: {
+            var m: u32 = 0;
+            for (d.games) |g| if (played(g) and (p == .final or !g.is_test)) {
+                m = @max(m, g.patch);
+            };
+            break :blk m;
+        };
+        var first: [256]i64 = @splat(std.math.maxInt(i64));
+        for (d.games) |g| if (g.patch == patch) {
+            first[g.platform] = @min(first[g.platform], g.start);
+        };
+        const day = try gpa.alloc(?u16, d.games.len);
+        errdefer gpa.free(day);
+        var n_days: usize = 0;
+        for (d.games, day) |g, *x| {
+            x.* = null;
+            if (g.patch != patch or !played(g) or (p == .dev and g.is_test)) continue;
+            const v: u16 = @intCast(@divFloor(g.start - first[g.platform], std.time.ms_per_day));
+            x.* = v;
+            n_days = @max(n_days, v + 1);
+        }
+        const cut = try gpa.alloc(i64, n_days);
+        @memset(cut, std.math.maxInt(i64));
+        for (d.games, day) |g, x| if (x) |v| {
+            cut[v] = @min(cut[v], g.start);
+        };
+        return .{ .latest = patch, .day = day, .cut = cut };
+    }
+
+    pub fn deinit(pd: *PatchDays, gpa: std.mem.Allocator) void {
+        gpa.free(pd.day);
+        gpa.free(pd.cut);
+    }
+
+    /// Game g is in day d's fit
+    pub fn fits(pd: *const PatchDays, p: Phase, d: usize, g: rows.Game) bool {
+        return played(g) and (p == .final or !g.is_test) and g.start < pd.cut[d];
+    }
+};
+
 pub fn inRegion(c: Cuts, g: rows.Game) bool {
     return c.region == null or g.platform == c.region.?;
 }
@@ -1164,4 +1230,46 @@ test "buildTrainWhere: the predicate's games, never test games or games under 15
     try std.testing.expectEqual(want, v.train.games.len);
     for (v.train.games) |g| try std.testing.expect(@mod(@divFloor(g.start, 60_000), 2) == 1);
     try std.testing.expectEqual(10 * want, v.train.rows.len);
+}
+
+test "patch days: every latest-patch game scored once, after everything its day fits on" {
+    const gpa = std.testing.allocator;
+    var f = try Fixture.init(gpa, 6000, 13);
+    defer f.data.deinit();
+    // The second half is patch 16.21, live on platform 1 a day after platform 0
+    const half: i64 = 3000 * 60_000;
+    for (f.data.games) |*g| {
+        if (g.start < half) continue;
+        if (g.platform == 1 and g.start < half + std.time.ms_per_day) continue;
+        g.patch = 16021;
+    }
+    f.data.games[4000].duration_s = 700;
+    for ([_]Phase{ .dev, .final }) |p| {
+        var pd = try PatchDays.init(gpa, &f.data, p, null);
+        defer pd.deinit(gpa);
+        try std.testing.expectEqual(16021, pd.latest);
+        var n_scored: usize = 0;
+        for (f.data.games, pd.day) |g, x| {
+            const want = g.patch == 16021 and played(g) and (p == .final or !g.is_test);
+            try std.testing.expectEqual(want, x != null);
+            const v = x orelse continue;
+            n_scored += 1;
+            try std.testing.expect(g.start >= pd.cut[v]);
+            // Day since its own platform's first 16.21 game
+            const first: i64 = if (g.platform == 1) half + std.time.ms_per_day else half;
+            try std.testing.expect(g.start - first >= @as(i64, v) * std.time.ms_per_day);
+            try std.testing.expect(g.start - first < @as(i64, v + 1) * std.time.ms_per_day + 3 * 60_000);
+            for (f.data.games) |h| if (pd.fits(p, v, h)) try std.testing.expect(h.start < g.start);
+        }
+        try std.testing.expect(n_scored > 1000);
+        try std.testing.expect(pd.cut.len >= 2);
+        // dev never fits on a test game; final does
+        var test_fit = false;
+        for (f.data.games) |h| test_fit = test_fit or (h.is_test and pd.fits(p, pd.cut.len - 1, h));
+        try std.testing.expectEqual(p == .final, test_fit);
+    }
+    try std.testing.expectEqual(0, PatchDays.bucket(0));
+    try std.testing.expectEqual(2, PatchDays.bucket(3));
+    try std.testing.expectEqual(3, PatchDays.bucket(4));
+    try std.testing.expectEqual(4, PatchDays.bucket(40));
 }
