@@ -185,7 +185,6 @@ pub const Crawler = struct {
         try c.backfillTimelines(db);
         defer c.sparse.deinit(c.gpa);
         try c.seedSparse(db);
-        try dropDoneRows(db);
         if (c.opts.patch_only) {
             c.patches = try .load(c.gpa, db);
             c.patches.log();
@@ -239,9 +238,9 @@ pub const Crawler = struct {
         if (c.opts.fake != null) return;
         const path = std.fs.path.join(c.gpa, &.{ c.opts.data_dir, windows_file }) catch return;
         defer c.gpa.free(path);
-        const text = std.Io.Dir.cwd().readFileAlloc(c.io, path, c.gpa, .limited(1 << 20)) catch |err| {
-            if (err != error.FileNotFound) log.warn("rate windows not loaded: {t}", .{err});
-            return;
+        const text = std.Io.Dir.cwd().readFileAlloc(c.io, path, c.gpa, .limited(1 << 20)) catch |err| switch (err) {
+            error.FileNotFound => return,
+            else => return log.warn("rate windows not loaded: {t}", .{err}),
         };
         defer c.gpa.free(text);
         const n = c.limiters.load(text, std.Io.Clock.real.now(c.io).toMilliseconds()) catch |err| {
@@ -309,14 +308,16 @@ pub const Crawler = struct {
         defer c.probe_lock.unlock(c.io);
         const now = c.nowS();
         if (c.key_ok_at) |t| if (now - t < key_recheck_s) return false;
-        c.probeKey(probe) catch |err| {
-            if (err == error.KeyRejected) {
+        c.probeKey(probe) catch |err| switch (err) {
+            error.KeyRejected => {
                 log.warn("key recheck: the stored {s} player is refused too, the key is rejected", .{probe.platform.id});
                 return true;
-            }
+            },
             // Riot down or slow, or that player gone: no answer, so not a rejection
-            log.warn("key recheck: {t}, skipping the refused request", .{err});
-            return false;
+            else => {
+                log.warn("key recheck: {t}, skipping the refused request", .{err});
+                return false;
+            },
         };
         c.key_ok_at = now;
         log.warn("key recheck: the key still works, skipping the refused request", .{});
@@ -506,22 +507,6 @@ pub const Crawler = struct {
     }
 };
 
-/// Stored matches and timelines used to stay queued as 'done'; now they leave the
-/// queue. A no-op once the old rows are gone
-fn dropDoneRows(db: store.Db) !void {
-    inline for (.{ "match_queue", "timeline_queue" }) |table| {
-        var total: i64 = 0;
-        while (true) {
-            try db.run("DELETE FROM " ++ table ++ " WHERE match_id IN (SELECT match_id FROM " ++
-                table ++ " WHERE status = 'done' LIMIT 5000)", .{});
-            const n = db.changes();
-            total += n;
-            if (n == 0) break;
-        }
-        if (total > 0) log.info("dropped {d} done rows from {s}", .{ total, table });
-    }
-}
-
 const KeyProbe = struct {
     platform: ep.Platform,
     buf: [96]u8 = undefined,
@@ -546,18 +531,22 @@ fn Thread(comptime T: type) type {
     return struct {
         fn run(c: *Crawler, of: T.Of) void {
             var t = while (true) {
-                break T.init(c, of) catch |err| {
-                    if (err != error.Busy or c.stop.load(.acquire)) return c.fail(err);
-                    c.io.sleep(.fromSeconds(5), .awake) catch return c.fail(err);
-                    continue;
+                break T.init(c, of) catch |err| switch (err) {
+                    error.Busy => {
+                        if (c.stop.load(.acquire)) return c.fail(err);
+                        c.io.sleep(.fromSeconds(5), .awake) catch return c.fail(err);
+                        continue;
+                    },
+                    else => return c.fail(err),
                 };
             };
             defer t.b.deinit();
-            loop(&t) catch |err| {
-                if (err != error.Stopping) {
+            loop(&t) catch |err| switch (err) {
+                error.Stopping => {},
+                else => {
                     log.err("{s} thread: {t}", .{ t.b.name, err });
                     c.fail(err);
-                }
+                },
             };
         }
 
@@ -1025,8 +1014,11 @@ const RegionCrawler = struct {
             rc.scanPlayer(p) catch |err| {
                 if (rc.b.fatal(err)) return err;
                 log.warn("{t} match ids: {t}", .{ rc.region, err });
-                // Marking them checked would skip their games since the last scan
-                if (err == error.RateLimited) continue;
+                switch (err) {
+                    // Marking them checked would skip their games since the last scan
+                    error.RateLimited => continue,
+                    else => {},
+                }
             };
             // Even after another error, so a bad player waits for the recheck interval
             const job = try Job.create(c.gpa, .none);
@@ -1055,18 +1047,12 @@ const RegionCrawler = struct {
         const limit = 4 * scan_batch;
         try s.bind(.{ rc.snowball_after, newest, try rc.platformsJson(a), floor, limit });
         var rows: usize = 0;
-        next: while (try s.step()) {
+        while (try s.step()) {
             rows += 1;
             const r = s.row(struct { puuid: []const u8, checked_at: ?i64, platform: []const u8, rowid: i64, start_s: i64 });
             rc.snowball_after = r.rowid;
             if (rc.b.c.opts.patch_only) if (rc.patches.start(r.platform)) |start| if (r.start_s < start) continue;
-            for (players.items) |p| if (std.mem.eql(u8, p.puuid, r.puuid)) continue :next;
-            try players.append(a, .{
-                .puuid = try a.dupe(u8, r.puuid),
-                .checked_at = r.checked_at,
-                .platform = try a.dupe(u8, r.platform),
-                .source = .snowball,
-            });
+            try addPlayer(a, players, .{ .puuid = r.puuid, .checked_at = r.checked_at, .platform = r.platform, .source = .snowball });
             if (players.items.len == scan_batch) return;
         }
         if (rows < limit) rc.snowball_after = newest;
@@ -1074,18 +1060,23 @@ const RegionCrawler = struct {
 
     const Player = struct { puuid: []const u8, checked_at: ?i64, platform: []const u8, source: Source };
 
-    /// Rows of new_games or scan_players, skipping players already taken
+    /// Rows of new_games or scan_players
     fn takePlayers(a: std.mem.Allocator, s: *store.Stmt, players: *std.ArrayList(Player), source: Source) !void {
-        next: while (try s.step()) {
+        while (try s.step()) {
             const r = s.row(struct { puuid: []const u8, checked_at: ?i64, platform: []const u8 });
-            for (players.items) |p| if (std.mem.eql(u8, p.puuid, r.puuid)) continue :next;
-            try players.append(a, .{
-                .puuid = try a.dupe(u8, r.puuid),
-                .checked_at = r.checked_at,
-                .platform = try a.dupe(u8, r.platform),
-                .source = source,
-            });
+            try addPlayer(a, players, .{ .puuid = r.puuid, .checked_at = r.checked_at, .platform = r.platform, .source = source });
         }
+    }
+
+    /// `p`, its strings copied into `a`, unless the player is taken already
+    fn addPlayer(a: std.mem.Allocator, players: *std.ArrayList(Player), p: Player) !void {
+        for (players.items) |q| if (std.mem.eql(u8, q.puuid, p.puuid)) return;
+        try players.append(a, .{
+            .puuid = try a.dupe(u8, p.puuid),
+            .checked_at = p.checked_at,
+            .platform = try a.dupe(u8, p.platform),
+            .source = p.source,
+        });
     }
 
     fn scanPlayer(rc: *RegionCrawler, p: Player) !void {
@@ -1132,31 +1123,52 @@ const RegionCrawler = struct {
         return true;
     }
 
+    /// A match or timeline body as Riot sent it (caller frees); null when there is none to
+    /// store, its queue row updated. Kept raw, a cut or empty body would be a document no
+    /// parser can redo: one stopped the raw archive for 40 h (an empty 200, OC1, 15 Oct)
+    fn fetchDoc(rc: *RegionCrawler, which: writer.Kind.Queue, id: []const u8) !?[]u8 {
+        const got = switch (which) {
+            .match => ep.match(&rc.b.client, rc.region, id),
+            .timeline => ep.timeline(&rc.b.client, rc.region, id),
+        } catch |err| {
+            if (rc.b.fatal(err)) return err;
+            log.warn("{t} {s}: {t}", .{ which, id, err });
+            switch (err) {
+                // Left pending, so a 429 storm can't use up its tries
+                error.RateLimited => {},
+                else => try rc.b.queueStatus(which, id, .attempt),
+            }
+            return null;
+        };
+        const body = got orelse {
+            try rc.b.queueStatus(which, id, .missing);
+            return null;
+        };
+        if (!wholeDoc(body)) {
+            defer rc.b.c.gpa.free(body);
+            log.warn("{t} {s}: not a whole document ({d} bytes), tried again later", .{ which, id, body.len });
+            try rc.b.queueStatus(which, id, .attempt);
+            return null;
+        }
+        return body;
+    }
+
     fn fetchMatch(rc: *RegionCrawler, id: []const u8) !void {
         const gpa = rc.b.c.gpa;
-        const got = ep.match(&rc.b.client, rc.region, id) catch |err| {
-            if (rc.b.fatal(err)) return err;
-            log.warn("match {s}: {t}", .{ id, err });
-            // Left pending, so a 429 storm can't use up its tries
-            if (err == error.RateLimited) return;
-            return rc.b.queueStatus(.match, id, .attempt);
-        };
-        const fetched = got orelse return rc.b.queueStatus(.match, id, .missing);
+        const fetched = try rc.fetchDoc(.match, id) orelse return;
         defer gpa.free(fetched);
-        if (!wholeDoc(fetched)) {
-            log.warn("match {s}: not a whole document ({d} bytes), tried again later", .{ id, fetched.len });
-            return rc.b.queueStatus(.match, id, .attempt);
-        }
 
         const job = try Job.create(gpa, .none);
         errdefer job.destroy(gpa);
         const a = job.allocator();
         const body = try a.dupe(u8, fetched);
-        const doc = match.parse(a, body) catch |err| {
-            if (err == error.OutOfMemory) return err;
-            log.warn("match {s} did not parse: {t}", .{ id, err });
-            job.kind = .{ .queue = .{ .which = .match, .id = try a.dupe(u8, id), .status = .failed } };
-            return rc.b.submit(job);
+        const doc = match.parse(a, body) catch |err| switch (err) {
+            error.OutOfMemory => return err,
+            else => {
+                log.warn("match {s} did not parse: {t}", .{ id, err });
+                job.kind = .{ .queue = .{ .which = .match, .id = try a.dupe(u8, id), .status = .failed } };
+                return rc.b.submit(job);
+            },
         };
         const platform = doc.info.platformId orelse if (ep.platformOf(id)) |p| p.id else "";
         const start_ms = doc.info.gameStartTimestamp orelse doc.info.gameCreation;
@@ -1176,29 +1188,18 @@ const RegionCrawler = struct {
     /// can redo it
     fn fetchTimeline(rc: *RegionCrawler, id: []const u8) !void {
         const gpa = rc.b.c.gpa;
-        const got = ep.timeline(&rc.b.client, rc.region, id) catch |err| {
-            if (rc.b.fatal(err)) return err;
-            log.warn("timeline {s}: {t}", .{ id, err });
-            // Left pending, so a 429 storm can't use up its tries
-            if (err == error.RateLimited) return;
-            return rc.b.queueStatus(.timeline, id, .attempt);
-        };
-        const body = got orelse return rc.b.queueStatus(.timeline, id, .missing);
+        const body = try rc.fetchDoc(.timeline, id) orelse return;
         defer gpa.free(body);
-        // Kept raw it would be a document no parser can redo, and it stopped the raw
-        // archive for 40 h (an empty 200, OC1, 15 Oct)
-        if (!wholeDoc(body)) {
-            log.warn("timeline {s}: not a whole document ({d} bytes), tried again later", .{ id, body.len });
-            return rc.b.queueStatus(.timeline, id, .attempt);
-        }
 
         const job = try Job.create(gpa, .none);
         errdefer job.destroy(gpa);
         const a = job.allocator();
-        const compact = compactTimeline(a, body) catch |err| blk: {
-            if (err == error.OutOfMemory) return err;
-            log.warn("timeline {s} did not parse: {t}", .{ id, err });
-            break :blk null;
+        const compact = compactTimeline(a, body) catch |err| switch (err) {
+            error.OutOfMemory => return err,
+            else => blk: {
+                log.warn("timeline {s} did not parse: {t}", .{ id, err });
+                break :blk null;
+            },
         };
         const keep_raw = rc.b.c.opts.raw_timeline_days > 0 or compact == null;
         job.kind = .{ .timeline = .{
@@ -1534,7 +1535,6 @@ pub const Compact = struct {
     gold: [gold_minutes.len][timeline.max_participants]?i32,
 };
 
-/// Timeline JSON -> gzipped compact blob, allocated with `gpa`
 /// A match-v5 summary or timeline as Riot sends one: a JSON object naming its match.
 /// Not a parse: a body that passes can still fail extraction and be kept raw
 fn wholeDoc(body: []const u8) bool {
@@ -1543,6 +1543,7 @@ fn wholeDoc(body: []const u8) bool {
     return std.mem.indexOf(u8, t, "\"matchId\":\"") != null;
 }
 
+/// Timeline JSON -> gzipped compact blob, allocated with `gpa`
 pub fn compactTimeline(gpa: std.mem.Allocator, body: []const u8) !Compact {
     var arena: std.heap.ArenaAllocator = .init(gpa);
     defer arena.deinit();
@@ -1939,18 +1940,4 @@ test "gold at 10, 14 and 15 minutes" {
         "SELECT count(*) FROM participants WHERE gold10 > 0 AND gold14 >= gold10",
         .{},
     ));
-}
-
-test "done queue rows are dropped" {
-    const db = try store.schema.memory();
-    defer db.close();
-    try db.exec(
-        \\INSERT INTO match_queue (match_id, status, discovered_at) VALUES
-        \\    ('EUW1_1', 'done', 1), ('EUW1_2', 'pending', 1), ('EUW1_3', 'failed', 1);
-        \\INSERT INTO timeline_queue (match_id, region, status, queued_at) VALUES
-        \\    ('EUW1_1', 'europe', 'done', 1);
-    );
-    try dropDoneRows(db);
-    try std.testing.expectEqual(@as(?i64, 2), try db.scalar("SELECT count(*) FROM match_queue", .{}));
-    try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM timeline_queue", .{}));
 }
