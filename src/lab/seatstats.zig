@@ -16,6 +16,7 @@ const std = @import("std");
 const store = @import("store");
 const par = @import("../par.zig");
 const summaries = @import("summaries.zig");
+const patchOf = @import("../riot/match.zig").patchOf;
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const log = std.log.scoped(.seatstats);
@@ -236,12 +237,6 @@ const Batch = struct {
 };
 
 /// "16.20.712.3456" -> "16.20"
-fn patchOf(version: []const u8) []const u8 {
-    const first = std.mem.findScalar(u8, version, '.') orelse return version;
-    const second = std.mem.findScalarPos(u8, version, first + 1, '.') orelse return version;
-    return version[0..second];
-}
-
 const Patches = std.StringArrayHashMapUnmanaged(Static);
 
 /// Every DDRAGON/<patch>/ with champion.json and item.json
