@@ -377,19 +377,23 @@ Limits since 23 Oct (deploy/wsl, installed by deploy/gpu-box.sh install as root)
 - Windows: PCIe Link State Power Management off on AC (was Moderate; `powercfg
   /setacvalueindex SCHEME_CURRENT SUB_PCIEXPRESS ASPM 1` to undo)
 
-Likely cause, not proven: no TRIM ever reaches it. `wsl --mount` passes the bare disk
-without discard (/sys/block/sde/queue/discard_max_bytes 0; fstrim never ran), so every
-block a snapshot, run or pull ever wrote stays in use to the drive, which then has
-little fast cache and long clean-up stalls. Fits the timing: the System log goes back to
-April and the first reset is 18 Oct 01:55, an hour after the lab partition was made and
-snapshots and runs moved onto it. Not the connection: PCIe 4.0 x4 as rated, no WHEA
-errors in 30 days. Ways out: the lab data in a VHDX on the P3 (WSL's own VHDX passes
-discard: / is mounted with it), or empty the partitions, let Windows trim the space
-(format), then copy back; fewer writes (incremental snapshots) slow the build-up.
+Tested 23 Oct (the limits on, no resets during the tests):
+- Not heat or wear: NVMe health log 0 minutes above warning temperature, never
+  throttled, 0 media errors, spare 100%, 4% used, 24 TB written. Not the connection:
+  PCIe 4.0 x4 as rated, no WHEA errors in 30 days
+- Not TRIM, though none reaches it (`wsl --mount` passes no discard: discard_max_bytes
+  0, fstrim never ran): 32 GB of sequential direct writes held 2.3 GB/s, so it has fast
+  space to spare, with two ~15 s dips to 80 MB/s
+- Random writes are the weak spot: 16 KB at 8 deep, 110-700 MB/s and every op under 25
+  ms; 128 KB at 32 deep (the new limit full), 20-50 MB/s for ~40 s with single ops up
+  to 4.7 s. At the old 1584 deep of 1.25 MB, ~2 GB queued at 20-50 MB/s puts the last
+  command 40-100 s back, past Windows' timeout: the reset. SQLite loads and index
+  builds are such writes. So the queue limit is the fix; first resets 18 Oct, when the
+  lab partition took snapshots and runs onto this disk
+- The drive's error log count (4,267) has no entries to read
 
-Still worth doing at the PC: Crucial Storage Executive for newer firmware (it also shows
-total writes and health), and a heatsink or airflow on the drive. Check resets since:
-System log, stornvme 129, Kernel-Power 41.
+Still worth doing at the PC: Crucial Storage Executive for newer firmware. Check resets
+since: System log, stornvme 129, Kernel-Power 41.
 
 ## Threads in our code
 
