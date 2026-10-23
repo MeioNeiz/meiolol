@@ -812,6 +812,7 @@ fn ols(gpa: std.mem.Allocator, x: []const f64, z: []const f64, k: usize) ![]f64 
     };
     try invert(xtx, inv, k);
     const out = try gpa.alloc(f64, 2 * k);
+    errdefer gpa.free(out);
     @memset(out, 0);
     for (0..k) |a| for (0..k) |b| {
         out[a] += inv[a * k + b] * xtz[b];

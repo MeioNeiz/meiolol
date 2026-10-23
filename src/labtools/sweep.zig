@@ -66,12 +66,12 @@ fn fail(err: *Writer, comptime f: []const u8, args: anytype) !u8 {
     return 1;
 }
 
-fn readFile(arena: Allocator, io: std.Io, path: []const u8) ![]const u8 {
+fn readFile(arena: Allocator, io: std.Io, path: []const u8) std.Io.Dir.ReadFileAllocError![]const u8 {
     return std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 30));
 }
 
 /// Perl's $! for the usual cases
-fn errText(e: anyerror) []const u8 {
+fn errText(e: std.Io.Dir.ReadFileAllocError) []const u8 {
     return switch (e) {
         error.FileNotFound => "No such file or directory",
         error.AccessDenied => "Permission denied",

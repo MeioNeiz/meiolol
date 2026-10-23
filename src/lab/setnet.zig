@@ -283,6 +283,7 @@ pub const SetGame = struct {
 /// games keep theirs; only fit games are read)
 fn shuffledResults(gpa: std.mem.Allocator, d: *const rows.Data, fit_games: []const u32, seed: u32) ![]u1 {
     const won = try gpa.alloc(u1, d.games.len);
+    errdefer gpa.free(won);
     for (won, d.games) |*w, g| w.* = 1 - g.winner;
     const ys = try gpa.alloc(u1, fit_games.len);
     defer gpa.free(ys);
@@ -606,6 +607,7 @@ pub fn fit(gpa: std.mem.Allocator, io: Io, opts: winnet.Options, seed: u32, s: w
     const w: Work = try .init(gpa, &full.net.s);
     defer w.deinit(gpa);
     const pred = try gpa.alloc(f32, scored.len);
+    errdefer gpa.free(pred);
     predict(&full.net, scored, &w, pred);
     std.debug.print("netcheck: seed {d}: set net {d:.2} epochs, offset weight {d:.3}\n", .{ seed, tuned.epochs, full.net.s.a.at(full.net.p, 0).* });
     if (opts.export_net and s.block == .dev) try writeExport(gpa, io, opts, seed, &full.net, &p_all, s, scored, &w);

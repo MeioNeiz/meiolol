@@ -996,6 +996,7 @@ fn fitBig(gpa: std.mem.Allocator, io: Io, gpu: ?*const cuda.Gpu, opts: Options, 
     var net = try fitBigOn(gpa, io, gpu, cfg, s.n_all, all, refitSteps(watch.bestEpochs(), all.len, cfg.batch), opts.threads, null);
     defer net.deinit(gpa);
     const pred = try gpa.alloc(f32, scored.len);
+    errdefer gpa.free(pred);
     try net.predict(gpa, io, scored, pred);
     if (opts.net == .bigres) std.debug.print("netcheck: seed {d}: offset weight {d:.3}\n", .{ seed, net.p[net.l.a] });
     return .{ .pred = pred, .epochs = watch.bestEpochs(), .val_loss = watch.best_loss, .seconds = secondsSince(io, t0) };

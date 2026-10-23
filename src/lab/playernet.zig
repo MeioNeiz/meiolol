@@ -412,6 +412,7 @@ fn rawFeatures(gpa: std.mem.Allocator, d: *const rows.Data, m: *const Mastery) !
 /// TrueSkill 2's premade signal)
 fn coPlay(gpa: std.mem.Allocator, d: *const rows.Data) ![][2]u16 {
     const out = try gpa.alloc([2]u16, d.rows.len);
+    errdefer gpa.free(out);
     @memset(out, @splat(0));
     const by_game = try gpa.alloc([10]u32, d.games.len);
     defer gpa.free(by_game);
