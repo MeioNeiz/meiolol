@@ -22,6 +22,7 @@
 //! Writes DIR/eventvalue.tsv, DIR/realised.tsv
 
 const std = @import("std");
+const nn = @import("nn");
 const store = @import("store");
 const timeline = @import("../riot/timeline.zig");
 const objectives = @import("../objectives.zig");
@@ -296,9 +297,7 @@ const Take = struct {
     is_test: bool,
 };
 
-fn sigmoid(x: f64) f64 {
-    return 1 / (1 + @exp(-x));
-}
+const sigmoid = nn.sigmoid;
 
 fn logitAt(minute: u8, s: objectives.State) f64 {
     const w = weights.w[@min(minute, weights.w.len) - 1];

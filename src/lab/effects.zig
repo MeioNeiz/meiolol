@@ -14,6 +14,7 @@
 //! DIR/components.tsv, DIR/cells.tsv
 
 const std = @import("std");
+const nn = @import("nn");
 const api = @import("api");
 const cand = @import("cand");
 const rows = @import("rows.zig");
@@ -248,9 +249,7 @@ fn loss1(y: f32, p: f64) f64 {
     return -(y * @log(q) + (1 - y) * @log(1 - q));
 }
 
-fn sigmoid(x: f64) f64 {
-    return 1 / (1 + @exp(-x));
-}
+const sigmoid = nn.sigmoid;
 
 const Task = struct {
     model: Model,

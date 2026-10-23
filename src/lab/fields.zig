@@ -12,6 +12,7 @@
 //! p-values from the clustered intervals, Benjamini-Hochberg within each table.
 
 const std = @import("std");
+const nn = @import("nn");
 const store = @import("store");
 const rows = @import("rows.zig");
 const looks = @import("looks.zig");
@@ -615,9 +616,7 @@ const Standard = struct {
 
 const Active = struct { ix: [n_base + per_role]u8, x: [n_base + per_role]f64, n: usize };
 
-fn sigmoid(e: f64) f64 {
-    return 1 / (1 + @exp(-e));
-}
+const sigmoid = nn.sigmoid;
 
 /// Solves a·x = b (n x n, row-major) by Gaussian elimination with partial pivoting
 fn solve(comptime n: usize, a: *[n][n]f64, b: *[n]f64) void {
@@ -1503,7 +1502,7 @@ test "logistic Newton recovers a slope" {
     for (&seats) |*s| {
         const g = rnd.floatNorm(f32);
         s.* = .{ .game = 0, .slot = 0, .side = 0, .role = 0, .champion = 1, .cr = 0, .opp = 0, .minutes = 30, .gd14 = g, .y = @splat(0), .fit = true, .scored = false };
-        s.y[win] = @floatFromInt(@intFromBool(rnd.float(f64) < sigmoid(1.5 * g)));
+        s.y[win] = @floatFromInt(@intFromBool(rnd.float(f64) < sigmoid(@as(f64, 1.5 * g))));
     }
     var beta: [n_params]f64 = @splat(0);
     fitLogistic(BaseCtx{}, &seats, &beta);

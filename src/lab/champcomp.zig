@@ -272,14 +272,8 @@ const Units = struct {
     }
 };
 
-fn logit(p: f64) f64 {
-    const q = std.math.clamp(p, 1e-6, 1 - 1e-6);
-    return @log(q / (1 - q));
-}
-
-fn sigmoid(z: f64) f64 {
-    return 1 / (1 + @exp(-z));
-}
+const logit = @import("nn").logit;
+const sigmoid = @import("nn").sigmoid;
 
 /// Ratings' chance for blue in every game with start < hi (not test, played), fitted on
 /// the dev games before `before`; NaN elsewhere. As compcheck.offset: the same seeds, the

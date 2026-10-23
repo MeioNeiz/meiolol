@@ -399,9 +399,7 @@ const Work = struct {
 
 const axpy = nn.axpy;
 
-fn sigmoid(x: f32) f32 {
-    return nn.sigmoid(x);
-}
+const sigmoid = winnet.sigmoid;
 
 /// f per side order (0: blue's view, 1: red's); with rnd, rho's units drop at 1 - keep
 fn forward(n: *const Net, g: *const SetGame, w: *const Work, keep: f32, rnd: ?std.Random) [2]f32 {

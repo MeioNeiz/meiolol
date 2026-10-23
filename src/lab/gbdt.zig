@@ -4,6 +4,7 @@
 //! features; NaN goes to its own bin (left of every split)
 
 const std = @import("std");
+const nn = @import("nn");
 const Allocator = std.mem.Allocator;
 
 pub const Options = struct {
@@ -76,9 +77,7 @@ fn treeSize(depth: u8) usize {
     return (@as(usize, 1) << @intCast(depth + 1)) - 1;
 }
 
-fn sigmoid(z: f64) f64 {
-    return 1 / (1 + @exp(-z));
-}
+const sigmoid = nn.sigmoid;
 
 /// Fits on (x, y, offset); with validation rows, keeps the tree count that minimised their
 /// log loss (patience trees past it), else all max_trees
