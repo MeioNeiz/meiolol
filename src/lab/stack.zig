@@ -24,6 +24,7 @@ const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const gbdt = @import("gbdt.zig");
+const tsvlog = @import("../tsvlog.zig");
 const nn = @import("nn");
 
 pub const usage =
@@ -144,14 +145,14 @@ fn loadTeams(arena: Allocator, io: Io, paths: []const []const u8, d: *const Data
         const text = try Io.Dir.cwd().readFileAlloc(io, path, arena, .unlimited);
         try texts.append(arena, text);
         const header = text[0 .. std.mem.findScalar(u8, text, '\n') orelse return error.Empty];
-        const at_pred = column(header, "pred") orelse return error.MissingColumn;
+        const at_pred = tsvlog.column(header, "pred") orelse return error.MissingColumn;
         if (pi == 0) {
             var it = std.mem.splitScalar(u8, header, '\t');
             var c: usize = 0;
             while (it.next()) |h| : (c += 1) if (c > at_pred) try names.append(arena, h);
         } else {
             var keep: std.ArrayList([]const u8) = .empty;
-            for (names.items) |nm| if (column(header, nm) != null) try keep.append(arena, nm);
+            for (names.items) |nm| if (tsvlog.column(header, nm) != null) try keep.append(arena, nm);
             names = keep;
         }
     }
@@ -163,10 +164,10 @@ fn loadTeams(arena: Allocator, io: Io, paths: []const []const u8, d: *const Data
     for (texts.items) |text| {
         var lines = std.mem.tokenizeScalar(u8, text, '\n');
         const header = lines.next().?;
-        const at_id = column(header, "match_id") orelse return error.MissingColumn;
-        const at_side = column(header, "side") orelse return error.MissingColumn;
+        const at_id = tsvlog.column(header, "match_id") orelse return error.MissingColumn;
+        const at_side = tsvlog.column(header, "side") orelse return error.MissingColumn;
         var at: [32]usize = undefined;
-        for (names.items, 0..) |nm, f| at[f] = column(header, nm).?;
+        for (names.items, 0..) |nm, f| at[f] = tsvlog.column(header, nm).?;
         var cols: [64][]const u8 = undefined;
         while (lines.next()) |line| {
             var it = std.mem.splitScalar(u8, line, '\t');
@@ -209,13 +210,6 @@ fn usageError() u8 {
     return 2;
 }
 
-fn column(header: []const u8, name: []const u8) ?usize {
-    var it = std.mem.splitScalar(u8, header, '\t');
-    var i: usize = 0;
-    while (it.next()) |h| : (i += 1) if (std.mem.eql(u8, h, name)) return i;
-    return null;
-}
-
 fn blockIndex(s: []const u8) ?u8 {
     for (blocks, 0..) |b, i| if (std.mem.eql(u8, b, s)) return @intCast(i);
     return null;
@@ -240,10 +234,10 @@ fn load(gpa: Allocator, arena: Allocator, io: Io, inputs: []const Input) !Data {
         const text = try Io.Dir.cwd().readFileAlloc(io, in.path, arena, .unlimited);
         var lines = std.mem.tokenizeScalar(u8, text, '\n');
         const header = lines.next() orelse return error.Empty;
-        const at_block = column(header, "fold") orelse column(header, "block") orelse return error.MissingColumn;
-        const at_id = column(header, "match_id") orelse return error.MissingColumn;
-        const at_y = column(header, "y") orelse return error.MissingColumn;
-        const at_p = column(header, in.col) orelse {
+        const at_block = tsvlog.column(header, "fold") orelse tsvlog.column(header, "block") orelse return error.MissingColumn;
+        const at_id = tsvlog.column(header, "match_id") orelse return error.MissingColumn;
+        const at_y = tsvlog.column(header, "y") orelse return error.MissingColumn;
+        const at_p = tsvlog.column(header, in.col) orelse {
             std.debug.print("{s}: no column {s}\n", .{ in.path, in.col });
             return error.MissingColumn;
         };

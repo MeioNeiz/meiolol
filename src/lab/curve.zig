@@ -17,6 +17,7 @@
 
 const std = @import("std");
 const Io = std.Io;
+const tsvlog = @import("../tsvlog.zig");
 
 pub const usage =
     \\  curve [--ref MODEL] [--min-fit N] [--max-fit N] [--reps N] [--at N,N...] [--tsv FILE] MODEL:COL:LABEL:DIR...
@@ -197,7 +198,7 @@ const Corpus = struct {
         const preds = try Io.Dir.cwd().readFileAlloc(io, try arena.print("{s}/preds.tsv", .{dir}), arena, .unlimited);
         var pl = std.mem.tokenizeScalar(u8, preds, '\n');
         const header = pl.next() orelse return error.Empty;
-        const at_col = try column(header, col);
+        const at_col = tsvlog.column(header, col) orelse return error.MissingColumn;
         const Rows = struct { games: std.ArrayList(u32) = .empty, loss: std.ArrayList(f64) = .empty, hit: std.ArrayList(f64) = .empty, key: u64 = 0 };
         var by_fold: std.StringArrayHashMapUnmanaged(Rows) = .empty;
         defer by_fold.deinit(gpa);
@@ -251,13 +252,6 @@ const Corpus = struct {
         return out.items;
     }
 };
-
-fn column(header: []const u8, name: []const u8) !usize {
-    var it = std.mem.splitScalar(u8, header, '\t');
-    var i: usize = 0;
-    while (it.next()) |h| : (i += 1) if (std.mem.eql(u8, h, name)) return i;
-    return error.MissingColumn;
-}
 
 /// Least squares of p.mean on c[block] + a * n_fit^-b over model m's points, weighted by
 /// scored games; a >= 0, b on a log grid. ok false when no block has two fit sizes

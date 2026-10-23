@@ -30,6 +30,14 @@ pub fn appendRaw(io: Io, dir: Io.Dir, path: []const u8, header: []const u8, byte
     try fw.interface.flush();
 }
 
+/// Index of `name` among the tab-separated names in `header`
+pub fn column(header: []const u8, name: []const u8) ?usize {
+    var it = std.mem.splitScalar(u8, header, '\t');
+    var i: usize = 0;
+    while (it.next()) |h| : (i += 1) if (std.mem.eql(u8, h, name)) return i;
+    return null;
+}
+
 /// The rows after the file's header when that header is an older form of `header`
 fn outdated(gpa: std.mem.Allocator, io: Io, path: []const u8, header: []const u8) !?[]u8 {
     var file = Io.Dir.cwd().openFile(io, path, .{}) catch |err| switch (err) {

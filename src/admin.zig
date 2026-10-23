@@ -332,7 +332,7 @@ const DayRow = struct { day: i64, region: [regions.len]u64, recent: [regions.len
 /// (status.rows), so this many back from the newest rowid were stored since `at`
 fn storedSince(history: []const u8, col: []const u8, at: i64, now: i64) ?u64 {
     var lines = std.mem.tokenizeScalar(u8, history, '\n');
-    const ci = column(lines.next() orelse return null, col) orelse return null;
+    const ci = tsvlog.column(lines.next() orelse return null, col) orelse return null;
     var then: ?i64 = null;
     while (lines.next()) |line| {
         const t = std.fmt.parseInt(i64, field(line, 0) orelse continue, 10) catch continue;
@@ -341,13 +341,6 @@ fn storedSince(history: []const u8, col: []const u8, at: i64, now: i64) ?u64 {
         then = std.fmt.parseInt(i64, field(line, ci) orelse continue, 10) catch continue;
     }
     return @intCast(@max(now - (then orelse return null), 0));
-}
-
-fn column(header: []const u8, name: []const u8) ?usize {
-    var it = std.mem.splitScalar(u8, header, '\t');
-    var i: usize = 0;
-    while (it.next()) |h| : (i += 1) if (std.mem.eql(u8, h, name)) return i;
-    return null;
 }
 
 fn field(line: []const u8, i: usize) ?[]const u8 {

@@ -29,6 +29,7 @@ const winchance = @import("../winchance.zig");
 const weights = @import("../winchance_weights.zig");
 const stats = @import("../stats.zig");
 const par = @import("../par.zig");
+const tsvlog = @import("../tsvlog.zig");
 const events = @import("events.zig");
 
 const Io = std.Io;
@@ -205,13 +206,6 @@ const max_minute = 40;
 /// Per game, blue's chance at frames 0..max_minute from --preds (nan where none)
 const Preds = std.AutoHashMapUnmanaged(u64, *[max_minute + 1]f32);
 
-fn colIndex(header: []const u8, name: []const u8) ?usize {
-    var it = std.mem.splitScalar(u8, header, '\t');
-    var i: usize = 0;
-    while (it.next()) |h| : (i += 1) if (std.mem.eql(u8, h, name)) return i;
-    return null;
-}
-
 fn loadPreds(gpa: Allocator, arena: Allocator, io: Io, path: []const u8, col: []const u8, block: []const u8, out: *Preds) !void {
     var file = try Io.Dir.cwd().openFile(io, path, .{});
     defer file.close(io);
@@ -220,10 +214,10 @@ fn loadPreds(gpa: Allocator, arena: Allocator, io: Io, path: []const u8, col: []
     const r = &fr.interface;
     const header = (r.takeDelimiter('\n') catch |e| return fr.err orelse e) orelse return error.EmptyPreds;
     const ci = [4]usize{
-        colIndex(header, "match_id") orelse return error.NoMatchId,
-        colIndex(header, "minute") orelse return error.NoMinute,
-        colIndex(header, "block") orelse return error.NoBlock,
-        colIndex(header, col) orelse {
+        tsvlog.column(header, "match_id") orelse return error.NoMatchId,
+        tsvlog.column(header, "minute") orelse return error.NoMinute,
+        tsvlog.column(header, "block") orelse return error.NoBlock,
+        tsvlog.column(header, col) orelse {
             std.debug.print("eventvalue: no column {s} in {s}\n", .{ col, path });
             return error.NoPredColumn;
         },
