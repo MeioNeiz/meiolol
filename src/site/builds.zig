@@ -13,6 +13,8 @@ const tpl = html.tpl;
 const plural = @import("text.zig").plural;
 const builds = @import("../builds.zig");
 const ddragon = @import("../ddragon.zig");
+const scope = @import("scope.zig");
+const filters = @import("filters.zig");
 
 const Writer = std.Io.Writer;
 const Role = core.Role;
@@ -60,6 +62,13 @@ fn periodText(a: std.mem.Allocator, f: *const File, period: html.Period) ![]cons
     };
 }
 
+fn periodDim(a: std.mem.Allocator, f: *const File, period: html.Period) !scope.Dim {
+    return switch (period) {
+        .days30 => .days30,
+        .patch => .patch(a, f.label),
+    };
+}
+
 /// A strip's build: the view's, or in a patch view the previous patch's while the
 /// current one has under solid_games of it and the previous more (a new patch's first
 /// days)
@@ -69,6 +78,11 @@ const Picked = struct {
     period: html.Period,
     /// The current patch's games of it when the previous patch's is shown
     newer: ?u64 = null,
+
+    /// As a scope chip: the patch shown, the previous one while the current is thin
+    fn chipPeriod(p: Picked, site: *const Site) !scope.Dim {
+        return periodDim(site.arena, p.f, p.period);
+    }
 
     /// "patch 16.21", "patch 16.20 (16.21: 57 games so far)", "last 30 days"
     fn when(p: Picked, site: *const Site) ![]const u8 {
@@ -165,9 +179,10 @@ pub fn strip(site: *const Site, w: *Writer, ch: Champ, r: Role, from: []const u8
     // The previous patch's build has no page
     const href: ?html.Link = if (picked.newer != null) null else .{ .root = site.toShared(from), .up = v.dir(), .path = try path(site.arena, ch, r) };
     try tpl.renderPart(w,
-        \\<div class="bstrip"><p class="bhead"><b>Most played build</b> <span class="muted">{when}, {in}, {ranks}: {games} game{s}.</span>{link}</p>
+        \\<div class="bstrip"><p class="bhead"><b>Most played build</b> {chip} <span class="muted">{when}, {in}, {ranks}: {games} game{s}.</span>{link}</p>
         \\<div class="bks">
     , .{
+        .chip = site.chip(site.regionDim(v.region), try picked.chipPeriod(site), rankDim(f.min_tier)),
         .when = try picked.when(site),
         .in = v.region.in(),
         .ranks = try rankLabel(site.arena, f.min_tier),
@@ -197,6 +212,7 @@ pub fn vsStrip(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ, from:
     const f = picked.f;
     const b = picked.b;
     const usual = f.get(x.id, r);
+    const chip = site.chip(site.regionDim(pv.region), try picked.chipPeriod(site), rankDim(f.min_tier));
     const href: ?html.Link = if (picked.newer != null or shown(f, x.id, r) == null) null else blk: {
         const to = try path(site.arena, x, r);
         break :blk if (site.view.period == .patch)
@@ -205,9 +221,10 @@ pub fn vsStrip(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ, from:
             .{ .root = site.toShared(from), .up = pv.dir(), .path = to };
     };
     try tpl.renderPart(w,
-        \\<div class="mu-build"><section class="mu-card"><h2>Most played build</h2><p class="mu-note">{games} game{s}, {patch}, {in}, {ranks}.{link}</p>
+        \\<div class="mu-build"><section class="mu-card"><h2>Most played build {chip}</h2><p class="mu-note">{games} game{s}, {patch}, {in}, {ranks}.{link}</p>
         \\<div class="bks">
     , .{
+        .chip = chip,
         .games = try root.thousands(site.arena, b.games),
         .s = plural(b.games),
         .patch = try picked.when(site),
@@ -225,7 +242,7 @@ pub fn vsStrip(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ, from:
     try w.writeAll("</div></section>\n");
     if (f.trees.len > 0 and b.get(.rune) != null) {
         const shifts = try runeShifts(site.arena, b, usual);
-        try tpl.renderPart(w, "<section class=\"mu-card\"><h2>Runes against {y}</h2><div class=\"mu-rbody\"><div>\n", .{ .y = y.name });
+        try tpl.renderPart(w, "<section class=\"mu-card\"><h2>Runes against {y} {chip}</h2><div class=\"mu-rbody\"><div>\n", .{ .y = y.name, .chip = chip });
         _ = try runeStats(w, f, b, true);
         try tpl.renderPart(w, "</div><div>\n", .{});
         if (shifts.len > 0) {
@@ -635,6 +652,12 @@ fn wonPct(o: File.Option) f64 {
     return 100 * @as(f64, @floatFromInt(o.wins)) / @as(f64, @floatFromInt(@max(o.games, 1)));
 }
 
+/// A builds file's min_tier as a scope chip's rank
+fn rankDim(tier: []const u8) scope.Dim {
+    for (filters.tiers, 0..) |t, i| if (std.mem.eql(u8, t, tier)) return .rank(i);
+    return .plat;
+}
+
 /// "PLATINUM" -> "Platinum IV and up"; "" -> "every player in Platinum+ games"
 pub fn rankLabel(a: std.mem.Allocator, tier: []const u8) ![]const u8 {
     if (tier.len == 0) return "every player in Platinum+ games";
@@ -665,9 +688,10 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
     try html.head(w, p);
     try tpl.render(w,
         \\<div class="hero"><img src="{icon}" alt="" width="72" height="72"><div><h1>{name} {role} build</h1>
-        \\<p class="muted">What players take on {name} in the {lower} role: ranked solo/duo {in}, {period}, {ranks}. {games} game{s}{rate}.</p></div></div>
+        \\<p class="muted">{chip} What players take on {name} in the {lower} role: ranked solo/duo {in}, {period}, {ranks}. {games} game{s}{rate}.</p></div></div>
         \\
     , .{
+        .chip = site.chip(site.regionDim(site.view.region), try periodDim(a, f, site.view.period), rankDim(f.min_tier)),
         .icon = site.icon(ch),
         .name = ch.name,
         .role = root.roleName(r),

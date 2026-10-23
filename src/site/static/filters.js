@@ -2,8 +2,8 @@
 // row per region, patch, 30-day flag, rank, role and lane opponent with games, wins and
 // gold at 14, plus bans by the game's rank; data/filters.json has players per role and
 // games by rank for pick and ban rates. This sums the rows the picks select and redraws
-// each role's tiles and opponent table, the scope lines and the early-data note, and
-// shows the blocks written per view for the picks' view. The
+// each role's tiles and opponent table, the scope lines and chips and the early-data
+// note, and shows the blocks written per view for the picks' view. The
 // picks are the subbar's region, period and rank links (html.zig switches) and each
 // opponent table's Common/All; the page as written is their defaults (the root view).
 // Picks live in the URL so a view can be shared; the views' own links use the same keys
@@ -242,11 +242,41 @@ const HARDEST = "hardest first";
     }
   }
 
+  // Scope chips (scope.zig Chip): a dimension the block follows says the pick, one it
+  // doesn't is marked against it
+  const chips = [...document.querySelectorAll("[data-chip]")];
+  function pickText(k, f) {
+    if (k === "region") return f.region === "all" ? "All regions" : platformName(f.region);
+    if (k === "period") return f.period === "days30" ? "30 days" : `Patch ${f.period.slice(6)}`;
+    return f.rank === "" ? "Plat+" : tier(f);
+  }
+  // As scope.zig Note
+  function chipNote(k, key, f) {
+    const text = pickText(k, f);
+    if (k === "region") return key === "all" ? `not ${text} alone` : f.region === "all" ? "not all regions" : `not ${text}`;
+    if (k === "period") return key === "days30" || key.startsWith("patch:") ? `not the ${f.period === "days30" ? "30 days" : "patch"} picked` : "not by period";
+    return key === "" ? "not by rank" : `not ${text}`;
+  }
+  function markChips(f) {
+    for (const chip of chips) {
+      ["region", "period", "rank"].forEach((k, i) => {
+        const part = chip.children[i];
+        const key = chip.dataset[k];
+        const off = key !== "*" && key !== f[k];
+        if (key === "*") part.textContent = pickText(k, f);
+        part.querySelector("i")?.remove();
+        part.classList.toggle("off", off);
+        if (off) part.append(Object.assign(document.createElement("i"), { textContent: `, ${chipNote(k, key, f)}` }));
+      });
+    }
+  }
+
   function apply() {
     const fresh = isDefault(f);
     history.replaceState(null, "", location.pathname + query(f) + location.hash);
     drawSwitches(f);
     showVariants(f);
+    markChips(f);
     const view = viewOf(f);
     // Nav links (Champions, Matchups, Pool) into the view the filters are on
     if (view && typeof meioView === "function") meioView(view.dir);

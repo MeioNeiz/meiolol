@@ -257,15 +257,20 @@ const Signed = struct {
 /// (`pd`, that region's). `to_view`: to the view whose patch page it links
 pub fn since(site: *const Site, w: *Writer, pd: *const PatchDay, region: html.Region, ch: Champ, r: core.Role, to_view: []const u8) !void {
     const o = pd.opts;
+    const chip = site.chip(site.regionDim(region), .{
+        .key = try site.arena.print("patch:{s}", .{pd.cur_patch}),
+        .text = try site.arena.print("Patch {s} vs {s}", .{ pd.cur_patch, pd.prev_patch }),
+    }, .plat);
     const m = pd.champion(ch.id, r) orelse {
         if (early(pd)) try tpl.render(w,
-            \\<p class="since muted">Patch {cur} against {prev}: too early to tell, too few games on {cur} so far. <a href="{href}">Patch changes</a></p>
+            \\<p class="since muted">{chip} Patch {cur} against {prev}: too early to tell, too few games on {cur} so far. <a href="{href}">Patch changes</a></p>
             \\
-        , .{ .cur = pd.cur_patch, .prev = pd.prev_patch, .href = try std.mem.concat(site.arena, u8, &.{ to_view, path }) });
+        , .{ .chip = chip, .cur = pd.cur_patch, .prev = pd.prev_patch, .href = try std.mem.concat(site.arena, u8, &.{ to_view, path }) });
         return;
     };
     const clear = m.win.clear(o.min_role_games, o.z);
-    try tpl.renderPart(w, "<p class=\"since muted\">Patch {cur} against {prev}, {in}: {verdict}, {now} games won against {then}", .{
+    try tpl.renderPart(w, "<p class=\"since muted\">{chip} Patch {cur} against {prev}, {in}: {verdict}, {now} games won against {then}", .{
+        .chip = chip,
         .cur = pd.cur_patch,
         .prev = pd.prev_patch,
         .in = region.in(),

@@ -23,6 +23,7 @@ const evalchart = @import("evalchart.zig");
 const flat = @import("flat.zig");
 const patchday = @import("../patchday.zig");
 const patch_page = @import("patch.zig");
+pub const scope = @import("scope.zig");
 
 const Writer = std.Io.Writer;
 const Stats = core.Stats;
@@ -260,6 +261,26 @@ pub const Site = struct {
         };
     }
 
+    /// Scope chip dimensions in this site's words: EUW is opts' home platform
+    pub fn regionDim(s: *const Site, r: html.Region) scope.Dim {
+        return .region(r, s.opts.platforms[0]);
+    }
+
+    pub fn periodDim(s: *const Site, p: html.Period) scope.Dim {
+        return switch (p) {
+            .days30 => .days30,
+            .patch => scope.Dim.patch(s.arena, s.patch) catch .{ .key = "patch", .text = s.patch },
+        };
+    }
+
+    /// A block's scope chip, marked against this view's picks
+    pub fn chip(s: *const Site, where: scope.Dim, when: scope.Dim, rank: scope.Dim) scope.Chip {
+        return .{ .region = where, .period = when, .rank = rank, .picks = .{
+            .region = s.regionDim(s.view.region),
+            .period = s.periodDim(s.view.period),
+        } };
+    }
+
     /// From `path` up to its view's root
     pub fn toRoot(s: *const Site, path: []const u8) []const u8 {
         const depth = std.mem.count(u8, path, "/");
@@ -373,6 +394,7 @@ test {
     _ = evalchart;
     _ = flat;
     _ = @import("puzzles.zig");
+    _ = scope;
 }
 
 test robots {

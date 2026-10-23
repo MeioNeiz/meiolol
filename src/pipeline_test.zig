@@ -215,7 +215,7 @@ test "fixture games to stats, curves and the website" {
         .{ "patch/patch.html", &.{ "<h1>Patch 15.13: what changed</h1>", "Too early to tell: 0 champion roles" } },
         .{ "all/patch.html", &.{ "<h1>Patch 15.13: what changed</h1>", "across all regions" } },
         // Its region's, whatever the period: the region pick shows every region's
-        .{ "champion/darius.html", &.{ "<div data-by-view><div data-view=\"0 1\"><p class=\"since muted\">Patch 15.13 against 15.12: too early to tell, too few games on 15.13 so far. <a href=\"../patch/patch.html\">Patch changes</a>", "<div data-view=\"2 3\" hidden><p class=\"since muted\">Patch 15.13 against 15.12: too early to tell, too few games on 15.13 so far. <a href=\"../all/patch/patch.html\">Patch changes</a>" } },
+        .{ "champion/darius.html", &.{ "<div data-by-view><div data-view=\"0 1\"><p class=\"since muted\"><span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"patch:15.13\" data-rank=\"\"", "<span class=\"off\">Patch 15.13 vs 15.12<i>, not the 30 days picked</i></span><span>Plat+</span></span> Patch 15.13 against 15.12: too early to tell, too few games on 15.13 so far. <a href=\"../patch/patch.html\">Patch changes</a>", "<div data-view=\"2 3\" hidden><p class=\"since muted\"><span class=\"scope\" data-chip data-region=\"all\"", "</span> Patch 15.13 against 15.12: too early to tell, too few games on 15.13 so far. <a href=\"../all/patch/patch.html\">Patch changes</a>" } },
         .{ "champions.html", &.{"Matchups</a>\n<a href=\"patch.html\">Patch changes</a>"} },
         .{ "index.html", &.{"New patch: <a href=\"patch/patch.html\">what changed in 15.13 since 15.12</a>."} },
         // Champion table and page: raw win rate on the table's track, every lane opponent
@@ -241,7 +241,7 @@ test "fixture games to stats, curves and the website" {
         .{ "matchup/index.html", &.{ "data-min-search", "<tr class=\"bx thin\" data-games=\"3\" data-name=\"", "<section data-min-group data-r=\"top\" id=\"top\"><h2>Top ", "<nav class=\"tabs mu-roles\" aria-label=\"Role\"><a href=\"#all\">All roles</a><a href=\"#top\">Top</a>", "<table class=\"tl mu-table\" id=\"mu-top\" data-sortable>", "<option selected>50</option>", " vs usual", "</b></span></td><td class=\"opt\" data-v=\"", "<p class=\"wr-key\">" } },
         // Champion page: each view's most played choice per kind, few games so no win
         // rate, then that view's build page; filters.js shows the one its picks select
-        .{ "champion/darius.html", &.{ "<div data-by-view><div data-view=\"0\"><div class=\"bstrip\"><p class=\"bhead\"><b>Most played build</b> <span class=\"muted\">last 30 days, in EUW, Platinum IV and up: 3 games.</span> <a href=\"../build/darius-top.html\">", "<div data-view=\"1\" hidden><div class=\"bstrip\"><p class=\"bhead\"><b>Most played build</b> <span class=\"muted\">patch 15.13, in EUW, Platinum IV and up: 3 games.</span> <a href=\"../patch/build/darius-top.html\">", "href=\"../all/build/darius-top.html\"", "<div class=\"bk runes thin\"><span>Runes</span>", "<div class=\"rp\"><div class=\"rt\"><img class=\"rh on\" src=\"https://example.com/8000.png\" alt=\"Precision\"", "<img class=\"on\" src=\"https://example.com/8242.png\" alt=\"Unflinching\"", "<div class=\"rt rs\" title=\"Most played stat shards\">", "<span>Levels 1-3</span>", "<span>Skill priority</span>", "players took this\">3 games · 100%</small>" } },
+        .{ "champion/darius.html", &.{ "<div data-by-view><div data-view=\"0\"><div class=\"bstrip\"><p class=\"bhead\"><b>Most played build</b> <span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"days30\" data-rank=\"\"", "<span>EUW</span><span>30 days</span><span>Plat+</span></span> <span class=\"muted\">last 30 days, in EUW, Platinum IV and up: 3 games.</span> <a href=\"../build/darius-top.html\">", "<div data-view=\"1\" hidden><div class=\"bstrip\"><p class=\"bhead\"><b>Most played build</b> <span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"patch:15.13\"", "<span class=\"off\">Patch 15.13<i>, not the 30 days picked</i></span><span>Plat+</span></span> <span class=\"muted\">patch 15.13, in EUW, Platinum IV and up: 3 games.</span> <a href=\"../patch/build/darius-top.html\">", "href=\"../all/build/darius-top.html\"", "<div class=\"bk runes thin\"><span>Runes</span>", "<div class=\"rp\"><div class=\"rt\"><img class=\"rh on\" src=\"https://example.com/8000.png\" alt=\"Precision\"", "<img class=\"on\" src=\"https://example.com/8242.png\" alt=\"Unflinching\"", "<div class=\"rt rs\" title=\"Most played stat shards\">", "<span>Levels 1-3</span>", "<span>Skill priority</span>", "players took this\">3 games · 100%</small>" } },
         .{ "patch/build/darius-top.html", &.{ "<th>Levels 1 to 3</th>", "<div class=\"rpages\">", "<div class=\"rpc thin\"><span class=\"tags\"><span class=\"tag mp\">most played</span></span><div class=\"rp\">", "<div class=\"rx\">", "<span class=\"rc on\" title=\"Conqueror: 3 games, 100.0%\">", "<span class=\"rc off\" title=\"Adaptive force: 0 games, 0.0%\">", "Most played rune pages first. Share of 3 players.", "the highest win rate among options with 100+ games once each is pulled toward the average by k games" } },
         .{ "champion/darius.html", &.{ "<div data-view=\"0\"><p class=\"muted small\">Players' win rates on Darius: more data needed (0 players in EUW with 10+ games on it, last 30 days; 20 needed).", "<div data-view=\"3\" hidden><p class=\"muted small\">Players' win rates on Darius: more data needed (0 players across all regions with 10+ games on it, patch 15.13; 20 needed).", "<div data-view=\"0 2\"></div><div data-view=\"1 3\" hidden></div>" } },
         .{ "build/darius-top.html", &.{ "ranked solo/duo in EUW, last 30 days, Platinum IV and up. 3 games.", "<title>Darius Top build: runes, items, skill order, last 30 days | meiolol</title>" } },
@@ -263,16 +263,16 @@ test "fixture games to stats, curves and the website" {
         .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "<p class=\"verdict mu-sum\">Mordekaiser wins ", "% against Darius, ", "Mordekaiser's usual ", "<div class=\"tiles mu-tiles\">", "<span>Vs usual</span>", "Mordekaiser usually wins about", "<span>Gold at 14 min</span>", "<section class=\"mu-card mu-gold\"><h2>Gold difference</h2>", "<title>14 min: ", "<section class=\"mu-card mu-h2h thin\"><h2>Head to head</h2>", "<span class=\"h2h-l\">Kill on the other, 0 to 6 min</span>", "<span class=\"h2h-l\">Level 6</span>", "<h2>Experience difference</h2>", "<h2>CS difference</h2>", "<section class=\"mu-card mu-comeback\"><h2>Win rate by gold at 10 min</h2>", "<section class=\"mu-card mu-split\"><h2>By rank and mastery</h2>", "Iron to Silver" } },
         // Either side's page, each swapping to the other
         .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "<h1>Mordekaiser vs Darius</h1>", "class=\"swap\" href=\"darius-vs-mordekaiser.html\"" } },
-        .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<h1>Darius vs Mordekaiser</h1>", "class=\"swap\" href=\"mordekaiser-vs-darius.html\"", "From Darius's side", "<div class=\"mu-build\"><section class=\"mu-card\"><h2>Most played build</h2>", "games, patch ", "href=\"../../patch/build/darius-top.html\">Darius's full Top build</a>", "<span>Runes <em class=\"muted\">same as usual</em></span>", "<span>First 2 items" } },
+        .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<h1>Darius vs Mordekaiser</h1>", "class=\"swap\" href=\"mordekaiser-vs-darius.html\"", "From Darius's side", "<div class=\"mu-build\"><section class=\"mu-card\"><h2>Most played build <span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"patch:15.13\"", "<span class=\"off\">Patch 15.13<i>, not the 30 days picked</i></span><span>Plat+</span></span></h2>", "games, patch ", "href=\"../../patch/build/darius-top.html\">Darius's full Top build</a>", "<span>Runes <em class=\"muted\">same as usual</em></span>", "<span>First 2 items" } },
         // Per rune in the matchup: share, win rate and games under each, beside the runes
         // whose share moves (builds.runeShifts)
-        .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<h2>Runes against Mordekaiser</h2>", "Every rune picked within 10 points of Darius's other Top games.", "<div class=\"rx\">", "<span class=\"rc on\" title=\"Conqueror: 3 games, 100.0%\">" } },
+        .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<h2>Runes against Mordekaiser <span class=\"scope\" data-chip ", "Every rune picked within 10 points of Darius's other Top games.", "<div class=\"rx\">", "<span class=\"rc on\" title=\"Conqueror: 3 games, 100.0%\">" } },
         .{ "method.html", &.{ "Games to stabilise", "<h2 id=\"lean\">Early or late</h2>" } },
         // Early or late: three games, so no numbers, only that it can't tell yet
         .{ "champion/darius.html", &.{ "<b>Early or late:</b> too few games yet to tell.", "Games still going at 20 min: 3 (every region, last 30 days)", "href=\"../method.html#lean\"" } },
         // A pick the current patch has few games of: the previous patch's build, no link
         // to the thin page (builds.zig pick)
-        .{ "champion/ahri.html", &.{"<b>Most played build</b> <span class=\"muted\">patch 15.12 (15.13: 3 games so far), in EUW"} },
+        .{ "champion/ahri.html", &.{"<span class=\"off\">Patch 15.12<i>, not the 30 days picked</i></span><span>Plat+</span></span> <span class=\"muted\">patch 15.12 (15.13: 3 games so far), in EUW"} },
         .{ "learn.html", &.{"From ranked games in EUW on patch 15.13"} },
         // Spread bars, pool and its section follow the view
         .{ "champions.html", &.{"games on it in any role, last 30 days (none under 20"} },
@@ -281,6 +281,19 @@ test "fixture games to stats, curves and the website" {
         // The pool section's, one per view (the fixture has no mains)
         .{ "champion/darius.html", &.{"<div data-by-view><div data-view=\"0\"></div><div data-view=\"1\" hidden></div><div data-view=\"2\" hidden></div><div data-view=\"3\" hidden></div></div>"} },
         .{ "daily.html", &.{"From ranked solo games in EUW on patch 15.13"} },
+        // Scope chips (site/scope.zig): what each block covers, marked where it doesn't
+        // follow the page's picks; filters.js marks them again for each pick
+        .{ "champion/darius.html", &.{
+            "<section id=\"top\"><h2>Top <span class=\"scope\" data-chip data-region=\"*\" data-period=\"*\" data-rank=\"*\" title=\"Region, period and rank these numbers are from\"><span>EUW</span><span>30 days</span><span>Plat+</span></span></h2>",
+            "<p class=\"curves-links\"><span class=\"scope\" data-chip data-region=\"all\" data-period=\"days30\" data-rank=\"\" title=\"Region, period and rank these numbers are from\"><span class=\"off\">All regions<i>, not EUW alone</i></span><span>30 days</span><span>Plat+</span></span> <b>Early or late",
+            "patch 15.13; 20 needed). <span class=\"scope\" data-chip data-region=\"all\" data-period=\"patch:15.13\" data-rank=\"\"",
+        } },
+        .{ "patch/matchup/top/darius-vs-mordekaiser.html", &.{ "<h2>Most played build <span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"patch:15.13\" data-rank=\"\" title=\"Region, period and rank these numbers are from\"><span>EUW</span><span>Patch 15.13</span><span>Plat+</span></span></h2>", "<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"patch:15.13\"" } },
+        // The fixture's every-region 30-day view has only a patch's curves
+        .{ "all/matchup/top/darius-vs-mordekaiser.html", &.{"<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"all\" data-period=\"patch:15.13\" data-rank=\"\" title=\"Region, period and rank these numbers are from\"><span>All regions</span><span class=\"off\">Patch 15.13<i>, not the 30 days picked</i></span><span>Plat+</span></span> From Darius"} },
+        .{ "patch/build/darius-top.html", &.{"<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"patch:15.13\" data-rank=\"\" title=\"Region, period and rank these numbers are from\"><span>EUW</span><span>Patch 15.13</span><span>Plat+</span></span> What players take"} },
+        .{ "pool.html", &.{ "<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"every\"", "<h2 id=\"pick-up\">How hard champions are to pick up <span class=\"scope\" data-chip data-region=\"all\" data-period=\"days30\"", "<span class=\"off\">All regions<i>, not EUW alone</i></span>" } },
+        .{ "all/patch/pool.html", &.{"<h2 id=\"pick-up\">How hard champions are to pick up <span class=\"scope\" data-chip data-region=\"all\" data-period=\"patch:15.13\" data-rank=\"\" title=\"Region, period and rank these numbers are from\"><span>All regions</span><span>Patch 15.13</span><span>Plat+</span></span></h2>"} },
     };
     for (pages) |pg| {
         const path = try std.fs.path.join(arena, &.{ out, pg[0] });
@@ -289,6 +302,35 @@ test "fixture games to stats, curves and the website" {
             std.debug.print("{s} lacks {s}\n", .{ pg[0], want });
             return error.TestUnexpectedResult;
         };
+    }
+    // Every block on a champion page says its scope: each role section, and each
+    // variant written per view that has anything in it
+    for ([_][]const u8{ "champion/darius.html", "champion/ahri.html" }) |page| {
+        const path = try std.fs.path.join(arena, &.{ out, page });
+        const html = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 20));
+        var sections = std.mem.splitSequence(u8, html, "<section id=\"");
+        _ = sections.next();
+        while (sections.next()) |rest| {
+            const h2 = rest[0 .. std.mem.indexOf(u8, rest, "</h2>") orelse rest.len];
+            if (std.mem.indexOf(u8, h2, "data-chip") == null) {
+                std.debug.print("{s}: section without a scope chip: {s}\n", .{ page, h2 });
+                return error.TestUnexpectedResult;
+            }
+        }
+        var variants = std.mem.splitSequence(u8, html, "<div data-view=\"");
+        _ = variants.next();
+        var blocks: usize = 0;
+        while (variants.next()) |rest| {
+            const body = rest[std.mem.indexOfScalar(u8, rest, '>').? + 1 ..];
+            if (std.mem.startsWith(u8, body, "</div>")) continue;
+            blocks += 1;
+            const end = std.mem.indexOf(u8, body, "</div></div>\n") orelse body.len;
+            if (std.mem.indexOf(u8, body[0..end], "data-chip") == null) {
+                std.debug.print("{s}: block without a scope chip: {s}\n", .{ page, body[0..@min(body.len, 200)] });
+                return error.TestUnexpectedResult;
+            }
+        }
+        try testing.expect(blocks >= 8);
     }
     // Data is Platinum+ (the crawl's floor): no lower tier to filter by, no "all ranks"
     for ([_][]const u8{ "champions.html", "champion/darius.html" }) |page| {

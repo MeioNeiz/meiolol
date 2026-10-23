@@ -45,10 +45,10 @@ fn footnote(site: *const Site, w: *Writer, l: *const Learning, period: []const u
 }
 
 /// Champion page: results by mastery points on `ch` in `period`'s games
-pub fn section(site: *const Site, w: *Writer, l: *const Learning, ch: Champ, period: []const u8) !void {
+pub fn section(site: *const Site, w: *Writer, l: *const Learning, ch: Champ, period: html.Period) !void {
     if (l.games == 0) return;
     const c = l.get(ch.id) orelse return;
-    try tpl.renderPart(w, "<h2>How hard {name} is to pick up</h2>\n<p>", .{ .name = ch.name });
+    try tpl.renderPart(w, "<h2>How hard {name} is to pick up {chip}</h2>\n<p>", .{ .name = ch.name, .chip = chip(site, period) });
     if (c.gap) |g| {
         try tpl.renderPart(w, "Players new to {name} ({new_text}) win {new:.1}%, practised ones ({practised_text}) {practised:.1}%. ", .{
             .name = ch.name,
@@ -103,7 +103,12 @@ pub fn section(site: *const Site, w: *Writer, l: *const Learning, ch: Champ, per
         });
     }
     try w.writeAll("</tbody></table></div>\n");
-    try footnote(site, w, l, period);
+    try footnote(site, w, l, site.periodText(period));
+}
+
+/// Every region's games (src/learning.zig), any rank
+fn chip(site: *const Site, period: html.Period) root.scope.Chip {
+    return site.chip(site.regionDim(.all), site.periodDim(period), .plat);
 }
 
 fn champCell(w: *Writer, site: *const Site, ch: Champ) !void {
@@ -120,7 +125,7 @@ fn kindText(w: *Writer, k: learning.Kind) !void {
 
 /// Pool page: every champion with a gap, biggest (pulled toward the average) first
 pub fn table(site: *const Site, w: *Writer, l: *const Learning) !void {
-    try w.writeAll("<h2 id=\"pick-up\">How hard champions are to pick up</h2>\n");
+    try tpl.render(w, "<h2 id=\"pick-up\">How hard champions are to pick up {chip}</h2>\n", .{ .chip = chip(site, site.view.period) });
     var list: std.ArrayList(learning.Champion) = .empty;
     for (l.champions) |c| if (c.gap != null) try list.append(site.arena, c);
     if (list.items.len == 0) {

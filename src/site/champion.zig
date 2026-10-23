@@ -11,6 +11,7 @@ const builds_page = @import("builds.zig");
 const lean_line = @import("lean.zig");
 const filters = @import("filters.zig");
 const patch_page = @import("patch.zig");
+const scope = @import("scope.zig");
 
 const Writer = std.Io.Writer;
 const Stats = core.Stats;
@@ -90,24 +91,29 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
         try w.writeAll("<div data-by-view>");
         for (html.View.all, site.by_view) |v, *b| {
             try variant(w, &.{v});
-            try spread_page.section(w, &b.spread, ch, v.region, site.periodText(v.period));
+            try spread_page.section(w, &b.spread, ch, v.region, site.periodText(v.period), site.chip(site.regionDim(v.region), site.periodDim(v.period), .plat));
             try w.writeAll("</div>");
         }
         try w.writeAll("</div>\n");
     }
     if (n_roles == 0) try tpl.render(w, "<p>No games yet.</p>\n", .{});
+    // The tiles and opponents: static/filters.js redraws them for every pick
+    const any: scope.Dim = .{ .key = scope.Dim.follows, .text = "" };
+    const follows = site.chip(any, any, any);
+    const lean_chip: ?scope.Chip = if (site.lean) |l| if (lean_line.scopeDims(a, l)) |d| site.chip(d[0], d[1], .plat) else |_| null else null;
 
     for (roles[0..n_roles]) |r| {
         const cr = st.champRole(r, ch.c);
         const rate = ratio(cr.wins, cr.games);
         const rank = try tierlist.roleRank(site, r, ch.id);
         try tpl.renderPart(w,
-            \\<section id="{slug}"><h2>{role}</h2>
+            \\<section id="{slug}"><h2>{role} {chip}</h2>
             \\<div class="tiles"><div data-tile="wr"><span>Win rate</span><b class="wrc" style="--c:{colour};opacity:{fade:.2}">{wr}</b><small data-rank>{rank}{won}</small></div><div data-tile="pick"><span>Pick rate</span><b>{pick}</b><small>of games</small></div><div data-tile="ban"><span>Ban rate</span><b>{ban}</b><small>of games</small></div><div data-tile="games"><span>Games</span><b>{games}</b><small>{role} lane</small></div></div>
             \\
         , .{
             .slug = roleSlug(r),
             .role = roleName(r),
+            .chip = follows,
             .colour = tierlist.wrColour(rate, tierlist.table_span),
             .fade = core.curvesfile.fade(cr.games),
             .wr = tpl.call(pct, .{ cr.wins, cr.games }),
@@ -132,7 +138,7 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
             const oc = st.champRole(r, other.c);
             try opps.append(a, .{ .other = other, .games = e.games, .wins = e.wins, .strength = ratio(oc.wins, oc.games) });
         }
-        if (site.lean) |l| try lean_line.line(w, l, ch.id, ch.name, r, "../method.html#lean");
+        if (site.lean) |l| try lean_line.line(w, l, ch.id, ch.name, r, "../method.html#lean", lean_chip);
         if (site.patchday) |*pd| {
             try w.writeAll("<div data-by-view>");
             for ([_]html.Region{ .euw, .all }) |region| {
@@ -170,7 +176,7 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
         for ([_]html.Period{ .days30, .patch }) |period| {
             const views = [_]html.View{ .{ .region = .euw, .period = period }, .{ .region = .all, .period = period } };
             try variant(w, &views);
-            try learning_page.section(site, w, &site.by_view[views[0].index()].learning, ch, site.periodText(period));
+            try learning_page.section(site, w, &site.by_view[views[0].index()].learning, ch, period);
             try w.writeAll("</div>");
         }
         try w.writeAll("</div>\n");

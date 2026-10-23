@@ -6,6 +6,7 @@ const root = @import("root.zig");
 const html = @import("html.zig");
 const tpl = html.tpl;
 const spread = @import("../spread.zig");
+const scope = @import("scope.zig");
 
 const Writer = std.Io.Writer;
 const Champ = root.Champ;
@@ -21,14 +22,15 @@ fn x(pct: u32) f64 {
 }
 
 /// `period`: "last 30 days", "patch 16.21"
-pub fn section(w: *Writer, s: *const spread.Spread, ch: Champ, region: html.Region, period: []const u8) !void {
+pub fn section(w: *Writer, s: *const spread.Spread, ch: Champ, region: html.Region, period: []const u8, chip: scope.Chip) !void {
     if (s.min_players == 0) return;
     const c = s.get(ch.id) orelse spread.Champion{ .id = ch.id, .players = 0, .bins = @splat(0), .p25 = 0, .p50 = 0, .p75 = 0, .shape = @splat(0) };
     if (c.players < s.min_players) {
         try tpl.render(w,
-            \\<p class="muted small">Players' win rates on {name}: more data needed ({players} {noun} {in} with {min}+ games on it, {period}; {need} needed).</p>
+            \\<p class="muted small">Players' win rates on {name}: more data needed ({players} {noun} {in} with {min}+ games on it, {period}; {need} needed). {chip}</p>
             \\
         , .{
+            .chip = chip,
             .name = ch.name,
             .players = c.players,
             .noun = if (c.players == 1) "player" else "players",
@@ -42,11 +44,11 @@ pub fn section(w: *Writer, s: *const spread.Spread, ch: Champ, region: html.Regi
     var tallest: u32 = 1;
     for (c.bins) |n| tallest = @max(tallest, n);
     try tpl.renderPart(w,
-        \\<div class="spread"><span>Players' win rates on {name}</span>
+        \\<div class="spread"><span>Players' win rates on {name} {chip}</span>
         \\<svg viewBox="0 0 {width} 62" role="img" aria-label="Players by win rate: middle half {p25}% to {p75}%">
         \\<line class="mid" x1="{fifty}" x2="{fifty}" y1="0" y2="{base}"></line>
         \\
-    , .{ .name = ch.name, .width = slot * spread.bin_count, .p25 = c.p25, .p75 = c.p75, .fifty = x(50), .base = base });
+    , .{ .name = ch.name, .chip = chip, .width = slot * spread.bin_count, .p25 = c.p25, .p75 = c.p75, .fifty = x(50), .base = base });
     for (c.bins, 0..) |n, i| {
         const pct: u32 = @intCast(10 * i);
         const h = bar_h * @as(f64, @floatFromInt(n)) / @as(f64, @floatFromInt(tallest));

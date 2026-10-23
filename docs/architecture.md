@@ -573,6 +573,16 @@ curve's estimate when the filters are a view (any rank, or Diamond+), else the p
 average. Other views link in with their filters in the query (html.View.query:
 ?region=all&period=patch), and the filters point the nav links into the matching view.
 
+Scope chips (site/scope.zig Chip, J23): every block on the champion, matchup, build and
+pool pages says the region, period and rank its numbers are from in the subbar's words
+("EUW · 30 days · Plat+"); a dimension the block doesn't follow is marked against the
+page's picks ("Plat+, not by rank", "Patch 16.21, not the 30 days picked"). Each chip
+carries its keys (data-region, data-period, data-rank; "*" for a block filters.js redraws
+for every pick) and on champion pages filters.js markChips redoes the marks per pick.
+Matchup and build pages: one chip in the hero for the page, its own on a block that
+differs (the matchup builds cards are the region's patch). Plain data in, markup out, so
+it can move into the frontend rework's ui.zig.
+
 `meiolol site --contact EMAIL` writes static files to data/site, framed as "learn your
 lane" for the production review (docs/concept.md "Application wording": no tier list,
 draft helper, best pick or recommend wording): landing page, matchup index and pages,

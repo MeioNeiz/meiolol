@@ -7,6 +7,7 @@ const core = @import("core");
 const html = @import("html.zig");
 const tpl = html.tpl;
 const lean = @import("../lean.zig");
+const scope = @import("scope.zig");
 
 const Writer = std.Io.Writer;
 const Role = core.Role;
@@ -52,18 +53,40 @@ fn round(x: f64, step: f64) i64 {
 }
 
 /// The line for `name` in role `r`; `method` links the method page
-pub fn line(w: *Writer, file: *const lean.File, champion: u32, name: []const u8, r: Role, method: []const u8) !void {
+pub fn line(w: *Writer, file: *const lean.File, champion: u32, name: []const u8, r: Role, method: []const u8, chip: ?scope.Chip) !void {
     const row = file.get(champion, r) orelse return;
     try tpl.render(w,
-        \\<p class="curves-links">{text} <span class="muted">Games still going at {win} min: {games} ({scope}). <a href="{method}">How this is measured</a></span></p>
+        \\<p class="curves-links">{chip}{text} <span class="muted">Games still going at {win} min: {games} ({scope}). <a href="{method}">How this is measured</a></span></p>
         \\
     , .{
+        .chip = if (chip) |c| tpl.t("{c} ", .{ .c = c }) else null,
         .text = tpl.call(text, .{ row, name, r }),
         .scope = file.scope,
         .games = Thousands{ .n = row.games },
         .win = lean.win_minute,
         .method = method,
     });
+}
+
+/// The file's scope (sitedata.zig: "every region, last 30 days", "EUW1, patch 16.21")
+/// as chip region and period
+pub fn scopeDims(a: std.mem.Allocator, file: *const lean.File) ![2]scope.Dim {
+    const comma = std.mem.lastIndexOf(u8, file.scope, ", ") orelse return error.BadLean;
+    const where = file.scope[0..comma];
+    const when = file.scope[comma + 2 ..];
+    const region: scope.Dim = if (std.mem.eql(u8, where, "every region"))
+        .region(.all, "")
+    else if (std.mem.indexOfScalar(u8, where, ',') == null)
+        .{ .key = where, .text = html.platformName(where) }
+    else
+        .{ .key = where, .text = where };
+    const period: scope.Dim = if (std.mem.startsWith(u8, when, "patch "))
+        try .patch(a, when["patch ".len..])
+    else if (std.mem.eql(u8, when, "last 30 days"))
+        .days30
+    else
+        .{ .key = when, .text = when };
+    return .{ region, period };
 }
 
 fn text(w: *Writer, row: lean.Row, name: []const u8, r: Role) !void {
@@ -126,8 +149,23 @@ fn render(row: lean.Row) ![]const u8 {
     const file: lean.File = .{ .games = 1, .from_ms = 0, .to_ms = 0, .scope = "every region, last 30 days", .rows = &rows };
     var aw: Writer.Allocating = .init(testing.allocator);
     errdefer aw.deinit();
-    try line(&aw.writer, &file, row.champion, "Kayle", row.role, "../method.html#lean");
+    try line(&aw.writer, &file, row.champion, "Kayle", row.role, "../method.html#lean", null);
     return aw.toOwnedSlice();
+}
+
+test scopeDims {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const cases = [_]struct { []const u8, [4][]const u8 }{
+        .{ "every region, last 30 days", .{ "all", "All regions", "days30", "30 days" } },
+        .{ "EUW1, patch 16.21", .{ "EUW1", "EUW", "patch:16.21", "Patch 16.21" } },
+        .{ "EUW1, KR, last 14 days", .{ "EUW1, KR", "EUW1, KR", "last 14 days", "last 14 days" } },
+    };
+    for (cases) |c| {
+        const file: lean.File = .{ .games = 1, .from_ms = 0, .to_ms = 0, .scope = c[0], .rows = &.{} };
+        const d = try scopeDims(arena.allocator(), &file);
+        for ([_][]const u8{ d[0].key, d[0].text, d[1].key, d[1].text }, c[1]) |got, want| try testing.expectEqualStrings(want, got);
+    }
 }
 
 test "early, late, one part clear, none, too few" {

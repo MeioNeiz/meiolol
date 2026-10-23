@@ -12,6 +12,7 @@ const text = @import("text.zig");
 const champion = @import("champion.zig");
 const tierlist = @import("tierlist.zig");
 const builds = @import("builds.zig");
+const Dim = @import("scope.zig").Dim;
 
 const Writer = std.Io.Writer;
 const Role = core.Role;
@@ -54,6 +55,13 @@ fn scope(site: *const Site, curves: *const Curves) ![]const u8 {
     const label = curves.patch();
     if (label.len > 0 and std.ascii.isDigit(label[0])) return site.arena.print("patch {s}", .{label});
     return if (site.view.period == .days30) site.when else label;
+}
+
+/// The curves' period as a scope chip: a patch file's patch, else the view's
+fn periodDim(site: *const Site, curves: *const Curves) !Dim {
+    const label = curves.patch();
+    if (label.len > 0 and std.ascii.isDigit(label[0])) return .patch(site.arena, label);
+    return site.periodDim(site.view.period);
 }
 
 /// From x's side: x's gold, wins and timings first
@@ -354,11 +362,12 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     const swap = try file(a, y, x);
     try tpl.render(w,
         \\<div class="hero"><img src="{x_icon}" alt="" width="72" height="72"><a class="swap" href="{swap}" title="Swap sides: {y} vs {x}" aria-label="Swap sides: {y} vs {x}">⇄</a><img src="{y_icon}" alt="" width="72" height="72"><div><h1>{x} vs {y}</h1>
-        \\<p class="muted">From {x}'s side: {lane} lane, ranked solo/duo {region}, {when}, Platinum+.</p></div></div>
+        \\<p class="muted">{chip} From {x}'s side: {lane} lane, ranked solo/duo {region}, {when}, Platinum+.</p></div></div>
         \\<nav class="mu-nav" aria-label="Other matchups"><a class="btn" href="{swap}">⇄ From {y}'s side</a>
         \\{opponents}{champions}</nav>
         \\
     , .{
+        .chip = site.chip(site.regionDim(site.view.region), try periodDim(site, curves), .plat),
         .x_icon = site.icon(x),
         .y_icon = site.icon(y),
         .swap = swap,

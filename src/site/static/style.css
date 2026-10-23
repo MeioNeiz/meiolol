@@ -761,6 +761,16 @@ td.wrap { white-space: normal; min-width: 140px; max-width: none; padding: 7px 1
   .demo .facts-inline { display: none; }
   .moments li { grid-template-columns: 38px 18px 1fr auto; gap: 8px; padding: 8px 12px; }
 }
+/* Scope chip (scope.zig): the region, period and rank a block's numbers are from; .off
+   a pick the block doesn't follow */
+.scope {
+  display: inline-flex; flex-wrap: wrap; gap: 0 5px; padding: 0 8px; border: 1px solid var(--line-2);
+  border-radius: 10px; color: var(--t2); font-size: 12px; font-weight: 500; line-height: 1.6;
+  letter-spacing: 0; vertical-align: 1px;
+}
+.scope > span + span::before { content: "·"; margin-right: 5px; color: var(--faint); }
+.scope .off { color: var(--turn); }
+.scope i { font-style: normal; }
 .spread { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin: 6px 0 14px; max-width: 420px; }
 .spread > span { display: block; color: var(--muted); font-size: 12px; }
 .spread svg { display: block; width: 100%; height: auto; margin: 6px 0 4px; }

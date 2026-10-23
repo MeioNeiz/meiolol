@@ -10,6 +10,7 @@ const matchup = @import("matchup.zig");
 const pool = @import("../pool.zig");
 const learning = @import("../learning.zig");
 const learning_page = @import("learning.zig");
+const scope = @import("scope.zig");
 
 const Writer = std.Io.Writer;
 const Site = root.Site;
@@ -17,6 +18,14 @@ const Champ = root.Champ;
 
 /// On a champion page; the pool page shows the full list
 const also_shown = 6;
+
+/// A pool's period as a scope chip: games over every patch, or lifetime mastery
+pub fn periodDim(p: *const pool.Pool) scope.Dim {
+    return switch (p.source) {
+        .games => .every_patch,
+        .mastery => .{ .key = "every", .text = "All time" },
+    };
+}
 
 pub fn sourceText(p: *const pool.Pool) []const u8 {
     return switch (p.source) {
@@ -49,7 +58,7 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool, l: *const l
         \\<label><span>Also</span><input data-main list="champions" placeholder="Champion (optional)"></label>
         \\</form>
         \\<div id="results" data-to-site="{up}" data-query="{query}"></div>
-        \\<p class="muted">A player's main is their most played champion, from {source}
+        \\<p class="muted">{chip} A player's main is their most played champion, from {source}
         \\({players} players {in} so far); they play another when it has at least a tenth of their
         \\main's games or points. "59% (28%)": 59% of the main's players play it, 28% of other players do.
         \\Listed are those played most beyond their usual share (small groups count for less),
@@ -60,6 +69,7 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool, l: *const l
         \\<script src="pool.js" defer></script>
         \\
     , .{
+        .chip = site.chip(site.regionDim(site.view.region), periodDim(p), .plat),
         .up = site.view.up(),
         .query = site.view.query(),
         .source = sourceText(p),
@@ -79,7 +89,10 @@ pub fn section(site: *const Site, w: *Writer, p: *const pool.Pool, l: *const lea
     const m: pool.Main = for (p.mains) |m| {
         if (m.id == ch.id) break m;
     } else .{ .id = ch.id, .players = 0, .one_tricks = 0 };
-    try tpl.render(w, "<h2>Players who main {name} also play</h2>\n", .{ .name = ch.name });
+    try tpl.render(w, "<h2>Players who main {name} also play {chip}</h2>\n", .{
+        .name = ch.name,
+        .chip = site.chip(site.regionDim(region), periodDim(p), .plat),
+    });
     if (m.players < p.min_players) {
         try tpl.render(w,
             \\<p class="note">Not enough players yet: {players} {in} with {name} as their most played champion so far; lists start at {min}.</p>

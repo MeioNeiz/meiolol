@@ -75,10 +75,11 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
 8. The latest patch (J25, 23 Oct): docs/plan/patch-transfer.md. Evaluate on
    latest-patch games only, day by day; old patches only while it is thin (pooled plus
    shrunk per-patch offsets); find the day old patches stop helping. PT1 pin next
-9. The data edge (J23, J24): every block respects its filters or is marked (E1, cheap,
-   now); then day cubes as storage (E7) so any patch, season, rank and region is a sum,
-   a public truth test (E2) and "Meio", one estimate per number from every game, patch
-   and season history views (E10): docs/plan/estimates.md. Items 7 and 8 feed it
+9. The data edge (J23, J24): every block respects its filters or is marked (E1, done
+   23 Oct: scope chips); next day cubes as storage (E7) so any patch, season, rank and
+   region is a sum, a public truth test (E2) and "Meio", one estimate per number from
+   every game, patch and season history views (E10): docs/plan/estimates.md. Items 7
+   and 8 feed it
 10. Our Zig "libraries" toward what the Rust crates give (Jacob 21 Oct), checks outside
    ci: desktop releases signed, fuzzed and ReleaseSafe done; next HTTP server limits,
    backend fuzzing, TSan, one `net` module: docs/plan/libraries.md
