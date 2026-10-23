@@ -1018,8 +1018,9 @@ const A1Result = struct {
 /// Reference test predictions by (match id, slot, outcome)
 const Ref = std.StringHashMapUnmanaged(f32);
 
-fn refKey(buf: []u8, match_id: []const u8, slot: usize, outcome: usize) []const u8 {
-    return std.mem.print(buf, "{s}/{d}/{d}", .{ match_id, slot, outcome }) catch unreachable;
+/// null when it doesn't fit buf: no game has so long a match id
+fn refKey(buf: []u8, match_id: []const u8, slot: usize, outcome: usize) ?[]const u8 {
+    return std.mem.print(buf, "{s}/{d}/{d}", .{ match_id, slot, outcome }) catch null;
 }
 
 fn loadRef(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, path: []const u8) !Ref {
@@ -1036,7 +1037,7 @@ fn loadRef(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, path: []con
         const pred = std.fmt.parseFloat(f32, f.next() orelse continue) catch continue;
         const o = std.meta.stringToEnum(rows.Outcome, name) orelse continue;
         var buf: [96]u8 = undefined;
-        try ref.put(gpa, try arena.dupe(u8, refKey(&buf, id, slot, @backingInt(o))), pred);
+        try ref.put(gpa, try arena.dupe(u8, refKey(&buf, id, slot, @backingInt(o)) orelse continue), pred);
     }
     return ref;
 }
@@ -1176,7 +1177,8 @@ fn lensA1(
                 if (ref) |rf| if (o != win) {
                     var buf: [96]u8 = undefined;
                     const g = d.games[s.game];
-                    if (rf.get(refKey(&buf, g.match_id, s.slot, o))) |pr| {
+                    const key = refKey(&buf, g.match_id, s.slot, o) orelse continue;
+                    if (rf.get(key)) |pr| {
                         try ref_before.append(gpa, (y - pr) * (y - pr));
                         after_ref[j] = (y - pr - adj) * (y - pr - adj);
                     }
@@ -1507,4 +1509,21 @@ test "logistic Newton recovers a slope" {
     var beta: [n_params]f64 = @splat(0);
     fitLogistic(BaseCtx{}, &seats, &beta);
     try testing.expectApproxEqAbs(1.5, beta[1], 0.25);
+}
+
+test "--ref: a match id too long for a key is skipped, not a crash" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const long: [100]u8 = @splat('x');
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "ref.tsv", .data = "match_id\tslot\toutcome\ty\tpred\n" ++
+        long ++ "\t0\tgold14\t1\t2\nEUW1_1\t3\tcs10\t1\t0.5\n" });
+    const path = try arena.print(".zig-cache/tmp/{s}/ref.tsv", .{&tmp.sub_path});
+    var ref = try loadRef(testing.allocator, arena, testing.io, path);
+    defer ref.deinit(testing.allocator);
+    try testing.expectEqual(1, ref.count());
+    var buf: [96]u8 = undefined;
+    try testing.expectEqual(0.5, ref.get(refKey(&buf, "EUW1_1", 3, @backingInt(rows.Outcome.cs10)).?));
 }
