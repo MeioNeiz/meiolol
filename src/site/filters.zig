@@ -148,10 +148,12 @@ const Counting = struct {
         const lo = c.matches.len * i / c.runs.len;
         const hi = c.matches.len * (i + 1) / c.runs.len;
         const matches = c.matches[lo..hi];
-        const db = c.db orelse return countGames(run, c.strings.?, matches, c.index_of, c.champs, c.since_ms, c.all_platforms);
+        run.cells = try run.arena.allocator().alloc(Cells, c.champs);
+        @memset(run.cells, .empty);
+        const db = c.db orelse return countGames(run, c.strings.?, matches, c.index_of, c.since_ms, c.all_platforms);
         const own = if (c.siblings) (try store.schema.openSibling(c.gpa, db)).? else db;
         defer if (c.siblings) own.close();
-        try countRun(run, own, matches, c.index_of, c.champs, c.since_ms, c.all_platforms);
+        try countRun(run, own, matches, c.index_of, c.since_ms, c.all_platforms);
     }
 };
 
@@ -285,9 +287,7 @@ fn makeIn(site: *const root.Site, maybe_db: ?store.Db, opts: root.Options, run_c
 }
 
 /// Each of `matches`' players and bans by primary key, into `run`
-fn countRun(run: *Run, db: store.Db, matches: []const Match, index_of: []const ?u16, champs: usize, since_ms: i64, all_platforms: []const []const u8) !void {
-    run.cells = try run.arena.allocator().alloc(Cells, champs);
-    @memset(run.cells, .empty);
+fn countRun(run: *Run, db: store.Db, matches: []const Match, index_of: []const ?u16, since_ms: i64, all_platforms: []const []const u8) !void {
     var pq = try db.prepare(
         \\SELECT team_id, position, champion_id, tier,
         \\  CASE WHEN gold15 IS NULL THEN NULL ELSE gold14 END
@@ -320,9 +320,7 @@ fn countRun(run: *Run, db: store.Db, matches: []const Match, index_of: []const ?
 }
 
 /// countRun from the views partials: each match's game
-fn countGames(run: *Run, games: *const partials.Store, matches: []const Match, index_of: []const ?u16, champs: usize, since_ms: i64, all_platforms: []const []const u8) !void {
-    run.cells = try run.arena.allocator().alloc(Cells, champs);
-    @memset(run.cells, .empty);
+fn countGames(run: *Run, games: *const partials.Store, matches: []const Match, index_of: []const ?u16, since_ms: i64, all_platforms: []const []const u8) !void {
     var bans: std.ArrayList(u32) = .empty;
     defer bans.deinit(run.arena.child_allocator);
     for (matches) |m| {
@@ -350,13 +348,9 @@ const Game = struct {
             g.bad = true;
             return;
         }
-        const team: u1 = switch (team_id) {
-            100 => 0,
-            200 => 1,
-            else => {
-                g.bad = true;
-                return;
-            },
+        const team = side(team_id) orelse {
+            g.bad = true;
+            return;
         };
         const role = Role.fromLcu(position orelse "") orelse {
             g.bad = true;
@@ -387,7 +381,7 @@ fn countGame(run: *Run, game: *const Game, m: Match, bans: []const u32, index_of
         .patch = try patchIndex(a, &run.patches, m.patch),
     };
     if (game.bad or game.n < 10) return;
-    const winner = winnerSide(m.winner) orelse return;
+    const winner = side(m.winner) orelse return;
     const players = &game.players;
     const gk: GameKey = .{ .slice = slice, .tier = gameTier(players) };
     (try run.games.getOrPutValue(a, gk, 0)).value_ptr.* += 1;
@@ -557,8 +551,8 @@ fn writeChampion(site: *const root.Site, w: *Writer, opts: root.Options, patches
     try w.writeAll("}}\n");
 }
 
-fn winnerSide(winning_team: i64) ?u1 {
-    return switch (winning_team) {
+fn side(team_id: i64) ?u1 {
+    return switch (team_id) {
         100 => 0,
         200 => 1,
         else => null,

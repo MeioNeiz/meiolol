@@ -44,8 +44,8 @@ const Row = struct {
     shrunk: f64,
 };
 
-/// Every champion's games in `role`, or in each role it plays when null. Most played
-/// first; the browser sorts by any column (static/table.js)
+/// Every champion's games in `role`, or in each role it plays when null, by Row.shrunk
+/// (ties most played first); the browser sorts by any column (static/table.js)
 fn tierRows(site: *const Site, role: ?Role) ![]Row {
     var rows: std.ArrayList(Row) = .empty;
     for (Role.all) |r| {
@@ -73,15 +73,12 @@ fn tierRows(site: *const Site, role: ?Role) ![]Row {
             return a.games > b.games;
         }
     }.f);
-    return rows.items;
-}
-
-fn sortShrunk(rows: []Row) void {
-    std.mem.sort(Row, rows, {}, struct {
+    std.mem.sort(Row, rows.items, {}, struct {
         fn f(_: void, a: Row, b: Row) bool {
             return a.shrunk > b.shrunk;
         }
     }.f);
+    return rows.items;
 }
 
 pub const Rank = struct { rank: usize, of: usize };
@@ -90,7 +87,6 @@ pub const Rank = struct { rank: usize, of: usize };
 /// hides them); null when it is one
 pub fn roleRank(site: *const Site, r: Role, id: u32) !?Rank {
     const rows = try tierRows(site, r);
-    sortShrunk(rows);
     var n: usize = 0;
     var rank: ?usize = null;
     for (rows) |row| {
@@ -287,7 +283,6 @@ fn roleTabs(w: *Writer, current: ?Role, root: []const u8) !void {
 /// minimums each player's own (table.js data-min)
 fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void {
     const rows = try tierRows(site, role);
-    sortShrunk(rows);
     try roleIcons(w);
     try tpl.renderPart(w, "<div class=\"tl-bar\">", .{});
     try roleTabs(w, role, root);

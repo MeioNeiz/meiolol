@@ -384,7 +384,7 @@ pub fn list(site: *const Site) ![]const Puzzle {
     var out: std.ArrayList(Puzzle) = .empty;
     for (fixed) |p| {
         try out.append(site.arena, p);
-        if (p.kind == .pick and std.mem.eql(u8, p.id, fed_role.id)) {
+        if (std.mem.eql(u8, p.id, fed_role.id)) {
             if (try lanePuzzle(site)) |l| try out.append(site.arena, l);
         }
     }

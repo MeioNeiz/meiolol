@@ -303,33 +303,33 @@ fn switches(w: *Writer, p: Page) Writer.Error!void {
         .{ .{ .region = .all, .period = v.period }, "all", "All regions" },
         .{ .{ .region = .euw, .period = v.period }, p.home, platformName(p.home) },
     };
-    for (views) |e| try viewLink(w, p, e[0], v, "data-region", e[1], e[2], "");
+    for (views) |e| try viewLink(w, p, e[0], v, "region", e[1], e[2], "");
     for (p.regions) |pl| {
         if (std.mem.eql(u8, pl, p.home)) continue;
-        try pick(w, p, live, "data-region", pl, platformName(pl), "region");
+        try pick(w, p, live, "region", pl, platformName(pl));
     }
     try w.writeAll("</div></details>\n<nav class=\"switch\" aria-label=\"Period\">");
     for ([_]Period{ .days30, .patch }) |pe| {
         const to: View = .{ .region = v.region, .period = pe };
-        try viewLink(w, p, to, v, "data-period", @tagName(pe), if (pe == .days30) "30 days" else "Patch ", if (pe == .days30) "" else p.patch);
+        try viewLink(w, p, to, v, "period", @tagName(pe), if (pe == .days30) "30 days" else "Patch ", if (pe == .days30) "" else p.patch);
     }
     try w.writeAll("</nav>\n<nav class=\"switch\" aria-label=\"Rank\">");
     try w.writeAll("<a aria-current=\"page\" data-rank=\"\" title=\"Every game we crawl: Platinum IV+ players' lobbies\">Plat+</a>");
-    for (ranks[1..]) |r| try pick(w, p, live, "data-rank", r[0], r[1], "rank");
+    for (ranks[1..]) |r| try pick(w, p, live, "rank", r[0], r[1]);
     try w.writeAll("</nav>\n</div>\n");
 }
 
 /// A pick no view has: on a champion page a link with it (filters.js takes the click),
 /// elsewhere greyed
-fn pick(w: *Writer, p: Page, live: bool, comptime data: []const u8, value: []const u8, label: []const u8, comptime key: []const u8) Writer.Error!void {
+fn pick(w: *Writer, p: Page, live: bool, comptime key: []const u8, value: []const u8, label: []const u8) Writer.Error!void {
     if (live) {
-        try tpl.render(w, "<a href=\"{to}?" ++ key ++ "={value}\" " ++ data ++ "=\"{value}\">{label}</a>", .{
+        try tpl.render(w, "<a href=\"{to}?" ++ key ++ "={value}\" data-" ++ key ++ "=\"{value}\">{label}</a>", .{
             .to = toSite(p, p.counterparts.?[0]),
             .value = value,
             .label = label,
         });
     } else {
-        try tpl.render(w, "<a aria-disabled=\"true\" title=\"Champion pages only\" " ++ data ++ "=\"{value}\">{label}</a>", .{
+        try tpl.render(w, "<a aria-disabled=\"true\" title=\"Champion pages only\" data-" ++ key ++ "=\"{value}\">{label}</a>", .{
             .value = value,
             .label = label,
         });
@@ -337,9 +337,9 @@ fn pick(w: *Writer, p: Page, live: bool, comptime data: []const u8, value: []con
 }
 
 /// A pick that is a view: a link to the page's counterpart there, current when it is `v`
-fn viewLink(w: *Writer, p: Page, to: View, v: View, comptime data: []const u8, value: []const u8, label: []const u8, tail: []const u8) Writer.Error!void {
+fn viewLink(w: *Writer, p: Page, to: View, v: View, comptime key: []const u8, value: []const u8, label: []const u8, tail: []const u8) Writer.Error!void {
     const here = to.index() == v.index();
-    try tpl.render(w, "<a{current}{href} " ++ data ++ "=\"{value}\">{label}{tail}</a>", .{
+    try tpl.render(w, "<a{current}{href} data-" ++ key ++ "=\"{value}\">{label}{tail}</a>", .{
         .current = tpl.flag(here, "aria-current=\"page\""),
         .href = tpl.when(!here, tpl.attr("href", toSite(p, p.counterparts.?[to.index()]))),
         .value = value,

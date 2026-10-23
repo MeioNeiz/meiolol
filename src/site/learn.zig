@@ -85,15 +85,12 @@ fn term(comptime key: []const u8, text: []const u8) Dfn {
 
 const Choice = struct { t: []const u8, id: ?u32 = null };
 const Question = struct { q: []const u8, choices: []const Choice, answer: usize, why: []const u8 };
+const Error = Writer.Error || std.mem.Allocator.Error;
 
 const Ctx = struct {
     site: *const Site,
     facts: *const learn.Facts,
     a: std.mem.Allocator,
-
-    fn print(ctx: Ctx, comptime fmt: []const u8, args: anytype) ![]const u8 {
-        return ctx.a.print(fmt, args);
-    }
 
     fn choice(ch: Champ) Choice {
         return .{ .t = ch.name, .id = ch.id };
@@ -188,7 +185,7 @@ pub fn write(site: *const Site, w: *Writer, facts: *const learn.Facts) !void {
         key: []const u8,
         title: []const u8,
         sub: []const u8,
-        body: *const fn (Ctx, *Writer) anyerror![]const Question,
+        body: *const fn (Ctx, *Writer) Error![]const Question,
     };
     const lessons = [_]Lesson{
         .{ .key = "roles", .title = "Roles", .sub = "Five jobs on every team", .body = roles },
@@ -331,7 +328,7 @@ fn mostPlayed(ctx: Ctx, r: Role, comptime n: usize) ![]Champ {
     return list.items;
 }
 
-fn roles(ctx: Ctx, w: *Writer) ![]const Question {
+fn roles(ctx: Ctx, w: *Writer) Error![]const Question {
     const site = ctx.site;
     const st = &site.stats;
     try tpl.renderPart(w,
@@ -368,10 +365,10 @@ fn roles(ctx: Ctx, w: *Writer) ![]const Question {
         var choices: std.ArrayList(Choice) = .empty;
         for (Role.all) |r| try choices.append(ctx.a, .{ .t = root.roleName(r) });
         try qs.append(ctx.a, .{
-            .q = try ctx.print("Which role is {s} played in most?", .{ch.name}),
+            .q = try ctx.a.print("Which role is {s} played in most?", .{ch.name}),
             .choices = choices.items,
             .answer = @backingInt(want),
-            .why = try ctx.print("{s}: {d:.0}% of {s}'s games on patch {s}.", .{
+            .why = try ctx.a.print("{s}: {d:.0}% of {s}'s games on patch {s}.", .{
                 root.roleName(want), 100 * best_share, ch.name, ctx.site.patch,
             }),
         });
@@ -409,7 +406,7 @@ fn byPp(_: void, p: Pair, q: Pair) bool {
     return p.pp > q.pp;
 }
 
-fn counters(ctx: Ctx, w: *Writer) ![]const Question {
+fn counters(ctx: Ctx, w: *Writer) Error![]const Question {
     const st = &ctx.site.stats;
     var pairs: std.ArrayList(Pair) = .empty;
     for (try lanePairs(ctx)) |p| {
@@ -449,12 +446,12 @@ fn counters(ctx: Ctx, w: *Writer) ![]const Question {
             const two = [2]Choice{ Ctx.choice(p.x), Ctx.choice(p.y) };
             const choices = if (i == 0) two else .{ two[1], two[0] };
             try qs.append(ctx.a, .{
-                .q = try ctx.print("{s}: which tends to do better, {s} or {s}?", .{
+                .q = try ctx.a.print("{s}: which tends to do better, {s} or {s}?", .{
                     root.roleName(p.r), choices[0].t, choices[1].t,
                 }),
                 .choices = try ctx.a.dupe(Choice, &choices),
                 .answer = i,
-                .why = try ctx.print("{s} won {d}% of {d} games against {s} on patch {s}.", .{
+                .why = try ctx.a.print("{s} won {d}% of {d} games against {s} on patch {s}.", .{
                     p.x.name, pctOf(p.n), p.n.games, p.y.name, ctx.site.patch,
                 }),
             });
@@ -551,7 +548,7 @@ fn lengthBars(w: *Writer, ctx: Ctx, t: Timing) !void {
     try w.writeAll("</div>\n");
 }
 
-fn timing(ctx: Ctx, w: *Writer) ![]const Question {
+fn timing(ctx: Ctx, w: *Writer) Error![]const Question {
     const list = try timings(ctx);
     try tpl.render(w,
         \\<p>Some champions {spike} early; others {scale} and are strongest late.</p>
@@ -604,7 +601,7 @@ fn timing(ctx: Ctx, w: *Writer) ![]const Question {
                     "Which wins more of its short games (under 25 minutes)?",
                 .choices = try ctx.a.dupe(Choice, &.{ Ctx.choice(first.ch), Ctx.choice(second.ch) }),
                 .answer = if (winner.ch.id == first.ch.id) 0 else 1,
-                .why = try ctx.print("{s} {d}% of {d} games, {s} {d}% of {d}.", .{
+                .why = try ctx.a.print("{s} {d}% of {d} games, {s} {d}% of {d}.", .{
                     first.ch.name,  pctOf(first.n[b]),  first.n[b].games,
                     second.ch.name, pctOf(second.n[b]), second.n[b].games,
                 }),
@@ -688,16 +685,15 @@ fn byDamage(ctx: Ctx, r: Role, lo: f64, hi: f64, skip: []const Champ) ![]Champ {
         for (skip) |s| if (s.id == ch.id) continue :outer;
         try list.append(ctx.a, ch);
     }
-    std.mem.sort(Champ, list.items, r, struct {
-        fn f(role: Role, p: Champ, q: Champ) bool {
-            _ = role;
+    std.mem.sort(Champ, list.items, {}, struct {
+        fn f(_: void, p: Champ, q: Champ) bool {
             return p.games > q.games;
         }
     }.f);
     return list.items;
 }
 
-fn damage(ctx: Ctx, w: *Writer) ![]const Question {
+fn damage(ctx: Ctx, w: *Writer) Error![]const Question {
     try tpl.render(w,
         \\<p>{physical} is blocked by {armour}, {magic} by magic resist. A team with one kind is
         \\easy to defend against.</p>
@@ -757,7 +753,7 @@ fn damage(ctx: Ctx, w: *Writer) ![]const Question {
         .q = "Which of these deals mostly magic damage?",
         .choices = try ctx.a.dupe(Choice, &.{ Ctx.choice(p[0]), Ctx.choice(m[1]), Ctx.choice(p[1]) }),
         .answer = 1,
-        .why = try ctx.print("{d}% of {s}'s damage to champions is magic.", .{
+        .why = try ctx.a.print("{d}% of {s}'s damage to champions is magic.", .{
             magicPct(ctx, m[1]), m[1].name,
         }),
     });
@@ -765,21 +761,21 @@ fn damage(ctx: Ctx, w: *Writer) ![]const Question {
         .q = "Which of these deals mostly physical damage?",
         .choices = try ctx.a.dupe(Choice, &.{ Ctx.choice(p[2]), Ctx.choice(m[2]), Ctx.choice(m[0]) }),
         .answer = 0,
-        .why = try ctx.print("Only {d}% of {s}'s damage to champions is magic.", .{
+        .why = try ctx.a.print("Only {d}% of {s}'s damage to champions is magic.", .{
             magicPct(ctx, p[2]), p[2].name,
         }),
     });
     if (team.items.len == 4) {
         const t = team.items;
         try qs.append(ctx.a, .{
-            .q = try ctx.print(
+            .q = try ctx.a.print(
                 "Your teammates are {s}, {s}, {s} and {s}: all mostly physical. You are mid. " ++
                     "Which pick adds magic damage?",
                 .{ t[0].name, t[1].name, t[2].name, t[3].name },
             ),
             .choices = try ctx.a.dupe(Choice, &.{ Ctx.choice(p[0]), Ctx.choice(p[1]), Ctx.choice(m[0]) }),
             .answer = 2,
-            .why = try ctx.print(
+            .why = try ctx.a.print(
                 "{s} deals {d}% magic damage, so the enemy cannot answer your whole team " ++
                     "with armour.",
                 .{ m[0].name, magicPct(ctx, m[0]) },
@@ -813,12 +809,12 @@ fn duoPairs(ctx: Ctx) ![]Pair {
 }
 
 fn duoName(ctx: Ctx, p: Pair) ![]const u8 {
-    return ctx.print("{s} ({s}) with {s} ({s})", .{
+    return ctx.a.print("{s} ({s}) with {s} ({s})", .{
         p.x.name, root.roleName(p.r), p.y.name, root.roleName(p.yr),
     });
 }
 
-fn synergy(ctx: Ctx, w: *Writer) ![]const Question {
+fn synergy(ctx: Ctx, w: *Writer) Error![]const Question {
     const duos = try duoPairs(ctx);
     try tpl.render(w,
         \\<p>Some champions win more together, most of all neighbours: a bot and support {duo},
@@ -866,7 +862,7 @@ fn synergy(ctx: Ctx, w: *Writer) ![]const Question {
             .q = "Which pair tends to win more together?",
             .choices = try ctx.a.dupe(Choice, &choices),
             .answer = 2 - i,
-            .why = try ctx.print("{s}: won {d}% of {d} games together on patch {s}.", .{
+            .why = try ctx.a.print("{s}: won {d}% of {d} games together on patch {s}.", .{
                 try duoName(ctx, good), pctOf(good.n), good.n.games, ctx.site.patch,
             }),
         });

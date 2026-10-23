@@ -94,7 +94,7 @@ pub fn card(w: *Writer, curves: *const Curves, r: Role, x: Champ, y: Champ) !voi
         , .{
             .thin = tpl.when(c.games < matchup.thin_games, " thin"),
             .cx = G.px(i),
-            .cy = G.py(ratio(c)),
+            .cy = G.py(root.ratio(c.wins, c.games)),
             .label = labels[i],
             .x = x.name,
             .rate = tpl.call(percent, .{ c.wins, c.games }),
@@ -108,17 +108,13 @@ pub fn card(w: *Writer, curves: *const Curves, r: Role, x: Champ, y: Champ) !voi
     try tpl.renderPart(w, "</svg></section>\n", .{});
 }
 
-fn ratio(c: curvesfile.Counts) f64 {
-    return @as(f64, @floatFromInt(c.wins)) / @as(f64, @floatFromInt(@max(c.games, 1)));
-}
-
 fn line(w: *Writer, v: View, class: []const u8) !void {
     var buf: [curvesfile.buckets * 24]u8 = undefined;
     var pw: Writer = .fixed(&buf);
     for (0..curvesfile.buckets) |i| {
         const c = v.comeback(.ten, i);
         if (c.games == 0) continue;
-        try pw.print("{d:.1},{d:.1} ", .{ G.px(i), G.py(ratio(c)) });
+        try pw.print("{d:.1},{d:.1} ", .{ G.px(i), G.py(root.ratio(c.wins, c.games)) });
     }
     try tpl.render(w, "<polyline class=\"{class}\" points=\"{p}\"/>\n", .{ .class = class, .p = pw.buffered() });
 }

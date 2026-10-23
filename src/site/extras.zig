@@ -45,12 +45,12 @@ pub const Extras = struct {
             if (path) |p| c.* = loadCurves(arena, io, p);
         }
         for (opts.builds, &e.builds) |path, *b| {
-            if (path) |p| b.* = loadBuilds(arena, io, p);
+            if (path) |p| b.* = loadParsed(builds.File, arena, io, p, "builds", .limited(1 << 30));
         }
         for (opts.builds_prev, &e.builds_prev) |path, *b| {
-            if (path) |p| b.* = loadBuilds(arena, io, p);
+            if (path) |p| b.* = loadParsed(builds.File, arena, io, p, "builds", .limited(1 << 30));
         }
-        if (opts.lean) |p| e.lean = loadLean(arena, io, p);
+        if (opts.lean) |p| e.lean = loadParsed(lean.File, arena, io, p, "lean file", .limited(1 << 24));
         return e;
     }
 
@@ -144,37 +144,22 @@ pub const People = struct {
     }
 };
 
-/// Optional, as curves: a bad or missing file leaves out build pages
-fn loadBuilds(arena: std.mem.Allocator, io: std.Io, path: []const u8) ?builds.File {
-    const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 30)) catch |err| {
+/// Optional, as curves: a bad or missing builds file leaves out build pages, a lean file
+/// the champion pages' line
+fn loadParsed(comptime T: type, arena: std.mem.Allocator, io: std.Io, path: []const u8, what: []const u8, limit: std.Io.Limit) ?T {
+    const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, arena, limit) catch |err| {
         switch (err) {
-            error.FileNotFound => log.info("no builds at {s}", .{path}),
-            else => log.warn("builds at {s}: {t}", .{ path, err }),
+            error.FileNotFound => log.info("no {s} at {s}", .{ what, path }),
+            else => log.warn("{s} at {s}: {t}", .{ what, path, err }),
         }
         return null;
     };
-    return builds.File.parse(arena, bytes) catch |err| {
-        log.warn("builds at {s}: {t}", .{ path, err });
+    return T.parse(arena, bytes) catch |err| {
+        log.warn("{s} at {s}: {t}", .{ what, path, err });
         return null;
     };
 }
 
-/// Optional, as builds: a bad or missing file leaves out the champion pages' line
-fn loadLean(arena: std.mem.Allocator, io: std.Io, path: []const u8) ?lean.File {
-    const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 24)) catch |err| {
-        switch (err) {
-            error.FileNotFound => log.info("no lean file at {s}", .{path}),
-            else => log.warn("lean file at {s}: {t}", .{ path, err }),
-        }
-        return null;
-    };
-    return lean.File.parse(arena, bytes) catch |err| {
-        log.warn("lean file at {s}: {t}", .{ path, err });
-        return null;
-    };
-}
-
-/// Optional extras: a bad or old file leaves out matchup pages, not the site
 /// The views' curves file with the most games: the steadiest fit for the method page
 pub fn biggestCurves(all: *const [html.View.count]?core.curvesfile.Curves) ?*const core.curvesfile.Curves {
     var best: ?*const core.curvesfile.Curves = null;
@@ -184,7 +169,8 @@ pub fn biggestCurves(all: *const [html.View.count]?core.curvesfile.Curves) ?*con
     return best;
 }
 
-/// Mapped, not read: a file is ~70-230 MB, a renderer keeps up to eight for its life, and
+/// Optional extras: a bad or old file leaves out matchup pages, not the site. Mapped, not
+/// read: a file is ~70-230 MB, a renderer keeps up to eight for its life, and
 /// mapped pages are shared with the other renderer and the page cache (Extras.deinit
 /// unmaps them)
 fn loadCurves(arena: std.mem.Allocator, io: std.Io, path: []const u8) ?core.curvesfile.Curves {

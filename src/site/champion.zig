@@ -169,9 +169,7 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
             try w.writeAll("</div>");
         }
         try w.writeAll("</div>\n");
-    }
-    // Every region's (learning.zig): one per period
-    if (site.by_view.len > 0) {
+        // Every region's (learning.zig): one per period
         try w.writeAll("<div data-by-view>");
         for ([_]html.Period{ .days30, .patch }) |period| {
             const views = [_]html.View{ .{ .region = .euw, .period = period }, .{ .region = .all, .period = period } };
