@@ -716,28 +716,62 @@ test "scenarios through the watch" {
     try testing.expect(checked >= 10);
 }
 
+/// The mock's LCU and Live Client Data servers on free ports and a lockfile for them,
+/// for tests; must not move after start
+pub const Harness = struct {
+    mock: Mock,
+    lcu_server: Io.net.Server,
+    live_server: Io.net.Server,
+    group: Io.Group = .init,
+    tmp: testing.TmpDir,
+    lock_path: []const u8,
+
+    pub fn start(h: *Harness, arena: std.mem.Allocator, s: *const Scenario) !void {
+        const io = testing.io;
+        h.mock = .{ .gpa = testing.allocator, .io = io, .scenario = s };
+        h.group = .init;
+        const address = try Io.net.IpAddress.parse("127.0.0.1", 0);
+        h.lcu_server = try address.listen(io, .{ .reuse_address = true });
+        errdefer h.lcu_server.deinit(io);
+        h.live_server = try address.listen(io, .{ .reuse_address = true });
+        errdefer h.live_server.deinit(io);
+        try h.group.concurrent(io, Mock.serveLcu, .{ &h.mock, &h.lcu_server });
+        errdefer h.group.cancel(io);
+        try h.group.concurrent(io, Mock.serveLive, .{ &h.mock, &h.live_server });
+        h.tmp = testing.tmpDir(.{});
+        errdefer h.tmp.cleanup();
+        var lock_buf: [128]u8 = undefined;
+        const lock = try h.mock.lockfile(&lock_buf, h.lcuPort());
+        try h.tmp.dir.writeFile(io, .{ .sub_path = "lockfile", .data = lock });
+        h.lock_path = try std.fmt.allocPrint(arena, ".zig-cache/tmp/{s}/lockfile", .{h.tmp.sub_path});
+    }
+
+    pub fn stop(h: *Harness) void {
+        const io = testing.io;
+        h.group.cancel(io);
+        h.tmp.cleanup();
+        h.live_server.deinit(io);
+        h.lcu_server.deinit(io);
+    }
+
+    pub fn lcuPort(h: *const Harness) u16 {
+        return h.lcu_server.socket.address.getPort();
+    }
+
+    pub fn livePort(h: *const Harness) u16 {
+        return h.live_server.socket.address.getPort();
+    }
+};
+
 fn runScenario(arena: std.mem.Allocator, path: []const u8) !usize {
     const io = testing.io;
     const gpa = testing.allocator;
     const s = try Scenario.load(arena, io, path);
-    var m: Mock = .{ .gpa = gpa, .io = io, .scenario = &s };
-
-    const address = try Io.net.IpAddress.parse("127.0.0.1", 0);
-    var lcu_server = try address.listen(io, .{ .reuse_address = true });
-    defer lcu_server.deinit(io);
-    var live_server = try address.listen(io, .{ .reuse_address = true });
-    defer live_server.deinit(io);
-    var lcu_task = try io.concurrent(Mock.serveLcu, .{ &m, &lcu_server });
-    defer lcu_task.cancel(io);
-    var live_task = try io.concurrent(Mock.serveLive, .{ &m, &live_server });
-    defer live_task.cancel(io);
-
-    var tmp = testing.tmpDir(.{});
-    defer tmp.cleanup();
-    var lock_buf: [128]u8 = undefined;
-    const lock = try m.lockfile(&lock_buf, lcu_server.socket.address.getPort());
-    try tmp.dir.writeFile(io, .{ .sub_path = "lockfile", .data = lock });
-    const lock_path = try std.fmt.allocPrint(arena, ".zig-cache/tmp/{s}/lockfile", .{tmp.sub_path});
+    var h: Harness = undefined;
+    try h.start(arena, &s);
+    defer h.stop();
+    const m = &h.mock;
+    const lock_path = h.lock_path;
 
     var w: Watch = .init(gpa, io, lock_path);
     defer w.deinit();
@@ -747,8 +781,7 @@ fn runScenario(arena: std.mem.Allocator, path: []const u8) !usize {
         var frame: std.heap.ArenaAllocator = .init(gpa);
         defer frame.deinit();
         const got = try w.step(frame.allocator());
-        const ports = .{ lcu_server.socket.address.getPort(), live_server.socket.address.getPort() };
-        checkServed(&m, expect.object, ports[0], ports[1]) catch |err| {
+        checkServed(m, expect.object, h.lcuPort(), h.livePort()) catch |err| {
             std.debug.print("{s} step {d}: {t}\n", .{ s.name, m.next, err });
             return err;
         };

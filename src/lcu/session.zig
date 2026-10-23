@@ -12,6 +12,28 @@ pub const paths = struct {
     pub const owned = "/lol-champions/v1/owned-champions-minimal";
 };
 
+/// One seat on the board, in cell order. No identity: champ select hides names
+pub const Slot = struct {
+    /// 0 while nothing shows
+    champion: u32 = 0,
+    role: ?Role = null,
+    state: State = .empty,
+    me: bool = false,
+    /// Their pick turn is now
+    picking: bool = false,
+
+    pub const State = enum(u8) {
+        empty,
+        /// An ally's pick intent, before their turn
+        intent,
+        /// Hovered during their turn
+        hover,
+        locked,
+    };
+};
+
+pub const Turn = enum(u8) { none, ban, pick };
+
 /// What the client shows during champ select, without anyone's identity
 pub const ChampSelect = struct {
     /// Null in modes without positions (blind pick, ARAM, customs)
@@ -24,6 +46,13 @@ pub const ChampSelect = struct {
     bans: []u32,
     /// Timer phase: PLANNING, BAN_PICK, FINALIZATION, ...
     phase: []const u8,
+    /// Both teams by cell, mine first; the same picks as allies and enemies, for the board
+    my_team: []Slot = &.{},
+    their_team: []Slot = &.{},
+    my_bans: []u32 = &.{},
+    their_bans: []u32 = &.{},
+    /// The local player's action in progress
+    my_turn: Turn = .none,
 
     pub fn draft(cs: ChampSelect, role: Role, pool: ?[]const u32) core.Draft {
         return .{
@@ -51,6 +80,14 @@ pub const ChampSelect = struct {
         }
         h.update(std.mem.sliceAsBytes(cs.bans));
         h.update(cs.phase);
+        for ([_][]const Slot{ cs.my_team, cs.their_team }) |slots| {
+            h.update(std.mem.asBytes(&slots.len));
+            for (slots) |sl| {
+                h.update(std.mem.asBytes(&sl.champion));
+                h.update(&.{ roleByte(sl.role), @backingInt(sl.state), @intFromBool(sl.picking) });
+            }
+        }
+        h.update(&.{@backingInt(cs.my_turn)});
         return h.final();
     }
 };
@@ -72,6 +109,7 @@ const Action = struct {
     type: []const u8 = "",
     completed: bool = false,
     isAllyAction: bool = false,
+    isInProgress: bool = false,
 };
 
 const Session = struct {
@@ -139,18 +177,67 @@ pub fn parse(arena: std.mem.Allocator, json: []const u8) !ChampSelect {
         try enemies.append(arena, .{ .champion = c });
     };
 
-    for ([_][]const i64{ s.bans.myTeamBans, s.bans.theirTeamBans }) |list| {
-        for (list) |b| try addBan(arena, &bans, b);
+    cs.my_team = try seats(arena, s, s.myTeam, true);
+    cs.their_team = try seats(arena, s, s.theirTeam, false);
+    for (s.actions) |turn| for (turn) |a| {
+        if (a.actorCellId != s.localPlayerCellId or !a.isInProgress or a.completed) continue;
+        if (std.mem.eql(u8, a.type, "pick")) cs.my_turn = .pick;
+        if (std.mem.eql(u8, a.type, "ban")) cs.my_turn = .ban;
+    };
+
+    var my_bans: std.ArrayList(u32) = .empty;
+    var their_bans: std.ArrayList(u32) = .empty;
+    for ([_][]const i64{ s.bans.myTeamBans, s.bans.theirTeamBans }, [_]*std.ArrayList(u32){ &my_bans, &their_bans }) |list, side| {
+        for (list) |b| {
+            try addBan(arena, &bans, b);
+            try addBan(arena, side, b);
+        }
     }
     for (s.actions) |turn| for (turn) |a| {
         if (!a.completed or !std.mem.eql(u8, a.type, "ban")) continue;
         try addBan(arena, &bans, a.championId);
+        try addBan(arena, if (a.isAllyAction) &my_bans else &their_bans, a.championId);
     };
 
+    cs.my_bans = my_bans.items;
+    cs.their_bans = their_bans.items;
     cs.allies = allies.items;
     cs.enemies = enemies.items;
     cs.bans = bans.items;
     return cs;
+}
+
+fn seats(arena: std.mem.Allocator, s: Session, team: []const Member, mine: bool) ![]Slot {
+    const out = try arena.alloc(Slot, team.len);
+    for (out, team) |*o, m| {
+        o.* = .{
+            .role = Role.fromLcu(m.assignedPosition orelse ""),
+            .me = m.cellId == s.localPlayerCellId,
+            .picking = pickingNow(s.actions, m.cellId),
+        };
+        const locked = lockedBy(s.actions, m.cellId);
+        if (id(m.championId)) |c| {
+            o.champion = c;
+            o.state = if (locked) .locked else .hover;
+        } else if (mine) if (id(m.championPickIntent)) |c| {
+            o.champion = c;
+            o.state = .intent;
+        };
+        // An enemy's lock can show in the actions before their seat has it
+        if (!mine and o.state == .empty) for (s.actions) |turn| for (turn) |a| {
+            if (a.actorCellId != m.cellId or !a.completed or !std.mem.eql(u8, a.type, "pick")) continue;
+            o.champion = id(a.championId) orelse continue;
+            o.state = .locked;
+        };
+    }
+    return out;
+}
+
+fn pickingNow(actions: []const []const Action, cell: i64) bool {
+    for (actions) |turn| for (turn) |a| {
+        if (a.actorCellId == cell and a.isInProgress and !a.completed and std.mem.eql(u8, a.type, "pick")) return true;
+    };
+    return false;
 }
 
 fn id(maybe: ?i64) ?u32 {
@@ -232,15 +319,52 @@ const identifying = [_][]const u8{
     "jwt",
     "multiUserChatId",
     "multiUserChatPassword",
+    // Live Client Data
+    "riotId",
+    "riotIdGameName",
+    "riotIdTagLine",
+    // A match id or icon leads back to the players
+    "gameId",
+    "reportGameId",
+    "profileIconId",
+    // Live Client Data events: players by name, or a minion, turret or monster
+    "KillerName",
+    "VictimName",
+    "Assisters",
+    "Recipient",
+    "Acer",
 };
 
+/// Killers and victims that are not players (Live Client Data events)
+const unit_prefixes = [_][]const u8{ "Minion_", "Turret_", "SRU_", "Barracks_", "Obelisk" };
+
 /// Pretty-printed JSON with player identities removed (Riot policy: champ select hides
-/// other players' names; this tool never shows them). Non-JSON is returned as is.
+/// other players' names; this tool never shows them). Non-JSON is returned as is. A
+/// value that was set becomes "hidden" or -1, so a capture still shows which fields a
+/// queue fills in.
 pub fn redact(arena: std.mem.Allocator, body: []const u8) ![]const u8 {
     var value = std.json.parseFromSliceLeaky(std.json.Value, arena, body, .{}) catch
         return body;
     redactValue(&value);
     return std.json.Stringify.valueAlloc(arena, value, .{ .whitespace = .indent_2 });
+}
+
+fn hide(v: *std.json.Value) void {
+    v.* = switch (v.*) {
+        .integer => |n| .{ .integer = if (n == 0) 0 else -1 },
+        .float, .number_string => .{ .integer = -1 },
+        .string => |t| blk: {
+            if (t.len == 0) break :blk v.*;
+            for (unit_prefixes) |p| if (std.mem.startsWith(u8, t, p)) break :blk v.*;
+            break :blk .{ .string = "hidden" };
+        },
+        .array => |a| blk: {
+            for (a.items) |*item| hide(item);
+            break :blk v.*;
+        },
+        .null => .null,
+        else => .{ .string = "hidden" },
+    };
 }
 
 fn redactValue(v: *std.json.Value) void {
@@ -251,10 +375,7 @@ fn redactValue(v: *std.json.Value) void {
             while (it.next()) |entry| {
                 for (identifying) |key| {
                     if (!std.mem.eql(u8, entry.key_ptr.*, key)) continue;
-                    entry.value_ptr.* = switch (entry.value_ptr.*) {
-                        .integer, .float, .number_string => .{ .integer = 0 },
-                        else => .{ .string = "" },
-                    };
+                    hide(entry.value_ptr);
                     break;
                 } else redactValue(entry.value_ptr);
             }
@@ -308,6 +429,19 @@ test "synthetic session" {
     const d = cs.draft(.middle, null);
     try testing.expectEqual(3, d.allies.len);
 
+    // The board: every seat in cell order, intent apart from a hover in turn
+    try testing.expectEqual(5, cs.my_team.len);
+    try testing.expectEqual(Slot{ .champion = 122, .role = .top, .state = .locked }, cs.my_team[0]);
+    try testing.expectEqual(Slot{ .champion = 254, .role = .jungle, .state = .hover, .picking = true }, cs.my_team[1]);
+    try testing.expectEqual(Slot{ .champion = 238, .role = .middle, .state = .intent, .me = true, .picking = true }, cs.my_team[2]);
+    try testing.expectEqual(Slot{ .champion = 222, .role = .bottom, .state = .intent }, cs.my_team[3]);
+    try testing.expectEqual(Slot{ .role = .utility }, cs.my_team[4]);
+    try testing.expectEqual(Slot{ .champion = 103, .state = .locked }, cs.their_team[0]);
+    try testing.expectEqual(Slot{}, cs.their_team[2]);
+    try testing.expectEqual(Turn.pick, cs.my_turn);
+    try testing.expectEqualSlices(u32, &.{ 157, 555, 875, 84 }, cs.my_bans);
+    try testing.expectEqualSlices(u32, &.{ 360, 221, 147, 950, 233 }, cs.their_bans);
+
     var other = cs;
     try testing.expectEqual(cs.fingerprint(), other.fingerprint());
     other.my_champion = 7;
@@ -330,6 +464,18 @@ test "redact removes identities" {
     };
     for (gone) |needle| {
         try testing.expect(std.mem.indexOf(u8, out, needle) == null);
+    }
+    try testing.expect(std.mem.indexOf(u8, out, "\"hidden\"") != null);
+    const event =
+        \\{"Events": [{"EventName": "ChampionKill", "KillerName": "Turret_T2_L_03_A",
+        \\  "VictimName": "Someone", "Assisters": ["Other", "Minion_T100L"]}]}
+    ;
+    const ev = try redact(arena, event);
+    for ([_][]const u8{ "Turret_T2_L_03_A", "Minion_T100L" }) |kept| {
+        try testing.expect(std.mem.indexOf(u8, ev, kept) != null);
+    }
+    for ([_][]const u8{ "Someone", "Other" }) |name| {
+        try testing.expect(std.mem.indexOf(u8, ev, name) == null);
     }
     // Still a session
     const cs = try parse(arena, out);
