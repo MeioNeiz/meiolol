@@ -13,7 +13,10 @@
 //! Shippable as terms: parent tables and factor vectors per champion-role and block.
 //! Paired per game against v2 fitted on the same games; folds 1-2 develop, 3-5 judge.
 //! --plant SD: semi-synthetic power check (outcomes drawn from v2's fit plus a planted
-//! kit or rank-2 part of cell sd SD pp in every pair block). Writes DIR/folds.tsv and
+//! kit or rank-2 part of cell sd SD pp in every pair block). --shipped: both arms as the
+//! stats file would carry them (fitted.zig: no damage mix, no side term, a cell's own part
+//! 0 under fitted.pair_floor games, f16 terms); --seen FILE: match ids scored before are
+//! left out of scoring (fresh games on a newer pin). Writes DIR/folds.tsv and
 //! DIR/games-<label>.tsv (netcheck's format)
 
 const std = @import("std");
@@ -40,6 +43,9 @@ pub const usage =
     \\                                  :shuf shuffles its kit map or pair keys)
     \\                                  [--resample N] [--shuffle SEED] (labels)
     \\                                  [--plant SD --plant-kind kit:prof:8|rank]
+    \\                                  [--shipped] (stats file form: no mix, no side,
+    \\                                  floor 20 on own parts, f16) [--seen FILE]
+    \\                                  (match ids not to score, first column)
     \\                                  A4: v2's pair cells shrunk toward kit x kit,
     \\                                  the same pair in other slots, or low rank,
     \\                                  paired per game vs v2 (lab/pairprior.zig)
@@ -60,7 +66,12 @@ const Options = struct {
     plant_kind: ?Kit = null,
     plant_rank: bool = false,
     plant_seed: u64 = 0x91a7,
+    shipped: bool = false,
+    seen: ?[]const u8 = null,
 };
+
+/// fitted.zig's pair_floor: a pair cell's own part ships as 0 under it
+const ship_floor = 20;
 
 // ---------------------------------------------------------------- variants
 
@@ -751,6 +762,35 @@ fn predict(p: *const A.Problem, s: ?*const Struct, f: *const Fitted, g: *const A
     return x;
 }
 
+/// predict as the stats file carries it: no side term, each term f16, a pair cell's own
+/// part 0 under ship_floor fit games (its parents kept), comp features unused
+fn predictShipped(p: *const A.Problem, s: ?*const Struct, f: *const Fitted, g: *const A.GameIn) f64 {
+    var x: f64 = 0;
+    var buf: [2]Cell = undefined;
+    for (A.g_main..A.g_ally) |gr| {
+        const n = cellsOf(gr, &g.teams, &buf);
+        for (buf[0..n]) |cl| if (p.keys.get(cl.key)) |j| {
+            x += cl.x * toF16(f.theta[j]);
+        };
+    }
+    for (slots, 0..) |sl, slot| {
+        const n = cellsOf(sl.group, &g.teams, &buf);
+        for (buf[0..n]) |cl| {
+            var v: f64 = 0;
+            if (p.keys.get(cl.key)) |j| if (p.count[j] >= ship_floor) {
+                v += f.theta[j];
+            };
+            if (s) |st| v += structValue(st, f, slot, cl.key);
+            x += cl.x * toF16(v);
+        }
+    }
+    return x;
+}
+
+fn toF16(x: f64) f64 {
+    return @as(f16, @floatCast(x));
+}
+
 fn structValue(s: *const Struct, f: *const Fitted, slot: usize, k: u64) f64 {
     const a: u32 = @intCast(k >> 24 & 0xffffff);
     const b: u32 = @intCast(k & 0xffffff);
@@ -1088,6 +1128,7 @@ fn runBlock(
     opts: Options,
     tags: [2]*const KitMap,
     champions: []const u32,
+    seen: ?*const Seen,
     dir: Io.Dir,
     sums: [][6]Sums,
     w: *Io.Writer,
@@ -1103,11 +1144,18 @@ fn runBlock(
     };
     var fit_idx: std.ArrayList(u32) = .empty;
     var scored: std.ArrayList(u32) = .empty;
+    var n_seen: usize = 0;
     const is_fit = try arena.alloc(bool, d.games.len);
     for (d.games, is_fit, 0..) |g, *f, i| {
         f.* = spec.fits(c, g, 1);
         if (f.*) try fit_idx.append(arena, @intCast(i));
-        if (spec.scores(c, g, 1)) try scored.append(arena, @intCast(i));
+        if (spec.scores(c, g, 1)) {
+            if (seen) |x| if (x.contains(std.hash.Wyhash.hash(0, g.match_id))) {
+                n_seen += 1;
+                continue;
+            };
+            try scored.append(arena, @intCast(i));
+        }
     }
     var mix = try addinputs.Mix.init(gpa, d, is_fit, in.win);
     defer mix.deinit(gpa);
@@ -1115,7 +1163,7 @@ fn runBlock(
     for (fit_idx.items, fit_win) |gi, *fw| fw.* = addinputs.gameIn(d, gi, in.win[gi], mix.diff(d, in, gi, true));
     const scored_in = try arena.alloc(A.GameIn, scored.items.len);
     for (scored.items, scored_in) |gi, *s| s.* = addinputs.gameIn(d, gi, in.win[gi], mix.diff(d, in, gi, false));
-    var p = try A.build(gpa, .logistic, addinputs.fullVariant(true, 1), fit_win);
+    var p = try A.build(gpa, .logistic, addinputs.fullVariant(true, if (opts.shipped) 0 else 1), fit_win);
     defer p.deinit(gpa);
 
     // Kit maps this block needs (prof maps from its fit games)
@@ -1194,6 +1242,7 @@ fn runBlock(
         tasks: []const Task,
         outs: []TaskOut,
         scored: []const A.GameIn,
+        shipped: bool,
         fn one(x: @This(), i: usize) !void {
             const t = x.tasks[i];
             var st: ?Struct = null;
@@ -1202,7 +1251,7 @@ fn runBlock(
             const sp: ?*const Struct = if (st) |*s| s else null;
             const f = try fitAll(x.gpa, x.p, sp, .{}, 0xfac +% i);
             const pred = try x.gpa.alloc(f64, x.scored.len);
-            for (x.scored, pred) |*g, *o| o.* = sigmoid(predict(x.p, sp, &f, g));
+            for (x.scored, pred) |*g, *o| o.* = sigmoid(if (x.shipped) predictShipped(x.p, sp, &f, g) else predict(x.p, sp, &f, g));
             x.outs[i] = .{
                 .pred = pred,
                 .fit = f,
@@ -1215,7 +1264,7 @@ fn runBlock(
     var at: usize = 0;
     while (at < tasks.len) : (at += opts.threads) {
         const n = @min(opts.threads, tasks.len - at);
-        try par.forEach(io, n, Ctx{ .gpa = gpa, .p = &p, .tasks = tasks[at..][0..n], .outs = outs[at..][0..n], .scored = scored_in }, Ctx.one);
+        try par.forEach(io, n, Ctx{ .gpa = gpa, .p = &p, .tasks = tasks[at..][0..n], .outs = outs[at..][0..n], .scored = scored_in, .shipped = opts.shipped }, Ctx.one);
     }
     if (block == opts.blocks[0]) {
         // fitAll without structure must be additive.fit
@@ -1227,7 +1276,7 @@ fn runBlock(
     }
 
     const name = blockName(block);
-    try w.print("block {s}: fit {d} games, {d} v2 params, scored {d}; {d:.0} s\n", .{ name, fit_idx.items.len, p.n_params(), scored.items.len, winnet.secondsSince(io, t0) });
+    try w.print("block {s}: fit {d} games, {d} v2 params, scored {d} ({d} seen before, left out); {d:.0} s\n", .{ name, fit_idx.items.len, p.n_params(), scored.items.len, n_seen, winnet.secondsSince(io, t0) });
     const bi: usize = @backingInt(block);
     const nsc: f64 = @floatFromInt(@max(scored.items.len, 1));
     for (tasks, outs, 0..) |t, o, ti| {
@@ -1267,12 +1316,35 @@ fn runBlock(
 
 // ---------------------------------------------------------------- main
 
+/// Wyhash of each match id
+const Seen = std.AutoHashMapUnmanaged(u64, void);
+
+/// First column of each line, a header line skipped if it says match_id
+fn loadSeen(gpa: Allocator, io: Io, path: []const u8) !Seen {
+    const text = try Io.Dir.cwd().readFileAlloc(io, path, gpa, .limited(256 << 20));
+    defer gpa.free(text);
+    var s: Seen = .empty;
+    errdefer s.deinit(gpa);
+    var lines = std.mem.tokenizeScalar(u8, text, '\n');
+    while (lines.next()) |line| {
+        const id = std.mem.sliceTo(line, '\t');
+        if (id.len == 0 or std.mem.eql(u8, id, "match_id")) continue;
+        try s.put(gpa, std.hash.Wyhash.hash(0, id), {});
+    }
+    return s;
+}
+
 fn parseOptions(arena: Allocator, args: []const []const u8) !Options {
     var o: Options = .{};
     var i: usize = 0;
-    while (i < args.len) : (i += 2) {
-        if (i + 1 >= args.len) return error.MissingValue;
+    while (i < args.len) {
         const k = args[i];
+        if (std.mem.eql(u8, k, "--shipped")) {
+            o.shipped = true;
+            i += 1;
+            continue;
+        }
+        if (i + 1 >= args.len) return error.MissingValue;
         const v = args[i + 1];
         if (std.mem.eql(u8, k, "--out")) {
             o.out = v;
@@ -1307,9 +1379,12 @@ fn parseOptions(arena: Allocator, args: []const []const u8) !Options {
             if (std.mem.eql(u8, v, "rank")) {
                 o.plant_rank = true;
             } else o.plant_kind = (try parseVariant(v)).kit orelse return error.BadPlant;
+        } else if (std.mem.eql(u8, k, "--seen")) {
+            o.seen = v;
         } else if (std.mem.eql(u8, k, "--plant-seed")) {
             o.plant_seed = try std.fmt.parseInt(u64, v, 10);
         } else return error.UnknownOption;
+        i += 2;
     }
     return o;
 }
@@ -1338,6 +1413,8 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
             std.mem.swap(f32, &in.win[i], &in.win[j]);
         }
     }
+    var seen: ?Seen = if (opts.seen) |path| try loadSeen(gpa, io, path) else null;
+    defer if (seen) |*x| x.deinit(gpa);
     var tag = try tagMap(gpa, arena, io, snap, false);
     defer tag.deinit(gpa);
     var tag_shuf = try tagMap(gpa, arena, io, snap, true);
@@ -1358,7 +1435,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     var out_buf: [4096]u8 = undefined;
     var stdout = Io.File.stdout().writer(io, &out_buf);
     const w = &stdout.interface;
-    try w.print("# pairprior: blocks {any}, resample {?d}, shuffle {?d}, plant {d:.2} pp ({s})\n", .{ opts.blocks, opts.resample, opts.shuffle, opts.plant, if (opts.plant_rank) "rank-2" else if (opts.plant_kind != null) "kit" else "-" });
+    try w.print("# pairprior: blocks {any}, resample {?d}, shuffle {?d}, plant {d:.2} pp ({s}), shipped {}, seen {d}\n", .{ opts.blocks, opts.resample, opts.shuffle, opts.plant, if (opts.plant_rank) "rank-2" else if (opts.plant_kind != null) "kit" else "-", opts.shipped, if (seen) |x| x.count() else 0 });
     if (opts.shuffle != null) try w.writeAll("SHUFFLED LABELS: a control, every gain must be ~0\n");
     try w.flush();
 
@@ -1367,7 +1444,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     for (opts.blocks) |b| {
         var block_arena: std.heap.ArenaAllocator = .init(gpa);
         defer block_arena.deinit();
-        try runBlock(gpa, block_arena.allocator(), io, &data, in, c, b, opts, .{ &tag, &tag_shuf }, champions, dir, sums, w, &sfw.interface);
+        try runBlock(gpa, block_arena.allocator(), io, &data, in, c, b, opts, .{ &tag, &tag_shuf }, champions, if (seen) |*x| x else null, dir, sums, w, &sfw.interface);
     }
 
     // Pools: development folds 1-2, sealed folds 3-5, dev-val; milli-nats vs v2
@@ -1529,4 +1606,37 @@ test "pairprior: variants parse" {
     try testing.expect(v.kit.?.kind == .prof and v.kit.?.k == 8 and v.kit.?.shuf);
     try testing.expect(v.pair and v.pair_mode == .multi and v.rank == 4 and v.fac_sd == 0.15);
     try testing.expectError(error.BadVariant, parseVariant("kat"));
+}
+
+test "pairprior: --shipped is a flag anywhere, --seen takes a file" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const o = try parseOptions(arena.allocator(), &.{ "--shipped", "--blocks", "dev,4", "--seen", "x.tsv" });
+    try testing.expect(o.shipped and o.blocks.len == 2 and std.mem.eql(u8, o.seen.?, "x.tsv"));
+    try testing.expect((try parseOptions(arena.allocator(), &.{ "--threads", "2", "--shipped" })).shipped);
+    try testing.expectError(error.MissingValue, parseOptions(arena.allocator(), &.{"--seen"}));
+}
+
+test "pairprior: shipped form is the fit less its side term, thin own parts dropped" {
+    const gpa = testing.allocator;
+    var m = try modMap(gpa, 8);
+    defer m.deinit(gpa);
+    const games = try synthGames(gpa, 8_000, 8, .{ .sd = 0.2, .kit = &m, .seed = 3 }, 6);
+    defer gpa.free(games);
+    var p = try A.build(gpa, .logistic, addinputs.fullVariant(true, 0), games);
+    defer p.deinit(gpa);
+    var st = try buildStruct(gpa, &p, .{ .kit = &m, .pair = true });
+    defer st.deinit(gpa);
+    var f = try fitAll(gpa, &p, &st, quick, 1);
+    defer f.deinit(gpa);
+    // 8 champions a role: every pair cell has well over ship_floor games
+    for (p.param_start[A.g_ally]..p.n_params()) |j| try testing.expect(p.count[j] >= ship_floor);
+    for (games[0..50]) |*g| try testing.expectApproxEqAbs(predict(&p, &st, &f, g) - f.theta[g.platform], predictShipped(&p, &st, &f, g), 5e-3);
+    // A jungler in top: v2 has no top vs jungle cell for it, the pair parent (from jungle
+    // vs jungle) still scores it
+    var g = games[0];
+    g.teams[0][0] = 1001;
+    g.teams[1][1] = 1002;
+    try testing.expect(p.keys.get(key(A.enemyGroup(0, 1), 1001, 1002)) == null);
+    try testing.expect(predictShipped(&p, &st, &f, &g) != predictShipped(&p, null, &f, &g));
 }
