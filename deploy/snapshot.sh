@@ -57,8 +57,22 @@ make_snap() {
     trap - EXIT
     rm -rf "$tree"
     log "$GPU: building $name"
-    ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=10 "$GPU" "ml/bin/snapshot-gpu.sh $name" \
-        || die "snapshot-gpu.sh failed on $GPU for $name"
+    # A user unit, so a dropped ssh no longer kills the build (22 Oct, 80 min in). Each
+    # poll touches awake.d (lab-watch.sh keeps Windows awake while it is fresh)
+    ssh "$GPU" "systemctl --user -q is-active meiolol-snapshot && exit 1; rm -f ml/snapshot.rc; \
+        systemd-run --user -q --collect --unit meiolol-snapshot --working-directory=\$HOME \
+        /bin/bash -c 'ml/bin/snapshot-gpu.sh $name > ml/snapshot.log 2>&1; echo \$? > ml/snapshot.rc'" \
+        || die "$GPU: a snapshot build is running already"
+    local rc=
+    for _ in $(seq 480); do
+        sleep 30
+        rc=$(ssh -o ConnectTimeout=10 -o BatchMode=yes "$GPU" "mkdir -p ml/awake.d; \
+            touch ml/awake.d/snapshot; systemctl --user -q is-active meiolol-snapshot \
+            || cat ml/snapshot.rc 2> /dev/null || echo lost") || continue
+        [[ -n $rc ]] && break
+    done
+    ssh "$GPU" 'rm -f ml/awake.d/snapshot; cat ml/snapshot.log' || true
+    [[ $rc == 0 ]] || die "snapshot-gpu.sh failed on $GPU for $name (${rc:-still running after 4 h})"
     mkdir -p "$STATE"
     echo "$name" >> "$STATE/pending"
     fetch_snap "$name" || log "$name waits for a tick to fetch it here"
