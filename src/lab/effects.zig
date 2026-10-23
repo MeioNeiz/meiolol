@@ -83,38 +83,13 @@ const Param = enum { v1, v2 };
 const cal_rounds = 8;
 const cal_seed = 0xca1;
 
-const Block = enum { dev, f1, f2, f3, f4, f5 };
+const Block = winnet.FoldBlock;
+const blockName = winnet.foldName;
 const n_folds = harness.folds;
 
 /// Fit on dev-visible games before `before`; score dev-val (dev) or dev-visible games in
-/// [lo, hi): netcheck's blocks (winnet.zig Spec), so games pair with its preds
-const Spec = struct {
-    before: i64,
-    lo: i64,
-    hi: i64,
-    dev: bool,
-    resample: ?u32 = null,
-
-    fn fits(s: Spec, c: harness.Cuts, g: rows.Game) bool {
-        if (s.resample) |r| if (!winnet.inResample(g, r)) return false;
-        return harness.visible(.dev, c, g) and g.start < s.before;
-    }
-
-    fn scores(s: Spec, c: harness.Cuts, g: rows.Game) bool {
-        if (s.dev) return harness.scored(.dev, c, g);
-        return harness.visible(.dev, c, g) and harness.inRegion(c, g) and g.start >= s.lo and g.start < s.hi;
-    }
-};
-
-/// The candidate's fit games (buildTrainWhere's keep)
-const FitKeep = struct {
-    spec: Spec,
-    c: harness.Cuts,
-
-    pub fn keep(k: FitKeep, g: rows.Game) bool {
-        return k.spec.fits(k.c, g);
-    }
-};
+/// [lo, hi): netcheck's blocks, so games pair with its preds
+const Spec = winnet.Spec;
 
 /// A spread from the blocks' variances: block a's sd, plus block b's when set (an enemy
 /// matchup's two sides; b == a counts the block twice)
@@ -169,13 +144,6 @@ fn summarise(arena: std.mem.Allocator, pick: Pick, sigma2: [A.n_groups]f64, boot
     std.mem.sort(f64, nsd, {}, std.sort.asc(f64));
     const q95 = if (nulls.len > 0) nsd[@min(nulls.len - 1, @as(usize, @ceil(0.95 * @as(f64, @floatFromInt(nulls.len)))) -| 1)] else 0;
     return .{ .sd = sd, .lo = lo, .hi = sd + 1.96 * se, .half_mean = hm, .null_ms = nv, .null_q95 = q95, .detected = sd > q95 and lo > q95 };
-}
-
-fn blockName(b: Block) []const u8 {
-    return switch (b) {
-        .dev => "dev",
-        inline else => |t| @tagName(t)[1..],
-    };
 }
 
 /// A nested family of terms
@@ -352,9 +320,9 @@ fn runBlock(
     const is_fit = try gpa.alloc(bool, d.games.len);
     defer gpa.free(is_fit);
     for (d.games, is_fit, 0..) |g, *f, i| {
-        f.* = spec.fits(c, g);
+        f.* = spec.fits(c, g, 1);
         if (f.*) try fit_idx.append(gpa, @intCast(i));
-        if (spec.scores(c, g)) try scored.append(gpa, @intCast(i));
+        if (spec.scores(c, g, 1)) try scored.append(gpa, @intCast(i));
     }
     var mix = try Mix.init(gpa, d, is_fit, in.win);
     defer mix.deinit(gpa);
@@ -396,7 +364,7 @@ fn runBlock(
     // ten rows' answers (red's as 1 - p), as netcheck's candBlue
     const pc = try arena.alloc(f64, scored.items.len);
     {
-        var v = try harness.buildTrainWhere(gpa, d, players, FitKeep{ .spec = spec, .c = c });
+        var v = try harness.buildTrainWhere(gpa, d, players, winnet.FitKeep{ .spec = spec, .c = c, .fraction = 1 });
         defer v.deinit();
         const slot = try gpa.alloc(i32, d.games.len);
         defer gpa.free(slot);
@@ -487,7 +455,7 @@ fn runBlock(
     defer for (results) |r| gpa.free(r.pred);
 
     const name = blockName(block);
-    const secs: f64 = @as(f64, @floatFromInt(t0.durationTo(Io.Clock.awake.now(io)).nanoseconds)) / 1e9;
+    const secs = winnet.secondsSince(io, t0);
     try w.print("block {s}: fit {d} games ({d} with gold at 14), scored {d}; gold slope {d:.3} logit per 1000; {d:.0} s\n", .{ name, fit_idx.items.len, fit_gold.items.len, scored.items.len, slope[1], secs });
     var ref_loss: f64 = 0;
     for (scored.items, pc) |gi, p| ref_loss += loss1(in.win[gi], p);

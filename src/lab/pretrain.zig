@@ -80,7 +80,8 @@ pub const Options = struct {
     out: []const u8 = ".",
 };
 
-pub const Block = enum { dev, f1, f2, f3, f4, f5 };
+pub const Block = winnet.FoldBlock;
+const blockName = winnet.foldName;
 
 fn fits(b: Block, split: u8) bool {
     return if (b == .dev) split <= nnexport.folds else split < @backingInt(b);
@@ -88,17 +89,6 @@ fn fits(b: Block, split: u8) bool {
 
 fn scores(b: Block, split: u8) bool {
     return if (b == .dev) split == @backingInt(nnexport.Split.dev_val) else split == @backingInt(b);
-}
-
-fn blockName(b: Block) []const u8 {
-    return switch (b) {
-        .dev => "dev",
-        .f1 => "1",
-        .f2 => "2",
-        .f3 => "3",
-        .f4 => "4",
-        .f5 => "5",
-    };
 }
 
 fn auxNames() [k][]const u8 {

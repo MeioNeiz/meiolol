@@ -50,6 +50,7 @@ const logit = nn.logit;
 const loss1 = nn.logLoss;
 const sigmoid = winnet.sigmoid;
 const secondsSince = winnet.secondsSince;
+const blockName = winnet.foldName;
 const meanLoss = winnet.meanLoss;
 const pairedGain = winnet.pairedGain;
 const auc = winnet.auc;
@@ -163,7 +164,7 @@ pub const Options = struct {
     out: []const u8 = ".",
 };
 
-pub const Block = enum { dev, f1, f2, f3, f4, f5 };
+pub const Block = winnet.FoldBlock;
 const val_share = 0.1;
 pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []const []const u8) !u8 {
     if (argv.len < 1) {
@@ -875,17 +876,6 @@ fn runBlock(
         try pooled.cand.appendSlice(gpa, pc);
         try pooled.ens.appendSlice(gpa, ens);
     }
-}
-
-fn blockName(b: Block) []const u8 {
-    return switch (b) {
-        .dev => "dev",
-        .f1 => "1",
-        .f2 => "2",
-        .f3 => "3",
-        .f4 => "4",
-        .f5 => "5",
-    };
 }
 
 fn summaryHead(w: *Io.Writer) !void {

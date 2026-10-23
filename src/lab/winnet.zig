@@ -137,6 +137,8 @@ pub const Options = struct {
 };
 
 pub const Block = enum { dev, f1, f2, f3, f4, f5, final };
+/// playernet, pretrain and effects: dev-val and the five folds, no test block
+pub const FoldBlock = enum { dev, f1, f2, f3, f4, f5 };
 const val_share = 0.1;
 pub const n_platforms = 16;
 
@@ -838,13 +840,15 @@ fn excludedRows(gpa: std.mem.Allocator, w: *Io.Writer, d: *const rows.Data, scor
 
 fn blockName(b: Block) []const u8 {
     return switch (b) {
-        .dev => "dev",
-        .f1 => "1",
-        .f2 => "2",
-        .f3 => "3",
-        .f4 => "4",
-        .f5 => "5",
         .final => "test",
+        inline else => |t| foldName(@field(FoldBlock, @tagName(t))),
+    };
+}
+
+pub fn foldName(b: FoldBlock) []const u8 {
+    return switch (b) {
+        .dev => "dev",
+        inline else => |t| @tagName(t)[1..],
     };
 }
 
@@ -1603,4 +1607,11 @@ test "health fit: a resid net at step 0 predicts its offsets" {
     const p = try healthFit(gpa, o, 1, 8, &games, 0, &games, &pred);
     defer gpa.free(p);
     for (pred, games) |q, g| try testing.expectApproxEqAbs(sigmoid(g.off), q, 1e-6);
+}
+
+test "block names as emb files and logs spell them" {
+    try testing.expectEqualStrings("dev", blockName(.dev));
+    try testing.expectEqualStrings("3", blockName(.f3));
+    try testing.expectEqualStrings("test", blockName(.final));
+    try testing.expectEqualStrings("5", foldName(.f5));
 }
