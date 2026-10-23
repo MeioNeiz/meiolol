@@ -102,20 +102,14 @@ pub fn main(init: std.process.Init) !u8 {
     const emb_source = emb_dir.source();
     if (emb_dir.path.len > 0) {
         harness.embeddings = &emb_source;
-        const rest = try arena.alloc(@TypeOf(argv[0]), argv.len - 2);
-        rest[0] = argv[0];
-        @memcpy(rest[1..], argv[3..]);
-        argv = rest;
+        argv = try std.mem.concat(arena, [:0]const u8, &.{ argv[0..1], argv[3..] });
     }
     if (argv.len >= 3 and std.mem.eql(u8, argv[1], "--control")) {
         harness.control = std.meta.stringToEnum(harness.Control, argv[2]) orelse {
             std.debug.print("--control: shuffle (permute: netcheck --net set's own --control)\n", .{});
             return 2;
         };
-        const rest = try arena.alloc(@TypeOf(argv[0]), argv.len - 2);
-        rest[0] = argv[0];
-        @memcpy(rest[1..], argv[3..]);
-        argv = rest;
+        argv = try std.mem.concat(arena, [:0]const u8, &.{ argv[0..1], argv[3..] });
     }
     if (argv.len < 2) {
         std.debug.print("{s}", .{usage});
@@ -127,15 +121,8 @@ pub fn main(init: std.process.Init) !u8 {
         return 0;
     }
     if (std.mem.eql(u8, cmd, "anonymise") and argv.len >= 4) {
-        const salt_path = if (argv.len >= 5) argv[4] else try std.fs.path.join(arena, &.{
-            init.environ_map.get("HOME") orelse return error.NoHome, ".config/meiolol/snap-salt",
-        });
-        const bytes = try std.Io.Dir.cwd().readFileAlloc(init.io, salt_path, arena, .limited(64));
-        if (bytes.len != 32) {
-            std.log.err("{s}: want 32 bytes, found {d}", .{ salt_path, bytes.len });
-            return 1;
-        }
-        try anonymise.run(init.gpa, init.io, argv[2], argv[3], bytes[0..32]);
+        const salt = try readSalt(init, arena, if (argv.len >= 5) argv[4] else null) orelse return 1;
+        try anonymise.run(init.gpa, init.io, argv[2], argv[3], salt);
         return 0;
     }
     if (std.mem.eql(u8, cmd, "archive") and argv.len >= 4) {
@@ -200,9 +187,7 @@ pub fn main(init: std.process.Init) !u8 {
         return 0;
     }
     if (std.mem.eql(u8, cmd, "nn-export") and argv.len >= 3) {
-        var legendaries = try rows.loadLegendaries(init.gpa, init.io, argv[2]);
-        defer legendaries.deinit(init.gpa);
-        var data = try rows.load(init.gpa, argv[2], &legendaries);
+        var data = try loadData(init, argv[2]);
         defer data.deinit();
         const c = try harness.cuts(init.gpa, &data);
         var e = try nnexport.build(init.gpa, &data, c);
@@ -245,14 +230,12 @@ pub fn main(init: std.process.Init) !u8 {
             }
         }
         var gpu: ?cuda.Gpu = null;
-        if (std.mem.indexOfScalar(bench.Device, opts.devices, .gpu) != null) {
+        if (std.mem.findScalar(bench.Device, opts.devices, .gpu) != null) {
             gpu = try cuda.Gpu.init(ptx);
             var buf: [128]u8 = @splat(0);
             std.log.info("device: {s}", .{try gpu.?.name(&buf)});
         }
-        var legendaries = try rows.loadLegendaries(init.gpa, init.io, argv[2]);
-        defer legendaries.deinit(init.gpa);
-        var data = try rows.load(init.gpa, argv[2], &legendaries);
+        var data = try loadData(init, argv[2]);
         defer data.deinit();
         var buf: [4096]u8 = undefined;
         var stdout = std.Io.File.stdout().writer(init.io, &buf);
@@ -281,10 +264,8 @@ pub fn main(init: std.process.Init) !u8 {
             }
         }
         var gpu: ?cuda.Gpu = null;
-        if (std.mem.indexOfScalar(draftnet.Device, opts.devices, .gpu) != null) gpu = try cuda.Gpu.init(ptx);
-        var legendaries = try rows.loadLegendaries(init.gpa, init.io, argv[2]);
-        defer legendaries.deinit(init.gpa);
-        var data = try rows.load(init.gpa, argv[2], &legendaries);
+        if (std.mem.findScalar(draftnet.Device, opts.devices, .gpu) != null) gpu = try cuda.Gpu.init(ptx);
+        var data = try loadData(init, argv[2]);
         defer data.deinit();
         var buf: [4096]u8 = undefined;
         var stdout = std.Io.File.stdout().writer(init.io, &buf);
@@ -318,7 +299,7 @@ pub fn main(init: std.process.Init) !u8 {
         return compare.main(init.gpa, arena, init.io, argv[2..]);
     }
     if (std.mem.eql(u8, cmd, "health")) {
-        return health.main(init.gpa, arena, init.io, argv[2..]);
+        return health.main(init.gpa, init.io, argv[2..]);
     }
     if (std.mem.eql(u8, cmd, "plant-score")) {
         return synth.main(init.gpa, arena, init.io, argv[2..]);
@@ -372,9 +353,7 @@ pub fn main(init: std.process.Init) !u8 {
         return 0;
     }
     if (std.mem.eql(u8, cmd, "rows") and argv.len >= 3) {
-        var legendaries = try rows.loadLegendaries(init.gpa, init.io, argv[2]);
-        defer legendaries.deinit(init.gpa);
-        var data = try rows.load(init.gpa, argv[2], &legendaries);
+        var data = try loadData(init, argv[2]);
         defer data.deinit();
         var buf: [4096]u8 = undefined;
         var stdout = std.Io.File.stdout().writer(init.io, &buf);
@@ -490,6 +469,12 @@ fn parseList(comptime T: type, arena: std.mem.Allocator, text: []const u8) ![]co
         else => try std.fmt.parseInt(T, s, 10),
     });
     return out.items;
+}
+
+fn loadData(init: std.process.Init, snap: []const u8) !rows.Data {
+    var legendaries = try rows.loadLegendaries(init.gpa, init.io, snap);
+    defer legendaries.deinit(init.gpa);
+    return rows.load(init.gpa, snap, &legendaries);
 }
 
 /// The snapshot salt: SALT_FILE or ~/.config/meiolol/snap-salt (docs/data-safety.md);

@@ -14,6 +14,7 @@ const winnet = @import("winnet.zig");
 const setnet = @import("setnet.zig");
 const playernet = @import("playernet.zig");
 const dn = @import("../gpu/draftnet_layout.zig");
+const gates = @import("gates.zig");
 
 const Io = std.Io;
 
@@ -73,7 +74,7 @@ fn bigGames(gpa: std.mem.Allocator, n: usize, n_ids: u32, sd: f32, seed: u64) ![
         for (0..10) |slot| {
             g.ids[slot] = while (true) {
                 const id = 5 + r.uintLessThan(u32, n_ids - 5);
-                if (std.mem.indexOfScalar(u32, g.ids[0..slot], id) == null) break id;
+                if (std.mem.findScalar(u32, g.ids[0..slot], id) == null) break id;
             };
             z += if (slot < 5) strength[g.ids[slot]] else -strength[g.ids[slot]];
         }
@@ -99,9 +100,7 @@ fn swapped(gpa: std.mem.Allocator, games: []const dn.Game) ![]dn.Game {
 fn baseLoss(games: []const dn.Game) f64 {
     var m: f64 = 0;
     for (games) |g| m += g.y;
-    m /= @floatFromInt(games.len);
-    if (m <= 0 or m >= 1) return 0;
-    return -(m * @log(m) + (1 - m) * @log(1 - m));
+    return gates.baseLoss(m / @as(f64, @floatFromInt(games.len)));
 }
 
 fn allFinite(p: []const f32) bool {
@@ -159,7 +158,7 @@ fn checkBig(gpa: std.mem.Allocator, io: Io, r: *Report, threads: usize, s: Sizes
         const pred = try gpa.alloc(f32, games.len);
         defer gpa.free(pred);
         try n.predict(gpa, io, games, pred);
-        try r.add(gpa, .{ .family = fam, .name = "init loss minus base rate's", .value = @abs(draftnet.logLoss(pred, games) - baseLoss(games)), .limit = 0.01 });
+        try r.add(gpa, .{ .family = fam, .name = "init loss minus base rate's", .value = @abs(draftnet.logLoss(pred, games) - baseLoss(games)), .limit = gates.init_limit });
         try r.add(gpa, .{ .family = fam, .name = "init: logit sum spread, sides swapped", .value = try asymmetry(gpa, io, &n, games), .limit = 1e-4 });
         try r.add(gpa, .{ .family = fam, .name = "init: non-finite parameters", .value = @floatFromInt(@intFromBool(!allFinite(n.p))), .limit = 0.5 });
     }
@@ -399,7 +398,7 @@ fn strengths(gpa: std.mem.Allocator, r: std.Random, sd: f32) ![2][]f32 {
 fn drawIds(r: std.Random, ids: *[10]u32) void {
     for (ids, 0..) |*id, slot| id.* = while (true) {
         const x = 5 + 5 * r.uintLessThan(u32, (net_ids - 5) / 5) + @as(u32, @intCast(slot % 5));
-        if (std.mem.indexOfScalar(u32, ids[0..slot], x) == null) break x;
+        if (std.mem.findScalar(u32, ids[0..slot], x) == null) break x;
     };
 }
 
@@ -430,9 +429,7 @@ fn refLoss(comptime F: type, games: []const F.Game) f64 {
     if (any) return meanLoss(F, games, null);
     var m: f64 = 0;
     for (games) |g| m += F.label(g);
-    m /= @floatFromInt(games.len);
-    if (m <= 0 or m >= 1) return 0;
-    return -(m * @log(m) + (1 - m) * @log(1 - m));
+    return gates.baseLoss(m / @as(f64, @floatFromInt(games.len)));
 }
 
 fn spread(comptime F: type, gpa: std.mem.Allocator, seed: u32, train: []const F.Game, steps: u64, games: []const F.Game) !f64 {
@@ -465,7 +462,7 @@ fn checkFamily(comptime F: type, gpa: std.mem.Allocator, r: *Report, s: Sizes) !
         defer gpa.free(pred);
         const p = try F.fit(gpa, 1, games, 0, games, pred, false);
         defer gpa.free(p);
-        try r.add(gpa, .{ .family = fam, .name = "init loss minus base rate's (offset's when resid)", .value = @abs(meanLoss(F, games, pred) - refLoss(F, games)), .limit = 0.01 });
+        try r.add(gpa, .{ .family = fam, .name = "init loss minus base rate's (offset's when resid)", .value = @abs(meanLoss(F, games, pred) - refLoss(F, games)), .limit = gates.init_limit });
         try r.add(gpa, .{ .family = fam, .name = "init: logit sum spread, sides swapped", .value = try spread(F, gpa, 1, games, 0, games), .limit = 1e-4 });
         try r.add(gpa, .{ .family = fam, .name = "init: non-finite parameters", .value = @floatFromInt(@intFromBool(!allFinite(p))), .limit = 0.5 });
     }
@@ -514,8 +511,7 @@ fn checkFamily(comptime F: type, gpa: std.mem.Allocator, r: *Report, s: Sizes) !
     }
 }
 
-pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []const []const u8) !u8 {
-    _ = arena;
+pub fn main(gpa: std.mem.Allocator, io: Io, argv: []const []const u8) !u8 {
     var threads: usize = std.Thread.getCpuCount() catch 1;
     var i: usize = 0;
     while (i + 1 < argv.len) : (i += 2) {
