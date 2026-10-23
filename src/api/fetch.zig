@@ -137,10 +137,10 @@ pub const Fetcher = struct {
     /// Riot ID -> account and platform; null when Riot has no such account
     fn account(f: *Fetcher, arena: Allocator, riot_id: []const u8) !?Account {
         const hash = std.mem.indexOfScalar(u8, riot_id, '#').?;
-        const body = try endpoints.accountByRiotId(try f.route(@tagName(account_route)), account_route, riot_id[0..hash], riot_id[hash + 1 ..]) orelse
+        const body = try f.keep(arena, try endpoints.accountByRiotId(try f.route(@tagName(account_route)), account_route, riot_id[0..hash], riot_id[hash + 1 ..])) orelse
             return null;
         const a = try endpoints.parse(endpoints.Account, arena, body);
-        const where = try endpoints.activePlatform(try f.route(@tagName(account_route)), account_route, a.puuid) orelse
+        const where = try f.keep(arena, try endpoints.activePlatform(try f.route(@tagName(account_route)), account_route, a.puuid)) orelse
             return error.NoActivePlatform;
         const active = try endpoints.parse(struct { region: []const u8 }, arena, where);
         return .{
@@ -185,7 +185,7 @@ pub const Fetcher = struct {
             try f.db.run("UPDATE challenges SET state = 'not_found' WHERE riot_id = ?", .{riot_id});
             return;
         };
-        const body = try endpoints.summonerByPuuid(try f.route(a.platform.host), a.platform, a.puuid) orelse
+        const body = try f.keep(arena, try endpoints.summonerByPuuid(try f.route(a.platform.host), a.platform, a.puuid)) orelse
             return error.NoSummoner;
         const current = (try endpoints.parse(struct { profileIconId: i64 }, arena, body)).profileIconId;
         const now = f.seconds();
@@ -223,7 +223,7 @@ pub const Fetcher = struct {
         const region = platform.region;
 
         var rank: game.Rank = .{};
-        if (try endpoints.leagueByPuuid(try f.route(platform.host), platform, puuid)) |body| {
+        if (try f.keep(arena, try endpoints.leagueByPuuid(try f.route(platform.host), platform, puuid))) |body| {
             const entries = try endpoints.parse([]const endpoints.LeagueEntry, arena, body);
             for (entries) |e| if (std.mem.eql(u8, e.queueType orelse "", "RANKED_SOLO_5x5")) {
                 rank = .{ .tier = e.tier, .division = e.rank, .lp = e.leaguePoints };
@@ -234,7 +234,7 @@ pub const Fetcher = struct {
         const now = f.seconds();
         var ids: std.ArrayList([]const u8) = .empty;
         for (queues) |queue| {
-            const body = try endpoints.matchIds(try f.route(@tagName(region)), region, puuid, queue, now - f.opts.since_days * std.time.s_per_day, now, 0) orelse
+            const body = try f.keep(arena, try endpoints.matchIds(try f.route(@tagName(region)), region, puuid, queue, now - f.opts.since_days * std.time.s_per_day, now, 0)) orelse
                 return error.NoMatchIds;
             try ids.appendSlice(arena, try endpoints.parse([]const []const u8, arena, body));
         }
@@ -272,7 +272,7 @@ pub const Fetcher = struct {
         }
         for (unnamed.items, 0..) |id, i| {
             if (endpoints.match(try f.route(@tagName(region)), region, id)) |found| {
-                if (found) |body| try f.storeNames(arena, id, body);
+                if (try f.keep(arena, found)) |body| try f.storeNames(arena, id, body);
             } else |err| switch (err) {
                 error.KeyRejected, error.OutOfMemory, error.Canceled => return err,
                 else => log.warn("{s}: names {t}", .{ id, err }),
@@ -301,11 +301,11 @@ pub const Fetcher = struct {
     }
 
     fn fetchMatch(f: *Fetcher, arena: Allocator, region: endpoints.Region, id: []const u8) !?game.Summary {
-        const body = try endpoints.match(try f.route(@tagName(region)), region, id) orelse return null;
+        const body = try f.keep(arena, try endpoints.match(try f.route(@tagName(region)), region, id)) orelse return null;
         const summary = try game.summarise(arena, body);
         var packed_timeline: ?[]const u8 = null;
         if (!summary.remake) {
-            if (try endpoints.timeline(try f.route(@tagName(region)), region, id)) |raw| {
+            if (try f.keep(arena, try endpoints.timeline(try f.route(@tagName(region)), region, id))) |raw| {
                 const t = try riot.timeline.fromJson(arena, raw);
                 const compact = try riot.timeline.encode(arena, t);
                 packed_timeline = try store.raw.compress(arena, compact);
@@ -332,6 +332,14 @@ pub const Fetcher = struct {
             if (try f.blocked(puuid)) continue;
             try f.db.run("INSERT OR REPLACE INTO match_names VALUES (?, ?, ?, ?)", .{ id, slot, game.hashPuuid(&hash_buf, puuid), riot_id });
         }
+    }
+
+    /// A Riot body moved into the job's arena: the client allocates with gpa, and parsed
+    /// strings may point into the body
+    fn keep(f: *Fetcher, arena: Allocator, got: ?[]u8) !?[]u8 {
+        const body = got orelse return null;
+        defer f.gpa.free(body);
+        return try arena.dupe(u8, body);
     }
 
     fn seconds(f: *Fetcher) i64 {
@@ -427,6 +435,26 @@ test "riot ids: none kept for a blocked player, a later erasure drops the rest" 
     try std.testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM match_names WHERE riot_id = 'player3#player3'", .{}));
     try cache.forget(db, "puuid-3", 1);
     try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM match_names WHERE riot_id = 'player3#player3'", .{}));
+}
+
+test "a refresh frees every Riot body it fetched" {
+    const gpa = std.testing.allocator;
+    const saved = std.testing.log_level;
+    defer std.testing.log_level = saved;
+    // The fake's players are new PUUIDs, so the game warns PlayerNotInMatch
+    std.testing.log_level = .err;
+    var fake: riot.fake.Fake = try .init(gpa, std.testing.io, 0);
+    defer fake.deinit(gpa);
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const db = try cache.open(":memory:");
+    defer db.close();
+    var f: Fetcher = .{ .gpa = gpa, .io = std.testing.io, .db = db, .opts = .{ .max_new = 1 } };
+    defer f.deinit();
+    for ([_][]const u8{ "europe", "euw1" }) |name| (try f.route(name)).fake = &fake;
+    try db.run("INSERT INTO players (puuid, game_name, tag_line, platform) VALUES ('p', 'A', '1', 'EUW1')", .{});
+    try f.refresh(arena_state.allocator(), "p", "p");
+    try std.testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM matches WHERE timeline IS NOT NULL", .{}));
 }
 
 test pickIcon {
