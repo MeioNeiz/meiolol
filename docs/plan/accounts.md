@@ -101,7 +101,10 @@ Each step ends tested and deployed; nginx and systemd changes on jomify need Jac
   route and action
   23 Oct: /auth/password, /auth/accounts, invite, role, disable, reset (route x role
   tests); /account.html (password, log out everywhere; devices wait for AC4); the admin
-  Accounts tab. Left: the /p/ space (nginx, Jacob's OK) and its first page
+  Accounts tab. /p/: the Draft tester in private mode (shipped models only, no box data,
+  no lab files), built and uploaded by the web loop once nginx gates /p/ (hosting.md
+  "Private site"). Left: the nginx /p/ location (Jacob's OK), then a private test
+  account's walk through /p/ and every /admin/ route
 - AC4 Desktop sign in: login screen in the app, device tokens, update gate by token,
   update.key retired. Done when a fresh install signs in, updates, and a revoked device
   stops updating within one check

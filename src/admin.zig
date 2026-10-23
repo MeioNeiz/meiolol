@@ -199,6 +199,42 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
     try writeGz(gpa, io, dir, "admin.css", @embedFile("site/static/admin.css"));
 }
 
+/// The private site's Draft tester (/p/, docs/plan/accounts.md AC3): the admin page in
+/// private mode (admin.js PRIVATE), no box data, only the shipped models the web loop
+/// copies into models/. nginx serves it to view_private logins
+pub fn private(gpa: std.mem.Allocator, io: Io, out_dir: []const u8, now_s: i64) !void {
+    var buf: [1024]u8 = undefined;
+    const page = try std.fmt.bufPrint(&buf,
+        \\<!doctype html>
+        \\<html lang="en">
+        \\<head>
+        \\<meta charset="utf-8">
+        \\<meta name="viewport" content="width=device-width, initial-scale=1">
+        \\<meta name="robots" content="noindex">
+        \\<title>meiolol private</title>
+        \\<link rel="stylesheet" href="admin.css">
+        \\</head>
+        \\<body>
+        \\<main id="app"><p>Loading…</p></main>
+        \\<script id="data" type="application/json">{{"private":true,"now":{d}}}</script>
+        \\<script src="admin-setnet.js"></script>
+        \\<script src="admin-draft.js"></script>
+        \\<script src="admin.js"></script>
+        \\</body>
+        \\</html>
+        \\
+    , .{now_s});
+    const cwd = Io.Dir.cwd();
+    try cwd.createDirPath(io, out_dir);
+    var dir = try cwd.openDir(io, out_dir, .{});
+    defer dir.close(io);
+    try writeGz(gpa, io, dir, "index.html", page);
+    try writeGz(gpa, io, dir, "admin-setnet.js", @embedFile("site/static/admin-setnet.js"));
+    try writeGz(gpa, io, dir, "admin-draft.js", @embedFile("site/static/admin-draft.js"));
+    try writeGz(gpa, io, dir, "admin.js", @embedFile("site/static/admin.js"));
+    try writeGz(gpa, io, dir, "admin.css", @embedFile("site/static/admin.css"));
+}
+
 /// Also `path`.gz, as the site's pages (nginx gzip_static)
 fn writeGz(gpa: std.mem.Allocator, io: Io, dir: Io.Dir, path: []const u8, data: []const u8) !void {
     try dir.writeFile(io, .{ .sub_path = path, .data = data });

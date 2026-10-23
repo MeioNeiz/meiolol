@@ -12,7 +12,7 @@
   function next(account) {
     const n = new URLSearchParams(location.search).get("next");
     if (n && n.startsWith("/") && !n.startsWith("//")) return n;
-    return account.can.includes("view_admin") ? "/admin/" : "/";
+    return account.can.includes("view_admin") ? "/admin/" : account.can.includes("view_private") ? "/p/" : "/";
   }
 
   function say(text) {
@@ -32,11 +32,10 @@
       if (!r.ok) throw new Error(r.status);
       const a = await r.json();
       me.replaceChildren(`Logged in as `, Object.assign(document.createElement("b"), { textContent: a.username }), ` (${a.role}).`);
-      if (a.can.includes("view_admin")) {
-        me.append(" ", Object.assign(document.createElement("a"), { href: "/admin/", textContent: "Admin pages" }));
-      }
-      if (a.can.includes("manage_accounts")) {
-        me.append(", ", Object.assign(document.createElement("a"), { href: "/admin/#accounts", textContent: "accounts" }));
+      const links = [["view_private", "/p/", "Draft tester"], ["view_admin", "/admin/", "Admin pages"], ["manage_accounts", "/admin/#accounts", "Accounts"]]
+        .filter(([cap]) => a.can.includes(cap));
+      for (const [i, [, href, text]] of links.entries()) {
+        me.append(i ? " · " : " ", Object.assign(document.createElement("a"), { href, textContent: text }));
       }
     }).catch(() => { me.textContent = "Can't reach the server. Try again in a moment."; });
     for (const b of document.querySelectorAll("[data-out]")) {

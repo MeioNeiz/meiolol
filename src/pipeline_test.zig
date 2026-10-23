@@ -623,6 +623,15 @@ test "admin page from the fixture games and a crawl log" {
         return error.TestUnexpectedResult;
     };
     try std.testing.expect(std.mem.find(u8, html, "EUW1_7123456") == null);
+    // The private site's Draft tester: the page in private mode, none of the box's data
+    const private = try std.fs.path.join(arena, &.{ dir, "p" });
+    try admin.private(gpa, io, private, 1760224200);
+    const p_html = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ private, "index.html" }), arena, .limited(1 << 20));
+    try std.testing.expect(std.mem.find(u8, p_html, "<script id=\"data\" type=\"application/json\">{\"private\":true,\"now\":1760224200}</script>") != null);
+    for ([_][]const u8{ "admin.js", "admin-draft.js", "admin-setnet.js", "admin.css" }) |f| {
+        try std.Io.Dir.cwd().access(io, try std.fs.path.join(arena, &.{ private, f }), .{});
+    }
+    try std.testing.expectError(error.FileNotFound, std.Io.Dir.cwd().access(io, try std.fs.path.join(arena, &.{ private, "data.json" }), .{}));
     // data.json: the page's data, for polling between rebuilds
     const json = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "data.json" }), arena, .limited(4 << 20));
     for ([_][]const u8{

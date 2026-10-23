@@ -46,7 +46,10 @@
 # then offer none until the next success.
 # Every round, the private admin page (`meiolol admin`) goes to admin/ on the server,
 # behind basic auth there; the site's rsync leaves that directory alone. data/desktop
-# (the Windows app's files and zip, desktop_files) goes with it to admin/desktop/. Daily, a dbstat
+# (the Windows app's files and zip, desktop_files) goes with it to admin/desktop/. The
+# private site's Draft tester (`--private-out`, with the tester's files) goes to p/, but only
+# while meio.lol/p/ sends a visitor without a login to the login page: the draft win
+# chances must never be public, and nginx's /p/ gate is installed by hand. Daily, a dbstat
 # scan (system sqlite3, read-only) leaves space by table and index in data/storage.tsv
 # for it.
 # The daily jobs' timers start from the files each leaves, and curves' from their files,
@@ -280,6 +283,8 @@ views_parts() {
     echo "loaded again: ${loaded:-none}; kept: ${kept:-none}"
 }
 round_sha=''
+# meio.lol/p/'s last answer, so a held private upload is logged once
+private_gate=''
 # `meiolol site --views data/views.bin` with these flags, in the background so a
 # deploy's signal (force=1) lands during the wait; the write always finishes, and the
 # deploy's round follows at once. Never two at a time, so the older format can't land
@@ -409,7 +414,7 @@ while true; do
             changed=$(rsync -rlpD --checksum --delete --stats data/site.new/ data/site/ \
                 | sed -nE 's/^Number of regular files transferred: ([0-9,]+)/\1/p')
             copy_s=$(( SECONDS - t )) t=$SECONDS
-            if ! stats=$(rsync -az --delete-delay --delay-updates --exclude /admin/ --stats \
+            if ! stats=$(rsync -az --delete-delay --delay-updates --exclude /admin/ --exclude /p/ --stats \
                 data/site/ meiolol-web:./); then
                 round_event upload failed "rsync to the web server failed"
             else
@@ -444,15 +449,25 @@ while true; do
         fi
     fi
     desktop_files || true
-    if nice -n 10 bin/meiolol admin --out data/admin.new \
+    rm -rf data/private.new
+    if nice -n 10 bin/meiolol admin --out data/admin.new --private-out data/private.new \
         --disk "$(df -B1 --output=size,used,avail data | tail -n 1)" \
         --health "$(bin/health.sh)" 2>&1; then
         # Times kept, so the upload sends the tester's files only when the daily job changed them
         [[ -d data/tester ]] && cp -pR data/tester data/admin.new/models
+        [[ -d data/tester ]] && cp -pR data/tester data/private.new/models
         # Linked, not copied (~50 MB)
         [[ -d data/desktop ]] && cp -al data/desktop data/admin.new/desktop
         rm -rf data/admin && mv data/admin.new data/admin
         rsync -a --delete data/admin/ meiolol-web:admin/ || echo "$(date -u +%FT%TZ) admin upload FAILED"
+        rm -rf data/private && mv data/private.new data/private
+        gate=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://meio.lol/p/ || true)
+        if [[ "$gate" == 302 ]]; then
+            rsync -a --delete data/private/ meiolol-web:p/ || echo "$(date -u +%FT%TZ) private upload FAILED"
+        elif [[ "$gate" != "$private_gate" ]]; then
+            echo "$(date -u +%FT%TZ) private upload held: meio.lol/p/ answers ${gate:-nothing}, not the login redirect"
+        fi
+        private_gate=$gate
     fi
     run_daily "$(date +%s)" || true
     # Hourly; SIGUSR1 interrupts the wait, and one during the round skips it. A daily job

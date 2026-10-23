@@ -7,6 +7,9 @@
 "use strict";
 
 let D = JSON.parse(document.getElementById("data").textContent);
+// The private site's Draft tester (/p/, admin.zig private): that tab alone, no box data,
+// shipped models only (admin-draft.js)
+const PRIVATE = D.private === true;
 const NS = "http://www.w3.org/2000/svg";
 // Fixed per entity, never by rank (validated on the dark panel, adjacent pairs)
 const PALETTE = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#9085e9", "#8a8f98"];
@@ -20,7 +23,7 @@ const KIND_LABEL = {
 const TIERS = ["CHALLENGER", "GRANDMASTER", "MASTER", "DIAMOND", "EMERALD", "PLATINUM", "GOLD",
   "SILVER", "BRONZE", "IRON"];
 const BAD = "#e66767";
-const TABS = [
+const TABS = PRIVATE ? [["models", "Draft tester"]] : [
   ["overview", "Overview"], ["crawler", "Crawler"], ["riot", "Riot API"], ["storage", "Storage"],
   ["ingest", "Ingest"], ["models", "Models"], ["traffic", "Traffic"],
   ["deploys", "Deploys"], ["logs", "Logs"], ["accounts", "Accounts"], ["ops", "Controls"],
@@ -127,8 +130,8 @@ const ui = {
   run: null,
   log: { file: "crawl", lines: 300, filter: "", follow: false },
 };
-if (!TABS.some(([k]) => k === ui.tab)) ui.tab = "overview";
-if (!CATS_KEYS.includes(ui.cat)) ui.cat = "all";
+if (!TABS.some(([k]) => k === ui.tab)) ui.tab = TABS[0][0];
+if (!CATS_KEYS.includes(ui.cat) || PRIVATE) ui.cat = PRIVATE ? "draft" : "all";
 
 // ---------- DOM ----------
 
@@ -748,8 +751,8 @@ function render(keep) {
   const open = new Set([...app.querySelectorAll("details[open] > summary")].map(s => s.textContent));
   app.replaceChildren();
   const top = el("header", { class: "top" },
-    el("h1", {}, el("a", { href: "/" }, "meiolol"), " ", el("span", {}, "admin")),
-    el("span", { id: "status", class: "status" }));
+    el("h1", {}, el("a", { href: "/" }, "meiolol"), " ", el("span", {}, PRIVATE ? "private" : "admin")),
+    PRIVATE ? null : el("span", { id: "status", class: "status" }));
   const controls = el("div", { class: "controls" });
   if (TIMED.has(ui.tab)) {
     controls.append(switcher([["3h", "3 hours"], ["24h", "24 hours"], ["7d", `${D.days} days`]], ui.range, setRange, "Range"));
@@ -772,14 +775,17 @@ function render(keep) {
     controls.append(el("button", { type: "button", class: "zoom", onclick: () => setZoom(null) },
       `${uk(ui.zoom[0])} to ${uk(ui.zoom[1])}`, el("span", { "aria-hidden": "true" }, " ×")));
   }
-  controls.append(desktopLink());
-  controls.append(el("button", { type: "button", class: "ghost", title: "Fetch everything now", onclick: () => refreshAll() }, "Refresh"));
+  if (!PRIVATE) {
+    controls.append(desktopLink());
+    controls.append(el("button", { type: "button", class: "ghost", title: "Fetch everything now", onclick: () => refreshAll() }, "Refresh"));
+  }
   if (ME) controls.append(el("span", { class: "me", title: `Signed in as ${ME.username} (${ME.role})` },
     el("a", { class: "who", href: "/account.html" }, ME.username), el("button", { type: "button", onclick: logOut }, "Log out")));
   top.append(controls);
   const nav = el("nav", { class: "tabs", "aria-label": "Sections" });
   TABS.forEach(([k, label], i) => nav.append(el("a", { href: "#" + k, "aria-current": k === ui.tab ? "page" : null, title: `${label} (${i + 1})`, onclick: ev => { ev.preventDefault(); setTab(k); } }, label)));
-  app.append(top, nav);
+  app.append(top);
+  if (TABS.length > 1) app.append(nav);
   const body = el("div", { class: "tab" });
   app.append(body);
   try {
@@ -1943,6 +1949,7 @@ function setCat(cat) {
 }
 
 VIEWS.models = body => {
+  if (PRIVATE) return draftView(body);
   modelsData();
   const nav = el("nav", { class: "cats", "aria-label": "Model categories" });
   for (const [k, label] of CATS) {
@@ -2390,7 +2397,7 @@ function hourBins(times, from, counts) {
 }
 
 let logTimer = null;
-VIEWS.accounts = accountsView;
+VIEWS.accounts = body => accountsView(body);
 VIEWS.logs = body => logViewer(section(body, "Logs", "Box logs with player names, ids and match ids removed. Times in UK time (the box logs UTC). Filter is case-insensitive."));
 // The box logs UTC ("2026-10-17 18:52:27", "2026-10-17T18:52:14Z", Python's ",823"):
 // leading stamps to UK time, as the rest of the panel
@@ -2495,18 +2502,19 @@ window.addEventListener("keydown", ev => {
   if (n >= 1 && n <= TABS.length) setTab(TABS[n - 1][0]);
   if (ev.key === "Escape" && ui.zoom) setZoom(null);
 });
-document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshAll(); });
-
-// The site's menu shows Jacob a link here (src/site/html.zig admin_link)
-store("link", { href: location.pathname + "#models/draft", label: "Draft tester (admin)" });
+// The site's menu shows a link here (src/site/html.zig admin_link)
+store("link", { href: location.pathname + "#models/draft", label: PRIVATE ? "Draft tester" : "Draft tester (admin)" });
 render();
 getJson("/auth/me").then(m => { ME = m; render(true); }).catch(() => {});
-pollLive();
-pollTraffic();
-pollTraining();
-pollDesktop();
-setInterval(() => { if (!document.hidden) pollLive(); }, LIVE_MS);
-setInterval(() => { if (!document.hidden) pollSnapshot(); }, SNAPSHOT_MS);
-setInterval(() => { if (!document.hidden) pollTraffic(); }, TRAFFIC_MS);
-setInterval(() => { if (!document.hidden && (ui.tab === "models" || ui.tab === "overview")) pollTraining(); }, TRAINING_MS);
-setInterval(renderStatus, 5000);
+if (!PRIVATE) {
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshAll(); });
+  pollLive();
+  pollTraffic();
+  pollTraining();
+  pollDesktop();
+  setInterval(() => { if (!document.hidden) pollLive(); }, LIVE_MS);
+  setInterval(() => { if (!document.hidden) pollSnapshot(); }, SNAPSHOT_MS);
+  setInterval(() => { if (!document.hidden) pollTraffic(); }, TRAFFIC_MS);
+  setInterval(() => { if (!document.hidden && (ui.tab === "models" || ui.tab === "overview")) pollTraining(); }, TRAINING_MS);
+  setInterval(renderStatus, 5000);
+}

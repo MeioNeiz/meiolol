@@ -265,6 +265,7 @@ pub const usage_admin =
     \\              --log FILE       crawler log (default DIR/crawl.log)
     \\              --disk "S U A"   data disk size, used, available in bytes
     \\              --health TEXT    deploy/health.sh output
+    \\              --private-out DIR  also the private site's Draft tester (/p/)
     \\
 ;
 
@@ -273,6 +274,7 @@ pub fn cmdAdmin(c: *Cmd) !u8 {
     var o: admin.Options = .{ .out_dir = "", .data_dir = c.data_dir, .crawl_log = "", .now_s = now };
     var out: ?[]const u8 = null;
     var log_path: ?[]const u8 = null;
+    var private_out: ?[]const u8 = null;
     while (c.next()) |_| {
         if (c.is("--out")) {
             out = try c.value();
@@ -285,6 +287,8 @@ pub fn cmdAdmin(c: *Cmd) !u8 {
             o.disk = d;
         } else if (c.is("--health")) {
             o.health = try c.value();
+        } else if (c.is("--private-out")) {
+            private_out = try c.value();
         } else return error.Usage;
     }
     o.out_dir = out orelse try std.fs.path.join(c.arena, &.{ c.data_dir, "admin" });
@@ -292,5 +296,6 @@ pub fn cmdAdmin(c: *Cmd) !u8 {
     const db = try store.open(c.init.gpa, c.data_dir);
     defer db.close();
     try admin.generate(c.init.gpa, c.init.io, db, o);
+    if (private_out) |p| try admin.private(c.init.gpa, c.init.io, p, now);
     return 0;
 }

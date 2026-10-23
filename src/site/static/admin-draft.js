@@ -17,17 +17,18 @@ const MODEL_DIRS = { models: "box daily", training: "lab pick" };
 // or the lab experiment (whatever `lab-push.sh use draft` sent, training/); the old
 // draftPrefer setting carries over
 const DRAFT_SOURCES = [["shipped", "Shipped model"], ["lab", "Lab experiment"]];
-const draftSource = () => stored("draftModel", stored("draftPrefer", "box") === "lab" ? "lab" : "shipped");
+const draftSource = () => PRIVATE ? "shipped" : stored("draftModel", stored("draftPrefer", "box") === "lab" ? "lab" : "shipped");
 // Files the box's daily export writes; the rest (draft-comp.json) come from the lab only, so
 // models/ isn't asked for them (a 404 there would only fill the console)
 const BOX_FILES = new Set(["draft-model.json", "lane-model.json"]);
 
 // A model file: the draft model from the chosen source only; the lane model from the box's
 // daily export, else the lab's; the rest from the lab. References come from the same
-// directory
+// directory. The private site has the box's files only: the lab's are a 404
 async function modelFile(name) {
-  const dirs = name === "draft-model.json" ? [draftSource() === "lab" ? "training" : "models"]
-    : BOX_FILES.has(name) ? ["models", "training"] : ["training"];
+  const dirs = (name === "draft-model.json" ? [draftSource() === "lab" ? "training" : "models"]
+    : BOX_FILES.has(name) ? ["models", "training"] : ["training"]).filter(d => !PRIVATE || d === "models");
+  if (!dirs.length) throw new Error(`404 ${name}: lab files are on the admin page only`);
   for (const [i, dir] of dirs.entries()) {
     try { return { json: await getJson(`${dir}/${name}`), dir }; }
     catch (e) { if (i === dirs.length - 1 || !/^404/.test(e.message)) throw e; }
@@ -483,12 +484,12 @@ function draftView(body) {
   if (DRAFT.model === undefined) { if (!DRAFT.loading) startDraftLoad(); body.append(el("p", { class: "muted" }, "Loading the draft model…")); return; }
   const m = DRAFT.m, M = DRAFT.model || {}, meta = M.meta || {};
   const lab = draftSource() === "lab";
-  const sec = section(body, "Draft tester", "Build two teams, swap champions in, see what the model thinks. Admin only: the public site never shows a draft's win chance.",
+  const sec = section(body, "Draft tester", `Build two teams, swap champions in, see what the model thinks. ${PRIVATE ? "Private" : "Admin only"}: the public site never shows a draft's win chance.`,
     el("span", { class: "actions" }, el("button", { type: "button", class: "ghost", onclick: reloadDraft }, "Reload model")));
   // Which model scores the board, in words; the lab's name comes from its file
   const modelName = lab ? (meta.name ? `Lab: ${meta.name.split(":")[0]}` : "Lab experiment") : "Shipped model";
   sec.append(el("div", { class: "modelpick" }, el("span", { class: "sub" }, "Model"),
-    switcher(DRAFT_SOURCES, lab ? "lab" : "shipped", k => { if (k !== draftSource()) { store("draftModel", k); reloadDraft(); } }, "Draft model"),
+    PRIVATE ? null : switcher(DRAFT_SOURCES, lab ? "lab" : "shipped", k => { if (k !== draftSource()) { store("draftModel", k); reloadDraft(); } }, "Draft model"),
     el("span", { class: "sub" }, !m ? "" : lab ? `${meta.name || "an export"}${DRAFT.net ? ", with the neural net on top" : ""}, sent from the lab (${meta.snapshot || "snapshot unknown"}); not used by the app or site.${fittedOn(meta)}`
       : `What the app and site use, refitted daily by the box.${fittedOn(meta)}`)));
   if (!m) {

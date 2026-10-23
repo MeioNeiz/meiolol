@@ -202,7 +202,7 @@ this on the site)
 ## Private site
 
 The /p/ pages (accounts.md AC3). First candidates, cheapest first: the draft tester
-(admin only today, site.md "Draft tester"), win chance and raw scores beside the public
+(/p/ since 23 Oct, the shipped model; the lab's stay on the admin page), win chance and raw scores beside the public
 wording on champion and matchup pages, experimental models (J15's labelled
 experiments), all regions and patches without the public page-weight cuts.
 
