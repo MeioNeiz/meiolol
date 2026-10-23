@@ -5082,6 +5082,19 @@ matchup "vs usual" by a per-role method-of-moments k (site/champion.zig usualK) 
 under 10 games: B4 confirms that design rather than changing it. One patch alone (16.19
 here, ~1/3 of the games) halves most cells' reliability.
 
+D1, first pass (1007Z mastery_pre: 21.9% of 8.65M seats have a pre-game fetch;
+champion-roles with 300+ such seats): a champion's raw rate mixes its strength with how
+practised its players are. With the replay's +0.1022 logit per tenfold points
+("Pool and expertise replay"), the bias is 0.1022 x (the champion-role's mean log10
+points minus everyone's) x 25 pp: sd 0.59 pp over champion-roles (players' mean log10
+points sd 0.23). Underrated: Locke every role (-2.0 to -2.2 pp: released recently, all
+players new to him), Corki top, Renata support, Zaahen top (-1.5); overrated: Neeko,
+Riven, Singed, Gangplank and Katarina mid (+1.3 to +1.5), Katarina and Vel'Koz bot. So
+for a new champion or a one-trick favourite a tier list should show strength at a fixed
+mastery. Next: the refit itself (strength with seat log mastery in the model, not this
+correction) on the new pin, and the slope's own interval; the lane card's expertise
+bonus counts this twice for one-trick champions.
+
 ## Shipped model, 2026-10-17
 
 `score.Options` defaults (app suggest, site draft tester, Daily Draft, pool, matchup and
