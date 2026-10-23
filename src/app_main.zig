@@ -37,6 +37,10 @@ const usage =
     \\            --lockfile PATH
     \\  get PATH  GET any League client path and print the reply (identities removed)
     \\            --lockfile PATH
+    \\  record DIR  save what the client sends through champ select, the game and its
+    \\            end to DIR, identities removed; Ctrl+C to stop
+    \\            --live-every N    seconds between in-game saves (default 30)
+    \\            --lockfile PATH
     \\  update DIR  run the desktop app's update check on a folder: needs
     \\            DIR/update.key; swaps DIR/meiolol-desktop.exe if there is one
     \\            (env MEIOLOL_UPDATE_URL: another update directory)
@@ -63,6 +67,7 @@ const Args = struct {
     curves: ?[]const u8 = null,
     lockfile: ?[]const u8 = null,
     save: ?[]const u8 = null,
+    live_every: u32 = 30,
     opts: core.Options = .{},
     expertise: bool = true,
     positional: ?[]const u8 = null,
@@ -93,6 +98,7 @@ pub fn main(init: std.process.Init) !void {
     if (std.mem.eql(u8, command, "watch")) return app.watch();
     if (std.mem.eql(u8, command, "session")) return app.session();
     if (std.mem.eql(u8, command, "get")) return app.get();
+    if (std.mem.eql(u8, command, "record")) return app.record();
     if (std.mem.eql(u8, command, "update")) return app.updateFolder(init.environ_map.get("MEIOLOL_UPDATE_URL"));
     if (std.mem.eql(u8, command, "help") or std.mem.eql(u8, command, "--help")) {
         std.debug.print(usage, .{});
@@ -143,6 +149,10 @@ fn parseArgs(argv: []const [:0]const u8) Args {
             args.lockfile = val;
         } else if (std.mem.eql(u8, flag, "--save")) {
             args.save = val;
+        } else if (std.mem.eql(u8, flag, "--live-every")) {
+            args.live_every = std.fmt.parseInt(u32, val, 10) catch
+                fail("--live-every: not a number", .{});
+            if (args.live_every == 0) fail("--live-every must be at least 1", .{});
         } else fail("unknown option: {s}", .{flag});
     }
     return args;
@@ -371,6 +381,41 @@ const App = struct {
         }
     }
 
+    fn record(app: App) !void {
+        const path = app.args.positional orelse fail("record needs a folder", .{});
+        const cwd = std.Io.Dir.cwd();
+        try cwd.createDirPath(app.io, path);
+        var dir = try cwd.openDir(app.io, path, .{});
+        defer dir.close(app.io);
+        try app.out.print("recording to {s}; Ctrl+C to stop\n", .{path});
+        try app.out.flush();
+        var r: lcu.Record = .{
+            .gpa = app.gpa,
+            .io = app.io,
+            .dir = dir,
+            .lockfile = app.args.lockfile,
+            .live_every = app.args.live_every,
+        };
+        defer r.deinit();
+        var waiting = false;
+        while (true) {
+            var frame: std.heap.ArenaAllocator = .init(app.gpa);
+            defer frame.deinit();
+            if (r.step(frame.allocator(), app.out)) |_| {
+                waiting = false;
+            } else |err| switch (err) {
+                error.OutOfMemory, error.WriteFailed => return err,
+                else => {
+                    if (!waiting) try app.out.print("waiting for the League client ({t})\n", .{err});
+                    waiting = true;
+                    r.disconnect();
+                },
+            }
+            app.out.flush() catch {};
+            std.Io.sleep(app.io, .fromSeconds(1), .awake) catch {};
+        }
+    }
+
     fn watch(app: App) !void {
         const loaded = try app.loadStats();
         try app.printHeader(loaded);
@@ -551,6 +596,8 @@ test {
     _ = lcu;
     _ = lanecard;
     _ = cardscenes;
+    _ = @import("board.zig");
+    _ = @import("desktop/icons.zig");
     _ = update;
     std.testing.refAllDecls(lcu);
 }

@@ -1,0 +1,298 @@
+//! The champ select board around the lane card: both teams' seats with roles and a fact
+//! each, the bans, ban options, options for allies still to pick and the draft so far.
+//! Pure; the desktop window builds it from what lcu/session.zig reads. Never anyone's
+//! identity: seats are champions and roles only (docs/production-key.md). What the
+//! public edition may show of it is the window's call (docs/plan/app.md "Policy line")
+
+const std = @import("std");
+const core = @import("core");
+const lanecard = @import("lanecard.zig");
+const session = @import("lcu/session.zig");
+const Role = core.Role;
+const Stats = core.Stats;
+const Slot = session.Slot;
+
+/// Two builds from one codebase (docs/plan/app.md "Two editions")
+pub const Edition = enum {
+    public,
+    /// Testers: numbers and percentages beside the public wording
+    private,
+};
+
+pub const Seat = struct {
+    slot: Slot,
+    /// Given, or inferred from what the champion usually plays
+    role: ?Role,
+    guessed: bool,
+    /// The champion's games and win rate in that role, from the stats file
+    games: u32 = 0,
+    win: f64 = 0,
+    /// Allies still to pick: the recommender's best for their role
+    ideas: []const u32 = &.{},
+};
+
+pub const BanOption = struct {
+    champion: u32,
+    role: Role,
+    /// core.banimpact: wins above the role's average per 10,000 games
+    impact: f64,
+    /// Share of the role's games
+    pick_rate: f64,
+    win: f64,
+    /// My lane opponent's role
+    my_lane: bool,
+};
+
+/// What the lane card is doing, for its label
+pub const Mode = union(enum) {
+    /// Before my lane opponent shows: options that hold up against anyone
+    blind,
+    /// Against a known (or guessed) opponent
+    counter: lanecard.Opponent,
+    /// I have locked in
+    locked,
+};
+
+pub const Draft = struct {
+    /// My team's win chance from the draft model, 0..1, and its standard error in log-odds
+    win: f64,
+    se: f64,
+    /// Champions counted on each side (locked, plus my team's hovers)
+    picks: [2]u8,
+    hovers: u8,
+};
+
+pub const Board = struct {
+    allies: []const Seat,
+    enemies: []const Seat,
+    my_bans: []const u32,
+    their_bans: []const u32,
+    turn: session.Turn,
+    /// "Planning", "Bans", "Picks", "Finalising"
+    stage: []const u8,
+    mode: Mode,
+    ban_options: []const BanOption,
+    /// Null before any champion shows
+    draft: ?Draft,
+};
+
+pub const max_ban_options = 5;
+pub const max_ideas = 3;
+
+/// Allocates in `arena`. `card` is the lane card already built for the same select
+pub fn build(arena: std.mem.Allocator, stats: *const Stats, opts: core.Options, cs: session.ChampSelect, card: ?*const lanecard.Card) !Board {
+    const allies = try arena.alloc(Seat, cs.my_team.len);
+    for (allies, cs.my_team) |*s, sl| s.* = seat(stats, opts, sl, sl.role, false);
+    const enemies = try arena.alloc(Seat, cs.their_team.len);
+    try placeEnemies(arena, stats, opts, cs.their_team, enemies);
+
+    for (allies) |*s| {
+        if (s.slot.state == .locked or s.slot.me) continue;
+        const role = s.role orelse continue;
+        s.ideas = try ideas(arena, stats, opts, cs, role);
+    }
+
+    return .{
+        .allies = allies,
+        .enemies = enemies,
+        .my_bans = cs.my_bans,
+        .their_bans = cs.their_bans,
+        .turn = cs.my_turn,
+        .stage = stage(cs.phase),
+        .mode = if (card) |c| if (c.locked) .locked else if (c.opponent) |o| .{ .counter = o } else .blind else .blind,
+        .ban_options = try banOptions(arena, stats, cs, enemies, if (card) |c| c.role else cs.my_role),
+        .draft = draft(stats, opts, allies, enemies),
+    };
+}
+
+fn seat(stats: *const Stats, opts: core.Options, sl: Slot, role: ?Role, guessed: bool) Seat {
+    var s: Seat = .{ .slot = sl, .role = role, .guessed = guessed };
+    if (sl.champion == 0) return s;
+    const r = role orelse return s;
+    const c = stats.index(sl.champion) orelse return s;
+    s.games = stats.champRole(r, c).games;
+    s.win = core.score.roleWin(stats, opts, c, r);
+    return s;
+}
+
+/// Enemy positions are hidden in ranked: each shown champion gets the role the
+/// recommender would place it in
+fn placeEnemies(arena: std.mem.Allocator, stats: *const Stats, opts: core.Options, slots: []const Slot, out: []Seat) !void {
+    var picks: std.ArrayList(core.Pick) = .empty;
+    var at: std.ArrayList(usize) = .empty;
+    for (slots, 0..) |sl, i| {
+        if (sl.champion == 0) continue;
+        try picks.append(arena, .{ .champion = sl.champion, .role = sl.role });
+        try at.append(arena, i);
+    }
+    const n = @min(picks.items.len, 5);
+    var roles: [5]?Role = @splat(null);
+    core.score.inferRoles(stats, picks.items[0..n], roles[0..n]);
+    for (out, slots) |*o, sl| o.* = seat(stats, opts, sl, sl.role, false);
+    for (at.items[0..n], roles[0..n]) |i, r| {
+        if (slots[i].role != null) continue;
+        out[i] = seat(stats, opts, slots[i], r, r != null);
+    }
+}
+
+/// The best champions for an ally's role given the draft, from every champion
+fn ideas(arena: std.mem.Allocator, stats: *const Stats, opts: core.Options, cs: session.ChampSelect, role: Role) ![]const u32 {
+    var allies: std.ArrayList(core.Pick) = .empty;
+    for (cs.my_team) |sl| {
+        if (sl.champion == 0 or sl.role == role) continue;
+        try allies.append(arena, .{ .champion = sl.champion, .role = sl.role, .hover = sl.state != .locked });
+    }
+    var buf: [max_ideas]core.Suggestion = undefined;
+    const list = core.recommend(stats, .{ .role = role, .allies = allies.items, .enemies = cs.enemies, .bans = cs.bans }, opts, &buf);
+    const out = try arena.alloc(u32, list.len);
+    for (out, list) |*o, s| o.* = s.champion;
+    return out;
+}
+
+fn stage(phase: []const u8) []const u8 {
+    const names = [_]struct { []const u8, []const u8 }{
+        .{ "PLANNING", "Planning" },
+        .{ "BAN_PICK", "Picks and bans" },
+        .{ "FINALIZATION", "Finalising" },
+        .{ "GAME_STARTING", "Game starting" },
+    };
+    for (names) |n| if (std.mem.eql(u8, phase, n[0])) return n[1];
+    return phase;
+}
+
+/// Champions the enemy may still pick, by ban impact in a role they have not filled;
+/// my lane opponent's role first among equals. The desktop stats file has no ban counts,
+/// so impact is per 10,000 games of all, not of games where it was available
+fn banOptions(arena: std.mem.Allocator, stats: *const Stats, cs: session.ChampSelect, enemies: []const Seat, my_role: ?Role) ![]const BanOption {
+    var open: [Role.count]bool = @splat(true);
+    for (enemies) |e| if (e.slot.state == .locked) if (e.role) |r| {
+        open[@backingInt(r)] = false;
+    };
+
+    var list: std.ArrayList(BanOption) = .empty;
+    for (Role.all) |r| {
+        if (!open[@backingInt(r)]) continue;
+        const prior = core.banimpact.Prior.of(stats, r);
+        var role_games: u64 = 0;
+        for (0..stats.n) |c| role_games += stats.champRole(r, c).games;
+        if (role_games == 0) continue;
+        candidates: for (0..stats.n) |c| {
+            const id = stats.ids[c];
+            const cr = stats.champRole(r, c);
+            if (cr.games == 0) continue;
+            if (std.mem.indexOfScalar(u32, cs.bans, id) != null) continue;
+            // My team's hovers and intents too: never ban what an ally wants to play
+            for (cs.my_team) |sl| if (sl.champion == id) continue :candidates;
+            for (cs.their_team) |sl| if (sl.champion == id and sl.state == .locked) continue :candidates;
+            const impact = prior.score(cr.wins, cr.games, 0, role_games);
+            if (impact <= 0) continue;
+            try list.append(arena, .{
+                .champion = id,
+                .role = r,
+                .impact = impact,
+                .pick_rate = @as(f64, @floatFromInt(cr.games)) / @as(f64, @floatFromInt(role_games)),
+                .win = prior.base + prior.edge(cr.wins, cr.games),
+                .my_lane = my_role == r,
+            });
+        }
+    }
+    std.mem.sort(BanOption, list.items, {}, struct {
+        fn more(_: void, a: BanOption, b: BanOption) bool {
+            return a.impact > b.impact;
+        }
+    }.more);
+    // One row per champion, its strongest role
+    var out: std.ArrayList(BanOption) = .empty;
+    for (list.items) |o| {
+        if (out.items.len == max_ban_options) break;
+        for (out.items) |p| {
+            if (p.champion == o.champion) break;
+        } else try out.append(arena, o);
+    }
+    return out.items;
+}
+
+/// The draft model on what shows so far: allies by position (hovers count), enemies by
+/// the roles placed above
+fn draft(stats: *const Stats, opts: core.Options, allies: []const Seat, enemies: []const Seat) ?Draft {
+    var teams: [2][5]u32 = @splat(@splat(0));
+    var d: Draft = .{ .win = 0.5, .se = 0, .picks = .{ 0, 0 }, .hovers = 0 };
+    for ([_][]const Seat{ allies, enemies }, 0..) |side, t| for (side) |s| {
+        if (s.slot.champion == 0) continue;
+        if (t == 1 and s.slot.state != .locked) continue;
+        const r = s.role orelse continue;
+        if (teams[t][@backingInt(r)] != 0) continue;
+        teams[t][@backingInt(r)] = s.slot.champion;
+        d.picks[t] += 1;
+        if (s.slot.state != .locked) d.hovers += 1;
+    };
+    if (d.picks[0] + d.picks[1] == 0) return null;
+    d.win = core.score.draftWin(stats, opts, teams);
+    d.se = core.score.draftSe(stats, opts, teams);
+    return d;
+}
+
+const testing = std.testing;
+const cardscenes = @import("cardscenes.zig");
+
+test "board: seats, guessed enemy roles, ideas, bans, draft" {
+    var f = try cardscenes.fixture();
+    defer f.deinit();
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const st = &f.stats;
+    const id = struct {
+        fn of(s: *const Stats, name: []const u8) u32 {
+            return s.ids[s.find(name).?];
+        }
+    }.of;
+
+    var mine = [_]Slot{
+        .{ .champion = id(st, "Darius"), .role = .top, .state = .locked },
+        .{ .role = .jungle, .picking = true },
+        .{ .champion = id(st, "Ahri"), .role = .middle, .state = .hover, .me = true, .picking = true },
+        .{ .role = .bottom },
+        .{ .role = .utility },
+    };
+    var theirs = [_]Slot{
+        .{ .champion = id(st, "Garen"), .state = .locked },
+        .{ .champion = id(st, "Syndra"), .state = .locked },
+        .{},
+        .{},
+        .{},
+    };
+    const cs: session.ChampSelect = .{
+        .my_role = .middle,
+        .my_champion = id(st, "Ahri"),
+        .my_locked = false,
+        .allies = @constCast(&[_]core.Pick{.{ .champion = id(st, "Darius"), .role = .top }}),
+        .enemies = @constCast(&[_]core.Pick{ .{ .champion = id(st, "Garen") }, .{ .champion = id(st, "Syndra") } }),
+        .bans = &.{},
+        .phase = "BAN_PICK",
+        .my_team = &mine,
+        .their_team = &theirs,
+        .my_turn = .pick,
+    };
+    const b = try build(arena, st, cardscenes.test_opts, cs, null);
+
+    try testing.expectEqualStrings("Picks and bans", b.stage);
+    try testing.expectEqual(Role.top, b.enemies[0].role.?);
+    try testing.expect(b.enemies[0].guessed);
+    try testing.expectEqual(Role.middle, b.enemies[1].role.?);
+    try testing.expect(b.allies[0].games > 0);
+    try testing.expect(b.allies[0].win > 0 and b.allies[0].win < 1);
+    // Locked and my own seat get no ideas; open roles get some, never a taken champion
+    try testing.expectEqual(0, b.allies[0].ideas.len);
+    try testing.expectEqual(0, b.allies[2].ideas.len);
+    try testing.expect(b.allies[1].ideas.len > 0);
+    for (b.allies[1].ideas) |c| try testing.expect(c != id(st, "Darius") and c != id(st, "Garen"));
+    // Bans only in roles the enemy has not filled
+    try testing.expect(b.ban_options.len > 0);
+    for (b.ban_options) |o| try testing.expect(o.role != .top and o.role != .middle);
+    // Darius into Garen and Ahri into Syndra: the planted matchups cancel roughly
+    const d = b.draft.?;
+    try testing.expectEqual(.{ 2, 2 }, d.picks);
+    try testing.expectEqual(1, d.hovers);
+    try testing.expect(d.win > 0.3 and d.win < 0.7 and d.se > 0);
+}

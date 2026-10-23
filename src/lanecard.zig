@@ -102,6 +102,9 @@ pub const Matchup = struct {
 pub const Option = struct {
     champion: u32,
     mastery: u32,
+    /// The draft model's win chance for my team with it, 0..1: the private edition shows
+    /// it, the public one never (docs/plan/app.md "Policy line")
+    win: f64 = 0.5,
     /// Gold against the lane opponent; null without an opponent or a curves file
     lane: ?LaneFact,
     /// Plain facts: mastery, team fit
@@ -334,6 +337,7 @@ fn options(arena: std.mem.Allocator, in: Input, opp: ?Opponent, bracket: Bracket
         o.* = .{
             .champion = s.champion,
             .mastery = masteryOf(in.mastery, s.champion),
+            .win = s.win,
             .lane = if (opp) |p| try laneFact(arena, in, s.champion, p.champion, bracket) else null,
             .reasons = try reasons(arena, in, s, opp, show_strong),
         };

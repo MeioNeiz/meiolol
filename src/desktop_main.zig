@@ -9,7 +9,7 @@ const poller = @import("desktop/poller.zig");
 pub const dvui_app: dvui.App = .{
     .config = .{ .options = .{
         .size = ui.size,
-        .min_size = .{ .w = 360, .h = 400 },
+        .min_size = ui.min_size,
         .title = ui.title,
         .window_init_options = .{ .theme = ui.theme },
     } },
@@ -84,7 +84,8 @@ fn waitMessage(micros: u32) bool {
 }
 fn start(_: *dvui.Window) !void {
     const init = dvui.App.main_init orelse return error.NoProcessInit;
-    try poller.start(init, null, wakeUi, @import("build_options").desktop_version);
+    const options = @import("build_options");
+    try poller.start(init, null, wakeUi, options.desktop_version, if (options.public) .public else .private);
 }
 
 fn wakeUi() void {

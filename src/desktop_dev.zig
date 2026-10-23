@@ -10,7 +10,7 @@ const poller = @import("desktop/poller.zig");
 pub const dvui_app: dvui.App = .{
     .config = .{ .options = .{
         .size = ui.size,
-        .min_size = .{ .w = 360, .h = 400 },
+        .min_size = ui.min_size,
         .title = ui.title ++ " (dev)",
         .window_init_options = .{ .theme = ui.theme },
     } },
@@ -27,7 +27,7 @@ var window: *dvui.Window = undefined;
 fn start(win: *dvui.Window) !void {
     window = win;
     const init = dvui.App.main_init orelse return error.NoProcessInit;
-    try poller.start(init, init.environ_map.get("MEIOLOL_LOCKFILE"), wakeUi, 0);
+    try poller.start(init, init.environ_map.get("MEIOLOL_LOCKFILE"), wakeUi, 0, .private);
 }
 
 /// From the poller thread: SDL_PushEvent is thread safe

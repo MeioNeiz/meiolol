@@ -64,8 +64,10 @@ pub fn build(b: *std.Build) void {
     // The updater never installs an exe of the same or an older release (update.zig)
     const desktop_version = b.option(u64, "desktop-version", "Release number for the desktop " ++
         "exe (deploy/desktop-release.sh; 0, the default, is unreleased)") orelse 0;
+    const edition = b.option(Edition, "edition", "Desktop edition: private (testers, the " ++
+        "default) or public (docs/plan/app.md)") orelse .private;
     const desktop_step = b.step("desktop", "Build the desktop window for Windows (meiolol-desktop.exe)");
-    if (desktopExe(b, windows, optimize, desktop_version)) |exe| desktop_step.dependOn(&b.addInstallArtifact(exe, .{}).step);
+    if (desktopExe(b, windows, optimize, desktop_version, edition)) |exe| desktop_step.dependOn(&b.addInstallArtifact(exe, .{}).step);
     // Opt in: dvui's SDL3 dependency would be fetched on every host otherwise
     const dev_step = b.step("desktop-dev", "Run the desktop window on this Mac or Linux " ++
         "via SDL3 (-Ddev-window -fsys=sdl3; deploy/mock-cs.sh)");
@@ -149,7 +151,7 @@ pub fn build(b: *std.Build) void {
             ci.dependOn(&b.addExecutable(.{ .name = name, .root_module = mod }).step);
         }
     }
-    if (desktopExe(b, windows, .Debug, 0)) |exe| ci.dependOn(&exe.step);
+    for ([_]Edition{ .private, .public }) |e| if (desktopExe(b, windows, .Debug, 0, e)) |exe| ci.dependOn(&exe.step);
     if (shot) |exe| ci.dependOn(&exe.step);
     ci.dependOn(&mock_exe.step);
     // Debug: ci only needs it to compile, and ReleaseFast spends up to a minute in LLVM
@@ -285,7 +287,9 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
 
 /// The desktop window (src/desktop_main.zig): dvui with its Direct3D 11 backend, tree-sitter
 /// off. Null until the lazy dvui dependency is fetched (the build reruns after)
-fn desktopExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode, version: u64) ?*std.Build.Step.Compile {
+const Edition = enum { public, private };
+
+fn desktopExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode, version: u64, edition: Edition) ?*std.Build.Step.Compile {
     const dvui = b.lazyDependency("dvui", .{
         .target = target,
         .optimize = optimize,
@@ -306,6 +310,7 @@ fn desktopExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lan
     });
     const options = b.addOptions();
     options.addOption(u64, "desktop_version", version);
+    options.addOption(bool, "public", edition == .public);
     exe.root_module.addOptions("build_options", options);
     exe.subsystem = .windows;
     return exe;

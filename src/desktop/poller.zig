@@ -9,6 +9,9 @@ const std = @import("std");
 const core = @import("core");
 const lcu = @import("../lcu/root.zig");
 const lanecard = @import("../lanecard.zig");
+const board = @import("../board.zig");
+const Icons = @import("icons.zig").Icons;
+const icons_path = @import("icons.zig").lcu_path;
 const datafiles = @import("../datafiles.zig");
 const ui = @import("ui.zig");
 const update = @import("update.zig");
@@ -26,6 +29,8 @@ const Shared = struct {
     fresh: std.atomic.Value(bool) = .init(false),
     /// The update thread's note for the footer, under the mutex
     note: Note = .none,
+    /// Grows as the poller fetches icons from the client, under the mutex
+    icons: ?Icons = null,
 };
 
 /// Stats and curves with the memory they live in
@@ -57,10 +62,13 @@ var lockfile: ?[]const u8 = null;
 var wake: *const fn () void = undefined;
 /// This exe's release (update.Options.version)
 var version: u64 = 0;
+var edition: ui.Edition = .private;
 
-pub fn start(init: std.process.Init, lockfile_override: ?[]const u8, wake_ui: *const fn () void, release: u64) !void {
+pub fn start(init: std.process.Init, lockfile_override: ?[]const u8, wake_ui: *const fn () void, release: u64, ed: ui.Edition) !void {
     io = init.io;
     version = release;
+    edition = ed;
+    shared.icons = .{ .gpa = init.gpa };
     lockfile = lockfile_override;
     wake = wake_ui;
     const gpa = init.gpa;
@@ -169,7 +177,7 @@ pub fn frame() void {
         .failed => |*e| if (stats == null) .{ .failed = std.mem.sliceTo(e, 0) } else .none,
         .restart => .restart,
     };
-    ui.frame(.{ .status = shared.status, .stats = stats, .note = note });
+    ui.frame(.{ .status = shared.status, .stats = stats, .icons = &shared.icons.?, .edition = edition, .note = note });
 }
 
 fn publish(status: ui.Status, arena: std.heap.ArenaAllocator) void {
@@ -253,7 +261,7 @@ const Poller = struct {
         switch (s) {
             .waiting => |phase| h.update(phase),
             .client_error => |e| h.update(e),
-            .card => h.update(std.mem.asBytes(&p.fingerprint)),
+            .select => h.update(std.mem.asBytes(&p.fingerprint)),
             else => {},
         }
         return h.final();
@@ -281,8 +289,8 @@ const Poller = struct {
         if (pool) |ids| h.update(std.mem.sliceAsBytes(ids));
         p.fingerprint = h.final();
 
-        const card = try arena.create(lanecard.Card);
-        card.* = try lanecard.build(arena, .{
+        const sel = try arena.create(ui.Select);
+        sel.card = try lanecard.build(arena, .{
             .stats = &data.stats,
             .curves = if (data.curves) |*c| c else null,
             .role = role,
@@ -296,7 +304,51 @@ const Poller = struct {
             .tier = own.tier,
             .expertise = if (by_mastery) .fitted else null,
         });
-        return .{ .card = card };
+        sel.board = try board.build(arena, &data.stats, .{}, cs, &sel.card);
+        p.fetchIcons(sel);
+        return .{ .select = sel };
+    }
+
+    /// Icons for every champion the select shows, from the client. Fetched outside the
+    /// mutex, added under it; a new icon changes the fingerprint so the window redraws
+    fn fetchIcons(p: *Poller, sel: *const ui.Select) void {
+        const client = p.watch.client orelse return;
+        var want: [64]u32 = undefined;
+        var n: usize = 0;
+        const add = struct {
+            fn f(list: *[64]u32, len: *usize, c: u32) void {
+                if (c == 0 or len.* == list.len) return;
+                if (std.mem.indexOfScalar(u32, list[0..len.*], c) != null) return;
+                list[len.*] = c;
+                len.* += 1;
+            }
+        }.f;
+        for ([_][]const board.Seat{ sel.board.allies, sel.board.enemies }) |seats| for (seats) |s| {
+            add(&want, &n, s.slot.champion);
+            for (s.ideas) |c| add(&want, &n, c);
+        };
+        for (sel.board.my_bans) |c| add(&want, &n, c);
+        for (sel.board.their_bans) |c| add(&want, &n, c);
+        for (sel.board.ban_options) |o| add(&want, &n, o.champion);
+        for (sel.card.options) |o| add(&want, &n, o.champion);
+        if (sel.card.opponent) |o| add(&want, &n, o.champion);
+        add(&want, &n, sel.card.me);
+
+        var got: u32 = 0;
+        for (want[0..n]) |c| {
+            shared.mutex.lockUncancelable(io);
+            const wanted = shared.icons.?.wanted(c);
+            shared.mutex.unlock(io);
+            if (!wanted) continue;
+            var buf: [96]u8 = undefined;
+            const path = std.fmt.bufPrint(&buf, icons_path, .{c}) catch continue;
+            const png: ?[]const u8 = client.getOk(path) catch null;
+            shared.mutex.lockUncancelable(io);
+            shared.icons.?.put(c, png) catch {};
+            shared.mutex.unlock(io);
+            got += 1;
+        }
+        if (got > 0) p.fingerprint +%= got;
     }
 
     /// Whatever fails to load is left out: the card works without it

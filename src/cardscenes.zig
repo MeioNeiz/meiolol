@@ -155,12 +155,12 @@ const plants = [_]Plant{
     .{ .a = "Syndra", .b = "Ahri", .logit = 0.25, .gold = 300 },
 };
 
-const Fixture = struct {
+pub const Fixture = struct {
     stats_bytes: []u8,
     stats: Stats,
     curves: curvesfile.Curves,
 
-    fn deinit(f: *Fixture) void {
+    pub fn deinit(f: *Fixture) void {
         f.stats.deinit(testing.allocator);
         testing.allocator.free(f.stats_bytes);
         f.curves.deinit(testing.allocator);
@@ -183,7 +183,7 @@ fn champIndex(name: []const u8) usize {
 }
 
 /// Deterministic games from the planted strengths; the same bytes on every run
-fn fixture() !Fixture {
+pub fn fixture() !Fixture {
     const gpa = testing.allocator;
     var named: [champs.len]statsfile.Champion = undefined;
     for (champs, &named) |c, *n| n.* = .{ .id = c.id, .name = c.name };
@@ -257,7 +257,7 @@ fn strengthOf(id: u32) f64 {
     unreachable;
 }
 
-const test_opts: core.Options = .{ .min_games = 300 };
+pub const test_opts: core.Options = .{ .min_games = 300 };
 const golden_path = "testdata/cards/fixture.txt";
 const got_path = ".zig-cache/cards-fixture.got.txt";
 
