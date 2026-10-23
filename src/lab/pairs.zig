@@ -4,15 +4,9 @@
 //! file's MSE, 95% interval clustered by game (meiolol-3c computes the same)
 
 const std = @import("std");
+const rows = @import("rows.zig");
 
 const Key = struct { match: u64, slot: i8, outcome: u8 };
-
-const outcome_names = [_][]const u8{ "win", "gold14", "lanediff14", "cs10", "deaths15", "first_item" };
-
-fn outcomeIndex(name: []const u8) ?u8 {
-    for (outcome_names, 0..) |n, i| if (std.mem.eql(u8, n, name)) return @intCast(i);
-    return null;
-}
 
 const Entry = struct { y: f32, pred: f32 };
 const File = std.AutoHashMapUnmanaged(Key, Entry);
@@ -28,10 +22,10 @@ fn load(gpa: std.mem.Allocator, io: std.Io, path: []const u8) !File {
         var cols = std.mem.tokenizeScalar(u8, line, '\t');
         const match = cols.next() orelse continue;
         const slot = std.fmt.parseInt(i8, cols.next() orelse continue, 10) catch continue;
-        const outcome = outcomeIndex(cols.next() orelse continue) orelse continue;
+        const outcome = std.meta.stringToEnum(rows.Outcome, cols.next() orelse continue) orelse continue;
         const y = std.fmt.parseFloat(f32, cols.next() orelse continue) catch continue;
         const pred = std.fmt.parseFloat(f32, cols.next() orelse continue) catch continue;
-        try map.put(gpa, .{ .match = std.hash.Wyhash.hash(0, match), .slot = slot, .outcome = outcome }, .{ .y = y, .pred = pred });
+        try map.put(gpa, .{ .match = std.hash.Wyhash.hash(0, match), .slot = slot, .outcome = @backingInt(outcome) }, .{ .y = y, .pred = pred });
     }
     return map;
 }
@@ -41,12 +35,14 @@ pub fn run(gpa: std.mem.Allocator, io: std.Io, paths: []const []const u8, w: *st
     if (paths.len < 2) return error.NeedTwoFiles;
     const files = try gpa.alloc(File, paths.len);
     defer gpa.free(files);
-    for (files, paths) |*f, p| f.* = try load(gpa, io, p);
+    @memset(files, .empty);
     defer for (files) |*f| f.deinit(gpa);
+    for (files, paths) |*f, p| f.* = try load(gpa, io, p);
 
     try w.print("base {s}, reference {s}\n\n", .{ std.fs.path.basename(paths[0]), std.fs.path.basename(paths[1]) });
     try w.writeAll("| outcome | file | rows | MSE | gain vs base, % | vs reference, % |\n| --- | --- | --- | --- | --- | --- |\n");
-    for (outcome_names, 0..) |name, oi| {
+    for (std.enums.values(rows.Outcome)) |o| {
+        const oi = @backingInt(o);
         // Rows every file has, grouped by game
         var keys: std.ArrayList(Key) = .empty;
         defer keys.deinit(gpa);
@@ -77,7 +73,7 @@ pub fn run(gpa: std.mem.Allocator, io: std.Io, paths: []const []const u8, w: *st
                 se += (e.pred - e.y) * (e.pred - e.y);
             }
             try w.print("| {s} | {s} | {d} | {d:.4} | {d:.2} |", .{
-                name, std.fs.path.basename(p), keys.items.len, se / n, (1 - se / base_se) * 100,
+                @tagName(o), std.fs.path.basename(p), keys.items.len, se / n, (1 - se / base_se) * 100,
             });
             if (fi < 2) {
                 try w.writeAll(" - |\n");

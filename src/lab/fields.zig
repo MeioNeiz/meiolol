@@ -428,10 +428,9 @@ fn load(gpa: std.mem.Allocator, io: Io, snap: []const u8, d: *const rows.Data, c
     var seen: usize = 0;
     try q.bind(.{});
     while (try q.step()) {
-        const g = want.get(q.bytes(0)) orelse continue;
+        if (!want.contains(q.bytes(0))) continue;
         seen += 1;
         if (seen % 40 != 0) continue;
-        _ = g;
         const ba = batch_arena.allocator();
         const json = try store.raw.decompress(ba, q.bytes(1));
         const doc = try std.json.parseFromSliceLeaky(Value, ba, json, .{});

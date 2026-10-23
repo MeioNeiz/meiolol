@@ -12,9 +12,7 @@
 //! slice of train. Use-time features: champions and roles only (docs/production-key.md)
 
 const std = @import("std");
-const core = @import("core");
 const nn = @import("nn");
-const rows_mod = @import("rows.zig");
 
 pub const Kind = enum { base, additive, lane, pairwise };
 
