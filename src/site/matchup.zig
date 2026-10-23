@@ -238,12 +238,8 @@ const IndexEntry = struct {
     y: Champ,
     games: u32,
     thin: bool,
-    /// x's games against y in the role (the stats, not the curves)
-    wins: u32,
-    played: u32,
-    vs: champion.VsUsual,
-    /// x's usual win rate against an opponent this strong (champion.usual)
-    usual: f64,
+    /// From the stats, not the curves
+    odds: Odds,
     /// Lane curve's gold at lane_minute, x minus y
     gold: i32,
 };
@@ -253,24 +249,15 @@ fn indexEntry(site: *const Site, c: *const Curves, r: Role, x0: Champ, y0: Champ
     const st = &site.stats;
     var x = x0;
     var y = y0;
-    var e = st.enemy(r, r, x.c, y.c);
-    if (2 * e.wins < e.games) {
-        std.mem.swap(Champ, &x, &y);
-        e = st.enemy(r, r, x.c, y.c);
-    }
-    const xr = st.champRole(r, x.c);
-    const yr = st.champRole(r, y.c);
-    const u = champion.usual(root.ratio(xr.wins, xr.games), root.ratio(yr.wins, yr.games));
+    const e = st.enemy(r, r, x.c, y.c);
+    if (2 * e.wins < e.games) std.mem.swap(Champ, &x, &y);
     const v = c.get(r, .all, x.id, y.id).?;
     return .{
         .x = x,
         .y = y,
         .games = games,
         .thin = thin(v),
-        .wins = e.wins,
-        .played = e.games,
-        .vs = champion.VsUsual.of(e.wins, e.games, u, ka),
-        .usual = u,
+        .odds = odds(st, r, x, y, ka),
         .gold = v.estimate(.gold, core.curvesfile.lane_minute - 1).mean,
     };
 }
@@ -278,7 +265,7 @@ fn indexEntry(site: *const Site, c: *const Curves, r: Role, x0: Champ, y0: Champ
 fn indexRow(ctx: struct { *const Site, Role, u32 }, w: *Writer, e: IndexEntry) !void {
     const site, const r, const default = ctx;
     const a = site.arena;
-    const p = root.ratio(e.wins, e.played);
+    const o = e.odds;
     try tpl.render(w,
         \\<tr class="bx{thin}" data-games="{games}" data-name="{x}|{y}"{hidden}><td class="l"><a class="champ box" href="{x_href}"><img src="{x_icon}" alt="" loading="lazy" width="24" height="24">{x}</a></td><td class="l"><a class="champ" href="{y_href}"><img src="{y_icon}" alt="" loading="lazy" width="24" height="24">{y}</a></td>{wr}<td data-v="{vs:.4}"><span class="vs" style="--c:{colour}"><b>{pts}</b></span></td><td class="opt" data-v="{gold}"><span class="gold {side}" style="opacity:{fade:.2}">{sign}{gold}</span></td><td class="dim" data-v="{games}">{games}</td></tr>
         \\
@@ -293,10 +280,10 @@ fn indexRow(ctx: struct { *const Site, Role, u32 }, w: *Writer, e: IndexEntry) !
         .x_icon = site.icon(e.x),
         .y_icon = site.icon(e.y),
         // Sorts by usual + vs usual: the rate pulled toward usual by its games
-        .wr = tpl.call(tierlist.trackCell, .{ p, e.usual + e.vs.mean, e.played, tierlist.matchup_span, try a.print("{d} games in the stats", .{e.played}), @as(?[]const u8, null) }),
-        .vs = e.vs.mean,
-        .colour = tierlist.wrColour(0.5 + e.vs.mean, tierlist.table_span),
-        .pts = champion.Points{ .v = e.vs.mean },
+        .wr = tpl.call(tierlist.trackCell, .{ root.ratio(o.wins, o.games), o.usual + o.d.mean, o.games, tierlist.matchup_span, try a.print("{d} games in the stats", .{o.games}), @as(?[]const u8, null) }),
+        .vs = o.d.mean,
+        .colour = tierlist.wrColour(0.5 + o.d.mean, tierlist.table_span),
+        .pts = champion.Points{ .v = o.d.mean },
         .side = if (e.gold > 0) "up" else if (e.gold < 0) "down" else "even",
         .fade = core.curvesfile.fade(e.games),
         .sign = if (e.gold > 0) "+" else "",
@@ -392,8 +379,9 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     }
     const vs = try variants(a, curves, r, x, y);
     const base = curves.baseline(r, .all);
-    try headline(site, w, v, r, x, y);
-    try tiles(site, w, v, r, x, y, when);
+    const o = odds(&site.stats, r, x, y, champion.usualK(&site.stats, r));
+    try headline(w, o, v, x, y);
+    try tiles(site, w, o, v, r, x, y, when);
     // Everything on screen at once as cards: the gold curve beside both sides' numbers,
     // then XP, CS, comebacks and the splits, then the build
     try tpl.renderPart(w, "<div class=\"mu-main\"><section class=\"mu-card mu-gold\"><h2>Gold difference</h2>\n", .{});
@@ -564,16 +552,15 @@ fn summary(w: *Writer, v: View, x: Champ, y: Champ) !void {
 }
 
 /// x's win rate against y (the view's stats) and against usual (champion.VsUsual, as
-/// the champion page's opponent grid)
+/// the champion page's opponent grid); `ka`: champion.usualK of `r`
 const Odds = struct { wins: u32, games: u32, usual: f64, d: champion.VsUsual };
 
-fn odds(site: *const Site, r: Role, x: Champ, y: Champ) Odds {
-    const st = &site.stats;
+fn odds(st: *const core.Stats, r: Role, x: Champ, y: Champ, ka: f64) Odds {
     const e = st.enemy(r, r, x.c, y.c);
     const xr = st.champRole(r, x.c);
     const yr = st.champRole(r, y.c);
     const u = champion.usual(root.ratio(xr.wins, xr.games), root.ratio(yr.wins, yr.games));
-    return .{ .wins = e.wins, .games = e.games, .usual = u, .d = champion.VsUsual.of(e.wins, e.games, u, champion.usualK(st, r)) };
+    return .{ .wins = e.wins, .games = e.games, .usual = u, .d = champion.VsUsual.of(e.wins, e.games, u, ka) };
 }
 
 /// Vs usual within this (a share) reads "about usual" in the headline
@@ -581,8 +568,7 @@ const about_usual = 0.01;
 
 /// The page's answer in a line, descriptive (docs/production-key.md product rules): x's
 /// win rate here against x's usual, then the lane (lead())
-fn headline(site: *const Site, w: *Writer, v: View, r: Role, x: Champ, y: Champ) !void {
-    const o = odds(site, r, x, y);
+fn headline(w: *Writer, o: Odds, v: View, x: Champ, y: Champ) !void {
     if (o.games == 0) return;
     try tpl.render(w, "<p class=\"verdict mu-sum\">{x} wins {wr} against {y}, {side} {x}'s usual {usual:.1}%.{lead}</p>\n", .{
         .x = x.name,
@@ -597,8 +583,7 @@ fn headline(site: *const Site, w: *Writer, v: View, r: Role, x: Champ, y: Champ)
 /// The first screen's numbers: win rate, vs usual (odds()), the lane curve's gold at
 /// lane_minute (CS's part of it and when half of it is there in its title) and how often
 /// x leads, then games
-fn tiles(site: *const Site, w: *Writer, v: View, r: Role, x: Champ, y: Champ, when: []const u8) !void {
-    const o = odds(site, r, x, y);
+fn tiles(site: *const Site, w: *Writer, o: Odds, v: View, r: Role, x: Champ, y: Champ, when: []const u8) !void {
     const z = 1.2816;
     const i = curvesfile.lane_minute - 1;
     const has_gold = i < v.minutes() and v.minute(i).n >= minuteFloor(v);
