@@ -82,7 +82,7 @@ pub fn loadRepacking(
 fn writeData(gpa: std.mem.Allocator, io: Io, snap: []const u8, before: []const u8, data: *const Data) !Written {
     var tag: [8]u8 = undefined;
     io.random(&tag);
-    const tmp_path = try std.fmt.allocPrint(gpa, "{s}/{s}.tmp-{x}", .{ snap, dir_name, tag });
+    const tmp_path = try gpa.print("{s}/{s}.tmp-{x}", .{ snap, dir_name, tag });
     defer gpa.free(tmp_path);
     const cwd = Io.Dir.cwd();
     try cwd.createDirPath(io, tmp_path);
@@ -94,7 +94,7 @@ fn writeData(gpa: std.mem.Allocator, io: Io, snap: []const u8, before: []const u
         bytes += try writeStruct(Game, "games", io, dir, data.games);
         bytes += try writeStruct(Row, "rows", io, dir, data.rows);
         // Last: a pack without its manifest is never read
-        const manifest = try std.fmt.allocPrint(gpa, "{s}games {d}\nrows {d}\n", .{
+        const manifest = try gpa.print("{s}games {d}\nrows {d}\n", .{
             before, data.games.len, data.rows.len,
         });
         defer gpa.free(manifest);
@@ -115,7 +115,7 @@ fn writeData(gpa: std.mem.Allocator, io: Io, snap: []const u8, before: []const u
 
     const pack_path = try std.fs.path.join(gpa, &.{ snap, dir_name });
     defer gpa.free(pack_path);
-    const old_path = try std.fmt.allocPrint(gpa, "{s}/{s}.old-{x}", .{ snap, dir_name, tag });
+    const old_path = try gpa.print("{s}/{s}.old-{x}", .{ snap, dir_name, tag });
     defer gpa.free(old_path);
     // rename can't replace a non-empty directory: move the old one aside first
     cwd.rename(pack_path, cwd, old_path, io) catch |err| switch (err) {
@@ -259,7 +259,7 @@ fn firstLineDiff(want: []const u8, have: []const u8) []const u8 {
         const y = b.next() orelse "";
         if (!std.mem.eql(u8, x, y)) {
             if (std.mem.startsWith(u8, x, "column")) return "column layout";
-            return x[0 .. std.mem.indexOfScalar(u8, x, ' ') orelse x.len];
+            return x[0 .. std.mem.findScalar(u8, x, ' ') orelse x.len];
         }
     }
     return "manifest";
@@ -477,16 +477,16 @@ fn decode(comptime T: type, w: Wire(T)) !T {
 /// The first field that differs between two loads, bit for bit (NaN equals NaN), or null
 pub fn firstDiff(a: *const Data, b: *const Data, buf: []u8) ?[]const u8 {
     if (a.games.len != b.games.len) {
-        return std.fmt.bufPrint(buf, "{d} games vs {d}", .{ a.games.len, b.games.len }) catch "games";
+        return std.mem.print(buf, "{d} games vs {d}", .{ a.games.len, b.games.len }) catch "games";
     }
     if (a.rows.len != b.rows.len) {
-        return std.fmt.bufPrint(buf, "{d} rows vs {d}", .{ a.rows.len, b.rows.len }) catch "rows";
+        return std.mem.print(buf, "{d} rows vs {d}", .{ a.rows.len, b.rows.len }) catch "rows";
     }
     for (a.games, b.games, 0..) |*x, *y, i| if (structDiff(Game, x, y)) |f| {
-        return std.fmt.bufPrint(buf, "game {d}: {s}", .{ i, f }) catch f;
+        return std.mem.print(buf, "game {d}: {s}", .{ i, f }) catch f;
     };
     for (a.rows, b.rows, 0..) |*x, *y, i| if (structDiff(Row, x, y)) |f| {
-        return std.fmt.bufPrint(buf, "row {d}: {s}", .{ i, f }) catch f;
+        return std.mem.print(buf, "row {d}: {s}", .{ i, f }) catch f;
     };
     return null;
 }

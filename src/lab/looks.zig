@@ -177,11 +177,11 @@ test "test-exclude.tsv: loaded by match id, said on every look either way" {
     const args: []const []const u8 = &.{"--final"};
     try testing.expectEqual(null, try Exclude.load(testing.allocator, testing.io, tmp.dir, "snap"));
     _ = try record(testing.allocator, testing.io, tmp.dir, "snap", "exp final", args, &sink.writer);
-    try testing.expect(std.mem.indexOf(u8, sink.written(), "no " ++ exclude_name) != null);
+    try testing.expect(std.mem.find(u8, sink.written(), "no " ++ exclude_name) != null);
     try tmp.dir.writeFile(testing.io, .{ .sub_path = "snap/" ++ exclude_name, .data = "match_id\treason\nEUW1_1\t2055Z test\nKR_2\t2055Z test\n" });
     var e = (try Exclude.load(testing.allocator, testing.io, tmp.dir, "snap")).?;
     defer e.deinit(testing.allocator);
     try testing.expect(e.has("EUW1_1") and e.has("KR_2") and !e.has("EUW1_2") and !e.has("match_id"));
     _ = try record(testing.allocator, testing.io, tmp.dir, "snap", "exp final", args, &sink.writer);
-    try testing.expect(std.mem.indexOf(u8, sink.written(), exclude_name ++ ": 2 test games") != null);
+    try testing.expect(std.mem.find(u8, sink.written(), exclude_name ++ ": 2 test games") != null);
 }

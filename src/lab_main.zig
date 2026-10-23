@@ -447,7 +447,7 @@ test {
 /// 16x rows (docs/compute.md "GPU vs CPU"). Flush them to zero (FTZ, DAZ); fits matched
 /// to the last digit. Threads started afterwards inherit it
 fn flushDenormals() void {
-    if (@import("builtin").cpu.arch != .x86_64) return;
+    if (@import("builtin").target.cpu.arch != .x86_64) return;
     var csr: u32 = 0;
     asm volatile ("stmxcsr (%[p])"
         :

@@ -81,9 +81,9 @@ pub fn classOf(name: []const u8) Class {
     if (std.mem.startsWith(u8, name, "t.")) return .result;
     var buf: [128]u8 = undefined;
     const lower = std.ascii.lowerString(buf[0..@min(name.len, buf.len)], name[0..@min(name.len, buf.len)]);
-    for (result_words) |w| if (std.mem.indexOf(u8, lower, w) != null) return .result;
+    for (result_words) |w| if (std.mem.find(u8, lower, w) != null) return .result;
     for (not_early) |f| if (std.mem.eql(u8, f, name)) return .game;
-    for (early_words) |w| if (std.mem.indexOf(u8, lower, w) != null) return .early;
+    for (early_words) |w| if (std.mem.find(u8, lower, w) != null) return .early;
     return .game;
 }
 
@@ -197,7 +197,7 @@ fn walk(sink: anytype, p: ObjectMap, team: ?ObjectMap) !void {
         var buf: [64]u8 = undefined;
         for ([_][]const u8{ "kills", "first" }) |what| {
             const v = number(e.value_ptr.object.get(what) orelse continue) orelse continue;
-            const key = std.fmt.bufPrint(&buf, "{s}.{s}", .{ e.key_ptr.*, what }) catch continue;
+            const key = std.mem.print(&buf, "{s}.{s}", .{ e.key_ptr.*, what }) catch continue;
             try sink.put("t.", key, v);
         }
     }
@@ -228,7 +228,7 @@ fn players(doc: Value, out: *[10]Player) usize {
 const max_name = 128;
 
 fn joinName(buf: *[max_name]u8, prefix: []const u8, key: []const u8) ?[]const u8 {
-    return std.fmt.bufPrint(buf, "{s}{s}", .{ prefix, key }) catch null;
+    return std.mem.print(buf, "{s}{s}", .{ prefix, key }) catch null;
 }
 
 const Collect = struct {
@@ -1019,7 +1019,7 @@ const A1Result = struct {
 const Ref = std.StringHashMapUnmanaged(f32);
 
 fn refKey(buf: []u8, match_id: []const u8, slot: usize, outcome: usize) []const u8 {
-    return std.fmt.bufPrint(buf, "{s}/{d}/{d}", .{ match_id, slot, outcome }) catch unreachable;
+    return std.mem.print(buf, "{s}/{d}/{d}", .{ match_id, slot, outcome }) catch unreachable;
 }
 
 fn loadRef(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, path: []const u8) !Ref {
@@ -1111,12 +1111,12 @@ fn lensA1(
             defer c2.deinit(gpa);
             const key1 = struct {
                 fn of(s: Seat, c: f32) u64 {
-                    return (@as(u64, @as(u32, @intFromFloat(c))) << 3) | s.role;
+                    return (@as(u64, @as(u32, @trunc(c))) << 3) | s.role;
                 }
             }.of;
             const key2 = struct {
                 fn of(s: Seat, c: f32) u64 {
-                    return (@as(u64, @as(u32, @intFromFloat(c))) << 32) | s.cr;
+                    return (@as(u64, @as(u32, @trunc(c))) << 32) | s.cr;
                 }
             }.of;
             for (t.seats, cat) |s, c| {
@@ -1431,16 +1431,16 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
         const b = try lensB(gpa, io, &t, b_fields.items);
         defer gpa.free(b);
         std.mem.sort(BResult, b, {}, byGainB);
-        try writeFile(gpa, io, out_dir, try std.fmt.allocPrint(arena, "{s}-b.tsv", .{stem}), writeB, .{ &t, b });
+        try writeFile(gpa, io, out_dir, try arena.print("{s}-b.tsv", .{stem}), writeB, .{ &t, b });
 
         const a2 = try lensA2(gpa, io, &t, a2_fields.items);
         defer gpa.free(a2);
         std.mem.sort(A2Result, a2, {}, byGainA2);
-        try writeFile(gpa, io, out_dir, try std.fmt.allocPrint(arena, "{s}-a2.tsv", .{stem}), writeA2, .{ &t, a2 });
+        try writeFile(gpa, io, out_dir, try arena.print("{s}-a2.tsv", .{stem}), writeA2, .{ &t, a2 });
 
         const a1 = try lensA1(gpa, &t, &data, a1_fields.items, if (ref) |*r| r else null);
         defer gpa.free(a1);
-        try writeFile(gpa, io, out_dir, try std.fmt.allocPrint(arena, "{s}-a1.tsv", .{stem}), writeA1, .{ &t, a1 });
+        try writeFile(gpa, io, out_dir, try arena.print("{s}-a1.tsv", .{stem}), writeA1, .{ &t, a1 });
     }
     return 0;
 }

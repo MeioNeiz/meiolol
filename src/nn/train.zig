@@ -13,7 +13,7 @@ pub fn stepsPerEpoch(n: usize, batch: u32) u64 {
 /// (1.1: a tenth more epochs for a tenth more rows). At least 1.
 pub fn refitSteps(epochs: f64, more: f64, n: usize, batch: u32) u64 {
     const per: f64 = @floatFromInt(stepsPerEpoch(n, batch));
-    return @max(1, @as(u64, @intFromFloat(@round(epochs * more * per))));
+    return @max(1, @as(u64, @round(epochs * more * per)));
 }
 
 pub const Config = struct {

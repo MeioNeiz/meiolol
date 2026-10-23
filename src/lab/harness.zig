@@ -102,7 +102,7 @@ fn shuffleOutcomes(gpa: std.mem.Allocator, rs: []const api.Row) ![]api.Row {
     }
     var full: std.ArrayList(u32) = .empty;
     defer full.deinit(gpa);
-    for (seats.items, 0..) |s, gi| if (std.mem.indexOfScalar(u32, &s, none) == null) try full.append(gpa, @intCast(gi));
+    for (seats.items, 0..) |s, gi| if (std.mem.findScalar(u32, &s, none) == null) try full.append(gpa, @intCast(gi));
     const from = try gpa.dupe(u32, full.items);
     defer gpa.free(from);
     var rng: std.Random.DefaultPrng = .init(0x5f1e +% rs.len);
@@ -125,8 +125,8 @@ fn statsPresent(rs: []const api.Row) !void {
     for (rs) |r| for (r.stats, &seen) |x, *s| {
         if (!std.math.isNan(x)) s.* = true;
     };
-    if (std.mem.indexOfScalar(bool, &seen, true) == null) return error.NoSeatStats;
-    if (std.mem.indexOfScalar(bool, &seen, false)) |i| {
+    if (std.mem.findScalar(bool, &seen, true) == null) return error.NoSeatStats;
+    if (std.mem.findScalar(bool, &seen, false)) |i| {
         // The test runner fails a test that writes to stderr
         if (!@import("builtin").is_test) std.debug.print("harness: seat stat {s} is NaN in every training row\n", .{@typeInfo(api.SeatStat).@"enum".field_names[i]});
         return error.SeatStatAllNaN;
@@ -653,7 +653,7 @@ pub const Fixture = struct {
                 var y: [rows.outcome_count]f32 = @splat(std.math.nan(f32));
                 y[@backingInt(rows.Outcome.win)] = @floatFromInt(@intFromBool(side == winner));
                 var bump: f32 = if (ch == 1) 400 else 0;
-                if (std.mem.indexOfScalar(u32, &teams[1 - side], 2) != null) bump -= 300;
+                if (std.mem.findScalar(u32, &teams[1 - side], 2) != null) bump -= 300;
                 y[@backingInt(rows.Outcome.gold14)] = 5000 + bump + 300 * @as(f32, @floatCast(rnd.floatNorm(f64)));
                 try out.append(a, .{
                     .game = @intCast(gi),

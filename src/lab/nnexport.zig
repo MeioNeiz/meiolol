@@ -173,14 +173,10 @@ const files = .{
     .{ "split", "split.u8" },  .{ "flags", "flags.u8" },        .{ "aux", "aux.f32" },
 };
 
-fn bytesOf(slice: anytype) []const u8 {
-    return std.mem.sliceAsBytes(slice);
-}
-
 pub fn write(gpa: Allocator, io: Io, snap: []const u8, e: *const Export) !void {
-    comptime std.debug.assert(@import("builtin").cpu.arch.endian() == .little);
+    comptime std.debug.assert(@import("builtin").target.cpu.arch.endian() == .little);
     const cwd = Io.Dir.cwd();
-    const tmp_path = try std.fmt.allocPrint(gpa, "{s}/{s}.tmp", .{ snap, dir_name });
+    const tmp_path = try gpa.print("{s}/{s}.tmp", .{ snap, dir_name });
     defer gpa.free(tmp_path);
     cwd.deleteTree(io, tmp_path) catch {};
     try cwd.createDirPath(io, tmp_path);
@@ -188,7 +184,7 @@ pub fn write(gpa: Allocator, io: Io, snap: []const u8, e: *const Export) !void {
     {
         var dir = try cwd.openDir(io, tmp_path, .{});
         defer dir.close(io);
-        inline for (files) |f| try dir.writeFile(io, .{ .sub_path = f[1], .data = bytesOf(@field(e, f[0])) });
+        inline for (files) |f| try dir.writeFile(io, .{ .sub_path = f[1], .data = std.mem.sliceAsBytes(@field(e, f[0])) });
         var out: Io.Writer.Allocating = .init(gpa);
         defer out.deinit();
         for (e.match_id) |id| {
@@ -318,7 +314,10 @@ pub fn read(gpa: Allocator, io: Io, snap: []const u8) !Export {
         for (ids) |*id| id.* = lines.next() orelse return error.NnExportSize;
         if (!std.mem.eql(u8, lines.rest(), "")) return error.NnExportSize;
         e.match_id = ids;
-    } else |err| if (err != error.FileNotFound) return err;
+    } else |err| switch (err) {
+        error.FileNotFound => {},
+        else => return err,
+    }
     return e;
 }
 
@@ -372,8 +371,8 @@ test "split codes match the harness's phases, the shared cuts and win-comp's fol
         if (sp == 10 or sp == 6) platforms[@intFromBool(sp == 10)][g.platform] = true;
     };
     const nf: f64 = @floatFromInt(played_n);
-    try testing.expectEqual(@as(usize, @intFromFloat(@round(nf * 0.15))), n_test);
-    try testing.expectEqual(@as(usize, @intFromFloat(@round(nf * 0.25))) - n_test, n_dev);
+    try testing.expectEqual(@as(usize, @round(nf * 0.15)), n_test);
+    try testing.expectEqual(@as(usize, @round(nf * 0.25)) - n_test, n_dev);
     for (platforms) |w| for (w) |seen_on| try testing.expect(seen_on);
     // A region filter scores that platform's games only, from the same cuts
     var euw = c;
@@ -402,13 +401,13 @@ test "split codes match the harness's phases, the shared cuts and win-comp's fol
 
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
-    const snap = try std.fmt.allocPrint(gpa, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    const snap = try gpa.print(".zig-cache/tmp/{s}", .{&tmp.sub_path});
     defer gpa.free(snap);
     try write(gpa, io, snap, &e);
     var back = try read(gpa, io, snap);
     defer back.deinit();
     inline for (files) |fl| {
-        try testing.expectEqualSlices(u8, bytesOf(@field(e, fl[0])), bytesOf(@field(back, fl[0])));
+        try testing.expectEqualSlices(u8, std.mem.sliceAsBytes(@field(e, fl[0])), std.mem.sliceAsBytes(@field(back, fl[0])));
     }
     try testing.expectEqualSlices(u32, e.champions, back.champions);
     try testing.expectEqualSlices(u32, e.patches, back.patches);

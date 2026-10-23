@@ -104,7 +104,7 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8, archive_dir: []const u8) !S
     };
     const cwd = Io.Dir.cwd();
     const pool_path = try std.fs.path.join(arena, &.{ snap, pool_file_name });
-    const pool_tmp = try std.fmt.allocPrint(arena, "{s}.tmp", .{pool_path});
+    const pool_tmp = try arena.print("{s}.tmp", .{pool_path});
     {
         var file = try cwd.createFile(io, pool_tmp, .{});
         errdefer cwd.deleteFile(io, pool_tmp) catch {};
@@ -128,7 +128,7 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8, archive_dir: []const u8) !S
     }
 
     const out_path = try std.fs.path.join(arena, &.{ snap, file_name });
-    const tmp_path = try std.fmt.allocPrint(arena, "{s}.tmp", .{out_path});
+    const tmp_path = try arena.print("{s}.tmp", .{out_path});
     var gaps: std.ArrayList(f64) = .empty;
     defer gaps.deinit(gpa);
     {
@@ -257,7 +257,7 @@ fn exportFrom(name: []const u8) ?i64 {
     const prefix = "mastery-raw-";
     if (!std.mem.startsWith(u8, name, prefix)) return null;
     const rest = name[prefix.len..];
-    const dash = std.mem.indexOfScalar(u8, rest, '-') orelse return null;
+    const dash = std.mem.findScalar(u8, rest, '-') orelse return null;
     return std.fmt.parseInt(i64, rest[0..dash], 10) catch null;
 }
 
