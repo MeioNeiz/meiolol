@@ -134,8 +134,8 @@ Build up, each step measured on the one before:
 - D4 ARAM natural experiment [causal C10]: 50-100k ARAM games (queue 450) of players
   with mastery; win on log mastery within player. Tests whether the expertise effect is
   causal. Costs Riot API budget: Jacob's go, likely after the production key
-- E2-E5 run as docs/plan/patch-transfer.md PT1-PT8 (23 Oct): protocol v3 (score only
-  newest-patch games, day by day, prequential), ratings and net arms, what transfers
+- E2-E3 run as docs/plan/patch-transfer.md PT1-PT5 (J25): scored on latest-patch games
+  only, day by day; E4-E5 only if PT3 finds a jump worth modelling
 - E2 Per-patch offsets with 16.21 in dev, scored by day since patch, shuffled-patch
   control, share of games on unseen patches [dynamics C11]
 - E3 Patch-day prior: changed champions start at minus k x last deviation plus the sign

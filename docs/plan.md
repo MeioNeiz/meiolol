@@ -72,10 +72,9 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
    site (app.md "Private site")
 7. Comp leans: held-out look ~24 Oct, then champion pages and reasons:
    data-and-model.md
-8. Training across patches (Jacob 21 and 23 Oct): docs/plan/patch-transfer.md. Score
-   only newest-patch games, replayed day by day (every game was once newest-patch);
-   pooled stationary part plus shrunk per-patch champion-role part; ratings then net
-   arms. no backfill (J25); PT0 is Jacob's (protocol v3 everywhere); PT1 episode pin next
+8. The latest patch (J25, 23 Oct): docs/plan/patch-transfer.md. Evaluate on
+   latest-patch games only, day by day; old patches only while it is thin (pooled plus
+   shrunk per-patch offsets); find the day old patches stop helping. PT1 pin next
 9. The data edge (J23, J24): every block respects its filters or is marked (E1, cheap,
    now); then day cubes as storage (E7) so any patch, season, rank and region is a sum,
    a public truth test (E2) and "Meio", one estimate per number from every game, patch

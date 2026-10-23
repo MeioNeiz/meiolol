@@ -8,7 +8,7 @@ description: How do we train neural draft models across patches (which old games
 ---
 # How do we train neural draft models across patches (which old games to trust, which parts to refit) and evaluate them on the newest patch only?
 
-Feeds: docs/plan/patch-transfer.md (procedures, arms N1-N6, dataset). Child of [[patch-transfer]] (ratings-level arms, rolling-origin eval).
+Feeds: docs/plan/patch-transfer.md (PT2 day-by-day mode, PT4 net). Child of [[patch-transfer]] (ratings-level arms, rolling-origin eval).
 
 ## Answer
 
@@ -63,7 +63,7 @@ inferred). Predicting a change's effect from the change list: nothing beyond
 
 - Warm start: IncCTR finds a daily warm start matches a retrain (C3, B), Ash and Adams
   find it generalises worse (C6, B). Different regimes: one pass on a small new slice vs
-  retraining on the growing union. Arms N2 vs N3 in docs/plan/patch-transfer.md settle it.
+  retraining on the growing union. PT4 in docs/plan/patch-transfer.md tests the daily warm start.
 - Freezing: Lee finds freezing beats full tuning with little target data (B), Ibrahim
   finds continued full training fits new data best (B) on a huge new set. Our new patch
   is small on day 0-2 and large by day 7: expect the answer to change by day.
