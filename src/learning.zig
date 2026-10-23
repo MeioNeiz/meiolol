@@ -240,7 +240,7 @@ fn tallyPartials(gpa: Allocator, games: *const partials.Store, st: *const Stats,
     const bins_of = &(games.learning orelse return error.NoMastery);
     var masks = try games.sliceMasks(gpa, slices);
     defer masks.deinit(gpa);
-    const lanes = try games.codesIn(gpa, &.{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" });
+    const lanes = try games.codesIn(gpa, &core.Role.positions);
     defer gpa.free(lanes);
     for (games.sorted) |g| {
         const in = masks.of(g);

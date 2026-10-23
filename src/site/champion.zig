@@ -25,7 +25,6 @@ const Site = root.Site;
 const pct = root.pct;
 const ratio = root.ratio;
 const earlyNote = root.earlyNote;
-const roleSlug = root.roleSlug;
 const roleName = root.roleName;
 const tierlist = @import("tierlist.zig");
 
@@ -111,14 +110,14 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
             \\<div class="tiles"><div data-tile="wr"><span>Win rate</span><b class="wrc" style="--c:{colour};opacity:{fade:.2}">{wr}</b><small data-rank>{rank}{won}</small></div><div data-tile="pick"><span>Pick rate</span><b>{pick}</b><small>of games</small></div><div data-tile="ban"><span>Ban rate</span><b>{ban}</b><small>of games</small></div><div data-tile="games"><span>Games</span><b>{games}</b><small>{role} lane</small></div></div>
             \\
         , .{
-            .slug = roleSlug(r),
+            .slug = r.label(),
             .role = roleName(r),
             .chip = follows,
             .colour = tierlist.wrColour(rate, tierlist.table_span),
             .fade = core.curvesfile.fade(cr.games),
             .wr = tpl.call(pct, .{ cr.wins, cr.games }),
             .rank = if (rank) |k| tpl.t("<a href=\"../role/{slug}.html\">{n}{th} of {of} in {role}</a>", .{
-                .slug = roleSlug(r),
+                .slug = r.label(),
                 .n = k.rank,
                 .th = ordinal(k.rank),
                 .of = k.of,
@@ -216,7 +215,7 @@ fn roleLinks(w: *Writer, roles: []const Role) !void {
     for (roles, 0..) |r, i| {
         try tpl.render(w, "{sep}<a href=\"#{slug}\">{name}</a>", .{
             .sep = if (i == 0) null else if (i + 1 == roles.len) " and " else ", ",
-            .slug = roleSlug(r),
+            .slug = r.label(),
             .name = roleName(r),
         });
     }
@@ -370,7 +369,7 @@ fn opponentTable(site: *const Site, w: *Writer, ch: Champ, r: Role, cr: core.sta
         \\<thead><tr><th class="l" data-sort="text">Name</th><th data-sort="num" title="{name}'s win rate in the matchup; sorts with few games pulled toward {name}'s own">Win rate</th><th data-sort="num" title="Points more or less than {name} usually wins against an opponent this strong">Vs usual</th><th data-sort="num" title="Lane curve estimate: {name} minus the opponent">Gold at {minute}</th><th data-sort="num">Games</th></tr></thead>
         \\<tbody>
         \\
-    , .{ .n = shown, .name = ch.name, .minute = core.curvesfile.lane_minute, .slug = roleSlug(r), .k = k, .ka = ka });
+    , .{ .n = shown, .name = ch.name, .minute = core.curvesfile.lane_minute, .slug = r.label(), .k = k, .ka = ka });
     var few: usize = 0;
     for (opps) |o| {
         const thin = o.games < min_opponent_games;
@@ -406,7 +405,7 @@ fn opponentTable(site: *const Site, w: *Writer, ch: Champ, r: Role, cr: core.sta
         .rare = tpl.when(shown < opps.len, tpl.t("{n} rarer opponents (under 1% of {name}'s games) hidden. <button class=\"link\" data-show-rare=\"opp-{slug}\" data-show-all>Show them</button>", .{
             .n = opps.len - shown,
             .name = ch.name,
-            .slug = roleSlug(r),
+            .slug = r.label(),
         })),
     });
 }

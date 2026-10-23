@@ -8,7 +8,7 @@
 const std = @import("std");
 const tiers = @import("store").schema.tiers;
 
-const positions = [_][]const u8{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" };
+const positions = @import("core").Role.positions;
 
 /// One game's lanes and ranks, filled a participant at a time
 pub const Game = struct {

@@ -346,7 +346,6 @@ test "curves from a real timeline" {
 
     const db = try store.schema.memory();
     defer db.close();
-    const positions = [_][]const u8{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" };
     for (0..2) |g| {
         const id = try arena.print("EUW1_{d}", .{g});
         try db.run("INSERT INTO matches VALUES (?,'t','EUW1',420,'16.20','',?,1600,100,0)", .{ id, 1000 * g });
@@ -358,7 +357,7 @@ test "curves from a real timeline" {
                 \\INSERT INTO participants
                 \\  (match_id, slot, team_id, puuid, champion_id, position, win, tier)
                 \\VALUES (?,?,?,'p',?,?,0,'EMERALD')
-            , .{ id, slot, team, 10 * (slot + 1), positions[slot % 5] });
+            , .{ id, slot, team, 10 * (slot + 1), Role.positions[slot % 5] });
         }
     }
     // Everyone shares puuid 'p': 150k points on champion 10 (blue top), 5k on 60

@@ -134,7 +134,7 @@ test "views: a tree each, switches between them, shared pages once" {
         .{ "EUW1_1", "16.20", now }, .{ "EUW1_2", "16.20", 0 }, .{ "EUW1_3", "16.19", 0 },
         .{ "KR_1", "16.20", now },
     };
-    const positions = [5][]const u8{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" };
+    const positions = @import("core").Role.positions;
     for (games) |g| {
         const platform = g[0][0..std.mem.findScalar(u8, g[0], '_').?];
         try db.run("INSERT INTO matches VALUES (?,'t',?,420,?,'',?,1800,100,0)", .{ g[0], platform, g[1], g[2] });

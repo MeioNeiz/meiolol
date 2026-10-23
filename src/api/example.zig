@@ -14,7 +14,6 @@ const fetch = @import("fetch.zig");
 const Allocator = std.mem.Allocator;
 const ranked_solo = 420;
 /// Riot teamPosition by Role
-const positions = [Role.count][]const u8{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" };
 const platform = "EUW1";
 /// Games shown, newest first
 const games_shown = 10;
@@ -95,7 +94,7 @@ fn player(arena: Allocator, db: store.Db, set: game.CurveSet, role: Role, puuid:
         \\ORDER BY m.game_start DESC LIMIT ?
     );
     defer q.deinit();
-    try q.bind(.{ puuid, positions[@backingInt(role)], ranked_solo, platform, games_shown });
+    try q.bind(.{ puuid, Role.positions[@backingInt(role)], ranked_solo, platform, games_shown });
     var players = try db.prepare(
         \\SELECT slot, team_id, position, champion_id, win, kills, deaths, assists
         \\FROM participants WHERE match_id = ? ORDER BY slot

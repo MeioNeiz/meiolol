@@ -424,7 +424,7 @@ fn pagePathsMin(site: *const Site, min_games: u32) ![]const []const u8 {
     const a = site.arena;
     var list: std.ArrayList([]const u8) = .empty;
     try list.appendSlice(a, &.{ "index.html", "champions.html" });
-    for (Role.all) |r| try list.append(a, try a.print("role/{s}.html", .{roleSlug(r)}));
+    for (Role.all) |r| try list.append(a, try a.print("role/{s}.html", .{r.label()}));
     if (site.view.index() == 0) for (site.champs) |ch| {
         try list.append(a, try a.print("champion/{s}.html", .{ch.slug}));
     };
@@ -525,18 +525,8 @@ pub fn earlyNote(site: *const Site, w: *Writer, filtered: bool) !void {
     });
 }
 
-pub fn roleSlug(r: Role) []const u8 {
-    return switch (r) {
-        .top => "top",
-        .jungle => "jungle",
-        .middle => "mid",
-        .bottom => "bot",
-        .utility => "support",
-    };
-}
-
 pub fn roleFromSlug(s: []const u8) ?Role {
-    for (Role.all) |r| if (std.mem.eql(u8, roleSlug(r), s)) return r;
+    for (Role.all) |r| if (std.mem.eql(u8, r.label(), s)) return r;
     return null;
 }
 
@@ -567,7 +557,7 @@ pub fn roleIcons(w: *Writer) !void {
 pub fn roleIcon(w: *Writer, r: Role) !void {
     try tpl.render(w, "<svg class=\"ri\" role=\"img\" aria-label=\"{name}\"><title>{name}</title><use href=\"#ri-{slug}\"></use></svg>", .{
         .name = roleName(r),
-        .slug = roleSlug(r),
+        .slug = r.label(),
     });
 }
 

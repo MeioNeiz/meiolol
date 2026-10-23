@@ -66,7 +66,7 @@ fn periodDim(site: *const Site, curves: *const Curves) !Dim {
 
 /// From x's side: x's gold, wins and timings first
 pub fn path(a: std.mem.Allocator, r: Role, x: Champ, y: Champ) ![]const u8 {
-    return a.print("matchup/{s}/{s}", .{ root.roleSlug(r), try file(a, x, y) });
+    return a.print("matchup/{s}/{s}", .{ r.label(), try file(a, x, y) });
 }
 
 /// path within its role's directory
@@ -169,7 +169,7 @@ pub fn writeIndex(site: *const Site, w: *Writer, curves: ?*const Curves) !void {
     try html.minGames(w, "../", "matchups", choices.items, default, 0);
     try w.writeAll("<div class=\"mu-ix\" data-role=\"top\">\n");
     for (Role.all, lists) |r, list| {
-        const slug = root.roleSlug(r);
+        const slug = r.label();
         var shown: usize = 0;
         for (list.items) |e| shown += @intFromBool(e.games >= default);
         // One block per role, so a search can drop and reorder them (min-games.js)
@@ -230,7 +230,7 @@ fn indexFloor(lists: []const std.ArrayList(IndexEntry)) u32 {
 }
 
 fn roleTab(_: void, w: *Writer, r: Role) !void {
-    try tpl.render(w, "<a href=\"#{slug}\">{name}</a>", .{ .slug = root.roleSlug(r), .name = root.roleName(r) });
+    try tpl.render(w, "<a href=\"#{slug}\">{name}</a>", .{ .slug = r.label(), .name = root.roleName(r) });
 }
 
 const IndexEntry = struct {

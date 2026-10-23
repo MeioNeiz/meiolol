@@ -20,7 +20,7 @@ pub fn json(site: *const Site) ![]const u8 {
     var aw: Writer.Allocating = .init(a);
     const w = &aw.writer;
     try w.print("{{\"ddragon\":\"{s}\",\"roles\":[", .{site.ddragon_version});
-    for (Role.all, 0..) |r, i| try w.print("{s}\"{s}\"", .{ if (i > 0) "," else "", root.roleSlug(r) });
+    for (Role.all, 0..) |r, i| try w.print("{s}\"{s}\"", .{ if (i > 0) "," else "", r.label() });
     try w.writeAll("],\"champs\":[");
     for (site.champs, 0..) |ch, i| {
         if (i > 0) try w.writeByte(',');

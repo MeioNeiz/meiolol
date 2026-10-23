@@ -1116,12 +1116,11 @@ test "curve set picks the covering file, else the newest" {
 }
 
 fn testSummary(arena: Allocator) !Summary {
-    const positions = [_][]const u8{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" };
     const players = try arena.alloc(Summary.Player, 10);
     for (players, 0..) |*p, i| p.* = .{
         .hash = "",
         .team = if (i < 5) 100 else 200,
-        .position = positions[i % 5],
+        .position = Role.positions[i % 5],
         .champion = @intCast(i + 1),
         .win = i < 5,
         .kills = 0,

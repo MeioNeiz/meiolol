@@ -35,7 +35,7 @@ const min_role_share = 0.1;
 const min_tree_share = 0.02;
 
 pub fn path(a: std.mem.Allocator, ch: Champ, r: Role) ![]const u8 {
-    return a.print("build/{s}-{s}.html", .{ ch.slug, root.roleSlug(r) });
+    return a.print("build/{s}-{s}.html", .{ ch.slug, r.label() });
 }
 
 /// The build `ch` has a page for in `r`
@@ -143,7 +143,7 @@ pub fn writeIndex(site: *const Site, w: *Writer, f: *const File) !void {
             try tpl.render(w,
                 \\<li><a class="champ" href="{href}"><img src="{icon}" alt="" loading="lazy" width="32" height="32">{name}</a> <span class="muted">{games}</span></li>
             , .{
-                .href = try a.print("{s}-{s}.html", .{ ch.slug, root.roleSlug(r) }),
+                .href = try a.print("{s}-{s}.html", .{ ch.slug, r.label() }),
                 .icon = try site.icon(ch),
                 .name = ch.name,
                 .games = b.games,
@@ -703,7 +703,7 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
         for (Role.all) |o| {
             if (shown(f, ch.id, o) == null) continue;
             try tpl.render(w, "<a href=\"{href}\"{current}>{label}</a>", .{
-                .href = try a.print("{s}-{s}.html", .{ ch.slug, root.roleSlug(o) }),
+                .href = try a.print("{s}-{s}.html", .{ ch.slug, o.label() }),
                 .current = tpl.flag(o == r, "aria-current=\"page\""),
                 .label = root.roleName(o),
             });

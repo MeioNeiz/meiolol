@@ -671,7 +671,6 @@ fn testDb() !store.Db {
     const db = try store.schema.memory();
     errdefer db.close();
     for (1..26) |id| try db.run("INSERT INTO champions VALUES (?,?,?,'','v')", .{ id, "k", "n" });
-    const positions = [_][]const u8{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" };
     var buf: [32]u8 = undefined;
     for (0..30) |g| {
         const id = try std.mem.print(&buf, "EUW1_{d}", .{g});
@@ -684,7 +683,7 @@ fn testDb() !store.Db {
             try db.run(
                 \\INSERT INTO participants (match_id, slot, team_id, puuid, champion_id, position,
                 \\  win, kills, gold, tier) VALUES (?,?,?,?,?,?,0,?,1000,'GOLD')
-            , .{ id, slot, team, "p", base + slot % 5, positions[slot % 5], slot });
+            , .{ id, slot, team, "p", base + slot % 5, Role.positions[slot % 5], slot });
         }
         try db.run("INSERT INTO bans VALUES (?,100,1,9)", .{id});
     }

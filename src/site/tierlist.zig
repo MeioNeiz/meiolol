@@ -15,7 +15,6 @@ const Site = @import("root.zig").Site;
 const pct = @import("root.zig").pct;
 const ratio = @import("root.zig").ratio;
 const earlyNote = @import("root.zig").earlyNote;
-const roleSlug = @import("root.zig").roleSlug;
 const roleName = @import("root.zig").roleName;
 const roleIcons = @import("root.zig").roleIcons;
 const roleIcon = @import("root.zig").roleIcon;
@@ -270,7 +269,7 @@ fn roleTabs(w: *Writer, current: ?Role, root: []const u8) !void {
     for (Role.all) |r| {
         try tpl.render(w, "<a href=\"{root}role/{slug}.html\"{current}><svg class=\"ri\" aria-hidden=\"true\"><use href=\"#ri-{slug}\"></use></svg>{name}</a>", .{
             .root = root,
-            .slug = roleSlug(r),
+            .slug = r.label(),
             .current = tpl.flag(current == r, "aria-current=\"page\""),
             .name = roleName(r),
         });
@@ -372,7 +371,7 @@ pub fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {
     else
         try a.print("Champions, {s} | meiolol", .{site.period()});
     const desc = try a.print("{s} champions in ranked solo queue {s}, {s}: win rate with how sure it is, pick and ban rates, influence.", .{ name, site.view.region.in(), site.when });
-    const path = if (role) |r| try a.print("role/{s}.html", .{roleSlug(r)}) else "champions.html";
+    const path = if (role) |r| try a.print("role/{s}.html", .{r.label()}) else "champions.html";
     const root = try site.toRoot(path);
     const p = try site.page(title, desc, path, .champions);
     try html.head(w, p);

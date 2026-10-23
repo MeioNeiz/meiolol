@@ -10,6 +10,8 @@ pub const Role = enum(u3) {
 
     pub const count = 5;
     pub const all = [count]Role{ .top, .jungle, .middle, .bottom, .utility };
+    /// Riot's teamPosition names
+    pub const positions = [count][]const u8{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" };
 
     /// LCU assignedPosition ("top", "jungle", "middle", "bottom", "utility"; "" when
     /// unknown) or a Riot teamPosition ("TOP" ...). Null for "" and anything else.

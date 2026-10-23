@@ -649,7 +649,6 @@ fn testDb() !store.Db {
     const db = try store.schema.memory();
     errdefer db.close();
     for (1..41) |id| try db.run("INSERT INTO champions VALUES (?,?,?,'','v')", .{ id, "k", "n" });
-    const positions = [_][]const u8{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" };
     var prng: std.Random.DefaultPrng = .init(7);
     const rand = prng.random();
     var buf: [32]u8 = undefined;
@@ -679,7 +678,7 @@ fn testDb() !store.Db {
             try db.run(
                 \\INSERT INTO participants (match_id, slot, team_id, puuid, champion_id, position,
                 \\  win, kills, gold) VALUES (?,?,?,'p',?,?,?,1,1000)
-            , .{ id, slot, @as(i64, if (side == 0) 100 else 200), c, positions[slot % 5], @intFromBool(won) });
+            , .{ id, slot, @as(i64, if (side == 0) 100 else 200), c, Role.positions[slot % 5], @intFromBool(won) });
             const magic: u32 = if (c % 2 == 1) 9000 else 500;
             if (slot > 0) try doc.writer.writeByte(',');
             try doc.writer.print(

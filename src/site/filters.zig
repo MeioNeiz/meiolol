@@ -455,7 +455,7 @@ fn writeMeta(w: *Writer, opts: root.Options, patches: []const []const u8, sorted
     try w.writeAll(",\"roles\":[");
     for (Role.all, 0..) |r, i| {
         if (i > 0) try w.writeByte(',');
-        try w.print("\"{s}\"", .{root.roleSlug(r)});
+        try w.print("\"{s}\"", .{r.label()});
     }
     // Players per role: platform, patch, recent, tier, role, players
     try w.writeAll("],\"slots\":[");
@@ -607,7 +607,6 @@ test "a game's rows, slots and bans, once per game" {
         \\  ('EUW1_2', 'riot', 'EUW1', 420, '16.20', '16.20.1', 1000, 1800, 100, 0);
         \\INSERT INTO bans VALUES ('EUW1_1', 100, 1, 11), ('EUW1_1', 200, 6, 11), ('EUW1_2', 100, 1, 11);
     );
-    const positions = [_][]const u8{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" };
     for ([_][]const u8{ "EUW1_1", "EUW1_2" }, [_]usize{ 10, 9 }) |id, players| {
         for (0..players) |slot| {
             const blue = slot < 5;
@@ -620,7 +619,7 @@ test "a game's rows, slots and bans, once per game" {
             try db.run(
                 \\INSERT INTO participants (match_id, slot, team_id, champion_id, position, win, tier, gold14, gold15)
                 \\VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            , .{ id, slot, @as(i64, if (blue) 100 else 200), slot + 1, positions[slot % 5], @intFromBool(blue), tier, gold14, gold14 });
+            , .{ id, slot, @as(i64, if (blue) 100 else 200), slot + 1, Role.positions[slot % 5], @intFromBool(blue), tier, gold14, gold14 });
         }
     }
     var champs: [11]root.Champ = undefined;
@@ -684,7 +683,6 @@ test "runs on their own connections make the files one walk makes" {
     defer memory_db.close();
     // 40 games over two platforms and three patches, champions and bans varying, so each
     // run meets patches and keys in its own order
-    const positions = [_][]const u8{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" };
     const patches = [_][]const u8{ "16.19", "16.20", "16.18" };
     for ([_]store.Db{ file_db, memory_db }) |db| {
         for (0..40) |g| {
@@ -706,7 +704,7 @@ test "runs on their own connections make the files one walk makes" {
                 try db.run(
                     \\INSERT INTO participants (match_id, slot, team_id, champion_id, position, win, tier, gold14, gold15)
                     \\VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                , .{ id, slot, @as(i64, if (blue) 100 else 200), (g * 3 + slot * 7) % 11 + 1, positions[slot % 5], @intFromBool(blue == (g % 2 == 0)), tier, gold14, gold14 });
+                , .{ id, slot, @as(i64, if (blue) 100 else 200), (g * 3 + slot * 7) % 11 + 1, Role.positions[slot % 5], @intFromBool(blue == (g % 2 == 0)), tier, gold14, gold14 });
             }
         }
     }

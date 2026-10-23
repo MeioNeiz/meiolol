@@ -209,12 +209,11 @@ test "lane gold from a real timeline" {
     defer db.close();
     try db.run("INSERT INTO matches VALUES ('EUW1_1','t','EUW1',420,'16.20','',0,1600,100,0)", .{});
     try db.run("INSERT INTO timeline.timelines VALUES ('EUW1_1',26,0,?)", .{store.Blob{ .bytes = blob }});
-    const positions = [_][]const u8{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" };
     for (0..10) |slot| {
         try db.run(
             \\INSERT INTO participants (match_id, slot, team_id, champion_id, position, win)
             \\VALUES ('EUW1_1',?,?,?,?,0)
-        , .{ slot, @as(i64, if (slot < 5) 100 else 200), slot + 1, positions[slot % 5] });
+        , .{ slot, @as(i64, if (slot < 5) 100 else 200), slot + 1, Role.positions[slot % 5] });
     }
 
     var map = try load(gpa, db, &.{"16.20"}, &.{"EUW1"});
