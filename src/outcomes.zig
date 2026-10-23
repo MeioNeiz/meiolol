@@ -29,7 +29,6 @@ pub const Options = struct {
     test_share: f64 = eval.test_share,
     /// Region model only; the global model is never scored on a region
     test_platform: ?[]const u8 = null,
-    passes: u32 = 12,
     /// One TSV per model of every test row's prediction (docs/model.md protocol)
     preds_dir: ?[]const u8 = null,
 };
@@ -38,6 +37,8 @@ pub const Options = struct {
 pub const Legendaries = std.AutoHashMapUnmanaged(u32, []const u32);
 
 const minute_ms = 60_000;
+/// Backfitting passes over the groups
+const passes = 12;
 
 /// One participant of a game with a timeline that reached minute 15
 const Row = struct {
@@ -413,7 +414,7 @@ pub fn run(
         var n_fits: usize = 0;
         defer for (fits[0..n_fits]) |*f| f.deinit(gpa);
         for (models, 0..) |m, mi| {
-            fits[mi] = try analysis.backfit(Group, gpa, space, train.items, z, m.groups, opts.passes);
+            fits[mi] = try analysis.backfit(Group, gpa, space, train.items, z, m.groups, passes);
             n_fits += 1;
             const err_model = err_models[mi];
             for (tests.items, err_model) |r, *e| {

@@ -336,7 +336,7 @@ const Plays = struct {
         }
         for (spreads, p.slices) |*s, *l| {
             for (l.items) |play| {
-                if (st.index(play.champion)) |c| s.add(c, play.weight, play.wins, .{});
+                if (st.index(play.champion)) |c| s.add(c, play.weight, play.wins);
             }
             l.clearRetainingCapacity();
         }

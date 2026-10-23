@@ -82,16 +82,14 @@ fn sum(b: [bin_count]Bin, lo: usize, hi: usize) Bin {
     return out;
 }
 
-pub const Options = struct {
-    /// Bins with fewer games are greyed out as "more data needed"
-    thin_games: u32 = 200,
-    /// Games of new and of practised players each, for a champion's gap
-    min_games: u32 = 200,
-    /// A champion is harder or easier when its pulled gap is this many of its own
-    /// standard deviations (after pulling) off the average: with ~170 champions a plain
-    /// 2-standard-error rule labels several by chance
-    z: f64 = 2,
-};
+/// Bins with fewer games are greyed out as "more data needed"
+const thin_games = 200;
+/// Games of new and of practised players each, for a champion's gap
+const min_games = 200;
+/// A champion is harder or easier when its pulled gap is this many of its own standard
+/// deviations (after pulling) off the average: with ~170 champions a plain
+/// 2-standard-error rule labels several by chance
+const kind_z = 2;
 
 /// Bins per champion, by stats index
 pub const Tally = struct {
@@ -317,7 +315,7 @@ pub const Gap = struct {
 pub const Champion = struct {
     id: u32,
     bins: [bin_count]Bin,
-    /// Null under Options.min_games new or practised
+    /// Null under min_games new or practised
     gap: ?Gap,
 };
 
@@ -337,8 +335,8 @@ pub const Learning = struct {
     }
 };
 
-pub fn build(arena: Allocator, t: *const Tally, st: *const Stats, opts: Options) !Learning {
-    var out: Learning = .{ .games = t.games, .thin_games = opts.thin_games };
+pub fn build(arena: Allocator, t: *const Tally, st: *const Stats) !Learning {
+    var out: Learning = .{ .games = t.games, .thin_games = thin_games };
     var list: std.ArrayList(Champion) = .empty;
     var n_gaps: f64 = 0;
     var pp_sum: f64 = 0;
@@ -349,7 +347,7 @@ pub fn build(arena: Allocator, t: *const Tally, st: *const Stats, opts: Options)
         const new = sum(b, 0, new_bins);
         const practised = sum(b, practised_from, bin_count);
         var gap: ?Gap = null;
-        if (new.games >= opts.min_games and practised.games >= opts.min_games) {
+        if (new.games >= min_games and practised.games >= min_games) {
             const pn = new.winRate();
             const pp = practised.winRate();
             const se = 100 * @sqrt(pn * (1 - pn) / @as(f64, @floatFromInt(new.games)) +
@@ -376,13 +374,13 @@ pub fn build(arena: Allocator, t: *const Tally, st: *const Stats, opts: Options)
         g.pulled = mean + keep * (g.pp - mean);
         // (pulled - mean) / (sqrt(keep) se)
         const z = (g.pp - mean) / g.se * @sqrt(keep);
-        g.kind = if (z >= opts.z) .harder else if (z <= -opts.z) .easier else .usual;
+        g.kind = if (z >= kind_z) .harder else if (z <= -kind_z) .easier else .usual;
     };
     return out;
 }
 
-pub fn make(arena: Allocator, t: *const Tally, st: *const Stats, opts: Options) !Learning {
-    const l = try build(arena, t, st, opts);
+pub fn make(arena: Allocator, t: *const Tally, st: *const Stats) !Learning {
+    const l = try build(arena, t, st);
     var counts: [3]usize = @splat(0);
     for (l.champions) |c| if (c.gap) |g| {
         counts[@backingInt(g.kind)] += 1;
@@ -448,7 +446,7 @@ test "gaps: off the average only when clear" {
         t.bins[c][0] = .{ .games = new_games[i], .wins = new_wins[i] };
         t.bins[c][4] = .{ .games = if (i == 2) 50 else 1000, .wins = if (i == 2) 26 else 520 };
     }
-    const l = try build(arena, &t, &st, .{});
+    const l = try build(arena, &t, &st);
     try testing.expectEqual(.harder, l.get(1).?.gap.?.kind);
     try testing.expectEqual(null, l.get(3).?.gap);
     // Champion 2's gap is small but on 220 new games: pulled most of the way back

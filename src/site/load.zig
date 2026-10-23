@@ -149,15 +149,15 @@ pub fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Opt
             const set = @backingInt(view.region);
             if (set >= people.pool.games.len) return error.NoView;
             site.pool = try pool.make(arena, &people.pool, set, &site.stats, .{});
-            site.spread = try spread.make(arena, &people.pool.spread[view.index()], &site.stats, .{});
+            site.spread = try spread.make(arena, &people.pool.spread[view.index()], &site.stats);
             // Every region's, whatever the view's region (learning.zig)
-            site.learning = try learning.make(arena, &people.learning[@backingInt(view.period)], &site.stats, .{});
+            site.learning = try learning.make(arena, &people.learning[@backingInt(view.period)], &site.stats);
             // The champion pages' filters pick a view: each one's, as its own load makes them
             if (view.index() == 0) {
                 const by = try arena.alloc(root.ByView, html.View.count);
                 for (html.View.all, by) |v, *b| b.* = .{
-                    .spread = try spread.make(arena, &people.pool.spread[v.index()], &site.stats, .{}),
-                    .learning = try learning.build(arena, &people.learning[@backingInt(v.period)], &site.stats, .{}),
+                    .spread = try spread.make(arena, &people.pool.spread[v.index()], &site.stats),
+                    .learning = try learning.build(arena, &people.learning[@backingInt(v.period)], &site.stats),
                     // Options.euw_only tallies EUW's alone
                     .pool = try pool.make(arena, &people.pool, @min(@backingInt(v.region), people.pool.games.len - 1), &site.stats, .{}),
                 };

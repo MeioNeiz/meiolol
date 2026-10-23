@@ -12,12 +12,10 @@ const core = @import("core");
 const Stats = core.Stats;
 const Allocator = std.mem.Allocator;
 
-pub const Options = struct {
-    /// Players with fewer games on the champion are left out
-    min_games: u32 = 10,
-    /// Fewer players and the page says more data is needed
-    min_players: u32 = 20,
-};
+/// Players with fewer games on the champion are left out
+const min_games = 10;
+/// Fewer players and the page says more data is needed
+const min_players = 20;
 
 /// Bins centred on 0%, 10%, ... 100%: a 10-game player's rate is a multiple of 10%, so
 /// edges between them keep 50% in the middle of its bin
@@ -52,8 +50,8 @@ pub const Tally = struct {
     }
 
     /// One player's games on champion index `c`
-    pub fn add(t: *Tally, c: usize, games: u32, wins: u32, opts: Options) void {
-        if (games < opts.min_games or games == 0) return;
+    pub fn add(t: *Tally, c: usize, games: u32, wins: u32) void {
+        if (games < min_games) return;
         t.players[c * 101 + (200 * wins + games) / (2 * games)] += 1;
     }
 };
@@ -83,7 +81,7 @@ pub const Spread = struct {
     }
 };
 
-pub fn make(arena: Allocator, t: *const Tally, st: *const Stats, opts: Options) !Spread {
+pub fn make(arena: Allocator, t: *const Tally, st: *const Stats) !Spread {
     var list: std.ArrayList(Champion) = .empty;
     for (0..st.n) |c| {
         const by_pct = t.players[c * 101 ..][0..101];
@@ -102,7 +100,7 @@ pub fn make(arena: Allocator, t: *const Tally, st: *const Stats, opts: Options) 
         for (by_pct, 0..) |n, p| ch.bins[(p + 5) / 10] += n;
         try list.append(arena, ch);
     }
-    return .{ .min_games = opts.min_games, .min_players = opts.min_players, .champions = list.items };
+    return .{ .min_games = min_games, .min_players = min_players, .champions = list.items };
 }
 
 /// Gaussian kernel density at the shape points, scaled to its peak
@@ -156,13 +154,12 @@ test "bins, percentiles, players under min_games left out" {
     var t: Tally = try .init(gpa, st.n);
     defer t.deinit(gpa);
     const c = st.index(10).?;
-    const opts: Options = .{};
-    t.add(c, 10, 5, opts);
-    t.add(c, 10, 6, opts);
-    t.add(c, 20, 9, opts); // 45%: rounds into the 50% bin
-    t.add(c, 12, 2, opts); // 17%
-    t.add(c, 9, 9, opts); // too few games
-    const s = try make(arena, &t, &st, opts);
+    t.add(c, 10, 5);
+    t.add(c, 10, 6);
+    t.add(c, 20, 9); // 45%: rounds into the 50% bin
+    t.add(c, 12, 2); // 17%
+    t.add(c, 9, 9); // too few games
+    const s = try make(arena, &t, &st);
     try testing.expectEqual(1, s.champions.len);
     const got = s.get(10).?;
     try testing.expectEqual(4, got.players);

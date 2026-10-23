@@ -25,7 +25,6 @@ pub const Options = struct {
     test_share: f64 = eval.test_share,
     /// Region model only; the global model is never scored on a region
     test_platform: ?[]const u8 = null,
-    passes: u32 = 8,
     /// One TSV per model of every test row's prediction
     preds_dir: ?[]const u8 = null,
     /// TSV of every champion-role's effect and lead slope by minute
@@ -61,6 +60,8 @@ pub const Slope = enum {
 };
 
 const minute_ms = 60_000;
+/// Backfitting passes over the terms
+const passes = 8;
 /// 0: the draft, no state
 const minutes = [_]u8{0} ++ objectives.minutes;
 const n_min = minutes.len;
@@ -417,7 +418,7 @@ pub fn run(
             try rows.appendSlice(gpa, m.train.items);
             try eta.appendSlice(gpa, m.base_train);
         }
-        for (0..opts.passes) |_| try update(gpa, &pooled, .one, champs, rows.items, eta.items);
+        for (0..passes) |_| try update(gpa, &pooled, .one, champs, rows.items, eta.items);
     }
 
     for (&at, minutes) |*m, minute| {
@@ -427,7 +428,7 @@ pub fn run(
         errdefer champ.deinit(gpa);
         var slope = try Term.init(gpa, cells);
         errdefer slope.deinit(gpa);
-        for (0..opts.passes) |_| {
+        for (0..passes) |_| {
             try update(gpa, &champ, .one, champs, m.train.items, eta);
             try update(gpa, &slope, slope_cov, champs, m.train.items, eta);
         }
