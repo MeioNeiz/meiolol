@@ -212,21 +212,20 @@ pub fn withCurves(
     opts: Options,
 ) !PatchDay {
     const champions = try arena.dupe(ChampionMove, wins.champions);
-    if (prev_curves != null and cur_curves != null) for (champions) |*move| {
-        const lp = laneTotals(prev_curves.?, move.id, move.role);
-        const lc = laneTotals(cur_curves.?, move.id, move.role);
-        move.ahead = Rate.of(lp.ahead, lc.ahead);
-        move.comeback = Rate.of(lp.comeback, lc.comeback);
-    };
-
     var matchups: std.ArrayList(MatchupMove) = .empty;
-    if (prev_curves != null and cur_curves != null) {
-        for (cur_curves.?.curves) |*cv| {
+    if (prev_curves) |pc| if (cur_curves) |cc| {
+        for (champions) |*move| {
+            const lp = laneTotals(pc, move.id, move.role);
+            const lc = laneTotals(cc, move.id, move.role);
+            move.ahead = Rate.of(lp.ahead, lc.ahead);
+            move.comeback = Rate.of(lp.comeback, lc.comeback);
+        }
+        for (cc.curves) |*cv| {
             const h = cv.header;
             if (h.bracket != @backingInt(curvesfile.Bracket.all)) continue;
             if (h.experience != @backingInt(curvesfile.Experience.any) or h.a == 0) continue;
             const r: Role = @fromBackingInt(@intCast(h.role));
-            const pv = prev_curves.?.get(r, .all, h.a, h.b) orelse continue;
+            const pv = pc.get(r, .all, h.a, h.b) orelse continue;
             const cview: curvesfile.View = .{ .curve = cv, .flipped = false };
             try matchups.append(arena, .{
                 .role = r,
@@ -236,7 +235,7 @@ pub fn withCurves(
                 .gold = goldMove(pv, cview, opts),
             });
         }
-    }
+    };
     return .{
         .prev_patch = wins.prev_patch,
         .cur_patch = wins.cur_patch,

@@ -319,10 +319,8 @@ pub fn chances(arena: Allocator, m: Model, g: Game) ![]f64 {
     const d = m.draft(g.champions, g.platform);
     var walk: livestate.Walker = .init(g.t, g.seat_of, g.items);
     var out: std.ArrayList(f64) = .empty;
-    const open = walk.at(0) orelse return &.{};
-    try out.append(arena, 1 / (1 + @exp(-m.logit(d, &open, 0))));
-    var minute: u8 = 1;
-    while (minute < 255) : (minute += 1) {
+    for (0..255) |i| {
+        const minute: u8 = @intCast(i);
         const s = walk.at(minute) orelse break;
         try out.append(arena, 1 / (1 + @exp(-m.logit(d, &s, minute))));
     }

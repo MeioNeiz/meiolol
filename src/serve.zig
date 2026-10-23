@@ -366,17 +366,12 @@ fn serveFile(ctx: *Context, request: *std.http.Server.Request, name: []const u8,
     };
     defer gpa.free(body);
 
-    var headers: [3]std.http.Header = undefined;
-    var n: usize = 0;
-    headers[n] = .{ .name = "content-type", .value = contentType(name) };
-    n += 1;
-    headers[n] = .{ .name = "cache-control", .value = "public, max-age=3600" };
-    n += 1;
-    if (encoded) {
-        headers[n] = .{ .name = "content-encoding", .value = "gzip" };
-        n += 1;
-    }
-    try request.respond(body, .{ .extra_headers = headers[0..n] });
+    const headers: [3]std.http.Header = .{
+        .{ .name = "content-type", .value = contentType(name) },
+        .{ .name = "cache-control", .value = "public, max-age=3600" },
+        .{ .name = "content-encoding", .value = "gzip" },
+    };
+    try request.respond(body, .{ .extra_headers = headers[0..if (encoded) 3 else 2] });
     return true;
 }
 

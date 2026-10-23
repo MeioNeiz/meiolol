@@ -67,11 +67,6 @@ const model_labels = [n_models][]const u8{ "per minute", "per minute, 300+", "sm
 /// `w`. Test: every platform's games from the protocol's test cut (analysis.protocolCuts,
 /// docs/model.md "Shared protocol"); train: older games. Weights (the smooth fit, per minute) as Zig source to
 /// `src_out` when given
-pub fn fit(gpa: std.mem.Allocator, db: store.Db, src_out: *Io.Writer, w: *Io.Writer) !void {
-    return fitWith(gpa, db, .{}, src_out, w);
-}
-
-/// As fit, with dev scoring and knots to choose between
 pub fn fitWith(gpa: std.mem.Allocator, db: store.Db, opts: Options, src_out: ?*Io.Writer, w: *Io.Writer) !void {
     if (opts.knots.len < 2 or opts.knots.len > max_knots) return error.Usage;
     var arena_state: std.heap.ArenaAllocator = .init(gpa);

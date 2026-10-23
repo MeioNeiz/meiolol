@@ -125,6 +125,9 @@ pub const Tally = struct {
 /// crawler fills from each timeline (riot/crawl.zig goldAt)
 const GoldMap = std.StringHashMapUnmanaged([10]?i32);
 
+/// A lane row of one match, as goldMap reads it
+const LaneRow = struct { slot: i64, team: i64, position: [8]u8, len: usize, gold14: ?i64 };
+
 /// Lane opponent: same position, other team. Both need a frame after gold_minute
 /// (gold15 set): the last frame is the game's end, part of a minute
 fn goldMap(arena: Allocator, db: store.Db, platform_json: []const u8) !GoldMap {
@@ -141,9 +144,8 @@ fn goldMap(arena: Allocator, db: store.Db, platform_json: []const u8) !GoldMap {
     );
     defer q.deinit();
     try q.bind(.{ stats.ranked_solo, platform_json });
-    const Lane = struct { slot: i64, team: i64, position: [8]u8, len: usize, gold14: ?i64 };
     var match: std.ArrayList(u8) = .empty;
-    var lanes: std.ArrayList(Lane) = .empty;
+    var lanes: std.ArrayList(LaneRow) = .empty;
     var more = try q.step();
     while (true) {
         const r = if (more) q.row(struct {
@@ -160,7 +162,7 @@ fn goldMap(arena: Allocator, db: store.Db, platform_json: []const u8) !GoldMap {
             try match.appendSlice(arena, r.match_id);
             lanes.clearRetainingCapacity();
         }
-        var lane: Lane = .{ .slot = r.slot, .team = r.team_id, .position = undefined, .len = r.position.len, .gold14 = r.gold14 };
+        var lane: LaneRow = .{ .slot = r.slot, .team = r.team_id, .position = undefined, .len = r.position.len, .gold14 = r.gold14 };
         if (r.position.len <= lane.position.len) @memcpy(lane.position[0..r.position.len], r.position);
         try lanes.append(arena, lane);
         more = try q.step();
@@ -170,7 +172,7 @@ fn goldMap(arena: Allocator, db: store.Db, platform_json: []const u8) !GoldMap {
 
 /// Each lane row's difference to its opponent (same position, other team): the last
 /// opponent by slot when a position repeats, 0 when either lacks gold14
-fn pairLanes(arena: Allocator, map: *GoldMap, match_id: []const u8, lanes: anytype) !void {
+fn pairLanes(arena: Allocator, map: *GoldMap, match_id: []const u8, lanes: []const LaneRow) !void {
     for (lanes) |p| {
         if (p.slot < 0 or p.slot >= 10) continue;
         for (lanes) |o| {
