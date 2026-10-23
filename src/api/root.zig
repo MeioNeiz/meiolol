@@ -37,18 +37,19 @@ pub const Options = struct {
     /// Access-Control-Allow-Origin, for a page served from another origin in testing
     cors: ?[]const u8 = null,
     fetch: fetch.Options = .{},
-    /// A visit refreshes a player's games when the last refresh is older than this
-    refresh_after_s: i64 = 5 * 60,
-    /// "Check for new games" (&refresh=1) does when it is older than this. Riot lists a
-    /// game a few minutes after it ends, so the page repeats the check for a while
-    check_after_s: i64 = 60,
-    /// Retry an unknown Riot ID after this long
-    not_found_s: i64 = 24 * 60 * 60,
-    /// More queued lookups than this and new ones are refused (503) until it drains
-    max_jobs: i64 = 30,
-    /// Games in a report, newest first
-    max_games: u32 = 100,
 };
+
+/// A visit refreshes a player's games when the last refresh is older than this
+const refresh_after_s: i64 = 5 * 60;
+/// "Check for new games" (&refresh=1) does when it is older than this. Riot lists a game
+/// a few minutes after it ends, so the page repeats the check for a while
+const check_after_s: i64 = 60;
+/// Retry an unknown Riot ID after this long
+const not_found_s: i64 = 24 * 60 * 60;
+/// More queued lookups than this and new ones are refused (503) until it drains
+const max_jobs: i64 = 30;
+/// Games in a report, newest first
+const max_games = 100;
 
 /// Newest curves files served: the box pushes two (web-loop.sh push_curves)
 const max_curve_files = 2;
@@ -383,8 +384,8 @@ fn games(ctx: *Context, arena: Allocator, db: store.Db, query: []const u8) !Repl
 
     // Every read statement is finished before a write (see fetch.cachedSummary)
     const acct = try account(arena, db, key);
-    if (acct == null or (acct.?.puuid == null and now - acct.?.checked > ctx.opts.not_found_s)) {
-        if (!try enqueue(ctx, db, key, now)) return busy(arena);
+    if (acct == null or (acct.?.puuid == null and now - acct.?.checked > not_found_s)) {
+        if (!try enqueue(db, key, now)) return busy(arena);
         return reply(arena, try progress(db, key, .{ .state = "queued" }));
     }
     const puuid = acct.?.puuid orelse return .{
@@ -395,18 +396,18 @@ fn games(ctx: *Context, arena: Allocator, db: store.Db, query: []const u8) !Repl
         return reply(arena, .{ .state = "opted_out" });
     }
     const player = try loadPlayer(arena, db, puuid) orelse {
-        if (!try enqueue(ctx, db, key, now)) return busy(arena);
+        if (!try enqueue(db, key, now)) return busy(arena);
         return reply(arena, try progress(db, key, .{ .state = "queued" }));
     };
     try db.run("UPDATE players SET looked_up = ? WHERE puuid = ?", .{ now, puuid });
     // A job for this player under either key: the Riot ID while resolving, else PUUID
     const job_key = if (try db.scalar("SELECT 1 FROM jobs WHERE key = ?", .{key}) != null) key else puuid;
     const asked = try param(arena, query, "refresh") != null;
-    const gate = if (asked) ctx.opts.check_after_s else ctx.opts.refresh_after_s;
-    if (now - player.refreshed > gate and !try enqueue(ctx, db, job_key, now) and asked) return busy(arena);
+    const gate = if (asked) check_after_s else refresh_after_s;
+    if (now - player.refreshed > gate and !try enqueue(db, job_key, now) and asked) return busy(arena);
 
     var out = try progress(db, job_key, .{ .state = "ready", .player = player });
-    out.check_at = player.refreshed + ctx.opts.check_after_s;
+    out.check_at = player.refreshed + check_after_s;
     out.report = try report(ctx, arena, db, puuid, .{ .tier = player.tier, .division = player.division, .lp = player.lp });
     return reply(arena, out);
 }
@@ -464,10 +465,10 @@ fn busy(arena: Allocator) !Reply {
 }
 
 /// False when the queue is full. A key already queued keeps its place
-fn enqueue(ctx: *Context, db: store.Db, key: []const u8, now: i64) !bool {
+fn enqueue(db: store.Db, key: []const u8, now: i64) !bool {
     if (try db.scalar("SELECT 1 FROM jobs WHERE key = ?", .{key}) != null) return true;
     const jobs = try db.scalar("SELECT count(*) FROM jobs", .{}) orelse 0;
-    if (jobs >= ctx.opts.max_jobs) return false;
+    if (jobs >= max_jobs) return false;
     try db.run("INSERT OR IGNORE INTO jobs (key, requested) VALUES (?, ?)", .{ key, now });
     return true;
 }
@@ -494,7 +495,7 @@ fn report(ctx: *Context, arena: Allocator, db: store.Db, puuid: []const u8, rank
         \\WHERE pg.puuid = ? ORDER BY pg.start_ms DESC LIMIT ?
     );
     defer q.deinit();
-    try q.bind(.{ puuid, ctx.opts.max_games });
+    try q.bind(.{ puuid, max_games });
     var inputs: std.ArrayList(game.Input) = .empty;
     while (try q.step()) {
         const r = q.row(struct {
@@ -561,7 +562,7 @@ fn forget(ctx: *Context, arena: Allocator, db: store.Db, query: []const u8, post
         if ((check and waiting) or !(waiting or busy_already)) {
             // Room first: a challenge row with no job behind it would hang until expiry
             const jobs = try db.scalar("SELECT count(*) FROM jobs", .{}) orelse 0;
-            if (jobs >= ctx.opts.max_jobs) return busy(arena);
+            if (jobs >= max_jobs) return busy(arena);
             if (check and waiting) {
                 try db.run("UPDATE challenges SET state = 'checking' WHERE riot_id = ?", .{key});
             } else {

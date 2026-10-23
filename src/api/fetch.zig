@@ -21,17 +21,18 @@ pub const Options = struct {
     /// Base URL of the crawler's proxy; null calls Riot with `key` (local testing)
     proxy: ?[]const u8 = null,
     key: []const u8 = "",
-    /// New games fetched per refresh (~2 calls each); older ones on later refreshes
-    max_new: u32 = 10,
-    /// How far back to list match ids
-    since_days: i64 = 60,
-    /// Players nobody looked up for this long are deleted (docs/your-games.md)
-    retention_days: i64 = 30,
     /// Shared with the box (docs/your-games.md): the service writes forgotten.txt,
     /// every blocked PUUID; it imports box-forgotten.txt, the box's `meiolol forget`
     /// list. Null: no sync
     exchange_dir: ?[]const u8 = null,
 };
+
+/// New games fetched per refresh (~2 calls each); older ones on later refreshes
+const max_new = 10;
+/// How far back to list match ids
+const since_days = 60;
+/// Players nobody looked up for this long are deleted (docs/your-games.md)
+const retention_days = 30;
 
 /// Account lookups go to the nearest account-v1 cluster; any answers for any player
 const account_route: endpoints.Region = .europe;
@@ -84,7 +85,7 @@ pub const Fetcher = struct {
             const arena = arena_state.allocator();
             const now = f.seconds();
             if (now - pruned >= std.time.s_per_hour) {
-                try cache.prune(f.db, now - f.opts.retention_days * std.time.s_per_day, now);
+                try cache.prune(f.db, now - retention_days * std.time.s_per_day, now);
                 if (f.opts.exchange_dir) |dir| syncForgotten(f.gpa, f.io, f.db, dir, now) catch |err| {
                     log.warn("forgotten list sync: {t}", .{err});
                 };
@@ -234,7 +235,7 @@ pub const Fetcher = struct {
         const now = f.seconds();
         var ids: std.ArrayList([]const u8) = .empty;
         for (queues) |queue| {
-            const body = try f.keep(arena, try endpoints.matchIds(try f.route(@tagName(region)), region, puuid, queue, now - f.opts.since_days * std.time.s_per_day, now, 0)) orelse
+            const body = try f.keep(arena, try endpoints.matchIds(try f.route(@tagName(region)), region, puuid, queue, now - since_days * std.time.s_per_day, now, 0)) orelse
                 return error.NoMatchIds;
             try ids.appendSlice(arena, try endpoints.parse([]const []const u8, arena, body));
         }
@@ -242,7 +243,7 @@ pub const Fetcher = struct {
 
         var wanted: std.ArrayList([]const u8) = .empty;
         for (ids.items) |id| {
-            if (wanted.items.len == f.opts.max_new) break;
+            if (wanted.items.len == max_new) break;
             const have = try f.db.scalar("SELECT 1 FROM player_games WHERE puuid = ? AND match_id = ?", .{ puuid, id });
             if (have == null) try wanted.append(arena, id);
         }
@@ -255,7 +256,7 @@ pub const Fetcher = struct {
                 \\ORDER BY start_ms DESC LIMIT ?
             );
             defer q.deinit();
-            try q.bind(.{ puuid, f.opts.max_new });
+            try q.bind(.{ puuid, max_new });
             while (try q.step()) try unnamed.append(arena, try arena.dupe(u8, q.bytes(0)));
         }
         const total = wanted.items.len + unnamed.items.len;
@@ -449,12 +450,12 @@ test "a refresh frees every Riot body it fetched" {
     defer arena_state.deinit();
     const db = try cache.open(":memory:");
     defer db.close();
-    var f: Fetcher = .{ .gpa = gpa, .io = std.testing.io, .db = db, .opts = .{ .max_new = 1 } };
+    var f: Fetcher = .{ .gpa = gpa, .io = std.testing.io, .db = db, .opts = .{} };
     defer f.deinit();
     for ([_][]const u8{ "europe", "euw1" }) |name| (try f.route(name)).fake = &fake;
     try db.run("INSERT INTO players (puuid, game_name, tag_line, platform) VALUES ('p', 'A', '1', 'EUW1')", .{});
     try f.refresh(arena_state.allocator(), "p", "p");
-    try std.testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM matches WHERE timeline IS NOT NULL", .{}));
+    try std.testing.expectEqual(@as(?i64, max_new), try db.scalar("SELECT count(*) FROM matches WHERE timeline IS NOT NULL", .{}));
 }
 
 test pickIcon {
