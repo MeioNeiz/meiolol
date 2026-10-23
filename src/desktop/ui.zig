@@ -59,8 +59,9 @@ pub const Status = union(enum) {
 /// From the update thread (update.zig), under the content
 pub const Note = union(enum) {
     none,
+    /// First start with update.key: fetching the data
     downloading,
-    /// Error name
+    /// Error name of the last failed check (@errorName: static)
     failed: []const u8,
     /// A new version is in place for the next start
     restart,

@@ -31,7 +31,7 @@ const Shared = struct {
     /// Set by the update thread when new files are on disk; the poller loads them
     fresh: std.atomic.Value(bool) = .init(false),
     /// The update thread's note for the footer, under the mutex
-    note: Note = .none,
+    note: ui.Note = .none,
     /// Grows as the poller fetches icons from the client, under the mutex
     icons: ?Icons = null,
 };
@@ -41,16 +41,6 @@ const Data = struct {
     arena: std.heap.ArenaAllocator,
     stats: core.Stats,
     curves: ?core.curvesfile.Curves,
-};
-
-pub const Note = union(enum) {
-    none,
-    /// First start with update.key: fetching the data
-    downloading,
-    /// Error name of the last failed check, while there is no data
-    failed: [32]u8,
-    /// A new exe is in place
-    restart,
 };
 
 /// Between checks; after a failure, sooner
@@ -91,8 +81,7 @@ fn load(gpa: std.mem.Allocator) ?*Data {
     const data = gpa.create(Data) catch return null;
     data.arena = .init(gpa);
     if (loadInto(data)) return data else |err| std.log.err("loading data: {t}", .{err});
-    data.arena.deinit();
-    gpa.destroy(data);
+    freeData(gpa, data);
     return null;
 }
 
@@ -147,17 +136,14 @@ fn updateLoop(o: update.Options) void {
         } else |err| {
             std.log.warn("update: {t}", .{err});
             wait = retry_after;
-            var name: [32]u8 = @splat(0);
-            const e = @errorName(err);
-            @memcpy(name[0..@min(e.len, name.len)], e[0..@min(e.len, name.len)]);
-            setNote(.{ .failed = name });
+            setNote(.{ .failed = @errorName(err) });
         }
         std.Io.sleep(io, wait, .awake) catch {};
     }
 }
 
 /// A failure never hides the restart note
-fn setNote(note: Note) void {
+fn setNote(note: ui.Note) void {
     shared.mutex.lockUncancelable(io);
     if (note != .failed or shared.note != .restart) shared.note = note;
     shared.mutex.unlock(io);
@@ -174,11 +160,9 @@ pub fn frame() void {
     defer shared.mutex.unlock(io);
     const stats = if (shared.data) |d| &d.stats else null;
     const note: ui.Note = switch (shared.note) {
-        .none => .none,
-        .downloading => .downloading,
         // Only matters while there is nothing else to show
-        .failed => |*e| if (stats == null) .{ .failed = std.mem.sliceTo(e, 0) } else .none,
-        .restart => .restart,
+        .failed => if (stats == null) shared.note else .none,
+        .none, .downloading, .restart => shared.note,
     };
     ui.frame(.{ .status = shared.status, .stats = stats, .icons = &shared.icons.?, .edition = edition, .note = note });
 }
@@ -214,7 +198,7 @@ fn poll(gpa: std.mem.Allocator) void {
         var arena: std.heap.ArenaAllocator = .init(gpa);
         const status = if (shared.data) |d| p.tick(arena.allocator(), d) catch |err| switch (err) {
             error.OutOfMemory => return,
-            else => p.disconnect(arena.allocator(), err),
+            else => p.disconnect(err),
         } else ui.Status.no_data;
         const key = p.key(status);
         if (key != shown) {
@@ -261,11 +245,13 @@ const Poller = struct {
         p.own = null;
     }
 
-    fn disconnect(p: *Poller, arena: std.mem.Allocator, err: anyerror) ui.Status {
+    fn disconnect(p: *Poller, err: anyerror) ui.Status {
         p.watch.disconnect();
         p.forgetOwn();
-        if (err == error.ClientNotRunning) return .no_client;
-        return .{ .client_error = arena.dupe(u8, @errorName(err)) catch "error" };
+        return switch (err) {
+            error.ClientNotRunning => .no_client,
+            else => .{ .client_error = @errorName(err) },
+        };
     }
 
     /// Changes whenever what the status shows would
