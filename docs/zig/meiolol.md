@@ -19,4 +19,7 @@ code), 13 `anyerror` (command table, thread failure slots, vtables), 17 `catch
 unreachable` (fixed buffers, labtools), 21 `.unlimited` (our own big lab files);
 sqlite `Stmt.row` @intCasts db values (an out-of-range value panics every reader;
 changing it touches ~100 call sites); winnet.setFlag adopted by the net family and
-effects only; deploy/golden.sh not yet rerun (gpu-box off)
+effects only. deploy/golden.sh after it (23 Oct): the lab didn't build at d3d7186
+(champgroups' comps.cellKey went private in 2ed8baa; fe264b4), and at e0ef0f5 all four
+non-test cases give the same numbers as 616e0a6, the cleanup's base: no change from the
+cleanup. Both differ from golden.tsv (moved between d87d8d7 and 616e0a6, not bisected)
