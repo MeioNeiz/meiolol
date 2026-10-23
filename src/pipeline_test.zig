@@ -233,7 +233,7 @@ test "fixture games to stats, curves and the website" {
         // Daily Draft: a recent game, read in words (no draft win chance,
         // points or gold amounts); reasons from the list Learn uses; option cards and lane
         // rows that static/daily.js fills
-        .{ "daily.html", &.{ "from recent games", "95% sure it is not even", "two standard errors on 200+ games", "<div id=\"options\" class=\"dd-options\"></div>", "<ul id=\"lanes\" class=\"dd-lanes\"></ul>", "<script src=\"reasons.js\" defer></script>", "<p id=\"crowd\" class=\"muted dd-crowd-note\" hidden></p>" } },
+        .{ "daily.html", &.{ "from recent games", "rated as if it were the last", "two standard errors on 200+ games", "<div id=\"options\" class=\"dd-options\"></div>", "<ul id=\"lanes\" class=\"dd-lanes\"></ul>", "<script src=\"reasons.js\" defer></script>", "<p id=\"crowd\" class=\"muted dd-crowd-note\" hidden></p>" } },
         .{ "privacy.html", &.{ "the date\nshown is the puzzle's, not the game's", "we keep only each puzzle's totals", "<h2 id=\"accounts\">Accounts</h2>" } },
         // Learn: lessons and practice as tabs, a lesson a screen with its own nav, practice
         // levels (learn.js draws them)

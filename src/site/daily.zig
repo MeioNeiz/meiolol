@@ -33,21 +33,30 @@ pub fn page(w: *Writer, info: prose.Info) Writer.Error!void {
         \\<div id="score" class="dd-score"></div>
         \\<div id="happened" class="tiles dd-tiles"></div>
         \\<p id="estimate" class="dd-paper"></p>
+        \\<section id="verdict" class="card dd-review" hidden></section>
+        \\<section id="model-picks" class="card dd-review" hidden></section>
+        \\<section id="seats" class="card dd-review" hidden></section>
         \\<div id="scoreboard" class="dd-sbs" hidden></div>
-        \\<h3 class="dd-h">Lanes at 14 minutes</h3>
+        \\<h3 class="dd-h">Lanes: who should win them, and gold at 14 minutes</h3>
         \\<ul id="lanes" class="dd-lanes"></ul>
         \\<p id="share-row"><button type="button" id="share">Share result</button> <span id="share-note" class="muted"></span></p>
         \\<details class="dd-how"><summary>How these facts are read</summary>
         \\<p class="muted">From ranked solo games in EUW on patch {patch}, whichever patch the game was
         \\played on. The hidden slot is the pick the rest of the draft explains best, by its
-        \\matchups and teammates more than its strength on the patch. A draft leans to a side only when our model is 95% sure it is not even;
-        \\otherwise it reads "close". A lane or option's usual gold at 14 minutes is always
+        \\matchups and teammates more than its strength on the patch. Win chances are our draft
+        \\model's, from the ten champions alone: each one's strength in its role, how it does
+        \\with its teammates and against each enemy. The range is where the model is 95% sure
+        \\the chance lies; a side is "clear" only when the range leaves out 50%. Every pick is
+        \\rated as if it were the last: the other nine and the bans fixed, against every champion
+        \\with enough games in the role. A gap to the model's pick inside its range is no clear
+        \\difference. A lane or option's usual gold at 14 minutes is always
         \\shown, coloured only when it is 200 or more and clear of even by
         \\two standard errors on 200+ games, mostly the matchup's own; in this game, under 200
         \\gold is uncoloured. A reason ("good into", "better with") needs 400+ games and a
         \\difference larger than chance, and comes only from lane matchups and the few other
-        \\pairings the data shows matter. How drafts like this tend to go, not a verdict on
-        \\anyone's pick. <a href="method.html">Method</a>.</p></details>
+        \\pairings the data shows matter. The model knows only the champions, not the players,
+        \\their pools or the plan: how drafts like this tend to go, which play then decides.
+        \\<a href="method.html">Method</a>.</p></details>
         \\</section>
         \\<h2>Archive</h2>
         \\<ul id="archive" class="archive"></ul>

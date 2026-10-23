@@ -84,6 +84,10 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
   latest-patch games only; old patches only adjust the model while the latest patch has
   too few games to train and evaluate. No backfill of older patches: crawling more
   recent games does more for accuracy (docs/plan/patch-transfer.md)
+- J26 (23 Oct) Daily Draft shows "much more info in a nice view of what champ should
+  have got picked and what champ should have won", and pick shares with no 10-player
+  minimum. Overrides J1 for the Daily Draft: win chances with their 95% range, the
+  model's picks and every pick rated, words "the model's pick", never "best pick"
 - nn on the GPU: planned, not now
 - Q1 Rewrite the application around game review of your own games, lane curves as the
   benchmark; squads worded as planned, or out until built

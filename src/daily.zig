@@ -1,8 +1,9 @@
 //! Daily Draft: one real ranked solo draft a day, the same for everyone. One slot is
 //! hidden behind four options (which was played?), then the guess is the winner. The
 //! hidden slot is the pick the rest of the draft explains best (`hideBestFit`). The
-//! reveal is what happened and what this patch's numbers say about it, never "the
-//! correct pick" (docs/concept.md).
+//! reveal is what happened and how this patch's model reads the draft (`Review`): which
+//! side it favoured and why, and for every seat the champions it rates above the one
+//! played, each with its range.
 //!
 //! Puzzles carry no Riot IDs, PUUIDs, match ids or game dates: champions, bans, patch,
 //! ranks and the scoreboard of a recent finished game (J10: public games are public
@@ -62,6 +63,9 @@ pub const Option = struct {
     reasons: []const Reason,
     /// Against the enemy in the hidden role
     lane: ?LaneGold = null,
+    /// The hidden team's draft win chance with this pick, percent; null on puzzles made
+    /// before it
+    win: ?f64 = null,
 };
 
 /// Gold at lane_minute in a lane matchup, from the lane curves, from the first
@@ -111,7 +115,7 @@ pub const HiddenBy = enum {
 };
 
 /// Which side the draft leaned to: blue or red only when the model's 95% range
-/// (score.draftSe) excludes even. The page shows no draft win chance (J1)
+/// (score.draftSe) excludes even
 pub const Lean = enum { close, blue, red };
 
 pub const Lane = struct {
@@ -120,6 +124,50 @@ pub const Lane = struct {
     games: u32,
     /// Blue's side
     gold: ?LaneGold = null,
+    /// Blue's win chance from this lane alone (both ratings and the matchup, everything
+    /// else even), percent
+    win: ?f64 = null,
+};
+
+/// How the model reads the finished draft, from `numbers`' stats. Win chances in percent,
+/// to one decimal
+pub const Review = struct {
+    blue_win: f64,
+    /// Blue's 95% range (score.draftSe)
+    blue_low: f64,
+    blue_high: f64,
+    /// Blue's edge from each kind of term on its own, points of win chance
+    edge: Edge,
+    /// [blue, red], indexed by role
+    seats: [2][5]Seat,
+    /// The model's top picks for the hidden slot, best first
+    picks: []const Option,
+};
+
+pub const Edge = struct {
+    /// The ten champions' strength in their roles on the patch
+    champions: f64,
+    /// Ally pairs
+    teammates: f64,
+    /// Lane opponents
+    lanes: f64,
+    /// Every other pairing across the teams
+    matchups: f64,
+};
+
+/// One seat as the last pick: the played champion among the champions with enough games
+/// in the role that the other nine and the bans leave open
+pub const Seat = struct {
+    /// 1: the model's top pick
+    rank: u32,
+    of: u32,
+    /// The seat's team's draft win chance with the played champion
+    win: f64,
+    /// The model's top pick and the team's win chance with it
+    top: u32,
+    top_win: f64,
+    /// 95% half-width of top_win - win, points (score.pickSe)
+    range: f64,
 };
 
 /// One seat's end of game line. Rank: the ladder rank when the game was stored, null
@@ -171,6 +219,8 @@ pub const Puzzle = struct {
     lanes: [5]Lane,
     /// [blue, red], indexed by role; null on puzzles made before it until backfilled
     players: ?[2][5]Player = null,
+    /// Null on puzzles on a patch gone before it, and until the stats can score it
+    review: ?Review = null,
 };
 
 pub const File = struct { path: []const u8, data: []const u8 };
@@ -251,6 +301,7 @@ fn refresh(
     var ids: [4]u32 = undefined;
     for (p.options, &ids) |o, *id| id.* = o.id;
     if (!try numbers(arena, st, opts.curves, &p, ids)) return data;
+    p.review = try review(arena, st, opts.curves, p);
     const fresh = try std.json.Stringify.valueAlloc(arena, p, .{});
     if (std.mem.eql(u8, fresh, data)) return data;
     // The web loop and the renderer both build the shared view: never a half-written file
@@ -338,6 +389,7 @@ fn makeFrom(
         puzzle.n = n;
         puzzle.date = try arena.print("{f}", .{Date.fromDay(day)});
         if (!isCurrent(opts.patches, puzzle.patch)) puzzle.numbers_patch = newest(opts.patches);
+        puzzle.review = try review(arena, st, opts.curves, puzzle);
         try used.appendSlice(arena, match_id);
         try used.append(arena, '\n');
         return try std.json.Stringify.valueAlloc(arena, puzzle, .{});
@@ -524,20 +576,14 @@ fn numbers(
         const s = for (scored) |s| {
             if (s.champion == id) break s;
         } else return false;
-        const reasons = try arena.alloc(Reason, s.n_reasons);
-        for (s.reasons(), reasons) |r, *dst| dst.* = .{
-            .kind = r.kind,
-            .id = r.champion,
-            .role = r.role,
-            .pp = round1(r.pp),
-            .games = r.games,
-        };
+        const reasons = try reasonsOf(arena, s);
         const enemy = p.teams[1 - p.hidden_team][@backingInt(p.hidden_role)];
         o.* = .{
             .id = id,
             .games = s.games,
             .reasons = reasons,
             .lane = laneGold(curves, p.hidden_role, id, enemy),
+            .win = percent(s.win),
         };
     }
     p.games = st.games;
@@ -545,13 +591,99 @@ fn numbers(
     for (Role.all) |r| {
         const blue = st.index(p.teams[0][@backingInt(r)]).?;
         const red = st.index(p.teams[1][@backingInt(r)]).?;
+        const x = score.baseLogit(st, .{}, blue, r) - score.baseLogit(st, .{}, red, r) +
+            score.matchupLogit(st, .{}, r, blue, r, red);
         p.lanes[@backingInt(r)] = .{
             .pp = round1(score.matchupPp(st, .{}, r, blue, r, red)),
             .games = st.enemy(r, r, blue, red).games,
             .gold = laneGold(curves, r, p.teams[0][@backingInt(r)], p.teams[1][@backingInt(r)]),
+            .win = percent(sigmoid(x)),
         };
     }
     return true;
+}
+
+/// How many top picks the hidden slot's review lists
+const review_picks = 5;
+
+/// `p`'s review from `st`: every seat scored as the last pick against the champions the
+/// page would suggest there (minGames), the hidden one's top picks with their facts.
+/// Null when a seat has no candidate
+fn review(
+    arena: std.mem.Allocator,
+    st: *const Stats,
+    curves: ?*const curvesfile.Curves,
+    p: Puzzle,
+) !?Review {
+    const opts: score.Options = .{ .min_games = 0 };
+    const x = score.draftTerms(st, opts, p.teams);
+    const w = score.termWeights(st, opts);
+    const logit = x.weighted(w);
+    const se = score.draftSe(st, opts, p.teams);
+    const even = struct {
+        fn pp(l: f64) f64 {
+            return round1(100 * (sigmoid(l) - 0.5));
+        }
+    }.pp;
+    var r: Review = .{
+        .blue_win = percent(sigmoid(logit)),
+        .blue_low = percent(sigmoid(logit - 1.96 * se)),
+        .blue_high = percent(sigmoid(logit + 1.96 * se)),
+        .edge = .{
+            .champions = even(w.base * x.base),
+            .teammates = even(w.duo * x.duo),
+            .lanes = even(w.lane * x.lane),
+            .matchups = even(w.matchup * x.matchup),
+        },
+        .seats = undefined,
+        .picks = &.{},
+    };
+    const ranked = try arena.alloc(core.Suggestion, st.n);
+    for ([_]u1{ 0, 1 }) |t| for (Role.all) |role| {
+        var seat = p;
+        seat.hidden_team = t;
+        seat.hidden_role = role;
+        const played = p.teams[t][@backingInt(role)];
+        var draft = try hiddenDraft(arena, seat);
+        const all = core.recommend(st, draft, .{ .min_games = minGames(st) }, ranked);
+        if (all.len == 0) return null;
+        const pool = [1]u32{played};
+        draft.pool = &pool;
+        var mine: [1]core.Suggestion = undefined;
+        if (core.recommend(st, draft, opts, &mine).len != 1) return null;
+        var above: u32 = 0;
+        var listed = false;
+        for (all) |s| {
+            if (s.champion == played) listed = true else if (s.pp > mine[0].pp) above += 1;
+        }
+        // The played champion may have too few games to be listed, yet rate higher
+        const top = if (above == 0) mine[0] else all[0];
+        var swapped = p.teams;
+        swapped[t][@backingInt(role)] = top.champion;
+        const diff_se = @sqrt(std.math.pow(f64, score.pickSe(st, opts, p.teams, t, role), 2) +
+            std.math.pow(f64, score.pickSe(st, opts, swapped, t, role), 2));
+        const win = mine[0].win;
+        r.seats[t][@backingInt(role)] = .{
+            .rank = above + 1,
+            .of = @intCast(all.len + @intFromBool(!listed)),
+            .win = percent(win),
+            .top = top.champion,
+            .top_win = percent(top.win),
+            .range = round1(100 * win * (1 - win) * 1.96 * diff_se),
+        };
+        if (t != p.hidden_team or role != p.hidden_role) continue;
+        const picks = try arena.alloc(Option, @min(review_picks, all.len));
+        const enemy = p.teams[1 - t][@backingInt(role)];
+        for (all[0..picks.len], picks) |s, *o| o.* = .{
+            .id = s.champion,
+            .games = s.games,
+            .reasons = try reasonsOf(arena, s),
+            .lane = laneGold(curves, role, s.champion, enemy),
+            .win = percent(s.win),
+        };
+        r.picks = picks;
+    };
+    return r;
 }
 
 const participants_sql =
@@ -654,13 +786,33 @@ fn options(arena: std.mem.Allocator, st: *const Stats, p: Puzzle, rand: std.Rand
 /// A side only when the model's 95% range for the draft's log-odds excludes even
 fn lean(st: *const Stats, teams: [2][5]u32) Lean {
     const opts: score.Options = .{ .min_games = 0 };
-    const x = score.draftTerms(st, opts, teams).weighted(opts.weights);
+    const x = score.draftTerms(st, opts, teams).weighted(score.termWeights(st, opts));
     if (@abs(x) <= 1.96 * score.draftSe(st, opts, teams)) return .close;
     return if (x > 0) .blue else .red;
 }
 
+fn reasonsOf(arena: std.mem.Allocator, s: core.Suggestion) ![]const Reason {
+    const reasons = try arena.alloc(Reason, s.n_reasons);
+    for (s.reasons(), reasons) |r, *dst| dst.* = .{
+        .kind = r.kind,
+        .id = r.champion,
+        .role = r.role,
+        .pp = round1(r.pp),
+        .games = r.games,
+    };
+    return reasons;
+}
+
 pub fn round1(x: f64) f64 {
     return @round(x * 10) / 10;
+}
+
+fn percent(p: f64) f64 {
+    return round1(100 * p);
+}
+
+fn sigmoid(x: f64) f64 {
+    return 1 / (1 + @exp(-x));
 }
 
 const testing = std.testing;
@@ -746,6 +898,25 @@ test "puzzles are made once, anonymised and published" {
     try testing.expectEqual(7, red_mid.kills);
     try testing.expectEqualStrings("GOLD", red_mid.tier.?);
     try testing.expectEqual(null, red_mid.gold14);
+
+    // Every seat as the last pick: the played champion's team's chance agrees with the
+    // whole draft's; the model's top pick is never below it
+    const rv = p.review.?;
+    try testing.expect(rv.blue_low <= rv.blue_win and rv.blue_win <= rv.blue_high);
+    for (0..2) |t| for (rv.seats[t]) |seat| {
+        const blue = if (t == 0) seat.win else 100 - seat.win;
+        try testing.expectApproxEqAbs(rv.blue_win, blue, 0.11);
+        try testing.expect(seat.rank >= 1 and seat.rank <= seat.of);
+        try testing.expect(seat.top_win >= seat.win);
+        try testing.expect(seat.range > 0);
+    };
+    try testing.expect(rv.picks.len > 0);
+    const hidden = rv.seats[p.hidden_team][@backingInt(p.hidden_role)];
+    if (hidden.rank > 1) try testing.expectEqual(hidden.top, rv.picks[0].id);
+    for (rv.picks[1..], rv.picks[0 .. rv.picks.len - 1]) |o, prev| {
+        try testing.expect(o.win.? <= prev.win.?);
+    }
+    for (p.lanes) |l| try testing.expect(l.win != null);
 
     // Kept, not remade; a new game for each new day, never one already used
     var next = opts;

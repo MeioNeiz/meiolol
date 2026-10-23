@@ -119,9 +119,16 @@ facts with counts are not that, but check the line with Jacob before numbers com
   "42% picked" on each turned card and "50% chose" on each side from 10 players, with
   the count under the sides. Privacy page says so. Repeats or scripts can inflate it
   within the rate limit: accepted, counts only
-- Next: pick verdicts (J2 form, Jacob 20 Oct): plan in
-  data/team/2026-10-19-night/daily.md (score.pickSe, measure how many picks clear on
-  the live patch first); a hint before the guess; share text with the facts
+- Done 23 Oct (J26): the reveal reviews the draft (Puzzle.review, refreshed while the
+  patch is current): "Who should have won, on paper" (blue's draft win chance as a bar
+  with its 95% range, the result against it, the edge by kind of term), "Who should have
+  been picked" (the model's top five for the hidden slot with each one's team win
+  chance, gap to the played champion and fact; the played one at its rank), "Every pick,
+  rated" (all ten seats as the last pick: rank among champions with minGames, the
+  model's pick, the gap, coloured when clear of score.pickSe's range). Option cards
+  show the team's win chance, a star on the model's pick of the four; lanes say which
+  champion should win them (both ratings and the matchup). Pick shares from 1 player
+- Next: a hint before the guess; share text with the facts
 Later: puzzles from clear comp leans (data-and-model.md step 5).
 
 ## Learn

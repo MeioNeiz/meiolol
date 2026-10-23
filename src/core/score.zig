@@ -280,41 +280,66 @@ pub fn draftWin(stats: *const Stats, opts: Options, teams: [2][5]u32) f64 {
     return sigmoid(draftTerms(stats, opts, teams).weighted(ctx.weights()));
 }
 
+/// The weights draftWin puts on draftTerms' kinds: the fitted model's are folded into its
+/// terms, so all 1 with one
+pub fn termWeights(stats: *const Stats, opts: Options) TermWeights {
+    return (Context{ .stats = stats, .opts = opts }).weights();
+}
+
+/// Posterior variance of one weighted term near 50%
+fn termVar(weight: f64, n: u32, k: f64) f64 {
+    return weight * weight * 4 / (@as(f64, @floatFromInt(n)) + k);
+}
+
 /// Standard error of draftTerms' weighted log-odds under the model's own assumptions:
 /// each term's posterior variance is about 4 / (games + prior games) (a logit near 50%),
 /// summed as independent. Says how sure the model is given its priors, not how well it
 /// predicts games
 pub fn draftSe(stats: *const Stats, opts: Options, teams: [2][5]u32) f64 {
-    const w = (Context{ .stats = stats, .opts = opts }).weights();
-    const termVar = struct {
-        fn f(weight: f64, n: u32, k: f64) f64 {
-            return weight * weight * 4 / (@as(f64, @floatFromInt(n)) + k);
-        }
-    }.f;
-    var c: [2][5]?usize = undefined;
-    for (teams, &c) |team, *cs| for (team, cs) |id, *ci| {
-        ci.* = stats.index(id);
-    };
     var v: f64 = 0;
-    for (c) |cs| for (cs, Role.all, 0..) |ca, ra, i| {
-        const a = ca orelse continue;
-        v += termVar(w.base, stats.champRole(ra, a).games, opts.base_prior_games);
-        for (cs[i + 1 ..], Role.all[i + 1 ..]) |cb, rb| if (cb) |b| {
-            const n = stats.ally(ra, rb, a, b).games;
-            v += termVar(w.duo, n, opts.duo_prior_games orelse opts.prior_games);
-        };
+    for (0..2) |s| for (Role.all) |r| {
+        v += slotVar(stats, opts, teams, @intCast(s), r, true);
     };
-    for (c[0], Role.all) |ca, ra| {
-        const a = ca orelse continue;
-        for (c[1], Role.all) |ce, re| if (ce) |e| {
-            const n = stats.enemy(ra, re, a, e).games;
-            v += if (ra == re)
-                termVar(w.lane, n, opts.lane_prior_games orelse opts.prior_games)
-            else
-                termVar(w.matchup, n, opts.matchup_prior_games orelse opts.prior_games);
-        };
-    }
     return @sqrt(v);
+}
+
+/// As draftSe over only the terms of the champion in `teams[side][role]`: its base
+/// rating, its four duos and its five matchups. Two champions for one seat share no
+/// term, so their difference's SE is the root of the sum of squares
+pub fn pickSe(stats: *const Stats, opts: Options, teams: [2][5]u32, side: u1, role: Role) f64 {
+    return @sqrt(slotVar(stats, opts, teams, side, role, false));
+}
+
+/// The variance of the terms holding seat (side, role). `whole_draft` counts each pair
+/// once across the draft's seats: duos with the allies after `role`, matchups from side 0
+fn slotVar(
+    stats: *const Stats,
+    opts: Options,
+    teams: [2][5]u32,
+    side: u1,
+    role: Role,
+    whole_draft: bool,
+) f64 {
+    const w = (Context{ .stats = stats, .opts = opts }).weights();
+    const a = stats.index(teams[side][@backingInt(role)]) orelse return 0;
+    var v = termVar(w.base, stats.champRole(role, a).games, opts.base_prior_games);
+    for (Role.all) |ra| {
+        if (ra == role) continue;
+        if (whole_draft and @backingInt(ra) < @backingInt(role)) continue;
+        const b = stats.index(teams[side][@backingInt(ra)]) orelse continue;
+        const n = stats.ally(role, ra, a, b).games;
+        v += termVar(w.duo, n, opts.duo_prior_games orelse opts.prior_games);
+    }
+    if (whole_draft and side == 1) return v;
+    for (Role.all) |re| {
+        const e = stats.index(teams[1 - side][@backingInt(re)]) orelse continue;
+        const n = stats.enemy(role, re, a, e).games;
+        v += if (role == re)
+            termVar(w.lane, n, opts.lane_prior_games orelse opts.prior_games)
+        else
+            termVar(w.matchup, n, opts.matchup_prior_games orelse opts.prior_games);
+    }
+    return v;
 }
 
 /// The roles recommend infers for a team whose positions are hidden: `out[i]` for
@@ -837,6 +862,20 @@ test "full draft agrees with recommend" {
     loose.prior_games = 1;
     try testing.expect(draftSe(&t.stats, loose, teams) > se);
     try testing.expect(se > 0);
+
+    // A seat's terms are part of the draft's; every seat's together count each pair twice
+    var seats: f64 = 0;
+    for (0..2) |side| for (Role.all) |r| {
+        const ps = pickSe(&t.stats, test_opts, teams, @intCast(side), r);
+        try testing.expect(ps < se);
+        seats += ps * ps;
+    };
+    try testing.expect(seats > se * se and seats < 2 * se * se);
+    try testing.expectApproxEqAbs(
+        pickSe(&t.stats, test_opts, teams, 0, .middle),
+        pickSe(&t.stats, test_opts, .{ teams[1], teams[0] }, 1, .middle),
+        1e-12,
+    );
 
     var out: [4]Suggestion = undefined;
     const s = recommend(&t.stats, .{

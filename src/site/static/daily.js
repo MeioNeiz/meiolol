@@ -1,9 +1,10 @@
 // Daily Draft: puzzles from src/daily.zig (daily/index.json lists them, daily/<n>.json
 // each). Guess the hidden champion, then the winner. The options flip to one fact each
-// and the reveal shows the scoreboard and the lanes at 14, this game's and the patch's
-// usual, with game counts: never a draft win chance or "+X% win rate" (Riot policy,
-// docs/production-key.md). Results, streaks and archive stay in this browser
-// (localStorage); a finished puzzle's two answers go once to /api/daily, counted with
+// and the reveal shows how the model reads the draft (puzzle.review: who it favoured and
+// why, its picks for the hidden slot, every pick rated), the scoreboard and the lanes at
+// 14, this game's and the patch's usual, with game counts. Words stay "the model's
+// pick", never "best pick" (docs/production-key.md). Results, streaks and archive stay
+// in this browser (localStorage); a finished puzzle's two answers go once to /api/daily, counted with
 // nothing about who sent them, for the share of players picking each. Reasons: reasons.js.
 "use strict";
 
@@ -22,8 +23,6 @@ const KEY = "meiolol.daily.v1";
 const API = ["localhost", "127.0.0.1"].includes(location.hostname) && location.port !== "8090"
   ? "http://127.0.0.1:8090/api"
   : "/api";
-// Players who finished a puzzle before its shares show: under it one player is 10%+
-const CROWD_MIN = 10;
 // Preview mode (no production key yet): the page carries html.zig's banner. No Share
 // then, as its text links the site, and the site may not be advertised until the key
 // (docs/production-key.md); it comes back with the public build
@@ -48,6 +47,13 @@ const pad = (n) => String(n).padStart(2, "0");
 const fmt = (n) => n.toLocaleString("en-GB");
 const signed = (n) => `${n > 0 ? "+" : n < 0 ? "\u2212" : ""}${fmt(Math.abs(n))}`;
 const kilo = (n) => `${(n / 1000).toFixed(1)}k`;
+const pct = (x) => `${x.toFixed(1)}%`;
+const points = (x) => `${x > 0 ? "+" : x < 0 ? "\u2212" : ""}${Math.abs(x).toFixed(1)}`;
+function ordinal(n) {
+  const t = n % 100;
+  const s = t >= 11 && t <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th";
+  return `${n}${s}`;
+}
 const title = (s) => s[0] + s.slice(1).toLowerCase();
 
 // "Gold II", "Master"; "" when the player was not on the ladder
@@ -241,7 +247,7 @@ class Game {
   // Share of players picking each option and side, on the turned cards and side buttons
   renderCrowd() {
     const c = this.crowd;
-    const enough = c && c.players >= CROWD_MIN;
+    const enough = c && c.players > 0;
     const share = (k) => `${Math.round((100 * k) / c.players)}%`;
     for (const s of document.querySelectorAll(".dd-crowd")) s.remove();
     if (enough) {
@@ -256,8 +262,8 @@ class Game {
     note.hidden = !c;
     if (c) {
       note.textContent = enough
-        ? `How ${fmt(c.players)} players who finished this puzzle answered.`
-        : `${c.players} ${c.players === 1 ? "player has" : "players have"} finished this puzzle: shares show from ${CROWD_MIN}.`;
+        ? `How ${fmt(c.players)} ${c.players === 1 ? "player" : "players"} who finished this puzzle answered.`
+        : "No one else has finished this puzzle yet.";
     }
   }
 
@@ -267,6 +273,13 @@ class Game {
 
   get done() {
     return this.picked && this.mine.side !== undefined;
+  }
+
+  // The option the model rates highest, null on puzzles made before win chances
+  get topOption() {
+    const ws = this.p.options.filter((o) => o.win != null);
+    if (ws.length < this.p.options.length) return null;
+    return ws.reduce((a, b) => (b.win > a.win ? b : a)).id;
   }
 
   get enemy() {
@@ -375,6 +388,14 @@ class Game {
         back.append(el("span", "dd-mark", mark || " "));
         const f = this.optionFact(o);
         back.append(el("b", `dd-fact ${f.tone}`, f.head), el("small", "dd-sub", f.sub));
+        if (o.win != null) {
+          const top = o.id === this.topOption;
+          const w = el("small", `dd-owin${top ? " top" : ""}`, `${top ? "★ " : ""}${SIDES[p.hidden_team]} ${pct(o.win)}`);
+          w.title = top
+            ? "The model's pick of the four: the team's draft win chance with it"
+            : "The team's draft win chance with this pick";
+          back.append(w);
+        }
         card.append(back);
         b.setAttribute("aria-label", `${this.name(o.id)}. ${mark ? mark.slice(2) + ". " : ""}${f.head}, ${f.sub}`);
       }
@@ -450,6 +471,10 @@ class Game {
       read = `the lanes (${games}).`;
     }
     est.append(read);
+    est.hidden = !!p.review;
+    this.renderVerdict();
+    this.renderModelPicks();
+    this.renderSeats();
     this.renderScoreboard();
     this.renderLanes();
     $("share-row").hidden = PREVIEW;
@@ -478,6 +503,171 @@ class Game {
     if (this.isToday) more.push(`next in ${untilMidnight()}`);
     streak.append(el("small", "", more.join(" · ")));
     box.append(head, streak);
+  }
+
+  // Who the model favoured: blue's chance as a bar with its 95% range, the result against
+  // it, and the edge from each kind of term
+  renderVerdict() {
+    const p = this.p;
+    const r = p.review;
+    const box = $("verdict");
+    box.hidden = !r;
+    if (!r) return;
+    box.replaceChildren(el("h2", "", "Who should have won, on paper"));
+    const fav = r.blue_win >= 50 ? 0 : 1;
+    const favWin = fav === 0 ? r.blue_win : 100 - r.blue_win;
+    const clearSide = r.blue_low > 50 ? 0 : r.blue_high < 50 ? 1 : null;
+    const head = el("p", "dd-v-head");
+    head.append(el("b", SIDE_CLS[fav], `${SIDES[fav]} ${pct(favWin)}`));
+    const sure = clearSide !== null;
+    const upset = p.winner !== fav;
+    head.append(sure ? " favoured. " : ", slightly ahead but not clear. ",
+      el("b", SIDE_CLS[p.winner], `${SIDES[p.winner]} won`),
+      sure ? (upset ? " against the odds." : " as expected.") : ".");
+    box.append(head);
+
+    const bar = el("div", "dd-wbar");
+    bar.setAttribute("role", "img");
+    bar.setAttribute("aria-label", `Blue ${pct(r.blue_win)}, red ${pct(100 - r.blue_win)}; blue's range ${pct(r.blue_low)} to ${pct(r.blue_high)}`);
+    const blue = el("span", "dd-wb dd-blue", `Blue ${pct(r.blue_win)}`);
+    blue.style.width = `${r.blue_win}%`;
+    const red = el("span", "dd-wb dd-red", `${pct(100 - r.blue_win)} Red`);
+    const band = el("span", "dd-wrange");
+    band.style.left = `${r.blue_low}%`;
+    band.style.width = `${r.blue_high - r.blue_low}%`;
+    bar.append(blue, red, band, el("span", "dd-wmid"));
+    box.append(bar);
+    box.append(el("p", "muted dd-v-note", `95% range for blue: ${pct(r.blue_low)} to ${pct(r.blue_high)}. ` +
+      (clearSide === null ? "It takes in 50%, so neither side is clear." : `It leaves out 50%: ${SIDES[clearSide].toLowerCase()} clear.`)));
+
+    box.append(el("h3", "dd-h", "Where the edge came from"));
+    const kinds = [
+      ["champions", "Champions on the patch", "each champion's strength in its role"],
+      ["lanes", "Lane matchups", "the five same-role pairs"],
+      ["teammates", "Teammates together", "pairs on the same team"],
+      ["matchups", "Other matchups", "every other pair across the teams"],
+    ];
+    const scale = Math.max(2, ...kinds.map(([k]) => Math.abs(r.edge[k])));
+    const list = el("ul", "dd-edge");
+    for (const [k, label, hint] of kinds) {
+      const v = r.edge[k];
+      const li = el("li");
+      li.title = hint;
+      const track = el("span", "dd-etrack");
+      const fill = el("span", `dd-efill ${v >= 0 ? "dd-blue" : "dd-red"}`);
+      fill.style.width = `${(50 * Math.abs(v)) / scale}%`;
+      fill.style[v >= 0 ? "right" : "left"] = "50%";
+      track.append(fill);
+      const side = Math.abs(v) < 0.05 ? "even" : `${SIDES[v > 0 ? 0 : 1]} +${Math.abs(v).toFixed(1)}`;
+      li.append(el("span", "", label), track, el("b", Math.abs(v) < 0.05 ? "" : SIDE_CLS[v > 0 ? 0 : 1], side));
+      list.append(li);
+    }
+    box.append(list, el("p", "muted dd-v-note", "Points of blue's win chance each kind of term gives on its own."));
+  }
+
+  // The model's top picks for the hidden slot with the played one at its rank: the
+  // team's draft win chance with each and the gap to the played champion
+  renderModelPicks() {
+    const p = this.p;
+    const r = p.review;
+    const box = $("model-picks");
+    box.hidden = !r;
+    if (!r) return;
+    const seat = r.seats[p.hidden_team][roleIndex[p.hidden_role]];
+    const side = SIDES[p.hidden_team];
+    box.replaceChildren(el("h2", "", `Who should have been picked: ${side.toLowerCase()} ${roleName[p.hidden_role].toLowerCase()}`));
+    const rows = r.picks.map((o, i) => ({ o, rank: i + 1 }));
+    if (!r.picks.some((o) => o.id === p.played)) {
+      const o = p.options.find((x) => x.id === p.played);
+      rows.push(null, { o: { ...o, win: seat.win }, rank: seat.rank });
+    }
+    const lo = Math.min(...rows.filter(Boolean).map((x) => x.o.win)) - 0.5;
+    const hi = Math.max(...rows.filter(Boolean).map((x) => x.o.win));
+    const list = el("ol", "dd-mp");
+    for (const row of rows) {
+      if (!row) {
+        list.append(el("li", "dd-mp-gap", "⋮"));
+        continue;
+      }
+      const { o, rank } = row;
+      const played = o.id === p.played;
+      const li = el("li", played ? "played" : "");
+      li.append(el("span", "dd-mp-rank", ordinal(rank)), this.champ(o.id, 32));
+      const f = this.optionFact(o);
+      const fact = el("span", "dd-mp-fact");
+      fact.append(el("span", f.tone, f.head), el("small", "", f.sub));
+      li.append(fact);
+      const bar = el("span", "dd-mp-bar");
+      const fill = el("span", SIDE_CLS[p.hidden_team]);
+      fill.style.width = `${Math.max(4, (100 * (o.win - lo)) / Math.max(0.5, hi - lo))}%`;
+      bar.append(fill);
+      li.append(bar, el("b", "dd-mp-win", pct(o.win)));
+      const gap = o.win - seat.win;
+      const clearGap = Math.abs(gap) > seat.range;
+      li.append(played
+        ? el("span", "dd-mp-tag", "Played")
+        : el("span", `dd-mp-gap-pts ${clearGap ? (gap > 0 ? "up" : "down") : ""}`, `${points(gap)} vs played`));
+      list.append(li);
+    }
+    box.append(list);
+    const top = this.name(seat.top);
+    const gap = seat.top_win - seat.win;
+    let verdict;
+    if (seat.rank === 1) verdict = `${this.name(p.played)} was the model's own pick here.`;
+    else if (gap > seat.range) verdict = `${top} over ${this.name(p.played)}: ${points(gap)} points, clear of the model's range (±${seat.range.toFixed(1)}).`;
+    else verdict = `${top} rates ${points(gap)} points higher, inside the model's range (±${seat.range.toFixed(1)}): no clear difference.`;
+    box.append(el("p", "dd-v-foot", verdict),
+      el("p", "muted dd-v-note", `${side}'s draft win chance with each pick, the other nine and the bans as they were. ${this.name(p.played)} ranked ${ordinal(seat.rank)} of ${seat.of} with enough games in the role.`));
+  }
+
+  // Every seat as if it were the last pick: its rank among the open champions, the
+  // model's pick and the gap, coloured only when clear of the range
+  renderSeats() {
+    const p = this.p;
+    const r = p.review;
+    const box = $("seats");
+    box.hidden = !r;
+    if (!r) return;
+    box.replaceChildren(el("h2", "", "Every pick, rated"));
+    const grid = el("div", "dd-sbs");
+    for (const t of [0, 1]) {
+      const table = el("table", `dd-sb dd-seat ${SIDE_CLS[t]}`);
+      const head = el("tr");
+      head.append(el("th", "l", SIDES[t]), el("th", "", "Rank"), el("th", "l", "Model's pick"), el("th", "", "Gap"));
+      table.append(el("thead"), el("tbody"), el("tfoot"));
+      table.tHead.append(head);
+      let total = 0;
+      let clearOnes = 0;
+      ROLES.forEach(([role], i) => {
+        const seat = r.seats[t][i];
+        const tr = el("tr");
+        if (t === p.hidden_team && role === p.hidden_role) tr.className = "dd-was-hidden";
+        const who = el("td", "l");
+        who.append(this.champ(p.teams[t][i], 24));
+        const rank = el("td", seat.rank === 1 ? "dd-top" : "", seat.rank === 1 ? "★ 1st" : ordinal(seat.rank));
+        rank.title = `${ordinal(seat.rank)} of ${seat.of} champions with enough games in the role`;
+        const pick = el("td", "l");
+        const gap = seat.top_win - seat.win;
+        const clearGap = gap > seat.range;
+        if (seat.rank === 1) pick.append(el("span", "muted", "same"));
+        else pick.append(this.champ(seat.top, 24));
+        const g = el("td", clearGap ? "dd-cost" : "muted", seat.rank === 1 ? "" : points(-gap));
+        g.title = `Range ±${seat.range.toFixed(1)} points: ${clearGap ? "a clear gap" : "no clear difference"}`;
+        total += gap;
+        if (clearGap) clearOnes += 1;
+        tr.append(who, rank, pick, g);
+        table.tBodies[0].append(tr);
+      });
+      const foot = el("tr");
+      const clears = clearOnes ? `${clearOnes} clear ${clearOnes === 1 ? "gap" : "gaps"}` : "No clear gaps";
+      const sum = el("td", "l", `${clears} · ${points(-total)} points in all`);
+      sum.colSpan = 4;
+      foot.append(sum);
+      table.tFoot.append(foot);
+      grid.append(table);
+    }
+    box.append(grid, el("p", "muted dd-v-note",
+      "Each pick as if it were the last: rank among the champions with enough games in the role, the model's top pick there and the points of win chance between them. Coloured when the gap is clear of the model's range."));
   }
 
   // Per team: each seat's K/D/A, CS, gold and damage to champions, by role
@@ -545,8 +735,15 @@ class Game {
       }
       if (!cls && b == null) li.classList.add("thin");
       mid.append(el("span", `dd-usual ${cls || ""}`, chip));
-      // The draft model's lane edge, when it clears chance (rare until a lot of data)
-      if (clear(lane.pp, lane.games)) {
+      // Who should win the lane: both champions' ratings and the matchup, the rest even.
+      // Coloured from 2 points; older puzzles show the matchup edge only when clear
+      if (lane.win != null) {
+        const side = lane.win >= 50 ? 0 : 1;
+        const w = side === 0 ? lane.win : 100 - lane.win;
+        const fav = el("span", `dd-chip dd-fav ${w >= 52 ? SIDE_CLS[side] : ""}`, `${this.name(p.teams[side][r])} favoured ${pct(w)}`);
+        fav.title = "Win chance from this lane alone: both champions on the patch and their matchup";
+        mid.append(fav);
+      } else if (clear(lane.pp, lane.games)) {
         const side = lane.pp > 0 ? 0 : 1;
         mid.append(el("span", `dd-chip ${SIDE_CLS[side]}`, `${SIDES[side]} wins it more`));
       }
