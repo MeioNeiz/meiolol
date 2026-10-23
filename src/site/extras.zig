@@ -110,7 +110,7 @@ pub const Extras = struct {
         const ids = try gpa.dupe(u32, st.ids);
         errdefer gpa.free(ids);
         // Learning after pool: it reads the bins pool's mastery pass finds
-        var pools = try pool.tallyWith(gpa, db, st, sets, &spreads, e.games);
+        var pools = try pool.tally(gpa, db, st, sets, &spreads, e.games);
         errdefer pools.deinit(gpa);
         const learnt = try learning.tallyWith(gpa, db, st, &learnings, e.games);
         e.people = .{ .ids = ids, .pool = pools, .learning = learnt };

@@ -275,7 +275,7 @@ pub fn cmdPool(c: *Cmd) !u8 {
     var model: std.Io.Writer.Allocating = .init(arena);
     try r.builder.write(&model.writer, try stats.label(&label_buf, chosen));
     const st: core.Stats = try .parse(arena, model.written());
-    var t = try pool.tally(gpa, db, &st, &.{platforms}, &.{});
+    var t = try pool.tally(gpa, db, &st, &.{platforms}, &.{}, null);
     defer t.deinit(gpa);
     const p = try pool.make(arena, &t, 0, &st, .{});
 

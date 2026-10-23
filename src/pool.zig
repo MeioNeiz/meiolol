@@ -419,14 +419,9 @@ fn freeTallies(gpa: Allocator, ts: []Tally) void {
 }
 
 /// Tallies for each of `sets` (platform lists), and players' win rates in each of
-/// `slices`' games, two passes over the database in all
-pub fn tally(gpa: Allocator, db: store.Db, st: *const Stats, sets: []const []const []const u8, slices: []const stats.Slice) !Tallies {
-    return tallyWith(gpa, db, st, sets, slices, null);
-}
-
-/// As tally; with `from`, games from the views partials and only the mastery rows
-/// changed since they were read
-pub fn tallyWith(
+/// `slices`' games, two passes over the database in all; with `from`, games from the
+/// views partials and only the mastery rows changed since they were read
+pub fn tally(
     gpa: Allocator,
     db: store.Db,
     st: *const Stats,
@@ -875,7 +870,7 @@ test "mastery: points as weight, stale and small champions left out" {
             puuid, p[0], now, p[1].len, store.Blob{ .bytes = blob },
         });
     }
-    var both = try tally(gpa, db, &st, &.{ &.{"EUW1"}, &.{ "EUW1", "KR" } }, &.{});
+    var both = try tally(gpa, db, &st, &.{ &.{"EUW1"}, &.{ "EUW1", "KR" } }, &.{}, null);
     defer both.deinit(gpa);
     try testing.expectEqual(2, both.mastery[1].players);
     const t = both.mastery[0];
@@ -912,7 +907,7 @@ test "games: one pass for several platform sets, a champion summed across platfo
         .{ .platforms = &.{ "EUW1", "KR" } },
         .{ .platforms = &.{ "EUW1", "KR" }, .since_ms = 6 },
     };
-    var t = try tally(gpa, db, &st, &.{ &.{"EUW1"}, &.{ "EUW1", "KR" } }, &slices);
+    var t = try tally(gpa, db, &st, &.{ &.{"EUW1"}, &.{ "EUW1", "KR" } }, &slices, null);
     defer t.deinit(gpa);
     try testing.expectEqual(1, t.spread[0].players[st.index(1).? * 101 + 100]);
     for (t.spread[1].players) |n| try testing.expectEqual(0, n);
