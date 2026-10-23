@@ -262,34 +262,6 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
         try set.put(arena, k, {});
         if (std.mem.eql(u8, k, "--net")) {
             o.net = std.meta.stringToEnum(Kind, v) orelse return error.UnknownNet;
-        } else if (std.mem.eql(u8, k, "--emb")) {
-            o.emb = try std.fmt.parseInt(u32, v, 10);
-        } else if (std.mem.eql(u8, k, "--hidden")) {
-            o.hidden = try std.fmt.parseInt(u32, v, 10);
-        } else if (std.mem.eql(u8, k, "--depth")) {
-            o.depth = try std.fmt.parseInt(u32, v, 10);
-        } else if (std.mem.eql(u8, k, "--emb-wd")) {
-            o.emb_wd = try std.fmt.parseFloat(f32, v);
-        } else if (std.mem.eql(u8, k, "--clip")) {
-            o.clip = try std.fmt.parseFloat(f32, v);
-        } else if (std.mem.eql(u8, k, "--fix-offset")) {
-            o.fix_offset = (try std.fmt.parseInt(u1, v, 10)) == 1;
-        } else if (std.mem.eql(u8, k, "--evals")) {
-            o.evals = try std.fmt.parseInt(u32, v, 10);
-        } else if (std.mem.eql(u8, k, "--dropout")) {
-            o.dropout = try std.fmt.parseFloat(f32, v);
-        } else if (std.mem.eql(u8, k, "--wd")) {
-            o.wd = try std.fmt.parseFloat(f32, v);
-        } else if (std.mem.eql(u8, k, "--lr")) {
-            o.lr = try std.fmt.parseFloat(f32, v);
-        } else if (std.mem.eql(u8, k, "--batch")) {
-            o.batch = try std.fmt.parseInt(u32, v, 10);
-        } else if (std.mem.eql(u8, k, "--patience")) {
-            o.patience = try std.fmt.parseInt(u32, v, 10);
-        } else if (std.mem.eql(u8, k, "--max-epochs")) {
-            o.max_epochs = try std.fmt.parseInt(u32, v, 10);
-        } else if (std.mem.eql(u8, k, "--min-games")) {
-            o.min_games = try std.fmt.parseInt(u32, v, 10);
         } else if (std.mem.eql(u8, k, "--seeds")) {
             o.seeds = try parseSeeds(arena, v);
         } else if (std.mem.eql(u8, k, "--blocks")) {
@@ -302,27 +274,15 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             else
                 try foldBlock(Block, s));
             o.blocks = out.items;
-        } else if (std.mem.eql(u8, k, "--fraction")) {
-            o.fraction = try std.fmt.parseFloat(f64, v);
         } else if (std.mem.eql(u8, k, "--window")) {
             o.window = try Window.parse(v);
-        } else if (std.mem.eql(u8, k, "--shuffle-ids")) {
-            o.shuffle_ids = try std.fmt.parseInt(u32, v, 10);
         } else if (std.mem.eql(u8, k, "--fit-preds")) {
             o.fit_preds = std.mem.eql(u8, v, "1");
         } else if (std.mem.eql(u8, k, "--export")) {
             o.export_net = std.mem.eql(u8, v, "1");
-        } else if (std.mem.eql(u8, k, "--resample")) {
-            o.resample = try std.fmt.parseInt(u32, v, 10);
-        } else if (std.mem.eql(u8, k, "--threads")) {
-            o.threads = try std.fmt.parseInt(u32, v, 10);
-        } else if (std.mem.eql(u8, k, "--emb-init")) {
-            o.emb_init = v;
         } else if (std.mem.eql(u8, k, "--emb-freeze")) {
             o.emb_freeze = !std.mem.eql(u8, v, "0");
-        } else if (std.mem.eql(u8, k, "--out")) {
-            o.out = v;
-        } else if (!try setnet.parseOption(&o.set, k, v)) return error.UnknownOption;
+        } else if (!try setFlag(&o, k, v, &.{"export_net"}) and !try setnet.parseOption(&o.set, k, v)) return error.UnknownOption;
     }
     // A test look is one run of the declared model on all its fit games
     if (std.mem.findScalar(Block, o.blocks, .final) != null) {
@@ -360,6 +320,46 @@ pub fn foldBlock(comptime B: type, s: []const u8) !B {
     const n = try std.fmt.parseInt(u3, s, 10);
     if (n > harness.folds) return error.BadBlock;
     return @fromBackingInt(n);
+}
+
+/// `--emb-wd 0.01` sets o.emb_wd: the field named like flag k, dashes for underscores,
+/// parsed in its type (unsigned or float, bool as 0/1, []const u8, or an optional of one).
+/// false when no such field (other types and `skip` never match)
+pub fn setFlag(o: anytype, k: []const u8, v: []const u8, comptime skip: []const []const u8) !bool {
+    const info = @typeInfo(@TypeOf(o.*)).@"struct";
+    inline for (info.field_names, info.field_types) |name, T| {
+        const flag = comptime blk: {
+            var dashed: [name.len]u8 = name[0..].*;
+            std.mem.replaceScalar(u8, &dashed, '_', '-');
+            break :blk "--" ++ dashed;
+        };
+        const skipped = comptime for (skip) |s| {
+            if (std.mem.eql(u8, s, name)) break true;
+        } else false;
+        if (comptime !skipped and flagType(T)) if (std.mem.eql(u8, k, flag)) {
+            @field(o, name) = try flagValue(T, v);
+            return true;
+        };
+    }
+    return false;
+}
+
+fn flagType(comptime T: type) bool {
+    return switch (@typeInfo(T)) {
+        .int, .float, .bool => true,
+        .optional => |x| flagType(x.child),
+        else => T == []const u8,
+    };
+}
+
+fn flagValue(comptime T: type, v: []const u8) !T {
+    return switch (@typeInfo(T)) {
+        .int => std.fmt.parseInt(T, v, 10),
+        .float => std.fmt.parseFloat(T, v),
+        .bool => (try std.fmt.parseInt(u1, v, 10)) == 1,
+        .optional => |x| try flagValue(x.child, v),
+        else => v,
+    };
 }
 
 /// --seeds 1,2,3
@@ -1595,6 +1595,21 @@ test "health fit: a resid net at step 0 predicts its offsets" {
     const p = try healthFit(gpa, o, 1, 8, &games, 0, &games, &pred);
     defer gpa.free(p);
     for (pred, games) |q, g| try testing.expectApproxEqAbs(sigmoid(g.off), q, 1e-6);
+}
+
+test "setFlag: a field by its dashed name, in its type; skipped and other types don't match" {
+    var o: Options = .{};
+    try testing.expect(try setFlag(&o, "--emb-wd", "0.25", &.{}));
+    try testing.expectEqual(@as(?f32, 0.25), o.emb_wd);
+    try testing.expect(try setFlag(&o, "--fix-offset", "1", &.{}));
+    try testing.expect(o.fix_offset);
+    try testing.expect(try setFlag(&o, "--emb-init", "dir", &.{}));
+    try testing.expectEqualStrings("dir", o.emb_init.?);
+    try testing.expectError(error.Overflow, setFlag(&o, "--fix-offset", "2", &.{}));
+    try testing.expect(!try setFlag(&o, "--emb_wd", "1", &.{}));
+    try testing.expect(!try setFlag(&o, "--export-net", "1", &.{"export_net"}));
+    try testing.expect(!try setFlag(&o, "--set", "1", &.{}));
+    try testing.expect(!try setFlag(&o, "--seeds", "1", &.{}));
 }
 
 test "block names as emb files and logs spell them" {

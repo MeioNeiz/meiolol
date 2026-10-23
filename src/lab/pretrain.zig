@@ -153,26 +153,12 @@ fn parseOptions(arena: Allocator, args: []const []const u8) !Options {
         if (i + 1 >= args.len) return error.MissingValue;
         const key = args[i];
         const v = args[i + 1];
-        if (std.mem.eql(u8, key, "--dim")) {
-            o.dim = try std.fmt.parseInt(u32, v, 10);
-        } else if (std.mem.eql(u8, key, "--min-games")) {
-            o.min_games = try std.fmt.parseInt(u32, v, 10);
-        } else if (std.mem.eql(u8, key, "--l2")) {
+        if (std.mem.eql(u8, key, "--l2")) {
             var out: std.ArrayList(f32) = .empty;
             var it = std.mem.tokenizeScalar(u8, v, ',');
             while (it.next()) |s| try out.append(arena, try std.fmt.parseFloat(f32, s));
             if (out.items.len == 0) return error.BadValue;
             o.l2 = out.items;
-        } else if (std.mem.eql(u8, key, "--lr")) {
-            o.lr = try std.fmt.parseFloat(f32, v);
-        } else if (std.mem.eql(u8, key, "--batch")) {
-            o.batch = try std.fmt.parseInt(u32, v, 10);
-        } else if (std.mem.eql(u8, key, "--evals")) {
-            o.evals = try std.fmt.parseInt(u32, v, 10);
-        } else if (std.mem.eql(u8, key, "--patience")) {
-            o.patience = try std.fmt.parseInt(u32, v, 10);
-        } else if (std.mem.eql(u8, key, "--max-epochs")) {
-            o.max_epochs = try std.fmt.parseInt(u32, v, 10);
         } else if (std.mem.eql(u8, key, "--drop")) {
             const names = auxNames();
             var it = std.mem.tokenizeScalar(u8, v, ',');
@@ -184,8 +170,6 @@ fn parseOptions(arena: Allocator, args: []const []const u8) !Options {
             }
         } else if (std.mem.eql(u8, key, "--win-adjust")) {
             o.win_adjust = !std.mem.eql(u8, v, "0");
-        } else if (std.mem.eql(u8, key, "--rare")) {
-            o.rare = try std.fmt.parseInt(u32, v, 10);
         } else if (std.mem.eql(u8, key, "--seeds")) {
             o.seeds = try winnet.parseSeeds(arena, v);
         } else if (std.mem.eql(u8, key, "--blocks")) {
@@ -196,13 +180,7 @@ fn parseOptions(arena: Allocator, args: []const []const u8) !Options {
             else
                 try winnet.foldBlock(Block, s));
             o.blocks = out.items;
-        } else if (std.mem.eql(u8, key, "--shuffle")) {
-            o.shuffle = try std.fmt.parseInt(u64, v, 10);
-        } else if (std.mem.eql(u8, key, "--resample")) {
-            o.resample = try std.fmt.parseInt(u32, v, 10);
-        } else if (std.mem.eql(u8, key, "--out")) {
-            o.out = v;
-        } else return error.UnknownOption;
+        } else if (!try winnet.setFlag(&o, key, v, &.{})) return error.UnknownOption;
     }
     if (o.dim == 0 or o.dim > max_dim or o.evals == 0 or o.batch == 0 or o.blocks.len == 0) return error.BadValue;
     return o;

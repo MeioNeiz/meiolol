@@ -262,21 +262,7 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
         if (i + 1 >= args.len) return error.MissingValue;
         const k = args[i];
         const v = args[i + 1];
-        if (std.mem.eql(u8, k, "--emb")) {
-            o.emb = try std.fmt.parseInt(u32, v, 10);
-        } else if (std.mem.eql(u8, k, "--hidden")) {
-            o.hidden = try std.fmt.parseInt(u32, v, 10);
-        } else if (std.mem.eql(u8, k, "--emb-wd")) {
-            o.emb_wd = try std.fmt.parseFloat(f32, v);
-        } else if (std.mem.eql(u8, k, "--clip")) {
-            o.clip = try std.fmt.parseFloat(f32, v);
-        } else if (std.mem.eql(u8, k, "--shuffle-feats")) {
-            o.shuffle_feats = (try std.fmt.parseInt(u1, v, 10)) == 1;
-        } else if (std.mem.eql(u8, k, "--shuffle-labels")) {
-            o.shuffle_labels = (try std.fmt.parseInt(u1, v, 10)) == 1;
-        } else if (std.mem.eql(u8, k, "--fix-offset")) {
-            o.fix_offset = (try std.fmt.parseInt(u1, v, 10)) == 1;
-        } else if (std.mem.eql(u8, k, "--drop")) {
+        if (std.mem.eql(u8, k, "--drop")) {
             var it = std.mem.tokenizeScalar(u8, v, ',');
             while (it.next()) |f| o.drop[@backingInt(std.meta.stringToEnum(Feat, f) orelse return error.UnknownFeat)] = true;
         } else if (std.mem.eql(u8, k, "--feats")) {
@@ -285,22 +271,6 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
                 var it = std.mem.tokenizeScalar(u8, v, ',');
                 while (it.next()) |s| o.groups[@backingInt(std.meta.stringToEnum(Group, s) orelse return error.UnknownFeats)] = true;
             }
-        } else if (std.mem.eql(u8, k, "--evals")) {
-            o.evals = try std.fmt.parseInt(u32, v, 10);
-        } else if (std.mem.eql(u8, k, "--dropout")) {
-            o.dropout = try std.fmt.parseFloat(f32, v);
-        } else if (std.mem.eql(u8, k, "--wd")) {
-            o.wd = try std.fmt.parseFloat(f32, v);
-        } else if (std.mem.eql(u8, k, "--lr")) {
-            o.lr = try std.fmt.parseFloat(f32, v);
-        } else if (std.mem.eql(u8, k, "--batch")) {
-            o.batch = try std.fmt.parseInt(u32, v, 10);
-        } else if (std.mem.eql(u8, k, "--patience")) {
-            o.patience = try std.fmt.parseInt(u32, v, 10);
-        } else if (std.mem.eql(u8, k, "--max-epochs")) {
-            o.max_epochs = try std.fmt.parseInt(u32, v, 10);
-        } else if (std.mem.eql(u8, k, "--min-games")) {
-            o.min_games = try std.fmt.parseInt(u32, v, 10);
         } else if (std.mem.eql(u8, k, "--seeds")) {
             o.seeds = try winnet.parseSeeds(arena, v);
         } else if (std.mem.eql(u8, k, "--blocks")) {
@@ -311,19 +281,7 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             else
                 try winnet.foldBlock(Block, s));
             o.blocks = out.items;
-        } else if (std.mem.eql(u8, k, "--dump")) {
-            o.dump = (try std.fmt.parseInt(u1, v, 10)) == 1;
-        } else if (std.mem.eql(u8, k, "--resample")) {
-            o.resample = try std.fmt.parseInt(u32, v, 10);
-        } else if (std.mem.eql(u8, k, "--fraction")) {
-            o.fraction = try std.fmt.parseFloat(f64, v);
-        } else if (std.mem.eql(u8, k, "--threads")) {
-            o.threads = try std.fmt.parseInt(u32, v, 10);
-        } else if (std.mem.eql(u8, k, "--emb-init")) {
-            o.emb_init = v;
-        } else if (std.mem.eql(u8, k, "--out")) {
-            o.out = v;
-        } else return error.UnknownOption;
+        } else if (!try winnet.setFlag(&o, k, v, &.{})) return error.UnknownOption;
     }
     if (o.emb_init != null and o.emb == 0) return error.EmbInitNeedsEmb;
     if (o.hidden == 0 or o.evals == 0 or o.dropout < 0 or o.dropout >= 1 or o.fraction <= 0 or o.threads == 0) return error.BadValue;

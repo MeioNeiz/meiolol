@@ -46,19 +46,9 @@ pub const Control = enum { none, shuffle, permute };
 
 /// Parses a set-only option; false when `k` isn't one
 pub fn parseOption(c: *Config, k: []const u8, v: []const u8) !bool {
-    if (std.mem.eql(u8, k, "--phi")) {
-        c.phi = try std.fmt.parseInt(u32, v, 10);
-    } else if (std.mem.eql(u8, k, "--rho")) {
-        c.rho = try std.fmt.parseInt(u32, v, 10);
-    } else if (std.mem.eql(u8, k, "--cross")) {
-        c.cross = (try std.fmt.parseInt(u1, v, 10)) == 1;
-    } else if (std.mem.eql(u8, k, "--ids")) {
-        c.ids = (try std.fmt.parseInt(u1, v, 10)) == 1;
-    } else if (std.mem.eql(u8, k, "--control")) {
+    if (std.mem.eql(u8, k, "--control")) {
         c.control = std.meta.stringToEnum(Control, v) orelse return error.UnknownControl;
-    } else if (std.mem.eql(u8, k, "--dump")) {
-        c.dump = (try std.fmt.parseInt(u1, v, 10)) == 1;
-    } else return false;
+    } else if (!try winnet.setFlag(c, k, v, &.{})) return false;
     if (c.phi == 0 or c.rho == 0) return error.BadValue;
     return true;
 }
