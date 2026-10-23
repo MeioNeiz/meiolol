@@ -15,6 +15,7 @@ const scope = @import("scope.zig");
 
 const Writer = std.Io.Writer;
 const Stats = core.Stats;
+const Counts = core.statsfile.Counts;
 const Role = core.Role;
 const tpl = html.tpl;
 
@@ -129,14 +130,6 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
             .games = root.Thousands{ .n = cr.games },
         });
 
-        var opps: std.ArrayList(Opponent) = .empty;
-        for (site.champs) |other| {
-            if (other.c == ch.c) continue;
-            const e = st.enemy(r, r, ch.c, other.c);
-            if (e.games == 0) continue;
-            const oc = st.champRole(r, other.c);
-            try opps.append(a, .{ .other = other, .games = e.games, .wins = e.wins, .strength = ratio(oc.wins, oc.games) });
-        }
         if (site.lean) |l| try lean_line.line(w, l, ch.id, ch.name, r, "../method.html#lean", lean_chip);
         if (site.patchday) |*pd| {
             try w.writeAll("<div data-by-view>");
@@ -156,7 +149,7 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
             try w.writeAll("</div>");
         }
         try w.writeAll("</div>\n");
-        try opponentTable(site, w, ch, r, cr, opponentK(st, r), usualK(st, r), opps.items);
+        try opponentTabs(site, w, ch, r, cr);
         try tpl.renderPart(w, "</section>\n", .{});
     }
     // Pool by region, its "harder to pick up" notes by period
@@ -235,21 +228,41 @@ fn filterBar(site: *const Site, w: *Writer, ch: Champ) !void {
     });
 }
 
-/// Games to stabilise (k) for a lane opponent's win rate in role r: game-to-game variance
-/// over how much true rates against different opponents differ from the champion's own,
-/// measured over every champion (method of moments, as curvefit for the curves). A rate
-/// on n games gets the weight n / (n + k) against the champion's rate in the role
-fn opponentK(st: *const Stats, r: Role) f64 {
+/// What one tab of the opponent grid counts: ch in r against champions in r2, or with
+/// them (ally: duos)
+const Pairs = struct {
+    st: *const Stats,
+    r: Role,
+    r2: Role,
+    ally: bool = false,
+
+    fn get(p: Pairs, c: usize, o: usize) Counts {
+        return if (p.ally) p.st.ally(p.r, p.r2, c, o) else p.st.enemy(p.r, p.r2, c, o);
+    }
+
+    /// usual() of a champion winning `base` in r with or against one winning `strength`
+    /// in r2: an ally adds on the log-odds scale what an opponent takes away
+    fn usualOf(p: Pairs, base: f64, strength: f64) f64 {
+        return usual(base, if (p.ally) 1 - strength else strength);
+    }
+};
+
+/// Games to stabilise (k) for a win rate against (or with) one champion: game-to-game
+/// variance over how much true rates against different champions differ from the
+/// champion's own, measured over every champion (method of moments, as curvefit for the
+/// curves). A rate on n games gets the weight n / (n + k) against the champion's rate
+/// in the role
+fn opponentK(p: Pairs) f64 {
     var q: f64 = 0;
     var noise: f64 = 0;
     var scale: f64 = 0;
-    for (0..st.n) |c| {
+    for (0..p.st.n) |c| {
         var n: f64 = 0;
         var wins: f64 = 0;
         var n2: f64 = 0;
         var cells: f64 = 0;
-        for (0..st.n) |o| {
-            const e = st.enemy(r, r, c, o);
+        for (0..p.st.n) |o| {
+            const e = p.get(c, o);
             if (o == c or e.games == 0) continue;
             const g: f64 = @floatFromInt(e.games);
             n += g;
@@ -259,8 +272,8 @@ fn opponentK(st: *const Stats, r: Role) f64 {
         }
         if (cells < 2) continue;
         const m = wins / n;
-        for (0..st.n) |o| {
-            const e = st.enemy(r, r, c, o);
+        for (0..p.st.n) |o| {
+            const e = p.get(c, o);
             if (o == c or e.games == 0) continue;
             const g: f64 = @floatFromInt(e.games);
             const d = @as(f64, @floatFromInt(e.wins)) - g * m;
@@ -274,7 +287,8 @@ fn opponentK(st: *const Stats, r: Role) f64 {
     return 0.25 / tau2;
 }
 
-/// Opponent's win rate pulled toward the champion's own in the role by games (opponentK)
+/// Win rate against (or with) one champion pulled toward the champion's own in the role
+/// by games (opponentK)
 fn shrunk(o: Opponent, base: f64, k: f64) f64 {
     return (@as(f64, @floatFromInt(o.wins)) + k * base) / (@as(f64, @floatFromInt(o.games)) + k);
 }
@@ -312,17 +326,21 @@ pub const VsUsual = struct {
 /// opponentK, but how much true rates differ from usual(), the opponent's strength
 /// allowed for, so less than opponentK's spread and a larger k
 pub fn usualK(st: *const Stats, r: Role) f64 {
+    return pairsUsualK(.{ .st = st, .r = r, .r2 = r });
+}
+
+fn pairsUsualK(p: Pairs) f64 {
     var q: f64 = 0;
     var noise: f64 = 0;
     var scale: f64 = 0;
-    for (0..st.n) |c| {
-        const cc = st.champRole(r, c);
+    for (0..p.st.n) |c| {
+        const cc = p.st.champRole(p.r, c);
         if (cc.games == 0) continue;
-        for (0..st.n) |o| {
-            const e = st.enemy(r, r, c, o);
+        for (0..p.st.n) |o| {
+            const e = p.get(c, o);
             if (o == c or e.games == 0) continue;
-            const oc = st.champRole(r, o);
-            const u = usual(ratio(cc.wins, cc.games), ratio(oc.wins, oc.games));
+            const oc = p.st.champRole(p.r2, o);
+            const u = p.usualOf(ratio(cc.wins, cc.games), ratio(oc.wins, oc.games));
             const g: f64 = @floatFromInt(e.games);
             const d = @as(f64, @floatFromInt(e.wins)) - g * u;
             q += d * d / g;
@@ -334,49 +352,157 @@ pub fn usualK(st: *const Stats, r: Role) f64 {
     return 0.25 / tau2;
 }
 
-/// Every lane opponent as a tile in one grid, all on screen: the opponent linking to
-/// the matchup page from ch's side, ch's win rate there (tierlist.trackCell), against
-/// usual (usualCell), the lane curve's gold difference at lane_minute and games. Still
-/// a table, so static/table.js sorts it by the header row (shown as sort buttons).
-/// Hardest first by the shrunk rate, so a few lucky games don't top the list; under
-/// min_opponent_games faded and last, by games; under min_opponent_share of cr hidden
-/// until asked for (static/filters.js redraws it the same way)
-fn opponentTable(site: *const Site, w: *Writer, ch: Champ, r: Role, cr: core.statsfile.Counts, k: f64, ka: f64, opps: []Opponent) !void {
-    if (opps.len == 0) return;
+/// One grid of the tabs: lane opponents (static/filters.js redraws these for other
+/// picks), opponents in another role, or duos
+const Tab = struct {
+    pairs: Pairs,
+    /// The table's id, for table.js's search and saved sort
+    id: []const u8,
+    kind: enum { lane, vs, duo },
+};
+
+/// The ally role the duo grid opens on: the lane partner for bot and support, jungle for
+/// the solo lanes, mid for the jungle
+fn duoRole(r: Role) Role {
+    return switch (r) {
+        .top, .middle => .jungle,
+        .jungle => .middle,
+        .bottom => .utility,
+        .utility => .bottom,
+    };
+}
+
+/// A role's grids behind tabs: Lane, vs each other role, Duos (one grid per ally role,
+/// behind its own tabs). Without script only Lane shows. The other grids are the page's
+/// view (the root view) whatever the picks, so their chips say so
+fn opponentTabs(site: *const Site, w: *Writer, ch: Champ, r: Role, cr: Counts) !void {
+    const st = &site.stats;
+    const a = site.arena;
+    const fixed = site.chip(site.regionDim(site.view.region), site.periodDim(site.view.period), .plat);
+    try w.writeAll("<div class=\"og-tabs\" data-tabset><nav class=\"tabs\" role=\"tablist\" aria-label=\"Opponents and duos\" hidden>");
+    try tabButton(w, "lane", "Lane", true);
+    for (Role.all) |r2| if (r2 != r) try tabButton(w, r2.label(), try a.print("vs {s}", .{roleName(r2)}), false);
+    try tabButton(w, "duo", "Duos", false);
+    try w.writeAll("</nav>\n<div data-panel=\"lane\">");
+    try opponentTable(site, w, ch, cr, .{ .pairs = .{ .st = st, .r = r, .r2 = r }, .id = try a.print("opp-{s}", .{r.label()}), .kind = .lane }, fixed);
+    try w.writeAll("</div>\n");
+    for (Role.all) |r2| {
+        if (r2 == r) continue;
+        try w.print("<div data-panel=\"{s}\" hidden>", .{r2.label()});
+        try opponentTable(site, w, ch, cr, .{ .pairs = .{ .st = st, .r = r, .r2 = r2 }, .id = try a.print("opp-{s}-{s}", .{ r.label(), r2.label() }), .kind = .vs }, fixed);
+        try w.writeAll("</div>\n");
+    }
+    try w.writeAll("<div data-panel=\"duo\" data-tabset hidden><nav class=\"tabs sub\" role=\"tablist\" aria-label=\"Duo's role\">");
+    for (Role.all) |r2| {
+        if (r2 != r) try tabButton(w, try a.print("duo-{s}", .{r2.label()}), try a.print("with {s}", .{roleName(r2)}), r2 == duoRole(r));
+    }
+    try w.writeAll("</nav>\n");
+    for (Role.all) |r2| {
+        if (r2 == r) continue;
+        try w.print("<div data-panel=\"duo-{s}\"{s}>", .{ r2.label(), if (r2 == duoRole(r)) "" else " hidden" });
+        try opponentTable(site, w, ch, cr, .{ .pairs = .{ .st = st, .r = r, .r2 = r2, .ally = true }, .id = try a.print("duo-{s}-{s}", .{ r.label(), r2.label() }), .kind = .duo }, fixed);
+        try w.writeAll("</div>\n");
+    }
+    try w.writeAll("</div>\n");
+    try tierlist.legend(w, tierlist.matchup_span);
+    try w.writeAll("</div>\n");
+}
+
+fn tabButton(w: *Writer, key: []const u8, text: []const u8, on: bool) !void {
+    try tpl.render(w, "<button type=\"button\" role=\"tab\" data-tab=\"{key}\" aria-selected=\"{on}\">{text}</button>", .{
+        .key = key,
+        .on = if (on) "true" else "false",
+        .text = text,
+    });
+}
+
+/// Every champion of a tab as a tile in one grid, all on screen: the champion linking to
+/// the matchup page from ch's side (lane), else its own page; ch's win rate there
+/// (tierlist.trackCell), against usual (usualCell), on lane the lane curve's gold
+/// difference at lane_minute, and games; unit words once in the key, not on each tile.
+/// Still a table, so static/table.js sorts it by the header row (shown as sort
+/// buttons). Opponents hardest first and duos highest first, by the shrunk rate, so a
+/// few lucky games don't top the list; under min_opponent_games faded and last, by
+/// games; under min_opponent_share of cr hidden until asked for on lane (static/
+/// filters.js redraws it the same way), left out on the others
+fn opponentTable(site: *const Site, w: *Writer, ch: Champ, cr: Counts, tab: Tab, fixed: scope.Chip) !void {
+    const a = site.arena;
+    const st = tab.pairs.st;
+    const lane = tab.kind == .lane;
+    const floor = @max(1, min_opponent_share * @as(f64, @floatFromInt(cr.games)));
+    var all: usize = 0;
+    var list: std.ArrayList(Opponent) = .empty;
+    for (site.champs) |other| {
+        if (other.c == ch.c) continue;
+        const e = tab.pairs.get(ch.c, other.c);
+        if (e.games == 0) continue;
+        all += 1;
+        if (!lane and @as(f64, @floatFromInt(e.games)) < floor) continue;
+        const oc = st.champRole(tab.pairs.r2, other.c);
+        try list.append(a, .{ .other = other, .games = e.games, .wins = e.wins, .strength = ratio(oc.wins, oc.games) });
+    }
+    const opps = list.items;
+    const what = switch (tab.kind) {
+        .lane => "Lane opponents",
+        .vs => try a.print("{s} opponents", .{roleName(tab.pairs.r2)}),
+        .duo => try a.print("{s} duos", .{roleName(tab.pairs.r2)}),
+    };
+    if (opps.len == 0) return tpl.render(w, "<p class=\"muted\">{what}: none in 1%+ of {name}'s games yet.</p>", .{ .what = what, .name = ch.name });
     const base = ratio(cr.wins, cr.games);
+    const k = opponentK(tab.pairs);
+    const ka = pairsUsualK(tab.pairs);
     const Order = struct {
         base: f64,
         k: f64,
+        high: bool,
         fn f(o: @This(), x: Opponent, y: Opponent) bool {
             const x_thin = x.games < min_opponent_games;
             const y_thin = y.games < min_opponent_games;
             if (x_thin != y_thin) return y_thin;
             if (x_thin) return x.games > y.games;
-            return shrunk(x, o.base, o.k) < shrunk(y, o.base, o.k);
+            const sx = shrunk(x, o.base, o.k);
+            const sy = shrunk(y, o.base, o.k);
+            return if (o.high) sx > sy else sx < sy;
         }
     };
-    std.mem.sort(Opponent, opps, Order{ .base = base, .k = k }, Order.f);
-    const floor = @max(1, min_opponent_share * @as(f64, @floatFromInt(cr.games)));
+    std.mem.sort(Opponent, opps, Order{ .base = base, .k = k, .high = tab.kind == .duo }, Order.f);
     var shown: usize = 0;
     for (opps) |o| {
         if (@as(f64, @floatFromInt(o.games)) >= floor) shown += 1;
     }
+    const with = if (tab.kind == .duo) "with the ally" else "in the matchup";
     try tpl.renderPart(w,
-        \\<div class="tl-bar"><h3 class="opp-h">Lane opponents <span class="muted">{n}, hardest first</span></h3>
-        \\<nav class="switch" aria-label="Opponents" hidden><a aria-current="page" data-min="p1" title="Opponents in 1%+ of {name}'s games in the role">Common</a><a href="?min=0" data-min="0">All</a></nav>
-        \\<input type="search" placeholder="Search opponent" data-filter="opp-{slug}" aria-label="Search opponent"></div>
-        \\<div class="og-wrap"><table class="og" id="opp-{slug}" data-sortable data-k="{k:.0}" data-ka="{ka:.0}">
-        \\<thead><tr><th class="l" data-sort="text">Name</th><th data-sort="num" title="{name}'s win rate in the matchup; sorts with few games pulled toward {name}'s own">Win rate</th><th data-sort="num" title="Points more or less than {name} usually wins against an opponent this strong">Vs usual</th><th data-sort="num" title="Lane curve estimate: {name} minus the opponent">Gold at {minute}</th><th data-sort="num">Games</th></tr></thead>
+        \\<div class="tl-bar"><h3 class="opp-h">{what} <span class="muted">{n}, {order}</span>{chip}</h3>
+        \\{lane}<span class="og-key">Each tile: win rate, vs usual{gold}, games</span></div>
+        \\<div class="og-wrap"><table class="og" id="{id}" data-sortable data-k="{k:.0}" data-ka="{ka:.0}">
+        \\<thead><tr><th class="l" data-sort="text">Name</th><th data-sort="num" title="{name}'s win rate {with}; sorts with few games pulled toward {name}'s own">Win rate</th><th data-sort="num" title="Points more or less than {name} usually wins {against} this strong">Vs usual</th>{gold_th}<th data-sort="num">Games</th></tr></thead>
         \\<tbody>
         \\
-    , .{ .n = shown, .name = ch.name, .minute = core.curvesfile.lane_minute, .slug = r.label(), .k = k, .ka = ka });
+    , .{
+        .what = what,
+        .n = shown,
+        .order = if (tab.kind == .duo) "highest win rate first" else "hardest first",
+        .chip = if (lane) null else tpl.t(" {c}", .{ .c = fixed }),
+        .lane = tpl.when(lane, tpl.t(
+            \\<nav class="switch" aria-label="Opponents" hidden><a aria-current="page" data-min="p1" title="Opponents in 1%+ of {name}'s games in the role">Common</a><a href="?min=0" data-min="0">All</a></nav>
+            \\<input type="search" placeholder="Search opponent" data-filter="{id}" aria-label="Search opponent">
+        , .{ .name = ch.name, .id = tab.id })),
+        .gold = tpl.when(lane, tpl.t(", gold at {m} min", .{ .m = core.curvesfile.lane_minute })),
+        .id = tab.id,
+        .k = k,
+        .ka = ka,
+        .name = ch.name,
+        .with = with,
+        .against = if (tab.kind == .duo) "with an ally" else "against an opponent",
+        .gold_th = tpl.when(lane, tpl.t("<th data-sort=\"num\" title=\"Lane curve estimate: {name} minus the opponent\">Gold at {minute}</th>", .{ .name = ch.name, .minute = core.curvesfile.lane_minute })),
+    });
     var few: usize = 0;
     for (opps) |o| {
         const thin = o.games < min_opponent_games;
         const rare = @as(f64, @floatFromInt(o.games)) < floor;
         if (thin and !rare) few += 1;
         try tpl.render(w,
-            \\<tr class="bx{thin}" data-id="{id}" data-name="{name}" data-q="{q:.4}"{rare}><td class="l">{link}</td>{wr}{vs}{gold}<td class="dim" data-v="{games}">{games} <small>games</small></td></tr>
+            \\<tr class="bx{thin}" data-id="{id}" data-name="{name}" data-q="{q:.4}"{rare}><td class="l">{link}</td>{wr}{vs}{gold}<td class="dim" data-v="{games}">{count}</td></tr>
             \\
         , .{
             .id = o.other.id,
@@ -384,45 +510,51 @@ fn opponentTable(site: *const Site, w: *Writer, ch: Champ, r: Role, cr: core.sta
             .q = o.strength,
             .thin = tpl.when(thin, " thin"),
             .rare = tpl.flag(rare, "data-rare hidden"),
-            .link = tpl.call(opponentLink, .{ site, ch, o.other, r }),
-            .wr = tpl.call(tierlist.trackCell, .{ ratio(o.wins, o.games), shrunk(o, base, k), o.games, tierlist.matchup_span, try site.arena.print("{d} games", .{o.games}), @as(?[]const u8, null) }),
-            .vs = tpl.call(usualCell, .{ site, ch, r, o, base, ka }),
-            .gold = tpl.call(goldCell, .{ site, ch, o.other, r }),
+            .link = tpl.call(opponentLink, .{ site, ch, o.other, tab.pairs.r, lane }),
+            .wr = tpl.call(tierlist.trackCell, .{ ratio(o.wins, o.games), shrunk(o, base, k), o.games, tierlist.matchup_span, try a.print("{d} games", .{o.games}), @as(?[]const u8, null) }),
+            .vs = tpl.call(usualCell, .{ site, ch, tab.pairs, o, base, ka }),
+            .gold = if (lane) tpl.call(goldCell, .{ site, ch, o.other, tab.pairs.r }) else null,
             .games = o.games,
+            .count = root.Thousands{ .n = o.games },
         });
     }
     try tpl.renderPart(w, "</tbody></table></div>\n", .{});
-    try tierlist.legend(w, tierlist.matchup_span);
     try tpl.renderPart(w,
-        \\<p class="tl-more"{none}>{faded}{rare}</p>
+        \\<p class="tl-more"{none}>{faded}{rare}{left}</p>
         \\
     , .{
-        .none = tpl.flag(few == 0 and shown == opps.len, "hidden"),
-        .faded = tpl.when(few > 0, tpl.t("Faded: the last {few} opponents, under {min} games each, too few to read much into. ", .{
+        .none = tpl.flag(few == 0 and shown == all, "hidden"),
+        .faded = tpl.when(few > 0, tpl.t("Faded: the last {few} {who}, under {min} games each, too few to read much into. ", .{
             .few = few,
+            .who = if (tab.kind == .duo) "duos" else "opponents",
             .min = min_opponent_games,
         })),
-        .rare = tpl.when(shown < opps.len, tpl.t("{n} rarer opponents (under 1% of {name}'s games) hidden. <button class=\"link\" data-show-rare=\"opp-{slug}\" data-show-all>Show them</button>", .{
-            .n = opps.len - shown,
+        .rare = tpl.when(shown < all and lane, tpl.t("{n} rarer opponents (under 1% of {name}'s games) hidden. <button class=\"link\" data-show-rare=\"{id}\" data-show-all>Show them</button>", .{
+            .n = all - shown,
             .name = ch.name,
-            .slug = r.label(),
+            .id = tab.id,
         })),
+        .left = tpl.when(shown < all and !lane, tpl.t("{n} rarer (under 1% of {name}'s games) left out.", .{ .n = all - shown, .name = ch.name })),
     });
 }
 
-/// "+2.1 vs usual" (VsUsual in points), coloured as win rates on the champions table
+/// "+2.1" vs usual (VsUsual in points), coloured as win rates on the champions table
 /// are, as if usual were 50%; the numbers behind it on hover. As static/filters.js
 /// usualCell
-fn usualCell(w: *Writer, site: *const Site, ch: Champ, r: Role, o: Opponent, base: f64, k: f64) !void {
-    const e = usual(base, o.strength);
+fn usualCell(w: *Writer, site: *const Site, ch: Champ, p: Pairs, o: Opponent, base: f64, k: f64) !void {
+    const e = p.usualOf(base, o.strength);
     const d = VsUsual.of(o.wins, o.games, e, k);
     const z = 1.2816;
-    const title = try site.arena.print("Against an opponent winning {d:.1}% in {s}, {s} usually wins about {d:.1}%; against {s} {d:.1}% in {d} games. Vs usual {f} points, pulled toward 0 the fewer the games; 8 in 10 between {f} and {f}", .{
-        100 * o.strength,                 roleName(r),                      ch.name, 100 * e,
-        o.other.name,                     100 * ratio(o.wins, o.games),     o.games, Points{ .v = d.mean },
-        Points{ .v = d.mean - z * d.sd }, Points{ .v = d.mean + z * d.sd },
+    const title = try site.arena.print("{s} {s} winning {d:.1}% in {s}, {s} usually wins about {d:.1}%; {s} {s} {d:.1}% in {d} games. Vs usual {f} points, pulled toward 0 the fewer the games; 8 in 10 between {f} and {f}", .{
+        if (p.ally) "With" else "Against", if (p.ally) "an ally" else "an opponent",
+        100 * o.strength,                  roleName(p.r2),
+        ch.name,                           100 * e,
+        if (p.ally) "with" else "against", o.other.name,
+        100 * ratio(o.wins, o.games),      o.games,
+        Points{ .v = d.mean },             Points{ .v = d.mean - z * d.sd },
+        Points{ .v = d.mean + z * d.sd },
     });
-    try tpl.render(w, "<td data-v=\"{v:.4}\"><span class=\"vs\" style=\"--c:{colour}\" title=\"{title}\"><b>{pts}</b> vs usual</span></td>", .{
+    try tpl.render(w, "<td data-v=\"{v:.4}\"><span class=\"vs\" style=\"--c:{colour}\" title=\"{title}\"><b>{pts}</b></span></td>", .{
         .v = d.mean,
         .colour = tierlist.wrColour(0.5 + d.mean, tierlist.table_span),
         .title = title,
@@ -456,9 +588,10 @@ test "usual and vs usual" {
     try std.testing.expectEqualStrings("0.0", try std.mem.print(&buf, "{f}", .{Points{ .v = -0.0004 }}));
 }
 
-/// To the matchup page from ch's side, or the opponent's own page where there is none
-fn opponentLink(w: *Writer, site: *const Site, ch: Champ, other: Champ, r: Role) !void {
-    const has = if (site.curves) |*c| c.get(r, .all, ch.id, other.id) != null else false;
+/// A lane opponent to the matchup page from ch's side, else (no matchup page, or not a
+/// lane opponent) to its own page
+fn opponentLink(w: *Writer, site: *const Site, ch: Champ, other: Champ, r: Role, lane: bool) !void {
+    const has = lane and if (site.curves) |*c| c.get(r, .all, ch.id, other.id) != null else false;
     if (!has) return site.champBox(w, other, "../");
     try tpl.render(w, "<a class=\"champ box\" href=\"../{path}\" title=\"{ch} vs {name}\"><img src=\"{icon}\" alt=\"\" loading=\"lazy\" width=\"32\" height=\"32\">{name}</a>", .{
         .path = try matchup.path(site.arena, r, ch, other),
@@ -475,7 +608,7 @@ fn goldCell(w: *Writer, site: *const Site, ch: Champ, other: Champ, r: Role) !vo
     const i = core.curvesfile.lane_minute - 1;
     const e = v.estimate(.gold, i);
     const g = matchup.range(v, curves.baseline(r, .all), .gold, i);
-    try tpl.render(w, "<td data-v=\"{mean}\"><a class=\"gold {side}\" style=\"opacity:{fade:.2}\" href=\"../{path}\" title=\"Lane curves, {games} games; 8 games in 10 from {p10s}{p10} to {p90s}{p90}\">{sign}{mean}</a> <small>gold</small></td>", .{
+    try tpl.render(w, "<td data-v=\"{mean}\"><a class=\"gold {side}\" style=\"opacity:{fade:.2}\" href=\"../{path}\" title=\"Lane curves, {games} games; 8 games in 10 from {p10s}{p10} to {p90s}{p90}\">{sign}{mean}</a></td>", .{
         .mean = e.mean,
         .side = if (e.mean > 0) "up" else if (e.mean < 0) "down" else "even",
         .fade = core.curvesfile.fade(v.games()),

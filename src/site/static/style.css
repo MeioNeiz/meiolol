@@ -158,6 +158,9 @@ p.verdict { font-size: 16px; font-weight: 600; max-width: 680px; margin: 0 0 8px
 .tabs a { padding: 5px 12px; border-radius: 6px; color: var(--muted); font-size: 13.5px; }
 .tabs a:hover { color: var(--text); text-decoration: none; }
 .tabs a[aria-current="page"] { background: var(--panel-3); color: var(--text); }
+.tabs button { padding: 5px 12px; border: 0; border-radius: 6px; background: none; color: var(--muted); font: inherit; font-size: 13.5px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--text); }
+.tabs button[aria-selected="true"] { background: var(--panel-3); color: var(--text); }
 .table-scroll { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; background: var(--panel); border-radius: 8px; }
 th, td { font-variant-numeric: tabular-nums; }
@@ -773,6 +776,12 @@ td.wrap { white-space: normal; min-width: 140px; max-width: none; padding: 7px 1
 #wr-shape .hi { stop-color: var(--good); }
 /* Champion page lane opponents (champion.zig opponentTable): a table drawn as a grid of
    tiles, all on screen; its header row is the sort buttons (static/table.js) */
+.og-tabs nav.tabs { flex-wrap: nowrap; max-width: 100%; overflow-x: auto; }
+.og-tabs > nav.tabs { margin: 12px 0 0; }
+.og-tabs nav.tabs.sub { margin: 10px 0 0; }
+.og-tabs nav.tabs.sub button { padding: 3px 10px; font-size: 12.5px; }
+.og-key { color: var(--faint); font-size: 12px; }
+.opp-h .scope { margin-left: 8px; }
 .og-wrap { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
 table.og, .og thead, .og tbody { display: block; }
 .og thead tr { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
@@ -784,29 +793,27 @@ table.og, .og thead, .og tbody { display: block; }
 .og th:hover, .og th[aria-sort] { color: var(--text); border-color: var(--muted); }
 .og th[aria-sort="descending"]::after { content: " \25BE"; }
 .og th[aria-sort="ascending"]::after { content: " \25B4"; }
-.og tbody { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 4px; padding: 8px; }
-.og tbody tr { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 6px 4px; border-radius: 8px; min-width: 0; }
+.og tbody { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 2px; padding: 6px; }
+.og tbody tr { display: flex; flex-direction: column; align-items: center; gap: 0; padding: 4px 2px; border-radius: 8px; min-width: 0; }
 .og tbody tr[hidden] { display: none; }
 .og tbody tr:hover { background: var(--panel-3); }
-.og td { display: block; padding: 0; text-align: center; font-size: 12px; line-height: 1.35; color: var(--t2); max-width: 100%; }
+.og td { display: block; padding: 0; text-align: center; font-size: 12px; line-height: 1.25; color: var(--t2); max-width: 100%; font-variant-numeric: tabular-nums; }
 .og td.dim { color: var(--muted); }
 .og small { color: var(--faint); font-size: 11px; }
 .og .champ { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 500; color: var(--text); }
-.og .champ img { display: block; width: 36px; height: 36px; margin: 0 auto 2px; border-radius: 6px; }
+.og .champ img { display: block; width: 32px; height: 32px; margin: 0 auto 1px; border-radius: 6px; }
 .og .wr { flex-direction: column-reverse; gap: 0; }
 .og .wr b { width: auto; font-size: 14px; }
-.og .ci { display: block; width: 72px; height: 10px; }
+.og .ci { display: block; width: 60px; height: 10px; }
 .og .ci::before { top: 4px; }
 .og .ci::after { top: 1px; height: 8px; }
 .og .ci .d { top: 1px; width: 8px; height: 8px; margin-left: -4px; border-width: 1px; border-color: var(--panel); }
-.og .vs { color: var(--faint); font-size: 11px; white-space: nowrap; }
 .og .vs b { color: var(--c); font-size: 12px; font-weight: 600; }
 .og a.gold { font-weight: 600; }
 @media (max-width: 480px) {
-  .og tbody { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 2px; padding: 6px; }
-  .og tbody tr { padding: 5px 2px; }
-  .og .champ img { width: 32px; height: 32px; }
-  .og .ci { width: 60px; }
+  .og tbody { grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); padding: 4px; }
+  .og .ci { width: 54px; }
+  .og-tabs > nav.tabs button { padding: 5px 6px; font-size: 13px; }
 }
 /* Matchup page (matchup.zig): cards, all on screen. x is the page's champion, y the
    opponent: one colour each wherever a mark belongs to a side */

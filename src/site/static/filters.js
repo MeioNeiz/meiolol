@@ -13,7 +13,21 @@
 // takes the kept picks for the rest.
 "use strict";
 
-// As root.zig opponentTable: by the win rate pulled toward the champion's own in the role
+// Tabs over the opponent grids (champion.zig opponentTabs): a tab shows its panel among
+// its tab set's own, nested sets (Duos' roles) apart. Without script only Lane shows
+for (const set of document.querySelectorAll("[data-tabset]")) {
+  const nav = set.querySelector(":scope > nav[role=tablist]");
+  if (!nav) continue;
+  nav.hidden = false;
+  nav.addEventListener("click", (e) => {
+    const tab = e.target.closest("[data-tab]");
+    if (!tab) return;
+    for (const b of nav.querySelectorAll("[data-tab]")) b.setAttribute("aria-selected", String(b === tab));
+    for (const p of set.querySelectorAll(":scope > [data-panel]")) p.hidden = p.dataset.panel !== tab.dataset.tab;
+  });
+}
+
+// As champion.zig opponentTable: by the win rate pulled toward the champion's own in the role
 // (table data-k games to stabilise), so few games can't top the list
 const HARDEST = "hardest first";
 
@@ -458,7 +472,7 @@ const HARDEST = "hardest first";
       `Vs usual ${points(mean)} points, pulled toward 0 the fewer the games; 8 in 10 between ${points(mean - 1.2816 * sd)} and ${points(mean + 1.2816 * sd)}`;
     const b = document.createElement("b");
     b.textContent = points(mean);
-    span.append(b, " vs usual");
+    span.append(b);
     td.append(span);
     return td;
   }
@@ -495,9 +509,7 @@ const HARDEST = "hardest first";
     if (href) value.href = href;
     value.title = curve ? `Lane curves, ${games} games; ${range}` : `${href ? "Lane curves. " : ""}Plain average of the games picked; ${range}`;
     value.textContent = sign(m);
-    const small = document.createElement("small");
-    small.textContent = "gold";
-    td.append(value, " ", small);
+    td.append(value);
     return td;
   }
 
@@ -505,9 +517,7 @@ const HARDEST = "hardest first";
     const td = document.createElement("td");
     td.className = "dim";
     td.dataset.v = games;
-    const small = document.createElement("small");
-    small.textContent = "games";
-    td.append(`${games} `, small);
+    td.textContent = games.toLocaleString("en-GB");
     return td;
   }
 
