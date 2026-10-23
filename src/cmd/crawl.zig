@@ -192,7 +192,7 @@ pub fn cmdStats(c: *Cmd) !u8 {
     const path = out orelse
         try c.arena.print("{s}/export/stats-{s}.bin", .{ c.data_dir, label });
 
-    var r = try stats.buildSince(c.init.gpa, db, chosen, platforms, 0, true);
+    var r = try stats.buildSince(c.init.gpa, db, null, chosen, platforms, 0, true);
     defer r.builder.deinit();
     if (r.summary.games == 0) {
         std.log.err("no complete ranked solo games on patch {s}", .{label});
