@@ -590,9 +590,7 @@ pub const Vocab = struct {
     }
 };
 
-fn key(champion: u32, role: usize) u64 {
-    return (@as(u64, champion) << 3) | role;
-}
+const key = api.cellKey;
 
 pub const logit = nn.logit;
 

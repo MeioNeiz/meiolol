@@ -13,6 +13,7 @@
 //! profiles without its own row (leave-one-out), scored and validation games the full ones
 
 const std = @import("std");
+const api = @import("api");
 const rows = @import("rows.zig");
 const seatstats = @import("seatstats.zig");
 const winnet = @import("winnet.zig");
@@ -112,9 +113,7 @@ fn rowValues(s: *const seatstats.Stats) [n_prof]f32 {
     return out;
 }
 
-fn key(champion: u32, role: usize) u64 {
-    return (@as(u64, champion) << 3) | role;
-}
+const key = api.cellKey;
 
 /// Row index per (game, side * 5 + role); maxInt when missing
 fn seatRows(gpa: std.mem.Allocator, d: *const rows.Data) ![]u32 {

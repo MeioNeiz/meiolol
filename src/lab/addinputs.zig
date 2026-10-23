@@ -25,9 +25,7 @@ pub const Mix = struct {
         return (m.win[r.game] > 0.5) == (r.side == 0);
     }
 
-    fn key(champion: u32, role: usize) u64 {
-        return @as(u64, champion) << 3 | role;
-    }
+    const key = api.cellKey;
 
     /// Magic share and damage per minute of one row, NaN when unknown
     fn values(s: *const seatstats.Stats) [2]f32 {

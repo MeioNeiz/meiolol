@@ -126,7 +126,7 @@ pub const Aa = struct {
     sd: [5]f64 = @splat(1),
 
     fn z(a: *const Aa, champion: u32, role: usize) f64 {
-        const v = a.raw.get(comps.cellKey(champion, role)) orelse return 0;
+        const v = a.raw.get(api.cellKey(champion, role)) orelse return 0;
         return (v - a.mean[role]) / a.sd[role];
     }
 };
@@ -144,7 +144,7 @@ pub fn loadAa(gpa: Allocator, io: Io, path: []const u8) !std.AutoHashMapUnmanage
         const c = try std.fmt.parseInt(u32, it.next() orelse return error.BadAaFile, 10);
         const r = try std.fmt.parseInt(usize, it.next() orelse return error.BadAaFile, 10);
         const v = try std.fmt.parseFloat(f64, it.next() orelse return error.BadAaFile);
-        try out.put(gpa, comps.cellKey(c, r), v);
+        try out.put(gpa, api.cellKey(c, r), v);
     }
     return out;
 }
@@ -155,7 +155,7 @@ fn aaOf(raw: *const std.AutoHashMapUnmanaged(u64, f64), d: *const rows.Data, gam
     var q: [5]f64 = @splat(0);
     var n: [5]f64 = @splat(0);
     for (games) |gi| for (d.games[gi].teams) |t| for (t, 0..) |ch, r| {
-        const v = raw.get(comps.cellKey(ch, r)) orelse continue;
+        const v = raw.get(api.cellKey(ch, r)) orelse continue;
         a.mean[r] += v;
         q[r] += v * v;
         n[r] += 1;
@@ -251,7 +251,7 @@ fn teamFeatures(seats: *const [2][5]Seat, side: usize) [nf]f64 {
 /// A seat (ten per game, blue's five then red's, by role) or a team (two per game)
 pub const Unit = struct {
     game: u32,
-    /// comps.cellKey; 0 for a team
+    /// api.cellKey; 0 for a team
     cell: u64,
     /// Its team won
     y: f32,
@@ -368,7 +368,7 @@ fn unitsOf(gpa: Allocator, d: *const rows.Data, p: *const comps.Profiles, aa: ?*
             try out.teams.append(gpa, .{ .game = gi, .cell = 0, .y = y, .off = off, .x = toF32(teamFeatures(&seats, s)) });
             for (0..5) |r| try out.seats.append(gpa, .{
                 .game = gi,
-                .cell = comps.cellKey(g.teams[s][r], r),
+                .cell = api.cellKey(g.teams[s][r], r),
                 .y = y,
                 .off = off,
                 .x = toF32(seatFeatures(&seats, s, r)),
@@ -1889,7 +1889,7 @@ test "a planted champion's deviation comes back; a shared slope stays a role mea
             try u.teams.append(gpa, .{ .game = @intCast(gi), .cell = 0, .y = y, .off = o, .x = enemy[s] });
             for (0..5) |role| try u.seats.append(gpa, .{
                 .game = @intCast(gi),
-                .cell = comps.cellKey(champs[s][role], role),
+                .cell = api.cellKey(champs[s][role], role),
                 .y = y,
                 .off = o,
                 .x = enemy[s],
@@ -1898,16 +1898,16 @@ test "a planted champion's deviation comes back; a shared slope stays a role mea
     }
     var m = try fitModel(gpa, &u, null);
     defer m.deinit(gpa);
-    const planted = m.index.get(comps.cellKey(11, 1)).?;
+    const planted = m.index.get(api.cellKey(11, 1)).?;
     const p = m.post[planted][melee];
     try testing.expect(p.mean > 0.1 and @abs(zOf(p)) >= 2);
     // A champion with nothing planted shows no clear deviation on melee
-    const other = m.index.get(comps.cellKey(12, 1)).?;
+    const other = m.index.get(api.cellKey(12, 1)).?;
     try testing.expect(@abs(zOf(m.post[other][melee])) < clear_z);
     // The team-wide CC slope reaches the team terms, not the jungle deviations
     try testing.expect(m.team.beta[cc] > 0.05);
     for (1..5) |ch| {
-        const ci = m.index.get(comps.cellKey(@intCast(ch + 10), 1)).?;
+        const ci = m.index.get(api.cellKey(@intCast(ch + 10), 1)).?;
         try testing.expect(@abs(zOf(m.post[ci][cc])) < clear_z);
     }
 }
@@ -1933,7 +1933,7 @@ test "kit groups: members shrink towards their group, not the role mean" {
     var ests: [40]Est = undefined;
     var members: [40]u32 = undefined;
     for (&cells, &ests, &members, 0..) |*c, *e, *k, i| {
-        c.* = comps.cellKey(@intCast(i + 1), 1);
+        c.* = api.cellKey(@intCast(i + 1), 1);
         k.* = @intFromBool(i < 8);
         e.* = .{ .n = 1000, .beta = @splat(0), .se = @splat(0.01) };
         e.beta[f] = 0.02 + 0.05 * @as(f64, @floatFromInt(k.*));
@@ -1982,13 +1982,13 @@ test "a planted kit group comes back through the whole fit" {
             const y: f32 = if (blue_won == (s == 0)) 1 else 0;
             const o: f32 = @floatCast(if (s == 0) off else -off);
             try u.teams.append(gpa, .{ .game = @intCast(gi), .cell = 0, .y = y, .off = o, .x = enemy[s] });
-            for (0..5) |role| try u.seats.append(gpa, .{ .game = @intCast(gi), .cell = comps.cellKey(champs[s][role], role), .y = y, .off = o, .x = enemy[s] });
+            for (0..5) |role| try u.seats.append(gpa, .{ .game = @intCast(gi), .cell = api.cellKey(champs[s][role], role), .y = y, .off = o, .x = enemy[s] });
         }
     }
     var members: Members = .empty;
     defer members.deinit(gpa);
-    try members.put(gpa, comps.cellKey(11, 1), 1);
-    try members.put(gpa, comps.cellKey(12, 1), 1);
+    try members.put(gpa, api.cellKey(11, 1), 1);
+    try members.put(gpa, api.cellKey(12, 1), 1);
     var m = try fitModel(gpa, &u, &members);
     defer m.deinit(gpa);
     const ci = 1.96 * @sqrt(m.rf.cov[0][0]);
@@ -1997,7 +1997,7 @@ test "a planted kit group comes back through the whole fit" {
     // average out
     var own: f64 = 0;
     for ([_]u32{ 11, 12 }) |ch| {
-        const c = m.index.get(comps.cellKey(ch, 1)).?;
+        const c = m.index.get(api.cellKey(ch, 1)).?;
         const grp = m.rf.target(1, f, m.members[c])[0];
         try testing.expect(grp > 0.1);
         own += m.post[c][f].mean - grp;

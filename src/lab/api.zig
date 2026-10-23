@@ -216,6 +216,11 @@ pub const Effects = struct {
 
 pub const no_opinion: Prediction = @splat(std.math.nan(f32));
 
+/// A champion in a role as one map key
+pub fn cellKey(champion: u32, role: usize) u64 {
+    return (@as(u64, champion) << 3) | role;
+}
+
 pub fn outcomeIndex(o: Outcome) usize {
     return @backingInt(o);
 }

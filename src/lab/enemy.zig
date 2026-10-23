@@ -3,6 +3,7 @@
 //! (docs/model.md "Champion embeddings against the enemy team") is in git history
 
 const std = @import("std");
+const api = @import("api");
 const fm = @import("fm.zig");
 const rows = @import("rows.zig");
 
@@ -13,9 +14,7 @@ pub const Ids = struct {
     map: std.AutoHashMapUnmanaged(u64, u16) = .empty,
     n: u16 = 5,
 
-    fn key(champion: u32, role: u3) u64 {
-        return (@as(u64, champion) << 3) | role;
-    }
+    const key = api.cellKey;
 
     fn get(ids: *const Ids, champion: u32, role: u3) u16 {
         return ids.map.get(key(champion, role)) orelse role;

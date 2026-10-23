@@ -196,9 +196,7 @@ const shrink_games = 50;
 /// A pick "has" a trait when its profile is in the top share of fit picks (all roles)
 const top_share = 0.2;
 
-pub fn cellKey(champion: u32, role: usize) u64 {
-    return (@as(u64, champion) << 3) | role;
-}
+const cellKey = api.cellKey;
 
 const Cell = struct {
     /// [won, lost]

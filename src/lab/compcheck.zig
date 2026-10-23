@@ -115,9 +115,7 @@ fn at(s: Stat) usize {
     return @backingInt(s);
 }
 
-fn cellKey(champion: u32, role: usize) u64 {
-    return (@as(u64, champion) << 3) | role;
-}
+const cellKey = api.cellKey;
 
 const Profiles = struct {
     cells: std.AutoHashMapUnmanaged(u64, Acc) = .empty,

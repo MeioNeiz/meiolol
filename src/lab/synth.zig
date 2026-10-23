@@ -23,6 +23,7 @@
 //! Experience wins (champ_wins, wins_before) stay the real ones: noise to the truth
 
 const std = @import("std");
+const api = @import("api");
 const core = @import("core");
 const rows = @import("rows.zig");
 const seatstats = @import("seatstats.zig");
@@ -117,9 +118,7 @@ pub const Truth = struct {
     }
 };
 
-fn key(champion: u32, role: usize) u64 {
-    return @as(u64, champion) << 3 | role;
-}
+const key = api.cellKey;
 
 fn pairKey(a: u64, b: u64) u64 {
     return a << 32 | b;

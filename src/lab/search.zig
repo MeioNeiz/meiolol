@@ -77,7 +77,7 @@ fn screenFeatures(
         const q = harness.query(C.scope, g, players[r.game], r, harness.afterGameRank(C));
         var f: [nf]f32 = undefined;
         C.features(&m, &q, &f);
-        const key = cellKey(q.champion, q.role);
+        const key = api.cellKey(q.champion, @backingInt(q.role));
         const e = try cells.getOrPut(gpa, key);
         if (!e.found_existing) e.value_ptr.* = .{};
         for (f, 0..) |x, j| if (!std.math.isNan(x)) {
@@ -119,7 +119,7 @@ fn screenFeatures(
         const q = harness.query(C.scope, g, players[r.game], r, harness.afterGameRank(C));
         var f: [nf]f32 = undefined;
         C.features(&m, &q, &f);
-        const cell = cells.get(cellKey(q.champion, q.role)) orelse Cell{};
+        const cell = cells.get(api.cellKey(q.champion, @backingInt(q.role))) orelse Cell{};
         const e = residual(k, r.y[k], base.predict(q.champion, q.role)[k], sd[@backingInt(q.role)][k]);
         try game.append(gpa, r.game);
         try lb.append(gpa, e * e);
@@ -159,10 +159,6 @@ fn screenFeatures(
         clears, nf, @as(f64, @floatFromInt(nf)) * 0.025,
     });
     try w.print("RESULT screen target={t} features={d} clear={d}\n", .{ api.outcomeAt(k), nf, clears });
-}
-
-fn cellKey(champion: u32, role: api.Role) u64 {
-    return (@as(u64, champion) << 3) | @backingInt(role);
 }
 
 fn centred(x: f32, cell: anytype, global: anytype, j: usize) ?f64 {

@@ -7,6 +7,7 @@
 //! and dropout masks on every device; only float sum order differs
 
 const std = @import("std");
+const api = @import("api");
 const rows = @import("rows.zig");
 // nnlib: this file's nn is the matrix product
 const nnlib = @import("nn");
@@ -70,9 +71,7 @@ pub fn buildGames(gpa: std.mem.Allocator, d: *const rows.Data) !Games {
     return .{ .train = try train.toOwnedSlice(gpa), .tests = try tests.toOwnedSlice(gpa), .n_ids = n_ids };
 }
 
-fn key(champion: u32, role: usize) u64 {
-    return (@as(u64, champion) << 3) | role;
-}
+const key = api.cellKey;
 
 pub const Net = struct {
     l: dn.Layout,

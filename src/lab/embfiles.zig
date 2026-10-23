@@ -21,9 +21,7 @@ pub const Dir = struct {
     }
 };
 
-fn key(champion: u32, role: usize) u64 {
-    return (@as(u64, champion) << 3) | role;
-}
+const key = api.cellKey;
 
 fn forFit(ctx: *const anyopaque, gpa: Allocator, t: *const api.Train, seed: u64) anyerror!api.Embeddings {
     const d: *const Dir = @ptrCast(@alignCast(ctx));

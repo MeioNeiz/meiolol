@@ -389,15 +389,11 @@ pub const Baseline = struct {
         }
     };
 
-    fn key(champion: u32, r: api.Role) u64 {
-        return (@as(u64, champion) << 3) | @backingInt(r);
-    }
-
     pub fn fit(gpa: std.mem.Allocator, t: *const api.Train) !Baseline {
         var b: Baseline = .{};
         errdefer b.deinit(gpa);
         for (t.rows) |r| {
-            const e = try b.cells.getOrPut(gpa, key(r.champion, r.role));
+            const e = try b.cells.getOrPut(gpa, api.cellKey(r.champion, @backingInt(r.role)));
             if (!e.found_existing) e.value_ptr.* = .{};
             e.value_ptr.add(r.y);
             b.roles[@backingInt(r.role)].add(r.y);
@@ -411,7 +407,7 @@ pub const Baseline = struct {
 
     pub fn predict(b: *const Baseline, champion: u32, r: api.Role) [api.outcome_count]f64 {
         const rc = b.roles[@backingInt(r)];
-        const cell = b.cells.get(key(champion, r)) orelse Cell{};
+        const cell = b.cells.get(api.cellKey(champion, @backingInt(r))) orelse Cell{};
         var out: [api.outcome_count]f64 = undefined;
         for (&out, 0..) |*o, k| {
             const role_mean = if (rc.n[k] > 0) rc.sum[k] / rc.n[k] else 0;
