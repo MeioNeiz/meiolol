@@ -90,7 +90,7 @@ Each step ends tested and deployed; nginx and systemd changes on jomify need Jac
   role has run_actions and admin.js hides the controls. accounts.db joins the web
   server's backup. Done when
   Jacob signs in with his own account and the basic auth is only the fallback
-  Done 23 Oct: live on meio.lol (account 'jacob', owner); admins join through a sign-up
+  Done 23 Oct: live on meio.lol (owner: Jacob's email); admins join through a sign-up
   link (email plus a shared password, Jacob 23 Oct; `meiolol account link admin`),
   tested live: logged out redirects, admin sees /admin/ and live data but gets 403 on
   actions, owner runs them, the desktop key still opens /admin/desktop/. accounts.db
