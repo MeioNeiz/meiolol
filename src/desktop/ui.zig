@@ -14,6 +14,8 @@ const lane = @import("lane.zig");
 const teams = @import("teams.zig");
 const game = @import("game.zig");
 const post = @import("post.zig");
+const loadscreen = @import("loadscreen.zig");
+const loading = @import("../loading.zig");
 const ingame = @import("../ingame.zig");
 const postgame = @import("../postgame.zig");
 const palette = w.palette;
@@ -46,6 +48,8 @@ pub const Status = union(enum) {
     /// Champ select without assigned positions (blind pick, ARAM)
     no_role,
     select: *const Select,
+    /// The game is loading: cards from the last champ select
+    loading: *const loading.Loading,
     /// In a game with Live Client Data up
     in_game: *const ingame.InGame,
     /// After a game, once the client has its end of game block
@@ -99,6 +103,7 @@ pub fn frame(v: View) void {
             defer body.deinit();
             w.para(@src(), "In game. The board comes back in your next champ select.", .{}, .{});
         },
+        .loading => |l| loadscreen.view(.{ .stats = v.stats.?, .icons = v.icons, .edition = v.edition, .wide = wide }, l),
         .post_game => |p| {
             const ctx: w.Ctx = .{ .stats = v.stats.?, .icons = v.icons, .edition = v.edition, .wide = wide };
             if (wide) post.wide(ctx, p) else post.narrow(ctx, p);
@@ -126,7 +131,7 @@ fn message(v: View) void {
         .client_error => |e| w.para(@src(), "League client not reachable ({s}); retrying.", .{e}, .{}),
         .waiting => w.para(@src(), "The board shows in champ select: both teams, your lane, options and bans.", .{}, .{}),
         .no_role => w.para(@src(), "This champ select has no assigned positions, so there is no lane to show.", .{}, .{}),
-        .select, .in_game, .post_game => {},
+        .select, .loading, .in_game, .post_game => {},
     }
 }
 
@@ -151,6 +156,7 @@ fn header(v: View) void {
             .waiting => |phase| phase,
             .no_role => "champ select",
             .select => |s| s.board.stage,
+            .loading => "Loading screen",
             .in_game => "In game",
             .post_game => "Post game",
         };
@@ -188,7 +194,7 @@ const step_names = [_][]const u8{ "Lobby", "Champ select", "In game", "Post game
 fn stepper(s: Status) void {
     const now: ?Step = switch (s) {
         .select, .no_role => .champ_select,
-        .in_game => .in_game,
+        .loading, .in_game => .in_game,
         .post_game => .post_game,
         .waiting => |phase| if (std.mem.eql(u8, phase, "In game") or std.mem.eql(u8, phase, "Reconnect"))
             .in_game

@@ -12,6 +12,7 @@ const lanecard = @import("../lanecard.zig");
 const board = @import("../board.zig");
 const ingame = @import("../ingame.zig");
 const postgame = @import("../postgame.zig");
+const loading = @import("../loading.zig");
 const Icons = @import("icons.zig").Icons;
 const icons_path = @import("icons.zig").lcu_path;
 const datafiles = @import("../datafiles.zig");
@@ -193,7 +194,7 @@ fn publish(status: ui.Status, arena: std.heap.ArenaAllocator) void {
 }
 
 fn poll(gpa: std.mem.Allocator) void {
-    var p: Poller = .{ .watch = .init(gpa, io, lockfile), .own_arena = .init(gpa) };
+    var p: Poller = .{ .watch = .init(gpa, io, lockfile), .own_arena = .init(gpa), .seats_arena = .init(gpa) };
     defer p.deinit();
     var shown: u64 = 0;
     while (!shared.quit.load(.acquire)) {
@@ -235,6 +236,10 @@ const Poller = struct {
     fingerprint: u64 = 0,
     /// This game's team gold so far; a new game starts it again
     history: std.ArrayList(ingame.Sample) = .empty,
+    /// The last champ select's seats and draft, for the loading screen
+    seats_arena: std.heap.ArenaAllocator,
+    seats: ?[2][]const loading.Seat = null,
+    draft: ?board.Draft = null,
     /// Positions the last in-game tick saw, for the post game
     hints: [10]postgame.Hint = undefined,
     n_hints: usize = 0,
@@ -246,6 +251,7 @@ const Poller = struct {
 
     fn deinit(p: *Poller) void {
         p.history.deinit(p.own_arena.child_allocator);
+        p.seats_arena.deinit();
         p.watch.deinit();
         p.own_arena.deinit();
     }
@@ -269,7 +275,7 @@ const Poller = struct {
         switch (s) {
             .waiting => |phase| h.update(phase),
             .client_error => |e| h.update(e),
-            .select, .in_game, .post_game => h.update(std.mem.asBytes(&p.fingerprint)),
+            .select, .loading, .in_game, .post_game => h.update(std.mem.asBytes(&p.fingerprint)),
             else => {},
         }
         return h.final();
@@ -289,6 +295,18 @@ const Poller = struct {
                     if (p.postGame(arena, data)) |pg| return .{ .post_game = pg } else |err| switch (err) {
                         error.OutOfMemory => return err,
                         else => {},
+                    }
+                } else if (std.mem.eql(u8, phase, "GameStart")) {
+                    if (p.seats) |seats| {
+                        const l = try arena.create(loading.Loading);
+                        l.* = try loading.build(arena, .{
+                            .stats = &data.stats,
+                            .curves = if (data.curves) |*c| c else null,
+                            .seats = seats,
+                            .draft = p.draft,
+                            .tier = if (p.own) |o| o.tier else null,
+                        });
+                        return .{ .loading = l };
                     }
                 } else if (!std.mem.eql(u8, phase, "WaitingForStats")) p.forgetOwn();
                 return .{ .waiting = phaseLabel(phase) };
@@ -325,6 +343,9 @@ const Poller = struct {
             .expertise = if (by_mastery) .fitted else null,
         });
         sel.board = try board.build(arena, &data.stats, .{}, cs, &sel.card);
+        _ = p.seats_arena.reset(.retain_capacity);
+        p.seats = try loading.seatsOf(p.seats_arena.allocator(), &sel.board);
+        p.draft = sel.board.draft;
         var want: Want = .{};
         for ([_][]const board.Seat{ sel.board.allies, sel.board.enemies }) |seats| for (seats) |s| {
             want.add(s.slot.champion);

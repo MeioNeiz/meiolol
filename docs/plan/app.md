@@ -118,8 +118,14 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
   "me"), percentages, experimental models
 - APP8 Window icon (champion icons done: from the client, desktop/icons.zig; Data
   Dragon art is allowed, logos not)
-- APP10 Loading screen cards (Window layout below): ten cards, champion-only facts in
-  the public edition; private adds player scouting (APP7)
+- APP10 Loading screen cards, first pass done (23 Oct): in GameStart the window shows
+  the last champ select's ten seats as cards (loading.zig, desktop/loadscreen.zig): role
+  (guessed with ?), pills for strong or weak in the role, few games, ahead, even or
+  behind against the same role across (2 SE from even at 14 min), level 6 and first
+  item sooner or later (20 s apart); testers also see each role's win rate and both
+  teams' draft score. Left: a loading screen with no champ select seen (app started
+  late: Live Client Data or the gameflow session), team comp pills; private adds player
+  scouting (APP7)
 - APP11 Post game view, first pass done (23 Oct, both editions: facts the client's own
   screen shows): verdict and kills, the team gold story in a sentence, my lane at 14 min
   against the matchup and gold earned over the game, award chips (damage, KDA, gold, CS,
@@ -152,9 +158,10 @@ CommunityDragon champion-icons/<id>.png into data/icons, gitignored).
   / Picks / Enemy team tabs, Picks first
 - Colour: win rates on fixed steps (widgets.rateColour), reason pills coloured by meaning
   with the words always on them (green good, red bad, orange caution, grey neutral)
-- Loading screen (APP10): Porofessor's 2 x 5 cards, ally row over enemy row, fixed card
-  order (champion, record, then pills), hover for the reason and number. Player pills
-  ("on a streak", "main") private only and only where names are visible
+- Loading screen (APP10, built): Porofessor's 2 x 5 cards, ally row over enemy row
+  under a team rule, fixed card order (icon, name, role, private rate, pills); narrow:
+  one compact row per seat with two pills. Hover for the reason and number later.
+  Player pills ("on a streak", "main") private only and only where names are visible
 - In game (APP9, built in the main window: desktop/game.zig): score strip and team item
   gold bar, five mirrored lane rows (our icon, gold delta, their icon) left; your lane
   against the curve, respawns and team gold through the game right. Narrow: one column,

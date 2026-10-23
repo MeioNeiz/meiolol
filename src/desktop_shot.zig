@@ -16,10 +16,11 @@ const lcu = @import("lcu/root.zig");
 const Icons = @import("desktop/icons.zig").Icons;
 const ingame = @import("ingame.zig");
 const postgame = @import("postgame.zig");
+const loading = @import("loading.zig");
 
 const Shot = struct {
     name: []const u8,
-    status: union(enum) { plain: ui.Status, select: Scene, game: Game, post: Post },
+    status: union(enum) { plain: ui.Status, select: Scene, loading: Scene, game: Game, post: Post },
 };
 
 /// A champ select by champion names. Enemies are locked; a trailing "?" hides the
@@ -114,6 +115,15 @@ const shots = [_]Shot{
         .their_bans = &.{ "Briar", "Smolder", "Mel", "Viego", "Ezreal" },
         .mastery = &.{ .{ "Jinx", 90_000 }, .{ "Caitlyn", 40_000 }, .{ "Ezreal", 22_000 } },
     } } },
+    .{ .name = "loading", .status = .{ .loading = .{
+        .role = .middle,
+        .me = "Orianna",
+        .locked = true,
+        .phase = "FINALIZATION",
+        .allies = &.{ .{ .top, "Darius" }, .{ .jungle, "Vi" }, .{ .bottom, "Jinx" }, .{ .utility, "Thresh" } },
+        .enemies = &.{ "Ornn?", "Lee Sin?", "Syndra?", "Caitlyn?", "Leona?" },
+        .tier = "GOLD",
+    } } },
     .{ .name = "in-game", .status = .{ .game = .{} } },
     .{ .name = "post-game", .status = .{ .post = .{} } },
 };
@@ -159,6 +169,14 @@ pub fn main(init: std.process.Init) !void {
         const opts: core.Options = .{ .min_games = min_games };
         const status: ui.Status = switch (shot.status) {
             .plain => |s| s,
+            .loading => |scene| blk: {
+                const cs = try champSelect(a, &stats, scene);
+                const card = try lanecard.build(a, .{ .stats = &stats, .curves = if (curves) |*c| c else null, .role = scene.role, .me = cs.my_champion, .locked = true, .allies = cs.allies, .enemies = cs.enemies, .tier = scene.tier, .opts = opts });
+                const b = try board.build(a, &stats, opts, cs, &card);
+                const l = try a.create(loading.Loading);
+                l.* = try loading.build(a, .{ .stats = &stats, .curves = if (curves) |*c| c else null, .seats = try loading.seatsOf(a, &b), .draft = b.draft, .tier = scene.tier, .opts = opts });
+                break :blk .{ .loading = l };
+            },
             .select => |scene| blk: {
                 const cs = try champSelect(a, &stats, scene);
                 const sel = try a.create(ui.Select);
