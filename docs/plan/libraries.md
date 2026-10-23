@@ -18,13 +18,19 @@ that slow everyday development).
   -32768 in i16 (both saturate now). `zig build --fuzz` exits 0 when a fuzz test
   crashes: the first release went out past one (withdrawn before any web round
   published it); the script now fails on the log's "terminated with signal"
+- HTTP server limits (23 Oct, what hyper and axum give): httpd.Limits per server, shared
+  by the Your games API, the crawler's proxy, serve.zig and the mocks. A connection cap
+  (503 past it), 64 KB heads (431), a Content-Length body cap (413; chunked bodies 411,
+  as nginx and our clients state a length), malformed heads 400; idle, head and handler
+  timeouts from one watchdog task per server that shuts a stalled socket down. Each sits
+  behind nginx's own (/api/ 1 KB bodies, /auth/ 4 KB, 30 s; render 15 s, /admin/api/
+  120 s): API 128 connections, 16 KB, idle 60 s, head 30 s, handler 60 s; serve 256,
+  handler 180 s; proxy 64, no body, no idle or handler timeout (the API keeps pooled
+  connections there; a request waits for a Riot slot)
 
 ## Next, by how exposed the code is
 
-1. HTTP server limits (what hyper and axum give): request header and body caps,
-   read and idle timeouts, a connection cap in src/httpd.zig, shared by the Your games
-   API, the crawler's proxy and serve.zig. nginx in front already rejects malformed
-   HTTP, so limits and timeouts are the gap
+1. HTTP server limits: done 23 Oct (above)
 2. Fuzz the backend's untrusted input: Riot match JSON (riot/match.zig), timeline
    decode (riot/timeline.zig, digest.zig), API request handling (api/root.zig), rawpack.
    Same pattern: a fuzz test from a good fixture (core/fuzz.zig mutate), searched in a

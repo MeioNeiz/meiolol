@@ -665,19 +665,19 @@ pub const Mock = struct {
 
     /// Accept loops until cancelled, each connection on its own thread
     pub fn serveLcu(m: *Mock, server: *Io.net.Server) void {
-        httpd.accept(.mock_lcu, m.io, server, m, lcuConnection);
+        httpd.accept(.mock_lcu, m.io, server, .local, m, lcuConnection);
     }
 
     pub fn serveLive(m: *Mock, server: *Io.net.Server) void {
-        httpd.accept(.mock_live, m.io, server, m, liveConnection);
+        httpd.accept(.mock_live, m.io, server, .local, m, liveConnection);
     }
 
-    pub fn lcuConnection(m: *Mock, stream: Io.net.Stream) void {
-        httpd.requests(.mock_lcu, m.io, stream, m, handleLcu, .path);
+    pub fn lcuConnection(m: *Mock, conn: httpd.Connection) void {
+        httpd.requests(.mock_lcu, m.io, conn, m, handleLcu, .path);
     }
 
-    pub fn liveConnection(m: *Mock, stream: Io.net.Stream) void {
-        httpd.requests(.mock_live, m.io, stream, m, handleLive, .path);
+    pub fn liveConnection(m: *Mock, conn: httpd.Connection) void {
+        httpd.requests(.mock_live, m.io, conn, m, handleLive, .path);
     }
 
     fn handleLcu(m: *Mock, r: *std.http.Server.Request) !void {

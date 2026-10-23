@@ -256,10 +256,10 @@ const TestServer = struct {
     dir: Io.Dir,
 
     fn serve(t: *TestServer, s: *Io.net.Server) void {
-        httpd.accept(.update_test, std.testing.io, s, t, connection);
+        httpd.accept(.update_test, std.testing.io, s, .local, t, connection);
     }
-    fn connection(t: *TestServer, stream: Io.net.Stream) void {
-        httpd.requests(.update_test, std.testing.io, stream, t, handle, .path);
+    fn connection(t: *TestServer, conn: httpd.Connection) void {
+        httpd.requests(.update_test, std.testing.io, conn, t, handle, .path);
     }
     fn handle(t: *TestServer, r: *std.http.Server.Request) !void {
         var it = r.iterateHeaders();

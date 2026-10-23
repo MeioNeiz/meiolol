@@ -31,9 +31,13 @@ pub const Proxy = struct {
         return server;
     }
 
+    /// GETs only. The API keeps its connections here open between lookups, and a closed
+    /// one costs it a warning and a second's retry. A request waits for a Riot slot
+    const limits: httpd.Limits = .{ .connections = 64, .body = 0, .idle = null, .handle = null };
+
     /// Until cancelled
     pub fn serve(p: *Proxy, server: *Io.net.Server) void {
-        httpd.accept(.proxy, p.io, server, p, connection);
+        httpd.accept(.proxy, p.io, server, limits, p, connection);
     }
 
     const Clients = [@typeInfo(@FieldType(Limiters, "all")).array.len]?Client;
@@ -41,11 +45,11 @@ pub const Proxy = struct {
     /// Per connection: a client per route, made on first use
     const Conn = struct { p: *Proxy, clients: Clients = @splat(null) };
 
-    fn connection(p: *Proxy, stream: Io.net.Stream) void {
+    fn connection(p: *Proxy, hc: httpd.Connection) void {
         var conn: Conn = .{ .p = p };
         defer for (&conn.clients) |*c| if (c.*) |*client| client.deinit();
         // The path may hold a Riot ID or PUUID: error names only
-        httpd.requests(.proxy, p.io, stream, &conn, handle, .error_only);
+        httpd.requests(.proxy, p.io, hc, &conn, handle, .error_only);
     }
 
     fn handle(conn: *Conn, request: *std.http.Server.Request) !void {

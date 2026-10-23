@@ -98,8 +98,12 @@ pub fn run(gpa: Allocator, io: Io, opts: Options) !void {
     serve(&ctx, &server);
 }
 
+/// Behind nginx's: it caps bodies at 1 KB (/api/) and 4 KB (/auth/) and waits 30 s for
+/// an answer
+const limits: httpd.Limits = .{};
+
 fn serve(ctx: *Context, server: *Io.net.Server) void {
-    httpd.accept(.api, ctx.io, server, ctx, connection);
+    httpd.accept(.api, ctx.io, server, limits, ctx, connection);
 }
 
 test "idle keep-alive connections do not hold up the next request" {
@@ -237,9 +241,9 @@ test newestPatch {
     try std.testing.expectEqual(0, newestPatch("curves-x.bin"));
 }
 
-fn connection(ctx: *Context, stream: Io.net.Stream) void {
+fn connection(ctx: *Context, conn: httpd.Connection) void {
     // The query holds the Riot ID: the path only
-    httpd.requests(.api, ctx.io, stream, ctx, handle, .path);
+    httpd.requests(.api, ctx.io, conn, ctx, handle, .path);
 }
 
 const Status = std.http.Status;

@@ -151,6 +151,9 @@ const Context = struct {
     started: i96,
 };
 
+/// nginx renders through here with a 15 s wait for pages and 120 s for /admin/api/
+const limits: httpd.Limits = .{ .connections = 256, .handle = .fromSeconds(180) };
+
 pub fn run(gpa: std.mem.Allocator, io: Io, opts: Options) !void {
     const address = try Io.net.IpAddress.parse(opts.host, opts.port);
     var server = try address.listen(io, .{ .reuse_address = true });
@@ -162,7 +165,7 @@ pub fn run(gpa: std.mem.Allocator, io: Io, opts: Options) !void {
     var group: Io.Group = .init;
     defer group.cancel(io);
     if (opts.dev) |d| group.async(io, watchBinary, .{ io, d });
-    httpd.accept(.serve, io, &server, &ctx, connection);
+    httpd.accept(.serve, io, &server, limits, &ctx, connection);
 }
 
 fn mtime(io: Io, dir: Io.Dir, path: []const u8) i96 {
@@ -185,8 +188,8 @@ fn watchBinary(io: Io, dev: Dev) void {
     }
 }
 
-fn connection(ctx: *Context, stream: Io.net.Stream) void {
-    httpd.requests(.serve, ctx.io, stream, ctx, respond, .path);
+fn connection(ctx: *Context, conn: httpd.Connection) void {
+    httpd.requests(.serve, ctx.io, conn, ctx, respond, .path);
 }
 
 fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
