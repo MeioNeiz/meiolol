@@ -24,6 +24,7 @@ const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const gbdt = @import("gbdt.zig");
+const nn = @import("nn");
 
 pub const usage =
     \\  stack NAME=FILE:COL... [--ref NAME,NAME] [--l2 X] [--permute SEED]
@@ -36,7 +37,6 @@ pub const usage =
 
 const blocks = [_][]const u8{ "1", "2", "3", "4", "5", "dev" };
 const max_inputs = 16;
-const eps = 1e-6;
 
 const Input = struct { name: []const u8, path: []const u8, col: []const u8 };
 
@@ -314,25 +314,16 @@ fn load(gpa: Allocator, arena: Allocator, io: Io, inputs: []const Input) !Data {
     return d;
 }
 
-fn logit(p: f64) f64 {
-    const q = std.math.clamp(p, eps, 1 - eps);
-    return @log(q / (1 - q));
-}
-
-fn sigmoid(z: f64) f64 {
-    return 1 / (1 + @exp(-z));
-}
-
-fn logLoss(y: f64, p: f64) f64 {
-    const q = std.math.clamp(p, eps, 1 - eps);
-    return -(y * @log(q) + (1 - y) * @log(1 - q));
-}
+const logit = nn.logit;
+const sigmoid = nn.sigmoid;
+const logLoss = nn.logLoss;
 
 /// Logistic regression on x (n rows of k features, row-major) by Newton's method; L2
 /// (times n) on every weight but the intercept, which is the last feature when used
 pub fn fitLogistic(gpa: Allocator, x: []const f64, y: []const f64, k: usize, intercept: bool, l2: f64) ![]f64 {
     const n = y.len;
     const w = try gpa.alloc(f64, k);
+    errdefer gpa.free(w);
     @memset(w, 0);
     const g = try gpa.alloc(f64, k);
     defer gpa.free(g);
@@ -357,7 +348,7 @@ pub fn fitLogistic(gpa: Allocator, x: []const f64, y: []const f64, k: usize, int
             g[a] += l2 * nf * w[a];
             h[a * k + a] += l2 * nf;
         };
-        try solve(gpa, h, g, k);
+        try solve(h, g, k);
         var step: f64 = 0;
         for (w, g) |*a, b| {
             a.* -= b;
@@ -369,8 +360,7 @@ pub fn fitLogistic(gpa: Allocator, x: []const f64, y: []const f64, k: usize, int
 }
 
 /// Solves h x = g in place (g becomes x); Gaussian elimination with partial pivoting
-fn solve(gpa: Allocator, h: []f64, g: []f64, k: usize) !void {
-    _ = gpa;
+fn solve(h: []f64, g: []f64, k: usize) !void {
     for (0..k) |c| {
         var piv = c;
         for (c + 1..k) |r| if (@abs(h[r * k + c]) > @abs(h[piv * k + c])) {

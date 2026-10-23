@@ -579,12 +579,6 @@ fn invert(m: []f64, inv: []f64, k: usize) !void {
     }
 }
 
-/// Smallest true effect (logit) a two-sided 5% test finds with 80% power, for a binary
-/// feature present (+1 or -1 for blue) in `games` games near 50%: se = 2 / sqrt(games)
-pub fn mdeLogit(games: f64) f64 {
-    return (1.96 + 0.84) * 2 / @sqrt(games);
-}
-
 pub const usage =
     \\  plant-score plant:SPEC:SNAP PREDS.tsv [REF_COL]
     \\                                  per-game win predictions (netcheck's preds.tsv,

@@ -1052,10 +1052,7 @@ fn job(gpa: Allocator, io: Io, e: *const nnexport.Export, opts: Options, block: 
     return out;
 }
 
-fn secondsSince(io: Io, t0: Io.Timestamp) f64 {
-    const ns = t0.durationTo(Io.Clock.awake.now(io)).toNanoseconds();
-    return @as(f64, @floatFromInt(ns)) / 1e9;
-}
+const secondsSince = winnet.secondsSince;
 
 /// emb-<block>-s<seed>.tsv: champion id, role (0 top .. 4 utility), fit games, then E;
 /// champion 0 rows are each role's shared vector for champion-roles under min_games
@@ -1110,9 +1107,7 @@ fn pairedDiff(ys: []const f32, base: []const f32, cand: []const f32, keep: ?[]co
 }
 
 fn meanLoss(ys: []const f32, p: []const f32) f64 {
-    var s: f64 = 0;
-    for (ys, p) |y, q| s += loss1(y, q);
-    return s / @as(f64, @floatFromInt(@max(ys.len, 1)));
+    return nn.meanLogLoss(f32, ys, p);
 }
 
 /// Scored games of one or more jobs (one seed), concatenated
