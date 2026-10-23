@@ -657,7 +657,6 @@ const crawlLive = () => L && L.crawl && L.crawl.buckets && L.crawl.buckets.lengt
 const health = () => L && L.health != null ? L.health : D.health;
 const queues = () => (L && L.queues) || D.queues;
 const disk = () => (L && L.disk) || D.disk;
-const freshest = () => Math.max(D.now, L ? L.now : 0);
 
 // ---------- crawl helpers ----------
 

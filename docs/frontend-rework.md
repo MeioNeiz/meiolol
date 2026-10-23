@@ -286,8 +286,8 @@ beside lanechart.zig's SVG.
 - Classes JS builds from data: `badge c-${kind}` (review.js:165) ties CSS to an enum in
   review.js; a rough grep can't see them, a rename breaks silently.
 - Dead rules: small. Of 386 class names only `matchup-list`, `lesson-done`/`todo` and
-  `reveal-summary` appear nowhere in Zig or JS (style.css:261-264, 290-291, 350). Not a
-  structural problem.
+  `reveal-summary` appeared nowhere in Zig or JS; removed 23 Oct with the unused
+  `--f-*` and `--bar-hi` tokens. Not a structural problem.
 - Dark mode: dark only (`color-scheme: dark`), no light theme; fine, but tokens make a
   later light theme cheap.
 - One global file: every page loads all 1,213 lines; 235 lines over 90 chars (one-line
