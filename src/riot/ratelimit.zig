@@ -14,6 +14,9 @@ const max_windows = 4;
 /// the slots a slow answer or a busy database cost them (a thread sends one request at
 /// a time). The window's limit still holds
 const catch_up = 16;
+/// Padding from Riot's counts stops here, far above any key's window, so a bogus count
+/// header can't take gigabytes
+const pad_max = 1 << 20;
 
 pub const Window = struct {
     limit: u32,
@@ -114,7 +117,7 @@ pub const Bucket = struct {
             const secs = std.fmt.parseInt(u32, std.mem.trim(u8, part[colon + 1 ..], " "), 10) catch continue;
             for (b.windows.items) |*w| {
                 if (w.seconds != secs) continue;
-                while (w.hits.len < seen) try w.hits.pushBack(gpa, now);
+                while (w.hits.len < @min(seen, pad_max)) try w.hits.pushBack(gpa, now);
             }
         }
     }
@@ -335,6 +338,13 @@ test "riot counts pad our windows" {
     try testing.expectEqual(@as(usize, 1), l.app.windows.items[0].hits.len);
     try testing.expectEqual(@as(usize, 57), l.app.windows.items[1].hits.len);
     try testing.expectEqual(@as(usize, 3), l.methods.getPtr("m").?.windows.items[0].hits.len);
+}
+
+test "a bogus count pads no further than pad_max" {
+    var l = try Limiter.init(testing.allocator, testing.io);
+    defer l.deinit();
+    try l.update("m", .{ .app_count = "4000000:1" });
+    try testing.expectEqual(@as(usize, pad_max), l.app.windows.items[0].hits.len);
 }
 
 test "acquire waits once a window is full" {
