@@ -173,6 +173,22 @@ fn learningKey() u64 {
     return h.final();
 }
 
+/// Code of `text` in `map` (null: 0), added (copied into `a`) when new
+fn internIn(a: Allocator, map: *std.StringArrayHashMapUnmanaged(void), text: ?[]const u8) !Code {
+    const t = text orelse return 0;
+    const gop = try map.getOrPut(a, t);
+    if (!gop.found_existing) gop.key_ptr.* = try a.dupe(u8, t);
+    return std.math.cast(Code, gop.index + 1) orelse error.TooManyStrings;
+}
+
+/// By string code: stats.setsWith of the string as a platform
+fn setMasksIn(a: Allocator, strings: []const []const u8, sets: []const []const []const u8) ![]u32 {
+    const masks = try a.alloc(u32, strings.len + 1);
+    masks[0] = 0;
+    for (strings, masks[1..]) |name, *m| m.* = stats.setsWith(sets, name);
+    return masks;
+}
+
 pub fn key(puuid: []const u8) Key {
     return .{ .lo = std.hash.Wyhash.hash(0, puuid), .hi = std.hash.Wyhash.hash(0x9e3779b97f4a7c15, puuid) };
 }
@@ -326,12 +342,8 @@ pub const Store = struct {
         return if (code == 0) null else s.strings.keys()[code - 1];
     }
 
-    /// Code of `text` (null: 0), added when new
     fn intern(s: *Store, text: ?[]const u8) !Code {
-        const t = text orelse return 0;
-        const gop = try s.strings.getOrPut(s.arena(), t);
-        if (!gop.found_existing) gop.key_ptr.* = try s.arena().dupe(u8, t);
-        return std.math.cast(Code, gop.index + 1) orelse error.TooManyStrings;
+        return internIn(s.arena(), &s.strings, text);
     }
 
     /// By code: whether the string is one of `names`; caller frees
@@ -348,10 +360,7 @@ pub const Store = struct {
 
     /// By code: stats.setsWith of the string as a platform; caller frees
     pub fn setMasks(s: *const Store, gpa: Allocator, sets: []const []const []const u8) ![]u32 {
-        const masks = try gpa.alloc(u32, s.strings.count() + 1);
-        masks[0] = 0;
-        for (s.strings.keys(), masks[1..]) |name, *m| m.* = stats.setsWith(sets, name);
-        return masks;
+        return setMasksIn(gpa, s.strings.keys(), sets);
     }
 
     /// stats.Slice.of for this store's games; free with SliceMasks.deinit
@@ -372,24 +381,16 @@ pub const Store = struct {
         return s.gpa.print("{s}/" ++ fmt, .{s.dir} ++ args);
     }
 
-    fn readFile(s: *Store, comptime T: type, file: []const u8) !?T {
-        return readIn(s.io, s.gpa, s.arena(), T, file);
-    }
-
-    fn writeFile(s: *Store, file: []const u8, value: anytype) !void {
-        try writeIn(s.io, file, value);
-    }
-
     /// Every day file the state lists; one unreadable or of another format is read
     /// again from the database (its matches are unknown)
     fn loadDays(s: *Store) !void {
         const state_path = try s.path("state.bin", .{});
         defer s.gpa.free(state_path);
-        const state = try s.readFile(State, state_path) orelse return;
+        const state = try readIn(s.io, s.gpa, s.arena(), State, state_path) orelse return;
         for (state.days) |d| {
             const file = try s.path("days/{d}.bin", .{d});
             defer s.gpa.free(file);
-            const df = try s.readFile(DayFile, file) orelse continue;
+            const df = try readIn(s.io, s.gpa, s.arena(), DayFile, file) orelse continue;
             if (df.day != d) continue;
             const day = s.dayFrom(df) catch |err| switch (err) {
                 error.Corrupt => {
@@ -455,14 +456,14 @@ pub const Store = struct {
             }
             try keep.append(s.gpa, d);
             if (!day.dirty) continue;
-            try s.writeFile(file, DayFile{ .day = d, .strings = strings, .games = day.games.items, .others = day.others.items });
+            try writeIn(s.io, file, DayFile{ .day = d, .strings = strings, .games = day.games.items, .others = day.others.items });
             day.dirty = false;
             s.counts.days_written += 1;
         }
         std.mem.sort(i64, keep.items, {}, std.sort.asc(i64));
         const state_path = try s.path("state.bin", .{});
         defer s.gpa.free(state_path);
-        try s.writeFile(state_path, State{ .days = keep.items });
+        try writeIn(s.io, state_path, State{ .days = keep.items });
     }
 
     fn sort(s: *Store) !void {
@@ -635,6 +636,7 @@ pub const Store = struct {
     }
 
     const MatchRow = struct {
+        id: []const u8,
         rowid: i64,
         platform: []const u8,
         queue_id: i64,
@@ -646,6 +648,7 @@ pub const Store = struct {
     };
 
     const PlayerRow = struct {
+        id: []const u8,
         slot: i64,
         team: i64,
         puuid: ?[]const u8,
@@ -657,7 +660,8 @@ pub const Store = struct {
         gold15: bool,
     };
 
-    const player_cols = "slot, team_id, puuid, champion_id, position, win, tier, gold14, gold15 IS NOT NULL";
+    const match_cols = "match_id, rowid, platform, queue_id, patch, game_start, duration_s, winning_team, remake";
+    const player_cols = "match_id, slot, team_id, puuid, champion_id, position, win, tier, gold14, gold15 IS NOT NULL";
 
     fn player(s: *Store, r: PlayerRow) !Player {
         return .{
@@ -680,10 +684,10 @@ pub const Store = struct {
         };
     }
 
-    fn addMatch(s: *Store, id: []const u8, m: MatchRow, timeline: i64, players: []const Player, bans: []const Ban) !void {
+    fn addMatch(s: *Store, m: MatchRow, timeline: i64, players: []const Player, bans: []const Ban) !void {
         const day = try s.dayOf(m.game_start);
         day.dirty = true;
-        const own = try s.arena().dupe(u8, id);
+        const own = try s.arena().dupe(u8, m.id);
         if (m.queue_id != ranked_solo or m.remake != 0) {
             try day.others.append(s.arena(), .{
                 .id = own,
@@ -711,7 +715,7 @@ pub const Store = struct {
 
     /// A few matches: each by primary key
     fn readEach(s: *Store, db: store.Db, ids: []const []const u8, timelines: *const std.StringHashMapUnmanaged(i64)) !void {
-        var mq = try db.prepare("SELECT rowid, platform, queue_id, patch, game_start, duration_s, winning_team, remake FROM matches WHERE match_id = ?");
+        var mq = try db.prepare("SELECT " ++ match_cols ++ " FROM matches WHERE match_id = ?");
         defer mq.deinit();
         var pq = try db.prepare("SELECT " ++ player_cols ++ " FROM participants WHERE match_id = ? ORDER BY slot");
         defer pq.deinit();
@@ -742,7 +746,7 @@ pub const Store = struct {
                 bq.reset();
             }
             // Strings in m are the statement's: copied by intern and addMatch
-            try s.addMatch(id, m, timelines.get(id) orelse 0, players.items, bans.items);
+            try s.addMatch(m, timelines.get(id) orelse 0, players.items, bans.items);
             mq.reset();
         }
     }
@@ -759,36 +763,20 @@ pub const Store = struct {
         defer index.deinit(s.gpa);
         for (ids, 0..) |id, i| try index.put(s.gpa, id, i);
         {
-            var q = try db.prepare("SELECT match_id, rowid, platform, queue_id, patch, game_start, duration_s, winning_team, remake FROM matches");
+            var q = try db.prepare("SELECT " ++ match_cols ++ " FROM matches");
             defer q.deinit();
             try q.bind(.{});
             while (try q.step()) {
-                const r = q.row(struct {
-                    id: []const u8,
-                    rowid: i64,
-                    platform: []const u8,
-                    queue_id: i64,
-                    patch: []const u8,
-                    game_start: i64,
-                    duration_s: i64,
-                    winning_team: ?i64,
-                    remake: i64,
-                });
-                const i = index.get(r.id) orelse continue;
-                pending[i] = .{ .m = .{
-                    .rowid = r.rowid,
-                    .platform = try wa.dupe(u8, r.platform),
-                    .queue_id = r.queue_id,
-                    .patch = try wa.dupe(u8, r.patch),
-                    .game_start = r.game_start,
-                    .duration_s = r.duration_s,
-                    .winning_team = r.winning_team,
-                    .remake = r.remake,
-                } };
+                var m = q.row(MatchRow);
+                const i = index.get(m.id) orelse continue;
+                m.id = ids[i];
+                m.platform = try wa.dupe(u8, m.platform);
+                m.patch = try wa.dupe(u8, m.patch);
+                pending[i] = .{ .m = m };
             }
         }
         {
-            var q = try db.prepare("SELECT match_id, " ++ player_cols ++ " FROM participants ORDER BY match_id, slot");
+            var q = try db.prepare("SELECT " ++ player_cols ++ " FROM participants ORDER BY match_id, slot");
             defer q.deinit();
             try q.bind(.{});
             var at: usize = 0;
@@ -799,29 +787,7 @@ pub const Store = struct {
                 if (!std.mem.eql(u8, ids[at], id)) continue;
                 const p = &(pending[at] orelse continue);
                 if (p.m.queue_id != ranked_solo or p.m.remake != 0) continue;
-                const r = q.row(struct {
-                    id: []const u8,
-                    slot: i64,
-                    team: i64,
-                    puuid: ?[]const u8,
-                    champion: i64,
-                    position: ?[]const u8,
-                    win: bool,
-                    tier: ?[]const u8,
-                    gold14: ?i64,
-                    gold15: bool,
-                });
-                try p.players.append(wa, try s.player(.{
-                    .slot = r.slot,
-                    .team = r.team,
-                    .puuid = r.puuid,
-                    .champion = r.champion,
-                    .position = r.position,
-                    .win = r.win,
-                    .tier = r.tier,
-                    .gold14 = r.gold14,
-                    .gold15 = r.gold15,
-                }));
+                try p.players.append(wa, try s.player(q.row(PlayerRow)));
             }
         }
         {
@@ -841,7 +807,7 @@ pub const Store = struct {
         }
         for (ids, pending) |id, *p| {
             const got = &(p.* orelse continue);
-            try s.addMatch(id, got.m, timelines.get(id) orelse 0, got.players.items, got.bans.items);
+            try s.addMatch(got.m, timelines.get(id) orelse 0, got.players.items, got.bans.items);
         }
     }
 
@@ -855,14 +821,6 @@ pub const Store = struct {
         defer work.deinit();
         const wa = work.allocator();
         var strings: std.StringArrayHashMapUnmanaged(void) = .empty;
-        const internIn = struct {
-            fn f(a: Allocator, map: *std.StringArrayHashMapUnmanaged(void), text: ?[]const u8) !Code {
-                const t = text orelse return 0;
-                const gop = try map.getOrPut(a, t);
-                if (!gop.found_existing) gop.key_ptr.* = try a.dupe(u8, t);
-                return std.math.cast(Code, gop.index + 1) orelse error.TooManyStrings;
-            }
-        }.f;
         const champs_key = masteryKey(st);
         const file = try s.path("mastery.bin", .{});
         defer gpa.free(file);
@@ -948,9 +906,7 @@ pub const Store = struct {
         try writeIn(s.io, file, MasteryFile{ .champs_key = champs_key, .strings = strings.keys(), .entries = entries });
         try s.learningBins(db, st, entries);
 
-        const masks = try wa.alloc(u32, strings.count() + 1);
-        masks[0] = 0;
-        for (strings.keys(), masks[1..]) |name, *m| m.* = stats.setsWith(sets, name);
+        const masks = try setMasksIn(wa, strings.keys(), sets);
         for (entries) |e| {
             if (e.main == 0) continue;
             const mask = masks[e.platform];
@@ -1147,7 +1103,7 @@ pub fn forget(gpa: Allocator, io: std.Io, dir: []const u8, puuids: []const []con
     try s.save();
     const file = try s.path("mastery.bin", .{});
     defer gpa.free(file);
-    if (try s.readFile(MasteryFile, file)) |m| {
+    if (try readIn(io, gpa, s.arena(), MasteryFile, file)) |m| {
         var kept: std.ArrayList(Contribution) = .empty;
         for (m.entries) |e| {
             if (gone.contains(e.key)) {
@@ -1155,7 +1111,7 @@ pub fn forget(gpa: Allocator, io: std.Io, dir: []const u8, puuids: []const []con
             } else try kept.append(s.arena(), e);
         }
         if (kept.items.len != m.entries.len) {
-            try s.writeFile(file, MasteryFile{ .champs_key = m.champs_key, .strings = m.strings, .entries = kept.items });
+            try writeIn(s.io, file, MasteryFile{ .champs_key = m.champs_key, .strings = m.strings, .entries = kept.items });
         }
     }
     return n;
@@ -1174,7 +1130,7 @@ pub fn mentions(gpa: Allocator, io: std.Io, dir: []const u8, puuid: []const u8) 
     };
     const file = try s.path("mastery.bin", .{});
     defer gpa.free(file);
-    if (try s.readFile(MasteryFile, file)) |m| for (m.entries) |e| {
+    if (try readIn(io, gpa, s.arena(), MasteryFile, file)) |m| for (m.entries) |e| {
         n += @intFromBool(e.key.eql(k));
     };
     return n;
