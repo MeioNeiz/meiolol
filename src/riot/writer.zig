@@ -234,7 +234,10 @@ pub const Writer = struct {
             var tries: u32 = 0;
             while (true) : (tries += 1) {
                 wr.commit(db, &s, batch.items) catch |err| {
-                    if (err != error.Busy) return err;
+                    switch (err) {
+                        error.Busy => {},
+                        else => return err,
+                    }
                     _ = wr.stats.busy.fetchAdd(1, .monotonic);
                     // Shutting down: give another process's lock a minute, then leave
                     // the items queued in the database for the next run
@@ -253,8 +256,9 @@ pub const Writer = struct {
             wr.committed_seq = batch.items[batch.items.len - 1].seq;
             wr.cond.broadcast(wr.c.io);
             wr.mutex.unlock(wr.c.io);
-            wr.prune.step(db, wr.c.io, wr.c.opts) catch |err| {
-                if (err != error.Busy) return err;
+            wr.prune.step(db, wr.c.io, wr.c.opts) catch |err| switch (err) {
+                error.Busy => {},
+                else => return err,
             };
             if (wr.c.opts.raw_valve_free_mb > 0 and now >= valve_at) {
                 valve_at = now + valve_check_s;
@@ -330,7 +334,10 @@ pub const Writer = struct {
         const stored = wr.apply(db, s, job) catch |err| {
             db.exec("ROLLBACK TO job") catch {};
             try db.exec("RELEASE job");
-            if (err != error.Sqlite) return err;
+            switch (err) {
+                error.Sqlite => {},
+                else => return err,
+            }
             switch (job.kind) {
                 // An attempt, not failed at once: Sqlite errors are often passing
                 // (locks, a full disk), and a match that never stores fails after three
