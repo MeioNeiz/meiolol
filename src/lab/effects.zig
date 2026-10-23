@@ -847,9 +847,7 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
         if (i + 1 >= args.len) return error.MissingValue;
         const k = args[i];
         const v = args[i + 1];
-        if (std.mem.eql(u8, k, "--out")) {
-            o.out = v;
-        } else if (std.mem.eql(u8, k, "--blocks")) {
+        if (std.mem.eql(u8, k, "--blocks")) {
             var out: std.ArrayList(Block) = .empty;
             var it = std.mem.tokenizeScalar(u8, v, ',');
             while (it.next()) |b| {
@@ -865,27 +863,13 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
                 try out.append(arena, blk);
             }
             o.blocks = out.items;
-        } else if (std.mem.eql(u8, k, "--null")) {
-            o.null = try std.fmt.parseInt(u32, v, 10);
-        } else if (std.mem.eql(u8, k, "--boot")) {
-            o.boot = try std.fmt.parseInt(u32, v, 10);
         } else if (std.mem.eql(u8, k, "--drop")) {
             o.drop = std.mem.eql(u8, v, "1");
         } else if (std.mem.eql(u8, k, "--threads")) {
             o.threads = @max(1, try std.fmt.parseInt(u32, v, 10));
-        } else if (std.mem.eql(u8, k, "--soft")) {
-            o.soft = v;
-        } else if (std.mem.eql(u8, k, "--shuffle")) {
-            o.shuffle = try std.fmt.parseInt(u64, v, 10);
-        } else if (std.mem.eql(u8, k, "--resample")) {
-            o.resample = try std.fmt.parseInt(u32, v, 10);
         } else if (std.mem.eql(u8, k, "--param")) {
             o.param = std.meta.stringToEnum(Param, v) orelse return error.BadParam;
-        } else if (std.mem.eql(u8, k, "--calibrate")) {
-            o.calibrate = try std.fmt.parseInt(u32, v, 10);
-        } else if (std.mem.eql(u8, k, "--alpha")) {
-            o.alpha = try std.fmt.parseFloat(f32, v);
-        } else return error.UnknownOption;
+        } else if (!try winnet.setFlag(&o, k, v, &.{})) return error.UnknownOption;
     }
     return o;
 }
