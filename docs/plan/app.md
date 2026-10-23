@@ -85,12 +85,18 @@ Champ select, updating live as champions are hovered and locked. P = public, X =
 Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's common.md).
 
 - APP1 Real champ select capture (Jacob, blocks the queue checks and the application's
-  screenshots): from C:\Users\jacob\meiolol-desktop-test open meiolol-desktop.exe, run
-  `meiolol-app.exe session --save session-real.json` in a ranked solo/duo and a normal
-  champ select, copy to testdata/lcu/. Then diff against the mock (`meiolol-app get
-  /lol-champ-select/v1/session` on each), fix the mock, and record which identity fields
-  each queue gives. Same for a real Live Client Data reply and eog-stats-block. Check in
-  a real trade that pick actions keep the first champion (mock and session.zig assume so)
+  screenshots). On the PC, in a terminal in C:\Users\jacob\meiolol-desktop-test, before
+  queueing: `meiolol-app.exe record capture-ranked` (lcu.Record: every champ select
+  state, gameflow at each phase, Live Client Data every 30 s in game, end of game block,
+  identities as "hidden"), then play a ranked solo/duo game to the end, Ctrl+C;
+  `record capture-normal` for a draft normal. Meanwhile open meiolol-desktop.exe and
+  screenshot (Win+Shift+S) its card at pick and after locks, and record a short video
+  of champ select with it (Win+Alt+R) for the application. A trade if one comes up
+  (pick actions keep the first champion: mock and session.zig assume so). A session
+  copies the folders to testdata/lcu/, diffs them against the mock, fixes the mock and
+  records which identity fields each queue fills in. First real check of Live Client
+  Data's certificate: a "live client data: <error>" line in record's output means
+  https.get needs another root for port 2999
 - APP2 Editions in the build: `-Dedition`, module split, both in `zig build ci`, release
   script builds and signs both. Done when the public exe's strings hold no private
   module names (a ci check)
