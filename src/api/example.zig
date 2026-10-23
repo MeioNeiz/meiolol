@@ -15,18 +15,18 @@ const Allocator = std.mem.Allocator;
 const ranked_solo = 420;
 /// Riot teamPosition by Role
 const positions = [Role.count][]const u8{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" };
+const platform = "EUW1";
+/// Games shown, newest first
+const games_shown = 10;
+/// Players tried per role for one with a game whose review has a turning minute and a
+/// lane curve (what the home page's featured review shows)
+const tries = 10;
 
 pub const Options = struct {
     /// Matches started at or after this count towards picking the player
     since_ms: i64,
-    platform: []const u8 = "EUW1",
-    /// Games shown, newest first
-    games: u32 = 10,
     /// Games of the role with timelines a player needs since `since_ms` to be picked
     min_games: u32 = 8,
-    /// Players tried per role for one with a game whose review has a turning minute and
-    /// a lane curve (what the home page's featured review shows)
-    tries: u32 = 10,
 };
 
 /// your-example.json: an example per role, keyed by Role.label(); missing where no
@@ -47,7 +47,7 @@ pub fn buildAll(arena: Allocator, db: store.Db, set: game.CurveSet, o: Options) 
     var used: std.ArrayList([]const u8) = .empty;
     const candidates = try pick(arena, db, o);
     inline for (Role.all) |r| {
-        if (try build(arena, db, set, o, r, candidates[@backingInt(r)], &used)) |ex| {
+        if (try build(arena, db, set, r, candidates[@backingInt(r)], &used)) |ex| {
             @field(out, r.label()) = ex;
             if (out.default.len == 0 or r == .middle) out.default = r.label();
         }
@@ -61,10 +61,10 @@ pub fn json(arena: Allocator, ex: Examples) ![]u8 {
 
 /// The first of `candidates` (from pick) outside `used` with a reviewed game: their
 /// games of `role`. The pick joins `used`
-fn build(arena: Allocator, db: store.Db, set: game.CurveSet, o: Options, role: Role, candidates: []const []const u8, used: *std.ArrayList([]const u8)) !?api.GamesOut {
+fn build(arena: Allocator, db: store.Db, set: game.CurveSet, role: Role, candidates: []const []const u8, used: *std.ArrayList([]const u8)) !?api.GamesOut {
     for (candidates) |puuid| {
         if (contains(used.items, puuid)) continue;
-        const out = try player(arena, db, set, o, role, puuid) orelse continue;
+        const out = try player(arena, db, set, role, puuid) orelse continue;
         if (!reviewed(out.report.?)) continue;
         try used.append(arena, puuid);
         return out;
@@ -85,7 +85,7 @@ fn reviewed(r: game.Report) bool {
     return false;
 }
 
-fn player(arena: Allocator, db: store.Db, set: game.CurveSet, o: Options, role: Role, puuid: []const u8) !?api.GamesOut {
+fn player(arena: Allocator, db: store.Db, set: game.CurveSet, role: Role, puuid: []const u8) !?api.GamesOut {
     var q = try db.prepare(
         \\SELECT m.match_id, m.patch, m.game_start, m.duration_s, m.remake, t.data, pa.slot,
         \\  pa.tier, pa.division
@@ -95,7 +95,7 @@ fn player(arena: Allocator, db: store.Db, set: game.CurveSet, o: Options, role: 
         \\ORDER BY m.game_start DESC LIMIT ?
     );
     defer q.deinit();
-    try q.bind(.{ puuid, positions[@backingInt(role)], ranked_solo, o.platform, o.games });
+    try q.bind(.{ puuid, positions[@backingInt(role)], ranked_solo, platform, games_shown });
     var players = try db.prepare(
         \\SELECT slot, team_id, position, champion_id, win, kills, deaths, assists
         \\FROM participants WHERE match_id = ? ORDER BY slot
@@ -157,7 +157,7 @@ fn player(arena: Allocator, db: store.Db, set: game.CurveSet, o: Options, role: 
             },
             .slot = g.slot,
             .timeline = t,
-            .platform = o.platform,
+            .platform = platform,
         });
     }
     if (inputs.items.len == 0) return null;
@@ -166,7 +166,7 @@ fn player(arena: Allocator, db: store.Db, set: game.CurveSet, o: Options, role: 
         .player = .{
             .name = "Example player",
             .tag = "",
-            .platform = o.platform,
+            .platform = platform,
             .tier = rank.tier,
             .division = rank.division,
             .lp = null,
@@ -194,12 +194,12 @@ fn pick(arena: Allocator, db: store.Db, o: Options) ![Role.count][]const []const
         \\ORDER BY mid DESC, n DESC, pa.puuid
     );
     defer q.deinit();
-    try q.bind(.{ o.since_ms, o.platform, ranked_solo, o.min_games });
+    try q.bind(.{ o.since_ms, platform, ranked_solo, o.min_games });
     var out: [Role.count]std.ArrayList([]const u8) = @splat(.empty);
     while (try q.step()) {
         const r = Role.fromLcu(q.bytes(0)) orelse continue;
         const list = &out[@backingInt(r)];
-        if (list.items.len < o.tries) try list.append(arena, try arena.dupe(u8, q.bytes(1)));
+        if (list.items.len < tries) try list.append(arena, try arena.dupe(u8, q.bytes(1)));
     }
     var lists: [Role.count][]const []const u8 = undefined;
     for (&lists, out) |*l, list| l.* = list.items;
