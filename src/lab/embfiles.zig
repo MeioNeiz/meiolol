@@ -76,7 +76,7 @@ fn matches(gpa: Allocator, e: *const api.Embeddings, counts: *const std.AutoHash
 }
 
 /// champion, role, fit_games, e0..e{dim-1}
-fn parse(gpa: Allocator, text: []const u8) !api.Embeddings {
+pub fn parse(gpa: Allocator, text: []const u8) !api.Embeddings {
     var lines = std.mem.tokenizeScalar(u8, text, '\n');
     const header = lines.next() orelse return error.EmbeddingsFile;
     const tabs = std.mem.count(u8, header, "\t");

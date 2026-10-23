@@ -29,6 +29,7 @@ const draftnet = @import("draftnet.zig");
 const gates = @import("gates.zig");
 const setnet = @import("setnet.zig");
 const looks = @import("looks.zig");
+const embfiles = @import("embfiles.zig");
 const nn = @import("nn");
 const par = @import("../par.zig");
 const cuda = @import("../gpu/cuda.zig");
@@ -922,7 +923,7 @@ pub const Sets = struct {
 /// Pretrained champion-role vectors (pretrain.zig's emb-<block>-s<seed>.tsv: champion,
 /// role, fit games, then d values; champion 0 is the role's shared vector)
 pub const EmbTable = struct {
-    map: std.AutoHashMapUnmanaged(u64, []f32) = .empty,
+    map: std.AutoHashMapUnmanaged(u64, []const f32) = .empty,
     arena: std.heap.ArenaAllocator,
 
     /// block: blockName's
@@ -937,18 +938,9 @@ pub const EmbTable = struct {
                 else => return e,
             };
         } else return error.EmbFileNotFound;
-        var lines = std.mem.tokenizeScalar(u8, text, '\n');
-        _ = lines.next();
-        while (lines.next()) |line| {
-            var it = std.mem.tokenizeScalar(u8, line, '\t');
-            const champion = try std.fmt.parseInt(u32, it.next() orelse return error.EmbFormat, 10);
-            const role = try std.fmt.parseInt(u3, it.next() orelse return error.EmbFormat, 10);
-            _ = it.next() orelse return error.EmbFormat;
-            const v = try a.alloc(f32, d);
-            for (v) |*x| x.* = try std.fmt.parseFloat(f32, it.next() orelse return error.EmbDim);
-            if (it.next() != null) return error.EmbDim;
-            try t.map.put(a, key(champion, role), v);
-        }
+        const e = try embfiles.parse(a, text);
+        if (e.dim != d) return error.EmbDim;
+        for (e.rows) |r| try t.map.put(a, key(r.champion, @backingInt(r.role)), r.e);
         return t;
     }
 
