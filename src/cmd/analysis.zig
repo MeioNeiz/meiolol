@@ -18,6 +18,33 @@ const main = @import("../main.zig");
 const Cmd = main.Cmd;
 const Games = main.Games;
 
+/// The held-out analyses' flags, in each one's usage
+const held_out_flags =
+    \\              --patch P        as for stats (default: every patch, pooled)
+    \\              --platform P     as for stats (train uses every one given)
+    \\              --test-platform P  region model only: test on P's games from the cut;
+    \\                               the global model is never scored on a region
+    \\              --test-share F   newest share of played games, every platform, held
+    \\                               out (default 0.15: the protocol's cut over every
+    \\                               platform's and patch's games, whatever is scanned)
+    \\              --preds DIR      one TSV of test predictions per model
+    \\
+;
+
+/// --test-share and --test-platform, and --preds where `o` (an analysis' *Options) has
+/// preds_dir; false for any other flag
+fn heldOut(c: *Cmd, o: anytype) !bool {
+    if (c.is("--test-share")) {
+        o.test_share = try c.float();
+        if (!(o.test_share > 0 and o.test_share < 1)) return error.Usage;
+    } else if (c.is("--test-platform")) {
+        o.test_platform = try c.value();
+    } else if (@hasField(@TypeOf(o.*), "preds_dir") and c.is("--preds")) {
+        o.preds_dir = try c.value();
+    } else return false;
+    return true;
+}
+
 pub const usage_eval =
     \\  eval        how well the draft model predicts held-out newer games (markdown
     \\              report on stdout; docs/model.md)
@@ -44,15 +71,10 @@ pub fn cmdEval(c: *Cmd) !u8 {
     var history: ?[]const u8 = null;
     var replay_only = false;
     while (c.next()) |_| {
-        if (try g.parse(c)) continue;
-        if (c.is("--test-share")) {
-            o.test_share = try c.float();
-            if (!(o.test_share > 0 and o.test_share < 1)) return error.Usage;
-        } else if (c.is("--folds")) {
+        if (try g.parse(c) or try heldOut(c, &o)) continue;
+        if (c.is("--folds")) {
             o.folds = try c.int(u32);
             if (o.folds < 2) return error.Usage;
-        } else if (c.is("--test-platform")) {
-            o.test_platform = try c.value();
         } else if (c.is("--history")) {
             history = try c.value();
         } else if (c.is("--replay")) {
@@ -105,30 +127,14 @@ pub fn cmdLegendaries(c: *Cmd) !u8 {
 pub const usage_outcomes =
     \\  outcomes    do allies and enemies shift gold@14, lane gold, CS@10, deaths before 15
     \\              and first item beyond champion and lane? (markdown on stdout)
-    \\              --patch P        as for stats (default: every patch, pooled)
-    \\              --platform P     as for stats (train uses every one given)
-    \\              --test-platform P  region model only: test on P's games from the cut;
-    \\                               the global model is never scored on a region
-    \\              --test-share F   newest share of played games, every platform, held
-    \\                               out (default 0.15: the protocol's cut over every
-    \\                               platform's and patch's games, whatever is scanned)
-    \\              --preds DIR      one TSV of test predictions per model
     \\
-;
+++ held_out_flags;
 
 pub fn cmdOutcomes(c: *Cmd) !u8 {
     var g: Games = .{};
     var o: outcomes.Options = .{};
     while (c.next()) |_| {
-        if (try g.parse(c)) continue;
-        if (c.is("--test-share")) {
-            o.test_share = try c.float();
-            if (!(o.test_share > 0 and o.test_share < 1)) return error.Usage;
-        } else if (c.is("--test-platform")) {
-            o.test_platform = try c.value();
-        } else if (c.is("--preds")) {
-            o.preds_dir = try c.value();
-        } else return error.Usage;
+        if (!try g.parse(c) and !try heldOut(c, &o)) return error.Usage;
     }
     const io = c.init.io;
     const db = try c.open();
@@ -152,30 +158,14 @@ pub fn cmdOutcomes(c: *Cmd) !u8 {
 pub const usage_objectives =
     \\  objectives  what is an objective worth beyond its gold? win from the state at
     \\              10-30 min (markdown on stdout; docs/model.md)
-    \\              --patch P        as for stats (default: every patch, pooled)
-    \\              --platform P     as for stats (train uses every one given)
-    \\              --test-platform P  region model only: test on P's games from the cut;
-    \\                               the global model is never scored on a region
-    \\              --test-share F   newest share of played games, every platform, held
-    \\                               out (default 0.15: the protocol's cut over every
-    \\                               platform's and patch's games, whatever is scanned)
-    \\              --preds DIR      one TSV of test predictions per model
     \\
-;
+++ held_out_flags;
 
 pub fn cmdObjectives(c: *Cmd) !u8 {
     var g: Games = .{};
     var o: objectives.Options = .{};
     while (c.next()) |_| {
-        if (try g.parse(c)) continue;
-        if (c.is("--test-share")) {
-            o.test_share = try c.float();
-            if (!(o.test_share > 0 and o.test_share < 1)) return error.Usage;
-        } else if (c.is("--test-platform")) {
-            o.test_platform = try c.value();
-        } else if (c.is("--preds")) {
-            o.preds_dir = try c.value();
-        } else return error.Usage;
+        if (!try g.parse(c) and !try heldOut(c, &o)) return error.Usage;
     }
     const io = c.init.io;
     const db = try c.open();
@@ -231,30 +221,14 @@ pub fn cmdWinchance(c: *Cmd) !u8 {
 pub const usage_items =
     \\  items       does the finished item change the win chance, given the state when it
     \\              was bought? (markdown on stdout; docs/model.md)
-    \\              --patch P        as for stats (default: every patch, pooled)
-    \\              --platform P     as for stats (train uses every one given)
-    \\              --test-platform P  region model only: test on P's games from the cut;
-    \\                               the global model is never scored on a region
-    \\              --test-share F   newest share of played games, every platform, held
-    \\                               out (default 0.15: the protocol's cut over every
-    \\                               platform's and patch's games, whatever is scanned)
-    \\              --preds DIR      one TSV of test predictions per model
     \\
-;
+++ held_out_flags;
 
 pub fn cmdItems(c: *Cmd) !u8 {
     var g: Games = .{};
     var o: items.Options = .{};
     while (c.next()) |_| {
-        if (try g.parse(c)) continue;
-        if (c.is("--test-share")) {
-            o.test_share = try c.float();
-            if (!(o.test_share > 0 and o.test_share < 1)) return error.Usage;
-        } else if (c.is("--test-platform")) {
-            o.test_platform = try c.value();
-        } else if (c.is("--preds")) {
-            o.preds_dir = try c.value();
-        } else return error.Usage;
+        if (!try g.parse(c) and !try heldOut(c, &o)) return error.Usage;
     }
     const io = c.init.io;
     const db = try c.open();
@@ -278,30 +252,14 @@ pub fn cmdItems(c: *Cmd) !u8 {
 pub const usage_playstyle =
     \\  playstyle   does early style (roaming, fights, wards) change the win chance, beyond
     \\              the champion and the state at 14:00? (markdown on stdout; docs/model.md)
-    \\              --patch P        as for stats (default: every patch, pooled)
-    \\              --platform P     as for stats (train uses every one given)
-    \\              --test-platform P  region model only: test on P's games from the cut;
-    \\                               the global model is never scored on a region
-    \\              --test-share F   newest share of played games, every platform, held
-    \\                               out (default 0.15: the protocol's cut over every
-    \\                               platform's and patch's games, whatever is scanned)
-    \\              --preds DIR      one TSV of test predictions per model
     \\
-;
+++ held_out_flags;
 
 pub fn cmdPlaystyle(c: *Cmd) !u8 {
     var g: Games = .{};
     var o: playstyle.Options = .{};
     while (c.next()) |_| {
-        if (try g.parse(c)) continue;
-        if (c.is("--test-share")) {
-            o.test_share = try c.float();
-            if (!(o.test_share > 0 and o.test_share < 1)) return error.Usage;
-        } else if (c.is("--test-platform")) {
-            o.test_platform = try c.value();
-        } else if (c.is("--preds")) {
-            o.preds_dir = try c.value();
-        } else return error.Usage;
+        if (!try g.parse(c) and !try heldOut(c, &o)) return error.Usage;
     }
     const io = c.init.io;
     const db = try c.open();
@@ -338,13 +296,8 @@ pub fn cmdCarry(c: *Cmd) !u8 {
     var g: Games = .{};
     var o: carry.Options = .{};
     while (c.next()) |_| {
-        if (try g.parse(c)) continue;
-        if (c.is("--test-share")) {
-            o.test_share = try c.float();
-            if (!(o.test_share > 0 and o.test_share < 1)) return error.Usage;
-        } else if (c.is("--test-platform")) {
-            o.test_platform = try c.value();
-        } else if (c.is("--cuts")) {
+        if (try g.parse(c) or try heldOut(c, &o)) continue;
+        if (c.is("--cuts")) {
             var it = std.mem.splitScalar(u8, try c.value(), ',');
             for (&o.cuts) |*x| x.* = std.fmt.parseInt(i64, it.next() orelse return error.Usage, 10) catch return error.Usage;
             if (it.next() != null) return error.Usage;
@@ -385,14 +338,8 @@ pub const usage_scaling =
     \\  scaling     which champions win more than the gold and XP lead says, by minute
     \\              (scaling) and by the lead (converting it, coming back)? (markdown on
     \\              stdout; docs/model.md)
-    \\              --patch P        as for stats (default: every patch, pooled)
-    \\              --platform P     as for stats (train uses every one given)
-    \\              --test-platform P  region model only: test on P's games from the cut;
-    \\                               the global model is never scored on a region
-    \\              --test-share F   newest share of played games, every platform, held
-    \\                               out (default 0.15: the protocol's cut over every
-    \\                               platform's and patch's games, whatever is scanned)
-    \\              --preds DIR      one TSV of test predictions per model
+    \\
+++ held_out_flags ++
     \\              --table FILE     TSV of every champion-role's effect and slope by minute
     \\              --state S        baseline: lead (team gold, XP; default), roles (gold
     \\                               by role: who holds it), objectives (+ objectives held)
@@ -405,15 +352,8 @@ pub fn cmdScaling(c: *Cmd) !u8 {
     var g: Games = .{};
     var o: scaling.Options = .{};
     while (c.next()) |_| {
-        if (try g.parse(c)) continue;
-        if (c.is("--test-share")) {
-            o.test_share = try c.float();
-            if (!(o.test_share > 0 and o.test_share < 1)) return error.Usage;
-        } else if (c.is("--test-platform")) {
-            o.test_platform = try c.value();
-        } else if (c.is("--preds")) {
-            o.preds_dir = try c.value();
-        } else if (c.is("--table")) {
+        if (try g.parse(c) or try heldOut(c, &o)) continue;
+        if (c.is("--table")) {
             o.table = try c.value();
         } else if (c.is("--state")) {
             o.state = std.meta.stringToEnum(scaling.State, try c.value()) orelse return error.Usage;
