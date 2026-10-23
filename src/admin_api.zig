@@ -48,10 +48,6 @@ pub fn handle(api: *Api, request: *Request) !bool {
     const path = target[prefix.len .. std.mem.findScalar(u8, target, '?') orelse target.len];
     const query = if (std.mem.findScalar(u8, target, '?')) |q| target[q + 1 ..] else "";
     if (std.mem.startsWith(u8, path, "action/")) {
-        // A bodyless POST has neither length nor encoding; respond() asserts on one
-        if (request.head.transfer_encoding == .none and request.head.content_length == null) {
-            request.head.content_length = 0;
-        }
         if (request.head.method != .POST) return reply(request, .method_not_allowed, "text/plain; charset=utf-8", "method not allowed\n");
         const flag = header(request, "x-meiolol-action") orelse "";
         if (!std.mem.eql(u8, flag, "1")) return reply(request, .forbidden, "text/plain; charset=utf-8", "forbidden\n");
@@ -59,12 +55,7 @@ pub fn handle(api: *Api, request: *Request) !bool {
         try runAction(api, request, action);
         return true;
     }
-    if (request.head.method != .GET) {
-        if (request.head.transfer_encoding == .none and request.head.content_length == null) {
-            request.head.content_length = 0;
-        }
-        return reply(request, .method_not_allowed, "text/plain; charset=utf-8", "method not allowed\n");
-    }
+    if (request.head.method != .GET) return reply(request, .method_not_allowed, "text/plain; charset=utf-8", "method not allowed\n");
     if (std.mem.eql(u8, path, "live.json")) {
         var arena_state: std.heap.ArenaAllocator = .init(api.gpa);
         defer arena_state.deinit();
@@ -332,7 +323,7 @@ fn liveJson(api: *Api, arena: std.mem.Allocator) ![]const u8 {
 
 fn services(arena: std.mem.Allocator, io: Io) admin.Services {
     var s: admin.Services = .{};
-    const fields = comptime std.meta.fieldNames(admin.Services);
+    const fields = @typeInfo(admin.Services).@"struct".field_names;
     var argv: [3 + fields.len][]const u8 = undefined;
     argv[0..3].* = .{ "systemctl", "--user", "is-active" };
     inline for (fields, 3..) |f, i| argv[i] = f;
