@@ -331,7 +331,10 @@ pub fn cmdRestore(c: *Cmd) !u8 {
     const from_dir = try c.required(from, "--from");
     const now = std.Io.Clock.real.now(c.init.io).toSeconds();
     const r = backup.restore(c.arena, c.init.io, from_dir, c.data_dir, state_file, now) catch |err| {
-        if (err == error.TargetNotEmpty) std.log.err("{s} holds a database: restore only into an empty directory", .{c.data_dir});
+        switch (err) {
+            error.TargetNotEmpty => std.log.err("{s} holds a database: restore only into an empty directory", .{c.data_dir}),
+            else => {},
+        }
         return err;
     };
     std.log.info("{s}: {d} files, {d} matches, {d} timelines; {d} rows re-erased", .{
@@ -400,7 +403,7 @@ pub fn cmdForget(c: *Cmd) !u8 {
     var unresolved: usize = 0;
     var already: usize = 0;
     for (ids) |id| {
-        const puuid = if (std.mem.indexOfScalar(u8, id, '#') == null) id else blk: {
+        const puuid = if (std.mem.findScalar(u8, id, '#') == null) id else blk: {
             if (client == null) client = .init(c.init.gpa, io, try c.apiKey(), &limiter);
             break :blk try forget.resolveRiotId(arena, &client.?, id) orelse {
                 unresolved += 1;

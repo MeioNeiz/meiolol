@@ -30,7 +30,7 @@ pub fn get(
         error.ConnectionRefused => return error.ClientNotRunning,
         // Zig 0.16 reports a refused connect on Windows as Unexpected
         error.Unexpected => {
-            if (builtin.os.tag == .windows) return error.ClientNotRunning;
+            if (builtin.target.os.tag == .windows) return error.ClientNotRunning;
             return err;
         },
         else => return err,
@@ -142,9 +142,9 @@ pub fn rootBundle(
 ) !std.crypto.Certificate.Bundle {
     const begin = "-----BEGIN CERTIFICATE-----";
     const end = "-----END CERTIFICATE-----";
-    const begin_at = std.mem.indexOf(u8, pem, begin) orelse return error.BadPem;
+    const begin_at = std.mem.find(u8, pem, begin) orelse return error.BadPem;
     const start = begin_at + begin.len;
-    const stop = std.mem.indexOfPos(u8, pem, start, end) orelse return error.BadPem;
+    const stop = std.mem.findPos(u8, pem, start, end) orelse return error.BadPem;
     const decoder = std.base64.standard.decoderWithIgnore(" \t\r\n");
 
     var bundle: std.crypto.Certificate.Bundle = .empty;
@@ -174,7 +174,7 @@ pub fn readResponse(gpa: std.mem.Allocator, r: *std.Io.Reader) !Response {
     while (true) {
         const line = try takeLine(r);
         if (line.len == 0) break;
-        const colon = std.mem.indexOfScalar(u8, line, ':') orelse
+        const colon = std.mem.findScalar(u8, line, ':') orelse
             return error.BadResponse;
         const name = std.mem.trim(u8, line[0..colon], " \t");
         const value = std.mem.trim(u8, line[colon + 1 ..], " \t");
@@ -191,7 +191,7 @@ pub fn readResponse(gpa: std.mem.Allocator, r: *std.Io.Reader) !Response {
     if (chunked) {
         while (true) {
             const size_line = try takeLine(r);
-            const hex = size_line[0 .. std.mem.indexOfScalar(u8, size_line, ';') orelse
+            const hex = size_line[0 .. std.mem.findScalar(u8, size_line, ';') orelse
                 size_line.len];
             const size = std.fmt.parseInt(usize, std.mem.trim(u8, hex, " \t"), 16) catch
                 return error.BadResponse;

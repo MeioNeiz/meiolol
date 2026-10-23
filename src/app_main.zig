@@ -233,7 +233,7 @@ const App = struct {
                 pick.hover = true;
                 item = item[0 .. item.len - 1];
             }
-            if (std.mem.indexOfScalar(u8, item, '=')) |eq| {
+            if (std.mem.findScalar(u8, item, '=')) |eq| {
                 const role_name = std.mem.trim(u8, item[0..eq], " \t");
                 pick.role = Role.parse(role_name) orelse
                     fail("{s}: unknown role {s}", .{ flag, role_name });
@@ -440,7 +440,7 @@ const State = union(enum) {
     client_error: anyerror,
     phase: u64,
     no_role,
-    bad_session: anyerror,
+    bad_session: lcu.session.ParseError,
     shown: u64,
 };
 
@@ -456,10 +456,10 @@ const Watcher = struct {
 
     fn disconnect(w: *Watcher, err: anyerror) void {
         w.watch.disconnect();
-        const next: State = if (err == error.ClientNotRunning)
-            .no_client
-        else
-            .{ .client_error = err };
+        const next: State = switch (err) {
+            error.ClientNotRunning => .no_client,
+            else => .{ .client_error = err },
+        };
         if (std.meta.eql(next, w.state)) return;
         w.state = next;
         const out = w.app.out;
@@ -573,10 +573,10 @@ fn printPicks(
 }
 
 fn failGet(path: []const u8, err: anyerror) noreturn {
-    if (err == error.ClientNotRunning) {
-        fail("League client not running (stale lockfile?)", .{});
+    switch (err) {
+        error.ClientNotRunning => fail("League client not running (stale lockfile?)", .{}),
+        else => fail("GET {s} failed: {t}", .{ path, err }),
     }
-    fail("GET {s} failed: {t}", .{ path, err });
 }
 
 fn fail(comptime fmt: []const u8, args: anytype) noreturn {

@@ -11,7 +11,7 @@ pub const Credentials = struct {
     plain: bool = false,
 };
 
-pub const default_paths: []const []const u8 = switch (builtin.os.tag) {
+pub const default_paths: []const []const u8 = switch (builtin.target.os.tag) {
     .windows => &.{"C:\\Riot Games\\League of Legends\\lockfile"},
     .macos => &.{"/Applications/League of Legends.app/Contents/LoL/lockfile"},
     else => &.{},
@@ -38,7 +38,7 @@ pub fn parse(content: []const u8) !Credentials {
 pub fn parseCommandLine(text: []const u8) ?Credentials {
     var lines = std.mem.splitScalar(u8, text, '\n');
     while (lines.next()) |line| {
-        if (std.mem.indexOf(u8, line, "LeagueClientUx") == null) continue;
+        if (std.mem.find(u8, line, "LeagueClientUx") == null) continue;
         const port = argValue(line, "--app-port=") orelse continue;
         const token = argValue(line, "--remoting-auth-token=") orelse continue;
         if (token.len == 0) continue;
@@ -51,9 +51,9 @@ pub fn parseCommandLine(text: []const u8) ?Credentials {
 }
 
 fn argValue(line: []const u8, key: []const u8) ?[]const u8 {
-    const at = std.mem.indexOf(u8, line, key) orelse return null;
+    const at = std.mem.find(u8, line, key) orelse return null;
     const rest = line[at + key.len ..];
-    const end = std.mem.indexOfAny(u8, rest, "\" \t\r") orelse rest.len;
+    const end = std.mem.findAny(u8, rest, "\" \t\r") orelse rest.len;
     return rest[0..end];
 }
 
@@ -74,7 +74,7 @@ pub fn discover(arena: std.mem.Allocator, io: std.Io, override: ?[]const u8) !Cr
     }
     // The process list costs ~1.5 s of CPU on Windows (PowerShell); pollers call this
     // every second while the client is closed
-    if (builtin.os.tag == .windows and !windowsProcessRunning("LeagueClientUx.exe"))
+    if (builtin.target.os.tag == .windows and !windowsProcessRunning("LeagueClientUx.exe"))
         return error.ClientNotRunning;
     const listing = processList(arena, io) catch return error.ClientNotRunning;
     return parseCommandLine(listing) orelse error.ClientNotRunning;
@@ -122,7 +122,7 @@ fn windowsProcessRunning(comptime exe: []const u8) bool {
 
 /// Command lines of running processes, for parseCommandLine
 pub fn processList(arena: std.mem.Allocator, io: std.Io) ![]const u8 {
-    const argv: []const []const u8 = switch (builtin.os.tag) {
+    const argv: []const []const u8 = switch (builtin.target.os.tag) {
         // wmic is gone from current Windows; CIM gives the full command line
         .windows => &.{
             "powershell.exe",

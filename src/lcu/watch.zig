@@ -25,7 +25,7 @@ pub const Watch = struct {
         /// In champ select, the session missing for a moment between phases
         between,
         /// A session the parser can't read (a client update?): the connection is fine
-        bad_session: anyerror,
+        bad_session: session.ParseError,
         select: session.ChampSelect,
     };
 

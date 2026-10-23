@@ -129,8 +129,10 @@ const json_opts: std.json.ParseOptions = .{
     .allocate = .alloc_always,
 };
 
+pub const ParseError = std.json.ParseError(std.json.Scanner);
+
 /// Allocates in `arena`
-pub fn parse(arena: std.mem.Allocator, json: []const u8) !ChampSelect {
+pub fn parse(arena: std.mem.Allocator, json: []const u8) ParseError!ChampSelect {
     const s = try std.json.parseFromSliceLeaky(Session, arena, json, json_opts);
 
     var allies: std.ArrayList(Pick) = .empty;
