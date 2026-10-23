@@ -40,14 +40,9 @@ const DailyPart = @import("views.zig").DailyPart;
 const champsKey = @import("views.zig").champsKey;
 const Parts = @import("views.zig").Parts;
 
-/// Reads the view's data from the database (the slow part of a site build); free with
-/// unload
-pub fn load(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options, view: html.View, extras: *Extras) !*Site {
-    return loadParts(gpa, io, db, all_opts, view, extras, null);
-}
-
-/// As load, but each part (Part) from `old` where it is there with this binary's key,
-/// the rest from the database; with old.strict a part not there is ViewsMismatch
+/// Reads the view's data (the slow part of a site build), each part (Part) from `old`
+/// where it is there with this binary's key, the rest from the database; with
+/// old.strict a part not there is ViewsMismatch. Free with unload
 pub fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Options, view: html.View, extras: *Extras, old: ?*const Parts) !*Site {
     const owner = try gpa.create(std.heap.ArenaAllocator);
     owner.* = .init(gpa);

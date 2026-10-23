@@ -104,10 +104,6 @@ fn pickFrom(slot: *const ?File, period: html.Period, get: anytype, args: anytype
     return .{ .f = f, .b = @call(.auto, get, .{f} ++ args) orelse return null, .period = period };
 }
 
-fn getVs(f: *const File, x: u32, r: Role, y: u32) ?File.Build {
-    return f.getVs(x, r, y);
-}
-
 /// A page per champion and role with enough of the champion's games
 pub fn paths(site: *const Site, f: *const File, list: *std.ArrayList([]const u8)) !void {
     try list.append(site.arena, index_path);
@@ -208,7 +204,7 @@ pub fn strip(site: *const Site, w: *Writer, ch: Champ, r: Role, from: []const u8
 /// Nothing when the pair has too few games for the file. `from`: the page's path
 pub fn vsStrip(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ, from: []const u8) !void {
     const pv = patchView(site);
-    const picked = pick(site, pv, getVs, .{ x.id, r, y.id }) orelse return;
+    const picked = pick(site, pv, File.getVs, .{ x.id, r, y.id }) orelse return;
     const f = picked.f;
     const b = picked.b;
     const usual = f.get(x.id, r);
@@ -301,7 +297,7 @@ fn runeShifts(a: std.mem.Allocator, b: File.Build, usual: ?File.Build) ![]const 
 fn shiftChip(w: *Writer, f: *const File, s: Shift) !void {
     const n = ddragon.find(f.runes, s.id) orelse return;
     var buf: [32]u8 = undefined;
-    const rate = if (s.o.games >= rate_games) try std.fmt.bufPrint(&buf, ", {d:.1}% won", .{wonPct(s.o)}) else "";
+    const rate = if (s.o.games >= rate_games) try std.fmt.bufPrint(&buf, ", {d:.1}% won", .{pct(s.o.wins, s.o.games)}) else "";
     try tpl.renderPart(w,
         \\<span class="rsh" title="{name}: {games} games{rate}"><img src="{src}" alt="" loading="lazy">{name} <b>{here:.0}%</b> <small>usually {usual:.0}%</small></span>
     , .{
@@ -394,7 +390,7 @@ fn top(a: std.mem.Allocator, w: *Writer, f: *const File, b: File.Build, usual: ?
         .all = try root.thousands(a, rows.games),
         .games = try root.thousands(a, o.games),
         .rate = tpl.when(o.games >= rate_games, tpl.t("<br>{wr:.1}% won{also}", .{
-            .wr = wonPct(o),
+            .wr = pct(o.wins, o.games),
             .also = tpl.when(hi != null and hi.? == 0, tpl.t(", the highest win rate", .{})),
         })),
         .hw = if (other) |h| tpl.t(
@@ -402,7 +398,7 @@ fn top(a: std.mem.Allocator, w: *Writer, f: *const File, b: File.Build, usual: ?
         , .{
             .label = if (ringed) "Highest win rate page: blue rings" else "Highest win rate",
             .value = tpl.when(!ringed, tpl.t("<div class=\"bv\">{v}</div>", .{ .v = tpl.call(value, .{ f, kind, h.v, true }) })),
-            .wr = wonPct(h),
+            .wr = pct(h.wins, h.games),
             .games = try root.thousands(a, h.games),
             .share = pct(h.games, rows.games),
         }) else null,
@@ -630,7 +626,7 @@ fn statRow(w: *Writer, list: []const ddragon.Named, ids: []const u32, row: []con
         const n = ddragon.find(list, id) orelse continue;
         const share = pct(o.games, all);
         var buf: [32]u8 = undefined;
-        const rate = if (o.games >= rate_games) try std.fmt.bufPrint(&buf, ", {d:.1}% won", .{wonPct(o)}) else "";
+        const rate = if (o.games >= rate_games) try std.fmt.bufPrint(&buf, ", {d:.1}% won", .{pct(o.wins, o.games)}) else "";
         try tpl.render(w,
             \\<span class="rc{state}" title="{name}: {games} games, {share:.1}%{rate}"><img src="{src}" alt="{name}" loading="lazy"><b>{pick}{few}</b><i>{wr}</i><em>{n}</em></span>
         , .{
@@ -642,14 +638,10 @@ fn statRow(w: *Writer, list: []const ddragon.Named, ids: []const u32, row: []con
             .src = n.icon,
             .pick = tpl.when(share >= 1, tpl.t("{p:.0}%", .{ .p = share })),
             .few = tpl.when(o.games > 0 and share < 1, "<1%"),
-            .wr = tpl.when(o.games >= rate_games, tpl.t("{wr:.1}%", .{ .wr = wonPct(o) })),
+            .wr = tpl.when(o.games >= rate_games, tpl.t("{wr:.1}%", .{ .wr = pct(o.wins, o.games) })),
             .n = tpl.call(shortCount, .{o.games}),
         });
     }
-}
-
-fn wonPct(o: File.Option) f64 {
-    return 100 * @as(f64, @floatFromInt(o.wins)) / @as(f64, @floatFromInt(@max(o.games, 1)));
 }
 
 /// A builds file's min_tier as a scope chip's rank
@@ -796,7 +788,7 @@ fn table(w: *Writer, f: *const File, b: File.Build, kind: Kind, comptime title: 
             .value = tpl.call(value, .{ f, kind, o.v, false }),
             .tags = tpl.call(tags, .{ i, hi }),
             .games = o.games,
-            .share = 100 * @as(f64, @floatFromInt(o.games)) / @as(f64, @floatFromInt(@max(rows.games, 1))),
+            .share = pct(o.games, rows.games),
             .rate = tpl.call(winRate, .{ o.games, o.wins }),
         });
     }

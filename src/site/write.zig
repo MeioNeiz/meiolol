@@ -19,7 +19,7 @@ const pagePaths = root.pagePaths;
 const renderPage = root.renderPage;
 const renderShared = root.renderShared;
 const Extras = @import("extras.zig").Extras;
-const load = @import("load.zig").load;
+const loadParts = @import("load.zig").loadParts;
 const unload = @import("load.zig").unload;
 
 pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options) !void {
@@ -37,7 +37,7 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
         if (opts.euw_only and v.region != .euw) continue;
         // Static.core: only the root's files, from the root view and the shared one
         if (opts.static == .core and v.index() != 0 and !std.meta.eql(v, html.View.shared)) continue;
-        const site = try load(gpa, io, db, opts, v, &extras);
+        const site = try loadParts(gpa, io, db, opts, v, &extras, null);
         defer unload(site);
         try writeSite(site, root_dir, gz_window);
     }

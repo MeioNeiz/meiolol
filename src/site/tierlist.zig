@@ -61,7 +61,7 @@ fn tierRows(site: *const Site, role: ?Role) ![]Row {
                 .games = cr.games,
                 .wins = cr.wins,
                 .share = share,
-                .rare = site.pickRate(cr.games) < min_pick_rate or share < min_role_share,
+                .rare = ratio(cr.games, site.games) < min_pick_rate or share < min_role_share,
                 .impact = prior.score(cr.wins, cr.games, ch.banned, site.games),
                 .edge = prior.edge(cr.wins, cr.games),
                 .shrunk = prior.base + prior.edge(cr.wins, cr.games),

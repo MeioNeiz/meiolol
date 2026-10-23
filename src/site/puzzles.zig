@@ -16,7 +16,6 @@ const matchup = @import("matchup.zig");
 
 const Writer = std.Io.Writer;
 const Role = core.Role;
-const curvesfile = core.curvesfile;
 const Site = root.Site;
 const Champ = root.Champ;
 

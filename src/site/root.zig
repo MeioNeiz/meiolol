@@ -32,10 +32,7 @@ const tpl = html.tpl;
 const score = core.score;
 
 pub const generate = @import("write.zig").generate;
-pub const Extras = @import("extras.zig").Extras;
 const biggestCurves = @import("extras.zig").biggestCurves;
-pub const load = @import("load.zig").load;
-pub const unload = @import("load.zig").unload;
 pub const Loaded = @import("views.zig").Loaded;
 const writeIndex = @import("home.zig").writeIndex;
 const writeTierList = @import("tierlist.zig").writeTierList;
@@ -307,18 +304,9 @@ pub const Site = struct {
         return s.arena.print("{s}champion/{s}.html{s}", .{ to_site, ch.slug, s.view.query() }) catch "";
     }
 
-    pub fn champLink(s: *const Site, w: *Writer, ch: Champ, to_site: []const u8) !void {
-        return s.champLinkAs(w, ch, to_site, "champ");
-    }
-
-    /// champLink as the main link of a row or tile (class bx) that it covers whole
+    /// A champion link as the main link of a row or tile (class bx) that it covers whole
     pub fn champBox(s: *const Site, w: *Writer, ch: Champ, to_site: []const u8) !void {
-        return s.champLinkAs(w, ch, to_site, "champ box");
-    }
-
-    fn champLinkAs(s: *const Site, w: *Writer, ch: Champ, to_site: []const u8, class: []const u8) !void {
-        try tpl.render(w, "<a class=\"{class}\" href=\"{href}\"><img src=\"{icon}\" alt=\"\" loading=\"lazy\" width=\"32\" height=\"32\">{name}</a>", .{
-            .class = class,
+        try tpl.render(w, "<a class=\"champ box\" href=\"{href}\"><img src=\"{icon}\" alt=\"\" loading=\"lazy\" width=\"32\" height=\"32\">{name}</a>", .{
             .href = s.champHref(ch, to_site),
             .icon = s.icon(ch),
             .name = ch.name,
@@ -327,10 +315,6 @@ pub const Site = struct {
 
     pub fn champBySlug(s: *const Site, slug_: []const u8) ?Champ {
         return s.champs[s.by_slug.get(slug_) orelse return null];
-    }
-
-    pub fn pickRate(s: *const Site, games: u64) f64 {
-        return if (s.games == 0) 0 else @as(f64, @floatFromInt(games)) / @as(f64, @floatFromInt(s.games));
     }
 
     fn info(s: *const Site) prose.Info {
