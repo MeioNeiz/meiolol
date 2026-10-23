@@ -5110,9 +5110,9 @@ reads v2.
 Eval on snap-20261018T1007Z's database (877,814 games, every platform, test 131,746
 newest, 15 to 18 Oct), shipped form against the counts model: log loss 0.6860 against
 0.6864, -0.00036 ± 0.00021, AUC 0.567 against 0.566, accuracy 54.8% against 54.6%. The
-same fit unfloored with its platform side terms: -0.0007 ± 0.0002, so the floor and the
-side cost ~0.0003 (side alone ~0.0001: blue side rate vs coin); floors 0 and 5 were
-being measured at handover. Pick metric: winners' picks rank 0.670 vs losers' 0.648
+same fit unfloored with its platform side terms: -0.0007 ± 0.0002. The floor costs
+nothing (floors 0 and 5: -0.00037 ± 0.00021 each), so the ~0.0003 is the per-platform
+side terms, which side-free suggestions can't use. Pick metric: winners' picks rank 0.670 vs losers' 0.648
 (counts 0.682 vs 0.664), AUC 0.522 both. From 23 Oct the daily eval's "current model"
 and eval-history's ll_current are this model; ll_counts, d_current_counts and
 ci_current_counts keep the counts model beside it. The damage mix (~0.7 milli-nats more
