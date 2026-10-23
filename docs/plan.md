@@ -75,7 +75,7 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
 8. Training across patches (Jacob 21 and 23 Oct): docs/plan/patch-transfer.md. Score
    only newest-patch games, replayed day by day (every game was once newest-patch);
    pooled stationary part plus shrunk per-patch champion-role part; ratings then net
-   arms. PT0 is Jacob's (backfill, protocol v3 everywhere); PT1 episode pin next
+   arms. no backfill (J25); PT0 is Jacob's (protocol v3 everywhere); PT1 episode pin next
 9. The data edge (J23, J24): every block respects its filters or is marked (E1, cheap,
    now); then day cubes as storage (E7) so any patch, season, rank and region is a sum,
    a public truth test (E2) and "Meio", one estimate per number from every game, patch

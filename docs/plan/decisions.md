@@ -80,6 +80,10 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
   patch were only the start), each honest about its scope, plus our estimate from every
   game; build the models on the same understanding so they beat anyone's. A lens for
   every plan step: docs/plan.md "Our edge", docs/plan/estimates.md
+- J25 (23 Oct) No backfill of older patches: the product is the best numbers for the
+  game as it is now (other sites show past snapshots), and crawling more recent games
+  does more for model accuracy. Old patches count only as far as they help the newest.
+  Patch episodes come from live patches (docs/plan/patch-transfer.md)
 - nn on the GPU: planned, not now
 - Q1 Rewrite the application around game review of your own games, lane curves as the
   benchmark; squads worded as planned, or out until built

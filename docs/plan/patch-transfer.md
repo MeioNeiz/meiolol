@@ -56,10 +56,9 @@ where it is used.
 
 ## Steps
 
-- PT0 Jacob's choices: (a) backfill older patches for more episodes (16.17-16.18 via
-  match-v5 history; Riot budget, likely after the production key); (b) protocol v3 as
-  the rule for every model claim, the daily box eval included (PT8). Blocks PT7 (a)
-  and PT8 (b)
+- PT0 Jacob's choice: protocol v3 as the rule for every model claim, the daily box
+  eval included. Blocks PT8. No backfill of older patches (J25): episodes come from
+  live patches, one every two weeks
 - PT1 Episode pin. Drafts for every patch (drafts table, 74 bytes a game: 10M games is
   740 MB) plus per game game_start ms, platform, patch, day since patch on that
   platform; seat stats for the set net's profiles (from the raw archive, 3091e18).
@@ -88,8 +87,8 @@ where it is used.
   seeds and the control
 - PT6 Train-vs-eval allocation curve (below), for knobs tuned on new-patch games only
 - PT7 Shift predictor (A6): regress per-champion-role jumps on the PT1 side tables over
-  3+ episodes; its prediction becomes the offset's prior mean. Needs PT0 (a) or two more
-  live patches. Patch-note text is lab-frontier W4
+  3+ episodes; its prediction becomes the offset's prior mean. Needs two more live
+  patches (16.22, 16.23; J25). Patch-note text is lab-frontier W4
 - PT8 Ship: the winning procedure runs on the box (daily update, refit per patch); the
   daily eval (deploy/web-loop.sh, data/eval-history.tsv) switches to protocol v3; the
   site's stats and the draft export follow the winning data rule (today: newest patch
@@ -145,7 +144,7 @@ answer is the k where (b) stops improving and the n where (a) stops being noise.
 - 16.20 to 16.21: the real one. 1.32M 16.20 games; 16.21 252k by 23 Oct (EUW1 53k, KR
   67k, VN2 46k, NA1 20k), ~100k a day
 - 16.19 to 16.20: weak, 17k 16.19 games left in drafts (54,750 in the 2253Z snapshot)
-- Each new patch adds one; backfill is PT0 (a)
+- Each new patch adds one; no backfill (J25)
 
 ## Status
 
