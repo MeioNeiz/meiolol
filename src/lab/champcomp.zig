@@ -41,7 +41,6 @@
 const std = @import("std");
 const api = @import("api");
 const cand = @import("cand");
-const store = @import("store");
 const rows = @import("rows.zig");
 const harness = @import("harness.zig");
 const compstats = @import("compstats.zig");
@@ -967,17 +966,6 @@ fn featureName(buf: []u8, f: usize) []const u8 {
     return std.mem.print(buf, "{s}:{s}", .{ if (f < nt) "enemy" else "ally", trait_names[f % nt] }) catch "?";
 }
 
-pub fn loadNames(gpa: Allocator, arena: Allocator, snap: []const u8) !std.AutoHashMapUnmanaged(u32, []const u8) {
-    var names: std.AutoHashMapUnmanaged(u32, []const u8) = .empty;
-    const db = try store.schema.openReadOnly(gpa, snap);
-    defer db.close();
-    var q = try db.prepare("SELECT id, name FROM champions");
-    defer q.deinit();
-    try q.bind(.{});
-    while (try q.step()) try names.put(arena, @intCast(q.int(0)), try arena.dupe(u8, q.bytes(1)));
-    return names;
-}
-
 const Window = struct {
     label: []const u8,
     /// Fit on dev games before this
@@ -1220,7 +1208,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     const players = try harness.gamePlayers(gpa, d);
     defer gpa.free(players);
     const c = try harness.cuts(gpa, d);
-    const names = try loadNames(gpa, arena, data_path);
+    const names = try rows.loadNames(gpa, arena, data_path);
     const offset_cache = try Offsets.init(gpa, io, snap, data_path, d);
     var group_ids: [ng][]const u32 = undefined;
     for (&group_ids, kit_groups) |*ids, grp| {

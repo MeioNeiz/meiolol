@@ -7,6 +7,7 @@ const stats = @import("../stats.zig");
 const rowsql = @import("rowsql.zig");
 const pack = @import("pack.zig");
 const synth = @import("synth.zig");
+const store = @import("store");
 
 pub const Outcome = rowsql.Outcome;
 pub const outcome_count = rowsql.outcome_count;
@@ -78,6 +79,18 @@ pub fn loadLegendaries(gpa: std.mem.Allocator, io: std.Io, snap: []const u8) !st
         try set.put(gpa, legendaryKey(stats.patchKey(patch), item), {});
     }
     return set;
+}
+
+/// Champion id to name, from SNAP's champions table
+pub fn loadNames(gpa: std.mem.Allocator, arena: std.mem.Allocator, snap: []const u8) !std.AutoHashMapUnmanaged(u32, []const u8) {
+    var names: std.AutoHashMapUnmanaged(u32, []const u8) = .empty;
+    const db = try store.schema.openReadOnly(gpa, snap);
+    defer db.close();
+    var q = try db.prepare("SELECT id, name FROM champions");
+    defer q.deinit();
+    try q.bind(.{});
+    while (try q.step()) try names.put(arena, @intCast(q.int(0)), try arena.dupe(u8, q.bytes(1)));
+    return names;
 }
 
 /// Counts and means per outcome, train and test, as a check on a snapshot

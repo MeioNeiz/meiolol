@@ -8,7 +8,6 @@ const std = @import("std");
 const api = @import("api");
 const core = @import("core");
 const cand = @import("cand");
-const store = @import("store");
 const rows = @import("rows.zig");
 const harness = @import("harness.zig");
 const protocol = @import("protocol.zig");
@@ -248,13 +247,7 @@ fn splitFlags(arena: std.mem.Allocator, line: []const u8) ![]const []const u8 {
 }
 
 fn loadChampions(gpa: std.mem.Allocator, arena: std.mem.Allocator, snap: []const u8, d: *const rows.Data) !Champions {
-    var c: Champions = .{};
-    const db = try store.schema.openReadOnly(gpa, snap);
-    defer db.close();
-    var q = try db.prepare("SELECT id, name FROM champions");
-    defer q.deinit();
-    try q.bind(.{});
-    while (try q.step()) try c.names.put(arena, @intCast(q.int(0)), try arena.dupe(u8, q.bytes(1)));
+    var c: Champions = .{ .names = try rows.loadNames(gpa, arena, snap) };
     try c.countShares(arena, d.games);
     for (d.rows) |r| {
         const e = try c.games.getOrPut(arena, Champions.key(r.champion, @backingInt(r.role)));

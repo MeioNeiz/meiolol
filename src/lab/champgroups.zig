@@ -275,7 +275,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     const players = try harness.gamePlayers(gpa, d);
     defer gpa.free(players);
     const c = try harness.cuts(gpa, d);
-    const names = try champcomp.loadNames(gpa, arena, data_path);
+    const names = try rows.loadNames(gpa, arena, data_path);
     const extra = try gpa.alloc(?compstats.Seat, d.rows.len);
     defer gpa.free(extra);
     const team_obj = try gpa.alloc(?[2]compstats.Team, d.games.len);

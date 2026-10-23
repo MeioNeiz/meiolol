@@ -13,7 +13,6 @@ const test_looks = @import("looks.zig");
 const protocol = @import("protocol.zig");
 const harness = @import("harness.zig");
 const search = @import("search.zig");
-const store = @import("store");
 const tsvlog = @import("../tsvlog.zig");
 
 const Io = std.Io;
@@ -264,7 +263,7 @@ fn called(p: f64, y: f32) f64 {
 /// label, effect, ci (95% half-width), n. Returns the file names, comma separated
 fn writeEffects(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, snap: []const u8, tables: []const api.Effects) ![]const u8 {
     if (tables.len == 0) return "";
-    const names = try championNames(gpa, arena, snap);
+    const names = try rows.loadNames(gpa, arena, snap);
     var files: std.ArrayList(u8) = .empty;
     for (tables) |t| {
         if (t.name.len == 0) return error.BadEffectsName;
@@ -284,17 +283,6 @@ fn writeEffects(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, snap: 
 }
 
 /// Champion names by id (the snapshot's Data Dragon table), for effect labels
-fn championNames(gpa: std.mem.Allocator, arena: std.mem.Allocator, snap: []const u8) !std.AutoHashMapUnmanaged(u32, []const u8) {
-    const db = try store.schema.openReadOnly(gpa, snap);
-    defer db.close();
-    var out: std.AutoHashMapUnmanaged(u32, []const u8) = .empty;
-    var q = try db.prepare("SELECT id, name FROM champions");
-    defer q.deinit();
-    try q.bind(.{});
-    while (try q.step()) try out.put(arena, @intCast(q.int(0)), try arena.dupe(u8, q.bytes(1)));
-    return out;
-}
-
 /// One TSV field: "#<champion id>" becomes the champion's name; tabs, newlines and "|"
 /// (the title line's separator) become spaces
 fn clean(arena: std.mem.Allocator, names: *const std.AutoHashMapUnmanaged(u32, []const u8), text: []const u8) ![]const u8 {
