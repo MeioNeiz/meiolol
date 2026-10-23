@@ -49,8 +49,8 @@ pub const Record = struct {
     pub fn step(r: *Record, arena: std.mem.Allocator, log: *std.Io.Writer) !void {
         if (r.client == null) {
             r.conn = .init(r.gpa);
-            const found = try lcu.lockfile.discover(r.conn.?.allocator(), r.io, r.lockfile);
-            r.client = .{ .gpa = r.gpa, .io = r.io, .credentials = found.credentials };
+            const credentials = try lcu.lockfile.discover(r.conn.?.allocator(), r.io, r.lockfile);
+            r.client = .{ .gpa = r.gpa, .io = r.io, .credentials = credentials };
         }
         const client = r.client.?;
         const phase_body = try client.getOk(session.paths.phase);
