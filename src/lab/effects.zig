@@ -171,7 +171,7 @@ fn summarise(arena: std.mem.Allocator, pick: Pick, sigma2: [A.n_groups]f64, boot
     }
     nv /= @floatFromInt(@max(nulls.len, 1));
     std.mem.sort(f64, nsd, {}, std.sort.asc(f64));
-    const q95 = if (nulls.len > 0) nsd[@min(nulls.len - 1, @as(usize, @intFromFloat(@ceil(0.95 * @as(f64, @floatFromInt(nulls.len))))) -| 1)] else 0;
+    const q95 = if (nulls.len > 0) nsd[@min(nulls.len - 1, @as(usize, @ceil(0.95 * @as(f64, @floatFromInt(nulls.len)))) -| 1)] else 0;
     return .{ .sd = sd, .lo = lo, .hi = sd + 1.96 * se, .half_mean = hm, .null_ms = nv, .null_q95 = q95, .detected = sd > q95 and lo > q95 };
 }
 
@@ -271,7 +271,7 @@ const Soft = struct {
     }
 
     fn get(s: *const Soft, buf: []u8, block: []const u8, id: []const u8) ?f64 {
-        const k = std.fmt.bufPrint(buf, "{s}\t{s}", .{ block, id }) catch return null;
+        const k = std.mem.print(buf, "{s}\t{s}", .{ block, id }) catch return null;
         const v = s.map.get(k) orelse return null;
         return v[0] / v[1];
     }
@@ -608,7 +608,7 @@ const Files = struct {
     fn gamesFor(f: *Files, io: Io, label: []const u8) !*Io.Writer {
         const arena = f.arena;
         if (f.games.get(label)) |x| return &x.interface;
-        const file = try f.dir.createFile(io, try std.fmt.allocPrint(arena, "games-{s}.tsv", .{label}), .{});
+        const file = try f.dir.createFile(io, try arena.print("games-{s}.tsv", .{label}), .{});
         const buf = try arena.alloc(u8, 64 * 1024);
         const fw = try arena.create(Io.File.Writer);
         fw.* = file.writer(io, buf);
@@ -804,7 +804,7 @@ fn components(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, d: *cons
             if (p.param_start[ga + 1] == p.param_start[ga] or p.param_start[gb + 1] == p.param_start[gb]) continue;
             const pick: Pick = .{ .a = ga, .b = gb };
             const sm = try summarise(arena, pick, f.sigma2, boots, nulls);
-            const label = try std.fmt.allocPrint(arena, "matchup {s}-{s}", .{ A.role_names[r], A.role_names[q] });
+            const label = try arena.print("matchup {s}-{s}", .{ A.role_names[r], A.role_names[q] });
             var n_cells: usize = 0;
             var games_in: u64 = 0;
             var gamma: f64 = 0;
@@ -991,7 +991,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     if (opts.drop) {
         var nbuf: [64]u8 = undefined;
         for (1..A.n_groups) |g| {
-            const label = try std.fmt.allocPrint(arena, "full-without-{s}", .{A.groupName(&nbuf, g)});
+            const label = try arena.print("full-without-{s}", .{A.groupName(&nbuf, g)});
             for (label) |*ch| if (ch.* == ' ') {
                 ch.* = '_';
             };

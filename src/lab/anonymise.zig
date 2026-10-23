@@ -39,8 +39,8 @@ pub fn gameNumber(salt: *const Salt, raw_id: []const u8) u64 {
 
 /// "EUW1_7613000000" -> "EUW1_<hash>"; written into buf
 pub fn matchId(salt: *const Salt, raw_id: []const u8, buf: []u8) ![]const u8 {
-    const cut = std.mem.indexOfScalar(u8, raw_id, '_') orelse raw_id.len;
-    return std.fmt.bufPrint(buf, "{s}_{d}", .{ raw_id[0..cut], gameNumber(salt, raw_id) });
+    const cut = std.mem.findScalar(u8, raw_id, '_') orelse raw_id.len;
+    return std.mem.print(buf, "{s}_{d}", .{ raw_id[0..cut], gameNumber(salt, raw_id) });
 }
 
 /// One match-v5 summary: every PUUID in metadata.participants replaced wherever it
@@ -64,10 +64,10 @@ pub fn rewriteMatch(gpa: std.mem.Allocator, salt: *const Salt, json: []const u8)
         puuids.deinit(gpa);
     }
     const list_key = "\"participants\":[";
-    const list = std.mem.indexOf(u8, out.items, list_key) orelse return error.NoParticipants;
+    const list = std.mem.find(u8, out.items, list_key) orelse return error.NoParticipants;
     var i = list + list_key.len;
     while (i < out.items.len and out.items[i] == '"') {
-        const end = std.mem.indexOfScalarPos(u8, out.items, i + 1, '"') orelse return error.BadJson;
+        const end = std.mem.findScalarPos(u8, out.items, i + 1, '"') orelse return error.BadJson;
         try puuids.append(gpa, try gpa.dupe(u8, out.items[i + 1 .. end]));
         i = end + 1;
         if (i < out.items.len and out.items[i] == ',') i += 1;
@@ -75,7 +75,7 @@ pub fn rewriteMatch(gpa: std.mem.Allocator, salt: *const Salt, json: []const u8)
     for (puuids.items) |p| {
         const hashed = puuid(salt, p);
         var from: usize = 0;
-        while (std.mem.indexOfPos(u8, out.items, from, p)) |at| {
+        while (std.mem.findPos(u8, out.items, from, p)) |at| {
             try replaceAt(gpa, &out, at, at + p.len, &hashed);
             from = at + hashed.len;
         }
@@ -89,7 +89,7 @@ pub fn rewriteMatch(gpa: std.mem.Allocator, salt: *const Salt, json: []const u8)
         }
     }
     var num_buf: [24]u8 = undefined;
-    const game = try std.fmt.bufPrint(&num_buf, "{d}", .{gameNumber(salt, raw_id)});
+    const game = try std.mem.print(&num_buf, "{d}", .{gameNumber(salt, raw_id)});
     try replaceNumbers(gpa, &out, "gameId", game);
     try replaceNumbers(gpa, &out, "profileIcon", "0");
     return out.toOwnedSlice(gpa);
@@ -100,7 +100,7 @@ const Span = struct { start: usize, end: usize };
 /// Contents of the next `"key":"..."` string at or after from (escapes skipped)
 fn stringField(json: []const u8, key: []const u8, from: usize) ?Span {
     var pos = from;
-    while (std.mem.indexOfPos(u8, json, pos, key)) |k| {
+    while (std.mem.findPos(u8, json, pos, key)) |k| {
         pos = k + key.len;
         if (k == 0 or json[k - 1] != '"') continue;
         const rest = json[pos..];
@@ -117,7 +117,7 @@ fn stringField(json: []const u8, key: []const u8, from: usize) ?Span {
 
 fn replaceNumbers(gpa: std.mem.Allocator, out: *std.ArrayList(u8), key: []const u8, value: []const u8) !void {
     var pos: usize = 0;
-    while (std.mem.indexOfPos(u8, out.items, pos, key)) |k| {
+    while (std.mem.findPos(u8, out.items, pos, key)) |k| {
         pos = k + key.len;
         if (k == 0 or out.items[k - 1] != '"') continue;
         if (!std.mem.startsWith(u8, out.items[pos..], "\":")) continue;
@@ -206,7 +206,7 @@ pub fn run(gpa: std.mem.Allocator, io: std.Io, src: []const u8, dst: []const u8,
     try db.exec("PRAGMA temp_store = FILE");
     try registerFunctions(db, salt);
     inline for (schemas) |s| {
-        const in_path = try std.fmt.allocPrint(gpa, "file:{s}/{s}?mode=ro", .{ src, s.file });
+        const in_path = try gpa.print("file:{s}/{s}?mode=ro", .{ src, s.file });
         defer gpa.free(in_path);
         try db.run("ATTACH DATABASE ? AS " ++ s.in, .{in_path});
         const out_path = try std.fs.path.join(gpa, &.{ dst, s.file });
@@ -278,7 +278,7 @@ fn createLike(gpa: std.mem.Allocator, db: Db, out: []const u8, sql: []const u8) 
     // "CREATE TABLE name" / "CREATE INDEX name" / "CREATE UNIQUE INDEX name": qualify name
     const kinds = [_][]const u8{ "CREATE TABLE ", "CREATE INDEX ", "CREATE UNIQUE INDEX " };
     for (kinds) |k| if (std.mem.startsWith(u8, sql, k)) {
-        const stmt = try std.fmt.allocPrintSentinel(gpa, "{s}{s}.{s}", .{ k, out, sql[k.len..] }, 0);
+        const stmt = try gpa.printSentinel("{s}{s}.{s}", .{ k, out, sql[k.len..] }, 0);
         defer gpa.free(stmt);
         return db.exec(stmt);
     };
@@ -296,7 +296,7 @@ fn copyTable(gpa: std.mem.Allocator, db: Db, in: []const u8, out: []const u8, na
     var n_pk: usize = 0;
     const keyed = std.mem.eql(u8, name, "ranks") or std.mem.eql(u8, name, "rank_history");
     {
-        const sql = try std.fmt.allocPrint(gpa, "SELECT name, pk FROM pragma_table_info('{s}', '{s}') ORDER BY cid", .{ name, in });
+        const sql = try gpa.print("SELECT name, pk FROM pragma_table_info('{s}', '{s}') ORDER BY cid", .{ name, in });
         defer gpa.free(sql);
         var q = try db.prepare(sql);
         defer q.deinit();
@@ -332,7 +332,7 @@ fn copyTable(gpa: std.mem.Allocator, db: Db, in: []const u8, out: []const u8, na
         \\       WHERE puuid IS NOT NULL) k ON k.old = t.key
     else
         "";
-    const sql = try std.fmt.allocPrintSentinel(gpa, "INSERT INTO {s}.\"{s}\" SELECT {s} FROM {s}.\"{s}\" t{s}{s}{s}", .{
+    const sql = try gpa.printSentinel("INSERT INTO {s}.\"{s}\" SELECT {s} FROM {s}.\"{s}\" t{s}{s}{s}", .{
         out,                                name,        cols.items, in, name, join,
         if (n_pk > 0) " ORDER BY " else "", order.items,
     }, 0);
@@ -377,15 +377,15 @@ test "rewriteMatch hashes ids, blanks names, keeps the rest" {
     const out = try rewriteMatch(testing.allocator, &test_salt, json);
     defer testing.allocator.free(out);
     for ([_][]const u8{ "AAA-p1", "BBB_p2", "EUW1_123", "Na\\\"me", "s1", "4075", "\"gameId\":123," }) |gone| {
-        try testing.expect(std.mem.indexOf(u8, out, gone) == null);
+        try testing.expect(std.mem.find(u8, out, gone) == null);
     }
     const p1 = puuid(&test_salt, "AAA-p1");
     try testing.expectEqual(@as(usize, 2), std.mem.count(u8, out, &p1));
-    try testing.expect(std.mem.indexOf(u8, out, "\"riotIdTagline\":\"\"") != null);
-    try testing.expect(std.mem.indexOf(u8, out, "\"kills\":3") != null);
+    try testing.expect(std.mem.find(u8, out, "\"riotIdTagline\":\"\"") != null);
+    try testing.expect(std.mem.find(u8, out, "\"kills\":3") != null);
     var buf: [64]u8 = undefined;
     const id = try matchId(&test_salt, "EUW1_123", &buf);
     try testing.expect(std.mem.startsWith(u8, id, "EUW1_"));
-    try testing.expect(std.mem.indexOf(u8, out, id) != null);
-    try testing.expect(std.mem.indexOf(u8, out, id[5..]) != null);
+    try testing.expect(std.mem.find(u8, out, id) != null);
+    try testing.expect(std.mem.find(u8, out, id[5..]) != null);
 }

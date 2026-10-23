@@ -87,7 +87,7 @@ fn ownName(i: usize) []const u8 {
 fn traitName(buf: []u8, i: usize) []const u8 {
     if (i < n_own) return ownName(i);
     if (i >= n_own + nt) return carry_names[i - n_own - nt];
-    return std.fmt.bufPrint(buf, "set:{s}", .{@typeInfo(champcomp.Trait).@"enum".field_names[i - n_own]}) catch "?";
+    return std.mem.print(buf, "set:{s}", .{@typeInfo(champcomp.Trait).@"enum".field_names[i - n_own]}) catch "?";
 }
 
 /// Sums for one cell, trait and window: one logistic step on the centred trait
@@ -501,7 +501,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
             if (!x or std.math.isNan(f.beta[ci])) continue;
             const a = acc[ci * n_en + g_t[gi]].plus(acc[(nc + ci) * n_en + g_t[gi]]);
             const hd: [2]f64 = if (g_t[gi] != ap_t) .{ (held[g_t[gi]].beta[ci] - held[g_t[gi]].m[k & 7]) * pp, 1.96 * held[g_t[gi]].se[ci] * pp } else .{ std.math.nan(f64), std.math.nan(f64) };
-            try mout.writer.print("{s}\t{s}\t{s}\t{d}\t{d:.2}\t{d:.2}\t{d:.2}\t{d:.2}\n", .{ grp.label, names.get(@intCast(k >> 3)) orelse "?", role_names[k & 7], @as(u64, @intFromFloat(a.n)), (f.beta[ci] - f.m[k & 7]) * pp, 1.96 * f.se[ci] * pp, hd[0], hd[1] });
+            try mout.writer.print("{s}\t{s}\t{s}\t{d}\t{d:.2}\t{d:.2}\t{d:.2}\t{d:.2}\n", .{ grp.label, names.get(@intCast(k >> 3)) orelse "?", role_names[k & 7], @as(u64, @trunc(a.n)), (f.beta[ci] - f.m[k & 7]) * pp, 1.96 * f.se[ci] * pp, hd[0], hd[1] });
         }
     }
     var g_bh: [2]f64 = undefined;
@@ -521,7 +521,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
         if (det and grp.family == 1) followups += 1;
         if (det and grp.family == 0) {
             detected += 1;
-            try det_names.print(arena, "{s}{s}", .{ if (det_names.items.len > 0) "," else "", grp.label[0..std.mem.indexOfScalar(u8, grp.label, ' ').?] });
+            try det_names.print(arena, "{s}{s}", .{ if (det_names.items.len > 0) "," else "", grp.label[0..std.mem.findScalar(u8, grp.label, ' ').?] });
         }
         try gout.writer.print("{s}\t{s}\t{s}\t{d}\t{d:.3}\t{d:.3}\t{e:.2}\t{}\t{}\t{d:.3}\t{d:.3}\t{d:.3}\t{d:.3}\t{d:.3}\t{d:.3}\n", .{
             grp.label,           grp.trait,           if (grp.sign > 0) "+" else "-", e[2].cells,

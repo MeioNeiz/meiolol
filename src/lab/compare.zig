@@ -77,7 +77,7 @@ const Ctx = struct {
     why: []const u8 = "",
 
     fn refuse(c: *Ctx, comptime fmt: []const u8, args: anytype) Refusal {
-        c.why = try std.fmt.allocPrint(c.arena, fmt, args);
+        c.why = try c.arena.print(fmt, args);
         return error.Refused;
     }
 };
@@ -106,9 +106,9 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
 
 fn parseSpec(s: []const u8) Spec {
     const whole: Spec = .{ .path = s, .col = null };
-    const i = std.mem.lastIndexOfScalar(u8, s, ':') orelse return whole;
+    const i = std.mem.findScalarLast(u8, s, ':') orelse return whole;
     const col = s[i + 1 ..];
-    if (col.len == 0 or std.mem.indexOfScalar(u8, col, '/') != null) return whole;
+    if (col.len == 0 or std.mem.findScalar(u8, col, '/') != null) return whole;
     return .{ .path = s[0..i], .col = col };
 }
 
@@ -242,7 +242,7 @@ fn load(c: *Ctx, spec: Spec) !Side {
         if (n < n_head) return c.refuse("{s}:{d}: short row", .{ spec.path, line_no });
         if (per_row and !std.mem.eql(u8, cols[oi], "win")) continue;
         const block = if (bi) |b| cols[b] else "-";
-        const key = std.fmt.bufPrint(&key_buf, "{s}\t{s}", .{ block, cols[mi] }) catch
+        const key = std.mem.print(&key_buf, "{s}\t{s}", .{ block, cols[mi] }) catch
             return c.refuse("{s}:{d}: match_id too long", .{ spec.path, line_no });
         const y = std.fmt.parseFloat(f64, cols[yi]) catch
             return c.refuse("{s}:{d}: bad y", .{ spec.path, line_no });
@@ -313,13 +313,13 @@ fn parseMeta(arena: Allocator, run_dir: []const u8, text: []const u8) !Meta {
     var lines = std.mem.tokenizeScalar(u8, text, '\n');
     while (lines.next()) |l| {
         const line = std.mem.trim(u8, l, " \t\r");
-        const sp = std.mem.indexOfAny(u8, line, " \t") orelse continue;
+        const sp = std.mem.findAny(u8, line, " \t") orelse continue;
         const key = line[0..sp];
         const value = std.mem.trim(u8, line[sp + 1 ..], " \t");
         if (std.mem.eql(u8, key, "src")) m.src = value;
         if (std.mem.eql(u8, key, "harness")) m.harness = value;
         if (std.mem.eql(u8, key, "snap")) {
-            const at = std.mem.lastIndexOfAny(u8, value, " \t");
+            const at = std.mem.findLastAny(u8, value, " \t");
             const h = if (at) |i| value[i + 1 ..] else value;
             if (snaps.items.len > 0) try snaps.append(arena, ',');
             try snaps.appendSlice(arena, h);
@@ -379,7 +379,7 @@ fn differs(a: ?[]const u8, b: ?[]const u8) bool {
 }
 
 fn blockOf(key: []const u8) []const u8 {
-    return key[0..std.mem.indexOfScalar(u8, key, '\t').?];
+    return key[0..std.mem.findScalar(u8, key, '\t').?];
 }
 
 fn isFold(block: []const u8) bool {
@@ -617,7 +617,7 @@ const T = struct {
     }
 
     fn has(t: *T, s: []const u8) bool {
-        return std.mem.indexOf(u8, t.out.written(), s) != null;
+        return std.mem.find(u8, t.out.written(), s) != null;
     }
 };
 
@@ -707,7 +707,7 @@ test "B strictly better: negative difference, B better" {
     try t.cmp(&.{ "a.tsv:cand", "a.tsv:ens" });
     try testing.expect(t.has("verdict=better"));
     try testing.expect(t.has(": B better\n"));
-    try testing.expect(std.mem.indexOf(u8, t.out.written(), "diff=-0.") != null);
+    try testing.expect(std.mem.find(u8, t.out.written(), "diff=-0.") != null);
     try testing.expect(t.has("seeds (B)   2: "));
 }
 
@@ -743,7 +743,7 @@ test "emit: header checked, row appended" {
     };
     const bad = base ++ [_][]const u8{ "--emit", "bad.tsv" };
     try testing.expectError(error.Refused, t.cmp(&bad));
-    try testing.expect(std.mem.indexOf(u8, t.c.why, "header") != null);
+    try testing.expect(std.mem.find(u8, t.c.why, "header") != null);
     try t.write("q.tsv", "# title: x\n" ++ emit_header ++ "\n");
     try t.cmp(&(base ++ [_][]const u8{ "--emit", "q.tsv", "--note", "a note" }));
     const text = try t.tmp.dir.readFileAlloc(testing.io, "q.tsv", t.c.arena, .unlimited);

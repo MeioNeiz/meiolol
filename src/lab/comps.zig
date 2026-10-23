@@ -311,7 +311,7 @@ pub fn buildProfiles(gpa: Allocator, d: *const rows.Data, extra: []const ?compst
     };
     for (&all, &p.cut) |*a, *c| {
         std.mem.sort(f64, a.items, {}, std.sort.asc(f64));
-        c.* = if (a.items.len == 0) 0 else a.items[@intFromFloat(@as(f64, @floatFromInt(a.items.len)) * (1 - top_share))];
+        c.* = if (a.items.len == 0) 0 else a.items[@trunc(@as(f64, @floatFromInt(a.items.len)) * (1 - top_share))];
     }
     return p;
 }

@@ -183,7 +183,7 @@ const Corpus = struct {
 
         var fit_games: std.StringHashMapUnmanaged(f64) = .empty;
         defer fit_games.deinit(gpa);
-        const folds = try Io.Dir.cwd().readFileAlloc(io, try std.fmt.allocPrint(arena, "{s}/folds.tsv", .{dir}), arena, .unlimited);
+        const folds = try Io.Dir.cwd().readFileAlloc(io, try arena.print("{s}/folds.tsv", .{dir}), arena, .unlimited);
         var fl = std.mem.tokenizeScalar(u8, folds, '\n');
         _ = fl.next();
         while (fl.next()) |line| {
@@ -194,7 +194,7 @@ const Corpus = struct {
             try fit_games.put(gpa, fold, n);
         }
 
-        const preds = try Io.Dir.cwd().readFileAlloc(io, try std.fmt.allocPrint(arena, "{s}/preds.tsv", .{dir}), arena, .unlimited);
+        const preds = try Io.Dir.cwd().readFileAlloc(io, try arena.print("{s}/preds.tsv", .{dir}), arena, .unlimited);
         var pl = std.mem.tokenizeScalar(u8, preds, '\n');
         const header = pl.next() orelse return error.Empty;
         const at_col = try column(header, col);
@@ -337,7 +337,7 @@ fn curveAt(f: Fit, n: f64) f64 {
 fn quantile(arena: std.mem.Allocator, xs: []const f64, q: f64) !f64 {
     const s = try arena.dupe(f64, xs);
     std.mem.sort(f64, s, {}, std.sort.asc(f64));
-    const k: usize = @intFromFloat(@round(q * @as(f64, @floatFromInt(s.len - 1))));
+    const k: usize = @round(q * @as(f64, @floatFromInt(s.len - 1)));
     return s[k];
 }
 

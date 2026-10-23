@@ -144,7 +144,7 @@ fn run(
     // No selection window since the one global cut (2253Z): no ladder looks
     const header = "run\tcampaign\ttarget\tscope\tdev_n\tdev_diff\tdev_half\tselect\tlooks\thyp\tfraction\tdesc" ++
         "\tcategory\tremoved_pct\tremoved_half\terr_base\terr_cand\tunit\teffects\n";
-    const line = try std.fmt.allocPrint(arena, "{s}\t{s}\t{t}\t{t}\t{d}\t{d:.5}\t{d:.5}\t{s}\t{d}\t{s}\t{d}\t{s}\t{s}\t{d:.3}\t{d:.3}\t{s}\t{s}\t{s}\t{s}\n", .{
+    const line = try arena.print("{s}\t{s}\t{t}\t{t}\t{d}\t{d:.5}\t{d:.5}\t{s}\t{d}\t{s}\t{d}\t{s}\t{s}\t{d:.3}\t{d:.3}\t{s}\t{s}\t{s}\t{s}\n", .{
         args.run,                                    args.campaign,     args.target,                                     cand.scope,
         dev_target.n,                                dev_target.diff,   dev_target.half,                                 "-",
         0,                                           args.hyp,          args.fraction,                                   args.desc,
@@ -193,9 +193,9 @@ fn unit(o: api.Outcome) []const u8 {
 fn errText(arena: std.mem.Allocator, o: api.Outcome, x: f64) ![]const u8 {
     if (std.math.isNan(x)) return "-";
     return switch (o) {
-        .gold14, .lanediff14 => std.fmt.allocPrint(arena, "{d:.0}", .{x}),
-        .win => std.fmt.allocPrint(arena, "{d:.1}", .{x}),
-        else => std.fmt.allocPrint(arena, "{d:.2}", .{x}),
+        .gold14, .lanediff14 => arena.print("{d:.0}", .{x}),
+        .win => arena.print("{d:.1}", .{x}),
+        else => arena.print("{d:.2}", .{x}),
     };
 }
 
@@ -276,7 +276,7 @@ fn writeEffects(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, snap: 
             try clean(arena, &names, t.title), try clean(arena, &names, t.unit), try clean(arena, &names, t.higher),
         });
         for (t.rows) |r| try w.print("{s}\t{d:.4}\t{d:.4}\t{d}\n", .{ try clean(arena, &names, r.label), r.effect, r.ci, r.n });
-        const file = try std.fmt.allocPrint(arena, "effects-{s}.tsv", .{t.name});
+        const file = try arena.print("effects-{s}.tsv", .{t.name});
         try Io.Dir.cwd().writeFile(io, .{ .sub_path = file, .data = aw.written() });
         if (files.items.len > 0) try files.append(arena, ',');
         try files.appendSlice(arena, file);
@@ -363,13 +363,13 @@ fn summary(gpa: std.mem.Allocator, io: Io, d: *const rows.Data, s: *const harnes
     defer patches.deinit(gpa);
     for (s.row) |ri| {
         const p = d.games[d.rows[ri].game].patch;
-        if (std.mem.indexOfScalar(u32, patches.items, p) == null) try patches.append(gpa, p);
+        if (std.mem.findScalar(u32, patches.items, p) == null) try patches.append(gpa, p);
     }
     std.mem.sort(u32, patches.items, {}, std.sort.asc(u32));
     for (patches.items) |p| {
         for (keep, s.row) |*kp, ri| kp.* = d.games[d.rows[ri].game].patch == p;
         var name: [16]u8 = undefined;
-        try sliceRow(w, try std.fmt.bufPrint(&name, "{d}.{d}", .{ p / 1000, p % 1000 }), harness.paired(s.game, la, lb, keep));
+        try sliceRow(w, try std.mem.print(&name, "{d}.{d}", .{ p / 1000, p % 1000 }), harness.paired(s.game, la, lb, keep));
     }
 
     try w.print("\n## {t} by rank tier (after-game rank, report only)\n\n| tier | rows | diff |\n|---|---|---|\n", .{args.target});
@@ -472,7 +472,7 @@ fn final(
             const p = harness.paired(s.game, la, lb, mask);
             const o = api.outcomeAt(k);
             try w.print("| {t} | {d} | {d:.5} | {d:.5} | {d:.5} ± {d:.5} |\n", .{ o, p.n, p.b, p.a, p.diff, p.half });
-            try appendLine(io, finals, "run\tcampaign\ttarget\toutcome\tset\tn\tdiff\thalf\n", try std.fmt.allocPrint(arena, "{s}\t{s}\t{t}\t{t}\t{s}\t{d}\t{d:.5}\t{d:.5}\n", .{
+            try appendLine(io, finals, "run\tcampaign\ttarget\toutcome\tset\tn\tdiff\thalf\n", try arena.print("{s}\t{s}\t{t}\t{t}\t{s}\t{d}\t{d:.5}\t{d:.5}\n", .{
                 args.run, args.campaign, args.target, o, if (pass == 0) "test" else "test-excl", p.n, p.diff, p.half,
             }));
         }

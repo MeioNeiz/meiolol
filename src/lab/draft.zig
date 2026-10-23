@@ -201,7 +201,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
             if (g.is_test and tests.items.len < 3) try tests.append(arena, g.teams);
         }
         try df.exportFiles(arena, io, &sc, &champs, .{
-            .name = if (model == .additive) "additive v2: champion strength, ally pairs, matchups, damage mix" else try std.fmt.allocPrint(arena, "{s} ({s})", .{ if (@hasDecl(cand, "name")) cand.name else "candidate", params.kind }),
+            .name = if (model == .additive) "additive v2: champion strength, ally pairs, matchups, damage mix" else try arena.print("{s} ({s})", .{ if (@hasDecl(cand, "name")) cand.name else "candidate", params.kind }),
             .run = std.fs.path.basename(args[1]),
             .snapshot = std.fs.path.basename(snap),
             .newest_start = newest,
@@ -242,8 +242,8 @@ fn splitFlags(arena: std.mem.Allocator, line: []const u8) ![]const []const u8 {
     while (it.next()) |part| {
         const p = std.mem.trim(u8, part, " \t\r");
         if (p.len == 0) continue;
-        const sp = std.mem.indexOfAny(u8, p, " \t") orelse p.len;
-        try out.append(arena, try std.fmt.allocPrint(arena, "--{s}", .{p[0..sp]}));
+        const sp = std.mem.findAny(u8, p, " \t") orelse p.len;
+        try out.append(arena, try arena.print("--{s}", .{p[0..sp]}));
         if (sp < p.len) try out.append(arena, std.mem.trim(u8, p[sp..], " \t\"'"));
     }
     return out.items;
@@ -522,7 +522,7 @@ fn parseDraft(arena: std.mem.Allocator, champs: *const Champions, args: []const 
                 var item = std.mem.trim(u8, raw, " \t\"'");
                 if (item.len == 0) continue;
                 var role: ?usize = null;
-                if (std.mem.indexOfScalar(u8, item, '=')) |eq| {
+                if (std.mem.findScalar(u8, item, '=')) |eq| {
                     const rn = std.mem.trim(u8, item[0..eq], " \t");
                     role = if (core.Role.parse(rn)) |r| @backingInt(r) else {
                         try w.print("unknown role {s}\n", .{rn});

@@ -33,7 +33,7 @@ fn forFit(ctx: *const anyopaque, gpa: Allocator, t: *const api.Train, seed: u64)
         (try counts.getOrPutValue(gpa, key(c, r), 0)).value_ptr.* += 1;
     };
     for (blocks) |b| {
-        const path = try std.fmt.allocPrint(gpa, "{s}/emb-{s}-s{d}.tsv", .{ d.path, b, seed });
+        const path = try gpa.print("{s}/emb-{s}-s{d}.tsv", .{ d.path, b, seed });
         defer gpa.free(path);
         const text = Io.Dir.cwd().readFileAlloc(d.io, path, gpa, .limited(64 << 20)) catch |err| switch (err) {
             error.FileNotFound => continue,

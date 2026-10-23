@@ -302,8 +302,8 @@ fn seat(p: Participant, top: Top, items: ?*const std.AutoHashMapUnmanaged(u32, [
 
 /// "16.20.712.3456" -> "16.20"
 fn patchOf(version: []const u8) []const u8 {
-    const first = std.mem.indexOfScalar(u8, version, '.') orelse return version;
-    const second = std.mem.indexOfScalarPos(u8, version, first + 1, '.') orelse return version;
+    const first = std.mem.findScalar(u8, version, '.') orelse return version;
+    const second = std.mem.findScalarPos(u8, version, first + 1, '.') orelse return version;
     return version[0..second];
 }
 
@@ -327,7 +327,7 @@ fn loadItems(gpa: Allocator, arena: Allocator, io: Io, dir_path: []const u8, out
         for (parsed.data.map.keys(), parsed.data.map.values()) |k, item| {
             const id = std.fmt.parseInt(u32, k, 10) catch continue;
             var f: [flag_names.len]bool = undefined;
-            for (&f, flag_text) |*x, t| x.* = std.mem.indexOf(u8, item.description, t) != null;
+            for (&f, flag_text) |*x, t| x.* = std.mem.find(u8, item.description, t) != null;
             try m.put(gpa, id, f);
         }
         if (m.count() == 0) return error.NoDataDragon;
@@ -345,7 +345,7 @@ pub fn fill(io: Io, snap: []const u8, comptime which: enum { seat, team }, sink:
         .team => .{ team_file, team_header, team_count },
     };
     var path_buf: [std.fs.max_path_bytes]u8 = undefined;
-    const path = try std.fmt.bufPrint(&path_buf, "{s}/{s}", .{ snap, name });
+    const path = try std.mem.print(&path_buf, "{s}/{s}", .{ snap, name });
     var file = Io.Dir.cwd().openFile(io, path, .{}) catch |err| switch (err) {
         error.FileNotFound => return null,
         else => return err,

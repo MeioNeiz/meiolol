@@ -330,7 +330,7 @@ pub const Offsets = struct {
 
     pub fn get(o: *const Offsets, gpa: Allocator, io: Io, d: *const rows.Data, players: []const harness.Players, c: harness.Cuts, before: i64, hi: i64) ![]f64 {
         var nb: [64]u8 = undefined;
-        const name = try std.fmt.bufPrint(&nb, "offsets-{d}-{d}", .{ before, hi });
+        const name = try std.mem.print(&nb, "offsets-{d}-{d}", .{ before, hi });
         const out = try gpa.alloc(f64, d.games.len);
         errdefer gpa.free(out);
         const io_ = struct {
@@ -787,7 +787,7 @@ fn membersOf(gpa: Allocator, p: *const comps.Profiles, ids: *const [ng][]const u
         for (keys.items) |k| if ((k & 7) == role) {
             var mask: u32 = 0;
             for (ids, 0..) |list, g| {
-                if (std.mem.indexOfScalar(u32, list, @intCast(k >> 3)) != null) mask |= @as(u32, 1) << @intCast(g);
+                if (std.mem.findScalar(u32, list, @intCast(k >> 3)) != null) mask |= @as(u32, 1) << @intCast(g);
             }
             try mine.append(gpa, k);
             try masks.append(gpa, mask);
@@ -970,7 +970,7 @@ fn bhPass(m: *const Model, cc: Clear, ci: usize, f: usize) bool {
 }
 
 fn featureName(buf: []u8, f: usize) []const u8 {
-    return std.fmt.bufPrint(buf, "{s}:{s}", .{ if (f < nt) "enemy" else "ally", trait_names[f % nt] }) catch "?";
+    return std.mem.print(buf, "{s}:{s}", .{ if (f < nt) "enemy" else "ally", trait_names[f % nt] }) catch "?";
 }
 
 pub fn loadNames(gpa: Allocator, arena: Allocator, snap: []const u8) !std.AutoHashMapUnmanaged(u32, []const u8) {
@@ -1262,7 +1262,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     var windows: [harness.folds + 1]Window = undefined;
     for (1..harness.folds + 1) |k| {
         const f = c.fold(k);
-        windows[k - 1] = .{ .label = try std.fmt.allocPrint(arena, "fold {d}", .{k}), .before = f.lo, .lo = f.lo, .hi = f.hi };
+        windows[k - 1] = .{ .label = try arena.print("fold {d}", .{k}), .before = f.lo, .lo = f.lo, .hi = f.hi };
     }
     windows[harness.folds] = .{ .label = "dev-val", .before = c.dev, .lo = c.dev, .hi = c.test_ };
 
@@ -1307,7 +1307,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     for (windows, &outs, 0..) |win, *o, wi| {
         const model = &o.model.?;
         var lb: [8]u8 = undefined;
-        const block = if (wi == harness.folds) "dev" else try std.fmt.bufPrint(&lb, "{d}", .{wi + 1});
+        const block = if (wi == harness.folds) "dev" else try std.mem.print(&lb, "{d}", .{wi + 1});
         try writePreds(&pw.interface, d, model, &o.score_u, block);
         if (groups_on) {
             var mp: std.ArrayList(f64) = .empty;
@@ -1414,7 +1414,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
         const slope = if (all_loo.tt > 0) all_loo.td / all_loo.tt else nan;
         const slope_se = if (all_loo.tt > 0) 1 / @sqrt(all_loo.tt) else nan;
         try w.print("leave one member out, all: {d} members, closer {d}, sse {d:.2}, slope {d:.2} ± {d:.2}\n", .{ all_loo.n, all_loo.closer, all_loo.sse, slope, 1.96 * slope_se });
-        group_text = try std.fmt.bufPrint(&group_buf, " groups={d:.5}±{d:.5} groups_better={d}/{d} member_games={d:.5}±{d:.5} member_better={d}/{d} member_devval={d:.5}±{d:.5} loo_sse={d:.2} loo_slope={d:.2}±{d:.2} loo_closer={d}/{d}{s}", .{
+        group_text = try std.mem.print(&group_buf, " groups={d:.5}±{d:.5} groups_better={d}/{d} member_games={d:.5}±{d:.5} member_better={d}/{d} member_devval={d:.5}±{d:.5} loo_sse={d:.2} loo_slope={d:.2}±{d:.2} loo_closer={d}/{d}{s}", .{
             pooled_g[0].mean,                   pooled_g[0].half,                   gb[0],       harness.folds, pooled_g[1].mean, pooled_g[1].half, gb[1],     harness.folds,
             group_gains[harness.folds][1].mean, group_gains[harness.folds][1].half, all_loo.sse, slope,         1.96 * slope_se,  all_loo.closer,   all_loo.n, if (group_shuffle != 0) " GROUP-SHUFFLED" else "",
         });
@@ -1480,7 +1480,7 @@ fn writeExport(
     const SeatRow = [2 + 1 + nt]f64;
     var features: [nf]Feature = undefined;
     for (&features, 0..) |*f, fi| {
-        const label = try std.fmt.allocPrint(arena, "{s} {s}", .{ if (fi < nt) "enemy" else "allies'", trait_words[fi % nt] });
+        const label = try arena.print("{s} {s}", .{ if (fi < nt) "enemy" else "allies'", trait_words[fi % nt] });
         f.* = .{ .name = try arena.dupe(u8, featureName(try arena.alloc(u8, 32), fi)), .label = label, .mean = sc.mean[fi], .sd = sc.sd[fi] };
     }
     // [champion, role, magic, dmg, v[1..]]: v[0] (AP share) is the set's, not a seat's
@@ -1725,7 +1725,7 @@ fn writeOutputs(
         try o.writeAll("feature\teffect_pp\tci_pp\tteams\n");
         for (0..nf) |f| {
             var nb: [32]u8 = undefined;
-            const name = std.fmt.bufPrint(&nb, "{s}:{s}", .{ if (f < nt) "enemy" else "own", trait_names[f % nt] }) catch "?";
+            const name = std.mem.print(&nb, "{s}:{s}", .{ if (f < nt) "enemy" else "own", trait_names[f % nt] }) catch "?";
             try o.print("{s}\t{d:.3}\t{d:.3}\t{d}\n", .{ name, m.team.beta[f] * pp_per_logit, 1.96 * m.team.se[f] * pp_per_logit, m.team.n });
         }
         try o.flush();
@@ -1775,7 +1775,7 @@ fn writeOutputs(
         .{ "enemy", 0, "Win into an enemy team with more of a trait, against the role's average champion" },
         .{ "ally", nt, "Win beside allies with more of a trait, against the role's average champion" },
     }) |side| {
-        const path = try std.fmt.allocPrint(arena, "effects-champcomp-{s}.tsv", .{side[0]});
+        const path = try arena.print("effects-champcomp-{s}.tsv", .{side[0]});
         var file = try cwd.createFile(io, path, .{});
         defer file.close(io);
         var b: [16 * 1024]u8 = undefined;

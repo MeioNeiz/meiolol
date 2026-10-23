@@ -75,7 +75,7 @@ pub fn run(
         defer for (outs[0..opened]) |*o| o.file.close(io);
         const files = [_][2][]const u8{ .{ "summaries", "jsonl" }, .{ "timelines", "jsonl" }, .{ "mastery", "tsv" } };
         for (files, &outs) |f, *o| {
-            const path = try std.fmt.allocPrint(arena, "{s}/{s}-{s}.{s}", .{ day_dir, f[0], name, f[1] });
+            const path = try arena.print("{s}/{s}-{s}.{s}", .{ day_dir, f[0], name, f[1] });
             try written.append(arena, path);
             o.file = try cwd.createFile(io, path, .{});
             opened += 1;
@@ -107,7 +107,7 @@ pub fn run(
 
     for (written.items) |path| {
         try zstd(gpa, io, &.{ "zstd", "-15", "--long=27", "-T0", "-q", "-f", "--rm", path });
-        try zstd(gpa, io, &.{ "zstd", "-t", "-q", "--long=27", try std.fmt.allocPrint(arena, "{s}.zst", .{path}) });
+        try zstd(gpa, io, &.{ "zstd", "-t", "-q", "--long=27", try arena.print("{s}.zst", .{path}) });
     }
 
     const index_path = try std.fs.path.join(arena, &.{ archive_dir, "index.tsv" });
@@ -213,12 +213,12 @@ fn readPack(gpa: std.mem.Allocator, io: Io, path: []const u8, sink: Sink, outs: 
 
 /// "raw-FROM-TO" -> the UTC day of TO, "YYYY-MM-DD"
 fn exportDay(arena: std.mem.Allocator, name: []const u8) ![]const u8 {
-    const dash = std.mem.lastIndexOfScalar(u8, name, '-') orelse return error.BadExportName;
+    const dash = std.mem.findScalarLast(u8, name, '-') orelse return error.BadExportName;
     const to = std.fmt.parseInt(i64, name[dash + 1 ..], 10) catch return error.BadExportName;
     const days: std.time.epoch.EpochDay = .{ .day = @intCast(@divFloor(to, std.time.s_per_day)) };
     const yd = days.calculateYearDay();
     const md = yd.calculateMonthDay();
-    return std.fmt.allocPrint(arena, "{d:0>4}-{d:0>2}-{d:0>2}", .{ yd.year, md.month.numeric(), md.day_index + 1 });
+    return arena.print("{d:0>4}-{d:0>2}-{d:0>2}", .{ yd.year, md.month.numeric(), md.day_index + 1 });
 }
 
 /// Whether metadata.participants (the PUUID list both summaries and timelines open
@@ -226,9 +226,9 @@ fn exportDay(arena: std.mem.Allocator, name: []const u8) ![]const u8 {
 fn mentionsForgotten(json: []const u8, forgotten: *const Forgotten) bool {
     if (forgotten.count() == 0) return false;
     const key = "\"participants\":[";
-    var i = (std.mem.indexOf(u8, json, key) orelse return false) + key.len;
+    var i = (std.mem.find(u8, json, key) orelse return false) + key.len;
     while (i < json.len and json[i] == '"') {
-        const end = std.mem.indexOfScalarPos(u8, json, i + 1, '"') orelse return false;
+        const end = std.mem.findScalarPos(u8, json, i + 1, '"') orelse return false;
         if (forgotten.contains(json[i + 1 .. end])) return true;
         i = end + 1;
         if (i < json.len and json[i] == ',') i += 1;
@@ -267,7 +267,7 @@ pub fn age(gpa: std.mem.Allocator, io: Io, archive_dir: []const u8, today: i64, 
         const marker = try std.fs.path.join(arena, &.{ archive_dir, d.name, "aged" });
         if (cwd.access(io, marker, .{})) |_| continue else |_| {}
         for (try archiveFiles(arena, io, archive_dir, d.name)) |path| {
-            if (std.mem.indexOf(u8, std.fs.path.basename(path), "mastery-") == 0) {
+            if (std.mem.find(u8, std.fs.path.basename(path), "mastery-") == 0) {
                 try cwd.deleteFile(io, path);
             } else _ = try rewrite(gpa, io, path, .blank);
         }
@@ -335,11 +335,11 @@ const Mode = union(enum) {
 /// line changed (compressed, tested, then renamed over it). Returns the lines changed
 fn rewrite(gpa: std.mem.Allocator, io: Io, path: []const u8, mode: Mode) !usize {
     const cwd = Io.Dir.cwd();
-    const plain = try std.fmt.allocPrint(gpa, "{s}.plain", .{path});
+    const plain = try gpa.print("{s}.plain", .{path});
     defer gpa.free(plain);
-    const edited = try std.fmt.allocPrint(gpa, "{s}.edited", .{path});
+    const edited = try gpa.print("{s}.edited", .{path});
     defer gpa.free(edited);
-    const packed_path = try std.fmt.allocPrint(gpa, "{s}.edited.zst", .{path});
+    const packed_path = try gpa.print("{s}.edited.zst", .{path});
     defer gpa.free(packed_path);
     defer for ([_][]const u8{ plain, edited, packed_path }) |p| cwd.deleteFile(io, p) catch {};
     try zstd(gpa, io, &.{ "zstd", "-d", "-q", "-f", "--long=27", path, "-o", plain });
@@ -361,7 +361,7 @@ fn rewrite(gpa: std.mem.Allocator, io: Io, path: []const u8, mode: Mode) !usize 
             switch (mode) {
                 .forget => |set| {
                     const drop = if (tsv)
-                        set.contains(line[0 .. std.mem.indexOfScalar(u8, line, '\t') orelse line.len])
+                        set.contains(line[0 .. std.mem.findScalar(u8, line, '\t') orelse line.len])
                     else
                         mentionsForgotten(line, set);
                     if (drop) {
@@ -394,19 +394,19 @@ fn blankPuuids(gpa: std.mem.Allocator, json: []const u8) ![]u8 {
     errdefer out.deinit(gpa);
     try out.appendSlice(gpa, json);
     const key = "\"participants\":[";
-    const list = std.mem.indexOf(u8, json, key) orelse return out.toOwnedSlice(gpa);
+    const list = std.mem.find(u8, json, key) orelse return out.toOwnedSlice(gpa);
     var ids: std.ArrayList([]const u8) = .empty;
     defer ids.deinit(gpa);
     var i = list + key.len;
     while (i < json.len and json[i] == '"') {
-        const end = std.mem.indexOfScalarPos(u8, json, i + 1, '"') orelse break;
+        const end = std.mem.findScalarPos(u8, json, i + 1, '"') orelse break;
         if (end > i + 1) try ids.append(gpa, json[i + 1 .. end]);
         i = end + 1;
         if (i < json.len and json[i] == ',') i += 1;
     }
     for (ids.items) |id| {
         var from: usize = 0;
-        while (std.mem.indexOfPos(u8, out.items, from, id)) |at| {
+        while (std.mem.findPos(u8, out.items, from, id)) |at| {
             try out.replaceRange(gpa, at, id.len, "");
             from = at;
         }
@@ -462,7 +462,7 @@ test "a real timeline pseudonymises like a summary" {
     const after = try std.json.parseFromSlice(Doc, gpa, anon, .{ .ignore_unknown_fields = true });
     defer after.deinit();
     for (before.value.metadata.participants) |p| {
-        try testing.expect(std.mem.indexOf(u8, anon, p) == null);
+        try testing.expect(std.mem.find(u8, anon, p) == null);
     }
     const first = anonymise.puuid(&salt, before.value.metadata.participants[0]);
     try testing.expectEqualStrings(&first, after.value.metadata.participants[0]);
@@ -558,7 +558,7 @@ test "forget and age rewrite archived files" {
     try zstd(gpa, io, &.{ "zstd", "-d", "-q", "-f", try arena.print("{s}.zst", .{summaries}), "-o", plain });
     const left = try cwd.readFileAlloc(io, plain, arena, .limited(1 << 20));
     try testing.expectEqual(1, std.mem.count(u8, left, "\n"));
-    try testing.expect(std.mem.indexOf(u8, left, &a) == null);
+    try testing.expect(std.mem.find(u8, left, &a) == null);
 
     // Past 24 months: ids blanked, mastery gone, done once
     const today = parseDay("2026-10-12").?;
@@ -566,7 +566,7 @@ test "forget and age rewrite archived files" {
     try testing.expectEqual(0, try age(gpa, io, base, today, 730));
     try zstd(gpa, io, &.{ "zstd", "-d", "-q", "-f", try arena.print("{s}.zst", .{summaries}), "-o", plain });
     const aged = try cwd.readFileAlloc(io, plain, arena, .limited(1 << 20));
-    try testing.expect(std.mem.indexOf(u8, aged, &b) == null);
+    try testing.expect(std.mem.find(u8, aged, &b) == null);
     try testing.expectError(error.FileNotFound, cwd.access(io, try arena.print("{s}.zst", .{mastery}), .{}));
 }
 

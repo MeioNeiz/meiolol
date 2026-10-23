@@ -91,7 +91,7 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8) !Summary {
 
     const cwd = Io.Dir.cwd();
     const out_path = try std.fs.path.join(arena, &.{ snap, file_name });
-    const tmp_path = try std.fmt.allocPrint(arena, "{s}.tmp", .{out_path});
+    const tmp_path = try arena.print("{s}.tmp", .{out_path});
     {
         var file = try cwd.createFile(io, tmp_path, .{});
         errdefer cwd.deleteFile(io, tmp_path) catch {};
@@ -129,7 +129,7 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8) !Summary {
 
 const Game = struct {
     game: rows.Game,
-    /// By slot: @intFromEnum(core.Role), 255 unknown
+    /// By slot: @backingInt(core.Role), 255 unknown
     roles: [10]u8,
     /// By slot: challenges.epicMonsterSteals, null without a summary
     steals: [10]?u16,

@@ -286,7 +286,7 @@ fn addUnits(
         try tanks.append(gpa, prof.get(r.champion, @backingInt(r.role)).tank);
     }
     std.mem.sort(f64, tanks.items, {}, std.sort.asc(f64));
-    const tank_cut = tanks.items[@intFromFloat(@as(f64, @floatFromInt(tanks.items.len)) * (1 - frontline_share))];
+    const tank_cut = tanks.items[@trunc(@as(f64, @floatFromInt(tanks.items.len)) * (1 - frontline_share))];
     prof.fallback_champ = 0;
     prof.fallback_role = 0;
     var role_lean: [5]f64 = undefined;
@@ -514,7 +514,7 @@ fn analyse(
         try tableHead(w, "magic share");
         for (0..4) |b| {
             for (in_a, units.items) |*a, u| a.* = u.magic_share >= edges[b] and u.magic_share < edges[b + 1];
-            try binRow(w, try std.fmt.allocPrint(arena, "{d:.0}-{d:.0}%", .{ edges[b] * 100, @min(edges[b + 1], 1) * 100 }), units.items, res, in_a);
+            try binRow(w, try arena.print("{d:.0}-{d:.0}%", .{ edges[b] * 100, @min(edges[b + 1], 1) * 100 }), units.items, res, in_a);
         }
         for (in_a, in_b, units.items) |*a, *b, u| {
             a.* = u.magic_share < 0.2 or u.magic_share >= 0.6;
@@ -547,7 +547,7 @@ fn analyse(
         try tableHead(w, "frontline");
         for (0..4) |b| {
             for (in_a, units.items) |*a, u| a.* = if (b == 3) u.frontline >= 3 else u.frontline == b;
-            try binRow(w, try std.fmt.allocPrint(arena, "{d}{s}", .{ b, if (b == 3) "+" else "" }), units.items, res, in_a);
+            try binRow(w, try arena.print("{d}{s}", .{ b, if (b == 3) "+" else "" }), units.items, res, in_a);
         }
         for (in_a, in_b, units.items) |*a, *b, u| {
             a.* = u.frontline == 0;
@@ -564,7 +564,7 @@ fn analyse(
         const edges = [_]f64{ -1, q[0], q[1], q[2], 2 };
         for (0..4) |b| {
             for (in_a, units.items) |*a, u| a.* = u.best_mitigated > edges[b] and u.best_mitigated <= edges[b + 1];
-            try binRow(w, try std.fmt.allocPrint(arena, "Q{d} ({d:.2}-{d:.2})", .{ b + 1, @max(edges[b], 0), @min(edges[b + 1], 1) }), units.items, res, in_a);
+            try binRow(w, try arena.print("Q{d} ({d:.2}-{d:.2})", .{ b + 1, @max(edges[b], 0), @min(edges[b + 1], 1) }), units.items, res, in_a);
         }
         for (in_a, in_b, units.items) |*a, *b, u| {
             a.* = u.best_mitigated <= q[0];
@@ -581,7 +581,7 @@ fn analyse(
         const edges = [_]f64{ -1, q[0], q[1], q[2], std.math.inf(f64) };
         for (0..4) |b| {
             for (in_a, units.items) |*a, u| a.* = u.cc > edges[b] and u.cc <= edges[b + 1];
-            try binRow(w, try std.fmt.allocPrint(arena, "Q{d} ({d:.1}-{d:.1})", .{ b + 1, @max(edges[b], 0), @min(edges[b + 1], 999) }), units.items, res, in_a);
+            try binRow(w, try arena.print("Q{d} ({d:.1}-{d:.1})", .{ b + 1, @max(edges[b], 0), @min(edges[b + 1], 999) }), units.items, res, in_a);
         }
         for (in_a, in_b, units.items) |*a, *b, u| {
             a.* = u.cc <= q[0];
@@ -599,7 +599,7 @@ fn analyse(
         const names = [_][]const u8{ "<30%", "30-50%", "50%+" };
         for (0..2) |fg| for (0..3) |eb| {
             for (in_a, units.items) |*a, u| a.* = (u.frontline >= 2) == (fg == 1) and u.enemy_magic_share >= edges[eb] and u.enemy_magic_share < edges[eb + 1];
-            try binRow(w, try std.fmt.allocPrint(arena, "{s}, {s}", .{ groups[fg], names[eb] }), units.items, res, in_a);
+            try binRow(w, try arena.print("{s}, {s}", .{ groups[fg], names[eb] }), units.items, res, in_a);
         };
         for (group, units.items) |*gr, u| gr.* = @intFromBool(u.frontline >= 2);
         const dd = interaction(units.items, resid, group);
@@ -618,7 +618,7 @@ fn analyse(
                 const t: usize = if (u.armour_lean <= q[0]) 0 else if (u.armour_lean <= q[1]) 1 else 2;
                 a.* = t == lg and u.enemy_magic_share >= edges[eb] and u.enemy_magic_share < edges[eb + 1];
             }
-            try binRow(w, try std.fmt.allocPrint(arena, "{s}, {s}", .{ groups[lg], names[eb] }), units.items, res, in_a);
+            try binRow(w, try arena.print("{s}, {s}", .{ groups[lg], names[eb] }), units.items, res, in_a);
         };
         for (group, units.items) |*gr, u| gr.* = if (u.armour_lean > q[1]) 1 else if (u.armour_lean <= q[0]) 0 else null;
         const dd = interaction(units.items, resid, group);
@@ -661,7 +661,7 @@ fn contrast(units: []const Unit, resid: []const f64, a: []const bool, b: ?[]cons
             sb += r;
         };
     }
-    if (na < 2 or (b != null and nb < 2)) return .{ .n = @intFromFloat(na) };
+    if (na < 2 or (b != null and nb < 2)) return .{ .n = @trunc(na) };
     const ma = sa / na;
     const mb = if (nb > 0) sb / nb else 0;
     var ss: f64 = 0;
@@ -686,7 +686,7 @@ fn contrast(units: []const Unit, resid: []const f64, a: []const bool, b: ?[]cons
         groups += 1;
     }
     const half = if (groups > 1) 1.96 * @sqrt(groups / (groups - 1) * ss) else std.math.inf(f64);
-    return .{ .n = @intFromFloat(na), .mean_p = sp / na, .est = ma - mb, .half = half };
+    return .{ .n = @trunc(na), .mean_p = sp / na, .est = ma - mb, .half = half };
 }
 
 /// Difference in differences: (group 1 minus group 0) into 50%+ enemy magic, minus the
@@ -873,7 +873,7 @@ fn strengthControl(gpa: std.mem.Allocator, arena: std.mem.Allocator, units: []co
         const vs_coin = contrast(units, coin, in_a, null);
         const vs_ratings = contrast(units, resid, in_a, null);
         try w.print("| Q{d} ({s}) | {d} | {d:.1}% | {d:.1}% | {d:.2} ± {d:.2} | {d:.2} ± {d:.2} |\n", .{
-            b + 1,                  try std.fmt.allocPrint(arena, "{d:.2} to {d:.2}", .{ @max(edges[b], -9), @min(edges[b + 1], 9) }),
+            b + 1,                  try arena.print("{d:.2} to {d:.2}", .{ @max(edges[b], -9), @min(edges[b + 1], 9) }),
             vs_coin.n,              100 * said / n,
             50 + vs_coin.est * 100, vs_coin.est * 100,
             vs_coin.half * 100,     vs_ratings.est * 100,

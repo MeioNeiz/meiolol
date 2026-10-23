@@ -567,8 +567,8 @@ fn quantiles(arena: Allocator, xs: []const f64) ![2]f64 {
     };
     if (n == 0) return .{ std.math.nan(f64), std.math.nan(f64) };
     std.mem.sort(f64, s[0..n], {}, std.sort.asc(f64));
-    const lo = s[@intFromFloat(@as(f64, @floatFromInt(n - 1)) * 0.025)];
-    const hi = s[@intFromFloat(@as(f64, @floatFromInt(n - 1)) * 0.975)];
+    const lo = s[@trunc(@as(f64, @floatFromInt(n - 1)) * 0.025)];
+    const hi = s[@trunc(@as(f64, @floatFromInt(n - 1)) * 0.975)];
     return .{ lo, hi };
 }
 
