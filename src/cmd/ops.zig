@@ -65,6 +65,10 @@ pub const usage_account =
     \\              delete NAME      the account, its sessions and invites (erasure)
     \\              invite ROLE      a one-use link for a new account (7 days)
     \\              reset NAME       a one-use link to set NAME's password (7 days)
+    \\              link ROLE        a sign-up link for many: email plus the shared password
+    \\                               (stdin, 10+ characters) makes an account with ROLE
+    \\              links            sign-up links and how often each was used
+    \\              revoke-links     every sign-up link stops working
     \\              list
     \\
 ;
@@ -74,18 +78,18 @@ pub fn cmdAccount(c: *Cmd) !u8 {
     const io = c.init.io;
     const arena = c.arena;
     const verb = c.next() orelse return error.Usage;
-    const Verb = enum { add, password, role, disable, enable, delete, invite, reset, list };
+    const Verb = enum { add, password, role, disable, enable, delete, invite, reset, list, link, links, @"revoke-links" };
     const v = std.meta.stringToEnum(Verb, verb) orelse return error.Usage;
     var name_buf: [accounts.username_max]u8 = undefined;
     const name: []const u8 = switch (v) {
-        .invite, .list => "",
+        .invite, .list, .link, .links, .@"revoke-links" => "",
         else => accounts.username(&name_buf, c.next() orelse return error.Usage) orelse {
-            std.log.err("username: 2 to 32 letters, digits, dots, dashes or underscores", .{});
+            std.log.err("username: 2 to 64 letters, digits and . _ - @ +", .{});
             return 2;
         },
     };
     const role: ?api.roles.Role = switch (v) {
-        .add, .role, .invite => api.roles.Role.parse(c.next() orelse return error.Usage) orelse return error.Usage,
+        .add, .role, .invite, .link => api.roles.Role.parse(c.next() orelse return error.Usage) orelse return error.Usage,
         else => null,
     };
     try c.noFlags();
@@ -106,17 +110,27 @@ pub fn cmdAccount(c: *Cmd) !u8 {
     }
     var hasher: accounts.Hasher = .{};
     switch (v) {
-        .add, .password => {
+        .add, .password, .link => {
             var in_buf: [1024]u8 = undefined;
             var stdin = std.Io.File.stdin().reader(io, &in_buf);
             const pw = std.mem.trimEnd(u8, try stdin.interface.allocRemaining(arena, .limited(1024)), "\r\n");
-            if (!accounts.passwordOk(pw)) {
-                std.log.err("password on stdin: {d} to {d} characters", .{ accounts.password_min, accounts.password_max });
+            const min: usize = if (v == .link) accounts.secret_min else accounts.password_min;
+            if (pw.len < min or pw.len > accounts.password_max) {
+                std.log.err("password on stdin: {d} to {d} characters", .{ min, accounts.password_max });
                 return 1;
             }
             var phc_buf: [128]u8 = undefined;
             const phc = try hasher.hash(c.init.gpa, io, pw, &phc_buf);
-            if (v == .add) {
+            if (v == .link) {
+                const t = accounts.makeLink(db, io, role.?, phc, "cli", now) catch |err| switch (err) {
+                    error.BadRole => {
+                        std.log.err("no sign-up link for the owner", .{});
+                        return 1;
+                    },
+                    else => return err,
+                };
+                try out.print("https://meio.lol/signup#{s}\n", .{&t});
+            } else if (v == .add) {
                 _ = accounts.create(db, name, phc, role.?, now) catch |err| switch (err) {
                     error.Taken, error.OwnerExists => {
                         std.log.err("{s}: {t}", .{ name, err });
@@ -151,6 +165,16 @@ pub fn cmdAccount(c: *Cmd) !u8 {
                 try out.print("{s}\t{s}\t{s}\tcreated {d}\tlast seen {?d}\n", .{ r.username, r.role, if (r.disabled) "disabled" else "active", r.created, r.last_seen });
             }
         },
+        .links => {
+            var q = try db.prepare("SELECT role, by, created, uses, revoked FROM signup_links ORDER BY created");
+            defer q.deinit();
+            try q.bind(.{});
+            while (try q.step()) {
+                const r = q.row(struct { role: []const u8, by: []const u8, created: i64, uses: i64, revoked: bool });
+                try out.print("{s}\tby {s}\tcreated {d}\tused {d}\t{s}\n", .{ r.role, r.by, r.created, r.uses, if (r.revoked) "revoked" else "live" });
+            }
+        },
+        .@"revoke-links" => try accounts.revokeLinks(db),
     }
     return 0;
 }

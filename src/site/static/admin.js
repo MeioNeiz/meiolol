@@ -588,6 +588,10 @@ let L = null, liveErr = null, liveAt = 0;
 let TRAFFIC = null, trafficErr = null;
 let TRAIN = null, trainErr = null;
 let DESKTOP = null;
+// The signed-in account (/auth/me, src/api/accounts.zig): the controls show only for a role
+// with run_actions, which the box checks again (admin_api.zig mayAct)
+let ME = null;
+const canAct = () => !!(ME && ME.can.includes("run_actions"));
 const runCache = new Map();
 
 async function fetchOk(path) {
@@ -597,6 +601,11 @@ async function fetchOk(path) {
 }
 const getJson = async path => (await fetchOk(path)).json();
 const getText = async path => (await fetchOk(path)).text();
+
+async function logOut() {
+  await fetch("/auth/logout", { method: "POST", headers: { "X-Meiolol-Action": "1" }, credentials: "same-origin" }).catch(() => {});
+  location.assign("/login.html");
+}
 
 async function pollLive() {
   try { L = await getJson("api/live.json"); liveErr = null; liveAt = nowS(); } catch (e) { liveErr = e.message; }
@@ -764,6 +773,7 @@ function render(keep) {
       `${uk(ui.zoom[0])} to ${uk(ui.zoom[1])}`, el("span", { "aria-hidden": "true" }, " ×")));
   }
   controls.append(desktopLink());
+  if (ME) controls.append(el("span", { class: "sub" }, ME.username), el("button", { type: "button", class: "ghost", onclick: logOut }, "Log out"));
   controls.append(el("button", { type: "button", class: "ghost", title: "Fetch everything now", onclick: () => refreshAll() }, "Refresh"));
   top.append(controls);
   const nav = el("nav", { class: "tabs", "aria-label": "Sections" });
@@ -2064,6 +2074,7 @@ const ACTIONS = {
 let actionBusy = null, actionResult = null;
 
 function actionButton(name, label, opts = {}) {
+  if (!canAct()) return null;
   return el("button", {
     type: "button", class: "action" + (opts.danger ? " danger" : ""), disabled: opts.disabled || !!actionBusy || !L,
     title: L ? null : "The live API is unavailable", onclick: () => runAction(name, opts.confirm),
@@ -2135,7 +2146,7 @@ VIEWS.ops = body => {
       el("b", {}, `${ACTIONS[actionResult.name] || actionResult.name}: ${actionResult.ok ? "done" : "failed"}`),
       actionResult.output ? el("pre", {}, actionResult.output) : null));
   }
-  cards.append(act);
+  if (canAct()) cards.append(act);
   if (L && L.actions && L.actions.length) {
     const h = el("details", { open: true }, el("summary", {}, `Action history (${L.actions.length})`));
     sec.append(h);
@@ -2485,6 +2496,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) refr
 // The site's menu shows Jacob a link here (src/site/html.zig admin_link)
 store("link", { href: location.pathname + "#models/draft", label: "Draft tester (admin)" });
 render();
+getJson("/auth/me").then(m => { ME = m; render(true); }).catch(() => {});
 pollLive();
 pollTraffic();
 pollTraining();

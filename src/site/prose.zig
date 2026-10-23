@@ -297,7 +297,8 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\<h1>Privacy policy</h1>
         \\<p class="muted">Last updated {updated}.</p>
         \\<h2>This website</h2>
-        \\<p>No accounts, no cookies, no analytics or advertising trackers. The hosting
+        \\<p>No analytics or advertising trackers, and no cookies unless you log in (see
+        \\<a href="#accounts">Accounts</a>). The hosting
         \\provider keeps standard request logs (IP address, time, page) for security and
         \\abuse prevention, for a limited time. The Daily Draft keeps your guesses, streak
         \\and archive in your own browser (local storage), and clearing site data removes
@@ -337,6 +338,14 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\you, your Riot ID in other players' games included, and keep only your encrypted
         \\identifier on a "do not collect" list so we never fetch your games or store your
         \\name again.</p>
+        \\<h2 id="accounts">Accounts</h2>
+        \\<p>Logins are only for people we invite to help run or test the site; there are no
+        \\public accounts. For each account we keep the email address or username used to log
+        \\in, a one-way hash of the password, its role, and when it was made and last used.
+        \\Logging in sets one cookie, which keeps you logged in for 30 days and does nothing
+        \\else; we store only a one-way hash of it. Nothing is ever sent to your email
+        \\address. To delete your account, write to the address below and we remove it and
+        \\its sessions.</p>
         \\<h2>The desktop app</h2>
         \\<p>The desktop app is not released yet. When it is, it will read champ select from
         \\the League client running on your own PC and show lane information on screen. It

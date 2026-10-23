@@ -1,13 +1,15 @@
 //! /admin/api/ in `meiolol render`: live data, log tails and a few fixed actions for the
-//! admin page (src/site/static/admin.js). nginx asks for the basic auth password and adds
-//! X-Meiolol-Admin with the token in admin.token (cwd); without exactly that token, a
-//! request here is answered as if these routes did not exist. docs/hosting.md
+//! admin page (src/site/static/admin.js). nginx checks the login (/auth/check/view_admin)
+//! and adds X-Meiolol-Admin with the token in admin.token (cwd); without exactly that token,
+//! a request here is answered as if these routes did not exist. Actions also need the
+//! X-Meiolol-Role nginx passes on to have run_actions (the owner). docs/hosting.md
 
 const std = @import("std");
 const store = @import("store");
 const admin = @import("admin.zig");
 const date = @import("date.zig");
 const tsvlog = @import("tsvlog.zig");
+const roles = @import("api/roles.zig");
 
 const Io = std.Io;
 const Request = std.http.Server.Request;
@@ -52,6 +54,7 @@ pub fn handle(api: *Api, request: *Request) !bool {
         if (request.head.method != .POST) return reply(request, .method_not_allowed, "text/plain; charset=utf-8", "method not allowed\n");
         const flag = header(request, "x-meiolol-action") orelse "";
         if (!std.mem.eql(u8, flag, "1")) return reply(request, .forbidden, "text/plain; charset=utf-8", "forbidden\n");
+        if (!mayAct(header(request, "x-meiolol-role"))) return reply(request, .forbidden, "text/plain; charset=utf-8", "your role cannot run actions\n");
         const action = find(path["action/".len..]) orelse return reply(request, .not_found, "text/plain; charset=utf-8", "not found\n");
         try runAction(api, request, action);
         return true;
@@ -86,6 +89,20 @@ pub fn allowed(api: *Api, request: *Request) bool {
     var token_buf: [256]u8 = undefined;
     const token = Io.Dir.cwd().readFile(api.io, token_file, &token_buf) catch null;
     return authorised(token, header(request, "x-meiolol-admin"));
+}
+
+/// nginx sets X-Meiolol-Role from the session (src/api/accounts.zig /auth/check); without
+/// one, as from the old basic auth, no actions
+fn mayAct(role: ?[]const u8) bool {
+    const r = roles.Role.parse(role orelse return false) orelse return false;
+    return r.can(.run_actions);
+}
+
+test mayAct {
+    try std.testing.expect(mayAct("owner"));
+    try std.testing.expect(!mayAct("admin"));
+    try std.testing.expect(!mayAct(null));
+    try std.testing.expect(!mayAct(""));
 }
 
 /// The header's value; null when absent or sent more than once

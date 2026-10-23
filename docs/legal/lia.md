@@ -137,7 +137,7 @@ profiling or tracking, and the same right to object.
   a profile icon check and removes the player within minutes, their Riot ID in other
   players' games included, then keeps them on a "do not collect" list, so their name is
   never stored again (C9, C12)
-- No cookies, ads or analytics; server logs kept 14 days
+- No ads or analytics; a session cookie only for invited logins; server logs kept 14 days
 - Data held in the UK; never sold or shared
 - Never infer hidden matchmaking rating, never show players hidden by the game: no live
   games, no champ select names (C3)

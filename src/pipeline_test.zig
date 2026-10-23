@@ -234,7 +234,7 @@ test "fixture games to stats, curves and the website" {
         // points or gold amounts); reasons from the list Learn uses; option cards and lane
         // rows that static/daily.js fills
         .{ "daily.html", &.{ "from recent games", "95% sure it is not even", "two standard errors on 200+ games", "<div id=\"options\" class=\"dd-options\"></div>", "<ul id=\"lanes\" class=\"dd-lanes\"></ul>", "<script src=\"reasons.js\" defer></script>", "<p id=\"crowd\" class=\"muted dd-crowd-note\" hidden></p>" } },
-        .{ "privacy.html", &.{ "the date\nshown is the puzzle's, not the game's", "we keep only each puzzle's totals" } },
+        .{ "privacy.html", &.{ "the date\nshown is the puzzle's, not the game's", "we keep only each puzzle's totals", "<h2 id=\"accounts\">Accounts</h2>" } },
         // Learn: lessons and practice as tabs, a lesson a screen with its own nav, practice
         // levels (learn.js draws them)
         .{ "learn.html", &.{ "<section id=\"puzzles\" data-view=\"puzzles\">", "<script type=\"application/json\" id=\"puzzle-data\">[{\"id\":\"know\"", "\"id\":\"luck\"", "<ol class=\"pz-list nojs\">", "<section id=\"practice\" data-view=\"practice\">", "<div class=\"lesson-nav\"></div>", "id=\"p-levels\"", "<article class=\"card lesson\" id=\"lesson-roles\"" } },
@@ -401,6 +401,13 @@ test "fixture games to stats, curves and the website" {
         }
     }
     try testing.expect(checked > 50);
+    // The account pages (site/account.zig): rendered on request only, never indexed
+    for ([_][]const u8{ "login.html", "signup.html", "join.html" }) |p| {
+        const page = try loaded.get(arena, p) orelse return error.TestUnexpectedResult;
+        try testing.expect(std.mem.find(u8, page, "<meta name=\"robots\" content=\"noindex\">") != null);
+        try testing.expect(std.mem.find(u8, page, "<form id=\"auth\" class=\"auth-form\" data-kind=\"") != null);
+        try testing.expect(std.mem.find(u8, page, "<script src=\"account.js\" defer></script>") != null);
+    }
     // `meiolol site --views` and `render` reading it: the same bytes for every file
     {
         for (site.html.View.all) |v| try loaded.loadView(v);

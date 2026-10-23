@@ -1222,3 +1222,6 @@ table.mu-table .vs b { color: var(--c); font-weight: 600; }
 .mo-fold > summary:hover { color: var(--text); }
 /* Wraps, as td is nowrap: on one line it widened the lane table past a phone screen */
 small.among { display: block; margin: 2px 0 0 auto; max-width: 8em; font-size: 11px; line-height: 1.3; color: var(--faint); white-space: normal; }
+.auth-form { display: grid; gap: 14px; max-width: 360px; margin: 16px 0; }
+.auth-form label { display: grid; gap: 4px; font-weight: 500; }
+.auth-form .hint { color: var(--muted); font-size: 13px; font-weight: 400; }

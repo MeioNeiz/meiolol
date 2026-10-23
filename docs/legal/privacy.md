@@ -20,8 +20,9 @@ published: no personal email on the site).
   dropping accounts it has erased. Implemented by meiolol-de: ladders refresh daily,
   mastery at least every 30 days, and a 404 for a PUUID deletes the player at once
 - **Children.** League is played by teenagers. The UK Age Appropriate Design Code may
-  apply to a site likely to be used by under-18s. This site has no accounts, ads or
-  tracking, which is most of what the code asks for. Not researched beyond that
+  apply to a site likely to be used by under-18s. This site has no public accounts, ads or
+  tracking, which is most of what the code asks for (logins are for invited testers and
+  admins only). Not researched beyond that
 - **EU transfers.** Data is stored in the UK (home server and Oracle Cloud London). The EU
   treats the UK as adequate, so no extra safeguards are needed; check that this still
   holds when publishing
@@ -45,7 +46,9 @@ who is the controller of the data described here. Contact: privacy@meio.lol.
 
 ## The short version
 
-- No accounts, no cookies, no advertising, no analytics trackers
+- No public accounts, no advertising, no analytics trackers; logins (one session cookie)
+  only for people we invite: email or username, password hash, role, created and last
+  used, deleted on request (`meiolol account delete`)
 - The public pages show champion and aggregate statistics, and Daily Draft games with
   players shown only as seats (no names); a player's games, with the Riot IDs of the
   players in them, appear only when someone looks up their Riot ID

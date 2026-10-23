@@ -5,6 +5,7 @@ const std = @import("std");
 const core = @import("core");
 pub const html = @import("html.zig");
 const prose = @import("prose.zig");
+const account_page = @import("account.zig");
 const daily_page = @import("daily.zig");
 const your_page = @import("your.zig");
 const daily = @import("../daily.zig");
@@ -338,6 +339,7 @@ pub const shared_assets = [_]File{
     .{ .path = "table.js", .data = @embedFile("static/table.js") },
     .{ .path = "filters.js", .data = @embedFile("static/filters.js") },
     .{ .path = "search.js", .data = @embedFile("static/search.js") },
+    .{ .path = "account.js", .data = @embedFile("static/account.js") },
 };
 /// And in every view's directory
 pub const view_assets = [_]File{
@@ -477,10 +479,17 @@ pub fn renderShared(site: *const Site, w: *Writer, path: []const u8) !bool {
         .{ "your.html", "Your games", "Look yourself up: your lane in each recent ranked game against how the matchup typically goes, with your highlights, streaks and record per matchup.", .your, your_page.page },
         .{ "privacy.html", "Privacy policy", "What meiolol collects and why.", .none, prose.privacy },
         .{ "terms.html", "Terms of use", "Terms for using meiolol.", .none, prose.terms },
+        .{ "login.html", "Log in", "Log in to meiolol.", .none, account_page.login },
+        .{ "signup.html", "Make your account", "Make a meiolol account from a sign-up link.", .none, account_page.signup },
+        .{ "join.html", "Set up your login", "Set up a meiolol login from an invite link.", .none, account_page.join },
     };
     for (fixed) |f| {
         if (!std.mem.eql(u8, path, f[0])) continue;
-        const p = try site.sharedPage(try site.arena.print("{s} | meiolol", .{f[1]}), f[2], f[3]);
+        var p = try site.sharedPage(try site.arena.print("{s} | meiolol", .{f[1]}), f[2], f[3]);
+        // The account pages: not in shared_pages (the sitemap), never indexed
+        p.index = for (shared_pages) |s| {
+            if (std.mem.eql(u8, s, f[0])) break true;
+        } else false;
         try html.head(w, p);
         try f[4](w, site.info());
         if (f[3] == .method) try evalchart.section(w, site.eval);

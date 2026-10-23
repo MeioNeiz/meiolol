@@ -9,6 +9,8 @@
 //!   GET  /auth/me         {"username","role","can":[...]}, or 401
 //!   POST /auth/join       {"invite","username","password"}: a new account, or a new
 //!                         password for a reset invite's account; signs in
+//!   POST /auth/signup     {"link","email","password"}: a new account through a sign-up
+//!                         link, whose password is the link's shared one; signs in
 //!   GET  /auth/check/CAP  204 with X-Meiolol-User and X-Meiolol-Role when the session's
 //!                         role has CAP (roles.zig); 401 without a session, 403 without CAP
 
@@ -62,6 +64,19 @@ pub const schema =
     \\    by TEXT NOT NULL,
     \\    expires INTEGER NOT NULL
     \\) WITHOUT ROWID;
+    \\
+    \\-- Many uses, until revoked: anyone with the link and its shared password (secret:
+    \\-- argon2id PHC) makes an account with `role`, the email as username (Jacob 23 Oct, for
+    \\-- admins)
+    \\CREATE TABLE IF NOT EXISTS signup_links (
+    \\    hash BLOB PRIMARY KEY,
+    \\    role TEXT NOT NULL,
+    \\    secret TEXT NOT NULL,
+    \\    by TEXT NOT NULL,
+    \\    created INTEGER NOT NULL,
+    \\    uses INTEGER NOT NULL DEFAULT 0,
+    \\    revoked INTEGER NOT NULL DEFAULT 0
+    \\) WITHOUT ROWID;
 ;
 
 pub fn open(path: [:0]const u8) !Db {
@@ -83,15 +98,17 @@ pub const Token = [token_len]u8;
 const max_body = 4096;
 pub const password_min = 8;
 pub const password_max = 256;
-pub const username_max = 32;
+pub const username_max = 64;
+/// A sign-up link's shared password
+pub const secret_min = 10;
 
-/// Lower case letters, digits, '.', '_' and '-', 2 to 32 long, lower-cased into `buf`;
-/// null otherwise
+/// Lower case letters, digits and . _ - @ +, 2 to 64 long (an email fits), lower-cased
+/// into `buf`; null otherwise
 pub fn username(buf: *[username_max]u8, name: []const u8) ?[]const u8 {
     if (name.len < 2 or name.len > username_max) return null;
     for (name, 0..) |ch, i| {
         const l = std.ascii.toLower(ch);
-        if (!std.ascii.isAlphanumeric(l) and l != '.' and l != '_' and l != '-') return null;
+        if (!std.ascii.isAlphanumeric(l) and std.mem.findScalar(u8, "._-@+", l) == null) return null;
         buf[i] = l;
     }
     return buf[0..name.len];
@@ -99,6 +116,16 @@ pub fn username(buf: *[username_max]u8, name: []const u8) ?[]const u8 {
 
 pub fn passwordOk(password: []const u8) bool {
     return password.len >= password_min and password.len <= password_max;
+}
+
+/// Loosely: something@something.tld, one @. The address is only a username here: nothing
+/// is ever mailed to it
+pub fn isEmail(name: []const u8) bool {
+    const at = std.mem.findScalar(u8, name, '@') orelse return false;
+    if (std.mem.findScalarLast(u8, name, '@') != at or at == 0) return false;
+    const domain = name[at + 1 ..];
+    const dot = std.mem.findScalarLast(u8, domain, '.') orelse return false;
+    return dot > 0 and dot + 1 < domain.len;
 }
 
 fn newToken(io: Io) !Token {
@@ -272,6 +299,34 @@ fn invite(db: Db, token: []const u8, now: i64, take: bool) !?Invite {
     return inv;
 }
 
+/// `secret_phc`: the shared password's hash (Hasher.hash). Never for the owner
+pub fn makeLink(db: Db, io: Io, role: Role, secret_phc: []const u8, by: []const u8, now: i64) !Token {
+    if (role == .owner) return error.BadRole;
+    const t = try newToken(io);
+    const h = tokenHash(&t);
+    try db.run("INSERT INTO signup_links (hash, role, secret, by, created) VALUES (?, ?, ?, ?, ?)", .{ Blob{ .bytes = &h }, @tagName(role), secret_phc, by, now });
+    return t;
+}
+
+pub fn revokeLinks(db: Db) !void {
+    try db.run("UPDATE signup_links SET revoked = 1", .{});
+}
+
+pub const Link = struct { role: Role, secret: []const u8 };
+
+/// A live sign-up link; strings in `arena`
+fn signupLink(db: Db, arena: Allocator, token: []const u8) !?Link {
+    const h = tokenHash(token);
+    var q = try db.prepare("SELECT role, secret FROM signup_links WHERE hash = ? AND revoked = 0");
+    defer q.deinit();
+    try q.bind(.{Blob{ .bytes = &h }});
+    if (!try q.step()) return null;
+    const r = q.row(struct { role: []const u8, secret: []const u8 });
+    const role = Role.parse(r.role) orelse return error.BadRole;
+    if (role == .owner) return error.BadRole;
+    return .{ .role = role, .secret = try arena.dupe(u8, r.secret) };
+}
+
 /// Failed logins, in memory (no IPs kept). After `free_fails` for a username each try
 /// waits a minute, doubling to an hour, until one succeeds; past `max_per_minute` fails
 /// across all usernames, everyone waits for the next minute
@@ -406,7 +461,7 @@ pub const Service = struct {
 
     pub fn route(s: *Service, arena: Allocator, in: In, now: i64) !Out {
         const post = in.method == .POST;
-        const Route = enum { login, logout, me, join };
+        const Route = enum { login, logout, me, join, signup };
         const not_found: Out = .{ .status = .not_found, .body = errorJson("not found") };
         if (std.mem.startsWith(u8, in.path, "check/")) {
             if (in.method != .GET) return notAllowed();
@@ -426,6 +481,7 @@ pub const Service = struct {
                 return .{ .status = .ok, .body = try accountJson(arena, a) };
             },
             .join => s.join(arena, in, now),
+            .signup => s.signup(arena, in, now),
         };
     }
 
@@ -489,7 +545,7 @@ pub const Service = struct {
         const peek = try invite(db, token, now, false) orelse return bad_invite;
         var name_buf: [username_max]u8 = undefined;
         const name: ?[]const u8 = if (peek.account == null)
-            username(&name_buf, b.username) orelse return .{ .status = .bad_request, .body = errorJson("username: 2 to 32 letters, digits, dots, dashes or underscores") }
+            username(&name_buf, b.username) orelse return .{ .status = .bad_request, .body = errorJson("username: 2 to 64 letters, digits, dots, dashes or underscores") }
         else
             null;
         // Before the transaction: argon2 takes a while
@@ -517,6 +573,40 @@ pub const Service = struct {
         const t = try startSession(db, s.io, id, now);
         const a = try session(db, arena, &t, now) orelse return error.Unexpected;
         return .{ .status = .ok, .body = try accountJson(arena, a), .set_cookie = try sessionCookie(arena, &t) };
+    }
+
+    /// Wrong passwords count against the link (its first characters), as logins count
+    /// against a username: guessing the shared password is slow, whoever holds the link
+    fn signup(s: *Service, arena: Allocator, in: In, now: i64) !Out {
+        const Body = struct { link: []const u8, email: []const u8, password: []const u8 };
+        const b = parseBody(Body, arena, in.body) orelse return .{ .status = .bad_request, .body = errorJson("expected JSON with link, email and password") };
+        const bad_link: Out = .{ .status = .bad_request, .body = errorJson("this sign-up link no longer works") };
+        const token = parseToken(b.link) orelse return bad_link;
+        var name_buf: [username_max]u8 = undefined;
+        const name = username(&name_buf, std.mem.trim(u8, b.email, " ")) orelse "";
+        if (!isEmail(name)) return .{ .status = .bad_request, .body = errorJson("enter your email address") };
+        const key = try arena.print("signup:{s}", .{token[0..8]});
+        const wait = s.throttle.wait(s.io, key, now);
+        if (wait > 0) return .{ .status = .too_many_requests, .body = try std.json.Stringify.valueAlloc(arena, .{ .@"error" = "too many tries", .retry_s = wait }, .{}) };
+
+        const db = try open(s.db_path);
+        defer db.close();
+        const link = try signupLink(db, arena, token) orelse return bad_link;
+        if (!try s.hasher.verify(s.gpa, s.io, link.secret, b.password)) {
+            try s.throttle.failed(s.gpa, s.io, key, now);
+            return .{ .status = .unauthorized, .body = errorJson("wrong password") };
+        }
+        // Its own salt: the stored hash differs from the link's though the password is the same
+        var phc_buf: [128]u8 = undefined;
+        const phc = try s.hasher.hash(s.gpa, s.io, b.password, &phc_buf);
+        const id = create(db, name, phc, link.role, now) catch |err| switch (err) {
+            error.Taken => return .{ .status = .conflict, .body = errorJson("there is already an account with this email: log in instead") },
+            else => return err,
+        };
+        const h = tokenHash(token);
+        try db.run("UPDATE signup_links SET uses = uses + 1 WHERE hash = ?", .{Blob{ .bytes = &h }});
+        const t = try startSession(db, s.io, id, now);
+        return .{ .status = .ok, .body = try accountJson(arena, .{ .id = id, .username = name, .role = link.role }), .set_cookie = try sessionCookie(arena, &t) };
     }
 };
 
@@ -818,7 +908,58 @@ test username {
     try testing.expectEqualStrings("jacob.m_1-x", username(&buf, "Jacob.M_1-x").?);
     try testing.expectEqual(null, username(&buf, "a"));
     try testing.expectEqual(null, username(&buf, "has space"));
-    try testing.expectEqual(null, username(&buf, &@as([33]u8, @splat('x'))));
+    try testing.expectEqualStrings("a.b+c@mail.co.uk", username(&buf, "A.B+c@Mail.co.uk").?);
+    try testing.expectEqual(null, username(&buf, &@as([username_max + 1]u8, @splat('x'))));
+}
+
+test isEmail {
+    try testing.expect(isEmail("a@b.co"));
+    try testing.expect(isEmail("first.last+x@mail.co.uk"));
+    for ([_][]const u8{ "ab", "@b.co", "a@b", "a@.co", "a@b.", "a@b@c.co" }) |s| try testing.expect(!isEmail(s));
+}
+
+test "signup: the link and its shared password make accounts; wrong ones are slowed" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    const a = f.arena();
+    const now = Fixture.now;
+    var phc_buf: [128]u8 = undefined;
+    const link = try makeLink(f.db, testing.io, .admin, try f.service.hasher.hash(testing.allocator, testing.io, "shared secret", &phc_buf), "owner", now);
+    const T = struct {
+        fn body(ar: Allocator, l: []const u8, email: []const u8, password: []const u8) ![]const u8 {
+            return std.json.Stringify.valueAlloc(ar, .{ .link = l, .email = email, .password = password }, .{});
+        }
+        fn signup(fx: *Fixture, b: []const u8) !Out {
+            return fx.service.route(fx.arena(), .{ .method = .POST, .path = "signup", .action = true, .body = b }, Fixture.now);
+        }
+    };
+    const signup = T.signup;
+
+    const out = try signup(&f, try T.body(a, &link, " Pal@Mail.com ", "shared secret"));
+    try testing.expectEqual(Status.ok, out.status);
+    try testing.expect(std.mem.find(u8, out.body, "\"username\":\"pal@mail.com\",\"role\":\"admin\"") != null);
+    try testing.expectEqual(Status.no_content, try f.check(cookieValue(out.set_cookie.?).?, "view_admin"));
+    try testing.expectEqual(Status.forbidden, try f.check(cookieValue(out.set_cookie.?).?, "run_actions"));
+    try testing.expectEqual(Status.ok, (try f.login("pal@mail.com", "shared secret")).status);
+    // Many uses
+    try testing.expectEqual(Status.ok, (try signup(&f, try T.body(a, &link, "two@mail.com", "shared secret"))).status);
+    try testing.expectEqual(2, try f.db.scalar("SELECT uses FROM signup_links", .{}));
+
+    try testing.expectEqual(Status.conflict, (try signup(&f, try T.body(a, &link, "pal@mail.com", "shared secret"))).status);
+    try testing.expectEqual(Status.bad_request, (try signup(&f, try T.body(a, &link, "not an email", "shared secret"))).status);
+    var other = link;
+    other[0] = if (other[0] == 'A') 'B' else 'A';
+    try testing.expectEqual(Status.bad_request, (try signup(&f, try T.body(a, &other, "x@mail.com", "shared secret"))).status);
+
+    for (0..Throttle.free_fails) |_| try testing.expectEqual(Status.unauthorized, (try signup(&f, try T.body(a, &link, "x@mail.com", "guess"))).status);
+    try testing.expectEqual(Status.too_many_requests, (try signup(&f, try T.body(a, &link, "x@mail.com", "shared secret"))).status);
+    try testing.expectEqual(null, try find(f.db, a, "x@mail.com"));
+
+    try revokeLinks(f.db);
+    f.service.throttle.succeeded(testing.allocator, testing.io, try a.print("signup:{s}", .{link[0..8]}));
+    try testing.expectEqual(Status.bad_request, (try signup(&f, try T.body(a, &link, "y@mail.com", "shared secret"))).status);
+    try testing.expectError(error.BadRole, makeLink(f.db, testing.io, .owner, "x", "owner", now));
 }
 
 test cookieValue {
