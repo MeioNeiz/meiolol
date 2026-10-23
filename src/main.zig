@@ -81,6 +81,7 @@ const usage = usage_head ++
     cmd_site.usage_render ++
     cmd_site.usage_serve ++
     cmd_ops.usage_api ++
+    cmd_ops.usage_account ++
     cmd_ops.usage_your_example ++
     cmd_ops.usage_status ++
     cmd_ops.usage_admin ++
@@ -146,6 +147,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "dev", cmd_site.cmdDev },
     .{ "render", cmd_site.cmdRender },
     .{ "api", cmd_ops.cmdApi },
+    .{ "account", cmd_ops.cmdAccount },
     .{ "your-example", cmd_ops.cmdYourExample },
     .{ "status", cmd_ops.cmdStatus },
     .{ "admin", cmd_ops.cmdAdmin },

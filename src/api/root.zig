@@ -23,6 +23,8 @@ pub const cache = @import("cache.zig");
 pub const fetch = @import("fetch.zig");
 pub const game = @import("game.zig");
 pub const example = @import("example.zig");
+pub const accounts = @import("accounts.zig");
+pub const roles = @import("roles.zig");
 
 const Allocator = std.mem.Allocator;
 const log = std.log.scoped(.api);
@@ -30,6 +32,8 @@ const log = std.log.scoped(.api);
 pub const Options = struct {
     /// api.db
     db_path: [:0]const u8,
+    /// accounts.db (accounts.zig)
+    accounts_path: [:0]const u8 = "",
     /// Directory with curves-<patch>.bin files (`meiolol curves`); may be empty
     curves_dir: []const u8,
     host: []const u8 = "127.0.0.1",
@@ -59,13 +63,23 @@ const Context = struct {
     io: Io,
     opts: Options,
     curves: game.CurveSet,
+    accounts: accounts.Service,
 };
 
 pub fn run(gpa: Allocator, io: Io, opts: Options) !void {
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    var ctx: Context = .{ .gpa = gpa, .io = io, .opts = opts, .curves = try loadCurveSet(arena, io, opts.curves_dir) };
+    var ctx: Context = .{
+        .gpa = gpa,
+        .io = io,
+        .opts = opts,
+        .curves = try loadCurveSet(arena, io, opts.curves_dir),
+        .accounts = .{ .gpa = gpa, .io = io, .db_path = opts.accounts_path },
+    };
+    defer ctx.accounts.deinit();
+    // Schema now, so a broken accounts.db stops the service at start, not at a login
+    (try accounts.open(opts.accounts_path)).close();
 
     const db = try cache.open(opts.db_path);
     defer db.close();
@@ -93,7 +107,7 @@ test "idle keep-alive connections do not hold up the next request" {
     var threaded: Io.Threaded = .init(std.testing.allocator, .{ .async_limit = .nothing });
     defer threaded.deinit();
     const io = threaded.io();
-    var ctx: Context = .{ .gpa = std.testing.allocator, .io = io, .opts = .{ .db_path = "", .curves_dir = "" }, .curves = .{} };
+    var ctx: Context = .{ .gpa = std.testing.allocator, .io = io, .opts = .{ .db_path = "", .curves_dir = "" }, .curves = .{}, .accounts = .{ .gpa = std.testing.allocator, .io = io, .db_path = "" } };
     const address = try Io.net.IpAddress.parse("127.0.0.1", 0);
     var server = try address.listen(io, .{ .reuse_address = true });
     defer server.deinit(io);
@@ -240,6 +254,7 @@ fn handle(ctx: *Context, request: *std.http.Server.Request) !void {
     const query = if (q < target.len) target[q + 1 ..] else "";
     const method = request.head.method;
 
+    if (std.mem.startsWith(u8, path, "/auth/")) return ctx.accounts.handle(request);
     if (std.mem.eql(u8, path, "/api/games") and method == .GET) {
         const db = try cache.open(ctx.opts.db_path);
         defer db.close();
@@ -601,7 +616,7 @@ test "games: a visit refreshes after refresh_after_s, a check after check_after_
     defer arena_state.deinit();
     const arena = arena_state.allocator();
     const io = std.testing.io;
-    var ctx: Context = .{ .gpa = std.testing.allocator, .io = io, .opts = .{ .db_path = ":memory:", .curves_dir = "" }, .curves = .{} };
+    var ctx: Context = .{ .gpa = std.testing.allocator, .io = io, .opts = .{ .db_path = ":memory:", .curves_dir = "" }, .curves = .{}, .accounts = .{ .gpa = std.testing.allocator, .io = io, .db_path = "" } };
     const db = try cache.open(":memory:");
     defer db.close();
     const now = std.Io.Clock.real.now(io).toSeconds();

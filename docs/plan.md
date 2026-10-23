@@ -68,7 +68,7 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
    docs/privacy-rules.md lists what the text and privacy page must still match (J10)
 6. Accounts and two apps (J21, 22 Oct): roles public, paid, private, admin, owner;
    owner and private logins first, then a public app and a private, fuller one.
-   accounts.md AC1-AC3 can start now (Jacob: AC0 and the nginx OK); app.md APP2-APP4
+   AC1 (accounts core, 23 Oct) done, not deployed; AC2 needs Jacob's nginx OK; app.md APP2-APP4
    against the mock, APP1 (real capture) is Jacob's. Draft tester moves to the private
    site (app.md "Private site")
 7. Comp leans: held-out look ~24 Oct, then champion pages and reasons:

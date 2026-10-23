@@ -45,11 +45,113 @@ pub fn cmdApi(c: *Cmd) !u8 {
     const arena = c.arena;
     if (o.fetch.proxy == null) o.fetch.key = try c.apiKey();
     o.db_path = try arena.printSentinel("{s}/api.db", .{c.data_dir}, 0);
+    o.accounts_path = try arena.printSentinel("{s}/accounts.db", .{c.data_dir}, 0);
     o.curves_dir = curves_dir orelse if (o.fetch.exchange_dir) |x|
         try std.fs.path.join(arena, &.{ x, "curves" })
     else
         try std.fs.path.join(arena, &.{ c.data_dir, "export" });
     try api.run(c.init.gpa, c.init.io, o);
+    return 0;
+}
+
+pub const usage_account =
+    \\  account     logins in DIR/accounts.db (src/api/accounts.zig, roles.zig); on jomify
+    \\              --data /var/lib/meiolol-api. Roles: public paid private admin owner.
+    \\              Passwords come from stdin, e.g. read -rs P; printf %s "$P" | ...
+    \\              add NAME ROLE    a new account
+    \\              password NAME    a new password; signs it out everywhere
+    \\              role NAME ROLE
+    \\              disable NAME     and signs it out everywhere; enable NAME undoes it
+    \\              delete NAME      the account, its sessions and invites (erasure)
+    \\              invite ROLE      a one-use link for a new account (7 days)
+    \\              reset NAME       a one-use link to set NAME's password (7 days)
+    \\              list
+    \\
+;
+
+pub fn cmdAccount(c: *Cmd) !u8 {
+    const accounts = api.accounts;
+    const io = c.init.io;
+    const arena = c.arena;
+    const verb = c.next() orelse return error.Usage;
+    const Verb = enum { add, password, role, disable, enable, delete, invite, reset, list };
+    const v = std.meta.stringToEnum(Verb, verb) orelse return error.Usage;
+    var name_buf: [accounts.username_max]u8 = undefined;
+    const name: []const u8 = switch (v) {
+        .invite, .list => "",
+        else => accounts.username(&name_buf, c.next() orelse return error.Usage) orelse {
+            std.log.err("username: 2 to 32 letters, digits, dots, dashes or underscores", .{});
+            return 2;
+        },
+    };
+    const role: ?api.roles.Role = switch (v) {
+        .add, .role, .invite => api.roles.Role.parse(c.next() orelse return error.Usage) orelse return error.Usage,
+        else => null,
+    };
+    try c.noFlags();
+
+    const path = try arena.printSentinel("{s}/accounts.db", .{c.data_dir}, 0);
+    const db = try accounts.open(path);
+    defer db.close();
+    const now = std.Io.Clock.real.now(io).toSeconds();
+    var buf: [4096]u8 = undefined;
+    var stdout = std.Io.File.stdout().writer(io, &buf);
+    const out = &stdout.interface;
+    defer out.flush() catch {};
+
+    const found = if (name.len > 0) try accounts.find(db, arena, name) else null;
+    if (v != .add and name.len > 0 and found == null) {
+        std.log.err("no account {s}", .{name});
+        return 1;
+    }
+    var hasher: accounts.Hasher = .{};
+    switch (v) {
+        .add, .password => {
+            var in_buf: [1024]u8 = undefined;
+            var stdin = std.Io.File.stdin().reader(io, &in_buf);
+            const pw = std.mem.trimEnd(u8, try stdin.interface.allocRemaining(arena, .limited(1024)), "\r\n");
+            if (!accounts.passwordOk(pw)) {
+                std.log.err("password on stdin: {d} to {d} characters", .{ accounts.password_min, accounts.password_max });
+                return 1;
+            }
+            var phc_buf: [128]u8 = undefined;
+            const phc = try hasher.hash(c.init.gpa, io, pw, &phc_buf);
+            if (v == .add) {
+                _ = accounts.create(db, name, phc, role.?, now) catch |err| switch (err) {
+                    error.Taken, error.OwnerExists => {
+                        std.log.err("{s}: {t}", .{ name, err });
+                        return 1;
+                    },
+                    else => return err,
+                };
+            } else try accounts.setPassword(db, found.?.id, phc);
+        },
+        .role => accounts.setRole(db, found.?.id, role.?) catch |err| switch (err) {
+            error.OwnerExists => {
+                std.log.err("there is an owner already", .{});
+                return 1;
+            },
+            else => return err,
+        },
+        .disable, .enable => try accounts.setDisabled(db, found.?.id, v == .disable),
+        .delete => try accounts.remove(db, found.?.id),
+        .invite, .reset => {
+            const t = if (v == .invite)
+                try accounts.makeInvite(db, io, role.?, null, "cli", now)
+            else
+                try accounts.makeInvite(db, io, found.?.role, found.?.id, "cli", now);
+            try out.print("https://meio.lol/join#{s}\n", .{&t});
+        },
+        .list => {
+            var q = try db.prepare("SELECT username, role, disabled, created, last_seen FROM accounts ORDER BY id");
+            defer q.deinit();
+            try q.bind(.{});
+            while (try q.step()) {
+                const r = q.row(struct { username: []const u8, role: []const u8, disabled: bool, created: i64, last_seen: ?i64 });
+                try out.print("{s}\t{s}\t{s}\tcreated {d}\tlast seen {?d}\n", .{ r.username, r.role, if (r.disabled) "disabled" else "active", r.created, r.last_seen });
+            }
+        },
+    }
     return 0;
 }
 

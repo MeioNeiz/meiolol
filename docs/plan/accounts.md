@@ -15,8 +15,8 @@ Jacob 22 Oct: five, in order, each with everything the one before has.
 | public | the site, the public app once released (no login; a free signed-in account may come later, same role) | anything below |
 | paid | extras in the public site and app, within the public product rules (app.md "Policy line") | private pages, private app |
 | private | Jacob's friends and testers: private site pages (/p/), private app, read-only admin views opened to them | actions, logs, accounts, settings, raw data |
-| admin | /admin/, ops actions (crawl, site build, eval), manage public, paid and private accounts, desktop releases | other admins or the owner, irreversible things below |
-| owner | Jacob only: everything, plus admins, keys and secrets, billing, data deletion and restores, the Riot application | |
+| admin | everything private, /admin/ views, manage public, paid and private accounts | the admin page's controls (Jacob 23 Oct), other admins or the owner, irreversible things below |
+| owner | Jacob only: everything, plus the admin page's controls (crawl, site build, eval, health check), admins, keys and secrets, billing, data deletion and restores, the Riot application | |
 
 - One capability table in code (e.g. src/auth/roles.zig: view_paid, view_private,
   view_admin, run_actions, manage_accounts, manage_admins, manage_billing, delete_data,
@@ -47,8 +47,8 @@ Jacob 22 Oct: five, in order, each with everything the one before has.
 - Sessions: 32 random bytes in cookie `__Host-meiolol` (Secure, HttpOnly, SameSite=Lax),
   stored as SHA-256 with expiry (30 days, renewed on use). Sign out everywhere on the
   account page. Writes need header X-Meiolol-Action: 1, as the admin API does today
-- Second factor for admin and owner: TOTP (std HMAC; works with any authenticator app);
-  passkeys later if wanted
+- No second factor (Jacob 23 Oct): passwords only, Jacob sets admins' with `meiolol
+  account add`. Revisit if admins grow past friends
 - Login limits in memory: per username and overall, slower after 5 fails. No IPs stored
   (traffic logs keep none either)
 - nginx: `auth_request /_auth` on /admin/ (needs view_admin) and /p/ (needs
@@ -72,15 +72,23 @@ Jacob 22 Oct: five, in order, each with everything the one before has.
 Each step ends tested and deployed; nginx and systemd changes on jomify need Jacob's OK
 (how-we-work.md).
 
-- AC0 Jacob decides: the policy framing (app.md "Policy line"), TOTP for admin and
-  owner yes or no, who gets the first private accounts, whether anyone else will be admin
+- AC0 Jacob 23 Oct: go; no TOTP; other admins yes, with the admin views and everything
+  private but not the controls (run_actions owner only; "maybe some other stuff" later,
+  one line each in roles.zig). Still his: the policy framing (app.md "Policy line"),
+  who gets the first private accounts, the nginx OK for AC2
 - AC1 Accounts core in `meiolol api`: accounts.db schema and migration, argon2id,
   sessions, invites, /auth/login, /auth/logout, /auth/me, /auth/join, /_auth, the CLI.
   Tests: a route x role matrix (every route, every role, expected status), cookie flags,
   constant-time compares, invite reuse and expiry, lockout; fuzz the login body parser.
   Done when the matrix passes and `meiolol account` works against a scratch DB
+  Done 23 Oct (src/api/accounts.zig, roles.zig; `meiolol account add|password|role|
+  disable|enable|delete|invite|reset|list`): the check route is /auth/check/CAP (nginx
+  maps /_auth to it), tested by route x role and over HTTP; not deployed to jomify yet
 - AC2 Owner login live: /login page (src/site, no framework), nginx auth_request on
-  /admin/ for admin and owner, "Signed in as" in the admin header, sign out. Done when
+  /admin/ for admin and owner, "Signed in as" in the admin header, sign out. nginx
+  passes X-Meiolol-Role on to the renderer: admin_api.zig refuses action/ unless the
+  role has run_actions and admin.js hides the controls. accounts.db joins the web
+  server's backup. Done when
   Jacob signs in with his own account and the basic auth is only the fallback
 - AC3 Private tier: /p/ space (first pages: app.md "Private site"), invites, account page
   (password, devices, sign out everywhere), admin Accounts tab (list, invite, role,
