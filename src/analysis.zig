@@ -109,22 +109,12 @@ pub const TimelineGames = struct {
         patches: []const []const u8,
         platforms: []const []const u8,
     ) !TimelineGames {
-        return initSince(gpa, db, patches, platforms, 0);
+        return initWith(gpa, null, db, patches, platforms, 0);
     }
 
-    /// As init, games started from `since_ms` on (Riot ms timestamp)
-    pub fn initSince(
-        gpa: std.mem.Allocator,
-        db: store.Db,
-        patches: []const []const u8,
-        platforms: []const []const u8,
-        since_ms: i64,
-    ) !TimelineGames {
-        return initWith(gpa, null, db, patches, platforms, since_ms);
-    }
-
-    /// As initSince, each game's timeline as its digest gives it (riot/digest.zig cut):
-    /// for a pass that reads nothing a digest leaves out
+    /// As init, games started from `since_ms` on (Riot ms timestamp), each game's timeline
+    /// as its digest gives it (riot/digest.zig cut): for a pass that reads nothing a
+    /// digest leaves out
     pub fn initDigests(
         gpa: std.mem.Allocator,
         io: std.Io,
