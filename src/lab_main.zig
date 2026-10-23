@@ -15,7 +15,6 @@ const rows = @import("lab/rows.zig");
 const pack = @import("lab/pack.zig");
 const enemy = @import("lab/enemy.zig");
 const pairs = @import("lab/pairs.zig");
-const lanebuckets = @import("lab/lanebuckets.zig");
 const bench = @import("lab/bench.zig");
 const draftnet = @import("lab/draftnet.zig");
 const exp = @import("lab/exp.zig");
@@ -36,7 +35,6 @@ const eventvalue = @import("lab/eventvalue.zig");
 const stateexport = @import("lab/stateexport.zig");
 const pretrain = @import("lab/pretrain.zig");
 const playernet = @import("lab/playernet.zig");
-const gains = @import("lab/gains.zig");
 const stack = @import("lab/stack.zig");
 const curve = @import("lab/curve.zig");
 const synth = @import("lab/synth.zig");
@@ -85,7 +83,6 @@ const usage =
     \\                                  which every command then loads instead of SQLite
     \\  pairs BASE REF [PREDS...]       paired MSE gains of prediction TSVs on shared rows,
     \\                                  % of BASE's MSE, intervals vs REF clustered by game
-    \\  lanebuckets SNAP BASE A B       A's gain over B by lane pair train games (lab/lanebuckets.zig)
     \\  bench SNAP [OPT VALUE]...       fm fits timed on one core, all cores and the GPU
     \\                                  (lab/bench.zig): --devices cpu1,cpu,gpu --kinds
     \\                                  additive,lane,pairwise --dims 8,32,128 --scales
@@ -95,7 +92,7 @@ const usage =
     \\                                  same way: --devices cpu1,cpu,gpu --scales
     \\                                  1,4,16,64 --epochs 2 --sweep 0 --limit 0
     \\
-++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage ++ compcheck.usage ++ champcomp.usage ++ champgroups.usage ++ events.usage ++ randsplit.usage ++ gains.usage ++ stack.usage ++ curve.usage ++ winnet.usage ++ pretrain.usage ++ playernet.usage ++ synth.usage ++ health.usage ++ effects.usage ++ eventvalue.usage ++ stateexport.usage ++ compare.usage ++ looks.usage;
+++ exp.usage ++ draft.usage ++ lane.usage ++ fields.usage ++ style.usage ++ compcheck.usage ++ champcomp.usage ++ champgroups.usage ++ events.usage ++ randsplit.usage ++ stack.usage ++ curve.usage ++ winnet.usage ++ pretrain.usage ++ playernet.usage ++ synth.usage ++ health.usage ++ effects.usage ++ eventvalue.usage ++ stateexport.usage ++ compare.usage ++ looks.usage;
 
 pub fn main(init: std.process.Init) !u8 {
     flushDenormals();
@@ -223,17 +220,6 @@ pub fn main(init: std.process.Init) !u8 {
         try stdout.interface.flush();
         return 0;
     }
-    if (std.mem.eql(u8, cmd, "lanebuckets") and argv.len >= 6) {
-        var legendaries = try rows.loadLegendaries(init.gpa, init.io, argv[2]);
-        defer legendaries.deinit(init.gpa);
-        var data = try rows.load(init.gpa, argv[2], &legendaries);
-        defer data.deinit();
-        var buf: [4096]u8 = undefined;
-        var stdout = std.Io.File.stdout().writer(init.io, &buf);
-        try lanebuckets.run(init.gpa, init.io, &data, argv[3], argv[4], argv[5], &stdout.interface);
-        try stdout.interface.flush();
-        return 0;
-    }
     if (std.mem.eql(u8, cmd, "bench") and argv.len >= 3) {
         var opts: bench.Options = .{};
         var i: usize = 3;
@@ -324,9 +310,6 @@ pub fn main(init: std.process.Init) !u8 {
     }
     if (std.mem.eql(u8, cmd, "stack")) {
         return stack.main(init.gpa, arena, init.io, argv[2..]);
-    }
-    if (std.mem.eql(u8, cmd, "gains")) {
-        return gains.main(init.gpa, arena, init.io, argv[2..]);
     }
     if (std.mem.eql(u8, cmd, "looks")) {
         return looks.main(init.gpa, init.io, argv[2..]);
@@ -458,7 +441,6 @@ test {
     _ = pack;
     _ = enemy;
     _ = pairs;
-    _ = lanebuckets;
     _ = bench;
     _ = draftnet;
     _ = harness;
@@ -479,7 +461,6 @@ test {
     _ = effects;
     _ = eventvalue;
     _ = stateexport;
-    _ = gains;
 }
 
 /// x86 SSE runs ~100x slower on denormal floats, which Adam's decaying moments of rarely
