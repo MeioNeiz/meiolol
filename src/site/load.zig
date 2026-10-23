@@ -468,14 +468,14 @@ pub const Phases = struct {
         const cpu_ms: f64 = @floatFromInt(cpu - p.last_cpu_ms);
         p.last_ms = now;
         p.last_cpu_ms = cpu;
-        const s = std.fmt.bufPrint(p.buf[p.len..], " {s} {d:.1}s (cpu {d:.1}s)", .{ name, ms / 1000, cpu_ms / 1000 }) catch return;
+        const s = std.mem.print(p.buf[p.len..], " {s} {d:.1}s (cpu {d:.1}s)", .{ name, ms / 1000, cpu_ms / 1000 }) catch return;
         p.len += s.len;
     }
 
     /// A part of the coming phase that ran beside others, with its own time
     fn add(p: *Phases, name: []const u8, ms: i64) void {
         const sec: f64 = @floatFromInt(ms);
-        const s = std.fmt.bufPrint(p.buf[p.len..], " {s} {d:.1}s", .{ name, sec / 1000 }) catch return;
+        const s = std.mem.print(p.buf[p.len..], " {s} {d:.1}s", .{ name, sec / 1000 }) catch return;
         p.len += s.len;
     }
 

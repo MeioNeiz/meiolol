@@ -40,7 +40,7 @@ pub fn loadChamps(site: *Site, db: store.Db, games: ?*const partials.Store) !voi
                 try match.appendSlice(a, r.match_id);
                 seen.clearRetainingCapacity();
             }
-            if (std.mem.indexOfScalar(u32, seen.items, r.champion) != null) continue;
+            if (std.mem.findScalar(u32, seen.items, r.champion) != null) continue;
             try seen.append(a, r.champion);
             (try banned.getOrPutValue(a, r.champion, 0)).value_ptr.* += 1;
         }

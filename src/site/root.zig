@@ -113,7 +113,7 @@ pub const core_static = [_][]const u8{
 /// Whether the static build writes the file at `dir` ++ `path` from the site root
 pub fn isStatic(opts: Options, dir: []const u8, path: []const u8) bool {
     if (opts.static == .all) return true;
-    if (dir.len > 0 or std.mem.indexOfScalar(u8, path, '/') != null) return false;
+    if (dir.len > 0 or std.mem.findScalar(u8, path, '/') != null) return false;
     for (core_static) |name| if (std.mem.eql(u8, name, path)) return true;
     for (shared_assets ++ view_assets) |f| if (std.mem.eql(u8, f.path, path)) return true;
     return false;

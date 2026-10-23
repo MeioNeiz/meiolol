@@ -71,7 +71,7 @@ pub fn card(w: *Writer, curves: *const Curves, r: Role, x: Champ, y: Champ) !voi
         .y = G.py(t),
         .tx = G.left - 5,
         .ty = G.py(t) + 4,
-        .p = @as(u32, @intFromFloat(100 * t)),
+        .p = @as(u32, @trunc(100 * t)),
     });
     for (short_labels, 0..) |label, i| try tpl.render(w,
         \\<text x="{x:.1}" y="{y}" text-anchor="middle">{label}</text>
@@ -149,9 +149,9 @@ test "comeback card from both sides" {
     var out: Writer.Allocating = .init(gpa);
     defer out.deinit();
     try card(&out.writer, &c, .top, champ(10, "Garen"), champ(60, "Darius"));
-    try std.testing.expect(std.mem.indexOf(u8, out.written(), "<circle class=\"dot\" cx=\"110.8\" cy=\"114.0\" r=\"4.5\"><title>500 to 1,500 behind at 10 min: Garen won 33% of 300 games") != null);
+    try std.testing.expect(std.mem.find(u8, out.written(), "<circle class=\"dot\" cx=\"110.8\" cy=\"114.0\" r=\"4.5\"><title>500 to 1,500 behind at 10 min: Garen won 33% of 300 games") != null);
     try std.testing.expectEqual(1, std.mem.count(u8, out.written(), "<circle"));
     out.clearRetainingCapacity();
     try card(&out.writer, &c, .top, champ(60, "Darius"), champ(10, "Garen"));
-    try std.testing.expect(std.mem.indexOf(u8, out.written(), "<title>500 to 1,500 ahead at 10 min: Darius won 67% of 300 games") != null);
+    try std.testing.expect(std.mem.find(u8, out.written(), "<title>500 to 1,500 ahead at 10 min: Darius won 67% of 300 games") != null);
 }

@@ -49,7 +49,7 @@ fn unsupported(comptime T: type) noreturn {
 }
 
 /// Ints go out in whole bytes: u1 as a byte, usize as 8
-fn Wide(comptime info: std.builtin.Type.Int) type {
+fn Wide(comptime info: std.lang.Type.Int) type {
     return @Int(info.signedness, (info.bits + 7) / 8 * 8);
 }
 

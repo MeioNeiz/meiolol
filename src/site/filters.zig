@@ -415,7 +415,7 @@ fn countGame(run: *Run, game: *const Game, m: Match, bans: []const u32, index_of
     var banned: [10]u32 = undefined;
     var nb: usize = 0;
     for (bans) |champion| {
-        if (std.mem.indexOfScalar(u32, banned[0..nb], champion) != null or nb == banned.len) continue;
+        if (std.mem.findScalar(u32, banned[0..nb], champion) != null or nb == banned.len) continue;
         banned[nb] = champion;
         nb += 1;
         (try run.bans.getOrPutValue(a, .{ .game = gk, .champion = champion }, 0)).value_ptr.* += 1;
@@ -591,7 +591,7 @@ test "games come from the start and patch indexes, not a walk of every match" {
     defer plan.deinit(std.testing.allocator);
     while (try q.step()) try plan.appendSlice(std.testing.allocator, q.bytes(3));
     for ([_][]const u8{ "USING INDEX matches_start", "USING INDEX matches_patch" }) |want| {
-        if (std.mem.indexOf(u8, plan.items, want) == null) {
+        if (std.mem.find(u8, plan.items, want) == null) {
             std.debug.print("plan: {s}\n", .{plan.items});
             return error.TestUnexpectedResult;
         }
@@ -670,7 +670,7 @@ test "a game's rows, slots and bans, once per game" {
         "\"slots\":[[0,0,1,3,0,1],[0,0,1,3,1,1],[0,0,1,3,2,1],[0,0,1,3,3,1],[0,0,1,3,4,1]," ++
             "[0,0,1,4,0,1],[0,0,1,4,1,1],[0,0,1,4,2,1],[0,0,1,4,3,1],[0,0,1,10,4,1]]",
         "\"games\":[[0,0,1,3,1]]}",
-    }) |want| if (std.mem.indexOf(u8, meta, want) == null) {
+    }) |want| if (std.mem.find(u8, meta, want) == null) {
         std.debug.print("data/filters.json lacks {s}:\n{s}\n", .{ want, meta });
         return error.TestUnexpectedResult;
     };
@@ -697,7 +697,7 @@ test "runs on their own connections make the files one walk makes" {
             const id = try a.print("{s}_{d:0>3}", .{ if (g % 3 == 0) "NA1" else "EUW1", g });
             const patch = patches[(g * 7 / 5) % patches.len];
             try db.run("INSERT INTO matches VALUES (?, 'riot', ?, 420, ?, ?, ?, 1800, ?, 0)", .{
-                id, id[0..std.mem.indexOfScalar(u8, id, '_').?], patch, patch, @as(i64, @intCast(g)) * 1000, @as(i64, if (g % 2 == 0) 100 else 200),
+                id, id[0..std.mem.findScalar(u8, id, '_').?], patch, patch, @as(i64, @intCast(g)) * 1000, @as(i64, if (g % 2 == 0) 100 else 200),
             });
             try db.run("INSERT INTO bans VALUES (?, 100, 1, ?), (?, 200, 6, ?)", .{ id, @as(i64, @intCast(g % 4 + 1)), id, @as(i64, @intCast(g % 3 + 5)) });
             for (0..10) |slot| {
@@ -743,5 +743,5 @@ test "runs on their own connections make the files one walk makes" {
         try std.testing.expectEqualStrings(x.path, y.path);
         try std.testing.expectEqualStrings(x.data, y.data);
     }
-    try std.testing.expect(std.mem.indexOf(u8, one.files[1].data, "\"rows\":[[") != null);
+    try std.testing.expect(std.mem.find(u8, one.files[1].data, "\"rows\":[[") != null);
 }

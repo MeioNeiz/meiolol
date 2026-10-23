@@ -36,7 +36,7 @@ fn points(r: lean.Row) Shown {
 }
 
 fn round(x: f64, step: f64) i64 {
-    return @intFromFloat(@round(x / step) * step);
+    return @trunc(@round(x / step) * step);
 }
 
 /// The line for `name` in role `r`; `method` links the method page
@@ -168,10 +168,10 @@ test "early, late, one part clear, none, too few" {
     for (cases) |c| {
         const got = try render(c[0]);
         defer testing.allocator.free(got);
-        if (std.mem.indexOf(u8, got, c[1]) == null) {
+        if (std.mem.find(u8, got, c[1]) == null) {
             std.debug.print("got {s}\n", .{got});
             return error.TestUnexpectedResult;
         }
-        try testing.expect(std.mem.indexOf(u8, got, "(every region, last 30 days)") != null);
+        try testing.expect(std.mem.find(u8, got, "(every region, last 30 days)") != null);
     }
 }

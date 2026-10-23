@@ -156,7 +156,7 @@ pub fn writeIndex(site: *const Site, w: *Writer, f: *const File) !void {
 
 /// `rest`: "<champion>-<role>" from build/<rest>.html; false for no such page
 pub fn route(site: *const Site, w: *Writer, f: *const File, rest: []const u8) !bool {
-    const dash = std.mem.lastIndexOfScalar(u8, rest, '-') orelse return false;
+    const dash = std.mem.findScalarLast(u8, rest, '-') orelse return false;
     const ch = site.champBySlug(rest[0..dash]) orelse return false;
     const r = root.roleFromSlug(rest[dash + 1 ..]) orelse return false;
     const b = shown(f, ch.id, r) orelse return false;
@@ -297,7 +297,7 @@ fn runeShifts(a: std.mem.Allocator, b: File.Build, usual: ?File.Build) ![]const 
 fn shiftChip(w: *Writer, f: *const File, s: Shift) !void {
     const n = ddragon.find(f.runes, s.id) orelse return;
     var buf: [32]u8 = undefined;
-    const rate = if (s.o.games >= rate_games) try std.fmt.bufPrint(&buf, ", {d:.1}% won", .{pct(s.o.wins, s.o.games)}) else "";
+    const rate = if (s.o.games >= rate_games) try std.mem.print(&buf, ", {d:.1}% won", .{pct(s.o.wins, s.o.games)}) else "";
     try tpl.renderPart(w,
         \\<span class="rsh" title="{name}: {games} games{rate}"><img src="{src}" alt="" loading="lazy">{name} <b>{here:.0}%</b> <small>usually {usual:.0}%</small></span>
     , .{
@@ -432,14 +432,14 @@ fn runePage(w: *Writer, f: *const File, v: []const u32, shards: ?[]const u32, ri
     try rune(w, f.runes, primary.id, "rh", true);
     for (primary.slots, 0..) |slot, i| {
         try w.writeAll(if (i == 0) "<div class=\"rr ks\">" else "<div class=\"rr\">");
-        for (slot) |id| try rune(w, f.runes, id, mark(v[1..5], if (ringed) |g| g[1..5] else &.{}, id), std.mem.indexOfScalar(u32, v[1..5], id) != null);
+        for (slot) |id| try rune(w, f.runes, id, mark(v[1..5], if (ringed) |g| g[1..5] else &.{}, id), std.mem.findScalar(u32, v[1..5], id) != null);
         try w.writeAll("</div>");
     }
     try w.writeAll("</div><div class=\"rt\">");
     try rune(w, f.runes, secondary.id, "rh", true);
     for (secondary.slots[1..]) |slot| {
         try w.writeAll("<div class=\"rr\">");
-        for (slot) |id| try rune(w, f.runes, id, mark(v[6..8], if (ringed) |g| g[6..8] else &.{}, id), std.mem.indexOfScalar(u32, v[6..8], id) != null);
+        for (slot) |id| try rune(w, f.runes, id, mark(v[6..8], if (ringed) |g| g[6..8] else &.{}, id), std.mem.findScalar(u32, v[6..8], id) != null);
         try w.writeAll("</div>");
     }
     try w.writeAll("</div>");
@@ -458,7 +458,7 @@ fn runePage(w: *Writer, f: *const File, v: []const u32, shards: ?[]const u32, ri
 
 /// "hw" for a rune in `ringed` and not in `lit`
 fn mark(lit: []const u32, ringed: []const u32, id: u32) []const u8 {
-    const in = std.mem.indexOfScalar(u32, ringed, id) != null and std.mem.indexOfScalar(u32, lit, id) == null;
+    const in = std.mem.findScalar(u32, ringed, id) != null and std.mem.findScalar(u32, lit, id) == null;
     return if (in) "hw" else "";
 }
 
@@ -624,7 +624,7 @@ fn statRow(w: *Writer, list: []const ddragon.Named, ids: []const u32, row: []con
         const n = ddragon.find(list, id) orelse continue;
         const share = pct(o.games, all);
         var buf: [32]u8 = undefined;
-        const rate = if (o.games >= rate_games) try std.fmt.bufPrint(&buf, ", {d:.1}% won", .{pct(o.wins, o.games)}) else "";
+        const rate = if (o.games >= rate_games) try std.mem.print(&buf, ", {d:.1}% won", .{pct(o.wins, o.games)}) else "";
         try tpl.render(w,
             \\<span class="rc{state}" title="{name}: {games} games, {share:.1}%{rate}"><img src="{src}" alt="{name}" loading="lazy"><b>{pick}{few}</b><i>{wr}</i><em>{n}</em></span>
         , .{

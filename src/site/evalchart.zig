@@ -202,7 +202,7 @@ test "parse keeps the newest line per games count, sorted" {
     var buf: [8192]u8 = undefined;
     var w: Writer = .fixed(&buf);
     try section(&w, points);
-    try std.testing.expect(std.mem.indexOf(u8, w.buffered(), "class=\"line s3\"") != null);
+    try std.testing.expect(std.mem.find(u8, w.buffered(), "class=\"line s3\"") != null);
 
     const regions =
         "date\ttest_platform\tgames\tauc_base\tauc_current\tauc_joint\n" ++

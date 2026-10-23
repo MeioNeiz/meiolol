@@ -206,7 +206,7 @@ test "a band, its line and one game" {
     });
     const out = w.buffered();
     try std.testing.expect(std.mem.startsWith(u8, out, "<svg viewBox=\"0 0 640 240\" role=\"img\" aria-label=\"gold of A &amp; B\">"));
-    try std.testing.expect(std.mem.indexOf(u8, out, "<polyline class=\"you\"") != null);
+    try std.testing.expect(std.mem.find(u8, out, "<polyline class=\"you\"") != null);
     try std.testing.expect(std.mem.endsWith(u8, out, "</svg>\n"));
     try std.testing.expectEqual(@as(i32, 200), niceCeil(150));
 }
@@ -215,6 +215,6 @@ test "previous patch line, dashed, inside the scale" {
     var aw: Writer.Allocating = .init(std.testing.allocator);
     defer aw.deinit();
     try render(&aw.writer, .{ .aria = "gold", .a = "A", .b = "B", .line = &.{ 0, 100, 200 }, .prev = &.{ 0, -900, -1000 } });
-    try std.testing.expect(std.mem.indexOf(u8, aw.written(), "<polyline class=\"median prev\"") != null);
-    try std.testing.expect(std.mem.indexOf(u8, aw.written(), ">-1000</text>") != null);
+    try std.testing.expect(std.mem.find(u8, aw.written(), "<polyline class=\"median prev\"") != null);
+    try std.testing.expect(std.mem.find(u8, aw.written(), ">-1000</text>") != null);
 }

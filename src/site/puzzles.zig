@@ -414,7 +414,7 @@ test "puzzles have an answer in range, games on every bar and no pick advice" {
         for (p.bars) |b| try std.testing.expect(b.n > 0);
         for ([_][]const u8{ p.q, p.real, p.why, p.tip }) |text| {
             for ([_][]const u8{ "best", "Best" }) |word| {
-                try std.testing.expect(std.mem.indexOf(u8, text, word) == null);
+                try std.testing.expect(std.mem.find(u8, text, word) == null);
             }
         }
     }

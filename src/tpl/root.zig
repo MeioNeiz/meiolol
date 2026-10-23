@@ -386,11 +386,11 @@ fn parse(comptime src: []const u8, comptime balanced: bool) []const Seg {
                         state = .comment;
                     } else if (src[i] == '!') {
                         // doctype: no holes or nesting worth tracking
-                        const end = std.mem.indexOfScalarPos(u8, src, i, '>') orelse fail(src, i, "unclosed <!");
+                        const end = std.mem.findScalarPos(u8, src, i, '>') orelse fail(src, i, "unclosed <!");
                         if (findHole(src, i, end)) |at| fail(src, at, "a hole in <!...> isn't filled");
                         i = end + 1;
                     } else if (src[i] == '/') {
-                        const end = std.mem.indexOfScalarPos(u8, src, i, '>') orelse fail(src, i, "unclosed end tag");
+                        const end = std.mem.findScalarPos(u8, src, i, '>') orelse fail(src, i, "unclosed end tag");
                         if (findHole(src, i, end)) |at| fail(src, at, tag_name_hole);
                         stack = closeTag(src, i, std.mem.trim(u8, src[i + 1 .. end], " \n"), stack, balanced);
                         i = end + 1;
@@ -481,7 +481,7 @@ fn urlAround(comptime src: []const u8, comptime start: usize, comptime at: usize
     var j = start;
     var after_hole = false;
     while (j < at) {
-        if (std.mem.indexOfScalar(u8, ":/?#", src[j]) != null) return null;
+        if (std.mem.findScalar(u8, ":/?#", src[j]) != null) return null;
         if (src[j] == '{') if (lexHole(src, j)) |h| {
             after_hole = true;
             j = h.end;
@@ -491,8 +491,8 @@ fn urlAround(comptime src: []const u8, comptime start: usize, comptime at: usize
     }
     if (after_hole) fail(src, at, "a URL's scheme can't come from two holes");
     var k = end;
-    while (k < src.len and std.mem.indexOfScalar(u8, "\"'{", src[k]) == null) : (k += 1) {
-        if (std.mem.indexOfScalar(u8, ":/?#", src[k]) != null) {
+    while (k < src.len and std.mem.findScalar(u8, "\"'{", src[k]) == null) : (k += 1) {
+        if (std.mem.findScalar(u8, ":/?#", src[k]) != null) {
             k += 1;
             break;
         }
@@ -548,9 +548,9 @@ fn checkAttrs(comptime src: []const u8, comptime start: usize, comptime end: usi
     while (i < attrs.len) {
         const c = attrs[i];
         if (c == '"' or c == '\'') {
-            i = std.mem.indexOfScalarPos(u8, attrs, i + 1, c).? + 1;
+            i = std.mem.findScalarPos(u8, attrs, i + 1, c).? + 1;
         } else if (c == '{') {
-            i = (std.mem.indexOfScalarPos(u8, attrs, i, '}') orelse attrs.len - 1) + 1;
+            i = (std.mem.findScalarPos(u8, attrs, i, '}') orelse attrs.len - 1) + 1;
         } else if (std.ascii.isAlphabetic(c)) {
             var j = i;
             while (j < attrs.len and isAttrName(attrs[j])) j += 1;
@@ -581,7 +581,7 @@ fn lexHole(comptime src: []const u8, comptime i: usize) ?Lexed {
     const name = src[i + 1 .. j];
     if (j < src.len and src[j] == '}') return .{ .name = name, .spec = "", .end = j + 1 };
     if (j >= src.len or src[j] != ':') return null;
-    const close = std.mem.indexOfScalarPos(u8, src, j, '}') orelse return null;
+    const close = std.mem.findScalarPos(u8, src, j, '}') orelse return null;
     const spec = src[j + 1 .. close];
     for (spec) |ch| if (ch == '{' or ch == ' ' or ch == '\n' or ch == ';' or ch == ',') return null;
     return .{ .name = name, .spec = spec, .end = close + 1 };
@@ -690,7 +690,7 @@ fn hasDecl(comptime T: type, comptime name: []const u8) bool {
 fn renderSegs(w: *Writer, comptime segs: []const Seg, comptime src: []const u8, args: anytype) !void {
     const Args = @TypeOf(args);
     comptime {
-        for (std.meta.fieldNames(Args)) |field| {
+        for (@typeInfo(Args).@"struct".field_names) |field| {
             for (segs) |s| {
                 if (s == .hole and std.mem.eql(u8, s.hole.name, field)) break;
             } else fail(src, 0, "field ." ++ field ++ " has no {" ++ field ++ "} hole");

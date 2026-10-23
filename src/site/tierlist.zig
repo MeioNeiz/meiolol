@@ -232,7 +232,7 @@ pub const WrColour = struct {
         var i: usize = 1;
         while (x >= stops[i]) i += 1;
         const t = (x - stops[i - 1]) / (stops[i] - stops[i - 1]);
-        const near: u8 = @intFromFloat(@round(100 * (1 - t)));
+        const near: u8 = @round(100 * (1 - t));
         if (near == 100) return w.print("var(--{s}{d})", .{ side, i });
         if (near == 0) return w.print("var(--{s}{d})", .{ side, i + 1 });
         try w.print("color-mix(in oklab,var(--{s}{d}) {d}%,var(--{s}{d}))", .{ side, i, near, side, i + 1 });
@@ -250,7 +250,7 @@ test wrColour {
         .{ 0.44, "var(--lo4)" },
     };
     inline for (cases) |c| {
-        const s = try std.fmt.bufPrint(&buf, "{f}", .{wrColour(c[0], table_span)});
+        const s = try std.mem.print(&buf, "{f}", .{wrColour(c[0], table_span)});
         try std.testing.expectEqualStrings(c[1], s);
     }
 }
@@ -295,7 +295,7 @@ fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void
         \\<span class="tl-mins" hidden><label>Min games <input type="number" inputmode="numeric" min="0" step="100" value="{games}" data-min="games" data-for="tiers"></label><label title="Share of the champion's games played in the role">Min lane % <input type="number" inputmode="numeric" min="0" max="100" step="5" value="{share}" data-min="share" data-for="tiers"></label></span>
         \\
     , .{
-        .games = @as(u64, @intFromFloat(@ceil(min_pick_rate * @as(f64, @floatFromInt(site.games))))),
+        .games = @as(u64, @ceil(min_pick_rate * @as(f64, @floatFromInt(site.games)))),
         .share = 100 * min_role_share,
     });
     try tpl.renderPart(w,

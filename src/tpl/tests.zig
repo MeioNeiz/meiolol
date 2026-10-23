@@ -323,7 +323,7 @@ test "URL schemes: relative, http, https and mailto pass, others don't" {
         var buf: [64]u8 = undefined;
         var w: Writer = .fixed(&buf);
         try tpl.render(&w, "<a href=\"{u}\"></a>", .{ .u = u });
-        try std.testing.expect(std.mem.indexOf(u8, w.buffered(), "about:invalid") == null);
+        try std.testing.expect(std.mem.find(u8, w.buffered(), "about:invalid") == null);
     }
     inline for (bad) |u| {
         try expectRender("<a href=\"about:invalid#tpl\"></a>", "<a href=\"{u}\"></a>", .{ .u = u });

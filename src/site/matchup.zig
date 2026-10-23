@@ -96,7 +96,7 @@ pub fn paths(site: *const Site, curves: *const Curves, list: *std.ArrayList([]co
 
 /// `rest`: "<role>/<a>-vs-<b>" from matchup/<rest>.html; false for no such page
 pub fn route(site: *const Site, w: *Writer, curves: *const Curves, rest: []const u8) !bool {
-    const slash = std.mem.indexOfScalar(u8, rest, '/') orelse return false;
+    const slash = std.mem.findScalar(u8, rest, '/') orelse return false;
     const r = root.roleFromSlug(rest[0..slash]) orelse return false;
     var it = std.mem.splitSequence(u8, rest[slash + 1 ..], "-vs-");
     const x = site.champBySlug(it.next().?) orelse return false;
@@ -633,9 +633,9 @@ fn h2h(w: *Writer, v: View, x: Champ, y: Champ) !void {
     , .{ .thin = tpl.when(thin(v), " thin"), .x = x.name, .y = y.name });
     try bars(w, "Wins the game", .{ v.wins(), v.games() }, .{ v.games() - v.wins(), v.games() });
     var buf: [64]u8 = undefined;
-    try bars(w, try std.fmt.bufPrint(&buf, "Ahead in gold at {d} min", .{m}), .{ lane.ahead, lane.games }, .{ lane.behind, lane.games });
+    try bars(w, try std.mem.print(&buf, "Ahead in gold at {d} min", .{m}), .{ lane.ahead, lane.games }, .{ lane.behind, lane.games });
     var buf2: [64]u8 = undefined;
-    try bars(w, try std.fmt.bufPrint(&buf2, "Wins when ahead at {d} min", .{m}), .{ lane.wins_ahead, lane.ahead }, .{ lane.behind - lane.wins_behind, lane.behind });
+    try bars(w, try std.mem.print(&buf2, "Wins when ahead at {d} min", .{m}), .{ lane.wins_ahead, lane.ahead }, .{ lane.behind - lane.wins_behind, lane.behind });
     const phases = [_][]const u8{ "Kill on the other, 0 to 6 min", "Kill on the other, 6 to 14 min", "Kill on the other, after 14 min" };
     for (phases, 0..) |label, ph| try bars(w, label, .{ v.kills(ph), v.games() }, .{ v.deaths(ph), v.games() });
     try times(w, "Level 6", v.level6());
@@ -649,8 +649,8 @@ fn h2h(w: *Writer, v: View, x: Champ, y: Champ) !void {
 fn bars(w: *Writer, label: []const u8, a: [2]u32, b: [2]u32) !void {
     const pa = root.ratio(a[0], a[1]);
     const pb = root.ratio(b[0], b[1]);
-    const ra: i32 = @intFromFloat(@round(100 * pa));
-    const rb: i32 = @intFromFloat(@round(100 * pb));
+    const ra: i32 = @round(100 * pa);
+    const rb: i32 = @round(100 * pb);
     try tpl.render(w,
         \\<span class="h2h-l">{label}</span><b class="h2h-v{xa}">{pa}</b><span class="h2h-bar"><i class="x" style="width:{wa:.1}%"></i></span><span class="h2h-bar r"><i class="y" style="width:{wb:.1}%"></i></span><b class="h2h-v{yb}">{pb}</b>
         \\
@@ -918,7 +918,7 @@ fn chartOne(
     const prev_last = if (prev) |pv| @min(last, reach(pv.v)) else 0;
     for (0..prev_last) |i| prev_line[i] = prev.?.v.estimate(metric, i).mean;
     var aria_buf: [160]u8 = undefined;
-    const aria = std.fmt.bufPrint(&aria_buf, "{s} of {s} minus {s} by minute", .{ unit, x.name, y.name }) catch unit;
+    const aria = std.mem.print(&aria_buf, "{s} of {s} minus {s} by minute", .{ unit, x.name, y.name }) catch unit;
     try tpl.renderPart(w, "<figure class=\"chart{thin}{small}\">\n", figure);
     try lanechart.render(w, .{
         .aria = aria,
@@ -1041,7 +1041,7 @@ test lead {
         minutes[curvesfile.lane_minute - 1].est[0] = case.e;
         aw.clearRetainingCapacity();
         try lead(&aw.writer, .{ .curve = &cv, .flipped = false }, x);
-        const want = try std.fmt.allocPrint(gpa, " {s} at 14 minutes, then whoever is ahead wins 64% of games.", .{case.want});
+        const want = try gpa.print(" {s} at 14 minutes, then whoever is ahead wins 64% of games.", .{case.want});
         defer gpa.free(want);
         try std.testing.expectEqualStrings(want, aw.written());
     }

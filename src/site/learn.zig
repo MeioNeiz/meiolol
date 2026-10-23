@@ -143,7 +143,7 @@ fn wrWhole(w: *Writer, n: Counts) !void {
 }
 
 fn pctOf(n: Counts) u32 {
-    return @intFromFloat(@round(100 * rate(n)));
+    return @round(100 * rate(n));
 }
 
 pub fn write(site: *const Site, w: *Writer, facts: *const learn.Facts) !void {
@@ -672,7 +672,7 @@ fn mixName(b: usize) []const u8 {
 }
 
 fn magicPct(ctx: Ctx, ch: Champ) u32 {
-    return @intFromFloat(@round(100 * ctx.facts.champs[ch.c].magic.?));
+    return @round(100 * ctx.facts.champs[ch.c].magic.?);
 }
 
 /// Champions mainly played in `r` whose magic share is within [lo, hi], most played

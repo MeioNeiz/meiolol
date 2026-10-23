@@ -454,9 +454,9 @@ test "usual and vs usual" {
     const d = VsUsual.of(5500, 10000, 0.5, 400);
     try std.testing.expectApproxEqAbs(0.0481, d.mean, 1e-4);
     var buf: [16]u8 = undefined;
-    try std.testing.expectEqualStrings("+2.1", try std.fmt.bufPrint(&buf, "{f}", .{Points{ .v = 0.021 }}));
-    try std.testing.expectEqualStrings("-2.1", try std.fmt.bufPrint(&buf, "{f}", .{Points{ .v = -0.021 }}));
-    try std.testing.expectEqualStrings("0.0", try std.fmt.bufPrint(&buf, "{f}", .{Points{ .v = -0.0004 }}));
+    try std.testing.expectEqualStrings("+2.1", try std.mem.print(&buf, "{f}", .{Points{ .v = 0.021 }}));
+    try std.testing.expectEqualStrings("-2.1", try std.mem.print(&buf, "{f}", .{Points{ .v = -0.021 }}));
+    try std.testing.expectEqualStrings("0.0", try std.mem.print(&buf, "{f}", .{Points{ .v = -0.0004 }}));
 }
 
 /// To the matchup page from ch's side, or the opponent's own page where there is none

@@ -136,7 +136,7 @@ test "views: a tree each, switches between them, shared pages once" {
     };
     const positions = [5][]const u8{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" };
     for (games) |g| {
-        const platform = g[0][0..std.mem.indexOfScalar(u8, g[0], '_').?];
+        const platform = g[0][0..std.mem.findScalar(u8, g[0], '_').?];
         try db.run("INSERT INTO matches VALUES (?,'t',?,420,?,'',?,1800,100,0)", .{ g[0], platform, g[1], g[2] });
         for (0..10) |slot| try db.run(
             "INSERT INTO participants (match_id, slot, team_id, champion_id, position, win) VALUES (?,?,?,?,?,?)",
@@ -170,7 +170,7 @@ test "views: a tree each, switches between them, shared pages once" {
     };
     for (want) |c| {
         const page = try read(arena, out, c[0]);
-        try std.testing.expect(std.mem.indexOf(u8, page, c[1]) != null);
+        try std.testing.expect(std.mem.find(u8, page, c[1]) != null);
     }
     const tiers = try read(arena, out, "all/champions.html");
     for ([_][]const u8{
@@ -181,7 +181,7 @@ test "views: a tree each, switches between them, shared pages once" {
         "href=\"../style.css\"",
         "href=\"../daily.html\"",
         "href=\"../champion/a.html?region=all\"",
-    }) |s| try std.testing.expect(std.mem.indexOf(u8, tiers, s) != null);
+    }) |s| try std.testing.expect(std.mem.find(u8, tiers, s) != null);
     // One page per champion, at the site root: its switches set the filters
     const champ = try read(arena, out, "champion/a.html");
     for ([_][]const u8{
@@ -192,18 +192,18 @@ test "views: a tree each, switches between them, shared pages once" {
         "<span data-foot>in EUW, last 30 days",
         "href=\"../style.css\"",
         "<a href=\"../champions.html\" aria-current=\"page\" data-view>",
-    }) |s| try std.testing.expect(std.mem.indexOf(u8, champ, s) != null);
+    }) |s| try std.testing.expect(std.mem.find(u8, champ, s) != null);
     try std.testing.expectError(error.FileNotFound, read(arena, out, "all/champion/a.html"));
     const shared_page = try read(arena, out, "daily.html");
-    try std.testing.expect(std.mem.indexOf(u8, shared_page, "<a href=\"champions.html\" data-view>") != null);
+    try std.testing.expect(std.mem.find(u8, shared_page, "<a href=\"champions.html\" data-view>") != null);
     try std.testing.expectError(error.FileNotFound, read(arena, out, "all/daily.html"));
     try std.testing.expectError(error.FileNotFound, read(arena, out, "patch/style.css"));
     // Under Champions: the section's tabs and the switches; not on home or shared pages
     for ([_][]const u8{
         "<nav class=\"section\" aria-label=\"Champions\">",
         "<a href=\"matchup/index.html\">Matchups</a>",
-    }) |s| try std.testing.expect(std.mem.indexOf(u8, tiers, s) != null);
-    try std.testing.expect(std.mem.indexOf(u8, shared_page, "class=\"subbar\"") == null);
+    }) |s| try std.testing.expect(std.mem.find(u8, tiers, s) != null);
+    try std.testing.expect(std.mem.find(u8, shared_page, "class=\"subbar\"") == null);
     // Home in a view: the lookup and the review demo, its scripts at the site root
     const home = try read(arena, out, "all/index.html");
     for ([_][]const u8{
@@ -211,9 +211,9 @@ test "views: a tree each, switches between them, shared pages once" {
         "<script src=\"../review.js\" defer></script>",
         "<script src=\"../home.js\" data-root=\"../\" defer></script>",
         "against ranked games in EUW on that game's patch",
-    }) |s| try std.testing.expect(std.mem.indexOf(u8, home, s) != null);
-    try std.testing.expect(std.mem.indexOf(u8, home, "class=\"subbar\"") == null);
+    }) |s| try std.testing.expect(std.mem.find(u8, home, s) != null);
+    try std.testing.expect(std.mem.find(u8, home, "class=\"subbar\"") == null);
     const your = try read(arena, out, "your.html");
-    try std.testing.expect(std.mem.indexOf(u8, your, "<script src=\"review.js\" defer></script>\n<script src=\"your.js\" defer></script>") != null);
+    try std.testing.expect(std.mem.find(u8, your, "<script src=\"review.js\" defer></script>\n<script src=\"your.js\" defer></script>") != null);
     for ([_][]const u8{ "review.js", "home.js", "inter.woff2" }) |f| _ = try read(arena, out, f);
 }
