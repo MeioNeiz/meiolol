@@ -54,10 +54,18 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     defer data.deinit();
     const eu = euIndex();
 
-    var train_arena: std.heap.ArenaAllocator = .init(gpa);
-    defer train_arena.deinit();
-    const t = try trainOf(train_arena.allocator(), &data);
-    var m = try harness.fit(cand, gpa, &t, .{});
+    const players = try harness.gamePlayers(gpa, &data);
+    defer gpa.free(players);
+    // A tool, not an evaluation: every game that reached 15:00 minutes, test games included
+    const Played = struct {
+        pub fn keep(_: @This(), g: rows.Game) bool {
+            return harness.played(g);
+        }
+    };
+    var train = try harness.buildTrainBy(gpa, &data, players, Played{}, false);
+    defer train.deinit();
+    const t = &train.train;
+    var m = try harness.fit(cand, gpa, t, .{});
     defer cand.deinit(&m, gpa);
     const ex = try lf.rounded(arena, try cand.exportLane(&m, arena, eu, min_pair_games));
     const sc = try lf.Scorer.init(arena, ex);
@@ -118,32 +126,6 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
 fn euIndex() u8 {
     for (protocol.platformIds(), 0..) |id, i| if (std.mem.eql(u8, id, protocol.home_platform)) return @intCast(i);
     unreachable;
-}
-
-/// A tool, not an evaluation: every game that reached 15:00 minutes, test games included
-fn trainOf(a: std.mem.Allocator, d: *const rows.Data) !api.Train {
-    const players = try harness.gamePlayers(a, d);
-    const index = try a.alloc(u32, d.games.len);
-    var games: std.ArrayList(api.Game) = .empty;
-    for (d.games, players, index) |g, pl, *ix| {
-        if (g.duration_s < harness.min_duration_s) continue;
-        ix.* = @intCast(games.items.len);
-        try games.append(a, .{ .start = g.start, .patch = g.patch, .platform = g.platform, .teams = g.teams, .ranks = pl.ranks, .exp = pl.exp });
-    }
-    var out: std.ArrayList(api.Row) = .empty;
-    for (d.rows) |r| {
-        if (d.games[r.game].duration_s < harness.min_duration_s) continue;
-        try out.append(a, .{
-            .game = index[r.game],
-            .side = r.side,
-            .role = @fromBackingInt(@backingInt(r.role)),
-            .champion = r.champion,
-            .rank = r.rank_start,
-            .exp = harness.experience(r),
-            .y = r.y,
-        });
-    }
-    return .{ .games = games.items, .rows = out.items };
 }
 
 /// The candidate refitted on dev's visible games, scored on dev-val per lane outcome

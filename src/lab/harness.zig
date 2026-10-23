@@ -155,23 +155,23 @@ pub const folds = eval.folds_n;
 /// From every played game: the same rule as eval.split, which set rows' is_test, so a
 /// test window that disagrees (a pack from older protocol code) is an error
 pub fn cuts(gpa: std.mem.Allocator, d: *const rows.Data) !Cuts {
-    var starts: std.ArrayList(i64) = .empty;
-    defer starts.deinit(gpa);
-    for (d.games) |g| if (played(g)) try starts.append(gpa, g.start);
-    std.mem.sort(i64, starts.items, {}, std.sort.asc(i64));
-    const e = try eval.cutsOf(starts.items, .{});
+    const e = try playedCuts(gpa, d);
     for (d.games) |g| if (g.is_test != (g.start >= e.test_)) return error.TestWindowMismatch;
     return .{ .test_ = e.test_, .dev = e.dev, .bounds = e.bounds };
 }
 
 /// Sets is_test by eval.split's rule (fixtures, and after editing games' durations)
 pub fn markTests(gpa: std.mem.Allocator, d: *rows.Data) !void {
+    const e = try playedCuts(gpa, d);
+    for (d.games) |*g| g.is_test = g.start >= e.test_;
+}
+
+fn playedCuts(gpa: std.mem.Allocator, d: *const rows.Data) !eval.Cuts {
     var starts: std.ArrayList(i64) = .empty;
     defer starts.deinit(gpa);
     for (d.games) |g| if (played(g)) try starts.append(gpa, g.start);
     std.mem.sort(i64, starts.items, {}, std.sort.asc(i64));
-    const e = try eval.cutsOf(starts.items, .{});
-    for (d.games) |*g| g.is_test = g.start >= e.test_;
+    return eval.cutsOf(starts.items, .{});
 }
 
 pub fn inRegion(c: Cuts, g: rows.Game) bool {
@@ -324,7 +324,9 @@ pub fn buildTrainWhere(gpa: std.mem.Allocator, d: *const rows.Data, players: []c
     return buildTrainBy(gpa, d, players, Keep{ .inner = k }, false);
 }
 
-fn buildTrainBy(gpa: std.mem.Allocator, d: *const rows.Data, players: []const Players, k: anytype, after: bool) !Visible {
+/// The training set of the games `k.keep(g)` accepts, test games and games under 15:00
+/// included unless k drops them (lab/lane.zig fits once on every played game)
+pub fn buildTrainBy(gpa: std.mem.Allocator, d: *const rows.Data, players: []const Players, k: anytype, after: bool) !Visible {
     var v: Visible = .{ .arena = .init(gpa), .train = .{ .games = &.{}, .rows = &.{} } };
     errdefer v.deinit();
     const a = v.arena.allocator();
