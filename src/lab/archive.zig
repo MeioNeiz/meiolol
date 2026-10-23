@@ -23,6 +23,7 @@
 const std = @import("std");
 const store = @import("store");
 const tsvlog = @import("../tsvlog.zig");
+const Date = @import("../date.zig").Date;
 const anonymise = @import("anonymise.zig");
 const Io = std.Io;
 const log = std.log.scoped(.archive);
@@ -208,10 +209,7 @@ fn readPack(gpa: std.mem.Allocator, io: Io, path: []const u8, sink: Sink, outs: 
 fn exportDay(arena: std.mem.Allocator, name: []const u8) ![]const u8 {
     const dash = std.mem.findScalarLast(u8, name, '-') orelse return error.BadExportName;
     const to = std.fmt.parseInt(i64, name[dash + 1 ..], 10) catch return error.BadExportName;
-    const days: std.time.epoch.EpochDay = .{ .day = @intCast(@divFloor(to, std.time.s_per_day)) };
-    const yd = days.calculateYearDay();
-    const md = yd.calculateMonthDay();
-    return arena.print("{d:0>4}-{d:0>2}-{d:0>2}", .{ yd.year, md.month.numeric(), md.day_index + 1 });
+    return arena.print("{f}", .{Date.fromSeconds(to)});
 }
 
 /// Whether metadata.participants (the PUUID list both summaries and timelines open

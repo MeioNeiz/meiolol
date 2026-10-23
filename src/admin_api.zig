@@ -259,9 +259,7 @@ fn appendActionLog(arena: std.mem.Allocator, io: Io, path: []const u8, now: i64,
     const short = output[0..@min(output.len, 200)];
     const one_line = try std.mem.replaceOwned(u8, arena, short, "\n", " / ");
     std.mem.replaceScalar(u8, one_line, '\t', ' ');
-    const d = date.Date.fromSeconds(now);
-    const s: u64 = @intCast(@mod(now, 86400));
-    const line = try arena.print("{f}T{d:0>2}:{d:0>2}:{d:0>2}Z\t{s}\t{t}\t{s}\n", .{ d, s / 3600, s / 60 % 60, s % 60, name, outcome, one_line });
+    const line = try arena.print("{f}\t{s}\t{t}\t{s}\n", .{ date.Time{ .secs = now }, name, outcome, one_line });
     try tsvlog.appendRaw(io, Io.Dir.cwd(), path, "", line);
 }
 

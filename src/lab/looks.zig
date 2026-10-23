@@ -6,6 +6,7 @@
 
 const std = @import("std");
 const tsvlog = @import("../tsvlog.zig");
+const Time = @import("../date.zig").Time;
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
@@ -46,13 +47,8 @@ pub fn record(
     // The run: lab-run's run dir is the cwd
     const cwd = std.process.currentPathAlloc(io, arena) catch "-";
     var line: Io.Writer.Allocating = .init(arena);
-    const now = std.time.epoch.EpochSeconds{ .secs = @intCast(Io.Clock.real.now(io).toSeconds()) };
-    const day = now.getEpochDay().calculateYearDay();
-    const md = day.calculateMonthDay();
-    const ds = now.getDaySeconds();
-    try line.writer.print("{d}\t{d:0>4}-{d:0>2}-{d:0>2}", .{ n, day.year, md.month.numeric(), md.day_index + 1 });
-    try line.writer.print("T{d:0>2}:{d:0>2}:{d:0>2}Z", .{ ds.getHoursIntoDay(), ds.getMinutesIntoHour(), ds.getSecondsIntoMinute() });
-    try line.writer.print("\t{s}\t{s}", .{ std.fs.path.basename(cwd), cmd });
+    const now: Time = .{ .secs = Io.Clock.real.now(io).toSeconds() };
+    try line.writer.print("{d}\t{f}\t{s}\t{s}", .{ n, now, std.fs.path.basename(cwd), cmd });
     for (argv) |a| {
         try line.writer.writeByte(' ');
         for (a) |ch| try line.writer.writeByte(if (ch == '\t' or ch == '\n') ' ' else ch);

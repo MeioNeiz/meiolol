@@ -81,6 +81,44 @@ pub const Date = struct {
     }
 };
 
+/// A UTC instant to the second
+pub const Time = struct {
+    /// Unix seconds
+    secs: i64,
+
+    /// Unix milliseconds (Riot's timestamps)
+    pub fn fromMs(ms: i64) Time {
+        return .{ .secs = @divFloor(ms, std.time.ms_per_s) };
+    }
+
+    /// "2026-10-11T14:03:09Z"
+    pub fn format(t: Time, w: *std.Io.Writer) std.Io.Writer.Error!void {
+        const s = t.daySeconds();
+        try w.print("{f}T{d:0>2}:{d:0>2}:{d:0>2}Z", .{ Date.fromSeconds(t.secs), s / 3600, s / 60 % 60, s % 60 });
+    }
+
+    /// "2026-10-11 14:03Z", the model files' run
+    pub fn minutes(t: Time) std.fmt.Alt(Time, writeMinutes) {
+        return .{ .data = t };
+    }
+
+    fn writeMinutes(t: Time, w: *std.Io.Writer) std.Io.Writer.Error!void {
+        const s = t.daySeconds();
+        try w.print("{f} {d:0>2}:{d:0>2}Z", .{ Date.fromSeconds(t.secs), s / 3600, s / 60 % 60 });
+    }
+
+    fn daySeconds(t: Time) u64 {
+        return @intCast(@mod(t.secs, std.time.s_per_day));
+    }
+};
+
+test Time {
+    var buf: [32]u8 = undefined;
+    const t: Time = .fromMs((1_760_140_800 + 14 * 3600 + 3 * 60 + 9) * 1000 + 999);
+    try std.testing.expectEqualStrings("2025-10-11T14:03:09Z", try std.mem.print(&buf, "{f}", .{t}));
+    try std.testing.expectEqualStrings("2025-10-11 14:03Z", try std.mem.print(&buf, "{f}", .{t.minutes()}));
+}
+
 test Date {
     const d: Date = .fromSeconds(1_760_140_800 + 3600);
     try std.testing.expectEqual(Date{ .year = 2025, .month = 10, .day = 11 }, d);
