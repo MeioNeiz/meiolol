@@ -3,7 +3,6 @@
 
 const std = @import("std");
 const core = @import("core");
-const riot = @import("../riot/root.zig");
 const ddragon = @import("../ddragon.zig");
 const stats = @import("../stats.zig");
 const curves = @import("../curves.zig");
@@ -83,10 +82,8 @@ pub fn cmdCurves(c: *Cmd) !u8 {
     const File = struct { spec: curves.Spec, label: []const u8, path: []const u8 };
     var files: std.ArrayList(File) = .empty;
     if (site_files) {
-        var every: std.ArrayList([]const u8) = .empty;
-        for (riot.endpoints.platforms) |pl| try every.append(arena, pl.id);
         for ([_]bool{ false, true }) |all| {
-            const platforms: []const []const u8 = if (all) every.items else &.{"EUW1"};
+            const platforms: []const []const u8 = if (all) main.all_platforms else &.{"EUW1"};
             try files.append(arena, .{
                 .spec = .{ .chosen = &.{}, .since_ms = recent_ms, .platforms = platforms },
                 .label = recent_label,
@@ -199,9 +196,8 @@ pub fn cmdBuilds(c: *Cmd) !u8 {
     const io = c.init.io;
     const db = try c.open();
     defer db.close();
-    var every: std.ArrayList([]const u8) = .empty;
-    for (riot.endpoints.platforms) |pl| try every.append(c.arena, pl.id);
-    o.platforms = if (site_files) every.items else g.platformIds();
+    const every = main.all_platforms;
+    o.platforms = if (site_files) every else g.platformIds();
     o.patches = if (g.patches.items.len > 0) g.patches.items else try newestPatch(c.arena, db, if (site_files) &.{"EUW1"} else o.platforms);
     var label_buf: [core.statsfile.patch_len]u8 = undefined;
     const label = try stats.label(&label_buf, o.patches);
@@ -210,10 +206,10 @@ pub fn cmdBuilds(c: *Cmd) !u8 {
     const Target = struct { set: builds.Set, label: []const u8, path: []const u8 };
     const targets: []const Target = if (site_files) &.{
         .{ .set = .{ .slice = .{ .platforms = &.{"EUW1"}, .patches = o.patches } }, .label = label, .path = try buildsPath(c.arena, c.data_dir, o.patches, false) },
-        .{ .set = .{ .slice = .{ .platforms = every.items, .patches = o.patches } }, .label = label, .path = try buildsPath(c.arena, c.data_dir, o.patches, true) },
+        .{ .set = .{ .slice = .{ .platforms = every, .patches = o.patches } }, .label = label, .path = try buildsPath(c.arena, c.data_dir, o.patches, true) },
         // The champion pages' 30-day views; matchup pages show the patch's
         .{ .set = .{ .slice = .{ .platforms = &.{"EUW1"}, .since_ms = recent_ms }, .matchups = false }, .label = recent_label, .path = try recentBuildsPath(c.arena, c.data_dir, false) },
-        .{ .set = .{ .slice = .{ .platforms = every.items, .since_ms = recent_ms }, .matchups = false }, .label = recent_label, .path = try recentBuildsPath(c.arena, c.data_dir, true) },
+        .{ .set = .{ .slice = .{ .platforms = every, .since_ms = recent_ms }, .matchups = false }, .label = recent_label, .path = try recentBuildsPath(c.arena, c.data_dir, true) },
     } else &.{
         .{ .set = .{ .slice = .{ .platforms = o.platforms, .patches = o.patches } }, .label = label, .path = out orelse try buildsPath(c.arena, c.data_dir, o.patches, g.every_platform) },
     };
@@ -334,9 +330,7 @@ pub fn cmdLean(c: *Cmd) !u8 {
     const io = c.init.io;
     const db = try c.open();
     defer db.close();
-    var every: std.ArrayList([]const u8) = .empty;
-    for (riot.endpoints.platforms) |pl| try every.append(c.arena, pl.id);
-    const platforms = if (g.platforms.items.len > 0) g.platforms.items else every.items;
+    const platforms = if (g.platforms.items.len > 0) g.platforms.items else main.all_platforms;
     const all_regions = g.platforms.items.len == 0 or g.every_platform;
     const chosen = if (g.patches.items.len > 0) g.patches.items else try stats.patches(c.arena, db, platforms);
     if (check) {

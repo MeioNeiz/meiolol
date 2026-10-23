@@ -3,7 +3,6 @@
 const std = @import("std");
 const store = @import("store");
 const core = @import("core");
-const riot = @import("../riot/root.zig");
 const stats = @import("../stats.zig");
 const site = @import("../site/root.zig");
 const serve = @import("../serve.zig");
@@ -74,14 +73,12 @@ const SiteFlags = struct {
     fn options(f: *const SiteFlags, c: *Cmd, arena: std.mem.Allocator, db: store.Db, contact: []const u8) !site.Options {
         const chosen = if (f.patches.items.len > 0) f.patches.items else try newestPatch(arena, db, &.{"EUW1"});
         const prev = try previousPatch(arena, db, chosen);
-        var every: std.ArrayList([]const u8) = .empty;
-        for (riot.endpoints.platforms) |pl| try every.append(arena, pl.id);
         const now_ms = std.Io.Clock.real.now(c.init.io).toMilliseconds();
         return .{
             .out_dir = f.out orelse try std.fs.path.join(arena, &.{ c.data_dir, "site" }),
             .patches = chosen,
             .since_ms = now_ms - main.recent_days * std.time.ms_per_day,
-            .all_platforms = every.items,
+            .all_platforms = main.all_platforms,
             .contact = contact,
             .riot_txt = f.riot_txt,
             .updated = try arena.print("{f}", .{Date.fromMs(now_ms).long()}),

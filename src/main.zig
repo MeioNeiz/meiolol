@@ -259,6 +259,14 @@ pub const Cmd = struct {
     }
 };
 
+/// Every platform in riot/endpoints.zig: --platform all, the site's all- files
+pub const all_platforms: []const []const u8 = ids: {
+    var ids: [riot.endpoints.platforms.len][]const u8 = undefined;
+    for (&ids, riot.endpoints.platforms) |*id, p| id.* = p.id;
+    const final = ids;
+    break :ids &final;
+};
+
 /// --patch and --platform: the games stats, curves, pool and eval read
 pub const Games = struct {
     patches: std.ArrayList([]const u8) = .empty,
@@ -274,7 +282,7 @@ pub const Games = struct {
             for (try c.list()) |p| {
                 if (std.mem.eql(u8, p, "all")) {
                     g.every_platform = true;
-                    for (riot.endpoints.platforms) |pl| try g.platforms.append(c.arena, pl.id);
+                    try g.platforms.appendSlice(c.arena, all_platforms);
                 } else try g.platforms.append(c.arena, p);
             }
         } else return false;
