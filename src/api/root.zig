@@ -129,7 +129,6 @@ fn work(f: *fetch.Fetcher) void {
     };
 }
 
-/// curves-<label>.bin files, newest patch first, at most max_curve_files
 /// The newest curves files in `dir_path` with the legendary items for first-item timing
 pub fn loadCurveSet(arena: Allocator, io: Io, dir_path: []const u8) !game.CurveSet {
     var set = try loadCurves(arena, io, dir_path);
@@ -144,9 +143,10 @@ pub fn loadCurveSet(arena: Allocator, io: Io, dir_path: []const u8) !game.CurveS
     return set;
 }
 
-/// Mapped, not read: pages load as lookups touch them and the kernel can drop them again,
-/// so files of any size fit the unit's MemoryMax. The mappings live as long as the process
-/// (a new curves file restarts it: meiolol-api-reload.path)
+/// curves-<label>.bin files, newest patch first, at most max_curve_files. Mapped, not
+/// read: pages load as lookups touch them and the kernel can drop them again, so files
+/// of any size fit the unit's MemoryMax. The mappings live as long as the process (a new
+/// curves file restarts it: meiolol-api-reload.path)
 fn loadCurves(arena: Allocator, io: Io, dir_path: []const u8) !game.CurveSet {
     var dir = Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch |err| switch (err) {
         error.FileNotFound => {
@@ -385,7 +385,7 @@ fn games(ctx: *Context, arena: Allocator, db: store.Db, query: []const u8) !Repl
     const acct = try account(arena, db, key);
     if (acct == null or (acct.?.puuid == null and now - acct.?.checked > ctx.opts.not_found_s)) {
         if (!try enqueue(ctx, db, key, now)) return busy(arena);
-        return reply(arena, try progress(arena, db, key, .{ .state = "queued" }));
+        return reply(arena, try progress(db, key, .{ .state = "queued" }));
     }
     const puuid = acct.?.puuid orelse return .{
         .status = .not_found,
@@ -396,7 +396,7 @@ fn games(ctx: *Context, arena: Allocator, db: store.Db, query: []const u8) !Repl
     }
     const player = try loadPlayer(arena, db, puuid) orelse {
         if (!try enqueue(ctx, db, key, now)) return busy(arena);
-        return reply(arena, try progress(arena, db, key, .{ .state = "queued" }));
+        return reply(arena, try progress(db, key, .{ .state = "queued" }));
     };
     try db.run("UPDATE players SET looked_up = ? WHERE puuid = ?", .{ now, puuid });
     // A job for this player under either key: the Riot ID while resolving, else PUUID
@@ -405,7 +405,7 @@ fn games(ctx: *Context, arena: Allocator, db: store.Db, query: []const u8) !Repl
     const gate = if (asked) ctx.opts.check_after_s else ctx.opts.refresh_after_s;
     if (now - player.refreshed > gate and !try enqueue(ctx, db, job_key, now) and asked) return busy(arena);
 
-    var out = try progress(arena, db, job_key, .{ .state = "ready", .player = player });
+    var out = try progress(db, job_key, .{ .state = "ready", .player = player });
     out.check_at = player.refreshed + ctx.opts.check_after_s;
     out.report = try report(ctx, arena, db, puuid, .{ .tier = player.tier, .division = player.division, .lp = player.lp });
     return reply(arena, out);
@@ -473,8 +473,7 @@ fn enqueue(ctx: *Context, db: store.Db, key: []const u8, now: i64) !bool {
 }
 
 /// `out` with the job's place and progress when one is queued
-fn progress(arena: Allocator, db: store.Db, key: []const u8, out: GamesOut) !GamesOut {
-    _ = arena;
+fn progress(db: store.Db, key: []const u8, out: GamesOut) !GamesOut {
     var o = out;
     var q = try db.prepare("SELECT requested, pending, total FROM jobs WHERE key = ?");
     defer q.deinit();

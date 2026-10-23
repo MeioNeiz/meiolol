@@ -529,7 +529,7 @@ fn wholeGame(arena: Allocator, s: Summary, slot: u8, t: timeline.Timeline, platf
     var chance: std.ArrayList(u16) = .empty;
     for (try blueChances(arena, s, t, platform, legendaries)) |p| {
         const mine_p = if (team == 100) p else 1 - p;
-        try chance.append(arena, @intFromFloat(@round(100 * mine_p)));
+        try chance.append(arena, @round(100 * mine_p));
     }
     g.win_chance = chance.items;
 
@@ -557,7 +557,7 @@ fn wholeGame(arena: Allocator, s: Summary, slot: u8, t: timeline.Timeline, platf
                 const theirs = s.players[k.victim - 1].team != team;
                 if (theirs) turn.kills += 1 else turn.deaths += 1;
                 if (k.victim == me) turn.your_deaths += 1;
-                if (k.killer == me or std.mem.indexOfScalar(u8, k.assists, me) != null) turn.your_kills += 1;
+                if (involved(me, k.killer, k.assists)) turn.your_kills += 1;
             },
             else => {},
         };
@@ -961,7 +961,7 @@ fn countKills(t: timeline.Timeline, p: u8, from: usize, to: usize) u32 {
     var n: u32 = 0;
     for (t.events) |e| switch (e.data) {
         .champion_kill => |k| if (inMinutes(e.t_ms, from, to) and
-            (k.killer == p or std.mem.indexOfScalar(u8, k.assists, p) != null))
+            involved(p, k.killer, k.assists))
         {
             n += 1;
         },
