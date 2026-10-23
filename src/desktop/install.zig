@@ -1,5 +1,5 @@
 //! Per-user install, so Windows search and the Start menu find the app: the downloaded exe
-//! copies itself and update.key into %LOCALAPPDATA%\Programs\meiolol and starts from
+//! copies itself and its update key into %LOCALAPPDATA%\Programs\meiolol and starts from
 //! there. A per-user folder needs no admin rights and the updater can replace the exe in
 //! it. This is the file side; setup.zig does the Windows side (shortcut, Apps list).
 
@@ -13,16 +13,37 @@ pub const dir_name = "meiolol";
 /// so an old zip never puts older data over newer
 const data_prefixes = [_][]const u8{ "stats-", "recent-curves", "curves-" };
 
-/// Copies the exe at `exe` in `from` into `to` as update.exe_name, with update.key and any
-/// data files `to` lacks. An exe already in `to` may be running: it is moved aside to
+/// The zip's exe carries the update key after its image (web-loop.sh desktop_files): the
+/// key, its length (u16 little endian), this. Explorer runs an exe from inside a zip
+/// without the files beside it, so update.key alone was lost that way
+pub const key_magic = "meiolol-key";
+
+pub const Bundled = struct {
+    /// The exe without the key: what the release signed and the manifest lists
+    exe: []const u8,
+    key: []const u8,
+};
+
+pub fn bundled(exe: []const u8) ?Bundled {
+    if (!std.mem.endsWith(u8, exe, key_magic)) return null;
+    const rest = exe[0 .. exe.len - key_magic.len];
+    if (rest.len < 2) return null;
+    const key_len = std.mem.readInt(u16, rest[rest.len - 2 ..][0..2], .little);
+    if (key_len == 0 or key_len + 2 > rest.len) return null;
+    const end = rest.len - 2;
+    return .{ .exe = rest[0 .. end - key_len], .key = rest[end - key_len .. end] };
+}
+
+/// Writes `exe` into `to` as update.exe_name, the key as update.key and copies data files
+/// in `from` that `to` lacks. An exe already in `to` may be running: it is moved aside to
 /// update.old_exe, as the updater does
-pub fn copyInto(arena: std.mem.Allocator, io: Io, from: Io.Dir, exe: []const u8, to: Io.Dir) !void {
+pub fn copyInto(arena: std.mem.Allocator, io: Io, from: Io.Dir, exe: []const u8, key: []const u8, to: Io.Dir) !void {
     // Fails when old_exe is the running image (after a self-update); the installed exe
-    // is then not running and can be overwritten. When the move fails, the copy says why
+    // is then not running and can be overwritten. When the move fails, the write says why
     to.deleteFile(io, update.old_exe) catch {};
     update.renameExe(arena, io, to, update.exe_name, update.old_exe) catch {};
-    try from.copyFile(exe, to, update.exe_name, io, .{});
-    try from.copyFile(update.key_file, to, update.key_file, io, .{});
+    try to.writeFile(io, .{ .sub_path = update.exe_name, .data = exe });
+    try to.writeFile(io, .{ .sub_path = update.key_file, .data = key });
 
     var it = from.iterate();
     while (try it.next(io)) |entry| {
@@ -61,6 +82,14 @@ pub fn displayVersion(buf: []u8, version: u64) []const u8 {
     return std.mem.print(buf, "{d}.{d}.{d}", .{ ymd.year, md.month.numeric(), md.day_index + 1 }) catch "dev";
 }
 
+test bundled {
+    try std.testing.expectEqual(null, bundled("MZ plain exe"));
+    try std.testing.expectEqual(null, bundled("\x09\x00" ++ key_magic));
+    const b = bundled("MZ image" ++ "k3y" ++ "\x03\x00" ++ key_magic).?;
+    try std.testing.expectEqualStrings("MZ image", b.exe);
+    try std.testing.expectEqualStrings("k3y", b.key);
+}
+
 test "copyInto installs the exe and key, moves a running exe aside, keeps newer data" {
     const io = std.testing.io;
     var from_dir = std.testing.tmpDir(.{ .iterate = true });
@@ -73,15 +102,13 @@ test "copyInto installs the exe and key, moves a running exe aside, keeps newer 
     defer arena_state.deinit();
     const arena = arena_state.allocator();
 
-    try from.writeFile(io, .{ .sub_path = "download (1).exe", .data = "new exe" });
-    try from.writeFile(io, .{ .sub_path = update.key_file, .data = "key" });
     try from.writeFile(io, .{ .sub_path = "stats-16.20.bin", .data = "zip stats" });
     try from.writeFile(io, .{ .sub_path = "recent-curves.bin", .data = "zip curves" });
     try from.writeFile(io, .{ .sub_path = "notes.txt", .data = "not ours" });
     try to.writeFile(io, .{ .sub_path = update.exe_name, .data = "old exe" });
     try to.writeFile(io, .{ .sub_path = "recent-curves.bin", .data = "newer curves" });
 
-    try copyInto(arena, io, from, "download (1).exe", to);
+    try copyInto(arena, io, from, "new exe", "key", to);
     var buf: [64]u8 = undefined;
     try std.testing.expectEqualStrings("new exe", try to.readFile(io, update.exe_name, &buf));
     try std.testing.expectEqualStrings("old exe", try to.readFile(io, update.old_exe, &buf));
@@ -93,7 +120,7 @@ test "copyInto installs the exe and key, moves a running exe aside, keeps newer 
     // A first install has no exe to move aside
     var fresh_dir = std.testing.tmpDir(.{});
     defer fresh_dir.cleanup();
-    try copyInto(arena, io, from, "download (1).exe", fresh_dir.dir);
+    try copyInto(arena, io, from, "new exe", "key", fresh_dir.dir);
     try std.testing.expectError(error.FileNotFound, fresh_dir.dir.access(io, update.old_exe, .{}));
 }
 

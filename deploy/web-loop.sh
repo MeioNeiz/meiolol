@@ -167,6 +167,12 @@ desktop_files() {
     fi
     cp release/meiolol-desktop.exe "$d/meiolol/"
     cp desktop.token "$d/meiolol/update.key"
+    # The key after the zip's exe too (src/desktop/install.zig bundled): opened from
+    # inside the zip, the exe runs without update.key beside it
+    local key len
+    key=$(tr -d ' \t\r\n' < desktop.token)
+    len="\\x$(printf %02x $(( ${#key} & 255 )))\\x$(printf %02x $(( ${#key} >> 8 )))"
+    printf '%s%b%s' "$key" "$len" meiolol-key >> "$d/meiolol/meiolol-desktop.exe"
     if ! batch python3 - "$d" "$patch" release/meiolol-desktop.json <<'EOF' \
         || ! bin/meiolol desktop-sign manifest --key-file desktop-data.key \
             "$d/update.json" "$d/update.signed"

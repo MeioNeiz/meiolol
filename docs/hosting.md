@@ -213,7 +213,7 @@ nginx caches each encoding apart, and answers a directory URL without its slash 
   /_meiolol_desktop_key, which answers 204 when X-Meiolol-Desktop equals the key in
   /etc/nginx/meiolol-desktop-key.conf (root only), else asks /auth/check/
   download_private_app (a login with the private tier or above); the key opens this directory only. Key: box ml/meiolol/desktop.token
-  (64 hex, made by web-loop.sh if missing), shipped in the zip as update.key. Rotate:
+  (64 hex, made by web-loop.sh if missing), shipped in the zip as update.key and after the zip's exe (install.zig bundled). Rotate:
   new token on the box, the same in the conf, `nginx -t`, reload; old zips stop
   updating. nginx before: /etc/nginx/meiolol.conf.bak-2026-10-20-desktop
 - Admin API (/admin/api/, src/admin_api.zig): `meiolol render` on the box answers

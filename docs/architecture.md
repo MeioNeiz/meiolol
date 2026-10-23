@@ -821,15 +821,17 @@ level still pickable.
   then frees the old. The key goes in X-Meiolol-Desktop with redirects off
   (std 0.17's privileged_headers are never sent). `meiolol-app update DIR` runs the same
   check on a folder. Box side: web-loop.sh desktop_files; gate: hosting.md
-- Install (desktop/install.zig, setup.zig; 23 Oct): an exe started with update.key
-  beside it (the admin zip) and outside %LOCALAPPDATA%\Programs\meiolol copies itself,
-  the key and data files the install lacks there, writes the Start menu shortcut (what
+- Install (desktop/install.zig, setup.zig; 23 Oct): an exe with an update key (the
+  zip's exe carries it after its image, as Explorer runs an exe inside a zip without the
+  files beside it; else update.key beside it) started outside
+  %LOCALAPPDATA%\Programs\meiolol writes itself there without the key, the key as
+  update.key, copies data files the install lacks, writes the Start menu shortcut (what
   Windows search finds) and an Apps list entry under HKCU (Uninstall runs `--uninstall`,
   `--quiet` skips the question), starts the installed copy and exits. No admin rights,
   and the updater can replace the exe there. The installed copy runs once (a Local
   mutex; a second start brings its window forward) and a new install closes it first
   (WM_CLOSE to the window class "meiolol"). `--portable` skips all of it, as does an exe
-  without update.key. Icon: src/desktop/meiolol.ico (the site's favicon) via meiolol.rc,
+  without a key. Icon: src/desktop/meiolol.ico (the site's favicon) via meiolol.rc,
   for the exe, shortcut and window
 - Lane card (lanecard.zig, docs/concept.md part 6): the enemy shown in my position, else
   the one core.score.inferRoles puts there (labelled a guess); gold at 14 min one
