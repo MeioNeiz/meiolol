@@ -153,8 +153,9 @@ in /etc/sudoers.d/meiolol-accounts-send). That script (deploy/accounts-send.sh, 
 by `deploy/jomify.sh install accounts-send`) runs `meiolol account backup` as
 meiolol-api: VACUUM INTO, so the copy is consistent while the API runs. The pull checks
 the SQLite header and opens a copy (an empty one fails: the owner always exists), then
-keeps /mnt/wsl/archive/meiolol-accounts/accounts-DATE.db (mode 600), the newest 14
-dates (privacy page: a deleted login leaves the backups within 14 days). Log
+keeps /mnt/wsl/archive/meiolol-accounts/accounts-DATE.db (mode 600; the directory made
+once as root, since the partition's top is root's: `wsl.exe -u root -e install -d -m 700 -o
+jmu -g jmu /mnt/wsl/archive/meiolol-accounts`), the newest 14 dates (privacy page: a deleted login leaves the backups within 14 days). Log
 ~/ml/accounts-pull.log on the gpu-box. api.db (Your games' cache, refetchable) is not
 backed up.
 

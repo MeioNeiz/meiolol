@@ -69,7 +69,7 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
 6. Accounts and two apps (J21, 22 Oct): roles public, paid, private, admin, owner;
    owner and private logins first, then a public app and a private, fuller one.
    AC1-AC2 live 23 Oct (logins on /admin/, admins by sign-up link, controls owner
-   only); next AC3 (private tier /p/), accounts.db backup; app.md APP2-APP4
+   only); next AC3 (private tier /p/); logins backed up to the gpu-box; app.md APP2-APP4
    against the mock, APP1 (real capture) is Jacob's. Draft tester moves to the private
    site (app.md "Private site")
 7. Comp leans: held-out look ~24 Oct, then champion pages and reasons:

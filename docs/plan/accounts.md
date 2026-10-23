@@ -94,7 +94,7 @@ Each step ends tested and deployed; nginx and systemd changes on jomify need Jac
   link (email plus a shared password, Jacob 23 Oct; `meiolol account link admin`),
   tested live: logged out redirects, admin sees /admin/ and live data but gets 403 on
   actions, owner runs them, the desktop key still opens /admin/desktop/. accounts.db
-  is not backed up yet (nor is api.db)
+  is backed up to the gpu-box every 6 h since 23 Oct (data-safety.md "Logins backup")
 - AC3 Private tier: /p/ space (first pages: app.md "Private site"), invites, account page
   (password, devices, sign out everywhere), admin Accounts tab (list, invite, role,
   disable). Done when a test private account reaches /p/ and gets 403 on every /admin/
