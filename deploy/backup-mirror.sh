@@ -75,3 +75,16 @@ n=$(find "$dir/mastery" -name '[0-9]*.db' | wc -l | tr -d ' ')
 serve mastery-size "$name:$(( kb * 1024 )):$n" || log "mastery-size failed"
 touch "$dir/.mirrored"
 log "$fetched files fetched ($(( bytes >> 20 )) MB), $(wc -l < "$dir/.list" | tr -d ' ') on the box"
+
+# A failed snapshot build keeps its real-id copy a day for a resume (snapshot-gpu.sh), no
+# longer, even when no build comes. Dated by its start, else the dir (older builds)
+if [[ $name == gpu-box ]] && ! systemctl --user -q is-active meiolol-snapshot; then
+    for d in "$HOME"/ml/snaps/.snap-*-real; do
+        [[ -e "$d" ]] || continue
+        f=$d/started
+        [[ -f "$f" ]] || f=$d
+        [[ -n $(find "$f" -maxdepth 0 -mmin +1440) ]] || continue
+        rm -rf "$d"
+        log "removed ${d##*/}, a failed snapshot build's real-id copy over a day old"
+    done
+fi

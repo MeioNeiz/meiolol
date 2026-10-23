@@ -39,11 +39,17 @@ die() {
 }
 
 make_snap() {
-    local stamp name bin tree
-    stamp=$(date -u +%Y%m%dT%H%MZ)
-    name=snap-$stamp
+    local name bin tree
     bin=$BIN
     gpu_ready || return 0
+    # A build that died under a day ago carries on under its name, from its last done
+    # stage (snapshot-gpu.sh, which deletes older ones)
+    name=$(ssh "$GPU" "cd ml/snaps 2> /dev/null && find . -maxdepth 2 -mmin -1440 \
+        \( -path './.snap-*-real/started' -o -path './snap-*/.building' \)" \
+        | grep -oE 'snap-[0-9]{8}T[0-9]{4}Z' | sort | tail -n 1) || true
+    if [[ -n $name ]]; then log "resuming $name"
+    else name=snap-$(date -u +%Y%m%dT%H%MZ)
+    fi
     tree=$(mktemp -d)
     # shellcheck disable=SC2064 # expand now
     trap "rm -rf '$tree'" EXIT
@@ -120,8 +126,12 @@ tick() {
     local name newest failed backup
     for name in $(cat "$STATE/pending" 2> /dev/null); do fetch_snap "$name" || break; done
     # The gpu-box's: it builds them, and a Mac copy may lag
+    # Finished ones only (mastery_pre.tsv is the last step, as lab-exp.sh reads it): an
+    # unfinished newer one is resumed by make, not counted
     newest=$(ssh -o ConnectTimeout=10 -o BatchMode=yes "$GPU" \
-        "find ml/snaps/ -maxdepth 1 -type d -name 'snap-*T*Z'" 2> /dev/null | sort | tail -n 1) || return 0
+        "find ml/snaps/ -maxdepth 2 -path 'ml/snaps/snap-*T*Z/mastery_pre.tsv'" 2> /dev/null \
+        | sort | tail -n 1) || return 0
+    newest=${newest%/mastery_pre.tsv}
     newest=${newest##*/snap-}
     failed=$(( $(date +%s) - $(stat -f %m "$STATE/failed" 2> /dev/null || echo 0) ))
     (( failed > 6 * 3600 )) || return 0

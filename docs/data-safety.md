@@ -277,7 +277,11 @@ Modelling copies of the box data (meiolol-lab; docs/model.md "Shared protocol"):
   hashes (HMAC-SHA256), Riot IDs, summoner ids and names blanked, profile icons zeroed,
   raw timelines and the forgotten list left out (it refuses a snapshot still holding a
   forgotten player's rows). Match ids are hashed too: a real one gives back the ten
-  players through the API. The real-id copy is deleted on any exit; the result is
+  players through the API. The real-id copy is deleted once the anonymised copy passes
+  its checks, or on a failed check; a build that dies otherwise keeps it so the next
+  build resumes from its last done stage (Jacob 23 Oct, after the lab disk hung the PC
+  mid-build: docs/compute.md "Disk resets"), at most a day from the build's start: the
+  next build, or backup-mirror.sh hourly, deletes it after. The result is
   checked (row counts against the source, fewer only in puuidKey tables, whose keys
   without a PUUID are left out; every PUUID hashed; a real match id absent), then
   split, legendaries, seat stats, pack and mastery-pre, in ~/ml/snaps/STAMP. The Mac
@@ -294,7 +298,8 @@ Modelling copies of the box data (meiolol-lab; docs/model.md "Shared protocol"):
   Without it a hash can't be linked back to a PUUID; with it only by hashing candidates
 - Disposable: a snapshot is deleted from the Mac and the gpu-box when a newer one
   replaces it (snapshot.sh prune, after each fetch; by hand before 23 Oct, when four
-  were on each host), so an erasure reaches analysis copies within a day. Open: prune
+  were on each host), so an erasure reaches analysis copies within a day, two when a
+  resumed build used a day-old restore. Open: prune
   keeps docs/golden.tsv's snapshot (snap-20261012T2055Z) for golden.sh, which this
   rule doesn't allow for long. Not in
   git, not published

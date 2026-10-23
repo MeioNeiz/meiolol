@@ -5,8 +5,13 @@
 # backup mirror (`meiolol restore`) and what backups leave out, fetched from the box
 # (backup-serve.sh snapshot-extra: players, ladder_pages, ranks, raw summaries, ...), in
 # the box's own schema; then anonymised with the salt here, as on the Mac before, and
-# deleted on any exit. The box sends ~3 GB instead of the ~23 GB VACUUM INTO.
-#   snapshot-gpu.sh NAME     builds ~/ml/snaps/NAME (snap-STAMP)
+# deleted. The box sends ~3 GB instead of the ~23 GB VACUUM INTO.
+#   snapshot-gpu.sh NAME     builds ~/ml/snaps/NAME (snap-STAMP), or resumes it
+# Resume (Jacob 23 Oct, after the lab disk hung the PC mid-build twice): each stage marks
+# itself done, in the real-id dir up to the anonymised copy's checks and in NAME/.building
+# after, and a build of the same NAME skips done stages (snapshot.sh make picks an
+# unfinished one under a day old). So a failed build keeps its real-id copy until the
+# next build, which deletes it once over a day old, as backup-mirror.sh does hourly
 # Needs ~/bin/sqlite3 and zstd (Ubuntu's packages unpacked there, no sudo), curl
 set -euo pipefail
 name=$1
@@ -22,30 +27,50 @@ log() { echo "$(date -u +%FT%TZ) $*"; }
 die() { log "$*"; exit 1; }
 count() { sqlite3 "file:$1?mode=ro" "SELECT count(*) FROM \"$2\""; }
 box_ssh() { ssh -n -o ServerAliveInterval=30 -o ServerAliveCountMax=10 "$box" "$@"; }
-# The box's copy of the extra (real ids) goes on any exit too
-cleanup() {
-    rm -rf "$work"
-    [[ -n "${SNAP_EXTRA:-}" ]] || box_ssh snapshot-done > /dev/null 2>&1 || true
-}
+# The box's copy of the extra (real ids) goes on any exit
+box_done() { [[ -n "${SNAP_EXTRA:-}" ]] || box_ssh snapshot-done > /dev/null 2>&1 || true; }
+done_() { grep -qx "$1" "$progress" 2> /dev/null; }
+mark() { echo "$1" >> "$progress"; }
 
 mountpoint -q /mnt/wsl/lab || die "/mnt/wsl/lab not mounted"
 [[ -f "$salt" ]] || die "no salt at $salt"
 [[ -f "$mirror/.mirrored" ]] || die "no backup mirror at $mirror"
 out=$snaps/$name
-[[ -e "$out" ]] && die "$out exists"
-# Real ids: owner only, gone on any exit. A crash or a stop skips the trap and leaves an
-# earlier build's copy (~24 GB); builds run one at a time (snapshot.sh's unit), so any
-# other is stale
+# Real ids: owner only
 umask 077
 work=$snaps/.$name-real
-rm -rf "$snaps"/.snap-*-real
-mkdir -p "$work"
-trap 'rm -rf "$work"' EXIT
 raw=$work/$name
 restored=$work/restored
 extra=$work/extra
-mkdir -p "$raw" "$extra"
+# Builds run one at a time (snapshot.sh's unit): another name's leftovers are stale
+for d in "$snaps"/.snap-*-real; do [[ ! -e "$d" || "$d" == "$work" ]] || rm -rf "$d"; done
+for d in "$snaps"/snap-*/.building; do
+    [[ ! -e "$d" || "$d" == "$out/.building" ]] || rm -rf "${d%/.building}"
+done
+if [[ -f "$work/started" && -n $(find "$work/started" -mmin +1440) ]]; then
+    log "$name's real-id copy is over a day old: starting again"
+    rm -rf "$work" "$out"
+fi
+if [[ -f "$out/.building" ]]; then
+    progress=$out/.building
+    rm -rf "$work"
+    log "resuming $name after: $(paste -sd, "$progress")"
+else
+    [[ -e "$out" && ! -d "$work" ]] && die "$out exists"
+    mkdir -p "$work"
+    [[ -f "$work/started" ]] || touch "$work/started"
+    progress=$work/done
+    [[ -s "$progress" ]] && log "resuming $name after: $(paste -sd, "$progress")"
+fi
+trap box_done EXIT
+# A check that fails would fail again on resume: nothing kept
+fail() { rm -rf "$work" "$out"; die "check: $*"; }
 
+if [[ "$progress" == "$work/done" ]]; then
+mkdir -p "$raw"
+
+if ! done_ restore; then
+rm -rf "$restored"
 # The mirror's own lock (backup-mirror.sh, same stale rule): no scrub or rotation under
 # the restore. An hourly mirror run holds it a minute or two
 lock=$mirror/.lock
@@ -65,12 +90,16 @@ for _ in $(seq 60); do
 done
 [[ -n $got ]] || die "backup mirror busy for 30 min: try again later"
 echo "$$ $boot" > "$lock/owner"
-trap 'cleanup; rm -rf "$lock"' EXIT
+trap 'box_done; rm -rf "$lock"' EXIT
 log "restore from $mirror (mirrored $(date -u -r "$mirror/.mirrored" +%FT%TZ))"
 nice -n 10 "$bin/meiolol-snapshot" restore --from "$mirror" --data "$restored" > "$work/restore.log" 2>&1 \
-    || { tail -n 5 "$work/restore.log"; die "restore failed"; }
+    || { tail -n 5 "$work/restore.log"; rm -rf "$restored"; die "restore failed"; }
 rm -rf "$lock"
-trap cleanup EXIT
+trap box_done EXIT
+mark restore
+fi
+
+if ! done_ extra; then
 day=$(sqlite3 "file:$restored/meiolol.db?mode=ro" "SELECT coalesce(max(day), 0) FROM rank_history")
 
 log "box: what backups leave out (rank_history after day $day)"
@@ -100,13 +129,19 @@ else
     box_ssh snapshot-done || true
     log "box: $(( size >> 20 )) MB"
 fi
+rm -rf "$extra"
+mkdir -p "$extra"
 zstd -dc -q "$file" | tar x -C "$extra"
 [[ "$file" == "$work/extra.tar.zst" ]] && rm -f "$file"
 for d in $DBS; do [[ -s "$extra/$d.sql" && -f "$extra/$d.db" ]] || die "box sent no $d"; done
+mark extra
+fi
 
 # The box's schema; rows from the box's file where it sent them, else from the restore
 # (by column name: a restored table's columns may be in another order). Indexes last
 for d in $DBS; do
+    done_ "load $d" && continue
+    rm -f "$raw/$d.db" "$raw/$d.db"-* "$work/$d.schema.db"
     # Statements span lines: split into tables and indexes by an empty database of them
     sqlite3 -bail "$work/$d.schema.db" < "$extra/$d.sql"
     ddl() { sqlite3 "$work/$d.schema.db" "SELECT sql || ';' FROM sqlite_schema WHERE type = '$1' AND sql IS NOT NULL"; }
@@ -141,9 +176,11 @@ for d in $DBS; do
         ddl index
     } > "$work/$d.load.sql"
     nice -n 10 sqlite3 -bail "$raw/$d.db" < "$work/$d.load.sql"
+    mark "load $d"
 done
 rm -rf "$restored"
 
+if ! done_ counted; then
 # Against the box: tables it sent hold what it counted; restored ones what the mirror
 # had, at most what the box has now plus a day of crawling (a newer box, or forgotten
 # players gone since). Every box table is there
@@ -151,20 +188,25 @@ while IFS=$'\t' read -r d t n; do
     sent=$(count "$extra/$d.db" "$t")
     have=$(count "$raw/$d.db" "$t")
     if [[ "$d $t" == "raw timeline_docs" ]]; then continue
-    elif (( sent == n )); then (( have == n )) || die "$d.$t: $have rows, box $n"
-    else (( have > 0 || n == 0 )) || die "$d.$t: empty, box $n"
+    elif (( sent == n )); then (( have == n )) || fail "$d.$t: $have rows, box $n"
+    else (( have > 0 || n == 0 )) || fail "$d.$t: empty, box $n"
     fi
     log "$d.$t: $have (box $n)"
 done < "$extra/counts.tsv"
-rm -rf "$extra"
 for d in $DBS; do
-    [[ "$(sqlite3 "file:$raw/$d.db?mode=ro" 'PRAGMA quick_check')" == ok ]] || die "$d.db: quick_check failed"
+    [[ "$(sqlite3 "file:$raw/$d.db?mode=ro" 'PRAGMA quick_check')" == ok ]] || fail "$d.db: quick_check failed"
 done
+mark counted
+fi
+rm -rf "$extra"
 
+if ! done_ anonymise; then
 log "anonymising"
+rm -rf "$out"
 nice -n 10 "$bin/meiolol-lab-snapshot" anonymise "$raw" "$out"
+mark anonymise
+fi
 # The checks deploy/snapshot.sh ran on the Mac
-fail() { rm -rf "$out"; die "check: $*"; }
 [[ "$(count "$out/meiolol.db" anon_meta)" == 1 ]] || fail "no anon_meta"
 for d in $DBS; do
     for t in $(sqlite3 "file:$raw/$d.db?mode=ro" "SELECT name FROM sqlite_master WHERE type = 'table'
@@ -185,18 +227,30 @@ done
 id=$(sqlite3 "file:$raw/meiolol.db?mode=ro" "SELECT match_id FROM matches LIMIT 1")
 a=$(sqlite3 "file:$out/meiolol.db?mode=ro" "SELECT count(*) FROM participants WHERE match_id = '$id'")
 [[ "$a" == 0 ]] || fail "real match id $id in participants"
-rm -rf "$work"
 log "checks passed"
+# From here no real ids: progress moves into the snapshot, then the real-id copy goes
+progress=$out/.building
+echo checked > "$progress"
+rm -rf "$work"
+fi
 
 log "split, legendaries, seat and comp stats, pack, mastery-pre"
-nice -n 10 "$bin/meiolol-lab-snapshot" split "$out" > /dev/null
-nice -n 10 "$bin/meiolol-snapshot" legendaries --data "$out" --platform all
+# step NAME CMD...: CMD unless done, then marked
+step() {
+    done_ "$1" && return 0
+    local what=$1
+    shift
+    "$@"
+    mark "$what"
+}
+step split sh -c 'nice -n 10 "$1" split "$2" > /dev/null' _ "$bin/meiolol-lab-snapshot" "$out"
+step legendaries nice -n 10 "$bin/meiolol-snapshot" legendaries --data "$out" --platform all
 versions=$(curl -sf https://ddragon.leagueoflegends.com/api/versions.json) || die "Data Dragon versions.json unreachable"
 # Not ?mode=ro: a read-only open fails (14) while the WAL has no -shm yet
 patches=$(sqlite3 "$out/meiolol.db" "SELECT DISTINCT patch FROM matches WHERE queue_id = 420")
 [[ -n "$patches" ]] || die "$out/meiolol.db: no queue 420 patches"
 for patch in $patches; do
-    v=$(grep -o "\"${patch//./\\.}\.[0-9]*\"" <<< "$versions" | head -n 1 | tr -d '"')
+    v=$({ grep -o "\"${patch//./\\.}\.[0-9]*\"" <<< "$versions" || true; } | head -n 1 | tr -d '"')
     [[ -n "$v" ]] || { log "no Data Dragon version for $patch"; continue; }
     mkdir -p "$out/ddragon/$patch"
     for f in champion item; do
@@ -207,12 +261,13 @@ done
 # Summaries leave the box's raw.db for the archive after ~2 days: read both
 arch=/mnt/wsl/archive/meiolol-raw
 if [[ -d "$out/ddragon" ]]; then
-    nice -n 10 "$bin/meiolol-lab-snapshot" seat-stats "$out" "$out/ddragon" "$arch"
-    nice -n 10 "$bin/meiolol-lab-snapshot" comp-stats "$out" "$out/ddragon" "$arch"
+    step seat-stats nice -n 10 "$bin/meiolol-lab-snapshot" seat-stats "$out" "$out/ddragon" "$arch"
+    step comp-stats nice -n 10 "$bin/meiolol-lab-snapshot" comp-stats "$out" "$out/ddragon" "$arch"
 else
-    nice -n 10 "$bin/meiolol-lab-snapshot" seat-stats "$out"
+    step seat-stats nice -n 10 "$bin/meiolol-lab-snapshot" seat-stats "$out"
 fi
-nice -n 10 "$bin/meiolol-lab-snapshot" pack "$out"
-nice -n 10 "$bin/meiolol-lab-snapshot" mastery-pre "$out" "$arch"
+step pack nice -n 10 "$bin/meiolol-lab-snapshot" pack "$out"
+step mastery-pre nice -n 10 "$bin/meiolol-lab-snapshot" mastery-pre "$out" "$arch"
+rm -f "$progress"
 chmod -R go+rX "$out"
 log "made $name ($(du -sh "$out" | cut -f1))"
