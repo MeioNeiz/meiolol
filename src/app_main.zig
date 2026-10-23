@@ -247,12 +247,11 @@ const App = struct {
 
     fn champion(app: App, stats: *const Stats, name: []const u8, flag: []const u8) !u32 {
         _ = app;
-        const i = stats.find(name) orelse
+        return stats.idOf(name) orelse
             fail("{s}: no single champion matches \"{s}\" in the stats file", .{
                 flag,
                 name,
             });
-        return stats.ids[i];
     }
 
     const Loaded = struct { stats: Stats, path: []const u8 };

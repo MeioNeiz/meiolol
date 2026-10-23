@@ -250,8 +250,7 @@ fn history(a: std.mem.Allocator, end: ingame.Sample) ![]const ingame.Sample {
 }
 
 fn champion(stats: *const core.Stats, name: []const u8) !u32 {
-    const at = stats.find(name) orelse return error.UnknownChampion;
-    return stats.ids[at];
+    return stats.idOf(name) orelse error.UnknownChampion;
 }
 
 /// The session lcu/session.zig would read for the scene

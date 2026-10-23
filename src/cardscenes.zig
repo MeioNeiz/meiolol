@@ -85,11 +85,10 @@ const Ids = struct {
     bad: *[]const u8,
 
     fn of(ids: Ids, name: []const u8) Error!u32 {
-        const i = ids.stats.find(name) orelse {
+        return ids.stats.idOf(name) orelse {
             ids.bad.* = name;
             return error.UnknownChampion;
         };
-        return ids.stats.ids[i];
     }
 
     fn picks(ids: Ids, arena: std.mem.Allocator, names: []const []const u8) Error![]Pick {

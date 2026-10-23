@@ -306,6 +306,11 @@ pub const Stats = struct {
     /// Champion index by name, forgiving case, spaces and punctuation ("kaisa",
     /// "lee sin", "leesin", "wukong"). Falls back to a unique prefix, then a unique
     /// substring ("nunu", "mundo"). Null when unknown or ambiguous.
+    /// The champion id `find` matches
+    pub fn idOf(s: *const Stats, query: []const u8) ?u32 {
+        return s.ids[s.find(query) orelse return null];
+    }
+
     pub fn find(s: *const Stats, query: []const u8) ?usize {
         var qbuf: [64]u8 = undefined;
         const q = normalise(&qbuf, query);
