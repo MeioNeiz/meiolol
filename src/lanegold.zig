@@ -81,7 +81,6 @@ pub const Model = struct {
         skip: ?struct { k: usize, folds: usize },
     ) !Model {
         const n = st.n;
-        const Cell = struct { n: f64 = 0, sum: f64 = 0 };
         const champ_cells = try gpa.alloc(Cell, Role.count * n);
         defer gpa.free(champ_cells);
         @memset(champ_cells, .{});
@@ -101,10 +100,10 @@ pub const Model = struct {
                 const b = st.index(g.teams[1][ri]) orelse continue;
                 const d: f64 = gold;
                 sum_sq[ri] += d * d;
-                addCell(&champ_cells[ri * n + a], d);
-                addCell(&champ_cells[ri * n + b], -d);
-                addCell(&pair_cells[(ri * n + a) * n + b], d);
-                addCell(&pair_cells[(ri * n + b) * n + a], -d);
+                champ_cells[ri * n + a].add(d);
+                champ_cells[ri * n + b].add(-d);
+                pair_cells[(ri * n + a) * n + b].add(d);
+                pair_cells[(ri * n + b) * n + a].add(-d);
             }
         }
 
@@ -152,10 +151,15 @@ pub const Model = struct {
         return m;
     }
 
-    fn addCell(c: anytype, d: f64) void {
-        c.n += 1;
-        c.sum += d;
-    }
+    const Cell = struct {
+        n: f64 = 0,
+        sum: f64 = 0,
+
+        fn add(c: *Cell, d: f64) void {
+            c.n += 1;
+            c.sum += d;
+        }
+    };
 
     /// Blue minus red: summed champion gold, summed pair gold (sds)
     pub fn features(m: *const Model, st: *const core.Stats, teams: [2][5]u32) [2]f64 {

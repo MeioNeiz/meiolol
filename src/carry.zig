@@ -692,7 +692,7 @@ const Ctx = struct {
     passes: u32,
     jobs: []Job,
 
-    fn one(c: Ctx, i: usize) anyerror!void {
+    fn one(c: Ctx, i: usize) !void {
         const j = &c.jobs[i];
         const blk = c.blocks[j.bi];
         const m = &c.at[j.mi];
