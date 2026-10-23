@@ -62,6 +62,15 @@ shipped model's edge over a coin, shrinking as the patch fills (frontier-dynamic
 - PT4 Net (gpu-box): the set net + embedding on PT3's winner as its base; fresh pooled
   fit vs a daily warm-start update (embeddings only vs all weights, 5% old games mixed
   in) [psn C3, C4, C7]. Done as PT3, with sealed seeds
+- PT6 EUW as the target region (J27). Scored set: EUW1 latest-patch games decide,
+  every other platform reported beside (KR, VN2, rest); fit still on every platform,
+  as every region's games beat EUW's alone (learned.md 13 Oct). Arms on PT3's winner:
+  A8 region offsets o[c][r][region] shrunk to 0, A9 EUW up-weight (EUW1 games x a,
+  2-10), and knobs tuned on EUW vs on every region. Noise: EUW1 is ~21% of 16.21 (53k
+  games), so ± ~0.19 milli-nats against 0.09 for all. Done when each arm has its EUW
+  curve by day vs A1, and lab-frontier.md's pass rule says EUW1 decides (today per
+  platform is reported, never deciding). Start: patchdays.zig (platform per game is in
+  the pin). Blocked by PT1
 - PT5 Ship: the winning rule on the box (daily update, refit per patch); the daily eval
   (deploy/web-loop.sh, data/eval-history.tsv) scores latest-patch games only
 
@@ -71,6 +80,7 @@ shipped model's edge over a coin, shrinking as the patch fills (frontier-dynamic
   [psn C15]; never per-game weights or a domain classifier [psn C11]
 - Predicting a champion's jump from what the patch changed (needs 3+ patches: 16.22,
   16.23; no backfill, J25)
+- A model per region for each region's pages, once A8 shows region terms help EUW
 - Per-block transfer (pairs, matchups, comp terms across patches); the train-vs-eval
   allocation curve for tuned knobs
 

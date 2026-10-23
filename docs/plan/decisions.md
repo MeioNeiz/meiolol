@@ -88,6 +88,10 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
   have got picked and what champ should have won", and pick shares with no 10-player
   minimum. Overrides J1 for the Daily Draft: win chances with their 95% range, the
   model's picks and every pick rated, words "the model's pick", never "best pick"
+- J27 (23 Oct) "Models need to be optimised per region, probably EUW, and patch diff
+  needs to show why". Models are tuned and scored for one target region, EUW first,
+  still fitted on every region's games (patch-transfer.md PT6). The Patch changes page
+  says why each champion moved: what the patch changed for it (site.md PC1-PC2)
 - nn on the GPU: planned, not now
 - Q1 Rewrite the application around game review of your own games, lane curves as the
   benchmark; squads worded as planned, or out until built

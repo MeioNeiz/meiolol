@@ -78,7 +78,9 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
    data-and-model.md
 8. The latest patch (J25, 23 Oct): docs/plan/patch-transfer.md. Evaluate on
    latest-patch games only, day by day; old patches only while it is thin (pooled plus
-   shrunk per-patch offsets); find the day old patches stop helping. PT1 pin next
+   shrunk per-patch offsets); find the day old patches stop helping. PT1 pin next.
+   J27 (23 Oct): tuned and scored for EUW (PT6); the Patch changes page says why each
+   champion moved (site.md PC1-PC2)
 9. The data edge (J23, J24): every block respects its filters or is marked (E1, done
    23 Oct: scope chips); next day cubes as storage (E7) so any patch, season, rank and
    region is a sum, a public truth test (E2) and "Meio", one estimate per number from
