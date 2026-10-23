@@ -51,11 +51,13 @@ pub const Ahead = struct {
         a.* = .{ .gpa = gpa, .io = io, .window = o.window, .reads = o.reads, .queue = undefined };
         a.queue = .init(&a.queue_buf);
         errdefer a.stop();
+        // Room first: a connection opened but not yet in conns would leak
+        try a.conns.ensureTotalCapacity(gpa, 1 + o.readers);
         const lister = (try schema.openSibling(gpa, db)) orelse return a;
-        try a.conns.append(gpa, lister);
+        a.conns.appendAssumeCapacity(lister);
         for (0..o.readers) |_| {
             const c = (try schema.openSibling(gpa, db)).?;
-            try a.conns.append(gpa, c);
+            a.conns.appendAssumeCapacity(c);
             // Its pages are wanted in the OS page cache, not this connection's
             try c.exec("PRAGMA main.cache_size = -1024; PRAGMA timeline.cache_size = -1024");
         }
