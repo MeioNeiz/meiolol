@@ -377,6 +377,13 @@ p.caption { font-size: 13px; margin: 4px 0 16px; }
 .tl-bar .tabs { margin: 0; }
 .tl-bar input { flex: 0 1 220px; background: var(--panel); }
 .tl-bar nav.switch { margin-left: auto; }
+.tl-knobs { margin-left: auto; position: relative; }
+.tl-knobs summary { list-style: none; cursor: pointer; padding: 5px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--muted); font-size: 13px; }
+.tl-knobs summary::-webkit-details-marker { display: none; }
+.tl-knobs summary::after { content: " \25BE"; }
+.tl-knobs[open] summary { color: var(--text); }
+.tl-knobs[open] .tl-mins { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); }
+.tl-key { color: var(--faint); font-size: 12.5px; margin: -4px 2px 8px; }
 .tl-mins { display: flex; gap: 14px; margin-left: auto; }
 .tl-mins label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; white-space: nowrap; }
 .tl-bar .tl-mins input { flex: none; width: 76px; padding: 5px 8px; }
@@ -400,9 +407,9 @@ table.tl .champ { gap: 10px; font-weight: 500; }
 table.tl .champ img { width: 24px; height: 24px; }
 table.tl .role { color: var(--faint); font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
 /* Champions table (tierlist.zig): roomier rows than the dense matchup tables */
-table.tiers td { padding: 5px 12px; }
+table.tiers td { padding: 2px 12px; height: 28px; }
 table.tiers .champ { gap: 12px; }
-table.tiers .champ img { width: 30px; height: 30px; border-radius: 6px; }
+table.tiers .champ img { width: 24px; height: 24px; border-radius: 5px; }
 table.tiers .role { text-align: center; width: 56px; color: var(--text); }
 table.tiers th.role { color: var(--muted); font: inherit; font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; }
 svg.ri { width: 22px; height: 22px; fill: currentColor; vertical-align: middle; }
@@ -423,6 +430,11 @@ b.down, a.down, .down { color: var(--bad); }
 .ci .down { background: var(--bad); }
 .ci .even { background: var(--muted); }
 .wr b { color: var(--c); }
+/* Champions table: the patch change under the rate (tierlist.zig PatchNote) */
+.wv { display: inline-flex; flex-direction: column; align-items: flex-end; line-height: 1; }
+.wv b { line-height: 13px; }
+.wv .pd { margin: 1px 0 0 !important; width: auto !important; font-size: 11px; line-height: 11px; color: var(--c); font-variant-numeric: tabular-nums; }
+.wv .pd.faint { color: var(--faint); }
 .wr .ci i { background: var(--c); }
 .wrc { color: var(--c); }
 .wr-key { color: var(--faint); font-size: 12px; margin: 6px 2px 0; }
@@ -445,6 +457,8 @@ h3.opp-h .muted { font-weight: 400; font-size: 13px; }
   .ci, table.tl .opt { display: none; }
   .tl-bar input[type="search"] { flex: 1 1 100%; }
   .tl-mins { margin-left: 0; }
+  .tl-bar .tl-knobs ~ input[type="search"] { flex: 1 1 0; min-width: 0; }
+  .tl-key { font-size: 12px; margin-top: -2px; }
 }
 .tiles > div.stale { opacity: 0.45; }
 .choices button .tag { margin-left: 6px; vertical-align: middle; }

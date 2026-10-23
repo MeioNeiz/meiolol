@@ -4,6 +4,7 @@ const std = @import("std");
 const core = @import("core");
 const html = @import("html.zig");
 const spread = @import("../spread.zig");
+const patchday = @import("../patchday.zig");
 const builds_page = @import("builds.zig");
 
 const Writer = std.Io.Writer;
@@ -114,7 +115,7 @@ pub fn legend(w: *Writer, span: f64) !void {
 /// rates around it (spread.zig), mirrored about the track and coloured by win rate
 /// along it (shapeGradient); none under min_players. The shape doesn't narrow as games
 /// come in; only the rate fades
-fn distCell(w: *Writer, site: *const Site, ch: Champ, wins: u32, games: u32, sort: f64) !void {
+fn distCell(w: *Writer, site: *const Site, ch: Champ, wins: u32, games: u32, sort: f64, patch: ?PatchNote) !void {
     const p = ratio(wins, games);
     const s = &site.spread;
     const players = if (s.get(ch.id)) |c| (if (c.players >= s.min_players) c else null) else null;
@@ -123,8 +124,36 @@ fn distCell(w: *Writer, site: *const Site, ch: Champ, wins: u32, games: u32, sor
     else
         try site.arena.print("{d} games", .{games});
     const shape = if (players) |c| try shapePath(site.arena, c.shape, 100 * p) else null;
-    try trackCell(w, p, sort, games, table_span, title, shape);
+    try trackCellNoted(w, p, sort, games, table_span, title, shape, patch);
 }
+
+/// The win rate's change since the previous patch, small under it: coloured as win rates
+/// are when clear (patchday.Rate.clear), faint when not
+const PatchNote = struct {
+    rate: patchday.Rate,
+    pd: *const patchday.PatchDay,
+    in: []const u8,
+
+    pub fn render(n: PatchNote, w: *Writer) !void {
+        const d = n.rate.delta();
+        const clear = n.rate.clear(n.pd.opts.min_role_games, n.pd.opts.z);
+        try tpl.render(w, "<small class=\"pd{faint}\" style=\"--c:{colour}\" title=\"Patch {cur} against {prev} {in}: {now:.1}% of {cur_n} games won against {then:.1}% of {prev_n}; {verdict}\">{sign}{abs:.1}</small>", .{
+            .faint = tpl.when(!clear, " faint"),
+            .colour = wrColour(0.5 + d / 100, table_span),
+            .cur = n.pd.cur_patch,
+            .prev = n.pd.prev_patch,
+            .in = n.in,
+            .now = 100 * patchday.Rate.share(n.rate.cur),
+            .cur_n = Thousands{ .n = n.rate.cur.games },
+            .then = 100 * patchday.Rate.share(n.rate.prev),
+            .prev_n = Thousands{ .n = n.rate.prev.games },
+            .verdict = if (clear) "a clear change" else "no clear change",
+            // U+2212: tabular figures space a hyphen out as if it were a digit
+            .sign = if (d >= 0.05) "+" else if (d <= -0.05) "\u{2212}" else "",
+            .abs = @abs(d),
+        });
+    }
+};
 
 /// Win rate as the champions table shows it: a dot at the rate on a track from 25% to
 /// 75% (50% marked), an optional shape path behind it (shapePath), then the rate,
@@ -132,16 +161,33 @@ fn distCell(w: *Writer, site: *const Site, ch: Champ, wins: u32, games: u32, sor
 /// (data-v): the rate pulled toward an average by its games, so sorting by the column
 /// can't put a few lucky games on top. Matchup rates (matchup_span) use it bare
 pub fn trackCell(w: *Writer, p: f64, sort: f64, games: u32, span: f64, title: []const u8, shape: ?[]const u8) !void {
+    try trackCellNoted(w, p, sort, games, span, title, shape, null);
+}
+
+/// The rate in a trackCell, fainter with fewer games, a patch change under it if any
+const RateText = struct {
+    p: f64,
+    games: u32,
+    note: ?PatchNote,
+
+    pub fn render(r: RateText, w: *Writer) !void {
+        const fade = core.curvesfile.fade(r.games);
+        if (r.note) |n| return tpl.render(w, "<span class=\"wv\"><b style=\"opacity:{fade:.2}\">{rate:.1}%</b>{n}</span>", .{ .fade = fade, .rate = 100 * r.p, .n = n });
+        try tpl.render(w, "<b style=\"opacity:{fade:.2}\">{rate:.1}%</b>", .{ .fade = fade, .rate = 100 * r.p });
+    }
+};
+
+/// trackCell with the patch change under the rate
+fn trackCellNoted(w: *Writer, p: f64, sort: f64, games: u32, span: f64, title: []const u8, shape: ?[]const u8, note: ?PatchNote) !void {
     try tpl.render(w, "<td data-v=\"{sort:.4}\"><span class=\"wr\" style=\"--c:{colour}\" title=\"{title}\"><span class=\"ci\">" ++
         "{shape}<i class=\"d\" style=\"left:{dot:.1}%\"></i></span>" ++
-        "<b style=\"opacity:{fade:.2}\">{rate:.1}%</b></span></td>", .{
+        "{rate}</span></td>", .{
         .sort = sort,
         .colour = wrColour(p, span),
         .title = title,
         .shape = if (shape) |d| tpl.t("<svg class=\"shape\" viewBox=\"0 0 100 10\" preserveAspectRatio=\"none\" aria-hidden=\"true\"><path d=\"{d}\"></path></svg>", .{ .d = d }) else null,
         .dot = trackX(100 * p),
-        .fade = core.curvesfile.fade(games),
-        .rate = 100 * p,
+        .rate = RateText{ .p = p, .games = games, .note = note },
     });
 }
 
@@ -250,6 +296,19 @@ test wrColour {
     }
 }
 
+test PatchNote {
+    var buf: [512]u8 = undefined;
+    const pd: patchday.PatchDay = .{ .prev_patch = "16.20", .cur_patch = "16.21" };
+    // 6 points on 4,000 games each side: clear, coloured; 1 point on 400: faint
+    var w: Writer = .fixed(&buf);
+    try (PatchNote{ .rate = .of(.{ .games = 4000, .wins = 2000 }, .{ .games = 4000, .wins = 2240 }), .pd = &pd, .in = "in EUW" }).render(&w);
+    try std.testing.expectStringStartsWith(w.buffered(), "<small class=\"pd\" style=\"--c:var(--hi4)\" title=\"Patch 16.21 against 16.20 in EUW: 56.0% of 4,000 games won against 50.0% of 4,000; a clear change\">+6.0</small>");
+    w = .fixed(&buf);
+    try (PatchNote{ .rate = .of(.{ .games = 400, .wins = 204 }, .{ .games = 400, .wins = 200 }), .pd = &pd, .in = "in EUW" }).render(&w);
+    try std.testing.expect(std.mem.find(u8, w.buffered(), "class=\"pd faint\"") != null);
+    try std.testing.expect(std.mem.endsWith(u8, w.buffered(), "no clear change\">\u{2212}1.0</small>"));
+}
+
 /// A win rate in text (.wrc), coloured by wrColour on the champions table's scale and
 /// fainter with fewer games, as the table's own
 pub fn wrText(w: *Writer, p: f64, games: u32) !void {
@@ -286,7 +345,7 @@ fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void
     try tpl.renderPart(w, "<div class=\"tl-bar\">", .{});
     try roleTabs(w, role, root);
     try tpl.renderPart(w,
-        \\<span class="tl-mins" hidden><label>Min games <input type="number" inputmode="numeric" min="0" step="100" value="{games}" data-min="games" data-for="tiers"></label><label title="Share of the champion's games played in the role">Min lane % <input type="number" inputmode="numeric" min="0" max="100" step="5" value="{share}" data-min="share" data-for="tiers"></label></span>
+        \\<details class="tl-knobs" hidden><summary>Minimums</summary><span class="tl-mins"><label>Min games <input type="number" inputmode="numeric" min="0" step="100" value="{games}" data-min="games" data-for="tiers"></label><label title="Share of the champion's games played in the role">Min lane % <input type="number" inputmode="numeric" min="0" max="100" step="5" value="{share}" data-min="share" data-for="tiers"></label></span></details>
         \\
     , .{
         .games = @as(u64, @ceil(min_pick_rate * @as(f64, @floatFromInt(site.games)))),
@@ -294,12 +353,14 @@ fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void
     });
     try tpl.renderPart(w,
         \\<input type="search" placeholder="Search champion" data-filter="tiers" aria-label="Search champion"></div>
+        \\<p class="tl-key">Sorted by win rate pulled toward the role's average, the more the fewer the games, so a few lucky games can't top it; the rate shown is raw.{since}</p>
         \\{gradient}<div class="tl-wrap"><table class="tl tiers" id="tiers" data-sortable>
-        \\<thead><tr><th class="rank">#</th><th class="l" data-sort="text">Champion</th>{role}<th data-sort="num" aria-sort="descending">Win rate</th><th data-sort="num" class="opt">Pick</th><th data-sort="num" class="opt">Ban</th><th data-sort="num" title="Wins above the role's average per 10,000 games it was not banned">Influence</th><th data-sort="num">Games</th></tr></thead>
+        \\<thead><tr><th class="rank">#</th><th class="l" data-sort="text">Champion</th>{role}<th data-sort="num" aria-sort="descending" title="Sorts by the rate pulled toward the role's average by games">Win rate</th><th data-sort="num" class="opt">Pick</th><th data-sort="num" class="opt">Ban</th><th data-sort="num" title="Wins above the role's average per 10,000 games it was not banned">Influence</th><th data-sort="num">Games</th></tr></thead>
         \\<tbody>
         \\
     , .{
         .gradient = tpl.call(shapeGradient, .{}),
+        .since = if (site.patchday) |pd| tpl.t(" Under it: the change since {prev}, faint when not clear.", .{ .prev = pd.prev_patch }) else null,
         .role = tpl.when(role == null, tpl.t("<th class=\"role\" data-sort=\"text\">Role</th>", .{})),
     });
     const to_site = try std.mem.concat(site.arena, u8, &.{ root, site.view.up() });
@@ -308,7 +369,7 @@ fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void
     for (rows) |row| {
         if (row.rare) rare += 1 else n += 1;
         try tpl.render(w,
-            \\<tr class="bx" data-name="{name}" data-games="{games}" data-share="{share:.1}"{rare}><td class="rank">{n}</td><td class="l">{link}</td>{role}{wr}<td class="opt" data-v="{games}">{pick}</td><td class="opt" data-v="{banned}">{ban}</td>{impact}<td class="dim" data-v="{games}">{games}</td></tr>
+            \\<tr class="bx" data-name="{name}" data-games="{games}" data-share="{share:.1}"{rare}><td class="rank">{n}</td><td class="l">{link}</td>{role}{wr}<td class="opt" data-v="{games}">{pick}</td><td class="opt" data-v="{banned}">{ban}</td>{impact}<td class="dim" data-v="{games}">{count}</td></tr>
             \\
         , .{
             .name = row.ch.name,
@@ -320,8 +381,9 @@ fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void
                 .n = @backingInt(row.role),
                 .icon = tpl.call(roleIcon, .{row.role}),
             })),
-            .wr = tpl.call(distCell, .{ site, row.ch, row.wins, row.games, row.shrunk }),
+            .wr = tpl.call(distCell, .{ site, row.ch, row.wins, row.games, row.shrunk, patchNote(site, row) }),
             .games = row.games,
+            .count = Thousands{ .n = row.games },
             .pick = tpl.call(pct, .{ row.games, site.games }),
             .banned = row.ch.banned,
             .ban = tpl.call(pct, .{ row.ch.banned, site.games }),
@@ -340,6 +402,12 @@ fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void
         , .{ .rare = rare, .none = tpl.flag(rare == 0, "hidden") }),
         .table_js = html.Link{ .root = root, .up = site.view.up(), .path = "table.js" },
     });
+}
+
+fn patchNote(site: *const Site, row: Row) ?PatchNote {
+    const pd = if (site.patchday) |*pd| pd else return null;
+    const m = pd.champion(row.ch.id, row.role) orelse return null;
+    return .{ .rate = m.win, .pd = pd, .in = site.view.region.in() };
 }
 
 /// Influence (ban impact), whole games won per 10,000; below 0 dim. Title: its two parts
@@ -393,7 +461,7 @@ pub fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {
     try earlyNote(site, w, false);
     try tierTable(site, w, role, root);
     try tpl.render(w,
-        \\<p class="muted small">Win rate: the champion's, the dot. Sorted by it pulled toward the role's average, the more so the fewer its games, so a few hundred lucky games can't top the table; the rate shown is raw. Bar: how its players' own win rates spread around it, thicker where more players are, players with {min}+ games on it in any role, {period} (none under {need} such players). On a scale from 25% to 75%, 50% marked. In 10 to 20 games luck alone moves a player's win rate by about 15 points, so much of the spread is luck. Influence: games won above the role's average, per 10,000 games the champion was not banned: its win rate over the role's average, pulled toward the average the fewer its games (so a few hundred lucky games can't make a big number), times how often it was picked in those games. 30: in every 10,000 such games, its team won about 30 more than the role's average win rate would give. High: often played and winning more than most, so a ban takes it away often. Below 0: winning less than most. Per 10,000 so the numbers are whole games (per 1,000 most would be under 1); the scale of lolalytics' PBI, which has no pull. A past-games measure, not a promise about your game.</p>
+        \\<p class="muted small">Win rate: the champion's, the dot. Bar: how its players' own win rates spread around it, thicker where more players are, players with {min}+ games on it in any role, {period} (none under {need} such players). On a scale from 25% to 75%, 50% marked. In 10 to 20 games luck alone moves a player's win rate by about 15 points, so much of the spread is luck. Influence: games won above the role's average, per 10,000 games the champion was not banned: its win rate over the role's average, pulled toward the average the fewer its games (so a few hundred lucky games can't make a big number), times how often it was picked in those games. 30: in every 10,000 such games, its team won about 30 more than the role's average win rate would give. High: often played and winning more than most, so a ban takes it away often. Below 0: winning less than most. Per 10,000 so the numbers are whole games (per 1,000 most would be under 1); the scale of lolalytics' PBI, which has no pull. A past-games measure, not a promise about your game.</p>
         \\
     , .{ .min = site.spread.min_games, .period = site.periodText(site.view.period), .need = site.spread.min_players });
     try html.foot(w, p);

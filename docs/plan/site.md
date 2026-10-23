@@ -10,9 +10,9 @@ docs/design-ideas.md, measured layout, colour by impact, build order. Done: buil
 order 1-3 (9ed5c1f, d0026ff): scale tokens in style.css, tierlist.wrColour steps with
 the thin-data cut and step-4 chip (dropped 20 Oct, Jacob: "they just look weird"; step 4 is now plain vivid text) (champions index, matchups index, vs usual, champion
 win rate tile), matchup win rate, gold and lead table in ink; wrap 1,560, header 48,
-29 px table rows (1080p champions table 17 to 26 rows; live 22 Oct: 41 px, 19 rows,
-CH8). Next (steps CH4, CH8, CH7 below): build order 4 (opponent
-tiles 76 px, 0 of 41 on a 1080p screen still), 5 (heat cells, pick/ban bars), 6
+29 px table rows (champions table 29 px since CH8, 24 Oct). Build order 4 done (CH4,
+24 Oct: 76 px opponent tiles, Darius's 40 in 3 rows); 5's patch change under the rate
+done (CH8). Next (CH7 below): 5's heat cells and pick/ban bars, 6
 (header row, phone filters button); Your games game scale (2.5, 5, 10, 15 points) not
 wired yet. Done 20 Oct (research review, f9's list): colour key under the champions
 table, opponent grid and matchups index (tierlist.legend); win rate columns sort by
@@ -233,7 +233,14 @@ opponent grid are its first components.
   vs Support, Duos, from statsfile enemy and ally pairs (vs usual from both champions'
   role rates on the log-odds scale, pulled by k as usualK; thin data fades). Done when
   Darius shows six tabs with games on each tile; no data work needed. Wording "duo",
-  never "best duo". Start: src/site/champion.zig, src/core/statsfile.zig
+  never "best duo". Start: src/site/champion.zig, src/core/statsfile.zig. Done 24 Oct
+  (7b0ef88): tiles 77x134 px (118 off lane, no gold), 19 a row at 1920, 4 at 390;
+  unit words in one key line; Duos by ally role behind their own tabs, opening on the
+  lane partner (bot, support) or jungle (mid for jungle), highest win rate first; tabs
+  other than Lane are the root view's (chips marked under other picks; the filter data
+  has lane opponents only). Vs usual's k per tab (champion.Pairs): off-lane pairs pull
+  harder, so their numbers sit near 0 until thousands of games. Left: the grid starts
+  at y 1,271 on Darius (CH1 moves it up)
 - CH5 Over time and by game length. Win rate and pick rate over the last 6 patches with
   rank in role, and win rate by game length (5 buckets with games), as two small charts
   side by side; the early lean and patch paragraphs shrink to one line each. Done when
@@ -249,7 +256,13 @@ opponent grid are its first components.
   the first screen
 - CH8 Champions index. Rows at 29 px (said done 20 Oct, but live rows are 41 px, 19 on a
   1080p screen), patch change under the win rate (design build order 5), and
-  ui-audit.md's index items (sort key, Min games knobs folded)
+  ui-audit.md's index items (sort key, Min games knobs folded). Done 24 Oct: 29 px
+  rows (24 px icons), the change since the previous patch under each rate (coloured
+  when clear at 300+ games a patch, else faint; hover for both rates), the sort key in
+  a line above the table and the Win rate header's title, Min games and Min lane %
+  folded behind "Minimums", games with separators. Left: heat cells and pick/ban bars
+  (build order 5), the empty band between Role and Win rate at 1280, phone role tabs
+  wrapping Support
 - CH9 Clarity: docs/ui-audit.md "Champion page" items (colour against copy, one win
   rate legend, the sort key on opponents and "also play", one number format)
 
