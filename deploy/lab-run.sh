@@ -71,10 +71,13 @@ DRY=0
 LITERAL=0
 WATCH=meiolol-lab-watch
 
+# The gpu-box's zstd and sqlite3 live in ~/bin, which a non-login ssh leaves off PATH
+# (lab tests spawn zstd)
 on() {
     local host=$1
     shift
-    if [[ "$host" == mac ]]; then (cd && bash -c "$*"); else ssh "$host" "$*"; fi
+    if [[ "$host" == mac ]]; then (cd && bash -c "$*")
+    else ssh "$host" "PATH=\$HOME/bin:\$PATH; $*"; fi
 }
 
 copy() {
