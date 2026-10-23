@@ -89,15 +89,12 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8) !Summary {
     const steals = try arena.alloc([10]?u16, data.games.len);
     sum.summaries = try readSteals(gpa, arena, io, snap, &index, steals);
 
-    const cwd = Io.Dir.cwd();
     const out_path = try std.fs.path.join(arena, &.{ snap, file_name });
-    const tmp_path = try arena.print("{s}.tmp", .{out_path});
+    var af = try Io.Dir.cwd().createFileAtomic(io, out_path, .{ .replace = true });
+    defer af.deinit(io);
     {
-        var file = try cwd.createFile(io, tmp_path, .{});
-        errdefer cwd.deleteFile(io, tmp_path) catch {};
-        defer file.close(io);
         var wbuf: [256 * 1024]u8 = undefined;
-        var fw = file.writer(io, &wbuf);
+        var fw = af.file.writer(io, &wbuf);
         const w = &fw.interface;
         try w.writeAll(header);
 
@@ -123,7 +120,7 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8) !Summary {
         }
         try w.flush();
     }
-    try cwd.rename(tmp_path, cwd, out_path, io);
+    try af.replace(io);
     return sum;
 }
 

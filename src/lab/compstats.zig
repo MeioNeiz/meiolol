@@ -175,16 +175,15 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8, ddragon: []const u8, archiv
     defer games.deinit(gpa);
     sum.games = games.count();
 
-    const cwd = Io.Dir.cwd();
-    var outs: [2]struct { path: []const u8, tmp: []const u8, file: Io.File, fw: Io.File.Writer, buf: [64 * 1024]u8 } = undefined;
+    var outs: [2]struct { af: Io.File.Atomic, fw: Io.File.Writer, buf: [64 * 1024]u8 } = undefined;
+    var opened: usize = 0;
+    defer for (outs[0..opened]) |*o| o.af.deinit(io);
     for (&outs, [_][]const u8{ seat_file, team_file }, [_][]const u8{ seat_header, team_header }) |*o, name, header| {
-        o.path = try std.fs.path.join(arena, &.{ snap, name });
-        o.tmp = try arena.print("{s}.tmp", .{o.path});
-        o.file = try cwd.createFile(io, o.tmp, .{});
-        o.fw = o.file.writer(io, &o.buf);
+        o.af = try Io.Dir.cwd().createFileAtomic(io, try std.fs.path.join(arena, &.{ snap, name }), .{ .replace = true });
+        opened += 1;
+        o.fw = o.af.file.writer(io, &o.buf);
         try o.fw.interface.writeAll(header);
     }
-    defer for (&outs) |*o| o.file.close(io);
 
     const b = try gpa.create(Batch);
     defer gpa.destroy(b);
@@ -192,7 +191,7 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8, ddragon: []const u8, archiv
     sum.from_archive = (try summaries.each(gpa, io, snap, archive_dir, &games, b)).from_archive;
     for (&outs) |*o| {
         try o.fw.interface.flush();
-        try cwd.rename(o.tmp, cwd, o.path, io);
+        try o.af.replace(io);
     }
     return sum;
 }
