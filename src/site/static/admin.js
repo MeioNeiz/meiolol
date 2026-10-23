@@ -2283,9 +2283,10 @@ function deployList() {
       live: cache && Math.max(cache, steps.upload && steps.upload.end || 0), subject: commits.length ? commits[0].replace(/^\S+ /, "") : "" });
   }
   out.sort((a, b) => b.start - a.start);
-  // A newer deploy whose binary reached the box before this one went live replaced it
+  // A newer deploy whose binary reached the box before this one went live replaced it; a
+  // skipped one (binary unchanged, no round of its own, 23 Oct) leaves this one running
   for (let i = 1; i < out.length; i++) {
-    if (out[i].state === "running" && out.slice(0, i).some(d => d.steps.build && d.steps.build.status === "done")) out[i].state = "superseded";
+    if (out[i].state === "running" && out.slice(0, i).some(d => d.state !== "skipped" && d.steps.build && d.steps.build.status === "done")) out[i].state = "superseded";
   }
   return out;
 }
@@ -2332,6 +2333,7 @@ VIEWS.deploys = body => {
     }
     else if (d.state === "running") when += `, ${etaText(d, list)}`;
     else if (d.state === "superseded") when += ", replaced by a newer deploy before it went live";
+    else if (d.state === "skipped") when += ", nothing on the box changed, so no round of its own";
     c.append(el("summary", { class: "deploy-head" },
       el("span", { class: "pill " + cls }, label),
       el("code", {}, d.short),
