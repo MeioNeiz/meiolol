@@ -54,6 +54,72 @@ stacking only at 35k games.
   block (folds, dev-val) keyed by match id, so ensembles, decompositions and the ceiling
   work read one format (nnsets.py rebuilds blocks already)
 
+### P3 proposal: the test-look rule (draft, 23 Oct; for Jacob to accept or change)
+
+Nothing here has run; no test game has been scored. Template: model.md "Nets on the
+shipped model, 2026-10-18" (rule declared before results, sealed seeds, 2.1x).
+
+Test window: snap-20261018T1007Z's test games, start >= 15 Oct 18:27Z (its test cut) to
+18 Oct 10:07Z, every platform, 130,095 played games. No lab model has scored them (no
+test-looks.tsv): every frontier dev number is below that cut (1320Z's blocks end 15 Oct
+09:37Z, 1007Z's dev-val at the cut). Only `meiolol eval` has read them, for shipped
+models (counts vs additive v2's shipped form, 23 Oct; the box's daily eval of those
+days); no lab model was chosen on them. They become dev games once P1's pin is worked
+on, so this window takes only models frozen before then; later models get P1's own test
+window. Seat stats: 1007Z's own file covers 9% of dev-visible games, so final fits use
+~/ml/lab/1007Z-ss (its lines, then 1320Z's: 72% of dev-visible, 99.7% of test).
+Profiles come from fit games only, so a test game's own stats are never read.
+
+One look per final model:
+- A final model is a spec written into model.md before its run: commit, build flags,
+  command, seeds. It fits on every played game below the test cut and scores every test
+  game once. The command counts the look (netcheck `--blocks test`, `meiolol eval
+  --setnet --test-look`; champcomp needs a final mode first). The result is written up
+  whatever it shows. No second look at the same model, and no change then a look on
+  this window: a failed model waits for a fresh window and a new declaration
+- Nets score with never-run seeds, their mean the model: set nets 7-9 (1-6 used in dev),
+  big and bigres 21-30
+- Each contrast is paired per game against a named reference fitted on the same games
+
+Pass rule per contrast: d the mean paired log loss difference (model minus reference,
+nats a game) over the test games, h its 95% half-width. Nets, and stacks with net
+members: pass when d + 2.1 h < 0 (2.1: 2253Z's measured A/A widening for nets, as at
+1320Z). Models without seeds: d + h < 0. Reported, never deciding: test minus
+test-exclude.tsv (1007Z has none: said so), per day, per platform group (EUW1, KR,
+rest), accuracy, AUC, the top tenth's said vs won.
+
+Two families, each at 5%:
+- The ladder, read in fixed order (a step is read only if the one before passed;
+  otherwise "not tested"):
+  1. Set net + embedding on additive v2 (setid-wa: -Dcand win-additive, `--net set
+     --ids 1`, 18 Oct options) vs additive v2 (win-additive). Dev: -0.78 ± 0.12 on 1320Z's
+     folds (sealed seeds 4-6); 1007Z dev-val -0.72 ± 0.19 (seeds 1-3), -0.94 ± 0.24
+     (4-6). At ~130k games h ~0.15, so it passes if the true gain is ~0.35 or more
+  2. A2 stack vs setid-wa: logistic stack weights fitted on all six 1320Z dev blocks
+     (dev-seed preds), frozen, applied to the members' test logits. Members: the CPU six
+     (win-draft, additive v2, setid-wa, setid-wd, set-wd, champcomp with kit groups):
+     -0.29 ± 0.08 vs setid-wa on 1320Z (ensel.py, 23 Oct); or all twelve (-0.49 ± 0.09)
+     if the gpu-box can run big and bigres seeds 21-30. Needs ensel.py to freeze and
+     apply weights, and champcomp's final mode
+  Secondary for step 1, never deciding: setid-wa vs the shipped model (the eval port:
+  `eval --setnet`, a correction on additive v2's shipped form) and vs win-draft
+- Comp leans (plan/data-and-model.md step 1; its own question, the site's reasons):
+  champcomp with kit groups on win-draft, as declared 17 Oct ~16:20Z, vs win-draft:
+  d + h < 0. Reported: of the 22 clear leans, how many keep their sign with |z| > 1.96;
+  champgroups' six kit groups and Rammus jungle into auto-attackers as declared 18 Oct.
+  The leans on today's shipped model (additive v2) would need a dev run first, then
+  their own declaration
+
+Not queued: big from scratch (failed its 1320Z rule), the within-team set net
+(dominated), A4 and wave 2 (still in dev: P1's window).
+
+Cost: on the Mac, setid-wa seeds 7-9 (~4 min), setid-wd and set-wd, eval --setnet
+(~15 min), champcomp final once written; big and bigres only on the gpu-box.
+
+For Jacob: (a) this window now, or wait for P1's; (b) the ladder order, and the CPU six
+or all twelve in the stack; (c) comp leans on win-draft as declared, or on additive v2
+after a dev run.
+
 ## Wave 1: cheap and decisive (CPU hours, first days)
 
 - B1 Draft ceiling by variance accounting [ceiling C4, C5, C11]. Per block

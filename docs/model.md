@@ -5099,6 +5099,71 @@ mastery. Next: the refit itself (strength with seat log mastery in the model, no
 correction) on the new pin, and the slope's own interval; the lane card's expertise
 bonus counts this twice for one-trick champions.
 
+### Set net on additive v2 in the tester and eval, 2026-10-23 (net, prepin run)
+
+The set net + champion-role embedding on additive v2 (setid-wa, passed its rule on
+1320Z: "Nets on the shipped model, 2026-10-18") refitted on snap-20261018T1007Z for the
+admin Draft tester, with a Zig reader for `meiolol eval`. Dev only, seeds 1-6, no test
+look.
+
+Data: 1007Z's own seat_stats.tsv covers 60,662 of 651,521 dev-visible played games (9%;
+dev-val 24%, test 91%: the box keeps summaries ~2 days), so profiles would come from the
+newest days only. Runs use ~/ml/lab/1007Z-ss: the snapshot's files by symlink and a
+seat_stats.tsv of 1007Z's lines then 1320Z's for missing seats (6.90M seats; 72% of
+dev-visible, 78% of dev-val, 99.7% of test games), packed there. P1's archive merge
+makes this unneeded on the next pin.
+
+Format (3c3b77d): meiolol-setnet version 1 as before (setnet.writeExport;
+draftfile.SetNetFile) plus `fit_newest` (unix ms of the newest fit game) and `platforms`
+(ids in the c intercepts' order; the tester falls back to EUW1 at 6 without it).
+draftfile.SetNet reads it and runs the forward pass in f64; netcheck --export 1 reads
+its own file back through it and stops unless it matches the net on 500 scored games
+within 1e-4 (as draft --export checks its scorer).
+
+Runs (Mac, 3c3b77d, -Dcand win-additive, 18 Oct options: emb 16, phi 16, rho 16;
+dev block: fit 648,631 games, dev-val 86,485): 20261023T195617Z-nx-setnet-wa-1007Z
+(seeds 1-3), 20261023T200032Z-nx-setnet-wa-1007Z-s456 (4-6), base
+20261023T195855Z-nx-additive-dev-1007Z (`draft --model additive --fit dev`: scorer
+1.1e-8 on 500 games, dev log loss 0.68436). Set net vs win-additive on dev-val,
+milli-nats a game:
+
+| seeds | seed mean | single seeds | epochs |
+| --- | --- | --- | --- |
+| 1-3 | -0.72 ± 0.19 | -0.65, -0.50, -0.02 | 4.75, 6.74, 0.50 |
+| 4-6 | -0.94 ± 0.24 | -0.59, -0.81, -0.86 | 5.00, 5.99, 6.99 |
+
+Seed 3 stopped at half an epoch (its validation loss never improved after the first
+evaluation), so it is nearly the base alone. 1320Z's dev-val was -1.01 ± 0.27 (1-3) and
+-0.50 ± 0.10 (sealed 4-6): same size.
+
+Tester: data/runs/setnet-tester-20261023 (the base export's draft-model.json and
+draft-ref.json, draft-setnet.json with seeds 1-6), the lab pick since 23 Oct ~20:10Z
+(it replaced 20261018T0950Z-draft-windraft-1320Z-groups, win-draft with the kit-group
+comp terms). Checked in node through the page's own code: draft-ref exact, the page's
+forward pass against the files' references 6.5e-8, base check 0.029 on 73 EUW1
+references (tolerance 0.05, pair floor), a full breakdown 6 ms.
+
+Eval port (2f40706, c1ad052): `meiolol eval --setnet FILE` (once per seed) adds "current
+model + set net (lab)": the nets on the shipped model's logit (additive v2 shipped form:
+no damage mix, no side term, f16 cells), blue's chance the seeds' mean. It refuses a
+file without fit_newest, one that saw a game of the scored window, or one missing a
+scanned platform. `--dev` scores the protocol's dev-val window, fitting below the dev
+cut; on test, `--setnet` needs `--test-look`, which records the look in
+DATA/test-looks.tsv. On 1007Z (`eval --platform all --dev`, seeds 1-6, run
+20261023T200824Z-eval-dev-setnet-1007Z, 87,842 dev-val games):
+
+| model | log loss | AUC | accuracy | vs current model |
+| --- | --- | --- | --- | --- |
+| current model (additive v2 shipped form) | 0.6853 | 0.571 | 54.9% | |
+| counts model (17 Oct) | 0.6857 | 0.569 | 54.9% | +0.0004 ± 0.0003 |
+| current model + set net (lab) | 0.6844 | 0.575 | 55.2% | -0.0009 ± 0.0002 |
+
+Reading (dev): the net, fitted on the lab's additive v2 (damage mix, side terms), keeps
+its gain on the shipped form's logit: -0.9 milli-nats, about what it gains on its own
+base, so it can sit on the shipped model as fitted (its offset weight and platform
+intercepts absorb the differences). Next: the test look under P3 (docs/plan/lab-frontier.md "P3
+proposal", Jacob's go), seeds 7-9.
+
 ## Shipped model, 2026-10-23: additive v2 in the stats file
 
 Drafts (app suggest, the site's draft helper, Daily Draft, Learn, lane cards, pool) now
@@ -5183,12 +5248,10 @@ and each prefix keeps its colour across charts. Flush each row as it is written.
   16.21 rerun, report per fold the share of scored games on a patch the fit has seen
   (unseen patches get no offset, so a null there is not a test; verifier, meiolol-4b)
 
-- Net exporter for the tester (meiolol-ba/d8, 2026-10-13): due. On 18 Oct the set net
-  with champion-role embeddings beat win-draft by -0.00145 ± 0.00018 on the folds, every
-  pre-declared leg passed ("Nets on the shipped model, 2026-10-18"). Next, in order:
-  declare a test-look rule and get Jacob's go (seeds 7-9, on win-draft); export
-  `--net set --ids 1` per the format below; the tester scores win-draft + net; port to
-  eval. Formats agreed: f1's concat-pool net (R[role] added,
+- Net exporter for the tester (meiolol-ba/d8, 2026-10-13): done 23 Oct on additive v2
+  ("Set net on additive v2 in the tester and eval, 2026-10-23"). Next: Jacob's go on
+  the test-look rule (docs/plan/lab-frontier.md "P3 proposal"), then the look with
+  seeds 7-9. Formats agreed: f1's concat-pool net (R[role] added,
   antisymmetric, residual, seed list, ReLU, empty slot = game-weighted mean input);
   35's set net (x = p(12) ++ role one-hot(5) ++ optional E, phi dense + ReLU, mean pool,
   rho on [t_own; t_other], f = w.h, antisymmetric, + a x candidate logit)
