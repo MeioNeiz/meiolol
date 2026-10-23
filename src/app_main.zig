@@ -598,6 +598,7 @@ test {
     _ = cardscenes;
     _ = @import("board.zig");
     _ = @import("ingame.zig");
+    _ = @import("postgame.zig");
     _ = @import("desktop/icons.zig");
     _ = update;
     std.testing.refAllDecls(lcu);

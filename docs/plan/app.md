@@ -120,7 +120,14 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
   Dragon art is allowed, logos not)
 - APP10 Loading screen cards (Window layout below): ten cards, champion-only facts in
   the public edition; private adds player scouting (APP7)
-- APP11 Post game view: verdict line, gold difference chart, lane rows (below)
+- APP11 Post game view, first pass done (23 Oct, both editions: facts the client's own
+  screen shows): verdict and kills, the team gold story in a sentence, my lane at 14 min
+  against the matchup and gold earned over the game, award chips (damage, KDA, gold, CS,
+  vision), mirrored lane rows with gold earned between, team gold chart (from the
+  in-game samples; none when the app missed the game), damage bars. From
+  /lol-end-of-game/v1/eog-stats-block (lcu/eog.zig; positions from detectedTeamPosition,
+  else the last in-game tick, else inferred). Left: check APP1's real block; tabs
+  (fighting, farming, vision); our draft call against the result
 - APP9 In-game companion, private first (below). First pass done (23 Oct, against the
   mock and a synthetic reply): score and team item gold, mirrored lane rows with gold
   differences, your lane's CS and item gold against the matchup at this minute with the
@@ -152,8 +159,9 @@ CommunityDragon champion-icons/<id>.png into data/icons, gitignored).
   gold bar, five mirrored lane rows (our icon, gold delta, their icon) left; your lane
   against the curve, respawns and team gold through the game right. Narrow: one column,
   rows without names. Later a small panel, hidden by default, hotkey
-- Post game (APP11): verdict sentence and award chips, gold difference area (blue over
-  red), mirrored lane rows, detail behind tabs; no dense tables
+- Post game (APP11, built: desktop/post.zig): verdict card with the gold story, my lane
+  and award chips on top; mirrored lane rows left; team gold area (blue over red) and
+  damage bars right; detail behind tabs later; no dense tables
 
 ## In-game companion
 

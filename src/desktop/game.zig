@@ -5,6 +5,7 @@
 
 const std = @import("std");
 const dvui = @import("dvui");
+const core = @import("core");
 const ingame = @import("../ingame.zig");
 const w = @import("widgets.zig");
 const lane = @import("lane.zig");
@@ -27,7 +28,7 @@ pub fn wide(ctx: Ctx, g: *const ingame.InGame) void {
     defer col.deinit();
     myLane(ctx, g);
     timers(g);
-    teamGold(g);
+    teamGold(g.history);
 }
 
 /// One column, small enough for a second screen's corner: score, your lane, lanes, timers
@@ -40,7 +41,7 @@ pub fn narrow(ctx: Ctx, g: *const ingame.InGame) void {
     myLane(ctx, g);
     rows(ctx, g);
     timers(g);
-    teamGold(g);
+    teamGold(g.history);
 }
 
 /// Kills, towers, dragons and the like as "ours label theirs", then the item gold bar
@@ -138,16 +139,42 @@ fn rows(ctx: Ctx, g: *const ingame.InGame) void {
 }
 
 fn laneRow(ctx: Ctx, i: usize, r: ingame.Row) void {
-    const mine = if (r.ours) |s| s.me else false;
+    var bufs: [2][64]u8 = undefined;
+    var views: [2]?SeatView = .{ null, null };
+    for ([_]?ingame.Seat{ r.ours, r.theirs }, &views, &bufs) |s_or, *v, *buf| {
+        const s = s_or orelse continue;
+        const line = if (ctx.wide)
+            std.fmt.bufPrint(buf, "Lv {d} · {d} / {d} / {d} · {d} cs", .{ s.level, s.kills, s.deaths, s.assists, s.cs })
+        else
+            std.fmt.bufPrint(buf, "{d} · {d}/{d}/{d} · {d}", .{ s.level, s.kills, s.deaths, s.assists, s.cs });
+        v.* = .{ .champion = s.champion, .me = s.me, .dead = s.dead, .respawn = s.respawn, .line = line catch "" };
+    }
+    mirrored(ctx, i, r.role, views[0], views[1], r.goldDiff());
+}
+
+/// A seat as a mirrored row shows it: in game and post game
+pub const SeatView = struct {
+    champion: u32,
+    me: bool,
+    dead: bool = false,
+    respawn: f32 = 0,
+    /// The small line under the name: level, K/D/A, CS...
+    line: []const u8,
+};
+
+/// One lane: our seat left, theirs right, the role and gold difference between
+/// (research/questions/desktop-app-layout.md C7)
+pub fn mirrored(ctx: Ctx, i: usize, role: core.Role, ours: ?SeatView, theirs: ?SeatView, gold_diff: ?i64) void {
+    const mine = if (ours) |s| s.me else false;
     var box = w.card(@src(), i, if (mine) palette.ally else null, .horizontal);
     defer box.deinit();
-    seat(ctx, r.ours, .left);
-    seat(ctx, r.theirs, .right);
+    seat(ctx, ours, .left);
+    seat(ctx, theirs, .right);
     // Centre, between the two seats
     var mid = dvui.box(@src(), .{ .dir = .vertical }, .{ .gravity_x = 0.5, .gravity_y = 0.5, .min_size_content = .{ .w = if (ctx.wide) 84 else 56 } });
     defer mid.deinit();
-    dvui.labelNoFmt(@src(), w.roleName(r.role), .{}, .{ .gravity_x = 0.5, .font = w.tiny(), .color_text = .{ .color = w.text().opacity(0.55) }, .padding = .{} });
-    if (r.goldDiff()) |d| {
+    dvui.labelNoFmt(@src(), w.roleName(role), .{}, .{ .gravity_x = 0.5, .font = w.tiny(), .color_text = .{ .color = w.text().opacity(0.55) }, .padding = .{} });
+    if (gold_diff) |d| {
         var buf: [32]u8 = undefined;
         var nbuf: [16]u8 = undefined;
         const n = w.compact(&nbuf, @abs(d));
@@ -167,9 +194,9 @@ fn laneRow(ctx: Ctx, i: usize, r: ingame.Row) void {
 
 const Edge = enum { left, right };
 
-/// Icon, name, level, K/D/A and CS; on the right the same mirrored. Narrow windows
-/// drop the name: the icon says who it is
-fn seat(ctx: Ctx, s_or: ?ingame.Seat, edge: Edge) void {
+/// Icon, name and the small line; on the right the same mirrored. Narrow windows drop
+/// the name: the icon says who it is
+fn seat(ctx: Ctx, s_or: ?SeatView, edge: Edge) void {
     const right = edge == .right;
     const gx: f32 = if (right) 1 else 0;
     var box = dvui.box(@src(), .{ .dir = .horizontal }, .{
@@ -202,12 +229,7 @@ fn seat(ctx: Ctx, s_or: ?ingame.Seat, edge: Edge) void {
         } else if (s.dead) {
             dvui.labelNoFmt(@src(), dead, .{}, .{ .gravity_x = gx, .font = w.small(), .color_text = .{ .color = w.text().opacity(0.5) }, .padding = .{} });
         }
-        var buf: [64]u8 = undefined;
-        const line = if (ctx.wide)
-            std.fmt.bufPrint(&buf, "Lv {d} · {d} / {d} / {d} · {d} cs", .{ s.level, s.kills, s.deaths, s.assists, s.cs })
-        else
-            std.fmt.bufPrint(&buf, "{d} · {d}/{d}/{d} · {d}", .{ s.level, s.kills, s.deaths, s.assists, s.cs });
-        dvui.labelNoFmt(@src(), line catch "", .{}, .{
+        dvui.labelNoFmt(@src(), s.line, .{}, .{
             .gravity_x = gx,
             .font = w.small(),
             .color_text = .{ .color = w.text().opacity(0.65) },
@@ -302,8 +324,7 @@ fn timers(g: *const ingame.InGame) void {
 
 /// Team item gold difference through the game: blue above zero, red below, as the
 /// post-game graphs players like (research/questions/desktop-app-layout.md C12)
-fn teamGold(g: *const ingame.InGame) void {
-    const h = g.history;
+pub fn teamGold(h: []const ingame.Sample) void {
     if (h.len < 2) return;
     w.heading(@src(), "Team gold", null);
     var lo: f64 = 0;

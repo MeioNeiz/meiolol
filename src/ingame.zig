@@ -322,7 +322,7 @@ fn myLane(arena: std.mem.Allocator, stats: *const Stats, curves: ?*const curvesf
     out.lane = lane;
 }
 
-fn compare(now: i64, s: curvesfile.Spread, mean: i16) Compare {
+pub fn compare(now: i64, s: curvesfile.Spread, mean: i16) Compare {
     const t: Typical = .{ .p10 = s.p10, .p25 = s.p25, .mean = mean, .p75 = s.p75, .p90 = s.p90 };
     return .{ .now = now, .typical = t, .standing = .of(now, t) };
 }

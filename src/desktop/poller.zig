@@ -11,6 +11,7 @@ const lcu = @import("../lcu/root.zig");
 const lanecard = @import("../lanecard.zig");
 const board = @import("../board.zig");
 const ingame = @import("../ingame.zig");
+const postgame = @import("../postgame.zig");
 const Icons = @import("icons.zig").Icons;
 const icons_path = @import("icons.zig").lcu_path;
 const datafiles = @import("../datafiles.zig");
@@ -234,6 +235,9 @@ const Poller = struct {
     fingerprint: u64 = 0,
     /// This game's team gold so far; a new game starts it again
     history: std.ArrayList(ingame.Sample) = .empty,
+    /// Positions the last in-game tick saw, for the post game
+    hints: [10]postgame.Hint = undefined,
+    n_hints: usize = 0,
 
     const Own = struct {
         mastery: []lanecard.Mastery,
@@ -265,7 +269,7 @@ const Poller = struct {
         switch (s) {
             .waiting => |phase| h.update(phase),
             .client_error => |e| h.update(e),
-            .select, .in_game => h.update(std.mem.asBytes(&p.fingerprint)),
+            .select, .in_game, .post_game => h.update(std.mem.asBytes(&p.fingerprint)),
             else => {},
         }
         return h.final();
@@ -275,12 +279,18 @@ const Poller = struct {
         const cs = switch (try p.watch.step(arena)) {
             .phase => |phase| {
                 // Live Client Data is up once the game has loaded; until then, waiting
+                // After it, the client's end of game block; the game's history stays
                 if (std.mem.eql(u8, phase, "InProgress")) {
                     if (p.inGame(arena, data)) |g| return .{ .in_game = g } else |err| switch (err) {
                         error.OutOfMemory => return err,
                         else => {},
                     }
-                } else p.forgetOwn();
+                } else if (std.mem.eql(u8, phase, "PreEndOfGame") or std.mem.eql(u8, phase, "EndOfGame")) {
+                    if (p.postGame(arena, data)) |pg| return .{ .post_game = pg } else |err| switch (err) {
+                        error.OutOfMemory => return err,
+                        else => {},
+                    }
+                } else if (!std.mem.eql(u8, phase, "WaitingForStats")) p.forgetOwn();
                 return .{ .waiting = phaseLabel(phase) };
             },
             .between => return .{ .waiting = "Champ select" },
@@ -352,10 +362,38 @@ const Poller = struct {
             try p.history.append(gpa, g.sample());
         }
         g.history = try arena.dupe(ingame.Sample, p.history.items);
+        p.n_hints = 0;
+        for (g.rows) |r| for ([_]?ingame.Seat{ r.ours, r.theirs }, [_]bool{ true, false }) |s, ours| if (s) |seat| {
+            p.hints[p.n_hints] = .{ .champion = seat.champion, .role = r.role, .ours = ours };
+            p.n_hints += 1;
+        };
         var want: Want = .{};
         for (g.rows) |r| for ([_]?ingame.Seat{ r.ours, r.theirs }) |s| if (s) |seat| want.add(seat.champion);
         p.fetchIcons(want.list[0..want.n]);
         return g;
+    }
+
+    fn postGame(p: *Poller, arena: std.mem.Allocator, data: *const Data) !*const postgame.PostGame {
+        const client = p.watch.client.?;
+        const body = try client.getOk(lcu.eog.path);
+        defer client.gpa.free(body);
+        const e = try lcu.eog.parse(arena, body);
+        if (e.players.len == 0) return error.NoPlayers;
+        if (p.own == null) p.own = p.loadOwn(client);
+        const pg = try arena.create(postgame.PostGame);
+        pg.* = try postgame.build(arena, .{
+            .stats = &data.stats,
+            .curves = if (data.curves) |*c| c else null,
+            .eog = e,
+            .history = try arena.dupe(ingame.Sample, p.history.items),
+            .hints = p.hints[0..p.n_hints],
+            .tier = p.own.?.tier,
+        });
+        p.fingerprint = std.hash.Wyhash.hash(2, body);
+        var want: Want = .{};
+        for (e.players) |pl| want.add(pl.champion);
+        p.fetchIcons(want.list[0..want.n]);
+        return pg;
     }
 
     /// Champions to fetch icons for, each once

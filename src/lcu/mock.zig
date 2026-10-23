@@ -508,7 +508,17 @@ fn endOfGame(a: std.mem.Allocator, s: *const Scenario, st: *const State) !struct
         .championId = c.champion,
         .championName = s.nameOf(c.champion),
         .summonerName = if (i == s.local_cell) local_name else "",
-        .stats = .{ .CHAMPIONS_KILLED = c.kills, .NUM_DEATHS = c.deaths, .ASSISTS = c.assists, .MINIONS_KILLED = c.cs, .LEVEL = c.level },
+        .detectedTeamPosition = try std.ascii.allocUpperString(a, c.position),
+        .stats = .{
+            .CHAMPIONS_KILLED = c.kills,
+            .NUM_DEATHS = c.deaths,
+            .ASSISTS = c.assists,
+            .MINIONS_KILLED = c.cs,
+            .LEVEL = c.level,
+            // Made up from what the scenario gives
+            .GOLD_EARNED = 500 + c.items + 300 * c.kills,
+            .TOTAL_DAMAGE_DEALT_TO_CHAMPIONS = 1000 * c.level + 1500 * (c.kills + c.assists),
+        },
     };
     const won = st.win orelse true;
     for (&teams, 0..) |*t, i| t.* = .{
@@ -530,7 +540,16 @@ const Player = struct {
     championId: u32,
     championName: []const u8,
     summonerName: []const u8,
-    stats: struct { CHAMPIONS_KILLED: i64, NUM_DEATHS: i64, ASSISTS: i64, MINIONS_KILLED: i64, LEVEL: i64 },
+    detectedTeamPosition: []const u8,
+    stats: struct {
+        CHAMPIONS_KILLED: i64,
+        NUM_DEATHS: i64,
+        ASSISTS: i64,
+        MINIONS_KILLED: i64,
+        LEVEL: i64,
+        GOLD_EARNED: i64,
+        TOTAL_DAMAGE_DEALT_TO_CHAMPIONS: i64,
+    },
 };
 const Team = struct { teamId: u32, isPlayerTeam: bool, isWinningTeam: bool, players: []const Player };
 
@@ -702,6 +721,7 @@ const testing = std.testing;
 const core = @import("core");
 const Watch = @import("watch.zig").Watch;
 const livedata = @import("live.zig");
+const eogdata = @import("eog.zig");
 
 // Each scenario through lcu.Watch, as `meiolol-app watch` and the window poll it,
 // checking each step's `expect`: phase (the gameflow phase watch reports), between
@@ -868,5 +888,15 @@ fn checkServed(m: *Mock, ex: std.json.ObjectMap, lcu_port: u16, live_port: u16) 
         const Eog = struct { teams: []const struct { isPlayerTeam: bool, isWinningTeam: bool } };
         const e = try std.json.parseFromSliceLeaky(Eog, a, resp.body, .{ .ignore_unknown_fields = true });
         try testing.expectEqual(want.object.get("win").?.bool, e.teams[0].isWinningTeam);
+        const parsed = try eogdata.parse(a, resp.body);
+        try testing.expectEqual(want.object.get("win").?.bool, parsed.win);
+        if (want.object.get("me")) |n| {
+            var mine: usize = 0;
+            for (parsed.players) |p| if (p.me) {
+                try testing.expectEqual(m.scenario.names.get(n.string).?, p.champion);
+                mine += 1;
+            };
+            try testing.expectEqual(1, mine);
+        }
     }
 }

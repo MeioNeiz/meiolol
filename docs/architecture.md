@@ -838,9 +838,13 @@ level still pickable.
   after a kill), my lane's CS and item gold against the matchup's curve at this whole
   minute (p10/p25/p75/p90 in words). The poller keeps the team gold every 20 s of game
   time for the chart (new game: game time goes back)
+- Post game (APP11; postgame.zig, desktop/post.zig): in PreEndOfGame and EndOfGame the
+  poller reads the end of game block (lcu/eog.zig) and builds the view with the game's
+  gold samples and the positions the last in-game tick saw; tier and mastery are kept
+  from champ select through the game until the next lobby
 - `zig build desktop-shot -- --stats F --curves F [--out DIR] [--min-games N]`: the
-  window's states (fixture champ selects in desktop_shot.zig, in game from
-  testdata/lcu/live-allgamedata.json) as PNGs at 100%, 150% and
+  window's states (fixture champ selects in desktop_shot.zig, in game and post
+  game from testdata/lcu/live-allgamedata.json and eog-stats-block.json) as PNGs at 100%, 150% and
   full height, drawn by desktop/raster.zig (premultiplied "over" blending, top-left
   fill rule); no screen or client needed. `zig build ci` compiles both. Test data
   (data/desktop, gitignored): `deploy/box.sh run stats --platform all --out FILE` on the

@@ -13,7 +13,9 @@ const w = @import("widgets.zig");
 const lane = @import("lane.zig");
 const teams = @import("teams.zig");
 const game = @import("game.zig");
+const post = @import("post.zig");
 const ingame = @import("../ingame.zig");
+const postgame = @import("../postgame.zig");
 const palette = w.palette;
 
 pub const title = "meiolol";
@@ -46,6 +48,8 @@ pub const Status = union(enum) {
     select: *const Select,
     /// In a game with Live Client Data up
     in_game: *const ingame.InGame,
+    /// After a game, once the client has its end of game block
+    post_game: *const postgame.PostGame,
 };
 
 /// From the update thread (update.zig), under the content
@@ -95,6 +99,10 @@ pub fn frame(v: View) void {
             defer body.deinit();
             w.para(@src(), "In game. The board comes back in your next champ select.", .{}, .{});
         },
+        .post_game => |p| {
+            const ctx: w.Ctx = .{ .stats = v.stats.?, .icons = v.icons, .edition = v.edition, .wide = wide };
+            if (wide) post.wide(ctx, p) else post.narrow(ctx, p);
+        },
         else => {
             var body = dvui.box(@src(), .{ .dir = .vertical }, .{ .expand = .both, .padding = .all(16) });
             defer body.deinit();
@@ -118,7 +126,7 @@ fn message(v: View) void {
         .client_error => |e| w.para(@src(), "League client not reachable ({s}); retrying.", .{e}, .{}),
         .waiting => w.para(@src(), "The board shows in champ select: both teams, your lane, options and bans.", .{}, .{}),
         .no_role => w.para(@src(), "This champ select has no assigned positions, so there is no lane to show.", .{}, .{}),
-        .select, .in_game => {},
+        .select, .in_game, .post_game => {},
     }
 }
 
@@ -144,6 +152,7 @@ fn header(v: View) void {
             .no_role => "champ select",
             .select => |s| s.board.stage,
             .in_game => "In game",
+            .post_game => "Post game",
         };
         dvui.labelNoFmt(@src(), state, .{}, .{ .gravity_y = 0.5, .color_text = .{ .color = w.text().opacity(0.7) }, .padding = .{ .x = 6, .w = 6 } });
     }
@@ -180,6 +189,7 @@ fn stepper(s: Status) void {
     const now: ?Step = switch (s) {
         .select, .no_role => .champ_select,
         .in_game => .in_game,
+        .post_game => .post_game,
         .waiting => |phase| if (std.mem.eql(u8, phase, "In game") or std.mem.eql(u8, phase, "Reconnect"))
             .in_game
         else if (std.mem.eql(u8, phase, "Post game"))

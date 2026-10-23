@@ -15,10 +15,11 @@ const board = @import("board.zig");
 const lcu = @import("lcu/root.zig");
 const Icons = @import("desktop/icons.zig").Icons;
 const ingame = @import("ingame.zig");
+const postgame = @import("postgame.zig");
 
 const Shot = struct {
     name: []const u8,
-    status: union(enum) { plain: ui.Status, select: Scene, game: Game },
+    status: union(enum) { plain: ui.Status, select: Scene, game: Game, post: Post },
 };
 
 /// A champ select by champion names. Enemies are locked; a trailing "?" hides the
@@ -43,6 +44,14 @@ const Scene = struct {
 /// A Live Client Data reply from a file, as the poller would read it in game
 const Game = struct {
     path: []const u8 = lcu.live.fixture_path,
+    tier: ?[]const u8 = "GOLD",
+};
+
+/// An end of game block from a file, with a made-up gold history ending at `team`
+const Post = struct {
+    path: []const u8 = lcu.eog.fixture_path,
+    team: i32 = 3400,
+    lane: i32 = 1100,
     tier: ?[]const u8 = "GOLD",
 };
 
@@ -106,6 +115,7 @@ const shots = [_]Shot{
         .mastery = &.{ .{ "Jinx", 90_000 }, .{ "Caitlyn", 40_000 }, .{ "Ezreal", 22_000 } },
     } } },
     .{ .name = "in-game", .status = .{ .game = .{} } },
+    .{ .name = "post-game", .status = .{ .post = .{} } },
 };
 
 pub fn main(init: std.process.Init) !void {
@@ -172,8 +182,20 @@ pub fn main(init: std.process.Init) !void {
                 const body = try cwd.readFileAlloc(io, gm.path, a, limit);
                 const g = try a.create(ingame.InGame);
                 g.* = try ingame.build(a, &stats, if (curves) |*c| c else null, try lcu.live.parse(a, body), gm.tier);
-                g.history = try history(a, g);
+                g.history = try history(a, g.sample());
                 break :blk .{ .in_game = g };
+            },
+            .post => |pg| blk: {
+                const e = try lcu.eog.parse(a, try cwd.readFileAlloc(io, pg.path, a, limit));
+                const p = try a.create(postgame.PostGame);
+                p.* = try postgame.build(a, .{
+                    .stats = &stats,
+                    .curves = if (curves) |*c| c else null,
+                    .eog = e,
+                    .history = try history(a, .{ .time = @floatFromInt(e.length), .team = pg.team, .lane = pg.lane }),
+                    .tier = pg.tier,
+                });
+                break :blk .{ .post_game = p };
             },
         };
         // Wide at 100% and 150%, as tall as everything (no scrolling), narrow, and the
@@ -193,10 +215,9 @@ pub fn main(init: std.process.Init) !void {
     }
 }
 
-/// A made-up game so far that ends where the reply is: even early, a swing, then the lead
-fn history(a: std.mem.Allocator, g: *const ingame.InGame) ![]const ingame.Sample {
+/// A made-up game so far that ends at `end`: even early, a swing, then the lead
+fn history(a: std.mem.Allocator, end: ingame.Sample) ![]const ingame.Sample {
     var out: std.ArrayList(ingame.Sample) = .empty;
-    const end = g.sample();
     var t: f32 = 0;
     while (t <= end.time) : (t += ingame.sample_every) {
         const x = t / end.time;

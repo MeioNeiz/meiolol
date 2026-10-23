@@ -48,7 +48,7 @@
       "events": [{"EventName": "BaronKill", "Stolen": "False", "KillerName": "Player1", "Assisters": ["MockPlayer"]}]}},
     {"wait": 2, "win": true, "game": {"time": 1722, "events": [{"EventName": "GameEnd", "Result": "Win"}]}},
     {"wait": 2, "phase": "WaitingForStats"},
-    {"wait": 2, "phase": "EndOfGame", "expect": {"phase": "EndOfGame", "eog": {"win": true}}},
+    {"wait": 2, "phase": "EndOfGame", "expect": {"phase": "EndOfGame", "eog": {"win": true, "me": "Orianna"}}},
     {"wait": 3, "phase": "Lobby", "expect": {"phase": "Lobby"}}
   ]
 }
