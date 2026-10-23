@@ -25,6 +25,16 @@ How to write a line:
 
 ## Win
 
+- 2026-10-23 (early): A counter is mostly about the two champions, not the roles they
+  play: what one champion does to another in one role pairing (say Malphite top against
+  Yasuo mid) carries over to their other meetings, and judging rare pairings by it, plus
+  a little by champion class, predicts games better. Sure: additive v2 with pair cells
+  shared across role slots and kit-class cells beats v2 by 0.53 ± 0.14 milli-nats a game
+  on 195k held-out dev games of 1007Z (folds 3-5, every fold), one candidate frozen on
+  folds 1-2, both resamples and shuffled controls clean; dev-val -0.63 ± 0.23. Low-rank
+  pair terms: not settled (the fitter failed its planted check). Site: nothing yet
+  (shipping needs Jacob's go). Evidence: docs/model.md "Pair cells that borrow strength
+  (A4)"
 - 2026-10-23: Suggestions and the draft helper now judge picks with a model that learns
   how much each kind of pair (duo, lane opponent, other matchup) really matters instead
   of one fixed rule, and it predicts held-out games slightly better than the old one

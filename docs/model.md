@@ -5243,6 +5243,124 @@ newest ~15% of games, which on a pin a few days into 16.21 is nearly all of 16.2
 dev scores almost nothing; the pin needs its test cut moved for this (say 16.21 days 4+)
 or the run is `--final`, a test look (Jacob's call).
 
+### Pair cells that borrow strength (A4), 2026-10-23 (meiolol-a4)
+
+Lab frontier A4 (docs/plan/lab-frontier.md; research frontier-tabular-ensembles C5):
+inside additive v2, shrink each pair cell toward a structured part instead of 0, since
+B1 ("Lab frontier wave 1") left most of the draft's unused signal in ally pairs and
+cross-role enemy pairs. Dev only, snap-20261018T1007Z (877,814 games), Mac CPU, no test
+look. Pre-declared in data/team/2026-10-23-prepin/a4.md before any code or run.
+
+Method (`meiolol-lab pairprior SNAP`, src/lab/pairprior.zig, 0d4dec0 and 40197e9): v2 full
+(mains, 10 ally and 15 matchup blocks, damage mix) plus extra random-effect terms, each a
+function of a v2 cell, fitted jointly with it (v2's block Newton passes, then one
+diagonal Newton step per extra part on the cells' summed gradient and curvature; MacKay
+variances per extra block). Without extras it is additive.fit exactly (1e-15 on 1007Z).
+- kit x kit: a parent cell per (kit(a), kit(b)) in each of the 25 pair blocks, signed as
+  the child. Kit maps: tag (Data Dragon tag string such as "Fighter,Tank", 26 classes,
+  role-free) or prof:K (k-means on 13 seat-stat kit features of the champion-role from
+  the block's fit games: damage mix, damage and damage taken a minute, tank share, CC,
+  immobilisations, self-heal, ally heal and shield, building damage, armour lean, range,
+  gold at 14)
+- pair: the same two champions in any role slots: one parent over the 10 ally blocks
+  (unordered), one over the 15 matchup blocks (signed, the blue champion against the red
+  one). pair:multi keeps only parents whose pair met in 2+ slots; pair:ident gives every
+  cell its own parent sharing the kind's variance (no pooling, a looser prior only)
+- rank:k: u_a . v_b per block (same-role u_a . v_b - u_b . v_a), a field-aware FM with
+  fields = role slots inside v2; factor sd by MacKay (capped) or fixed
+
+Protocol: per game log loss minus v2's on the same fit games, paired. Folds 1-2 for every
+choice; one candidate frozen before anything was scored on folds 3-5 or dev-val; pass =
+sealed folds 3-5 mean + 1.6 x 95% half-width < 0, --resample 1 and 2 means < 0, real minus
+the shuffled-group control < 0 with the control not below v2; worth shipping at -0.10 or
+better.
+
+Development, folds 1-2 (129,726 games; runs 20261023T200222Z-a4-pp-dev1, 205804Z-dev2,
+210025Z-dev3), milli-nats a game vs v2, both folds better unless marked:
+
+| variant | folds 1-2 | its shuffled control |
+| --- | --- | --- |
+| kit:tag | -0.08 ± 0.06 | +0.003 ± 0.002 |
+| kit:prof:8 / 16 | -0.04 ± 0.05 / -0.02 ± 0.05 | +0.003 ± 0.003 (8) |
+| pair | -0.34 ± 0.12 | +0.009 ± 0.004 |
+| pair:multi | -0.34 ± 0.12 | |
+| pair:ident | +0.06 ± 0.02, 0 of 2 | |
+| pair + kit:tag | -0.44 ± 0.14 | pair:shuf + kit:tag -0.07, pair + kit:tag:shuf -0.36 |
+| pair + kit:prof:8 | -0.40 ± 0.14 | |
+| rank:2 / 4 / 8, MacKay | +2.8 / +3072 / +6152 (ran away) | |
+| rank:2 / 4, MacKay capped at sd 0.22 | +3.0 / +5.7 | |
+| rank:2 / 4, sd 0.1 | -0.06 ± 0.18 (1 of 2) / -0.08 ± 0.19 | |
+| rank:2, sd 0.2 / rank:4 and 8, sd 0.05 | +4.8 / 0.00 (factors collapse to 0) | |
+
+pair:multi equals pair (nearly every champion pair meets in 2+ slots, through off-role
+picks and flex champions) and pair:ident loses: the gain is pooling the same two
+champions across slots, not a looser prior for thin cells. Frozen at 21:05Z:
+`pair+kit:tag` at 40197e9; control `pair:shuf+kit:tag:shuf`. (d), a field-aware FM
+residual as an offset, is the rank form outside the fit; with no rank gain at any sd on
+development it had no room shown and was not run.
+
+Sealed (runs 20261023T210252Z-a4-pp-sealed, 210647Z-r1, 210823Z-r2, 211000Z-shuf; folds
+3-5 194,590 games, fit 454k-584k; dev-val 86,485, fit 649k):
+
+| statistic | folds 3-5 | fold 3 / 4 / 5 | resample 1 / 2 | dev-val | verdict |
+| --- | --- | --- | --- | --- | --- |
+| candidate pair + kit:tag - v2 | -0.53 ± 0.14, 3 of 3 | -0.59 / -0.37 / -0.63 | -0.47 ± 0.12 / -0.50 ± 0.13 | -0.63 ± 0.23 | pass (bound -0.31) |
+| control (both shuffled) - v2 | +0.010 ± 0.003 | | | +0.008 ± 0.004 | not below v2 |
+| candidate - control | -0.54 ± 0.14 | | | -0.63 ± 0.23 | < 0 |
+| shuffled labels: candidate - v2 | +0.002 ± 0.009 | | | | no gain |
+| pair alone (reported) | -0.41 ± 0.11, 3 of 3 | | | -0.54 ± 0.18 | |
+| kit:tag / kit:prof:8 alone (reported) | -0.09 ± 0.05 / -0.15 ± 0.06 | | | -0.08 / -0.10 | |
+| pair:ident (reported) | +0.04 ± 0.01 | | | +0.04 | |
+| rank:4, sd 0.1 (reported) | +0.04 ± 0.21 | | | +0.19 ± 0.35 | |
+
+Log loss on folds 3-5: v2 0.68569, candidate 0.68516. For scale, v2 over win-draft was
+-1.08 and the set net on v2 -0.78 (1320Z): about two thirds of the set net's gain, from
+a CPU model with named terms.
+
+Planted power check (fold 3's games; outcomes drawn from v2's real fit plus a planted
+kit:tag part of cell sd 0, 0.25 or 0.5 pp in every pair block; runs 211136Z-plant0,
+211251Z-plant25, 211433Z-plant50, 211549Z-plantr50):
+- kit plant 0: candidate +0.01 ± 0.02, kit:tag +0.01 ± 0.02 (no gain from nothing)
+- kit plant 0.25 pp: -0.01 ± 0.07, not seen; fitted parent sd 0.07 (mean over blocks)
+- kit plant 0.5 pp: -0.39 ± 0.20 (seen, bound -0.08); fitted parent sd 0.26
+- rank-2 plant 0.5 pp: rank:4 +0.39 ± 0.31, rank:2 +0.29 ± 0.28 (worse than v2)
+So kit parents are seen from about 0.5 pp a cell and their sds come back at a third to a
+half of the plant (the binary-outcome bias of "Effects and the CPU model" again, and v2's
+own cells take part of the plant). Real kit:tag parents fit 0.12 pp on average (fold
+3), between the 0.25 and 0.5 plants. Low rank failed its power check: this fitter can't
+use a planted rank-2 part, so (c)'s null says nothing about low-rank structure.
+
+Where the gain sits (fold 5 fit, cell sds in win pp at 50%, v2 -> candidate): the
+matchup parent ("this champion against that one, in any roles") fits 0.82 pp and takes
+most of the cross-role blocks (top vs jungle 0.72 -> 0.09, jungle vs bottom 0.52 -> 0.01,
+middle vs bottom 0.64 -> 0.02, jungle vs jungle 1.15 -> 0.27, bottom vs bottom 1.12 ->
+0.18) and part of the lanes (top 2.36 -> 1.99, middle 1.95 -> 1.36). The ally pair
+parent fits 0.06. Kit parents of 0.3-0.6 pp sit in middle vs middle, jungle vs jungle,
+jungle-support, jungle-middle and bottom-support allies, bottom vs support, top vs top.
+
+Reading (dev, no test look): a counter is mostly a fact about the two champions, not
+their roles. Letting a pair's cells share across role slots, plus kit-class cells,
+predicts held-out games 0.53 ± 0.14 milli-nats a game better than additive v2 (3 of 3
+sealed folds, both resamples, controls clean, dev-val -0.63). The B1 residual in
+cross-role enemy pairs was this: thin cross-role cells shrunk to 0 where the same two
+champions' other meetings knew their sign.
+
+Shipping it in src/additive.zig (not done; needs Jacob's go, and P2's same-split view):
+- Fit: pairprior's cell-level steps move into additive.zig (kit and pair parents only;
+  low rank stays in the lab): two parent tables, their MacKay variances, ~150 lines;
+  four more sweeps over the pair entries a pass beside v2's ~40 group sweeps (not timed
+  alone; a whole pairprior block of 8 fits on 4 threads took 46-54 s at 454k-649k games)
+- Kit map: Data Dragon tags, already in the champions table (ddragon.zig stores them),
+  so no new data on the box
+- Stats file: no format change. statsfile v2 holds dense n x n tables per role pair, so
+  fitted.attach writes child + kit parent + pair parent into every cell, including pairs
+  never seen in that slot (the parents' gain for unseen cells comes free). The pair
+  floor (20 games) should apply to the child part only
+- Then `meiolol eval` on the shipped form (no damage mix, f16, floor) against today's
+  model before switching, as for v2 on 23 Oct
+- Explanations: a matchup's reason can say "X counters Y in any role" when the pair
+  parent carries it; C5's purification applies (parents vs cells)
+
 ## Shipped model, 2026-10-23: additive v2 in the stats file
 
 Drafts (app suggest, the site's draft helper, Daily Draft, Learn, lane cards, pool) now
