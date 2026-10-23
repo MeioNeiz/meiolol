@@ -164,7 +164,6 @@ pub const Options = struct {
 };
 
 pub const Block = enum { dev, f1, f2, f3, f4, f5 };
-const n_folds = harness.folds;
 const val_share = 0.1;
 pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []const []const u8) !u8 {
     if (argv.len < 1) {
@@ -304,18 +303,14 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
         } else if (std.mem.eql(u8, k, "--min-games")) {
             o.min_games = try std.fmt.parseInt(u32, v, 10);
         } else if (std.mem.eql(u8, k, "--seeds")) {
-            var out: std.ArrayList(u32) = .empty;
-            var it = std.mem.tokenizeScalar(u8, v, ',');
-            while (it.next()) |s| try out.append(arena, try std.fmt.parseInt(u32, s, 10));
-            if (out.items.len == 0) return error.NoSeeds;
-            o.seeds = out.items;
+            o.seeds = try winnet.parseSeeds(arena, v);
         } else if (std.mem.eql(u8, k, "--blocks")) {
             var out: std.ArrayList(Block) = .empty;
             var it = std.mem.tokenizeScalar(u8, v, ',');
             while (it.next()) |s| try out.append(arena, if (std.mem.eql(u8, s, "dev"))
                 .dev
             else
-                @fromBackingInt(@intCast(try std.fmt.parseInt(u3, s, 10))));
+                try winnet.foldBlock(Block, s));
             o.blocks = out.items;
         } else if (std.mem.eql(u8, k, "--dump")) {
             o.dump = (try std.fmt.parseInt(u1, v, 10)) == 1;
@@ -332,7 +327,6 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
         } else return error.UnknownOption;
     }
     if (o.emb_init != null and o.emb == 0) return error.EmbInitNeedsEmb;
-    for (o.blocks) |b| if (@backingInt(b) > n_folds) return error.BadBlock;
     if (o.hidden == 0 or o.evals == 0 or o.dropout < 0 or o.dropout >= 1 or o.fraction <= 0 or o.threads == 0) return error.BadValue;
     return o;
 }
@@ -1260,6 +1254,15 @@ test "playernet dumpSet writes one record per game and the match ids in order" {
     defer gpa.free(txt);
     try testing.expect(std.mem.startsWith(u8, txt, "n_ids 7 n_feat "));
     try testing.expect(std.mem.endsWith(u8, txt, "\nEUW1_2\nEUW1_1\n"));
+}
+
+test "playernet --blocks: a fold past 5 is an error" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    try testing.expectError(error.BadBlock, parseOptions(arena.allocator(), &.{ "--blocks", "7" }));
+    const o = try parseOptions(arena.allocator(), &.{ "--blocks", "dev,5", "--seeds", "2,3" });
+    try testing.expectEqualSlices(Block, &.{ .dev, .f5 }, o.blocks);
+    try testing.expectEqualSlices(u32, &.{ 2, 3 }, o.seeds);
 }
 
 test "playernet featsOn: groups on, minus dropped features" {

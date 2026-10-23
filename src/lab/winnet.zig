@@ -290,11 +290,7 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
         } else if (std.mem.eql(u8, k, "--min-games")) {
             o.min_games = try std.fmt.parseInt(u32, v, 10);
         } else if (std.mem.eql(u8, k, "--seeds")) {
-            var out: std.ArrayList(u32) = .empty;
-            var it = std.mem.tokenizeScalar(u8, v, ',');
-            while (it.next()) |s| try out.append(arena, try std.fmt.parseInt(u32, s, 10));
-            if (out.items.len == 0) return error.NoSeeds;
-            o.seeds = out.items;
+            o.seeds = try parseSeeds(arena, v);
         } else if (std.mem.eql(u8, k, "--blocks")) {
             var out: std.ArrayList(Block) = .empty;
             var it = std.mem.tokenizeScalar(u8, v, ',');
@@ -303,7 +299,7 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
             else if (std.mem.eql(u8, s, "test"))
                 .final
             else
-                try foldBlock(s));
+                try foldBlock(Block, s));
             o.blocks = out.items;
         } else if (std.mem.eql(u8, k, "--fraction")) {
             o.fraction = try std.fmt.parseFloat(f64, v);
@@ -358,10 +354,20 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
     return o;
 }
 
-fn foldBlock(s: []const u8) !Block {
+/// A --blocks number, shared with playernet and pretrain: 0 dev, 1-5 the folds
+pub fn foldBlock(comptime B: type, s: []const u8) !B {
     const n = try std.fmt.parseInt(u3, s, 10);
     if (n > harness.folds) return error.BadBlock;
     return @fromBackingInt(n);
+}
+
+/// --seeds 1,2,3
+pub fn parseSeeds(arena: std.mem.Allocator, v: []const u8) ![]const u32 {
+    var out: std.ArrayList(u32) = .empty;
+    var it = std.mem.tokenizeScalar(u8, v, ',');
+    while (it.next()) |s| try out.append(arena, try std.fmt.parseInt(u32, s, 10));
+    if (out.items.len == 0) return error.NoSeeds;
+    return out.items;
 }
 
 /// Fit on dev-visible games before `before`; score dev-val (dev) or dev-visible games in

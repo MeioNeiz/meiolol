@@ -22,6 +22,7 @@ const std = @import("std");
 const rows = @import("rows.zig");
 const protocol = @import("protocol.zig");
 const harness = @import("harness.zig");
+const winnet = @import("winnet.zig");
 const nnexport = @import("nnexport.zig");
 const seatstats = @import("seatstats.zig");
 const nn = @import("nn");
@@ -198,18 +199,14 @@ fn parseOptions(arena: Allocator, args: []const []const u8) !Options {
         } else if (std.mem.eql(u8, key, "--rare")) {
             o.rare = try std.fmt.parseInt(u32, v, 10);
         } else if (std.mem.eql(u8, key, "--seeds")) {
-            var out: std.ArrayList(u32) = .empty;
-            var it = std.mem.tokenizeScalar(u8, v, ',');
-            while (it.next()) |s| try out.append(arena, try std.fmt.parseInt(u32, s, 10));
-            if (out.items.len == 0) return error.NoSeeds;
-            o.seeds = out.items;
+            o.seeds = try winnet.parseSeeds(arena, v);
         } else if (std.mem.eql(u8, key, "--blocks")) {
             var out: std.ArrayList(Block) = .empty;
             var it = std.mem.tokenizeScalar(u8, v, ',');
             while (it.next()) |s| try out.append(arena, if (std.mem.eql(u8, s, "dev"))
                 .dev
             else
-                @fromBackingInt(@intCast(try std.fmt.parseInt(u3, s, 10))));
+                try winnet.foldBlock(Block, s));
             o.blocks = out.items;
         } else if (std.mem.eql(u8, key, "--shuffle")) {
             o.shuffle = try std.fmt.parseInt(u64, v, 10);
@@ -1419,6 +1416,14 @@ test "pretrain on the fixture: E carries the planted stats, every variant scores
     defer out.deinit();
     try summary(gpa, &out.writer, &fx.e, opts, outs);
     try testing.expect(std.mem.find(u8, out.written(), "| folds | emb |") != null);
+}
+
+test "pretrain --blocks: a fold past 5 is an error" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    try testing.expectError(error.BadBlock, parseOptions(arena.allocator(), &.{ "--blocks", "6" }));
+    const o = try parseOptions(arena.allocator(), &.{ "--blocks", "1,dev" });
+    try testing.expectEqualSlices(Block, &.{ .f1, .dev }, o.blocks);
 }
 
 test "pretrain resample: fits on netcheck's 90% only" {
