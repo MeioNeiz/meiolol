@@ -21,6 +21,7 @@
 
 const std = @import("std");
 const store = @import("store");
+const tsvlog = @import("tsvlog.zig");
 const Io = std.Io;
 const log = std.log.scoped(.archive);
 
@@ -609,16 +610,9 @@ pub fn valve(
         "{d} documents, {d} MB, never archived", .{
         free_mb, min_free_mb, @tagName(d.kind), d.name, d.from_s, d.to_s, d.docs, @divFloor(d.bytes, 1 << 20),
     });
-    const cwd = Io.Dir.cwd();
-    var file = try cwd.createFile(io, log_path, .{ .truncate = false });
-    defer file.close(io);
-    var buf: [512]u8 = undefined;
-    var fw = file.writer(io, &buf);
-    try fw.seekTo(try file.length(io));
-    try fw.interface.print("{d}\t{s}\t{s}\t{d}\t{d}\t{d}\t{d}\t{d}\n", .{
+    try tsvlog.appendRaw(io, Io.Dir.cwd(), log_path, "", try arena.print("{d}\t{s}\t{s}\t{d}\t{d}\t{d}\t{d}\t{d}\n", .{
         now_s, @tagName(d.kind), d.name, d.from_s, d.to_s, d.docs, d.bytes, free_mb,
-    });
-    try fw.interface.flush();
+    }));
     return d;
 }
 

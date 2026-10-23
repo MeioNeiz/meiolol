@@ -9,24 +9,24 @@ const Io = std.Io;
 /// `header` and `row` end in a newline
 pub fn append(gpa: std.mem.Allocator, io: Io, path: []const u8, header: []const u8, row: []const u8) !void {
     const cwd = Io.Dir.cwd();
-    if (try outdated(gpa, io, path, header)) |rest| {
-        defer gpa.free(rest);
-        const tmp = try gpa.print("{s}.tmp", .{path});
-        defer gpa.free(tmp);
-        const data = try std.mem.concat(gpa, u8, &.{ header, rest, row });
-        defer gpa.free(data);
-        try cwd.writeFile(io, .{ .sub_path = tmp, .data = data });
-        try cwd.rename(tmp, cwd, path, io);
-        return;
-    }
-    var file = try cwd.createFile(io, path, .{ .truncate = false });
+    const rest = try outdated(gpa, io, path, header) orelse return appendRaw(io, cwd, path, header, row);
+    defer gpa.free(rest);
+    var af = try cwd.createFileAtomic(io, path, .{ .replace = true });
+    defer af.deinit(io);
+    for ([_][]const u8{ header, rest, row }) |part| try af.file.writeStreamingAll(io, part);
+    try af.replace(io);
+}
+
+/// `bytes` on the end of `path`, after `header` ("" for none) when the file is new or empty
+pub fn appendRaw(io: Io, dir: Io.Dir, path: []const u8, header: []const u8, bytes: []const u8) !void {
+    var file = try dir.createFile(io, path, .{ .truncate = false });
     defer file.close(io);
     const len = try file.length(io);
     var buf: [1024]u8 = undefined;
     var fw = file.writer(io, &buf);
     try fw.seekTo(len);
     if (len == 0) try fw.interface.writeAll(header);
-    try fw.interface.writeAll(row);
+    try fw.interface.writeAll(bytes);
     try fw.interface.flush();
 }
 

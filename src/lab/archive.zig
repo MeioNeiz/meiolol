@@ -22,6 +22,7 @@
 
 const std = @import("std");
 const store = @import("store");
+const tsvlog = @import("../tsvlog.zig");
 const anonymise = @import("anonymise.zig");
 const Io = std.Io;
 const log = std.log.scoped(.archive);
@@ -111,17 +112,9 @@ pub fn run(
     }
 
     const index_path = try std.fs.path.join(arena, &.{ archive_dir, "index.tsv" });
-    var index = try cwd.createFile(io, index_path, .{ .truncate = false });
-    defer index.close(io);
-    var ibuf: [512]u8 = undefined;
-    var iw = index.writer(io, &ibuf);
-    const len = try index.length(io);
-    try iw.seekTo(len);
-    if (len == 0) try iw.interface.writeAll("export\tday\tsummaries\ttimelines\tmastery\tforgotten_left_out\n");
-    try iw.interface.print("{s}\t{s}\t{d}\t{d}\t{d}\t{d}\n", .{
+    try tsvlog.appendRaw(io, cwd, index_path, "export\tday\tsummaries\ttimelines\tmastery\tforgotten_left_out\n", try arena.print("{s}\t{s}\t{d}\t{d}\t{d}\t{d}\n", .{
         name, day, counts.summaries, counts.timelines, counts.mastery, counts.forgotten,
-    });
-    try iw.interface.flush();
+    }));
     return counts;
 }
 

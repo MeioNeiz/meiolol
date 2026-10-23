@@ -14,6 +14,7 @@ const protocol = @import("protocol.zig");
 const harness = @import("harness.zig");
 const search = @import("search.zig");
 const store = @import("store");
+const tsvlog = @import("../tsvlog.zig");
 
 const Io = std.Io;
 
@@ -151,7 +152,7 @@ fn run(
         category(args.target),                       h.removed_pct,     h.removed_half,                                  try errText(arena, args.target, h.err_base),
         try errText(arena, args.target, h.err_cand), unit(args.target), if (effect_files.len > 0) effect_files else "-",
     });
-    try appendLine(io, try std.fs.path.join(arena, &.{ dir, "runs.tsv" }), header, line);
+    try tsvlog.appendRaw(io, Io.Dir.cwd(), try std.fs.path.join(arena, &.{ dir, "runs.tsv" }), header, line);
     try Io.Dir.cwd().writeFile(io, .{ .sub_path = "result.tsv", .data = try std.mem.concat(arena, u8, &.{ header, line }) });
     try w.print("RESULT run={s} scope={t} target={t} dev={d:.5}±{d:.5} n={d} ({s}) select={s}", .{
         args.run,                                                         cand.scope, args.target, dev_target.diff, dev_target.half, dev_target.n,
@@ -425,18 +426,6 @@ fn testPreds(gpa: std.mem.Allocator, io: Io, d: *const rows.Data, players: []con
     try w.print("RESULT preds rows={d} file=preds.tsv\n", .{s.row.len});
 }
 
-fn appendLine(io: Io, path: []const u8, header: []const u8, line: []const u8) !void {
-    var file = try Io.Dir.cwd().createFile(io, path, .{ .truncate = false });
-    defer file.close(io);
-    const len = try file.length(io);
-    var buf: [1024]u8 = undefined;
-    var fw = file.writer(io, &buf);
-    try fw.seekTo(len);
-    if (len == 0) try fw.interface.writeAll(header);
-    try fw.interface.writeAll(line);
-    try fw.interface.flush();
-}
-
 fn final(
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
@@ -472,7 +461,7 @@ fn final(
             const p = harness.paired(s.game, la, lb, mask);
             const o = api.outcomeAt(k);
             try w.print("| {t} | {d} | {d:.5} | {d:.5} | {d:.5} ± {d:.5} |\n", .{ o, p.n, p.b, p.a, p.diff, p.half });
-            try appendLine(io, finals, "run\tcampaign\ttarget\toutcome\tset\tn\tdiff\thalf\n", try arena.print("{s}\t{s}\t{t}\t{t}\t{s}\t{d}\t{d:.5}\t{d:.5}\n", .{
+            try tsvlog.appendRaw(io, Io.Dir.cwd(), finals, "run\tcampaign\ttarget\toutcome\tset\tn\tdiff\thalf\n", try arena.print("{s}\t{s}\t{t}\t{t}\t{s}\t{d}\t{d:.5}\t{d:.5}\n", .{
                 args.run, args.campaign, args.target, o, if (pass == 0) "test" else "test-excl", p.n, p.diff, p.half,
             }));
         }

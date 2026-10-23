@@ -5,6 +5,7 @@
 //! prints the ledger
 
 const std = @import("std");
+const tsvlog = @import("../tsvlog.zig");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
@@ -57,14 +58,7 @@ pub fn record(
         for (a) |ch| try line.writer.writeByte(if (ch == '\t' or ch == '\n') ' ' else ch);
     }
     try line.writer.writeByte('\n');
-    var file = try dir.createFile(io, path, .{ .truncate = false });
-    defer file.close(io);
-    var buf: [1024]u8 = undefined;
-    var fw = file.writer(io, &buf);
-    try fw.seekTo(old.len);
-    if (old.len == 0) try fw.interface.writeAll(header);
-    try fw.interface.writeAll(line.written());
-    try fw.interface.flush();
+    try tsvlog.appendRaw(io, dir, path, header, line.written());
     try w.print("test look {d} of {s} (ledger {s})\n", .{ n, snap, path });
     if (try Exclude.load(gpa, io, dir, snap)) |e| {
         var ex = e;

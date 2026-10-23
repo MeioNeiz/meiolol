@@ -7,6 +7,7 @@ const std = @import("std");
 const store = @import("store");
 const admin = @import("admin.zig");
 const date = @import("date.zig");
+const tsvlog = @import("tsvlog.zig");
 
 const Io = std.Io;
 const Request = std.http.Server.Request;
@@ -258,16 +259,10 @@ fn appendActionLog(arena: std.mem.Allocator, io: Io, path: []const u8, now: i64,
     const short = output[0..@min(output.len, 200)];
     const one_line = try std.mem.replaceOwned(u8, arena, short, "\n", " / ");
     std.mem.replaceScalar(u8, one_line, '\t', ' ');
-    var file = try Io.Dir.cwd().createFile(io, path, .{ .truncate = false });
-    defer file.close(io);
-    const len = try file.length(io);
-    var buf: [512]u8 = undefined;
-    var fw = file.writer(io, &buf);
-    try fw.seekTo(len);
     const d = date.Date.fromSeconds(now);
     const s: u64 = @intCast(@mod(now, 86400));
-    try fw.interface.print("{f}T{d:0>2}:{d:0>2}:{d:0>2}Z\t{s}\t{t}\t{s}\n", .{ d, s / 3600, s / 60 % 60, s % 60, name, outcome, one_line });
-    try fw.interface.flush();
+    const line = try arena.print("{f}T{d:0>2}:{d:0>2}:{d:0>2}Z\t{s}\t{t}\t{s}\n", .{ d, s / 3600, s / 60 % 60, s % 60, name, outcome, one_line });
+    try tsvlog.appendRaw(io, Io.Dir.cwd(), path, "", line);
 }
 
 /// MEIOLOL_NO_EVAL (host.env, the render unit's EnvironmentFile), as web-loop.sh reads it
