@@ -64,17 +64,17 @@ pub fn groupRoles(g: usize) struct { ally: bool, r: usize, q: usize } {
 /// "champion top", "ally jungle-middle", "jungle vs their middle"
 pub fn groupName(buf: []u8, g: usize) []const u8 {
     if (g == g_fixed) return "fixed";
-    if (g < g_ally) return std.fmt.bufPrint(buf, "champion {s}", .{role_names[g - g_main]}) catch unreachable;
+    if (g < g_ally) return std.mem.print(buf, "champion {s}", .{role_names[g - g_main]}) catch unreachable;
     if (g < g_enemy) {
         var k: usize = 0;
         for (0..n_role) |a| for (a + 1..n_role) |b| {
-            if (g_ally + k == g) return std.fmt.bufPrint(buf, "ally {s}-{s}", .{ role_names[a], role_names[b] }) catch unreachable;
+            if (g_ally + k == g) return std.mem.print(buf, "ally {s}-{s}", .{ role_names[a], role_names[b] }) catch unreachable;
             k += 1;
         };
         unreachable;
     }
     const e = g - g_enemy;
-    return std.fmt.bufPrint(buf, "{s} vs their {s}", .{ role_names[e / n_role], role_names[e % n_role] }) catch unreachable;
+    return std.mem.print(buf, "{s} vs their {s}", .{ role_names[e / n_role], role_names[e % n_role] }) catch unreachable;
 }
 
 pub const Kind = enum { logistic, gaussian };

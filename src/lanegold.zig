@@ -115,7 +115,7 @@ pub const Model = struct {
             .pair = try gpa.alloc(f64, Role.count * n * n),
             .champ_prior = undefined,
             .pair_prior = undefined,
-            .games = @intFromFloat(count),
+            .games = @trunc(count),
         };
         errdefer m.deinit(gpa);
         @memset(m.pair, 0);

@@ -232,7 +232,7 @@ pub fn championList(arena: std.mem.Allocator, db: store.Db) ![]const ChampionOut
 
 /// stats.patchKey back to "16.21"
 pub fn patchLabel(arena: std.mem.Allocator, key: u32) ![]const u8 {
-    return std.fmt.allocPrint(arena, "{d}.{d}", .{ key / 1000, key % 1000 });
+    return arena.print("{d}.{d}", .{ key / 1000, key % 1000 });
 }
 
 /// Oldest and newest of `games`' patches (each .patch, a stats.patchKey) as labels
@@ -251,7 +251,7 @@ pub fn dayOf(arena: std.mem.Allocator, ms: i64) ![]const u8 {
     const es: std.time.epoch.EpochSeconds = .{ .secs = @intCast(@divFloor(ms, 1000)) };
     const yd = es.getEpochDay().calculateYearDay();
     const md = yd.calculateMonthDay();
-    return std.fmt.allocPrint(arena, "{d}-{d:0>2}-{d:0>2}", .{ yd.year, md.month.numeric(), md.day_index + 1 });
+    return arena.print("{d}-{d:0>2}-{d:0>2}", .{ yd.year, md.month.numeric(), md.day_index + 1 });
 }
 
 /// DIR/lane-model.json and DIR/lane-ref.json. References: per role the 4 most played

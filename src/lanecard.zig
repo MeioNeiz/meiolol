@@ -163,7 +163,7 @@ pub fn build(arena: std.mem.Allocator, in: Input) !Card {
         card.sentence = if (card.matchup) |m|
             try sentence(arena, m, me_name, them, card.period)
         else if (in.curves != null)
-            try std.fmt.allocPrint(arena, "No {s} games of {s} against {s} in the {s}.", .{
+            try arena.print("No {s} games of {s} against {s} in the {s}.", .{
                 in.role.label(), me_name, them, card.period,
             })
         else
@@ -275,12 +275,12 @@ fn gold(w: *std.Io.Writer, mean: i16) !void {
 
 fn percent(part: u32, whole: u32) u32 {
     if (whole == 0) return 0;
-    return @intFromFloat(@round(100 * @as(f64, @floatFromInt(part)) / @as(f64, @floatFromInt(whole))));
+    return @round(100 * @as(f64, @floatFromInt(part)) / @as(f64, @floatFromInt(whole)));
 }
 
 pub fn period(arena: std.mem.Allocator, c: *const Curves) ![]const u8 {
     const label = c.patch();
-    if (label.len > 0 and std.ascii.isDigit(label[0])) return std.fmt.allocPrint(arena, "patch {s}", .{label});
+    if (label.len > 0 and std.ascii.isDigit(label[0])) return arena.print("patch {s}", .{label});
     return label;
 }
 
@@ -295,7 +295,7 @@ fn options(arena: std.mem.Allocator, in: Input, opp: ?Opponent, bracket: Bracket
         if (m.points == 0) break;
         const c = stats.index(m.champion) orelse continue;
         if (stats.champRole(in.role, c).games < in.opts.min_games) continue;
-        if (in.pickable) |p| if (std.mem.indexOfScalar(u32, p, m.champion) == null) continue;
+        if (in.pickable) |p| if (std.mem.findScalar(u32, p, m.champion) == null) continue;
         try pool.append(arena, m.champion);
     }
     const draft: core.Draft = .{
@@ -360,7 +360,7 @@ fn rolePlayers(arena: std.mem.Allocator, stats: *const Stats, role: Role, pickab
     var out: std.ArrayList(u32) = .empty;
     for (0..stats.n) |c| {
         const id = stats.ids[c];
-        if (pickable) |p| if (std.mem.indexOfScalar(u32, p, id) == null) continue;
+        if (pickable) |p| if (std.mem.findScalar(u32, p, id) == null) continue;
         const g: f64 = @floatFromInt(stats.champRole(role, c).games);
         if (g < min_role_share * @as(f64, @floatFromInt(stats.champGames(c)))) continue;
         try out.append(arena, id);
@@ -386,13 +386,13 @@ fn laneFact(arena: std.mem.Allocator, in: Input, me: u32, them: u32, bracket: Br
     const c = in.curves orelse return null;
     const name = in.stats.nameOf(them);
     const f = view(c, in.role, bracket, me, them) orelse return .{
-        .text = try std.fmt.allocPrint(arena, "vs {s}: no lane games yet", .{name}),
+        .text = try arena.print("vs {s}: no lane games yet", .{name}),
         .lean = .unclear,
     };
     const e = f.view.estimate(.gold, curvesfile.lane_minute - 1);
     const thin = f.view.games() < thin_games or f.view.own() < 0.5;
     return .{
-        .text = try std.fmt.allocPrint(arena, "vs {s}: {s}{d} gold at {d} min ({d} games{s})", .{
+        .text = try arena.print("vs {s}: {s}{d} gold at {d} min ({d} games{s})", .{
             name,
             if (e.mean > 0) "+" else "",
             e.mean,
@@ -425,9 +425,9 @@ fn reasons(arena: std.mem.Allocator, in: Input, s: core.Suggestion, opp: ?Oppone
         if (opp != null and r.kind == .enemy and r.champion == opp.?.champion) continue;
         const name = stats.nameOf(r.champion);
         const text = switch (r.kind) {
-            .base => if (r.pp > 0 and show_strong) try std.fmt.allocPrint(arena, "strong in {s}{f}", .{ in.role.label(), core.score.When{ .label = stats.patch } }) else continue,
-            .ally => if (r.pp > 0) try std.fmt.allocPrint(arena, "pairs well with {s}", .{name}) else continue,
-            .enemy => try std.fmt.allocPrint(arena, "{s} into {s}", .{ if (r.pp > 0) "good" else "hard", name }),
+            .base => if (r.pp > 0 and show_strong) try arena.print("strong in {s}{f}", .{ in.role.label(), core.score.When{ .label = stats.patch } }) else continue,
+            .ally => if (r.pp > 0) try arena.print("pairs well with {s}", .{name}) else continue,
+            .enemy => try arena.print("{s} into {s}", .{ if (r.pp > 0) "good" else "hard", name }),
         };
         try out.append(arena, text);
         try tones.append(arena, if (r.pp > 0) .good else .bad);
@@ -547,7 +547,7 @@ test "known opponent: sentence and curve" {
     try testing.expect(m.range[0] < m.gold.mean and m.gold.mean < m.range[1]);
     try testing.expectEqualStrings("last 30 days", card.period);
     try testing.expect(std.mem.startsWith(u8, card.sentence, "At 14 min Darius is typically "));
-    try testing.expect(std.mem.indexOf(u8, card.sentence, " gold ahead of Garen (8 games in 10 between ") != null);
+    try testing.expect(std.mem.find(u8, card.sentence, " gold ahead of Garen (8 games in 10 between ") != null);
     try testing.expect(std.mem.endsWith(u8, card.sentence, "% of 300 games (Gold to Emerald, last 30 days)."));
 }
 
@@ -569,7 +569,7 @@ test "guessed opponent, thin curve, options with reasons" {
     try testing.expectEqual(garen, card.opponent.?.champion);
     try testing.expect(card.opponent.?.guessed);
     try testing.expect(card.matchup.?.thin);
-    try testing.expect(std.mem.indexOf(u8, card.sentence, "mostly from how both champions do against everyone: 20 games") != null);
+    try testing.expect(std.mem.find(u8, card.sentence, "mostly from how both champions do against everyone: 20 games") != null);
     // Darius alone is in the pool for top: widened to everyone who plays it, Garen taken;
     // not Lux, whose few top games are all wins
     try testing.expectEqual(2, card.options.len);

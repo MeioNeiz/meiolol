@@ -651,8 +651,8 @@ pub fn cutsOf(starts: []const i64, shares: struct { test_: f64 = test_share, dev
     const n = starts.len;
     if (n < 100) return error.TooFewGames;
     const nf: f64 = @floatFromInt(n);
-    const n_test: usize = @intFromFloat(@round(nf * shares.test_));
-    const n_late: usize = @intFromFloat(@round(nf * (shares.test_ + shares.dev)));
+    const n_test: usize = @round(nf * shares.test_);
+    const n_late: usize = @round(nf * (shares.test_ + shares.dev));
     if (n_test < 20 or n_late >= n) return error.TooFewGames;
     var c: Cuts = .{ .test_ = starts[n - n_test], .dev = starts[n - n_late], .bounds = undefined };
     const visible = std.sort.partitionPoint(i64, starts, c.dev, struct {
@@ -667,7 +667,7 @@ pub fn cutsOf(starts: []const i64, shares: struct { test_: f64 = test_share, dev
             continue;
         }
         const q = 0.5 + 0.5 * @as(f64, @floatFromInt(k)) / folds_n;
-        b.* = starts[@intFromFloat(@as(f64, @floatFromInt(visible)) * q)];
+        b.* = starts[@trunc(@as(f64, @floatFromInt(visible)) * q)];
     }
     return c;
 }
@@ -1282,7 +1282,7 @@ fn pickMetric(
     }
     const nl = @as(f64, @floatFromInt(pct.items.len)) - nw;
     const out: PickResult = .{
-        .top_n = @intFromFloat(top_n),
+        .top_n = @trunc(top_n),
         .top_win = top_w / @max(top_n, 1),
         .auc = try auc(gpa, pct.items, won.items),
     };

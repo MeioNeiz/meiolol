@@ -71,7 +71,7 @@ pub fn run(gpa: std.mem.Allocator, io: std.Io, db: store.Db, dir: []const u8, w:
     try w.print("dev: log loss {d:.5} (baseline {d:.5}), accuracy {d:.4}, AUC {d:.4} on {d} games\n", .{ dev.log_loss, dev.baseline_log_loss, dev.accuracy, dev.auc, dev.games });
     try df.exportFiles(arena, io, &sc, &info, .{
         .name = "shipped model (site and app)",
-        .run = try std.fmt.allocPrint(arena, "{s} {d:0>2}:{d:0>2}Z", .{ try df.dayOf(arena, now_ms), @as(u64, @intCast(@mod(@divFloor(now_ms, 3_600_000), 24))), @as(u64, @intCast(@mod(@divFloor(now_ms, 60_000), 60))) }),
+        .run = try arena.print("{s} {d:0>2}:{d:0>2}Z", .{ try df.dayOf(arena, now_ms), @as(u64, @intCast(@mod(@divFloor(now_ms, 3_600_000), 24))), @as(u64, @intCast(@mod(@divFloor(now_ms, 60_000), 60))) }),
         .snapshot = "box database",
         .newest_start = games[games.len - 1].start,
         .training_games = games.len,
@@ -137,7 +137,7 @@ fn params(arena: std.mem.Allocator, st: *const core.Stats) !df.Params {
                 shipped += 1;
             };
             try groups.append(arena, .{
-                .name = try std.fmt.allocPrint(arena, "{s} {s}-{s}", .{ kind, role_names[ri], role_names[qi] }),
+                .name = try arena.print("{s} {s}-{s}", .{ kind, role_names[ri], role_names[qi] }),
                 .kind = if (std.mem.eql(u8, kind, "ally")) "ally" else "matchup",
                 .r = ri,
                 .q = qi,

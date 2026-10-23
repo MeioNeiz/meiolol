@@ -85,7 +85,7 @@ pub fn run(gpa: std.mem.Allocator, io: std.Io, db: store.Db, dir: []const u8, w:
     const range = try lf.patchRange(arena, d.games);
     try lf.write(arena, io, &sc, .{
         .name = team2.name,
-        .run = try std.fmt.allocPrint(arena, "{s} {d:0>2}:{d:0>2}Z", .{ try lf.dayOf(arena, now_ms), @as(u64, @intCast(@mod(@divFloor(now_ms, 3_600_000), 24))), @as(u64, @intCast(@mod(@divFloor(now_ms, 60_000), 60))) }),
+        .run = try arena.print("{s} {d:0>2}:{d:0>2}Z", .{ try lf.dayOf(arena, now_ms), @as(u64, @intCast(@mod(@divFloor(now_ms, 3_600_000), 24))), @as(u64, @intCast(@mod(@divFloor(now_ms, 60_000), 60))) }),
         .snapshot = "box database",
         .newest_game = try lf.dayOf(arena, d.starts[d.starts.len - 1]),
         .training_games = d.games.len,

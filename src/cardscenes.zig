@@ -101,7 +101,7 @@ const Ids = struct {
                 p.hover = true;
                 name = name[0 .. name.len - 1];
             }
-            if (std.mem.indexOfScalar(u8, name, '=')) |eq| {
+            if (std.mem.findScalar(u8, name, '=')) |eq| {
                 p.role = Role.parse(name[0..eq]) orelse {
                     ids.bad.* = raw;
                     return error.UnknownRole;
@@ -219,7 +219,7 @@ pub fn fixture() !Fixture {
                 .a_won = blue_won,
                 .minutes = 20,
             };
-            for (0..20) |m| l.gold[m] = @intFromFloat(at14 * @as(f64, @floatFromInt(m + 1)) / curvesfile.lane_minute);
+            for (0..20) |m| l.gold[m] = @trunc(at14 * @as(f64, @floatFromInt(m + 1)) / curvesfile.lane_minute);
             try cb.addLane(l);
         }
         cb.addGame();
@@ -339,7 +339,7 @@ fn randomPicks(arena: std.mem.Allocator, rand: std.Random, used: *std.ArrayList(
     var out: std.ArrayList(Pick) = .empty;
     while (out.items.len < n) {
         const c = champs[rand.uintLessThan(usize, champs.len)];
-        if (std.mem.indexOfScalar(u32, used.items, c.id) != null) continue;
+        if (std.mem.findScalar(u32, used.items, c.id) != null) continue;
         if (skip == c.role) continue;
         try used.append(arena, c.id);
         try out.append(arena, .{
@@ -385,7 +385,7 @@ fn checkCard(in: lanecard.Input, card: lanecard.Card) !void {
 fn eligible(in: lanecard.Input, id: u32) bool {
     const i = in.stats.index(id) orelse return false;
     if (in.stats.champRole(in.role, i).games < in.opts.min_games) return false;
-    if (in.pickable) |p| if (std.mem.indexOfScalar(u32, p, id) == null) return false;
+    if (in.pickable) |p| if (std.mem.findScalar(u32, p, id) == null) return false;
     return true;
 }
 
@@ -397,7 +397,7 @@ fn playsRole(in: lanecard.Input, id: u32) bool {
 }
 
 fn available(in: lanecard.Input, id: u32) bool {
-    if (std.mem.indexOfScalar(u32, in.bans, id) != null) return false;
+    if (std.mem.findScalar(u32, in.bans, id) != null) return false;
     for (in.allies) |p| if (p.champion == id) return false;
     for (in.enemies) |p| if (p.champion == id) return false;
     return true;
@@ -411,7 +411,7 @@ fn masteryOf(in: lanecard.Input, id: u32) u32 {
 /// docs/production-key.md "Product rules": facts, no win rate uplift, never "best"
 fn policyWording(text: []const u8) !void {
     for ([_][]const u8{ "%", "win", "best", "Best" }) |bad| {
-        if (std.mem.indexOf(u8, text, bad) != null) {
+        if (std.mem.find(u8, text, bad) != null) {
             std.debug.print("policy wording: \"{s}\" in \"{s}\"\n", .{ bad, text });
             return error.PolicyWording;
         }

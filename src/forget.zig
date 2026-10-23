@@ -139,7 +139,7 @@ pub fn exportList(io: std.Io, db: Db, path: []const u8) !usize {
 
 /// Riot ID ("Name#TAG") to PUUID via account-v1; null when Riot has no such account
 pub fn resolveRiotId(gpa: std.mem.Allocator, client: *riot.client.Client, riot_id: []const u8) !?[]u8 {
-    const at = std.mem.lastIndexOfScalar(u8, riot_id, '#') orelse return error.BadRiotId;
+    const at = std.mem.findScalarLast(u8, riot_id, '#') orelse return error.BadRiotId;
     var buf: [512]u8 = undefined;
     var w: std.Io.Writer = .fixed(&buf);
     try w.writeAll("/riot/account/v1/accounts/by-riot-id/");

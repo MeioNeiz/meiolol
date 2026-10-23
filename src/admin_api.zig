@@ -45,8 +45,8 @@ pub fn handle(api: *Api, request: *Request) !bool {
     if (!std.mem.startsWith(u8, target, prefix)) return false;
     if (!allowed(api, request)) return false;
 
-    const path = target[prefix.len .. std.mem.indexOfScalar(u8, target, '?') orelse target.len];
-    const query = if (std.mem.indexOfScalar(u8, target, '?')) |q| target[q + 1 ..] else "";
+    const path = target[prefix.len .. std.mem.findScalar(u8, target, '?') orelse target.len];
+    const query = if (std.mem.findScalar(u8, target, '?')) |q| target[q + 1 ..] else "";
     if (std.mem.startsWith(u8, path, "action/")) {
         // A bodyless POST has neither length nor encoding; respond() asserts on one
         if (request.head.transfer_encoding == .none and request.head.content_length == null) {
@@ -75,7 +75,7 @@ pub fn handle(api: *Api, request: *Request) !bool {
         defer arena_state.deinit();
         const arena = arena_state.allocator();
         const q = parseLogQuery(query) orelse return reply(request, .not_found, "text/plain; charset=utf-8", "not found\n");
-        const file = try std.fmt.allocPrint(arena, "{s}/{s}.log", .{ api.data_dir, q.file });
+        const file = try arena.print("{s}/{s}.log", .{ api.data_dir, q.file });
         return reply(request, .ok, "text/plain; charset=utf-8", try logTail(arena, api.io, file, q.lines));
     }
     return reply(request, .not_found, "text/plain; charset=utf-8", "not found\n");
@@ -128,7 +128,7 @@ fn parseLogQuery(query: []const u8) ?LogQuery {
     var file: ?[]const u8 = null;
     var params = std.mem.splitScalar(u8, query, '&');
     while (params.next()) |p| {
-        const eq = std.mem.indexOfScalar(u8, p, '=') orelse continue;
+        const eq = std.mem.findScalar(u8, p, '=') orelse continue;
         const value = p[eq + 1 ..];
         if (std.mem.eql(u8, p[0..eq], "file")) {
             for (log_files) |f| if (std.mem.eql(u8, value, f)) {
@@ -352,7 +352,7 @@ fn services(arena: std.mem.Allocator, io: Io) admin.Services {
 fn disk(arena: std.mem.Allocator, io: Io, data_dir: []const u8) ?[3]u64 {
     const r = run(arena, io, &.{ "df", "-B1", "--output=size,used,avail", data_dir });
     if (!r.ok) return null;
-    const last = r.output[(std.mem.lastIndexOfScalar(u8, r.output, '\n') orelse return null) + 1 ..];
+    const last = r.output[(std.mem.findScalarLast(u8, r.output, '\n') orelse return null) + 1 ..];
     var words = std.mem.tokenizeScalar(u8, last, ' ');
     var d: [3]u64 = undefined;
     for (&d) |*x| x.* = std.fmt.parseInt(u64, words.next() orelse return null, 10) catch return null;

@@ -713,7 +713,7 @@ pub fn compRefs(arena: std.mem.Allocator, sc: *const Scorer, champs: *const Cham
         for (red.names, &d.teams[1]) |n, *c| c.* = champs.find(n) orelse return;
         const r = try rank(arena, sc, champs, &d);
         try slots.append(arena, .{
-            .label = try std.fmt.allocPrint(arena, "blue jungle to fill into {s}", .{red.label}),
+            .label = try arena.print("blue jungle to fill into {s}", .{red.label}),
             .role = 1,
             .side = 0,
             .teams = d.bySide(),
@@ -724,7 +724,7 @@ pub fn compRefs(arena: std.mem.Allocator, sc: *const Scorer, champs: *const Cham
             .options = r.options,
         });
         d.teams[0][1] = rammus;
-        try drafts.append(arena, refDraft(try std.fmt.allocPrint(arena, "Rammus jungle into {s}", .{red.label}), sc, d.bySide()));
+        try drafts.append(arena, refDraft(try arena.print("Rammus jungle into {s}", .{red.label}), sc, d.bySide()));
     }
 }
 
@@ -757,14 +757,14 @@ pub fn firstOther(champs: *const Champions, teams: *const [2][n_role]u32) u32 {
 
 /// stats.patchKey back to "16.21"
 pub fn patchLabel(arena: std.mem.Allocator, key: u32) ![]const u8 {
-    return std.fmt.allocPrint(arena, "{d}.{d}", .{ key / 1000, key % 1000 });
+    return arena.print("{d}.{d}", .{ key / 1000, key % 1000 });
 }
 
 pub fn dayOf(arena: std.mem.Allocator, ms: i64) ![]const u8 {
     const es: std.time.epoch.EpochSeconds = .{ .secs = @intCast(@divFloor(ms, 1000)) };
     const yd = es.getEpochDay().calculateYearDay();
     const md = yd.calculateMonthDay();
-    return std.fmt.allocPrint(arena, "{d}-{d:0>2}-{d:0>2}", .{ yd.year, md.month.numeric(), md.day_index + 1 });
+    return arena.print("{d}-{d:0>2}-{d:0>2}", .{ yd.year, md.month.numeric(), md.day_index + 1 });
 }
 
 test "play shares: the newest patch with enough games, else the newest" {

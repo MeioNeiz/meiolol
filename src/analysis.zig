@@ -227,7 +227,7 @@ pub const TimelineGames = struct {
             if (slot < 0 or slot >= g.t.participants) continue;
             pid[side][@backingInt(r)] = @intCast(slot + 1);
         }
-        if (std.mem.indexOfScalar(u8, std.mem.asBytes(&pid), 0) != null) return null;
+        if (std.mem.findScalar(u8, std.mem.asBytes(&pid), 0) != null) return null;
         for (pid, 0..) |team, side| for (team) |p| {
             if ((p <= 5) != (side == 0)) return null;
         };
@@ -620,7 +620,7 @@ pub const Preds = struct {
         const files = try arena.alloc(Io.File, names.len);
         const writers = try arena.alloc(Io.File.Writer, names.len);
         for (names, 0..) |name, i| {
-            const path = try std.fmt.allocPrint(arena, "{s}/{s}.tsv", .{ d, name });
+            const path = try arena.print("{s}/{s}.tsv", .{ d, name });
             files[i] = cwd.createFile(io, path, .{}) catch |err| {
                 for (files[0..i]) |f| f.close(io);
                 return err;

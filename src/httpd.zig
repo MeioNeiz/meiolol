@@ -76,7 +76,7 @@ pub fn requests(
             switch (logged) {
                 .path => {
                     const target = request.head.target;
-                    const path = target[0 .. std.mem.indexOfScalar(u8, target, '?') orelse target.len];
+                    const path = target[0 .. std.mem.findScalar(u8, target, '?') orelse target.len];
                     log.warn("{s}: {t}", .{ path, err });
                 },
                 .error_only => log.warn("request: {t}", .{err}),

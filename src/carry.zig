@@ -146,7 +146,7 @@ fn covariate(c: Cov, r: Row) f64 {
 }
 
 fn heldIndex(comptime f: objectives.Feat) usize {
-    return comptime std.mem.indexOfScalar(objectives.Feat, objectives.held, f).?;
+    return comptime std.mem.findScalar(objectives.Feat, objectives.held, f).?;
 }
 
 /// Champion types: the first of Data Dragon's tags (as outcomes.zig's classes), then
@@ -912,7 +912,7 @@ pub fn run(
     var blocks: std.ArrayList(Block) = .empty;
     defer blocks.deinit(gpa);
     for (0..n_folds) |f| try blocks.append(gpa, .{
-        .label = try std.fmt.allocPrint(arena, "{d}", .{f + 1}),
+        .label = try arena.print("{d}", .{f + 1}),
         .fit_before = c[f],
         .lo = c[f],
         .hi = c[f + 1],
@@ -959,7 +959,7 @@ pub fn run(
     const names = try arena.alloc([]const u8, champs);
     for (names, champ_index.ids.items) |*n, id| {
         try name.bind(.{@as(i64, id)});
-        n.* = if (try name.step()) try arena.dupe(u8, name.bytes(0)) else try std.fmt.allocPrint(arena, "#{d}", .{id});
+        n.* = if (try name.step()) try arena.dupe(u8, name.bytes(0)) else try arena.print("#{d}", .{id});
     }
 
     try w.print("# meiolol carry\n\nTrain: {d} games reaching 15:00, every scanned platform, before " ++
@@ -1205,7 +1205,7 @@ fn labCuts(e: eval.Cuts) [n_folds + 2]i64 {
 }
 
 fn mi_of(minute: u8) usize {
-    return std.mem.indexOfScalar(u8, &minutes, minute).?;
+    return std.mem.findScalar(u8, &minutes, minute).?;
 }
 
 /// Adds a block's per-game paired sums (rows sorted by game) to pooled sums; with

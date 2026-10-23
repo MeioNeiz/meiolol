@@ -97,8 +97,8 @@ pub fn exportNew(arena: std.mem.Allocator, io: Io, db: store.Db, dir: []const u8
     const more = first + max_window_s < now_s - settle_s;
     const to = if (more) first + max_window_s else now_s - settle_s;
     if (to <= first) return null;
-    const name = try std.fmt.allocPrint(arena, "raw-{d}-{d}.db", .{ from, to });
-    const tmp = try std.fmt.allocPrintSentinel(arena, "{s}/{s}.tmp", .{ dir, name }, 0);
+    const name = try arena.print("raw-{d}-{d}.db", .{ from, to });
+    const tmp = try arena.printSentinel("{s}/{s}.tmp", .{ dir, name }, 0);
     errdefer Io.Dir.cwd().deleteFile(io, tmp) catch {};
 
     const counts = try copy(db, tmp, from, to);
@@ -107,7 +107,7 @@ pub fn exportNew(arena: std.mem.Allocator, io: Io, db: store.Db, dir: []const u8
     try db.run("INSERT INTO raw.archive_exports VALUES (?,?,?,?,?,?,?,NULL)", .{
         name, from, to, counts.summaries, counts.timelines, counts.mastery, now_s,
     });
-    const path = try std.fmt.allocPrintSentinel(arena, "{s}/{s}", .{ dir, name }, 0);
+    const path = try arena.printSentinel("{s}/{s}", .{ dir, name }, 0);
     Io.Dir.cwd().rename(tmp, Io.Dir.cwd(), path, io) catch |err| {
         db.run("DELETE FROM raw.archive_exports WHERE name = ?", .{name}) catch {};
         return err;
@@ -302,8 +302,11 @@ pub fn ack(io: Io, db: store.Db, dir: []const u8, name: []const u8, now_s: i64) 
 fn exportFile(arena: std.mem.Allocator, io: Io, dir: []const u8, name: []const u8) !?[]const u8 {
     const cwd = Io.Dir.cwd();
     for ([_][]const u8{ ".zst", "" }) |ext| {
-        const path = try std.fmt.allocPrint(arena, "{s}/{s}{s}", .{ dir, name, ext });
-        if (cwd.access(io, path, .{})) |_| return path else |err| if (err != error.FileNotFound) return err;
+        const path = try arena.print("{s}/{s}{s}", .{ dir, name, ext });
+        if (cwd.access(io, path, .{})) |_| return path else |err| switch (err) {
+            error.FileNotFound => {},
+            else => return err,
+        }
     }
     return null;
 }
@@ -311,8 +314,11 @@ fn exportFile(arena: std.mem.Allocator, io: Io, dir: []const u8, name: []const u
 fn deleteExportFiles(io: Io, dir: []const u8, name: []const u8) !void {
     for ([_][]const u8{ ".zst", "" }) |ext| {
         var buf: [std.fs.max_path_bytes]u8 = undefined;
-        const path = try std.fmt.bufPrint(&buf, "{s}/{s}{s}", .{ dir, name, ext });
-        Io.Dir.cwd().deleteFile(io, path) catch |err| if (err != error.FileNotFound) return err;
+        const path = try std.mem.print(&buf, "{s}/{s}{s}", .{ dir, name, ext });
+        Io.Dir.cwd().deleteFile(io, path) catch |err| switch (err) {
+            error.FileNotFound => {},
+            else => return err,
+        };
     }
 }
 
@@ -328,18 +334,21 @@ pub fn pack(gpa: std.mem.Allocator, io: Io, dir: []const u8, name: []const u8, l
     defer arena_state.deinit();
     const arena = arena_state.allocator();
     const cwd = Io.Dir.cwd();
-    const path = try std.fmt.allocPrintSentinel(arena, "{s}/{s}", .{ dir, name }, 0);
-    const zst = try std.fmt.allocPrint(arena, "{s}.zst", .{path});
-    const tmp = try std.fmt.allocPrint(arena, "{s}.zst.tmp", .{path});
-    if (cwd.access(io, path, .{})) |_| {} else |err| {
-        if (err != error.FileNotFound) return err;
-        if (cwd.access(io, zst, .{})) |_| return null else |e| return e;
+    const path = try arena.printSentinel("{s}/{s}", .{ dir, name }, 0);
+    const zst = try arena.print("{s}.zst", .{path});
+    const tmp = try arena.print("{s}.zst.tmp", .{path});
+    if (cwd.access(io, path, .{})) |_| {} else |err| switch (err) {
+        error.FileNotFound => if (cwd.access(io, zst, .{})) |_| return null else |e| return e,
+        else => return err,
     }
     // A pack whose rename was done but not the delete: NAME's pack is whole
     if (cwd.access(io, zst, .{})) |_| {
         try cwd.deleteFile(io, path);
         return null;
-    } else |err| if (err != error.FileNotFound) return err;
+    } else |err| switch (err) {
+        error.FileNotFound => {},
+        else => return err,
+    }
     errdefer cwd.deleteFile(io, tmp) catch {};
 
     const db_bytes = blk: {
@@ -355,7 +364,7 @@ pub fn pack(gpa: std.mem.Allocator, io: Io, dir: []const u8, name: []const u8, l
         .mastery = @intCast(try int(db, "SELECT count(*) FROM mastery", .{})),
     };
     {
-        const lvl = try std.fmt.allocPrint(arena, "-{d}", .{level});
+        const lvl = try arena.print("-{d}", .{level});
         var child = try std.process.spawn(io, .{
             .argv = &.{ "zstd", "-q", "-f", lvl, "-T1", "-", "-o", tmp },
             .stdin = .pipe,
@@ -393,8 +402,11 @@ pub fn pack(gpa: std.mem.Allocator, io: Io, dir: []const u8, name: []const u8, l
     try cwd.rename(tmp, cwd, zst, io);
     try syncPath(io, dir, .directory);
     cwd.deleteFile(io, path) catch |err| {
-        // The valve dropped the export meanwhile: its pack goes too
-        if (err == error.FileNotFound) cwd.deleteFile(io, zst) catch {};
+        switch (err) {
+            // The valve dropped the export meanwhile: its pack goes too
+            error.FileNotFound => cwd.deleteFile(io, zst) catch {},
+            else => {},
+        }
         return err;
     };
     try syncPath(io, dir, .directory);
@@ -465,7 +477,7 @@ pub fn readPack(gpa: std.mem.Allocator, io: Io, path: []const u8) !store.rawpack
 fn isExportName(name: []const u8) bool {
     if (!std.mem.startsWith(u8, name, "raw-") or !std.mem.endsWith(u8, name, ".db")) return false;
     const range = name["raw-".len .. name.len - ".db".len];
-    const dash = std.mem.indexOfScalar(u8, range, '-') orelse return false;
+    const dash = std.mem.findScalar(u8, range, '-') orelse return false;
     _ = std.fmt.parseInt(u64, range[0..dash], 10) catch return false;
     _ = std.fmt.parseInt(u64, range[dash + 1 ..], 10) catch return false;
     return true;

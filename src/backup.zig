@@ -172,7 +172,10 @@ fn writeFile(
 ) !Written {
     const cwd = Io.Dir.cwd();
     const tmp = try arena.printSentinel("{s}.tmp", .{path}, 0);
-    cwd.deleteFile(io, tmp) catch |err| if (err != error.FileNotFound) return err;
+    cwd.deleteFile(io, tmp) catch |err| switch (err) {
+        error.FileNotFound => {},
+        else => return err,
+    };
     var w: Written = .{};
     {
         const db = try Db.open(tmp);
@@ -483,7 +486,10 @@ pub fn restore(arena: std.mem.Allocator, io: Io, from_dir: []const u8, data_dir:
     const target = try std.fs.path.join(arena, &.{ data_dir, "meiolol.db" });
     if (cwd.access(io, target, .{})) |_| {
         return error.TargetNotEmpty;
-    } else |err| if (err != error.FileNotFound) return err;
+    } else |err| switch (err) {
+        error.FileNotFound => {},
+        else => return err,
+    }
     try cwd.createDirPath(io, data_dir);
 
     const state_dir = try std.fs.path.join(arena, &.{ from_dir, "state" });
@@ -620,7 +626,10 @@ pub fn sweepAged(arena: std.mem.Allocator, io: Io, dir: []const u8, now: i64) !i
     if (old_history.items.len == 0) return changed;
     // Keys with a row since the cutoff, in any segment, keep all their rows
     const recent = try arena.printSentinel("{s}/.sweep-recent.db", .{dir}, 0);
-    Io.Dir.cwd().deleteFile(io, recent) catch |err| if (err != error.FileNotFound) return err;
+    Io.Dir.cwd().deleteFile(io, recent) catch |err| switch (err) {
+        error.FileNotFound => {},
+        else => return err,
+    };
     defer Io.Dir.cwd().deleteFile(io, recent) catch {};
     const db = try Db.open(recent);
     defer db.close();

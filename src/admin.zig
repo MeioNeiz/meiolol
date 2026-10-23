@@ -437,7 +437,7 @@ pub fn tail(arena: std.mem.Allocator, io: Io, path: []const u8, n: usize) ![]con
         }
     }
     if (i > 0 and isTsv(text)) {
-        const header = text[0 .. std.mem.indexOfScalar(u8, text, '\n').? + 1];
+        const header = text[0 .. std.mem.findScalar(u8, text, '\n').? + 1];
         return std.mem.concat(arena, u8, &.{ header, text[i..] });
     }
     return text[i..];
@@ -464,9 +464,9 @@ fn readTail(arena: std.mem.Allocator, io: Io, path: []const u8, max: u64) ![]con
         // A large TSV: its header from the start
         var head: [512]u8 = undefined;
         const h = try file.readPositionalAll(io, &head, 0);
-        const nl = std.mem.indexOfScalar(u8, text, '\n') orelse return "";
+        const nl = std.mem.findScalar(u8, text, '\n') orelse return "";
         text = text[nl + 1 ..];
-        if (std.mem.indexOfScalar(u8, head[0..h], '\n')) |e| {
+        if (std.mem.findScalar(u8, head[0..h], '\n')) |e| {
             if (isTsv(head[0..h])) return std.mem.concat(arena, u8, &.{ head[0 .. e + 1], text });
         }
     }
@@ -683,13 +683,13 @@ fn scrub(arena: std.mem.Allocator, line: []const u8, digits: bool) ![]const u8 {
         var e = i;
         while (e < stop and isWordChar(line[e])) e += 1;
         const word = line[i..e];
-        const has_digit = std.mem.indexOfAny(u8, word, "0123456789") != null;
+        const has_digit = std.mem.findAny(u8, word, "0123456789") != null;
         // Error names such as HttpConnectionClosing stay: letters only, shorter than any
         // PUUID or encrypted id
         const error_name = word.len < 32 and for (word) |c| {
             if (!std.ascii.isAlphabetic(c)) break false;
         } else true;
-        if ((word.len >= 20 and !error_name) or (has_digit and std.mem.indexOfScalar(u8, word, '_') != null)) {
+        if ((word.len >= 20 and !error_name) or (has_digit and std.mem.findScalar(u8, word, '_') != null)) {
             try out.appendSlice(arena, "…");
         } else if (!digits or isStatus(line, i, e)) {
             try out.appendSlice(arena, word);
@@ -727,7 +727,7 @@ const max_name_chars = 16;
 /// rules, so a neighbouring word may go too: better than a name left half shown
 fn riotIdAt(line: []const u8, from: usize) ?struct { start: usize, end: usize } {
     var h = from;
-    while (std.mem.indexOfScalarPos(u8, line, h, '#')) |hash| : (h = hash + 1) {
+    while (std.mem.findScalarPos(u8, line, h, '#')) |hash| : (h = hash + 1) {
         if (hash == from or !isNameByte(line[hash - 1]) or line[hash - 1] == ' ') continue;
         var end = hash + 1;
         var tag_chars: usize = 0;
@@ -746,7 +746,7 @@ fn riotIdAt(line: []const u8, from: usize) ?struct { start: usize, end: usize } 
         }
         // Cut off inside a word: that word is too long to be in the name
         if (start > from and isNameByte(line[start - 1]) and line[start - 1] != ' ') {
-            if (std.mem.indexOfScalarPos(u8, line[0..hash], start, ' ')) |sp| start = sp;
+            if (std.mem.findScalarPos(u8, line[0..hash], start, ' ')) |sp| start = sp;
         }
         while (line[start] == ' ') start += 1;
         return .{ .start = start, .end = end };
@@ -826,12 +826,12 @@ fn crawlSeries(
                 add(b, base, r);
             }
             prev = .{ .t = t, .r = r };
-        } else if (std.mem.indexOf(u8, rest, "workers for") != null or std.mem.indexOf(u8, rest, "threads for") != null) {
+        } else if (std.mem.find(u8, rest, "workers for") != null or std.mem.find(u8, rest, "threads for") != null) {
             try restarts.append(arena, t);
             prev = .{ .t = t, .r = .{} };
         } else if (std.mem.startsWith(u8, rest, "warning(") or std.mem.startsWith(u8, rest, "error(")) {
             const msg = try normalise(arena, rest);
-            if (key_problems) |kp| if (std.mem.indexOf(u8, msg, "key missing or expired") != null) {
+            if (key_problems) |kp| if (std.mem.find(u8, msg, "key missing or expired") != null) {
                 try kp.append(arena, .{ t, msg });
             };
             const kind = classify(msg);
@@ -887,7 +887,7 @@ fn add(b: *Bucket, from: Report, to: Report) void {
 /// americas 3978m 2160t 483ids 6593req | ... | writes 28138 in 3921 commits, 4 queued,
 /// 0 busy | pages written 626229, read 454155"
 fn parseReport(line: []const u8) ?Report {
-    if (!std.mem.startsWith(u8, line, "info(crawl): ") or std.mem.indexOf(u8, line, " matches/day | ") == null) return null;
+    if (!std.mem.startsWith(u8, line, "info(crawl): ") or std.mem.find(u8, line, " matches/day | ") == null) return null;
     var r: Report = .{};
     var parts = std.mem.splitSequence(u8, line, " | ");
     _ = parts.next();
@@ -897,7 +897,7 @@ fn parseReport(line: []const u8) ?Report {
         if (std.meta.stringToEnum(Region, first)) |region| {
             const i = @backingInt(region);
             while (words.next()) |word| {
-                const digits = std.mem.indexOfNone(u8, word, "0123456789") orelse continue;
+                const digits = std.mem.findNone(u8, word, "0123456789") orelse continue;
                 const n = std.fmt.parseInt(u64, word[0..digits], 10) catch continue;
                 const unit = word[digits..];
                 if (std.mem.eql(u8, unit, "m")) r.m[i] = n;
@@ -918,10 +918,10 @@ fn parseReport(line: []const u8) ?Report {
             _ = after.next();
             const rest = after.next() orelse continue;
             r.commits = firstNumber(rest);
-            if (std.mem.indexOf(u8, rest, ", ")) |c| r.queued = firstNumber(rest[c + 2 ..]);
+            if (std.mem.find(u8, rest, ", ")) |c| r.queued = firstNumber(rest[c + 2 ..]);
         } else if (std.mem.eql(u8, first, "pages")) {
             // pages written W, read R
-            const c = std.mem.indexOfScalar(u8, part, ',') orelse continue;
+            const c = std.mem.findScalar(u8, part, ',') orelse continue;
             r.pages_written = lastNumber(part[0..c]);
             r.pages_read = lastNumber(part[c..]);
         }
@@ -930,8 +930,8 @@ fn parseReport(line: []const u8) ?Report {
 }
 
 fn firstNumber(s: []const u8) u64 {
-    const a = std.mem.indexOfAny(u8, s, "0123456789") orelse return 0;
-    const e = std.mem.indexOfNonePos(u8, s, a, "0123456789") orelse s.len;
+    const a = std.mem.findAny(u8, s, "0123456789") orelse return 0;
+    const e = std.mem.findNonePos(u8, s, a, "0123456789") orelse s.len;
     return std.fmt.parseInt(u64, s[a..e], 10) catch 0;
 }
 
@@ -951,7 +951,7 @@ fn normalise(arena: std.mem.Allocator, line: []const u8) ![]const u8 {
 fn classify(msg: []const u8) Kind {
     const has = struct {
         fn f(s: []const u8, needle: []const u8) bool {
-            return std.mem.indexOf(u8, s, needle) != null;
+            return std.mem.find(u8, s, needle) != null;
         }
     }.f;
     if (has(msg, "429 (server)")) return .riot_busy;
@@ -1012,7 +1012,7 @@ test "normalise log messages" {
     const m = try normalise(arena, "warning(riot): 503 on /lol/match/v5/matches/EUW1_7123456/timeline, retrying");
     try std.testing.expectEqualStrings("warning(riot): 503 on /lol/match/vN/matches/…/timeline, retrying", m);
     const p = try normalise(arena, "warning(riot): 504 on /lol/match/v5/matches/by-puuid/-3uog-_IosuG5ssbfFVk1cyKUZg0/ids, retrying");
-    try std.testing.expect(std.mem.indexOf(u8, p, "IosuG") == null);
+    try std.testing.expect(std.mem.find(u8, p, "IosuG") == null);
     try std.testing.expectEqualStrings("warning(crawl): writer: database busy, retrying N jobs", try normalise(arena, "warning(crawl): writer: database busy, retrying 500 jobs"));
     // Lines as the crawler logs them on 17 Oct
     const cases = [_]struct { []const u8, Kind }{

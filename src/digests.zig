@@ -156,7 +156,7 @@ test "digests hold no PUUID: forget has nothing to erase in them" {
     _ = try catchUp(testing.allocator, testing.io, db, .{});
     const before = try onlyDigest(arena, db);
     for (doc.metadata.participants) |puuid| {
-        try testing.expect(std.mem.indexOf(u8, before, puuid) == null);
+        try testing.expect(std.mem.find(u8, before, puuid) == null);
         _ = try forget.forget(db, puuid, 7, .record);
     }
     try testing.expectEqualSlices(u8, before, try onlyDigest(arena, db));

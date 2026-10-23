@@ -223,7 +223,7 @@ pub const Builder = struct {
 
     fn addVs(b: *Builder, champion: u32, role: Role, opponent: u16, kind: Kind, v: []const u32, won: bool) !void {
         const c: u16 = @intCast(champion);
-        if (b.per_opponent and std.mem.indexOfScalar(Kind, &matchup_kinds, kind) == null) return;
+        if (b.per_opponent and std.mem.findScalar(Kind, &matchup_kinds, kind) == null) return;
         try b.total(.{ .champion = c, .role = role, .opponent = opponent, .kind = kind }, won);
         try b.option(c, role, opponent, kind, v, won);
     }
@@ -232,7 +232,7 @@ pub const Builder = struct {
     /// 0 (no rune) is skipped
     fn addEach(b: *Builder, champion: u32, role: Role, opponent: u16, kind: Kind, vs: []const []const u32, won: bool) !void {
         const c: u16 = @intCast(champion);
-        if (b.per_opponent and std.mem.indexOfScalar(Kind, &matchup_kinds, kind) == null) return;
+        if (b.per_opponent and std.mem.findScalar(Kind, &matchup_kinds, kind) == null) return;
         try b.total(.{ .champion = c, .role = role, .opponent = opponent, .kind = kind }, won);
         for (vs) |v| if (v[v.len - 1] != 0) try b.option(c, role, opponent, kind, v, won);
     }
@@ -514,7 +514,7 @@ fn valueLen(kind: Kind, v: [max_values]u32) usize {
         .runes => 8,
         .shards, .core3, .skills, .skill_start => 3,
         .spells, .core2, .shard => 2,
-        .start => std.mem.indexOfScalar(u32, &v, 0) orelse max_values,
+        .start => std.mem.findScalar(u32, &v, 0) orelse max_values,
     };
 }
 
@@ -550,7 +550,7 @@ pub const Picks = struct {
     first: [3]u8 = @splat(0),
 
     fn removeStart(p: *Picks, item: u32) void {
-        const i = std.mem.indexOfScalar(u32, p.start[0..p.start_len], item) orelse return;
+        const i = std.mem.findScalar(u32, p.start[0..p.start_len], item) orelse return;
         p.start_len -= 1;
         p.start[i] = p.start[p.start_len];
         p.start[p.start_len] = 0;

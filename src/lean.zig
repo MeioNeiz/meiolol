@@ -476,7 +476,7 @@ pub fn write(w: *Io.Writer, f: *const Fit, ids: []const u32, games: []const Game
     for (0..Role.count * f.champs) |c| {
         if (f.win.n[c] == 0) continue;
         try w.print("{d}\t{t}\t{d}\t{d:.0}\t{d:.0}\t{d:.2}\t{d:.2}\n", .{
-            ids[c % f.champs],  @as(Role, @fromBackingInt(@intCast(c / f.champs))), @as(u32, @intFromFloat(f.win.n[c])),
+            ids[c % f.champs],  @as(Role, @fromBackingInt(@intCast(c / f.champs))), @as(u32, @trunc(f.win.n[c])),
             1000 * f.gold.b[c], 1000 * f.gold.sd[c],                                25 * f.win.b[c],
             25 * f.win.sd[c],
         });
@@ -745,7 +745,7 @@ pub fn check(
     const names = try arena.alloc([]const u8, champs);
     for (names, games.champs.ids.items) |*n, id| {
         try name.bind(.{@as(i64, id)});
-        n.* = if (try name.step()) try arena.dupe(u8, name.bytes(0)) else try std.fmt.allocPrint(arena, "#{d}", .{id});
+        n.* = if (try name.step()) try arena.dupe(u8, name.bytes(0)) else try arena.print("#{d}", .{id});
     }
     try w.print("\nDev fit ({d} games before the dev cut): champion-roles by role, spread of " ++
         "true effects (gold; win pp)\n\n| role | {d}+ games | gold clear | win clear | early | late | " ++

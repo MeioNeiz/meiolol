@@ -329,7 +329,7 @@ fn phaseOf(t_ms: i64) usize {
 }
 
 fn involved(k: anytype, p: u8) bool {
-    return k.killer == p or std.mem.indexOfScalar(u8, k.assists, p) != null;
+    return k.killer == p or std.mem.findScalar(u8, k.assists, p) != null;
 }
 
 const testing = std.testing;

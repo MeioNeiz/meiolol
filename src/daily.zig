@@ -651,7 +651,7 @@ fn medianTier(db: store.Db, match_id: []const u8) !?[]const u8 {
 
 /// Same minimum as the site's draft helper: 0.3% of games, between 5 and 200
 pub fn minGames(st: *const Stats) u32 {
-    const share: u32 = @intFromFloat(@round(@as(f64, @floatFromInt(st.games)) * 0.003));
+    const share: u32 = @round(@as(f64, @floatFromInt(st.games)) * 0.003);
     return std.math.clamp(share, 5, 200);
 }
 
@@ -764,8 +764,8 @@ test "puzzles are made once, anonymised and published" {
         "[{\"n\":4,\"date\":\"2026-10-14\"},{\"n\":5,\"date\":\"2026-10-15\"}]\n",
         files[2].data,
     );
-    try testing.expect(std.mem.indexOf(u8, files[0].data, "EUW1_") == null);
-    try testing.expect(std.mem.indexOf(u8, files[0].data, "\"p\"") == null);
+    try testing.expect(std.mem.find(u8, files[0].data, "EUW1_") == null);
+    try testing.expect(std.mem.find(u8, files[0].data, "\"p\"") == null);
 
     const p = try std.json.parseFromSliceLeaky(Puzzle, arena, files[0].data, .{});
     try testing.expectEqual(4, p.n);
