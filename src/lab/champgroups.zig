@@ -22,6 +22,7 @@ const comps = @import("comps.zig");
 const champcomp = @import("champcomp.zig");
 const synth = @import("synth.zig");
 const cand = @import("cand");
+const api = @import("api");
 
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
@@ -300,7 +301,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     for (d.games, 0..) |g, gi| {
         if (!fit_cfg.has(g) or std.math.isNan(blue[gi])) continue;
         for (g.teams) |t| for (t, 0..) |ch, r| {
-            const v = aa.get(comps.cellKey(ch, r)) orelse continue;
+            const v = aa.get(api.cellKey(ch, r)) orelse continue;
             aa_m[r] += v;
             aa_q[r] += v * v;
             aa_n[r] += 1;
@@ -315,7 +316,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
         fn f(pr: *const comps.Profiles, a: *const std.AutoHashMapUnmanaged(u64, f64), am: [5]f64, asd: [5]f64, ch: u32, r: usize) [n_own]f64 {
             var o: [n_own]f64 = undefined;
             @memcpy(o[0..nv], &pr.z(r, pr.raw_of(ch, r)));
-            o[aa_index] = ((a.get(comps.cellKey(ch, r)) orelse am[r]) - am[r]) / asd[r];
+            o[aa_index] = ((a.get(api.cellKey(ch, r)) orelse am[r]) - am[r]) / asd[r];
             return o;
         }
     }.f;
@@ -336,7 +337,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
     for (d.games, 0..) |g, gi| {
         if (std.math.isNan(blue[gi]) or windowOf(g, c, split, fit_cfg) == null) continue;
         for (g.teams) |t| for (t, 0..) |ch, r| {
-            const k = comps.cellKey(ch, r);
+            const k = api.cellKey(ch, r);
             const e = try index.getOrPut(gpa, k);
             if (!e.found_existing) {
                 e.value_ptr.* = @intCast(cells.items.len);
@@ -379,7 +380,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
             for (t, seats, 0..) |ch, st, r| {
                 ap_max = @max(ap_max, st.magic);
                 ap_total += st.magic;
-                aa_max = @max(aa_max, aa.get(comps.cellKey(ch, r)) orelse aa_m[r]);
+                aa_max = @max(aa_max, aa.get(api.cellKey(ch, r)) orelse aa_m[r]);
             }
             tr[s][n_own + nt ..].* = .{ ap_max, ap_total, aa_max };
         }
@@ -397,7 +398,7 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
                 xn += 1;
             }
             for (t, 0..) |ch, r| {
-                const ci = index.get(comps.cellKey(ch, r)).?;
+                const ci = index.get(api.cellKey(ch, r)).?;
                 const base = (@as(usize, @backingInt(win)) * nc + ci) * n_en;
                 for (x, 0..) |v, j| {
                     acc[base + j].add(v, q * (1 - q), y - q);
