@@ -78,9 +78,17 @@ const Variant = struct {
     label: []const u8,
     kit: ?Kit = null,
     pair: bool = false,
-    pair_shuf: bool = false,
+    pair_mode: PairMode = .pooled,
     rank: u32 = 0,
+    /// Factor entries' prior sd, fixed; 0: MacKay, capped
+    fac_sd: f64 = 0,
 };
+
+/// pooled: the same two champions in any slot share a parent; shuf: a slot's own
+/// relabelling first (control); multi: only parents with cells in 2+ slots; ident: one
+/// parent per cell, sharing the kind's variance (no pooling: tells pooling from the
+/// shared variance)
+const PairMode = enum { pooled, shuf, multi, ident };
 
 fn parseVariant(label: []const u8) !Variant {
     var v: Variant = .{ .label = label };
@@ -100,9 +108,10 @@ fn parseVariant(label: []const u8) !Variant {
             v.kit = kit;
         } else if (std.mem.eql(u8, head, "pair")) {
             v.pair = true;
-            if (f.next()) |s| v.pair_shuf = std.mem.eql(u8, s, "shuf");
+            if (f.next()) |m| v.pair_mode = std.meta.stringToEnum(PairMode, m) orelse return error.BadVariant;
         } else if (std.mem.eql(u8, head, "rank")) {
             v.rank = try std.fmt.parseInt(u32, f.next() orelse return error.BadVariant, 10);
+            if (f.next()) |x| v.fac_sd = try std.fmt.parseFloat(f64, x);
         } else return error.BadVariant;
     }
     return v;
@@ -198,8 +207,9 @@ fn kitParent(map: *const KitMap, slot: usize, a: u32, b: u32) ?Parent {
 
 /// The same two champions in any slots of the kind; perm (control): a slot's own
 /// relabelling of champions, so a parent pools unrelated pairs across slots
-fn pairParent(perm: ?*const Perm, slot: usize, a0: u32, b0: u32) ?Parent {
+fn pairParent(perm: ?*const Perm, ident: bool, slot: usize, a0: u32, b0: u32) ?Parent {
     const s = slots[slot];
+    if (ident) return .{ .key = key(130 + slot, a0, b0), .sign = 1 };
     const a = if (perm) |p| p.of(slot, a0) else a0;
     const b = if (perm) |p| p.of(slot, b0) else b0;
     if (a == b) return null;
@@ -261,6 +271,8 @@ const Struct = struct {
     n_fac: u32 = 0,
     kit: ?*const KitMap,
     perm: ?*const Perm,
+    ident: bool,
+    fac_sd: f64,
 
     fn deinit(s: *Struct, gpa: Allocator) void {
         gpa.free(s.kit_of);
@@ -285,8 +297,23 @@ const Struct = struct {
     }
 };
 
-fn buildStruct(gpa: Allocator, p: *const A.Problem, kit: ?*const KitMap, pair: bool, perm: ?*const Perm, rank: u32) !Struct {
+const Parts = struct {
+    kit: ?*const KitMap = null,
+    pair: bool = false,
+    pair_mode: PairMode = .pooled,
+    /// pair_mode shuf: the slots' relabellings
+    perm: ?*const Perm = null,
+    rank: u32 = 0,
+    fac_sd: f64 = 0,
+};
+
+fn buildStruct(gpa: Allocator, p: *const A.Problem, parts: Parts) !Struct {
     const np = p.n_params();
+    const kit = parts.kit;
+    const pair = parts.pair;
+    const rank = parts.rank;
+    const perm = if (parts.pair_mode == .shuf) parts.perm.? else null;
+    const ident = parts.pair_mode == .ident;
     var s: Struct = .{
         .rank = rank,
         .kit_of = try gpa.alloc(u32, np),
@@ -300,6 +327,8 @@ fn buildStruct(gpa: Allocator, p: *const A.Problem, kit: ?*const KitMap, pair: b
         .ib = try gpa.alloc(u32, np),
         .kit = kit,
         .perm = perm,
+        .ident = ident,
+        .fac_sd = parts.fac_sd,
     };
     errdefer s.deinit(gpa);
     @memset(s.kit_of, none_u32);
@@ -327,7 +356,7 @@ fn buildStruct(gpa: Allocator, p: *const A.Problem, kit: ?*const KitMap, pair: b
                 s.kit_of[j] = e.value_ptr.*;
                 s.kit_sign[j] = pa.sign;
             };
-            if (pair) if (pairParent(perm, slot, a, b)) |pa| {
+            if (pair) if (pairParent(perm, ident, slot, a, b)) |pa| {
                 const e = try s.parent_idx.getOrPut(gpa, pa.key);
                 if (!e.found_existing) {
                     e.value_ptr.* = n_pair;
@@ -355,6 +384,23 @@ fn buildStruct(gpa: Allocator, p: *const A.Problem, kit: ?*const KitMap, pair: b
             at += nv * rank;
         }
         s.n_fac = at;
+    }
+    if (parts.pair_mode == .multi) {
+        // A parent only where the two champions met in 2+ slots
+        const slot_seen = try gpa.alloc(u32, n_pair);
+        defer gpa.free(slot_seen);
+        const n_slots_of = try gpa.alloc(u8, n_pair);
+        defer gpa.free(n_slots_of);
+        @memset(slot_seen, none_u32);
+        @memset(n_slots_of, 0);
+        for (s.pair_of, s.cell_slot) |k, slot| {
+            if (k == none_u32 or slot_seen[k] == slot) continue;
+            slot_seen[k] = slot;
+            n_slots_of[k] +|= 1;
+        }
+        for (s.pair_of) |*k| if (k.* != none_u32 and n_slots_of[k.*] < 2) {
+            k.* = none_u32;
+        };
     }
     s.kit_group = try kit_group.toOwnedSlice(gpa);
     s.pair_group = try pair_group.toOwnedSlice(gpa);
@@ -419,7 +465,8 @@ fn fitAll(gpa: Allocator, p: *const A.Problem, s: ?*const Struct, cfg: A.Config,
     var sigma2: [A.n_groups]f64 = @splat(cfg.sigma2_init);
     var kit_s2: [n_slots]f64 = @splat(cfg.sigma2_init);
     var pair_s2: [2]f64 = @splat(cfg.sigma2_init);
-    var fac_s2: [n_slots]f64 = @splat(cfg.sigma2_init);
+    const fac_sd = if (s) |x| x.fac_sd else 0;
+    var fac_s2: [n_slots]f64 = @splat(if (fac_sd > 0) fac_sd * fac_sd else cfg.sigma2_init);
     // Structure work arrays: per v2 param the cell's gradient, curvature and change
     const gc = try gpa.alloc(f64, if (s != null) np else 0);
     defer gpa.free(gc);
@@ -445,7 +492,7 @@ fn fitAll(gpa: Allocator, p: *const A.Problem, s: ?*const Struct, cfg: A.Config,
     {
         // A small random start: at u = v = 0 the factors' gradient is 0
         var rng: std.Random.DefaultPrng = .init(seed);
-        const sd = @sqrt(cfg.sigma2_init) * 0.5;
+        const sd = @sqrt(fac_s2[0]) * 0.5;
         for (fac) |*x| x.* = rng.random().floatNorm(f64) * sd;
     }
     @memset(eta, 0);
@@ -525,7 +572,7 @@ fn fitAll(gpa: Allocator, p: *const A.Problem, s: ?*const Struct, cfg: A.Config,
             if (s) |x| {
                 mackay(kit, kit_h, x.kit_group, &kit_s2, cfg);
                 mackay(pair, pair_h, x.pair_group, &pair_s2, cfg);
-                if (n_fac > 0) for (0..n_slots) |slot| {
+                if (n_fac > 0 and fac_sd == 0) for (0..n_slots) |slot| {
                     const lo = x.u_off[slot];
                     const hi = if (slot + 1 < n_slots) x.u_off[slot + 1] else x.n_fac;
                     var ss: f64 = 0;
@@ -534,7 +581,9 @@ fn fitAll(gpa: Allocator, p: *const A.Problem, s: ?*const Struct, cfg: A.Config,
                         ss += fac[j] * fac[j];
                         gam += 1 - 1 / (fac_s2[slot] * fac_h[j]);
                     }
-                    if (hi > lo) fac_s2[slot] = if (gam > 1e-9) @max(ss / gam, cfg.sigma2_floor) else cfg.sigma2_floor;
+                    // Capped: a bilinear block's MacKay update can run away (sd 5 per
+                    // entry on 1007Z fold 1, rank 2)
+                    if (hi > lo) fac_s2[slot] = @min(fac_cap, if (gam > 1e-9) @max(ss / gam, cfg.sigma2_floor) else cfg.sigma2_floor);
                 };
             }
         }
@@ -543,6 +592,7 @@ fn fitAll(gpa: Allocator, p: *const A.Problem, s: ?*const Struct, cfg: A.Config,
 }
 
 const Step = enum { kit, pair, u, v };
+const fac_cap = 0.05;
 
 fn residuals(p: *const A.Problem, eta: []const f64, r: []f64, c: []f64) void {
     for (p.games, eta, r, c) |gm, e, *ri, *ci| {
@@ -644,7 +694,8 @@ fn facStep(s: *const Struct, on_u: bool, s2: []const f64, fac: []f64, h: []f64, 
         const lam = 1 / s2[slot];
         for (lo..hi) |j| {
             h[j] += lam;
-            const step = (g[j] - lam * fac[j]) / h[j];
+            // Clamped: the objective is not convex in the factors
+            const step = std.math.clamp((g[j] - lam * fac[j]) / h[j], -0.1, 0.1);
             fac[j] += step;
             g[j] = step;
         }
@@ -707,7 +758,7 @@ fn structValue(s: *const Struct, f: *const Fitted, slot: usize, k: u64) f64 {
     if (s.kit) |m| if (kitParent(m, slot, a, b)) |pa| {
         if (s.parent_idx.get(pa.key)) |i| x += pa.sign * f.kit[i];
     };
-    if (f.pair.len > 0) if (pairParent(s.perm, slot, a, b)) |pa| {
+    if (f.pair.len > 0) if (pairParent(s.perm, s.ident, slot, a, b)) |pa| {
         if (s.parent_idx.get(pa.key)) |i| x += pa.sign * f.pair[i];
     };
     if (s.rank > 0) {
@@ -1099,7 +1150,7 @@ fn runBlock(
     }.f;
     var perm: ?Perm = null;
     defer if (perm) |*x| x.deinit(gpa);
-    for (opts.variants) |v| if (v.pair_shuf and perm == null) {
+    for (opts.variants) |v| if (v.pair_mode == .shuf and perm == null) {
         perm = try Perm.init(gpa, champions, 0x9e57);
     };
 
@@ -1130,7 +1181,7 @@ fn runBlock(
     for (opts.variants, tasks[1..]) |v, *t| t.* = .{
         .variant = v,
         .kit = mapOf(maps.items, v.kit),
-        .perm = if (v.pair_shuf) &perm.? else null,
+        .perm = if (v.pair_mode == .shuf) &perm.? else null,
     };
     const outs = try arena.alloc(TaskOut, tasks.len);
     defer for (outs) |*o| {
@@ -1147,7 +1198,7 @@ fn runBlock(
             const t = x.tasks[i];
             var st: ?Struct = null;
             defer if (st) |*s| s.deinit(x.gpa);
-            if (t.variant) |v| st = try buildStruct(x.gpa, x.p, t.kit, v.pair, t.perm, v.rank);
+            if (t.variant) |v| st = try buildStruct(x.gpa, x.p, .{ .kit = t.kit, .pair = v.pair, .pair_mode = v.pair_mode, .perm = t.perm, .rank = v.rank, .fac_sd = v.fac_sd });
             const sp: ?*const Struct = if (st) |*s| s else null;
             const f = try fitAll(x.gpa, x.p, sp, .{}, 0xfac +% i);
             const pred = try x.gpa.alloc(f64, x.scored.len);
@@ -1395,7 +1446,7 @@ fn modMap(gpa: Allocator, n_champ: u32) !KitMap {
 fn heldOut(gpa: Allocator, train: []const A.GameIn, test_: []const A.GameIn, kit: ?*const KitMap, pair: bool, rank: u32) ![2]f64 {
     var p = try A.build(gpa, .logistic, addinputs.fullVariant(true, 0), train);
     defer p.deinit(gpa);
-    var st = try buildStruct(gpa, &p, kit, pair, null, rank);
+    var st = try buildStruct(gpa, &p, .{ .kit = kit, .pair = pair, .rank = rank });
     defer st.deinit(gpa);
     var f0 = try fitAll(gpa, &p, null, quick, 1);
     defer f0.deinit(gpa);
@@ -1460,7 +1511,7 @@ test "pairprior: swapping sides negates the prediction beyond the side term" {
     defer gpa.free(games);
     var p = try A.build(gpa, .logistic, addinputs.fullVariant(true, 0), games);
     defer p.deinit(gpa);
-    var st = try buildStruct(gpa, &p, &m, true, null, 2);
+    var st = try buildStruct(gpa, &p, .{ .kit = &m, .pair = true, .rank = 2 });
     defer st.deinit(gpa);
     var f = try fitAll(gpa, &p, &st, .{ .outer = 5 }, 1);
     defer f.deinit(gpa);
@@ -1474,8 +1525,8 @@ test "pairprior: swapping sides negates the prediction beyond the side term" {
 }
 
 test "pairprior: variants parse" {
-    const v = try parseVariant("kit:prof:8:shuf+pair+rank:4");
+    const v = try parseVariant("kit:prof:8:shuf+pair:multi+rank:4:0.15");
     try testing.expect(v.kit.?.kind == .prof and v.kit.?.k == 8 and v.kit.?.shuf);
-    try testing.expect(v.pair and !v.pair_shuf and v.rank == 4);
+    try testing.expect(v.pair and v.pair_mode == .multi and v.rank == 4 and v.fac_sd == 0.15);
     try testing.expectError(error.BadVariant, parseVariant("kat"));
 }
