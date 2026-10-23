@@ -9,6 +9,9 @@ const Allocator = std.mem.Allocator;
 
 const zstd_magic = "\x28\xb5\x2f\xfd";
 const gzip_magic = "\x1f\x8b";
+/// Riot bodies are at most 16 MiB (riot/client.zig readBody): a corrupt blob must not
+/// inflate without bound
+const decompressed_max = 64 << 20;
 
 pub fn compress(gpa: Allocator, data: []const u8) ![]u8 {
     const window = try gpa.alloc(u8, window_len);
@@ -35,13 +38,13 @@ pub fn decompress(gpa: Allocator, blob: []const u8) ![]u8 {
         const buf = try gpa.alloc(u8, zstd.default_window_len + zstd.block_size_max);
         defer gpa.free(buf);
         var d: zstd.Decompress = .init(&in, buf, .{});
-        return d.reader.allocRemaining(gpa, .unlimited);
+        return d.reader.allocRemaining(gpa, .limited(decompressed_max));
     }
     if (std.mem.startsWith(u8, blob, gzip_magic)) {
         const buf = try gpa.alloc(u8, flate.max_window_len);
         defer gpa.free(buf);
         var d: flate.Decompress = .init(&in, .gzip, buf);
-        return d.reader.allocRemaining(gpa, .unlimited);
+        return d.reader.allocRemaining(gpa, .limited(decompressed_max));
     }
     return error.UnknownCompression;
 }
