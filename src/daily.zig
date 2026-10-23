@@ -254,11 +254,10 @@ fn refresh(
     const fresh = try std.json.Stringify.valueAlloc(arena, p, .{});
     if (std.mem.eql(u8, fresh, data)) return data;
     // The web loop and the renderer both build the shared view: never a half-written file
-    var tag: [8]u8 = undefined;
-    io.random(&tag);
-    const tmp = try arena.print("{s}.{x}.tmp", .{ name, &tag });
-    try dir.writeFile(io, .{ .sub_path = tmp, .data = fresh });
-    try dir.rename(tmp, dir, name, io);
+    var file = try dir.createFileAtomic(io, name, .{ .replace = true });
+    defer file.deinit(io);
+    try file.file.writeStreamingAll(io, fresh);
+    try file.replace(io);
     return fresh;
 }
 

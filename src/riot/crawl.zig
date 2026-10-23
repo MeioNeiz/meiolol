@@ -257,11 +257,10 @@ pub const Crawler = struct {
         try c.limiters.save(&aw.writer, std.Io.Clock.real.now(c.io).toMilliseconds());
         const path = try std.fs.path.join(c.gpa, &.{ c.opts.data_dir, windows_file });
         defer c.gpa.free(path);
-        const tmp = try c.gpa.print("{s}.tmp", .{path});
-        defer c.gpa.free(tmp);
-        const cwd = std.Io.Dir.cwd();
-        try cwd.writeFile(c.io, .{ .sub_path = tmp, .data = aw.written() });
-        try cwd.rename(tmp, cwd, path, c.io);
+        var file = try std.Io.Dir.cwd().createFileAtomic(c.io, path, .{ .replace = true });
+        defer file.deinit(c.io);
+        try file.file.writeStreamingAll(c.io, aw.written());
+        try file.replace(c.io);
     }
 
     /// A key from another Riot app answers every call but gives 400 "Exception

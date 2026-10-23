@@ -104,13 +104,11 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8, archive_dir: []const u8) !S
     };
     const cwd = Io.Dir.cwd();
     const pool_path = try std.fs.path.join(arena, &.{ snap, pool_file_name });
-    const pool_tmp = try arena.print("{s}.tmp", .{pool_path});
+    var pool_file = try cwd.createFileAtomic(io, pool_path, .{ .replace = true });
+    defer pool_file.deinit(io);
     {
-        var file = try cwd.createFile(io, pool_tmp, .{});
-        errdefer cwd.deleteFile(io, pool_tmp) catch {};
-        defer file.close(io);
         var wbuf: [64 * 1024]u8 = undefined;
-        var fw = file.writer(io, &wbuf);
+        var fw = pool_file.file.writer(io, &wbuf);
         try fw.interface.writeAll(pool_header);
         for (files.read, wanted, 0..) |path, want, i| {
             if (!want) continue;
@@ -128,15 +126,13 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8, archive_dir: []const u8) !S
     }
 
     const out_path = try std.fs.path.join(arena, &.{ snap, file_name });
-    const tmp_path = try arena.print("{s}.tmp", .{out_path});
     var gaps: std.ArrayList(f64) = .empty;
     defer gaps.deinit(gpa);
+    var out_file = try cwd.createFileAtomic(io, out_path, .{ .replace = true });
+    defer out_file.deinit(io);
     {
-        var file = try cwd.createFile(io, tmp_path, .{});
-        errdefer cwd.deleteFile(io, tmp_path) catch {};
-        defer file.close(io);
         var wbuf: [64 * 1024]u8 = undefined;
-        var fw = file.writer(io, &wbuf);
+        var fw = out_file.file.writer(io, &wbuf);
         const w = &fw.interface;
         try w.writeAll(header);
         for (s.parts.items) |p| {
@@ -149,8 +145,8 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8, archive_dir: []const u8) !S
         }
         try w.flush();
     }
-    try cwd.rename(tmp_path, cwd, out_path, io);
-    try cwd.rename(pool_tmp, cwd, pool_path, io);
+    try out_file.replace(io);
+    try pool_file.replace(io);
     return .{
         .rows = s.parts.items.len,
         .pre_game = gaps.items.len,
@@ -497,8 +493,6 @@ test "latest fetch strictly before game start, champion entry decoded" {
         "EUW1_2\t0\t{d}\t2\t1000\t{d}\t2\t1400\n", .{
         t0 + 9 * h, t0 + 6 * h, t0 + 5 * h, t0 + 11 * h, t0 + 6 * h,
     }), out);
-    const tmp_path = try arena.print("{s}.tmp", .{out_path});
-    try testing.expectError(error.FileNotFound, cwd.access(io, tmp_path, .{}));
 
     const pool = try cwd.readFileAlloc(io, try std.fs.path.join(arena, &.{ snap, pool_file_name }), arena, .limited(1 << 20));
     try testing.expectEqualStrings(pool_header ++

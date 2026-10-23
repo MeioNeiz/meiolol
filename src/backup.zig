@@ -725,9 +725,10 @@ pub fn tendMirror(
         try out.writer.writeAll(old);
         if (old.len > 0 and old[old.len - 1] != '\n') try out.writer.writeByte('\n');
         for (fresh.items) |p| try out.writer.print("{s}\n", .{p});
-        const tmp = try arena.print("{s}.tmp", .{applied_path});
-        try cwd.writeFile(io, .{ .sub_path = tmp, .data = out.written() });
-        try cwd.rename(tmp, cwd, applied_path, io);
+        var file = try cwd.createFileAtomic(io, applied_path, .{ .replace = true });
+        defer file.deinit(io);
+        try file.file.writeStreamingAll(io, out.written());
+        try file.replace(io);
     }
     const state_dir = try std.fs.path.join(arena, &.{ dir, "state" });
     try cwd.createDirPath(io, state_dir);
