@@ -187,7 +187,7 @@ pub const Loaded = struct {
     /// strings in `arena`, which must outlive it. error.ViewsMismatch when a binary
     /// with other part keys wrote it
     pub fn readViews(gpa: std.mem.Allocator, io: std.Io, db: store.Db, path: []const u8, arena: std.mem.Allocator) !*Loaded {
-        const bytes = try std.Io.Dir.cwd().readFileAlloc(io, path, gpa, .unlimited);
+        const bytes = try std.Io.Dir.cwd().readFileAlloc(io, path, gpa, views_size_max);
         defer gpa.free(bytes);
         const parts: Parts = try .parse(bytes, true);
         const opts = (try parts.get(Options, .opts, html.View.all[0], arena)) orelse return error.ViewsMismatch;
@@ -207,7 +207,7 @@ pub const Loaded = struct {
     /// has another layout
     pub fn reuseViews(l: *Loaded, path: []const u8) !void {
         const a = l.arena_state.allocator();
-        const bytes = std.Io.Dir.cwd().readFileAlloc(l.io, path, a, .unlimited) catch |err| switch (err) {
+        const bytes = std.Io.Dir.cwd().readFileAlloc(l.io, path, a, views_size_max) catch |err| switch (err) {
             error.FileNotFound => return,
             else => |e| return e,
         };
@@ -224,6 +224,8 @@ pub const Loaded = struct {
 };
 
 const views_magic = "MEIOVIE2";
+/// The box's file: 143 MB on 23 Oct
+const views_size_max: std.Io.Limit = .limited(1 << 30);
 /// A views file's parts. Each has its own key (partKeys), so a write after a deploy
 /// keeps those whose types and sources the deploy left alone and loads only the rest
 const Part = enum(u8) { opts, base, filter, people, daily, prev };
