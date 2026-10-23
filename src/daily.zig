@@ -214,7 +214,7 @@ pub fn update(
             },
             else => return err,
         };
-        const data = try refresh(arena, io, dir, db, used.items, st, opts, name, read_data);
+        const data = try refresh(arena, io, dir, st, opts, name, read_data);
         const path = try arena.print("daily/{s}", .{name});
         try files.append(arena, .{ .path = path, .data = data });
         if (index.writer.end > 1) try index.writer.writeByte(',');
@@ -230,14 +230,11 @@ pub fn update(
 /// `st` and are saved back; once the patch is gone the last ones stay. Only the numbers
 /// change: champions, the four options, the hidden slot and the winner (the answers
 /// archive results were marked against) are the game's. Kept as made when it does not
-/// parse or `st` cannot score it. A puzzle made before `Puzzle.players` gets them, on
-/// any patch.
+/// parse or `st` cannot score it.
 fn refresh(
     arena: std.mem.Allocator,
     io: std.Io,
     dir: std.Io.Dir,
-    db: store.Db,
-    used: []const u8,
     st: *const Stats,
     opts: Options,
     name: []const u8,
@@ -250,16 +247,10 @@ fn refresh(
         log.info("{s} kept as made: {t}", .{ name, err });
         return data;
     };
-    const backfilled = p.players == null and try backfillPlayers(arena, db, used, &p);
-    var scored = false;
-    if (isCurrent(opts.patches, p.numbers_patch orelse p.patch)) {
-        var ids: [4]u32 = undefined;
-        for (p.options, &ids) |o, *id| id.* = o.id;
-        const before = p;
-        scored = try numbers(arena, st, opts.curves, &p, ids);
-        if (!scored) p = before;
-    }
-    if (!backfilled and !scored) return data;
+    if (!isCurrent(opts.patches, p.numbers_patch orelse p.patch)) return data;
+    var ids: [4]u32 = undefined;
+    for (p.options, &ids) |o, *id| id.* = o.id;
+    if (!try numbers(arena, st, opts.curves, &p, ids)) return data;
     const fresh = try std.json.Stringify.valueAlloc(arena, p, .{});
     if (std.mem.eql(u8, fresh, data)) return data;
     // The web loop and the renderer both build the shared view: never a half-written file
@@ -604,35 +595,6 @@ fn player(arena: std.mem.Allocator, pa: Participant) !Player {
     };
 }
 
-/// Puzzles made before `Puzzle.players`: the seats of the used.txt game with the same
-/// ten champions in the same seats. False when none matches
-fn backfillPlayers(
-    arena: std.mem.Allocator,
-    db: store.Db,
-    used: []const u8,
-    p: *Puzzle,
-) !bool {
-    var q = try db.prepare(participants_sql);
-    defer q.deinit();
-    var it = std.mem.tokenizeScalar(u8, used, '\n');
-    next: while (it.next()) |match_id| {
-        try q.bind(.{match_id});
-        var players: [2][5]Player = undefined;
-        var rows: usize = 0;
-        while (try q.step()) : (rows += 1) {
-            const pa = q.row(Participant);
-            const t: u1 = if (pa.team_id == 100) 0 else 1;
-            const r = Role.fromLcu(pa.position) orelse continue :next;
-            if (p.teams[t][@backingInt(r)] != pa.champion_id) continue :next;
-            players[t][@backingInt(r)] = try player(arena, pa);
-        }
-        if (rows != 10) continue;
-        p.players = players;
-        return true;
-    }
-    return false;
-}
-
 /// From the rank snapshot stored with the match: players is emptied on a rekey
 fn medianTier(db: store.Db, match_id: []const u8) !?[]const u8 {
     var q = try db.prepare(
@@ -799,11 +761,9 @@ test "puzzles are made once, anonymised and published" {
     const used = try std.Io.Dir.cwd().readFileAlloc(io, used_path, arena, .unlimited);
     try testing.expectEqual(4, std.mem.count(u8, used, "\n"));
 
-    // Numbers frozen thin on an early day follow the patch's stats; the answers stay, and
-    // seats missing from an older puzzle come back from its game. A puzzle on a patch no
-    // longer in the stats keeps what it has.
+    // Numbers frozen thin on an early day follow the patch's stats; the answers stay. A
+    // puzzle on a patch no longer in the stats keeps what it has.
     var thin = p;
-    thin.players = null;
     thin.games = 7;
     thin.lanes = @splat(.{ .pp = 0, .games = 1 });
     const four = try arena.print("{s}/4.json", .{dir});
