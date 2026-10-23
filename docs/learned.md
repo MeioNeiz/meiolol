@@ -903,3 +903,11 @@ How to write a line:
   (americas went from 0.3 to 1.9 new games per call). Sure: crawl counts per hour, all
   four regions, 16.21 day one. Crawler: snowball and patch-start reset since 3648361
   and 044f5fa. Evidence: research/sources/patch-day-discovery-measured.md
+- 2026-10-23: In the newest lab snapshot every game now has its players' end-of-game
+  stats, but we know all ten players' champion mastery from before the game in only 1
+  game in 15 of the older games (1 in 3 of the newest days, under 1 in 10 on EUW), and
+  all ten ranks at game start in about half the games since 13 Oct. Sure: counts over
+  1.6M games, snap-20261023T2004Z; every game of patch 16.21 is in the held-out test
+  days, so no dev result covers 16.21 yet. Models: seat-level mastery is usable, all-ten
+  mastery features fit on the newest days only or impute. Evidence: docs/model.md "The
+  new pin, snap-20261023T2004Z"

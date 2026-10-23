@@ -5362,6 +5362,60 @@ Shipping it in src/additive.zig (not done; needs Jacob's go, and P2's same-split
 - Explanations: a matchup's reason can say "X counters Y in any role" when the pair
   parent carries it; C5's purification applies (parents vs cells)
 
+### The new pin, snap-20261023T2004Z: coverage and wave 1, 2026-10-23 (w1g, prepin run)
+
+The pin for Phase 0 and wave 1 (docs/plan/lab-frontier.md), 1,611,151 games 26 Sep to
+23 Oct, every platform. Dev only, no test look: the test window below is counted, never
+scored.
+
+P1, coverage per protocol window (`meiolol-lab coverage SNAP`, lab/coverage.zig: counts
+from the pack and mastery_pre.tsv, no outcomes; data/team/2026-10-23-prepin/w1g/
+coverage-2004Z.tsv). Played games (15:00+); inputs as the share of played seats, then of
+played games with all ten seats known. Seat stats: SNAP/seat_stats.tsv through rows;
+mastery: a pre-game fetch in mastery_pre.tsv; rank: rows' rank_start (rank_history
+starts 12 Oct, so the old window has none):
+
+| window | from (UTC) | games | played | 16.19 / 16.20 / 16.21 | seat stats | mastery seats / all ten | rank seats / all ten |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| old (fit only) | 26 Sep 23:26 | 603,985 | 595,230 | 52,604 / 542,626 / 0 | 100% | 0.04% / 0% | 0% / 0% |
+| fold 1 | 12 Oct 22:12 | 120,894 | 119,046 | 0 / 119,046 / 0 | 100% | 25% / 1.0% | 78% / 45% |
+| fold 2 | 14 Oct 07:14 | 120,997 | 119,046 | 0 / 119,046 / 0 | 100% | 50% / 5.9% | 85% / 54% |
+| fold 3 | 15 Oct 09:59 | 120,893 | 119,046 | 0 / 119,046 / 0 | 100% | 64% / 15% | 87% / 55% |
+| fold 4 | 16 Oct 13:05 | 120,775 | 119,046 | 0 / 119,046 / 0 | 100% | 70% / 19% | 87% / 56% |
+| fold 5 | 17 Oct 13:36 | 120,732 | 119,047 | 0 / 119,047 / 0 | 100% | 76% / 24% | 88% / 57% |
+| dev-val | 18 Oct 14:13 | 161,124 | 158,728 | 0 / 158,728 / 0 | 100% | 84% / 35% | 89% / 59% |
+| test | 20 Oct 14:44 | 241,751 | 238,092 | 0 / 13,961 / 224,131 | 100% | 88% / 42% | 91% / 61% |
+
+Fit games per dev block (played, before the block): dev 1,190,461 (scores dev-val), fold
+1 595,230, 2 714,276, 3 833,322, 4 952,368, 5 1,071,414; 119k scored per fold. Per
+platform, all ten known (seat stats / mastery / rank):
+
+| platform | dev-visible played | all ten | dev-val played | all ten | test played | all ten |
+| --- | --- | --- | --- | --- | --- | --- |
+| EUW1 | 285,206 | 100% / 0% / 25% | 30,898 | 100% / 7% / 61% | 50,820 | 100% / 16% / 64% |
+| KR | 272,121 | 100% / 1% / 27% | 36,974 | 100% / 14% / 57% | 61,257 | 100% / 23% / 61% |
+| VN2 | 181,867 | 100% / 13% / 27% | 29,158 | 100% / 59% / 62% | 43,252 | 100% / 66% / 63% |
+| NA1 | 118,019 | 100% / 6% / 29% | 15,467 | 100% / 34% / 60% | 19,147 | 100% / 44% / 64% |
+| BR1 | 95,079 | 100% / 6% / 28% | 12,128 | 100% / 32% / 58% | 16,134 | 100% / 48% / 62% |
+| LA1 | 58,635 | 100% / 6% / 31% | 7,917 | 100% / 34% / 63% | 10,172 | 100% / 54% / 65% |
+| LA2 | 51,867 | 100% / 5% / 29% | 7,049 | 100% / 29% / 59% | 10,027 | 100% / 48% / 62% |
+| SG2 | 37,327 | 100% / 23% / 26% | 6,084 | 100% / 88% / 53% | 8,255 | 100% / 91% / 55% |
+| JP1 | 32,974 | 100% / 25% / 24% | 4,065 | 100% / 88% / 50% | 6,057 | 100% / 89% / 54% |
+| TW2 | 27,770 | 100% / 25% / 22% | 4,362 | 100% / 88% / 49% | 6,991 | 100% / 87% / 47% |
+| OC1 | 26,651 | 100% / 33% / 25% | 4,336 | 100% / 90% / 52% | 5,785 | 100% / 91% / 51% |
+| EUN1, TR1, RU, ME1 | 2,945 | | 290 | | 195 | |
+
+Reading against P1's asks:
+- Seat stats for every game: met (100% of played seats in every window; 1007Z had ~24%)
+- Mastery for all ten: not in dev. 6.5% of dev-visible games (28% of seats), 35% of
+  dev-val, EUW1 the thinnest (0% / 7%). A
+  model on all ten masteries fits on fold 4-5-era games or imputes; seat-level mastery
+  (84% of dev-val seats) is usable
+- rank_start: from fold 1 on, ~87% of seats and ~55% of games all ten; none before 12 Oct
+- 16.21 in dev: not met. Every 16.21 game is in the test window (none starts before
+  the 20 Oct 14:44Z cut), so dev scores 16.20 only and any 16.21 question waits
+  for the P3 look or the next pin
+
 ## Shipped model, 2026-10-23: additive v2 in the stats file
 
 Drafts (app suggest, the site's draft helper, Daily Draft, Learn, lane cards, pool) now
