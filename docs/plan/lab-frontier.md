@@ -59,15 +59,14 @@ stacking only at 35k games.
 Nothing here has run; no test game has been scored. Template: model.md "Nets on the
 shipped model, 2026-10-18" (rule declared before results, sealed seeds, 2.1x).
 
-Test window: snap-20261018T1007Z's test games, start >= 15 Oct 18:27Z (its test cut) to
-18 Oct 10:07Z, every platform, 130,095 played games. No lab model has scored them (no
-test-looks.tsv): every frontier dev number is below that cut (1320Z's blocks end 15 Oct
-09:37Z, 1007Z's dev-val at the cut). Only `meiolol eval` has read them, for shipped
-models (counts vs additive v2's shipped form, 23 Oct; the box's daily eval of those
-days); no lab model was chosen on them. They become dev games once P1's pin is worked
-on, so this window takes only models frozen before then; later models get P1's own test
-window. Seat stats: 1007Z's own file covers 9% of dev-visible games, so final fits use
-~/ml/lab/1007Z-ss (its lines, then 1320Z's: 72% of dev-visible, 99.7% of test).
+Test window: snap-20261023T2004Z's test games (P1's pin, made 23 Oct; 1007Z was pruned
+that night), start >= 20 Oct 14:44Z (its test cut) to 23 Oct 20:04Z, every platform:
+238,153 played games, 224,188 of them on 16.21. No lab model has scored them, and all
+are newer than every game any frontier model was developed on (1007Z's newest: 18 Oct
+10:07Z). Final fits use every played game below that cut (2004Z's seat stats merge the
+archive, P1). Models developed later on 2004Z's dev blocks may join the queue under the
+same rule. Since 94% of the test is a patch the dev work never saw, the look also asks
+whether the gains carry to a new patch: reported per patch and per day since 16.21.
 Profiles come from fit games only, so a test game's own stats are never read.
 
 One look per final model:
@@ -85,7 +84,7 @@ Pass rule per contrast: d the mean paired log loss difference (model minus refer
 nats a game) over the test games, h its 95% half-width. Nets, and stacks with net
 members: pass when d + 2.1 h < 0 (2.1: 2253Z's measured A/A widening for nets, as at
 1320Z). Models without seeds: d + h < 0. Reported, never deciding: test minus
-test-exclude.tsv (1007Z has none: said so), per day, per platform group (EUW1, KR,
+test-exclude.tsv (say so if 2004Z has none), per patch, per day, per platform group (EUW1, KR,
 rest), accuracy, AUC, the top tenth's said vs won.
 
 Two families, each at 5%:
@@ -94,7 +93,7 @@ Two families, each at 5%:
   1. Set net + embedding on additive v2 (setid-wa: -Dcand win-additive, `--net set
      --ids 1`, 18 Oct options) vs additive v2 (win-additive). Dev: -0.78 ± 0.12 on 1320Z's
      folds (sealed seeds 4-6); 1007Z dev-val -0.72 ± 0.19 (seeds 1-3), -0.94 ± 0.24
-     (4-6). At ~130k games h ~0.15, so it passes if the true gain is ~0.35 or more
+     (4-6). At ~238k games h ~0.11, so it passes if the true gain is ~0.25 or more
   2. A2 stack vs setid-wa: logistic stack weights fitted on all six 1320Z dev blocks
      (dev-seed preds), frozen, applied to the members' test logits. Members: the CPU six
      (win-draft, additive v2, setid-wa, setid-wd, set-wd, champcomp with kit groups):
@@ -116,7 +115,7 @@ Not queued: big from scratch (failed its 1320Z rule), the within-team set net
 Cost: on the Mac, setid-wa seeds 7-9 (~4 min), setid-wd and set-wd, eval --setnet
 (~15 min), champcomp final once written; big and bigres only on the gpu-box.
 
-For Jacob: (a) this window now, or wait for P1's; (b) the ladder order, and the CPU six
+For Jacob: (a) this window (2004Z's test), or a later pin's; (b) the ladder order, and the CPU six
 or all twelve in the stack; (c) comp leans on win-draft as declared, or on additive v2
 after a dev run.
 

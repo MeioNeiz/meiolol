@@ -5111,7 +5111,8 @@ dev-val 24%, test 91%: the box keeps summaries ~2 days), so profiles would come 
 newest days only. Runs use ~/ml/lab/1007Z-ss: the snapshot's files by symlink and a
 seat_stats.tsv of 1007Z's lines then 1320Z's for missing seats (6.90M seats; 72% of
 dev-visible, 78% of dev-val, 99.7% of test games), packed there. P1's archive merge
-makes this unneeded on the next pin.
+makes this unneeded on the next pin (snap-20261023T2004Z: 16.5M seats for 1.59M played
+games); 1007Z and the view were removed 23 Oct night, the exports stay.
 
 Format (3c3b77d): meiolol-setnet version 1 as before (setnet.writeExport;
 draftfile.SetNetFile) plus `fit_newest` (unix ms of the newest fit game) and `platforms`
