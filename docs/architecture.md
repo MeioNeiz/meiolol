@@ -118,7 +118,7 @@ Cross-compiles to Windows, Linux and macOS from the Mac; nothing to install on t
   Catch-up from empty 1203 s; 4.8 GB for 878k timelines.
   Reads in flight (19 Oct, src/store/ahead.zig): a lister and 8 readers, each on its own
   read-only connection, read each game's digest and participants up to 4,096 games ahead
-  of the pass (and stats.scanAhead's participants), so its own reads hit the page cache;
+  of the pass (and stats.scan's with an io), so its own reads hit the page cache;
   its order and output are unchanged. Box, wall/CPU s before -> after: curves --site
   1315/517 -> 842/622, builds 1375/212 -> 266/228, lean 1356/154 -> 263/170, lane-model
   1186/448 -> 517/454; ~1 read in flight (~1,500/s at ~1 ms) -> 3,200-5,200/s, 6-12

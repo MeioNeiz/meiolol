@@ -110,7 +110,7 @@ pub fn loadSql(
     const patches = try stats.patches(arena, db, &ids);
     var list: GameList = .{ .gpa = gpa };
     defer list.items.deinit(gpa);
-    _ = try stats.scan(gpa, db, patches, &ids, 0, &list);
+    _ = try stats.scan(gpa, null, db, patches, &ids, 0, &list);
     var parts = try eval.split(gpa, list.items.items, &ids, .{});
     defer parts.deinit(gpa);
 

@@ -52,7 +52,7 @@ pub fn writeSplit(gpa: std.mem.Allocator, io: std.Io, snap: []const u8, w: *std.
     const patches = try stats.patches(arena.allocator(), db, &ids);
     var list: GameList = .{ .gpa = gpa };
     defer list.items.deinit(gpa);
-    const summary = try stats.scan(gpa, db, patches, &ids, 0, &list);
+    const summary = try stats.scan(gpa, null, db, patches, &ids, 0, &list);
     var parts = try eval.split(gpa, list.items.items, &ids, .{});
     defer parts.deinit(gpa);
 

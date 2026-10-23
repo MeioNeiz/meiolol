@@ -102,7 +102,7 @@ pub fn run(gpa: std.mem.Allocator, io: std.Io, db: store.Db, dir: []const u8, w:
 fn load(gpa: std.mem.Allocator, io: std.Io, arena: std.mem.Allocator, db: store.Db, ids: []const []const u8) !Data {
     var list: analysis.GameList = .{ .gpa = gpa };
     defer list.items.deinit(gpa);
-    _ = try stats.scanAhead(gpa, io, db, try stats.patches(arena, db, ids), ids, 0, &list);
+    _ = try stats.scan(gpa, io, db, try stats.patches(arena, db, ids), ids, 0, &list);
     var played: std.ArrayList(stats.Row) = .empty;
     defer played.deinit(gpa);
     for (list.items.items) |g| if (g.duration_s >= eval.min_duration_s) try played.append(gpa, g);

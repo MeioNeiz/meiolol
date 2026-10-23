@@ -51,7 +51,7 @@ pub fn protocolCuts(gpa: std.mem.Allocator, db: store.Db) !eval.Cuts {
     const patches = try stats.patches(arena.allocator(), db, &ids);
     var list: GameList = .{ .gpa = gpa };
     defer list.items.deinit(gpa);
-    _ = try stats.scan(gpa, db, patches, &ids, 0, &list);
+    _ = try stats.scan(gpa, null, db, patches, &ids, 0, &list);
     var starts: std.ArrayList(i64) = .empty;
     defer starts.deinit(gpa);
     for (list.items.items) |g| if (g.duration_s >= eval.min_duration_s) try starts.append(gpa, g.start);
@@ -73,7 +73,7 @@ pub fn heldOut(
 ) !HeldOut {
     var list: GameList = .{ .gpa = gpa };
     errdefer list.items.deinit(gpa);
-    _ = try stats.scan(gpa, db, patches, platforms, 0, &list);
+    _ = try stats.scan(gpa, null, db, patches, platforms, 0, &list);
     const split = try eval.split(gpa, list.items.items, platforms, .{
         .test_share = test_share,
         .test_platform = test_platform,

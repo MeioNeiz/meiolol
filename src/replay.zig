@@ -90,7 +90,7 @@ pub fn run(
     defer stats.freeChampions(gpa, champs);
     var list: analysis.GameList = .{ .gpa = gpa };
     defer list.items.deinit(gpa);
-    _ = try stats.scanAhead(gpa, io, db, patches, platforms, 0, &list);
+    _ = try stats.scan(gpa, io, db, patches, platforms, 0, &list);
     var parts = try eval.split(gpa, list.items.items, platforms, opts);
     defer parts.deinit(gpa);
     const train = parts.train;

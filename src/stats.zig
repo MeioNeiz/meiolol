@@ -73,7 +73,7 @@ pub fn buildSince(
     const summary = if (from) |games|
         try scanFrom(gpa, games, chosen, platforms, since_ms, sink)
     else
-        try scan(gpa, db, chosen, platforms, since_ms, sink);
+        try scan(gpa, null, db, chosen, platforms, since_ms, sink);
     try played.attachTo(&b);
     return .{ .builder = b, .summary = summary };
 }
@@ -196,33 +196,10 @@ pub fn patchKey(patch: []const u8) u32 {
 }
 
 /// Every valid game (as for `build`) started from `since_ms` (0: any) to
-/// `sink.add(Row)`, in match id order
+/// `sink.add(Row)`, in match id order. With `io`, each game's participants are read
+/// ahead (store.Ahead): for passes over most of the table, whose pages lie scattered
+/// on disk
 pub fn scan(
-    gpa: std.mem.Allocator,
-    db: store.Db,
-    chosen: []const []const u8,
-    platforms: []const []const u8,
-    since_ms: i64,
-    sink: anytype,
-) !Summary {
-    return scanWith(gpa, null, db, chosen, platforms, since_ms, sink);
-}
-
-/// As scan, reading each game's participants ahead (store.Ahead): for passes over most
-/// of the table, whose pages lie scattered on disk
-pub fn scanAhead(
-    gpa: std.mem.Allocator,
-    io: std.Io,
-    db: store.Db,
-    chosen: []const []const u8,
-    platforms: []const []const u8,
-    since_ms: i64,
-    sink: anytype,
-) !Summary {
-    return scanWith(gpa, io, db, chosen, platforms, since_ms, sink);
-}
-
-fn scanWith(
     gpa: std.mem.Allocator,
     io: ?std.Io,
     db: store.Db,

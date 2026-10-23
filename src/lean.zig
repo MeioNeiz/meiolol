@@ -77,7 +77,7 @@ pub fn load(
 ) !Games {
     var scanned: analysis.GameList = .{ .gpa = gpa };
     defer scanned.items.deinit(gpa);
-    _ = try stats.scanAhead(gpa, io, db, patches, platforms, since_ms, &scanned);
+    _ = try stats.scan(gpa, io, db, patches, platforms, since_ms, &scanned);
     var by_id: std.AutoHashMapUnmanaged(u64, u32) = .empty;
     defer by_id.deinit(gpa);
     for (scanned.items.items, 0..) |g, i| {
