@@ -109,7 +109,7 @@ test "saved bytes load under their key only" {
     const gpa = testing.allocator;
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
-    const snap = try std.fmt.allocPrint(gpa, ".zig-cache/tmp/{s}/snap-x", .{&tmp.sub_path});
+    const snap = try gpa.print(".zig-cache/tmp/{s}/snap-x", .{&tmp.sub_path});
     defer gpa.free(snap);
     const xs = [_]f64{ 1.5, -2, std.math.nan(f64) };
     const Put = struct {

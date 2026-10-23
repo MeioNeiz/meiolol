@@ -119,7 +119,7 @@ fn act(a: Act) usize {
 pub fn sumName(buf: []u8, i: usize) []const u8 {
     if (i >= phases.len * n_zone) return @tagName(@as(Act, @fromBackingInt(@intCast(i - phases.len * n_zone))));
     const z: Zone = @fromBackingInt(@intCast(i % n_zone));
-    return std.fmt.bufPrint(buf, "{s}.{t}", .{ phase_names[i / n_zone], z }) catch "?";
+    return std.mem.print(buf, "{s}.{t}", .{ phase_names[i / n_zone], z }) catch "?";
 }
 
 /// Style summary of every player, by participant id - 1. Needs frame `until_minute`
@@ -322,7 +322,7 @@ fn selectSeats(gpa: std.mem.Allocator, arena: std.mem.Allocator, d: *const rows.
     for (d.games, by_game) |g, slots| {
         const fit = harness.visible(phase, c, g);
         if (!g.timeline15 or !(fit or harness.scored(phase, c, g))) continue;
-        if (std.mem.indexOfScalar(u32, &slots, none) != null) continue;
+        if (std.mem.findScalar(u32, &slots, none) != null) continue;
         const game: u32 = @intCast(ids.items.len);
         try want.put(gpa, g.match_id, @intCast(seats.items.len));
         try ids.append(arena, g.match_id);
@@ -1005,8 +1005,8 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     try specs.append(arena, .{ .name = "b0: champion + state + b0 style" });
     try specs.append(arena, .{ .name = "b0 + 10 style components", .pcs = true });
     for (k_list, 0..) |k, ki| {
-        try specs.append(arena, .{ .name = try std.fmt.allocPrint(arena, "b0 + clusters k={d}", .{k}), .k = ki });
-        try specs.append(arena, .{ .name = try std.fmt.allocPrint(arena, "champion + state + clusters k={d}", .{k}), .b0 = false, .k = ki });
+        try specs.append(arena, .{ .name = try arena.print("b0 + clusters k={d}", .{k}), .k = ki });
+        try specs.append(arena, .{ .name = try arena.print("champion + state + clusters k={d}", .{k}), .b0 = false, .k = ki });
     }
     const ctx: Ctx = .{ .seats = seats, .pcs = pcs, .clusterings = clusterings, .dims = .{ .n_cr = l.n_cr } };
     const fitted = try arena.alloc(Fitted, specs.items.len);
@@ -1019,7 +1019,7 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     if (net_list) |list| try runNets(gpa, arena, io, list, phase, out_dir, &ctx, specs.items[@intFromBool(net_on_b0)], fitted[@intFromBool(net_on_b0)], net_x, fit_idx.items, scored_idx.items, scored_games.items, keep, l.match_ids);
 
     const stem = if (phase == .final) "final" else "dev";
-    const path = try std.fs.path.join(arena, &.{ out_dir, try std.fmt.allocPrint(arena, "{s}-report.md", .{stem}) });
+    const path = try std.fs.path.join(arena, &.{ out_dir, try arena.print("{s}-report.md", .{stem}) });
     var file = try Io.Dir.cwd().createFile(io, path, .{});
     defer file.close(io);
     var buf: [64 * 1024]u8 = undefined;
@@ -1194,7 +1194,7 @@ fn runNets(
     for (base, scored_idx) |*b, i| b.* = analysis.logLoss(logreg.sigmoid(offset[i]), y[i]);
 
     const stem = if (phase == .final) "final" else "dev";
-    const path = try std.fs.path.join(arena, &.{ out_dir, try std.fmt.allocPrint(arena, "{s}-net{s}.md", .{ stem, if (b0_spec.b0) "" else "-champ" }) });
+    const path = try std.fs.path.join(arena, &.{ out_dir, try arena.print("{s}-net{s}.md", .{ stem, if (b0_spec.b0) "" else "-champ" }) });
     var file = try Io.Dir.cwd().createFile(io, path, .{});
     defer file.close(io);
     var buf: [64 * 1024]u8 = undefined;

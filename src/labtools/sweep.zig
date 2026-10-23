@@ -101,7 +101,7 @@ fn sample(arena: Allocator, text: []const u8, space: []const u8, n: u64, rng: u6
     var no: usize = 0;
     while (lines.next()) |raw| {
         no += 1;
-        const line = raw[0 .. std.mem.indexOfScalar(u8, raw, '#') orelse raw.len];
+        const line = raw[0 .. std.mem.findScalar(u8, raw, '#') orelse raw.len];
         const w = try perl.words(arena, line);
         if (w.len == 0) continue;
         const flag = w[0];
@@ -163,7 +163,7 @@ fn sample(arena: Allocator, text: []const u8, space: []const u8, n: u64, rng: u6
 fn draw(buf: []u8, d: Dim, u: f64) []const u8 {
     if (d.dist == .choice) {
         const n: f64 = @floatFromInt(d.args.len);
-        return d.args[@intFromFloat(u * n)];
+        return d.args[@trunc(u * n)];
     }
     const lo = perl.num(d.args[0]);
     const hi = perl.num(d.args[1]);
@@ -186,14 +186,14 @@ fn flagOk(s: []const u8) bool {
 /// /^[A-Za-z0-9.,+_-]+$/
 fn valueOk(s: []const u8) bool {
     if (s.len == 0) return false;
-    for (s) |c| if (!std.ascii.isAlphanumeric(c) and std.mem.indexOfScalar(u8, ".,+_-", c) == null) return false;
+    for (s) |c| if (!std.ascii.isAlphanumeric(c) and std.mem.findScalar(u8, ".,+_-", c) == null) return false;
     return true;
 }
 
 /// /^[-+.\deE]+$/
 fn boundOk(s: []const u8) bool {
     if (s.len == 0) return false;
-    for (s) |c| if (!std.ascii.isDigit(c) and std.mem.indexOfScalar(u8, "-+.eE", c) == null) return false;
+    for (s) |c| if (!std.ascii.isDigit(c) and std.mem.findScalar(u8, "-+.eE", c) == null) return false;
     return true;
 }
 
@@ -259,7 +259,7 @@ fn summarise(arena: Allocator, trials_tsv: []const u8, folds: []const u8) !Summa
     var rows: std.StringHashMapUnmanaged(std.ArrayList(Row)) = .empty;
     var in = Lines{ .text = folds };
     while (in.next()) |l| {
-        const tab = std.mem.indexOfScalar(u8, l, '\t') orelse continue;
+        const tab = std.mem.findScalar(u8, l, '\t') orelse continue;
         const t = l[0..tab];
         const f = try perl.split(arena, l[tab + 1 ..], '\t');
         if (f.len > 0 and eql(f[0], "seed")) {
@@ -454,7 +454,7 @@ fn table(a: Allocator, s: Summary, out: *Writer) !void {
         const is_ref = eql(d.t, "ref");
         if (!is_ref) i += 1;
         try out.print("| {s} | {s}{s} | {s} | {s} ± {s} | {d} of {d} | {s} | {s} | {s} | {d} x {d} | {s} | {s} | {s} |\n", .{
-            if (is_ref) "ref" else std.fmt.bufPrint(&bn, "{d}", .{i}) catch unreachable,
+            if (is_ref) "ref" else std.mem.print(&bn, "{d}", .{i}) catch unreachable,
             d.t,
             if (d.rows < full) " (partial)" else "",
             if (d.val) |v| perl.fmtFloat(&bv, "%.5f", v) else "-",
@@ -492,7 +492,7 @@ const Lines = struct {
 
     fn next(l: *Lines) ?[]const u8 {
         if (l.at >= l.text.len) return null;
-        const end = std.mem.indexOfScalarPos(u8, l.text, l.at, '\n') orelse l.text.len;
+        const end = std.mem.findScalarPos(u8, l.text, l.at, '\n') orelse l.text.len;
         defer l.at = end + 1;
         return l.text[l.at..end];
     }
@@ -570,7 +570,7 @@ test "table and verdict as lab-sweep.pl wrote them on recorded folds" {
     var lines = std.mem.splitScalar(u8, @embedFile("../testdata/labtools/verdicts.txt"), '\n');
     while (lines.next()) |l| {
         if (l.len == 0) continue;
-        const tab = std.mem.indexOfScalar(u8, l, '\t').?;
+        const tab = std.mem.findScalar(u8, l, '\t').?;
         const k = l[0..tab];
         var v: Writer.Allocating = .init(a);
         if (std.mem.startsWith(u8, k, "lose ")) try verdict(lose, k[5..], &v.writer) else try verdict(s, k, &v.writer);

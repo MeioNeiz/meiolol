@@ -154,8 +154,8 @@ fn Buffer(comptime Sink: type) type {
 /// metadata.matchId, the first "matchId" of a summary
 fn matchId(line: []const u8) ?[]const u8 {
     const key = "\"matchId\":\"";
-    const start = (std.mem.indexOf(u8, line, key) orelse return null) + key.len;
-    const end = std.mem.indexOfScalarPos(u8, line, start, '"') orelse return null;
+    const start = (std.mem.find(u8, line, key) orelse return null) + key.len;
+    const end = std.mem.findScalarPos(u8, line, start, '"') orelse return null;
     return line[start..end];
 }
 

@@ -48,7 +48,7 @@ pub fn e(x: f64) f64 {
 /// writes Inf and NaN itself: "Inf", "-Inf", "+Inf" with %+, "NaN"
 pub fn fmtFloat(buf: []u8, comptime spec: [:0]const u8, v: f64) []const u8 {
     if (std.math.isNan(v)) return "NaN";
-    if (std.math.isInf(v)) return if (v < 0) "-Inf" else if (comptime std.mem.indexOfScalar(u8, spec, '+') != null) "+Inf" else "Inf";
+    if (std.math.isInf(v)) return if (v < 0) "-Inf" else if (comptime std.mem.findScalar(u8, spec, '+') != null) "+Inf" else "Inf";
     const n = snprintf(buf.ptr, buf.len, spec, v);
     return buf[0..@min(@as(usize, @intCast(n)), buf.len - 1)];
 }
@@ -57,14 +57,14 @@ pub fn fmtFloat(buf: []u8, comptime spec: [:0]const u8, v: f64) []const u8 {
 pub fn fmtInt(buf: []u8, v: f64) []const u8 {
     if (std.math.isNan(v)) return "NaN";
     if (std.math.isInf(v)) return if (v < 0) "-Inf" else "Inf";
-    const i: i64 = if (v >= 9.2e18) std.math.maxInt(i64) else if (v <= -9.2e18) std.math.minInt(i64) else @intFromFloat(v);
-    return std.fmt.bufPrint(buf, "{d}", .{i}) catch unreachable;
+    const i: i64 = if (v >= 9.2e18) std.math.maxInt(i64) else if (v <= -9.2e18) std.math.minInt(i64) else @trunc(v);
+    return std.mem.print(buf, "{d}", .{i}) catch unreachable;
 }
 
 /// int(v) as Perl prints it: the integer, or past 64 bits the float as %.15g
 pub fn intStr(buf: []u8, v: f64) []const u8 {
     const t = @trunc(v);
-    if (@abs(t) < 9.2e18) return std.fmt.bufPrint(buf, "{d}", .{@as(i64, @intFromFloat(t))}) catch unreachable;
+    if (@abs(t) < 9.2e18) return std.mem.print(buf, "{d}", .{@as(i64, @trunc(t))}) catch unreachable;
     return fmtFloat(buf, "%.15g", t);
 }
 
@@ -201,12 +201,12 @@ fn daysFromCivil(y0: i64, m: i64, d: i64) i64 {
 
 /// gmtime as "YYYY-MM-DDTHH:MM:SSZ"
 pub fn iso(buf: []u8, t: f64) []const u8 {
-    const secs: u64 = @intFromFloat(@max(t, 0));
+    const secs: u64 = @trunc(@max(t, 0));
     const es: std.time.epoch.EpochSeconds = .{ .secs = secs };
     const yd = es.getEpochDay().calculateYearDay();
     const md = yd.calculateMonthDay();
     const ds = es.getDaySeconds();
-    return std.fmt.bufPrint(buf, "{d:0>4}-{d:0>2}-{d:0>2}T{d:0>2}:{d:0>2}:{d:0>2}Z", .{
+    return std.mem.print(buf, "{d:0>4}-{d:0>2}-{d:0>2}T{d:0>2}:{d:0>2}:{d:0>2}Z", .{
         yd.year,              md.month.numeric(),      md.day_index + 1,
         ds.getHoursIntoDay(), ds.getMinutesIntoHour(), ds.getSecondsIntoMinute(),
     }) catch unreachable;

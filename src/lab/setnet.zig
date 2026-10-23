@@ -674,7 +674,7 @@ fn writeExport(gpa: std.mem.Allocator, io: Io, opts: winnet.Options, seed: u32, 
         .refs = refs,
     };
     const json = try std.json.Stringify.valueAlloc(arena, file, .{});
-    const name = try std.fmt.allocPrint(arena, "setnet-s{d}.json", .{seed});
+    const name = try arena.print("setnet-s{d}.json", .{seed});
     try Io.Dir.cwd().writeFile(io, .{ .sub_path = try std.fs.path.join(arena, &.{ opts.out, name }), .data = json });
 }
 
@@ -688,14 +688,14 @@ fn dumpPart(gpa: std.mem.Allocator, io: Io, out: []const u8, block: winnet.Block
     var dir = try Io.Dir.cwd().openDir(io, out, .{});
     defer dir.close(io);
     var buf: [64 * 1024]u8 = undefined;
-    const bin = try std.fmt.allocPrint(gpa, "set-{s}-{s}.f32", .{ @tagName(block), part });
+    const bin = try gpa.print("set-{s}-{s}.f32", .{ @tagName(block), part });
     defer gpa.free(bin);
     var bf = try dir.createFile(io, bin, .{});
     defer bf.close(io);
     var bw = bf.writer(io, &buf);
     for (set) |*g| try bw.interface.writeAll(std.mem.sliceAsBytes(&g.z));
     try bw.interface.flush();
-    const tsv = try std.fmt.allocPrint(gpa, "set-{s}-{s}.tsv", .{ @tagName(block), part });
+    const tsv = try gpa.print("set-{s}-{s}.tsv", .{ @tagName(block), part });
     defer gpa.free(tsv);
     var tf = try dir.createFile(io, tsv, .{});
     defer tf.close(io);
@@ -894,7 +894,7 @@ test "dump: the net's inputs per game, z as f32 and a tsv line each" {
     const io = testing.io;
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
-    const dir = try std.fmt.allocPrint(gpa, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    const dir = try gpa.print(".zig-cache/tmp/{s}", .{&tmp.sub_path});
     defer gpa.free(dir);
     var games: [2]rows.Game = undefined;
     for (&games, 0..) |*g, i| g.* = .{ .match_id = if (i == 0) "EUW1_1" else "EUW1_2", .start = 0, .patch = 0, .platform = 0, .is_test = false, .teams = @splat(@splat(0)), .winner = 0 };

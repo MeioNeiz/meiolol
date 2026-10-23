@@ -549,7 +549,7 @@ fn dumpSet(io: Io, d: *const rows.Data, out: []const u8, block: []const u8, part
     var dir = try Io.Dir.cwd().openDir(io, out, .{});
     defer dir.close(io);
     var name_buf: [64]u8 = undefined;
-    var bin = try dir.createFile(io, try std.fmt.bufPrint(&name_buf, "net-{s}-{s}.bin", .{ block, part }), .{});
+    var bin = try dir.createFile(io, try std.mem.print(&name_buf, "net-{s}-{s}.bin", .{ block, part }), .{});
     defer bin.close(io);
     var bbuf: [64 * 1024]u8 = undefined;
     var bw = bin.writer(io, &bbuf);
@@ -564,7 +564,7 @@ fn dumpSet(io: Io, d: *const rows.Data, out: []const u8, block: []const u8, part
         try bw.interface.writeAll(std.mem.sliceAsBytes(&rec));
     }
     try bw.interface.flush();
-    var txt = try dir.createFile(io, try std.fmt.bufPrint(&name_buf, "net-{s}-{s}.txt", .{ block, part }), .{});
+    var txt = try dir.createFile(io, try std.mem.print(&name_buf, "net-{s}-{s}.txt", .{ block, part }), .{});
     defer txt.close(io);
     var tbuf: [64 * 1024]u8 = undefined;
     var tw = txt.writer(io, &tbuf);
@@ -689,7 +689,7 @@ fn runBlock(
     defer gpa.free(fit_starts);
     for (fit_starts, fit.items) |*s, gi| s.* = d.games[gi].start;
     std.mem.sort(i64, fit_starts, {}, std.sort.asc(i64));
-    const cut = fit_starts[@intFromFloat(@as(f64, @floatFromInt(fit_starts.len)) * (1 - val_share))];
+    const cut = fit_starts[@trunc(@as(f64, @floatFromInt(fit_starts.len)) * (1 - val_share))];
     var inner: std.ArrayList(u32) = .empty;
     defer inner.deinit(gpa);
     var val: std.ArrayList(u32) = .empty;
@@ -822,7 +822,7 @@ fn runBlock(
             seed, name, fit.items.len, scored.items.len, meanLoss(ys, f.pred), cand_loss, g.mean, g.se, f.epochs, f.seconds, f.val_loss, try auc(gpa, ys, f.pred), cand_auc, f.offset_weight,
         });
         var label_buf: [32]u8 = undefined;
-        try summaryRow(gpa, w, try std.fmt.bufPrint(&label_buf, "seed {d}", .{seed}), ys, pc, f.pred, f);
+        try summaryRow(gpa, w, try std.mem.print(&label_buf, "seed {d}", .{seed}), ys, pc, f.pred, f);
     }
     {
         const g = pairedGain(ys, pc, ens);
@@ -1238,7 +1238,7 @@ test "playernet dumpSet writes one record per game and the match ids in order" {
     const io = testing.io;
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
-    const base = try std.fmt.allocPrint(gpa, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    const base = try gpa.print(".zig-cache/tmp/{s}", .{&tmp.sub_path});
     defer gpa.free(base);
     var games: [2]rows.Game = undefined;
     for (&games, [_][]const u8{ "EUW1_1", "EUW1_2" }) |*g, id| g.* = .{ .match_id = id, .start = 0, .patch = 0, .platform = 3, .is_test = false, .teams = @splat(@splat(0)), .winner = 0, .duration_s = 1800 };

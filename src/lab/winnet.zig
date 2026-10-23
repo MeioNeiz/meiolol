@@ -183,12 +183,12 @@ pub fn main(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, argv: []co
     // gains' dev.tsv shape: one row per game, blue's chance, the block last
     const cand_name = if (@hasDecl(cand, "name")) cand.name else "cand";
     const game_head = "match_id\tslot\toutcome\ty\tpred\tblock\n";
-    var cand_file = try dir.createFile(io, try std.fmt.allocPrint(arena, "games-{s}.tsv", .{cand_name}), .{});
+    var cand_file = try dir.createFile(io, try arena.print("games-{s}.tsv", .{cand_name}), .{});
     defer cand_file.close(io);
     var cbuf: [64 * 1024]u8 = undefined;
     var cw = cand_file.writer(io, &cbuf);
     try cw.interface.writeAll(game_head);
-    var net_file = try dir.createFile(io, try std.fmt.allocPrint(arena, "games-{s}.tsv", .{@tagName(opts.net)}), .{});
+    var net_file = try dir.createFile(io, try arena.print("games-{s}.tsv", .{@tagName(opts.net)}), .{});
     defer net_file.close(io);
     var nbuf: [64 * 1024]u8 = undefined;
     var nw = net_file.writer(io, &nbuf);
@@ -328,7 +328,7 @@ fn parseOptions(arena: std.mem.Allocator, args: []const []const u8) !Options {
         } else if (!try setnet.parseOption(&o.set, k, v)) return error.UnknownOption;
     }
     // A test look is one run of the declared model on all its fit games
-    if (std.mem.indexOfScalar(Block, o.blocks, .final) != null) {
+    if (std.mem.findScalar(Block, o.blocks, .final) != null) {
         if (o.blocks.len != 1) return error.TestBlockAlone;
         for ([_][]const u8{ "--fraction", "--window", "--resample", "--shuffle-ids", "--fit-preds" }) |k| if (set.contains(k)) return error.NotForTest;
     }
@@ -410,7 +410,7 @@ const Window = struct {
     n: usize,
 
     fn parse(v: []const u8) !Window {
-        const colon = std.mem.indexOfScalar(u8, v, ':') orelse return error.BadWindow;
+        const colon = std.mem.findScalar(u8, v, ':') orelse return error.BadWindow;
         return .{
             .kind = std.meta.stringToEnum(@FieldType(Window, "kind"), v[0..colon]) orelse return error.BadWindow,
             .n = try std.fmt.parseInt(usize, v[colon + 1 ..], 10),
@@ -647,7 +647,7 @@ fn runBlock(
     defer gpa.free(fit_starts);
     for (fit_starts, fit.items) |*s, gi| s.* = d.games[gi].start;
     std.mem.sort(i64, fit_starts, {}, std.sort.asc(i64));
-    const cut = fit_starts[@intFromFloat(@as(f64, @floatFromInt(fit_starts.len)) * (1 - val_share))];
+    const cut = fit_starts[@trunc(@as(f64, @floatFromInt(fit_starts.len)) * (1 - val_share))];
     var inner: std.ArrayList(u32) = .empty;
     defer inner.deinit(gpa);
     var val: std.ArrayList(u32) = .empty;
@@ -765,7 +765,7 @@ fn runBlock(
             seed, name, fit.items.len, scored.items.len, meanLoss(ys, f.pred), cand_loss, g.mean, g.se, f.epochs, f.seconds, f.val_loss, try auc(gpa, ys, f.pred), cand_auc,
         });
         var label_buf: [32]u8 = undefined;
-        try summaryRow(gpa, w, try std.fmt.bufPrint(&label_buf, "seed {d}", .{seed}), ys, pc, f.pred, f);
+        try summaryRow(gpa, w, try std.mem.print(&label_buf, "seed {d}", .{seed}), ys, pc, f.pred, f);
     }
     {
         const g = pairedGain(ys, pc, ens);
@@ -923,7 +923,7 @@ pub const EmbTable = struct {
         errdefer t.arena.deinit();
         const a = t.arena.allocator();
         const text = for ([_]u32{ seed, 1 }) |s| {
-            const path = try std.fmt.allocPrint(a, "{s}/emb-{s}-s{d}.tsv", .{ dir, block, s });
+            const path = try a.print("{s}/emb-{s}-s{d}.tsv", .{ dir, block, s });
             break Io.Dir.cwd().readFileAlloc(io, path, a, .limited(64 << 20)) catch |e| switch (e) {
                 error.FileNotFound => continue,
                 else => return e,
@@ -1399,7 +1399,7 @@ test "emb init: a table's vectors by champion-role, the role's shared one otherw
     try tmp.dir.writeFile(io, .{ .sub_path = "emb-dev-s1.tsv", .data = "champion\trole\tfit_games\te0\te1\n" ++
         "0\t0\t5\t0.1\t0.2\n0\t1\t5\t0.3\t0.4\n0\t2\t5\t0\t0\n0\t3\t5\t0\t0\n0\t4\t5\t0\t0\n" ++
         "7\t0\t90\t1.5\t-2\n" });
-    const dir = try std.fmt.allocPrint(gpa, ".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    const dir = try gpa.print(".zig-cache/tmp/{s}", .{&tmp.sub_path});
     defer gpa.free(dir);
     try testing.expectError(error.EmbDim, EmbTable.load(gpa, io, dir, "dev", 2, 3));
     var t: EmbTable = try .load(gpa, io, dir, "dev", 2, 2);

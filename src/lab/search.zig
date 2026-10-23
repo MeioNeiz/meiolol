@@ -313,9 +313,9 @@ const Label = enum {
 
     fn format(l: Label, buf: []u8, key: u64) ![]const u8 {
         return switch (l) {
-            .plain => std.fmt.bufPrint(buf, "{d}", .{key}),
-            .patch => std.fmt.bufPrint(buf, "{d}.{d}", .{ key / 1000, key % 1000 }),
-            .champion_role => std.fmt.bufPrint(buf, "{d} {t}", .{ key >> 3, @as(api.Role, @fromBackingInt(@as(u3, @intCast(key & 7)))) }),
+            .plain => std.mem.print(buf, "{d}", .{key}),
+            .patch => std.mem.print(buf, "{d}.{d}", .{ key / 1000, key % 1000 }),
+            .champion_role => std.mem.print(buf, "{d} {t}", .{ key >> 3, @as(api.Role, @fromBackingInt(@as(u3, @intCast(key & 7)))) }),
         };
     }
 };
@@ -338,7 +338,7 @@ test "screen finds a planted feature, diagnose runs" {
             return api.no_opinion;
         }
         pub fn features(_: *const Model, q: *const api.Query, out: []f32) void {
-            out[0] = @floatFromInt(@intFromBool(std.mem.indexOfScalar(u32, &q.teams[1 - q.side], 2) != null));
+            out[0] = @floatFromInt(@intFromBool(std.mem.findScalar(u32, &q.teams[1 - q.side], 2) != null));
             out[1] = @floatFromInt(@mod(@divFloor(q.start, 60_000), 2));
         }
         pub fn deinit(_: *Model, _: std.mem.Allocator) void {}
@@ -347,9 +347,9 @@ test "screen finds a planted feature, diagnose runs" {
     defer aw.deinit();
     try screen(Cand, gpa, &f.data, players, c, api.outcomeIndex(.gold14), &aw.writer);
     const out = aw.written();
-    try std.testing.expect(std.mem.indexOf(u8, out, "| enemy has champion 2 |") != null);
-    try std.testing.expect(std.mem.indexOf(u8, out, "clear=1") != null);
+    try std.testing.expect(std.mem.find(u8, out, "| enemy has champion 2 |") != null);
+    try std.testing.expect(std.mem.find(u8, out, "clear=1") != null);
     aw.clearRetainingCapacity();
     try diagnose(Cand, gpa, &f.data, players, c, api.outcomeIndex(.gold14), &aw.writer);
-    try std.testing.expect(std.mem.indexOf(u8, aw.written(), "RESULT diagnose") != null);
+    try std.testing.expect(std.mem.find(u8, aw.written(), "RESULT diagnose") != null);
 }

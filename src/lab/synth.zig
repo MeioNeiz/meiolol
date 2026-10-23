@@ -58,7 +58,7 @@ pub const Spec = struct {
         var it = std.mem.tokenizeScalar(u8, text, ',');
         const info = @typeInfo(Spec).@"struct";
         while (it.next()) |kv| {
-            const eq = std.mem.indexOfScalar(u8, kv, '=') orelse return error.BadPlantSpec;
+            const eq = std.mem.findScalar(u8, kv, '=') orelse return error.BadPlantSpec;
             var found = false;
             inline for (info.field_names, info.field_types) |name, T| {
                 if (std.mem.eql(u8, kv[0..eq], name)) {
@@ -82,7 +82,7 @@ pub const Arg = struct { spec: Spec, path: []const u8 };
 pub fn parseArg(snap: []const u8) !?Arg {
     if (!std.mem.startsWith(u8, snap, prefix)) return null;
     const rest = snap[prefix.len..];
-    const colon = std.mem.indexOfScalar(u8, rest, ':') orelse return error.BadPlantSpec;
+    const colon = std.mem.findScalar(u8, rest, ':') orelse return error.BadPlantSpec;
     return .{ .spec = try Spec.parse(rest[0..colon]), .path = rest[colon + 1 ..] };
 }
 
@@ -440,7 +440,7 @@ pub fn draft(gpa: std.mem.Allocator, n: usize, spec: Spec) !rows.Data {
 
     const games = try a.alloc(rows.Game, n);
     const out = try a.alloc(rows.Row, 10 * n);
-    const n_test: usize = @intFromFloat(@round(@as(f64, @floatFromInt(n)) * eval.test_share));
+    const n_test: usize = @round(@as(f64, @floatFromInt(n)) * eval.test_share);
     for (games, 0..) |*g, gi| {
         var teams: [2][5]u32 = undefined;
         var used: [10]u32 = @splat(0);
@@ -449,13 +449,13 @@ pub fn draft(gpa: std.mem.Allocator, n: usize, spec: Spec) !rows.Data {
             const ch: u32 = while (true) {
                 const own = if (rnd.uintLessThan(u8, 8) == 0) (role + 1 + rnd.uintLessThan(usize, 4)) % 5 else role;
                 const c: u32 = @intCast(1 + own + 5 * rnd.weightedIndex(f64, &weights));
-                if (std.mem.indexOfScalar(u32, &used, c) == null) break c;
+                if (std.mem.findScalar(u32, &used, c) == null) break c;
             };
             used[slot] = ch;
             teams[slot / 5][role] = ch;
         }
         g.* = .{
-            .match_id = try std.fmt.allocPrint(a, "SYN_{d}", .{gi}),
+            .match_id = try a.print("SYN_{d}", .{gi}),
             .start = @intCast(gi * 60_000),
             .patch = 16020,
             .platform = @intCast(gi % 3),
@@ -475,7 +475,7 @@ pub fn draft(gpa: std.mem.Allocator, n: usize, spec: Spec) !rows.Data {
             st[@backingInt(seatstats.SeatStat.dmg_magic)] = @floatCast(30 * dpm * share);
             st[@backingInt(seatstats.SeatStat.dmg_phys)] = @floatCast(30 * dpm * (1 - share));
             st[@backingInt(seatstats.SeatStat.dmg_true)] = 0;
-            const champ_games: u16 = @intFromFloat(@exp(rnd.float(f64) * 4) - 1);
+            const champ_games: u16 = @trunc(@exp(rnd.float(f64) * 4) - 1);
             out[gi * 10 + slot] = .{
                 .game = @intCast(gi),
                 .slot = @intCast(slot),

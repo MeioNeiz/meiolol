@@ -159,7 +159,7 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8, ddragon: ?[]const u8, archi
 
     const cwd = Io.Dir.cwd();
     const out_path = try std.fs.path.join(arena, &.{ snap, file_name });
-    const tmp_path = try std.fmt.allocPrint(arena, "{s}.tmp", .{out_path});
+    const tmp_path = try arena.print("{s}.tmp", .{out_path});
     {
         var file = try cwd.createFile(io, tmp_path, .{});
         errdefer cwd.deleteFile(io, tmp_path) catch {};
@@ -239,8 +239,8 @@ const Batch = struct {
 
 /// "16.20.712.3456" -> "16.20"
 fn patchOf(version: []const u8) []const u8 {
-    const first = std.mem.indexOfScalar(u8, version, '.') orelse return version;
-    const second = std.mem.indexOfScalarPos(u8, version, first + 1, '.') orelse return version;
+    const first = std.mem.findScalar(u8, version, '.') orelse return version;
+    const second = std.mem.findScalarPos(u8, version, first + 1, '.') orelse return version;
     return version[0..second];
 }
 
@@ -321,7 +321,7 @@ fn atLevel(base: f32, growth: f32, n: f32) f32 {
 /// caller doesn't have). Returns the lines placed, or null when there is no file
 pub fn fill(io: Io, snap: []const u8, sink: anytype) !?usize {
     var path_buf: [std.fs.max_path_bytes]u8 = undefined;
-    const path = try std.fmt.bufPrint(&path_buf, "{s}/{s}", .{ snap, file_name });
+    const path = try std.mem.print(&path_buf, "{s}/{s}", .{ snap, file_name });
     var file = Io.Dir.cwd().openFile(io, path, .{}) catch |err| switch (err) {
         error.FileNotFound => return null,
         else => return err,

@@ -242,10 +242,10 @@ const Listing = struct {
         var pauses: std.ArrayList(Pause) = .empty;
         for (try perl.split(arena, field(f, 7), ',')) |p| {
             // /^(\S+) (STOP|CONT)$/
-            const sp = std.mem.lastIndexOfScalar(u8, p, ' ') orelse continue;
+            const sp = std.mem.findScalarLast(u8, p, ' ') orelse continue;
             const what = p[sp + 1 ..];
             const t = p[0..sp];
-            if (t.len == 0 or std.mem.indexOfAny(u8, t, " \t\n\r\x0b\x0c") != null) continue;
+            if (t.len == 0 or std.mem.findAny(u8, t, " \t\n\r\x0b\x0c") != null) continue;
             if (!eql(what, "STOP") and !eql(what, "CONT")) continue;
             const at = perl.parseTs(t) orelse continue;
             try pauses.append(arena, .{ .t = at, .stop = eql(what, "STOP") });
@@ -334,7 +334,7 @@ const Listing = struct {
             const k = for (r.keys) |k| {
                 if (k.kind == .snap) break k;
             } else continue;
-            const gop = try by.getOrPut(p.arena, try std.fmt.allocPrint(p.arena, "{s} {s}", .{ r.host, k.key }));
+            const gop = try by.getOrPut(p.arena, try p.arena.print("{s} {s}", .{ r.host, k.key }));
             if (!gop.found_existing) gop.value_ptr.* = .empty;
             try gop.value_ptr.append(p.arena, .{ perl.ln(t), perl.ln(r.share) });
         }
@@ -364,7 +364,7 @@ const Listing = struct {
         }
         if (n < 10 or sxx < 1e-9) return;
         p.beta = std.math.clamp(sxy / sxx, 0, 1);
-        p.beta_why = try std.fmt.allocPrint(p.arena, "{d} runs", .{n});
+        p.beta_why = try p.arena.print("{d} runs", .{n});
     }
 
     /// Finished runs by host and key, oldest first
@@ -462,7 +462,7 @@ const Listing = struct {
             const n = rs.items.len;
             p.ratio[hi][oi] = if (perl.median(rs.items)) |m| .{
                 .x = m,
-                .why = try std.fmt.allocPrint(p.arena, "{d} {s} on both", .{ n, if (n == 1) "command" else "commands" }),
+                .why = try p.arena.print("{d} {s} on both", .{ n, if (n == 1) "command" else "commands" }),
             } else .{ .x = assumed_ratio[hi], .why = "assumed" };
         };
     }
@@ -501,7 +501,7 @@ const Listing = struct {
             if (t.len > 0) {
                 return .{
                     .secs = perl.median(t).?,
-                    .why = try std.fmt.allocPrint(p.arena, "median of {d} here, {s}{s}{s}", .{ t.len, k.label, if (by.len > 0) ", scaled by " else "", by }),
+                    .why = try p.arena.print("median of {d} here, {s}{s}{s}", .{ t.len, k.label, if (by.len > 0) ", scaled by " else "", by }),
                 };
             }
             const hi = hostIndex(host) orelse continue;
@@ -513,7 +513,7 @@ const Listing = struct {
                 var b: [64]u8 = undefined;
                 return .{
                     .secs = perl.median(to).? * r.x,
-                    .why = try std.fmt.allocPrint(p.arena, "{s} median of {d} x {s} ({s}), {s}{s}{s}", .{ o, to.len, perl.fmtFloat(&b, "%.2f", r.x), r.why, k.label, if (oby.len > 0) ", scaled by " else "", oby }),
+                    .why = try p.arena.print("{s} median of {d} x {s} ({s}), {s}{s}{s}", .{ o, to.len, perl.fmtFloat(&b, "%.2f", r.x), r.why, k.label, if (oby.len > 0) ", scaled by " else "", oby }),
                 };
             }
         }
@@ -572,14 +572,14 @@ const Listing = struct {
             const s = p.slots.get(try pair(a, host, res)) orelse break :blk 1;
             if (s.len == 0 or !allDigits(s)) break :blk 1;
             const v = perl.num(s);
-            break :blk if (v > 0) @intFromFloat(@min(v, 1 << 20)) else 1;
+            break :blk if (v > 0) @trunc(@min(v, 1 << 20)) else 1;
         };
         const nf: f64 = @floatFromInt(n_slots);
         // A share-N run holds N slots, at most all of them (lab-run caps it the same way)
         const Width = struct {
             n: f64,
             fn of(w: @This(), k: f64) usize {
-                return @intFromFloat(if (k < w.n) k else w.n);
+                return @trunc(if (k < w.n) k else w.n);
             }
         };
         // $free[K - 1]: K is at least 1 but for a 0 slots line, where Perl took the last
@@ -677,7 +677,7 @@ const Listing = struct {
             const t = perl.parseTs(if (first.len > 0) first[0] else "") orelse continue;
             if (leagueUp(line) != null) {
                 if (since == null) since = t;
-            } else if (std.mem.indexOf(u8, line, "League down") != null) {
+            } else if (std.mem.find(u8, line, "League down") != null) {
                 if (since) |s| {
                     try lens.append(p.arena, t - s);
                     since = null;
@@ -692,10 +692,10 @@ const Listing = struct {
         var b1: [32]u8 = undefined;
         var b2: [32]u8 = undefined;
         const past = if (m) |v|
-            try std.fmt.allocPrint(p.arena, "median session {s} of {d}", .{ fmtSecs(&b1, v), n })
+            try p.arena.print("median session {s} of {d}", .{ fmtSecs(&b1, v), n })
         else
-            try std.fmt.allocPrint(p.arena, "no past session, {s} assumed", .{fmtSecs(&b1, league_default)});
-        return .{ pen, try std.fmt.allocPrint(p.arena, "League {s} {s} ({s}): +", .{ state, fmtSecs(&b2, up), past }) };
+            try p.arena.print("no past session, {s} assumed", .{fmtSecs(&b1, league_default)});
+        return .{ pen, try p.arena.print("League {s} {s} ({s}): +", .{ state, fmtSecs(&b2, up), past }) };
     }
 
     /// Slots a new run of RES on HOST holds when the caller gave no SHARE, and why
@@ -708,13 +708,13 @@ const Listing = struct {
             const m = perl.median(@constCast(recent(u.items))) orelse continue;
             if (m >= narrow) break;
             var b: [32]u8 = undefined;
-            return .{ 1, try std.fmt.allocPrint(p.arena, ", 1 slot: {s} of its cores busy before", .{perl.fmtFloat(&b, "%.1f", m)}) };
+            return .{ 1, try p.arena.print(", 1 slot: {s} of its cores busy before", .{perl.fmtFloat(&b, "%.1f", m)}) };
         }
         var w: f64 = @trunc((wide + k - 1) / k);
         if (w > n) w = n;
         var b1: [32]u8 = undefined;
         var b2: [32]u8 = undefined;
-        return .{ w, if (w > 1) try std.fmt.allocPrint(p.arena, ", {s} slots ({s} cores)", .{ perl.fmtInt(&b1, w), perl.fmtInt(&b2, w * k) }) else "" };
+        return .{ w, if (w > 1) try p.arena.print(", {s} slots ({s} cores)", .{ perl.fmtInt(&b1, w), perl.fmtInt(&b2, w * k) }) else "" };
     }
 
     const Cand = struct {
@@ -739,7 +739,7 @@ const Listing = struct {
         const candidates: []const []const u8 = if (!auto) &.{q.host} else if (q.auto_mac) &hosts else hosts[0..1];
         for (candidates) |h| {
             const res = if (!eql(q.res, "auto")) q.res else if (eql(cuda, "gpu")) "gpu" else "cpu";
-            const name = try std.fmt.allocPrint(a, "{s}/{s}", .{ h, res });
+            const name = try a.print("{s}/{s}", .{ h, res });
             var why_not: []const u8 = "";
             if (p.nowOf(h) == null) {
                 why_not = "unreachable";
@@ -757,7 +757,7 @@ const Listing = struct {
             // Explicit choices are the caller's: only report what we'd predict
             if (!auto and !eql(why_not, "unreachable")) why_not = "";
             if (why_not.len > 0) {
-                try notes.append(a, try std.fmt.allocPrint(a, "{s}: {s}", .{ name, why_not }));
+                try notes.append(a, try a.print("{s}: {s}", .{ name, why_not }));
                 continue;
             }
             const est = try p.estimate(h, keys, q.args);
@@ -770,19 +770,19 @@ const Listing = struct {
                 const beside = if (w.live + 1 < w.slots) w.live + 1 else w.slots;
                 run.? *= perl.power(@floatFromInt(beside), p.beta);
                 var b: [32]u8 = undefined;
-                if (beside > 1) why = try std.fmt.allocPrint(a, "{s}, x {d} sharing {s} ^{s} ({s})", .{ why.?, beside, res, perl.fmtFloat(&b, "%.2f", p.beta), p.beta_why });
+                if (beside > 1) why = try a.print("{s}, x {d} sharing {s} ^{s} ({s})", .{ why.?, beside, res, perl.fmtFloat(&b, "%.2f", p.beta), p.beta_why });
             }
             if (!eql(res, "none") and fast(run)) {
                 const f = try p.waitFor(h, res, true, need_new, share);
                 w.at = f.at;
                 w.mem_wait = f.mem_wait;
-                why = try std.fmt.allocPrint(a, "{s}, fast lane", .{why.?});
+                why = try a.print("{s}, fast lane", .{why.?});
             }
             if (w.mem_wait > 0) {
                 var b1: [32]u8 = undefined;
                 var b2: [32]u8 = undefined;
                 var b3: [32]u8 = undefined;
-                why = try std.fmt.allocPrint(a, "{s}, {s} of it for memory (needs {s} GB, {s} free)", .{
+                why = try a.print("{s}, {s} of it for memory (needs {s} GB, {s} free)", .{
                     why orelse "no history",
                     fmtSecs(&b1, w.mem_wait),
                     perl.fmtFloat(&b2, "%.1f", need_new),
@@ -790,11 +790,11 @@ const Listing = struct {
                 });
             }
             const pen, const pen_why = try p.leaguePenalty(h);
-            if (wide_why.len > 0) why = try std.fmt.allocPrint(a, "{s}{s}", .{ why orelse "no history", wide_why });
+            if (wide_why.len > 0) why = try a.print("{s}{s}", .{ why orelse "no history", wide_why });
             var b1: [32]u8 = undefined;
             var b2: [32]u8 = undefined;
             var b3: [32]u8 = undefined;
-            const pen_say = if (pen != 0) try std.fmt.allocPrint(a, "{s}{s}, ", .{ pen_why, fmtSecs(&b1, pen) }) else "";
+            const pen_say = if (pen != 0) try a.print("{s}{s}, ", .{ pen_why, fmtSecs(&b1, pen) }) else "";
             try cands.append(a, .{
                 .host = h,
                 .res = res,
@@ -802,7 +802,7 @@ const Listing = struct {
                 .wait = w.at + pen,
                 .total = if (run) |r| w.at + pen + r else null,
                 .share = share,
-                .say = try std.fmt.allocPrint(a, "{s}: {s}wait {s} ({d} live, {d} slots) + run {s} ({s})", .{
+                .say = try a.print("{s}: {s}wait {s} ({d} live, {d} slots) + run {s} ({s})", .{
                     name, pen_say, fmtSecs(&b2, w.at), w.live, w.slots, fmtOpt(&b3, run), why orelse "no history",
                 }),
             });
@@ -853,21 +853,21 @@ const Listing = struct {
             var b1: [32]u8 = undefined;
             var b2: [32]u8 = undefined;
             var b3: [32]u8 = undefined;
-            const pred = if (r.pred) |v| try std.fmt.allocPrint(p.arena, "predicted {s}", .{fmtSecs(&b1, v)}) else "";
+            const pred = if (r.pred) |v| try p.arena.print("predicted {s}", .{fmtSecs(&b1, v)}) else "";
             const sep = if (pred.len > 0) ", " else "";
             var t: []const u8 = pred;
             if (r.ran) |v| {
-                t = try std.fmt.allocPrint(p.arena, "ran {s}{s}{s}", .{ fmtSecs(&b2, v), sep, pred });
+                t = try p.arena.print("ran {s}{s}{s}", .{ fmtSecs(&b2, v), sep, pred });
                 // Runs of seconds are mostly startup and rounding: no percentage
                 if (r.pred) |pv| if (pv >= 30) {
-                    t = try std.fmt.allocPrint(p.arena, "{s} ({s}%)", .{ t, perl.fmtFloat(&b3, "%+.0f", 100 * (v / pv - 1)) });
+                    t = try p.arena.print("{s} ({s}%)", .{ t, perl.fmtFloat(&b3, "%+.0f", 100 * (v / pv - 1)) });
                 };
             } else if (r.started != null and (std.mem.startsWith(u8, r.state, "running") or std.mem.startsWith(u8, r.state, "paused"))) {
-                t = try std.fmt.allocPrint(p.arena, "so far {s}{s}{s}", .{ fmtSecs(&b2, p.doneSoFar(r)), sep, pred });
+                t = try p.arena.print("so far {s}{s}{s}", .{ fmtSecs(&b2, p.doneSoFar(r)), sep, pred });
             }
             var b4: [32]u8 = undefined;
             const started = if (r.started) |s| perl.iso(&b4, s) else "";
-            const slot = if (perl.truthy(r.slot)) try std.fmt.allocPrint(p.arena, " ({s})", .{r.slot}) else "";
+            const slot = if (perl.truthy(r.slot)) try p.arena.print(" ({s})", .{r.slot}) else "";
             try out.print("{s} | {s}{s} | {s} | {s} | {s}\n", .{ r.dir, r.state, slot, started, t, r.log });
         }
     }
@@ -947,7 +947,7 @@ const Gate = struct {
 /// /League (up|unknown)/: what the line says League is, when up or unknown
 fn leagueUp(line: []const u8) ?[]const u8 {
     var from: usize = 0;
-    while (std.mem.indexOfPos(u8, line, from, "League ")) |i| : (from = i + 1) {
+    while (std.mem.findPos(u8, line, from, "League ")) |i| : (from = i + 1) {
         const rest = line[i + "League ".len ..];
         if (std.mem.startsWith(u8, rest, "up")) return "up";
         if (std.mem.startsWith(u8, rest, "unknown")) return "unknown";
@@ -1011,13 +1011,13 @@ fn ran(r: *const Run) ?f64 {
 /// the words after the binary
 fn programWords(arena: Allocator, args: []const u8) ![]const []const u8 {
     var from: usize = 0;
-    while (std.mem.indexOfPos(u8, args, from, "./meiolol")) |i| : (from = i + 1) {
+    while (std.mem.findPos(u8, args, from, "./meiolol")) |i| : (from = i + 1) {
         var j = i + "./meiolol".len;
         if (std.mem.startsWith(u8, args[j..], "-lab") and j + 4 < args.len and perl.isSpace(args[j + 4])) {
             j += 4;
         } else if (!(j < args.len and perl.isSpace(args[j]))) continue;
         while (j < args.len and perl.isSpace(args[j])) j += 1;
-        const end = std.mem.indexOfScalarPos(u8, args, j, '\n') orelse args.len;
+        const end = std.mem.findScalarPos(u8, args, j, '\n') orelse args.len;
         return perl.words(arena, args[j..end]);
     }
     return perl.words(arena, args);
@@ -1046,7 +1046,7 @@ fn inputs(arena: Allocator, args: []const u8) ![]const []const u8 {
             if (!pathChar(w[q])) break null;
         } else null;
         const p = path orelse continue;
-        if (std.mem.indexOf(u8, p, "..") != null) continue;
+        if (std.mem.find(u8, p, "..") != null) continue;
         try out.append(arena, p);
     }
     return out.items;
@@ -1055,7 +1055,7 @@ fn inputs(arena: Allocator, args: []const u8) ![]const []const u8 {
 /// The first `snap-*` in ARGS
 fn snapOf(args: []const u8) ?[]const u8 {
     var from: usize = 0;
-    while (std.mem.indexOfPos(u8, args, from, "snap-")) |i| : (from = i + 1) {
+    while (std.mem.findPos(u8, args, from, "snap-")) |i| : (from = i + 1) {
         var e = i + 5;
         while (e < args.len and snapChar(args[e])) e += 1;
         if (e > i + 5) return args[i..e];
@@ -1066,7 +1066,7 @@ fn snapOf(args: []const u8) ?[]const u8 {
 /// -Dcand=DIR's last part
 fn candOf(build: []const u8) ?[]const u8 {
     var from: usize = 0;
-    while (std.mem.indexOfPos(u8, build, from, "-Dcand=")) |i| : (from = i + 1) {
+    while (std.mem.findPos(u8, build, from, "-Dcand=")) |i| : (from = i + 1) {
         const s = i + "-Dcand=".len;
         var e = s;
         while (e < build.len and !perl.isSpace(build[e])) e += 1;
@@ -1076,10 +1076,10 @@ fn candOf(build: []const u8) ?[]const u8 {
             k -= 1;
             if (tok[k] == '/' and k + 1 < tok.len and tok[k + 1] != '/') {
                 const rest = tok[k + 1 ..];
-                return rest[0 .. std.mem.indexOfScalar(u8, rest, '/') orelse rest.len];
+                return rest[0 .. std.mem.findScalar(u8, rest, '/') orelse rest.len];
             }
         }
-        if (tok.len > 0 and tok[0] != '/') return tok[0 .. std.mem.indexOfScalar(u8, tok, '/') orelse tok.len];
+        if (tok.len > 0 and tok[0] != '/') return tok[0 .. std.mem.findScalar(u8, tok, '/') orelse tok.len];
     }
     return null;
 }
@@ -1099,26 +1099,26 @@ fn keysFor(arena: Allocator, bin: []const u8, args: []const u8, build: []const u
     const w = try programWords(arena, args);
     const w0: ?[]const u8 = if (w.len > 0) w[0] else null;
     // python: the script is the command (BIN python/SCRIPT), its first arg a path
-    var cmd: []const u8 = if (std.mem.startsWith(u8, bin, "python") or w0 == null) bin else try std.fmt.allocPrint(arena, "{s} {s}", .{ bin, w0.? });
+    var cmd: []const u8 = if (std.mem.startsWith(u8, bin, "python") or w0 == null) bin else try arena.print("{s} {s}", .{ bin, w0.? });
     var fine = cmd;
     if (w0 != null and eql(w0.?, "exp") and w.len >= 2) {
-        cmd = try std.fmt.allocPrint(arena, "{s} {s}", .{ cmd, w[1] });
+        cmd = try arena.print("{s} {s}", .{ cmd, w[1] });
         fine = cmd;
         for ([_]usize{ 3, 4 }) |i| {
-            if (i < w.len) fine = try std.fmt.allocPrint(arena, "{s} {s}", .{ fine, w[i] });
+            if (i < w.len) fine = try arena.print("{s} {s}", .{ fine, w[i] });
         }
     }
     // netcheck's nets differ by orders of magnitude (big on the GPU, small, resid)
     if (w0 != null and eql(w0.?, "netcheck")) {
-        cmd = try std.fmt.allocPrint(arena, "{s} --net {s}", .{ cmd, flagValue(w, "--net") orelse "small" });
+        cmd = try arena.print("{s} --net {s}", .{ cmd, flagValue(w, "--net") orelse "small" });
         fine = cmd;
     }
-    const with = if (candOf(build)) |c| try std.fmt.allocPrint(arena, "{s}, candidate {s}", .{ fine, c }) else fine;
+    const with = if (candOf(build)) |c| try arena.print("{s}, candidate {s}", .{ fine, c }) else fine;
     var keys: std.ArrayList(Key) = .empty;
-    try keys.append(arena, .{ .key = try std.fmt.allocPrint(arena, "args {s} {s} {s}", .{ bin, build, args }), .label = "same args", .kind = .args });
+    try keys.append(arena, .{ .key = try arena.print("args {s} {s} {s}", .{ bin, build, args }), .label = "same args", .kind = .args });
     if (snapOf(args)) |snap| {
-        try keys.append(arena, .{ .key = try std.fmt.allocPrint(arena, "{s} @ {s}", .{ with, snap }), .label = try std.fmt.allocPrint(arena, "{s} on {s}", .{ with, snap }), .kind = .snap });
-        try keys.append(arena, .{ .key = try std.fmt.allocPrint(arena, "{s} @ {s}", .{ fine, snap }), .label = try std.fmt.allocPrint(arena, "{s} on {s}", .{ fine, snap }), .kind = .snap });
+        try keys.append(arena, .{ .key = try arena.print("{s} @ {s}", .{ with, snap }), .label = try arena.print("{s} on {s}", .{ with, snap }), .kind = .snap });
+        try keys.append(arena, .{ .key = try arena.print("{s} @ {s}", .{ fine, snap }), .label = try arena.print("{s} on {s}", .{ fine, snap }), .kind = .snap });
     }
     try keys.append(arena, .{ .key = fine, .label = fine, .kind = .cmd });
     try keys.append(arena, .{ .key = cmd, .label = cmd, .kind = .cmd });
@@ -1138,7 +1138,7 @@ const work_names = [_][]const u8{ "trials", "--boot", "--seeds" };
 /// ` ; `). Parallel packs (`&`) share the slot's cores: no clear scale, left out
 fn work(arena: Allocator, args: []const u8) ![3]?f64 {
     var v: [3]?f64 = .{ null, null, null };
-    const padded = try std.fmt.allocPrint(arena, " {s} ", .{args});
+    const padded = try arena.print(" {s} ", .{args});
     var trials: f64 = 0;
     var seg_from: usize = 0;
     var i: usize = 0;
@@ -1173,7 +1173,7 @@ fn work(arena: Allocator, args: []const u8) ![3]?f64 {
 /// /\s--out\s/
 fn hasOut(s: []const u8) bool {
     var i: usize = 0;
-    while (std.mem.indexOfPos(u8, s, i, "--out")) |at| : (i = at + 1) {
+    while (std.mem.findPos(u8, s, i, "--out")) |at| : (i = at + 1) {
         if (at > 0 and perl.isSpace(s[at - 1]) and at + 5 < s.len and perl.isSpace(s[at + 5])) return true;
     }
     return false;
@@ -1181,7 +1181,7 @@ fn hasOut(s: []const u8) bool {
 
 /// /^\d+(\.\d+)?$/
 fn isDecimal(s: []const u8) bool {
-    const dot = std.mem.indexOfScalar(u8, s, '.');
+    const dot = std.mem.findScalar(u8, s, '.');
     const int_part = s[0 .. dot orelse s.len];
     if (int_part.len == 0 or !allDigits(int_part)) return false;
     if (dot) |d| return d + 1 < s.len and allDigits(s[d + 1 ..]);
@@ -1231,7 +1231,7 @@ fn fmtSecs(buf: []u8, s: f64) []const u8 {
         .{ perl.fmtFloat(&tmp, "%.1f", s / 60), 'm' }
     else
         .{ perl.fmtFloat(&tmp, "%.1f", s / 3600), 'h' };
-    return std.fmt.bufPrint(buf, "{s}{c}", .{ body, unit }) catch unreachable;
+    return std.mem.print(buf, "{s}{c}", .{ body, unit }) catch unreachable;
 }
 
 fn fmtOpt(buf: []u8, s: ?f64) []const u8 {
@@ -1247,7 +1247,7 @@ fn field(f: []const []const u8, i: usize) []const u8 {
 }
 
 fn pair(arena: Allocator, a: []const u8, b: []const u8) ![]const u8 {
-    return std.fmt.allocPrint(arena, "{s}\x00{s}", .{ a, b });
+    return arena.print("{s}\x00{s}", .{ a, b });
 }
 
 fn allDigits(s: []const u8) bool {

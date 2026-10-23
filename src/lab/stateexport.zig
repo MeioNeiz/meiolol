@@ -337,7 +337,7 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8, o: Options) !Summary {
             const raw = try store.raw.decompress(ta, q.bytes(1));
             const t = timeline.decode(ta, raw) catch continue;
             if (t.participants != 10 or t.frames.len == 0) continue;
-            if (std.mem.indexOfScalar(u8, &seat_of[gi], no_seat) != null) {
+            if (std.mem.findScalar(u8, &seat_of[gi], no_seat) != null) {
                 sum.unmapped += 1;
                 continue;
             }
@@ -354,7 +354,7 @@ pub fn run(gpa: Allocator, io: Io, snap: []const u8, o: Options) !Summary {
 
     comptime std.debug.assert(@import("builtin").cpu.arch.endian() == .little);
     const cwd = Io.Dir.cwd();
-    const tmp_path = try std.fmt.allocPrint(arena, "{s}/{s}.tmp", .{ snap, dir_name });
+    const tmp_path = try arena.print("{s}/{s}.tmp", .{ snap, dir_name });
     cwd.deleteTree(io, tmp_path) catch {};
     try cwd.createDirPath(io, tmp_path);
     errdefer cwd.deleteTree(io, tmp_path) catch {};

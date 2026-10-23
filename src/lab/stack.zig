@@ -81,8 +81,8 @@ pub fn main(gpa: Allocator, arena: Allocator, io: Io, argv: []const []const u8) 
             } else return usageError();
             continue;
         }
-        const eq = std.mem.indexOfScalar(u8, a, '=') orelse return usageError();
-        const colon = std.mem.lastIndexOfScalar(u8, a, ':') orelse return usageError();
+        const eq = std.mem.findScalar(u8, a, '=') orelse return usageError();
+        const colon = std.mem.findScalarLast(u8, a, ':') orelse return usageError();
         if (colon < eq) return usageError();
         try inputs.append(arena, .{ .name = a[0..eq], .path = a[eq + 1 .. colon], .col = a[colon + 1 ..] });
     }
@@ -143,7 +143,7 @@ fn loadTeams(arena: Allocator, io: Io, paths: []const []const u8, d: *const Data
     for (paths, 0..) |path, pi| {
         const text = try Io.Dir.cwd().readFileAlloc(io, path, arena, .unlimited);
         try texts.append(arena, text);
-        const header = text[0 .. std.mem.indexOfScalar(u8, text, '\n') orelse return error.Empty];
+        const header = text[0 .. std.mem.findScalar(u8, text, '\n') orelse return error.Empty];
         const at_pred = column(header, "pred") orelse return error.MissingColumn;
         if (pi == 0) {
             var it = std.mem.splitScalar(u8, header, '\t');
@@ -256,7 +256,7 @@ fn load(gpa: Allocator, arena: Allocator, io: Io, inputs: []const Input) !Data {
                 cols[n] = c;
             };
             const b = blockIndex(cols[at_block]) orelse continue;
-            const key = try std.fmt.allocPrint(arena, "{s}\t{s}", .{ cols[at_block], cols[at_id] });
+            const key = try arena.print("{s}\t{s}", .{ cols[at_block], cols[at_id] });
             const yv = try std.fmt.parseFloat(f64, cols[at_y]);
             const pv = try std.fmt.parseFloat(f64, cols[at_p]);
             const g: u32 = if (index.get(key)) |g| g else blk: {
@@ -575,7 +575,7 @@ fn report(gpa: Allocator, arena: Allocator, w: *Io.Writer, d: *const Data, input
         try models.append(arena, .{ .name = in.name, .p = p });
         for (feat, p) |*f, q| f.* = logit(q);
         try forward(gpa, d, feat, 1, false, 0, tp[m * n ..][0..n], scales[m * (blocks.len - 1) ..][0..(blocks.len - 1)]);
-        try models.append(arena, .{ .name = try std.fmt.allocPrint(arena, "{s}, temperature", .{in.name}), .p = tp[m * n ..][0..n] });
+        try models.append(arena, .{ .name = try arena.print("{s}, temperature", .{in.name}), .p = tp[m * n ..][0..n] });
     }
 
     const avg = try arena.alloc(f64, n);

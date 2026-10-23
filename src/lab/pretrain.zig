@@ -959,7 +959,7 @@ fn job(gpa: Allocator, io: Io, e: *const nnexport.Export, opts: Options, block: 
     defer gpa.free(starts);
     for (starts, fit.items) |*s, gi| s.* = e.start[gi];
     std.mem.sort(i64, starts, {}, std.sort.asc(i64));
-    const cut = starts[@intFromFloat(@as(f64, @floatFromInt(starts.len)) * (1 - val_share))];
+    const cut = starts[@trunc(@as(f64, @floatFromInt(starts.len)) * (1 - val_share))];
     var inner: std.ArrayList(u32) = .empty;
     defer inner.deinit(gpa);
     var val: std.ArrayList(u32) = .empty;
@@ -1063,7 +1063,7 @@ fn secondsSince(io: Io, t0: Io.Timestamp) f64 {
 /// emb-<block>-s<seed>.tsv: champion id, role (0 top .. 4 utility), fit games, then E;
 /// champion 0 rows are each role's shared vector for champion-roles under min_games
 fn writeEmb(gpa: Allocator, io: Io, dir: Io.Dir, e: *const nnexport.Export, o: JobOut) !void {
-    const name = try std.fmt.allocPrint(gpa, "emb-{s}-s{d}.tsv", .{ blockName(o.block), o.seed });
+    const name = try gpa.print("emb-{s}-s{d}.tsv", .{ blockName(o.block), o.seed });
     defer gpa.free(name);
     var f = try dir.createFile(io, name, .{});
     defer f.close(io);
@@ -1198,7 +1198,7 @@ fn writeTables(gpa: Allocator, io: Io, dir: Io.Dir, e: *const nnexport.Export, d
     // games-<variant>.tsv: netcheck's per-game shape (gains, the verifier), the seeds'
     // mean chance; a block's seeds are consecutive jobs on the same scored games
     for (std.enums.values(Variant), 0..) |v, vi| {
-        const name = try std.fmt.allocPrint(gpa, "games-{s}.tsv", .{if (v == .none) "ratings" else @tagName(v)});
+        const name = try gpa.print("games-{s}.tsv", .{if (v == .none) "ratings" else @tagName(v)});
         defer gpa.free(name);
         var f = try dir.createFile(io, name, .{});
         defer f.close(io);
@@ -1418,7 +1418,7 @@ test "pretrain on the fixture: E carries the planted stats, every variant scores
     var out: Io.Writer.Allocating = .init(gpa);
     defer out.deinit();
     try summary(gpa, &out.writer, &fx.e, opts, outs);
-    try testing.expect(std.mem.indexOf(u8, out.written(), "| folds | emb |") != null);
+    try testing.expect(std.mem.find(u8, out.written(), "| folds | emb |") != null);
 }
 
 test "pretrain resample: fits on netcheck's 90% only" {
