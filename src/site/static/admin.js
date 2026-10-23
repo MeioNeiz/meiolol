@@ -773,8 +773,9 @@ function render(keep) {
       `${uk(ui.zoom[0])} to ${uk(ui.zoom[1])}`, el("span", { "aria-hidden": "true" }, " ×")));
   }
   controls.append(desktopLink());
-  if (ME) controls.append(el("span", { class: "sub" }, ME.username), el("button", { type: "button", class: "ghost", onclick: logOut }, "Log out"));
   controls.append(el("button", { type: "button", class: "ghost", title: "Fetch everything now", onclick: () => refreshAll() }, "Refresh"));
+  if (ME) controls.append(el("span", { class: "me", title: `Signed in as ${ME.username} (${ME.role})` },
+    el("span", { class: "who" }, ME.username), el("button", { type: "button", onclick: logOut }, "Log out")));
   top.append(controls);
   const nav = el("nav", { class: "tabs", "aria-label": "Sections" });
   TABS.forEach(([k, label], i) => nav.append(el("a", { href: "#" + k, "aria-current": k === ui.tab ? "page" : null, title: `${label} (${i + 1})`, onclick: ev => { ev.preventDefault(); setTab(k); } }, label)));
