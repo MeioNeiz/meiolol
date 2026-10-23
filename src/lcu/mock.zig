@@ -655,6 +655,14 @@ pub const Mock = struct {
         return step;
     }
 
+    /// Back to the first step, for playing the scenario again
+    pub fn restart(m: *Mock) void {
+        m.mutex.lockUncancelable(m.io);
+        defer m.mutex.unlock(m.io);
+        m.next = 0;
+        m.state = .{};
+    }
+
     /// Accept loops until cancelled, each connection on its own thread
     pub fn serveLcu(m: *Mock, server: *Io.net.Server) void {
         httpd.accept(.mock_lcu, m.io, server, m, lcuConnection);

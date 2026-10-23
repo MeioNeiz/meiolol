@@ -120,8 +120,7 @@ pub fn main(init: std.process.Init) !void {
             });
         }
         if (!loop) break;
-        m.next = 0;
-        m.state = .{};
+        m.restart();
         std.debug.print("starting over\n", .{});
     }
     if (hold) |secs| {
