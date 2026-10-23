@@ -103,8 +103,10 @@ Each step ends tested and deployed; nginx and systemd changes on jomify need Jac
   tests); /account.html (password, log out everywhere; devices wait for AC4); the admin
   Accounts tab. /p/: the Draft tester in private mode (shipped models only, no box data,
   no lab files), built and uploaded by the web loop once nginx gates /p/ (hosting.md
-  "Private site"). Left: the nginx /p/ location (Jacob's OK), then a private test
-  account's walk through /p/ and every /admin/ route
+  "Private site"). Done 23 Oct: nginx gates /p/ (Jacob's OK); a test private login got
+  /p/ and its models, and 403 on every /admin/ page, data file, API route and action and
+  on /auth/accounts and invite (deleted after). /admin/desktop/ stays open to it
+  (download_private_app). Still Jacob's: who gets the first private accounts
 - AC4 Desktop sign in: login screen in the app, device tokens, update gate by token,
   update.key retired. Done when a fresh install signs in, updates, and a revoked device
   stops updating within one check

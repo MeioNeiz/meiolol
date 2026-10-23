@@ -246,7 +246,8 @@ nginx caches each encoding apart, and answers a directory URL without its slash 
   shipped models in models/). nginx location /p/ with auth_request /_meiolol_private
   (/auth/check/view_private), 401 to the login page, X-Robots-Tag noindex. The loop
   uploads p/ only while meio.lol/p/ answers 302 (the gate), so nothing private is public
-  without it; the site's rsync leaves p/ alone nginx before: /etc/nginx/meiolol.conf.bak-pre-accounts
+  without it; the site's rsync leaves p/ alone. nginx before:
+  /etc/nginx/meiolol.conf.bak-2026-10-23-private nginx before: /etc/nginx/meiolol.conf.bak-pre-accounts
 
 ### Deploy events
 
