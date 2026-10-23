@@ -8,7 +8,6 @@ const std = @import("std");
 const dvui = @import("dvui");
 
 allocator: std.mem.Allocator,
-arena: std.mem.Allocator = undefined,
 size: dvui.Size.Natural,
 size_pixels: dvui.Size.Physical,
 scale: f32,
@@ -72,8 +71,7 @@ pub fn nanoTime(self: *Raster) i128 {
 
 pub fn sleep(_: *Raster, _: u64) void {}
 
-pub fn begin(self: *Raster, arena: std.mem.Allocator) !void {
-    self.arena = arena;
+pub fn begin(self: *Raster, _: std.mem.Allocator) !void {
     @memset(self.screen.pixels, 0);
 }
 
