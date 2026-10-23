@@ -1114,7 +1114,9 @@ pub const Store = struct {
             list.deinit(gpa);
         }
         for (have[1..], 1..) |h, code| {
-            if (h) try list.append(gpa, try gpa.dupe(u8, s.string(@intCast(code)).?));
+            if (!h) continue;
+            try list.ensureUnusedCapacity(gpa, 1);
+            list.appendAssumeCapacity(try gpa.dupe(u8, s.string(@intCast(code)).?));
         }
         // As SQLite's DISTINCT walks the patch index: text order, then stats' sort
         std.mem.sort([]const u8, list.items, {}, struct {

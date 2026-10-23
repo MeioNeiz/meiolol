@@ -462,7 +462,10 @@ pub fn patches(gpa: std.mem.Allocator, db: store.Db, platforms: []const []const 
         "AND platform IN (SELECT value FROM json_each(?))");
     defer q.deinit();
     try q.bind(.{ ranked_solo, platform_json });
-    while (try q.step()) try list.append(gpa, try gpa.dupe(u8, q.bytes(0)));
+    while (try q.step()) {
+        try list.ensureUnusedCapacity(gpa, 1);
+        list.appendAssumeCapacity(try gpa.dupe(u8, q.bytes(0)));
+    }
     sortPatches(list.items);
     return list.toOwnedSlice(gpa);
 }
@@ -595,6 +598,20 @@ test "patch order and label" {
     var buf: [statsfile.patch_len]u8 = undefined;
     try testing.expectEqualStrings("16.9-16.20", try label(&buf, &.{ "16.20", "16.9", "16.19" }));
     try testing.expectEqualStrings("16.20", try label(&buf, &.{"16.20"}));
+}
+
+test "patches frees what it read when an allocation fails" {
+    const db = try testDb();
+    defer db.close();
+    try addMatch(db, "EUW1_1", "16.9", 420, 100, false, roles_ok);
+    try addMatch(db, "EUW1_2", "16.20", 420, 100, false, roles_ok);
+    try testing.checkAllAllocationFailures(testing.allocator, struct {
+        fn f(gpa: std.mem.Allocator, d: store.Db) !void {
+            const ps = try patches(gpa, d, euw);
+            for (ps) |p| gpa.free(p);
+            gpa.free(ps);
+        }
+    }.f, .{db});
 }
 
 test "slice masks: platform, start and patch" {
