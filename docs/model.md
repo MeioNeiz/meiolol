@@ -5164,6 +5164,85 @@ base, so it can sit on the shipped model as fitted (its offset weight and platfo
 intercepts absorb the differences). Next: the test look under P3 (docs/plan/lab-frontier.md "P3
 proposal", Jacob's go), seeds 7-9.
 
+### The latest patch day by day: PT2-PT3 dry run on 16.20, 2026-10-23 (pt, prepin run)
+
+docs/plan/patch-transfer.md PT2 and PT3 as a tool, run with 16.20 as "the latest patch"
+so the 16.21 pin is one command. Dev only: test games are neither fitted nor scored.
+`meiolol-lab patchdays SNAP` (lab/patchdays.zig, eceb666): day d = days since the
+patch's first game on the game's platform; day d's games are scored by fits on every
+played game starting before day d's first scored game (harness.PatchDays, any platform
+and patch); preds.tsv per game (match id, platform, day, bucket, any changed champion,
+blue won, each arm's chance), curve.tsv by bucket 0, 1, 2-3, 4-7, 8+ and the patch mean
+with days weighted equally, days.tsv. Arms on additive v2 without the damage mix (the
+shipped terms), each refitted per day:
+
+- A0 latest patch only; A1 pooled, no patch term (the bar)
+- A2 pooled + a champion-role offset per role on latest-patch games (new offset groups in
+  additive.zig), variance estimated (MacKay) or fixed (--offset-sd)
+- A3 A2 with the changed champions' offset variance x16 (Step 0: 1.92 vs 0.50 pp)
+- A4 latest only, L2 prior centred on a fit of the older patches (old games' cells kept
+  at the prior), jump variances estimated
+- A7:a pooled, latest-patch games weighted a (weights scaled to sum to the games)
+- C A2 with the latest flag on a hashed share of fit games (A2's share): the control
+
+Data: snap-20261018T1007Z. 16.20 day 0 is there on every platform (first games 6 Oct
+20:53Z TR1 to 7 Oct 11:41Z NA1; KR 22:40Z, EUW1 7 Oct 05:29Z). Dev-visible 16.20 games:
+days 0-7 whole (67-91k a day), day 8 part (55k), 682,512 scored; 129,726 later ones are
+the test window. The old patch is 16.19 alone with 51k played games (the crawl was
+small then), against 16.21's 1.3M of 16.20. Changed 16.19 -> 16.20 (Data Dragon
+championFull, Step 0's rule, which gives Step 0's 12 for 16.21): Cassiopeia, K'Sante,
+Mordekaiser, Swain, Vayne (22% of games have one). Run 20261023T201251Z-pt-dry-1620,
+3.5 min on 4 Mac cores; fixed-sd runs ...201750Z (0.02) and ...201815Z (0.05).
+
+Milli-nats a game vs A1, 95% paired (A1 row: its log loss), all games:
+
+| arm | day 0 | day 1 | days 2-3 | days 4-7 | day 8 | patch (days equal) |
+| --- | --- | --- | --- | --- | --- | --- |
+| games | 67,249 | 70,883 | 157,564 | 331,804 | 55,012 | 682,512 |
+| fit games (latest) | 51k (0) | 103k (51k) | 173-247k | 327-568k | 659k (607k) | |
+| A1 pooled | 0.69070 | 0.68871 | 0.68786 | 0.68628 | 0.68439 | 0.68718 |
+| A0 latest only | +2.45 ± 0.58 | +1.70 ± 0.38 | +0.49 ± 0.14 | +0.23 ± 0.06 | +0.21 ± 0.12 | +0.70 ± 0.09 |
+| A2 offsets, estimated | 0 | 0.00 ± 0.02 | 0 | 0 | 0 | 0 |
+| A2, sd 0.02 | 0 | -0.02 ± 0.05 | +0.00 ± 0.02 | +0.01 ± 0.01 | +0.01 ± 0.01 | +0.00 ± 0.01 |
+| A2, sd 0.05 | 0 | +0.08 ± 0.17 | +0.07 ± 0.06 | +0.08 ± 0.03 | +0.06 ± 0.06 | +0.07 ± 0.03 |
+| A3 changed x16, estimated | 0 | -0.00 ± 0.00 | 0 | 0 | 0 | 0 |
+| A3, sd 0.02 | 0 | -0.05 ± 0.07 | +0.01 ± 0.03 | +0.01 ± 0.01 | +0.01 ± 0.01 | +0.00 ± 0.01 |
+| A4 warm start | 0 | +0.66 ± 0.21 | +0.49 ± 0.12 | +0.14 ± 0.05 | +0.16 ± 0.09 | +0.26 ± 0.04 |
+| A7 x3 | 0 | +2.34 ± 0.58 | +0.31 ± 0.17 | -0.05 ± 0.05 | +0.03 ± 0.10 | +0.31 ± 0.08 |
+| A7 x10 | 0 | +17.06 ± 1.48 | +2.43 ± 0.39 | +0.05 ± 0.10 | +0.07 ± 0.15 | +2.48 ± 0.19 |
+| C control, estimated | 0 | -0.00 ± 0.00 | 0 | 0 | 0 | 0 |
+| C, sd 0.02 | 0 | +0.04 ± 0.04 | +0.01 ± 0.02 | +0.01 ± 0.01 | +0.01 ± 0.01 | +0.01 ± 0.01 |
+| C, sd 0.05 | 0 | +0.28 ± 0.15 | +0.07 ± 0.06 | +0.05 ± 0.02 | +0.06 ± 0.05 | +0.08 ± 0.02 |
+
+On the changed champions' games (148,739) the same order: A3 at sd 0.02 -0.21 ± 0.23 on
+day 1, -0.01 ± 0.04 over the patch; A0 +0.70 ± 0.19; A4 +0.33 ± 0.09. On day 0 every arm
+but A0 is A1 (no 16.20 game fitted yet: A0 is a coin, A4 the old fit).
+
+Reading (dev, a dry run of the tool, not the answer for 16.21):
+- The shuffled control gains nothing in every form (0 estimated, +0.01 and +0.08 when its
+  offsets are forced): the mode doesn't leak, and noise offsets cost what they should
+- Old patches never stop helping here: A0 is still +0.21 ± 0.12 behind on day 8 with 607k
+  of its own games. But 16.19 is only 51k games, so this is mostly "more games help" (A1
+  has 8% more on day 8), not patch transfer; with 1.3M games of 16.20 behind 16.21 the
+  crossover question is real
+- No patch jump is detectable at 16.19 -> 16.20 with these data: the estimated offset
+  sd is 0.006 logit on day 1 and at its floor from day 2, and forced offsets (sd 0.05)
+  lose as much as the control's noise offsets, except on day 1 (A2 +0.08 vs C +0.28). A
+  champion-role rate on 51k old games is ~2 pp of noise against Step 0's 0.75 pp jump, so
+  the old side can't separate it; 16.21's old side can
+- A4 and A7 lose to pooling: a prior centred on a noisy 51k-game fit is worse than pooling
+  those games, and up-weighting the new patch cuts the effective sample (x10: +17 on day 1)
+- Speed: 72 additive fits on up to 660k games in 210 s, so the 16.21 run is minutes
+
+For the 16.21 pin (after PT1): `meiolol-lab patchdays SNAP --changed
+changed-16.21.tsv` (latest = the newest patch; the list from `meiolol-lab patchdays
+changed 16.20.1/championFull.json 16.21.1/championFull.json`, kept in
+data/team/2026-10-23-prepin/pt/), then `--arms A1,A2,A3,C --offset-sd 0.02` and `0.05`
+if the estimated offsets collapse again. One catch: the protocol's test window is the
+newest ~15% of games, which on a pin a few days into 16.21 is nearly all of 16.21, so
+dev scores almost nothing; the pin needs its test cut moved for this (say 16.21 days 4+)
+or the run is `--final`, a test look (Jacob's call).
+
 ## Shipped model, 2026-10-23: additive v2 in the stats file
 
 Drafts (app suggest, the site's draft helper, Daily Draft, Learn, lane cards, pool) now

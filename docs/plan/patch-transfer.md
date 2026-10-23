@@ -82,6 +82,11 @@ shipped model's edge over a coin, shrinking as the patch fills (frontier-dynamic
 - Every net result so far (to 1320Z) was scored on 16.20 games only: valid within a
   patch, silent on what happens at one
 - 16.21: 252k games by 23 Oct (EUW1 53k, KR 67k, VN2 46k, NA1 20k), ~100k a day
+- PT2-PT3 tool done 23 Oct (`meiolol-lab patchdays`, eceb666), dry run with 16.20 as
+  latest (docs/model.md "The latest patch day by day"): control gains 0, pooled wins,
+  no jump detectable as 16.19 has only 51k games. For 16.21: one command after PT1, but
+  the pin's test window (newest ~15%) covers nearly all of 16.21: move its cut or run
+  --final (Jacob)
 
 ## Step 0 SQL
 
