@@ -518,7 +518,7 @@ fn testDb() !store.Db {
 }
 
 fn addMatch(db: store.Db, id: []const u8, patch: []const u8, queue: i64, winner: ?i64, remake: bool, positions: [10][]const u8) !void {
-    const platform = id[0..std.mem.indexOfScalar(u8, id, '_').?];
+    const platform = id[0..std.mem.findScalar(u8, id, '_').?];
     try db.run("INSERT INTO matches VALUES (?,'t',?,?,?,'',0,1800,?,?)", .{
         id, platform, queue, patch, winner, remake,
     });

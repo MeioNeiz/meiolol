@@ -123,7 +123,7 @@ fn shape(by_pct: *const [101]u32, players: u32) [shape_points]u8 {
     }
     var out: [shape_points]u8 = @splat(0);
     if (peak == 0) return out;
-    for (d, &out) |v, *o| o.* = @intFromFloat(@round(255 * v / peak));
+    for (d, &out) |v, *o| o.* = @round(255 * v / peak);
     return out;
 }
 
@@ -181,7 +181,7 @@ test "bins, percentiles, players under min_games left out" {
         }
     }.k;
     try testing.expectEqual(255, std.mem.max(u8, &got.shape));
-    const peak = std.mem.indexOfMax(u8, &got.shape);
+    const peak = std.mem.findMax(u8, &got.shape);
     try testing.expect(peak >= at(4) and peak <= at(10));
     try testing.expect(got.shape[at(-24)] > 0 and got.shape[at(-24)] < 255);
     try testing.expect(got.shape[at(24)] < got.shape[at(-24)]);

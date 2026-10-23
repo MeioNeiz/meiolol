@@ -361,9 +361,9 @@ fn weights(
     try w.writeAll("\n| --- |");
     for (minutes) |_| try w.writeAll(" --- |");
     try w.writeAll("\n");
-    const gold_i = 1 + std.mem.indexOfScalar(Feat, m.feats, .gold).?;
+    const gold_i = 1 + std.mem.findScalar(Feat, m.feats, .gold).?;
     for (lead[0..1] ++ lead[2..] ++ shown) |f| {
-        const i = 1 + (std.mem.indexOfScalar(Feat, m.feats, f) orelse continue);
+        const i = 1 + (std.mem.findScalar(Feat, m.feats, f) orelse continue);
         try w.print("| {t} |", .{f});
         for (fitted, nonzero) |fm, nz| {
             // Too few games with the feature set to say anything

@@ -391,7 +391,7 @@ fn hitRow(w: *Io.Writer, known: bool, seats: []const TestSeat, tests: []const Ga
     const diff = sums.gain();
     try w.print("| {s} | {d} | {d:.1}% | {d:.1}% | {d:.1}% | {s}{d:.2} ± {d:.2} pp | {d:.1}% / {d:.1}% |\n", .{
         if (known) "other nine" else "blind",
-        @as(u64, @intFromFloat(n)),
+        @as(u64, @trunc(n)),
         100 * pool / n,
         100 * off / n,
         100 * on / n,
@@ -455,7 +455,7 @@ fn loadPools(
             var it = std.mem.splitScalar(u8, f.next() orelse "", ',');
             while (it.next()) |e| {
                 if (e.len == 0) continue;
-                const colon = std.mem.indexOfScalar(u8, e, ':') orelse return error.BadMasteryLine;
+                const colon = std.mem.findScalar(u8, e, ':') orelse return error.BadMasteryLine;
                 try pool.append(c.arena, .{
                     .champion = try field(u32, e[0..colon]),
                     .points = try field(u32, e[colon + 1 ..]),
@@ -478,7 +478,7 @@ fn field(comptime T: type, text: ?[]const u8) !T {
 /// Each line of DIR/NAME after its header
 fn eachLine(io: Io, dir: []const u8, name: []const u8, ctx: anytype, comptime body: anytype) !void {
     var path_buf: [std.fs.max_path_bytes]u8 = undefined;
-    const path = try std.fmt.bufPrint(&path_buf, "{s}/{s}", .{ dir, name });
+    const path = try std.mem.print(&path_buf, "{s}/{s}", .{ dir, name });
     var file = Io.Dir.cwd().openFile(io, path, .{}) catch |err| {
         std.log.err("{s}: {t} (meiolol-lab mastery-pre writes it into a snapshot)", .{ path, err });
         return err;

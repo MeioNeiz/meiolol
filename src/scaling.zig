@@ -442,7 +442,7 @@ pub fn run(
         n.* = if (opts.state == .lead and opts.slope == .team)
             m.file
         else
-            try std.fmt.allocPrint(arena, "{s}-{t}-{t}", .{ m.file, opts.state, opts.slope });
+            try arena.print("{s}-{t}-{t}", .{ m.file, opts.state, opts.slope });
     }
     const preds: analysis.Preds = try .init(arena, io, opts.preds_dir, &names, "match_id\tslot\tminute\ty\tpred\n");
     defer preds.close(io);
@@ -540,7 +540,7 @@ pub fn run(
     const champ_names = try arena.alloc([]const u8, champs);
     for (champ_names, champ_index.ids.items) |*n, id| {
         try name.bind(.{@as(i64, id)});
-        n.* = if (try name.step()) try arena.dupe(u8, name.bytes(0)) else try std.fmt.allocPrint(arena, "#{d}", .{id});
+        n.* = if (try name.step()) try arena.dupe(u8, name.bytes(0)) else try arena.print("#{d}", .{id});
     }
 
     if (opts.table) |path| {
@@ -567,7 +567,7 @@ pub fn run(
 
 /// Index of a minute in `minutes`
 fn mi(minute: u8) usize {
-    return std.mem.indexOfScalar(u8, &minutes, minute).?;
+    return std.mem.findScalar(u8, &minutes, minute).?;
 }
 
 const Shown = struct { cell: usize, key: f64, sd: f64 };

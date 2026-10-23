@@ -242,7 +242,7 @@ pub const Walker = struct {
                 if (k.victim >= 1 and k.victim <= 10) {
                     const v = k.victim - 1;
                     a.deaths[v] += 1;
-                    a.alive_at[v] = e.t_ms + @as(i64, @intFromFloat(respawnSeconds(a.level[v], e.t_ms) * 1000));
+                    a.alive_at[v] = e.t_ms + @as(i64, @trunc(respawnSeconds(a.level[v], e.t_ms) * 1000));
                 }
                 if (k.killer >= 1 and k.killer <= 10) a.kills[k.killer - 1] += 1;
                 for (k.assists) |p| if (p >= 1 and p <= 10) {

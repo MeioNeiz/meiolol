@@ -628,7 +628,10 @@ pub fn loadLegendaries(
             if (!e.found_existing) e.value_ptr.* = .empty;
             try e.value_ptr.append(arena, item);
         }
-    } else |err| if (err != error.FileNotFound) return err;
+    } else |err| switch (err) {
+        error.FileNotFound => {},
+        else => return err,
+    }
 
     var appended: std.ArrayList(u8) = .empty;
     for (patches) |p| {

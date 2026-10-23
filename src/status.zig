@@ -292,7 +292,7 @@ test "the samples read index ranges, not whole tables" {
         var plan: std.ArrayList(u8) = .empty;
         defer plan.deinit(testing.allocator);
         while (try q.step()) try plan.appendSlice(testing.allocator, q.bytes(3));
-        if (std.mem.indexOf(u8, plan.items, case[1]) == null) {
+        if (std.mem.find(u8, plan.items, case[1]) == null) {
             std.debug.print("{s}\n  plan: {s}\n", .{ case[0], plan.items });
             return error.TestUnexpectedResult;
         }
@@ -308,5 +308,5 @@ test "a small sample falls back to counting every player" {
     defer w.deinit();
     try write(arena_state.allocator(), db, &w.writer, .{});
     try testing.expect(std.mem.startsWith(u8, w.written(), "players: 64\n"));
-    try testing.expect(std.mem.indexOf(u8, w.written(), "players: europe=48 asia=16\n") != null);
+    try testing.expect(std.mem.find(u8, w.written(), "players: europe=48 asia=16\n") != null);
 }

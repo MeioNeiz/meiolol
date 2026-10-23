@@ -566,7 +566,7 @@ fn draftFor(
             .pp = daily.round1(s.pp),
             .games = s.games,
             .wins = st.champRole(role, c).wins,
-            .magic = if (facts.champs[c].magic) |m| @intFromFloat(@round(m * 100)) else null,
+            .magic = if (facts.champs[c].magic) |m| @round(m * 100) else null,
             .reasons = reasons,
             .lane = if (curves) |cv| try laneCurve(arena, cv, role, id, enemy) else null,
         };
@@ -736,8 +736,8 @@ test "facts and practice drafts" {
 
     try testing.expectEqualStrings("learn/practice.json", l.files[1].path);
     const json = l.files[1].data;
-    try testing.expect(std.mem.indexOf(u8, json, "EUW1_") == null);
-    try testing.expect(std.mem.indexOf(u8, json, "\"p\"") == null);
+    try testing.expect(std.mem.find(u8, json, "EUW1_") == null);
+    try testing.expect(std.mem.find(u8, json, "\"p\"") == null);
     const pack = try std.json.parseFromSliceLeaky([]Practice, arena, json, .{});
     try testing.expect(pack.len > 0);
     var seen: [3]usize = @splat(0);

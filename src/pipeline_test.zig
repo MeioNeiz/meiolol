@@ -142,9 +142,9 @@ test "fixture games to stats, curves and the website" {
     }
     const example_json = try api.example.json(arena, examples);
     for ([_][]const u8{ "\"default\":\"mid\"", "\"support\":{\"state\":\"ready\"", "\"name\":\"Example player\"", "\"lane\":{\"gold\":[" }) |want| {
-        try testing.expect(std.mem.indexOf(u8, example_json, want) != null);
+        try testing.expect(std.mem.find(u8, example_json, want) != null);
     }
-    try testing.expect(std.mem.indexOf(u8, example_json, "EUW1_") == null);
+    try testing.expect(std.mem.find(u8, example_json, "EUW1_") == null);
     try db.run("INSERT INTO forgotten SELECT DISTINCT puuid, 0 FROM participants", .{});
     try testing.expectEqual(null, try api.example.buildAll(arena, db, set, .{ .since_ms = 0, .min_games = 1 }));
     try db.exec("DELETE FROM forgotten");
@@ -298,7 +298,7 @@ test "fixture games to stats, curves and the website" {
     for (pages) |pg| {
         const path = try std.fs.path.join(arena, &.{ out, pg[0] });
         const html = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 20));
-        for (pg[1]) |want| if (std.mem.indexOf(u8, html, want) == null) {
+        for (pg[1]) |want| if (std.mem.find(u8, html, want) == null) {
             std.debug.print("{s} lacks {s}\n", .{ pg[0], want });
             return error.TestUnexpectedResult;
         };
@@ -336,7 +336,7 @@ test "fixture games to stats, curves and the website" {
     for ([_][]const u8{ "champions.html", "champion/darius.html" }) |page| {
         const path = try std.fs.path.join(arena, &.{ out, page });
         const html = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 20));
-        for ([_][]const u8{ "all ranks", "All ranks", ">Gold+" }) |bad| if (std.mem.indexOf(u8, html, bad) != null) {
+        for ([_][]const u8{ "all ranks", "All ranks", ">Gold+" }) |bad| if (std.mem.find(u8, html, bad) != null) {
             std.debug.print("{s} has {s}\n", .{ page, bad });
             return error.TestUnexpectedResult;
         };
@@ -346,7 +346,7 @@ test "fixture games to stats, curves and the website" {
     {
         const path = try std.fs.path.join(arena, &.{ out, "matchup/top/mordekaiser-vs-darius.html" });
         const html = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 20));
-        try testing.expect(std.mem.indexOf(u8, html, "whoever is ahead wins") == null);
+        try testing.expect(std.mem.find(u8, html, "whoever is ahead wins") == null);
         const pickers = std.mem.count(u8, html, "<details class=\"pick\">") + std.mem.count(u8, html, "<details class=\"regions\">");
         try testing.expectEqual(pickers, std.mem.count(u8, html, "<details"));
     }
@@ -360,9 +360,9 @@ test "fixture games to stats, curves and the website" {
             var it = std.mem.splitSequence(u8, html, attr);
             _ = it.next();
             while (it.next()) |rest| {
-                const id = rest[0..std.mem.indexOfScalar(u8, rest, '"').?];
-                const want = try std.fmt.allocPrint(arena, "id=\"{s}\"", .{id});
-                if (std.mem.indexOf(u8, html, want) == null) {
+                const id = rest[0..std.mem.findScalar(u8, rest, '"').?];
+                const want = try arena.print("id=\"{s}\"", .{id});
+                if (std.mem.find(u8, html, want) == null) {
                     std.debug.print("{s}: {s}{s}\" has no table\n", .{ page, attr, id });
                     return error.TestUnexpectedResult;
                 }
@@ -393,8 +393,8 @@ test "fixture games to stats, curves and the website" {
         };
         try testing.expectEqualStrings(want, got);
         checked += 1;
-        if (std.mem.endsWith(u8, e.path, ".html") and std.mem.indexOf(u8, want, "data-sortable") != null and
-            std.mem.indexOf(u8, want, "table.js\"") == null)
+        if (std.mem.endsWith(u8, e.path, ".html") and std.mem.find(u8, want, "data-sortable") != null and
+            std.mem.find(u8, want, "table.js\"") == null)
         {
             std.debug.print("{s}: sortable table without table.js\n", .{e.path});
             return error.TestUnexpectedResult;
@@ -457,7 +457,7 @@ test "fixture games to stats, curves and the website" {
             const files = try std.fs.path.join(arena, &.{ dir, "db" });
             try std.Io.Dir.cwd().createDirPath(io, files);
             for ([_][]const u8{ "main", "raw", "timeline" }, [_][]const u8{ "meiolol.db", "raw.db", "timeline.db" }) |schema, name| {
-                const sql = try std.fmt.allocPrintSentinel(arena, "VACUUM {s} INTO '{s}/{s}'", .{ schema, files, name }, 0);
+                const sql = try arena.printSentinel("VACUUM {s} INTO '{s}/{s}'", .{ schema, files, name }, 0);
                 try db.exec(sql);
             }
             const file_db = try store.schema.open(gpa, files);
@@ -541,10 +541,10 @@ test "fixture games to stats, curves and the website" {
     // Sitemaps list rendered pages: the root one static, the views' rendered
     const sitemap = try core_dir.readFileAlloc(io, "sitemap.xml", arena, .limited(1 << 20));
     for ([_][]const u8{ "https://x.io/champion/darius.html", "https://x.io/matchup/top/mordekaiser-vs-darius.html", "https://x.io/daily.html", "https://x.io/learn.html" }) |want| {
-        try testing.expect(std.mem.indexOf(u8, sitemap, want) != null);
+        try testing.expect(std.mem.find(u8, sitemap, want) != null);
     }
     const patch_sitemap = (try core_loaded.get(arena, "patch/sitemap.xml")).?;
-    try testing.expect(std.mem.indexOf(u8, patch_sitemap, "https://x.io/patch/build/darius-top.html") != null);
+    try testing.expect(std.mem.find(u8, patch_sitemap, "https://x.io/patch/build/darius-top.html") != null);
 }
 
 test "admin page from the fixture games and a crawl log" {
@@ -611,11 +611,11 @@ test "admin page from the fixture games and a crawl log" {
         "\"text\":\"warning(riot): 429 (server) on /lol/match/vN/matches/…, waiting Ns\"",
         "\"rows\":3,\"days\":[{\"day\":",
         "\"recent\":[0,0,1,0]}]",
-    }) |want| if (std.mem.indexOf(u8, html, want) == null) {
+    }) |want| if (std.mem.find(u8, html, want) == null) {
         std.debug.print("admin page lacks {s}\n", .{want});
         return error.TestUnexpectedResult;
     };
-    try std.testing.expect(std.mem.indexOf(u8, html, "EUW1_7123456") == null);
+    try std.testing.expect(std.mem.find(u8, html, "EUW1_7123456") == null);
     // data.json: the page's data, for polling between rebuilds
     const json = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "data.json" }), arena, .limited(4 << 20));
     for ([_][]const u8{
@@ -627,11 +627,11 @@ test "admin page from the fixture games and a crawl log" {
         "\"riot\":{\"app_limit\":\"20:1,100:120\",\"method_limits\":{},\"crawl_args\":\"--proxy 10.0.0.3:8092\"," ++
             "\"key_problems\":[[1760223780,\"error(riot): 403 on /lol/match/vN/matches/…: key missing or expired\"]," ++
             "[1760223780,\"KEY REJECTED\"]]}",
-    }) |want| if (std.mem.indexOf(u8, json, want) == null) {
+    }) |want| if (std.mem.find(u8, json, want) == null) {
         std.debug.print("data.json lacks {s}\n", .{want});
         return error.TestUnexpectedResult;
     };
-    try std.testing.expect(std.mem.indexOf(u8, html, json) != null);
+    try std.testing.expect(std.mem.find(u8, html, json) != null);
     // live.json (admin_api.zig), its command results given
     const live = try admin.liveJson(arena, io, db, .{
         .data_dir = dir,
@@ -651,7 +651,7 @@ test "admin page from the fixture games and a crawl log" {
             "[1760224010,\"ab12cd\",\"commit\",\"info\",\"ab12cd fix …'s timeline\"]," ++
             "[1760224030,\"ab12cd\",\"swap\",\"ok\",\"meiolol-render@a serving; stopped meiolol-render@b\"]]",
         "\"running\":{\"eval\":null,\"action\":{\"name\":\"site-build\",\"since\":1760224190}}}",
-    }) |want| if (std.mem.indexOf(u8, live, want) == null) {
+    }) |want| if (std.mem.find(u8, live, want) == null) {
         std.debug.print("live.json lacks {s}\n{s}\n", .{ want, live });
         return error.TestUnexpectedResult;
     };
@@ -795,7 +795,7 @@ fn timelineOutputs(arena: std.mem.Allocator, io: std.Io, db: store.Db, tmp: std.
     try lanemodel.run(gpa, io, db, dir, &log.writer);
     const model = try tmp.dir.readFileAlloc(io, try arena.print("{s}/lane-model.json", .{tag}), arena, .limited(16 << 20));
     // Its run time to the minute: two runs either side of one differ there only
-    const run = std.mem.indexOf(u8, model, "\"run\":\"").? + 7;
+    const run = std.mem.find(u8, model, "\"run\":\"").? + 7;
     @memset(model[run..][0.."2026-10-19 08:02Z".len], '-');
     out[3] = model;
     out[4] = try tmp.dir.readFileAlloc(io, try arena.print("{s}/lane-ref.json", .{tag}), arena, .limited(1 << 20));
@@ -944,7 +944,7 @@ test "fixture games to lab rows, from SQLite and packed" {
         const manifest_path = try std.fs.path.join(arena, &.{ snap, "pack", "manifest" });
         const manifest = try std.Io.Dir.cwd().readFileAlloc(io, manifest_path, arena, .limited(1 << 20));
         const line = "column games.duration_s u32 1\n";
-        const at = std.mem.indexOf(u8, manifest, line).?;
+        const at = std.mem.find(u8, manifest, line).?;
         const old = try std.mem.concat(arena, u8, &.{ manifest[0..at], manifest[at + line.len ..] });
         try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = manifest_path, .data = old });
         try testing.expectEqual(null, try lab_pack.read(gpa, io, snap, &legendaries));
@@ -1026,7 +1026,7 @@ fn expectSiteFiles(arena: std.mem.Allocator, io: std.Io, out: []const u8) !void 
         var it = std.mem.tokenizeScalar(u8, list, '\n');
         const other = if (list.ptr == got.ptr) want else got;
         while (it.next()) |line| {
-            if (std.mem.indexOf(u8, other, line) == null) std.debug.print("site file {s}: {s}\n", .{ label, line });
+            if (std.mem.find(u8, other, line) == null) std.debug.print("site file {s}: {s}\n", .{ label, line });
         }
     }
     const new_path = ".zig-cache/site-files.txt";
@@ -1076,7 +1076,7 @@ test "fixture games to events.tsv" {
         defer data.deinit();
         try testing.expectEqual(data.games.len, sum.games);
         for (data.games) |g| {
-            const n = try std.fmt.parseInt(usize, g.match_id[std.mem.indexOfScalar(u8, g.match_id, '_').? + 1 ..], 10);
+            const n = try std.fmt.parseInt(usize, g.match_id[std.mem.findScalar(u8, g.match_id, '_').? + 1 ..], 10);
             with_tl += @intFromBool(n % 3 != 0);
         }
     }

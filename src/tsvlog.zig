@@ -11,7 +11,7 @@ pub fn append(gpa: std.mem.Allocator, io: Io, path: []const u8, header: []const 
     const cwd = Io.Dir.cwd();
     if (try outdated(gpa, io, path, header)) |rest| {
         defer gpa.free(rest);
-        const tmp = try std.fmt.allocPrint(gpa, "{s}.tmp", .{path});
+        const tmp = try gpa.print("{s}.tmp", .{path});
         defer gpa.free(tmp);
         const data = try std.mem.concat(gpa, u8, &.{ header, rest, row });
         defer gpa.free(data);
@@ -39,7 +39,7 @@ fn outdated(gpa: std.mem.Allocator, io: Io, path: []const u8, header: []const u8
     defer file.close(io);
     var first: [4096]u8 = undefined;
     const got = first[0..try file.readPositionalAll(io, &first, 0)];
-    const nl = std.mem.indexOfScalar(u8, got, '\n') orelse return null;
+    const nl = std.mem.findScalar(u8, got, '\n') orelse return null;
     const old = got[0..nl];
     const new = header[0 .. header.len - 1];
     if (std.mem.eql(u8, old, new) or !std.mem.startsWith(u8, new, old) or new[old.len] != '\t') return null;
@@ -55,7 +55,7 @@ test "append, then widen the header" {
     const io = testing.io;
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
-    const path = try std.fmt.allocPrint(testing.allocator, ".zig-cache/tmp/{s}/h.tsv", .{&tmp.sub_path});
+    const path = try testing.allocator.print(".zig-cache/tmp/{s}/h.tsv", .{&tmp.sub_path});
     defer testing.allocator.free(path);
 
     try append(testing.allocator, io, path, "a\tb\n", "1\t2\n");

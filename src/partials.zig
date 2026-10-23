@@ -369,7 +369,7 @@ pub const Store = struct {
     }
 
     fn path(s: *Store, comptime fmt: []const u8, args: anytype) ![]const u8 {
-        return std.fmt.allocPrint(s.gpa, "{s}/" ++ fmt, .{s.dir} ++ args);
+        return s.gpa.print("{s}/" ++ fmt, .{s.dir} ++ args);
     }
 
     fn readFile(s: *Store, comptime T: type, file: []const u8) !?T {

@@ -94,7 +94,7 @@ pub const Rendered = struct {
         const version = r.current.version;
         r.mutex.unlock(r.io);
         var buf: [16]u8 = undefined;
-        const hex = std.fmt.bufPrint(&buf, "{x:0>16}", .{version}) catch unreachable;
+        const hex = std.mem.print(&buf, "{x:0>16}", .{version}) catch unreachable;
         try Io.Dir.cwd().writeFile(r.io, .{ .sub_path = path, .data = hex });
     }
 
@@ -206,7 +206,7 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
     var it = request.iterateHeaders();
     while (it.next()) |h| {
         if (std.ascii.eqlIgnoreCase(h.name, "accept-encoding") and
-            std.mem.indexOf(u8, h.value, "gzip") != null) gzip = true;
+            std.mem.find(u8, h.value, "gzip") != null) gzip = true;
     }
 
     if (ctx.opts.dev) |d| if (std.mem.eql(u8, path, "__dev")) {
@@ -251,7 +251,7 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
             };
             var body = got orelse continue;
             if (ctx.opts.dev != null and std.mem.endsWith(u8, name, ".html")) {
-                if (std.mem.lastIndexOf(u8, body, "</body>")) |at| {
+                if (std.mem.findLast(u8, body, "</body>")) |at| {
                     body = try std.mem.concat(arena, u8, &.{ body[0..at], reload_script, body[at..] });
                 }
             }
@@ -333,10 +333,10 @@ fn staticVersion(io: Io, path: []const u8) i96 {
 /// The request target as a path relative to the site root; null for anything that
 /// could escape it
 fn resolve(buf: []u8, target: []const u8) ?[]const u8 {
-    const raw = target[0 .. std.mem.indexOfAny(u8, target, "?#") orelse target.len];
+    const raw = target[0 .. std.mem.findAny(u8, target, "?#") orelse target.len];
     if (raw.len == 0 or raw[0] != '/' or raw.len > buf.len) return null;
     const path = raw[1..];
-    if (std.mem.indexOfAny(u8, path, "\\%\x00") != null) return null;
+    if (std.mem.findAny(u8, path, "\\%\x00") != null) return null;
     var parts = std.mem.splitScalar(u8, path, '/');
     while (parts.next()) |part| {
         if (part.len > 0 and part[0] == '.') return null;
