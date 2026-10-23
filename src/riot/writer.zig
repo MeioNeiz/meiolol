@@ -478,9 +478,7 @@ pub const Writer = struct {
             return false;
         };
         try s.timeline.exec(.{ id, ct.frames, ct.events, store.Blob{ .bytes = ct.blob } });
-        for (0..ct.participants) |slot| {
-            try s.gold.exec(.{ ct.gold[0][slot], ct.gold[1][slot], ct.gold[2][slot], id, slot });
-        }
+        try crawl.storeGold(&s.gold, id, ct.participants, ct.gold);
         try s.timeline_done.exec(.{id});
         return true;
     }
@@ -827,7 +825,7 @@ const Stmts = struct {
         .blank = "SELECT EXISTS (SELECT 1 FROM participants WHERE match_id = ? AND puuid IS NULL)",
         .raw_timeline = "INSERT OR REPLACE INTO raw.timeline_docs VALUES (?,?,?)",
         .timeline = "INSERT OR REPLACE INTO timeline.timelines VALUES (?,?,?,?)",
-        .gold = "UPDATE participants SET gold10 = ?, gold14 = ?, gold15 = ? WHERE match_id = ? AND slot = ?",
+        .gold = crawl.gold_sql,
         .timeline_status = "UPDATE timeline_queue SET status = ? WHERE match_id = ?",
         .timeline_done = "DELETE FROM timeline_queue WHERE match_id = ?",
         .timeline_attempt =

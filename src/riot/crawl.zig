@@ -1567,10 +1567,10 @@ fn goldAt(t: timeline.Timeline) [gold_minutes.len][timeline.max_participants]?i3
     return gold;
 }
 
-fn storeGold(db: store.Db, match_id: []const u8, participants: u8, gold: [gold_minutes.len][timeline.max_participants]?i32) !void {
-    var up = try db.prepare("UPDATE participants SET gold10 = ?, gold14 = ?, gold15 = ? " ++
-        "WHERE match_id = ? AND slot = ?");
-    defer up.deinit();
+pub const gold_sql = "UPDATE participants SET gold10 = ?, gold14 = ?, gold15 = ? WHERE match_id = ? AND slot = ?";
+
+/// `up`: gold_sql prepared
+pub fn storeGold(up: *store.Stmt, match_id: []const u8, participants: u8, gold: [gold_minutes.len][timeline.max_participants]?i32) !void {
     for (0..participants) |slot| try up.exec(.{ gold[0][slot], gold[1][slot], gold[2][slot], match_id, slot });
 }
 
@@ -1578,6 +1578,8 @@ fn storeGold(db: store.Db, match_id: []const u8, participants: u8, gold: [gold_m
 pub fn rebuildGold(gpa: std.mem.Allocator, db: store.Db) !usize {
     var q = try db.prepare("SELECT match_id, data FROM timeline.timelines");
     defer q.deinit();
+    var up = try db.prepare(gold_sql);
+    defer up.deinit();
     var stored: usize = 0;
     try db.begin();
     errdefer db.rollback();
@@ -1590,7 +1592,7 @@ pub fn rebuildGold(gpa: std.mem.Allocator, db: store.Db) !usize {
             log.warn("timeline {s} did not decode: {t}", .{ r.match_id, err });
             continue;
         };
-        try storeGold(db, r.match_id, t.participants, goldAt(t));
+        try storeGold(&up, r.match_id, t.participants, goldAt(t));
         stored += 1;
         if (stored % 1000 == 0) {
             try db.commit();
@@ -1929,7 +1931,9 @@ test "gold at 10, 14 and 15 minutes" {
     var doc = try match.parse(arena.allocator(), @embedFile("testdata/match.json"));
     doc.metadata.matchId = "EUW1_1";
     try match.storeRows(db, doc, "riot");
-    try storeGold(db, "EUW1_1", ct.participants, ct.gold);
+    var up = try db.prepare(gold_sql);
+    defer up.deinit();
+    try storeGold(&up, "EUW1_1", ct.participants, ct.gold);
     // Frame 15, participant 1 of the fixture (riot-timeline-measured)
     try std.testing.expectEqual(@as(?i64, 6208), try db.scalar(
         "SELECT gold15 FROM participants WHERE match_id = 'EUW1_1' AND slot = 0",
