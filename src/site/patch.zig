@@ -111,6 +111,12 @@ fn winOf(w: *Writer, c: core.curvesfile.Counts) !void {
     try w.print(" of {f}", .{root.Thousands{ .n = c.games }});
 }
 
+/// winOf when the change is clear, else in plain ink: a vivid rate beside "no clear
+/// change" reads as a change
+fn sinceRate(w: *Writer, c: core.curvesfile.Counts, clear: bool) !void {
+    return if (clear) winOf(w, c) else rateOf(w, c);
+}
+
 fn rateOf(w: *Writer, c: core.curvesfile.Counts) !void {
     try root.pct(w, c.wins, c.games);
     try w.print(" of {f}", .{root.Thousands{ .n = c.games }});
@@ -262,8 +268,8 @@ pub fn since(site: *const Site, w: *Writer, pd: *const PatchDay, region: html.Re
         .prev = pd.prev_patch,
         .in = region.in(),
         .verdict = if (!clear) "no clear change" else if (m.win.z > 0) "won more often" else "won less often",
-        .now = tpl.call(winOf, .{m.win.cur}),
-        .then = tpl.call(winOf, .{m.win.prev}),
+        .now = tpl.call(sinceRate, .{ m.win.cur, clear }),
+        .then = tpl.call(sinceRate, .{ m.win.prev, clear }),
     });
     if (clear) try tpl.renderPart(w, " (a gap of {gap}, 99% range)", .{ .gap = tpl.call(gap, .{ m.win, o.z }) });
     if (m.ahead) |l| if (l.clear(o.min_role_games, o.z)) {

@@ -97,19 +97,19 @@ pub fn section(site: *const Site, w: *Writer, p: *const pool.Pool, l: *const lea
         try tpl.render(w,
             \\<p class="note">Not enough players yet: {players} {in} with {name} as their most played champion so far; lists start at {min}.</p>
             \\
-        , .{ .players = m.players, .in = region.in(), .name = ch.name, .min = p.min_players });
+        , .{ .players = root.Thousands{ .n = m.players }, .in = region.in(), .name = ch.name, .min = p.min_players });
         return;
     }
     try tpl.render(w,
-        \\<p class="muted">{players} players {in} main {name}, from {source}: the share of them who play each champion (of other players in brackets), those played most beyond their usual share first.</p>
+        \\<p class="muted">{players} players {in} main {name}, from {source}: how many times as often as other players they play each champion (pulled toward 1 when few play it; the order), then the share of them who do (of other players in brackets).</p>
         \\
-    , .{ .players = m.players, .in = region.in(), .name = ch.name, .source = sourceText(p) });
+    , .{ .players = root.Thousands{ .n = m.players }, .in = region.in(), .name = ch.name, .source = sourceText(p) });
     try w.writeAll("<div class=\"card\"><ul class=\"also\">\n");
     if (m.also.len == 0) try w.writeAll("<li class=\"muted\">No champion stands out yet</li>\n");
     for (m.also[0..@min(m.also.len, also_shown)]) |a| {
         const other = matchup.champ(site, a.id) orelse continue;
         try tpl.render(w,
-            \\<li class="bx"><span>{champ}</span><span class="num" title="{together} of {players} players">{share:.0}% <span class="muted">({base:.0}%)</span>{kind}</span></li>
+            \\<li class="bx"><span>{champ}</span><span class="num" title="{together} of {players} players"><b>{lift:.1}×</b> {share:.0}% <span class="muted">({base:.0}%)</span>{kind}</span></li>
             \\
         , .{
             .champ = tpl.call(champCell, .{ site, other }),
@@ -117,6 +117,7 @@ pub fn section(site: *const Site, w: *Writer, p: *const pool.Pool, l: *const lea
             .players = m.players,
             .share = 100 * @as(f64, @floatFromInt(a.together)) / @as(f64, @floatFromInt(m.players)),
             .base = 100 * a.base,
+            .lift = a.lift,
             .kind = if (kindNote(l, a.id)) |k| tpl.t(" <span class=\"role\">{k}</span>", .{ .k = k }) else null,
         });
     }

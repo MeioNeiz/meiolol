@@ -531,7 +531,7 @@ pub fn earlyNote(site: *const Site, w: *Writer, filtered: bool) !void {
     , .{
         .early = early_games,
         .hidden = tpl.flag(!early, "hidden"),
-        .games = site.games,
+        .games = Thousands{ .n = site.games },
         .when = site.when,
     });
 }

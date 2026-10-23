@@ -99,7 +99,7 @@ pub fn section(site: *const Site, w: *Writer, l: *const Learning, ch: Champ, per
             .rate = tpl.when(b.games > 0, tpl.call(tierlist.wrText, .{ b.winRate(), b.games })),
             .gold = gold,
             .none = tpl.when(gold == null, "-"),
-            .games = b.games,
+            .games = root.Thousands{ .n = b.games },
         });
     }
     try w.writeAll("</tbody></table></div>\n");
@@ -132,7 +132,7 @@ pub fn table(site: *const Site, w: *Writer, l: *const Learning) !void {
         try tpl.render(w,
             \\<p class="note">More data needed: no champion has 200+ games each from players new to it and practised on it yet ({games} games so far).</p>
             \\
-        , .{ .games = l.games });
+        , .{ .games = root.Thousands{ .n = l.games } });
         return;
     }
     std.mem.sort(learning.Champion, list.items, {}, struct {
@@ -151,7 +151,7 @@ pub fn table(site: *const Site, w: *Writer, l: *const Learning) !void {
         const ch = matchup.champ(site, c.id) orelse continue;
         const g = c.gap.?;
         try tpl.render(w,
-            \\<tr class="bx"><td class="l" data-v="{name}">{champ}</td><td class="l" data-v="{kind_v}">{kind}</td><td data-v="{new:.4}">{new_wr}</td><td data-v="{practised:.4}">{practised_wr}</td><td data-v="{pulled:.2}">{sign}{pp:.1}</td><td class="dim" data-v="{games}">{games}</td></tr>
+            \\<tr class="bx"><td class="l" data-v="{name}">{champ}</td><td class="l" data-v="{kind_v}">{kind}</td><td data-v="{new:.4}">{new_wr}</td><td data-v="{practised:.4}">{practised_wr}</td><td data-v="{pulled:.2}">{sign}{pp:.1}</td><td class="dim" data-v="{games}">{count}</td></tr>
             \\
         , .{
             .name = ch.name,
@@ -170,6 +170,7 @@ pub fn table(site: *const Site, w: *Writer, l: *const Learning) !void {
             .sign = if (g.pp >= 0) "+" else "",
             .pp = g.pp,
             .games = g.new.games + g.practised.games,
+            .count = root.Thousands{ .n = g.new.games + g.practised.games },
         });
     }
     try w.writeAll("</tbody></table></div>\n");

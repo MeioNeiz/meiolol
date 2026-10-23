@@ -99,7 +99,8 @@ pub fn roleRank(site: *const Site, r: Role, id: u32) !?Rank {
 
 /// The colour scale's key: rates at its stops (wrColour) on `span`, each in its colour
 pub fn legend(w: *Writer, span: f64) !void {
-    try w.writeAll("<p class=\"wr-key\">Win rate colour");
+    // A matchup's own scale says so: the same rate is paler here than on the champions table
+    try w.writeAll(if (span == table_span) "<p class=\"wr-key\">Win rate colour" else "<p class=\"wr-key\">Matchup win rate colour, on a scale twice as wide as the champions table's:");
     const pts = [_]f64{ -5.5, -3.5, -2, 0, 2, 3.5, 5.5 };
     for (pts) |x| {
         const p = 0.5 + x * span / table_span / 100;

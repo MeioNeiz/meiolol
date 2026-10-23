@@ -32,7 +32,7 @@ pub fn section(w: *Writer, s: *const spread.Spread, ch: Champ, region: html.Regi
         , .{
             .chip = chip,
             .name = ch.name,
-            .players = c.players,
+            .players = root.Thousands{ .n = c.players },
             .noun = if (c.players == 1) "player" else "players",
             .in = region.in(),
             .min = s.min_games,

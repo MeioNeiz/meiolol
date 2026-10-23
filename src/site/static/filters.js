@@ -304,7 +304,7 @@ const HARDEST = "hardest first";
       } else {
         const games = Math.round(sums.players / 10);
         early.hidden = games >= Number(early.dataset.early);
-        early.querySelector("[data-early-games]").textContent = `${games} games so far (${when(f)})`;
+        early.querySelector("[data-early-games]").textContent = `${games.toLocaleString("en-GB")} games so far (${when(f)})`;
       }
     }
     for (const s of sections) {

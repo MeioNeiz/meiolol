@@ -473,7 +473,7 @@ fn opponentTable(site: *const Site, w: *Writer, ch: Champ, cr: Counts, tab: Tab,
     const with = if (tab.kind == .duo) "with the ally" else "in the matchup";
     try tpl.renderPart(w,
         \\<div class="tl-bar"><h3 class="opp-h">{what} <span class="muted">{n}, {order}</span>{chip}</h3>
-        \\{lane}<span class="og-key">Each tile: win rate, vs usual{gold}, games</span></div>
+        \\{lane}<span class="og-key">Each tile: win rate, vs usual{gold}, games. Order: the win rate pulled toward {name}'s own by games</span></div>
         \\<div class="og-wrap"><table class="og" id="{id}" data-sortable data-k="{k:.0}" data-ka="{ka:.0}">
         \\<thead><tr><th class="l" data-sort="text">Name</th><th data-sort="num" title="{name}'s win rate {with}; sorts with few games pulled toward {name}'s own">Win rate</th><th data-sort="num" title="Points more or less than {name} usually wins {against} this strong">Vs usual</th>{gold_th}<th data-sort="num">Games</th></tr></thead>
         \\<tbody>

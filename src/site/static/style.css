@@ -177,6 +177,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .card li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 4px 0; }
 .card li > span:first-child { display: flex; align-items: center; gap: 8px; }
 .card li.thin { opacity: 0.6; }
+/* Champion page "also play" (pool.zig section): columns, so a name sits by its numbers */
+.card ul.also { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 300px)); column-gap: 40px; }
 [hidden] { display: none !important; }
 .min-games label { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; }
 .role { color: var(--muted); font-size: 13px; }
@@ -448,7 +450,7 @@ b.down, a.down, .down { color: var(--bad); }
 /* Champions table: the patch change under the rate (tierlist.zig PatchNote) */
 .wv { display: inline-flex; flex-direction: column; align-items: flex-end; line-height: 1; }
 .wv b { line-height: 13px; }
-.wv .pd { margin: 1px 0 0 !important; width: auto !important; font-size: 11px; line-height: 11px; color: var(--c); font-variant-numeric: tabular-nums; }
+.wv .pd { margin: 0 !important; width: auto !important; font-size: 11px; line-height: 10px; color: var(--c); font-variant-numeric: tabular-nums; }
 .wv .pd.faint { color: var(--faint); }
 .wr .ci i { background: var(--c); }
 .wrc { color: var(--c); }
