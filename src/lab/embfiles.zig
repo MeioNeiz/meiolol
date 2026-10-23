@@ -4,6 +4,7 @@
 //! own row). Anything else fails, so a candidate never gets E learnt on a game it scores
 
 const std = @import("std");
+const builtin = @import("builtin");
 const api = @import("api");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
@@ -40,12 +41,12 @@ fn forFit(ctx: *const anyopaque, gpa: Allocator, t: *const api.Train, seed: u64)
         defer gpa.free(text);
         var e = try parse(gpa, text);
         if (try matches(gpa, &e, &counts)) {
-            std.debug.print("embeddings: {s} ({d} games)\n", .{ path, t.games.len });
+            if (!builtin.is_test) std.debug.print("embeddings: {s} ({d} games)\n", .{ path, t.games.len });
             return e;
         }
         e.deinit(gpa);
     }
-    std.debug.print("embeddings: no emb-*-s{d}.tsv in {s} was learnt on these {d} games\n", .{ seed, d.path, t.games.len });
+    if (!builtin.is_test) std.debug.print("embeddings: no emb-*-s{d}.tsv in {s} was learnt on these {d} games\n", .{ seed, d.path, t.games.len });
     return error.NoEmbeddingsForFitSet;
 }
 
