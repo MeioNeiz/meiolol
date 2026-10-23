@@ -146,11 +146,16 @@ fn carry(gpa: std.mem.Allocator, db: Db, comptime table: []const u8, comptime at
 /// PUUIDs `sql` selects, each allocated with `gpa`
 pub fn readList(gpa: std.mem.Allocator, db: Db, sql: []const u8) ![]const []const u8 {
     var list: std.ArrayList([]const u8) = .empty;
-    errdefer freeList(gpa, list.items);
-    errdefer list.deinit(gpa);
+    errdefer {
+        for (list.items) |p| gpa.free(p);
+        list.deinit(gpa);
+    }
     var s = try db.prepare(sql);
     defer s.deinit();
-    while (try s.step()) try list.append(gpa, try gpa.dupe(u8, s.bytes(0)));
+    while (try s.step()) {
+        try list.ensureUnusedCapacity(gpa, 1);
+        list.appendAssumeCapacity(try gpa.dupe(u8, s.bytes(0)));
+    }
     return list.toOwnedSlice(gpa);
 }
 
@@ -186,6 +191,17 @@ const Keys = struct {
         k.limiter.deinit();
     }
 };
+
+test "readList frees what it read when an allocation fails" {
+    const db = try store.schema.memory();
+    defer db.close();
+    try db.exec("INSERT INTO players (puuid, source) VALUES ('a', 't'), ('b', 't'), ('c', 't')");
+    try testing.checkAllAllocationFailures(testing.allocator, struct {
+        fn f(gpa: std.mem.Allocator, d: Db) !void {
+            freeList(gpa, try readList(gpa, d, "SELECT puuid FROM players"));
+        }
+    }.f, .{db});
+}
 
 test "translate goes through the Riot ID" {
     var k: Keys = undefined;
