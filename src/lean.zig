@@ -5,7 +5,7 @@
 //! win_minute (log-odds beyond a logistic of the state then: team gold, XP and the
 //! objectives held). Both additive over the ten picks of a game, one row per game, each
 //! champion-role's effect shrunk toward its role's average pick by a method-of-moments
-//! prior per role (as scaling.zig). Descriptive: who picks a champion is not held fixed,
+//! prior per role (analysis.Prior). Descriptive: who picks a champion is not held fixed,
 //! and "even" is even by these measures. `--check`: the lab's folds and dev-val, never a
 //! game from the test cut on.
 
@@ -485,7 +485,7 @@ pub fn write(w: *Io.Writer, f: *const Fit, ids: []const u32, games: []const Game
 
 // ---- The lab check
 
-/// Fold starts b_0-b_4, the dev cut, the test cut (harness.Cuts, as carry's --cuts)
+/// Fold starts b_0-b_4, the dev cut, the test cut (harness.Cuts)
 pub const Cuts = [7]i64;
 
 pub fn labCuts(e: eval.Cuts) Cuts {

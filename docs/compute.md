@@ -427,7 +427,7 @@ first.
 
 ### 4. Speed, only when a real workload needs it
 
-- Measure first: eval, outcomes and 2a's models on the full snapshot on the gpu-box
+- Measure first: eval and 2a's models on the full snapshot on the gpu-box
 - Dense Newton/Cholesky (logreg.zig) is d^3: fine at d ~850 (champion x role), not for
   pair or embedding features. Then L-BFGS/CG on CPU or a Zig Cholesky kernel on the GPU
   (2a)

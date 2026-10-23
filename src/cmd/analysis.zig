@@ -1,18 +1,14 @@
-//! `meiolol eval`, `outcomes`, `legendaries`, `objectives`, `winchance`, `items`,
-//! `playstyle`, `scaling`, `carry`: model checks and analyses on held-out games
+//! `meiolol eval`, `legendaries`, `objectives`, `winchance`, `playstyle`: model checks
+//! and analyses on held-out games
 
 const std = @import("std");
 const stats = @import("../stats.zig");
 const eval = @import("../eval.zig");
+const ddragon = @import("../ddragon.zig");
 const replay = @import("../replay.zig");
-const outcomes = @import("../outcomes.zig");
 const objectives = @import("../objectives.zig");
 const winchance = @import("../winchance.zig");
-const items = @import("../items.zig");
 const playstyle = @import("../playstyle.zig");
-const scaling = @import("../scaling.zig");
-const carry = @import("../carry.zig");
-const test_looks = @import("../lab/looks.zig");
 const Date = @import("../date.zig").Date;
 const main = @import("../main.zig");
 const Cmd = main.Cmd;
@@ -105,7 +101,7 @@ pub fn cmdEval(c: *Cmd) !u8 {
 
 pub const usage_legendaries =
     \\  legendaries write DATA/legendaries.tsv, the finished items of every patch in the
-    \\              data (Data Dragon; outcomes and meiolol-lab's first_item read it)
+    \\              data (Data Dragon; meiolol-lab's first_item reads it)
     \\              --patch P, --platform P  as for stats
     \\
 ;
@@ -119,40 +115,52 @@ pub fn cmdLegendaries(c: *Cmd) !u8 {
     defer db.close();
     const chosen = if (g.patches.items.len > 0) g.patches.items else try stats.patches(c.arena, db, g.platformIds());
     const path = try std.fs.path.join(c.arena, &.{ c.data_dir, "legendaries.tsv" });
-    const legendaries = try outcomes.loadLegendaries(c.init.gpa, c.arena, c.init.io, path, chosen);
-    std.debug.print("{s}: {d} patches\n", .{ path, legendaries.count() });
+    const n = try updateLegendaries(c.init.gpa, c.arena, c.init.io, path, chosen);
+    std.debug.print("{s}: {d} patches\n", .{ path, n });
     return 0;
 }
 
-pub const usage_outcomes =
-    \\  outcomes    do allies and enemies shift gold@14, lane gold, CS@10, deaths before 15
-    \\              and first item beyond champion and lane? (markdown on stdout)
-    \\
-++ held_out_flags;
-
-pub fn cmdOutcomes(c: *Cmd) !u8 {
-    var g: Games = .{};
-    var o: outcomes.Options = .{};
-    while (c.next()) |_| {
-        if (!try g.parse(c) and !try heldOut(c, &o)) return error.Usage;
+/// Appends to `path` (lines "16.20<TAB>3078") the finished items of each of `patches` it
+/// lacks, from Data Dragon, so later runs need no network; the patches it then holds
+fn updateLegendaries(
+    gpa: std.mem.Allocator,
+    arena: std.mem.Allocator,
+    io: std.Io,
+    path: []const u8,
+    patches: []const []const u8,
+) !usize {
+    var have: std.AutoArrayHashMapUnmanaged(u32, void) = .empty;
+    const cwd = std.Io.Dir.cwd();
+    if (cwd.readFileAlloc(io, path, arena, .limited(16 << 20))) |text| {
+        var lines = std.mem.tokenizeScalar(u8, text, '\n');
+        while (lines.next()) |line| {
+            var it = std.mem.splitScalar(u8, line, '\t');
+            const patch = stats.patchKey(it.next() orelse continue);
+            _ = std.fmt.parseInt(u32, it.next() orelse continue, 10) catch continue;
+            try have.put(arena, patch, {});
+        }
+    } else |err| switch (err) {
+        error.FileNotFound => {},
+        else => return err,
     }
-    const io = c.init.io;
-    const db = try c.open();
-    defer db.close();
-    const platforms = g.platformIds();
-    const chosen = if (g.patches.items.len > 0) g.patches.items else try stats.patches(c.arena, db, platforms);
-    const legendaries = try outcomes.loadLegendaries(
-        c.init.gpa,
-        c.arena,
-        io,
-        try std.fs.path.join(c.arena, &.{ c.data_dir, "legendaries.tsv" }),
-        chosen,
-    );
-    var buf: [64 * 1024]u8 = undefined;
-    var stdout = std.Io.File.stdout().writer(io, &buf);
-    try outcomes.run(c.init.gpa, io, db, chosen, platforms, &legendaries, o, &stdout.interface);
-    try stdout.interface.flush();
-    return 0;
+
+    var appended: std.ArrayList(u8) = .empty;
+    for (patches) |p| {
+        if ((try have.getOrPut(arena, stats.patchKey(p))).found_existing) continue;
+        const items = try ddragon.legendaries(gpa, io, p);
+        defer gpa.free(items);
+        for (items) |item| try appended.print(arena, "{s}\t{d}\n", .{ p, item });
+    }
+    if (appended.items.len > 0) {
+        const file = try cwd.createFile(io, path, .{ .truncate = false });
+        defer file.close(io);
+        var buf: [4096]u8 = undefined;
+        var fw = file.writer(io, &buf);
+        try fw.seekTo(try file.length(io));
+        try fw.interface.writeAll(appended.items);
+        try fw.interface.flush();
+    }
+    return have.count();
 }
 
 pub const usage_objectives =
@@ -218,37 +226,6 @@ pub fn cmdWinchance(c: *Cmd) !u8 {
     return 0;
 }
 
-pub const usage_items =
-    \\  items       does the finished item change the win chance, given the state when it
-    \\              was bought? (markdown on stdout; docs/model.md)
-    \\
-++ held_out_flags;
-
-pub fn cmdItems(c: *Cmd) !u8 {
-    var g: Games = .{};
-    var o: items.Options = .{};
-    while (c.next()) |_| {
-        if (!try g.parse(c) and !try heldOut(c, &o)) return error.Usage;
-    }
-    const io = c.init.io;
-    const db = try c.open();
-    defer db.close();
-    const platforms = g.platformIds();
-    const chosen = if (g.patches.items.len > 0) g.patches.items else try stats.patches(c.arena, db, platforms);
-    const legendaries = try outcomes.loadLegendaries(
-        c.init.gpa,
-        c.arena,
-        io,
-        try std.fs.path.join(c.arena, &.{ c.data_dir, "legendaries.tsv" }),
-        chosen,
-    );
-    var buf: [64 * 1024]u8 = undefined;
-    var stdout = std.Io.File.stdout().writer(io, &buf);
-    try items.run(c.init.gpa, io, db, chosen, platforms, &legendaries, o, &stdout.interface);
-    try stdout.interface.flush();
-    return 0;
-}
-
 pub const usage_playstyle =
     \\  playstyle   does early style (roaming, fights, wards) change the win chance, beyond
     \\              the champion and the state at 14:00? (markdown on stdout; docs/model.md)
@@ -269,106 +246,6 @@ pub fn cmdPlaystyle(c: *Cmd) !u8 {
     var buf: [64 * 1024]u8 = undefined;
     var stdout = std.Io.File.stdout().writer(io, &buf);
     try playstyle.run(c.init.gpa, io, db, chosen, platforms, o, &stdout.interface);
-    try stdout.interface.flush();
-    return 0;
-}
-
-pub const usage_carry =
-    \\  carry       which champions turn their own lead into wins, whose seat decides games,
-    \\              which reward experience, which make games more decided? (markdown on
-    \\              stdout; docs/model.md "Carry and impact")
-    \\              --cuts A,B,C,D,E,DEV,TEST  ms: the lab's 5 fold block starts, dev
-    \\                               and test cuts (default: eval.split's, as the lab's)
-    \\              --patch P, --platform P, --test-share F  as scaling (default 0.15)
-    \\              --test-platform P  region model only: dev-val and test on P's games;
-    \\                               the global model is never scored on a region
-    \\              --final          also score the test games (one look per model)
-    \\              --table FILE     TSV of every champion-role's terms by minute
-    \\              --type-table FILE  TSV of champion type x role x state terms by minute
-    \\              --fold-table FILE  per fold and dev: leverage, scaling, skill per
-    \\                               champion-role fitted before the block
-    \\              --plant COV:SD[:SEED]  redraw winners with a planted champion slope on
-    \\                               lane, kd, dmg or exp, sd SD win pp per unit
-    \\
-;
-
-pub fn cmdCarry(c: *Cmd) !u8 {
-    var g: Games = .{};
-    var o: carry.Options = .{};
-    while (c.next()) |_| {
-        if (try g.parse(c) or try heldOut(c, &o)) continue;
-        if (c.is("--cuts")) {
-            var it = std.mem.splitScalar(u8, try c.value(), ',');
-            for (&o.cuts) |*x| x.* = std.fmt.parseInt(i64, it.next() orelse return error.Usage, 10) catch return error.Usage;
-            if (it.next() != null) return error.Usage;
-        } else if (c.is("--final")) {
-            o.final = true;
-        } else if (c.is("--table")) {
-            o.table = try c.value();
-        } else if (c.is("--fold-table")) {
-            o.fold_table = try c.value();
-        } else if (c.is("--type-table")) {
-            o.type_table = try c.value();
-        } else if (c.is("--plant")) {
-            var it = std.mem.splitScalar(u8, try c.value(), ':');
-            const cov = std.meta.stringToEnum(carry.Cov, it.next().?) orelse return error.Usage;
-            const sd = std.fmt.parseFloat(f64, it.next() orelse return error.Usage) catch return error.Usage;
-            const seed = if (it.next()) |x| std.fmt.parseInt(u64, x, 10) catch return error.Usage else 1;
-            if (cov == .one) return error.Usage;
-            o.plant = .{ .cov = cov, .sd = sd, .seed = seed };
-        } else return error.Usage;
-    }
-    const io = c.init.io;
-    const db = try c.open();
-    defer db.close();
-    const platforms = g.platformIds();
-    const chosen = if (g.patches.items.len > 0) g.patches.items else try stats.patches(c.arena, db, platforms);
-    var buf: [64 * 1024]u8 = undefined;
-    var stdout = std.Io.File.stdout().writer(io, &buf);
-    if (o.final) _ = try test_looks.record(c.init.gpa, io, std.Io.Dir.cwd(), c.data_dir, "meiolol carry", c.args, &stdout.interface);
-    var exclude = if (o.final) try test_looks.Exclude.load(c.init.gpa, io, std.Io.Dir.cwd(), c.data_dir) else null;
-    defer if (exclude) |*e| e.deinit(c.init.gpa);
-    if (exclude) |*e| o.exclude = &e.keys;
-    try carry.run(c.init.gpa, io, db, chosen, platforms, o, &stdout.interface);
-    try stdout.interface.flush();
-    return 0;
-}
-
-pub const usage_scaling =
-    \\  scaling     which champions win more than the gold and XP lead says, by minute
-    \\              (scaling) and by the lead (converting it, coming back)? (markdown on
-    \\              stdout; docs/model.md)
-    \\
-++ held_out_flags ++
-    \\              --table FILE     TSV of every champion-role's effect and slope by minute
-    \\              --state S        baseline: lead (team gold, XP; default), roles (gold
-    \\                               by role: who holds it), objectives (+ objectives held)
-    \\              --slope L        champion x lead term: team (default) or own (own gold
-    \\                               minus the lane opponent's)
-    \\
-;
-
-pub fn cmdScaling(c: *Cmd) !u8 {
-    var g: Games = .{};
-    var o: scaling.Options = .{};
-    while (c.next()) |_| {
-        if (try g.parse(c) or try heldOut(c, &o)) continue;
-        if (c.is("--table")) {
-            o.table = try c.value();
-        } else if (c.is("--state")) {
-            o.state = std.meta.stringToEnum(scaling.State, try c.value()) orelse return error.Usage;
-        } else if (c.is("--slope")) {
-            o.slope = std.meta.stringToEnum(scaling.Slope, try c.value()) orelse return error.Usage;
-        } else return error.Usage;
-    }
-    const io = c.init.io;
-    const db = try c.open();
-    defer db.close();
-    const platforms = g.platformIds();
-    const chosen = if (g.patches.items.len > 0) g.patches.items else try stats.patches(c.arena, db, platforms);
-    var buf: [64 * 1024]u8 = undefined;
-    var stdout = std.Io.File.stdout().writer(io, &buf);
-    try scaling.run(c.init.gpa, io, db, chosen, platforms, o, &stdout.interface);
     try stdout.interface.flush();
     return 0;
 }

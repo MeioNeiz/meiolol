@@ -19,13 +19,9 @@ pub const spread = @import("spread.zig");
 pub const patchday = @import("patchday.zig");
 pub const eval = @import("eval.zig");
 pub const fitted = @import("fitted.zig");
-pub const outcomes = @import("outcomes.zig");
 pub const objectives = @import("objectives.zig");
 pub const winchance = @import("winchance.zig");
-pub const items = @import("items.zig");
 pub const playstyle = @import("playstyle.zig");
-pub const scaling = @import("scaling.zig");
-pub const carry = @import("carry.zig");
 pub const lean = @import("lean.zig");
 pub const draftmodel = @import("draftmodel.zig");
 pub const lanemodel = @import("lanemodel.zig");
@@ -73,14 +69,10 @@ const usage = usage_head ++
     cmd_sitedata.usage_builds ++
     cmd_sitedata.usage_pool ++
     cmd_analysis.usage_eval ++
-    cmd_analysis.usage_outcomes ++
     cmd_analysis.usage_legendaries ++
     cmd_analysis.usage_winchance ++
     cmd_analysis.usage_objectives ++
-    cmd_analysis.usage_items ++
     cmd_analysis.usage_playstyle ++
-    cmd_analysis.usage_scaling ++
-    cmd_analysis.usage_carry ++
     cmd_sitedata.usage_lean ++
     cmd_sitedata.usage_draft_model ++
     cmd_sitedata.usage_lane_model ++
@@ -143,14 +135,10 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "builds", cmd_sitedata.cmdBuilds },
     .{ "pool", cmd_sitedata.cmdPool },
     .{ "eval", cmd_analysis.cmdEval },
-    .{ "outcomes", cmd_analysis.cmdOutcomes },
     .{ "legendaries", cmd_analysis.cmdLegendaries },
     .{ "objectives", cmd_analysis.cmdObjectives },
     .{ "winchance", cmd_analysis.cmdWinchance },
-    .{ "items", cmd_analysis.cmdItems },
     .{ "playstyle", cmd_analysis.cmdPlaystyle },
-    .{ "scaling", cmd_analysis.cmdScaling },
-    .{ "carry", cmd_analysis.cmdCarry },
     .{ "lean", cmd_sitedata.cmdLean },
     .{ "draft-model", cmd_sitedata.cmdDraftModel },
     .{ "lane-model", cmd_sitedata.cmdLaneModel },

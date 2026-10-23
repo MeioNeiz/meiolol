@@ -30,9 +30,9 @@ src/
   lanefile.zig       the tester's lane model file, as draftfile.zig (lab/lane.zig shares it)
   lanemodel.zig      `meiolol lane-model`: lab candidate team2 (imported as a module,
                      build.zig) on every played game as that file, daily on the box
-  analysis.zig       shared by eval, outcomes, items, objectives, scaling: the held-out
-                     split, games with a timeline by role, paired gains,
-                     shrinkage priors and backfitting, prediction files
+  analysis.zig       shared by eval, objectives, playstyle: the held-out split, games
+                     with a timeline by role, paired gains, shrinkage priors,
+                     prediction files
   api/               "Your games" service (`meiolol api`, docs/your-games.md): cache.zig
                      (api.db), fetch.zig (the one Riot caller), game.zig (lane vs curve)
   livestate.zig      the game state by minute from a timeline, per seat and team (shared

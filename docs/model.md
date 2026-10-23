@@ -199,7 +199,8 @@ outcomes and readings decided by Jacob the same day.
 
 ### Team effects on early outcomes, 2026-10-12 (meiolol-3c)
 
-`meiolol outcomes --data SNAP --platform all --preds DIR` (src/outcomes.zig) on
+`meiolol outcomes --data SNAP --platform all --preds DIR` (src/outcomes.zig; retired 23
+Oct, code at 616e0a6) on
 snap-20261012T2055Z. Train 117,806 games, test 10,604 EUW1 games (rows above, with the
 game reaching 15:00: frames[15] at 900000 ms or later), ten rows per game.
 
@@ -417,7 +418,8 @@ Reading:
 
 ### Items given the state at purchase, 2026-10-12 (meiolol-b0)
 
-`meiolol items --data SNAP --platform all --preds DIR` (src/items.zig), same split,
+`meiolol items --data SNAP --platform all --preds DIR` (src/items.zig; retired 23 Oct,
+code at 616e0a6), same split,
 games with a timeline (119,479 train, 10,759 test). Rows: each player's first three
 distinct finished items (the first_item finished set and undo rule): 2.94M train,
 268k test. Baseline: logistic win from the purchase's state per slot (minute, team gold
@@ -559,7 +561,8 @@ Reading:
 
 ### Champion given the state (scaling), 2026-10-13 (meiolol-b0's successor)
 
-`meiolol scaling --data SNAP --platform all --preds DIR --table FILE` (src/scaling.zig),
+`meiolol scaling --data SNAP --platform all --preds DIR --table FILE` (src/scaling.zig;
+retired 23 Oct, code at 616e0a6),
 same split, games reaching 15:00 (117,806 train, 10,604 test), ten rows per game at the
 draft (minute 0) and at 10/15/20/25/30 while still going. Baseline per minute: logistic
 win from the own team's gold lead (with objectives' curve term) and XP lead. On top, in
@@ -3139,7 +3142,8 @@ ensembles tie ratings; the additive model is at -0.0013), so it waits for one.
 ### Carry and impact, 2026-10-14 (meiolol-61)
 
 Jacob (2026-10-13): which champions carry, and which have less effect on the game?
-`meiolol carry --cuts ...` (src/carry.zig), pinned snap-20261012T2055Z, run
+`meiolol carry --cuts ...` (src/carry.zig; retired 23 Oct, code at 616e0a6), pinned
+snap-20261012T2055Z, run
 20261013T223040Z-carry-a (64ada94); test look 20261013T231146Z-carry-final (3f8b9d6,
 look 8 in SNAP/test-looks.tsv; the same models plus a per-role breakdown, folds and
 dev-val identical). Rows: every player at the draft and at
