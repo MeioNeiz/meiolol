@@ -40,7 +40,6 @@ pub const experienced_points = 100_000;
 /// their champion (mastery is a snapshot from when the crawler fetched it, not match time)
 pub const Experience = enum(u8) { any, a, b };
 
-/// Visible rank tiers, never inferred MMR (docs/concept.md)
 /// Comeback odds: games and wins by lane gold difference at these minutes, in buckets
 /// split at these edges (behind 1500+, 500 to 1500, within 500, ahead 500 to 1500, 1500+)
 pub const comeback_minutes = [_]u8{ 10, 15 };
@@ -59,6 +58,7 @@ pub fn bucket(gold: i16) usize {
     return 4;
 }
 
+/// Visible rank tiers, never inferred MMR (docs/concept.md)
 pub const Bracket = enum(u8) {
     all,
     /// Iron to Silver
