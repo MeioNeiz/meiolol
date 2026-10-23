@@ -6,8 +6,9 @@
 # and units install from HEAD's committed copy and meiolol from a clean checkout of HEAD,
 # never the working tree (jomify.sh's rule: 17 Oct, a hand copy ran 3 commits old).
 # Installs are recorded in ~/ml/bin/installed ("meiolol SHA TIME"), which drift reads.
-# Run-time pieces are elsewhere: lab-run.sh copies lab-gates/lab-usage into each run,
-# snapshot.sh copies snapshot-gpu.sh for each make. docs/compute.md
+# WSL's /etc gets deploy/wsl (the lab disk's writeback and queue limits) as root, through
+# wsl.exe -u root. Run-time pieces are elsewhere: lab-run.sh copies lab-gates/lab-usage
+# into each run, snapshot.sh copies snapshot-gpu.sh for each make. docs/compute.md
 #
 #   deploy/gpu-box.sh drift       installed vs HEAD, per piece
 #   deploy/gpu-box.sh install     every piece, then daemon-reload, the watcher restarted
@@ -21,6 +22,9 @@ SCRIPTS=(lab-watch.sh archive-pull.sh backup-mirror.sh)
 UNITS=(meiolol-lab-watch.service meiolol-archive-pull.service meiolol-archive-pull.timer
     meiolol-backup-mirror.service meiolol-backup-mirror.timer)
 TIMERS=(meiolol-archive-pull.timer meiolol-backup-mirror.timer)
+ETC=(sysctl.d/60-meiolol-disk.conf udev/rules.d/60-meiolol-disk.rules)
+# Root without a PATH: commands by full path
+WSL_ROOT="/mnt/c/Windows/System32/wsl.exe -u root -e"
 WATCH=meiolol-lab-watch
 RECORD=ml/bin/installed
 # What the mirror's meiolol is built from, for drift. Lab and GPU code isn't in it
@@ -48,6 +52,7 @@ drift() {
         paths+=("$win/${f##*/}")
         want+=("$(crlf_hash "$f")")
     done < <(windows)
+    for f in "${ETC[@]}"; do paths+=("/etc/$f"); want+=("$(head_hash "deploy/wsl/${f##*/}")"); done
     # One line per path, - when missing
     have=$(ssh "$HOST" "for p in $(printf "'%s' " "${paths[@]}"); do \
         if [ -f \"\$p\" ]; then sha256sum \"\$p\" | cut -d' ' -f1; else echo -; fi; done")
@@ -76,7 +81,7 @@ install() {
     tmp=$(mktemp -d)
     # shellcheck disable=SC2064 # expand now
     trap "rm -rf '$tmp'" EXIT
-    mkdir "$tmp/bin" "$tmp/units"
+    mkdir "$tmp/bin" "$tmp/units" "$tmp/etc"
     for f in "${SCRIPTS[@]}"; do git -C "$ROOT" show "HEAD:deploy/$f" > "$tmp/bin/$f"; done
     chmod 755 "$tmp"/bin/*
     for f in "${UNITS[@]}"; do git -C "$ROOT" show "HEAD:deploy/systemd/$f" > "$tmp/units/$f"; done
@@ -98,6 +103,12 @@ install() {
     while read -r f; do
         git -C "$ROOT" show "HEAD:$f" | sed 's/$/\r/' | ssh "$HOST" "cat > '$win/${f##*/}'"
     done < <(windows)
+    for f in "${ETC[@]}"; do git -C "$ROOT" show "HEAD:deploy/wsl/${f##*/}" > "$tmp/etc/${f##*/}"; done
+    scp -q "$tmp"/etc/* "$HOST:/tmp/"
+    ssh "$HOST" "for f in ${ETC[*]}; do $WSL_ROOT install -m 644 /tmp/\${f##*/} /etc/\$f || exit 1; \
+        rm /tmp/\${f##*/}; done; $WSL_ROOT /usr/sbin/sysctl -q --system \
+        && $WSL_ROOT /usr/bin/udevadm control --reload \
+        && $WSL_ROOT /usr/bin/udevadm trigger --action=change --subsystem-match=block"
     ssh "$HOST" "loginctl enable-linger \$USER; systemctl --user daemon-reload \
         && systemctl --user enable -q $WATCH ${TIMERS[*]} \
         && systemctl --user restart $WATCH \

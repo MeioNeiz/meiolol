@@ -1,0 +1,4 @@
+# The gpu-box's WSL, /etc/udev/rules.d (deploy/gpu-box.sh install; docs/compute.md "Disk
+# resets"): at most 32 commands of 512 KB in flight to the Crucial P3 (default 1584 of
+# 1.25 MB), so none waits long enough behind the queue for Windows to reset the drive
+ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="sd[a-z]", ATTRS{model}=="CT2000P3PSSD8*", ATTR{device/queue_depth}="32", ATTR{queue/max_sectors_kb}="512"
