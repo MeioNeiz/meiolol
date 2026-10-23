@@ -57,7 +57,7 @@ pub const Sets = struct {
     tests: Set = .{},
 
     pub fn deinit(s: *Sets, gpa: std.mem.Allocator) void {
-        inline for (.{ &s.inner, &s.val, &s.train, &s.tests }) |set| set.deinit(gpa);
+        for ([_]*Set{ &s.inner, &s.val, &s.train, &s.tests }) |set| set.deinit(gpa);
     }
 };
 

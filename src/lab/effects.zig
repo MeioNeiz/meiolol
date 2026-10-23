@@ -79,10 +79,6 @@ const Options = struct {
 /// v2: identified matchups (additive.Variant.matchupGroups); v1: the 25 enemy blocks
 const Param = enum { v1, v2 };
 
-fn fullVariant(param: Param, cont: u8) A.Variant {
-    return addinputs.fullVariant(param == .v2, cont);
-}
-
 /// Calibration rounds (additive.calibrate's iters)
 const cal_rounds = 8;
 const cal_seed = 0xca1;
@@ -227,7 +223,7 @@ fn models(arena: std.mem.Allocator, param: Param) ![]Model {
         if (lanePair(r, q)) lane = lane.with(A.enemyGroup(r, q));
         enemy = enemy.with(A.enemyGroup(r, q));
     };
-    const full = fullVariant(param, 1);
+    const full = addinputs.fullVariant(param == .v2, 1);
     var nomix = full;
     nomix.cont = 0;
     var out: std.ArrayList(Model) = .empty;
@@ -674,7 +670,7 @@ fn components(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: Io, d: *cons
     var lw = lf.writer(io, &lbuf);
     try lw.interface.writeAll("outcome\tblock\tchampion_a\tchampion_b\tgames\teffect\tci\tunit\n");
 
-    const full = fullVariant(opts.param, 1);
+    const full = addinputs.fullVariant(opts.param == .v2, 1);
     if (soft != null and teacher_games.items.len < win_games.items.len) {
         try w.print("teacher covers {d} of {d} dev games: no student table\n", .{ teacher_games.items.len, win_games.items.len });
         teacher_games.clearRetainingCapacity();

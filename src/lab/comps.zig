@@ -3,7 +3,8 @@
 //! frontline, CC, peel, siege, vision, objectives, waveclear, fights, roams, items, early
 //! power, scaling) from fit games only, per fold: each the average of the champion-role's
 //! mean in won and in lost games (end of game stats lean to the winner), shrunk to the
-//! role mean, then z within role. Also the comp_stats loader and the tests' statistics
+//! role mean, then z within role. Also the comp_stats loader, normal p-values,
+//! Benjamini-Hochberg and a small matrix inverse
 
 const std = @import("std");
 const api = @import("api");
