@@ -96,6 +96,11 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
   techniques for correcting between each patch". Overrides J25's switch to latest patch
   only once it fills: the model always pools old patches plus a patch correction; still
   scored on latest-patch games (patch-transfer.md)
+- J29 (24 Oct) Front end from the ground up, long term: one UI for the site and the
+  desktop app; components and the stack under them decided on evidence, nothing kept
+  because it exists ("dvui was a very early decision"); a plan per page and Jacob's
+  review before building; new features built the new way. Review:
+  docs/review/page-review-2026-10-24.md; direction: docs/frontend.md
 - nn on the GPU: planned, not now
 - Q1 Rewrite the application around game review of your own games, lane curves as the
   benchmark; squads worded as planned, or out until built

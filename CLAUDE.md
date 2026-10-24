@@ -88,6 +88,8 @@ docs/plan.md "Now". Read it first.
   (4.5k lines: read its Start here, then one section). Measure any recommender change
   there first
 - Data sources and what was ruled out (and why): docs/data.md. Read before adding one
+- Front end, site and desktop (one UI, rebuilt from the ground up): docs/frontend.md;
+  read before any UI work
 - Production key requirements and policy limits on what the app may show:
   docs/production-key.md; sources and quotes in research/ (josearch store, see
   research/README.md)

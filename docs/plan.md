@@ -46,17 +46,10 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
    matchups index table; Daily Draft facts, reveal, last pick, J10 recent games; Learn
    one per screen; site-wide colour scale and denser frame; mock champ select on the
    Mac (deploy/mock-cs.sh); privacy rules audit (docs/privacy-rules.md)
-3. Front end (Jacob 20 Oct: styling, JS and templates "really holding us back" for
-   app development, wants time on it soon): scoped in docs/frontend-rework.md,
-   recommends Option A (ui.zig components, CSS tokens and layers, one JS core, hashed
-   assets, wasm for the filters redraw, Playwright QA at 390/1280 px; ~8-10 days
-   foundation, pages move with design steps 4-9). 22 Oct update in the same doc: all
-   feature code in Zig (zero JS is impossible; zjb bridge patched for 0.17, a tpl island
-   spike ran with a 5-line loader; server fragments for big data), guardrails from
-   design-ideas.md made checkable
-   (words, tap targets, colour), qa.sh and a gallery first. Jacob 23 Oct: the pain is
-   both the site and the desktop window, so one UI for both; the WebView2 spike against
-   dvui moves into the order (doc's "23 Oct"). Waits on Jacob: go or not
+3. Front end from the ground up (J29, 24 Oct): one UI for the site and the desktop.
+   Team run 2026-10-24-ui wrote the page plans and the foundation (docs/plan/ui/); the
+   stack decision runs by spikes (docs/plan/ui/stack.md); then Jacob reviews, then the
+   foundation build. Direction: docs/frontend.md. Earlier scoping: docs/frontend-rework.md
 4. Next on the site, by size of win: champion and matchup pages to the leaders' level
    (Jacob 22 Oct: "match" LoLalytics; gaps, measurements and target layout in
    docs/champion-matchup.md): site.md CH0 (Jacob's choices), CH1-CH9, MU1-MU8, first
