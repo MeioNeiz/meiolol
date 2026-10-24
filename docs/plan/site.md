@@ -257,7 +257,9 @@ opponent grid are its first components.
   own views part; two cards after the opponents, By patch (win line, pick bars, rank in
   role per patch) over the patch line, By game length over the lean line, each line one
   sentence. The db holds 16.19 (part) to 16.21, so 3 patches until more come. MU5 reads
-  Trend.lane, 3 buckets by Trend.merged
+  Trend.lane, 3 buckets by Trend.merged. Live (b3db03b): Kayle Top 41%, 38%, 50%, 56%,
+  59% from short to long games (late lean, +15 points from even); Darius Top 49% to 51%
+  with 48.5% at 35+ (early lean, mild: its gold and its even-game wins mostly cancel)
 - CH6 Build page compact. Tables at content width (numbers beside the name, not 1,000
   px away), the method paragraph a one-line link, items by slot and skill order tables
   from CH2. Done when no Darius Top build table is wider than ~900 px at 1920 and the
