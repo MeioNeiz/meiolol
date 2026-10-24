@@ -199,9 +199,8 @@ pub fn strip(site: *const Site, w: *Writer, ch: Champ, r: Role, from: []const u8
 }
 
 /// Matchup page: what `x` players took against `y` in `r` (File.matchups), each cell
-/// marked when it is also x's most played in the role, beside every rune's pick and win
-/// rate there, the runes taken more or less often than usual (runeShifts) on top.
-/// Nothing when the pair has too few games for the file. `from`: the page's path
+/// marked when it is also x's most played in the role. Nothing when the pair has too few
+/// games for the file. `from`: the page's path
 pub fn vsStrip(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ, from: []const u8) !void {
     const pv = patchView(site);
     const picked = pick(site, pv, File.getVs, .{ x.id, r, y.id }) orelse return;
@@ -235,10 +234,21 @@ pub fn vsStrip(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ, from:
     try top(w, f, b, usual, .core2, "First 2 items");
     try top(w, f, b, usual, .core3, "First 3 items");
     try top(w, f, b, usual, .skills, "Skill priority");
-    try w.writeAll("</div></section>\n");
+    try w.writeAll("</div></section></div>\n");
+}
+
+/// Matchup page, under its charts: every rune's pick and win rate against `y`, the runes
+/// taken more or less often than in x's other games (runeShifts) beside them
+pub fn vsRunes(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ) !void {
+    const pv = patchView(site);
+    const picked = pick(site, pv, File.getVs, .{ x.id, r, y.id }) orelse return;
+    const f = picked.f;
+    const b = picked.b;
+    const usual = f.get(x.id, r);
+    const chip = site.chip(site.regionDim(pv.region), try picked.chipPeriod(site), rankDim(f.min_tier));
     if (f.trees.len > 0 and b.get(.rune) != null) {
         const shifts = try runeShifts(site.arena, b, usual);
-        try tpl.renderPart(w, "<section class=\"mu-card\"><h2>Runes against {y} {chip}</h2><div class=\"mu-rbody\"><div>\n", .{ .y = y.name, .chip = chip });
+        try tpl.renderPart(w, "<div class=\"mu-build\"><section class=\"mu-card\"><h2>Runes against {y} {chip}</h2><div class=\"mu-rbody\"><div>\n", .{ .y = y.name, .chip = chip });
         _ = try runeStats(w, f, b, true);
         try tpl.renderPart(w, "</div><div>\n", .{});
         if (shifts.len > 0) {
@@ -253,9 +263,8 @@ pub fn vsStrip(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ, from:
             }
             try tpl.renderPart(w, "</ul>\n<p class=\"mu-note\">Share of {x} players against {y}, then in {x}'s other {lane} games; runes {gap}+ points apart.</p>\n", .{ .x = x.name, .y = y.name, .lane = root.roleName(r), .gap = shift_points });
         } else try tpl.renderPart(w, "<p class=\"mu-note\">Every rune picked within {gap} points of {x}'s other {lane} games.</p>\n", .{ .gap = shift_points, .x = x.name, .lane = root.roleName(r) });
-        try w.writeAll("</div></div></section>\n");
+        try w.writeAll("</div></div></section></div>\n");
     }
-    try w.writeAll("</div>\n");
 }
 
 /// A rune counts as taken differently in a matchup when its pick share is this many

@@ -27,6 +27,9 @@ pub const Chart = struct {
     /// SVG units; text is a fixed size in them, so a chart drawn small wants fewer
     width: u16 = 640,
     height: u16 = 240,
+    /// Set: only the band's first `fit` minutes set the scale and later band clips. The
+    /// band widens far past the lane (±3,000 gold at 30 min) while the line stays near 0
+    fit: usize = 0,
 };
 
 /// Before this minute nearly every game is still running (no surrender vote yet)
@@ -40,18 +43,32 @@ pub fn longest(c: Chart) usize {
 pub fn render(w: *Writer, c: Chart) !void {
     const n = longest(c);
     if (n < 2) return;
-    var max_abs: u32 = 0;
-    for (c.band) |b| max_abs = @max(max_abs, @abs(b[0]), @abs(b[1]));
-    for (c.line) |v| max_abs = @max(max_abs, @abs(v));
-    for (c.you) |v| max_abs = @max(max_abs, @abs(v));
-    for (c.prev) |v| max_abs = @max(max_abs, @abs(v));
-    const g: Geometry = .{ .scale = niceCeil(@intCast(max_abs)), .longest = n, .width = c.width, .height = c.height };
+    // Each side its own top: a lean or a one-sided game gets the room, the smaller side
+    // at least a third of the larger so its tick label clears 0's
+    var up: i32 = 0;
+    var down: i32 = 0;
+    const fitted = if (c.fit > 0) c.band[0..@min(c.fit, c.band.len)] else c.band;
+    for (fitted) |b| for (b) |v| {
+        up = @max(up, v);
+        down = @max(down, -v);
+    };
+    for ([_][]const i32{ c.line, c.you, c.prev }) |vs| for (vs) |v| {
+        up = @max(up, v);
+        down = @max(down, -v);
+    };
+    const g: Geometry = .{
+        .hi = niceCeil(@max(up, @divTrunc(down, 3))),
+        .lo = niceCeil(@max(down, @divTrunc(up, 3))),
+        .longest = n,
+        .width = c.width,
+        .height = c.height,
+    };
     try tpl.renderPart(w, "<svg viewBox=\"0 0 {width} {height}\" role=\"img\" aria-label=\"{aria}\">\n", .{
         .width = c.width,
         .height = c.height,
         .aria = c.aria,
     });
-    for ([_]i32{ g.scale, 0, -g.scale }) |tick| {
+    for ([_]i32{ g.hi, 0, -g.lo }) |tick| {
         try tpl.render(w,
             \\<line class="{class}" x1="{left}" x2="{right}" y1="{y:.1}" y2="{y:.1}"/><text x="{label_x}" y="{label_y:.1}" text-anchor="end">{sign}{tick}</text>
             \\
@@ -140,9 +157,10 @@ const Signed = struct {
     }
 };
 
-/// Chart area in SVG units; values map onto it by the chart's scale
+/// Chart area in SVG units; values from -lo to hi map onto it
 const Geometry = struct {
-    scale: i32,
+    hi: i32,
+    lo: i32,
     longest: usize,
     width: f64,
     height: f64,
@@ -158,9 +176,10 @@ const Geometry = struct {
     }
 
     fn py(g: Geometry, value: i32) f64 {
-        const v: f64 = @floatFromInt(value);
-        const half = (g.height - top - bottom) / 2.0;
-        return top + half - v / @as(f64, @floatFromInt(g.scale)) * half;
+        const v: f64 = @floatFromInt(std.math.clamp(value, -g.lo, g.hi));
+        const hi: f64 = @floatFromInt(g.hi);
+        const span: f64 = @floatFromInt(g.hi + g.lo);
+        return top + (hi - v) / span * (g.height - top - bottom);
     }
 };
 
@@ -185,11 +204,15 @@ const Points = struct {
     }
 };
 
-/// The axis top: the next 1, 2, 3, 4, 5, 6 or 8 times a power of ten at or above `value`
+/// The axis top: the next 1, 1.5, 2, 2.5, 3, 4, 5, 6 or 8 times a power of ten at or
+/// above `value`, whole numbers only
 pub fn niceCeil(value: i32) i32 {
     var step: i32 = 1;
     while (true) : (step *= 10) {
-        for ([_]i32{ 1, 2, 3, 4, 5, 6, 8 }) |k| if (k * step >= value) return k * step;
+        for ([_]i32{ 10, 15, 20, 25, 30, 40, 50, 60, 80 }) |k| {
+            if (@rem(k * step, 10) != 0) continue;
+            if (@divExact(k * step, 10) >= value) return @divExact(k * step, 10);
+        }
     }
 }
 
@@ -208,7 +231,18 @@ test "a band, its line and one game" {
     try std.testing.expect(std.mem.startsWith(u8, out, "<svg viewBox=\"0 0 640 240\" role=\"img\" aria-label=\"gold of A &amp; B\">"));
     try std.testing.expect(std.mem.find(u8, out, "<polyline class=\"you\"") != null);
     try std.testing.expect(std.mem.endsWith(u8, out, "</svg>\n"));
-    try std.testing.expectEqual(@as(i32, 200), niceCeil(150));
+    try std.testing.expectEqual(@as(i32, 150), niceCeil(150));
+    try std.testing.expectEqual(@as(i32, 2), niceCeil(2));
+    try std.testing.expect(std.mem.find(u8, out, ">+150</text>") != null);
+    try std.testing.expect(std.mem.find(u8, out, ">-50</text>") != null);
+}
+
+test "a fitted band clips past its minutes" {
+    var aw: Writer.Allocating = .init(std.testing.allocator);
+    defer aw.deinit();
+    try render(&aw.writer, .{ .aria = "gold", .a = "A", .b = "B", .band = &.{ .{ -100, 100 }, .{ -400, 400 }, .{ -3000, 3000 } }, .line = &.{ 0, 50, 100 }, .fit = 2 });
+    try std.testing.expect(std.mem.find(u8, aw.written(), ">+400</text>") != null);
+    try std.testing.expect(std.mem.find(u8, aw.written(), "3000") == null);
 }
 
 test "previous patch line, dashed, inside the scale" {

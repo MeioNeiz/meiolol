@@ -852,9 +852,23 @@ table.og, .og thead, .og tbody { display: block; }
 }
 /* Matchup page (matchup.zig): cards, all on screen. x is the page's champion, y the
    opponent: one colour each wherever a mark belongs to a side */
-main:has(> .mu-tiles) { --mu-x: #3f97ee; --mu-y: #f0596b; }
-p.mu-sum { margin: 12px 0 10px; max-width: 820px; font-weight: 500; }
-.mu-tiles { margin-bottom: 12px; }
+main:has(.mu-tiles) { --mu-x: #3f97ee; --mu-y: #f0596b; }
+.mu-hero { gap: 16px; }
+.mu-hero img { width: 44px; height: 44px; border-radius: 10px; }
+.mu-hero .swap { width: 30px; height: 30px; font-size: 15px; }
+.mu-hero > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; }
+.mu-hero h1 { margin: 0; font-size: 24px; }
+@media (max-width: 640px) {
+  .mu-hero { flex-wrap: wrap; row-gap: 6px; }
+  .mu-hero > div { display: contents; }
+  .mu-hero p { flex-basis: 100%; }
+}
+.mu-nav { margin-top: 10px; }
+.mu-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; margin: 6px 0 12px; }
+.mu-strip .tiles { margin: 0; gap: 8px; }
+.mu-tiles > div { padding: 6px 12px; min-width: 112px; }
+.mu-tiles b { font-size: 19px; }
+p.mu-sum { flex: 1 1 360px; margin: 0; max-width: 820px; font-weight: 500; }
 .mu-tiles b.vs { color: var(--c); }
 .mu-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; min-width: 0; }
 .mu-card h2 { font-size: 13px; font-weight: 600; color: var(--t2); margin: 0 0 8px; letter-spacing: 0.01em; }
@@ -862,11 +876,11 @@ p.mu-sum { margin: 12px 0 10px; max-width: 820px; font-weight: 500; }
 .mu-note { color: var(--faint); font-size: 12px; margin: 6px 0 0; }
 .mu-main, .mu-cards, .mu-build { display: grid; gap: 12px; margin: 0 0 12px; }
 @media (min-width: 1000px) {
-  .mu-main { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); }
+  .mu-main { grid-template-columns: minmax(0, 2.6fr) minmax(340px, 1fr); }
 }
 .mu-cards { grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); }
-.mu-gold .chart text { font-size: 11px; }
-.mu-gold .chart .side { font-size: 11px; }
+.mu-trio { display: grid; gap: 10px 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); }
+.mu-cap { color: var(--faint); font-size: 12px; margin: 6px 0 0; }
 .mu-card .chart { max-width: none; }
 .mu-card .chart svg { background: none; border: 0; border-radius: 0; }
 .mu-card .chart figcaption { font-size: 12px; color: var(--faint); margin-top: 4px; }
@@ -878,8 +892,8 @@ p.mu-sum { margin: 12px 0 10px; max-width: 820px; font-weight: 500; }
 .mu-card .k.prev, .featured .k.prev { border-top-color: #b4b7bd; }
 .chart .hit { fill: transparent; }
 .chart .hit:hover { fill: rgba(255, 255, 255, 0.06); }
-/* SVG units: the small charts (400 wide) draw at about 300px */
-.chart.mu-small text, .chart.mu-small .side { font-size: 14px; }
+/* SVG units: the three charts (360 wide) draw at 300 to 380 px */
+.chart.mu-small text, .chart.mu-small .side { font-size: 11px; }
 .k { display: inline-block; width: 14px; height: 8px; margin: 0 4px 0 8px; vertical-align: 0; border-radius: 2px; }
 .k:first-child { margin-left: 0; }
 .k.line { height: 2.5px; background: var(--accent); }
@@ -897,7 +911,7 @@ p.mu-sum { margin: 12px 0 10px; max-width: 820px; font-weight: 500; }
 .h2h-x::before { background: var(--mu-x); margin-left: 0; }
 .h2h-y::after { background: var(--mu-y); margin-right: 0; }
 .h2h > span:empty { display: none; }
-.h2h-l { grid-column: 1 / -1; text-align: center; color: var(--muted); font-size: 11.5px; margin-top: 5px; }
+.h2h-l { grid-column: 1 / -1; text-align: center; color: var(--muted); font-size: 11.5px; margin-top: 3px; }
 .h2h-v { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text); }
 .h2h-v:last-child, .h2h-v + .h2h-gap + .h2h-v, .h2h-bar.r + .h2h-v { text-align: right; }
 .h2h-v.lo { color: var(--muted); font-weight: 500; }
@@ -906,7 +920,9 @@ p.mu-sum { margin: 12px 0 10px; max-width: 820px; font-weight: 500; }
 .h2h-bar i { display: block; height: 100%; }
 .h2h-bar .x { background: var(--mu-x); border-radius: 4px 0 0 4px; }
 .h2h-bar .y { background: var(--mu-y); border-radius: 0 4px 4px 0; }
-.h2h-gap { grid-column: 2 / 4; text-align: center; color: var(--faint); font-size: 12px; }
+.h2h-gap { grid-column: 2 / 4; text-align: center; color: var(--faint); font-size: 12px; margin-top: 6px; }
+.h2h-gap span { color: var(--muted); font-size: 11.5px; }
+.h2h-v.h2h-t { margin-top: 6px; }
 /* Champion page charts by patch and game length (trend.zig) */
 .trends { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 400px)); gap: 12px 32px; margin: 18px 0 8px; }
 .trend h3 { font-size: 14px; font-weight: 600; margin: 0 0 6px; }

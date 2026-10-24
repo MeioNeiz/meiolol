@@ -361,7 +361,7 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     try html.head(w, p);
     const swap = try file(a, y, x);
     try tpl.render(w,
-        \\<div class="hero"><img src="{x_icon}" alt="" width="72" height="72"><a class="swap" href="{swap}" title="Swap sides: {y} vs {x}" aria-label="Swap sides: {y} vs {x}">⇄</a><img src="{y_icon}" alt="" width="72" height="72"><div><h1>{x} vs {y}</h1>
+        \\<div class="hero mu-hero"><img src="{x_icon}" alt="" width="44" height="44"><a class="swap" href="{swap}" title="Swap sides: {y} vs {x}" aria-label="Swap sides: {y} vs {x}">⇄</a><img src="{y_icon}" alt="" width="44" height="44"><div><h1>{x} vs {y}</h1>
         \\<p class="muted">{chip} From {x}'s side: {lane} lane, ranked solo/duo {region}, {when}, Platinum+.</p></div></div>
         \\<nav class="mu-nav" aria-label="Other matchups"><a class="btn" href="{swap}">⇄ From {y}'s side</a>
         \\{champions}{opponents}</nav>
@@ -393,25 +393,31 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     const vs = try variants(a, curves, r, x, y);
     const base = curves.baseline(r, .all);
     const o = odds(&site.stats, r, x, y, champion.usualK(&site.stats, r));
-    try headline(w, o, v, r, x, y);
+    // Everything on screen at once as cards: the numbers in one strip, the pair's build
+    // (what most players open a matchup for), the three curves beside both sides'
+    // numbers, then comebacks, splits and supports, the runes last
+    try tpl.renderPart(w, "<div class=\"mu-strip\">\n", .{});
     try tiles(site, w, o, v, r, x, y, when);
-    // Everything on screen at once as cards: the gold curve beside both sides' numbers,
-    // then XP, CS, comebacks and the splits, then the build
-    try tpl.renderPart(w, "<div class=\"mu-main\"><section class=\"mu-card mu-gold\"><h2>Gold difference</h2>\n", .{});
-    try chartOne(w, v, base, prevLine(site, r, x, y), .gold, "gold", x, y, when, lane, false);
+    try headline(w, o, v, r, x, y);
+    try tpl.renderPart(w, "</div>\n", .{});
+    try builds.vsStrip(site, w, r, x, y, page_path);
+    try tpl.renderPart(w, "<div class=\"mu-main\"><section class=\"mu-card mu-curves\"><div class=\"mu-trio\">\n", .{});
+    const prev = prevLine(site, r, x, y);
+    for ([_]struct { []const u8, curvesfile.Metric, []const u8 }{ .{ "Gold difference", .gold, "gold" }, .{ "Experience difference", .xp, "XP" }, .{ "CS difference", .cs, "CS" } }) |c| {
+        try tpl.renderPart(w, "<div><h2>{title}</h2>\n", .{ .title = c[0] });
+        try chartOne(w, v, base, if (c[1] == .gold) prev else null, c[1], c[2], x, y, when, lane, true);
+        try tpl.renderPart(w, "</div>\n", .{});
+    }
+    try tpl.renderPart(w, "</div>\n", .{});
+    if (reach(v) >= 2) try caption(w, v, base, if (prev != null and reach(prev.?.v) >= 2) prev else null, when, lane, false);
     try tpl.renderPart(w, "</section>\n", .{});
     try h2h(w, v, x, y);
     try tpl.renderPart(w, "</div>\n<div class=\"mu-cards\">\n", .{});
-    for ([_]struct { []const u8, curvesfile.Metric, []const u8 }{ .{ "Experience difference", .xp, "XP" }, .{ "CS difference", .cs, "CS" } }) |c| {
-        try tpl.renderPart(w, "<section class=\"mu-card\"><h2>{title}</h2>\n", .{ .title = c[0] });
-        try chartOne(w, v, base, null, c[1], c[2], x, y, when, lane, true);
-        try tpl.renderPart(w, "</section>\n", .{});
-    }
     try comeback.card(w, curves, r, x, y);
     try splits(w, curves, vs, r, x, y);
     try duos(site, w, r, x, y);
     try tpl.renderPart(w, "</div>\n", .{});
-    try builds.vsStrip(site, w, r, x, y, page_path);
+    try builds.vsRunes(site, w, r, x, y);
     const to_site = try site.toShared(page_path);
     try tpl.render(w,
         \\<p class="muted"><a href="{x_href}">{x}</a> · <a href="{y_href}">{y}</a> · <a href="{up}method.html">Method</a></p>
@@ -722,13 +728,13 @@ fn times(w: *Writer, label: []const u8, both: [2]u16) !void {
     const diff = @as(i32, both[0]) - @as(i32, both[1]);
     const known = both[0] != 0 and both[1] != 0;
     try tpl.render(w,
-        \\<span class="h2h-l">{label}</span><b class="h2h-v{xa}">{a}</b><span class="h2h-gap">{gap}</span><b class="h2h-v{yb}">{b}</b>
+        \\<b class="h2h-v h2h-t{xa}">{a}</b><span class="h2h-gap"><span>{label}</span>{gap}</span><b class="h2h-v h2h-t{yb}">{b}</b>
         \\
     , .{
         .label = label,
         .xa = tpl.when(known and diff > 0, " lo"),
         .a = tpl.call(clockOr, .{both[0]}),
-        .gap = tpl.when(known and diff != 0, tpl.t("{d} apart", .{ .d = tpl.call(duration, .{@abs(diff)}) })),
+        .gap = tpl.when(known and diff != 0, tpl.t(" <small>{d} apart</small>", .{ .d = tpl.call(duration, .{@abs(diff)}) })),
         .yb = tpl.when(known and diff < 0, " lo"),
         .b = tpl.call(clockOr, .{both[1]}),
     });
@@ -1000,8 +1006,8 @@ fn prevLine(site: *const Site, r: Role, x: Champ, y: Champ) ?Prev {
 }
 
 /// Estimated average line and middle-half band of `metric` by minute, each minute
-/// titled with both; `prev` dashed. A `small` chart (XP, CS beside the gold one) has no
-/// caption: the gold one's says what the marks are
+/// titled with both; `prev` dashed. A `small` chart (one of the matchup page's three) has
+/// no caption: the page gives one for all three
 fn chartOne(
     w: *Writer,
     v: View,
@@ -1044,20 +1050,26 @@ fn chartOne(
         .line = line[0..last],
         .prev = prev_line[0..prev_last],
         .tips = unit,
-        .width = if (small) 400 else 640,
-        .height = if (small) 280 else 250,
+        .width = if (small) 360 else 640,
+        .height = if (small) 270 else 250,
+        .fit = fit_minutes,
     });
-    if (!small) try caption(w, v, base, if (prev_last >= 2) prev else null, when, lane);
+    if (!small) try caption(w, v, base, if (prev_last >= 2) prev else null, when, lane, true);
     try tpl.renderPart(w, "</figure>\n", .{});
 }
 
-/// What the marks are, in one line; the minutes' numbers are in the chart's hover titles
-fn caption(w: *Writer, v: View, base: ?View, prev: ?Prev, when: []const u8, lane: []const u8) !void {
+/// The axis fits the band to here: the lane and the first fights, before the spread of
+/// long games (±3,000 gold) flattens every line to 0
+const fit_minutes = 20;
+
+/// What the marks are, in one line; the minutes' numbers are in the chart's hover titles.
+/// Outside a figure: the matchup page's one line under its three charts
+fn caption(w: *Writer, v: View, base: ?View, prev: ?Prev, when: []const u8, lane: []const u8, in_figure: bool) !void {
     const last = reach(v);
     const own = v.games() >= thin_games or base == null;
+    try w.writeAll(if (in_figure) "<figcaption>" else "<p class=\"mu-cap\">");
     try tpl.render(w,
-        \\<figcaption><span class="k line"></span>average <span class="k band"></span>middle half of {band}{base}{ended}{prev} · games with timelines, {when}</figcaption>
-        \\
+        \\<span class="k line"></span>average <span class="k band"></span>middle half of {band}{base}{ended}{prev} · games with timelines, {when}
     , .{
         .band = tpl.when(own, "games"),
         .base = tpl.when(!own, tpl.t("all {lane} lanes (few games here)", .{ .lane = lane })),
@@ -1065,6 +1077,7 @@ fn caption(w: *Writer, v: View, base: ?View, prev: ?Prev, when: []const u8, lane
         .prev = if (prev) |pv| tpl.t(" <span class=\"k prev\"></span>patch {patch}", .{ .patch = pv.patch }) else null,
         .when = when,
     });
+    try w.writeAll(if (in_figure) "</figcaption>\n" else "</p>\n");
 }
 
 /// Surrender opens at 15 minutes: before it nearly all games are still running
@@ -1074,8 +1087,8 @@ test "nice scale" {
     try std.testing.expectEqual(1, lanechart.niceCeil(0));
     try std.testing.expectEqual(500, lanechart.niceCeil(420));
     try std.testing.expectEqual(600, lanechart.niceCeil(501));
-    try std.testing.expectEqual(2000, lanechart.niceCeil(1001));
-    try std.testing.expectEqual(3000, lanechart.niceCeil(2120));
+    try std.testing.expectEqual(1500, lanechart.niceCeil(1001));
+    try std.testing.expectEqual(2500, lanechart.niceCeil(2120));
 }
 
 test "one page per matchup, though experienced players' curves share its pair" {

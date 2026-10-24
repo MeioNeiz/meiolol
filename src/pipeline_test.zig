@@ -270,7 +270,7 @@ test "fixture games to stats, curves and the website" {
         // All on screen as cards: a headline against usual, tiles (vs usual:
         // champion.VsUsual), the gold curve beside head to head bars, XP and CS curves
         // (hover titles per minute), comeback chart, by rank and mastery
-        .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "<p class=\"verdict mu-sum\">Mordekaiser wins ", "% against Darius, ", "% in all Top games.", "<small>Mordekaiser, in gold</small>", "<div class=\"tiles mu-tiles\">", "<span>Vs usual</span>", "Mordekaiser usually wins about", "<span>Gold at 14 min</span>", "<section class=\"mu-card mu-gold\"><h2>Gold difference</h2>", "<title>14 min: ", "<section class=\"mu-card mu-h2h thin\"><h2>Head to head</h2>", "<span class=\"h2h-l\">Kill on the other, 0 to 6 min</span>", "<span class=\"h2h-l\">Level 6</span>", "<h2>Experience difference</h2>", "<h2>CS difference</h2>", "<section class=\"mu-card mu-comeback\"><h2>Win rate by gold at 10 min</h2>", "<section class=\"mu-card mu-split\"><h2>By rank and mastery</h2>", "Iron to Silver" } },
+        .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "<p class=\"verdict mu-sum\">Mordekaiser wins ", "% against Darius, ", "% in all Top games.", "<small>Mordekaiser, in gold</small>", "<div class=\"tiles mu-tiles\">", "<span>Vs usual</span>", "Mordekaiser usually wins about", "<span>Gold at 14 min</span>", "<div class=\"mu-strip\">\n<div class=\"tiles mu-tiles\">", "<section class=\"mu-card mu-curves\"><div class=\"mu-trio\">\n<div><h2>Gold difference</h2>", "<p class=\"mu-cap\"><span class=\"k line\"></span>average", "<title>14 min: ", "<section class=\"mu-card mu-h2h thin\"><h2>Head to head</h2>", "<span class=\"h2h-l\">Kill on the other, 0 to 6 min</span>", "<span class=\"h2h-gap\"><span>Level 6</span>", "<h2>Experience difference</h2>", "<h2>CS difference</h2>", "<section class=\"mu-card mu-comeback\"><h2>Win rate by gold at 10 min</h2>", "<section class=\"mu-card mu-split\"><h2>By rank and mastery</h2>", "Iron to Silver" } },
         // Either side's page, each swapping to the other
         .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "<h1>Mordekaiser vs Darius</h1>", "class=\"swap\" href=\"darius-vs-mordekaiser.html\"" } },
         // Bot lane partners (MU4): each side's supports, and a support matchup's bot laners
@@ -317,6 +317,19 @@ test "fixture games to stats, curves and the website" {
             std.debug.print("{s} lacks {s}\n", .{ pg[0], want });
             return error.TestUnexpectedResult;
         };
+    }
+    // Matchup first screen (MU3): the numbers, the pair's build, then the curves; the
+    // runes under everything
+    {
+        const path = try std.fs.path.join(arena, &.{ out, "matchup/top/darius-vs-mordekaiser.html" });
+        const html = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 20));
+        var at: usize = 0;
+        for ([_][]const u8{ "<div class=\"mu-strip\">", "<h2>Most played build", "<section class=\"mu-card mu-curves\">", "<h2>Head to head</h2>", "<h2>Runes against Mordekaiser" }) |want| {
+            at = (std.mem.findPos(u8, html, at, want) orelse {
+                std.debug.print("darius-vs-mordekaiser: {s} missing or out of order\n", .{want});
+                return error.TestUnexpectedResult;
+            }) + want.len;
+        }
     }
     // Every block on a champion page says its scope: each role section, and each
     // variant written per view that has anything in it

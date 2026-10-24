@@ -329,7 +329,15 @@ switch opponent, a first screen spent on one big chart of a nearly flat line.
   then gold, XP and CS as three ~240 px charts beside head to head; the gold axis fits
   the average and middle half to 20 minutes, not ±3,000. Done when at 1920x1080 the
   strip, the panel and the charts' tops are on the first screen; phone gold chart at
-  container width (ui-audit 7). Design build order 8
+  container width (ui-audit 7). Design build order 8. Done 24 Oct: header one line
+  (44 px icons, h1, chip and scope), the five tiles and the headline in one strip, today's
+  build card in the panel's slot (runes card moved last: builds.vsRunes), gold, XP and CS
+  in one card (360x270 SVG units each) beside head to head (timings one row each). Axis:
+  the band's first 20 min set it (later band clips), each side its own nice top (smaller
+  at least a third of the larger; steps 1.5 and 2.5 added): Kai'Sa vs Jinx gold +2,500 /
+  -1,500, was ±3,000 (its middle half alone is -1,300 to +2,140 at 20 min). At 1920x1080
+  the charts start at y 632 (Darius vs Garen 715, taller rune cell); phone charts at
+  container width. Your games' chart (chart_wasm) gets the per-side axis too
 - MU4 Bot lane supports: on bot matchups x's and y's supports (ally pairs), each with
   games and vs usual; support matchups show their ADCs. Nobody else shows this. Done
   when Kai'Sa vs Jinx lists both. Data exists (statsfile ally)
