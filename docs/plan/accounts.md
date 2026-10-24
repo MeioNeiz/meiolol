@@ -119,6 +119,26 @@ Each step ends tested and deployed; nginx and systemd changes on jomify need Jac
   /admin/desktop/'s key check falls through to /auth/check/download_private_app with the
   request's headers. Next: the app's side (sign-in form, device.token), then the
   cut-over (Jacob: release, then the key leaves nginx and the zip)
+  App side: device.zig (POST /auth/device, device.token beside the exe), signin.zig (the
+  form: the whole window on a first start with no data, else a line under the content);
+  update checks send the token, else update.key until the cut-over; a 401 on the token
+  removes it and the form comes back, so a removed device stops at its next check (3 h,
+  or the next start). A release installs itself without a key. `meiolol-app signin DIR`
+  does the same from a terminal (then `meiolol-app update DIR`)
+  Cut-over (Jacob's, in order):
+  1. Release an exe that carries sign in (deploy/desktop-release.sh). Installed apps
+     still update with update.key and get it; the zip still bundles the key
+  2. Each tester signs in from the app (a private account: the form says why not
+     otherwise); check with the account page or `meiolol account devices NAME` on jomify
+  3. When everyone is on a sign in: on jomify back up /etc/nginx/conf.d/meiolol.conf,
+     drop the `include /etc/nginx/meiolol-desktop-key.conf;` line from location
+     /_meiolol_desktop_key, `sudo nginx -t`, reload. An app still on the key gets 401
+     and shows the form
+  4. A session commits web-loop.sh desktop_files without the key (no desktop.token, no
+     update.key in the zip, nothing appended to the exe), then removes the box's
+     ml/meiolol/desktop.token and jomify's meiolol-desktop-key.conf; hosting.md
+     "Desktop app files" follows. The privacy page's desktop app paragraph says the app
+     signs in (with step 1)
 - AC5 Private edition channel: /p/desktop/ serves the private exe and its data; the
   release script builds both editions (app.md "Two editions")
 - AC6 Later: friends link their Riot ID (profile icon check, as Remove a Riot ID does);

@@ -2,7 +2,8 @@
 //! Windows, desktop_dev.zig elsewhere): stats and curves loaded once, and a poller thread
 //! that reads the League client once a second and publishes what to show; the UI thread
 //! only draws it. Read-only GETs, as `meiolol-app watch`. An update thread keeps the
-//! data and the exe current from meio.lol (update.zig); new data is swapped in by the
+//! data and the exe current from meio.lol (update.zig), once the app is signed in
+//! (device.zig, the window's form: signin.zig); new data is swapped in by the
 //! poller between ticks. Practice (practice.zig) is built here too, from the window's
 //! setup, whenever the client is not in champ select or a game.
 
@@ -20,6 +21,8 @@ const icons_path = @import("icons.zig").lcu_path;
 const datafiles = @import("../datafiles.zig");
 const ui = @import("ui.zig");
 const update = @import("update.zig");
+const device = @import("device.zig");
+const signin = @import("signin.zig");
 
 /// What the UI shows. The poller swaps `status` and the arena that owns it under the
 /// mutex; the UI holds the mutex for a whole frame
@@ -42,6 +45,15 @@ const Shared = struct {
     practice_gen: std.atomic.Value(u32) = .init(0),
     /// `status` is the practice draft's, under the mutex
     practicing: bool = false,
+    /// The sign-in form's, under the mutex
+    signin: signin.State = .{},
+    /// What update checks send, under the mutex; null until signed in. In auth_buf
+    auth: ?update.Auth = null,
+    auth_buf: [512]u8 = undefined,
+    /// signin.message's when it isn't static
+    signin_buf: [256]u8 = undefined,
+    /// Bumped by each sign in; the update thread waits on it
+    auth_gen: std.atomic.Value(u32) = .init(0),
 };
 
 /// Stats and curves with the memory they live in
@@ -78,7 +90,12 @@ pub fn start(init: std.process.Init, lockfile_override: ?[]const u8, wake_ui: *c
     // Detached, both: a request to a hung client or server cannot be interrupted (no
     // network timeouts in Threaded IO), so quitting must not wait for them
     if (updateOptions(init)) |o| {
-        if (shared.data == null) shared.note = .downloading;
+        updates = o;
+        auth_url = init.environ_map.get("MEIOLOL_AUTH_URL") orelse device.default_url;
+        if (update.Auth.find(init.arena.allocator(), io, o.dir)) |a| {
+            setAuth(a);
+            if (shared.data == null) shared.note = .downloading;
+        } else shared.signin.needed = true;
         (try std.Thread.spawn(.{}, updateLoop, .{o})).detach();
     }
     (try std.Thread.spawn(.{}, poll, .{gpa})).detach();
@@ -114,40 +131,152 @@ fn freeData(gpa: std.mem.Allocator, data: *Data) void {
     gpa.destroy(data);
 }
 
-/// Updates need update.key beside the exe; MEIOLOL_UPDATE_URL points them elsewhere
+/// Updates in the exe's folder, with its sign in or update.key (Options.auth is set per
+/// check); MEIOLOL_UPDATE_URL points them elsewhere
 fn updateOptions(init: std.process.Init) ?update.Options {
     const arena = init.arena.allocator();
     const exe_path = std.process.executablePathAlloc(io, arena) catch return null;
     const dir_path = std.fs.path.dirname(exe_path) orelse return null;
     const dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch return null;
-    const key = update.readKey(arena, io, dir) orelse {
-        dir.close(io);
-        return null;
-    };
     return .{
         .gpa = init.gpa,
         .io = io,
         .dir = dir,
         .exe = std.fs.path.basename(exe_path),
         .base = init.environ_map.get("MEIOLOL_UPDATE_URL") orelse update.default_base,
-        .key = key,
+        .auth = undefined,
         .version = version,
     };
 }
 
-fn updateLoop(o: update.Options) void {
+/// Set when updates can run at all: the exe's folder, for the sign in too
+var updates: ?update.Options = null;
+/// POST /auth/device; MEIOLOL_AUTH_URL points it elsewhere
+var auth_url: []const u8 = device.default_url;
+
+/// Without a sign in it waits for one
+fn updateLoop(base: update.Options) void {
+    var buf: [512]u8 = undefined;
     while (!shared.quit.load(.acquire)) {
+        const gen = shared.auth_gen.load(.acquire);
+        shared.mutex.lockUncancelable(io);
+        const auth = if (shared.auth) |a| copyAuth(&buf, a) else null;
+        shared.mutex.unlock(io);
         var wait = update_every;
-        if (update.run(o)) |r| {
-            if (r.data) shared.fresh.store(true, .release);
-            if (r.exe) setNote(.restart);
-        } else |err| {
-            std.log.warn("update: {t}", .{err});
-            wait = retry_after;
-            setNote(.{ .failed = @errorName(err) });
+        if (auth) |a| {
+            var o = base;
+            o.auth = a;
+            if (update.run(o)) |r| {
+                if (r.data) shared.fresh.store(true, .release);
+                if (r.exe) setNote(.restart);
+            } else |err| {
+                std.log.warn("update: {t}", .{err});
+                wait = retry_after;
+                switch (err) {
+                    error.Unauthorized, error.Forbidden => signedOut(a, err == error.Forbidden),
+                    else => setNote(.{ .failed = @errorName(err) }),
+                }
+            }
         }
-        std.Io.sleep(io, wait, .awake) catch {};
+        // A sign in ends the wait
+        io.futexWaitTimeout(u32, &shared.auth_gen.raw, gen, .{ .duration = .{ .raw = wait, .clock = .awake } }) catch {};
     }
+}
+
+/// `a` with its bytes in `buf`; null when they don't fit
+fn copyAuth(buf: []u8, a: update.Auth) ?update.Auth {
+    switch (a) {
+        inline else => |bytes, tag| {
+            if (bytes.len > buf.len) return null;
+            @memcpy(buf[0..bytes.len], bytes);
+            return @unionInit(update.Auth, @tagName(tag), buf[0..bytes.len]);
+        },
+    }
+}
+
+/// Under the mutex, or before the threads start
+fn setAuth(a: update.Auth) void {
+    shared.auth = copyAuth(&shared.auth_buf, a);
+}
+
+/// The server refused the sign in (removed on the account page, logged out everywhere, a
+/// new password, the role lowered) or, after the cut-over, the shared key: the form comes
+/// back. No sign in can be on its way meanwhile: the form only shows without a working one
+fn signedOut(was: update.Auth, forbidden: bool) void {
+    if (was == .device) device.forget(io, updates.?.dir);
+    shared.mutex.lockUncancelable(io);
+    shared.auth = null;
+    shared.signin.needed = true;
+    shared.signin.message = if (forbidden)
+        "This account no longer gets the app: sign in with another."
+    else if (was == .device)
+        "Signed out: this app was removed from your account, or you logged out everywhere."
+    else
+        "";
+    shared.mutex.unlock(io);
+    wake();
+}
+
+const Credentials = struct {
+    username: [64]u8 = undefined,
+    username_len: usize = 0,
+    password: [256]u8 = undefined,
+    password_len: usize = 0,
+};
+
+/// From the window, holding the mutex: the request runs on a thread of its own
+fn submit(username: []const u8, password: []const u8) void {
+    const o = updates orelse return;
+    if (shared.signin.busy or username.len > 64 or password.len > 256) return;
+    const c = o.gpa.create(Credentials) catch return;
+    c.* = .{ .username_len = username.len, .password_len = password.len };
+    @memcpy(c.username[0..username.len], username);
+    @memcpy(c.password[0..password.len], password);
+    shared.signin.busy = true;
+    shared.signin.message = "";
+    const t = std.Thread.spawn(.{}, signInThread, .{c}) catch {
+        std.crypto.secureZero(u8, &c.password);
+        o.gpa.destroy(c);
+        shared.signin.busy = false;
+        shared.signin.message = "Couldn't start the sign in.";
+        return;
+    };
+    t.detach();
+}
+
+fn signInThread(c: *Credentials) void {
+    const o = updates.?;
+    defer {
+        std.crypto.secureZero(u8, &c.password);
+        o.gpa.destroy(c);
+    }
+    var arena_state: std.heap.ArenaAllocator = .init(o.gpa);
+    defer arena_state.deinit();
+    const answer = device.signIn(arena_state.allocator(), o.gpa, io, o.dir, auth_url, c.username[0..c.username_len], c.password[0..c.password_len]);
+    var signed_in = false;
+    shared.mutex.lockUncancelable(io);
+    shared.signin.busy = false;
+    if (answer) |a| switch (a) {
+        .token => |t| {
+            setAuth(.{ .device = t });
+            shared.signin.needed = false;
+            shared.signin.message = "";
+            if (shared.data == null) shared.note = .downloading;
+            signed_in = true;
+        },
+        .refused => |m| shared.signin.message = std.fmt.bufPrint(&shared.signin_buf, "{s}", .{m}) catch "Refused.",
+    } else |err| {
+        std.log.warn("sign in: {t}", .{err});
+        shared.signin.message = std.fmt.bufPrint(&shared.signin_buf, "Couldn't reach meio.lol ({t}); try again in a moment.", .{err}) catch "Couldn't reach meio.lol.";
+    }
+    shared.mutex.unlock(io);
+    if (signed_in) {
+        // This install's own sign in replaces the shared key
+        o.dir.deleteFile(io, update.key_file) catch {};
+        _ = shared.auth_gen.fetchAdd(1, .release);
+        io.futexWake(u32, &shared.auth_gen.raw, 1);
+    }
+    wake();
 }
 
 /// A failure never hides the restart note
@@ -178,6 +307,7 @@ pub fn frame() void {
         .icons = &shared.icons.?,
         .edition = edition,
         .note = note,
+        .signin = if (updates != null) .{ .state = &shared.signin, .submit = submit } else null,
         .practice = .{ .setup = &shared.practice, .shown = shared.practicing, .changed = practiceChanged },
     });
 }

@@ -5,15 +5,17 @@
 //! differs is downloaded beside it as .part, checked, then renamed over it. Windows can't overwrite a running exe but can rename it:
 //! it becomes meiolol-desktop.old.exe (kept for a manual rollback) and the new one takes
 //! its name, so the next start runs it.
-//! Until the production key the directory is behind the admin login (Product rules:
-//! nothing public on the personal key); the app sends the key in update.key beside it,
-//! which nginx accepts for that directory only (docs/hosting.md). No update.key: no
-//! updates, the app uses whatever files are beside it.
+//! Until the production key the directory is behind the login (Product rules: nothing
+//! public on the personal key): the app sends its sign-in token (device.zig), or until
+//! that cut-over the shared key in update.key beside it, which nginx accepts for that
+//! directory only (docs/hosting.md). Neither: no updates, the app uses whatever files
+//! are beside it.
 
 const builtin = @import("builtin");
 const std = @import("std");
 const Io = std.Io;
 const sign = @import("sign.zig");
+const device = @import("device.zig");
 
 pub const default_base = "https://meio.lol/admin/desktop/";
 pub const key_file = "update.key";
@@ -51,12 +53,26 @@ pub const Options = struct {
     exe: ?[]const u8,
     /// Ends in a slash
     base: []const u8 = default_base,
-    key: []const u8,
+    auth: Auth,
     /// The running exe's release (build option desktop-version): an exe of the same or
     /// an older release is never installed, so an old signed one can't be served again.
     /// 0, unreleased builds, takes any signed exe
     version: u64 = 0,
     keys: sign.Keys = sign.shipped,
+};
+
+pub const Auth = union(enum) {
+    /// device.token: the app's own sign in
+    device: []const u8,
+    /// update.key, shared by every install until accounts.md AC4's cut-over
+    key: []const u8,
+
+    /// The sign in first; null without either
+    pub fn find(arena: std.mem.Allocator, io: Io, dir: Io.Dir) ?Auth {
+        if (device.read(arena, io, dir)) |t| return .{ .device = t };
+        if (readKey(arena, io, dir)) |k| return .{ .key = k };
+        return null;
+    }
 };
 
 /// The key in update.key in `dir`, trimmed; null when there is none
@@ -73,7 +89,10 @@ pub fn run(o: Options) !Result {
     const arena = arena_state.allocator();
     var http: std.http.Client = .{ .allocator = o.gpa, .io = o.io };
     defer http.deinit();
-    const headers = [_]std.http.Header{.{ .name = key_header, .value = o.key }};
+    const headers = [_]std.http.Header{switch (o.auth) {
+        .device => |t| .{ .name = "authorization", .value = try arena.print("Bearer {s}", .{t}) },
+        .key => |k| .{ .name = key_header, .value = k },
+    }};
     var u: Updater = .{ .o = o, .http = &http, .headers = &headers };
 
     var body: Io.Writer.Allocating = .init(arena);
@@ -181,13 +200,16 @@ const Updater = struct {
             .location = .{ .url = url },
             .response_writer = w,
             // Not privileged_headers, which std 0.17 never sends; no redirects instead, so
-            // the key goes to no other host
+            // the token or key goes to no other host
             .extra_headers = u.headers,
             .redirect_behavior = .unhandled,
         });
         switch (res.status) {
             .ok => {},
-            .unauthorized, .forbidden => return error.Unauthorized,
+            // A device token removed on the account page, or a wrong key
+            .unauthorized => return error.Unauthorized,
+            // The account's role no longer gets the app
+            .forbidden => return error.Forbidden,
             .not_found => return error.NotFound,
             else => {
                 std.log.warn("{s}: HTTP {d}", .{ name, @backingInt(res.status) });
@@ -247,11 +269,27 @@ const Updater = struct {
 
 test {
     _ = sign;
+    _ = device;
+}
+
+test "Auth.find: the sign in before the shared key" {
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    try std.testing.expectEqual(null, Auth.find(arena, io, tmp.dir));
+    try testFile(tmp.dir, key_file, "k\n");
+    try std.testing.expectEqualStrings("k", Auth.find(arena, io, tmp.dir).?.key);
+    try testFile(tmp.dir, device.token_file, "t");
+    try std.testing.expectEqualStrings("t", Auth.find(arena, io, tmp.dir).?.device);
 }
 
 const httpd = @import("../httpd.zig");
 
-/// Serves the files in `dir` under /d/ to requests carrying the key "k"
+/// Serves the files in `dir` under /d/ to requests carrying the key "k" or the device
+/// token "t"
 const TestServer = struct {
     dir: Io.Dir,
 
@@ -265,6 +303,7 @@ const TestServer = struct {
         var it = r.iterateHeaders();
         const key_ok = while (it.next()) |h| {
             if (std.ascii.eqlIgnoreCase(h.name, key_header)) break std.mem.eql(u8, h.value, "k");
+            if (std.ascii.eqlIgnoreCase(h.name, "authorization")) break std.mem.eql(u8, h.value, "Bearer t");
         } else false;
         if (!key_ok) return r.respond("", .{ .status = .unauthorized });
         const name = r.head.target["/d/".len..];
@@ -337,7 +376,7 @@ test "update fetches changed files, swaps the exe, then has nothing to do" {
         .dir = app,
         .exe = "app.exe",
         .base = base,
-        .key = "k",
+        .auth = .{ .key = "k" },
         .version = 4,
         .keys = sign.testKeys(),
     };
@@ -351,10 +390,12 @@ test "update fetches changed files, swaps the exe, then has nothing to do" {
     try std.testing.expectError(error.FileNotFound, app.access(io, "later.bin", .{}));
     try std.testing.expectEqual(Result{}, try run(o));
 
-    o.key = "wrong";
+    o.auth = .{ .key = "wrong" };
+    try std.testing.expectError(error.Unauthorized, run(o));
+    o.auth = .{ .device = "removed" };
     try std.testing.expectError(error.Unauthorized, run(o));
 
-    o.key = "k";
+    o.auth = .{ .device = "t" };
     try testManifest(srv, &.{.{ "stats.bin", "other stats" }}, 0);
     try std.testing.expectError(error.HashMismatch, run(o));
     try std.testing.expectEqualStrings("new stats", try app.readFile(io, "stats-16.20.bin", &buf));

@@ -1,10 +1,10 @@
 //! The Windows side of the per-user install (install.zig): on start, an exe from the
-//! download (its update key bundled, or update.key beside it) installs itself and starts
-//! the installed copy; the installed one keeps its Start menu shortcut, which Windows
-//! search indexes, and its Apps list entry current. Settings' Uninstall runs
+//! download (a release, or one with an update key bundled or beside it) installs itself
+//! and starts the installed copy; the installed one keeps its Start menu shortcut, which
+//! Windows search indexes, and its Apps list entry current. Settings' Uninstall runs
 //! `meiolol-desktop.exe --uninstall` (`--quiet` skips its question). The installed app
 //! runs once: starting it again shows the open window, and installing a new download
-//! closes it first. `--portable` skips all of it, as does an exe without a key.
+//! closes it first. `--portable` skips all of it, as does a dev build without a key.
 
 const std = @import("std");
 const Io = std.Io;
@@ -45,10 +45,12 @@ pub fn atStart(init: std.process.Init, version: u64) Next {
     var from = Io.Dir.cwd().openDir(io, exe_dir, .{ .iterate = true }) catch return .run;
     defer from.close(io);
     const self = Io.Dir.cwd().readFileAlloc(io, exe_path, arena, .limited(256 << 20)) catch return .run;
-    const exe, const key = if (install.bundled(self)) |b|
+    const exe: []const u8, const key: ?[]const u8 = if (install.bundled(self)) |b|
         .{ b.exe, b.key }
     else
-        .{ self, update.readKey(arena, io, from) orelse return .run };
+        .{ self, update.readKey(arena, io, from) };
+    // A release without a key installs too: it signs in instead (device.zig)
+    if (key == null and version == 0) return .run;
 
     installFrom(arena, io, from, exe, key, target, version) catch |err| {
         fail("Couldn't install meiolol into {s}: {t}. Running it from here instead.", .{ target, err });
@@ -62,7 +64,7 @@ fn hasArg(argv: []const [:0]const u8, name: []const u8) bool {
     return false;
 }
 
-fn installFrom(arena: std.mem.Allocator, io: Io, from: Io.Dir, exe: []const u8, key: []const u8, target: []const u8, version: u64) !void {
+fn installFrom(arena: std.mem.Allocator, io: Io, from: Io.Dir, exe: []const u8, key: ?[]const u8, target: []const u8, version: u64) !void {
     closeOpen();
     var to = try Io.Dir.cwd().createDirPathOpen(io, target, .{});
     defer to.close(io);

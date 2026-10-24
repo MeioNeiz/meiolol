@@ -20,6 +20,7 @@ const loading = @import("../loading.zig");
 const ingame = @import("../ingame.zig");
 const postgame = @import("../postgame.zig");
 const palette = w.palette;
+const signin = @import("signin.zig");
 
 pub const title = "meiolol";
 /// Logical pixels; Windows scales these by the display's DPI
@@ -61,7 +62,7 @@ pub const Status = union(enum) {
 /// From the update thread (update.zig), under the content
 pub const Note = union(enum) {
     none,
-    /// First start with update.key: fetching the data
+    /// First start, signed in: fetching the data
     downloading,
     /// Error name of the last failed check (@errorName: static)
     failed: []const u8,
@@ -77,6 +78,8 @@ pub const View = struct {
     icons: *const Icons,
     edition: Edition,
     note: Note = .none,
+    /// Null where updates can't run (the shots, no exe folder)
+    signin: ?signin.Hook = null,
     /// Null where there is no poller (the shots)
     practice: ?practice.Hook = null,
 };
@@ -130,11 +133,12 @@ pub fn frame(v: View) void {
     if (v.note == .restart) {
         w.para(@src(), "A new version of meiolol is downloaded: it starts the next time you open the app.", .{}, .{ .muted = true, .small = true });
     }
+    if (v.signin) |h| if (v.status != .no_data) signin.view(h, false);
 }
 
 fn message(v: View) void {
     switch (v.status) {
-        .no_data => switch (v.note) {
+        .no_data => if (v.signin != null and v.signin.?.state.needed) signin.view(v.signin.?, true) else switch (v.note) {
             .downloading => w.para(@src(), "Downloading champion statistics from meio.lol.", .{}, .{}),
             .failed => |e| w.para(@src(), "Could not download champion statistics from meio.lol ({s}); trying again in 5 minutes.", .{e}, .{}),
             else => w.para(@src(), "No stats file found. Put stats-*.bin and recent-curves.bin next to meiolol-desktop.exe.", .{}, .{}),

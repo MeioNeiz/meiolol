@@ -1,5 +1,5 @@
 //! Per-user install, so Windows search and the Start menu find the app: the downloaded exe
-//! copies itself and its update key into %LOCALAPPDATA%\Programs\meiolol and starts from
+//! copies itself and its update key, if it has one, into %LOCALAPPDATA%\Programs\meiolol and starts from
 //! there. A per-user folder needs no admin rights and the updater can replace the exe in
 //! it. This is the file side; setup.zig does the Windows side (shortcut, Apps list).
 
@@ -34,16 +34,16 @@ pub fn bundled(exe: []const u8) ?Bundled {
     return .{ .exe = rest[0 .. end - key_len], .key = rest[end - key_len .. end] };
 }
 
-/// Writes `exe` into `to` as update.exe_name, the key as update.key and copies data files
-/// in `from` that `to` lacks. An exe already in `to` may be running: it is moved aside to
+/// Writes `exe` into `to` as update.exe_name, a key as update.key and copies data files
+/// in `from` that `to` lacks. A sign in (device.token) already there stays. An exe already in `to` may be running: it is moved aside to
 /// update.old_exe, as the updater does
-pub fn copyInto(arena: std.mem.Allocator, io: Io, from: Io.Dir, exe: []const u8, key: []const u8, to: Io.Dir) !void {
+pub fn copyInto(arena: std.mem.Allocator, io: Io, from: Io.Dir, exe: []const u8, key: ?[]const u8, to: Io.Dir) !void {
     // Fails when old_exe is the running image (after a self-update); the installed exe
     // is then not running and can be overwritten. When the move fails, the write says why
     to.deleteFile(io, update.old_exe) catch {};
     update.renameExe(arena, io, to, update.exe_name, update.old_exe) catch {};
     try to.writeFile(io, .{ .sub_path = update.exe_name, .data = exe });
-    try to.writeFile(io, .{ .sub_path = update.key_file, .data = key });
+    if (key) |k| try to.writeFile(io, .{ .sub_path = update.key_file, .data = k });
 
     var it = from.iterate();
     while (try it.next(io)) |entry| {
@@ -120,8 +120,9 @@ test "copyInto installs the exe and key, moves a running exe aside, keeps newer 
     // A first install has no exe to move aside
     var fresh_dir = std.testing.tmpDir(.{});
     defer fresh_dir.cleanup();
-    try copyInto(arena, io, from, "new exe", "key", fresh_dir.dir);
+    try copyInto(arena, io, from, "new exe", null, fresh_dir.dir);
     try std.testing.expectError(error.FileNotFound, fresh_dir.dir.access(io, update.old_exe, .{}));
+    try std.testing.expectError(error.FileNotFound, fresh_dir.dir.access(io, update.key_file, .{}));
 }
 
 test samePath {

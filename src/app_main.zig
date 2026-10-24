@@ -5,6 +5,7 @@ const datafiles = @import("datafiles.zig");
 const lanecard = @import("lanecard.zig");
 const cardscenes = @import("cardscenes.zig");
 const update = @import("desktop/update.zig");
+const device = @import("desktop/device.zig");
 
 // watch retries every second; Debug builds would print a stack trace for each
 // error.Unexpected from the network layer
@@ -42,8 +43,12 @@ const usage =
     \\            --live-every N    seconds between in-game saves (default 30)
     \\            --lockfile PATH
     \\  update DIR  run the desktop app's update check on a folder: needs
-    \\            DIR/update.key; swaps DIR/meiolol-desktop.exe if there is one
+    \\            DIR/device.token or DIR/update.key; swaps DIR/meiolol-desktop.exe
+    \\            if there is one
     \\            (env MEIOLOL_UPDATE_URL: another update directory)
+    \\  signin DIR  sign the app in as the desktop window does: username and password
+    \\            on stdin, one line each; the token goes in DIR/device.token
+    \\            (env MEIOLOL_AUTH_URL: another /auth/device)
     \\
     \\common:
     \\  --stats FILE      model file (default: newest data/export/stats-*.bin here,
@@ -100,6 +105,7 @@ pub fn main(init: std.process.Init) !void {
     if (std.mem.eql(u8, command, "get")) return app.get();
     if (std.mem.eql(u8, command, "record")) return app.record();
     if (std.mem.eql(u8, command, "update")) return app.updateFolder(init.environ_map.get("MEIOLOL_UPDATE_URL"));
+    if (std.mem.eql(u8, command, "signin")) return app.signIn(init.environ_map.get("MEIOLOL_AUTH_URL"));
     if (std.mem.eql(u8, command, "help") or std.mem.eql(u8, command, "--help")) {
         std.debug.print(usage, .{});
         return;
@@ -334,11 +340,28 @@ const App = struct {
         try app.out.print("HTTP {d}\n{s}\n", .{ resp.status, body });
     }
 
+    fn signIn(app: App, url: ?[]const u8) !void {
+        const path = app.args.positional orelse fail("signin needs a folder", .{});
+        var dir = try std.Io.Dir.cwd().createDirPathOpen(app.io, path, .{});
+        defer dir.close(app.io);
+        var buf: [1024]u8 = undefined;
+        var stdin = std.Io.File.stdin().reader(app.io, &buf);
+        const in = try stdin.interface.allocRemaining(app.arena, .limited(1024));
+        var lines = std.mem.splitScalar(u8, in, '\n');
+        const username = std.mem.trim(u8, lines.next() orelse "", " \r");
+        const password = std.mem.trimEnd(u8, lines.next() orelse "", "\r");
+        if (username.len == 0 or password.len == 0) fail("username and password on stdin, one line each", .{});
+        switch (try device.signIn(app.arena, app.gpa, app.io, dir, url orelse device.default_url, username, password)) {
+            .token => try app.out.print("signed in: {s}/{s}\n", .{ path, device.token_file }),
+            .refused => |why| fail("{s}", .{why}),
+        }
+    }
+
     fn updateFolder(app: App, base: ?[]const u8) !void {
         const path = app.args.positional orelse fail("update needs a folder", .{});
         var dir = try std.Io.Dir.cwd().openDir(app.io, path, .{ .iterate = true });
         defer dir.close(app.io);
-        const key = update.readKey(app.arena, app.io, dir) orelse fail("no {s} in {s}", .{ update.key_file, path });
+        const auth = update.Auth.find(app.arena, app.io, dir) orelse fail("no device.token or {s} in {s}", .{ update.key_file, path });
         const exe = "meiolol-desktop.exe";
         const has_exe = if (dir.access(app.io, exe, .{})) true else |_| false;
         const r = try update.run(.{
@@ -347,7 +370,7 @@ const App = struct {
             .dir = dir,
             .exe = if (has_exe) exe else null,
             .base = base orelse update.default_base,
-            .key = key,
+            .auth = auth,
         });
         try app.out.print("data {s}, exe {s}\n", .{
             if (r.data) "updated" else "current",
