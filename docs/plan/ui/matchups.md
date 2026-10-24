@@ -45,6 +45,13 @@ ChampRolePicker pair  [ Your champion ▾ ] ⇄ [ Opponent ▾ ]   RolePicker (a
 
 Words: "Matchups", "Your champion", "Opponent", "Most played", "Moved this patch": ~8.
 
+## References (research refs/matchups/notes.md)
+
+dpm's /matchups two-slot picker (champion, then opponent, over an icon grid and search)
+is the model for the finder; after the first pick, its opponents ranked by games
+(op.gg's list) rather than dpm's plain grid. Leave verdict words ("Best picks vs
+Darius", "Counter rating").
+
 ## Components used
 
 ChampRolePicker pair (two ChampSearch slots, swap), ChampSearch, RolePicker, MatchupGrid,

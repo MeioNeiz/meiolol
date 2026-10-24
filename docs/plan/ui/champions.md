@@ -71,6 +71,17 @@ Today: ~70 (two sentences above the table and the run-on build link).
 Only the table. The method paragraph (11,000 px down today) becomes the Toggletips on
 the column heads. The build index link goes (builds.md).
 
+## References (research refs/tier-list/notes.md)
+
+| Element | Model on | Take | Leave |
+| --- | --- | --- | --- |
+| Sorting | lolalytics, dpm | every header sorts; dpm's rank shown apart from the sort order | |
+| Minimums | lolalytics | visible, never in a dropdown (ours a Segmented of three floors, not free number inputs) | lolalytics' 600 px of chrome above the table |
+| Role links | lolalytics, u.gg, op.gg, dpm | the role in every link: every other site does it, ours is the only one that drops it | |
+| Change in a row | dpm (signed change under the value, grey near zero) | the colour rule: grey when unclear, coloured when clear | its place under the value: Jacob says that is where it doesn't make sense, hence the Delta arrow column |
+| Phone | dpm | drop columns, keep a table, keep the rate | cards |
+| Tier letters | u.gg, op.gg | | opaque and disagree with their own numbers |
+
 ## Components used
 
 RolePicker, ChampSearch (filter mode: narrows the table, aliases and typos as the

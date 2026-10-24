@@ -107,6 +107,22 @@ the first screen, 1,154 on the page (frontend-rework.md).
      pick up as a Badge. Link to the pool page
 4. Footer: one "Method" link. The two method paragraphs move to method.html
 
+## References (research refs/champion/notes.md, 27 shots)
+
+| Element | Model on | Take | Leave |
+| --- | --- | --- | --- |
+| RolePicker | dpm, lolalytics | share under each role icon; op.gg's hide roles under 10% | lolalytics' sticky filter bar wider than the phone |
+| StatStrip | dpm | six figures in one row, no prose, rank of N | lolalytics' WR delta and game avg WR (nobody reads them) |
+| BuildPanel | lolalytics | whole build in one ~350 px panel, win and games under every choice, 2-3 options in late slots, reflow into pairs on the phone | the toggle that hides the other build |
+| Common and winning at once | op.gg core rows, Blitz variant list | options as ranked rows (pick, games, win), sort only reorders | Blitz's signed "+X" WRI form |
+| RuneTree | lolalytics grid | every rune with pick, win, games; labels once | colour as metric identity, no fading (0.0 on 1 game looks like 52.8 on 25k): we fade under 400 as op.gg and dpm |
+| SkillGrid | lolalytics | 4x18 numbered grid, win and games under it; all 18 levels on the phone | Mobalytics' letters on lines; u.gg's phone cut to 8 levels |
+| MatchupGrid, RelationPicker | lolalytics per-role strips | all five enemy roles and allies | strips sorted by raw pick with hover-only deltas; deeplol's raw WR sort |
+| By patch, by length | dpm | equal small charts, patch starts as labelled lines | lolalytics' 7 unlabelled rank lines per chart, no games per bucket |
+
+Later, not in this plan: named build variants (Blitz, dpm, deeplol: "Bruiser 23,521 games
+51%"), site.md Champion page "Later" (clusters of item paths).
+
 ## Components used
 
 ChampHeader, RolePicker, ChampSearch, StatStrip, StatCell, Toggletip, Chip (only where a

@@ -79,6 +79,15 @@ Words (desktop first screen, without names and numbers): "vs", "wins", "vs usual
    colour)
 5. Links: Darius, Garen, From Garen's side (the swap does this too)
 
+## References (research refs/matchups/notes.md)
+
+- Keep ours (no other site has the page). Take lolalytics' VS slot behaviours: the
+  ChampHeader's opponent shows as "vs Garen ⊗"; ⊗ clears it and returns to the champion
+  page in the same role, the swap arrows flip sides. Champion page and matchup page are
+  then visibly one page with the slot empty or filled
+- Switching opponent: op.gg's list sorted by games with a search, as the MatchupGrid
+  strip already does; the order by games, not by win rate
+
 ## Components used
 
 ChampHeader (pair variant), RolePicker, MatchupGrid strip, ChampSearch, StatStrip,

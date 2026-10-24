@@ -74,6 +74,16 @@ Words on the first screen (without names, numbers): "Patch", "vs", "day", "games
 "official notes", summary labels (won more, won less, lanes moved, changed by Riot,
 matchups), chip labels, column heads: ~30. Today: ~95 above the first table.
 
+## References (research refs/patch/notes.md)
+
+| Element | Model on | Take | Leave |
+| --- | --- | --- | --- |
+| Change table | Dotabuff hero trends | start, now, change, sorted by change; a per-row patch sparkline once the db holds 4+ patches | |
+| Change colour | lolalytics, dpm | every change signed and coloured, scaled by how clear it is, grey when unclear | lolalytics' green/red |
+| Change text | DeepLoL, Riot's notes | old value struck through ⇒ new, ability icon; a Badge patch variant buff, nerf or adjusted, inferred per field (cooldown, cost down = buff; base stat, damage down = nerf; mixed = adjusted) | AI advice lines (op.gg) |
+| Text beside the stat move | metabot.gg (archived, 25.22) | the only one seen; nobody ties matchup moves to a change: open ground, ours | |
+| Champion history | DeepLoL Patch History | on the champion page's By patch chart: each patch point's Badge and change lines in its tip | |
+
 ## Components used
 
 ChampHeader patch, Select, StatStrip, FilterBar, RolePicker,
