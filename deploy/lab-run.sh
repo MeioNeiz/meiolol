@@ -195,6 +195,11 @@ zig_args() {
 labtests() {
     local host=$1 harness=$2 tree=$3 tested=$4 cache=$5 zig=$6
     on "$host" "[[ -f $tested/$harness ]]" && return
+    # --commit before 8eded6a (20 Oct): no test-lab step, its lab tests were in zig build test
+    if ! on "$host" "grep -q '\"test-lab\"' $tree/build.zig"; then
+        echo "lab tests: no test-lab step at this commit, skipped" >&2
+        return
+    fi
     echo "lab tests (zig build test-lab) for harness $harness" >&2
     if ! on "$host" "cd $tree && nice -n 0 $zig build test-lab --cache-dir $cache" >&2; then
         echo "lab tests failed: zig build test-lab in $host:$tree" >&2

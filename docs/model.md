@@ -4623,6 +4623,12 @@ we call "not detected"? Three kinds of check, all on the gpu-box:
 
 Golden, snap-20261012T2055Z: all 6 reproduce to the last digit at d87d8d7 (74cf241); the
 4 non-test cases again at a7961de (f98213f).
+Golden moved at 85fd62a (one time cut over every platform, 14 Oct), by design: dev-val
+went from 8,500 EUW1 games to 22,174 games on every platform (85,000 to 221,740 rows), the
+folds' cut moved with the test cut. Parent c4e8077 gives all 4 non-test cases exactly; from
+85fd62a on, ratings-dev 0.68867, comp-dev 0.68835, ratings-folds 0.68947, comp-folds
+0.68905 (same at 616e0a6 and e0ef0f5). Test cases not rerun (each is a look). golden.tsv
+still holds the old-protocol values: new ones are Jacob's call.
 
 | case | published | got |
 | --- | --- | --- |
