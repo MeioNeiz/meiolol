@@ -8,6 +8,7 @@ const partials = @import("partials.zig");
 const fitted = @import("fitted.zig");
 const additive = @import("additive.zig");
 const Role = core.Role;
+const Counts = statsfile.Counts;
 
 const log = std.log.scoped(.stats);
 
@@ -489,6 +490,199 @@ pub fn label(buf: []u8, chosen: []const []const u8) ![]const u8 {
     return std.mem.print(buf, "{s}-{s}", .{ oldest, newest });
 }
 
+/// Game length buckets by minute: under 20, 20 to 25, 25 to 30, 30 to 35, 35 and over.
+/// Wider ones are unions (Trend.merged): the matchup page's three are 0-2, 2-4, 4-5
+pub const length_edges = [_]u32{ 20, 25, 30, 35 };
+pub const length_buckets = length_edges.len + 1;
+
+pub fn lengthBucket(duration_s: u32) usize {
+    var b: usize = 0;
+    for (length_edges) |m| b += @intFromBool(duration_s >= 60 * m);
+    return b;
+}
+
+/// Per champion role: the view's games by length (length_edges) and the games of each
+/// of the last patches; per lane pair, the view's games by length. For the champion
+/// page's charts and the matchup page's length chart. Champions indexed as the Stats
+/// given to buildTrend
+pub const Trend = struct {
+    n: usize,
+    /// By role, champion, length bucket
+    lengths: []Counts,
+    /// Lane opponents (same role, either side) that met, by key (laneKey) with the lower
+    /// index first; wins are the lower index's
+    lanes: []Lane,
+    /// Newest first, at most max_patches: those with games on the view's platforms,
+    /// whatever its period
+    patches: []const []const u8,
+    /// Games on each patch
+    patch_games: []u32,
+    /// By patch, role, champion
+    by_patch: []Counts,
+
+    pub const max_patches = 6;
+
+    pub const Lane = struct {
+        key: u32,
+        by: [length_buckets]Counts,
+
+        fn order(key: u32, l: Lane) std.math.Order {
+            return std.math.order(key, l.key);
+        }
+    };
+
+    fn laneKey(n: usize, role: usize, lo: usize, hi: usize) u32 {
+        return @intCast((role * n + lo) * n + hi);
+    }
+
+    pub fn length(t: *const Trend, r: Role, c: usize, b: usize) Counts {
+        return t.lengths[(@as(usize, @backingInt(r)) * t.n + c) * length_buckets + b];
+    }
+
+    /// c1 against c2 in lane r by length, from c1's side; null when they never met
+    pub fn lane(t: *const Trend, r: Role, c1: usize, c2: usize) ?[length_buckets]Counts {
+        const key = laneKey(t.n, @backingInt(r), @min(c1, c2), @max(c1, c2));
+        const i = std.sort.binarySearch(Lane, t.lanes, key, Lane.order) orelse return null;
+        var by = t.lanes[i].by;
+        if (c1 > c2) for (&by) |*x| {
+            x.wins = x.games - x.wins;
+        };
+        return by;
+    }
+
+    /// Buckets `from` to `to` (exclusive) as one
+    pub fn merged(by: [length_buckets]Counts, from: usize, to: usize) Counts {
+        var sum: Counts = .{ .games = 0, .wins = 0 };
+        for (by[from..to]) |x| {
+            sum.games += x.games;
+            sum.wins += x.wins;
+        }
+        return sum;
+    }
+
+    pub fn onPatch(t: *const Trend, p: usize, r: Role, c: usize) Counts {
+        return t.by_patch[(p * Role.count + @backingInt(r)) * t.n + c];
+    }
+};
+
+/// The view's Trend: lengths over the games buildSince would read for `window` and
+/// `since_ms`, patch counts over the newest Trend.max_patches of `all_patches` (newest
+/// first, as `patches`), all from `platforms`; champions indexed as `st`. In `arena`
+pub fn buildTrend(
+    gpa: std.mem.Allocator,
+    arena: std.mem.Allocator,
+    db: store.Db,
+    from: ?*const partials.Store,
+    st: *const core.Stats,
+    window: []const []const u8,
+    all_patches: []const []const u8,
+    platforms: []const []const u8,
+    since_ms: i64,
+) !Trend {
+    const recent = all_patches[0..@min(all_patches.len, Trend.max_patches)];
+    var t: Trend = .{
+        .n = st.n,
+        .lengths = try arena.alloc(Counts, Role.count * st.n * length_buckets),
+        .lanes = &.{},
+        .patches = undefined,
+        .patch_games = try arena.alloc(u32, recent.len),
+        .by_patch = try arena.alloc(Counts, recent.len * Role.count * st.n),
+    };
+    const names = try arena.alloc([]const u8, recent.len);
+    for (names, recent) |*name, p| name.* = try arena.dupe(u8, p);
+    t.patches = names;
+    @memset(t.lengths, .{ .games = 0, .wins = 0 });
+    @memset(t.patch_games, 0);
+    @memset(t.by_patch, .{ .games = 0, .wins = 0 });
+
+    var max_id: u32 = 0;
+    for (st.ids) |id| max_id = @max(max_id, id);
+    const index = try gpa.alloc(u16, max_id + 1);
+    defer gpa.free(index);
+    @memset(index, 0);
+    for (st.ids, 1..) |id, i| index[id] = @intCast(i);
+    var chosen: std.ArrayList([]const u8) = .empty;
+    defer chosen.deinit(gpa);
+    try chosen.appendSlice(gpa, recent);
+    for (window) |p| {
+        for (recent) |q| {
+            if (std.mem.eql(u8, p, q)) break;
+        } else try chosen.append(gpa, p);
+    }
+    const keys = try gpa.alloc(u32, window.len + recent.len);
+    defer gpa.free(keys);
+    for (window, keys[0..window.len]) |p, *k| k.* = patchKey(p);
+    for (recent, keys[window.len..]) |p, *k| k.* = patchKey(p);
+
+    var sink: TrendSink = .{
+        .gpa = gpa,
+        .t = &t,
+        .index = index,
+        .window = keys[0..window.len],
+        .recent = keys[window.len..],
+        .since_ms = since_ms,
+    };
+    defer sink.lanes.deinit(gpa);
+    _ = if (from) |games|
+        try scanFrom(gpa, games, chosen.items, platforms, 0, &sink)
+    else
+        try scan(gpa, null, db, chosen.items, platforms, 0, &sink);
+
+    t.lanes = try arena.alloc(Trend.Lane, sink.lanes.count());
+    var it = sink.lanes.iterator();
+    var i: usize = 0;
+    while (it.next()) |e| : (i += 1) t.lanes[i] = .{ .key = e.key_ptr.*, .by = e.value_ptr.* };
+    std.mem.sort(Trend.Lane, t.lanes, {}, struct {
+        fn f(_: void, a: Trend.Lane, b: Trend.Lane) bool {
+            return a.key < b.key;
+        }
+    }.f);
+    return t;
+}
+
+const TrendSink = struct {
+    gpa: std.mem.Allocator,
+    t: *Trend,
+    /// Champion id to its index + 1; 0 for one the stats don't know
+    index: []const u16,
+    window: []const u32,
+    recent: []const u32,
+    since_ms: i64,
+    lanes: std.AutoHashMapUnmanaged(u32, [length_buckets]Counts) = .empty,
+
+    fn add(s: *TrendSink, r: Row) !void {
+        const t = s.t;
+        var cs: [2][Role.count]?usize = undefined;
+        for (r.teams, &cs) |team, *out| {
+            for (team, out) |id, *c| c.* = if (id < s.index.len and s.index[id] > 0) s.index[id] - 1 else null;
+        }
+        if (std.mem.findScalar(u32, s.recent, r.patch)) |p| {
+            t.patch_games[p] += 1;
+            for (cs, 0..) |team, side| for (team, 0..) |c, role| {
+                add1(&t.by_patch[(p * Role.count + role) * t.n + (c orelse continue)], side == r.winner);
+            };
+        }
+        if (r.start < s.since_ms or std.mem.findScalar(u32, s.window, r.patch) == null) return;
+        const b = lengthBucket(r.duration_s);
+        for (cs, 0..) |team, side| for (team, 0..) |c, role| {
+            add1(&t.lengths[(role * t.n + (c orelse continue)) * length_buckets + b], side == r.winner);
+        };
+        for (cs[0], cs[1], 0..) |a, z, role| {
+            const c0 = a orelse continue;
+            const c1 = z orelse continue;
+            const key = Trend.laneKey(t.n, role, @min(c0, c1), @max(c0, c1));
+            const e = try s.lanes.getOrPut(s.gpa, key);
+            if (!e.found_existing) e.value_ptr.* = @splat(.{ .games = 0, .wins = 0 });
+            add1(&e.value_ptr[b], (r.winner == 0) == (c0 <= c1));
+        }
+    }
+
+    fn add1(c: *Counts, won: bool) void {
+        c.games += 1;
+        c.wins += @intFromBool(won);
+    }
+};
+
 const testing = std.testing;
 
 fn testDb() !store.Db {
@@ -617,4 +811,58 @@ test "slice masks: platform, start and patch" {
     try testing.expectEqual(0b001, Slice.of(&slices, "EUW1", 999, "16.21"));
     try testing.expectEqual(0b110, Slice.of(&slices, "KR", 2000, "16.21"));
     try testing.expectEqual(0b000, Slice.of(&slices, "NA1", 2000, "16.21"));
+}
+
+test "trend: lengths in the view's window, patch counts over the newest patches" {
+    const gpa = testing.allocator;
+    const db = try testDb();
+    defer db.close();
+    const timed = struct {
+        fn f(d: store.Db, id: []const u8, patch: []const u8, winner: i64, start: i64, duration_s: i64) !void {
+            try addMatch(d, id, patch, 420, winner, false, roles_ok);
+            try d.run("UPDATE matches SET game_start = ?, duration_s = ? WHERE match_id = ?", .{ start, duration_s, id });
+        }
+    }.f;
+    try timed(db, "EUW1_1", "16.20", 100, 2000, 1000);
+    try timed(db, "EUW1_2", "16.20", 200, 2000, 1900);
+    try timed(db, "EUW1_3", "16.20", 100, 500, 1500); // before since: patch counts only
+    try timed(db, "EUW1_4", "16.19", 100, 2000, 2400); // outside the window
+    var built = try build(gpa, db, &.{ "16.19", "16.20" }, euw);
+    defer built.builder.deinit();
+    var aw: std.Io.Writer.Allocating = .init(gpa);
+    defer aw.deinit();
+    try built.builder.write(&aw.writer, "16.20");
+    var s: core.Stats = try .parse(gpa, aw.written());
+    defer s.deinit(gpa);
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+    const t = try buildTrend(gpa, arena.allocator(), db, null, &s, &.{"16.20"}, &.{ "16.20", "16.19" }, euw, 1000);
+
+    const a = s.index(1).?;
+    const j = s.index(10).?;
+    const c = struct {
+        fn f(games: u32, wins: u32) Counts {
+            return .{ .games = games, .wins = wins };
+        }
+    }.f;
+    try testing.expectEqual(c(1, 1), t.length(.top, a, 0));
+    try testing.expectEqual(c(0, 0), t.length(.top, a, 2));
+    try testing.expectEqual(c(1, 0), t.length(.top, a, 3));
+    try testing.expectEqual(c(1, 1), t.lane(.top, a, j).?[0]);
+    try testing.expectEqual(c(1, 1), t.lane(.top, j, a).?[3]);
+    try testing.expectEqual(c(2, 1), Trend.merged(t.lane(.top, a, j).?, 0, length_buckets));
+    try testing.expectEqual(null, t.lane(.top, a, s.index(2).?));
+    try testing.expectEqual(2, t.patches.len);
+    try testing.expectEqualStrings("16.19", t.patches[1]);
+    try testing.expectEqualSlices(u32, &.{ 3, 1 }, t.patch_games);
+    try testing.expectEqual(c(3, 2), t.onPatch(0, .top, a));
+    try testing.expectEqual(c(1, 1), t.onPatch(1, .top, a));
+    try testing.expectEqual(c(1, 0), t.onPatch(1, .top, j));
+}
+
+test lengthBucket {
+    try testing.expectEqual(0, lengthBucket(0));
+    try testing.expectEqual(0, lengthBucket(20 * 60 - 1));
+    try testing.expectEqual(1, lengthBucket(20 * 60));
+    try testing.expectEqual(4, lengthBucket(35 * 60));
 }

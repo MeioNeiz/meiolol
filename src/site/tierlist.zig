@@ -22,7 +22,7 @@ const roleIcon = @import("root.zig").roleIcon;
 const Thousands = @import("root.zig").Thousands;
 
 /// Below this share of all games a champion's row is a rare pick, listed on request
-const min_pick_rate = 0.004;
+pub const min_pick_rate = 0.004;
 /// And below this share of the champion's own games, as a role it rarely plays
 pub const min_role_share = 0.1;
 

@@ -252,7 +252,12 @@ opponent grid are its first components.
   side by side; the early lean and patch paragraphs shrink to one line each. Done when
   Darius shows both and the length chart agrees with the early lean (learned.md).
   Start: a new tally by duration_s bucket per champion role (src/stats.zig rows carry
-  it), src/site/champion.zig
+  it), src/site/champion.zig. Done 24 Oct: stats.Trend per view (lengths per champion
+  role and lane pair, 5 buckets at 20/25/30/35 min; the newest 6 patches' counts), its
+  own views part; two cards after the opponents, By patch (win line, pick bars, rank in
+  role per patch) over the patch line, By game length over the lean line, each line one
+  sentence. The db holds 16.19 (part) to 16.21, so 3 patches until more come. MU5 reads
+  Trend.lane, 3 buckets by Trend.merged
 - CH6 Build page compact. Tables at content width (numbers beside the name, not 1,000
   px away), the method paragraph a one-line link, items by slot and skill order tables
   from CH2. Done when no Darius Top build table is wider than ~900 px at 1920 and the

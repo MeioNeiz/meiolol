@@ -12,6 +12,8 @@ const lean_line = @import("lean.zig");
 const filters = @import("filters.zig");
 const patch_page = @import("patch.zig");
 const scope = @import("scope.zig");
+const trend = @import("trend.zig");
+const ordinal = @import("text.zig").ordinal;
 
 const Writer = std.Io.Writer;
 const Stats = core.Stats;
@@ -130,18 +132,6 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
             .games = root.Thousands{ .n = cr.games },
         });
 
-        if (site.lean) |l| try lean_line.line(w, l, ch.id, ch.name, r, "../method.html#lean", lean_chip);
-        if (site.patchday) |*pd| {
-            try w.writeAll("<div data-by-view>");
-            for ([_]html.Region{ .euw, .all }) |region| {
-                const views = [_]html.View{ .{ .region = region, .period = .days30 }, .{ .region = region, .period = .patch } };
-                const p_day = if (region == .euw) pd else if (site.patchday_all) |*all| all else continue;
-                try variant(w, &views);
-                try patch_page.since(site, w, p_day, region, ch, r, try std.mem.concat(a, u8, &.{ "../", views[1].dir() }));
-                try w.writeAll("</div>");
-            }
-            try w.writeAll("</div>\n");
-        }
         try w.writeAll("<div data-by-view>");
         for (html.View.all) |v| {
             try variant(w, &.{v});
@@ -150,6 +140,7 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
         }
         try w.writeAll("</div>\n");
         try opponentTabs(site, w, ch, r, cr);
+        try trend.cards(site, w, ch, r, tpl.call(patchLines, .{ site, ch, r }), tpl.call(leanLine, .{ site, ch, r, lean_chip }));
         try tpl.renderPart(w, "</section>\n", .{});
     }
     // Pool by region, its "harder to pick up" notes by period
@@ -172,12 +163,30 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
         try w.writeAll("</div>\n");
     }
     try tpl.render(w,
-        \\<p class="muted small">Win rates are raw: no pulling toward 50%, fainter under {full} games; coloured on a scale twice as wide as the champions table's (a matchup's rate is mostly the opponent's strength), a dot on 25% to 75%. Vs usual: how much more or less often than usual the champion won in the matchup, in points, after allowing for the opponent's own win rate in the role (against a strong opponent it usually wins less), pulled toward 0 the fewer the games so a thin matchup stays quiet; the matchup page has the numbers behind it. Hardest first, and sorting by win rate, use the win rate pulled toward the champion's own in the role, the more so the fewer the games, so a few lucky games can't top the list. Gold at {minute} min is the lane curve's estimate, then where 8 games in 10 end (10th to 90th percentile); + when the champion is ahead, in plain ink (gold is not a win rate), fainter under {full} games; for filters other than a region and period above, the plain average of the games picked. <a href="../method.html">Method</a>.</p>
+        \\<p class="muted small">Win rates are raw: no pulling toward 50%, fainter under {full} games; coloured on a scale twice as wide as the champions table's (a matchup's rate is mostly the opponent's strength), a dot on 25% to 75%. Vs usual: how much more or less often than usual the champion won in the matchup, in points, after allowing for the opponent's own win rate in the role (against a strong opponent it usually wins less), pulled toward 0 the fewer the games so a thin matchup stays quiet; the matchup page has the numbers behind it. Hardest first, and sorting by win rate, use the win rate pulled toward the champion's own in the role, the more so the fewer the games, so a few lucky games can't top the list. Gold at {minute} min is the lane curve's estimate, then where 8 games in 10 end (10th to 90th percentile); + when the champion is ahead, in plain ink (gold is not a win rate), fainter under {full} games; for filters other than a region and period above, the plain average of the games picked. By patch: the win rate, how often it was picked and its place in the role's champions table on each patch; by game length: its win rate in games that lasted that long; a hollow dot under {full} games. <a href="../method.html">Method</a>.</p>
         \\<script src="../table.js" defer></script>
         \\<script src="../filters.js" defer></script>
         \\
     , .{ .minute = core.curvesfile.lane_minute, .full = core.curvesfile.full_games });
     try html.foot(w, p);
+}
+
+/// The patch line under each region's views (filters.js shows the picked one)
+fn patchLines(w: *Writer, site: *const Site, ch: Champ, r: Role) !void {
+    const pd = &(site.patchday orelse return);
+    try w.writeAll("<div data-by-view>");
+    for ([_]html.Region{ .euw, .all }) |region| {
+        const views = [_]html.View{ .{ .region = region, .period = .days30 }, .{ .region = region, .period = .patch } };
+        const p_day = if (region == .euw) pd else if (site.patchday_all) |*all| all else continue;
+        try variant(w, &views);
+        try patch_page.since(site, w, p_day, region, ch, r, try std.mem.concat(site.arena, u8, &.{ "../", views[1].dir() }));
+        try w.writeAll("</div>");
+    }
+    try w.writeAll("</div>\n");
+}
+
+fn leanLine(w: *Writer, site: *const Site, ch: Champ, r: Role, chip: ?scope.Chip) !void {
+    if (site.lean) |l| try lean_line.line(w, l, ch.id, r, "../method.html#lean", chip);
 }
 
 /// Opens a variant of a [data-by-view] group for `views`: static/filters.js shows the one
@@ -190,17 +199,6 @@ fn variant(w: *Writer, views: []const html.View) !void {
         if (v.index() == 0) break;
     } else try w.writeAll(" hidden");
     try w.writeAll(">");
-}
-
-/// 1 -> "st", 12 -> "th", 22 -> "nd"
-fn ordinal(n: usize) []const u8 {
-    if (n % 100 >= 11 and n % 100 <= 13) return "th";
-    return switch (n % 10) {
-        1 => "st",
-        2 => "nd",
-        3 => "rd",
-        else => "th",
-    };
 }
 
 /// "<a>Top</a>, <a>Jungle</a> and <a>Mid</a>"

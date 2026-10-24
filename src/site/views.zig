@@ -13,6 +13,7 @@ const filters = @import("filters.zig");
 const evalchart = @import("evalchart.zig");
 const flat = @import("flat.zig");
 const patchday = @import("../patchday.zig");
+const stats = @import("../stats.zig");
 
 const Writer = std.Io.Writer;
 
@@ -162,6 +163,7 @@ pub const Loaded = struct {
                 .cur_games = pd.cur_games,
                 .champions = pd.champions,
             });
+            if (s.trend) |t| try writePart(w, &aw, keys, .trend, v, TrendPart{ .champs_key = champs_key, .trend = t });
             if (std.meta.eql(v, html.View.shared)) try writePart(w, &aw, keys, .daily, v, DailyPart{
                 .champs_key = champs_key,
                 .files = s.daily_files,
@@ -228,7 +230,7 @@ const views_magic = "MEIOVIE2";
 const views_size_max: std.Io.Limit = .limited(1 << 30);
 /// A views file's parts. Each has its own key (partKeys), so a write after a deploy
 /// keeps those whose types and sources the deploy left alone and loads only the rest
-const Part = enum(u8) { opts, base, filter, people, daily, prev };
+const Part = enum(u8) { opts, base, filter, people, daily, prev, trend };
 const part_count = @typeInfo(Part).@"enum".field_names.len;
 
 /// A view's stats and champions; the parts after it are made from these. The rest of
@@ -259,6 +261,8 @@ pub const PeoplePart = struct {
     by_view: []const root.ByView,
 };
 
+pub const TrendPart = struct { champs_key: u64, trend: stats.Trend };
+
 /// The shared view's
 pub const DailyPart = struct {
     champs_key: u64,
@@ -281,6 +285,7 @@ fn partKeys() [part_count]u64 {
         partKey(PeoplePart, &.{ @embedFile("../pool.zig"), @embedFile("../learning.zig"), @embedFile("../spread.zig"), @embedFile("../partials.zig") }),
         partKey(DailyPart, &.{ @embedFile("../daily.zig"), @embedFile("../learn.zig"), @embedFile("evalchart.zig"), @embedFile("../partials.zig") }),
         partKey(patchday.Wins, &.{ @embedFile("../patchday.zig"), @embedFile("../stats.zig"), @embedFile("../partials.zig") }),
+        partKey(TrendPart, &.{ @embedFile("../stats.zig"), @embedFile("../partials.zig") }),
     };
 }
 

@@ -11,6 +11,7 @@ const statsfile = @import("statsfile.zig");
 
 const Role = roles.Role;
 const Stats = statsfile.Stats;
+const Counts = statsfile.Counts;
 
 /// The role's average win rate and k, the games that pull a champion's rate halfway to
 /// it, from how much true champion win rates in the role differ (method of moments over
@@ -20,18 +21,44 @@ pub const Prior = struct {
     k: f64,
 
     pub fn of(st: *const Stats, r: Role) Prior {
+        return over(st.n, InRole{ .st = st, .r = r });
+    }
+
+    /// From every champion's games in one role, as `of` from a Stats
+    pub fn ofCounts(cells: []const Counts) Prior {
+        return over(cells.len, InSlice{ .cells = cells });
+    }
+
+    const InRole = struct {
+        st: *const Stats,
+        r: Role,
+
+        fn get(x: InRole, c: usize) Counts {
+            return x.st.champRole(x.r, c);
+        }
+    };
+
+    const InSlice = struct {
+        cells: []const Counts,
+
+        fn get(x: InSlice, c: usize) Counts {
+            return x.cells[c];
+        }
+    };
+
+    fn over(n: usize, cells: anytype) Prior {
         var wins: f64 = 0;
         var games: f64 = 0;
-        for (0..st.n) |c| {
-            const cr = st.champRole(r, c);
+        for (0..n) |c| {
+            const cr = cells.get(c);
             wins += @floatFromInt(cr.wins);
             games += @floatFromInt(cr.games);
         }
         const base = if (games > 0) wins / games else 0.5;
         var q: f64 = 0;
         var noise: f64 = 0;
-        for (0..st.n) |c| {
-            const cr = st.champRole(r, c);
+        for (0..n) |c| {
+            const cr = cells.get(c);
             if (cr.games == 0) continue;
             const g: f64 = @floatFromInt(cr.games);
             const d = @as(f64, @floatFromInt(cr.wins)) - g * base;

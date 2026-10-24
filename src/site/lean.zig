@@ -40,14 +40,14 @@ fn round(x: f64, step: f64) i64 {
 }
 
 /// The line for `name` in role `r`; `method` links the method page
-pub fn line(w: *Writer, file: *const lean.File, champion: u32, name: []const u8, r: Role, method: []const u8, chip: ?scope.Chip) !void {
+pub fn line(w: *Writer, file: *const lean.File, champion: u32, r: Role, method: []const u8, chip: ?scope.Chip) !void {
     const row = file.get(champion, r) orelse return;
     try tpl.render(w,
-        \\<p class="curves-links">{chip}{text} <span class="muted">Games still going at {win} min: {games} ({scope}). <a href="{method}">How this is measured</a></span></p>
+        \\<p class="curves-links">{chip}{text} <a href="{method}" title="Games still going at {win} min: {games} ({scope})">How this is measured</a></p>
         \\
     , .{
         .chip = if (chip) |c| tpl.t("{c} ", .{ .c = c }) else null,
-        .text = tpl.call(text, .{ row, name, r }),
+        .text = tpl.call(text, .{ row, r }),
         .scope = file.scope,
         .games = Thousands{ .n = row.games },
         .win = lean.win_minute,
@@ -76,57 +76,38 @@ pub fn scopeDims(a: std.mem.Allocator, file: *const lean.File) ![2]scope.Dim {
     return .{ region, period };
 }
 
-fn text(w: *Writer, row: lean.Row, name: []const u8, r: Role) !void {
+fn text(w: *Writer, row: lean.Row, r: Role) !void {
     if (!row.enough()) return tpl.render(w, "<b>Early or late:</b> too few games yet to tell.", .{});
     const g = gold(row);
     const p = points(row);
-    const ahead = tpl.t("on average {side} at {min} min: {sign}{gold} gold (±{pm}) against an average {noun}", .{
-        .side = if (row.gold > 0) "ahead" else "behind",
-        .min = lean.gold_minute,
+    const ahead = tpl.t("{sign}{gold} gold at {min} min against an average {noun} (±{pm})", .{
         .sign = if (g.v > 0) "+" else "",
         .gold = g.v,
-        .pm = g.pm,
+        .min = lean.gold_minute,
         .noun = noun(r),
+        .pm = g.pm,
     });
-    const wins = tpl.t("from an even game at {min} min (same gold, XP and objectives) they win {pts} percentage point{s} {dir} often (±{pm})", .{
-        .min = lean.win_minute,
+    const wins = tpl.t("won {pts} point{s} {dir} often from an even game at {min} min (±{pm})", .{
         .pts = p.v,
         .s = if (p.v == 1) "" else "s",
         .dir = if (row.win > 0) "more" else "less",
+        .min = lean.win_minute,
         .pm = p.pm,
     });
-    switch (row.lean()) {
-        .early, .late => |l| try tpl.render(w, "<b>{label} lean.</b> Teams with {name} are {ahead}; {wins}.", .{
-            .label = if (l == .early) "Early" else "Late",
-            .name = name,
-            .ahead = ahead,
-            .wins = wins,
-        }),
-        .none => {
-            const gc = row.goldClear();
-            const wc = row.winClear();
-            if (gc and wc) return tpl.render(w, "<b>No clear early or late lean.</b> Teams with {name} are {ahead}, and {wins}.", .{
-                .name = name,
-                .ahead = ahead,
-                .wins = wins,
-            });
-            if (gc) return tpl.render(w, "<b>No clear early or late lean.</b> Teams with {name} are {ahead}; from an even game at {min} min they show no clear difference.", .{
-                .name = name,
-                .ahead = ahead,
-                .min = lean.win_minute,
-            });
-            if (wc) return tpl.render(w, "<b>No clear early or late lean.</b> At {min} min teams with {name} show no clear gold difference; {wins}.", .{
-                .min = lean.gold_minute,
-                .name = name,
-                .wins = wins,
-            });
-            try tpl.render(w, "<b>No clear early or late lean:</b> neither the gold at {gm} min nor the wins from an even game at {wm} min differ clearly from an average {noun}.", .{
-                .gm = lean.gold_minute,
-                .wm = lean.win_minute,
-                .noun = noun(r),
-            });
-        },
-    }
+    const label = switch (row.lean()) {
+        .early => "Early lean",
+        .late => "Late lean",
+        .none => "No clear early or late lean",
+    };
+    const gc = row.goldClear();
+    const wc = row.winClear();
+    try tpl.render(w, "<b>{label}:</b> {ahead}{no_gold}; {wins}{no_wins}.", .{
+        .label = label,
+        .ahead = tpl.when(gc, ahead),
+        .no_gold = tpl.when(!gc, tpl.t("no clear gold difference at {min} min", .{ .min = lean.gold_minute })),
+        .wins = tpl.when(wc, wins),
+        .no_wins = tpl.when(!wc, tpl.t("no clear difference in wins from an even game at {min} min", .{ .min = lean.win_minute })),
+    });
 }
 
 const testing = std.testing;
@@ -136,7 +117,7 @@ fn render(row: lean.Row) ![]const u8 {
     const file: lean.File = .{ .games = 1, .from_ms = 0, .to_ms = 0, .scope = "every region, last 30 days", .rows = &rows };
     var aw: Writer.Allocating = .init(testing.allocator);
     errdefer aw.deinit();
-    try line(&aw.writer, &file, row.champion, "Kayle", row.role, "../method.html#lean", null);
+    try line(&aw.writer, &file, row.champion, row.role, "../method.html#lean", null);
     return aw.toOwnedSlice();
 }
 
@@ -157,12 +138,12 @@ test scopeDims {
 
 test "early, late, one part clear, none, too few" {
     const cases = [_]struct { lean.Row, []const u8 }{
-        .{ .{ .champion = 1, .role = .top, .games = 14204, .gold = -842, .gold_sd = 52, .win = 13.8, .win_sd = 0.97 }, "<b>Late lean.</b> Teams with Kayle are on average behind at 14 min: -840 gold (±100) against an average top laner; from an even game at 20 min (same gold, XP and objectives) they win 14 percentage points more often (±2). <span class=\"muted\">Games still going at 20 min: 14,204 (every region, last 30 days)." },
-        .{ .{ .champion = 1, .role = .utility, .games = 11387, .gold = 749, .gold_sd = 31, .win = -11.4, .win_sd = 0.6 }, "<b>Early lean.</b> Teams with Kayle are on average ahead at 14 min: +750 gold (±60) against an average support; from an even game at 20 min (same gold, XP and objectives) they win 11 percentage points less often (±1)." },
-        .{ .{ .champion = 1, .role = .jungle, .games = 900, .gold = 300, .gold_sd = 50, .win = 0.5, .win_sd = 1 }, "Teams with Kayle are on average ahead at 14 min: +300 gold (±100) against an average jungler; from an even game at 20 min they show no clear difference." },
-        .{ .{ .champion = 1, .role = .middle, .games = 900, .gold = 30, .gold_sd = 50, .win = -4, .win_sd = 1 }, "At 14 min teams with Kayle show no clear gold difference; from an even game at 20 min (same gold, XP and objectives) they win 4 percentage points less often (±2)." },
-        .{ .{ .champion = 1, .role = .middle, .games = 900, .gold = 300, .gold_sd = 50, .win = 4, .win_sd = 1 }, "<b>No clear early or late lean.</b> Teams with Kayle are on average ahead at 14 min: +300 gold (±100) against an average mid laner, and from an even game" },
-        .{ .{ .champion = 1, .role = .bottom, .games = 900, .gold = 30, .gold_sd = 50, .win = 0, .win_sd = 0 }, "neither the gold at 14 min nor the wins from an even game at 20 min differ clearly from an average bot laner." },
+        .{ .{ .champion = 1, .role = .top, .games = 14204, .gold = -842, .gold_sd = 52, .win = 13.8, .win_sd = 0.97 }, "<b>Late lean:</b> -840 gold at 14 min against an average top laner (±100); won 14 points more often from an even game at 20 min (±2). <a href=\"../method.html#lean\" title=\"Games still going at 20 min: 14,204 (every region, last 30 days)\">" },
+        .{ .{ .champion = 1, .role = .utility, .games = 11387, .gold = 749, .gold_sd = 31, .win = -11.4, .win_sd = 0.6 }, "<b>Early lean:</b> +750 gold at 14 min against an average support (±60); won 11 points less often from an even game at 20 min (±1)." },
+        .{ .{ .champion = 1, .role = .jungle, .games = 900, .gold = 300, .gold_sd = 50, .win = 0.5, .win_sd = 1 }, "<b>No clear early or late lean:</b> +300 gold at 14 min against an average jungler (±100); no clear difference in wins from an even game at 20 min." },
+        .{ .{ .champion = 1, .role = .middle, .games = 900, .gold = 30, .gold_sd = 50, .win = -4, .win_sd = 1 }, "<b>No clear early or late lean:</b> no clear gold difference at 14 min; won 4 points less often from an even game at 20 min (±2)." },
+        .{ .{ .champion = 1, .role = .middle, .games = 900, .gold = 300, .gold_sd = 50, .win = 4, .win_sd = 1 }, "<b>No clear early or late lean:</b> +300 gold at 14 min against an average mid laner (±100); won 4 points more often" },
+        .{ .{ .champion = 1, .role = .bottom, .games = 900, .gold = 30, .gold_sd = 50, .win = 0, .win_sd = 0 }, "no clear gold difference at 14 min; no clear difference in wins from an even game at 20 min." },
         .{ .{ .champion = 1, .role = .bottom, .games = 150, .gold = 900, .gold_sd = 50, .win = -9, .win_sd = 1 }, "<b>Early or late:</b> too few games yet to tell." },
     };
     for (cases) |c| {

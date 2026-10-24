@@ -256,18 +256,15 @@ pub fn since(site: *const Site, w: *Writer, pd: *const PatchDay, region: html.Re
     }, .plat);
     const m = pd.champion(ch.id, r) orelse {
         if (early(pd)) try tpl.render(w,
-            \\<p class="since muted">{chip} Patch {cur} against {prev}: too early to tell, too few games on {cur} so far. <a href="{href}">Patch changes</a></p>
+            \\<p class="since muted">{chip} Too early to tell: too few games on {cur} so far. <a href="{href}">Patch changes</a></p>
             \\
-        , .{ .chip = chip, .cur = pd.cur_patch, .prev = pd.prev_patch, .href = try std.mem.concat(site.arena, u8, &.{ to_view, path }) });
+        , .{ .chip = chip, .cur = pd.cur_patch, .href = try std.mem.concat(site.arena, u8, &.{ to_view, path }) });
         return;
     };
     const clear = m.win.clear(o.min_role_games, o.z);
-    try tpl.renderPart(w, "<p class=\"since muted\">{chip} Patch {cur} against {prev}, {in}: {verdict}, {now} games won against {then}", .{
+    try tpl.renderPart(w, "<p class=\"since muted\">{chip} {verdict}: {now} games won against {then}", .{
         .chip = chip,
-        .cur = pd.cur_patch,
-        .prev = pd.prev_patch,
-        .in = region.in(),
-        .verdict = if (!clear) "no clear change" else if (m.win.z > 0) "won more often" else "won less often",
+        .verdict = if (!clear) "No clear change" else if (m.win.z > 0) "Won more often" else "Won less often",
         .now = tpl.call(sinceRate, .{ m.win.cur, clear }),
         .then = tpl.call(sinceRate, .{ m.win.prev, clear }),
     });

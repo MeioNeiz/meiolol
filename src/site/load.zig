@@ -37,6 +37,7 @@ const BasePart = @import("views.zig").BasePart;
 const FilterPart = @import("views.zig").FilterPart;
 const PeoplePart = @import("views.zig").PeoplePart;
 const DailyPart = @import("views.zig").DailyPart;
+const TrendPart = @import("views.zig").TrendPart;
 const champsKey = @import("views.zig").champsKey;
 const Parts = @import("views.zig").Parts;
 
@@ -173,6 +174,10 @@ pub fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Opt
             } else try loadDaily(site, db, try extras.partialsFor(gpa, io, db, &phases), &phases);
         }
         try loadPatchDay(site, db, all_opts, extras, old, &phases);
+        if (try Parts.ofFor(old, TrendPart, .trend, view, arena, champs_key)) |t| {
+            site.trend = t.trend;
+            phases.mark("trend kept");
+        } else try loadTrend(site, db, try extras.partialsFor(gpa, io, db, &phases), &phases);
     }
     try addFiles(site);
     if (old == null or !old.?.strict) log.info("view {d} ({s}) load:{s}", .{ view.index(), site.when, phases.text() });
@@ -343,6 +348,20 @@ fn patchStats(site: *Site, db: store.Db, patches: []const []const u8, platforms:
     var model: Writer.Allocating = .init(site.arena);
     try built.builder.write(&model.writer, try site.arena.dupe(u8, try stats.label(&label_buf, patches)));
     return .parse(site.arena, model.written());
+}
+
+/// The view's win rates by game length and by patch (stats.Trend), the patches from
+/// every one with games in its region
+fn loadTrend(site: *Site, db: store.Db, games: ?*const partials.Store, phases: *Phases) !void {
+    const gpa = site.gpa;
+    const platforms = site.opts.platforms;
+    const all = if (games) |g| try g.patches(gpa, platforms) else try stats.patches(gpa, db, platforms);
+    defer {
+        for (all) |p| gpa.free(p);
+        gpa.free(all);
+    }
+    site.trend = try stats.buildTrend(gpa, site.arena, db, games, &site.stats, site.opts.patches, all, platforms, site.since_ms);
+    phases.mark("trend");
 }
 
 /// The shared view's Daily Draft, your example, eval chart and Learn data

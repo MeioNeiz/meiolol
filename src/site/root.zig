@@ -24,6 +24,7 @@ const evalchart = @import("evalchart.zig");
 const flat = @import("flat.zig");
 const patchday = @import("../patchday.zig");
 const patch_page = @import("patch.zig");
+const stats = @import("../stats.zig");
 pub const scope = @import("scope.zig");
 
 const Writer = std.Io.Writer;
@@ -184,6 +185,8 @@ pub const Site = struct {
     view_builds_prev: *const [html.View.count]?builds.File,
     /// One file for every view: its scope is its own, every region
     lean: ?*const lean.File = null,
+    /// Win rates by game length and by patch (stats.Trend); null in a core static build
+    trend: ?stats.Trend = null,
     pool: pool.Pool = .{},
     learning: learning.Learning = .{},
     spread: spread.Spread = .{},
