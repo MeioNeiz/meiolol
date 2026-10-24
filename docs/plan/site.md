@@ -380,8 +380,8 @@ switch opponent, a first screen spent on one big chart of a nearly flat line.
   fields and a box rebuild of the curves)
   Done 24 Oct: curves v6 (curvesfile.Extra per curve: games each side took part in the
   game's first kill, median level 2), digests v3 keep level 2; head to head rows "First
-  blood, kill or assist" and "Level 2", hidden on v5 files. Live once the box's digest
-  catch-up and curves rebuild have run
+  blood, kill or assist" and "Level 2", hidden on v5 files. Live 24 Oct: curves v6
+  on the box, the matchup rows live, desktop copy v5
 - MU7 Clarity: docs/ui-audit.md "Matchup page" items (one game count on screen, one
   "usual" with the champion page, gold line not in accent violet); runes section
   without the empty right 40%
