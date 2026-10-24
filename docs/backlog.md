@@ -11,8 +11,11 @@ that wrote it.
 - Data safety is on main (fad705a; docs/data-safety.md): start the box backup loop (D:)
   and health loop (ntfy): running on the box since ~04:20. Mac launchd notifier: Jacob's
   call
-- Backup loop: pull exchange/forgotten.txt from jomify, push box-forgotten.txt
-- Measure real per-match sizes after a day; recheck disk runway
+- Backup loop: pull exchange/forgotten.txt from jomify, push box-forgotten.txt (done,
+  deploy/backup-loop.sh)
+- Measure real per-match sizes after a day; recheck disk runway (done 24 Oct, ops.md
+  "Storage and hosts": ~8 KB a match in meiolol.db and as much in timeline.db, ~3.6 GB
+  a day at ~165k matches; box backups had never been pruned)
 - Rekey translation (done 2026-10-12, src/rekey.zig): `meiolol rekey` carries
   `forgotten` and Your games `blocked` over (old PUUID -> Riot ID -> new PUUID, both
   keys, Riot ID never stored), in one transaction with the crawl-state clear; stops
@@ -91,9 +94,8 @@ that wrote it.
   by whole day. docs/architecture.md Storage. Rehearsed on a VACUUM INTO copy of the
   live DB: migration 3 s; 5.39M ranks rows as history = 141 MB. With 12 h ladder
   refreshes expect ~1-1.5M rows/day, ~15-20 GB a year (plan said 2: weekly refresh).
-  Next: measure the real rows/day after a day (`SELECT day, count(*) FROM rank_history
-  GROUP BY 1`) and fix the estimate in architecture.md; rank at game time for
-  participants/drafts from it (not wired). Open for Jacob: backup segments are kept
+  Measured 24 Oct: ~840-880k rows/day, 28 B a row (architecture.md). Next: rank at game
+  time for participants/drafts from it (not wired). Open for Jacob: backup segments are kept
   forever, so their PUUIDs (participants) and rank_history outlive the 24 months
   (segments need the same sweep); history under old keys after a rekey can't be
   forgotten by PUUID (it ages out in 24 months)
@@ -146,7 +148,8 @@ that wrote it.
   - On A1 after the move (not on the micro): `deploy/box.sh run draft-backfill` once
     (chunks of 200 with 1 s pauses, resumable). Until it finishes the `--keep-days`
     prune skips listed matches, so run it before 2026-11-25. Check `meiolol status`:
-    draft_backfill 0
+    draft_backfill 0. Started 24 Oct 00:56 UTC for 53,955 matches (box job
+    draft-backfill; crawl.args has --keep-days 0, so no deadline now)
   - Move stats/eval onto `draft.Reader` once the window drops games they need (eval's
     lane gold and experience sections still join per-match data by match id)
   - Game length (Jacob: yes): `minutes` column, u8 capped at 255, 74 bytes a row. The
@@ -567,8 +570,10 @@ Next:
    box is disk bound (7.3 GB meiolol.db, ~4 GB page cache): three render-swaps on 14 Oct
    were not ready in 15 min, so the old binary kept serving. The core build could need
    no DB at all if the home page came from the renderer
-3. Renderer boot after a box reboot never verified on the box (only locally); with
-   data/views.bin it should listen and serve within seconds
+3. Renderer boot after a box reboot (checked 24 Oct without a reboot): the serving
+   instance is in default.target.wants (render-swap.sh enables the new one, disables
+   the old), Linger=yes, data/views.bin current, so it starts from the file; a boot
+   before the network is up fails `hostname -I` and Restart=always retries every 10 s
 
 ## Code safety (2026-10-22, Zig tutor and memory review)
 

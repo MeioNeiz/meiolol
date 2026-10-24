@@ -20,7 +20,11 @@ active pages 4.5 -> 1.4 GB, commits stall, and every thread waits for its commit
   rounds; 11:50-12:30 its 120 s window held 100 of 100 every minute. Sea up from ~97 to
   ~98.6, the one region short (96-99 of 100 in its window: long round trips, one
   request at a time)
-- Next: tonight's draft-model and builds rounds. If job dips stay:
+- Hourly key use 21-24 Oct (region requests vs 50/min, crawl.log): ~97-100% most
+  hours. Dips: 21 Oct 16h 52% (a 29 min gap), 20-21h 78-91%; 22 Oct 20-21h 50-78%
+  (20:44-20:50 the writer got only busy: another process held the lock, nothing
+  written; fa27b53's export IO priority landed 21:04), 22-23h ~94%; 23 Oct 17-18h
+  85-92%, 21h ~93%; 24 Oct 00h ~85% (a run of deploys). If job dips stay:
   pipelined steps instead of Bucket.flush after each, or BFQ (mq-deadline honours
   ionice -c 3 only partly)
 - Sea: few "due" players (sea scans them fast, then falls back to never-scanned ones),
@@ -74,8 +78,15 @@ people, unconfirmed and bots. Next, only if needed:
 
 - raw.db VACUUM done 21 Oct: 40.5 GB to 10.3 GB, now auto_vacuum=INCREMENTAL so
   prunes return pages; box disk 62% to 42% (85 GB free). docs/data-safety.md "Raw
-  archive". Next: check a prune logs "MB of raw.db returned" (data/crawl.log,
-  data/archive-prune.log) and the admin's "full in ~N days" moves out
+  archive". Prunes return 150-640 MB each (archive-prune.log, 23-24 Oct)
+- Growth, 24 Oct (admin-history.tsv): disk +6 GB in the last day (45%, 81 GB free):
+  meiolol.db +1.8 GB, timeline.db +1.35 GB, raw.db +0.5 GB, ~165k matches (~8 KB a
+  match in each of the first two), the rest box backups. Those were never pruned:
+  meiolol-backup's bash loop ran from 11 Oct and bash keeps the loop it parsed, so the
+  17 Oct prune (files both mirrors hold) never ran; backups/ 16 GB, all acked. Now
+  backup-loop.sh re-execs the deployed script each day; the running loop needs one
+  restart after a 04:00 backup (frees ~14 GB). The admin's "full in ~N days" counts
+  only the databases (~3.6 GB a day: ~22 days)
 - Off-site and rolling window: Hetzner BX11 plus ~30-day window on the box
   (decisions.md "Storage and hosting", data-and-model.md step 7). Jacob orders; needed
   within ~a week of 18 Oct (admin's "full in ~N days": ~26 days on 18 Oct)
