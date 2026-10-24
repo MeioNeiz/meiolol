@@ -14,16 +14,20 @@ published: no personal email on the site).
   PUUIDs 24 months after the game, as Counterwatch does. Backup segments get the same
   sweep (18 Oct, backup.sweepAged on the box and both mirrors: PUUIDs of games over 24
   months old, rank history whose newest row is), and the gpu-box's mastery history
-  files go 24 months after their window. Check before going live: the raw archive's
-  24-month step (meiolol-lab archive-age) covers deleting its files
+  files go 24 months after their window. The raw archive's 24-month step
+  (meiolol-lab archive-age) removes the hashed PUUIDs and mastery files; the matches
+  stay, linked to no one (checked 24 Oct: it deletes no match files)
 - **30-day refresh.** Riot recommends refreshing stored players every 30 days and
   dropping accounts it has erased. Implemented by meiolol-de: ladders refresh daily,
   mastery at least every 30 days, and a 404 for a PUUID deletes the player at once
+- **Mail.** privacy@ mail is kept in Cloudflare KV with no end (deploy/mail-worker.js)
+  and forwarded to Gmail: needs a retention length, and Cloudflare is outside the UK
 - **Children.** League is played by teenagers. The UK Age Appropriate Design Code may
   apply to a site likely to be used by under-18s. This site has no public accounts, ads or
   tracking, which is most of what the code asks for (logins are for invited testers and
   admins only). Not researched beyond that
-- **EU transfers.** Data is stored in the UK (home server and Oracle Cloud London). The EU
+- **EU transfers.** Data is stored in the UK (Oracle Cloud London; backup mirrors and
+  the archive on our own machines in the UK). The EU
   treats the UK as adequate, so no extra safeguards are needed; check that this still
   holds when publishing
 
@@ -81,21 +85,23 @@ statistics sites, we collect only what the game exposes, we publish no names or 
 identifiers outside a looked-up player's own games, we never contact players, build
 advertising profiles or sell data, and anyone can object.
 
-**Where.** On a computer in the United Kingdom run by us. The public website is served
-from Oracle Cloud in London. Backups and the archive are kept on our own machines, and
-erasures are applied to them at the same time as to the live data.
+**Where.** On Oracle Cloud servers in London. Copies of the backups and the archive are
+kept on our own machines in the United Kingdom, and erasures are applied to them at the
+same time as to the live data. Mail to privacy@meio.lol passes through Cloudflare's
+email routing, which keeps a copy, and reaches a Gmail inbox.
 
 **How long.**
 - Raw match records from Riot (which contain Riot IDs): on our server until archived,
   usually a few days
 - Archive of raw match records, without Riot IDs and with player identifiers replaced
-  by one-way codes: 24 months after the game, then deleted
+  by one-way codes: the codes are removed 24 months after we collected the game; the
+  matches stay, linked to no one
 - Compact match and timeline data used for the statistics: the player identifier
   (PUUID) is removed 24 months after the game; the anonymous match stays for the
   statistics
 - Rank history per player: 24 months after the player's most recent rank
-- Rank and champion mastery per player: refreshed regularly; removed when the player
-  has not appeared in a collected game for 24 months
+- Rank and champion mastery per player: refreshed at least every 30 days; removed when
+  no ranked ladder or collected game has shown the player for 30 days
 - We refresh stored players at least every 30 days and delete any account Riot reports
   as not found
 
@@ -114,7 +120,9 @@ Rift games and show their own lane against the typical curve for each matchup. A
 look up any Riot ID, as on other League statistics sites (legal basis: legitimate
 interests). The page shows that player's finished games, and lists the ten players in
 each with their champion, kills, deaths and assists and their Riot ID as at that game, as
-the League client's match history and other statistics sites do. Riot's streamer mode
+the League client's match history and other statistics sites do. Friends lists the
+players on the same team in three or more of those games, with the player's record with
+and without each. Riot's streamer mode
 hides names only during a game, and we show no live games.
 
 For each player looked up we store the Riot ID, Riot's encrypted player identifier,
@@ -147,8 +155,9 @@ a squad with no members is deleted.
 
 ## The desktop app *(when released)*
 
-The app reads champ select from the League client on your own PC, read-only, and shows
-lane information on screen. It does not send your games or any other personal data
+The app reads champ select from the League client on your own PC, read-only, and during
+and after a game the game's own live data and end of game totals, and shows lane
+information on screen. It does not send your games or any other personal data
 anywhere. Apart from the League client it connects only to this site, every few hours, to
 download newer champion statistics and updates to itself; those requests carry nothing
 about you except, while the app is for invited testers, its sign-in: a token of its own
@@ -158,9 +167,11 @@ days unused. The server logs them like any page visit (below).
 
 ## Server logs
 
-Like any website, our web server records each request: IP address, time, page and
-browser type. We use these only for security and to fix problems, and delete them after
-14 days.
+Our web server records each request to meio.lol without the IP address: time, page,
+status, referring page and browser type. Requests to our old addresses, plain-HTTP
+redirects and failed requests are recorded with the IP address. We use these only for
+security, fixing problems and counting visits, and delete them after 14 days; hourly
+totals of visits by page and browser type, which identify no one, are kept 90 days.
 
 ## Your rights
 
@@ -169,13 +180,15 @@ You can ask us to:
   Riot ID" on the [Your games](your.html) page, which checks you own the Riot ID and
   removes you within minutes
 - **Access** the data we hold about you
+- Have it in a **machine-readable** form
 - **Correct** it, though match data comes from Riot as it happened
 - **Restrict** our use of it while a request is considered
 
 Email privacy@meio.lol for anything the form doesn't cover. We'll ask you to prove you
-own the Riot ID (the same profile icon check) and reply within one month. If you're
-unhappy with our answer, you can complain to the UK Information Commissioner's Office
-(ico.org.uk) or, in the EU, to your local data protection authority.
+own the Riot ID (the same profile icon check) and reply within one month. You can
+complain to us at the same address, and to the UK Information Commission (ico.org.uk;
+the Information Commissioner's Office until 30 Sep 2026) or, in the EU, to your local
+data protection authority.
 
 Removing your data takes your identifier out of our stored matches, deletes our raw
 copies of your games and stops us showing your games. To keep it that way we keep one

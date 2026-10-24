@@ -104,8 +104,10 @@ What changed from 11 Oct and what to check:
 - Squads left out: not on the site, and "squads promised but not found" was the first
   mismatch reviewers flagged (A2). Once built, a support ticket or edit can add them
 - 24-month PUUID blanking is built live (writer prune) and over backup segments on the
-  box and both mirrors (backup.sweepAged, 18 Oct, tested); still check privacy.md's note
-  on the raw archive's step before pasting. Deletion lists: `meiolol forget --list FILE`
+  box and both mirrors (backup.sweepAged, 18 Oct, tested). The raw archive's step
+  removes the one-way codes, it doesn't delete the archive (24 Oct): "Data kept" above
+  says "is deleted 24 months after the game", so change it to "whose codes are removed
+  24 months after the game" (prodkey notes, data/team/2026-10-23-progress). Deletion lists: `meiolol forget --list FILE`
   exists (docs/data-safety.md)
 - Check: the download page doesn't yet say queues or before/after lock-in (A1); the app
   text matches it as is. Update both together after the real champ select run

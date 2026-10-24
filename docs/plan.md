@@ -65,7 +65,10 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
    (docs/learn-proposal.md), Daily Draft pick verdicts (daily notes)
 5. Application: Jacob checks the 18 Oct draft text and pastes (production-key.md);
    screenshots, video and LCU list need his real champ select run (app.md APP1);
-   docs/privacy-rules.md lists what the text and privacy page must still match (J10)
+   docs/privacy-rules.md lists what the text and privacy page must still match (J10);
+   24 Oct: privacy page checked against the code and given every GDPR Art 13/14 item;
+   eight gaps for Jacob (archive wording and LCU list in the text, controller name,
+   mail retention): data/team/2026-10-23-progress/prodkey-notes.md "For Jacob"
 6. Accounts and two apps (J21, 22 Oct): roles public, paid, private, admin, owner;
    owner and private logins first, then a public app and a private, fuller one.
    AC1-AC3 live 23 Oct (logins on /admin/, admins by sign-up link, controls owner
