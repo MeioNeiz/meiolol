@@ -6,6 +6,7 @@
 
 const std = @import("std");
 const Io = std.Io;
+const client = @import("net").client;
 
 pub const token_file = "device.token";
 pub const default_url = "https://meio.lol/auth/device";
@@ -30,24 +31,27 @@ pub const Answer = union(enum) {
     refused: []const u8,
 };
 
+/// A server that doesn't answer in this long is error.Timeout
+pub const timeout: Io.Duration = .fromSeconds(20);
+
 /// One sign in. A refusal is an answer, not an error; errors are the network's
 pub fn signIn(arena: std.mem.Allocator, gpa: std.mem.Allocator, io: Io, dir: Io.Dir, url: []const u8, username: []const u8, password: []const u8) !Answer {
     var http: std.http.Client = .{ .allocator = gpa, .io = io };
     defer http.deinit();
     const payload = try std.json.Stringify.valueAlloc(arena, .{ .username = username, .password = password, .name = name }, .{});
-    var body: Io.Writer.Allocating = .init(arena);
-    const res = try http.fetch(.{
-        .location = .{ .url = url },
+    // Never redirected, so the password goes to this host only
+    const res = try client.get(&http, arena, .{
+        .url = url,
         .method = .POST,
         .payload = payload,
-        .response_writer = &body.writer,
-        .headers = .{ .content_type = .{ .override = "application/json" } },
-        .extra_headers = &.{.{ .name = "x-meiolol-action", .value = "1" }},
-        // The password goes to this host only
-        .redirect_behavior = .unhandled,
+        .content_type = "application/json",
+        .headers = &.{.{ .name = "x-meiolol-action", .value = "1" }},
+        .max_body = 64 * 1024,
+        // The form shows "Signing in..." until this returns
+        .timeout = timeout,
     });
     const Reply = struct { token: []const u8 = "", @"error": []const u8 = "", retry_s: i64 = 0 };
-    const reply = std.json.parseFromSliceLeaky(Reply, arena, body.written(), .{ .ignore_unknown_fields = true }) catch Reply{};
+    const reply = std.json.parseFromSliceLeaky(Reply, arena, res.body, .{ .ignore_unknown_fields = true }) catch Reply{};
     if (res.status == .ok and reply.token.len > 0) {
         try dir.writeFile(io, .{ .sub_path = token_file, .data = reply.token });
         return .{ .token = reply.token };

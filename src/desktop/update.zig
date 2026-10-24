@@ -16,6 +16,7 @@ const std = @import("std");
 const Io = std.Io;
 const sign = @import("sign.zig");
 const device = @import("device.zig");
+const client = @import("net").client;
 
 /// Apps from before sign in check /admin/desktop/, which serves the same files until they
 /// have all updated (accounts.md AC5)
@@ -98,7 +99,7 @@ pub fn run(o: Options) !Result {
     var u: Updater = .{ .o = o, .http = &http, .headers = &headers };
 
     var body: Io.Writer.Allocating = .init(arena);
-    try u.get(sign.manifest_name, &body.writer);
+    try u.get(sign.manifest_name, &body.writer, 1024 * 1024, .fromSeconds(30));
     const json = try sign.openManifest(body.written(), o.keys.data);
     const manifest = try std.json.parseFromSliceLeaky(Manifest, arena, json, .{
         .ignore_unknown_fields = true,
@@ -139,7 +140,7 @@ pub fn run(o: Options) !Result {
             else => continue,
         };
         const part = try arena.print("{s}.part", .{local});
-        try u.download(f.name, part);
+        try u.download(f.name, part, f.bytes);
         const got = u.hash(part) catch |err| {
             o.dir.deleteFile(o.io, part) catch {};
             return err;
@@ -195,18 +196,17 @@ const Updater = struct {
     http: *std.http.Client,
     headers: []const std.http.Header,
 
-    fn get(u: *Updater, name: []const u8, w: *Io.Writer) !void {
+    fn get(u: *Updater, name: []const u8, w: *Io.Writer, max_body: u64, timeout: Io.Duration) !void {
         var url_buf: [512]u8 = undefined;
         const url = try std.mem.print(&url_buf, "{s}{s}", .{ u.o.base, name });
-        const res = try u.http.fetch(.{
-            .location = .{ .url = url },
-            .response_writer = w,
-            // Not privileged_headers, which std 0.17 never sends; no redirects instead, so
-            // the token or key goes to no other host
-            .extra_headers = u.headers,
-            .redirect_behavior = .unhandled,
-        });
-        switch (res.status) {
+        // Never redirected, so the token or key goes to no other host
+        const status = try client.send(u.http, .{
+            .url = url,
+            .headers = u.headers,
+            .max_body = max_body,
+            .timeout = timeout,
+        }, w);
+        switch (status) {
             .ok => {},
             // A device token removed on the account page, or a wrong key
             .unauthorized => return error.Unauthorized,
@@ -214,19 +214,21 @@ const Updater = struct {
             .forbidden => return error.Forbidden,
             .not_found => return error.NotFound,
             else => {
-                std.log.warn("{s}: HTTP {d}", .{ name, @backingInt(res.status) });
+                std.log.warn("{s}: HTTP {d}", .{ name, @backingInt(status) });
                 return error.HttpStatus;
             },
         }
     }
 
-    /// Into `part`, removed again on failure
-    fn download(u: *Updater, name: []const u8, part: []const u8) !void {
+    /// Into `part`, removed again on failure. Past `bytes` it stops; slower than 64 KB/s
+    /// on average after the first two minutes is error.Timeout
+    fn download(u: *Updater, name: []const u8, part: []const u8, bytes: u64) !void {
         const io = u.o.io;
         var file = try u.o.dir.createFile(io, part, .{});
         var buf: [64 * 1024]u8 = undefined;
         var fw = file.writer(io, &buf);
-        const ok = if (u.get(name, &fw.interface)) fw.interface.flush() else |err| err;
+        const timeout: Io.Duration = .fromSeconds(120 + @as(i64, @intCast(bytes / (64 * 1024))));
+        const ok = if (u.get(name, &fw.interface, bytes, timeout)) fw.interface.flush() else |err| err;
         file.close(io);
         ok catch |err| {
             u.o.dir.deleteFile(io, part) catch {};

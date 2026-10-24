@@ -87,8 +87,8 @@ pub fn start(init: std.process.Init, lockfile_override: ?[]const u8, wake_ui: *c
     const gpa = init.gpa;
     shared.data = load(gpa);
     if (shared.data == null) shared.status = .no_data;
-    // Detached, both: a request to a hung client or server cannot be interrupted (no
-    // network timeouts in Threaded IO), so quitting must not wait for them
+    // Detached, both: a check can download for many minutes (net.client's limit scales
+    // with the file), so quitting must not wait for them
     if (updateOptions(init)) |o| {
         updates = o;
         auth_url = init.environ_map.get("MEIOLOL_AUTH_URL") orelse device.default_url;

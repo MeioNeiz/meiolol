@@ -6,6 +6,9 @@
 //!   sizes, idle, head and handler timeouts)
 //! - `pinned`: HTTPS GET trusting one root certificate and no host name, for a local
 //!   service with its own CA
+//! - `client`: HTTP requests with a time limit and a capped body, on std.http.Client,
+//!   which has neither
+//! - `deadline`: a time limit on any call that can be cancelled
 //! - `sign`: Ed25519 signatures in text, each bound to a context string, for what a
 //!   program downloads
 
@@ -15,6 +18,8 @@ pub const ratelimit = @import("ratelimit.zig");
 pub const pinned = @import("pinned.zig");
 pub const server = @import("server.zig");
 pub const sign = @import("sign.zig");
+pub const client = @import("client.zig");
+pub const deadline = @import("deadline.zig");
 
 test {
     std.testing.refAllDecls(@This());

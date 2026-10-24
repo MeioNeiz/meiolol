@@ -2,6 +2,7 @@
 
 const std = @import("std");
 const store = @import("store");
+const client = @import("net").client;
 
 const base = "https://ddragon.leagueoflegends.com";
 
@@ -41,10 +42,9 @@ pub fn refresh(gpa: std.mem.Allocator, io: std.Io, db: store.Db) !usize {
 }
 
 fn fetch(http: *std.http.Client, arena: std.mem.Allocator, url: []const u8) ![]u8 {
-    var body: std.Io.Writer.Allocating = .init(arena);
-    const res = try http.fetch(.{ .location = .{ .url = url }, .response_writer = &body.writer });
+    const res = try client.get(http, arena, .{ .url = url, .timeout = .fromSeconds(60) });
     if (res.status != .ok) return error.UnexpectedStatus;
-    return body.written();
+    return res.body;
 }
 
 /// The Data Dragon version for `patch` ("16.20" -> "16.20.1"), else the newest
