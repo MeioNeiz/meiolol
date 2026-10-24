@@ -3,7 +3,8 @@
 # (pushes to main leave it alone, deploy/box.sh). On a clean checkout of REV (default
 # HEAD; it must be on origin/main, so ci passed): the release checks, `zig build
 # desktop-check` (core and app tests under ThreadSanitizer) and `zig build desktop-fuzz
-# --fuzz=N` (the parsers for what the app downloads), then both editions in ReleaseSafe
+# --fuzz=N` (the parsers for what the app downloads, one fuzz test at a time: given a
+# binary's several, `zig build --fuzz` searched only one), then both editions in ReleaseSafe
 # (docs/plan/app.md "Two editions"), numbered with the release (unix seconds: the app
 # never installs an older one); the public one holds no private module
 # (deploy/check-edition.sh), the window looks as approved (deploy/desktop-shots.sh) and
@@ -12,8 +13,8 @@
 # one goes to the box's release/, whose next web round lists it in update.signed
 # (web-loop.sh desktop_files, hourly; installed apps take it within 3 h of that), the
 # public one to release/public/, kept but served nowhere until the public channel.
-#   deploy/desktop-release.sh [REV] [--fuzz N]  N inputs per fuzz test, default 500K
-#                                               (~10 min on the Mac)
+#   deploy/desktop-release.sh [REV] [--fuzz N]  N inputs per fuzz test, default 200K
+#                                               (1 to 5 min each on the Mac)
 #     --dry-run                                 checks and builds only: nothing signed
 #                                               or copied, the exes left in a temp dir
 #     --no-smoke                                skip the Windows start (gpu-box down)
@@ -27,7 +28,7 @@ HERE=$ROOT/deploy
 # shellcheck source=deploy/lib.sh
 . "$HERE/lib.sh"
 
-fuzz=500K rev='' dry=0 smoke=1
+fuzz=200K rev='' dry=0 smoke=1
 while [[ $# -gt 0 ]]; do
     case $1 in
         status)
@@ -51,6 +52,9 @@ git -C "$ROOT" merge-base --is-ancestor "$rev" origin/main \
 version=$(date -u +%s)
 out=$(mktemp -d)
 ((dry)) || trap 'rm -rf "$out"' EXIT
+# Every fuzz test in the desktop binaries (core, app, net); one in none of them fails below
+git -C "$ROOT" grep -h -o 'test "fuzz:[^"]*"' "$rev" -- src/core src/desktop src/lcu src/net \
+    src/lanecard.zig | sed 's/^test "//; s/"$//' | sort -u > "$out/fuzz-tests"
 
 echo "desktop release $version from ${rev:0:7}: checks, fuzzing $fuzz inputs, build"
 # Fuzzing in the release tree's own cache: its corpus there is the release's, and two
@@ -59,11 +63,16 @@ echo "desktop release $version from ${rev:0:7}: checks, fuzzing $fuzz inputs, bu
 "$HERE/build-tree.sh" desktop "$rev" sh -c 'set -e
     cache="$1/.zig-cache"
     zig build desktop-check --cache-dir "$cache"
-    zig build desktop-fuzz --fuzz="$2" 2>&1 | tee "$4/fuzz.log"
-    if grep -q "terminated with signal\|failed command" "$4/fuzz.log"; then
-        echo "desktop-release: fuzzing found a crash (above), nothing released"
-        exit 1
-    fi
+    while IFS= read -r name; do
+        zig build desktop-fuzz --fuzz="$2" -Dtest-filter="$name" > "$4/fuzz.log" 2>&1 || true
+        if grep -q "terminated with signal\|failed command\|exited with code" "$4/fuzz.log" \
+            || ! grep -q "Fuzz test:" "$4/fuzz.log"; then
+            cat "$4/fuzz.log"
+            echo "desktop-release: fuzzing $name failed (above), nothing released"
+            exit 1
+        fi
+        echo "fuzz ok $name: $(grep -o "Runs: .*" "$4/fuzz.log" | head -1)"
+    done < "$4/fuzz-tests"
     for e in private public; do
         zig build desktop -Doptimize=ReleaseSafe -Dedition=$e -Ddesktop-version="$3" \
             --prefix "$4/$e" --cache-dir "$cache"

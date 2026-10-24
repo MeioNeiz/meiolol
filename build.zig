@@ -193,18 +193,19 @@ pub fn build(b: *std.Build) void {
     const fuzz = modules(b, target, .Debug);
     const check_step = b.step("desktop-check", "Desktop release: core, app and net tests under ThreadSanitizer");
     const fuzz_step = b.step("desktop-fuzz", "Desktop release: fuzz the parsers it downloads (--fuzz=N)");
+    // -Dtest-filter picks fuzz tests, here and in backend-fuzz
+    const fuzz_filters: []const []const u8 = if (test_filters.len > 0) test_filters else &.{"fuzz"};
     for ([_]*std.Build.Module{ tsan.core, tsan.app, tsan.net }, [_]*std.Build.Module{ fuzz.core, fuzz.app, fuzz.net }) |t, f| {
         t.sanitize_thread = true;
         check_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = t, .filters = test_filters })).step);
-        fuzz_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = f, .filters = &.{"fuzz"} })).step);
+        fuzz_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = f, .filters = fuzz_filters })).step);
     }
 
     // The backend's untrusted input (Riot replies, stored blobs, packs, API requests),
-    // searched by hand before a crawler or API change. -Dtest-filter picks fuzz tests
+    // searched by hand before a crawler or API change
     const backend_fuzz = modules(b, target, .Debug);
     const backend_fuzz_step = b.step("backend-fuzz", "Fuzz the backend's parsers of Riot " ++
         "replies, stored blobs and API requests (--fuzz=N)");
-    const fuzz_filters: []const []const u8 = if (test_filters.len > 0) test_filters else &.{"fuzz"};
     for ([_]*std.Build.Module{ backend_fuzz.backend, backend_fuzz.store }) |f| {
         backend_fuzz_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = f, .filters = fuzz_filters })).step);
     }
