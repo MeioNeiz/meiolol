@@ -5416,6 +5416,92 @@ Reading against P1's asks:
   the 20 Oct 14:44Z cut), so dev scores 16.20 only and any 16.21 question waits
   for the P3 look or the next pin
 
+### Strength at fixed mastery (D1), 2026-10-24 (w1c, prepin run)
+
+Question (docs/plan/lab-frontier.md D1): a champion-role's raw win rate mixes its
+strength with how practised its players are; the "Lab frontier wave 1" first pass
+corrected it after the fact. Here the refit itself, dev only, no test look.
+
+Data: snap-20261023T2004Z, 1,369,400 played games before the test cut (dev's visible
+games and dev-val), every platform, 865 champion-roles; 35.0% of seats have a pre-game
+mastery fetch (mastery_pre.tsv; dev-val 83.9%: fetching grew). Script:
+py/xcheck/mastery_strength.py (Mac, `uv run --no-project --with numpy --with scipy
+--with pandas`), output data/runs/d1-2004Z/ (out.md, d1-strength.tsv per champion-role).
+
+Model: one logistic regression per game (blue's win): platform side + champion-role
+strength theta (blue minus red, Gaussian prior sd 0.1 logit) + beta * m per seat,
+m = log10(points + 1000) - 3 (lanecard.Expertise.feature). A seat without a fetch gets
+its champion-role's mean m among fetched seats (shrunk to the role's by 50 seats), so an
+unknown player counts at the champion's usual mastery and beta comes from fetched seats
+within a champion-role. Newton fit, beta's interval from the Hessian. Beside it the raw
+fit (no mastery term) and one with log10 total points as well.
+
+| model | beta a tenfold points | 95% | 10k to 300k points, even game |
+| --- | --- | --- | --- |
+| + log points | 0.0798 | 0.0773 to 0.0824 | 2.87 pp |
+| + log points + log total points | 0.1150 | 0.1121 to 0.1179 | 4.13 pp (total: -0.1285 ± 0.0052) |
+
+Time halves of the games, refitted: older 0.0830 ± 0.0141 (few fetches then), newer
+0.0796 ± 0.0026. The replay's 0.1022 beside total points ("Pool and expertise replay",
+seat level, 1007Z, draft terms fitted) sits between the two rows.
+
+Strength at 50k points vs the raw fit, champion-roles with 300+ fetched seats (502),
+each against its role's games-weighted mean (beta * m at 50k is the same for all, so
+ranking at any fixed mastery is the same ranking): the move has sd 0.45 pp and is almost
+exactly beta x (the champion-role's mean m minus the role's) (r 0.991), so the first
+pass's correction was the right shape (its sd 0.59 used beta 0.1022). Rank correlation
+raw vs fixed mastery per role 0.962 to 0.989. Largest moves:
+
+| champion | role | games | fetched seats | players' mean points | raw | at 50k | move |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Locke | middle | 89,649 | 31,716 | 15k | -0.05 | +1.55 | +1.60 |
+| Locke | jungle | 10,191 | 3,752 | 14k | -3.01 | -1.46 | +1.55 |
+| Corki | top | 8,782 | 2,327 | 17k | -4.95 | -3.52 | +1.43 |
+| Locke | top | 3,213 | 1,100 | 18k | -2.40 | -1.03 | +1.37 |
+| Zaahen | top | 33,812 | 12,121 | 24k | +0.28 | +1.52 | +1.24 |
+| Yunara | bottom | 127,354 | 40,863 | 28k | -0.81 | +0.31 | +1.11 |
+| Kog'Maw | middle | 9,657 | 3,989 | 29k | -0.58 | +0.50 | +1.08 |
+| Cho'Gath | jungle | 91,315 | 32,929 | 28k | +1.70 | +2.70 | +0.99 |
+| Renata Glasc | support | 19,836 | 6,683 | 27k | +1.38 | +2.36 | +0.98 |
+| Vel'Koz | top | 1,502 | 498 | 420k | +0.12 | -0.91 | -1.03 |
+| Zoe | top | 1,546 | 537 | 421k | +2.23 | +1.22 | -1.01 |
+| Katarina | middle | 79,364 | 26,729 | 305k | +0.73 | -0.21 | -0.95 |
+| Shaco | jungle | 60,156 | 20,471 | 264k | +0.07 | -0.85 | -0.92 |
+| Riven | middle | 5,214 | 1,902 | 310k | +1.10 | +0.20 | -0.90 |
+| Neeko | middle | 4,456 | 1,419 | 320k | +1.28 | +0.38 | -0.89 |
+| Fiddlesticks | support | 6,759 | 2,430 | 264k | -0.02 | -0.91 | -0.89 |
+
+(pp vs the role at an even game; "players' mean points" is 10^(mean m + 3) - 1000.)
+
+Lane card double count: lanecard.rankLogit adds beta * m to the draft's logit, whose
+champion strength is raw, i.e. already at that champion's usual mastery. Scored on
+dev-val (161,124 games, fit on the 1,208,276 before the dev cut, beta 0.0815), every
+fetched seat of both teams, paired per game:
+
+| scoring | log loss | vs raw strength (milli-nats) |
+| --- | --- | --- |
+| raw strength | 0.68794 | |
+| raw + beta (m - everyone's mean m): the lane card now | 0.68519 | -2.75 ± 0.43 |
+| raw + beta (m - the champion-role's mean m) | 0.68489 | -3.05 ± 0.41 |
+| refit: theta + beta m | 0.68488 | -3.07 ± 0.41 |
+
+Centring on the champion-role's mean beats the lane card's form by -0.30 ± 0.13
+milli-nats a game, and matches the refit. So yes, the bonus double counts: within one
+player's pool it favours champions whose players are practised in general (Katarina,
+Shaco, Riven, Neeko by ~0.9 pp) and under-rates new or rarely mained ones (Locke,
+Corki top, Zaahen top by up to 1.6 pp).
+
+Reading (dev, final for the method, early for the site):
+- A tier list or "safe blind" at fixed mastery moves few ranks (rank r >= 0.96); the
+  champions that move are new releases (Locke every role) and one-trick favourites
+- Fix for the lane card: rank by draft logit + beta (m - mean m of the champion-role),
+  with a per-champion-role mean log mastery shipped beside the strengths (from fetched
+  seats, shrunk to the role's). Not yet measured: the replay's hit rate with it
+  (`meiolol eval --replay`), the honest test of the ranking itself
+- beta is not causal practice alone: better players are also more practised on their
+  mains. It is the right term for ranking within one player's pool (the replay's
+  point), and for a tier list it standardises who plays the champion
+
 ## Shipped model, 2026-10-23: additive v2 in the stats file
 
 Drafts (app suggest, the site's draft helper, Daily Draft, Learn, lane cards, pool) now

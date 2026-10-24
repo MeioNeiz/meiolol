@@ -805,6 +805,19 @@ How to write a line:
 
 ## Player
 
+- 2026-10-24 (early): Part of a champion's win rate is how practised its players are,
+  so a tier list should compare champions at the same mastery: a new champion looks up
+  to 1.6 percentage points weaker than it is (Locke in every role, Corki top, Zaahen
+  top) and one-trick favourites up to 1 point stronger (Katarina mid, Shaco jungle,
+  Riven and Neeko mid). Few ranks move otherwise. Each tenfold more points on the
+  champion is worth about 2 points of win rate (2.9 from 10k to 300k). The lane card's
+  mastery bonus counts this twice: it should compare a player's points with what that
+  champion's players usually have. Sure: 1.37M ranked games (every crawled region, up to
+  20 Oct), 35% of players with mastery from before the game; slope 0.080 (0.077 to
+  0.082) a tenfold; the centred bonus predicts held-out games better by 0.30 ± 0.13
+  milli-nats a game (dev-val, 161k games); not yet checked on the lane card's own hit
+  rate. Site: nothing changes until the lane card fix is measured on the replay.
+  Evidence: docs/model.md "Strength at fixed mastery (D1)"
 - 2026-10-20: Ranking your own champions by your mastery on them as well as by the
   draft helps: a player wins more on a champion they have more points on, even compared
   with their own other champions, by about 3.7 percentage points from 10k to 300k
