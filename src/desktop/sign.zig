@@ -6,7 +6,10 @@
 //! Key files hold the 32-byte seed as 64 hex characters.
 
 const std = @import("std");
+const net = @import("net");
 const Ed25519 = std.crypto.sign.Ed25519;
+
+pub const keyPair = net.sign.keyPair;
 
 pub const Keys = struct {
     release: [32]u8,
@@ -16,8 +19,8 @@ pub const Keys = struct {
 /// The public halves the app trusts, as `meiolol desktop-keygen` printed them. A new
 /// key means a new app download: installed apps reject anything else
 pub const shipped: Keys = .{
-    .release = hexKey("e29a11fc9185f6c58cb23762904e43115a22e7e474abc2292780a1f025e93d45"),
-    .data = hexKey("15aa533cbdc529a47efc1fbf3f5eb173a1987c533b0bbf5a53501fb8842acdc9"),
+    .release = net.sign.publicKey("e29a11fc9185f6c58cb23762904e43115a22e7e474abc2292780a1f025e93d45"),
+    .data = net.sign.publicKey("15aa533cbdc529a47efc1fbf3f5eb173a1987c533b0bbf5a53501fb8842acdc9"),
 };
 
 /// The signature in hex, a newline, then the manifest JSON
@@ -26,64 +29,33 @@ pub const manifest_name = "update.signed";
 const manifest_context = "meiolol desktop manifest v1\n";
 const exe_context = "meiolol desktop exe v1\n";
 
-fn hexKey(comptime hex: []const u8) [32]u8 {
-    var key: [32]u8 = undefined;
-    _ = std.fmt.hexToBytes(&key, hex) catch @compileError("bad key: " ++ hex);
-    return key;
-}
-
-/// From a key file's text
-pub fn keyPair(seed_hex: []const u8) !Ed25519.KeyPair {
-    const hex = std.mem.trim(u8, seed_hex, " \t\r\n");
-    var seed: [Ed25519.KeyPair.seed_length]u8 = undefined;
-    if (hex.len != 2 * seed.len) return error.BadKey;
-    _ = std.fmt.hexToBytes(&seed, hex) catch return error.BadKey;
-    return Ed25519.KeyPair.generateDeterministic(seed);
-}
-
 /// `json` as update.signed
 pub fn sealManifest(gpa: std.mem.Allocator, kp: Ed25519.KeyPair, json: []const u8) ![]u8 {
-    const msg = try std.mem.concat(gpa, u8, &.{ manifest_context, json });
-    defer gpa.free(msg);
-    const sig = try kp.sign(msg, null);
-    return std.mem.concat(gpa, u8, &.{ &std.fmt.bytesToHex(sig.toBytes(), .lower), "\n", json });
+    return net.sign.seal(gpa, kp, manifest_context, json);
 }
 
 /// The JSON inside update.signed once its signature checks out
 pub fn openManifest(signed: []const u8, public: [32]u8) ![]const u8 {
-    const nl = std.mem.findScalar(u8, signed, '\n') orelse return error.BadSignature;
-    const json = signed[nl + 1 ..];
-    try verify(public, signed[0..nl], &.{ manifest_context, json });
-    return json;
+    return net.sign.open(signed, public, manifest_context);
 }
 
 /// An exe's signature covers its release version, SHA-256 (hex as in the manifest) and
 /// size, so an older signed exe can't pass for a newer one
-pub fn signExe(kp: Ed25519.KeyPair, version: u64, sha256_hex: []const u8, bytes: u64) ![128]u8 {
+pub fn signExe(kp: Ed25519.KeyPair, version: u64, sha256_hex: []const u8, bytes: u64) !net.sign.Hex {
     var buf: [256]u8 = undefined;
-    const sig = try kp.sign(try exeMessage(&buf, version, sha256_hex, bytes), null);
-    return std.fmt.bytesToHex(sig.toBytes(), .lower);
+    var joined: [512]u8 = undefined;
+    var fba: std.heap.FixedBufferAllocator = .init(&joined);
+    return net.sign.sign(fba.allocator(), kp, exe_context, &.{try exeMessage(&buf, version, sha256_hex, bytes)});
 }
 
 pub fn verifyExe(public: [32]u8, sig_hex: []const u8, version: u64, sha256_hex: []const u8, bytes: u64) !void {
     var buf: [256]u8 = undefined;
-    try verify(public, sig_hex, &.{try exeMessage(&buf, version, sha256_hex, bytes)});
+    try net.sign.verify(public, sig_hex, exe_context, &.{try exeMessage(&buf, version, sha256_hex, bytes)});
 }
 
 fn exeMessage(buf: []u8, version: u64, sha256_hex: []const u8, bytes: u64) ![]const u8 {
     if (sha256_hex.len != 64) return error.BadSignature;
-    return std.mem.print(buf, exe_context ++ "{d} {s} {d}", .{ version, sha256_hex, bytes });
-}
-
-/// Every failure is error.BadSignature: the app only needs to know it was refused
-fn verify(public: [32]u8, sig_hex: []const u8, parts: []const []const u8) !void {
-    var sig_bytes: [Ed25519.Signature.encoded_length]u8 = undefined;
-    if (sig_hex.len != 2 * sig_bytes.len) return error.BadSignature;
-    _ = std.fmt.hexToBytes(&sig_bytes, sig_hex) catch return error.BadSignature;
-    const pk = Ed25519.PublicKey.fromBytes(public) catch return error.BadSignature;
-    var v = Ed25519.Signature.fromBytes(sig_bytes).verifier(pk) catch return error.BadSignature;
-    for (parts) |p| v.update(p);
-    v.verify() catch return error.BadSignature;
+    return std.mem.print(buf, "{d} {s} {d}", .{ version, sha256_hex, bytes });
 }
 
 /// Fixed keys for tests
@@ -123,13 +95,14 @@ test "exe: signature binds version, hash and size" {
     try testing.expectError(error.BadSignature, verifyExe(testKeyPair(2).public_key.toBytes(), &sig, 7, &sha, 100));
 }
 
-test "key file: 64 hex, whitespace trimmed" {
-    const ones: [64]u8 = @splat('1');
-    const kp = try keyPair(&ones ++ "\n");
-    try testing.expectEqual(testKeyPair(0x11).public_key.toBytes(), kp.public_key.toBytes());
-    try testing.expectError(error.BadKey, keyPair("11"));
-    const bad: [64]u8 = @splat('z');
-    try testing.expectError(error.BadKey, keyPair(&bad));
+test "signatures are the bytes the shipped app checks" {
+    const sha: [64]u8 = @splat('a');
+    try testing.expectEqualStrings("2e3757958875c5bf6aa5fec8a40cefe342c27a4cf5c24f0f31fa1fad15de4664" ++
+        "b7f3af91343801a1eefd33b0e110cb111e821a39758a62fadd4cec498fee220b", &try signExe(testKeyPair(1), 7, &sha, 100));
+    const signed = try sealManifest(testing.allocator, testKeyPair(2), "{}");
+    defer testing.allocator.free(signed);
+    try testing.expectEqualStrings("59a2629876b7fde766f9f01dd0625ae1b02813f60cf334078fd503b092f99c68" ++
+        "300d291a51a6f1c0553d7390949cd19ce4cd85307227857689b70527c50f9a0d\n{}", signed);
 }
 
 fn fuzzOpen(_: void, s: *testing.Smith) !void {

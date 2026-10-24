@@ -226,7 +226,7 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
         .optimize = optimize,
     });
 
-    // HTTP pieces std leaves out (rate limits): std only, library-grade (src/net/root.zig)
+    // HTTP pieces std leaves out (rate limits, signatures): std only, library-grade (src/net/root.zig)
     const net = b.createModule(.{
         .root_source_file = b.path("src/net/root.zig"),
         .target = target,
@@ -279,7 +279,7 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
         .root_source_file = b.path("src/app_main.zig"),
         .target = target,
         .optimize = optimize,
-        .imports = &.{.{ .name = "core", .module = core }},
+        .imports = &.{ .{ .name = "core", .module = core }, .{ .name = "net", .module = net } },
     });
 
     // The recommender for the website's draft helper, embedded by `meiolol site`
@@ -336,6 +336,7 @@ fn desktopExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lan
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "core", .module = modules(b, target, optimize).core },
+                .{ .name = "net", .module = modules(b, target, optimize).net },
                 .{ .name = "dvui", .module = dvui.module("dvui_dx11") },
             },
         }),
@@ -370,6 +371,7 @@ fn desktopDev(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lan
         .optimize = optimize,
         .imports = &.{
             .{ .name = "core", .module = modules(b, target, optimize).core },
+            .{ .name = "net", .module = modules(b, target, optimize).net },
             .{ .name = "dvui", .module = dvui.module("dvui_sdl3") },
         },
     });
@@ -409,6 +411,7 @@ fn desktopShot(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.la
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "core", .module = modules(b, target, optimize).core },
+                .{ .name = "net", .module = modules(b, target, optimize).net },
                 .{ .name = "dvui", .module = dvui_mod },
                 .{ .name = "raster", .module = raster },
             },
