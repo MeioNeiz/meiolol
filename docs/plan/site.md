@@ -256,7 +256,10 @@ opponent grid are its first components.
 - CH6 Build page compact. Tables at content width (numbers beside the name, not 1,000
   px away), the method paragraph a one-line link, items by slot and skill order tables
   from CH2. Done when no Darius Top build table is wider than ~900 px at 1920 and the
-  runes start under y 300
+  runes start under y 300. Done 24 Oct (local, 16.21 all-regions file): tables in a
+  grid of ~490 px cells (Darius Top: 11 tables, all 488 px, were 1,512), spells beside
+  the items, Runes heading at y 291 (380), page 2,842 px (3,670); the method paragraph is
+  one line in the hero with a link, the highest win rate rule moved to the method page
 - CH7 Phone. Subbar's three rows into one (a filters button; design build order 6),
   histogram folded. Done when Darius at 390x844 has its stat strip and build panel on
   the first screen

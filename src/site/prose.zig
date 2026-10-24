@@ -231,6 +231,11 @@ pub fn method(w: *Writer, info: Info) Writer.Error!void {
         \\at 6, 11 and 16, otherwise the ability with the most points), except for kits that
         \\break those rules (R before 6, an ability past 5 points), which count only when
         \\the game reached 18.</li>
+        \\<li><b>Highest win rate</b>: marked among options with 100 or more games, once each
+        \\is pulled toward the average of its kind by k games and taken at the low end of its
+        \\range, so a few lucky games can't top it. k comes from how much options of a kind
+        \\really differ across every champion (about 6,000 games for a rune, 600 to 1,000 for
+        \\items); against one lane opponent, from every matchup.</li>
         \\<li><b>Sample size</b>: every row shows games and its share. A win rate needs 100
         \\games and always comes with its 95% range; rows under 400 games are greyed out.
         \\Games that reach three finished items run long, so their win rates are for

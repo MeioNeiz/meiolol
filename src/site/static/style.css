@@ -387,6 +387,10 @@ table.build td:first-child { white-space: normal; }
 table.build .icon { width: 28px; height: 28px; border-radius: 4px; vertical-align: middle; margin-right: 2px; }
 table.build .label { margin: 0 8px 0 4px; vertical-align: middle; }
 table.build .sep { color: var(--muted); margin: 0 4px; }
+/* Build page tables side by side, each at about content width (site.md CH6) */
+.bgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: 0 24px; }
+.bgrid > div { min-width: 0; }
+table.build .path { letter-spacing: 1px; white-space: nowrap; margin-right: 6px; }
 p.caption { font-size: 13px; margin: 4px 0 16px; }
 
 /* Champion tables (root.zig tierTable, opponentTable; static/table.js) */

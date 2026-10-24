@@ -676,11 +676,17 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
         if (!has) there.* = try std.mem.concat(a, u8, &.{ champ_path, v.query() });
     }
     try html.head(w, p);
+    const to_site = try site.toShared(page_path);
     try tpl.render(w,
         \\<div class="hero"><img src="{icon}" alt="" width="72" height="72"><div><h1>{name} {role} build</h1>
-        \\<p class="muted">{chip} What players take on {name} in the {lower} role: ranked solo/duo {in}, {period}, {ranks}. {games} game{s}{rate}.</p></div></div>
+        \\<p class="muted">{chip} What players take on {name} in the {lower} role: ranked solo/duo {in}, {period}, {ranks}. {games} game{s}{rate}.<br>Most played first, not a ranking. ± is a 95% range; no win rate under {rated} games, grey under {solid}. <span class="key mp"></span> most played{hw}. <a href="{site}method.html#builds">How builds are counted</a></p></div></div>
         \\
     , .{
+        .solid = solid_games,
+        .rated = rate_games,
+        // Files before 21 Oct 2026 have no k, so no highest win rate marks
+        .hw = tpl.when(f.shrink.len > 0, tpl.t(" <span class=\"key hw\"></span> highest win rate, adjusted for few games", .{})),
+        .site = to_site,
         .chip = site.chip(site.regionDim(site.view.region), try periodDim(a, f, site.view.period), rankDim(f.min_tier)),
         .icon = try site.icon(ch),
         .name = ch.name,
@@ -716,44 +722,26 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
             \\
         , .{ .games = b.games, .s = plural(b.games), .solid = solid_games, .rated = rate_games });
     }
-    try tpl.render(w,
-        \\<p class="muted">Most played first: what players take, not a ranking. Win rates show a 95% range (±) from the number of games; two rows whose ranges overlap may not differ at all. Rows under {solid} games are greyed out; under {rated} there is no win rate. Marked: the most played{hw}.</p>
-        \\
-    , .{
-        .solid = solid_games,
-        .rated = rate_games,
-        // Files before 21 Oct 2026 have no k, so no highest win rate marks
-        .hw = tpl.when(f.shrink.len > 0, tpl.t(", and the highest win rate among options with {rated}+ games once each is pulled toward the average by k games (k from how much options of a kind really differ across every champion{ks}) and taken at the low end of its range, so a few lucky games can't top it. None on boots and finished items: their win rates mostly say how the game was going when they were bought (nobody finishes Mejai's in a game they're losing)", .{
-            .rated = rate_games,
-            .ks = if (f.shrinkK(.rune, false)) |kr| if (f.shrinkK(.start, false)) |ki| tpl.t(": {r} for a rune, {i} for starting items", .{
-                .r = root.Thousands{ .n = @round(kr) },
-                .i = root.Thousands{ .n = @round(ki) },
-            }) else null else null,
-        })),
-    });
-
     try w.writeAll("<h2>Runes</h2>\n");
     const explored = try runeStats(w, f, b, false);
     const paged = try pages(w, f, b);
     if (!explored) try table(w, f, b, .keystone, "Keystone", "players");
     if (!paged) try table(w, f, b, .runes, "Rune page", "players");
     if (!explored) try table(w, f, b, .shards, "Stat shards", "players");
-    try w.writeAll("<h2>Summoner spells</h2>\n");
+    try w.writeAll("<h2>Spells and items</h2>\n<div class=\"bgrid\">\n");
     try table(w, f, b, .spells, "Spells", "players");
-    try w.writeAll("<h2>Items</h2>\n");
-    const items_from = "players with a match timeline";
-    try table(w, f, b, .start, "Starting items", items_from);
+    try table(w, f, b, .start, "Starting items", "players with a match timeline");
     try table(w, f, b, .boots, "Boots", "players with boots or two finished items");
     try table(w, f, b, .core2, "First two finished items", "players who finished two items");
     try table(w, f, b, .core3, "First three finished items", "players who finished three items: longer games, so compare these win rates with each other rather than with the champion's overall");
     try table(w, f, b, .item4, "Fourth finished item", "players who finished four items, whatever the first three");
     try table(w, f, b, .item5, "Fifth finished item", "players who finished five items");
     try table(w, f, b, .item6, "Sixth finished item", "players who finished six items");
-    try w.writeAll("<h2>Skill order</h2>\n");
+    try w.writeAll("</div>\n<h2>Skill order</h2>\n<div class=\"bgrid\">\n");
     try table(w, f, b, .skill_path, "Levels 1 to 18", "players with a match timeline who reached level 11; levels after the game ended follow the player's order: R when due, else the ability they were maxing");
     try table(w, f, b, .skills, "Priority", "players with a match timeline who reached level 11");
     try table(w, f, b, .skill_start, "Levels 1 to 3", "players with a match timeline");
-    const to_site = try site.toShared(page_path);
+    try w.writeAll("</div>\n");
     try tpl.render(w,
         \\<p class="muted"><a href="{champ}">{name}</a> · <a href="{site}method.html#builds">How builds are counted</a></p>
         \\
@@ -775,7 +763,7 @@ fn winRate(w: *Writer, games: u32, wins: u32) !void {
 fn table(w: *Writer, f: *const File, b: File.Build, kind: Kind, comptime title: []const u8, comptime of: []const u8) !void {
     const timed = b.minutes.len > 0 and builds.itemSlot(kind, 0) != null;
     try tpl.renderPart(w,
-        \\<div class="table-scroll"><table class="build">
+        \\<div><div class="table-scroll"><table class="build">
         \\<thead><tr><th>{title}</th>{minute}<th class="num">Games</th><th class="num">Share</th><th class="num">Win rate</th></tr></thead>
         \\<tbody>
         \\
@@ -800,15 +788,15 @@ fn table(w: *Writer, f: *const File, b: File.Build, kind: Kind, comptime title: 
             .rate = tpl.call(winRate, .{ o.games, o.wins }),
         });
     }
-    try tpl.renderPart(w, "</tbody></table></div>\n<p class=\"muted caption\">Share of {games} " ++ of ++ ".</p>\n", .{
+    try tpl.renderPart(w, "</tbody></table></div>\n<p class=\"muted caption\">Share of {games} " ++ of ++ ".</p></div>\n", .{
         .games = rows.games,
     });
 }
 
-/// Median minute each item of `v` was bought in its place in the build: "14", "11 · 19"
+/// Median minute each item of `v` was bought in its place in the build: "14", "11·19"
 fn minutes(w: *Writer, b: File.Build, kind: Kind, v: []const u32) !void {
     for (v, 0..) |item, i| {
-        if (i > 0) try w.writeAll(" · ");
+        if (i > 0) try w.writeAll("·");
         const m = if (builds.itemSlot(kind, i)) |slot| b.minute(slot, item) else null;
         if (m) |x| try w.print("{d:.0}", .{x.minute}) else try w.writeAll("-");
     }
@@ -852,14 +840,15 @@ fn value(w: *Writer, f: *const File, kind: Kind, v: []const u32, compact: bool) 
             } });
         },
         // R in bold: the levels it comes at stand out
-        .skill_path => for (builds.unpackPath(v), 0..) |x, i| {
-            if (i > 0) try w.writeAll(" ");
-            try w.writeAll(switch (x) {
+        .skill_path => {
+            try w.writeAll("<span class=\"path\">");
+            for (builds.unpackPath(v)) |x| try w.writeAll(switch (x) {
                 1 => "Q",
                 2 => "W",
                 3 => "E",
                 else => "<b>R</b>",
             });
+            try w.writeAll("</span>");
         },
     }
 }
