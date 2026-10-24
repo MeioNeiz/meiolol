@@ -52,9 +52,9 @@ pub fn writePage(site: *const Site, w: *Writer) !void {
         \\solo/duo {in}, Platinum+ games: {cur_games} games on {cur} so far, {prev_games} on
         \\{prev}. Whole patches, whichever period is picked above.</p>
         \\<p class="muted">Listed: a champion with {role_games} games in the role on both
-        \\patches, a matchup with {pair_games}, and a change clear of chance (z above {z:.2},
-        \\about 1 in 100 by luck alone; with a few hundred tested, expect one or two of
-        \\those). Ranges hold 99 times in 100. <a href="{up}method.html">Method</a>.</p>
+        \\patches, a matchup with {pair_games}, and a change too big to be luck (under 1 in 100
+        \\by chance; with a few hundred tested, expect one or two). Change: {cur} minus
+        \\{prev}, in points; ± is a 95% range. <a href="{up}method.html">Method</a>.</p>
         \\
     , .{
         .cur = pd.cur_patch,
@@ -64,7 +64,6 @@ pub fn writePage(site: *const Site, w: *Writer) !void {
         .prev_games = root.Thousands{ .n = pd.prev_games },
         .role_games = o.min_role_games,
         .pair_games = o.min_pair_games,
-        .z = o.z,
         .up = site.view.up(),
     });
 
@@ -122,29 +121,33 @@ fn rateOf(w: *Writer, c: core.curvesfile.Counts) !void {
     try w.print(" of {f}", .{root.Thousands{ .n = c.games }});
 }
 
-/// "0.8 to 3.8 points", the size of the gap either way
-fn gap(w: *Writer, r: Rate, z: f64) !void {
-    const g = r.range(z);
-    const lo = if (r.z > 0) g[0] else -g[1];
-    const hi = if (r.z > 0) g[1] else -g[0];
-    try w.print("{d:.1} to {d:.1} points", .{ lo, hi });
+/// ± as on the rest of the site (builds, lean): 95%, not the listing's stricter z
+const range_z = 1.96;
+
+/// "+2.3 ±1.8": the change in points and its range
+fn change(w: *Writer, r: Rate) !void {
+    const g = r.range(range_z);
+    const sign = if (r.delta() > 0) "+" else "";
+    try w.print("<b>{s}{d:.1}</b> <span class=\"muted\">±{d:.1}</span>", .{
+        sign, r.delta(), (g[1] - g[0]) / 2,
+    });
 }
 
 fn winTable(site: *const Site, w: *Writer, pd: *const PatchDay, rows: []const ChampionMove, dir: []const u8) !void {
     if (rows.len == 0) return;
     try tpl.renderPart(w,
         \\<h2>Won {dir} often than on {prev}</h2>
-        \\<div class="table-scroll"><table class="patch"><thead><tr><th>Champion</th><th>Role</th><th>{prev}</th><th>{cur}</th><th>Gap (99% range)</th></tr></thead><tbody>
+        \\<div class="table-scroll"><table class="patch"><thead><tr><th>Champion</th><th>Role</th><th>{prev}</th><th>{cur}</th><th>Change</th></tr></thead><tbody>
         \\
     , .{ .dir = dir, .prev = pd.prev_patch, .cur = pd.cur_patch });
     for (rows[0..@min(rows.len, max_rows)]) |m| {
         const ch = matchup.champ(site, m.id) orelse continue;
-        try tpl.render(w, "<tr class=\"bx\"><td>{champ}</td><td>{role}</td><td>{prev}</td><td>{cur}</td><td>{gap}</td></tr>\n", .{
+        try tpl.render(w, "<tr class=\"bx\"><td>{champ}</td><td>{role}</td><td>{prev}</td><td>{cur}</td><td>{change}</td></tr>\n", .{
             .champ = tpl.call(champCell, .{ site, ch }),
             .role = root.roleName(m.role),
             .prev = tpl.call(winOf, .{m.win.prev}),
             .cur = tpl.call(winOf, .{m.win.cur}),
-            .gap = tpl.call(gap, .{ m.win, pd.opts.z }),
+            .change = tpl.call(change, .{m.win}),
         });
     }
     try tpl.renderPart(w, "</tbody></table></div>\n{more}", .{ .more = tpl.call(more, .{rows.len}) });
@@ -162,19 +165,18 @@ fn laneTable(site: *const Site, w: *Writer, pd: *const PatchDay, rows: []const C
     if (rows.len == 0) return;
     try tpl.renderPart(w,
         \\<h2>Ahead in lane at {minute} min, more or less often</h2>
-        \\<div class="table-scroll"><table class="patch"><thead><tr><th>Champion</th><th>Role</th><th>{prev}</th><th>{cur}</th><th>Gap (99% range)</th></tr></thead><tbody>
+        \\<div class="table-scroll"><table class="patch"><thead><tr><th>Champion</th><th>Role</th><th>{prev}</th><th>{cur}</th><th>Change</th></tr></thead><tbody>
         \\
     , .{ .minute = core.curvesfile.lane_minute, .prev = pd.prev_patch, .cur = pd.cur_patch });
     for (rows[0..@min(rows.len, max_rows)]) |m| {
         const ch = matchup.champ(site, m.id) orelse continue;
         const r = m.ahead.?;
-        try tpl.render(w, "<tr class=\"bx\"><td>{champ}</td><td>{role}</td><td>{prev}</td><td>{cur}</td><td>{dir} {gap}</td></tr>\n", .{
+        try tpl.render(w, "<tr class=\"bx\"><td>{champ}</td><td>{role}</td><td>{prev}</td><td>{cur}</td><td>{change}</td></tr>\n", .{
             .champ = tpl.call(champCell, .{ site, ch }),
             .role = root.roleName(m.role),
             .prev = tpl.call(rateOf, .{r.prev}),
             .cur = tpl.call(rateOf, .{r.cur}),
-            .dir = if (r.z > 0) "more:" else "less:",
-            .gap = tpl.call(gap, .{ r, pd.opts.z }),
+            .change = tpl.call(change, .{r}),
         });
     }
     try tpl.renderPart(w, "</tbody></table></div>\n{more}", .{ .more = tpl.call(more, .{rows.len}) });
@@ -268,7 +270,7 @@ pub fn since(site: *const Site, w: *Writer, pd: *const PatchDay, region: html.Re
         .now = tpl.call(sinceRate, .{ m.win.cur, clear }),
         .then = tpl.call(sinceRate, .{ m.win.prev, clear }),
     });
-    if (clear) try tpl.renderPart(w, " (a gap of {gap}, 99% range)", .{ .gap = tpl.call(gap, .{ m.win, o.z }) });
+    if (clear) try tpl.renderPart(w, " ({change} points)", .{ .change = tpl.call(change, .{m.win}) });
     if (m.ahead) |l| if (l.clear(o.min_role_games, o.z)) {
         try tpl.renderPart(w, ". Ahead in lane at {minute} min {dir} often: {now} games against {then}", .{
             .minute = core.curvesfile.lane_minute,
