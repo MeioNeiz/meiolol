@@ -140,7 +140,16 @@ Each step ends tested and deployed; nginx and systemd changes on jomify need Jac
      "Desktop app files" follows. The privacy page's desktop app paragraph says the app
      signs in (with step 1)
 - AC5 Private edition channel: /p/desktop/ serves the private exe and its data; the
-  release script builds both editions (app.md "Two editions")
+  release script builds both editions (app.md "Two editions"). 24 Oct: the release
+  script builds, checks (check-edition, desktop-shots, desktop-smoke on both) and signs
+  both editions; private to the box's release/ as before, public to release/public/
+  (served nowhere yet); `--dry-run` stops before signing. The web loop puts the same
+  files in p/desktop/ as admin/desktop/; nginx location /p/desktop/ has
+  /admin/desktop/'s gate (the app's key or device token, or a private login; 401, no
+  login redirect, as the app reads 401). Left: the app's update base
+  (update.zig default_base) to /p/desktop/ in a release; once every installed app runs
+  it (the account page's devices, or nginx's log for /admin/desktop/update.signed),
+  admin/desktop/ and its location go
 - AC6 Later: friends link their Riot ID (profile icon check, as Remove a Riot ID does);
   friends' groups become Squads (backlog.md "Your games and Squads") for the private
   tier first

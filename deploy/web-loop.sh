@@ -462,6 +462,9 @@ while true; do
         # Times kept, so the upload sends the tester's files only when the daily job changed them
         [[ -d data/tester ]] && cp -pR data/tester data/admin.new/models
         [[ -d data/tester ]] && cp -pR data/tester data/private.new/models
+        # The private edition's channel, p/desktop/ (app.md "Two editions"); admin/desktop/
+        # too while installed apps check there
+        [[ -d data/desktop ]] && cp -al data/desktop data/private.new/desktop
         # Linked, not copied (~50 MB)
         [[ -d data/desktop ]] && cp -al data/desktop data/admin.new/desktop
         rm -rf data/admin && mv data/admin.new data/admin

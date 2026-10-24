@@ -807,8 +807,10 @@ level still pickable.
   On a clean checkout of a pushed commit it runs `zig build desktop-check` (core and app
   tests under ThreadSanitizer) and `zig build desktop-fuzz --fuzz=N` (fuzz tests of what
   the app reads: stats, curves and the lane card, champ select, mastery and ranked
-  replies, the signed manifest; core/fuzz.zig mutates good files), builds ReleaseSafe
-  with `-Ddesktop-version=<unix seconds>`, signs and copies it to the box's release/.
+  replies, the signed manifest; core/fuzz.zig mutates good files), builds both editions
+  ReleaseSafe with `-Ddesktop-version=<unix seconds>`, signs them and copies the private
+  one to the box's release/, the public one to release/public/ (`--dry-run`: no signing
+  or copying).
   Plain `zig build test` runs each fuzz test once. Two more checks (24 Oct):
   deploy/desktop-shots.sh check renders every desktop-shot state from pinned inputs
   (data/desktop-shots/inputs, gitignored) and compares them pixel for pixel with the

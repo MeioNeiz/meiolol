@@ -15,9 +15,10 @@ review" (J7). How it is built: docs/architecture.md "App" and "Desktop window";
   through it); ci checks it (APP2)
 - Both share the poller, the lane card, data files, signing and updates. The private
   edition reads extra data files (e.g. raw model outputs) that only /p/desktop/ serves
-- deploy/desktop-release.sh builds, fuzzes and signs both; each has its own update
-  channel: public /desktop/ (after the key), private /p/desktop/ (device token, AC4).
-  Today's admin-gated exe becomes the private edition
+- deploy/desktop-release.sh builds, fuzzes, checks and signs both (24 Oct); each has
+  its own update channel: public /desktop/ (after the key), private /p/desktop/ (device
+  token, AC4; served since 24 Oct, the app still checks /admin/desktop/: AC5). Today's
+  admin-gated exe is the private edition
 - The public edition is built and shot from now on, for the application's screenshots,
   even while only the private one is downloaded
 

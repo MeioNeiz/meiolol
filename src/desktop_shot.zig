@@ -22,10 +22,13 @@ const postgame = @import("postgame.zig");
 const loading = @import("loading.zig");
 const practice = @import("practice.zig");
 const practice_ui = @import("desktop/private/practice.zig");
+const signin = @import("desktop/signin.zig");
 
 const Shot = struct {
     name: []const u8,
     status: union(enum) { plain: ui.Status, select: Scene, loading: Scene, game: Game, post: Post, practice: Practice },
+    /// The sign-in form or line (desktop/signin.zig)
+    signin: ?signin.State = null,
 };
 
 /// A random practice draft (the same one for the same stats file), on `screen`
@@ -74,6 +77,8 @@ const mid_mastery = .{ .{ "Ahri", 212_000 }, .{ "Syndra", 64_000 }, .{ "Orianna"
 const shots = [_]Shot{
     .{ .name = "no-client", .status = .{ .plain = .no_client } },
     .{ .name = "lobby", .status = .{ .plain = .{ .waiting = "Lobby" } } },
+    .{ .name = "sign-in", .status = .{ .plain = .no_data }, .signin = .{ .needed = true } },
+    .{ .name = "sign-in-failed", .status = .{ .plain = .no_data }, .signin = .{ .needed = true, .message = "Couldn't reach meio.lol (ConnectionRefused); try again in a moment." } },
     .{ .name = "ban-turn", .status = .{ .select = .{
         .role = .middle,
         .turn = .ban,
@@ -274,7 +279,8 @@ pub fn main(init: std.process.Init) !void {
                 .approved = try a.print("{s}/{s}{s}.png", .{ d, shot.name, sz[0] }),
                 .diff = try a.print("{s}/{s}{s}.diff.png", .{ out_dir, shot.name, sz[0] }),
             } else null;
-            const diff = try render(gpa, io, .{ .status = status, .stats = &stats, .icons = &icons, .edition = sz[1], .practice = hook }, sz[3], sz[2], name, against);
+            const sign: ?signin.Hook = if (shot.signin) |*st| .{ .state = st, .submit = noSubmit } else null;
+            const diff = try render(gpa, io, .{ .status = status, .stats = &stats, .icons = &icons, .edition = sz[1], .practice = hook, .signin = sign }, sz[3], sz[2], name, against);
             compared += 1;
             switch (diff) {
                 .same => std.debug.print("{s}\n", .{name}),
@@ -305,6 +311,8 @@ const Diff = union(enum) {
 };
 
 fn noop() void {}
+
+fn noSubmit(_: []const u8, _: []const u8) void {}
 
 fn dupe(a: std.mem.Allocator, v: anytype) !*const @TypeOf(v) {
     const out = try a.create(@TypeOf(v));
