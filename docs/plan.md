@@ -93,9 +93,9 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
 10. Our Zig "libraries" toward what the Rust crates give (Jacob 21 Oct), checks outside
    ci: desktop releases signed, fuzzed and ReleaseSafe done, HTTP server limits done
    23 Oct, backend TSan and desktop shot comparison and Windows smoke start 24 Oct,
-   backend fuzzing 24 Oct (four faults on damaged input fixed), `net` module steps 1-4
-   24 Oct; next its client timeouts and a fetch that a reset socket can't crash:
-   docs/plan/libraries.md
+   backend fuzzing 24 Oct (four faults on damaged input fixed), `net` module 24 Oct
+   (rate limits, signing, server, pinned TLS, client time limits and a GET a reset
+   socket can't crash): docs/plan/libraries.md
 
 Others own: the TW2 mastery retry (meiolol-8f); neural nets vs
 today's model; the draft's "Rammus into high AD/AP" check.

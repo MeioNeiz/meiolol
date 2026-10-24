@@ -6,6 +6,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Limiter = @import("ratelimit.zig").Limiter;
 const Fake = @import("fake.zig").Fake;
+const deadline = @import("net").deadline;
 
 const log = std.log.scoped(.riot);
 
@@ -56,8 +57,8 @@ pub const Client = struct {
         for (0..tries) |attempt| {
             const backoff: i64 = @as(i64, 1) << @intCast(attempt);
             try limiter.acquire(method, c.priority);
-            const res = c.once(limiter, uri, method, backoff) catch |err| switch (err) {
-                error.OutOfMemory => return err,
+            const res = deadline.within(c.io, riot_timeout, once, .{ c, limiter, uri, method, backoff }) catch |err| switch (err) {
+                error.OutOfMemory, error.Canceled, error.ConcurrencyUnavailable => return err,
                 else => {
                     log.warn("{s} on {s}, retrying", .{ @errorName(err), shown });
                     try c.io.sleep(.fromSeconds(backoff), .awake);
@@ -100,6 +101,8 @@ pub const Client = struct {
     }
 
     const tries = 6;
+    /// One try, from connecting to the body's end; Riot answers in a second or two
+    const riot_timeout: std.Io.Duration = .fromSeconds(30);
 
     /// Riot's own error body, `{"status": {"message": ..., "status_code": ...}}`. Its
     /// Cloudflare edge answers some URLs with an HTML block page instead (16 Oct: one TW2
@@ -118,8 +121,10 @@ pub const Client = struct {
         const uri = try std.Uri.parse(try std.mem.print(&url_buf, "{s}/riot/{s}{s}", .{ base, route, path }));
         const shown = logged(path, method);
         for (0..proxy_tries) |attempt| {
-            const res = c.proxied(uri, method) catch |err| switch (err) {
-                error.OutOfMemory, error.Canceled => return err,
+            const res = deadline.within(c.io, proxy_timeout, proxied, .{ c, uri, method }) catch |err| switch (err) {
+                error.OutOfMemory, error.Canceled, error.ConcurrencyUnavailable => return err,
+                // The crawler alive but stuck: retrying would only wait as long again
+                error.Timeout => return error.ProxyTimeout,
                 else => {
                     const backoff = @min(@as(i64, 1) << @intCast(attempt), 30);
                     log.warn("proxy: {s} on {s}, retrying in {d}s", .{ @errorName(err), shown, backoff });
@@ -149,6 +154,9 @@ pub const Client = struct {
     }
 
     const proxy_tries = 9;
+    /// Past the crawler's own tries at Riot (a slot wait, then up to 6 tries 30 s each
+    /// with backoff); only a hung crawler hits it
+    const proxy_timeout: std.Io.Duration = .fromSeconds(5 * 60);
     pub const method_header = "x-meiolol-method";
 
     fn proxied(c: *Client, uri: std.Uri, method: []const u8) !Response {

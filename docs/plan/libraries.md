@@ -52,8 +52,8 @@ that slow everyday development).
   instruments sqlite3.c, which Zig's fuzzer has no comparison hooks for, so sqlite
   builds with -fno-sanitize-coverage; the fuzzer checks every input for leaks, so
   harness state lives per input; given a binary's several fuzz tests in one run, zig
-  searched only one, so the script runs each on its own (desktop-fuzz in
-  desktop-release.sh likely has the same gap: unchecked)
+  searched only one, so the script runs each on its own; desktop-release.sh loops the
+  same way since 6a0a223 (desktop-fuzz takes -Dtest-filter)
 
 - One `net` module, steps 1-4 (24 Oct): src/net/ (build module "net", std only, a
   module doc with an example, imported by backend, app, mock and desktop; backend-check,
@@ -65,6 +65,17 @@ that slow everyday development).
   pinned.zig (HTTPS GET trusting one root and no host name, from lcu/https.zig). Found
   on the way: a chunked answer after a first chunk whose size overflowed body + size
   panicked (the desktop app is ReleaseSafe), saturating now, regression test
+- `net` step 5, client timeouts (24 Oct, reqwest's timeout and body cap): std.http.Client
+  has none (ConnectTcpOptions.timeout is never read). deadline.zig: within(io, limit,
+  func, args) runs the call beside a timer on Io.Select and cancels it past the limit
+  (~200 ms to return on macOS and Windows; a success that lands during the cancel is
+  returned, an outer cancel propagates). client.zig: get/send on std.http.Client
+  without fetch(), which panics (bodyErr().? null) when a Content-Length body read
+  fails, on a cancel and on a plain reset mid-body; no redirects, a body cap, ShortBody
+  on a cut body, the connection dropped on any error. On it: device.signIn 20 s,
+  update.zig (manifest 30 s; each file capped at its manifest size, 2 min plus 64 KB/s),
+  ddragon 60 s; riot/client.zig wraps each try in within (30 s to Riot, retried; 5 min
+  through the proxy, not retried)
 
 ## Next, by how exposed the code is
 
@@ -72,17 +83,9 @@ that slow everyday development).
 2. Backend fuzzing: done 24 Oct (above). Could still add: a nightly run on the
    gpu-box, the crawler's other Riot replies (league, mastery, account ids)
 3. ThreadSanitizer: done 24 Oct (above)
-4. `net` module: steps 1-4 done (above). Step 5, client timeouts and a safe fetch:
-   std.http.Client has no timeout (ConnectTcpOptions.timeout is never read), so a
-   stalled server blocks a crawl thread or the desktop's "Signing in..." for good.
-   Cancelling the call returns in ~200 ms on macOS and Windows (Io.Threaded), so plan
-   net.deadline.within(io, limit, func, args) on Io.Select. Blocker found: std's
-   fetch() panics (bodyErr().? null) when a Content-Length body read fails, on cancel
-   AND on a plain connection reset mid-body: desktop update.zig and device.zig and
-   ddragon.zig all call fetch. So step 5 also needs net's own GET (request,
-   receiveHead, bounded body read, connection closing on error, as riot/client.zig
-   does) and those three moved to it. Repros and handover: net-notes.md of the
-   2026-10-23-progress run
+4. `net` module: done 24 Oct (above). Could still add: a stall limit (bytes per
+   interval) instead of the whole-request one for big downloads; the LCU client
+   (pinned.zig) has no time limit yet, the League client being local
 5. Desktop release checks: done 24 Oct. deploy/desktop-shots.sh (`zig build desktop-shot
    --compare`: every state from pinned inputs, pixel for pixel against an approved set,
    NAME.diff.png for a change; renders are deterministic, a one-word change shows as 289
