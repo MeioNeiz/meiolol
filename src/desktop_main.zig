@@ -6,6 +6,7 @@ const dvui = @import("dvui");
 const ui = @import("desktop/ui.zig");
 const poller = @import("desktop/poller.zig");
 const setup = @import("desktop/setup.zig");
+const selftest = @import("desktop/selftest.zig");
 const build_options = @import("build_options");
 
 pub const dvui_app: dvui.App = .{
@@ -37,6 +38,8 @@ pub fn main(init: std.process.Init) !void {
     dvui.App.main_init = init;
     // Logs reach the console when started from one
     dvui.Backend.Common.windowsAttachConsole() catch {};
+    const argv = try init.minimal.args.toSlice(init.arena.allocator());
+    if (argv.len == 2 and std.mem.eql(u8, argv[1], "--self-test")) return selftest.run(init);
     if (setup.atStart(init, build_options.desktop_version) == .exit) return;
     const class = setup.window_class;
     const icon = win32.LoadIconW(win32.GetModuleHandleW(null), @ptrFromInt(1)); // meiolol.rc

@@ -46,9 +46,12 @@ that slow everyday development).
    example in its header): the server limits, LCU TLS (lcu/https.zig), the rate limiter
    (riot/ratelimit.zig), signing (desktop/sign.zig). A Zig upgrade's std.http and
    std.Io changes then land in one place
-5. Desktop release checks still to add: screenshot comparison (desktop-shot against
-   approved PNGs) and a Windows smoke start on the gpu-box (`--self-test`: load the
-   files, exit)
+5. Desktop release checks: done 24 Oct. deploy/desktop-shots.sh (`zig build desktop-shot
+   --compare`: every state from pinned inputs, pixel for pixel against an approved set,
+   NAME.diff.png for a change; renders are deterministic, a one-word change shows as 289
+   red pixels) and deploy/desktop-smoke.sh (`meiolol-desktop --self-test` on the
+   gpu-box's Windows: the files load, a lane card per role, ~6 s). The release script
+   runs both (accounts.md AC5)
 
 ## Not planned
 

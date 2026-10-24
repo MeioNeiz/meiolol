@@ -1,9 +1,12 @@
 //! `zig build desktop-shot`: the desktop window's states rendered to PNG without a
 //! screen or a League client (desktop/raster.zig), from real stats and curves files and
 //! made-up champ selects. For looking at the UI on any machine, at 100% and 150%.
+//! `--compare DIR` checks each against the approved PNG of the same name there, pixel
+//! for pixel: the changed ones get NAME.diff.png (changes red on the dimmed new shot)
+//! and the exit code is 1 (deploy/desktop-shots.sh).
 //!
 //! usage: meiolol-desktop-shot --stats FILE --curves FILE [--icons DIR] [--out DIR]
-//!   [--only NAME] [--min-games N]
+//!   [--only NAME] [--min-games N] [--compare DIR]
 
 const std = @import("std");
 const dvui = @import("dvui");
@@ -153,6 +156,7 @@ pub fn main(init: std.process.Init) !void {
     var icons_dir: ?[]const u8 = null;
     var out_dir: []const u8 = "zig-out/shots";
     var only: ?[]const u8 = null;
+    var approved_dir: ?[]const u8 = null;
     var min_games: u32 = (core.Options{}).min_games;
     var i: usize = 1;
     while (i + 1 < argv.len) : (i += 2) {
@@ -162,6 +166,7 @@ pub fn main(init: std.process.Init) !void {
         if (std.mem.eql(u8, flag, "--icons")) icons_dir = argv[i + 1];
         if (std.mem.eql(u8, flag, "--out")) out_dir = argv[i + 1];
         if (std.mem.eql(u8, flag, "--only")) only = argv[i + 1];
+        if (std.mem.eql(u8, flag, "--compare")) approved_dir = argv[i + 1];
         if (std.mem.eql(u8, flag, "--min-games")) min_games = try std.fmt.parseInt(u32, argv[i + 1], 10);
     }
     const cwd = std.Io.Dir.cwd();
@@ -175,6 +180,8 @@ pub fn main(init: std.process.Init) !void {
     if (icons_dir) |d| try icons.loadDir(io, d);
     try cwd.createDirPath(io, out_dir);
 
+    var compared: usize = 0;
+    var changed: usize = 0;
     for (shots) |shot| {
         if (only) |o| if (std.mem.indexOf(u8, shot.name, o) == null) continue;
         var frame_arena: std.heap.ArenaAllocator = .init(gpa);
@@ -263,11 +270,39 @@ pub fn main(init: std.process.Init) !void {
         for (sizes) |sz| {
             const name = try a.print("{s}/{s}{s}.png", .{ out_dir, shot.name, sz[0] });
             const hook: ?practice_ui.Hook = if (setup != null) .{ .setup = &setup, .shown = true, .changed = noop } else null;
-            try render(gpa, io, .{ .status = status, .stats = &stats, .icons = &icons, .edition = sz[1], .practice = hook }, sz[3], sz[2], name);
-            std.debug.print("{s}\n", .{name});
+            const against: ?Against = if (approved_dir) |d| .{
+                .approved = try a.print("{s}/{s}{s}.png", .{ d, shot.name, sz[0] }),
+                .diff = try a.print("{s}/{s}{s}.diff.png", .{ out_dir, shot.name, sz[0] }),
+            } else null;
+            const diff = try render(gpa, io, .{ .status = status, .stats = &stats, .icons = &icons, .edition = sz[1], .practice = hook }, sz[3], sz[2], name, against);
+            compared += 1;
+            switch (diff) {
+                .same => std.debug.print("{s}\n", .{name}),
+                .new => std.debug.print("{s}: NEW, no approved shot\n", .{name}),
+                .size => std.debug.print("{s}: CHANGED, another size\n", .{name}),
+                .pixels => |p| std.debug.print("{s}: CHANGED, {d} pixels in x {d}-{d}, y {d}-{d}\n", .{ name, p.count, p.x0, p.x1, p.y0, p.y1 }),
+            }
+            if (diff != .same) changed += 1;
         }
     }
+    if (changed > 0) {
+        std.debug.print("{d} of {d} shots differ from {s}: see {s}/*.diff.png\n", .{ changed, compared, approved_dir.?, out_dir });
+        std.process.exit(1);
+    }
 }
+
+const Against = struct {
+    approved: []const u8,
+    /// Written only when the shot differs
+    diff: []const u8,
+};
+
+const Diff = union(enum) {
+    same,
+    new,
+    size,
+    pixels: struct { count: usize, x0: u32, y0: u32, x1: u32, y1: u32 },
+};
 
 fn noop() void {}
 
@@ -341,7 +376,7 @@ fn mastery(a: std.mem.Allocator, stats: *const core.Stats, s: Scene) ![]lanecard
     return out.items;
 }
 
-fn render(gpa: std.mem.Allocator, io: std.Io, view: ui.View, size: dvui.Size.Natural, scale: f32, path: []const u8) !void {
+fn render(gpa: std.mem.Allocator, io: std.Io, view: ui.View, size: dvui.Size.Natural, scale: f32, path: []const u8, against: ?Against) !Diff {
     var backend: Raster = try .init(.{ .allocator = gpa, .size = size, .scale = scale });
     defer backend.deinit();
     var win = try dvui.Window.init(@src(), gpa, backend.backend(), .{ .theme = ui.theme, .keybinds = .windows });
@@ -358,4 +393,51 @@ fn render(gpa: std.mem.Allocator, io: std.Io, view: ui.View, size: dvui.Size.Nat
     var w = file.writer(io, &buf);
     try backend.writePng(&w.interface);
     try w.interface.flush();
+    const a = against orelse return .same;
+    return compare(gpa, io, backend.screen.pixels, backend.screen.width, backend.screen.height, a);
+}
+
+fn compare(gpa: std.mem.Allocator, io: std.Io, pixels: []const u8, width: u32, height: u32, against: Against) !Diff {
+    const cwd = std.Io.Dir.cwd();
+    const bytes = cwd.readFileAlloc(io, against.approved, gpa, .limited(1 << 28)) catch |err| switch (err) {
+        error.FileNotFound => return .new,
+        else => return err,
+    };
+    defer gpa.free(bytes);
+    var aw: c_int = undefined;
+    var ah: c_int = undefined;
+    var channels: c_int = undefined;
+    const approved_ptr = dvui.c.stbi_load_from_memory(bytes.ptr, @intCast(bytes.len), &aw, &ah, &channels, 4) orelse return error.BadApprovedPng;
+    defer dvui.c.stbi_image_free(approved_ptr);
+    if (aw != width or ah != height) return .size;
+    const approved = approved_ptr[0..pixels.len];
+    if (std.mem.eql(u8, approved, pixels)) return .same;
+
+    // Changed pixels red on the new shot at a third of its brightness
+    const out = try gpa.alloc(u8, pixels.len);
+    defer gpa.free(out);
+    var d: Diff = .{ .pixels = .{ .count = 0, .x0 = width, .y0 = height, .x1 = 0, .y1 = 0 } };
+    const p = &d.pixels;
+    for (0..width * height) |i| {
+        const px = pixels[i * 4 ..][0..4];
+        if (std.mem.eql(u8, px, approved[i * 4 ..][0..4])) {
+            out[i * 4 ..][0..4].* = .{ px[0] / 3, px[1] / 3, px[2] / 3, 255 };
+            continue;
+        }
+        out[i * 4 ..][0..4].* = .{ 255, 0, 0, 255 };
+        const x: u32 = @intCast(i % width);
+        const y: u32 = @intCast(i / width);
+        p.count += 1;
+        p.x0 = @min(p.x0, x);
+        p.x1 = @max(p.x1, x);
+        p.y0 = @min(p.y0, y);
+        p.y1 = @max(p.y1, y);
+    }
+    var file = try cwd.createFile(io, against.diff, .{});
+    defer file.close(io);
+    var buf: [64 * 1024]u8 = undefined;
+    var w = file.writer(io, &buf);
+    try dvui.PNGEncoder.writeWithResolution(&w.interface, out, width, height, 0);
+    try w.interface.flush();
+    return d;
 }

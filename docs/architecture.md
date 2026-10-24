@@ -809,7 +809,13 @@ level still pickable.
   the app reads: stats, curves and the lane card, champ select, mastery and ranked
   replies, the signed manifest; core/fuzz.zig mutates good files), builds ReleaseSafe
   with `-Ddesktop-version=<unix seconds>`, signs and copies it to the box's release/.
-  Plain `zig build test` runs each fuzz test once
+  Plain `zig build test` runs each fuzz test once. Two more checks (24 Oct):
+  deploy/desktop-shots.sh check renders every desktop-shot state from pinned inputs
+  (data/desktop-shots/inputs, gitignored) and compares them pixel for pixel with the
+  approved set there (`--compare`; NAME.diff.png marks changes red; `approve` after a
+  look, `pin` for new inputs); deploy/desktop-smoke.sh EXE runs `meiolol-desktop
+  --self-test` (desktop/selftest.zig: data files load, a lane card per role, no window
+  or install) in the gpu-box's %LOCALAPPDATA%\meiolol-smoke from WSL
 - Signatures (desktop/sign.zig, Ed25519, public keys built in): the release key (vault
   meiolol/desktop only) signs each exe's version, SHA-256 and size (`meiolol
   desktop-sign exe`); the data key (box ml/meiolol/desktop-data.key, copy in the same
@@ -877,7 +883,8 @@ level still pickable.
   (futexWaitTimeout, else 1 s), so a click redraws without a client round trip. A real
   champ select or game takes over until it ends. Icons need the client open, else
   initials
-- `zig build desktop-shot -- --stats F --curves F [--out DIR] [--min-games N]`: the
+- `zig build desktop-shot -- --stats F --curves F [--out DIR] [--min-games N] [--compare
+  DIR]`: the
   window's states (fixture champ selects in desktop_shot.zig, the loading screen
   from one, in game and post
   game from testdata/lcu/live-allgamedata.json and eog-stats-block.json, practice from a
