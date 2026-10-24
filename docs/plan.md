@@ -82,8 +82,9 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
    data-and-model.md. A4 (pair cells that borrow strength) shipped 24 Oct (DM1); the
    desktop app gets it once web-loop.sh's strip_fitted goes
 8. The latest patch (J25, 23 Oct): docs/plan/patch-transfer.md. Evaluate on
-   latest-patch games only, day by day; old patches only while it is thin (pooled plus
-   shrunk per-patch offsets); find the day old patches stop helping. PT1 pin next.
+   latest-patch games only, day by day; old patches always pooled with a correction
+   between patches (J28, 24 Oct: shrunk per-patch offsets the main candidate). PT1 pin
+   next.
    J27 (23 Oct): tuned and scored for EUW (PT6); the Patch changes page says why each
    champion moved (site.md PC1-PC2)
 9. The data edge (J23, J24): every block respects its filters or is marked (E1, done

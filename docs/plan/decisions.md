@@ -92,6 +92,10 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
   needs to show why". Models are tuned and scored for one target region, EUW first,
   still fitted on every region's games (patch-transfer.md PT6). The Patch changes page
   says why each champion moved: what the patch changed for it (site.md PC1-PC2)
+- J28 (24 Oct) "I always want to use older patch games as well with some good
+  techniques for correcting between each patch". Overrides J25's switch to latest patch
+  only once it fills: the model always pools old patches plus a patch correction; still
+  scored on latest-patch games (patch-transfer.md)
 - nn on the GPU: planned, not now
 - Q1 Rewrite the application around game review of your own games, lane curves as the
   benchmark; squads worded as planned, or out until built

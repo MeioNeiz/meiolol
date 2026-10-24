@@ -1,8 +1,8 @@
-# Plan: the latest patch, with old patches while it is thin
+# Plan: the latest patch, with old patches corrected for it
 
 Jacob, 23 Oct: we mostly analyse the latest patch and keep it simple. The model is
-evaluated against latest-patch games only; old patches are used only to adjust the
-model while the latest patch has too few games to train and evaluate on its own (J25).
+evaluated against latest-patch games only (J25). 24 Oct: old patches always stay in,
+with a correction between patches, never latest patch only (J28).
 Research: research/questions/patch-transfer.md (ratings level, cited [pt C1]) and its
 child patch-shift-nets.md (nets, cited [psn C1]). lab-frontier.md E2-E3 run here (A2,
 A3); E4-E5 only if PT3 finds a jump worth modelling.
@@ -17,8 +17,8 @@ A3); E4-E5 only if PT3 finds a jump worth modelling.
 2. The model: a stable part fitted on every game plus a small per-patch champion-role
    offset, shrunk to 0, looser for champions the patch changed [pt C1, C8, psn C5]. The
    offset takes over as the patch fills
-3. The answer we want is simple: from which day (or how many latest-patch games) old
-   patches stop helping. Before that, use the winning arm; after it, latest patch only
+3. The answer we want: which correction wins on every day bucket, and how it should
+   loosen as the patch fills (J28: pooled always; A0 stays as a reference arm only)
 
 Size: ignoring 16.21's jump cost ~1.1 milli-nats a game on day one, about 15% of the
 shipped model's edge over a coin, shrinking as the patch fills (frontier-dynamics C11).
@@ -51,7 +51,7 @@ shipped model's edge over a coin, shrinking as the patch fills (frontier-dynamic
 
   | arm | fit | tests |
   | --- | --- | --- |
-  | A0 latest only | latest-patch games only | where old patches stop helping |
+  | A0 latest only | latest-patch games only | reference only (J28) |
   | A1 pooled | every game, no patch term | the bar [pt C2] |
   | A2 pooled + offsets | rating + o[c][patch], one L2 | the main candidate [pt C1] |
   | A3 changed-aware | A2, looser L2 for changed champions | does the change list help days 0-1 |
