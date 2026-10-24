@@ -22,12 +22,11 @@ const Date = @import("date.zig").Date;
 const Role = core.Role;
 const Io = std.Io;
 
-pub const gold_minute = 14;
-pub const win_minute = 20;
-/// Fewer fit games still going at win_minute and the champion-role says nothing
-pub const min_games = 200;
-/// An effect is clear this many posterior sds from 0
-pub const clear_z = 2.0;
+const champfacts = core.champfacts;
+pub const gold_minute = champfacts.gold_minute;
+pub const win_minute = champfacts.win_minute;
+pub const min_games = champfacts.lean_min_games;
+pub const clear_z = champfacts.clear_z;
 const passes = 12;
 /// Champions in the game, with room for new ones
 const max_champs = 512;
@@ -206,7 +205,7 @@ pub const Fit = struct {
     }
 };
 
-pub const Lean = enum { early, late, none };
+pub const Lean = champfacts.Lean;
 
 fn classify(gold: Effects, win: Effects, cell: usize) Lean {
     if (!gold.clear(cell) or !win.clear(cell)) return .none;
@@ -358,53 +357,7 @@ fn shrinkRole(e: *Effects, ri: usize, sxr: []const f64, info: []const f64, sigma
 
 pub const version = 1;
 
-/// One champion-role, in display units
-pub const Row = struct {
-    champion: u32,
-    role: Role,
-    /// Fit games still going at win_minute
-    games: u32,
-    /// Team gold lead at gold_minute against the role's average pick, ± its sd
-    gold: f64,
-    gold_sd: f64,
-    /// Win pp from an even game at win_minute against the role's average pick (log-odds
-    /// x 25: the change at 50%), ± its sd
-    win: f64,
-    win_sd: f64,
-
-    fn effects(r: Row) [2]Effects1 {
-        return .{ .{ .b = r.gold, .sd = r.gold_sd, .n = r.games }, .{ .b = r.win, .sd = r.win_sd, .n = r.games } };
-    }
-
-    pub fn goldClear(r: Row) bool {
-        return r.effects()[0].clear();
-    }
-
-    pub fn winClear(r: Row) bool {
-        return r.effects()[1].clear();
-    }
-
-    pub fn enough(r: Row) bool {
-        return r.games >= min_games;
-    }
-
-    pub fn lean(r: Row) Lean {
-        if (!r.goldClear() or !r.winClear()) return .none;
-        if (r.gold > 0 and r.win < 0) return .early;
-        if (r.gold < 0 and r.win > 0) return .late;
-        return .none;
-    }
-};
-
-const Effects1 = struct {
-    b: f64,
-    sd: f64,
-    n: u32,
-
-    fn clear(e: Effects1) bool {
-        return e.n >= min_games and e.sd > 0 and @abs(e.b) >= clear_z * e.sd;
-    }
-};
+pub const Row = champfacts.LeanRow;
 
 pub const File = struct {
     /// Fit games (reaching 15:00)

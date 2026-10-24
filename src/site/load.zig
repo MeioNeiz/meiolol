@@ -447,9 +447,20 @@ fn addFiles(site: *Site) !void {
             try files.append(arena, .{ .path = "data/learning.json", .data = aw.written() });
         }
         try shared_files.appendSlice(arena, site.daily_files);
+        if (site.learn) |facts| try shared_files.append(arena, .{ .path = "data/champ-facts.tsv", .data = try champFacts(site, facts) });
     }
     site.files = files.items;
     site.shared_files = shared_files.items;
+}
+
+/// The desktop's comp view facts (core/champfacts.zig): Learn's damage split and mix
+/// tally, and the lean file's rows when there is one
+fn champFacts(site: *const Site, facts: learn.Facts) ![]const u8 {
+    const magic = try site.arena.alloc(?f32, facts.champs.len);
+    for (magic, facts.champs) |*m, ch| m.* = ch.magic;
+    var aw: Writer.Allocating = .init(site.arena);
+    try core.champfacts.write(&aw.writer, site.patch, site.stats.ids[0..facts.champs.len], magic, facts.mix, if (site.lean) |l| l.rows else &.{});
+    return aw.written();
 }
 
 fn eqlStrings(a: []const []const u8, b: []const []const u8) bool {

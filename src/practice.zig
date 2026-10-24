@@ -13,6 +13,7 @@ const eog = @import("lcu/eog.zig");
 const lanecard = @import("lanecard.zig");
 const board = @import("board.zig");
 const loading = @import("loading.zig");
+const comp = @import("comp.zig");
 const ingame = @import("ingame.zig");
 const postgame = @import("postgame.zig");
 const Role = core.Role;
@@ -273,12 +274,13 @@ fn game(st: *mock.State, s: Setup) void {
 pub const Input = struct {
     stats: *const Stats,
     curves: ?*const core.curvesfile.Curves = null,
+    facts: ?*const core.champfacts.Facts = null,
     mastery: []const lanecard.Mastery = &.{},
     tier: ?[]const u8 = null,
     expertise: ?lanecard.Expertise = .fitted,
 };
 
-pub const Select = struct { card: lanecard.Card, board: board.Board };
+pub const Select = struct { card: lanecard.Card, board: board.Board, comp: ?*const comp.Comp };
 
 pub const Built = union(enum) {
     select: Select,
@@ -349,7 +351,8 @@ fn selectOf(arena: std.mem.Allocator, in: Input, sc: *const mock.Scenario, s: Se
         .tier = in.tier,
         .expertise = in.expertise,
     });
-    return .{ .card = card, .board = try board.build(arena, in.stats, .{}, cs, &card) };
+    const b = try board.build(arena, in.stats, .{}, cs, &card);
+    return .{ .card = card, .board = b, .comp = try comp.after(arena, .{ .stats = in.stats, .curves = in.curves, .facts = in.facts, .tier = in.tier }, &b) };
 }
 
 const testing = std.testing;

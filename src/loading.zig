@@ -103,33 +103,64 @@ fn card(arena: std.mem.Allocator, in: Input, s: Seat, across: []const Seat) !Car
     return c;
 }
 
-/// "ahead in lane vs Syndra", "level 6 sooner", "first item later"
-fn lanePills(arena: std.mem.Allocator, in: Input, curves: *const curvesfile.Curves, role: Role, me: u32, them: u32, pills: *std.ArrayList(Pill)) !void {
-    const found = lanecard.view(curves, role, lanecard.bracketOf(in.tier), me, them) orelse return;
+/// A lane matchup's curve as the loading screen and the comp view read it
+pub const LaneFacts = struct {
+    games: u32,
+    /// Gold at lane_minute, mine minus theirs; null when the curve stops sooner
+    gold: ?struct { mean: i32, se: i32 },
+    /// Seconds, mine minus theirs (negative: mine sooner); null when either is unknown
+    level6: ?i32,
+    first_item: ?i32,
+
+    pub const Edge = enum { ahead, even, behind };
+
+    /// Ahead or behind only `sure` standard errors from even
+    pub fn edge(f: LaneFacts) ?Edge {
+        const g = f.gold orelse return null;
+        const z = @as(f64, @floatFromInt(g.mean)) / @as(f64, @floatFromInt(@max(1, g.se)));
+        return if (z >= sure) .ahead else if (z <= -sure) .behind else .even;
+    }
+};
+
+/// Null without a curve with enough games of the pair, mine the champion's own way round
+pub fn laneFacts(curves: *const curvesfile.Curves, role: Role, tier: ?[]const u8, me: u32, them: u32) ?LaneFacts {
+    const found = lanecard.view(curves, role, lanecard.bracketOf(tier), me, them) orelse return null;
     const v = found.view;
-    if (v.games() < lanecard.thin_games or v.own() < 0.5) return;
-    const name = in.stats.nameOf(them);
+    if (v.games() < lanecard.thin_games or v.own() < 0.5) return null;
+    var f: LaneFacts = .{ .games = v.games(), .gold = null, .level6 = null, .first_item = null };
     if (v.minutes() >= curvesfile.lane_minute) {
         const e = v.estimate(.gold, curvesfile.lane_minute - 1);
-        const se: f64 = @floatFromInt(@max(1, e.se));
-        const z = @as(f64, @floatFromInt(e.mean)) / se;
-        const where = if (role == .jungle) "early" else "in lane";
-        try pills.append(arena, if (z >= sure)
-            .{ .text = try std.fmt.allocPrint(arena, "ahead {s} vs {s}", .{ where, name }), .tone = .good }
-        else if (z <= -sure)
-            .{ .text = try std.fmt.allocPrint(arena, "behind {s} vs {s}", .{ where, name }), .tone = .bad }
-        else
-            .{ .text = try std.fmt.allocPrint(arena, "even {s} vs {s}", .{ where, name }), .tone = .neutral });
+        f.gold = .{ .mean = e.mean, .se = @max(1, e.se) };
     }
-    const timings = [_]struct { [2]u16, []const u8 }{ .{ v.level6(), "level 6" }, .{ v.firstItem(), "first item" } };
-    for (timings) |t| {
-        const a, const b = t[0];
-        if (a == 0 or b == 0) continue;
-        const gap = @as(i32, a) - b;
-        if (@abs(gap) < timing_gap) continue;
+    for ([_][2]u16{ v.level6(), v.firstItem() }, [_]*?i32{ &f.level6, &f.first_item }) |t, out| {
+        if (t[0] == 0 or t[1] == 0) continue;
+        out.* = @as(i32, t[0]) - t[1];
+    }
+    return f;
+}
+
+/// Closer timings than timing_gap are "about the same"
+pub fn timingWord(gap: ?i32) ?enum { sooner, later } {
+    const g = gap orelse return null;
+    if (@abs(g) < timing_gap) return null;
+    return if (g < 0) .sooner else .later;
+}
+
+/// "ahead in lane vs Syndra", "level 6 sooner", "first item later"
+fn lanePills(arena: std.mem.Allocator, in: Input, curves: *const curvesfile.Curves, role: Role, me: u32, them: u32, pills: *std.ArrayList(Pill)) !void {
+    const f = laneFacts(curves, role, in.tier, me, them) orelse return;
+    const name = in.stats.nameOf(them);
+    const where = if (role == .jungle) "early" else "in lane";
+    if (f.edge()) |e| try pills.append(arena, switch (e) {
+        .ahead => .{ .text = try std.fmt.allocPrint(arena, "ahead {s} vs {s}", .{ where, name }), .tone = .good },
+        .behind => .{ .text = try std.fmt.allocPrint(arena, "behind {s} vs {s}", .{ where, name }), .tone = .bad },
+        .even => .{ .text = try std.fmt.allocPrint(arena, "even {s} vs {s}", .{ where, name }), .tone = .neutral },
+    });
+    for ([_]?i32{ f.level6, f.first_item }, [_][]const u8{ "level 6", "first item" }) |gap, what| {
+        const word = timingWord(gap) orelse continue;
         try pills.append(arena, .{
-            .text = try std.fmt.allocPrint(arena, "{s} {s}", .{ t[1], if (gap < 0) "sooner" else "later" }),
-            .tone = if (gap < 0) .good else .caution,
+            .text = try std.fmt.allocPrint(arena, "{s} {t}", .{ what, word }),
+            .tone = if (word == .sooner) .good else .caution,
         });
     }
 }

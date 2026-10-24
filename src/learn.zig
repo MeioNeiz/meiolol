@@ -25,10 +25,8 @@ const log = std.log.scoped(.learn);
 /// Game length buckets: short below the first, long from the second (minutes)
 pub const length_minutes = [_]u32{ 25, 32 };
 pub const lengths = length_minutes.len + 1;
-/// Team damage mix buckets by the team's average magic share: mostly physical below
-/// the first, mostly magic from the second
-pub const mix_bounds = [_]f64{ 0.3, 0.7 };
-pub const mixes = mix_bounds.len + 1;
+pub const mix_bounds = core.champfacts.mix_bounds;
+pub const mixes = core.champfacts.mixes;
 /// Newest games whose raw match JSON is read for the damage split; damage type barely
 /// moves, so a sample does
 const damage_sample = 3000;
@@ -166,11 +164,7 @@ pub fn lengthBucket(minutes: u32) usize {
     return b;
 }
 
-pub fn mixBucket(magic: f64) usize {
-    var b: usize = 0;
-    while (b < mix_bounds.len and magic >= mix_bounds[b]) b += 1;
-    return b;
-}
+pub const mixBucket = core.champfacts.mixBucket;
 
 /// The partials' games on the chosen patches and platforms with a winner, by match id;
 /// each Game.position code's role in `roles`

@@ -1,5 +1,5 @@
 //! The desktop app keeping itself current from meio.lol (J19): its statistics, lane
-//! curves and its own exe. update.signed in the update directory lists each file's name,
+//! curves, champion facts and its own exe. update.signed in the update directory lists each file's name,
 //! SHA-256 and size, signed by the box's data key; the exe's entry also carries its
 //! release version and the release key's signature (sign.zig). A file whose local copy
 //! differs is downloaded beside it as .part, checked, then renamed over it. Windows can't overwrite a running exe but can rename it:
@@ -24,6 +24,8 @@ pub const default_base = "https://meio.lol/p/desktop/";
 pub const key_file = "update.key";
 pub const old_exe = "meiolol-desktop.old.exe";
 pub const exe_name = "meiolol-desktop.exe";
+/// core/champfacts.zig's; exes from before it skip the entry
+const facts_name = "champ-facts.tsv";
 const key_header = "x-meiolol-desktop";
 
 const Manifest = struct {
@@ -108,17 +110,19 @@ pub fn run(o: Options) !Result {
 
     var result: Result = .{};
     for (manifest.files) |f| {
-        const kind: enum { stats, curves, exe } = if (std.mem.eql(u8, f.name, "stats.bin"))
+        const kind: enum { stats, curves, facts, exe } = if (std.mem.eql(u8, f.name, "stats.bin"))
             .stats
         else if (std.mem.eql(u8, f.name, "recent-curves.bin"))
             .curves
+        else if (std.mem.eql(u8, f.name, facts_name))
+            .facts
         else if (std.mem.eql(u8, f.name, exe_name) and o.exe != null)
             .exe
         else
             continue;
         const local = switch (kind) {
             .stats => try arena.print("stats-{s}.bin", .{manifest.patch}),
-            .curves => f.name,
+            .curves, .facts => f.name,
             .exe => o.exe.?,
         };
         if (f.sha256.len != 64) return error.BadManifest;
@@ -357,6 +361,7 @@ test "update fetches changed files, swaps the exe, then has nothing to do" {
     const files = [_][2][]const u8{
         .{ "stats.bin", "new stats" },
         .{ "recent-curves.bin", "curves" },
+        .{ "champ-facts.tsv", "facts" },
         .{ exe_name, "new exe" },
         .{ "later.bin", "ignored" },
     };
@@ -388,6 +393,7 @@ test "update fetches changed files, swaps the exe, then has nothing to do" {
     try std.testing.expectEqual(Result{ .data = true, .exe = true }, try run(o));
     var buf: [64]u8 = undefined;
     try std.testing.expectEqualStrings("new stats", try app.readFile(io, "stats-16.20.bin", &buf));
+    try std.testing.expectEqualStrings("facts", try app.readFile(io, "champ-facts.tsv", &buf));
     try std.testing.expectEqualStrings("new exe", try app.readFile(io, "app.exe", &buf));
     try std.testing.expectEqualStrings("old exe", try app.readFile(io, old_exe, &buf));
     try std.testing.expectError(error.FileNotFound, app.access(io, "stats-16.19.bin", .{}));

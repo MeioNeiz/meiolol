@@ -16,6 +16,7 @@ const ingame = @import("../ingame.zig");
 const postgame = @import("../postgame.zig");
 const loading = @import("../loading.zig");
 const practice = @import("../practice.zig");
+const comp = @import("../comp.zig");
 const Icons = @import("icons.zig").Icons;
 const icons_path = @import("icons.zig").lcu_path;
 const datafiles = @import("../datafiles.zig");
@@ -56,11 +57,12 @@ const Shared = struct {
     auth_gen: std.atomic.Value(u32) = .init(0),
 };
 
-/// Stats and curves with the memory they live in
+/// Stats, curves and champion facts with the memory they live in
 const Data = struct {
     arena: std.heap.ArenaAllocator,
     stats: core.Stats,
     curves: ?core.curvesfile.Curves,
+    facts: ?core.champfacts.Facts,
 };
 
 /// Between checks; after a failure, sooner
@@ -120,6 +122,14 @@ fn loadInto(data: *Data) !void {
     // Without curves the card still lists options, without lane gold
     if (try datafiles.curves(arena, io)) |p| {
         data.curves = core.curvesfile.Curves.parse(arena, try cwd.readFileAlloc(io, p, arena, limit)) catch |err| blk: {
+            std.log.err("{s}: {t}", .{ p, err });
+            break :blk null;
+        };
+    }
+    // Without facts the comp view has the lanes alone
+    data.facts = null;
+    if (try datafiles.facts(arena, io)) |p| {
+        data.facts = core.champfacts.Facts.parse(arena, try cwd.readFileAlloc(io, p, arena, .limited(1 << 22))) catch |err| blk: {
             std.log.err("{s}: {t}", .{ p, err });
             break :blk null;
         };
@@ -518,6 +528,12 @@ const Poller = struct {
             .expertise = if (by_mastery) .fitted else null,
         });
         sel.board = try board.build(arena, &data.stats, .{}, cs, &sel.card);
+        sel.comp = try comp.after(arena, .{
+            .stats = &data.stats,
+            .curves = if (data.curves) |*c| c else null,
+            .facts = if (data.facts) |*f| f else null,
+            .tier = own.tier,
+        }, &sel.board);
         _ = p.seats_arena.reset(.retain_capacity);
         p.seats = try loading.seatsOf(p.seats_arena.allocator(), &sel.board);
         p.draft = sel.board.draft;
@@ -537,6 +553,7 @@ const Poller = struct {
         const built = try practice.build(arena, .{
             .stats = &data.stats,
             .curves = if (data.curves) |*c| c else null,
+            .facts = if (data.facts) |*f| f else null,
             .mastery = own.mastery,
             .tier = own.tier,
             .expertise = if (by_mastery) .fitted else null,
@@ -552,7 +569,7 @@ const Poller = struct {
         const status: ui.Status = switch (built) {
             .select => |s| blk: {
                 const sel = try arena.create(ui.Select);
-                sel.* = .{ .card = s.card, .board = s.board };
+                sel.* = .{ .card = s.card, .board = s.board, .comp = s.comp };
                 want.addSelect(sel);
                 break :blk .{ .select = sel };
             },

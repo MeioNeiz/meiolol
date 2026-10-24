@@ -90,6 +90,7 @@ champion/rakan.html fdec6ed41970742d
 champion/twitch.html 01858951fec1322a
 champions.html 37aa6ef75740a900
 daily.html 5c2f13a9c923ac7a
+data/champ-facts.tsv 020d3fa6e870afa3
 data/champions.json 00926860dfeebe26
 data/filters.json 406e23555894da4c
 data/filters/ahri.json 3ae6e09eadd8da20

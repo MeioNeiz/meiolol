@@ -14,6 +14,11 @@ pub fn curves(arena: std.mem.Allocator, io: std.Io) !?[]const u8 {
     return find(arena, io, "curves-", ".bin");
 }
 
+/// champ-facts.tsv (core/champfacts.zig)
+pub fn facts(arena: std.mem.Allocator, io: std.Io) !?[]const u8 {
+    return find(arena, io, "champ-facts", ".tsv");
+}
+
 fn find(arena: std.mem.Allocator, io: std.Io, prefix: []const u8, suffix: []const u8) !?[]const u8 {
     if (try newest(arena, io, "data/export", prefix, suffix)) |p| return p;
     const exe_dir = std.process.executableDirPathAlloc(io, arena) catch return null;

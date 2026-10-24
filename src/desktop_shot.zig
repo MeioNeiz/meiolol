@@ -5,8 +5,8 @@
 //! for pixel: the changed ones get NAME.diff.png (changes red on the dimmed new shot)
 //! and the exit code is 1 (deploy/desktop-shots.sh).
 //!
-//! usage: meiolol-desktop-shot --stats FILE --curves FILE [--icons DIR] [--out DIR]
-//!   [--only NAME] [--min-games N] [--compare DIR]
+//! usage: meiolol-desktop-shot --stats FILE --curves FILE [--facts FILE] [--icons DIR]
+//!   [--out DIR] [--only NAME] [--min-games N] [--compare DIR]
 
 const std = @import("std");
 const dvui = @import("dvui");
@@ -20,6 +20,7 @@ const Icons = @import("desktop/icons.zig").Icons;
 const ingame = @import("ingame.zig");
 const postgame = @import("postgame.zig");
 const loading = @import("loading.zig");
+const comp = @import("comp.zig");
 const practice = @import("practice.zig");
 const practice_ui = @import("desktop/private/practice.zig");
 const signin = @import("desktop/signin.zig");
@@ -158,6 +159,7 @@ pub fn main(init: std.process.Init) !void {
     const argv = try init.minimal.args.toSlice(arena);
     var stats_path: ?[]const u8 = null;
     var curves_path: ?[]const u8 = null;
+    var facts_path: ?[]const u8 = null;
     var icons_dir: ?[]const u8 = null;
     var out_dir: []const u8 = "zig-out/shots";
     var only: ?[]const u8 = null;
@@ -168,6 +170,7 @@ pub fn main(init: std.process.Init) !void {
         const flag = argv[i];
         if (std.mem.eql(u8, flag, "--stats")) stats_path = argv[i + 1];
         if (std.mem.eql(u8, flag, "--curves")) curves_path = argv[i + 1];
+        if (std.mem.eql(u8, flag, "--facts")) facts_path = argv[i + 1];
         if (std.mem.eql(u8, flag, "--icons")) icons_dir = argv[i + 1];
         if (std.mem.eql(u8, flag, "--out")) out_dir = argv[i + 1];
         if (std.mem.eql(u8, flag, "--only")) only = argv[i + 1];
@@ -180,6 +183,9 @@ pub fn main(init: std.process.Init) !void {
     const stats: core.Stats = try .parse(arena, stats_bytes);
     var curves: ?core.curvesfile.Curves = null;
     if (curves_path) |p| curves = try .parse(arena, try cwd.readFileAlloc(io, p, arena, limit));
+    var facts: ?core.champfacts.Facts = null;
+    if (facts_path) |p| facts = try .parse(arena, try cwd.readFileAlloc(io, p, arena, .limited(1 << 22)));
+    const comp_in: comp.Input = .{ .stats = &stats, .curves = if (curves) |*c| c else null, .facts = if (facts) |*f| f else null };
     var icons: Icons = .{ .gpa = gpa };
     defer icons.deinit();
     if (icons_dir) |d| try icons.loadDir(io, d);
@@ -207,9 +213,9 @@ pub fn main(init: std.process.Init) !void {
                 setup = st;
                 practice_ui.open(pr.picker orelse .{ .ally = .top });
                 if (pr.picker == null) practice_ui.close();
-                const in: practice.Input = .{ .stats = &stats, .curves = if (curves) |*c| c else null, .tier = "GOLD" };
+                const in: practice.Input = .{ .stats = &stats, .curves = comp_in.curves, .facts = comp_in.facts, .tier = "GOLD" };
                 break :blk switch (try practice.build(a, in, st)) {
-                    .select => |sel| .{ .select = try dupe(a, ui.Select{ .card = sel.card, .board = sel.board }) },
+                    .select => |sel| .{ .select = try dupe(a, ui.Select{ .card = sel.card, .board = sel.board, .comp = sel.comp }) },
                     .loading => |l| .{ .loading = try dupe(a, l) },
                     .in_game => |g| .{ .in_game = try dupe(a, g) },
                     .post_game => |pg| .{ .post_game = try dupe(a, pg) },
@@ -241,6 +247,9 @@ pub fn main(init: std.process.Init) !void {
                     .opts = opts,
                 });
                 sel.board = try board.build(a, &stats, opts, cs, &sel.card);
+                var in = comp_in;
+                in.tier = scene.tier;
+                sel.comp = try comp.after(a, in, &sel.board);
                 break :blk .{ .select = sel };
             },
             .game => |gm| blk: {

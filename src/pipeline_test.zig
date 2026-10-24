@@ -208,6 +208,14 @@ test "fixture games to stats, curves and the website" {
         const helper: core.Stats = try .parse(arena, bytes);
         try testing.expect(helper.fitted_bytes != null);
     }
+    // The desktop's comp view facts: the lean file's rows, a mix tally (damage split from
+    // raw JSON the fixture may lack)
+    {
+        const bytes = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "data/champ-facts.tsv" }), arena, .limited(1 << 20));
+        const facts = try core.champfacts.Facts.parse(arena, bytes);
+        try testing.expectEqual(games, facts.leanOf(122, .top).?.games);
+        try testing.expectEqualStrings("15.13", facts.patch);
+    }
     // Build page: three games, so no bare win rates; the champion page (root view) links
     // into the patch view's
     const pages = [_]struct { []const u8, []const []const u8 }{

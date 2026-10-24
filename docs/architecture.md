@@ -808,7 +808,9 @@ level still pickable.
 - `zig build desktop`: zig-out/bin/meiolol-desktop.exe (~3 MB;
   dvui pinned to PR #1012, lazy so the box never fetches it). Reads the newest
   stats-*.bin and recent-curves.bin (else curves-<patch>.bin) from data/export or next
-  to the exe (src/datafiles.zig, shared with `meiolol-app`)
+  to the exe (src/datafiles.zig, shared with `meiolol-app`), and champ-facts.tsv when
+  there (core/champfacts.zig: damage split, team mix tally and early or late leans, which
+  the site's shared view writes as data/champ-facts.tsv; the comp view's, src/comp.zig)
 - A detached poller thread does what `watch` does once a second and publishes a
   ui.Status (with the lane card) under a mutex, waking the window with a WM_NULL; the
   UI thread only draws, and sleeps between messages (own main loop: dvui's dx11 App
@@ -843,7 +845,8 @@ level still pickable.
   at start and every 3 h (5 min after a failure; MEIOLOL_UPDATE_URL elsewhere), and at
   once after a sign in, checks its signature, and fetches each listed
   file whose SHA-256 differs from the local copy: stats.bin as stats-<patch>.bin (older stats-*.bin
-  deleted), recent-curves.bin, meiolol-desktop.exe. Each goes to NAME.part (gzip on the
+  deleted), recent-curves.bin, champ-facts.tsv, meiolol-desktop.exe (names it doesn't
+  know are skipped, so a new data file needs no version bump). Each goes to NAME.part (gzip on the
   wire, nginx's .gz copies), is checked against hash and size, then renamed over the
   old. The running exe is renamed to meiolol-desktop.old.exe (kept for a manual
   rollback) and the new one takes its name: next start runs it, and the footer says

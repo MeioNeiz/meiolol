@@ -5,12 +5,13 @@
 # (deploy/desktop-release.sh runs `check`). A changed shot gets NAME.diff.png beside it
 # in last/ (changes red on the dimmed new shot); look, then approve. Everything lives in
 # the main checkout's data/desktop-shots (gitignored, ~15 MB): inputs/ (stats.bin,
-# curves.bin, icons/), approved/, last/ (the latest check's renders). Renders the tree
-# it runs in, ReleaseSafe as both approve and check (float rounding may differ by mode).
+# curves.bin, icons/, champ-facts.tsv), approved/, last/ (the latest check's renders).
+# Renders the tree it runs in, ReleaseSafe as both approve and check (float rounding
+# may differ by mode).
 #   deploy/desktop-shots.sh check [NAME]        render (NAME: only shots containing it)
 #                                               and compare; exit 1 on any difference
 #   deploy/desktop-shots.sh approve             last/'s shots become the approved ones
-#   deploy/desktop-shots.sh pin STATS CURVES [ICONS]
+#   deploy/desktop-shots.sh pin STATS CURVES [ICONS [FACTS]]
 #                                               new inputs: every shot changes, so check
 #                                               and approve after
 set -euo pipefail
@@ -32,11 +33,13 @@ case ${1:-} in
         mkdir -p "$shots/last" "$shots/approved"
         only=()
         [[ -z ${2:-} ]] || only=(--only "$2")
-        icons=()
-        [[ ! -d $shots/inputs/icons ]] || icons=(--icons "$shots/inputs/icons")
+        extra=()
+        [[ ! -d $shots/inputs/icons ]] || extra=(--icons "$shots/inputs/icons")
+        [[ ! -f $shots/inputs/champ-facts.tsv ]] \
+            || extra+=(--facts "$shots/inputs/champ-facts.tsv")
         rc=0
         zig build desktop-shot -Doptimize=ReleaseSafe -- --stats "$shots/inputs/stats.bin" \
-            --curves "$shots/inputs/curves.bin" ${icons[@]+"${icons[@]}"} \
+            --curves "$shots/inputs/curves.bin" ${extra[@]+"${extra[@]}"} \
             --out "$shots/last" --compare "$shots/approved" ${only[@]+"${only[@]}"} \
             > "$shots/last/check.log" 2>&1 || rc=$?
         grep -E 'NEW|CHANGED|differ|error|panic' "$shots/last/check.log" | sed "s#$shots/last/##" || true
@@ -66,6 +69,7 @@ case ${1:-} in
             rm -rf "$shots/inputs/icons"
             cp -R "$4" "$shots/inputs/icons"
         fi
+        [[ -z ${5:-} ]] || cp "$5" "$shots/inputs/champ-facts.tsv"
         echo "desktop-shots: inputs pinned; check, look at last/, approve"
         ;;
     *) usage_of "$0"; exit 2 ;;

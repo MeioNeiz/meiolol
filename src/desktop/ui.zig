@@ -21,6 +21,8 @@ const ingame = @import("../ingame.zig");
 const postgame = @import("../postgame.zig");
 const palette = w.palette;
 const signin = @import("signin.zig");
+const comp = @import("../comp.zig");
+const comp_view = @import("comp.zig");
 
 pub const title = "meiolol";
 /// Logical pixels; Windows scales these by the display's DPI
@@ -38,6 +40,8 @@ pub const private_code = w.private_code;
 pub const Select = struct {
     card: lanecard.Card,
     board: board.Board,
+    /// Once every seat is locked
+    comp: ?*const comp.Comp = null,
 };
 
 pub const Status = union(enum) {
@@ -289,6 +293,7 @@ fn sideColumn(ctx: w.Ctx, b: *const board.Board, side: teams.Side) void {
 fn centre(ctx: w.Ctx, s: *const Select) void {
     const banning = s.board.turn == .ban or std.mem.eql(u8, s.board.stage, "Planning");
     if (banning) teams.banOptions(ctx, &s.board);
+    if (s.comp) |c| comp_view.view(ctx, c);
     lane.panel(ctx, &s.card, s.board.mode);
     {
         var strip = dvui.box(@src(), .{ .dir = .vertical }, .{ .expand = .horizontal, .margin = .{ .y = 14 } });

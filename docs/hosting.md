@@ -206,8 +206,8 @@ nginx caches each encoding apart, and answers a directory URL without its slash 
   units, `sudo install -m 755 traffic.sh /usr/local/bin/meiolol-traffic`, units into
   /etc/systemd/system, `daemon-reload`. nginx before: /home/ubuntu/meiolol.conf.bak-dashboard
 - Desktop app files (/admin/desktop/: zip, update.signed, update.json (unsigned, for
-  apps from before 21 Oct), stats.bin, recent-curves.bin, the exe, .gz copies;
-  deploy/web-loop.sh desktop_files from the box's release/ (deploy/desktop-release.sh),
+  apps from before 21 Oct), stats.bin, recent-curves.bin, champ-facts.tsv, the exe, .gz
+  copies; deploy/web-loop.sh desktop_files from the box's release/ (deploy/desktop-release.sh),
   manifest signed with ml/meiolol/desktop-data.key, mode 600, copy in vault
   meiolol/desktop): an auth_request to internal
   /_meiolol_desktop_key, which answers 204 when X-Meiolol-Desktop equals the key in
