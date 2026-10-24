@@ -225,6 +225,15 @@ The /p/ pages (accounts.md AC3). First candidates, cheapest first: the draft tes
 wording on champion and matchup pages, experimental models (J15's labelled
 experiments), all regions and patches without the public page-weight cuts.
 
+Done 24 Oct: the Draft tester's Lab experiment switch on /p/ too (J15: labelled with
+the export's name; jomify's training-receive.sh puts only the tester's model files in
+p/lab, linked while /p/ answers 302 logged out); the shipped model's win chances on the
+public champion and matchup pages for private logins (/p/pv.js, loaded by the header
+script in browsers that opened /admin/ or /p/, data p/models/champ/<id>.json from
+`meiolol draft-model`): a line in the hero (each role against an average draft; on a
+matchup page the pairing and each champion alone) and a last line on every opponent and
+duo tile. Next: all regions and patches without the public page-weight cuts.
+
 Private ideas from the feature survey (league-apps-feature-matrix), after the above:
 loading-screen scouting of the lane opponent and the rest (mainstream; names are
 visible there), the group's pooled stats and leaderboard, a Discord bot, game-start

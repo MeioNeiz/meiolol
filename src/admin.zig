@@ -201,7 +201,8 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
 
 /// The private site's Draft tester (/p/, docs/plan/accounts.md AC3): the admin page in
 /// private mode (admin.js PRIVATE), no box data, only the shipped models the web loop
-/// copies into models/. nginx serves it to view_private logins
+/// copies into models/; and pv.js, the public pages' private numbers. nginx serves it to
+/// view_private logins
 pub fn private(gpa: std.mem.Allocator, io: Io, out_dir: []const u8, now_s: i64) !void {
     var buf: [1024]u8 = undefined;
     const page = try std.fmt.bufPrint(&buf,
@@ -233,6 +234,7 @@ pub fn private(gpa: std.mem.Allocator, io: Io, out_dir: []const u8, now_s: i64) 
     try writeGz(gpa, io, dir, "admin-draft.js", @embedFile("site/static/admin-draft.js"));
     try writeGz(gpa, io, dir, "admin.js", @embedFile("site/static/admin.js"));
     try writeGz(gpa, io, dir, "admin.css", @embedFile("site/static/admin.css"));
+    try writeGz(gpa, io, dir, "pv.js", @embedFile("site/static/pv.js"));
 }
 
 /// Also `path`.gz, as the site's pages (nginx gzip_static)

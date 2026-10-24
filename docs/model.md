@@ -4278,7 +4278,11 @@ game, baseline champion strength alone. Daily on the box (deploy/web-loop.sh), s
 /admin/models/ with the admin upload. The tester's Model switch picks the draft model:
 "Shipped model" (this file) or "Lab experiment" (/admin/training/, `lab-push.sh use`, with
 the set net when draft-setnet.json is there); the lane model is the box's, else the lab's;
-comp terms the lab's. The scorer and writer are src/draftfile.zig, shared
+comp terms the lab's. It also writes champ/<id>.json (and .gz) per champion: by role, its team's
+chance against an average draft (95% range) and with each opponent ("vs") and ally
+("with") it has a cell with, [role, champion, chance, games], every other slot its
+role's average pick; the private site's pv.js shows them on champion and matchup pages
+(docs/plan/app.md "Private site"). The scorer and writer are src/draftfile.zig, shared
 with the lab.
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has
