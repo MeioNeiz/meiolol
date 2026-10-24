@@ -51,7 +51,9 @@ First screen, desktop 1280: player bar, tabs, then two columns:
   the list (the same state as the filter chips)
 - Right (9/12), filter row (queue chips: All, Solo, Flex, Draft, Swift; role; champion
   search, the shared `champion-search`) and the list grouped by day ("Today",
-  "Yesterday", "21 Oct"), each a `game-row`
+  "Yesterday", "21 Oct"), each a `game-row`. The day header carries W-L and time played
+  ("3-0 · 1h 52m", deeplol's session line); net LP as dpm has it needs LP per game,
+  which we don't store (Data needed)
 
 `game-row`, 56 px, one line at desktop:
 result edge (--us win, --them loss, 3 px) | champion 40 px with level and role badge |
@@ -162,8 +164,17 @@ New, two parts:
    - Week: week, games, W-L, the same averages
    Rows press to filter the chart to that champion or matchup
 
+The chart marks patch changes as dashed dividers labelled "16.20", "16.21"
+(Mobalytics' LP Gains), so a patch's effect shows without a second chart. Matchup and
+Week groupings are mocked: Matchup folds one-game matchups behind an "N one-game
+matchups" chip.
+
 Scales because the default grouping has one row per champion, sorting puts the answer
 first, and the chart holds any number of games.
+
+A fifth group, Patterns (League of Graphs' Personal Patterns): win rate by game length
+(under 25, 25-35, over 35 min) as signed differences from your overall rate with a
+small bar each. Client side from the report; not mocked.
 
 ## Your data
 
@@ -174,6 +185,24 @@ New: nothing on the page but the "⋯" menu item "Remove my data", which opens a
 countdown, a Check button; one line "Set this profile icon, then press Check." and a
 "What we keep" link to the privacy page, where the paragraphs go. The site footer of
 Your games gains "What we keep" next to Privacy.
+
+## Model site (research's refs, refs/README.md kind 2)
+
+| Take | From | Where |
+| --- | --- | --- |
+| 56-62 px rows, the lane opponent only, not ten names | dpm.lol | game-row (already ours) |
+| Two-line phone row, no names | u.gg | game-row phone |
+| Day groups with W-L and time played | dpm.lol, deeplol sessions | Games list |
+| Patch dividers on the over-time chart | Mobalytics LP Gains | GameTrend |
+| Played-with as a real table | u.gg, Mobalytics | Friends (ours already goes further) |
+| Signed differences by game length | League of Graphs Personal Patterns | Highlights, Patterns |
+| List first on phone | deeplol | page order |
+
+Leave: place pills (MVP, ACE, 3rd) and dpm's score rings (no score of ours to show,
+and they grade named teammates), Mobalytics' 10-16 tag chips per row and op.gg's tags,
+ten names per row, op.gg's "Strong pick #7" (best-pick wording), op.gg's last-20 vs
+season chip (our window is 60 days; revisit with a longer history). Ours alone: the win
+chance sparkline per row (no site has one).
 
 ## Components used (register names)
 
@@ -192,6 +221,7 @@ band, trend-chart = GameTrend, form strip = ResultStrip form).
 | Games with K/D/A, lane, win chance, records, friends, weeks, matchups | exists |
 | CS, gold, damage per game in the row and the trend | new, timeline last frame (small, as game-detail) |
 | Items in the row | new Summary fields (medium, as game-detail) |
+| LP change per game (dpm's row chip and day net LP) | not stored: league-v4 gives the current LP only; a snapshot per refresh gives a change per refresh, not per game. Medium, and only for games after it ships |
 | Rank emblem and LP | exists (league-v4 at refresh); emblem images from Riot's static assets (new asset, small) |
 | All 60 days of games in the list (not only those with timelines) | new: the report returns the backlog's summaries too (medium: they are cached, it is a query and a lighter row) |
 | Rolling and per-champion aggregates | client side in ui.wasm from the report (no API change) |

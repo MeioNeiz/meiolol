@@ -54,11 +54,16 @@ Desktop 1280 (content 1232), top to bottom:
      24 px icons under the chips (you ringed)
 3. Graph and inspector, ~420 px, side by side (8 and 4 of 12 columns):
    - Left, the game graph (component `timeline-graph`): win chance 0-100 by minute, the
-     area to 50% filled --us above and --them below. Under the x axis, two event rails
-     (14 px each): your team's kills and objectives on the top rail, the enemy's on the
-     bottom, as small glyphs in the team colour (dot kill, tower, dragon, Baron, grubs,
-     Herald); a ring where you took part, a cross where you died. No text on the
-     plot. The turning minute is a --turn band with a star on the top edge
+     area to 50% filled --us above and --them below. Nothing on the line. Events sit
+     off the plot, drawn the way Dotabuff and OpenDota do it (refs/game-detail):
+     - Fight strip above the plot (OpenDota): one thin line, a crossed-swords mark per
+       moment coloured by who came out ahead (--us-hot, --them-hot, neutral on a trade),
+       objectives as 10 px icons off the line, yours above, theirs below. Each mark is a
+       button: press it and the inspector shows that moment
+     - Deaths on the plot's edges (Dotabuff): enemy deaths as 15 px portraits stacked up
+       from the top edge, yours down from the bottom edge, one stack per minute (two
+       shown, then "+3"); your own death ringed in --accent
+     - The turning minute is a --turn band with a star inside the plot's top edge
    - Above the graph, one control row: [Win chance | Gold] segmented; range chips
      (Game, 0-14, 14-25, 25+, Turn); a moment stepper (‹ 12 of 26 ›)
    - Right, the inspector (component `range-inspector`): what the selection holds.
@@ -74,10 +79,15 @@ Desktop 1280 (content 1232), top to bottom:
    Each cell's sub line is its time ("35-36"). Pressing a cell selects its range or
    minute on the graph; the cell stays pressed while it is the selection
 
-Below the fold at 1280 (~730 px fold, the header bar included): the objectives row,
-lane, scoreboard.
+Below the fold at 1280 (~730 px fold, the header bar included; the stat cells now sit
+at ~740-800, the strip and portraits take ~80 px): the objectives row, players, lane,
+build.
 
-Phone 390: strip (scrolls), header in two rows (portraits, KDA and result; then the
+Phone 390 (a minute is ~8 px, too narrow for portraits): the fight strip keeps fights
+and epic monsters only, deaths become 3 px ticks on the edges (taller for more deaths).
+The same compact form is home's read-only review.
+
+Phone 390: game strip (scrolls), header in two rows (portraits, KDA and result; then the
 four figure cells as a 4-up grid, build on a third row), graph full width at 200 px with
 the control row as one scrolling chip row, stat cells as a 3 by 2 grid, inspector below
 the graph (not beside), its moment list capped at 5 rows with "All 26".
@@ -93,18 +103,18 @@ row labels (none: rows are icons and figures). About 22 words. Today's first scr
 All in ui.wasm (README architecture); without wasm the page shows the default
 selection (turning minute) and the full moment list, nothing hidden.
 
-- Select a range: drag across the plot or the rails (pointer events; touch drags too,
+- Select a range: drag across the plot or the strip (pointer events; touch drags too,
   with a 6 px dead zone so vertical page scroll still works); handles at both ends to
   adjust; Esc or "Game" clears. Range chips are the keyboard and phone route
-- Select a moment: press its marker on the rail, its row in the inspector, or the
+- Select a moment: press its mark on the fight strip, a death portrait, its row in the inspector, or the
   stepper; ←/→ step through moments in time order inside the current range. The plot
   draws a cursor line at the moment and the inspector shows the moment card
 - Filter moments: chips in the inspector's header, All, Yours (you took part or died),
-  Fights, Objectives, Deaths. The rails dim filtered-out glyphs to 30%
+  Fights, Objectives, Deaths. The strip and portraits dim filtered-out marks to 30%
 - Hover (desktop) or tap (phone) on the plot: a crosshair with "21:00 · 63%" in a
   readout at the top edge, not a floating tooltip over the line
 - Gold toggle: the same plot draws your team's gold lead (timeline team gold sums);
-  rails and selection stay
+  strip, portraits and selection stay
 - URL: #id=..&game=..&t=2100-2160 or &m=17 keeps the selection, so a link points at a
   moment (Copy link exists today)
 
@@ -147,21 +157,54 @@ against one opponent with a "typical" range, so the UI is a duel:
 
 Phone: chart full width 180 px, races stacked, bullet under them.
 
-### Scoreboard (component `scoreboard`)
+### Players (component `scoreboard`)
 
-A real table, two teams of five, one header row per team with result, team K/D/A,
-gold and objective icons. Columns: champion (32 px icon, level badge) with the Riot ID
-under it (link to their games), K/D/A with the KDA ratio under it, KP, damage to
-champions (figure and a bar against the game's highest), gold, CS with per minute under
-it, vision, items (7 at 22 px), spells and keystone. Your row on --panel-2 with a left
-edge in --us. Sortable by any figure column (shared `data-table` sort), default by role.
-Phone: champion, K/D/A, damage bar; items on a second line inside the row; the rest
-behind a row press (expands).
+Moved up, straight under the objectives row: who did what comes before your lane in
+depth. A Segmented [Lanes | Table]:
 
-Model site: decided when research's game-detail refs land (refs/README.md). Working
-choice: the op.gg expanded match for the scoreboard grid (dense, items inline, damage
-bars) without its tab maze; League of Graphs for the kill map; none of them has our
-graph, inspector or lane duel, which are the identity of the page.
+- Lanes (default, Mobalytics' mirrored scoreboard at Blitz's density): five rows, one
+  per lane, your team left and the enemy right facing each other, so every row is a
+  lane comparison. Per side: champion 32 px with level, name over Riot ID (link to
+  their games), K/D/A over KDA, CS over per minute, items 7 at 19 px, damage to
+  champions as a figure over a bar that grows towards the middle (Mobalytics' mirrored
+  damage bars). The middle column: role icon and that lane's gold lead at 14 in the
+  leading side's colour (Tracker's signed lane gap; Dotabuff Lanes' verdict as a
+  number). A team bar on top: result, team K/D/A, gold, objective counts. Your seat on
+  --panel-2 with an --us edge. ~52 px rows, 5 rows instead of 10
+- Table (u.gg Performance): all ten in one real table, team by row edge, columns KDA,
+  KP, Damage, Taken, Gold, CS, Vision, items, spells and runes; press a header to sort,
+  default by role
+
+Phone: Lanes keeps champion, K/D/A and the damage bar per side with the lane gold in
+the middle (names, CS and items behind a row press); Table scrolls sideways.
+
+Model site, from research's refs (data/team/2026-10-24-ui/refs/README.md kind 1):
+
+| Take | From |
+| --- | --- |
+| Lane rows, opponents facing, mirrored damage bars | Mobalytics match scoreboard |
+| Row density (~47-52 px), one line per seat | Blitz |
+| Sortable table of all ten | u.gg Performance |
+| Per-lane signed gap at 14 | Tracker.gg, Dotabuff Lanes |
+| Deaths as portraits on the plot's edges | Dotabuff advantage graph |
+| Fight strip above the plot, marks as buttons | OpenDota timeline |
+| Fight breakdown: who was in it, died, gold | OpenDota Teamfights |
+| Build order with minutes, numbered skill grid | dpm.lol Details, deeplol Build |
+| Team totals beside the objectives | op.gg team strip (already ours) |
+
+Leave: Mobalytics' 40-60 word Cheat Sheet cards and jokey badges, op.gg's five equal
+tabs and its timeline in a modal, Blitz's unlabelled win probability bars, place pills
+(1st-10th, MVP) and "Bad team" tags (we have no score, and they grade named players),
+deeplol's black-box AI score. Nobody drags a range (we keep it: Jacob asked for it) and
+nobody has a win chance curve with moments: those stay ours.
+
+### Build (components `ItemRow` with times, `SkillGrid`)
+
+dpm.lol Details and deeplol Build: your purchases grouped by back with the minute under
+each group (ItemRow, 26 px), and the 4 x 18 skill grid with the level number in each
+cell (SkillGrid, the champion page's component). One card, build left 7/12, skills
+right 5/12; phone stacked. Later: dpm's ten-champion strip (the header's team icons as
+buttons) switches whose build and lane the page shows.
 
 ### Moments, the list
 
@@ -176,18 +219,21 @@ champions | objective icons after it, team-bordered | kill gold "+381". Where it
 ("bot", "enemy jungle") is a 16 px minimap dot, not a word. No size words ("big",
 "huge"): the bar is the size.
 
-`moment-card` (selected): the row's content larger, a 160 px minimap with the kill
-positions (blue and red dots, crosses for deaths, from timeline kill x/y), win chance
-before → after, and the gold and objectives in the next minute.
+`moment-card` (selected): a 150 px minimap with the kill positions (blue and red dots,
+crosses for deaths, from timeline kill x/y), win chance before → after, then who was in
+it per team (OpenDota Teamfights): champion icon (dead state if it died), K/D/A in the
+fight, kill gold earned, your team left with an --us edge and theirs right; objectives
+under it. The killer → victim feed goes: order is rarely the question, and the time is
+on the row.
 
 ## Components used (register names, data/team/2026-10-24-ui/components.md)
 
 GameStrip, GameHeader (header variant), ChampIcon (level badge, "you" ring, "dead"
 state), ItemIcon, SpellIcon, RuneIcon, ObjectiveIcon, Kda, Chip, Segmented,
-TimelineChart (EventRail, TurnBand, RangeSelect, Gold mode), StatStrip (items as
-buttons), RangeInspector, MomentList, MomentCard (with KillFeed), Minimap, Versus
+TimelineChart (FightStrip, EdgeMarks, TurnBand, RangeSelect, Gold mode), StatStrip (items as
+buttons), RangeInspector, MomentList, MomentCard (FightTable in place of KillFeed), Minimap, ItemRow (times), SkillGrid, Versus
 (split for the objectives row; dumbbell for the races; band for gold and CS lead),
-LaneChart, Scoreboard (DataTable), Toggletip, Delta. Kebab names above in this plan map
+LaneChart, Scoreboard (lanes variant; DataTable for Table), Toggletip, Delta. Kebab names above in this plan map
 to these (team-compare = Versus split, race-track = Versus dumbbell, bullet-range =
 Versus band, timeline-graph = TimelineChart, game-strip = GameStrip).
 
@@ -201,6 +247,9 @@ Versus band, timeline-graph = TimelineChart, game-strip = GameStrip).
 | Objective totals per team (towers, dragons, grubs, Herald, Baron, inhibitors) | new, timeline building and elite monster events (small) |
 | Team gold by minute (Gold toggle) | new, timeline frames (small) |
 | Per player end CS, gold, level, damage dealt and taken | new, timeline last frame (small) |
+| Each lane's gold lead at 14 (Players, Lanes) | new, timeline frame 14 (small) |
+| Build order by minute, skill order | new, timeline item and skill-up events (small; undo and sold handled) |
+| Fight participants, kill gold | new, timeline kill events (killer, assists, bounty; small) |
 | Final items, summoner spells, keystone and trees, vision score | new Summary fields from match-v5 (medium): free for new games; cached ones get them on the next refresh, one match call each, as match_names does |
 | Peak, low, minutes ahead | exists (computed in your.js today; moves to Zig) |
 | Rank of the other nine | not stored; a league-v4 call each, no (cost, and not needed) |
@@ -227,4 +276,4 @@ game-header (without "you"), team-compare, scoreboard and timeline-graph read-on
 1. The inspector opens on the turning minute. Or on the whole game, with the turn only
    marked? (Recommended: turning minute; it is the answer.)
 2. Gold toggle on the game graph: worth the second series, or win chance only?
-3. Scoreboard sorting: useful, or fixed role order only?
+3. Players: lane rows by default with a sortable Table beside them, or the Table only?

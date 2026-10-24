@@ -38,7 +38,8 @@ Desktop 1280, a 12-column grid under the site header:
     - Patch 16.21: the three biggest win rate changes as champion icon, role icon,
       "+2.6" on the diverging scale (the patch page's rows, `change-chip` from stats)
     - Learn: today's lesson title and a progress ring of the five
-- Right (8/12): the review (`game-header`, `timeline-graph` with event rails, the
+- Right (8/12): the review (`game-header`, `timeline-graph` in its compact form: the
+  fight strip above and deaths as ticks on the plot's edges, game-detail.md; the
   `stat-cell` row; the game-detail kit, read-only, no inspector) of:
   - the visitor's newest game when this device has looked a Riot ID up (their player
     bar compact above it: Riot ID, record, form strip), with "Open" to the game
@@ -59,8 +60,8 @@ champ select helper" (footer's Desktop app link), the scope note, "In every revi
 "Your record book" (the same tiles live in Your games Highlights), the "New patch" line
 (now the Patch card).
 
-Phone 390: h1 and lookup (~150 px), then the review (header, graph at 180 px, stat cells
-3 by 2), then the three Today cards, then Champions. The example must start above 844
+Phone 390: h1 and lookup (~150 px), then the review (header with the K/D/A on its own
+line under the names, graph at 170 px, stat cells 3 by 2), then the three Today cards, then Champions. The example must start above 844
 px (today it starts at ~750 px after the paragraph and steps: the cut fixes it).
 
 Words on the first screen (labels, no data): Review your games, Review, Today, Daily
@@ -72,14 +73,14 @@ on the page, ~150 in the first screen.
 
 - Lookup: Enter or the button goes to your.html#id=... (exists). Typing a champion name
   instead offers the champion (the header search's logic, shared `search` component)
-- Review on home: rails and stat cells are live (press a cell, the graph shows it), no
+- Review on home: the stat cells are live (press a cell, the graph shows it), no
   range drag (that is the game page's); "Open" goes to the full game
 - Example role switch (exists)
 
 ## Components used (register names)
 
 IdLookup, Chip, TodayCard, ChampIcon, Delta (patch changes, as stats uses it),
-GameHeader, TimelineChart (EventRail, read-only), StatStrip, Segmented, RolePicker,
+GameHeader, TimelineChart (compact: FightStrip, edge ticks; read-only), StatStrip, Segmented, RolePicker,
 ChampSearch, PlayerBar (compact), ResultStrip (form).
 
 ## Data needed

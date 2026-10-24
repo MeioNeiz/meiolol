@@ -139,20 +139,36 @@ On paper 2 + kinds 8 = ~37. Today after the reveal: ~420 words.
 
 ## The last pick problem
 
-Match data has no pick order (research answers whether any queue does:
-data/team/2026-10-24-ui/refs/pick-order.md). Two cases, one design:
+Research's answer (data/team/2026-10-24-ui/refs/pick-order.md, 24 Oct): no match-v5
+queue records pick order. Ranked solo, flex and normal draft list players by role and
+ban pickTurn is the slot; swiftplay, blind and ARAM have no order to record; tournament
+lobby events stop at champ select start. Fixed by rule in every draft: blue picks first,
+red picks last (1-2-2-2-2-1), so the last pick is always one of red's five, but which
+one is unknown, and swaps reorder players. Only LCU (our app, the user's own games) and
+pro games (Leaguepedia) carry the real order. One lead: spectator-v5 lists live
+players in a per-game order that may be the champ select cells; untested (a few hours
+of light calls, best with the production key).
 
-- No queue gives it (expected): stop calling it the last pick. The puzzle is "Who played
-  red bot?", a hidden seat in a finished draft; the model's ratings say "with the other
-  nine fixed" in the rank toggletip only. The hidden seat is chosen as today (hidden_by
-  "fit": a seat whose options are clear). Jacob's "give more info": hints, one tap each,
-  costing the "spot on" mark: (1) the player's rank and their role's most played
-  champions at that rank (exists: role shares), (2) "this player has N games on one of
-  these" (needs pre-game mastery per seat: mastery_pre.tsv has it for crawled players;
-  new, small), (3) lane outcome: who was ahead at 14 (exists, gold14)
-- A queue gives it (e.g. a draft field we have missed): choose games where the hidden
-  seat is the actual last pick, show the pick order as a small number on each seat (1-10)
-  and keep the "last pick" wording. Same board, same flow
+Question for Jacob, four options (research recommends none outright; mine: 4 now, 1 if
+the spectator test passes):
+
+| Option | What the board changes | Cost |
+| --- | --- | --- |
+| 1. Spectator order (if the test passes): poll live ranked games, keep the seat order | Seats show a 1-10 pick number; the hidden seat is red's real last pick; "last pick" wording stays | Small poller on the box, rate limit shared with the crawler (easy with the production key); swaps make it "as seated", mostly the pick order |
+| 2. App users' games (LCU, with consent) | As 1, exact order | Few games until the app has users |
+| 3. Pro games (Leaguepedia) | As 1, plus team names; game stats only from Leaguepedia's scoreboards (no timeline: no lane duel, Scoreboard versus cells reduced) | Different population, names not match ids, CC BY-SA licence to check |
+| 4. Ranked as now, no order | No pick numbers; the question is "Who played red bot?" (any of red's five can be hidden); "last pick" appears nowhere, the rank toggletip says "with the other nine fixed" | None |
+
+The board is built for both: option 4 is today's board; options 1-3 add a pick number
+(11 px, top-left of each seat) and keep the hidden seat on red's last pick. Nothing
+else moves, so the choice can change later without a redesign.
+
+Jacob's "give more info", for option 4: hints, one tap each, costing the "spot on"
+mark: (1) the player's rank and their role's most played champions at that rank
+(exists: role shares), (2) "this player has N games on one of these" (needs pre-game
+mastery per seat: mastery_pre.tsv has it for crawled players; new, small), (3) lane
+outcome: who was ahead at 14 (exists, gold14). The hidden seat is chosen as today
+(hidden_by "fit": a seat whose options are clear).
 
 ## Components used (register names)
 
@@ -217,7 +233,7 @@ ChoiceCards and ResultStrip: not on desktop.
 
 ## Open questions for Jacob
 
-1. Wording without "last pick": "Who played red bot?" fine, or keep "last pick" with the
-   toggletip saying we can't know the order?
+1. Pick order (The last pick problem): option 4 now and run the spectator test for 1,
+   or another? With 4, "Who played red bot?" as the question
 2. Hints that cost the "spot on" mark: wanted, or keep the puzzle pure?
 3. "Try this pick in the board" (moves the on-paper bar): worth the bigger puzzle file?
