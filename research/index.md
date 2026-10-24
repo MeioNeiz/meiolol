@@ -10,7 +10,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | Area | Covers | Questions | Sources | Findings |
 | --- | --- | --- | --- | --- |
 | [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 9 | 254 | 1233 |
-| [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 4 | 154 | 573 |
+| [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 4 | 158 | 593 |
 | [data](areas/data.md) | what the Riot API serves and how to crawl it | 3 | 163 | 404 |
 | [stats](areas/stats.md) | estimation and recommendation methods | 26 | 340 | 2443 |
 | [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 10 | 289 | 1374 |
@@ -37,7 +37,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Status | Pri. | Question | Claims | Sources | Searches | Leads |
 | --- | --- | --- | --- | --- | --- | --- |
-| answered | now | [How can players look themselves up and opt into Squads without RSO, and what do Riot policy and GDPR require for storing and showing player data?](questions/identity-and-privacy.md): How can players look themselves up and opt into Squads without RSO, and what do Riot policy and GDPR require for storing and showing player data? | 10 strong, 1 moderate, 2 weak, 1 contested | 21 | 16 (growing) | 1 |
+| answered | now | [How can players look themselves up and opt into Squads without RSO, and what do Riot policy and GDPR require for storing and showing player data?](questions/identity-and-privacy.md): How can players look themselves up and opt into Squads without RSO, and what do Riot policy and GDPR require for storing and showing player data? | 13 strong, 2 moderate, 2 weak, 1 contested | 25 | 17 (growing) | 2 |
 | answered | soon | [What has Riot made League tools remove or change, when, and what does that predict for new features?](questions/league-tools-riot-removals.md): What has Riot made League tools remove or change, when, and what does that predict for new features? | 7 strong, 4 moderate | 23 | 0 |  |
 | answered | soon | [Would Riot grant meiolol a production API key, and what does the application need?](questions/riot-production-key.md): Would Riot grant meiolol a production API key, and what does the application need? | 9 strong, 5 moderate, 2 contested | 55 | 52 (saturated) | 1 |
 | answered | soon | [How do lookup sites and the Riot API treat streamer mode and other players' Riot IDs on public pages?](questions/streamer-mode-names.md): How do lookup sites and the Riot API treat streamer mode and other players' Riot IDs on public pages? | - | 9 | 12 (saturated) |  |
@@ -124,6 +124,6 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 ## Health
 
-- 68 questions, 1029 sources, 8045 findings
-- Open leads: 280 (`josearch leads`)
+- 68 questions, 1033 sources, 8065 findings
+- Open leads: 281 (`josearch leads`)
 - Lint: 0 errors, 5 warnings (`josearch lint`)

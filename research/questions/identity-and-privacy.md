@@ -39,6 +39,12 @@ objection and removal form gated by the icon check and the Riot erasure lists ap
 Squads should be consent-based: each member proves their Riot ID with the icon check
 before joining. Move both to RSO once the production key arrives.
 
+Transparency and retention (C14-C17): the law sets no retention length, only "no longer
+than necessary" and the duty to show compliance. Crawled players get no individual notice
+(disproportionate effort), which makes the public privacy page the required measure: it
+must list categories, source, purposes, legal basis, interests, retention, rights and
+both complaint routes (to us, and to the Information Commission).
+
 ## Claims
 
 - C1: League policy has no consent or opt-in rule for showing any Riot ID's normal or ranked match history; only custom-game history needs opt-in or RSO. for: [[riot-docs-lol#^f15]], [[riot-docs-lol#^f16]], [[riot-docs-lol#^f17]]
@@ -54,6 +60,10 @@ before joining. Move both to RSO once the production key arrives.
 - C11: A UK controller serving EEA players must appoint an EEA representative unless processing is occasional and low risk. for: [[ico-european-representatives#^f1]], [[ico-european-representatives#^f2]], [[ico-european-representatives#^f4]]
 - C12: A small tracker's model for non-users: legitimate interests, objection open to anyone, ownership check before removal, pseudonymised archive, 24-month retention. for: [[counterwatch-data-request#^f1]], [[counterwatch-data-request#^f3]], [[counterwatch-privacy#^f2]], [[counterwatch-privacy#^f5]]
 - C13 (inferred): "Your games" can rest on legitimate interests with an icon-gated objection form; Squads should be consent-based with each member proving their Riot ID by the icon check; both move to RSO with the production key. from: C1, C6, C9, C12
+- C14: Storage limitation: identifiable personal data kept no longer than the purpose needs; the law sets no period, and the controller must be able to show compliance. for: [[ukgdpr-art5#^f1]], [[ukgdpr-art5#^f3]]
+- C15: A privacy notice must give identity and contact, purposes and legal basis, the legitimate interests, recipients, storage period or its criteria, the rights (access, rectification, erasure, restriction, objection, portability) and complaints to the regulator; in the UK since 19 Jun 2026 also the right to complain to the controller. for: [[ukgdpr-art13#^f1]], [[ukgdpr-art13#^f2]], [[ukgdpr-art13#^f3]], [[ukgdpr-art13#^f4]], [[ukgdpr-art14#^f2]]
+- C16: For data not obtained from the person (crawled players), the notice must also give the categories of data and their source; individual notice can be skipped for disproportionate effort only if the information is made public. for: [[ukgdpr-art14#^f1]], [[ukgdpr-art14#^f4]], [[ukgdpr-art14#^f5]], [[eugdpr-art14#^f1]]
+- C17 (inferred): meiolol's public privacy page is the Art 14 measure for crawled players, so it must carry every Art 13/14 item, including data categories, source (Riot's API) and both complaint routes. from: C15, C16
 
 ## Disagreements
 

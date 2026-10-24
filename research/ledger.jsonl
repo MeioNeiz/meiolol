@@ -3155,3 +3155,9 @@
 {"t": "search", "date": "2026-10-23", "where": "web", "query": "LoLDraftAI and DraftGap board screenshots", "for": "desktop-app-layout", "seen": 2}
 {"t": "search", "date": "2026-10-23", "where": "web", "query": "porofessor league of graphs player tags list explanation", "for": "desktop-app-layout", "seen": 3}
 {"t": "skip", "date": "2026-10-23", "url": "https://porofessor.gg/live/euw/Buggy2v9-EUW", "reason": "live game page behind Cloudflare challenge (403) for both fetch and browse; tag texts taken from screenshots instead", "key": "porofessor.gg/live/euw/Buggy2v9-EUW"}
+{"t": "fetch", "date": "2026-10-24", "url": "https://www.legislation.gov.uk/eur/2016/679/article/5", "slug": "ukgdpr-art5", "file": "raw/ukgdpr-art5.md", "sha": "c1476d6703b2", "key": "legislation.gov.uk/eur/2016/679/article/5"}
+{"t": "fetch", "date": "2026-10-24", "url": "https://www.legislation.gov.uk/eur/2016/679/article/13", "slug": "ukgdpr-art13", "file": "raw/ukgdpr-art13.md", "sha": "59e9dba9bcc1", "key": "legislation.gov.uk/eur/2016/679/article/13"}
+{"t": "fetch", "date": "2026-10-24", "url": "https://www.legislation.gov.uk/eur/2016/679/article/14", "slug": "ukgdpr-art14", "file": "raw/ukgdpr-art14.md", "sha": "75ecb4d60f6b", "key": "legislation.gov.uk/eur/2016/679/article/14"}
+{"t": "fetch", "date": "2026-10-24", "url": "https://gdpr-info.eu/art-14-gdpr/", "slug": "eugdpr-art14", "file": "raw/eugdpr-art14.md", "sha": "76267a93c6ea", "key": "gdpr-info.eu/art-14-gdpr"}
+{"t": "search", "date": "2026-10-24", "where": "web", "query": "UK GDPR Article 5 13 14 legislation.gov.uk", "for": "identity-and-privacy", "new": 4}
+{"t": "lead", "date": "2026-10-24", "url": "https://ec.europa.eu/newsroom/article29/items/622227", "why": "WP260 transparency guidelines: disproportionate effort under Art 14(5)(b)", "for": "identity-and-privacy", "key": "ec.europa.eu/newsroom/article29/items/622227"}
