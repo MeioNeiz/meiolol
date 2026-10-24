@@ -25,6 +25,15 @@ How to write a line:
 
 ## Win
 
+- 2026-10-24 (early): The same holds on newer games and in the form the site would use.
+  On 521k games of the 23 Oct pin that no earlier A4 run had scored, the frozen model as
+  the stats file would carry it (no damage mix, no side term, thin cells' own part 0,
+  f16) beats today's site model by 0.99 ± 0.12 milli-nats a game, every block better,
+  resamples and controls clean. That is more than it beat v2 by before shipping, because
+  the parents fill the cells today's floor zeroes: it wins back all v2 lost to its
+  shipping simplifications. Site: nothing yet; code behind a flag, plan for Jacob in
+  docs/plan/data-and-model.md DM1. Evidence: docs/model.md "A4 on the new pin, shipped
+  form"
 - 2026-10-23 (early): A counter is mostly about the two champions, not the roles they
   play: what one champion does to another in one role pairing (say Malphite top against
   Yasuo mid) carries over to their other meetings, and judging rare pairings by it, plus

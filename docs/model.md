@@ -5508,6 +5508,64 @@ Reading (dev, final for the method, early for the site):
   mains. It is the right term for ranking within one player's pool (the replay's
   point), and for a tier list it standardises who plays the champion
 
+### A4 on the new pin, shipped form, 2026-10-24 (meiolol-a4b, prepin run)
+
+The frozen A4 candidate (`pair+kit:tag` at 40197e9, "Pair cells that borrow strength
+(A4)") rerun against additive v2 in the form the stats file carries, on games no A4 run
+had scored, to get it ready for Jacob's ship decision. Dev only, no test look.
+Pre-declared in data/team/2026-10-23-prepin/a4b.md before any run.
+
+Setup (`meiolol-lab pairprior --shipped --seen FILE`, 754c01d): both arms as fitted.zig
+ships them: no damage mix, no side term, a pair cell's own part 0 under 20 fit games (its
+parents kept), every term f16; a cell a slot never had gets its parents. snap-20261023T2004Z,
+blocks 1-5 and dev-val, each fitted on its dev-visible games before the block (595k to
+1.19M); the 410,801 match ids any 1007Z A4 run scored are left out of scoring, so each
+block keeps its fresh games (1: 19,580; 2: 21,370; 3: 83,452; 4, 5: 119k each; dev-val
+158,728; 521,223 pooled; folds 1-3's are older games the 1007Z pack didn't hold). Pass:
+a4.md's rule on the pooled fresh games.
+
+Runs 20261023T223630Z-a4b-ship, 223648Z-r1, 223712Z-r2, 231328Z-shuf, 231425Z-full
+(Mac); milli-nats a game against v2 shipped, pooled per game (a4b-pool.py):
+
+| statistic | pooled fresh games | blocks 1 / 2 / 3 / 4 / 5 / dev | verdict |
+| --- | --- | --- | --- |
+| candidate - v2 | -0.99 ± 0.12 | -1.05 / -0.52 / -0.99 / -1.10 / -1.07 / -0.90 | pass (bound -0.79) |
+| resample 1 / 2 | -0.99 ± 0.12 / -0.94 ± 0.12 | | both < 0 |
+| control (both shuffled) - v2 | +0.001 ± 0.001 | | not below v2 |
+| candidate - control | -0.99 ± 0.12 | | < 0 |
+| shuffled labels: candidate - v2 | -0.000 ± 0.008 | | no gain |
+| pair alone / kit:tag alone (reported) | -0.66 ± 0.10 / -0.34 ± 0.07 | | |
+
+Log loss: v2 shipped 0.6850-0.6862 by block, candidate 0.6841-0.6852. Worth shipping
+(-0.10 or better).
+
+What shipping costs and gives back (231425Z, the unshipped form on the same games: mix,
+side term, no floor, f64): candidate - v2 there -0.73 ± 0.10. The shipped simplifications
+cost v2 +0.84 ± 0.12 and the candidate only +0.58 ± 0.11, so shipped A4 against unshipped
+v2 is -0.15 ± 0.15: it wins back everything v2 lost to shipping. The extra gain shipped is
+the floor: today's file zeroes cells under 20 games, and the parents refill them.
+
+The ship code (aefe235, behind a flag, off): additive.Parents in src/additive.zig, kit
+classes from the champions table's tags, parents folded into statsfile v2's dense cells
+by fitted.attach. Its parent step carries a guard the lab's lacks: the step is diagonal
+over parents that share game sides (a team's 10 ally pairs), so where the data outweighs
+the prior it overshoots (a dense 12-champion toy ran the lab fit to 4 million logits);
+additive.zig halves a step until the penalised loss doesn't rise (Config.parent_guard
+false is the lab's step, equal to pairprior's to 1e-9 in a test). Real fits halve 9-48
+of ~170 steps. pairprior's `ship` variant runs that code (run 20261023T234104Z-a4b-shipcode,
+fresh games, shipped form): ship - v2 pooled -0.98 ± 0.12 (blocks -1.04 / -0.56 / -0.99 /
+-1.08 / -1.07 / -0.90, 14-34 halvings a fit) against the frozen fit's -0.99 ± 0.12.
+
+End to end (`meiolol eval --dev --pair-prior`, aefe235, run 20261024T000646Z-a4b-eval: the
+stats file and core.score as the site uses them, 2004Z's database, every platform, train
+1,208,276 games to 18 Oct, dev-val 161,124 from 18 to 20 Oct): log loss 0.6843 against the
+current model's 0.6851, -0.0009 ± 0.0002; AUC 0.576 against 0.572; accuracy 55.3% against
+55.1%.
+
+Cost per stats view and the ship plan: docs/plan/data-and-model.md DM1 (dense v2 cells:
+no scorer or format change, download 1.6-3x larger gzipped; the 1.56M-game view's fit
+163 s -> 363 s and 1.26 -> 1.62 GB on a shared Mac).
+
 ## Shipped model, 2026-10-23: additive v2 in the stats file
 
 Drafts (app suggest, the site's draft helper, Daily Draft, Learn, lane cards, pool) now

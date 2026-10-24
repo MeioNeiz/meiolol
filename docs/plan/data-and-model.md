@@ -61,6 +61,68 @@ Open for Jacob: the storage decisions; whether comp-lean reasons may appear in t
 desktop app in champ select once the held-out look passes (policy allows options with
 reasons; the app shows champion and aggregate stats only)
 
+## DM1: ship A4, pair cells that borrow strength (Jacob's call)
+
+What: the site's and app's draft model (additive v2 in the stats file, src/fitted.zig)
+with every pair cell shrunk toward two parents instead of 0: the same two champions in
+any slot of the kind (ally pairs; matchups, signed) and a kit-class pair per block (Data
+Dragon tags). Evidence: docs/model.md "Pair cells that borrow strength (A4)" and "A4 on
+the new pin, shipped form": in the shipped form (no damage mix, no side term, floor 20 on
+a cell's own part, f16) on 521k games no A4 run had scored (snap-20261023T2004Z, dev
+only) it predicts -0.99 +- 0.12 milli-nats a game better than today's model, every block
+better, both resamples, controls clean; it wins back all v2 lost to its shipping
+simplifications (0.84). End to end in `meiolol eval --dev`: -0.0009 ± 0.0002 log loss.
+Code is on main behind a flag, off (aefe235); nothing live uses it.
+
+Cost (Mac, measured while a lab run shared the CPU, so times run high; per stats view,
+v2 then v2 + parents):
+
+| view | games | time | peak memory | stats.bin gzip |
+| --- | --- | --- | --- | --- |
+| EUW, 16.21 | 48k | 7.5 s, 11.6 s | 743, 796 MB | 1.0, 3.3 MB |
+| EUW, 16.20-16.21 | 354k | 28 s, 43 s | 948, 882 MB | 2.0, 4.0 MB |
+| every platform, 16.20-16.21 | 1.56M | 163 s, 363 s | 1.26, 1.62 GB | 3.0, 4.6 MB |
+
+- Scorer: no change. Parents are folded into statsfile v2's dense cells (fitted.attach),
+  so a draft is still 55 reads (10 strength, 20 ally, 25 matchup), no format change, no
+  client change; the desktop strip (deploy/web-loop.sh strip_fitted) is untouched
+- Download grows 1.6-3x: today's floor leaves most cells 0, which gzip packs; with parents
+  every cell holds a value. If that matters, statsfile v3: parents as their own tables
+  (pair parents 2 x n x n, kit 25 x 27 x 27, ~120 KB f16) and cells sparse; then 3 reads a
+  pair term (165 a draft) and the scorer, wasm and desktop change together
+- Fit: parent steps add 2 working-residual passes, 4 sweeps over pair entries and a loss
+  check per pass. The check (a guarded step, below) is most of the extra time; checking
+  only the first pass after each variance update, or a quadratic bound, would cut it
+
+The guard (new in the ship code): the lab's parent step is a diagonal Newton step over
+parents that share game sides (a team's 10 ally pairs), so where data outweighs the prior
+it overshoots; a dense 12-champion toy ran it to 4 million logits. additive.zig halves a
+parent step until the penalised loss doesn't rise (Config.parent_guard; false is the frozen
+lab step, equal to pairprior's to 1e-9). On real fits it halves 9-48 of ~170 steps and
+scores as the frozen candidate (2004Z's fresh games: -0.98 ± 0.12 against -0.99 ± 0.12). The production key's volume makes the overshoot likelier, so ship guarded.
+
+Steps once Jacob says go:
+1. Eval row (`meiolol eval --pair-prior`): run on dev 24 Oct (2004Z, every platform,
+   dev-val 161k games): log loss -0.0009 ± 0.0002 against the current model, AUC 0.576
+   against 0.572, accuracy 55.3% against 55.1%. On the test window only as a declared P3
+   look (`--test-look`), if Jacob wants a test number before switching
+2. Switch: src/site/load.zig's `.v2` to `.pair_prior` (and `meiolol stats`'s default),
+   so every site view, the draft helper, Daily Draft, Learn, lane cards and app suggest
+   score with it; src/eval.zig's buildShipped to pass kit classes, so the daily eval's
+   "current model" follows. kitClasses reads the champions table's tags (already there)
+3. Box headroom: time one site round on the box with it (deploy/box.sh web status) before
+   leaving it on; if the 30-day all-platform view runs long, cut the guard's cost first
+4. Reasons and pages: a matchup's fitted value can now be non-zero with 0 games in that
+   slot (its parents). Lane cards and suggest reasons that show fitted matchups must keep
+   a games floor from the counts; "X counters Y in any role" is a new reason the pair
+   parent supports (C5's purification: parents vs cells)
+5. pipeline_test: the helper's model file with parents (fitted.zig's test covers the
+   file; the site pipeline test should build one view with `.pair_prior`)
+
+Where to start: src/fitted.zig (Fit.init classes, attach's dense loop), src/stats.zig
+(Fit, kitClasses), src/additive.zig (Parents, the guard in fit), src/eval.zig
+(Options.pair_prior). Blocks: Jacob's go; the P3 look if he wants a test number first.
+
 ## Neural nets
 
 Superseded as the programme by docs/plan/lab-frontier.md (21 Oct); below is the 14 Oct
