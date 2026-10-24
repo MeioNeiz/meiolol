@@ -128,6 +128,7 @@ Riot developer policy, production key, player privacy and GDPR
 | [OP.GG Privacy Policy (last updated 2026-09-14)](../sources/opgg-privacy-policy.md) | Privacy policy of the largest League lookup site: GDPR bases per purpose, retention table, data subject rights, EU and UK Article 27 representatives | docs | policy privacy | docs (whole policy) | high | A/fair | 7/7 | 2026-10-11 |
 | [OP.GG: game detail (expanded match row), Oct 2026](../sources/opgg-game-detail-ui.md) | OP.GG's game detail, opened inside a match row on the profile: Overview scoreboard, OP Score line, Team analysis donuts and kill feed with map, Build, gold/XP/CS lines | project | policy ux/charts ux/density ux/layout ux/postgame | docs (rendered text of all five tabs and the Timeline modal, screenshots 1280 wide) | high | A/fair | 8/9 | 2026-10-24 |
 | [OP.GG: summoner profile and match list, Oct 2026](../sources/opgg-profile-ui.md) | OP.GG profile of a Challenger EUW player: sidebar of rank, play style, champions, performance vs season and played-with; match rows with laning split, tags and ten names; Champions tab with per-opponent rows | project | policy ux/charts ux/density ux/features ux/layout ux/postgame | docs (rendered text of Summary, Champions and Highlights tabs; screenshots desktop and phone) | high | A/fair | 9/10 | 2026-10-24 |
+| [Overlay Not Appearing (Mobalytics support, 2020)](../sources/mobalytics-overlay-not-appearing.md) | Mobalytics troubleshooting for its in-game overlay, Overwolf build and standalone build, from July 2020 | docs | gui policy ux/desktop | docs (whole page) | low | C/weak | 3/4 | 2026-10-24 |
 | [Overwolf developers newsletter Aug 2025: Riot's LoL Season 3 feature removals](../sources/overwolf-aug-2025-riot-guidelines.md) | Overwolf tells its developers which in-game features Riot made them remove before LoL Season 3 (deadline 27 Aug 2025) | article | market policy tools/removed | docs (LoL Season 3 section; rest skimmed) | high | B/fair | 7/7 | 2026-10-22 |
 | [Overwolf Electron: Riot Games compliance guidelines](../sources/overwolf-riot-compliance.md) | Overwolf's relay of Riot's rules for LoL/TFT/Valorant apps on its platform (hosts Porofessor, Blitz-style overlays) | docs | policy ux/features | docs (whole page) | high | B/fair | 6/6 | 2026-10-11 |
 | [Overwolf: Riot in-game ads rules (developer docs, 2026)](../sources/overwolf-riot-in-game-ads.md) | Overwolf's six rules for ads in overlays on Riot games (opt-in, dimming, no floating ads, no in-game upsell, visually distinct from Riot UI), current version | docs | policy tools/paid ux/features | docs (whole page) | high | B/fair | 6/7 | 2026-10-22 |
@@ -186,7 +187,7 @@ Riot developer policy, production key, player privacy and GDPR
 
 ## Findings by tag
 
-### policy: Riot developer policies, API key approval process, legal requirements (446)
+### policy: Riot developer policies, API key approval process, legal requirements (447)
 
 - [[blitz-lutris-description#^f1]] [data] [policy] Blitz said it fetched all data from Riot's League API and analysed it itself, using no other third-party stats. (C/weak, verified)
 - [[blitz-lutris-description#^f3]] [policy] Blitz claimed it consulted Riot before major features. (C/weak, verified)
@@ -392,6 +393,7 @@ Riot developer policy, production key, player privacy and GDPR
 - [[mobalytics-app-download#^f6]] [policy] Checked, not there: no mention of a production key, registration, or features removed for policy reasons. (B/weak, absence)
 - [[mobalytics-help#^f7]] [policy] (claim) Running the app is not a ToS risk; Mobalytics says it talks to Riot regularly. (B/fair, verified)
 - [[mobalytics-live-companion#^f8]] [policy] (inferred) Enemy level 6 pop-ups are power spike alerts, a category Riot's rules (via Overwolf) now prohibit ([[overwolf-riot-compliance#^f4]]); the 2026 listing still names "powerspike notifications" ([[overwolf-mobalytics-desktop#^f9]]). (B/fair, unquoted)
+- [[mobalytics-overlay-not-appearing#^f4]] [policy] Checked, not there (2026-10-24, three web searches): no Riot primary source separating an always-on-top window from an injected in-game overlay. Riot's portal approves overlays with pre-game static data ([[riot-docs-lol#^f9]]), DevRel expects overlays on the official APIs to keep working... (C/weak, absence)
 - [[moon-poro-bot#^f10]] [policy] README carries the Riot non-endorsement line and points to Riot policies. `README.md` (C/strong, verified)
 - [[opgg-ai#^f4]] [policy] (inferred) Live "what to do next" calls are the in-game help players call unfair ([[player-tool-needs]] C2) and near Riot's "dictate decisions" line ([[riot-production-key]] C3). (B/weak, verified)
 - [[opgg-desktop#^f5]] [policy] (inferred) Its in-game "spell tracker" and "real-time stats" overlays sit close to the line Riot drew on enemy ult tracking ([[pcgamesn-blitz-plugins#^f2]]); presumably limited to what the game shows. (B/weak, unquoted)

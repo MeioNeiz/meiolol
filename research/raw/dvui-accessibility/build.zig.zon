@@ -1,0 +1,131 @@
+.{
+    .name = .dvui,
+    .fingerprint = 0xa35affe599490101,
+    .version = "0.6.0-dev",
+    .minimum_zig_version = "0.17.0",
+    .paths = .{
+        "LICENSE",
+        "README.md",
+        "build.zig",
+        "build.zig.zon",
+        "docs",
+        "examples",
+        "package.json",
+        "readme-accessibility.md",
+        "readme-implementation.md",
+        "readme-raylib-zig-custom.md",
+        "src",
+        "tools",
+        "tsconfig.json",
+        "vendor",
+    },
+    .dependencies = .{
+        .sdl2 = .{
+            .url = "git+https://github.com/david-vanderson/SDL?ref=zig16#9243546640b45eba67d3cccc939add6039dc6c62",
+            .hash = "SDL-2.32.10-JToi34a4EgEYfCUCjSrKCF6Kmryc7Km9YP6k1qEyDMAz",
+        },
+        .sdl3 = .{
+            .url = "git+https://github.com/allyourcodebase/SDL#26ea74f20ed8c80b0ed0027bc0a7684967cdc243",
+            .hash = "sdl-1.0.6+3.4.18-i4QD0eENqgBF05QqwFxQm937mtl5sNDidtSmvG38hHKz",
+            .lazy = true,
+        },
+        .freetype = .{
+            .url = "git+https://github.com/david-vanderson/freetype#4938878b58e8481bc11ac52d6fe10a7cf6c3c7d5",
+            .hash = "freetype-2.14.1-alzUkceCqgDRZIP8PnxnNCd8jwfbwY0k1VhlTV2O5Ivo",
+            .lazy = true,
+        },
+        .raylib = .{
+            .url = "git+https://github.com/raysan5/raylib#2dee47282ae75d241759cc35f22e4768dcd092be",
+            .hash = "raylib-6.0.0-whq8uM2eNwXVGGNZwCSIfww2flgpamJLoaJ9Tau5lbJa",
+            .lazy = true,
+        },
+        .wio = .{
+            .url = "git+https://github.com/ypsvlq/wio.git#e923d9051d2fae9125bcd3b255cea7f28105dcb3",
+            .hash = "wio-0.0.0-8xHrr3oTCAAXDVug4r82SZYOjCKJUdLU2JlUrwjCQee_",
+            .lazy = true,
+        },
+        .opengl = .{
+            .url = "git+https://github.com/ypsvlq/opengl#659d2da5fcb911981d410f34d0d4236a39685065",
+            .hash = "opengl-0.0.0-_Vp8-BvwKgAaj2cWMaOMKT8VFoLx0AP9kX519_4WUaV7",
+            .lazy = true,
+        },
+        .vulkan = .{
+            .url = "git+https://github.com/Snektron/vulkan-zig#ff62f6efc7b966f91c0b4ea7a2394c8cca7892e5",
+            .hash = "vulkan-0.0.0-r7Ytx_6DAwDB1QJAbIew5IzR2PiiAtJENX5kdJHf449X",
+            .lazy = true,
+        },
+        .vulkan_headers = .{
+            .url = "https://github.com/KhronosGroup/Vulkan-Headers/archive/3dda5a1a87b62fdf3baf4680edc41c00e85a7a22.tar.gz",
+            .hash = "N-V-__8AAB3SBAKySRcX3yPGLhjKZreuo_mCzCTRBgkE1e-v",
+            .lazy = true,
+        },
+        //used in the raylib-ontop example
+        .raygui = .{
+            .url = "https://github.com/raysan5/raygui/archive/33f1659.tar.gz",
+            .hash = "N-V-__8AAAHFTwBfBg00dnFXcYkNbjC8BSyi1CDcrnh12ypL",
+            .lazy = true,
+        },
+        // required for the directx11 backend
+        .win32 = .{
+            .url = "git+https://github.com/kristoff-it/zigwin32.git?ref=fix/zig16#1102e9b82e8bd50913b6a78035bfb399ebd8cf97",
+            .hash = "zigwin32-25.0.28-preview-6BfVhYKN5AOvXPVJq4bGZ7C5dM3PbUra4xhKAKOFJGcF",
+            .lazy = true,
+        },
+        // for rendering tvg icons
+        .svg2tvg = .{
+            .url = "git+https://github.com/nat3Github/zig-lib-svg2tvg#b41ef1eb5b432c9026deaad31046789247a1fe29",
+            .hash = "svg2tvg-0.0.0-HpMZuXH9BQA3K8zSdy8LfbrbuWwOYyZdvQa55n2KTCbv",
+            .lazy = true,
+        },
+        .accesskit = .{
+            .url = "https://github.com/AccessKit/accesskit-c/releases/download/0.23.0/accesskit-c-0.23.0.zip",
+            .hash = "N-V-__8AAEFGZhErLHq9UH3Pw21WPLBLfjYaqLIboPjbQHTB",
+            .lazy = true,
+        },
+
+        // Experimental zig bindings, any zig based backend will be located here
+        .raylib_zig = .{
+            .url = "git+https://github.com/raylib-zig/raylib-zig#f6de93c03197260df941b36ddf3b8dab12bcd393",
+            .hash = "raylib_zig-6.0.0-KE8REN2mBQC2nQqk9ILHtZgMfQ-3tZpKCvyhmyUPra_3",
+            .lazy = true,
+        },
+        .zglfw = .{
+            .url = "git+https://github.com/zig-gamedev/zglfw.git#6e39cc356564525d2fed529e732595813e5224d6",
+            .hash = "zglfw-0.10.0-dev-zgVDNCC6IQD8ejmsERzRdWwpzrlcSHPBFmtcXKeMFwcZ",
+            .lazy = true,
+        },
+        .tree_sitter = .{
+            // .url = "git+https://github.com/tree-sitter/tree-sitter#$COMIT_HASH",
+            // Trivial change for 0.17.0, will probably be upstreamed at some point despite the restrained enthousiasm
+            // See https://github.com/tree-sitter/tree-sitter/issues/5999#issuecomment-5968224808
+            .url = "git+https://github.com/Yinameah/tree-sitter#67d4d7e3a9c2c0b155b13642b9d6b3ed177325e1",
+            .hash = "tree_sitter-0.28.0-Tw2sRznODQDCEzlat-s1Bb2lQeOuggNKJT_TLNaXDRZs",
+            .lazy = true,
+        },
+        .tree_sitter_json = .{
+            .url = "git+https://github.com/tree-sitter/tree-sitter-json#001c28d7a29832b06b0e831ec77845553c89b56d",
+            .hash = "N-V-__8AAHNaAgD6kjK3HX6lAf89chPqS5zIm0tLpvBQLOtX",
+            .lazy = true,
+        },
+        .tree_sitter_zig = .{
+            // Forked to support zig 0.17. Not maintained, feel free to take ownership if relevant.
+            .url = "git+https://github.com/Yinameah/tree-sitter-zig#39643900518f291a72ff8e26a3b505b5ce3c3a66",
+            .hash = "tree_sitter_zig-1.1.2-YNf2GP57XABT7jXfXt3CkhXpwo-NnAVVhiMqljClr_ds",
+            .lazy = true,
+        },
+        .zgl = .{
+            .url = "git+https://github.com/ziglibs/zgl#6ee54c287f3c4f176bd05a92746828bb791a1ad0",
+            .hash = "zgl-1.1.0-p_NpAJNECgCzUGx0aF5KFsmD5VOwfw8LaOsN0fcoU2bi",
+            .lazy = true,
+        },
+        .pugl = .{
+            .url = "git+https://github.com/bandithedoge/pugl.zig#fed6bb5f3c98e43a85736ea0574714cab35b5f1c",
+            .hash = "pugl-0.1.0-CUvtTqRjAQAQ2sX-zW39HvOnN8MLoyJQneShRiBG8F4n",
+            .lazy = true,
+        },
+        .translate_c = .{
+            .url = "git+https://codeberg.org/ziglang/translate-c?ref=zig-0.17.x#02ff0c523fb92a38939b04d0145c4a9602a74d56",
+            .hash = "translate_c-2.0.0-Q_BUWltOBwBYABF84EUL208pIFeUIwbBs29FmVBaafN5",
+        },
+    },
+}

@@ -78,30 +78,35 @@ the detail). Say if any should go the other way.
 
 ## Architecture
 
+The stack under the components is decided in stack.md (spikes, 24 Oct): a typed node
+tree in Zig instead of tpl strings, islands with keyed patching, CSS and words beside
+each component, the system webview for the desktop. Where this section and stack.md
+differ, stack.md wins; the API shapes below still read the same as tree code.
+
 ### A component exists once
 
 ```
-src/site/ui/            components: pub structs with render(self, w), tpl inside
+src/site/ui/            components: structs with view(h) building a tree (stack.md 1),
+                        their css and phrases beside them; Msg and update if interactive
 src/site/ui/fmt.zig     the formatters and the colour step (StatCell, Delta, charts)
 src/site/ui/chart.zig   one chart system (lanechart.zig grows into it)
-src/site/ui/wasm.zig    ui.wasm entry: exports per interactive component, via zjb
-src/site/static/css/    tokens.css, base.css, components.css, pages/*.css, joined at
-                        comptime into one hashed style.<hash>.css
+src/site/ui/wasm.zig    ui.wasm entry: one island per interactive component, via zjb
+src/site/ui/tokens.zig  tokens, the one source for tokens.css; component css bundled
+                        at comptime into one hashed style.<hash>.css
 ```
 
-- Server: page modules compose components; `meiolol render` and the static build emit
-  the same bytes (pipeline_test keeps that).
-- Browser: `ui.wasm` is built from the same `src/site/ui/` files with zjb (fork,
-  branch `meiolol`, research/raw/zjb-tpl-island-spike.md) and a thin `dom.zig` (byId,
-  setHtml, on, fetchBytes, storage) so components never touch handles. The only
-  hand-written JS is zjb's 5-line loader. One `ui.wasm` for the whole site (budget 40 KB
-  gzip), hashed name.
-- Big data (Pool's tallies, a full matchup list): server fragments, fetched and swapped
-  by dom.zig; never shipped as JSON to be re-summed.
-- Which data an island reads: what the server already rendered comes from the DOM
-  (`data-v` on cells: sorting reorders existing rows, no re-render); what it did not
-  render comes as a small binary file (chart_wasm.zig's pattern, already live), never
-  JSON (std.json was most of chart.wasm's size).
+- Server: page modules compose components; the tree's HTML backend (tpl's escaper)
+  writes them; `meiolol render` and the static build emit the same bytes
+  (pipeline_test keeps that).
+- Browser: `ui.wasm` is built from the same `src/site/ui/` files; each island keeps its
+  state in its struct, rebuilds its tree on an event and a keyed diff patches the DOM
+  through zjb (fork, branch `meiolol`). Server HTML is adopted, not re-created. The only
+  hand-written JS is zjb's loader. Budget 40 KB gzip, a size line per component.
+- Big data (Pool's tallies, a full matchup list): server fragments, fetched and swapped;
+  never shipped as JSON to be re-summed.
+- Which data an island reads: the server renders the default state only; other states
+  come as a small binary file encoded from the same Zig struct and rendered by the same
+  component (no hidden pre-rendered variants, never JSON).
 - Escape hatch: a page may still write tpl directly with tokens and `pages` layer CSS
   for a one-off block; it goes in the register if a second page wants it.
 
@@ -209,6 +214,9 @@ passes.
 
 ## Desktop carry-over
 
+Decided in stack.md 5: the system webview (WebView2, WKWebView on the Mac) from Zig,
+showing these same components; dvui goes. The table below is what the app reuses.
+
 The desktop review comes after this, so no screens here; what the app can reuse:
 
 | App need (docs/plan/app.md) | Components |
@@ -263,6 +271,9 @@ code opens a WKWebView window on the Mac for development.
   use it. A page never grows its own copy
 
 ## Build order and sizes
+
+stack.md "Order" changes this list: the tree core and island runtime come before the
+component set (about 13-16 days in all), and the desktop shell runs beside them.
 
 Foundation (~11-13 days; WebView2 spike in parallel):
 
