@@ -116,7 +116,8 @@ storage_scan() {
 # The Windows app, admin/desktop/ (behind the login until the public release, plan J7,
 # J19): the released exe (release/, put there by deploy/desktop-release.sh on the Mac,
 # never by a deploy), the renderer's data/stats.bin (EUW, current patch: what meio.lol
-# serves) and recent-curves.bin, each with a .gz for nginx's gzip_static, and the
+# serves), its data/champ-facts.tsv (the comp view's, src/core/champfacts.zig) and
+# recent-curves.bin, each with a .gz for nginx's gzip_static, and the
 # manifest listing them (name, sha256, bytes; the exe also its release version and
 # signature from release/meiolol-desktop.json) for the app's own update check
 # (src/desktop/update.zig), which nginx lets in with the key in desktop.token
@@ -138,7 +139,7 @@ strip_fitted() {
 }
 
 desktop_files() {
-    local d=data/desktop.new inputs
+    local d=data/desktop.new inputs hashed
     [[ -f release/meiolol-desktop.exe && -f data/export/recent-curves.bin && -n "$patch" ]] \
         || return 0
     [[ -s desktop.token ]] || (umask 077 && openssl rand -hex 32 > desktop.token)
@@ -150,10 +151,15 @@ desktop_files() {
         return 1
     fi
     strip_fitted "$d/stats.bin"
+    # The comp view's champion facts (src/core/champfacts.zig); apps without them still work
+    curl -sf --max-time 60 -o "$d/champ-facts.tsv" \
+        "http://$(hostname -I | cut -d' ' -f1):8091/data/champ-facts.tsv" \
+        || rm -f "$d/champ-facts.tsv"
+    hashed=("$d/stats.bin" release/meiolol-desktop.exe release/meiolol-desktop.json desktop.token)
+    [[ ! -f $d/champ-facts.tsv ]] || hashed+=("$d/champ-facts.tsv")
     # The curves by size and time, not content: 80 MB to read every round
-    inputs=$(sha256sum "$d/stats.bin" release/meiolol-desktop.exe release/meiolol-desktop.json \
-        desktop.token | cut -d' ' -f1 && stat -c '%s %Y' data/export/recent-curves.bin \
-        && echo "$patch")
+    inputs=$(sha256sum "${hashed[@]}" | cut -d' ' -f1 \
+        && stat -c '%s %Y' data/export/recent-curves.bin && echo "$patch")
     if [[ -f data/desktop/update.signed \
         && "$inputs" == "$(cat data/desktop.inputs 2> /dev/null)" ]]; then
         rm -rf "$d"
@@ -181,8 +187,10 @@ d, patch, release_path = sys.argv[1:]
 with open(release_path) as f:
     release = json.load(f)
 files = []
-for name in ("stats.bin", "recent-curves.bin", "meiolol-desktop.exe"):
+for name in ("stats.bin", "recent-curves.bin", "champ-facts.tsv", "meiolol-desktop.exe"):
     path = os.path.join(d, name)
+    if name == "champ-facts.tsv" and not os.path.exists(path):
+        continue
     if not os.path.exists(path + ".gz"):
         with open(path, "rb") as src, gzip.open(path + ".gz", "wb", compresslevel=6) as dst:
             shutil.copyfileobj(src, dst, 1 << 20)
@@ -472,7 +480,7 @@ while true; do
         rm -rf data/private && mv data/private.new data/private
         gate=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://meio.lol/p/ || true)
         if [[ "$gate" == 302 ]]; then
-            rsync -a --delete data/private/ meiolol-web:p/ || echo "$(date -u +%FT%TZ) private upload FAILED"
+            rsync -a --delete --exclude=/lab data/private/ meiolol-web:p/ || echo "$(date -u +%FT%TZ) private upload FAILED"
         elif [[ "$gate" != "$private_gate" ]]; then
             echo "$(date -u +%FT%TZ) private upload held: meio.lol/p/ answers ${gate:-nothing}, not the login redirect"
         fi
