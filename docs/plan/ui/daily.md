@@ -117,13 +117,13 @@ Daily Draft #14  ...                                                 [ResultStri
     each row ChampIcon, name, team win chance Bar with range whisker, "+1.0 vs
     played", up to three reason Chips
   - tap a row: `ReasonBreakdown` under it: from the role's average to this pick, one
-    diverging bar per term ("strength as a bot", "into Caitlyn", "with Lulu", "rest")
-    with points and games, the total with its 95% range. Two rows open at once
+    waterfall step per term ("strength as a bot", "into Caitlyn", "with Lulu",
+    "rest") with points and games, the total with its 95% range. Two rows open at once
     compare (played vs model's pick)
   - "Show the board as if": tap "Pick" on a candidate swaps it into the board and the
     WinSplit moves (client side, the puzzle JSON carries the terms); "Reset" undoes.
     Later, needs the per-seat terms in the JSON (Data needed)
-- On paper (full width under the board): `WinSplit`, the bar with blue and red shares,
+- On paper (under the board, beside the seat panel): `WinSplit`, the bar with blue and red shares,
   the 95% range as a whisker around the split, the result as a flag on the winner's end;
   then the edge by kind as one row of four diverging mini bars (DivergingBars variant of
   Bar). Words: "On paper", the four kind labels, numbers
