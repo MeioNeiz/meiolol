@@ -5,30 +5,31 @@
 // Admin only: a draft board of two teams, the model's win chance for the whole draft, and
 // a picker per slot showing what each champion would change. The model comes from the box's
 // daily `meiolol draft-model` (models/, deploy/web-loop.sh) or meiolol-lab's `draft --export`
-// sent by deploy/lab-push.sh (training/), as draft-model.json with reference pairs in
-// draft-ref.json, checked at load (modelFile). Nothing here reaches the public site, which
+// sent by deploy/lab-push.sh (training/; the private site's lab/), as draft-model.json
+// with reference pairs in draft-ref.json, checked at load (modelFile). Nothing here reaches the public site, which
 // must not claim "this draft wins X%"
 
 const DRAFT_ROLES = [["top", "Top"], ["jungle", "Jungle"], ["mid", "Mid"], ["bot", "Bot"], ["support", "Support"]];
 const SIDES = [["blue", "Blue"], ["red", "Red"]];
 const DRAFT = { model: undefined, err: null, check: null, m: null, from: {}, gen: 0, loading: null };
-const MODEL_DIRS = { models: "box daily", training: "lab pick" };
+const MODEL_DIRS = { models: "box daily", training: "lab pick", lab: "lab pick" };
 // The draft model the board scores with: the shipped one (the box's daily export, models/)
 // or the lab experiment (whatever `lab-push.sh use draft` sent, training/); the old
 // draftPrefer setting carries over
 const DRAFT_SOURCES = [["shipped", "Shipped model"], ["lab", "Lab experiment"]];
-const draftSource = () => PRIVATE ? "shipped" : stored("draftModel", stored("draftPrefer", "box") === "lab" ? "lab" : "shipped");
+const draftSource = () => stored("draftModel", stored("draftPrefer", "box") === "lab" ? "lab" : "shipped");
 // Files the box's daily export writes; the rest (draft-comp.json) come from the lab only, so
 // models/ isn't asked for them (a 404 there would only fill the console)
 const BOX_FILES = new Set(["draft-model.json", "lane-model.json"]);
 
 // A model file: the draft model from the chosen source only; the lane model from the box's
 // daily export, else the lab's; the rest from the lab. References come from the same
-// directory. The private site has the box's files only: the lab's are a 404
+// directory. The private site has the lab's tester files only, in lab/
+// (deploy/training-receive.sh), not the rest of the training view
+const labDir = () => PRIVATE ? "lab" : "training";
 async function modelFile(name) {
-  const dirs = (name === "draft-model.json" ? [draftSource() === "lab" ? "training" : "models"]
-    : BOX_FILES.has(name) ? ["models", "training"] : ["training"]).filter(d => !PRIVATE || d === "models");
-  if (!dirs.length) throw new Error(`404 ${name}: lab files are on the admin page only`);
+  const dirs = name === "draft-model.json" ? [draftSource() === "lab" ? labDir() : "models"]
+    : BOX_FILES.has(name) ? ["models", labDir()] : [labDir()];
   for (const [i, dir] of dirs.entries()) {
     try { return { json: await getJson(`${dir}/${name}`), dir }; }
     catch (e) { if (i === dirs.length - 1 || !/^404/.test(e.message)) throw e; }
@@ -85,7 +86,7 @@ async function loadDraftModel() {
     // Another draft model (the box's daily one by default) is expected, so only a note
     const same = base.games > 0 && base.worst < SETNET_BASE_TOL;
     x.netChecks.push({ ok: true, info: !same, text: same ? `set net base: the draft model against the offsets the nets were fitted on, ${base.games} EUW reference games, max |logit diff| ${base.worst.toFixed(4)}`
-      : "Set net not shown: the lab experiment's draft model isn't the one the net was fitted on (send the matching export with `lab-push.sh use draft`)" });
+      : "Set net not shown: the lab experiment's draft model isn't the one the net was fitted on" + (PRIVATE ? "" : " (send the matching export with `lab-push.sh use draft`)") });
     if (same && x.netChecks.every(c => c.ok)) x.net = net;
   } catch (e) { if (!/^404/.test(e.message)) x.netErr = e.message; }
   // The lane model is optional: without it the picker has no lane column
@@ -489,11 +490,12 @@ function draftView(body) {
   // Which model scores the board, in words; the lab's name comes from its file
   const modelName = lab ? (meta.name ? `Lab: ${meta.name.split(":")[0]}` : "Lab experiment") : "Shipped model";
   sec.append(el("div", { class: "modelpick" }, el("span", { class: "sub" }, "Model"),
-    PRIVATE ? null : switcher(DRAFT_SOURCES, lab ? "lab" : "shipped", k => { if (k !== draftSource()) { store("draftModel", k); reloadDraft(); } }, "Draft model"),
+    switcher(DRAFT_SOURCES, lab ? "lab" : "shipped", k => { if (k !== draftSource()) { store("draftModel", k); reloadDraft(); } }, "Draft model"),
     el("span", { class: "sub" }, !m ? "" : lab ? `${meta.name || "an export"}${DRAFT.net ? ", with the neural net on top" : ""}, sent from the lab (${meta.snapshot || "snapshot unknown"}); not used by the app or site.${fittedOn(meta)}`
       : `What the app and site use, refitted daily by the box.${fittedOn(meta)}`)));
   if (!m) {
     if (DRAFT.err && !/^404/.test(DRAFT.err)) sec.append(el("div", { class: "health bad" }, el("b", {}, "The draft model didn't load: "), DRAFT.err));
+    else if (lab && PRIVATE) sec.append(el("p", { class: "muted" }, "No lab experiment right now: switch to the shipped model."));
     else if (lab) sec.append(el("p", { class: "muted" }, "No lab experiment loaded: send one with `deploy/lab-push.sh use draft RUN|DIR` (meiolol-lab's `draft --export`), or switch to the shipped model."));
     else sec.append(el("p", { class: "muted" }, "No shipped model yet: the box writes one daily (`meiolol draft-model`). The lab experiment may have one."));
     return;
