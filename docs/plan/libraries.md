@@ -51,7 +51,9 @@ that slow everyday development).
   `rebuild` (the first ban stays). Each has a regression test. Setup: -ffuzz
   instruments sqlite3.c, which Zig's fuzzer has no comparison hooks for, so sqlite
   builds with -fno-sanitize-coverage; the fuzzer checks every input for leaks, so
-  harness state lives per input
+  harness state lives per input; given a binary's several fuzz tests in one run, zig
+  searched only one, so the script runs each on its own (desktop-fuzz in
+  desktop-release.sh likely has the same gap: unchecked)
 
 - One `net` module, steps 1-4 (24 Oct): src/net/ (build module "net", std only, a
   module doc with an example, imported by backend, app, mock and desktop; backend-check,
