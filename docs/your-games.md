@@ -14,9 +14,15 @@ static/your.js) is the page. Live, /api/ open without login since 2026-10-17: De
   the page polls every 3 s and shows progress
 - Per new Riot ID: account-v1 by Riot ID and active region (europe route), league-v4
   by PUUID (visible rank), match-v5 ids (last 60 days, one list per queue: solo 420,
-  flex 440, draft 400, Swiftplay 480), then match + timeline for up to 10 games not yet
-  cached, newest first across the lists. ~26 regional calls plus 1 platform call for a
-  first lookup; a refresh costs 5 plus 2 per new game.
+  flex 440, draft 400, Swiftplay 480; up to 3 pages of 100 each), then match + timeline
+  for up to 10 games not yet cached, newest first across the lists. ~26 regional calls
+  plus 1 platform call for a first lookup; a refresh costs 5 plus 2 per new game.
+- The rest of the 60 days goes in api.db `backlog`: a `history:<puuid>` job fetches 25
+  of them a step (match only, one call each, for Friends), then queues itself again
+  behind any lookup that arrived meanwhile, so a heavy player's history never holds up
+  another's lookup. It does not count toward the 30-job cap. A refresh's spare timeline
+  slots (10 less its new games) fill cached games still without one, newest first;
+  `matches.timeline` is NULL until fetched, empty when Riot has none or a remake
   Not the unfiltered list: it holds private ARAM Mayhem ids (403) that would take the 10
   new-game slots on every refresh. ARAM and Arena have no lanes to show
 - When to refresh (src/api/root.zig): a visit refreshes when the last refresh is over 5
@@ -84,12 +90,36 @@ copies the file into each site build; a failed run deletes it, so no stale examp
 | GET /api/games?id=Name%23TAG | state (queued, fetching, ready, not_found, opted_out), progress (ahead, pending, total), player, report |
 | POST /api/forget?id=... | starts an objection: state pending, then issued with an icon |
 | POST /api/forget?id=...&check=1 | checks the icon: checking, then done or mismatch |
+| GET /api/friends?id=Name%23TAG | state (none, opted_out, ready), friends (src/api/friends.zig): games, waiting (backlog), with_friends and alone, and per friend (3+ games on the same team, top 20): riot_id, together, against, last_ms, you and them (with, apart, apart_rate, diff, lo, hi), their_games, top 3 champion and role pairs. Fetches nothing |
 | GET /api/forget?id=... | the objection's state (none, pending, issued, checking, mismatch, done, not_found, failed, expired) |
 | GET /api/health | {ok, jobs} |
 | POST /api/daily?n=N&pick=0-3&side=0-1 | Daily Draft: one finished puzzle's answers counted (option index in the puzzle's order, side 0 blue); replies as GET |
 | GET /api/daily?n=N | {n, players, picks[4], sides[2]}: counts only, daily_answers in api.db |
 
 Queue capped at 30 jobs (503 "busy" beyond); objection checks jump the queue.
+
+## Friends
+
+Under Highlights on Your games: everyone on the player's team in 3 or more of their
+cached games (two random teammates in 60 days happen; three rarely do), most games
+together first.
+
+- You with them: the player's win rate in games with the friend against their rate
+  apart in the same queues, each queue's rate apart weighted by the games together in it
+  (friends play flex and normals together and solo/duo alone, so a plain "without"
+  compares queues). Queues with no games apart drop out; none left shows "no games
+  apart". Range: 95%, normal approximation on rates with one win and one loss added;
+  coloured only when it leaves out 0
+- Them with you: the same from the friend's own cached games, found by their Riot ID in
+  `accounts` when its PUUID still hashes to the friend's seat (names change hands).
+  Until then "Fetch their games" looks them up exactly as typing their Riot ID would
+  (a press only: it costs Riot calls); the friend's name links to their page
+- Against them, the champion pair and role pair played most together, with the record
+- The page polls /api/friends every 15 s while the backlog or an asked friend's games
+  are still coming
+- Facts, not causes: the page says games with friends differ in other ways too
+
+Next (docs/backlog.md "Your games and Squads"): opt-in Squads pages built on this.
 
 ## Rate limits
 

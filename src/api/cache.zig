@@ -50,6 +50,14 @@ pub const schema =
     \\    PRIMARY KEY (puuid, match_id)
     \\) WITHOUT ROWID;
     \\
+    \\-- A player's games in the last 60 days not fetched yet, oldest last by id: the
+    \\-- fetcher takes them a step at a time (summary only), between other lookups
+    \\CREATE TABLE IF NOT EXISTS backlog (
+    \\    puuid TEXT NOT NULL,
+    \\    match_id TEXT NOT NULL,
+    \\    PRIMARY KEY (puuid, match_id)
+    \\) WITHOUT ROWID;
+    \\
     \\-- Objections (docs/your-games.md): to prove they own a Riot ID, the player sets
     \\-- profile icon `icon` before `expires` (unix s). state: pending (being issued),
     \\-- issued, checking, mismatch (icon not set yet), done, not_found
@@ -68,7 +76,8 @@ pub const schema =
     \\) WITHOUT ROWID;
     \\
     \\-- summary: gzip JSON of game.Summary (no names; PUUIDs hashed). timeline: gzip
-    \\-- compact timeline (riot/timeline.zig), NULL when Riot has none
+    \\-- compact timeline (riot/timeline.zig); NULL not fetched yet, empty when Riot has
+    \\-- none or the game was a remake
     \\CREATE TABLE IF NOT EXISTS matches (
     \\    match_id TEXT PRIMARY KEY,
     \\    fetched INTEGER NOT NULL,
@@ -98,6 +107,9 @@ pub const schema =
     \\    PRIMARY KEY (n, pick, side)
     \\) WITHOUT ROWID;
 ;
+
+/// Job keys for a player's backlog: this prefix, then the PUUID
+pub const history_prefix = "history:";
 
 pub fn open(path: [:0]const u8) !Db {
     const db = try Db.open(path);
@@ -166,8 +178,9 @@ fn deletePlayers(db: Db, comptime select: []const u8, args: anytype) !void {
     try db.run("INSERT OR IGNORE INTO temp.gone " ++ select, args);
     try db.run("DELETE FROM players WHERE puuid IN temp.gone", .{});
     try db.run("DELETE FROM player_games WHERE puuid IN temp.gone", .{});
+    try db.run("DELETE FROM backlog WHERE puuid IN temp.gone", .{});
     try db.run("DELETE FROM accounts WHERE puuid IN temp.gone", .{});
-    try db.run("DELETE FROM jobs WHERE key IN temp.gone", .{});
+    try db.run("DELETE FROM jobs WHERE key IN temp.gone OR key IN (SELECT ?1 || puuid FROM temp.gone)", .{history_prefix});
     try db.run(
         \\DELETE FROM matches WHERE match_id NOT IN (SELECT match_id FROM player_games)
     , .{});

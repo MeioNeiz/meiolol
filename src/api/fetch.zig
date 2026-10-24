@@ -1,8 +1,10 @@
 //! The service's only Riot caller: one task working through the jobs table, oldest
 //! first. Calls go through the crawler's proxy (riot/proxy.zig), which takes the
 //! crawler's next free slot for each, so the key's limits are shared without either
-//! side holding back. Fetches only a few new games per refresh; everything fetched is
-//! cached by match id.
+//! side holding back. A refresh fetches the newest games whole; the rest of the last 60
+//! days goes in a backlog, fetched without timelines a step at a time as its own job, so
+//! one player's history never holds up another's lookup. Everything fetched is cached
+//! by match id.
 
 const std = @import("std");
 const store = @import("store");
@@ -27,8 +29,13 @@ pub const Options = struct {
     exchange_dir: ?[]const u8 = null,
 };
 
-/// New games fetched per refresh (~2 calls each); older ones on later refreshes
+/// Games fetched with timelines per refresh (~2 calls each): new ones first, then cached
+/// ones still without, newest first
 const max_new = 10;
+/// Backlog games per history step, one call each
+const backlog_step = 25;
+/// Match id pages of 100 per queue: a heavy player's 60 days
+const max_id_pages = 3;
 /// How far back to list match ids
 const since_days = 60;
 /// Players nobody looked up for this long are deleted (docs/your-games.md)
@@ -95,9 +102,9 @@ pub const Fetcher = struct {
                 try f.io.sleep(.fromMilliseconds(500), .awake);
                 continue;
             };
-            f.job(arena, key) catch |err| switch (err) {
+            const again = f.job(arena, key) catch |err| switch (err) {
                 error.KeyRejected, error.OutOfMemory, error.Canceled => return err,
-                else => {
+                else => again: {
                     log.warn("job failed: {t}", .{err});
                     if (std.mem.startsWith(u8, key, verify_prefix)) {
                         // Back to waiting, so the player can press check again
@@ -108,20 +115,32 @@ pub const Fetcher = struct {
                     } else if (std.mem.findScalar(u8, key, '#') == null) {
                         try f.db.run("UPDATE players SET error = ? WHERE puuid = ?", .{ @errorName(err), key });
                     }
+                    break :again false;
                 },
             };
             try f.db.run("DELETE FROM jobs WHERE key = ?", .{key});
+            if (again) try f.db.run("INSERT OR IGNORE INTO jobs (key, requested) VALUES (?, ?)", .{ key, f.seconds() });
         }
     }
 
-    fn job(f: *Fetcher, arena: Allocator, key: []const u8) !void {
-        if (std.mem.startsWith(u8, key, verify_prefix)) return f.verify(arena, key[verify_prefix.len..]);
+    /// True when the job should run again, behind everything queued meanwhile
+    fn job(f: *Fetcher, arena: Allocator, key: []const u8) !bool {
+        if (std.mem.startsWith(u8, key, verify_prefix)) {
+            try f.verify(arena, key[verify_prefix.len..]);
+            return false;
+        }
+        if (std.mem.startsWith(u8, key, cache.history_prefix)) {
+            const puuid = key[cache.history_prefix.len..];
+            if (try f.blocked(puuid)) return false;
+            return f.history(arena, puuid);
+        }
         const puuid = if (std.mem.findScalar(u8, key, '#') != null)
-            try f.resolve(arena, key) orelse return
+            try f.resolve(arena, key) orelse return false
         else
             key;
-        if (try f.blocked(puuid)) return;
+        if (try f.blocked(puuid)) return false;
         try f.refresh(arena, puuid, key);
+        return false;
     }
 
     fn blocked(f: *Fetcher, puuid: []const u8) !bool {
@@ -210,17 +229,20 @@ pub const Fetcher = struct {
         }
     }
 
-    /// Rank and the newest games not yet cached for this player. Progress goes on the
-    /// job row `job_key` (the Riot ID while the page polls by it)
+    fn platformOf(f: *Fetcher, puuid: []const u8) !endpoints.Platform {
+        var q = try f.db.prepare("SELECT platform FROM players WHERE puuid = ?");
+        defer q.deinit();
+        try q.bind(.{puuid});
+        if (!try q.step()) return error.UnknownPlayer;
+        // Hosts are the platform ids in lower case
+        return endpoints.platformByHost(q.bytes(0)) orelse error.UnknownPlatform;
+    }
+
+    /// Rank, the newest games not yet cached for this player and timelines for cached
+    /// ones without; the rest of the 60 days to the backlog. Progress goes on the job
+    /// row `job_key` (the Riot ID while the page polls by it)
     fn refresh(f: *Fetcher, arena: Allocator, puuid: []const u8, job_key: []const u8) !void {
-        const platform = blk: {
-            var q = try f.db.prepare("SELECT platform FROM players WHERE puuid = ?");
-            defer q.deinit();
-            try q.bind(.{puuid});
-            if (!try q.step()) return error.UnknownPlayer;
-            // Hosts are the platform ids in lower case
-            break :blk endpoints.platformByHost(q.bytes(0)) orelse return error.UnknownPlatform;
-        };
+        const platform = try f.platformOf(puuid);
         const region = platform.region;
 
         var rank: game.Rank = .{};
@@ -234,18 +256,38 @@ pub const Fetcher = struct {
 
         const now = f.seconds();
         var ids: std.ArrayList([]const u8) = .empty;
-        for (queues) |queue| {
-            const body = try f.keep(arena, try endpoints.matchIds(try f.route(@tagName(region)), region, puuid, queue, now - since_days * std.time.s_per_day, now, 0)) orelse
+        for (queues) |queue| for (0..max_id_pages) |page| {
+            const body = try f.keep(arena, try endpoints.matchIds(try f.route(@tagName(region)), region, puuid, queue, now - since_days * std.time.s_per_day, now, @intCast(page * 100))) orelse
                 return error.NoMatchIds;
-            try ids.appendSlice(arena, try endpoints.parse([]const []const u8, arena, body));
-        }
+            const got = try endpoints.parse([]const []const u8, arena, body);
+            try ids.appendSlice(arena, got);
+            if (got.len < 100) break;
+        };
         newestFirst(ids.items);
 
         var wanted: std.ArrayList([]const u8) = .empty;
+        var older: std.ArrayList([]const u8) = .empty;
         for (ids.items) |id| {
-            if (wanted.items.len == max_new) break;
             const have = try f.db.scalar("SELECT 1 FROM player_games WHERE puuid = ? AND match_id = ?", .{ puuid, id });
-            if (have == null) try wanted.append(arena, id);
+            if (have != null) continue;
+            try (if (wanted.items.len < max_new) &wanted else &older).append(arena, id);
+        }
+        {
+            try f.db.begin();
+            errdefer f.db.rollback();
+            try f.db.run("DELETE FROM backlog WHERE puuid = ?", .{puuid});
+            for (older.items) |id| try f.db.run("INSERT OR IGNORE INTO backlog VALUES (?, ?)", .{ puuid, id });
+            try f.db.commit();
+        }
+        var bare: std.ArrayList([]const u8) = .empty;
+        {
+            var q = try f.db.prepare(
+                \\SELECT pg.match_id FROM player_games pg JOIN matches m USING (match_id)
+                \\WHERE pg.puuid = ? AND m.timeline IS NULL ORDER BY pg.start_ms DESC LIMIT ?
+            );
+            defer q.deinit();
+            try q.bind(.{ puuid, max_new - wanted.items.len });
+            while (try q.step()) try bare.append(arena, try arena.dupe(u8, q.bytes(0)));
         }
         // Games cached before Riot IDs were kept (20 Oct 2026) get them: one call each
         var unnamed: std.ArrayList([]const u8) = .empty;
@@ -259,33 +301,77 @@ pub const Fetcher = struct {
             try q.bind(.{ puuid, max_new });
             while (try q.step()) try unnamed.append(arena, try arena.dupe(u8, q.bytes(0)));
         }
-        const total = wanted.items.len + unnamed.items.len;
+        const total = wanted.items.len + bare.items.len + unnamed.items.len;
         try f.db.run("UPDATE jobs SET pending = ?, total = ? WHERE key = ?", .{ total, total, job_key });
 
         var hash_buf: [game.hash_len]u8 = undefined;
         const hash = game.hashPuuid(&hash_buf, puuid);
-        for (wanted.items, 0..) |id, i| {
-            f.addGame(arena, region, puuid, hash, id) catch |err| switch (err) {
+        var done: usize = 0;
+        for (wanted.items) |id| {
+            f.addGame(arena, region, puuid, hash, id, .whole) catch |err| switch (err) {
                 error.KeyRejected, error.OutOfMemory, error.Canceled => return err,
                 else => log.warn("{s}: {t}", .{ id, err }),
             };
-            try f.db.run("UPDATE jobs SET pending = ? WHERE key = ?", .{ total - i - 1, job_key });
+            done += 1;
+            try f.db.run("UPDATE jobs SET pending = ? WHERE key = ?", .{ total - done, job_key });
         }
-        for (unnamed.items, 0..) |id, i| {
+        for (bare.items) |id| {
+            f.addTimeline(arena, region, id) catch |err| switch (err) {
+                error.KeyRejected, error.OutOfMemory, error.Canceled => return err,
+                else => log.warn("{s}: timeline {t}", .{ id, err }),
+            };
+            done += 1;
+            try f.db.run("UPDATE jobs SET pending = ? WHERE key = ?", .{ total - done, job_key });
+        }
+        for (unnamed.items) |id| {
             if (endpoints.match(try f.route(@tagName(region)), region, id)) |found| {
                 if (try f.keep(arena, found)) |body| try f.storeNames(arena, id, body);
             } else |err| switch (err) {
                 error.KeyRejected, error.OutOfMemory, error.Canceled => return err,
                 else => log.warn("{s}: names {t}", .{ id, err }),
             }
-            try f.db.run("UPDATE jobs SET pending = ? WHERE key = ?", .{ unnamed.items.len - i - 1, job_key });
+            done += 1;
+            try f.db.run("UPDATE jobs SET pending = ? WHERE key = ?", .{ total - done, job_key });
         }
         try f.db.run("UPDATE players SET refreshed = ?, error = NULL WHERE puuid = ?", .{ f.seconds(), puuid });
+        if (older.items.len > 0) {
+            var buf: [128]u8 = undefined;
+            const key = try std.mem.print(&buf, "{s}{s}", .{ cache.history_prefix, puuid });
+            try f.db.run("INSERT OR IGNORE INTO jobs (key, requested) VALUES (?, ?)", .{ key, f.seconds() });
+        }
     }
 
-    fn addGame(f: *Fetcher, arena: Allocator, region: endpoints.Region, puuid: []const u8, hash: []const u8, id: []const u8) !void {
+    /// One step of the backlog, newest first, summaries only (the friends stats need no
+    /// timeline; a later refresh adds it). True while games are left
+    fn history(f: *Fetcher, arena: Allocator, puuid: []const u8) !bool {
+        const region = (try f.platformOf(puuid)).region;
+        var ids: std.ArrayList([]const u8) = .empty;
+        {
+            var q = try f.db.prepare("SELECT match_id FROM backlog WHERE puuid = ?");
+            defer q.deinit();
+            try q.bind(.{puuid});
+            while (try q.step()) try ids.append(arena, try arena.dupe(u8, q.bytes(0)));
+        }
+        newestFirst(ids.items);
+        var hash_buf: [game.hash_len]u8 = undefined;
+        const hash = game.hashPuuid(&hash_buf, puuid);
+        const step = ids.items[0..@min(ids.items.len, backlog_step)];
+        for (step) |id| {
+            f.addGame(arena, region, puuid, hash, id, .summary) catch |err| switch (err) {
+                error.KeyRejected, error.OutOfMemory, error.Canceled => return err,
+                // Dropped: the next refresh lists it again
+                else => log.warn("{s}: {t}", .{ id, err }),
+            };
+            try f.db.run("DELETE FROM backlog WHERE puuid = ? AND match_id = ?", .{ puuid, id });
+        }
+        return ids.items.len > step.len;
+    }
+
+    const Fetch = enum { whole, summary };
+
+    fn addGame(f: *Fetcher, arena: Allocator, region: endpoints.Region, puuid: []const u8, hash: []const u8, id: []const u8, how: Fetch) !void {
         const summary = try f.cachedSummary(arena, id) orelse
-            try f.fetchMatch(arena, region, id) orelse return;
+            try f.fetchMatch(arena, region, id, how) orelse return;
         const slot = summary.slotOf(hash) orelse return error.PlayerNotInMatch;
         try f.db.run("INSERT OR IGNORE INTO player_games VALUES (?, ?, ?, ?)", .{ puuid, id, summary.start_ms, slot });
     }
@@ -301,17 +387,13 @@ pub const Fetcher = struct {
         return try readSummary(arena, q.bytes(0));
     }
 
-    fn fetchMatch(f: *Fetcher, arena: Allocator, region: endpoints.Region, id: []const u8) !?game.Summary {
+    fn fetchMatch(f: *Fetcher, arena: Allocator, region: endpoints.Region, id: []const u8, how: Fetch) !?game.Summary {
         const body = try f.keep(arena, try endpoints.match(try f.route(@tagName(region)), region, id)) orelse return null;
         const summary = try game.summarise(arena, body);
-        var packed_timeline: ?[]const u8 = null;
-        if (!summary.remake) {
-            if (try f.keep(arena, try endpoints.timeline(try f.route(@tagName(region)), region, id))) |raw| {
-                const t = try riot.timeline.fromJson(arena, raw);
-                const compact = try riot.timeline.encode(arena, t);
-                packed_timeline = try store.raw.compress(arena, compact);
-            }
-        }
+        const packed_timeline: ?[]const u8 = switch (how) {
+            .whole => try f.packedTimeline(arena, region, id, summary),
+            .summary => null,
+        };
         const json = try std.json.Stringify.valueAlloc(arena, summary, .{});
         const packed_summary = try store.raw.compress(arena, json);
         try f.db.run("INSERT OR REPLACE INTO matches VALUES (?, ?, ?, ?)", .{
@@ -322,6 +404,20 @@ pub const Fetcher = struct {
         });
         try f.storeNames(arena, id, body);
         return summary;
+    }
+
+    /// Empty for a remake or when Riot has none, so it is not asked for again
+    fn packedTimeline(f: *Fetcher, arena: Allocator, region: endpoints.Region, id: []const u8, summary: game.Summary) ![]const u8 {
+        if (summary.remake) return "";
+        const raw = try f.keep(arena, try endpoints.timeline(try f.route(@tagName(region)), region, id)) orelse return "";
+        const t = try riot.timeline.fromJson(arena, raw);
+        return store.raw.compress(arena, try riot.timeline.encode(arena, t));
+    }
+
+    fn addTimeline(f: *Fetcher, arena: Allocator, region: endpoints.Region, id: []const u8) !void {
+        const summary = try f.cachedSummary(arena, id) orelse return;
+        const t = try f.packedTimeline(arena, region, id, summary);
+        try f.db.run("UPDATE matches SET timeline = ? WHERE match_id = ?", .{ store.Blob{ .bytes = t }, id });
     }
 
     /// Each player's Riot ID as at the game, none for a blocked player
@@ -456,6 +552,52 @@ test "a refresh frees every Riot body it fetched" {
     try db.run("INSERT INTO players (puuid, game_name, tag_line, platform) VALUES ('p', 'A', '1', 'EUW1')", .{});
     try f.refresh(arena_state.allocator(), "p", "p");
     try std.testing.expectEqual(@as(?i64, max_new), try db.scalar("SELECT count(*) FROM matches WHERE timeline IS NOT NULL", .{}));
+}
+
+test "a refresh fetches the newest games whole, the backlog the rest without timelines" {
+    const gpa = std.testing.allocator;
+    const saved = std.testing.log_level;
+    defer std.testing.log_level = saved;
+    std.testing.log_level = .err;
+    var fake: riot.fake.Fake = try .init(gpa, std.testing.io, 0);
+    defer fake.deinit(gpa);
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const db = try cache.open(":memory:");
+    defer db.close();
+    var f: Fetcher = .{ .gpa = gpa, .io = std.testing.io, .db = db, .opts = .{} };
+    defer f.deinit();
+    for ([_][]const u8{ "europe", "euw1" }) |name| (try f.route(name)).fake = &fake;
+    try db.run("INSERT INTO players (puuid, game_name, tag_line, platform) VALUES ('p', 'A', '1', 'EUW1')", .{});
+    try f.refresh(arena, "p", "p");
+    // The fake lists 20 solo games
+    try std.testing.expectEqual(@as(?i64, 10), try db.scalar("SELECT count(*) FROM backlog WHERE puuid = 'p'", .{}));
+    try std.testing.expectEqual(@as(?i64, 1), try db.scalar("SELECT count(*) FROM jobs WHERE key = 'history:p'", .{}));
+    try std.testing.expect(!try f.history(arena, "p"));
+    try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM backlog", .{}));
+    try std.testing.expectEqual(@as(?i64, 10), try db.scalar("SELECT count(*) FROM matches WHERE timeline IS NULL", .{}));
+
+    // A summary-only game gets its timeline in a later refresh's spare slots; a remake an
+    // empty one without asking Riot
+    try db.run("DELETE FROM matches WHERE timeline IS NOT NULL", .{});
+    var q = try db.prepare("SELECT match_id, summary FROM matches LIMIT 2");
+    var ids: [2][]const u8 = undefined;
+    for (&ids) |*id| {
+        _ = try q.step();
+        id.* = try arena.dupe(u8, q.bytes(0));
+        const summary = try readSummary(arena, q.bytes(1));
+        try db.run("INSERT INTO player_games VALUES ('p', ?, ?, 0)", .{ id.*, summary.start_ms });
+    }
+    q.deinit();
+    var remake = (try f.cachedSummary(arena, ids[1])).?;
+    remake.remake = true;
+    const json = try std.json.Stringify.valueAlloc(arena, remake, .{});
+    try db.run("UPDATE matches SET summary = ? WHERE match_id = ?", .{ store.Blob{ .bytes = try store.raw.compress(arena, json) }, ids[1] });
+    try f.addTimeline(arena, .europe, ids[0]);
+    try f.addTimeline(arena, .europe, ids[1]);
+    try std.testing.expect((try db.scalar("SELECT length(timeline) FROM matches WHERE match_id = ?", .{ids[0]})).? > 0);
+    try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT length(timeline) FROM matches WHERE match_id = ?", .{ids[1]}));
 }
 
 test pickIcon {

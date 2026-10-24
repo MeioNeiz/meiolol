@@ -5,6 +5,8 @@
 //!
 //!   GET  /api/games?id=Name%23TAG   state, player, report (game.zig); &refresh=1 checks
 //!                                   for new games sooner than a visit does
+//!   GET  /api/friends?id=Name%23TAG who the player plays with (friends.zig), from the
+//!                                   games /api/games fetched; fetches nothing itself
 //!   POST /api/forget?id=Name%23TAG  objection: issue a profile icon; &check=1 checks it
 //!   GET  /api/forget?id=Name%23TAG  the objection's state
 //!   GET  /api/health                queue length
@@ -25,6 +27,7 @@ pub const game = @import("game.zig");
 pub const example = @import("example.zig");
 pub const accounts = @import("accounts.zig");
 pub const roles = @import("roles.zig");
+pub const friends = @import("friends.zig");
 
 const Allocator = std.mem.Allocator;
 const log = std.log.scoped(.api);
@@ -265,6 +268,12 @@ fn handle(ctx: *Context, request: *std.http.Server.Request) !void {
         const r = try games(ctx, arena, db, query);
         return send(ctx, request, r.status, r.body);
     }
+    if (std.mem.eql(u8, path, "/api/friends") and method == .GET) {
+        const db = try cache.open(ctx.opts.db_path);
+        defer db.close();
+        const r = try friendsOf(arena, db, query);
+        return send(ctx, request, r.status, r.body);
+    }
     if (std.mem.eql(u8, path, "/api/forget") and (method == .POST or method == .GET)) {
         const db = try cache.open(ctx.opts.db_path);
         defer db.close();
@@ -486,10 +495,14 @@ fn busy(arena: Allocator) !Reply {
 /// False when the queue is full. A key already queued keeps its place
 fn enqueue(db: store.Db, key: []const u8, now: i64) !bool {
     if (try db.scalar("SELECT 1 FROM jobs WHERE key = ?", .{key}) != null) return true;
-    const jobs = try db.scalar("SELECT count(*) FROM jobs", .{}) orelse 0;
-    if (jobs >= max_jobs) return false;
+    if (try queued(db) >= max_jobs) return false;
     try db.run("INSERT OR IGNORE INTO jobs (key, requested) VALUES (?, ?)", .{ key, now });
     return true;
+}
+
+/// Jobs someone waits on: history steps (fetch.zig) run behind them and are left out
+fn queued(db: store.Db) !i64 {
+    return try db.scalar("SELECT count(*) FROM jobs WHERE NOT key LIKE ? || '%'", .{cache.history_prefix}) orelse 0;
 }
 
 /// `out` with the job's place and progress when one is queued
@@ -528,7 +541,7 @@ fn report(ctx: *Context, arena: Allocator, db: store.Db, puuid: []const u8, rank
             continue;
         };
         if (r.slot >= summary.players.len) continue;
-        const t = if (r.timeline) |bytes| fetch.readTimeline(arena, bytes) catch |err| blk: {
+        const t = if (r.timeline != null and r.timeline.?.len > 0) fetch.readTimeline(arena, r.timeline.?) catch |err| blk: {
             log.warn("{s}: timeline {t}", .{ r.match_id, err });
             break :blk null;
         } else null;
@@ -542,6 +555,79 @@ fn report(ctx: *Context, arena: Allocator, db: store.Db, puuid: []const u8, rank
         });
     }
     return game.report(arena, inputs.items, rank, ctx.curves);
+}
+
+pub const FriendsOut = struct {
+    /// none: not looked up (ask /api/games first); ready
+    state: []const u8,
+    friends: ?friends.Out = null,
+};
+
+fn friendsOf(arena: Allocator, db: store.Db, query: []const u8) !Reply {
+    const key = try riotIdParam(arena, query) orelse
+        return errorReply(arena, .bad_request, "error", "expected ?id=Name#TAG");
+    const none: Reply = .{ .status = .ok, .body = "{\"state\":\"none\"}" };
+    const acct = try account(arena, db, key) orelse return none;
+    const puuid = acct.puuid orelse return none;
+    if (try db.scalar("SELECT 1 FROM blocked WHERE puuid = ?", .{puuid}) != null) {
+        return .{ .status = .ok, .body = "{\"state\":\"opted_out\"}" };
+    }
+    if (try db.scalar("SELECT 1 FROM players WHERE puuid = ?", .{puuid}) == null) return none;
+    var built = try friends.build(arena, try friendGames(arena, db, puuid));
+    var out = &built.out;
+    out.waiting = @intCast(try db.scalar("SELECT count(*) FROM backlog WHERE puuid = ?", .{puuid}) orelse 0);
+    var mine_buf: [game.hash_len]u8 = undefined;
+    const mine = game.hashPuuid(&mine_buf, puuid);
+    const list = try arena.dupe(friends.Friend, out.friends);
+    for (list, built.hashes) |*f, hash| {
+        const theirs = try cachedPlayer(arena, db, f.riot_id, hash) orelse continue;
+        const games_ = try friendGames(arena, db, theirs);
+        f.their_games = @intCast(games_.len);
+        const t = try friends.tally(arena, games_);
+        f.them = friends.effect(&t, mine);
+    }
+    out.friends = list;
+    return .{ .status = .ok, .body = try std.json.Stringify.valueAlloc(arena, FriendsOut{ .state = "ready", .friends = out.* }, .{}) };
+}
+
+/// Every cached game of a player, newest first, summaries and names only
+fn friendGames(arena: Allocator, db: store.Db, puuid: []const u8) ![]const friends.Game {
+    var q = try db.prepare(
+        \\SELECT pg.match_id, pg.slot, m.summary
+        \\FROM player_games pg JOIN matches m USING (match_id)
+        \\WHERE pg.puuid = ? ORDER BY pg.start_ms DESC
+    );
+    defer q.deinit();
+    try q.bind(.{puuid});
+    var out: std.ArrayList(friends.Game) = .empty;
+    while (try q.step()) {
+        const r = q.row(struct { match_id: []const u8, slot: u8, summary: []const u8 });
+        const summary = fetch.readSummary(arena, r.summary) catch |err| {
+            log.warn("{s}: summary {t}", .{ r.match_id, err });
+            continue;
+        };
+        if (r.slot >= summary.players.len) continue;
+        try out.append(arena, .{
+            .summary = summary,
+            .slot = r.slot,
+            .riot_ids = try riotIds(arena, db, r.match_id, summary.players.len),
+        });
+    }
+    return out.items;
+}
+
+/// The PUUID of a looked-up player by the Riot ID seen in a game, when it is still the
+/// same account (`hash`): names change hands
+fn cachedPlayer(arena: Allocator, db: store.Db, riot_id: []const u8, hash: []const u8) !?[]const u8 {
+    const sep = std.mem.findScalarLast(u8, riot_id, '#') orelse return null;
+    const buf = try arena.alloc(u8, riot_id.len);
+    const key = cache.riotIdKey(buf, riot_id[0..sep], riot_id[sep + 1 ..]) orelse return null;
+    const acct = try account(arena, db, key) orelse return null;
+    const puuid = acct.puuid orelse return null;
+    var hash_buf: [game.hash_len]u8 = undefined;
+    if (!std.mem.eql(u8, game.hashPuuid(&hash_buf, puuid), hash)) return null;
+    if (try db.scalar("SELECT 1 FROM players WHERE puuid = ?", .{puuid}) == null) return null;
+    return puuid;
 }
 
 /// By slot, null where none is kept (blocked, or not yet backfilled)
@@ -580,8 +666,7 @@ fn forget(ctx: *Context, arena: Allocator, db: store.Db, query: []const u8, post
         const busy_already = std.mem.eql(u8, state, "pending") or std.mem.eql(u8, state, "checking");
         if ((check and waiting) or !(waiting or busy_already)) {
             // Room first: a challenge row with no job behind it would hang until expiry
-            const jobs = try db.scalar("SELECT count(*) FROM jobs", .{}) orelse 0;
-            if (jobs >= max_jobs) return busy(arena);
+            if (try queued(db) >= max_jobs) return busy(arena);
             if (check and waiting) {
                 try db.run("UPDATE challenges SET state = 'checking' WHERE riot_id = ?", .{key});
             } else {
@@ -640,6 +725,53 @@ test "games: a visit refreshes after refresh_after_s, a check after check_after_
     try db.run("UPDATE players SET refreshed = ?", .{now - 30});
     _ = try games(&ctx, arena, db, "id=A%231&refresh=1");
     try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM jobs", .{}));
+}
+
+test "friends: a friend's record with and without the player once both are looked up" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const db = try cache.open(":memory:");
+    defer db.close();
+    try db.run("INSERT INTO accounts VALUES ('a#1', 'pa', 0), ('b#1', 'pb', 0)", .{});
+    try db.run("INSERT INTO players (puuid, game_name, tag_line, platform) VALUES ('pa', 'A', '1', 'EUW1'), ('pb', 'B', '1', 'EUW1')", .{});
+    var ha: [game.hash_len]u8 = undefined;
+    var hb: [game.hash_len]u8 = undefined;
+    const a = game.hashPuuid(&ha, "pa");
+    const b = game.hashPuuid(&hb, "pb");
+    // Games 0-3 together (3 won), 4-5 A alone (1 won), 6-7 B alone (none won)
+    for (0..8) |i| {
+        const players = try arena.alloc(game.Summary.Player, 10);
+        const win = i < 3 or i == 4;
+        for (players, 0..) |*p, slot| {
+            const hash = switch (slot) {
+                0 => if (i < 6) a else try arena.print("x{d}", .{i}),
+                1 => if (i < 4 or i >= 6) b else try arena.print("y{d}", .{i}),
+                else => try arena.print("s{d}-{d}", .{ i, slot }),
+            };
+            p.* = .{ .hash = hash, .team = if (slot < 5) 100 else 200, .position = "", .champion = 1, .win = win == (slot < 5), .kills = 0, .deaths = 0, .assists = 0 };
+        }
+        const summary: game.Summary = .{ .patch = "16.20", .queue = 420, .start_ms = @intCast(100 - i), .duration_s = 1800, .remake = false, .players = players };
+        const json = try std.json.Stringify.valueAlloc(arena, summary, .{});
+        const id = try arena.print("EUW1_{d}", .{i});
+        try db.run("INSERT INTO matches VALUES (?, 0, ?, NULL)", .{ id, store.Blob{ .bytes = try store.raw.compress(arena, json) } });
+        if (i < 6) try db.run("INSERT INTO player_games VALUES ('pa', ?, ?, 0)", .{ id, summary.start_ms });
+        if (i < 4 or i >= 6) try db.run("INSERT INTO player_games VALUES ('pb', ?, ?, 1)", .{ id, summary.start_ms });
+        try db.run("INSERT INTO match_names VALUES (?, 0, ?, 'A#1'), (?, 1, ?, 'B#1')", .{ id, players[0].hash, id, players[1].hash });
+    }
+    const r = try friendsOf(arena, db, "id=A%231");
+    const got = try std.json.parseFromSliceLeaky(FriendsOut, arena, r.body, .{});
+    const f = got.friends.?.friends[0];
+    try std.testing.expectEqualStrings("B#1", f.riot_id);
+    try std.testing.expectEqual(friends.Record{ .games = 4, .wins = 3 }, f.together);
+    try std.testing.expectEqual(friends.Record{ .games = 2, .wins = 1 }, f.you.?.apart);
+    try std.testing.expectEqual(6, f.their_games);
+    try std.testing.expectEqual(friends.Record{ .games = 4, .wins = 3 }, f.them.?.with);
+    try std.testing.expectEqual(friends.Record{ .games = 2, .wins = 0 }, f.them.?.apart);
+
+    try db.run("INSERT INTO blocked VALUES ('pa', 0)", .{});
+    try std.testing.expectEqualStrings("{\"state\":\"opted_out\"}", (try friendsOf(arena, db, "id=A%231")).body);
+    try std.testing.expectEqualStrings("{\"state\":\"none\"}", (try friendsOf(arena, db, "id=C%231")).body);
 }
 
 test "daily: counts a finished puzzle's answers, refuses junk" {

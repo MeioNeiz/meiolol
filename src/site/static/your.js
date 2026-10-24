@@ -16,6 +16,8 @@ const POLL_MS = 3000;
 // every minute for a while. The service refuses checks closer than check_at
 const WATCH_MS = 60_000;
 const WATCH_FOR_MS = 10 * 60_000;
+// Friends fill in as older games and friends' own games arrive
+const FRIENDS_POLL_MS = 15_000;
 
 const $ = (id) => document.getElementById(id);
 const { el, plural, signed, clock } = Review;
@@ -38,6 +40,10 @@ let watchTimer = 0;
 let checkTimer = 0;
 // From a game link (#id=...&game=start_ms): that game opens once the lookup lists it
 let wantGame = 0;
+let friendsTimer = 0;
+// Friends whose games this tab asked for: a lookup of their Riot ID, so Riot calls, only
+// on a press
+const friendsAsked = new Set();
 // The newest game this device saw for the ID before this visit, 0 for none
 let since = 0;
 // Newer games are marked new in the film strip: since, or the newest before a check
@@ -194,6 +200,7 @@ async function lookup(id, game = 0) {
   stopWatch();
   lookupId = id;
   fresh();
+  hideFriends();
   wantGame = game;
   since = recentRead().find((r) => sameId(r.id, id))?.newest ?? 0;
   newAfter = since;
@@ -262,6 +269,7 @@ async function poll(refresh) {
     }
     if (watchUntil) watchStep(body);
     renderCheck(body);
+    loadFriends();
     return;
   }
   renderCheck(body);
@@ -338,6 +346,7 @@ async function showExample(role = "") {
   stopWatch();
   lookupId = "";
   newAfter = 0;
+  hideFriends();
   try {
     examples ??= await (await fetch(EXAMPLE)).json();
   } catch {
@@ -506,6 +515,129 @@ function renderHighlights(games) {
   $("highlights").hidden = all.length < 2;
   const played = games.filter((g) => !g.remake).length;
   $("highlights-note").textContent = `From your last ${plural(played, "game")}. A record book across every game you've played is coming.`;
+}
+
+function hideFriends() {
+  clearTimeout(friendsTimer);
+  friendsAsked.clear();
+  $("friends").hidden = true;
+}
+
+async function loadFriends() {
+  clearTimeout(friendsTimer);
+  const id = lookupId;
+  let body;
+  try {
+    const res = await apiFetch(`${API}/friends?id=${encodeURIComponent(id)}`);
+    if (!res.ok) return;
+    body = await res.json();
+  } catch {
+    return;
+  }
+  if (id !== lookupId) return;
+  const f = body.friends;
+  renderFriends(f);
+  if (f && (f.waiting || f.friends.some((x) => friendsAsked.has(x.riot_id) && !x.their_games))) {
+    friendsTimer = setTimeout(loadFriends, FRIENDS_POLL_MS);
+  }
+}
+
+const rate = (r) => Math.round((100 * r.wins) / r.games);
+
+function renderFriends(f) {
+  $("friends").hidden = !f;
+  if (!f) return;
+  $("friends-note").textContent = f.waiting
+    ? `From ${plural(f.games, "game")} so far, ${f.waiting} older still coming from Riot`
+    : `From ${plural(f.games, "game")} in the last 60 days`;
+  const box = $("friends-record");
+  box.replaceChildren();
+  for (const [r, label] of [[f.with_friends, "With friends"], [f.alone, "Without"]]) {
+    if (!r.games) continue;
+    const d = el("div");
+    d.append(el("b", "", `${rate(r)}%`), el("span", "", `${label}, ${r.wins}–${r.games - r.wins}`));
+    box.append(d);
+  }
+  const rows = $("friends-rows");
+  rows.replaceChildren();
+  for (const x of f.friends) {
+    const tr = el("tr");
+    const who = el("td");
+    const a = el("a", "", x.riot_id);
+    a.href = `#${idHash(x.riot_id)}`;
+    a.title = "Their games";
+    who.append(a, el("div", "small muted", `last ${date({ start_ms: x.last_ms })}`));
+    tr.append(
+      who,
+      cell(`${x.together.wins}–${x.together.games - x.together.wins}`, true),
+      effectCell(x.you),
+      theirCell(x),
+      cell(x.against.games ? `won ${x.against.wins} of ${x.against.games}` : "-"),
+      pairCell(x),
+    );
+    rows.append(tr);
+  }
+  if (!f.friends.length) rows.append(emptyRow(6, "Nobody on your team in 3 or more games yet."));
+}
+
+// Together against apart in the same queues, with the difference's 95% range
+function effectCell(e) {
+  const td = el("td", "wrap");
+  if (!e) {
+    td.append(el("span", "muted", "No games apart in the queues you share"));
+    return td;
+  }
+  const clear = e.lo > 0 || e.hi < 0;
+  const d = Math.round(e.diff);
+  td.append(
+    el("span", clear ? (d > 0 ? "good" : "bad") : "", `${rate(e.with)}% together, ${Math.round(e.apart_rate)}% apart`),
+    el("div", "small muted", `${signed(d)} points (${signed(Math.round(e.lo))} to ${signed(Math.round(e.hi))}); ${e.with.games} together, ${e.apart.games} apart`),
+  );
+  return td;
+}
+
+function theirCell(x) {
+  if (x.their_games) {
+    const td = effectCell(x.them);
+    td.append(el("div", "small muted", `from their ${plural(x.their_games, "game")}`));
+    return td;
+  }
+  const td = el("td");
+  if (friendsAsked.has(x.riot_id)) {
+    td.append(el("span", "muted", "Fetching their games…"));
+    return td;
+  }
+  const b = el("button", "link", "Fetch their games");
+  b.type = "button";
+  b.title = "Looks them up, as typing their Riot ID would";
+  b.addEventListener("click", async () => {
+    friendsAsked.add(x.riot_id);
+    b.replaceWith(el("span", "muted", "Fetching their games…"));
+    try {
+      await apiFetch(`${API}/games?id=${encodeURIComponent(x.riot_id)}`);
+    } catch {}
+    clearTimeout(friendsTimer);
+    friendsTimer = setTimeout(loadFriends, FRIENDS_POLL_MS);
+  });
+  td.append(b);
+  return td;
+}
+
+function pairCell(x) {
+  const td = el("td", "wrap");
+  const c = x.champions[0];
+  if (c) {
+    const span = el("span", "champ-row");
+    for (const id of [c.mine, c.theirs]) {
+      const champ = el("span", "champ");
+      champ.append(Review.icon(id), Review.champName(id));
+      span.append(champ);
+    }
+    td.append(span, el("div", "small muted", `won ${c.wins} of ${c.games}`));
+  }
+  const r = x.roles[0];
+  if (r) td.append(el("div", "small muted", `you ${r.mine}, them ${r.theirs}: won ${r.wins} of ${r.games}`));
+  return td;
 }
 
 function cell(text, num) {

@@ -39,6 +39,20 @@ pub fn page(w: *Writer, info: prose.Info) Writer.Error!void {
         \\<div class="sec-h"><h2>Highlights</h2><span id="highlights-note"></span></div>
         \\<div id="highlight-tiles" class="hls"></div>
         \\</section>
+        \\<section id="friends" hidden>
+        \\<div class="sec-h"><h2>Friends</h2><span id="friends-note"></span></div>
+        \\<div id="friends-record" class="record"></div>
+        \\<div class="panel">
+        \\<div class="table-scroll"><table>
+        \\<thead><tr><th>Played with</th><th class="num">Together</th><th>You with them</th><th>Them with you</th><th>Against them</th><th>Usual pair</th></tr></thead>
+        \\<tbody id="friends-rows"></tbody></table></div>
+        \\</div>
+        \\<p class="small muted">Everyone on your team in 3 or more games. With and apart
+        \\compare the same queues, as friends often play flex and normals together and
+        \\solo/duo alone. The range is 95%; a figure is coloured only when its range
+        \\leaves out 0. Games with friends differ in other ways too (time of day, who
+        \\queues with whom), so this is what happened, not why.</p>
+        \\</section>
         \\<div class="sec-h"><h2>Over time</h2></div>
         \\<div class="panel">
         \\<nav class="tabs" id="time-tabs" aria-label="Over time">
@@ -58,7 +72,8 @@ pub fn page(w: *Writer, info: prose.Info) Writer.Error!void {
         \\<p class="muted">Looking up a Riot ID fetches its recent games from the Riot
         \\Games API and keeps them, so the page loads fast and your history builds up. Each
         \\game lists its ten players with their Riot IDs as at that game, as other League
-        \\statistics sites do. Details in the <a href="privacy.html">privacy policy</a>.</p>
+        \\statistics sites do, and Friends lists the players you team up with most and how
+        \\those games went. Details in the <a href="privacy.html">privacy policy</a>.</p>
         \\<p class="muted">Don't want your games here? Remove them and stop us collecting
         \\them again. To prove the account is yours, you set a given profile icon for a
         \\moment.</p>

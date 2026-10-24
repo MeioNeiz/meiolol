@@ -163,6 +163,12 @@ that wrote it.
 - Done 2026-10-11: jomify deploy, basic auth on /api/, crawler --reserve 20 default,
   index link, privacy section, Riot IDs out of client logs
 - Extras: experienced-players curve, flex/normal once curves cover them, rank at game time
+- Friends done 24 Oct (docs/your-games.md "Friends"): 60-day backlog of matches, played
+  with, you with/without each friend in the same queues, them with/without you once
+  their games are cached, against, champion and role pairs. Jacob 24 Oct: public friends
+  on every player page plus opt-in Squads, built now on the current front end. Open:
+  privacy page and docs/legal/privacy.md line for Friends (prose.zig was busy in
+  another session), architecture.md's api/ list
 - Squads (concept part 4), design agreed: join by profile-icon challenge (purpose=join),
   leave any time; api.db squads/members; private invite-link pages, noindex, Riot IDs
   visible to the squad only; games together by intersecting members' match ids; queues
