@@ -325,10 +325,10 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\by page and browser type, which identify no one, are kept 90 days. The Daily Draft
         \\keeps your guesses, streak and archive in your own browser (local storage), and
         \\clearing site data removes them. When you finish a puzzle, its two answers (which
-        \\champion, which side) are sent once with nothing that identifies you; we keep only
-        \\each puzzle's totals, to show what share of players picked each answer, and these
-        \\requests are not in our server logs. Pages also keep your view settings in your
-        \\browser, such as filters, sort orders and tabs.</p>
+        \\champion, which side) are sent once with nothing that identifies you;
+        \\we keep only each puzzle's totals, to show what share of players picked each
+        \\answer, and these requests are not in our server logs. Pages also keep your view
+        \\settings in your browser, such as filters, sort orders and tabs.</p>
         \\<p>Daily Draft puzzles are real ranked games shown without names, Riot IDs, player
         \\identifiers, match ids or game dates: at most champions, bans, patch, game length,
         \\and each player's rank and game statistics (kills, gold and the like); the date
