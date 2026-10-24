@@ -148,8 +148,8 @@ that wrote it.
   - On A1 after the move (not on the micro): `deploy/box.sh run draft-backfill` once
     (chunks of 200 with 1 s pauses, resumable). Until it finishes the `--keep-days`
     prune skips listed matches, so run it before 2026-11-25. Check `meiolol status`:
-    draft_backfill 0. Started 24 Oct 00:56 UTC for 53,955 matches (box job
-    draft-backfill; crawl.args has --keep-days 0, so no deadline now)
+    draft_backfill 0. Done 24 Oct 00:56-01:14 UTC: 53,955 matches read, 52,684 draft
+    rows (the rest not complete ranked games); draft_backfill 0
   - Move stats/eval onto `draft.Reader` once the window drops games they need (eval's
     lane gold and experience sections still join per-match data by match id)
   - Game length (Jacob: yes): `minutes` column, u8 capped at 255, 74 bytes a row. The
