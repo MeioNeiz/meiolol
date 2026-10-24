@@ -362,8 +362,8 @@ or b with 100k+ mastery): per minute 1..25 the raw p25/p50/p75 of gold, XP and C
 + jungle) difference with n still playing, and the estimated mean with its standard
 error (below); who leads in gold at 14 min and how often each side then wins; comeback
 odds (games and wins by lane gold lead at 10 and 15 min in five buckets); games where
-each takes part in killing the other before 6, 6-14 and after 14 min; median level 6 and
-first finished item times; `own`, the share of the 14-min gold estimate from the
+each takes part in killing the other before 6, 6-14 and after 14 min, and in the game's
+first kill (v6); median level 2 (v6), level 6 and first finished item times; `own`, the share of the 14-min gold estimate from the
 matchup's own games. A role baseline record a = b = 0 per bracket counts every lane from
 both sides: comeback counts, and per minute n and the role's spread (quartiles,
 median 0). Pairs are stored once (lower champion id first, a mirror from blue's side);
@@ -371,7 +371,10 @@ median 0). Pairs are stored once (lower champion id first, a mirror from blue's 
 swaps percentiles (p10, p25, p50, p75, p90) and estimates. The file also holds the fit
 (per role, bracket, level, metric and minute: sigma^2 and tau^2; smoothing per role and
 metric) for the method page. Format at the top of curvesfile.zig; bump the version on
-any change. Rolling a bump out: stop meiolol-web on the box before the push, so the
+any change. Since v6 readers take the previous version too (v5: no Extra, read as
+zeros), so the Your games binary can go first; the desktop bundle gets the file as v5
+(`meiolol desktop-curves`, web-loop.sh), which every released app reads. Rolling a bump
+out: stop meiolol-web on the box before the push, so the
 deploy restarts the loop, which rebuilds curves before the site (a running loop is only
 signalled and would build the site on old-format curves, dropping the lane pages); then
 the Your games binary (docs/your-games.md, Deploy)

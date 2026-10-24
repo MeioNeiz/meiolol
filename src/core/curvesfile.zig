@@ -1,11 +1,12 @@
 //! Curves file: how each lane matchup unfolds, minute by minute, for one patch (or
 //! patch range). Written beside the model file by `meiolol curves`.
 //!
-//! Format v5, little-endian:
+//! Format v6, little-endian:
 //!   magic "MEIOCURV", version u32, minutes u32 (m), games u32, curves u32 (k),
 //!   patch [16]u8 zero padded
 //!   Fit: per role the estimation's variance parameters and smoothing (curvefit.zig)
-//!   k x (Header, then m x Minute), the extern structs below
+//!   k x (Header, Extra, then m x Minute), the extern structs below
+//! v5 (read too, so readers can update before the writer): no Extra, read as zeros
 //! Curves are sorted by (role, a, b, bracket, experience) with a <= b by champion id;
 //! a == b is a mirror, seen from blue's side. Everything is from a's side: diffs are a
 //! minus b. a == b == 0 is the role baseline: every lane of the role counted from both
@@ -19,7 +20,9 @@ pub const curvefit = @import("curvefit.zig");
 const log = std.log.scoped(.curves);
 
 pub const magic = "MEIOCURV";
-pub const version: u32 = 5;
+pub const version: u32 = 6;
+/// The oldest version Curves reads: v5 files lack Extra
+pub const min_version: u32 = 5;
 pub const patch_len = 16;
 /// Lane phase and the early mid game; later minutes mostly measure who is still playing
 pub const max_minutes = 25;
@@ -188,6 +191,19 @@ pub const Header = extern struct {
     comeback: [comeback_minutes.len][buckets]Counts,
 };
 
+/// v6's per-curve counts after Header, kept apart so v5 files still read
+pub const Extra = extern struct {
+    /// Games where a (or b) took part in the game's first kill, as killer or assist. They
+    /// are on opposite teams, so at most one of them does
+    first_blood_a: u32 = 0,
+    first_blood_b: u32 = 0,
+    /// Median seconds to level 2; 0 when too few reached it
+    level2_a: u16 = 0,
+    level2_b: u16 = 0,
+};
+
+const no_extra: Extra = .{};
+
 /// One lane in one game, for Builder
 pub const Lane = struct {
     role: Role,
@@ -204,8 +220,12 @@ pub const Lane = struct {
     b_kills_a: [phases]bool = @splat(false),
     level6_a: u16 = 0,
     level6_b: u16 = 0,
+    level2_a: u16 = 0,
+    level2_b: u16 = 0,
     first_item_a: u16 = 0,
     first_item_b: u16 = 0,
+    first_blood_a: bool = false,
+    first_blood_b: bool = false,
     /// Mastery of at least experienced_points on their champion
     experienced_a: bool = false,
     experienced_b: bool = false,
@@ -227,6 +247,10 @@ pub const Lane = struct {
         s.b_kills_a = l.a_kills_b;
         s.level6_a = l.level6_b;
         s.level6_b = l.level6_a;
+        s.level2_a = l.level2_b;
+        s.level2_b = l.level2_a;
+        s.first_blood_a = l.first_blood_b;
+        s.first_blood_b = l.first_blood_a;
         s.first_item_a = l.first_item_b;
         s.first_item_b = l.first_item_a;
         s.experienced_a = l.experienced_b;
@@ -431,6 +455,8 @@ fn baselines(
         }
         if (h.games / 2 < @max(min_games, 1)) continue;
         try out.appendSlice(gpa, std.mem.asBytes(&h));
+        // The role's own first blood share and level 2 time aren't used: none
+        try out.appendSlice(gpa, std.mem.asBytes(&no_extra));
         for (0..max_minutes) |i| {
             var m: Minute = .{ .n = 2 * going[i], .gold = .{}, .xp = .{}, .cs = .{} };
             inline for (.{ "gold", "xp", "cs" }, 0..) |field, mi| {
@@ -525,12 +551,21 @@ fn curve(
     h.level6_b = try medianSeconds(gpa, lanes, "level6_b");
     h.first_item_a = try medianSeconds(gpa, lanes, "first_item_a");
     h.first_item_b = try medianSeconds(gpa, lanes, "first_item_b");
+    var extra: Extra = .{
+        .level2_a = try medianSeconds(gpa, lanes, "level2_a"),
+        .level2_b = try medianSeconds(gpa, lanes, "level2_b"),
+    };
+    for (lanes) |l| {
+        extra.first_blood_a += @intFromBool(l.first_blood_a);
+        extra.first_blood_b += @intFromBool(l.first_blood_b);
+    }
     const at = est[0][lane_minute - 1];
     // n / (n + k) = n var / sigma^2 for the posterior variance var = sigma^2 / (n + k)
     h.own = if (sigma2 > 0)
         @intFromFloat(std.math.clamp(@round(1000 * at.n * at.@"var" / sigma2), 0, 1000))
     else if (at.n > 0) 1000 else 0;
     try out.appendSlice(gpa, std.mem.asBytes(&h));
+    try out.appendSlice(gpa, std.mem.asBytes(&extra));
 
     for (0..max_minutes) |i| {
         var m: Minute = .{ .n = 0, .gold = undefined, .xp = undefined, .cs = undefined };
@@ -579,13 +614,20 @@ fn spread(values: []i16) Spread {
 
 pub const Curve = struct {
     header: *const Header,
+    extra: *const Extra = &no_extra,
     minutes: []const Minute,
 };
 
 /// What the file's bytes are aligned to, so its headers and minutes are read in place
-pub const file_align = @max(@alignOf(Fit), @alignOf(Header), @alignOf(Minute));
-const curve_len = @sizeOf(Header) + max_minutes * @sizeOf(Minute);
+pub const file_align = @max(@alignOf(Fit), @alignOf(Header), @alignOf(Extra), @alignOf(Minute));
+
+fn curveLen(v: u32) usize {
+    const extra: usize = if (v >= 6) @sizeOf(Extra) else 0;
+    return @sizeOf(Header) + extra + max_minutes * @sizeOf(Minute);
+}
+
 comptime {
+    std.debug.assert(@sizeOf(Extra) % file_align == 0);
     std.debug.assert(header_len % file_align == 0);
     std.debug.assert(@sizeOf(Fit) % file_align == 0);
     std.debug.assert(@sizeOf(Header) % file_align == 0);
@@ -646,7 +688,10 @@ pub const Curves = struct {
         if (bytes.len < header_len) return error.Truncated;
         if (!std.mem.eql(u8, bytes[0..magic.len], magic)) return error.BadMagic;
         const ints = bytes[magic.len..header_len];
-        if (std.mem.readInt(u32, ints[0..4], .little) != version) return error.UnsupportedVersion;
+        const v = std.mem.readInt(u32, ints[0..4], .little);
+        if (v < min_version or v > version) return error.UnsupportedVersion;
+        const curve_len = curveLen(v);
+        const extra_len: usize = if (v >= 6) @sizeOf(Extra) else 0;
         if (std.mem.readInt(u32, ints[4..8], .little) != max_minutes) return error.UnsupportedVersion;
         const games = std.mem.readInt(u32, ints[8..12], .little);
         const k = std.mem.readInt(u32, ints[12..16], .little);
@@ -660,7 +705,8 @@ pub const Curves = struct {
         var at: usize = header_len + @sizeOf(Fit);
         for (curves) |*cv| {
             cv.header = @ptrCast(@alignCast(bytes[at..].ptr));
-            const mins: [*]const Minute = @ptrCast(@alignCast(bytes[at + @sizeOf(Header) ..].ptr));
+            cv.extra = if (extra_len > 0) @ptrCast(@alignCast(bytes[at + @sizeOf(Header) ..].ptr)) else &no_extra;
+            const mins: [*]const Minute = @ptrCast(@alignCast(bytes[at + @sizeOf(Header) + extra_len ..].ptr));
             cv.minutes = mins[0..max_minutes];
             at += curve_len;
         }
@@ -670,6 +716,19 @@ pub const Curves = struct {
             .curves = curves,
             .bytes = bytes,
         };
+    }
+
+    /// The file as v5, without Extra: the desktop bundle (web-loop.sh), as released apps
+    /// read v5 only and none of them uses Extra
+    pub fn writeV5(c: *const Curves, w: *std.Io.Writer) std.Io.Writer.Error!void {
+        try w.writeAll(c.bytes[0..magic.len]);
+        try w.writeInt(u32, min_version, .little);
+        try w.writeAll(c.bytes[magic.len + 4 .. header_len]);
+        try w.writeAll(std.mem.asBytes(c.fit));
+        for (c.curves) |cv| {
+            try w.writeAll(std.mem.asBytes(cv.header));
+            try w.writeAll(std.mem.sliceAsBytes(cv.minutes));
+        }
     }
 
     /// For parse's; unmap for map's
@@ -798,6 +857,18 @@ pub const View = struct {
         return if (v.flipped) .{ h.level6_b, h.level6_a } else .{ h.level6_a, h.level6_b };
     }
 
+    /// Median seconds to level 2 for me and them; 0 when unknown (v5 files)
+    pub fn level2(v: View) [2]u16 {
+        const e = v.curve.extra;
+        return if (v.flipped) .{ e.level2_b, e.level2_a } else .{ e.level2_a, e.level2_b };
+    }
+
+    /// Games where I, and where they, took part in the game's first kill
+    pub fn firstBlood(v: View) [2]u32 {
+        const e = v.curve.extra;
+        return if (v.flipped) .{ e.first_blood_b, e.first_blood_a } else .{ e.first_blood_a, e.first_blood_b };
+    }
+
     /// Games and my wins when my lane gold lead at `at` fell in `b` (0 = behind
     /// 1500+ ... 4 = ahead 1500+)
     pub fn comeback(v: View, at: Comeback, b: usize) Counts {
@@ -865,6 +936,9 @@ fn testLane(a: u32, b: u32, a_won: bool, gold_at: i16, bracket: ?Bracket) Lane {
     l.level6_a = 360;
     l.level6_b = 420;
     l.first_item_a = 900;
+    l.level2_a = 90;
+    l.level2_b = 100;
+    l.first_blood_a = gold_at >= 700;
     l.experienced_a = gold_at > 0;
     return l;
 }
@@ -963,6 +1037,24 @@ test "round trip, sides and brackets" {
     defer gpa.free(bad);
     bad[magic.len] += 1;
     try testing.expectError(error.UnsupportedVersion, Curves.parse(gpa, bad));
+
+    try testing.expectEqual([2]u16{ 100, 90 }, garen.level2());
+    try testing.expectEqual([2]u32{ 0, 1 }, garen.firstBlood());
+
+    // v5 reads as before, Extra as zeros
+    const darius_first_blood = darius.firstBlood();
+    var v5: std.Io.Writer.Allocating = .init(gpa);
+    defer v5.deinit();
+    try c.writeV5(&v5.writer);
+    try testing.expectEqual(bytes.len - c.curves.len * @sizeOf(Extra), v5.written().len);
+    var old: Curves = try .parse(gpa, v5.written());
+    defer old.deinit(gpa);
+    const old_garen = old.get(.top, .all, 86, 122).?;
+    try testing.expectEqual(garen.games(), old_garen.games());
+    try testing.expectEqual(garen.firstItem(), old_garen.firstItem());
+    try testing.expectEqual(garen.minute(lane_minute - 1).gold, old_garen.minute(lane_minute - 1).gold);
+    try testing.expectEqual([2]u32{ 0, 0 }, old_garen.firstBlood());
+    try testing.expectEqual([2]u32{ 1, 0 }, darius_first_blood);
 }
 
 test "map: the file in place, as parse reads it; a rename leaves the mapping intact" {

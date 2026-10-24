@@ -6,9 +6,10 @@
 //!
 //! Kept (since version 1): frames 0..max_frames-1 with total gold, XP, minions and jungle
 //! minions (other stats 0); every champion kill (killer, victim, assists), item purchase,
-//! sale and undo, and skill-up; reaching level 6; buildings, elite monsters and dragon
-//! souls before the last kept frame, without assists. Dropped: the other stats, kill
-//! positions and bounties, wards, item destroys, plates, transforms, other level-ups.
+//! sale and undo, and skill-up; reaching level 6, and level 2 since version 3; buildings,
+//! elite monsters and dragon souls before the last kept frame, without assists. Dropped:
+//! the other stats, kill positions and bounties, wards, item destroys, plates,
+//! transforms, other level-ups.
 //! Bump `version` on any change to what is kept or how: `meiolol digest` then remakes
 //! every digest.
 //!
@@ -25,7 +26,7 @@ const timeline = @import("timeline.zig");
 const Timeline = timeline.Timeline;
 const Event = timeline.Event;
 
-pub const version: u8 = 2;
+pub const version: u8 = 3;
 
 /// curves' 25 whole minutes need frames 0..26, and its minute count (frames - 2) the
 /// frame count up to 27; lean's state at 20 needs 22
@@ -59,7 +60,7 @@ pub fn cut(arena: std.mem.Allocator, t: Timeline) !Timeline {
                 .assists = k.assists,
             } },
             .item_purchased, .item_sold, .item_undo, .skill_level_up => e.data,
-            .level_up => |u| if (u.level == 6) e.data else continue,
+            .level_up => |u| if (u.level == 2 or u.level == 6) e.data else continue,
             .building_kill => |b| if (e.t_ms < end_ms) blk: {
                 var c = b;
                 c.assists = &.{};

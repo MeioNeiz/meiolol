@@ -119,7 +119,7 @@ pub fn main(init: std.process.Init) !u8 {
         } else try flags.append(arena, argv[i]);
     }
     c.args = flags.items;
-    // The lab tools and desktop-sign run from deploy/ scripts in any directory
+    // The lab tools and desktop-sign and -curves run from deploy/ scripts in any directory
     if (!std.mem.startsWith(u8, argv[1], "lab-") and !std.mem.startsWith(u8, argv[1], "desktop-")) try std.Io.Dir.cwd().createDirPath(init.io, c.data_dir);
     return run(&c) catch |err| switch (err) {
         error.Usage => usageError(c.flag),
@@ -162,6 +162,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "restore", cmd_data.cmdRestore },
     .{ "forget", cmd_data.cmdForget },
     .{ "desktop-sign", cmd_desktop.cmdDesktopSign },
+    .{ "desktop-curves", cmd_desktop.cmdDesktopCurves },
     .{ "lab-place", cmd_lab.cmdLabPlace },
     .{ "lab-sweep", cmd_lab.cmdLabSweep },
 });

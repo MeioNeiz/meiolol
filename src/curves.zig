@@ -287,15 +287,28 @@ pub fn lane(t: timeline.Timeline, g: Game, r: Role, blue_won: bool, legendaries:
         l.xp[i] = diff(f.get(pa, .xp), f.get(pb, .xp));
         l.cs[i] = diff(cs(f, pa), cs(f, pb));
     }
+    var first_kill: i64 = std.math.maxInt(i64);
     for (t.events) |e| switch (e.data) {
         .champion_kill => |k| {
             const phase = phaseOf(e.t_ms);
             if (k.victim == pb and involved(k, pa)) l.a_kills_b[phase] = true;
             if (k.victim == pa and involved(k, pb)) l.b_kills_a[phase] = true;
+            if (e.t_ms < first_kill) {
+                first_kill = e.t_ms;
+                l.first_blood_a = involved(k, pa);
+                l.first_blood_b = involved(k, pb);
+            }
         },
-        .level_up => |u| if (u.level == 6) {
-            if (u.participant == pa and l.level6_a == 0) l.level6_a = seconds(e.t_ms);
-            if (u.participant == pb and l.level6_b == 0) l.level6_b = seconds(e.t_ms);
+        .level_up => |u| switch (u.level) {
+            2 => {
+                if (u.participant == pa and l.level2_a == 0) l.level2_a = seconds(e.t_ms);
+                if (u.participant == pb and l.level2_b == 0) l.level2_b = seconds(e.t_ms);
+            },
+            6 => {
+                if (u.participant == pa and l.level6_a == 0) l.level6_a = seconds(e.t_ms);
+                if (u.participant == pb and l.level6_b == 0) l.level6_b = seconds(e.t_ms);
+            },
+            else => {},
         },
         .item_purchased => |p| if (std.sort.binarySearch(u32, legendaries, p.item, orderU32) != null) {
             if (p.participant == pa and l.first_item_a == 0) l.first_item_a = seconds(e.t_ms);
@@ -422,5 +435,10 @@ test "curves from a real timeline" {
     const bot = c.get(.bottom, .all, 40, 90).?;
     try testing.expectEqual(2, bot.deaths(0));
     try testing.expectEqual(0, bot.kills(0));
+    // First blood: 9 kills, so red's bot laner took part in both games; top did not
+    try testing.expectEqual([2]u32{ 0, 2 }, bot.firstBlood());
+    try testing.expectEqual([2]u32{ 0, 0 }, top.firstBlood());
+    const l2 = top.level2();
+    try testing.expect(l2[0] > 0 and l2[0] < 3 * 60 and l2[1] > 0 and l2[1] < 3 * 60);
     try testing.expect(c.get(.utility, .all, 100, 50).?.flipped);
 }

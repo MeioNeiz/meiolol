@@ -166,10 +166,11 @@ desktop_files() {
         return 0
     fi
     cp -p release/meiolol-desktop.exe "$d/"
-    ln data/export/recent-curves.bin "$d/"
-    if [[ data/desktop/recent-curves.bin -ef data/export/recent-curves.bin \
-        && data/desktop/recent-curves.bin.gz -nt data/export/recent-curves.bin ]]; then
-        ln data/desktop/recent-curves.bin.gz "$d/"
+    # As v5: released apps read no other (curvesfile.zig writeV5)
+    if ! bin/meiolol desktop-curves data/export/recent-curves.bin "$d/recent-curves.bin"; then
+        echo "$(date -u +%FT%TZ) desktop files: curves as v5 failed, old ones kept"
+        rm -rf "$d"
+        return 1
     fi
     cp release/meiolol-desktop.exe "$d/meiolol/"
     cp desktop.token "$d/meiolol/update.key"

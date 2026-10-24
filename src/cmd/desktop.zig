@@ -1,7 +1,8 @@
-//! `meiolol desktop-sign`: signatures on what the desktop app downloads
+//! `meiolol desktop-sign` and `desktop-curves`: what the desktop app downloads
 
 const std = @import("std");
 const sign = @import("../desktop/sign.zig");
+const curvesfile = @import("core").curvesfile;
 const main = @import("../main.zig");
 const Cmd = main.Cmd;
 
@@ -16,6 +17,8 @@ pub const usage_desktop_sign =
     \\              --version N      exe: its release, as built with -Ddesktop-version
     \\              --key-file F     the key's seed in hex
     \\              --key-env NAME   or from env var NAME (vault run)
+    \\  desktop-curves IN OUT  the curves file IN as v5 (curvesfile.writeV5), which
+    \\              released desktop apps read (box: web-loop.sh)
     \\
 ;
 
@@ -77,4 +80,25 @@ pub fn cmdDesktopSign(c: *Cmd) !u8 {
 fn wrongKey(which: []const u8) u8 {
     std.log.err("not the {s} key the app ships (src/desktop/sign.zig)", .{which});
     return 1;
+}
+
+pub fn cmdDesktopCurves(c: *Cmd) !u8 {
+    const io = c.init.io;
+    const cwd = std.Io.Dir.cwd();
+    var args: std.ArrayList([]const u8) = .empty;
+    while (c.next()) |flag| {
+        if (std.mem.startsWith(u8, flag, "--")) return error.Usage;
+        try args.append(c.arena, flag);
+    }
+    if (args.items.len != 2) return error.Usage;
+    var curves = try curvesfile.Curves.map(c.arena, io, cwd, args.items[0]);
+    defer curves.unmap(c.arena, io);
+    var atomic = try cwd.createFileAtomic(io, args.items[1], .{ .replace = true });
+    defer atomic.deinit(io);
+    var buf: [1 << 16]u8 = undefined;
+    var fw = atomic.file.writer(io, &buf);
+    try curves.writeV5(&fw.interface);
+    try fw.interface.flush();
+    try atomic.replace(io);
+    return 0;
 }

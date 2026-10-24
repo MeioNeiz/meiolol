@@ -347,6 +347,10 @@ switch opponent, a first screen spent on one big chart of a nearly flat line.
   gold at 10. Shares CH5's tally
 - MU6 Level 2 time and first blood for the pair in head to head (curves format: header
   fields and a box rebuild of the curves)
+  Done 24 Oct: curves v6 (curvesfile.Extra per curve: games each side took part in the
+  game's first kill, median level 2), digests v3 keep level 2; head to head rows "First
+  blood, kill or assist" and "Level 2", hidden on v5 files. Live once the box's digest
+  catch-up and curves rebuild have run
 - MU7 Clarity: docs/ui-audit.md "Matchup page" items (one game count on screen, one
   "usual" with the champion page, gold line not in accent violet); runes section
   without the empty right 40%

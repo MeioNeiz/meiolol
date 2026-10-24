@@ -680,7 +680,7 @@ fn tiles(site: *const Site, w: *Writer, o: Odds, v: View, r: Role, x: Champ, y: 
 }
 
 /// Both sides' shares as bars from the middle, x's growing left and y's right, then
-/// level 6 and first item timings; each row titled in full
+/// level 2, level 6 and first item timings; each row titled in full
 fn h2h(w: *Writer, v: View, x: Champ, y: Champ) !void {
     const lane = v.lane();
     const m = curvesfile.lane_minute;
@@ -693,8 +693,13 @@ fn h2h(w: *Writer, v: View, x: Champ, y: Champ) !void {
     try bars(w, try std.mem.print(&buf, "Ahead in gold at {d} min", .{m}), .{ lane.ahead, lane.games }, .{ lane.behind, lane.games });
     var buf2: [64]u8 = undefined;
     try bars(w, try std.mem.print(&buf2, "Wins when ahead at {d} min", .{m}), .{ lane.wins_ahead, lane.ahead }, .{ lane.behind - lane.wins_behind, lane.behind });
+    // Curves files from before v6 have neither: no row rather than 0%
+    const fb = v.firstBlood();
+    if (fb[0] + fb[1] > 0) try bars(w, "First blood, kill or assist", .{ fb[0], v.games() }, .{ fb[1], v.games() });
     const phases = [_][]const u8{ "Kill on the other, 0 to 6 min", "Kill on the other, 6 to 14 min", "Kill on the other, after 14 min" };
     for (phases, 0..) |label, ph| try bars(w, label, .{ v.kills(ph), v.games() }, .{ v.deaths(ph), v.games() });
+    const l2 = v.level2();
+    if (l2[0] != 0 or l2[1] != 0) try times(w, "Level 2", l2);
     try times(w, "Level 6", v.level6());
     try times(w, "First finished item", v.firstItem());
     try tpl.renderPart(w,
