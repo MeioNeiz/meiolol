@@ -5426,6 +5426,88 @@ Reading against P1's asks:
   the 20 Oct 14:44Z cut), so dev scores 16.20 only and any 16.21 question waits
   for the P3 look or the next pin
 
+#### P2: same-split head-to-head, 2026-10-24 (dev only)
+
+Every model on the protocol's blocks of this pin (folds 1-5 fit on every played game
+before them, dev-val on the 1.19M before the dev cut), compared game by game on the
+753,959 scored games (py/xcheck/h2h.py: per-game preds keyed by match id, paired
+differences, ± 1.96 se over games). Runs on the gpu-box, queue.sh p2 at ed17798
+(setid-wd) and 1db246e (the rest; 1db246e only silences two test prints):
+20261023T232808Z-setid-wd, 20261023T234438Z-setid-wa, 20261023T235036Z-setid-wa-s456,
+20261024T002326Z-setid-wd-s456, 20261024T000446Z-set-wr, 20261024T003414Z-add-v2
+(effects --param v2, cand win-draft), 20261024T004458Z-bigres-wa (+ 005551Z s11),
+20261024T010643Z-big (+ 015013Z s11), 20261024T020047Z-bigres-wd; all `-2004Z`, in
+data/runs. v2's shipped form here is effects' full-nomix: no damage mix, but it keeps
+the platform side terms and unfloored f64 cells, which the stats file drops (worth
+~0.3 on 1007Z: "Shipped model, 2026-10-23").
+
+The ladder, milli-nats a game (negative better):
+
+| model | dev-val loss | vs win-draft | vs row above | folds loss | vs win-draft | vs row above | folds accuracy |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| win-draft (17 Oct form) | 0.68566 | | | 0.68603 | | | 54.7% |
+| additive v2, no damage mix (shipped form) | 0.68474 | -0.92 ± 0.22 | | 0.68540 | -0.63 ± 0.11 | | 54.9% |
+| additive v2 full (damage mix) | 0.68422 | -1.44 ± 0.28 | -0.52 ± 0.18 | 0.68480 | -1.23 ± 0.15 | -0.59 ± 0.09 | 55.1% |
+| set net + embedding on v2, seeds 1-3 | 0.68365 | -2.01 ± 0.33 | -0.57 ± 0.17 | 0.68406 | -1.97 ± 0.16 | -0.74 ± 0.08 | 55.3% |
+
+Per fold, vs win-draft (v2 shipped form / v2 full / set net on v2): fold 1 -0.49 / -1.18
+/ -1.86, 2 -0.48 / -1.00 / -1.76, 3 -0.63 / -1.23 / -2.03, 4 -0.59 / -1.09 / -1.94, 5
+-0.95 / -1.63 / -2.23. Every step gains in every block.
+
+The other nets, against their own base (folds pooled; dev-val):
+
+| net | base | vs base, folds | dev-val |
+| --- | --- | --- | --- |
+| set net + emb, sealed seeds 4-6 | v2 full | -0.80 ± 0.09 | -0.68 ± 0.15 |
+| bigres, seeds 1-10 | v2 full | -0.37 ± 0.05 | -0.43 ± 0.09 |
+| bigres, seeds 11-20 | v2 full | -0.39 ± 0.06 | -0.22 ± 0.05 |
+| set net + emb, seeds 1-3 | win-draft | -1.43 ± 0.12 | -1.43 ± 0.23 |
+| set net + emb, seeds 4-6 | win-draft | -1.47 ± 0.13 | -1.27 ± 0.22 |
+| big, seeds 1-10 | win-draft | -1.52 ± 0.19 | -2.10 ± 0.41 |
+| big, seeds 11-20 | win-draft | -1.46 ± 0.20 | -2.00 ± 0.41 |
+| bigres, seeds 1-10 | win-draft | -1.50 ± 0.14 | -1.89 ± 0.30 |
+| set net + emb, seed 1 | win-ratings (+2.48 ± 0.21 vs win-draft) | -2.16 ± 0.17 | -2.50 ± 0.32 |
+
+Reading (dev):
+- Why the shipped model trails v2 (inventory gap 5): the damage mix. Without it v2 is
+  -0.63 on win-draft; with it -1.23. So half of v2's gain is the mix, which needs
+  champion-role profiles on the box (the seat stats decision)
+- The set net on v2 is the best single model: -1.97 on win-draft, -0.74 on v2, sealed
+  seeds -0.80; the same size as on 1320Z (-0.78) at twice the fit games, so it hasn't
+  grown with data. On v2 it gains twice what bigres does
+- Nets on win-draft land at -1.4 to -1.5 whatever the architecture (set, big, bigres),
+  just above v2 full: they relearn what v2's identified pair blocks have. On dev-val big
+  reaches -2.1, as good as set on v2, but its folds don't follow (-1.5)
+- Seed groups agree within 0.1 (set 1-3 vs 4-6, big 1-10 vs 11-20)
+
+#### E1: drift or noise at equal N, 2026-10-24 (dev only)
+
+Each dev block's additive v2 (win-additive) and set net + embedding on it (seeds 1-3)
+fitted on N = 297,000 of its fit games (half of fold 1's 595,230; netcheck --window):
+its newest N, its oldest N, or a hashed N spread over every day; same scored games
+(runs 20261024T021423Z-e1-newest, 022546Z-e1-oldest, 023624Z-e1-spread, all -2004Z,
+1db246e). For fold 1 the oldest N is 26 Sep to 9 Oct 22:08 (all of 16.19) and the newest 9
+Oct 22:30 to 12 Oct 22:12 (the crawl grew, so the newest days are dense); for dev-val,
+N is a quarter of its 1.19M. Milli-nats a game (h2h.py):
+
+| fit window | v2 dev-val | v2 folds pooled | vs spread, dev-val | vs spread, folds | set net on it, folds |
+| --- | --- | --- | --- | --- | --- |
+| all fit games (P2) | 0.68422 | 0.68480 | -2.27 ± 0.31 | -1.68 ± 0.14 | -0.74 ± 0.08 |
+| spread N | 0.68649 | 0.68649 | | | -0.52 ± 0.05 |
+| newest N | 0.68657 | 0.68659 | +0.08 ± 0.27 | +0.10 ± 0.14 | -0.16 ± 0.03 |
+| oldest N | 0.68651 | 0.68652 | +0.02 ± 0.28 | +0.03 ± 0.14 | -0.36 ± 0.04 |
+
+Newest vs spread per fold: +0.09, -0.22, +0.02, +0.13, +0.49 (each ± ~0.3).
+
+Verdict (dev): noise, not drift, for the draft model within 16.20 and the 16.19 tail.
+At equal N the newest games are no better than the oldest or a spread (all within 0.1,
+inside the expected ~0.3 tie), while doubling N gains 1.7. So older history is not dead
+weight and strength doesn't need time terms on this span; more games is what helps. Not
+yet tested across a big patch (16.21 is all test). One thing not understood: the set net
+gains less on the newest window (-0.16 against -0.52 spread), so the newest-window
+model with its net is worse by 0.46 in total; worth a look before the net is refitted
+on recent games only.
+
 ### Strength at fixed mastery (D1), 2026-10-24 (w1c, prepin run)
 
 Question (docs/plan/lab-frontier.md D1): a champion-role's raw win rate mixes its

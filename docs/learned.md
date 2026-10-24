@@ -25,6 +25,22 @@ How to write a line:
 
 ## Win
 
+- 2026-10-24 (early): Champion strength and pairings from the newest games predict no
+  better than the same number of games from up to two weeks earlier: what wins drafts within a
+  patch barely moves day to day, so older games are worth keeping and more games is what
+  helps (half the games costs about half a point of accuracy, the oldest or newest
+  half alike). Sure: dev only, 297k fitting games each way, 754k held-out ranked games up to
+  20 Oct, newest vs oldest within 0.1 milli-nats a game (± 0.15); one patch (16.20 and
+  the end of 16.19), not yet across a big patch. Site: nothing yet; supports pooling old
+  days in the tier list's estimates. Evidence: docs/model.md "E1: drift or noise at
+  equal N"
+- 2026-10-24 (early): Our models line up the same on newer games as before: the
+  shipped pair model calls 54.9% of games right, the same model with the damage mix
+  of each team 55.1%, and a small net on top of it 55.3%, against 54.7% for the
+  17 Oct model. Half of what the pair model gains is the damage mix, which the site
+  can't use until it stores per-champion damage profiles. Sure: dev only, 754k held-out
+  ranked games, every model scored on the same games, each step better in all six
+  blocks. Site: nothing yet. Evidence: docs/model.md "P2: same-split head-to-head"
 - 2026-10-24 (early): The draft alone has a little more to give than our best model
   takes: knowing exactly how every pair of champions does together and against each
   other would call about 56.5% of games right, against about 55.4% for the best model
