@@ -161,13 +161,13 @@ Cross-compiles to Windows, Linux and macOS from the Mac; nothing to install on t
   day of each change; a second change the same day replaces that day's row. The writer
   does it in the ladder job: one INSERT ... WHERE NOT EXISTS against ranks (its page is
   already in cache for the ranks upsert), so unchanged players cost nothing extra. With
-  `--ladder-refresh-hours 12` over Platinum+ (~5.3M players, all platforms) expect
-  roughly a row per player per day played (~1-1.5M rows/day, ~30-45 MB/day: ~16 GB a
-  year; measure). A player's rows go 24 months after their newest one, their last
-  change: about their last ranked game, as privacy.md promises (hourly prune, a 168th
-  of the key space per round, so weekly); forget deletes
-  them; backup segments copy them by whole day. A rekey leaves them under the old keys
-  (no mapping to the new PUUIDs): they match nobody and age out
+  `--ladder-refresh-hours 12` over Platinum+ (~5.3M players, all platforms), measured
+  24 Oct: ~840-880k rows a day (`meiolol status` "rank_history by day"), 28 bytes a row
+  (14.8M rows in 408 MB, dbstat), so ~24 MB a day, ~9 GB a year. A player's rows go
+  24 months after their newest one, their last change: about their last ranked game,
+  as privacy.md promises (hourly prune, a 168th of the key space per round, so
+  weekly); forget deletes them; backup segments copy them by whole day. A rekey leaves
+  them under the old keys (no mapping to the new PUUIDs): they match nobody and age out
 - Privacy (crawler writer, hourly): players no ladder page or match has shown for 30 days
   are deleted with their mastery, and mastery older than 30 days is refetched (Riot's
   monthly refresh; erased accounts drop out). A mastery refetch that Riot answers 404
