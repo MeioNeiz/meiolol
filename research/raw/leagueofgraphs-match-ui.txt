@@ -1,0 +1,383 @@
+Wayback Machine capture of 2 May 2025 (live site behind a Cloudflare challenge), innerText captured 24 Oct 2026. Player names replaced by [player].
+
+EN
+CS
+DA
+DE
+EL
+EN
+ES
+FR
+HU
+IT
+JA
+KO
+NL
+PL
+PT
+RO
+RU
+TH
+TR
+UA
+VN
+ZH
+ Home
+ Champions
+ Rankings
+ Stats
+ Arena
+ Infographics
+ Replays
+ Porofessor
+ Get the in-game app
+Patch: 15.9
+4,140,064 matches (Last 2 days)
+Contact - Privacy - TOS -  -  - 
+...
+Ranked Solo/Duo
+20/12/2024, 00:36:00
+HOME
+Defeat 29 / 40 / 46	 6  1  0  2  1	Ranked Solo/Duo (50:35)	 10  3  1  6  2	40 / 29 / 50 Victory
+18
+[player]
+Unranked
+5 / 12 / 8
+274 CS - 17.6k gold
+45% Kills P. - Vision: 36
+10 / 7 / 7
+364 CS - 22.1k gold
+43% Kills P. - Vision: 43
+18
+[player]
+Unranked
+18
+[player]
+Unranked
+11 / 8 / 4
+347 CS - 20.5k gold
+52% Kills P. - Vision: 89
+12 / 7 / 11
+309 CS - 20.8k gold
+58% Kills P. - Vision: 35
+18
+[player]
+Master
+18
+[player]
+Unranked
+6 / 9 / 12
+320 CS - 17.9k gold
+62% Kills P. - Vision: 32
+5 / 6 / 8
+340 CS - 20k gold
+33% Kills P. - Vision: 39
+18
+[player]
+Master
+18
+[player]
+Diamond III
+ 1
+7 / 5 / 7
+495 CS - 22.6k gold
+48% Kills P. - Vision: 22
+9 / 5 / 11
+405 CS - 23.5k gold
+50% Kills P. - Vision: 22
+18
+[player]
+Diamond II
+18
+[player]
+Diamond III
+ 1
+0 / 6 / 15
+77 CS - 11.8k gold
+52% Kills P. - Vision: 190
+4 / 4 / 13
+61 CS - 13.7k gold
+43% Kills P. - Vision: 132
+18
+[player]
+Unranked
+Bans: 
+		Bans: 
+Team Gold Advantage
+0
+10
+20
+30
+40
+50
+0
+2500
+-10000
+-7500
+-5000
+-2500
+Damage dealt
+0
+10000
+20000
+30000
+40000
+50000
+60000
+70000
+Fighting Farming Objectives Vision Pings
+Teamfights winrate
+66.7%
+Duels winrate
+50.0%
+Kills under enemy turret
+0.0%
+Teamfights participation
+75.0%
+Solo deaths
+91.7%
+Deaths under enemy turret
+8.3%
+Kills + Assists
+0
+10
+20
+30
+40
+50
+0
+5
+10
+15
+20
+25
+	[player]	
+	Average Bronze Dr. Mundo
+0
+10
+20
+30
+40
+50
+0
+5
+10
+15
+20
+	Dr. Mundo	
+	Garen
+Deaths
+0
+10
+20
+30
+40
+50
+0.0
+2.5
+5.0
+7.5
+10.0
+12.5
+	[player]	
+	Average Bronze Dr. Mundo
+0
+10
+20
+30
+40
+50
+0.0
+2.5
+5.0
+7.5
+10.0
+12.5
+	Dr. Mundo	
+	Garen
+Kill participation
+0
+10
+20
+30
+40
+50
+0%
+10%
+20%
+30%
+40%
+50%
+60%
+	[player]	
+	Average Bronze Dr. Mundo
+0
+10
+20
+30
+40
+50
+0%
+10%
+20%
+30%
+40%
+50%
+60%
+	Dr. Mundo	
+	Garen
+Roaming Kills/Assists
+0
+10
+20
+30
+40
+50
+0
+2
+4
+6
+8
+10
+12
+	[player]	
+	Average Bronze Dr. Mundo
+0
+10
+20
+30
+40
+50
+0
+2
+4
+6
+8
+	Dr. Mundo	
+	Garen
+Damage dealt
+0
+10
+20
+30
+40
+50
+0
+10000
+20000
+30000
+40000
+50000
+	[player]	
+	Average Bronze Dr. Mundo
+0
+10
+20
+30
+40
+50
+0
+10000
+20000
+30000
+40000
+50000
+60000
+	Dr. Mundo	
+	Garen
+Damage taken
+0
+10
+20
+30
+40
+50
+0
+25000
+50000
+75000
+100000
+125000
+150000
+	[player]	
+	Average Bronze Dr. Mundo
+0
+10
+20
+30
+40
+50
+0
+25000
+50000
+75000
+100000
+125000
+150000
+	Dr. Mundo	
+	Garen
+High Kill Participation Good vision Split pusher Stopped CSing Bad CSer No Control Wards
+5 / 12 / 8
+274 Minions - 17,578 gold
+Items
+00:14	
+02:57	
+05:02	
+07:01	
+09:07	
+12:52	
+15:48	
+17:58	
+20:59	
+23:27	
+25:20	
+28:37	
+30:18	
+34:41	
+37:12	
+43:06	
+46:24	
+48:24	
+Skill Orders
+	1	2	3	4	5	6	7	8	9	10	11	12	13	14	15	16	17	18
+	Q				Q		Q	Q	Q									
+			W	W											W		W	W
+		E								E		E	E	E				
+						R					R					R		
+Runes
+Grasp of the Undying
+Demolish
+Second Wind
+Revitalize
+Triumph
+Legend: Alacrity
++10% Attack Speed
++10-180 Health (based on level)
++10-180 Health (based on level)
+M.O.B.A. NETWORK
+MOBAFire
+League of Graphs
+Porofessor
+Counterstats
+WildriftFire
+RuneterraFire
+SmiteFire
+DOTAFire
+Valofessor
+Resetera
+FarmFriends
+ForzaFire
+HeroesFire
+LostarkFire
+VaingloryFire
+MTG Salvation
+Minecraft Forum
+WoWDB
+MMO-Champion
+mmorpg.com
+Bluetracker
+HearthPwn
+Diablo Fans
+Overframe
+© Copyright 2013-2025 www.leagueofgraphs.com. All rights reserved.
+LeagueOfGraphs.com isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing League of Legends. League of Legends and Riot Games are trademarks or registered trademarks of Riot Games, Inc. League of Legends © Riot Games, Inc. Also available on Android. . Legal. Page generated in 0.02s

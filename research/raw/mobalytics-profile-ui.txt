@@ -1,0 +1,219 @@
+Page innerText captured 24 Oct 2026 with headless Chrome (data/team/2026-10-24-ui/refs/shot.mjs). Player names replaced by [player]. Overview tab cut at the first match row's player list; LP Gains tab excerpt at the end.
+
+Home
+Summoner
+Game Highlights
+GPI
+Challenges
+Champions
+Tier List
+Guides
+Classic
+REFRESH DATA
+[player]
+#1111
+Damage Dealer
+Early Farmer
+Ready to Rumble
+Vision Focused
+Solid Laner
+Strong Start
+Ranked Solo
+Challenger·4257 LP
+1020W 884L·53.6%
+Ranked Flex
+Unranked·0 LP
+2W 0L·100%
+Normal Draft
+1W 0L·100%
+LP PROGRESS TRACKING
+last 50 games
+C
+50 games ago
+25
+Last game
+LEARN MORE
+ABOUT YOUR LP
+GPI
+PRIMARY ROLE OVERVIEW
+See all champions
+Champions
+Games
+Win Rate
+KDA
+CS/M
+LP
+Top
+1059
+57.0%
+6.9  6.0  6.7 (2.3)
+7.3
++4 767
+Pantheon
+1002
+58.5%
+7.1  6.0  6.7 (2.3)
+7.3
++5 259
+Gnar
+25
+36.0%
+3.0  6.5  5.7 (1.3)
+7.3
+-180
+Malphite
+8
+25.0%
+3.8  5.5  6.9 (1.9)
+7.3
+-109
+Jax
+5
+40.0%
+1.4  5.6  2.8 (0.8)
+6.9
+-21
+Renekton
+5
+40.0%
+3.2  6.0  5.4 (1.4)
+7.3
+-30
+PERFORMANCE OVERVIEW
++243.3
+GD@15
+19.5%
+Gold Share
+23.8%
+Damage Share
+1.6
+Solo Deaths
+2.2
+Solo Kills
+25.0
+Vision Score
+WANT TO SEE MORE IN-DEPTH PLAYER STATS?
+Track your in-game stats and more with our free Desktop App
+DOWNLOAD APP
+Overview
+Champion Pool
+Matchup Pool
+LP Gains
+All Queues
+RECENT ACTIVITY
+Last 120 Days
+Jul
+Aug
+Sep
+Oct
+Sun
+Mon
+Tue
+Wed
+Thu
+Fri
+Sat
+1900
+games played
+864
+hours played
+bad day
+good day
+1 game
+7+ games
+TOP ROLES
+1059
+57.0%
+286
+48.3%
+159
+53.5%
+110
+53.6%
+286
+46.2%
+MOST PLAYED WITH
+Player
+Games
+Win Rate
+[player]
+2W 2L
+50.0%
+[player]
+1W 2L
+33.3%
+RECENT SUMMARY
+last 10 games
+5W 5L·50.0%
+5.4  7.8  8.8
+(1.8) KDA
+4W 3L·57.1%
+6.3 / 7.0 / 7.6 ( 2.0 ) KDA
+4W 4L·50.0%
+6.1 / 8.0 / 9.4 ( 1.9 ) KDA
+1W 1L·50.0%
+2.5 / 7.0 / 6.5 ( 1.3 ) KDA
+3  10  5
+17h ago
+4  4  9
+18h ago
+5  4  6
+2d ago
+9  2  8
+2d ago
+1  10  4
+2d ago
+3  11  16
+2d ago
+6  10  3
+2d ago
+12  10  14
+2d ago
+4  8  14
+6d ago
+7  9  9
+6d ago
+17 HOURS AGO · 1W 1L · 50.0%
+RANKED SOLO
+17h ago
+ ∙ 24 minutes
+ ∙  P16.21
+Match Details
+3  10  5
+0.8 KDA
+133 (5.5) CS
+40.0%KP
+9 (0) / 3
+-35LP
+Servant Of Darkness
+No Control
+Not A Fan Of Early Game CS
+Anti-KDA Player
+Where Are Your Dragons?
+
+--- LP Gains tab ---
+Vision Score
+WANT TO SEE MORE IN-DEPTH PLAYER STATS?
+Track your in-game stats and more with our free Desktop App
+DOWNLOAD APP
+Overview
+Champion Pool
+Matchup Pool
+LP Gains
+Last 150 Games
+All Patches
+Hover graph for details
+The graph shows additional info about the date, matchup, LP gain, and more.
+C
+16.17
+16.18
+16.19
+16.20
+16.21
+150 games ago
+24 Aug’26
+100
+6 Sep’26
+50
+6 Oct’26
+Last game

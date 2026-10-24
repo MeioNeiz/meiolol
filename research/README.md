@@ -55,6 +55,9 @@ Area: which areas/ page the tag's findings go to (blank on a sub-tag: its parent
 | `ux/features` | | what competitor tools show and how |
 | `ux/desktop` | | desktop companion windows: window sizes, per-phase screens, player and champion cards, overlays, tags |
 | `ux/density` | | dense tables and number layout: colour-scaled cells, bars or sparklines in cells, small multiples |
+| `ux/postgame` | | game detail and match history: scoreboards, item and rune rows, damage and gold bars, timelines, profiles |
+| `ux/controls` | | champion search, region, rank and patch filters, dropdowns, role pickers, tooltips, toggles |
+| `ux/puzzle` | | daily games, quizzes and puzzles, in League or not: streaks, sharing, feedback |
 | `tools/paid` | | what tools charge for: tiers, prices, what sits behind the paywall |
 | `tools/accounts` | | logins and identity in tools: RSO, own accounts, friends, groups, roles, sharing |
 | `tools/removed` | | features Riot made tools remove or change, with dates (champ select names, timers, Vanguard, memory) |
@@ -62,6 +65,8 @@ Area: which areas/ page the tag's findings go to (blank on a sub-tag: its parent
 | `web/template` | | HTML generation, templating languages, components |
 | `web/wasm` | | wasm, JS interop, client-side rendering |
 | `web/qa` | | checking UI: visual regression, layout assertions, accessibility checks, CSS lints, component galleries, agents judging UI |
+| `gui/webview` | | embedded web views for the app: WebView2, webview/webview, Tauri, Electron, CEF; process model, footprint, runtime distribution |
+| `gui/a11y` | | accessibility of desktop GUIs: screen readers, UI Automation, AccessKit |
 | `ops/io` | | disk IO on the box: schedulers, ionice, cgroup io controls, block volume limits |
 | `method/tabular` | | modern tabular learners: tabular foundation models, TabM, RealMLP, GBDT, factorisation machines |
 | `method/ensemble` | | ensembles and stacking: seeds, bagging, snapshot, hyper-ensembles, ensemble selection, stacked generalisation |

@@ -1,0 +1,480 @@
+METAsrc
+Legacy Theme
+Report a Bug
+Ranked
+26.21
+Home
+Champions
+Tier Lists
+Comps
+Databases
+Counter Picker
+Darius Build
+ 
+LoL Runes, Items, Counters
+ 
+Patch 26.21
+ 
+Top
+P
+Q
+W
+E
+R
+
+Darius is ranked S+ Tier and has a 50.13% win rate in LoL Patch 26.21. We've analyzed 181,468 Darius games to compile the highest win rate League of Legends Darius build & runes guide with the best items, runes, summoner spells, skill order, counters, and synergies.
+
+Ranked
+ARAM: Mayhem
+Arena
+ARAM
+More
+Patch 26.21
+All Regions
+All Ranks
+Summary Text
+Build Style:
+Recommended
+Select a counter build
+Select a duo build
+Tier:
+S+
+Win %:
+50.13%
+Pick %:
+8.73%
+Role %:
+80.95%
+Ban %:
+14.77%
+KDA:
+1.77
+Games:
+181,468
+Score:
+65.33
+Advertisement
+Build
+Runes
+Info
+Counters
+Synergies
+Stats
+Darius Runes
+Darius Runes
+
+Best runes for Darius: Precision primary and Sorcery secondary.
+
+Win %
+Pick %
+50%
+37%
+50%
+30%
+50%
+27%
+52%
+2%
+Summoner Spells
+Summoner Spells
+
+The best summoner spells for Darius are Flash and Ghost.
+
+Win %
+Pick %
+50%
+70%
+50%
+22%
+52%
+4%
+45%
+3%
+44%
+1%
+Starting Items
+Starting Items
+
+The best starting items for Darius include Doran's Blade and Health Potion.
+
+Win %
+Buy %
+50%
+64%
+49%
+18%
+51%
+40%
+Darius Skill Order
+Darius Skill Order
+
+When playing Darius, prioritize Q, followed by E, and finally W.
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+Q
+Q
+Q
+Q
+Q
+W
+W
+W
+W
+W
+E
+E
+E
+E
+E
+R
+R
+R
+Priority
+Q > E > W
+Win %
+51%
+Pick %
+79%
+Darius Items
+Darius Items
+
+Best items for Darius, featuring Plated Steelcaps, Youmuu's Ghostblade, and Dead Man's Plate.
+
+Win %
+Buy %
+Core
+52%
+52%
+ 
+57%
+36%
+ 
+60%
+25%
+ 
+57%
+18%
+ 
+50%
+82%
+ 
+51%
+53%
+Item Build Order
+Item Build Order
+
+Best Darius item build path for efficient power spikes.
+
+1200
+2800
+2900
+3300
+3200
+2800
+Slot 4 Item Options
+Slot 4 Item Options
+
+Popular item choices for slot 4 on Darius.
+
+Win %
+Buy %
+57%
+36%
+54%
+22%
+58%
+18%
+57%
+4%
+Slot 5 Item Options
+Slot 5 Item Options
+
+Popular item choices for slot 5 on Darius.
+
+Win %
+Buy %
+60%
+25%
+58%
+26%
+52%
+13%
+54%
+7%
+Slot 6 Item Options
+Slot 6 Item Options
+
+Popular item choices for slot 6 on Darius.
+
+Win %
+Buy %
+57%
+18%
+53%
+15%
+54%
+11%
+57%
+8%
+Elixirs
+Elixirs
+
+Preferred elixirs for Darius in the late game.
+
+Win %
+Buy %
+51%
+53%
+53%
+47%
+54%
+1%
+Darius Boots
+Darius Boots
+
+Best boots for Darius are Plated Steelcaps.
+
+Win %
+Buy %
+50%
+59%
+51%
+25%
+53%
+14%
+55%
+0%
+48%
+0%
+Trinkets
+Trinkets
+
+Most effective trinkets to use on Darius.
+
+Win %
+Buy %
+50%
+82%
+52%
+12%
+51%
+6%
+Recommended Bans
+Recommended Bans
+
+Ban champions like Lucian, Gangplank, Kennen, and Poppy to increase the win rate of Darius.
+
+Win %
+Diff
+Games
+52%
++2.2%
+2.7K
+52%
++2.0%
+8.5K
+52%
++2.0%
+3.1K
+52%
++1.7%
+2.8K
+52%
++1.6%
+7K
+52%
++1.5%
+3K
+51%
++1.3%
+5.6K
+51%
++1.2%
+6.4K
+51%
++1.2%
+6.5K
+51%
++1.2%
+4.4K
+51%
++1.1%
+9.8K
+51%
++1.1%
+5.7K
+Darius Team Synergies
+Darius Team Synergies
+
+Top synergy picks to play alongside Darius Top include Cho'Gath, Malzahar, Ziggs, and Leona.
+
+Jungle
+Win %
+ 
+Games
+54%
++3.5%
+5.4K
+53%
++3.0%
+4.2K
+53%
++3.0%
+4.5K
+Win %
+ 
+Games
+53%
++2.8%
+4.7K
+52%
++1.8%
+5.1K
+52%
++1.5%
+6.7K
+Mid
+Win %
+ 
+Games
+53%
++2.8%
+5.6K
+53%
++2.5%
+4.5K
+52%
++2.4%
+5.5K
+Win %
+ 
+Games
+52%
++2.2%
+3.6K
+52%
++2.1%
+3.9K
+51%
++1.1%
+5.4K
+ADC
+Win %
+ 
+Games
+53%
++3.1%
+1.8K
+53%
++2.6%
+3.2K
+52%
++1.8%
+4.7K
+Win %
+ 
+Games
+52%
++1.8%
+5K
+51%
++1.1%
+15.7K
+51%
++1.0%
+5.2K
+Support
+Win %
+ 
+Games
+52%
++2.3%
+7.5K
+52%
++2.2%
+4.1K
+52%
++1.6%
+3.8K
+Win %
+ 
+Games
+51%
++1.2%
+5.1K
+51%
++1.2%
+7.5K
+51%
++1.1%
+4.5K
+Latest News
+League of Legends Patch 26.21 Preview
+Meta Impact
+OCT 21, 2026
+·
+METAsrc Maxwell
+PATCH 26.21
+META ANALYSIS
+Patch 26.21 brings a massive balance pass for Summoner's Rift outliers, Mayhem headliners, and returning Classic champions.
+AP Sion Mid Guide
+League Classic Build, Runes and Masteries
+JUL 22, 2026
+·
+METAsrc Hamilton
+LEAGUE CLASSIC
+MID
+A data-backed League Classic Sion mid guide, from prepared AP picks and roaming to the separate off-role Cannibalism path.
+League of Legends Patch 26.14 Preview
+Meta Impact
+JUL 14, 2026
+·
+METAsrc Maxwell
+PATCH 26.14
+META PREVIEW
+SUMMONER'S RIFT
+A Patch 26.14 meta preview for League of Legends, focused on the champion, item, ARAM: Mayhem, and Arena changes most likely to move the meta.
+VIEW ALL
+METAsrc Network
+League of Legends
+Teamfight Tactics
+METAsrc News
+LoL Modes
+Ranked
+ARAM: Mayhem
+Arena
+ARAM
+League Classic
+LoL Ranked Content
+Home
+Champions
+Tier Lists
+Comps
+Counter Picker
+
+Copyright 2026 METASRC LLC
+
+www.metasrc.com isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.
+
+Made with ♥ in Boulder, CO
+
+Terms and Conditions
+Privacy Policy
+ 

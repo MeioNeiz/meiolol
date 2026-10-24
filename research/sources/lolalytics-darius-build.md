@@ -188,6 +188,47 @@ y, x and font size), .tooltips.txt (help icons, hovered). `browse` itself is fix
   section beyond hover tooltips, no sample-size shading: an item on 1 game shows 100.00
   like one on 5,000. ^f28
 
+### 24 Oct: element shots at 1280x900 (for lol-site-ui)
+
+Screenshots in data/team/2026-10-24-ui/refs/champion/ (gitignored): lolalytics-darius-fold.png,
+-build-panel.png, -build-panel-common.png, -skill-table.png, -rune-grid.png,
+-trends-counters.png, -wr-by-length.png, lolalytics-phone-fold.png, -phone-build.png. Raw
+lolalytics-darius-build.2026-10-24.md. Patch 16.21, 43,338 Emerald+ games.
+
+- [ux/controls] At 1280 the role picker is the same row of six 40 px tiles (portrait, then
+  five role icons) with the share under each (82.3% top, 15.7% jungle, 1.1%, 0.2%, 0.7%);
+  roles with under 1% still get a full tile. (seen in screenshot lolalytics-darius-fold.png) ^f29
+  > Average Emerald+ Win Rate: 51.53%
+- [ux/features] The Highest Win and Most Common builds differ in nearly every slot, and
+  only one shows at a time: highest-win core 61.15% on 1,161 games against most-common core
+  55.04% on 4,193; skill order 57.96% on 5,259 against 56.51% on 12,388; other spells and
+  other secondary tree. The rune line reads 52.8% on 25,484 games under both, so it does not
+  follow the toggle. (seen in screenshots lolalytics-darius-build-panel.png and
+  -build-panel-common.png) ^f30
+  > Highest Win Build Most Common Build
+- [ux/density] The full rune grid is three blocks: primary (five trees side by side, four
+  rows: keystones then three slots), secondary (five trees, three rows), shards (three groups
+  of three); every rune has win rate, pick rate and games stacked under it, labels written
+  once at the left, about 985 by 720 px. Clicking a keystone filters the builds. Unpicked
+  runes are not faded: 0.0 on 1 game prints like 52.8 on 25,484. (seen in screenshot
+  lolalytics-darius-rune-grid.png) ^f31
+  > Click Keystones Below to Filter Builds
+- [ux/density] Skill table: Overview, Level 6+, 10+, 15+ tabs over six skill-priority rows
+  (win, pick, games) beside a per-level table, levels 1 to 6, giving each ability's win and
+  pick rate at that level. (seen in screenshot lolalytics-darius-skill-table.png) ^f32
+- [ux/features] Synergy tabs show four strips, one per ally role (the champion's own role
+  left out), with the same rows as counters; their cells stayed empty or vanished again on
+  24 Oct after a click with an 8 second wait, so content is still unseen. ^f33
+  > Common Teammates
+- [ux/layout] At 1280 the right column drops under the main column, so Win Rate vs Game
+  Length (seven buckets 0-15 to 40+, one green line, 51 to 57%) and Game Length Distribution
+  end up at y 5,600 to 6,970 of a 7,249 px page. (seen in screenshot
+  lolalytics-darius-wr-by-length.png) ^f34
+- [ux/layout] Phone (390x844), 24 Oct: the filter bar still runs off screen (queue and
+  region tiles cut); the build panel reflows well into one column: runes, skill order grid at
+  full 18 levels, priority and spells side by side, starting items, core and item 4 side by
+  side, items 5 and 6 side by side, about 840 px. (seen in screenshot lolalytics-phone-build.png) ^f35
+
 ## Read
 
 - raw/lolalytics-darius-build.md: header, summary, counters strip, objectives table

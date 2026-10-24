@@ -1,0 +1,624 @@
+League of Legends
+Teamfight Tactics
+VALORANT
+Counter-Strike 2
+Deadlock
+Fortnite
+Escape From Tarkov
+Apex Legends
+Marvel Rivals
+Search Profiles (Name#Tag), Champions, etc.
+⌘
+K
+Go Ad-Free
+Log In
+Download Blitz
+Home
+Champions
+Tier List
+League Classic
+ARAM Mayhem
+Arena
+News
+League of Legends
+Champions
+Ahri Mid Build
+Ahri Mid Build, Runes, Items, and Stats - Patch 26.21 (Emerald+)
+
+Recommended Ahri Mid runes, items, skill order, and build stats for Emerald+ on Patch 26.21.
+
+Data updated 1 minute ago.
+
+Build
+ARAM Mayhem
+Classic
+New
+ARAM
+URF
+Arena
+Pro Builds
+One Tricks
+New
+Counters
+Synergies
+Abilities
+Emerald+
+World
+Select Matchup
+Patch: 26.21
+Tier
+Win Rate
+51.5%
+Win Rate Change
++0.4%
+Pick rate
+5.3%
+Ban rate
+1.7%
+Matches
+36,335
+Best
+Win Rate
+Common
+Emerald+ Builds
+
+AP
+
+45,062 GAMES
+52%
+Ahri OTP Builds
+KR
+
+Pristine #KR1
+
+MASTER 309 LP
+Pro Builds
+NA
+
+Pobelter
+
+VS
+NA
+
+Broxah
+
+VS
+EUW
+
+Vladi
+
+VS
+EUW
+
+Vladi
+
+VS
+BR
+
+Tay
+
+VS
+BR
+
+Tay
+
+VS
+BR
+
+Envy
+
+VS
+BR
+
+Envy
+
+VS
+BR
+
+micaO
+
+VS
+KR
+
+Clozer
+
+VS
+EUW
+
+MagiFelix
+
+VS
+EUW
+
+MagiFelix
+
+VS
+EUW
+
+MagiFelix
+
+VS
+NA
+
+TF Blade
+
+VS
+EUW
+
+MagiFelix
+
+VS
+EUW
+
+MagiFelix
+
+VS
+EUW
+
+MagiFelix
+
+VS
+EUW
+
+MagiFelix
+
+VS
+KR
+
+Croco
+
+VS
+EUW
+
+MagiFelix
+
+VS
+BR
+
+Tay
+
+VS
+KR
+
+Karis
+
+VS
+EUW
+
+Color
+
+VS
+EUW
+
+Chres
+
+VS
+EUW
+
+Fresskowy
+
+VS
+EUW
+
+Fresskowy
+
+VS
+EUW
+
+Color
+
+VS
+KR
+
+BuLLDoG
+
+VS
+EUW
+
+Koldo
+
+VS
+EUW
+
+Zwyroo
+
+VS
+EUW
+
+Fresskowy
+
+VS
+EUW
+
+Black
+
+VS
+KR
+
+ON
+
+VS
+EUW
+
+Black
+
+VS
+EUW
+
+twohoyrz
+
+VS
+EUW
+
+Kirei
+
+VS
+EUW
+
+Black
+
+VS
+EUW
+
+Black
+
+VS
+NA
+
+Max108
+
+VS
+NA
+
+Doxa
+
+VS
+Patch: 26.21
+Runes
+52%
+37,983 GAMES
+52%
+6,343 GAMES
+Summoner Spells
+52%
+32,999 GAMES
+52%
+11,095 GAMES
+Items
+Starting Items
+Build Order
+Completed Items
+Situational Items
+Ability Max Order
+63%
+
+9,444 GAMES
+
+Q
+W
+E
+1
+W
+2
+Q
+3
+E
+4
+Q
+5
+Q
+6
+R
+7
+Q
+8
+W
+9
+Q
+10
+W
+11
+R
+12
+W
+13
+W
+14
+E
+15
+E
+16
+R
+17
+E
+18
+E
+Damage Breakdown
+7%
+72% AP
+21% True
+Item Performance
+Item Builder
+Min pick rate
+ITEM	
+WRI
+	PRE-BUY WR	WIN RATE	PICK RATE
+	PURCHASES
+
+Malignance
+	
+-0.60
+	
+51.7%
+	
+51.1%
+	
+23.2%
+	
+10,971
+
+
+Shadowflame
+	
+-0.27
+	
+52.3%
+	
+52.0%
+	
+17.1%
+	
+8,098
+
+
+Zhonya's Hourglass
+	
++0.27
+	
+54.4%
+	
+54.6%
+	
+11.3%
+	
+5,366
+
+
+Lich Bane
+	
++1.44
+	
+53.6%
+	
+55.0%
+	
+11.0%
+	
+5,210
+
+
+Rabadon's Deathcap
+	
++0.13
+	
+56.1%
+	
+56.3%
+	
+9.3%
+	
+4,418
+
+
+Blackfire Torch
+	
++1.72
+	
+51.2%
+	
+52.9%
+	
+9.3%
+	
+4,384
+
+
+Luden's Echo
+	
+-1.20
+	
+50.2%
+	
+49.0%
+	
+4.0%
+	
+1,873
+
+
+Mejai's Soulstealer
+	
++4.96
+	
+72.0%
+	
+76.9%
+	
+3.4%
+	
+1,604
+
+
+Stormsurge
+	
++1.85
+	
+54.5%
+	
+56.3%
+	
+2.1%
+	
+987
+
+
+Cosmic Drive
+	
++0.68
+	
+53.3%
+	
+54.0%
+	
+2.1%
+	
+978
+
+
+Void Staff
+	
+-3.14
+	
+54.6%
+	
+51.5%
+	
+1.6%
+	
+769
+
+
+Cryptbloom
+	
++1.40
+	
+54.1%
+	
+55.5%
+	
+1.3%
+	
+618
+
+
+Hextech Rocketbelt
+	
+-0.72
+	
+54.8%
+	
+54.0%
+	
+1.2%
+	
+568
+
+
+Banshee's Veil
+	
++5.61
+	
+53.6%
+	
+59.2%
+	
+1.0%
+	
+476
+
+
+Liandry's Torment
+	
+-0.60
+	
+51.3%
+	
+50.7%
+	
+0.9%
+	
+420
+Ahri Mid Build Guide
+
+Ahri Mid is A Tier with a 51.5% win rate, 5.3% pick rate, and 1.7% ban rate across 36,335 Emerald+ matches in the World region on Patch 26.21.
+
+The recommended core item build is Malignance → Sorcerer's Shoes → Shadowflame. Electrocute is the recommended primary rune keystone. Gwen is one of the more difficult matchups.
+
+Review Ahri counters, synergies, and abilities for more matchup and champion details.
+
+#
+Key Insights
+R
+ gains an extra charge and an increased duration if she consumes an enemy champion's essence with 
+P
+ while active.
+W
+ grants 40% bonus decaying movespeed for 2 seconds on cast.
+W
+ will prioritize targets affected by 
+E
+ and Ahri's most recently auto attacked target in the last 3 seconds.
+The returning half of 
+Q
+ deals true damage.
+#
+Strengths
+Can stall out games with 
+Q
+'s waveclear.
+Excels with items that boost her magic damage and burst potential.
+Has the potential to "pop off" in fights with 
+R
+'s reset mechanic.
+W
+ and 
+R
+ offer other methods to escape ganks without having to use Flash, letting her play aggressively.
+When 
+E
+ hits its target, she easily wins trades and all-ins.
+#
+Weaknesses
+Quickly burns through mana, making her susceptible to being zoned off waves and taking bad recalls if not managed properly.
+Reliant on landing 
+E
+. If it misses, her strength diminishes.
+R
+ has a longer cooldown of 140 seconds at rank 1. Once used, she can be punished.
+Similar Champions
+
+A few champions that are similar playstyle to Ahri.
+
+Annie
+Twisted Fate
+LeBlanc
+Fiddlesticks
+Veigar
+Orianna
+COMPANY
+About Us
+Partnerships
+Careers
+Contact Support
+Privacy Policy
+SOCIALS
+X/Twitter
+Discord
+Facebook
+Instagram
+TikTok
+GAMES
+League of Legends
+Teamfight Tactics
+VALORANT
+Counter-Strike 2
+Deadlock
+Fortnite
+Escape From Tarkov
+Apex Legends
+Marvel Rivals
+Made with Lots of Love and Tilt in Ukraine
+English
+Terms of Service
+Privacy Policy
+Remove Ads with Premium

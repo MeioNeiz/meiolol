@@ -30,6 +30,23 @@ Why: the header stat box of a major site's champion page.
   > Darius Top has a 49.7% win rate with 6.4% pick rate in Emerald + and is currently ranked S tier.
 - [ux/uncertainty] Failure: "Top players" list gives one player 70.4% and another 64.1% with no game counts beside them (seen in screenshot mobalytics-darius-build.png). ^f4
 
+### 24 Oct: element shots (for lol-site-ui)
+
+Screenshots in data/team/2026-10-24-ui/refs/champion/ (gitignored): mobalytics-darius-build.png,
+-matchups.png. Raw mobalytics-darius-build.2026-10-24.md (patch 16.21, 34,420 matches).
+
+- [ux/controls] Recommended builds are a left-hand list of four named variants with a win
+  rate each, all visible at once (Most Popular 54.8%, Highest WR 55.1%, Alternative 54.3%,
+  Off-Meta 56.0%); the open one's sample is given in the panel header ("5 760 matches"),
+  the others' only after clicking. ^f5
+  > Most Popular 54.8% Highest WR 55.1% Alternative 54.3% Off-Meta 56.0%
+- [ux/uncertainty] Matchups overview (weak against, strong against, best synergy) shows six
+  portraits each with a win rate ring and win rate, no games. (seen in screenshot
+  mobalytics-darius-matchups.png) ^f6
+- [ux/density] Ability order is an 18-column grid of letters on thin vertical guide lines
+  with the max order (Q > E > W) above it, no numbers; items carry the minute (core @ 19 min,
+  early @ 3 min) instead of rates. (seen in screenshot mobalytics-darius-build.png) ^f7
+
 ## Read
 
 - Page innerText; fold screenshot, full page skimmed

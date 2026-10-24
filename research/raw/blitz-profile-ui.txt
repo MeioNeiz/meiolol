@@ -1,0 +1,35 @@
+Page innerText captured 24 Oct 2026 with headless Chrome (data/team/2026-10-24-ui/refs/shot.mjs). Player names replaced by [player]. Cut at the first match row's player list.
+
+Home
+Champions
+Tier List
+League Classic
+ARAM Mayhem
+Arena
+News
+1151
+[player] #1111
+Overview
+Champion Pool
+LP History
+Ranked Solo
+Challenger
+4257 LP
+53.6% WR
+1020W - 884L
+LP History
+VIEW FULL HISTORY
+Other Modes
+Profile Stats
+Defeat
+•
+Ranked Solo
+•
+24:22
+•
+0.8 KDA
+3 / 10 / 5
+5.5 CS/Min.
+133 CS
+343 GPM
+133 CS

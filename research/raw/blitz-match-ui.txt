@@ -1,0 +1,444 @@
+Page innerText captured 24 Oct 2026 with headless Chrome (data/team/2026-10-24-ui/refs/shot.mjs). Player names replaced by [player]. Overview tab, then the Graphs and Win Probability tabs.
+
+Home
+Champions
+Tier List
+League Classic
+ARAM Mayhem
+Arena
+News
+Victory
+Ranked Solo
+•
+30:12 mins
+•
+18 hours ago
+CS Master
+vs
+Rank
+Draven
+MARKSMAN
+64
+Combat
+Good
+Damage Dealt
+26,577
+11,884
+41,326
+You
+Percent Team Damage
+21%
+11%
+35%
+You
+Deaths
+4
+13
+4
+You
+MARKSMAN
+33
+Farming
+Fair
+CS Gained - Lane Phase
+143
+80
+143
+You
+CS Gained - Mid Game
+43
+50
+80
+You
+CS Gained - Late Game
+31
+42
+72
+You
+Press the Attack
+Damage
+6.9% of total 1,837
+Bonus Damage
+1,837
+Expose Damage
+0
+Presence of Mind
+Resource Restored
+2,006
+Legend: Alacrity
+Time completed
+15:50
+Cut Down
+Damage
+8.9% of total 2,371
+Bone Plating
+Damage Blocked
+434
+Overgrowth
+Bonus Health
+199
+SCROLL FOR MORE
+Overview
+Stats
+Timeline
+Graphs
+New
+Win Probability
+BANS
+Blue Team
+35 / 21 / 59
+11
+3
+2
+2
+1
+70,784
+126,751 DMG
+18
+[player]
+7th
+4257
+4 / 4 / 9
+3.25 KDA
+217 CS
+37% KP
+26,577 DMG
+18
+[player]
+2nd
+1941
+14 / 2 / 7
+10.50 KDA
+235 CS
+60% KP
+27,222 DMG
+17
+[player]
+5th
+2193
+3 / 3 / 15
+6.00 KDA
+208 CS
+51% KP
+18,133 DMG
+18
+[player]
+MVP
+3050
+11 / 4 / 8
+4.75 KDA
+319 CS
+54% KP
+39,951 DMG
+14
+[player]
+4th
+2434
+3 / 8 / 20
+2.88 KDA
+18 CS
+66% KP
+14,868 DMG
+Red Team
+21 / 35 / 27
+2
+0
+0
+2
+0
+58,581
+116,978 DMG
+17
+[player]
+6th
+2828
+5 / 3 / 7
+4.00 KDA
+218 CS
+57% KP
+16,562 DMG
+15
+[player]
+9th
+2360
+4 / 6 / 6
+1.67 KDA
+209 CS
+48% KP
+19,702 DMG
+16
+[player]
+SVP
+3043
+9 / 7 / 3
+1.71 KDA
+265 CS
+57% KP
+52,040 DMG
+15
+[player]
+10th
+2345
+3 / 8 / 2
+0.63 KDA
+261 CS
+24% KP
+22,654 DMG
+13
+[player]
+8th
+2409
+0 / 11 / 9
+0.82 KDA
+27 CS
+43% KP
+6,020 DMG
+COMPANY
+About Us
+Partnerships
+Careers
+Contact Support
+Privacy Policy
+SOCIALS
+X/Twitter
+Discord
+Facebook
+Instagram
+TikTok
+GAMES
+League of Legends
+Teamfight Tactics
+VALORANT
+Counter-Strike 2
+Deadlock
+Fortnite
+Escape From Tarkov
+Apex Legends
+Marvel Rivals
+Made with Lots of Love and Tilt in San Francisco
+English
+Terms of Service
+Privacy Policy
+Remove Ads with Premium
+
+--- Graphs tab ---
+Overview
+Stats
+Timeline
+Graphs
+New
+Win Probability
+BANS
+Damage Dealt
+Damage Taken
+CS
+Gold
+Level
+Team Gold Lead
+0
+10k
+20k
+30k
+40k
+50k
+60k
+2′
+4′
+6′
+8′
+10′
+12′
+14′
+16′
+18′
+20′
+22′
+24′
+26′
+28′
+30′
+BLUE
+126.8K
+26.6k
+27.2k
+18.1k
+40k
+14.9k
+RED
+117K
+16.6k
+19.7k
+52k
+22.7k
+6k
+COMPANY
+About Us
+Partnerships
+Careers
+Contact Support
+Privacy Policy
+SOCIALS
+X/Twitter
+Discord
+Facebook
+Instagram
+TikTok
+GAMES
+League of Legends
+Teamfight Tactics
+VALORANT
+Counter-Strike 2
+Deadlock
+Fortnite
+Escape From Tarkov
+Apex Legends
+Marvel Rivals
+Made with Lots of Love and Tilt in Los Angeles
+English
+Terms of Service
+Privacy Policy
+Remove Ads with Premium
+
+--- Win Probability tab ---
+Overview
+Stats
+Timeline
+Graphs
+New
+Win Probability
+BANS
+Blue Team
+35 / 21 / 59
+11
+3
+2
+2
+1
+70,784
+126,751 DMG
+18
+[player]
+7th
+4257
+4 / 4 / 9
+3.25 KDA
+217 CS
+37% KP
+26,577 DMG
+18
+[player]
+2nd
+1941
+14 / 2 / 7
+10.50 KDA
+235 CS
+60% KP
+27,222 DMG
+17
+[player]
+5th
+2193
+3 / 3 / 15
+6.00 KDA
+208 CS
+51% KP
+18,133 DMG
+18
+[player]
+MVP
+3050
+11 / 4 / 8
+4.75 KDA
+319 CS
+54% KP
+39,951 DMG
+14
+[player]
+4th
+2434
+3 / 8 / 20
+2.88 KDA
+18 CS
+66% KP
+14,868 DMG
+Red Team
+21 / 35 / 27
+2
+0
+0
+2
+0
+58,581
+116,978 DMG
+17
+[player]
+6th
+2828
+5 / 3 / 7
+4.00 KDA
+218 CS
+57% KP
+16,562 DMG
+15
+[player]
+9th
+2360
+4 / 6 / 6
+1.67 KDA
+209 CS
+48% KP
+19,702 DMG
+16
+[player]
+SVP
+3043
+9 / 7 / 3
+1.71 KDA
+265 CS
+57% KP
+52,040 DMG
+15
+[player]
+10th
+2345
+3 / 8 / 2
+0.63 KDA
+261 CS
+24% KP
+22,654 DMG
+13
+[player]
+8th
+2409
+0 / 11 / 9
+0.82 KDA
+27 CS
+43% KP
+6,020 DMG
+COMPANY
+About Us
+Partnerships
+Careers
+Contact Support
+Privacy Policy
+SOCIALS
+X/Twitter
+Discord
+Facebook
+Instagram
+TikTok
+GAMES
+League of Legends
+Teamfight Tactics
+VALORANT
+Counter-Strike 2
+Deadlock
+Fortnite
+Escape From Tarkov
+Apex Legends
+Marvel Rivals
+Made with Lots of Love and Tilt in Germany
+English
+Terms of Service
+Privacy Policy
+Remove Ads with Premium

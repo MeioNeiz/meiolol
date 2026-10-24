@@ -1,0 +1,205 @@
+Page innerText captured 24 Oct 2026 with headless Chrome (data/team/2026-10-24-ui/refs/shot.mjs). Player names replaced by [player].
+
+Home
+Summoner
+Game Highlights
+GPI
+Challenges
+Champions
+Tier List
+Guides
+Classic
+Highest CS
+198
+[player]
+Best DMG
+26 037
+[player]
+MVP
+[player]
+Best Gold
+16 365
+[player]
+Highest KDA
+13.5
+[player]
+BLUE TEAM
+Lost
+20  45  31
+47.1k
+58.9k
+45  20  64
+RED TEAM
+Won
+[player]
+GM
+4  8  7
+1.4 KDA
+171 (7.0) CS
+55.0%KP
+7th
+[player]
+MS
+7  6  5
+2.0 KDA
+167 (6.9) CS
+26.7%KP
+5th
+Build stats
+[player]
+GM
+4  10  7
+1.1 KDA
+159 (6.5) CS
+55.0%KP
+8th
+[player]
+CH
+8  5  11
+3.8 KDA
+198 (8.1) CS
+42.2%KP
+4th
+Build stats
+[player]
+GM
+6  6  6
+2.0 KDA
+175 (7.2) CS
+60.0%KP
+6th
+[player]
+CH
+16  5  11
+5.4 KDA
+138 (5.7) CS
+60.0%KP
+2nd
+Build stats
+[player]
+CH
+3  10  5
+0.8 KDA
+133 (5.5) CS
+40.0%KP
+10th
+[player]
+GM
+13  2  11
+12.0 KDA
+191 (7.8) CS
+53.3%KP
+MVP
+Build stats
+[player]
+CH
+3  11  6
+0.8 KDA
+34 (1.4) CS
+45.0%KP
+9th
+[player]
+GM
+1  2  26
+13.5 KDA
+46 (1.9) CS
+60.0%KP
+3rd
+Build stats
+1
+0
+0
+0
+8
+1
+0
+4
+DAMAGE DEALT
+19 424
+11 478
+20 722
+12 595
+23 364
+19 141
+19 467
+23 568
+26 037
+19 668
+DAMAGE RECEIVED
+25 991
+33 166
+14 559
+23 339
+22 952
+33 195
+25 259
+24 677
+15 457
+14 420
+INCOME
+Overall
+CS
+198
+191
+175
+171
+167
+159
+138
+133
+46
+34
+WARDS
+Cleared
+Placed
+30
+26
+9
+9
+9
+8
+8
+8
+7
+4
+Match Details
+Ranked Solo∙24:22
+Cheat Sheet
+GAME INSIGHTS
+Your achievements
+Servant of Darkness
+Enemy wards aren't safe when you are in charge. You cleared 3 wards this game.
+Things to improve
+No Control
+You didn't place a single control ward all game. I know you want to save money for those juicy items, but knowledge gives you the power to get more items.
+Not a Fan of Early Game CS
+In the first 15 minutes you had 5 cs per minute, which means you only last hit less than half of each wave. Focusing more on last hitting over trading can help you get more gold. Remember, 15 CS is worth about 1 kill.
+Anti-KDA Player
+Your KDA this game was 1. You died more times than you were involved in kills. Don't go for over-aggressive kills, especially when you're already behind, and make sure you play & fight with your team.
+Where Are Your Dragons?
+Your team did not get a single dragon this game. The stats boost you get from dragons can be impactful throughout the course of the game. Look to play around enemy base times to grab a quick uncontested dragon.
+BLUE SIDE
+Lost
+Won
+RED SIDE
+Bans
+87 583
+Damage
+107 881
+20  45  31
+KDA
+45  20  64
+47 113
+Gold
+58 949
+1
+Towers
+8
+0
+Drakes
+0
+Elder Dragons
+0
+0
+Barons
+0

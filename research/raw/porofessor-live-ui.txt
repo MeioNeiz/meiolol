@@ -1,0 +1,183 @@
+Wayback Machine capture of the live-game partial, 12 Apr 2026 (live site behind a Cloudflare challenge), injected into an archived live page shell, innerText captured 24 Oct 2026. Player names replaced by [player].
+
+Normal (Draft Pick) (11:27)  Spectate  Record
+Bans:
+NORMAL & RANKED STATS 
+LAST 30 DAYS 
+Top Builds for 
+[player]
+ 1
+256
+0 Played
+- / - / -
+Rank: -
+Silver IV 8 LP
+(Soloqueue) S25.S3: 
+S26.S1: 51% Win (65 Played)
+Rank: #9,208,795
+Top (Current game)
+Main Roles: AD Carry, Top
+4 Played
+3 Wins
+30 Played
+11 Wins
+Hot Streak Invader
+[player]
+ 1
+21
+50% Win (2 Played)
+3.0 / 5.5 / 7.0
+Rank: -
+Unranked
+Jungler (Current game)
+Main Roles: Top
+3 Played
+3 Wins
+13 Played
+10 Wins
+Hot Streak AutoFilled? Shyvana newbie
+[player]
+ 1
+191
+72% Win (18 Played)
+7.5 / 2.6 / 5.9
+Rank: -
+Bronze I 50 LP
+(Soloqueue) S25.S3: 
+S26.S1: 51% Win (112 Played)
+Rank: #9,526,903
+Mid (Current game)
+Main Roles: Mid
+4 Played
+3 Wins
+53 Played
+24 Wins
+Great with Veigar Unkillable Laner Hot Streak Main banned Passive Laner
+[player]
+ 2
+441
+0 Played
+- / - / -
+Rank: -
+Gold IV 55 LP
+(Soloqueue) S25.S3: 
+S26.S1: 52% Win (93 Played)
+Rank: #6,080,205
+AD Carry (Current game)
+Main Roles: Jungler, Mid
+2 Played
+0 Wins
+102 Played
+42 Wins
+AutoFilled? Ashe casual
+[player]
+ 2
+50
+75% Win (4 Played)
+2.0 / 9.5 / 21.3
+Rank: -
+Unranked
+S25.S3: 
+Support (Current game)
+Main Roles: Jungler
+0 Played
+40 Played
+15 Wins
+Aggressive Laner Great with Seraphine AutoFilled? Waking up Vulnerable Laner Bad vision
+[player]
+22
+64% Win (14 Played)
+7.5 / 3.6 / 4.7
+Rank: -
+Unranked
+Top (Current game)
+Main Roles: Jungler, Top
+3 Played
+1 Wins
+40 Played
+22 Wins
+Split Pusher
+[player]
+ 3
+109
+67% Win (3 Played)
+9.0 / 3.0 / 8.3
+Rank: -
+Unranked
+S25.S3: 
+Jungler (Current game)
+Main Roles: Mid, Jungler
+3 Played
+2 Wins
+16 Played
+8 Wins
+[player]
+119
+0 Played
+- / - / -
+Rank: -
+Gold IV 79 LP
+(Soloqueue) S25.S3: 
+S26.S1: 53% Win (77 Played)
+Rank: #5,896,371
+Mid (Current game)
+Main Roles: Mid
+0 Played
+42 Played
+19 Wins
+Waking up LeBlanc newbie
+[player]
+49
+0% Win (2 Played)
+3.0 / 4.0 / 4.5
+Rank: -
+Unranked
+AD Carry (Current game)
+Main Roles: Mid, Support
+2 Played
+2 Wins
+6 Played
+3 Wins
+AutoFilled? Morgana casual
+[player]
+ 3
+295
+100% Win (1 Played)
+11.0 / 13.0 / 11.0
+Rank: -
+Gold I 57 LP
+(Soloqueue) S25.S3: 
+S26.S1: 47% Win (211 Played)
+Rank: #4,044,620
+Support (Current game)
+Main Roles: Jungler
+3 Played
+2 Wins
+147 Played
+74 Wins
+AutoFilled?
+Team Stats
+Blue Team
+54.6%
+Average Winrate
+6.2 / 5.7 / 8.2 (2.52:1)
+Average KDA
+405 / min
+Average Gold / min
+716 / min
+Average Damage / min
+0.48 / min
+Average Wards placed / min
+Good frontline Splitpush potential Great dive Great backline access Good siege Good engage Good CC Good Peeling Good waveclear Good depush Good gank setup
+Red Team
+50.3%
+Average Winrate
+6.8 / 6.3 / 7.7 (2.32:1)
+Average KDA
+399 / min
+Average Gold / min
+691 / min
+Average Damage / min
+0.41 / min
+Average Wards placed / min
+Good frontline Splitpush potential Great dive Great backline access Good engage Good CC Good waveclear Good depush Good gank setup

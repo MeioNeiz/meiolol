@@ -70,10 +70,17 @@ Why: League-specific rules for a champ select recommender, and what Riot evaluat
 - [privacy] Checked, not there: no rule against looking up any Riot ID and showing its
   (non-custom) match history; no consent requirement for that; no retention period. ^f17
 
+- [data] Tournament API lobby events list seven event types, from lobby created to game
+  begins; the only champ select event is that it started, so no picks or bans and no
+  order. ^f18
+  > "eventType": "ChampSelectStartedEvent"  //Champ Select Begins
+  > "eventType": "GameAllocatedToLsmEvent"  //Game Begins
+  > Lobby events should only be used to audit Tournament matches as needed.
+
 ## Read
 
 - Developer API Policy, Game Policy, RSO Integration, League Client API sections
 
 ## Not read
 
-- Data Dragon, tournament, Game Client API sections (not relevant)
+- Data Dragon, Game Client API sections (not relevant); tournament section read for lobby events (24 Oct)

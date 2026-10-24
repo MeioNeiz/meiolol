@@ -1,0 +1,769 @@
+Page innerText captured 24 Oct 2026 with headless Chrome (data/team/2026-10-24-ui/refs/shot.mjs). Player names replaced by [player]. Overview tab, then the match modal opened from a row.
+
+Home
+Leaderboards
+Insights
+Premium
+OBS Overlay
+More
+Get the Apps
+ Live Update On
+Claim Profile
+485
+Views
+[player]
+#1111
+Share
+Overview
+Matches
+Champions
+Premium users don't see ads.
+Upgrade for $3.99/mo
+Ranked Solo
+Ranked Flex
+ARAM
+Swiftplay
+Normal Draft
+Arena
+2026 Season 3
+LIVE MATCH
+[player] is in an active match.
+ROLES
+2026 Season 3 Matches
+Top
+WR
+61.1%
+102 W
+65 L
+KDA
+2.39
+6.4
+5.6
+7.1
+Support
+WR
+39.2%
+20 W
+31 L
+KDA
+2.07
+4.8
+7.2
+10.2
+Bottom
+WR
+54.3%
+19 W
+16 L
+KDA
+2.37
+7.7
+6.5
+7.5
+TOP CHAMPIONS
+S26 S3
+View All
+Pantheon
+WR
+55.7%
+162 W
+129 L
+KDA
+2.45
+6.7
+5.9
+7.7
+Draven
+WR
+40.0%
+2 W
+3 L
+KDA
+1.41
+4.0
+8.2
+7.6
+Gnar
+WR
+20.0%
+1 W
+4 L
+KDA
+0.97
+1.8
+6.0
+4.0
+Premium users don't see ads.
+Upgrade for $3.99/mo
+RANKED SOLO OVERVIEW
+315 Matches Played // 141h Playtime
+More Stats
+CHALLENGER
+Challenger
+4257 LP
+—
+Season Best
+Challenger
+4417 LP
+All-Time Best
+Challenger // S26 S3
+4417 LP
+Previous
+S26 S3
+CH
+S26 S2
+CH
+S26 S1
+CH
+S25 S3
+M
+Last 70 Days
++660
+Rating
+Aug 29
+Sep 21
+Oct 14
+Tracker Score
+561
+/1,000
+What’s this?
+B
+Win %
+53.3%
+B
+Top 39.0%
+S
+Kill Participation
+49.3%
+S
+Top 15.0%
+C
+Objective Participation
+40.7%
+C
+Bottom 38.0%
+C
+% XP Diff. vs. Enemy
+-1.2%
+C
+Bottom 42.0%
+LAST 25 MATCHES
+All Matches
+All Roles
+All Champions
+Win Rate
+48.0%
+12 W
+13 L
+Avg DPM
+778
+20,919.2 Damage/Match
+Avg KDA
+1.39
+5.5
+6.5
+7.1
+Avg GPM
+415
+11,036.9 Gold/Match
+Oct 23
+2
+1 W
+1 L
+Avg DPM
+698.5
+Avg KDA
+1.34
+Avg GPM
+390.4
+16h ago
+24m 22s
+Ranked Solo
+-10
+12
+TRS
+100
+KDA
+0.80
+3
+10
+5
+CS/min
+5.5
+17h ago
+30m 12s
+Ranked Solo
+18
+TRS
+679
+KDA
+3.25
+4
+4
+9
+CS/min
+7.2
+Oct 22
+6
+3 W
+3 L
+Avg DPM
+836.9
+Avg KDA
+2.08
+Avg GPM
+407.2
+1d ago
+22m 10s
+Ranked Solo
+14
+TRS
+492
+KDA
+2.75
+5
+4
+6
+CS/min
+7.0
+1d ago
+25m 20s
+Ranked Solo
+17
+TRS
+984
+KDA
+8.50
+9
+2
+8
+CS/min
+8.6
+1d ago
+30m 53s
+Ranked Solo
+16
+TRS
+100
+KDA
+0.50
+1
+10
+4
+CS/min
+7.3
+1d ago
+26m 18s
+Ranked Solo
+13
+TRS
+275
+KDA
+1.73
+3
+11
+16
+CS/min
+1.6
+1d ago
+25m 53s
+Ranked Solo
+14
+TRS
+140
+KDA
+0.90
+6
+10
+3
+CS/min
+6.1
+1d ago
+30m 29s
+Ranked Solo
+17
+TRS
+421
+KDA
+2.60
+12
+10
+14
+CS/min
+5.7
+Oct 18
+2
+1 W
+1 L
+Avg DPM
+771.8
+Avg KDA
+1.33
+Avg GPM
+398.5
+6d ago
+30m 02s
+Ranked Solo
+14
+TRS
+968
+KDA
+2.25
+4
+8
+14
+CS/min
+1.4
+6d ago
+31m 16s
+Ranked Solo
+16
+TRS
+279
+KDA
+1.78
+7
+9
+9
+CS/min
+6.5
+Oct 17
+8
+2 W
+6 L
+Avg DPM
+767.5
+Avg KDA
+2.97
+Avg GPM
+421.2
+6d ago
+23m 27s
+Ranked Solo
+14
+TRS
+654
+KDA
+2.83
+11
+6
+6
+CS/min
+6.0
+6d ago
+26m 05s
+Ranked Solo
+14
+TRS
+199
+KDA
+1.00
+6
+8
+2
+CS/min
+6.1
+6d ago
+23m 11s
+Ranked Solo
+11
+TRS
+536
+KDA
+1.33
+7
+9
+5
+CS/min
+1.6
+6d ago
+26m 29s
+Ranked Solo
+15
+TRS
+979
+KDA
+21.00
+9
+1
+12
+CS/min
+7.4
+6d ago
+25m 29s
+Ranked Solo
+12
+TRS
+283
+KDA
+2.00
+4
+7
+10
+CS/min
+2.4
+6d ago
+33m 08s
+Ranked Solo
+17
+TRS
+222
+KDA
+2.00
+5
+7
+9
+CS/min
+5.9
+6d ago
+27m 35s
+Ranked Solo
+15
+TRS
+100
+KDA
+0.88
+3
+8
+4
+CS/min
+6.9
+6d ago
+28m 15s
+Ranked Solo
+15
+TRS
+526
+KDA
+1.67
+7
+9
+8
+CS/min
+6.6
+Oct 13
+2
+1 W
+1 L
+Avg DPM
+664.2
+Avg KDA
+1.63
+Avg GPM
+420.8
+1w ago
+15m 32s
+Ranked Solo
++15
+13
+TRS
+503
+KDA
+2.00
+1
+0
+1
+CS/min
+10.8
+1w ago
+26m 42s
+Ranked Solo
+14
+TRS
+265
+KDA
+2.00
+6
+4
+2
+CS/min
+7.8
+Oct 11
+5
+4 W
+1 L
+Avg DPM
+805.0
+Avg KDA
+2.42
+Avg GPM
+430.6
+1w ago
+27m 56s
+Ranked Solo
++90
+16
+TRS
+827
+KDA
+1.71
+6
+7
+6
+CS/min
+7.2
+1w ago
+29m 34s
+Ranked Solo
+17
+TRS
+783
+KDA
+2.29
+5
+7
+11
+CS/min
+7.1
+1w ago
+25m 22s
+Ranked Solo
+17
+TRS
+525
+KDA
+10.00
+3
+1
+7
+CS/min
+9.5
+1w ago
+25m 54s
+Ranked Solo
+16
+TRS
+597
+KDA
+2.75
+6
+4
+5
+CS/min
+7.1
+1w ago
+22m 47s
+Ranked Solo
+13
+TRS
+100
+KDA
+0.86
+4
+7
+2
+CS/min
+6.6
+All Matches
+Premium users don't see ads.
+Upgrade for $3.99/mo
+GET THE MOBILE APP
+We've rebuilt our mobile app from the ground up with your favorite features and games.
+Get Info
+2026 © Tracker Network
+Advertise
+Privacy Policy
+Terms of Service
+Support
+Developer API
+Press Kit
+Update consent preferences
+League of Legends Tracker isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.
+c633f2e
+ English
+Deutsch
+English
+Español
+Français
+Italiano
+Nederlands
+Polski
+Português
+Limba română
+You control your privacy
+We and up to 1229 vendors process, store and/or access personal data from you and your device. This data can include your type of browser, settings, cookies, unique identifiers, IP address, and geo location. Your consent can be updated or withdrawn at any time by clicking the link in our privacy policy or footer.
+We're requesting consent to offer: Personalised advertising and content, advertising and content measurement, audience research and services development
+Advertising and content can be personalised based on your profile. Your activity on this service can be used to build or improve a profile about you for personalised advertising and content. Advertising and content performance can be measured. Reports can be generated based on your activity and those of others. Your activity on this service can help develop and improve products and services.
+Advanced Settings
+Accept
+Your consents are specific to this site & device.
+
+--- match modal ---
+c633f2e
+Ranked Solo
+Blue Side Victory
+23/10/20266:00 PM
+30m 12s
+Open in New Tab
+Copy Share Link
+Close
+Scoreboard
+Matchups
+CH
+4257
+LP
+TRS
+679
+4
+4
+9
+26,577
+25,798
+14,237
+1,079
+2.5%
+49
+7.2
+217
+13,219
+M
+1161
+LP
+TRS
+1,000
+14
+2
+7
+27,222
+38,888
+49,514
+-498
+28.7%
+-8
+7.8
+235
+16,025
+M
+1601
+LP
+TRS
+959
+3
+3
+15
+18,133
+31,001
+6,488
+-925
+13.6%
+-30
+6.9
+208
+11,563
+GM
+2168
+LP
+TRS
+950
+3
+8
+20
+14,868
+33,125
+2,138
+1,014
+17.6%
+-9
+0.6
+18
+10,134
+—
+TRS
+995
+11
+4
+8
+39,951
+22,678
+44,301
+2,085
+30.8%
+50
+10.6
+319
+19,843
+CH
+2528
+LP
+TRS
+382
+5
+3
+7
+16,562
+28,677
+5,757
+-1,079
+-2.5%
+-49
+7.2
+218
+11,972
+GM
+2402
+LP
+TRS
+208
+4
+6
+6
+19,702
+31,675
+14,272
+498
+-28.7%
+8
+6.9
+209
+12,203
+CH
+3092
+LP
+TRS
+273
+9
+7
+3
+52,040
+30,189
+10,850
+925
+-13.6%
+30
+8.8
+265
+13,755
+CH
+2409
+LP
+TRS
+147
+0
+11
+9
+6,020
+32,502
+0
+-1,014
+-17.6%
+9
+0.9
+27
+7,522
+CH
+2404
+LP
+TRS
+100
+3
+8
+2
+22,654
+27,548
+3,887
+-2,085
+-30.8%
+-50
+8.6
+261
+13,129

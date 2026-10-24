@@ -43,11 +43,15 @@ Researched 2026-10-11. Production key details: production-key.md.
 - Match data kept 2 years (timelines 1 year); a player's match list holds their last
   ~1000 games, older ones only reachable by match id
 - Metas differ by region (KR especially): matches.platform lets stats pool or split
-- Not available anywhere: pick order (ban `pickTurn` is slot order, not real order),
-  rank at match time (participants.tier is the ladder rank when we stored the match;
-  since 2026-10-12 rank_history has every Platinum+ player's ladder rank per day they
-  changed, refreshed every 12 h, so rank at game time to within a day from then on),
-  mastery at match time
+- Pick order: in no match-v5 record (420, 400, 440, 480 tested: role order, ban
+  `pickTurn` is the slot) nor tournament lobby events; spectator-v5 lists live players in
+  a non-role order, maybe champ select order (untested; test in
+  research/sources/meiolol-pick-order-queues.md f4); pro games' order is in Leaguepedia;
+  LCU has it
+- Not available anywhere: rank at match time (participants.tier is the ladder rank when
+  we stored the match; since 2026-10-12 rank_history has every Platinum+ player's ladder
+  rank per day they changed, refreshed every 12 h, so rank at game time to within a day
+  from then on), mastery at match time
 - Production key: 3-8 month review, needs a live site; default limits may be no higher
   than personal. Only worth it for the public app
 - One developer account per person and no key sharing (API Terms); one product per key

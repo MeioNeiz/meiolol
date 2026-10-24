@@ -45,6 +45,24 @@ Why: how a champion page groups many small numbers into cards.
 - [ux/trust] The tier letter moved from B on patch 26.20 (20 Oct) to S+ on 26.21 while showing 17,070 matches; no note on how young the patch sample is. ^f11
   > Ban Rate 10.9% Matches 17,070
 
+### 24 Oct: element shots (for lol-site-ui)
+
+Screenshots in data/team/2026-10-24-ui/refs/champion/ (gitignored): ugg-darius-fold.png,
+-skills-items.png, ugg-phone-fold.png, ugg-phone-skills-items.png. Raw
+ugg-darius-build.2026-10-24.md.
+
+- [ux/controls] Role picker is five bare role icons in the filter bar, no share under them,
+  the current one boxed; the region chip in the search bar read NA for a British browser.
+  (seen in screenshot ugg-darius-fold.png) ^f12
+- [ux/layout] Item 4, 5 and 6 are three equal cards of two or three rows (icon, win rate,
+  matches), each card ending in a grey hint; 95 matches at 62.11% sits beside 1,899 at 59.14%
+  in the same weight. (seen in screenshot ugg-darius-skills-items.png) ^f13
+  > Fourth Item Options
+  > Options after core build
+- [ux/layout] Phone (390x844): the skill path keeps ability names, truncated ("Decim..."),
+  so only about eight of 18 levels fit and the rest scrolls sideways; item cards stack one per
+  row, about 140 px each. (seen in screenshot ugg-phone-skills-items.png) ^f14
+
 ## Read
 
 - Whole page text; screenshots

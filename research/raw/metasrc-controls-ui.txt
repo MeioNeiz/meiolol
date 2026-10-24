@@ -1,0 +1,484 @@
+METAsrc
+Legacy Theme
+Report a Bug
+Ranked
+26.21
+Home
+Champions
+Tier Lists
+Comps
+Databases
+Counter Picker
+Ahri Build
+ 
+LoL Runes, Items, Counters
+ 
+Patch 26.21
+ 
+Mid
+P
+Q
+W
+E
+R
+
+Ahri is ranked S+ Tier and has a 50.22% win rate in LoL Patch 26.21. We've analyzed 215,781 Ahri games to compile the highest win rate League of Legends Ahri build & runes guide with the best items, runes, summoner spells, skill order, counters, and synergies.
+
+Ranked
+ARAM: Mayhem
+Arena
+ARAM
+League Classic
+More
+Patch 26.21
+All Regions
+All Ranks
+Summary Text
+Build Style:
+Recommended
+Select a counter build
+Select a duo build
+Tier:
+S+
+Win %:
+50.22%
+Pick %:
+10.38%
+Role %:
+92.26%
+Ban %:
+3.70%
+KDA:
+2.30
+Games:
+215,781
+Score:
+66.59
+Advertisement
+Build
+Runes
+Info
+Counters
+Synergies
+Stats
+Ahri Runes
+Ahri Runes
+
+Best runes for Ahri: Domination primary and Sorcery secondary.
+
+Win %
+Pick %
+50%
+71%
+50%
+15%
+48%
+8%
+52%
+2%
+Summoner Spells
+Summoner Spells
+
+The best summoner spells for Ahri are Flash and Ignite.
+
+Win %
+Pick %
+51%
+73%
+50%
+23%
+49%
+1%
+50%
+1%
+41%
+1%
+Starting Items
+Starting Items
+
+The best starting items for Ahri include Doran's Ring and Health Potion.
+
+Win %
+Buy %
+2
+51%
+88%
+2
+49%
+0%
+51%
+42%
+Ahri Skill Order
+Ahri Skill Order
+
+When playing Ahri, prioritize Q, followed by W, and finally E.
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+Q
+Q
+Q
+Q
+Q
+W
+W
+W
+W
+W
+E
+E
+E
+E
+E
+R
+R
+R
+Priority
+Q > W > E
+Win %
+51%
+Pick %
+85%
+Ahri Items
+Ahri Items
+
+Best items for Ahri, featuring Malignance, Sorcerer's Shoes, and Shadowflame.
+
+Win %
+Buy %
+Core
+51%
+60%
+ 
+56%
+38%
+ 
+55%
+29%
+ 
+50%
+27%
+ 
+50%
+68%
+ 
+53%
+97%
+Item Build Order
+Item Build Order
+
+Best Ahri item build path for efficient power spikes.
+
+2700
+1100
+3200
+3000
+3250
+3500
+0
+Slot 4 Item Options
+Slot 4 Item Options
+
+Popular item choices for slot 4 on Ahri.
+
+Win %
+Buy %
+56%
+38%
+55%
+29%
+74%
+6%
+53%
+8%
+Slot 5 Item Options
+Slot 5 Item Options
+
+Popular item choices for slot 5 on Ahri.
+
+Win %
+Buy %
+55%
+29%
+53%
+23%
+69%
+8%
+57%
+7%
+Slot 6 Item Options
+Slot 6 Item Options
+
+Popular item choices for slot 6 on Ahri.
+
+Win %
+Buy %
+50%
+27%
+52%
+17%
+53%
+10%
+68%
+7%
+Elixirs
+Elixirs
+
+Preferred elixirs for Ahri in the late game.
+
+Win %
+Buy %
+53%
+97%
+44%
+2%
+48%
+1%
+Ahri Boots
+Ahri Boots
+
+Best boots for Ahri are Spellslinger's Shoes.
+
+Win %
+Buy %
+51%
+100%
+52%
+37%
+49%
+15%
+53%
+2%
+52%
+1%
+Trinkets
+Trinkets
+
+Most effective trinkets to use on Ahri.
+
+Win %
+Buy %
+50%
+68%
+54%
+16%
+52%
+16%
+Recommended Bans
+Recommended Bans
+
+Ban champions like Milio, Evelynn, Qiyana, and Swain to increase the win rate of Ahri.
+
+Win %
+Diff
+Games
+53%
++2.3%
+5.6K
+52%
++1.5%
+3.6K
+52%
++1.5%
+9.9K
+52%
++1.5%
+9.5K
+52%
++1.5%
+9.8K
+52%
++1.4%
+7.5K
+52%
++1.3%
+7.6K
+51%
++1.0%
+2.6K
+51%
++1.0%
+9.6K
+51%
++1.0%
+5.9K
+51%
++1.0%
+12.5K
+51%
++1.0%
+5.6K
+Ahri Team Synergies
+Ahri Team Synergies
+
+Top synergy picks to play alongside Ahri Mid include Garen, Wukong, Jinx, and Leona.
+
+Top
+Win %
+ 
+Games
+53%
++2.8%
+8.4K
+53%
++2.5%
+5.2K
+52%
++1.9%
+4.2K
+Win %
+ 
+Games
+52%
++1.4%
+5.2K
+52%
++1.4%
+10.6K
+51%
++1.1%
+8.6K
+Jungle
+Win %
+ 
+Games
+54%
++4.1%
+6.1K
+54%
++3.5%
+5.3K
+52%
++2.1%
+6.6K
+Win %
+ 
+Games
+52%
++2.0%
+4.6K
+52%
++1.3%
+4K
+51%
++1.0%
+10.9K
+ADC
+Win %
+ 
+Games
+52%
++1.5%
+15.5K
+52%
++1.4%
+5.8K
+52%
++1.3%
+5.1K
+Win %
+ 
+Games
+51%
++1.2%
+6.3K
+51%
++1.2%
+18.5K
+51%
++1.1%
+6.6K
+Support
+Win %
+ 
+Games
+53%
++2.5%
+9.3K
+52%
++2.3%
+4.1K
+52%
++2.1%
+5K
+Win %
+ 
+Games
+52%
++1.6%
+3.6K
+51%
++1.1%
+6.6K
+51%
++1.0%
+3.9K
+Latest News
+League of Legends Patch 26.21 Preview
+Meta Impact
+OCT 21, 2026
+·
+METAsrc Maxwell
+PATCH 26.21
+META ANALYSIS
+Patch 26.21 brings a massive balance pass for Summoner's Rift outliers, Mayhem headliners, and returning Classic champions.
+AP Sion Mid Guide
+League Classic Build, Runes and Masteries
+JUL 22, 2026
+·
+METAsrc Hamilton
+LEAGUE CLASSIC
+MID
+A data-backed League Classic Sion mid guide, from prepared AP picks and roaming to the separate off-role Cannibalism path.
+League of Legends Patch 26.14 Preview
+Meta Impact
+JUL 14, 2026
+·
+METAsrc Maxwell
+PATCH 26.14
+META PREVIEW
+SUMMONER'S RIFT
+A Patch 26.14 meta preview for League of Legends, focused on the champion, item, ARAM: Mayhem, and Arena changes most likely to move the meta.
+VIEW ALL
+METAsrc Network
+League of Legends
+Teamfight Tactics
+METAsrc News
+LoL Modes
+Ranked
+ARAM: Mayhem
+Arena
+ARAM
+League Classic
+LoL Ranked Content
+Home
+Champions
+Tier Lists
+Comps
+Counter Picker
+
+Copyright 2026 METASRC LLC
+
+www.metasrc.com isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.
+
+Made with ♥ in Boulder, CO
+
+Terms and Conditions
+Privacy Policy
+ 
