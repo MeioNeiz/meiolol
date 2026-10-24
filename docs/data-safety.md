@@ -93,6 +93,13 @@ under the write lock they starve the crawler on a slow host.
   except its newest state snapshot, segment and mastery file (the next ones start where
   they end); mastery files only once both mirrors acked them. So the box holds ~3 files
   plus whatever the mirrors have not fetched yet
+- 11-24 Oct the box pruned nothing: meiolol-backup's bash loop ran from 11 Oct, bash
+  keeps the loop it parsed, so the 17 Oct prune never ran (deploys don't restart the
+  loop) and backups/ grew to 18 GB. Now backup-loop.sh re-execs the deployed script
+  after each day's sleep. 24 Oct 04:04 UTC, after checking every file on the Mac mirror
+  (size and SHA-256) and the gpu-box's sizes plus three hashes: one restart, `backup
+  prune: 20 files mirrored, 15954 MB freed`, backups/ 1.9 GB, disk 46% to 35%. Each
+  day's backup.log has a `backup prune:` line from then on (the old loop printed none)
 - Mirrors keep every segment (the box may hold only the newest) and rotate state (7
   daily + 4 weekly) and mastery files themselves (`meiolol backup --mirror DIR
   --forgotten FILE`). A `--full` segment on the box leaves older ones on the mirrors:

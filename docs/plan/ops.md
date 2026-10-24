@@ -84,9 +84,9 @@ people, unconfirmed and bots. Next, only if needed:
   match in each of the first two), the rest box backups. Those were never pruned:
   meiolol-backup's bash loop ran from 11 Oct and bash keeps the loop it parsed, so the
   17 Oct prune (files both mirrors hold) never ran; backups/ 16 GB, all acked. Now
-  backup-loop.sh re-execs the deployed script each day; the running loop needs one
-  restart after a 04:00 backup (frees ~14 GB). The admin's "full in ~N days" counts
-  only the databases (~3.6 GB a day: ~22 days)
+  backup-loop.sh re-execs the deployed script each day; restarted once 24 Oct 04:04
+  UTC, its prune freed 15.95 GB (disk 46% to 35%, 95 GB free; docs/data-safety.md).
+  The admin's "full in ~N days" counts only the databases (~3.6 GB a day: ~26 days)
 - Off-site and rolling window: Hetzner BX11 plus ~30-day window on the box
   (decisions.md "Storage and hosting", data-and-model.md step 7). Jacob orders; needed
   within ~a week of 18 Oct (admin's "full in ~N days": ~26 days on 18 Oct)
