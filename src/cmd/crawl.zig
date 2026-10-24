@@ -165,20 +165,21 @@ pub const usage_stats =
     \\              --platform P     Riot platform id, repeatable or comma separated
     \\                               (default EUW1; "all" for every platform in
     \\                               riot/endpoints.zig)
-    \\              --pair-prior     pair cells borrow strength (A4, lab; not shipped)
+    \\              --no-pair-prior  additive v2 without pair parents (the model before
+    \\                               24 Oct's DM1)
     \\
 ;
 
 pub fn cmdStats(c: *Cmd) !u8 {
     var g: Games = .{};
     var out: ?[]const u8 = null;
-    var fit: stats.Fit = .v2;
+    var fit: stats.Fit = .pair_prior;
     while (c.next()) |_| {
         if (try g.parse(c)) continue;
         if (c.is("--out")) {
             out = try c.value();
-        } else if (c.is("--pair-prior")) {
-            fit = .pair_prior;
+        } else if (c.is("--no-pair-prior")) {
+            fit = .v2;
         } else return error.Usage;
     }
     const io = c.init.io;

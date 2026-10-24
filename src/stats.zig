@@ -53,8 +53,9 @@ pub const Built = struct {
     summary: Summary,
 };
 
-/// The draft model a stats file carries (fitted.zig): none (version 1), additive v2 (what
-/// the site and app score with), or v2 with pair cells that borrow strength (A4, lab)
+/// The draft model a stats file carries (fitted.zig): none (version 1), additive v2, or
+/// v2 with pair cells that borrow strength (A4; what the site and app score with since
+/// 24 Oct, data-and-model.md DM1)
 pub const Fit = enum { none, v2, pair_prior };
 
 /// As build, games started from `since_ms` (Unix ms) only, from the views partials when

@@ -67,9 +67,6 @@ pub const usage_eval =
     \\                               seen no game of the scored window. On test (no
     \\                               --dev) only with --test-look, which counts a look
     \\                               in DATA/test-looks.tsv (docs/plan/lab-frontier.md P3)
-    \\              --pair-prior     one more row: the current model with pair cells
-    \\                               that borrow strength (A4, lab); --test-look as
-    \\                               --setnet
     \\              --replay         only the pool and expertise replay, on a snapshot
     \\                               with mastery_pre.tsv and mastery_pre_pool.tsv
     \\                               (meiolol-lab mastery-pre); fits lanecard.Expertise
@@ -96,8 +93,6 @@ pub fn cmdEval(c: *Cmd) !u8 {
             o.dev = true;
         } else if (c.is("--test-look")) {
             test_look = true;
-        } else if (c.is("--pair-prior")) {
-            o.pair_prior = true;
         } else if (c.is("--setnet")) {
             const bytes = try std.Io.Dir.cwd().readFileAlloc(c.init.io, try c.value(), c.arena, .limited(64 << 20));
             try setnets.append(c.arena, try .parse(c.arena, bytes));
@@ -106,7 +101,7 @@ pub fn cmdEval(c: *Cmd) !u8 {
     o.setnets = setnets.items;
     // The history is the daily's test-window line of the shipped models
     if (replay_only and history != null) return error.Usage;
-    const lab = o.setnets.len > 0 or o.pair_prior;
+    const lab = o.setnets.len > 0;
     if (history != null and (o.dev or lab)) return error.Usage;
     // A lab model on the test window is a test look: declared, then counted
     if (test_look != (lab and !o.dev)) return error.Usage;

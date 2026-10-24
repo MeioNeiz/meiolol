@@ -46,9 +46,6 @@ pub const Options = struct {
     /// Lab set nets (seeds of one export, draftfile.SetNet) scored as a correction on the
     /// shipped model, one more row; each must have seen no game from the scored window on
     setnets: []const draftfile.SetNet = &.{},
-    /// One more row: the current model with pair cells that borrow strength (fitted.zig's
-    /// kit classes, A4), a lab model until shipped
-    pair_prior: bool = false,
 };
 
 const Game = stats.Row;
@@ -109,13 +106,16 @@ pub fn run(
     for (train) |g| blue_wins += @floatFromInt(1 - @as(u2, g.winner));
     const blue_rate = blue_wins / @as(f64, @floatFromInt(train.len));
 
-    // The site's and app's: additive v2 in the stats file (fitted.zig), from 23 Oct
-    var shipped: Model = try .buildShipped(gpa, champs, train);
+    // The site's and app's: additive v2 in the stats file (fitted.zig), from 23 Oct, with
+    // pair parents from 24 Oct
+    const classes = try stats.kitClasses(gpa, db);
+    defer gpa.free(classes);
+    var shipped: Model = try .buildShipped(gpa, champs, train, classes);
     defer shipped.deinit(gpa);
     const counts_opts: score.Options = .{ .fitted = false };
     const previous: score.Options = .{ .base_prior_games = 1000, .prior_games = 1000, .weights = .{}, .fitted = false };
     const base_only: Predictor = .{ .label = "champion base only", .kind = .{ .base = previous } };
-    const model: Predictor = .{ .label = "current model (additive v2)", .kind = .{ .shipped = &shipped.stats } };
+    const model: Predictor = .{ .label = "current model (additive v2, pair parents)", .kind = .{ .shipped = &shipped.stats } };
     const counts: Predictor = .{ .label = "counts model (17 Oct)", .kind = .{ .model = counts_opts } };
     const before: Predictor = .{ .label = "previous model (1000/1000)", .kind = .{ .model = previous } };
     const tuned_priors: Predictor = .{ .label = "tuned priors", .kind = .{ .model = tuned.opts } };
@@ -144,14 +144,6 @@ pub fn run(
     var nets: ?SetNets = if (opts.setnets.len > 0) try .init(gpa, opts.setnets, platforms, &shipped.stats, if (opts.dev) parts.cuts.dev else parts.cuts.test_) else null;
     defer if (nets) |*x| x.deinit(gpa);
     if (nets) |*x| try predictors.append(gpa, .{ .label = "current model + set net (lab)", .kind = .{ .setnet = x } });
-    var pair_prior: ?Model = null;
-    defer if (pair_prior) |*m| m.deinit(gpa);
-    if (opts.pair_prior) {
-        const classes = try stats.kitClasses(gpa, db);
-        defer gpa.free(classes);
-        pair_prior = try .buildWith(gpa, champs, train, null, classes);
-        try predictors.append(gpa, .{ .label = "current model, pair cells borrow strength (lab)", .kind = .{ .shipped = &pair_prior.?.stats } });
-    }
     const eb = score.empiricalPriors(&full.stats, eb_min_games);
     try w.print("## Full draft, held-out games\n\nEmpirical-Bayes priors from train (cells " ++
         "with {d}+ games): base {f}, duo {f}, lane {f}, other matchups {f}.\n\n", .{
@@ -769,8 +761,14 @@ pub const Model = struct {
     }
 
     /// As the site and app get it: with the draft model fitted on `games` (fitted.zig)
-    pub fn buildShipped(gpa: std.mem.Allocator, champs: []const core.statsfile.Champion, games: []const Game) !Model {
-        return buildWith(gpa, champs, games, null, &.{});
+    /// classes: stats.kitClasses for pair parents, empty for none
+    pub fn buildShipped(
+        gpa: std.mem.Allocator,
+        champs: []const core.statsfile.Champion,
+        games: []const Game,
+        classes: []const additive.KitClass,
+    ) !Model {
+        return buildWith(gpa, champs, games, null, classes);
     }
 
     /// classes: null, no fitted model; else fitted, with pair parents if not empty

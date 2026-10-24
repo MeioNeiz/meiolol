@@ -225,7 +225,7 @@ fn loadBase(site: *Site, db: store.Db, all_opts: Options, phases: *Phases, games
         try g.patches(arena, site.opts.platforms)
     else
         try stats.patches(arena, db, site.opts.platforms);
-    var built = try stats.buildSince(site.gpa, db, games, site.opts.patches, site.opts.platforms, site.since_ms, .v2);
+    var built = try stats.buildSince(site.gpa, db, games, site.opts.patches, site.opts.platforms, site.since_ms, .pair_prior);
     phases.mark("stats");
     defer built.builder.deinit();
     if (built.summary.games == 0) return error.NoMatches;

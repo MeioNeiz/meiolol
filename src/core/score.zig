@@ -61,6 +61,9 @@ pub const Options = struct {
     weights: TermWeights = .{ .base = 0.943, .duo = 0.765, .lane = 2.025, .matchup = 1.009 },
     /// Reasons worth less than this many percentage points are left out
     min_reason_pp: f64 = 0.1,
+    /// With a fitted model, ally and enemy reasons on fewer pair games are left out: pair
+    /// parents give a cell a value with no games of its own (fitted.pair_floor)
+    min_reason_games: u32 = 20,
     /// Drafts score with the stats file's fitted model when it has one (statsfile version
     /// 2): its terms replace the smoothed counts, priors and weights. min_games, role
     /// inference and reasons' games still read the counts; page rates (roleWin, duoPp,
@@ -687,6 +690,7 @@ const Context = struct {
         for (terms[0..n]) |t| {
             if (s.n_reasons == max_reasons) break;
             if (@abs(t.reason.pp) < ctx.opts.min_reason_pp) break;
+            if (ctx.fitted() and t.reason.kind != .base and t.reason.games < ctx.opts.min_reason_games) continue;
             s.reasons_buf[s.n_reasons] = t.reason;
             s.n_reasons += 1;
         }

@@ -11,6 +11,7 @@ const store = @import("store");
 const core = @import("core");
 const stats = @import("stats.zig");
 const eval = @import("eval.zig");
+const additive = @import("additive.zig");
 const analysis = @import("analysis.zig");
 const riot = @import("riot/root.zig");
 const df = @import("draftfile.zig");
@@ -51,7 +52,9 @@ pub fn run(gpa: std.mem.Allocator, io: std.Io, db: store.Db, dir: []const u8, w:
 
     const champs = try stats.champions(gpa, db);
     defer stats.freeChampions(gpa, champs);
-    var full = try eval.Model.buildShipped(gpa, champs, games);
+    const classes = try stats.kitClasses(gpa, db);
+    defer gpa.free(classes);
+    var full = try eval.Model.buildShipped(gpa, champs, games, classes);
     defer full.deinit(gpa);
     const st = &full.stats;
     const info = try champions(arena, st, games);
@@ -69,7 +72,7 @@ pub fn run(gpa: std.mem.Allocator, io: std.Io, db: store.Db, dir: []const u8, w:
     try w.print("file scorer vs core.score on {d} test games: max |diff| {e}\n", .{ tests.items.len, worst });
     if (worst > 1e-4) return error.ScorerDisagrees;
 
-    const dev = try devScore(gpa, arena, champs, games, cuts);
+    const dev = try devScore(gpa, arena, champs, classes, games, cuts);
     try w.print("dev: log loss {d:.5} (baseline {d:.5}), accuracy {d:.4}, AUC {d:.4} on {d} games\n", .{ dev.log_loss, dev.baseline_log_loss, dev.accuracy, dev.auc, dev.games });
     try df.exportFiles(arena, io, &sc, &info, .{
         .name = "shipped model (site and app)",
@@ -165,12 +168,13 @@ fn devScore(
     gpa: std.mem.Allocator,
     arena: std.mem.Allocator,
     champs: []const core.statsfile.Champion,
+    classes: []const additive.KitClass,
     games: []const Game,
     cuts: eval.Cuts,
 ) !df.Dev {
     var older: usize = 0;
     while (games[older].start < cuts.dev) older += 1;
-    var m = try eval.Model.buildShipped(gpa, champs, games[0..older]);
+    var m = try eval.Model.buildShipped(gpa, champs, games[0..older], classes);
     defer m.deinit(gpa);
     var points: std.ArrayList(df.Point) = .empty;
     var la: f64 = 0;
@@ -214,7 +218,7 @@ test "the file scores fixture drafts as core.score" {
             g.teams[s][r] = champs[rnd.uintLessThan(usize, champs.len)].id;
         };
     }
-    var m = try eval.Model.buildShipped(gpa, &champs, games);
+    var m = try eval.Model.buildShipped(gpa, &champs, games, &.{});
     defer m.deinit(gpa);
     const info = try champions(arena, &m.stats, games);
     const sc = try df.Scorer.init(arena, try params(arena, &m.stats), 0, &info);
