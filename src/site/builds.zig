@@ -779,7 +779,7 @@ fn table(w: *Writer, f: *const File, b: File.Build, kind: Kind, comptime title: 
         \\<thead><tr><th>{title}</th>{minute}<th class="num">Games</th><th class="num">Share</th><th class="num">Win rate</th></tr></thead>
         \\<tbody>
         \\
-    , .{ .title = title, .minute = tpl.when(timed, "<th class=\"num\" title=\"Median minute bought, as this item of the build\">Minute</th>") });
+    , .{ .title = title, .minute = tpl.when(timed, tpl.t("<th class=\"num\" title=\"Median minute bought, as this item of the build\">Minute</th>", .{})) });
     const rows = b.get(kind) orelse File.Rows{ .kind = kind, .games = 0, .wins = 0, .options = &.{} };
     if (rows.options.len == 0) {
         try tpl.render(w, "<tr class=\"thin\"><td colspan=\"{n}\">More data needed</td></tr>\n", .{ .n = @as(u8, if (timed) 5 else 4) });
