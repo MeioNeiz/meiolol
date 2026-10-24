@@ -91,12 +91,14 @@ shipped model's edge over a coin, shrinking as the patch fills (frontier-dynamic
   Data Dragon changes vs 0.5 pp for the rest (docs/model.md "Patch 16.21's first day")
 - Every net result so far (to 1320Z) was scored on 16.20 games only: valid within a
   patch, silent on what happens at one
-- 16.21: 252k games by 23 Oct (EUW1 53k, KR 67k, VN2 46k, NA1 20k), ~100k a day
+- 16.21: 405k games by 24 Oct 09:00 UTC (drafts table), ~120-135k played a day
 - PT2-PT3 tool done 23 Oct (`meiolol-lab patchdays`, eceb666), dry run with 16.20 as
   latest (docs/model.md "The latest patch day by day"): control gains 0, pooled wins,
-  no jump detectable as 16.19 has only 51k games. For 16.21: one command after PT1, but
-  the pin's test window (newest ~15%) covers nearly all of 16.21: move its cut or run
-  --final (Jacob)
+  no jump detectable as 16.19 has only 51k games
+- PT1 cut (Jacob, 24 Oct): tune on 16.21 days 0-3 day by day, days 4+ stay test. No
+  protocol change: the daily snapshot of ~28 Oct has its newest 15% (~340k of ~2.26M
+  played) from about 25 Oct 00:00 UTC, EUW1's day 4. Pin that one (check split.tsv's
+  test_cut_ms first; 27 Oct's would cut near day 3), then patchdays A1, A2, A3, C
 
 ## Step 0 SQL
 
