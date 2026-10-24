@@ -4956,7 +4956,7 @@ Reading:
 - Shipped: one beta 0.1022 for every role (lanecard.Expertise.fitted), from the row
   beside total points: within one player's pool total points are fixed, so that
   coefficient is the one that ranks. Per role adds nothing; log points match the
-  bands' shape. A toggle in the window ("Rank by your mastery points") turns it off
+  bands' shape. A toggle in the window ("Count your mastery points") turns it off
 - Players with more points overall win slightly less once their points on the champion
   are known: the gain is the share of a player's play on this champion, not experience
   in general

@@ -333,6 +333,20 @@ fn options(arena: std.mem.Allocator, in: Input, opp: ?Opponent, bracket: Bracket
         }
         list = buf[0..len];
     }
+    // My hover always gets a row, in last place when it ranks below the rest
+    const shown = for (list) |s| {
+        if (s.champion == in.me) break true;
+    } else false;
+    if (in.me != 0 and !shown) {
+        var solo = draft;
+        solo.pool = &.{in.me};
+        var one: [1]core.Suggestion = undefined;
+        if (core.recommend(stats, solo, in.opts, &one).len == 1) {
+            const n = @min(list.len, max_options - 1);
+            buf[n] = one[0];
+            list = buf[0 .. n + 1];
+        }
+    }
 
     // Strong in the role only says something when it sets an option apart
     var strong: usize = 0;
@@ -634,6 +648,27 @@ test "expertise ranks the pool by points too" {
     try testing.expectEqual(garen, card.options[2].champion);
     try testing.expectEqual(0, Expertise.feature(0));
     try testing.expectApproxEqAbs(1, Expertise.feature(9000), 1e-12);
+}
+
+test "my hover from outside the pool still gets a row" {
+    var f = try fixture();
+    defer f.deinit();
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const card = try build(arena.allocator(), .{
+        .stats = &f.stats,
+        .curves = null,
+        .role = .top,
+        .me = lux,
+        .mastery = &.{
+            .{ .champion = sett, .points = 400_000 },
+            .{ .champion = darius, .points = 20_000 },
+            .{ .champion = garen, .points = 1000 },
+        },
+        .opts = test_opts,
+    });
+    try testing.expectEqual(4, card.options.len);
+    try testing.expectEqual(lux, card.options[3].champion);
 }
 
 test compact {

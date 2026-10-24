@@ -100,7 +100,7 @@ pub fn build(arena: std.mem.Allocator, stats: *const Stats, opts: core.Options, 
         .turn = cs.my_turn,
         .stage = stage(cs.phase),
         .mode = if (card) |c| if (c.locked) .locked else if (c.opponent) |o| .{ .counter = o } else .blind else .blind,
-        .ban_options = try banOptions(arena, stats, cs, enemies, if (card) |c| c.role else cs.my_role),
+        .ban_options = if (cs.bans_open) try banOptions(arena, stats, cs, enemies, card) else &.{},
         .draft = draft(stats, opts, allies, enemies),
     };
 }
@@ -161,9 +161,12 @@ fn stage(phase: []const u8) []const u8 {
 }
 
 /// Champions the enemy may still pick, by ban impact in a role they have not filled;
-/// my lane opponent's role first among equals. The desktop stats file has no ban counts,
-/// so impact is per 10,000 games of all, not of games where it was available
-fn banOptions(arena: std.mem.Allocator, stats: *const Stats, cs: session.ChampSelect, enemies: []const Seat, my_role: ?Role) ![]const BanOption {
+/// my lane opponent's role first among equals; never one of the lane card's options. The
+/// desktop stats file has no ban counts, so impact is per 10,000 games of all, not of
+/// games where it was available
+fn banOptions(arena: std.mem.Allocator, stats: *const Stats, cs: session.ChampSelect, enemies: []const Seat, card: ?*const lanecard.Card) ![]const BanOption {
+    const my_role = if (card) |c| c.role else cs.my_role;
+    const mine: []const lanecard.Option = if (card) |c| c.options else &.{};
     var open: [Role.count]bool = @splat(true);
     for (enemies) |e| if (e.slot.state == .locked) if (e.role) |r| {
         open[@backingInt(r)] = false;
@@ -183,6 +186,7 @@ fn banOptions(arena: std.mem.Allocator, stats: *const Stats, cs: session.ChampSe
             if (std.mem.indexOfScalar(u32, cs.bans, id) != null) continue;
             // My team's hovers and intents too: never ban what an ally wants to play
             for (cs.my_team) |sl| if (sl.champion == id) continue :candidates;
+            for (mine) |o| if (o.champion == id) continue :candidates;
             for (cs.their_team) |sl| if (sl.champion == id and sl.state == .locked) continue :candidates;
             const impact = prior.score(cr.wins, cr.games, 0, role_games);
             if (impact <= 0) continue;
@@ -290,6 +294,22 @@ test "board: seats, guessed enemy roles, ideas, bans, draft" {
     // Bans only in roles the enemy has not filled
     try testing.expect(b.ban_options.len > 0);
     for (b.ban_options) |o| try testing.expect(o.role != .top and o.role != .middle);
+    // Never one of my own options; none once the bans are in
+    const card: lanecard.Card = .{
+        .role = .middle,
+        .me = 0,
+        .locked = false,
+        .opponent = null,
+        .matchup = null,
+        .sentence = "",
+        .options = &.{.{ .champion = b.ban_options[0].champion, .mastery = 0, .lane = null, .reasons = &.{} }},
+        .period = "",
+    };
+    const with_card = try build(arena, st, cardscenes.test_opts, cs, &card);
+    for (with_card.ban_options) |o| try testing.expect(o.champion != b.ban_options[0].champion);
+    var done = cs;
+    done.bans_open = false;
+    try testing.expectEqual(0, (try build(arena, st, cardscenes.test_opts, done, null)).ban_options.len);
     // Darius into Garen and Ahri into Syndra: the planted matchups cancel roughly
     const d = b.draft.?;
     try testing.expectEqual(.{ 2, 2 }, d.picks);

@@ -62,7 +62,7 @@ fn seat(ctx: Ctx, i: usize, s: board.Seat, side: Side) void {
             .padding = .{},
         });
         if (sl.me) w.chip(@src(), "you", team.opacity(0.75), 0);
-        if (sl.picking) w.chip(@src(), "picking", palette.turn.opacity(0.85), 1);
+        if (sl.picking and sl.champion != 0) w.chip(@src(), "picking", palette.turn.opacity(0.85), 1);
     }
     {
         var buf: [64]u8 = undefined;
@@ -152,14 +152,9 @@ pub fn draft(ctx: Ctx, b: *const board.Board) void {
             .color_text = .{ .color = w.rateColour(d.win) },
             .padding = .{},
         });
-        dvui.label(@src(), "{d} v {d} champions{s}", .{ d.picks[0], d.picks[1], if (d.hovers > 0) ", hovers count" else "" }, .{
-            .font = w.small(),
-            .color_text = .{ .color = w.text().opacity(0.55) },
-            .gravity_x = 1,
-            .gravity_y = 0.5,
-            .padding = .{},
-        });
+        if (ctx.wide) count(d, .{ .gravity_x = 1, .gravity_y = 0.5 });
     }
+    if (!ctx.wide) count(d, .{});
     var bar = dvui.box(@src(), .{}, .{ .expand = .horizontal, .min_size_content = .{ .h = 8 }, .margin = .{ .y = 4 } });
     const r = bar.data().contentRectScale().r;
     bar.deinit();
@@ -170,6 +165,14 @@ pub fn draft(ctx: Ctx, b: *const board.Board) void {
     right.w -= left.w;
     left.fill(.{}, .{ .color = .{ .color = palette.ally } });
     right.fill(.{}, .{ .color = .{ .color = palette.enemy } });
+}
+
+fn count(d: board.Draft, o: dvui.Options) void {
+    dvui.label(@src(), "{d} v {d} champions{s}", .{ d.picks[0], d.picks[1], if (d.hovers > 0) ", hovers count" else "" }, o.override(.{
+        .font = w.small(),
+        .color_text = .{ .color = w.text().opacity(0.55) },
+        .padding = .{},
+    }));
 }
 
 /// Who to ban: champions the enemy can still pick, in roles they have not filled, by
@@ -189,7 +192,7 @@ pub fn banOptions(ctx: Ctx, b: *const board.Board) void {
             defer row.deinit();
             dvui.label(@src(), "{s}", .{ctx.stats.nameOf(o.champion)}, .{ .font = dvui.themeGet().font_heading, .padding = .{} });
             if (o.my_lane) w.chip(@src(), "your lane", palette.ally.opacity(0.7), 0);
-            if (ctx.private()) dvui.label(@src(), "impact {d:.1}", .{o.impact}, .{ .gravity_x = 1, .font = w.small(), .padding = .{} });
+            if (ctx.private()) dvui.label(@src(), "+{d:.0} wins per 10k games", .{o.impact}, .{ .gravity_x = 1, .font = w.small(), .padding = .{} });
         }
         if (ctx.private()) {
             w.para(@src(), "{s}: {d:.1}% won, {d:.1}% of games", .{ o.role.label(), 100 * o.win, 100 * o.pick_rate }, .{ .muted = true, .small = true, .id_extra = i });

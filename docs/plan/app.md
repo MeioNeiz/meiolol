@@ -117,9 +117,18 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
   filled, never an ally's hover; the desktop stats file has no ban counts, so impact is
   per all games). Left: ban counts in the desktop stats file, my lane first while my
   opponent is unknown; private adds pools where names are visible
-- APP6 After picks: comp view (notes, early/late, carry, matchups); public in words,
-  private with numbers. Damage split bar needs damage type per champion in the stats
-  file
+- APP6 After picks: comp view, first pass done (24 Oct, both editions; comp.zig,
+  desktop/comp.zig): once all ten are locked, above the lane panel, each team's damage
+  split bar and mix (and "teams this one-sided win less often" when Learn's tally is 2 SE
+  under even), its champions with a clear early or late lean (`meiolol lean`), and five
+  mirrored lane rows (ahead, even or behind at 14 min, 2 SE; level 6 sooner or later);
+  testers see the magic share, the mix's win rate, lean numbers and lane gold. Data:
+  champ-facts.tsv (core/champfacts.zig), written by the site's shared view, listed in
+  the desktop manifest, fetched by update.zig (older exes skip it), not a stats file
+  bump. Left: comp leans (Malphite into AP teams) after their held-out look
+  (data-and-model.md step 1); "who carries" (no shipped carry measure: gold or damage
+  share per champion would need a new tally); the loading screen's team pills from the
+  same comp; a release so testers get it
 - APP7 Private: scouting where names are visible (needs APP1's queue facts and AC6 for
   "me"), percentages, experimental models
 - APP8 Icons done: champion icons from the client (desktop/icons.zig; Data Dragon art
@@ -227,7 +236,7 @@ games.
 
 - Champ select board around the lane card (Window layout); lane card for your role,
   ranked by draft plus your mastery points
-  (lanecard.Expertise.fitted; "Rank by your mastery points" box, not kept across
+  (lanecard.Expertise.fitted; "Count your mastery points" box, not kept across
   restarts). Card rules tested over 400 random drafts and ten scenes
   (testdata/cards/scenes.json, `meiolol-app cards [FILE] [--expertise off]`, fixture
   testdata/cards/fixture.txt): run cards before and after a recommender change and diff

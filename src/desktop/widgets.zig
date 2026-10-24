@@ -224,7 +224,7 @@ pub fn pill(src: std.builtin.SourceLocation, str: []const u8, tone: Tone, id_ext
         .corners = .all(8),
         .padding = .{ .x = 7, .y = 1, .w = 7, .h = 1 },
         .margin = .{ .w = 4, .h = 4 },
-        .font = tiny(),
+        .font = small(),
     });
 }
 

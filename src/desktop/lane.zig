@@ -10,7 +10,7 @@ const practice = @import("private/practice.zig");
 const Ctx = w.Ctx;
 const palette = w.palette;
 
-/// The window's "Rank by your mastery points" box; the poller reads it each tick
+/// The window's "Count your mastery points" box; the poller reads it each tick
 pub var by_mastery: std.atomic.Value(bool) = .init(true);
 var by_mastery_box = true;
 
@@ -38,7 +38,7 @@ pub fn panel(ctx: Ctx, c: *const lanecard.Card, mode: board.Mode) void {
             .counter => "Options into them",
             .locked => "Other options",
         }, .{}, .{ .font = dvui.themeGet().font_heading, .gravity_y = 0.5, .padding = .{} });
-        if (dvui.checkbox(@src(), &by_mastery_box, "Rank by your mastery points", .{ .gravity_x = 1, .font = w.small() })) {
+        if (dvui.checkbox(@src(), &by_mastery_box, "Count your mastery points", .{ .gravity_x = 1, .font = w.small() })) {
             by_mastery.store(by_mastery_box, .release);
         }
     }
@@ -49,7 +49,7 @@ pub fn panel(ctx: Ctx, c: *const lanecard.Card, mode: board.Mode) void {
     while (i < c.options.len) : (i += per_row) {
         var row = dvui.box(@src(), .{ .dir = .horizontal, .equal_space = true }, .{ .id_extra = i, .expand = .horizontal });
         defer row.deinit();
-        for (c.options[i..@min(i + per_row, c.options.len)], i..) |o, j| option(ctx, j, o, o.champion == c.me);
+        for (c.options[i..@min(i + per_row, c.options.len)], i..) |o, j| option(ctx, j, o, o.champion == c.me, c.locked);
         // Keep a lone last card half wide
         if (per_row == 2 and i + 1 == c.options.len) {
             var empty = dvui.box(@src(), .{}, .{ .expand = .horizontal });
@@ -170,7 +170,7 @@ fn signed(gpa: std.mem.Allocator, tick: f64) std.mem.Allocator.Error![]const u8 
     return std.fmt.allocPrint(gpa, "{s}{d:.0}", .{ if (tick > 0) "+" else "", tick });
 }
 
-fn option(ctx: Ctx, i: usize, o: lanecard.Option, current: bool) void {
+fn option(ctx: Ctx, i: usize, o: lanecard.Option, current: bool, locked: bool) void {
     var box = w.card(@src(), i, if (current) dvui.themeGet().color(.highlight, .fill) else null, .horizontal);
     defer box.deinit();
     if (w.private_code and practice.editing() and dvui.clicked(box.data(), .{})) practice.take(o.champion);
@@ -185,7 +185,7 @@ fn option(ctx: Ctx, i: usize, o: lanecard.Option, current: bool) void {
             .color_text = .{ .color = w.rateColour(o.win) },
             .padding = .{},
         });
-        dvui.labelNoFmt(@src(), "team", .{}, .{ .gravity_x = 1, .font = w.tiny(), .color_text = .{ .color = w.text().opacity(0.5) }, .padding = .{} });
+        dvui.labelNoFmt(@src(), "team win", .{}, .{ .gravity_x = 1, .font = w.small(), .color_text = .{ .color = w.text().opacity(0.5) }, .padding = .{} });
     }
     var col = dvui.box(@src(), .{ .dir = .vertical }, .{ .expand = .horizontal, .margin = .{ .x = 8 } });
     defer col.deinit();
@@ -193,7 +193,7 @@ fn option(ctx: Ctx, i: usize, o: lanecard.Option, current: bool) void {
         var row = dvui.box(@src(), .{ .dir = .horizontal }, .{ .expand = .horizontal });
         defer row.deinit();
         dvui.label(@src(), "{s}", .{ctx.stats.nameOf(o.champion)}, .{ .font = dvui.themeGet().font_heading, .padding = .{} });
-        if (current) w.chip(@src(), "your pick", dvui.themeGet().color(.highlight, .fill), 0);
+        if (current) w.chip(@src(), if (locked) "locked" else "hovering", dvui.themeGet().color(.highlight, .fill), 0);
     }
     if (o.lane) |l| {
         const color: dvui.Color = switch (l.lean) {

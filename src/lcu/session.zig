@@ -53,6 +53,8 @@ pub const ChampSelect = struct {
     their_bans: []u32 = &.{},
     /// The local player's action in progress
     my_turn: Turn = .none,
+    /// A ban still to come on either side
+    bans_open: bool = true,
 
     pub fn draft(cs: ChampSelect, role: Role, pool: ?[]const u32) core.Draft {
         return .{
@@ -87,7 +89,7 @@ pub const ChampSelect = struct {
                 h.update(&.{ roleByte(sl.role), @backingInt(sl.state), @intFromBool(sl.picking) });
             }
         }
-        h.update(&.{@backingInt(cs.my_turn)});
+        h.update(&.{ @backingInt(cs.my_turn), @intFromBool(cs.bans_open) });
         return h.final();
     }
 };
@@ -185,6 +187,12 @@ pub fn parse(arena: std.mem.Allocator, json: []const u8) ParseError!ChampSelect 
         if (a.actorCellId != s.localPlayerCellId or !a.isInProgress or a.completed) continue;
         if (std.mem.eql(u8, a.type, "pick")) cs.my_turn = .pick;
         if (std.mem.eql(u8, a.type, "ban")) cs.my_turn = .ban;
+    };
+    cs.bans_open = open: {
+        for (s.actions) |turn| for (turn) |a| {
+            if (!a.completed and std.mem.eql(u8, a.type, "ban")) break :open true;
+        };
+        break :open false;
     };
 
     var my_bans: std.ArrayList(u32) = .empty;
@@ -441,6 +449,7 @@ test "synthetic session" {
     try testing.expectEqual(Slot{ .champion = 103, .state = .locked }, cs.their_team[0]);
     try testing.expectEqual(Slot{}, cs.their_team[2]);
     try testing.expectEqual(Turn.pick, cs.my_turn);
+    try testing.expect(!cs.bans_open);
     try testing.expectEqualSlices(u32, &.{ 157, 555, 875, 84 }, cs.my_bans);
     try testing.expectEqualSlices(u32, &.{ 360, 221, 147, 950, 233 }, cs.their_bans);
 
