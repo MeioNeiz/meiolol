@@ -187,13 +187,13 @@ pub fn build(b: *std.Build) void {
     ).step);
 
     // Desktop release checks (deploy/desktop-release.sh), slower than ci so not in it:
-    // core and app tests under ThreadSanitizer, and their fuzz tests searched for --fuzz=N
-    // inputs (plain `zig build test` runs each fuzz test once)
+    // core, app and net tests under ThreadSanitizer, and their fuzz tests searched for
+    // --fuzz=N inputs (plain `zig build test` runs each fuzz test once)
     const tsan = modules(b, target, .Debug);
     const fuzz = modules(b, target, .Debug);
-    const check_step = b.step("desktop-check", "Desktop release: core and app tests under ThreadSanitizer");
+    const check_step = b.step("desktop-check", "Desktop release: core, app and net tests under ThreadSanitizer");
     const fuzz_step = b.step("desktop-fuzz", "Desktop release: fuzz the parsers it downloads (--fuzz=N)");
-    for ([_]*std.Build.Module{ tsan.core, tsan.app }, [_]*std.Build.Module{ fuzz.core, fuzz.app }) |t, f| {
+    for ([_]*std.Build.Module{ tsan.core, tsan.app, tsan.net }, [_]*std.Build.Module{ fuzz.core, fuzz.app, fuzz.net }) |t, f| {
         t.sanitize_thread = true;
         check_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = t, .filters = test_filters })).step);
         fuzz_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = f, .filters = &.{"fuzz"} })).step);
