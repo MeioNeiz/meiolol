@@ -246,3 +246,10 @@ and A1's curves decide how much of wave 2 is draft architecture (A3, A4, A7) vs 
 (A8). Wave 3 needs a teacher that beats v2 sealed. Wave 4's patch items need 16.21 in
 dev; D4 needs API budget. Rough gpu-box time: wave 1 under a day, wave 2 two to four
 days, wave 3 a day, wave 4 a day plus the ARAM crawl.
+
+B1's gate, 24 Oct (docs/model.md "Draft ceiling (B1) rerun on 2004Z"): not met. Four
+blocks known perfectly: s 0.33 (~56.5%); the set net on v2 is 4.8 ± 0.9 milli-nats
+short, all in pair cells too thin to estimate one by one: wave 2's borrowing across
+cells (A4, A3) and more games both stay worth it. D1 (model.md "Strength at fixed
+mastery"): the lane card's expertise bonus double counts (fix: centre on the
+champion-role's mean mastery; replay hit rate not yet measured).

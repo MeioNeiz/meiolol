@@ -5566,6 +5566,113 @@ Cost per stats view and the ship plan: docs/plan/data-and-model.md DM1 (dense v2
 no scorer or format change, download 1.6-3x larger gzipped; the 1.56M-game view's fit
 163 s -> 363 s and 1.26 -> 1.62 GB on a shared Mac).
 
+### Draft ceiling (B1) rerun on 2004Z, 2026-10-24 (w1c, prepin run)
+
+The 22 Oct B1 ("Lab frontier wave 1") was provisional: null sd 0.35-0.64, planted flips
+short, and additive v2 showing more left than win-draft though it predicts better. Rerun
+on snap-20261023T2004Z, dev only, no test look, with the estimator fixed. Script
+py/xcheck/ceiling.py (Mac, `uv run --no-project --with numpy --with pandas`), output
+data/runs/b1-2004Z/ (ceiling.md final, effects.md the same on the effects models,
+effects-v1-estimator.md the 22 Oct estimator on these preds, attain.md).
+
+Preds (753,959 games: folds 1-5 and dev-val, every platform, each block fitted on the
+games before it): one Mac run 20261023T225629Z-effects-wr-v2-2004Z (`effects --param v2`
+built with -Dcand win-ratings, HEAD ed17798) for win-ratings (the reference: champion-role
+ratings, no pair terms), additive mains, v2 full (damage mix) and v2 without the mix
+(the shipped form's terms, f64, side term kept); w1g's gpu-box runs
+20261023T232808Z-setid-wd-2004Z (win-draft and its set net, seeds 1-3) and
+20261023T234438Z-setid-wa-2004Z + 20261023T235036Z-setid-wa-s456-2004Z (set net +
+champion-role embedding on v2, seeds 1-6 as one logit mean). Their candidates' preds
+match the effects run's to the printed digit.
+
+What was wrong with the 22 Oct estimator, each found by a check on the real schedule of
+games:
+- Overlaps: it assumed two games sharing a pair cell share only that cell's two mains.
+  They often share a third champion or an enemy too, so each pair effect was counted
+  again through the other cells. Planted cells (y drawn from win-ratings' logit plus cells
+  at the sizes measured): the old estimator recovered 22.4 milli-nats where 12.3 were
+  planted, ~1.8x. Now M, the expectation of each block's statistic given each unit's
+  variance, comes from simulation: each unit's cells at +-1 (Rademacher) and nothing
+  else, through the same statistic, so every overlap counts
+- Nested folds: block k's model has seen block k-1's games, so a pair of games across
+  blocks carries the model's step on the earlier game (-lambda w w) instead of a
+  residual covariance. That pulls a model's estimate down where it estimates cells
+  (win-ratings' mains came out negative, v2's own V/8 2.1 below its distance to the
+  ceiling on a dev + fold 5 check). Now a cell is per scored block: only games one model
+  scored, none of which it saw, share it
+- Pair weighting: each cell weighed by its pairs of games (n^2), so the biggest cells
+  decided the answer, while rare cells spread more (B4). Now cells sit in bands by games
+  in the block (2-9, 10-49, 50-199, 200+; mains 2-499, 500-1999, 2000+), one variance
+  per band, and V counts each band by the cells a game holds (one-game cells, 0.47 a game
+  of 55, at their block's smallest band). That is the per-game excess log loss, the
+  thing a model's log loss measures
+
+Result: milli-nats a game a perfect estimate of each block would gain over the model
+(V/8), null sd of the total from 20 Bernoulli draws on each model's own chances:
+
+| model | main | ally | lane | cross | total (null sd) | log loss | log loss - V/8 | s of the model |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| win-ratings (reference) | 0.08 | 2.41 | 2.98 | 3.65 | 9.11 (0.96) | 0.68848 | 0.67937 | 0.193 |
+| additive mains | -0.14 | 2.13 | 2.95 | 3.24 | 8.17 (1.02) | 0.68799 | 0.67982 | 0.203 |
+| win-draft | 0.12 | 1.63 | 2.08 | 2.49 | 6.32 (0.94) | 0.68595 | 0.67963 | 0.240 |
+| v2 without the mix | 0.07 | 1.60 | 1.58 | 2.43 | 5.68 (1.12) | 0.68526 | 0.67958 | 0.251 |
+| v2 full | 0.08 | 1.28 | 1.57 | 2.48 | 5.40 (0.85) | 0.68468 | 0.67928 | 0.260 |
+| set net on win-draft | 0.14 | 1.20 | 1.94 | 2.12 | 5.41 (0.98) | 0.68452 | 0.67911 | 0.263 |
+| set net on v2 (6 seeds) | 0.12 | 1.14 | 1.45 | 2.04 | 4.76 (0.88) | 0.68390 | 0.67914 | 0.272 |
+
+Checks:
+- Consistency: V/8 is an excess loss, so every model's log loss minus its V/8 should
+  be the same perfect log loss. It is: 0.67911 to 0.67982, all within one null sd of
+  the reference's 0.67937. The 22 Oct paradox is gone: what is left now falls in the
+  models' log loss order (win-draft 6.3, v2 5.4, set net 4.8)
+- Flips (10% of labels, 20 draws): win-ratings 5.76 ± 0.62 against 5.80 expected, set
+  net 2.96 ± 0.82 against 3.00 (expected from the estimate and M of the flipped chances)
+- Planted (6 draws over two runs): recovered 8.93 ± 0.43 and 8.21 ± 1.23 against 9.36
+  and 9.35 planted. Models of the planted truth that estimate each pair cell from its
+  games: V/8 8.02 and 7.24 against a true excess of 8.45-8.47 and a log loss gap of
+  8.03-8.11 (posterior-mean shrink); 10.58 and 9.80 against 10.72 and 10.24-10.44
+  (shrunk a quarter as much). So model cell noise counts in V/8 as excess, as it
+  should, and nothing else inflates it; the estimator may sit ~5-10% low
+- Null sd of the total ~0.9-1.1 milli-nats: within-block pairs and bands cost the
+  doubled games' gain. By scored block alone, the total varies more than the null
+  (win-ratings 4.3, 13.6, 9.7, 9.7, 12.1, dev-val 5.7; set net 0.6, 8.7, 6.0, 5.8, 7.7,
+  1.2; null sd ~2.4 each; chi-square p ~0.05): fold 1 and dev-val show least
+
+Where it is (pair blocks, by the cell's games in its scored block, ± null sd):
+
+| model | one-game cells | 2-9 | 10-49 | 50-199 | 200+ |
+| --- | --- | --- | --- | --- | --- |
+| win-ratings | 0.24 | 1.34 ± 0.60 | 1.57 ± 0.37 | 3.20 ± 0.23 | 2.68 ± 0.19 |
+| v2 full | 0.19 | 1.08 ± 0.66 | 1.12 ± 0.43 | 1.66 ± 0.28 | 1.26 ± 0.13 |
+| set net on v2 | 0.17 | 0.94 ± 0.69 | 0.93 ± 0.57 | 1.40 ± 0.25 | 1.19 ± 0.17 |
+
+The reference's cell sd (pp at an even game): ally 0.7-1.1, lane 1.4-1.8 (2.9 in 2-9
+game cells), cross 0.8-0.9 (2.0 in 2-9); mains left over the ratings: 1.4 pp in
+off-role cells under 500 games a block, ~0 above.
+
+How much of the reference's 9.5 an ideal estimate of each cell on its own could reach
+(posterior mean per cell, lambda = s2 / (s2 + 4 / n), n its games over all 1.37M dev
+games, s2 the reference's band; data/runs/b1-2004Z/attain.py, a one-off): 3.3 (35%);
+with 2x the games 4.5, 4x 5.7, 10x 7.1. The models already pass the 1x figure: v2
+captures 3.7 of the reference's 9.1, the set net 4.4, by borrowing across cells (low
+rank, damage mix, embeddings).
+
+Gate (lab-frontier "Order and gates": a ceiling near s 0.27 -> stop draft architecture
+work): not met. The four blocks known perfectly give log loss ~0.6793, s
+0.33 (about 56.5% of games called right), against the best model's 0.6839, s 0.27
+(~55.4%): 4.8 ± 0.9 milli-nats a game left, six times the set net's gain over v2. It
+is in pair cells (cross-role enemy pairs most, then lane matchups, then ally pairs),
+2.6 of it in cells with 50+ games a block (500+ in a fit). Estimating cells one by one
+is spent at this data size, so what is left needs strength borrowed across cells (A4's
+pair and kit parents, low rank, nets) or more games: an ideal per-cell estimate gains
+~1.2 milli-nats a doubling of games here, more than the set net's gain over v2 (0.8),
+so the production key's games pay as well. B1 is now fit to be the gate: the four checks
+hold and its null sd is ~1 milli-nat; rerun it at each pin.
+
+Not covered: three-way and comp effects beyond the four blocks (the damage mix and nets
+capture some; their gain shows as the models' log loss, not here), drift within a cell
+(the estimate is each block's own cell effect), player terms (D1, the replay).
+
 ## Shipped model, 2026-10-23: additive v2 in the stats file
 
 Drafts (app suggest, the site's draft helper, Daily Draft, Learn, lane cards, pool) now

@@ -25,6 +25,18 @@ How to write a line:
 
 ## Win
 
+- 2026-10-24 (early): The draft alone has a little more to give than our best model
+  takes: knowing exactly how every pair of champions does together and against each
+  other would call about 56.5% of games right, against about 55.4% for the best model
+  now. Most of what is left sits in pairings with too few games to read one at a time
+  (cross-role enemy pairs most, then lane matchups, then duos), so it needs models that
+  share what similar pairings show, or more games: twice the games would let even a
+  pair-by-pair estimate close about a quarter of the gap. Sure: 754k held-out ranked games
+  (every crawled region, up to 20 Oct), each scored by a model fitted only on older
+  games; the method recovers planted effects and flipped labels within its noise, and
+  every model lands on the same ceiling (4.8 ± 0.9 milli-nats a game above the set net
+  on additive v2). Site: nothing. Evidence: docs/model.md "Draft ceiling (B1) rerun on
+  2004Z"
 - 2026-10-24 (early): The same holds on newer games and in the form the site would use.
   On 521k games of the 23 Oct pin that no earlier A4 run had scored, the frozen model as
   the stats file would carry it (no damage mix, no side term, thin cells' own part 0,
