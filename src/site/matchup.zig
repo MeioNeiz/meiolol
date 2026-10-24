@@ -155,7 +155,7 @@ pub fn writeIndex(site: *const Site, w: *Writer, curves: ?*const Curves) !void {
         list.shrinkRetainingCapacity(keep);
     }
     try tpl.render(w,
-        \\<p class="muted">Each pair once, from the side that won more, {region}, {when}; under {floor} games, see champion pages.</p>
+        \\<p class="muted">Each pair once, from the side that won more (searching one champion shows its side), {region}, {when}; under {floor} games, see champion pages.</p>
         \\<div class="tl-bar mu-bar"><nav class="tabs mu-roles" aria-label="Role"><a href="#all">All roles</a>{tabs}</nav><span class="mu-search" hidden><input type="search" placeholder="Search champion" data-min-search aria-label="Search champion"></span></div>
         \\
     , .{
@@ -207,7 +207,15 @@ pub fn writeIndex(site: *const Site, w: *Writer, curves: ?*const Curves) !void {
         \\const set=(r)=>{if(!tabs.some((t)=>t.hash==="#"+r))r="top";ix.dataset.role=r;for(const t of tabs)t.hash==="#"+r?t.setAttribute("aria-current","page"):t.removeAttribute("aria-current")};
         \\let r=location.hash.slice(1);if(!r)try{r=localStorage.getItem("mu-role")}catch(e){}set(r);
         \\for(const t of tabs)t.addEventListener("click",(e)=>{e.preventDefault();const r=t.hash.slice(1);set(r);history.replaceState(null,"",t.hash);try{localStorage.setItem("mu-role",r)}catch(e){}});
-        \\const sync=()=>ix.classList.toggle("q",!!q&&q.value.trim()!=="");if(q){q.addEventListener("input",sync);addEventListener("pageshow",sync)}})()</script>
+        \\const neg=(t)=>t[0]==="+"?"-"+t.slice(1):t[0]==="-"?"+"+t.slice(1):t,hl=(e)=>{e.style.cssText=e.style.cssText.replace(/--(hi|lo)(?=\d)/g,(m)=>m==="--hi"?"--lo":"--hi")};
+        \\const flip=(row)=>{const [a,b,wr,vs,gold]=row.cells,x=a.firstElementChild,y=b.firstElementChild;a.append(y);b.append(x);x.classList.toggle("box");y.classList.toggle("box");
+        \\for(const c of [wr,vs,gold])c.dataset.v=String(c===wr?1-c.dataset.v:-c.dataset.v);const w=wr.querySelector(".wr"),d=w.querySelector(".d"),r=w.querySelector("b");hl(w);d.style.left=(100-parseFloat(d.style.left)).toFixed(1)+"%";r.textContent=(100-parseFloat(r.textContent)).toFixed(1)+"%";
+        \\const s=vs.querySelector(".vs");hl(s);s.firstElementChild.textContent=neg(s.textContent);const g=gold.querySelector(".gold");g.textContent=neg(g.textContent);g.classList.contains("even")||(g.classList.toggle("up"),g.classList.toggle("down"));row.toggleAttribute("data-f")};
+        \\// A search naming only a row's second champion turns the row to that champion's side: its rate is 100 minus the other's, vs usual and gold the other's negated (champion.usual is symmetric)
+        \\const norm=(t)=>t.toLowerCase().replace(/[^a-z0-9]/g,"");
+        \\const sync=()=>{const v=q?q.value.trim():"";ix.classList.toggle("q",v!=="");const words=v.split(/\s+/).map(norm).filter((x)=>x&&!["v","vs","versus"].includes(x));let moved=false;
+        \\for(const row of ix.querySelectorAll("tr[data-name]")){const [a,b]=row.dataset.name.split("|").map(norm),has=(n)=>words.length>0&&words.every((x)=>n.includes(x));if((has(b)&&!has(a))!==row.hasAttribute("data-f")){flip(row);moved=true}}
+        \\if(moved)for(const t of ix.querySelectorAll("table"))t._resort?.()};if(q){q.addEventListener("input",sync);addEventListener("pageshow",sync)}})()</script>
         \\<script src="../table.js" defer></script>
         \\
     );
@@ -242,6 +250,8 @@ const IndexEntry = struct {
     odds: Odds,
     /// Lane curve's gold at lane_minute, x minus y
     gold: i32,
+    /// A lead to emphasise (J11, J12): min_lead_gold or more, 2 SE from 0, thin_games
+    clear: bool,
 };
 
 /// x and y swapped when y won more
@@ -252,13 +262,15 @@ fn indexEntry(site: *const Site, c: *const Curves, r: Role, x0: Champ, y0: Champ
     const e = st.enemy(r, r, x.c, y.c);
     if (2 * e.wins < e.games) std.mem.swap(Champ, &x, &y);
     const v = c.get(r, .all, x.id, y.id).?;
+    const g = v.estimate(.gold, core.curvesfile.lane_minute - 1);
     return .{
         .x = x,
         .y = y,
         .games = games,
         .thin = thin(v),
         .odds = odds(st, r, x, y, ka),
-        .gold = v.estimate(.gold, core.curvesfile.lane_minute - 1).mean,
+        .gold = g.mean,
+        .clear = games >= thin_games and @abs(g.mean) >= min_lead_gold and clearSide(g) != 0,
     };
 }
 
@@ -267,7 +279,7 @@ fn indexRow(ctx: struct { *const Site, Role, u32 }, w: *Writer, e: IndexEntry) !
     const a = site.arena;
     const o = e.odds;
     try tpl.render(w,
-        \\<tr class="bx{thin}" data-games="{games}" data-name="{x}|{y}"{hidden}><td class="l"><a class="champ box" href="{x_href}"><img src="{x_icon}" alt="" loading="lazy" width="24" height="24">{x}</a></td><td class="l"><a class="champ" href="{y_href}"><img src="{y_icon}" alt="" loading="lazy" width="24" height="24">{y}</a></td>{wr}<td data-v="{vs:.4}"><span class="vs" style="--c:{colour}"><b>{pts}</b></span></td><td class="opt" data-v="{gold}"><span class="gold {side}" style="opacity:{fade:.2}">{sign}{gold}</span></td><td class="dim" data-v="{games}">{games}</td></tr>
+        \\<tr class="bx{thin}" data-games="{games}" data-name="{x}|{y}"{hidden}><td class="l"><a class="champ box" href="{x_href}"><img src="{x_icon}" alt="" loading="lazy" width="24" height="24">{x}</a></td><td class="l"><a class="champ" href="{y_href}"><img src="{y_icon}" alt="" loading="lazy" width="24" height="24">{y}</a></td>{wr}<td data-v="{vs:.4}"><span class="vs" style="--c:{colour}"><b>{pts}</b></span></td><td class="opt" data-v="{gold}"><span class="gold {side}" style="opacity:{fade:.2}">{sign}{gold}</span></td><td class="dim" data-v="{games}">{count}</td></tr>
         \\
     , .{
         .games = e.games,
@@ -284,8 +296,9 @@ fn indexRow(ctx: struct { *const Site, Role, u32 }, w: *Writer, e: IndexEntry) !
         .vs = o.d.mean,
         .colour = tierlist.wrColour(0.5 + o.d.mean, tierlist.table_span),
         .pts = champion.Points{ .v = o.d.mean },
-        .side = if (e.gold > 0) "up" else if (e.gold < 0) "down" else "even",
+        .side = if (!e.clear) "even" else if (e.gold > 0) "up" else "down",
         .fade = core.curvesfile.fade(e.games),
+        .count = root.Thousands{ .n = e.games },
         .sign = if (e.gold > 0) "+" else "",
         .gold = e.gold,
     });

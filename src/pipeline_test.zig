@@ -243,6 +243,9 @@ test "fixture games to stats, curves and the website" {
         // Learn: lessons and practice as tabs, a lesson a screen with its own nav, practice
         // levels (learn.js draws them)
         .{ "learn.html", &.{ "<section id=\"puzzles\" data-view=\"puzzles\">", "<script type=\"application/json\" id=\"puzzle-data\">[{\"id\":\"know\"", "\"id\":\"luck\"", "<ol class=\"pz-list nojs\">", "<section id=\"practice\" data-view=\"practice\">", "<div class=\"lesson-nav\"></div>", "id=\"p-levels\"", "<article class=\"card lesson\" id=\"lesson-roles\"" } },
+        // A search for one champion turns its rows to its side (MU8); gold under a clear
+        // lead plain (J11, J12)
+        .{ "matchup/index.html", &.{ "(searching one champion shows its side)", "row.toggleAttribute(\"data-f\")", "<span class=\"gold even\"" } },
         .{ "matchup/index.html", &.{ "data-min-search", "<tr class=\"bx thin\" data-games=\"3\" data-name=\"", "<section data-min-group data-r=\"top\" id=\"top\"><h2>Top ", "<nav class=\"tabs mu-roles\" aria-label=\"Role\"><a href=\"#all\">All roles</a><a href=\"#top\">Top</a>", "<table class=\"tl mu-table\" id=\"mu-top\" data-sortable>", "<option selected>50</option>", " vs usual", "</b></span></td><td class=\"opt\" data-v=\"", "<p class=\"wr-key\">" } },
         // Champion page: each view's most played choice per kind, few games so no win
         // rate, then that view's build page; filters.js shows the one its picks select

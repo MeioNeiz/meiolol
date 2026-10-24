@@ -1316,6 +1316,8 @@ svg.wc .mo-obj.objl { stroke: var(--them); }
 table.mu-table { width: 100%; }
 table.mu-table .champ img { width: 24px; height: 24px; }
 table.mu-table .vs b { color: var(--c); font-weight: 600; }
+table.mu-table .gold { font-weight: 600; }
+table.mu-table .gold.even { color: var(--muted); font-weight: 400; }
 @media (max-width: 480px) {
   table.mu-table .champ img { display: none; }
   .mu-roles a { padding: 5px 8px; }
