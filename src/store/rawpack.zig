@@ -316,3 +316,26 @@ test "every cut is PackCut; a corrupt length fails before allocating" {
     try testing.expectError(error.BadPack, r.next());
     try testing.expect(r.buf.capacity < 1024);
 }
+
+fn fuzzPack(pack: []const u8, s: *testing.Smith) !void {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    var in: Io.Reader = .fixed(try @import("core").fuzz.mutate(s, arena_state.allocator(), pack));
+    var r = Reader.init(testing.allocator, &in) catch return;
+    defer r.deinit();
+    while (r.next() catch return) |_| {}
+}
+
+test "fuzz: a damaged pack reads or fails, never crashes" {
+    const gpa = testing.allocator;
+    var out: Io.Writer.Allocating = .init(gpa);
+    defer out.deinit();
+    var w = try Writer.begin(&out.writer);
+    try w.doc(.summary, .{ .key = "EUW1_1", .fetched_at = 10, .encoding = .plain, .body = "{\"a\":1}" });
+    try w.doc(.summary, .{ .key = "EUW1_2", .fetched_at = 11, .encoding = .stored, .body = "\x1f\x8b" });
+    try w.doc(.timeline, .{ .key = "EUW1_1", .fetched_at = 12, .encoding = .plain, .body = "{}" });
+    try w.mastery(.{ .puuid = "p1", .platform = null, .fetched_at = 13, .champions = 2, .data = "\x00\x01" });
+    try w.mastery(.{ .puuid = "p2", .platform = "EUW1", .fetched_at = 14, .champions = 0, .data = "" });
+    try w.end();
+    try testing.fuzz(@as([]const u8, out.written()), fuzzPack, .{});
+}

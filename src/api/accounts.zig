@@ -1443,6 +1443,9 @@ fn fuzzLogin(f: *Fixture, s: *testing.Smith) !void {
     const arena = arena_state.allocator();
     const body = try core.fuzz.mutate(s, arena, "{\"username\":\"owner\",\"password\":\"password-owner\",\"x\":[1]}");
     const out = try f.service.route(arena, .{ .method = .POST, .path = "login", .action = true, .body = body }, Fixture.now);
+    // The fuzzer checks each input for leaks: fails kept for the next input would count
+    f.service.throttle.deinit(testing.allocator);
+    f.service.throttle = .{};
     try testing.expect(out.status == .ok or out.status == .bad_request or out.status == .unauthorized or out.status == .too_many_requests);
 }
 

@@ -862,7 +862,8 @@ fn monsterLabel(monster: []const u8, subtype: []const u8) ?[]const u8 {
 
 fn mine(arena: Allocator, diffs: []const i16, sign: i16) ![]i16 {
     const out = try arena.alloc(i16, diffs.len);
-    for (diffs, out) |d, *o| o.* = d * sign;
+    // A damaged timeline's diff can be -32768, which has no i16 negation
+    for (diffs, out) |d, *o| o.* = d *| sign;
     return out;
 }
 
@@ -1236,4 +1237,44 @@ test "a real timeline from both sides, with and without a curve" {
     try testing.expectEqual(@as(u32, 1), r.weeks[0].lane_games);
     try testing.expectEqual(@as(usize, 1), r.matchups.len);
     try testing.expectEqual(@as(usize, 2), r.matchups[0].points.len);
+}
+
+test "a red lead past i16 reads as the largest, not an overflow" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const raw = try @import("store").raw.decompress(arena, @embedFile("../riot/testdata/timeline.json.gz"));
+    var t = try timeline.fromJson(arena, raw);
+    const frames = try arena.dupe(timeline.Frame, t.frames);
+    // backend-fuzz: blue minus red clamps to -32768, and red's view negated it
+    frames[4].stats[5][@backingInt(timeline.Stat.total_gold)] = 1_000_000;
+    t.frames = frames;
+    const red = try analyse(arena, .{ .summary = try testSummary(arena), .slot = 5, .timeline = t }, .{}, .{});
+    try testing.expectEqual(std.math.maxInt(i16), red.lane.?.gold[3]);
+}
+
+const FuzzGame = struct { match: []const u8, timeline: []const u8 };
+
+fn fuzzGame(in: FuzzGame, s: *testing.Smith) !void {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const summary = summarise(arena, try core.fuzz.mutate(s, arena, in.match)) catch return;
+    if (summary.players.len == 0) return;
+    const t = timeline.decode(arena, try core.fuzz.mutate(s, arena, in.timeline)) catch null;
+    const slot: u8 = @intCast(s.index(@min(summary.players.len, 256)));
+    const tiers = [_]?[]const u8{ null, "GOLD", "CHALLENGER", "x" };
+    const rank: Rank = .{ .tier = tiers[s.index(tiers.len)] };
+    _ = try report(arena, &.{.{ .summary = summary, .slot = slot, .timeline = t, .platform = "EUW1" }}, rank, .{});
+}
+
+test "fuzz: a damaged match or timeline makes a report, never a crash" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const raw = try @import("store").raw.decompress(arena, @embedFile("../riot/testdata/timeline.json.gz"));
+    try testing.fuzz(FuzzGame{
+        .match = @embedFile("../riot/testdata/match.json"),
+        .timeline = try timeline.encode(arena, try timeline.fromJson(arena, raw)),
+    }, fuzzGame, .{});
 }

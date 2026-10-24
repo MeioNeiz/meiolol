@@ -792,6 +792,82 @@ test "daily: counts a finished puzzle's answers, refuses junk" {
     try std.testing.expectEqual(@as(?i64, 4), try db.scalar("SELECT sum(count) FROM daily_answers", .{}));
 }
 
+const fuzz_token: accounts.Token = @splat('A');
+
+/// What nginx passes on, each followed by a second request on the same connection
+const fuzz_requests = [_][]const u8{
+    "GET /api/games?id=A%231&refresh=1 HTTP/1.1\r\nHost: x\r\n\r\n",
+    "POST /api/forget?id=Hide%20on%20bush%23KR1&check=1 HTTP/1.1\r\nHost: x\r\n\r\n",
+    "GET /api/forget?id=A%231 HTTP/1.1\r\nHost: x\r\n\r\n",
+    "POST /api/daily?n=3&pick=2&side=0 HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n",
+    "GET /api/daily?n=3 HTTP/1.1\r\nHost: x\r\n\r\n",
+    "POST /auth/login HTTP/1.1\r\nHost: x\r\nX-Meiolol-Action: 1\r\nContent-Length: 42\r\n\r\n" ++
+        "{\"username\":\"owner\",\"password\":\"12345678\"}",
+    "POST /auth/signup HTTP/1.1\r\nHost: x\r\nX-Meiolol-Action: 1\r\nContent-Length: 50\r\n\r\n" ++
+        "{\"link\":\"x\",\"email\":\"a@b.c\",\"password\":\"12345678\"}",
+    "GET /auth/check/view_paid HTTP/1.1\r\nHost: x\r\nCookie: a=b; " ++ accounts.cookie_name ++ "=" ++ fuzz_token ++
+        "\r\n\r\n",
+    "GET /auth/me HTTP/1.1\r\nHost: x\r\nExpect: 100-continue\r\n\r\n",
+};
+
+/// A Context on fresh databases: the fuzzer checks each input for leaks, and the login
+/// throttle keeps keys
+fn testContext() Context {
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+    return .{
+        .gpa = gpa,
+        .io = io,
+        .opts = .{ .db_path = ":memory:", .curves_dir = "" },
+        .curves = .{},
+        .accounts = .{ .gpa = gpa, .io = io, .db_path = "", .hasher = .{ .params = .{ .t = 1, .m = 64, .p = 1 } } },
+    };
+}
+
+/// `bytes` as one connection's requests, as httpd.requests reads them, where a refusal
+/// ends the connection
+fn serveBytes(ctx: *Context, bytes: []const u8, out: *Io.Writer) void {
+    var in: Io.Reader = .fixed(bytes);
+    var server = std.http.Server.init(&in, out);
+    while (server.reader.state == .ready) {
+        var request = server.receiveHead() catch return;
+        if (httpd.admit(&request, limits)) |_| return;
+        handle(ctx, &request) catch return;
+    }
+}
+
+fn fuzzRequest(_: void, s: *std.testing.Smith) !void {
+    var ctx = testContext();
+    defer ctx.accounts.deinit();
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const valid = try std.mem.concat(arena, u8, &.{ fuzz_requests[s.index(fuzz_requests.len)], fuzz_requests[4] });
+    var buf: [1024]u8 = undefined;
+    var out: Io.Writer.Discarding = .init(&buf);
+    serveBytes(&ctx, try core.fuzz.mutate(s, arena, valid), &out.writer);
+}
+
+test "fuzz: a damaged request is answered or dropped, never crashes the service" {
+    try std.testing.fuzz({}, fuzzRequest, .{});
+}
+
+test "a body cut short is answered, then the connection closes" {
+    var ctx = testContext();
+    defer ctx.accounts.deinit();
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    // backend-fuzz's first find: respond() drained the unread body and asserted it whole
+    for ([_][]const u8{ "POST /api/daily?n=3&pick=1&side=0", "GET /auth/me" }) |line| {
+        var out: Io.Writer.Allocating = .init(arena);
+        const bytes = try arena.print("{s} HTTP/1.1\r\nHost: x\r\nContent-Length: 10\r\n\r\nabc", .{line});
+        serveBytes(&ctx, bytes, &out.writer);
+        try std.testing.expectStringStartsWith(out.written(), "HTTP/1.1 ");
+        try std.testing.expect(std.mem.find(u8, out.written(), "connection: close") != null);
+    }
+}
+
 test {
     std.testing.refAllDecls(@This());
 }

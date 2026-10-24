@@ -207,7 +207,9 @@ pub const Rows = struct {
         \\    (SELECT tier, division FROM players p WHERE p.puuid = participants.puuid)
         \\WHERE match_id = ?
         ,
-        .ban = "INSERT INTO bans VALUES (?,?,?,?)",
+        // A team's pick turn twice (a damaged or odd document): the first ban stays,
+        // rather than the match failing on the key
+        .ban = "INSERT OR IGNORE INTO bans VALUES (?,?,?,?)",
     };
     const names = @typeInfo(Rows).@"struct".field_names;
 
@@ -391,4 +393,32 @@ test "re-storing after a rekey keeps rank and blanked puuids" {
         "SELECT count(*) FROM participants WHERE puuid IS NULL AND item6 IS NOT NULL",
         .{},
     ));
+}
+
+test "a pick turn twice keeps the first ban and stores the match" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    // backend-fuzz: the bans key failed and the match was not stored
+    const body = try std.mem.replaceOwned(u8, arena.allocator(), @embedFile("testdata/match.json"), "\"pickTurn\":2", "\"pickTurn\":1");
+    const db = try store.schema.memory();
+    defer db.close();
+    try storeRows(db, try parse(arena.allocator(), body), "riot");
+    try testing.expectEqual(@as(?i64, 9), try db.scalar("SELECT count(*) FROM bans", .{}));
+    try testing.expectEqual(@as(?i64, 10), try db.scalar("SELECT count(*) FROM participants", .{}));
+}
+
+fn fuzzMatch(db: store.Db, s: *testing.Smith) !void {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const body = try @import("core").fuzz.mutate(s, arena.allocator(), @embedFile("testdata/match.json"));
+    const doc = parse(arena.allocator(), body) catch return;
+    try db.begin();
+    defer db.rollback();
+    try storeRows(db, doc, "riot");
+}
+
+test "fuzz: a damaged match summary parses and stores, or fails, never crashes" {
+    const db = try store.schema.memory();
+    defer db.close();
+    try testing.fuzz(db, fuzzMatch, .{});
 }

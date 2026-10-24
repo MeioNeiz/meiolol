@@ -198,6 +198,16 @@ pub fn build(b: *std.Build) void {
         check_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = t, .filters = test_filters })).step);
         fuzz_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = f, .filters = &.{"fuzz"} })).step);
     }
+
+    // The backend's untrusted input (Riot replies, stored blobs, packs, API requests),
+    // searched by hand before a crawler or API change. -Dtest-filter picks fuzz tests
+    const backend_fuzz = modules(b, target, .Debug);
+    const backend_fuzz_step = b.step("backend-fuzz", "Fuzz the backend's parsers of Riot " ++
+        "replies, stored blobs and API requests (--fuzz=N)");
+    const fuzz_filters: []const []const u8 = if (test_filters.len > 0) test_filters else &.{"fuzz"};
+    for ([_]*std.Build.Module{ backend_fuzz.backend, backend_fuzz.store }) |f| {
+        backend_fuzz_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = f, .filters = fuzz_filters })).step);
+    }
 }
 
 const Modules = struct {
@@ -237,13 +247,22 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
         .root_source_file = b.path("src/store/root.zig"),
         .target = target,
         .optimize = optimize,
+        .imports = &.{.{ .name = "core", .module = core }},
         .link_libc = true,
     });
     store.addCSourceFile(.{
         .file = sqlite.path("sqlite3.c"),
         // Optimised in Debug too: the site's data step is mostly SQL, and at -O0 a dev
-        // server's data load or a test run waits minutes on it
-        .flags = &.{ "-DSQLITE_DQS=0", "-DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1", "-O2", "-fno-sanitize=undefined" },
+        // server's data load or a test run waits minutes on it. Not instrumented under
+        // --fuzz: Zig's fuzzer has no hooks for C comparisons (undefined symbols), and
+        // sqlite's own paths are not what backend-fuzz searches
+        .flags = &.{
+            "-DSQLITE_DQS=0",
+            "-DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1",
+            "-O2",
+            "-fno-sanitize=undefined",
+            "-fno-sanitize-coverage=trace-cmp,inline-8bit-counters,pc-table",
+        },
     });
     store.addIncludePath(sqlite.path("."));
     const sqlite_h: Translator = .init(b.dependency("translate_c", .{}), .{

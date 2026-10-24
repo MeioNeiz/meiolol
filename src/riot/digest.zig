@@ -197,3 +197,26 @@ test "a digest decodes to the cut timeline, and the cut keeps what readers use" 
     other[0] = version + 1;
     try testing.expectEqual(null, try decode(arena, other));
 }
+
+fn fuzzDigest(blobs: [2][]const u8, s: *testing.Smith) !void {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const mutate = @import("core").fuzz.mutate;
+    _ = decode(arena, try mutate(s, arena, blobs[0])) catch {};
+    // Source.get's path for a game without a current digest
+    const stored = try mutate(s, arena, blobs[1]);
+    const t = timeline.decode(arena, store.raw.decompress(arena, stored) catch return) catch return;
+    const bytes = try encode(arena, t);
+    try testing.expectEqualDeep((try cut(arena, t)).frames, (try decode(arena, bytes)).?.frames);
+}
+
+test "fuzz: a damaged digest or stored timeline reads or fails, never crashes" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const t = try timeline.fromJson(arena, try store.raw.decompress(arena, @embedFile("testdata/timeline.json.gz")));
+    const full = try timeline.encode(arena, t);
+    const blobs: [2][]const u8 = .{ try encode(arena, t), try store.raw.compress(arena, full) };
+    try testing.fuzz(blobs, fuzzDigest, .{});
+}

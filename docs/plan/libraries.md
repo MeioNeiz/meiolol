@@ -33,14 +33,31 @@ that slow everyday development).
   crawl of the TSan build with the proxy serving (`zig build backend-tsan`; how to run:
   architecture.md "Crawler"). No races found. TSan works on macOS with 0.17 (a planted
   race is reported)
+- Backend fuzzing (24 Oct): `zig build backend-fuzz` (outside ci) searches fuzz tests
+  from good fixtures (core/fuzz.zig mutate) over Riot match JSON parsed and stored
+  (riot/match.zig), timeline JSON to the compact form and back, a damaged compact
+  timeline (timeline.zig), a damaged digest or stored gzip blob (digest.zig), a damaged
+  pack (rawpack.zig), raw HTTP bytes through std.http.Server, httpd.admit and the API's
+  handle (api/root.zig, /api/ and /auth/), and the Your games report from a damaged
+  match and stored timeline (api/game.zig). deploy/backend-fuzz.sh [REV] runs it on a
+  clean checkout and fails on the log (`zig build --fuzz` exits 0 on a crash and on a
+  test that doesn't build); before a crawler, storage or API change. ~300K inputs per
+  test, 2 to 45 min each on the Mac, found: a POST body cut short and left unread
+  crashed any of our servers in std's respond() (httpd.admit closes after a body
+  now); a red player's lane diff of -32768 overflowed on negation in the report
+  (saturates); timeline timestamp deltas past i64 overflowed in encode and decode
+  (BadTimeline, by reading the code, the fuzzer did not get there); bans repeating a
+  pick turn failed the bans key, losing the match in the crawler and stopping
+  `rebuild` (the first ban stays). Each has a regression test. Setup: -ffuzz
+  instruments sqlite3.c, which Zig's fuzzer has no comparison hooks for, so sqlite
+  builds with -fno-sanitize-coverage; the fuzzer checks every input for leaks, so
+  harness state lives per input
 
 ## Next, by how exposed the code is
 
 1. HTTP server limits: done 23 Oct (above)
-2. Fuzz the backend's untrusted input: Riot match JSON (riot/match.zig), timeline
-   decode (riot/timeline.zig, digest.zig), API request handling (api/root.zig), rawpack.
-   Same pattern: a fuzz test from a good fixture (core/fuzz.zig mutate), searched in a
-   step outside ci, e.g. before a crawler or API change, or nightly on the gpu-box
+2. Backend fuzzing: done 24 Oct (above). Could still add: a nightly run on the
+   gpu-box, the crawler's other Riot replies (league, mastery, account ids)
 3. ThreadSanitizer: done 24 Oct (above)
 4. One library-grade `net` module (like tpl/ and nn/: std only, own tests, a worked
    example in its header): the server limits, LCU TLS (lcu/https.zig), the rate limiter

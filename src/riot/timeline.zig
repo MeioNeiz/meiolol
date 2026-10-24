@@ -353,7 +353,7 @@ fn encodeAs(gpa: Allocator, t: Timeline, stats: StatSet, masked: bool) ![]u8 {
     try w.varint(t.frames.len);
     var prev: Frame = .{ .t_ms = 0 };
     for (t.frames) |f| {
-        try w.z(f.t_ms - prev.t_ms);
+        try w.z(std.math.sub(i64, f.t_ms, prev.t_ms) catch return error.BadTimeline);
         for (f.stats[0..t.participants], prev.stats[0..t.participants]) |now, before| {
             for (now, before, std.enums.values(Stat)) |v, b, s| {
                 if (stats.contains(s)) try w.z(@as(i64, v) - b);
@@ -365,7 +365,7 @@ fn encodeAs(gpa: Allocator, t: Timeline, stats: StatSet, masked: bool) ![]u8 {
     var prev_t: i64 = 0;
     for (t.events) |e| {
         try w.byte(@backingInt(e.data));
-        try w.z(e.t_ms - prev_t);
+        try w.z(std.math.sub(i64, e.t_ms, prev_t) catch return error.BadTimeline);
         prev_t = e.t_ms;
         switch (e.data) {
             inline else => |payload| inline for (@typeInfo(@TypeOf(payload)).@"struct".field_names) |name| {
@@ -398,7 +398,7 @@ pub fn decode(arena: Allocator, bytes: []const u8) !Timeline {
     const frames = try arena.alloc(Frame, try r.count());
     var prev: Frame = .{ .t_ms = 0 };
     for (frames) |*f| {
-        f.* = .{ .t_ms = prev.t_ms + try r.z() };
+        f.* = .{ .t_ms = std.math.add(i64, prev.t_ms, try r.z()) catch return error.BadTimeline };
         for (f.stats[0..n], prev.stats[0..n]) |*now, before| {
             // Blobs from a newer build may carry more stats: skip them
             for (ids[0..stats]) |s| {
@@ -413,7 +413,7 @@ pub fn decode(arena: Allocator, bytes: []const u8) !Timeline {
     var prev_t: i64 = 0;
     for (events) |*e| {
         const kind = std.enums.fromInt(Event.Kind, try r.byte()) orelse return error.BadTimeline;
-        prev_t += try r.z();
+        prev_t = std.math.add(i64, prev_t, try r.z()) catch return error.BadTimeline;
         e.* = .{ .t_ms = prev_t, .data = switch (kind) {
             inline else => |k| blk: {
                 var payload: @FieldType(Event.Data, @tagName(k)) = undefined;
@@ -444,7 +444,8 @@ const Writer = struct {
     }
 
     fn z(w: *Writer, v: i64) !void {
-        try w.varint(@bitCast((v << 1) ^ (v >> 63)));
+        const u: u64 = @bitCast(v);
+        try w.varint((u << 1) ^ @as(u64, @bitCast(v >> 63)));
     }
 
     fn field(w: *Writer, comptime name: []const u8, v: anytype) !void {
@@ -584,4 +585,66 @@ test "unknown strings survive inline" {
     const back = try decode(arena.allocator(), bytes);
     try testing.expectEqualStrings("NEW_MONSTER", back.events[0].data.elite_monster.monster);
     try testing.expectError(error.BadTimeline, decode(arena.allocator(), bytes[0 .. bytes.len - 1]));
+}
+
+fn fuzzJson(json: []const u8, s: *testing.Smith) !void {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const t = fromJson(arena, try @import("core").fuzz.mutate(s, arena, json)) catch return;
+    const bytes = try encode(arena, t);
+    try testing.expectEqualSlices(u8, bytes, try encode(arena, try decode(arena, bytes)));
+}
+
+test "fuzz: a damaged timeline converts and round trips, or fails, never crashes" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    try testing.fuzz(@as([]const u8, try fixture(arena_state.allocator())), fuzzJson, .{});
+}
+
+fn fuzzBlob(blob: []const u8, s: *testing.Smith) !void {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    _ = decode(arena, try @import("core").fuzz.mutate(s, arena, blob)) catch {};
+}
+
+test "fuzz: a damaged compact timeline decodes or fails, never crashes" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const blob = try encode(arena, try fromJson(arena, try fixture(arena)));
+    try testing.fuzz(@as([]const u8, blob), fuzzBlob, .{});
+}
+
+test "timestamps past i64 are BadTimeline, not an overflow" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const far = [_]Frame{ .{ .t_ms = std.math.minInt(i64) }, .{ .t_ms = std.math.maxInt(i64) } };
+    try testing.expectError(error.BadTimeline, encode(arena, .{ .participants = 1, .frames = &far, .events = &.{} }));
+    const late = [_]Event{
+        .{ .t_ms = std.math.minInt(i64), .data = .{ .level_up = .{ .participant = 1, .level = 2 } } },
+        .{ .t_ms = std.math.maxInt(i64), .data = .{ .level_up = .{ .participant = 1, .level = 3 } } },
+    };
+    try testing.expectError(error.BadTimeline, encode(arena, .{ .participants = 1, .frames = &.{}, .events = &late }));
+
+    // A blob whose second frame's delta runs past the largest timestamp
+    var w: Writer = .{ .gpa = arena };
+    for ([_]u8{ version, 1, 0 }) |b| try w.byte(b);
+    try w.varint(2);
+    try w.z(std.math.maxInt(i64));
+    try w.z(1);
+    try w.varint(0);
+    try testing.expectError(error.BadTimeline, decode(arena, w.out.items));
+    w.out.items.len = 3;
+    try w.varint(0);
+    try w.varint(2);
+    for (0..2) |_| {
+        try w.byte(@backingInt(Event.Kind.level_up));
+        try w.z(std.math.maxInt(i64));
+        try w.byte(1);
+        try w.byte(2);
+    }
+    try testing.expectError(error.BadTimeline, decode(arena, w.out.items));
 }
