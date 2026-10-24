@@ -69,8 +69,9 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
 6. Accounts and two apps (J21, 22 Oct): roles public, paid, private, admin, owner;
    owner and private logins first, then a public app and a private, fuller one.
    AC1-AC3 live 23 Oct (logins on /admin/, admins by sign-up link, controls owner
-   only; /p/ Draft tester, account page, admin Accounts tab); next AC4 (desktop sign
-   in); Jacob picks the first private accounts; logins backed up to the gpu-box (health
+   only; /p/ Draft tester, account page, admin Accounts tab); AC4 desktop sign in
+   built and live on the API 24 Oct, its cut-over is Jacob's (accounts.md AC4: release,
+   testers sign in, then the shared key goes); Jacob picks the first private accounts; logins backed up to the gpu-box (health
    alert if it stops); editions split and the private channel /p/desktop/ done 24 Oct
    (app.md APP2, accounts.md AC5); app.md APP3-APP4 against the mock, APP1 (real capture) is Jacob's. Draft tester moves to the private
    site (app.md "Private site")
