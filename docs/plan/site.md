@@ -222,7 +222,13 @@ opponent grid are its first components.
   spells and the new kinds in the matchup builder's kinds too. Done when the box's
   builds run writes them (file size and run time noted here) and the build page lists
   them. Start: src/builds.zig (Kind, Builder.vs), src/site/builds.zig. Blocks: a builds
-  run on the box
+  run on the box. Done 24 Oct: kinds item4-6, skill_path (levels a game didn't reach
+  filled by the player's order; architecture.md Builds), File.Build.minutes (median
+  minute per boots and nth item, role-wide); matchups add spells and the new kinds. Box
+  test, 16.21 all regions with matchups (348k games): 83 s CPU (76 before), 877 MB RSS,
+  15.0 MB file (11.4); --max-keys now 1 << 20 (1 << 19 pruned in the patch's first
+  week), matchup keys still 1 << 22 (floor 1 after a week: watch at patch end, MU1).
+  Build page: Fourth to Sixth finished item tables, Minute column, Levels 1 to 18
 - CH3 Build panel, full. Items 4, 5 and 6 as the top 3 options each (games, % won from
   100 games), the 4x18 skill grid, start, core 3, boots, both rune trees lit, and the
   most played | highest win rate toggle. One component used by the champion page, the

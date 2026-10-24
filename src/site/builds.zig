@@ -345,7 +345,7 @@ fn highest(options: []const File.Option, games: u32, wins: u32, k: ?f64, min: us
 /// bought (Mejai's wins ~80%: nobody finishes it in a lost game), and boots follow it
 fn marked(kind: Kind) bool {
     return switch (kind) {
-        .boots, .core2, .core3 => false,
+        .boots, .core2, .core3, .item4, .item5, .item6 => false,
         else => true,
     };
 }
@@ -746,8 +746,12 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
     try table(w, f, b, .boots, "Boots", "players with boots or two finished items");
     try table(w, f, b, .core2, "First two finished items", "players who finished two items");
     try table(w, f, b, .core3, "First three finished items", "players who finished three items: longer games, so compare these win rates with each other rather than with the champion's overall");
-    try w.writeAll("<h2>Skill priority</h2>\n");
-    try table(w, f, b, .skills, "Order", "players with a match timeline who reached level 11");
+    try table(w, f, b, .item4, "Fourth finished item", "players who finished four items, whatever the first three");
+    try table(w, f, b, .item5, "Fifth finished item", "players who finished five items");
+    try table(w, f, b, .item6, "Sixth finished item", "players who finished six items");
+    try w.writeAll("<h2>Skill order</h2>\n");
+    try table(w, f, b, .skill_path, "Levels 1 to 18", "players with a match timeline who reached level 11; levels after the game ended follow the player's order: R when due, else the ability they were maxing");
+    try table(w, f, b, .skills, "Priority", "players with a match timeline who reached level 11");
     try table(w, f, b, .skill_start, "Levels 1 to 3", "players with a match timeline");
     const to_site = try site.toShared(page_path);
     try tpl.render(w,
@@ -769,22 +773,28 @@ fn winRate(w: *Writer, games: u32, wins: u32) !void {
 }
 
 fn table(w: *Writer, f: *const File, b: File.Build, kind: Kind, comptime title: []const u8, comptime of: []const u8) !void {
-    try w.writeAll("<div class=\"table-scroll\"><table class=\"build\">\n<thead><tr><th>" ++ title ++
-        "</th><th class=\"num\">Games</th><th class=\"num\">Share</th><th class=\"num\">Win rate</th></tr></thead>\n<tbody>\n");
+    const timed = b.minutes.len > 0 and builds.itemSlot(kind, 0) != null;
+    try tpl.renderPart(w,
+        \\<div class="table-scroll"><table class="build">
+        \\<thead><tr><th>{title}</th>{minute}<th class="num">Games</th><th class="num">Share</th><th class="num">Win rate</th></tr></thead>
+        \\<tbody>
+        \\
+    , .{ .title = title, .minute = tpl.when(timed, "<th class=\"num\" title=\"Median minute bought, as this item of the build\">Minute</th>") });
     const rows = b.get(kind) orelse File.Rows{ .kind = kind, .games = 0, .wins = 0, .options = &.{} };
     if (rows.options.len == 0) {
-        try w.writeAll("<tr class=\"thin\"><td colspan=\"4\">More data needed</td></tr>\n");
+        try tpl.render(w, "<tr class=\"thin\"><td colspan=\"{n}\">More data needed</td></tr>\n", .{ .n = @as(u8, if (timed) 5 else 4) });
     }
     const hi = if (marked(kind)) highest(rows.options, rows.games, rows.wins, f.shrinkK(kind, false), 2) else null;
     for (rows.options, 0..) |o, i| {
         if (i >= rows_shown and i != hi) continue;
         try tpl.render(w,
-            \\<tr{class}><td>{value}{tags}</td><td class="num">{games}</td><td class="num">{share:.1}%</td><td class="num">{rate}</td></tr>
+            \\<tr{class}><td>{value}{tags}</td>{minute}<td class="num">{games}</td><td class="num">{share:.1}%</td><td class="num">{rate}</td></tr>
             \\
         , .{
             .class = if (i == hi) tpl.flag(true, "class=\"hw\"") else tpl.flag(o.games < solid_games, "class=\"thin\""),
             .value = tpl.call(value, .{ f, kind, o.v, false }),
             .tags = tpl.call(tags, .{ i, hi }),
+            .minute = tpl.when(timed, tpl.t("<td class=\"num\">{m}</td>", .{ .m = tpl.call(minutes, .{ b, kind, o.v }) })),
             .games = o.games,
             .share = pct(o.games, rows.games),
             .rate = tpl.call(winRate, .{ o.games, o.wins }),
@@ -795,6 +805,15 @@ fn table(w: *Writer, f: *const File, b: File.Build, kind: Kind, comptime title: 
     });
 }
 
+/// Median minute each item of `v` was bought in its place in the build: "14", "11 · 19"
+fn minutes(w: *Writer, b: File.Build, kind: Kind, v: []const u32) !void {
+    for (v, 0..) |item, i| {
+        if (i > 0) try w.writeAll(" · ");
+        const m = if (builds.itemSlot(kind, i)) |slot| b.minute(slot, item) else null;
+        if (m) |x| try w.print("{d:.0}", .{x.minute}) else try w.writeAll("-");
+    }
+}
+
 /// `compact`: icons without names beside them (names on hover), shards one a line
 fn value(w: *Writer, f: *const File, kind: Kind, v: []const u32, compact: bool) !void {
     switch (kind) {
@@ -802,6 +821,7 @@ fn value(w: *Writer, f: *const File, kind: Kind, v: []const u32, compact: bool) 
             if (v[0] == 0) return w.writeAll("No boots");
             try named(w, if (kind == .boots) f.items else f.runes, v[0], !compact);
         },
+        .item4, .item5, .item6 => try named(w, f.items, v[0], !compact),
         .shard => if (ddragon.find(&ddragon.shards, v[1])) |n| try tpl.writeEscaped(n.name, w),
         .spells => for (v, 0..) |x, i| {
             if (i > 0) try w.writeAll(" ");
@@ -830,6 +850,16 @@ fn value(w: *Writer, f: *const File, kind: Kind, v: []const u32, compact: bool) 
                 3 => "E",
                 else => "?",
             } });
+        },
+        // R in bold: the levels it comes at stand out
+        .skill_path => for (builds.unpackPath(v), 0..) |x, i| {
+            if (i > 0) try w.writeAll(" ");
+            try w.writeAll(switch (x) {
+                1 => "Q",
+                2 => "W",
+                3 => "E",
+                else => "<b>R</b>",
+            });
         },
     }
 }

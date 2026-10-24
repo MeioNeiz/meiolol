@@ -154,14 +154,15 @@ pub fn cmdCurves(c: *Cmd) !u8 {
 
 pub const usage_builds =
     \\  builds      write what players build per champion and role (builds.zig): runes,
-    \\              summoner spells, starting items, boots, first items, skill order;
+    \\              summoner spells, starting items, boots, finished items 1 to 6
+    \\              with the minute bought, skill order and path to 18;
     \\              per lane opponent too (300+ games); JSON the site reads (needs
     \\              Data Dragon)
     \\              --patch P        as for stats (default: the newest patch)
     \\              --platform P     as for stats
     \\              --min-tier T     lowest rank counted, per player (default PLATINUM;
     \\                               "any" counts everyone, unranked too)
-    \\              --max-keys N     distinct options held in memory (default 524288)
+    \\              --max-keys N     distinct options held in memory (default 1048576)
     \\              --max-matchup-keys N  the same per lane opponent (default 4194304)
     \\              --out FILE       default DIR/export/builds-<patch>.json
     \\                               (all-builds-... with --platform all)

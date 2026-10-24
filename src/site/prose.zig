@@ -218,12 +218,19 @@ pub fn method(w: *Writer, info: Info) Writer.Error!void {
         \\the first 90 seconds (net of undos and sales, trinkets left out); boots are the
         \\first pair bought, an upgraded pair counting as the boots it came from, and "no
         \\boots" once a player finished two items without any; finished items are those
-        \\used for first-item timing above, in the order they were bought. Boots and finished
-        \\items get no highest win rate mark: their win rates mostly say how the game was
-        \\going when they were bought (nobody finishes Mejai's in a game they're losing).</li>
+        \\used for first-item timing above, in the order they were bought; the fourth to sixth
+        \\are counted on their own, whatever came before. Beside each item the median minute
+        \\it was bought in that place: half the players who bought it there had it by then.
+        \\Boots and finished items get no highest win rate mark: their win rates mostly say
+        \\how the game was going when they were bought (nobody finishes Mejai's in a game
+        \\they're losing).</li>
         \\<li><b>Skill priority</b>: Q, W and E ordered by points spent after 13 skill
         \\points (or the game's end, from 11), ties going to the ability that got there
-        \\first.</li>
+        \\first. <b>Levels 1 to 18</b>: the ability taken at each level, from players who
+        \\reached level 11; a game that ended sooner continues as the player was going (R
+        \\at 6, 11 and 16, otherwise the ability with the most points), except for kits that
+        \\break those rules (R before 6, an ability past 5 points), which count only when
+        \\the game reached 18.</li>
         \\<li><b>Sample size</b>: every row shows games and its share. A win rate needs 100
         \\games and always comes with its 95% range; rows under 400 games are greyed out.
         \\Games that reach three finished items run long, so their win rates are for

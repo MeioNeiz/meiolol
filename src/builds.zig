@@ -1,6 +1,8 @@
 //! `meiolol builds`: what players build per champion and role, as lolalytics shows it:
 //! rune pages, summoner spells (participants), starting items, boots, the first finished
-//! items in purchase order and skill priority (compact timelines). Written as a JSON file
+//! items in purchase order, the 4th to 6th finished items, skill priority and the skill
+//! path through level 18 (compact timelines), and per finished item and boots the median
+//! minute bought. Written as a JSON file
 //! (`File`) that `meiolol site` turns into build pages (src/site/builds.zig).
 //!
 //! Memory is bounded by Options.max_keys distinct options, whatever the number of games:
@@ -45,6 +47,14 @@ pub const Kind = enum {
     skills,
     /// Ability slots of the first three skill-ups (levels 1 to 3)
     skill_start,
+    /// [item]: the 4th, 5th and 6th finished items, whatever came before
+    item4,
+    item5,
+    item6,
+    /// Levels 1 to 18, an ability slot (0 Q to 3 R) per level in 2 bits: [levels 1 to 16,
+    /// 17 and 18]. From 11 skill-ups; a game ending sooner is filled as the player was
+    /// going (Picks.skillPath)
+    skill_path,
 };
 
 pub const max_values = 8;
@@ -59,6 +69,11 @@ const every_rune = 64;
 pub const start_ms = 90_000;
 const skill_snapshot = 13;
 const min_skill_ups = 11;
+pub const max_level = 18;
+/// Finished items in Picks.core: core2, core3 and item4 to item6
+const max_items = 6;
+/// File.Build.minutes: a minute bucket each, the last for that minute and later
+const minute_buckets = 60;
 
 pub const Options = struct {
     /// Empty: any
@@ -69,8 +84,9 @@ pub const Options = struct {
     /// Lowest tier counted (participants.tier: the player's ladder rank when the game was
     /// stored); null counts everyone, unranked too
     min_tier: ?[]const u8 = "PLATINUM",
-    /// Distinct options held in memory (~50 bytes each)
-    max_keys: usize = 1 << 19,
+    /// Distinct options held in memory (~50 bytes each): at 1 << 19 the box's 16.21 run
+    /// with items 4 to 6 and skill paths pruned in its first week
+    max_keys: usize = 1 << 20,
     /// Options written per champion, role and kind, most played first
     rows: usize = 10,
     /// Distinct matchup options held (Builder.vs): at 1 << 22 the box's 16.20 run kept its
@@ -126,11 +142,23 @@ pub const File = struct {
         wins: u32,
         kinds: []const Rows,
 
+        /// Median minute each boots and finished item of the options was bought, by slot;
+        /// none in `matchups` and files before 24 Oct 2026
+        minutes: []const Minute = &.{},
+
         pub fn get(b: Build, kind: Kind) ?Rows {
             for (b.kinds) |r| if (r.kind == kind) return r;
             return null;
         }
+
+        pub fn minute(b: Build, slot: u8, item: u32) ?Minute {
+            for (b.minutes) |m| if (m.slot == slot and m.item == item) return m;
+            return null;
+        }
     };
+    /// slot: 0 boots (item the .boots value), 1 to 6 the nth finished item; games: players
+    /// who bought it there
+    pub const Minute = struct { slot: u8, item: u32, games: u32, minute: f64 };
     /// games and wins: every player with a value of this kind (the share's whole)
     pub const Rows = struct { kind: Kind, games: u32, wins: u32, options: []const Option };
     pub const Option = struct { v: []const u32, games: u32, wins: u32 };
@@ -164,11 +192,13 @@ const BuildKey = struct {
     }
 };
 
-/// Kinds counted per lane opponent; keystone, spells and skill_start only role-wide
-pub const matchup_kinds = [_]Kind{ .runes, .shards, .rune, .shard, .start, .boots, .core2, .core3, .skills };
+/// Kinds counted per lane opponent; keystone and skill_start only role-wide
+pub const matchup_kinds = [_]Kind{ .runes, .shards, .rune, .shard, .spells, .start, .boots, .core2, .core3, .item4, .item5, .item6, .skills, .skill_path };
 
 const Key = struct { champion: u16, role: Role, opponent: u16 = 0, kind: Kind, v: [max_values]u32 };
 const Total = struct { champion: u16, role: Role, opponent: u16 = 0, kind: ?Kind };
+const MinuteKey = struct { champion: u16, role: Role, slot: u8, item: u32 };
+const Minutes = [minute_buckets]u32;
 
 pub const Builder = struct {
     gpa: std.mem.Allocator,
@@ -176,6 +206,8 @@ pub const Builder = struct {
     options: std.AutoHashMapUnmanaged(Key, Count) = .empty,
     /// Per champion and role (kind null) and per kind
     totals: std.AutoHashMapUnmanaged(Total, Count) = .empty,
+    /// Role-wide only: players per minute bought, every boots and finished item by slot
+    minutes: std.AutoHashMapUnmanaged(MinuteKey, Minutes) = .empty,
     /// Options at or under this count were dropped
     floor: u32 = 0,
     dropped_games: u64 = 0,
@@ -192,6 +224,7 @@ pub const Builder = struct {
     pub fn deinit(b: *Builder) void {
         b.options.deinit(b.gpa);
         b.totals.deinit(b.gpa);
+        b.minutes.deinit(b.gpa);
         if (b.vs) |v| {
             v.deinit();
             b.gpa.destroy(v);
@@ -241,6 +274,13 @@ pub const Builder = struct {
         if (!e.found_existing) e.value_ptr.* = .{};
         e.value_ptr.games += 1;
         e.value_ptr.wins += @intFromBool(won);
+    }
+
+    fn addMinute(b: *Builder, c: u16, role: Role, slot: u8, item: u32, ms: i64) !void {
+        const e = try b.minutes.getOrPut(b.gpa, .{ .champion = c, .role = role, .slot = slot, .item = item });
+        if (!e.found_existing) e.value_ptr.* = @splat(0);
+        const m: usize = @intCast(std.math.clamp(@divFloor(ms, std.time.ms_per_min), 0, minute_buckets - 1));
+        e.value_ptr[m] += 1;
     }
 
     /// Drops the rarest options until at most half of max_keys are left
@@ -301,8 +341,15 @@ pub const Builder = struct {
         }
         if (k.core_len >= 2) try b.addVs(p.champion, p.role, opp, .core2, k.core[0..2], p.won);
         if (k.core_len >= 3) try b.addVs(p.champion, p.role, opp, .core3, k.core[0..3], p.won);
+        for ([_]Kind{ .item4, .item5, .item6 }, 3..) |kind, i| {
+            if (k.core_len > i) try b.addVs(p.champion, p.role, opp, kind, &.{k.core[i]}, p.won);
+        }
         if (k.skillOrder()) |order| try b.addVs(p.champion, p.role, opp, .skills, &order, p.won);
         if (k.skill_ups >= 3) try b.addVs(p.champion, p.role, opp, .skill_start, &.{ k.first[0], k.first[1], k.first[2] }, p.won);
+        if (k.skillPath()) |path| try b.addVs(p.champion, p.role, opp, .skill_path, &path, p.won);
+        if (b.per_opponent) return;
+        if (k.boots != 0) if (d.bootsOf(k.boots)) |boots| try b.addMinute(c, p.role, 0, boots, k.boots_ms);
+        for (k.core[0..k.core_len], k.core_ms[0..k.core_len], 1..) |item, ms, slot| try b.addMinute(c, p.role, @intCast(slot), item, ms);
     }
 
     /// The file, in `arena`: `rows` options per champion, role and kind, and the names
@@ -399,11 +446,62 @@ pub const Builder = struct {
                 .games = all.games,
                 .wins = all.wins,
                 .kinds = kinds.items,
+                .minutes = try b.fileMinutes(arena, first.champion, first.role, kinds.items),
             });
         }
         return builds.items;
     }
+
+    /// The median minute of each boots and finished item in `kinds`' options, in its slot
+    fn fileMinutes(b: *const Builder, arena: std.mem.Allocator, c: u16, role: Role, kinds: []const File.Rows) ![]const File.Minute {
+        if (b.minutes.count() == 0) return &.{};
+        var out: std.ArrayList(File.Minute) = .empty;
+        for (kinds) |rows| for (rows.options) |o| for (o.v, 0..) |item, i| {
+            const slot = itemSlot(rows.kind, i) orelse continue;
+            const hist = b.minutes.get(.{ .champion = c, .role = role, .slot = slot, .item = item }) orelse continue;
+            for (out.items) |m| {
+                if (m.slot == slot and m.item == item) break;
+            } else try out.append(arena, median(slot, item, hist));
+        };
+        std.mem.sort(File.Minute, out.items, {}, struct {
+            fn f(_: void, x: File.Minute, y: File.Minute) bool {
+                return if (x.slot != y.slot) x.slot < y.slot else x.item < y.item;
+            }
+        }.f);
+        return out.items;
+    }
 };
+
+/// File.Minute.slot of the item at `i` in an option of `kind`; null for kinds without
+pub fn itemSlot(kind: Kind, i: usize) ?u8 {
+    return switch (kind) {
+        .boots => 0,
+        .core2, .core3 => @intCast(i + 1),
+        .item4 => 4,
+        .item5 => 5,
+        .item6 => 6,
+        else => null,
+    };
+}
+
+/// The minute half the players had bought it by, within its bucket as if spread evenly,
+/// to a tenth
+fn median(slot: u8, item: u32, hist: Minutes) File.Minute {
+    var games: u32 = 0;
+    for (hist) |n| games += n;
+    const half = @as(f64, @floatFromInt(games)) / 2;
+    var below: f64 = 0;
+    var mid: f64 = 0;
+    for (hist, 0..) |n, m| {
+        const count: f64 = @floatFromInt(n);
+        if (n > 0 and below + count >= half) {
+            mid = @as(f64, @floatFromInt(m)) + (half - below) / count;
+            break;
+        }
+        below += count;
+    }
+    return .{ .slot = slot, .item = item, .games = games, .minute = @round(mid * 10) / 10 };
+}
 
 /// k for an option's win rate: how much true win rates differ between the options of one
 /// slot (a kind's rows; for .rune a tree row, for .shard a shard row), by the method of
@@ -499,17 +597,17 @@ fn nameList(kind: Kind) ?usize {
     return switch (kind) {
         .keystone, .runes, .shards, .rune => 1,
         .spells => 2,
-        .start, .boots, .core2, .core3 => 0,
-        .shard, .skills, .skill_start => null,
+        .start, .boots, .core2, .core3, .item4, .item5, .item6 => 0,
+        .shard, .skills, .skill_start, .skill_path => null,
     };
 }
 
 fn valueLen(kind: Kind, v: [max_values]u32) usize {
     return switch (kind) {
-        .keystone, .boots, .rune => 1,
+        .keystone, .boots, .rune, .item4, .item5, .item6 => 1,
         .runes => 8,
         .shards, .core3, .skills, .skill_start => 3,
-        .spells, .core2, .shard => 2,
+        .spells, .core2, .shard, .skill_path => 2,
         .start => std.mem.findScalar(u32, &v, 0) orelse max_values,
     };
 }
@@ -536,14 +634,20 @@ pub const Picks = struct {
     start_overflow: bool = false,
     /// First boots bought, the item itself (BuildData.bootsOf gives the choice)
     boots: u32 = 0,
-    core: [3]u32 = @splat(0),
+    boots_ms: i64 = 0,
+    /// Finished items in purchase order, and when each was bought
+    core: [max_items]u32 = @splat(0),
+    core_ms: [max_items]i64 = @splat(0),
     core_len: u8 = 0,
-    /// Q, W, E, R
+    /// Q, W, E, R: the first skill_snapshot skill-ups
     points: [4]u8 = @splat(0),
     reached_ms: [4]i64 = @splat(0),
     skill_ups: u8 = 0,
     /// Slots of the first three skill-ups
     first: [3]u8 = @splat(0),
+    /// Slot (1 Q to 4 R) of every skill-up up to max_level
+    path: [max_level]u8 = @splat(0),
+    path_len: u8 = 0,
 
     fn removeStart(p: *Picks, item: u32) void {
         const i = std.mem.findScalar(u32, p.start[0..p.start_len], item) orelse return;
@@ -563,7 +667,56 @@ pub const Picks = struct {
         }.f);
         return order;
     }
+
+    /// The .skill_path value: path packed 2 bits a level. A game ending before level 18,
+    /// from 11 skill-ups, is filled as the player was going: R when one is due (6, 11,
+    /// 16), else the basic ability with the most points under 5, ties to the one that got
+    /// there first. Not filled, so null, for a path off those rules (Udyr, Jayce and the
+    /// other kits with R before 6 or a basic past 5): those count from level 18 only
+    pub fn skillPath(p: Picks) ?[2]u32 {
+        if (p.path_len < min_skill_ups) return null;
+        var path = p.path;
+        if (p.path_len < max_level) {
+            var points: [4]u8 = @splat(0);
+            var reached: [4]usize = @splat(0);
+            for (path[0..p.path_len], 1..) |s, level| {
+                points[s - 1] += 1;
+                reached[s - 1] = level;
+                if (points[3] > ultPoints(level) or points[s - 1] > 5) return null;
+            }
+            for (p.path_len + 1..max_level + 1) |level| {
+                var s: u8 = 4;
+                if (points[3] == ultPoints(level)) {
+                    s = 0;
+                    for (1..4) |x| {
+                        if (points[x - 1] == 5) continue;
+                        if (s == 0 or points[x - 1] > points[s - 1] or
+                            (points[x - 1] == points[s - 1] and reached[x - 1] < reached[s - 1])) s = @intCast(x);
+                    }
+                    if (s == 0) return null;
+                }
+                path[level - 1] = s;
+                points[s - 1] += 1;
+                reached[s - 1] = level;
+            }
+        }
+        var v: [2]u32 = @splat(0);
+        for (path, 0..) |s, i| v[i / 16] |= @as(u32, s - 1) << @intCast(2 * (i % 16));
+        return v;
+    }
 };
+
+/// R points a standard kit can have at `level`
+fn ultPoints(level: usize) u8 {
+    return @as(u8, @intFromBool(level >= 6)) + @intFromBool(level >= 11) + @intFromBool(level >= 16);
+}
+
+/// Ability slots (1 Q to 4 R), one per level, of a .skill_path value
+pub fn unpackPath(v: []const u32) [max_level]u8 {
+    var out: [max_level]u8 = undefined;
+    for (&out, 0..) |*s, i| s.* = @intCast((v[i / 16] >> @intCast(2 * (i % 16)) & 3) + 1);
+    return out;
+}
 
 /// Every participant's picks; out[participant id - 1]
 pub fn picks(t: timeline.Timeline, d: *const ddragon.BuildData, out: []Picks) void {
@@ -579,9 +732,13 @@ pub fn picks(t: timeline.Timeline, d: *const ddragon.BuildData, out: []Picks) vo
                     p.start_len += 1;
                 }
             }
-            if (p.boots == 0 and d.bootsOf(b.item) != null) p.boots = b.item;
-            if (p.core_len < 3 and d.isLegendary(b.item)) {
+            if (p.boots == 0 and d.bootsOf(b.item) != null) {
+                p.boots = b.item;
+                p.boots_ms = e.t_ms;
+            }
+            if (p.core_len < max_items and d.isLegendary(b.item)) {
                 p.core[p.core_len] = b.item;
+                p.core_ms[p.core_len] = e.t_ms;
                 p.core_len += 1;
             }
         },
@@ -598,12 +755,17 @@ pub fn picks(t: timeline.Timeline, d: *const ddragon.BuildData, out: []Picks) vo
             if (p.core_len > 0 and p.core[p.core_len - 1] == u.before) {
                 p.core_len -= 1;
                 p.core[p.core_len] = 0;
+                p.core_ms[p.core_len] = 0;
             }
         },
         .skill_level_up => |s| {
             const p = at(out, s.participant) orelse continue;
             // EVOLVE: Kai'Sa, Kha'Zix and the like upgrading an ability, not a point
             if (s.slot < 1 or s.slot > 4 or std.mem.eql(u8, s.type, "EVOLVE")) continue;
+            if (p.path_len < max_level) {
+                p.path[p.path_len] = s.slot;
+                p.path_len += 1;
+            }
             if (p.skill_ups == skill_snapshot) continue;
             if (p.skill_ups < 3) p.first[p.skill_ups] = s.slot;
             p.skill_ups += 1;
@@ -869,6 +1031,38 @@ test "picks: starting items, boots, core and skills from events" {
     try testing.expectEqual([3]u8{ 1, 2, 3 }, p.first);
     try testing.expectEqual(0, out[1].start_len);
     try testing.expectEqual(null, out[1].skillOrder());
+    try testing.expectEqualSlices(i64, &.{ 600_000, 800_000, 900_000 }, p.core_ms[0..3]);
+    try testing.expectEqual(300_000, p.boots_ms);
+    // 14 skill-ups (EVOLVE out), then filled: E maxed at 13, W to 15, R at 16, W to 18
+    try testing.expectEqual(14, p.path_len);
+    try testing.expectEqualSlices(u8, &.{ 1, 2, 3, 1, 1, 4, 1, 3, 1, 3, 4, 3, 3, 2, 2, 4, 2, 2 }, &unpackPath(&p.skillPath().?));
+}
+
+test "skill path: 18 levels kept as played, off-rule kits only once complete" {
+    const of = struct {
+        fn f(slots: []const u8) Picks {
+            var p: Picks = .{};
+            @memcpy(p.path[0..slots.len], slots);
+            p.path_len = @intCast(slots.len);
+            return p;
+        }
+    }.f;
+    const full = [_]u8{ 1, 3, 2, 1, 1, 4, 1, 1, 3, 3, 4, 3, 3, 2, 2, 4, 2, 2 };
+    try testing.expectEqualSlices(u8, &full, &unpackPath(&of(&full).skillPath().?));
+    // Q maxed second: the fill follows the points, not the slot order
+    try testing.expectEqualSlices(u8, &.{ 3, 1, 2, 3, 3, 4, 3, 1, 3, 1, 4, 1, 1, 2, 2, 4, 2, 2 }, &unpackPath(&of(&.{ 3, 1, 2, 3, 3, 4, 3, 1, 3, 1, 4 }).skillPath().?));
+    // R at level 1 (Jayce): not filled
+    try testing.expectEqual(null, of(&.{ 4, 1, 2, 3, 1, 4, 1, 1, 1, 1, 4, 2 }).skillPath());
+    try testing.expectEqual(null, of(full[0..10]).skillPath());
+}
+
+test "median minute: halfway through the bucket half the players reach" {
+    var hist: Minutes = @splat(0);
+    hist[10] = 2;
+    hist[12] = 4;
+    // 3 of 6: one of the 4 in minute 12, a quarter of the way
+    try testing.expectEqual(12.3, median(1, 3078, hist).minute);
+    try testing.expectEqual(6, median(1, 3078, hist).games);
 }
 
 test "builder: shares, rank floor in build, pruning keeps totals" {
@@ -909,7 +1103,6 @@ test "builder: shares, rank floor in build, pruning keeps totals" {
     try testing.expectEqual(5, rune.games);
     try testing.expectEqual(1, rune.options.len);
     try testing.expectEqualSlices(u32, &.{8010}, rune.options[0].v);
-    try testing.expectEqual(null, darius.get(.core3));
     try testing.expectEqualStrings("Doran's Blade", f.items[0].name);
     try testing.expectEqual(null, f.get(122, .jungle));
 
@@ -947,10 +1140,19 @@ test "builder: per lane opponent, own floor, only matchups with enough games" {
         var k: Picks = .{};
         k.start[0] = 1055;
         k.start_len = 1;
+        k.core = .{ 3078, 3153, 6631, 3078, 0, 0 };
+        k.core_ms = .{ 600_000, 800_000, 900_000, 1_500_000 + @as(i64, @intCast(i)) * 60_000, 0, 0 };
+        k.core_len = 4;
         try b.addPlayer(.{ .champion = 122, .role = .top, .won = i < 2, .keystone = 8010, .spells = .{ 4, 12 }, .opponent = opp }, k, &d);
     }
     const f = try b.file(arena, &d, "16.20", "PLATINUM", 3);
-    try testing.expectEqual(6, f.get(122, .top).?.games);
+    const darius = f.get(122, .top).?;
+    try testing.expectEqual(6, darius.games);
+    try testing.expectEqualSlices(u32, &.{3078}, darius.get(.item4).?.options[0].v);
+    try testing.expectEqual(null, darius.get(.item5));
+    // Minutes 25 to 30, one each: the third of six is all of 27
+    try testing.expectEqual(28, darius.minute(4, 3078).?.minute);
+    try testing.expectEqual(10.5, darius.minute(1, 3078).?.minute);
     try testing.expectEqual(1, f.matchups.len);
     const garen = f.getVs(122, .top, 86).?;
     try testing.expectEqual(3, garen.games);
@@ -958,9 +1160,12 @@ test "builder: per lane opponent, own floor, only matchups with enough games" {
     try testing.expectEqual(3, garen.get(.start).?.options[0].games);
     try testing.expectEqualSlices(u32, &.{8010}, garen.get(.rune).?.options[0].v);
     try testing.expectEqual(3, garen.get(.rune).?.options[0].games);
+    try testing.expectEqualSlices(u32, &.{ 4, 12 }, garen.get(.spells).?.options[0].v);
+    try testing.expectEqual(3, garen.get(.item4).?.games);
+    try testing.expectEqual(0, garen.minutes.len);
     // Role-wide only
     try testing.expectEqual(null, garen.get(.keystone));
-    try testing.expectEqual(null, garen.get(.spells));
+    try testing.expectEqual(null, garen.get(.skill_start));
     try testing.expectEqual(null, f.getVs(122, .top, 875));
 
     const back = try File.parse(arena, try std.json.Stringify.valueAlloc(arena, f, .{}));

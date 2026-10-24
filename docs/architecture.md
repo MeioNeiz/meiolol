@@ -453,13 +453,20 @@ spells (unordered pair) from participants; from timelines: starting items (bough
 first 90 s, net of undo and sale, no trinkets), boots (first tier-2, tier 3 counted as
 its tier 2; "no boots" once two items are finished without), first two and first three
 finished items in purchase order (ddragon legendary rule, as first-item timing; an undone
-purchase comes off), skill priority (Q/W/E by points after 13 skill-ups or the game's end
-from 11, ties by who got there first; EVOLVE ups skipped). Needs Data Dragon's item.json,
+purchase comes off), the 4th, 5th and 6th finished item each on its own (any path), skill
+priority (Q/W/E by points after 13 skill-ups or the game's end from 11, ties by who got
+there first; EVOLVE ups skipped), skill path (the slot of each level 1-18, 2 bits a level
+in two u32s; from 11 skill-ups, a shorter game filled as the player was going: R when
+due, else the basic with most points under 5; kits off those rules, R before 6 or a basic
+past 5, only from a full 18). Per build `minutes`: median minute bought (one-minute
+histogram, interpolated) of each boots and finished item in its slot (0 boots, 1-6 nth
+item), for the items in the file's options; role-wide only. Matchups count every kind but
+keystone and skill_start. Needs Data Dragon's item.json,
 runesReforged.json and summoner.json for the patch (ddragon.buildData); stat shard names
 are a table in ddragon.zig.
 
 Memory: one hash map of distinct options (~50 B each) capped by --max-keys (default
-512k, ~30 MB); at the cap options at or under a rising count floor are dropped (logged),
+1M, ~60 MB); at the cap options at or under a rising count floor are dropped (logged),
 totals never. Per game an arena reset, like curves. Measured on 3.8k EUW 16.20 games
 (1.7k timelines): 1 s, 29 MB RSS, 25k options, 1.1 MB JSON; ~0.25 ms per timeline, so
 a full EUW patch (~400k) is a couple of minutes on a fast disk; on the micro the
@@ -479,8 +486,10 @@ Rows most played first, never by win rate, no "best" or "recommended": games and
 on every row, a win rate only from 100 games and always with its 95% range (±1.96 SE),
 rows under 400 greyed, a "more data needed" note under 400 for the champion-role. Item,
 rune and spell icons hotlink Data Dragon like champion icons. Method page section
-`#builds`. Levels 1-3: kind skill_start. Not yet: item timing, full skill sequence,
-builds by rank or matchup.
+`#builds`. Levels 1-3: kind skill_start. Not yet: builds by rank. Box, 16.21 all regions
+with matchups (348k games, 24 Oct): 83 s CPU, 877 MB RSS, 15.0 MB file (11.4 MB before
+items 4-6, skill paths, minutes and the matchups' spells); both key budgets prune at
+floor 1 in the patch's first week.
 
 ## Early or late (src/lean.zig, src/site/lean.zig)
 
