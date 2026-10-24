@@ -164,9 +164,9 @@ pub fn route(site: *const Site, w: *Writer, f: *const File, rest: []const u8) !b
     return true;
 }
 
-/// Champion page, in `r`'s section: view `v`'s most played choice of each kind with its
-/// games, share and win rate (a past-games fact, the build page's framing), and a link to
-/// v's build page; false when v has none. `from`: the champion page's path, at the site
+/// Champion page, in `r`'s section: view `v`'s build panel (games, share and win rate,
+/// past-games facts in the build page's framing) and a link to v's build page; false
+/// when v has none. `from`: the champion page's path, at the site
 /// root
 pub fn strip(site: *const Site, w: *Writer, ch: Champ, r: Role, from: []const u8, v: html.View) !bool {
     const picked = pick(site, v, shown, .{ ch.id, r }) orelse return false;
@@ -175,8 +175,8 @@ pub fn strip(site: *const Site, w: *Writer, ch: Champ, r: Role, from: []const u8
     // The previous patch's build has no page
     const href: ?html.Link = if (picked.newer != null) null else .{ .root = try site.toShared(from), .up = v.dir(), .path = try path(site.arena, ch, r) };
     try tpl.renderPart(w,
-        \\<div class="bstrip"><p class="bhead"><b>Most played build</b> {chip} <span class="muted">{when}, {in}, {ranks}: {games} game{s}.</span>{link}</p>
-        \\<div class="bks">
+        \\<div class="bstrip"><p class="bhead"><b>Build</b> {chip} <span class="muted">{when}, {in}, {ranks}: {games} game{s}.</span>{link}</p>
+        \\
     , .{
         .chip = site.chip(site.regionDim(v.region), try picked.chipPeriod(site), rankDim(f.min_tier)),
         .when = try picked.when(site),
@@ -186,15 +186,8 @@ pub fn strip(site: *const Site, w: *Writer, ch: Champ, r: Role, from: []const u8
         .s = plural(b.games),
         .link = tpl.when(href != null, tpl.t(" <a href=\"{href}\">Full build: runes, items and skill order</a>", .{ .href = href orelse html.Link{ .root = "", .path = "" } })),
     });
-    try top(w, f, b, null, .runes, "Runes");
-    if (f.trees.len == 0) try top(w, f, b, null, .shards, "Shards");
-    try top(w, f, b, null, .spells, "Spells");
-    try top(w, f, b, null, .start, "Start");
-    try top(w, f, b, null, .boots, "Boots");
-    try top(w, f, b, null, .core3, "First 3 items");
-    try top(w, f, b, null, .skill_start, "Levels 1-3");
-    try top(w, f, b, null, .skills, "Skill priority");
-    try w.writeAll("</div></div>\n");
+    try panel(w, f, b, null, v.index());
+    try w.writeAll("</div>\n");
     return true;
 }
 
@@ -422,6 +415,166 @@ fn cell(w: *Writer, f: *const File, b: File.Build, kind: Kind, v: []const u32, r
         if (try runePage(w, f, v, shards, ringed)) return;
     }
     try value(w, f, kind, v, true);
+}
+
+/// Item slots in the panel: top options each
+const slot_options = 3;
+
+/// A panel cell's options: most played `mp`, highest win rate `hw` when another one.
+/// In a matchup (b.opponent) options under rate_games are left out
+const Choice = struct {
+    rows: File.Rows,
+    mp: usize,
+    hw: ?usize,
+
+    fn of(f: *const File, b: File.Build, kind: Kind) ?Choice {
+        const rows = b.get(kind) orelse return null;
+        if (rows.options.len == 0) return null;
+        if (b.opponent != 0 and rows.options[0].games < rate_games) return null;
+        const hi = if (marked(kind)) highest(rows.options, rows.games, rows.wins, f.shrinkK(kind, b.opponent != 0), 2) else null;
+        return .{ .rows = rows, .mp = 0, .hw = if (hi) |i| if (i != 0) i else null else null };
+    }
+};
+
+/// The build panel (site.md CH3): the whole build on one card grid, for the champion
+/// page, the build page's top and the matchup page (`usual`: the role-wide build, its
+/// most played cells marked "as usual"). Most played by default (CH0 b); the toggle, a
+/// radio pair read by CSS, swaps cells to the highest win rate (highest()) where
+/// marked() allows one: items and boots stay by games either way. `tag` makes the
+/// radios' name unique on the page (a view's index)
+pub fn panel(w: *Writer, f: *const File, b: File.Build, usual: ?File.Build, tag: usize) !void {
+    var toggled = false;
+    for ([_]Kind{ .runes, .spells, .start, .skills, .skill_path }) |kind| {
+        if (Choice.of(f, b, kind)) |c| toggled = toggled or c.hw != null;
+    }
+    var buf: [64]u8 = undefined;
+    const name = try std.mem.print(&buf, "bp-{d}-{s}-{d}-{d}", .{ b.champion, @tagName(b.role), b.opponent, tag });
+    try tpl.renderPart(w, "<div class=\"bpanel\"><div class=\"bp-bar\">", .{});
+    if (toggled) try tpl.render(w,
+        \\<input type="radio" class="vh" name="{n}" id="{n}-mp" checked><label for="{n}-mp">Most played</label><input type="radio" class="vh hwr" name="{n}" id="{n}-hw"><label for="{n}-hw">Highest win rate</label>
+    , .{ .n = name });
+    try tpl.render(w,
+        \\<small>Games · share of players · % won from {rated} games{grey}</small><small class="hwv">. Highest win rate adjusted for few games; items and boots stay by games, as a finished item's win rate mostly says how the game was going</small>
+    , .{ .rated = rate_games, .grey = tpl.t(", grey under {solid}", .{ .solid = solid_games }) });
+    try tpl.renderPart(w, "</div>", .{});
+    try tpl.renderPart(w, "<div class=\"bp-grid\">", .{});
+    try pcell(w, f, b, usual, .runes, "Runes");
+    try skillCell(w, f, b, usual);
+    try pcell(w, f, b, usual, .spells, "Spells");
+    try pcell(w, f, b, usual, .start, "Start");
+    try pcell(w, f, b, usual, .core3, "First 3 items");
+    try pcell(w, f, b, usual, .boots, "Boots");
+    try slotCell(w, f, b, .item4, "Item 4");
+    try slotCell(w, f, b, .item5, "Item 5");
+    try slotCell(w, f, b, .item6, "Item 6");
+    try tpl.renderPart(w, "</div></div>\n", .{});
+}
+
+/// One kind's most played option, and its highest win rate one for the toggle
+fn pcell(w: *Writer, f: *const File, b: File.Build, usual: ?File.Build, kind: Kind, comptime title: []const u8) !void {
+    const c = Choice.of(f, b, kind) orelse return;
+    try tpl.renderPart(w, "<div class=\"bc {kind}\"><span>{title}</span>", .{ .kind = @tagName(kind), .title = title });
+    if (c.hw) |hw| {
+        try tpl.renderPart(w, "<div class=\"mpv\">", .{});
+        try popt(w, f, b, usual, c.rows, c.mp);
+        try tpl.renderPart(w, "</div><div class=\"hwv\">", .{});
+        try popt(w, f, b, usual, c.rows, hw);
+        try tpl.renderPart(w, "</div>", .{});
+    } else try popt(w, f, b, usual, c.rows, c.mp);
+    try tpl.renderPart(w, "</div>\n", .{});
+}
+
+fn popt(w: *Writer, f: *const File, b: File.Build, usual: ?File.Build, rows: File.Rows, i: usize) !void {
+    const o = rows.options[i];
+    try tpl.render(w,
+        \\<div class="bo{thin}"><div class="bv">{value}</div>{fold}<small title="{games} of {all} players took this">{games} · {share:.0}%{rate}{same}</small></div>
+    , .{
+        .thin = tpl.when(o.games < solid_games, " thin"),
+        .value = tpl.call(cell, .{ f, b, rows.kind, o.v, null }),
+        .fold = tpl.when(rows.kind == .runes, tpl.call(runeFold, .{ f, o.v })),
+        .games = root.Thousands{ .n = o.games },
+        .all = root.Thousands{ .n = rows.games },
+        .share = pct(o.games, rows.games),
+        .rate = tpl.when(o.games >= rate_games, tpl.t(" · {wr:.1}% won", .{ .wr = pct(o.wins, o.games) })),
+        .same = tpl.when(sameAs(usual, rows.kind, o.v), tpl.t(" <em>as usual</em>", .{})),
+    });
+}
+
+/// Whether `v` is also `usual`'s most played of `kind`
+fn sameAs(usual: ?File.Build, kind: Kind, v: []const u32) bool {
+    const u = (usual orelse return false).get(kind) orelse return false;
+    return u.options.len > 0 and std.mem.eql(u32, u.options[0].v, v);
+}
+
+/// Phone: a .runes value as its keystone and secondary tree (CSS hides the full page)
+fn runeFold(w: *Writer, f: *const File, v: []const u32) !void {
+    try w.writeAll("<div class=\"rfold\">");
+    try named(w, f.runes, v[1], true);
+    try named(w, f.runes, v[5], false);
+    try w.writeAll("</div>");
+}
+
+/// Skill priority over the 4x18 grid of levels 1 to 18 (.skill_path)
+fn skillCell(w: *Writer, f: *const File, b: File.Build, usual: ?File.Build) !void {
+    const pri = Choice.of(f, b, .skills);
+    const path_c = Choice.of(f, b, .skill_path);
+    if (pri == null and path_c == null) return;
+    try tpl.renderPart(w, "<div class=\"bc skills\"><span>Skill order</span>", .{});
+    const split = (if (pri) |c| c.hw != null else false) or (if (path_c) |c| c.hw != null else false);
+    for ([_]bool{ false, true }) |hw| {
+        if (hw and !split) break;
+        if (split) try tpl.renderPart(w, "<div class=\"{v}\">", .{ .v = if (hw) "hwv" else "mpv" });
+        if (pri) |c| try popt(w, f, b, usual, c.rows, if (hw) c.hw orelse c.mp else c.mp);
+        if (path_c) |c| {
+            const i = if (hw) c.hw orelse c.mp else c.mp;
+            const o = c.rows.options[i];
+            try tpl.render(w,
+                \\<div class="bo{thin}">{grid}<small title="{games} of {all} players took this order, levels 1 to 18">{games} · {share:.0}%{rate}{same}</small></div>
+            , .{
+                .thin = tpl.when(o.games < solid_games, " thin"),
+                .grid = tpl.call(skillGrid, .{o.v}),
+                .games = root.Thousands{ .n = o.games },
+                .all = root.Thousands{ .n = c.rows.games },
+                .share = pct(o.games, c.rows.games),
+                .rate = tpl.when(o.games >= rate_games, tpl.t(" · {wr:.1}% won", .{ .wr = pct(o.wins, o.games) })),
+                .same = tpl.when(sameAs(usual, .skill_path, o.v), tpl.t(" <em>as usual</em>", .{})),
+            });
+        }
+        if (split) try tpl.renderPart(w, "</div>", .{});
+    }
+    try tpl.renderPart(w, "</div>\n", .{});
+}
+
+/// Rows Q, W, E, R; a level's cell lit with its number in the row of the ability taken
+fn skillGrid(w: *Writer, v: []const u32) !void {
+    const path_v = builds.unpackPath(v);
+    try w.writeAll("<div class=\"sg\">");
+    for ([_][]const u8{ "Q", "W", "E", "R" }, 1..) |key, slot| {
+        try w.print("<b>{s}</b>", .{key});
+        for (path_v, 1..) |s, level| {
+            if (s == slot) try w.print("<i class=\"on\">{d}</i>", .{level}) else try w.writeAll("<i></i>");
+        }
+    }
+    try w.writeAll("</div>");
+}
+
+/// An item slot's top slot_options options: icon, win rate, games
+fn slotCell(w: *Writer, f: *const File, b: File.Build, kind: Kind, comptime title: []const u8) !void {
+    const c = Choice.of(f, b, kind) orelse return;
+    try tpl.renderPart(w, "<div class=\"bc slot {kind}\"><span>{title}</span>", .{ .kind = @tagName(kind), .title = title });
+    for (c.rows.options[0..@min(slot_options, c.rows.options.len)]) |o| {
+        if (b.opponent != 0 and o.games < rate_games) break;
+        try tpl.render(w,
+            \\<div class="bs{thin}">{icon}<small title="{games} of {all} players">{rate}{games}</small></div>
+        , .{
+            .thin = tpl.when(o.games < solid_games, " thin"),
+            .icon = tpl.call(named, .{ f.items, o.v[0], false }),
+            .games = root.Thousands{ .n = o.games },
+            .all = root.Thousands{ .n = c.rows.games },
+            .rate = tpl.when(o.games >= rate_games, tpl.t("<b>{wr:.1}%</b>", .{ .wr = pct(o.wins, o.games) })),
+        });
+    }
+    try tpl.renderPart(w, "</div>\n", .{});
 }
 
 fn findTree(f: *const File, id: u32) ?ddragon.Tree {
@@ -731,6 +884,7 @@ fn writePage(site: *const Site, w: *Writer, f: *const File, ch: Champ, r: Role, 
             \\
         , .{ .games = b.games, .s = plural(b.games), .solid = solid_games, .rated = rate_games });
     }
+    try panel(w, f, b, null, 0);
     try w.writeAll("<h2>Runes</h2>\n");
     const explored = try runeStats(w, f, b, false);
     const paged = try pages(w, f, b);

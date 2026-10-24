@@ -1255,6 +1255,66 @@ ul.rshift li > span { flex-basis: 100%; }
   .bk.runes { grid-column: 1 / -1; }
 }
 
+/* Build panel (builds.zig panel): the whole build on one grid; radios swap .mpv and .hwv */
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.bpanel { margin: 0 0 6px; }
+.bp-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; margin: 0 0 6px; font-size: 12.5px; }
+.bp-bar label { border: 1px solid var(--line); padding: 2px 10px; cursor: pointer; color: var(--muted); }
+.bp-bar label:first-of-type { border-radius: 999px 0 0 999px; }
+.bp-bar label:last-of-type { border-radius: 0 999px 999px 0; border-left: 0; margin-right: 10px; }
+.bp-bar input:checked + label { color: var(--text); background: var(--panel); border-color: var(--turn); }
+.bp-bar input.hwr:checked + label { border-color: var(--good); }
+.bp-bar input:focus-visible + label { outline: 2px solid var(--turn); outline-offset: 1px; }
+.bp-bar small { color: var(--faint); font-size: 11.5px; }
+.hwv { display: none; }
+.bpanel:has(.hwr:checked) .mpv { display: none; }
+.bpanel:has(.hwr:checked) .hwv { display: block; }
+.bpanel:has(.hwr:checked) .bp-bar small.hwv { display: inline; }
+.bp-grid {
+  display: grid; gap: 8px; align-items: start;
+  grid-template-columns: auto auto repeat(4, minmax(0, 1fr));
+  grid-template-areas: "runes skills spells start core3 boots" "runes skills item4 item5 item6 .";
+}
+.bc { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; display: flex; flex-direction: column; gap: 4px; min-width: 0; height: 100%; }
+.bc > span { color: var(--muted); font-size: 12px; }
+.bc small { color: var(--faint); font-size: 11.5px; }
+.bc small em { font-style: normal; color: var(--t2); }
+.bc.runes { grid-area: runes; }
+.bc.skills { grid-area: skills; }
+.bc.spells { grid-area: spells; }
+.bc.start { grid-area: start; }
+.bc.core3 { grid-area: core3; }
+.bc.boots { grid-area: boots; }
+.bc.item4 { grid-area: item4; }
+.bc.item5 { grid-area: item5; }
+.bc.item6 { grid-area: item6; }
+.bo { display: flex; flex-direction: column; gap: 3px; }
+.bo + .bo { margin-top: 4px; }
+.bo.thin, .bs.thin { opacity: 0.6; }
+.rfold { display: none; }
+.bs { display: flex; align-items: center; gap: 6px; }
+.bs .icon { width: 28px; height: 28px; border-radius: 4px; }
+.bs small { display: flex; flex-direction: column; line-height: 1.2; }
+.bs small b { color: var(--text); font-weight: 600; }
+.sg { display: grid; grid-template-columns: 14px repeat(18, 15px); gap: 2px; font-size: 10px; line-height: 15px; text-align: center; }
+.sg b { color: var(--muted); font-weight: 600; }
+.sg i { font-style: normal; background: #1b1d22; border-radius: 3px; height: 15px; }
+.sg i.on { background: color-mix(in srgb, var(--turn) 30%, #1b1d22); color: var(--text); }
+.sg b:nth-of-type(4) ~ i.on { background: color-mix(in srgb, var(--turn) 60%, #1b1d22); font-weight: 600; }
+@media (max-width: 1300px) {
+  .bp-grid { grid-template-columns: auto auto repeat(2, minmax(0, 1fr)); grid-template-areas: "runes skills spells start" "runes skills core3 boots" "item4 item5 item6 ."; }
+}
+@media (max-width: 900px) {
+  .bp-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: "runes runes skills" "spells start core3" "boots item4 item5" "item6 . ."; }
+}
+@media (max-width: 640px) {
+  .bp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "runes spells" "skills skills" "start core3" "boots item4" "item5 item6"; }
+  .bc.runes .bv { display: none; }
+  .rfold { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+  .rfold .icon { width: 28px; height: 28px; border-radius: 50%; }
+  .sg { grid-template-columns: 12px repeat(18, minmax(0, 1fr)); font-size: 9px; }
+}
+
 /* Rune page as in game (builds.zig runePage): every rune of the trees, chosen ones lit */
 .bks:has(.rp) { display: grid; grid-template-columns: auto repeat(3, minmax(0, 1fr)); }
 .bks:has(.rp) .bk.runes { grid-row: span 2; }
