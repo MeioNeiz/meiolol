@@ -53,16 +53,34 @@ that slow everyday development).
   builds with -fno-sanitize-coverage; the fuzzer checks every input for leaks, so
   harness state lives per input
 
+- One `net` module, steps 1-4 (24 Oct): src/net/ (build module "net", std only, a
+  module doc with an example, imported by backend, app, mock and desktop; backend-check,
+  desktop-check and desktop-fuzz run its tests). ratelimit.zig (governor: global and
+  per-key windows corrected from the server's limit and count headers, priority,
+  pacing, save/load; riot/ratelimit.zig keeps routes and the personal key's spec),
+  sign.zig (Ed25519 in text bound to a context; desktop/sign.zig keeps keys and
+  contexts, signatures byte for byte as before), server.zig (httpd.zig moved, as is),
+  pinned.zig (HTTPS GET trusting one root and no host name, from lcu/https.zig). Found
+  on the way: a chunked answer after a first chunk whose size overflowed body + size
+  panicked (the desktop app is ReleaseSafe), saturating now, regression test
+
 ## Next, by how exposed the code is
 
 1. HTTP server limits: done 23 Oct (above)
 2. Backend fuzzing: done 24 Oct (above). Could still add: a nightly run on the
    gpu-box, the crawler's other Riot replies (league, mastery, account ids)
 3. ThreadSanitizer: done 24 Oct (above)
-4. One library-grade `net` module (like tpl/ and nn/: std only, own tests, a worked
-   example in its header): the server limits, LCU TLS (lcu/https.zig), the rate limiter
-   (riot/ratelimit.zig), signing (desktop/sign.zig). A Zig upgrade's std.http and
-   std.Io changes then land in one place
+4. `net` module: steps 1-4 done (above). Step 5, client timeouts and a safe fetch:
+   std.http.Client has no timeout (ConnectTcpOptions.timeout is never read), so a
+   stalled server blocks a crawl thread or the desktop's "Signing in..." for good.
+   Cancelling the call returns in ~200 ms on macOS and Windows (Io.Threaded), so plan
+   net.deadline.within(io, limit, func, args) on Io.Select. Blocker found: std's
+   fetch() panics (bodyErr().? null) when a Content-Length body read fails, on cancel
+   AND on a plain connection reset mid-body: desktop update.zig and device.zig and
+   ddragon.zig all call fetch. So step 5 also needs net's own GET (request,
+   receiveHead, bounded body read, connection closing on error, as riot/client.zig
+   does) and those three moved to it. Repros and handover: net-notes.md of the
+   2026-10-23-progress run
 5. Desktop release checks: done 24 Oct. deploy/desktop-shots.sh (`zig build desktop-shot
    --compare`: every state from pinned inputs, pixel for pixel against an approved set,
    NAME.diff.png for a change; renders are deterministic, a one-word change shows as 289
