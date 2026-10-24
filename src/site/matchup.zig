@@ -396,6 +396,7 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     }
     try comeback.card(w, curves, r, x, y);
     try splits(w, curves, vs, r, x, y);
+    try duos(site, w, r, x, y);
     try tpl.renderPart(w, "</div>\n", .{});
     try builds.vsStrip(site, w, r, x, y, page_path);
     const to_site = try site.toShared(page_path);
@@ -762,6 +763,69 @@ fn splitRow(w: *Writer, label: []const u8, v: View) !void {
         .gold = tpl.when(has_gold, tpl.call(signed, .{v.estimate(.gold, i).mean})),
         .dash = tpl.when(!has_gold, "-"),
     });
+}
+
+/// Most duo partners listed for each side
+const duo_rows = 5;
+
+/// Bot lane: the supports x and y each play with, most games first, vs usual as on the
+/// champion page's Duos tab; a support matchup lists their bot laners. From all of each
+/// champion's games in the role, not only this matchup's: the stats count pairs, not
+/// threes
+fn duos(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ) !void {
+    const r2: Role = switch (r) {
+        .bottom => .utility,
+        .utility => .bottom,
+        else => return,
+    };
+    const p: champion.Pairs = .{ .st = &site.stats, .r = r, .r2 = r2, .ally = true };
+    const k = champion.pairsUsualK(p);
+    try tpl.renderPart(w,
+        \\<section class="mu-card mu-duos"><h2>{title} <span class="muted">in all their {lane} games</span></h2><div class="split">
+        \\
+    , .{ .title = if (r2 == .utility) "Supports" else "Bot laners", .lane = root.roleName(r) });
+    const to_site = try site.toShared(try path(site.arena, r, x, y));
+    for ([_]Champ{ x, y }) |ch| try duoRows(site, w, p, k, ch, to_site);
+    try tpl.renderPart(w, "</div></section>\n", .{});
+}
+
+fn duoRows(site: *const Site, w: *Writer, p: champion.Pairs, k: f64, ch: Champ, to_site: []const u8) !void {
+    const st = p.st;
+    const Duo = struct { ch: Champ, wins: u32, games: u32 };
+    var list: std.ArrayList(Duo) = .empty;
+    for (0..st.n) |c2| {
+        const e = p.get(ch.c, c2);
+        if (e.games == 0) continue;
+        try list.append(site.arena, .{ .ch = site.champs[site.by_c[c2] orelse continue], .wins = e.wins, .games = e.games });
+    }
+    std.mem.sort(Duo, list.items, {}, struct {
+        fn f(_: void, a: Duo, b: Duo) bool {
+            return a.games > b.games;
+        }
+    }.f);
+    try tpl.render(w, "<span class=\"sh\">{x} with</span><span class=\"sh num\">Vs usual</span><span class=\"sh num\">Games</span>\n", .{ .x = ch.name });
+    if (list.items.len == 0) return tpl.render(w, "<span class=\"thin\">more data needed</span><span></span><span></span>\n", .{});
+    const cr = st.champRole(p.r, ch.c);
+    for (list.items[0..@min(duo_rows, list.items.len)]) |d| {
+        const dr = st.champRole(p.r2, d.ch.c);
+        const u = p.usualOf(root.ratio(cr.wins, cr.games), root.ratio(dr.wins, dr.games));
+        const v = champion.VsUsual.of(d.wins, d.games, u, k);
+        try tpl.render(w,
+            \\<a class="champ" href="{href}" style="opacity:{fade:.2}"><img src="{icon}" alt="" loading="lazy" width="24" height="24">{name}</a><span class="vs num" style="--c:{colour};opacity:{fade:.2}" title="{title}"><b>{pts}</b></span><span class="num dim">{games}</span>
+            \\
+        , .{
+            .href = try site.champHref(d.ch, to_site),
+            .fade = curvesfile.fade(d.games),
+            .icon = try site.icon(d.ch),
+            .name = d.ch.name,
+            .colour = tierlist.wrColour(0.5 + v.mean, tierlist.table_span),
+            .title = try site.arena.print("{s} with {s}: {d:.1}% won in {f} games, usually about {d:.1}%", .{
+                ch.name, d.ch.name, 100 * root.ratio(d.wins, d.games), root.Thousands{ .n = d.games }, 100 * u,
+            }),
+            .pts = champion.Points{ .v = v.mean },
+            .games = root.Thousands{ .n = d.games },
+        });
+    }
 }
 
 /// "50.3%"; "-" without games

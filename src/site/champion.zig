@@ -230,19 +230,19 @@ fn filterBar(site: *const Site, w: *Writer, ch: Champ) !void {
 
 /// What one tab of the opponent grid counts: ch in r against champions in r2, or with
 /// them (ally: duos)
-const Pairs = struct {
+pub const Pairs = struct {
     st: *const Stats,
     r: Role,
     r2: Role,
     ally: bool = false,
 
-    fn get(p: Pairs, c: usize, o: usize) Counts {
+    pub fn get(p: Pairs, c: usize, o: usize) Counts {
         return if (p.ally) p.st.ally(p.r, p.r2, c, o) else p.st.enemy(p.r, p.r2, c, o);
     }
 
     /// usual() of a champion winning `base` in r with or against one winning `strength`
     /// in r2: an ally adds on the log-odds scale what an opponent takes away
-    fn usualOf(p: Pairs, base: f64, strength: f64) f64 {
+    pub fn usualOf(p: Pairs, base: f64, strength: f64) f64 {
         return usual(base, if (p.ally) 1 - strength else strength);
     }
 };
@@ -329,7 +329,7 @@ pub fn usualK(st: *const Stats, r: Role) f64 {
     return pairsUsualK(.{ .st = st, .r = r, .r2 = r });
 }
 
-fn pairsUsualK(p: Pairs) f64 {
+pub fn pairsUsualK(p: Pairs) f64 {
     var q: f64 = 0;
     var noise: f64 = 0;
     var scale: f64 = 0;

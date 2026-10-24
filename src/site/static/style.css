@@ -917,6 +917,10 @@ p.mu-sum { margin: 12px 0 10px; max-width: 820px; font-weight: 500; }
 .split > span:not(.sh) { white-space: nowrap; }
 .split .num { text-align: right; font-variant-numeric: tabular-nums; }
 .split .thin { opacity: 0.5; }
+.mu-duos .champ { gap: 8px; }
+.mu-duos .champ img { width: 24px; height: 24px; border-radius: 5px; }
+.mu-duos .vs b { color: var(--c); font-weight: 600; }
+.mu-duos .sh:not(:first-child, .num) { margin-top: 6px; }
 .mu-card .rx { background: none; border: 0; padding: 4px 0 0; }
 .mu-card .bks { margin-top: 8px; }
 .mu-rbody { display: grid; gap: 14px; }
