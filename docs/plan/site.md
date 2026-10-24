@@ -264,7 +264,10 @@ opponent grid are its first components.
   (build order 5), the empty band between Role and Win rate at 1280, phone role tabs
   wrapping Support
 - CH9 Clarity: docs/ui-audit.md "Champion page" items (colour against copy, one win
-  rate legend, the sort key on opponents and "also play", one number format)
+  rate legend, the sort key on opponents and "also play", one number format). Done 24 Oct
+  (9df944c): patch line in plain ink unless clear, the opponent key says it is the
+  matchup scale, the order named on opponents, "also play" shows its lift and sits in
+  narrow columns, separators on players and games (gold still without)
 
 ### Status
 
