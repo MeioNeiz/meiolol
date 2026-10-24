@@ -71,8 +71,8 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
    AC1-AC3 live 23 Oct (logins on /admin/, admins by sign-up link, controls owner
    only; /p/ Draft tester, account page, admin Accounts tab); next AC4 (desktop sign
    in); Jacob picks the first private accounts; logins backed up to the gpu-box (health
-   alert if it stops); app.md APP2-APP4
-   against the mock, APP1 (real capture) is Jacob's. Draft tester moves to the private
+   alert if it stops); editions split and the private channel /p/desktop/ done 24 Oct
+   (app.md APP2, accounts.md AC5); app.md APP3-APP4 against the mock, APP1 (real capture) is Jacob's. Draft tester moves to the private
    site (app.md "Private site")
 7. Comp leans: held-out look ~24 Oct, then champion pages and reasons:
    data-and-model.md
@@ -88,7 +88,7 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
    and 8 feed it
 10. Our Zig "libraries" toward what the Rust crates give (Jacob 21 Oct), checks outside
    ci: desktop releases signed, fuzzed and ReleaseSafe done, HTTP server limits done
-   23 Oct, backend TSan 24 Oct (no races); next backend fuzzing, one `net` module: docs/plan/libraries.md
+   23 Oct, backend TSan and desktop shot comparison and Windows smoke start 24 Oct; next backend fuzzing, one `net` module: docs/plan/libraries.md
 
 Others own: the TW2 mastery retry (meiolol-8f); neural nets vs
 today's model; the draft's "Rammus into high AD/AP" check.
