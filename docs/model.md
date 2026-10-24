@@ -5508,6 +5508,49 @@ gains less on the newest window (-0.16 against -0.52 spread), so the newest-wind
 model with its net is worse by 0.46 in total; worth a look before the net is refitted
 on recent games only.
 
+#### A1: scaling curves at 1/16 to all fit games, 2026-10-24 (dev only)
+
+Each family refitted per block on a hashed share of its fit games (netcheck --fraction,
+harness.inFraction: nested, the same games at every size; base and net both), scored on
+the same 753,959 games. Fit games: dev-val 74k, 149k, 298k, 596k, 1.19M; fold 1 37k to
+595k, fold 5 67k to 1.07M. Runs queue.sh a1 at 1db246e (`*-setid-wa-f*`, `*-big-f*`,
+`*-set-wr-f*`, all -2004Z; fraction 1 is P2's runs): ratings and set net + emb on it
+(seed 1), win-draft and big on it (seeds 1-10), v2 full and set net + emb on it (seeds
+1-3). Log loss:
+
+| fraction | ratings | set on ratings | win-draft | big on win-draft | v2 full | set on v2 |
+| --- | --- | --- | --- | --- | --- | --- |
+| folds pooled | | | | | | |
+| 1/16 | 0.69064 | 0.69049 | 0.69130 | 0.69083 | 0.68975 | 0.68985 |
+| 1/8 | 0.68984 | 0.68968 | 0.68968 | 0.68975 | 0.68848 | 0.68839 |
+| 1/4 | 0.68899 | 0.68847 | 0.68830 | 0.68847 | 0.68708 | 0.68680 |
+| 1/2 | 0.68862 | 0.68727 | 0.68717 | 0.68685 | 0.68601 | 0.68557 |
+| 1 | 0.68850 | 0.68635 | 0.68603 | 0.68451 | 0.68480 | 0.68406 |
+| dev-val | | | | | | |
+| 1/16 | 0.69001 | 0.68975 | 0.69009 | 0.69008 | 0.68886 | 0.68872 |
+| 1/8 | 0.68921 | 0.68919 | 0.68880 | 0.68890 | 0.68775 | 0.68763 |
+| 1/4 | 0.68855 | 0.68758 | 0.68765 | 0.68791 | 0.68648 | 0.68629 |
+| 1/2 | 0.68840 | 0.68687 | 0.68663 | 0.68542 | 0.68544 | 0.68493 |
+| 1 | 0.68837 | 0.68587 | 0.68566 | 0.68356 | 0.68422 | 0.68365 |
+
+Last doubling (1/2 to all, folds, milli-nats): ratings -0.12, win-draft -1.14, v2 full
+-1.21, set on v2 -1.51, set on ratings -0.92, big on win-draft -2.34. Big against v2
+full (paired, folds): +0.85 ± 0.17 at 1/2, -0.29 ± 0.20 at all; set on v2 against big
+at all: -0.45 ± 0.18 (dev-val +0.09 ± 0.35).
+
+Reading (dev):
+- Ratings have plateaued (0.1 per doubling); every pair model and net is still gaining
+  1.1 to 2.3 per doubling at 1.19M games, so the plateau question is answered for the
+  draft models: no plateau yet
+- Nets need data: under 1/4 (~300k games) a net adds nothing over its base (set on v2
+  +0.10 at 1/16), and its gain grows with each doubling (set on v2 over v2: -0.28 at
+  1/4, -0.44 at 1/2, -0.74 at all)
+- The big net passes v2 between half and all the games and gains the most per doubling;
+  set on v2 is still 0.45 ahead. If both keep their last slope, big passes set on v2
+  within the next doubling (~2.4M fit games), which is a forecast, not a measurement
+- Train loss isn't logged (netcheck prints its inner-validation loss only), so the
+  train/test bracket per family the plan asked for is still to do
+
 ### Strength at fixed mastery (D1), 2026-10-24 (w1c, prepin run)
 
 Question (docs/plan/lab-frontier.md D1): a champion-role's raw win rate mixes its

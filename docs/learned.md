@@ -25,6 +25,15 @@ How to write a line:
 
 ## Win
 
+- 2026-10-24 (early): More games still make every draft model better, and the deeper
+  models gain the most: the last doubling of the games (to about 1.2M) added 0.4 points
+  of accuracy to the pair model and 0.7 to the largest net, while a model of champion
+  strength alone has stopped improving. The nets only start to help past about 300k
+  games, and the largest one now edges past the pair model. Sure: dev only, five sizes
+  from 1/16 to all games, the same 754k held-out ranked games for all; the forecast that
+  the largest net becomes best with twice the games is an extrapolation. Site: nothing
+  yet; a reason to keep crawling and re-check at the next snapshot. Evidence:
+  docs/model.md "A1: scaling curves"
 - 2026-10-24 (early): Champion strength and pairings from the newest games predict no
   better than the same number of games from up to two weeks earlier: what wins drafts within a
   patch barely moves day to day, so older games are worth keeping and more games is what
