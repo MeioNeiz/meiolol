@@ -13,6 +13,7 @@ const root = @import("root.zig");
 const html = @import("html.zig");
 const tpl = html.tpl;
 const matchup = @import("matchup.zig");
+const lean = @import("../lean.zig");
 
 const Writer = std.Io.Writer;
 const Role = core.Role;
@@ -379,6 +380,137 @@ fn lanePuzzle(site: *const Site) !?Puzzle {
     };
 }
 
+/// A lean counts from this many win points from an even game at win_minute
+const lean_min_points = 3;
+/// and this much team gold at gold_minute, against the role's average pick
+const lean_min_gold = 200;
+
+fn leanClear(r: lean.Row) bool {
+    return r.enough() and r.lean() != .none and @abs(r.win) >= lean_min_points and
+        @abs(r.gold) >= lean_min_gold;
+}
+
+/// The hook first (the early champion furthest ahead at 14, yet losing long games, of
+/// those played in hook_games or more), then per other role its most played champion
+/// with a clear lean, clearest first
+fn leanRows(a: std.mem.Allocator, rows: []const lean.Row, hook_games: u32) ![]const lean.Row {
+    var hook: ?lean.Row = null;
+    for (rows) |r| {
+        if (!leanClear(r) or r.lean() != .early or r.games < hook_games) continue;
+        if (hook == null or r.gold > hook.?.gold) hook = r;
+    }
+    const h = hook orelse return &.{};
+    var per_role: [Role.count]?lean.Row = @splat(null);
+    for (rows) |r| {
+        if (!leanClear(r) or r.role == h.role) continue;
+        const slot = &per_role[@backingInt(r.role)];
+        if (slot.* == null or r.games > slot.*.?.games) slot.* = r;
+    }
+    var out: std.ArrayList(lean.Row) = .empty;
+    try out.append(a, h);
+    for (per_role) |r| if (r) |x| try out.append(a, x);
+    const z = struct {
+        fn more(_: void, x: lean.Row, y: lean.Row) bool {
+            return @abs(x.win) / x.win_sd > @abs(y.win) / y.win_sd;
+        }
+    };
+    std.mem.sort(lean.Row, out.items[1..], {}, z.more);
+    return out.items;
+}
+
+fn inRole(r: Role) []const u8 {
+    return switch (r) {
+        .top => "in top lane",
+        .jungle => "in the jungle",
+        .middle => "in mid lane",
+        .bottom => "in bot lane",
+        .utility => "as support",
+    };
+}
+
+fn roleNoun(r: Role) []const u8 {
+    return switch (r) {
+        .top => "top laner",
+        .jungle => "jungler",
+        .middle => "mid laner",
+        .bottom => "bot laner",
+        .utility => "support",
+    };
+}
+
+/// "Early or late?": does winning lane win the game? From `meiolol lean`
+fn leanPuzzles(site: *const Site) ![]const Puzzle {
+    const file = site.lean orelse return &.{};
+    const a = site.arena;
+    // An off-role pick with a few hundred games is no hook: 1 in 100 games, about 13k
+    // over 30 days
+    const rows = try leanRows(a, file.rows, file.games / 100);
+    var enough: u32 = 0;
+    var clear: u32 = 0;
+    for (file.rows) |r| {
+        if (!r.enough()) continue;
+        enough += 1;
+        if (r.lean() != .none) clear += 1;
+    }
+    const from = try a.print("Ranked games, {s}, games still going at {d} minutes", .{
+        file.scope, lean.win_minute,
+    });
+    var out: std.ArrayList(Puzzle) = .empty;
+    for (rows, 0..) |r, i| {
+        const c = matchup.champ(site, r.champion) orelse continue;
+        const gold: root.Thousands = .{ .n = @trunc(@round(@abs(r.gold) / 10) * 10) };
+        const pts: i64 = @max(1, @as(i64, @trunc(@round(@abs(r.win)))));
+        const early = r.lean() == .early;
+        const told = try a.print("{s}'s team was {f} gold {s} at {d} minutes, and won {d} " ++
+            "points {s} often from an even game at {d}", .{
+            c.name,           gold, if (early) "ahead" else "behind",
+            lean.gold_minute, pts,  if (early) "less" else "more",
+            lean.win_minute,
+        });
+        const games = try a.print(", over {f} games", .{root.Thousands{ .n = r.games }});
+        if (i == 0) {
+            try out.append(a, .{
+                .id = "lean-hook",
+                .topic = "Lane and game",
+                .q = try a.print("With {s} {s}, the team is usually {f} gold ahead at {d} " ++
+                    "minutes. From an even game at {d}, does it win more or less often than " ++
+                    "with an average {s}?", .{
+                    c.name, inRole(r.role), gold, lean.gold_minute, lean.win_minute, roleNoun(r.role),
+                }),
+                .kind = .pick,
+                .answer = 1,
+                .choices = &.{ .{ .t = "More often" }, .{ .t = "Less often" } },
+                .real = try a.print("Less: {s}{s}", .{ told, games }),
+                .why = try a.print("Early champions win lanes, not long games. {d} of {d} " ++
+                    "champion-roles lean clearly early or late.", .{ clear, enough }),
+                .tip = "Ahead with an early champion? Spend the lead before 20 minutes.",
+                .from = from,
+            });
+            continue;
+        }
+        try out.append(a, .{
+            .id = try a.print("lean-{d}-{t}", .{ r.champion, r.role }),
+            .topic = "Lane and game",
+            .q = try a.print("{s} {s}: does the team lean early or late?", .{ c.name, inRole(r.role) }),
+            .kind = .pick,
+            .answer = if (early) 0 else 1,
+            .choices = &.{ .{ .t = "Early: ahead at 14 minutes" }, .{ .t = "Late: wins more from even at 20" } },
+            .real = try a.print("{s}: {s}{s}", .{ if (early) "Early" else "Late", told, games }),
+            .why = if (early)
+                "Its lead comes early; in a long, even game the other team is stronger."
+            else
+                "Behind at 14, but in a long, even game its team is the stronger one.",
+            .tip = if (early)
+                try a.print("Against {s}, play safe early: an even game at 20 is better " ++
+                    "than usual for you.", .{c.name})
+            else
+                try a.print("Against {s}, end it early: take objectives before 20 minutes.", .{c.name}),
+            .from = from,
+        });
+    }
+    return out.items;
+}
+
 /// Every puzzle in play order
 pub fn list(site: *const Site) ![]const Puzzle {
     var out: std.ArrayList(Puzzle) = .empty;
@@ -386,6 +518,7 @@ pub fn list(site: *const Site) ![]const Puzzle {
         try out.append(site.arena, p);
         if (std.mem.eql(u8, p.id, fed_role.id)) {
             if (try lanePuzzle(site)) |l| try out.append(site.arena, l);
+            try out.appendSlice(site.arena, try leanPuzzles(site));
         }
     }
     return out.items;
@@ -418,4 +551,31 @@ test "puzzles have an answer in range, games on every bar and no pick advice" {
             }
         }
     }
+}
+
+test leanRows {
+    const row = struct {
+        fn f(champion: u32, role: Role, games: u32, gold: f64, win: f64) lean.Row {
+            return .{ .champion = champion, .role = role, .games = games, .gold = gold, .gold_sd = 50, .win = win, .win_sd = 1 };
+        }
+    }.f;
+    const rows = [_]lean.Row{
+        row(1, .bottom, 40_000, 850, -8), // the hook: most gold of the early ones
+        row(10, .top, 1_500, 1_000, -9), // more gold, too few games for the hook
+        row(2, .bottom, 90_000, -250, 6), // same role as the hook
+        row(3, .top, 60_000, 300, -4),
+        row(4, .top, 70_000, -660, 7), // top's most played
+        row(5, .jungle, 150_000, 250, -2), // under 3 points
+        row(6, .jungle, 80_000, 150, -5), // under 200 gold
+        row(7, .middle, 100, 900, -9), // too few games
+        row(8, .utility, 90_000, 400, 5), // ahead and wins more: no lean
+        row(9, .middle, 50_000, -300, 12),
+    };
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const got = try leanRows(arena.allocator(), &rows, 10_000);
+    var ids: [3]u32 = undefined;
+    try std.testing.expectEqual(ids.len, got.len);
+    for (got, &ids) |r, *id| id.* = r.champion;
+    try std.testing.expectEqualSlices(u32, &.{ 1, 9, 4 }, &ids);
 }
