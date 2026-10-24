@@ -162,10 +162,23 @@ puzzle game: docs/learn-proposal.md (team run 2026-10-19 night, teach).
   split pushers, luck), one from this patch's curves (a matchup whose lane leader, 60%+ of
   games ahead at 14, wins 5+ points and 2 SE under even, 300+ games; live: Viego vs Zac
   jungle, 74% ahead, Zac wins 57% of 367). Lessons renamed Basics; Practice unchanged
-- Next for puzzles: refresh the hand-written numbers when the checks are rerun (each
-  names its source in puzzles.zig); more generated puzzles from live data (champion
-  lean: early or late; counter or just strong, from vs usual); a daily five; drop or
-  keep Basics and Practice (Jacob)
+- Done 24 Oct (progress run, learn; a27b186, b0d28e5): generated puzzles from live data,
+  proposal chapters 2 and 4. Early or late (`meiolol lean`, after the lane puzzle): a
+  hook, the early champion furthest ahead at 14 of those in 1 in 100 games (live:
+  Draven bot, 850 gold up, 8 points less often from even at 20, 45,991 games: more or
+  less often?), then per other role its most played champion with a clear lean (both
+  parts 2 sd, 3+ points, 200+ gold): early or late? Counter or just strong (every
+  region, last 30 days lane curves; one region's patch is too thin to clear k): per top,
+  mid and bot, the most played champion losing by 2 SE to one real counter (3+ points
+  under usual, shrunk by k as vs usual, 2 sd, opponent 51% or less) and one or two
+  opponents strong against everyone (within 1 point of usual, 51%+ by 2 SE); names
+  only, reveal bars each rate and the opponent's own (local: Yone top, Jax; Zed mid,
+  Irelia; bot none at k 2,500). 18 puzzles in one line now: the chapter map is next
+- Next for puzzles: the map (proposal "Home"): chapters as tiles with their question,
+  progress and tips earned, a chapter's puzzles then its takeaways; a champion icon on
+  generated questions; refresh the hand-written numbers when the checks are rerun (each
+  names its source in puzzles.zig); myth or measured cards (chapter 5); a daily five;
+  drop or keep Basics and Practice (Jacob)
 - Next: levels inside a Difficulty by clarity (easy drills whose one bringer also leads
   its lane before ones whose doesn't; hard ones sorted by how close the four sit);
   lesson examples as tiles, not sentences; a lesson from lane curves (who is ahead at 14)
