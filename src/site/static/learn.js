@@ -299,7 +299,7 @@ function pzEnd(box, focus) {
   head.tabIndex = -1;
   box.append(head, el("p", "", "Every takeaway, for your next game:"));
   const tips = el("ul", "pz-tips");
-  for (const p of puzzles) tips.append(el("li", "", p.tip));
+  for (const tip of new Set(puzzles.map((p) => p.tip))) tips.append(el("li", "", tip));
   box.append(tips);
   const nav = el("div", "lesson-nav");
   nav.append(

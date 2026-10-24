@@ -14,6 +14,8 @@ const html = @import("html.zig");
 const tpl = html.tpl;
 const matchup = @import("matchup.zig");
 const lean = @import("../lean.zig");
+const champion = @import("champion.zig");
+const curvesfile = core.curvesfile;
 
 const Writer = std.Io.Writer;
 const Role = core.Role;
@@ -511,6 +513,202 @@ fn leanPuzzles(site: *const Site) ![]const Puzzle {
     return out.items;
 }
 
+/// Opponents of a counter puzzle each beat the champion by 2 SE in this many games or more
+const counter_min_games = 200;
+/// A real counter: this far under usual() (shrunk, as the champion page's vs usual) and
+/// 2 sd, against an opponent winning at most counter_ordinary in the role
+const counter_min_gap = 0.03;
+const counter_ordinary = 0.51;
+/// Just strong: within this of usual(), against an opponent winning at least
+/// counter_strong in the role, by 2 SE
+const strong_max_gap = 0.01;
+const counter_strong = 0.51;
+
+const Tally = struct {
+    games: u64 = 0,
+    wins: u64 = 0,
+
+    fn rate(t: Tally) f64 {
+        return root.ratio(t.wins, t.games);
+    }
+};
+
+/// x against one lane opponent, from x's side
+const Against = struct { o: u32, wins: u32, games: u32, own: Tally, vs: champion.VsUsual };
+
+const Beaten = enum { counter, strong, neither };
+
+/// How x losing to an opponent reads: a real counter, the opponent's own strength, or
+/// neither clearly
+fn beaten(a: Against) Beaten {
+    const n: f64 = @floatFromInt(a.games);
+    const rate = root.ratio(a.wins, a.games);
+    if (a.games < counter_min_games) return .neither;
+    if (0.5 - rate < 2 * @sqrt(rate * (1 - rate) / n)) return .neither;
+    const o = a.own.rate();
+    const o_se = @sqrt(o * (1 - o) / @as(f64, @floatFromInt(@max(1, a.own.games))));
+    if (-a.vs.mean >= counter_min_gap and -a.vs.mean >= 2 * a.vs.sd and o <= counter_ordinary) return .counter;
+    if (@abs(a.vs.mean) <= strong_max_gap and o >= counter_strong and o - 0.5 >= 2 * o_se) return .strong;
+    return .neither;
+}
+
+/// One role's lane matchups from a curves file: each champion's own record (its
+/// matchups summed) and k for vs usual (as champion.usualK, over these pairs)
+const Lanes = struct {
+    pairs: []const curvesfile.Header,
+    own: std.AutoHashMapUnmanaged(u32, Tally),
+    k: f64,
+
+    fn init(a: std.mem.Allocator, curves: *const curvesfile.Curves, r: Role) !Lanes {
+        var pairs: std.ArrayList(curvesfile.Header) = .empty;
+        var own: std.AutoHashMapUnmanaged(u32, Tally) = .empty;
+        for (curves.curves) |c| {
+            const h = c.header;
+            if (!matchup.isPage(h) or h.role != @backingInt(r) or h.a == 0) continue;
+            const ta = try own.getOrPutValue(a, h.a, .{});
+            ta.value_ptr.games += h.games;
+            ta.value_ptr.wins += h.a_wins;
+            const tb = try own.getOrPutValue(a, h.b, .{});
+            tb.value_ptr.games += h.games;
+            tb.value_ptr.wins += h.games - h.a_wins;
+            if (h.a != h.b) try pairs.append(a, h.*);
+        }
+        var l: Lanes = .{ .pairs = pairs.items, .own = own, .k = 0 };
+        var q: f64 = 0;
+        var noise: f64 = 0;
+        var scale: f64 = 0;
+        for (l.pairs) |h| {
+            const u = l.usualOf(h.a, h.b);
+            const g: f64 = @floatFromInt(h.games);
+            const d = @as(f64, @floatFromInt(h.a_wins)) - g * u;
+            q += d * d / g;
+            noise += u * (1 - u);
+            scale += g;
+        }
+        l.k = 0.25 / std.math.clamp((q - noise) / @max(scale, 1), 0.0001, 0.01);
+        return l;
+    }
+
+    fn usualOf(l: *const Lanes, x: u32, o: u32) f64 {
+        return champion.usual(l.own.get(x).?.rate(), l.own.get(o).?.rate());
+    }
+
+    fn against(l: *const Lanes, x: u32, h: curvesfile.Header) Against {
+        const o = if (h.a == x) h.b else h.a;
+        const wins = if (h.a == x) h.a_wins else h.games - h.a_wins;
+        return .{
+            .o = o,
+            .wins = wins,
+            .games = h.games,
+            .own = l.own.get(o).?,
+            .vs = champion.VsUsual.of(wins, h.games, l.usualOf(x, o), l.k),
+        };
+    }
+};
+
+/// "Counter or just strong?" in role r: the most played champion that loses clearly to
+/// one real counter and to one or two opponents strong against everyone (two if any
+/// champion has them), from the every
+/// region, last 30 days lane curves (a patch in one region is too few games for a
+/// counter to clear k)
+fn counterPuzzle(site: *const Site, r: Role) !?Puzzle {
+    const curves = &(site.view_curves[(html.View{ .region = .all, .period = .days30 }).index()] orelse return null);
+    const a = site.arena;
+    const lanes: Lanes = try .init(a, curves, r);
+    const Case = struct { x: u32, games: u64, counter: Against, strong: [2]?Against };
+    var best: ?Case = null;
+    var it = lanes.own.iterator();
+    while (it.next()) |e| {
+        const x = e.key_ptr.*;
+        if (best) |b| if (e.value_ptr.games <= b.games and (b.strong[1] != null)) continue;
+        var counter: ?Against = null;
+        var strong: [2]?Against = .{ null, null };
+        for (lanes.pairs) |h| {
+            if (h.a != x and h.b != x) continue;
+            const o = lanes.against(x, h);
+            switch (beaten(o)) {
+                .counter => if (counter == null or o.vs.mean / o.vs.sd < counter.?.vs.mean / counter.?.vs.sd) {
+                    counter = o;
+                },
+                // The two most played
+                .strong => if (strong[0] == null or o.games > strong[0].?.games) {
+                    strong[1] = strong[0];
+                    strong[0] = o;
+                } else if (strong[1] == null or o.games > strong[1].?.games) {
+                    strong[1] = o;
+                },
+                .neither => {},
+            }
+        }
+        if (counter == null or strong[0] == null) continue;
+        // Three options beat two; then the most played
+        if (best) |b| if (b.strong[1] != null and strong[1] == null) continue;
+        if (best) |b| if ((b.strong[1] != null) == (strong[1] != null) and e.value_ptr.games <= b.games) continue;
+        best = .{ .x = x, .games = e.value_ptr.games, .counter = counter.?, .strong = strong };
+    }
+    const b = best orelse return null;
+    const x = matchup.champ(site, b.x) orelse return null;
+    const Named = struct { c: Champ, t: Against };
+    var buf: [3]Named = undefined;
+    var three: []Named = buf[0..0];
+    for ([_]?Against{ b.counter, b.strong[0], b.strong[1] }) |maybe| {
+        const t = maybe orelse continue;
+        three.len += 1;
+        three[three.len - 1] = .{ .c = matchup.champ(site, t.o) orelse return null, .t = t };
+    }
+    const by_name = struct {
+        fn less(_: void, p: Named, q: Named) bool {
+            return std.mem.lessThan(u8, p.c.name, q.c.name);
+        }
+    };
+    std.mem.sort(Named, three, {}, by_name.less);
+    const choices = try a.alloc(Choice, three.len);
+    const bars = try a.alloc(Bar, three.len);
+    var answer: usize = 0;
+    var c_name: []const u8 = "";
+    var strong: std.ArrayList(u8) = .empty;
+    for (three, choices, bars, 0..) |n, *ch, *bar, i| {
+        const pct = @round(100 * root.ratio(n.t.wins, n.t.games));
+        ch.* = .{ .t = n.c.name, .icon = try site.icon(n.c) };
+        const counter = n.t.o == b.counter.o;
+        if (counter) {
+            answer = i;
+            c_name = n.c.name;
+        } else {
+            if (strong.items.len > 0) try strong.appendSlice(a, " and ");
+            try strong.appendSlice(a, n.c.name);
+        }
+        bar.* = .{
+            .label = try a.print("{s} ({d:.0}% overall)", .{ n.c.name, @round(100 * n.t.own.rate()) }),
+            .v = pct,
+            .n = n.t.games,
+            .hi = counter,
+        };
+    }
+    const c = b.counter;
+    return .{
+        .id = try a.print("counter-{t}", .{r}),
+        .topic = "Counters",
+        .q = try a.print("{s} {s} loses most games against {s}. Which one is a real " ++
+            "counter, not just strong against everyone?", .{ x.name, inRole(r), if (three.len == 3) "all three" else "both" }),
+        .kind = .pick,
+        .answer = @floatFromInt(answer),
+        .choices = choices,
+        .real = try a.print("{s}: {s} won {d:.0} points less than usual against an opponent " ++
+            "that strong, over {f} games", .{
+            c_name, x.name, @max(1, @round(-100 * c.vs.mean)), root.Thousands{ .n = c.games },
+        }),
+        .bars = bars,
+        .why = try a.print("{s} beat{s} most of {s}'s rivals too; {s} wins only {d:.0}% " ++
+            "against everyone, yet {s} still loses to it.", .{
+            strong.items,               if (three.len == 3) "" else "s", x.name, c_name,
+            @round(100 * c.own.rate()), x.name,
+        }),
+        .tip = "Before calling it a counter, check the enemy's win rate against everyone.",
+        .from = "Ranked games, every region, all ranks, last 30 days",
+    };
+}
+
 /// Every puzzle in play order
 pub fn list(site: *const Site) ![]const Puzzle {
     var out: std.ArrayList(Puzzle) = .empty;
@@ -519,6 +717,9 @@ pub fn list(site: *const Site) ![]const Puzzle {
         if (std.mem.eql(u8, p.id, fed_role.id)) {
             if (try lanePuzzle(site)) |l| try out.append(site.arena, l);
             try out.appendSlice(site.arena, try leanPuzzles(site));
+            for ([_]Role{ .top, .middle, .bottom }) |r| {
+                if (try counterPuzzle(site, r)) |c| try out.append(site.arena, c);
+            }
         }
     }
     return out.items;
@@ -555,8 +756,8 @@ test "puzzles have an answer in range, games on every bar and no pick advice" {
 
 test leanRows {
     const row = struct {
-        fn f(champion: u32, role: Role, games: u32, gold: f64, win: f64) lean.Row {
-            return .{ .champion = champion, .role = role, .games = games, .gold = gold, .gold_sd = 50, .win = win, .win_sd = 1 };
+        fn f(id: u32, role: Role, games: u32, gold: f64, win: f64) lean.Row {
+            return .{ .champion = id, .role = role, .games = games, .gold = gold, .gold_sd = 50, .win = win, .win_sd = 1 };
         }
     }.f;
     const rows = [_]lean.Row{
@@ -578,4 +779,23 @@ test leanRows {
     try std.testing.expectEqual(ids.len, got.len);
     for (got, &ids) |r, *id| id.* = r.champion;
     try std.testing.expectEqualSlices(u32, &.{ 1, 9, 4 }, &ids);
+}
+
+test beaten {
+    const k = 600;
+    const case = struct {
+        fn f(wins: u32, games: u32, own_rate: f64, usual: f64) Against {
+            const own: Tally = .{ .games = 100_000, .wins = @round(own_rate * 100_000) };
+            return .{ .o = 1, .wins = wins, .games = games, .own = own, .vs = champion.VsUsual.of(wins, games, usual, k) };
+        }
+    }.f;
+    // 45% of 5,000 against a 49% champion, usually 51%: 5 points under, shrunk to 4.5
+    try std.testing.expectEqual(Beaten.counter, beaten(case(2_250, 5_000, 0.49, 0.51)));
+    // 48% of 5,000 against a 52% champion, usually 48%
+    try std.testing.expectEqual(Beaten.strong, beaten(case(2_400, 5_000, 0.52, 0.48)));
+    // Too few games, or not losing by 2 SE
+    try std.testing.expectEqual(Beaten.neither, beaten(case(80, 190, 0.49, 0.51)));
+    try std.testing.expectEqual(Beaten.neither, beaten(case(2_450, 5_000, 0.52, 0.48)));
+    // Far under usual, but the opponent is strong: neither clearly
+    try std.testing.expectEqual(Beaten.neither, beaten(case(2_100, 5_000, 0.53, 0.47)));
 }
