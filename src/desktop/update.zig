@@ -288,7 +288,7 @@ test "Auth.find: the sign in before the shared key" {
     try std.testing.expectEqualStrings("t", Auth.find(arena, io, tmp.dir).?.device);
 }
 
-const httpd = @import("../httpd.zig");
+const httpd = @import("net").server;
 
 /// Serves the files in `dir` under /d/ to requests carrying the key "k" or the device
 /// token "t"

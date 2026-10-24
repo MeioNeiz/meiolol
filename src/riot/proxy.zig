@@ -10,7 +10,7 @@ const Allocator = std.mem.Allocator;
 const Client = @import("client.zig").Client;
 const Limiters = @import("ratelimit.zig").Limiters;
 const Fake = @import("fake.zig").Fake;
-const httpd = @import("../httpd.zig");
+const httpd = @import("net").server;
 
 const log = std.log.scoped(.proxy);
 

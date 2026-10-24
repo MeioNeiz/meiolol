@@ -9,7 +9,7 @@ const Io = std.Io;
 const site = @import("site/root.zig");
 const matchup = @import("site/matchup.zig");
 const store = @import("store");
-const httpd = @import("httpd.zig");
+const httpd = @import("net").server;
 pub const admin_api = @import("admin_api.zig");
 
 const log = std.log.scoped(.serve);

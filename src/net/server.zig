@@ -1,5 +1,26 @@
-//! The accept and request loops the HTTP servers share: serve.zig (local and preview
-//! site), api/root.zig (Your games) and riot/proxy.zig (the crawler's proxy for it)
+//! An HTTP/1.1 server on std.http.Server with the limits hyper and axum set: a cap on
+//! open connections, head and body sizes, and idle, head and handler timeouts, so a slow
+//! or hostile client can't hold the process up. Each connection runs on its own thread.
+//!
+//!     fn handle(app: *App, r: *std.http.Server.Request) !void {
+//!         try r.respond("hello", .{});
+//!     }
+//!     fn connection(app: *App, conn: server.Connection) void {
+//!         server.requests(.web, app.io, conn, app, handle, .path);
+//!     }
+//!
+//!     var listener = try address.listen(io, .{ .reuse_address = true });
+//!     // Returns when cancelled, closing every connection
+//!     server.accept(.web, io, &listener, .{ .connections = 256 }, &app, connection);
+//!
+//! Past a limit the client gets an answer, then the connection closes: 503 over the
+//! connection cap, 431 for a head over 64 KB, 413 for a body over `Limits.body`, 411 for
+//! a chunked body, 400 for a head that doesn't parse. A timeout shuts the socket down,
+//! which ends the handler's blocked read or write with an error.
+//!
+//! What it leaves to the handler: routing, reading the body (`request.readerExpectNone`
+//! or `readerExpectContinue`, bounded by `Limits.body`) and anything past HTTP/1.1. Put
+//! TLS in front (nginx, a load balancer)
 
 const std = @import("std");
 const Io = std.Io;
@@ -9,18 +30,18 @@ const Request = std.http.Server.Request;
 pub const Logged = enum {
     /// The target without its query
     path,
-    /// The error alone: the path may hold a Riot ID or PUUID
+    /// The error alone, for paths that hold personal data
     error_only,
 };
 
-/// What hyper and axum bound, per server. nginx in front has lower caps of its own
-/// (/etc/nginx/conf.d/meiolol.conf on jomify); these sit behind them and guard what reaches
-/// a port directly. A head over 64 KB is answered 431 (the receive buffer, see `requests`)
+/// What hyper and axum bound, per server. Behind a proxy with lower caps of its own
+/// these guard what reaches the port directly. A head over 64 KB is answered 431 (the
+/// receive buffer, see `requests`)
 pub const Limits = struct {
     /// Open connections; one more is answered 503 and closed
     connections: u16 = 128,
     /// Request body bytes by Content-Length, else 413. A chunked body is refused (411):
-    /// nginx and our own clients state a length, and std discards an unread body whole
+    /// proxies such as nginx state a length, and std discards an unread body whole
     body: u32 = 16 * 1024,
     /// Waiting for the next request's first byte
     idle: ?Io.Duration = .fromSeconds(60),
@@ -29,7 +50,7 @@ pub const Limits = struct {
     /// Reading the body and answering
     handle: ?Io.Duration = .fromSeconds(60),
 
-    /// Loopback mocks and tests: the client is ours and may keep a connection or a
+    /// Loopback mocks and tests: the client is trusted and may keep a connection or a
     /// request open as long as it likes
     pub const local: Limits = .{ .idle = null, .handle = null };
 
@@ -179,7 +200,7 @@ pub fn requests(
     const log = std.log.scoped(scope);
     const limits = conn.limits;
     // Holds the whole request head: browsers send every localhost port's cookies, often
-    // over 8 KB from other dev servers
+    // over 8 KB from other dev servers on a developer's machine
     var recv_buffer: [64 * 1024]u8 = undefined;
     var send_buffer: [16 * 1024]u8 = undefined;
     var conn_reader = conn.stream.reader(io, &recv_buffer);
@@ -269,10 +290,10 @@ const Test = struct {
         t.server.deinit(io);
     }
     fn serve(s: *Io.net.Server) void {
-        accept(.httpd, io, s, limits, {}, connection);
+        accept(.server, io, s, limits, {}, connection);
     }
     fn connection(_: void, conn: Connection) void {
-        requests(.httpd, io, conn, {}, handle, .path);
+        requests(.server, io, conn, {}, handle, .path);
     }
     fn handle(_: void, r: *Request) !void {
         try r.respond("ok", .{});

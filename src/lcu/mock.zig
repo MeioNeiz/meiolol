@@ -16,7 +16,7 @@
 //! (what `zig build test` checks the watch saw, see mock_test in this file).
 
 const std = @import("std");
-const httpd = @import("../httpd.zig");
+const httpd = @import("net").server;
 const Io = std.Io;
 const Value = std.json.Value;
 

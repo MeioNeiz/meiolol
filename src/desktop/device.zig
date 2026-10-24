@@ -66,7 +66,7 @@ fn sentence(arena: std.mem.Allocator, text: []const u8) ![]const u8 {
     return s;
 }
 
-const httpd = @import("../httpd.zig");
+const httpd = @import("net").server;
 
 /// Answers POST /auth/device as accounts.zig does, for "friend" with "right"
 const TestServer = struct {

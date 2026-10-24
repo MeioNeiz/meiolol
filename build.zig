@@ -95,7 +95,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/mocklcu_main.zig"),
         .target = target,
         .optimize = optimize,
-        .imports = &.{.{ .name = "core", .module = m.core }},
+        .imports = &.{ .{ .name = "core", .module = m.core }, .{ .name = "net", .module = m.net } },
     }) });
     const mock_install = b.addInstallArtifact(mock_exe, .{});
     const mock_run = b.addRunArtifact(mock_exe);
@@ -174,7 +174,7 @@ pub fn build(b: *std.Build) void {
     const backend_tsan = modules(b, target, .Debug);
     const backend_check = b.step("backend-check", "Backend tests that run threads, under ThreadSanitizer");
     const tsan_filters: []const []const u8 = if (test_filters.len > 0) test_filters else &.{
-        "par.test", "ahead.test", "httpd.test", "proxy.test", "ratelimit.test", "idle keep-alive", "pipeline_test",
+        "par.test", "ahead.test", "server.test", "proxy.test", "ratelimit.test", "idle keep-alive", "pipeline_test",
     };
     for ([_]*std.Build.Module{ backend_tsan.backend, backend_tsan.store, backend_tsan.net }) |t| {
         t.sanitize_thread = true;
