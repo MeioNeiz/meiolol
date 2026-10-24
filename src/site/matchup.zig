@@ -380,7 +380,7 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     const vs = try variants(a, curves, r, x, y);
     const base = curves.baseline(r, .all);
     const o = odds(&site.stats, r, x, y, champion.usualK(&site.stats, r));
-    try headline(w, o, v, x, y);
+    try headline(w, o, v, r, x, y);
     try tiles(site, w, o, v, r, x, y, when);
     // Everything on screen at once as cards: the gold curve beside both sides' numbers,
     // then XP, CS, comebacks and the splits, then the build
@@ -592,29 +592,29 @@ fn summary(w: *Writer, v: View, x: Champ, y: Champ) !void {
 
 /// x's win rate against y (the view's stats) and against usual (champion.VsUsual, as
 /// the champion page's opponent grid); `ka`: champion.usualK of `r`
-const Odds = struct { wins: u32, games: u32, usual: f64, d: champion.VsUsual };
+/// `base`: x's win rate in the role, the champion page's
+const Odds = struct { wins: u32, games: u32, base: f64, usual: f64, d: champion.VsUsual };
 
 fn odds(st: *const core.Stats, r: Role, x: Champ, y: Champ, ka: f64) Odds {
     const e = st.enemy(r, r, x.c, y.c);
     const xr = st.champRole(r, x.c);
     const yr = st.champRole(r, y.c);
-    const u = champion.usual(root.ratio(xr.wins, xr.games), root.ratio(yr.wins, yr.games));
-    return .{ .wins = e.wins, .games = e.games, .usual = u, .d = champion.VsUsual.of(e.wins, e.games, u, ka) };
+    const base = root.ratio(xr.wins, xr.games);
+    const u = champion.usual(base, root.ratio(yr.wins, yr.games));
+    return .{ .wins = e.wins, .games = e.games, .base = base, .usual = u, .d = champion.VsUsual.of(e.wins, e.games, u, ka) };
 }
 
-/// Vs usual within this (a share) reads "about usual" in the headline
-const about_usual = 0.01;
-
 /// The page's answer in a line, descriptive (docs/production-key.md product rules): x's
-/// win rate here against x's usual, then the lane (lead())
-fn headline(w: *Writer, o: Odds, v: View, x: Champ, y: Champ) !void {
+/// win rate here, then in all its games in the role (the champion page's number; the
+/// Vs usual tile compares against this opponent's strength), then the lane (lead())
+fn headline(w: *Writer, o: Odds, v: View, r: Role, x: Champ, y: Champ) !void {
     if (o.games == 0) return;
-    try tpl.render(w, "<p class=\"verdict mu-sum\">{x} wins {wr} against {y}, {side} {x}'s usual {usual:.1}%.{lead}</p>\n", .{
+    try tpl.render(w, "<p class=\"verdict mu-sum\">{x} wins {wr} against {y}, {base:.1}% in all {lane} games.{lead}</p>\n", .{
         .x = x.name,
         .wr = tpl.call(pct1, .{ o.wins, o.games }),
         .y = y.name,
-        .side = if (@abs(o.d.mean) < about_usual) "about" else if (o.d.mean > 0) "above" else "below",
-        .usual = 100 * o.usual,
+        .base = 100 * o.base,
+        .lane = root.roleName(r),
         .lead = tpl.call(lead, .{ v, x }),
     });
 }
@@ -630,7 +630,7 @@ fn tiles(site: *const Site, w: *Writer, o: Odds, v: View, r: Role, x: Champ, y: 
     const cs_gold = if (has_gold and r != .jungle and r != .utility) round10(@as(i32, v.estimate(.cs, i).mean) * gold_per_cs) else null;
     const lane = v.lane();
     try tpl.render(w,
-        \\<div class="tiles mu-tiles"><div><span>Win rate</span><b class="wrc" style="--c:{wr_colour};opacity:{fade:.2}">{wr}</b><small>{x} against {y}</small></div><div title="{title}"><span>Vs usual</span><b class="vs" style="--c:{colour}">{pts}</b><small>usually {usual:.1}%</small></div><div{thin} title="{gold_title}"><span>Gold at {minute} min</span><b class="{side}">{gold}{dash}</b><small>{cs}</small></div><div{thin}><span>Ahead at {minute} min</span><b>{ahead}</b><small>of {lane_games} games</small></div><div><span>Games</span><b>{games}</b><small>{when}</small></div></div>
+        \\<div class="tiles mu-tiles"><div><span>Win rate</span><b class="wrc" style="--c:{wr_colour};opacity:{fade:.2}">{wr}</b><small>{x} against {y}</small></div><div title="{title}"><span>Vs usual</span><b class="vs" style="--c:{colour}">{pts}</b><small>usually {usual:.1}%</small></div><div{thin} title="{gold_title}"><span>Gold at {minute} min</span><b class="{side}">{gold}{dash}</b><small>{cs}</small></div><div{thin}><span>Ahead at {minute} min</span><b>{ahead}</b><small>{x}, in gold</small></div><div><span>Games</span><b>{games}</b><small>{when}</small></div></div>
         \\
     , .{
         .wr_colour = tierlist.wrColour(root.ratio(o.wins, o.games), tierlist.matchup_span),
@@ -655,7 +655,6 @@ fn tiles(site: *const Site, w: *Writer, o: Odds, v: View, r: Role, x: Champ, y: 
         .dash = tpl.when(!has_gold, "-"),
         .cs = if (cs_gold) |c| tpl.t("about {c} of it from CS", .{ .c = tpl.call(signed, .{c}) }) else null,
         .ahead = tpl.call(percent, .{ lane.ahead, lane.games }),
-        .lane_games = root.Thousands{ .n = lane.games },
         .games = root.Thousands{ .n = o.games },
         .when = when,
     });
@@ -739,22 +738,24 @@ fn splits(w: *Writer, curves: *const Curves, vs: []const Variant, r: Role, x: Ch
             try tpl.render(w, "<span class=\"thin\">{rank}</span><span class=\"thin sh\">more data needed</span><span></span>\n", .{ .rank = b.label() });
             continue;
         };
-        try splitRow(w, b.label(), v);
+        try splitRow(w, b.label(), v, b != .all);
     }
-    for (vs[1..]) |s| try splitRow(w, s.label, s.v);
+    for (vs[1..]) |s| try splitRow(w, s.label, s.v, true);
     try tpl.renderPart(w, "</div></section>\n", .{});
 }
 
-fn splitRow(w: *Writer, label: []const u8, v: View) !void {
+/// `count`: games under the label; all games' count is the Games tile's, so left out
+fn splitRow(w: *Writer, label: []const u8, v: View, count: bool) !void {
     const i = curvesfile.lane_minute - 1;
     const has_gold = i < v.minutes() and v.minute(i).n >= minuteFloor(v);
     const p = root.ratio(v.wins(), v.games());
     try tpl.render(w,
-        \\<span{thin}>{label}<small>{games} games</small></span><b class="wrc{thin_c}" style="--c:{colour}" title="{label}: {x_wins} of {games} games won">{rate}</b><span class="num{thin_c}">{gold}{dash}</span>
+        \\<span{thin}>{label}{count}</span><b class="wrc{thin_c}" style="--c:{colour}" title="{label}: {x_wins} of {games} games won">{rate}</b><span class="num{thin_c}">{gold}{dash}</span>
         \\
     , .{
         .thin = tpl.flag(thin(v), "class=\"thin\""),
         .label = label,
+        .count = tpl.when(count, tpl.t("<small>{games} games</small>", .{ .games = root.Thousands{ .n = v.games() } })),
         .thin_c = tpl.when(thin(v), " thin"),
         .colour = tierlist.wrColour(p, tierlist.matchup_span),
         .x_wins = v.wins(),
@@ -1042,14 +1043,13 @@ fn caption(w: *Writer, v: View, base: ?View, prev: ?Prev, when: []const u8, lane
     const last = reach(v);
     const own = v.games() >= thin_games or base == null;
     try tpl.render(w,
-        \\<figcaption><span class="k line"></span>average <span class="k band"></span>middle half of {band}{base}{ended}{prev} · from {games} games with timelines, {when}</figcaption>
+        \\<figcaption><span class="k line"></span>average <span class="k band"></span>middle half of {band}{base}{ended}{prev} · games with timelines, {when}</figcaption>
         \\
     , .{
         .band = tpl.when(own, "games"),
         .base = tpl.when(!own, tpl.t("all {lane} lanes (few games here)", .{ .lane = lane })),
         .ended = tpl.when(last > surrender_minute, tpl.t(" <span class=\"k end\"></span>{m} min, after it only games still going", .{ .m = surrender_minute })),
         .prev = if (prev) |pv| tpl.t(" <span class=\"k prev\"></span>patch {patch}", .{ .patch = pv.patch }) else null,
-        .games = root.Thousands{ .n = v.games() },
         .when = when,
     });
 }

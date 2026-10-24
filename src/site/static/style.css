@@ -866,6 +866,12 @@ p.mu-sum { margin: 12px 0 10px; max-width: 820px; font-weight: 500; }
 .mu-card .chart { max-width: none; }
 .mu-card .chart svg { background: none; border: 0; border-radius: 0; }
 .mu-card .chart figcaption { font-size: 12px; color: var(--faint); margin-top: 4px; }
+/* A matchup's lean is a magnitude, not good or bad: neutral ink (design-ideas.md) */
+.mu-card .chart:not(.thin) .median, .featured .chart:not(.thin) .median { stroke: #b4b7bd; }
+.mu-card .chart:not(.thin) .band, .featured .chart:not(.thin) .band { fill: #5d6169; opacity: 0.35; }
+.mu-card .k.line, .featured .k.line { background: #b4b7bd; }
+.mu-card .k.band, .featured .k.band { background: color-mix(in srgb, #5d6169 45%, transparent); }
+.mu-card .k.prev, .featured .k.prev { border-top-color: #b4b7bd; }
 .chart .hit { fill: transparent; }
 .chart .hit:hover { fill: rgba(255, 255, 255, 0.06); }
 /* SVG units: the small charts (400 wide) draw at about 300px */
@@ -926,6 +932,10 @@ p.mu-sum { margin: 12px 0 10px; max-width: 820px; font-weight: 500; }
 .mu-rbody { display: grid; gap: 14px; }
 @media (min-width: 1000px) { .mu-rbody { grid-template-columns: auto minmax(0, 1fr); align-items: start; } }
 ul.rshift li > span { flex-basis: 100%; }
+/* Runes card hugs its trees; with no rune taken differently the note goes under them */
+.mu-build > .mu-card:has(> .mu-rbody) { justify-self: start; max-width: 100%; }
+.mu-rbody:not(:has(.rshift)) { grid-template-columns: auto; }
+@media (min-width: 1000px) { .mu-rbody:has(.rshift) { grid-template-columns: auto minmax(280px, 520px); } }
 .mu-build .bks:has(.rp) { grid-template-columns: auto repeat(5, minmax(0, 1fr)); }
 .mu-build .bks:has(.rp) .bk.runes { grid-row: auto; }
 @media (max-width: 1100px) { .mu-build .bks:has(.rp) { grid-template-columns: auto repeat(3, minmax(0, 1fr)); } .mu-build .bks:has(.rp) .bk.runes { grid-row: span 2; } }
