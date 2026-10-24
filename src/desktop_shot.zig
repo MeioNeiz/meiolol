@@ -52,6 +52,8 @@ const Scene = struct {
     my_bans: []const []const u8 = &.{},
     their_bans: []const []const u8 = &.{},
     turn: lcu.session.Turn = .none,
+    /// A ban still to come
+    bans_open: bool = false,
     /// Roles whose pick turn is now (mine included)
     picking: []const core.Role = &.{},
     phase: []const u8 = "BAN_PICK",
@@ -83,6 +85,7 @@ const shots = [_]Shot{
     .{ .name = "ban-turn", .status = .{ .select = .{
         .role = .middle,
         .turn = .ban,
+        .bans_open = true,
         .allies = &.{ .{ .top, "Darius~" }, .{ .bottom, "Jinx~" } },
         .mastery = &mid_mastery,
         .tier = "GOLD",
@@ -122,6 +125,41 @@ const shots = [_]Shot{
         .their_bans = &.{ "Teemo", "Fiora", "Camille", "Zed" },
         .mastery = &.{ .{ "Garen", 150_000 }, .{ "Sett", 80_000 }, .{ "Malphite", 20_000 }, .{ "Ornn", 9_000 } },
         .tier = "SILVER",
+    } } },
+    // First pick of the game: nothing shows on either side
+    .{ .name = "mid-first", .status = .{ .select = .{
+        .role = .middle,
+        .turn = .pick,
+        .picking = &.{.middle},
+        .my_bans = &.{ "Zed", "Yasuo", "Kayn", "Thresh", "Master Yi" },
+        .their_bans = &.{ "Darius", "Briar", "Smolder", "Mel", "Viego" },
+        .mastery = &mid_mastery,
+        .tier = "GOLD",
+    } } },
+    // A one-trick hovering their champion into a known lane opponent
+    .{ .name = "top-one-trick", .status = .{ .select = .{
+        .role = .top,
+        .me = "Camille",
+        .turn = .pick,
+        .picking = &.{.top},
+        .allies = &.{ .{ .jungle, "Sejuani" }, .{ .middle, "Ahri" }, .{ .bottom, "" }, .{ .utility, "" } },
+        .enemies = &.{ "Jayce?", "Viego?" },
+        .my_bans = &.{ "Fiora", "Yone", "Kayle" },
+        .their_bans = &.{ "Teemo", "Darius", "Zed" },
+        .mastery = &.{ .{ "Camille", 850_000 }, .{ "Fiora", 30_000 }, .{ "Irelia", 12_000 }, .{ "Riven", 4_000 } },
+        .tier = "EMERALD",
+    } } },
+    // Most points on champions played years ago, not the ones wanted tonight
+    .{ .name = "jungle-old-mains", .status = .{ .select = .{
+        .role = .jungle,
+        .turn = .pick,
+        .picking = &.{ .jungle, .utility },
+        .allies = &.{ .{ .top, "Ornn" }, .{ .middle, "Orianna~" }, .{ .bottom, "Jhin" }, .{ .utility, "" } },
+        .enemies = &.{ "Jayce?", "Ahri?", "Kai'Sa?" },
+        .my_bans = &.{ "Zed", "Yasuo", "Kayn", "Draven", "Briar" },
+        .their_bans = &.{ "Smolder", "Mel", "Viego", "Ezreal", "Lux" },
+        .mastery = &.{ .{ "Master Yi", 480_000 }, .{ "Warwick", 310_000 }, .{ "Amumu", 190_000 }, .{ "Shaco", 150_000 }, .{ "Vi", 40_000 }, .{ "Lee Sin", 25_000 }, .{ "Kha'Zix", 9_000 } },
+        .tier = "PLATINUM",
     } } },
     .{ .name = "bot-locked", .status = .{ .select = .{
         .role = .bottom,
@@ -384,6 +422,7 @@ fn champSelect(a: std.mem.Allocator, stats: *const core.Stats, s: Scene) !lcu.se
         .my_bans = sides[0].items,
         .their_bans = sides[1].items,
         .my_turn = s.turn,
+        .bans_open = s.bans_open,
     };
 }
 
