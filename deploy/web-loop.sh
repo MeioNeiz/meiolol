@@ -242,7 +242,9 @@ mtime() { stat -c %Y "$1" 2> /dev/null || echo 0; }
 # eval.log is truncated as a run starts, the other logs written as each runs
 last_eval=$(mtime data/eval.log) last_example=$(mtime data/your-example.log)
 last_builds=$(mtime data/builds.log) last_lean=$(mtime data/lean.log)
-last_tester=$(mtime data/tester.log)
+# The tester's from its last swap, not its log: a restart mid-run (draft-model and
+# lane-model take over an hour since A4) kills it, and the next start runs it again
+last_tester=$(mtime data/tester/lane-model.json)
 last_upload=$(mtime data/views.full)
 # 1 h for the first day of a patch, else 6 h
 interval_for() {
