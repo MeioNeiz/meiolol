@@ -23,32 +23,58 @@ each problem in isolation".
 - CSS: tokens (5 type sizes, one colour scale, spacing, control sizes), then `@layer`
   base, components, pages. Components size to their container, not the screen, so one
   component works in a phone column, a desktop page and an app panel
-- Words: the rules below are enforced by the compiler (labels), by a page sweep (word
-  budgets, tap targets, text size) and by having no legend component at all
+- Words and the other review points are direction, not rules yet (Jacob 24 Oct): the
+  measured checks below (word budgets, label length, tap targets, text size) are drafts,
+  warnings only, tested on the first rebuilt page. Product rules are the binding
+  exception
 - Desktop: recommend the 1-2 day WebView2 spike now, in parallel with the site
   foundation and before any desktop-facing component is built. If it passes, the app
-  shows the same components; if not, ~15 components need dvui twins
+  shows the same components; if not, ~15 components need dvui twins. The toolkit is now
+  open from scratch and decided by the stack session's spikes (docs/plan/ui/stack.md)
 - Build order: foundation ~11-13 days (tokens and layers, ui.zig core, gallery and QA,
   ui.wasm, one chart system), then pages, champion page first
 
-## Principles, made checkable
+## Principles: direction, with draft checks
 
-Each rule says how it is enforced. "Compile" means a Zig compile error in ui.zig;
-"qa.sh" the Playwright sweep (warning first, then error, exceptions carry a reason).
+Jacob (24 Oct): the review's rules are direction, not exact rules yet; an exact rule
+applied everywhere becomes its own design trap, so use judgement per case (the hub,
+docs/frontend.md, says the same). Each line has a draft check: "qa.sh" is the Playwright
+sweep, "lint" a ui.zig or CSS check. All are warnings until the first rebuilt page shows
+which ones help; a check that fights a good design gets changed, not obeyed. Product
+rules are the exception: they bind every screen.
 
-| Rule (Jacob's words where he said it) | Concretely | Enforced by |
+| Direction (Jacob's words where he said it) | In practice | Draft check |
 | --- | --- | --- |
-| Words: "WAAAAY too many words" | each page plan sets a first-screen word budget and counts it; labels 2 words / 16 chars; headings 6 words; no sentence inside a component | compile (labels, headings), qa.sh (visible words per page vs its plan's budget) |
-| "never have something that long" | explanations only in a Toggletip: 30 words max, one level deep | compile (Toggletip text length) |
-| "We never need a key of colours" | colour is read from the number; no legend, no colour words in prose | there is no Legend component; a CSS test fails on hex outside tokens |
-| Colour means "far from usual" | one diverging scale, steps from one Zig function (aggregate stops 1, 2, 3.5, 5.5 points; one game 2.5, 5, 10, 15), always with a sign, bar or weight; thin data fades | by construction: StatCell and Delta pick the step and the cue, pages pass numbers only |
+| Words: "WAAAAY too many words" | the UI mostly explains itself; each page plan names and counts its first-screen words; short labels (about 2 words); no "how to read this" text | qa.sh: visible words vs the plan's count; lint: label length |
+| "never have something that long" | Toggletips sparingly: for a term or an uncertainty that needs a line, not a place to park words an unclear component couldn't carry | lint: Toggletip text over ~30 words |
+| "We never need a key of colours" | no key where the number describes itself (a win rate's colour is read from the win rate); a key earns its place where colour encodes something the reader can't see otherwise, drawn in place, kept to a line | lint: no colour outside tokens |
+| Colour means "far from usual" | one diverging scale, steps from one Zig function (aggregate stops 1, 2, 3.5, 5.5 points; one game 2.5, 5, 10, 15), always with a sign, bar or weight; thin data fades | by construction: StatCell and Delta pick the step and the cue, pages pass numbers |
 | "the UI should explain itself" | each component's states are visible (selected, disabled with reason, empty, thin) | gallery shows every state; rubric review |
-| "awful use of space" | answer first: the page's answer visible at 390 x 844 and 1280 x 800 without scrolling; chrome 70 px or less on phones | qa.sh (first answer's y position) |
-| "real table" | every list of rows is a DataTable: `<table>`, sortable headers, column priorities for phones | compile (no other table markup in ui pages), qa.sh (no horizontal overflow 320-1280) |
+| "awful use of space" | answer first: the page's answer on the first screen at 390 x 844 and 1280 x 800; little chrome on phones | qa.sh: first answer's position |
+| "real table" | a sortable DataTable where it is a table; purpose-built components where the data has its own shape (tiles, trees, charts) | qa.sh: no horizontal overflow 320-1280 |
 | "some cells ... look just like the other buttons" | Badge has no border or hover; only Button, Chip, Segmented look pressable | CSS in one place (components layer) |
-| Tap, not hover | Toggletip, ChartTip and RowDetail open on tap; nothing hover-only | qa.sh (hit areas 44 px on phone, 24 px floor) |
+| Tap, not hover | Toggletip, ChartTip and RowDetail open on tap; nothing hover-only | qa.sh: tap targets (44 px phone, 24 px floor) |
 | Numbers read the same everywhere | one formatter per kind (rate 51.2%, delta +2.6, points +2.6 ±1.8, count 12.3k, time 11:54, gold +1,402), U+2212 minus | unit test; wasm uses the same Zig |
-| Product rules (production-key.md) | no "best pick", no "+X% win rate"; 3-5 options with reasons; no other players' names or stats in champ select | CandidateList and ReasonBreakdown have a public mode with tiers and words; DraftBoard's champ select mode has no name or rank fields at all (compile) |
+| Product rules (production-key.md), binding | no "best pick", no "+X% win rate"; 3-5 options with reasons; no other players' names or stats in champ select | CandidateList and ReasonBreakdown have a public mode with tiers and words; DraftBoard's champ select mode has no name or rank fields (compile) |
+
+## Decided while drawing the gallery (24 Oct)
+
+Planners drew some components differently; foundation picked one (gallery-notes.md has
+the detail). Say if any should go the other way.
+
+- StatStrip: plain figures, no box per figure (champion, matchup and patch mocks boxed)
+- ReasonBreakdown: the waterfall from the tester, not plain bars per term (Daily)
+- Versus mirrored: matchup.html's head to head (label over two bars, values at the
+  ends, the better side bold, no gap column)
+- ChampHeader pair: icons ringed by side, so no colour key is needed
+- MatchupTile strip: icon, rate and tick only; the grid keeps name and games
+- Badge: flat, no border (the patch mock's pill read like a Chip)
+- Game events: FightStrip above the plot and death portraits on its edges (reconcile,
+  from OpenDota and Dotabuff), replacing the rails under the axis the games mock had
+- Scoreboard: lane rows by default (Mobalytics), Lanes | Table
+- MinGames: one cut-off per table (Any shows thin rows faded, other options hide them)
+- Build slots: runes, spells, start and skills coloured on the scale; items, boots and
+  core paths plain (late items mostly say how the game went)
 
 ## Architecture
 
@@ -160,11 +186,12 @@ Placement next to the trigger by CSS anchor positioning where supported, else a
 lanechart.zig (server SVG and chart.wasm in Your games) becomes `ui/chart.zig`: scales
 (minute, patch, value, date), a frame (ticks, grid, end labels instead of a legend), marks
 (line, area split at zero, ±95% band, bars, dots), parts (ChartTip, RangeSelect,
-EventRail, TurnBand) and presets (TimelineChart, LaneChart, TrendChart, OutcomeCurve,
-PatchSpark, RankStrip, TimelineSpark, GameTrend). SVG from tpl on the server; the same
-code in ui.wasm redraws on a metric switch or range. Events go on rails under the axis,
-not on the line (dense games overlap it). The desktop's third lane chart (dvui plot,
-src/desktop/ui.zig) goes if WebView2 passes.
+FightStrip, EdgeMarks, TurnBand) and presets (TimelineChart, LaneChart, TrendChart,
+OutcomeCurve, PatchSpark, RankStrip, TimelineSpark, GameTrend). SVG from tpl on the
+server; the same code in ui.wasm redraws on a metric switch or range. Game events stay
+off the line (dense games overlap it): fights on a strip above the plot, deaths on its
+edges. The desktop's third lane chart (dvui plot, src/desktop/ui.zig) goes if WebView2
+passes.
 
 ### CSS
 
@@ -226,8 +253,9 @@ code opens a WKWebView window on the Mac for development.
   requests, axe with target-size on, ARIA snapshot as text. Warnings first
 - Screenshots: main against the working tree in one run, shown in review, never stored
   baselines or a gate
-- ci (Zig tests): CSS lint, comptime guardrails, formatter tests, server and wasm render
-  the same component from the same data byte for byte, ui.wasm size budget
+- ci (Zig tests): CSS lint and guardrail checks (warnings while they are drafts),
+  formatter tests, server and wasm render the same component from the same data byte
+  for byte, ui.wasm size budget
 - Review: a session that did not write the page scores qa.sh screenshots against a short
   rubric (answer first, said twice, colour meaning, words)
 - Adding a component: register entry (name, states, data, words) → struct in
@@ -243,18 +271,19 @@ Foundation (~11-13 days; WebView2 spike in parallel):
    traffic.sh). CSS lint as warnings
 2. ui.zig core (2-3 d): fmt.zig (formatters, step), Card, SectionHead, ChampIcon,
    RoleIcon, game art icons, Badge, Chip, Button, Toggletip, StatCell, Delta, Bar, Kda,
-   StatStrip, Segmented, Select. Comptime label checks
+   StatStrip, Segmented, Select. Label checks as warnings
 3. Gallery and qa.sh (2 d): the baseline numbers for every page today
 4. ui.wasm (2-3 d): Safari/iOS check of the zjb island first (half a day; if it fails,
    server fragments take the interactions), dom.zig, Toggletip placement, Segmented,
    DataTable sort/filter/RowDetail, ChampSearch
-5. Chart system (2-3 d): chart.zig from lanechart.zig; TimelineChart with EventRail and
-   RangeSelect, LaneChart, TrendChart, PatchSpark; chart.wasm folds into ui.wasm
+5. Chart system (2-3 d): chart.zig from lanechart.zig; TimelineChart with FightStrip,
+   EdgeMarks and RangeSelect, LaneChart, TrendChart, PatchSpark; chart.wasm folds into
+   ui.wasm
 6. Desktop-facing set if WebView2 passes (1-2 d): DraftBoard, CandidateList,
    ReasonBreakdown on the gallery
 
-Pages (each: new module from components, its legacy CSS deleted, qa.sh word budget
-met, one commit for the move; 1-3 days each, sizes in each page plan):
+Pages (each: new module from components, its legacy CSS deleted, qa.sh words checked
+against the plan, one commit for the move; 1-3 days each, sizes in each page plan):
 
 1. Champion page with RolePicker, BuildPanel, RuneTree, MatchupGrid (exercises most of
    the system; deletes filters.js and its twins), then matchup and builds (same family)
@@ -269,12 +298,17 @@ unless the coordinator says so.
 
 ## Questions for Jacob
 
-1. WebView2 spike now, before the desktop review (recommended), or after?
+1. WebView2 spike now, before the desktop review (recommended), or after? (The stack
+   session now runs the desktop toolkit spikes; this may be answered there)
 2. Type: body and tables at 13.5 px (one size for both; today body is 14). Five sizes
    total: 11, 12, 13.5, 16, 22. OK?
 3. Table headers as small caps-style uppercase 11 px (u.gg-like) or sentence case?
    Both in the gallery
-4. Game events on rails under the chart (games session's choice, in its mock) instead
-   of on the line: agree?
+4. Game events as a fight strip above the chart and death portraits on its edges
+   (from the refs; game-detail.md and its mock): agree?
 5. First page to rebuild: champion page (recommended: the most shared parts, deletes
    the filters.js twins) or Your games detail (the most visible change)?
+6. The public app may not show numbers for picks (product rules), so CandidateList's
+   tiers mode leaves ReasonBreakdown as direction-only chips ("into Yuumi ▲"), which
+   says little. What should the public "why" show: words per reason, a ranked list of
+   reasons, or the bars without numbers?
