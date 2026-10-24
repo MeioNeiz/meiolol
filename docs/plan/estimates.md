@@ -145,6 +145,52 @@ the default switch (E0b). E10 follows E7; E11 follows each estimate that passes 
   player's region (labelled since 89c2a2c); the all-region curves for other regions
   would roughly double the service's mapped memory
 
+### E2 baseline, raw 30 days vs raw patch (24 Oct)
+
+Tool: `meiolol truth --patch P` (src/truth.zig; read-only on a snapshot, ~40 s, 2.8 GB,
+4 threads). Day d counts from the patch's first EUW1 game; at each d both modes are
+built from every game before then, and scored on the patch's games of the next 7 days.
+A cell is scored where both modes have 10 games; win rates and build shares by log loss
+(milli-nats a target game, rate (k + 0.5) / (n + 1) for both), gold at 14 (lane gold
+difference per matchup) by noise-corrected RMSE. Brackets by the stored rank (the
+curves' brackets; E8's rank at start later). Snapshot snap-20261023T2004Z.
+
+How much worse the raw patch predicts than the raw 30 days (every region, all ranks;
+patch coverage in brackets: share of target games whose cell had a patch number):
+
+| cell | day 0 | day 1 | days 2-3 | days 4-7 |
+| --- | --: | --: | --: | --: |
+| 16.20: champion-role | 3.35 (98%) | 0.09 | 0.03 | 0.01 |
+| 16.20: matchup | 21.4 (39%) | 2.85 (90%) | 0.91 | 0.32 |
+| 16.20: duo (bot+sup) | 20.5 (56%) | 2.05 | 0.66 | 0.21 |
+| 16.20: gold at 14, RMSE 30 days / patch | 110 / 347 g | 136 / 175 | 119 / 135 | 103 / 110 |
+| 16.20: build share | 2.61 | 0.06 | 0.01 | 0.00 |
+| 16.21: champion-role | 2.14 (99%) | 0.15 | | |
+| 16.21: matchup | 21.8 (55%) | 4.42 (93%) | | |
+| 16.21: duo | 15.0 (70%) | 3.32 | | |
+| 16.21: gold at 14 | 59 / 321 g | 67 / 166 | | |
+| 16.21: build share | 1.71 | -0.03 | | |
+
+Every gap is the 30 days ahead by more than 2 se, except build share on 16.21's day 1
+and 16.20's days 4-7 (ties). Diamond+ gaps are 2-4x larger (thinner cells); EUW1 alone
+has the same shape, larger (its day 0 has no patch games by definition). Full tables by
+bracket and region: rerun `meiolol truth --data SNAP --patch 16.20 --until
+2026-10-20T14:44Z` (and `--patch 16.21 --origins 2`).
+
+Reading it:
+- The raw 30 days is the bar the estimate has to beat: the raw patch never beat it in
+  any bucket or cell kind. For champion-role win rates and build shares the patch
+  catches up within 2-3 days; for matchups, duos and gold at 14 it still trails after a
+  week, as those cells are thin and a patch's few days are thinner
+- 16.19 -> 16.20 says little about old patches: the crawl was ramping up (16.19 has
+  53k games, 16.20 70-100k a day), so from day 1 the 30 days is mostly 16.20 itself
+- 16.20 -> 16.21 is the real boundary but provisional: 16.21 games are all inside the
+  P3 test window (from 20 Oct 14:44Z; why this look is independent in e2-notes.md) and
+  the snapshot ends 23 Oct, so targets are 2.6 days at most and only days 0-1 exist. On
+  day 1, with the 30 days ~90% 16.20 games, it still beats a full day of 16.21 for
+  every cell but builds. Next: the live 16.21 -> 16.22 boundary on a fresh snapshot,
+  and E3's estimate as a third mode
+
 ## Later
 
 - Region per region (E3's g term), once Jacob wants it

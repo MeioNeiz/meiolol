@@ -1,5 +1,5 @@
-//! `meiolol eval`, `legendaries`, `objectives`, `winchance`, `playstyle`: model checks
-//! and analyses on held-out games
+//! `meiolol eval`, `legendaries`, `objectives`, `winchance`, `playstyle`, `truth`: model
+//! checks and analyses on held-out games
 
 const std = @import("std");
 const stats = @import("../stats.zig");
@@ -11,6 +11,8 @@ const replay = @import("../replay.zig");
 const objectives = @import("../objectives.zig");
 const winchance = @import("../winchance.zig");
 const playstyle = @import("../playstyle.zig");
+const truth = @import("../truth.zig");
+const store = @import("store");
 const Date = @import("../date.zig").Date;
 const main = @import("../main.zig");
 const Cmd = main.Cmd;
@@ -279,4 +281,78 @@ pub fn cmdPlaystyle(c: *Cmd) !u8 {
     try playstyle.run(c.init.gpa, io, db, chosen, platforms, o, &stdout.interface);
     try stdout.interface.flush();
     return 0;
+}
+
+pub const usage_truth =
+    \\  truth       E2's truth test (docs/plan/estimates.md): each data mode's numbers from
+    \\              games before day d of a patch, scored on the patch's next days, per
+    \\              cell kind, region, rank and day (markdown on stdout). Read-only
+    \\              --patch P        the newest patch, whose boundary is replayed
+    \\              --origins N      days 0..N-1 since the patch (default 7)
+    \\              --horizon N      target days after each (default 7)
+    \\              --window N       the raw window's days (default 30)
+    \\              --min-games N    a mode's number from N games (default 10)
+    \\              --until 2026-10-20T14:44Z  never read games from then (a test window)
+    \\              --threads N      default 4
+    \\
+;
+
+pub fn cmdTruth(c: *Cmd) !u8 {
+    var o: truth.Options = .{ .patch = "" };
+    while (c.next()) |_| {
+        if (c.is("--patch")) {
+            o.patch = try c.value();
+        } else if (c.is("--origins")) {
+            o.origins = try c.int(u8);
+        } else if (c.is("--horizon")) {
+            o.horizon = try c.int(u8);
+        } else if (c.is("--window")) {
+            o.window = try c.int(u16);
+        } else if (c.is("--min-games")) {
+            o.min_games = try c.int(u32);
+        } else if (c.is("--until")) {
+            o.until_ms = parseUtc(try c.value()) orelse return error.Usage;
+        } else if (c.is("--threads")) {
+            o.threads = try c.int(u8);
+        } else return error.Usage;
+    }
+    if (o.patch.len == 0 or o.origins == 0) return error.Usage;
+    const gpa = c.init.gpa;
+    const io = c.init.io;
+    const db = try store.schema.openReadOnly(gpa, c.data_dir);
+    defer db.close();
+
+    // Finished items, any patch (DATA/legendaries.tsv); every item when it is missing
+    var legendary: std.AutoHashMapUnmanaged(u32, void) = .empty;
+    const path = try std.fs.path.join(c.arena, &.{ c.data_dir, "legendaries.tsv" });
+    if (std.Io.Dir.cwd().readFileAlloc(io, path, c.arena, .limited(16 << 20))) |text| {
+        var lines = std.mem.tokenizeScalar(u8, text, '\n');
+        while (lines.next()) |line| {
+            const tab = std.mem.findScalar(u8, line, '\t') orelse continue;
+            try legendary.put(c.arena, std.fmt.parseInt(u32, line[tab + 1 ..], 10) catch continue, {});
+        }
+    } else |err| switch (err) {
+        error.FileNotFound => std.log.info("no {s}: build shares count every item", .{path}),
+        else => return err,
+    }
+
+    var buf: [64 * 1024]u8 = undefined;
+    var stdout = std.Io.File.stdout().writer(io, &buf);
+    try truth.run(gpa, io, db, o, if (legendary.count() > 0) &legendary else null, &stdout.interface);
+    try stdout.interface.flush();
+    return 0;
+}
+
+/// "2026-10-20T14:44Z" as Unix ms
+fn parseUtc(s: []const u8) ?i64 {
+    if (s.len != 17 or s[10] != 'T' or s[13] != ':' or s[16] != 'Z') return null;
+    const d = Date.parse(s[0..10]) orelse return null;
+    const h = std.fmt.parseInt(i64, s[11..13], 10) catch return null;
+    const m = std.fmt.parseInt(i64, s[14..16], 10) catch return null;
+    return (d.toDay() * 24 * 60 + h * 60 + m) * std.time.ms_per_min;
+}
+
+test parseUtc {
+    try std.testing.expectEqual(1760971440000, parseUtc("2025-10-20T14:44Z").?);
+    try std.testing.expectEqual(null, parseUtc("2025-10-20"));
 }

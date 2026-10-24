@@ -868,6 +868,15 @@ How to write a line:
 
 ## Data quality
 
+- 2026-10-24 (early): In a new patch's first days, last month's numbers predict the
+  next week's games better than the new patch's own games, for every number we show.
+  A champion's win rate and item choices on the new patch catch up after 2-3 days;
+  matchups, duos and lane gold at 14 still trail after a week, as each pairing has few
+  games. Sure: two patch boundaries replayed day by day (16.19 to 16.20 over 7 days,
+  16.20 to 16.21 over its first 2), every region, on games not used to choose anything;
+  16.21 is short and inside the draft model's test window. Site: keep 30 days as the
+  default; an estimate must beat it, not only the patch. Evidence: docs/plan/estimates.md
+  "E2 baseline"
 - 2026-10-12: The rank we store with each game is taken after the game, so it already
   knows a little about the result. Sure. Models: use the rank at game start (from rank
   history) before trusting any rank effect. Evidence: meiolol-88

@@ -72,6 +72,7 @@ const usage = usage_head ++
     cmd_analysis.usage_winchance ++
     cmd_analysis.usage_objectives ++
     cmd_analysis.usage_playstyle ++
+    cmd_analysis.usage_truth ++
     cmd_sitedata.usage_lean ++
     cmd_sitedata.usage_draft_model ++
     cmd_sitedata.usage_lane_model ++
@@ -138,6 +139,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "objectives", cmd_analysis.cmdObjectives },
     .{ "winchance", cmd_analysis.cmdWinchance },
     .{ "playstyle", cmd_analysis.cmdPlaystyle },
+    .{ "truth", cmd_analysis.cmdTruth },
     .{ "lean", cmd_sitedata.cmdLean },
     .{ "draft-model", cmd_sitedata.cmdDraftModel },
     .{ "lane-model", cmd_sitedata.cmdLaneModel },
