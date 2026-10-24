@@ -241,12 +241,25 @@ opponent grid are its first components.
   test, 16.21 all regions with matchups (348k games): 83 s CPU (76 before), 877 MB RSS,
   15.0 MB file (11.4); --max-keys now 1 << 20 (1 << 19 pruned in the patch's first
   week), matchup keys still 1 << 22 (floor 1 after a week: watch at patch end, MU1).
-  Build page: Fourth to Sixth finished item tables, Minute column, Levels 1 to 18
+  Build page: Fourth to Sixth finished item tables, Minute column, Levels 1 to 18.
+  Box run 24 Oct (web loop, niced, ~01:24 to 01:54 UTC): builds-16.21 6.4 MB (75,494
+  games, 182 matchups), all-builds-16.21 16.0 MB (358,122 games, 2,764 matchups, 2.0M
+  matchup options), recent-builds 7.5 MB, all-recent-builds 7.7 MB (were 4.0, 10.6,
+  4.8, 4.8 MB); no warnings. Live 03:23 UTC (views write after the curves rebuild):
+  build page Minute column, Fourth finished item, Levels 1 to 18
 - CH3 Build panel, full. Items 4, 5 and 6 as the top 3 options each (games, % won from
   100 games), the 4x18 skill grid, start, core 3, boots, both rune trees lit, and the
   most played | highest win rate toggle. One component used by the champion page, the
   build page's top and the matchup page (MU1). Done when Darius and Kai'Sa show it at
-  1920 and 390 px; pipeline_test checks its sections. Needs CH2
+  1920 and 390 px; pipeline_test checks its sections. Needs CH2. Done 24 Oct (2a505e3):
+  builds.panel on the champion page (each view's strip) and the build page's top;
+  runes as the in-game page (phone: keystone and secondary tree), skill priority over a
+  4x18 grid, spells, start, first 3 items, boots, items 4-6 top 3 each; games · share ·
+  % won per cell, one legend line; toggle a CSS radio pair, most played by default (CH0
+  b still Jacob's), highest win rate only where marked() allows (items and boots stay
+  by games). Local 30 days EUW: Darius panel at y 480, 253 px at 1920 (opponent tabs y
+  760); Kai'Sa same; 390 px two columns. The build page's Runes heading moved to y 493
+  (CH6 had 291): the panel's runes card is above it
 - CH4 Opponents. Compact tiles (76 px, unit words once in a legend row; design build
   order 4), all 40 on screen; tabs over the same grid: Lane, vs Jungle, vs Mid, vs Bot,
   vs Support, Duos, from statsfile enemy and ally pairs (vs usual from both champions'
@@ -335,7 +348,12 @@ switch opponent, a first screen spent on one big chart of a nearly flat line.
   under 400 grey, never a win rate on fewer than 100 (LoLalytics and OP.GG print 100%
   on 2 to 4 games). Done when Kai'Sa vs Jinx shows spells and items 4 to 6 for the
   pair. Needs CH2, CH3. Watch the matchup builder (key budget 1 << 22: 1.1 GB, 6.5 min
-  on the box) and the file (12.5 MB every region)
+  on the box) and the file (12.5 MB every region). Done 24 Oct (9e17642): the panel
+  refiltered to the pair ("Build against Jinx"), options under 100 games left out,
+  "· as usual" on cells matching the role-wide most played, one "More data needed"
+  line when nothing has 100 games. Kai'Sa vs Jinx (16.21 every region, local):
+  spells, items 4 and 5 (item 6 under 100 games), panel 269 px at y 408, charts from
+  y 708 at 1920. Matchup key budget unchanged (1 << 22), all-builds-16.21 16.0 MB
 - MU2 Opponent strip under the header: x's lane opponents sorted by games, icon and x's
   win rate, the current one lit, a search; replaces "Change opponent" (the swap stays).
   Done when another opponent is one click from the first screen; the strip scrolls on
