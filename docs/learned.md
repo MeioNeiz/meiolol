@@ -53,6 +53,10 @@ How to write a line:
   every model lands on the same ceiling (4.8 ± 0.9 milli-nats a game above the set net
   on additive v2). Site: nothing. Evidence: docs/model.md "Draft ceiling (B1) rerun on
   2004Z"
+- 2026-10-24: The site's draft helper, Daily Draft, Learn, lane cards and suggestions now
+  judge pairs this way: a rare pairing borrows from the same two champions in other role
+  slots and from their kit classes (shipped, data-and-model.md DM1). The desktop app
+  still scores with counts until its stats file keeps the fitted model
 - 2026-10-24 (early): The same holds on newer games and in the form the site would use.
   On 521k games of the 23 Oct pin that no earlier A4 run had scored, the frozen model as
   the stats file would carry it (no damage mix, no side term, thin cells' own part 0,

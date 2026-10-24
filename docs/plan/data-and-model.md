@@ -63,6 +63,19 @@ reasons; the app shows champion and aggregate stats only)
 
 ## DM1: ship A4, pair cells that borrow strength (Jacob's call)
 
+Done 24 Oct (Jacob's go; 133d11b, live 03:23 UTC): every site view's stats file is fitted
+with pair parents, guarded; `meiolol stats` defaults to it (`--no-pair-prior` for v2);
+the daily eval's and draft-model page's current model too (eval's `--pair-prior` row
+gone). Ally and enemy reasons under 20 pair games are left out with a fitted model
+(score.Options.min_reason_games). On the box: the views write refitting all four views
+443 s; the core build's EUW 30-day stats load 210 s (206-380 s before). Downloads,
+gzip, before then after: EUW 30 days 2.08 to 4.05 MB, EUW patch 1.23 to 3.45, every
+platform 30 days 3.08 to 4.68, every platform patch 2.01 to 4.01. The desktop app does
+not get it yet: web-loop.sh strip_fitted cuts the fitted block from the app's stats.bin
+(v1, counts), due to go now that the 23 Oct releases read v2; dropping it gives the app
+A4 with no release. Revert: src/site/load.zig's `.pair_prior` back to `.v2` (and
+cmd/crawl.zig's stats default, `&.{}` for the classes in eval.zig and draftmodel.zig)
+
 What: the site's and app's draft model (additive v2 in the stats file, src/fitted.zig)
 with every pair cell shrunk toward two parents instead of 0: the same two champions in
 any slot of the kind (ally pairs; matchups, signed) and a kit-class pair per block (Data

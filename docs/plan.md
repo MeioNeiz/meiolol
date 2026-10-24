@@ -79,7 +79,8 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
    (app.md APP2, accounts.md AC5); app.md APP3-APP4 against the mock, APP1 (real capture) is Jacob's. Draft tester moves to the private
    site (app.md "Private site")
 7. Comp leans: held-out look ~24 Oct, then champion pages and reasons:
-   data-and-model.md
+   data-and-model.md. A4 (pair cells that borrow strength) shipped 24 Oct (DM1); the
+   desktop app gets it once web-loop.sh's strip_fitted goes
 8. The latest patch (J25, 23 Oct): docs/plan/patch-transfer.md. Evaluate on
    latest-patch games only, day by day; old patches only while it is thin (pooled plus
    shrunk per-patch offsets); find the day old patches stop helping. PT1 pin next.
