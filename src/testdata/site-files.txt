@@ -160,7 +160,7 @@ patch/role/mid.html 57efb992719984f8
 patch/role/support.html 6e35f26488629589
 patch/role/top.html f98edae012effce3
 pool.html f75f3d45fc0dcfc0
-privacy.html 0bd405a1f5c2cf3c
+privacy.html 75141ed000db8ab3
 robots.txt 331ea9090db0c9f6
 role/bot.html 4889b6a698b6aa64
 role/jungle.html 74a1b2805f00abe3

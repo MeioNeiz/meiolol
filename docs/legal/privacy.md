@@ -148,10 +148,13 @@ a squad with no members is deleted.
 ## The desktop app *(when released)*
 
 The app reads champ select from the League client on your own PC, read-only, and shows
-lane information on screen. It does not send your games, account or any other personal
-data anywhere. Apart from the League client it connects only to this site, every few
-hours, to download newer champion statistics and updates to itself; those requests carry
-nothing about you, and the server logs them like any page visit (below).
+lane information on screen. It does not send your games or any other personal data
+anywhere. Apart from the League client it connects only to this site, every few hours, to
+download newer champion statistics and updates to itself; those requests carry nothing
+about you except, while the app is for invited testers, its sign-in: a token of its own
+from the account's login, stored by us only as a one-way hash with when it was made and
+last used, ended on the account page, by logging out everywhere, a new password or 90
+days unused. The server logs them like any page visit (below).
 
 ## Server logs
 

@@ -833,29 +833,34 @@ level still pickable.
   vault group) signs the manifest each web round (`desktop-sign manifest`). The app
   refuses an unsigned manifest, an exe not signed by the release key, and an exe whose
   release is not newer than its own. A new key needs a new download
-- Updates (desktop/update.zig, J19): with update.key beside the exe, a detached thread
-  reads https://meio.lol/admin/desktop/update.signed at start and every 3 h (5 min after
-  a failure; MEIOLOL_UPDATE_URL elsewhere), checks its signature, and fetches each listed
+- Updates (desktop/update.zig, J19): once the app is signed in (device.zig: POST
+  /auth/device, the token in device.token beside the exe; until accounts.md AC4's
+  cut-over, update.key beside it also works), a detached thread reads
+  https://meio.lol/p/desktop/update.signed (exes from before sign in: /admin/desktop/)
+  at start and every 3 h (5 min after a failure; MEIOLOL_UPDATE_URL elsewhere), and at
+  once after a sign in, checks its signature, and fetches each listed
   file whose SHA-256 differs from the local copy: stats.bin as stats-<patch>.bin (older stats-*.bin
   deleted), recent-curves.bin, meiolol-desktop.exe. Each goes to NAME.part (gzip on the
   wire, nginx's .gz copies), is checked against hash and size, then renamed over the
   old. The running exe is renamed to meiolol-desktop.old.exe (kept for a manual
   rollback) and the new one takes its name: next start runs it, and the footer says
   so. New data: the poller loads it between ticks, publishes a status built from it,
-  then frees the old. The key goes in X-Meiolol-Desktop with redirects off
-  (std 0.17's privileged_headers are never sent). `meiolol-app update DIR` runs the same
-  check on a folder. Box side: web-loop.sh desktop_files; gate: hosting.md
-- Install (desktop/install.zig, setup.zig; 23 Oct): an exe with an update key (the
-  zip's exe carries it after its image, as Explorer runs an exe inside a zip without the
-  files beside it; else update.key beside it) started outside
-  %LOCALAPPDATA%\Programs\meiolol writes itself there without the key, the key as
-  update.key, copies data files the install lacks, writes the Start menu shortcut (what
+  then frees the old. The token goes as Authorization: Bearer (the key in
+  X-Meiolol-Desktop) with redirects off (std 0.17's privileged_headers are never sent). A
+  401 on the token deletes it and the sign-in form comes back (signin.zig: the whole
+  window with no data yet, else a line under the content). `meiolol-app signin DIR` and
+  `meiolol-app update DIR` do the same on a folder. Box side: web-loop.sh desktop_files; gate: hosting.md
+- Install (desktop/install.zig, setup.zig; 23 Oct): a release, or an exe with an update
+  key (the zip's exe carries it after its image, as Explorer runs an exe inside a zip
+  without the files beside it; else update.key beside it), started outside
+  %LOCALAPPDATA%\Programs\meiolol writes itself there without the key, any key as
+  update.key (a device.token there stays), copies data files the install lacks, writes the Start menu shortcut (what
   Windows search finds) and an Apps list entry under HKCU (Uninstall runs `--uninstall`,
   `--quiet` skips the question), starts the installed copy and exits. No admin rights,
   and the updater can replace the exe there. The installed copy runs once (a Local
   mutex; a second start brings its window forward) and a new install closes it first
-  (WM_CLOSE to the window class "meiolol"). `--portable` skips all of it, as does an exe
-  without a key. Icon: src/desktop/meiolol.ico (the site's favicon) via meiolol.rc,
+  (WM_CLOSE to the window class "meiolol"). `--portable` skips all of it, as does a dev
+  build without a key. Icon: src/desktop/meiolol.ico (the site's favicon) via meiolol.rc,
   for the exe, shortcut and window
 - Lane card (lanecard.zig, docs/concept.md part 6): the enemy shown in my position, else
   the one core.score.inferRoles puts there (labelled a guess); gold at 14 min one

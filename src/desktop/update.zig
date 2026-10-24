@@ -17,7 +17,9 @@ const Io = std.Io;
 const sign = @import("sign.zig");
 const device = @import("device.zig");
 
-pub const default_base = "https://meio.lol/admin/desktop/";
+/// Apps from before sign in check /admin/desktop/, which serves the same files until they
+/// have all updated (accounts.md AC5)
+pub const default_base = "https://meio.lol/p/desktop/";
 pub const key_file = "update.key";
 pub const old_exe = "meiolol-desktop.old.exe";
 pub const exe_name = "meiolol-desktop.exe";

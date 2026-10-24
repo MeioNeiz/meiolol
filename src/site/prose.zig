@@ -351,15 +351,20 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\in, a one-way hash of the password, its role, and when it was made and last used.
         \\Logging in sets one cookie, which keeps you logged in for 30 days and does nothing
         \\else; we store only a one-way hash of it. Nothing is ever sent to your email
-        \\address. To delete your account, write to the address below and we remove it and
-        \\its sessions. Copies in our backups are gone within 14 days.</p>
+        \\address. The desktop app, once signed in, keeps a sign-in of its own: we store a
+        \\one-way hash of it and when it was made and last used; it ends when you remove it on
+        \\your account page, log out everywhere or change your password, or after 90 days
+        \\unused. To delete your account, write to the address below and we remove it, its
+        \\sessions and its app sign-ins. Copies in our backups are gone within 14 days.</p>
         \\<h2>The desktop app</h2>
         \\<p>The desktop app is not released yet. When it is, it will read champ select from
         \\the League client running on your own PC and show lane information on screen. It
-        \\will not send your games, account or any other personal data anywhere. Apart from
-        \\the League client it will connect only to this site, every few hours, to download
-        \\newer champion statistics and updates to itself; those requests carry nothing
-        \\about you, and our server logs them like any page visit (below).</p>
+        \\will not send your games or any other personal data anywhere. Apart from the League
+        \\client it will connect only to this site, every few hours, to download newer
+        \\champion statistics and updates to itself; those requests carry nothing about you
+        \\except, while the app is for invited testers, its sign-in (<a
+        \\href="#accounts">Accounts</a>), and our server logs them like any page visit
+        \\(below).</p>
         \\<h2>Game data from Riot Games</h2>
         \\<p>The statistics are computed from ranked match data provided by the Riot Games
         \\API. Raw match records, which include Riot's per-application encrypted player

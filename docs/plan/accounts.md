@@ -146,10 +146,10 @@ Each step ends tested and deployed; nginx and systemd changes on jomify need Jac
   (served nowhere yet); `--dry-run` stops before signing. The web loop puts the same
   files in p/desktop/ as admin/desktop/; nginx location /p/desktop/ has
   /admin/desktop/'s gate (the app's key or device token, or a private login; 401, no
-  login redirect, as the app reads 401). Left: the app's update base
-  (update.zig default_base) to /p/desktop/ in a release; once every installed app runs
-  it (the account page's devices, or nginx's log for /admin/desktop/update.signed),
-  admin/desktop/ and its location go
+  login redirect, as the app reads 401). The app's update base (update.zig
+  default_base) is /p/desktop/ from 24 Oct, so the release with sign in moves there.
+  Left: once every installed app runs it (the account page's devices, or nginx's log for
+  /admin/desktop/update.signed), admin/desktop/ and its location go
 - AC6 Later: friends link their Riot ID (profile icon check, as Remove a Riot ID does);
   friends' groups become Squads (backlog.md "Your games and Squads") for the private
   tier first
