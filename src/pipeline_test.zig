@@ -278,7 +278,7 @@ test "fixture games to stats, curves and the website" {
         .{ "matchup/support/pyke-vs-rakan.html", &.{ "<h2>Bot laners <span class=\"muted\">in all their Support games</span></h2>", "<span class=\"sh\">Rakan with</span>" } },
         // Opponent strip (MU2): the lane opponents with a page, the current one lit
         .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<div class=\"mu-opps\"><input type=\"search\"", "<li data-name=\"Mordekaiser\"><a href=\"darius-vs-mordekaiser.html\" aria-current=\"page\" title=\"Darius vs Mordekaiser: Darius wins " } },
-        .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<h1>Darius vs Mordekaiser</h1>", "class=\"swap\" href=\"mordekaiser-vs-darius.html\"", "From Darius's side", "<div class=\"mu-build\"><section class=\"mu-card\"><h2>Most played build <span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"patch:15.13\"", "<span class=\"off\">Patch 15.13<i>, not the 30 days picked</i></span><span>Plat+</span></span></h2>", "games, patch ", "href=\"../../patch/build/darius-top.html\">Darius's full Top build</a>", "<span>Runes <em class=\"muted\">same as usual</em></span>", "<span>First 2 items" } },
+        .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<h1>Darius vs Mordekaiser</h1>", "class=\"swap\" href=\"mordekaiser-vs-darius.html\"", "From Darius's side", "<div class=\"mu-build\"><section class=\"mu-card\"><h2>Build against Mordekaiser <span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"patch:15.13\"", "<span class=\"off\">Patch 15.13<i>, not the 30 days picked</i></span><span>Plat+</span></span></h2>", "games, patch ", "href=\"../../patch/build/darius-top.html\">Darius's full Top build</a>", "More data needed: no choice has 100 games in this matchup yet." } },
         // Per rune in the matchup: share, win rate and games under each, beside the runes
         // whose share moves (builds.runeShifts)
         .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<h2>Runes against Mordekaiser <span class=\"scope\" data-chip ", "Every rune picked within 10 points of Darius's other Top games.", "<div class=\"rx\">", "<span class=\"rc on\" title=\"Conqueror: 3 games, 100.0%\">" } },
@@ -303,7 +303,7 @@ test "fixture games to stats, curves and the website" {
             "<p class=\"curves-links\"><span class=\"scope\" data-chip data-region=\"all\" data-period=\"days30\" data-rank=\"\" title=\"Region, period and rank these numbers are from\"><span class=\"off\">All regions<i>, not EUW alone</i></span><span>30 days</span><span>Plat+</span></span> <b>Early or late",
             "patch 15.13; 20 needed). <span class=\"scope\" data-chip data-region=\"all\" data-period=\"patch:15.13\" data-rank=\"\"",
         } },
-        .{ "patch/matchup/top/darius-vs-mordekaiser.html", &.{ "<h2>Most played build <span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"patch:15.13\" data-rank=\"\" title=\"Region, period and rank these numbers are from\"><span>EUW</span><span>Patch 15.13</span><span>Plat+</span></span></h2>", "<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"patch:15.13\"" } },
+        .{ "patch/matchup/top/darius-vs-mordekaiser.html", &.{ "<h2>Build against Mordekaiser <span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"patch:15.13\" data-rank=\"\" title=\"Region, period and rank these numbers are from\"><span>EUW</span><span>Patch 15.13</span><span>Plat+</span></span></h2>", "<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"patch:15.13\"" } },
         // The fixture's every-region 30-day view has only a patch's curves
         .{ "all/matchup/top/darius-vs-mordekaiser.html", &.{"<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"all\" data-period=\"patch:15.13\" data-rank=\"\" title=\"Region, period and rank these numbers are from\"><span>All regions</span><span class=\"off\">Patch 15.13<i>, not the 30 days picked</i></span><span>Plat+</span></span> From Darius"} },
         .{ "patch/build/darius-top.html", &.{"<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"patch:15.13\" data-rank=\"\" title=\"Region, period and rank these numbers are from\"><span>EUW</span><span>Patch 15.13</span><span>Plat+</span></span> What players take"} },
@@ -324,7 +324,7 @@ test "fixture games to stats, curves and the website" {
         const path = try std.fs.path.join(arena, &.{ out, "matchup/top/darius-vs-mordekaiser.html" });
         const html = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 20));
         var at: usize = 0;
-        for ([_][]const u8{ "<div class=\"mu-strip\">", "<h2>Most played build", "<section class=\"mu-card mu-curves\">", "<h2>Head to head</h2>", "<h2>Runes against Mordekaiser" }) |want| {
+        for ([_][]const u8{ "<div class=\"mu-strip\">", "<h2>Build against Mordekaiser", "<section class=\"mu-card mu-curves\">", "<h2>Head to head</h2>", "<h2>Runes against Mordekaiser" }) |want| {
             at = (std.mem.findPos(u8, html, at, want) orelse {
                 std.debug.print("darius-vs-mordekaiser: {s} missing or out of order\n", .{want});
                 return error.TestUnexpectedResult;

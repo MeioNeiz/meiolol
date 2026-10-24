@@ -209,9 +209,10 @@ pub fn vsStrip(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ, from:
             .{ .root = try site.toShared(from), .up = pv.dir(), .path = to };
     };
     try tpl.renderPart(w,
-        \\<div class="mu-build"><section class="mu-card"><h2>Most played build {chip}</h2><p class="mu-note">{games} game{s}, {patch}, {in}, {ranks}.{link}</p>
-        \\<div class="bks">
+        \\<div class="mu-build"><section class="mu-card"><h2>Build against {y} {chip}</h2><p class="mu-note">{games} game{s}, {patch}, {in}, {ranks}.{link}</p>
+        \\
     , .{
+        .y = y.name,
         .chip = chip,
         .games = root.Thousands{ .n = b.games },
         .s = plural(b.games),
@@ -220,14 +221,8 @@ pub fn vsStrip(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ, from:
         .ranks = try rankLabel(site.arena, f.min_tier),
         .link = tpl.when(href != null, tpl.t(" <a href=\"{href}\">{x}'s full {lane} build</a>", .{ .href = href orelse html.Link{ .root = "", .path = "" }, .x = x.name, .lane = root.roleName(r) })),
     });
-    try top(w, f, b, usual, .runes, "Runes");
-    if (f.trees.len == 0) try top(w, f, b, usual, .shards, "Shards");
-    try top(w, f, b, usual, .start, "Start");
-    try top(w, f, b, usual, .boots, "Boots");
-    try top(w, f, b, usual, .core2, "First 2 items");
-    try top(w, f, b, usual, .core3, "First 3 items");
-    try top(w, f, b, usual, .skills, "Skill priority");
-    try w.writeAll("</div></section></div>\n");
+    try panel(w, f, b, usual, 0);
+    try w.writeAll("</section></div>\n");
 }
 
 /// Matchup page, under its charts: every rune's pick and win rate against `y`, the runes
@@ -312,12 +307,6 @@ fn shiftChip(w: *Writer, f: *const File, s: Shift) !void {
     });
 }
 
-fn sameTop(rows: File.Rows, usual: ?File.Build, kind: Kind) bool {
-    const u = usual orelse return false;
-    const ur = u.get(kind) orelse return false;
-    return rows.options.len > 0 and ur.options.len > 0 and std.mem.eql(u32, ur.options[0].v, rows.options[0].v);
-}
-
 /// Index of the option with the highest win rate once each is pulled toward its slot's
 /// (`games` players, `wins` won) by `k` games (File.shrinkK), taking the low end of
 /// that estimate's range (one standard error), so a few lucky games can't top it and
@@ -368,51 +357,11 @@ fn pct(n: u32, all: u32) f64 {
     return 100 * @as(f64, @floatFromInt(n)) / @as(f64, @floatFromInt(@max(all, 1)));
 }
 
-/// One kind's most played option: value, then games, share and win rate; "same as
-/// usual" when it is also `usual`'s most played. Below it the option with the highest
-/// win rate (highest()) when that is another one; a rune page on the same trees as
-/// its runes ringed in the most played page
-fn top(w: *Writer, f: *const File, b: File.Build, usual: ?File.Build, kind: Kind, comptime title: []const u8) !void {
-    const rows = b.get(kind) orelse return;
-    if (rows.options.len == 0) return;
-    const o = rows.options[0];
-    const hi = if (marked(kind)) highest(rows.options, rows.games, rows.wins, f.shrinkK(kind, b.opponent != 0), 2) else null;
-    const other: ?File.Option = if (hi) |i| if (i > 0) rows.options[i] else null else null;
-    const ringed = if (other) |h| kind == .runes and f.trees.len > 0 and h.v[0] == o.v[0] and h.v[5] == o.v[5] else false;
-    try tpl.render(w,
-        \\<div class="bk {kind}{thin}"><span>{title}{same}</span><div class="bv">{value}</div><small title="{games} of {all} players took this">{games} games · {share:.0}%{rate}</small>{hw}</div>
-        \\
-    , .{
-        .kind = @tagName(kind),
-        .thin = tpl.when(o.games < solid_games, " thin"),
-        .title = title,
-        .same = tpl.when(sameTop(rows, usual, kind), tpl.t(" <em class=\"muted\">same as usual</em>", .{})),
-        .value = tpl.call(cell, .{ f, b, kind, o.v, if (ringed) other.?.v else null }),
-        .share = pct(o.games, rows.games),
-        .all = root.Thousands{ .n = rows.games },
-        .games = root.Thousands{ .n = o.games },
-        .rate = tpl.when(o.games >= rate_games, tpl.t("<br>{wr:.1}% won{also}", .{
-            .wr = pct(o.wins, o.games),
-            .also = tpl.when(hi != null and hi.? == 0, tpl.t(", the highest win rate", .{})),
-        })),
-        .hw = if (other) |h| tpl.t(
-            \\<div class="bhw"><span>{label}</span>{value}<small>{wr:.1}% won · {games} games · {share:.0}%</small></div>
-        , .{
-            .label = if (ringed) "Highest win rate page: blue rings" else "Highest win rate",
-            .value = tpl.when(!ringed, tpl.t("<div class=\"bv\">{v}</div>", .{ .v = tpl.call(value, .{ f, kind, h.v, true }) })),
-            .wr = pct(h.wins, h.games),
-            .games = root.Thousands{ .n = h.games },
-            .share = pct(h.games, rows.games),
-        }) else null,
-    });
-}
-
-/// The strip's value: the rune page with the most played shards as the in-game tree,
-/// `ringed` (another page on the same trees) marking its other runes
-fn cell(w: *Writer, f: *const File, b: File.Build, kind: Kind, v: []const u32, ringed: ?[]const u32) !void {
+/// A panel cell's value: a rune page as the in-game tree with the most played shards
+fn cell(w: *Writer, f: *const File, b: File.Build, kind: Kind, v: []const u32) !void {
     if (kind == .runes) {
         const shards: ?[]const u32 = if (b.get(.shards)) |r| if (r.options.len > 0) r.options[0].v else null else null;
-        if (try runePage(w, f, v, shards, ringed)) return;
+        if (try runePage(w, f, v, shards)) return;
     }
     try value(w, f, kind, v, true);
 }
@@ -444,9 +393,16 @@ const Choice = struct {
 /// radios' name unique on the page (a view's index)
 pub fn panel(w: *Writer, f: *const File, b: File.Build, usual: ?File.Build, tag: usize) !void {
     var toggled = false;
-    for ([_]Kind{ .runes, .spells, .start, .skills, .skill_path }) |kind| {
-        if (Choice.of(f, b, kind)) |c| toggled = toggled or c.hw != null;
+    var any = false;
+    for ([_]Kind{ .runes, .skills, .skill_path, .spells, .start, .core3, .boots, .item4, .item5, .item6 }) |kind| {
+        const c = Choice.of(f, b, kind) orelse continue;
+        any = true;
+        toggled = toggled or c.hw != null;
     }
+    if (!any) return tpl.render(w,
+        \\<p class="mu-note">More data needed: no choice has {rated} games in this matchup yet.</p>
+        \\
+    , .{ .rated = rate_games });
     var buf: [64]u8 = undefined;
     const name = try std.mem.print(&buf, "bp-{d}-{s}-{d}-{d}", .{ b.champion, @tagName(b.role), b.opponent, tag });
     try tpl.renderPart(w, "<div class=\"bpanel\"><div class=\"bp-bar\">", .{});
@@ -490,13 +446,13 @@ fn popt(w: *Writer, f: *const File, b: File.Build, usual: ?File.Build, rows: Fil
         \\<div class="bo{thin}"><div class="bv">{value}</div>{fold}<small title="{games} of {all} players took this">{games} · {share:.0}%{rate}{same}</small></div>
     , .{
         .thin = tpl.when(o.games < solid_games, " thin"),
-        .value = tpl.call(cell, .{ f, b, rows.kind, o.v, null }),
+        .value = tpl.call(cell, .{ f, b, rows.kind, o.v }),
         .fold = tpl.when(rows.kind == .runes, tpl.call(runeFold, .{ f, o.v })),
         .games = root.Thousands{ .n = o.games },
         .all = root.Thousands{ .n = rows.games },
         .share = pct(o.games, rows.games),
         .rate = tpl.when(o.games >= rate_games, tpl.t(" · {wr:.1}% won", .{ .wr = pct(o.wins, o.games) })),
-        .same = tpl.when(sameAs(usual, rows.kind, o.v), tpl.t(" <em>as usual</em>", .{})),
+        .same = tpl.when(sameAs(usual, rows.kind, o.v), tpl.t(" · <em>as usual</em>", .{})),
     });
 }
 
@@ -537,7 +493,7 @@ fn skillCell(w: *Writer, f: *const File, b: File.Build, usual: ?File.Build) !voi
                 .all = root.Thousands{ .n = c.rows.games },
                 .share = pct(o.games, c.rows.games),
                 .rate = tpl.when(o.games >= rate_games, tpl.t(" · {wr:.1}% won", .{ .wr = pct(o.wins, o.games) })),
-                .same = tpl.when(sameAs(usual, .skill_path, o.v), tpl.t(" <em>as usual</em>", .{})),
+                .same = tpl.when(sameAs(usual, .skill_path, o.v), tpl.t(" · <em>as usual</em>", .{})),
             });
         }
         if (split) try tpl.renderPart(w, "</div>", .{});
@@ -583,10 +539,9 @@ fn findTree(f: *const File, id: u32) ?ddragon.Tree {
 }
 
 /// `v` (a .runes value) as the in-game page: every rune of the primary tree and of the
-/// secondary's rows (its keystones left out), the chosen ones lit, those only in
-/// `ringed` (a page on the same trees) ringed, and `shards` (a .shards value) on the
-/// shard rows. False, writing nothing, without the trees (files before 20 Oct 2026)
-fn runePage(w: *Writer, f: *const File, v: []const u32, shards: ?[]const u32, ringed: ?[]const u32) !bool {
+/// secondary's rows (its keystones left out), the chosen ones lit, and `shards` (a
+/// .shards value) on the shard rows. False, writing nothing, without the trees (files before 20 Oct 2026)
+fn runePage(w: *Writer, f: *const File, v: []const u32, shards: ?[]const u32) !bool {
     const primary = findTree(f, v[0]) orelse return false;
     const secondary = findTree(f, v[5]) orelse return false;
     if (secondary.slots.len == 0) return false;
@@ -594,14 +549,14 @@ fn runePage(w: *Writer, f: *const File, v: []const u32, shards: ?[]const u32, ri
     try rune(w, f.runes, primary.id, "rh", true);
     for (primary.slots, 0..) |slot, i| {
         try w.writeAll(if (i == 0) "<div class=\"rr ks\">" else "<div class=\"rr\">");
-        for (slot) |id| try rune(w, f.runes, id, mark(v[1..5], if (ringed) |g| g[1..5] else &.{}, id), std.mem.findScalar(u32, v[1..5], id) != null);
+        for (slot) |id| try rune(w, f.runes, id, "", std.mem.findScalar(u32, v[1..5], id) != null);
         try w.writeAll("</div>");
     }
     try w.writeAll("</div><div class=\"rt\">");
     try rune(w, f.runes, secondary.id, "rh", true);
     for (secondary.slots[1..]) |slot| {
         try w.writeAll("<div class=\"rr\">");
-        for (slot) |id| try rune(w, f.runes, id, mark(v[6..8], if (ringed) |g| g[6..8] else &.{}, id), std.mem.findScalar(u32, v[6..8], id) != null);
+        for (slot) |id| try rune(w, f.runes, id, "", std.mem.findScalar(u32, v[6..8], id) != null);
         try w.writeAll("</div>");
     }
     try w.writeAll("</div>");
@@ -616,12 +571,6 @@ fn runePage(w: *Writer, f: *const File, v: []const u32, shards: ?[]const u32, ri
     }
     try w.writeAll("</div>");
     return true;
-}
-
-/// "hw" for a rune in `ringed` and not in `lit`
-fn mark(lit: []const u32, ringed: []const u32, id: u32) []const u8 {
-    const in = std.mem.findScalar(u32, ringed, id) != null and std.mem.findScalar(u32, lit, id) == null;
-    return if (in) "hw" else "";
 }
 
 /// A rune's icon, dimmed unless `lit`; the name on hover, as alt text only when lit
@@ -654,7 +603,7 @@ fn pages(w: *Writer, f: *const File, b: File.Build) !bool {
             .hw = tpl.when(i == hi, " hw"),
             .tags = tpl.call(tags, .{ i, hi }),
         });
-        if (!try runePage(w, f, o.v, null, null)) try value(w, f, .runes, o.v, true);
+        if (!try runePage(w, f, o.v, null)) try value(w, f, .runes, o.v, true);
         try tpl.renderPart(w,
             \\<small>{games} games · {share:.1}%<br>{rate}</small></div>
             \\
