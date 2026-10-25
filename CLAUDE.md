@@ -13,9 +13,9 @@ docs/plan.md "Now". Read it first.
 - Work on main only (one developer); other sessions share the checkout. Commit with
   `deploy/commit.sh -m msg -- <paths>`: by path, so others' dirty files stay out; adds
   new files and the page hashes. A new file goes in the same commit as its first use
-- Every push to main deploys (log .git/meiolol-deploy.log). Push the tested sha, `git
-  push origin <sha>:main` (plain push can send a commit another session made meanwhile);
-  pre-push runs `zig build ci` on it
+- Every push to main deploys (log .git/meiolol-deploy.log). Push the tested sha with
+  `deploy/push.sh <sha>` (plain push can send a commit another session made meanwhile);
+  pre-push runs `zig build ci` on it, once for a group of queued pushes
 - Solid, tested change: commit and push without asking, then `deploy/box.sh
   wait-deployed`. Ask first only when unfinished, risky or hard to undo
 
@@ -75,8 +75,7 @@ docs/plan.md "Now". Read it first.
 - Waiting: run_in_background, then wait for the notification
 - Builds and tests through `deploy/zb.sh test|test-ui|ci|<zig build args>`: one build
   at a time across sessions, and a run that started after your request answers it.
-  UI work: `test-ui` while iterating, `test` before a commit. Push: `lockf
-  ~/.cache/meiolol-zig.lock git push ...`
+  UI work: `test-ui` while iterating, `test` before a commit
 - Tests: `deploy/zb.sh test 2>&1 | tee $SCRATCH/t.log | tail -30`, then grep the log
 - Past ~200k context, hand over at the next natural break (step committed); a new
   topic starts fresh (fleet skill)
