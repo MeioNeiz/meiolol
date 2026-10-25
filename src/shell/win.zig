@@ -443,6 +443,16 @@ pub fn setUp(ctrl: [*c]c.ICoreWebView2Controller, wv: [*c]c.ICoreWebView2) void 
     _ = com(wv, "add_NewWindowRequested", .{ newwin_handler.as(c.ICoreWebView2NewWindowRequestedEventHandler), &token });
 }
 
+/// Low trims the GPU and renderer processes once, when set (at 150%: 348 to 175 MB), and
+/// costs the next draw about 10 ms; it is no cap, so pages grow back while it stays low.
+/// Microsoft's advice and ours: low while the app is inactive, normal while in use
+pub fn setMemoryLow(wv: [*c]c.ICoreWebView2, low: bool) void {
+    const w19 = tryQi(wv, "6921f954-79b0-437f-a997-c85811897c68", c.ICoreWebView2_19) orelse return;
+    const level: c.COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL = if (low) c.COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW else c.COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL;
+    _ = com(w19, "put_MemoryUsageTargetLevel", .{level});
+    _ = com(w19, "Release", .{});
+}
+
 fn resize() void {
     if (controller == null) return;
     var r: c.RECT = undefined;
@@ -589,7 +599,8 @@ fn painted(page: []const u8) void {
     if (first_paint == null) {
         first_paint = t;
         if (opt.self_test) return finishSelfTest(true, "painted");
-        if (opt.demo) pushing = true;
+        // --measure starts and stops the pushes itself
+        if (opt.demo and !opt.measure) pushing = true;
     }
     if (opt.measure) measure.painted(page, t);
 }
@@ -602,6 +613,7 @@ fn tick() void {
     const now = client.current();
     if (sent_client != null and now != sent_client.?) {
         sent_client = now;
+        log("client: {t}", .{now});
         send(.{ .status = .{ .client = now } });
     }
     if (pushing) {
@@ -641,6 +653,7 @@ fn wndProc(h: c.HWND, msg: c.UINT, wp: c.WPARAM, lp: c.LPARAM) callconv(.c) c.LR
             keepNormalRect();
             if (controller != null) _ = com(controller, "NotifyParentWindowPositionChanged", .{});
         },
+        c.WM_ACTIVATEAPP => if (webview != null) setMemoryLow(webview, wp == 0),
         c.WM_SETFOCUS => if (controller != null) {
             _ = com(controller, "MoveFocus", .{c.COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC});
         },
@@ -826,8 +839,7 @@ fn run(init: std.process.Init) !void {
     if (opt.self_test) _ = c.SetTimer(hwnd, timer_watchdog, 30_000, null);
     if (opt.measure) _ = c.SetTimer(hwnd, timer_watchdog, measure.watchdog_ms, null);
     if (opt.measure) measure.start();
-    // Scripted runs leave Jacob's client alone (LCU HTTPS segfaults on Windows: notes)
-    if (!opt.scripted()) client.start(init.gpa, init.io, init.environ_map.get("MEIOLOL_LOCKFILE")) catch |e|
+    if (!opt.self_test) client.start(init.gpa, init.io, init.environ_map.get("MEIOLOL_LOCKFILE")) catch |e|
         log("client poller: {t}", .{e});
     try startEnvironment();
 

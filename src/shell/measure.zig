@@ -29,14 +29,16 @@ pub fn served(bytes: usize) void {
 var push_at: [64]f64 = undefined;
 var ack_ms: [64]f64 = undefined;
 var acks: u32 = 0;
+var last_ack_ms: f64 = 0;
 
 pub fn pushed(seq: u32) void {
     push_at[seq % 64] = win.nowMs();
 }
 
 pub fn drawn(seq: u32) void {
+    last_ack_ms = win.nowMs() - push_at[seq % 64];
     if (acks < ack_ms.len) {
-        ack_ms[acks] = win.nowMs() - push_at[seq % 64];
+        ack_ms[acks] = last_ack_ms;
         acks += 1;
     }
 }
@@ -271,8 +273,9 @@ pub fn tick() void {
                 sum += x;
                 worst = @max(worst, x);
             }
+            // first: after 15 s without pushes
             field("push_to_drawn_ms");
-            jw.print("{{\"n\": {d}, \"mean\": {d:.2}, \"max\": {d:.2}}}", .{ acks, sum / @as(f64, @floatFromInt(@max(acks, 1))), worst }) catch {};
+            jw.print("{{\"n\": {d}, \"first\": {d:.2}, \"mean\": {d:.2}, \"max\": {d:.2}}}", .{ acks, if (acks > 0) ack_ms[0] else 0, sum / @as(f64, @floatFromInt(@max(acks, 1))), worst }) catch {};
             capture(pageAt(0));
         },
         35 => nextPage(),
@@ -292,17 +295,21 @@ pub fn tick() void {
         12 => nextPage(),
         else => {},
     } else switch (phase_sec) {
-        // After the pages: memory knobs, a second window, suspend
-        1 => if (win.tryQi(win.webview, "6921f954-79b0-437f-a997-c85811897c68", c.ICoreWebView2_19)) |w19| {
-            _ = com(w19, "put_MemoryUsageTargetLevel", .{c.COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW});
-            _ = com(w19, "Release", .{});
-        },
+        // After the pages: memory Low (as when the app goes inactive) and one push once it
+        // has trimmed, a second window, suspend
+        1 => win.setMemoryLow(win.webview, true),
         6 => {
             sample(&s_b, &l_b);
             memJson("mem_target_low", &s_b);
+            win.setPushing(true);
+        },
+        7 => win.setPushing(false),
+        8 => {
+            field("push_after_low_idle_ms");
+            jw.print("{d:.2}", .{last_ack_ms}) catch {};
             openPanel();
         },
-        12 => {
+        14 => {
             sample(&s_b, &l_b);
             memJson("mem_with_topmost_panel", &s_b);
             _ = com(win.controller, "put_IsVisible", .{@as(c.BOOL, 0)});
@@ -312,7 +319,7 @@ pub fn tick() void {
             }
             s_a = s_b;
         },
-        18 => {
+        20 => {
             sample(&s_b, &l_b);
             memJson("mem_main_suspended_panel_open", &s_b);
             cpuJson("cpu_main_suspended_panel_idle", &s_a, &s_b);
