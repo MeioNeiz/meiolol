@@ -165,6 +165,8 @@ fn newClass(name: [*:0]const u8, proto: ?[*:0]const u8, methods: anytype) Id {
     return msg(Id, msg(Id, c, "alloc", .{}), "init", .{});
 }
 
+fn noWake() void {}
+
 pub fn main(init: std.process.Init) !void {
     io = init.io;
     gpa = init.gpa;
@@ -189,7 +191,8 @@ pub fn main(init: std.process.Init) !void {
         } else return error.UnknownArgument;
     }
 
-    try client.start(gpa, io, init.environ_map.get("MEIOLOL_LOCKFILE"));
+    // The 1 s tick sends what changed
+    try client.start(init, init.environ_map.get("MEIOLOL_LOCKFILE"), noWake);
     const app = msg(Id, cls("NSApplication"), "sharedApplication", .{});
     msg(void, app, "setActivationPolicy:", .{@as(isize, 0)});
     const delegate = newClass("MeiololAppDelegate", null, .{

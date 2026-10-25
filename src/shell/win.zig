@@ -20,6 +20,7 @@ const files = @import("files.zig");
 const place = @import("place.zig");
 const demo = @import("demo.zig");
 const measure = @import("measure.zig");
+const focustest = @import("focustest.zig");
 const client = @import("client.zig");
 
 pub const W = std.unicode.utf8ToUtf16LeStringLiteral;
@@ -45,6 +46,8 @@ pub const Options = struct {
     n_also: usize = 0,
     /// --measure: the webview's rasterisation scale (1.5 renders as at 150%)
     scale: ?f64 = null,
+    /// --focus-test: focustest.zig's run 1 or 2 (0 off); not scripted: it takes focus
+    focus_test: u8 = 0,
 
     fn scripted(o: Options) bool {
         return o.measure or o.self_test;
@@ -154,6 +157,8 @@ var pushing = false;
 var seq: u32 = 0;
 /// What the page was last told of the League client
 var sent_client: ?client.Client = null;
+/// When to log memory again after the target changed
+var memory_log_at: ?f64 = null;
 pub var t_window: f64 = 0;
 pub var t_env: f64 = 0;
 pub var t_ctrl: f64 = 0;
@@ -604,6 +609,21 @@ fn painted(page: []const u8) void {
         if (opt.demo and !opt.measure) pushing = true;
     }
     if (opt.measure) measure.painted(page, t);
+    if (opt.focus_test != 0) focustest.painted(t);
+}
+
+fn clientChanged() void {
+    const now = client.current();
+    if (sent_client != null and now != sent_client.?) {
+        sent_client = now;
+        log("client: {t}", .{now});
+        send(.{ .status = .{ .client = now } });
+    }
+}
+
+/// From the poller's thread
+fn wakeTick() void {
+    _ = c.PostMessageW(hwnd, wm_client, 0, 0);
 }
 
 pub fn setPushing(on: bool) void {
@@ -611,18 +631,19 @@ pub fn setPushing(on: bool) void {
 }
 
 fn tick() void {
-    const now = client.current();
-    if (sent_client != null and now != sent_client.?) {
-        sent_client = now;
-        log("client: {t}", .{now});
-        send(.{ .status = .{ .client = now } });
-    }
+    if (memory_log_at) |at| if (nowMs() >= at) {
+        memory_log_at = null;
+        const m = measure.privateMb();
+        log("private {d:.0} MB ({d:.0} host), 5 s after", .{ m.all, m.host });
+    };
+    clientChanged();
     if (pushing) {
         seq += 1;
         measure.pushed(seq);
         send(demo.champSelect(seq));
     }
     if (opt.measure) measure.tick();
+    if (opt.focus_test != 0) focustest.tick();
 }
 
 fn finishSelfTest(ok: bool, what: []const u8) void {
@@ -641,12 +662,19 @@ fn finishSelfTest(ok: bool, what: []const u8) void {
 
 const timer_tick = 1;
 const timer_watchdog = 2;
+/// The poller published something
+const wm_client = c.WM_APP + 1;
 var exit_code: u8 = 0;
 
 fn wndProc(h: c.HWND, msg: c.UINT, wp: c.WPARAM, lp: c.LPARAM) callconv(.c) c.LRESULT {
     switch (msg) {
         c.WM_SIZE => {
             if (controller != null) _ = com(controller, "put_IsVisible", .{@as(c.BOOL, @intFromBool(wp != c.SIZE_MINIMIZED))});
+            // Minimising an active window sent no WM_ACTIVATE 0 in the focus test
+            if (wp == c.SIZE_MINIMIZED and webview != null) {
+                setMemoryLow(webview, true);
+                log("minimised: memory target low", .{});
+            }
             if (wp == c.SIZE_RESTORED) keepNormalRect();
             resize();
         },
@@ -654,7 +682,16 @@ fn wndProc(h: c.HWND, msg: c.UINT, wp: c.WPARAM, lp: c.LPARAM) callconv(.c) c.LR
             keepNormalRect();
             if (controller != null) _ = com(controller, "NotifyParentWindowPositionChanged", .{});
         },
-        c.WM_ACTIVATEAPP => if (webview != null) setMemoryLow(webview, wp == 0),
+        // Not WM_ACTIVATEAPP: with the webview's windows (another process) attached to
+        // this thread's input, it came only at start and close (focus test, 25 Oct)
+        c.WM_ACTIVATE => {
+            const active = wp & 0xffff != c.WA_INACTIVE;
+            const m = measure.privateMb();
+            log("{s}, private {d:.0} MB ({d:.0} host)", .{ if (active) "active: normal" else "inactive: memory target low", m.all, m.host });
+            if (webview != null) setMemoryLow(webview, !active);
+            memory_log_at = nowMs() + 5000;
+            return c.DefWindowProcW(h, msg, wp, lp);
+        },
         c.WM_SETFOCUS => if (controller != null) {
             _ = com(controller, "MoveFocus", .{c.COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC});
         },
@@ -667,6 +704,7 @@ fn wndProc(h: c.HWND, msg: c.UINT, wp: c.WPARAM, lp: c.LPARAM) callconv(.c) c.LR
             const r: *const c.RECT = @ptrFromInt(@as(usize, @bitCast(lp)));
             _ = c.SetWindowPos(h, null, r.left, r.top, r.right - r.left, r.bottom - r.top, c.SWP_NOZORDER | c.SWP_NOACTIVATE);
         },
+        wm_client => clientChanged(),
         c.WM_TIMER => if (wp == timer_watchdog) {
             log("watchdog: closing", .{});
             if (opt.self_test) finishSelfTest(false, "timeout") else measure.finish();
@@ -698,6 +736,7 @@ fn savePlace() void {
     place.format(&w, .{ .rect = normal_rect, .maximised = c.IsZoomed(hwnd) != 0 }) catch return;
     var path: [400]u16 = undefined;
     _ = writeFile(besideExe(&path, "window.txt"), w.buffered());
+    log("place saved: {s}", .{std.mem.trimEnd(u8, w.buffered(), "\r\n")});
 }
 
 /// Last time's place, fitted to the screen nearest it; else 1120 x 720 at this screen's
@@ -767,6 +806,11 @@ fn parseArgs(args: []const [:0]const u8) !void {
             opt.measure = true;
         } else if (std.mem.eql(u8, a, "--self-test")) {
             opt.self_test = true;
+        } else if (std.mem.eql(u8, a, "--focus-test")) {
+            opt.focus_test = try std.fmt.parseInt(u8, next, 10);
+            if (opt.focus_test != 1 and opt.focus_test != 2) return error.BadFocusTest;
+            focustest.start(opt.focus_test);
+            i += 1;
         } else return error.UnknownArgument;
     }
 }
@@ -829,7 +873,10 @@ fn run(init: std.process.Init) !void {
     if (c.RegisterClassExW(&wc) == 0) return error.RegisterClass;
     const at = initialPlace();
     normal_rect = at.rect;
-    hwnd = c.CreateWindowExW(0, class_name, W("meiolol"), c.WS_OVERLAPPEDWINDOW, at.rect.x, at.rect.y, at.rect.w, at.rect.h, null, null, inst, null);
+    log("place {d},{d} {d}x{d}{s}", .{ at.rect.x, at.rect.y, at.rect.w, at.rect.h, if (at.maximised) " maximised" else "" });
+    // Unreleased builds say so: beside the released app, both would be "meiolol"
+    const title = if (build_options.desktop_version == 0) W("meiolol test build") else W("meiolol");
+    hwnd = c.CreateWindowExW(0, class_name, title, c.WS_OVERLAPPEDWINDOW, at.rect.x, at.rect.y, at.rect.w, at.rect.h, null, null, inst, null);
     if (hwnd == null) return error.CreateWindow;
     // Scripted runs open on Jacob's screen: don't take the keyboard from him
     _ = c.ShowWindow(hwnd, if (opt.scripted()) c.SW_SHOWNOACTIVATE else if (at.maximised) c.SW_SHOWMAXIMIZED else c.SW_SHOWNORMAL);
@@ -840,7 +887,7 @@ fn run(init: std.process.Init) !void {
     if (opt.self_test) _ = c.SetTimer(hwnd, timer_watchdog, 30_000, null);
     if (opt.measure) _ = c.SetTimer(hwnd, timer_watchdog, measure.watchdog_ms, null);
     if (opt.measure) measure.start();
-    if (!opt.self_test) client.start(init.gpa, init.io, init.environ_map.get("MEIOLOL_LOCKFILE")) catch |e|
+    if (!opt.self_test) client.start(init, init.environ_map.get("MEIOLOL_LOCKFILE"), wakeTick) catch |e|
         log("client poller: {t}", .{e});
     try startEnvironment();
 

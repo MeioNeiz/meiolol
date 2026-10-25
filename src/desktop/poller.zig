@@ -77,14 +77,29 @@ var wake: *const fn () void = undefined;
 /// This exe's release (update.Options.version)
 var version: u64 = 0;
 var edition: state.Edition = .private;
+var update_exe = true;
 
-pub fn start(init: std.process.Init, lockfile_override: ?[]const u8, wake_ui: *const fn () void, release: u64, ed: state.Edition) !void {
+pub const Options = struct {
+    /// Null finds the client (lockfile.discover)
+    lockfile: ?[]const u8 = null,
+    /// From the poller thread after each publish
+    wake: *const fn () void,
+    /// This exe's release (update.Options.version)
+    release: u64,
+    edition: state.Edition,
+    /// Updates may replace the running exe. The webview shell says no until it takes
+    /// over meiolol-desktop.exe's name
+    update_exe: bool = true,
+};
+
+pub fn start(init: std.process.Init, opt: Options) !void {
     io = init.io;
-    version = release;
-    edition = ed;
+    version = opt.release;
+    edition = opt.edition;
+    update_exe = opt.update_exe;
     shared.icons = .{ .gpa = init.gpa };
-    lockfile = lockfile_override;
-    wake = wake_ui;
+    lockfile = opt.lockfile;
+    wake = opt.wake;
     const gpa = init.gpa;
     shared.data = load(gpa);
     if (shared.data == null) shared.status = .no_data;
@@ -151,7 +166,7 @@ fn updateOptions(init: std.process.Init) ?update.Options {
         .gpa = init.gpa,
         .io = io,
         .dir = dir,
-        .exe = std.fs.path.basename(exe_path),
+        .exe = if (update_exe) std.fs.path.basename(exe_path) else null,
         .base = init.environ_map.get("MEIOLOL_UPDATE_URL") orelse update.default_base,
         .auth = undefined,
         .version = version,

@@ -143,6 +143,16 @@ fn sample(ours: *Sample, league: *Sample) void {
     };
 }
 
+/// Private memory of this process alone and with its webview processes, for the log
+pub fn privateMb() struct { host: f64, all: f64 } {
+    var ours: Sample = undefined;
+    var league: Sample = undefined;
+    sample(&ours, &league);
+    var sum: u64 = 0;
+    for (ours.p[0..ours.n]) |p| sum += p.private;
+    return .{ .host = mb(ours.p[0].private), .all = mb(sum) };
+}
+
 /// % of one core used between two samples by each process of b (0 before for new ones)
 fn cpuPct(a: *const Sample, b: *const Sample, q: Proc) f64 {
     const before = for (a.p[0..a.n]) |p| (if (p.pid == q.pid) break p.cpu) else 0;

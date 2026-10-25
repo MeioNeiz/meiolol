@@ -1,66 +1,63 @@
-//! The League client's state for the shell: a thread steps lcu.Watch once a second
-//! (read-only GETs, as the dvui poller) and keeps the latest; the UI thread's 1 s tick
-//! sends it to the page when it changes. Champ select seats come with the app's screens
+//! The League client's state for the shell, from the app's poller (src/desktop/poller.zig:
+//! read-only GETs once a second, with the stats and curves beside the exe). The UI
+//! thread's 1 s tick, or the poller's wake, sends it to the page when it changes
 
 const std = @import("std");
-const lcu = @import("lcu");
+const build_options = @import("build_options");
+const desktop = @import("desktop");
 const channel = @import("channel.zig");
+const poller = desktop.poller;
+const state = desktop.state;
 
 pub const Client = @FieldType(channel.Status, "client");
 
-var latest: std.atomic.Value(u8) = .init(@backingInt(Client.none));
-var quit: std.atomic.Value(bool) = .init(false);
-
-/// `lockfile` null finds the client (lockfile.discover); MEIOLOL_LOCKFILE in dev
-pub fn start(gpa: std.mem.Allocator, io: std.Io, lockfile: ?[]const u8) !void {
-    (try std.Thread.spawn(.{}, loop, .{ gpa, io, lockfile })).detach();
+/// `lockfile` null finds the client; MEIOLOL_LOCKFILE in dev. `wake` runs on the poller's
+/// thread after each change
+pub fn start(init: std.process.Init, lockfile: ?[]const u8, wake: *const fn () void) !void {
+    try poller.start(init, .{
+        .lockfile = lockfile,
+        .wake = wake,
+        .release = build_options.desktop_version,
+        .edition = if (build_options.public) .public else .private,
+        .update_exe = false,
+    });
 }
 
 pub fn stop() void {
-    quit.store(true, .release);
+    poller.stop();
 }
 
 pub fn current() Client {
-    return @fromBackingInt(@intCast(latest.load(.acquire)));
+    const s = poller.lock();
+    defer poller.unlock();
+    return of(s.status);
 }
 
-fn loop(gpa: std.mem.Allocator, io: std.Io, lockfile: ?[]const u8) void {
-    var watch: lcu.Watch = .init(gpa, io, lockfile);
-    defer watch.deinit();
-    while (!quit.load(.acquire)) {
-        var arena: std.heap.ArenaAllocator = .init(gpa);
-        defer arena.deinit();
-        const now: Client = if (watch.step(arena.allocator())) |s| switch (s) {
-            .phase => |p| fromPhase(p),
-            .between, .bad_session, .select => .champ_select,
-        } else |_| blk: {
-            watch.disconnect();
-            break :blk .none;
-        };
-        latest.store(@backingInt(now), .release);
-        io.sleep(.fromSeconds(1), .awake) catch return;
-    }
-}
-
-/// /lol-gameflow/v1/gameflow-phase's names
-pub fn fromPhase(phase: []const u8) Client {
-    const map = [_]struct { []const u8, Client }{
-        .{ "ChampSelect", .champ_select },
-        .{ "GameStart", .in_game },
-        .{ "InProgress", .in_game },
-        .{ "Reconnect", .in_game },
-        .{ "WaitingForStats", .post_game },
-        .{ "PreEndOfGame", .post_game },
-        .{ "EndOfGame", .post_game },
+fn of(s: state.Status) Client {
+    return switch (s) {
+        .no_data => .no_data,
+        .no_client, .client_error => .none,
+        .waiting => |phase| if (std.mem.eql(u8, phase, "Champ select"))
+            .champ_select
+        else if (std.mem.eql(u8, phase, "In game") or std.mem.eql(u8, phase, "Reconnect"))
+            .in_game
+        else if (std.mem.eql(u8, phase, "Post game"))
+            .post_game
+        else
+            .idle,
+        .no_role, .select => .champ_select,
+        .loading, .in_game => .in_game,
+        .post_game => .post_game,
     };
-    for (map) |m| if (std.mem.eql(u8, m[0], phase)) return m[1];
-    return .idle;
 }
 
-test "gameflow phases" {
-    try std.testing.expectEqual(.champ_select, fromPhase("ChampSelect"));
-    try std.testing.expectEqual(.in_game, fromPhase("InProgress"));
-    try std.testing.expectEqual(.post_game, fromPhase("EndOfGame"));
-    try std.testing.expectEqual(.idle, fromPhase("Lobby"));
-    try std.testing.expectEqual(.idle, fromPhase("unknown"));
+test "the poller's status as the page's client state" {
+    try std.testing.expectEqual(.none, of(.no_client));
+    try std.testing.expectEqual(.none, of(.{ .client_error = "ConnectionRefused" }));
+    try std.testing.expectEqual(.no_data, of(.no_data));
+    try std.testing.expectEqual(.idle, of(.{ .waiting = "Lobby" }));
+    try std.testing.expectEqual(.champ_select, of(.{ .waiting = "Champ select" }));
+    try std.testing.expectEqual(.in_game, of(.{ .waiting = "In game" }));
+    try std.testing.expectEqual(.post_game, of(.{ .waiting = "Post game" }));
+    try std.testing.expectEqual(.champ_select, of(.no_role));
 }

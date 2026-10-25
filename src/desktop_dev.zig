@@ -27,7 +27,7 @@ var window: *dvui.Window = undefined;
 fn start(win: *dvui.Window) !void {
     window = win;
     const init = dvui.App.main_init orelse return error.NoProcessInit;
-    try poller.start(init, init.environ_map.get("MEIOLOL_LOCKFILE"), wakeUi, 0, .private);
+    try poller.start(init, .{ .lockfile = init.environ_map.get("MEIOLOL_LOCKFILE"), .wake = wakeUi, .release = 0, .edition = .private });
 }
 
 /// From the poller thread: SDL_PushEvent is thread safe

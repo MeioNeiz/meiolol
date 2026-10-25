@@ -14,6 +14,9 @@
 #                                              (ARGS e.g. --scale 1.5)
 #   deploy/shell.sh run [ARGS...]              start it there and leave it open (--demo)
 #   deploy/shell.sh stop                       close a run left open
+#   deploy/shell.sh focus OUT                  --focus-test (takes focus, ~45 s): memory
+#                                              target on (de)activation, window place
+#                                              kept, a second copy brings the first back
 # A window on Jacob's screen during his game: runs refuse while League of Legends.exe
 # (a game, not the client) is running, unless IN_GAME=1 (he agreed to an in-game run)
 set -euo pipefail
@@ -53,6 +56,21 @@ remote_dir() {
     d=$(ssh "$HOST" 'd=$(wslpath "$(/mnt/c/Windows/System32/cmd.exe /c "echo %LOCALAPPDATA%" 2> /dev/null | tr -d "\r")")/meiolol-shell-test && mkdir -p "$d" && echo "$d"')
     [[ $d == /mnt/* ]] || { echo "shell.sh: no Windows folder on $HOST ($d)" >&2; exit 1; }
     echo "$d"
+}
+
+# The installed app's stats and curves beside the test exe, so the poller has data (never
+# its sign in: the test exe must not update or sign in)
+data_files() {
+    local dir=$1
+    # shellcheck disable=SC2016 # expanded on the gpu-box
+    ssh "$HOST" bash -s -- "$(printf '%q ' "$dir")" <<'REMOTE'
+dir=$1
+app=$(dirname "$dir")/Programs/meiolol
+for f in "$app"/stats-*.bin "$app"/recent-curves.bin "$app"/champ-facts.tsv; do
+    [[ -f $f ]] && cp -u "$f" "$dir/"
+done
+true
+REMOTE
 }
 
 # Runs EXE there with ARGS until it exits (or SECS pass, then kills it); WAIT is 1 to
@@ -146,5 +164,34 @@ case ${1:-} in
         run_there "$exe" 0 0 "$@"
         ;;
     stop) ssh "$HOST" "$S/taskkill.exe /t /im meiolol-shell.exe < /dev/null" || true ;;
+    focus)
+        out=${2:?usage: deploy/shell.sh focus OUT}
+        exe=$(build private | tail -1)
+        dir=$(remote_dir)
+        data_files "$dir"
+        ssh "$HOST" "rm -f '$dir/window.txt'"
+        run_there "$exe" 60 1 --focus-test 1
+        mkdir -p "$out"
+        rsync -t "$HOST:$dir/shell.log" "$out/focus1.log"
+        rsync -t "$HOST:$dir/window.txt" "$out/" 2> /dev/null || echo "no window.txt after run 1"
+        run_there "$exe" 0 0 --focus-test 2
+        # A second copy once run 2 has minimised itself: it must exit and restore run 2
+        ssh "$HOST" bash -s -- "$(printf '%q ' "$dir")" <<'REMOTE'
+dir=$1 S=/mnt/c/Windows/System32
+count() { $S/tasklist.exe < /dev/null | grep -ci '^meiolol-shell'; }
+start=$SECONDS
+until grep -q 'focus test: minimise' "$dir/shell.log" 2> /dev/null || (( SECONDS - start > 30 )); do sleep 1; done
+win=$(wslpath -w "$dir/meiolol-shell.exe")
+$S/schtasks.exe /create /tn meiolol-shell-second /tr "\"$win\"" /sc once /st 23:59 /it /f < /dev/null > /dev/null
+$S/schtasks.exe /run /tn meiolol-shell-second < /dev/null > /dev/null
+for _ in 1 2 3 4 5 6; do sleep 1; echo "copies running: $(count)"; done
+$S/schtasks.exe /delete /tn meiolol-shell-second /f < /dev/null > /dev/null
+start=$SECONDS
+until (( $(count) == 0 )) || (( SECONDS - start > 40 )); do sleep 1; done
+(( $(count) == 0 )) || { echo "run 2 still open: killing"; $S/taskkill.exe /f /t /im meiolol-shell.exe < /dev/null > /dev/null; }
+REMOTE
+        rsync -t "$HOST:$dir/shell.log" "$out/focus2.log"
+        echo "results in $out"
+        ;;
     -h | --help | *) usage_of "$0"; [[ ${1:-} == -h || ${1:-} == --help ]] ;;
 esac

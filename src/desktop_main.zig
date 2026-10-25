@@ -92,7 +92,7 @@ fn waitMessage(micros: u32) bool {
 fn start(_: *dvui.Window) !void {
     const init = dvui.App.main_init orelse return error.NoProcessInit;
     const edition: ui.Edition = if (build_options.public) .public else .private;
-    try poller.start(init, null, wakeUi, build_options.desktop_version, edition);
+    try poller.start(init, .{ .wake = wakeUi, .release = build_options.desktop_version, .edition = edition });
 }
 
 fn wakeUi() void {

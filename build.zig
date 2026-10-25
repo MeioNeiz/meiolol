@@ -64,11 +64,15 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(test_ui_step);
 
     test_step.dependOn(errorChecks(b, target, "tpl", m.tpl, "src/tpl/compile_errors.zig", &tpl_errors.cases));
+    const shell_options = desktopOptions(b, 0, .private).createModule();
     const shell_test = b.createModule(.{
         .root_source_file = b.path("src/shell/test.zig"),
         .target = target,
         .optimize = optimize,
-        .imports = &.{.{ .name = "lcu", .module = lcuModule(b, target, optimize) }},
+        .imports = &.{
+            .{ .name = "desktop", .module = desktopModule(b, target, optimize, shell_options) },
+            .{ .name = "build_options", .module = shell_options },
+        },
     });
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = shell_test, .filters = test_filters })).step);
 
@@ -483,15 +487,20 @@ fn desktopOptions(b: *std.Build, version: u64, edition: Edition) *std.Build.Step
     return options;
 }
 
-/// The League client's local API (src/lcu) as a module, for the shell; the app and the
-/// dvui window import it by path from src/
-fn lcuModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode) *std.Build.Module {
+/// The app's poller and what it publishes (src/desktop_app.zig), for the shell: the dvui
+/// window imports the same files by path from src/
+/// `options` is the importer's build_options too: one module, as Zig refuses a file in two
+fn desktopModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode, options: *std.Build.Module) *std.Build.Module {
     const m = modules(b, target, optimize);
     return b.createModule(.{
-        .root_source_file = b.path("src/lcu/root.zig"),
+        .root_source_file = b.path("src/desktop_app.zig"),
         .target = target,
         .optimize = optimize,
-        .imports = &.{ .{ .name = "core", .module = m.core }, .{ .name = "net", .module = m.net } },
+        .imports = &.{
+            .{ .name = "core", .module = m.core },
+            .{ .name = "net", .module = m.net },
+            .{ .name = "build_options", .module = options },
+        },
     });
 }
 
@@ -503,6 +512,7 @@ fn shellExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.
         .target = target,
         .optimize = optimize,
     });
+    const options = desktopOptions(b, version, edition).createModule();
     const exe = b.addExecutable(.{
         .name = "meiolol-shell",
         .root_module = b.createModule(.{
@@ -511,11 +521,11 @@ fn shellExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "c", .module = wv2.mod },
-                .{ .name = "lcu", .module = lcuModule(b, target, optimize) },
+                .{ .name = "desktop", .module = desktopModule(b, target, optimize, options) },
+                .{ .name = "build_options", .module = options },
             },
         }),
     });
-    exe.root_module.addOptions("build_options", desktopOptions(b, version, edition));
     exe.root_module.addWin32ResourceFile(.{ .file = b.path("src/desktop/meiolol.rc") });
     for ([_][]const u8{ "user32", "gdi32", "ole32", "shlwapi", "shell32", "advapi32", "psapi" }) |l|
         exe.root_module.linkSystemLibrary(l, .{});
@@ -524,11 +534,15 @@ fn shellExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.
 }
 
 fn shellMac(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode) *std.Build.Step.Compile {
+    const options = desktopOptions(b, 0, .private).createModule();
     const mod = b.createModule(.{
         .root_source_file = b.path("src/shell/mac.zig"),
         .target = target,
         .optimize = optimize,
-        .imports = &.{.{ .name = "lcu", .module = lcuModule(b, target, optimize) }},
+        .imports = &.{
+            .{ .name = "desktop", .module = desktopModule(b, target, optimize, options) },
+            .{ .name = "build_options", .module = options },
+        },
     });
     mod.linkFramework("AppKit", .{});
     mod.linkFramework("WebKit", .{});

@@ -27,7 +27,8 @@ pub const Hello = struct {
 };
 
 pub const Status = struct {
-    client: enum { none, idle, champ_select, in_game, post_game },
+    /// no_data: no stats file yet (first start, before the download)
+    client: enum { none, no_data, idle, champ_select, in_game, post_game },
 };
 
 pub const ChampSelect = struct {
