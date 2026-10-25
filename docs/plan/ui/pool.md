@@ -165,3 +165,11 @@ Override the sections above where they differ.
    add: "just so cool"); how hard a champion is to pick up is often the most
    interesting thing. Both stay; the flow between them gets reworked
 3. No Table view; the chart must show all the information well instead
+
+## Jacob's answers (review v6, 25 Oct)
+
+Override the sections above where they differ. Raw: review artifact db, ids v2-*.
+
+1. No full pick-up chart below the pool: like the matchup field it makes the vertical
+   seem to matter. Adding champions must be easy: e.g. a side panel for choosing pool
+   champions, showing those we know they play and high mastery (mocks round 3)

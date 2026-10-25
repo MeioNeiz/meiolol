@@ -193,3 +193,11 @@ Override the sections above where they differ.
    heading; rework in the visual pass
 2. Drop Practice drills from the default path; clear chapter-end drafts only
 3. Stars 0-3
+
+## Jacob's answers (review v6, 25 Oct)
+
+Override the sections above where they differ. Raw: review artifact db, ids v2-*.
+
+1. v6 first screen "too empty now, doesnt look great" (24 Oct: too much at once): find
+   the middle (mocks round 3). Mastery reveal as columns not settled
+2. Chapter 0 role rule: not fussed; decided 90% (keeps Lee Sin, 92.7% jungle)

@@ -296,3 +296,10 @@ Override the sections above where they differ.
    page load and page speed are not traded away
 2. zjb calls, no JS beyond the loader
 3. Several ui.wasm files per page family (each page loads only its code)
+
+## Jacob's answers (review v6, 25 Oct)
+
+Override the sections above where they differ. Raw: review artifact db, ids v2-*.
+
+1. CSS cached a year by its hash (nginx rule on jomify, separate traffic beacon): do
+   it now, with the island runtime work

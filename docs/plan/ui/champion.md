@@ -194,3 +194,13 @@ Override the sections above where they differ.
    also not a massive massive fan of tiles although its close to good". Redesign in the
    visual pass: one view, no Tiles | Table toggle
 3. No tier letters
+
+## Jacob's answers (review v6, 25 Oct)
+
+Override the sections above where they differ. Raw: review artifact db, ids v2-*.
+
+1. Matchups: neither the v6 MatchupField (games on y) nor the 24 Oct tiles. Field
+   "still so packed", "so uncentered on wr it looks funny"; tiles "looked lazy". Try
+   other options (mocks round 3)
+2. Build slots: colour against the slot's average. How a choice moves the champion's own
+   rate is interesting but "much more secondary": a quieter second reading, not the colour

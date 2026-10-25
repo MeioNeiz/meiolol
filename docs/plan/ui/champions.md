@@ -134,3 +134,11 @@ Override the sections above where they differ.
    toggletip". Keep only if it reads without explanation; check production-key.md
    product rules before it ships
 3. Default role always All: consistent, never the visitor's main
+
+## Jacob's answers (review v6, 25 Oct)
+
+Override the sections above where they differ. Raw: review artifact db, ids v2-*.
+
+1. "Moved in <patch>" band: mock showed no icons; needs less space; maybe a link to
+   the patch page; "sort is kinda enough. I do like it, uncertain on whether we will keep
+   it". Mocks round 3: compact form, decide at build

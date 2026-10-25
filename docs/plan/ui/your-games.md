@@ -258,3 +258,10 @@ Override the sections above where they differ.
 2. Open the newest game when it ended under 3 hours ago
 3. Over time's default measure: win chance at 15 (fair to every role); gold at 14 vs
    typical stays as an option
+
+## Jacob's answers (review v6, 25 Oct)
+
+Override the sections above where they differ. Raw: review artifact db, ids v2-*.
+
+1. Patterns on Over time: keep
+2. Game rows tinted by result: keep

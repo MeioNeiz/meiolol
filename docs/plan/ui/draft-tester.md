@@ -184,3 +184,10 @@ Override the sections above where they differ.
 2. One model by default; a compare option to put a second beside it
 3. Pair grid on the first screen. The page is "much better than it was" but clunky with
    too much wasted space: tighten in the visual pass
+
+## Jacob's answers (review v6, 25 Oct)
+
+Override the sections above where they differ. Raw: review artifact db, ids v2-*.
+
+1. Drop ", lab" from model names (the Lab tag says where from)
+2. Pair grid: a finer colour scale for pair terms (most sit at 0.2-0.9)

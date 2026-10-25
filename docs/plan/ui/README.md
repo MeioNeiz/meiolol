@@ -341,3 +341,14 @@ plans' own answers sections.
    (home, Your games, Daily Draft board, pool chart, draft tester) and controls (tabs,
    segmented, buttons) look small and tacked on. One visual pass on the gallery before
    page building: first-class controls, denser use of space
+
+## Jacob's answers (review v6, 25 Oct)
+
+Override the sections above where they differ. Raw: review artifact db, ids v2-*.
+
+1. Phone navigation: "whatever you think best"; decided: a menu button in the header
+   (popover, no JS) on every page, not a bottom tab bar
+2. Game rows tinted by result (win blue, loss red, dpm-style), gallery GameRow too: keep
+3. Across: v6 mocks swung from busy to empty (daily, learn); charts must not imply meaning
+   on an axis that has none and must centre on the reference win rate; stay in the
+   site's style (square icons, gallery components)

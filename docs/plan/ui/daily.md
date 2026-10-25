@@ -248,3 +248,15 @@ Override the sections above where they differ.
    enough": redesign in the visual pass
 2. Hints that cost the "spot on" mark: yes
 3. "Try this pick in the board": yes, later (medium)
+
+## Jacob's answers (review v6, 25 Oct)
+
+Override the sections above where they differ. Raw: review artifact db, ids v2-*.
+
+1. Seats: team and role only, no player or team names; if teams are shown the puzzle
+   must be harder (people will know). A pro game "every now and again", not the default
+2. Loading-art seats and the all-in-a-row lineup: no. Stay in the site's style (square
+   icons); matchups and comps must read (teams facing); v6 "really empty now"; white
+   champion names vs a white player name inconsistent
+3. "Solo queue view" label: meant nothing to him; "idk about this direction" of v6.
+   Mocks round 3 reworks it

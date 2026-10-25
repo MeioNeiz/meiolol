@@ -287,3 +287,10 @@ Override the sections above where they differ.
 2. Win chance with a Gold toggle
 3. Lane rows only, no Table ("just looks worse")
 4. Phone: fight marks clustered per minute
+
+## Jacob's answers (review v6, 25 Oct)
+
+Override the sections above where they differ. Raw: review artifact db, ids v2-*.
+
+1. Turns (what counts as one): not now, refined while built; current rule (one-minute
+   swing of 20+ points) is a placeholder
