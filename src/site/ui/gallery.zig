@@ -93,6 +93,7 @@ pub const css =
     \\.g-frames { display: flex; gap: var(--sp-4); align-items: flex-start; flex-wrap: wrap; }
     \\.g-frame { container-type: inline-size; flex: 1 1 360px; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-4);
     \\  padding: var(--sp-3); border: 1px dashed var(--line-2); border-radius: var(--r-m); }
+    \\.g-frame:not([data-w]) { flex-basis: 100%; }
     \\.g-frame[data-w] { flex: none; width: calc(var(--w) * 1px); }
     \\.g-frame[data-w]::before { content: attr(data-w) " px"; font-size: var(--fs-xs); color: var(--faint); }
     \\.g-state { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-1); min-width: 0; }

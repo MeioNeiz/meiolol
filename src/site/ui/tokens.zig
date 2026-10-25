@@ -24,6 +24,8 @@ pub const root = [_]Token{
     // Brand/selection only, never data
     .{ .name = "accent", .value = "#a99dff" },
     .{ .name = "brand", .value = "#8b7cf6" },
+    // The logo's dot
+    .{ .name = "brand-dot", .value = "#f5c451" },
     .{ .name = "accent-bg", .value = "rgb(139 124 246 / 0.16)" },
     .{ .name = "focus", .value = "rgb(139 124 246 / 0.6)" },
     // Diverging scale: above usual blue, below orange, grey middle; step 4 rare. Text on

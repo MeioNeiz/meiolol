@@ -38,6 +38,7 @@ pub const champ = @import("champ.zig");
 pub const rolepicker = @import("rolepicker.zig");
 pub const filterbar = @import("filterbar.zig");
 pub const champsearch = @import("champsearch.zig");
+pub const site = @import("site.zig");
 pub const table = @import("table.zig");
 pub const chart = @import("chart.zig");
 pub const dotplot = @import("dotplot.zig");
@@ -46,7 +47,7 @@ pub const dotplot = @import("dotplot.zig");
 pub const components = .{};
 
 /// Every component, in the gallery's order
-pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, role, champ, rolepicker, filterbar, champsearch, table, chart, dotplot };
+pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, role, champ, site, rolepicker, filterbar, champsearch, table, chart, dotplot };
 
 pub const H = tree.H;
 pub const N = tree.N;
