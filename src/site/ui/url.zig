@@ -9,7 +9,8 @@
 //!     const s = url.read(Url, location_hash);
 //!
 //! Field types: ints, bools, enums (tag names), optionals of these (null is `key=`),
-//! unsigned int arrays (`r=1200-1800`) and `Str(n)` for typed text.
+//! unsigned int arrays (`r=1200-1800`) and `Str(n)` for typed text. Two islands with the
+//! same field names tell them apart by `pub const prefix = "opp-"` on one's struct.
 const std = @import("std");
 const Writer = std.Io.Writer;
 
@@ -47,6 +48,10 @@ fn isStr(comptime T: type) bool {
 }
 
 /// `v`'s non-default fields as `k=v` pairs joined by `&`, no leading `#`
+fn prefix(comptime T: type) []const u8 {
+    return if (@hasDecl(T, "prefix")) T.prefix else "";
+}
+
 pub fn write(comptime T: type, v: T, w: *Writer) Writer.Error!void {
     const d: T = .{};
     var first = true;
@@ -55,7 +60,7 @@ pub fn write(comptime T: type, v: T, w: *Writer) Writer.Error!void {
         if (!same(@TypeOf(x), x, @field(d, f))) {
             if (!first) try w.writeByte('&');
             first = false;
-            try w.writeAll(f ++ "=");
+            try w.writeAll(comptime prefix(T) ++ f ++ "=");
             try value(@TypeOf(x), x, w);
         }
     }
@@ -109,7 +114,7 @@ pub fn read(comptime T: type, s: []const u8) T {
         const eq = std.mem.findScalar(u8, kv, '=') orelse continue;
         const k = kv[0..eq];
         inline for (comptime std.meta.fieldNames(T)) |f| {
-            if (std.mem.eql(u8, k, f)) {
+            if (std.mem.eql(u8, k, comptime prefix(T) ++ f)) {
                 var buf: [256]u8 = undefined;
                 const raw = unescape(kv[eq + 1 ..], &buf);
                 if (parse(@FieldType(T, f), raw)) |x| @field(v, f) = x;
@@ -190,6 +195,19 @@ test "defaults write nothing; changes write only themselves and read back" {
     try testing.expectEqual(s.min, back.min);
     try testing.expectEqual(s.range, back.range);
     try testing.expectEqualStrings("kai'sa & co", back.q.slice());
+}
+
+test "a prefix keeps two islands' fields apart" {
+    const Opp = struct {
+        pub const prefix = "opp-";
+        sort: u8 = 0,
+        desc: bool = true,
+    };
+    const Main = struct { sort: u8 = 0 };
+    var buf: [64]u8 = undefined;
+    try testing.expectEqualStrings("opp-sort=3", written(Opp, .{ .sort = 3 }, &buf));
+    try testing.expectEqual(@as(u8, 3), read(Opp, "#sort=1&opp-sort=3").sort);
+    try testing.expectEqual(@as(u8, 1), read(Main, "#sort=1&opp-sort=3").sort);
 }
 
 test "bad values and unknown keys keep the defaults" {

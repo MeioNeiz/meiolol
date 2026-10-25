@@ -63,7 +63,7 @@ const Page = struct {
     fn names(p: *Page) ![]const u8 {
         const page = try p.shown();
         var out: std.ArrayList(u8) = .empty;
-        var it = std.mem.splitSequence(u8, page, "<b>");
+        var it = std.mem.splitSequence(u8, page[std.mem.find(u8, page, "<tbody>").?..], "<b>");
         _ = it.next();
         while (it.next()) |rest| {
             if (out.items.len > 0) try out.append(p.arena.allocator(), ',');
@@ -138,4 +138,39 @@ test "search, minimums and a row's detail" {
     try testing.expect(std.mem.find(u8, page, "<tr class=\"detail\"><td colspan=\"6\"><p class=\"muted\">Ahri in Mid") != null);
     _ = p.rt.event(0, .{ .kind = .click, .target = p.byText(.b, "Ahri") });
     try testing.expect(std.mem.find(u8, try p.shown(), "class=\"detail\"") == null);
+}
+
+test "a column head's note opens without sorting; the rest of the head and its arrow sort" {
+    var p: Page = undefined;
+    try p.init("");
+    defer p.deinit();
+    try testing.expect(std.mem.find(u8, try p.shown(), "<button class=\"c-tt\" popovertarget=\"dt-tip-3\" type=\"button\">Patch</button>") != null);
+    _ = p.rt.event(0, .{ .kind = .click, .target = p.id("popovertarget", "dt-tip-3") });
+    _ = p.rt.event(0, .{ .kind = .click, .target = p.id("id", "dt-tip-3") });
+    try testing.expectEqualStrings(by_rate, try p.names());
+    try testing.expectEqualStrings("", p.fake.fragment.items);
+    // Win rate's arrow: sorted already, so the order turns
+    _ = p.rt.event(0, .{ .kind = .click, .target = p.id("aria-label", "Sort") });
+    try testing.expectEqualStrings("#desc=0", p.fake.fragment.items);
+    // Patch's head itself, around the term
+    const t = p.i.current();
+    const th = t.node(@fromBackingInt(@intCast(t.node(t.find(t.root, "popovertarget", "dt-tip-3").?).parent))).dom;
+    _ = p.rt.event(0, .{ .kind = .click, .target = th });
+    try testing.expectEqualStrings("#sort=3", p.fake.fragment.items);
+    _ = p.rt.event(0, .{ .kind = .click, .target = p.byText(.th, "Games") });
+    try testing.expectEqualStrings("#sort=5", p.fake.fragment.items);
+}
+
+test "a keyed table's URL fields carry its prefix" {
+    const Opp = table.DataTable(table.Demo, blk: {
+        var s = table.Demo.spec;
+        s.key = "opp";
+        break :blk s;
+    });
+    const u: Opp = .{ .rows = &table.Demo.rows, .sort = 5 };
+    var buf: [64]u8 = undefined;
+    var w: std.Io.Writer = .fixed(&buf);
+    try @import("url.zig").write(Opp.Url, u.toUrl(), &w);
+    try testing.expectEqualStrings("opp-sort=5", w.buffered());
+    try testing.expectEqualStrings("opp", u.id);
 }

@@ -4,7 +4,8 @@
 //! in ui.wasm (sorted, searched, cut by a minimum, a row's detail open), so server and
 //! client order can't disagree. Rendered as a flush Card: a head band with the title,
 //! the count shown, search and MinGames, then the table. Columns of priority 2 and 3
-//! give way in narrow containers (420 and 560 px)
+//! give way in narrow containers (420 and 560 px). A column head can open a note (its
+//! label is then a Toggletip term; the rest of the head and a small arrow button sort)
 //!
 //!     const Opp = ui.table.DataTable(Row, .{
 //!         .title = plain("Lane opponents"),
@@ -22,6 +23,7 @@ const url = @import("url.zig");
 const fmt = @import("fmt.zig");
 const phrase = @import("phrase.zig");
 const card = @import("card.zig");
+const toggletip = @import("toggletip.zig");
 const segmented = @import("segmented.zig");
 const stat = @import("stat.zig");
 const delta = @import("delta.zig");
@@ -38,6 +40,7 @@ const W = struct {
     pub const find = plain("Find");
     pub const any = plain("Any");
     pub const min_games = plain("Min games");
+    pub const sort = plain("Sort");
 };
 
 pub fn Column(comptime Row: type) type {
@@ -55,6 +58,8 @@ pub fn Column(comptime Row: type) type {
         priority: u2 = 1,
         /// The column that answers the table's question (one per table)
         answer: bool = false,
+        /// What the label opens: a line on what the figures are
+        tip: ?tree.Text = null,
     };
 }
 
@@ -72,6 +77,8 @@ pub fn Spec(comptime Row: type) type {
         min_games: []const u32 = &.{},
         /// What opens under a row when it is tapped
         detail: ?*const fn (*H, *const Row) N = null,
+        /// Two tables on a page: a short name for one, its URL keys' prefix ("opp")
+        key: []const u8 = "",
     };
 }
 
@@ -105,6 +112,8 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
 
     return struct {
         rows: []const Row,
+        /// Unique on the page: the column notes' ids start with it
+        id: []const u8 = if (spec.key.len > 0) spec.key else "dt",
         sort: u8 = spec.default_sort,
         desc: bool = !isName(spec.default_sort),
         q: url.Str(24) = .{},
@@ -117,8 +126,8 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
 
         pub const Msg = union(enum) { sort: u8, search, min: u8, open: u32 };
 
-        /// One DataTable per page writes these to the URL
         pub const Url = struct {
+            pub const prefix = if (spec.key.len > 0) spec.key ++ "-" else "";
             sort: u8 = spec.default_sort,
             desc: bool = !isName(spec.default_sort),
             q: url.Str(24) = .{},
@@ -203,15 +212,22 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
             inline for (spec.columns, 0..) |col, i| {
                 const sorted = t.sort == i;
                 const cls = if (sorted) classes[1][i] else classes[0][i];
-                const label = if (comptime col.sort != null or col.name != null)
-                    h.button(.{ .type = "button", .on_click = h.on(t, .{ .sort = i }) }, .{col.label})
-                else
-                    h.text(col.label.s);
+                const can = comptime col.sort != null or col.name != null;
+                const tip: ?[2]N = if (col.tip) |note| toggletip.view(h, h.fmt("{s}-tip-{d}", .{ t.id, i }), .{col.label}, col.label, note) else null;
+                const term: ?*const [2]N = if (tip) |*x| x else null;
+                const on_sort: ?tree.Handler = if (can) h.on(t, .{ .sort = i }) else null;
+                const arrow: ?N = if (can and tip != null) h.button(.{ .class = "s", .type = "button", .aria_label = W.sort }, .{}) else null;
+                const label: ?N = if (tip != null) null else if (can) h.button(.{ .type = "button" }, .{col.label}) else h.text(col.label.s);
                 ths.add(h.th(.{
                     .class = if (cls.len > 0) cls else null,
                     .aria_sort = if (sorted) (if (t.desc) "descending" else "ascending") else null,
                     .data_answer = col.answer,
-                }, .{label}));
+                    .on_click = on_sort,
+                }, .{
+                    term,
+                    label,
+                    arrow,
+                }));
             }
             var trs = h.list();
             const min = t.minimum();
@@ -281,13 +297,15 @@ pub const css =
     \\  .c-table { font-size: var(--fs-m); }
     \\  .c-table thead th { position: sticky; top: 0; z-index: 1; background: var(--th-bg); height: 32px;
     \\    border-bottom-color: var(--line-2); }
-    \\  .c-table th > button { all: unset; cursor: pointer; user-select: none; }
-    \\  .c-table th > button:hover { color: var(--text); }
-    \\  .c-table th > button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 2px; }
+    \\  .c-table thead th:has(> button) { cursor: pointer; user-select: none; }
+    \\  .c-table thead th:hover { color: var(--text); }
+    \\  .c-table th > button:not(.c-tt) { all: unset; cursor: pointer; }
+    \\  .c-table th > button:not(.c-tt):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 2px; }
     \\  .c-table th[aria-sort] { color: var(--text); box-shadow: inset 0 calc(-1 * var(--tab-bar)) 0 var(--accent); }
-    \\  .c-table th[aria-sort] > button::after { color: var(--accent); margin-left: 3px; font-size: var(--fs-xs); }
-    \\  .c-table th[aria-sort="ascending"] > button::after { content: "▲"; }
-    \\  .c-table th[aria-sort="descending"] > button::after { content: "▼"; }
+    \\  .c-table th > button:not(.c-tt)::after { color: var(--accent); margin-left: 3px; font-size: var(--fs-xs); }
+    \\  .c-table th[aria-sort="ascending"] > button:not(.c-tt)::after { content: "▲"; }
+    \\  .c-table th[aria-sort="descending"] > button:not(.c-tt)::after { content: "▼"; }
+    \\  .c-table th:not([aria-sort]) > button.s::after { content: "▼"; color: var(--faint); }
     \\  .c-table td.sorted { background: var(--wash); }
     \\  .c-table tbody tr[aria-expanded] { cursor: pointer; }
     \\  .c-table tbody tr:hover > td { background: var(--panel-2); }
@@ -369,13 +387,15 @@ pub const Demo = struct {
         return h.p(.{ .class = "muted" }, .{ r.name, " in ", r.role, ": the matchups and builds open here" });
     }
 
-    pub const Table = DataTable(Demo, .{
+    pub const Table = DataTable(Demo, spec);
+
+    pub const spec: Spec(Demo) = .{
         .title = plain("Champions"),
         .columns = &.{
             .{ .label = plain("Champion"), .cell = who, .name = nameOf, .num = false },
             .{ .label = plain("Role"), .cell = roleCell, .num = false, .priority = 3 },
-            .{ .label = plain("Win rate"), .cell = rate, .sort = wrOf, .answer = true },
-            .{ .label = plain("Patch"), .cell = changeCell, .sort = changeOf, .priority = 2 },
+            .{ .label = plain("Win rate"), .cell = rate, .sort = wrOf, .answer = true, .tip = plain("Last 30 days. Faint under 100 games: could be luck.") },
+            .{ .label = plain("Patch"), .cell = changeCell, .sort = changeOf, .priority = 2, .tip = plain("Change in win rate since the last patch, in points.") },
             .{ .label = plain("Pick"), .cell = pickBar, .sort = pickOf, .priority = 2 },
             .{ .label = plain("Games"), .cell = gamesCell, .sort = gamesF, .priority = 3 },
         },
@@ -384,7 +404,7 @@ pub const Demo = struct {
         .games = gamesOf,
         .min_games = &.{ 0, 300, 1000 },
         .detail = detail,
-    });
+    };
 };
 
 pub fn gallery(g: *Gallery) void {
@@ -399,12 +419,13 @@ pub fn gallery(g: *Gallery) void {
         } } },
         .{ "min 300 games, a row open", .{ .rows = &Demo.rows, .min = 1, .open = 0 } },
     };
-    for (states) |s| {
+    for (states, 0..) |s, k| {
         const t = h.mem.create(Demo.Table) catch {
             h.oom = true;
             return;
         };
         t.* = s[1];
+        t.id = h.fmt("dt{d}-{d}", .{ k, g.width });
         g.addFill(s[0], t.view(h));
     }
 }

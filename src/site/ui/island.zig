@@ -211,6 +211,9 @@ pub fn Island(comptime Root: type, comptime Dom: type) type {
                 // A link's click is the browser's
                 if (in.kind == .click and node.tag == .a) return false;
                 if (t.handler(n, in.kind)) |hd| break hd;
+                // So is an unhandled one that opens a popover or falls inside one (a
+                // column head's Toggletip must not also sort)
+                if (in.kind == .click and (t.attr(n, "popovertarget") != null or t.attr(n, "popover") != null)) return false;
                 if (n == t.root) return false;
                 n = @fromBackingInt(node.parent);
             };
