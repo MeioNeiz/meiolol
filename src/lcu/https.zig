@@ -17,9 +17,8 @@ pub fn get(
     password: []const u8,
     path: []const u8,
 ) !Response {
-    var host_buf: [32]u8 = undefined;
-    var auth_buf: [512]u8 = undefined;
-    const req = try request(&host_buf, &auth_buf, port, password, path);
+    var parts: RequestParts = undefined;
+    const req = try parts.request(port, password, path);
     return pinned.get(gpa, io, riot_root_pem, req) catch |err| switch (err) {
         error.ConnectionRefused => error.ClientNotRunning,
         else => err,
@@ -34,26 +33,35 @@ pub fn getPlain(
     password: []const u8,
     path: []const u8,
 ) !Response {
-    var host_buf: [32]u8 = undefined;
-    var auth_buf: [512]u8 = undefined;
-    const req = try request(&host_buf, &auth_buf, port, password, path);
+    var parts: RequestParts = undefined;
+    const req = try parts.request(port, password, path);
     return pinned.getPlain(gpa, io, req) catch |err| switch (err) {
         error.ConnectionRefused => error.ClientNotRunning,
         else => err,
     };
 }
 
-fn request(host_buf: []u8, auth_buf: []u8, port: u16, password: []const u8, path: []const u8) !pinned.Request {
-    return .{
-        .address = .{ .ip4 = .loopback(port) },
-        .host = try std.mem.print(host_buf, "127.0.0.1:{d}", .{port}),
-        .path = path,
-        .headers = &.{
-            .{ .name = "Authorization", .value = try basicAuth(auth_buf, password) },
+/// What the Request points into. A `&.{...}` header list in the returned literal would
+/// live in request's own frame and dangle once it returns (garbage headers and a
+/// segfault in the TLS writer on Windows)
+const RequestParts = struct {
+    host: [32]u8,
+    auth: [512]u8,
+    headers: [2]pinned.Header,
+
+    fn request(p: *RequestParts, port: u16, password: []const u8, path: []const u8) !pinned.Request {
+        p.headers = .{
+            .{ .name = "Authorization", .value = try basicAuth(&p.auth, password) },
             .{ .name = "Accept", .value = "application/json" },
-        },
-    };
-}
+        };
+        return .{
+            .address = .{ .ip4 = .loopback(port) },
+            .host = try std.mem.print(&p.host, "127.0.0.1:{d}", .{port}),
+            .path = path,
+            .headers = &p.headers,
+        };
+    }
+};
 
 /// "Basic " and base64 of riot:password
 fn basicAuth(buf: []u8, password: []const u8) ![]const u8 {
@@ -78,4 +86,40 @@ test "basic auth" {
     var buf: [128]u8 = undefined;
     // base64("riot:pw")
     try testing.expectEqualStrings("Basic cmlvdDpwdw==", try basicAuth(&buf, "pw"));
+}
+
+test "getPlain sends Host, the basic auth and Accept" {
+    const io = testing.io;
+    var listener = try (try std.Io.net.IpAddress.parse("127.0.0.1", 0)).listen(io, .{ .reuse_address = true });
+    defer listener.deinit(io);
+    const Serve = struct {
+        fn one(l: *std.Io.net.Server, got: *[512]u8, n: *usize) !void {
+            const s = try l.accept(io);
+            defer s.close(io);
+            var rb: [1024]u8 = undefined;
+            var r = s.reader(io, &rb);
+            while (true) {
+                const line = try r.interface.takeDelimiterInclusive('\n');
+                @memcpy(got[n.*..][0..line.len], line);
+                n.* += line.len;
+                if (line.len == 2) break;
+            }
+            var wb: [128]u8 = undefined;
+            var w = s.writer(io, &wb);
+            try w.interface.writeAll("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok");
+            try w.interface.flush();
+        }
+    };
+    var got: [512]u8 = undefined;
+    var n: usize = 0;
+    var serving = try io.concurrent(Serve.one, .{ &listener, &got, &n });
+    const port = listener.socket.address.getPort();
+    const res = try getPlain(testing.allocator, io, port, "pw", "/x");
+    defer testing.allocator.free(res.body);
+    try serving.await(io);
+    var want_buf: [256]u8 = undefined;
+    const want = try std.mem.print(&want_buf, "GET /x HTTP/1.1\r\nHost: 127.0.0.1:{d}\r\n" ++
+        "Authorization: Basic cmlvdDpwdw==\r\nAccept: application/json\r\n" ++
+        "Connection: close\r\n\r\n", .{port});
+    try testing.expectEqualStrings(want, got[0..n]);
 }

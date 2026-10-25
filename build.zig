@@ -165,6 +165,12 @@ pub fn build(b: *std.Build) void {
     const ci = b.step("ci", "Everything before a push: fmt, tests, cross-builds, scripts");
     ci.dependOn(&b.addFmt(.{ .paths = &fmt_paths, .check = true }).step);
     ci.dependOn(test_step);
+    // The app's and net's tests again in ReleaseSafe, as the desktop app ships: a header
+    // slice into a returned frame read fine in Debug (lcu/https.zig RequestParts)
+    const safe = modules(b, target, .ReleaseSafe);
+    for ([_]*std.Build.Module{ safe.app, safe.net }) |mod| {
+        ci.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = mod, .filters = test_filters })).step);
+    }
     for (ci_targets) |q| {
         const cm = modules(b, b.resolveTargetQuery(q), .Debug);
         for ([_]*std.Build.Module{ cm.backend, cm.app }, [_][]const u8{ "meiolol", "meiolol-app" }) |mod, name| {
