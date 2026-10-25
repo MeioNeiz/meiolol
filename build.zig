@@ -59,7 +59,12 @@ pub fn build(b: *std.Build) void {
 
     test_step.dependOn(errorChecks(b, target, "tpl", m.tpl, "src/tpl/compile_errors.zig", &tpl_errors.cases));
     test_step.dependOn(errorChecks(b, target, "ui", m.ui, "src/site/ui/compile_errors.zig", &ui_errors.cases));
-    const shell_test = b.createModule(.{ .root_source_file = b.path("src/shell/test.zig"), .target = target, .optimize = optimize });
+    const shell_test = b.createModule(.{
+        .root_source_file = b.path("src/shell/test.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "lcu", .module = lcuModule(b, target, optimize) }},
+    });
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = shell_test, .filters = test_filters })).step);
 
     b.step("fmt", "Format the Zig sources").dependOn(&b.addFmt(.{ .paths = &fmt_paths }).step);
@@ -404,6 +409,18 @@ fn desktopOptions(b: *std.Build, version: u64, edition: Edition) *std.Build.Step
     return options;
 }
 
+/// The League client's local API (src/lcu) as a module, for the shell; the app and the
+/// dvui window import it by path from src/
+fn lcuModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode) *std.Build.Module {
+    const m = modules(b, target, optimize);
+    return b.createModule(.{
+        .root_source_file = b.path("src/lcu/root.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{ .{ .name = "core", .module = m.core }, .{ .name = "net", .module = m.net } },
+    });
+}
+
 /// The webview app for Windows (src/shell/win.zig): WebView2's COM API through
 /// translate-c of Microsoft's header, vendored in src/shell/wv2 with the loader dll
 fn shellExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode, version: u64, edition: Edition) *std.Build.Step.Compile {
@@ -418,7 +435,10 @@ fn shellExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.
             .root_source_file = b.path("src/shell/win.zig"),
             .target = target,
             .optimize = optimize,
-            .imports = &.{.{ .name = "c", .module = wv2.mod }},
+            .imports = &.{
+                .{ .name = "c", .module = wv2.mod },
+                .{ .name = "lcu", .module = lcuModule(b, target, optimize) },
+            },
         }),
     });
     exe.root_module.addOptions("build_options", desktopOptions(b, version, edition));
@@ -434,6 +454,7 @@ fn shellMac(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.
         .root_source_file = b.path("src/shell/mac.zig"),
         .target = target,
         .optimize = optimize,
+        .imports = &.{.{ .name = "lcu", .module = lcuModule(b, target, optimize) }},
     });
     mod.linkFramework("AppKit", .{});
     mod.linkFramework("WebKit", .{});

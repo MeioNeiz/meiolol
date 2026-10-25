@@ -20,6 +20,7 @@ const files = @import("files.zig");
 const place = @import("place.zig");
 const demo = @import("demo.zig");
 const measure = @import("measure.zig");
+const client = @import("client.zig");
 
 pub const W = std.unicode.utf8ToUtf16LeStringLiteral;
 pub const origin = "https://meiolol.app/";
@@ -151,6 +152,8 @@ var normal_rect: place.Rect = undefined;
 var first_paint: ?f64 = null;
 var pushing = false;
 var seq: u32 = 0;
+/// What the page was last told of the League client
+var sent_client: ?client.Client = null;
 pub var t_window: f64 = 0;
 pub var t_env: f64 = 0;
 pub var t_ctrl: f64 = 0;
@@ -254,10 +257,10 @@ fn openExternal(url: []const u8) void {
 /// the EdgeUpdate client state per machine, then per user. Its version goes to the log
 fn findRuntime(out: []u16) ?[*:0]const u16 {
     const state = W("SOFTWARE\\Microsoft\\EdgeUpdate\\ClientState\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}");
-    const client = W("SOFTWARE\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}");
+    const clients_key = W("SOFTWARE\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}");
     for ([_]usize{ hklm, hkcu }) |root| {
         var ver: [64]u16 = undefined;
-        if (regString(root, client, W("pv"), &ver)) |v| {
+        if (regString(root, clients_key, W("pv"), &ver)) |v| {
             const n = std.unicode.utf16LeToUtf8(&runtime_version, v) catch 0;
             runtime_version_len = n;
         }
@@ -581,7 +584,8 @@ fn painted(page: []const u8) void {
     const t = nowMs();
     log("painted {s}", .{page});
     send(.{ .hello = .{ .release = build_options.desktop_version, .public = build_options.public, .os = "windows" } });
-    send(.{ .status = .{ .client = .none } });
+    sent_client = client.current();
+    send(.{ .status = .{ .client = sent_client.? } });
     if (first_paint == null) {
         first_paint = t;
         if (opt.self_test) return finishSelfTest(true, "painted");
@@ -595,6 +599,11 @@ pub fn setPushing(on: bool) void {
 }
 
 fn tick() void {
+    const now = client.current();
+    if (sent_client != null and now != sent_client.?) {
+        sent_client = now;
+        send(.{ .status = .{ .client = now } });
+    }
     if (pushing) {
         seq += 1;
         measure.pushed(seq);
@@ -653,6 +662,7 @@ fn wndProc(h: c.HWND, msg: c.UINT, wp: c.WPARAM, lp: c.LPARAM) callconv(.c) c.LR
             _ = c.DestroyWindow(h);
         },
         c.WM_DESTROY => {
+            client.stop();
             if (controller != null) _ = com(controller, "Close", .{});
             c.PostQuitMessage(0);
         },
@@ -816,6 +826,8 @@ fn run(init: std.process.Init) !void {
     if (opt.self_test) _ = c.SetTimer(hwnd, timer_watchdog, 30_000, null);
     if (opt.measure) _ = c.SetTimer(hwnd, timer_watchdog, measure.watchdog_ms, null);
     if (opt.measure) measure.start();
+    if (!opt.self_test) client.start(init.gpa, init.io, init.environ_map.get("MEIOLOL_LOCKFILE")) catch |e|
+        log("client poller: {t}", .{e});
     try startEnvironment();
 
     var msg: c.MSG = undefined;

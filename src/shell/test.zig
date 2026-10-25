@@ -4,4 +4,5 @@ test {
     _ = @import("files.zig");
     _ = @import("place.zig");
     _ = @import("demo.zig");
+    _ = @import("client.zig");
 }

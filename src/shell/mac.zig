@@ -8,6 +8,7 @@ const std = @import("std");
 const channel = @import("channel.zig");
 const files = @import("files.zig");
 const demo = @import("demo.zig");
+const client = @import("client.zig");
 
 const Id = ?*anyopaque;
 const Sel = ?*anyopaque;
@@ -64,6 +65,8 @@ var ticks: u32 = 0;
 var seconds: u32 = 0;
 var pushing = false;
 var push_demo = false;
+/// What the page was last told of the League client
+var sent_client: ?client.Client = null;
 var t0: std.Io.Timestamp = undefined;
 
 fn nowMs() f64 {
@@ -109,7 +112,8 @@ fn received(_: Id, _: Sel, _: Id, message: Id) callconv(.c) void {
         .painted => |p| {
             std.debug.print("{d:8.1} ms painted {s}\n", .{ nowMs(), p.page });
             send(.{ .hello = .{ .release = 0, .public = false, .os = "macos" } });
-            send(.{ .status = .{ .client = .none } });
+            sent_client = client.current();
+            send(.{ .status = .{ .client = sent_client.? } });
             if (push_demo) pushing = true;
         },
         .drawn => {},
@@ -137,6 +141,12 @@ fn tick(_: Id, _: Sel, _: Id) callconv(.c) void {
     if (seconds > 0 and ticks >= seconds) {
         msg(void, msg(Id, cls("NSApplication"), "sharedApplication", .{}), "terminate:", .{@as(Id, null)});
         return;
+    }
+    const now = client.current();
+    if (sent_client != null and now != sent_client.?) {
+        sent_client = now;
+        std.debug.print("{d:8.1} ms client: {t}\n", .{ nowMs(), now });
+        send(.{ .status = .{ .client = now } });
     }
     if (!pushing) return;
     seq += 1;
@@ -179,6 +189,7 @@ pub fn main(init: std.process.Init) !void {
         } else return error.UnknownArgument;
     }
 
+    try client.start(gpa, io, init.environ_map.get("MEIOLOL_LOCKFILE"));
     const app = msg(Id, cls("NSApplication"), "sharedApplication", .{});
     msg(void, app, "setActivationPolicy:", .{@as(isize, 0)});
     const delegate = newClass("MeiololAppDelegate", null, .{
