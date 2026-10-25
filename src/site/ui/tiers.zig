@@ -119,7 +119,7 @@ pub const Key = enum {
 };
 
 const W = struct {
-    const key = "Sorted by win rate pulled toward the role's average, the more the fewer the games, so a few lucky games can't top it; the rate shown is raw.";
+    const key = "Sorted by win rate; the minimum games keeps a few lucky games off the top.";
     const share_title = "Share of the champion's games played in the role";
     const search = "Search champion";
     const impact_title = "Wins above the role's average per 10,000 games it was not banned";
