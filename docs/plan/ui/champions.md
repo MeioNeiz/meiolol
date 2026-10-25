@@ -142,3 +142,11 @@ Override the sections above where they differ. Raw: review artifact db, ids v2-*
 1. "Moved in <patch>" band: mock showed no icons; needs less space; maybe a link to
    the patch page; "sort is kinda enough. I do like it, uncertain on whether we will keep
    it". Mocks round 3: compact form, decide at build
+
+## Jacob's answers (review v7, 25 Oct)
+
+Override the sections above where they differ. Raw: review artifact db, ids v3-*.
+
+1. Win rate colours in the r3 mock "feel weird, having the box around just looks
+   funky"; he suspects the sort is a bit broken; preferred the live site's colours ("not
+   saying we need to go back"). Mocks round 4: closer to live, no boxed cells

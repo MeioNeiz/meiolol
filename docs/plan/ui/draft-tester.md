@@ -191,3 +191,10 @@ Override the sections above where they differ. Raw: review artifact db, ids v2-*
 
 1. Drop ", lab" from model names (the Lab tag says where from)
 2. Pair grid: a finer colour scale for pair terms (most sit at 0.2-0.9)
+
+## Jacob's answers (review v7, 25 Oct)
+
+Override the sections above where they differ. Raw: review artifact db, ids v3-*.
+
+1. Round 3 "looks much better"; not fully convinced by its functionality, good
+   enough for now

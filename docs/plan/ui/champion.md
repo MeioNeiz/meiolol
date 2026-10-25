@@ -204,3 +204,12 @@ Override the sections above where they differ. Raw: review artifact db, ids v2-*
    other options (mocks round 3)
 2. Build slots: colour against the slot's average. How a choice moves the champion's own
    rate is interesting but "much more secondary": a quieter second reading, not the colour
+
+## Jacob's answers (review v7, 25 Oct)
+
+Override the sections above where they differ. Raw: review artifact db, ids v3-*.
+
+1. Matchups: option C (one axis, dot plot centred on his rate). A unclear ("what are
+   the bars"); B "could get funky" with uneven columns. The 5 hardest / 5 easiest list
+   under C is "not very good use of space": rework it (mocks round 4)
+2. Centre on the champion's own rate, but no label for his rate in the middle

@@ -201,3 +201,10 @@ Override the sections above where they differ. Raw: review artifact db, ids v2-*
 1. v6 first screen "too empty now, doesnt look great" (24 Oct: too much at once): find
    the middle (mocks round 3). Mastery reveal as columns not settled
 2. Chapter 0 role rule: not fussed; decided 90% (keeps Lee Sin, 92.7% jungle)
+
+## Jacob's answers (review v7, 25 Oct)
+
+Override the sections above where they differ. Raw: review artifact db, ids v3-*.
+
+1. Mastery reveal: rows ("not really linear along x")
+2. Keep it in the site's style; he thinks it is, but is not used to the new style yet

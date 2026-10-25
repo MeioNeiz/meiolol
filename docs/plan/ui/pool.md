@@ -173,3 +173,10 @@ Override the sections above where they differ. Raw: review artifact db, ids v2-*
 1. No full pick-up chart below the pool: like the matchup field it makes the vertical
    seem to matter. Adding champions must be easy: e.g. a side panel for choosing pool
    champions, showing those we know they play and high mastery (mocks round 3)
+
+## Jacob's answers (review v7, 25 Oct)
+
+Override the sections above where they differ. Raw: review artifact db, ids v3-*.
+
+1. Mastery in the picker: yes, add the champion-mastery-v4 call per lookup
+2. "Looks a bit funny before you pick pool", otherwise good (mocks round 4: empty state)

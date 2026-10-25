@@ -260,3 +260,12 @@ Override the sections above where they differ. Raw: review artifact db, ids v2-*
    champion names vs a white player name inconsistent
 3. "Solo queue view" label: meant nothing to him; "idk about this direction" of v6.
    Mocks round 3 reworks it
+
+## Jacob's answers (review v7, 25 Oct)
+
+Override the sections above where they differ. Raw: review artifact db, ids v3-*.
+
+1. Pro games only until the app records pick orders; then solo (v3-daily-1)
+2. Pro difficulty (six options, no Pool hint, no event or date) is enough; keep ranks and
+   patch visible
+3. Looks good, but "the focus of the page doesn't pull me towards picking" (mocks round 4)
