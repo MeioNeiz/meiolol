@@ -23,6 +23,7 @@ const filters = @import("filters.zig");
 const evalchart = @import("evalchart.zig");
 const flat = @import("flat.zig");
 const style = @import("style.zig");
+pub const gallery = @import("gallery.zig");
 pub const ui = @import("ui");
 const patchday = @import("../patchday.zig");
 const patch_page = @import("patch.zig");
@@ -389,6 +390,7 @@ pub fn robots(arena: std.mem.Allocator, opts: Options) ![]const u8 {
 
 test {
     _ = style;
+    _ = gallery;
     _ = evalchart;
     _ = flat;
     _ = @import("puzzles.zig");

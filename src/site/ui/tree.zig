@@ -301,7 +301,10 @@ pub const H = struct {
                 };
             } else {
                 comptime if (!isNumber(@TypeOf(x))) @compileError("h.vars ." ++ f ++ ": numbers and fmt.WrColour only");
-                h.cssVar(&w, name, @floatCast(x));
+                h.cssVar(&w, name, switch (@typeInfo(@TypeOf(x))) {
+                    .int, .comptime_int => @floatFromInt(x),
+                    else => @floatCast(x),
+                });
             }
         }
         return .{ .css = w.items };
@@ -370,14 +373,19 @@ pub const H = struct {
         var nh: usize = 0;
         var events: u16 = 0;
         var key: u32 = 0;
-        // Handlers in Ev order, so Tree.handler finds one by popcount
+        // Handlers in Ev order, so Tree.handler finds one by popcount. A null one (a
+        // component's optional `on`) is no handler
         inline for (@typeInfo(Ev).@"enum".field_names) |evn| {
             if (@hasField(A, "on_" ++ evn)) {
-                if (@FieldType(A, "on_" ++ evn) != Handler) @compileError(".on_" ++ evn ++ " takes h.on(component, msg)");
-                hs[nh] = @field(attrs, "on_" ++ evn);
-                hs[nh].ev = @field(Ev, evn);
-                nh += 1;
-                events |= @as(u16, 1) << @backingInt(@field(Ev, evn));
+                const F = @FieldType(A, "on_" ++ evn);
+                if (F != Handler and F != ?Handler) @compileError(".on_" ++ evn ++ " takes h.on(component, msg)");
+                const hv: ?Handler = @field(attrs, "on_" ++ evn);
+                if (hv) |x| {
+                    hs[nh] = x;
+                    hs[nh].ev = @field(Ev, evn);
+                    nh += 1;
+                    events |= @as(u16, 1) << @backingInt(@field(Ev, evn));
+                }
             }
         }
         // Values known at compile time (literals, catalogue words) become one static
@@ -430,6 +438,8 @@ pub const H = struct {
         const K = @TypeOf(k);
         if (K == N) return .{ .node = k };
         if (K == []const N or K == []N) return .{ .nodes = k };
+        if (@typeInfo(K) == .pointer and @typeInfo(K).pointer.size == .one and @typeInfo(@typeInfo(K).pointer.child) == .array and
+            @typeInfo(@typeInfo(K).pointer.child).array.child == N) return .{ .nodes = k };
         if (K == Text) return .{ .text = k.s };
         if (comptime isString(K)) return .{ .text = k };
         if (K == void) return .none;

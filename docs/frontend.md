@@ -49,4 +49,8 @@ into its own design trap. Use judgement per case.
 - Other sites: research/questions/lol-site-ui.md
 - Today's code surveyed: docs/frontend-rework.md sections 1-6 (its options are
   superseded by docs/plan/ui/)
+- Components: src/site/ui/<name>.zig (view, css and gallery states in one file), listed
+  in ui.all. Gallery: /gallery on `meiolol dev` (deploy/dev.sh), every state at 320, 390
+  and wide. Sweep: deploy/qa.sh (overflow, text under 11 px, tap targets, console
+  errors, failed requests; warnings only; --webkit, --shots DIR)
 - Status: docs/plan.md "Now" item 3

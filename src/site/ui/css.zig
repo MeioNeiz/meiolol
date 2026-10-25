@@ -33,19 +33,47 @@ pub fn version(comptime bytes: []const u8) []const u8 {
     };
 }
 
-/// Selectors of rules that don't start with `scope` (`.c-table`)
-pub fn unscoped(a: std.mem.Allocator, css: []const u8, scope: []const u8) ![]const []const u8 {
+/// Selectors of rules that start with none of `scopes` (`.c-table`)
+pub fn unscoped(a: std.mem.Allocator, css: []const u8, scopes: []const []const u8) ![]const []const u8 {
     var out: std.ArrayList([]const u8) = .empty;
     var it: Rules = .{ .css = css };
     while (it.next()) |r| {
-        var parts = std.mem.tokenizeScalar(u8, r.selector, ',');
+        var parts: SelectorList = .{ .s = r.selector };
         while (parts.next()) |p| {
             const s = std.mem.trim(u8, p, " \n");
             if (s.len == 0 or s[0] == '@' or std.mem.eql(u8, s, "from") or std.mem.eql(u8, s, "to") or std.ascii.isDigit(s[0])) continue;
-            if (!std.mem.startsWith(u8, s, scope)) try out.append(a, s);
+            for (scopes) |scope| {
+                if (std.mem.startsWith(u8, s, scope) and (s.len == scope.len or !isNameChar(s[scope.len]))) break;
+            } else try out.append(a, s);
         }
     }
     return out.items;
+}
+
+/// A selector list's selectors: commas inside :is(), :not() and :has() don't split
+const SelectorList = struct {
+    s: []const u8,
+    i: usize = 0,
+
+    fn next(l: *SelectorList) ?[]const u8 {
+        if (l.i >= l.s.len) return null;
+        const start = l.i;
+        var depth: usize = 0;
+        while (l.i < l.s.len) : (l.i += 1) switch (l.s[l.i]) {
+            '(' => depth += 1,
+            ')' => depth -|= 1,
+            ',' => if (depth == 0) {
+                l.i += 1;
+                return l.s[start .. l.i - 1];
+            },
+            else => {},
+        };
+        return l.s[start..];
+    }
+};
+
+fn isNameChar(c: u8) bool {
+    return std.ascii.isAlphanumeric(c) or c == '-' or c == '_';
 }
 
 /// Class names a stylesheet's selectors mention, once each
@@ -264,7 +292,7 @@ test "the lint finds what README rules out" {
         \\.c-x .c { border: 1px solid rgb(0 0 0) }: a colour outside the tokens
         \\
     , msgs.items);
-    try testing.expectEqual(@as(usize, 0), (try unscoped(arena.allocator(), css, ".c-x")).len);
+    try testing.expectEqual(@as(usize, 0), (try unscoped(arena.allocator(), css, &.{".c-x"})).len);
     const cls = try classes(arena.allocator(), css);
     try testing.expectEqual(@as(usize, 5), cls.len);
     try testing.expectEqualStrings("c-x", cls[0]);

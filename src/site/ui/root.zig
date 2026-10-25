@@ -17,9 +17,22 @@ pub const diff = @import("diff.zig");
 pub const island = @import("island.zig");
 pub const tiers = @import("tiers.zig");
 pub const FakeDom = @import("fakedom.zig").Fake;
+pub const gallery = @import("gallery.zig");
+
+pub const button = @import("button.zig");
+pub const chip = @import("chip.zig");
+pub const badge = @import("badge.zig");
+pub const segmented = @import("segmented.zig");
+pub const tabs = @import("tabs.zig");
+pub const card = @import("card.zig");
+pub const select = @import("select.zig");
+pub const toggletip = @import("toggletip.zig");
 
 /// Components whose CSS ships (css.join): add one when a page first uses it
 pub const components = .{};
+
+/// Every component, in the gallery's order
+pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip };
 
 pub const H = tree.H;
 pub const N = tree.N;
@@ -34,4 +47,8 @@ test {
     _ = @import("tests.zig");
     _ = @import("island_test.zig");
     _ = @import("tiers_test.zig");
+}
+
+test "every component: scoped, linted CSS; clean states; no dead class" {
+    try gallery.expectSound(all);
 }

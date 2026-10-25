@@ -61,6 +61,7 @@ pub const root = [_]Token{
     .{ .name = "them-bg", .value = "rgb(240 89 107 / 0.12)" },
     // Game moment kinds (classes, not magnitudes)
     .{ .name = "turn", .value = "#f5c451" },
+    .{ .name = "turn-line", .value = "rgb(245 196 81 / 0.35)" },
     .{ .name = "gain", .value = "#3ccf91" },
     .{ .name = "drop", .value = "#f59a4a" },
     .{ .name = "cost", .value = "#f0596b" },
@@ -112,6 +113,11 @@ pub const root = [_]Token{
     .{ .name = "sel-bg", .value = "#3b3762" },
     .{ .name = "sel-ink", .value = "#ffffff" },
     .{ .name = "sel-line", .value = "rgb(169 157 255 / 0.45)" },
+    // Ink on the brand fill (primary button); a faint wash for flat labels (Badge,
+    // reason chip) and its hover step
+    .{ .name = "on-brand", .value = "#ffffff" },
+    .{ .name = "wash", .value = "rgb(255 255 255 / 0.05)" },
+    .{ .name = "wash-2", .value = "rgb(255 255 255 / 0.1)" },
     // Tabs: the selected tab's bar on the panel edge
     .{ .name = "tab-bar", .value = "2px" },
     // Table header band
@@ -133,6 +139,9 @@ pub const root = [_]Token{
     .{ .name = "card-pad", .value = "var(--card-py) var(--card-px)" },
     // Elevation, motion, stacking
     .{ .name = "shadow-pop", .value = "0 12px 32px rgb(0 0 0 / 0.5)" },
+    // A chosen segment lifted off its well; the primary button's top light
+    .{ .name = "shadow-ctl", .value = "0 1px 2px rgb(0 0 0 / 0.5)" },
+    .{ .name = "shadow-btn", .value = "inset 0 1px 0 rgb(255 255 255 / 0.18), 0 1px 2px rgb(0 0 0 / 0.4)" },
     .{ .name = "dur", .value = "120ms" },
     .{ .name = "ease", .value = "cubic-bezier(0.2, 0, 0, 1)" },
     .{ .name = "z-sticky", .value = "10" },

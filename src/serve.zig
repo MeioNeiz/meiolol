@@ -218,6 +218,20 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
         return request.respond(v, .{ .extra_headers = &.{.{ .name = "cache-control", .value = "no-store" }} });
     };
 
+    // The component gallery, from fixtures: no data needed
+    if (ctx.opts.dev != null) {
+        if (std.mem.eql(u8, path, "gallery")) {
+            var arena_state: std.heap.ArenaAllocator = .init(ctx.gpa);
+            defer arena_state.deinit();
+            const arena = arena_state.allocator();
+            const body = try std.mem.concat(arena, u8, &.{ try site.gallery.page(arena), reload_script });
+            return request.respond(body, .{ .extra_headers = &.{.{ .name = "content-type", .value = "text/html; charset=utf-8" }} });
+        }
+        if (std.mem.eql(u8, path, "gallery.css")) {
+            return request.respond(site.gallery.css, .{ .extra_headers = &.{.{ .name = "content-type", .value = "text/css; charset=utf-8" }} });
+        }
+    }
+
     // Clean URLs: /about serves about.html, /tier/ serves tier/index.html
     var candidates: [3][]const u8 = undefined;
     var n: usize = 0;
