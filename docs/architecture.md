@@ -82,6 +82,9 @@ src/
                      client poller), update.zig (data and exe updates from meio.lol),
                      raster.zig (dvui backend drawing into memory, for
                      desktop_shot.zig's PNGs)
+  shell/             `meiolol-shell`: the app as a WebView2 window (win.zig) and its
+                     Mac dev loop (WKWebView, mac.zig), replacing dvui (stack.md 5);
+                     channel.zig the typed messages to and from pages
 deploy/box.sh        cross-compile (static musl, for the host's CPU) and run on the box
 deploy/systemd/      the box's loops as systemd user services (docs/hosting.md)
 deploy/*-loop.sh     box loops in tmux: web (site upload), backup, health (ntfy);
@@ -796,6 +799,20 @@ level still pickable.
   root. Shapes from the community schema, as session-synthetic.json; check them against
   a real capture. `zig build test` plays every scenario through lcu.Watch and checks
   each step's `expect` (keys in mock.zig's header)
+
+### Webview shell (src/shell, deploy/shell.sh)
+
+- Beside the dvui window until the app's screens are site components (docs/plan/ui/
+  stack.md section 5 and Order step 6); then it takes the exe name, install and updates
+- win.zig drives WebView2 through its COM API (translate-c of the vendored WebView2.h,
+  src/shell/wv2); environment via the runtime's own dll, else the embedded
+  WebView2Loader.dll; no runtime: a message offering Microsoft's bootstrapper
+- Pages are served from memory on https://meiolol.app/ (embedded, or `--dir` on disk);
+  navigation stays on that origin, links to meio.lol and Riot open in the browser.
+  bridge.js (injected) turns channel.zig messages into `meiolol` events and back
+- Window place in window.txt and the webview's data in webview/, both beside the exe
+- deploy/shell.sh: gpu-box smoke (both loaders), measure (memory, CPU, push delay,
+  League's processes), run; refuses while a League game runs unless IN_GAME=1
 
 ### Desktop window (src/desktop_main.zig, src/desktop, src/lanecard.zig)
 

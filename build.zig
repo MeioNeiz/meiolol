@@ -59,6 +59,8 @@ pub fn build(b: *std.Build) void {
 
     test_step.dependOn(errorChecks(b, target, "tpl", m.tpl, "src/tpl/compile_errors.zig", &tpl_errors.cases));
     test_step.dependOn(errorChecks(b, target, "ui", m.ui, "src/site/ui/compile_errors.zig", &ui_errors.cases));
+    const shell_test = b.createModule(.{ .root_source_file = b.path("src/shell/test.zig"), .target = target, .optimize = optimize });
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = shell_test, .filters = test_filters })).step);
 
     b.step("fmt", "Format the Zig sources").dependOn(&b.addFmt(.{ .paths = &fmt_paths }).step);
 
@@ -91,6 +93,17 @@ pub fn build(b: *std.Build) void {
         run.addPassthruArgs();
         shot_step.dependOn(&run.step);
     }
+
+    // The webview app (src/shell, docs/plan/ui/stack.md), beside the dvui one until it
+    // takes over: Windows exe, and the Mac window for the dev loop
+    const shell = shellExe(b, windows, optimize, desktop_version, edition);
+    b.step("shell", "Build the webview app for Windows (meiolol-shell.exe)").dependOn(&b.addInstallArtifact(shell, .{}).step);
+    const shell_mac_step = b.step("shell-mac", "Run the webview app on this Mac (-- [--dir PATH] [--page P] [--demo])");
+    if (b.graph.host.result.os.tag == .macos) {
+        const run = b.addRunArtifact(shellMac(b, target, optimize));
+        run.addPassthruArgs();
+        shell_mac_step.dependOn(&run.step);
+    } else shell_mac_step.dependOn(&b.addFail("shell-mac runs on macOS only").step);
 
     // A mock League client for trying the app without League (deploy/mock-cs.sh)
     const mock_exe = b.addExecutable(.{ .name = "meiolol-mock-lcu", .root_module = b.createModule(.{
@@ -161,6 +174,8 @@ pub fn build(b: *std.Build) void {
         ci.dependOn(&editions.step);
     };
     if (shot) |exe| ci.dependOn(&exe.step);
+    ci.dependOn(&shellExe(b, windows, .Debug, 0, .private).step);
+    if (b.graph.host.result.os.tag == .macos) ci.dependOn(&shellMac(b, target, .Debug).step);
     ci.dependOn(&mock_exe.step);
     // Debug: ci only needs it to compile, and ReleaseFast spends up to a minute in LLVM
     const lab_check = labModule(b, b.resolveTargetQuery(gpu_box), .Debug, cand);
@@ -387,6 +402,43 @@ fn desktopOptions(b: *std.Build, version: u64, edition: Edition) *std.Build.Step
     options.addOption(u64, "desktop_version", version);
     options.addOption(bool, "public", edition == .public);
     return options;
+}
+
+/// The webview app for Windows (src/shell/win.zig): WebView2's COM API through
+/// translate-c of Microsoft's header, vendored in src/shell/wv2 with the loader dll
+fn shellExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode, version: u64, edition: Edition) *std.Build.Step.Compile {
+    const wv2: Translator = .init(b.dependency("translate_c", .{}), .{
+        .c_source_file = b.path("src/shell/wv2/wv2.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const exe = b.addExecutable(.{
+        .name = "meiolol-shell",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/shell/win.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "c", .module = wv2.mod }},
+        }),
+    });
+    exe.root_module.addOptions("build_options", desktopOptions(b, version, edition));
+    exe.root_module.addWin32ResourceFile(.{ .file = b.path("src/desktop/meiolol.rc") });
+    for ([_][]const u8{ "user32", "gdi32", "ole32", "shlwapi", "shell32", "advapi32", "psapi" }) |l|
+        exe.root_module.linkSystemLibrary(l, .{});
+    exe.subsystem = .windows;
+    return exe;
+}
+
+fn shellMac(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode) *std.Build.Step.Compile {
+    const mod = b.createModule(.{
+        .root_source_file = b.path("src/shell/mac.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    mod.linkFramework("AppKit", .{});
+    mod.linkFramework("WebKit", .{});
+    mod.linkSystemLibrary("objc", .{});
+    return b.addExecutable(.{ .name = "meiolol-shell-mac", .root_module = mod });
 }
 
 /// The desktop window through dvui's SDL3 backend (src/desktop_dev.zig), for trying it
