@@ -43,12 +43,13 @@ pub const table = @import("table.zig");
 pub const chart = @import("chart.zig");
 pub const dotplot = @import("dotplot.zig");
 pub const trend = @import("trend.zig");
+pub const histogram = @import("histogram.zig");
 
 /// Components whose CSS ships (css.join): add one when a page first uses it
 pub const components = .{};
 
 /// Every component, in the gallery's order
-pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, role, champ, site, rolepicker, filterbar, champsearch, table, chart, dotplot, trend };
+pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, role, champ, site, rolepicker, filterbar, champsearch, table, chart, dotplot, trend, histogram };
 
 pub const H = tree.H;
 pub const N = tree.N;
