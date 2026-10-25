@@ -10,8 +10,7 @@ const practice = @import("private/practice.zig");
 const Ctx = w.Ctx;
 const palette = w.palette;
 
-/// The window's "Count your mastery points" box; the poller reads it each tick
-pub var by_mastery: std.atomic.Value(bool) = .init(true);
+const by_mastery = &@import("state.zig").by_mastery;
 var by_mastery_box = true;
 
 pub fn panel(ctx: Ctx, c: *const lanecard.Card, mode: board.Mode) void {

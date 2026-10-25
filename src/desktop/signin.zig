@@ -5,15 +5,7 @@ const std = @import("std");
 const dvui = @import("dvui");
 const w = @import("widgets.zig");
 
-/// The poller's, under its mutex
-pub const State = struct {
-    /// No working sign in: the form is offered
-    needed: bool = false,
-    /// A sign in is on its way
-    busy: bool = false,
-    /// Why the last try or update check failed, for the form
-    message: []const u8 = "",
-};
+pub const State = @import("state.zig").SignIn;
 
 pub const Hook = struct {
     state: *const State,

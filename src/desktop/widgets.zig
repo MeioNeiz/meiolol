@@ -7,9 +7,7 @@ const core = @import("core");
 const icons = @import("icons.zig");
 const board = @import("../board.zig");
 
-/// False in the public exe: no private-edition code is compiled into it, desktop/private/
-/// above all (deploy/check-edition.sh). The shots and the dev window carry both editions
-pub const private_code = !@import("build_options").public;
+pub const private_code = @import("state.zig").private_code;
 
 pub const Ctx = struct {
     stats: *const core.Stats,

@@ -6,7 +6,6 @@
 const std = @import("std");
 const dvui = @import("dvui");
 const core = @import("core");
-const lanecard = @import("../lanecard.zig");
 const board = @import("../board.zig");
 const Icons = @import("icons.zig").Icons;
 const w = @import("widgets.zig");
@@ -16,13 +15,12 @@ const game = @import("private/game.zig");
 const post = @import("post.zig");
 const loadscreen = @import("loadscreen.zig");
 const practice = @import("private/practice.zig");
-const loading = @import("../loading.zig");
 const ingame = @import("../ingame.zig");
-const postgame = @import("../postgame.zig");
 const palette = w.palette;
 const signin = @import("signin.zig");
-const comp = @import("../comp.zig");
 const comp_view = @import("comp.zig");
+const app_state = @import("state.zig");
+const poller = @import("poller.zig");
 
 pub const title = "meiolol";
 /// Logical pixels; Windows scales these by the display's DPI
@@ -33,48 +31,11 @@ const wide_from = 900;
 /// Each team column, padding included
 const side_width = 270;
 
-pub const Edition = board.Edition;
-pub const private_code = w.private_code;
-
-/// Champ select as shown: the lane card and the board around it
-pub const Select = struct {
-    card: lanecard.Card,
-    board: board.Board,
-    /// Once every seat is locked
-    comp: ?*const comp.Comp = null,
-};
-
-pub const Status = union(enum) {
-    /// No stats file found next to the program
-    no_data,
-    no_client,
-    /// Reachable but failing (error name)
-    client_error: []const u8,
-    /// Client running, not in champ select (gameflow phase)
-    waiting: []const u8,
-    /// Champ select without assigned positions (blind pick, ARAM)
-    no_role,
-    select: *const Select,
-    /// The game is loading: cards from the last champ select
-    loading: *const loading.Loading,
-    /// In a game with Live Client Data up
-    in_game: *const ingame.InGame,
-    /// After a game, once the client has its end of game block
-    post_game: *const postgame.PostGame,
-};
-
-/// From the update thread (update.zig), under the content
-pub const Note = union(enum) {
-    none,
-    /// First start, signed in: fetching the data
-    downloading,
-    /// Error name of the last failed check (@errorName: static)
-    failed: []const u8,
-    /// A new version is in place for the next start
-    restart,
-};
-
-pub const by_mastery = &lane.by_mastery;
+pub const Edition = app_state.Edition;
+pub const private_code = app_state.private_code;
+pub const Select = app_state.Select;
+pub const Status = app_state.Status;
+pub const Note = app_state.Note;
 
 pub const View = struct {
     status: Status,
@@ -90,6 +51,21 @@ pub const View = struct {
 
 /// For dvui.Window.init
 pub const theme = dvui.Theme.builtin.adwaita_dark;
+
+/// The poller's latest, drawn with its mutex held: call between dvui's begin and end
+pub fn framePoller() void {
+    const s = poller.lock();
+    defer poller.unlock();
+    frame(.{
+        .status = s.status,
+        .stats = s.stats,
+        .icons = s.icons,
+        .edition = s.edition,
+        .note = s.note,
+        .signin = if (s.signin) |st| .{ .state = st, .submit = s.submit } else null,
+        .practice = .{ .setup = s.practice, .shown = s.practicing, .changed = s.practice_changed },
+    });
+}
 
 pub fn frame(v: View) void {
     var root = dvui.box(@src(), .{ .dir = .vertical }, .{

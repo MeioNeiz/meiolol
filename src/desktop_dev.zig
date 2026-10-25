@@ -40,6 +40,6 @@ fn stop(_: *dvui.Window) void {
 }
 
 fn frame() !dvui.App.Result {
-    poller.frame();
+    ui.framePoller();
     return .ok;
 }

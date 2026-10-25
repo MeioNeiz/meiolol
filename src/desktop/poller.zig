@@ -20,16 +20,15 @@ const comp = @import("../comp.zig");
 const Icons = @import("icons.zig").Icons;
 const icons_path = @import("icons.zig").lcu_path;
 const datafiles = @import("../datafiles.zig");
-const ui = @import("ui.zig");
+const state = @import("state.zig");
 const update = @import("update.zig");
 const device = @import("device.zig");
-const signin = @import("signin.zig");
 
 /// What the UI shows. The poller swaps `status` and the arena that owns it under the
 /// mutex; the UI holds the mutex for a whole frame
 const Shared = struct {
     mutex: std.Io.Mutex = .init,
-    status: ui.Status = .no_client,
+    status: state.Status = .no_client,
     arena: ?std.heap.ArenaAllocator = null,
     quit: std.atomic.Value(bool) = .init(false),
     /// Under the mutex: the UI reads it, the poller swaps it
@@ -37,7 +36,7 @@ const Shared = struct {
     /// Set by the update thread when new files are on disk; the poller loads them
     fresh: std.atomic.Value(bool) = .init(false),
     /// The update thread's note under the board, under the mutex
-    note: ui.Note = .none,
+    note: state.Note = .none,
     /// Grows as the poller fetches icons from the client, under the mutex
     icons: ?Icons = null,
     /// The window's practice draft, under the mutex; null while practice is off
@@ -47,7 +46,7 @@ const Shared = struct {
     /// `status` is the practice draft's, under the mutex
     practicing: bool = false,
     /// The sign-in form's, under the mutex
-    signin: signin.State = .{},
+    signin: state.SignIn = .{},
     /// What update checks send, under the mutex; null until signed in. In auth_buf
     auth: ?update.Auth = null,
     auth_buf: [512]u8 = undefined,
@@ -77,9 +76,9 @@ var lockfile: ?[]const u8 = null;
 var wake: *const fn () void = undefined;
 /// This exe's release (update.Options.version)
 var version: u64 = 0;
-var edition: ui.Edition = .private;
+var edition: state.Edition = .private;
 
-pub fn start(init: std.process.Init, lockfile_override: ?[]const u8, wake_ui: *const fn () void, release: u64, ed: ui.Edition) !void {
+pub fn start(init: std.process.Init, lockfile_override: ?[]const u8, wake_ui: *const fn () void, release: u64, ed: state.Edition) !void {
     io = init.io;
     version = release;
     edition = ed;
@@ -290,7 +289,7 @@ fn signInThread(c: *Credentials) void {
 }
 
 /// A failure never hides the restart note
-fn setNote(note: ui.Note) void {
+fn setNote(note: state.Note) void {
     shared.mutex.lockUncancelable(io);
     if (note != .failed or shared.note != .restart) shared.note = note;
     shared.mutex.unlock(io);
@@ -301,25 +300,46 @@ pub fn stop() void {
     shared.quit.store(true, .release);
 }
 
-/// Draws the current status: call between dvui's begin and end
-pub fn frame() void {
+/// What to draw, valid until `unlock`: the window holds the poller's mutex for a frame
+pub const Shown = struct {
+    status: state.Status,
+    stats: ?*const core.Stats,
+    icons: *const Icons,
+    edition: state.Edition,
+    note: state.Note,
+    /// Null where updates can't run (no exe folder)
+    signin: ?*const state.SignIn,
+    /// From the window, holding the mutex; copies what it keeps
+    submit: *const fn (username: []const u8, password: []const u8) void = submit,
+    /// The window's practice draft; null while practice is off
+    practice: *?practice.Setup,
+    /// `status` is the practice draft's, not the client's
+    practicing: bool,
+    /// The window changed `practice`
+    practice_changed: *const fn () void = practiceChanged,
+};
+
+pub fn lock() Shown {
     shared.mutex.lockUncancelable(io);
-    defer shared.mutex.unlock(io);
     const stats = if (shared.data) |d| &d.stats else null;
-    const note: ui.Note = switch (shared.note) {
-        // Only matters while there is nothing else to show
-        .failed => if (stats == null) shared.note else .none,
-        .none, .downloading, .restart => shared.note,
-    };
-    ui.frame(.{
+    return .{
         .status = shared.status,
         .stats = stats,
         .icons = &shared.icons.?,
         .edition = edition,
-        .note = note,
-        .signin = if (updates != null) .{ .state = &shared.signin, .submit = submit } else null,
-        .practice = .{ .setup = &shared.practice, .shown = shared.practicing, .changed = practiceChanged },
-    });
+        .note = switch (shared.note) {
+            // Only matters while there is nothing else to show
+            .failed => if (stats == null) shared.note else .none,
+            .none, .downloading, .restart => shared.note,
+        },
+        .signin = if (updates != null) &shared.signin else null,
+        .practice = &shared.practice,
+        .practicing = shared.practicing,
+    };
+}
+
+pub fn unlock() void {
+    shared.mutex.unlock(io);
 }
 
 /// From the window, holding the mutex (it draws with it held)
@@ -328,7 +348,7 @@ fn practiceChanged() void {
     io.futexWake(u32, &shared.practice_gen.raw, 1);
 }
 
-fn publish(status: ui.Status, arena: std.heap.ArenaAllocator, practicing: bool) void {
+fn publish(status: state.Status, arena: std.heap.ArenaAllocator, practicing: bool) void {
     shared.mutex.lockUncancelable(io);
     const old = shared.arena;
     shared.status = status;
@@ -366,14 +386,14 @@ fn poll(gpa: std.mem.Allocator) void {
         const setup = shared.practice;
         shared.mutex.unlock(io);
         // A practice change alone needs no round trip to the client
-        const practice_only = ui.private_code and gen != seen_gen and setup != null and shared.data != null;
+        const practice_only = state.private_code and gen != seen_gen and setup != null and shared.data != null;
         seen_gen = gen;
-        var status: ?ui.Status = null;
+        var status: ?state.Status = null;
         if (!practice_only) {
             const s = if (shared.data) |d| p.tick(arena.allocator(), d) catch |err| switch (err) {
                 error.OutOfMemory => return,
                 else => p.disconnect(err),
-            } else ui.Status.no_data;
+            } else state.Status.no_data;
             live = switch (s) {
                 .select, .loading, .in_game, .post_game => true,
                 else => false,
@@ -381,7 +401,7 @@ fn poll(gpa: std.mem.Allocator) void {
             status = s;
         }
         var practicing = false;
-        if (ui.private_code and setup != null and !live) if (shared.data) |d| {
+        if (state.private_code and setup != null and !live) if (shared.data) |d| {
             if (p.practiceStatus(arena.allocator(), d, setup.?, gen)) |s| {
                 status = s;
                 practicing = true;
@@ -441,7 +461,7 @@ const Poller = struct {
         p.own = null;
     }
 
-    fn disconnect(p: *Poller, err: anyerror) ui.Status {
+    fn disconnect(p: *Poller, err: anyerror) state.Status {
         p.watch.disconnect();
         p.forgetOwn();
         _ = p.practice_arena.reset(.retain_capacity);
@@ -453,7 +473,7 @@ const Poller = struct {
     }
 
     /// Changes whenever what the status shows would
-    fn key(p: *const Poller, s: ui.Status, practicing: bool) u64 {
+    fn key(p: *const Poller, s: state.Status, practicing: bool) u64 {
         var h: std.hash.Wyhash = .init(0);
         h.update(@tagName(s));
         h.update(&.{@intFromBool(practicing)});
@@ -466,7 +486,7 @@ const Poller = struct {
         return h.final();
     }
 
-    fn tick(p: *Poller, arena: std.mem.Allocator, data: *const Data) !ui.Status {
+    fn tick(p: *Poller, arena: std.mem.Allocator, data: *const Data) !state.Status {
         const cs = switch (try p.watch.step(arena)) {
             .phase => |phase| {
                 // Live Client Data is up once the game has loaded; until then, waiting
@@ -505,14 +525,14 @@ const Poller = struct {
         if (p.own == null) p.own = loadOwn(p.own_arena.allocator(), p.watch.client.?);
         const own = p.own.?;
         const pool = p.watch.pool;
-        const by_mastery = ui.by_mastery.load(.acquire);
+        const by_mastery = state.by_mastery.load(.acquire);
         var h: std.hash.Wyhash = .init(cs.fingerprint());
         h.update(std.mem.asBytes(&role));
         h.update(std.mem.asBytes(&by_mastery));
         if (pool) |ids| h.update(std.mem.sliceAsBytes(ids));
         p.fingerprint = h.final();
 
-        const sel = try arena.create(ui.Select);
+        const sel = try arena.create(state.Select);
         sel.card = try lanecard.build(arena, .{
             .stats = &data.stats,
             .curves = if (data.curves) |*c| c else null,
@@ -544,12 +564,12 @@ const Poller = struct {
     }
 
     /// The practice draft on its screen, built as a real one would be
-    fn practiceStatus(p: *Poller, arena: std.mem.Allocator, data: *const Data, setup: practice.Setup, gen: u32) !ui.Status {
+    fn practiceStatus(p: *Poller, arena: std.mem.Allocator, data: *const Data, setup: practice.Setup, gen: u32) !state.Status {
         if (p.practice_own == null) if (p.watch.client) |c| {
             p.practice_own = loadOwn(p.practice_arena.allocator(), c);
         };
         const own: Own = p.practice_own orelse .{ .mastery = &.{}, .tier = null };
-        const by_mastery = ui.by_mastery.load(.acquire);
+        const by_mastery = state.by_mastery.load(.acquire);
         const built = try practice.build(arena, .{
             .stats = &data.stats,
             .curves = if (data.curves) |*c| c else null,
@@ -566,9 +586,9 @@ const Poller = struct {
         for (setup.mine) |s| want.add(s.champion);
         for (setup.theirs) |s| want.add(s.champion);
         for (setup.my_bans ++ setup.their_bans) |c| want.add(c);
-        const status: ui.Status = switch (built) {
+        const status: state.Status = switch (built) {
             .select => |s| blk: {
-                const sel = try arena.create(ui.Select);
+                const sel = try arena.create(state.Select);
                 sel.* = .{ .card = s.card, .board = s.board, .comp = s.comp };
                 want.addSelect(sel);
                 break :blk .{ .select = sel };
@@ -655,7 +675,7 @@ const Poller = struct {
             w.n += 1;
         }
 
-        fn addSelect(w: *Want, sel: *const ui.Select) void {
+        fn addSelect(w: *Want, sel: *const state.Select) void {
             for ([_][]const board.Seat{ sel.board.allies, sel.board.enemies }) |seats| for (seats) |s| {
                 w.add(s.slot.champion);
                 for (s.ideas) |c| w.add(c);
