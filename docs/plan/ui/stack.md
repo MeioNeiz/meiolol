@@ -306,3 +306,10 @@ Override the sections above where they differ. Raw: review artifact db, ids v2-*
    Done 25 Oct: hashed names (src/site/assets.zig) for the CSS, font, search.js and the
    islands' loader and wasm, immutable in nginx; beacon /print.css (media print);
    docs/hosting.md "Cache-Control"
+
+## Jacob's answers (chat, 25 Oct evening)
+
+1. In-game companion: the private edition, certainly. The public edition gets something
+   more helpful within policy: in-game contextual builds and helpful info
+2. Desktop measurements (in-game CPU, poller against the real client, focus-taking run)
+   wait until he plays; they don't block building the app's screens
