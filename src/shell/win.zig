@@ -826,7 +826,8 @@ fn run(init: std.process.Init) !void {
     if (opt.self_test) _ = c.SetTimer(hwnd, timer_watchdog, 30_000, null);
     if (opt.measure) _ = c.SetTimer(hwnd, timer_watchdog, measure.watchdog_ms, null);
     if (opt.measure) measure.start();
-    if (!opt.self_test) client.start(init.gpa, init.io, init.environ_map.get("MEIOLOL_LOCKFILE")) catch |e|
+    // Scripted runs leave Jacob's client alone (LCU HTTPS segfaults on Windows: notes)
+    if (!opt.scripted()) client.start(init.gpa, init.io, init.environ_map.get("MEIOLOL_LOCKFILE")) catch |e|
         log("client poller: {t}", .{e});
     try startEnvironment();
 
