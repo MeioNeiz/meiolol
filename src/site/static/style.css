@@ -445,6 +445,9 @@ table.tl th small.sub { display: block; margin: 1px 0 0; font-size: 11px; }
 .ci::before { content: ""; position: absolute; top: 8px; left: 0; right: 0; height: 2px; background: var(--axis); border-radius: 1px; }
 .ci::after { content: ""; position: absolute; top: 2px; left: 50%; width: 1px; height: 14px; background: var(--axis); }
 .ci .d { position: absolute; top: 4px; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; border: 2px solid var(--bg); z-index: 1; }
+/* The champions table island sets the dot and the rate's fade as numbers (ui/tiers.zig) */
+.ci .d { left: calc(var(--x, 50) * 1%); }
+.wr b { opacity: var(--f, 1); }
 b.up, a.up, .up { color: var(--good); }
 b.down, a.down, .down { color: var(--bad); }
 .ci .up { background: var(--good); }

@@ -374,6 +374,12 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
     chart_wasm.entry = .disabled;
     chart_wasm.rdynamic = true;
     backend.addAnonymousImport("chart.wasm", .{ .root_source_file = chart_wasm.getEmittedBin() });
+    // The site's islands, per page family (src/site/ui/wasm), with zjb's loaders
+    for (ui_families) |f| {
+        const u = uiWasm(b, f);
+        backend.addAnonymousImport(b.fmt("{s}.wasm", .{u.name}), .{ .root_source_file = u.wasm });
+        backend.addAnonymousImport(b.fmt("{s}.js", .{u.name}), .{ .root_source_file = u.js });
+    }
 
     return .{ .core = core, .tpl = tpl, .ui = ui, .net = net, .store = store, .backend = backend, .app = app };
 }

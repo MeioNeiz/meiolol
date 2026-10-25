@@ -2,9 +2,9 @@
 
 const std = @import("std");
 const core = @import("core");
+const ui = @import("ui");
 const html = @import("html.zig");
 const spread = @import("../spread.zig");
-const patchday = @import("../patchday.zig");
 const builds_page = @import("builds.zig");
 
 const Writer = std.Io.Writer;
@@ -13,12 +13,10 @@ const tpl = html.tpl;
 
 const Champ = @import("root.zig").Champ;
 const Site = @import("root.zig").Site;
-const pct = @import("root.zig").pct;
 const ratio = @import("root.zig").ratio;
 const earlyNote = @import("root.zig").earlyNote;
 const roleName = @import("root.zig").roleName;
 const roleIcons = @import("root.zig").roleIcons;
-const roleIcon = @import("root.zig").roleIcon;
 const Thousands = @import("root.zig").Thousands;
 
 /// Below this share of all games a champion's row is a rare pick, listed on request
@@ -112,74 +110,26 @@ pub fn legend(w: *Writer, span: f64) !void {
     try w.writeAll("</p>\n");
 }
 
-/// Champions table's win rate cell: trackCell with the shape of its players' own win
-/// rates around it (spread.zig), mirrored about the track and coloured by win rate
-/// along it (shapeGradient); none under min_players. The shape doesn't narrow as games
-/// come in; only the rate fades
-fn distCell(w: *Writer, site: *const Site, ch: Champ, wins: u32, games: u32, sort: f64, patch: ?PatchNote) !void {
-    const p = ratio(wins, games);
-    const s = &site.spread;
-    const players = if (s.get(ch.id)) |c| (if (c.players >= s.min_players) c else null) else null;
-    const title = if (players) |c|
-        try site.arena.print("{d} games; players with {d}+ games on {s}: middle half {d}% to {d}% ({d} players)", .{ games, s.min_games, ch.name, c.p25, c.p75, c.players })
-    else
-        try site.arena.print("{d} games", .{games});
-    const shape = if (players) |c| try shapePath(site.arena, c.shape, 100 * p) else null;
-    try trackCellNoted(w, p, sort, games, table_span, title, shape, patch);
-}
-
-/// The win rate's change since the previous patch, small under it: coloured as win rates
-/// are when clear (patchday.Rate.clear), faint when not
-const PatchNote = struct {
-    rate: patchday.Rate,
-    pd: *const patchday.PatchDay,
-    in: []const u8,
-
-    pub fn render(n: PatchNote, w: *Writer) !void {
-        const d = n.rate.delta();
-        const clear = n.rate.clear(n.pd.opts.min_role_games, n.pd.opts.z);
-        try tpl.render(w, "<small class=\"pd{faint}\" style=\"--c:{colour}\" title=\"Patch {cur} against {prev} {in}: {now:.1}% of {cur_n} games won against {then:.1}% of {prev_n}; {verdict}\">{sign}{abs:.1}</small>", .{
-            .faint = tpl.when(!clear, " faint"),
-            .colour = wrColour(0.5 + d / 100, table_span),
-            .cur = n.pd.cur_patch,
-            .prev = n.pd.prev_patch,
-            .in = n.in,
-            .now = 100 * patchday.Rate.share(n.rate.cur),
-            .cur_n = Thousands{ .n = n.rate.cur.games },
-            .then = 100 * patchday.Rate.share(n.rate.prev),
-            .prev_n = Thousands{ .n = n.rate.prev.games },
-            .verdict = if (clear) "a clear change" else "no clear change",
-            // U+2212: tabular figures space a hyphen out as if it were a digit
-            .sign = if (d >= 0.05) "+" else if (d <= -0.05) "\u{2212}" else "",
-            .abs = @abs(d),
-        });
-    }
-};
-
 /// Win rate as the champions table shows it: a dot at the rate on a track from 25% to
 /// 75% (50% marked), an optional shape path behind it (shapePath), then the rate,
 /// coloured by wrColour on `span` and fainter with fewer games (curvesfile.fade). `sort`
 /// (data-v): the rate pulled toward an average by its games, so sorting by the column
 /// can't put a few lucky games on top. Matchup rates (matchup_span) use it bare
 pub fn trackCell(w: *Writer, p: f64, sort: f64, games: u32, span: f64, title: []const u8, shape: ?[]const u8) !void {
-    try trackCellNoted(w, p, sort, games, span, title, shape, null);
+    try trackCellNoted(w, p, sort, games, span, title, shape);
 }
 
-/// The rate in a trackCell, fainter with fewer games, a patch change under it if any
+/// The rate in a trackCell, fainter with fewer games
 const RateText = struct {
     p: f64,
     games: u32,
-    note: ?PatchNote,
 
     pub fn render(r: RateText, w: *Writer) !void {
-        const fade = core.curvesfile.fade(r.games);
-        if (r.note) |n| return tpl.render(w, "<span class=\"wv\"><b style=\"opacity:{fade:.2}\">{rate:.1}%</b>{n}</span>", .{ .fade = fade, .rate = 100 * r.p, .n = n });
-        try tpl.render(w, "<b style=\"opacity:{fade:.2}\">{rate:.1}%</b>", .{ .fade = fade, .rate = 100 * r.p });
+        try tpl.render(w, "<b style=\"opacity:{fade:.2}\">{rate:.1}%</b>", .{ .fade = core.curvesfile.fade(r.games), .rate = 100 * r.p });
     }
 };
 
-/// trackCell with the patch change under the rate
-fn trackCellNoted(w: *Writer, p: f64, sort: f64, games: u32, span: f64, title: []const u8, shape: ?[]const u8, note: ?PatchNote) !void {
+fn trackCellNoted(w: *Writer, p: f64, sort: f64, games: u32, span: f64, title: []const u8, shape: ?[]const u8) !void {
     try tpl.render(w, "<td data-v=\"{sort:.4}\"><span class=\"wr\" style=\"--c:{colour}\" title=\"{title}\"><span class=\"ci\">" ++
         "{shape}<i class=\"d\" style=\"left:{dot:.1}%\"></i></span>" ++
         "{rate}</span></td>", .{
@@ -188,12 +138,11 @@ fn trackCellNoted(w: *Writer, p: f64, sort: f64, games: u32, span: f64, title: [
         .title = title,
         .shape = if (shape) |d| tpl.t("<svg class=\"shape\" viewBox=\"0 0 100 10\" preserveAspectRatio=\"none\" aria-hidden=\"true\"><path d=\"{d}\"></path></svg>", .{ .d = d }) else null,
         .dot = trackX(100 * p),
-        .rate = RateText{ .p = p, .games = games, .note = note },
+        .rate = RateText{ .p = p, .games = games },
     });
 }
 
-/// wrColour's span on the champions table, and for anything coloured to match it
-pub const table_span = 0.12;
+pub const table_span = ui.fmt.table_span;
 /// A matchup's win rate spreads about twice as wide (it is mostly the opponent's
 /// strength): on table_span most would be the vivid end
 pub const matchup_span = 0.24;
@@ -204,34 +153,6 @@ const track_width = 50.0;
 
 fn trackX(rate: f64) f64 {
     return 100 * (std.math.clamp(rate, track_lo, track_lo + track_width) - track_lo) / track_width;
-}
-
-/// The shape's outline centred on `centre`% in a 100 x 10 box: along the top, back
-/// along the bottom, pointed at both ends; it fades out towards the track's ends
-/// (#wr-edge), past them clipped
-fn shapePath(a: std.mem.Allocator, shape: [spread.shape_points]u8, centre: f64) ![]const u8 {
-    const Point = struct {
-        fn x(c: f64, k: usize) f64 {
-            const off = @as(f64, @floatFromInt(spread.shape_step * k)) - spread.shape_reach;
-            return 100 * (c + off - track_lo) / track_width;
-        }
-        fn half(v: u8) f64 {
-            return 5 * @as(f64, @floatFromInt(v)) / 255;
-        }
-    };
-    var out: std.ArrayList(u8) = .empty;
-    try out.print(a, "M{d:.1} 5", .{Point.x(centre, 0)});
-    for (shape, 0..) |v, k| {
-        try out.print(a, "L{d:.1} {d:.2}", .{ Point.x(centre, k), 5 - Point.half(v) });
-    }
-    try out.print(a, "L{d:.1} 5", .{Point.x(centre, spread.shape_points - 1)});
-    var k: usize = spread.shape_points;
-    while (k > 0) {
-        k -= 1;
-        try out.print(a, "L{d:.1} {d:.2}", .{ Point.x(centre, k), 5 + Point.half(shape[k]) });
-    }
-    try out.append(a, 'Z');
-    return out.items;
 }
 
 /// One gradient and edge mask for every row's shape: orange at the track's low end
@@ -248,67 +169,8 @@ fn shapeGradient(w: *Writer) !void {
         "<rect width=\"100\" height=\"10\" fill=\"url(#wr-fade)\"></rect></mask></defs></svg>\n");
 }
 
-/// Win rate colour on the site's diverging scale (style.css --lo4 to --hi4,
-/// docs/design-ideas.md): continuous, orange then hot pink below 50%, blue then aqua
-/// above, each colour at its stop's points (scaled by span / table_span). Grey only when
-/// it shows as 50.0%: every other rate has a side (J12). Not red against green: the
-/// pair red-green colour blindness merges. Few games fade by opacity, not colour
-pub fn wrColour(p: f64, span: f64) WrColour {
-    return .{ .pts = 100 * (p - 0.5) * table_span / span };
-}
-
-/// Aggregate scale (a champion's or matchup's rate over many games): the points where
-/// --hi1..--hi4 sit; past the last, --hi4. 4% of champion roles with 500+ games reach
-/// it
-const stops = [_]f64{ 0, 2, 3.5, 5.5 };
-
-pub const WrColour = struct {
-    pts: f64,
-
-    /// The value of --c: a mix of the two stops either side
-    pub fn format(c: WrColour, w: *Writer) Writer.Error!void {
-        const side = if (c.pts < 0) "lo" else "hi";
-        const x = @abs(c.pts);
-        if (x < 0.05) return w.writeAll("var(--s0)");
-        if (x >= stops[stops.len - 1]) return w.print("var(--{s}4)", .{side});
-        var i: usize = 1;
-        while (x >= stops[i]) i += 1;
-        const t = (x - stops[i - 1]) / (stops[i] - stops[i - 1]);
-        const near: u8 = @round(100 * (1 - t));
-        if (near == 100) return w.print("var(--{s}{d})", .{ side, i });
-        if (near == 0) return w.print("var(--{s}{d})", .{ side, i + 1 });
-        try w.print("color-mix(in oklab,var(--{s}{d}) {d}%,var(--{s}{d}))", .{ side, i, near, side, i + 1 });
-    }
-};
-
-test wrColour {
-    var buf: [96]u8 = undefined;
-    const cases = .{
-        .{ 0.5004, "var(--s0)" },
-        .{ 0.501, "color-mix(in oklab,var(--hi1) 95%,var(--hi2))" },
-        .{ 0.495, "color-mix(in oklab,var(--lo1) 75%,var(--lo2))" },
-        .{ 0.52, "var(--hi2)" },
-        .{ 0.545, "color-mix(in oklab,var(--hi3) 50%,var(--hi4))" },
-        .{ 0.44, "var(--lo4)" },
-    };
-    inline for (cases) |c| {
-        const s = try std.mem.print(&buf, "{f}", .{wrColour(c[0], table_span)});
-        try std.testing.expectEqualStrings(c[1], s);
-    }
-}
-
-test PatchNote {
-    var buf: [512]u8 = undefined;
-    const pd: patchday.PatchDay = .{ .prev_patch = "16.20", .cur_patch = "16.21" };
-    // 6 points on 4,000 games each side: clear, coloured; 1 point on 400: faint
-    var w: Writer = .fixed(&buf);
-    try (PatchNote{ .rate = .of(.{ .games = 4000, .wins = 2000 }, .{ .games = 4000, .wins = 2240 }), .pd = &pd, .in = "in EUW" }).render(&w);
-    try std.testing.expectStringStartsWith(w.buffered(), "<small class=\"pd\" style=\"--c:var(--hi4)\" title=\"Patch 16.21 against 16.20 in EUW: 56.0% of 4,000 games won against 50.0% of 4,000; a clear change\">+6.0</small>");
-    w = .fixed(&buf);
-    try (PatchNote{ .rate = .of(.{ .games = 400, .wins = 204 }, .{ .games = 400, .wins = 200 }), .pd = &pd, .in = "in EUW" }).render(&w);
-    try std.testing.expect(std.mem.find(u8, w.buffered(), "class=\"pd faint\"") != null);
-    try std.testing.expect(std.mem.endsWith(u8, w.buffered(), "no clear change\">\u{2212}1.0</small>"));
-}
+pub const wrColour = ui.fmt.wrColour;
+pub const WrColour = ui.fmt.WrColour;
 
 /// A win rate in text (.wrc), coloured by wrColour on the champions table's scale and
 /// fainter with fewer games, as the table's own
@@ -320,116 +182,99 @@ pub fn wrText(w: *Writer, p: f64, games: u32) !void {
     });
 }
 
-/// All roles (champions.html) and one per role (role/<slug>.html)
-fn roleTabs(w: *Writer, current: ?Role, root: []const u8) !void {
-    try tpl.renderPart(w, "<nav class=\"tabs\"><a href=\"{root}champions.html\"{current}>All roles</a>", .{
-        .root = root,
-        .current = tpl.flag(current == null, "aria-current=\"page\""),
-    });
-    for (Role.all) |r| {
-        try tpl.render(w, "<a href=\"{root}role/{slug}.html\"{current}><svg class=\"ri\" aria-hidden=\"true\"><use href=\"#ri-{slug}\"></use></svg>{name}</a>", .{
-            .root = root,
-            .slug = r.label(),
-            .current = tpl.flag(current == r, "aria-current=\"page\""),
-            .name = roleName(r),
-        });
-    }
-    try tpl.renderPart(w, "</nav>\n", .{});
-}
+/// The champions table's data file, in each view's directory
+pub const data_path = "data/tiers.bin";
 
-/// Champions table: win rate, pick and ban rate, games. Rows sorted by win rate pulled
-/// toward the role's average (Row.shrunk); rare picks hidden until asked for, the
-/// minimums each player's own (table.js data-min)
-fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void {
-    const rows = try tierRows(site, role);
-    try roleIcons(w);
-    try tpl.renderPart(w, "<div class=\"tl-bar\">", .{});
-    try roleTabs(w, role, root);
-    try tpl.renderPart(w,
-        \\<details class="tl-knobs" hidden><summary>Minimums</summary><span class="tl-mins"><label>Min games <input type="number" inputmode="numeric" min="0" step="100" value="{games}" data-min="games" data-for="tiers"></label><label title="Share of the champion's games played in the role">Min lane % <input type="number" inputmode="numeric" min="0" max="100" step="5" value="{share}" data-min="share" data-for="tiers"></label></span></details>
-        \\
-    , .{
-        .games = @as(u64, @ceil(min_pick_rate * @as(f64, @floatFromInt(site.games)))),
-        .share = 100 * min_role_share,
-    });
-    try tpl.renderPart(w,
-        \\<input type="search" placeholder="Search champion" data-filter="tiers" aria-label="Search champion"></div>
-        \\<p class="tl-key">Sorted by win rate pulled toward the role's average, the more the fewer the games, so a few lucky games can't top it; the rate shown is raw.{since}</p>
-        \\{gradient}<div class="tl-wrap"><table class="tl tiers" id="tiers" data-sortable>
-        \\<thead><tr><th class="rank">#</th><th class="l" data-sort="text">Champion</th>{role}<th data-sort="num" aria-sort="descending" title="Sorts by the rate pulled toward the role's average by games">Win rate</th><th data-sort="num" class="opt">Pick</th><th data-sort="num" class="opt">Ban</th><th data-sort="num" title="Wins above the role's average per 10,000 games it was not banned">Influence</th><th data-sort="num">Games</th></tr></thead>
-        \\<tbody>
-        \\
-    , .{
-        .gradient = tpl.call(shapeGradient, .{}),
-        .since = if (site.patchday) |pd| tpl.t(" Under it: the change since {prev}, faint when not clear.", .{ .prev = pd.prev_patch }) else null,
-        .role = tpl.when(role == null, tpl.t("<th class=\"role\" data-sort=\"text\">Role</th>", .{})),
-    });
-    const to_site = try std.mem.concat(site.arena, u8, &.{ root, site.view.up() });
-    var rare: usize = 0;
-    var n: usize = 0;
-    for (rows) |row| {
-        if (row.rare) rare += 1 else n += 1;
-        try tpl.render(w,
-            \\<tr class="bx" data-name="{name}" data-games="{games}" data-share="{share:.1}"{rare}><td class="rank">{n}</td><td class="l">{link}</td>{role}{wr}<td class="opt" data-v="{games}">{pick}</td><td class="opt" data-v="{banned}">{ban}</td>{impact}<td class="dim" data-v="{games}">{count}</td></tr>
-            \\
-        , .{
-            .name = row.ch.name,
-            .share = 100 * row.share,
-            .rare = tpl.flag(row.rare, "data-rare hidden"),
-            .n = n,
-            .link = tpl.call(champLinkTo, .{ site, row.ch, to_site }),
-            .role = tpl.when(role == null, tpl.t("<td class=\"role\" data-v=\"{n}\">{icon}</td>", .{
-                .n = @backingInt(row.role),
-                .icon = tpl.call(roleIcon, .{row.role}),
-            })),
-            .wr = tpl.call(distCell, .{ site, row.ch, row.wins, row.games, row.shrunk, patchNote(site, row) }),
+/// The view's champions table, every role, for ui.tiers: tierRows' rows and order
+fn tiersData(site: *const Site) !ui.tiers.Data {
+    const a = site.arena;
+    const rows = try tierRows(site, null);
+    const champs = try a.alloc(ui.tiers.Champ, site.champs.len);
+    for (champs, site.champs) |*c, ch| c.* = .{ .name = ch.name, .key = ch.key, .slug = ch.slug, .banned = ch.banned };
+    const out = try a.alloc(ui.tiers.Row, rows.len);
+    const s = &site.spread;
+    for (out, rows) |*o, row| {
+        const pd = if (site.patchday) |*pd| pd else null;
+        const move = if (pd) |x| x.champion(row.ch.id, row.role) else null;
+        const sp = if (s.get(row.ch.id)) |c| (if (c.players >= s.min_players) c else null) else null;
+        o.* = .{
+            .champ = @intCast(site.by_c[row.ch.c].?),
+            .role = @fromBackingInt(@as(u8, @backingInt(row.role))),
             .games = row.games,
-            .count = Thousands{ .n = row.games },
-            .pick = tpl.call(pct, .{ row.games, site.games }),
-            .banned = row.ch.banned,
-            .ban = tpl.call(pct, .{ row.ch.banned, site.games }),
-            .impact = tpl.call(impactCell, .{ row, site.games }),
-        });
+            .wins = row.wins,
+            .share = @floatCast(row.share),
+            .shrunk = @floatCast(row.shrunk),
+            .impact = @floatCast(row.impact),
+            .edge = @floatCast(row.edge),
+            .fade = @floatCast(core.curvesfile.fade(row.games)),
+            .spread = if (sp) |c| .{ .players = c.players, .p25 = c.p25, .p75 = c.p75, .shape = c.shape } else null,
+            .patch = if (move) |m| .{
+                .prev = .{ m.win.prev.games, m.win.prev.wins },
+                .cur = .{ m.win.cur.games, m.win.cur.wins },
+                .clear = m.win.clear(pd.?.opts.min_role_games, pd.?.opts.z),
+            } else null,
+        };
     }
-    try tpl.renderPart(w, "</tbody></table></div>\n", .{});
-    try legend(w, table_span);
-    try tpl.renderPart(w,
-        \\{more}<script src="{table_js}" defer></script>
-        \\
-    , .{
-        .more = tpl.t(
-            \\<p class="tl-more"{none}><span data-rare-count="tiers">{rare}</span> rare picks (under the minimum games, or a role the champion seldom plays) hidden. <button class="link" data-no-min="tiers">Show them</button></p>
-            \\
-        , .{ .rare = rare, .none = tpl.flag(rare == 0, "hidden") }),
-        .table_js = html.Link{ .root = root, .up = site.view.up(), .path = "table.js" },
+    return .{
+        .games = site.games,
+        .min_games = @intFromFloat(@ceil(min_pick_rate * @as(f64, @floatFromInt(site.games)))),
+        .min_share = @intFromFloat(100 * min_role_share),
+        .spread_min_games = s.min_games,
+        .cur_patch = if (site.patchday) |pd| pd.cur_patch else "",
+        .prev_patch = if (site.patchday) |pd| pd.prev_patch else "",
+        .region_in = site.view.region.in(),
+        .ddragon = site.ddragon_version,
+        .query = site.view.query(),
+        .champs = champs,
+        .rows = out,
+    };
+}
+
+/// data/tiers.bin
+pub fn dataFile(site: *const Site) ![]const u8 {
+    var out: std.ArrayList(u8) = .empty;
+    try ui.data.encode(site.arena, ui.tiers.Data, try tiersData(site), &out);
+    return out.items;
+}
+
+comptime {
+    std.debug.assert(ui.tiers.shape_points == spread.shape_points and ui.tiers.shape_step == spread.shape_step and ui.tiers.shape_reach == spread.shape_reach);
+    for (Role.all, 0..) |r, i| {
+        std.debug.assert(std.mem.eql(u8, roleName(r), ui.tiers.Role.names[i]));
+        std.debug.assert(std.mem.eql(u8, r.label(), ui.tiers.Role.slugs[i]));
+    }
+}
+
+/// Champions table: the ui.tiers island, rendered from the same data its file carries
+/// (ui-stats.wasm sorts, searches and sets the minimums). The role icons and the shape's
+/// gradient stay outside it: string styles, which the tree refuses
+fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void {
+    const a = site.arena;
+    const d = try a.create(ui.tiers.Data);
+    d.* = try tiersData(site);
+    var bytes: std.ArrayList(u8) = .empty;
+    try ui.data.encode(a, ui.tiers.Data, d.*, &bytes);
+    const base = try std.mem.concat(a, u8, &.{ root, site.view.up() });
+    const r: ?ui.tiers.Role = if (role) |x| @fromBackingInt(@as(u8, @backingInt(x))) else null;
+    var t: ui.tiers.Tiers = .{
+        .data = d,
+        .cells = try ui.tiers.prepare(a, d, r, base),
+        .role = r,
+        .root = root,
+        .base = base,
+        .src = try std.mem.concat(a, u8, &.{ root, data_path }),
+        .stamp = ui.tiers.stamp(bytes.items),
+    };
+    var tree: ui.Tree = .{};
+    var h: ui.H = .init(a, &tree);
+    tree.root = t.view(&h);
+    if (h.oom) return error.OutOfMemory;
+    try roleIcons(w);
+    try shapeGradient(w);
+    try ui.html.write(&tree, tree.root, w);
+    try tpl.render(w, "\n<script src=\"{js}\" data-wasm=\"ui-stats.wasm\" defer></script>\n", .{
+        .js = html.Link{ .root = root, .up = site.view.up(), .path = "ui-stats.js" },
     });
-}
-
-fn patchNote(site: *const Site, row: Row) ?PatchNote {
-    const pd = if (site.patchday) |*pd| pd else return null;
-    const m = pd.champion(row.ch.id, row.role) orelse return null;
-    return .{ .rate = m.win, .pd = pd, .in = site.view.region.in() };
-}
-
-/// Influence (ban impact), whole games won per 10,000; below 0 dim. Title: its two parts
-fn impactCell(w: *Writer, row: Row, total: u64) !void {
-    const available = total -| row.ch.banned;
-    try tpl.render(w, "<td class=\"{class}\" data-v=\"{v:.4}\" title=\"Win rate {edge:.1} points {side} the role's average once pulled toward it, picked in {pick:.1}% of games it was not banned: {abs:.0} {more} games won per 10,000 such games\">{minus}{abs:.0}</td>", .{
-        .class = if (row.impact < 0) "bi dim" else "bi",
-        .v = row.impact,
-        // U+2212: tabular figures space a hyphen out as if it were a digit
-        .minus = if (row.impact <= -0.5) "\u{2212}" else "",
-        .abs = @abs(row.impact),
-        .edge = 100 * @abs(row.edge),
-        .side = if (row.edge < 0) "under" else "over",
-        .more = if (row.impact < 0) "fewer" else "more",
-        .pick = if (available == 0) 0 else 100 * @as(f64, @floatFromInt(row.games)) / @as(f64, @floatFromInt(available)),
-    });
-}
-
-/// Site.champBox for tpl.call
-fn champLinkTo(w: *Writer, site: *const Site, ch: Champ, to_site: []const u8) !void {
-    return site.champBox(w, ch, to_site);
 }
 
 pub fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {

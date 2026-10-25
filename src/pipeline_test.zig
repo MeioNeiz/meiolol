@@ -234,7 +234,7 @@ test "fixture games to stats, curves and the website" {
         // as a tile in one grid (few games: shown, faded) with its rate against usual
         // (the opponent's own rate on the row for filters.js), it and the curve's gold at
         // 14 linking to the matchup page from the champion's side
-        .{ "champions.html", &.{ "data-sortable", "class=\"ci\"", "own win rates spread around it", "id=\"wr-edge\"", "opacity:", "<p class=\"wr-key\">Win rate colour <span class=\"wrc\" style=\"--c:var(--lo4)\">44.5%</span>", "<p class=\"tl-key\">Sorted by win rate pulled toward the role's average", "<details class=\"tl-knobs\" hidden><summary>Minimums</summary>", "<symbol id=\"ri-top\"", "<td class=\"role\" data-v=\"", "<title>Top</title><use href=\"#ri-top\">", "data-min=\"games\"", "data-min=\"share\" data-for=\"tiers\"", "\" data-share=\"" } },
+        .{ "champions.html", &.{ "<div data-island=\"tiers\" data-src=\"data/tiers.bin\" data-root=\"\" data-base=\"\" data-stamp=\"", "class=\"ci\"", "own win rates spread around it", "id=\"wr-edge\"", "<b style=\"--f:", "<i class=\"d\" style=\"--x:", "<p class=\"wr-key\">Win rate colour <span class=\"wrc\" style=\"--c:var(--lo4)\">44.5%</span>", "<p class=\"tl-key\">Sorted by win rate pulled toward the role&#39;s average", "<details class=\"tl-knobs\" hidden=\"\"><summary>Minimums</summary>", "<symbol id=\"ri-top\"", "<th tabindex=\"0\" class=\"l\" data-sort=\"text\">Champion</th>", "<th tabindex=\"0\" data-sort=\"num\" title=\"Sorts by the rate pulled toward the role&#39;s average by games\" aria-sort=\"descending\">Win rate</th>", "<td class=\"role\"><svg class=\"ri\" role=\"img\" aria-label=\"Top\"><title>Top</title><use href=\"#ri-top\">", "<script src=\"ui-stats.js\" data-wasm=\"ui-stats.wasm\" defer></script>" } },
         .{ "champion/darius.html", &.{ "Lane opponents", "<a class=\"champ box\" href=\"../matchup/top/darius-vs-mordekaiser.html\" title=\"Darius vs Mordekaiser\">", "href=\"../matchup/top/darius-vs-mordekaiser.html\" title=\"Lane curves", "<th data-sort=\"num\" title=\"Lane curve estimate: Darius minus the opponent\">Gold at 14</th>", "Search opponent", "data-name=\"Mordekaiser\" data-q=\"", "<tr class=\"bx thin\" data-id=", "<table class=\"og\"", "data-ka=\"", "usually wins about", "Each tile: win rate, vs usual, gold at 14 min, games", "<small data-rank>", "<p class=\"wr-key\">Matchup win rate colour, on a scale twice as wide as the champions table's: <span class=\"wrc\" style=\"--c:var(--lo4)\">39%</span>" } },
         // Hardest first by the rate shrunk with the role's k; opponents under 1% of the
         // champion's games hidden by default (the Opponents filter's p1). Rank filter from
@@ -388,7 +388,7 @@ test "fixture games to stats, curves and the website" {
     }
     // table.js finds each search's, minimum's and rare button's table by id: every target on
     // the page
-    for ([_][]const u8{ "champions.html", "role/top.html", "champion/darius.html" }) |page| {
+    for ([_][]const u8{"champion/darius.html"}) |page| {
         const path = try std.fs.path.join(arena, &.{ out, page });
         const html = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 20));
         var found: usize = 0;
@@ -409,6 +409,38 @@ test "fixture games to stats, curves and the website" {
             std.debug.print("{s}: no table search\n", .{page});
             return error.TestUnexpectedResult;
         }
+    }
+
+    // The champions table island: what ui-stats.wasm renders from the data file, before
+    // the URL's state, is the page's own (hydration adopts the server's nodes as they are)
+    for ([_]struct { []const u8, []const u8, ?site.ui.tiers.Role }{
+        .{ "champions.html", "", null },
+        .{ "role/top.html", "../", .top },
+    }) |c| {
+        const page = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, c[0] }), arena, .limited(1 << 22));
+        const bytes = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "data/tiers.bin" }), arena, .limited(1 << 22));
+        const tiers = site.ui.tiers;
+        const d = try arena.create(tiers.Data);
+        d.* = try site.ui.data.decode(arena, tiers.Data, bytes);
+        var state: tiers.Tiers = .{
+            .data = d,
+            .cells = try tiers.prepare(arena, d, c[2], c[1]),
+            .role = c[2],
+            .root = c[1],
+            .base = c[1],
+            .src = try std.mem.concat(arena, u8, &.{ c[1], "data/tiers.bin" }),
+            .stamp = tiers.stamp(bytes),
+        };
+        var t: site.ui.Tree = .{};
+        var h: site.ui.H = .init(arena, &t);
+        t.root = state.view(&h);
+        var w: std.Io.Writer.Allocating = .init(arena);
+        try site.ui.html.write(&t, t.root, &w.writer);
+        if (std.mem.find(u8, page, w.written()) == null) {
+            std.debug.print("{s}: the island differs from ui.wasm's render of data/tiers.bin\n", .{c[0]});
+            return error.TestUnexpectedResult;
+        }
+        try testing.expect(std.mem.count(u8, w.written(), "<tr class=\"bx\">") > 0);
     }
 
     // Rendered on request (site.Loaded, `meiolol serve --render` and `dev`): every file

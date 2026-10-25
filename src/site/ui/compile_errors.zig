@@ -14,7 +14,7 @@ pub const cases = [_]Case{
     .{ .name = "srcdoc", .expect = "srcdoc is HTML: not in the tree" },
     .{ .name = "style_string", .expect = "style takes h.vars(.{ ... }), numbers only" },
     .{ .name = "style_runtime_string", .expect = "style takes h.vars(.{ ... }), numbers only" },
-    .{ .name = "vars_string", .expect = "h.vars .x: numbers only" },
+    .{ .name = "vars_string", .expect = "h.vars .x: numbers and fmt.WrColour only" },
     .{ .name = "camel_attribute", .expect = "attribute .dataName: lower case, digits and _ only" },
     .{ .name = "kids_not_tuple", .expect = "children go in a tuple: .{ ... }" },
     .{ .name = "msg_too_big", .expect = "Msg is over 16 bytes: pass an index, not the value" },

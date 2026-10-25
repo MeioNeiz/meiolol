@@ -10,8 +10,8 @@
 //! Attributes are an anonymous struct, checked at compile time: `_` in a field name is
 //! `-`; `key` keys the node among its siblings; `on_<event>` takes `h.on(component,
 //! msg)`; any other `on*`, `srcdoc` and a string `style` are compile errors (style takes
-//! `h.vars`, numbers only); href/src/action... are scheme-checked by tpl's own check,
-//! for both backends. Values: strings, numbers, enums (tag name), void and true
+//! `h.vars`, numbers and scale colours only); href/src/action... are scheme-checked by
+//! tpl's own check, for both backends. Values: strings, numbers, enums (tag name), void and true
 //! (present), false and null (absent); `aria_*` bools write "true"/"false".
 //! Children are a tuple of nodes, node slices (`List.items`), optionals, strings and
 //! numbers; neighbouring strings and numbers become one text node. There is no raw
@@ -225,8 +225,8 @@ pub const Tree = struct {
     }
 };
 
-/// `h.vars(.{ .x = 31.5 })`: ` --x:31.5` for a style attribute. Numbers only, so a style
-/// value never carries data as CSS text
+/// `h.vars(.{ .x = 31.5 })`: ` --x:31.5` for a style attribute. Numbers and scale colours
+/// (fmt.WrColour) only, so a style value never carries data as CSS text
 pub const Vars = struct { css: []const u8 };
 
 /// `h.cls(.{ .thin = g < 1000, .off = s < 10 })` plus a fixed base: "row thin"
@@ -294,8 +294,15 @@ pub const H = struct {
         const V = @TypeOf(v);
         inline for (@typeInfo(V).@"struct".field_names, 0..) |f, i| {
             const x = @field(v, f);
-            comptime if (!isNumber(@TypeOf(x))) @compileError("h.vars ." ++ f ++ ": numbers only");
-            h.cssVar(&w, (if (i == 0) "--" else ";--") ++ f ++ ":", @floatCast(x));
+            const name = (if (i == 0) "--" else ";--") ++ f ++ ":";
+            if (@TypeOf(x) == figures.WrColour) {
+                w.print(h.mem, name ++ "{f}", .{x}) catch {
+                    h.oom = true;
+                };
+            } else {
+                comptime if (!isNumber(@TypeOf(x))) @compileError("h.vars ." ++ f ++ ": numbers and fmt.WrColour only");
+                h.cssVar(&w, name, @floatCast(x));
+            }
         }
         return .{ .css = w.items };
     }
@@ -415,6 +422,11 @@ pub const H = struct {
     const Kid = union(enum) { none, node: N, nodes: []const N, text: []const u8, int: i64, float: f64 };
 
     inline fn toKid(k: anytype) Kid {
+        if (@typeInfo(@TypeOf(k)) == .optional) return if (k) |v| toKidPlain(v) else .none;
+        return toKidPlain(k);
+    }
+
+    inline fn toKidPlain(k: anytype) Kid {
         const K = @TypeOf(k);
         if (K == N) return .{ .node = k };
         if (K == []const N or K == []N) return .{ .nodes = k };
@@ -424,7 +436,6 @@ pub const H = struct {
         return switch (@typeInfo(K)) {
             .int, .comptime_int => .{ .int = @intCast(k) },
             .float, .comptime_float => .{ .float = @floatCast(k) },
-            .optional => if (k) |v| toKid(v) else .none,
             else => @compileError("can't be a child: " ++ @typeName(K)),
         };
     }

@@ -65,6 +65,8 @@ fn same(comptime V: type, a: V, b: V) bool {
     if (comptime isStr(V)) return a.eql(&b);
     return switch (@typeInfo(V)) {
         .array => std.mem.eql(@typeInfo(V).array.child, &a, &b),
+        // Str's bytes past its length are undefined: compare what it holds
+        .optional => |o| if (a == null or b == null) a == null and b == null else same(o.child, a.?, b.?),
         else => std.meta.eql(a, b),
     };
 }

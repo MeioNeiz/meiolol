@@ -23,6 +23,7 @@ const filters = @import("filters.zig");
 const evalchart = @import("evalchart.zig");
 const flat = @import("flat.zig");
 const style = @import("style.zig");
+pub const ui = @import("ui");
 const patchday = @import("../patchday.zig");
 const patch_page = @import("patch.zig");
 const stats = @import("../stats.zig");
@@ -344,6 +345,9 @@ pub const shared_assets = [_]File{
     .{ .path = "filters.js", .data = @embedFile("static/filters.js") },
     .{ .path = "search.js", .data = @embedFile("static/search.js") },
     .{ .path = "account.js", .data = @embedFile("static/account.js") },
+    // Built (build.zig uiWasm), so never read from static_dir
+    .{ .path = "ui-stats.wasm", .data = @embedFile("ui-stats.wasm") },
+    .{ .path = "ui-stats.js", .data = @embedFile("ui-stats.js") },
 };
 /// And in every view's directory
 pub const view_assets = [_]File{
@@ -359,6 +363,7 @@ pub fn asset(arena: std.mem.Allocator, io: std.Io, opts: Options, name: []const 
         if (std.mem.eql(u8, f.path, name)) break f.data;
     } else return null;
     const dir = opts.static_dir orelse return embedded;
+    if (std.mem.startsWith(u8, name, "ui-")) return embedded;
     const path = try std.fs.path.join(arena, &.{ dir, name });
     const data = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 24));
     return if (std.mem.eql(u8, name, "style.css")) try style.rebuild(arena, data) else data;

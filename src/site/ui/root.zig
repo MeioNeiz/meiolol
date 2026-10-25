@@ -15,6 +15,7 @@ pub const tokens = @import("tokens.zig");
 pub const css = @import("css.zig");
 pub const diff = @import("diff.zig");
 pub const island = @import("island.zig");
+pub const tiers = @import("tiers.zig");
 pub const FakeDom = @import("fakedom.zig").Fake;
 
 /// Components whose CSS ships (css.join): add one when a page first uses it
@@ -32,4 +33,5 @@ test {
     std.testing.refAllDecls(@This());
     _ = @import("tests.zig");
     _ = @import("island_test.zig");
+    _ = @import("tiers_test.zig");
 }

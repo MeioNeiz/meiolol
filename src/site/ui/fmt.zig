@@ -112,6 +112,59 @@ pub fn ink(v: f32, cuts: [4]f32) []const u8 {
     return names[@as(usize, s) + if (v > 0) @as(usize, 0) else 4];
 }
 
+/// Win rate colour on the site's diverging scale (--lo4 to --hi4, docs/design-ideas.md):
+/// continuous, orange then hot pink below 50%, blue then aqua above, each colour at its
+/// stop's points (scaled by span / table_span). Grey only when it shows as 50.0%: every
+/// other rate has a side (J12). Not red against green: the pair red-green colour
+/// blindness merges. Few games fade by opacity, not colour
+pub fn wrColour(p: f64, span: f64) WrColour {
+    return .{ .pts = 100 * (p - 0.5) * table_span / span };
+}
+
+/// wrColour's span on the champions table, and for anything coloured to match it
+pub const table_span = 0.12;
+
+/// Aggregate scale (a champion's or matchup's rate over many games): the points where
+/// --hi1..--hi4 sit; past the last, --hi4. 4% of champion roles with 500+ games reach
+/// it
+const wr_stops = [_]f64{ 0, 2, 3.5, 5.5 };
+
+/// A colour of the scale, as a CSS value: `h.vars(.{ .c = wrColour(p, span) })`
+pub const WrColour = struct {
+    pts: f64,
+
+    /// A mix of the two stops either side
+    pub fn format(c: WrColour, w: *W) W.Error!void {
+        const side = if (c.pts < 0) "lo" else "hi";
+        const x = @abs(c.pts);
+        if (x < 0.05) return w.writeAll("var(--s0)");
+        if (x >= wr_stops[wr_stops.len - 1]) return w.print("var(--{s}4)", .{side});
+        var i: usize = 1;
+        while (x >= wr_stops[i]) i += 1;
+        const t = (x - wr_stops[i - 1]) / (wr_stops[i] - wr_stops[i - 1]);
+        const near: u8 = @round(100 * (1 - t));
+        if (near == 100) return w.print("var(--{s}{d})", .{ side, i });
+        if (near == 0) return w.print("var(--{s}{d})", .{ side, i + 1 });
+        try w.print("color-mix(in oklab,var(--{s}{d}) {d}%,var(--{s}{d}))", .{ side, i, near, side, i + 1 });
+    }
+};
+
+test wrColour {
+    var buf: [96]u8 = undefined;
+    const cases = .{
+        .{ 0.5004, "var(--s0)" },
+        .{ 0.501, "color-mix(in oklab,var(--hi1) 95%,var(--hi2))" },
+        .{ 0.495, "color-mix(in oklab,var(--lo1) 75%,var(--lo2))" },
+        .{ 0.52, "var(--hi2)" },
+        .{ 0.545, "color-mix(in oklab,var(--hi3) 50%,var(--hi4))" },
+        .{ 0.44, "var(--lo4)" },
+    };
+    inline for (cases) |c| {
+        const s = try std.mem.print(&buf, "{f}", .{wrColour(c[0], table_span)});
+        try std.testing.expectEqualStrings(c[1], s);
+    }
+}
+
 test "numbers read as the mock's" {
     var buf: [64]u8 = undefined;
     var w: W = .fixed(&buf);

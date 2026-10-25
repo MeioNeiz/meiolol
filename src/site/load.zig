@@ -22,6 +22,7 @@ const Stats = core.Stats;
 const log = std.log.scoped(.site);
 
 const root = @import("root.zig");
+const tierlist = @import("tierlist.zig");
 const Options = root.Options;
 const Site = root.Site;
 const File = root.File;
@@ -435,6 +436,7 @@ fn addFiles(site: *Site) !void {
         try files.appendSlice(arena, site.filter.files);
         try files.append(arena, .{ .path = stats_path, .data = site.model });
         try files.append(arena, .{ .path = "data/champions.json", .data = try championsJson(site) });
+        try files.append(arena, .{ .path = tierlist.data_path, .data = try tierlist.dataFile(site) });
         try files.append(arena, .{ .path = search.path, .data = try search.json(site) });
         {
             var aw: Writer.Allocating = .init(arena);
