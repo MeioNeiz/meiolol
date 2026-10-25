@@ -598,6 +598,7 @@ fn painted(page: []const u8) void {
     send(.{ .status = .{ .client = sent_client.? } });
     if (first_paint == null) {
         first_paint = t;
+        log("client: {t}", .{sent_client.?});
         if (opt.self_test) return finishSelfTest(true, "painted");
         // --measure starts and stops the pushes itself
         if (opt.demo and !opt.measure) pushing = true;
