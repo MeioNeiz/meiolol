@@ -319,3 +319,9 @@ Override the sections above where they differ. Raw: review artifact db, ids v2-*
    Riot in the production key application or a support ticket
 4. Private edition in game: item recommendations and the like (live advice the public
    edition can't show). Later, "we can get there when we get there"
+5. Long term: our own renderer of the component tree in place of WebView2 ("for fun"
+   and for learning; low priority). What it takes: CSS subset (style resolution),
+   layout (flex, grid, container queries; Clay or Yoga as a start), text (DirectWrite,
+   Core Text), painting (dvui's backends?), input and focus, the island runtime on our
+   own DOM, accessibility. Gain: tens of MB instead of 215-300. First step when picked
+   up: a week's spike drawing the lane card through Clay and DirectWrite, measured
