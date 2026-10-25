@@ -505,7 +505,7 @@ fn attrContext(comptime name: []const u8) Context {
 }
 
 /// on*, style and srcdoc values are script, CSS and HTML once entities are decoded
-fn isCodeAttr(comptime name: []const u8) bool {
+pub fn isCodeAttr(comptime name: []const u8) bool {
     return std.ascii.eqlIgnoreCase(name, "style") or std.ascii.eqlIgnoreCase(name, "srcdoc") or
         (name.len > 2 and std.ascii.startsWithIgnoreCase(name, "on"));
 }
@@ -513,7 +513,7 @@ fn isCodeAttr(comptime name: []const u8) bool {
 /// Attributes whose value a browser loads or navigates to: a javascript: URL there runs
 const url_attrs = [_][]const u8{ "href", "src", "action", "formaction", "poster", "cite", "data", "xlink:href" };
 
-fn isUrlAttr(name: []const u8) bool {
+pub fn isUrlAttr(name: []const u8) bool {
     for (url_attrs) |u| if (std.ascii.eqlIgnoreCase(u, name)) return true;
     return false;
 }
@@ -752,7 +752,7 @@ fn writeText(w: *Writer, s: []const u8, comptime ctx: Context, comptime around: 
 /// Relative, or http, https or mailto: what a page links to. Anything else with a
 /// scheme (javascript:, data:, or one hidden by whitespace) is refused. The URL is
 /// `before ++ s ++ after`
-fn safeUrl(comptime before: []const u8, s: []const u8, comptime after: []const u8) bool {
+pub fn safeUrl(comptime before: []const u8, s: []const u8, comptime after: []const u8) bool {
     var scheme: [8]u8 = undefined;
     var n: usize = 0;
     for ([_][]const u8{ before, s, after }) |part| for (part) |ch| switch (ch) {

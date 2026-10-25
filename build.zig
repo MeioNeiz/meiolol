@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const Translator = @import("translate_c").Translator;
 const tpl_errors = @import("src/tpl/compile_errors.zig");
+const ui_errors = @import("src/site/ui/compile_errors.zig");
 
 // 0.x releases break APIs; move versions on purpose
 comptime {
@@ -51,12 +52,13 @@ pub fn build(b: *std.Build) void {
         run.addPassthruArgs();
         b.step(e.name, b.fmt("Run {s} ({s})", .{ e.name, e.about })).dependOn(&run.step);
     }
-    for ([_]*std.Build.Module{ m.backend, m.app, m.core, m.store, m.tpl, m.net }) |mod| {
+    for ([_]*std.Build.Module{ m.backend, m.app, m.core, m.store, m.tpl, m.ui, m.net }) |mod| {
         const t = b.addTest(.{ .root_module = mod, .filters = test_filters });
         test_step.dependOn(&b.addRunArtifact(t).step);
     }
 
-    test_step.dependOn(tplErrorChecks(b, target, m.tpl));
+    test_step.dependOn(errorChecks(b, target, "tpl", m.tpl, "src/tpl/compile_errors.zig", &tpl_errors.cases));
+    test_step.dependOn(errorChecks(b, target, "ui", m.ui, "src/site/ui/compile_errors.zig", &ui_errors.cases));
 
     b.step("fmt", "Format the Zig sources").dependOn(&b.addFmt(.{ .paths = &fmt_paths }).step);
 
@@ -214,6 +216,7 @@ pub fn build(b: *std.Build) void {
 const Modules = struct {
     core: *std.Build.Module,
     tpl: *std.Build.Module,
+    ui: *std.Build.Module,
     net: *std.Build.Module,
     store: *std.Build.Module,
     backend: *std.Build.Module,
@@ -235,6 +238,15 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
         .root_source_file = b.path("src/tpl/root.zig"),
         .target = target,
         .optimize = optimize,
+    });
+
+    // The component system (docs/plan/ui/stack.md): std and tpl only, as it builds for
+    // the backend and for ui.wasm
+    const ui = b.createModule(.{
+        .root_source_file = b.path("src/site/ui/root.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "tpl", .module = tpl }},
     });
 
     // HTTP pieces std leaves out (rate limits, signatures): std only, library-grade (src/net/root.zig)
@@ -281,6 +293,7 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
             .{ .name = "core", .module = core },
             .{ .name = "store", .module = store },
             .{ .name = "tpl", .module = tpl },
+            .{ .name = "ui", .module = ui },
             .{ .name = "net", .module = net },
         },
         .link_libc = true,
@@ -334,7 +347,7 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
     chart_wasm.rdynamic = true;
     backend.addAnonymousImport("chart.wasm", .{ .root_source_file = chart_wasm.getEmittedBin() });
 
-    return .{ .core = core, .tpl = tpl, .net = net, .store = store, .backend = backend, .app = app };
+    return .{ .core = core, .tpl = tpl, .ui = ui, .net = net, .store = store, .backend = backend, .app = app };
 }
 
 /// The desktop window (src/desktop_main.zig): dvui with its Direct3D 11 backend, tree-sitter
@@ -441,18 +454,26 @@ fn desktopShot(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.la
     return exe;
 }
 
-/// Templates that must not compile (src/tpl/compile_errors.zig), each built on its own and
-/// expecting its error: a Zig test can't catch a compile error
-fn tplErrorChecks(b: *std.Build, target: std.Build.ResolvedTarget, tpl: *std.Build.Module) *std.Build.Step {
-    const step = b.step("tpl-errors", "Check that bad templates fail to compile, each with its error");
-    for (tpl_errors.cases) |c| {
+/// Code that must not compile (src/tpl/compile_errors.zig, src/site/ui/compile_errors.zig),
+/// each case built on its own and expecting its error: a Zig test can't catch a compile
+/// error
+fn errorChecks(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    comptime name: []const u8,
+    mod: *std.Build.Module,
+    root: []const u8,
+    cases: anytype,
+) *std.Build.Step {
+    const step = b.step(name ++ "-errors", "Check that bad " ++ name ++ " code fails to compile, each with its error");
+    for (cases) |c| {
         const options = b.addOptions();
         options.addOption([]const u8, "case", c.name);
         const t = b.addTest(.{ .name = c.name, .root_module = b.createModule(.{
-            .root_source_file = b.path("src/tpl/compile_errors.zig"),
+            .root_source_file = b.path(root),
             .target = target,
             .imports = &.{
-                .{ .name = "tpl", .module = tpl },
+                .{ .name = name, .module = mod },
                 .{ .name = "options", .module = options.createModule() },
             },
         }) });
