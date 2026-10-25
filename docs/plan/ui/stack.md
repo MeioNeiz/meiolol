@@ -313,3 +313,7 @@ Override the sections above where they differ. Raw: review artifact db, ids v2-*
    more helpful within policy: in-game contextual builds and helpful info
 2. Desktop measurements (in-game CPU, poller against the real client, focus-taking run)
    wait until he plays; they don't block building the app's screens
+3. In game "we will need overlay": the spiked topmost no-activate window (borderless
+   League only; injected overlays out), within policy (research/areas/policy.md: opt-in,
+   clear of minimap, scoreboard, shop and ability bar, own look, no enemy timers). Ask
+   Riot in the production key application or a support ticket
