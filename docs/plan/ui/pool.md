@@ -187,3 +187,6 @@ Override the sections above where they differ. Raw: review artifact db, ids v4-*
 
 1. Round 4 fine. Champion difficulty (pick-up) wanted somewhere general again, as the
    old pool page had: maybe its own page; to be looked into
+2. Pick-up difficulty (chat, 25 Oct): not yet, later. The champion page shows its own
+   difficulty; for now at most a very lean page of every champion's pick-up, linked from
+   champion pages and the pool; design it properly later
