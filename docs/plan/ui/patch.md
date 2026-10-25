@@ -122,8 +122,16 @@ Delta bar and Badge patch in the desktop's suggestion reasons ("buffed this patc
 +2.6"), subject to production-key.md wording rules (no "+X% win rate" claims about a
 pick: the patch change is the champion's measured change, not a promise).
 
-## Open questions for Jacob
+## Questions for Jacob (24 Oct)
 
 1. Default filter: clear moves plus Riot's changes (plan), or every champion?
 2. Ability numbers from CommunityDragon worth 2-3 days now, or Data Dragon's diff and a
    link to the notes first?
+
+## Jacob's answers (25 Oct)
+
+Override the sections above where they differ.
+
+1. Default filter: clear moves plus Riot's changes
+2. Both sources long term (CommunityDragon ability numbers with Data Dragon); plan for
+   the most useful page, not the cheapest first step. Order of building left to the plan

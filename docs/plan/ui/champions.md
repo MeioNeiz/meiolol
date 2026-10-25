@@ -117,8 +117,20 @@ the win rate.
 DataTable, RolePicker, Delta arrow, StatCell fill; a champ select "your pool" list is the
 same table filtered to the pool.
 
-## Open questions for Jacob
+## Questions for Jacob (24 Oct)
 
 1. Delta arrow in its own column (plan), or the arrow inside the win rate cell?
 2. Keep Ban value (Influence) at all? It needs a Toggletip to mean anything
 3. Default role: the visitor's main when known, or always All?
+
+## Jacob's answers (25 Oct)
+
+Override the sections above where they differ.
+
+1. Patch change as a simple delta (signed number, coloured when clear), not the long
+   dot-to-dot track. The players' spread violin stays in the table ("i really liked
+   something that shows the distribution like we had before"), tidied to fit the rows
+2. Ban value: "Riot dont like ban value, but maybe could be more intuitive, maybe just a
+   toggletip". Keep only if it reads without explanation; check production-key.md
+   product rules before it ships
+3. Default role always All: consistent, never the visitor's main

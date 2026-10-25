@@ -231,9 +231,20 @@ player's seat open); CandidateList and ReasonBreakdown are its suggestion list a
 no points, production-key.md product rules); WinSplit stays private (the private app).
 ChoiceCards and ResultStrip: not on desktop.
 
-## Open questions for Jacob
+## Questions for Jacob (24 Oct)
 
 1. Pick order (The last pick problem): option 4 now and run the spectator test for 1,
    or another? With 4, "Who played red bot?" as the question
 2. Hints that cost the "spot on" mark: wanted, or keep the puzzle pure?
 3. "Try this pick in the board" (moves the on-paper bar): worth the bigger puzzle file?
+
+## Jacob's answers (25 Oct)
+
+Override the sections above where they differ.
+
+1. Pick order wanted, and the hidden seat is always the last pick. Pro games
+   (Leaguepedia, option 3) now; app users' games (LCU, option 2) once there are enough.
+   The first-screen matchup board is still space-inefficient and "doesnt look cool
+   enough": redesign in the visual pass
+2. Hints that cost the "spot on" mark: yes
+3. "Try this pick in the board": yes, later (medium)

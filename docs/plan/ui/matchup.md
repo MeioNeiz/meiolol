@@ -130,8 +130,16 @@ OutcomeCurve, TrendChart, DataTable, DuoPair, Chip.
 The whole page is the desktop's in-game "your lane" view: StatStrip, LaneChart,
 Versus, the pair's BuildPanel. MatchupGrid strip is the desktop's enemy picker.
 
-## Open questions for Jacob
+## Questions for Jacob (24 Oct)
 
 1. One LaneChart with a Gold | XP | CS switch, or keep three charts but larger (two
    rows)? Plan: one with a switch
 2. Range select on the lane chart worth a curves format change (per-minute kills)?
+
+## Jacob's answers (25 Oct)
+
+Override the sections above where they differ.
+
+1. One LaneChart with a switch, for now. Tabs and buttons are too small and look tacked
+   on, not part of the UI: controls become first class in the visual pass (all pages)
+2. No range select on the lane chart; curves stay as they are

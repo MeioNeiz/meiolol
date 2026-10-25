@@ -307,7 +307,7 @@ New features from day one: built from register components; a missing one is adde
 the register and the gallery first, in its own commit. No feature work on the old UI
 unless the coordinator says so.
 
-## Questions for Jacob
+## Questions for Jacob (24 Oct)
 
 1. WebView2 spike now, before the desktop review (recommended), or after? (The stack
    session now runs the desktop toolkit spikes; this may be answered there)
@@ -323,3 +323,21 @@ unless the coordinator says so.
    tiers mode leaves ReasonBreakdown as direction-only chips ("into Yuumi ▲"), which
    says little. What should the public "why" show: words per reason, a ranked list of
    reasons, or the bars without numbers?
+
+## Jacob's answers (25 Oct)
+
+Override the sections above where they differ.
+
+Review page answers (claude.ai artifact, db collection answers), all 42 in the page
+plans' own answers sections.
+
+1. WebView2 desktop spike now, in parallel with the foundation
+2. Type: whole pixels ("dont want .5 in pixels"): 11, 12, 13, 16, 22; body and tables 13
+3. Table headers uppercase 11 px
+4. Fight strip above the chart, death portraits on its edges: yes, refined while built
+5. First page: ours to choose; champion page (most shared components)
+6. Public "why": reasons, few words, displayed well; no tiers. Still to design
+7. Across pages: fewer words worked, but several mocks now look plain, empty or clunky
+   (home, Your games, Daily Draft board, pool chart, draft tester) and controls (tabs,
+   segmented, buttons) look small and tacked on. One visual pass on the gallery before
+   page building: first-class controls, denser use of space

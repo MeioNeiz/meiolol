@@ -78,6 +78,12 @@ All five role tables, the intro sentence, Min games floors, the index's 4.4 MB.
 
 ChampRolePicker pair is the desktop's "look up a lane" box.
 
-## Open questions for Jacob
+## Questions for Jacob (24 Oct)
 
 1. Keep any full list at all (e.g. a role's 50 most played pairs as a table)? Plan: no
+
+## Jacob's answers (25 Oct)
+
+Override the sections above where they differ.
+
+1. No list

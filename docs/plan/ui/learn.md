@@ -178,8 +178,18 @@ label and games; foundation to say if that is its own entry), Toggletip, Card, B
 PuzzleCard and GuessSlider as a "while you queue" card in the app (outside champ select;
 no live advice). DraftBoard and ChoiceCards come with the champ select work anyway.
 
-## Open questions for Jacob
+## Questions for Jacob (24 Oct)
 
 1. First visit straight into puzzle 1 (map one tap away), or the map first?
 2. Practice drills: drop from the default path and keep only clear chapter-end drafts?
 3. Stars for closeness (GeoGuessr style), or just right/wrong marks?
+
+## Jacob's answers (25 Oct)
+
+Override the sections above where they differ.
+
+1. Neither as drawn: "Map + lesson 1 ... feels like too much with that big text first";
+   too much shown at once with the scroll down the page. One thing per screen, smaller
+   heading; rework in the visual pass
+2. Drop Practice drills from the default path; clear chapter-end drafts only
+3. Stars 0-3

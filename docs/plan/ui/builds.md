@@ -84,6 +84,19 @@ whose share it is).
 
 RuneTree with stats and DataTable compact are the desktop's rune and item import view.
 
-## Open questions for Jacob
+## Questions for Jacob (24 Oct)
 
 1. Expand in place (plan) or a side drawer that keeps the rest of the panel visible?
+
+## Jacob's answers (25 Oct)
+
+Override the sections above where they differ.
+
+1. Expand in place, for now. Later the slot must show far more options than a top 3
+   and a table.
+2. Contextual builds (Jacob: "def will be doing"): like LoLalytics, choosing a rune or
+   one or more items filters the rest of the page to games with that choice, and the
+   rest of the build is shown in that context. Needs its own data design (builds per
+   combination of choices, not per slot: on-demand queries over game rows, or
+   precomputed combinations; ties to E7 day cubes, docs/plan/estimates.md). BuildPanel
+   is built to take filters from the start

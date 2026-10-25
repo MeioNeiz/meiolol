@@ -101,6 +101,11 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
   because it exists ("dvui was a very early decision"); a plan per page and Jacob's
   review before building; new features built the new way. Review:
   docs/review/page-review-2026-10-24.md; direction: docs/frontend.md
+- J30 (25 Oct) UI plans reviewed (42 answers, each plan's "Jacob's answers" section):
+  one UI for site and desktop, the webview's extra 200-290 MB accepted; efficiency and
+  page speed over dev ease; whole-pixel type; contextual builds (filter the build by
+  chosen runes and items) are a planned feature with their own data design. Mocks read
+  plain or clunky in places: a visual pass on the gallery before pages are built
 - nn on the GPU: planned, not now
 - Q1 Rewrite the application around game review of your own games, lane curves as the
   benchmark; squads worded as planned, or out until built

@@ -177,10 +177,20 @@ ChampHeader (smaller), BuildPanel and RuneTree (the in-game rune page import vie
 MatchupGrid tiles (champ select: the enemy laner's tile), TrendChart, Toggletip. The
 desktop's "why this pick" links open this page in its role.
 
-## Open questions for Jacob
+## Questions for Jacob (24 Oct)
 
 1. Highest win rate shown by colour alone (the number is the key) or also a small marker
    on the top option of each slot? Plan: colour alone
 2. Matchup tiles: win rate plus a vs usual bar (gold in the tip), or keep all four
    numbers on the tile? Plan: two, Table view has all
 3. Tier letter (CH0 c): still no?
+
+## Jacob's answers (25 Oct)
+
+Override the sections above where they differ.
+
+1. Highest win rate by colour alone
+2. Matchups: neither as drawn. "Dont really like the toggle between table or not, but
+   also not a massive massive fan of tiles although its close to good". Redesign in the
+   visual pass: one view, no Tiles | Table toggle
+3. No tier letters

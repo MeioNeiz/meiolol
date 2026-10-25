@@ -278,7 +278,7 @@ independent of components and can run beside it.
 
 Foundation grows from README's 11-13 days to about 13-16; pages follow as README lists.
 
-## Questions for Jacob
+## Questions for Jacob (24 Oct)
 
 1. Desktop memory: the webview app costs 200 to 290 MB more than today's dvui window
    while League runs (the same as Porofessor or iTero). One UI for site and app at that
@@ -287,3 +287,12 @@ Foundation grows from README's 11-13 days to about 13-16; pages follow as README
    same), or allow the 72-line generic op applier as the one other JS file?
 3. Several ui.wasm files per page family when the 40 KB budget is reached, or a larger
    budget for one file?
+
+## Jacob's answers (25 Oct)
+
+Override the sections above where they differ.
+
+1. One UI; the extra 200 to 290 MB is acceptable. Efficiency over dev ease otherwise:
+   page load and page speed are not traded away
+2. zjb calls, no JS beyond the loader
+3. Several ui.wasm files per page family (each page loads only its code)

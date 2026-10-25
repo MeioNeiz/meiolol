@@ -240,10 +240,21 @@ game-row and record-tile are the desktop's "last games" list and post-game badge
 player-bar's form strip and record work in the desktop's session view (`meiolol-app
 session`). friend-row only on the site.
 
-## Open questions for Jacob
+## Questions for Jacob (24 Oct)
 
 1. Four views as tabs, or keep one long page with the sections tighter? (Recommended:
    tabs; Over time and Friends need the room and scale badly inside a scroll.)
 2. Land on the Games list or the newest game (above)
 3. Over time's default measure: gold at 14 against typical, or something less
    lane-bound (win chance at 15) so junglers and supports get a fair line?
+
+## Jacob's answers (25 Oct)
+
+Override the sections above where they differ.
+
+1. Tabs, but the page looks empty and not everything should hide behind tabs: the
+   Games view keeps a summary of the others (e.g. top highlights, a small Over time
+   line) above or beside the list
+2. Open the newest game when it ended under 3 hours ago
+3. Over time's default measure: win chance at 15 (fair to every role); gold at 14 vs
+   typical stays as an option

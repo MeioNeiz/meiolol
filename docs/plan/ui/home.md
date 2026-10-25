@@ -99,9 +99,17 @@ ChampSearch, PlayerBar (compact), ResultStrip (form).
 Only id-lookup (the desktop's account link) and today-card's Daily Draft (a desktop
 "between games" panel). The rest is site only.
 
-## Open questions for Jacob
+## Questions for Jacob (24 Oct)
 
 1. A returning visitor sees their own newest game instead of the example: yes? It makes
    the home page personal, which design-ideas.md asks for, at the cost of everyone's
    home looking different
 2. Keep Learn on home, or only Daily Draft and the patch?
+
+## Jacob's answers (25 Oct)
+
+Override the sections above where they differ.
+
+1. Personal home: a returning visitor sees their own newest game
+2. Daily Draft and patch only, no Learn card. The page now looks plain and less
+   inviting than before, though better: give it life in the visual pass

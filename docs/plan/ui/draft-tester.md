@@ -167,9 +167,20 @@ DraftBoard, CandidateList, ReasonBreakdown, ChampSearch are the champ select scr
 ModelBadge in the app's About (which model the app runs, from where). WinSplit and the
 HeatGrid stay in the private app (no draft win chance in public champ select).
 
-## Open questions for Jacob
+## Questions for Jacob (24 Oct)
 
 1. Model names: "Ratings + pairs", "Additive v2", "Set net x6", "Lane 3c-team2": fine,
    or names of your own?
 2. Compare two models on one board (the "vs" Select): wanted now, or one model at a time?
 3. The pair grid (what affects what) on the first screen, or behind a Terms view?
+
+## Jacob's answers (25 Oct)
+
+Override the sections above where they differ.
+
+1. Names must say what each model is; ours to choose. Proposed: "Live draft model"
+   (Ratings + pairs), "Comp model, lab" (Additive v2), "Neural set model, lab" (Set net
+   x6), "Lane model" (Lane 3c-team2); used-in and from tags as planned
+2. One model by default; a compare option to put a second beside it
+3. Pair grid on the first screen. The page is "much better than it was" but clunky with
+   too much wasted space: tighten in the visual pass

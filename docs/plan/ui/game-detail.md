@@ -271,9 +271,19 @@ if WebView2 wins the spike; if dvui stays, timeline-graph and lane-duel are the 
 components that would need a dvui twin. Daily Draft's game stats (play) reuse
 game-header (without "you"), team-compare, scoreboard and timeline-graph read-only.
 
-## Open questions for Jacob
+## Questions for Jacob (24 Oct)
 
 1. The inspector opens on the turning minute. Or on the whole game, with the turn only
    marked? (Recommended: turning minute; it is the answer.)
 2. Gold toggle on the game graph: worth the second series, or win chance only?
 3. Players: lane rows by default with a sortable Table beside them, or the Table only?
+
+## Jacob's answers (25 Oct)
+
+Override the sections above where they differ.
+
+1. Opens on the turning minute. Several turns ("what if there are multiple?"): opens on
+   the biggest, the others marked on the graph and reached with the moment stepper
+2. Win chance with a Gold toggle
+3. Lane rows only, no Table ("just looks worse")
+4. Phone: fight marks clustered per minute

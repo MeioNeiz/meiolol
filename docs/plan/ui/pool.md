@@ -149,8 +149,19 @@ The pool is the app's own setting (meiolol-app session knows the player's champi
 PoolSlots as its pool editor, the HeatGrid as "your pool vs their likely picks" before
 champ select, CandidateList with the same rows. The pick-up dumbbell: an info view only.
 
-## Open questions for Jacob
+## Questions for Jacob (24 Oct)
 
 1. Prefill from the last Your games lookup automatically, or offer it with one tap?
 2. Pick-up chart first when no pool is chosen (as planned), or the pool picker alone?
 3. Keep the "Table" view of all 172 for sorting, or the chart only?
+
+## Jacob's answers (25 Oct)
+
+Override the sections above where they differ.
+
+1. Empty by default; offer "your pool from Your games" with one tap, showing what it
+   would add
+2. The page's purpose must be clearer. The pool is the main part (weak lanes, what to
+   add: "just so cool"); how hard a champion is to pick up is often the most
+   interesting thing. Both stay; the flow between them gets reworked
+3. No Table view; the chart must show all the information well instead

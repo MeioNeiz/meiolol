@@ -48,8 +48,9 @@ players back. 18 Oct's list with its done items: docs/archive/plan-now-2026-10-1
    Mac (deploy/mock-cs.sh); privacy rules audit (docs/privacy-rules.md)
 3. Front end from the ground up (J29, 24 Oct): one UI for the site and the desktop.
    Team run 2026-10-24-ui wrote the page plans and the foundation (docs/plan/ui/); the
-   stack decision runs by spikes (docs/plan/ui/stack.md); then Jacob reviews, then the
-   foundation build. Direction: docs/frontend.md. Earlier scoping: docs/frontend-rework.md
+   stack decided by spikes (docs/plan/ui/stack.md); Jacob reviewed 25 Oct (J30, answers
+   in each plan). Next: visual pass on the gallery and the mocks he found plain, with
+   the foundation build (tree core, island runtime) beside it. Direction: docs/frontend.md. Earlier scoping: docs/frontend-rework.md
 4. Next on the site, by size of win: champion and matchup pages to the leaders' level
    (Jacob 22 Oct: "match" LoLalytics; gaps, measurements and target layout in
    docs/champion-matchup.md): site.md CH0 (Jacob's choices), CH1-CH9, MU1-MU8, first
