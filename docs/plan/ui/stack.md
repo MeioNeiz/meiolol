@@ -317,3 +317,5 @@ Override the sections above where they differ. Raw: review artifact db, ids v2-*
    League only; injected overlays out), within policy (research/areas/policy.md: opt-in,
    clear of minimap, scoreboard, shop and ability bar, own look, no enemy timers). Ask
    Riot in the production key application or a support ticket
+4. Private edition in game: item recommendations and the like (live advice the public
+   edition can't show). Later, "we can get there when we get there"
