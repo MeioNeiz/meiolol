@@ -178,7 +178,7 @@ test "views: a tree each, switches between them, shared pages once" {
         "<a href=\"../champions.html\" data-region=\"EUW1\">EUW</a>",
         "<a aria-disabled=\"true\" title=\"Champion pages only\" data-region=\"KR\">KR</a>",
         "<a aria-disabled=\"true\" title=\"Champion pages only\" data-rank=\"6\">Diamond+</a>",
-        "href=\"../style.css\"",
+        "href=\"../style.css?v=",
         "href=\"../daily.html\"",
         "href=\"../champion/a.html?region=all\"",
     }) |s| try std.testing.expect(std.mem.find(u8, tiers, s) != null);
@@ -190,7 +190,7 @@ test "views: a tree each, switches between them, shared pages once" {
         "<a href=\"../champion/a.html?region=KR\" data-region=\"KR\">KR</a>",
         "<a href=\"../champion/a.html?rank=6\" data-rank=\"6\">Diamond+</a>",
         "<span data-foot>in EUW, last 30 days",
-        "href=\"../style.css\"",
+        "href=\"../style.css?v=",
         "<a href=\"../champions.html\" aria-current=\"page\" data-view>",
     }) |s| try std.testing.expect(std.mem.find(u8, champ, s) != null);
     try std.testing.expectError(error.FileNotFound, read(arena, out, "all/champion/a.html"));

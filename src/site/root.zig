@@ -22,6 +22,7 @@ const lean = @import("../lean.zig");
 const filters = @import("filters.zig");
 const evalchart = @import("evalchart.zig");
 const flat = @import("flat.zig");
+const style = @import("style.zig");
 const patchday = @import("../patchday.zig");
 const patch_page = @import("patch.zig");
 const stats = @import("../stats.zig");
@@ -330,7 +331,7 @@ pub const File = daily.File;
 
 /// Front-end files at the site root; `Options.static_dir` serves them from disk instead
 pub const shared_assets = [_]File{
-    .{ .path = "style.css", .data = @embedFile("static/style.css") },
+    .{ .path = "style.css", .data = style.bundle },
     .{ .path = "favicon.svg", .data = @embedFile("static/favicon.svg") },
     .{ .path = "daily.js", .data = @embedFile("static/daily.js") },
     .{ .path = "reasons.js", .data = @embedFile("static/reasons.js") },
@@ -359,7 +360,8 @@ pub fn asset(arena: std.mem.Allocator, io: std.Io, opts: Options, name: []const 
     } else return null;
     const dir = opts.static_dir orelse return embedded;
     const path = try std.fs.path.join(arena, &.{ dir, name });
-    return try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 24));
+    const data = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 24));
+    return if (std.mem.eql(u8, name, "style.css")) try style.rebuild(arena, data) else data;
 }
 
 /// Pages at the site root, from the shared view (renderShared)
@@ -381,6 +383,7 @@ pub fn robots(arena: std.mem.Allocator, opts: Options) ![]const u8 {
 }
 
 test {
+    _ = style;
     _ = evalchart;
     _ = flat;
     _ = @import("puzzles.zig");

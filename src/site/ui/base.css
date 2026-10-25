@@ -1,0 +1,44 @@
+/* Base element styles (layer base). Transcribed from the gallery's mocks/tokens.css by
+   data/team/2026-10-25-ui-build/tools/tokens2zig.py. Under :where(.ui) (no added
+   specificity): pages still on legacy CSS are unchanged; a rebuilt page's body and an
+   island's root carry class ui */
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: var(--w-r) var(--fs-m) / var(--lh) var(--font); font-feature-settings: "cv11", "ss01"; -webkit-font-smoothing: antialiased; }
+  :where(.ui) :is(h1, h2, h3) { margin: 0; line-height: var(--lh-tight); }
+  :where(.ui) h1 { font-size: var(--fs-xl); font-weight: var(--w-b); letter-spacing: -0.025em; }
+  :where(.ui) h2 { font-size: var(--fs-l); font-weight: var(--w-b); letter-spacing: -0.015em; }
+  :where(.ui) h3 { font-size: var(--fs-m); font-weight: var(--w-b); }
+  :where(.ui) p { margin: 0; }
+  :where(.ui) small { font-size: var(--fs-s); }
+  :where(.ui) a { color: var(--accent); text-decoration: none; }
+  :where(.ui) a:hover { text-decoration: underline; }
+  :where(.ui) img { display: block; }
+  [hidden] { display: none !important; }
+  :where(.ui) :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  :where(.ui) :is(button, input, select) { font: inherit; color: inherit; }
+  :where(.ui) button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: var(--ctl); padding: 0 14px; border: 1px solid var(--ctl-line); border-radius: var(--r-ctl); background: var(--ctl-bg); cursor: pointer; white-space: nowrap; font-weight: var(--w-m); transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+  :where(.ui) button:hover { background: var(--ctl-bg-2); }
+  :where(.ui) button:active { transform: translateY(1px); }
+  :where(.ui) :is(input, select) { min-height: var(--ctl); padding: 0 var(--sp-3); border: 1px solid var(--ctl-line); border-radius: var(--r-ctl); background: var(--ctl-bg); min-width: 0; }
+  :where(.ui) input::placeholder { color: var(--faint); }
+  :where(.ui) input:hover { background: var(--ctl-bg-2); }
+  :where(.ui) :is(input:focus, select:focus) { outline: none; border-color: var(--sel-line); box-shadow: 0 0 0 3px var(--accent-bg); }
+  :where(.ui) table { width: 100%; border-collapse: collapse; }
+  :where(.ui) :is(th, td) { padding: 0 var(--sp-2); height: var(--row); text-align: left; white-space: nowrap; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  :where(.ui) th { font-size: var(--fs-xs); font-weight: var(--w-b); color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  :where(.ui) .num { text-align: right; font-variant-numeric: tabular-nums; }
+  :where(.ui) .muted { color: var(--muted); }
+  :where(.ui) .faint { color: var(--faint); }
+  :where(.ui) .v { color: var(--c, var(--text)); font-variant-numeric: tabular-nums; }
+  :where(.ui) .lo4 { color: var(--lo4); }
+  :where(.ui) .lo3 { color: var(--lo3); }
+  :where(.ui) .lo2 { color: var(--lo2); }
+  :where(.ui) .lo1 { color: var(--lo1); }
+  :where(.ui) .s0 { color: var(--s0); }
+  :where(.ui) .hi1 { color: var(--hi1); }
+  :where(.ui) .hi2 { color: var(--hi2); }
+  :where(.ui) .hi3 { color: var(--hi3); }
+  :where(.ui) .hi4 { color: var(--hi4); }
+}

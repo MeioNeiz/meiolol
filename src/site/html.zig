@@ -4,6 +4,7 @@ const std = @import("std");
 const core = @import("core");
 const Writer = std.Io.Writer;
 pub const tpl = @import("tpl");
+const style = @import("style.zig");
 
 pub const product = "meiolol";
 
@@ -160,7 +161,7 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
     , .{
         .title = p.title,
         .description = p.description,
-        .css = toSite(p, "style.css"),
+        .css = toSite(p, style.link),
         .icon = toSite(p, "favicon.svg"),
         .robots = tpl.when(!p.public or !p.index, tpl.trusted("<meta name=\"robots\" content=\"noindex\">\n")),
         .canonical = if (p.public and p.index) if (p.canonical) |url|
