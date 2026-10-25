@@ -52,13 +52,18 @@ pub fn build(b: *std.Build) void {
         run.addPassthruArgs();
         b.step(e.name, b.fmt("Run {s} ({s})", .{ e.name, e.about })).dependOn(&run.step);
     }
-    for ([_]*std.Build.Module{ m.backend, m.app, m.core, m.store, m.tpl, m.ui, m.net }) |mod| {
+    for ([_]*std.Build.Module{ m.backend, m.app, m.core, m.store, m.tpl, m.net }) |mod| {
         const t = b.addTest(.{ .root_module = mod, .filters = test_filters });
         test_step.dependOn(&b.addRunArtifact(t).step);
     }
+    // Component work's inner loop (deploy/zb.sh test-ui): the backend imports ui, so a ui
+    // edit under plain `test` rebuilds the backend's tests too
+    const test_ui_step = b.step("test-ui", "Run the ui module's tests only (-Dtest-filter=NAME)");
+    test_ui_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = m.ui, .filters = test_filters })).step);
+    test_ui_step.dependOn(errorChecks(b, target, "ui", m.ui, "src/site/ui/compile_errors.zig", &ui_errors.cases));
+    test_step.dependOn(test_ui_step);
 
     test_step.dependOn(errorChecks(b, target, "tpl", m.tpl, "src/tpl/compile_errors.zig", &tpl_errors.cases));
-    test_step.dependOn(errorChecks(b, target, "ui", m.ui, "src/site/ui/compile_errors.zig", &ui_errors.cases));
     const shell_test = b.createModule(.{
         .root_source_file = b.path("src/shell/test.zig"),
         .target = target,

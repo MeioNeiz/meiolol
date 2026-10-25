@@ -73,7 +73,11 @@ docs/plan.md "Now". Read it first.
 - Batch reads: several files or line ranges in one Bash call (`sed -n 1,40p a; sed -n
   80,120p b`), independent calls in parallel in one turn; never one read per turn
 - Waiting: run_in_background, then wait for the notification
-- Tests: `zig build test 2>&1 | tee $SCRATCH/t.log | tail -30`, then grep the log
+- Builds and tests through `deploy/zb.sh test|test-ui|ci|<zig build args>`: one build
+  at a time across sessions, and a run that started after your request answers it.
+  UI work: `test-ui` while iterating, `test` before a commit. Push: `lockf
+  ~/.cache/meiolol-zig.lock git push ...`
+- Tests: `deploy/zb.sh test 2>&1 | tee $SCRATCH/t.log | tail -30`, then grep the log
 - Past ~200k context, hand over at the next natural break (step committed); a new
   topic starts fresh (fleet skill)
 - Team runs: shared state in the run's common.md; messages are "done: <path>" or
