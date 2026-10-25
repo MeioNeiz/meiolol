@@ -30,13 +30,18 @@ pub const toggletip = @import("toggletip.zig");
 pub const stat = @import("stat.zig");
 pub const delta = @import("delta.zig");
 pub const bar = @import("bar.zig");
+pub const kda = @import("kda.zig");
+pub const strip = @import("strip.zig");
+pub const split = @import("split.zig");
+pub const role = @import("role.zig");
+pub const champ = @import("champ.zig");
 pub const table = @import("table.zig");
 
 /// Components whose CSS ships (css.join): add one when a page first uses it
 pub const components = .{};
 
 /// Every component, in the gallery's order
-pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, table };
+pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, role, champ, table };
 
 pub const H = tree.H;
 pub const N = tree.N;
