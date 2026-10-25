@@ -48,6 +48,7 @@ pub const Tag = enum(u8) {
     input,
     label,
     li,
+    mark,
     nav,
     ol,
     option,
@@ -590,6 +591,9 @@ pub const H = struct {
     }
     pub inline fn li(h: *H, at: anytype, k: anytype) N {
         return h.el(.li, at, k);
+    }
+    pub inline fn mark(h: *H, at: anytype, k: anytype) N {
+        return h.el(.mark, at, k);
     }
     pub inline fn p(h: *H, at: anytype, k: anytype) N {
         return h.el(.p, at, k);

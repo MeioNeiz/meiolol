@@ -37,13 +37,14 @@ pub const role = @import("role.zig");
 pub const champ = @import("champ.zig");
 pub const rolepicker = @import("rolepicker.zig");
 pub const filterbar = @import("filterbar.zig");
+pub const champsearch = @import("champsearch.zig");
 pub const table = @import("table.zig");
 
 /// Components whose CSS ships (css.join): add one when a page first uses it
 pub const components = .{};
 
 /// Every component, in the gallery's order
-pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, role, champ, rolepicker, filterbar, table };
+pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, role, champ, rolepicker, filterbar, champsearch, table };
 
 pub const H = tree.H;
 pub const N = tree.N;
@@ -59,6 +60,7 @@ test {
     _ = @import("island_test.zig");
     _ = @import("tiers_test.zig");
     _ = @import("table_test.zig");
+    _ = @import("champsearch_test.zig");
 }
 
 test "every component: scoped, linted CSS; clean states; no dead class" {

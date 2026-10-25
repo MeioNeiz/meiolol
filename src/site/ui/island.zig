@@ -40,6 +40,9 @@ pub fn Runtime(comptime Dom: type) type {
         islands: std.ArrayList(Slot) = .empty,
         /// The fragment as last written, to skip a history call when nothing changed
         hash: std.ArrayList(u8) = .empty,
+        /// In a handler or a patch: removing a focused node fires focusout synchronously
+        /// in some engines, and that event must not start a second patch
+        busy: bool = false,
 
         const R = @This();
 
@@ -75,13 +78,17 @@ pub fn Runtime(comptime Dom: type) type {
         }
 
         pub fn event(r: *R, island: usize, in: Input) bool {
-            if (island >= r.islands.items.len) return false;
+            if (island >= r.islands.items.len or r.busy) return false;
+            r.busy = true;
+            defer r.busy = false;
             const s = r.islands.items[island];
             return s.event(s.ctx, in);
         }
 
         /// Back or Forward: every island reads the fragment again
         pub fn popstate(r: *R) void {
+            r.busy = true;
+            defer r.busy = false;
             var buf: [1024]u8 = undefined;
             const h = r.dom.hash(&buf);
             for (r.islands.items) |s| {
