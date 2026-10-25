@@ -72,10 +72,10 @@ pub const css =
     \\  .c-select::after { content: ""; width: 6px; height: 6px; margin-left: 2px; border-right: 1.5px solid var(--muted);
     \\    border-bottom: 1.5px solid var(--muted); transform: rotate(45deg) translate(-2px, -2px); }
     \\  .c-select[data-s="s"] { height: var(--ctl-s); min-height: 0; padding: 0 10px; font-size: var(--fs-s); }
-    \\  .c-menu { margin: 0; padding: 4px; border: 1px solid var(--line-2); border-radius: var(--r-l);
+    \\  .c-menu { padding: 4px; border: 1px solid var(--line-2); border-radius: var(--r-l);
     \\    background: var(--panel-2); color: var(--text); box-shadow: var(--shadow-pop); gap: 2px; }
     \\  .c-menu:popover-open { display: grid; }
-    \\  .c-menu.static { display: inline-grid; box-shadow: none; }
+    \\  .c-menu.static { display: inline-grid; margin: 0; box-shadow: none; }
     \\  .c-menu[data-cols="1"] { grid-template-columns: auto; }
     \\  .c-menu[data-cols="4"] { grid-template-columns: repeat(4, auto); }
     \\  .c-menu > button { all: unset; position: relative; padding: 0 12px; height: var(--ctl-s); display: flex;
@@ -85,7 +85,7 @@ pub const css =
     \\  .c-menu > [aria-selected="true"] { background: var(--sel-bg); color: var(--sel-ink); font-weight: var(--w-m); }
     \\  .c-menu > .wide { grid-column: 1 / -1; }
     \\  @supports (position-area: bottom) {
-    \\    .c-menu { inset: auto; margin-top: 4px; position-area: bottom span-right; position-try-fallbacks: flip-block, flip-inline; }
+    \\    .c-menu { inset: auto; margin: 4px 0 0; position-area: bottom span-right; position-try-fallbacks: flip-block, flip-inline; }
     \\  }
     \\}
     \\

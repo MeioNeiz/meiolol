@@ -52,6 +52,7 @@ pub const Tag = enum(u8) {
     ol,
     option,
     p,
+    s,
     section,
     select,
     small,
@@ -295,12 +296,13 @@ pub const H = struct {
         inline for (@typeInfo(V).@"struct".field_names, 0..) |f, i| {
             const x = @field(v, f);
             const name = (if (i == 0) "--" else ";--") ++ f ++ ":";
-            if (@TypeOf(x) == figures.WrColour) {
+            const X = @TypeOf(x);
+            if (X == figures.WrColour or X == figures.Step or X == figures.Fill) {
                 w.print(h.mem, name ++ "{f}", .{x}) catch {
                     h.oom = true;
                 };
             } else {
-                comptime if (!isNumber(@TypeOf(x))) @compileError("h.vars ." ++ f ++ ": numbers and fmt.WrColour only");
+                comptime if (!isNumber(@TypeOf(x))) @compileError("h.vars ." ++ f ++ ": numbers and scale colours (fmt.WrColour, Step, Fill) only");
                 h.cssVar(&w, name, switch (@typeInfo(@TypeOf(x))) {
                     .int, .comptime_int => @floatFromInt(x),
                     else => @floatCast(x),

@@ -35,6 +35,11 @@ pub const Fake = struct {
         parent: ?*FNode = null,
     };
 
+    /// A copy, as the browser keeps: the island's render arenas are reused
+    fn own(f: *Fake, s: []const u8) []const u8 {
+        return f.a.dupe(u8, s) catch unreachable;
+    }
+
     fn put(f: *Fake, id: u32, n: FNode) void {
         const p = f.a.create(FNode) catch unreachable;
         p.* = n;
@@ -45,10 +50,10 @@ pub const Fake = struct {
     /// Mirror an existing tree whose nodes have their ids
     pub fn mirror(f: *Fake, t: *const tree.Tree, n: tree.N) *FNode {
         const x = t.node(n);
-        f.put(x.dom, .{ .tag = @tagName(x.tag), .text = x.text });
+        f.put(x.dom, .{ .tag = @tagName(x.tag), .text = f.own(x.text) });
         const me = f.nodes.get(x.dom).?;
         if (x.tag != .@"#text") {
-            for (t.attrsOf(n)) |a| me.attrs.append(f.a, a) catch unreachable;
+            for (t.attrsOf(n)) |a| me.attrs.append(f.a, .{ .name = a.name, .value = f.own(a.value) }) catch unreachable;
             for (t.kidsOf(n)) |k| {
                 const c = f.mirror(t, k);
                 c.parent = me;
@@ -62,15 +67,15 @@ pub const Fake = struct {
         f.put(id, .{ .tag = @tagName(tag) });
     }
     pub fn text(f: *Fake, id: u32, s: []const u8) void {
-        f.put(id, .{ .tag = "#text", .text = s });
+        f.put(id, .{ .tag = "#text", .text = f.own(s) });
     }
     pub fn attr(f: *Fake, id: u32, name: []const u8, v: []const u8) void {
         const n = f.nodes.get(id).?;
         for (n.attrs.items) |*a| if (std.mem.eql(u8, a.name, name)) {
-            a.value = v;
+            a.value = f.own(v);
             return;
         };
-        n.attrs.append(f.a, .{ .name = name, .value = v }) catch unreachable;
+        n.attrs.append(f.a, .{ .name = name, .value = f.own(v) }) catch unreachable;
     }
     pub fn del(f: *Fake, id: u32, name: []const u8) void {
         const n = f.nodes.get(id).?;
@@ -80,7 +85,7 @@ pub const Fake = struct {
         };
     }
     pub fn data(f: *Fake, id: u32, s: []const u8) void {
-        f.nodes.get(id).?.text = s;
+        f.nodes.get(id).?.text = f.own(s);
     }
     fn detach(n: *FNode) void {
         const p = n.parent orelse return;

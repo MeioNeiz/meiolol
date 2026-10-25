@@ -27,12 +27,16 @@ pub const tabs = @import("tabs.zig");
 pub const card = @import("card.zig");
 pub const select = @import("select.zig");
 pub const toggletip = @import("toggletip.zig");
+pub const stat = @import("stat.zig");
+pub const delta = @import("delta.zig");
+pub const bar = @import("bar.zig");
+pub const table = @import("table.zig");
 
 /// Components whose CSS ships (css.join): add one when a page first uses it
 pub const components = .{};
 
 /// Every component, in the gallery's order
-pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip };
+pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, table };
 
 pub const H = tree.H;
 pub const N = tree.N;
@@ -47,6 +51,7 @@ test {
     _ = @import("tests.zig");
     _ = @import("island_test.zig");
     _ = @import("tiers_test.zig");
+    _ = @import("table_test.zig");
 }
 
 test "every component: scoped, linted CSS; clean states; no dead class" {

@@ -17,6 +17,8 @@ pub const Kind = enum {
     time,
     /// 7
     int,
+    /// 4.4: one decimal, no sign (a ± or an arrow carries it)
+    dec,
     text,
 };
 
@@ -38,6 +40,7 @@ pub fn write(w: *W, comptime k: Kind, v: anytype) W.Error!void {
         },
         .time => try w.print("{d}:{d:0>2}", .{ @divTrunc(v, 60), @mod(v, 60) }),
         .int => try w.print("{d}", .{v}),
+        .dec => try fixed(w, @abs(v), 1, false),
         .text => try w.writeAll(v),
     }
 }
@@ -87,7 +90,7 @@ fn count(w: *W, v: u64) W.Error!void {
 pub fn accepts(comptime k: Kind, comptime T: type) bool {
     const info = @typeInfo(T);
     return switch (k) {
-        .rate, .points => info == .float or info == .comptime_float,
+        .rate, .points, .dec => info == .float or info == .comptime_float,
         .pct, .count, .signed, .time, .int => info == .int or info == .comptime_int,
         .text => T == []const u8 or (info == .pointer and info.pointer.size == .one),
     };
@@ -103,6 +106,55 @@ pub fn step(v: f32, cuts: [4]f32) u3 {
 }
 
 pub const win_cuts: [4]f32 = .{ 1, 2, 3.5, 5.5 };
+/// One game's swings are wider than an aggregate's
+pub const game_cuts: [4]f32 = .{ 2.5, 5, 10, 15 };
+
+pub const Scale = enum {
+    none,
+    /// A rate over many games (a champion's, a matchup's): win_cuts
+    aggregate,
+    /// One game: game_cuts
+    game,
+
+    pub fn cuts(s: Scale) [4]f32 {
+        return if (s == .game) game_cuts else win_cuts;
+    }
+};
+
+/// Under this many games a figure fades: it could easily be luck
+pub const thin_games = 100;
+
+/// A step of the diverging scale as a CSS colour: `h.vars(.{ .c = Step.of(d, cuts) })`
+/// writes var(--hi2)
+pub const Step = struct {
+    /// 0 grey, 1..4 away from the middle
+    s: u3 = 0,
+    low: bool = false,
+
+    pub fn of(v: f32, cuts: [4]f32) Step {
+        return .{ .s = step(v, cuts), .low = v < 0 };
+    }
+
+    pub fn format(c: Step, w: *W) W.Error!void {
+        if (c.s == 0) return w.writeAll("var(--s0)");
+        try w.print("var(--{s}{d})", .{ if (c.low) "lo" else "hi", c.s });
+    }
+
+    /// The cell fill for this step (fills stop at step 3)
+    pub fn fill(c: Step) Fill {
+        return .{ .of = c };
+    }
+};
+
+/// A heat cell's background: var(--f-hi2)
+pub const Fill = struct {
+    of: Step,
+
+    pub fn format(f: Fill, w: *W) W.Error!void {
+        if (f.of.s == 0) return w.writeAll("var(--f-0)");
+        try w.print("var(--f-{s}{d})", .{ if (f.of.low) "lo" else "hi", @min(f.of.s, 3) });
+    }
+};
 
 /// The class for a step of the scale: s0, hi1..hi4, lo1..lo4
 pub fn ink(v: f32, cuts: [4]f32) []const u8 {
@@ -163,6 +215,14 @@ test wrColour {
         const s = try std.mem.print(&buf, "{f}", .{wrColour(c[0], table_span)});
         try std.testing.expectEqualStrings(c[1], s);
     }
+}
+
+test Step {
+    var buf: [32]u8 = undefined;
+    try std.testing.expectEqualStrings("var(--hi2)", try std.mem.print(&buf, "{f}", .{Step.of(2.6, win_cuts)}));
+    try std.testing.expectEqualStrings("var(--lo1)", try std.mem.print(&buf, "{f}", .{Step.of(-4.4, game_cuts)}));
+    try std.testing.expectEqualStrings("var(--f-lo3)", try std.mem.print(&buf, "{f}", .{Step.of(-6, win_cuts).fill()}));
+    try std.testing.expectEqualStrings("var(--s0)", try std.mem.print(&buf, "{f}", .{Step.of(0.3, win_cuts)}));
 }
 
 test "numbers read as the mock's" {
