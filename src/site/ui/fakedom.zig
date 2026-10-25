@@ -26,6 +26,7 @@ pub const Fake = struct {
     warnings: u32 = 0,
     shown: u32 = 0,
     scrolled: u32 = 0,
+    clicked: u32 = 0,
 
     pub const FNode = struct {
         tag: []const u8,
@@ -157,6 +158,9 @@ pub const Fake = struct {
     }
     pub fn focus(f: *Fake, id: u32) void {
         f.focused = id;
+    }
+    pub fn click(f: *Fake, _: u32) void {
+        f.clicked += 1;
     }
     pub fn scroll(f: *Fake, _: u32) void {
         f.scrolled += 1;

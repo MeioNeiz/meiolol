@@ -26,7 +26,7 @@ pub const Input = struct {
     x: f32 = 0,
     y: f32 = 0,
     pointer: i32 = 0,
-    /// pointerleave: the node the pointer went to (0: outside)
+    /// pointerleave and focusout: the node the pointer or focus went to (0: outside)
     related: u32 = 0,
     /// An input's value, or keydown's key
     text: []const u8 = "",
@@ -208,7 +208,8 @@ pub fn Island(comptime Root: type, comptime Dom: type) type {
                 n = @fromBackingInt(node.parent);
             };
             const target = t.node(n);
-            if (in.kind == .pointerleave and i.inside(in.related, n)) return false;
+            // Moves inside the node are not leaving it
+            if ((in.kind == .pointerleave or in.kind == .focusout) and i.inside(in.related, n)) return false;
             var ev: tree.Event = .{ .kind = in.kind, .x = in.x, .y = in.y, .pointer = in.pointer, .text = in.text, .dom = target.dom };
             switch (in.kind) {
                 .pointerdown, .pointermove, .pointerup, .pointerleave, .pointercancel => {
@@ -237,6 +238,7 @@ pub fn Island(comptime Root: type, comptime Dom: type) type {
                 .scroll => i.rt.dom.scroll(id),
                 .show => i.rt.dom.popover(id, true),
                 .hide => i.rt.dom.popover(id, false),
+                .click => i.rt.dom.click(id),
             }
         }
 

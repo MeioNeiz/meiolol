@@ -154,6 +154,10 @@ pub const Dom = struct {
         d.node(id).call("focus", .{d.no_scroll}, void);
     }
 
+    pub fn click(d: *Dom, id: u32) void {
+        d.node(id).call("click", .{}, void);
+    }
+
     pub fn scroll(d: *Dom, id: u32) void {
         const o = zjb.global("Object").new(.{});
         defer o.release();
@@ -244,6 +248,7 @@ fn onEvent(slot: i32, bit: i32, e: zjb.Handle) callconv(.c) void {
             in.pointer = e.get("pointerId", i32);
             if (kind == .pointerleave) in.related = nearest(e.get("relatedTarget", zjb.Handle));
         },
+        .focusout => in.related = nearest(e.get("relatedTarget", zjb.Handle)),
         else => {},
     }
     if (rt.event(@intCast(slot), in)) e.call("preventDefault", .{}, void);

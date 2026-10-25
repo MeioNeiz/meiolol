@@ -134,7 +134,8 @@ pub const Event = struct {
 };
 
 pub const After = struct {
-    op: enum { focus, scroll, show, hide },
+    /// click: a link chosen by keyboard follows itself
+    op: enum { focus, scroll, show, hide, click },
     /// The `data-ref` value of the node in the new tree
     ref: []const u8,
 };

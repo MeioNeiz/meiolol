@@ -1,8 +1,8 @@
 //! RolePicker: the role a page shows, in Segmented's well: each role's icon with its
 //! share of the champion's games under it, the chosen one filled. Links (aria-current)
-//! when each role is its own URL, else buttons (aria-pressed); an island's handler on
-//! either switches in place. "All" for lists across roles; a role with no games is shown
-//! but not choosable. Compact: icons only, a row's height
+//! when each role is its own URL (a link's click is always the browser's), else buttons
+//! (aria-pressed) whose handler switches in place. "All" for lists across roles; a role
+//! with no games is shown but not choosable. Compact: icons only, a row's height
 const tree = @import("tree.zig");
 const role = @import("role.zig");
 const Gallery = @import("gallery.zig").Gallery;
@@ -19,6 +19,7 @@ pub const Item = struct {
     role: ?role.Role,
     /// % of the champion's games in this role
     share: ?f32 = null,
+    /// A link to the role's page; `on` is then unused
     href: ?[]const u8 = null,
     on: ?tree.Handler = null,
     current: bool = false,
@@ -53,7 +54,6 @@ pub fn view(h: *H, o: Opts, items: []const Item) N {
             .aria_current = if (it.current) "page" else null,
             .aria_disabled = if (it.disabled) true else null,
             .aria_label = label,
-            .on_click = if (it.disabled) null else it.on,
         }, kids) else h.button(.{
             .key = i,
             .type = "button",
