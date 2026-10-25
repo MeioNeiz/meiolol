@@ -213,3 +213,12 @@ Override the sections above where they differ. Raw: review artifact db, ids v3-*
    the bars"); B "could get funky" with uneven columns. The 5 hardest / 5 easiest list
    under C is "not very good use of space": rework it (mocks round 4)
 2. Centre on the champion's own rate, but no label for his rate in the middle
+
+## Jacob's answers (review v9, 25 Oct)
+
+Override the sections above where they differ. Raw: review artifact db, ids v4-*. No re-review: refine while building.
+
+1. Matchups under the chart: the selected panel (mocks/champion.html `#under=sel`).
+   One click or tap on an opponent shows its brief in the panel; an obvious way into the
+   matchup page from there (button; double click as a shortcut is fine)
+2. Hover tooltip on the chart is too wordy again: icon, name, rate, games at most

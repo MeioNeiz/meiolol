@@ -150,3 +150,11 @@ Override the sections above where they differ. Raw: review artifact db, ids v3-*
 1. Win rate colours in the r3 mock "feel weird, having the box around just looks
    funky"; he suspects the sort is a bit broken; preferred the live site's colours ("not
    saying we need to go back"). Mocks round 4: closer to live, no boxed cells
+
+## Jacob's answers (review v9, 25 Oct)
+
+Override the sections above where they differ. Raw: review artifact db, ids v4-*. No re-review: refine while building.
+
+1. Sort by the rate shown; the Games floor (default 1.5k) keeps thin rows off the
+   top. Win rate as StatCell ink with the continuous mix (fmt.wrColour), no box
+2. Round 4 mock "looks good"

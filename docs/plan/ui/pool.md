@@ -180,3 +180,10 @@ Override the sections above where they differ. Raw: review artifact db, ids v3-*
 
 1. Mastery in the picker: yes, add the champion-mastery-v4 call per lookup
 2. "Looks a bit funny before you pick pool", otherwise good (mocks round 4: empty state)
+
+## Jacob's answers (review v9, 25 Oct)
+
+Override the sections above where they differ. Raw: review artifact db, ids v4-*. No re-review: refine while building.
+
+1. Round 4 fine. Champion difficulty (pick-up) wanted somewhere general again, as the
+   old pool page had: maybe its own page; to be looked into

@@ -208,3 +208,9 @@ Override the sections above where they differ. Raw: review artifact db, ids v3-*
 
 1. Mastery reveal: rows ("not really linear along x")
 2. Keep it in the site's style; he thinks it is, but is not used to the new style yet
+
+## Jacob's answers (review v9, 25 Oct)
+
+Override the sections above where they differ. Raw: review artifact db, ids v4-*. No re-review: refine while building.
+
+1. Round 4 "lgtm"

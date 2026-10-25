@@ -269,3 +269,10 @@ Override the sections above where they differ. Raw: review artifact db, ids v3-*
 2. Pro difficulty (six options, no Pool hint, no event or date) is enough; keep ranks and
    patch visible
 3. Looks good, but "the focus of the page doesn't pull me towards picking" (mocks round 4)
+
+## Jacob's answers (review v9, 25 Oct)
+
+Override the sections above where they differ. Raw: review artifact db, ids v4-*. No re-review: refine while building.
+
+1. Phone: the pick as a bottom sheet (Jacob: not his priority; coordinator took the
+   lean). Round 4 "lgtm"
