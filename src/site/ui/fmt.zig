@@ -38,7 +38,8 @@ pub fn write(w: *W, comptime k: Kind, v: anytype) W.Error!void {
             try sign(w, v);
             try count(w, @abs(v));
         },
-        .time => try w.print("{d}:{d:0>2}", .{ @divTrunc(v, 60), @mod(v, 60) }),
+        // Unsigned seconds: std puts "+" on a signed int given a width ("11:+54")
+        .time => try w.print("{d}:{d:0>2}", .{ @divTrunc(v, 60), @as(u64, @intCast(@mod(v, 60))) }),
         .int => try w.print("{d}", .{v}),
         .dec => try fixed(w, @abs(v), 1, false),
         .text => try w.writeAll(v),
@@ -230,7 +231,7 @@ test "numbers read as the mock's" {
     var w: W = .fixed(&buf);
     try write(&w, .count, 403364);
     try write(&w, .points, @as(f32, -2.94));
-    try write(&w, .time, 2196);
+    try write(&w, .time, @as(i64, 2196));
     try write(&w, .signed, -811);
     try std.testing.expectEqualStrings("403,364\u{2212}2.936:36\u{2212}811", w.buffered());
     try std.testing.expectEqualStrings("hi3", ink(4, win_cuts));

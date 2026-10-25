@@ -1,6 +1,8 @@
 //! StatCell: one figure, formatted by its kind through fmt.zig and coloured by how far it
-//! sits from its scale's middle (the step comes from one function, fmt.Step). Thin data
-//! fades; a missing figure says so. Ink by default, fill for heat cells
+//! sits from its scale's middle. Ink by default: an aggregate rate mixes continuously
+//! (fmt.WrColour, as the live champions table), so a sorted column reads as a smooth run;
+//! one game's steps (fmt.Step). Fill for heat cells, stepped. Thin data fades; a missing
+//! figure says so
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
 const Gallery = @import("gallery.zig").Gallery;
@@ -52,7 +54,8 @@ pub fn view(h: *H, s: Stat) N {
         h.span(.{ .class = "v" }, .{W.missing}),
         if (s.ctx) |c| h.span(.{ .class = "ctx" }, .{c}) else null,
     });
-    const step: fmt.Step = if (s.scale == .none) .{} else .of(@floatCast(v - s.ref), s.scale.cuts());
+    const d = v - s.ref;
+    const step: fmt.Step = if (s.scale == .none) .{} else .of(@floatCast(d), s.scale.cuts());
     const thin = if (s.games) |g| g < fmt.thin_games else false;
     const ci: ?N = if (s.ci) |c| (if (s.ci_tip) |id|
         h.button(.{ .class = "c-tt ci", .type = "button", .popovertarget = id }, .{ "±", phrase.num(h, .dec, c) })
@@ -62,7 +65,7 @@ pub fn view(h: *H, s: Stat) N {
         .class = "c-stat",
         .data_v = if (s.fill) "fill" else null,
         .data_state = if (thin) "thin" else null,
-        .style = if (s.scale == .none) null else if (s.fill) h.vars(.{ .f = step.fill() }) else h.vars(.{ .c = step }),
+        .style = if (s.scale == .none) null else if (s.fill) h.vars(.{ .f = step.fill() }) else if (s.scale == .aggregate) h.vars(.{ .c = fmt.WrColour{ .pts = d } }) else h.vars(.{ .c = step }),
     }, .{
         h.span(.{ .class = "v" }, .{ figure(h, s.kind, v), ci }),
         if (s.ctx) |c| h.span(.{ .class = "ctx" }, .{c}) else null,
@@ -110,6 +113,9 @@ pub fn gallery(g: *Gallery) void {
     g.add("thin", view(h, .{ .value = 38.3, .scale = agg, .ref = 50, .games = 64, .ctx = plain("64") }));
     g.add("missing", view(h, .{ .value = null, .ctx = plain("few games") }));
     g.add("with context", view(h, .{ .value = 52.2, .scale = agg, .ref = 50, .ctx = plain("16.20 51.1%") }));
+    var run = h.list();
+    for ([_]f64{ 55.2, 53.9, 52.8, 51.6, 50.7, 49.8, 48.4, 46.9 }) |v| run.add(view(h, .{ .value = v, .scale = agg, .ref = 50 }));
+    g.add("a sorted column: the ink mixes, no steps", h.div(.{ .class = "g-row" }, .{run.done()}));
     var fills = h.list();
     for ([_]f64{ -4.2, -2.3, -1.3, 0.3, 1.2, 1.9, 2.8 }) |d| fills.add(view(h, .{ .value = d, .kind = .points, .scale = agg, .fill = true }));
     g.add("fill, heat cells", h.div(.{ .class = "g-row" }, .{fills.done()}));
