@@ -182,6 +182,8 @@ pub fn build(b: *std.Build) void {
     ci.dependOn(&shellExe(b, windows, .Debug, 0, .private).step);
     if (b.graph.host.result.os.tag == .macos) ci.dependOn(&shellMac(b, target, .Debug).step);
     ci.dependOn(&mock_exe.step);
+    // ui.wasm per page family: built, and its size against the budget (stack.md)
+    for (ui_families) |f| ci.dependOn(uiSize(b, uiWasm(b, f)));
     // Debug: ci only needs it to compile, and ReleaseFast spends up to a minute in LLVM
     const lab_check = labModule(b, b.resolveTargetQuery(gpu_box), .Debug, cand);
     ci.dependOn(&b.addExecutable(.{ .name = "meiolol-lab", .root_module = lab_check }).step);
@@ -368,6 +370,61 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
     backend.addAnonymousImport("chart.wasm", .{ .root_source_file = chart_wasm.getEmittedBin() });
 
     return .{ .core = core, .tpl = tpl, .ui = ui, .net = net, .store = store, .backend = backend, .app = app };
+}
+
+/// ui.wasm files, one per page family so each page loads only its islands (Jacob 25 Oct)
+const ui_families = [_][]const u8{"stats"};
+/// gzip bytes per family: stack.md's 40 KB
+const ui_budget = 40 * 1024;
+
+const UiWasm = struct { name: []const u8, wasm: std.Build.LazyPath, js: std.Build.LazyPath };
+
+/// src/site/ui/wasm/<family>.zig as ui-<family>.wasm, and zjb's loader for it
+fn uiWasm(b: *std.Build, family: []const u8) UiWasm {
+    const wasm_target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .freestanding });
+    const zjb = b.dependency("zjb", .{});
+    const tpl = b.createModule(.{ .root_source_file = b.path("src/tpl/root.zig") });
+    const ui = b.createModule(.{
+        .root_source_file = b.path("src/site/ui/root.zig"),
+        .imports = &.{.{ .name = "tpl", .module = tpl }},
+    });
+    const name = b.fmt("ui-{s}", .{family});
+    const exe = b.addExecutable(.{ .name = name, .root_module = b.createModule(.{
+        .root_source_file = b.path(b.fmt("src/site/ui/wasm/{s}.zig", .{family})),
+        .target = wasm_target,
+        .optimize = .ReleaseSmall,
+        .imports = &.{
+            .{ .name = "ui", .module = ui },
+            .{ .name = "zjb", .module = zjb.module("zjb") },
+        },
+    }) });
+    exe.entry = .disabled;
+    exe.rdynamic = true;
+    const gen = b.addRunArtifact(zjb.artifact("generate_js"));
+    const js = gen.addOutputFileArg(b.fmt("{s}.js", .{name}));
+    gen.addArg("Zjb");
+    gen.addArtifactArg(exe);
+    gen.addArg("--loader");
+    return .{ .name = name, .wasm = exe.getEmittedBin(), .js = js };
+}
+
+/// A size line per ui.wasm (raw and gzip), failing over ui_budget
+fn uiSize(b: *std.Build, w: UiWasm) *std.Build.Step {
+    const run = b.addSystemCommand(&.{
+        "sh",      "-c",
+        b.fmt(
+            \\raw=$(wc -c < "$1"); gz=$(gzip -9 -c "$1" | wc -c); js=$(gzip -9 -c "$2" | wc -c)
+            \\echo "{s}.wasm: $raw B, $gz B gz; loader $js B gz (budget {d} B gz)"
+            \\[ "$gz" -le {d} ] || {{ echo "{s}.wasm over its budget"; exit 1; }}
+        , .{ w.name, ui_budget, ui_budget, w.name }),
+        "ui-size",
+    });
+    run.addFileArg(w.wasm);
+    run.addFileArg(w.js);
+    run.setName(b.fmt("{s} size", .{w.name}));
+    run.has_side_effects = true;
+    b.step(b.fmt("{s}-size", .{w.name}), b.fmt("Size of {s}.wasm", .{w.name})).dependOn(&run.step);
+    return &run.step;
 }
 
 /// The desktop window (src/desktop_main.zig): dvui with its Direct3D 11 backend, tree-sitter

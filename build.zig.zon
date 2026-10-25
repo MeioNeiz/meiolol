@@ -19,6 +19,11 @@
             .url = "https://github.com/david-vanderson/dvui/archive/164b69f397419b8d06e4579b9b8a86fa0b1ed071.tar.gz",
             .hash = "dvui-0.6.0-dev-AQFJmVUKBAGK70x-BA-UMgh0NAyduhaNExbFdypjWuvO",
         },
+        // ui.wasm's bridge to the page: our fork, branch meiolol (its docs/meiolol.md)
+        .zjb = .{
+            .url = "git+https://github.com/MeioNeiz/zig-javascript-bridge?ref=meiolol#362fc04277c547adf2724a4cc285425974232dc5",
+            .hash = "javascript_bridge-0.0.0-E-FZAWjUAACy2D4eJXtfQ6hza6L4YNd_NYn7fULmHDcS",
+        },
     },
     .paths = .{ "build.zig", "build.zig.zon", "src" },
 }

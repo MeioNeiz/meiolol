@@ -13,6 +13,9 @@ pub const url = @import("url.zig");
 pub const data = @import("data.zig");
 pub const tokens = @import("tokens.zig");
 pub const css = @import("css.zig");
+pub const diff = @import("diff.zig");
+pub const island = @import("island.zig");
+pub const FakeDom = @import("fakedom.zig").Fake;
 
 /// Components whose CSS ships (css.join): add one when a page first uses it
 pub const components = .{};
@@ -28,4 +31,5 @@ pub const plain = phrase.plain;
 test {
     std.testing.refAllDecls(@This());
     _ = @import("tests.zig");
+    _ = @import("island_test.zig");
 }

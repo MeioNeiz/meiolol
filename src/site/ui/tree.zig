@@ -125,6 +125,17 @@ pub const Event = struct {
     handled: bool = false,
     /// Set by the handler: capture the pointer on the handler's element
     capture: bool = false,
+    /// Set by the handler: the URL change gets a history entry (Back undoes it), not a
+    /// replaced one
+    push: bool = false,
+    /// Set by the handler: done to the node marked `data_ref` once the DOM is patched
+    after: ?After = null,
+};
+
+pub const After = struct {
+    op: enum { focus, scroll, show, hide },
+    /// The `data-ref` value of the node in the new tree
+    ref: []const u8,
 };
 
 /// A message bound to a component: `h.on(self, .{ .sort = .w })`. Typed at the call,
@@ -163,6 +174,8 @@ pub const Tree = struct {
     attrs: std.ArrayList(Attr) = .empty,
     handlers: std.ArrayList(Handler) = .empty,
     root: N = .none,
+    /// Bit per Ev any node handles: what the island listens for
+    events: u16 = 0,
 
     pub fn node(t: *const Tree, n: N) *Node {
         return &t.nodes.items[@backingInt(n)];
@@ -418,6 +431,7 @@ pub const H = struct {
 
     noinline fn make(h: *H, tag: Tag, static: []const Attr, as: []const Attr, hs: []const Handler, events: u16, key: u32, ks: []const Kid) N {
         var n: Node = .{ .tag = tag, .events = events, .key = key };
+        h.t.events |= events;
         n.attrs = @intCast(h.t.attrs.items.len);
         n.n_attrs = @intCast(static.len + as.len);
         h.t.attrs.appendSlice(h.mem, static) catch {
