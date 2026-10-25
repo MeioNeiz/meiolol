@@ -5,6 +5,7 @@ const core = @import("core");
 const Writer = std.Io.Writer;
 pub const tpl = @import("tpl");
 const style = @import("style.zig");
+const assets = @import("assets.zig");
 
 pub const product = "meiolol";
 
@@ -149,6 +150,7 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
         \\<title>{title}</title>
         \\<meta name="description" content="{description}">
         \\<link rel="stylesheet" href="{css}">
+        \\<link rel="stylesheet" href="{print}" media="print">
         \\<link rel="icon" href="{icon}" type="image/svg+xml">
         \\{robots}{canonical}</head>
         \\<body>
@@ -161,7 +163,8 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
     , .{
         .title = p.title,
         .description = p.description,
-        .css = toSite(p, style.link),
+        .css = toSite(p, style.file.path),
+        .print = toSite(p, "print.css"),
         .icon = toSite(p, "favicon.svg"),
         .robots = tpl.when(!p.public or !p.index, tpl.trusted("<meta name=\"robots\" content=\"noindex\">\n")),
         .canonical = if (p.public and p.index) if (p.canonical) |url|
@@ -182,7 +185,7 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
             \\
         , .{
             .your = toSite(p, "your.html"),
-            .js = toSite(p, "search.js"),
+            .js = toSite(p, assets.search_js.path),
             .site = toSite(p, ""),
             .view = if (p.view) |v| tpl.attr("data-view", v.dir()) else null,
         }),

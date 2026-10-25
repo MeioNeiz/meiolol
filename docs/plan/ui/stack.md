@@ -303,3 +303,6 @@ Override the sections above where they differ. Raw: review artifact db, ids v2-*
 
 1. CSS cached a year by its hash (nginx rule on jomify, separate traffic beacon): do
    it now, with the island runtime work
+   Done 25 Oct: hashed names (src/site/assets.zig) for the CSS, font, search.js and the
+   islands' loader and wasm, immutable in nginx; beacon /print.css (media print);
+   docs/hosting.md "Cache-Control"

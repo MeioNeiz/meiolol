@@ -73,7 +73,10 @@
 # Upload: the new build is copied into data/site by checksum without times, so only
 # files whose content changed get a new mtime, and the upload's quick check sends just
 # those. --delete removes what the build no longer writes; nginx then hands those paths
-# to meiolol-render.
+# to meiolol-render. Except hashed assets (src/site/assets.zig: style.1a2b3c4d.css), which
+# stay 30 days from when first written, for pages cached before a deploy (nginx's
+# @render_any copies, a browser's restored tab); an older one is pruned before the copy,
+# which writes it again if the build still does
 set -u
 contact=$1
 cd "$(dirname "$0")/.." || exit 1
@@ -428,7 +431,10 @@ while true; do
             round_event site ok "core build ${site_s}s"
             echo "$out"
             t=$SECONDS
-            changed=$(rsync -rlpD --checksum --delete --stats data/site.new/ data/site/ \
+            asset_glob='*.[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].*'
+            find data/site -maxdepth 1 -type f -name "$asset_glob" -mtime +30 -delete
+            changed=$(rsync -rlpD --checksum --delete --filter="protect /$asset_glob" --stats \
+                data/site.new/ data/site/ \
                 | sed -nE 's/^Number of regular files transferred: ([0-9,]+)/\1/p')
             copy_s=$(( SECONDS - t )) t=$SECONDS
             if ! stats=$(rsync -az --delete-delay --delay-updates --exclude /admin/ --exclude /p/ --stats \

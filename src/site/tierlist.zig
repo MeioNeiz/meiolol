@@ -4,6 +4,7 @@ const std = @import("std");
 const core = @import("core");
 const ui = @import("ui");
 const html = @import("html.zig");
+const assets = @import("assets.zig");
 const spread = @import("../spread.zig");
 const builds_page = @import("builds.zig");
 
@@ -272,8 +273,9 @@ fn tierTable(site: *const Site, w: *Writer, role: ?Role, root: []const u8) !void
     try roleIcons(w);
     try shapeGradient(w);
     try ui.html.write(&tree, tree.root, w);
-    try tpl.render(w, "\n<script src=\"{js}\" data-wasm=\"ui-stats.wasm\" defer></script>\n", .{
-        .js = html.Link{ .root = root, .up = site.view.up(), .path = "ui-stats.js" },
+    try tpl.render(w, "\n<script src=\"{js}\" data-wasm=\"{wasm}\" defer></script>\n", .{
+        .js = html.Link{ .root = root, .up = site.view.up(), .path = assets.stats_js.path },
+        .wasm = assets.stats_wasm.path,
     });
 }
 

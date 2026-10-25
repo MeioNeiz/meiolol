@@ -184,6 +184,13 @@ nginx caches each encoding apart, and answers a directory URL without its slash 
   views.bin and serves in 1.3 s (file in page cache) to 16.6 s (evicted, as after a
   boot); swaps 1.4-16.6 s; renderer stopped by hand: a warmed page ANY-HIT, an unwarmed
   one 503
+- Cache-Control (25 Oct; nginx before: /etc/nginx/meiolol.conf.bak-2026-10-25-immutable):
+  `map $uri $meiolol_cache_control` gives hashed assets (src/site/assets.zig:
+  `style.1a2b3c4d.css`, the font, search.js, ui-stats.js and .wasm; `name.<8 hex>.ext` at
+  the root) `public, max-age=31536000, immutable`, everything else `no-cache`, in `/`,
+  @render and @render_any (which hide the renderer's own no-cache). A page after the
+  first asks for none of them. Old hashed files stay 30 days (deploy/web-loop.sh); one
+  missing from the upload falls through to the renderer, which serves its own
 - Training view (/admin/training/, same login as /admin/; data for the admin Models
   tab): lab runs of the Mac and the gpu-box (staged over ssh, home network only), learned.md,
   model.md, campaigns, uploaded by deploy/lab-push.sh (launchd, every 30 s when changed). Served from
@@ -200,9 +207,10 @@ nginx caches each encoding apart, and answers a directory URL without its slash 
   sandboxed: sees only /var/log/nginx, no network) into /var/www/meiolol-ops. State in
   /var/lib/meiolol-traffic: per log file summaries cached by inode with the offset read
   (files2/), hourly totals kept 90 days (hourly.tsv). A person is a browser user agent
-  whose page view is matched to a /style.css fetch by the same agent within 60 s (every
-  page revalidates it); browser agents with no such fetch are "unconfirmed" (hours
-  column 6), 97% of 12-19 Oct's old "people" count. Update by hand: scp the script and
+  whose page view is matched to a /print.css fetch by the same agent within 60 s (every
+  page links it for print, so it never holds up rendering, and revalidates it; pages
+  until 25 Oct did the same with /style.css, still counted); browser agents with no
+  such fetch are "unconfirmed" (hours column 6), 97% of 12-19 Oct's old "people" count. Update by hand: scp the script and
   units, `sudo install -m 755 traffic.sh /usr/local/bin/meiolol-traffic`, units into
   /etc/systemd/system, `daemon-reload`. nginx before: /home/ubuntu/meiolol.conf.bak-dashboard
 - Desktop app files (/admin/desktop/: zip, update.signed, update.json (unsigned, for

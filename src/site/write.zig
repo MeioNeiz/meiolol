@@ -59,6 +59,7 @@ fn writeSite(site: *const Site, root_dir: std.Io.Dir, gz_window: []u8) !void {
     for (site.shared_files) |f| if (isStatic(opts, "", f.path)) try w.write(root_dir, f.path, f.data);
     if (std.meta.eql(site.view, html.View.shared)) {
         for (shared_assets) |f| try w.write(root_dir, f.path, f.data);
+        for (root.hashed_assets) |h| try w.write(root_dir, h.path, h.data);
     }
     for (view_assets) |f| if (isStatic(opts, vdir, f.path)) try w.write(dir, f.path, f.data);
 
@@ -178,7 +179,7 @@ test "views: a tree each, switches between them, shared pages once" {
         "<a href=\"../champions.html\" data-region=\"EUW1\">EUW</a>",
         "<a aria-disabled=\"true\" title=\"Champion pages only\" data-region=\"KR\">KR</a>",
         "<a aria-disabled=\"true\" title=\"Champion pages only\" data-rank=\"6\">Diamond+</a>",
-        "href=\"../style.css?v=",
+        "href=\"../" ++ @import("style.zig").file.path ++ "\"",
         "href=\"../daily.html\"",
         "href=\"../champion/a.html?region=all\"",
     }) |s| try std.testing.expect(std.mem.find(u8, tiers, s) != null);
@@ -190,7 +191,7 @@ test "views: a tree each, switches between them, shared pages once" {
         "<a href=\"../champion/a.html?region=KR\" data-region=\"KR\">KR</a>",
         "<a href=\"../champion/a.html?rank=6\" data-rank=\"6\">Diamond+</a>",
         "<span data-foot>in EUW, last 30 days",
-        "href=\"../style.css?v=",
+        "href=\"../" ++ @import("style.zig").file.path ++ "\"",
         "<a href=\"../champions.html\" aria-current=\"page\" data-view>",
     }) |s| try std.testing.expect(std.mem.find(u8, champ, s) != null);
     try std.testing.expectError(error.FileNotFound, read(arena, out, "all/champion/a.html"));
@@ -215,5 +216,6 @@ test "views: a tree each, switches between them, shared pages once" {
     try std.testing.expect(std.mem.find(u8, home, "class=\"subbar\"") == null);
     const your = try read(arena, out, "your.html");
     try std.testing.expect(std.mem.find(u8, your, "<script src=\"review.js\" defer></script>\n<script src=\"your.js\" defer></script>") != null);
-    for ([_][]const u8{ "review.js", "home.js", "inter.woff2" }) |f| _ = try read(arena, out, f);
+    for ([_][]const u8{ "review.js", "home.js", "inter.woff2", "print.css" }) |f| _ = try read(arena, out, f);
+    for (root.hashed_assets) |h| try std.testing.expectEqualStrings(h.data, try read(arena, out, h.path));
 }

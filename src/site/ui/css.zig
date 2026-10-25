@@ -23,7 +23,7 @@ pub fn join(comptime components: anytype) []const u8 {
     };
 }
 
-/// 8 hex digits of a stylesheet's FNV-1a hash, at compile time: `style.css?v=<version>`
+/// 8 hex digits of a file's FNV-1a hash, at compile time: its hashed name (site/assets.zig)
 pub fn version(comptime bytes: []const u8) []const u8 {
     return comptime blk: {
         @setEvalBranchQuota(bytes.len * 4 + 1000);

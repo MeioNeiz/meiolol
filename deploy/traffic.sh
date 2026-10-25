@@ -6,10 +6,12 @@
 # the offset read, so a run reads only new lines (a rotation keeps the inode; a .gz is
 # read once). Hourly totals go to hourly.tsv, kept 90 days, past the 14 days of logs.
 # A browser-agent page view counts as a person only when the same agent also fetched
-# /style.css within PAIR_S: every page links it with Cache-Control no-cache, so a browser
-# asks for it (200 or 304) on each load, and most bots with a browser's agent never do.
-# Pages link with no-referrer, so the CSS request can't name its page: matched by agent,
-# one fetch per view. The rest are "unconfirmed" (hours column 6)
+# /print.css within PAIR_S: every page links it (media print, Cache-Control no-cache), so
+# a browser asks for it (200 or 304) on each load, and most bots with a browser's agent
+# never do. Pages link with no-referrer, so the CSS request can't name its page: matched
+# by agent, one fetch per view. The rest are "unconfirmed" (hours column 6). Pages until
+# 25 Oct linked /style.css the same way, so it still counts (a page links one or the
+# other; the stylesheet is now cached for a year by a hashed name)
 # Shape of traffic.json: section 3 of the admin dashboard contract (admin.js reads it)
 set -euo pipefail
 
@@ -31,9 +33,9 @@ PIECE_LINES=50000
 PAIR_S=60
 
 # Per hour: people's and bot page views, assets, 5xx, bytes, unconfirmed views (browser
-# agent, no stylesheet), then counts by status, 404 uri, page uri, referrer domain, agent
+# agent, no beacon fetch), then counts by status, 404 uri, page uri, referrer domain, agent
 # family, render cache status, latency bucket (ms). Page uri and referrer count people only.
-# pend: per agent, views waiting for a stylesheet fetch and fetches waiting for a view (a
+# pend: per agent, views waiting for a beacon fetch and fetches waiting for a view (a
 # big page can be logged after its CSS); a view still waiting at the end stays unconfirmed
 SUMMARY=$TOP'
 def page: .m == "GET" and (.s == 200 or .s == 304)
@@ -84,7 +86,7 @@ reduce (inputs | fromjson? | select(type == "object" and (.t | type) == "number"
         | .hours[$h].rc[if ($r.c // "") == "" then "static" else $r.c end] += 1
         | .hours[$h].lt[$r | bucket] += 1
       elif $r.s < 400 then .hours[$h].a += 1
-        | if $r.u == "/style.css" and ($r | bot | not) then
+        | if ($r.u == "/print.css" or $r.u == "/style.css") and ($r | bot | not) then
             ($r.a // "") as $a
             | .pend[$a] |= ((. // {p: [], c: []}) | .p |= map(select(.[0] >= $r.t - $pair)))
             | if (.pend[$a].p | length) > 0 then

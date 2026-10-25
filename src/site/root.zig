@@ -23,6 +23,7 @@ const filters = @import("filters.zig");
 const evalchart = @import("evalchart.zig");
 const flat = @import("flat.zig");
 const style = @import("style.zig");
+const assets = @import("assets.zig");
 pub const gallery = @import("gallery.zig");
 pub const ui = @import("ui");
 const patchday = @import("../patchday.zig");
@@ -121,6 +122,7 @@ pub fn isStatic(opts: Options, dir: []const u8, path: []const u8) bool {
     if (dir.len > 0 or std.mem.findScalar(u8, path, '/') != null) return false;
     for (core_static) |name| if (std.mem.eql(u8, name, path)) return true;
     for (shared_assets ++ view_assets) |f| if (std.mem.eql(u8, f.path, path)) return true;
+    for (hashed_assets) |h| if (std.mem.eql(u8, h.path, path)) return true;
     return false;
 }
 
@@ -331,6 +333,9 @@ pub const Site = struct {
 
 pub const File = daily.File;
 
+/// Also written by their plain names, with the same data (assets.zig)
+pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.search_js, assets.stats_js, assets.stats_wasm };
+
 /// Front-end files at the site root; `Options.static_dir` serves them from disk instead
 pub const shared_assets = [_]File{
     .{ .path = "style.css", .data = style.bundle },
@@ -346,6 +351,8 @@ pub const shared_assets = [_]File{
     .{ .path = "filters.js", .data = @embedFile("static/filters.js") },
     .{ .path = "search.js", .data = @embedFile("static/search.js") },
     .{ .path = "account.js", .data = @embedFile("static/account.js") },
+    // Linked for print, so it never holds up rendering; browsers still fetch it on each load
+    .{ .path = "print.css", .data = @embedFile("static/print.css") },
     // Built (build.zig uiWasm), so never read from static_dir
     .{ .path = "ui-stats.wasm", .data = @embedFile("ui-stats.wasm") },
     .{ .path = "ui-stats.js", .data = @embedFile("ui-stats.js") },
@@ -356,9 +363,12 @@ pub const view_assets = [_]File{
     .{ .path = "min-games.js", .data = @embedFile("static/min-games.js") },
 };
 
-/// Asset `name` from Options.static_dir when set (edits show without a rebuild), else
-/// as embedded; null for anything else
-pub fn asset(arena: std.mem.Allocator, io: std.Io, opts: Options, name: []const u8) !?[]const u8 {
+/// Asset `wanted` (a hashed name as its plain one) from Options.static_dir when set (edits
+/// show without a rebuild), else as embedded; null for anything else
+pub fn asset(arena: std.mem.Allocator, io: std.Io, opts: Options, wanted: []const u8) !?[]const u8 {
+    const name = for (hashed_assets) |h| {
+        if (std.mem.eql(u8, h.path, wanted)) break h.plain;
+    } else wanted;
     const all = shared_assets ++ view_assets;
     const embedded = for (all) |f| {
         if (std.mem.eql(u8, f.path, name)) break f.data;
