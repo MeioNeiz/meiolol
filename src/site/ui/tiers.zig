@@ -79,8 +79,6 @@ pub const Row = struct {
     wins: u32,
     /// Of the champion's games, the share in this role
     share: f32,
-    /// Win rate pulled toward the role's average: the default order
-    shrunk: f32,
     /// Ban impact (core.banimpact), and its pulled edge as a share
     impact: f32,
     edge: f32,
@@ -124,7 +122,6 @@ const W = struct {
     const key = "Sorted by win rate pulled toward the role's average, the more the fewer the games, so a few lucky games can't top it; the rate shown is raw.";
     const share_title = "Share of the champion's games played in the role";
     const search = "Search champion";
-    const win_title = "Sorts by the rate pulled toward the role's average by games";
     const impact_title = "Wins above the role's average per 10,000 games it was not banned";
     const rare = " rare picks (under the minimum games, or a role the champion seldom plays) hidden. ";
 };
@@ -424,7 +421,7 @@ pub const Tiers = struct {
         return switch (t.sort) {
             .name => std.ascii.orderIgnoreCase(t.data.champs[x.champ].name, t.data.champs[y.champ].name) == .lt,
             .role => @backingInt(x.role) < @backingInt(y.role),
-            .win => x.shrunk < y.shrunk,
+            .win => share(x.wins, x.games) < share(y.wins, y.games),
             .pick, .games => x.games < y.games,
             .ban => t.data.champs[x.champ].banned < t.data.champs[y.champ].banned,
             .impact => x.impact < y.impact,
@@ -491,7 +488,7 @@ pub const Tiers = struct {
     const heads_all = [_]Head{
         .{ .key = .name, .label = "Champion", .class = "l", .sort = "text" },
         .{ .key = .role, .label = "Role", .class = "role", .sort = "text" },
-        .{ .key = .win, .label = "Win rate", .title = W.win_title },
+        .{ .key = .win, .label = "Win rate" },
         .{ .key = .pick, .label = "Pick", .class = "opt" },
         .{ .key = .ban, .label = "Ban", .class = "opt" },
         .{ .key = .impact, .label = "Influence", .title = W.impact_title },

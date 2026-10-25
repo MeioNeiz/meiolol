@@ -38,13 +38,11 @@ const Row = struct {
     impact: f64,
     /// The pulled edge, as a share, for the impact cell's title
     edge: f64,
-    /// Win rate pulled toward the role's average (base + edge): the sort order, so a few
-    /// lucky games can't top the table
-    shrunk: f64,
 };
 
-/// Every champion's games in `role`, or in each role it plays when null, by Row.shrunk
-/// (ties most played first); the browser sorts by any column (static/table.js)
+/// Every champion's games in `role`, or in each role it plays when null, by the win rate
+/// shown (ties most played first; the minimum games keeps a few lucky games off the top);
+/// the browser sorts by any column (ui.tiers)
 fn tierRows(site: *const Site, role: ?Role) ![]Row {
     var rows: std.ArrayList(Row) = .empty;
     for (Role.all) |r| {
@@ -63,7 +61,6 @@ fn tierRows(site: *const Site, role: ?Role) ![]Row {
                 .rare = ratio(cr.games, site.games) < min_pick_rate or share < min_role_share,
                 .impact = prior.score(cr.wins, cr.games, ch.banned, site.games),
                 .edge = prior.edge(cr.wins, cr.games),
-                .shrunk = prior.base + prior.edge(cr.wins, cr.games),
             });
         }
     }
@@ -74,7 +71,7 @@ fn tierRows(site: *const Site, role: ?Role) ![]Row {
     }.f);
     std.mem.sort(Row, rows.items, {}, struct {
         fn f(_: void, a: Row, b: Row) bool {
-            return a.shrunk > b.shrunk;
+            return ratio(a.wins, a.games) > ratio(b.wins, b.games);
         }
     }.f);
     return rows.items;
@@ -204,7 +201,6 @@ fn tiersData(site: *const Site) !ui.tiers.Data {
             .games = row.games,
             .wins = row.wins,
             .share = @floatCast(row.share),
-            .shrunk = @floatCast(row.shrunk),
             .impact = @floatCast(row.impact),
             .edge = @floatCast(row.edge),
             .fade = @floatCast(core.curvesfile.fade(row.games)),

@@ -17,18 +17,19 @@ const champs = [_]tiers.Champ{
     .{ .name = "Lux", .key = "Lux", .slug = "lux", .banned = 50 },
 };
 
-fn row(champ: u16, role: tiers.Role, games: u32, wins: u32, share: f32, shrunk: f32) tiers.Row {
-    return .{ .champ = champ, .role = role, .games = games, .wins = wins, .share = share, .shrunk = shrunk, .impact = shrunk - 0.5, .edge = shrunk - 0.5, .fade = 1, .spread = null, .patch = null };
+fn row(champ: u16, role: tiers.Role, games: u32, wins: u32, share: f32) tiers.Row {
+    const edge = @as(f32, @floatFromInt(wins)) / @as(f32, @floatFromInt(games)) - 0.5;
+    return .{ .champ = champ, .role = role, .games = games, .wins = wins, .share = share, .impact = edge, .edge = edge, .fade = 1, .spread = null, .patch = null };
 }
 
-// By shrunk, as the server orders them. Lux top: rare by games; Zed top: by share
+// By win rate, as the server orders them. Lux top: rare by games; Zed top: by share
 const rows = [_]tiers.Row{
-    row(1, .bottom, 900, 480, 0.95, 0.53),
-    row(0, .middle, 1200, 620, 0.9, 0.52),
-    row(2, .middle, 800, 400, 0.8, 0.505),
-    row(3, .utility, 600, 290, 0.9, 0.49),
-    row(3, .top, 40, 25, 0.1, 0.48),
-    row(2, .top, 200, 90, 0.08, 0.47),
+    row(1, .bottom, 900, 480, 0.95),
+    row(0, .middle, 1200, 620, 0.9),
+    row(2, .middle, 800, 400, 0.8),
+    row(3, .utility, 600, 290, 0.9),
+    row(3, .top, 40, 19, 0.1),
+    row(2, .top, 200, 90, 0.08),
 };
 
 const data: tiers.Data = .{
