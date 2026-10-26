@@ -1,6 +1,6 @@
 //! BuildPanel on the fake DOM (build_demo.zig's Darius): a cell opens from the URL or its
-//! "all", closes by "fewer", Escape or Back; RuneTree's pages, runes and Every tree.
-//! Each patch equal to a fresh render
+//! "all", closes by "fewer", Escape or Back; the best row and Highest WR; RuneTree's
+//! pages, runes and Every tree. Each patch equal to a fresh render
 const std = @import("std");
 const tree = @import("tree.zig");
 const diff = @import("diff.zig");
@@ -106,6 +106,26 @@ const Page = struct {
 };
 
 const item4_open = "data-k=\"item4\" data-open";
+
+/// The markup of cell `k` (up to the next cell)
+fn cellOf(page: []const u8, k: []const u8) []const u8 {
+    var buf: [64]u8 = undefined;
+    const tag = std.fmt.bufPrint(&buf, "data-k=\"{s}\"", .{k}) catch unreachable;
+    const at = std.mem.find(u8, page, tag) orelse return "";
+    const rest = page[at + tag.len ..];
+    return rest[0 .. std.mem.find(u8, rest, "class=\"slot\"") orelse rest.len];
+}
+
+/// Where each of `names` first shows in `s`, in order
+fn inOrder(s: []const u8, names: []const []const u8) bool {
+    var last: usize = 0;
+    for (names) |n| {
+        const at = std.mem.find(u8, s, n) orelse return false;
+        if (at < last) return false;
+        last = at;
+    }
+    return true;
+}
 const thornmail_named = "Thornmail</span>";
 
 test "a cell opens from the URL or its all; fewer, Escape and Back close it" {
@@ -153,13 +173,52 @@ test "hydration takes the URL's cell; one with no cell is dropped" {
     try testing.expect(std.mem.startsWith(u8, try p.firstName(), "Force of Nature"));
     p.click(p.button("Won"));
     try testing.expect(try p.has(item4_open));
-    try testing.expect(std.mem.startsWith(u8, try p.firstName(), "Sterak"));
+    try testing.expect(std.mem.startsWith(u8, try p.firstName(), "Dead Man"));
     p.deinit();
 
     try p.init("#slot=skill_path");
     defer p.deinit();
     try testing.expect(!try p.has("data-open"));
     try testing.expectEqual(@as(?bp.Kind, null), p.state.open);
+}
+
+test "the best win rate on 400+ games is marked, a 4th row when not in the top 3" {
+    var p: Page = undefined;
+    try p.init("");
+    defer p.deinit();
+    const item4 = cellOf(try p.shown(), "item4");
+    try testing.expectEqual(4, std.mem.count(u8, item4, "<tr"));
+    try testing.expect(inOrder(item4, &.{ "Force of Nature", "Sterak", "Death's Dance", "Dead Man", ">best<" }));
+    // Exhaust Flash, in the top 3: no 4th row
+    const spells = cellOf(try p.shown(), "spells");
+    try testing.expectEqual(3, std.mem.count(u8, spells, "<tr"));
+    try testing.expect(inOrder(spells, &.{ "Exhaust", ">best<" }));
+    // Item 6: none on 400 games, no mark
+    try testing.expect(std.mem.find(u8, cellOf(try p.shown(), "item6"), ">best<") == null);
+}
+
+test "Highest WR sorts every cell by win rate, under 400 games after; in the URL" {
+    var p: Page = undefined;
+    try p.init("");
+    defer p.deinit();
+    p.click(p.button("Highest WR"));
+    try testing.expectEqualStrings("#order=win", p.fake.fragment.items);
+    const item4 = cellOf(try p.shown(), "item4");
+    try testing.expectEqual(3, std.mem.count(u8, item4, "<tr"));
+    try testing.expect(inOrder(item4, &.{ "Dead Man", "Sterak", "Death's Dance" }));
+    // Item 5: Sterak's 401 games first; Fort of Nature's 59.1 on 252 out of the order
+    try testing.expect(inOrder(cellOf(try p.shown(), "item5"), &.{ "Sterak", "Randuin", "Death's Dance" }));
+    // The open cell sorts by Won too
+    p.click(p.nth("data-ref", "all-item4", 0));
+    try testing.expect(std.mem.startsWith(u8, try p.firstName(), "Dead Man"));
+    try testing.expectEqualStrings("#slot=item4&order=win", p.fake.fragment.items);
+    p.click(p.button("Most picked"));
+    try testing.expect(std.mem.startsWith(u8, try p.firstName(), "Force of Nature"));
+    p.deinit();
+
+    try p.init("#order=win");
+    try testing.expectEqual(@as(u32, 0), p.fake.warnings);
+    try testing.expect(inOrder(cellOf(try p.shown(), "item4"), &.{ "Dead Man", "Sterak" }));
 }
 
 test "skills open with every level path" {

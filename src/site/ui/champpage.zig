@@ -700,6 +700,8 @@ pub const Build = struct {
     wasm: ?[]const u8 = null,
     files: Files(BuildData, champrank.Build) = .{},
     want_role: ?role.Role = null,
+    /// Kept for a role without a build
+    order: buildpanel.Order = .pick,
     /// Data.roles' index
     cur: u8 = 0,
 
@@ -711,6 +713,7 @@ pub const Build = struct {
         period: Period = .days30,
         rank: Rank = .plat,
         slot: ?buildpanel.Kind = null,
+        order: buildpanel.Order = .pick,
     };
 
     /// The shown rank's build of the role, else the base one
@@ -733,14 +736,22 @@ pub const Build = struct {
     pub fn toUrl(p: *P) Url {
         const w = p.files.want;
         const b = p.panel();
-        return .{ .role = p.want_role, .region = w.region(), .period = w.period(), .rank = w.rank, .slot = if (b) |x| x.open else null };
+        return .{
+            .role = p.want_role,
+            .region = w.region(),
+            .period = w.period(),
+            .rank = w.rank,
+            .slot = if (b) |x| x.open else null,
+            .order = if (b) |x| x.order else p.order,
+        };
     }
 
     pub fn fromUrl(p: *P, u: Url) void {
         p.want_role = u.role;
         p.files.want = .of(u);
         p.cur = roleIndex(p.data.roles, u.role);
-        if (p.panel()) |b| b.fromUrl(.{ .slot = u.slot });
+        p.order = u.order;
+        if (p.panel()) |b| b.fromUrl(.{ .slot = u.slot, .order = u.order });
     }
 
     /// The loader's, once what files.want needs is in: the open slot stays open

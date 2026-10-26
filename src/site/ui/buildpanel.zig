@@ -3,10 +3,13 @@
 //! Skills) in a 3-column grid, pairs in a narrow container. Each cell lists its top 3
 //! options as compact DataTable rows, most played first: pick share, win rate coloured
 //! against the slot's own (which choice is better here, Jacob 25 Oct), the quieter
-//! reading after it (the rate minus the champion's), games. Tap a cell's "all" to open it
-//! across the panel: every option, named, sortable. One open at a time, in the URL.
-//! The figures' names are said once, above the cells. Data is plain, so a page can hand
-//! it builds filtered by a choice (contextual builds, builds.md answers) later
+//! reading after it (the rate minus the champion's, wide cells only), games. The slot's
+//! highest win rate on solid_games is marked "best", a 4th row when not in the top 3.
+//! Most picked | Highest WR (lolalytics' build toggle, Jacob 26 Oct) re-sorts every cell
+//! by win rate, options under solid_games after. Tap a cell's "all" to open it across
+//! the panel: every option, named, sortable. One open at a time; it and the order in
+//! the URL. The figures' names are said once, above the cells. Data is plain, so a page
+//! can hand it builds filtered by a choice (contextual builds, builds.md answers) later
 const std = @import("std");
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
@@ -14,6 +17,7 @@ const phrase = @import("phrase.zig");
 const art = @import("art.zig");
 const button = @import("button.zig");
 const toggletip = @import("toggletip.zig");
+const segmented = @import("segmented.zig");
 const table = @import("table.zig");
 const runetree = @import("runetree.zig");
 const skillgrid = @import("skillgrid.zig");
@@ -29,7 +33,8 @@ pub const scope = .{".c-build"};
 
 /// Under this many games an option shows no win rate (±10 points at 100 games)
 pub const rate_games = 100;
-/// Under this many games an option fades
+/// Under this many games an option fades, can't be "best" and sorts after the others by
+/// win rate
 pub const solid_games = 400;
 /// Options in a closed cell
 pub const shown = 3;
@@ -61,6 +66,9 @@ pub const Kind = enum {
     }
 };
 const n_kinds = @typeInfo(Kind).@"enum".field_names.len;
+
+/// The cells' order: most played or highest win rate first
+pub const Order = enum { pick, win };
 
 pub const Option = struct {
     /// Spells, items, a path's items
@@ -103,6 +111,10 @@ const W = struct {
     pub const own_title = plain("The small figure");
     pub const own_note = Phrase("The choice's win rate minus {c:text}'s {r:rate}. Late items read high: games that reach them were often won already.");
     pub const min = plain("min");
+    pub const best = plain("best");
+    pub const order = plain("Order");
+    pub const most_picked = plain("Most picked");
+    pub const highest = plain("Highest WR");
 };
 
 /// Win rate, %
@@ -144,7 +156,21 @@ const Ctx = struct {
     open: bool = false,
     /// Core: the most played path, whose items dim in the others
     top: []const art.Art = &.{},
+    /// The highest win rate of two or more options on solid_games
+    best: ?*const Option = null,
 };
+
+/// The highest win rate on solid_games, when two or more options have that many
+fn bestOf(options: []const Option) ?*const Option {
+    var best: ?*const Option = null;
+    var solid: usize = 0;
+    for (options) |*o| {
+        if (o.games < solid_games) continue;
+        solid += 1;
+        if (best == null or rate(o.games, o.wins) > rate(best.?.games, best.?.wins)) best = o;
+    }
+    return if (solid >= 2) best else null;
+}
 
 pub const Row = struct {
     o: *const Option,
@@ -160,15 +186,15 @@ pub const Row = struct {
         return @floatFromInt(r.o.games);
     }
     fn winSort(r: *const Row) f64 {
-        return if (r.o.games < rate_games) -1 else rate(r.o.games, r.o.wins);
+        return if (r.o.games < solid_games) -1 else rate(r.o.games, r.o.wins);
     }
 
     fn what(h: *H, r: *const Row) N {
         const o = r.o;
         const open = r.c.open;
         return switch (r.c.kind) {
-            .core => itempath.view(h, o.art, .{ .minutes = o.minutes, .top = if (r.c.top.ptr == o.art.ptr) null else r.c.top }),
-            .skills => h.span(.{ .class = "keys" }, .{keys(h, o.keys, true)}),
+            .core => h.span(.{ .class = "what" }, .{ itempath.view(h, o.art, .{ .minutes = o.minutes, .top = if (r.c.top.ptr == o.art.ptr) null else r.c.top }), bestMark(h, r) }),
+            .skills => h.span(.{ .class = "what" }, .{ h.span(.{ .class = "keys" }, .{keys(h, o.keys, true)}), bestMark(h, r) }),
             .skill_path => h.span(.{ .class = "keys", .data_v = "path" }, .{keys(h, o.keys, false)}),
             else => blk: {
                 var icons = h.list();
@@ -178,9 +204,13 @@ pub const Row = struct {
                     h.span(.{ .class = "min" }, .{ phrase.num(h, .int, @as(u32, @intFromFloat(@round(o.minutes[0])))), " ", W.min })
                 else
                     null;
-                break :blk h.span(.{ .class = "what" }, .{ icons.done(), if (label) |l| h.span(.{ .class = "nm" }, .{l}) else null, minute });
+                break :blk h.span(.{ .class = "what" }, .{ icons.done(), if (label) |l| h.span(.{ .class = "nm" }, .{l}) else null, minute, bestMark(h, r) });
             },
         };
+    }
+
+    fn bestMark(h: *H, r: *const Row) ?N {
+        return if (r.c.best == r.o) h.span(.{ .class = "best" }, .{W.best}) else null;
     }
 
     /// "Q › E › W", or the level path with R bold
@@ -212,9 +242,10 @@ pub const Table = table.DataTable(Row, .{
     .title = plain("Options"),
     .columns = &.{
         .{ .label = plain(""), .cell = Row.what, .num = false },
-        .{ .label = plain("Pick"), .cell = Row.pickCell, .sort = Row.share },
+        // Under 150 px (320 phones) games stay, pick gives way
+        .{ .label = plain("Pick"), .cell = Row.pickCell, .sort = Row.share, .priority = 2 },
         .{ .label = plain("Won"), .cell = Row.wonCell, .sort = Row.winSort, .answer = true },
-        .{ .label = plain("Games"), .cell = Row.gamesCell, .sort = Row.gamesF, .priority = 3 },
+        .{ .label = plain("Games"), .cell = Row.gamesCell, .sort = Row.gamesF },
     },
     .default_sort = 1,
     .games = Row.games,
@@ -227,24 +258,43 @@ pub const BuildPanel = struct {
     runes: runetree.RuneTree,
     /// The cell open across the panel
     open: ?Kind = null,
+    order: Order = .pick,
     /// Unique on the page: the note's id starts with it
     id: []const u8 = "build",
     ctx: [n_kinds]Ctx = undefined,
     rows: [n_kinds][]Row = @splat(&.{}),
     tables: [n_kinds]Table = undefined,
 
-    pub const Msg = union(enum) { open: Kind, key };
+    pub const Msg = union(enum) { open: Kind, key, order: Order };
 
     pub const Url = struct {
         slot: ?Kind = null,
+        order: Order = .pick,
     };
 
     pub fn toUrl(p: *const BuildPanel) Url {
-        return .{ .slot = p.open };
+        return .{ .slot = p.open, .order = p.order };
     }
 
     pub fn fromUrl(p: *BuildPanel, u: Url) void {
         p.open = if (u.slot) |k| (if (p.rows[@backingInt(k)].len > 0 and k != .skill_path) k else null) else null;
+        p.setOrder(u.order);
+    }
+
+    /// The Table column an order sorts by
+    fn column(o: Order) u8 {
+        return switch (o) {
+            .pick => 1,
+            .win => 2,
+        };
+    }
+
+    fn setOrder(p: *BuildPanel, o: Order) void {
+        p.order = o;
+        for (&p.tables) |*t| {
+            t.sort = column(o);
+            t.desc = true;
+        }
     }
 
     /// In place: the rows point into the panel
@@ -259,6 +309,7 @@ pub const BuildPanel = struct {
                 .ref = rate(s.games, s.wins),
                 .own = data.own,
                 .top = if (s.options.len > 0) s.options[0].art else &.{},
+                .best = bestOf(s.options),
             };
             const rows = try a.alloc(Row, s.options.len);
             for (rows, s.options) |*r, *o| r.* = .{ .o = o, .c = &p.ctx[i] };
@@ -271,6 +322,14 @@ pub const BuildPanel = struct {
         switch (m) {
             .open => |k| {
                 p.open = if (p.open == k) null else k;
+                const t = &p.tables[@backingInt(k)];
+                t.sort = column(p.order);
+                t.desc = true;
+                ev.push = true;
+            },
+            .order => |o| {
+                if (p.order == o) return;
+                p.setOrder(o);
                 ev.push = true;
             },
             // Escape in the open cell closes it, focus back on its "all"
@@ -294,6 +353,10 @@ pub const BuildPanel = struct {
             h.div(.{ .class = "runes" }, .{p.runes.view(h)}),
             h.div(.{ .class = "slots" }, .{
                 h.div(.{ .class = "names" }, .{
+                    segmented.view(h, .{ .s = .s, .label = W.order }, &.{
+                        .{ .label = W.most_picked, .selected = p.order == .pick, .on = h.on(p, .{ .order = .pick }) },
+                        .{ .label = W.highest, .selected = p.order == .win, .on = h.on(p, .{ .order = .win }) },
+                    }),
                     h.span(.{}, .{W.pick}),
                     h.span(.{ .class = "w" }, .{W.won}),
                     h.span(.{ .class = "own" }, .{&tip}),
@@ -323,10 +386,55 @@ pub const BuildPanel = struct {
         const i = @backingInt(k);
         p.ctx[i].open = open;
         const t = &p.tables[i];
-        t.rows = p.rows[i][0..if (open) p.rows[i].len else @min(max, p.rows[i].len)];
+        if (open) {
+            t.rows = p.rows[i];
+        } else {
+            t.rows = p.closed(h, k, max);
+            t.sort = column(p.order);
+            t.desc = true;
+        }
         t.head = open;
         t.id = h.fmt("{s}-{s}", .{ p.id, @tagName(k) });
         return t.view(h);
+    }
+
+    /// A closed cell's rows: the top `max` by pick and the best when not among them, or
+    /// the top `max` by win rate
+    fn closed(p: *BuildPanel, h: *H, k: Kind, max: usize) []Row {
+        const rows = p.rows[@backingInt(k)];
+        const n = @min(max, rows.len);
+        if (p.order == .win) {
+            const out = h.mem.dupe(Row, rows) catch {
+                h.oom = true;
+                return rows[0..n];
+            };
+            std.sort.insertion(Row, out, {}, struct {
+                fn f(_: void, x: Row, y: Row) bool {
+                    return x.winSort() > y.winSort();
+                }
+            }.f);
+            return out[0..n];
+        }
+        const best = p.ctx[@backingInt(k)].best orelse return rows[0..n];
+        for (rows[0..n]) |r| if (r.o == best) return rows[0..n];
+        const out = h.mem.alloc(Row, n + 1) catch {
+            h.oom = true;
+            return rows[0..n];
+        };
+        @memcpy(out[0..n], rows[0..n]);
+        for (rows[n..]) |r| if (r.o == best) {
+            out[n] = r;
+        };
+        return out;
+    }
+
+    /// The level path the grid draws: the most played, or the best by win rate
+    fn shownPath(p: *BuildPanel) *const Row {
+        const paths = p.rows[@backingInt(Kind.skill_path)];
+        if (p.order == .win) if (p.ctx[@backingInt(Kind.skill_path)].best) |b| {
+            for (paths) |*r| if (r.o == b) return r;
+        };
+        return &paths[0];
     }
 
     fn cell(p: *BuildPanel, h: *H, k: Kind) ?N {
@@ -353,10 +461,10 @@ pub const BuildPanel = struct {
             p.head(h, .skills, @max(pri.len, paths.len)),
             if (pri.len > 0) p.tableFor(h, .skills, open, 1) else null,
             if (paths.len > 0) skillgrid.view(h, .{
-                .keys = paths[0].o.keys,
-                .games = paths[0].o.games,
-                .wins = paths[0].o.wins,
-                .share = paths[0].share(),
+                .keys = p.shownPath().o.keys,
+                .games = p.shownPath().o.games,
+                .wins = p.shownPath().o.wins,
+                .share = p.shownPath().share(),
             }, path_c.ref) else null,
             if (open and paths.len > 0) p.tableFor(h, .skill_path, true, paths.len) else null,
         });
@@ -370,9 +478,10 @@ pub const css =
     \\  @container (min-width: 900px) { .c-build > .in { grid-template-columns: minmax(0, 600px) minmax(0, 1fr); } }
     \\  .c-build > .in > * { min-width: 0; }
     \\  .c-build .slots { container-type: inline-size; display: flex; flex-direction: column; }
-    \\  .c-build .slots > .names { display: flex; justify-content: flex-end; align-items: baseline; gap: var(--sp-2); height: 18px;
-    \\    font-size: var(--fs-xs); color: var(--faint); }
-    \\  .c-build .names > span:first-child { color: var(--muted); }
+    \\  .c-build .slots > .names { display: flex; justify-content: flex-end; align-items: center; gap: var(--sp-2);
+    \\    margin-bottom: var(--sp-2); font-size: var(--fs-xs); color: var(--faint); }
+    \\  .c-build .names > .c-seg { margin-right: auto; }
+    \\  .c-build .names > .c-seg + span { color: var(--muted); }
     \\  .c-build .names > .w { color: var(--t2); font-weight: var(--w-b); }
     \\  .c-build .slots > .cells { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-3) var(--sp-4); }
     \\  @container (max-width: 520px) { .c-build .slots > .cells { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); } }
@@ -395,7 +504,13 @@ pub const css =
     \\  .c-build .keys > b { color: var(--text); }
     \\  .c-build .keys > .ar { color: var(--faint); margin: 0 3px; font-family: var(--font); }
     \\  .c-build .slot > .c-skills { margin: var(--sp-2) 0 var(--sp-1); }
-    \\  @container (max-width: 180px) { .c-build .won > .own { display: none; } }
+    \\  .c-build .what > .best { margin-left: 4px; font-size: var(--fs-xs); font-weight: var(--w-b); color: var(--accent); }
+    \\  @container (max-width: 260px) { .c-build .won > .own { display: none; } }
+    \\  @container (max-width: 200px) {
+    \\    .c-build .what > .best { flex: none; width: 6px; height: 6px; margin-left: 5px; border-radius: 50%;
+    \\      overflow: hidden; color: transparent; background: var(--accent); }
+    \\    .c-build .c-table[data-v="compact"] :is(th, td) { padding: 0 2px; }
+    \\  }
     \\}
     \\
 ;

@@ -43,9 +43,11 @@ and TOO MANY WORDS"; "how hard champ is to pickup, why does it take up so much s
   carries it (champions table, matchup page, search "darius jungle", desktop)
 - The build page folds into this page (builds.md): every build slot opens in place to
   its full option table. Nothing to go back from
-- Most played and highest win rate at once, no toggle: every slot lists its options by
-  games, each with pick share, win rate and games. The win rate is coloured on the
-  scale, so the higher one is visible without a marker or a key
+- Most played and highest win rate at once (Jacob 26 Oct): every slot lists its top 3
+  by games, each row with pick share, win rate and games. The slot's highest win rate on
+  400+ games is marked "best", a 4th row when not in the top 3. A panel-wide Most picked
+  | Highest WR (lolalytics' build toggle) re-sorts every cell by win rate, options under
+  400 games after; `order=win` in the URL. Under 150 px of cell, pick gives way to games
 - No colour key anywhere. Scale colour carries a second cue (sign, bold); thin data
   fades. A number whose meaning isn't obvious gets a Toggletip on its label, not a key
 - Buttons look like buttons, data cells never do: data cells have no border, no

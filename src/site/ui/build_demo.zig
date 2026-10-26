@@ -132,7 +132,7 @@ pub const darius: bp.Data = .{
             timed(&.{sterak}, &.{31}, 1616, 59.2),
             timed(&.{dd}, &.{32}, 1553, 58.3),
             timed(&.{randuin}, &.{32}, 894, 51.3),
-            timed(&.{dmp}, &.{31}, 718, 58.6),
+            timed(&.{dmp}, &.{31}, 718, 60.6),
             timed(&.{thornmail}, &.{33}, 248, 50.8),
         } },
         .{ .kind = .item5, .games = 2415, .wins = 1340, .options = &.{
