@@ -53,8 +53,9 @@ pub fn encode(a: Allocator, comptime T: type, v: T, out: *std.ArrayList(u8)) All
 /// A value of `T` from bytes written by `encode`; slices are allocated with `a` (an arena)
 pub fn decode(a: Allocator, comptime T: type, bytes: []const u8) Error!T {
     var r: Reader = .{ .bytes = bytes, .a = a };
-    if (try r.read(u32) != fingerprint(T)) return error.WrongType;
-    const v = try r.read(T);
+    if (r.read(u32) != fingerprint(T)) return r.err orelse error.WrongType;
+    const v = r.read(T);
+    if (r.err) |e| return e;
     if (r.i != bytes.len) return error.BadValue;
     return v;
 }
@@ -95,62 +96,104 @@ fn put(a: Allocator, out: *std.ArrayList(u8), comptime T: type, v: T) Allocator.
     }
 }
 
+/// Errors are sticky and checked once at the end: no branch per field (ui.wasm size). After
+/// one, reads give zeros and empty slices
 const Reader = struct {
     bytes: []const u8,
     i: usize = 0,
     a: Allocator,
+    err: ?Error = null,
 
-    fn take(r: *Reader, n: usize) Error![]const u8 {
-        if (n > r.bytes.len - r.i) return error.Truncated;
+    fn fail(r: *Reader, e: Error) void {
+        if (r.err == null) r.err = e;
+        r.i = r.bytes.len;
+    }
+
+    fn take(r: *Reader, n: usize) []const u8 {
+        if (n > r.bytes.len - r.i) {
+            r.fail(error.Truncated);
+            return "";
+        }
         defer r.i += n;
         return r.bytes[r.i..][0..n];
     }
 
-    fn read(r: *Reader, comptime T: type) Error!T {
+    /// `n` bytes little-endian; one function for every int width
+    noinline fn word(r: *Reader, n: u8) u64 {
+        const b = r.take(n);
+        var x: u64 = 0;
+        for (b, 0..) |c, k| x |= @as(u64, c) << @intCast(8 * k);
+        return x;
+    }
+
+    fn read(r: *Reader, comptime T: type) T {
         switch (@typeInfo(T)) {
             .int => |i| {
                 const U = @Int(.unsigned, (i.bits + 7) / 8 * 8);
-                const u = std.mem.readInt(U, (try r.take(@sizeOf(U)))[0..@sizeOf(U)], .little);
+                const u: U = @truncate(r.word(@sizeOf(U)));
                 const wide: @Int(i.signedness, @bitSizeOf(U)) = @bitCast(u);
-                return std.math.cast(T, wide) orelse error.BadValue;
+                return std.math.cast(T, wide) orelse {
+                    r.fail(error.BadValue);
+                    return 0;
+                };
             },
-            .float => |f| return @bitCast(try r.read(@Int(.unsigned, f.bits))),
+            .float => |f| return @bitCast(r.read(@Int(.unsigned, f.bits))),
             .void => return {},
-            .bool => return switch ((try r.take(1))[0]) {
-                0 => false,
-                1 => true,
-                else => error.BadValue,
+            .bool => {
+                const x = r.read(u8);
+                if (x > 1) r.fail(error.BadValue);
+                return x == 1;
             },
-            .@"enum" => |e| return std.enums.fromInt(T, try r.read(e.tag_type)) orelse error.BadValue,
-            .optional => |o| return if (try r.read(bool)) try r.read(o.child) else null,
+            .@"enum" => |e| {
+                const x = r.read(e.tag_type);
+                if (comptime dense(e)) {
+                    if (x < e.field_names.len) return @fromBackingInt(@intCast(x));
+                } else if (std.enums.fromInt(T, x)) |v| return v;
+                r.fail(error.BadValue);
+                return @fromBackingInt(@intCast(e.field_values[0]));
+            },
+            .optional => |o| return if (r.read(bool)) r.read(o.child) else null,
             .array => |arr| {
                 var v: T = undefined;
-                for (&v) |*x| x.* = try r.read(arr.child);
+                for (&v) |*x| x.* = r.read(arr.child);
                 return v;
             },
             .pointer => |p| {
-                const n = try r.read(u32);
+                const n = r.read(u32);
                 if (p.child == u8) return r.take(n);
                 // Every element takes a byte or more: a bad length can't ask for more
                 // memory than the file is long
-                if (n > r.bytes.len - r.i) return error.Truncated;
-                const items = try r.a.alloc(p.child, n);
-                for (items) |*x| x.* = try r.read(p.child);
+                if (n > r.bytes.len - r.i) {
+                    r.fail(error.Truncated);
+                    return &.{};
+                }
+                const items = r.a.alloc(p.child, n) catch {
+                    r.fail(error.OutOfMemory);
+                    return &.{};
+                };
+                for (items) |*x| x.* = r.read(p.child);
                 return items;
             },
             .@"struct" => {
                 var v: T = undefined;
-                inline for (comptime std.meta.fieldNames(T)) |f| @field(v, f) = try r.read(@FieldType(T, f));
+                inline for (comptime std.meta.fieldNames(T)) |f| @field(v, f) = r.read(@FieldType(T, f));
                 return v;
             },
             .@"union" => |u| {
-                const tag = try r.read(u.tag_type.?);
+                const tag = r.read(u.tag_type.?);
                 switch (tag) {
-                    inline else => |t| return @unionInit(T, @tagName(t), try r.read(@FieldType(T, @tagName(t)))),
+                    inline else => |t| return @unionInit(T, @tagName(t), r.read(@FieldType(T, @tagName(t)))),
                 }
             },
             else => @compileError("data: can't decode " ++ @typeName(T)),
         }
+    }
+
+    /// Values 0, 1, 2 ... in order: a range check stands for the lookup
+    fn dense(comptime e: std.lang.Type.Enum) bool {
+        if (e.mode != .exhaustive) return false;
+        for (e.field_values, 0..) |v, k| if (v != k) return false;
+        return true;
     }
 };
 

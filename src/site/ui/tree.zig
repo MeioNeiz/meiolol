@@ -367,35 +367,32 @@ pub const H = struct {
     }
 
     /// The typed front: checks and converts at compile time, then hands plain arrays to
-    /// `make`, so each call site costs a few stores and one call (ui.wasm size)
+    /// `make`, so each call site costs a few stores and one call (ui.wasm size). Slots are
+    /// fixed at compile time (names and events static, a null value or handler is none):
+    /// no counters or copies at the call site
     pub fn el(h: *H, comptime tag: Tag, attrs: anytype, kids: anytype) N {
         @setEvalBranchQuota(1_000_000);
         const A = @TypeOf(attrs);
         const fields = @typeInfo(A).@"struct".field_names;
-        var as: [fields.len]Attr = undefined;
-        var na: usize = 0;
-        var hs: [@typeInfo(Ev).@"enum".field_names.len]Handler = undefined;
-        var nh: usize = 0;
-        var events: u16 = 0;
-        var key: u32 = 0;
+        const info = @typeInfo(A).@"struct";
         // Handlers in Ev order, so Tree.handler finds one by popcount. A null one (a
         // component's optional `on`) is no handler
-        inline for (@typeInfo(Ev).@"enum".field_names) |evn| {
-            if (@hasField(A, "on_" ++ evn)) {
+        const evs = comptime blk: {
+            var arr: []const Ev = &.{};
+            for (@typeInfo(Ev).@"enum".field_names) |evn| if (@hasField(A, "on_" ++ evn)) {
                 const F = @FieldType(A, "on_" ++ evn);
                 if (F != Handler and F != ?Handler) @compileError(".on_" ++ evn ++ " takes h.on(component, msg)");
-                const hv: ?Handler = @field(attrs, "on_" ++ evn);
-                if (hv) |x| {
-                    hs[nh] = x;
-                    hs[nh].ev = @field(Ev, evn);
-                    nh += 1;
-                    events |= @as(u16, 1) << @backingInt(@field(Ev, evn));
-                }
-            }
+                arr = arr ++ [_]Ev{@field(Ev, evn)};
+            };
+            break :blk arr;
+        };
+        var hs: [evs.len]?*const Handler = undefined;
+        inline for (evs, 0..) |e, i| {
+            const F = @FieldType(A, "on_" ++ @tagName(e));
+            hs[i] = if (F == Handler) &@field(attrs, "on_" ++ @tagName(e)) else if (@field(attrs, "on_" ++ @tagName(e))) |*x| x else null;
         }
         // Values known at compile time (literals, catalogue words) become one static
         // array in the binary; only the rest are stored at run time
-        const info = @typeInfo(A).@"struct";
         const static = comptime blk: {
             var arr: []const Attr = &.{};
             for (fields, 0..) |f, i| {
@@ -406,30 +403,38 @@ pub const H = struct {
             }
             break :blk arr;
         };
+        const names = comptime blk: {
+            var arr: []const []const u8 = &.{};
+            for (fields, 0..) |f, fi| {
+                if (std.mem.startsWith(u8, f, "on_")) {
+                    if (!@hasField(Ev, f[3..])) @compileError("no event " ++ f[3..]);
+                    continue;
+                }
+                if (std.mem.eql(u8, f, "key") or info.field_attrs[fi].@"comptime") continue;
+                arr = arr ++ [_][]const u8{attrName(f)};
+            }
+            break :blk arr;
+        };
+        var vs: [names.len]?[]const u8 = undefined;
+        var key: u32 = 0;
+        comptime var vi = 0;
         inline for (fields, 0..) |f, fi| {
-            if (comptime std.mem.startsWith(u8, f, "on_")) {
-                comptime if (!@hasField(Ev, f[3..])) @compileError("no event " ++ f[3..]);
+            if (comptime std.mem.startsWith(u8, f, "on_")) continue;
+            if (comptime std.mem.eql(u8, f, "key")) {
+                key = keyOf(@field(attrs, f));
                 continue;
             }
-            if (comptime info.field_attrs[fi].@"comptime" and !std.mem.eql(u8, f, "key")) continue;
-            const v = @field(attrs, f);
-            if (comptime std.mem.eql(u8, f, "key")) {
-                key = keyOf(v);
-            } else {
-                const name = comptime attrName(f);
-                if (h.attrValue(comptime attrKind(name), v)) |val| {
-                    as[na] = .{ .name = name, .value = val };
-                    na += 1;
-                }
-            }
+            if (comptime info.field_attrs[fi].@"comptime") continue;
+            vs[vi] = h.attrValue(comptime attrKind(names[vi]), @field(attrs, f));
+            vi += 1;
         }
         const K = @TypeOf(kids);
-        if (K == Text) return h.make(tag, static, as[0..na], hs[0..nh], events, key, &.{.{ .text = kids.s }});
+        if (K == Text) return h.make(tag, static, names, &vs, evs, &hs, key, &.{.{ .text = kids.s }});
         const kf = @typeInfo(K).@"struct";
         if (!kf.is_tuple) @compileError("children go in a tuple: .{ ... }");
         var ks: [kf.field_names.len]Kid = undefined;
         inline for (0..kf.field_names.len) |i| ks[i] = toKid(kids[i]);
-        return h.make(tag, static, as[0..na], hs[0..nh], events, key, &ks);
+        return h.make(tag, static, names, &vs, evs, &hs, key, &ks);
     }
 
     const Kid = union(enum) { none, node: N, nodes: []const N, text: []const u8, int: i64, float: f64 };
@@ -455,21 +460,26 @@ pub const H = struct {
         };
     }
 
-    noinline fn make(h: *H, tag: Tag, static: []const Attr, as: []const Attr, hs: []const Handler, events: u16, key: u32, ks: []const Kid) N {
-        var n: Node = .{ .tag = tag, .events = events, .key = key };
-        h.t.events |= events;
+    noinline fn make(h: *H, tag: Tag, static: []const Attr, names: []const []const u8, vs: []const ?[]const u8, evs: []const Ev, hs: []const ?*const Handler, key: u32, ks: []const Kid) N {
+        var n: Node = .{ .tag = tag, .key = key };
         n.attrs = @intCast(h.t.attrs.items.len);
-        n.n_attrs = @intCast(static.len + as.len);
         h.t.attrs.appendSlice(h.mem, static) catch {
             h.oom = true;
         };
-        h.t.attrs.appendSlice(h.mem, as) catch {
+        for (names, vs) |name, v| if (v) |x| h.t.attrs.append(h.mem, .{ .name = name, .value = x }) catch {
             h.oom = true;
         };
+        n.n_attrs = @intCast(h.t.attrs.items.len - n.attrs);
         n.handlers = @intCast(h.t.handlers.items.len);
-        h.t.handlers.appendSlice(h.mem, hs) catch {
-            h.oom = true;
+        for (evs, hs) |e, hp| if (hp) |x| {
+            var hd = x.*;
+            hd.ev = e;
+            n.events |= @as(u16, 1) << @backingInt(e);
+            h.t.handlers.append(h.mem, hd) catch {
+                h.oom = true;
+            };
         };
+        h.t.events |= n.events;
         // Kids built first (they are arguments), so they go straight into the shared kids
         // array; neighbouring text and numbers merge into one text node
         n.kids = @intCast(h.t.kids.items.len);

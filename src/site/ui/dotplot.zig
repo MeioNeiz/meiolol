@@ -98,7 +98,9 @@ pub const DotPlot = struct {
                 return c.d.dots[a].games > c.d.dots[b].games;
             }
         };
-        std.mem.sort(u16, o, Ctx{ .d = d, .nb = nb }, Ctx.less);
+        // Insertion: a few hundred dots at most, and std.mem.sort's block sort costs ~9 KB
+        // of ui.wasm
+        std.sort.insertion(u16, o, Ctx{ .d = d, .nb = nb }, Ctx.less);
     }
 
     pub fn update(d: *D, m: Msg, ev: *tree.Event) void {
