@@ -65,7 +65,7 @@ pub const Inspector = struct {
 
     const I = @This();
 
-    pub const Msg = union(enum) { filter: Filter, pick: u8, clear, more };
+    pub const Msg = union(enum) { filter: Filter, pick: u8, clear, more, key };
 
     pub fn update(i: *I, m: Msg, ev: *tree.Event) void {
         switch (m) {
@@ -74,9 +74,22 @@ pub const Inspector = struct {
                 i.all = false;
             },
             .more => i.all = true,
+            // From a row's button: the arrows step through the list, as the graph's do
+            .key => {
+                const k = ev.text;
+                const eql = std.mem.eql;
+                if (eql(u8, k, "Escape")) return i.update(.clear, ev);
+                const d: i32 = if (eql(u8, k, "ArrowDown") or eql(u8, k, "ArrowRight")) 1 else if (eql(u8, k, "ArrowUp") or eql(u8, k, "ArrowLeft")) -1 else return;
+                i.tl.cur = i.next(d) orelse return;
+                ev.handled = true;
+                ev.push = true;
+                ev.after = .{ .op = .focus, .ref = "insp-cur" };
+            },
             .pick => |k| {
                 i.tl.cur = k;
                 ev.push = true;
+                // Safari leaves a pressed button unfocused: the arrows then reach nothing
+                ev.after = .{ .op = .focus, .ref = "insp-cur" };
             },
             .clear => {
                 if (i.tl.cur != null) i.tl.cur = null else i.tl.range = null;
@@ -108,6 +121,26 @@ pub const Inspector = struct {
             .objectives => m.objs,
             .deaths => m.died,
         };
+    }
+
+    /// The shown moment `d` rows from the picked one; the first or last when none of
+    /// the shown is picked
+    fn next(i: *const I, d: i32) ?u8 {
+        var first: ?u8 = null;
+        var prev: ?u8 = null;
+        var past = false;
+        for (i.moments, 0..) |m, k| {
+            if (!i.shown(m)) continue;
+            const here: u8 = @intCast(k);
+            if (past) return here;
+            if (i.tl.cur == here) {
+                if (d < 0) return prev orelse here;
+                past = true;
+            }
+            first = first orelse here;
+            prev = here;
+        }
+        return if (past) i.tl.cur else if (d > 0) first else prev;
     }
 
     fn atTurn(i: *const I, s: gamedata.Span) bool {
@@ -215,7 +248,7 @@ pub const Inspector = struct {
         for (i.moments, 0..) |m, k| if (i.shown(m)) l.add(i.row(h, m, k));
         const rs = l.done();
         if (rs.len == 0) return h.p(.{ .class = "none" }, .{W.none});
-        return h.el(.ol, .{ .class = "ml", .aria_label = W.moments, .data_all = i.all or rs.len <= list_cap }, .{rs});
+        return h.el(.ol, .{ .class = "ml", .aria_label = W.moments, .data_all = i.all or rs.len <= list_cap, .on_keydown = h.on(i, .key) }, .{rs});
     }
 
     fn more(i: *I, h: *H) ?N {
@@ -249,6 +282,7 @@ pub const Inspector = struct {
                 .class = "t",
                 .type = "button",
                 .aria_current = on,
+                .data_ref = if (on) "insp-cur" else null,
                 .aria_label = W.row.with(h, .{ .t = m.t, .d = d, .a = m.us, .b = m.them }),
                 .on_click = h.on(i, .{ .pick = @as(u8, @intCast(k)) }),
             }, .{phrase.num(h, .time, m.t)}),
@@ -374,7 +408,7 @@ pub fn gallery(g: *Gallery) void {
 
 const testing = std.testing;
 
-test "the summary follows the pick, the list the range; filters, a row press, Esc" {
+test "the summary follows the pick, the list the range; filters, a row press, arrows, Esc" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     var t: tree.Tree = .{};
@@ -389,6 +423,16 @@ test "the summary follows the pick, the list the range; filters, a row press, Es
     i.update(.{ .pick = first.? }, &ev);
     try testing.expect(ev.push);
     try testing.expectEqual(gamedata.momentSpan(i.moments[first.?]), i.span());
+    var key: tree.Event = .{ .kind = .keydown, .text = "ArrowDown" };
+    i.update(.key, &key);
+    try testing.expect(key.handled);
+    const second = i.tl.cur.?;
+    try testing.expect(second > first.? and i.shown(i.moments[second]));
+    key.text = "ArrowLeft";
+    i.update(.key, &key);
+    try testing.expectEqual(first, i.tl.cur);
+    i.update(.key, &key);
+    try testing.expectEqual(first, i.tl.cur);
     i.update(.{ .filter = .deaths }, &ev);
     for (i.moments) |m| if (i.shown(m)) try testing.expect(m.died);
     i.update(.clear, &ev);
