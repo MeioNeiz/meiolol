@@ -156,7 +156,8 @@ pub const Timeline = struct {
         t.cur = null;
     }
 
-    fn step(t: *T, d: i32) void {
+    /// The next (d 1) or previous (d -1) moment in the range
+    pub fn step(t: *T, d: i32) void {
         var at: ?usize = null;
         var first: ?u8 = null;
         var last: ?u8 = null;

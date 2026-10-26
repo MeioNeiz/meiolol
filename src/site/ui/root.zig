@@ -57,6 +57,8 @@ pub const histogram = @import("histogram.zig");
 pub const lane = @import("lane.zig");
 pub const timeline = @import("timeline.zig");
 pub const gamedata = @import("gamedata.zig");
+pub const gamepage = @import("gamepage.zig");
+pub const gamehead = @import("gamehead.zig");
 pub const inspector = @import("inspector.zig");
 pub const gamestrip = @import("gamestrip.zig");
 pub const minimap = @import("minimap.zig");
@@ -74,7 +76,7 @@ pub const champpage = @import("champpage.zig");
 pub const components = .{ button, chip, badge, segmented, card, toggletip, strip, role, champ, rolepicker, champsearch, champhead, matchbrief, champlist, table, chart, dotplot, trend, histogram, art, skillgrid, itempath, runetree, buildpanel, champpage };
 
 /// Every component, in the gallery's order
-pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, role, champ, site, rolepicker, filterbar, champsearch, champhead, matchbrief, champlist, draftboard, champselect, teamrows, loadscreen, gamescreen, postgame, app, table, chart, dotplot, trend, histogram, lane, timeline, spark, art, skillgrid, itempath, runetree, buildpanel, versus, objicon, minimap, gamestrip, inspector };
+pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, role, champ, site, rolepicker, filterbar, champsearch, champhead, matchbrief, champlist, draftboard, champselect, teamrows, loadscreen, gamescreen, postgame, app, table, chart, dotplot, trend, histogram, lane, timeline, spark, art, skillgrid, itempath, runetree, buildpanel, versus, objicon, minimap, gamestrip, inspector, gamehead, gamepage };
 
 pub const H = tree.H;
 pub const N = tree.N;

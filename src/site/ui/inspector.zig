@@ -249,7 +249,7 @@ pub const Inspector = struct {
 
 pub const css =
     \\@layer components {
-    \\  .c-insp { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+    \\  .c-insp { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; container-type: inline-size; }
     \\  .c-insp > .head { display: flex; align-items: center; gap: var(--sp-2); }
     \\  .c-insp .sp { font-size: var(--fs-l); font-variant-numeric: tabular-nums; }
     \\  .c-insp .esc { all: unset; margin-left: auto; padding: 2px 6px; border-radius: var(--r-s); cursor: pointer;
@@ -261,7 +261,7 @@ pub const css =
     \\  .c-insp .rows { flex: 1; min-width: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px var(--sp-3);
     \\    align-items: center; font-size: var(--fs-s); }
     \\  .c-insp .rows > .k { color: var(--muted); white-space: nowrap; }
-    \\  .c-insp .rows > .v { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-2);
+    \\  .c-insp .rows > .v { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 2px var(--sp-2);
     \\    font-variant-numeric: tabular-nums; white-space: nowrap; }
     \\  .c-insp .us { color: var(--us-hot); }
     \\  .c-insp .them { color: var(--them-hot); }
@@ -299,12 +299,17 @@ pub const css =
     \\  .c-insp .db::before { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; border-radius: 2px;
     \\    width: calc(var(--d) * 1.25%); background: var(--gain); }
     \\  .c-insp .db[data-d="drop"]::before { left: auto; right: 50%; background: var(--drop); }
-    \\  .c-insp .who { display: flex; align-items: center; gap: 3px; min-width: 0; flex: 1; }
+    \\  .c-insp .who { display: flex; align-items: center; gap: 3px; min-width: 0; flex: 1; overflow-x: clip; }
     \\  .c-insp .who > .c-champ + .c-champ { margin-left: -7px; }
     \\  .c-insp .who > b { margin: 0 4px; font-variant-numeric: tabular-nums; white-space: nowrap; }
     \\  .c-insp .ob { display: flex; gap: 2px; }
     \\  .c-insp .ml .g { margin-left: auto; font-weight: var(--w-m); }
     \\  .c-insp .none { margin: 0; font-size: var(--fs-s); color: var(--faint); }
+    \\  @container (max-width: 330px) {
+    \\    .c-insp > .sum { flex-direction: column; }
+    \\    .c-insp > .sum > .rows { align-self: stretch; }
+    \\    .c-insp .ml .c-map, .c-insp .ml .nm, .c-insp .ml .db { display: none; }
+    \\  }
     \\}
     \\
 ;
