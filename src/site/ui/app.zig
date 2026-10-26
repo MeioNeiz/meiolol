@@ -10,6 +10,7 @@ const champselect = @import("champselect.zig");
 const loadscreen = @import("loadscreen.zig");
 const gamescreen = @import("gamescreen.zig");
 const postgame = @import("postgame.zig");
+const lane = @import("lane.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = @import("phrase.zig").plain;
 const H = tree.H;
@@ -42,8 +43,8 @@ pub const sel = "[data-island=app]";
 
 pub const App = struct {
     data: Data,
-    lane: gamescreen.Held = .{},
-    team: gamescreen.Held = .{},
+    lane: lane.Held = .{},
+    team: lane.Held = .{},
 
     pub const Msg = enum { none };
 
@@ -62,7 +63,7 @@ pub const App = struct {
                     h.el(.h1, .{}, .{n.title}),
                     if (n.text.len > 0) h.p(.{}, .{n.text}) else null,
                 }),
-                .select => |s| champselect.view(h, s),
+                .select => |s| champselect.view(h, s, &a.lane),
                 .loading => |s| loadscreen.view(h, s),
                 .game => |s| gamescreen.view(h, s, .{ .lane = &a.lane, .team = &a.team }),
                 .post => |s| postgame.view(h, s, &a.team),

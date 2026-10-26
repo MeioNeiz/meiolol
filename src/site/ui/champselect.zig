@@ -12,6 +12,7 @@ const chip = @import("chip.zig");
 const card = @import("card.zig");
 const fmt = @import("fmt.zig");
 const draftboard = @import("draftboard.zig");
+const lanechart = @import("lane.zig");
 const phrase = @import("phrase.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
@@ -46,6 +47,9 @@ pub const Lane = struct {
     sentence: []const u8 = "",
     /// Few games behind the sentence
     thin: bool = false,
+    /// The matchup's gold by minute (band and line, no `you`) and what it shows
+    chart: ?lanechart.Figures = null,
+    caption: []const u8 = "",
     options: []const Option = &.{},
     /// "EUW, last 30 days"
     scope: []const u8 = "",
@@ -76,7 +80,8 @@ pub const BanOption = struct {
     why: []const u8,
 };
 
-pub fn view(h: *H, s: Screen) N {
+/// `held`: the island's chart state; null draws no chart
+pub fn view(h: *H, s: Screen, held: ?*lanechart.Held) N {
     const bans = banOptions(h, s);
     return h.div(.{ .class = "c-cs" }, .{
         h.div(.{ .class = "board" }, .{
@@ -86,12 +91,12 @@ pub fn view(h: *H, s: Screen) N {
         }),
         h.div(.{ .class = "side" }, .{
             if (s.banning) bans else null,
-            lane(h, s.lane),
+            lane(h, s.lane, held),
         }),
     });
 }
 
-fn lane(h: *H, l: Lane) N {
+fn lane(h: *H, l: Lane, held: ?*lanechart.Held) N {
     var opts = h.list();
     for (l.options, 0..) |o, i| opts.add(option(h, i, o, l.mode == .locked));
     return h.section(.{ .class = "lane" }, .{
@@ -114,6 +119,8 @@ fn lane(h: *H, l: Lane) N {
             if (l.them) |t| champ.view(h, t, .{ .px = .@"32", .side = .them, .state = if (l.guessed) .thin else .normal }) else null,
         }),
         if (l.sentence.len > 0) h.p(.{ .class = "say", .data_thin = l.thin }, .{l.sentence}) else null,
+        if (l.chart) |c| if (held) |x| x.at(c, W.gold).view(h) else null else null,
+        if (l.chart != null and l.caption.len > 0) h.p(.{ .class = "scope" }, .{l.caption}) else null,
         h.h3(.{}, .{switch (l.mode) {
             .blind => W.head_blind,
             .counter => W.head_counter,
@@ -171,6 +178,7 @@ const W = struct {
     const win = phrase.Phrase("{p:rate}");
     const team_win = plain("team win");
     const no_pick = plain("No pick yet");
+    const gold = plain("Gold");
     const vs = plain(" vs ");
     const guess = plain("?");
     const blind = plain("Safe blind");
@@ -237,6 +245,13 @@ pub const sample: Screen = .{
         .guessed = true,
         .mode = .counter,
         .sentence = "Ahri usually trails Syndra by about 150 gold at 14 minutes, though 8 games in 10 land between -900 and +700.",
+        .chart = .{
+            .a = "Ahri",
+            .b = "Syndra",
+            .band = &.{ .{ 0, 0 }, .{ -40, 30 }, .{ -90, 60 }, .{ -140, 90 }, .{ -190, 110 }, .{ -240, 140 }, .{ -290, 160 }, .{ -340, 190 }, .{ -390, 210 }, .{ -440, 240 }, .{ -480, 260 }, .{ -530, 280 }, .{ -570, 300 }, .{ -610, 320 }, .{ -650, 340 }, .{ -690, 360 } },
+            .line = &.{ 0, -5, -15, -25, -40, -50, -60, -75, -85, -95, -105, -115, -125, -135, -150, -160 },
+        },
+        .caption = "Gold, you minus them: the line is the average, the band the middle half of 1,204 games (All games, EUW, last 30 days).",
         .options = &.{
             .{
                 .champ = demo("Ahri", "Ahri"),
@@ -275,10 +290,19 @@ fn private(h: *H, s: Screen) Screen {
     return p;
 }
 
+fn chartState(h: *H) ?*lanechart.Held {
+    const x = h.mem.create(lanechart.Held) catch {
+        h.oom = true;
+        return null;
+    };
+    x.* = .{};
+    return x;
+}
+
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
-    g.addFill("counter, public", view(h, sample));
-    g.addFill("counter, private", view(h, private(h, sample)));
+    g.addFill("counter, public", view(h, sample, chartState(h)));
+    g.addFill("counter, private", view(h, private(h, sample), chartState(h)));
     g.addFill("your ban, blind", view(h, .{
         .board = .{ .lanes = draftboard.sample.lanes[0..5], .bans_them = draftboard.sample.bans_them },
         .banning = true,
@@ -287,5 +311,5 @@ pub fn gallery(g: *Gallery) void {
             .{ .champ = demo("Smolder", "Smolder"), .role = .bot, .why = "wins often and is picked a lot in bot" },
         },
         .lane = .{ .role = .mid, .options = sample.lane.options[1..], .scope = "EUW, last 30 days" },
-    }));
+    }, null));
 }

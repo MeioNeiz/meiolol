@@ -292,10 +292,16 @@ fn lane(a: Allocator, c: Ctx, card: *const lanecard.Card, mode: board.Mode) !ui.
         };
     }
     const them = card.opponent;
+    const me_champ = try c.champ(a, card.me);
+    const them_champ = if (them) |o| try c.champ(a, o.champion) else null;
+    const chart: ?ui.lane.Figures = if (card.matchup) |m| if (m.points.len >= 2) blk: {
+        const cv = try curve(a, m);
+        break :blk .{ .a = if (me_champ) |x| x.name else "You", .b = if (them_champ) |x| x.name else "Them", .band = cv.band, .line = cv.line };
+    } else null else null;
     return .{
         .role = uiRole(card.role),
-        .me = try c.champ(a, card.me),
-        .them = if (them) |o| try c.champ(a, o.champion) else null,
+        .me = me_champ,
+        .them = them_champ,
         .guessed = if (them) |o| o.guessed else false,
         .mode = switch (mode) {
             .blind => .blind,
@@ -304,6 +310,8 @@ fn lane(a: Allocator, c: Ctx, card: *const lanecard.Card, mode: board.Mode) !ui.
         },
         .sentence = card.sentence,
         .thin = if (card.matchup) |m| m.thin else false,
+        .chart = chart,
+        .caption = if (card.matchup) |m| try a.print("Gold, you minus them: the line is the average, the band the middle half of {d} games ({s}, EUW, {s}).", .{ m.games, m.bracket.label(), card.period }) else "",
         .options = options,
         .scope = if (card.period.len > 0) try a.print("EUW, {s}", .{card.period}) else "EUW",
     };
@@ -415,17 +423,7 @@ fn gameLane(a: Allocator, c: Ctx, g: *const ingame.InGame, l: ingame.Lane, now: 
         });
     };
     const mu = l.matchup;
-    // The curve's points start at minute 1; index i is minute i, both 0 at the start
-    var n: usize = 0;
-    for (mu.points) |p| n = @max(n, @as(usize, p.minute) + 1);
-    const band = try a.alloc([2]f32, n);
-    const line = try a.alloc(f32, n);
-    @memset(band, .{ 0, 0 });
-    @memset(line, 0);
-    for (mu.points) |p| {
-        band[p.minute] = .{ @floatFromInt(p.p25), @floatFromInt(p.p75) };
-        line[p.minute] = @floatFromInt(p.mean);
-    }
+    const cv = try curve(a, mu);
     const me = try c.champ(a, l.me);
     const them = try c.champ(a, l.opponent);
     return .{
@@ -437,11 +435,27 @@ fn gameLane(a: Allocator, c: Ctx, g: *const ingame.InGame, l: ingame.Lane, now: 
             .a = if (me) |x| x.name else "You",
             .b = if (them) |x| x.name else "Them",
             .you = try perMinute(a, g.history, now, .lane),
-            .band = band,
-            .line = line,
+            .band = cv.band,
+            .line = cv.line,
         },
         .caption = try a.print("Item gold, you minus them: the band is the middle half of {d} games ({s}, EUW, {s}), the line their average; yours from items.", .{ mu.games, mu.bracket.label(), g.period }),
     };
+}
+
+/// The matchup's gold by minute as a chart's band (middle half) and line (average). The
+/// points start at minute 1; index i is minute i, both 0 at the start
+fn curve(a: Allocator, mu: lanecard.Matchup) !struct { band: [][2]f32, line: []f32 } {
+    var n: usize = 0;
+    for (mu.points) |p| n = @max(n, @as(usize, p.minute) + 1);
+    const band = try a.alloc([2]f32, n);
+    const line = try a.alloc(f32, n);
+    @memset(band, .{ 0, 0 });
+    @memset(line, 0);
+    for (mu.points) |p| {
+        band[p.minute] = .{ @floatFromInt(p.p25), @floatFromInt(p.p75) };
+        line[p.minute] = @floatFromInt(p.mean);
+    }
+    return .{ .band = band, .line = line };
 }
 
 fn post(a: Allocator, c: Ctx, p: *const postgame.PostGame) !ui.postgame.Screen {
@@ -620,6 +634,7 @@ fn testSelect() state.Select {
         };
         const allies = [_]board.Seat{.{ .slot = .{ .champion = ahri, .role = .middle, .state = .hover, .me = true }, .role = .middle, .guessed = false, .games = 25_551, .win = 0.55 }};
         const enemies = [_]board.Seat{.{ .slot = .{ .champion = syndra, .state = .locked }, .role = null, .guessed = true, .games = 20, .win = 0.45 }};
+        const points = [_]lanecard.Point{ .{ .minute = 1, .mean = -10, .p25 = -60, .p75 = 40 }, .{ .minute = 2, .mean = -20, .p25 = -100, .p75 = 70 } };
         const ban_options = [_]board.BanOption{.{ .champion = galio, .role = .middle, .impact = 31, .pick_rate = 0.08, .win = 0.53, .my_lane = true }};
     };
     return .{
@@ -628,7 +643,7 @@ fn testSelect() state.Select {
             .me = ahri,
             .locked = false,
             .opponent = .{ .champion = syndra, .guessed = true },
-            .matchup = null,
+            .matchup = .{ .bracket = .all, .games = 1204, .gold = .{}, .range = .{ -900, 700 }, .lane_games = 1204, .ahead = 500, .thin = false, .points = &S.points },
             .sentence = "Ahri usually trails Syndra.",
             .options = &S.options,
             .period = "last 30 days",
@@ -670,6 +685,9 @@ test "champ select: the private edition's numbers, the public one's words" {
     try testing.expectEqual(.good, ps.lane.options[1].reasons[1].lean);
     try testing.expectEqualStrings("EUW, last 30 days", ps.lane.scope);
     try testing.expectEqualStrings("", ps.lane.me.?.src);
+    try testing.expectEqualSlices([2]f32, &.{ .{ 0, 0 }, .{ -60, 40 }, .{ -100, 70 } }, ps.lane.chart.?.band);
+    try testing.expectEqualStrings("Syndra", ps.lane.chart.?.b);
+    try testing.expectEqualStrings("Gold, you minus them: the line is the average, the band the middle half of 1204 games (All games, EUW, last 30 days).", ps.lane.caption);
 
     var d = try data(a, .{ .stats = stats, .icons = null, .private = false }, .{ .select = &sel }, .none);
     const s = d.screen.select;

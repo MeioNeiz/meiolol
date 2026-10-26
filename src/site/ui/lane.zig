@@ -205,6 +205,32 @@ pub const Lane = struct {
     }
 };
 
+/// One measure's figures as plain data a data file can carry (the app's app.bin); the
+/// chart's own state (tip, range) stays in the island (Held). Index i is minute i
+pub const Figures = struct {
+    /// "Orianna", "Your team"
+    a: []const u8,
+    b: []const u8,
+    you: []const f32 = &.{},
+    band: []const [2]f32 = &.{},
+    line: []const f32 = &.{},
+};
+
+/// A LaneChart's state, kept across the island's data patches
+pub const Held = struct {
+    l: Lane = .{ .a = "", .b = "", .metrics = &.{} },
+    m: [1]Metric = undefined,
+
+    /// The chart pointed at `c`, ready to view
+    pub fn at(x: *Held, c: Figures, label: tree.Text) *Lane {
+        x.m[0] = .{ .label = label, .s = .{ .you = c.you, .band = c.band, .line = c.line } };
+        x.l.a = c.a;
+        x.l.b = c.b;
+        x.l.metrics = &x.m;
+        return &x.l;
+    }
+};
+
 fn round(v: f32) i32 {
     return @intFromFloat(@round(v));
 }

@@ -19,32 +19,6 @@ pub const scope = .{".c-game"};
 
 pub const Lean = teamrows.Lean;
 
-/// A chart's figures as plain data, which app.bin carries; LaneChart's own state (tip,
-/// range) lives in the island (Held). Index i is minute i
-pub const Chart = struct {
-    /// "Orianna", "Your team"
-    a: []const u8,
-    b: []const u8,
-    you: []const f32 = &.{},
-    band: []const [2]f32 = &.{},
-    line: []const f32 = &.{},
-};
-
-/// A LaneChart's state, kept across the island's data patches
-pub const Held = struct {
-    l: lane.Lane = .{ .a = "", .b = "", .metrics = &.{} },
-    m: [1]lane.Metric = undefined,
-
-    /// The chart pointed at `c`, ready to view
-    pub fn at(x: *Held, c: Chart, label: tree.Text) *lane.Lane {
-        x.m[0] = .{ .label = label, .s = .{ .you = c.you, .band = c.band, .line = c.line } };
-        x.l.a = c.a;
-        x.l.b = c.b;
-        x.l.metrics = &x.m;
-        return &x.l;
-    }
-};
-
 pub const Score = struct { what: []const u8, us: u16, them: u16 };
 
 /// Both teams' item gold: one bar split by share, the difference over it
@@ -72,7 +46,7 @@ pub const Lane = struct {
     compare: []const Compare = &.{},
     /// Why nothing is compared now ("The lane curve covers minutes 1 to 20.")
     note: []const u8 = "",
-    chart: ?Chart = null,
+    chart: ?lane.Figures = null,
     /// What the chart shows, under it
     caption: []const u8 = "",
 };
@@ -100,8 +74,8 @@ pub const Screen = struct {
 
 /// The island's chart states; null draws no chart
 pub const Charts = struct {
-    lane: ?*Held = null,
-    team: ?*Held = null,
+    lane: ?*lane.Held = null,
+    team: ?*lane.Held = null,
 };
 
 pub fn view(h: *H, s: Screen, c: Charts) N {
@@ -142,7 +116,7 @@ fn score(h: *H, lines: []const Score, g: Gold) N {
     });
 }
 
-fn yourLane(h: *H, s: Screen, held: ?*Held) N {
+fn yourLane(h: *H, s: Screen, held: ?*lane.Held) N {
     const l = s.lane orelse return h.section(.{ .class = "you" }, .{
         h.h3(.{}, .{W.your_lane}),
         h.p(.{ .class = "note" }, .{s.lane_note}),
@@ -180,7 +154,7 @@ fn timers(h: *H, ts: []const Timer) N {
 }
 
 /// Item gold, us minus them, by minute: the in-game panel's and the post game screen's
-pub fn teamGold(h: *H, team: []const f32, held: ?*Held) ?N {
+pub fn teamGold(h: *H, team: []const f32, held: ?*lane.Held) ?N {
     if (team.len < 2) return null;
     const x = held orelse return null;
     return h.section(.{ .class = "team" }, .{
@@ -287,7 +261,7 @@ pub const sample: Screen = .{
 };
 
 pub fn charts(h: *H) Charts {
-    const held = h.mem.alloc(Held, 2) catch {
+    const held = h.mem.alloc(lane.Held, 2) catch {
         h.oom = true;
         return .{};
     };

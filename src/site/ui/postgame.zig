@@ -6,6 +6,7 @@ const tree = @import("tree.zig");
 const champ = @import("champ.zig");
 const teamrows = @import("teamrows.zig");
 const gamescreen = @import("gamescreen.zig");
+const lane = @import("lane.zig");
 const phrase = @import("phrase.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
@@ -52,7 +53,7 @@ pub const Screen = struct {
     team: []const f32 = &.{},
 };
 
-pub fn view(h: *H, s: Screen, team: ?*gamescreen.Held) N {
+pub fn view(h: *H, s: Screen, team: ?*lane.Held) N {
     var awards = h.list();
     for (s.awards, 0..) |a, i| awards.add(h.span(.{ .key = i, .class = "award", .data_side = a.side }, .{
         champ.view(h, a.champ, .{ .px = .@"24", .named = false }),
