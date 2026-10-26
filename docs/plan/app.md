@@ -1,6 +1,6 @@
 # Plan: desktop apps
 
-Two editions from one codebase (Jacob 22 Oct, J21): a public app that fits what Riot
+Two editions from one codebase (J21): a public app that fits what Riot
 reviews, and a private one for the private, admin and owner roles (Jacob's friends and
 testers; docs/plan/accounts.md). Paid accounts (later) get extras in the public
 edition, within the public rules. Public release: no date, "after Riot's production
@@ -12,13 +12,15 @@ review" (J7). How it is built: docs/architecture.md "App" and "Desktop window";
 - Build option `-Dedition=public|private`. Private features live in their own modules
   (src/desktop/private/), called only under a comptime check, so the public exe holds
   none of their code or strings (Riot may look at it; friends' features shouldn't leak
-  through it); ci checks it (APP2)
+  through it). `zig build ci` builds both and runs deploy/check-edition.sh: no
+  desktop/private/ path (dvui's @src() leaves one per module with widgets) in the public
+  exe, every one in the private exe (else the check is blind). Every `ctx.private()`
+  branch sits behind widgets.private_code, comptime false in the public exe
 - Both share the poller, the lane card, data files, signing and updates. The private
   edition reads extra data files (e.g. raw model outputs) that only /p/desktop/ serves
-- deploy/desktop-release.sh builds, fuzzes, checks and signs both (24 Oct); each has
-  its own update channel: public /desktop/ (after the key), private /p/desktop/ (device
-  token, AC4; served since 24 Oct, the app still checks /admin/desktop/: AC5). Today's
-  admin-gated exe is the private edition
+- deploy/desktop-release.sh builds, fuzzes, checks and signs both; each has its own
+  update channel: public /desktop/ (after the key), private /p/desktop/ (device token,
+  accounts.md AC4). Today's downloaded exe is the private edition
 - The public edition is built and shot from now on, for the application's screenshots,
   even while only the private one is downloaded
 
@@ -45,10 +47,9 @@ little that is "op" (no ads, favourites, dashboards, high-elo builds, AI review)
 iTero, LoLDraftAI and Team Advisor show draft win % with no Riot pushback so far.
 - No tier, ever: other players' identities or stats in ranked solo/duo champ select
   (hidden since 12.22; reading them anyway is de-anonymising), streamer-mode players
-  anywhere live (17 Oct 2025), enemy ult timers (13 Mar 2025) and all enemy cooldowns,
-  power spike alerts and "gank top now" prompts (27 Aug 2025), ads in game, on loading
-  screens or in the client (29 May 2025), augment win rates, auto accept, pick, ban,
-  lock or dodge, MMR calculators
+  anywhere live, enemy ult timers and all enemy cooldowns, power spike alerts and "gank
+  top now" prompts, ads in game, on loading screens or in the client, augment win rates,
+  auto accept, pick, ban, lock or dodge, MMR calculators
 - Private only: win chance as a percentage, "+X%" and single-pick rankings, raw model
   scores, experimental models beside the shipped one, all of Jacob's list in queues
   where names are visible (normals, flex: check in a real capture), player scouting
@@ -63,7 +64,7 @@ iTero, LoLDraftAI and Team Advisor show draft win % with no Riot pushback so far
   Riot Sign On needs a production key, so either way the private tier uses our own
   login
 
-## Jacob's list by edition (19 Oct list)
+## Jacob's list by edition
 
 Champ select, updating live as champions are hovered and locked. P = public, X = private.
 
@@ -99,13 +100,6 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
   records which identity fields each queue fills in. First real check of Live Client
   Data's certificate: a "live client data: <error>" line in record's output means
   https.get needs another root for port 2999
-- APP2 Editions in the build: done 24 Oct. `-Dedition=public|private`; private-only UI
-  lives in src/desktop/private/ (in-game panel, practice) and every call into it, and
-  every `ctx.private()` branch, sits behind widgets.private_code, comptime false in the
-  public exe, so none of it is compiled in. `zig build ci` builds both and runs
-  deploy/check-edition.sh: no desktop/private/ path (dvui's @src() leaves one per
-  module with widgets) in the public exe, every one in the private exe (else the check
-  is blind). A new private module goes in desktop/private/. Release script: AC5
 - APP3 Every role and pick order (both editions). Done: the board (Window layout
   below) with the mode chip and ideas for allies still to pick. Left: switch the lane
   panel to any ally's role (click a seat), and the blind-safe ranking itself (J2:
@@ -117,7 +111,7 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
   filled, never an ally's hover; the desktop stats file has no ban counts, so impact is
   per all games). Left: ban counts in the desktop stats file, my lane first while my
   opponent is unknown; private adds pools where names are visible
-- APP6 After picks: comp view, first pass done (24 Oct, both editions; comp.zig,
+- APP6 After picks: comp view, first pass done (both editions; comp.zig,
   desktop/comp.zig): once all ten are locked, above the lane panel, each team's damage
   split bar and mix (and "teams this one-sided win less often" when Learn's tally is 2 SE
   under even), its champions with a clear early or late lean (`meiolol lean`), and five
@@ -131,10 +125,7 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
   same comp; a release so testers get it
 - APP7 Private: scouting where names are visible (needs APP1's queue facts and AC6 for
   "me"), percentages, experimental models
-- APP8 Icons done: champion icons from the client (desktop/icons.zig; Data Dragon art
-  is allowed, Riot logos not); the app's own is the site favicon's M (23 Oct, exe,
-  shortcut and window)
-- APP10 Loading screen cards, first pass done (23 Oct): in GameStart the window shows
+- APP10 Loading screen cards, first pass done: in GameStart the window shows
   the last champ select's ten seats as cards (loading.zig, desktop/loadscreen.zig): role
   (guessed with ?), pills for strong or weak in the role, few games, ahead, even or
   behind against the same role across (2 SE from even at 14 min), level 6 and first
@@ -142,7 +133,7 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
   teams' draft score. Left: a loading screen with no champ select seen (app started
   late: Live Client Data or the gameflow session), team comp pills; private adds player
   scouting (APP7)
-- APP11 Post game view, first pass done (23 Oct, both editions: facts the client's own
+- APP11 Post game view, first pass done (both editions: facts the client's own
   screen shows): verdict and kills, the team gold story in a sentence, my lane at 14 min
   against the matchup and gold earned over the game, award chips (damage, KDA, gold, CS,
   vision), mirrored lane rows with gold earned between, team gold chart (from the
@@ -150,12 +141,12 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
   /lol-end-of-game/v1/eog-stats-block (lcu/eog.zig; positions from detectedTeamPosition,
   else the last in-game tick, else inferred). Left: check APP1's real block; tabs
   (fighting, farming, vision); our draft call against the result
-- APP12 Practice, first pass done (23 Oct, private; Jacob: "test out different drafts
+- APP12 Practice, first pass done (private; Jacob: "test out different drafts
   and see more of the UI before even getting into a lobby"): architecture.md "Desktop
   window". Left: Jacob's try on the PC; Data Dragon icons when the client is closed;
   a saved draft or two; the in-game and post game numbers are made up, not a replay
-- APP9 In-game companion, private first (below). First pass done (23 Oct, against the
-  mock and a synthetic reply): score and team item gold, mirrored lane rows with gold
+- APP9 In-game companion, private first (below). First pass done (against the mock and
+  a synthetic reply): score and team item gold, mirrored lane rows with gold
   differences, your lane's CS and item gold against the matchup at this minute with the
   dot on the gold chart, respawn timers after a kill, team gold through the game. Left:
   check APP1's real reply (item `price` total or combine cost; creepScore exact or in
@@ -164,7 +155,7 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
 
 ## Window layout
 
-Jacob 23 Oct: Porofessor-style. Research: research/questions/desktop-app-layout.md (17
+Porofessor-style. Research: research/questions/desktop-app-layout.md (17
 sources, screenshots of Porofessor, Blitz, Mobalytics, U.GG, OP.GG, iTero, DraftGap).
 One window, 1120 x 720, a phase stepper on top (Lobby, Champ select, In game, Post game);
 under 900 px one column. `zig build desktop-shot -- --stats F --curves F --icons
@@ -182,20 +173,20 @@ CommunityDragon champion-icons/<id>.png into data/icons, gitignored).
   under a team rule, fixed card order (icon, name, role, private rate, pills); narrow:
   one compact row per seat with two pills. Hover for the reason and number later.
   Player pills ("on a streak", "main") private only and only where names are visible
-- In game (APP9, built in the main window: desktop/game.zig): score strip and team item
-  gold bar, five mirrored lane rows (our icon, gold delta, their icon) left; your lane
-  against the curve, respawns and team gold through the game right. Narrow: one column,
-  rows without names. Later a small panel, hidden by default, hotkey
+- In game (APP9, built in the main window: src/desktop/private/game.zig): score strip
+  and team item gold bar, five mirrored lane rows (our icon, gold delta, their icon)
+  left; your lane against the curve, respawns and team gold through the game right.
+  Narrow: one column, rows without names. Later a small panel, hidden by default, hotkey
 - Post game (APP11, built: desktop/post.zig): verdict card with the gold story, my lane
   and award chips on top; mirrored lane rows left; team gold area (blue over red) and
   damage bars right; detail behind tabs later; no dense tables
 
 ## In-game companion
 
-Jacob 22 Oct (J22): the app shows info that helps throughout the game. A panel the
-player looks at, never a notification that tells them what to do: Riot's 27 Aug 2025
-guidelines ban power spike alerts ("X champion has hit level 6"), decision prompts
-("Gank top lane now!") and enemy ability or summoner spell cooldowns
+J22: the app shows info that helps throughout the game. A panel the player looks at,
+never a notification that tells them what to do: Riot's guidelines ban power spike
+alerts ("X champion has hit level 6"), decision prompts ("Gank top lane now!") and
+enemy ability or summoner spell cooldowns
 (research/sources/overwolf-aug-2025-riot-guidelines.md). Big apps still show objective
 timers, gold leads, benchmarks against your tier and teammates' ult timers
 (league-apps-feature-matrix C3).
@@ -220,19 +211,14 @@ this on the site)
 
 ## Private site
 
-The /p/ pages (accounts.md AC3). First candidates, cheapest first: the draft tester
-(/p/ since 23 Oct, the shipped model; the lab's stay on the admin page), win chance and raw scores beside the public
-wording on champion and matchup pages, experimental models (J15's labelled
-experiments), all regions and patches without the public page-weight cuts.
-
-Done 24 Oct: the Draft tester's Lab experiment switch on /p/ too (J15: labelled with
-the export's name; jomify's training-receive.sh puts only the tester's model files in
-p/lab, linked while /p/ answers 302 logged out); the shipped model's win chances on the
-public champion and matchup pages for private logins (/p/pv.js, loaded by the header
-script in browsers that opened /admin/ or /p/, data p/models/champ/<id>.json from
-`meiolol draft-model`): a line in the hero (each role against an average draft; on a
-matchup page the pairing and each champion alone) and a last line on every opponent and
-duo tile. Next: all regions and patches without the public page-weight cuts.
+The /p/ pages (accounts.md "Status"). Live: the Draft tester with the shipped model and
+a Lab experiment switch (J15: labelled with the export's name; jomify's
+training-receive.sh puts only the tester's model files in p/lab); the shipped model's
+win chances on the public champion and matchup pages for private logins (/p/pv.js,
+loaded by the header script in browsers that opened /admin/ or /p/, data
+p/models/champ/<id>.json from `meiolol draft-model`): a line in the hero and a last line
+on every opponent and duo tile. Next: all regions and patches without the public
+page-weight cuts.
 
 Private ideas from the feature survey (league-apps-feature-matrix), after the above:
 loading-screen scouting of the lane opponent and the rest (mainstream; names are
@@ -241,23 +227,24 @@ alerts for friends, model-driven post-game review. Public counterparts: opt-in s
 of your own stats (OP.GG's verified link), post-game review as facts, progress between
 games.
 
-## Status (22 Oct)
+## Status
 
+- Icons: champion icons from the client (desktop/icons.zig; Data Dragon art is allowed,
+  Riot logos not); the app's own is the site favicon's M (exe, shortcut and window)
 - Champ select board around the lane card (Window layout); lane card for your role,
   ranked by draft plus your mastery points
   (lanecard.Expertise.fitted; "Count your mastery points" box, not kept across
   restarts). Card rules tested over 400 random drafts and ten scenes
   (testdata/cards/scenes.json, `meiolol-app cards [FILE] [--expertise off]`, fixture
   testdata/cards/fixture.txt): run cards before and after a recommender change and diff
-- Windows (gpu-box, 14 Oct, Windows 11, 1080p at 100%): per monitor DPI aware, crisp,
+- Windows (gpu-box, Windows 11, 1080p at 100%): per monitor DPI aware, crisp,
   resizes and closes cleanly; idle 0.3% of a core; ~470 MB private with EUW
   recent-curves. Not checked: 150% scaling. From WSL over ssh the window can't open
   (session 0): start it in Jacob's session with a one-off `schtasks /it` task
 - Admin download and self-update (J19, signed exe and data, release script only):
-  architecture.md "Desktop window", hosting.md "Desktop app files". Exes from before
-  the MoveFileExW fix (20 Oct) never swap themselves; a second exe update in one session
-  waits for a restart
-- Installs itself (23 Oct): the zip's exe moves into %LOCALAPPDATA%\Programs\meiolol
+  architecture.md "Desktop window", hosting.md "Desktop app files". A second exe update
+  in one session waits for a restart
+- Installs itself: the zip's exe moves into %LOCALAPPDATA%\Programs\meiolol
   with a Start menu shortcut (Windows search finds it) and an Apps list entry with
   Uninstall; one copy at a time. Checked on the gpu-box: install, second start, install
   over an open copy, uninstall
@@ -267,15 +254,15 @@ games.
 
 ## Later
 
-- Expertise bonus richer (Jacob 20 Oct: "a calculated bonus based on as much stats as
-  we can"): per-champion slope shrunk to the role's, recent games and win rate on the
+- Expertise bonus richer (Jacob: "a calculated bonus based on as much stats as we
+  can"): per-champion slope shrunk to the role's, recent games and win rate on the
   champion, games in the role, rank, time since last played; keep a term only if
   `meiolol eval --replay` beats the error bar. Notes:
   data/team/2026-10-20-pooltest/notes.md
 - Lane gold colour: lanecard.zig colours by sign alone, architecture.md says only 2 SE
   from even; one is wrong (also an open question in decisions.md)
 - Your own record in the matchup (concept part 6; LCU match history, needs a real reply)
-- Public download, after the key, in order: the public channel (APP2), Authenticode
-  signing (SmartScreen warns on unsigned exes, in a zip or an installer alike); the
-  per-user install is done (23 Oct, architecture.md "Desktop window")
+- Public download, after the key, in order: the public channel ("Two editions"),
+  Authenticode signing (SmartScreen warns on unsigned exes, in a zip or an installer
+  alike)
 - dvui: pin PR #1012 (0.17.x branch) until it merges
