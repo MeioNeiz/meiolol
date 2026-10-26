@@ -1,8 +1,13 @@
 //! ChampHeader: a champion page's first row: the portrait, the name as the page's h1 and
 //! a line under it (role, patch), the role picker, the opponent search and the headline
-//! figures. Wraps in its container: on a phone each part takes a row, the strip last
+//! figures. Wraps in its container: on a phone each part takes a row, the strip last.
+//! With `pair` filled it heads the matchup page: both portraits, the swap between them
+//! (the other side's page) and ⊗ on the opponent back to the champion page (lolalytics'
+//! VS slot: the two pages are one with the slot empty or filled)
 const tree = @import("tree.zig");
 const champ = @import("champ.zig");
+const button = @import("button.zig");
+const phrase = @import("phrase.zig");
 const rolepicker = @import("rolepicker.zig");
 const champsearch = @import("champsearch.zig");
 const strip = @import("strip.zig");
@@ -25,14 +30,32 @@ pub const Opts = struct {
     vs: ?N = null,
     /// StatStrip
     strip: ?N = null,
+    /// The matchup page's opponent
+    pair: ?Pair = null,
+};
+
+pub const Pair = struct {
+    champ: champ.Champ,
+    /// The other side's page
+    swap: []const u8,
+    /// The champion page, same role
+    clear: []const u8,
 };
 
 pub fn view(h: *H, o: Opts) N {
+    const pic = champ.view(h, o.champ, .{ .px = .@"56", .named = false, .eager = true });
     return h.div(.{ .class = "c-champhead" }, .{
         h.div(.{ .class = "id" }, .{
-            champ.view(h, o.champ, .{ .px = .@"56", .named = false, .eager = true }),
+            if (o.pair) |p| h.div(.{ .class = "pair" }, .{
+                pic,
+                button.view(h, .{ .s = .s, .v = .icon, .href = p.swap, .label = W.swap.with(h, .{ .y = p.champ.name, .x = o.champ.name }) }, .{"⇄"}),
+                h.span(.{ .class = "y" }, .{
+                    champ.view(h, p.champ, .{ .px = .@"56", .named = false, .eager = true }),
+                    h.a(.{ .class = "clear", .href = p.clear, .aria_label = W.clear.with(h, .{ .y = p.champ.name }) }, .{"×"}),
+                }),
+            }) else pic,
             h.div(.{}, .{
-                h.el(.h1, .{}, .{o.champ.name}),
+                if (o.pair) |p| h.el(.h1, .{}, .{ o.champ.name, h.span(.{ .class = "and" }, .{W.vs_word}), p.champ.name }) else h.el(.h1, .{}, .{o.champ.name}),
                 if (o.sub) |s| h.span(.{ .class = "sub" }, .{s}) else null,
             }),
         }),
@@ -48,16 +71,31 @@ pub const css =
     \\    container: champhead / inline-size; }
     \\  .c-champhead > .id { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
     \\  .c-champhead > .id h1 { white-space: nowrap; }
+    \\  .c-champhead > .id > .pair ~ div h1 { white-space: normal; }
+    \\  .c-champhead h1 > .and { margin: 0 0.3em; font-weight: var(--w-m); color: var(--muted); }
+    \\  .c-champhead .pair { display: flex; align-items: center; gap: var(--sp-2); flex: none; }
+    \\  .c-champhead .pair > .y { position: relative; display: flex; }
+    \\  .c-champhead .pair .clear { position: absolute; top: -6px; right: -6px; display: grid; place-items: center;
+    \\    width: 20px; height: 20px; border-radius: 50%; background: var(--panel-3); color: var(--t2);
+    \\    box-shadow: 0 0 0 2px var(--panel); font-size: var(--fs-m); line-height: 1; text-decoration: none; }
+    \\  .c-champhead .pair .clear::after { content: ""; position: absolute; inset: calc((20px - var(--hit)) / 2); }
+    \\  .c-champhead .pair .clear:hover { background: var(--ctl-bg-2); color: var(--text); }
     \\  .c-champhead > .id .sub { display: block; margin-top: 2px; font-size: var(--fs-s); color: var(--muted); }
     \\  .c-champhead > .vs { flex: 1 1 200px; max-width: 240px; }
     \\  .c-champhead > .c-strip { margin-left: auto; }
     \\  @container champhead (max-width: 1000px) { .c-champhead > .c-strip { margin-left: 0; } }
-    \\  @container champhead (max-width: 480px) { .c-champhead > .vs { max-width: none; } }
+    \\  @container champhead (max-width: 480px) {
+    \\    .c-champhead > .vs { max-width: none; }
+    \\    .c-champhead .pair .c-champ { --sz: 40px; }
+    \\  }
     \\}
     \\
 ;
 
 const W = struct {
+    pub const swap = phrase.Phrase("From {y:text}'s side: {y:text} vs {x:text}");
+    pub const clear = phrase.Phrase("Clear {y:text}: every opponent");
+    pub const vs_word = plain("vs");
     pub const sub = plain("Top · 16.21");
     pub const vs = plain("vs opponent");
     pub const roles = plain("Darius roles");
@@ -108,4 +146,15 @@ pub fn gallery(g: *Gallery) void {
     };
     g.addFill("a champion page's head", view(h, o));
     g.addFill("name only", view(h, .{ .champ = champ.demo("Ahri", "Ahri") }));
+    g.addFill("a matchup page's head: the opponent's slot filled", view(h, .{
+        .champ = champ.demo("Darius", "Darius"),
+        .sub = plain("Top · 16.21"),
+        .pair = .{ .champ = champ.demo("Garen", "Garen"), .swap = "#", .clear = "#" },
+        .strip = strip.view(h, &.{
+            .{ .label = plain("Darius wins"), .value = plain("49.9%"), .step = .of(-0.1, agg), .answer = true },
+            .{ .label = plain("Vs usual"), .value = plain("+1.2"), .ctx = plain("48.2% usually"), .step = .of(1.2, agg) },
+            .{ .label = plain("Gold at 14"), .value = plain("+382") },
+            .{ .label = plain("Games"), .value = plain("1,788") },
+        }),
+    }));
 }
