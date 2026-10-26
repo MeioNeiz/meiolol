@@ -192,6 +192,8 @@ pub const ChampSearch = struct {
     active: u8 = 0,
     /// Pick mode: the entry taken
     chosen: ?u16 = null,
+    /// Pick mode: told after an entry is taken or cleared (the host reads `chosen`)
+    on_pick: ?tree.Handler = null,
 
     const S = @This();
 
@@ -211,6 +213,7 @@ pub const ChampSearch = struct {
                 s.chosen = null;
                 ev.push = true;
                 ev.after = .{ .op = .focus, .ref = "input" };
+                s.told(ev);
             },
             .key => s.key(ev),
         }
@@ -222,6 +225,11 @@ pub const ChampSearch = struct {
         s.open = false;
         ev.push = true;
         ev.after = .{ .op = .focus, .ref = "clear" };
+        s.told(ev);
+    }
+
+    fn told(s: *S, ev: *tree.Event) void {
+        if (s.on_pick) |hd| hd.call(hd.target, &hd.msg, ev);
     }
 
     fn key(s: *S, ev: *tree.Event) void {
