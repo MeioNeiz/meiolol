@@ -53,6 +53,8 @@ pub const Change = struct {
     name: []const u8,
     status: Status = .changed,
     lines: []const Line = &.{},
+    /// A rune's image under Data Dragon's cdn/img/, else ""
+    icon: []const u8 = "",
 
     /// The badge's tone: buff or nerf when every numbered line agrees, else adjusted
     pub fn dir(c: Change) Dir {
@@ -381,7 +383,7 @@ fn onRift(item: Value) bool {
     return p == .bool and p.bool;
 }
 
-const Rune = struct { id: u32, name: []const u8, longDesc: []const u8 };
+const Rune = struct { id: u32, name: []const u8, icon: []const u8 = "", longDesc: []const u8 };
 
 fn runes(arena: Allocator, old_json: []const u8, new_json: []const u8) ![]const Change {
     const old = try runeList(arena, old_json);
@@ -391,17 +393,17 @@ fn runes(arena: Allocator, old_json: []const u8, new_json: []const u8) ![]const 
         const o = for (old) |x| {
             if (x.id == r.id) break x;
         } else {
-            try out.append(arena, .{ .id = r.id, .name = r.name, .status = .new });
+            try out.append(arena, .{ .id = r.id, .name = r.name, .icon = r.icon, .status = .new });
             continue;
         };
         var lines: std.ArrayList(Line) = .empty;
         try textLines(arena, &lines, .text, "", o.longDesc, r.longDesc, false);
-        if (lines.items.len > 0) try out.append(arena, .{ .id = r.id, .name = r.name, .lines = lines.items });
+        if (lines.items.len > 0) try out.append(arena, .{ .id = r.id, .name = r.name, .icon = r.icon, .lines = lines.items });
     }
     for (old) |r| {
         for (new) |x| {
             if (x.id == r.id) break;
-        } else try out.append(arena, .{ .id = r.id, .name = r.name, .status = .gone });
+        } else try out.append(arena, .{ .id = r.id, .name = r.name, .icon = r.icon, .status = .gone });
     }
     sortByName(out.items);
     return out.items;
@@ -718,7 +720,7 @@ const runes_old =
     \\[{"id":8000,"slots":[{"runes":[{"id":8005,"name":"Press the Attack","longDesc":"Deals <b>40</b> damage."}]}]}]
 ;
 const runes_new =
-    \\[{"id":8000,"slots":[{"runes":[{"id":8005,"name":"Press the Attack","longDesc":"Deals <b>45</b> damage."}]}]}]
+    \\[{"id":8000,"slots":[{"runes":[{"id":8005,"name":"Press the Attack","icon":"perk-images/Styles/Precision/PressTheAttack/PressTheAttack.png","longDesc":"Deals <b>45</b> damage."}]}]}]
 ;
 
 fn testNotes(arena: Allocator) !Notes {
@@ -813,6 +815,7 @@ test "runes: description numbers" {
     try testing.expectEqual(1, n.runes.len);
     try expectLine(n.runes[0].lines[0], .text, "", "40", "45", .adjusted);
     try testing.expectEqualStrings("Deals", n.runes[0].lines[0].before);
+    try testing.expectEqualStrings("perk-images/Styles/Precision/PressTheAttack/PressTheAttack.png", n.runes[0].icon);
 }
 
 test "numbers: words only, not inf, nan or hex" {

@@ -254,10 +254,9 @@ bot) when the games allow; keep the pool page's mains in the browser (ask Jacob)
 patch.html (docs/arch-site.md "Patch changes") shows what Riot changed (Data Dragon)
 beside each champion's and matchup's move; J27 asked for the why.
 
-- PC1 Why, from Data Dragon: champion, item and rune changes on the page (done). Left:
-  each changed item with the champions that build it most and their change (builds
-  files); older patch pairs behind PatchHead's ‹ › (patch/<cur>-<prev>.html while the
-  db holds both patches whole)
+- PC1 Why, from Data Dragon: champion, item and rune changes on the page, each item
+  and rune with who uses it most (done). Left: older patch pairs behind PatchHead's ‹ ›
+  (patch/<cur>-<prev>.html while the db holds both patches whole)
 - PC2 Ability numbers: Data Dragon lacks most ability damage changes
   (research/questions/patch-transfer.md "Open"); CommunityDragon's data or Riot's patch
   notes page would complete PC1. Read docs/data.md before adding the source. Done when

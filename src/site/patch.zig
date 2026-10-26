@@ -11,6 +11,7 @@ const assets = @import("assets.zig");
 const matchup = @import("matchup.zig");
 const patchday = @import("../patchday.zig");
 const patchnotes = @import("../patchnotes.zig");
+const builds = @import("../builds.zig");
 
 const Writer = std.Io.Writer;
 const Site = root.Site;
@@ -28,6 +29,8 @@ pub const data_path = "data/patch.bin";
 
 /// A row's matchup moves in its detail
 const max_moves = 3;
+/// A changed item's or rune's champions
+const max_users = 3;
 
 comptime {
     for (Role.all, 0..) |r, i| std.debug.assert(std.mem.eql(u8, r.label(), pp.Role.slugs[i]));
@@ -69,6 +72,8 @@ pub fn writePage(site: *const Site, w: *Writer) !void {
     if (h.oom) return error.OutOfMemory;
     try root.roleIcons(w);
     try ui.html.write(&tree, tree.root, w);
+    if (pp.riotView(&h, d, try riot(site, d), base)) |n| try ui.html.write(&tree, n, w);
+    if (h.oom) return error.OutOfMemory;
     try tpl.render(w, "\n<script src=\"{js}\" data-wasm=\"{wasm}\" defer></script>\n", .{
         .js = html.Link{ .root = to_root, .up = site.view.up(), .path = assets.patch_js.path },
         .wasm = assets.patch_wasm.path,
@@ -94,16 +99,12 @@ fn data(site: *const Site, pd: *const PatchDay) !pp.Data {
     // By champs index: its Change's
     const changed = try a.alloc(?u16, site.champs.len);
     @memset(changed, null);
-    var items: []const pp.Change = &.{};
-    var runes: []const pp.Change = &.{};
     if (site.notes) |n| {
         for (n.champions) |c| {
             const i = index(site, c.id) orelse continue;
             changed[i] = @intCast(changes.items.len);
             try changes.append(a, try change(a, c, i));
         }
-        items = try changeList(a, n.items);
-        runes = try changeList(a, n.runes);
     }
 
     var rows: std.ArrayList(pp.Row) = .empty;
@@ -158,8 +159,6 @@ fn data(site: *const Site, pd: *const PatchDay) !pp.Data {
         .changes = changes.items,
         .rows = rows.items,
         .matchups = mus.items,
-        .items = items,
-        .runes = runes,
     };
 }
 
@@ -253,10 +252,73 @@ fn change(a: std.mem.Allocator, c: patchnotes.Change, id: u32) !pp.Change {
     };
 }
 
-fn changeList(a: std.mem.Allocator, list: []const patchnotes.Change) ![]const pp.Change {
-    const out = try a.alloc(pp.Change, list.len);
-    for (out, list) |*o, c| o.* = try change(a, c, c.id);
-    return out;
+/// The items and runes Riot changed, each with who uses it most in this patch view's
+/// builds file
+fn riot(site: *const Site, d: *const pp.Data) !pp.Riot {
+    const n = site.notes orelse return .{ .items = &.{}, .runes = &.{} };
+    const a = site.arena;
+    const f = &site.view_builds[(html.View{ .region = site.view.region, .period = .patch }).index()];
+    const items = try a.alloc(pp.Kit, n.items.len);
+    for (items, n.items) |*k, c| k.* = .{
+        .change = try change(a, c, c.id),
+        .icon = try a.print("https://ddragon.leagueoflegends.com/cdn/{s}/img/item/{d}.png", .{ d.ddragon, c.id }),
+        .users = if (f.*) |*b| try users(site, d, b, c.id, false) else &.{},
+    };
+    const runes = try a.alloc(pp.Kit, n.runes.len);
+    for (runes, n.runes) |*k, c| k.* = .{
+        .change = try change(a, c, c.id),
+        .icon = if (c.icon.len > 0) try a.print("https://ddragon.leagueoflegends.com/cdn/img/{s}", .{c.icon}) else "",
+        .users = if (f.*) |*b| try users(site, d, b, c.id, true) else &.{},
+    };
+    return .{ .items = items, .runes = runes };
+}
+
+/// The champion roles with the biggest share of players using item or rune `id`, among
+/// those with the page's games
+fn users(site: *const Site, d: *const pp.Data, f: *const builds.File, id: u32, rune: bool) ![]const pp.User {
+    var all: std.ArrayList(pp.User) = .empty;
+    for (f.builds) |b| {
+        if (b.games < d.min_games) continue;
+        const sh = (if (rune) runeShare(b, id) else itemShare(b, id)) orelse continue;
+        const c = index(site, b.champion) orelse continue;
+        const r = role(b.role);
+        const row: ?u16 = for (d.rows, 0..) |x, i| {
+            if (x.champ == c and x.role == r) break @intCast(i);
+        } else null;
+        try all.append(site.arena, .{ .champ = c, .role = r, .share = @floatCast(sh), .row = row });
+    }
+    std.mem.sort(pp.User, all.items, {}, struct {
+        fn more(_: void, x: pp.User, y: pp.User) bool {
+            return x.share > y.share;
+        }
+    }.more);
+    return all.items[0..@min(all.items.len, max_users)];
+}
+
+/// Of `b`'s players, those with `item` as boots, in their start or in their first three
+/// finished items. A file keeps only the commonest starts and first threes, so it is a
+/// floor where the builds vary
+fn itemShare(b: builds.File.Build, item: u32) ?f64 {
+    var best: ?f64 = null;
+    for ([_]builds.Kind{ .boots, .start, .core3 }) |k| {
+        const rows = b.get(k) orelse continue;
+        var with: u64 = 0;
+        for (rows.options) |o| {
+            if (std.mem.findScalar(u32, o.v, item) != null) with += o.games;
+        }
+        if (with == 0) continue;
+        best = @max(best orelse 0, @as(f64, @floatFromInt(with)) / @as(f64, @floatFromInt(@max(rows.games, 1))));
+    }
+    return best;
+}
+
+/// Of `b`'s players, those with `rune` on their page
+fn runeShare(b: builds.File.Build, rune: u32) ?f64 {
+    const rows = b.get(.rune) orelse return null;
+    for (rows.options) |o| if (o.v.len > 0 and o.v[0] == rune) {
+        return @as(f64, @floatFromInt(o.games)) / @as(f64, @floatFromInt(@max(rows.games, 1)));
+    };
+    return null;
 }
 
 /// ChangeLine's: the slot's key, and what it is ("Decimate cooldown"; a stat's name; the
@@ -305,4 +367,18 @@ test "line: labels and keys" {
     const hunk = try line(a, .{ .slot = .p, .spell = "Hemorrhage", .before = "Bleeds for", .old = "5", .new = "4", .dir = .adjusted });
     try std.testing.expectEqualStrings("", hunk.label);
     try std.testing.expectEqualStrings("P", hunk.key);
+}
+
+test "itemShare and runeShare: of every player with boots, a first three, runes" {
+    const b: builds.File.Build = .{ .champion = 122, .role = .top, .games = 1000, .wins = 500, .kinds = &.{
+        .{ .kind = .boots, .games = 900, .wins = 450, .options = &.{ .{ .v = &.{3047}, .games = 450, .wins = 230 }, .{ .v = &.{3111}, .games = 300, .wins = 150 } } },
+        .{ .kind = .core3, .games = 800, .wins = 400, .options = &.{ .{ .v = &.{ 6630, 3053, 3071 }, .games = 300, .wins = 160 }, .{ .v = &.{ 6630, 3071, 3065 }, .games = 100, .wins = 50 }, .{ .v = &.{ 3078, 3053, 3065 }, .games = 100, .wins = 50 } } },
+        .{ .kind = .rune, .games = 1000, .wins = 500, .options = &.{.{ .v = &.{8010}, .games = 700, .wins = 360 }} },
+    } };
+    try std.testing.expectEqual(@as(?f64, 0.5), itemShare(b, 3047));
+    try std.testing.expectEqual(@as(?f64, 0.5), itemShare(b, 6630));
+    try std.testing.expectEqual(@as(?f64, 0.5), itemShare(b, 3071));
+    try std.testing.expectEqual(@as(?f64, null), itemShare(b, 1054));
+    try std.testing.expectEqual(@as(?f64, 0.7), runeShare(b, 8010));
+    try std.testing.expectEqual(@as(?f64, null), runeShare(b, 8005));
 }

@@ -201,6 +201,10 @@ from the view's data/patch.bin (stamped, as the champions board), ui-patch.wasm 
   goes without the Riot column and chip
 - Matchups: those whose win rate (400+ games both) or median gold moved clearly, from
   the side that gained; a row's detail has its 3 biggest matchup moves
+- Items and runes Riot changed: server-rendered under the island (patchpage.riotView;
+  nothing in them filters), each with the 3 champion roles (300+ games) using it most
+  in the view's patch builds file: an item as boots, in the start or first three
+  finished items (a floor: the file keeps the commonest only), a rune on the page
 - Riot's notes link: league-of-legends-patch-<major+10>-<minor>-notes (patchnotes.officialUrl)
 
 ## Learn (src/site/learn.zig, learnbuild.zig, learnfixed.zig; ui/learnpage.zig)

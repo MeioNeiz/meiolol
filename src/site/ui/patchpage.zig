@@ -65,10 +65,27 @@ pub const Data = struct {
     rows: []const Row,
     /// Moved clearly, biggest win rate change first
     matchups: []const Matchup,
-    /// Change.id: Data Dragon's
-    items: []const Change,
-    runes: []const Change,
 };
+
+/// The items and runes Riot changed: server-rendered under the island (riotView), as
+/// nothing in them filters
+pub const Riot = struct {
+    items: []const Kit,
+    runes: []const Kit,
+};
+
+/// A changed item or rune (Change.id: Data Dragon's) and the champions using it most
+pub const Kit = struct {
+    change: Change,
+    icon: []const u8,
+    users: []const User,
+};
+
+/// `share`: of a champion role's players, those with the item in their first three
+/// finished items (boots: as their boots; a starting item: in their start), a floor as
+/// the builds file keeps the commonest only; or with the rune on their page. `row`: its
+/// Data.rows index
+pub const User = struct { champ: u16, role: Role, share: f32, row: ?u16 };
 
 pub const Champ = struct {
     name: []const u8,
@@ -170,6 +187,8 @@ const W = struct {
     pub const matchups = plain("Matchups that moved");
     pub const items = plain("Items changed");
     pub const runes = plain("Runes changed");
+    pub const bought = plain("Bought most by");
+    pub const taken = plain("Taken most by");
     pub const none = plain("Nothing listed here yet.");
 };
 
@@ -291,8 +310,15 @@ fn moveCell(h: *H, a: Count, b: Count, clear: bool, span: f32) N {
     const ci: f32 = @floatCast(halfWidth(a, b));
     return h.span(.{ .class = "mv", .data_clear = clear }, .{
         delta.bar(h, .{ .d = d, .ci = ci, .span = span }),
-        delta.view(h, .{ .d = d, .ci = if (clear) null else @max(ci, @abs(d) + 0.01) }),
+        moveText(h, a, b, clear),
     });
+}
+
+/// The change's number, grey when it could be luck
+fn moveText(h: *H, a: Count, b: Count, clear: bool) N {
+    const d: f32 = @floatCast(points(a, b));
+    const ci: f32 = @floatCast(halfWidth(a, b));
+    return delta.view(h, .{ .d = d, .ci = if (clear) null else @max(ci, @abs(d) + 0.01) });
 }
 
 fn changeCell(h: *H, l: *const Line) N {
@@ -494,6 +520,11 @@ pub const Lines = struct {
     shown_mu: []MLine,
 };
 
+/// Its champion page on this patch's numbers, open on `r`
+fn champHref(a: std.mem.Allocator, d: *const Data, base: []const u8, c: u16, r: Role) ![]const u8 {
+    return a.print("{s}{s}champion/{s}.html#role={s}", .{ base, d.patch_dir, d.champs[c].slug, Role.slugs[@backingInt(r)] });
+}
+
 /// `base`: from the page to the site root
 pub fn prepare(a: std.mem.Allocator, d: *const Data, base: []const u8) !Lines {
     // Every bar shares one edge: the biggest clear move, at least 4 points
@@ -509,14 +540,14 @@ pub fn prepare(a: std.mem.Allocator, d: *const Data, base: []const u8) !Lines {
     for (rows, d.rows, 0..) |*l, r, i| l.* = .{
         .d = d,
         .i = @intCast(i),
-        .href = try std.fmt.allocPrint(a, "{s}{s}champion/{s}.html#role={s}", .{ base, d.patch_dir, d.champs[r.champ].slug, Role.slugs[@backingInt(r.role)] }),
+        .href = try champHref(a, d, base, r.champ, r.role),
         .span = edge,
     };
     const mus = try a.alloc(MLine, d.matchups.len);
     for (mus, d.matchups, 0..) |*l, m, i| l.* = .{
         .d = d,
         .i = @intCast(i),
-        .href = try std.fmt.allocPrint(a, "{s}{s}{s}", .{ base, d.patch_dir, m.path }),
+        .href = try a.print("{s}{s}{s}", .{ base, d.patch_dir, m.path }),
         .span = edge,
     };
     return .{ .rows = rows, .matchups = mus, .shown = try a.alloc(Line, rows.len), .shown_mu = try a.alloc(MLine, mus.len) };
@@ -702,8 +733,6 @@ pub const Page = struct {
                 if (p.table.rows.len > 0) p.table.view(h) else h.p(.{ .class = "empty" }, .{W.none}),
             }),
             if (p.mu.rows.len > 0) h.div(.{ .id = "mu" }, .{p.mu.view(h)}) else null,
-            changes(h, d, d.items, W.items, .item),
-            changes(h, d, d.runes, W.runes, .rune),
         });
     }
 
@@ -727,21 +756,51 @@ pub const Page = struct {
     }
 };
 
-/// Items or runes Riot changed, each with its lines
-fn changes(h: *H, d: *const Data, list: []const Change, title: tree.Text, k: art.Kind) ?N {
+/// The items and runes Riot changed; `base` from the page to the site root
+pub fn riotView(h: *H, d: *const Data, r: Riot, base: []const u8) ?N {
+    if (r.items.len == 0 and r.runes.len == 0) return null;
+    return h.div(.{ .class = "c-patch" }, .{
+        kits(h, d, r.items, W.items, W.bought, base),
+        kits(h, d, r.runes, W.runes, W.taken, base),
+    });
+}
+
+fn kits(h: *H, d: *const Data, list: []const Kit, title: tree.Text, used: tree.Text, base: []const u8) ?N {
     if (list.len == 0) return null;
     var l = h.list();
-    for (list, 0..) |c, i| l.add(h.li(.{ .key = i }, .{
+    for (list, 0..) |k, i| l.add(h.li(.{ .key = i }, .{
         h.div(.{ .class = "nh" }, .{
-            if (k == .item) art.view(h, .{ .name = c.name, .src = h.fmt("https://ddragon.leagueoflegends.com/cdn/{s}/img/item/{d}.png", .{ d.ddragon, c.id }) }, .{ .px = .@"28", .named = false }) else null,
-            h.b(.{}, .{c.name}),
-            if (c.status != .changed) riotBadge(h, c) else null,
+            art.view(h, .{ .name = k.change.name, .src = k.icon }, .{ .px = .@"28", .named = false }),
+            h.b(.{}, .{k.change.name}),
+            if (k.change.status != .changed) riotBadge(h, k.change) else null,
         }),
-        changeline.view(h, c.lines),
+        changeline.view(h, k.change.lines),
+        users(h, d, k.users, used, base),
     }));
     return h.section(.{ .class = "chg" }, .{
         card.sechead(h, title, phrase.num(h, .count, list.len), &.{}),
         h.ul(.{}, .{l.done()}),
+    });
+}
+
+fn users(h: *H, d: *const Data, list: []const User, used: tree.Text, base: []const u8) ?N {
+    if (list.len == 0) return null;
+    var l = h.list();
+    for (list, 0..) |u, i| {
+        const row = if (u.row) |x| &d.rows[x] else null;
+        l.add(h.li(.{ .key = i }, .{
+            h.a(.{ .class = "who", .href = h.fmt("{s}{s}champion/{s}.html#role={s}", .{ base, d.patch_dir, d.champs[u.champ].slug, Role.slugs[@backingInt(u.role)] }) }, .{
+                icon(h, d, u.champ),
+                h.span(.{ .class = "nm" }, .{d.champs[u.champ].name}),
+                @import("role.zig").view(h, u.role.ui(), .{}),
+            }),
+            h.span(.{ .class = "r" }, .{phrase.num(h, .rate, 100 * u.share)}),
+            if (row) |x| moveText(h, x.prev, x.cur, x.clear) else null,
+        }));
+    }
+    return h.div(.{ .class = "blk" }, .{
+        card.label(h, used),
+        h.ul(.{ .class = "us" }, .{l.done()}),
     });
 }
 
@@ -779,6 +838,9 @@ pub const css =
     \\  .c-patch .chg > ul { list-style: none; margin: var(--sp-2) 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--sp-2); }
     \\  .c-patch .chg > ul > li { display: grid; gap: var(--sp-2); align-content: start; padding: var(--sp-3); border-radius: var(--r-m); background: var(--panel); border: 1px solid var(--line); min-width: 0; }
     \\  .c-patch .nh { display: flex; align-items: center; gap: var(--sp-2); }
+    \\  .c-patch .us { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-1); }
+    \\  .c-patch .us li { display: grid; grid-template-columns: minmax(0, 1fr) auto 3.5em; align-items: center; gap: var(--sp-2); font-size: var(--fs-s); }
+    \\  .c-patch .us .c-delta { text-align: right; }
     \\  .c-patch:not([data-riot]) .ri { display: none; }
     \\  @container (max-width: 620px) {
     \\    .c-patch .dl { width: 150px; }
@@ -839,15 +901,24 @@ pub const demo: Data = .{
         .{ .role = .bottom, .a = 1, .b = 4, .prev = .{ 800, 386 }, .cur = .{ 520, 286 }, .clear = true, .gold = .{ .minute = 11, .prev = 40, .cur = 209, .games = 510 }, .path = "matchup/bot/missfortune-vs-tristana.html" },
         .{ .role = .bottom, .a = 3, .b = 4, .prev = .{ 900, 435 }, .cur = .{ 864, 437 }, .clear = false, .gold = null, .path = "matchup/bot/jinx-vs-tristana.html" },
     },
+};
+
+pub const demo_riot: Riot = .{
     .items = &.{
-        .{ .id = 2520, .name = "Bastionbreaker", .tone = .nerf, .slots = "", .lines = &.{
+        .{ .change = .{ .id = 2520, .name = "Bastionbreaker", .tone = .nerf, .slots = "", .lines = &.{
             .{ .before = "", .old = "22", .new = "18", .after = "Lethality", .dir = .nerf },
+        } }, .icon = "https://ddragon.leagueoflegends.com/cdn/16.21.1/img/item/2520.png", .users = &.{
+            .{ .champ = 1, .role = .bottom, .share = 0.62, .row = 1 },
+            .{ .champ = 4, .role = .bottom, .share = 0.31, .row = 5 },
+            .{ .champ = 0, .role = .top, .share = 0.08, .row = null },
         } },
-        .{ .id = 9999, .name = "New Thing", .status = .new, .tone = .adjusted, .slots = "", .lines = &.{} },
+        .{ .change = .{ .id = 9999, .name = "New Thing", .status = .new, .tone = .adjusted, .slots = "", .lines = &.{} }, .icon = "", .users = &.{} },
     },
     .runes = &.{
-        .{ .id = 8005, .name = "Press the Attack", .tone = .adjusted, .slots = "", .lines = &.{
+        .{ .change = .{ .id = 8005, .name = "Press the Attack", .tone = .adjusted, .slots = "", .lines = &.{
             .{ .before = "Deals", .old = "40", .new = "45", .after = "damage", .dir = .adjusted },
+        } }, .icon = "https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/Precision/PressTheAttack/PressTheAttack.png", .users = &.{
+            .{ .champ = 3, .role = .bottom, .share = 0.41, .row = 3 },
         } },
     },
 };
@@ -863,6 +934,7 @@ pub fn shown(a: std.mem.Allocator, d: *const Data, open: bool) ?*Page {
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
     if (shown(h.mem, &demo, true)) |p| g.addFill("moved clearly and changed by Riot, Darius open", p.view(h));
+    if (riotView(h, &demo, demo_riot, "")) |n| g.addFill("items and runes Riot changed, with who uses them", n);
     if (shown(h.mem, &demo, false)) |p| {
         p.role = .bot;
         p.only = .lane;
@@ -872,8 +944,6 @@ pub fn gallery(g: *Gallery) void {
     }
     var no_riot = demo;
     no_riot.riot = false;
-    no_riot.items = &.{};
-    no_riot.runes = &.{};
     no_riot.matchups = &.{};
     const d = h.mem.create(Data) catch return;
     d.* = no_riot;

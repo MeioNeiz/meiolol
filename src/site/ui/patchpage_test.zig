@@ -114,8 +114,25 @@ test "the server renders every listed row by change, the strip and Riot's lines"
     try testing.expect(std.mem.find(u8, page, "<h1>Patch 16.21 vs 16.20</h1>") != null);
     try testing.expect(std.mem.find(u8, page, "href=\"../patch/champion/darius.html#role=top\"") != null);
     try testing.expect(std.mem.find(u8, page, "href=\"../patch/matchup/bot/missfortune-vs-tristana.html\"") != null);
+    const report = try check.run(a, &t, .{ .words = .off, .answer = .off });
+    for (report.findings.items) |f| std.debug.print("{s}\n", .{f.msg});
+    try testing.expectEqual(@as(usize, 0), report.findings.items.len);
+}
+
+test "items and runes under the island, each with who uses it most" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var t: tree.Tree = .{};
+    var h: tree.H = .init(a, &t);
+    t.root = pp.riotView(&h, &pp.demo, pp.demo_riot, "../").?;
+    var w: std.Io.Writer.Allocating = .init(a);
+    try html.write(&t, t.root, &w.writer);
+    const page = w.written();
+    try testing.expect(std.mem.find(u8, page, "data-island") == null);
     try testing.expect(std.mem.find(u8, page, "Bastionbreaker") != null);
-    try testing.expect(std.mem.find(u8, page, "Press the Attack") != null);
+    try testing.expect(std.mem.find(u8, page, "href=\"../patch/champion/missfortune.html#role=bot\"") != null);
+    try testing.expect(std.mem.find(u8, page, "PressTheAttack.png") != null);
     const report = try check.run(a, &t, .{ .words = .off, .answer = .off });
     for (report.findings.items) |f| std.debug.print("{s}\n", .{f.msg});
     try testing.expectEqual(@as(usize, 0), report.findings.items.len);
