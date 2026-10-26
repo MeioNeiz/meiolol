@@ -45,7 +45,7 @@ same cost, so no list to choose. The panel says the context's games; under rate_
 | Box | builder keys x4 (per-matchup builds cost ~1.1 GB a builder) | rows written in the pass that reads the games anyway; no hash map | as B, plus a daily upload of ~15 MB | heavy: counts x conditions x days |
 | New moving parts | none | a rows file and a counting module shared by box and wasm | a service on the micro (1 GB RAM beside nginx, Your games, jomove), cache, abuse limits | the cube format |
 
-## Recommendation: B, rows, on E7's footing
+## Recommendation: rows on the box (E7), B to the browser if policy allows, else C
 
 - Box: the builds pass writes one rows file per finished day (data/rows/builds-<day>.bin:
   per player and game the build fields, rank bracket, platform, patch, win; sorted by
@@ -53,6 +53,12 @@ same cost, so no list to choose. The panel says the context's games; under rate_
   every region at today's rate; 60 days rolling ~0.9 GB (80 GB free). This is E7's builds
   layer: builds --site then sums rows (seconds) instead of rereading 30 days of timelines
   (266 s wall today), and the matchup and rank builds come from the same rows
+- Policy, open: the application text (production-key.md) says "the site only shows
+  champion and aggregate data". A public rows file holds no ids, but it is per game, not
+  an aggregate. Until Jacob decides (question 1), the fallback is C served from the same
+  rows: per champion-role files on jomify's disk, read per query (no mmap of the whole
+  set, so little RAM on the micro), answers cached by nginx for the day; the page and
+  the counting module stay as below, only the fetch differs
 - Site: per region scope (root = EUW, all/) a file per champion-role,
   data/champion/rows/<slug>-<role>.bin: the newest 30k rows of the last 30 days, columns
   as measured, the dictionaries (ids only; names and icons are already on the page), the
@@ -91,14 +97,16 @@ same cost, so no list to choose. The panel says the context's games; under rate_
 
 - Measured: participant columns on real rows. Estimated: timeline columns (independent
   draws), the box's write and read times, every-region sizes (EUW x4.4)
-- Not checked: production-key.md on shipping per-game rows (no ids, but finer than
-  aggregates); forget (data-safety.md "Erasure") would need rows rebuilt or the forgotten
-  player's rows dropped at write
+- Not checked: forget (data-safety.md "Erasure") would need rows rebuilt or the
+  forgotten player's rows dropped at write; C's service design (endpoint, cache keys,
+  limits) beyond the paragraph above
 
 ## Questions for Jacob
 
-1. Rows to the browser (B, recommended) or a query service on jomify (C, exact and
-   uncapped, a new service on the micro)?
+1. Rows to the browser (B: fastest, static, but per-game rows public, against "only
+   champion and aggregate data" in the application text) or a query service on jomify
+   (C: aggregates only, exact and uncapped, a new service on the micro)? Lean: C until
+   the production key is granted, B after if Riot is fine with it
 2. Cap at the newest 30k games per champion-role, or the whole 30 days (EUW up to 800
    KB, every region up to 4.2 MB on a first tap)?
 3. Filtered tables without a filtered Minute column: fine?
