@@ -5,7 +5,10 @@
 //! client order can't disagree. Rendered as a flush Card: a head band with the title,
 //! the count shown, search and MinGames, then the table. Columns of priority 2 and 3
 //! give way in narrow containers (420 and 560 px). A column head can open a note (its
-//! label is then a Toggletip term; the rest of the head and a small arrow button sort)
+//! label is then a Toggletip term; the rest of the head and a small arrow button sort).
+//! A cell can open a line on its row (one shared popover); in a narrow container `pick`
+//! columns show one at a time, chosen in a "Show" band; rare rows (off-role picks) wait
+//! behind a "+N" chip
 //!
 //!     const Opp = ui.table.DataTable(Row, .{
 //!         .title = plain("Lane opponents"),
@@ -30,6 +33,8 @@ const delta = @import("delta.zig");
 const bar = @import("bar.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
+const Phrase = phrase.Phrase;
+const chip = @import("chip.zig");
 const H = tree.H;
 const N = tree.N;
 
@@ -41,7 +46,14 @@ const W = struct {
     pub const any = plain("Any");
     pub const min_games = plain("Min games");
     pub const sort = plain("Sort");
+    pub const show = plain("Show");
+    pub const rank = plain("#");
+    pub const more = Phrase("+{n:count} {w:text}");
+    pub const fewer = Phrase("Hide {w:text}");
 };
+
+/// A cell's line on its row: what opens when the cell is tapped
+pub const Tip = struct { title: tree.Text, note: tree.Text };
 
 pub fn Column(comptime Row: type) type {
     return struct {
@@ -60,6 +72,12 @@ pub fn Column(comptime Row: type) type {
         answer: bool = false,
         /// What the label opens: a line on what the figures are
         tip: ?tree.Text = null,
+        /// What the cell opens on tap: a line on this row's figure
+        row_tip: ?*const fn (*H, *const Row) Tip = null,
+        /// In a narrow container (620 px) one of the pick columns shows at a time
+        pick: bool = false,
+        /// A class on its cells, for the page's widths
+        key: []const u8 = "",
     };
 }
 
@@ -84,6 +102,13 @@ pub fn Spec(comptime Row: type) type {
         /// Rows inside another component (a build slot): no card or head band, tighter
         /// rows, columns give way at 200 and 150 px
         compact: bool = false,
+        /// No card or head band: the page places searchBox and minPick in its own head
+        bare: bool = false,
+        /// A first column with each row's place in the order shown
+        numbered: bool = false,
+        /// Rows hidden until the "+N" chip (or a search) shows them, and what they are
+        rare: ?*const fn (*const Row) bool = null,
+        rare_name: tree.Text = plain("rare"),
     };
 }
 
@@ -108,7 +133,8 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
         var plain_c: [ncols][]const u8 = undefined;
         var sorted_c: [ncols][]const u8 = undefined;
         for (spec.columns, 0..) |c, i| {
-            const base = (if (c.num) "num" else "") ++ (if (c.priority >= 2) (if (c.num) " " else "") ++ std.fmt.comptimePrint("p{d}", .{c.priority}) else "");
+            const nk = (if (c.num) "num" else "") ++ (if (c.priority >= 2) (if (c.num) " " else "") ++ std.fmt.comptimePrint("p{d}", .{c.priority}) else "");
+            const base = nk ++ (if (c.key.len > 0) (if (nk.len > 0) " " else "") ++ c.key else "");
             plain_c[i] = base;
             sorted_c[i] = base ++ (if (base.len > 0) " " else "") ++ "sorted";
         }
@@ -128,10 +154,20 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
         open: ?u32 = null,
         /// False: no column heads (a compact table whose figures are named elsewhere)
         head: bool = true,
+        /// The pick column shown in a narrow container
+        col: u8 = first_pick,
+        /// Rare rows shown
+        rare: bool = false,
+        /// The row and column whose line is open: row * columns + column
+        tip: ?u32 = null,
 
         const T = @This();
 
-        pub const Msg = union(enum) { sort: u8, search, min: u8, open: u32 };
+        const first_pick: u8 = for (spec.columns, 0..) |c, i| {
+            if (c.pick) break i;
+        } else 0;
+
+        pub const Msg = union(enum) { sort: u8, search, min: u8, open: u32, col: u8, rare, tip: u32 };
 
         pub const Url = struct {
             pub const prefix = if (spec.key.len > 0) spec.key ++ "-" else "";
@@ -173,6 +209,10 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
                     ev.push = true;
                 },
                 .open => |i| t.open = if (t.open == i) null else i,
+                .col => |i| t.col = i,
+                .rare => t.rare = !t.rare,
+                // The button's popovertarget opens it: the handler only fills it
+                .tip => |i| t.tip = i,
             }
         }
 
@@ -182,16 +222,26 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
 
         /// The rows shown, in order (indexes into rows)
         pub fn order(t: *const T, a: std.mem.Allocator) ![]u32 {
+            return (try t.ordered(a)).rows;
+        }
+
+        /// The rows shown, in order, and how many rare ones wait behind the chip
+        fn ordered(t: *const T, a: std.mem.Allocator) !struct { rows: []u32, rare: usize } {
             var out: std.ArrayList(u32) = try .initCapacity(a, t.rows.len);
             const q = t.q.slice();
             const min = t.minimum();
+            var rare: usize = 0;
             for (t.rows, 0..) |*r, i| {
                 if (spec.games) |g| if (g(r) < min) continue;
-                if (spec.search) |s| if (q.len > 0 and std.ascii.findIgnoreCase(s(r), q) == null) continue;
+                if (spec.search) |s| if (q.len > 0 and !matches(s(r), q)) continue;
+                if (spec.rare) |f| if (q.len == 0 and f(r)) {
+                    rare += 1;
+                    if (!t.rare) continue;
+                };
                 out.appendAssumeCapacity(@intCast(i));
             }
             std.sort.pdq(u32, out.items, t, before);
-            return out.items;
+            return .{ .rows = out.items, .rare = rare };
         }
 
         /// Ties keep the data's order, in either direction
@@ -211,11 +261,13 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
         }
 
         pub fn view(t: *T, h: *H) N {
-            const shown = t.order(h.mem) catch {
+            const o = t.ordered(h.mem) catch {
                 h.oom = true;
                 return .none;
             };
+            const shown = o.rows;
             var ths = h.list();
+            if (t.head and spec.numbered) ths.add(h.th(.{ .class = "num p3" }, .{W.rank}));
             if (t.head) inline for (spec.columns, 0..) |col, i| {
                 const sorted = t.sort == i;
                 const cls = if (sorted) classes[1][i] else classes[0][i];
@@ -229,6 +281,7 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
                     .class = if (cls.len > 0) cls else null,
                     .aria_sort = if (sorted) (if (t.desc) "descending" else "ascending") else null,
                     .data_answer = col.answer,
+                    .data_col = t.colState(i),
                     .on_click = on_sort,
                 }, .{
                     term,
@@ -236,15 +289,27 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
                     arrow,
                 }));
             };
+            const tip_id = h.fmt("{s}-rt", .{t.id});
             var trs = h.list();
             const min = t.minimum();
-            for (shown) |ri| {
+            for (shown, 1..) |ri, place| {
                 const r = &t.rows[ri];
                 var tds = h.list();
+                if (spec.numbered) tds.add(h.td(.{ .class = "num p3" }, .{place}));
                 inline for (spec.columns, 0..) |col, i| {
                     const cls = if (t.sort == i) classes[1][i] else classes[0][i];
+                    const content = col.cell(h, r);
                     // Without heads the answer column is marked on its cells
-                    tds.add(h.td(.{ .class = if (cls.len > 0) cls else null, .data_answer = !t.head and col.answer and trs.items.items.len == 0 }, .{col.cell(h, r)}));
+                    tds.add(h.td(.{
+                        .class = if (cls.len > 0) cls else null,
+                        .data_answer = !t.head and col.answer and trs.items.items.len == 0,
+                        .data_col = t.colState(i),
+                    }, .{if (col.row_tip != null) h.button(.{
+                        .class = "rt",
+                        .type = "button",
+                        .popovertarget = tip_id,
+                        .on_click = h.on(t, .{ .tip = @as(u32, @intCast(ri * ncols + i)) }),
+                    }, .{content}) else content}));
                 }
                 const thin = if (spec.games) |g| min == 0 and g(r) < spec.thin else false;
                 const open = t.open == ri;
@@ -256,37 +321,119 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
                     .on_click = on_open,
                 }, .{tds.done()}));
                 if (spec.detail) |d| if (open) trs.add(h.tr(.{ .key = ri | 0x8000_0000, .class = "detail" }, .{
-                    h.td(.{ .colspan = ncols }, .{d(h, r)}),
+                    h.td(.{ .colspan = ncols + @intFromBool(spec.numbered) }, .{d(h, r)}),
                 }));
             }
-            const wrap = h.div(.{ .class = "c-table-wrap" }, .{h.table(.{ .class = "c-table", .data_v = if (spec.compact) "compact" else null }, .{
-                if (t.head) h.thead(.{}, .{h.tr(.{}, .{ths.done()})}) else null,
-                h.tbody(.{}, .{trs.done()}),
-            })});
-            if (spec.compact) return wrap;
+            const more: ?N = if (spec.rare != null and o.rare > 0) h.div(.{ .class = "more" }, .{chip.view(h, .{ .v = .expand, .on = h.on(t, .rare) }, .{
+                if (t.rare) W.fewer.with(h, .{ .w = spec.rare_name.s }) else W.more.with(h, .{ .n = o.rare, .w = spec.rare_name.s }),
+            })}) else null;
+            const row_tip: ?N = if (comptime anyRowTip()) t.rowTip(h, tip_id) else null;
+            const wrap = h.div(.{ .class = "c-table-wrap" }, .{
+                t.chooser(h),
+                h.table(.{ .class = "c-table", .data_v = if (spec.compact) "compact" else null }, .{
+                    if (t.head) h.thead(.{}, .{h.tr(.{}, .{ths.done()})}) else null,
+                    h.tbody(.{}, .{trs.done()}),
+                }),
+                more,
+                row_tip,
+            });
+            if (spec.compact or spec.bare) return wrap;
             var controls = h.list();
-            if (spec.search != null) controls.add(h.input(.{
-                .type = "search",
-                .placeholder = W.find,
-                .aria_label = W.find,
-                .value = t.q.slice(),
-                .on_input = h.on(t, .search),
-            }));
-            if (spec.min_games.len > 0) {
-                var items: [spec.min_games.len]segmented.Item = undefined;
-                for (spec.min_games, 0..) |g, i| items[i] = .{
-                    .label = if (g == 0) W.any else minLabel(h, g),
-                    .selected = t.min == i,
-                    .on = h.on(t, .{ .min = @intCast(i) }),
-                };
-                controls.add(segmented.view(h, .{ .s = .s, .label = W.min_games }, &items));
-            }
+            controls.add(t.searchBox(h) orelse .none);
+            controls.add(t.minPick(h) orelse .none);
             return card.view(h, .{ .flush = true }, &.{
                 card.head(h, spec.title, phrase.num(h, .count, shown.len), controls.done()),
                 wrap,
             });
         }
+
+        fn anyRowTip() bool {
+            inline for (spec.columns) |c| if (c.row_tip != null) return true;
+            return false;
+        }
+
+        /// A pick column's cells: shown or not in a narrow container
+        fn colState(t: *const T, i: u8) ?[]const u8 {
+            if (!spec.columns[i].pick) return null;
+            return if (t.col == i) "on" else "off";
+        }
+
+        /// The narrow container's "Show" band: which pick column is shown
+        fn chooser(t: *T, h: *H) ?N {
+            const n = comptime blk: {
+                var k = 0;
+                for (spec.columns) |c| k += @intFromBool(c.pick);
+                break :blk k;
+            };
+            if (n == 0) return null;
+            var items: [n]segmented.Item = undefined;
+            var k: usize = 0;
+            inline for (spec.columns, 0..) |c, i| if (c.pick) {
+                items[k] = .{ .label = c.label, .selected = t.col == i, .on = h.on(t, .{ .col = @intCast(i) }) };
+                k += 1;
+            };
+            return h.div(.{ .class = "cols" }, .{ card.label(h, W.show), segmented.view(h, .{ .s = .s, .label = W.show }, &items) });
+        }
+
+        /// The one popover every row's tip fills
+        fn rowTip(t: *const T, h: *H, id: []const u8) N {
+            const at = t.tip orelse return toggletip.tip(h, id, .{ .s = "" }, .{ .s = "" }, false);
+            const ri = at / ncols;
+            const ci = at % ncols;
+            if (ri >= t.rows.len) return toggletip.tip(h, id, .{ .s = "" }, .{ .s = "" }, false);
+            inline for (spec.columns, 0..) |c, i| if (i == ci) if (c.row_tip) |f| {
+                const x = f(h, &t.rows[ri]);
+                return toggletip.tip(h, id, x.title, x.note, false);
+            };
+            return toggletip.tip(h, id, .{ .s = "" }, .{ .s = "" }, false);
+        }
+
+        /// The search box: in the head band, or the page's own head when bare
+        pub fn searchBox(t: *T, h: *H) ?N {
+            if (spec.search == null) return null;
+            return h.input(.{
+                .type = "search",
+                .placeholder = W.find,
+                .aria_label = W.find,
+                .value = t.q.slice(),
+                .on_input = h.on(t, .search),
+            });
+        }
+
+        /// MinGames: in the head band, or the page's own head when bare
+        pub fn minPick(t: *T, h: *H) ?N {
+            if (spec.min_games.len == 0) return null;
+            var items: [spec.min_games.len]segmented.Item = undefined;
+            for (spec.min_games, 0..) |g, i| items[i] = .{
+                .label = if (g == 0) W.any else minLabel(h, g),
+                .selected = t.min == i,
+                .on = h.on(t, .{ .min = @intCast(i) }),
+            };
+            return segmented.view(h, .{ .s = .s, .label = W.min_games }, &items);
+        }
     };
+}
+
+/// Letters and digits of `q` in order in `s`, ignoring case and the rest ("velkoz",
+/// "vel koz" find Vel'Koz)
+fn matches(s: []const u8, q: []const u8) bool {
+    var buf: [64]u8 = undefined;
+    const a = squeeze(&buf, s);
+    var qb: [24]u8 = undefined;
+    const b = squeeze(&qb, q);
+    if (b.len == 0) return true;
+    return std.mem.find(u8, a, b) != null;
+}
+
+fn squeeze(buf: []u8, s: []const u8) []const u8 {
+    var n: usize = 0;
+    for (s) |c| {
+        if (n == buf.len) break;
+        if (!std.ascii.isAlphanumeric(c)) continue;
+        buf[n] = std.ascii.toLower(c);
+        n += 1;
+    }
+    return buf[0..n];
 }
 
 /// 300, 1k, 2.5k
@@ -327,6 +474,15 @@ pub const css =
     \\  .c-table td:first-child, .c-table th:first-child { padding-left: var(--sp-3); }
     \\  .c-table td:last-child, .c-table th:last-child { padding-right: var(--sp-3); }
     \\  .c-table .c-bar { justify-content: flex-end; }
+    \\  .c-table .rt { all: unset; cursor: pointer; }
+    \\  .c-table .rt:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 2px; }
+    \\  .c-table-wrap > .cols { display: none; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-3);
+    \\    border-bottom: 1px solid var(--line); }
+    \\  .c-table-wrap > .more { display: flex; justify-content: center; padding: var(--sp-2); }
+    \\  @container (max-width: 620px) {
+    \\    .c-table-wrap > .cols { display: flex; }
+    \\    .c-table [data-col="off"] { display: none; }
+    \\  }
     \\  @container (max-width: 560px) { .c-table:not([data-v]) .p3 { display: none; } }
     \\  @container (max-width: 420px) { .c-table:not([data-v]) .p2 { display: none; } .c-table .c-bar > span { display: none; } }
     \\  .c-table[data-v="compact"] { font-size: var(--fs-s); }
@@ -406,7 +562,33 @@ pub const Demo = struct {
         return h.p(.{ .class = "muted" }, .{ r.name, " in ", r.role, ": the matchups and builds open here" });
     }
 
+    fn offRole(r: *const Demo) bool {
+        return r.pick < 1;
+    }
+    fn changeTip(h: *H, r: *const Demo) Tip {
+        return .{ .title = phrase.num(h, .points, r.change), .note = .{ .s = r.name } };
+    }
+
     pub const Table = DataTable(Demo, spec);
+    pub const Wide = DataTable(Demo, wide);
+
+    /// The champions list's shape: numbered, a Show band in narrow containers, off-role
+    /// rows behind a chip, the patch change opening a line on its row
+    pub const wide: Spec(Demo) = .{
+        .title = plain("Champions"),
+        .columns = &.{
+            .{ .label = plain("Champion"), .cell = who, .name = nameOf, .num = false },
+            .{ .label = plain("Win rate"), .cell = rate, .sort = wrOf, .answer = true },
+            .{ .label = plain("Patch"), .cell = changeCell, .sort = changeOf, .row_tip = changeTip },
+            .{ .label = plain("Pick"), .cell = pickBar, .sort = pickOf, .pick = true },
+            .{ .label = plain("Games"), .cell = gamesCell, .sort = gamesF, .pick = true },
+        },
+        .default_sort = 1,
+        .search = nameOf,
+        .numbered = true,
+        .rare = offRole,
+        .rare_name = plain("off-role"),
+    };
 
     pub const spec: Spec(Demo) = .{
         .title = plain("Champions"),
@@ -445,6 +627,19 @@ pub fn gallery(g: *Gallery) void {
         };
         t.* = s[1];
         t.id = h.fmt("dt{d}-{d}", .{ k, g.width });
+        g.addFill(s[0], t.view(h));
+    }
+    const wides = [_]struct { []const u8, Demo.Wide }{
+        .{ "numbered, off-role behind a chip, Show band when narrow", .{ .rows = &Demo.rows } },
+        .{ "off-role shown, Games picked", .{ .rows = &Demo.rows, .rare = true, .col = 4 } },
+    };
+    for (wides, 0..) |s, k| {
+        const t = h.mem.create(Demo.Wide) catch {
+            h.oom = true;
+            return;
+        };
+        t.* = s[1];
+        t.id = h.fmt("dw{d}-{d}", .{ k, g.width });
         g.addFill(s[0], t.view(h));
     }
 }
