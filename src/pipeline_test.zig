@@ -242,6 +242,8 @@ test "fixture games to stats, curves and the website" {
             try testing.expectEqual(1, b[0].from);
             try testing.expect(b[0].build != null and m[0].rels.len == 1 and m[0].rels[0].opps.len > 0 and m[0].by_patch.len == 1);
             try testing.expectEqual(games, m[0].by_patch[0].games);
+            // The Matchups tab's count, Top's, is More's lane opponents
+            try testing.expectEqual(m[0].rels[0].opps.len, t[0].opps);
         }
         try testing.expectEqual(0, rank_top.groups[2].len);
         try testing.expectError(error.FileNotFound, std.Io.Dir.cwd().statFile(io, try std.fs.path.join(arena, &.{ out, "data/champion/mordekaiser-rank.bin" }), .{}));

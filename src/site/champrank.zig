@@ -102,7 +102,7 @@ fn roleData(site: *const Site, x: *const filters.Ranked, k: f64) !Roles {
     rels[0] = .{ .ally = false, .role = champion.uiRole(x.role), .opps = opps };
     const r = champion.uiRole(x.role);
     return .{
-        .top = .{ .role = r, .games = x.games, .wins = x.wins, .share = 0, .rank = x.rank, .of = x.of, .pick = x.pick, .ban = x.ban, .lane = &.{} },
+        .top = .{ .role = r, .games = x.games, .wins = x.wins, .share = 0, .rank = x.rank, .of = x.of, .pick = x.pick, .ban = x.ban, .lane = &.{}, .opps = @intCast(opps.len) },
         .build = .{
             .role = r,
             .build = if (picked) |p| try buildblock.data(a, p.picked.f, p.picked.b, ch.name) else null,

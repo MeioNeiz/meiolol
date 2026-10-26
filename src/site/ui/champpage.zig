@@ -365,6 +365,8 @@ pub const TopRole = struct {
     patch_move: ?[2]f32 = null,
     /// Lane opponents, for the search
     lane: []const Opp,
+    /// A rank file's lane opponent count, its lane being empty: the Matchups tab's
+    opps: u16 = 0,
 };
 
 /// ui-champbuild.wasm's: each role's build
@@ -571,7 +573,7 @@ pub const Top = struct {
                 }),
                 tabs.view(h, W.sections, &.{
                     .{ .label = W.build, .href = "#build", .on = h.on(p, .{ .jump = .build }) },
-                    .{ .label = W.matchups, .href = "#matchups", .on = h.on(p, .{ .jump = .matchups }), .n = @intCast(rl.lane.len) },
+                    .{ .label = W.matchups, .href = "#matchups", .on = h.on(p, .{ .jump = .matchups }), .n = if (p.files.shown.rank == .plat) @intCast(rl.lane.len) else if (x) |y| y.opps else null },
                     .{ .label = W.trends, .href = "#trends", .on = h.on(p, .{ .jump = .trends }) },
                 }, &.{}),
                 p.toolbar(h),
