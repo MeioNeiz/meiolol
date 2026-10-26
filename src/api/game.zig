@@ -400,8 +400,9 @@ pub const Detail = struct {
     seats: []const SeatStats,
     /// Yours in time order, undone ones left out
     buys: []const Buy,
-    /// Yours: the ability levelled (1 Q to 4 R), one per level-up in order
-    skills: []const u8,
+    /// Yours: the ability levelled (1 Q to 4 R), one per level-up in order. u16 slices
+    /// here as in `Game.win_chance`: std.json writes a u8 slice as a string
+    skills: []const u16,
 };
 
 pub const no_slot = 255;
@@ -411,7 +412,7 @@ pub const Kill = struct {
     /// `no_slot` for a turret, minion or monster
     killer: u8,
     victim: u8,
-    assists: []const u8,
+    assists: []const u16,
     /// Map units, blue's base at (0, 0), about 15k a side
     x: u16,
     y: u16,
@@ -897,11 +898,11 @@ fn detail(arena: Allocator, s: Summary, slot: u8, t: timeline.Timeline) !Detail 
     var kills: std.ArrayList(Kill) = .empty;
     var objectives: std.ArrayList(Objective) = .empty;
     var buys: std.ArrayList(Buy) = .empty;
-    var skills: std.ArrayList(u8) = .empty;
+    var skills: std.ArrayList(u16) = .empty;
     for (t.events, 0..) |e, i| switch (e.data) {
         .champion_kill => |k| {
             if (k.victim == 0 or k.victim > n) continue;
-            const assists = try arena.alloc(u8, k.assists.len);
+            const assists = try arena.alloc(u16, k.assists.len);
             var na: usize = 0;
             for (k.assists) |a| if (toSlot(a, n) != no_slot) {
                 assists[na] = a - 1;
