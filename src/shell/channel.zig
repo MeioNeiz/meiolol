@@ -62,6 +62,8 @@ pub const FromPage = union(enum) {
     signin: struct { username: []const u8, password: []const u8 },
     /// Options weigh the player's mastery points (champ select's toggle)
     mastery: bool,
+    /// Private edition: practice on or off, or a change to its draft (practice.zig)
+    practice: @import("ui").toshell.Practice,
 };
 
 /// Pages send small messages; a larger one is a bug or not ours

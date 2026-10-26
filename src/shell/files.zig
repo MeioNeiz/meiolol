@@ -11,11 +11,16 @@ pub const bridge_js = @embedFile("web/bridge.js");
 pub const start_page = "index.html";
 
 /// Beside these, screens.zig serves the page, its data and the champion icons
-const embedded = [_]struct { []const u8, []const u8 }{
+const embedded = [_]File{
     .{ "app.css", screens.css },
     .{ "ui-app.js", @embedFile("ui-app.js") },
     .{ "ui-app.wasm", @embedFile("ui-app.wasm") },
+} ++ if (@import("build_options").public) [_]File{} else [_]File{
+    .{ "ui-practice.js", @embedFile("ui-practice.js") },
+    .{ "ui-practice.wasm", @embedFile("ui-practice.wasm") },
 };
+
+const File = struct { []const u8, []const u8 };
 
 pub fn get(path: []const u8) ?[]const u8 {
     for (embedded) |f| if (std.mem.eql(u8, f[0], path)) return f[1];

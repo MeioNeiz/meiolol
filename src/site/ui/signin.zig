@@ -50,7 +50,7 @@ pub const Form = struct {
     fn submit(f: *Form) void {
         const user = std.mem.trim(u8, f.user.slice(), " ");
         if (user.len == 0 or f.pass.len == 0) return;
-        toshell.send(.{ .signin = .{ .username = user, .password = f.pass.slice() } });
+        toshell.send(.signin, .{ .username = user, .password = f.pass.slice() });
         @memset(&f.pass.buf, 0);
         f.pass.len = 0;
         f.tries +%= 1;
@@ -138,10 +138,9 @@ const testing = std.testing;
 var sent: []const u8 = "";
 var sent_buf: [512]u8 = undefined;
 
-fn record(o: toshell.Out) void {
-    var w: std.Io.Writer = .fixed(&sent_buf);
-    toshell.json(o, &w) catch unreachable;
-    sent = w.buffered();
+fn record(s: []const u8) void {
+    @memcpy(sent_buf[0..s.len], s);
+    sent = sent_buf[0..s.len];
 }
 
 test "on the fake DOM: the line opens the form, Enter sends, the password input is new after" {
@@ -150,9 +149,9 @@ test "on the fake DOM: the line opens the form, Enter sends, the password input 
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const old = toshell.send;
-    defer toshell.send = old;
-    toshell.send = record;
+    const old = toshell.out;
+    defer toshell.out = old;
+    toshell.out = record;
     sent = "";
     var fake: Fake = .{ .a = a };
     var rt: island.Runtime(Fake) = .init(a, &fake);

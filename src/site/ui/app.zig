@@ -14,6 +14,7 @@ const postgame = @import("postgame.zig");
 const lane = @import("lane.zig");
 const signin = @import("signin.zig");
 const toshell = @import("toshell.zig");
+const chip = @import("chip.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = @import("phrase.zig").plain;
 const H = tree.H;
@@ -44,6 +45,9 @@ pub const Data = struct {
     signin: ?signin.SignIn = null,
     /// A new version is in place for the next start
     restart: bool = false,
+    /// Private edition: practice is on (ui/practice.zig above the page); null shows no
+    /// button. Turning it on or off reloads the page, which loads ui-practice.wasm or not
+    practice: ?bool = null,
 };
 
 pub const sel = "[data-island=app]";
@@ -54,11 +58,12 @@ pub const App = struct {
     team: lane.Held = .{},
     form: signin.Form = .{},
 
-    pub const Msg = enum { mastery };
+    pub const Msg = enum { mastery, practice };
 
     pub fn update(a: *App, m: Msg, _: *tree.Event) void {
         switch (m) {
-            .mastery => if (a.data.screen == .select) if (a.data.screen.select.lane.mastery) |on| toshell.send(.{ .mastery = !on }),
+            .mastery => if (a.data.screen == .select) if (a.data.screen.select.lane.mastery) |on| toshell.send(.mastery, !on),
+            .practice => if (a.data.practice) |on| toshell.practice(.on, !on),
         }
     }
 
@@ -68,6 +73,7 @@ pub const App = struct {
             h.b(.{}, .{"meiolol"}),
             if (d.private) badge.view(h, .accent, .{W.private}) else null,
             h.span(.{ .class = "where" }, .{d.where}),
+            if (d.practice) |on| chip.view(h, .{ .pressed = on, .on = h.on(a, .practice) }, .{W.practice}) else null,
         });
         const attrs = .{ .class = "c-app", .data_island = "app", .data_seq = d.seq };
         if (d.signin) |s| if (s.full) return h.div(attrs, .{ head, signin.view(h, s, &a.form) });
@@ -101,6 +107,7 @@ pub fn page(h: *H, d: Data) N {
 
 const W = struct {
     const private = plain("private");
+    const practice = plain("Practice");
     const restart = plain("A new version of meiolol is downloaded: it starts the next time you open the app.");
 };
 
@@ -116,6 +123,7 @@ pub const css =
     \\  .c-app > .note { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-6) 0; text-align: center; }
     \\  .c-app > .note h1 { margin: 0; font-size: var(--fs-l); font-weight: var(--w-b); }
     \\  .c-app > .note p { margin: 0; color: var(--muted); }
+    \\  .c-app [data-act] { cursor: pointer; }
     \\  .c-app > .restart { margin: 0; color: var(--muted); font-size: var(--fs-s); }
     \\}
     \\
@@ -132,6 +140,7 @@ pub fn gallery(g: *Gallery) void {
         .private = true,
         .where = "Champ select · Picks",
         .screen = .{ .select = champselect.sample },
+        .practice = false,
     }));
     g.addFill("in game", page(h, .{ .seq = 3, .private = true, .where = "In game · 14:05", .screen = .{ .game = gamescreen.sample } }));
     g.addFill("first start, sign in", page(h, .{ .seq = 4, .private = false, .where = "No data", .screen = .{ .note = .{

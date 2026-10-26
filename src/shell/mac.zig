@@ -3,6 +3,7 @@
 //! (meiolol://app/...) with the same bridge behind a small chrome.webview shim and the
 //! same channel. Window place kept by AppKit (frame autosave).
 //!   zig build shell-mac -- [--dir PATH] [--page P] [--demo] [--seconds N] [--dump DIR]
+//!   [--practice]
 
 const std = @import("std");
 const channel = @import("channel.zig");
@@ -10,6 +11,7 @@ const files = @import("files.zig");
 const screens = @import("screens.zig");
 const demo = @import("demo.zig");
 const client = @import("client.zig");
+const practice = @import("practice.zig");
 
 const Id = ?*anyopaque;
 const Sel = ?*anyopaque;
@@ -68,6 +70,8 @@ var pushing = false;
 var push_demo = false;
 /// --dump DIR: no window, the page's changes into DIR
 var dump: ?[]const u8 = null;
+/// --practice: with --dump, practice on with a random draft once the stats are in
+var practise = false;
 /// What the page was last told of the League client
 var sent_client: ?client.Client = null;
 var t0: std.Io.Timestamp = undefined;
@@ -132,6 +136,9 @@ fn received(_: Id, _: Sel, _: Id, message: Id) callconv(.c) void {
         },
         .signin => |x| client.signIn(x.username, x.password),
         .mastery => |on| client.mastery(on),
+        .practice => |p| if (!@import("build_options").public) {
+            _ = practice.edit(p, @intFromFloat(nowMs() * 1000));
+        },
     }
 }
 
@@ -199,6 +206,8 @@ pub fn main(init: std.process.Init) !void {
         } else if (std.mem.eql(u8, a, "--dump")) {
             dump = next;
             i += 1;
+        } else if (std.mem.eql(u8, a, "--practice")) {
+            practise = true;
         } else if (std.mem.eql(u8, a, "--demo")) {
             push_demo = true;
         } else return error.UnknownArgument;
@@ -209,6 +218,7 @@ pub fn main(init: std.process.Init) !void {
     if (dump) |d| {
         // No window: each change of the page into its own folder until --seconds
         for (0..if (seconds > 0) seconds else 30) |_| {
+            if (practise and practice.edit(.{ .on = true }, 0)) _ = practice.edit(.random, 7);
             if (screens.refresh(gpa, true)) |n| {
                 try screens.dump(io, gpa, d);
                 std.debug.print("{d:8.1} ms page {d}: {t}\n", .{ nowMs(), n, client.current() });

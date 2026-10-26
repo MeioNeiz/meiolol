@@ -395,7 +395,7 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
 }
 
 /// ui.wasm files, one per page family so each page loads only its islands (Jacob 25 Oct)
-const ui_families = [_][]const u8{ "stats", "champion", "champbuild", "champmore", "app", "games", "gamemore" };
+const ui_families = [_][]const u8{ "stats", "champion", "champbuild", "champmore", "app", "games", "gamemore", "practice" };
 /// gzip bytes per family: stack.md's 40 KB
 const ui_budget = 40 * 1024;
 
@@ -537,12 +537,16 @@ fn shellExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.
     return exe;
 }
 
-/// The app's page (src/shell/screens.zig): the ui module and ui-app.wasm with its loader
+/// The app's page (src/shell/screens.zig): the ui module, ui-app.wasm and ui-practice.wasm
+/// with their loaders
 fn shellUi(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode) void {
     mod.addImport("ui", modules(b, target, optimize).ui);
-    const u = uiWasm(b, "app");
-    mod.addAnonymousImport("ui-app.wasm", .{ .root_source_file = u.wasm });
-    mod.addAnonymousImport("ui-app.js", .{ .root_source_file = u.js });
+    // Practice's file is embedded in the private edition only (files.zig)
+    for ([_][]const u8{ "app", "practice" }) |f| {
+        const u = uiWasm(b, f);
+        mod.addAnonymousImport(b.fmt("{s}.wasm", .{u.name}), .{ .root_source_file = u.wasm });
+        mod.addAnonymousImport(b.fmt("{s}.js", .{u.name}), .{ .root_source_file = u.js });
+    }
 }
 
 fn shellMac(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode) *std.Build.Step.Compile {

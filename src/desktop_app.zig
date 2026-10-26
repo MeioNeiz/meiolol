@@ -7,6 +7,7 @@ pub const lanecard = @import("lanecard.zig");
 pub const loading = @import("loading.zig");
 pub const ingame = @import("ingame.zig");
 pub const postgame = @import("postgame.zig");
+pub const practice = @import("practice.zig");
 pub const lcu = @import("lcu/root.zig");
 pub const core = @import("core");
 pub const Icons = @import("desktop/icons.zig").Icons;

@@ -6,4 +6,5 @@ test {
     _ = @import("demo.zig");
     _ = @import("client.zig");
     _ = @import("screens.zig");
+    _ = @import("practice.zig");
 }

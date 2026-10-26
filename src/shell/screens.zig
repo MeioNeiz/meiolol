@@ -15,15 +15,18 @@ const loading = desktop.loading;
 const ingame = desktop.ingame;
 const postgame = desktop.postgame;
 const files = @import("files.zig");
+const practice = @import("practice.zig");
 const app = ui.app;
 const Allocator = std.mem.Allocator;
 
-pub const css = ui.css.head ++ ui.css.join(.{ ui.badge, ui.chip, ui.card, ui.role, ui.champ, ui.draftboard, ui.champselect, ui.kda, ui.teamrows, ui.loadscreen, ui.chart, ui.lane, ui.gamescreen, ui.postgame, ui.button, ui.signin, ui.app });
+pub const css = ui.css.head ++ ui.css.join(.{ ui.badge, ui.chip, ui.card, ui.role, ui.champ, ui.draftboard, ui.champselect, ui.kda, ui.teamrows, ui.loadscreen, ui.chart, ui.lane, ui.gamescreen, ui.postgame, ui.button, ui.signin, ui.segmented, ui.practice, ui.app });
 
 const Page = struct {
     arena: std.heap.ArenaAllocator,
     html: []const u8,
     bin: []const u8,
+    /// ui-practice.wasm's practice.bin; "" while practice is off
+    practice: []const u8,
 };
 
 var page: ?Page = null;
@@ -34,6 +37,7 @@ pub fn get(path: []const u8) ?[]const u8 {
     const p = page orelse return null;
     if (std.mem.eql(u8, path, files.start_page)) return p.html;
     if (std.mem.eql(u8, path, "app.bin")) return p.bin;
+    if (std.mem.eql(u8, path, "practice.bin") and p.practice.len > 0) return p.practice;
     return null;
 }
 
@@ -55,7 +59,7 @@ pub fn refresh(gpa: Allocator, live: bool) ?u32 {
         return null;
     };
     if (page) |*old| old.arena.deinit();
-    page = .{ .arena = arena, .html = next.html, .bin = next.bin };
+    page = .{ .arena = arena, .html = next.html, .bin = next.bin, .practice = next.practice };
     return seq;
 }
 
@@ -64,15 +68,26 @@ pub fn deinit() void {
     page = null;
 }
 
-const Next = struct { html: []const u8, bin: []const u8 };
+const Next = struct { html: []const u8, bin: []const u8, practice: []const u8 };
 
 fn build(a: Allocator, live: bool) !?Next {
-    if (!live) return finish(a, try data(a, .{ .stats = null, .icons = null, .private = false }, .no_client, .none));
+    if (!live) return finish(a, try data(a, .{ .stats = null, .icons = null, .private = false }, .no_client, .none), null);
     const s = poller.lock();
     defer poller.unlock();
-    var d = try data(a, .{ .stats = s.stats, .icons = s.icons, .private = s.edition == .private }, s.status, s.note);
+    const c: Ctx = .{
+        .stats = s.stats,
+        .icons = s.icons,
+        .private = s.edition == .private,
+        .practice = state.private_code and s.practicing and s.practice.* != null,
+    };
+    var d = try data(a, c, s.status, s.note);
     d.signin = signIn(s.signin, s.status);
-    return finish(a, d);
+    var bar: ?ui.practice.Data = null;
+    if (state.private_code and practice.offered(s.edition, s.stats, s.practice.*, s.status)) {
+        d.practice = s.practice.* != null;
+        if (s.practice.*) |x| bar = try practice.data(a, c, x, s.practicing);
+    }
+    return finish(a, d, bar);
 }
 
 /// The form while there is no working sign-in: the whole screen until there is data
@@ -84,15 +99,25 @@ fn signIn(s: ?*const state.SignIn, status: state.Status) ?ui.signin.SignIn {
 
 /// Encoded and rendered into `a`, so nothing points into the poller's memory once it
 /// unlocks; null when what shows is as before
-fn finish(a: Allocator, shown: app.Data) !?Next {
+fn finish(a: Allocator, shown: app.Data, bar: ?ui.practice.Data) !?Next {
     var d = shown;
     d.seq = seq + 1;
     var bin: std.ArrayList(u8) = .empty;
     try ui.data.encode(a, app.Data, d, &bin);
-    // Past the fingerprint and seq: the rest is what shows
-    if (page) |old| if (std.mem.eql(u8, old.bin[8..], bin.items[8..])) return null;
+    var pbin: std.ArrayList(u8) = .empty;
+    var p = bar;
+    if (p) |*x| {
+        x.seq = d.seq;
+        try ui.data.encode(a, ui.practice.Data, x.*, &pbin);
+    }
+    if (page) |old| if (std.mem.eql(u8, shows(old.bin), shows(bin.items)) and std.mem.eql(u8, shows(old.practice), shows(pbin.items))) return null;
     seq += 1;
-    return .{ .html = try render(a, d), .bin = bin.items };
+    return .{ .html = try render(a, d, p), .bin = bin.items, .practice = pbin.items };
+}
+
+/// Past the fingerprint and seq: what shows
+fn shows(bin: []const u8) []const u8 {
+    return if (bin.len >= 8) bin[8..] else bin;
 }
 
 /// The page as of now with what it loads into `dir`/<seq>/, for a look without a window
@@ -101,9 +126,10 @@ pub fn dump(io: std.Io, gpa: Allocator, dir: []const u8) !void {
     const p = page orelse return;
     const sub = try std.fmt.allocPrint(gpa, "{s}/{d}", .{ dir, seq });
     defer gpa.free(sub);
-    const own = [_]struct { []const u8, []const u8 }{ .{ files.start_page, p.html }, .{ "app.bin", p.bin } };
-    for (own) |f| try dumpFile(io, gpa, sub, f[0], f[1]);
-    for ([_][]const u8{ "app.css", "ui-app.js", "ui-app.wasm" }) |f| try dumpFile(io, gpa, sub, f, files.get(f).?);
+    const own = [_]struct { []const u8, []const u8 }{ .{ files.start_page, p.html }, .{ "app.bin", p.bin }, .{ "practice.bin", p.practice } };
+    for (own) |f| if (f[1].len > 0) try dumpFile(io, gpa, sub, f[0], f[1]);
+    for ([_][]const u8{ "app.css", "ui-app.js", "ui-app.wasm", "ui-practice.js", "ui-practice.wasm" }) |f|
+        if (files.get(f)) |bytes| try dumpFile(io, gpa, sub, f, bytes);
     var rest = p.html;
     while (std.mem.find(u8, rest, "\"icon/")) |i| {
         rest = rest[i + 1 ..];
@@ -122,11 +148,17 @@ fn dumpFile(io: std.Io, gpa: Allocator, dir: []const u8, name: []const u8, bytes
     try cwd.writeFile(io, .{ .sub_path = path, .data = bytes });
 }
 
-pub fn render(a: Allocator, d: app.Data) ![]const u8 {
+/// With `bar`, practice's island above the app's and its file
+pub fn render(a: Allocator, d: app.Data, bar: ?ui.practice.Data) ![]const u8 {
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
     var island: app.App = .{ .data = d };
     const body = island.view(&h);
+    var drill: ui.practice.Practice = undefined;
+    const top: ?ui.N = if (bar) |x| blk: {
+        drill = .{ .data = x };
+        break :blk drill.view(&h);
+    } else null;
     if (h.oom) return error.OutOfMemory;
     var out: std.Io.Writer.Allocating = .init(a);
     try out.writer.writeAll(
@@ -135,8 +167,11 @@ pub fn render(a: Allocator, d: app.Data) ![]const u8 {
         \\<title>meiolol</title><link rel="stylesheet" href="app.css"></head>
         \\<body class="ui">
     );
+    if (top) |n| try ui.html.write(&t, n, &out.writer);
     try ui.html.write(&t, body, &out.writer);
-    try out.writer.writeAll("\n<script src=\"ui-app.js\" data-wasm=\"ui-app.wasm\" defer></script></body></html>\n");
+    try out.writer.writeAll("\n<script src=\"ui-app.js\" data-wasm=\"ui-app.wasm\" defer></script>");
+    if (top != null) try out.writer.writeAll("<script src=\"ui-practice.js\" data-wasm=\"ui-practice.wasm\" defer></script>");
+    try out.writer.writeAll("</body></html>\n");
     return out.written();
 }
 
@@ -144,12 +179,20 @@ pub const Ctx = struct {
     stats: ?*const core.Stats,
     icons: ?*const desktop.Icons,
     private: bool,
+    /// Practice shows: the board's seats and options carry practice's clicks
+    practice: bool = false,
 
-    fn champ(c: Ctx, a: Allocator, id: u32) !?ui.champ.Champ {
+    pub fn champ(c: Ctx, a: Allocator, id: u32) !?ui.champ.Champ {
         if (id == 0) return null;
         const stats = c.stats orelse return null;
         const has = if (c.icons) |i| i.get(id) != null else false;
         return .{ .name = stats.nameOf(id), .src = if (has) try a.print("icon/{d}.png", .{id}) else "" };
+    }
+
+    /// Practice's click on a board element (data-act); "" while practice doesn't show
+    fn act(c: Ctx, a: Allocator, x: ui.practice.Act) ![]const u8 {
+        if (!state.private_code or !c.practice) return "";
+        return a.print("{f}", .{x});
     }
 };
 
@@ -206,6 +249,7 @@ fn select(a: Allocator, c: Ctx, s: *const state.Select) !ui.champselect.Screen {
             try a.print("{f} won, {f} of games, +{d:.0} wins per 10k", .{ rate(o.win), rate(o.pick_rate), o.impact })
         else
             try a.print("wins often and is picked a lot in {s}", .{o.role.label()}),
+        .act = try c.act(a, .{ .ban = o.champion }),
     };
     return .{
         .board = .{ .lanes = try lanes(a, c, b), .bans_us = bans_us, .bans_them = bans_them },
@@ -223,15 +267,15 @@ fn lanes(a: Allocator, c: Ctx, b: *const board.Board) ![]const ui.draftboard.Lan
     for (&rows, ui.role.Role.all) |*r, role| r.* = .{ .role = role };
     var filled: [2][5]bool = @splat(@splat(false));
     for ([_][]const board.Seat{ b.allies, b.enemies }, 0..) |seats, side| {
-        for (seats) |s| if (s.role) |r| {
+        for (seats, 0..) |s, k| if (s.role) |r| {
             const i = @backingInt(r);
             if (filled[side][i]) continue;
             filled[side][i] = true;
-            setSeat(&rows[i], side, try seat(a, c, s));
+            setSeat(&rows[i], side, try seat(a, c, s, side, k));
         };
-        for (seats) |s| if (s.role == null) for (&rows, 0..) |*row, i| if (!filled[side][i]) {
+        for (seats, 0..) |s, k| if (s.role == null) for (&rows, 0..) |*row, i| if (!filled[side][i]) {
             filled[side][i] = true;
-            setSeat(row, side, try seat(a, c, s));
+            setSeat(row, side, try seat(a, c, s, side, k));
             break;
         };
     }
@@ -242,10 +286,15 @@ fn setSeat(row: *ui.draftboard.Lane, side: usize, s: ui.draftboard.Seat) void {
     if (side == 0) row.us = s else row.them = s;
 }
 
-fn seat(a: Allocator, c: Ctx, s: board.Seat) !ui.draftboard.Seat {
+/// `k`: the seat's place in its side's list, practice's enemy seat
+fn seat(a: Allocator, c: Ctx, s: board.Seat, side: usize, k: usize) !ui.draftboard.Seat {
     const sl = s.slot;
     const ideas = try a.alloc(ui.champ.Champ, s.ideas.len);
     for (ideas, s.ideas) |*x, id| x.* = (try c.champ(a, id)).?;
+    // Practice: an ally's seat by role (none without one), its ideas into it
+    const ally: ?u8 = if (side == 0) if (s.role) |r| @backingInt(r) else null else null;
+    const idea_acts = try a.alloc([]const u8, if (ally != null) s.ideas.len else 0);
+    for (idea_acts, s.ideas) |*x, id| x.* = try c.act(a, .{ .fill = .{ ally.?, id } });
     var out: ui.draftboard.Seat = .{
         .champ = try c.champ(a, sl.champion),
         .state = switch (sl.state) {
@@ -258,6 +307,10 @@ fn seat(a: Allocator, c: Ctx, s: board.Seat) !ui.draftboard.Seat {
         .picking = sl.picking,
         .guessed = s.guessed,
         .ideas = ideas,
+        .act = if (side == 1)
+            try c.act(a, .{ .seat = .{ .enemy = @intCast(k) } })
+        else if (ally) |r| try c.act(a, .{ .seat = .{ .ally = r } }) else "",
+        .idea_acts = idea_acts,
     };
     // How the champion does in the role: a number for testers, words for everyone
     if (sl.champion != 0 and s.games > 0) if (s.role) |r| {
@@ -299,6 +352,7 @@ fn lane(a: Allocator, c: Ctx, card: *const lanecard.Card, mode: board.Mode) !ui.
             } else .none,
             .faint = if (o.lane) |l| l.strength < 0.75 else false,
             .reasons = reasons,
+            .act = try c.act(a, .{ .take = o.champion }),
         };
     }
     const them = card.opponent;
@@ -612,17 +666,18 @@ const ahri = 103;
 const syndra = 134;
 const galio = 3;
 
-const Fixture = struct {
+pub const Fixture = struct {
     bytes: []u8,
     stats: core.Stats,
 
-    fn deinit(f: *Fixture) void {
+    pub fn deinit(f: *Fixture) void {
         f.stats.deinit(testing.allocator);
         testing.allocator.free(f.bytes);
     }
 };
 
-fn fixture() !Fixture {
+/// Three champions, Ahri and Syndra with mid games (practice.zig's tests too)
+pub fn fixture() !Fixture {
     const gpa = testing.allocator;
     var sb: core.statsfile.Builder = try .init(gpa, &.{
         .{ .id = ahri, .name = "Ahri" }, .{ .id = syndra, .name = "Syndra" }, .{ .id = galio, .name = "Galio" },
@@ -707,7 +762,7 @@ test "champ select: the private edition's numbers, the public one's words" {
     try testing.expectEqualStrings("wins often and is picked a lot in mid", s.ban_options[0].why);
     try testing.expectEqualStrings("strong in mid now", s.board.lanes[2].us.fact);
     d.seq = 7;
-    const html = try render(a, d);
+    const html = try render(a, d, null);
     try testing.expect(std.mem.find(u8, html, "data-seq=\"7\"") != null);
     try testing.expect(std.mem.find(u8, html, "ui-app.wasm") != null);
     try testing.expect(std.mem.find(u8, html, "%") == null);
@@ -716,6 +771,35 @@ test "champ select: the private edition's numbers, the public one's words" {
     try ui.data.encode(a, app.Data, d, &bin);
     const back = try ui.data.decode(a, app.Data, bin.items);
     try testing.expectEqualStrings("Syndra", back.screen.select.lane.them.?.name);
+}
+
+test "practice: the board's clicks while it shows, its island and file above the app" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var f = try fixture();
+    defer f.deinit();
+    const sel = testSelect();
+    const c: Ctx = .{ .stats = &f.stats, .icons = null, .private = true, .practice = true };
+    var d = try data(a, c, .{ .select = &sel }, .none);
+    const s = d.screen.select;
+    try testing.expectEqualStrings("seat ally 2", s.board.lanes[2].us.act);
+    try testing.expectEqualStrings("seat enemy 0", s.board.lanes[0].them.act);
+    try testing.expectEqualStrings("", s.board.lanes[1].us.act);
+    try testing.expectEqualStrings("take 103", s.lane.options[0].act);
+    try testing.expectEqualStrings("ban 3", s.ban_options[0].act);
+    const off = try data(a, .{ .stats = &f.stats, .icons = null, .private = true }, .{ .select = &sel }, .none);
+    try testing.expectEqualStrings("", off.screen.select.board.lanes[2].us.act);
+
+    d.practice = true;
+    d.seq = 4;
+    const bar = try practice.data(a, c, .{}, true);
+    const html = try render(a, d, bar);
+    const top = std.mem.find(u8, html, "data-island=\"practice\"").?;
+    try testing.expect(top < std.mem.find(u8, html, "data-island=\"app\"").?);
+    try testing.expect(std.mem.find(u8, html, "data-act=\"seat enemy 0\"") != null);
+    try testing.expect(std.mem.find(u8, html, "src=\"ui-practice.js\"") != null);
+    try testing.expect(std.mem.find(u8, try render(a, d, null), "ui-practice") == null);
 }
 
 test "notes while there is no board" {
@@ -731,7 +815,7 @@ test "notes while there is no board" {
     try testing.expect((try data(a, c, .{ .waiting = "Lobby" }, .restart)).restart);
 }
 
-test "sign-in: the form is the screen until there is data; what the page sends parses" {
+test "sign-in: the form is the screen until there is data; what pages send parses" {
     const needed: state.SignIn = .{ .needed = true, .message = "Refused." };
     try testing.expect(signIn(&needed, .no_data).?.full);
     const line = signIn(&needed, .no_client).?;
@@ -740,14 +824,26 @@ test "sign-in: the form is the screen until there is data; what the page sends p
     try testing.expectEqual(null, signIn(&.{}, .no_data));
     try testing.expectEqual(null, signIn(null, .no_data));
 
-    var buf: [256]u8 = undefined;
-    var w: std.Io.Writer = .fixed(&buf);
-    try ui.toshell.json(.{ .signin = .{ .username = "ann", .password = "p\"w" } }, &w);
+    const old = ui.toshell.out;
+    defer ui.toshell.out = old;
+    ui.toshell.out = hear;
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
-    const m = try @import("channel.zig").read(arena.allocator(), w.buffered());
+    const channel = @import("channel.zig");
+    ui.toshell.send(.signin, .{ .username = "ann", .password = "p\"w" });
+    const m = try channel.read(arena.allocator(), heard[0..heard_len]);
     try testing.expectEqualStrings("ann", m.signin.username);
     try testing.expectEqualStrings("p\"w", m.signin.password);
+    ui.toshell.practice(.place, .{ .at = .{ .enemy = 3 }, .champion = ahri, .locked = true });
+    try testing.expectEqual(3, (try channel.read(arena.allocator(), heard[0..heard_len])).practice.place.at.enemy);
+}
+
+var heard: [256]u8 = undefined;
+var heard_len: usize = 0;
+
+fn hear(s: []const u8) void {
+    @memcpy(heard[0..s.len], s);
+    heard_len = s.len;
 }
 
 test "loading: the role's numbers private only" {
@@ -771,7 +867,7 @@ test "loading: the role's numbers private only" {
     try testing.expectEqual(null, d.screen.loading.draft);
     try testing.expectEqualStrings("", d.screen.loading.us[0].fact);
     d.seq = 1;
-    try testing.expect(std.mem.find(u8, try render(a, d), "%") == null);
+    try testing.expect(std.mem.find(u8, try render(a, d, null), "%") == null);
 }
 
 fn testGame(my_lane: ?ingame.Lane) ingame.InGame {
@@ -846,7 +942,7 @@ test "in game: the private panel, a note for the public edition" {
     try testing.expectEqualStrings("1:10", s.timers[0].in);
     var shown = d;
     shown.seq = 1;
-    const html = try render(a, shown);
+    const html = try render(a, shown, null);
     try testing.expect(std.mem.find(u8, html, "c-game") != null and std.mem.find(u8, html, "c-lane") != null);
 
     const p = try data(a, .{ .stats = &f.stats, .icons = null, .private = false }, .{ .in_game = &testGame(null) }, .none);
@@ -890,6 +986,6 @@ test "post game: lanes, damage ours then theirs, team gold by minute" {
     try testing.expectEqualStrings("Ahri", s.awards[0].champ.?.name);
     try testing.expectEqualSlices(f32, &.{ 0, -100, 400 }, s.team);
     d.seq = 1;
-    const html = try render(a, d);
+    const html = try render(a, d, null);
     try testing.expect(std.mem.find(u8, html, "Victory in 28:42.") != null);
 }

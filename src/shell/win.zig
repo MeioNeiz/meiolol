@@ -23,6 +23,7 @@ const demo = @import("demo.zig");
 const measure = @import("measure.zig");
 const focustest = @import("focustest.zig");
 const client = @import("client.zig");
+const practice = @import("practice.zig");
 
 pub const W = std.unicode.utf8ToUtf16LeStringLiteral;
 pub const origin = "https://meiolol.app/";
@@ -599,6 +600,9 @@ fn messageReceived(_: *Handler, _: [*c]c.ICoreWebView2, args: [*c]c.ICoreWebView
         .open => |url| openExternal(url),
         .signin => |x| client.signIn(x.username, x.password),
         .mastery => |on| client.mastery(on),
+        .practice => |p| if (!@import("build_options").public) {
+            _ = practice.edit(p, @intFromFloat(nowMs() * 1000));
+        },
     }
     return 0;
 }

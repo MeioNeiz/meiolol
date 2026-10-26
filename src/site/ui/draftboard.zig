@@ -33,6 +33,9 @@ pub const Seat = struct {
     lean: Lean = .none,
     /// An ally still to pick: options for the role
     ideas: []const champ.Champ = &.{},
+    /// Practice's click on the seat and on each idea (ui/practice.zig Act); "" for none
+    act: []const u8 = "",
+    idea_acts: []const []const u8 = &.{},
 };
 
 pub const Lane = struct {
@@ -79,12 +82,16 @@ fn seat(h: *H, s: Seat, side: Side) N {
         .empty, .locked => null,
     };
     var ideas = h.list();
-    for (s.ideas, 0..) |c, i| ideas.add(h.span(.{ .key = i }, .{champ.view(h, c, .{ .px = .@"20" })}));
+    for (s.ideas, 0..) |c, i| ideas.add(h.span(.{
+        .key = i,
+        .data_act = if (i < s.idea_acts.len) s.idea_acts[i] else null,
+    }, .{champ.view(h, c, .{ .px = .@"20" })}));
     return h.div(.{
         .class = "seat",
         .data_side = side,
         .data_turn = s.picking,
         .data_you = s.you,
+        .data_act = if (s.act.len > 0) s.act else null,
     }, .{
         champ.view(h, s.champ, .{
             .px = .@"40",

@@ -69,6 +69,8 @@ pub const Option = struct {
     /// Few games behind the lane fact: fainter
     faint: bool = false,
     reasons: []const Reason = &.{},
+    /// Practice's click (ui/practice.zig Act); "" for none
+    act: []const u8 = "",
 };
 
 pub const Reason = struct { text: []const u8, lean: Lean = .none };
@@ -80,6 +82,8 @@ pub const BanOption = struct {
     mine: bool = false,
     /// Why ("wins often, picked a lot"; numbers in the private edition)
     why: []const u8,
+    /// Practice's click (ui/practice.zig Act); "" for none
+    act: []const u8 = "",
 };
 
 /// `held`: the island's chart state; null draws no chart. `mastery` flips Lane.mastery
@@ -141,7 +145,7 @@ fn option(h: *H, i: usize, o: Option, locked: bool) N {
     for (o.reasons, 0..) |r, j| chips.add(h.span(.{ .key = j, .class = "why", .data_lean = if (r.lean == .none) null else r.lean }, .{
         chip.view(h, .{ .v = .reason }, .{r.text}),
     }));
-    return h.li(.{ .key = i, .data_current = o.current }, .{
+    return h.li(.{ .key = i, .data_current = o.current, .data_act = if (o.act.len > 0) o.act else null }, .{
         champ.view(h, o.champ, .{ .px = .@"40", .named = false }),
         h.div(.{ .class = "body" }, .{
             h.div(.{ .class = "name" }, .{
@@ -161,7 +165,7 @@ fn option(h: *H, i: usize, o: Option, locked: bool) N {
 fn banOptions(h: *H, s: Screen) ?N {
     if (s.ban_options.len == 0) return null;
     var rows = h.list();
-    for (s.ban_options, 0..) |o, i| rows.add(h.li(.{ .key = i }, .{
+    for (s.ban_options, 0..) |o, i| rows.add(h.li(.{ .key = i, .data_act = if (o.act.len > 0) o.act else null }, .{
         champ.view(h, o.champ, .{ .px = .@"32", .named = false }),
         h.div(.{ .class = "body" }, .{
             h.div(.{ .class = "name" }, .{

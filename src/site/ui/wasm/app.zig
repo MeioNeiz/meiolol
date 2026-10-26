@@ -34,19 +34,15 @@ export fn main() void {
     page_seq = std.fmt.parseInt(u32, seq.readString(&buf) catch return, 10) catch return;
     wanted = page_seq;
     zjb.global("window").call("addEventListener", .{ zjb.constString("meiolol"), zjb.fnHandle("appMessage", &onMessage) }, void);
-    ui.toshell.send = toShell;
+    ui.toshell.out = toShell;
     get();
 }
 
 /// A page outside the shell (a dump in a browser) has no bridge
-fn toShell(o: ui.toshell.Out) void {
+fn toShell(json: []const u8) void {
     const window = zjb.global("window");
     if (!window.call("hasOwnProperty", .{zjb.constString("meiolol")}, bool)) return;
-    var buf: [1024]u8 = undefined;
-    defer std.crypto.secureZero(u8, &buf);
-    var w: std.Io.Writer = .fixed(&buf);
-    ui.toshell.json(o, &w) catch return;
-    const text = zjb.string(w.buffered());
+    const text = zjb.string(json);
     defer text.release();
     const m = zjb.global("JSON").call("parse", .{text}, zjb.Handle);
     defer m.release();
@@ -72,6 +68,11 @@ fn onMessage(e: zjb.Handle) callconv(.c) void {
     get();
 }
 
+noinline fn stale(d: *const app.Data) bool {
+    if (island == null) return d.seq != page_seq;
+    return (d.practice orelse false) != (state.data.practice orelse false);
+}
+
 fn loaded(_: i32, got: ?[]u8) void {
     const b = got orelse return dom.dom.warn("app: no data");
     var arena: std.heap.ArenaAllocator = .init(gpa);
@@ -84,14 +85,15 @@ fn loaded(_: i32, got: ?[]u8) void {
         arena.deinit();
         return gpa.free(b);
     }
+    // The page was rendered from another state than the file's, or practice turned on
+    // or off (the page loads ui-practice.wasm or not): render it afresh
+    if (stale(&d)) return zjb.global("location").call("reload", .{}, void);
     const old = held;
     held = .{ .arena = arena, .bytes = b };
     if (island) |i| {
         state.data = d;
         i.render();
     } else {
-        // The page was rendered from another state than the file's: render it afresh
-        if (d.seq != page_seq) return zjb.global("location").call("reload", .{}, void);
         server = .{ .data = d };
         state = server;
         island = dom.rt.add(app.App, &state, &server, app.sel) catch return dom.dom.warn("app: out of memory");
