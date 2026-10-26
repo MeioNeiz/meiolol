@@ -7,6 +7,7 @@ const std = @import("std");
 const champ = @import("champ.zig");
 const role = @import("role.zig");
 const data = @import("data.zig");
+const timeline = @import("timeline.zig");
 
 pub const ObjKind = enum { tower, inhibitor, dragon, elder, grubs, herald, baron, atakhan };
 
@@ -104,6 +105,7 @@ pub const Moment = struct {
     obj: ?u16 = null,
     /// You killed, helped or died
     you: bool = false,
+    died: bool = false,
     /// Kill gold to your team minus to theirs
     gold: i32 = 0,
     /// Objectives taken during it or within `after_s` of its end
@@ -140,6 +142,7 @@ pub fn moments(a: std.mem.Allocator, g: *const Game) ![]Moment {
         if (ours) m.them += 1 else m.us += 1;
         m.gold += if (ours) -@as(i32, k.gold) else k.gold;
         m.you = m.you or k.victim == g.you or involved(k, g.you);
+        m.died = m.died or k.victim == g.you;
     }
     for (g.objs, 0..) |o, i| {
         const in_fight = for (out.items[0..nf]) |*m| {
@@ -331,6 +334,37 @@ pub fn momentSpan(m: Moment) Span {
     return .{ .a = m.t, .b = m.end };
 }
 
+/// The game as TimelineChart draws it, its moments parallel to `ms`
+pub fn chart(a: std.mem.Allocator, g: *const Game, champs: []const champ.Champ, ms: []const Moment) !timeline.Game {
+    const wc = try a.alloc(f32, g.wc.len);
+    for (g.wc, wc) |v, *o| o.* = @floatFromInt(v);
+    const gold = try a.alloc(f32, g.gold.len);
+    for (g.gold, gold) |v, *o| o.* = @floatFromInt(v);
+    const tms = try a.alloc(timeline.Moment, ms.len);
+    for (ms, tms) |m, *o| o.* = .{ .t = m.t, .us = m.us, .them = m.them, .objective = m.obj != null };
+    const objs = try a.alloc(timeline.Objective, g.objs.len);
+    for (g.objs, objs) |o, *x| x.* = .{ .t = o.t, .ours = o.ours, .name = o.name, .kind = switch (o.kind) {
+        .tower => .tower,
+        .inhibitor => .inhib,
+        .dragon, .elder => .dragon,
+        .grubs => .grubs,
+        .herald => .herald,
+        .baron, .atakhan => .baron,
+    } };
+    const deaths = try a.alloc(timeline.Death, g.kills.len);
+    for (g.kills, deaths) |k, *d| d.* = .{ .t = k.t, .ours = g.seats[k.victim].us, .champ = champs[g.seats[k.victim].champ], .you = k.victim == g.you };
+    const turn, _ = turns(g.wc);
+    return .{
+        .dur = g.dur,
+        .wc = wc,
+        .gold = gold,
+        .turn = if (turn) |t| t.minute else null,
+        .moments = tms,
+        .objectives = objs,
+        .deaths = deaths,
+    };
+}
+
 /// The fixture: a short made-up game, each case once
 pub const demo: Game = .{
     .day = "23 Oct",
@@ -370,7 +404,7 @@ test "moments: fights by number, objectives after a fight fold in, grubs fold" {
     try testing.expectEqual(@as(usize, 3), ms.len);
     try testing.expectEqual(@as(u16, 170), ms[0].t);
     try testing.expect(ms[0].them == 1 and ms[0].us == 0 and !ms[0].you and ms[0].gold == -400);
-    try testing.expect(ms[1].us == 2 and ms[1].you and ms[1].objs and ms[1].end == 262);
+    try testing.expect(ms[1].us == 2 and ms[1].you and !ms[1].died and ms[1].objs and ms[1].end == 262);
     // The two grubs are one moment; the tower is nobody's moment
     try testing.expectEqual(@as(?u16, 1), ms[2].obj);
     try testing.expectEqual(@as(u16, 410), ms[2].end);
