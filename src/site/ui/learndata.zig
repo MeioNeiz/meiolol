@@ -115,7 +115,7 @@ pub const Progress = struct {
         var p: Progress = .{};
         var it = std.mem.tokenizeScalar(u8, s, ',');
         while (it.next()) |e| {
-            const c = std.mem.lastIndexOfScalar(u8, e, ':') orelse continue;
+            const c = std.mem.findScalarLast(u8, e, ':') orelse continue;
             const n = std.fmt.parseInt(u2, e[c + 1 ..], 10) catch continue;
             try p.set(a, try a.dupe(u8, e[0..c]), n);
         }

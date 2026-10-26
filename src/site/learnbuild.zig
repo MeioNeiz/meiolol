@@ -50,10 +50,6 @@ fn starter(site: *const Site) ![]const ld.Puzzle {
     return out.items;
 }
 
-fn uiRole(r: Role) ld.Role {
-    return @fromBackingInt(@intCast(@backingInt(r)));
-}
-
 fn share(site: *const Site, c: usize) struct { Role, f64, u64 } {
     const st = &site.stats;
     var best: Role = .top;
@@ -92,7 +88,7 @@ fn roles(site: *const Site) !?ld.Puzzle {
         var cs: std.ArrayList(ld.Champ) = .empty;
         for (picks[0..3]) |x| if (x) |c| try cs.append(a, .{ .key = c.key, .name = c.name });
         if (cs.items.len == 0) return null;
-        tiles[ri] = .{ .title = root.roleName(r), .role = uiRole(r), .champs = cs.items };
+        tiles[ri] = .{ .title = root.roleName(r), .role = champion.uiRole(r), .champs = cs.items };
         if (r == .jungle) asked = picks[3];
     }
     const c = asked orelse return null;
@@ -102,7 +98,7 @@ fn roles(site: *const Site) !?ld.Puzzle {
         const g = st.champRole(r, c.c).games;
         choices[ri] = .{
             .text = root.roleName(r),
-            .role = uiRole(r),
+            .role = champion.uiRole(r),
             .shown = try a.print("{d:.1}%", .{100 * @as(f64, @floatFromInt(g)) / @as(f64, @floatFromInt(@max(total, 1)))}),
             .games = @intCast(g),
         };
@@ -426,7 +422,8 @@ const Lanes = struct {
 /// champion has them), from the every region, last 30 days lane curves (a patch in one
 /// region is too few games for a counter to clear k)
 fn counterPuzzle(site: *const Site, r: Role) !?ld.Puzzle {
-    const curves = &(site.view_curves[(html.View{ .region = .all, .period = .days30 }).index()] orelse return null);
+    const view = (html.View{ .region = .all, .period = .days30 }).index();
+    const curves = if (site.view_curves[view]) |*c| c else return null;
     const a = site.arena;
     const lanes: Lanes = try .init(a, curves, r);
     const Case = struct { x: u32, games: u64, counter: Against, strong: [2]?Against };
@@ -497,7 +494,7 @@ fn counterPuzzle(site: *const Site, r: Role) !?ld.Puzzle {
         .id = try a.print("counter-{t}", .{r}),
         .q = "Which is a real counter?",
         .term = .{ .word = "counter", .note = "Wins more against this champion than against everyone else." },
-        .setup = .{ .duel = .{ .who = uiChamp(x), .role = uiRole(r), .label = "wins into", .vs = vs } },
+        .setup = .{ .duel = .{ .who = uiChamp(x), .role = champion.uiRole(r), .label = "wins into", .vs = vs } },
         .answer = .{ .pick = .{ .right = right, .choices = choices } },
         .why = try a.print("{s} wins {d:.0}% against everyone, {d:.0}% against {s}.", .{
             c.c.name, @round(100 * c.t.own.rate()), 100 - @round(100 * root.ratio(c.t.wins, c.t.games)), x.name,
@@ -544,31 +541,39 @@ fn lopsided(a: std.mem.Allocator, curves: *const curvesfile.Curves) ![]Lopsided 
     return out.items;
 }
 
+/// The two most lopsided counters for the tiles, then the next with neither champion on
+/// a tile to ask
+fn lopsidedPicks(ls: []const Lopsided) ?[3]Lopsided {
+    var out: [3]Lopsided = undefined;
+    var n: usize = 0;
+    next: for (ls) |l| {
+        for (out[0..n]) |p| for ([_]u32{ p.x, p.t.o }) |c| if (c == l.x or c == l.t.o) continue :next;
+        out[n] = l;
+        n += 1;
+        if (n == out.len) return out;
+    }
+    return null;
+}
+
 /// Tiles of the two most lopsided counters; the question, "who wins?" on the next pair
 /// with neither champion on a tile
 fn counterBasic(site: *const Site) !?ld.Puzzle {
-    const curves = &(site.view_curves[(html.View{ .region = .all, .period = .days30 }).index()] orelse return null);
+    const view = (html.View{ .region = .all, .period = .days30 }).index();
+    const curves = if (site.view_curves[view]) |*c| c else return null;
     const a = site.arena;
-    var seen: std.ArrayList(u32) = .empty;
-    var tiles: std.ArrayList(ld.Tile) = .empty;
-    var asked: ?Lopsided = null;
-    for (try lopsided(a, curves)) |l| {
-        if (std.mem.indexOfScalar(u32, seen.items, l.x) != null or std.mem.indexOfScalar(u32, seen.items, l.t.o) != null) continue;
-        try seen.appendSlice(a, &.{ l.x, l.t.o });
-        if (tiles.items.len == 2) {
-            asked = l;
-            break;
-        }
-        const x = matchup.champ(site, l.x) orelse continue;
-        const o = matchup.champ(site, l.t.o) orelse continue;
-        try tiles.append(a, .{
-            .title = root.roleName(l.r),
-            .role = uiRole(l.r),
+    const picks = lopsidedPicks(try lopsided(a, curves)) orelse return null;
+    var tiles: [2]ld.Tile = undefined;
+    for (&tiles, picks[0..2]) |*t, p| {
+        const x = matchup.champ(site, p.x) orelse return null;
+        const o = matchup.champ(site, p.t.o) orelse return null;
+        t.* = .{
+            .title = root.roleName(p.r),
+            .role = champion.uiRole(p.r),
             .champs = try a.dupe(ld.Champ, &.{ uiChamp(o), uiChamp(x) }),
             .sep = "into",
-        });
+        };
     }
-    const l = asked orelse return null;
+    const l = picks[2];
     const x = matchup.champ(site, l.x) orelse return null;
     const o = matchup.champ(site, l.t.o) orelse return null;
     const won = @round(100 * root.ratio(l.t.wins, l.t.games));
@@ -579,7 +584,7 @@ fn counterBasic(site: *const Site) !?ld.Puzzle {
         .id = try a.print("basic-counter-{s}-{s}", .{ o.slug, x.slug }),
         .q = "Who wins this lane more often?",
         .ctx = try a.print("{s} against {s}, {s}", .{ x.name, o.name, laneName(l.r) }),
-        .setup = .{ .tiles = tiles.items },
+        .setup = .{ .tiles = try a.dupe(ld.Tile, &tiles) },
         .answer = .{ .pick = .{
             .right = if (o_first) 0 else 1,
             .choices = try a.dupe(ld.Choice, if (o_first) &.{ win, lose } else &.{ lose, win }),
@@ -591,14 +596,29 @@ fn counterBasic(site: *const Site) !?ld.Puzzle {
     };
 }
 
+/// Of rows (most played first), three early and three late for the tiles, then the next
+/// to ask, none of them in `hooks`
+fn leanPicks(rows: []const lean.Row, hooks: []const lean.Row) ?struct { [2][3]lean.Row, lean.Row } {
+    var tiles: [2][3]lean.Row = undefined;
+    var n: [2]usize = .{ 0, 0 };
+    next: for (rows) |r| {
+        for (hooks) |h| if (h.champion == r.champion) continue :next;
+        if (n[0] == 3 and n[1] == 3) return .{ tiles, r };
+        const i: usize = if (r.lean() == .early) 0 else 1;
+        if (n[i] == 3) continue;
+        tiles[i][n[i]] = r;
+        n[i] += 1;
+    }
+    return null;
+}
+
 /// Tiles of the three most played clearly early and clearly late champions; the
 /// question on the next most played, none of them in "Does winning lane win the game?",
 /// each in its main role
 fn leanBasic(site: *const Site) !?ld.Puzzle {
     const file = site.lean orelse return null;
     const a = site.arena;
-    var seen: std.ArrayList(u32) = .empty;
-    for (try leanRows(a, file.rows, file.games / 100)) |r| try seen.append(a, r.champion);
+    const hooks = try leanRows(a, file.rows, file.games / 100);
     var clear: std.ArrayList(lean.Row) = .empty;
     for (file.rows) |r| {
         const c = matchup.champ(site, r.champion) orelse continue;
@@ -610,21 +630,12 @@ fn leanBasic(site: *const Site) !?ld.Puzzle {
             return x.games > y.games;
         }
     }.more);
-    var tiles: [2]std.ArrayList(ld.Champ) = .{ .empty, .empty };
-    var asked: ?struct { lean.Row, Champ } = null;
-    for (clear.items) |r| {
-        if (std.mem.indexOfScalar(u32, seen.items, r.champion) != null) continue;
-        const c = matchup.champ(site, r.champion) orelse continue;
-        try seen.append(a, r.champion);
-        const t = &tiles[if (r.lean() == .early) 0 else 1];
-        if (t.items.len < 3) {
-            try t.append(a, uiChamp(c));
-        } else if (tiles[0].items.len == 3 and tiles[1].items.len == 3) {
-            asked = .{ r, c };
-            break;
-        }
-    }
-    const r, const c = asked orelse return null;
+    const tile_rows, const r = leanPicks(clear.items, hooks) orelse return null;
+    var tiles: [2][3]ld.Champ = undefined;
+    for (&tiles, tile_rows) |*t, rows| for (t, rows) |*x, row| {
+        x.* = uiChamp(matchup.champ(site, row.champion) orelse return null);
+    };
+    const c = matchup.champ(site, r.champion) orelse return null;
     const early = r.lean() == .early;
     const gold: root.Thousands = .{ .n = @trunc(@round(@abs(r.gold) / 10) * 10) };
     const pts: i64 = @max(1, @as(i64, @trunc(@round(@abs(r.win)))));
@@ -633,8 +644,8 @@ fn leanBasic(site: *const Site) !?ld.Puzzle {
         .q = try a.print("{s}: early or late?", .{c.name}),
         .ctx = try a.print("{s} {s}", .{ c.name, inRole(r.role) }),
         .setup = .{ .tiles = try a.dupe(ld.Tile, &.{
-            .{ .title = "Early", .champs = tiles[0].items },
-            .{ .title = "Late", .champs = tiles[1].items },
+            .{ .title = "Early", .champs = try a.dupe(ld.Champ, &tiles[0]) },
+            .{ .title = "Late", .champs = try a.dupe(ld.Champ, &tiles[1]) },
         }) },
         .answer = .{ .pick = .{ .right = if (early) 0 else 1, .choices = try a.dupe(ld.Choice, &.{
             .{ .text = "Early", .shown = if (early) try a.print("{f} gold ahead at {d}", .{ gold, lean.gold_minute }) else "", .games = r.games },
@@ -733,19 +744,8 @@ fn duoBasic(site: *const Site) !?ld.Puzzle {
         if (best == null or d.vs.mean / d.vs.sd > best.?.vs.mean / best.?.vs.sd) best = d;
     }
     const b = best orelse return null;
-    var usual: [2]?Duo = .{ null, null };
-    for (duos.items) |d| {
-        if (d.bot.c == b.bot.c or d.sup.c == b.sup.c or @abs(d.vs.mean) > d.vs.sd) continue;
-        if (!clearlyAbove(b, d)) continue;
-        if (usual[0] != null and d.bot.c == usual[0].?.bot.c) continue;
-        if (usual[0] == null or d.games > usual[0].?.games) {
-            usual[1] = usual[0];
-            usual[0] = d;
-        } else if (usual[1] == null or d.games > usual[1].?.games) {
-            usual[1] = d;
-        }
-    }
-    var three = [_]Duo{ b, usual[0] orelse return null, usual[1] orelse return null };
+    const first = usualDuo(duos.items, b, null) orelse return null;
+    var three = [_]Duo{ b, first, usualDuo(duos.items, b, first) orelse return null };
     std.mem.sort(Duo, &three, {}, struct {
         fn less(_: void, x: Duo, y: Duo) bool {
             return std.mem.lessThan(u8, x.bot.name, y.bot.name);
@@ -775,10 +775,124 @@ fn duoBasic(site: *const Site) !?ld.Puzzle {
     };
 }
 
+/// The most played pair as usual (within 1 sd of it) that b clearly beats, with none of
+/// b's champions nor other's bot
+fn usualDuo(duos: []const Duo, b: Duo, other: ?Duo) ?Duo {
+    var out: ?Duo = null;
+    for (duos) |d| {
+        if (d.bot.c == b.bot.c or d.sup.c == b.sup.c or @abs(d.vs.mean) > d.vs.sd or !clearlyAbove(b, d)) continue;
+        if (other) |o| if (d.bot.c == o.bot.c) continue;
+        if (out == null or d.games > out.?.games) out = d;
+    }
+    return out;
+}
+
 /// x wins more than y by 2 standard errors of the difference
 fn clearlyAbove(x: Duo, y: Duo) bool {
     const p = root.ratio(x.wins, x.games);
     const q = root.ratio(y.wins, y.games);
     const v = p * (1 - p) / @as(f64, @floatFromInt(x.games)) + q * (1 - q) / @as(f64, @floatFromInt(y.games));
     return p - q >= 2 * @sqrt(v);
+}
+
+test leanRows {
+    const row = struct {
+        fn f(id: u32, role: Role, games: u32, gold: f64, win: f64) lean.Row {
+            return .{ .champion = id, .role = role, .games = games, .gold = gold, .gold_sd = 50, .win = win, .win_sd = 1 };
+        }
+    }.f;
+    const rows = [_]lean.Row{
+        row(1, .bottom, 40_000, 850, -8), // the hook: most gold of the early ones
+        row(10, .top, 1_500, 1_000, -9), // more gold, too few games for the hook
+        row(2, .bottom, 90_000, -250, 6), // same role as the hook
+        row(3, .top, 60_000, 300, -4),
+        row(4, .top, 70_000, -660, 7), // top's most played
+        row(5, .jungle, 150_000, 250, -2), // under 3 points
+        row(6, .jungle, 80_000, 150, -5), // under 200 gold
+        row(7, .middle, 100, 900, -9), // too few games
+        row(8, .utility, 90_000, 400, 5), // ahead and wins more: no lean
+        row(9, .middle, 50_000, -300, 12),
+    };
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const got = try leanRows(arena.allocator(), &rows, 10_000);
+    var ids: [3]u32 = undefined;
+    try std.testing.expectEqual(ids.len, got.len);
+    for (got, &ids) |r, *id| id.* = r.champion;
+    try std.testing.expectEqualSlices(u32, &.{ 1, 9, 4 }, &ids);
+}
+
+test leanPicks {
+    const row = struct {
+        fn f(id: u32, early: bool) lean.Row {
+            return .{ .champion = id, .role = .top, .games = 50_000, .gold = if (early) 500 else -500, .gold_sd = 50, .win = if (early) -5 else 5, .win_sd = 1 };
+        }
+    }.f;
+    const hooks = [_]lean.Row{row(2, true)};
+    // 2 is a hook; 6 comes when early's tile is full, so it is passed over
+    const rows = [_]lean.Row{ row(1, true), row(2, true), row(3, true), row(4, false), row(5, true), row(6, true), row(7, false), row(8, false), row(9, true) };
+    const tiles, const asked = leanPicks(&rows, &hooks).?;
+    for (tiles, [2][3]u32{ .{ 1, 3, 5 }, .{ 4, 7, 8 } }) |t, want| for (t, want) |r, id| try std.testing.expectEqual(id, r.champion);
+    try std.testing.expectEqual(9, asked.champion);
+    try std.testing.expectEqual(null, leanPicks(rows[0..8], &hooks));
+}
+
+test beaten {
+    const k = 600;
+    const case = struct {
+        fn f(wins: u32, games: u32, own_rate: f64, usual: f64) Against {
+            const own: Tally = .{ .games = 100_000, .wins = @round(own_rate * 100_000) };
+            return .{ .o = 1, .wins = wins, .games = games, .own = own, .vs = champion.VsUsual.of(wins, games, usual, k) };
+        }
+    }.f;
+    // 45% of 5,000 against a 49% champion, usually 51%: 5 points under, shrunk to 4.5
+    try std.testing.expectEqual(Beaten.counter, beaten(case(2_250, 5_000, 0.49, 0.51)));
+    // 48% of 5,000 against a 52% champion, usually 48%
+    try std.testing.expectEqual(Beaten.strong, beaten(case(2_400, 5_000, 0.52, 0.48)));
+    // Too few games, or not losing by 2 SE
+    try std.testing.expectEqual(Beaten.neither, beaten(case(80, 190, 0.49, 0.51)));
+    try std.testing.expectEqual(Beaten.neither, beaten(case(2_450, 5_000, 0.52, 0.48)));
+    // Far under usual, but the opponent is strong: neither clearly
+    try std.testing.expectEqual(Beaten.neither, beaten(case(2_100, 5_000, 0.53, 0.47)));
+}
+
+test lopsidedPicks {
+    const pick = struct {
+        fn f(x: u32, o: u32) Lopsided {
+            return .{ .r = .top, .x = x, .t = .{ .o = o, .wins = 0, .games = 0, .own = .{}, .vs = .{ .mean = 0, .sd = 0 } } };
+        }
+    }.f;
+    // 3 into 2 shares 2 with the first tile; 5 into 1 shares 1
+    const ls = [_]Lopsided{ pick(1, 2), pick(3, 2), pick(3, 4), pick(5, 1), pick(5, 6) };
+    const got = lopsidedPicks(&ls).?;
+    for (got, [_]u32{ 1, 3, 5 }) |p, x| try std.testing.expectEqual(x, p.x);
+    try std.testing.expectEqual(null, lopsidedPicks(ls[0..4]));
+}
+
+test usualDuo {
+    const duo = struct {
+        fn f(bot: usize, sup: usize, wins: u32, games: u32, mean: f64) Duo {
+            const c = struct {
+                fn c(i: usize) Champ {
+                    return .{ .c = i, .id = @intCast(i), .key = "", .name = "", .slug = "", .banned = 0, .games = 0 };
+                }
+            }.c;
+            return .{ .bot = c(bot), .sup = c(sup), .wins = wins, .games = games, .vs = .{ .mean = mean, .sd = 0.01 } };
+        }
+    }.f;
+    const b = duo(1, 2, 5_600, 10_000, 0.03);
+    const duos = [_]Duo{
+        b,
+        duo(3, 4, 4_900, 10_000, 0), // most played as usual
+        duo(5, 6, 2_450, 5_000, 0),
+        duo(5, 7, 3_920, 8_000, 0), // 5's more played pair: it, not 5 + 6
+        duo(3, 8, 9_800, 20_000, 0), // 3's more played pair, so the second has another bot
+        duo(9, 2, 9_800, 20_000, 0), // b's support
+        duo(10, 11, 9_800, 20_000, -0.02), // not as usual
+        duo(12, 13, 5_500, 10_000, 0), // not clearly under b
+    };
+    const first = usualDuo(&duos, b, null).?;
+    try std.testing.expectEqual(8, first.sup.c);
+    const second = usualDuo(&duos, b, first).?;
+    try std.testing.expectEqual(7, second.sup.c);
 }

@@ -147,3 +147,25 @@ pub const luck: ld.Puzzle = .{
 pub const chapter1 = [_]ld.Puzzle{ know, newcomer };
 pub const chapter2 = [_]ld.Puzzle{ fed, fed_role, surrender, bounty };
 pub const chapter5 = [_]ld.Puzzle{ splitpush, luck };
+
+test "fixed puzzles: answers in range, games on every bar, no pick advice" {
+    const std = @import("std");
+    for ([_][]const ld.Puzzle{ &chapter1, &chapter2, &chapter5 }) |chapter| for (chapter) |p| {
+        switch (p.answer) {
+            .guess => |g| try std.testing.expect(g.lo <= g.real and g.real <= g.hi),
+            .pick => |k| try std.testing.expect(k.right < k.choices.len),
+        }
+        switch (p.setup) {
+            .rates => |r| {
+                try std.testing.expect(r.ask < r.rows.len);
+                for (r.rows) |row| try std.testing.expect(row.games > 0);
+            },
+            else => {},
+        }
+        for (p.reveal) |row| try std.testing.expect(row.games > 0);
+        try std.testing.expect(p.games > 0);
+        for ([_][]const u8{ p.q, p.ctx, p.why, p.tip }) |text| {
+            try std.testing.expect(std.ascii.findIgnoreCase(text, "best") == null);
+        }
+    };
+}

@@ -4,6 +4,7 @@
 //! is marked right, a wrong choice wrong. Champion cards (icon, name) or side cards
 //! (label in the side's colour, the side's five icons): Daily's pick and "Who won?",
 //! Learn's drills. Phone: six champions fit one row of icons, names kept for readers
+const std = @import("std");
 const tree = @import("tree.zig");
 const champ = @import("champ.zig");
 const phrase = @import("phrase.zig");
@@ -72,7 +73,7 @@ pub fn view(h: *H, o: Opts, choices: []const Choice) N {
         .role = "group",
         .aria_label = o.label,
         .data_n = choices.len,
-        .data_side = choices.len > 0 and choices[0].champ == null,
+        .data_side = choices.len > 0 and choices[0].side != null,
         .data_chosen = any and !o.done,
         .data_done = o.done,
     }, .{l.done()});
@@ -152,7 +153,10 @@ const six = [_]champ.Champ{
 };
 
 fn champs(h: *H, chosen: ?usize, done: bool) []const Choice {
-    const cs = h.mem.alloc(Choice, six.len) catch return &.{};
+    const cs = h.mem.alloc(Choice, six.len) catch {
+        h.oom = true;
+        return &.{};
+    };
     for (cs, six, 0..) |*c, x, i| c.* = .{
         .champ = x,
         .chosen = chosen == i,
@@ -177,4 +181,32 @@ pub fn gallery(g: *Gallery) void {
         .{ .label = plain("50 to 55%") },
         .{ .label = plain("Over 55%") },
     }));
+}
+
+test "buttons until done, then divs with the marks; key numbers only while choosing" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const html = @import("html.zig");
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    var out: std.Io.Writer.Allocating = .init(a);
+    try html.write(&t, view(&h, .{}, champs(&h, 1, false)), &out.writer);
+    var s = out.written();
+    try std.testing.expectEqual(6, std.mem.count(u8, s, "<button"));
+    try std.testing.expectEqual(1, std.mem.count(u8, s, "aria-pressed=\"true\""));
+    try std.testing.expect(std.mem.find(u8, s, "data-chosen") != null);
+    try std.testing.expect(std.mem.find(u8, s, "data-side") == null);
+    try std.testing.expect(std.mem.find(u8, s, "class=\"kn\"") != null);
+    out = .init(a);
+    try html.write(&t, view(&h, .{ .done = true }, champs(&h, 1, true)), &out.writer);
+    s = out.written();
+    try std.testing.expect(std.mem.find(u8, s, "<button") == null);
+    try std.testing.expect(std.mem.find(u8, s, "class=\"kn\"") == null);
+    try std.testing.expectEqual(1, std.mem.count(u8, s, "data-mark=\"right\""));
+    try std.testing.expectEqual(1, std.mem.count(u8, s, "data-mark=\"wrong\""));
+    try std.testing.expect(std.mem.find(u8, s, "won 54%") != null);
+    out = .init(a);
+    try html.write(&t, view(&h, .{}, &.{ .{ .label = plain("Under 45%") }, .{ .label = plain("Over 45%") } }), &out.writer);
+    try std.testing.expect(std.mem.find(u8, out.written(), "data-side") == null);
 }
