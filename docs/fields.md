@@ -1,8 +1,7 @@
 # Fields: what we fetch, keep and drop
 
-Owner: stats CPU session (meiolol-3c), 2026-10-12. Input for the stats models
-(docs/model.md) and the retention decision (Jacob). The GPU session (meiolol-2a) builds
-on this list. Field names as Riot sends them.
+Input for the stats models (docs/model.md) and the retention rules below. Field names
+as Riot sends them.
 
 ## Per match today
 
@@ -14,7 +13,7 @@ on this list. Field names as Riot sends them.
 | ladder | platform bucket | rank per player, history per change | ranks, rank_history |
 
 Sizes: summary 79 KB JSON / 12.8 KB gz; timeline ~730 KB / ~60 KB gz; compact timeline
-~8.6 KB; everything raw ~7 GB/day at today's ~165k matches/day (coordinator, 2026-10-12).
+~8.6 KB; everything raw ~7 GB/day at ~165k matches/day.
 
 ## Kept forever
 
@@ -115,7 +114,7 @@ anything.
 | Objectives | elite monster, building, plate events with time; per-minute gold; positions; soul state | yes (compact); bounty state dropped | to be measured |
 | Playstyle | positions per minute, kills with x/y, wards (counts), CS; challenges (roams, solo kills, skillshots, vision) | positions yes; challenges dropped | to be measured |
 
-## Measured 2026-10-12
+## Measured
 
 - What carries signal (docs/model.md, `meiolol outcomes`, 118k Platinum+ games): lane
   opponent, bot lane partners, junglers and the rest of both teams each shift gold@14,
@@ -129,28 +128,26 @@ anything.
 - Compact timeline additions, from the fixture game (gzip of delta text, rough): per
   minute championStats +3.5 KB, damage split +4 KB, death recaps (victimDamageReceived
   and Dealt) +3-6 KB, on today's 8.6 KB
-- Box (2026-10-12 21:30Z, after the WAL fix): 129 GB free, ~172k matches/day, compact
-  rows ~1.5 GB/day
-- Signal per field (2026-10-13, docs/model.md "Field ranking"): champ select fields
+- Compact rows grow ~1.5 GB/day at ~172k matches/day
+- Signal per field (docs/model.md "Field ranking"): champ select fields
   (spells, keystone, trees, shards, role assignment status) carry draft-time signal on
   every early outcome, a few bytes per player: recommended for compact rows (not yet
   decided). Challenges add almost nothing to win beyond the 14:00 state; whole-game
   ones mostly restate the result
 
-## Decided (Jacob, 2026-10-12)
+## Retention and crawl settings
 
-"We need to keep more data while we figure out what we need"; keep anything per player
-that might help training, within the law; "for now keep raw data until we understand it
-better". Applied on the box 2026-10-12 ~21:30-21:45Z (crawl.args; the previous one in
-crawl.args.bak-20261012):
+Jacob's rule: "we need to keep more data while we figure out what we need"; keep
+anything per player that might help training, within the law, and keep raw data until
+we understand it better. On the box (crawl.args):
 
 - Compact rows and timelines forever (`--keep-days 0`); raw summaries kept on the box
   until archived (`--raw-match-days 0`); raw timelines likewise (`--raw-timeline-days
   3650`): acked raw is pruned at ack after 2 days (`raw-export --ack`), and the
   crawler's raw prune never passes the acked point
-- Every match gets a timeline (`--timelines 100`, coordinator for Jacob): every result
-  with signal comes from timelines
-- Mastery on (Jacob, 2026-10-13: every player). First every player of the week's new
+- Timelines: every EUW match, 50% elsewhere until the production key; games under 15
+  min skipped (docs/data.md has the flags). Every result with signal comes from them
+- Mastery on, every player. First every player of the week's new
   matches, again once their snapshot is over 7 days old, then sampled ladder players
   (1 in 16) with spare budget; dropped after 30 days. The box keeps each player's latest
   fetch (fetched_at); the archive keeps each one, so pre-game mastery is the latest
@@ -158,7 +155,7 @@ crawl.args.bak-20261012):
   pass after start reaches N days back (one-time sweep, then remove it from crawl.args);
   a fetch only serves games after it. A player whose call fails (bad PUUID) is skipped;
   5 failures in a row and the last good player failing too = outage, pause 60s
-- Ranked flex sample (Jacob, 2026-10-13, test only): `--flex-calls-per-day 500`, one
+- Ranked flex sample (test only): `--flex-calls-per-day 500`, one
   page of flex ids per scanned EUW1 player until the day's lookups are used; stored,
   timelined and archived like solo. Every stats, site and model reader keeps to queue
   420 (pipeline test: flex copies of the fixture change no count and no site file)
@@ -181,8 +178,8 @@ deploy/archive-pull.sh, docs/data-safety.md "Raw archive"):
 - Kept until player ids would be blanked anyway: days past 24 months lose every hashed
   PUUID and their mastery (`archive-age`), as the crawler blanks its own rows. Forgotten
   players: left out at ingest, erased from archived days (`archive-forget`) each round
-- Size, measured on the first pull (2026-10-12; timelines from 1,744 only, recheck on a
-  full day): ~172k summaries/day x 4.3 KB and ~130k timelines/day x 45 KB at -15: ~6.6
+- Size, from the first pull (timelines from 1,744 games only; recheck on a full day):
+  ~172k summaries/day x 4.3 KB and ~130k timelines/day x 45 KB at -15: ~6.6
   GB/day, ~2.4 TB/year; the 1 TB partition lasts ~5 months, then more disk (Jacob plans
   to buy)
 
