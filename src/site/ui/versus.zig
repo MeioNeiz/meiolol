@@ -4,9 +4,10 @@
 //! readers (game-detail.md "Objectives and firsts"). `race`: when you and your opponent
 //! got somewhere, the typical time a tick, the gap to typical a signed figure (later is
 //! worse). `band`: one figure on a track, the typical middle half shaded and its median
-//! a tick (game-detail.md "Lane"). `rows`: one side against the other mirrored, a row per
-//! figure, bars growing out from the middle, the larger (or earlier) figure bold
-//! (matchup.md "Versus")
+//! a tick (game-detail.md "Lane"); `cell` the same at a list row's size, the figure under
+//! the track and the label only for screen readers (GameRow's lane at 14). `rows`: one
+//! side against the other mirrored, a row per figure, bars growing out from the middle,
+//! the larger (or earlier) figure bold (matchup.md "Versus")
 const std = @import("std");
 const tree = @import("tree.zig");
 const phrase = @import("phrase.zig");
@@ -107,26 +108,44 @@ pub const Band = struct {
 };
 
 pub fn band(h: *H, b: Band) N {
+    const md: ?i32 = if (b.typ) |q| q[1] else null;
+    return h.div(.{ .class = "bnd" }, .{
+        h.span(.{ .class = "lab" }, .{b.label}),
+        h.b(.{ .class = "fig", .data_side = bandSide(b) }, .{phrase.num(h, .signed, b.you)}),
+        track(h, b),
+        h.span(.{ .class = "ends", .aria_hidden = true }, .{
+            h.span(.{}, .{phrase.num(h, .signed, -b.dom)}),
+            if (md) |m| h.span(.{}, .{W.typ.with(h, .{ .v = m })}) else null,
+            h.span(.{}, .{phrase.num(h, .signed, b.dom)}),
+        }),
+    });
+}
+
+/// `fig` written under the track ("−768 at 14")
+pub fn cell(h: *H, b: Band, fig: tree.Text) N {
+    return h.span(.{ .class = "c-vs", .data_v = "cell", .title = b.label }, .{
+        track(h, b),
+        h.span(.{ .class = "fig", .data_side = bandSide(b) }, .{fig}),
+    });
+}
+
+/// Against the typical median: better is ours
+fn bandSide(b: Band) ?[]const u8 {
+    const q = b.typ orelse return null;
+    return side(b.you > q[1], b.you < q[1]);
+}
+
+fn track(h: *H, b: Band) N {
     const d: f32 = @floatFromInt(@max(b.dom, 1));
     const at = struct {
         fn f(v: i32, dd: f32) f32 {
             return @round(std.math.clamp((@as(f32, @floatFromInt(v)) + dd) / (2 * dd), 0, 1) * 1000) / 10;
         }
     }.f;
-    const md: ?i32 = if (b.typ) |q| q[1] else null;
-    return h.div(.{ .class = "bnd" }, .{
-        h.span(.{ .class = "lab" }, .{b.label}),
-        h.b(.{ .class = "fig", .data_side = if (md) |m| side(b.you > m, b.you < m) else null }, .{phrase.num(h, .signed, b.you)}),
-        h.div(.{ .class = "tr", .aria_hidden = true }, .{
-            if (b.typ) |q| h.span(.{ .class = "q", .style = h.vars(.{ .a = at(q[0], d), .b = at(q[2], d) }) }, .{}) else null,
-            if (md) |m| h.span(.{ .class = "typ", .style = h.vars(.{ .x = at(m, d) }) }, .{}) else null,
-            h.span(.{ .class = "you", .style = h.vars(.{ .x = at(b.you, d) }) }, .{}),
-        }),
-        h.span(.{ .class = "ends", .aria_hidden = true }, .{
-            h.span(.{}, .{phrase.num(h, .signed, -b.dom)}),
-            if (md) |m| h.span(.{}, .{W.typ.with(h, .{ .v = m })}) else null,
-            h.span(.{}, .{phrase.num(h, .signed, b.dom)}),
-        }),
+    return h.span(.{ .class = "tr", .aria_hidden = true }, .{
+        if (b.typ) |q| h.span(.{ .class = "q", .style = h.vars(.{ .a = at(q[0], d), .b = at(q[2], d) }) }, .{}) else null,
+        if (b.typ) |q| h.span(.{ .class = "typ", .style = h.vars(.{ .x = at(q[1], d) }) }, .{}) else null,
+        h.span(.{ .class = "you", .style = h.vars(.{ .x = at(b.you, d) }) }, .{}),
     });
 }
 
@@ -230,6 +249,10 @@ pub const css =
     \\  .c-vs .mr .bars { align-self: stretch; height: 5px;
     \\    background: linear-gradient(90deg, transparent calc(50% - var(--a) * 0.5%), var(--us) 0 calc(50% - 1px), transparent 0 calc(50% + 1px),
     \\      var(--them) 0 calc(50% + var(--b) * 0.5%), transparent 0); border-radius: 3px; }
+    \\  .c-vs[data-v="cell"] { display: flex; flex-direction: column; gap: 3px; width: 96px; }
+    \\  .c-vs[data-v="cell"] > .tr { display: block; height: 8px; margin-top: 3px; }
+    \\  .c-vs[data-v="cell"] .tr > .you { top: -3px; bottom: -3px; width: 6px; margin-left: -3px; }
+    \\  .c-vs[data-v="cell"] > .fig { font-size: var(--fs-xs); white-space: nowrap; }
     \\  .c-vs .bnd > .ends { grid-column: 1 / -1; display: flex; justify-content: space-between; font-size: var(--fs-xs); color: var(--faint); font-variant-numeric: tabular-nums; }
     \\}
     \\
@@ -266,5 +289,10 @@ pub fn gallery(g: *Gallery) void {
         band(h, .{ .label = plain("Gold lead at 14"), .you = -768, .typ = .{ -1677, -63, 511 }, .dom = 2500 }),
         band(h, .{ .label = plain("CS lead at 10"), .you = 12, .typ = .{ -9, -1, 6 }, .dom = 30 }),
         band(h, .{ .label = plain("CS lead at 10"), .you = -4, .dom = 30 }),
+    }));
+    g.add("cells: below typical, above, no typical", h.div(.{ .class = "g-row" }, .{
+        cell(h, .{ .label = plain("Gold lead at 14"), .you = -768, .typ = .{ -1677, -63, 511 }, .dom = 3000 }, plain("−768 at 14")),
+        cell(h, .{ .label = plain("Gold lead at 14"), .you = 1084, .typ = .{ -200, 300, 900 }, .dom = 3000 }, plain("+1,084 at 14")),
+        cell(h, .{ .label = plain("Gold lead at 14"), .you = -3408, .dom = 3000 }, plain("−3,408 at 14")),
     }));
 }
