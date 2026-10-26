@@ -53,7 +53,7 @@ Four channels, chosen per page:
 1. data- attributes on server markup: filters.js (22 `dataset.` reads), table.js (16),
    min-games.js (9), learn.js (16); `data-site`, `data-view`, `data-root` on script tags
    (html.zig:176, home.zig:76).
-2. Inline JSON: only learn.zig:229-235, `<script type="application/json">` via `tpl.json`.
+2. Inline JSON: only learn.zig:229-235, `<script type="application/json">` via `tpl.json`. <!-- hygiene-ok -->
 3. Fetched JSON: data/champions.json (fetched separately by review.js:50, pool.js:34,
    your.js:697, learn.js), data/pool.json, data/learning.json, data/search.json,
    data/filters/<slug>.json, daily/<n>.json, learn/practice.json, the Your games API.

@@ -12,6 +12,8 @@
     { "id": "index", "match": "^docs/(plan|frontend)\\.md$", "budget": 140,
       "kind": "an index read first: pointers, not detail" },
     { "id": "plan", "match": "^docs/plan/", "budget": 300, "kind": "a plan area file" },
+    { "id": "review", "match": "^docs/review/", "budget": null, "twin": false, "shape": false,
+      "timeline": false, "longLine": 2000, "kind": "Jacob's review, quoted by the page plans" },
     { "id": "zig", "match": "^docs/zig/", "budget": 500, "kind": "Zig reference" },
     { "id": "doc", "match": "^docs/.*\\.md$", "budget": 450, "kind": "a doc page (one subject)" }
   ],

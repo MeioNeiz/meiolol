@@ -6,8 +6,8 @@ when nothing real is left. Design and evidence: docs/lab-agent.md (read it once)
 Known traps and fixes: docs/lab-constraints.md (read it first; its header says how to
 add a line).
 
-Your working directory is your campaign: `root.zig` (the candidate), `digest.md`,
-`hypotheses.tsv`. You may edit only these. Everything else in the repo you may read,
+Your working directory is your campaign: `root.zig` (the candidate), `digest.md`, <!-- hygiene-ok -->
+`hypotheses.tsv`. You may edit only these. Everything else in the repo you may read, <!-- hygiene-ok -->
 never change. Your only tool for running anything is `deploy/lab-exp.sh` (full path
 in your start message); `LAB_CANDS` is already set.
 

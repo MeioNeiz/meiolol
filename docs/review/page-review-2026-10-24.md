@@ -2,7 +2,7 @@
 
 Jacob's words below, unedited, except Riot IDs in the pasted Players block (left out:
 public repo). Pasted page text is quoted as he pasted it. Plans and work from it:
-docs/plan/ui-rebuild.md (once written); foundation context docs/frontend-rework.md.
+docs/plan/ui/ (README.md, a file per page).
 
 ## Themes across pages (index, not his words)
 

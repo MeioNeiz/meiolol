@@ -87,7 +87,7 @@ Coloured numbers (text on the dark page; all at least 5.3:1):
 
 | Step | Below | Above | Use |
 | --- | --- | --- | --- |
-| 4, extreme | `#fb2b9a` hot pink | `#0bfaf4` electric aqua | as text (a filled chip with dark text until 20 Oct) |
+| 4, extreme | `#fb2b9a` hot pink | `#0bfaf4` electric aqua | as text |
 | 3 | `#fe6652` | `#25d1ff` | |
 | 2 | `#f79c40` | `#59aaf8` | today's --bad / --good |
 | 1 | `#caac83` | `#89afd6` | |
