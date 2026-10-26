@@ -105,6 +105,9 @@ recommendations"). A later decision that overrides an earlier one says so.
   page speed over dev ease; whole-pixel type; contextual builds (filter the build by
   chosen runes and items) are a planned feature with their own data design. Mocks read
   plain or clunky in places: a visual pass on the gallery before pages are built
+- J31 (26 Oct) meiolol leaves Oracle for Ethan's VM C01, all of it, benchmarked on the
+  real data before the switch so it is no downgrade; jomify stays for jomove only.
+  Storage: C01's 60 GB disk plus Megatron, not a new local disk (docs/plan/vm.md)
 - nn on the GPU: planned, not now
 - Q1 Rewrite the application around game review of your own games, lane curves as the
   benchmark; squads worded as planned, or out until built

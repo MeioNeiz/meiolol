@@ -35,40 +35,47 @@ on 26 Oct), and its 2 cores sit at load ~3. The move replaces the Hetzner BX11 o
 
 ### VM0: Jacob's choices
 
-- Disk: (a) Ethan adds ~500 GB on the same storage as C01's own disk (best: ~25x the
-  image's lookups) or (b) a loop mounted ext4 image on Megatron with lvmcache on ~35 GB
-  of the local disk (VM1b tests it). Asked of Ethan: the disk and CPU type "host"
-- jomove: stays on jomify (free, untouched) or moves too
-- Standby: how long the Oracle box stays stopped but kept before it is terminated
-- Privacy wording: "a server in the United Kingdom" (src/site/prose.zig "Where it is
-  kept"); Ethan has admin on C01 and the shares, so can see player data
+- Decided (J31): all of meiolol moves, jomify stays for jomove; storage is C01's disk
+  plus Megatron; benchmarked on the real data before the switch (VM3)
+- Open: CPU type "host" (asked of Ethan); how long the Oracle box stays stopped but
+  kept before it is terminated; privacy wording "a server in the United Kingdom"
+  (src/site/prose.zig "Where it is kept"; Ethan has admin on C01 and the shares)
 
 ### VM1: storage
 
-- (a) New disk: ext4, mounted `noatime,nodiscard` at /srv/meiolol, fstrim.timer weekly
-  (hosting.md: online discard starves the crawler's commits)
-- (b) Image: first mount the Megatron share `hard` instead of `soft` (a NAS pause must
-  stall writes, not fail them into ext4), then VM1b
-- VM1b: lvmcache, writethrough, a ~35 GB cache file on the local disk in front of the
-  image; rerun the 26 Oct SQLite test (scratch copy in this session; keep it in
-  deploy/ if it decides). Done when: within ~2x of local disk on lookups beside the
-  writer, else back to (a)
-- ~/ml/meiolol lives on that disk (symlink from home). Backups/ to Megatron later (VM8)
+Built: /srv/meiolol (ext4, `noatime,nodiscard`, 492 GB) on LVM meiolol/data: a 500 GB
+image on Megatron (/srv/megatron/meiolol/disk.img) with a 30 GB writethrough cache file
+on C01's disk (/var/lib/meiolol/cache.img), loops with direct IO.
+/srv/megatron is our own fstab mount of Megatron, `hard,nosharesock` (without
+nosharesock the kernel reuses Ethan's `soft` /mnt/jacob session and its options);
+credentials /etc/meiolol/megatron.cred. meiolol-disk.service (/usr/local/sbin/meiolol-disk)
+assembles it at boot. ~/ml links to /srv/meiolol/ml. Writeback was refused by LVM (a
+damaged cachevol can't be repaired)
+
+- SQLite test with the cache: commits 11-12/s (p50 ~62 ms), lookups beside the writer
+  243-260/s, cold scan 147-171 MB/s, cold row reads 1,450-1,640/s: scans near local
+  disk, row reads ~2x the bare image, writes still at Megatron's pace
+- Left: a reboot test (disk back, services after it); fstrim.timer; backups/ to
+  Megatron outside the image (VM8)
 
 ### VM2: base host
 
-- Unattended upgrades, lingering for jacob (box.sh's user units), UTC, journald limits,
-  ufw: ssh on tailscale0 only. Tailscale on the box (for the copy) and on the gpu-box
-  WSL (its mirror and archive pulls)
+- Lingering for jacob: done. Left: unattended upgrades, UTC, journald limits, ufw (ssh
+  on tailscale0 only), Tailscale on the gpu-box WSL (its mirror and archive pulls)
 - Done when: `MEIOLOL_HOST=essex-vm deploy/box.sh status` answers
 
 ### VM3: backend on a copy, crawler off
 
 - `MEIOLOL_HOST=essex-vm deploy/box.sh` sync: binary, scripts, units; crawl.args with
   `--proxy 127.0.0.1:8092` (or the API's address) instead of 10.0.0.3
-- First copy of data/ from the box over Tailscale, crawler still running there
-  (rsync; a live db copy is only for testing), plus .env, contact, riot.txt, host.env,
-  desktop-data.key, desktop.token, release/
+- First copy: C01 pulls ~/ml/meiolol (bin/ and -shm left out) from the box over the
+  internet with alias meiolol-box, key ~/.ssh/meiolol_box, which the box's
+  authorized_keys limits to `ionice -c3 nice -n 19 rrsync -ro ~/ml/meiolol`; job
+  meiolol-copy (user unit), log ~/copy.log. A live copy is for testing only: check it
+  with `PRAGMA quick_check` before timing
+- Benchmark against the box before the switch (J31): views write and its phases
+  (views.log), core build, renderer load, page render latency under concurrent load,
+  deploy/bench-crawl.sh on both disks
 - Never two crawlers: the key's rate is per key, so meiolol-crawl stays disabled on C01
   until VM6
 - Run the web loop, a views write and the renderer on C01; compare times with the box's
@@ -137,3 +144,7 @@ on 26 Oct), and its 2 cores sit at load ~3. The move replaces the Hetzner BX11 o
 
 - `-Dcpu` for C01's real CPU once its type is host
 - Plain local calls in place of the localhost ssh aliases (VM4)
+- Retune for C01 (after VM3's baseline): the box's limits were set for 2 cores and a
+  72 MB/s disk. More parallel read runs in the views write (4 today), more reads in
+  flight (Megatron's latency hides behind queue depth), bigger SQLite caches and
+  MemoryHigh in 15 GB, the hot set kept inside the 30 GB cache
