@@ -133,9 +133,13 @@ fn loadInto(data: *Data) !void {
     const stats_path = try datafiles.stats(arena, io) orelse return error.NoStatsFile;
     data.stats = try core.Stats.parse(arena, try cwd.readFileAlloc(io, stats_path, arena, limit));
     data.curves = null;
-    // Without curves the card still lists options, without lane gold
+    // Without curves the card still lists options, without lane gold. Viewed in place, not
+    // parsed (a copy): the file is ~100 MB. Not mapped: the update renames a new file
+    // over it, which Windows may refuse while mapped (untested)
     if (try datafiles.curves(arena, io)) |p| {
-        data.curves = core.curvesfile.Curves.parse(arena, try cwd.readFileAlloc(io, p, arena, limit)) catch |err| blk: {
+        const file_align: std.mem.Alignment = comptime .fromByteUnits(core.curvesfile.file_align);
+        const bytes = try cwd.readFileAllocOptions(io, p, arena, limit, file_align, null);
+        data.curves = core.curvesfile.Curves.view(arena, bytes) catch |err| blk: {
             std.log.err("{s}: {t}", .{ p, err });
             break :blk null;
         };

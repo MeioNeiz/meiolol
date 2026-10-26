@@ -684,7 +684,7 @@ pub const Curves = struct {
     /// exactly its curves, so every curve lies inside `bytes`; values are not checked
     /// (a mapped file would be read whole), so View's sums saturate: a damaged file
     /// gives wrong counts, never a crash (the desktop app's fuzz test)
-    fn view(gpa: std.mem.Allocator, bytes: []align(file_align) const u8) ParseError!Curves {
+    pub fn view(gpa: std.mem.Allocator, bytes: []align(file_align) const u8) ParseError!Curves {
         if (bytes.len < header_len) return error.Truncated;
         if (!std.mem.eql(u8, bytes[0..magic.len], magic)) return error.BadMagic;
         const ints = bytes[magic.len..header_len];
