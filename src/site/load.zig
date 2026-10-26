@@ -171,7 +171,13 @@ pub fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Opt
             }
         }
         if (shared) {
-            if (try Parts.ofFor(old, DailyPart, .daily, view, arena, champs_key)) |d| {
+            site.daily_inputs = dailyInputs(io, opts);
+            const kept = try Parts.ofFor(old, DailyPart, .daily, view, arena, champs_key);
+            // A deploy round keeps the part, and deploys can come all day: without this
+            // check, yesterday's Daily Draft and example would stay
+            if (kept != null and (kept.?.inputs == site.daily_inputs or old.?.strict)) {
+                const d = kept.?;
+                site.daily_inputs = d.inputs;
                 site.daily_files = d.files;
                 site.learn = d.learn;
                 site.eval = d.eval;
@@ -367,6 +373,19 @@ fn loadTrend(site: *Site, db: store.Db, games: ?*const partials.Store, phases: *
     }
     site.trend = try stats.buildTrend(gpa, site.arena, db, games, &site.stats, site.opts.patches, all, platforms, site.since_ms);
     phases.mark("trend");
+}
+
+/// What loadDaily reads that changes without a deploy: the UTC day (the Daily Draft's)
+/// and the example file, by its mtime and size
+fn dailyInputs(io: std.Io, opts: Options) u64 {
+    var h: std.hash.Wyhash = .init(0);
+    const day = @divFloor(std.Io.Clock.real.now(io).toSeconds(), std.time.s_per_day);
+    h.update(std.mem.asBytes(&day));
+    if (opts.your_example) |path| if (std.Io.Dir.cwd().statFile(io, path, .{})) |st| {
+        h.update(std.mem.asBytes(&st.mtime.nanoseconds));
+        h.update(std.mem.asBytes(&st.size));
+    } else |_| {};
+    return h.final();
 }
 
 /// The shared view's Daily Draft, your example, eval chart and Learn data

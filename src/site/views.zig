@@ -166,6 +166,7 @@ pub const Loaded = struct {
             if (s.trend) |t| try writePart(w, &aw, keys, .trend, v, TrendPart{ .champs_key = champs_key, .trend = t });
             if (std.meta.eql(v, html.View.shared)) try writePart(w, &aw, keys, .daily, v, DailyPart{
                 .champs_key = champs_key,
+                .inputs = s.daily_inputs,
                 .files = s.daily_files,
                 .learn = s.learn,
                 .eval = s.eval,
@@ -266,6 +267,9 @@ pub const TrendPart = struct { champs_key: u64, trend: stats.Trend };
 /// The shared view's
 pub const DailyPart = struct {
     champs_key: u64,
+    /// load.dailyInputs when made: a reuse load makes the part again on a new day or
+    /// example file
+    inputs: u64,
     files: []const File,
     learn: ?learn.Facts,
     eval: []const evalchart.Point,
@@ -283,7 +287,7 @@ fn partKeys() [part_count]u64 {
         partKey(BasePart, &.{ @embedFile("../stats.zig"), @embedFile("../partials.zig") }),
         partKey(FilterPart, &.{ @embedFile("filters.zig"), @embedFile("../partials.zig") }),
         partKey(PeoplePart, &.{ @embedFile("../pool.zig"), @embedFile("../learning.zig"), @embedFile("../spread.zig"), @embedFile("../partials.zig") }),
-        partKey(DailyPart, &.{ @embedFile("../daily.zig"), @embedFile("../learn.zig"), @embedFile("evalchart.zig"), @embedFile("../partials.zig") }),
+        partKey(DailyPart, &.{ @embedFile("../daily.zig"), @embedFile("../learn.zig"), @embedFile("evalchart.zig"), @embedFile("yourgame.zig"), @embedFile("ui/gamedata.zig"), @embedFile("../partials.zig") }),
         partKey(patchday.Wins, &.{ @embedFile("../patchday.zig"), @embedFile("../stats.zig"), @embedFile("../partials.zig") }),
         partKey(TrendPart, &.{ @embedFile("../stats.zig"), @embedFile("../partials.zig") }),
     };

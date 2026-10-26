@@ -76,7 +76,9 @@ slices length-prefixed; each part is tag, view, key, length, bytes. A part's key
 its type's shape (field names and types all the way down) and the source of the code
 that makes it (partKeys: stats.zig for base, pool, learning and spread for people...),
 so a deploy that changes either loads that part again; parts after the base also keep
-the champion ids they were made with and are dropped when those change. A change
+the champion ids they were made with and are dropped when those change. The daily part
+also keeps its inputs (UTC day, the example file's mtime and size) and is made again on
+a reuse write when they change, as deploys can keep it for days otherwise. A change
 elsewhere that alters a part's data (loadParts, core, store) bumps data_version. Header:
 magic MEIOVIE2, then a hash of every key: `render` reads the file only when it matches
 its own (else error.ViewsMismatch, and the database load at start), and

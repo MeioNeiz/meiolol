@@ -209,6 +209,8 @@ pub const Site = struct {
     /// Of shared_files, those the shared view's load makes (Daily Draft, your example,
     /// Learn); the rest come from the binary and options
     daily_files: []const File = &.{},
+    /// What daily_files were made from (load.dailyInputs)
+    daily_inputs: u64 = 0,
     /// The view's stats file (stats_path), as stats was parsed from
     model: []const u8 = "",
     /// Learn page facts; the shared view's only
