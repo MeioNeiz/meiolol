@@ -1,97 +1,59 @@
 # Plan: our Zig libraries toward Rust-crate quality
 
-Jacob 21 Oct: where Rust would be better here it is mostly the ecosystem (hyper and
-axum, rustls, reqwest, governor, egui, Velopack), plus compile-time memory and race
-safety. Instead of a rewrite, bring our own pieces up to what those crates give, and
-match the safety with checks: ReleaseSafe builds, fuzz tests, ThreadSanitizer. Slow
-checks stay out of `zig build ci` and run where a release happens (Jacob: no tests
-that slow everyday development).
+Where Rust would be better here it is mostly the ecosystem (hyper and axum, rustls,
+reqwest, governor, egui, Velopack), plus compile-time memory and race safety. Instead of
+a rewrite, bring our own pieces up to what those crates give, and match the safety with
+checks: ReleaseSafe builds, fuzz tests, ThreadSanitizer. Slow checks stay out of `zig
+build ci` and run where a release happens (Jacob: no tests that slow everyday
+development).
 
-## Done
+## Status
 
-- Desktop releases (21 Oct): deploy/desktop-release.sh is the only way an exe ships;
-  ReleaseSafe (was ReleaseSmall: no bounds or overflow checks); Ed25519-signed exe
-  and manifest with an offline release key and a rollback guard (sign.zig, what
-  Velopack or self_update give); `zig build desktop-check` (ThreadSanitizer) and
-  `desktop-fuzz` (architecture.md "Desktop window"). Fuzzing found two crashes on
-  damaged curves files: View.lane's sums underflowed and a flipped minute negated
-  -32768 in i16 (both saturate now). `zig build --fuzz` exits 0 when a fuzz test
-  crashes: the first release went out past one (withdrawn before any web round
-  published it); the script now fails on the log's "terminated with signal"
-- HTTP server limits (23 Oct, what hyper and axum give): httpd.Limits per server, shared
-  by the Your games API, the crawler's proxy, serve.zig and the mocks. A connection cap
-  (503 past it), 64 KB heads (431), a Content-Length body cap (413; chunked bodies 411,
-  as nginx and our clients state a length), malformed heads 400; idle, head and handler
-  timeouts from one watchdog task per server that shuts a stalled socket down. Each sits
-  behind nginx's own (/api/ 1 KB bodies, /auth/ 4 KB, 30 s; render 15 s, /admin/api/
-  120 s): API 128 connections, 16 KB, idle 60 s, head 30 s, handler 60 s; serve 256,
-  handler 180 s; proxy 64, no body, no idle or handler timeout (the API keeps pooled
-  connections there; a request waits for a Riot slot)
-- ThreadSanitizer over the backend (24 Oct): `zig build backend-check` (par.zig,
-  store/ahead.zig, httpd's watchdog and slot table, the proxy, ratelimit, the API's
-  keep-alive test and the site pipeline's parallel load and filters) and a 90 s fake
-  crawl of the TSan build with the proxy serving (`zig build backend-tsan`; how to run:
-  architecture.md "Crawler"). No races found. TSan works on macOS with 0.17 (a planted
-  race is reported)
-- Backend fuzzing (24 Oct): `zig build backend-fuzz` (outside ci) searches fuzz tests
-  from good fixtures (core/fuzz.zig mutate) over Riot match JSON parsed and stored
-  (riot/match.zig), timeline JSON to the compact form and back, a damaged compact
-  timeline (timeline.zig), a damaged digest or stored gzip blob (digest.zig), a damaged
-  pack (rawpack.zig), raw HTTP bytes through std.http.Server, httpd.admit and the API's
-  handle (api/root.zig, /api/ and /auth/), and the Your games report from a damaged
-  match and stored timeline (api/game.zig). deploy/backend-fuzz.sh [REV] runs it on a
-  clean checkout and fails on the log (`zig build --fuzz` exits 0 on a crash and on a
-  test that doesn't build); before a crawler, storage or API change. ~300K inputs per
-  test, 2 to 45 min each on the Mac, found: a POST body cut short and left unread
-  crashed any of our servers in std's respond() (httpd.admit closes after a body
-  now); a red player's lane diff of -32768 overflowed on negation in the report
-  (saturates); timeline timestamp deltas past i64 overflowed in encode and decode
-  (BadTimeline, by reading the code, the fuzzer did not get there); bans repeating a
-  pick turn failed the bans key, losing the match in the crawler and stopping
-  `rebuild` (the first ban stays). Each has a regression test. Setup: -ffuzz
-  instruments sqlite3.c, which Zig's fuzzer has no comparison hooks for, so sqlite
-  builds with -fno-sanitize-coverage; the fuzzer checks every input for leaks, so
-  harness state lives per input; given a binary's several fuzz tests in one run, zig
-  searched only one, so the script runs each on its own; desktop-release.sh loops the
-  same way since 6a0a223 (desktop-fuzz takes -Dtest-filter)
-
-- One `net` module, steps 1-4 (24 Oct): src/net/ (build module "net", std only, a
-  module doc with an example, imported by backend, app, mock and desktop; backend-check,
-  desktop-check and desktop-fuzz run its tests). ratelimit.zig (governor: global and
-  per-key windows corrected from the server's limit and count headers, priority,
-  pacing, save/load; riot/ratelimit.zig keeps routes and the personal key's spec),
-  sign.zig (Ed25519 in text bound to a context; desktop/sign.zig keeps keys and
-  contexts, signatures byte for byte as before), server.zig (httpd.zig moved, as is),
-  pinned.zig (HTTPS GET trusting one root and no host name, from lcu/https.zig). Found
-  on the way: a chunked answer after a first chunk whose size overflowed body + size
-  panicked (the desktop app is ReleaseSafe), saturating now, regression test
-- `net` step 5, client timeouts (24 Oct, reqwest's timeout and body cap): std.http.Client
-  has none (ConnectTcpOptions.timeout is never read). deadline.zig: within(io, limit,
-  func, args) runs the call beside a timer on Io.Select and cancels it past the limit
-  (~200 ms to return on macOS and Windows; a success that lands during the cancel is
-  returned, an outer cancel propagates). client.zig: get/send on std.http.Client
-  without fetch(), which panics (bodyErr().? null) when a Content-Length body read
-  fails, on a cancel and on a plain reset mid-body; no redirects, a body cap, ShortBody
-  on a cut body, the connection dropped on any error. On it: device.signIn 20 s,
-  update.zig (manifest 30 s; each file capped at its manifest size, 2 min plus 64 KB/s),
-  ddragon 60 s; riot/client.zig wraps each try in within (30 s to Riot, retried; 5 min
-  through the proxy, not retried)
+- Desktop releases: deploy/desktop-release.sh is the only way an exe ships. ReleaseSafe;
+  Ed25519-signed exe and manifest with an offline release key and a rollback guard
+  (sign.zig); `zig build desktop-check` (ThreadSanitizer), `desktop-fuzz`,
+  deploy/desktop-shots.sh (`zig build desktop-shot --compare`: every state from pinned
+  inputs, pixel for pixel against an approved set, NAME.diff.png for a change) and
+  deploy/desktop-smoke.sh (`meiolol-desktop --self-test` on the gpu-box's Windows, ~6 s)
+  all run in the release script (architecture.md "Desktop window", accounts.md AC5)
+- HTTP server limits (what hyper and axum give): httpd.Limits per server (Your games
+  API, the crawler's proxy, serve.zig, the mocks): connection cap (503), 64 KB heads
+  (431), Content-Length body cap (413; chunked 411), malformed heads 400; idle, head
+  and handler timeouts from one watchdog task per server. Each sits behind nginx's own
+  limits; the values per server are in the code
+- ThreadSanitizer over the backend: `zig build backend-check` (par.zig, store/ahead.zig,
+  httpd's watchdog and slot table, the proxy, ratelimit, the API's keep-alive test, the
+  site pipeline's parallel load and filters) and a 90 s fake crawl of the TSan build
+  (`zig build backend-tsan`; architecture.md "Crawler"). TSan works on macOS with 0.17
+- Backend fuzzing: `zig build backend-fuzz` over Riot match and timeline JSON, compact
+  timelines, digests and gzip blobs, packs, raw HTTP through std.http.Server,
+  httpd.admit and the API, and the Your games report. Run deploy/backend-fuzz.sh [REV]
+  (a clean checkout) before a crawler, storage or API change; ~300K inputs per test,
+  2 to 45 min each on the Mac. Each fault found has a regression test
+- Fuzzing gotchas: `zig build --fuzz` exits 0 on a crash and on a test that doesn't
+  build, so the scripts fail on the log ("terminated with signal"); given several fuzz
+  tests in one run zig searches only one, so the scripts run each on its own
+  (desktop-fuzz takes -Dtest-filter); sqlite builds with -fno-sanitize-coverage (no
+  comparison hooks for C); the fuzzer checks every input for leaks, so harness state
+  lives per input
+- `net` module (src/net/, std only, imported by backend, app, mock and desktop; its
+  tests run in backend-check, desktop-check and desktop-fuzz): ratelimit.zig (governor:
+  global and per-key windows set from the server's limit and count headers, priority,
+  pacing, save/load), sign.zig (Ed25519 in text bound to a context), server.zig
+  (httpd), pinned.zig (HTTPS GET trusting one root), deadline.zig (within(io, limit,
+  func, args): a call beside a timer on Io.Select, cancelled past the limit, ~200 ms to
+  return) and client.zig (get/send on std.http.Client without fetch(), which panics on
+  a failed body read; no redirects, a body cap, ShortBody on a cut body). Limits:
+  device.signIn 20 s, update.zig manifest 30 s and each file 2 min plus 64 KB/s,
+  ddragon 60 s, Riot 30 s per try (retried), 5 min through the proxy (not retried)
 
 ## Next, by how exposed the code is
 
-1. HTTP server limits: done 23 Oct (above)
-2. Backend fuzzing: done 24 Oct (above). Could still add: a nightly run on the
-   gpu-box, the crawler's other Riot replies (league, mastery, account ids)
-3. ThreadSanitizer: done 24 Oct (above)
-4. `net` module: done 24 Oct (above). Could still add: a stall limit (bytes per
-   interval) instead of the whole-request one for big downloads; the LCU client
-   (pinned.zig) has no time limit yet, the League client being local
-5. Desktop release checks: done 24 Oct. deploy/desktop-shots.sh (`zig build desktop-shot
-   --compare`: every state from pinned inputs, pixel for pixel against an approved set,
-   NAME.diff.png for a change; renders are deterministic, a one-word change shows as 289
-   red pixels) and deploy/desktop-smoke.sh (`meiolol-desktop --self-test` on the
-   gpu-box's Windows: the files load, a lane card per role, ~6 s). The release script
-   runs both (accounts.md AC5)
+1. Backend fuzzing: a nightly run on the gpu-box; the crawler's other Riot replies
+   (league, mastery, account ids)
+2. `net`: a stall limit (bytes per interval) instead of the whole-request one for big
+   downloads; a time limit for the LCU client (pinned.zig), the League client being
+   local
 
 ## Not planned
 
