@@ -437,7 +437,6 @@ fn addFiles(site: *Site) !void {
         try files.append(arena, .{ .path = "sitemap.xml", .data = try sitemap(site) });
     }
     if (opts.static != .core) {
-        try files.appendSlice(arena, site.filter.files);
         try files.append(arena, .{ .path = stats_path, .data = site.model });
         try files.append(arena, .{ .path = "data/champions.json", .data = try championsJson(site) });
         try files.append(arena, .{ .path = tierlist.data_path, .data = try tierlist.dataFile(site) });

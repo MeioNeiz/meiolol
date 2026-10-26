@@ -1,25 +1,19 @@
-//! Champion page filters: per champion, games, wins and gold at 14 against the lane
-//! opponent, split by region, the player's rank, patch, role and opponent, as one JSON
-//! file (data/filters/<slug>.json), plus data/filters.json with the role totals every
-//! champion shares (for pick rates). The page's filter bar (static/filters.js) sums the
-//! slices picked. Counts add up, so any mix of filters needs neither a server nor a page
-//! per combination. Lane curve estimates don't add up: each view's are listed as they
-//! are, for the filters that match a view
+//! The champion page's rank filter tally: per champion, games and wins against the lane
+//! opponent by region, the player's rank, patch, role and opponent, with players per
+//! role and bans by game rank, summed into each view and rank group's figures
+//! (Made.ranked) that champrank.zig writes as the rank files
 
 const std = @import("std");
 const store = @import("store");
 const core = @import("core");
 const root = @import("root.zig");
 const html = @import("html.zig");
-const matchup = @import("matchup.zig");
 const stats = @import("../stats.zig");
 const par = @import("../par.zig");
 const partials = @import("../partials.zig");
 const tierlist = @import("tierlist.zig");
 
 const Role = core.Role;
-const Bracket = core.curvesfile.Bracket;
-const Writer = std.Io.Writer;
 
 /// Ladder tiers, lowest first; a player off the ladder when the game was stored (tier
 /// NULL) gets index tiers.len, counted only under "All (Platinum+ games)"
@@ -29,11 +23,7 @@ pub const tiers = [_][]const u8{
 /// The Rank filter's lowest option, Platinum: the tier the crawl samples from
 pub const lowest_offered = 4;
 
-/// Rank filters a curves bracket matches: all ranks, and Diamond+ (the high bracket)
-const curve_ranks = [_]struct { Bracket, []const u8 }{ .{ .all, "" }, .{ .high, "6" } };
-
 comptime {
-    std.debug.assert(std.mem.eql(u8, tiers[6], "DIAMOND") and Bracket.ofRank(6) == .high and Bracket.ofRank(5) != .high);
     std.debug.assert(std.mem.eql(u8, tiers[lowest_offered], "PLATINUM"));
 }
 
@@ -52,17 +42,7 @@ const Key = struct {
     opponent: u16,
 };
 
-const Cell = struct {
-    games: u32 = 0,
-    wins: u32 = 0,
-    /// Games with both players' gold at 14 and a frame after it (as learning.goldMap),
-    /// the difference's sum and sum of squares, for its mean and spread
-    gold_n: u32 = 0,
-    gold_sum: i64 = 0,
-    gold_sq: i64 = 0,
-};
-
-const Cells = std.AutoArrayHashMapUnmanaged(Key, Cell);
+const Cells = std.AutoArrayHashMapUnmanaged(Key, Counts);
 
 /// Players in a role, of every champion: pick rates' denominators
 const SlotKey = struct { slice: Slice, tier: u8, role: Role };
@@ -80,15 +60,9 @@ const Player = struct {
     role: Role,
     champion: u16,
     tier: u8,
-    gold14: ?i64,
 };
 
 pub const Made = struct {
-    files: []const root.File = &.{},
-    /// Patches with games, newest first: the period choices
-    patches: []const []const u8 = &.{},
-    /// Of the patch views
-    current: []const []const u8 = &.{},
     /// The rank filter's (rankFigures), by champion, view, group and role
     ranked: []const Ranked = &.{},
     /// Every champion's lane games by view, group, role and champion (roleCount):
@@ -141,7 +115,7 @@ pub const RankedPatch = struct { patch: []const u8, games: u32, wins: u32, rank:
 /// The games' matches; make reads each one's players and bans by primary key. A join
 /// ordered by match_id walks every match ever stored: with +match_id the start and patch
 /// indexes find the matches and only those are sorted. The order fixes the first-seen
-/// order of patches and the maps, so the files' byte order
+/// order of patches and the maps
 const games_sql =
     \\SELECT match_id, winning_team, game_start, patch, platform
     \\FROM matches
@@ -207,17 +181,32 @@ const Counting = struct {
 
 /// The games of the 30-day and current-patch views on every platform, valid as for
 /// stats.scan (ten players, one per team and role, a winner), for every champion. In
-/// runs of games at once, merged in game order, so the files match a single walk's
+/// runs of games at once, merged in game order, so the tally matches a single walk's
 pub fn make(site: *const root.Site, db: store.Db, opts: root.Options) !Made {
-    return makeIn(site, db, opts, runs, null);
+    return figures(site, opts, try tally(site, db, opts, runs, null));
 }
 
 /// As make, the games from the views partials
 pub fn makeFrom(site: *const root.Site, games: *const partials.Store, opts: root.Options) !Made {
-    return makeIn(site, null, opts, runs, games);
+    return figures(site, opts, try tally(site, null, opts, runs, games));
 }
 
-fn makeIn(site: *const root.Site, maybe_db: ?store.Db, opts: root.Options, run_count: usize, games_from: ?*const partials.Store) !Made {
+fn figures(site: *const root.Site, opts: root.Options, t: Tally) !Made {
+    const ranks = try rankFigures(site.arena, site, opts, t.patches, t.cells, &t.slots, &t.games, &t.bans, t.index_of);
+    return .{ .ranked = ranks.ranked, .role_counts = ranks.role_counts };
+}
+
+/// Every run's counts merged, patch indexes into `patches`
+const Tally = struct {
+    cells: []const Cells,
+    slots: Slots,
+    games: Games,
+    bans: Bans,
+    patches: []const []const u8,
+    index_of: []const ?u16,
+};
+
+fn tally(site: *const root.Site, maybe_db: ?store.Db, opts: root.Options, run_count: usize, games_from: ?*const partials.Store) !Tally {
     const a = site.arena;
     const index_of = try a.alloc(?u16, std.math.maxInt(u16) + 1);
     @memset(index_of, null);
@@ -298,13 +287,7 @@ fn makeIn(site: *const root.Site, maybe_db: ?store.Db, opts: root.Options, run_c
         for (cells, r.cells) |*into, from| {
             var cit = from.iterator();
             while (cit.next()) |e| {
-                const v = e.value_ptr.*;
-                const to = (try into.getOrPutValue(a, inGlobal(e.key_ptr.*, &global), .{})).value_ptr;
-                to.games += v.games;
-                to.wins += v.wins;
-                to.gold_n += v.gold_n;
-                to.gold_sum += v.gold_sum;
-                to.gold_sq += v.gold_sq;
+                add((try into.getOrPutValue(a, inGlobal(e.key_ptr.*, &global), .{})).value_ptr, e.value_ptr.*);
             }
         }
         var bit = r.bans.iterator();
@@ -313,34 +296,13 @@ fn makeIn(site: *const root.Site, maybe_db: ?store.Db, opts: root.Options, run_c
         r.arena = .init(gpa);
     }
 
-    const sorted = try a.dupe([]const u8, patches.items);
-    std.mem.sort([]const u8, sorted, {}, struct {
-        fn f(_: void, x: []const u8, y: []const u8) bool {
-            return stats.patchKey(x) > stats.patchKey(y);
-        }
-    }.f);
-
-    const files = try a.alloc(root.File, site.champs.len + 1);
-    {
-        var aw: Writer.Allocating = .init(a);
-        try writeMeta(&aw.writer, opts, patches.items, sorted, &slots, &games);
-        files[0] = .{ .path = "data/filters.json", .data = aw.written() };
-    }
-    for (site.champs, cells, files[1..]) |ch, *c, *f| {
-        var aw: Writer.Allocating = .init(a);
-        try writeChampion(site, &aw.writer, opts, patches.items, ch, c, &bans);
-        f.* = .{ .path = try a.print("data/filters/{s}.json", .{ch.slug}), .data = aw.written() };
-    }
-    const ranks = try rankFigures(a, site, opts, patches.items, cells, &slots, &games, &bans, index_of);
-    return .{ .files = files, .patches = sorted, .current = opts.patches, .ranked = ranks.ranked, .role_counts = ranks.role_counts };
+    return .{ .cells = cells, .slots = slots, .games = games, .bans = bans, .patches = patches.items, .index_of = index_of };
 }
 
 /// Each of `matches`' players and bans by primary key, into `run`
 fn countRun(run: *Run, db: store.Db, matches: []const Match, index_of: []const ?u16, since_ms: i64, all_platforms: []const []const u8) !void {
     var pq = try db.prepare(
-        \\SELECT team_id, position, champion_id, tier,
-        \\  CASE WHEN gold15 IS NULL THEN NULL ELSE gold14 END
-        \\FROM participants WHERE match_id = ? ORDER BY slot
+        \\SELECT team_id, position, champion_id, tier FROM participants WHERE match_id = ? ORDER BY slot
     );
     defer pq.deinit();
     var bq = try db.prepare("SELECT champion_id FROM bans WHERE match_id = ? ORDER BY team_id, pick_turn");
@@ -357,9 +319,8 @@ fn countRun(run: *Run, db: store.Db, matches: []const Match, index_of: []const ?
                 position: ?[]const u8,
                 champion: i64,
                 tier: ?[]const u8,
-                gold14: ?i64,
             });
-            game.add(r.team, r.position, r.champion, r.tier, r.gold14);
+            game.add(r.team, r.position, r.champion, r.tier);
         }
         bans.clearRetainingCapacity();
         try bq.bind(.{m.id});
@@ -376,7 +337,7 @@ fn countGames(run: *Run, games: *const partials.Store, matches: []const Match, i
         const g = m.game.?;
         var game: Game = .{};
         for (g.players) |p| {
-            game.add(p.team, games.string(p.position), p.champion, games.string(p.tier), if (p.gold15) if (p.gold14) |g14| @as(i64, g14) else null else null);
+            game.add(p.team, games.string(p.position), p.champion, games.string(p.tier));
         }
         bans.clearRetainingCapacity();
         for (g.bans) |b| try bans.append(run.arena.child_allocator, std.math.cast(u32, b.champion) orelse return error.Unrepresentable);
@@ -391,7 +352,7 @@ const Game = struct {
     rows: usize = 0,
     bad: bool = false,
 
-    fn add(g: *Game, team_id: i64, position: ?[]const u8, champion: i64, tier: ?[]const u8, gold14: ?i64) void {
+    fn add(g: *Game, team_id: i64, position: ?[]const u8, champion: i64, tier: ?[]const u8) void {
         g.rows += 1;
         if (g.n == 10) {
             g.bad = true;
@@ -414,7 +375,6 @@ const Game = struct {
             .role = role,
             .champion = @intCast(std.math.clamp(champion, 0, std.math.maxInt(u16))),
             .tier = @intCast(if (tier) |t| indexOf(&tiers, t) orelse tiers.len else tiers.len),
-            .gold14 = gold14,
         };
         g.n += 1;
     }
@@ -447,12 +407,6 @@ fn countGame(run: *Run, game: *const Game, m: Match, bans: []const u32, index_of
         }, .{});
         e.value_ptr.games += 1;
         if (p.team == winner) e.value_ptr.wins += 1;
-        if (p.gold14 != null and opp.gold14 != null) {
-            const d = p.gold14.? - opp.gold14.?;
-            e.value_ptr.gold_n += 1;
-            e.value_ptr.gold_sum += d;
-            e.value_ptr.gold_sq += d * d;
-        }
     }
     // Once per game: both teams may ban the same champion
     var banned: [10]u32 = undefined;
@@ -488,116 +442,6 @@ fn gameTier(players: *const [10]Player) u8 {
     if (n == 0) return tiers.len;
     std.mem.sort(u8, ranked[0..n], {}, std.sort.asc(u8));
     return ranked[(n - 1) / 2];
-}
-
-fn writeMeta(w: *Writer, opts: root.Options, patches: []const []const u8, sorted: []const []const u8, slots: *const Slots, games: *const Games) !void {
-    try w.writeAll("{\"platforms\":");
-    try std.json.Stringify.value(opts.all_platforms, .{}, w);
-    try w.writeAll(",\"tiers\":");
-    try std.json.Stringify.value(tiers, .{}, w);
-    try w.writeAll(",\"patches\":");
-    try std.json.Stringify.value(patches, .{}, w);
-    try w.writeAll(",\"newest\":");
-    try std.json.Stringify.value(sorted, .{}, w);
-    try w.writeAll(",\"current\":");
-    try std.json.Stringify.value(opts.patches, .{}, w);
-    try w.writeAll(",\"roles\":[");
-    for (Role.all, 0..) |r, i| {
-        if (i > 0) try w.writeByte(',');
-        try w.print("\"{s}\"", .{r.label()});
-    }
-    // Players per role: platform, patch, recent, tier, role, players
-    try w.writeAll("],\"slots\":[");
-    var it = slots.iterator();
-    var first = true;
-    while (it.next()) |e| {
-        if (!first) try w.writeByte(',');
-        first = false;
-        const k = e.key_ptr.*;
-        try w.print("[{d},{d},{d},{d},{d},{d}]", .{
-            k.slice.platform, k.slice.patch, @intFromBool(k.slice.recent), k.tier, @backingInt(k.role), e.value_ptr.*,
-        });
-    }
-    // Games by their rank (gameTier), for ban rates: platform, patch, recent, tier, games
-    try w.writeAll("],\"games\":[");
-    first = true;
-    var git = games.iterator();
-    while (git.next()) |e| {
-        if (!first) try w.writeByte(',');
-        first = false;
-        const k = e.key_ptr.*;
-        try w.print("[{d},{d},{d},{d},{d}]", .{ k.slice.platform, k.slice.patch, @intFromBool(k.slice.recent), k.tier, e.value_ptr.* });
-    }
-    try w.writeAll("]}\n");
-}
-
-fn writeChampion(site: *const root.Site, w: *Writer, opts: root.Options, patches: []const []const u8, ch: root.Champ, cells: *const Cells, bans: *const Bans) !void {
-    // Platforms and patches by index, as in data/filters.json, repeated so a cached copy
-    // of either file can't misread the other
-    try w.writeAll("{\"platforms\":");
-    try std.json.Stringify.value(opts.all_platforms, .{}, w);
-    try w.writeAll(",\"patches\":");
-    try std.json.Stringify.value(patches, .{}, w);
-    // One array per slice: platform, patch, recent, tier, role, opponent, games, wins,
-    // gold n, gold sum, gold sum of squares
-    try w.writeAll(",\"rows\":[");
-    var it = cells.iterator();
-    var first = true;
-    while (it.next()) |e| {
-        if (!first) try w.writeByte(',');
-        first = false;
-        const k = e.key_ptr.*;
-        const v = e.value_ptr.*;
-        try w.print("[{d},{d},{d},{d},{d},{d},{d},{d},{d},{d},{d}]", .{
-            k.slice.platform, k.slice.patch, @intFromBool(k.slice.recent), k.tier,     @backingInt(k.role), k.opponent,
-            v.games,          v.wins,        v.gold_n,                     v.gold_sum, v.gold_sq,
-        });
-    }
-    // Platform, patch, recent, the game's rank (gameTier), games banned in
-    try w.writeAll("],\"bans\":[");
-    first = true;
-    var bit = bans.iterator();
-    while (bit.next()) |e| {
-        const k = e.key_ptr.*;
-        if (k.champion != ch.id) continue;
-        if (!first) try w.writeByte(',');
-        first = false;
-        const g = k.game;
-        try w.print("[{d},{d},{d},{d},{d}]", .{ g.slice.platform, g.slice.patch, @intFromBool(g.slice.recent), g.tier, e.value_ptr.* });
-    }
-    // Each view's lane curve gold at 14 per role and opponent: mean, games, p10 and p90,
-    // keyed "region|period|rank" as the filter bar's values. An all-ranks entry also
-    // means the view has that matchup's page
-    try w.writeAll("],\"gold\":{");
-    first = true;
-    for (html.View.all, site.view_curves) |v, *maybe| {
-        const curves = if (maybe.*) |*c| c else continue;
-        const period = switch (v.period) {
-            .days30 => "days30",
-            .patch => if (opts.patches.len == 1) try site.arena.print("patch:{s}", .{opts.patches[0]}) else continue,
-        };
-        const region = switch (v.region) {
-            .euw => opts.platforms[0],
-            .all => "all",
-        };
-        for (curve_ranks) |cr| {
-            if (!first) try w.writeByte(',');
-            first = false;
-            try w.print("\"{s}|{s}|{s}\":[", .{ region, period, cr[1] });
-            var n: usize = 0;
-            for (Role.all) |r| for (site.champs) |other| {
-                const view = curves.get(r, cr[0], ch.id, other.id) orelse continue;
-                const i = core.curvesfile.lane_minute - 1;
-                const e = view.estimate(.gold, i);
-                const g = matchup.range(view, curves.baseline(r, cr[0]), .gold, i);
-                if (n > 0) try w.writeByte(',');
-                n += 1;
-                try w.print("[{d},{d},{d},{d},{d},{d}]", .{ @backingInt(r), other.id, e.mean, view.games(), g[0], g[1] });
-            };
-            try w.writeByte(']');
-        }
-    }
-    try w.writeAll("}}\n");
 }
 
 const Ranks = struct { ranked: []const Ranked, role_counts: []const Counts };
@@ -797,7 +641,7 @@ fn rankFigures(a: std.mem.Allocator, site: *const root.Site, opts: root.Options,
 /// the champion page (champion.zig)
 const min_opponent_share = 0.01;
 
-fn add(into: *Counts, c: Cell) void {
+fn add(into: *Counts, c: Counts) void {
     into.games += c.games;
     into.wins += c.wins;
 }
@@ -878,8 +722,7 @@ test "a game's rows, slots and bans, once per game" {
     const db = try store.schema.memory();
     defer db.close();
     // EUW1_1: champions 1-5 (Gold, blue, won) against 6-10 (Platinum, the support off
-    // the ladder), top laners' gold at 14 500 and 300; both teams ban 11. EUW1_2: nine
-    // players, left out
+    // the ladder); both teams ban 11. EUW1_2: nine players, left out
     try db.exec(
         \\INSERT INTO matches VALUES ('EUW1_1', 'riot', 'EUW1', 420, '16.20', '16.20.1', 1000, 1800, 100, 0),
         \\  ('EUW1_2', 'riot', 'EUW1', 420, '16.20', '16.20.1', 1000, 1800, 100, 0);
@@ -889,15 +732,10 @@ test "a game's rows, slots and bans, once per game" {
         for (0..players) |slot| {
             const blue = slot < 5;
             const tier: ?[]const u8 = if (slot == 9) null else if (blue) "GOLD" else "PLATINUM";
-            const gold14: ?i64 = switch (slot) {
-                0 => 500,
-                5 => 300,
-                else => null,
-            };
             try db.run(
-                \\INSERT INTO participants (match_id, slot, team_id, champion_id, position, win, tier, gold14, gold15)
-                \\VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            , .{ id, slot, @as(i64, if (blue) 100 else 200), slot + 1, Role.positions[slot % 5], @intFromBool(blue), tier, gold14, gold14 });
+                \\INSERT INTO participants (match_id, slot, team_id, champion_id, position, win, tier)
+                \\VALUES (?, ?, ?, ?, ?, ?, ?)
+            , .{ id, slot, @as(i64, if (blue) 100 else 200), slot + 1, Role.positions[slot % 5], @intFromBool(blue), tier });
         }
     }
     var champs: [11]root.Champ = undefined;
@@ -920,34 +758,32 @@ test "a game's rows, slots and bans, once per game" {
     site.arena = a;
     site.champs = &champs;
     site.view_curves = &no_curves;
-    const made = try make(&site, db, opts);
-    try std.testing.expectEqual(champs.len + 1, made.files.len);
-    const file = struct {
-        fn f(files: []const root.File, path: []const u8) []const u8 {
-            for (files) |x| if (std.mem.eql(u8, x.path, path)) return x.data;
-            return "";
+    const t = try tally(&site, db, opts, runs, null);
+    const slice: Slice = .{ .platform = 0, .patch = 0, .recent = true };
+    const counts = struct {
+        fn f(c: Cells, tier: u8, r: Role, opp: u16) !Counts {
+            try std.testing.expectEqual(1, c.count());
+            return c.get(.{ .slice = slice, .tier = tier, .role = r, .opponent = opp }) orelse error.TestUnexpectedResult;
         }
     }.f;
-    const head = "{\"platforms\":[\"EUW1\"],\"patches\":[\"16.20\"],";
-    // Platform, patch, recent, tier, role, opponent, games, wins, gold n, sum, squares
-    try std.testing.expectEqualStrings(head ++ "\"rows\":[[0,0,1,3,0,6,1,1,1,200,40000]],\"bans\":[],\"gold\":{}}\n", file(made.files, "data/filters/c1.json"));
-    try std.testing.expectEqualStrings(head ++ "\"rows\":[[0,0,1,4,0,1,1,0,1,-200,40000]],\"bans\":[],\"gold\":{}}\n", file(made.files, "data/filters/c6.json"));
-    try std.testing.expectEqualStrings(head ++ "\"rows\":[[0,0,1,10,4,5,1,0,0,0,0]],\"bans\":[],\"gold\":{}}\n", file(made.files, "data/filters/c10.json"));
+    // Tier (Gold 3, Platinum 4, off the ladder 10), role, lane opponent
+    try std.testing.expectEqual(Counts{ .games = 1, .wins = 1 }, try counts(t.cells[0], 3, .top, 6));
+    try std.testing.expectEqual(Counts{ .games = 1, .wins = 0 }, try counts(t.cells[5], 4, .top, 1));
+    try std.testing.expectEqual(Counts{ .games = 1, .wins = 0 }, try counts(t.cells[9], 10, .utility, 5));
+    try std.testing.expectEqual(0, t.cells[10].count());
+    try std.testing.expectEqual(10, t.slots.count());
+    for (Role.all) |r| {
+        try std.testing.expectEqual(1, t.slots.get(.{ .slice = slice, .tier = 3, .role = r }));
+        try std.testing.expectEqual(1, t.slots.get(.{ .slice = slice, .tier = if (r == .utility) 10 else 4, .role = r }));
+    }
     // Banned by both teams: one game, of Gold rank (the players' lower median)
-    try std.testing.expectEqualStrings(head ++ "\"rows\":[],\"bans\":[[0,0,1,3,1]],\"gold\":{}}\n", file(made.files, "data/filters/c11.json"));
-    const meta = file(made.files, "data/filters.json");
-    for ([_][]const u8{
-        "\"roles\":[\"top\",\"jungle\",\"mid\",\"bot\",\"support\"]",
-        "\"slots\":[[0,0,1,3,0,1],[0,0,1,3,1,1],[0,0,1,3,2,1],[0,0,1,3,3,1],[0,0,1,3,4,1]," ++
-            "[0,0,1,4,0,1],[0,0,1,4,1,1],[0,0,1,4,2,1],[0,0,1,4,3,1],[0,0,1,10,4,1]]",
-        "\"games\":[[0,0,1,3,1]]}",
-    }) |want| if (std.mem.find(u8, meta, want) == null) {
-        std.debug.print("data/filters.json lacks {s}:\n{s}\n", .{ want, meta });
-        return error.TestUnexpectedResult;
-    };
+    try std.testing.expectEqual(1, t.games.count());
+    try std.testing.expectEqual(1, t.games.get(.{ .slice = slice, .tier = 3 }));
+    try std.testing.expectEqual(1, t.bans.count());
+    try std.testing.expectEqual(1, t.bans.get(.{ .game = .{ .slice = slice, .tier = 3 }, .champion = 11 }));
 }
 
-test "runs on their own connections make the files one walk makes" {
+test "runs on their own connections tally as one walk does" {
     const gpa = std.testing.allocator;
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
@@ -978,11 +814,10 @@ test "runs on their own connections make the files one walk makes" {
                     2 => "DIAMOND",
                     else => null,
                 };
-                const gold14: ?i64 = if ((g + slot) % 3 == 0) null else @intCast(4000 + g * 13 + slot * 101);
                 try db.run(
-                    \\INSERT INTO participants (match_id, slot, team_id, champion_id, position, win, tier, gold14, gold15)
-                    \\VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                , .{ id, slot, @as(i64, if (blue) 100 else 200), (g * 3 + slot * 7) % 11 + 1, Role.positions[slot % 5], @intFromBool(blue == (g % 2 == 0)), tier, gold14, gold14 });
+                    \\INSERT INTO participants (match_id, slot, team_id, champion_id, position, win, tier)
+                    \\VALUES (?, ?, ?, ?, ?, ?, ?)
+                , .{ id, slot, @as(i64, if (blue) 100 else 200), (g * 3 + slot * 7) % 11 + 1, Role.positions[slot % 5], @intFromBool(blue == (g % 2 == 0)), tier });
             }
         }
     }
@@ -1006,14 +841,20 @@ test "runs on their own connections make the files one walk makes" {
     site.arena = a;
     site.champs = &champs;
     site.view_curves = &no_curves;
-    const one = try makeIn(&site, memory_db, opts, 1, null);
-    const several = try makeIn(&site, file_db, opts, runs, null);
-    try std.testing.expectEqual(one.files.len, several.files.len);
-    for (one.files, several.files) |x, y| {
-        try std.testing.expectEqualStrings(x.path, y.path);
-        try std.testing.expectEqualStrings(x.data, y.data);
+    const one = try tally(&site, memory_db, opts, 1, null);
+    const several = try tally(&site, file_db, opts, runs, null);
+    for (one.patches, several.patches) |x, y| try std.testing.expectEqualStrings(x, y);
+    for (one.cells, several.cells) |x, y| {
+        try std.testing.expectEqualSlices(Key, x.keys(), y.keys());
+        try std.testing.expectEqualSlices(Counts, x.values(), y.values());
     }
-    try std.testing.expect(std.mem.find(u8, one.files[1].data, "\"rows\":[[") != null);
+    try std.testing.expectEqualSlices(SlotKey, one.slots.keys(), several.slots.keys());
+    try std.testing.expectEqualSlices(u32, one.slots.values(), several.slots.values());
+    try std.testing.expectEqualSlices(BanKey, one.bans.keys(), several.bans.keys());
+    try std.testing.expectEqualSlices(u32, one.bans.values(), several.bans.values());
+    const made = try figures(&site, opts, several);
+    try std.testing.expect(made.ranked.len > 0);
+    try std.testing.expectEqualDeep(made, try figures(&site, opts, one));
 }
 
 test "rank in role at a rank: rare picks out, then by win rate" {

@@ -318,12 +318,7 @@ test "fixture games to stats, curves and the website" {
         .{ "patch/build/darius-top.html", &.{ "<div class=\"bpanel\"><div class=\"bp-bar\">", "<div class=\"bc runes\">", "<th>Levels 1 to 3</th>", "<th>Levels 1 to 18</th>", "<th>Fourth finished item</th>", ">Minute</th>", "<div class=\"rpages\">", "<div class=\"rpc thin\"><span class=\"tags\"><span class=\"tag mp\">most played</span></span><div class=\"rp\">", "<div class=\"rx\">", "<span class=\"rc on\" title=\"Conqueror: 3 games, 100.0%\">", "<span class=\"rc off\" title=\"Adaptive force: 0 games, 0.0%\">", "Most played rune pages first. Share of 3 players.", "<span class=\"key hw\"></span> highest win rate, adjusted for few games. <a href=\"../../method.html#builds\">How builds are counted</a></p>", "<h2>Spells and items</h2>\n<div class=\"bgrid\">" } },
         .{ "build/darius-top.html", &.{ "ranked solo/duo in EUW, last 30 days, Platinum IV and up. 3 games.", "<title>Darius Top build: runes, items, skill order, last 30 days | meiolol</title>" } },
         .{ "champions.html", &.{"<a href=\"build/index.html\">Builds, last 30 days</a>."} },
-        // Filters: the champion's counts by region, rank, patch, role and opponent, its
-        // bans and each view's curve gold, the players per role for pick rates, and the
-        // bar that sums them, written as the root view. One page per champion: the other
-        // views link to it with their filters, and its switches set them
-        .{ "data/filters/darius.json", &.{ "\"platforms\":[\"EUW1\"]", "\"rows\":[[", "\"bans\":[", "\"gold\":{\"EUW1|days30|\":[" } },
-        .{ "data/filters.json", &.{ "\"roles\":[\"top\"", "\"slots\":[[" } },
+        // One page per champion: the other views link to it with their view
         .{ "all/patch/role/top.html", &.{"href=\"../../../champion/darius.html?region=all&amp;period=patch#role=top\""} },
         .{ "all/matchup/top/mordekaiser-vs-darius.html", &.{"href=\"../../../champion/darius.html?region=all\""} },
         // Lane curves: the estimate (curvefit.zig) on the page, k on the method page
@@ -568,7 +563,7 @@ test "fixture games to stats, curves and the website" {
         for (try site.pagePaths(&s)) |p| try testing.expect(!std.mem.startsWith(u8, p, "matchup/") or std.mem.eql(u8, p, "matchup/index.html"));
         try testing.expect(try loaded.get(arena, "matchup/top/mordekaiser-vs-darius.html") != null);
     }
-    for ([_][]const u8{ "champion/nobody.html", "all/champion/darius.html", "matchup/top/darius-vs-darius.html", "matchup/mid/darius-vs-mordekaiser.html", "all/daily.html", "patch/learn.html", "patch/", "nosuch/index.html", "data/filters/nobody.json", "data/your-example.json" }) |path| {
+    for ([_][]const u8{ "champion/nobody.html", "all/champion/darius.html", "matchup/top/darius-vs-darius.html", "matchup/mid/darius-vs-mordekaiser.html", "all/daily.html", "patch/learn.html", "patch/", "nosuch/index.html", "data/your-example.json" }) |path| {
         try testing.expectEqual(null, try loaded.get(arena, path));
     }
 

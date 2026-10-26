@@ -1,7 +1,7 @@
 //! Scope chip: what a block's numbers cover, in the subbar's words, "EUW · 30 days ·
 //! Plat+". A dimension the block doesn't follow is marked against the page's picks
-//! ("Plat+, not by rank"); on champion pages static/filters.js markChips redoes it for
-//! each pick. Plain data in, markup out (no Site), so it can move into a ui.zig
+//! ("Plat+, not by rank"). Plain data in, markup out (no Site), so it can move into a
+//! ui.zig
 
 const std = @import("std");
 const html = @import("html.zig");
@@ -9,10 +9,9 @@ const tpl = html.tpl;
 
 const Writer = std.Io.Writer;
 
-/// One dimension: `key` as filters.js picks it (region "EUW1" or "all", period
-/// "days30" or "patch:16.21", rank "" or a tier index as html.ranks), any other key for
-/// a scope no pick names ("every": every patch), or `follows` when the block is redrawn
-/// for each pick (filters.js writes the pick's text)
+/// One dimension: `key` as a pick names it (region "EUW1" or "all", period "days30" or
+/// "patch:16.21", rank "" or a tier index as html.ranks), any other key for a scope no
+/// pick names ("every": every patch), or `follows` when the block follows every pick
 pub const Dim = struct {
     key: []const u8,
     text: []const u8,

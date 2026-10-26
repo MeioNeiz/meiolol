@@ -15,32 +15,23 @@ view so shared pages (Daily Draft, Learn, Your games, legal: at the root only, m
 from the EUW patch view; learn.js reads patch/data/stats.bin) link back into it.
 
 Champion pages are the exception: one per champion at the site root (champion/<slug>.html,
-written from the root view), with a filter bar for region (every platform), rank (tier
-and up), period (30 days or a patch) and min opponent games. filters.zig writes
-data/filters/<slug>.json (games, wins and gold at 14 per region, patch, 30-day flag,
-rank, role and opponent; bans; each view's curve gold at 14) and data/filters.json
-(players per role, for pick rates; games by rank, for ban rates). A ban counts under
-its game's rank, the median ladder tier of its players: Riot's ban order doesn't say
-reliably which player banned. static/filters.js sums the picked slices and redraws
-the tiles, opponent table, early-data note and header switches. Blocks made per view
-(players' win rates, builds strip, how hard to pick up, the pool section, the patch
-"since" line) are written once per view in a `data-by-view` group (champion.zig
-variant; the root view's from Site.by_view, the since line's every-region one from
-Site.patchday_all) and filters.js shows the picks' view's; a single platform takes all
-regions', the rank pick changes none of them. The pool section's pool is its region's
-over every patch (mastery is lifetime), its "harder to pick up" notes its period's; the
-since line is whole patches, so one per region. Gold at 14 is the
-curve's estimate when the filters are a view (any rank, or Diamond+), else the plain
-average. Other views link in with their filters in the query (html.View.query:
-?region=all&period=patch), and the filters point the nav links into the matching view.
+written from the root view): ui.champpage's three islands (Top, Build, More, each its
+own ui-*.wasm) with a toolbar for region, period and rank, kept in the fragment
+(region=, period=, rank=). Each view's data files sit under its dir
+(data/champion/<slug>{,-build,-more}.bin); a rank pick above Platinum+ fetches
+<slug>{,-build,-more}-rank{,-patch,-all,-all-patch}.bin (champrank.zig, from
+filters.zig's tally of every view's games by region, rank, patch, role and opponent).
+A ban counts under its game's rank, the median ladder tier of its players: Riot's ban
+order doesn't say reliably which player banned. Cards that stay Platinum+ under a rank
+pick say so. Other views link in with their view in the query (html.View.query:
+?region=all&period=patch), folded into the fragment at start.
 
 Scope chips (site/scope.zig Chip, J23): every block on the champion, matchup, build and
 pool pages says the region, period and rank its numbers are from in the subbar's words
 ("EUW · 30 days · Plat+"); a dimension the block doesn't follow is marked against the
 page's picks ("Plat+, not by rank", "Patch 16.21, not the 30 days picked"). Each chip
-carries its keys (data-region, data-period, data-rank; "*" for a block filters.js redraws
-for every pick) and on champion pages filters.js markChips redoes the marks per pick.
-Matchup and build pages: one chip in the hero for the page, its own on a block that
+carries its keys (data-region, data-period, data-rank; "*" for a block that follows
+every pick). Matchup and build pages: one chip in the hero for the page, its own on a block that
 differs (the matchup builds cards are the region's patch). Plain data in, markup out, so
 it can move into the frontend rework's ui.zig.
 
@@ -48,9 +39,7 @@ it can move into the frontend rework's ui.zig.
 lane" for the production review (docs/concept.md "Application wording": no tier list,
 draft helper, best pick or recommend wording): landing page, matchup index and pages,
 Daily Draft, a page per role (role/<role>.html, most played first, no tier grades), a
-page per champion (lane opponents and teammates by edge, lane curve links; a min games
-selector, default 400 plus clearing chance, lower shows thinner pairs greyed: each card
-carries the top 6 for every choice, hidden unless chosen), method,
+page per champion (above), method,
 download (desktop app, in development), privacy, terms, robots.txt, optional riot.txt,
 data/stats.bin (for the app) + data/champions.json, meiolol.wasm (core.recommend in the
 browser, for pages that score drafts). Champion icons hotlink Data Dragon. Edges use the
