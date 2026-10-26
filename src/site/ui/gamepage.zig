@@ -224,7 +224,7 @@ pub const GamePage = struct {
             .data_stamp = p.stamp,
         }, .{
             gamestrip.view(h, games.items, .{ .all = p.all }),
-            gamehead.view(h, g, p.data.champs),
+            gamehead.view(h, g, p.data.champs, p.data.arts),
             card.view(h, .{ .id = graph_id }, &.{
                 h.div(.{ .class = "ctl" }, .{ p.tl.modes(h), p.chips(h), p.stepper(h) }),
                 p.tl.view(h),
