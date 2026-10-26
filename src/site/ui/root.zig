@@ -38,6 +38,9 @@ pub const champ = @import("champ.zig");
 pub const rolepicker = @import("rolepicker.zig");
 pub const filterbar = @import("filterbar.zig");
 pub const champsearch = @import("champsearch.zig");
+pub const champhead = @import("champhead.zig");
+pub const matchbrief = @import("matchbrief.zig");
+pub const champlist = @import("champlist.zig");
 pub const site = @import("site.zig");
 pub const table = @import("table.zig");
 pub const chart = @import("chart.zig");
@@ -55,7 +58,7 @@ pub const buildpanel = @import("buildpanel.zig");
 pub const components = .{};
 
 /// Every component, in the gallery's order
-pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, role, champ, site, rolepicker, filterbar, champsearch, table, chart, dotplot, trend, histogram, lane, art, skillgrid, itempath, runetree, buildpanel };
+pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, role, champ, site, rolepicker, filterbar, champsearch, champhead, matchbrief, champlist, table, chart, dotplot, trend, histogram, lane, art, skillgrid, itempath, runetree, buildpanel };
 
 pub const H = tree.H;
 pub const N = tree.N;

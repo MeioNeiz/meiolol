@@ -18,7 +18,7 @@ pub const Champ = struct {
     src: []const u8,
 };
 
-pub const Px = enum { @"20", @"24", @"32", @"40", @"48" };
+pub const Px = enum { @"20", @"24", @"32", @"40", @"48", @"56" };
 
 pub const State = enum { normal, thin, banned, dead, empty, add };
 
@@ -34,6 +34,8 @@ pub const Opts = struct {
     named: bool = true,
     /// What an empty seat stands for ("Hidden seat")
     label: ?tree.Text = null,
+    /// Above the fold (a page's own champion): not lazy
+    eager: bool = false,
 };
 
 /// `c` null: an empty seat
@@ -46,7 +48,7 @@ pub fn view(h: *H, c: ?Champ, o: Opts) N {
         .alt = if (o.named) x.name else "",
         .width = px,
         .height = px,
-        .loading = "lazy",
+        .loading = if (o.eager) null else "lazy",
     }) else null;
     const empty = c == null;
     return h.span(.{
@@ -79,6 +81,7 @@ pub const css =
     \\  .c-champ[data-s="32"] { --sz: var(--icon-m); }
     \\  .c-champ[data-s="40"] { --sz: 40px; }
     \\  .c-champ[data-s="48"] { --sz: var(--icon-l); }
+    \\  .c-champ[data-s="56"] { --sz: 56px; }
     \\  .c-champ[data-state="thin"] > img { opacity: 0.45; }
     \\  .c-champ[data-state="banned"] > img { opacity: 0.85; filter: saturate(0.35); }
     \\  .c-champ[data-state="banned"]::after { content: ""; position: absolute; inset: 0;
@@ -118,8 +121,8 @@ pub fn gallery(g: *Gallery) void {
     const h = g.h;
     const ahri = demo("Ahri", "Ahri");
     var sizes = h.list();
-    for ([_]Px{ .@"48", .@"40", .@"32", .@"24", .@"20" }) |p| sizes.add(view(h, ahri, .{ .px = p }));
-    g.add("48, 40, 32, 24, 20", h.div(.{ .class = "g-row" }, .{sizes.done()}));
+    for ([_]Px{ .@"56", .@"48", .@"40", .@"32", .@"24", .@"20" }) |p| sizes.add(view(h, ahri, .{ .px = p }));
+    g.add("56, 48, 40, 32, 24, 20", h.div(.{ .class = "g-row" }, .{sizes.done()}));
     g.add("role, sides, you and level", h.div(.{ .class = "g-row" }, .{
         view(h, ahri, .{ .px = .@"40", .role = .mid }),
         view(h, demo("Leblanc", "LeBlanc"), .{ .px = .@"40", .side = .us }),
