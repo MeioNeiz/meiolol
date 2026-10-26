@@ -34,7 +34,8 @@ patch moves numbers), lab-frontier.md (models); findings land in docs/learned.md
 Ranked by harm: outages and data risk, then what Riot's reviewers see, then what brings
 players back.
 
-1. Storage: Hetzner BX11 and the rolling window (Jacob orders), gpu-box WSL
+1. Storage and hosts: everything moves to the Essex VM (docs/plan/vm.md, VM0 first; the
+   box fills in ~3 weeks from 26 Oct), replacing the Hetzner BX11 order; gpu-box WSL
    compaction: ops.md "Storage and hosts"
 2. Front end from the ground up (J29, J30): one UI for the site and the desktop. Page
    plans and the foundation in docs/plan/ui/, the stack in docs/plan/ui/stack.md,
@@ -91,6 +92,7 @@ draft's "Rammus into high AD/AP" check.
 - docs/plan/libraries.md: our Zig pieces toward Rust-crate quality, with fuzzing and
   ThreadSanitizer outside ci
 - docs/plan/ops.md: crawler speed, traffic, storage and hosts, hosting reference
+- docs/plan/vm.md: moving off Oracle onto the Essex VM, steps VM0-VM8
 - docs/plan/decisions.md: Jacob's decisions (J, Q, G ids), open decisions, ruled out
 - docs/plan/how-we-work.md: sessions, team size, unattended runs
 - docs/backlog.md: older next steps by area; check before acting, move what you pick
