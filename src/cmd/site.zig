@@ -151,7 +151,7 @@ pub const usage_site =
     \\                               there that this binary would make the same way
     \\                               (a deploy's round), load only the rest
     \\              --no-partials    with --views: read every game from the database,
-    \\                               not data/partials (docs/architecture.md "Views
+    \\                               not data/partials (docs/arch-site.md "Views
     \\                               partials"), which is left alone
     \\              --patch-games    print the EUW patch the site would show and its
     \\                               game count (no site; deploy/web-loop.sh)

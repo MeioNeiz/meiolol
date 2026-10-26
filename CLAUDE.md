@@ -50,7 +50,7 @@ docs/plan.md "Now". Read it first.
   ssh), `job status|wait NAME`. Waiting for a push: `deploy/box.sh wait-deployed [REV]
   [--live]` (exits 0, 1 failed, 3 timeout). Hand-edited Daily or Learn
   files: `deploy/box.sh web rebuild` (a forced round keeps the old ones)
-- Website: https://meio.lol (DNS on Cloudflare: docs/architecture.md; mail to @meio.lol:
+- Website: https://meio.lol (DNS on Cloudflare: docs/arch-site.md; mail to @meio.lol:
   deploy/mail.sh), static nginx and the Your games API on the jomify server (`ssh
   jomify`; it also runs jomove, an unrelated house-moving app: leave its config alone).
   The box builds and uploads on new data: `deploy/box.sh web start
@@ -88,7 +88,8 @@ docs/plan.md "Now". Read it first.
 Docs say what is true now; how it got there goes in the commit message. Budgets and
 guards: .claude/doc-rules.json, skill context-review.
 
-- Layout, modules, storage, model file format: docs/architecture.md
+- Layout, modules, storage, model file format: docs/architecture.md; derived stats,
+  website, app: docs/arch-stats.md, arch-site.md, arch-app.md
 - What we have learnt about the data (plain findings, read first): docs/learned.md. Add a
   line when a model or data check gives a final result
 - Draft model quality on held-out games (`meiolol eval`): docs/model.md, the lab record

@@ -199,7 +199,7 @@ that colours it are four separate files with no declared contract.
 - Build: none. `@embedFile` and serve. CI: `node --check` per file (build.zig:159), a
   syntax check only. No lint, no type check, no run.
 - Dev loop is good: `meiolol dev` serves CSS/JS from disk and reloads on edit; a Zig
-  template edit is ~20 s (architecture.md "Website").
+  template edit is ~20 s (arch-site.md "Website").
 
 ## 5. Tests
 
@@ -258,7 +258,7 @@ Impossible now:
 
 - `meiolol-app` is a CLI (suggest, watch, session, get, cards); the window is
   meiolol-desktop: dvui (immediate-mode Zig GUI, pinned PR #1012), dx11 on Windows, SDL3
-  for the Mac dev window, raster backend for `desktop-shot` (architecture.md "Desktop
+  for the Mac dev window, raster backend for `desktop-shot` (arch-app.md "Desktop
   window").
 - UI code: src/desktop/ui.zig (278 lines) draws src/lanecard.zig's data. Theme
   `adwaita_dark` (ui.zig:52); its own ahead/behind colours `#4fb37a`/`#d0605e`

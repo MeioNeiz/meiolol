@@ -1,4 +1,4 @@
-//! Views partials (data/partials, docs/architecture.md "Views partials"): compact copies of
+//! Views partials (data/partials, docs/arch-site.md "Views partials"): compact copies of
 //! what `site --views` reads from the database, kept between writes so a write reads
 //! only what changed since the last one.
 //!

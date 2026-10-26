@@ -1,7 +1,7 @@
 {
   "_why": "Budgets for the context-review skill (~/.claude/skills/context-review): its sweep, the PostToolUse hook and deploy/commit.sh's gate all read this file, so a number lives once",
   "classes": [
-    { "id": "root", "match": "^CLAUDE(\\.local)?\\.md$", "budget": 120, "kind": "always loaded" },
+    { "id": "root", "match": "(^|/)CLAUDE(\\.local)?\\.md$", "budget": 120, "kind": "always loaded" },
     { "id": "record", "match": "^docs/model\\.md$", "budget": null, "shape": false,
       "timeline": false, "twin": false, "pointer": false,
       "kind": "lab record: dated sections, grep by heading" },
