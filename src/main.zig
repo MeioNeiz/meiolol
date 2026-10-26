@@ -313,6 +313,14 @@ pub fn buildsPath(arena: std.mem.Allocator, data_dir: []const u8, chosen: []cons
     return arena.print("{s}/export/{s}builds-{s}.json", .{ data_dir, allPrefix(every), label });
 }
 
+/// A builds file's rank filter twin: builds-16.21.json at Emerald+ is
+/// builds-16.21-emerald.json
+pub fn rankBuildsPath(arena: std.mem.Allocator, path: []const u8, tier: []const u8) ![]const u8 {
+    std.debug.assert(std.mem.endsWith(u8, path, ".json"));
+    const low = try std.ascii.allocLowerString(arena, tier);
+    return arena.print("{s}-{s}.json", .{ path[0 .. path.len - ".json".len], low });
+}
+
 pub fn allPrefix(every: bool) []const u8 {
     return if (every) "all-" else "";
 }

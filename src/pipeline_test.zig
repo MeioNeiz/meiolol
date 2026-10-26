@@ -921,12 +921,16 @@ test "fixture games to builds: EUW and every region, patch and recent, from one 
     try fillGames(arena, db, 40, true);
     const both: []const []const u8 = &.{ "EUW1", "NA1" };
     const o: builds.Options = .{ .patches = &.{patch}, .platforms = both, .min_tier = null };
-    // An hour apart: the third set (a 30-day view's) from game 20, any patch
-    var each: [3]builds.Builder = undefined;
+    try db.exec("UPDATE participants SET tier = CASE WHEN slot < 3 THEN 'MASTER' WHEN slot < 6 THEN 'EMERALD' ELSE 'PLATINUM' END");
+    // An hour apart: the third set (a 30-day view's) from game 20, any patch; the last
+    // two the rank filter's (EUW at Emerald+ and Master+)
+    var each: [5]builds.Builder = undefined;
     try builds.buildEach(gpa, io, db, &build_data, o, &.{
         .{ .slice = .{ .platforms = &.{"EUW1"}, .patches = &.{patch} } },
         .{ .slice = .{ .platforms = both, .patches = &.{patch} } },
         .{ .slice = .{ .platforms = both, .since_ms = start_ms + 20 * std.time.ms_per_hour }, .matchups = false },
+        .{ .slice = .{ .platforms = &.{"EUW1"}, .patches = &.{patch} }, .matchups = false, .min_tier = "EMERALD" },
+        .{ .slice = .{ .platforms = &.{"EUW1"}, .patches = &.{patch} }, .matchups = false, .min_tier = "MASTER" },
     }, &each);
     defer for (&each) |*b| b.deinit();
     try testing.expectEqual(30, each[0].games);
@@ -941,6 +945,17 @@ test "fixture games to builds: EUW and every region, patch and recent, from one 
         const a = try std.json.Stringify.valueAlloc(arena, try alone.file(arena, &build_data, patch, "", 10), .{});
         const e = try std.json.Stringify.valueAlloc(arena, try b.file(arena, &build_data, patch, "", 10), .{});
         try testing.expectEqualStrings(a, e);
+    }
+    // Each rank set as a run at that floor alone, without matchups
+    for (each[3..], [_][]const u8{ "EMERALD", "MASTER" }, [_]u32{ 6, 3 }) |b, tier, per_game| {
+        var alone = try builds.build(gpa, io, db, &build_data, .{ .patches = &.{patch}, .platforms = &.{"EUW1"}, .min_tier = tier });
+        defer alone.deinit();
+        const a = try std.json.Stringify.valueAlloc(arena, try alone.file(arena, &build_data, patch, tier, 10), .{});
+        const f = try b.file(arena, &build_data, patch, tier, 10);
+        try testing.expectEqualStrings(a, try std.json.Stringify.valueAlloc(arena, f, .{}));
+        var players: u32 = 0;
+        for (f.builds) |x| players += x.games;
+        try testing.expectEqual(30 * per_game, players);
     }
     // `site --patch-games`, which the web loop decides on
     try testing.expectEqual(30, try stats.countGames(db, &.{patch}, &.{"EUW1"}));

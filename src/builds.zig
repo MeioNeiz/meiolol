@@ -58,6 +58,9 @@ pub const Kind = enum {
 };
 
 pub const max_values = 8;
+/// The rank filter's floors above Platinum (site html.ranks): `builds --site` writes a
+/// file per view for each
+pub const rank_tiers = [_][]const u8{ "EMERALD", "DIAMOND", "MASTER" };
 /// What `builds --site` writes per lane opponent: matchups with this many games, this
 /// many options per kind
 pub const min_matchup_games = 300;
@@ -794,6 +797,9 @@ pub const Set = struct {
     slice: stats.Slice,
     /// Per lane opponent too (Options.min_matchup_games)
     matchups: bool = true,
+    /// Lowest tier counted in this set, in place of Options.min_tier: the rank filter's
+    /// builds (Emerald+, Diamond+, Master+) in the pass that makes Platinum+
+    min_tier: ?[]const u8 = null,
 };
 
 /// As build, one builder per set, every timeline read once: EUW's and every region's
@@ -829,6 +835,8 @@ pub fn buildEach(
     const platform_json = try std.json.Stringify.valueAlloc(gpa, o.platforms, .{});
     defer gpa.free(platform_json);
     const floor: ?usize = if (o.min_tier) |t| tierIndex(t) orelse return error.UnknownTier else null;
+    var floors: [max_sets]?usize = undefined;
+    for (sets, floors[0..sets.len]) |set, *f| f.* = if (set.min_tier) |t| tierIndex(t) orelse return error.UnknownTier else floor;
 
     const where =
         \\WHERE (m.patch IN (SELECT value FROM json_each(?)) OR m.game_start >= ?)
@@ -867,7 +875,7 @@ pub fn buildEach(
     defer arena_state.deinit();
     var all: [timeline.max_participants]Picks = undefined;
     // One game's players, kept until the loop has seen every lane opponent
-    const Row = struct { p: Player, team: bool, k: ?Picks, counted: bool };
+    const Row = struct { p: Player, team: bool, k: ?Picks, rank: ?usize };
     var game: [timeline.max_participants]Row = undefined;
     while (try q.step()) {
         ahead.next();
@@ -914,11 +922,6 @@ pub fn buildEach(
             });
             const role = Role.fromLcu(r.position) orelse continue;
             if (n == game.len) break;
-            // Below the floor: not counted, still someone's lane opponent
-            const counted = if (floor) |f| blk: {
-                const rank = if (r.tier) |t| tierIndex(t) else null;
-                break :blk rank != null and rank.? <= f;
-            } else true;
             const p: Player = .{
                 .champion = r.champion_id,
                 .role = role,
@@ -931,24 +934,31 @@ pub fn buildEach(
                 .shards = .{ idOf(r.shard_offense), idOf(r.shard_flex), idOf(r.shard_defense) },
             };
             const k: ?Picks = if (have_picks and r.slot < timeline.max_participants) all[r.slot] else null;
-            game[n] = .{ .p = p, .team = r.slot < 5, .k = k, .counted = counted };
+            game[n] = .{ .p = p, .team = r.slot < 5, .k = k, .rank = if (r.tier) |t| tierIndex(t) else null };
             n += 1;
         }
         for (game[0..n], 0..) |*g, i| {
-            if (!g.counted) continue;
+            // Below a set's floor: not counted there, still someone's lane opponent
+            var counted: [max_sets]bool = undefined;
+            var any = false;
+            for (floors[0..out.len], counted[0..out.len], in[0..out.len]) |f, *c, yes| {
+                c.* = yes and if (f) |lowest| g.rank != null and g.rank.? <= lowest else true;
+                any = any or c.*;
+            }
+            if (!any) continue;
             var found: usize = 0;
             for (game[0..n], 0..) |h, j| if (i != j and h.team != g.team and h.p.role == g.p.role) {
                 g.p.opponent = h.p.champion;
                 found += 1;
             };
             if (found != 1) g.p.opponent = 0;
-            for (out, in[0..out.len]) |*b, yes| if (yes) try b.addPlayer(g.p, g.k, d);
+            for (out, counted[0..out.len]) |*b, yes| if (yes) try b.addPlayer(g.p, g.k, d);
         }
     }
 }
 
-/// Sets one buildEach pass feeds
-const max_sets = 4;
+/// Sets one buildEach pass feeds: `builds --site`'s four views at four rank floors
+pub const max_sets = 16;
 
 /// NULL or out of range: 0, none
 fn idOf(v: ?i64) u32 {

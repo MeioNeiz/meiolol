@@ -168,7 +168,9 @@ pub const usage_builds =
     \\                               (all-builds-... with --platform all)
     \\              --site           the files the site reads, in one pass over the
     \\                               timelines: EUW and every platform, the patch and
-    \\                               the last 30 days (no matchups), default paths
+    \\                               the last 30 days (no matchups), default paths;
+    \\                               each again at Emerald+, Diamond+ and Master+
+    \\                               (builds-16.21-emerald.json, no matchups)
     \\
 ;
 
@@ -205,7 +207,7 @@ pub fn cmdBuilds(c: *Cmd) !u8 {
     const recent_ms = std.Io.Clock.real.now(io).toMilliseconds() - recent_days * std.time.ms_per_day;
     const recent_label = std.fmt.comptimePrint("last {d} days", .{recent_days});
     const Target = struct { set: builds.Set, label: []const u8, path: []const u8 };
-    const targets: []const Target = if (site_files) &.{
+    const views: []const Target = if (site_files) &.{
         .{ .set = .{ .slice = .{ .platforms = &.{"EUW1"}, .patches = o.patches } }, .label = label, .path = try buildsPath(c.arena, c.data_dir, o.patches, false) },
         .{ .set = .{ .slice = .{ .platforms = every, .patches = o.patches } }, .label = label, .path = try buildsPath(c.arena, c.data_dir, o.patches, true) },
         // The champion pages' 30-day views; matchup pages show the patch's
@@ -214,12 +216,22 @@ pub fn cmdBuilds(c: *Cmd) !u8 {
     } else &.{
         .{ .set = .{ .slice = .{ .platforms = o.platforms, .patches = o.patches } }, .label = label, .path = out orelse try buildsPath(c.arena, c.data_dir, o.patches, g.every_platform) },
     };
+    // The site's views again at each higher rank filter, no matchups (rank_tiers)
+    var all_targets: std.ArrayList(Target) = .empty;
+    try all_targets.appendSlice(c.arena, views);
+    if (site_files) for (builds.rank_tiers) |tier| for (views) |v| {
+        var set = v.set;
+        set.matchups = false;
+        set.min_tier = tier;
+        try all_targets.append(c.arena, .{ .set = set, .label = v.label, .path = try main.rankBuildsPath(c.arena, v.path, tier) });
+    };
+    const targets = all_targets.items;
     // Names and icons from the patch's Data Dragon: an item gone since has none
     const data = try ddragon.buildData(gpa, c.arena, io, o.patches[0]);
 
-    var sets: [4]builds.Set = undefined;
+    var sets: [builds.max_sets]builds.Set = undefined;
     for (targets, 0..) |t, i| sets[i] = t.set;
-    var bs: [4]builds.Builder = undefined;
+    var bs: [builds.max_sets]builds.Builder = undefined;
     try builds.buildEach(gpa, io, db, &data, o, sets[0..targets.len], bs[0..targets.len]);
     defer for (bs[0..targets.len]) |*b| b.deinit();
     for (targets, bs[0..targets.len]) |t, *b| {
@@ -227,7 +239,7 @@ pub fn cmdBuilds(c: *Cmd) !u8 {
             std.log.err("{s}: no ranked solo games, {s}", .{ t.path, t.label });
             return error.NoMatches;
         }
-        const f = try b.file(c.arena, &data, t.label, o.min_tier orelse "", o.rows);
+        const f = try b.file(c.arena, &data, t.label, t.set.min_tier orelse o.min_tier orelse "", o.rows);
         var file = try std.Io.Dir.cwd().createFileAtomic(io, t.path, .{ .make_path = true, .replace = true });
         defer file.deinit(io);
         var buf: [64 * 1024]u8 = undefined;
@@ -239,7 +251,7 @@ pub fn cmdBuilds(c: *Cmd) !u8 {
             t.path, t.label, b.games, b.timelines, f.builds.len, b.options.count(), f.matchups.len, if (b.vs) |v| v.options.count() else 0,
         });
         // docs/learned.md keeps these: how much options of a kind really differ
-        for (f.shrink) |x| std.log.info("{s}: k {d:.0}, in matchups {d:.0}", .{ @tagName(x.kind), x.k, x.vs });
+        if (t.set.min_tier == null) for (f.shrink) |x| std.log.info("{s}: k {d:.0}, in matchups {d:.0}", .{ @tagName(x.kind), x.k, x.vs });
     }
     return 0;
 }
