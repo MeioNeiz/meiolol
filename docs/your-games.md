@@ -1,10 +1,10 @@
 # Your games: the service
 
 The dynamic part of the site (docs/concept.md, product 1): enter a Riot ID, see each
-recent Summoner's Rift game's lane laid over the typical curve for that matchup at your rank,
-then a weekly roll-up and per-matchup trend. `meiolol api` (src/api) serves JSON at
-/api/ behind nginx on the jomify server; site/your.html + your.js (src/site/your.zig,
-static/your.js) is the page. Live, /api/ open without login since 2026-10-17: Deploy below.
+recent Summoner's Rift game's lane laid over the typical curve for that matchup at your
+rank, then a weekly roll-up and per-matchup trend. `meiolol api` (src/api) serves JSON
+at /api/ behind nginx on the jomify server; site/your.html + your.js (src/site/your.zig,
+static/your.js) is the page. Live, /api/ open without login: Deploy below.
 
 ## How it works
 
@@ -53,12 +53,11 @@ static/your.js) is the page. Live, /api/ open without login since 2026-10-17: De
   gold, XP, level, CS, items, death timer and deaths by role, objectives, buffs and
   vision, the draft logit and each champion's value by minute, fitted on ranked solo
   games by py/state/stateship.py into src/state_model.bin; games without each side's
-  five roles fall back to src/winchance.zig, team gold and objectives only, 50 at
-  0:00). With the model, 0:00 is the champions alone (Jacob, 14 Oct: start from the
-  draft), so every later move is the game; the turning minute (biggest one-minute
-  change, with that minute's kills, deaths and objectives) and death cost
-  per death (bounty and shutdown gold to the enemy, objectives the enemy took in the
-  next minute, win chance before and after).
+  five roles fall back to src/winchance.zig, team gold and objectives only, 50 at 0:00).
+  With the model, 0:00 is the champions alone (start from the draft), so every later
+  move is the game; the turning minute (biggest one-minute change, with that minute's
+  kills, deaths and objectives) and death cost per death (bounty and shutdown gold to
+  the enemy, objectives the enemy took in the next minute, win chance before and after).
   Plate events after 14:00 are ignored (Riot sends them, worth nothing then)
 - Tier is the visible rank (league-v4), never inferred MMR. It is the rank now, not at
   game time; the curves bracket games by the median visible rank of their players
@@ -131,9 +130,8 @@ crawler's own limiter for that route at priority. The crawler paces its calls ev
 (one per 1.2 s per route on a personal key), so a priority call waits at most about one
 pace for the next free slot, unpaced, and the crawler holds back while one waits. So a
 first lookup (~26 calls) takes ~30 s, and the crawler has the whole key the rest of
-the time. This replaced `--reserve 20` and the service's own `--budget 20:120`
-(2026-10-13): the crawler gave up 20% for 10 minutes after each lookup and a lookup
-still got only 20 calls per 2 min.
+the time (a fixed reserve would idle 20% of the key and still leave a lookup 20 calls
+per 2 min).
 
 The proxy answers as Riot would (200, 404), 401 when Riot rejects the box's key, 503
 when the crawler's tries ran out, 400 for an unknown route. The service retries an
@@ -144,13 +142,13 @@ the service calls Riot itself with RIOT_API_KEY (local testing).
 
 ## Privacy: what is stored and shown, and why
 
-Decided 2026-10-11 from research/questions/identity-and-privacy.md (meiolol-44):
+From research/questions/identity-and-privacy.md:
 
 - Any Riot ID may be looked up, on legitimate interests: League policy has no consent
   rule for ranked history (C1), and that is how lookup sites work (C8). The review is
   the looked-up player's own lane and game; a Players panel lists all ten with champion,
-  K/D/A and Riot ID as at that game, each linking to their own lookup (J18, 20 Oct;
-  balancing in docs/legal/lia.md). Streamer mode: match-v5 neither blanks nor marks
+  K/D/A and Riot ID as at that game, each linking to their own lookup (J18; balancing
+  in docs/legal/lia.md). Streamer mode: match-v5 neither blanks nor marks
   players who had it on, and Riot says it hides names only during the match
   (research/questions/streamer-mode-names.md), so finished games show everyone, as on
   lookup sites. The example (below) has no names
@@ -160,9 +158,9 @@ Decided 2026-10-11 from research/questions/identity-and-privacy.md (meiolol-44):
   hashes (so a later lookup can find its slot in a cached match without refetching; a
   hash is pseudonymous, not anonymous: anyone with the PUUID can recompute it); the
   compact timeline (per-minute stats per slot, no identities); and `match_names`, each
-  slot's Riot ID as at the game with its PUUID hash, none for a blocked PUUID. Games
-  cached before 20 Oct 2026 get names on the player's next refresh (one match-v5 call
-  each, up to 10 per refresh)
+  slot's Riot ID as at the game with its PUUID hash, none for a blocked PUUID. A cached
+  game without names gets them on the player's next refresh (one match-v5 call each, up
+  to 10 per refresh)
 - Retention: a player nobody has looked up for 30 days is deleted (hourly prune), with
   matches no remaining player uses: Riot's advice to refresh stored players at least
   every 30 days (C7) and the privacy policy's promise. Each visit refreshes from Riot (at
@@ -190,39 +188,28 @@ Decided 2026-10-11 from research/questions/identity-and-privacy.md (meiolol-44):
   below), since the query string holds the Riot ID
 - Privacy page: "Your games" section on the site (src/site/prose.zig) and in
   docs/legal/privacy.md, matching the above
-- Preview gating: /api/ was behind HTTP basic auth from 2026-10-11, since a personal key
-  may not serve the public. Opened 2026-10-17 by Jacob's call, knowing that policy, so
-  Riot's reviewers can run it without a login (research: they rarely use demo
-  credentials). your.js still shows the preview note on a 401. /admin/ keeps the login:
-  user `meiolol`, password in vault (group meiolol/local, key MEIOLOL_API_BASIC_AUTH;
-  also in .env)
+- Preview gating: /api/ is open without a login although a personal key may not serve
+  the public: Jacob's call, knowing that policy, so Riot's reviewers can run it
+  (research: they rarely use demo credentials). your.js still shows the preview note on
+  a 401. /admin/ needs a login (docs/hosting.md "Logins")
 
-## Deploy (live since 2026-10-11, jomify server)
+## Deploy (jomify server)
 
 Jacob left the deploy and the preview gating to us. Server: jomify (x86_64, 1 GB RAM,
 ~540 MB free; the service uses ~11 MB plus the curves array, 24 bytes a curve). The
 newest two curves files are mapped read-only (curvesfile.Curves.map): pages load as
 lookups touch them and count as reclaimable page cache under MemoryMax 400M, so both
-patches load whatever their size (before 18 Oct they were copied to the heap, 226 MB
-for 16.20 on 17 Oct, and older patches were left out past 320 MB).
+patches load whatever their size. Never copy them to the heap: one patch's file passes
+200 MB, and raw plus parsed copies OOM-kill the service at start.
 
 - Binary: /usr/local/bin/meiolol (root 755), built on the Mac from a clean commit with
   `zig build -Dtarget=x86_64-linux-musl -Doptimize=ReleaseSafe`. Not part of the box's
   push deploy: after a change to src/api or the curves file format (curvesfile.zig
   version), rebuild, `scp` to /tmp, `sudo install`, then `sudo systemctl restart
-  meiolol-api` (or `deploy/jomify.sh install api`). Installed: 176909b (curves mapped,
-  connections on their own threads), 2026-10-18 09:38Z: start-up 3 s -> 0.3 s, RSS 152 ->
-  10 MB at start and 23 MB after a lookup, both patches' files (63 + 75 MB) mapped;
-  76d691f kept as /usr/local/bin/meiolol.bak-pre-176909b. Before: 76d691f (curves byte
-  budget, "All games" label), 2026-10-17 23:36Z, 236 MB with one curves file; 809669c
-  kept as /usr/local/bin/meiolol.bak-pre-76d691f. Before: 809669c (curves read straight into
-  the parsed copy; raw plus parsed passed 400M and OOM-killed every start from 17 Oct
-  00:49Z), 2026-10-17 16:05Z; 8dd457b kept as /usr/local/bin/meiolol.bak-pre-809669c, 12b3bd7 as
-  /usr/local/bin/meiolol.bak-pre-8dd457b, the one before (bfea7b8) as
-  /usr/local/bin/meiolol.bak-pre-12b3bd7, the unit before the proxy as
-  /etc/meiolol-api.service.bak-pre-proxy; /etc/meiolol-api.env (the key) shredded.
-  First lookup through the proxy: 9 new games (4 id lists, rank, 9 matches and
-  timelines) in ~5 s, no 429s
+  meiolol-api` (or `deploy/jomify.sh install api`, which records what is installed for
+  `deploy/jomify.sh drift`). Previous binaries are kept as
+  /usr/local/bin/meiolol.bak-pre-<sha>. Mapped, it starts in ~0.3 s at ~10 MB RSS,
+  ~23 MB after a lookup; a first lookup through the proxy fetches 9 new games in ~5 s
 - User `meiolol-api` (system, no shell). /var/lib/meiolol-api (750): api.db. Exchange
   /var/lib/meiolol-api/exchange (meiolol:meiolol-api, 2770; `meiolol` is in the group):
   curves/ from the box, forgotten.txt out, box-forgotten.txt in
@@ -234,16 +221,12 @@ for 16.20 on 17 Oct, and older patches were left out past 320 MB).
   and restarts the service through meiolol-api-reload.service. Logs: `sudo journalctl
   -u meiolol-api`
 - nginx: /etc/nginx/conf.d/meiolol.conf only (jomove.conf, the house-moving app's,
-  untouched; the previous version is /etc/nginx/meiolol.conf.bak-2026-10-11).
-  `limit_req_zone meiolol_api 60r/m` at the top; `location /api/` in the 443 server: no login since 2026-10-17 (before:
-  /etc/nginx/meiolol.conf.bak-2026-10-17-api-open), limit_req burst 30, access_log off, proxy_pass 127.0.0.1:8090,
-  client_max_body_size 1k. `location /admin/` (the ops page, src/admin.zig): auth_basic
-  (/etc/nginx/meiolol-api.htpasswd, root:www-data 640), previous config /etc/nginx/meiolol.conf.bak-2026-10-12.
+  untouched; rollback copies: docs/hosting.md). `limit_req_zone meiolol_api 60r/m` at
+  the top; `location /api/` in the 443 server: no login, limit_req burst 30, access_log
+  off, proxy_pass 127.0.0.1:8090, client_max_body_size 1k. `/admin/` (the ops page,
+  src/admin.zig) behind the login check (docs/hosting.md "Logins").
   `location /admin/training/`: gzip on, gzip_vary, gzip_types application/json
-  text/plain since 2026-10-18 (draft-model.json 12.1 MB to 5.6 MB on the wire; before:
-  /etc/nginx/meiolol.conf.bak-2026-10-18-training-gzip)
-- Preview gating: /api/ open since 2026-10-17 (Preview gating above); /admin/ keeps its
-  basic auth
+  text/plain (draft-model.json 12.1 MB to 5.6 MB on the wire)
 - Box: ssh alias `meiolol-exchange` (key ~/.ssh/meiolol_exchange) is the rrsync user
   limited to the exchange dir (`command="/usr/bin/rrsync /var/lib/meiolol-api/exchange",
   restrict` in ~meiolol/.ssh/authorized_keys; the site key stays limited to
@@ -254,14 +237,12 @@ for 16.20 on 17 Oct, and older patches were left out past 320 MB).
   crawl.args has it too. Security list rule "meiolol-proxy: Your games service to the
   crawler" (TCP 8092 from 10.0.0.214/32) and an iptables ACCEPT on the box before its
   REJECT (netfilter-persistent), as for render (docs/hosting.md)
-- Check: `curl -s -o /dev/null -w '%{http_code}' https://meio.lol/api/health`
-  answers 401; with the password, {"ok":true,"jobs":N}. Live lookup tested through nginx
-  on 2026-10-11 (10 games)
+- Check: `curl -s https://meio.lol/api/health` answers {"ok":true,"jobs":N}
 
 ## Testing locally
 
 `zig build && RIOT_API_KEY=... zig-out/bin/meiolol api --data /tmp/x --cors '*'` and
 `zig-out/bin/meiolol serve --out <site dir>`; your.js talks to 127.0.0.1:8090 when the
-page is on localhost. Live run 2026-10-11 (one Challenger EUW account, ~40 calls): 10
-games cached in ~2.5 min (queued behind the crawler), objection issue, mismatch, success
-(icon forced in the scratch DB), opted_out after.
+page is on localhost. A first lookup (~40 calls) caches 10 games in ~2.5 min when
+queued behind a crawler on the same key. The objection flow can be tested end to end by
+forcing the icon in the scratch DB.
