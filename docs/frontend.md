@@ -3,17 +3,17 @@
 Hub for any UI work on the site or the desktop app: the lasting direction. Plans,
 decisions and status live in the files below.
 
-## Goal (Jacob 24 Oct, J29)
+## Goal (J29)
 - One UI for the site and the desktop app, built from the ground up for the long term:
   a component system and the stack under it, not page by page fixes. Quality over speed
 - Nothing stays because it exists: tpl, the CSS, chart.wasm, zjb islands and dvui (picked
   9-10 Oct only because it built for Windows from the Mac) are all open. Each layer is
   decided on evidence (spikes, measured) for where the product is going
-- All feature code in Zig, no JS beyond a loader (22 Oct), unless the stack decision
+- All feature code in Zig, no JS beyond a loader, unless the stack decision
   shows that costs too much
 - Plans before building; Jacob reviews them
 
-## Good UI here (his 24 Oct review)
+## Good UI here (Jacob's review)
 Direction, not rules: we are still planning, and an exact rule applied everywhere turns
 into its own design trap. Use judgement per case.
 - Far fewer words: the UI should mostly explain itself. Long "how to read this" text is
@@ -47,8 +47,7 @@ into its own design trap. Use judgement per case.
   docs/plan/ui/stack.md
 - Page plans: docs/plan/ui/<page>.md
 - Other sites: research/questions/lol-site-ui.md
-- Today's code surveyed: docs/frontend-rework.md sections 1-6 (its options are
-  superseded by docs/plan/ui/)
+- The code before the rebuild, surveyed: docs/frontend-rework.md
 - Components: src/site/ui/<name>.zig (view, css and gallery states in one file), listed
   in ui.all. Gallery: /gallery on `meiolol dev` (deploy/dev.sh), every state at 320, 390
   and wide. Sweep: deploy/qa.sh (overflow, text under 11 px, tap targets, console
