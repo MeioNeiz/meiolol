@@ -7,12 +7,15 @@
 //! a tick (game-detail.md "Lane"); `cell` the same at a list row's size, the figure under
 //! the track and the label only for screen readers (GameRow's lane at 14). `rows`: one
 //! side against the other mirrored, a row per figure, bars growing out from the middle,
-//! the larger (or earlier) figure bold (matchup.md "Versus")
+//! the larger (or earlier) figure bold (matchup.md "Versus"). `dumbbell`: a row per item,
+//! two rates on a shared axis as dots, the line between them the gap, the gap a figure
+//! (pool.md "How hard to pick up": new against practised players)
 const std = @import("std");
 const tree = @import("tree.zig");
 const phrase = @import("phrase.zig");
 const objicon = @import("objicon.zig");
 const champ = @import("champ.zig");
+const badge = @import("badge.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
 const H = tree.H;
@@ -42,6 +45,8 @@ const W = struct {
     pub const gap = phrase.Phrase("{v:signed}s");
     pub const typ = phrase.Phrase("typ {v:signed}");
     pub const never = plain("–");
+    pub const tick = phrase.Phrase("{v:int}%");
+    pub const bell = phrase.Phrase("{a:text} {x:rate}, {b:text} {y:rate}");
 };
 
 pub const Race = struct {
@@ -180,6 +185,62 @@ pub fn rows(h: *H, names: [2][]const u8, items: []const Row) N {
     });
 }
 
+pub const Bell = struct {
+    /// A champion's icon and name, as a link
+    head: N,
+    /// Rates on the axis, percent: the first dot and the second
+    a: f32,
+    b: f32,
+    /// After the track: "+11.0"
+    fig: tree.Text,
+    /// Under the head: a Badge
+    tag: ?N = null,
+    /// Few games: faded
+    thin: bool = false,
+};
+
+pub const Bells = struct {
+    /// The two dots, for the legend: "New", "Practised"
+    names: [2][]const u8,
+    /// Over the figures: "Gap"
+    fig: tree.Text,
+    /// Axis ends and ticks, percent
+    lo: f32,
+    hi: f32,
+    ticks: []const u8,
+};
+
+pub fn dumbbell(h: *H, o: Bells, items: []const Bell) N {
+    const at = struct {
+        fn f(b: Bells, v: f32) f32 {
+            return pct((v - b.lo) / (b.hi - b.lo));
+        }
+    }.f;
+    var ticks = h.list();
+    for (o.ticks, 0..) |t, i| ticks.add(h.span(.{ .key = i, .style = h.vars(.{ .x = at(o, @floatFromInt(t)) }) }, .{W.tick.with(h, .{ .v = t })}));
+    var l = h.list();
+    for (items, 0..) |it, i| {
+        const a = at(o, it.a);
+        const b = at(o, it.b);
+        l.add(h.div(.{ .key = i, .class = "bl", .data_thin = it.thin }, .{
+            h.span(.{ .class = "hd" }, .{ it.head, it.tag }),
+            h.span(.{ .class = "tk", .role = "img", .aria_label = W.bell.with(h, .{ .a = o.names[0], .x = it.a, .b = o.names[1], .y = it.b }), .style = h.vars(.{ .a = a, .b = b, .l = @min(a, b), .w = @abs(b - a) }) }, .{
+                h.span(.{ .class = "a" }, .{}),
+                h.span(.{ .class = "b" }, .{}),
+            }),
+            h.span(.{ .class = "fig" }, .{it.fig}),
+        }));
+    }
+    return h.div(.{ .class = "c-vs", .data_v = "bell" }, .{
+        h.div(.{ .class = "bl ax", .aria_hidden = true }, .{
+            h.span(.{ .class = "hd key" }, .{ h.span(.{ .class = "a" }, .{}), o.names[0], h.span(.{ .class = "b" }, .{}), o.names[1] }),
+            h.span(.{ .class = "tx" }, .{ticks.done()}),
+            h.span(.{ .class = "fig" }, .{o.fig}),
+        }),
+        l.done(),
+    });
+}
+
 fn pct(f: f32) f32 {
     return @round(std.math.clamp(f, 0, 1) * 1000) / 10;
 }
@@ -253,6 +314,26 @@ pub const css =
     \\  .c-vs[data-v="cell"] > .tr { display: block; height: 8px; margin-top: 3px; }
     \\  .c-vs[data-v="cell"] .tr > .you { top: -3px; bottom: -3px; width: 6px; margin-left: -3px; }
     \\  .c-vs[data-v="cell"] > .fig { font-size: var(--fs-xs); white-space: nowrap; }
+    \\  .c-vs[data-v="bell"] { grid-template-columns: minmax(0, 1fr); gap: 0; }
+    \\  .c-vs > .bl { display: grid; grid-template-columns: minmax(0, 10em) minmax(0, 1fr) 3.4em; align-items: center; gap: var(--sp-2); min-height: 32px; }
+    \\  .c-vs > .bl[data-thin] { opacity: 0.55; }
+    \\  .c-vs > .bl + .bl:not(.ax) { border-top: 1px solid var(--line); }
+    \\  .c-vs .bl > .hd { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-width: 0; }
+    \\  .c-vs .hd > a { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: inherit; text-decoration: none; }
+    \\  .c-vs .hd > a:hover { text-decoration: underline; }
+    \\  .c-vs .bl > .key { font-size: var(--fs-xs); color: var(--muted); gap: 4px; }
+    \\  .c-vs .key > span, .c-vs .tk > span { width: 9px; height: 9px; border-radius: 50%; box-sizing: border-box; }
+    \\  .c-vs .bl > .fig { text-align: right; font-variant-numeric: tabular-nums; }
+    \\  .c-vs .bl.ax > .fig { font-size: var(--fs-xs); color: var(--muted); }
+    \\  .c-vs .bl > .tx { position: relative; height: 16px; font-size: var(--fs-xs); color: var(--faint); font-variant-numeric: tabular-nums; }
+    \\  .c-vs .tx > span { position: absolute; left: calc(var(--x) * 1%); transform: translateX(-50%); white-space: nowrap; }
+    \\  .c-vs .bl > .tk { position: relative; height: 14px; background: linear-gradient(var(--line), var(--line)) 0 50% / 100% 1px no-repeat; }
+    \\  .c-vs .tk::before { content: ""; position: absolute; top: calc(50% - 1.5px); height: 3px; left: calc(var(--l) * 1%); width: calc(var(--w) * 1%); background: var(--line-2); }
+    \\  .c-vs .tk > span { position: absolute; top: 50%; margin: -4.5px 0 0 -4.5px; }
+    \\  .c-vs .tk > .a { left: calc(var(--a) * 1%); }
+    \\  .c-vs .tk > .b { left: calc(var(--b) * 1%); }
+    \\  .c-vs .key > .a, .c-vs .tk > .a { border: 2px solid var(--t2); background: var(--panel); }
+    \\  .c-vs .key > .b, .c-vs .tk > .b { background: var(--brand-dot); }
     \\  .c-vs .bnd > .ends { grid-column: 1 / -1; display: flex; justify-content: space-between; font-size: var(--fs-xs); color: var(--faint); font-variant-numeric: tabular-nums; }
     \\}
     \\
@@ -285,6 +366,12 @@ pub fn gallery(g: *Gallery) void {
         .{ .label = plain("Level 6"), .a = plain("5:19"), .b = plain("5:28"), .lead = .a, .sub = plain("9 s apart") },
         .{ .label = plain("First item"), .a = plain("12:04"), .b = plain("–") },
     }));
+    g.addFill("dumbbell: new against practised players, a gap each; a thin row", dumbbell(h, .{ .names = .{ "New", "Practised" }, .fig = plain("Gap"), .lo = 40, .hi = 56, .ticks = &.{ 40, 45, 50, 55 } }, &.{
+        .{ .head = bellHead(h, "Rengar"), .a = 41.2, .b = 52.2, .fig = plain("+11.0"), .tag = badge.view(h, .neutral, .{plain("Harder")}) },
+        .{ .head = bellHead(h, "Udyr"), .a = 43.0, .b = 52.9, .fig = plain("+9.9") },
+        .{ .head = bellHead(h, "Garen"), .a = 50.8, .b = 52.1, .fig = plain("+1.3"), .tag = badge.view(h, .neutral, .{plain("Easier")}) },
+        .{ .head = bellHead(h, "Taliyah"), .a = 46.0, .b = 51.5, .fig = plain("+5.5"), .thin = true },
+    }));
     g.add("bands: below typical, above, no typical", h.div(.{ .class = "c-vs" }, .{
         band(h, .{ .label = plain("Gold lead at 14"), .you = -768, .typ = .{ -1677, -63, 511 }, .dom = 2500 }),
         band(h, .{ .label = plain("CS lead at 10"), .you = 12, .typ = .{ -9, -1, 6 }, .dom = 30 }),
@@ -295,4 +382,28 @@ pub fn gallery(g: *Gallery) void {
         cell(h, .{ .label = plain("Gold lead at 14"), .you = 1084, .typ = .{ -200, 300, 900 }, .dom = 3000 }, plain("+1,084 at 14")),
         cell(h, .{ .label = plain("Gold lead at 14"), .you = -3408, .dom = 3000 }, plain("−3,408 at 14")),
     }));
+}
+
+fn bellHead(h: *H, comptime key: []const u8) N {
+    return h.a(.{ .href = "#" }, .{ champ.view(h, champ.demo(key, key), .{ .named = false }), key });
+}
+
+test "dumbbell: dots and the gap on the axis, legend and ticks, thin rows marked" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var t: tree.Tree = .{};
+    var h: H = .init(arena.allocator(), &t);
+    const fig = dumbbell(&h, .{ .names = .{ "New", "Practised" }, .fig = plain("Gap"), .lo = 40, .hi = 60, .ticks = &.{ 40, 50 } }, &.{
+        .{ .head = h.text("Rengar"), .a = 45, .b = 55, .fig = plain("+10.0") },
+        .{ .head = h.text("Garen"), .a = 52, .b = 50, .fig = plain("−2.0"), .thin = true },
+    });
+    var out: std.Io.Writer.Allocating = .init(arena.allocator());
+    try @import("html.zig").write(&t, fig, &out.writer);
+    const s = out.written();
+    try std.testing.expect(std.mem.indexOf(u8, s, "--a:25;--b:75;--l:25;--w:50") != null);
+    // Practised below new: the line still runs left to right
+    try std.testing.expect(std.mem.indexOf(u8, s, "--a:60;--b:50;--l:50;--w:10") != null);
+    try std.testing.expect(std.mem.indexOf(u8, s, "aria-label=\"New 45.0%, Practised 55.0%\"") != null);
+    try std.testing.expectEqual(1, std.mem.count(u8, s, "data-thin"));
+    try std.testing.expect(std.mem.indexOf(u8, s, ">50%</span>") != null);
 }
