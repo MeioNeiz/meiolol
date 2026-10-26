@@ -165,6 +165,22 @@ pub const Dom = struct {
         d.node(id).call("scrollIntoView", .{o}, void);
     }
 
+    /// Scrolls the node's parent sideways to put the node in its middle; unlike
+    /// scrollIntoView, the page stays where it is
+    pub fn centre(d: *Dom, id: u32) void {
+        const n = d.node(id);
+        const p = n.get("parentElement", zjb.Handle);
+        defer p.release();
+        if (p == .null) return;
+        const nr = n.call("getBoundingClientRect", .{}, zjb.Handle);
+        defer nr.release();
+        const pr = p.call("getBoundingClientRect", .{}, zjb.Handle);
+        defer pr.release();
+        const mid = nr.get("left", f64) + nr.get("width", f64) / 2;
+        const pmid = pr.get("left", f64) + pr.get("width", f64) / 2;
+        p.set("scrollLeft", p.get("scrollLeft", f64) + mid - pmid);
+    }
+
     pub fn jump(_: *Dom, id: []const u8) void {
         const s = zjb.string(id);
         defer s.release();

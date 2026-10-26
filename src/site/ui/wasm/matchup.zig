@@ -31,7 +31,7 @@ export fn main() void {
     server = mp.Head.init(gpa, &data) catch return dom.dom.warn("matchup: out of memory");
     state = mp.Head.init(gpa, &data) catch return dom.dom.warn("matchup: out of memory");
     const i = dom.rt.add(mp.Head, &state, &server, sel) catch return dom.dom.warn("matchup: out of memory");
-    // The page's opponent in view, the strip scrolled sideways to it
+    // The page's opponent in the strip's middle
     const cur = i.current();
-    if (cur.find(cur.root, "aria-current", "page")) |n| dom.dom.scroll(cur.node(n).dom);
+    if (cur.find(cur.root, "aria-current", "page")) |n| dom.dom.centre(cur.node(n).dom);
 }
