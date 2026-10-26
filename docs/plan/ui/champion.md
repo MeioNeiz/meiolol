@@ -41,6 +41,9 @@ and TOO MANY WORDS"; "how hard champ is to pickup, why does it take up so much s
 - One page per champion, one role on screen. The role lives in the URL
   (`darius.html#jungle`, later `darius/jungle.html`); every link that knows a role
   carries it (champions table, matchup page, search "darius jungle", desktop)
+- Every role with any games is in the RolePicker (Jacob 26 Oct); the most played opens.
+  One under the champions table's share (10%) opens with its figures faded and "A rare
+  role for {champion}: {n} games." Build pages keep the 10% cut
 - The build page folds into this page (builds.md): every build slot opens in place to
   its full option table. Nothing to go back from
 - Most played and highest win rate at once (Jacob 26 Oct): every slot lists its top 3
