@@ -192,7 +192,12 @@ case "${1:-}" in
                 exit 0
             fi
             if (( ! live )); then
-                if grep -q "^$sha " <<< "${got%%---*}"; then echo "${sha:0:7} on $HOST"; exit 0; fi
+                # A grouped push (deploy/push.sh) or a later push deploys REV inside a newer tip
+                while read -r d _; do
+                    git -C "$ROOT" merge-base --is-ancestor "$sha" "$d" 2> /dev/null || continue
+                    if [[ $d == "$sha" ]]; then echo "${sha:0:7} on $HOST"; else echo "${sha:0:7} on $HOST (in ${d:0:7})"; fi
+                    exit 0
+                done <<< "${got%%---*}"
             else
                 swapped='' live_line=''
                 while IFS=$'\t' read -r _ round step status detail; do
