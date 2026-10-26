@@ -16,8 +16,11 @@ docs/plan.md "Now". Read it first.
   its first use
 - Every push to main deploys (log .git/meiolol-deploy.log). Push the tested sha with
   `deploy/push.sh <sha>` (plain push can send a commit another session made meanwhile);
-  pre-push runs `zig build ci` on it, once for a group of queued pushes
-- Solid, tested change: commit and push without asking, then `deploy/box.sh
+  pre-push runs `zig build ci` on it (none for docs only), once for a group
+- Push mode, for all sessions (`deploy/push.sh --status`; docs/dev-flow.md): fast
+  pushes now; bulk queues and returns, a timer pushes the batch: don't wait-deployed,
+  check pages on the dev server
+- Solid, tested change: commit and push without asking, then (fast mode) `deploy/box.sh
   wait-deployed`. Ask first only when unfinished, risky or hard to undo
 
 ## Build and test
@@ -30,8 +33,9 @@ docs/plan.md "Now". Read it first.
   change
 - src/pipeline_test.zig: fixture games through stats, curves and the whole site; extend
   it when adding a pipeline step or page
-- Local site: `deploy/dev.sh` (data/snap; `--exports` refreshes the box's curves and
-  builds when it warns the curves are an old version)
+- Local site: `deploy/dev.sh`, one server for all sessions at localhost:8080, rebuilt
+  on each edit (data/snap; `--exports` refreshes the box's curves and builds when it
+  warns the curves are an old version)
 - Zig 0.16/0.17 std changed a lot (std.Io everywhere, renames): LSP hover/goToDefinition
   (ZLS; ToolSearch "select:LSP") first; grep the std source (`$(zig env | grep
   lib_dir)`) only when LSP has no answer
@@ -74,9 +78,10 @@ docs/plan.md "Now". Read it first.
 - Batch reads: several files or line ranges in one Bash call (`sed -n 1,40p a; sed -n
   80,120p b`), independent calls in parallel in one turn; never one read per turn
 - Waiting: run_in_background, then wait for the notification
-- Builds and tests through `deploy/zb.sh test|test-ui|ci|<zig build args>`: one build
-  at a time across sessions, and a run that started after your request answers it.
-  UI work: `test-ui` while iterating, `test` before a commit
+- Builds and tests through `deploy/zb.sh test|test-ui|ci|<zig build args>`: shared
+  build slots (`deploy/slots.sh status`), and a run that started after your request
+  answers it; other zig builds `deploy/slots.sh 1 zig build ...`. UI work: `test-ui`
+  while iterating, `test` before a commit
 - Tests: `deploy/zb.sh test 2>&1 | tee $SCRATCH/t.log | tail -30`, then grep the log
 - Past ~200k context, hand over at the next natural break (step committed); a new
   topic starts fresh (fleet skill)
@@ -102,6 +107,7 @@ guards: .claude/doc-rules.json, skill context-review.
   research/README.md)
 - Backups, health alerts, disk headroom, GDPR erasure (`meiolol backup|restore|forget`):
   docs/data-safety.md
+- Builds, tests, pushes and the two push modes on the Mac: docs/dev-flow.md
 - Older next steps by area: docs/backlog.md. Finished team runs: docs/archive/
 - Team runs (a coordinator and several sessions): briefs, notes and handovers in
   data/team/<date>-<name>/ (gitignored, survives reboots), not /tmp scratchpads
