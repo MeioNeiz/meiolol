@@ -213,7 +213,7 @@ pub const Page = struct {
         const tt = toggletip.view(h, "lp-src", .{W.games.with(h, .{ .n = z.games })}, W.games.with(h, .{ .n = z.games }), .{ .s = z.from });
         return puzzle.view(h, .{
             .stage = stage,
-            .q = h.span(.{}, .{z.q}),
+            .q = question(h, z),
             .ctx = if (!p.revealed and z.ctx.len > 0) h.span(.{}, .{z.ctx}) else null,
             .answer = switch (z.answer) {
                 .pick => |x| p.choices(h, x),
@@ -229,6 +229,14 @@ pub const Page = struct {
             else
                 button.view(h, .{ .v = .primary, .disabled = !p.lockable(), .on = h.on(p, .lock) }, .{W.lock}),
         });
+    }
+
+    /// The question, its term (if any) a Toggletip with the term's note
+    fn question(h: *H, z: *const ld.Puzzle) N {
+        const t = z.term orelse return h.span(.{}, .{z.q});
+        const i = std.mem.find(u8, z.q, t.word) orelse return h.span(.{}, .{z.q});
+        const tt = toggletip.view(h, "lp-term", .{t.word}, .{ .s = t.word }, .{ .s = t.note });
+        return h.span(.{}, .{ z.q[0..i], &tt, z.q[i + t.word.len ..] });
     }
 
     fn ratesStage(p: *Page, h: *H, z: *const ld.Puzzle) N {
