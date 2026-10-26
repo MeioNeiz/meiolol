@@ -13,7 +13,7 @@ const H = tree.H;
 const N = tree.N;
 
 pub const name = "ChoiceCards";
-pub const scope = .{".c-choices"};
+pub const scope = .{ ".c-choices", ".c-choice" };
 
 pub const Side = enum { us, them };
 pub const Mark = enum { none, right, wrong };
@@ -106,9 +106,9 @@ pub const css =
     \\    align-items: center; justify-content: center; gap: var(--sp-2); min-width: 0; padding: var(--sp-3) var(--sp-1) var(--sp-2);
     \\    border: 1px solid var(--line-2); border-radius: var(--r-m); background: var(--panel-2); text-align: center;
     \\    transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease); }
-    \\  button.c-choice { cursor: pointer; }
-    \\  button.c-choice:hover { border-color: var(--focus); }
-    \\  button.c-choice:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+    \\  .c-choice[type="button"] { cursor: pointer; }
+    \\  .c-choice[type="button"]:hover { border-color: var(--focus); }
+    \\  .c-choice[type="button"]:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
     \\  .c-choice .nm { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--w-m); }
     \\  .c-choice b.nm { font-size: var(--fs-l); font-weight: var(--w-b); }
     \\  .c-choice .nm[data-side="us"] { color: var(--us); }
