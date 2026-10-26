@@ -102,7 +102,7 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool, l: *const l
         \\<p class="lead">Looking for a second champion? Pick the one you main, or up to
         \\three: see what else their players play and which do
         \\well where your main struggles or when it is banned. Several options with the
-        \\numbers behind each; the choice is yours. <a href="#pick-up">How hard every
+        \\numbers behind each; the choice is yours. <a href="pickup.html">How hard every
         \\champion is to pick up</a>.</p>
         \\<p id="status" class="note">Loading…</p>
         \\<form id="pool" class="pool-form" autocomplete="off" onsubmit="return false">

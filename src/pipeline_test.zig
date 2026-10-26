@@ -353,6 +353,8 @@ test "fixture games to stats, curves and the website" {
         // View links: this page in each view, the current one lit, ranks greyed
         .{ "patch/matchup/top/darius-vs-mordekaiser.html", &.{ "<a aria-current=\"page\">15.13</a>", "<a href=\"../../../matchup/top/darius-vs-mordekaiser.html\">30 days</a>", "<a aria-disabled=\"true\">Emerald+</a>" } },
         .{ "pool.html", &.{ "<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"every\"", "<h2 id=\"pick-up\">How hard champions are to pick up <span class=\"scope\" data-chip data-region=\"all\" data-period=\"days30\"", "<span class=\"off\">All regions<i>, not EUW alone</i></span>" } },
+        .{ "pickup.html", &.{ "<h1>How hard to pick up</h1>", "<a aria-current=\"page\">All</a><a href=\"pickup/top.html\">Top</a>" } },
+        .{ "patch/pickup/mid.html", &.{ "<a href=\"../pickup.html\">All</a><a href=\"../pickup/top.html\">Top</a>", "<a aria-current=\"page\">Mid</a>" } },
         .{ "all/patch/pool.html", &.{"<h2 id=\"pick-up\">How hard champions are to pick up <span class=\"scope\" data-chip data-region=\"all\" data-period=\"patch:15.13\" data-rank=\"\" title=\"Region, period and rank these numbers are from\"><span>All regions</span><span>Patch 15.13</span><span>Plat+</span></span></h2>"} },
     };
     for (pages) |pg| {

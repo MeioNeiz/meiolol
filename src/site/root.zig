@@ -15,6 +15,7 @@ const learn_page = @import("learn.zig");
 const matchup = @import("matchup.zig");
 const finder = @import("finder.zig");
 const pool_page = @import("pool.zig");
+const pickup_page = @import("pickup.zig");
 const pool = @import("../pool.zig");
 const learning = @import("../learning.zig");
 const spread = @import("../spread.zig");
@@ -496,6 +497,7 @@ fn pagePathsMin(site: *const Site, min_games: u32) ![]const []const u8 {
     if (site.curves) |*c| try matchup.paths(site, c, &list, min_games);
     if (site.view_builds[site.view.index()]) |*b| try builds_page.paths(site, b, &list);
     try list.append(a, "pool.html");
+    try pickup_page.paths(site, &list);
     try list.append(a, patch_page.path);
     return list.items;
 }
@@ -522,6 +524,10 @@ pub fn renderPage(site: *const Site, w: *Writer, path: []const u8) !bool {
         return builds_page.route(site, w, s);
     } else if (eql(u8, path, "pool.html")) {
         try pool_page.writePage(site, w, &site.pool, &site.learning);
+    } else if (eql(u8, path, pickup_page.path)) {
+        try pickup_page.writePage(site, w, null);
+    } else if (strip(path, "pickup/", ".html")) |s| {
+        try pickup_page.writePage(site, w, roleFromSlug(s) orelse return false);
     } else if (eql(u8, path, patch_page.path)) {
         try patch_page.writePage(site, w);
     } else return false;
