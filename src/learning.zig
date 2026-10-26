@@ -326,6 +326,11 @@ pub const Learning = struct {
     mean_pp: f64 = 0,
     /// Every champion's games together
     all: [bin_count]Bin = @splat(.{}),
+    /// The usual curve: per bin, the average over champions with thin_games there of the
+    /// bin's win rate minus the champion's own, percentage points. A champion's bins only
+    /// read against it (its own rate plus these): practised players are better players
+    /// too, so every champion rises
+    usual: [bin_count]f64 = @splat(0),
     /// Champions with any games, in stats order
     champions: []const Champion = &.{},
 
@@ -360,6 +365,7 @@ pub fn build(arena: Allocator, t: *const Tally, st: *const Stats) !Learning {
         try list.append(arena, .{ .id = st.ids[c], .bins = b, .gap = gap });
     }
     out.champions = list.items;
+    out.usual = usual(list.items);
     if (n_gaps == 0) return out;
     const mean = pp_sum / n_gaps;
     out.mean_pp = mean;
@@ -376,6 +382,21 @@ pub fn build(arena: Allocator, t: *const Tally, st: *const Stats) !Learning {
         const z = (g.pp - mean) / g.se * @sqrt(keep);
         g.kind = if (z >= kind_z) .harder else if (z <= -kind_z) .easier else .usual;
     };
+    return out;
+}
+
+fn usual(champions: []const Champion) [bin_count]f64 {
+    var sums: [bin_count]f64 = @splat(0);
+    var ns: [bin_count]f64 = @splat(0);
+    for (champions) |c| {
+        const own = sum(c.bins, 0, bin_count).winRate();
+        for (c.bins, &sums, &ns) |b, *s, *n| if (b.games >= thin_games) {
+            s.* += 100 * (b.winRate() - own);
+            n.* += 1;
+        };
+    }
+    var out: [bin_count]f64 = @splat(0);
+    for (&out, sums, ns) |*o, s, n| o.* = if (n > 0) s / n else 0;
     return out;
 }
 
@@ -453,6 +474,10 @@ test "gaps: off the average only when clear" {
     const g2 = l.get(2).?.gap.?;
     try testing.expect(g2.pulled > g2.pp and g2.pulled < l.mean_pp);
     try testing.expectEqual(.usual, l.get(4).?.gap.?.kind);
+    // Bin 0 under the champions' own rates, bin 4 over; champion 2's 220 new games count,
+    // champion 3's 50 practised don't; no champion has bins 1 to 3
+    try testing.expect(l.usual[0] < -1 and l.usual[4] > 1);
+    try testing.expectEqual(0, l.usual[2]);
     var out: std.Io.Writer.Allocating = .init(arena);
     try writeJson(&out.writer, l);
     const parsed = try std.json.parseFromSliceLeaky(std.json.Value, arena, out.written(), .{});

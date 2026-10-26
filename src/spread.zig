@@ -34,27 +34,52 @@ pub const shape_points = 2 * shape_reach / shape_step + 1;
 /// less leaves a comb
 const shape_bandwidth = 5.0;
 
+/// Players with more games count as this many for the luck reference: few play that
+/// much, and luck at 100 games is already small beside the 10-game players'
+const luck_games = 100;
+const by_games_len = luck_games - min_games + 1;
+
 /// Players by whole-percent win rate, per champion by stats index
 pub const Tally = struct {
     /// [c * 101 + percent]
     players: []u32,
+    /// [c * by_games_len + games - min_games], games capped at luck_games
+    by_games: []u32,
+    /// Counted players' games and wins together, per champion
+    games: []u64,
+    wins: []u64,
 
     pub fn init(gpa: Allocator, n: usize) !Tally {
         const p = try gpa.alloc(u32, n * 101);
+        errdefer gpa.free(p);
+        const g = try gpa.alloc(u32, n * by_games_len);
+        errdefer gpa.free(g);
+        const sums = try gpa.alloc(u64, 2 * n);
         @memset(p, 0);
-        return .{ .players = p };
+        @memset(g, 0);
+        @memset(sums, 0);
+        return .{ .players = p, .by_games = g, .games = sums[0..n], .wins = sums[n..] };
     }
 
     pub fn deinit(t: *Tally, gpa: Allocator) void {
         gpa.free(t.players);
+        gpa.free(t.by_games);
+        gpa.free(t.games.ptr[0 .. 2 * t.games.len]);
     }
 
     /// One player's games on champion index `c`
     pub fn add(t: *Tally, c: usize, games: u32, wins: u32) void {
         if (games < min_games) return;
-        t.players[c * 101 + (200 * wins + games) / (2 * games)] += 1;
+        t.players[c * 101 + pctOf(wins, games)] += 1;
+        t.by_games[c * by_games_len + @min(games, luck_games) - min_games] += 1;
+        t.games[c] += games;
+        t.wins[c] += wins;
     }
 };
+
+fn pctOf(wins: u32, games: u32) usize {
+    return (200 * wins + games) / (2 * games);
+}
 
 pub const Champion = struct {
     id: u32,
@@ -67,6 +92,12 @@ pub const Champion = struct {
     p75: u8,
     /// How many players sit near each shape point, 255 at the most
     shape: [shape_points]u8,
+    /// What luck alone gives: players per bin, and its quartiles, had every player the
+    /// players' pooled win rate over their own games. Near bins and p25/p75 when the
+    /// champion's players differ little beyond luck (learned.md, 15 Oct)
+    luck_bins: [bin_count]f32,
+    luck_p25: u8,
+    luck_p75: u8,
 };
 
 pub const Spread = struct {
@@ -96,8 +127,15 @@ pub fn make(arena: Allocator, t: *const Tally, st: *const Stats) !Spread {
             .p50 = percentile(by_pct, players, 1, 2),
             .p75 = percentile(by_pct, players, 3, 4),
             .shape = shape(by_pct, players),
+            .luck_bins = @splat(0),
+            .luck_p25 = 0,
+            .luck_p75 = 0,
         };
         for (by_pct, 0..) |n, p| ch.bins[(p + 5) / 10] += n;
+        const luck_pct = luck(t.by_games[c * by_games_len ..][0..by_games_len], ratio(t.wins[c], t.games[c]));
+        for (luck_pct, 0..) |n, p| ch.luck_bins[(p + 5) / 10] += @floatCast(n);
+        ch.luck_p25 = percentileF(&luck_pct, 1, 4);
+        ch.luck_p75 = percentileF(&luck_pct, 3, 4);
         try list.append(arena, ch);
     }
     return .{ .min_games = min_games, .min_players = min_players, .champions = list.items };
@@ -125,6 +163,41 @@ fn shape(by_pct: *const [101]u32, players: u32) [shape_points]u8 {
     return out;
 }
 
+fn ratio(a: u64, b: u64) f64 {
+    return @as(f64, @floatFromInt(a)) / @as(f64, @floatFromInt(@max(b, 1)));
+}
+
+/// Expected players by whole-percent win rate when each plays their games at rate `p`:
+/// a binomial per game count, rounded to percents as Tally.add rounds
+fn luck(by_games: *const [by_games_len]u32, p_in: f64) [101]f64 {
+    var out: [101]f64 = @splat(0);
+    // Away from 0 and 1 so the odds ratio below stays finite
+    const p = std.math.clamp(p_in, 1e-6, 1 - 1e-6);
+    for (by_games, min_games..) |players, games| {
+        if (players == 0) continue;
+        const n: u32 = @intCast(games);
+        var pmf = std.math.pow(f64, 1 - p, @floatFromInt(n));
+        for (0..n + 1) |k| {
+            out[pctOf(@intCast(k), n)] += @as(f64, @floatFromInt(players)) * pmf;
+            pmf *= @as(f64, @floatFromInt(n - k)) / @as(f64, @floatFromInt(k + 1)) * p / (1 - p);
+        }
+    }
+    return out;
+}
+
+/// The percent num/den of the way up an expected count
+fn percentileF(by_pct: *const [101]f64, num: f64, den: f64) u8 {
+    var total: f64 = 0;
+    for (by_pct) |n| total += n;
+    const rank = total * num / den;
+    var seen: f64 = 0;
+    for (by_pct, 0..) |n, p| {
+        seen += n;
+        if (seen >= rank) return @intCast(p);
+    }
+    return 100;
+}
+
 /// The rate of the player num/den of the way up (nearest rank)
 fn percentile(by_pct: *const [101]u32, players: u32, num: u32, den: u32) u8 {
     const rank = @max(1, (players * num + den - 1) / den);
@@ -137,6 +210,21 @@ fn percentile(by_pct: *const [101]u32, players: u32, num: u32, den: u32) u8 {
 }
 
 const testing = std.testing;
+
+test "luck: one 10-game player at 50%" {
+    var by_games: [by_games_len]u32 = @splat(0);
+    by_games[0] = 1;
+    const l = luck(&by_games, 0.5);
+    try testing.expectApproxEqAbs(252.0 / 1024.0, l[50], 1e-9);
+    try testing.expectEqual(0, l[45]);
+    try testing.expectEqual(40, percentileF(&l, 1, 4));
+    try testing.expectEqual(60, percentileF(&l, 3, 4));
+    // 100 and more games count as 100: narrower
+    by_games = @splat(0);
+    by_games[by_games_len - 1] = 1;
+    const wide = luck(&by_games, 0.5);
+    try testing.expectEqual(47, percentileF(&wide, 1, 4));
+}
 
 test "bins, percentiles, players under min_games left out" {
     const gpa = testing.allocator;
@@ -170,6 +258,11 @@ test "bins, percentiles, players under min_games left out" {
     try testing.expectEqual(45, got.p50);
     try testing.expectEqual(50, got.p75);
     try testing.expectEqual(null, s.get(60));
+    // Luck at the pooled 22 of 52: the four players again, spread around 42%
+    var luck_players: f32 = 0;
+    for (got.luck_bins) |n| luck_players += n;
+    try testing.expectApproxEqAbs(4, luck_players, 1e-4);
+    try testing.expect(got.luck_p25 < 42 and got.luck_p75 > 42);
     // Mean 39.75%: peak near +6 (45% to 50%), a bump at -24 (the 17% player), less at
     // +24 (64%, past the 60% player)
     const at = struct {
