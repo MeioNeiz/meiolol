@@ -309,7 +309,7 @@ test "fixture games to stats, curves and the website" {
         // games; Darius, whom Riot changed, in his main role all the same; in every view,
         // linking the patch view's pages, and a tab after Matchups
         .{ "patch/patch.html", &.{ "<h1>Patch 15.13 vs 15.12</h1>", "<div class=\"c-patch\" data-island=\"patch\" data-src=\"data/patch.bin\" data-stamp=\"", "href=\"../patch/champion/darius.html#role=top\"", "<span class=\"ar\" aria-hidden=\"true\">▲</span>Q</span>", "league-of-legends-patch-25-13-notes/", "<script src=\"../" ++ assets.patch_js.path ++ "\" data-wasm=\"" ++ assets.patch_wasm.path ++ "\" defer></script>" } },
-        .{ "all/patch.html", &.{ "<h1>Patch 15.13 vs 15.12</h1>", "href=\"../all/patch/champion/darius.html#role=top\"" } },
+        .{ "all/patch.html", &.{ "<h1>Patch 15.13 vs 15.12</h1>", "href=\"../all/patch/champion/darius.html#role=top\"", "title=\"This page counts every game we crawl (Plat+)\" data-rank=\"5\"" } },
         .{ "champions.html", &.{"Matchups</a>\n<a href=\"patch.html\">Patch changes</a>"} },
         .{ "index.html", &.{"New patch: <a href=\"patch/patch.html\">what changed in 15.13 since 15.12</a>."} },
         // Champion page: the ui.champpage island from the root view, its data file for

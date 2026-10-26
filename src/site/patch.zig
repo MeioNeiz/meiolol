@@ -49,12 +49,13 @@ pub fn writePage(site: *const Site, w: *Writer) !void {
         try tpl.render(w, "<h1>Patch changes</h1>\n<p>No earlier patch in the data yet to compare with.</p>\n", .{});
         return html.foot(w, pg);
     };
-    const pg = try site.page(
+    var pg = try site.page(
         try a.print("Patch {s} vs {s}: what changed | meiolol", .{ pd.cur_patch, pd.prev_patch }),
         try a.print("What Riot changed in patch {s}, next to how each champion's and lane matchup's win rate moved from {s}, with the games behind each.", .{ pd.cur_patch, pd.prev_patch }),
         path,
         .patch,
     );
+    pg.rank_off = "This page counts every game we crawl (Plat+)";
     try html.head(w, pg);
     const d = try a.create(pp.Data);
     d.* = try data(site, &pd);

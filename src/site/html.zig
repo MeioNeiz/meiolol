@@ -119,6 +119,8 @@ pub const Page = struct {
     canonical: ?[]const u8 = null,
     /// False: noindex even when public (thin matchups, Options.index_min_games)
     index: bool = true,
+    /// Why the rank picks past Plat+ are greyed, on pages with a view
+    rank_off: []const u8 = "Champion pages only",
 };
 
 /// A link to `path` under a root: for href and src holes
@@ -375,7 +377,8 @@ fn pick(w: *Writer, p: Page, live: bool, comptime key: []const u8, value: []cons
             .label = label,
         });
     } else {
-        try tpl.render(w, "<a aria-disabled=\"true\" title=\"Champion pages only\" data-" ++ key ++ "=\"{value}\">{label}</a>", .{
+        try tpl.render(w, "<a aria-disabled=\"true\" title=\"{why}\" data-" ++ key ++ "=\"{value}\">{label}</a>", .{
+            .why = if (comptime std.mem.eql(u8, key, "rank")) p.rank_off else "Champion pages only",
             .value = value,
             .label = label,
         });

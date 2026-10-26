@@ -58,7 +58,7 @@ all/matchup/support/pyke-vs-rakan.html de60f3d58a1f9db1
 all/matchup/support/rakan-vs-pyke.html 59ce9c510d604a59
 all/matchup/top/darius-vs-mordekaiser.html 92e4af1c42902617
 all/matchup/top/mordekaiser-vs-darius.html 98658a3e1d6cded9
-all/patch.html dea0805b8725b2ba
+all/patch.html daba78cdfb4a60db
 all/patch/build/ahri-mid.html 1f0c1a22ddaffa3c
 all/patch/build/amumu-jungle.html ce4f7199afbfe0fa
 all/patch/build/darius-top.html 6448e74dcf6d5799
@@ -119,7 +119,7 @@ all/patch/matchup/support/pyke-vs-rakan.html a769477e6fc28128
 all/patch/matchup/support/rakan-vs-pyke.html e76c9d1819d1d23e
 all/patch/matchup/top/darius-vs-mordekaiser.html bd9a562db40b737d
 all/patch/matchup/top/mordekaiser-vs-darius.html 27714cfe11c0b450
-all/patch/patch.html 1bb44e56d0e695df
+all/patch/patch.html 87c8fa805007bbac
 all/patch/pickup.html 12277063566b8836
 all/patch/pickup/bot.html 3e97cbc1d78eb534
 all/patch/pickup/jungle.html bf9885126b69132b
@@ -237,7 +237,7 @@ matchup/support/rakan-vs-pyke.html 6a08fc52ac8292d0
 matchup/top/darius-vs-mordekaiser.html 9c3c2426ddaaaa15
 matchup/top/mordekaiser-vs-darius.html 6652b563f949bc0c
 method.html 3d1c76731f693432
-patch.html d841c80011f90b36
+patch.html f7718432dd96390b
 patch/build/ahri-mid.html ebf13fdf3a61d6ed
 patch/build/amumu-jungle.html 34970c47007add72
 patch/build/darius-top.html 8318f0c09e6730ef
@@ -298,7 +298,7 @@ patch/matchup/support/pyke-vs-rakan.html 0876cec00e8e8a67
 patch/matchup/support/rakan-vs-pyke.html 2493041be06c343e
 patch/matchup/top/darius-vs-mordekaiser.html 16b627c207fe589b
 patch/matchup/top/mordekaiser-vs-darius.html 2cb6fe4ddc941a13
-patch/patch.html 89d02cb7e79ffecf
+patch/patch.html 4958d8c2dd9a2ad4
 patch/pickup.html 995273d22518c54e
 patch/pickup/bot.html 5239f945f64bb8b6
 patch/pickup/jungle.html 60808a275a7ba3cf
