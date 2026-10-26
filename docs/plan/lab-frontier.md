@@ -1,7 +1,7 @@
 # Plan: lab frontier (gpu-box experiment programme)
 
-Jacob, 21 Oct: try everything, push past what we have, many models and ensembles. Two
-aims, kept apart:
+Try everything, push past what we have, many models and ensembles. Two aims, kept
+apart:
 1. The most accurate pre-game model we can build, any input, internal only: the
    teacher. It is the yardstick for every shipped model and the thing we explain
 2. Understand why drafts win (main, pair, comp effects; what is causal; what moves over
@@ -35,39 +35,57 @@ near 55.5%, a model that knows the players near 57%+.
 
 ## Already tried (don't redo blind)
 
-Full inventory with numbers: data/team/2026-10-21-frontier/inventory.md. Gaps it found:
-nothing measured above fit 600k; player history never combined with the best draft
-model; mastery for all ten and rank at start never in a win model; pair cells never
-borrow strength; one patch boundary ever tested; no test look since 13 Oct; bans unused;
-stacking only at 35k games.
+Full inventory with numbers: data/team/2026-10-21-frontier/inventory.md. Open gaps:
+player history never combined with the best draft model; mastery for all ten and rank
+at start never in a win model; one patch boundary ever tested; no test look since 1320Z;
+bans unused.
+
+## Results so far (dev only; write-ups in docs/model.md)
+
+- P1 pin snap-20261023T2004Z with seat stats merged, mastery_pre and 16.21: "The new
+  pin, snap-20261023T2004Z: coverage and wave 1"
+- P2 same-split head-to-head: half of v2's gain over the shipped model was the damage
+  mix (needs champion-role profiles on the box); the set net on v2 is the best single
+  model (-0.74 on v2) and hasn't grown with data since 1320Z: "P2: same-split
+  head-to-head"
+- E1 drift or noise: noise. At equal N newest, oldest and spread tie; doubling N gains
+  1.7, so old history is not dead weight. Open: the set net gains less on the newest
+  window: "E1: drift or noise at equal N"
+- A1 scaling: no plateau for pair models and nets (1.1-2.3 a doubling at 1.19M games);
+  nets add nothing under ~300k games; big may pass set on v2 within the next doubling
+  (forecast). Train loss still to log: "A1: scaling curves"
+- A2 ensemble selection on 1320Z preds: logistic stack -0.49 ± 0.09 vs setid-wa,
+  greedy -0.11: "Lab frontier wave 1"
+- B4 site table reliability: a matchup's raw rate at ~80 games is a third signal, half
+  at ~300; confirms the site's usualK shrinkage: "Lab frontier wave 1"
+- D1 strength at fixed mastery: the raw rate's mastery bias has sd 0.59 pp over
+  champion-roles; the lane card's expertise bonus double counts (fix: centre on the
+  champion-role's mean mastery): "Strength at fixed mastery (D1)"
+- B1 draft ceiling: gate not met, see "Order and gates"
+- A4 pair cells that borrow strength: shipped (data-and-model.md)
 
 ## Phase 0: before the gpu-box runs (CPU, Mac or box)
 
-- P1 New pin, ~1.3M+ games: seat stats merged for every game (1007Z has ~24% of seats:
-  profile models silently degrade, lab-constraints 13 Oct), mastery_pre for all ten,
-  rank_start in dev, 16.21 in dev. Report coverage per split first
-- P2 Same-split head-to-head on P1: win-draft, additive v2, set net on v2 (why the shipped
-  model trails v2 by ~1.1, inventory gap 5). Port v2 into `meiolol eval`
 - P3 Pre-declare the test-look rule for this programme (one look per final model, sealed
-  seeds, pass rule form from model.md 1320Z) and get Jacob's go
+  seeds, pass rule form from model.md 1320Z) and get Jacob's go: proposal below
 - P4 One Python harness for per-game predictions: every model writes preds.tsv per
   block (folds, dev-val) keyed by match id, so ensembles, decompositions and the ceiling
   work read one format (nnsets.py rebuilds blocks already)
 
-### P3 proposal: the test-look rule (draft, 23 Oct; for Jacob to accept or change)
+### P3 proposal: the test-look rule (for Jacob to accept or change)
 
 Nothing here has run; no test game has been scored. Template: model.md "Nets on the
 shipped model, 2026-10-18" (rule declared before results, sealed seeds, 2.1x).
 
-Test window: snap-20261023T2004Z's test games (P1's pin, made 23 Oct; 1007Z was pruned
-that night), start >= 20 Oct 14:44Z (its test cut) to 23 Oct 20:04Z, every platform:
-238,153 played games, 224,188 of them on 16.21. No lab model has scored them, and all
-are newer than every game any frontier model was developed on (1007Z's newest: 18 Oct
-10:07Z). Final fits use every played game below that cut (2004Z's seat stats merge the
-archive, P1). Models developed later on 2004Z's dev blocks may join the queue under the
-same rule. Since 94% of the test is a patch the dev work never saw, the look also asks
-whether the gains carry to a new patch: reported per patch and per day since 16.21.
-Profiles come from fit games only, so a test game's own stats are never read.
+Test window: snap-20261023T2004Z's test games (P1's pin), start >= 20 Oct 14:44Z (its
+test cut) to 23 Oct 20:04Z, every platform: 238,153 played games, 224,188 of them on
+16.21. No lab model has scored them, and all are newer than every game any frontier
+model was developed on (1007Z's newest: 18 Oct 10:07Z). Final fits use every played game
+below that cut (2004Z's seat stats merge the archive, P1). Models developed later on
+2004Z's dev blocks may join the queue under the same rule. Since 94% of the test is a
+patch the dev work never saw, the look also asks whether the gains carry to a new patch:
+reported per patch and per day since 16.21. Profiles come from fit games only, so a test
+game's own stats are never read.
 
 One look per final model:
 - A final model is a spec written into model.md before its run: commit, build flags,
@@ -119,40 +137,24 @@ For Jacob: (a) this window (2004Z's test), or a later pin's; (b) the ladder orde
 or all twelve in the stack; (c) comp leans on win-draft as declared, or on additive v2
 after a dev run.
 
-## Wave 1: cheap and decisive (CPU hours, first days)
+## Wave 1: cheap and decisive (CPU hours)
 
-- B1 Draft ceiling by variance accounting [ceiling C4, C5, C11]. Per block
-  (champion-role, ally pairs, enemy pairs, comp residual), excess spread of held-out
-  residual cells over a null simulated on the real schedule; sum, convert with s^2/8.
-  Validate by flipping a known share of labels (estimate shrinks by (1-2r)^2); joint
-  REML or Haseman-Elston for overlap. Same for own-seat terms and all-ten history.
-  Gate: total near s 0.27 -> stop draft architecture work, effort to players and product
-- E1 Drift or noise? Equal-N test [dynamics C2, C12]: at each N, newest N vs N spread
-  over all days vs oldest N, same forward folds. Expected tie within ~0.3. If newest wins
-  clearly, strength needs time terms and old history is dead weight
-- A1 Fixed-block scaling curve on P1 at 1/16 to 1 of fit games: ratings, additive v2,
-  set+emb on v2, big, bigres. Log train loss too: train and test bracket each family's
-  limit [ceiling C6]. Answers the plateau question properly and whether nets cross v2
-- A2 Ensemble selection over existing preds [tabular C7, C8, C9]: greedy with
-  replacement, sorted start, 20 bags; weights fitted forward on folds 2-5, scored on
-  dev-val and sealed seeds. Expected -0.3 to -0.8. Members: win-draft, v2, set seeds,
+Done: B1, E1, A1, A2, B4 (Results so far). Left:
+- A1: log train loss, so train and test bracket each family's limit [ceiling C6]
+- A2 on 2004Z's preds once P4's harness exists; members: win-draft, v2, set seeds,
   bigres, big, champcomp, embx
-- D1 Strength at fixed mastery [causal C2, C3]: refit with seat log mastery as a
-  covariate, report strength at 50k points. Rankings that move -> tier list and "safe
-  blind" show strength at the user's mastery; also fixes double counting in the lane
-  card's expertise bonus
-- B4 Split-half reliability of every site table (champion-role per patch, matchups,
-  duos) with Spearman-Brown [ceiling C5]: tables under 0.3 get harder shrinkage or a
-  luck note
+- D1 refit: strength with seat log mastery as a covariate in the model, reported at
+  50k points, and the slope's own interval [causal C2, C3]. Rankings that move -> tier
+  list and "safe blind" show strength at the user's mastery
 
 ## Wave 2: the teacher (gpu-box)
 
 Build up, each step measured on the one before:
 - A3 TabM (k=32) residual on v2, same inputs as the big net [tabular C4, C10]: should
   match the 10-seed big net in one run; replaces seed ensembles if it does
-- A4 Pair cells that borrow strength: field-aware FM (fields = 10 role slots) residual
-  on v2, and inside v2 matchup cells shrunk toward kit group x kit group and low-rank
-  u.v instead of 0 [tabular C5]. CPU-shippable; FM is dot products in Zig
+- A4 Pair cells that borrow strength: the parent form shipped; left: a field-aware FM
+  (fields = 10 role slots) residual on v2 and low-rank u.v cells [tabular C5].
+  CPU-shippable; FM is dot products in Zig
 - A5 Multi-task set net: win plus gold14, lanediff14, game length, kill pace heads
   (the draft explains 6-22% of those, Q2) and a masked-pick head [pretrain C7, C12].
   Side product: P(champion | role, other nine), the pick model D2 needs
@@ -247,9 +249,7 @@ and A1's curves decide how much of wave 2 is draft architecture (A3, A4, A7) vs 
 dev; D4 needs API budget. Rough gpu-box time: wave 1 under a day, wave 2 two to four
 days, wave 3 a day, wave 4 a day plus the ARAM crawl.
 
-B1's gate, 24 Oct (docs/model.md "Draft ceiling (B1) rerun on 2004Z"): not met. Four
-blocks known perfectly: s 0.33 (~56.5%); the set net on v2 is 4.8 ± 0.9 milli-nats
-short, all in pair cells too thin to estimate one by one: wave 2's borrowing across
-cells (A4, A3) and more games both stay worth it. D1 (model.md "Strength at fixed
-mastery"): the lane card's expertise bonus double counts (fix: centre on the
-champion-role's mean mastery; replay hit rate not yet measured).
+B1's gate (docs/model.md "Draft ceiling (B1) rerun on 2004Z"): not met. Four blocks
+known perfectly: s 0.33 (~56.5%); the set net on v2 is 4.8 ± 0.9 milli-nats short, all
+in pair cells too thin to estimate one by one: wave 2's borrowing across cells (A4, A3)
+and more games both stay worth it.
