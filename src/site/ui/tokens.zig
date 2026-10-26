@@ -49,6 +49,8 @@ pub const root = [_]Token{
     .{ .name = "f-hi3", .value = "#1a68bf" },
     .{ .name = "good", .value = "var(--hi2)" },
     .{ .name = "bad", .value = "var(--lo2)" },
+    .{ .name = "good-line", .value = "rgb(89 170 248 / 0.4)" },
+    .{ .name = "bad-line", .value = "rgb(247 156 64 / 0.4)" },
     // Magnitude without good/bad (pick, ban, games, gold lean): neutral ink bar
     .{ .name = "bar-lo", .value = "#5d6169" },
     .{ .name = "bar-hi", .value = "#b4b7bd" },
