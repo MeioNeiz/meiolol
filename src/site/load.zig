@@ -84,6 +84,7 @@ pub fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Opt
         .view_curves = &extras.curves,
         .view_builds = &extras.builds,
         .view_builds_prev = &extras.builds_prev,
+        .view_builds_rank = &extras.builds_rank,
         .lean = if (extras.lean) |*l| l else null,
     };
     var phases: Phases = .init(io);

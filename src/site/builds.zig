@@ -105,6 +105,22 @@ pub fn forChampion(site: *const Site, v: html.View, ch: Champ, r: Role) ?Picked 
     return pick(site, v, shown, .{ ch.id, r });
 }
 
+/// As forChampion under the rank filter: `rank` 0 Platinum+ (forChampion), 1 to 3
+/// builds.rank_tiers. A rank with under solid_games of it falls back to the next wider
+/// one, `rank` saying which is shown: a few one-tricks are much of a thin high-rank slice
+/// (16.21 Master+: 4.5 games per player on a champion and role, weighted by games)
+pub const RankPicked = struct { picked: Picked, rank: u8 };
+
+pub fn forRank(site: *const Site, v: html.View, ch: Champ, r: Role, rank: u8) ?RankPicked {
+    var at = @min(rank, builds.rank_tiers.len);
+    while (at > 0) : (at -= 1) {
+        const f = if (site.view_builds_rank[v.index()][at - 1]) |*f| f else continue;
+        const b = shown(f, ch.id, r) orelse continue;
+        if (b.games >= solid_games) return .{ .picked = .{ .f = f, .b = b, .period = v.period }, .rank = at };
+    }
+    return .{ .picked = forChampion(site, v, ch, r) orelse return null, .rank = 0 };
+}
+
 fn pickFrom(slot: *const ?File, period: html.Period, get: anytype, args: anytype) ?Picked {
     const f = if (slot.*) |*f| f else return null;
     return .{ .f = f, .b = @call(.auto, get, .{f} ++ args) orelse return null, .period = period };

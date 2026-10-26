@@ -16,7 +16,7 @@ const pool_page = @import("pool.zig");
 const pool = @import("../pool.zig");
 const learning = @import("../learning.zig");
 const spread = @import("../spread.zig");
-const builds_page = @import("builds.zig");
+pub const builds_page = @import("builds.zig");
 const builds = @import("../builds.zig");
 const lean = @import("../lean.zig");
 const filters = @import("filters.zig");
@@ -78,6 +78,8 @@ pub const Options = struct {
     /// pages' build strips while the current patch has few games of a pick (builds.zig
     /// pick)
     builds_prev: [html.View.count]?[]const u8 = @splat(null),
+    /// The rank filter's builds files, by view as `builds`, then builds.rank_tiers
+    builds_rank: [html.View.count][builds.rank_tiers.len]?[]const u8 = @splat(@splat(null)),
     /// Only the EUW views (the root and patch/; the shared pages come from patch/): a
     /// quick preview, links into all/ dangle
     euw_only: bool = false,
@@ -188,6 +190,8 @@ pub const Site = struct {
     view_builds: *const [html.View.count]?builds.File,
     /// The previous patch's (Options.builds_prev)
     view_builds_prev: *const [html.View.count]?builds.File,
+    /// The rank filter's (Options.builds_rank)
+    view_builds_rank: *const [html.View.count][builds.rank_tiers.len]?builds.File,
     /// One file for every view: its scope is its own, every region
     lean: ?*const lean.File = null,
     /// Win rates by game length and by patch (stats.Trend); null in a core static build

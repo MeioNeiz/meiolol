@@ -26,6 +26,7 @@ pub const Extras = struct {
     curves_prev: [html.View.count]?core.curvesfile.Curves = @splat(null),
     builds: [html.View.count]?builds.File = @splat(null),
     builds_prev: [html.View.count]?builds.File = @splat(null),
+    builds_rank: [html.View.count][builds.rank_tiers.len]?builds.File = @splat(@splat(null)),
     lean: ?lean.File = null,
     /// Pool and learning tallies, on the first view's load: one pass over the database
     /// serves every view
@@ -50,6 +51,9 @@ pub const Extras = struct {
         for (opts.builds_prev, &e.builds_prev) |path, *b| {
             if (path) |p| b.* = loadParsed(builds.File, arena, io, p, "builds", .limited(1 << 30));
         }
+        for (opts.builds_rank, &e.builds_rank) |paths, *bs| for (paths, bs) |path, *b| {
+            if (path) |p| b.* = loadParsed(builds.File, arena, io, p, "builds", .limited(1 << 30));
+        };
         if (opts.lean) |p| e.lean = loadParsed(lean.File, arena, io, p, "lean file", .limited(1 << 24));
         return e;
     }

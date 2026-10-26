@@ -135,6 +135,20 @@ test "fixture games to stats, curves and the website" {
     prev_builds.builds = more;
     try tmp.dir.writeFile(io, .{ .sub_path = "builds-prev.json", .data = try std.json.Stringify.valueAlloc(arena, prev_builds, .{}) });
     const prev_builds_path = try std.fs.path.join(arena, &.{ dir, "builds-prev.json" });
+    // The rank filter's (builds --site): Darius top solid at Emerald+, thin at Master+
+    var rank_paths: [2][]const u8 = undefined;
+    for (&rank_paths, [_]u32{ 400, 10 }, [_][]const u8{ "EMERALD", "MASTER" }) |*path, games_at, tier| {
+        var f = build_file;
+        f.min_tier = tier;
+        const bs = try arena.dupe(builds.File.Build, build_file.builds);
+        for (bs) |*x| if (x.champion == 122 and x.role == .top) {
+            x.games = games_at;
+        };
+        f.builds = bs;
+        const name = try arena.print("builds-{s}.json", .{tier});
+        try tmp.dir.writeFile(io, .{ .sub_path = name, .data = try std.json.Stringify.valueAlloc(arena, f, .{}) });
+        path.* = try std.fs.path.join(arena, &.{ dir, name });
+    }
 
     // Early or late (`meiolol lean`): every fixture game counts, too few for any line
     var ln = try lean.load(gpa, io, db, &.{patch}, &.{"EUW1"}, 0, std.math.maxInt(i64));
@@ -197,6 +211,7 @@ test "fixture games to stats, curves and the website" {
         .prev_patch = prev_patch,
         .curves_prev = .{ null, prev_curves_path, null, prev_curves_path },
         .builds_prev = .{ null, prev_builds_path, null, prev_builds_path },
+        .builds_rank = .{ .{ rank_paths[0], null, rank_paths[1] }, @splat(null), @splat(null), @splat(null) },
         .lean = lean_path,
     };
     try site.generate(gpa, io, db, opts);
@@ -390,6 +405,18 @@ test "fixture games to stats, curves and the website" {
     // the static build wrote, byte for byte, and nothing for paths it didn't
     const loaded = try site.Loaded.init(gpa, io, db, opts);
     defer loaded.deinit();
+    {
+        // Rank filter: Master+ asked, Diamond+ missing, Master+ thin, so Emerald+ shown
+        const s = try loaded.site(site.html.View.all[0]);
+        const ch = s.champBySlug("darius").?;
+        const v = s.view;
+        const at = site.builds_page.forRank(s, v, ch, .top, 3).?;
+        try testing.expectEqual(1, at.rank);
+        try testing.expectEqual(400, at.picked.b.games);
+        try testing.expectEqualStrings("EMERALD", at.picked.f.min_tier);
+        try testing.expectEqual(0, site.builds_page.forRank(s, v, ch, .top, 0).?.rank);
+        try testing.expectEqual(0, site.builds_page.forRank(s, .{ .region = .euw, .period = .patch }, ch, .top, 3).?.rank);
+    }
     var out_dir = try std.Io.Dir.cwd().openDir(io, out, .{ .iterate = true });
     defer out_dir.close(io);
     var walker = try out_dir.walk(gpa);

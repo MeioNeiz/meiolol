@@ -8,6 +8,7 @@ const site = @import("../site/root.zig");
 const serve = @import("../serve.zig");
 const partials = @import("../partials.zig");
 const Date = @import("../date.zig").Date;
+const builds = @import("../builds.zig");
 const main = @import("../main.zig");
 const Cmd = main.Cmd;
 const curvesPath = main.curvesPath;
@@ -105,6 +106,12 @@ const SiteFlags = struct {
                 try main.recentBuildsPath(arena, c.data_dir, true),
                 try buildsPath(arena, c.data_dir, chosen, true),
             },
+            .builds_rank = try rankPaths(arena, .{
+                try main.recentBuildsPath(arena, c.data_dir, false),
+                try buildsPath(arena, c.data_dir, chosen, false),
+                try main.recentBuildsPath(arena, c.data_dir, true),
+                try buildsPath(arena, c.data_dir, chosen, true),
+            }),
             .prev_patch = if (prev) |p| p[0] else null,
             .builds_prev = if (prev) |p| .{
                 null,
@@ -121,6 +128,15 @@ const SiteFlags = struct {
         };
     }
 };
+
+/// Each view's builds file at each of builds.rank_tiers (main.rankBuildsPath)
+fn rankPaths(arena: std.mem.Allocator, base: [site.html.View.count][]const u8) ![site.html.View.count][builds.rank_tiers.len]?[]const u8 {
+    var out: [site.html.View.count][builds.rank_tiers.len]?[]const u8 = undefined;
+    for (base, &out) |b, *o| for (builds.rank_tiers, o) |tier, *p| {
+        p.* = try main.rankBuildsPath(arena, b, tier);
+    };
+    return out;
+}
 
 pub const usage_site =
     \\  site       write the public website (static files): EUW over the last 30 days
