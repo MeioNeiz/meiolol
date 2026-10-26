@@ -79,10 +79,6 @@ pub const Made = struct {
 /// Diamond+, Master+ by their lowest tier index, as builds.rank_tiers
 pub const rank_groups = [_]u8{ 5, 6, 7 };
 
-/// Roles under this share of a champion's games at a rank get no rank figures: half the
-/// champions table's floor, so a role the base page shows mostly has them
-const rank_role_share = tierlist.min_role_share / 2.0;
-
 pub const Counts = struct { games: u32 = 0, wins: u32 = 0 };
 
 /// A champion's lane games in a role under a view and rank group, with the figures that
@@ -596,8 +592,7 @@ fn rankFigures(a: std.mem.Allocator, site: *const root.Site, opts: root.Options,
             const i = at.vgrOf(vi, g, r);
             const vg = vi * n_g + g;
             const t = totals[i * n_c + c];
-            const all_roles = champ_games[(vg * (n_p + 1) + n_p) * n_c + c];
-            if (t.games == 0 or ratio(t.games, all_roles) < rank_role_share) continue;
+            if (t.games == 0) continue;
             const floor = @max(1, min_opponent_share * @as(f64, @floatFromInt(t.games)));
             var list: std.ArrayList(RankedOpp) = .empty;
             var oit = opps.iterator();

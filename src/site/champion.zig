@@ -140,7 +140,7 @@ pub fn pageData(site: *const Site, ch: Champ) !cp.Data {
     var roles: std.ArrayList(Role) = .empty;
     for (Role.all) |r| {
         const g = st.champRole(r, ch.c).games;
-        if (g > 0 and @as(f64, @floatFromInt(g)) >= tierlist.min_role_share * @as(f64, @floatFromInt(ch.games))) try roles.append(a, r);
+        if (g > 0) try roles.append(a, r);
     }
     std.mem.sort(Role, roles.items, RoleGames{ .st = st, .c = ch.c }, RoleGames.more);
     const out = try a.alloc(cp.Role, roles.items.len);
@@ -200,6 +200,7 @@ fn roleData(site: *const Site, ch: Champ, r: Role) !cp.Role {
         .games = cr.games,
         .wins = cr.wins,
         .share = pct(cr.games, ch.games),
+        .thin = ratio(cr.games, ch.games) < tierlist.min_role_share,
         .rank = if (rank) |k| @intCast(k.rank) else 0,
         .of = if (rank) |k| @intCast(k.of) else 0,
         .pick = pct(cr.games, site.games),

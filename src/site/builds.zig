@@ -38,6 +38,12 @@ pub fn path(a: std.mem.Allocator, ch: Champ, r: Role) ![]const u8 {
     return a.print("build/{s}-{s}.html", .{ ch.slug, r.label() });
 }
 
+/// Any games of `ch` in `r`: the champion page shows every role it has
+fn played(f: *const File, champion: u32, r: Role) ?File.Build {
+    const b = f.get(champion, r) orelse return null;
+    return if (b.games > 0) b else null;
+}
+
 /// The build `ch` has a page for in `r`
 pub fn shown(f: *const File, champion: u32, r: Role) ?File.Build {
     const b = f.get(champion, r) orelse return null;
@@ -102,7 +108,7 @@ fn pick(site: *const Site, v: html.View, get: anytype, args: anytype) ?Picked {
 /// The build the champion page shows for `ch` in `r`: this patch's, or the previous one's
 /// while this one's is thin
 pub fn forChampion(site: *const Site, v: html.View, ch: Champ, r: Role) ?Picked {
-    return pick(site, v, shown, .{ ch.id, r });
+    return pick(site, v, played, .{ ch.id, r });
 }
 
 /// As forChampion under the rank filter: `rank` 0 Platinum+ (forChampion), 1 to 3
@@ -115,7 +121,7 @@ pub fn forRank(site: *const Site, v: html.View, ch: Champ, r: Role, rank: u8) ?R
     var at = @min(rank, builds.rank_tiers.len);
     while (at > 0) : (at -= 1) {
         const f = if (site.view_builds_rank[v.index()][at - 1]) |*f| f else continue;
-        const b = shown(f, ch.id, r) orelse continue;
+        const b = played(f, ch.id, r) orelse continue;
         if (b.games >= solid_games) return .{ .picked = .{ .f = f, .b = b, .period = v.period }, .rank = at };
     }
     return .{ .picked = forChampion(site, v, ch, r) orelse return null, .rank = 0 };

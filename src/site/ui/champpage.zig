@@ -16,6 +16,7 @@
 //! it's in
 const std = @import("std");
 const tree = @import("tree.zig");
+const html = @import("html.zig");
 const fmt = @import("fmt.zig");
 const phrase = @import("phrase.zig");
 const champ = @import("champ.zig");
@@ -60,7 +61,7 @@ pub const Data = struct {
     ddragon: []const u8,
     /// Every champion, for opponents, allies and the search (Opp.champ indexes it)
     champs: []const Other,
-    /// Most played first; only roles with enough of its games
+    /// Most played first; every role with any of its games
     roles: []const Role,
     /// Game length buckets' names: "<20", "20-25" ...
     lengths: []const []const u8,
@@ -86,6 +87,8 @@ pub const Role = struct {
     wins: u32,
     /// Of the champion's games, %
     share: f32,
+    /// A role it rarely plays (under the champions table's share): figures faded
+    thin: bool = false,
     /// Its place in the role's champions table; 0: a rare pick there
     rank: u16 = 0,
     of: u16 = 0,
@@ -310,6 +313,7 @@ const W = struct {
     pub const length_tip = Phrase("{l:text} min: {r:rate} in {n:count} games");
     pub const band_tip = Phrase("{l:text}: {r:rate} in {n:count} games");
     pub const few = Phrase("Too few games at {r:text}.");
+    pub const rare_role = Phrase("A rare role for {c:text}: {n:count} games.");
     pub const from = Phrase("Build from {g:text} games: too few at {r:text}.");
     pub const plat = plain("Plat+");
     pub const picked = Phrase("{r:text} · {p:text} · {k:text}");
@@ -362,6 +366,7 @@ pub const TopRole = struct {
     games: u32,
     wins: u32,
     share: f32,
+    thin: bool = false,
     rank: u16 = 0,
     of: u16 = 0,
     pick: f32,
@@ -382,6 +387,7 @@ pub const BuildData = struct {
 
 pub const BuildRole = struct {
     role: role.Role,
+    thin: bool = false,
     build: ?buildpanel.Data = null,
     /// A rank file's: the group the build is from (Rank's index), when this one has too
     /// few games
@@ -403,6 +409,7 @@ pub const MoreData = struct {
 
 pub const MoreRole = struct {
     role: role.Role,
+    thin: bool = false,
     games: u32,
     wins: u32,
     lean: ?i16 = null,
@@ -419,9 +426,9 @@ pub fn split(a: std.mem.Allocator, d: *const Data) !Split {
     const build = try a.alloc(BuildRole, d.roles.len);
     const more = try a.alloc(MoreRole, d.roles.len);
     for (d.roles, top, build, more) |x, *t, *b, *m| {
-        t.* = .{ .role = x.role, .games = x.games, .wins = x.wins, .share = x.share, .rank = x.rank, .of = x.of, .pick = x.pick, .ban = x.ban, .patch_move = x.patch_move, .lane = if (x.rels.len > 0) x.rels[0].opps else &.{} };
-        b.* = .{ .role = x.role, .build = x.build };
-        m.* = .{ .role = x.role, .games = x.games, .wins = x.wins, .lean = x.lean, .rels = x.rels, .by_patch = x.by_patch, .by_length = x.by_length };
+        t.* = .{ .role = x.role, .games = x.games, .wins = x.wins, .share = x.share, .thin = x.thin, .rank = x.rank, .of = x.of, .pick = x.pick, .ban = x.ban, .patch_move = x.patch_move, .lane = if (x.rels.len > 0) x.rels[0].opps else &.{} };
+        b.* = .{ .role = x.role, .thin = x.thin, .build = x.build };
+        m.* = .{ .role = x.role, .thin = x.thin, .games = x.games, .wins = x.wins, .lean = x.lean, .rels = x.rels, .by_patch = x.by_patch, .by_length = x.by_length };
     }
     return .{
         .top = .{ .name = d.name, .slug = d.slug, .icon = d.icon, .patch = d.patch, .ddragon = d.ddragon, .champs = d.champs, .roles = top },
@@ -567,7 +574,7 @@ pub const Top = struct {
             .data_stamp = p.stamp,
             .data_root = p.root,
             .data_busy = p.files.busy(),
-            .data_thin = if (x) |y| p.files.shown.rank != .plat and y.games < solid_games else false,
+            .data_thin = rl.thin or if (x) |y| p.files.shown.rank != .plat and y.games < solid_games else false,
         }, .{
             card.view(h, .{}, &.{
                 champhead.view(h, .{
@@ -577,6 +584,7 @@ pub const Top = struct {
                     .vs = if (p.has_search) p.search.view(h) else null,
                     .strip = if (x) |y| p.headline(h, y) else h.p(.{ .class = "none" }, .{W.few.with(h, .{ .r = W.ranks[@backingInt(p.files.shown.rank)].s })}),
                 }),
+                if (rl.thin) h.p(.{ .class = "rare" }, .{W.rare_role.with(h, .{ .c = d.name, .n = rl.games })}) else .none,
                 tabs.view(h, W.sections, &.{
                     .{ .label = W.build, .href = "#build", .on = h.on(p, .{ .jump = .build }) },
                     .{ .label = W.matchups, .href = "#matchups", .on = h.on(p, .{ .jump = .matchups }), .n = if (p.files.shown.rank == .plat) @intCast(rl.lane.len) else if (x) |y| y.opps else null },
@@ -777,6 +785,7 @@ pub const Build = struct {
             .data_js = p.js,
             .data_wasm = p.wasm,
             .data_busy = p.files.busy(),
+            .data_thin = p.data.roles[p.cur].thin,
         }, .{if (p.panel()) |b| card.view(h, .{ .flush = true }, &.{
             if (p.data.against) |y| card.head(h, W.build_against.with(h, .{ .y = y }), null, &.{}) else .none,
             note,
@@ -924,6 +933,7 @@ pub const More = struct {
             .data_js = p.js,
             .data_wasm = p.wasm,
             .data_busy = p.files.busy(),
+            .data_thin = p.r().thin,
         }, .{
             p.matchups(h),
             h.div(.{ .class = "row3", .id = "trends" }, .{ p.patchCard(h), p.lengthCard(h), p.playersCard(h) }),
@@ -1215,6 +1225,8 @@ pub const css =
     \\  .c-cpage .c-toolbar { container-type: inline-size; margin-top: var(--sp-3); }
     \\  .c-cpage > [data-busy]:not([data-island=champion]), .c-cpage > [data-busy] .c-champhead { opacity: 0.55; transition: opacity 0.2s; }
     \\  .c-cpage [data-thin] .c-champhead > .c-strip, .c-cpage .plot[data-thin] { opacity: 0.6; }
+    \\  .c-cpage > [data-thin] :is(.c-build > .in, .plot, .c-mpick, #trends .c-trend) { opacity: 0.6; }
+    \\  .c-cpage .rare { margin: var(--sp-3) 0 0; font-size: var(--fs-s); color: var(--muted); }
     \\  .c-cpage .c-champhead > .none { margin: 0 0 0 auto; }
     \\  .c-cpage .from { margin: 0; padding: var(--sp-3) var(--card-px) 0; font-size: var(--fs-s); color: var(--muted); }
     \\  .c-cpage .none { margin: var(--sp-3) 0; color: var(--muted); }
@@ -1243,4 +1255,27 @@ test "a view's files sit beside the page's; rank files at the root" {
     try std.testing.expectEqual(3, p.view);
     try std.testing.expectEqual(.all, p.region());
     try std.testing.expectEqual(.patch, p.period());
+}
+
+test "a rare role is listed and opens faded, with its games" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const d: TopData = .{ .name = "Karthus", .slug = "karthus", .icon = "", .patch = "16.21", .ddragon = "16.21.1", .champs = &.{}, .roles = &.{
+        .{ .role = .jungle, .games = 9000, .wins = 4700, .share = 95, .pick = 4, .ban = 2, .lane = &.{} },
+        .{ .role = .top, .games = 120, .wins = 55, .share = 1.3, .thin = true, .pick = 0.1, .ban = 2, .lane = &.{} },
+    } };
+    var p: Top = .init(&d, try prepare(a, &d, "../"), "../");
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    var w: std.Io.Writer.Allocating = .init(a);
+    try html.write(&t, p.view(&h), &w.writer);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "data-thin") == null);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "Top") != null);
+
+    p.fromUrl(.{ .role = .top });
+    w.clearRetainingCapacity();
+    try html.write(&t, p.view(&h), &w.writer);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "data-thin") != null);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "<p class=\"rare\">A rare role for Karthus: 120 games.</p>") != null);
 }
