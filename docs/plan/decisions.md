@@ -2,10 +2,10 @@
 
 What Jacob decided, what is still his to decide, and what is ruled out.
 
-## Decided (Jacob 18 Oct: "follow your recommendations")
+## Decided
 
-Each line was a question with a recommendation; Jacob approved them all. Storage and
-hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
+J1-J9, Q and G: questions with a recommendation, all approved (18 Oct: "follow your
+recommendations"). A later decision that overrides an earlier one says so.
 
 - J1 Daily Draft: drop the numbers; "on paper the draft leaned red" only when clear,
   option reasons in words and only detected kinds (as Learn, R20)
@@ -21,9 +21,9 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
   now (cheap, aggregate); the pool block after J2
 - J7 Desktop app: no date, "after Riot's production review"; no notify list (it would
   keep emails)
-- J8 Ops: gzip for /admin/training/ JSON in jomify's nginx (done 18 Oct);
-  browser-tool's first commit is Jacob's; "429 (server)" is Riot's side, count it
-  apart from our key's limit, no action. Password rotation skipped (your call)
+- J8 Ops: gzip for /admin/training/ JSON in jomify's nginx; browser-tool's first commit
+  is Jacob's; "429 (server)" is Riot's side, count it apart from our key's limit, no
+  action. Password rotation skipped (your call)
 - J9 Admin is for you only: jargon stays low priority
 - J10 (20 Oct) Public games are public data: drop self-imposed privacy rules (Daily
   Draft week delay, no per-player stats or ranks, "no names" style anonymising) across
@@ -37,32 +37,31 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
 - J13 (20 Oct) Runes and build options: show pick rate and win rate together; highlight
   the highest win rate among options with enough games (not raw highest wr), alongside
   most played; others stay easy to read. Keep the in-game rune view and its highlight.
-  20 Oct research review: no mark on boots and finished items, whose win rates mostly
-  say how the game was going when bought (loltheory-item-recs ^f3)
+  No mark on boots and finished items, whose win rates mostly say how the game was
+  going when bought (loltheory-item-recs ^f3)
 - J14 (20 Oct) Clickable things are the whole box (matchup rows, champion tiles,
   cards), not just the name: site-wide
 - J15 (20 Oct) Admin Overview tile shows the shipped model; experiments stay visible
   and testable beside it, labelled. One rule everywhere
-- J16 (20 Oct) Crawler target 99-100% of the key's limit (now ~97%)
+- J16 (20 Oct) Crawler target 99-100% of the key's limit
 - J17 (20 Oct) CI much lighter: lighter heavy tests and lab tests out of the push check
 - J18 (20 Oct) Other players' names on public pages: yes, rewrite lia.md balancing;
   hide streamer-mode players if op.gg and other big sites do
 - J19 (20 Oct) Desktop download on the site for Jacob (admin login until the key, per
-  Product rules); data in it kept fresh. 09:05: "it should update its own data without
+  Product rules); data in it kept fresh: "it should update its own data without
   needing to be redownloaded, even update itself ideally with changes": the app fetches
   stats and curves from the site itself and replaces its exe (version file, download,
   swap on next start), behind the admin gate (the zip's own key) until the key
 - J20 (20 Oct) "pbr" on the champions pages means a PBI-style ban impact, "the most
   optimal ban in terms of pick rate and win rate": lolalytics' PBI with small samples
-  pulled toward the average, worded "ban impact" (Product rules: no "best ban");
-  column renamed "Influence" the same day (Jacob: a word without "ban"); scale: games
-  won above the role's average per 10,000 games it was not banned, whole numbers (Jacob:
-  "a different scale to lolalytics but just something smart"; PBI turned out to be this
-  count unlabelled; per 1,000 most rows read 0.0 to 0.4)
+  pulled toward the average; the column is "Influence" (Jacob: a word without "ban";
+  Product rules: no "best ban"); scale: games won above the role's average per 10,000
+  games it was not banned, whole numbers (Jacob: "a different scale to lolalytics but
+  just something smart"; per 1,000 most rows read 0.0 to 0.4)
 - J21 (22 Oct) Two apps and accounts: a public app in line with Riot's rules and a
   private, fuller one ("op" app and site) for Jacob and friends. Proper logins: Jacob's
-  own account; friends a tier below admin who can't break anything. Roles (later the
-  same day): public, paid, private, admin, owner (Jacob). Plans:
+  own account; friends a tier below admin who can't break anything. Roles: public,
+  paid, private, admin, owner (Jacob). Plans:
   docs/plan/accounts.md, docs/plan/app.md; open points in accounts.md AC0
 - J22 (22 Oct) Private tool: everything Riot allows; no ads in game, no auto accept,
   pick or ban (not wanted). Not built in any tier: names or stats of others in ranked
@@ -109,25 +108,20 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
 - nn on the GPU: planned, not now
 - Q1 Rewrite the application around game review of your own games, lane curves as the
   benchmark; squads worded as planned, or out until built
-- Q2 (dropped 20 Oct by J10) Daily games at least 7 days old; the previous patch's in a
-  patch's first week
 - Q3 Ban suggestions in scope: yes, several with games and range, never auto-ban
 - Q4 Crawl floor: Gold IV once the key's rate allows (the identity is Silver to Emerald),
   Silver after
 - G1 gpu-box lab data: a new ext4 partition in the 673 GB unallocated (keeps your
   Pop!_OS install untouched; you format it and add it to wsl-mount.ps1), not a
   directory on the Pop!_OS partition
-- G2 Prune snapshots 2351Z, 1954Z, 2137Z (~36 GB; only cited in learned.md and
-  model.md): yes. meiolol-2a, who owned them, is gone, so this is yours
 - Patch day movers bar: z 2.58 (fewer, surer movers on a public page)
-- Storage and hosting (Open decisions): Hetzner BX11 for backups and old segments plus
-  a rolling window on the box; needed within ~a week (item 2)
+- Storage and hosting: Hetzner BX11 for backups and old segments plus a rolling window
+  on the box (options (1) and (2) below); Jacob orders
 
 ## Open decisions (Jacob)
 
-- Legal: retention periods (docs/legal/privacy.md top). Decided 14
-  Oct: controller "Jacob Maschler, trading as meiolol", contact privacy@meio.lol
-  (Namecheap forward to add)
+- Legal: retention periods (docs/legal/privacy.md top). Decided: controller "Jacob
+  Maschler, trading as meiolol", contact privacy@meio.lol (Namecheap forward to add)
 - Alerts and backups: an ntfy topic for phone alerts (NTFY_TOPIC in .env; the health loop
   only logs until then); install the Mac job (`deploy/box.sh watch install`: notifications
   + backup mirror); ok to delete de's pre-deploy copies in ml/meiolol/backup (1.8 GB)
@@ -145,7 +139,7 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
   Volume)" to free block storage. GitHub/Hugging Face ruled out: size limits, "not a
   backup tool", erasure from git history impractical
 
-- Night run 19-20 Oct questions (team notes data/team/2026-10-19-night/<agent>.md):
+- Questions from the night run's notes (data/team/2026-10-19-night/<agent>.md):
   - Champion/matchup: "vs usual" quiet for most matchups (-3 to +2 on big ones): fine,
     or a wider range shown? Opponent grid mostly grey now that only vs usual is
     coloured: wanted? Matchup CS split "about 20 gold a CS" clear, or raw CS and gold?
@@ -160,9 +154,8 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
     Levels lock or stay pickable? (docs/learn-proposal.md is the redesign)
   - Site: preview banner as a slim strip or a header badge? Blue means both "good" and
     "your side" in review and Daily Draft: ok?
-  - Privacy (docs/privacy-rules.md "For Jacob"): other players' names on public pages
-    (Daily Draft, Your games teammates): lia.md balancing needs rewriting and streamer
-    mode players must stay hidden; retention lengths; ICO fee and EEA representative
+  - Privacy (docs/privacy-rules.md "For Jacob"): retention lengths; ICO fee and EEA
+    representative (names on public pages: J18)
   - Desktop: lane card gold coloured by sign alone or only 2 SE from even? Refresh or
     drop data/desktop (v4 curves)?
   - jomify: "Tešter#EUW" was looked up by a test and is stored (ages out in 30 days);
@@ -176,5 +169,5 @@ hosting still needs him to order. Done: J8 gzip (477a1ff, jomify nginx), G2.
 - lolalytics/op.gg/u.gg scraping, old datasets, pro play data: docs/data.md
 - Replay-file analysis: Riot locked replays from 26.20 (research)
 - Python: Jacob wants Zig for everything, including training if feasible
-- Champions table "Hard lanes" column (3 hardest opponents' icons a row): Jacob 20 Oct
-  "dont like that"
+- Champions table "Hard lanes" column (3 hardest opponents' icons a row): Jacob "dont
+  like that"
