@@ -33,6 +33,9 @@ comptime {
     for (Role.all, 0..) |r, i| std.debug.assert(std.mem.eql(u8, r.label(), pp.Role.slugs[i]));
     std.debug.assert(pp.pair_games == (patchday.Options{}).min_pair_games);
     std.debug.assert(pp.z == (patchday.Options{}).z);
+    // change() and line() map by name, so equal counts mean the same fields both ways
+    std.debug.assert(std.enums.values(patchnotes.Dir).len == std.enums.values(ui.changeline.Dir).len);
+    std.debug.assert(std.enums.values(patchnotes.Status).len == std.enums.values(pp.Status).len);
 }
 
 pub fn writePage(site: *const Site, w: *Writer) !void {

@@ -2,6 +2,7 @@
 //! items), what it is, the old value struck, then the new one in the tone's colour with
 //! an arrow as the second cue. A text hunk keeps a few words either side. Lines with
 //! no number to show say so instead
+const std = @import("std");
 const tree = @import("tree.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = @import("phrase.zig").plain;
@@ -94,4 +95,26 @@ pub fn gallery(g: *Gallery) void {
         .{ .label = "Gold", .old = "1000", .new = "1100", .dir = .nerf },
         .{ .before = "Attack Damage", .old = "22", .new = "18", .after = "Lethality 15", .dir = .nerf },
     }));
+}
+
+test "tone and arrow by direction; text and blanked say so" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var t: tree.Tree = .{};
+    var h: H = .init(arena.allocator(), &t);
+    const n = view(&h, &.{
+        .{ .key = "Q", .old = "9", .new = "8", .dir = .buff },
+        .{ .old = "630", .new = "610", .dir = .nerf },
+        .{ .old = "1", .new = "2", .dir = .adjusted },
+        .{ .key = "E", .dir = .blanked },
+    });
+    var out: std.Io.Writer.Allocating = .init(arena.allocator());
+    try @import("html.zig").write(&t, n, &out.writer);
+    const s = out.written();
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, s, "data-v=\"buff\""));
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, s, "\u{25B2}"));
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, s, "\u{25BC}"));
+    try std.testing.expectEqual(@as(usize, 2), std.mem.count(u8, s, "class=\"ar\""));
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, s, "data-v=\"blanked\""));
+    try std.testing.expect(std.mem.indexOf(u8, s, ">\u{00B7}<") != null);
 }

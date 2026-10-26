@@ -1,6 +1,7 @@
 //! PatchHead: the patch page's title, the pair it compares, with ‹ › to the older and
 //! newer pair (disabled at either end), and a small line under it: how many games so
 //! far and a link to Riot's own notes
+const std = @import("std");
 const tree = @import("tree.zig");
 const button = @import("button.zig");
 const Gallery = @import("gallery.zig").Gallery;
@@ -50,9 +51,10 @@ pub fn view(h: *H, o: Opts) N {
     });
 }
 
+/// No pair, or one without a page: disabled
 fn nav(h: *H, p: ?Pair, glyph: []const u8, none: tree.Text) N {
-    const to = p orelse return button.view(h, .{ .v = .icon, .s = .s, .disabled = true, .label = none }, .{glyph});
-    return button.view(h, .{ .v = .icon, .s = .s, .href = to.href, .label = W.title.with(h, .{ .c = to.cur, .p = to.prev }) }, .{glyph});
+    if (p) |to| if (to.href) |href| return button.view(h, .{ .v = .icon, .s = .s, .href = href, .label = W.title.with(h, .{ .c = to.cur, .p = to.prev }) }, .{glyph});
+    return button.view(h, .{ .v = .icon, .s = .s, .disabled = true, .label = none }, .{glyph});
 }
 
 pub const css =
@@ -80,4 +82,17 @@ pub fn gallery(g: *Gallery) void {
         .newer = .{ .cur = "16.20", .prev = "16.19", .href = "patch/16.20-16.19.html" },
         .games = 412003,
     }));
+}
+
+test "ends without a page are disabled" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var t: tree.Tree = .{};
+    var h: H = .init(arena.allocator(), &t);
+    const n = view(&h, .{ .pair = .{ .cur = "16.21", .prev = "16.20" }, .older = .{ .cur = "16.20", .prev = "16.19" }, .games = 5 });
+    var out: std.Io.Writer.Allocating = .init(arena.allocator());
+    try @import("html.zig").write(&t, n, &out.writer);
+    const s = out.written();
+    try std.testing.expectEqual(@as(usize, 2), std.mem.count(u8, s, "disabled"));
+    try std.testing.expect(std.mem.indexOf(u8, s, "href") == null);
 }

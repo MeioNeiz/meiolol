@@ -362,9 +362,9 @@ pub fn prepare(a: std.mem.Allocator, d: *const Data, base: []const u8) !Lines {
         l.* = .{
             .d = d,
             .i = @intCast(i),
-            .icon = try std.fmt.allocPrint(a, "https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png", .{ d.ddragon, c.key }),
+            .icon = try a.print("https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png", .{ d.ddragon, c.key }),
             // The row's role and rank: the champion page opens on them
-            .href = try std.fmt.allocPrint(a, "{s}champion/{s}.html{s}#role={s}{s}{s}", .{ base, c.slug, d.query, Role.slugs[@backingInt(x.role)], if (d.rank == .plat) "" else "&rank=", if (d.rank == .plat) "" else @tagName(d.rank) }),
+            .href = try a.print("{s}champion/{s}.html{s}#role={s}{s}{s}", .{ base, c.slug, d.query, Role.slugs[@backingInt(x.role)], if (d.rank == .plat) "" else "&rank=", if (d.rank == .plat) "" else @tagName(d.rank) }),
             .shape = if (x.spread) |s| try violin.path(a, &s.shape, 100 * share(.{ x.games, x.wins }) - shape_reach, shape_step) else null,
             .all = true,
         };

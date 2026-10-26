@@ -35,6 +35,7 @@ export fn main() void {
     } else null;
     base = dom.attrOf(root, "data-base");
     view_index = std.fmt.parseInt(u8, dom.attrOf(root, "data-view"), 10) catch return;
+    if (view_index >= tiers.rank_paths.len) return dom.dom.warn("tiers: bad data-view");
     path = dom.attrOf(root, "data-path");
     src = dom.attrOf(root, "data-src");
     want = std.fmt.parseInt(u32, dom.attrOf(root, "data-stamp"), 10) catch return;

@@ -163,10 +163,11 @@ fn cached(http: *std.http.Client, arena: Allocator, io: std.Io, cache_dir: []con
     }
     const url = try arena.print("https://ddragon.leagueoflegends.com/cdn/{s}/data/en_GB/{s}.json", .{ version, name });
     const body = try ddragon.fetch(http, arena, url);
-    try cwd.createDirPath(io, dir);
-    const tmp = try arena.print("{s}.tmp", .{path});
-    try cwd.writeFile(io, .{ .sub_path = tmp, .data = body });
-    try cwd.rename(tmp, cwd, path, io);
+    // The web round and `meiolol patchnotes` may fetch at once
+    var file = try cwd.createFileAtomic(io, path, .{ .make_path = true, .replace = true });
+    defer file.deinit(io);
+    try file.file.writeStreamingAll(io, body);
+    try file.replace(io);
     return body;
 }
 
@@ -423,7 +424,7 @@ fn words(arena: Allocator, html: []const u8) ![]const Word {
     var i: usize = 0;
     while (i < html.len) {
         if (html[i] == '<') {
-            const end = std.mem.indexOfScalarPos(u8, html, i, '>') orelse html.len;
+            const end = std.mem.findScalarPos(u8, html, i, '>') orelse html.len;
             const tag = html[i..end];
             if (std.ascii.startsWithIgnoreCase(tag, "<stats")) in_stats = true;
             if (std.ascii.startsWithIgnoreCase(tag, "</stats")) in_stats = false;
@@ -493,10 +494,22 @@ fn hunkDir(old: []const Word, new: []const Word, stats_dir: bool) Dir {
 }
 
 /// The numbers in `ws` ("22", "16%", "(0.5s)"), at most out.len
+/// parseFloat also takes "inf", "nan" and hex
+fn isNumber(t: []const u8) bool {
+    var digit = false;
+    for (t) |c| switch (c) {
+        '0'...'9' => digit = true,
+        '.', '-' => {},
+        else => return false,
+    };
+    return digit;
+}
+
 fn numbers(ws: []const Word, out: []f64) usize {
     var n: usize = 0;
     for (ws) |w| {
         const t = std.mem.trim(u8, w.text, "()%s+,.:;");
+        if (!isNumber(t)) continue;
         const v = std.fmt.parseFloat(f64, t) catch continue;
         if (n == out.len) break;
         out[n] = v;
@@ -800,6 +813,19 @@ test "runes: description numbers" {
     try testing.expectEqual(1, n.runes.len);
     try expectLine(n.runes[0].lines[0], .text, "", "40", "45", .adjusted);
     try testing.expectEqualStrings("Deals", n.runes[0].lines[0].before);
+}
+
+test "numbers: words only, not inf, nan or hex" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var lines: std.ArrayList(Line) = .empty;
+    try textLines(arena, &lines, .p, "", "Lasts Infinity seconds", "Lasts 0x10 seconds", false);
+    try testing.expectEqual(.text, lines.items[0].dir);
+    var x: [4]f64 = undefined;
+    const ws = [_]Word{ .{ .text = "nan", .in_stats = false }, .{ .text = "(-5%)", .in_stats = false }, .{ .text = "0.5,", .in_stats = false } };
+    try testing.expectEqual(2, numbers(&ws, &x));
+    try testing.expectEqualSlices(f64, &.{ -5, 0.5 }, x[0..2]);
 }
 
 test "wordDiff: a rewrite past max_hunks is one text line" {
