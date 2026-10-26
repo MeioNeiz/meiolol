@@ -1,5 +1,6 @@
-//! ui-stats.wasm: the champions board (ui.tiers.Tiers) from its view's data file. zjb's
-//! generated loader (ui-stats.js, `<script src data-wasm>`) calls `main`
+//! ui-stats.wasm: the champions board (ui.tiers.Tiers) from its view's data file, and its
+//! rank file on the first pick above Platinum+. zjb's generated loader (ui-stats.js,
+//! `<script src data-wasm>`) calls `main`
 const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
@@ -20,6 +21,8 @@ var view_index: u8 = 0;
 var path: []const u8 = "";
 var src: []const u8 = "";
 var want: u32 = 0;
+var island: *ui.island.Island(tiers.Tiers, dom.Dom) = undefined;
+var asked = false;
 
 export fn main() void {
     dom.start();
@@ -51,5 +54,32 @@ fn loaded(_: i32, bytes: ?[]u8) void {
     server.src = src;
     server.stamp = want;
     state = server;
-    _ = dom.rt.add(tiers.Tiers, &state, &server, sel) catch return dom.dom.warn("tiers: out of memory");
+    island = dom.rt.add(tiers.Tiers, &state, &server, sel) catch return dom.dom.warn("tiers: out of memory");
+    dom.rt.changed = check;
+    check();
+}
+
+/// A rank picked (or in the URL): its file once, then the board
+fn check() void {
+    if (state.need()) {
+        if (asked) return;
+        asked = true;
+        const p = std.mem.concat(gpa, u8, &.{ base, tiers.rank_paths[view_index] }) catch return;
+        return dom.fetch(p, 0, rankLoaded);
+    }
+    if (!state.busy()) return;
+    state.show(gpa) catch return dom.dom.warn("tiers: out of memory");
+    island.render();
+}
+
+fn rankLoaded(_: i32, bytes: ?[]u8) void {
+    asked = false;
+    state.none = true;
+    if (bytes) |b| if (ui.data.decode(gpa, tiers.RankData, b)) |v| {
+        const p = gpa.create(tiers.RankData) catch return;
+        p.* = v;
+        state.ranks = p;
+        state.none = false;
+    } else |_| dom.dom.warn("tiers: bad rank data");
+    check();
 }

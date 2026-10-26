@@ -462,7 +462,10 @@ fn addFiles(site: *Site) !void {
         // Every view's champion data, for the page's view picker; the rank filter's
         // from the root view's tally
         try champion.dataFiles(site, &files);
-        if (site.view.index() == 0) try champrank.dataFiles(site, &files);
+        if (site.view.index() == 0) {
+            try champrank.dataFiles(site, &files);
+            try tierlist.rankFiles(site, &files);
+        }
         try files.append(arena, .{ .path = search.path, .data = try search.json(site) });
         {
             var aw: Writer.Allocating = .init(arena);

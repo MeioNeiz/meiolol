@@ -5,7 +5,9 @@
 //!
 //! The server renders the default state from the same Data the view's data file
 //! (data/tiers.bin) carries; ui-stats.wasm decodes that file and adopts the page. A view
-//! (region, period) is its own page: the toolbar links to it, keeping the fragment
+//! (region, period) is its own page: the toolbar links to it, keeping the fragment. A
+//! rank above Platinum+ is picked in place: the view's rank file (rank_paths) is fetched
+//! on the first pick and the board shown faded until it is in
 const std = @import("std");
 const tree = @import("tree.zig");
 const url = @import("url.zig");
@@ -23,6 +25,7 @@ const badge = @import("badge.zig");
 const champ = @import("champ.zig");
 const role = @import("role.zig");
 const violin = @import("violin.zig");
+const champpage = @import("champpage.zig");
 const plain = phrase.plain;
 const Phrase = phrase.Phrase;
 const H = tree.H;
@@ -60,6 +63,18 @@ pub const shape_points = 2 * shape_reach / shape_step + 1;
 /// html.View.all's directories, by index (tierlist.zig checks they match)
 pub const view_dirs = [_][]const u8{ "", "patch/", "all/", "all/patch/" };
 
+/// Platinum+ (the view's data file), then RankData's groups; the champion page's, so a
+/// link carries it
+pub const Rank = champpage.Rank;
+pub const n_groups = @import("champrank.zig").n_groups;
+
+/// Each view's rank file, from the site root: the root view writes them all
+pub const rank_paths = [_][]const u8{ "data/tiers-rank.bin", "data/tiers-rank-patch.bin", "data/tiers-rank-all.bin", "data/tiers-rank-all-patch.bin" };
+
+/// Emerald+, Diamond+, Master+ (ui.champrank's groups), each a whole board without
+/// spreads: per-player figures are thin at high ranks
+pub const RankData = struct { groups: [n_groups]Data };
+
 /// A data file's stamp: the page carries its file's, so ui.wasm adopts a page only with
 /// the data it was rendered from (a cached page and a newer file would not match)
 pub fn stamp(bytes: []const u8) u32 {
@@ -82,6 +97,7 @@ pub const Data = struct {
     ddragon: []const u8,
     /// The view's query, for links to champion pages (html.View.query)
     query: []const u8,
+    rank: Rank = .plat,
     champs: []const Champ,
     /// By win rate, ties most played first
     rows: []const Row,
@@ -104,6 +120,9 @@ pub const Row = struct {
     share: f32,
     spread: ?Spread,
     patch: ?Patch,
+    /// Pick and ban %, a rank group's (filters.Ranked's, as the champion page shows);
+    /// null: from games and the champion's bans
+    rates: ?[2]f32 = null,
 };
 
 pub const Spread = struct {
@@ -137,7 +156,7 @@ const W = struct {
     pub const regions = [_]tree.Text{ plain("EUW"), plain("All") };
     pub const days = plain("30 days");
     pub const ranks = [_]tree.Text{ plain("Plat+"), plain("Emerald+"), plain("Diamond+"), plain("Master+") };
-    pub const picked = Phrase("{r:text} · {p:text} · Plat+");
+    pub const picked = Phrase("{r:text} · {p:text} · {k:text}");
     pub const min_games = plain("Min games");
     pub const moved = Phrase("Moved in {p:text}");
     pub const patch_link = plain("Patch changes ›");
@@ -158,6 +177,7 @@ const W = struct {
     pub const spread = Phrase("{n:count} players");
     pub const middle = Phrase("Middle half win {lo:pct} to {hi:pct}; the champion {at:rate}.");
     pub const no_spread = plain("Too few players with 10+ games on it.");
+    pub const plat_only = plain("Plat+ only: too few players with 10+ games on it at higher ranks.");
     pub const no_patch = plain("No games last patch.");
 };
 
@@ -225,9 +245,11 @@ fn middleOf(l: *const Line) f64 {
     return @as(f64, @floatFromInt(s.p75)) - @as(f64, @floatFromInt(s.p25));
 }
 fn pickOf(l: *const Line) f64 {
+    if (l.row().rates) |r| return r[0];
     return pctOf(l.row().games, l.d.games);
 }
 fn banOf(l: *const Line) f64 {
+    if (l.row().rates) |r| return r[1];
     return pctOf(l.d.champs[l.row().champ].banned, l.d.games);
 }
 fn gamesF(l: *const Line) f64 {
@@ -274,7 +296,7 @@ fn playersCell(h: *H, l: *const Line) N {
 }
 
 fn playersTip(h: *H, l: *const Line) table.Tip {
-    const s = l.row().spread orelse return .{ .title = W.players, .note = W.no_spread };
+    const s = l.row().spread orelse return .{ .title = W.players, .note = if (l.d.rank == .plat) W.no_spread else W.plat_only };
     return .{
         .title = W.spread.with(h, .{ .n = s.players }),
         .note = W.middle.with(h, .{ .lo = s.p25, .hi = s.p75, .at = l.rate() }),
@@ -341,8 +363,8 @@ pub fn prepare(a: std.mem.Allocator, d: *const Data, base: []const u8) !Lines {
             .d = d,
             .i = @intCast(i),
             .icon = try std.fmt.allocPrint(a, "https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png", .{ d.ddragon, c.key }),
-            // The row's role: the champion page opens on it
-            .href = try std.fmt.allocPrint(a, "{s}champion/{s}.html{s}#role={s}", .{ base, c.slug, d.query, Role.slugs[@backingInt(x.role)] }),
+            // The row's role and rank: the champion page opens on them
+            .href = try std.fmt.allocPrint(a, "{s}champion/{s}.html{s}#role={s}{s}{s}", .{ base, c.slug, d.query, Role.slugs[@backingInt(x.role)], if (d.rank == .plat) "" else "&rank=", if (d.rank == .plat) "" else @tagName(d.rank) }),
             .shape = if (x.spread) |s| try violin.path(a, &s.shape, 100 * share(.{ x.games, x.wins }) - shape_reach, shape_step) else null,
             .all = true,
         };
@@ -363,9 +385,20 @@ pub fn prepare(a: std.mem.Allocator, d: *const Data, base: []const u8) !Lines {
 }
 
 pub const Tiers = struct {
+    /// The rank shown's (data.rank)
     data: *const Data,
     lines: Lines,
     table: Table,
+    /// The page's own: Platinum+
+    plat: *const Data,
+    plat_lines: Lines,
+    /// The rank picked: shown once its file is in (busy until then)
+    want: Rank = .plat,
+    /// The view's rank file, fetched on the first pick above Platinum+ (ui-stats.wasm);
+    /// none: it failed (a build without the filter tally)
+    ranks: ?*const RankData = null,
+    none: bool = false,
+    rank_lines: [n_groups]?Lines = @splat(null),
     /// The page's role (role/<slug>.html); null on champions.html
     page_role: ?Role = null,
     /// The role shown; null: All
@@ -387,6 +420,8 @@ pub const Tiers = struct {
         return .{
             .data = d,
             .lines = lines,
+            .plat = d,
+            .plat_lines = lines,
             .table = .{ .rows = lines[slot(page_role)], .id = "tl", .min = d.min },
             .page_role = page_role,
             .role = page_role,
@@ -408,7 +443,7 @@ pub const Tiers = struct {
         return if (s == .all) null else @fromBackingInt(@intCast(@backingInt(s) - 1));
     }
 
-    pub const Msg = union(enum) { role: Shown, mover: u16, filters };
+    pub const Msg = union(enum) { role: Shown, rank: Rank, mover: u16, filters };
 
     pub const Url = struct {
         /// Null: the page's own
@@ -418,6 +453,7 @@ pub const Tiers = struct {
         q: url.Str(24) = .{},
         /// Null: the data's own
         min: ?u8 = null,
+        rank: Rank = .plat,
     };
 
     pub fn toUrl(t: *const T) Url {
@@ -428,12 +464,41 @@ pub const Tiers = struct {
             .desc = u.desc,
             .q = u.q,
             .min = if (u.min == t.data.min) null else u.min,
+            .rank = t.want,
         };
     }
 
     pub fn fromUrl(t: *T, u: Url) void {
         t.setRole(if (u.role) |s| roleOf(s) else t.page_role);
         t.table.fromUrl(.{ .sort = u.sort, .desc = u.desc, .q = u.q, .min = u.min orelse t.data.min });
+        t.want = u.rank;
+    }
+
+    /// The rank file is wanted and not yet asked for
+    pub fn need(t: *const T) bool {
+        return t.want != .plat and t.ranks == null and !t.none;
+    }
+
+    pub fn busy(t: *const T) bool {
+        return t.want != t.data.rank;
+    }
+
+    /// The rank wanted, its file in (or failed: back to Platinum+)
+    pub fn show(t: *T, a: std.mem.Allocator) !void {
+        if (t.want != .plat and t.ranks == null) t.want = .plat;
+        if (t.want == .plat) return t.setData(t.plat, t.plat_lines);
+        const g = @backingInt(t.want) - 1;
+        const d = &t.ranks.?.groups[g];
+        if (t.rank_lines[g] == null) t.rank_lines[g] = try prepare(a, d, t.base);
+        t.setData(d, t.rank_lines[g].?);
+    }
+
+    /// A Games floor left at the data's default moves to the new data's
+    fn setData(t: *T, d: *const Data, lines: Lines) void {
+        if (t.table.min == t.data.min) t.table.min = d.min;
+        t.data = d;
+        t.lines = lines;
+        t.setRole(t.role);
     }
 
     fn setRole(t: *T, r: ?Role) void {
@@ -447,6 +512,10 @@ pub const Tiers = struct {
         switch (m) {
             .role => |s| {
                 t.setRole(roleOf(s));
+                ev.push = true;
+            },
+            .rank => |r| {
+                t.want = r;
                 ev.push = true;
             },
             .mover => |i| {
@@ -474,6 +543,7 @@ pub const Tiers = struct {
             .data_view = t.view_index,
             .data_path = t.path,
             .data_role = if (t.page_role) |r| Role.slugs[@backingInt(r)] else null,
+            .data_busy = t.busy(),
         }, .{
             card.view(h, .{}, &.{
                 h.div(.{ .class = "hd" }, .{
@@ -509,10 +579,10 @@ pub const Tiers = struct {
         const period = t.view_index % 2;
         const patch = if (t.data.cur_patch.len > 0) tree.Text{ .s = t.data.cur_patch } else W.patch;
         var ranks: [W.ranks.len]segmented.Item = undefined;
-        for (&ranks, W.ranks, 0..) |*it, l, i| it.* = .{ .label = l, .selected = i == 0, .disabled = i > 0, .href = "" };
+        for (&ranks, W.ranks, 0..) |*it, l, i| it.* = .{ .label = l, .selected = @backingInt(t.want) == i, .disabled = i > 0 and t.none, .on = h.on(t, .{ .rank = @fromBackingInt(@intCast(i)) }) };
         return card.toolbar(h, &.{
             filterbar.view(h, .{
-                .summary = W.picked.with(h, .{ .r = W.regions[region].s, .p = if (period == 1) patch.s else W.days.s }),
+                .summary = W.picked.with(h, .{ .r = W.regions[region].s, .p = if (period == 1) patch.s else W.days.s, .k = W.ranks[@backingInt(t.want)].s }),
                 .open = t.open,
                 .on_toggle = h.on(t, .filters),
             }, &.{
@@ -584,8 +654,10 @@ pub const css =
     \\    border-bottom: 1px solid var(--line); }
     \\  .c-tiers .moved .chips { display: flex; flex-wrap: wrap; gap: var(--sp-1); align-items: center; }
     \\  .c-tiers .moved .sep { width: 1px; height: 20px; margin: 0 var(--sp-1); background: var(--line); }
+    \\  .c-tiers .moved > .lab { white-space: nowrap; }
     \\  .c-tiers .moved .more { margin-left: auto; font-size: var(--fs-s); white-space: nowrap; }
     \\  .c-tiers .c-table-wrap { overflow-x: clip; }
+    \\  .c-tiers[data-busy] .moved, .c-tiers[data-busy] .c-table { opacity: 0.55; transition: opacity 0.2s; }
     \\  .c-tiers .c-toolbar { container-type: inline-size; }
     \\  .c-tiers .c-toolbar > .grp { margin-left: auto; }
     \\  .c-tiers .pl .rt { display: block; width: 100%; }
@@ -602,6 +674,15 @@ pub const css =
     \\  .c-tiers .pl { width: 340px; }
     \\  .c-tiers .pk, .c-tiers .bn { width: 120px; }
     \\  .c-tiers .gm { width: 88px; }
+    \\  @container (max-width: 520px) {
+    \\    .c-tiers .c-toolbar > .grp > .lab { display: none; }
+    \\    .c-tiers .c-filters[data-open] { flex-basis: 100%; }
+    \\  }
+    \\  @media (max-width: 620px) {
+    \\    .c-tiers .hd > input { flex-basis: 100%; margin-left: 0; }
+    \\    .c-tiers .moved .chips { flex: 1; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+    \\    .c-tiers .moved .more { display: none; }
+    \\  }
     \\  @container (max-width: 620px) {
     \\    .c-tiers .wr { width: 66px; }
     \\    .c-tiers .dl { width: 52px; }

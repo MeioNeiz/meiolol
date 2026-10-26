@@ -6,6 +6,8 @@ const ui = @import("ui");
 const html = @import("html.zig");
 const assets = @import("assets.zig");
 const spread = @import("../spread.zig");
+const patchday = @import("../patchday.zig");
+const filters = @import("filters.zig");
 
 const Writer = std.Io.Writer;
 const Role = core.Role;
@@ -148,7 +150,95 @@ pub fn dataFile(site: *const Site) ![]const u8 {
     return out.items;
 }
 
+/// Every view's rank file (ui.tiers.RankData at rank_paths) from the root view's filter
+/// tally (filters.Made.ranked), rows as tierRows'. Patch moves come from the region's 30
+/// days, which hold both patches (a patch view's tally has the current one only)
+pub fn rankFiles(site: *const Site, files: anytype) !void {
+    const a = site.arena;
+    const made = &site.filter;
+    if (made.ranked.len == 0) return;
+    const n_v = html.View.count;
+    const n_g = filters.rank_groups.len;
+    const n_r = Role.all.len;
+    const n_c = site.champs.len;
+    // Ranked's index by champion, view, group and role; each champion's games by view and
+    // group over its roles
+    const at = try a.alloc(?u32, n_c * n_v * n_g * n_r);
+    @memset(at, null);
+    const champ_games = try a.alloc(u64, n_c * n_v * n_g);
+    @memset(champ_games, 0);
+    for (made.ranked, 0..) |x, i| {
+        const cvg = (@as(usize, x.champ) * n_v + x.view) * n_g + x.group;
+        at[cvg * n_r + @backingInt(x.role)] = @intCast(i);
+        champ_games[cvg] += x.games;
+    }
+    const pd = if (site.patchday) |*pd| pd else null;
+    const champs = try a.alloc(ui.tiers.Champ, n_c);
+    for (champs, site.champs) |*c, ch| c.* = .{ .name = ch.name, .key = ch.key, .slug = ch.slug, .banned = 0 };
+    for (html.View.all, 0..) |v, vi| {
+        var groups: [n_g]ui.tiers.Data = undefined;
+        for (&groups, 0..) |*d, g| {
+            var rows: std.ArrayList(ui.tiers.Row) = .empty;
+            for (0..n_c) |c| for (0..n_r) |r| {
+                const cvg = (c * n_v + vi) * n_g + g;
+                const x = made.ranked[at[cvg * n_r + r] orelse continue];
+                if (x.games == 0) continue;
+                const days = (c * n_v + 2 * (vi / 2)) * n_g + g;
+                try rows.append(a, .{
+                    .champ = @intCast(c),
+                    .role = @fromBackingInt(@as(u8, @backingInt(x.role))),
+                    .games = x.games,
+                    .wins = x.wins,
+                    .share = @floatCast(ratio(x.games, champ_games[cvg])),
+                    .spread = null,
+                    .patch = if (pd) |p| patchOf(p, if (at[days * n_r + r]) |k| made.ranked[k].patches else &.{}) else null,
+                    .rates = .{ x.pick, x.ban },
+                });
+            };
+            std.mem.sort(ui.tiers.Row, rows.items, {}, struct {
+                fn f(_: void, x: ui.tiers.Row, y: ui.tiers.Row) bool {
+                    const rx = ratio(x.wins, x.games);
+                    const ry = ratio(y.wins, y.games);
+                    return if (rx != ry) rx > ry else x.games > y.games;
+                }
+            }.f);
+            const games: u32 = @intCast(made.gamesAt(vi, g));
+            d.* = .{
+                .games = games,
+                .min = ui.tiers.defaultMin(games),
+                .spread_min_games = site.spread.min_games,
+                .cur_patch = if (pd) |p| p.cur_patch else "",
+                .prev_patch = if (pd) |p| p.prev_patch else "",
+                .region_in = v.region.in(),
+                .ddragon = site.ddragon_version,
+                .query = v.query(),
+                .rank = @fromBackingInt(@intCast(g + 1)),
+                .champs = champs,
+                .rows = rows.items,
+            };
+        }
+        var out: std.ArrayList(u8) = .empty;
+        try ui.data.encode(a, ui.tiers.RankData, .{ .groups = groups }, &out);
+        try files.append(a, .{ .path = ui.tiers.rank_paths[vi], .data = out.items });
+    }
+}
+
+/// The current patch against the previous one, as the base rows' (patchday.PatchDay
+/// champions: enough games on both)
+fn patchOf(pd: *const patchday.PatchDay, patches: []const filters.RankedPatch) ?ui.tiers.Patch {
+    var prev: core.curvesfile.Counts = .{};
+    var cur: core.curvesfile.Counts = .{};
+    for (patches) |p| {
+        if (std.mem.eql(u8, p.patch, pd.prev_patch)) prev = .{ .games = p.games, .wins = p.wins };
+        if (std.mem.eql(u8, p.patch, pd.cur_patch)) cur = .{ .games = p.games, .wins = p.wins };
+    }
+    const r = patchday.Rate.of(prev, cur);
+    if (!r.enough(pd.opts.min_role_games)) return null;
+    return .{ .prev = .{ prev.games, prev.wins }, .cur = .{ cur.games, cur.wins }, .clear = r.clear(pd.opts.min_role_games, pd.opts.z) };
+}
+
 comptime {
+    std.debug.assert(ui.tiers.n_groups == filters.rank_groups.len);
     std.debug.assert(ui.tiers.shape_points == spread.shape_points and ui.tiers.shape_step == spread.shape_step and ui.tiers.shape_reach == spread.shape_reach);
     for (Role.all, 0..) |r, i| {
         std.debug.assert(std.mem.eql(u8, roleName(r), ui.tiers.Role.names[i]));

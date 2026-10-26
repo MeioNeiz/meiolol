@@ -68,6 +68,12 @@ pub const Made = struct {
     /// Every champion's lane games by view, group, role and champion (roleCount):
     /// opponents' own rates at a rank
     role_counts: []const Counts = &.{},
+    /// Games by view and group (by gameTier): the champions board's at a rank
+    games: []const u64 = &.{},
+
+    pub fn gamesAt(m: *const Made, v: usize, g: usize) u64 {
+        return m.games[v * rank_groups.len + g];
+    }
 
     pub fn roleCount(m: *const Made, v: usize, g: usize, r: Role, c: usize) Counts {
         const n = m.role_counts.len / (html.View.count * rank_groups.len * Role.all.len);
@@ -189,7 +195,7 @@ pub fn makeFrom(site: *const root.Site, games: *const partials.Store, opts: root
 
 fn figures(site: *const root.Site, opts: root.Options, t: Tally) !Made {
     const ranks = try rankFigures(site.arena, site, opts, t.patches, t.cells, &t.slots, &t.games, &t.bans, t.index_of);
-    return .{ .ranked = ranks.ranked, .role_counts = ranks.role_counts };
+    return .{ .ranked = ranks.ranked, .role_counts = ranks.role_counts, .games = ranks.games };
 }
 
 /// Every run's counts merged, patch indexes into `patches`
@@ -440,7 +446,7 @@ fn gameTier(players: *const [10]Player) u8 {
     return ranked[(n - 1) / 2];
 }
 
-const Ranks = struct { ranked: []const Ranked, role_counts: []const Counts };
+const Ranks = struct { ranked: []const Ranked, role_counts: []const Counts, games: []const u64 };
 
 /// Which slices and tiers a view and rank group count
 const RankScope = struct {
@@ -629,7 +635,7 @@ fn rankFigures(a: std.mem.Allocator, site: *const root.Site, opts: root.Options,
             });
         };
     }
-    return .{ .ranked = out.items, .role_counts = totals };
+    return .{ .ranked = out.items, .role_counts = totals, .games = game_n };
 }
 
 /// Opponents under this share of the champion's games in the role are left out, as on

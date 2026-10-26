@@ -429,6 +429,34 @@ test "fixture games to stats, curves and the website" {
         }
     }
 
+    // The board's rank files (tierlist.rankFiles), every view's: Darius top at Emerald+,
+    // no spreads, the rank's pick and ban; picked, the board shows it and links it on
+    {
+        const tiers = site.ui.tiers;
+        for (tiers.rank_paths) |p| _ = try std.Io.Dir.cwd().statFile(io, try std.fs.path.join(arena, &.{ out, p }), .{});
+        const bytes = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, tiers.rank_paths[0] }), arena, .limited(1 << 22));
+        const rk = try site.ui.data.decode(arena, tiers.RankData, bytes);
+        const em = &rk.groups[0];
+        try testing.expectEqual(.emerald, em.rank);
+        const top = for (em.rows) |r| {
+            if (r.role == .top and std.mem.eql(u8, em.champs[r.champ].slug, "darius")) break r;
+        } else return error.TestUnexpectedResult;
+        try testing.expect(top.games > 0 and top.spread == null and top.rates != null);
+        const plat = try site.ui.data.decode(arena, tiers.Data, try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "data/tiers.bin" }), arena, .limited(1 << 22)));
+        var state: tiers.Tiers = .init(&plat, try tiers.prepare(arena, &plat, ""), null);
+        state.want = .emerald;
+        try testing.expect(state.need());
+        state.ranks = &rk;
+        try state.show(arena);
+        try testing.expect(!state.busy() and state.data == em);
+        var t: site.ui.Tree = .{};
+        var h: site.ui.H = .init(arena, &t);
+        t.root = state.view(&h);
+        var w: std.Io.Writer.Allocating = .init(arena);
+        try site.ui.html.write(&t, t.root, &w.writer);
+        try testing.expect(std.mem.find(u8, w.written(), "champion/darius.html#role=top&amp;rank=emerald") != null);
+    }
+
     // Rendered on request (site.Loaded, `meiolol serve --render` and `dev`): every file
     // the static build wrote, byte for byte, and nothing for paths it didn't
     const loaded = try site.Loaded.init(gpa, io, db, opts);
