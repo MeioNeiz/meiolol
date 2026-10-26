@@ -41,8 +41,8 @@ pub fn dataPath(a: std.mem.Allocator, ch: Champ, part: Part) ![]const u8 {
 
 pub const Part = enum { top, build, more };
 
-/// One page per champion, from the root view (EUW, 30 days) at the site root. No region
-/// or rank switches yet: a scope line says what the figures are
+/// One page per champion, from the root view (EUW, 30 days) at the site root; its toolbar
+/// fetches the other views' files and the rank files (champrank.zig)
 pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
     const a = site.arena;
     const title = try a.print("{s} build, matchups and win rate | meiolol", .{ch.name});
@@ -63,7 +63,8 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
     top.stamp = cp.stamp(bytes[0]);
     var build: cp.Build = .{
         .data = &parts.build,
-        .panels = try cp.panels(a, &parts.build),
+        .panels = try cp.panels(a, parts.build.roles),
+        .root = "../",
         .src = try std.mem.concat(a, u8, &.{ "../", try dataPath(a, ch, .build) }),
         .stamp = cp.stamp(bytes[1]),
         .js = "../" ++ assets.champbuild_js.path,
@@ -151,7 +152,6 @@ pub fn pageData(site: *const Site, ch: Champ) !cp.Data {
         .icon = try site.icon(ch),
         .patch = site.patch,
         .ddragon = site.ddragon_version,
-        .scope = try a.print("{s}, {s}, Platinum+ games", .{ site.view.region.in()[3..], site.period() }),
         .champs = champs,
         .roles = out,
         .lengths = &trend.length_labels,

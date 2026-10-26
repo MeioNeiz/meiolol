@@ -15,6 +15,7 @@ var data: cp.BuildData = undefined;
 var state: cp.Build = undefined;
 var server: cp.Build = undefined;
 var src: []const u8 = "";
+var root_path: []const u8 = "";
 var js: []const u8 = "";
 var wasm: []const u8 = "";
 var want: u32 = 0;
@@ -25,6 +26,7 @@ export fn main() void {
     if (root == .null) return;
     defer root.release();
     src = dom.attrOf(root, "data-src");
+    root_path = dom.attrOf(root, "data-root");
     js = dom.attrOf(root, "data-js");
     wasm = dom.attrOf(root, "data-wasm");
     want = std.fmt.parseInt(u32, dom.attrOf(root, "data-stamp"), 10) catch return;
@@ -36,10 +38,12 @@ fn loaded(_: i32, bytes: ?[]u8) void {
     if (cp.stamp(b) != want) return dom.dom.warn("champbuild: the page and its data differ");
     data = ui.data.decode(gpa, cp.BuildData, b) catch return dom.dom.warn("champbuild: bad data");
     // Each its own panels: the server's stay as rendered for hydration
-    const sp = cp.panels(gpa, &data) catch return dom.dom.warn("champbuild: out of memory");
-    const pp = cp.panels(gpa, &data) catch return dom.dom.warn("champbuild: out of memory");
-    server = .{ .data = &data, .panels = sp, .src = src, .stamp = want, .js = js, .wasm = wasm };
+    const sp = cp.panels(gpa, data.roles) catch return dom.dom.warn("champbuild: out of memory");
+    const pp = cp.panels(gpa, data.roles) catch return dom.dom.warn("champbuild: out of memory");
+    server = .{ .data = &data, .panels = sp, .root = root_path, .src = src, .stamp = want, .js = js, .wasm = wasm };
+    server.files.base[0] = &data;
     state = server;
     state.panels = pp;
-    _ = dom.rt.add(cp.Build, &state, &server, sel) catch return dom.dom.warn("champbuild: out of memory");
+    const i = dom.rt.add(cp.Build, &state, &server, sel) catch return dom.dom.warn("champbuild: out of memory");
+    dom.Loader(cp.Build, cp.BuildData, ui.champrank.Build).start(&state, i);
 }

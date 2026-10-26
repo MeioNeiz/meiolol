@@ -23,6 +23,7 @@ var want: u32 = 0;
 
 export fn main() void {
     dom.start();
+    fold();
     dom.lazyLoad(&lazy);
     const root = zjb.global("document").call("querySelector", .{zjb.constString(sel)}, zjb.Handle);
     if (root == .null) return dom.lazyLater();
@@ -47,5 +48,45 @@ fn loaded(_: i32, bytes: ?[]u8) void {
     state = .init(&data, pp, root_path);
     state.src = src;
     state.stamp = want;
-    _ = dom.rt.add(cp.Top, &state, &server, sel) catch return dom.dom.warn("champion: out of memory");
+    const i = dom.rt.add(cp.Top, &state, &server, sel) catch return dom.dom.warn("champion: out of memory");
+    loader.start(&state, i);
+    dom.rt.changed = changed;
+    changed();
 }
+
+/// Links from a view's pages carry its pick as a query (html.View.query): into the
+/// fragment, where the islands read it, ahead of the fragment's own keys
+fn fold() void {
+    var buf: [512]u8 = undefined;
+    const loc = zjb.global("location");
+    const q = loc.get("search", zjb.Handle);
+    defer q.release();
+    const s = q.readString(&buf) catch return;
+    if (s.len < 2) return;
+    var frag: [1024]u8 = undefined;
+    const h = dom.dom.hash(&frag);
+    const path = loc.get("pathname", zjb.Handle);
+    defer path.release();
+    var to: [2048]u8 = undefined;
+    const p = path.readString(&to) catch return;
+    const all = std.fmt.bufPrint(to[p.len..], "#{s}{s}{s}", .{ s[1..], if (h.len > 1) "&" else "", if (h.len > 1) h[1..] else "" }) catch return;
+    dom.dom.setHash(to[0 .. p.len + all.len], false);
+}
+
+/// The view picked last, for the site's other pages' links (html.zig meio_view)
+var stored: u8 = 0;
+
+fn changed() void {
+    loader.check();
+    const v = state.files.want.view;
+    if (v == stored) return;
+    stored = v;
+    const dirs = [_][]const u8{ "", "patch/", "all/", "all/patch/" };
+    const window = zjb.global("window");
+    if (!window.call("hasOwnProperty", .{zjb.constString("meioView")}, bool)) return;
+    const d = zjb.string(dirs[v]);
+    defer d.release();
+    window.call("meioView", .{d}, void);
+}
+
+const loader = dom.Loader(cp.Top, cp.TopData, ui.champrank.Top);

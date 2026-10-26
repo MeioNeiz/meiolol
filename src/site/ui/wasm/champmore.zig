@@ -39,6 +39,8 @@ fn loaded(_: i32, bytes: ?[]u8) void {
     if (cp.stamp(b) != want) return dom.dom.warn("champmore: the page and its data differ");
     data = ui.data.decode(gpa, cp.MoreData, b) catch return dom.dom.warn("champmore: bad data");
     server = .{ .data = &data, .root = root_path, .src = src, .stamp = want, .js = js, .wasm = wasm };
+    server.files.base[0] = &data;
     state = server;
-    _ = dom.rt.add(cp.More, &state, &server, sel) catch return dom.dom.warn("champmore: out of memory");
+    const i = dom.rt.add(cp.More, &state, &server, sel) catch return dom.dom.warn("champmore: out of memory");
+    dom.Loader(cp.More, cp.MoreData, ui.champrank.More).start(&state, i);
 }

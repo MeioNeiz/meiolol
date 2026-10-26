@@ -222,29 +222,28 @@ test "fixture games to stats, curves and the website" {
     {
         // Rank filter files, every view's at the root: Darius at Emerald+ and Diamond+
         // (no one at Master+); the builds from Emerald+'s file, Diamond+'s missing
-        for ([_][]const u8{ "", "-patch", "-all", "-all-patch" }) |suffix| {
-            _ = try std.Io.Dir.cwd().statFile(io, try std.fs.path.join(arena, &.{ out, try arena.print("data/champion/darius-rank{s}.bin", .{suffix}) }), .{});
-        }
+        for ([_][]const u8{ "", "-patch", "-all", "-all-patch" }) |suffix| for ([_][]const u8{ "", "-build", "-more" }) |part| {
+            _ = try std.Io.Dir.cwd().statFile(io, try std.fs.path.join(arena, &.{ out, try arena.print("data/champion/darius{s}-rank{s}.bin", .{ part, suffix }) }), .{});
+        };
         // Every view's own champion data
         for ([_][]const u8{ "patch/", "all/", "all/patch/" }) |dir_of| {
             _ = try std.Io.Dir.cwd().statFile(io, try std.fs.path.join(arena, &.{ out, dir_of, "data/champion/darius-more.bin" }), .{});
         }
-        const bytes = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "data/champion/darius-rank.bin" }), arena, .limited(1 << 20));
-        const d = try site.ui.data.decode(arena, site.ui.champrank.Data, bytes);
-        try testing.expectEqual(3, d.groups.len);
-        try testing.expectEqualStrings("Emerald+", d.groups[0].label);
-        for (d.groups[0..2]) |g| {
-            try testing.expectEqual(1, g.roles.len);
-            const r = g.roles[0];
-            try testing.expectEqual(.top, r.role);
-            try testing.expectEqual(games, r.games);
-            try testing.expectEqual(1, r.rank);
-            try testing.expectEqual(1, r.of);
-            try testing.expectEqual(1, r.build_group);
-            try testing.expect(r.build != null and r.opps.len > 0 and r.by_patch.len == 1);
-            try testing.expectEqual(games, r.by_patch[0].games);
+        const cr = site.ui.champrank;
+        const rank_top = try site.ui.data.decode(arena, cr.Top, try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "data/champion/darius-rank.bin" }), arena, .limited(1 << 20)));
+        const rank_build = try site.ui.data.decode(arena, cr.Build, try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "data/champion/darius-build-rank.bin" }), arena, .limited(1 << 20)));
+        const rank_more = try site.ui.data.decode(arena, cr.More, try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "data/champion/darius-more-rank.bin" }), arena, .limited(1 << 20)));
+        for (rank_top.groups[0..2], rank_build.groups[0..2], rank_more.groups[0..2]) |t, b, m| {
+            try testing.expectEqual(1, t.len);
+            try testing.expectEqual(.top, t[0].role);
+            try testing.expectEqual(games, t[0].games);
+            try testing.expectEqual(1, t[0].rank);
+            try testing.expectEqual(1, t[0].of);
+            try testing.expectEqual(1, b[0].from);
+            try testing.expect(b[0].build != null and m[0].rels.len == 1 and m[0].rels[0].opps.len > 0 and m[0].by_patch.len == 1);
+            try testing.expectEqual(games, m[0].by_patch[0].games);
         }
-        try testing.expectEqual(0, d.groups[2].roles.len);
+        try testing.expectEqual(0, rank_top.groups[2].len);
         try testing.expectError(error.FileNotFound, std.Io.Dir.cwd().statFile(io, try std.fs.path.join(arena, &.{ out, "data/champion/mordekaiser-rank.bin" }), .{}));
     }
     for ([_][]const u8{
@@ -300,7 +299,7 @@ test "fixture games to stats, curves and the website" {
         // Champion page: the ui.champpage island from the root view, its data file for
         // the other roles; the head, the build, the matchups with the most met opponent's
         // brief linking to the matchup page from the champion's side
-        .{ "champion/darius.html", &.{ "<div class=\"c-cpage\" data-id=\"122\" data-roles=\"top\"><div class=\"part\" data-island=\"champion\" data-src=\"../data/champion/darius.bin\" data-stamp=\"", "<h1>Darius</h1>", "EUW, last 30 days, Platinum+ games", "data-island=\"champbuild\" data-src=\"../data/champion/darius-build.bin\"", "<section class=\"c-card\" data-v=\"flush\"><div class=\"c-build\">", "<h2>Matchups</h2>", "data-island=\"champmore\" data-src=\"../data/champion/darius-more.bin\"", "data-js=\"../" ++ assets.champmore_js.path ++ "\" data-wasm=\"" ++ assets.champmore_wasm.path ++ "\"", "class=\"c-dots\"", "class=\"c-mpick\"", "href=\"../matchup/top/darius-vs-mordekaiser.html\"", "<h2>By patch</h2>", "<h2>By game length</h2>", "<script src=\"../" ++ assets.champion_js.path ++ "\" data-wasm=\"" ++ assets.champion_wasm.path ++ "\" defer></script>" } },
+        .{ "champion/darius.html", &.{ "<div class=\"c-cpage\" data-id=\"122\" data-roles=\"top\"><div class=\"part\" data-island=\"champion\" data-src=\"../data/champion/darius.bin\" data-stamp=\"", "<h1>Darius</h1>", "<span class=\"sum\">EUW · 30 days · Plat+</span>", "data-island=\"champbuild\" data-src=\"../data/champion/darius-build.bin\"", "<section class=\"c-card\" data-v=\"flush\"><div class=\"c-build\">", "<h2>Matchups</h2>", "data-island=\"champmore\" data-src=\"../data/champion/darius-more.bin\"", "data-js=\"../" ++ assets.champmore_js.path ++ "\" data-wasm=\"" ++ assets.champmore_wasm.path ++ "\"", "class=\"c-dots\"", "class=\"c-mpick\"", "href=\"../matchup/top/darius-vs-mordekaiser.html\"", "<h2>By patch</h2>", "<h2>By game length</h2>", "<script src=\"../" ++ assets.champion_js.path ++ "\" data-wasm=\"" ++ assets.champion_wasm.path ++ "\" defer></script>" } },
         .{ "champions.html", &.{ "<div data-island=\"tiers\" data-src=\"data/tiers.bin\" data-root=\"\" data-base=\"\" data-stamp=\"", "class=\"ci\"", "own win rates spread around it", "id=\"wr-edge\"", "<b style=\"--f:", "<i class=\"d\" style=\"--x:", "<p class=\"wr-key\">Win rate colour <span class=\"wrc\" style=\"--c:var(--lo4)\">44.5%</span>", "<p class=\"tl-key\">Sorted by win rate; the minimum games keeps a few lucky games off the top.", "<details class=\"tl-knobs\" hidden=\"\"><summary>Minimums</summary>", "<symbol id=\"ri-top\"", "<th tabindex=\"0\" class=\"l\" data-sort=\"text\">Champion</th>", "<th tabindex=\"0\" data-sort=\"num\" aria-sort=\"descending\">Win rate</th>", "<td class=\"role\"><svg class=\"ri\" role=\"img\" aria-label=\"Top\"><title>Top</title><use href=\"#ri-top\">", "<script src=\"" ++ assets.stats_js.path ++ "\" data-wasm=\"" ++ assets.stats_wasm.path ++ "\" defer></script>" } },
         .{ "champions.html", &.{"Platinum+ ranked solo/duo games in EUW, last 30 days, patch 15.13."} },
         .{ "index.html", &.{"<a href=\"download.html\">Coming: a champ select helper for Windows</a>"} },

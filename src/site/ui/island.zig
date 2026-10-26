@@ -42,6 +42,8 @@ pub fn Runtime(comptime Dom: type) type {
         /// In a handler or a patch: removing a focused node fires focusout synchronously
         /// in some engines, and that event must not start a second patch
         busy: bool = false,
+        /// After every event and Back: the page's code may need more data for the new state
+        changed: ?*const fn () void = null,
 
         const R = @This();
 
@@ -82,6 +84,7 @@ pub fn Runtime(comptime Dom: type) type {
             r.busy = true;
             defer r.busy = false;
             const s = r.islands.items[island];
+            defer if (r.changed) |f| f();
             return s.event(s.ctx, in);
         }
 
@@ -95,6 +98,7 @@ pub fn Runtime(comptime Dom: type) type {
                 s.readUrl(s.ctx, h);
                 s.render(s.ctx);
             }
+            if (r.changed) |f| f();
         }
 
         /// Keys no island of ours owns as they are, then each island's

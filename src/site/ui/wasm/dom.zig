@@ -406,3 +406,65 @@ fn onBytes(ctx: i32, buf: zjb.Handle) callconv(.c) void {
     defer view.release();
     on_bytes(ctx, view.allocBytes(gpa) catch null);
 }
+
+/// Fetches what an island's toolbar pick needs (ui.champpage.Files: `files`, with the
+/// island's `src` and `root`), one file at a time, then has it show them and redraws.
+/// A missing rank file is a view without games at Emerald+; a failed base file drops the
+/// pick, if still wanted, back to what is shown
+pub fn Loader(comptime Root: type, comptime D: type, comptime R: type) type {
+    return struct {
+        var st: *Root = undefined;
+        var island: *ui.island.Island(Root, Dom) = undefined;
+        var asked: ?@FieldType(Root, "files").Need = null;
+
+        pub fn start(s: *Root, i: *ui.island.Island(Root, Dom)) void {
+            st = s;
+            island = i;
+            rt.changed = check;
+            check();
+        }
+
+        /// A pick already in shows at once, though a fetch for an older one is out
+        pub fn check() void {
+            const f = &st.files;
+            if (f.need()) |n| {
+                if (asked != null) return;
+                const path = ui.champpage.viewPath(gpa, st.src, st.root, n.view, n.rank) catch return;
+                asked = n;
+                return fetch(path, 0, loaded);
+            }
+            if (!f.busy()) return;
+            st.show(gpa);
+            island.render();
+        }
+
+        fn loaded(_: i32, bytes: ?[]u8) void {
+            const n = asked.?;
+            asked = null;
+            const f = &st.files;
+            if (n.rank) {
+                f.none[n.view] = true;
+                if (bytes) |b| if (ui.data.decode(gpa, R, b)) |v| {
+                    const p = gpa.create(R) catch return;
+                    p.* = v;
+                    f.rank[n.view] = p;
+                    f.none[n.view] = false;
+                } else |_| dom.warn("champion: bad rank data");
+            } else {
+                const v = if (bytes) |b| ui.data.decode(gpa, D, b) catch null else null;
+                if (v) |x| {
+                    const p = gpa.create(D) catch return;
+                    p.* = x;
+                    f.base[n.view] = p;
+                } else {
+                    dom.warn("champion: no data for the view");
+                    if (f.want.view == n.view) {
+                        f.want = f.shown;
+                        island.render();
+                    }
+                }
+            }
+            check();
+        }
+    };
+}
