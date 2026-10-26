@@ -1,4 +1,4 @@
-# One-time setup of the gpu-box PC's WSL tasks (docs/compute.md "WSL watchdog"). Run it
+# One-time setup of the gpu-box PC's WSL tasks (docs/compute.md "Rules"). Run it
 # by hand from an elevated PowerShell, after reading it: its copy in %USERPROFILE%\.meiolol
 # is writable from WSL, so check it is this file before running it as admin.
 #   powershell -NoProfile -ExecutionPolicy Bypass -File $env:USERPROFILE\.meiolol\install-watchdog.ps1

@@ -1,4 +1,4 @@
-//! Random-search sweeps for deploy/lab-sweep.sh (docs/compute.md "Sweeps").
+//! Random-search sweeps for deploy/lab-sweep.sh (docs/lab-run.md "Sweeps").
 //!
 //! SPACE: one flag per line, `--name DIST ARGS`; # comments. DIST: choice V..., uniform
 //! LO HI, loguniform LO HI, int LO HI, logint LO HI. Values reach a shell on the gpu-box,

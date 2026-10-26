@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 # deploy/lab-exp.sh's candidate check: prints FILE:LINE: WHAT for each hit, nothing when
-# clean. A tripwire, not a sandbox (docs/compute.md "Candidate code"): a candidate may
+# clean. A tripwire, not a sandbox (docs/lab-run.md "Lab agent limits"): a candidate may
 # compute, not reach the snapshot, labels or network behind the harness's back. Module
 # imports already keep it from other source files; this refuses std's ways out (files,
 # processes, sockets, syscalls, C, a global Io), any std that isn't the one import line

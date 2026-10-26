@@ -1,5 +1,5 @@
 //! Run-time estimates and placement for deploy/lab-run.sh, from the runs on both hosts
-//! (docs/compute.md "Placement"). Reads lab-run.sh's listing, tab-separated:
+//! (docs/lab-run.md "Placement"). Reads lab-run.sh's listing, tab-separated:
 //!   HOST now TIME | HOST league LINE (watcher.log, oldest first) | HOST have PATH
 //!   HOST slots RES N (lab-run.sh's locks per resource) | HOST mem KB (MemAvailable)
 //!   HOST memheld KB (what the gate counts as taken: runs <15 min old growing into memneed)

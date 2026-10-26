@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Random-search sweeps of one model family (30-64 trials, research C19) on the gpu-box's
-# 3080, queued on deploy/lab-run.sh's gpu lock. docs/compute.md "Sweeps"
+# 3080, queued on deploy/lab-run.sh's gpu lock. docs/lab-run.md "Sweeps"
 #
 #   deploy/lab-sweep.sh start SWEEP SPACE [--trials N] [--rng S] [--pack K] [--serial]
 #                             [--head | --commit SHA] [--build-arg A]... [--res gpu|cpu]
