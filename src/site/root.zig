@@ -461,6 +461,8 @@ pub fn sitemap(site: *const Site) ![]const u8 {
     // Listed from the root view, before the shared view (whose learn build may fail) loads
     if (site.view.index() == 0) try paths.appendSlice(a, &shared_pages);
     for (paths.items) |path| {
+        // Old build pages only redirect to champion pages
+        if (std.mem.startsWith(u8, path, "build/")) continue;
         // Paths are slugs and fixed names: nothing XML needs escaped
         try out.print(a, "<url><loc>{s}</loc></url>\n", .{(try site.canonical(site.view.dir(), path)).?});
     }
@@ -507,9 +509,9 @@ pub fn renderPage(site: *const Site, w: *Writer, path: []const u8) !bool {
     } else if (strip(path, "matchup/", ".html")) |s| {
         return matchup.route(site, w, if (site.curves) |*c| c else return false, s);
     } else if (eql(u8, path, builds_page.index_path)) {
-        try builds_page.writeIndex(site, w, if (site.view_builds[site.view.index()]) |*b| b else return false);
+        try builds_page.writeIndex(site, w);
     } else if (strip(path, "build/", ".html")) |s| {
-        return builds_page.route(site, w, if (site.view_builds[site.view.index()]) |*b| b else return false, s);
+        return builds_page.route(site, w, s);
     } else if (eql(u8, path, "pool.html")) {
         try pool_page.writePage(site, w, &site.pool, &site.learning);
     } else if (eql(u8, path, patch_page.path)) {

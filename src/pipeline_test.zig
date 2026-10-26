@@ -291,7 +291,7 @@ test "fixture games to stats, curves and the website" {
     // Build page: three games, so no bare win rates; the champion page (root view) links
     // into the patch view's
     const pages = [_]struct { []const u8, []const []const u8 }{
-        .{ "patch/build/darius-top.html", &.{ "Conqueror", "few games", "Doran&#39;s Shield", "More data needed", "href=\"../../champion/darius.html?period=patch\"" } },
+        .{ "patch/build/darius-top.html", &.{ "<meta name=\"robots\" content=\"noindex\">", "url=../../champion/darius.html?period=patch#role=top\"" } },
         // Patch day: three games a patch is a patch's first day, too early to tell, in
         // every view, the champion pages per role, and a tab after Matchups
         .{ "patch/patch.html", &.{ "<h1>Patch 15.13: what changed</h1>", "Too early to tell: 0 champion roles" } },
@@ -316,9 +316,7 @@ test "fixture games to stats, curves and the website" {
         // A search for one champion turns its rows to its side (MU8); gold under a clear
         // lead plain (J11, J12)
         .{ "matchup/index.html", &.{ "<div class=\"c-finder\" data-island=\"finder\" data-root=\"../\" data-bin=\"", "<h1>Matchups</h1>", "<h2>Most played</h2>", "<a href=\"../matchup/top/", "<script src=\"../" ++ assets.finder_js.path ++ "\" data-wasm=\"" ++ assets.finder_wasm.path ++ "\" defer></script>" } },
-        .{ "patch/build/darius-top.html", &.{ "<div class=\"bpanel\"><div class=\"bp-bar\">", "<div class=\"bc runes\">", "<th>Levels 1 to 3</th>", "<th>Levels 1 to 18</th>", "<th>Fourth finished item</th>", ">Minute</th>", "<div class=\"rpages\">", "<div class=\"rpc thin\"><span class=\"tags\"><span class=\"tag mp\">most played</span></span><div class=\"rp\">", "<div class=\"rx\">", "<span class=\"rc on\" title=\"Conqueror: 3 games, 100.0%\">", "<span class=\"rc off\" title=\"Adaptive force: 0 games, 0.0%\">", "Most played rune pages first. Share of 3 players.", "<span class=\"key hw\"></span> highest win rate, adjusted for few games. <a href=\"../../method.html#builds\">How builds are counted</a></p>", "<h2>Spells and items</h2>\n<div class=\"bgrid\">" } },
-        .{ "build/darius-top.html", &.{ "ranked solo/duo in EUW, last 30 days, Platinum IV and up. 3 games.", "<title>Darius Top build: runes, items, skill order, last 30 days | meiolol</title>" } },
-        .{ "champions.html", &.{"<a href=\"build/index.html\">Builds, last 30 days</a>."} },
+        .{ "build/darius-top.html", &.{"<meta http-equiv=\"refresh\" content=\"0; url=../champion/darius.html#role=top\">"} },
         // One page per champion: the other views link to it with their view
         .{ "all/patch/role/top.html", &.{"href=\"../../../champion/darius.html?region=all&amp;period=patch#role=top\""} },
         .{ "all/matchup/top/mordekaiser-vs-darius.html", &.{"href=\"../../../champion/darius.html?region=all\""} },
@@ -343,7 +341,6 @@ test "fixture games to stats, curves and the website" {
         // follow the page's picks
         // View links: this page in each view, the current one lit, ranks greyed
         .{ "patch/matchup/top/darius-vs-mordekaiser.html", &.{ "<a aria-current=\"page\">15.13</a>", "<a href=\"../../../matchup/top/darius-vs-mordekaiser.html\">30 days</a>", "<a aria-disabled=\"true\">Emerald+</a>" } },
-        .{ "patch/build/darius-top.html", &.{"<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"patch:15.13\" data-rank=\"\" title=\"Region, period and rank these numbers are from\"><span>EUW</span><span>Patch 15.13</span><span>Plat+</span></span> What players take"} },
         .{ "pool.html", &.{ "<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"every\"", "<h2 id=\"pick-up\">How hard champions are to pick up <span class=\"scope\" data-chip data-region=\"all\" data-period=\"days30\"", "<span class=\"off\">All regions<i>, not EUW alone</i></span>" } },
         .{ "all/patch/pool.html", &.{"<h2 id=\"pick-up\">How hard champions are to pick up <span class=\"scope\" data-chip data-region=\"all\" data-period=\"patch:15.13\" data-rank=\"\" title=\"Region, period and rank these numbers are from\"><span>All regions</span><span>Patch 15.13</span><span>Plat+</span></span></h2>"} },
     };
@@ -650,7 +647,7 @@ test "fixture games to stats, curves and the website" {
         try testing.expect(std.mem.find(u8, sitemap, want) != null);
     }
     const patch_sitemap = (try core_loaded.get(arena, "patch/sitemap.xml")).?;
-    try testing.expect(std.mem.find(u8, patch_sitemap, "https://x.io/patch/build/darius-top.html") != null);
+    try testing.expect(std.mem.find(u8, patch_sitemap, "https://x.io/patch/build/darius-top.html") == null);
 }
 
 test "admin page from the fixture games and a crawl log" {

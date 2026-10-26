@@ -6,7 +6,6 @@ const ui = @import("ui");
 const html = @import("html.zig");
 const assets = @import("assets.zig");
 const spread = @import("../spread.zig");
-const builds_page = @import("builds.zig");
 
 const Writer = std.Io.Writer;
 const Role = core.Role;
@@ -291,16 +290,12 @@ pub fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {
         try tpl.render(w, "<h1>{role} lane champions</h1>\n", .{ .role = roleName(r) });
     } else try tpl.render(w, "<h1>Champions</h1>\n", .{});
     try tpl.render(w,
-        \\<p class="muted"><b>{games}</b> Platinum+ ranked solo/duo games {in}, {when}.{builds}</p>
+        \\<p class="muted"><b>{games}</b> Platinum+ ranked solo/duo games {in}, {when}.</p>
         \\
     , .{
         .games = Thousands{ .n = site.games },
         .in = site.view.region.in(),
         .when = site.when,
-        .builds = if (site.view_builds[site.view.index()] != null) tpl.t(" <a href=\"{href}\">Builds, {period}</a>.", .{
-            .href = try std.mem.concat(a, u8, &.{ root, builds_page.index_path }),
-            .period = site.period(),
-        }) else null,
     });
     try earlyNote(site, w, false);
     try tierTable(site, w, role, root);

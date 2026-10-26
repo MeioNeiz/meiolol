@@ -32,6 +32,7 @@ const champhead = @import("champhead.zig");
 const buildpanel = @import("buildpanel.zig");
 const dotplot = @import("dotplot.zig");
 const matchbrief = @import("matchbrief.zig");
+const matchgrid = @import("matchgrid.zig");
 const trend = @import("trend.zig");
 const histogram = @import("histogram.zig");
 const champlist = @import("champlist.zig");
@@ -207,8 +208,8 @@ const rank_suffixes = [n_views][]const u8{ "", "-patch", "-all", "-all-patch" };
 
 /// Figures of a rank group's role under this many games are faded; under min_games, games
 /// only (builds.md)
-const solid_games = 400;
-const min_games = 100;
+pub const solid_games = 400;
+pub const min_games = 100;
 
 /// An island's data in each view: the base file (0: the page's) and its rank file,
 /// fetched on a pick (ui/wasm/dom.zig Loader). `shown` stays until what `want` needs is in
@@ -262,7 +263,7 @@ fn at(comptime T: type, roles: []const T, r: role.Role) ?*const T {
 
 const thin_games = fmt.thin_games;
 
-const W = struct {
+pub const W = struct {
     pub const roles = Phrase("{c:text}'s roles");
     pub const sub = Phrase("{r:text} · {p:text}");
     pub const vs = plain("vs opponent");
@@ -809,17 +810,14 @@ pub const More = struct {
     want_role: ?role.Role = null,
     /// Data.roles' index
     cur: u8 = 0,
-    /// Data.roles[cur].rels' index
-    rel: u8 = 0,
-    measure: Measure = .win,
-    dots: dotplot.DotPlot = .{ .dots = &.{}, .m = .{ .label = W.matchups } },
+    grid: matchgrid.MatchupGrid = .{},
     by_patch: trend.Trend = .{ .label = W.by_patch, .points = &.{} },
     by_length: trend.Trend = .{ .label = W.by_length, .points = &.{} },
     pickup: trend.Trend = .{ .label = W.pickup, .points = &.{}, .height = 110 },
 
     const P = @This();
 
-    pub const Msg = union(enum) { rel: u8, ally: bool, rel_role: role.Role, measure: Measure };
+    pub const Msg = matchgrid.Msg;
 
     pub const Url = struct {
         role: ?role.Role = null,
@@ -837,7 +835,7 @@ pub const More = struct {
 
     pub fn toUrl(p: *const P) Url {
         const rl = p.r();
-        const rel = if (rl.rels.len > 0) rl.rels[p.rel] else null;
+        const rel = if (rl.rels.len > 0) rl.rels[p.grid.rel] else null;
         const w = p.files.want;
         return .{
             .role = p.want_role,
@@ -846,7 +844,7 @@ pub const More = struct {
             .rank = w.rank,
             .with = if (rel) |x| x.ally else false,
             .vs = if (rel) |x| (if (x.role == rl.role) null else x.role) else null,
-            .by = p.measure,
+            .by = p.grid.measure,
         };
     }
 
@@ -854,10 +852,7 @@ pub const More = struct {
         p.want_role = u.role;
         p.files.want = .of(u);
         p.cur = roleIndex(p.data.roles, u.role);
-        const own = p.r().role;
-        p.rel = p.relOf(u.with, u.vs orelse if (u.with) partner(own) else own) orelse 0;
-        p.measure = if (u.by == .gold and !p.goldShown()) .win else u.by;
-        p.dots.sel = null;
+        p.grid.set(&p.input(), u.with, u.vs, u.by);
     }
 
     /// The loader's, once what files.want needs is in
@@ -886,41 +881,15 @@ pub const More = struct {
         return h.p(.{ .class = "none" }, .{W.few.with(h, .{ .r = W.ranks[@backingInt(p.files.shown.rank)].s })});
     }
 
-    fn relOf(p: *const P, ally: bool, r2: role.Role) ?u8 {
-        for (p.r().rels, 0..) |x, i| if (x.ally == ally and x.role == r2) return @intCast(i);
-        return null;
-    }
-
-    /// Gold at 14 is the lane curves': lane opponents only
-    fn goldShown(p: *const P) bool {
-        const rl = p.r();
-        if (rl.rels.len == 0) return false;
-        const x = rl.rels[p.rel];
-        return !x.ally and x.role == rl.role;
-    }
-
     pub fn update(p: *P, m: Msg, ev: *tree.Event) void {
-        switch (m) {
-            .rel => |i| p.rel = i,
-            .ally => |a| {
-                const rl = p.r();
-                if (rl.rels.len == 0) return;
-                const cur = rl.rels[p.rel].role;
-                // Nobody is with the champion in its own role: the usual partner then
-                const r2 = if (a and cur == rl.role) partner(rl.role) else cur;
-                p.rel = p.relOf(a, r2) orelse for (rl.rels, 0..) |x, i| {
-                    if (x.ally == a) break @intCast(i);
-                } else p.rel;
-            },
-            .rel_role => |r2| {
-                const ally = if (p.r().rels.len > 0) p.r().rels[p.rel].ally else false;
-                p.rel = p.relOf(ally, r2) orelse p.rel;
-            },
-            .measure => |x| p.measure = x,
-        }
-        if (p.measure == .gold and !p.goldShown()) p.measure = .win;
-        p.dots.sel = null;
+        p.grid.update(&p.input(), m);
         ev.push = true;
+    }
+
+    /// The grid's champion and role
+    fn input(p: *const P) matchgrid.Input {
+        const rl = p.r();
+        return .{ .name = p.data.name, .slug = p.data.slug, .ddragon = p.data.ddragon, .champs = p.data.champs, .root = p.root, .role = rl.role, .counts = .{ .games = rl.games, .wins = rl.wins }, .rels = rl.rels };
     }
 
     pub fn view(p: *P, h: *H) N {
@@ -942,139 +911,15 @@ pub const More = struct {
     }
 
     fn matchups(p: *P, h: *H) N {
-        const d = p.data;
-        const rl = p.r();
-        if (rl.rels.len == 0) return card.view(h, .{ .id = "matchups" }, &.{ card.head(h, W.matchups, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
-        const rel = rl.rels[p.rel];
-        const lane = !rel.ally and rel.role == rl.role;
-        var counts: Counts = .{ .games = rl.games, .wins = rl.wins };
-        var opps = rel.opps;
-        var rare = rel.rare;
-        var few_games = false;
-        if (lane) if (p.ranked()) |x| switch (x) {
-            .few => few_games = true,
-            .role => |y| {
-                counts = .{ .games = y.games, .wins = y.wins };
-                opps = if (y.rels.len > 0) y.rels[0].opps else &.{};
-                rare = if (y.rels.len > 0) y.rels[0].rare else 0;
-                few_games = y.games < min_games;
-            },
+        var in = p.input();
+        if (p.ranked()) |x| in.ranked = switch (x) {
+            .few => .few,
+            .role => |y| .{ .lane = .{ .counts = .{ .games = y.games, .wins = y.wins }, .opps = if (y.rels.len > 0) y.rels[0].opps else &.{}, .rare = if (y.rels.len > 0) y.rels[0].rare else 0 } },
         };
-        const own = rate(counts);
-        const dots = h.mem.alloc(dotplot.Dot, opps.len) catch {
-            h.oom = true;
-            return .none;
-        };
-        // Dots skip opponents without the measure (gold): back to opps
-        const of = h.mem.alloc(u16, opps.len) catch {
-            h.oom = true;
-            return .none;
-        };
-        var n: usize = 0;
-        for (opps, 0..) |o, k| {
-            const x: f32 = switch (p.measure) {
-                .win => rate(.{ .games = o.games, .wins = o.wins }) - own,
-                .usual => o.usual,
-                .gold => @floatFromInt(o.gold orelse continue),
-            };
-            dots[n] = .{
-                .champ = icon(h, d.ddragon, d.champs[o.champ]),
-                .x = x,
-                .games = o.games,
-                .fig = p.figure(h, o),
-                .thin = o.games < thin_games,
-                .href = p.matchHref(h, o),
-            };
-            of[n] = @intCast(k);
-            n += 1;
-        }
-        p.dots.dots = dots[0..n];
-        p.dots.m = switch (p.measure) {
-            .win => .{ .label = W.matchups },
-            .usual => .{ .label = W.matchups, .bin = 0.5, .reach = 1 },
-            .gold => .{ .label = W.matchups, .bin = 100, .reach = 200 },
-        };
-        const chosen: ?Opp = if (p.dots.chosen()) |i| opps[of[i]] else null;
-        var chips: [6]matchbrief.Common = undefined;
-        var nc: usize = 0;
-        for (dots[0..n], 0..) |x, i| {
-            if (nc == chips.len) break;
-            const o = opps[of[i]];
-            chips[nc] = .{
-                .champ = x.champ,
-                .fig = phrase.num(h, .rate, rate(.{ .games = o.games, .wins = o.wins })),
-                .colour = .{ .pts = rate(.{ .games = o.games, .wins = o.wins }) - own },
-                .thin = x.thin,
-                .pressed = p.dots.chosen() == @as(u16, @intCast(i)),
-                .on = h.on(&p.dots, .{ .pick = @intCast(i) }),
-            };
-            nc += 1;
-        }
-
-        var rels: [role.Role.all.len]rolepicker.Item = undefined;
-        for (role.Role.all, &rels) |x, *it| {
-            const i = p.relOf(rel.ally, x);
-            it.* = .{ .role = x, .current = x == rel.role, .disabled = i == null, .on = if (i) |k| h.on(p, .{ .rel = k }) else null };
-        }
-        const controls = [_]N{
-            segmented.view(h, .{ .label = W.rel_label }, &.{
-                .{ .label = W.against, .selected = !rel.ally, .on = h.on(p, .{ .ally = false }) },
-                .{ .label = W.with, .selected = rel.ally, .on = h.on(p, .{ .ally = true }) },
-            }),
-            rolepicker.view(h, .{ .v = .compact, .label = W.rel_label }, &rels),
-            segmented.view(h, .{ .label = W.measure_label }, &.{
-                .{ .label = W.m_win, .selected = p.measure == .win, .on = h.on(p, .{ .measure = .win }) },
-                .{ .label = W.m_usual, .selected = p.measure == .usual, .on = h.on(p, .{ .measure = .usual }) },
-                .{ .label = W.m_gold, .selected = p.measure == .gold, .disabled = !p.goldShown(), .on = h.on(p, .{ .measure = .gold }) },
-            }),
-        };
-        const count: u32 = @intCast(opps.len);
-        return card.view(h, .{ .id = "matchups" }, &.{
-            card.head(h, W.matchups, if (rare > 0) W.rare.with(h, .{ .n = count, .r = rare }) else phrase.num(h, .count, count), &.{ if (lane) .none else p.plat(h), controls[0], controls[1], controls[2] }),
-            if (few_games) p.few(h) else h.div(.{ .class = "plot", .data_thin = p.files.shown.rank != .plat and counts.games < solid_games }, .{p.dots.view(h)}),
-            if (chosen) |o| (if (few_games) .none else h.div(.{ .class = "brief" }, .{matchbrief.view(h, p.brief(h, rel, counts, o), chips[0..nc])})) else .none,
-        });
-    }
-
-    /// The figure a dot reads out with its name, in the measure's units
-    fn figure(p: *const P, h: *H, o: Opp) tree.Text {
-        return switch (p.measure) {
-            .win => phrase.num(h, .rate, rate(.{ .games = o.games, .wins = o.wins })),
-            .usual => phrase.num(h, .points, o.usual),
-            .gold => phrase.num(h, .signed, @as(i32, o.gold orelse 0)),
-        };
-    }
-
-    fn brief(p: *const P, h: *H, rel: Rel, rl: Counts, o: Opp) matchbrief.Brief {
-        const d = p.data;
-        const own = rate(rl);
-        const won = rate(.{ .games = o.games, .wins = o.wins });
-        const c = d.champs[o.champ];
-        const usual_tip = h.fmt("cp-usual-{d}", .{o.champ});
-        var items: [4]strip.Item = undefined;
-        var n: usize = 0;
-        items[n] = .{ .label = W.wins.with(h, .{ .c = d.name }), .value = phrase.num(h, .rate, won), .ctx = phrase.num(h, .points, won - own), .step = .of(won - own, fmt.win_cuts), .answer = true };
-        n += 1;
-        items[n] = .{ .label = W.m_usual, .value = phrase.num(h, .points, o.usual), .step = .of(o.usual, fmt.win_cuts), .tip = .{ .id = usual_tip, .note = W.usual_note.with(h, .{ .c = d.name }) } };
-        n += 1;
-        if (o.gold) |g| {
-            items[n] = .{ .label = W.m_gold, .value = phrase.num(h, .signed, @as(i32, g)) };
-            n += 1;
-        }
-        items[n] = .{ .label = W.games, .value = phrase.num(h, .count, o.games), .ctx = phrase.num(h, .pct, @as(u32, @intFromFloat(@round(100 * @as(f32, @floatFromInt(o.games)) / @as(f32, @floatFromInt(@max(rl.games, 1))))))) };
-        n += 1;
-        return .{
-            .champ = icon(h, d.ddragon, c),
-            .rel = if (rel.ally) W.ally.with(h, .{ .r = rel.role.label().s }) else W.opponent.with(h, .{ .r = rel.role.label().s }),
-            .thin = o.games < thin_games,
-            .figures = strip.view(h, items[0..n]),
-            .href = p.matchHref(h, o),
-        };
-    }
-
-    fn matchHref(p: *const P, h: *H, o: Opp) ?[]const u8 {
-        if (!o.page) return null;
-        return h.fmt("{s}matchup/{s}/{s}-vs-{s}.html", .{ p.root, @tagName(p.r().role), p.data.slug, p.data.champs[o.champ].slug });
+        in.plat = p.plat(h);
+        in.few = p.few(h);
+        in.faded = p.files.shown.rank != .plat;
+        return p.grid.view(h, p, &in);
     }
 
     fn patchCard(p: *P, h: *H) N {
@@ -1205,17 +1050,6 @@ pub const More = struct {
     }
 };
 
-/// The ally the With view opens on: the lane partner for bot and support, jungle for
-/// the solo lanes, mid for the jungle
-fn partner(r: role.Role) role.Role {
-    return switch (r) {
-        .top, .mid => .jungle,
-        .jungle => .mid,
-        .bot => .support,
-        .support => .bot,
-    };
-}
-
 pub const css =
     \\@layer components {
     \\  .c-cpage, .c-cpage > .part { display: flex; flex-direction: column; gap: var(--sp-4); }
@@ -1233,7 +1067,6 @@ pub const css =
     \\  .c-cpage .note { margin-left: auto; font-size: var(--fs-s); color: var(--muted); }
     \\  .c-cpage .more { margin-left: auto; font-size: var(--fs-s); }
     \\  .c-cpage .plot { padding: var(--sp-3) 0; }
-    \\  .c-cpage .brief { container-type: inline-size; }
     \\  .c-cpage .row3, .c-cpage .row2 { display: grid; gap: var(--sp-4); grid-template-columns: minmax(0, 1fr); }
     \\  @media (min-width: 1000px) {
     \\    .c-cpage .row3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }

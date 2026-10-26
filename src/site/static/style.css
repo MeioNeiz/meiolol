@@ -330,8 +330,6 @@ table.build .icon { width: 28px; height: 28px; border-radius: 4px; vertical-alig
 table.build .label { margin: 0 8px 0 4px; vertical-align: middle; }
 table.build .sep { color: var(--muted); margin: 0 4px; }
 /* Build page tables side by side, each at about content width (site.md CH6) */
-.bgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: 0 24px; }
-.bgrid > div { min-width: 0; }
 table.build .path { letter-spacing: 1px; white-space: nowrap; margin-right: 6px; }
 p.caption { font-size: 13px; margin: 4px 0 16px; }
 
@@ -728,7 +726,6 @@ td.wrap { white-space: normal; min-width: 140px; max-width: none; padding: 7px 1
 #wr-shape .hi { stop-color: var(--good); }
 
 /* Matchup notes and the landing page's featured lane chart (matchup.featured) */
-.mu-note { color: var(--faint); font-size: 12px; margin: 6px 0 0; }
 /* A matchup's lean is a magnitude, not good or bad: neutral ink (design-ideas.md) */
 .featured .chart:not(.thin) .median { stroke: #b4b7bd; }
 .featured .chart:not(.thin) .band { fill: #5d6169; opacity: 0.35; }
@@ -995,121 +992,16 @@ td.wrap { white-space: normal; min-width: 140px; max-width: none; padding: 7px 1
   .levels .level { padding: 8px; }
   .lesson-head { font-size: 18px; }
 }
-.bv { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; min-height: 28px; }
-.bv .icon { width: 28px; height: 28px; border-radius: 4px; }
-.bv .sep { color: var(--muted); margin: 0 3px; }
 
-/* Build panel (builds.zig panel): the whole build on one grid; radios swap .mpv and .hwv */
 .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-.bpanel { margin: 0 0 6px; }
-.bp-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; margin: 0 0 6px; font-size: 12.5px; }
-.bp-bar label { border: 1px solid var(--line); padding: 2px 10px; cursor: pointer; color: var(--muted); }
-.bp-bar label:first-of-type { border-radius: 999px 0 0 999px; }
-.bp-bar label:last-of-type { border-radius: 0 999px 999px 0; border-left: 0; margin-right: 10px; }
-.bp-bar input:checked + label { color: var(--text); background: var(--panel); border-color: var(--turn); }
-.bp-bar input.hwr:checked + label { border-color: var(--good); }
-.bp-bar input:focus-visible + label { outline: 2px solid var(--turn); outline-offset: 1px; }
-.bp-bar small { color: var(--faint); font-size: 11.5px; }
-.hwv { display: none; }
-.bpanel:has(.hwr:checked) .mpv { display: none; }
-.bpanel:has(.hwr:checked) .hwv { display: block; }
-.bpanel:has(.hwr:checked) .bp-bar small.hwv { display: inline; }
-.bp-grid {
-  display: grid; gap: 8px; align-items: start;
-  grid-template-columns: auto auto repeat(4, minmax(0, 1fr));
-  grid-template-areas: "runes skills spells start core3 boots" "runes skills item4 item5 item6 .";
-}
-.bc { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; display: flex; flex-direction: column; gap: 4px; min-width: 0; height: 100%; }
-.bc > span { color: var(--muted); font-size: 12px; }
-.bc small { color: var(--faint); font-size: 11.5px; }
-.bc small em { font-style: normal; color: var(--t2); }
-.bc.runes { grid-area: runes; }
-.bc.skills { grid-area: skills; }
-.bc.spells { grid-area: spells; }
-.bc.start { grid-area: start; }
-.bc.core3 { grid-area: core3; }
-.bc.boots { grid-area: boots; }
-.bc.item4 { grid-area: item4; }
-.bc.item5 { grid-area: item5; }
-.bc.item6 { grid-area: item6; }
-.bo { display: flex; flex-direction: column; gap: 3px; }
-.bo + .bo { margin-top: 4px; }
-.bo.thin, .bs.thin { opacity: 0.6; }
-.rfold { display: none; }
-.bs { display: flex; align-items: center; gap: 6px; }
-.bs .icon { width: 28px; height: 28px; border-radius: 4px; }
-.bs small { display: flex; flex-direction: column; line-height: 1.2; }
-.bs small b { color: var(--text); font-weight: 600; }
-.sg { display: grid; grid-template-columns: 14px repeat(18, 15px); gap: 2px; font-size: 10px; line-height: 15px; text-align: center; }
-.sg b { color: var(--muted); font-weight: 600; }
-.sg i { font-style: normal; background: #1b1d22; border-radius: 3px; height: 15px; }
-.sg i.on { background: color-mix(in srgb, var(--turn) 30%, #1b1d22); color: var(--text); }
-.sg b:nth-of-type(4) ~ i.on { background: color-mix(in srgb, var(--turn) 60%, #1b1d22); font-weight: 600; }
-@media (max-width: 1300px) {
-  .bp-grid { grid-template-columns: auto auto repeat(2, minmax(0, 1fr)); grid-template-areas: "runes skills spells start" "runes skills core3 boots" "item4 item5 item6 ."; }
-}
-@media (max-width: 900px) {
-  .bp-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: "runes runes skills" "spells start core3" "boots item4 item5" "item6 . ."; }
-}
-@media (max-width: 640px) {
-  .bp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "runes spells" "skills skills" "start core3" "boots item4" "item5 item6"; }
-  .bc.runes .bv { display: none; }
-  .rfold { display: flex; align-items: center; gap: 6px; font-size: 13px; }
-  .rfold .icon { width: 28px; height: 28px; border-radius: 50%; }
-  .sg { grid-template-columns: 12px repeat(18, minmax(0, 1fr)); font-size: 9px; }
-}
 
-/* Rune page as in game (builds.zig runePage): every rune of the trees, chosen ones lit */
-.rp { display: flex; gap: 12px; align-items: flex-start; }
-.rt { display: flex; flex-direction: column; align-items: center; gap: 3px; }
-.rr { display: flex; gap: 3px; justify-content: center; }
-.rp img { width: 20px; height: 20px; border-radius: 50%; }
-.rp .ks img { width: 26px; height: 26px; }
-.rp img.rh { width: 16px; height: 16px; margin-bottom: 1px; }
-.rp .rs { gap: 4px; padding-top: 18px; }
-.rp .rs img { width: 15px; height: 15px; background: #1b1d22; padding: 1px; }
-.rp img.on:not(.rh) { box-shadow: 0 0 0 1.5px var(--turn); }
-.rp img.off { filter: grayscale(0.8); opacity: 0.45; }
 .tags { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: 6px; vertical-align: middle; }
 .tag { font-size: 11px; line-height: 1.5; border-radius: 999px; padding: 0 7px; border: 1px solid var(--turn); color: var(--turn); white-space: nowrap; }
 .tag.hw { border-color: var(--good); color: var(--good); }
 table.build tr.hw td:first-child { box-shadow: inset 2px 0 0 var(--good); }
-.rpc .tags { margin: 0; }
-.rpc.hw { border-color: color-mix(in srgb, var(--good) 55%, transparent); }
-/* Build page: every rune taken, pick rate and win rate under each (builds.zig runeStats) */
-.rx { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: flex-start; margin: 6px 0 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
-.rx .rt { gap: 6px; }
-.rx .rr { gap: 4px; align-items: flex-start; }
-.rx img.rh { width: 20px; height: 20px; border-radius: 50%; }
-.rx .rs { padding-top: 26px; }
-.rc { display: flex; flex-direction: column; align-items: center; width: 42px; font-size: 10.5px; line-height: 1.25; }
-.rc img { width: 28px; height: 28px; border-radius: 50%; margin-bottom: 3px; }
-.rx .ks .rc img { width: 34px; height: 34px; }
-.rx .rs .rc img { width: 22px; height: 22px; background: #1b1d22; padding: 2px; }
-.rc b { font-weight: 600; color: var(--text); min-height: 1.25em; }
-.rc i { font-style: normal; color: var(--muted); min-height: 1.25em; }
-.rc em { font-style: normal; color: var(--faint); min-height: 1.25em; }
-.rc.on img { box-shadow: 0 0 0 2px var(--turn); }
-.rc.hw img { box-shadow: 0 0 0 2px var(--good); }
-.rc.on.hw img { box-shadow: 0 0 0 2px var(--turn), 0 0 0 4px var(--good); }
-.rc.off img { filter: grayscale(0.8); opacity: 0.45; }
 .key { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin: 0 2px; vertical-align: 0; }
 .key.mp { box-shadow: 0 0 0 2px var(--turn); }
 .key.hw { box-shadow: 0 0 0 2px var(--good); }
-/* Matchup page: runes taken more or less often than usual (builds.zig runeShifts) */
-.rsh {
-  display: inline-flex; align-items: center; gap: 6px; font-size: 13px; background: var(--panel);
-  border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px 2px 3px;
-}
-.rsh img { width: 22px; height: 22px; border-radius: 50%; }
-.rsh small { color: var(--faint); font-size: 11.5px; }
-.rpages { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 2px; }
-.rpc { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
-.rpc small { color: var(--faint); font-size: 12px; }
-.rpc.thin { opacity: 0.6; }
-.rpc .rp img { width: 24px; height: 24px; }
-.rpc .rp .ks img { width: 32px; height: 32px; }
-.rpc .rp img.rh { width: 18px; height: 18px; }
 @media (max-width: 640px) {
   .rx { gap: 10px 14px; padding: 8px; }
   .rc { width: 37px; }
