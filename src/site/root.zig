@@ -404,6 +404,7 @@ test {
     _ = evalchart;
     _ = flat;
     _ = @import("puzzles.zig");
+    _ = @import("yourgame.zig");
     _ = scope;
 }
 

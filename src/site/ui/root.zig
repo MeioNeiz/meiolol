@@ -52,6 +52,7 @@ pub const trend = @import("trend.zig");
 pub const histogram = @import("histogram.zig");
 pub const lane = @import("lane.zig");
 pub const timeline = @import("timeline.zig");
+pub const gamedata = @import("gamedata.zig");
 pub const spark = @import("spark.zig");
 pub const art = @import("art.zig");
 pub const skillgrid = @import("skillgrid.zig");
