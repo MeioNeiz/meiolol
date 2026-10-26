@@ -17,6 +17,10 @@ pub const champbuild_js = hashed("ui-champbuild.js", @embedFile("ui-champbuild.j
 pub const champbuild_wasm = hashed("ui-champbuild.wasm", @embedFile("ui-champbuild.wasm"));
 pub const champmore_js = hashed("ui-champmore.js", @embedFile("ui-champmore.js"));
 pub const champmore_wasm = hashed("ui-champmore.wasm", @embedFile("ui-champmore.wasm"));
+pub const games_js = hashed("ui-games.js", @embedFile("ui-games.js"));
+pub const games_wasm = hashed("ui-games.wasm", @embedFile("ui-games.wasm"));
+pub const gamemore_js = hashed("ui-gamemore.js", @embedFile("ui-gamemore.js"));
+pub const gamemore_wasm = hashed("ui-gamemore.wasm", @embedFile("ui-gamemore.wasm"));
 
 /// `plain` with 8 hex digits of `data`'s FNV-1a before its extension
 pub fn hashed(comptime plain: []const u8, comptime data: []const u8) Hashed {

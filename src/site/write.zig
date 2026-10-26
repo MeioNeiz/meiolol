@@ -15,6 +15,7 @@ const Site = root.Site;
 const shared_assets = root.shared_assets;
 const view_assets = root.view_assets;
 const shared_pages = root.shared_pages;
+const unlisted_pages = root.unlisted_pages;
 const pagePaths = root.pagePaths;
 const renderPage = root.renderPage;
 const renderShared = root.renderShared;
@@ -81,7 +82,7 @@ fn writeSite(site: *const Site, root_dir: std.Io.Dir, gz_window: []u8) !void {
         if (std.mem.startsWith(u8, path, "build/")) build_pages += 1;
         if (std.mem.startsWith(u8, path, "champion/")) champion_pages += 1;
     }
-    if (std.meta.eql(site.view, html.View.shared)) for (shared_pages) |path| {
+    if (std.meta.eql(site.view, html.View.shared)) for (shared_pages ++ unlisted_pages) |path| {
         if (!isStatic(opts, "", path)) continue;
         _ = page_arena.reset(.retain_capacity);
         var aw: Writer.Allocating = .init(s.arena);

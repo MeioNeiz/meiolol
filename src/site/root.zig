@@ -8,6 +8,7 @@ const prose = @import("prose.zig");
 const account_page = @import("account.zig");
 const daily_page = @import("daily.zig");
 const your_page = @import("your.zig");
+const yourgame = @import("yourgame.zig");
 const daily = @import("../daily.zig");
 const learn = @import("../learn.zig");
 const learn_page = @import("learn.zig");
@@ -338,7 +339,7 @@ pub const Site = struct {
 pub const File = daily.File;
 
 /// Also written by their plain names, with the same data (assets.zig)
-pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.search_js, assets.stats_js, assets.stats_wasm, assets.champion_js, assets.champion_wasm, assets.champbuild_js, assets.champbuild_wasm, assets.champmore_js, assets.champmore_wasm };
+pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.search_js, assets.stats_js, assets.stats_wasm, assets.champion_js, assets.champion_wasm, assets.champbuild_js, assets.champbuild_wasm, assets.champmore_js, assets.champmore_wasm, assets.games_js, assets.games_wasm, assets.gamemore_js, assets.gamemore_wasm };
 
 /// Front-end files at the site root; `Options.static_dir` serves them from disk instead
 pub const shared_assets = [_]File{
@@ -365,6 +366,10 @@ pub const shared_assets = [_]File{
     .{ .path = "ui-champbuild.js", .data = @embedFile("ui-champbuild.js") },
     .{ .path = "ui-champmore.wasm", .data = @embedFile("ui-champmore.wasm") },
     .{ .path = "ui-champmore.js", .data = @embedFile("ui-champmore.js") },
+    .{ .path = "ui-games.wasm", .data = @embedFile("ui-games.wasm") },
+    .{ .path = "ui-games.js", .data = @embedFile("ui-games.js") },
+    .{ .path = "ui-gamemore.wasm", .data = @embedFile("ui-gamemore.wasm") },
+    .{ .path = "ui-gamemore.js", .data = @embedFile("ui-gamemore.js") },
 };
 /// And in every view's directory
 pub const view_assets = [_]File{
@@ -394,6 +399,9 @@ pub const shared_pages = [_][]const u8{
     "learn.html", "method.html", "daily.html", "download.html", "your.html", "privacy.html", "terms.html",
 };
 
+/// Shared pages the static build writes but the sitemap leaves out
+pub const unlisted_pages = [_][]const u8{yourgame.page_path};
+
 pub fn robots(arena: std.mem.Allocator, opts: Options) ![]const u8 {
     if (!opts.public) return "User-agent: *\nDisallow: /\n";
     var out: std.ArrayList(u8) = .empty;
@@ -413,7 +421,7 @@ test {
     _ = evalchart;
     _ = flat;
     _ = @import("puzzles.zig");
-    _ = @import("yourgame.zig");
+    _ = yourgame;
     _ = scope;
 }
 
@@ -506,6 +514,7 @@ pub fn renderShared(site: *const Site, w: *Writer, path: []const u8) !bool {
         try learn_page.write(site, w, &(site.learn orelse return false));
         return true;
     }
+    if (std.mem.eql(u8, path, yourgame.page_path)) return yourgame.writePage(site, w);
     const fixed = [_]struct { []const u8, []const u8, []const u8, html.Nav, *const fn (*Writer, prose.Info) Writer.Error!void }{
         .{ "method.html", "Method", "Where meiolol's numbers come from and how lane curves, champion statistics and the Daily Draft are made.", .method, prose.method },
         .{ "daily.html", "Daily Draft", "Guess the hidden champion and the winner of a real ranked draft, then see what this patch's games say about it.", .daily, daily_page.page },

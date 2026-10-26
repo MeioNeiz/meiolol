@@ -143,9 +143,12 @@ pub const Table = struct {
   Floor per file: runtime + std ~20 KB gz (decode, tree, island, diff, dom, zjb, url).
   A family over 40 splits into files of its own, ~10 KB gz of runtime repeated in each
   (champion, 27 + 31 + 37 KB gz: ui-champion.wasm the head, ui-champbuild.wasm the build,
-  ui-champmore.wasm the matchups and below): the first loads the others when their
-  island nears the viewport or after it hydrates. The runtimes share the fragment (each
-  keeps the keys it doesn't own)
+  ui-champmore.wasm the matchups and below; games, 36 + 29: ui-games.wasm the strip,
+  header and graph, ui-gamemore.wasm the inspector beside it and the rows under):
+  the first loads the others when their island nears the viewport or after it hydrates
+  (dom.lazyLoad). The runtimes share the fragment (each keeps the keys it doesn't own)
+  and follow each other's writes (setHash's ui-hash event: the others re-read it as on
+  Back). Roots can be `display: contents`, so two runtimes' cards share one grid row
 
 What we own: diff (~155), ops and fake DOM (~150), island (~135), dom on zjb (~130),
 fmt (~105), data codec (~100), URL codec. Still to build (zig-tree report): several

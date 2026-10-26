@@ -157,6 +157,7 @@ fn player(arena: Allocator, db: store.Db, set: game.CurveSet, role: Role, puuid:
             .slot = g.slot,
             .timeline = t,
             .platform = platform,
+            .detail = true,
         });
     }
     if (inputs.items.len == 0) return null;

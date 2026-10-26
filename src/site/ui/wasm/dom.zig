@@ -203,6 +203,12 @@ pub const Dom = struct {
         defer t.release();
         const args = .{ zjb.ConstHandle.null, zjb.ConstHandle.empty_string, t };
         if (push) zjb.global("history").call("pushState", args, void) else zjb.global("history").call("replaceState", args, void);
+        // The page's other ui.wasm files (each its own runtime) read the fragment again
+        sending = true;
+        defer sending = false;
+        const e = zjb.global("Event").new(.{zjb.constString("ui-hash")});
+        defer e.release();
+        zjb.global("window").call("dispatchEvent", .{e}, void);
     }
 
     pub fn warn(_: *Dom, msg: []const u8) void {
@@ -262,14 +268,93 @@ fn onEvent(slot: i32, bit: i32, e: zjb.Handle) callconv(.c) void {
     if (rt.event(@intCast(slot), in)) e.call("preventDefault", .{}, void);
 }
 
+/// In this runtime's own setHash: its ui-hash is for the others
+var sending = false;
+
 fn onPopstate(e: zjb.Handle) callconv(.c) void {
     e.release();
-    rt.popstate();
+    if (!sending) rt.popstate();
 }
 
-/// Back and Forward reach every island
+/// Back and Forward, and another runtime's fragment, reach every island
 pub fn start() void {
-    zjb.global("window").call("addEventListener", .{ zjb.constString("popstate"), zjb.fnHandle("uiPopstate", &onPopstate) }, void);
+    const w = zjb.global("window");
+    const f = zjb.fnHandle("uiPopstate", &onPopstate);
+    w.call("addEventListener", .{ zjb.constString("popstate"), f }, void);
+    w.call("addEventListener", .{ zjb.constString("ui-hash"), f }, void);
+}
+
+// The page's other ui.wasm files (lazyLoad's selectors: island roots with data-js and
+// data-wasm): each once its island nears the viewport, or once this file is done
+// (lazyLater), whichever is first; a deep link or a quick scroll doesn't wait
+
+var lazy: []const []const u8 = &.{};
+var started: u32 = 0;
+
+pub fn lazyLoad(sels: []const []const u8) void {
+    lazy = sels;
+    for (0..sels.len) |i| watch(@intCast(i));
+}
+
+fn watch(i: i32) void {
+    const q = zjb.string(lazy[@intCast(i)]);
+    defer q.release();
+    const el = zjb.global("document").call("querySelector", .{q}, zjb.Handle);
+    if (el == .null) return;
+    defer el.release();
+    const opts = zjb.global("Object").new(.{});
+    defer opts.release();
+    opts.set("rootMargin", zjb.constString("600px"));
+    const cb = zjb.fnHandle("uiNear", &onNear).bind(.{i});
+    defer cb.release();
+    const io = zjb.global("IntersectionObserver").new(.{ cb, opts });
+    defer io.release();
+    io.call("observe", .{el}, void);
+}
+
+fn onNear(i: i32, entries: zjb.Handle, io: zjb.Handle) callconv(.c) void {
+    defer entries.release();
+    defer io.release();
+    // Not get("0"): zjb writes the name as a property (`.0`), not valid JS
+    const first = entries.call("at", .{@as(i32, 0)}, zjb.Handle);
+    defer first.release();
+    if (first == .null or !first.get("isIntersecting", bool)) return;
+    io.call("disconnect", .{}, void);
+    load(@intCast(i));
+}
+
+/// After this file's work: on the next task, so the patch paints first
+pub fn lazyLater() void {
+    zjb.global("window").call("setTimeout", .{ zjb.fnHandle("uiLater", &onLater), @as(i32, 0) }, void);
+}
+
+fn onLater() callconv(.c) void {
+    for (0..lazy.len) |i| load(i);
+}
+
+/// The island's file: a <script> as the page's own, src and data-wasm from its root
+fn load(i: usize) void {
+    const bit = @as(u32, 1) << @intCast(i);
+    if (started & bit != 0) return;
+    started |= bit;
+    const doc = zjb.global("document");
+    const q = zjb.string(lazy[i]);
+    defer q.release();
+    const el = doc.call("querySelector", .{q}, zjb.Handle);
+    if (el == .null) return;
+    defer el.release();
+    const js = el.call("getAttribute", .{zjb.constString("data-js")}, zjb.Handle);
+    defer js.release();
+    const wasm = el.call("getAttribute", .{zjb.constString("data-wasm")}, zjb.Handle);
+    defer wasm.release();
+    if (js == .null or wasm == .null) return;
+    const s = doc.call("createElement", .{zjb.constString("script")}, zjb.Handle);
+    defer s.release();
+    s.call("setAttribute", .{ zjb.constString("data-wasm"), wasm }, void);
+    s.set("src", js);
+    const head = doc.get("head", zjb.Handle);
+    defer head.release();
+    head.call("appendChild", .{s}, void);
 }
 
 /// An element's attribute, kept ("" when missing). The name is a runtime string: one

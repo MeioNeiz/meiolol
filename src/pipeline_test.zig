@@ -26,6 +26,7 @@ const lab_events = @import("lab/events.zig");
 const objectives = @import("objectives.zig");
 const partials = @import("partials.zig");
 const forget = @import("forget.zig");
+const ui = @import("ui");
 
 const testing = std.testing;
 const games = 3;
@@ -612,7 +613,20 @@ test "fixture games to stats, curves and the website" {
         }
     }
     try testing.expect(core_files >= site.core_static.len);
-    try testing.expectEqualStrings(example_json, (try core_loaded.get(arena, "data/your-example.json")).?);
+    // The example without its detail; the game page and its data from the detail
+    try testing.expect(std.mem.find(u8, example_json, "\"detail\":{") != null);
+    const served = (try core_loaded.get(arena, "data/your-example.json")).?;
+    try testing.expect(std.mem.find(u8, served, "\"detail\"") == null);
+    try testing.expect(std.mem.find(u8, served, "\"default\":\"mid\"") != null);
+    const game_page = (try core_loaded.get(arena, "game.html")).?;
+    for ([_][]const u8{ "data-island=\"games\"", "data-src=\"data/your/mid.bin\"", "ui-games.", "noindex", "data-island=\"gamemore\"", "data-js=\"" ++ assets.gamemore_js.path ++ "\" data-wasm=\"" ++ assets.gamemore_wasm.path ++ "\"" }) |want| {
+        try testing.expect(std.mem.find(u8, game_page, want) != null);
+    }
+    inline for (core.Role.all) |r| {
+        const bin = (try core_loaded.get(arena, "data/your/" ++ comptime r.label() ++ ".bin")).?;
+        const d = try ui.data.decode(arena, ui.gamedata.Data, bin);
+        try testing.expectEqual(games, d.games.len);
+    }
     // Sitemaps list rendered pages: the root one static, the views' rendered
     const sitemap = try core_dir.readFileAlloc(io, "sitemap.xml", arena, .limited(1 << 20));
     for ([_][]const u8{ "https://x.io/champion/darius.html", "https://x.io/matchup/top/mordekaiser-vs-darius.html", "https://x.io/daily.html", "https://x.io/learn.html" }) |want| {

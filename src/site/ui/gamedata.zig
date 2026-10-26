@@ -165,7 +165,8 @@ pub fn moments(a: std.mem.Allocator, g: *const Game) ![]Moment {
         }
         out.appendAssumeCapacity(.{ .t = o.t, .end = o.t, .obj = @intCast(i), .you = o.you, .objs = true });
     }
-    std.mem.sort(Moment, out.items, {}, struct {
+    // Insertion: a few dozen moments, and std.mem.sort's block sort costs ~3.5 KB gz
+    std.sort.insertion(Moment, out.items, {}, struct {
         fn earlier(_: void, x: Moment, y: Moment) bool {
             return x.t < y.t;
         }

@@ -36,6 +36,7 @@ const loadChamps = @import("champs.zig").loadChamps;
 const indexChamps = @import("champs.zig").indexChamps;
 const championsJson = @import("champs.zig").championsJson;
 const search = @import("search.zig");
+const yourgame = @import("yourgame.zig");
 const BasePart = @import("views.zig").BasePart;
 const FilterPart = @import("views.zig").FilterPart;
 const PeoplePart = @import("views.zig").PeoplePart;
@@ -390,7 +391,7 @@ fn loadDaily(site: *Site, db: store.Db, games: ?*const partials.Store, phases: *
     }
     if (opts.your_example) |path| {
         if (std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(16 << 20))) |json| {
-            try files.append(arena, .{ .path = "data/your-example.json", .data = json });
+            try yourgame.files(site, json, &files);
         } else |err| switch (err) {
             // `meiolol your-example` removes it after a failed run
             error.FileNotFound => {},

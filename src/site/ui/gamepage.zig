@@ -26,6 +26,9 @@ pub const scope = .{".c-gpage"};
 
 pub const stamp = gamedata.stamp;
 
+/// "All games" on the site's game page
+pub const all_games = "your.html";
+
 /// The range chips; `turn` is the default selection
 pub const Span = enum { game, early, mid, late, turn };
 
@@ -71,11 +74,15 @@ pub const GamePage = struct {
     data: *const gamedata.Data,
     /// The games list, for "All games"
     all: ?[]const u8 = null,
+    /// The data file and its stamp, for ui-games.wasm (wasm/games.zig)
+    src: []const u8 = "",
+    stamp: u32 = 0,
     /// Data.games' index
     cur: u8 = 0,
     /// Each game's, once opened
     preps: []?Prep,
     tl: timeline.Timeline,
+    /// GameMore's view of it; here for the moments
     insp: inspector.Inspector,
 
     const P = @This();
@@ -199,18 +206,19 @@ pub const GamePage = struct {
         }) catch {
             h.oom = true;
         };
-        return h.div(.{ .class = "c-gpage", .data_island = "games" }, .{
+        return h.div(.{
+            .class = "part",
+            .data_island = "games",
+            .data_src = if (p.src.len > 0) p.src else null,
+            .data_stamp = p.stamp,
+        }, .{
             gamestrip.view(h, games.items, .{ .all = p.all }),
             gamehead.view(h, g, p.data.champs),
-            h.div(.{ .class = "main" }, .{
-                card.view(h, .{}, &.{
-                    h.div(.{ .class = "ctl" }, .{ p.tl.modes(h), p.chips(h), p.stepper(h) }),
-                    p.tl.view(h),
-                    p.cells(h),
-                }),
-                card.view(h, .{}, &.{p.insp.view(h)}),
+            card.view(h, .{}, &.{
+                h.div(.{ .class = "ctl" }, .{ p.tl.modes(h), p.chips(h), p.stepper(h) }),
+                p.tl.view(h),
+                p.cells(h),
             }),
-            card.view(h, .{}, &.{versus.split(h, p.objectives(h))}),
         });
     }
 
@@ -309,9 +317,54 @@ pub const GamePage = struct {
         const r = p.tl.range orelse return false;
         return p.tl.cur == null and r[0] == s.a and r[1] == s.b;
     }
+};
+
+/// The page: GamePage's part (ui-games.wasm) and GameMore's (ui-gamemore.wasm), each
+/// root `display: contents` so the graph and the inspector share a grid row
+pub fn page(h: *H, top: N, more: N) N {
+    return h.div(.{ .class = "c-gpage" }, .{h.div(.{ .class = "g" }, .{ top, more })});
+}
+
+/// The inspector beside the graph and the objectives row, ui-gamemore.wasm's. Keeps its
+/// own GamePage state (game, graph, selection) in step with ui-games.wasm's through the
+/// URL (wasm/dom.zig's ui-hash); a moment picked in the inspector goes back the same way
+pub const GameMore = struct {
+    s: GamePage,
+    /// ui-gamemore.js and .wasm, for ui-games.wasm to load (wasm/games.zig)
+    js: []const u8 = "",
+    wasm: []const u8 = "",
+
+    const P = @This();
+
+    /// GamePage's keys but `gold`
+    pub const Url = struct { g: u8 = 0, m: u16 = 0, r: [2]u16 = .{ 0, 0 } };
+
+    pub fn toUrl(p: *const P) Url {
+        const u = p.s.toUrl();
+        return .{ .g = u.g, .m = u.m, .r = u.r };
+    }
+
+    pub fn fromUrl(p: *P, u: Url) void {
+        p.s.fromUrl(.{ .g = u.g, .m = u.m, .r = u.r, .gold = p.s.tl.mode == .gold });
+    }
+
+    pub fn view(p: *P, h: *H) N {
+        p.s.bind();
+        return h.div(.{
+            .class = "part",
+            .data_island = "gamemore",
+            .data_src = if (p.s.src.len > 0) p.s.src else null,
+            .data_stamp = p.s.stamp,
+            .data_js = if (p.js.len > 0) p.js else null,
+            .data_wasm = if (p.wasm.len > 0) p.wasm else null,
+        }, .{
+            card.view(h, .{}, &.{p.s.insp.view(h)}),
+            card.view(h, .{}, &.{versus.split(h, p.objectives(h))}),
+        });
+    }
 
     fn objectives(p: *const P, h: *H) []const versus.Item {
-        const t = gamedata.teams(p.game());
+        const t = gamedata.teams(p.s.game());
         const row = struct {
             fn f(hh: *H, label: tree.Text, icon: ?objicon.Kind, x: gamedata.Tally) versus.Item {
                 const sum = x.us + x.them;
@@ -350,8 +403,12 @@ pub const GamePage = struct {
 
 pub const css =
     \\@layer components {
-    \\  .c-gpage { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; container-type: inline-size; }
-    \\  .c-gpage > .main { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--sp-4); align-items: start; }
+    \\  .c-gpage { min-width: 0; container-type: inline-size; }
+    \\  .c-gpage > .g { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--sp-4); align-items: start; }
+    \\  .c-gpage .part { display: contents; }
+    \\  .c-gpage .part > * { grid-column: 1 / -1; }
+    \\  .c-gpage .part:first-child > :last-child { grid-column: 1; }
+    \\  .c-gpage .part:last-child > :first-child { grid-column: 2; }
     \\  .c-gpage .ctl { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-2); }
     \\  .c-gpage .rg { display: flex; gap: 4px; flex-wrap: wrap; }
     \\  .c-gpage .st { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; }
@@ -363,7 +420,8 @@ pub const css =
     \\  .c-gpage .cells { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--line); }
     \\  .c-gpage .cells > .c-strip { justify-content: space-between; }
     \\  @container (max-width: 820px) {
-    \\    .c-gpage > .main { grid-template-columns: minmax(0, 1fr); }
+    \\    .c-gpage > .g { grid-template-columns: minmax(0, 1fr); }
+    \\    .c-gpage .part:last-child > :first-child { grid-column: 1; }
     \\    .c-gpage .rg { order: 1; flex-basis: 100%; }
     \\  }
     \\}
@@ -381,7 +439,8 @@ pub fn gallery(g: *Gallery) void {
         return;
     };
     p.all = "#games";
-    g.addFill("a win, on its turn", p.view(h));
+    var more: GameMore = .{ .s = p.* };
+    g.addFill("a win, on its turn", page(h, p.view(h), more.view(h)));
 }
 
 const testing = std.testing;
