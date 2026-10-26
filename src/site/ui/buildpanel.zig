@@ -233,7 +233,7 @@ pub const BuildPanel = struct {
     rows: [n_kinds][]Row = @splat(&.{}),
     tables: [n_kinds]Table = undefined,
 
-    pub const Msg = union(enum) { open: Kind };
+    pub const Msg = union(enum) { open: Kind, key };
 
     pub const Url = struct {
         slot: ?Kind = null,
@@ -273,6 +273,15 @@ pub const BuildPanel = struct {
                 p.open = if (p.open == k) null else k;
                 ev.push = true;
             },
+            // Escape in the open cell closes it, focus back on its "all"
+            .key => {
+                const k = p.open orelse return;
+                if (!std.mem.eql(u8, ev.text, "Escape")) return;
+                p.open = null;
+                ev.push = true;
+                ev.handled = true;
+                ev.after = .{ .op = .focus, .ref = allRef(k) };
+            },
         }
     }
 
@@ -295,12 +304,18 @@ pub const BuildPanel = struct {
         })});
     }
 
+    fn allRef(k: Kind) []const u8 {
+        return switch (k) {
+            inline else => |c| "all-" ++ @tagName(c),
+        };
+    }
+
     /// A cell's head band: its title and, with more options than shown, all / fewer
     fn head(p: *BuildPanel, h: *H, k: Kind, total: usize) N {
         const open = p.open == k;
         return h.div(.{ .class = "sh" }, .{
             h.h3(.{}, .{k.title()}),
-            if (total > shown) button.view(h, .{ .v = .quiet, .s = .s, .on = h.on(p, .{ .open = k }) }, .{if (open) W.fewer else W.all.with(h, .{ .n = total })}) else null,
+            if (total > shown) button.view(h, .{ .v = .quiet, .s = .s, .on = h.on(p, .{ .open = k }), .ref = allRef(k) }, .{if (open) W.fewer else W.all.with(h, .{ .n = total })}) else null,
         });
     }
 
@@ -322,6 +337,7 @@ pub const BuildPanel = struct {
             .key = @backingInt(k),
             .data_k = k,
             .data_open = p.open == k,
+            .on_keydown = if (p.open == k) h.on(p, .key) else null,
         }, .{ p.head(h, k, rows.len), p.tableFor(h, k, p.open == k, shown) });
     }
 
@@ -333,7 +349,7 @@ pub const BuildPanel = struct {
         if (pri.len == 0 and paths.len == 0) return null;
         const open = p.open == .skills;
         const path_c = &p.ctx[@backingInt(Kind.skill_path)];
-        return h.div(.{ .class = "slot", .key = @backingInt(Kind.skills), .data_k = Kind.skills, .data_open = open }, .{
+        return h.div(.{ .class = "slot", .key = @backingInt(Kind.skills), .data_k = Kind.skills, .data_open = open, .on_keydown = if (open) h.on(p, .key) else null }, .{
             p.head(h, .skills, @max(pri.len, paths.len)),
             if (pri.len > 0) p.tableFor(h, .skills, open, 1) else null,
             if (paths.len > 0) skillgrid.view(h, .{
@@ -406,4 +422,8 @@ pub fn gallery(g: *Gallery) void {
         p.runes.id = p.id;
         g.addFill(s[0], p.view(h));
     }
+}
+
+test {
+    _ = @import("build_test.zig");
 }
