@@ -77,9 +77,13 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
         .js = "../" ++ assets.champmore_js.path,
         .wasm = assets.champmore_wasm.path,
     };
+    // The champion and its roles, most played first, for /p/pv.js (no island's root, so
+    // no wasm reads or writes them)
+    var roles: std.ArrayList(u8) = .empty;
+    for (d.roles, 0..) |r, i| try roles.print(a, "{s}{s}", .{ if (i > 0) " " else "", @tagName(r.role) });
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
-    t.root = h.div(.{ .class = "c-cpage" }, .{ top.view(&h), build.view(&h), more.view(&h) });
+    t.root = h.div(.{ .class = "c-cpage", .data_id = ch.id, .data_roles = roles.items }, .{ top.view(&h), build.view(&h), more.view(&h) });
     if (h.oom) return error.OutOfMemory;
     try ui.html.write(&t, t.root, w);
     // Only Top's: it loads the others' (ui/wasm/champion.zig)

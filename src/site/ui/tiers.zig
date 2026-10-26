@@ -162,7 +162,8 @@ pub fn prepare(gpa: std.mem.Allocator, d: *const Data, role: ?Role, base: []cons
         if (role != null and role.? != r.role) continue;
         const ch = d.champs[r.champ];
         const p = share(r.wins, r.games);
-        c.href = h.fmt("{s}champion/{s}.html{s}", .{ base, ch.slug, d.query });
+        // The row's role: the champion page opens on it (its main role drops the key)
+        c.href = h.fmt("{s}champion/{s}.html{s}#role={s}", .{ base, ch.slug, d.query, Role.slugs[@backingInt(r.role)] });
         c.icon = h.fmt("https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png", .{ d.ddragon, ch.key });
         c.colour = h.vars(.{ .c = fmt.wrColour(p, fmt.table_span) });
         c.title = if (r.spread) |s|

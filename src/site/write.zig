@@ -181,7 +181,7 @@ test "views: a tree each, switches between them, shared pages once" {
         "<a aria-disabled=\"true\" title=\"Champion pages only\" data-rank=\"6\">Diamond+</a>",
         "href=\"../" ++ @import("style.zig").file.path ++ "\"",
         "href=\"../daily.html\"",
-        "href=\"../champion/a.html?region=all\"",
+        "href=\"../champion/a.html?region=all#role=",
     }) |s| try std.testing.expect(std.mem.find(u8, tiers, s) != null);
     // One page per champion, at the site root: the root view's, no switches until the
     // island takes the views

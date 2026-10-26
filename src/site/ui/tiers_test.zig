@@ -138,7 +138,7 @@ test "the server renders the default rows; rare ones come with the data" {
     const page = w.written();
     try testing.expectEqual(@as(usize, 4), std.mem.count(u8, page, "<tr class=\"bx\">"));
     try testing.expect(std.mem.find(u8, page, ">Lux</a></td><td class=\"role\"><svg class=\"ri\" role=\"img\" aria-label=\"Support\">") != null);
-    try testing.expect(std.mem.find(u8, page, "<a class=\"champ box\" href=\"../champion/kaisa.html\"><img alt=\"\" loading=\"lazy\" width=\"32\" height=\"32\" src=\"https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Kaisa.png\">") != null);
+    try testing.expect(std.mem.find(u8, page, "<a class=\"champ box\" href=\"../champion/kaisa.html#role=bot\"><img alt=\"\" loading=\"lazy\" width=\"32\" height=\"32\" src=\"https://ddragon.leagueoflegends.com/cdn/15.13.1/img/champion/Kaisa.png\">") != null);
     try testing.expect(std.mem.find(u8, page, "<td class=\"rank\">4</td>") != null);
     try testing.expect(std.mem.find(u8, page, "<details class=\"tl-knobs\" hidden=\"\">") != null);
     try testing.expect(std.mem.find(u8, page, "<p class=\"tl-more\"><span>2</span> rare picks") != null);
