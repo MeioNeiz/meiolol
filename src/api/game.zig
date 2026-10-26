@@ -35,12 +35,24 @@ pub const Summary = struct {
         kills: i64,
         deaths: i64,
         assists: i64,
+        /// At the end; 0 for none, and in summaries cached before these fields
+        loadout: Loadout = .{},
     };
 
     pub fn slotOf(s: Summary, hash: []const u8) ?u8 {
         for (s.players, 0..) |p, i| if (std.mem.eql(u8, p.hash, hash)) return @intCast(i);
         return null;
     }
+};
+
+/// A player's final items (6 the trinket), summoner spells, keystone, second rune tree
+/// and vision score; ids as match-v5 gives them, 0 for none
+pub const Loadout = struct {
+    items: [7]u32 = @splat(0),
+    spells: [2]u32 = @splat(0),
+    keystone: u32 = 0,
+    second: u32 = 0,
+    vision: u32 = 0,
 };
 
 pub const hash_len = 32;
@@ -69,6 +81,7 @@ pub fn summarise(arena: Allocator, body: []const u8) !Summary {
             .kills = p.kills orelse 0,
             .deaths = p.deaths orelse 0,
             .assists = p.assists orelse 0,
+            .loadout = loadout(p),
         };
     }
     return .{
@@ -79,6 +92,24 @@ pub fn summarise(arena: Allocator, body: []const u8) !Summary {
         .remake = riot.match.isRemake(doc),
         .players = players,
     };
+}
+
+/// `p`: a match-v5 participant
+fn loadout(p: anytype) Loadout {
+    const id = struct {
+        fn f(v: ?i64) u32 {
+            return std.math.cast(u32, v orelse 0) orelse 0;
+        }
+    }.f;
+    var o: Loadout = .{
+        .items = .{ id(p.item0), id(p.item1), id(p.item2), id(p.item3), id(p.item4), id(p.item5), id(p.item6) },
+        .spells = .{ id(p.summoner1Id), id(p.summoner2Id) },
+        .vision = id(p.visionScore),
+    };
+    const perks = p.perks orelse return o;
+    if (perks.styles.len > 0 and perks.styles[0].selections.len > 0) o.keystone = id(perks.styles[0].selections[0].perk);
+    if (perks.styles.len > 1) o.second = id(perks.styles[1].style);
+    return o;
 }
 
 /// One player's Riot ID from a match-v5 document, as at that game, with their PUUID for
@@ -222,6 +253,7 @@ pub const Seat = struct {
     deaths: i64,
     assists: i64,
     you: bool,
+    loadout: Loadout = .{},
 };
 
 /// A fight (champion kills close in time and place, one of them yours: a kill, an
@@ -556,6 +588,7 @@ fn seats(arena: Allocator, s: Summary, slot: u8, riot_ids: []const ?[]const u8) 
         .deaths = p.deaths,
         .assists = p.assists,
         .you = i == slot,
+        .loadout = p.loadout,
     };
     return out;
 }
@@ -1253,6 +1286,24 @@ const testing = std.testing;
 
 test {
     _ = statemodel;
+}
+
+test "summarise keeps each player's loadout; a cached summary without one parses" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const s = try summarise(arena, @embedFile("../riot/testdata/match.json"));
+    const l = s.players[0].loadout;
+    try testing.expectEqual(@as(u32, 1055), l.items[0]);
+    try testing.expectEqual(@as(u32, 3340), l.items[6]);
+    try testing.expectEqual([2]u32{ 4, 6 }, l.spells);
+    try testing.expectEqual(@as(u32, 8010), l.keystone);
+    try testing.expectEqual(@as(u32, 8400), l.second);
+    try testing.expectEqual(@as(u32, 8), l.vision);
+    const old = try std.json.parseFromSliceLeaky(Summary.Player, arena,
+        \\{"hash":"","team":100,"position":"TOP","champion":1,"win":true,"kills":0,"deaths":0,"assists":0}
+    , .{});
+    try testing.expectEqual(Loadout{}, old.loadout);
 }
 
 test "riot ids by slot, seats name only those known" {

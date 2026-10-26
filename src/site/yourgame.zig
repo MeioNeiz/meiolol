@@ -5,6 +5,7 @@
 const std = @import("std");
 const ui = @import("ui");
 const game = @import("../api/game.zig");
+const ddragon = @import("../ddragon.zig");
 const Date = @import("../date.zig").Date;
 const html = @import("html.zig");
 const assets = @import("assets.zig");
@@ -37,12 +38,19 @@ pub fn files(site: *const Site, json: []const u8, out: *std.ArrayList(File)) !vo
         if (i > 0 and std.mem.eql(u8, r, ex.default)) continue;
         const pl = ex.player(r) orelse continue;
         const report = pl.report orelse continue;
-        const d = try data(a, site.champs, report.games, site, siteIcon);
+        const d = try data(a, site.champs, names(site), report.games, site, siteIcon);
         if (d.games.len == 0) continue;
         var bytes: std.ArrayList(u8) = .empty;
         try ui.data.encode(a, gd.Data, d, &bytes);
         try out.append(a, .{ .path = try a.print(data_dir ++ "{s}.bin", .{r}), .data = bytes.items });
     }
+}
+
+/// Items, spells and runes from the view's builds file; none without one (icons then
+/// draw empty)
+fn names(site: *const Site) Names {
+    const f = &(site.view_builds[site.view.index()] orelse return .{});
+    return .{ .items = f.items, .spells = f.spells, .runes = f.runes };
 }
 
 fn siteIcon(site: *const Site, ch: Champ) anyerror![]const u8 {
@@ -154,10 +162,44 @@ const queues = [_]struct { i64, []const u8 }{
 
 const months = [_][]const u8{ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
 
+/// Data Dragon's names and icons, sorted by id (ddragon.find)
+pub const Names = struct {
+    items: []const ddragon.Named = &.{},
+    spells: []const ddragon.Named = &.{},
+    runes: []const ddragon.Named = &.{},
+};
+
+/// Data.arts, each item, spell and rune once
+const Arts = struct {
+    names: Names,
+    list: std.ArrayList(ui.art.Art) = .empty,
+    /// Kind in the high bits, so an item and a rune with one id stay apart
+    keys: std.ArrayList(u64) = .empty,
+
+    const Kind = enum(u2) { item, spell, rune };
+
+    fn at(x: *Arts, a: Allocator, k: Kind, id: u32) !u16 {
+        if (id == 0) return gd.no_art;
+        const key = @as(u64, @backingInt(k)) << 32 | id;
+        if (std.mem.findScalar(u64, x.keys.items, key)) |i| return @intCast(i);
+        if (x.list.items.len >= gd.no_art) return gd.no_art;
+        const list = switch (k) {
+            .item => x.names.items,
+            .spell => x.names.spells,
+            .rune => x.names.runes,
+        };
+        const n = ddragon.find(list, id);
+        try x.list.append(a, if (n) |v| .{ .name = v.name, .src = v.icon } else .{ .name = try a.print("#{d}", .{id}), .src = "" });
+        try x.keys.append(a, key);
+        return @intCast(x.list.items.len - 1);
+    }
+};
+
 /// Games with a timeline and its detail; `icon` makes a portrait URL
-pub fn data(arena: Allocator, champs: []const Champ, games: []const game.Game, ctx: anytype, icon: fn (@TypeOf(ctx), Champ) anyerror![]const u8) !gd.Data {
+pub fn data(arena: Allocator, champs: []const Champ, nm: Names, games: []const game.Game, ctx: anytype, icon: fn (@TypeOf(ctx), Champ) anyerror![]const u8) !gd.Data {
     var used: std.ArrayList(ui.champ.Champ) = .empty;
     var ids: std.ArrayList(u32) = .empty;
+    var arts: Arts = .{ .names = nm };
     var out: std.ArrayList(gd.Game) = .empty;
     for (games) |g| {
         const d = g.detail orelse continue;
@@ -192,7 +234,18 @@ pub fn data(arena: Allocator, champs: []const Champ, games: []const game.Game, c
                 .taken = st.taken,
                 .lane14 = st.lane14,
             };
+            const lo = p.loadout;
+            for (lo.items, &o.items) |id, *x| x.* = try arts.at(arena, .item, id);
+            for (lo.spells, &o.spells) |id, *x| x.* = try arts.at(arena, .spell, id);
+            o.keystone = try arts.at(arena, .rune, lo.keystone);
+            o.second = try arts.at(arena, .rune, lo.second);
+            // All zero: a summary from before loadouts
+            if (!std.meta.eql(lo, game.Loadout{})) o.vision = @intCast(@min(lo.vision, std.math.maxInt(u16)));
         }
+        const buys = try arena.alloc(gd.Buy, d.buys.len);
+        for (d.buys, buys) |b, *o| o.* = .{ .t = secs(b.t_s), .item = try arts.at(arena, .item, b.item) };
+        const skills = try arena.alloc(u8, d.skills.len);
+        for (d.skills, skills) |k, *o| o.* = if (k >= 1 and k <= 4) "QWER"[k - 1] else '?';
 
         const kills = try arena.alloc(gd.Kill, d.kills.len);
         for (d.kills, kills) |k, *o| {
@@ -230,9 +283,50 @@ pub fn data(arena: Allocator, champs: []const Champ, games: []const game.Game, c
             .kills = kills,
             .objs = objs,
             .best = if (g.best_minute) |b| .{ .minute = b.minute, .gold = b.gold } else null,
+            .buys = buys,
+            .skills = skills,
+            .lane = if (g.lane) |l| lane(l) else null,
         });
     }
-    return .{ .champs = used.items, .games = out.items };
+    return .{ .champs = used.items, .games = out.items, .arts = arts.list.items };
+}
+
+/// The curve's minutes with this many games; api/game.zig reads it the same way
+const min_minute_games = 10;
+
+fn lane(l: game.LaneReport) gd.Lane {
+    const stretch = struct {
+        fn f(x: ?game.Stretch) ?gd.Lane.Stretch {
+            const v = x orelse return null;
+            return .{ .from = v.from, .to = v.to, .change = v.change };
+        }
+    }.f;
+    var out: gd.Lane = .{
+        .gold = l.gold,
+        .xp = l.xp,
+        .cs = l.cs,
+        .cs10 = if (l.cs10) |c| @intCast(std.math.clamp(c, 0, std.math.maxInt(u16))) else null,
+        .kills = @intCast(@min(l.lane_kills, 255)),
+        .deaths = @intCast(@min(l.lane_deaths, 255)),
+        .level6 = l.level6,
+        .first_item = l.first_item,
+        .fall = stretch(l.fall),
+        .rise = stretch(l.rise),
+    };
+    const c = l.curve orelse return out;
+    var m: usize = 0;
+    while (m < c.n.len and c.n[m] >= min_minute_games) m += 1;
+    if (m == 0) return out;
+    out.typical = .{
+        .games = c.games,
+        .bracket = c.bracket,
+        .gold = c.gold[0..@min(m, c.gold.len)],
+        .xp = c.xp[0..@min(m, c.xp.len)],
+        .cs = c.cs[0..@min(m, c.cs.len)],
+        .level6 = c.level6[0],
+        .first_item = c.first_item[0],
+    };
+    return out;
 }
 
 fn secs(s: u32) u16 {
@@ -261,7 +355,7 @@ test "a game with its detail maps every kill, objective and seat" {
             return c.key;
         }
     }.f;
-    const d = try data(arena, &champs, &.{ g, try game.analyse(arena, .{ .summary = s, .slot = 0, .timeline = null }, .{}, .{}) }, {}, icon);
+    const d = try data(arena, &champs, .{}, &.{ g, try game.analyse(arena, .{ .summary = s, .slot = 0, .timeline = null }, .{}, .{}) }, {}, icon);
     // The game without a timeline has no page
     try testing.expectEqual(@as(usize, 1), d.games.len);
     const p = d.games[0];
@@ -272,6 +366,12 @@ test "a game with its detail maps every kill, objective and seat" {
     try testing.expectEqual(g.detail.?.kills.len, p.kills.len);
     try testing.expectEqual(g.detail.?.objectives.len, p.objs.len);
     try testing.expectEqual(p.wc.len, p.gold.len);
+    try testing.expectEqual(g.detail.?.skills.len, p.skills.len);
+    try testing.expectEqual(g.detail.?.buys.len, p.buys.len);
+    try testing.expect(p.lane != null);
+    // No loadout in this summary: empty slots, no vision
+    try testing.expectEqual(gd.no_art, p.me().items[0]);
+    try testing.expectEqual(@as(?u16, null), p.me().vision);
     try testing.expectEqual(@as(usize, 10), d.champs.len);
     try testing.expectEqualStrings("Ranked solo", p.queue);
     const turn, _ = gd.turns(p.wc);

@@ -71,6 +71,10 @@ fn build(arena: Allocator, db: store.Db, set: game.CurveSet, role: Role, candida
     return null;
 }
 
+fn idOf(v: ?i64) u32 {
+    return std.math.cast(u32, v orelse 0) orelse 0;
+}
+
 fn contains(list: []const []const u8, s: []const u8) bool {
     for (list) |x| if (std.mem.eql(u8, x, s)) return true;
     return false;
@@ -96,7 +100,9 @@ fn player(arena: Allocator, db: store.Db, set: game.CurveSet, role: Role, puuid:
     defer q.deinit();
     try q.bind(.{ puuid, Role.positions[@backingInt(role)], ranked_solo, platform, games_shown });
     var players = try db.prepare(
-        \\SELECT slot, team_id, position, champion_id, win, kills, deaths, assists
+        \\SELECT slot, team_id, position, champion_id, win, kills, deaths, assists,
+        \\  item0, item1, item2, item3, item4, item5, item6, summoner1, summoner2, keystone,
+        \\  secondary_style, vision_score
         \\FROM participants WHERE match_id = ? ORDER BY slot
     );
     defer players.deinit();
@@ -131,6 +137,18 @@ fn player(arena: Allocator, db: store.Db, set: game.CurveSet, role: Role, puuid:
                 kills: i64,
                 deaths: i64,
                 assists: i64,
+                item0: ?i64,
+                item1: ?i64,
+                item2: ?i64,
+                item3: ?i64,
+                item4: ?i64,
+                item5: ?i64,
+                item6: ?i64,
+                summoner1: ?i64,
+                summoner2: ?i64,
+                keystone: ?i64,
+                secondary_style: ?i64,
+                vision_score: ?i64,
             });
             try list.append(arena, .{
                 .hash = "",
@@ -141,6 +159,13 @@ fn player(arena: Allocator, db: store.Db, set: game.CurveSet, role: Role, puuid:
                 .kills = p.kills,
                 .deaths = p.deaths,
                 .assists = p.assists,
+                .loadout = .{
+                    .items = .{ idOf(p.item0), idOf(p.item1), idOf(p.item2), idOf(p.item3), idOf(p.item4), idOf(p.item5), idOf(p.item6) },
+                    .spells = .{ idOf(p.summoner1), idOf(p.summoner2) },
+                    .keystone = idOf(p.keystone),
+                    .second = idOf(p.secondary_style),
+                    .vision = idOf(p.vision_score),
+                },
             });
         }
         if (g.slot >= list.items.len) continue;

@@ -8,10 +8,14 @@ const champ = @import("champ.zig");
 const role = @import("role.zig");
 const data = @import("data.zig");
 const timeline = @import("timeline.zig");
+const art = @import("art.zig");
 
 pub const ObjKind = enum { tower, inhibitor, dragon, elder, grubs, herald, baron, atakhan };
 
 pub const no_slot = 255;
+
+/// `Data.arts` index for none: an empty slot, or a summary that predates loadouts
+pub const no_art = std.math.maxInt(u16);
 
 pub const Seat = struct {
     /// Index into `Data.champs`
@@ -31,6 +35,13 @@ pub const Seat = struct {
     taken: u32 = 0,
     /// Gold minus the lane opponent's at 14 min
     lane14: ?i32 = null,
+    /// `Data.arts` indices; 6 the trinket
+    items: [7]u16 = @splat(no_art),
+    spells: [2]u16 = @splat(no_art),
+    keystone: u16 = no_art,
+    second: u16 = no_art,
+    /// Null when the summary predates it
+    vision: ?u16 = null,
 };
 
 pub const Kill = struct {
@@ -51,6 +62,45 @@ pub const Obj = struct { t: u16, ours: bool, kind: ObjKind, name: []const u8, yo
 
 pub const Best = struct { minute: u8, gold: i32 };
 
+/// One of your purchases: `Data.arts` index
+pub const Buy = struct { t: u16, item: u16 };
+
+/// Your lane against your opponent's (api/game.zig LaneReport): index i is minute i + 1
+pub const Lane = struct {
+    /// You minus them
+    gold: []const i16,
+    xp: []const i16,
+    cs: []const i16,
+    /// Your CS at 10 min
+    cs10: ?u16 = null,
+    /// Before 14 min: kills you took part in, your deaths
+    kills: u8 = 0,
+    deaths: u8 = 0,
+    /// Seconds, yours and theirs
+    level6: [2]?u16 = .{ null, null },
+    first_item: [2]?u16 = .{ null, null },
+    /// Your biggest fall and rise against the typical median
+    fall: ?Stretch = null,
+    rise: ?Stretch = null,
+    typical: ?Typical = null,
+
+    pub const Stretch = struct { from: u8, to: u8, change: i32 };
+};
+
+/// The matchup's typical lane, minutes with enough games only
+pub const Typical = struct {
+    games: u32,
+    /// "Gold to Emerald"; "All games" when yours was too thin
+    bracket: []const u8,
+    /// [p25, p50, p75] from your side
+    gold: []const [3]i16,
+    xp: []const [3]i16,
+    cs: []const [3]i16,
+    /// Seconds, yours
+    level6: ?u16 = null,
+    first_item: ?u16 = null,
+};
+
 pub const Game = struct {
     /// "23 Oct"
     day: []const u8,
@@ -70,6 +120,11 @@ pub const Game = struct {
     objs: []const Obj = &.{},
     /// The minute you earned most gold
     best: ?Best = null,
+    /// Yours in time order, undone ones left out
+    buys: []const Buy = &.{},
+    /// The ability you levelled at each level: "QWEQQR..."
+    skills: []const u8 = "",
+    lane: ?Lane = null,
 
     pub fn me(g: *const Game) Seat {
         return g.seats[g.you];
@@ -88,6 +143,12 @@ pub const Data = struct {
     champs: []const champ.Champ,
     /// Newest first
     games: []const Game,
+    /// Items, summoner spells and runes the games name (Seat.items and the like index it)
+    arts: []const art.Art = &.{},
+
+    pub fn artAt(d: *const Data, i: u16) ?art.Art {
+        return if (i < d.arts.len) d.arts[i] else null;
+    }
 };
 
 pub const stamp = @import("tiers.zig").stamp;
