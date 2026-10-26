@@ -9,7 +9,7 @@ From the langref Style Guide [[zig-langref-017-b#^f103]]:
 - other callables: `camelCase`
 - everything else (variables, fields, constants): `snake_case`
 - acronyms are words, even two-letter ones: `XmlParser`, `readU32Be`
-- files with fields are `TitleCase.zig`; other files and all directories `snake_case`
+- files with fields are `TitleCase.zig`; other files and all directories `snake_case` <!-- hygiene-ok -->
 
 ```zig
 // research/raw/zig-langref-017.md:14397 (langref 0.17.0, Style Guide)
