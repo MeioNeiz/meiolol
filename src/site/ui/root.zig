@@ -85,12 +85,13 @@ pub const buildpanel = @import("buildpanel.zig");
 pub const champpage = @import("champpage.zig");
 pub const champrank = @import("champrank.zig");
 pub const matchpage = @import("matchpage.zig");
+pub const finder = @import("finder.zig");
 
 /// Components whose CSS ships (css.join): add one when a page first uses it
-pub const components = .{ button, chip, badge, segmented, card, toggletip, strip, role, champ, rolepicker, champsearch, champhead, matchbrief, matchstrip, champlist, table, chart, dotplot, trend, histogram, art, skillgrid, itempath, runetree, buildpanel, tabs, site, filterbar, champpage, kda, timeline, versus, objicon, minimap, gamestrip, inspector, gamehead, gamerow, spark, stat, scoreboard, laneduel, itemrow, gamepage, lane, matchpage };
+pub const components = .{ button, chip, badge, segmented, card, toggletip, strip, role, champ, rolepicker, champsearch, champhead, matchbrief, matchstrip, champlist, table, chart, dotplot, trend, histogram, art, skillgrid, itempath, runetree, buildpanel, tabs, site, filterbar, champpage, kda, timeline, versus, objicon, minimap, gamestrip, inspector, gamehead, gamerow, spark, stat, scoreboard, laneduel, itemrow, gamepage, lane, matchpage, finder };
 
 /// Every component, in the gallery's order
-pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, role, champ, site, rolepicker, filterbar, champsearch, champhead, matchbrief, matchstrip, champlist, draftboard, champselect, teamrows, loadscreen, gamescreen, postgame, signin, practice, app, table, chart, dotplot, trend, histogram, lane, timeline, spark, art, skillgrid, itempath, runetree, buildpanel, versus, objicon, minimap, gamestrip, inspector, gamehead, gamerow, scoreboard, laneduel, itemrow, gamepage, guess, puzzle, champrolepicker };
+pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, role, champ, site, rolepicker, filterbar, champsearch, champhead, matchbrief, matchstrip, champlist, draftboard, champselect, teamrows, loadscreen, gamescreen, postgame, signin, practice, app, table, chart, dotplot, trend, histogram, lane, timeline, spark, art, skillgrid, itempath, runetree, buildpanel, versus, objicon, minimap, gamestrip, inspector, gamehead, gamerow, scoreboard, laneduel, itemrow, gamepage, guess, puzzle, champrolepicker, finder };
 
 pub const H = tree.H;
 pub const N = tree.N;

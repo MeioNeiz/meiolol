@@ -13,6 +13,7 @@ const daily = @import("../daily.zig");
 const learn = @import("../learn.zig");
 const learn_page = @import("learn.zig");
 const matchup = @import("matchup.zig");
+const finder = @import("finder.zig");
 const pool_page = @import("pool.zig");
 const pool = @import("../pool.zig");
 const learning = @import("../learning.zig");
@@ -341,7 +342,7 @@ pub const Site = struct {
 pub const File = daily.File;
 
 /// Also written by their plain names, with the same data (assets.zig)
-pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.search_js, assets.stats_js, assets.stats_wasm, assets.champion_js, assets.champion_wasm, assets.champbuild_js, assets.champbuild_wasm, assets.champmore_js, assets.champmore_wasm, assets.matchup_js, assets.matchup_wasm, assets.matchmore_js, assets.matchmore_wasm, assets.games_js, assets.games_wasm, assets.gamemore_js, assets.gamemore_wasm, assets.gamelane_js, assets.gamelane_wasm };
+pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.search_js, assets.stats_js, assets.stats_wasm, assets.champion_js, assets.champion_wasm, assets.champbuild_js, assets.champbuild_wasm, assets.champmore_js, assets.champmore_wasm, assets.matchup_js, assets.matchup_wasm, assets.matchmore_js, assets.matchmore_wasm, assets.games_js, assets.games_wasm, assets.gamemore_js, assets.gamemore_wasm, assets.gamelane_js, assets.gamelane_wasm, assets.finder_js, assets.finder_wasm };
 
 /// Front-end files at the site root; `Options.static_dir` serves them from disk instead
 pub const shared_assets = [_]File{
@@ -378,11 +379,12 @@ pub const shared_assets = [_]File{
     .{ .path = "ui-gamemore.js", .data = @embedFile("ui-gamemore.js") },
     .{ .path = "ui-gamelane.wasm", .data = @embedFile("ui-gamelane.wasm") },
     .{ .path = "ui-gamelane.js", .data = @embedFile("ui-gamelane.js") },
+    .{ .path = "ui-finder.wasm", .data = @embedFile("ui-finder.wasm") },
+    .{ .path = "ui-finder.js", .data = @embedFile("ui-finder.js") },
 };
 /// And in every view's directory
 pub const view_assets = [_]File{
     .{ .path = "pool.js", .data = @embedFile("static/pool.js") },
-    .{ .path = "min-games.js", .data = @embedFile("static/min-games.js") },
 };
 
 /// Asset `wanted` (a hashed name as its plain one) from Options.static_dir when set (edits
@@ -501,7 +503,7 @@ pub fn renderPage(site: *const Site, w: *Writer, path: []const u8) !bool {
         if (site.view.index() != 0) return false;
         try writeChampion(site, w, site.champBySlug(s) orelse return false);
     } else if (eql(u8, path, "matchup/index.html")) {
-        try matchup.writeIndex(site, w, if (site.curves) |*c| c else null);
+        try finder.writePage(site, w);
     } else if (strip(path, "matchup/", ".html")) |s| {
         return matchup.route(site, w, if (site.curves) |*c| c else return false, s);
     } else if (eql(u8, path, builds_page.index_path)) {

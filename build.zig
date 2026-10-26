@@ -395,7 +395,7 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
 }
 
 /// ui.wasm files, one per page family so each page loads only its islands (Jacob 25 Oct)
-const ui_families = [_][]const u8{ "stats", "champion", "champbuild", "champmore", "matchup", "matchmore", "app", "games", "gamemore", "gamelane", "practice" };
+const ui_families = [_][]const u8{ "stats", "champion", "champbuild", "champmore", "matchup", "matchmore", "app", "games", "gamemore", "gamelane", "practice", "finder" };
 /// gzip bytes per family: stack.md's 40 KB
 const ui_budget = 40 * 1024;
 
