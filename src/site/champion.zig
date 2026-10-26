@@ -107,7 +107,7 @@ fn encode(site: *const Site, parts: *const cp.Split) ![3][]const u8 {
     return .{ out[0].items, out[1].items, out[2].items };
 }
 
-/// Every champion's data files, for the root view's files
+/// Every champion's data files, under the view's directory
 pub fn dataFiles(site: *const Site, files: anytype) !void {
     for (site.champs) |ch| {
         const d = try pageData(site, ch);
@@ -116,7 +116,7 @@ pub fn dataFiles(site: *const Site, files: anytype) !void {
     }
 }
 
-fn uiRole(r: Role) ui.role.Role {
+pub fn uiRole(r: Role) ui.role.Role {
     return switch (r) {
         .top => .top,
         .jungle => .jungle,

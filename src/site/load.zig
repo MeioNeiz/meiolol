@@ -24,6 +24,7 @@ const log = std.log.scoped(.site);
 const root = @import("root.zig");
 const tierlist = @import("tierlist.zig");
 const champion = @import("champion.zig");
+const champrank = @import("champrank.zig");
 const Options = root.Options;
 const Site = root.Site;
 const File = root.File;
@@ -439,7 +440,10 @@ fn addFiles(site: *Site) !void {
         try files.append(arena, .{ .path = stats_path, .data = site.model });
         try files.append(arena, .{ .path = "data/champions.json", .data = try championsJson(site) });
         try files.append(arena, .{ .path = tierlist.data_path, .data = try tierlist.dataFile(site) });
-        if (site.view.index() == 0) try champion.dataFiles(site, &files);
+        // Every view's champion data, for the page's view picker; the rank filter's
+        // from the root view's tally
+        try champion.dataFiles(site, &files);
+        if (site.view.index() == 0) try champrank.dataFiles(site, &files);
         try files.append(arena, .{ .path = search.path, .data = try search.json(site) });
         {
             var aw: Writer.Allocating = .init(arena);

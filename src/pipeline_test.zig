@@ -90,6 +90,8 @@ test "fixture games to stats, curves and the website" {
     try testing.expectEqual(9, build_file.builds.len);
     const darius = build_file.get(122, .top).?;
     try testing.expectEqual(games, darius.games);
+    // The rank filter (filters.zig rankFigures): Darius's players at Diamond from here
+    try db.exec("UPDATE participants SET tier = 'DIAMOND' WHERE champion_id = 122");
     try testing.expectEqual(games, darius.get(.start).?.games);
     try testing.expectEqualSlices(u32, &.{ 4, 6 }, darius.get(.spells).?.options[0].v);
     try testing.expectEqual(games, darius.get(.skill_start).?.games);
@@ -216,6 +218,34 @@ test "fixture games to stats, curves and the website" {
     };
     try site.generate(gpa, io, db, opts);
     try expectSiteFiles(arena, io, out);
+    {
+        // Rank filter files, every view's at the root: Darius at Emerald+ and Diamond+
+        // (no one at Master+); the builds from Emerald+'s file, Diamond+'s missing
+        for ([_][]const u8{ "", "-patch", "-all", "-all-patch" }) |suffix| {
+            _ = try std.Io.Dir.cwd().statFile(io, try std.fs.path.join(arena, &.{ out, try arena.print("data/champion/darius-rank{s}.bin", .{suffix}) }), .{});
+        }
+        // Every view's own champion data
+        for ([_][]const u8{ "patch/", "all/", "all/patch/" }) |dir_of| {
+            _ = try std.Io.Dir.cwd().statFile(io, try std.fs.path.join(arena, &.{ out, dir_of, "data/champion/darius-more.bin" }), .{});
+        }
+        const bytes = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "data/champion/darius-rank.bin" }), arena, .limited(1 << 20));
+        const d = try site.ui.data.decode(arena, site.ui.champrank.Data, bytes);
+        try testing.expectEqual(3, d.groups.len);
+        try testing.expectEqualStrings("Emerald+", d.groups[0].label);
+        for (d.groups[0..2]) |g| {
+            try testing.expectEqual(1, g.roles.len);
+            const r = g.roles[0];
+            try testing.expectEqual(.top, r.role);
+            try testing.expectEqual(games, r.games);
+            try testing.expectEqual(1, r.rank);
+            try testing.expectEqual(1, r.of);
+            try testing.expectEqual(1, r.build_group);
+            try testing.expect(r.build != null and r.opps.len > 0 and r.by_patch.len == 1);
+            try testing.expectEqual(games, r.by_patch[0].games);
+        }
+        try testing.expectEqual(0, d.groups[2].roles.len);
+        try testing.expectError(error.FileNotFound, std.Io.Dir.cwd().statFile(io, try std.fs.path.join(arena, &.{ out, "data/champion/mordekaiser-rank.bin" }), .{}));
+    }
     for ([_][]const u8{
         "index.html",
         "champions.html",

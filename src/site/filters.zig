@@ -15,6 +15,7 @@ const matchup = @import("matchup.zig");
 const stats = @import("../stats.zig");
 const par = @import("../par.zig");
 const partials = @import("../partials.zig");
+const tierlist = @import("tierlist.zig");
 
 const Role = core.Role;
 const Bracket = core.curvesfile.Bracket;
@@ -88,7 +89,54 @@ pub const Made = struct {
     patches: []const []const u8 = &.{},
     /// Of the patch views
     current: []const []const u8 = &.{},
+    /// The rank filter's (rankFigures), by champion, view, group and role
+    ranked: []const Ranked = &.{},
+    /// Every champion's lane games by view, group, role and champion (roleCount):
+    /// opponents' own rates at a rank
+    role_counts: []const Counts = &.{},
+
+    pub fn roleCount(m: *const Made, v: usize, g: usize, r: Role, c: usize) Counts {
+        const n = m.role_counts.len / (html.View.count * rank_groups.len * Role.all.len);
+        return m.role_counts[((v * rank_groups.len + g) * Role.all.len + @backingInt(r)) * n + c];
+    }
 };
+
+/// The champion page's rank filter above its Platinum+ base (ui.champrank): Emerald+,
+/// Diamond+, Master+ by their lowest tier index, as builds.rank_tiers
+pub const rank_groups = [_]u8{ 5, 6, 7 };
+
+/// Roles under this share of a champion's games at a rank get no rank figures: half the
+/// champions table's floor, so a role the base page shows mostly has them
+const rank_role_share = tierlist.min_role_share / 2.0;
+
+pub const Counts = struct { games: u32 = 0, wins: u32 = 0 };
+
+/// A champion's lane games in a role under a view and rank group, with the figures that
+/// need every champion's; champrank.zig adds those that need the view's own files
+pub const Ranked = struct {
+    /// site.champs index
+    champ: u16,
+    view: u8,
+    group: u8,
+    role: Role,
+    games: u32,
+    wins: u32,
+    /// %, of the role's players at the rank and of its games (by gameTier)
+    pick: f32,
+    ban: f32,
+    /// tierlist.roleRank's order from the rank's counts; 0: rare there
+    rank: u16 = 0,
+    of: u16 = 0,
+    /// In 1%+ of its games here, most played first
+    opps: []const RankedOpp,
+    /// Oldest first, those the view has players of the role on
+    patches: []const RankedPatch,
+};
+
+/// champ: site.champs index
+pub const RankedOpp = struct { champ: u16, games: u32, wins: u32 };
+
+pub const RankedPatch = struct { patch: []const u8, games: u32, wins: u32, rank: u16 = 0 };
 
 /// The games' matches; make reads each one's players and bans by primary key. A join
 /// ordered by match_id walks every match ever stored: with +match_id the start and patch
@@ -283,7 +331,8 @@ fn makeIn(site: *const root.Site, maybe_db: ?store.Db, opts: root.Options, run_c
         try writeChampion(site, &aw.writer, opts, patches.items, ch, c, &bans);
         f.* = .{ .path = try a.print("data/filters/{s}.json", .{ch.slug}), .data = aw.written() };
     }
-    return .{ .files = files, .patches = sorted, .current = opts.patches };
+    const ranks = try rankFigures(a, site, opts, patches.items, cells, &slots, &games, &bans, index_of);
+    return .{ .files = files, .patches = sorted, .current = opts.patches, .ranked = ranks.ranked, .role_counts = ranks.role_counts };
 }
 
 /// Each of `matches`' players and bans by primary key, into `run`
@@ -551,6 +600,235 @@ fn writeChampion(site: *const root.Site, w: *Writer, opts: root.Options, patches
     try w.writeAll("}}\n");
 }
 
+const Ranks = struct { ranked: []const Ranked, role_counts: []const Counts };
+
+/// Which slices and tiers a view and rank group count
+const RankScope = struct {
+    /// By opts.all_platforms: an EUW view's
+    home: []const bool,
+    /// By patch index: the patch views'
+    current: []const bool,
+
+    fn has(s: RankScope, v: html.View, slice: Slice) bool {
+        if (v.region == .euw and !s.home[slice.platform]) return false;
+        return switch (v.period) {
+            .days30 => slice.recent,
+            .patch => s.current[slice.patch],
+        };
+    }
+
+    /// Every ladder tier from the group's lowest up; off the ladder (tiers.len) is only
+    /// in the base's Platinum+
+    fn inGroup(g: usize, tier: u8) bool {
+        return tier >= rank_groups[g] and tier < tiers.len;
+    }
+};
+
+/// The rank filter's figures from the merged tally: cells' lane games summed over each
+/// view's slices and each group's tiers, and per patch; rank in role, pick and ban rates
+/// from every champion's at the same view and group
+fn rankFigures(a: std.mem.Allocator, site: *const root.Site, opts: root.Options, patches: []const []const u8, cells: []const Cells, slots: *const Slots, games: *const Games, bans: *const Bans, index_of: []const ?u16) !Ranks {
+    const n_v = html.View.count;
+    const n_g = rank_groups.len;
+    const n_r = Role.all.len;
+    const n_c = site.champs.len;
+    const n_p = patches.len;
+    const home = try a.alloc(bool, opts.all_platforms.len);
+    for (home, opts.all_platforms) |*h, p| h.* = indexOf(opts.platforms, p) != null;
+    const current = try a.alloc(bool, n_p);
+    for (current, patches) |*c, p| c.* = indexOf(opts.patches, p) != null;
+    const scope: RankScope = .{ .home = home, .current = current };
+
+    // By view, group, role (vgr), then champion; by_patch with the patch before it.
+    // players: by vgr then patch, index n_p for every patch
+    const vgr = n_v * n_g * n_r;
+    const totals = try a.alloc(Counts, vgr * n_c);
+    const by_patch = try a.alloc(Counts, vgr * n_p * n_c);
+    const players = try a.alloc(u64, vgr * (n_p + 1));
+    const game_n = try a.alloc(u64, n_v * n_g);
+    const ban_n = try a.alloc(u64, n_v * n_g * n_c);
+    @memset(totals, .{});
+    @memset(by_patch, .{});
+    @memset(players, 0);
+    @memset(game_n, 0);
+    @memset(ban_n, 0);
+    const at = struct {
+        fn vgrOf(v: usize, g: usize, r: Role) usize {
+            return (v * rank_groups.len + g) * Role.all.len + @backingInt(r);
+        }
+    };
+
+    var sit = slots.iterator();
+    while (sit.next()) |e| {
+        const k = e.key_ptr.*;
+        for (html.View.all, 0..) |v, vi| {
+            if (!scope.has(v, k.slice)) continue;
+            for (0..n_g) |g| if (RankScope.inGroup(g, k.tier)) {
+                const i = at.vgrOf(vi, g, k.role) * (n_p + 1);
+                players[i + n_p] += e.value_ptr.*;
+                players[i + k.slice.patch] += e.value_ptr.*;
+            };
+        }
+    }
+    var git = games.iterator();
+    while (git.next()) |e| for (html.View.all, 0..) |v, vi| {
+        if (!scope.has(v, e.key_ptr.slice)) continue;
+        for (0..n_g) |g| if (RankScope.inGroup(g, e.key_ptr.tier)) {
+            game_n[vi * n_g + g] += e.value_ptr.*;
+        };
+    };
+    var bit = bans.iterator();
+    while (bit.next()) |e| {
+        const k = e.key_ptr.*;
+        if (k.champion > std.math.maxInt(u16)) continue;
+        const c = index_of[k.champion] orelse continue;
+        for (html.View.all, 0..) |v, vi| {
+            if (!scope.has(v, k.game.slice)) continue;
+            for (0..n_g) |g| if (RankScope.inGroup(g, k.game.tier)) {
+                ban_n[(vi * n_g + g) * n_c + c] += e.value_ptr.*;
+            };
+        }
+    }
+    for (cells, 0..) |*cs, c| {
+        var it = cs.iterator();
+        while (it.next()) |e| {
+            const k = e.key_ptr.*;
+            for (html.View.all, 0..) |v, vi| {
+                if (!scope.has(v, k.slice)) continue;
+                for (0..n_g) |g| if (RankScope.inGroup(g, k.tier)) {
+                    const i = at.vgrOf(vi, g, k.role);
+                    add(&totals[i * n_c + c], e.value_ptr.*);
+                    add(&by_patch[(i * n_p + k.slice.patch) * n_c + c], e.value_ptr.*);
+                };
+            }
+        }
+    }
+
+    // Each champion's games over every role, by view and group (and patch): role shares
+    const champ_games = try a.alloc(u64, n_v * n_g * (n_p + 1) * n_c);
+    @memset(champ_games, 0);
+    for (0..n_v * n_g) |vg| for (0..n_r) |r| for (0..n_c) |c| {
+        const i = vg * n_r + r;
+        champ_games[(vg * (n_p + 1) + n_p) * n_c + c] += totals[i * n_c + c].games;
+        for (0..n_p) |p| champ_games[(vg * (n_p + 1) + p) * n_c + c] += by_patch[(i * n_p + p) * n_c + c].games;
+    };
+    // Rank in role per vgr and patch (n_p: every patch), 0 when rare
+    const ranks = try a.alloc(u16, vgr * (n_p + 1) * n_c);
+    const ofs = try a.alloc(u16, vgr * (n_p + 1));
+    for (0..vgr) |i| for (0..n_p + 1) |p| {
+        const vg = i / n_r;
+        const counts = if (p == n_p) totals[i * n_c ..][0..n_c] else by_patch[(i * n_p + p) * n_c ..][0..n_c];
+        const j = i * (n_p + 1) + p;
+        ofs[j] = try roleRanks(a, counts, champ_games[(vg * (n_p + 1) + p) * n_c ..][0..n_c], players[j], ranks[j * n_c ..][0..n_c]);
+    };
+
+    // Patches oldest first
+    const order = try a.alloc(usize, n_p);
+    for (order, 0..) |*o, i| o.* = i;
+    std.mem.sort(usize, order, patches, struct {
+        fn f(ps: []const []const u8, x: usize, y: usize) bool {
+            return stats.patchKey(ps[x]) < stats.patchKey(ps[y]);
+        }
+    }.f);
+
+    var out: std.ArrayList(Ranked) = .empty;
+    const OppKey = struct { vgr: u16, opp: u16 };
+    var opps: std.AutoArrayHashMapUnmanaged(OppKey, Counts) = .empty;
+    for (cells, 0..) |*cs, c| {
+        opps.clearRetainingCapacity();
+        var it = cs.iterator();
+        while (it.next()) |e| {
+            const k = e.key_ptr.*;
+            if (k.opponent > std.math.maxInt(u16)) continue;
+            const o = index_of[k.opponent] orelse continue;
+            for (html.View.all, 0..) |v, vi| {
+                if (!scope.has(v, k.slice)) continue;
+                for (0..n_g) |g| if (RankScope.inGroup(g, k.tier)) {
+                    add((try opps.getOrPutValue(a, .{ .vgr = @intCast(at.vgrOf(vi, g, k.role)), .opp = o }, .{})).value_ptr, e.value_ptr.*);
+                };
+            }
+        }
+        for (0..n_v) |vi| for (0..n_g) |g| for (Role.all) |r| {
+            const i = at.vgrOf(vi, g, r);
+            const vg = vi * n_g + g;
+            const t = totals[i * n_c + c];
+            const all_roles = champ_games[(vg * (n_p + 1) + n_p) * n_c + c];
+            if (t.games == 0 or ratio(t.games, all_roles) < rank_role_share) continue;
+            const floor = @max(1, min_opponent_share * @as(f64, @floatFromInt(t.games)));
+            var list: std.ArrayList(RankedOpp) = .empty;
+            var oit = opps.iterator();
+            while (oit.next()) |e| {
+                if (e.key_ptr.vgr != i or @as(f64, @floatFromInt(e.value_ptr.games)) < floor) continue;
+                try list.append(a, .{ .champ = e.key_ptr.opp, .games = e.value_ptr.games, .wins = e.value_ptr.wins });
+            }
+            std.mem.sort(RankedOpp, list.items, {}, struct {
+                fn f(_: void, x: RankedOpp, y: RankedOpp) bool {
+                    return x.games > y.games;
+                }
+            }.f);
+            var ps: std.ArrayList(RankedPatch) = .empty;
+            for (order) |p| {
+                if (players[i * (n_p + 1) + p] == 0) continue;
+                const pc = by_patch[(i * n_p + p) * n_c + c];
+                try ps.append(a, .{ .patch = patches[p], .games = pc.games, .wins = pc.wins, .rank = ranks[(i * (n_p + 1) + p) * n_c + c] });
+            }
+            const j = i * (n_p + 1) + n_p;
+            const rank = ranks[j * n_c + c];
+            try out.append(a, .{
+                .champ = @intCast(c),
+                .view = @intCast(vi),
+                .group = @intCast(g),
+                .role = r,
+                .games = t.games,
+                .wins = t.wins,
+                .pick = @floatCast(100 * ratio(t.games, players[j] / 2)),
+                .ban = @floatCast(100 * ratio(ban_n[vg * n_c + c], game_n[vg])),
+                .rank = rank,
+                .of = if (rank > 0) ofs[j] else 0,
+                .opps = list.items,
+                .patches = ps.items,
+            });
+        };
+    }
+    return .{ .ranked = out.items, .role_counts = totals };
+}
+
+/// Opponents under this share of the champion's games in the role are left out, as on
+/// the champion page (champion.zig)
+const min_opponent_share = 0.01;
+
+fn add(into: *Counts, c: Cell) void {
+    into.games += c.games;
+    into.wins += c.wins;
+}
+
+fn ratio(n: u64, of: u64) f64 {
+    return if (of == 0) 0 else @as(f64, @floatFromInt(n)) / @as(f64, @floatFromInt(of));
+}
+
+/// tierlist.roleRank's rule on one role's counts: rare picks (under min_pick_rate of the
+/// role's players' games, or min_role_share of the champion's) left out, the rest by win
+/// rate, more games first on a tie. Writes each champion's place (0: rare or none) into
+/// `out` and returns how many are placed
+fn roleRanks(a: std.mem.Allocator, counts: []const Counts, champ_games: []const u64, players: u64, out: []u16) !u16 {
+    @memset(out, 0);
+    var placed: std.ArrayList(usize) = .empty;
+    for (counts, champ_games, 0..) |x, all, c| {
+        if (x.games == 0) continue;
+        if (ratio(x.games, players / 2) < tierlist.min_pick_rate or ratio(x.games, all) < tierlist.min_role_share) continue;
+        try placed.append(a, c);
+    }
+    std.mem.sort(usize, placed.items, counts, struct {
+        fn f(cs: []const Counts, x: usize, y: usize) bool {
+            const rx = ratio(cs[x].wins, cs[x].games);
+            const ry = ratio(cs[y].wins, cs[y].games);
+            return if (rx != ry) rx > ry else cs[x].games > cs[y].games;
+        }
+    }.f);
+    for (placed.items, 1..) |c, k| out[c] = @intCast(k);
+    return @intCast(placed.items.len);
+}
+
 fn side(team_id: i64) ?u1 {
     return switch (team_id) {
         100 => 0,
@@ -736,4 +1014,19 @@ test "runs on their own connections make the files one walk makes" {
         try std.testing.expectEqualStrings(x.data, y.data);
     }
     try std.testing.expect(std.mem.find(u8, one.files[1].data, "\"rows\":[[") != null);
+}
+
+test "rank in role at a rank: rare picks out, then by win rate" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var out: [4]u16 = undefined;
+    // The third has 5% of its games in the role, the fourth 0.2% of the role's players
+    const of = try roleRanks(arena.allocator(), &.{
+        .{ .games = 100, .wins = 50 },
+        .{ .games = 100, .wins = 60 },
+        .{ .games = 100, .wins = 70 },
+        .{ .games = 1, .wins = 1 },
+    }, &.{ 100, 100, 2000, 1 }, 1000, &out);
+    try std.testing.expectEqual(2, of);
+    try std.testing.expectEqualSlices(u16, &.{ 2, 1, 0, 0 }, &out);
 }

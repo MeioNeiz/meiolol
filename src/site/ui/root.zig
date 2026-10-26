@@ -73,6 +73,7 @@ pub const itempath = @import("itempath.zig");
 pub const runetree = @import("runetree.zig");
 pub const buildpanel = @import("buildpanel.zig");
 pub const champpage = @import("champpage.zig");
+pub const champrank = @import("champrank.zig");
 
 /// Components whose CSS ships (css.join): add one when a page first uses it
 pub const components = .{ button, chip, badge, segmented, card, toggletip, strip, role, champ, rolepicker, champsearch, champhead, matchbrief, champlist, table, chart, dotplot, trend, histogram, art, skillgrid, itempath, runetree, buildpanel, champpage };
