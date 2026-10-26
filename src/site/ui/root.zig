@@ -61,6 +61,8 @@ pub const histogram = @import("histogram.zig");
 pub const lane = @import("lane.zig");
 pub const timeline = @import("timeline.zig");
 pub const gamedata = @import("gamedata.zig");
+pub const puzzle = @import("puzzle.zig");
+pub const guess = @import("guess.zig");
 pub const yourlist = @import("yourlist.zig");
 pub const gamepage = @import("gamepage.zig");
 pub const gamehead = @import("gamehead.zig");
@@ -86,7 +88,7 @@ pub const matchpage = @import("matchpage.zig");
 pub const components = .{ button, chip, badge, segmented, card, toggletip, strip, role, champ, rolepicker, champsearch, champhead, matchbrief, matchstrip, champlist, table, chart, dotplot, trend, histogram, art, skillgrid, itempath, runetree, buildpanel, tabs, site, filterbar, champpage, kda, timeline, versus, objicon, minimap, gamestrip, inspector, gamehead, scoreboard, laneduel, itemrow, gamepage, lane, matchpage };
 
 /// Every component, in the gallery's order
-pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, role, champ, site, rolepicker, filterbar, champsearch, champhead, matchbrief, matchstrip, champlist, draftboard, champselect, teamrows, loadscreen, gamescreen, postgame, signin, practice, app, table, chart, dotplot, trend, histogram, lane, timeline, spark, art, skillgrid, itempath, runetree, buildpanel, versus, objicon, minimap, gamestrip, inspector, gamehead, scoreboard, laneduel, itemrow, gamepage };
+pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, role, champ, site, rolepicker, filterbar, champsearch, champhead, matchbrief, matchstrip, champlist, draftboard, champselect, teamrows, loadscreen, gamescreen, postgame, signin, practice, app, table, chart, dotplot, trend, histogram, lane, timeline, spark, art, skillgrid, itempath, runetree, buildpanel, versus, objicon, minimap, gamestrip, inspector, gamehead, scoreboard, laneduel, itemrow, gamepage, guess, puzzle };
 
 pub const H = tree.H;
 pub const N = tree.N;
