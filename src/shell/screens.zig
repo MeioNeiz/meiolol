@@ -11,11 +11,14 @@ const poller = desktop.poller;
 const state = desktop.state;
 const board = desktop.board;
 const lanecard = desktop.lanecard;
+const loading = desktop.loading;
+const ingame = desktop.ingame;
+const postgame = desktop.postgame;
 const files = @import("files.zig");
 const app = ui.app;
 const Allocator = std.mem.Allocator;
 
-pub const css = ui.css.head ++ ui.css.join(.{ ui.badge, ui.chip, ui.card, ui.role, ui.champ, ui.draftboard, ui.champselect, ui.app });
+pub const css = ui.css.head ++ ui.css.join(.{ ui.badge, ui.chip, ui.card, ui.role, ui.champ, ui.draftboard, ui.champselect, ui.kda, ui.teamrows, ui.loadscreen, ui.chart, ui.lane, ui.gamescreen, ui.postgame, ui.app });
 
 const Page = struct {
     arena: std.heap.ArenaAllocator,
@@ -113,7 +116,8 @@ fn dumpFile(io: std.Io, gpa: Allocator, dir: []const u8, name: []const u8, bytes
 pub fn render(a: Allocator, d: app.Data) ![]const u8 {
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
-    const body = app.page(&h, d);
+    var island: app.App = .{ .data = d };
+    const body = island.view(&h);
     if (h.oom) return error.OutOfMemory;
     var out: std.Io.Writer.Allocating = .init(a);
     try out.writer.writeAll(
@@ -152,7 +156,7 @@ pub fn data(a: Allocator, c: Ctx, status: state.Status, note: state.Note) !app.D
             .no_role => "Champ select",
             .select => |s| try a.print("Champ select · {s}", .{s.board.stage}),
             .loading => "Loading",
-            .in_game => "In game",
+            .in_game => |g| if (c.private) try a.print("In game · {s}", .{ingame.clock(try a.alloc(u8, 16), g.time)}) else "In game",
             .post_game => "Post game",
         },
         .screen = switch (status) {
@@ -169,7 +173,10 @@ pub fn data(a: Allocator, c: Ctx, status: state.Status, note: state.Note) !app.D
             .waiting => .{ .note = .{ .title = "The board shows in champ select", .text = "Both teams, your lane, options and bans." } },
             .no_role => .{ .note = .{ .title = "No lane to show", .text = "This champ select has no assigned positions." } },
             .select => |s| .{ .select = try select(a, c, s) },
-            .loading, .in_game, .post_game => .{ .note = .{ .title = "The board comes back in your next champ select" } },
+            .loading => |l| .{ .loading = try loadScreen(a, c, l) },
+            // The public edition gets the panel once the private one has proved it
+            .in_game => |g| if (c.private) .{ .game = try game(a, c, g) } else .{ .note = .{ .title = "In game", .text = "The board comes back in your next champ select." } },
+            .post_game => |p| .{ .post = try post(a, c, p) },
         },
     };
 }
@@ -302,6 +309,220 @@ fn lane(a: Allocator, c: Ctx, card: *const lanecard.Card, mode: board.Mode) !ui.
     };
 }
 
+fn loadScreen(a: Allocator, c: Ctx, l: *const loading.Loading) !ui.loadscreen.Screen {
+    var teams: [2][]ui.loadscreen.Card = undefined;
+    for (&teams, l.teams) |*out, cards| {
+        out.* = try a.alloc(ui.loadscreen.Card, cards.len);
+        for (out.*, cards) |*x, card| {
+            const pills = try a.alloc(ui.loadscreen.Pill, card.pills.len);
+            for (pills, card.pills) |*p, q| p.* = .{ .text = q.text, .tone = switch (q.tone) {
+                .neutral => .none,
+                .good => .good,
+                .bad => .bad,
+                .caution => .caution,
+            } };
+            const shown = c.private and card.games > 0;
+            x.* = .{
+                .champ = try c.champ(a, card.champion),
+                .role = if (card.role) |r| uiRole(r) else null,
+                .guessed = card.guessed,
+                .you = card.me,
+                .fact = if (shown) try a.print("{f} · {f} games", .{ rate(card.win), count(card.games) }) else "",
+                .lean = if (!shown) .none else if (card.win >= 0.515) .good else if (card.win <= 0.485) .bad else .none,
+                .pills = pills,
+            };
+        }
+    }
+    return .{
+        .us = teams[0],
+        .them = teams[1],
+        .draft = if (c.private) if (l.draft) |d| @floatCast(100 * d.win) else null else null,
+    };
+}
+
+fn game(a: Allocator, c: Ctx, g: *const ingame.InGame) !ui.gamescreen.Screen {
+    const us = g.score[0];
+    const them = g.score[1];
+    const lines = [_]struct { []const u8, u32, u32 }{
+        .{ "Kills", us.kills, them.kills },
+        .{ "Towers", us.towers, them.towers },
+        .{ "Dragons", us.dragons + us.elders, them.dragons + them.elders },
+        .{ "Grubs", us.grubs, them.grubs },
+        .{ "Heralds", us.heralds, them.heralds },
+        .{ "Barons", us.barons, them.barons },
+        .{ "Inhibitors", us.inhibitors, them.inhibitors },
+    };
+    var score: std.ArrayList(ui.gamescreen.Score) = .empty;
+    for (lines, 0..) |l, i| {
+        // Objectives nobody has taken yet only add noise
+        if (i > 1 and l[1] == 0 and l[2] == 0) continue;
+        try score.append(a, .{ .what = l[0], .us = @intCast(@min(l[1], 999)), .them = @intCast(@min(l[2], 999)) });
+    }
+    const diff = @as(i64, us.item_gold) - them.item_gold;
+    const now = g.sample();
+    const timers = try a.alloc(ui.gamescreen.Timer, g.timers.len);
+    for (timers, g.timers) |*x, t| x.* = .{
+        .what = t.what,
+        .at = ingame.clock(try a.alloc(u8, 16), t.back),
+        .in = ingame.clock(try a.alloc(u8, 16), t.back - g.time),
+    };
+    var rows: [5]ui.teamrows.Row = undefined;
+    for (&rows, g.rows) |*x, r| {
+        var seats: [2]?ui.teamrows.Seat = .{ null, null };
+        for (&seats, [_]?ingame.Seat{ r.ours, r.theirs }) |*out, seat_or| {
+            const s = seat_or orelse continue;
+            out.* = .{
+                .champ = try c.champ(a, s.champion),
+                .you = s.me,
+                .dead = if (s.dead) @intFromFloat(@min(999, @ceil(@max(0, s.respawn)))) else null,
+                .kda = kda(s.kills, s.deaths, s.assists),
+                .line = try a.print("Lv {d} · {d} cs", .{ s.level, s.cs }),
+            };
+        }
+        x.* = try teamRow(a, r.role, seats, r.goldDiff());
+    }
+    return .{
+        .score = score.items,
+        .gold = .{
+            .us = try a.print("{f}", .{count(us.item_gold)}),
+            .them = try a.print("{f}", .{count(them.item_gold)}),
+            .gap = try a.print("{f} item gold", .{gold(diff)}),
+            .lean = if (diff > 0) .good else if (diff < 0) .bad else .none,
+            .share = @floatCast(@as(f64, @floatFromInt(us.item_gold)) / @as(f64, @floatFromInt(@max(1, us.item_gold + them.item_gold)))),
+        },
+        .rows = try a.dupe(ui.teamrows.Row, &rows),
+        .lane = if (g.lane) |l| try gameLane(a, c, g, l, now) else null,
+        .lane_note = g.lane_note,
+        .timers = timers,
+        .team = try perMinute(a, g.history, now, .team),
+    };
+}
+
+fn gameLane(a: Allocator, c: Ctx, g: *const ingame.InGame, l: ingame.Lane, now: ingame.Sample) !ui.gamescreen.Lane {
+    var compare: std.ArrayList(ui.gamescreen.Compare) = .empty;
+    if (l.minute) |m| for ([_]struct { []const u8, ?ingame.Compare }{ .{ "CS", l.cs }, .{ "Item gold", l.gold } }) |x| {
+        const cmp = x[1] orelse continue;
+        const t = cmp.typical;
+        try compare.append(a, .{
+            .what = x[0],
+            .now = try a.print("{f}", .{signed(cmp.now)}),
+            .lean = switch (cmp.standing) {
+                .far_behind, .behind => .bad,
+                .typical => .none,
+                .ahead, .far_ahead => .good,
+            },
+            .text = try a.print("{s} at {d} min (middle half {f} to {f})", .{ cmp.standing.words(), m, signed(t.p25), signed(t.p75) }),
+        });
+    };
+    const mu = l.matchup;
+    // The curve's points start at minute 1; index i is minute i, both 0 at the start
+    var n: usize = 0;
+    for (mu.points) |p| n = @max(n, @as(usize, p.minute) + 1);
+    const band = try a.alloc([2]f32, n);
+    const line = try a.alloc(f32, n);
+    @memset(band, .{ 0, 0 });
+    @memset(line, 0);
+    for (mu.points) |p| {
+        band[p.minute] = .{ @floatFromInt(p.p25), @floatFromInt(p.p75) };
+        line[p.minute] = @floatFromInt(p.mean);
+    }
+    const me = try c.champ(a, l.me);
+    const them = try c.champ(a, l.opponent);
+    return .{
+        .me = me,
+        .them = them,
+        .compare = compare.items,
+        .note = if (l.minute == null) try a.print("The lane curve covers minutes 1 to {d}.", .{mu.points.len}) else "",
+        .chart = .{
+            .a = if (me) |x| x.name else "You",
+            .b = if (them) |x| x.name else "Them",
+            .you = try perMinute(a, g.history, now, .lane),
+            .band = band,
+            .line = line,
+        },
+        .caption = try a.print("Item gold, you minus them: the band is the middle half of {d} games ({s}, EUW, {s}), the line their average; yours from items.", .{ mu.games, mu.bracket.label(), g.period }),
+    };
+}
+
+fn post(a: Allocator, c: Ctx, p: *const postgame.PostGame) !ui.postgame.Screen {
+    const awards = try a.alloc(ui.postgame.Award, p.awards.len);
+    for (awards, p.awards) |*x, w| x.* = .{ .what = w.what, .champ = try c.champ(a, w.champion), .side = if (w.ours) .us else .them };
+    var rows: [5]ui.teamrows.Row = undefined;
+    var damage: std.ArrayList(ui.postgame.Damage) = .empty;
+    for (&rows, p.rows) |*x, r| {
+        var seats: [2]?ui.teamrows.Seat = .{ null, null };
+        for (&seats, [_]?postgame.Seat{ r.ours, r.theirs }) |*out, seat_or| {
+            const s = seat_or orelse continue;
+            out.* = .{
+                .champ = try c.champ(a, s.champion),
+                .you = s.me,
+                .kda = kda(s.kills, s.deaths, s.assists),
+                .line = try a.print("{d} cs · {f} dmg", .{ s.cs, count(s.damage) }),
+            };
+        }
+        x.* = try teamRow(a, r.role, seats, r.goldDiff());
+    }
+    for ([_]bool{ true, false }) |ours| for (p.rows) |r| {
+        const s = (if (ours) r.ours else r.theirs) orelse continue;
+        try damage.append(a, .{
+            .champ = try c.champ(a, s.champion),
+            .side = if (ours) .us else .them,
+            .you = s.me,
+            .value = s.damage,
+            .text = try a.print("{f}", .{count(s.damage)}),
+        });
+    };
+    return .{
+        .win = p.win,
+        .verdict = p.verdict,
+        .kills = .{ @intCast(@min(p.kills[0], 9999)), @intCast(@min(p.kills[1], 9999)) },
+        .story = p.story,
+        .lane = p.lane,
+        .awards = awards,
+        .rows = try a.dupe(ui.teamrows.Row, &rows),
+        .damage = damage.items,
+        .team = if (p.history.len > 0) try perMinute(a, p.history, p.history[p.history.len - 1], .team) else &.{},
+    };
+}
+
+/// Our seat and theirs with the gold gap between, quiet under 300
+fn teamRow(a: Allocator, role: core.Role, seats: [2]?ui.teamrows.Seat, diff: ?i64) !ui.teamrows.Row {
+    return .{
+        .role = uiRole(role),
+        .us = seats[0],
+        .them = seats[1],
+        .gap = if (diff) |d| try a.print("{f}", .{gold(d)}) else "",
+        .lean = if (diff) |d| if (@abs(d) < 300) .none else if (d > 0) .good else .bad else .none,
+    };
+}
+
+fn kda(k: u32, d: u32, as: u32) ui.kda.Kda {
+    return .{ .k = @intCast(@min(k, 999)), .d = @intCast(@min(d, 999)), .a = @intCast(@min(as, 999)) };
+}
+
+/// The game so far by minute (index i is minute i) up to `now`: the last sample at or
+/// before each minute, `now` for the last
+fn perMinute(a: Allocator, history: []const ingame.Sample, now: ingame.Sample, comptime what: enum { team, lane }) ![]const f32 {
+    const n: usize = @intFromFloat(@max(0, now.time) / 60);
+    if (n < 1) return &.{};
+    const out = try a.alloc(f32, n + 1);
+    var i: usize = 0;
+    var last: f32 = 0;
+    for (out, 0..) |*v, m| {
+        while (i < history.len and history[i].time <= @as(f32, @floatFromInt(m * 60))) : (i += 1) last = value(history[i], what) orelse last;
+        v.* = if (m == 0) 0 else last;
+    }
+    out[n] = value(now, what) orelse last;
+    return out;
+}
+
+fn value(s: ingame.Sample, comptime what: anytype) ?f32 {
+    return switch (what) {
+        .team => @floatFromInt(s.team),
+        .lane => if (s.lane) |l| @floatFromInt(l) else null,
+    };
+}
+
 fn uiRole(r: core.Role) ui.role.Role {
     return @fromBackingInt(@as(u3, @backingInt(r)));
 }
@@ -323,6 +544,34 @@ const Num = struct {
         }
     }
 };
+
+/// "+1.2k", "−800", "even": a gold gap
+const Gold = struct {
+    n: i64,
+
+    pub fn format(g: Gold, w: *std.Io.Writer) std.Io.Writer.Error!void {
+        if (g.n == 0) return w.writeAll("even");
+        try w.writeAll(if (g.n > 0) "+" else "\u{2212}");
+        try count(@intCast(@min(@abs(g.n), std.math.maxInt(u32)))).format(w);
+    }
+};
+
+fn gold(n: i64) Gold {
+    return .{ .n = n };
+}
+
+/// "+8", "−420"
+const Signed = struct {
+    n: i64,
+
+    pub fn format(s: Signed, w: *std.Io.Writer) std.Io.Writer.Error!void {
+        try ui.fmt.write(w, .signed, s.n);
+    }
+};
+
+fn signed(n: i64) Signed {
+    return .{ .n = n };
+}
 
 fn rate(v: f64) Num {
     return .{ .v = v, .kind = .rate };
@@ -450,4 +699,148 @@ test "notes while there is no board" {
     try testing.expectEqualStrings("ConnectionRefused; retrying.", e.screen.note.text);
     const f = try data(a, c, .no_data, .{ .failed = "Timeout" });
     try testing.expectEqualStrings("Timeout; trying again in 5 minutes.", f.screen.note.text);
+}
+
+test "loading: the role's numbers private only" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var f = try fixture();
+    defer f.deinit();
+    const ours = [_]loading.Card{.{ .champion = ahri, .role = .middle, .guessed = false, .me = true, .games = 12_400, .win = 0.521, .pills = &.{.{ .text = "few games", .tone = .caution }} }};
+    const theirs = [_]loading.Card{.{ .champion = syndra, .role = .middle, .guessed = true, .me = false, .games = 0, .win = 0, .pills = &.{} }};
+    const l: loading.Loading = .{ .teams = .{ &ours, &theirs }, .draft = .{ .win = 0.534, .se = 0.1, .picks = .{ 5, 5 }, .hovers = 0 } };
+
+    const priv = (try data(a, .{ .stats = &f.stats, .icons = null, .private = true }, .{ .loading = &l }, .none)).screen.loading;
+    try testing.expectEqualStrings("52.1% · 12k games", priv.us[0].fact);
+    try testing.expectEqual(.good, priv.us[0].lean);
+    try testing.expectEqual(.caution, priv.us[0].pills[0].tone);
+    try testing.expect(priv.them[0].guessed and priv.them[0].fact.len == 0);
+    try testing.expectApproxEqAbs(@as(f32, 53.4), priv.draft.?, 0.01);
+
+    var d = try data(a, .{ .stats = &f.stats, .icons = null, .private = false }, .{ .loading = &l }, .none);
+    try testing.expectEqual(null, d.screen.loading.draft);
+    try testing.expectEqualStrings("", d.screen.loading.us[0].fact);
+    d.seq = 1;
+    try testing.expect(std.mem.find(u8, try render(a, d), "%") == null);
+}
+
+fn testGame(my_lane: ?ingame.Lane) ingame.InGame {
+    var rows: [5]ingame.Row = undefined;
+    for (&rows, core.Role.all) |*r, role| r.* = .{ .role = role };
+    rows[2] = .{
+        .role = .middle,
+        .ours = .{ .champion = ahri, .level = 9, .kills = 2, .deaths = 1, .assists = 3, .cs = 101, .item_gold = 4200, .dead = false, .respawn = 0, .me = true },
+        .theirs = .{ .champion = syndra, .level = 8, .kills = 1, .deaths = 2, .assists = 0, .cs = 90, .item_gold = 3000, .dead = true, .respawn = 12.3, .me = false },
+    };
+    const S = struct {
+        const history = [_]ingame.Sample{
+            .{ .time = 0, .team = 0, .lane = 0 },      .{ .time = 60, .team = 100, .lane = 50 },
+            .{ .time = 120, .team = 300, .lane = 80 }, .{ .time = 180, .team = 250, .lane = null },
+        };
+        const timers = [_]ingame.Timer{.{ .what = "Dragon", .back = 300 }};
+    };
+    return .{
+        .time = 230,
+        .rows = rows,
+        .score = .{ .{ .kills = 3, .item_gold = 9000 }, .{ .kills = 2, .towers = 0, .item_gold = 8100 } },
+        .timers = &S.timers,
+        .lane = my_lane,
+        .lane_note = "No lane to compare.",
+        .period = "last 30 days",
+        .gold = 300,
+        .history = &S.history,
+    };
+}
+
+test "in game: the private panel, a note for the public edition" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var f = try fixture();
+    defer f.deinit();
+    const points = [_]lanecard.Point{ .{ .minute = 1, .mean = 10, .p25 = -50, .p75 = 60 }, .{ .minute = 2, .mean = 20, .p25 = -90, .p75 = 110 } };
+    const t: ingame.Typical = .{ .p10 = -300, .p25 = -100, .mean = 0, .p75 = 120, .p90 = 400 };
+    const g = testGame(.{
+        .role = .middle,
+        .me = ahri,
+        .opponent = syndra,
+        .matchup = .{ .bracket = .all, .games = 412, .gold = .{}, .range = .{ -500, 500 }, .lane_games = 412, .ahead = 200, .thin = false, .points = &points },
+        .minute = 3,
+        .cs = .{ .now = 11, .typical = t, .standing = .typical },
+        .gold = .{ .now = 1200, .typical = t, .standing = .far_ahead },
+    });
+
+    const d = try data(a, .{ .stats = &f.stats, .icons = null, .private = true }, .{ .in_game = &g }, .none);
+    try testing.expectEqualStrings("In game · 3:50", d.where);
+    const s = d.screen.game;
+    // Kills and towers always; dragons and the rest once someone took one
+    try testing.expectEqual(@as(usize, 2), s.score.len);
+    try testing.expectEqualStrings("+900 item gold", s.gold.gap);
+    try testing.expectEqualStrings("9.0k", s.gold.us);
+    const mid = s.rows[2];
+    try testing.expectEqualStrings("+1.2k", mid.gap);
+    try testing.expectEqual(.good, mid.lean);
+    try testing.expectEqual(@as(?u16, 13), mid.them.?.dead);
+    try testing.expectEqualStrings("Lv 9 · 101 cs", mid.us.?.line);
+    try testing.expect(s.rows[0].us == null and s.rows[0].gap.len == 0);
+    const l = s.lane.?;
+    try testing.expectEqualStrings("+11", l.compare[0].now);
+    try testing.expectEqualStrings("about typical at 3 min (middle half \u{2212}100 to +120)", l.compare[0].text);
+    try testing.expectEqual(.good, l.compare[1].lean);
+    const c = l.chart.?;
+    try testing.expectEqualSlices([2]f32, &.{ .{ 0, 0 }, .{ -50, 60 }, .{ -90, 110 } }, c.band);
+    // Minutes 0..3; a sample without a lane keeps the last; the last is now
+    try testing.expectEqualSlices(f32, &.{ 0, 50, 80, 1200 }, c.you);
+    try testing.expectEqualSlices(f32, &.{ 0, 100, 300, 900 }, s.team);
+    try testing.expectEqualStrings("5:00", s.timers[0].at);
+    try testing.expectEqualStrings("1:10", s.timers[0].in);
+    var shown = d;
+    shown.seq = 1;
+    const html = try render(a, shown);
+    try testing.expect(std.mem.find(u8, html, "c-game") != null and std.mem.find(u8, html, "c-lane") != null);
+
+    const p = try data(a, .{ .stats = &f.stats, .icons = null, .private = false }, .{ .in_game = &testGame(null) }, .none);
+    try testing.expectEqualStrings("In game", p.where);
+    try testing.expectEqualStrings("In game", p.screen.note.title);
+}
+
+test "post game: lanes, damage ours then theirs, team gold by minute" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var f = try fixture();
+    defer f.deinit();
+    var rows: [5]postgame.Row = undefined;
+    for (&rows, core.Role.all) |*r, role| r.* = .{ .role = role };
+    rows[2] = .{
+        .role = .middle,
+        .ours = .{ .champion = ahri, .kills = 7, .deaths = 2, .assists = 9, .cs = 231, .gold = 13_000, .damage = 24_600, .vision = 20, .level = 16, .me = true },
+        .theirs = .{ .champion = syndra, .kills = 2, .deaths = 7, .assists = 3, .cs = 214, .gold = 13_200, .damage = 950, .vision = 12, .level = 15, .me = false },
+    };
+    const history = [_]ingame.Sample{ .{ .time = 0, .team = 0, .lane = 0 }, .{ .time = 60, .team = -100, .lane = 0 }, .{ .time = 120, .team = 400, .lane = 0 } };
+    const p: postgame.PostGame = .{
+        .win = true,
+        .length = 1722,
+        .verdict = "Victory in 28:42.",
+        .story = "",
+        .lane = "",
+        .awards = &.{.{ .what = "Most damage", .champion = ahri, .ours = true }},
+        .rows = rows,
+        .kills = .{ 24, 17 },
+        .gold = .{ 60_000, 52_000 },
+        .history = &history,
+    };
+    var d = try data(a, .{ .stats = &f.stats, .icons = null, .private = false }, .{ .post_game = &p }, .none);
+    const s = d.screen.post;
+    try testing.expectEqualStrings("231 cs · 25k dmg", s.rows[2].us.?.line);
+    try testing.expectEqualStrings("\u{2212}200", s.rows[2].gap);
+    try testing.expectEqual(.none, s.rows[2].lean);
+    try testing.expectEqual(.us, s.damage[0].side);
+    try testing.expectEqualStrings("950", s.damage[1].text);
+    try testing.expectEqualStrings("Ahri", s.awards[0].champ.?.name);
+    try testing.expectEqualSlices(f32, &.{ 0, -100, 400 }, s.team);
+    d.seq = 1;
+    const html = try render(a, d);
+    try testing.expect(std.mem.find(u8, html, "Victory in 28:42.") != null);
 }

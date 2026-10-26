@@ -26,14 +26,19 @@ file and packed rows: docs/architecture.md.
 
 ### Webview shell (src/shell, deploy/shell.sh)
 
-- Beside the dvui window until the app's screens are site components (docs/plan/ui/
-  stack.md section 5 and Order step 6); then it takes the exe name, install and updates
+- Beside the dvui window until it takes the exe name, install and updates (docs/plan/ui/
+  stack.md Order step 6); every client state already has its ui screen
 - win.zig drives WebView2 through its COM API (translate-c of the vendored WebView2.h,
   src/shell/wv2); environment via the runtime's own dll, else the embedded
   WebView2Loader.dll; no runtime: a message offering Microsoft's bootstrapper
 - Pages are served from memory on https://meiolol.app/ (embedded, or `--dir` on disk);
   navigation stays on that origin, links to meio.lol and Riot open in the browser.
   bridge.js (injected) turns channel.zig messages into `meiolol` events and back
+- screens.zig: the poller's state as ui.app.Data in the edition's words (notes,
+  ChampSelect, LoadScreen, GameScreen private only, PostGame), rendered per page load
+  and encoded at app.bin; the App island (ui-app.wasm) patches from it on each `app`
+  message and keeps the charts' state. The Mac build's `--dump DIR --seconds N` writes
+  each change to DIR/<seq>/ for a look against the mock client
 - Window place in window.txt and the webview's data in webview/, both beside the exe
 - deploy/shell.sh: gpu-box smoke (both loaders), measure (memory, CPU, push delay,
   League's processes), run; refuses while a League game runs unless IN_GAME=1

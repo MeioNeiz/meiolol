@@ -2,10 +2,14 @@
 //! renders it from the poller's state and keeps the same Data encoded (data.zig) at
 //! app.bin; on a change it sends `{"app": seq}` and the island fetches the file and
 //! patches. A screen per client state: a note while there is nothing to show, champ
-//! select's board and options
+//! select's board and options, the loading cards, the in-game panel, the post game. The
+//! charts' own state (a tapped minute, a dragged range) lives in App, past patches
 const tree = @import("tree.zig");
 const badge = @import("badge.zig");
 const champselect = @import("champselect.zig");
+const loadscreen = @import("loadscreen.zig");
+const gamescreen = @import("gamescreen.zig");
+const postgame = @import("postgame.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = @import("phrase.zig").plain;
 const H = tree.H;
@@ -15,6 +19,9 @@ pub const Screen = union(enum) {
     /// Nothing to show yet: what the app waits for
     note: Note,
     select: champselect.Screen,
+    loading: loadscreen.Screen,
+    game: gamescreen.Screen,
+    post: postgame.Screen,
 };
 
 pub const Note = struct {
@@ -35,31 +42,43 @@ pub const sel = "[data-island=app]";
 
 pub const App = struct {
     data: Data,
+    lane: gamescreen.Held = .{},
+    team: gamescreen.Held = .{},
 
     pub const Msg = enum { none };
 
     pub fn update(_: *App, _: Msg, _: *tree.Event) void {}
 
     pub fn view(a: *App, h: *H) N {
-        return page(h, a.data);
+        const d = a.data;
+        return h.div(.{ .class = "c-app", .data_island = "app", .data_seq = d.seq }, .{
+            h.el(.header, .{}, .{
+                h.b(.{}, .{"meiolol"}),
+                if (d.private) badge.view(h, .accent, .{W.private}) else null,
+                h.span(.{ .class = "where" }, .{d.where}),
+            }),
+            switch (d.screen) {
+                .note => |n| h.div(.{ .class = "note" }, .{
+                    h.el(.h1, .{}, .{n.title}),
+                    if (n.text.len > 0) h.p(.{}, .{n.text}) else null,
+                }),
+                .select => |s| champselect.view(h, s),
+                .loading => |s| loadscreen.view(h, s),
+                .game => |s| gamescreen.view(h, s, .{ .lane = &a.lane, .team = &a.team }),
+                .post => |s| postgame.view(h, s, &a.team),
+            },
+        });
     }
 };
 
+/// A fresh App's render (the gallery's states)
 pub fn page(h: *H, d: Data) N {
-    return h.div(.{ .class = "c-app", .data_island = "app", .data_seq = d.seq }, .{
-        h.el(.header, .{}, .{
-            h.b(.{}, .{"meiolol"}),
-            if (d.private) badge.view(h, .accent, .{W.private}) else null,
-            h.span(.{ .class = "where" }, .{d.where}),
-        }),
-        switch (d.screen) {
-            .note => |n| h.div(.{ .class = "note" }, .{
-                h.el(.h1, .{}, .{n.title}),
-                if (n.text.len > 0) h.p(.{}, .{n.text}) else null,
-            }),
-            .select => |s| champselect.view(h, s),
-        },
-    });
+    const a = h.mem.create(App) catch {
+        h.oom = true;
+        return .none;
+    };
+    a.* = .{ .data = d };
+    return a.view(h);
 }
 
 const W = struct {
@@ -75,9 +94,9 @@ pub const css =
     \\    padding: var(--sp-3) var(--sp-4) var(--sp-5); min-width: 0; }
     \\  .c-app > header { display: flex; align-items: center; gap: var(--sp-2); }
     \\  .c-app > header .where { margin-left: auto; font-size: var(--fs-s); color: var(--muted); }
-    \\  .c-app .note { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-6) 0; text-align: center; }
-    \\  .c-app .note h1 { margin: 0; font-size: var(--fs-l); font-weight: var(--w-b); }
-    \\  .c-app .note p { margin: 0; color: var(--muted); }
+    \\  .c-app > .note { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-6) 0; text-align: center; }
+    \\  .c-app > .note h1 { margin: 0; font-size: var(--fs-l); font-weight: var(--w-b); }
+    \\  .c-app > .note p { margin: 0; color: var(--muted); }
     \\}
     \\
 ;
@@ -94,4 +113,5 @@ pub fn gallery(g: *Gallery) void {
         .where = "Champ select · Picks",
         .screen = .{ .select = champselect.sample },
     }));
+    g.addFill("in game", page(h, .{ .seq = 3, .private = true, .where = "In game · 14:05", .screen = .{ .game = gamescreen.sample } }));
 }
