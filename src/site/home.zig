@@ -67,7 +67,7 @@ pub fn writeIndex(site: *const Site, w: *Writer) !void {
         \\<h2>Between games</h2>
         \\<div class="three go">
         \\<a class="panel" href="{daily}"><span class="ic"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#f5c451" stroke-width="1.6" aria-hidden="true"><rect x="2" y="3" width="14" height="13" rx="2"/><path d="M2 7h14M6 1.5v3M12 1.5v3"/></svg></span><span><b>Daily Draft</b><span>One real ranked draft a day. Guess who won.</span></span><span class="arrow">→</span></a>
-        \\<a class="panel" href="{learn}"><span class="ic"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#3ccf91" stroke-width="1.6" aria-hidden="true"><path d="M2 4.5 9 2l7 2.5L9 7z"/><path d="M5 6v4.5c0 1.4 1.8 2.5 4 2.5s4-1.1 4-2.5V6"/></svg></span><span><b>Learn the draft</b><span>Five short lessons, then practice drafts.</span></span><span class="arrow">→</span></a>
+        \\<a class="panel" href="{learn}"><span class="ic"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#3ccf91" stroke-width="1.6" aria-hidden="true"><path d="M2 4.5 9 2l7 2.5L9 7z"/><path d="M5 6v4.5c0 1.4 1.8 2.5 4 2.5s4-1.1 4-2.5V6"/></svg></span><span><b>Learn the draft</b><span>Puzzles from real games: guess, then see.</span></span><span class="arrow">→</span></a>
         \\<a class="panel" href="champions.html"><span class="ic"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#6aa1ff" stroke-width="1.6" aria-hidden="true"><path d="M3 15V9M7 15V4M11 15V7M15 15V2"/></svg></span><span><b>Champions</b><span>Win rates, matchups and lane curves.</span></span><span class="arrow">→</span></a>
         \\</div>
         \\{patch_day}</section>

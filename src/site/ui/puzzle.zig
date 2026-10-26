@@ -57,18 +57,19 @@ pub const Opts = struct {
 };
 
 pub fn view(h: *H, o: Opts) N {
+    // Slots keyed: the answer, unkeyed, keeps its nodes (and focus) when ctx goes
     return card.view(h, .{ .label = o.label }, &.{h.div(.{ .class = "c-puzzle", .aria_live = "polite" }, .{
-        h.div(.{ .class = "stage" }, .{o.stage}),
-        h.div(.{ .class = "qrow" }, .{
+        h.div(.{ .key = 1, .class = "stage" }, .{o.stage}),
+        h.div(.{ .key = 2, .class = "qrow" }, .{
             h.h2(.{ .class = "q" }, .{o.q}),
             if (o.off) |t| badge.view(h, .neutral, .{t}) else null,
             if (o.stars) |n| stars(h, n, false) else null,
         }),
-        if (o.ctx) |c| h.div(.{ .class = "ctx" }, .{c}) else null,
+        if (o.ctx) |c| h.div(.{ .key = 3, .class = "ctx" }, .{c}) else null,
         o.answer,
         if (o.why) |t| h.p(.{ .class = "why" }, .{t}) else null,
         if (o.take) |t| take(h, t) else null,
-        h.div(.{ .class = "foot" }, .{ o.games orelse h.span(.{}, .{}), o.action }),
+        h.div(.{ .key = 4, .class = "foot" }, .{ o.games orelse h.span(.{}, .{}), o.action }),
     })});
 }
 

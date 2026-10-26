@@ -12,7 +12,7 @@ stats, pool and curves file (recent-curves.bin, curves-<patch>.bin, and all- ver
 from `meiolol curves --platform all`). Header switches link to the same page in another
 view (a matchup that view lacks: its matchup index); localStorage remembers the last
 view so shared pages (Daily Draft, Learn, Your games, legal: at the root only, made
-from the EUW patch view; learn.js reads patch/data/stats.bin) link back into it.
+from the EUW patch view) link back into it.
 
 Champion pages are the exception: one per champion at the site root (champion/<slug>.html,
 written from the root view): ui.champpage's three islands (Top, Build, More, each its
@@ -186,33 +186,20 @@ without names, PUUIDs hashed; compact timeline). Per-game numbers come from curv
 profile-icon check, then delete and block the PUUID. Players not looked up for 30 days
 are pruned.
 
-## Learn (src/learn.zig, src/site/learn.zig, static/learn.js)
+## Learn (src/site/learn.zig, learnbuild.zig, learnfixed.zig; ui/learnpage.zig)
 
-For new players: five lessons (roles, counters and why your own champion matters more,
-early vs late, mixing damage, synergy), each with examples picked from the patch's games
-and a three-question check, then unlimited practice drafts. No streaks or timers. One
-thing per screen (learn.js): Lessons and Practice as two tabs; a lesson at a time (dots
-1 to 5), its short text above one question at a time (the answers are the only buttons;
-champions in lesson text and on the practice board are plain names, not links); practice a drill at a time in
-three levels of five drills (Level 1 clear-cut = easy, 2 two fit = medium, 3 close call
-= hard, the generator's Difficulty below), the next level offered once one is done, any
-level still pickable.
+Chapters of puzzles (plan docs/plan/ui/learn.md): a setup drawn as UI (RateRows, a duel,
+role tiles, champion icons with chips), a short question, a guess on a GuessSlider or a
+pick, then the reveal (all bands as rows when the puzzle has them), one line why and a
+takeaway. A first visit lands on chapter 1; chapter 0 (basics) one tap away.
 
-- Facts, made per site build: magic share of each champion's damage to champions (raw
-  match JSON of the newest 3000 games), wins by game length (<25, 25-32, 32+ min) per
-  champion and role, and team win rate by damage mix (<30% / 30-70% / 70%+ magic)
-- Lessons show raw win rates with n, not model points: at a few thousand games the
-  model's pair terms are noise (draft-model eval: AUC 0.52). Examples are ranked by the
-  smoothed edge so thin pairs stay out of the top; an early-data note under 50k games
-- Practice pack (learn/practice.json, ~240 drafts): real games anonymised as the Daily
-  Draft, leaving out its used.txt games; remade daily from a seed of the day. Graded on
-  facts, not pp spread: easy = the four teammates lean one damage type and exactly one
-  option brings the other; medium = two do; hard = balanced team. Options are the
-  recommender's candidates that are usual for the role (30%+ of their games, 15+)
-- The reveal explains every option (damage fit, role win rate, game length, model
-  reasons with 50+ games, lane gold curve when the curves file has the pair), never "the
-  correct pick". Champions the player adds join the options (meiolol.wasm scores them,
-  request field `pool`)
-- Site: learn.html (checks and glossary as embedded JSON), learn.js, learn/champs.json,
-  learn/practice.json. Progress in localStorage (key meiolol.learn.v1: answers per
-  lesson, drills done per level, current lesson, level and tab; nothing sent anywhere)
+- learn.html is rendered per request: ui.learndata.Data in the island's data-bin,
+  ui-learn.wasm runs it. `#p=<id>` links a puzzle
+- learnfixed.zig: hand-written puzzles from finished checks (chapters 1, 2, 5); edit
+  there, a deploy makes it live
+- learnbuild.zig: chapter 0 roles (tiles of each role's top 90%+ champions), chapter 3
+  lane (all-ranks curves) and early or late (`meiolol lean`), chapter 4 counters (every
+  region, 30 days curves). A puzzle ships only when clear (J11); empty chapters drop
+- Progress: stars per puzzle in localStorage meiolol.learn.v2 ("id:n,..."), nothing sent
+- src/learn.zig still makes learn/practice.json and learn/champs.json (DailyPart) for
+  chapter-end drafts; the page does not read them yet

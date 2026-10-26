@@ -29,6 +29,8 @@ pub const gamelane_js = hashed("ui-gamelane.js", @embedFile("ui-gamelane.js"));
 pub const gamelane_wasm = hashed("ui-gamelane.wasm", @embedFile("ui-gamelane.wasm"));
 pub const finder_js = hashed("ui-finder.js", @embedFile("ui-finder.js"));
 pub const finder_wasm = hashed("ui-finder.wasm", @embedFile("ui-finder.wasm"));
+pub const learn_js = hashed("ui-learn.js", @embedFile("ui-learn.js"));
+pub const learn_wasm = hashed("ui-learn.wasm", @embedFile("ui-learn.wasm"));
 
 /// `plain` with 8 hex digits of `data`'s FNV-1a before its extension
 pub fn hashed(comptime plain: []const u8, comptime data: []const u8) Hashed {

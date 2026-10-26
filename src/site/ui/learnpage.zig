@@ -17,6 +17,7 @@ const ld = @import("learndata.zig");
 const champ = @import("champ.zig");
 const role = @import("role.zig");
 const phrase = @import("phrase.zig");
+const url = @import("url.zig");
 const plain = phrase.plain;
 const Phrase = phrase.Phrase;
 const H = tree.H;
@@ -40,8 +41,6 @@ const W = struct {
     pub const games = Phrase("{n:count} games");
 };
 
-pub const Url = struct { p: []const u8 = "" };
-
 pub const Page = struct {
     d: *const ld.Data,
     a: std.mem.Allocator,
@@ -55,6 +54,11 @@ pub const Page = struct {
     progress: ld.Progress = .{},
     /// Set when progress changed: the page's code saves it
     dirty: bool = false,
+    /// The server's render: Data as ui.data, base64, for the island
+    bin: []const u8 = "",
+
+    /// The puzzle's id: a link to one puzzle
+    pub const Url = struct { p: url.Str(48) = .{} };
 
     pub const Msg = union(enum) {
         guess,
@@ -141,11 +145,13 @@ pub const Page = struct {
     }
 
     pub fn toUrl(p: *const Page) Url {
-        return .{ .p = p.cur().id };
+        var u: Url = .{};
+        u.p.set(p.cur().id);
+        return u;
     }
 
     pub fn fromUrl(p: *Page, u: Url) void {
-        for (p.d.chapters, 0..) |ch, ci| for (ch.puzzles, 0..) |z, zi| if (std.mem.eql(u8, z.id, u.p)) {
+        for (p.d.chapters, 0..) |ch, ci| for (ch.puzzles, 0..) |z, zi| if (std.mem.eql(u8, z.id, u.p.slice())) {
             p.c = @intCast(ci);
             p.p = @intCast(zi);
             p.reset();
@@ -154,7 +160,7 @@ pub const Page = struct {
     }
 
     pub fn view(p: *Page, h: *H) N {
-        return h.div(.{ .class = "c-learn", .data_island = "learn", .on_keydown = h.on(p, .key) }, .{
+        return h.div(.{ .class = "c-learn", .data_island = "learn", .data_bin = if (p.bin.len > 0) p.bin else null, .on_keydown = h.on(p, .key) }, .{
             p.strip(h),
             h.div(.{ .class = "grid" }, .{
                 h.div(.{ .class = "main" }, .{if (p.end) p.endCard(h) else p.puzzleCard(h)}),
@@ -475,4 +481,32 @@ test "first visit on chapter 1; guess, lock in, pick, chapter end, next chapter"
     var h: H = .init(arena.allocator(), &t);
     _ = p.view(&h);
     try testing.expect(!h.oom);
+}
+
+test "a puzzle's link opens it" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var p: Page = .init(arena.allocator(), &ld.demo);
+    p.fromUrl(url.read(Page.Url, "#p=counter-top"));
+    try testing.expectEqualStrings("counter-top", p.cur().id);
+    try testing.expectEqualStrings("counter-top", p.toUrl().p.slice());
+}
+
+test "the island opens the linked puzzle" {
+    const island = @import("island.zig");
+    const Fake = @import("fakedom.zig").Fake;
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fake: Fake = .{ .a = a };
+    try fake.fragment.appendSlice(a, "#p=counter-top");
+    var rt: island.Runtime(Fake) = .init(a, &fake);
+    var server: Page = .init(a, &ld.demo);
+    var state: Page = .init(a, &ld.demo);
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    t.root = server.view(&h);
+    fake.server = &t;
+    _ = try rt.add(Page, &state, &server, sel);
+    try testing.expectEqualStrings("counter-top", state.cur().id);
 }

@@ -309,9 +309,9 @@ test "fixture games to stats, curves and the website" {
         // rows that static/daily.js fills
         .{ "daily.html", &.{ "from recent games", "rated as if it were the last", "two standard errors on 200+ games", "<div id=\"options\" class=\"dd-options\"></div>", "<ul id=\"lanes\" class=\"dd-lanes\"></ul>", "<script src=\"reasons.js\" defer></script>", "<p id=\"crowd\" class=\"muted dd-crowd-note\" hidden></p>" } },
         .{ "privacy.html", &.{ "the date\nshown is the puzzle's, not the game's", "we keep only each puzzle's totals", "<h2 id=\"accounts\">Accounts</h2>" } },
-        // Learn: lessons and practice as tabs, a lesson a screen with its own nav, practice
-        // levels (learn.js draws them)
-        .{ "learn.html", &.{ "<section id=\"puzzles\" data-view=\"puzzles\">", "<script type=\"application/json\" id=\"puzzle-data\">[{\"id\":\"know\"", "\"id\":\"luck\"", "<ol class=\"pz-list nojs\">", "<section id=\"practice\" data-view=\"practice\">", "<div class=\"lesson-nav\"></div>", "id=\"p-levels\"", "<article class=\"card lesson\" id=\"lesson-roles\"" } },
+        // Learn (ui.learnpage): the island with its chapters inline, a first visit on
+        // chapter 1's first puzzle
+        .{ "learn.html", &.{ "<div class=\"c-learn\" data-island=\"learn\" data-bin=\"", "Does knowing your champion matter?", "How often do mains win?", "<script src=\"" ++ assets.learn_js.path ++ "\" data-wasm=\"" ++ assets.learn_wasm.path ++ "\" defer></script>" } },
         // A search for one champion turns its rows to its side (MU8); gold under a clear
         // lead plain (J11, J12)
         .{ "matchup/index.html", &.{ "<div class=\"c-finder\" data-island=\"finder\" data-root=\"../\" data-bin=\"", "<h1>Matchups</h1>", "<h2>Most played</h2>", "<a href=\"../matchup/top/", "<script src=\"../" ++ assets.finder_js.path ++ "\" data-wasm=\"" ++ assets.finder_wasm.path ++ "\" defer></script>" } },

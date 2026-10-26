@@ -342,7 +342,7 @@ pub const Site = struct {
 pub const File = daily.File;
 
 /// Also written by their plain names, with the same data (assets.zig)
-pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.search_js, assets.stats_js, assets.stats_wasm, assets.champion_js, assets.champion_wasm, assets.champbuild_js, assets.champbuild_wasm, assets.champmore_js, assets.champmore_wasm, assets.matchup_js, assets.matchup_wasm, assets.matchmore_js, assets.matchmore_wasm, assets.games_js, assets.games_wasm, assets.gamemore_js, assets.gamemore_wasm, assets.gamelane_js, assets.gamelane_wasm, assets.finder_js, assets.finder_wasm };
+pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.search_js, assets.stats_js, assets.stats_wasm, assets.champion_js, assets.champion_wasm, assets.champbuild_js, assets.champbuild_wasm, assets.champmore_js, assets.champmore_wasm, assets.matchup_js, assets.matchup_wasm, assets.matchmore_js, assets.matchmore_wasm, assets.games_js, assets.games_wasm, assets.gamemore_js, assets.gamemore_wasm, assets.gamelane_js, assets.gamelane_wasm, assets.finder_js, assets.finder_wasm, assets.learn_js, assets.learn_wasm };
 
 /// Front-end files at the site root; `Options.static_dir` serves them from disk instead
 pub const shared_assets = [_]File{
@@ -354,7 +354,6 @@ pub const shared_assets = [_]File{
     .{ .path = "review.js", .data = @embedFile("static/review.js") },
     .{ .path = "home.js", .data = @embedFile("static/home.js") },
     .{ .path = "inter.woff2", .data = @embedFile("static/inter.woff2") },
-    .{ .path = "learn.js", .data = @embedFile("static/learn.js") },
     .{ .path = "table.js", .data = @embedFile("static/table.js") },
     .{ .path = "search.js", .data = @embedFile("static/search.js") },
     .{ .path = "account.js", .data = @embedFile("static/account.js") },
@@ -381,6 +380,8 @@ pub const shared_assets = [_]File{
     .{ .path = "ui-gamelane.js", .data = @embedFile("ui-gamelane.js") },
     .{ .path = "ui-finder.wasm", .data = @embedFile("ui-finder.wasm") },
     .{ .path = "ui-finder.js", .data = @embedFile("ui-finder.js") },
+    .{ .path = "ui-learn.wasm", .data = @embedFile("ui-learn.wasm") },
+    .{ .path = "ui-learn.js", .data = @embedFile("ui-learn.js") },
 };
 /// And in every view's directory
 pub const view_assets = [_]File{
@@ -430,7 +431,6 @@ test {
     _ = gallery;
     _ = evalchart;
     _ = flat;
-    _ = @import("puzzles.zig");
     _ = yourgame;
     _ = scope;
 }
@@ -523,7 +523,7 @@ pub fn renderPage(site: *const Site, w: *Writer, path: []const u8) !bool {
 /// A page at the site root from the shared view (shared_pages); false for any other path
 pub fn renderShared(site: *const Site, w: *Writer, path: []const u8) !bool {
     if (std.mem.eql(u8, path, "learn.html")) {
-        try learn_page.write(site, w, &(site.learn orelse return false));
+        try learn_page.write(site, w);
         return true;
     }
     if (std.mem.eql(u8, path, yourgame.page_path)) return yourgame.writePage(site, w);

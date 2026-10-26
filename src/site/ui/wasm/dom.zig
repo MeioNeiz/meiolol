@@ -384,6 +384,26 @@ pub fn attrOf(el: zjb.Handle, name: []const u8) []const u8 {
     return v.allocString(gpa) catch "";
 }
 
+/// localStorage's `key`, gpa's; null when missing. Blocked storage throws, ending the
+/// calling export there: call it last
+pub fn stored(key: []const u8) ?[]const u8 {
+    const k = zjb.string(key);
+    defer k.release();
+    const v = zjb.global("localStorage").call("getItem", .{k}, zjb.Handle);
+    defer v.release();
+    if (v == .null) return null;
+    return v.allocString(gpa) catch null;
+}
+
+/// Sets localStorage's `key`; throws as `stored`
+pub fn store(key: []const u8, value: []const u8) void {
+    const k = zjb.string(key);
+    defer k.release();
+    const v = zjb.string(value);
+    defer v.release();
+    zjb.global("localStorage").call("setItem", .{ k, v }, void);
+}
+
 /// An attribute's base64 decoded (an island's data-bin), gpa's; null when missing or bad
 pub fn binOf(el: zjb.Handle, name: []const u8) ?[]u8 {
     const s = attrOf(el, name);
