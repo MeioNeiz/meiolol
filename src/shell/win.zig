@@ -589,13 +589,15 @@ fn messageReceived(_: *Handler, _: [*c]c.ICoreWebView2, args: [*c]c.ICoreWebView
     var mem: [2 * channel.max_from_page]u8 = undefined;
     var fba: std.heap.FixedBufferAllocator = .init(&mem);
     const m = channel.read(fba.allocator(), text) catch |e| {
-        log("page message ignored ({t}): {s}", .{ e, text[0..@min(text.len, 80)] });
+        // Not its text: it could be the sign-in's
+        log("page message ignored ({t}, {d} bytes)", .{ e, text.len });
         return 0;
     };
     switch (m) {
         .painted => |p| painted(p.page),
         .drawn => |n| measure.drawn(n),
         .open => |url| openExternal(url),
+        .signin => |x| client.signIn(x.username, x.password),
     }
     return 0;
 }

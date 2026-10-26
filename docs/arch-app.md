@@ -39,6 +39,9 @@ file and packed rows: docs/architecture.md.
   and encoded at app.bin; the App island (ui-app.wasm) patches from it on each `app`
   message and keeps the charts' state. The Mac build's `--dump DIR --seconds N` writes
   each change to DIR/<seq>/ for a look against the mock client
+- Page to shell: ui/toshell.zig's Out, written by ui-app.wasm through bridge.js. The
+  sign-in form (ui/signin.zig: the screen until there is data, else a line under it)
+  sends `signin`, which the shell hands to the poller (device.zig); never logged
 - Window place in window.txt and the webview's data in webview/, both beside the exe
 - deploy/shell.sh: gpu-box smoke (both loaders), measure (memory, CPU, push delay,
   League's processes), run; refuses while a League game runs unless IN_GAME=1

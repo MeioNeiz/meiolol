@@ -18,7 +18,7 @@ const files = @import("files.zig");
 const app = ui.app;
 const Allocator = std.mem.Allocator;
 
-pub const css = ui.css.head ++ ui.css.join(.{ ui.badge, ui.chip, ui.card, ui.role, ui.champ, ui.draftboard, ui.champselect, ui.kda, ui.teamrows, ui.loadscreen, ui.chart, ui.lane, ui.gamescreen, ui.postgame, ui.app });
+pub const css = ui.css.head ++ ui.css.join(.{ ui.badge, ui.chip, ui.card, ui.role, ui.champ, ui.draftboard, ui.champselect, ui.kda, ui.teamrows, ui.loadscreen, ui.chart, ui.lane, ui.gamescreen, ui.postgame, ui.button, ui.signin, ui.app });
 
 const Page = struct {
     arena: std.heap.ArenaAllocator,
@@ -70,7 +70,16 @@ fn build(a: Allocator, live: bool) !?Next {
     if (!live) return finish(a, try data(a, .{ .stats = null, .icons = null, .private = false }, .no_client, .none));
     const s = poller.lock();
     defer poller.unlock();
-    return finish(a, try data(a, .{ .stats = s.stats, .icons = s.icons, .private = s.edition == .private }, s.status, s.note));
+    var d = try data(a, .{ .stats = s.stats, .icons = s.icons, .private = s.edition == .private }, s.status, s.note);
+    d.signin = signIn(s.signin, s.status);
+    return finish(a, d);
+}
+
+/// The form while there is no working sign-in: the whole screen until there is data
+fn signIn(s: ?*const state.SignIn, status: state.Status) ?ui.signin.SignIn {
+    const x = s orelse return null;
+    if (!x.needed) return null;
+    return .{ .full = status == .no_data, .busy = x.busy, .message = x.message };
 }
 
 /// Encoded and rendered into `a`, so nothing points into the poller's memory once it
@@ -178,6 +187,7 @@ pub fn data(a: Allocator, c: Ctx, status: state.Status, note: state.Note) !app.D
             .in_game => |g| if (c.private) .{ .game = try game(a, c, g) } else .{ .note = .{ .title = "In game", .text = "The board comes back in your next champ select." } },
             .post_game => |p| .{ .post = try post(a, c, p) },
         },
+        .restart = note == .restart,
     };
 }
 
@@ -717,6 +727,26 @@ test "notes while there is no board" {
     try testing.expectEqualStrings("ConnectionRefused; retrying.", e.screen.note.text);
     const f = try data(a, c, .no_data, .{ .failed = "Timeout" });
     try testing.expectEqualStrings("Timeout; trying again in 5 minutes.", f.screen.note.text);
+    try testing.expect((try data(a, c, .{ .waiting = "Lobby" }, .restart)).restart);
+}
+
+test "sign-in: the form is the screen until there is data; what the page sends parses" {
+    const needed: state.SignIn = .{ .needed = true, .message = "Refused." };
+    try testing.expect(signIn(&needed, .no_data).?.full);
+    const line = signIn(&needed, .no_client).?;
+    try testing.expect(!line.full);
+    try testing.expectEqualStrings("Refused.", line.message);
+    try testing.expectEqual(null, signIn(&.{}, .no_data));
+    try testing.expectEqual(null, signIn(null, .no_data));
+
+    var buf: [256]u8 = undefined;
+    var w: std.Io.Writer = .fixed(&buf);
+    try ui.toshell.json(.{ .signin = .{ .username = "ann", .password = "p\"w" } }, &w);
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const m = try @import("channel.zig").read(arena.allocator(), w.buffered());
+    try testing.expectEqualStrings("ann", m.signin.username);
+    try testing.expectEqualStrings("p\"w", m.signin.password);
 }
 
 test "loading: the role's numbers private only" {

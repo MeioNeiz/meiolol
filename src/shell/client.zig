@@ -27,6 +27,13 @@ pub fn stop() void {
     poller.stop();
 }
 
+/// The page's sign-in form; the poller copies what it keeps
+pub fn signIn(username: []const u8, password: []const u8) void {
+    const s = poller.lock();
+    defer poller.unlock();
+    s.submit(username, password);
+}
+
 pub fn current() Client {
     const s = poller.lock();
     defer poller.unlock();

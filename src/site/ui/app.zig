@@ -2,8 +2,9 @@
 //! renders it from the poller's state and keeps the same Data encoded (data.zig) at
 //! app.bin; on a change it sends `{"app": seq}` and the island fetches the file and
 //! patches. A screen per client state: a note while there is nothing to show, champ
-//! select's board and options, the loading cards, the in-game panel, the post game. The
-//! charts' own state (a tapped minute, a dragged range) lives in App, past patches
+//! select's board and options, the loading cards, the in-game panel, the post game; the
+//! sign-in under it, or in its place before there is data. The charts' own state (a
+//! tapped minute, a dragged range) and what's typed live in App, past patches
 const tree = @import("tree.zig");
 const badge = @import("badge.zig");
 const champselect = @import("champselect.zig");
@@ -11,6 +12,7 @@ const loadscreen = @import("loadscreen.zig");
 const gamescreen = @import("gamescreen.zig");
 const postgame = @import("postgame.zig");
 const lane = @import("lane.zig");
+const signin = @import("signin.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = @import("phrase.zig").plain;
 const H = tree.H;
@@ -37,6 +39,10 @@ pub const Data = struct {
     /// Where the client is ("Lobby", "Champ select · Picks")
     where: []const u8,
     screen: Screen,
+    /// No working sign-in: the form, or a line that opens it
+    signin: ?signin.SignIn = null,
+    /// A new version is in place for the next start
+    restart: bool = false,
 };
 
 pub const sel = "[data-island=app]";
@@ -45,6 +51,7 @@ pub const App = struct {
     data: Data,
     lane: lane.Held = .{},
     team: lane.Held = .{},
+    form: signin.Form = .{},
 
     pub const Msg = enum { none };
 
@@ -52,12 +59,15 @@ pub const App = struct {
 
     pub fn view(a: *App, h: *H) N {
         const d = a.data;
-        return h.div(.{ .class = "c-app", .data_island = "app", .data_seq = d.seq }, .{
-            h.el(.header, .{}, .{
-                h.b(.{}, .{"meiolol"}),
-                if (d.private) badge.view(h, .accent, .{W.private}) else null,
-                h.span(.{ .class = "where" }, .{d.where}),
-            }),
+        const head = h.el(.header, .{}, .{
+            h.b(.{}, .{"meiolol"}),
+            if (d.private) badge.view(h, .accent, .{W.private}) else null,
+            h.span(.{ .class = "where" }, .{d.where}),
+        });
+        const attrs = .{ .class = "c-app", .data_island = "app", .data_seq = d.seq };
+        if (d.signin) |s| if (s.full) return h.div(attrs, .{ head, signin.view(h, s, &a.form) });
+        return h.div(attrs, .{
+            head,
             switch (d.screen) {
                 .note => |n| h.div(.{ .class = "note" }, .{
                     h.el(.h1, .{}, .{n.title}),
@@ -68,6 +78,8 @@ pub const App = struct {
                 .game => |s| gamescreen.view(h, s, .{ .lane = &a.lane, .team = &a.team }),
                 .post => |s| postgame.view(h, s, &a.team),
             },
+            if (d.restart) h.p(.{ .class = "restart" }, .{W.restart}) else null,
+            if (d.signin) |s| signin.view(h, s, &a.form) else null,
         });
     }
 };
@@ -84,6 +96,7 @@ pub fn page(h: *H, d: Data) N {
 
 const W = struct {
     const private = plain("private");
+    const restart = plain("A new version of meiolol is downloaded: it starts the next time you open the app.");
 };
 
 pub const name = "App";
@@ -98,6 +111,7 @@ pub const css =
     \\  .c-app > .note { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-6) 0; text-align: center; }
     \\  .c-app > .note h1 { margin: 0; font-size: var(--fs-l); font-weight: var(--w-b); }
     \\  .c-app > .note p { margin: 0; color: var(--muted); }
+    \\  .c-app > .restart { margin: 0; color: var(--muted); font-size: var(--fs-s); }
     \\}
     \\
 ;
@@ -115,4 +129,10 @@ pub fn gallery(g: *Gallery) void {
         .screen = .{ .select = champselect.sample },
     }));
     g.addFill("in game", page(h, .{ .seq = 3, .private = true, .where = "In game · 14:05", .screen = .{ .game = gamescreen.sample } }));
+    g.addFill("first start, sign in", page(h, .{ .seq = 4, .private = false, .where = "No data", .screen = .{ .note = .{
+        .title = "No stats file found",
+    } }, .signin = .{ .full = true } }));
+    g.addFill("waiting, sign in and restart lines", page(h, .{ .seq = 5, .private = false, .where = "Lobby", .screen = .{ .note = .{
+        .title = "The board shows in champ select",
+    } }, .signin = .{ .message = "Your sign-in was removed: sign in again." }, .restart = true }));
 }

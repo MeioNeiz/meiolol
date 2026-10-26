@@ -111,7 +111,8 @@ fn received(_: Id, _: Sel, _: Id, message: Id) callconv(.c) void {
     var mem: [2 * channel.max_from_page]u8 = undefined;
     var fba: std.heap.FixedBufferAllocator = .init(&mem);
     const m = channel.read(fba.allocator(), text) catch {
-        std.debug.print("page message ignored: {s}\n", .{text[0..@min(text.len, 80)]});
+        // Not its text: it could be the sign-in's
+        std.debug.print("page message ignored ({d} bytes)\n", .{text.len});
         return;
     };
     switch (m) {
@@ -129,6 +130,7 @@ fn received(_: Id, _: Sel, _: Id, message: Id) callconv(.c) void {
             const ws = msg(Id, cls("NSWorkspace"), "sharedWorkspace", .{});
             _ = msg(bool, ws, "openURL:", .{msg(Id, cls("NSURL"), "URLWithString:", .{nsString(z.ptr)})});
         },
+        .signin => |x| client.signIn(x.username, x.password),
     }
 }
 

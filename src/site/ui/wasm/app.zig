@@ -1,6 +1,7 @@
 //! ui-app.wasm: the desktop app's page (ui/app.zig). Adopts the shell's render with the
 //! app.bin it was made from, then on each `{"app": seq}` from the shell (bridge.js's
-//! `meiolol` event) fetches the newer file and patches
+//! `meiolol` event) fetches the newer file and patches. What the page asks of the shell
+//! (ui/toshell.zig) goes out through bridge.js's meiolol.send
 const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
@@ -33,7 +34,25 @@ export fn main() void {
     page_seq = std.fmt.parseInt(u32, seq.readString(&buf) catch return, 10) catch return;
     wanted = page_seq;
     zjb.global("window").call("addEventListener", .{ zjb.constString("meiolol"), zjb.fnHandle("appMessage", &onMessage) }, void);
+    ui.toshell.send = toShell;
     get();
+}
+
+/// A page outside the shell (a dump in a browser) has no bridge
+fn toShell(o: ui.toshell.Out) void {
+    const window = zjb.global("window");
+    if (!window.call("hasOwnProperty", .{zjb.constString("meiolol")}, bool)) return;
+    var buf: [1024]u8 = undefined;
+    defer std.crypto.secureZero(u8, &buf);
+    var w: std.Io.Writer = .fixed(&buf);
+    ui.toshell.json(o, &w) catch return;
+    const text = zjb.string(w.buffered());
+    defer text.release();
+    const m = zjb.global("JSON").call("parse", .{text}, zjb.Handle);
+    defer m.release();
+    const bridge = window.get("meiolol", zjb.Handle);
+    defer bridge.release();
+    bridge.call("send", .{m}, void);
 }
 
 fn get() void {
