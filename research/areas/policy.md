@@ -64,6 +64,8 @@ Riot developer policy, production key, player privacy and GDPR
 | [DraftGap web app](../sources/draftgap-site.md) | DraftGap's web app, Oct 2026: opens straight onto an empty ally and opponent draft board with a sorted win-rate list of every champion, patch 26.20, no sign-in | docs | data policy ux/desktop ux/features ux/layout | skimmed (first screen text) | medium | B/weak | 1/10 | 2026-10-17 |
 | [EU GDPR Article 14 (gdpr-info.eu)](../sources/eugdpr-art14.md) | EU text of Article 14 as it applies to EEA players: disproportionate effort exemption with information made publicly available | spec | privacy | listed (article 14 only) | high | B/fair | 1/2 | 2026-10-24 |
 | [Facecheck on the Overwolf app store (v1.9.52, Sep 2026)](../sources/overwolf-facecheck.md) | Facecheck (Convex Apps) Overwolf listing: all-phase League and TFT companion, pick and ban suggestions, lobby tags, in-game widgets and opponent habits, post-game breakdown; free with ads plus subscription; 3.16M downloads | project | fun market policy tools/accounts tools/paid tools/phase ux/desktop ux/features | docs (store listing, whole page) | high | C/fair | 7/11 | 2026-10-22 |
+| [Fandom: Licensing](../sources/fandom-licensing.md) | Fandom's licensing page: wiki text under CC BY-SA 3.0 Unported, accepted attribution forms, example credit line | docs | policy | docs (whole page) | high | A/fair | 5/5 | 2026-10-26 |
+| [Fandom: Terms of Use](../sources/fandom-terms.md) | Fandom Terms of Use: generic ban on robots and scraping without written permission, carve-out for licensed wiki text, no undue load | docs | policy | skimmed (prohibited uses) | medium | A/fair | 4/5 | 2026-10-26 |
 | [Game Memory Access Removed for Third Party Apps (Riot Support, 2026-09-29)](../sources/riot-memory-access-removed.md) | Riot announcement that from 2026-10-06 unknown third-party apps are blocked from game memory; official APIs the only allowed route | docs | policy | docs (whole page) | high | A/fair | 5/6 | 2026-10-11 |
 | [GitHub Acceptable Use Policies (2026)](../sources/gh-aup.md) | GitHub's AUP: excessive bandwidth may lead to suspension, throttled file hosting or deleted repos; no excessive automated bulk activity | docs | ops policy | docs (sections 4, 9, 10) | high | A/fair | 3/3 | 2026-10-11 |
 | [GitHub Docs: Git LFS billing](../sources/gh-lfs-billing.md) | How GitHub bills Git LFS: 10 GiB storage and 10 GiB bandwidth free on Free/Pro, blocked or metered beyond, storage not recalculated on mid-month delete | docs | ops privacy | docs (whole page) | high | A/fair | 4/4 | 2026-10-11 |
@@ -95,7 +97,10 @@ Riot developer policy, production key, player privacy and GDPR
 | [League of Legends on X: streamer mode and third-party spectate, live games and featured games (2025-10-21)](../sources/league-tweet-streamer-mode-spectate.md) | League's official account on streamer mode: client spectate hides streamer-mode players, third-party live spectate and featured games to be disabled, live game lookups respect streamer mode | thread | policy privacy tools | docs (post and the one before it, logged-out X) | high | A/weak | 4/4 | 2026-10-20 |
 | [League of Legends Patch 26.20 Notes (Riot, 2026-10-06)](../sources/lol-patch-26-20.md) | Official patch notes; Private Replays section ties replay lockout to the game memory restrictions | docs | policy | skimmed (Private Replays section; grepped for champ select and third party) | medium | A/fair | 3/3 | 2026-10-11 |
 | [League Overlays and AI: When Data Analysis becomes borderline Cheating? (r/leagueoflegends, Jun 2025)](../sources/lol-overlays-ai-cheating.md) | 1k-upvote debate on AI overlays (gank alerts, heatmaps, draft AI); players split in-game (bad), post-game review (fine) and draft (grey area) | thread | draft learning market method needs policy tools ux/trust | docs (post; comments skimmed and grepped for pre/post-game, draft, Overwolf) | high | B/fair | 10/10 | 2026-10-11 |
+| [Leaguepedia user page: Avoiding cargo ratelimits (Arbolitoloco)](../sources/leaguepedia-cargo-ratelimits.md) | Leaguepedia admin's how-to for cargo ratelimits: bot password with the Cargo grant, confirmed email, retrying mwcleric fork | docs | data policy | docs (whole page) | high | B/fair | 3/3 | 2026-10-26 |
+| [Leaguepedia: Help:Leaguepedia API](../sources/leaguepedia-api-help.md) | Leaguepedia's own API page: api.php endpoint, Cargo query fields, 500-row limit, logged-out ratelimits, join examples | docs | data policy | docs (whole page) | high | A/fair | 11/11 | 2026-10-26 |
 | [Legends of Runeterra Developer Challenge Announcement (Riot DevRel, 2019-11-04)](../sources/riot-lor-dev-challenge.md) | Riot's Director of DevRel on a LoR developer challenge: judged on Values, Novelty, Polish; reveals pre-launch tool work with Mobalytics | docs | market policy tools ux/layout | docs (whole post; skimmed the API patch notes part) | high | A/strong | 7/8 | 2026-10-11 |
+| [lol.fandom.com robots.txt](../sources/fandom-lol-robots.md) | Leaguepedia robots.txt: api.php allowed for all agents, /wiki/Special: (incl. CargoExport) disallowed, AI crawlers blocked | docs | policy | docs (whole file) | high | A/fair | 3/4 | 2026-10-26 |
 | [LoLdle homepage (Oct 2026)](../sources/loldle-site.md) | LoLdle's live homepage: five daily champion-guessing modes, a temporary Worlds roster-building event, sister -dle games, ad-funded | project | data draft fun market policy | docs (homepage rendered text, consent banner) | high | B/fair | 4/4 | 2026-10-11 |
 | [LoLDraftAI blog: iTero vs LoLDraftAI, a detailed comparison (Apr 2026)](../sources/loldraftai-vs-itero.md) | LoLDraftAI's head-to-head of its neural draft model against iTero (100 greedy drafts judged by DraftGap) with a feature table of what each ships, including tiers, desktop, overlays and macro coaching | article | draft method policy tools tools/paid tools/phase ux/features | docs (whole article) | high | C/fair | 9/10 | 2026-10-22 |
 | [LoLDraftAI desktop download page (Oct 2026)](../sources/loldraftai-download.md) | LoLDraftAI's Windows desktop app page: reads the live draft from the local League client and applies runes, item sets and summoner spells on request; unsigned installer, SmartScreen warning | docs | policy tools tools/accounts tools/phase ux/features ux/trust | docs (whole page) | medium | C/fair | 3/4 | 2026-10-22 |
@@ -187,7 +192,7 @@ Riot developer policy, production key, player privacy and GDPR
 
 ## Findings by tag
 
-### policy: Riot developer policies, API key approval process, legal requirements (447)
+### policy: Riot developer policies, API key approval process, legal requirements (465)
 
 - [[blitz-lutris-description#^f1]] [data] [policy] Blitz said it fetched all data from Riot's League API and analysed it itself, using no other third-party stats. (C/weak, verified)
 - [[blitz-lutris-description#^f3]] [policy] Blitz claimed it consulted Riot before major features. (C/weak, verified)
@@ -210,6 +215,20 @@ Riot developer policy, production key, player privacy and GDPR
 - [[draftgap#^f5]] [policy] Checked, not there: no mention of Riot approval, production key, registration or the "isn't endorsed" boilerplate in README or FAQ; no GitHub issue (16 total) about Riot policy, Vanguard or removed features. (B/fair, absence)
 - [[draftgap-site#^f11]] [policy] (inferred) Every number is a win rate to two decimals (team 60.38, each pick 53.59): the "+X% win rate" framing meio.lol's rules exclude. (B/weak, unquoted)
 - [[esportsnet-lolking#^f4]] [policy] Checked, not there: no mention of a Riot API key problem in its closure. (C/weak, absence)
+- [[fandom-licensing#^f1]] [policy] Wiki text is CC BY-SA 3.0 Unported unless a wiki states otherwise. (A/fair, verified)
+- [[fandom-licensing#^f2]] [policy] Reuse, commercial included, is allowed with attribution and share-alike on derivatives. (A/fair, verified)
+- [[fandom-licensing#^f3]] [policy] Attribution by a hyperlink to the article(s) is enough. (A/fair, verified)
+- [[fandom-licensing#^f4]] [policy] Example credit line for reuse on your own site. (A/fair, verified)
+- [[fandom-licensing#^f5]] [policy] Images are not covered by the text licence (we use our own champion art anyway). (A/fair, verified)
+- [[fandom-lol-robots#^f1]] [policy] api.php is allowed for every user agent. (A/fair, verified)
+- [[fandom-lol-robots#^f2]] [policy] /wiki/Special: is disallowed, so Special:CargoExport (which answered anonymously in our test) is off limits to bots. (A/fair, verified)
+- [[fandom-lol-robots#^f3]] [policy] AI crawlers (GPTBot, ClaudeBot, CCBot...) are disallowed site-wide; a non-AI app user agent is not in that list. (A/fair, verified)
+- [[fandom-lol-robots#^f4]] [policy] A plain curl with our user agent got 403 on robots.txt; Chrome got it. (inferred) Cloudflare bot rules sit in front. (A/fair, unquoted)
+- [[fandom-terms#^f1]] [policy] Generic ban on robots and automated access without express written permission. (A/fair, verified)
+- [[fandom-terms#^f2]] [policy] Scraping and reuse of content is barred except where Fandom permits it, e.g. wiki text under the licensing page. (A/fair, verified)
+- [[fandom-terms#^f3]] [policy] No disproportionate load; do not bypass robot exclusion. (A/fair, verified)
+- [[fandom-terms#^f4]] [policy] No disguising origin (so a truthful user agent). (A/fair, verified)
+- [[fandom-terms#^f5]] [policy] (inferred) The API page, bot passwords with a Cargo grant and robots.txt allowing api.php are the express permission in practice; a polite, logged-in, once-a-day api.php query is the defensible reading. Asking in their Discord settles it. (A/fair, unquoted)
 - [[gamestars-key-refused#^f1]] [policy] Riot refused Gamestars (a paid tournament/wager site) an API key over its business model and values, after talks with them. (B/fair, verified)
 - [[gamestars-key-refused#^f2]] [policy] Gamestars then forced deprecated legacy tournament codes to work without authorisation; Riot patched it. (B/fair, verified)
 - [[gamestars-key-refused#^f3]] [policy] Checked, not there: no date in the article itself. (B/fair, absence)
@@ -349,6 +368,10 @@ Riot developer policy, production key, player privacy and GDPR
 - [[league-tweet-streamer-mode-spectate#^f2]] [policy] [tools] Third-party live spectate to be disabled and replaced by replay file access in the match API; featured games capability disabled too. (A/weak, verified)
 - [[league-tweet-streamer-mode-spectate#^f3]] [policy] [privacy] Third-party live game lookups keep working but results respect each player's streamer mode. (A/weak, verified)
 - [[league-tweet-streamer-mode-spectate#^f4]] [policy] The day before, the whole Spectator API including getCurrentGameInfoByPuuid was re-enabled, with time for third-party sites to adjust. (A/weak, verified)
+- [[leaguepedia-api-help#^f1]] [data] [policy] The API is offered as a courtesy, unofficial (not Riot), without guarantee of stability or accuracy; support only through their Discord. (A/fair, verified)
+- [[leaguepedia-api-help#^f3]] [data] [policy] But anonymous cargo queries are ratelimited to near uselessness: log in with a bot password and a confirmed email first. (A/fair, verified)
+- [[leaguepedia-api-help#^f11]] [policy] Page footer: content under CC BY-SA 3.0 unless otherwise noted. (A/fair, verified)
+- [[leaguepedia-cargo-ratelimits#^f1]] [data] [policy] Logged-out cargo queries are really difficult since Fandom's new ratelimits. (B/fair, verified)
 - [[lol-dev-matchmaking-champselect-fall-2022#^f1]] [policy] [draft] Riot sees third-party teammate info in champ select as causing wrong conclusions and pressure, e.g. forcing highest-winrate champion picks. (A/strong, verified)
 - [[lol-dev-matchmaking-champselect-fall-2022#^f2]] [policy] [draft] Riot does not want lobby-player metagaming or dodging when the setup is imperfect. (A/strong, verified)
 - [[lol-dev-matchmaking-champselect-fall-2022#^f3]] [policy] Riot wants to reduce dodging frequency by changing its motives. (A/strong, verified)

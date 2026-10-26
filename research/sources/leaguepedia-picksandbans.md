@@ -3,7 +3,7 @@ title: Leaguepedia Cargo table PicksAndBansS7 (pro games' picks and bans in orde
 url: https://lol.fandom.com/wiki/Special:CargoTables/PicksAndBansS7
 kind: dataset
 commit: 
-for: [lol-site-ui]
+for: [lol-site-ui, leaguepedia-daily-fetch]
 looked: 2026-10-24
 depth: skimmed
 relevance: medium
@@ -28,6 +28,9 @@ Why: Is there any game population where pick order is public?
   > Team1Pick1 | Team1Pick2 | Team1Pick3 | Team1Pick4 | Team1Pick5
 - [data] The table had 104,747 rows on 24 Oct 2026 (one per pro game since 2017). ^f2
   > This table has **104,747** rows altogether.
+- [data] [draft] Per game also Team1, Team2, Winner, SwitchedSides, GameId and MatchId; Team1/Team2 follow the series' teams, SwitchedSides marks Team1 on red ([[leaguepedia-cargo-tests#^f4]]). ^f3
+  > **SwitchedSides** - Boolean
+  > **GameId** - String
 
 ## Read
 

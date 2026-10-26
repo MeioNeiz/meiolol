@@ -1,0 +1,111 @@
+Leaguepedia Cargo test calls, 26 Oct 2026 09:33-09:36 UTC, UA 'meiolol-daily/0.1 (https://meio.lol; privacy@meio.lol)'
+
+1. api.php action=cargoquery, anonymous, from the Mac (first call of the day, limit=5, 3-table join):
+{"error":{"code":"ratelimited","info":"You've exceeded your rate limit. Please wait some time and try again.","*":"See https://lol.fandom.com/api.php for API usage. Subscribe to the mediawiki-api-announce mailing list at &lt;https://lists.wikimedia.org/postorius/lists/mediawiki-api-announce.lists.wikimedia.org/&gt; for notice of API deprecations and breaking changes."}}
+
+2. api.php action=cargoquery, anonymous, from the Mac, one table, limit=1, 3 minutes later:
+{"error":{"code":"ratelimited","info":"You've exceeded your rate limit. Please wait some time and try again.","*":"See https://lol.fandom.com/api.php for API usage. Subscribe to the mediawiki-api-announce mailing list at &lt;https://lists.wikimedia.org/postorius/lists/mediawiki-api-announce.lists.wikimedia.org/&gt; for notice of API deprecations and breaking changes."}}
+
+3. api.php action=cargoquery, anonymous, from the box (meiolol-cloud, first call ever from that IP): same ratelimited error as 2.
+
+4. api.php action=query meta=siteinfo, anonymous: works (returns sitename Leaguepedia).
+
+5. Special:CargoExport format=json, anonymous, ScoreboardGames+PicksAndBansS7+Tournaments+ScoreboardPlayers joined on GameId / OverviewPage, limit=20: HTTP 200, 20 rows (10 per game), first row:
+{
+ "GameId": "2026 Season World Championship/Main Event_Round 3_4_3",
+ "DateTime": "2026-10-25 22:43:00",
+ "Tournament": "Worlds 2026 Main Event",
+ "League": "World Championship",
+ "Team1": "Gen.G",
+ "Team2": "LYON (2024 American Team)",
+ "WinTeam": "Gen.G",
+ "Winner": 1,
+ "Gamelength": "31:57",
+ "Gamelength Number": 31.95,
+ "Patch": 26.2,
+ "PBTeam1": "Gen.G",
+ "PBTeam2": "LYON (2024 American Team)",
+ "PBWinner": 1,
+ "SwitchedSides": 0,
+ "Team1Ban1": "Wukong",
+ "Team1Ban2": "Jarvan IV",
+ "Team1Ban3": "Sivir",
+ "Team1Ban4": "Pantheon",
+ "Team1Ban5": "Trundle",
+ "Team1Pick1": "Ezreal",
+ "Team1Pick2": "Jayce",
+ "Team1Pick3": "Nautilus",
+ "Team1Pick4": "Camille",
+ "Team1Pick5": "Galio",
+ "Team1Role1": "Bot",
+ "Team1Role2": "Jungle",
+ "Team1Role3": "Support",
+ "Team1Role4": "Top",
+ "Team1Role5": "Mid",
+ "Team2Ban1": "Cassiopeia",
+ "Team2Ban2": "Syndra",
+ "Team2Ban3": "Lee Sin",
+ "Team2Ban4": "Gnar",
+ "Team2Ban5": "Gwen",
+ "Team2Pick1": "Lucian",
+ "Team2Pick2": "Milio",
+ "Team2Pick3": "K'Sante",
+ "Team2Pick4": "Maokai",
+ "Team2Pick5": "Tristana",
+ "Team2Role1": "Bot",
+ "Team2Role2": "Support",
+ "Team2Role3": "Top",
+ "Team2Role4": "Jungle",
+ "Team2Role5": "Mid",
+ "Side": 1,
+ "Team": "Gen.G",
+ "Role": "Top",
+ "Link": "Kiin",
+ "Champion": "Camille",
+ "Kills": 3,
+ "Deaths": 1,
+ "Assists": 9,
+ "CS": 328,
+ "Gold": 14692,
+ "DamageToChampions": 13371,
+ "DateTime__precision": 0
+}
+
+6. Side check, Special:CargoExport, Worlds 2026 Main Event Round 3 games:
+{"GameId": "2026 Season World Championship/Main Event_Round 3_4_3", "Team1": "Gen.G", "Winner": 1, "WinTeam": "Gen.G", "Patch": 26.2, "PatchSort": null, "LegacyPatch": 16.2, "PBTeam1": "Gen.G", "PBWinner": 1, "SwitchedSides": 0, "Team1Ban1": "Wukong", "Team2Ban1": "Cassiopeia"}
+{"GameId": "2026 Season World Championship/Main Event_Round 3_4_2", "Team1": "Gen.G", "Winner": 1, "WinTeam": "Gen.G", "Patch": 26.2, "PatchSort": null, "LegacyPatch": 16.2, "PBTeam1": "Gen.G", "PBWinner": 1, "SwitchedSides": 0, "Team1Ban1": "Jarvan IV", "Team2Ban1": "Cassiopeia"}
+{"GameId": "2026 Season World Championship/Main Event_Round 3_4_1", "Team1": "LYON (2024 American Team)", "Winner": 1, "WinTeam": "LYON (2024 American Team)", "Patch": 26.2, "PatchSort": null, "LegacyPatch": 16.2, "PBTeam1": "Gen.G", "PBWinner": 2, "SwitchedSides": 1, "Team1Ban1": "Nocturne", "Team2Ban1": "Cassiopeia"}
+{"GameId": "2026 Season World Championship/Main Event_Round 3_3_2", "Team1": "Dplus Kia", "Winner": 1, "WinTeam": "Dplus Kia", "Patch": 26.2, "PatchSort": null, "LegacyPatch": 16.2, "PBTeam1": "Movistar KOI", "PBWinner": 2, "SwitchedSides": 1, "Team1Ban1": "Olaf", "Team2Ban1": "Nocturne"}
+{"GameId": "2026 Season World Championship/Main Event_Round 3_3_1", "Team1": "Movistar KOI", "Winner": 2, "WinTeam": "Dplus Kia", "Patch": 26.2, "PatchSort": null, "LegacyPatch": 16.2, "PBTeam1": "Dplus Kia", "PBWinner": 1, "SwitchedSides": 1, "Team1Ban1": "Nocturne", "Team2Ban1": "Vi"}
+
+7. Same game 3_4_1, ScoreboardPlayers (SP.Side, SP.Team, SP.Champion):
+1 LYON (2024 American Team) Top Olaf Yes
+1 LYON (2024 American Team) Jungle Xin Zhao Yes
+1 LYON (2024 American Team) Mid Ahri Yes
+1 LYON (2024 American Team) Bot Kalista Yes
+1 LYON (2024 American Team) Support Renata Glasc Yes
+2 Gen.G Top Rumble No
+2 Gen.G Jungle Qiyana No
+2 Gen.G Mid Anivia No
+2 Gen.G Bot Jhin No
+2 Gen.G Support Alistar No
+
+8. Patch of game 3_4_1 with format=csv:
+Patch
+26.20
+
+9. Primary official tournaments starting 2026 or later, grouped by League and Region:
+6 LoL EMEA Championship | EMEA
+6 League of Legends Championship Pacific | Asia Pacific
+6 Circuit Brazilian League of Legends | Brazil
+6 Tencent LoL Pro League | China
+6 League of Legends Championship Series | North America
+6 LoL Champions Korea | Korea
+2 World Championship | International
+1 None | Korea
+1 World Championship | China
+1 First Stand | International
+1 Mid-Season Invitational | International
+
+10. Game 3_4_1 from the first CargoExport call (PB columns with SG.Team1):
+{"GameId": "2026 Season World Championship/Main Event_Round 3_4_1", "DateTime": "2026-10-25 20:59:00", "Team1": "LYON (2024 American Team)", "Team2": "Gen.G", "WinTeam": "LYON (2024 American Team)", "Winner": 1, "Gamelength": "35:45", "Patch": 26.2, "Tournament": "Worlds 2026 Main Event", "League": "World Championship", "TournamentLevel": "Primary", "Region": "International", "PBTeam1": "Gen.G", "PBTeam2": "LYON (2024 American Team)", "Team1Ban1": "Nocturne", "Team2Ban1": "Cassiopeia", "Team1Pick1": "Qiyana", "Team2Pick1": "Kalista", "Team1Role1": "Jungle", "SwitchedSides": 1, "DateTime__precision": 0}

@@ -9,9 +9,9 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 | Area | Covers | Questions | Sources | Findings |
 | --- | --- | --- | --- | --- |
-| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 9 | 260 | 1244 |
-| [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 4 | 167 | 602 |
-| [data](areas/data.md) | what the Riot API serves and how to crawl it | 3 | 167 | 415 |
+| [product](areas/product.md) | what to build: existing tools, players' needs, market, fun and learning features | 9 | 263 | 1248 |
+| [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 4 | 172 | 620 |
+| [data](areas/data.md) | what the Riot API serves and how to crawl it | 4 | 179 | 457 |
 | [stats](areas/stats.md) | estimation and recommendation methods | 26 | 340 | 2443 |
 | [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 12 | 365 | 1842 |
 | [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 7 | 152 | 580 |
@@ -47,6 +47,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | Status | Pri. | Question | Claims | Sources | Searches | Leads |
 | --- | --- | --- | --- | --- | --- | --- |
 | answered | now | [How do we find the most newest-patch ranked games per Riot API call?](questions/crawl-discovery.md): Which players to scan for match ids so the key's budget goes on newest-patch ranked games | 1 strong, 3 moderate | 4 | 3 (slowing) |  |
+| answered | soon | [What may we take from Leaguepedia's Cargo API for a daily pro draft, under what licence and rate limits, and which tables and fields give one game's draft, result and scoreboard?](questions/leaguepedia-daily-fetch.md): What may we take from Leaguepedia's Cargo API for a daily pro draft, under what licence and rate limits, and which tables and fields give one game's draft, result and scoreboard? | 12 strong, 1 moderate, 2 contested | 13 | 2 (thin) |  |
 | answered | soon | [Which queues and modes does match-v5 serve, with timelines, and what are their queue ids?](questions/match-v5-queues.md): Which queues and modes does match-v5 serve, with timelines, and what are their queue ids? | 4 strong, 4 moderate, 1 weak | 9 | 3 (slowing) | 1 |
 | decided | soon | [What can the Riot API provide beyond match summaries to power a data-hungry learning or fun tool?](questions/riot-api-data-depth.md): What can the Riot API provide beyond match summaries to power a data-hungry learning or fun tool? | 5 strong, 4 moderate, 1 contested | 9 | 7 (slowing) |  |
 
@@ -126,6 +127,6 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 ## Health
 
-- 70 questions, 1109 sources, 8561 findings
+- 71 questions, 1121 sources, 8618 findings
 - Open leads: 284 (`josearch leads`)
 - Lint: 0 errors, 5 warnings (`josearch lint`)
