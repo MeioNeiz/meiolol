@@ -34,6 +34,14 @@ pub fn signIn(username: []const u8, password: []const u8) void {
     s.submit(username, password);
 }
 
+/// Champ select's mastery toggle; wakes the poller to rebuild the card now
+pub fn mastery(on: bool) void {
+    state.by_mastery.store(on, .release);
+    const s = poller.lock();
+    defer poller.unlock();
+    s.practice_changed();
+}
+
 pub fn current() Client {
     const s = poller.lock();
     defer poller.unlock();

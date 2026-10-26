@@ -51,6 +51,8 @@ pub const Lane = struct {
     chart: ?lanechart.Figures = null,
     caption: []const u8 = "",
     options: []const Option = &.{},
+    /// Options weigh your mastery points; null shows no toggle
+    mastery: ?bool = null,
     /// "EUW, last 30 days"
     scope: []const u8 = "",
 };
@@ -80,8 +82,8 @@ pub const BanOption = struct {
     why: []const u8,
 };
 
-/// `held`: the island's chart state; null draws no chart
-pub fn view(h: *H, s: Screen, held: ?*lanechart.Held) N {
+/// `held`: the island's chart state; null draws no chart. `mastery` flips Lane.mastery
+pub fn view(h: *H, s: Screen, held: ?*lanechart.Held, mastery: ?tree.Handler) N {
     const bans = banOptions(h, s);
     return h.div(.{ .class = "c-cs" }, .{
         h.div(.{ .class = "board" }, .{
@@ -91,12 +93,12 @@ pub fn view(h: *H, s: Screen, held: ?*lanechart.Held) N {
         }),
         h.div(.{ .class = "side" }, .{
             if (s.banning) bans else null,
-            lane(h, s.lane, held),
+            lane(h, s.lane, held, mastery),
         }),
     });
 }
 
-fn lane(h: *H, l: Lane, held: ?*lanechart.Held) N {
+fn lane(h: *H, l: Lane, held: ?*lanechart.Held, on_mastery: ?tree.Handler) N {
     var opts = h.list();
     for (l.options, 0..) |o, i| opts.add(option(h, i, o, l.mode == .locked));
     return h.section(.{ .class = "lane" }, .{
@@ -121,11 +123,14 @@ fn lane(h: *H, l: Lane, held: ?*lanechart.Held) N {
         if (l.sentence.len > 0) h.p(.{ .class = "say", .data_thin = l.thin }, .{l.sentence}) else null,
         if (l.chart) |c| if (held) |x| x.at(c, W.gold).view(h) else null else null,
         if (l.chart != null and l.caption.len > 0) h.p(.{ .class = "scope" }, .{l.caption}) else null,
-        h.h3(.{}, .{switch (l.mode) {
-            .blind => W.head_blind,
-            .counter => W.head_counter,
-            .locked => W.head_locked,
-        }}),
+        h.div(.{ .class = "opts-head" }, .{
+            h.h3(.{}, .{switch (l.mode) {
+                .blind => W.head_blind,
+                .counter => W.head_counter,
+                .locked => W.head_locked,
+            }}),
+            if (l.mastery) |m| chip.view(h, .{ .pressed = m, .on = on_mastery }, .{W.mastery}) else null,
+        }),
         if (l.options.len == 0) h.p(.{ .class = "say" }, .{W.none}) else h.el(.ol, .{ .class = "opts" }, .{opts.done()}),
         if (l.scope.len > 0) h.p(.{ .class = "scope" }, .{l.scope}) else null,
     });
@@ -189,6 +194,7 @@ const W = struct {
     const head_blind = plain("Options that hold up blind");
     const head_counter = plain("Options into them");
     const head_locked = plain("Other options");
+    const mastery = plain("Count mastery");
     const none = plain("No champion you can pick has enough games in this role.");
     const your_lane = plain("your lane");
     const ban_now = plain("Your ban");
@@ -213,6 +219,7 @@ pub const css =
     \\  .c-cs .tags { display: flex; gap: 4px; flex-wrap: wrap; }
     \\  .c-cs .say { margin: 0; color: var(--text); }
     \\  .c-cs .say[data-thin] { color: var(--muted); }
+    \\  .c-cs .opts-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--sp-2); flex-wrap: wrap; }
     \\  .c-cs .scope { margin: 0; font-size: var(--fs-xs); color: var(--faint); }
     \\  .c-cs .opts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
     \\  .c-cs .opts > li { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2);
@@ -273,6 +280,7 @@ pub const sample: Screen = .{
                 .reasons = &.{.{ .text = "few games in this matchup", .lean = .bad }},
             },
         },
+        .mastery = true,
         .scope = "EUW, last 30 days",
     },
 };
@@ -301,8 +309,8 @@ fn chartState(h: *H) ?*lanechart.Held {
 
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
-    g.addFill("counter, public", view(h, sample, chartState(h)));
-    g.addFill("counter, private", view(h, private(h, sample), chartState(h)));
+    g.addFill("counter, public", view(h, sample, chartState(h), null));
+    g.addFill("counter, private", view(h, private(h, sample), chartState(h), null));
     g.addFill("your ban, blind", view(h, .{
         .board = .{ .lanes = draftboard.sample.lanes[0..5], .bans_them = draftboard.sample.bans_them },
         .banning = true,
@@ -310,6 +318,6 @@ pub fn gallery(g: *Gallery) void {
             .{ .champ = demo("Yasuo", "Yasuo"), .role = .mid, .mine = true, .why = "wins often and is picked a lot in mid" },
             .{ .champ = demo("Smolder", "Smolder"), .role = .bot, .why = "wins often and is picked a lot in bot" },
         },
-        .lane = .{ .role = .mid, .options = sample.lane.options[1..], .scope = "EUW, last 30 days" },
-    }, null));
+        .lane = .{ .role = .mid, .options = sample.lane.options[1..], .mastery = false, .scope = "EUW, last 30 days" },
+    }, null, null));
 }

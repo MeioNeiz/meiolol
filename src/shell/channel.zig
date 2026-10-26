@@ -60,6 +60,8 @@ pub const FromPage = union(enum) {
     open: []const u8,
     /// The sign-in form (ui/signin.zig), for the poller's device.zig. Never logged
     signin: struct { username: []const u8, password: []const u8 },
+    /// Options weigh the player's mastery points (champ select's toggle)
+    mastery: bool,
 };
 
 /// Pages send small messages; a larger one is a bug or not ours
@@ -117,6 +119,7 @@ test "from page: each kind parses, anything else is an error" {
     try std.testing.expectEqual(@as(u32, 12), (try read(a, "{\"drawn\":12}")).drawn);
     try std.testing.expectEqualStrings("https://meio.lol/", (try read(a, "{\"open\":\"https://meio.lol/\"}")).open);
     try std.testing.expectEqualStrings("a\"b", (try read(a, "{\"signin\":{\"username\":\"ann\",\"password\":\"a\\\"b\"}}")).signin.password);
+    try std.testing.expectEqual(false, (try read(a, "{\"mastery\":false}")).mastery);
     try std.testing.expectError(error.UnknownField, read(a, "{\"quit\":{}}"));
     try std.testing.expect(std.meta.isError(read(a, "{\"drawn\":-1}")));
     try std.testing.expect(std.meta.isError(read(a, "not json")));

@@ -5,6 +5,8 @@ const std = @import("std");
 
 pub const Out = union(enum) {
     signin: SignIn,
+    /// Options weigh your mastery points
+    mastery: bool,
 };
 
 pub const SignIn = struct { username: []const u8, password: []const u8 };
@@ -23,6 +25,7 @@ pub fn json(o: Out, w: *std.Io.Writer) std.Io.Writer.Error!void {
             try string(w, x.password);
             try w.writeAll("}}");
         },
+        .mastery => |on| try w.writeAll(if (on) "{\"mastery\":true}" else "{\"mastery\":false}"),
     }
 }
 
@@ -48,4 +51,7 @@ test "a tagged object, strings escaped" {
     defer arena.deinit();
     const back = try std.json.parseFromSliceLeaky(Out, arena.allocator(), w.buffered(), .{});
     try std.testing.expectEqualStrings("a\"b\\\x01é", back.signin.password);
+    w = .fixed(&buf);
+    try json(.{ .mastery = false }, &w);
+    try std.testing.expectEqual(false, (try std.json.parseFromSliceLeaky(Out, arena.allocator(), w.buffered(), .{})).mastery);
 }

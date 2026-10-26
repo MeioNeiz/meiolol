@@ -598,6 +598,7 @@ fn messageReceived(_: *Handler, _: [*c]c.ICoreWebView2, args: [*c]c.ICoreWebView
         .drawn => |n| measure.drawn(n),
         .open => |url| openExternal(url),
         .signin => |x| client.signIn(x.username, x.password),
+        .mastery => |on| client.mastery(on),
     }
     return 0;
 }

@@ -323,6 +323,7 @@ fn lane(a: Allocator, c: Ctx, card: *const lanecard.Card, mode: board.Mode) !ui.
         .chart = chart,
         .caption = if (card.matchup) |m| try a.print("Gold, you minus them: the line is the average, the band the middle half of {d} games ({s}, EUW, {s}).", .{ m.games, m.bracket.label(), card.period }) else "",
         .options = options,
+        .mastery = state.by_mastery.load(.acquire),
         .scope = if (card.period.len > 0) try a.print("EUW, {s}", .{card.period}) else "EUW",
     };
 }

@@ -131,6 +131,7 @@ fn received(_: Id, _: Sel, _: Id, message: Id) callconv(.c) void {
             _ = msg(bool, ws, "openURL:", .{msg(Id, cls("NSURL"), "URLWithString:", .{nsString(z.ptr)})});
         },
         .signin => |x| client.signIn(x.username, x.password),
+        .mastery => |on| client.mastery(on),
     }
 }
 
