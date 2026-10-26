@@ -61,6 +61,7 @@ pub const histogram = @import("histogram.zig");
 pub const lane = @import("lane.zig");
 pub const timeline = @import("timeline.zig");
 pub const gamedata = @import("gamedata.zig");
+pub const yourlist = @import("yourlist.zig");
 pub const gamepage = @import("gamepage.zig");
 pub const gamehead = @import("gamehead.zig");
 pub const inspector = @import("inspector.zig");

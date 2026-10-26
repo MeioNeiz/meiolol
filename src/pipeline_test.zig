@@ -635,6 +635,16 @@ test "fixture games to stats, curves and the website" {
         const d = try ui.data.decode(arena, ui.gamedata.Data, bin);
         try testing.expectEqual(games, d.games.len);
     }
+    // The list: the default role's games, each with its page on game.html
+    const list = try ui.data.decode(arena, ui.yourlist.List, (try core_loaded.get(arena, "data/your/list.bin")).?);
+    const mid = try ui.data.decode(arena, ui.gamedata.Data, (try core_loaded.get(arena, "data/your/mid.bin")).?);
+    try testing.expectEqualStrings("Example player", list.player.name);
+    try testing.expectEqual(games, list.games.len);
+    for (list.games, mid.games, 0..) |row, g, i| {
+        try testing.expectEqual(@as(?u16, @intCast(i)), row.page);
+        try testing.expectEqual(g.me().cs, row.cs.?);
+        try testing.expectEqualStrings(mid.champs[g.me().champ].name, list.champs[row.champ].name);
+    }
     // Sitemaps list rendered pages: the root one static, the views' rendered
     const sitemap = try core_dir.readFileAlloc(io, "sitemap.xml", arena, .limited(1 << 20));
     for ([_][]const u8{ "https://x.io/champion/darius.html", "https://x.io/matchup/top/mordekaiser-vs-darius.html", "https://x.io/daily.html", "https://x.io/learn.html" }) |want| {

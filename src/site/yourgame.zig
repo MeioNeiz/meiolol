@@ -10,6 +10,7 @@ const Date = @import("../date.zig").Date;
 const html = @import("html.zig");
 const assets = @import("assets.zig");
 const root = @import("root.zig");
+const yourlist = @import("yourlist.zig");
 const Champ = root.Champ;
 const Site = root.Site;
 const File = root.File;
@@ -44,6 +45,13 @@ pub fn files(site: *const Site, json: []const u8, out: *std.ArrayList(File)) !vo
         try ui.data.encode(a, gd.Data, d, &bytes);
         try out.append(a, .{ .path = try a.print(data_dir ++ "{s}.bin", .{r}), .data = bytes.items });
     }
+    // After the role files: writePage reads the first file in data_dir
+    if (ex.player(ex.default)) |pl| if (pl.report) |report| {
+        const l = try yourlist.list(a, pl.player orelse .{}, report.games, names(site), site, siteChamp);
+        var bytes: std.ArrayList(u8) = .empty;
+        try ui.data.encode(a, ui.yourlist.List, l, &bytes);
+        try out.append(a, .{ .path = yourlist.path, .data = bytes.items });
+    };
 }
 
 /// Items, spells and runes from the view's builds file; none without one (icons then
@@ -55,6 +63,13 @@ fn names(site: *const Site) Names {
 
 fn siteIcon(site: *const Site, ch: Champ) anyerror![]const u8 {
     return site.icon(ch);
+}
+
+fn siteChamp(site: *const Site, id: u32) anyerror!ui.champ.Champ {
+    const ch = for (site.champs) |c| {
+        if (c.id == id) break c;
+    } else return error.UnknownChampion;
+    return .{ .name = ch.name, .src = try site.icon(ch) };
 }
 
 /// The default role's newest game; false without the example's files
@@ -112,7 +127,21 @@ pub const Example = struct {
     support: ?Player = null,
 
     /// No report: the role's player isn't ready
-    pub const Player = struct { report: ?struct { games: []const game.Game } = null };
+    pub const Player = struct {
+        player: ?Who = null,
+        report: ?struct { games: []const game.Game } = null,
+    };
+
+    /// api/root.zig PlayerOut
+    pub const Who = struct {
+        name: []const u8 = "",
+        tag: []const u8 = "",
+        platform: []const u8 = "",
+        tier: ?[]const u8 = null,
+        division: ?[]const u8 = null,
+        lp: ?i64 = null,
+        refreshed: i64 = 0,
+    };
 
     pub fn player(e: Example, role: []const u8) ?Player {
         inline for (.{ "top", "jungle", "mid", "bot", "support" }) |r| {
@@ -180,15 +209,15 @@ pub const Names = struct {
 };
 
 /// Data.arts, each item, spell and rune once
-const Arts = struct {
+pub const Arts = struct {
     names: Names,
     list: std.ArrayList(ui.art.Art) = .empty,
     /// Kind in the high bits, so an item and a rune with one id stay apart
     keys: std.ArrayList(u64) = .empty,
 
-    const Kind = enum(u2) { item, spell, rune };
+    pub const Kind = enum(u2) { item, spell, rune };
 
-    fn at(x: *Arts, a: Allocator, k: Kind, id: u32) !u16 {
+    pub fn at(x: *Arts, a: Allocator, k: Kind, id: u32) !u16 {
         if (id == 0) return gd.no_art;
         const key = @as(u64, @backingInt(k)) << 32 | id;
         if (std.mem.findScalar(u64, x.keys.items, key)) |i| return @intCast(i);
@@ -207,6 +236,14 @@ const Arts = struct {
     }
 };
 
+/// Your slot when the game has a page (a timeline and its detail)
+pub fn pageSlot(g: game.Game) ?usize {
+    const d = g.detail orelse return null;
+    if (g.players.len != d.seats.len or g.players.len > 10 or g.win_chance.len < 2) return null;
+    for (g.players, 0..) |p, i| if (p.you) return i;
+    return null;
+}
+
 /// Games with a timeline and its detail; `icon` makes a portrait URL
 pub fn data(arena: Allocator, champs: []const Champ, nm: Names, games: []const game.Game, ctx: anytype, icon: fn (@TypeOf(ctx), Champ) anyerror![]const u8) !gd.Data {
     var used: std.ArrayList(ui.champ.Champ) = .empty;
@@ -214,11 +251,8 @@ pub fn data(arena: Allocator, champs: []const Champ, nm: Names, games: []const g
     var arts: Arts = .{ .names = nm };
     var out: std.ArrayList(gd.Game) = .empty;
     for (games) |g| {
-        const d = g.detail orelse continue;
-        if (g.players.len != d.seats.len or g.players.len > 10 or g.win_chance.len < 2) continue;
-        const you = for (g.players, 0..) |p, i| {
-            if (p.you) break i;
-        } else continue;
+        const you = pageSlot(g) orelse continue;
+        const d = g.detail.?;
         const team = g.players[you].team;
 
         const seats = try arena.alloc(gd.Seat, g.players.len);
