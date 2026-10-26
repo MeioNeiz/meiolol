@@ -44,12 +44,17 @@ pub const chart = @import("chart.zig");
 pub const dotplot = @import("dotplot.zig");
 pub const trend = @import("trend.zig");
 pub const histogram = @import("histogram.zig");
+pub const art = @import("art.zig");
+pub const skillgrid = @import("skillgrid.zig");
+pub const itempath = @import("itempath.zig");
+pub const runetree = @import("runetree.zig");
+pub const buildpanel = @import("buildpanel.zig");
 
 /// Components whose CSS ships (css.join): add one when a page first uses it
 pub const components = .{};
 
 /// Every component, in the gallery's order
-pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, role, champ, site, rolepicker, filterbar, champsearch, table, chart, dotplot, trend, histogram };
+pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, role, champ, site, rolepicker, filterbar, champsearch, table, chart, dotplot, trend, histogram, art, skillgrid, itempath, runetree, buildpanel };
 
 pub const H = tree.H;
 pub const N = tree.N;

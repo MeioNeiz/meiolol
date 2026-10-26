@@ -79,6 +79,11 @@ pub fn Spec(comptime Row: type) type {
         detail: ?*const fn (*H, *const Row) N = null,
         /// Two tables on a page: a short name for one, its URL keys' prefix ("opp")
         key: []const u8 = "",
+        /// Under this many games a row fades
+        thin: u32 = fmt.thin_games,
+        /// Rows inside another component (a build slot): no card or head band, tighter
+        /// rows, columns give way at 200 and 150 px
+        compact: bool = false,
     };
 }
 
@@ -121,6 +126,8 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
         min: u8 = 0,
         /// The row whose detail is open (an index into rows)
         open: ?u32 = null,
+        /// False: no column heads (a compact table whose figures are named elsewhere)
+        head: bool = true,
 
         const T = @This();
 
@@ -209,7 +216,7 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
                 return .none;
             };
             var ths = h.list();
-            inline for (spec.columns, 0..) |col, i| {
+            if (t.head) inline for (spec.columns, 0..) |col, i| {
                 const sorted = t.sort == i;
                 const cls = if (sorted) classes[1][i] else classes[0][i];
                 const can = comptime col.sort != null or col.name != null;
@@ -228,7 +235,7 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
                     label,
                     arrow,
                 }));
-            }
+            };
             var trs = h.list();
             const min = t.minimum();
             for (shown) |ri| {
@@ -236,20 +243,27 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
                 var tds = h.list();
                 inline for (spec.columns, 0..) |col, i| {
                     const cls = if (t.sort == i) classes[1][i] else classes[0][i];
-                    tds.add(h.td(.{ .class = if (cls.len > 0) cls else null }, .{col.cell(h, r)}));
+                    // Without heads the answer column is marked on its cells
+                    tds.add(h.td(.{ .class = if (cls.len > 0) cls else null, .data_answer = !t.head and col.answer and trs.items.items.len == 0 }, .{col.cell(h, r)}));
                 }
-                const thin = if (spec.games) |g| min == 0 and g(r) < fmt.thin_games else false;
+                const thin = if (spec.games) |g| min == 0 and g(r) < spec.thin else false;
                 const open = t.open == ri;
+                const on_open: ?tree.Handler = if (spec.detail != null) h.on(t, .{ .open = ri }) else null;
                 trs.add(h.tr(.{
                     .key = ri,
                     .data_state = if (thin) "thin" else null,
                     .aria_expanded = if (spec.detail != null) open else null,
-                    .on_click = if (spec.detail != null) h.on(t, .{ .open = ri }) else null,
+                    .on_click = on_open,
                 }, .{tds.done()}));
                 if (spec.detail) |d| if (open) trs.add(h.tr(.{ .key = ri | 0x8000_0000, .class = "detail" }, .{
                     h.td(.{ .colspan = ncols }, .{d(h, r)}),
                 }));
             }
+            const wrap = h.div(.{ .class = "c-table-wrap" }, .{h.table(.{ .class = "c-table", .data_v = if (spec.compact) "compact" else null }, .{
+                if (t.head) h.thead(.{}, .{h.tr(.{}, .{ths.done()})}) else null,
+                h.tbody(.{}, .{trs.done()}),
+            })});
+            if (spec.compact) return wrap;
             var controls = h.list();
             if (spec.search != null) controls.add(h.input(.{
                 .type = "search",
@@ -269,10 +283,7 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
             }
             return card.view(h, .{ .flush = true }, &.{
                 card.head(h, spec.title, phrase.num(h, .count, shown.len), controls.done()),
-                h.div(.{ .class = "c-table-wrap" }, .{h.table(.{ .class = "c-table" }, .{
-                    h.thead(.{}, .{h.tr(.{}, .{ths.done()})}),
-                    h.tbody(.{}, .{trs.done()}),
-                })}),
+                wrap,
             });
         }
     };
@@ -316,8 +327,16 @@ pub const css =
     \\  .c-table td:first-child, .c-table th:first-child { padding-left: var(--sp-3); }
     \\  .c-table td:last-child, .c-table th:last-child { padding-right: var(--sp-3); }
     \\  .c-table .c-bar { justify-content: flex-end; }
-    \\  @container (max-width: 560px) { .c-table .p3 { display: none; } }
-    \\  @container (max-width: 420px) { .c-table .p2 { display: none; } .c-table .c-bar > span { display: none; } }
+    \\  @container (max-width: 560px) { .c-table:not([data-v]) .p3 { display: none; } }
+    \\  @container (max-width: 420px) { .c-table:not([data-v]) .p2 { display: none; } .c-table .c-bar > span { display: none; } }
+    \\  .c-table[data-v="compact"] { font-size: var(--fs-s); }
+    \\  .c-table[data-v="compact"] :is(th, td) { height: 30px; padding: 0 3px; }
+    \\  .c-table[data-v="compact"] td.sorted { background: none; }
+    \\  .c-table[data-v="compact"] thead th { position: static; height: 26px; background: none; }
+    \\  .c-table[data-v="compact"] td:first-child, .c-table[data-v="compact"] th:first-child { padding-left: 0; }
+    \\  .c-table[data-v="compact"] td:last-child, .c-table[data-v="compact"] th:last-child { padding-right: 0; }
+    \\  @container (max-width: 200px) { .c-table[data-v="compact"] .p3 { display: none; } }
+    \\  @container (max-width: 150px) { .c-table[data-v="compact"] .p2 { display: none; } }
     \\}
     \\
 ;
