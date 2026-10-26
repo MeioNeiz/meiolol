@@ -26,6 +26,9 @@ pub const Dot = struct {
     /// The figure read out with the name ("49.9%")
     fig: tree.Text,
     thin: bool = false,
+    /// The matchup page: a double click opens it (Jacob v9: one click shows the brief, a
+    /// double click is the shortcut)
+    href: ?[]const u8 = null,
 };
 
 pub const Measure = struct {
@@ -65,7 +68,7 @@ pub const DotPlot = struct {
 
     const D = @This();
 
-    pub const Msg = union(enum) { pick: u16, key };
+    pub const Msg = union(enum) { pick: u16, open: u16, key };
 
     /// The dot the page shows figures for
     pub fn chosen(d: *const D) ?u16 {
@@ -101,6 +104,11 @@ pub const DotPlot = struct {
     pub fn update(d: *D, m: Msg, ev: *tree.Event) void {
         switch (m) {
             .pick => |i| d.sel = i,
+            // Through a link, so the browser navigates (and a middle click still could)
+            .open => |i| {
+                d.sel = i;
+                ev.after = .{ .op = .click, .ref = "dot-go" };
+            },
             .key => {
                 const step: i32 = if (std.mem.eql(u8, ev.text, "ArrowRight")) 1 else if (std.mem.eql(u8, ev.text, "ArrowLeft")) -1 else return;
                 var buf: [256]u16 = undefined;
@@ -145,6 +153,7 @@ pub const DotPlot = struct {
                         .aria_pressed = on,
                         .aria_label = W.dot.with(h, .{ .n = x.champ.name, .v = x.fig.s }),
                         .on_click = h.on(d, .{ .pick = k }),
+                        .on_dblclick = if (x.href != null) h.on(d, .{ .open = k }) else null,
                     }, .{h.img(.{ .src = x.champ.src, .alt = "" })}),
                     h.span(.{ .class = "tt", .aria_hidden = true }, .{ h.b(.{}, .{x.champ.name}), " ", x.fig, " · ", W.games.with(h, .{ .n = x.games }) }),
                 }));
@@ -174,6 +183,7 @@ pub const DotPlot = struct {
                 h.span(.{ .class = "end" }, .{d.m.lo}),
                 h.span(.{ .class = "end", .data_at = "hi" }, .{d.m.hi}),
             }),
+            if (ch) |k| if (d.dots[k].href) |href| h.a(.{ .href = href, .hidden = true, .tabindex = @as(i8, -1), .data_ref = "dot-go" }, .{d.dots[k].champ.name}) else null else null,
         });
     }
 };
@@ -256,6 +266,7 @@ pub const demo_dots = blk: {
         .games = r[3],
         .fig = plain(std.fmt.comptimePrint("{d:.1}%", .{r[2]})),
         .thin = r[3] < 400,
+        .href = "#vs-" ++ r[0],
     };
     break :blk out;
 };
@@ -299,4 +310,34 @@ test "the most played is chosen first; arrows walk bins left to right" {
     ev = .{ .kind = .keydown, .text = "ArrowLeft" };
     d.update(.key, &ev);
     try testing.expectEqual(@as(?u16, 0), d.chosen());
+}
+
+test "on the fake DOM: a double click picks the dot and follows its matchup link" {
+    const island = @import("island.zig");
+    const Fake = @import("fakedom.zig").Fake;
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fake: Fake = .{ .a = a };
+    var rt: island.Runtime(Fake) = .init(a, &fake);
+    var server: DotPlot = .{ .dots = &demo_dots, .m = .{ .label = demo_label } };
+    var state = server;
+    const t = try a.create(tree.Tree);
+    t.* = .{};
+    var h: H = .init(a, t);
+    t.root = server.view(&h);
+    fake.server = t;
+    const i = try rt.add(DotPlot, &state, &server, "#dots");
+    const cur = i.current();
+    // Dr. Mundo, the hardest
+    const mundo = cur.node(cur.find(cur.root, "aria-label", "Dr. Mundo 43.2%").?).dom;
+    _ = rt.event(0, .{ .kind = .click, .target = mundo });
+    _ = rt.event(0, .{ .kind = .click, .target = mundo });
+    try testing.expectEqual(@as(?u16, 0), state.sel);
+    try testing.expectEqual(@as(u32, 0), fake.clicked);
+    _ = rt.event(0, .{ .kind = .dblclick, .target = mundo });
+    try testing.expectEqual(@as(u32, 1), fake.clicked);
+    const now = i.current();
+    try testing.expectEqualStrings("#vs-DrMundo", now.attr(now.find(now.root, "data-ref", "dot-go").?, "href").?);
+    try testing.expectEqual(@as(u32, 0), fake.warnings);
 }

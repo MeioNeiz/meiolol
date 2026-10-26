@@ -110,6 +110,7 @@ pub const Ev = enum(u4) {
     pointerleave,
     pointercancel,
     toggle,
+    dblclick,
 };
 
 /// A DOM event as Zig sees it. Pointer x is relative to the handler's element, w its width
