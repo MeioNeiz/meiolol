@@ -97,7 +97,7 @@ without its slash with a 301.
   practice games stay on the db. The heavy loads read in parallel: filters in 4 runs of
   games, learning in 4 puuid ranges, each on its own read-only connection
   (schema.openSibling), and filters beside the people tallies; the box waits on cold
-  pages, one read in flight each. docs/backlog.md "Parallel reads". views.log gives each
+  pages, one read in flight each. views.log gives each
   phase's CPU time beside its time. views.bin is ~150 MB, read in ~14 s; the renderer
   holds ~2.0 GB (curves files ~940 MB of it)
 - A deploy runs deploy/render-swap.sh: it starts the idle instance beside the running
@@ -217,18 +217,18 @@ without its slash with a 301.
   header X-Meiolol-Action: 1, which a cross-site form cannot send, and X-Meiolol-Role
   (nginx, from the login check) with run_actions: the owner only. 8091 takes only the
   web server
-- Logins (docs/plan/accounts.md; src/api/accounts.zig, roles.zig):
-  `meiolol api` answers /auth/ (nginx location /auth/, unlogged, 4 KB bodies) from
-  /var/lib/meiolol-api/accounts.db; desktop apps sign in with POST /auth/device and
-  send their token as Authorization: Bearer, good for /auth/check/download_private_app
-  only (accounts.md AC4). nginx auth_request /_meiolol_admin
-  (/auth/check/view_admin) guards /admin/, /admin/api/, /admin/ops/ and /admin/training/; no
-  login sends a page to /login.html?next=, a lower role gets 403 (meiolol-api.htpasswd
-  is unused). /account.html: own password, log out
-  everywhere. The admin page's Accounts tab (manage_accounts) lists logins, makes invite
-  and reset links, changes roles and disables, below the signed-in role only. Accounts by
-  hand: `sudo -u meiolol-api meiolol account ... --data /var/lib/meiolol-api` on jomify
-  (list, reset, link, revoke-links, delete; the owner only here).
+- Logins (docs/plan/accounts.md; src/api/accounts.zig, roles.zig): `meiolol api` answers
+  /auth/ (nginx location /auth/, unlogged, 4 KB bodies) from
+  /var/lib/meiolol-api/accounts.db; desktop apps sign in with POST /auth/device and send
+  their token as Authorization: Bearer, good for /auth/check/download_private_app only
+  (accounts.md AC4). nginx auth_request /_meiolol_admin (/auth/check/view_admin) guards
+  /admin/, /admin/api/, /admin/ops/ and /admin/training/; no login sends a page to
+  /login.html?next=, a lower role gets 403 (meiolol-api.htpasswd is unused).
+  /account.html: own password, log out everywhere. The admin page's Accounts tab
+  (manage_accounts) lists logins, makes invite and reset links, changes roles and
+  disables, below the signed-in role only. Accounts by hand: `sudo -u meiolol-api
+  meiolol account ... --data /var/lib/meiolol-api` on jomify (list, reset, link,
+  revoke-links, delete; the owner only here).
 - Private site (/p/, docs/plan/accounts.md AC3): static, uploaded by the web loop to
   /var/www/meiolol/p (`meiolol admin --private-out`: the Draft tester in private mode, the
   shipped models in models/). nginx location /p/ with auth_request /_meiolol_private
