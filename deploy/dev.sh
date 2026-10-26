@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Site dev loop on the Mac: `meiolol dev` renders each page on request from data loaded
 # once (default data/snap: deploy/box.sh snapshot), CSS and JS straight from
-# src/site/static, at http://localhost:8080. `zig build --watch` rebuilds on any source
-# edit; the server replaces itself with the new binary and open pages reload. Extra
-# arguments go to `meiolol dev` (--port, --euw-only, --patch, ...). `--exports` first
+# src/site/static, at http://localhost:8080. `zig build backend --watch` rebuilds on any
+# source edit; the server replaces itself with the new binary and open pages reload.
+# One server serves every session: the shared tree's pages as they are, a build that
+# fails keeping the last good one; started again it says where it runs and exits.
+# Extra arguments go to `meiolol dev` (--port, --euw-only, --patch, ...). `--exports` first
 # fetches the box's curves, builds, lean and Daily Draft files into $data (~1.2 GB): older
 # curves files fail to load, so matchup pages and gold columns stay empty.
 set -euo pipefail
@@ -26,10 +28,19 @@ for f in "$data"/export/*curves*.bin; do
     [[ "$have" == "$want" ]] || echo "$f is curves v$have, this build reads v$want:" \
         "matchup pages stay empty (deploy/dev.sh --exports fetches the box's)"
 done
+port=8080
+for ((i = 1; i <= $#; i++)); do
+    [[ ${!i} == --port ]] && { j=$((i + 1)); port=${!j}; }
+done
+if pid=$(lsof -tiTCP:"$port" -sTCP:LISTEN 2> /dev/null) && [[ -n $pid ]]; then
+    echo "already serving: http://localhost:$port (pid $pid, $(ps -o args= -p "$pid" | cut -c1-60));" \
+        "builds: .zig-cache/dev-watch.log"
+    exit 0
+fi
 # Its own prefix, so other sessions' builds don't restart it
 prefix=zig-out/dev
-zig build --prefix "$prefix"
-zig build --watch --prefix "$prefix" > .zig-cache/dev-watch.log 2>&1 &
+deploy/slots.sh 1 zig build backend --prefix "$prefix"
+zig build backend --watch --prefix "$prefix" > .zig-cache/dev-watch.log 2>&1 &
 watch=$!
 trap 'kill $watch 2> /dev/null' EXIT
 "$prefix/bin/meiolol" dev --data "$data" "$@"

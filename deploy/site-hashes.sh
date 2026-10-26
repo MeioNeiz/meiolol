@@ -8,9 +8,10 @@
 set -u
 root=$(cd "$(dirname "$0")/.." && pwd)
 rev=$(git -C "$root" rev-parse --verify HEAD) || exit 1
-# The ci tree: its zig cache is warm from every pre-push. It is reset at its next use
+# A tree of its own, not pre-push's "ci": a commit never waits for a push's ci. A
+# build slot, as zb.sh's test. It is reset at its next use
 # shellcheck disable=SC2016 # the inner sh expands them
-"$root/deploy/build-tree.sh" ci "$rev" sh -c '
+"$root/deploy/slots.sh" 1 "$root/deploy/build-tree.sh" hashes "$rev" sh -c '
     root=$1 short=$2 out=$3 tree=$(pwd)
     shift 3
     if [ $# -gt 0 ]; then

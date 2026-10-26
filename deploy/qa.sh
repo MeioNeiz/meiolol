@@ -12,7 +12,7 @@ if [[ "${1:-}" =~ ^https?:// ]]; then
 fi
 
 port=8097
-lockf "$HOME/.cache/meiolol-zig.lock" zig build backend --prefix zig-out/qa
+deploy/slots.sh 1 zig build backend --prefix zig-out/qa
 log=$(mktemp)
 zig-out/qa/bin/meiolol dev --data data/snap --port "$port" >"$log" 2>&1 &
 pid=$!

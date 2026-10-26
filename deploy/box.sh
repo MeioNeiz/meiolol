@@ -170,7 +170,8 @@ case "${1:-}" in
         # serving (render-swap.sh swaps after the round's upload). A push the deploy
         # skipped (no change in src, deploy or build files) counts as there. Exit 0 there,
         # 1 the round's views write or the swap failed, 3 timeout (default 900 s; --live
-        # 5400 s)
+        # 5400 s), 4 at once when REV is not on main and pushes are in bulk mode
+        # (deploy/push.sh): it goes with the next batch
         rev=origin/main live=0 timeout=''
         for a in "${@:2}"; do
             case $a in
@@ -182,6 +183,11 @@ case "${1:-}" in
         done
         [[ -n $timeout && $timeout != next ]] || timeout=$(( live ? 5400 : 900 ))
         sha=$(git -C "$ROOT" rev-parse "$rev^{commit}")
+        if ! git -C "$ROOT" merge-base --is-ancestor "$sha" refs/remotes/origin/main 2> /dev/null \
+            && [[ $(cut -d' ' -f1 "${MEIOLOL_PUSH_QUEUE:-$HOME/.cache/meiolol-push}/mode" 2> /dev/null) == bulk ]]; then
+            echo "${sha:0:7}: not on main, pushes are in bulk mode (deploy/push.sh --status): not waiting"
+            exit 4
+        fi
         end=$(( SECONDS + timeout ))
         while (( SECONDS < end )); do
             got=$(ssh "$HOST" "cd $DIR && tail -n 20 DEPLOYED; echo ---; \

@@ -30,7 +30,7 @@ S=/mnt/c/Windows/System32
 
 build() {
     local e=${1:-private}
-    (cd "$ROOT" && lockf ~/.cache/meiolol-zig.lock zig build shell -Doptimize=ReleaseSafe \
+    (cd "$ROOT" && deploy/slots.sh 1 zig build shell -Doptimize=ReleaseSafe \
         -Dedition="$e" --prefix "zig-out/shell/$e")
     echo "$ROOT/zig-out/shell/$e/bin/meiolol-shell.exe"
 }

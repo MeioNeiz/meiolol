@@ -7,11 +7,20 @@ zero=0000000000000000000000000000000000000000
 # Each check's start and result go to the admin page's Deploys tab (deploy-events.sh);
 # a refused push reaches the box in the background, a passed one with its deploy
 events=$root/deploy/deploy-events.sh
-while read -r _ sha remote_ref _; do
+while read -r _ sha remote_ref remote_sha; do
     [ "$remote_ref" = refs/heads/main ] && [ "$sha" != $zero ] || continue
+    # Docs, research and notes only: ci checks none of it (on-push.sh skips the deploy too)
+    if [ "$remote_sha" != $zero ] && git -C "$root" cat-file -e "$remote_sha^{commit}" 2> /dev/null \
+        && git -C "$root" diff --quiet "$remote_sha" "$sha" -- src deploy build.zig build.zig.zon; then
+        echo "pre-push: no change in src, deploy or build files: no ci"
+        "$events" add "$sha" ci skipped "no change in src, deploy or build files"
+        continue
+    fi
     echo "pre-push: zig build ci on $(git -C "$root" rev-parse --short "$sha")"
     "$events" add "$sha" ci start "zig build ci on the Mac"
-    if ! "$root/deploy/build-tree.sh" ci "$sha" zig build ci --cache-dir "$root/.zig-cache"; then
+    # 3 of the Mac's build slots (deploy/slots.sh), as zb.sh's ci
+    if ! "$root/deploy/slots.sh" 3 "$root/deploy/build-tree.sh" ci "$sha" \
+        zig build ci --cache-dir "$root/.zig-cache"; then
         # on-push.sh names deployed commits; a refused one would show with no message
         "$events" add "$sha" commit info "$(git -C "$root" log -1 --format='%h %s' "$sha")"
         "$events" add "$sha" ci failed "zig build ci failed: push refused"
