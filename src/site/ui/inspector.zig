@@ -22,6 +22,9 @@ const N = tree.N;
 pub const name = "RangeInspector";
 pub const scope = .{".c-insp"};
 
+/// Rows the stacked page shows before "All N" (gamepage's css)
+pub const list_cap = 5;
+
 pub const Filter = enum { all, yours, fights, objectives, deaths };
 
 const W = struct {
@@ -47,6 +50,7 @@ const W = struct {
     pub const moments = plain("Moments");
     pub const row = phrase.Phrase("{t:time}, win chance {d:signed}, kills {a:int}–{b:int}");
     pub const none = plain("No moments here");
+    pub const more = phrase.Phrase("All {n:int}");
 };
 
 pub const Inspector = struct {
@@ -56,14 +60,20 @@ pub const Inspector = struct {
     /// Parallel to tl.game.moments
     moments: []const gamedata.Moment,
     filter: Filter = .all,
+    /// Every row, where the page caps the list (stacked under the graph: list_cap)
+    all: bool = false,
 
     const I = @This();
 
-    pub const Msg = union(enum) { filter: Filter, pick: u8, clear };
+    pub const Msg = union(enum) { filter: Filter, pick: u8, clear, more };
 
     pub fn update(i: *I, m: Msg, ev: *tree.Event) void {
         switch (m) {
-            .filter => |f| i.filter = f,
+            .filter => |f| {
+                i.filter = f;
+                i.all = false;
+            },
+            .more => i.all = true,
             .pick => |k| {
                 i.tl.cur = k;
                 ev.push = true;
@@ -121,6 +131,7 @@ pub const Inspector = struct {
             i.seats(h, sum),
             i.chips(h),
             i.list(h),
+            i.more(h),
         });
     }
 
@@ -204,7 +215,14 @@ pub const Inspector = struct {
         for (i.moments, 0..) |m, k| if (i.shown(m)) l.add(i.row(h, m, k));
         const rs = l.done();
         if (rs.len == 0) return h.p(.{ .class = "none" }, .{W.none});
-        return h.el(.ol, .{ .class = "ml", .aria_label = W.moments }, .{rs});
+        return h.el(.ol, .{ .class = "ml", .aria_label = W.moments, .data_all = i.all or rs.len <= list_cap }, .{rs});
+    }
+
+    fn more(i: *I, h: *H) ?N {
+        var n: usize = 0;
+        for (i.moments) |m| n += @intFromBool(i.shown(m));
+        if (i.all or n <= list_cap) return null;
+        return h.button(.{ .class = "more", .type = "button", .on_click = h.on(i, .more) }, .{W.more.with(h, .{ .n = n })});
     }
 
     fn row(i: *I, h: *H, m: gamedata.Moment, k: usize) N {
@@ -252,10 +270,11 @@ pub const css =
     \\  .c-insp { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; container-type: inline-size; }
     \\  .c-insp > .head { display: flex; align-items: center; gap: var(--sp-2); }
     \\  .c-insp .sp { font-size: var(--fs-l); font-variant-numeric: tabular-nums; }
-    \\  .c-insp .esc { all: unset; margin-left: auto; padding: 2px 6px; border-radius: var(--r-s); cursor: pointer;
+    \\  .c-insp .esc, .c-insp > .more { all: unset; margin-left: auto; padding: 2px 6px; border-radius: var(--r-s); cursor: pointer;
     \\    font-size: var(--fs-xs); color: var(--muted); box-shadow: inset 0 0 0 1px var(--line-2); }
-    \\  .c-insp .esc:hover { color: var(--text); }
-    \\  .c-insp .esc:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+    \\  .c-insp .esc:hover, .c-insp > .more:hover { color: var(--text); }
+    \\  .c-insp .esc:focus-visible, .c-insp > .more:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+    \\  .c-insp > .more { display: none; }
     \\  .c-insp > .sum { display: flex; gap: var(--sp-3); align-items: flex-start; }
     \\  .c-insp > .sum > .c-map { width: 112px; }
     \\  .c-insp .rows { flex: 1; min-width: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px var(--sp-3);

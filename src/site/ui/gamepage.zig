@@ -533,7 +533,7 @@ pub const GameLane = struct {
 
 pub const css =
     \\@layer components {
-    \\  .c-gpage { min-width: 0; container-type: inline-size; }
+    \\  .c-gpage { min-width: 0; container: gpage / inline-size; }
     \\  .c-gpage > .g { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--sp-4); align-items: start; }
     \\  .c-gpage .part { display: contents; }
     \\  .c-gpage .part > * { grid-column: 1 / -1; }
@@ -557,6 +557,12 @@ pub const css =
     \\    .c-gpage .part:nth-child(2) > :first-child { grid-column: 1; }
     \\    .c-gpage .rg { order: 1; flex-basis: 100%; }
     \\    .c-gpage .bld { grid-template-columns: minmax(0, 1fr); }
+    \\  }
+    \\  /* Named: the inspector is a container itself, nearer its rows than the page */
+    \\  @container gpage (max-width: 820px) {
+    \\    .c-gpage .c-insp .ml { max-height: none; }
+    \\    .c-gpage .c-insp .ml:not([data-all]) > li:nth-child(n+6):not([data-cur]) { display: none; }
+    \\    .c-gpage .c-insp > .more { display: block; margin: 0; padding: var(--sp-2); text-align: center; font-size: var(--fs-s); }
     \\  }
     \\}
     \\
