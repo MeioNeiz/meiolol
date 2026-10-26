@@ -25,7 +25,7 @@ pub fn data(site: *const Site) !ld.Data {
     const a = site.arena;
     var chapters: std.ArrayList(ld.Chapter) = .empty;
     const all = [_]ld.Chapter{
-        .{ .title = "What does each role do?", .puzzles = try starter(site) },
+        .{ .title = "The basics", .puzzles = try starter(site) },
         .{ .title = "Does knowing your champion matter?", .puzzles = &fixed.chapter1 },
         .{ .title = "Whose lead wins games?", .puzzles = &fixed.chapter2 },
         .{ .title = "Does winning lane win the game?", .puzzles = try lane(site) },
@@ -42,10 +42,11 @@ pub fn data(site: *const Site) !ld.Data {
     return .{ .ddragon = site.ddragon_version, .chapters = chapters.items, .start = start };
 }
 
-// TODO(L2): counters, early or late, damage, duos from site/learn.zig's selection
+/// Chapter 0 (plan "Chapter 0"): tiles of clear examples, the question on another
 fn starter(site: *const Site) ![]const ld.Puzzle {
     var out: std.ArrayList(ld.Puzzle) = .empty;
-    if (try roles(site)) |p| try out.append(site.arena, p);
+    const all = [_]?ld.Puzzle{ try roles(site), try counterBasic(site), try leanBasic(site), try damageBasic(site), try duoBasic(site) };
+    for (all) |x| if (x) |p| try out.append(site.arena, p);
     return out.items;
 }
 
@@ -505,4 +506,279 @@ fn counterPuzzle(site: *const Site, r: Role) !?ld.Puzzle {
         .games = games,
         .from = try a.print("Ranked games, every region, all ranks, last 30 days; {s} games only", .{laneName(r)}),
     };
+}
+
+/// Chapter 0's counters (plan "Chapter 0"): the counter wins the pair outright by 2 SE,
+/// this far under usual and 2 sd, in this many games, both champions in the top half of
+/// their role by games
+const basic_counter_gap = 0.04;
+const basic_counter_games = 500;
+
+/// x losing clearly to t.o in role r
+const Lopsided = struct { r: Role, x: u32, t: Against };
+
+fn lopsided(a: std.mem.Allocator, curves: *const curvesfile.Curves) ![]Lopsided {
+    var out: std.ArrayList(Lopsided) = .empty;
+    for ([_]Role{ .top, .middle, .bottom }) |r| {
+        const lanes: Lanes = try .init(a, curves, r);
+        var games: std.ArrayList(u64) = .empty;
+        var it = lanes.own.valueIterator();
+        while (it.next()) |t| try games.append(a, t.games);
+        if (games.items.len == 0) continue;
+        std.mem.sort(u64, games.items, {}, std.sort.desc(u64));
+        const popular = games.items[games.items.len / 2];
+        for (lanes.pairs) |h| for ([_]u32{ h.a, h.b }) |x| {
+            const t = lanes.against(x, h);
+            if (t.games < basic_counter_games or -t.vs.mean < basic_counter_gap or -t.vs.mean < 2 * t.vs.sd) continue;
+            const won = root.ratio(t.wins, t.games);
+            if (0.5 - won < 2 * @sqrt(won * (1 - won) / @as(f64, @floatFromInt(t.games)))) continue;
+            if (lanes.own.get(x).?.games < popular or t.own.games < popular) continue;
+            try out.append(a, .{ .r = r, .x = x, .t = t });
+        };
+    }
+    std.mem.sort(Lopsided, out.items, {}, struct {
+        fn more(_: void, p: Lopsided, q: Lopsided) bool {
+            return p.t.vs.mean < q.t.vs.mean;
+        }
+    }.more);
+    return out.items;
+}
+
+/// Tiles of the two most lopsided counters; the question, "who wins?" on the next pair
+/// with neither champion on a tile
+fn counterBasic(site: *const Site) !?ld.Puzzle {
+    const curves = &(site.view_curves[(html.View{ .region = .all, .period = .days30 }).index()] orelse return null);
+    const a = site.arena;
+    var seen: std.ArrayList(u32) = .empty;
+    var tiles: std.ArrayList(ld.Tile) = .empty;
+    var asked: ?Lopsided = null;
+    for (try lopsided(a, curves)) |l| {
+        if (std.mem.indexOfScalar(u32, seen.items, l.x) != null or std.mem.indexOfScalar(u32, seen.items, l.t.o) != null) continue;
+        try seen.appendSlice(a, &.{ l.x, l.t.o });
+        if (tiles.items.len == 2) {
+            asked = l;
+            break;
+        }
+        const x = matchup.champ(site, l.x) orelse continue;
+        const o = matchup.champ(site, l.t.o) orelse continue;
+        try tiles.append(a, .{
+            .title = root.roleName(l.r),
+            .role = uiRole(l.r),
+            .champs = try a.dupe(ld.Champ, &.{ uiChamp(o), uiChamp(x) }),
+            .sep = "into",
+        });
+    }
+    const l = asked orelse return null;
+    const x = matchup.champ(site, l.x) orelse return null;
+    const o = matchup.champ(site, l.t.o) orelse return null;
+    const won = @round(100 * root.ratio(l.t.wins, l.t.games));
+    const o_first = std.mem.lessThan(u8, o.name, x.name);
+    const lose: ld.Choice = .{ .text = x.name, .champ = uiChamp(x), .shown = try a.print("won {d:.0}%", .{won}), .games = l.t.games };
+    const win: ld.Choice = .{ .text = o.name, .champ = uiChamp(o), .shown = try a.print("won {d:.0}%", .{100 - won}), .games = l.t.games };
+    return .{
+        .id = try a.print("basic-counter-{s}-{s}", .{ o.slug, x.slug }),
+        .q = "Who wins this lane more often?",
+        .ctx = try a.print("{s} against {s}, {s}", .{ x.name, o.name, laneName(l.r) }),
+        .setup = .{ .tiles = tiles.items },
+        .answer = .{ .pick = .{
+            .right = if (o_first) 0 else 1,
+            .choices = try a.dupe(ld.Choice, if (o_first) &.{ win, lose } else &.{ lose, win }),
+        } },
+        .why = try a.print("{s} wins {d:.0}% of these games: a counter to {s}.", .{ o.name, 100 - won, x.name }),
+        .tip = "A few matchups are lopsided: know the ones that beat your champion.",
+        .games = l.t.games,
+        .from = try a.print("Ranked games, every region, all ranks, last 30 days; {s} games only", .{laneName(l.r)}),
+    };
+}
+
+/// Tiles of the three most played clearly early and clearly late champions; the
+/// question on the next most played, none of them in "Does winning lane win the game?",
+/// each in its main role
+fn leanBasic(site: *const Site) !?ld.Puzzle {
+    const file = site.lean orelse return null;
+    const a = site.arena;
+    var seen: std.ArrayList(u32) = .empty;
+    for (try leanRows(a, file.rows, file.games / 100)) |r| try seen.append(a, r.champion);
+    var clear: std.ArrayList(lean.Row) = .empty;
+    for (file.rows) |r| {
+        const c = matchup.champ(site, r.champion) orelse continue;
+        const main, _, _ = share(site, c.c);
+        if (main == r.role and leanClear(r)) try clear.append(a, r);
+    }
+    std.mem.sort(lean.Row, clear.items, {}, struct {
+        fn more(_: void, x: lean.Row, y: lean.Row) bool {
+            return x.games > y.games;
+        }
+    }.more);
+    var tiles: [2]std.ArrayList(ld.Champ) = .{ .empty, .empty };
+    var asked: ?struct { lean.Row, Champ } = null;
+    for (clear.items) |r| {
+        if (std.mem.indexOfScalar(u32, seen.items, r.champion) != null) continue;
+        const c = matchup.champ(site, r.champion) orelse continue;
+        try seen.append(a, r.champion);
+        const t = &tiles[if (r.lean() == .early) 0 else 1];
+        if (t.items.len < 3) {
+            try t.append(a, uiChamp(c));
+        } else if (tiles[0].items.len == 3 and tiles[1].items.len == 3) {
+            asked = .{ r, c };
+            break;
+        }
+    }
+    const r, const c = asked orelse return null;
+    const early = r.lean() == .early;
+    const gold: root.Thousands = .{ .n = @trunc(@round(@abs(r.gold) / 10) * 10) };
+    const pts: i64 = @max(1, @as(i64, @trunc(@round(@abs(r.win)))));
+    return .{
+        .id = try a.print("basic-lean-{s}-{t}", .{ c.slug, r.role }),
+        .q = try a.print("{s}: early or late?", .{c.name}),
+        .ctx = try a.print("{s} {s}", .{ c.name, inRole(r.role) }),
+        .setup = .{ .tiles = try a.dupe(ld.Tile, &.{
+            .{ .title = "Early", .champs = tiles[0].items },
+            .{ .title = "Late", .champs = tiles[1].items },
+        }) },
+        .answer = .{ .pick = .{ .right = if (early) 0 else 1, .choices = try a.dupe(ld.Choice, &.{
+            .{ .text = "Early", .shown = if (early) try a.print("{f} gold ahead at {d}", .{ gold, lean.gold_minute }) else "", .games = r.games },
+            .{ .text = "Late", .shown = if (early) "" else try a.print("+{d} points from even at {d}", .{ pts, lean.win_minute }), .games = r.games },
+        }) } },
+        .why = if (early)
+            try a.print("{s} is ahead at {d} minutes, then wins fewer long, even games.", .{ c.name, lean.gold_minute })
+        else
+            try a.print("{s} is behind at {d} minutes, then wins more long, even games.", .{ c.name, lean.gold_minute }),
+        .tip = "Early champions want a short game; late ones a long one.",
+        .games = r.games,
+        .from = try a.print("Ranked games, {s}, games still going at {d} minutes", .{ file.scope, lean.win_minute }),
+    };
+}
+
+/// Mostly magic or mostly physical: this share of damage to champions or more
+const basic_damage_share = 0.8;
+
+/// Tiles of the three most played mostly magic and mostly physical champions; the
+/// question: which of the next ones is magic
+fn damageBasic(site: *const Site) !?ld.Puzzle {
+    const facts = site.learn orelse return null;
+    const a = site.arena;
+    var kinds: [2]std.ArrayList(Champ) = .{ .empty, .empty };
+    for (site.champs) |c| {
+        const m = facts.champs[c.c].magic orelse continue;
+        if (m >= basic_damage_share) try kinds[0].append(a, c);
+        if (1 - m >= basic_damage_share) try kinds[1].append(a, c);
+    }
+    for (&kinds) |*k| std.mem.sort(Champ, k.items, {}, struct {
+        fn more(_: void, x: Champ, y: Champ) bool {
+            return x.games > y.games;
+        }
+    }.more);
+    const m = kinds[0].items;
+    const p = kinds[1].items;
+    if (m.len < 4 or p.len < 5) return null;
+    var three = [_]Champ{ p[3], m[3], p[4] };
+    std.mem.sort(Champ, &three, {}, struct {
+        fn less(_: void, x: Champ, y: Champ) bool {
+            return std.mem.lessThan(u8, x.name, y.name);
+        }
+    }.less);
+    var choices: [3]ld.Choice = undefined;
+    var right: u8 = 0;
+    for (three, &choices, 0..) |c, *ch, i| {
+        if (c.id == m[3].id) right = @intCast(i);
+        ch.* = .{ .text = c.name, .champ = uiChamp(c), .shown = try a.print("{d:.0}% magic", .{@round(100 * facts.champs[c.c].magic.?)}) };
+    }
+    var tiles: [2]ld.Tile = undefined;
+    for (&tiles, [_][]const u8{ "Mostly magic", "Mostly physical" }, [_][]const Champ{ m, p }) |*t, title, k| {
+        var cs: [3]ld.Champ = undefined;
+        for (&cs, k[0..3]) |*x, c| x.* = uiChamp(c);
+        t.* = .{ .title = title, .champs = try a.dupe(ld.Champ, &cs) };
+    }
+    return .{
+        .id = try a.print("basic-magic-{s}", .{m[3].slug}),
+        .q = "Which of these deals mostly magic damage?",
+        .setup = .{ .tiles = try a.dupe(ld.Tile, &tiles) },
+        .answer = .{ .pick = .{ .right = right, .choices = try a.dupe(ld.Choice, &choices) } },
+        .why = try a.print("{d:.0}% of {s}'s damage to champions is magic.", .{ @round(100 * facts.champs[m[3].c].magic.?), m[3].name }),
+        .tip = "Mix magic and physical damage: armour alone then can't stop your team.",
+        .games = facts.damage_games,
+        .from = try a.print("Damage to champions in {d} recent ranked games, patch {s}", .{ facts.damage_games, site.patch }),
+    };
+}
+
+/// A bot and support pair counts from this many games together
+const duo_min_games = 300;
+
+const Duo = struct { bot: Champ, sup: Champ, wins: u32, games: u32, vs: champion.VsUsual };
+
+/// "Which pair wins more together?": a bot and support pair clearly over usual (2 sd)
+/// against the two most played pairs as usual, both clearly under it in raw win rate;
+/// none when no pair is clear (learned.md: duos move 1.3-1.6 points)
+fn duoBasic(site: *const Site) !?ld.Puzzle {
+    const st = &site.stats;
+    const a = site.arena;
+    const pairs: champion.Pairs = .{ .st = st, .r = .bottom, .r2 = .utility, .ally = true };
+    const k = champion.pairsUsualK(pairs);
+    var duos: std.ArrayList(Duo) = .empty;
+    for (site.champs) |x| {
+        const xs = st.champRole(.bottom, x.c);
+        if (xs.games < duo_min_games) continue;
+        for (site.champs) |y| {
+            const n = pairs.get(x.c, y.c);
+            if (x.c == y.c or n.games < duo_min_games) continue;
+            const ys = st.champRole(.utility, y.c);
+            const u = pairs.usualOf(root.ratio(xs.wins, xs.games), root.ratio(ys.wins, ys.games));
+            try duos.append(a, .{ .bot = x, .sup = y, .wins = n.wins, .games = n.games, .vs = .of(n.wins, n.games, u, k) });
+        }
+    }
+    var best: ?Duo = null;
+    for (duos.items) |d| {
+        if (d.vs.mean < 2 * d.vs.sd) continue;
+        if (best == null or d.vs.mean / d.vs.sd > best.?.vs.mean / best.?.vs.sd) best = d;
+    }
+    const b = best orelse return null;
+    var usual: [2]?Duo = .{ null, null };
+    for (duos.items) |d| {
+        if (d.bot.c == b.bot.c or d.sup.c == b.sup.c or @abs(d.vs.mean) > d.vs.sd) continue;
+        if (!clearlyAbove(b, d)) continue;
+        if (usual[0] != null and d.bot.c == usual[0].?.bot.c) continue;
+        if (usual[0] == null or d.games > usual[0].?.games) {
+            usual[1] = usual[0];
+            usual[0] = d;
+        } else if (usual[1] == null or d.games > usual[1].?.games) {
+            usual[1] = d;
+        }
+    }
+    var three = [_]Duo{ b, usual[0] orelse return null, usual[1] orelse return null };
+    std.mem.sort(Duo, &three, {}, struct {
+        fn less(_: void, x: Duo, y: Duo) bool {
+            return std.mem.lessThan(u8, x.bot.name, y.bot.name);
+        }
+    }.less);
+    var tiles: [3]ld.Tile = undefined;
+    var choices: [3]ld.Choice = undefined;
+    var right: u8 = 0;
+    var games: u32 = 0;
+    for (three, &tiles, &choices, 0..) |d, *t, *ch, i| {
+        if (d.bot.c == b.bot.c) right = @intCast(i);
+        games += d.games;
+        const name = try a.print("{s} + {s}", .{ d.bot.name, d.sup.name });
+        t.* = .{ .title = "", .champs = try a.dupe(ld.Champ, &.{ uiChamp(d.bot), uiChamp(d.sup) }), .sep = "+" };
+        ch.* = .{ .text = name, .shown = try a.print("won {d:.0}%", .{@round(100 * root.ratio(d.wins, d.games))}), .games = d.games };
+    }
+    return .{
+        .id = try a.print("basic-duo-{s}-{s}", .{ b.bot.slug, b.sup.slug }),
+        .q = "Which pair wins more together?",
+        .ctx = "A bot laner and a support, same team",
+        .setup = .{ .tiles = try a.dupe(ld.Tile, &tiles) },
+        .answer = .{ .pick = .{ .right = right, .choices = try a.dupe(ld.Choice, &choices) } },
+        .why = try a.print("{s} and {s} win more together than each does with others.", .{ b.bot.name, b.sup.name }),
+        .tip = "Bot and support is the pairing that matters: pick with your partner.",
+        .games = games,
+        .from = try a.print("Ranked games, patch {s}, bot laners and supports on one team", .{site.patch}),
+    };
+}
+
+/// x wins more than y by 2 standard errors of the difference
+fn clearlyAbove(x: Duo, y: Duo) bool {
+    const p = root.ratio(x.wins, x.games);
+    const q = root.ratio(y.wins, y.games);
+    const v = p * (1 - p) / @as(f64, @floatFromInt(x.games)) + q * (1 - q) / @as(f64, @floatFromInt(y.games));
+    return p - q >= 2 * @sqrt(v);
 }

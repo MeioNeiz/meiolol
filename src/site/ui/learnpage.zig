@@ -106,9 +106,9 @@ pub const Page = struct {
 
     pub fn update(p: *Page, m: Msg, ev: *tree.Event) void {
         switch (m) {
-            .guess => if (p.g.event(ev) == .commit) p.reveal(),
-            .lock => if (!p.revealed and p.g.value != null) p.reveal(),
-            .choose => |i| if (!p.revealed) {
+            .guess => return if (p.g.event(ev) == .commit) p.reveal(),
+            .lock => return if (!p.revealed and p.g.value != null) p.reveal(),
+            .choose => |i| return if (!p.revealed) {
                 p.pick = i;
                 p.reveal();
             },
@@ -124,12 +124,13 @@ pub const Page = struct {
                 ev.push = true;
             },
             .key => {
-                if (std.mem.eql(u8, ev.text, "Enter") and p.revealed) {
-                    p.advance();
-                    ev.handled = true;
-                }
+                if (!std.mem.eql(u8, ev.text, "Enter") or !p.revealed) return;
+                p.advance();
+                ev.handled = true;
             },
         }
+        // On a phone the answer sits below the stage: the next puzzle starts at its top
+        ev.after = .{ .op = .scroll, .ref = "main" };
     }
 
     fn advance(p: *Page) void {
@@ -163,7 +164,7 @@ pub const Page = struct {
         return h.div(.{ .class = "c-learn", .data_island = "learn", .data_bin = if (p.bin.len > 0) p.bin else null, .on_keydown = h.on(p, .key) }, .{
             p.strip(h),
             h.div(.{ .class = "grid" }, .{
-                h.div(.{ .class = "main" }, .{if (p.end) p.endCard(h) else p.puzzleCard(h)}),
+                h.div(.{ .class = "main", .data_ref = "main" }, .{if (p.end) p.endCard(h) else p.puzzleCard(h)}),
                 p.path(h),
             }),
         });
@@ -274,9 +275,12 @@ pub const Page = struct {
         var l = h.list();
         for (ts, 0..) |t, i| {
             var ics = h.list();
-            for (t.champs) |c| ics.add(p.icon(h, c, .@"24"));
+            for (t.champs, 0..) |c, j| {
+                if (j > 0 and t.sep.len > 0) ics.add(h.span(.{ .key = 2 * j - 1, .class = "sep" }, .{t.sep}));
+                ics.add(h.span(.{ .key = 2 * j, .class = "ic" }, .{ p.icon(h, c, .@"32"), h.span(.{ .class = "nm" }, .{c.name}) }));
+            }
             l.add(h.div(.{ .key = i, .class = "tile" }, .{
-                h.div(.{ .class = "h" }, .{ if (t.role) |r| role.view(h, r, .{}) else null, t.title }),
+                if (t.title.len > 0) h.div(.{ .class = "h" }, .{ if (t.role) |r| role.view(h, r, .{}) else null, t.title }) else null,
                 h.div(.{ .class = "ics" }, .{ics.done()}),
             }));
         }
@@ -379,6 +383,11 @@ pub const css =
     \\    border-radius: var(--r-m); background: var(--bg); border: 1px solid var(--line); }
     \\  .c-learn .tile .h { display: flex; align-items: center; gap: 6px; font-size: var(--fs-s); font-weight: var(--w-m); }
     \\  .c-learn .tile .ics, .c-learn .chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+    \\  .c-learn .tile .ics { flex-wrap: nowrap; align-items: flex-start; justify-content: center; gap: var(--sp-1); }
+    \\  .c-learn .tile .ic { max-width: 64px; display: grid; justify-items: center; gap: 2px;
+    \\    font-size: var(--fs-xs); line-height: 1.2; color: var(--t2); text-align: center; }
+    \\  .c-learn > .grid > .main { scroll-margin-top: calc(var(--header) + var(--sp-3)); }
+    \\  .c-learn .tile .sep { padding-top: 8px; font-size: var(--fs-xs); color: var(--faint); }
     \\  .c-learn .lab { font-size: var(--fs-xs); font-weight: var(--w-b); color: var(--faint); text-transform: uppercase; letter-spacing: 0.06em; }
     \\  .c-learn .tips, .c-learn .chs { display: grid; gap: var(--sp-2); }
     \\  .c-learn .ch { all: unset; display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: var(--sp-2); align-items: center;
@@ -406,6 +415,7 @@ pub fn gallery(g: *@import("gallery.zig").Gallery) void {
     if (shown(h.mem, &ld.demo, 1, 0, 55)) |p| g.addFill("mastery guess locked in: every band, 3.3 off", p.view(h));
     if (shown(h.mem, &ld.demo, 1, 1, 0)) |p| g.addFill("counter duel, a wrong pick revealed", p.view(h));
     if (shown(h.mem, &ld.demo, 0, 0, null)) |p| g.addFill("chapter 0: role tiles", p.view(h));
+    if (shown(h.mem, &counter_demo, 0, 0, null)) |p| g.addFill("chapter 0: counter tiles, one phrase each", p.view(h));
     if (shown(h.mem, &chips_demo, 0, 0, null)) |p| g.addFill("chips setup with a slider", p.view(h));
     if (shown(h.mem, &chips_demo, 0, 0, 60)) |p| g.addFill("chips setup revealed: the bands", p.view(h));
     if (shown(h.mem, &ld.demo, 1, 1, 1)) |p| {
@@ -510,3 +520,25 @@ test "the island opens the linked puzzle" {
     _ = try rt.add(Page, &state, &server, sel);
     try testing.expectEqualStrings("counter-top", state.cur().id);
 }
+
+fn demoChamp(comptime key: []const u8, comptime n: []const u8) ld.Champ {
+    return .{ .key = key, .name = n };
+}
+
+const counter_demo: ld.Data = .{ .ddragon = "16.21.1", .start = 0, .chapters = &.{.{ .title = "The basics", .puzzles = &.{.{
+    .id = "basic-counter-mordekaiser-illaoi",
+    .q = "Who wins this lane more often?",
+    .ctx = "Illaoi against Mordekaiser, top lane",
+    .setup = .{ .tiles = &.{
+        .{ .title = "Top", .role = .top, .champs = &.{ demoChamp("Malphite", "Malphite"), demoChamp("Vayne", "Vayne") }, .sep = "into" },
+        .{ .title = "Mid", .role = .mid, .champs = &.{ demoChamp("Yasuo", "Yasuo"), demoChamp("Akshan", "Akshan") }, .sep = "into" },
+    } },
+    .answer = .{ .pick = .{ .right = 1, .choices = &.{
+        .{ .text = "Illaoi", .shown = "won 42%", .games = 1_965 },
+        .{ .text = "Mordekaiser", .shown = "won 58%", .games = 1_965 },
+    } } },
+    .why = "Mordekaiser wins 58% of these games: a counter to Illaoi.",
+    .tip = "A few matchups are lopsided: know the ones that beat your champion.",
+    .games = 1_965,
+    .from = "Ranked games, every region, all ranks, last 30 days; top lane games only",
+}} }} };

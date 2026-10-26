@@ -47,7 +47,13 @@ pub const Setup = union(enum) {
 };
 
 pub const Figure = struct { champ: Champ, text: []const u8 };
-pub const Tile = struct { title: []const u8, role: ?Role = null, champs: []const Champ };
+pub const Tile = struct {
+    title: []const u8,
+    role: ?Role = null,
+    champs: []const Champ,
+    /// Between the champions, so the tile reads as one phrase ("into", "+")
+    sep: []const u8 = "",
+};
 
 pub const Answer = union(enum) {
     guess: Guess,
@@ -158,7 +164,7 @@ fn ch(comptime key: []const u8, comptime n: []const u8) Champ {
 pub const demo: Data = .{
     .ddragon = "16.21.1",
     .chapters = &.{
-        .{ .title = "What does each role do?", .puzzles = &.{.{
+        .{ .title = "The basics", .puzzles = &.{.{
             .id = "role-leesin",
             .q = "Which role is Lee Sin?",
             .setup = .{ .tiles = &.{
