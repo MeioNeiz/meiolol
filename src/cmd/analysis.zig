@@ -7,6 +7,7 @@ const eval = @import("../eval.zig");
 const draftfile = @import("../draftfile.zig");
 const looks = @import("../lab/looks.zig");
 const ddragon = @import("../ddragon.zig");
+const patchnotes = @import("../patchnotes.zig");
 const replay = @import("../replay.zig");
 const objectives = @import("../objectives.zig");
 const winchance = @import("../winchance.zig");
@@ -133,6 +134,36 @@ pub const usage_legendaries =
     \\              --patch P, --platform P  as for stats
     \\
 ;
+
+pub const usage_patchnotes =
+    \\  patchnotes  OLD NEW: what Riot changed from patch OLD to NEW ("16.20 16.21"), from
+    \\              Data Dragon (cached in DATA/ddragon)
+    \\
+;
+
+pub fn cmdPatchnotes(c: *Cmd) !u8 {
+    const old = c.next() orelse return error.Usage;
+    const new = c.next() orelse return error.Usage;
+    try c.noFlags();
+    const io = c.init.io;
+    const cache = try std.fs.path.join(c.arena, &.{ c.data_dir, "ddragon" });
+    const n = try patchnotes.load(c.init.gpa, c.arena, io, cache, old, new);
+    var buf: [4096]u8 = undefined;
+    var stdout = std.Io.File.stdout().writer(io, &buf);
+    const w = &stdout.interface;
+    try w.print("{s} -> {s}\n", .{ n.old, n.new });
+    for ([_][]const patchnotes.Change{ n.champions, n.items, n.runes }, [_][]const u8{ "champions", "items", "runes" }) |list, title| {
+        try w.print("\n{s} ({d})\n", .{ title, list.len });
+        for (list) |ch| {
+            try w.print("{s} [{s}] {s} {s}\n", .{ ch.name, @tagName(ch.status), @tagName(ch.dir()), try ch.slots(c.arena) });
+            for (ch.lines) |l| try w.print("  {s} {s} {s}: {s} [{s}] -> [{s}] {s} ({s})\n", .{
+                @tagName(l.slot), l.spell, l.field, l.before, l.old, l.new, l.after, @tagName(l.dir),
+            });
+        }
+    }
+    try w.flush();
+    return 0;
+}
 
 pub fn cmdLegendaries(c: *Cmd) !u8 {
     var g: Games = .{};

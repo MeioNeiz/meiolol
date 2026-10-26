@@ -41,14 +41,14 @@ pub fn refresh(gpa: std.mem.Allocator, io: std.Io, db: store.Db) !usize {
     return doc.data.map.count();
 }
 
-fn fetch(http: *std.http.Client, arena: std.mem.Allocator, url: []const u8) ![]u8 {
+pub fn fetch(http: *std.http.Client, arena: std.mem.Allocator, url: []const u8) ![]u8 {
     const res = try client.get(http, arena, .{ .url = url, .timeout = .fromSeconds(60) });
     if (res.status != .ok) return error.UnexpectedStatus;
     return res.body;
 }
 
 /// The Data Dragon version for `patch` ("16.20" -> "16.20.1"), else the newest
-fn versionFor(http: *std.http.Client, arena: std.mem.Allocator, patch: []const u8) ![]const u8 {
+pub fn versionFor(http: *std.http.Client, arena: std.mem.Allocator, patch: []const u8) ![]const u8 {
     const versions = try std.json.parseFromSliceLeaky(
         []const []const u8,
         arena,

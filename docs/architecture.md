@@ -11,6 +11,8 @@ src/
                      your-example, status, admin), data.zig (raw-export, rebuild,
                      rekey, backup, restore, forget)
   ddragon.zig        Data Dragon: champion ids/names; item classes, rune and spell names
+  patchnotes.zig     what Riot changed between two patches, from Data Dragon (cached
+                     in DATA/ddragon/<version>/; `meiolol patchnotes OLD NEW`)
   date.zig           UTC dates (Date: format, parse, epoch days)
   pipeline_test.zig  fixture games through stats, curves and the site
   daily.zig          Daily Draft puzzles (data/daily), made by full loads (site --views)

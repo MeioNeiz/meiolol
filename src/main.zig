@@ -17,6 +17,7 @@ pub const pool = @import("pool.zig");
 pub const learning = @import("learning.zig");
 pub const spread = @import("spread.zig");
 pub const patchday = @import("patchday.zig");
+pub const patchnotes = @import("patchnotes.zig");
 pub const eval = @import("eval.zig");
 pub const fitted = @import("fitted.zig");
 pub const objectives = @import("objectives.zig");
@@ -69,6 +70,7 @@ const usage = usage_head ++
     cmd_sitedata.usage_builds ++
     cmd_analysis.usage_eval ++
     cmd_analysis.usage_legendaries ++
+    cmd_analysis.usage_patchnotes ++
     cmd_analysis.usage_winchance ++
     cmd_analysis.usage_objectives ++
     cmd_analysis.usage_playstyle ++
@@ -136,6 +138,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "builds", cmd_sitedata.cmdBuilds },
     .{ "eval", cmd_analysis.cmdEval },
     .{ "legendaries", cmd_analysis.cmdLegendaries },
+    .{ "patchnotes", cmd_analysis.cmdPatchnotes },
     .{ "objectives", cmd_analysis.cmdObjectives },
     .{ "winchance", cmd_analysis.cmdWinchance },
     .{ "playstyle", cmd_analysis.cmdPlaystyle },
