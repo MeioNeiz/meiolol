@@ -17,6 +17,7 @@ pub const c = @import("c");
 const build_options = @import("build_options");
 const channel = @import("channel.zig");
 const files = @import("files.zig");
+const screens = @import("screens.zig");
 const place = @import("place.zig");
 const demo = @import("demo.zig");
 const measure = @import("measure.zig");
@@ -536,13 +537,17 @@ fn resourceRequested(_: *Handler, _: [*c]c.ICoreWebView2, args: [*c]c.ICoreWebVi
         std.mem.replaceScalar(u8, f, '/', '\\');
         owned = readFile(toWide(&wide, f), 64 << 20);
         break :blk owned;
-    } else files.get(p)) else null;
+    } else screens.get(p) orelse files.get(p) orelse blk: {
+        owned = screens.icon(std.heap.page_allocator, p);
+        break :blk owned;
+    }) else null;
     measure.served(if (body) |b| b.len else 0);
 
     var headers: [128]u8 = undefined;
     const h = std.mem.print(&headers, "Content-Type: {s}{s}", .{
         files.mime(path orelse ""),
-        if (path != null and files.immutable(path.?)) "\r\nCache-Control: max-age=31536000, immutable" else "",
+        // Not a 404: an icon the poller hasn't fetched yet comes later
+        if (body != null and files.immutable(path.?)) "\r\nCache-Control: max-age=31536000, immutable" else "",
     }) catch return 0;
     var wide_headers: [128]u16 = undefined;
     const data = body orelse "not found";
@@ -599,7 +604,8 @@ fn painted(page: []const u8) void {
     const t = nowMs();
     log("painted {s}", .{page});
     send(.{ .hello = .{ .release = build_options.desktop_version, .public = build_options.public, .os = "windows" } });
-    sent_client = client.current();
+    // --self-test runs no poller
+    sent_client = if (opt.self_test) .none else client.current();
     send(.{ .status = .{ .client = sent_client.? } });
     if (first_paint == null) {
         first_paint = t;
@@ -613,6 +619,8 @@ fn painted(page: []const u8) void {
 }
 
 fn clientChanged() void {
+    if (opt.self_test) return;
+    if (screens.refresh(std.heap.page_allocator, true)) |n| send(.{ .app = n });
     const now = client.current();
     if (sent_client != null and now != sent_client.?) {
         sent_client = now;
@@ -889,6 +897,7 @@ fn run(init: std.process.Init) !void {
     if (opt.measure) measure.start();
     if (!opt.self_test) client.start(init, init.environ_map.get("MEIOLOL_LOCKFILE"), wakeTick) catch |e|
         log("client poller: {t}", .{e});
+    _ = screens.refresh(std.heap.page_allocator, !opt.self_test);
     try startEnvironment();
 
     var msg: c.MSG = undefined;

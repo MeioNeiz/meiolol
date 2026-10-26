@@ -14,7 +14,7 @@ pub const scope = .{".c-champ"};
 
 pub const Champ = struct {
     name: []const u8,
-    /// The portrait's URL (Site.icon)
+    /// The portrait's URL (Site.icon); "" draws the frame without it
     src: []const u8,
 };
 
@@ -43,7 +43,8 @@ pub fn view(h: *H, c: ?Champ, o: Opts) N {
     const px: u8 = switch (o.px) {
         inline else => |p| comptime parse(@tagName(p)),
     };
-    const pic: ?N = if (c) |x| h.img(.{
+    // No src: the app's icon isn't fetched from the client yet
+    const pic: ?N = if (c) |x| if (x.src.len == 0) null else h.img(.{
         .src = x.src,
         .alt = if (o.named) x.name else "",
         .width = px,

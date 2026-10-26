@@ -5,4 +5,5 @@ test {
     _ = @import("place.zig");
     _ = @import("demo.zig");
     _ = @import("client.zig");
+    _ = @import("screens.zig");
 }

@@ -2,11 +2,12 @@
 //! Objective-C runtime (no Objective-C source, no Xcode project), serving the same files
 //! (meiolol://app/...) with the same bridge behind a small chrome.webview shim and the
 //! same channel. Window place kept by AppKit (frame autosave).
-//!   zig build shell-mac -- [--dir PATH] [--page P] [--demo] [--seconds N]
+//!   zig build shell-mac -- [--dir PATH] [--page P] [--demo] [--seconds N] [--dump DIR]
 
 const std = @import("std");
 const channel = @import("channel.zig");
 const files = @import("files.zig");
+const screens = @import("screens.zig");
 const demo = @import("demo.zig");
 const client = @import("client.zig");
 
@@ -65,6 +66,8 @@ var ticks: u32 = 0;
 var seconds: u32 = 0;
 var pushing = false;
 var push_demo = false;
+/// --dump DIR: no window, the page's changes into DIR
+var dump: ?[]const u8 = null;
 /// What the page was last told of the League client
 var sent_client: ?client.Client = null;
 var t0: std.Io.Timestamp = undefined;
@@ -86,7 +89,10 @@ fn startTask(_: Id, _: Sel, _: Id, task: Id) callconv(.c) void {
         defer gpa.free(full);
         owned = std.Io.Dir.cwd().readFileAlloc(io, full, gpa, .limited(64 << 20)) catch null;
         break :blk owned;
-    } else files.get(p)) orelse "not found" else "not found";
+    } else screens.get(p) orelse files.get(p) orelse blk: {
+        owned = screens.icon(gpa, p);
+        break :blk owned;
+    }) orelse "not found" else "not found";
     var mime: [64]u8 = undefined;
     const m = std.mem.printSentinel(&mime, "{s}", .{files.mime(path orelse "")}, 0) catch unreachable;
     const resp = msg(Id, msg(Id, cls("NSURLResponse"), "alloc", .{}), "initWithURL:MIMEType:expectedContentLength:textEncodingName:", .{ url, nsString(m.ptr), @as(isize, @intCast(body.len)), @as(Id, null) });
@@ -142,6 +148,7 @@ fn tick(_: Id, _: Sel, _: Id) callconv(.c) void {
         msg(void, msg(Id, cls("NSApplication"), "sharedApplication", .{}), "terminate:", .{@as(Id, null)});
         return;
     }
+    if (screens.refresh(gpa, true)) |n| send(.{ .app = n });
     const now = client.current();
     if (sent_client != null and now != sent_client.?) {
         sent_client = now;
@@ -186,6 +193,9 @@ pub fn main(init: std.process.Init) !void {
         } else if (std.mem.eql(u8, a, "--page")) {
             page = files.clean(next) orelse return error.BadPage;
             i += 1;
+        } else if (std.mem.eql(u8, a, "--dump")) {
+            dump = next;
+            i += 1;
         } else if (std.mem.eql(u8, a, "--demo")) {
             push_demo = true;
         } else return error.UnknownArgument;
@@ -193,6 +203,20 @@ pub fn main(init: std.process.Init) !void {
 
     // The 1 s tick sends what changed
     try client.start(init, init.environ_map.get("MEIOLOL_LOCKFILE"), noWake);
+    if (dump) |d| {
+        // No window: each change of the page into its own folder until --seconds
+        for (0..if (seconds > 0) seconds else 30) |_| {
+            if (screens.refresh(gpa, true)) |n| {
+                try screens.dump(io, gpa, d);
+                std.debug.print("{d:8.1} ms page {d}: {t}\n", .{ nowMs(), n, client.current() });
+            }
+            std.Io.sleep(io, .fromSeconds(1), .awake) catch {};
+        }
+        screens.deinit();
+        client.stop();
+        return;
+    }
+    _ = screens.refresh(gpa, true);
     const app = msg(Id, cls("NSApplication"), "sharedApplication", .{});
     msg(void, app, "setActivationPolicy:", .{@as(isize, 0)});
     const delegate = newClass("MeiololAppDelegate", null, .{

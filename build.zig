@@ -74,6 +74,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "build_options", .module = shell_options },
         },
     });
+    shellUi(b, shell_test, target, optimize);
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = shell_test, .filters = test_filters })).step);
 
     b.step("fmt", "Format the Zig sources").dependOn(&b.addFmt(.{ .paths = &fmt_paths }).step);
@@ -526,11 +527,20 @@ fn shellExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.
             },
         }),
     });
+    shellUi(b, exe.root_module, target, optimize);
     exe.root_module.addWin32ResourceFile(.{ .file = b.path("src/desktop/meiolol.rc") });
     for ([_][]const u8{ "user32", "gdi32", "ole32", "shlwapi", "shell32", "advapi32", "psapi" }) |l|
         exe.root_module.linkSystemLibrary(l, .{});
     exe.subsystem = .windows;
     return exe;
+}
+
+/// The app's page (src/shell/screens.zig): the ui module and ui-app.wasm with its loader
+fn shellUi(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode) void {
+    mod.addImport("ui", modules(b, target, optimize).ui);
+    const u = uiWasm(b, "app");
+    mod.addAnonymousImport("ui-app.wasm", .{ .root_source_file = u.wasm });
+    mod.addAnonymousImport("ui-app.js", .{ .root_source_file = u.js });
 }
 
 fn shellMac(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode) *std.Build.Step.Compile {
@@ -544,6 +554,7 @@ fn shellMac(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.
             .{ .name = "build_options", .module = options },
         },
     });
+    shellUi(b, mod, target, optimize);
     mod.linkFramework("AppKit", .{});
     mod.linkFramework("WebKit", .{});
     mod.linkSystemLibrary("objc", .{});

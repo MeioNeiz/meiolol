@@ -5,6 +5,8 @@ pub const state = @import("desktop/state.zig");
 pub const board = @import("board.zig");
 pub const lanecard = @import("lanecard.zig");
 pub const lcu = @import("lcu/root.zig");
+pub const core = @import("core");
+pub const Icons = @import("desktop/icons.zig").Icons;
 
 test {
     _ = state;

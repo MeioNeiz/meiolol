@@ -71,8 +71,8 @@ pub const scope = .{".c-app"};
 
 pub const css =
     \\@layer components {
-    \\  .c-app { display: flex; flex-direction: column; gap: var(--sp-4); padding: var(--sp-3) var(--sp-4) var(--sp-5);
-    \\    min-width: 0; }
+    \\  .c-app { container-type: inline-size; display: flex; flex-direction: column; gap: var(--sp-4);
+    \\    padding: var(--sp-3) var(--sp-4) var(--sp-5); min-width: 0; }
     \\  .c-app > header { display: flex; align-items: center; gap: var(--sp-2); }
     \\  .c-app > header .where { margin-left: auto; font-size: var(--fs-s); color: var(--muted); }
     \\  .c-app .note { display: flex; flex-direction: column; gap: var(--sp-1); padding: var(--sp-6) 0; text-align: center; }

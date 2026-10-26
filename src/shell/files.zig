@@ -4,14 +4,17 @@
 //! Mac); nothing leaves the machine to load a page.
 
 const std = @import("std");
+const screens = @import("screens.zig");
 
 pub const bridge_js = @embedFile("web/bridge.js");
 
 pub const start_page = "index.html";
 
-/// Until the app's screens are site components: a start page that shows the channel
+/// Beside these, screens.zig serves the page, its data and the champion icons
 const embedded = [_]struct { []const u8, []const u8 }{
-    .{ "index.html", @embedFile("web/index.html") },
+    .{ "app.css", screens.css },
+    .{ "ui-app.js", @embedFile("ui-app.js") },
+    .{ "ui-app.wasm", @embedFile("ui-app.wasm") },
 };
 
 pub fn get(path: []const u8) ?[]const u8 {
@@ -48,10 +51,11 @@ pub fn mime(path: []const u8) []const u8 {
     return "application/octet-stream";
 }
 
-/// Embedded files change only with the exe, so all but pages may stay cached: without
-/// it the webview refetched every icon on each DOM swap (3x the CPU of a push, spike)
+/// Embedded files and icons change only with the exe, so all but pages and data may stay
+/// cached: without it the webview refetched every icon on each DOM swap (3x the CPU of a
+/// push, spike)
 pub fn immutable(path: []const u8) bool {
-    return !std.mem.endsWith(u8, path, ".html");
+    return !std.mem.endsWith(u8, path, ".html") and !std.mem.endsWith(u8, path, ".bin");
 }
 
 test "clean: plain paths in the folder only" {
@@ -67,9 +71,10 @@ test "clean: plain paths in the folder only" {
     }) |bad| try t.expect(clean(bad) == null);
 }
 
-test "embedded: the start page is there, mime by extension" {
-    try std.testing.expect(get(start_page) != null);
+test "embedded: the island and its CSS, mime by extension" {
+    try std.testing.expect(get("ui-app.wasm") != null and get("ui-app.js") != null);
+    try std.testing.expect(std.mem.find(u8, get("app.css").?, ".c-cs") != null);
     try std.testing.expect(get("nope.html") == null);
     try std.testing.expectEqualStrings("application/wasm", mime("ui.wasm"));
-    try std.testing.expect(!immutable("index.html") and immutable("ui.wasm"));
+    try std.testing.expect(!immutable("index.html") and !immutable("app.bin") and immutable("ui.wasm"));
 }

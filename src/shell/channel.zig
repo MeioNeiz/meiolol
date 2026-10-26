@@ -15,6 +15,8 @@ pub const ToPage = union(enum) {
     hello: Hello,
     status: Status,
     champ_select: ChampSelect,
+    /// The app's page changed: app.bin is at this seq (ui/wasm/app.zig fetches it)
+    app: u32,
 };
 
 pub const Hello = struct {
