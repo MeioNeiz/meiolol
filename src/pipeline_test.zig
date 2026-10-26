@@ -454,7 +454,12 @@ test "fixture games to stats, curves and the website" {
         t.root = state.view(&h);
         var w: std.Io.Writer.Allocating = .init(arena);
         try site.ui.html.write(&t, t.root, &w.writer);
-        try testing.expect(std.mem.find(u8, w.written(), "champion/darius.html#role=top&amp;rank=emerald") != null);
+        try testing.expect(std.mem.find(u8, w.written(), " · Emerald+") != null);
+        // Under the Games floor here, so off the table, but its link carries the rank
+        const line = for (state.lines[1]) |*l| {
+            if (std.mem.find(u8, l.href, "champion/darius.html") != null) break l;
+        } else return error.TestUnexpectedResult;
+        try testing.expectEqualStrings("champion/darius.html#role=top&rank=emerald", line.href);
     }
 
     // Rendered on request (site.Loaded, `meiolol serve --render` and `dev`): every file
