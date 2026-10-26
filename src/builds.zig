@@ -33,7 +33,8 @@ pub const Kind = enum {
     rune,
     /// [shard row 0 to 2, shard id]
     shard,
-    /// Items bought in the first start_ms, sorted, net of undos and sales; trinkets out
+    /// Items bought in the first start_ms that start_gold covers, sorted, net of undos
+    /// and sales; trinkets out
     start,
     /// [tier-2 boots] (tier 3 counts as the tier 2 it upgrades), [0] for none by the
     /// second finished item
@@ -70,6 +71,9 @@ const matchup_rows = 3;
 const every_rune = 64;
 /// Starting items: bought before this many ms
 pub const start_ms = 90_000;
+/// What every player starts with. The first purchase it can't cover ends the start:
+/// that's a second stop (gold from an invade, bought on respawn), not a start
+pub const start_gold = 500;
 const skill_snapshot = 13;
 const min_skill_ups = 11;
 pub const max_level = 18;
@@ -635,6 +639,8 @@ pub const Picks = struct {
     start: [max_values]u32 = @splat(0),
     start_len: u8 = 0,
     start_overflow: bool = false,
+    start_spent: u32 = 0,
+    start_done: bool = false,
     /// First boots bought, the item itself (BuildData.bootsOf gives the choice)
     boots: u32 = 0,
     boots_ms: i64 = 0,
@@ -652,11 +658,12 @@ pub const Picks = struct {
     path: [max_level]u8 = @splat(0),
     path_len: u8 = 0,
 
-    fn removeStart(p: *Picks, item: u32) void {
-        const i = std.mem.findScalar(u32, p.start[0..p.start_len], item) orelse return;
+    fn removeStart(p: *Picks, item: u32) bool {
+        const i = std.mem.findScalar(u32, p.start[0..p.start_len], item) orelse return false;
         p.start_len -= 1;
         p.start[i] = p.start[p.start_len];
         p.start[p.start_len] = 0;
+        return true;
     }
 
     pub fn skillOrder(p: Picks) ?[3]u32 {
@@ -727,12 +734,16 @@ pub fn picks(t: timeline.Timeline, d: *const ddragon.BuildData, out: []Picks) vo
     for (t.events) |e| switch (e.data) {
         .item_purchased => |b| {
             const p = at(out, b.participant) orelse continue;
-            if (e.t_ms < start_ms and !d.isTrinket(b.item)) {
-                if (p.start_len == max_values) {
+            if (e.t_ms < start_ms and !p.start_done and !d.isTrinket(b.item)) {
+                const gold = d.goldOf(b.item);
+                if (p.start_spent + gold > start_gold) {
+                    p.start_done = true;
+                } else if (p.start_len == max_values) {
                     p.start_overflow = true;
                 } else {
                     p.start[p.start_len] = b.item;
                     p.start_len += 1;
+                    p.start_spent += gold;
                 }
             }
             if (p.boots == 0 and d.bootsOf(b.item) != null) {
@@ -747,13 +758,14 @@ pub fn picks(t: timeline.Timeline, d: *const ddragon.BuildData, out: []Picks) vo
         },
         .item_sold => |s| {
             const p = at(out, s.participant) orelse continue;
-            if (e.t_ms < start_ms) p.removeStart(s.item);
+            // A sale refunds part of the price: the gold stays spent
+            if (e.t_ms < start_ms and !p.start_done) _ = p.removeStart(s.item);
         },
         // Undoing a purchase: before = the item, after = 0 (after set: an undone sale)
         .item_undo => |u| {
             const p = at(out, u.participant) orelse continue;
             if (u.before == 0 or u.after != 0) continue;
-            if (e.t_ms < start_ms) p.removeStart(u.before);
+            if (e.t_ms < start_ms and !p.start_done and p.removeStart(u.before)) p.start_spent -|= d.goldOf(u.before);
             if (p.boots == u.before) p.boots = 0;
             if (p.core_len > 0 and p.core[p.core_len - 1] == u.before) {
                 p.core_len -= 1;
@@ -978,6 +990,7 @@ fn testData(arena: std.mem.Allocator) !ddragon.BuildData {
         .legendary = &.{ 3078, 3153, 6631 },
         .trinkets = &.{3340},
         .boots = &.{ .{ 3047, 3047 }, .{ 3111, 3111 }, .{ 3174, 3047 } },
+        .gold = &.{ .{ 1052, 400 }, .{ 1055, 450 }, .{ 1101, 450 }, .{ 2003, 50 } },
         .items = try arena.dupe(ddragon.Named, &.{.{ .id = 1055, .name = "Doran's Blade" }}),
         .runes = &.{},
         .spells = &.{},
@@ -1046,6 +1059,30 @@ test "picks: starting items, boots, core and skills from events" {
     // 14 skill-ups (EVOLVE out), then filled: E maxed at 13, W to 15, R at 16, W to 18
     try testing.expectEqual(14, p.path_len);
     try testing.expectEqualSlices(u8, &.{ 1, 2, 3, 1, 1, 4, 1, 3, 1, 3, 4, 3, 3, 2, 2, 4, 2, 2 }, &unpackPath(&p.skillPath().?));
+}
+
+test "picks: the start ends at the first purchase the starting gold can't cover" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const d = try testData(arena_state.allocator());
+    const E = timeline.Event;
+    const buy = struct {
+        fn f(t: i64, item: u32) E {
+            return .{ .t_ms = t, .data = .{ .item_purchased = .{ .participant = 1, .item = item } } };
+        }
+    }.f;
+    // Karthus jungle: Tome undone for Pup and a potion; Tome again at 79 s on invade gold
+    const events = [_]E{
+        buy(2_000, 1052),
+        .{ .t_ms = 2_500, .data = .{ .item_undo = .{ .participant = 1, .before = 1052, .after = 0, .gold = 400 } } },
+        buy(3_000, 1101),
+        buy(3_100, 2003),
+        buy(79_000, 1052),
+        buy(80_000, 2003),
+    };
+    var out: [1]Picks = undefined;
+    picks(.{ .participants = 1, .frames = &.{}, .events = &events }, &d, &out);
+    try testing.expectEqualSlices(u32, &.{ 1101, 2003 }, out[0].start[0..out[0].start_len]);
 }
 
 test "skill path: 18 levels kept as played, off-rule kits only once complete" {

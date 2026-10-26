@@ -145,6 +145,8 @@ pub const BuildData = struct {
     /// [item, the tier-2 boots it is]: tier-2 boots map to themselves, tier-3 to the
     /// tier 2 they upgrade from. Basic Boots (1001) are not a choice and left out
     boots: []const [2]u32,
+    /// [item, total gold]: the start's budget (builds.start_gold)
+    gold: []const [2]u32 = &.{},
     items: []const Named,
     runes: []const Named,
     spells: []const Named,
@@ -166,6 +168,16 @@ pub const BuildData = struct {
             }
         }.f) orelse return null;
         return d.boots[i][1];
+    }
+
+    /// 0 when unknown
+    pub fn goldOf(d: *const BuildData, item: u32) u32 {
+        const i = std.sort.binarySearch([2]u32, d.gold, item, struct {
+            fn f(key: u32, g: [2]u32) std.math.Order {
+                return std.math.order(key, g[0]);
+            }
+        }.f) orelse return 0;
+        return d.gold[i][1];
     }
 };
 
@@ -216,6 +228,7 @@ pub fn parseBuildData(
     var legendary: std.ArrayList(u32) = .empty;
     var trinkets: std.ArrayList(u32) = .empty;
     var boots: std.ArrayList([2]u32) = .empty;
+    var gold: std.ArrayList([2]u32) = .empty;
     var named: std.ArrayList(Named) = .empty;
     var it = items.map.iterator();
     while (it.next()) |e| {
@@ -227,6 +240,7 @@ pub fn parseBuildData(
             .name = item.name,
             .icon = try arena.print(base ++ "/cdn/{s}/img/item/{s}", .{ version, item.image.full }),
         });
+        try gold.append(arena, .{ id, item.gold.total });
         if (item.legendary()) try legendary.append(arena, id);
         if (item.tagged("Trinket")) try trinkets.append(arena, id);
         if (item.tagged("Boots") and item.from.len > 0 and std.mem.eql(u8, item.from[0], "1001")) {
@@ -246,7 +260,7 @@ pub fn parseBuildData(
     }
     std.mem.sort(u32, legendary.items, {}, std.sort.asc(u32));
     std.mem.sort(u32, trinkets.items, {}, std.sort.asc(u32));
-    std.mem.sort([2]u32, boots.items, {}, struct {
+    for ([_][][2]u32{ boots.items, gold.items }) |list| std.mem.sort([2]u32, list, {}, struct {
         fn f(_: void, a: [2]u32, b: [2]u32) bool {
             return a[0] < b[0];
         }
@@ -303,6 +317,7 @@ pub fn parseBuildData(
         .legendary = legendary.items,
         .trinkets = trinkets.items,
         .boots = boots.items,
+        .gold = gold.items,
         .items = named.items,
         .runes = runes.items,
         .spells = spells.items,
@@ -378,6 +393,8 @@ test "build data: boots tiers, trinkets, names" {
     try std.testing.expect(d.isTrinket(3340));
     try std.testing.expectEqual(3006, d.bootsOf(3006).?);
     try std.testing.expectEqual(3006, d.bootsOf(3172).?);
+    try std.testing.expectEqual(300, d.goldOf(1001));
+    try std.testing.expectEqual(0, d.goldOf(9999));
     try std.testing.expectEqual(null, d.bootsOf(1001));
     try std.testing.expectEqualStrings(
         "https://ddragon.leagueoflegends.com/cdn/16.20.1/img/item/3006.png",
