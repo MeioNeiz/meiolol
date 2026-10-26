@@ -6,7 +6,7 @@ raw window; we show every window, honest about its scope, plus an estimate that 
 what we have learnt about how patches, seasons and ranks move numbers, and the models
 are built on the same understanding.
 
-Jacob 22 Oct (J23): every block should respect the filters it sits under, or say
+J23: every block should respect the filters it sits under, or say
 clearly that it doesn't. Pages keep the raw modes, last 30 days and the newest patch,
 and gain a third: one best estimate per number. That estimate uses every game we have:
 the previous patch moved by what the patch changed, every rank adjusted to the rank
@@ -23,15 +23,15 @@ research/questions/patch-transfer.md and curve-statistics-method.md; partial poo
 ## Why one estimate can beat both windows
 
 - A matchup over 30 days and ~80 games is about a third real, two thirds luck; half
-  real at ~300 games (learned.md 22 Oct). The newest patch alone is thinner still. A
+  real at ~300 games (learned.md). The newest patch alone is thinner still. A
   number that shrinks a thin cell toward a well-measured parent beats the raw cell; the
   site already does this for "vs usual" and the curves
 - Patches move most champions little: on 16.21's first day 0.75 pp RMS, the 12 changed
-  ones 1.9 pp, the rest 0.5 pp (learned.md 21 Oct). So last patch's numbers, moved for
+  ones 1.9 pp, the rest 0.5 pp (learned.md). So last patch's numbers, moved for
   the changed champions, are a strong prior for the new patch, and the new patch's own
   games take over as they arrive
 - Ranks differ in a few smooth ways (gold at 14 rises ~90-200 from Emerald to Master,
-  learned.md 13 Oct). A rank's estimate is every rank's number plus a shrunk rank
+  learned.md). A rank's estimate is every rank's number plus a shrunk rank
   deviation. That is more accurate than the rank's own thin games, and it lets every
   block follow the rank pick
 - Seasons are bigger boundaries: the preseason patch reworks items, objectives and
@@ -60,15 +60,6 @@ research/questions/patch-transfer.md and curve-statistics-method.md; partial poo
   estimate for today's patch, from every game". Others: "Now", "Best read", "Forecast".
   (b) The default stays 30 days until E2's gate holds for two patches, then becomes Meio
   (Jacob confirms). (c) Regions: EUW and every region now, one region each later
-- E1 Scope chips, the cheap fix now. Each block's scope (region, period, rank) comes
-  from one component, and filters.js marks a dimension the block doesn't follow, e.g.
-  "Platinum+ · not by rank" or "patch 16.21 · not the 30 days picked". Done when every
-  block on the champion, matchup, build and pool pages has one, pipeline_test checks
-  it, and today's known mismatches are marked: the matchup builds strip (patch only),
-  the lean line (every region, 30 days), and rank on the builds strip, players' win
-  rates, pool and learning. Start: champion.zig variant(), static/filters.js
-  showVariants(), builds.zig, lean.zig, spread.zig. Fits frontend-rework.md's ui.zig
-  components if that goes first
 - E2 The truth test, before anything ships. A rolling origin as in patch-transfer.md:
   for each day d of the newest patch, build each mode from games before d, then score
   its numbers against the next 7 days' games on that patch, per cell (champion-role,
@@ -104,8 +95,8 @@ research/questions/patch-transfer.md and curve-statistics-method.md; partial poo
   modes read the same cubes. Done when the views, curves --site and builds --site load
   from cubes, with sizes measured and percentile error at the chosen bins checked
   against exact percentiles. Start: partials.zig (already per-day game files, 1.2 GB on
-  the box), curves.zig, builds.zig, stats.zig Slice. Box: 81 GB disk and ~9 GB of RAM
-  free (22 Oct); measure a day's cube before choosing the bins
+  the box), curves.zig, builds.zig, stats.zig Slice. Measure a day's cube against the
+  box's free disk and RAM before choosing the bins
 - E8 Rank respected everywhere: with brackets in the cubes, filters.js sums every block
   by the rank picked (raw modes), and Meio uses E3-E5's bracket terms. Rank is the one
   at game start (rank_history, from 12 Oct), never the post-game one (learned.md Data
@@ -124,28 +115,26 @@ research/questions/patch-transfer.md and curve-statistics-method.md; partial poo
   the model gains what the windows can't give it. Measured in docs/model.md like any
   model change; lab-frontier.md and patch-transfer.md are where the terms are proved
 
-Order: E1 now. E7 next, as the base: on its own it fixes the matchup builds strip per
+Order: E7 next, as the base: on its own it fixes the matchup builds strip per
 period and rank in every block. Then E2, then E3-E5 as each passes the gate, then E9 and
 the default switch (E0b). E10 follows E7; E11 follows each estimate that passes E2.
 
 ## Status
 
-- Champion page blocks follow the region and period picks (0a88af7, 89c2a2c): players'
-  win rates, the builds strip, how hard to pick up, the pool section and the patch line.
-  Still fixed, each labelled: the matchup builds strip (region's patch), the lean line
-  (every region, 30 days), and rank on the strips, spread, pool and learning
-- E1 done (23 Oct): scope chips (site/scope.zig) on every block of the champion,
-  matchup, build and pool pages, marked where a block doesn't follow the picks, again by
-  filters.js per pick; pipeline_test checks each champion page block has one. Marked
-  today: the lean line (every region, 30 days), the patch line (whole patches), the
-  matchup builds cards (the region's patch), rank on every fixed block (builds strip,
-  players' win rates, pool, learning, lean, patch line), pool (every patch or all time),
-  learning (every region). The role tiles and opponents follow every pick
+- Champion page blocks follow the region and period picks: players' win rates, the
+  builds strip, how hard to pick up, the pool section and the patch line
+- Scope chips (E1, site/scope.zig) on every block of the champion, matchup, build and
+  pool pages, marked where a block doesn't follow the picks, again by filters.js per
+  pick; pipeline_test checks each champion page block has one. Marked: the lean line
+  (every region, 30 days), the patch line (whole patches), the matchup builds cards (the
+  region's patch), rank on every fixed block (builds strip, players' win rates, pool,
+  learning, lean, patch line), pool (every patch or all time), learning (every region).
+  The role tiles and opponents follow every pick
 - Your games compares each game with EUW curves on that game's patch, whatever the
-  player's region (labelled since 89c2a2c); the all-region curves for other regions
+  player's region (labelled); the all-region curves for other regions
   would roughly double the service's mapped memory
 
-### E2 baseline, raw 30 days vs raw patch (24 Oct)
+### E2 baseline, raw 30 days vs raw patch
 
 Tool: `meiolol truth --patch P` (src/truth.zig; read-only on a snapshot, ~40 s, 2.8 GB,
 4 threads). Day d counts from the patch's first EUW1 game; at each d both modes are
