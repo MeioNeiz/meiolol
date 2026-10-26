@@ -20,6 +20,8 @@ pub const Link = struct {
 
 pub const Opts = struct {
     home: []const u8,
+    /// The logo's link moves into the last view visited, as Link.view
+    home_view: bool = false,
     /// The pages, in the bar and the menu
     links: []const Link,
     /// In the menu only, under a Champions label
@@ -37,8 +39,8 @@ const W = struct {
 };
 
 pub fn view(h: *H, o: Opts) N {
-    return h.el(.header, .{ .class = "c-site" }, .{h.div(.{ .class = "bar" }, .{
-        h.a(.{ .class = "logo", .href = o.home }, .{ logo(h), W.product }),
+    return h.el(.header, .{ .class = "c-site ui" }, .{h.div(.{ .class = "bar" }, .{
+        h.a(.{ .class = "logo", .href = o.home, .data_view = o.home_view }, .{ logo(h), W.product }),
         h.el(.nav, .{ .class = "links", .aria_label = W.pages }, .{links(h, o.links)}),
         o.search,
         h.button(.{ .class = "c-btn menu", .type = "button", .data_v = "icon", .popovertarget = o.menu_id, .aria_label = W.menu }, .{
@@ -102,6 +104,7 @@ pub const css =
     \\    .c-site .bar > :not(.logo, .links, .menu, .c-sitemenu) { max-width: none; }
     \\    .c-site .menu { display: inline-flex; margin-left: auto; }
     \\    .c-site .bar > :not(.logo, .links, .menu, .c-sitemenu) + .menu { margin-left: 0; }
+    \\    .c-site input { font-size: var(--fs-l); }
     \\  }
     \\  .c-sitemenu { margin: 0; position: fixed; inset: calc(var(--header) + 4px) var(--sp-2) auto auto;
     \\    width: min(264px, calc(100vw - 16px)); padding: 4px; box-sizing: border-box; border: 1px solid var(--line-2);

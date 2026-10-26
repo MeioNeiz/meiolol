@@ -856,7 +856,7 @@ function slotPicker(m, d, side, role) {
     const card = box.closest(".picker"), top = card && card.getBoundingClientRect().top;
     if (!card || top < 0.6 * window.innerHeight) return;
     // Clear of the sticky header and tabs
-    const cover = Math.max(0, ...[...document.querySelectorAll("header.top, nav.tabs")]
+    const cover = Math.max(0, ...[...document.querySelectorAll("header.c-site, nav.tabs")]
       .filter(e => ["sticky", "fixed"].includes(getComputedStyle(e).position)).map(e => e.getBoundingClientRect().bottom));
     window.scrollTo({ top: window.scrollY + top - cover - 8, behavior: "smooth" });
   }, 0);

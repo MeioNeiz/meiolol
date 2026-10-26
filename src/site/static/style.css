@@ -75,26 +75,6 @@ a:hover { text-decoration: underline; }
 .bx a.box:focus-visible { outline: none; }
 .wrap { max-width: 1560px; margin: 0 auto; padding: 0 24px; }
 @media (max-width: 600px) { .wrap { padding: 0 16px; } }
-header.top {
-  position: sticky; top: 0; z-index: 20; border-bottom: 1px solid var(--line);
-  background: rgba(8, 9, 10, 0.78); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-}
-header.top .wrap { display: flex; align-items: center; gap: 22px; height: 48px; }
-.brand { display: flex; align-items: center; gap: 9px; font-weight: 650; font-size: 15px; color: var(--text); letter-spacing: -0.01em; }
-.brand:hover { text-decoration: none; }
-.brand svg { display: block; flex: none; }
-header nav { display: flex; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
-header nav::-webkit-scrollbar { display: none; }
-header nav a { color: var(--muted); padding: 5px 10px; border-radius: 6px; font-size: 13.5px; font-weight: 500; white-space: nowrap; }
-header nav a:hover { color: var(--text); background: var(--panel-2); text-decoration: none; }
-header nav a[aria-current="page"] { color: var(--text); background: var(--panel-3); }
-header .look { margin-left: auto; flex: 0 1 260px; display: flex; position: relative; }
-header .look input {
-  width: 100%; height: 32px; padding: 0 10px 0 30px; font-size: 13px; border: 1px solid var(--line-2); border-radius: 8px;
-  background: var(--panel) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%238e939c' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='6' cy='6' r='4.5'/%3E%3Cpath d='m9.5 9.5 3 3'/%3E%3C/svg%3E") no-repeat 10px 50%;
-}
-header .look input::-webkit-search-cancel-button { display: none; }
-header .look input:focus { outline: none; border-color: rgba(139, 124, 246, 0.6); box-shadow: 0 0 0 3px rgba(139, 124, 246, 0.15); }
 /* Header search suggestions (search.js) */
 .look-list {
   position: absolute; top: 38px; right: 0; width: max(100%, 320px); max-height: min(70vh, 420px); overflow-y: auto;
@@ -751,18 +731,6 @@ td.wrap { white-space: normal; min-width: 140px; max-width: none; padding: 7px 1
   .wrap { padding: 0 16px; }
   .chart text, .chart .side { font-size: 15px; }
   main.wrap { padding-top: 18px; padding-bottom: 28px; }
-  header.top .wrap { gap: 10px; }
-  .brand span { display: none; }
-  /* The search as an icon until focused, then over the whole header */
-  header.top .wrap { position: relative; }
-  header .look { flex: 0 0 34px; position: static; }
-  header .look input { padding: 0 0 0 30px; color: transparent; font-size: 16px; }
-  header .look input::placeholder { color: transparent; }
-  header .look:focus-within { position: absolute; left: 16px; right: 16px; top: 10px; z-index: 1; }
-  header .look:focus-within input { color: var(--text); padding-right: 10px; }
-  header .look:focus-within input::placeholder { color: var(--faint); }
-  header .look:focus-within .look-list { width: 100%; }
-  header nav a { padding: 5px 7px; font-size: 13px; }
   .subbar .filters { margin-left: 0; }
   .region-list { left: 0; right: auto; }
   .home-top h1 { font-size: 28px; }

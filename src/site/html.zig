@@ -6,6 +6,7 @@ const Writer = std.Io.Writer;
 pub const tpl = @import("tpl");
 const style = @import("style.zig");
 const assets = @import("assets.zig");
+const ui = @import("ui");
 
 pub const product = "meiolol";
 
@@ -154,10 +155,8 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
         \\<link rel="icon" href="{icon}" type="image/svg+xml">
         \\{robots}{canonical}</head>
         \\<body>
-        \\<header class="top"><div class="wrap">
-        \\{brand}<nav>
-        \\{items}</nav>
-        \\{look}{remember}{meio_view}{admin}</div></header>
+        \\{header}
+        \\{look}{remember}{meio_view}{admin}
         \\{subbar}{banner}<main class="wrap">
         \\
     , .{
@@ -171,20 +170,12 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
             tpl.t("<link rel=\"canonical\" href=\"{url}\">\n", .{ .url = url })
         else
             null else null,
-        .brand = tpl.t("<a href=\"{href}\" class=\"brand\"{view}>{logo}<span>{name}</span></a>\n", .{
-            .href = Link{ .root = p.root, .path = "index.html" },
-            .view = tpl.flag(p.view == null, "data-view"),
-            .logo = tpl.trusted(logo),
-            .name = product,
-        }),
-        .items = tpl.each(&nav_items, p, navItem),
-        // static/search.js; without JS a Riot ID lookup
+        .header = SiteHeader{ .p = p },
+        // static/search.js
         .look = tpl.t(
-            \\<form class="look" action="{your}" method="get" role="search"><input name="id" placeholder="Champion, matchup or Riot ID" aria-label="Search a champion, a matchup (Ahri vs Zed) or a Riot ID (Name#TAG)" autocomplete="off" spellcheck="false" required></form>
             \\<script src="{js}" data-site="{site}"{view} defer></script>
             \\
         , .{
-            .your = toSite(p, "your.html"),
             .js = toSite(p, assets.search_js.path),
             .site = toSite(p, ""),
             .view = if (p.view) |v| tpl.attr("data-view", v.dir()) else null,
@@ -201,13 +192,69 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
     });
 }
 
+/// ui.site's bar. Its search: static/search.js; without JS a Riot ID lookup
+const SiteHeader = struct {
+    p: Page,
+
+    pub fn render(x: SiteHeader, w: *Writer) Writer.Error!void {
+        const p = x.p;
+        var buf: [16 * 1024]u8 = undefined;
+        var fba: std.heap.FixedBufferAllocator = .init(&buf);
+        const a = fba.allocator();
+        var t: ui.Tree = .{};
+        var h: ui.H = .init(a, &t);
+        var links: [nav_items.len]ui.site.Link = undefined;
+        for (nav_items, &links) |it, *l| {
+            const here = it.nav == p.nav or (it.nav == .champions and p.nav.inChampions());
+            l.* = link(a, p, it, here) catch return error.WriteFailed;
+        }
+        var more: [champion_tabs.len - 1]ui.site.Link = undefined;
+        for (champion_tabs[1..], &more) |it, *l| l.* = link(a, p, it, it.nav == p.nav) catch return error.WriteFailed;
+        const look = h.el(.form, .{ .class = "look c-search", .action = siteHref(a, p, "your.html") catch return error.WriteFailed, .method = "get", .role = "search" }, .{
+            h.input(.{
+                .name = "id",
+                .placeholder = "Champion, matchup or Riot ID",
+                .aria_label = "Search a champion, a matchup (Ahri vs Zed) or a Riot ID (Name#TAG)",
+                .autocomplete = "off",
+                .spellcheck = "false",
+                .required = true,
+            }),
+        });
+        t.root = ui.site.view(&h, .{
+            .home = std.mem.concat(a, u8, &.{ p.root, "index.html" }) catch return error.WriteFailed,
+            .home_view = p.view == null,
+            .links = &links,
+            .more = &more,
+            .search = look,
+        });
+        if (h.oom) return error.WriteFailed;
+        try ui.html.write(&t, t.root, w);
+    }
+
+    /// Pages in a view link within it; from a shared page (all at the site root), to the
+    /// default view's, moved by the header script into the last one visited
+    fn link(a: std.mem.Allocator, p: Page, it: NavItem, here: bool) !ui.site.Link {
+        return .{
+            .label = .{ .s = it.label },
+            .href = if (it.in_view) try std.mem.concat(a, u8, &.{ p.root, it.path }) else try siteHref(a, p, it.path),
+            .current = here,
+            .view = it.in_view and p.view == null,
+        };
+    }
+
+    fn siteHref(a: std.mem.Allocator, p: Page, path: []const u8) ![]const u8 {
+        const l = toSite(p, path);
+        return std.mem.concat(a, u8, &.{ l.root, l.up, l.path });
+    }
+};
+
 /// A menu link to the Draft tester for logins that opened it: the admin page (/admin/) or the
 /// private one (/p/) stores it in this origin's localStorage, so visitors' pages carry
 /// neither link nor path. Those browsers also load /p/pv.js (static/pv.js), the private
 /// numbers, which nginx serves to private logins only
 const admin_link =
     \\<script>try{const l=JSON.parse(localStorage.getItem("admin-link"));if(l&&typeof l.href=="string"&&/^\/(admin|p)\//.test(l.href)){const a=document.createElement("a");
-    \\a.href=l.href;a.textContent=l.label;document.querySelector("header.top nav").append(a);const s=document.createElement("script");s.src="/p/pv.js";document.head.append(s)}}catch(e){}</script>
+    \\a.href=l.href;a.textContent=l.label;document.querySelector("header .links").append(a);const s=document.createElement("script");s.src="/p/pv.js";document.head.append(s)}}catch(e){}</script>
     \\
 ;
 
@@ -237,13 +284,6 @@ const champion_tabs = [_]NavItem{
     .{ .nav = .patch, .path = "patch.html", .label = "Patch changes", .in_view = true },
     .{ .nav = .pool, .path = "pool.html", .label = "Champion pool", .in_view = true },
 };
-
-/// Pages in a view link within it; from a shared page (all at the site root), to the
-/// default view's, moved by the header script into the last one visited
-fn navItem(p: Page, w: *Writer, it: NavItem) Writer.Error!void {
-    const here = it.nav == p.nav or (it.nav == .champions and p.nav.inChampions());
-    try navLink(p, w, it, here);
-}
 
 fn tabItem(p: Page, w: *Writer, it: NavItem) Writer.Error!void {
     try navLink(p, w, it, it.nav == p.nav);

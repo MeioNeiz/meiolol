@@ -190,12 +190,12 @@ test "views: a tree each, switches between them, shared pages once" {
         "data-island=\"champion\" data-src=\"../data/champion/a.bin\"",
         "<span data-foot>in EUW, last 30 days",
         "href=\"../" ++ @import("style.zig").file.path ++ "\"",
-        "<a href=\"../champions.html\" aria-current=\"page\" data-view>",
+        "<a href=\"../champions.html\" aria-current=\"page\" data-view=\"\">",
     }) |s| try std.testing.expect(std.mem.find(u8, champ, s) != null);
     try std.testing.expect(std.mem.find(u8, champ, "data-region=\"KR\"") == null);
     try std.testing.expectError(error.FileNotFound, read(arena, out, "all/champion/a.html"));
     const shared_page = try read(arena, out, "daily.html");
-    try std.testing.expect(std.mem.find(u8, shared_page, "<a href=\"champions.html\" data-view>") != null);
+    try std.testing.expect(std.mem.find(u8, shared_page, "<a href=\"champions.html\" data-view=\"\">") != null);
     try std.testing.expectError(error.FileNotFound, read(arena, out, "all/daily.html"));
     try std.testing.expectError(error.FileNotFound, read(arena, out, "patch/style.css"));
     // Under Champions: the section's tabs and the switches; not on home or shared pages
