@@ -279,6 +279,15 @@ How to write a line:
 
 ## Items
 
+- What players build changes with rank: Master+ players' shares of each slot's options
+  differ from the rest of Platinum+ by 8-17 points (root of summed squares; rune pages
+  most, the top page 12 points less used) against 2-4.5 points of chance, but the most
+  played option is the same in 78-96% of champion roles. A thin slice is mostly a few
+  players: a player's games on a champion-role, weighted by games, average 4.5 at
+  Master+ (3.1 at Platinum+). Sure: 16.21, every region, method of moments; chance
+  doubles at most for one-tricks, still well short. Site: the rank filter applies to
+  builds, a rank under 400 games falling back to the next wider one. Evidence:
+  data/team/2026-10-25-ui-build/notes/data.md "G4"
 - (early) Within one champion and role, options differ in win rate far less than raw
   rates suggest: about 0.6 points between runes in a row and stat shards, 0.7 for
   spells, 0.8 starting items, 1.0 skill order, 1.4 rune pages, 1.5-2 boots and first
