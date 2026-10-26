@@ -1,6 +1,6 @@
 # title: Does a net over each team's champion profiles (DeepSets) find more than the damage-mix term?
 model	vs	block	diff	ci	seeds	seed_lo	seed_hi	games	fit_games	source	note	learned
-set net, within-team, sealed seeds 4-6	ratings	folds	-0.00037	0.00021	3	-0.00045	-0.00017	44353		20261013T223405Z-conf-a	confirmed by the pre-declared rule, barely (audit meiolol-33) (1.6x floor-widened interval -0.71 to -0.03 milli-nats; both 90% resamples negative); better in 4 of 5 folds	2026-10-14 (early): A small neural network
+set net, within-team, sealed seeds 4-6	ratings	folds	-0.00037	0.00021	3	-0.00045	-0.00017	44353		20261013T223405Z-conf-a	confirmed by the pre-declared rule, barely (audit meiolol-33) (1.6x floor-widened interval -0.71 to -0.03 milli-nats; both 90% resamples negative); better in 4 of 5 folds	(early) A small neural network
 set net, within-team, sealed seeds 4-6	ratings	dev-val	-0.00018	0.00045	3			8500		20261013T223405Z-conf-a		
 set net on win-comp, sealed seeds 4-6	win-comp	folds	-0.00025	0.00017	3	-0.00030	-0.00017	44353		20261013T223644Z-conf-b	not confirmed beyond win-comp (audit meiolol-33): floor-widened interval reaches +0.02 milli-nats, all point estimates negative	
 set net	ratings	folds	-0.00042	0.00023	3	-0.00053	-0.00022	44353		20261013T214152Z-set-wr	gain on lopsided-damage teams; not better than win-comp (+0.15 ± 0.33 milli-nats)	

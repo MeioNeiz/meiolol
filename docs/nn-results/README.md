@@ -24,7 +24,7 @@ header and one row per comparison, tab-separated, blank cell for unknown:
   chart's x)
 - source: commit or run name; note: one plain sentence, optional
 - learned: optional, a docs/learned.md line this row supports, named by its start
-  (`2026-10-13: Knowing that a team's damage`); the page shows the lines named (once
+  (`Knowing that a team's damage`); the page shows the lines named (once
   each) under the question and in "What we learnt". Add the column to the header when
   you first use it
 

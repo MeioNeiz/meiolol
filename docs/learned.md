@@ -1,22 +1,25 @@
 # What we have learnt about the data
 
-What the models and data checks have taught us, in plain words, newest first under
-each heading. This is the summary Jacob, the admin page's Models tab and a new session
-read first; numbers and method live in docs/model.md.
+What the models and data checks have taught us, in plain words. The summary Jacob, the
+admin page's Models tab and a new session read first; numbers and method live in
+docs/model.md.
 
 Headings are the admin page's model categories (Win, Early game, Items, Objectives,
-Playstyle, Player, Data quality): put each line under its category.
+Playstyle, Player, Data quality): put each line under its category, most useful first
+(the admin overview shows a category's first two).
 
 How to write a line:
 - First sentence: the finding in plain English a ranked player would follow, with
   numbers in gold, CS, deaths, minutes or percentage points. No MSE, sd, nats, model
-  names or column names in it (the admin page shows only this sentence on the overview)
-- Then "Sure:" how confident and at what data size; "Site:" what the site or app may
-  say because of it; "Evidence:" the docs/model.md section or commit, where technical
-  terms are fine
-- Add a line when a result is final (held-out games, interval reported); mark dev-only
-  results "(early)". Supersede, don't delete: strike the old line with ~~ ~~ and add the
-  new one with its date
+  names or column names in it (the admin page shows only this part on the overview)
+- Then "Sure:" how confident and at what data size (name the snapshot); "Site:" what
+  the site or app may say because of it; "Evidence:" the docs/model.md section name.
+  Keep each entry to a few lines: the detail is in the section
+- Add a line when a result is final (held-out games, interval reported); start
+  dev-only results "(early)". docs/nn-results/*.tsv name lines by their start, so
+  keep a line's start when editing it
+- A newer result replaces the old line in place; the commit message says what changed.
+  No struck-through lines, no dates in front
 - "Sure:" names what was measured. A null result is "not detected", with the largest
   effect the data still allows; "under X" only when X is a measured upper bound
 - Leaving games out (short games, regions, patches) needs a with/without comparison
@@ -25,961 +28,355 @@ How to write a line:
 
 ## Win
 
-- 2026-10-24 (early): More games still make every draft model better, and the deeper
-  models gain the most: the last doubling of the games (to about 1.2M) added 0.4 points
-  of accuracy to the pair model and 0.7 to the largest net, while a model of champion
-  strength alone has stopped improving. The nets only start to help past about 300k
-  games, and the largest one now edges past the pair model. Sure: dev only, five sizes
-  from 1/16 to all games, the same 754k held-out ranked games for all; the forecast that
-  the largest net becomes best with twice the games is an extrapolation. Site: nothing
-  yet; a reason to keep crawling and re-check at the next snapshot. Evidence:
-  docs/model.md "A1: scaling curves"
-- 2026-10-24 (early): Champion strength and pairings from the newest games predict no
-  better than the same number of games from up to two weeks earlier: what wins drafts within a
-  patch barely moves day to day, so older games are worth keeping and more games is what
-  helps (half the games costs about half a point of accuracy, the oldest or newest
-  half alike). Sure: dev only, 297k fitting games each way, 754k held-out ranked games up to
-  20 Oct, newest vs oldest within 0.1 milli-nats a game (± 0.15); one patch (16.20 and
-  the end of 16.19), not yet across a big patch. Site: nothing yet; supports pooling old
-  days in the tier list's estimates. Evidence: docs/model.md "E1: drift or noise at
-  equal N"
-- 2026-10-24 (early): Our models line up the same on newer games as before: the
-  shipped pair model calls 54.9% of games right, the same model with the damage mix
-  of each team 55.1%, and a small net on top of it 55.3%, against 54.7% for the
-  17 Oct model. Half of what the pair model gains is the damage mix, which the site
-  can't use until it stores per-champion damage profiles. Sure: dev only, 754k held-out
-  ranked games, every model scored on the same games, each step better in all six
-  blocks. Site: nothing yet. Evidence: docs/model.md "P2: same-split head-to-head"
-- 2026-10-24 (early): The draft alone has a little more to give than our best model
-  takes: knowing exactly how every pair of champions does together and against each
-  other would call about 56.5% of games right, against about 55.4% for the best model
-  now. Most of what is left sits in pairings with too few games to read one at a time
-  (cross-role enemy pairs most, then lane matchups, then duos), so it needs models that
-  share what similar pairings show, or more games: twice the games would let even a
-  pair-by-pair estimate close about a quarter of the gap. Sure: 754k held-out ranked games
-  (every crawled region, up to 20 Oct), each scored by a model fitted only on older
-  games; the method recovers planted effects and flipped labels within its noise, and
-  every model lands on the same ceiling (4.8 ± 0.9 milli-nats a game above the set net
-  on additive v2). Site: nothing. Evidence: docs/model.md "Draft ceiling (B1) rerun on
-  2004Z"
-- 2026-10-24: The site's draft helper, Daily Draft, Learn, lane cards and suggestions now
-  judge pairs this way: a rare pairing borrows from the same two champions in other role
-  slots and from their kit classes (shipped, data-and-model.md DM1). The desktop app
-  still scores with counts until its stats file keeps the fitted model
-- 2026-10-24 (early): The same holds on newer games and in the form the site would use.
-  On 521k games of the 23 Oct pin that no earlier A4 run had scored, the frozen model as
-  the stats file would carry it (no damage mix, no side term, thin cells' own part 0,
-  f16) beats today's site model by 0.99 ± 0.12 milli-nats a game, every block better,
-  resamples and controls clean. That is more than it beat v2 by before shipping, because
-  the parents fill the cells today's floor zeroes: it wins back all v2 lost to its
-  shipping simplifications. Site: nothing yet; code behind a flag, plan for Jacob in
-  docs/plan/data-and-model.md DM1. Evidence: docs/model.md "A4 on the new pin, shipped
-  form"
-- 2026-10-23 (early): A counter is mostly about the two champions, not the roles they
-  play: what one champion does to another in one role pairing (say Malphite top against
-  Yasuo mid) carries over to their other meetings, and judging rare pairings by it, plus
-  a little by champion class, predicts games better. Sure: additive v2 with pair cells
-  shared across role slots and kit-class cells beats v2 by 0.53 ± 0.14 milli-nats a game
-  on 195k held-out dev games of 1007Z (folds 3-5, every fold), one candidate frozen on
-  folds 1-2, both resamples and shuffled controls clean; dev-val -0.63 ± 0.23. Low-rank
-  pair terms: not settled (the fitter failed its planted check). Site: nothing yet
-  (shipping needs Jacob's go). Evidence: docs/model.md "Pair cells that borrow strength
-  (A4)"
-- 2026-10-23: Suggestions and the draft helper now judge picks with a model that learns
-  how much each kind of pair (duo, lane opponent, other matchup) really matters instead
-  of one fixed rule, and it predicts held-out games slightly better than the old one
-  (54.8% against 54.6% right). Sure: 131,746 newest games of the 1007Z database,
-  -0.00036 ± 0.00021 nats a game. Site: live for drafts; page win rates unchanged.
-  Evidence: docs/model.md "Shipped model, 2026-10-23"
-- 2026-10-22 (early): Blending several of our draft models predicts the winner a little
-  better than the best one alone: a weighted mix that turns the neural nets' corrections
-  up beats the best single model (a set net on additive v2) by 0.49 ± 0.09 milli-nats a
-  game, in every block, and the shipped model by 2.3. A plain average barely helps
-  (0.11). Sure: 320k held-out dev games of the 1320Z folds, weights fitted only on older
-  blocks, sealed seeds scored. Site: nothing yet (several nets to ship). Evidence:
-  docs/model.md "Lab frontier wave 1"
-- 2026-10-22: A matchup's win rate over the site's usual 30 days and ~80 games is about
-  a third real and two thirds luck; it takes ~300 games to be half real and ~800 for two
-  thirds. Duos are the same; a champion's own rate in the role is 0.77 real at 500-2,000
-  games and 0.93 above. Sure: split halves of 800k games (1320Z) agree with the method of
-  moments in every band. Site: matchup "vs usual" and sorting already shrink by a k
-  estimated this way and fade under 10 games; keep it. Evidence: docs/model.md "Lab
-  frontier wave 1"
-- 2026-10-20 (early): What a team comp and its champion pairs add beyond each
-  champion's own strength does not show in how the game stands at 10 to 20 minutes
-  (gold, objectives, towers): it shows only in who wins. So we can't use the in-game
-  win chance as a less noisy stand-in for the result when testing new draft effects:
-  scored that way, the better draft model's gains vanish or flip sign, while
-  champion-strength differences come through with about a third of the noise. Sure:
-  16 archived model pairs on 100,847 held-out games of the 2253Z folds; additive v2 over
-  ratings -0.00175 ± 0.00035 nats a game on results, +0.00010 ± 0.00021 against the
-  win chance at 15:00. Site: nothing. Evidence: docs/model.md "Scoring draft models
-  against the in-game win chance"
-- 2026-10-20 (early): Once the two champions' own win rates in the role are allowed
-  for, lane matchups still differ by about 2 percentage points in top and mid, 1.2 in
-  bot, 1.0 in support and 0.7 in jungle; the opponent's own strength is about 40% of how
-  much matchup win rates differ in top and mid, 60% in bot and 80-90% in jungle and
-  support. Sure: method of moments on the live site's lane opponent tables (269k EUW
-  games, last 30 days, 1.5-4k matchups a role), no held-out look; sizes agree with the
-  2253Z v2 line below except jungle (lower here). Site: the champion page's "vs usual"
-  pulls each matchup toward usual by this: the page's own usualK (data-ka, 20 Oct, 279k
-  games) is about 750-770 games in top and mid and the 2,500 cap in bot, jungle and
-  support. Evidence: champion.zig usualK; re-derived in Python from the live pages' rows
-  (raw k for mid 391 vs the page's opponentK 370), which gives 680-710 top and mid and
-  1,900 bot: a 10% gap (bot more) not yet explained, likely role totals vs lane-opponent
-  sums for the champions' own rates
-
-- 2026-10-18 (early): A neural network now predicts the winner from the draft better
-  than the model the site and app use. It reads what each team's champions typically do
-  in games (damage type, tankiness, crowd control, healing, range) together with which
-  champions they are, on top of today's model, and adds about a quarter to its edge over
-  a coin flip (accuracy 54.5% to 55.0%). It covers the champion-into-comp effects the
-  Draft tester adds (Malphite into magic damage and the rest) and more. A large network
-  that reads only the picks is level with today's model now; it gains more from extra
-  games than the simple models do (on 14 Oct's games it was still behind the pair
-  model). Sure: -0.00145 ± 0.00018
-  nats per game on 300,113 held-out games (5 rounds, 300-540k training games a round),
-  better in every round, with fresh seeds and on two resamples, and shuffling which
-  champion has which profile leaves -0.00014; the comp terms alone give -0.00068. Against
-  the best model without a net (additive v2, itself -0.00108 better than today's) that
-  net is -0.00039 ± 0.00017, under the noise floor; trained on top of additive v2
-  instead, it passes the same pre-declared rule: -0.00078 ± 0.00012 on the 300,113 games
-  (sealed seeds, 5 of 5 rounds, resamples -0.00058 and -0.00062, permuted profiles
-  -0.00000), accuracy 54.7% to 55.0%. It moves a typical draft by about 1 point (mean
-  1.2, 1 in 5 drafts over 2), against additive's own lean of 4.7 from 50%. Dev only, no
-  test look. Site: nothing; the admin Draft tester shows it beside additive v2, broken
-  down by swapping picks and traits. Evidence: docs/model.md "Nets on the shipped model,
-  2026-10-18"
-- 2026-10-18: Rammus does do better into teams of auto-attackers (champions who build
-  crit and attack speed, like Master Yi, Tryndamere and marksmen), about 1.4 points per
-  step towards such a team, even with their damage type held fixed: it was never about AD
-  damage, which is why the AD check below found nothing. Champions whose kits punish
-  basic attacks (Rammus, Jax, Teemo, Shen, Malphite) do about 0.7-0.9 better per step as
-  a group; Fiora does not. Five more kit groups lean as their kits say: champions that
-  dodge or cleanse crowd control (Olaf, Gangplank, Sivir, Morgana, Nocturne, Malzahar,
-  Fizz) about 0.6 better per step into high-CC teams; lethality assassins about 0.9
-  worse into tanky teams and true or %HP damage dealers about 0.7 better; magic shield
-  kits about 0.5 better into magic damage; armour kits about 1.5 worse into it. Not
-  detected: stealth into control wards, long-range poke into engage, dash stoppers into
-  dive, hyper-scalers into early teams, juggernauts into long-range teams. Two came out
-  the opposite way: self-healers slightly better into teams that build antiheal, and
-  armour kits better into armour pen (which only means an AD team). A scan of every
-  build and play stat pair finds a few more, all small (about 0.2 per step): tanky
-  champions better into early, roaming and assassin teams, worse into objective-taking
-  ones; ranged champions worse into assassins. What counts is the whole team's damage,
-  weighted by how much each champion usually deals: the enemy's single strongest AP or
-  auto-attack carry predicts less than the whole team's share, and adds nothing beyond
-  it (armour kits into the top AP threat -0.14 ± 0.35 with the share held). Sure: 13 kit groups declared before the
-  run, 6 detected (5% false discovery rate, declared sign, same size in older and newer
-  games), beyond the shipped model, snap-20261017T1320Z dev games; Rammus jungle +1.41 ±
-  0.89 pp per sd with AP share held (held post hoc); scan 337 of 4,608 pairs replicated,
-  0 with shuffled profiles; dev only, no test look, four groups partly seen before.
-  Site: nothing yet; the detected groups and Rammus go into the held-out look on games
-  after 17 Oct. Evidence: docs/model.md "Kit groups and a property scan"
-- 2026-10-18: Kit groups make a good starting guess for each member: a champion's lean
-  into a kind of team is best guessed as its group's lean, with its own games moving it
-  from there. Leaving each member out, its group predicted its lean on newer games
-  (slope 0.86 ± 0.28, 82 members), and the comp terms predicted winners better on games
-  with a member (-0.00021 ± 0.00010 nats a game, 5 of 5 folds); with shuffled groups
-  neither. Clear groups, pp per step of the enemy trait: auto-attack punishers +0.9 into
-  auto-attack teams, armour kits -1.2 into magic damage, lethality assassins -0.8 and
-  true or %HP damage +0.7 into tanky teams; CC answers and magic shield kits not clear
-  once the other traits are held. Most members' leans are their group's alone (Rammus
-  jungle into auto-attackers: +0.9, nothing of his own on top). Overall prediction
-  barely moves against the shipped comp terms (-0.00005 ± 0.00009), because the
-  auto-attack trait the groups need makes the plain terms worse by about as much. Sure:
-  declared before the run, snap-20261017T1320Z dev games, the six groups picked on the
-  same dev games (so not yet a fresh test). Site: admin Draft tester only, reasons "like
-  other ..." marked not yet confirmed; nothing public before the held-out look.
-  Evidence: docs/model.md "Kit groups into champcomp"
-- 2026-10-18: A whole draft rarely leans clearly to one side: none of the 9 published
-  Daily Draft puzzles on 16.20 is clear of even at 95%, including the one the page had
-  shown as "39 to 61 for blue" (1.4 SE from even). A lean needs about 38/62 or wider to
-  be clear. Sure: shipped draft model on 191k 16.20 games, SE of the draft's log-odds
-  ~0.25 (score.draftSe: each term's posterior variance 4/(games + prior games), summed).
-  Site: Daily Draft says "on paper, close" unless the range excludes even (231a458)
-
-- 2026-10-18: Rammus jungle does not clearly do better into physical-damage (AD-heavy)
-  teams or worse into magic-damage ones, beyond what the draft model already knows: about
-  0.5 points better per step towards an AD team, and the data allow anything from about
-  1.3 better to 0.4 worse per step (a 4-AD team is about 1.5-2 steps), so the Draft tester
-  rightly says nothing for him. Armour tanks as a group lean that way but only slightly:
-  champions that build more armour than magic resist do about 0.14 points better per step
-  of armour lean per step towards an AD team, too small to improve predictions. One by
-  one, only a few are clear: Malphite (top about 1.8 points worse per step towards an AP
-  team, mid and jungle 3-4), Wukong jungle 1.1, Jax top 0.9 and Braum 1.0; Galio and
-  Kassadin mid about 1.5-1.8 better towards AP. Sure: snap-20261017T1320Z dev games,
-  offset the shipped model, AP share alone per champion-role: Rammus jungle -0.45 ± 0.81
-  pp per sd of enemy AP share (14,213 games), +0.07 ± 0.89 holding the other 15 comp
-  traits fixed; a pre-declared kit prior (slopes shrunk towards the champion's armour
-  lean) missed its rule: -0.00002 ± 0.00004 nats a game against the plain terms, Rammus
-  still not clear (-0.47 ± 0.53). Site: nothing changes; the tester's Malphite, Galio and
-  Kassadin leans stay. Evidence: docs/model.md "Armour tanks into AD"
-- 2026-10-17 (early): Beyond the matchups and duos the site already uses, about half
-  of the team-comp effects remain, and the ones that remain are about magic damage and
-  tankiness: Malphite (top, mid) still wins about 1.1 points less per step towards a
-  magic-damage enemy team, Galio and Kassadin mid about 1 more; Lillia jungle, Brand and
-  Senna support about 1 more into tanky teams, Nautilus about 0.8 less; AD carries
-  (Yone, Yasuo, Qiyana, Zed, Viego, Master Yi, Graves, Rengar) about 0.7-1 more with
-  magic-damage allies, Malphite and Zac jungle, Viktor bot and Mordekaiser top about 1
-  less. The dive and melee effects were matchups already counted. Sure: same
-  snapshot and folds, offset the shipped model (win-draft): -0.00068 ± 0.00012 nats a
-  game, better in 5 of 5 folds (declared rule: pass), dev-val -0.00072 ± 0.00025; 22
-  effects clear (9 at a 5% false discovery rate), all 22 among the earlier 48 with the
-  same sign, 8 of 8 replicated on newer games; dev only, no test look. Site: the admin
-  draft picker first (shipped model plus these terms), champion pages after a held-out
+- A counter is mostly about the two champions, not the roles they play: what one
+  champion does to another in one role pairing (say Malphite top against Yasuo mid)
+  carries over to their other meetings, and judging rare pairings by it, plus a little
+  by kit class, predicts games better. Sure: beats additive v2 by 0.53 ± 0.14
+  milli-nats a game on 195k dev games of 1007Z, and the frozen shipped form beats the
+  previous site model by 0.99 ± 0.12 on 521k unseen games of 2004Z, every block better,
+  controls clean. Site: live for the draft helper, Daily Draft, Learn, lane cards and
+  suggestions; the desktop app still scores with counts until its stats file keeps the
+  fitted model. Evidence: docs/model.md "Pair cells that borrow strength (A4)", "A4 on
+  the new pin, shipped form"
+- (early) The draft alone has a little more to give than our best model takes: knowing
+  exactly how every pair of champions does together and against each other would call
+  about 56.5% of games right, against about 55.4% now. Most of what is left sits in
+  pairings too thin to read one at a time (cross-role enemy pairs most, then lane
+  matchups, then duos), so it needs models that share strength, or more games. Sure:
+  754k held-out games of 2004Z, method checked on planted effects, every model lands
+  on the same ceiling (4.8 ± 0.9 milli-nats above the set net). Site: nothing.
+  Evidence: docs/model.md "Draft ceiling (B1) rerun on 2004Z"
+- (early) More games still make every draft model better, and the deeper models gain
+  the most: the last doubling (to about 1.2M games) added 0.4 points of accuracy to
+  the pair model and 0.7 to the largest net, while champion strength alone has stopped
+  improving; nets only help past about 300k games. Sure: dev only, five sizes, the
+  same 754k held-out games; "the net becomes best with twice the games" is an
+  extrapolation. Site: a reason to keep crawling. Evidence: docs/model.md "A1: scaling
+  curves"
+- (early) Within a patch, the newest games predict no better than the same number of
+  games from up to two weeks earlier: what wins drafts barely moves day to day, so
+  older games are worth keeping and more games is what helps. Sure: dev only, 297k fit
+  games each way, 754k held-out, newest vs oldest within 0.1 milli-nats (± 0.15); one
+  patch, not yet across a big one. Site: supports pooling old days in the tier list's
+  estimates. Evidence: docs/model.md "E1: drift or noise at equal N"
+- (early) Half of what the pair model gains over champion strength is each team's
+  damage mix, and a small net on top adds a little more: 54.9% of games called right
+  by the pair model, 55.1% with the damage mix, 55.3% with the net. Sure: dev only,
+  754k held-out games, each step better in all six blocks. Site: the damage mix waits
+  for per-champion damage profiles in the stats file. Evidence: docs/model.md "P2:
+  same-split head-to-head"
+- (early) Blending several draft models predicts a little better than the best one
+  alone: a weighted mix beats the best single model (a set net on additive v2) by
+  0.49 ± 0.09 milli-nats a game in every block; a plain average barely helps. Sure:
+  320k dev games of 1320Z, weights fitted on older blocks. Site: nothing yet.
+  Evidence: docs/model.md "Lab frontier wave 1"
+- A matchup's win rate over the site's usual 30 days and ~80 games is about a third
+  real and two thirds luck; it takes ~300 games to be half real and ~800 for two
+  thirds. Duos are the same; a champion's own rate in a role is 0.77 real at 500-2,000
+  games and 0.93 above. Sure: split halves of 800k games (1320Z) agree with the method
+  of moments in every band. Site: matchup "vs usual" and sorting shrink by a k
+  estimated this way and fade under 10 games. Evidence: docs/model.md "Lab frontier
+  wave 1"
+- Once the two champions' own win rates are allowed for, lane matchups still differ by
+  about 2 points in top and mid, 1.2 in bot, 1.0 in support and 0.7 in jungle. Sure:
+  method of moments on the live pages' tables (269k EUW games, 30 days). Site: the
+  champion page's "vs usual" shrinks by usualK (about 750 games top and mid, the 2,500
+  cap elsewhere); a 10% gap to a Python re-derivation is unexplained. Evidence:
+  src/site/champion.zig usualK
+- (early) What a comp and its champion pairs add beyond each champion's strength does
+  not show in how the game stands at 10 to 20 minutes, only in who wins, so the in-game
+  win chance can't stand in for the result when testing draft effects. Sure: 16 model
+  pairs on 100,847 games of 2253Z; additive v2 over ratings -0.00175 ± 0.00035 nats on
+  results, +0.00010 ± 0.00021 against the win chance at 15:00. Site: nothing.
+  Evidence: docs/model.md "Scoring draft models against the in-game win chance"
+- (early) A neural network now predicts the winner from the draft better than additive
+  v2: it reads what each team's champions typically do (damage type, tankiness, crowd
+  control, healing, range) on top of the pair model, accuracy 54.7% to 55.0%, and moves
+  a typical draft by about 1 point. A large net reading only the picks is level with
+  the pair model. Sure: dev only, -0.00078 ± 0.00012 nats a game over additive v2 on
+  300,113 games of 1320Z, sealed seeds, 5 of 5 rounds, permuted profiles zero. Site:
+  the admin Draft tester shows it beside additive v2. Evidence: docs/model.md "Nets on
+  the shipped model, 2026-10-18"
+- (early) Kit groups lean as their kits say, beyond the draft model: champions that
+  punish basic attacks (Rammus, Jax, Teemo, Shen, Malphite) about 0.9 points better per
+  step towards an auto-attack team; armour kits about 1.2-1.5 worse into magic damage;
+  lethality assassins about 0.8 worse and true or %HP damage about 0.7 better into
+  tanky teams. A member's lean is best guessed as its group's, its own games moving it
+  from there (Rammus jungle into auto-attackers: +0.9, nothing of his own). What counts
+  is the whole enemy team's damage share, not its single biggest threat. Sure: dev
+  only, 13 groups declared before the run, 6 detected at 5% FDR on 1320Z; leaving each
+  member out, its group predicted its lean on newer games (slope 0.86 ± 0.28); not yet
+  a fresh test. Not detected: stealth into wards, poke into engage, hyper-scalers into
+  early teams. Site: admin Draft tester only, "like other ..." reasons marked
+  unconfirmed. Evidence: docs/model.md "Kit groups and a property scan", "Kit groups
+  into champcomp"
+- (early) Beyond the matchups and duos the site uses, about half the team-comp effects
+  remain, all about magic damage and tankiness: Malphite (top, mid) about 1.1 points
+  less per step towards a magic-damage team, Galio and Kassadin mid about 1 more;
+  Lillia jungle, Brand and Senna support about 1 more into tanky teams, Nautilus 0.8
+  less; AD carries (Yone, Yasuo, Qiyana, Zed, Viego) about 0.7-1 more with
+  magic-damage allies. Dive and melee effects were matchups already counted. Sure: dev
+  only, offset the shipped model, -0.00068 ± 0.00012 nats a game, 5 of 5 folds, 8 of 8
+  replicated on newer games; a single champion's effect shows from about 3 points at
+  10k games, 1 at 90k. Site: admin draft picker first, champion pages after a held-out
   look. Evidence: docs/model.md "Champions into comps", "Beyond the shipped model"
-- 2026-10-17 (early, before the check against the shipped model below): Some champions
-  do clearly better or worse depending on what the
-  enemy team is made of, beyond how strong they are: Malphite top wins about 2
-  percentage points less than an average top laner for each step towards a
-  magic-damage enemy team, Galio and Kassadin mid about 1.5 and 1 more; Lillia jungle,
-  Brand and Senna support and Viktor mid gain about 1-1.5 into tanky teams while
-  Nautilus loses about 1.3; Lulu gains about 1.5 into divers and Yasuo loses about 1;
-  Lissandra mid gains and Syndra loses about 1 into melee teams. AD carries like Yone,
-  Yasuo and Qiyana gain about 1 more than their role's average from magic-damage
-  allies (mostly the damage mix again). Rammus into melee: still not detected. Sure: 47
-  champion-role and trait effects clear (28 at a 5% false discovery rate) on
-  snap-20261017T1320Z's dev games (600k fit), against 1 and 0 when the traits are
-  shuffled or reassigned to other champions; all 25 effects clear on older games kept
-  their sign on 180k newer ones; together they predict the winner better than champion
-  strength in every fold (-0.0014 ± 0.0002 nats a game, dev-val -0.0019 ± 0.0004).
-  Effects are a step of one sd of the trait, a typical draft moves less; a single
-  champion's effect is found from about 3 points at 10,000 games, 1.6 at 35,000, 1 at
-  90,000; dev only,
-  no test look. Site: nothing yet; candidate champion-page lines and suggest reasons
-  (docs/model.md reading). Evidence: docs/model.md "Champions into comps"
-
-- 2026-10-17: With about 786k games the suggestions predict who wins a little better
-  when a champion's own win rate is trusted more and ally pairings less: the drafts'
-  winner is picked 54.8% of the time instead of 54.4%. Lane matchups carry the most
-  weight of the pair effects. Sure: held-out newest 117,908 games (15 to 17 Oct), every
-  platform, -0.0017 ± 0.0004 nats a game against the previous settings. Site: shipped
-  as the default (suggest, draft tester, Daily Draft, pool, matchup numbers). Evidence:
-  docs/model.md "Shipped model, 2026-10-17"
-- 2026-10-14: Rammus jungle does not clearly win less against teams with more melee
-  champions: on fresh games his win rate moved about half a percentage point per step
-  towards a melee-heavy enemy team, well inside the noise, so the earlier 1.3-point dip
-  was most likely chance. He may do better into physical-damage teams (about 1.8 points
-  in the fresh games), but that was not the declared test and is a lead only. Sure: not
-  detected; one pre-declared look (declared 2026-10-14T22:23Z) on the 125k ranked games
-  in snap-20261014T2137Z-raw not in snap-20261013T2253Z, 3,030 Rammus jungle games:
-  -0.56 ± 0.95 pp per sd of enemy melee share (one-sided 5% test, power about 1 in 3 at
-  -1.3); the data still allow about -2.4 pp per sd. CC +0.41 ± 0.91, AP -1.81 ± 0.95,
-  reported only. Site: nothing. Evidence: exploratory run on 2253Z (8.3k Rammus jungle
-  games) gave -1.27 ± 0.58; confirmation GLM win ~ ratings offset + enemy melee, CC and
-  AP z + Rammus interactions over all jungle team-games, profiles, ratings and scaling
-  fixed from 2253Z. A clean Rammus-into-AD check needs games after 14 Oct (~60 Rammus
-  jungle games a day)
-- 2026-10-14 (early, 2253Z): Most champions lean early or late, and the lean holds up
-  champion by champion: Draven's team is on average about 900 gold ahead at 14 minutes
-  but from an even game at 20 minutes wins about 8 percentage points less often than
-  with an average bot laner; Kayle top's team is about 800 gold behind and wins about 14
-  points more often from an even game. About a third of champion-roles with 200+ games
-  (153 of 429) are clearly one or the other; the two parts mostly cancel in their win
-  rates. Sure: snap-20261013T2253Z, 5 forward folds and dev-val (dev only, no test
-  look), 236k games; fitted on older games, the numbers predicted newer games' gold and
-  results better than without them in every fold, at the sizes fitted (calibration 1.02
-  ± 0.03), and 9 in 10 clear ones kept their sign, as many as expected from the noise;
-  matches draftpath's per-champion mediation (r 0.94-0.98). Site: one line per role on
-  champion pages, numbers only where clear, as a fact about games, never a pick reason
-  (meiolol lean, daily on the box). Evidence: docs/model.md "Early and late champions"
-
-- 2026-10-14 (early, 2253Z): During a game, who wins is read much better from every
-  player's gold, XP, items and death timers plus which champions are playing than from
-  team gold and objectives alone: at 15 minutes the better read ranks the eventual
-  winner above the loser 85% of the time against 83%, and its chances stay honest to
-  within about 1 point on average through 30 minutes. The champions are half of that
-  gain: at the same game state a champion is worth most between 10 and 20 minutes and
-  little after 35. Sure: snap-20261013T2253Z, 5 forward folds (100,848 games with a
-  timeline) and dev-val (26,263), every fold better, intervals from resampling whole
-  games; no test look; ranked solo games that reached 15 minutes. Site: Your games' win
-  chance by minute (post-game review only), starting at 0:00 from the champions alone
-  (Jacob, 14 Oct); never a draft win chance in champ select. Evidence:
-  docs/model.md "Rich state and champions (richc)" (-0.0245 ± 0.0011 nats per
-  game-minute vs the old form on the folds, audited)
-- 2026-10-14 (2253Z): Champion pairs help a tiny bit once each champion is described by
-  how it usually plays (its damage, gold and early-game numbers) rather than by name: how
-  every two champions in a game combine predicts the winner slightly
-  better than the champions and their comp's damage mix alone. The gain is real but
-  tiny, about half of what the damage mix itself adds, and the same champions with
-  shuffled descriptions gain nothing. Sure: detected by a rule declared before the
-  runs, at its margin (a slightly stricter floor would miss), on snap-20261013T2253Z,
-  134,375 games in 5 forward folds with sealed seeds and one 90% resample (5 of 5 folds
-  each), audited by the verifier; the earlier snapshot showed the same sign with half
-  the games and missed; dev-val not judged (covers no gain). Site: nothing; too small to
-  claim a better prediction or to name pairs. Evidence: docs/model.md "Interactions on
-  pretrained embeddings" (-0.00026 ± 0.00014 nats/game vs win-comp)
-- 2026-10-14 (early, 2253Z): The champions tell you far more about who wins once you know
-  how the game stands than before it starts: with each team's gold, kills and objectives
-  at 15 minutes known, the draft adds four to five times as much as it does in champ
-  select, rising to 20 minutes, and about as large at 30 among games still going. A draft
-  one standard deviation stronger in draft score wins about 4.6 percentage points more
-  often, and none of that was found to come through getting ahead early, though we can
-  only rule out more than about 2.3 of those points. Sure: snap-20261013T2253Z, 5 forward
-  folds, 100,847 games with a 15-minute timeline (dev-val 26,263), readings pre-declared
-  before any run; draft given state at 15 -0.0201 ± 0.0012 nats/game (5/5) against draft
-  alone -0.0041 ± 0.0006 (about 4x on dev-val; with a GBDT state -0.0164, up to a fifth
-  less); the minute curve is over games still going (100,847 at 15, 76,456 at 25, 44,451
-  at 30), so later minutes are longer games only; two shuffled-draft controls (across
-  games, within patch x platform) at zero. The early-lead part is "not detected":
-  g-computation with the joint state at 10/14/20, |indirect| under 2.3 pp per sd of draft
-  score against a total of about 4.6, so only a large part is ruled out; bootstrap
-  intervals slightly narrow. The state also carries who plays better, so "at equal state"
-  is description, not cause. Dev only, no test look. Site: nothing; no "this draft wins
-  late" or win-chance claims from it. Evidence: docs/model.md "How drafts win" (Q1, Q3),
-  audited by meiolol-53
-
-- 2026-10-14 (2253Z): How players did in their earlier games (gold, CS and damage per
-  minute, how often they played off their role, days since their last game) predicts
-  the winner beyond how much they have played: the ten champions alone pick the winner
-  53.7% of the time, adding each player's games and wins on their champion and recent
-  form lifts it to 55.5%, and a model given these earlier-game averages as well picks
-  56.1% against 55.6% for the same model without them (ranking a winning team above a
-  losing one 58.5% of the time instead of 57.8%). The
-  gain is bigger when more of the ten have earlier games, about twice as big with all
-  ten as with four or fewer. Whether players have queued together before adds nothing
-  we can detect. Sure: snap-20261013T2253Z, 134,375 games in 5 forward folds, a sealed
-  pre-declared check (3 new seeds, two 90% resamples, every fold better, a shuffled-
-  feature control at zero); the first player term past the noise floor beyond the
-  experience terms; premade not detected (at most ~0.1 milli-nats per game). Simple
-  per-player averages of gold, CS and damage per minute added to the experience model
-  capture most to all of it (the net's remaining edge is within noise). "Earlier
-  games" means games our crawl holds, so how much history a player has follows crawl
-  depth, not what a live lobby would know. Dev folds only, no test look. Site: nothing;
-  internal only, other players' history is never for the app. Evidence: docs/model.md
-  "Prior and premade, sealed confirmation" (history means -0.00195 ± 0.00031 nats/game
-  beyond the net on win-exp; win-exp -0.00507 vs ratings), audited by meiolol-53; the
-  hand-made rate terms: "History means as hand-made terms" (win-exp-rates -0.00191 ±
-  0.00036 vs win-exp, pre-declared, audited by meiolol-53)
-
-- 2026-10-14 (2253Z, v2): Who faces whom, and who plays beside whom, matters a little
-  beyond each champion's own strength. The lane matchups matter most: top vs top (typical
-  difference between matchups about 2.2-2.5 percentage points of win chance), mid vs mid
-  1.7-2.1, support vs support 1.2-1.5, bot vs bot 1.1-1.3, jungle vs jungle 1.0-1.4, mid
-  vs the enemy bot and bot vs the enemy support 0.8-1.1, top vs the enemy mid 0.5-1.0.
-  Among allies only the bot laner and support's pairing shows (1.3-1.6 points); the other
-  nine ally pairings show nothing. A champion's own strength spreads 1.6-3.4 points by
-  role (support most). Sure: pre-declared tests on 134,375 held-out games (5 forward
-  rounds, every platform): a shrunk table of champion strength, every ally pairing, each
-  matchup and the damage mix predicts better than champion strength plus the damage mix
-  (win-comp) by 1.24 ± 0.26 mnats per game, better in 5 of 5 rounds; the pairings add
-  0.91 ± 0.21 beyond strength and mix; dev-val (reported only) 1.9; no test look. Each
-  range runs from the model's own estimate, a lower bound (on win with thin data a
-  planted pair came back at 0.63x), to a simulation-calibrated one (0.91x in that plant,
-  but calibrated sizes did not predict better, so they are not confirmed); single pairs
-  have few games and are not reported. The other ally pairings are not detected; the
-  other cross-role matchups are not detected as fitted (0.2-0.6), calibrated up to about
-  1.1. Designed on the
-  older pin, whose games overlap the early rounds; the gain is largest on the newest
-  games. Site: lane matchup and bot-lane synergy may become reasons on the admin draft
-  board once the shipped model switches to this table; no numbers for single champion
-  pairs. Evidence: docs/model.md "Additive model v2: identified matchups" and
-  "Additive model on snap-20261013T2253Z", both audited by meiolol-53
-- ~~2026-10-14 (2253Z): Who faces whom, and who plays beside whom, matters a little beyond
-  each champion's own strength. The lane matchups matter most: top vs top (typical
-  difference between matchups about 2.5 percentage points of win chance), mid vs mid
-  1.9, support vs support 1.3, bot vs bot 1.2, jungle vs jungle 1.1, mid vs the enemy bot
-  0.7-0.9, bot vs the enemy support 0.8-0.9 and top vs the enemy mid 0.4-0.6 (cross-role
-  sizes as a range until a planted check settles how to combine the two sides). Among
-  allies only the bot laner and support's
-  pairing shows (about 1.3 points); the other nine ally pairings show nothing. A
-  champion's own strength spreads 1.6-3.4 points by role (support most). Sure: one
-  pre-declared test on 134,375 held-out games (5 forward rounds, every platform): a
-  shrunk table of champion strength, every ally and enemy role pairing and the damage
-  mix predicts better than champion strength plus the damage mix (win-comp) by 1.15 ±
-  0.22 mnats per game, better in 5 of 5 rounds and in both 90% resamples; the pairings
-  alone add 0.82 ± 0.17 beyond strength and mix; dev-val (reported only) 1.7; no test
-  look. Designed on the older pin, whose games overlap the early rounds; the gain is
-  largest on the newest games. The sizes are typical spreads across pairs, and lower
-  bounds: planted pairs came back at 0.6-0.9x; single pairs have 1-3 games each and are
-  not reported. Other ally pairings and the other cross-role matchups not detected, at
-  most about 0.3 and 0.7 points as fitted. Site: lane matchup and bot-lane synergy may become
-  reasons on the admin draft board once the shipped model switches to this table; no
-  numbers for single champion pairs. Evidence: docs/model.md "Effects and the CPU
-  model", "Additive model on snap-20261013T2253Z", audited by meiolol-53~~ (superseded by the v2 line above: identified matchups)
-- 2026-10-14 (2253Z): Beyond which champions are picked, a comp's damage makes a small
-  measurable difference, each about 1-2 percentage points for a comp clearly off in that
-  way: damage far from half magic loses, magic-heavy teams (60%+ magic) lose about 2
-  points more, and physical damage into a team of armour-leaning champions does worse
-  while magic damage into it does better. Tanky teams do slightly better, not worse,
-  against champions who buy penetration items. No coaching win condition (dive vs peel,
-  engage vs disengage, front-to-back, healing vs anti-heal, split vs waveclear) or comp
-  archetype was found. Sure: 89,584 unseen held-out games (sealed blocks, every
-  platform), 244 traits screened, one pre-declared list of 32 read with Holm: mix -1.1
-  pp per team sd (z -9), magic 60%+ -2.1 ± 0.9 pp, AD share x their armour -0.6 ± 0.2
-  and tankiness x their pen items +0.6 ± 0.2 pp per team sd. These are associations
-  beside champion strength; adding them doesn't measurably improve predictions (-0.34 ±
-  0.25 mnats beyond the mix, under the noise floor). The rest not detected (plants on
-  2055Z: a true 1.6 pp per team sd found, 1.1 not; this pin's intervals are about half
-  as wide, not re-planted). Sustain against poke (-0.6) kept its sign from the screen but
-  wasn't declared for that direction; poke against engage (+0.4) showed only on the
-  sealed games: leads for the next pin.
-  Site: the damage-mix reason as before; "physical damage into armour" may become a
-  reason without a number once the production key allows anything public; no tank vs
-  pen or win-condition advice. Evidence: docs/model.md "Comp discovery" (rerun on
-  snap-20261013T2253Z), audit meiolol-53
-- ~~2026-10-14: Screening 252 team traits and team-vs-team matchups beyond champion
-  strength finds only the damage mix: lopsided damage (team magic share far from half)
-  costs about 0.9 percentage points of win chance per team sd, reproducing win-comp's
-  term on games already used for it, and near zero on the newest games alone (-0.1). No
-  other trait, win condition or archetype holds: AD share x enemy armour, 4+ ranged and
-  2+ catch-and-kill engagers passed the screen but not the sealed games; coaching win
-  conditions (front-to-back, dive vs peel, poke vs engage, split vs waveclear, healing vs
-  anti-heal) are each within about ±1 point per sd. Sure: sealed blocks 4-5 and dev-val,
-  26,242 games, z -4.1, Holm over 27 pre-declared names; not detected rather than ruled
-  out: a planted mix effect of 1.6 points per team sd (estimated at about 1) was found,
-  1.1 was not; flags one team in ten has need about 3 points estimated, about 5 true if
-  flags shrink like the mix. Adding the mix to ratings doesn't measurably improve log
-  loss on the sealed games (-0.00028 ± 0.00042 nats). Site: nothing new; good and bad
-  comps stay the damage-mix reason only. Evidence: docs/model.md "Comp discovery", audit
-  meiolol-33~~ (superseded by the 2253Z line above)
-- 2026-10-14: No champion was found to turn its own gold lead into wins better than
-  others in its role: what 1,000 gold on your champion is worth depends on the role, at
-  15 minutes about 8 percentage points for the bot laner, 4.5-7 for top, jungle and mid
-  and about 0 for the support (at 25 minutes: 5, 3-3.5 and 0). Sure: 10,604 held-out
-  EUW games, one pre-declared look at 15 and 25 minutes with the team's gold, XP and
-  objectives held fixed; not detected, but not ruled out: a planted spread of 2 points
-  per 1,000 gold across a role's champions showed in the checks, 1 point didn't, and
-  the data allow spreads up to 3-11 points. Site: no "carry champion" or "low-impact
-  champion" labels; lessons by role ("your bot laner's lead matters most"). Evidence:
-  docs/model.md "Carry and impact" (test +0.00003 ± 0.00007 and +0.00001 ± 0.00008
-  nats; audited by meiolol-33)
-- 2026-10-14 (early): A small neural network that reads what each team's champions
-  typically do in games (damage type, tankiness, crowd control, healing, range) finds
-  mostly the same thing as the lopsided-damage line below: up to about two-thirds of
-  what the one hand-made damage-mix term gives, from the same lopsided teams; adding the
-  enemy's champions didn't help, and on top of the damage-mix term it is not confirmed
-  to add more. Sure: dev only, 5 rounds of held-out games (44,353; 44-89k training games
-  a round), confirmed with fresh seeds and two resamples by the narrowest margin
-  (-0.00037 ± 0.00021 nats per game, honest size about 0.00015-0.0004, a quarter to
-  two-thirds of the term's), nothing on the 8,500 dev-val games; on top of the
-  damage-mix term -0.00025 ± 0.00017, not confirmed. As a pipeline check (first seeds,
-  default net) shuffled profiles or shuffled results gave nothing. Site: nothing, the
-  recommender keeps the ratings and the damage-mix term. Evidence: docs/model.md "Set
-  net: DeepSets on champion profiles", audit meiolol-33
-- 2026-10-13 (early): A large neural network that reads the whole draft predicts wins no
-  better than each champion's own win record in its role: one trained copy is worse, and
-  only averaging ten or more copies brings it level; tuning its settings didn't help.
-  Sure: not detected, dev only (5 rounds of held-out games, 44,353, plus 8,500 dev-val;
-  44-89k training games a round): sealed confirmation copies -0.00012 ± 0.00036 nats per
-  game and a resample -0.00010 ± 0.00035; 20 copies -0.00034, which with the noise floor
-  (± 0.00042) leaves at most about 0.0008 nats per game of real gain; every single copy
-  is worse (+0.0006 to +0.0035); the best of 32 settings by validation -0.00009 ±
-  0.00046. Site: nothing, the recommender keeps the ratings. Evidence: docs/model.md "Big
-  net: tuning, seed ensembles, confirmation", audit meiolol-4b
-- 2026-10-13 (early): Knowing how each champion plays in its role (gold, CS, deaths,
-  damage and early lead, learnt from past games) does not measurably improve win
-  predictions beyond each champion's own win record; any help is in rarely played
-  picks, and even there it is within noise. Sure: not detected, dev only (5 rounds of
-  held-out games, 44,353, plus 8,500 dev-val), better in every round but by at most
-  about 0.0007 nats per game the data still allows (-0.00024 ± 0.00048 with resample
-  noise); random vectors and shuffled labels give nothing. Site: nothing, the
-  recommender keeps the ratings. Evidence: docs/model.md "Pretrained champion-role
-  embeddings", audit meiolol-4b
-- 2026-10-13: Knowing that a team's damage is lopsided makes win predictions only a
-  little better overall, because only about one team in ten is lopsided: the gain was at
-  the edge of noise over five rounds of held-out games and not detected on the test set.
-  Sure: 10,604 EUW test games, game by game against the champions-only model; a gain
-  larger than about a fifth of what the champions themselves add is ruled out (the
-  rounds' estimate sits at that edge). The effect itself holds (the lopsided-damage line
-  below); it is the prediction gain that is small. Site: the admin Draft tester may show
-  the term with its interval; lessons quote the effect line. Evidence: docs/model.md
-  "Model: win-comp ablation" (test log loss 0.69065 vs 0.69064, +0.00002 ± 0.00048;
-  rounds -0.00057 ± 0.00028)
-- 2026-10-13: A team that deals under a fifth of its damage as magic wins about
-  5 percentage points less often than its champions alone suggest, and lopsided teams
-  (that, or over 60% magic) about 3 points less than balanced ones; how many
-  tanky champions a team has and how much crowd control it brings make about a point of
-  difference at most. Sure: 44,353 games from every region in five forward time blocks
-  (dev), each team's mix from its champions' averages over the games before
-  its block, beyond a champion-strength model fitted on the same older games. Lopsided
-  minus balanced -3.0 ± 1.1 points, in every block (-2.4 to -3.6); on 10,604 held-out
-  EUW test games (one pre-declared look) -2.7 ± 2.2, consistent; the 3% of teams under
-  20% magic damage -5.3 ± 1.7. In iTero's rarer extremes (under 20% or over 80%
-  physical, 1% of teams) -10 ± 5 and -8 ± 4, like iTero's unadjusted -9 and -6, so their
-  gap is not just which champions sit in those comps. About one team in ten is
-  lopsided. EUW alone -2.6 ± 2.1 in the blocks, not different from other regions
-  (+0.5 ± 2.5; the 8,500 newest EUW games showed -0.3 ± 2.5). No frontline -0.4 ± 0.8;
-  weakest-frontline quarter -0.9 ± 0.8 and least-CC quarter -0.8 ± 0.8, just past zero
-  but not once seven tests are allowed for; armour-heavy picks into magic damage not
-  detected (-2.5 ± 2.6); these and the <20% size are from the blocks only, the test
-  checked lopsided minus balanced alone. Site: the admin Draft tester may show the size
-  (about 3 points); the public site and app may give it only as a reason without a number
-  ("your team's damage is almost all physical; mixed damage tends to do better", never
-  "+X% win rate", docs/production-key.md), once the production key allows anything
-  public; no frontline or CC warnings. Evidence: docs/model.md "Comp features
-  from champion profiles", model-free cross-check (folds and test look)
-- ~~2026-10-13 (early, to be updated with the larger held-out check and the win-comp
-  model): Whether a team's damage is mostly magic or mostly physical, how many tanky
-  champions it has, or how much crowd control it brings does not detectably change its
-  chance of winning beyond which champions are in it. Sure: 8,500 dev EUW games, each
-  team's mix from its champions' averages over ~89k older games; not detected: a
-  lopsided damage mix is within about 3 percentage points of a balanced one, no
-  frontline at most 2 points worse, low crowd control at most 1 point worse;
-  armour-heavy picks into magic damage too uncertain to bound under 6 points. The same
-  check finds the 11-point gap between the strongest and weakest quarter of drafts by
-  champion strength. Teams whose champions average under 20% or over 80% physical
-  damage are under 0.5% of teams, so "all-AD comps lose" can't be tested this way. Site:
-  no "your comp lacks AP / a frontline" warnings as fact. Evidence: docs/model.md "Comp
-  features from champion profiles", model-free cross-check~~
-- 2026-10-13: Once you know each team's gold at 14:00 and how long the game ran, the
-  early-game stats Riot records (first tower, takedowns in the first minutes, the
-  laning-phase gold and XP lead) barely help tell the winner: the best adds under half a
-  percent. Sure: 10,604 held-out EUW games, fields picked on dev before one test look;
-  first tower, early takedowns and the laning-phase lead clear zero after correcting for
-  the many fields tested; lane CS and jungle CS before 10 and the early-laning lead not
-  detected. Whole-game stats (towers, barons, level, biggest kill deficit) explain far
-  more but mostly record who won. Site: no "take first tower to win"; post-game may show
-  them as what happened, not why. Evidence: docs/model.md "Field ranking" (B)
-- 2026-10-13: What you set in champ select for yourself (summoner spells, runes, stat
-  shards, being autofilled, account level) does not detectably change your chance of
-  winning on the same champion and role. Sure: 10,604 held-out games; none improved
-  held-out win predictions; the largest single-option effects were about 1.5 percentage
-  points either way, within noise. Site: no win claims for runes, spells or autofill.
-  Evidence: docs/model.md "Field ranking" (A1)
-- 2026-10-13 (early): Games where more of the ten players have earlier games on their
-  champion in our data gain more from knowing that history, then the gain levels off:
-  none when no player has such history, about 2 milli-nats per game with one or two such
-  players, about 4 with three or more, and nothing extra beyond five. Not causal:
-  players with history are the more active, crawled ones, and this can't separate that;
-  our crawl finds games through known players, so a random lobby has less history than
-  our games. Sure: snap-20261012T2055Z (52,853 games, folds + dev-val pooled, one row
-  per game); win-exp vs win-ratings, both deterministic, so no seed spread; far past the
-  ~0.5 milli-nat noise floor; the same gradient with each time block weighted equally
-  (4b). A snapshot two days longer (snap-20261013T1954Z, 89,519 games) gives the same
-  buckets and more games with history, so the average gain rose from 2.5 to 4.0. Site:
-  internal only; it's player data, check production-key.md before any public use.
-  Evidence: f7's player-exp-cal and player-rat-cal preds (gpu-box
-  ~/ml/runs/*-player-{exp,rat}-cal-*), ~/ml/analysis/histgain-4a.py; audited by
-  meiolol-4b
-- 2026-10-13: On games we held back, the ten champions alone pick the winner 53.2% of
-  the time, and adding how much each player has played before the game (earlier games
-  and wins on their champion, recent games, win rate, KDA, lane gold and deaths) lifts
-  that to 54.5%; it ranks a winning team above a losing one 56% of the time instead of
-  54%. Sure: 10,604 held-out EUW games, one look each, models picked on dev; the gain is
-  just beyond noise. We hold only 16 days of history (74% of players have no earlier
-  game on their champion in our data); the gain may grow as history builds up (not yet
-  tested). A random split of the same games, as LoLDraftAI reports, flatters the
-  champions-only model by about half a point (54.2% on dev). Site: nothing; research
-  only, since other players' history isn't for the app. Evidence: docs/model.md
-  "Player experience and everything pre-game" (test log loss 0.6906 and 0.6883, paired
-  -0.0023 ± 0.0022)
-- ~~2026-10-13 (early): Knowing how much each player has played before the game adds a
-  little to the draft: with every player's earlier games and wins on their champion and
-  their recent form (games, win rate, KDA, lane gold, deaths) on top of the ten
-  champions, our model picks the winner 54.1% of the time instead of 53.7% and ranks a
-  winning team above a losing one 56% of the time instead of 55%. Sure: dev games only,
-  8,500 EUW games scored, 90k training games; the gain is at the edge of noise, and we
-  hold only 16 days of history (74% of players have no earlier game on their champion
-  in our data), so it should grow. Site: nothing; research only, since other players'
-  history isn't for the app. Evidence: docs/model.md "Player experience and everything
-  pre-game" (log loss 0.6878 vs 0.6897, -0.0019 ± 0.0018). Superseded the same day by
-  the held-out result above~~
-- ~~2026-10-14: We can't tell which champions reward experience more than others: how
-  much a player's earlier games on a champion add to the win chance looked the same for
-  every champion in a role. Sure: 10,604 held-out EUW games, one pre-declared look; not
-  detected, and only a large difference would show: experience here is the earlier
-  ranked games we stored (16 days; 76% of player-games have none), and a planted
-  difference of about 10 percentage points from 0 to 10 earlier games, for a champion
-  one typical step from its role, showed on the rounds of older games (about three
-  times the test's size) but not on the smaller dev games. Site: no "champions that
-  reward mastery" list. Evidence: docs/model.md "Carry and impact" (test -0.00001 ±
-  0.00004 nats; audited by meiolol-33). Superseded 2026-10-20 by Player "Every
-  champion is harder when you're new" (mastery points, far more games)~~
-- ~~2026-10-13 (early): We can't yet tell which champions reward a practised player most:
-  giving each champion its own gain from earlier games on it predicted worse than one
-  gain per role, and every champion's estimate is uncertain by 7-10 percentage points.
-  Sure: not detected, dev only; only 0.1% of players have 50+ earlier games on their
-  champion in our data. Site: no "champions that reward mastery" list. Evidence:
-  docs/model.md "Player experience and everything pre-game". Superseded 2026-10-14 by
-  the held-out line above~~
-- 2026-10-13 (early): The rank we store for each player is looked up after the game, and
-  with it the model picks the winner 63.8% of the time instead of 53.7%; most of that
-  is probably the result leaking into the rank, so it says nothing yet about what rank
-  is worth before a game. Sure: dev only; leak and real effect can't be separated until
-  rank at game start is recorded (from 2026-10-12). Site: never use the stored rank as a
-  pre-game input. Evidence: docs/model.md "Player experience and everything pre-game"
-
-- 2026-10-13: The same gold lead is worth more or less depending on the champions:
-  at 25 minutes a team with Kayle top wins as often as an average team about 2,900
-  gold further ahead, and a team with Pyke support as often as one about 2,600 gold
-  further behind. It holds at equal gold in every role and with the same objectives
-  taken, so it is the champion itself (late-game strength, fighting), not where the
-  gold sits. Sure: 118k games, better on held-out games at every minute from 10 to
-  30; common picks known to about ±1-3 percentage points.
-  Site: lessons such as "on Kayle, 1,500 gold behind at 15 is par", with the
-  interval; never a pick reason (who plays the champion isn't held fixed). Evidence:
-  docs/model.md "Champion given the state (scaling)"
-- 2026-10-13: Gold on your support barely moves your team's chances: 1,000 gold more
-  on the support is worth 1-3 percentage points, against 6-12 on the bot laner, 4-11
-  on jungle and mid and 4-8 on top; the bot laner's gold counts most at every minute.
-  Sure: 118k games, better on held-out games at every minute from 10 to 30. Site:
-  lessons ("your bot laner's gold lead matters most"); post-game leads may be weighted
-  by role. Evidence: docs/model.md "Champion given the state (scaling)", who holds the
-  gold; confirmed with team gold, XP and objectives held fixed: splitting gold by role
-  beat team gold on the test at 15 and 25, the bot-most ordering from the training fit
-  (docs/model.md "Carry and impact", audited by meiolol-33)
-- 2026-10-13: We found no champion that is better at coming back from behind, or at
-  closing out a lead, than at an even game: 2,000 gold behind at 15, a champion makes
-  the same difference as at even. A champion's value beyond the gold mostly stays the
-  same from minute 10 to 30, with a small real scaling curve (bot laners matter more
-  late). Sure: 118k games; not detected, and bounded: at 15:00 a typical champion's
-  comeback differs from its role's average by at most 2-3.5 percentage points per
-  1,000 gold (1.5-4.5 across roles and minutes 10-30), so at most ~4-7 points from
-  2,000 behind; modelling it never improved held-out games. Site: no "comeback
-  champion" labels; scaling only as the effect by minute with intervals. Evidence:
-  docs/model.md "Champion given the state (scaling)"
-- ~~2026-10-13: We found no champion that is better at coming back from behind, or at
-  closing out a lead, than at an even game: 2,000 gold behind at 15, a champion makes
-  the same difference as at even. A champion's value beyond the gold mostly stays the
-  same from minute 10 to 30, with a small real scaling curve (bot laners matter more
-  late). Sure: 118k games; not detected rather than ruled out: the estimate is zero in
-  most roles and minutes, at most about 2 percentage points per 1,000 gold (jungle,
-  10-20 min), and modelling it never improved held-out games. Site: no "comeback
-  champion" labels; scaling only as the effect by minute with intervals. Evidence:
-  docs/model.md "Champion given the state (scaling)"~~
-- ~~2026-10-12 (early): Our best draft model picks the winner 53.3% of the time, still
-  getting better with every doubling of games. Withdrawn 2026-10-13: 53.3 was the old
-  eval's pick percentile (reported there as no signal), not an accuracy, and the curve
-  is flat from 67k to 90k games~~
-- 2026-10-13 (early): The ten champions alone predict the winner only slightly better
-  than a coin: our best draft model ranks a winning team above a losing one 55% of the
-  time (a coin 50%). It improved from 4.5k to 67k training games but not from 67k to
-  90k, so whether more games keep helping is open. Counters and ally synergy added
-  nothing measurable (superseded for counters and synergy by the 2026-10-14 (2253Z)
-  matchup line); every region's games beat EUW's alone; weighting newer games
-  didn't help. Sure: dev games only, 90k training games, games ending before 15:00
-  still in. Site: nothing yet. Evidence: docs/model.md "Win from the draft" (AUC 0.550,
-  log loss 0.6897 vs a coin's 0.6931)
-- 2026-10-11: Knowing all ten champions does not yet predict the winner better than
-  each champion's own win rate. Sure at 152k games. Site: no "this draft wins X%"
-  claims. Evidence: meiolol eval, docs/model.md baselines (log loss 0.6905 vs 0.6902)
+- Rammus jungle does not clearly do better into AD-heavy or melee-heavy teams: about
+  0.5 points per step towards AD (-0.4 to +1.3 allowed) and 0.6 towards melee (2.4
+  allowed); his real lean is into auto-attackers (above). Malphite, Wukong jungle, Jax
+  top and Braum are clearly worse into AP teams (1-1.8 per step, Malphite mid and
+  jungle 3-4). Sure: one pre-declared look on 125k fresh games for melee; 1320Z dev
+  games for AD. Site: the tester's Malphite, Galio and Kassadin leans stay; nothing for
+  Rammus. Evidence: docs/model.md "Armour tanks into AD"
+- A whole draft rarely leans clearly to one side: none of 9 Daily Draft puzzles on
+  16.20 is clear of even at 95%; a lean needs about 38/62 or wider. Sure: shipped
+  model on 191k 16.20 games, SE of the draft's log-odds ~0.25 (score.draftSe). Site:
+  Daily Draft says "on paper, close" unless the range excludes even
+- (early) Most champions lean early or late, and it holds champion by champion:
+  Draven's team is about 900 gold ahead at 14 but from an even game at 20 wins about 8
+  points less; Kayle top's team is about 800 behind and wins about 14 more from even.
+  About a third of champion-roles with 200+ games are clearly one or the other; the two
+  parts mostly cancel in their win rates. Sure: dev only, 236k games of 2253Z,
+  predicted newer games better in every fold (calibration 1.02 ± 0.03). Site: one line
+  per role on champion pages, numbers only where clear, never a pick reason. Evidence:
+  docs/model.md "Early and late champions"
+- (early) During a game, who wins is read much better from every player's gold, XP,
+  items and death timers plus the champions than from team gold and objectives: at 15
+  minutes 85% against 83% of winners ranked above losers, honest to about 1 point
+  through 30 minutes. A champion is worth most between 10 and 20 minutes and little
+  after 35. Sure: 2253Z, 100,848 games with a timeline, every fold better. Site: Your
+  games' win chance by minute (post-game only), never in champ select. Evidence:
+  docs/model.md "Rich state and champions (richc)"
+- Champion pairs help a tiny bit once each champion is described by how it usually
+  plays rather than by name: about half of what the damage mix adds, and nothing with
+  shuffled descriptions. Sure: rule declared before the runs, passed at its margin;
+  2253Z, 134,375 games, 5 of 5 folds; -0.00026 ± 0.00014 nats vs win-comp. Site:
+  nothing; too small to claim or to name pairs. Evidence: docs/model.md "Interactions
+  on pretrained embeddings"
+- (early) The champions tell you far more about who wins once you know how the game
+  stands: with gold, kills and objectives at 15 minutes known, the draft adds four to
+  five times as much as in champ select. A draft one sd stronger wins about 4.6 points
+  more often, and none of that was found to come through an early lead (only more than
+  2.3 points is ruled out). Sure: dev only, 2253Z, 100,847 games, readings declared
+  before any run; the state also carries who plays better, so description, not cause.
+  Site: no "this draft wins late" claims. Evidence: docs/model.md "How drafts win"
+- How players did in their earlier games (gold, CS and damage per minute, off-role
+  games, days since last game) predicts the winner beyond how much they have played:
+  56.1% of winners against 55.6% without, and 53.7% from the champions alone. The gain
+  doubles when all ten have earlier games and levels off past five; queuing together
+  before adds nothing detected. Sure: 2253Z, 134,375 games, sealed pre-declared check;
+  "earlier games" means games our crawl holds. Site: nothing; other players' history
+  is never for the app. Evidence: docs/model.md "Prior and premade, sealed
+  confirmation", "History means as hand-made terms"
+- Who faces whom, and who plays beside whom, matters a little beyond each champion's
+  strength. Lane matchups most: top 2.2-2.5 points between typical matchups, mid
+  1.7-2.1, support 1.2-1.5, bot 1.1-1.3, jungle 1.0-1.4; mid vs enemy bot and bot vs
+  enemy support 0.8-1.1. Among allies only bot and support show (1.3-1.6). A champion's
+  own strength spreads 1.6-3.4 points by role. Sure: pre-declared, 134,375 held-out
+  games of 2253Z, 1.24 ± 0.26 milli-nats over win-comp, 5 of 5 rounds; ranges run from
+  the model's estimate to a simulation-calibrated one; single pairs not reported.
+  Site: matchup and bot-lane synergy reasons on the draft board; no numbers for single
+  pairs. Evidence: docs/model.md "Additive model v2: identified matchups"
+- Beyond which champions are picked, a comp's damage makes a small difference, about
+  1-2 points for a comp clearly off: damage far from half magic loses, magic-heavy
+  teams (60%+) about 2 points more, and physical damage into an armour-leaning team does
+  worse. No coaching win condition (dive vs peel, engage vs disengage, front-to-back,
+  healing vs anti-heal, split vs waveclear) or archetype was found among 244 traits.
+  Sure: 89,584 sealed games of 2253Z, 32 pre-declared with Holm; associations beside
+  champion strength, not a measurable prediction gain. Site: the damage-mix reason;
+  "physical damage into armour" may become a reason without a number. Evidence:
+  docs/model.md "Comp discovery"
+- A team that deals under a fifth of its damage as magic wins about 5 points less often
+  than its champions suggest, and lopsided teams (that, or over 60% magic) about 3 less
+  than balanced ones; tankiness and crowd control make a point at most. Sure: 44,353
+  dev games in five blocks (-3.0 ± 1.1, every block), one pre-declared test look on
+  10,604 EUW games (-2.7 ± 2.2). Site: as a reason without a number ("mixed damage
+  tends to do better", never "+X% win rate"); no frontline or CC warnings. Evidence:
+  docs/model.md "Comp features from champion profiles"
+- Knowing that a team's damage is lopsided makes win predictions only a little better
+  overall, because only about one team in ten is lopsided. Sure: 10,604 EUW test games,
+  +0.00002 ± 0.00048 nats; a gain over a fifth of the champions' own is ruled out.
+  Site: the admin Draft tester may show the term. Evidence: docs/model.md "Model:
+  win-comp ablation"
+- No champion was found to turn its own gold lead into wins better than others in its
+  role: 1,000 gold on your champion at 15 minutes is worth about 8 points for the bot
+  laner, 4.5-7 for top, jungle and mid and about 0 for support. Sure: 10,604 held-out
+  EUW games, pre-declared; not detected, spreads up to 3-11 points allowed. Site: no
+  "carry champion" labels; lessons by role. Evidence: docs/model.md "Carry and impact"
+- (early) A small neural network that reads what each team's champions typically do
+  finds mostly the damage-mix effect again (up to two-thirds of the hand-made term), and
+  nothing confirmed on top of it. Sure: dev only, 44,353 games, -0.00037 ± 0.00021 nats.
+  Site: nothing. Evidence: docs/model.md "Set net: DeepSets on champion profiles"
+- (early) Knowing how each champion plays in its role (gold, CS, deaths, damage, early
+  lead) does not measurably improve win predictions beyond its own win record. Sure:
+  not detected, dev only, 44,353 games, at most 0.0007 nats a game. Site: nothing.
+  Evidence: docs/model.md "Pretrained champion-role embeddings"
+- What you set in champ select for yourself (summoner spells, runes, shards, being
+  autofilled, account level) does not detectably change your chance of winning on the
+  same champion and role. Sure: 10,604 held-out games; the largest single options about
+  1.5 points either way, within noise. Site: no win claims for runes, spells or
+  autofill. Evidence: docs/model.md "Field ranking" (A1)
+- Once you know each team's gold at 14:00 and the game length, Riot's early-game stats
+  (first tower, early takedowns, laning-phase lead) barely help tell the winner: the
+  best adds under half a percent. Sure: 10,604 held-out EUW games. Site: no "take first
+  tower to win"; post-game may show them as what happened. Evidence: docs/model.md
+  "Field ranking" (B)
+- The same gold lead is worth more or less depending on the champions: at 25 minutes a
+  team with Kayle top wins as often as an average team about 2,900 gold further ahead,
+  one with Pyke support as one about 2,600 further behind, in every role and with the
+  same objectives. Sure: 118k games, better on held-out games at every minute 10-30;
+  common picks to ±1-3 points. Site: lessons ("on Kayle, 1,500 behind at 15 is par"),
+  never a pick reason. Evidence: docs/model.md "Champion given the state (scaling)"
+- Gold on your support barely moves your team's chances: 1,000 gold more is worth 1-3
+  points on the support, 6-12 on the bot laner, 4-11 on jungle and mid, 4-8 on top.
+  Sure: 118k games, held-out at every minute 10-30; confirmed with team gold, XP and
+  objectives held. Site: lessons ("your bot laner's gold lead matters most").
+  Evidence: docs/model.md "Champion given the state (scaling)", "Carry and impact"
+- No champion is better at coming back from behind, or closing out a lead, than at an
+  even game. Sure: 118k games; not detected, at most 2-3.5 points per 1,000 gold at
+  15:00. Site: no "comeback champion" labels. Evidence: docs/model.md "Champion given
+  the state (scaling)"
 
 ## Early game
 
-- 2026-10-20 (early): Being ahead of your lane opponent goes with winning in your own
-  game, but a matchup where one side is usually ahead is not a matchup that side
-  usually wins. In a single game the player about 1,000-1,700 gold ahead at 14 (850 for
-  supports) wins 37-51 percentage points more often than the one as far behind, and
-  CS at 10, deaths before 15 and first item time show the same (0 deaths before 15:
-  65-71% won, 4 or more: 31-39%). Across matchups, a matchup's average gold lead at 14
-  (300-480 gold apart between typical matchups) moves its win rate by -2.6 to +2.3
-  points per 1,000 gold, and its share of games ahead, CS, deaths and item timing by
-  about a point or less per typical difference; matchup win rates themselves spread
-  2.3-2.7 points, champions' 1.3-2.8. Sure: raw associations, not causes (the team's
-  state is not held), 877,814 games of snap-20261018T1007Z (every platform, Platinum+,
-  9.5% without a 14-minute timeline), matchups with 300+ games (736-1,540 a role),
-  binomial noise taken out of the spreads; no held-out look. Site: colour a game's own
-  leads (Your games) but not a matchup's or champion's average lead as good or bad: it
-  says how the lane goes, not who wins; colour win rate and vs usual
-  (docs/design-ideas.md "What to colour"). Evidence: Python over the snapshot's pack
-  columns (rows.y, rows.role, rows.champion), data/team/2026-10-19-night/design-impact.py
-  on Jacob's Mac
-- 2026-10-13: On the same champion and role, rune and spell choices go with different
-  early games: First Strike players have about 120 more gold at 14, Inspiration with
-  Domination about 150 more, Teleport with Ignite about 100 more gold and 2 more CS at
-  10; autofilled players die about 0.2 more times before 15, and players who queue as
-  Fill first end lane about 100 gold behind their opponent at 14. Sure: 10,604
-  held-out games; runes, shards and spells each explain 0.2-1% of the spread in gold at
-  14, CS at 10 and first item time, also on top of the best draft model; single-option
-  numbers are shrunk estimates without their own intervals. Who-picks-what, not cause:
-  players who take First Strike may play differently anyway. Site: no advice until
-  docs/production-key.md is checked; lesson wording "players who take X tend to".
-  Evidence: docs/model.md "Field ranking" (A1)
-- 2026-10-13: A higher rank means more gold at 14 in the same matchup: going from
-  Emerald to Master is worth about 200 gold for a jungler, 145 mid and bot, 90 top and
-  20 support, and Iron to Challenger spans 400-850 gold outside support. Sure: on
-  106k held-out test games, adding your rank to the team model (3c-team) makes the
-  typical gold miss 811 to 810 (0.3% of the error, give or take 0.1%; dev said 0.6%)
-  and CS at 10 1.4% better (as on dev); lane gold difference and deaths unchanged.
-  Clear on held-out games with the after-game rank, looked up after the game (sometimes
-  days later) so it tracks recent results: the leak is large for win (db: 53.7% to
-  63.8% of winners called on dev) and its share here is unknown. To recheck with the
-  rank at game start (rank_history, from 12 Oct) before it's settled (see Data
-  quality); not yet checked on top of 3c-team2. Site: lesson material ("at your rank,
-  expect about X gold at 14 in this matchup"), not a pick reason: it is mostly better
-  players earning more. Evidence: lab campaign
-  gold14-a (built on 3c-team), run 20261012T2322Z-gold14-a-rankfx (effects-rank.tsv)
-  paired vs 20261012T2222Z-gold14-a-ref on dev; final 20261012T2343Z-final-gold14-a,
-  its test preds paired vs 3c-team.tsv (`meiolol-lab pairs`)
-- 2026-10-13: Carries played off-role really do earn their usual gold at 14: Draven top
-  (+840 over the average top laner, 87 games) matches Draven bot (+840), and Twitch,
-  Locke and Briar support sit 810-870 above the average support. Sure: on 80k dev rows,
-  letting each off-role champion lean on its own level in other roles changes no
-  prediction (all five early numbers within 0.02% of the error) and moves these by
-  under 70 gold; whether it is the champion or the one-trick players who pick it
-  off-role is not separated. Site: the Draft tester keeps champions with 1%+ of the
-  role's games. Evidence: dev runs 20261012T235952Z-t2ref-ref and
-  20261013T000332Z-champlevel-cl (effects-champ.tsv), paired (`meiolol-lab pairs`)
-- 2026-10-13 (early): For your own gold at 14, it is who the enemy laner is that counts,
-  not how your champion matches up against theirs: knowing the enemy laner's champion
-  does as well as knowing the exact matchup. Sure: dev only, 80k rows, the two within
-  noise of each other; other early numbers (lane gold difference, CS) not checked this
-  way. Site: nothing yet. Evidence: lab campaign gold14-a, runs
-  20261012T2324Z-gold14-a-nolane and 20261012T2328Z-gold14-a-lanemain
-- 2026-10-12: Your lane opponent's champion changes your early game the same way
-  whoever you play, on top of the specific matchup; adding that makes every early-game
-  prediction better (gold at 14, lane gold difference, CS at 10, deaths before 15, first
-  item time). Sure: 118k games, beats every earlier model. Site: lane curves use the
-  opponent's general effect plus the specific matchup, which also fixes matchups with
-  few games. Evidence: docs/model.md "3c-team2" (+0.3-0.7% of base MSE)
-- 2026-10-12: Every champion in the game nudges your early numbers, and the nudges
-  simply add up: your own champion moves your gold at 14 by a typical 270-360, your lane
-  opponent by 75-200, a jungler by 20-65 and each other enemy by 15-50. Sure: 118k
-  games. Site: "what your lane matchup and this enemy team typically do to your early
-  game", with ranges. Evidence: docs/model.md "Team effects on early outcomes"
-- 2026-10-13: Whether your champion in particular is good or bad against this enemy
-  team doesn't show up beyond your lane. Sure: two different model types agree at 118k
-  games; not detected, and bounded: a typical champion-against-enemy-champion pairing
-  moves your gold at 14 by at most 35-45 gold, and against the enemy's classes by at
-  most 50-85 (your lane opponent alone moves it 75-200). Site: no team counters or
-  "best pick against this comp". Evidence: docs/model.md "Team effects", "Champion
-  embeddings against the enemy team"
-- ~~2026-10-12: Whether your champion in particular is good or bad against this enemy
-  team doesn't show up beyond your lane. Sure: two different model types agree at 118k
-  games; not detected rather than ruled out (the estimate is 0-21 gold at 14 and is
-  switched off as noise in 3 of 5 roles). Site: no team counters or "best
-  pick against this comp". Evidence: docs/model.md "Team effects", "Champion
-  embeddings against the enemy team"~~
-- ~~2026-10-12: Real interactions live in the lane: champion embeddings help only in
-  matchups with few games. Superseded the same day by the lane opponent's general
-  effect above, which explains most of it~~
-- 2026-10-12: Most of what happens in your first 15 minutes comes from the game itself,
-  not the draft: the draft explains only a few percent of the spread in gold, CS and
-  deaths. Sure. Site: always show ranges, never a single predicted number
+- (early) Being ahead of your lane opponent goes with winning your own game, but a
+  matchup where one side is usually ahead is not a matchup that side usually wins: in a
+  game, the player 1,000-1,700 gold ahead at 14 wins 37-51 points more often (0 deaths
+  before 15: 65-71% won, 4+: 31-39%), while a matchup's average lead moves its win rate
+  by -2.6 to +2.3 points per 1,000 gold. Sure: raw associations on 877,814 games of
+  1007Z, matchups with 300+ games, noise taken out. Site: colour a game's own leads
+  (Your games), not a matchup's average lead. Evidence: docs/design-ideas.md "What to
+  colour"
+- Your lane opponent's champion changes your early game the same way whoever you play,
+  on top of the specific matchup; adding that improves every early-game prediction.
+  Sure: 118k games. Site: lane curves use the opponent's general effect plus the
+  matchup, which also fixes thin matchups. Evidence: docs/model.md "3c-team2"
+- Every champion in the game nudges your early numbers, and the nudges add up: your own
+  champion moves your gold at 14 by a typical 270-360, your lane opponent 75-200, a
+  jungler 20-65 and each other enemy 15-50. Sure: 118k games. Site: "what your matchup
+  and this enemy team typically do to your early game", with ranges. Evidence:
+  docs/model.md "Team effects on early outcomes"
+- Whether your champion in particular is good against this enemy team doesn't show
+  beyond your lane. Sure: two model types at 118k games; not detected, at most 35-45
+  gold at 14 per pairing. Site: no team counters or "best pick against this comp".
+  Evidence: docs/model.md "Team effects", "Champion embeddings against the enemy team"
+- Most of your first 15 minutes comes from the game itself: the draft explains only a
+  few percent of the spread in gold, CS and deaths. Site: always ranges, never a single
+  predicted number
+- On the same champion and role, runes and spells go with different early games: First
+  Strike about 120 more gold at 14, Teleport with Ignite about 100 more gold and 2 more
+  CS at 10; autofilled players die about 0.2 more before 15. Sure: 10,604 held-out
+  games; who picks what, not cause. Site: "players who take X tend to". Evidence:
+  docs/model.md "Field ranking" (A1)
+- A higher rank means more gold at 14 in the same matchup: Emerald to Master is about
+  200 gold for a jungler, 145 mid and bot, 90 top, 20 support. Sure: 106k held-out
+  games, but with the after-game rank (see Data quality); recheck with the rank at game
+  start. Site: lesson material, never a pick reason. Evidence: lab campaign gold14-a
+- Carries played off-role earn their usual gold at 14: Draven top (+840 over the
+  average top laner) matches Draven bot. Sure: 80k dev rows. Site: the Draft tester
+  keeps champions with 1%+ of the role's games
+- (early) For your gold at 14 it is who the enemy laner is that counts, not how your
+  champion matches theirs. Sure: dev only, 80k rows. Site: nothing yet
 
 ## Items
 
-- 2026-10-20 (early): Within one champion and role, the options players pick differ in
-  win rate far less than raw win rates suggest: about 0.6 percentage points between
-  runes in a row and between stat shards, 0.7 for summoner spells, 0.8 for starting
-  items, 1.0 for skill order, 1.4 for rune pages and 1.5 to 2 for boots and first items
-  (true spread, binomial noise taken out). So a rune's own games count for little
-  against the row's average until it has thousands of them (k about 6,000 for a rune,
-  600 to 1,000 for items). Under a 2-standard-error test the top win rate beats the next
-  in under 1% of slots, as expected from the 13 Oct finding that these choices don't
-  detectably change who wins. Sure: method of moments over 858 champion roles and 2,000
-  matchups (274k EUW games, 16.20); the spread is not causal (who picks an option
-  differs too) and is larger on small samples (a few players' streaks), so k comes from
-  each builds run. Site: "highest win rate" marks the option with the best win rate
-  pulled toward the average by k games and taken at the low end of its range (100+
-  games only), never "best". Evidence: builds.zig Spread, the builds log's k lines
-- 2026-10-13: Which item you finish adds almost nothing to predicting the win once you
-  know when you bought it and how far ahead you were (a twentieth of what the champion
-  adds). Sure: 118k games (2.9M first-three-item purchases); an item being better on one
-  champion than on others in its role is not detected, and is at most about 3
-  percentage points for a typical champion-item pair; no item-only model was fitted, so
-  how much of "win rate by item" is the lead is not measured. Site: no "best build" or
-  "this item wins more"; buying time and the lead at purchase are fair lessons.
-  Evidence: docs/model.md "Items given the state at purchase"
-- ~~2026-10-12: Which item you finish adds almost nothing to predicting the win once you
-  know when you bought it and how far ahead you were (a twentieth of what the champion
-  adds). Sure: 118k games (2.9M first-three-item purchases); the champion-specific item
-  term is not detected; no item-only model was fitted, so how much of "win rate by item"
-  is the lead is not measured. Site: no "best build"
-  or "this item wins more"; buying time and the lead at purchase are fair lessons.
-  Evidence: docs/model.md "Items given the state at purchase"~~
+- (early) Within one champion and role, options differ in win rate far less than raw
+  rates suggest: about 0.6 points between runes in a row and stat shards, 0.7 for
+  spells, 0.8 starting items, 1.0 skill order, 1.4 rune pages, 1.5-2 boots and first
+  items. A rune's own games count for little until it has thousands (k about 6,000; 600
+  to 1,000 for items). Sure: method of moments over 858 champion roles (274k EUW games,
+  16.20); not causal. Site: "highest win rate" pulled toward the average by k, 100+
+  games only, never "best". Evidence: src/builds.zig Spread
+- Which item you finish adds almost nothing to predicting the win once you know when
+  you bought it and how far ahead you were. Sure: 118k games, 2.9M purchases; an item
+  better on one champion than others not detected (at most about 3 points). Site: no
+  "best build" or "this item wins more". Evidence: docs/model.md "Items given the state
+  at purchase"
 
 ## Objectives
 
-- 2026-10-14 (2253Z): What a taking team gains at the moment of an objective barely
-  depends on the draft: adding which champions were picked to the game state changes
-  every objective's and kill's value by under 0.2 percentage points of win chance. Given
-  gold and objectives so far, a dragon adds about 4-4.5 points (5-5.5 after 30 minutes),
-  baron 5.6-7.9, elder 9 after 30 minutes, an outer tower 1.5-3.2 from 15 minutes, a kill
-  2.5-3.8 (5.3 before 10 minutes), a grub under 1, herald 0.6. Teams that were behind and
-  took an objective went on to win more than the simple state model said (baron 4.6
-  points, inhibitor 8, elder 8 more), and a model that also knows items, levels, death
-  timers and buffs explains most of that, the draft almost none. A stolen dragon or
-  herald is followed by the stealing team winning 8-10 points less than expected (baron
-  3-5): don't treat steals as lucky coin flips. Sure: 236,227 games (every platform, dev
-  games, no test), win chances cross-fitted by game, 200 game bootstraps (± 0.1-0.2 points
-  on the values); comparisons between state models are like for like, absolute values as
-  fitted (no planted check of this regression yet); description, not proof an objective
-  caused the win; "behind" is each model's own view. Site: post-game only (self-review,
-  which Riot's policy encourages; not champ-select advice) and only once the production
-  key allows anything public: a game timeline may note "teams that took this won about X
-  points more often", never "+X% win rate"; no "steal saved the game" claims
-  (docs/production-key.md). Evidence: docs/model.md "In-game events on the draft-aware
-  state", cleared by meiolol-53; chances from meiolol-state's run
-  20261014T020129Z-state-preds-2253Zr
-- 2026-10-12: Teams that take objectives win about as often as teams with this much
-  more gold lead: a dragon about 1000, each soul point about 800 more, soul about 4000,
-  elder about 4800, baron 400-1000, an inhibitor 900 at 20 minutes to 2300 at 30, a
-  grub 100-150; towers are worth only their gold. No difference was detected by who is
-  ahead. Sure as a description, not proof the objective caused the win. Site:
-  post-game "teams that took this dragon won about as often as teams 1000 gold ahead"
-  (Jacob to confirm). Evidence: docs/model.md "Objective value given the state"
+- What a team gains at an objective barely depends on the draft (under 0.2 points).
+  Given gold and objectives so far, a dragon adds about 4-4.5 points of win chance
+  (5-5.5 after 30), baron 5.6-7.9, elder 9, an outer tower 1.5-3.2, a kill 2.5-3.8. A
+  stolen dragon or herald is followed by the stealing team winning 8-10 points less
+  than expected. Sure: 236,227 dev games of 2253Z, cross-fitted, description not cause.
+  Site: post-game only, once the production key allows anything public ("teams that
+  took this won about X points more often"). Evidence: docs/model.md "In-game events on
+  the draft-aware state"
+- Teams that take objectives win about as often as teams with this much more gold: a
+  dragon about 1000, soul about 4000, elder about 4800, baron 400-1000, an inhibitor
+  900-2300; towers only their gold. Sure as description. Site: post-game wording, to
+  confirm with Jacob. Evidence: docs/model.md "Objective value given the state"
 
 ## Playstyle
 
-- 2026-10-13: Your champion decides most of how many skillshots you land, spells you
-  cast and how much crowd control you deal (70-82% of the spread); your lane opponent
-  decides about a third of how many skillshots you dodge, how often you survive three
-  stuns in a fight and how many wards you clear before 20 minutes (likely because some
-  champions' traps count as wards), and about a tenth of the magic and true damage you
-  take. Sure: 10,604 held-out games, all clear. Site: a champ-select lesson can forecast
-  these from the matchup ("against X expect to dodge more"); they don't measure skill.
-  Evidence: docs/model.md "Field ranking" (A2)
-- 2026-10-13: Beyond the gold, XP and objectives at 14:00, how you play adds almost
-  nothing measurable: your early style moves your win chance by about 0.7 percentage
-  points on average (under 1.6 for nine players in ten). There are no distinct
-  "playstyle types" once champion and state are known, and a neural net reading play
-  minute by minute found nothing more. Sure: 10,604 held-out games, one look; the style
-  measures together are clear but tiny; types and the net: not detected (the net could
-  not have seen effects quite this small). Single directions (say, farming rather than
-  fighting) look clear in the training games but don't hold up on held-out games. Site:
-  no "play aggressive to win", no "you are a type X player" and no per-style win
-  claims; post-game may show your own style against your role's spread, as description
-  only. Evidence: docs/model.md "Playstyle clusters and sequence net"
-- ~~2026-10-13: Early aggression, roaming and time in the enemy half look like they win
-  games, but almost all of that is just being ahead; once the gold and XP leads at
-  14:00 are known, style adds very little. What survives is small: bot laners and mids
-  who trade more damage win a bit more (about +2.4 and +1.7 percentage points per step),
-  supports who roam and fight and laners who take spare camps a little more. Sure:
-  118k games; each style number is within about 0.2-0.35 percentage points either way
-  (counting a game's ten players together), and the ones above clear zero. Site: no
-  "play aggressive to win"; post-game may show your own style against your role's
-  spread. Evidence: docs/model.md "Playstyle given the state". Superseded 2026-10-13 by
-  the line above (objectives in the state too)~~
-- ~~2026-10-12: Early aggression, roaming and time in the enemy half look like they win
-  games, but almost all of that is just being ahead; once the gold and XP leads at
-  14:00 are known, style adds very little. What survives is small: bot laners and mids
-  who trade more damage win a bit more (about +2.4 and +1.7 percentage points per step),
-  supports who roam and fight and laners who take spare camps a little more. Sure:
-  118k games for the overall result; the per-style numbers' intervals treat the ten
-  players of a game as independent, so they are too narrow until refitted by game.
-  Site: no "play aggressive to win"; post-game may show your own style against your
-  role's spread. Evidence: docs/model.md "Playstyle given the state"~~
+- Your champion decides most of how many skillshots you land, spells you cast and how
+  much crowd control you deal (70-82%); your lane opponent about a third of how many
+  skillshots you dodge and wards you clear. Sure: 10,604 held-out games. Site: a lesson
+  may forecast these from the matchup; they don't measure skill. Evidence:
+  docs/model.md "Field ranking" (A2)
+- Beyond the gold, XP and objectives at 14:00, how you play adds almost nothing: about
+  0.7 points of win chance on average, and no distinct playstyle types. Sure: 10,604
+  held-out games; types and a sequence net not detected. Site: no "play aggressive to
+  win" or "you are a type X player"; post-game may show your style against your role's
+  spread. Evidence: docs/model.md "Playstyle clusters and sequence net"
 
 ## Player
 
-- 2026-10-24 (early): Part of a champion's win rate is how practised its players are,
-  so a tier list should compare champions at the same mastery: a new champion looks up
-  to 1.6 percentage points weaker than it is (Locke in every role, Corki top, Zaahen
-  top) and one-trick favourites up to 1 point stronger (Katarina mid, Shaco jungle,
-  Riven and Neeko mid). Few ranks move otherwise. Each tenfold more points on the
-  champion is worth about 2 points of win rate (2.9 from 10k to 300k). The lane card's
-  mastery bonus counts this twice: it should compare a player's points with what that
-  champion's players usually have. Sure: 1.37M ranked games (every crawled region, up to
-  20 Oct), 35% of players with mastery from before the game; slope 0.080 (0.077 to
-  0.082) a tenfold; the centred bonus predicts held-out games better by 0.30 ± 0.13
-  milli-nats a game (dev-val, 161k games); not yet checked on the lane card's own hit
-  rate. Site: nothing changes until the lane card fix is measured on the replay.
-  Evidence: docs/model.md "Strength at fixed mastery (D1)"
-- 2026-10-20: Ranking your own champions by your mastery on them as well as by the
-  draft helps: a player wins more on a champion they have more points on, even compared
-  with their own other champions, by about 3.7 percentage points from 10k to 300k
-  points in an otherwise even game, the same in every role. With it the lane card shows
-  the champion the player actually picked 47% of the time instead of 39% (other picks
-  known; 48% instead of 37% blind). Sure: held out, 944k player-games of 130k ranked
-  games (15 to 18 Oct, every crawled region) with the player's mastery fetched before
-  the game; 977k older player-games to fit; log loss of the player's own result
-  -0.00052 ± 0.00007 nats (EUW alone -0.00087 ± 0.00021); log of points works as well
-  as five bands, and one weight as well as one per role. Players with more points on
-  everything win slightly less, so the gain is within a player's pool, not "experienced
-  players win". Site: the app ranks the pool with it (a toggle, on by default) and says
-  only "150k mastery points", never a win chance from it. Evidence: docs/model.md "Pool
-  and expertise replay"
-- 2026-10-20: Every champion is harder when you're new to it, and some much more than
-  others. Players with under 10k mastery points on their champion win 47.7%, with 300k+
-  51.7% (practised players are also better players overall, so every champion shows
-  some gap: 3.6 points on average between under 30k and 100k+). New Rengar players win
-  39% against 51% for practised ones, Yuumi 43% against 51%, Nunu, Shaco, Udyr, Briar
-  and Hecarim similar; new Leona, Milio, Braum, Caitlyn, Vayne, Lulu and Nami players do
-  about as well as practised ones. Sure: 1.92M ranked solo player-games, every crawled
-  region, with the player's mastery fetched before the game (median 1.6 days before);
-  champions differ by about 2 points (sd) beyond chance, the same order on accounts
-  with 1M+ total points (r 0.92, so not autofill or new accounts), but split in half
-  the order per champion and role only partly repeats (r 0.33): single champions are
-  rough, and only the clearest (10 harder, 18 easier of 173) get a label. Ruled out:
-  taking a champion's last game before the fetch as the game the points belong to
-  (those games win 42-45%: players drop a champion after a loss). Site: "harder or
-  easier to pick up" only for those, always with both win rates and their games, never
-  as a win rate gain; the rest "usual". Evidence: src/learning.zig; scratch checks
-  2026-10-20 on snap-20261018T1007Z (scripts and per champion-role table in
-  data/team/2026-10-20-morning/, learning.md)
-- 2026-10-15: How widely players' win rates on a champion spread (about 46% to 64% for
-  the middle half of players with 10+ games) is almost all luck: with 10 to 20 games a
-  player's rate swings by about 15 points by chance, and no real difference between
-  players on the same champion beyond that was detected; the largest the data allows
-  is a spread (sd) of about 3 points. Matchmaking pulls everyone towards 50%. Sure:
-  6,952 player-champion pairs with 10+ games, EUW, all patches in the crawl,
-  Platinum IV+; method of moments with a 95% upper bound. Site: the champion pages
-  show the spread with a luck note, never as "good players get X%". Evidence:
-  src/spread.zig; scratch check 2026-10-15 (per-pair excess variance over binomial,
-  1.8 pp² ± 3.2)
-- ~~2026-10-12 (early): Higher-ranked players have more gold at 14 in the same matchup,
-  as you'd expect. Sure: partly measured with the post-game rank (see Data quality),
-  so not yet trustworthy. Site: lesson material ("at your rank, expect X"), never a
-  reason to pick. Evidence: lab screen r 0.11 on gold14. Superseded 2026-10-13 by Early
-  game "A higher rank means more gold at 14" (measured on held-out games)~~
+- Every champion is harder when you're new to it, some much more: under 10k mastery
+  points win 47.7%, 300k+ 51.7%. New Rengar players win 39% against 51% practised, Yuumi
+  43% against 51%; new Leona, Milio, Braum and Caitlyn players do about as well as
+  practised ones. Sure: 1.92M player-games with mastery from before the game; single
+  champions are rough (split-half r 0.33), so only the clearest 10 harder and 18 easier
+  get a label. Site: "harder or easier to pick up" with both win rates and games, never
+  a gain. Evidence: src/learning.zig
+- Ranking your own champions by your mastery as well as the draft helps: a player wins
+  about 3.7 points more from 10k to 300k points on a champion, even against their own
+  other champions; the lane card then shows the champion actually picked 47% of the
+  time instead of 39%. Sure: 944k held-out player-games, -0.00052 ± 0.00007 nats.
+  Site: the app ranks the pool with it and says only "150k mastery points". Evidence:
+  docs/model.md "Pool and expertise replay"
+- (early) Part of a champion's win rate is how practised its players are: a new
+  champion looks up to 1.6 points weaker (Locke, Corki top) and one-trick favourites up
+  to 1 stronger (Katarina mid, Shaco jungle). The lane card's mastery bonus counts this
+  twice: it should compare against that champion's usual mastery. Sure: 1.37M games,
+  held-out gain 0.30 ± 0.13 milli-nats. Site: nothing until the lane card fix is
+  measured on the replay. Evidence: docs/model.md "Strength at fixed mastery (D1)"
+- How widely players' win rates on a champion spread (46% to 64% for the middle half
+  with 10+ games) is almost all luck: no real difference between players beyond it was
+  detected, at most a 3-point sd. Sure: 6,952 player-champion pairs, EUW. Site:
+  champion pages show the spread with a luck note. Evidence: src/spread.zig
 
 ## Data quality
 
-- 2026-10-24 (early): In a new patch's first days, last month's numbers predict the
-  next week's games better than the new patch's own games, for every number we show.
-  A champion's win rate and item choices on the new patch catch up after 2-3 days;
-  matchups, duos and lane gold at 14 still trail after a week, as each pairing has few
-  games. Sure: two patch boundaries replayed day by day (16.19 to 16.20 over 7 days,
-  16.20 to 16.21 over its first 2), every region, on games not used to choose anything;
-  16.21 is short and inside the draft model's test window. Site: keep 30 days as the
-  default; an estimate must beat it, not only the patch. Evidence: docs/plan/estimates.md
-  "E2 baseline"
-- 2026-10-12: The rank we store with each game is taken after the game, so it already
-  knows a little about the result. Sure. Models: use the rank at game start (from rank
-  history) before trusting any rank effect. Evidence: meiolol-88
-- 2026-10-12: Riot's "dragon soul given" event with team 0 only announces which soul is
-  coming (in every game with 2+ dragons); only team 100 or 200 means a soul was taken.
-  Sure: 1,683 of 2,209 such events are team 0 in archived timelines. Models read soul
-  from team 100/200 only (src/objectives.zig)
-- 2026-10-13: Leaving out the games that end before 15:00 without a remake flag (about
-  1.5%, mostly surrenders after someone left) makes no difference we can detect to
-  draft win predictions, and early-game numbers are identical either way, since those
-  games never reach 15:00. Sure: dev only, 8,608 games, same code apart from the
-  filter; win log loss differs by +0.00003 ± 0.00025 nats per row, so the largest
-  effect the data allows is about 0.0003 nats either way. Models: the lab harness and the draft export fit on games that lasted
-  15:00 (07564cc, 3500fd3), kept for the cleaner definition; the site's stats and
-  meiolol eval still keep them. Evidence: meiolol-db, win-ratings champ_select,
-  harness.min_duration_s 900 vs 0 at 4478aeb
-- ~~2026-10-12: About 1.5% of games end before 15:00 without being flagged as remakes,
-  mostly surrenders after someone left, likely decided by the leaver; a few are
-  anti-cheat aborts with no real result. Real remakes are flagged correctly. Sure:
-  3,400 of 230k games, raw summaries checked. Models: not settled. The lab harness
-  leaves them out of win fitting and scoring (07564cc); the site's stats, meiolol eval
-  and the draft export keep them. Whether leaving them out helps is untested: compare
-  win runs with and without first. Early-game outcomes need 15:00 by definition.
-  Superseded 2026-10-13 by the measured line above~~
-- 2026-10-12: Nearly everyone finishes an item before the game ends (only 1.1% of top
-  laners and 1.3% of supports in games past 15:00 never do), so first-item time works
-  for every role. Sure. Evidence: docs/model.md "Team effects"
-- 2026-10-18: Most lane matchups seen in a patch have only a handful of games: of
-  166.5k matchup curves on EUW 16.20 (every rank bracket and mastery split), 32% had 1
-  game, 58% under 5 and 71% under 10; only 9% had 50+. Sure: 190k games, every curve in
-  curves-16.20.bin counted. Site: `meiolol curves` writes matchups from 10 games
-  (docs/architecture.md "Lane curves"); thinner ones show the plain average or nothing
-- 2026-10-21: A new patch moves champions' win rates beyond noise, mostly the ones it
-  changed: on 16.21's first day champion-role rates moved 0.75 pp (RMS, within platform)
-  from the week before, while two later days of 16.20 moved 0; the 12 champions with
-  Data Dragon changes moved 1.9 pp, the rest 0.5 pp. Using last patch's numbers unchanged
-  costs about 1 milli-nat per game on day one. Fairly sure for day one (52k games, noise
-  subtracted per cell, control on the same cells); later days not yet measured. Models:
-  nothing changed yet; docs/plan/patch-transfer.md. Evidence: docs/model.md "Patch
-  16.21's first day"
-- 2026-10-22: On a patch's first day most players have not played it yet, so asking for
-  a random player's games mostly finds nothing: of players checked on 16.21's first day
-  75 to 89% had no game on it, while those who had one had 1.6 to 3.5 more. Players just
-  seen in a new game are the best bet (3.1 to 3.5 new games per call), and the ladder's
-  "played since" signal only works once it is measured from a check after the patch
-  (americas went from 0.3 to 1.9 new games per call). Sure: crawl counts per hour, all
-  four regions, 16.21 day one. Crawler: snowball and patch-start reset since 3648361
-  and 044f5fa. Evidence: research/sources/patch-day-discovery-measured.md
-- 2026-10-23: In the newest lab snapshot every game now has its players' end-of-game
-  stats, but we know all ten players' champion mastery from before the game in only 1
-  game in 15 of the older games (1 in 3 of the newest days, under 1 in 10 on EUW), and
-  all ten ranks at game start in about half the games since 13 Oct. Sure: counts over
-  1.6M games, snap-20261023T2004Z; every game of patch 16.21 is in the held-out test
-  days, so no dev result covers 16.21 yet. Models: seat-level mastery is usable, all-ten
-  mastery features fit on the newest days only or impute. Evidence: docs/model.md "The
-  new pin, snap-20261023T2004Z"
+- The rank we store with each game is looked up after it, so it knows the result: with
+  it a model calls 63.8% of winners instead of 53.7%. Models: use the rank at game
+  start (rank history, from 12 Oct), never the stored rank, as a pre-game input
+- In a new patch's first days, last month's numbers predict the next week better than
+  the new patch's own games: win rates and items catch up after 2-3 days, matchups,
+  duos and lane gold still trail after a week. Sure: two patch boundaries replayed day
+  by day. Site: keep 30 days as the default; an estimate must beat it. Evidence:
+  docs/plan/estimates.md "E2 baseline"
+- A new patch moves champions' win rates beyond noise, mostly the changed ones: 0.75 pp
+  RMS on 16.21's first day, 1.9 pp for the 12 changed champions; last patch's numbers
+  unchanged cost about 1 milli-nat a game on day one. Sure: 52k games, day one only.
+  Evidence: docs/model.md "Patch 16.21's first day"
+- On a patch's first day most players have not played it: 75-89% of players checked
+  had no game on it; players just seen in a new game give 3.1-3.5 new games per call.
+  Crawler: snowball and patch-start reset. Evidence:
+  research/sources/patch-day-discovery-measured.md
+- In the newest snapshot (2004Z) every game has end-of-game stats, but all ten
+  players' mastery from before the game in only 1 game in 15 (1 in 3 of the newest
+  days), and all ten ranks at game start in about half the games since 13 Oct; every
+  16.21 game is in the test days. Models: seat-level mastery is usable. Evidence:
+  docs/model.md "The new pin, snap-20261023T2004Z"
+- Most lane matchups in a patch have a handful of games: of 166.5k matchup curves on
+  EUW 16.20, 58% had under 5 games, only 9% 50+. Site: `meiolol curves` writes
+  matchups from 10 games (docs/architecture.md "Lane curves")
+- Leaving out games that end before 15:00 without a remake flag (about 1.5%, mostly
+  surrenders after a leaver) makes no detectable difference to draft predictions.
+  Sure: 8,608 dev games, +0.00003 ± 0.00025 nats. Models: the lab harness and draft
+  export fit on games past 15:00; the site's stats and meiolol eval keep them
+- Riot's "dragon soul given" event with team 0 only announces the coming soul; only
+  team 100 or 200 means a soul was taken. Models read soul from those (src/objectives.zig)
+- Nearly everyone finishes an item (98.7%+ in games past 15:00, every role), so
+  first-item time works for every role

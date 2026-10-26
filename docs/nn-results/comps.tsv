@@ -1,9 +1,9 @@
 # title: Which team traits and matchups win beyond the champions? (comp discovery)
 model	vs	block	diff	ci	seeds	seed_lo	seed_hi	games	fit_games	source	note	learned
-ratings + mix (logistic layer, fit blocks 1-3), snap-20261013T2253Z	ratings	folds	-0.00046	0.00022	1			89584		20261014T005906Z-comps-confirm-2253Z	folds here = the sealed blocks 4-5 and dev-val, all unseen; mix replicates (-1.06 ± 0.23 pp/sd); plus magic 60%+, damage type into armour, tankiness x pen items confirmed as effects	2026-10-14 (2253Z): Beyond which champions are picked
+ratings + mix (logistic layer, fit blocks 1-3), snap-20261013T2253Z	ratings	folds	-0.00046	0.00022	1			89584		20261014T005906Z-comps-confirm-2253Z	folds here = the sealed blocks 4-5 and dev-val, all unseen; mix replicates (-1.06 ± 0.23 pp/sd); plus magic 60%+, damage type into armour, tankiness x pen items confirmed as effects	Beyond which champions are picked
 ratings + mix (logistic layer, fit blocks 1-3), snap-20261013T2253Z	ratings	dev-val	-0.00052	0.00034	1			35834		20261014T005906Z-comps-confirm-2253Z
 ratings + 31 listed terms + mix, snap-20261013T2253Z	ratings + mix	folds	-0.00034	0.00025	1			89584		20261014T005906Z-comps-confirm-2253Z	under the ~0.0005 noise floor: no prediction gain claimed for the confirmed crosses
-ratings + mix (logistic layer, fit blocks 1-3)	ratings	folds	-0.00028	0.00042	1			26242		20261013T233834Z-comps-confirm	folds here = the sealed blocks 4-5 and dev-val; mix is the only comp trait confirmed of 252 screened	2026-10-14: Screening 252 team traits
+ratings + mix (logistic layer, fit blocks 1-3)	ratings	folds	-0.00028	0.00042	1			26242		20261013T233834Z-comps-confirm	folds here = the sealed blocks 4-5 and dev-val; mix is the only comp trait confirmed of 252 screened	Beyond which champions are picked
 ratings + mix (logistic layer, fit blocks 1-3)	ratings	dev-val	0.00043	0.00070	1			8500		20261013T233834Z-comps-confirm
 ratings + 6 non-mix screen passes	ratings	folds	0.00043	0.00066	1			26242		20261013T233834Z-comps-confirm	AD share x armour, 4+ ranged, 2+ engagers and mix proxies: worse on sealed games
 ratings + screen passes + mix	ratings + mix	folds	0.00067	0.00058	1			26242		20261013T233834Z-comps-confirm

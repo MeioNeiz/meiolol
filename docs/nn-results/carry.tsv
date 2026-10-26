@@ -1,15 +1,15 @@
 # title: Which champions carry: does a champion turn its own lead into wins more than its role?
 # diff: log loss per player-row of the team's win, model minus vs (negative better); in-game rows at the minute, same team state; not draft predictors
 model	vs	block	diff	ci	seeds	seed_lo	seed_hi	games	fit_games	source	note	learned
-champion x own gold lead, minute 15	same state model without it	test	-0.00003	0.00007	1			10604	117806	20261013T231146Z-carry-final	pre-declared reading (b); not detected: champions in a role differ by under ~2 pp per 1000 gold (plant)	2026-10-14: No champion was found
-champion x own gold lead, minute 25	same state model without it	test	-0.00001	0.00008	1			10604	117806	20261013T231146Z-carry-final	pre-declared reading (b)	2026-10-14: No champion was found
-champion x own gold lead, minute 15	same state model without it	folds	0.00004	0.00005	1					20261013T223040Z-carry-a	better in 1 of 5 folds	2026-10-14: No champion was found
-champion x own gold lead, minute 25	same state model without it	folds	0.00002	0.00004	1					20261013T223040Z-carry-a	better in 2 of 5 folds	2026-10-14: No champion was found
-gold by role, minute 15	team gold lead	test	-0.00251	0.00167	1			10604	117806	20261013T231146Z-carry-final	pre-declared reading (a): whose gold it is matters; bot laner most, support least	2026-10-13: Gold on your support barely moves
-gold by role, minute 25	team gold lead	test	-0.00410	0.00192	1			10604	117806	20261013T231146Z-carry-final	pre-declared reading (a)	2026-10-13: Gold on your support barely moves
-gold by role, minute 15	team gold lead	folds	-0.00413	0.00100	1					20261013T223040Z-carry-a	better in 5 of 5 folds	2026-10-13: Gold on your support barely moves
-champion x experience on it, draft	role experience slopes	test	0.00001	0.00004	1			10604	117806	20261013T231146Z-carry-final	pre-declared reading (c); not detected: plant shows 4 pp per log1p game, not 2	2026-10-14: We can't tell which champions
-champion x experience on it, draft	role experience slopes	folds	0.00006	0.00003	1					20261013T223040Z-carry-a	better in 0 of 5 folds	2026-10-14: We can't tell which champions
+champion x own gold lead, minute 15	same state model without it	test	-0.00003	0.00007	1			10604	117806	20261013T231146Z-carry-final	pre-declared reading (b); not detected: champions in a role differ by under ~2 pp per 1000 gold (plant)	No champion was found
+champion x own gold lead, minute 25	same state model without it	test	-0.00001	0.00008	1			10604	117806	20261013T231146Z-carry-final	pre-declared reading (b)	No champion was found
+champion x own gold lead, minute 15	same state model without it	folds	0.00004	0.00005	1					20261013T223040Z-carry-a	better in 1 of 5 folds	No champion was found
+champion x own gold lead, minute 25	same state model without it	folds	0.00002	0.00004	1					20261013T223040Z-carry-a	better in 2 of 5 folds	No champion was found
+gold by role, minute 15	team gold lead	test	-0.00251	0.00167	1			10604	117806	20261013T231146Z-carry-final	pre-declared reading (a): whose gold it is matters; bot laner most, support least	Gold on your support barely moves
+gold by role, minute 25	team gold lead	test	-0.00410	0.00192	1			10604	117806	20261013T231146Z-carry-final	pre-declared reading (a)	Gold on your support barely moves
+gold by role, minute 15	team gold lead	folds	-0.00413	0.00100	1					20261013T223040Z-carry-a	better in 5 of 5 folds	Gold on your support barely moves
+champion x experience on it, draft	role experience slopes	test	0.00001	0.00004	1			10604	117806	20261013T231146Z-carry-final	pre-declared reading (c); not detected: plant shows 4 pp per log1p game, not 2	Every champion is harder when you're new
+champion x experience on it, draft	role experience slopes	folds	0.00006	0.00003	1					20261013T223040Z-carry-a	better in 0 of 5 folds	Every champion is harder when you're new
 planted leverage, sd 2 pp per 1000 gold, minute 15	same state model without it	folds	-0.00052	0.00012	1					20261013T223708Z-carry-plant-lane2	planted truth, not real data: what the folds detect	
 planted leverage, sd 1 pp per 1000 gold, minute 15	same state model without it	folds	-0.00007	0.00007	1					20261013T223656Z-carry-plant-lane1	planted truth, not real data: below detection	
 type x own gold lead, minute 15, new pin 2253Z	same state model without it	folds	-0.00005	0.00003	1					20261013T234133Z-carry-types-2253	better in 5 of 5 folds; dev-val -0.00004 ± 0.00006; bot-lane mages' gold worth less than marksmen's	
