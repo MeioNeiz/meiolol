@@ -131,6 +131,8 @@ const W = struct {
     pub const everyone = Phrase("dashed: {x:text} against everyone");
     pub const by_rank = plain("By rank and mastery");
     pub const with = Phrase("{x:text} with");
+    pub const partners = plain("Lane partners");
+    pub const partners_key = plain("vs usual · games");
 };
 
 /// The head (ui-matchup.wasm), with the opponents and the view links
@@ -466,10 +468,12 @@ pub const More = struct {
         return card.view(h, .{}, &.{ card.head(h, W.by_rank, null, &.{}), p.ranks.view(h) });
     }
 
+    /// DuoPair: both sides' lane partners in one card, x's left and y's right (stacked
+    /// when narrow)
     fn duos(p: *P, h: *H) N {
         const d = p.data;
         if (d.duos.len == 0) return .none;
-        var cards = h.list();
+        var sides = h.list();
         for (d.duos, 0..) |side, k| {
             const rows = h.mem.alloc(champlist.Row, side.partners.len) catch {
                 h.oom = true;
@@ -481,9 +485,9 @@ pub const More = struct {
                 .note = phrase.num(h, .count, x.games),
             };
             const title = W.with.with(h, .{ .x = side.name });
-            cards.add(h.div(.{ .key = k }, .{card.view(h, .{}, &.{ card.head(h, title, null, &.{}), champlist.view(h, .{ .label = title }, rows) })}));
+            sides.add(h.div(.{ .key = k, .class = "side" }, .{ h.h3(.{}, .{title}), champlist.view(h, .{ .label = title }, rows) }));
         }
-        return h.div(.{ .class = "row2" }, .{cards.done()});
+        return card.view(h, .{}, &.{ card.head(h, W.partners, null, &.{h.span(.{ .class = "lg" }, .{W.partners_key})}), h.div(.{ .class = "partners" }, .{sides.done()}) });
     }
 };
 
@@ -570,6 +574,8 @@ pub const css =
     \\@layer components {
     \\  .c-mpage .c-mstrip { margin-top: var(--sp-4); }
     \\  .c-mpage [data-thin] > .c-vs { opacity: 0.6; }
+    \\  .c-mpage .partners { display: grid; gap: var(--sp-3) var(--sp-5); grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+    \\  .c-mpage .partners h3 { margin: 0 0 var(--sp-1); font-size: var(--fs-s); font-weight: var(--w-m); color: var(--t2); }
     \\  .c-mpage .c-head .lg { font-size: var(--fs-s); color: var(--muted); }
     \\  .c-mpage .lanerow { display: grid; gap: var(--sp-4); grid-template-columns: minmax(0, 1fr); }
     \\  @media (min-width: 1000px) {

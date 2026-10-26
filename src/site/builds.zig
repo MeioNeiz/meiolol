@@ -199,58 +199,6 @@ pub fn forVs(site: *const Site, r: Role, x: Champ, y: Champ) ?Picked {
     return pick(site, patchView(site), File.getVs, .{ x.id, r, y.id });
 }
 
-/// A rune counts as taken differently in a matchup when its pick share is this many
-/// points away from the champion's in the role. Win rates don't enter: pulled toward the
-/// row's by File.shrinkK (about 6,000 games for runes in matchups), no rune's moves 2
-/// points from its usual in any EUW matchup with a file (16.20, 2,002 pairs)
-const shift_points = 10;
-/// Under this many players a rune's share is left out either way
-const shift_games = rate_games;
-
-const Shift = struct { id: u32, here: f64, usual: f64, o: File.Option };
-
-/// Runes whose share of `b`'s players is shift_points away from the usual build's,
-/// largest move first
-fn runeShifts(a: std.mem.Allocator, b: File.Build, usual: ?File.Build) ![]const Shift {
-    const rows = b.get(.rune) orelse return &.{};
-    const ur = (usual orelse return &.{}).get(.rune) orelse return &.{};
-    var list: std.ArrayList(Shift) = .empty;
-    for (rows.options) |o| {
-        if (o.games < shift_games) continue;
-        const u = if (find(ur.options, o.v)) |q| pct(q.games, ur.games) else 0;
-        const here = pct(o.games, rows.games);
-        if (@abs(here - u) >= shift_points) try list.append(a, .{ .id = o.v[0], .here = here, .usual = u, .o = o });
-    }
-    // Taken less: the usual rune left out in the matchup is found from the usual side
-    for (ur.options) |q| {
-        if (q.games < shift_games or find(rows.options, q.v) != null) continue;
-        const u = pct(q.games, ur.games);
-        if (u >= shift_points) try list.append(a, .{ .id = q.v[0], .here = 0, .usual = u, .o = .{ .v = q.v, .games = 0, .wins = 0 } });
-    }
-    std.mem.sort(Shift, list.items, {}, struct {
-        fn f(_: void, p: Shift, q: Shift) bool {
-            return @abs(p.here - p.usual) > @abs(q.here - q.usual);
-        }
-    }.f);
-    return list.items;
-}
-
-fn shiftChip(w: *Writer, f: *const File, s: Shift) !void {
-    const n = ddragon.find(f.runes, s.id) orelse return;
-    var buf: [32]u8 = undefined;
-    const rate = if (s.o.games >= rate_games) try std.mem.print(&buf, ", {d:.1}% won", .{pct(s.o.wins, s.o.games)}) else "";
-    try tpl.renderPart(w,
-        \\<span class="rsh" title="{name}: {games} games{rate}"><img src="{src}" alt="" loading="lazy">{name} <b>{here:.0}%</b> <small>usually {usual:.0}%</small></span>
-    , .{
-        .name = n.name,
-        .games = s.o.games,
-        .rate = rate,
-        .src = n.icon,
-        .here = s.here,
-        .usual = s.usual,
-    });
-}
-
 /// Index of the option with the highest win rate once each is pulled toward its slot's
 /// (`games` players, `wins` won) by `k` games (File.shrinkK), taking the low end of
 /// that estimate's range (one standard error), so a few lucky games can't top it and
@@ -945,37 +893,4 @@ test "rank label" {
     try std.testing.expectEqualStrings("Platinum IV and up", try rankLabel(a, "PLATINUM"));
     try std.testing.expectEqualStrings("Master and up", try rankLabel(a, "MASTER"));
     try std.testing.expectEqualStrings("every player in Platinum+ games", try rankLabel(a, ""));
-}
-
-test "rune shifts: 10+ points from usual, runes left out of the matchup too" {
-    const rows = struct {
-        fn of(options: []const File.Option) [1]File.Rows {
-            return .{.{ .kind = .rune, .games = 1000, .wins = 500, .options = options }};
-        }
-    };
-    const usual_rows = rows.of(&.{
-        .{ .v = &.{8010}, .games = 600, .wins = 300 },
-        .{ .v = &.{8008}, .games = 400, .wins = 200 },
-        .{ .v = &.{8444}, .games = 300, .wins = 150 },
-        .{ .v = &.{8299}, .games = 50, .wins = 25 },
-    });
-    const vs_rows = rows.of(&.{
-        .{ .v = &.{8010}, .games = 800, .wins = 400 },
-        .{ .v = &.{8008}, .games = 150, .wins = 75 },
-        // Under shift_games: never listed
-        .{ .v = &.{8021}, .games = 50, .wins = 25 },
-    });
-    const usual: File.Build = .{ .champion = 1, .role = .top, .games = 1000, .wins = 500, .kinds = &usual_rows };
-    const vs: File.Build = .{ .champion = 1, .role = .top, .opponent = 2, .games = 1000, .wins = 500, .kinds = &vs_rows };
-    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-    defer arena.deinit();
-    const got = try runeShifts(arena.allocator(), vs, usual);
-    try std.testing.expectEqual(3, got.len);
-    const want = [_]struct { u32, f64, f64 }{ .{ 8444, 0, 30 }, .{ 8008, 15, 40 }, .{ 8010, 80, 60 } };
-    for (want, got) |w, g| {
-        try std.testing.expectEqual(w[0], g.id);
-        try std.testing.expectApproxEqAbs(w[1], g.here, 1e-9);
-        try std.testing.expectApproxEqAbs(w[2], g.usual, 1e-9);
-    }
-    try std.testing.expectEqual(0, (try runeShifts(arena.allocator(), vs, null)).len);
 }

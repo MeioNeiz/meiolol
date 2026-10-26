@@ -22,7 +22,8 @@ pub fn data(a: std.mem.Allocator, f: *const File, b: File.Build, champion: []con
     return dataVs(a, f, b, champion, null);
 }
 
-/// A matchup's `b`, with the champion's `usual` build for the runes the matchup moves
+/// A matchup's `b`, with the champion's `usual` build: each slot's "as usual" option and
+/// the runes the matchup moves
 pub fn dataVs(a: std.mem.Allocator, f: *const File, b: File.Build, champion: []const u8, usual: ?File.Build) !bp.Data {
     var slots: std.ArrayList(bp.Slot) = .empty;
     const kinds = [_]struct { Kind, bp.Kind }{ .{ .spells, .spells }, .{ .start, .start }, .{ .boots, .boots }, .{ .core3, .core }, .{ .item4, .item4 }, .{ .item5, .item5 }, .{ .item6, .item6 }, .{ .skills, .skills }, .{ .skill_path, .skill_path } };
@@ -31,7 +32,7 @@ pub fn dataVs(a: std.mem.Allocator, f: *const File, b: File.Build, champion: []c
         if (rows.options.len == 0) continue;
         const options = try a.alloc(bp.Option, rows.options.len);
         for (options, rows.options) |*o, x| o.* = try option(a, f, b, k[0], x);
-        try slots.append(a, .{ .kind = k[1], .games = rows.games, .wins = rows.wins, .options = options });
+        try slots.append(a, .{ .kind = k[1], .games = rows.games, .wins = rows.wins, .options = options, .usual = usualOf(rows, if (usual) |u| u.get(k[0]) else null) });
     }
     return .{
         .runes = try runes(a, f, b, if (usual) |u| u.get(.rune) else null),
@@ -39,6 +40,14 @@ pub fn dataVs(a: std.mem.Allocator, f: *const File, b: File.Build, champion: []c
         .champion = champion,
         .own = bp.rate(b.games, b.wins),
     };
+}
+
+/// Where the usual build's most played option is among the matchup's `rows`
+fn usualOf(rows: File.Rows, usual: ?File.Rows) ?u8 {
+    const u = usual orelse return null;
+    if (u.options.len == 0) return null;
+    for (rows.options, 0..) |o, i| if (std.mem.eql(u32, o.v, u.options[0].v)) return std.math.cast(u8, i);
+    return null;
 }
 
 fn option(a: std.mem.Allocator, f: *const File, b: File.Build, kind: Kind, x: File.Option) !bp.Option {
@@ -221,4 +230,19 @@ test "moved runes: 10+ points from usual either way, under 100 players on both s
     };
     for (want) |w| try std.testing.expectEqual(w[1], moved(vs, find(vs.options, &.{w[0]}), usual, w[0]));
     try std.testing.expectEqual(null, moved(vs, find(vs.options, &.{8010}), null, 8010));
+}
+
+test "as usual: the usual build's most played, wherever it is among the matchup's" {
+    const usual: File.Rows = .{ .kind = .boots, .games = 1000, .wins = 500, .options = &.{
+        .{ .v = &.{3047}, .games = 600, .wins = 300 },
+        .{ .v = &.{3111}, .games = 400, .wins = 200 },
+    } };
+    const vs: File.Rows = .{ .kind = .boots, .games = 500, .wins = 250, .options = &.{
+        .{ .v = &.{3111}, .games = 300, .wins = 150 },
+        .{ .v = &.{3047}, .games = 200, .wins = 100 },
+    } };
+    try std.testing.expectEqual(1, usualOf(vs, usual));
+    try std.testing.expectEqual(0, usualOf(usual, usual));
+    try std.testing.expectEqual(null, usualOf(vs, null));
+    try std.testing.expectEqual(null, usualOf(.{ .kind = .boots, .games = 0, .wins = 0, .options = vs.options[0..1] }, usual));
 }

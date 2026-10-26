@@ -328,8 +328,8 @@ test "fixture games to stats, curves and the website" {
         // mastery
         .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "<div class=\"c-cpage c-mpage\"><div class=\"part\" data-island=\"matchup\" data-bin=\"", "<h1>Mordekaiser<span class=\"and\">vs</span>Darius</h1>", "href=\"darius-vs-mordekaiser.html\"", "Mordekaiser wins", "Vs usual", "data-island=\"matchmore\" data-bin=\"", "data-js=\"../../" ++ assets.matchmore_js.path ++ "\" data-wasm=\"" ++ assets.matchmore_wasm.path ++ "\"", "<h2>Lane</h2>", "class=\"c-chart c-lane\"", "<h2>Head to head</h2>", "Kills to 6 min", "Level 6", "First item", "<h2>Won by gold at 10</h2>", "dashed: all lanes", "<h2>By game length</h2>", "dashed: Mordekaiser against everyone", "<h2>By rank and mastery</h2>", "All games", "<script src=\"../../" ++ assets.matchup_js.path ++ "\" data-wasm=\"" ++ assets.matchup_wasm.path ++ "\" defer></script>" } },
         // Bot lane partners (MU4): each side's supports, and a support matchup's bot laners
-        .{ "matchup/bot/kaisa-vs-twitch.html", &.{ "First blood", "<h2>Twitch with</h2>" } },
-        .{ "matchup/support/pyke-vs-rakan.html", &.{"<h2>Rakan with</h2>"} },
+        .{ "matchup/bot/kaisa-vs-twitch.html", &.{ "First blood", "<h2>Lane partners</h2>", "<h3>Twitch with</h3>" } },
+        .{ "matchup/support/pyke-vs-rakan.html", &.{"<h3>Rakan with</h3>"} },
         // MatchupStrip: the lane opponents with a page, the current one lit; the pair's build
         .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<nav class=\"c-mstrip\" aria-label=\"Darius&#39;s Top opponents\">", "<a href=\"darius-vs-mordekaiser.html\" aria-current=\"page\"", "data-island=\"champbuild\" data-bin=\"", "<h2>Build against Mordekaiser</h2>", "href=\"../../champion/darius.html#role=top\"" } },
         .{ "method.html", &.{ "Games to stabilise", "<li><b>Highest win rate</b>: marked among options", "<h2 id=\"lean\">Early or late</h2>" } },

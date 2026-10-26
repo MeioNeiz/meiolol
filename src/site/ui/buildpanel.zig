@@ -6,7 +6,8 @@
 //! reading after it (the rate minus the champion's, wide cells only), games. The slot's
 //! highest win rate on solid_games is marked "best", a 4th row when not in the top 3.
 //! Most picked | Highest WR (lolalytics' build toggle, Jacob 26 Oct) re-sorts every cell
-//! by win rate, options under solid_games after. Tap a cell's "all" to open it across
+//! by win rate, options under solid_games after. A matchup's marks the champion's usual
+//! choice "as usual" and dims a cell led by it. Tap a cell's "all" to open it across
 //! the panel: every option, named, sortable. One open at a time; it and the order in
 //! the URL. The figures' names are said once, above the cells. Data is plain, so a page
 //! can hand it builds filtered by a choice (contextual builds, builds.md answers) later
@@ -90,6 +91,8 @@ pub const Slot = struct {
     wins: u32,
     /// Most played first
     options: []const Option,
+    /// A matchup's: the option the champion plays most in all its games ("as usual")
+    usual: ?u8 = null,
 };
 
 pub const Data = struct {
@@ -112,6 +115,7 @@ const W = struct {
     pub const own_note = Phrase("The choice's win rate minus {c:text}'s {r:rate}. Late items read high: games that reach them were often won already.");
     pub const min = plain("min");
     pub const best = plain("best");
+    pub const as_usual = plain("as usual");
     pub const order = plain("Order");
     pub const most_picked = plain("Most picked");
     pub const highest = plain("Highest WR");
@@ -158,6 +162,7 @@ const Ctx = struct {
     top: []const art.Art = &.{},
     /// The highest win rate of two or more options on solid_games
     best: ?*const Option = null,
+    usual: ?*const Option = null,
 };
 
 /// The highest win rate on solid_games, when two or more options have that many
@@ -193,9 +198,9 @@ pub const Row = struct {
         const o = r.o;
         const open = r.c.open;
         return switch (r.c.kind) {
-            .core => h.span(.{ .class = "what" }, .{ itempath.view(h, o.art, .{ .minutes = o.minutes, .top = if (r.c.top.ptr == o.art.ptr) null else r.c.top }), bestMark(h, r) }),
-            .skills => h.span(.{ .class = "what" }, .{ h.span(.{ .class = "keys" }, .{keys(h, o.keys, true)}), bestMark(h, r) }),
-            .skill_path => h.span(.{ .class = "keys", .data_v = "path" }, .{keys(h, o.keys, false)}),
+            .core => h.span(.{ .class = "what" }, .{ itempath.view(h, o.art, .{ .minutes = o.minutes, .top = if (r.c.top.ptr == o.art.ptr) null else r.c.top }), bestMark(h, r), usualMark(h, r) }),
+            .skills => h.span(.{ .class = "what" }, .{ h.span(.{ .class = "keys" }, .{keys(h, o.keys, true)}), bestMark(h, r), usualMark(h, r) }),
+            .skill_path => h.span(.{ .class = "what" }, .{ h.span(.{ .class = "keys", .data_v = "path" }, .{keys(h, o.keys, false)}), usualMark(h, r) }),
             else => blk: {
                 var icons = h.list();
                 for (o.art) |a| icons.add(art.view(h, a, .{ .k = if (r.c.kind == .spells) .spell else .item, .named = !open }));
@@ -204,13 +209,17 @@ pub const Row = struct {
                     h.span(.{ .class = "min" }, .{ phrase.num(h, .int, @as(u32, @intFromFloat(@round(o.minutes[0])))), " ", W.min })
                 else
                     null;
-                break :blk h.span(.{ .class = "what" }, .{ icons.done(), if (label) |l| h.span(.{ .class = "nm" }, .{l}) else null, minute, bestMark(h, r) });
+                break :blk h.span(.{ .class = "what" }, .{ icons.done(), if (label) |l| h.span(.{ .class = "nm" }, .{l}) else null, minute, bestMark(h, r), usualMark(h, r) });
             },
         };
     }
 
     fn bestMark(h: *H, r: *const Row) ?N {
         return if (r.c.best == r.o) h.span(.{ .class = "best" }, .{W.best}) else null;
+    }
+
+    fn usualMark(h: *H, r: *const Row) ?N {
+        return if (r.c.usual == r.o) h.span(.{ .class = "usual" }, .{W.as_usual}) else null;
     }
 
     /// "Q › E › W", or the level path with R bold
@@ -310,6 +319,7 @@ pub const BuildPanel = struct {
                 .own = data.own,
                 .top = if (s.options.len > 0) s.options[0].art else &.{},
                 .best = bestOf(s.options),
+                .usual = if (s.usual) |u| (if (u < s.options.len) &s.options[u] else null) else null,
             };
             const rows = try a.alloc(Row, s.options.len);
             for (rows, s.options) |*r, *o| r.* = .{ .o = o, .c = &p.ctx[i] };
@@ -437,6 +447,13 @@ pub const BuildPanel = struct {
         return &paths[0];
     }
 
+    /// A matchup's cell whose most played is the champion's usual: dimmed, the others
+    /// stand out
+    fn asUsual(p: *const BuildPanel, k: Kind) bool {
+        const rows = p.rows[@backingInt(k)];
+        return rows.len > 0 and p.ctx[@backingInt(k)].usual == rows[0].o;
+    }
+
     fn cell(p: *BuildPanel, h: *H, k: Kind) ?N {
         const rows = p.rows[@backingInt(k)];
         if (rows.len == 0) return null;
@@ -445,6 +462,7 @@ pub const BuildPanel = struct {
             .key = @backingInt(k),
             .data_k = k,
             .data_open = p.open == k,
+            .data_usual = p.open != k and p.asUsual(k),
             .on_keydown = if (p.open == k) h.on(p, .key) else null,
         }, .{ p.head(h, k, rows.len), p.tableFor(h, k, p.open == k, shown) });
     }
@@ -457,7 +475,7 @@ pub const BuildPanel = struct {
         if (pri.len == 0 and paths.len == 0) return null;
         const open = p.open == .skills;
         const path_c = &p.ctx[@backingInt(Kind.skill_path)];
-        return h.div(.{ .class = "slot", .key = @backingInt(Kind.skills), .data_k = Kind.skills, .data_open = open, .on_keydown = if (open) h.on(p, .key) else null }, .{
+        return h.div(.{ .class = "slot", .key = @backingInt(Kind.skills), .data_k = Kind.skills, .data_open = open, .data_usual = !open and p.asUsual(.skills), .on_keydown = if (open) h.on(p, .key) else null }, .{
             p.head(h, .skills, @max(pri.len, paths.len)),
             if (pri.len > 0) p.tableFor(h, .skills, open, 1) else null,
             if (paths.len > 0) skillgrid.view(h, .{
@@ -505,11 +523,14 @@ pub const css =
     \\  .c-build .keys > .ar { color: var(--faint); margin: 0 3px; font-family: var(--font); }
     \\  .c-build .slot > .c-skills { margin: var(--sp-2) 0 var(--sp-1); }
     \\  .c-build .what > .best { margin-left: 4px; font-size: var(--fs-xs); font-weight: var(--w-b); color: var(--accent); }
+    \\  .c-build .what > .usual { margin-left: 4px; font-size: var(--fs-xs); color: var(--faint); white-space: nowrap; }
+    \\  .c-build .slot[data-usual] > :not(.sh) { opacity: 0.55; }
     \\  @container (max-width: 260px) { .c-build .won > .own { display: none; } }
     \\  @container (max-width: 200px) {
     \\    .c-build .what > .best { flex: none; width: 6px; height: 6px; margin-left: 5px; border-radius: 50%;
     \\      overflow: hidden; color: transparent; background: var(--accent); }
     \\    .c-build .c-table[data-v="compact"] :is(th, td) { padding: 0 2px; }
+    \\    .c-build .what > .usual { display: none; }
     \\  }
     \\}
     \\
@@ -537,6 +558,35 @@ pub fn gallery(g: *Gallery) void {
         p.runes.id = p.id;
         g.addFill(s[0], p.view(h));
     }
+    const vs = matchup(h, &demo.darius) catch {
+        h.oom = true;
+        return;
+    };
+    const p = h.mem.create(BuildPanel) catch {
+        h.oom = true;
+        return;
+    };
+    p.init(h.mem, vs) catch {
+        h.oom = true;
+        return;
+    };
+    p.id = h.fmt("build-vs-{d}", .{g.width});
+    p.runes.id = p.id;
+    g.addFill("a matchup's: spells and skills as usual (dimmed), boots' usual second", p.view(h));
+}
+
+/// `d` as a matchup's: the usual leads Spells and Skills, Boots' is its second
+fn matchup(h: *H, d: *const Data) !*const Data {
+    const slots = try h.mem.dupe(Slot, d.slots);
+    for (slots) |*s| s.usual = switch (s.kind) {
+        .spells, .skills, .skill_path => 0,
+        .boots => if (s.options.len > 1) 1 else null,
+        else => null,
+    };
+    const out = try h.mem.create(Data);
+    out.* = d.*;
+    out.slots = slots;
+    return out;
 }
 
 test {
