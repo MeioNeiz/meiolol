@@ -209,6 +209,8 @@ pub const Game = struct {
     /// Everyone in the game by slot, with their Riot ID as at the game where the
     /// service has it (the example has none)
     players: []const Seat = &.{},
+    /// Only with `Input.detail` and a timeline
+    detail: ?Detail = null,
 };
 
 pub const Seat = struct {
@@ -387,6 +389,64 @@ pub const Matchup = struct {
     pub const Point = struct { start_ms: i64, gold10: ?i16, vs_typical10: ?i32 };
 };
 
+/// The whole game for the game page, everyone's and not only yours; slots index
+/// `Game.players`
+pub const Detail = struct {
+    /// Your team's total gold minus the enemy's at each frame from 0
+    gold_lead: []const i32,
+    kills: []const Kill,
+    objectives: []const Objective,
+    /// By slot, at the last frame
+    seats: []const SeatStats,
+    /// Yours in time order, undone ones left out
+    buys: []const Buy,
+    /// Yours: the ability levelled (1 Q to 4 R), one per level-up in order
+    skills: []const u8,
+};
+
+pub const no_slot = 255;
+
+pub const Kill = struct {
+    t_s: u32,
+    /// `no_slot` for a turret, minion or monster
+    killer: u8,
+    victim: u8,
+    assists: []const u8,
+    /// Map units, blue's base at (0, 0), about 15k a side
+    x: u16,
+    y: u16,
+    /// Bounty and shutdown
+    gold: u32,
+    /// Kills close in time and place share one (fight_gap_ms, fight_range), numbered
+    /// from 0 in time order
+    fight: u16,
+};
+
+pub const Objective = struct {
+    t_s: u32,
+    ours: bool,
+    kind: Kind,
+    /// "Infernal dragon", "Mid inner tower"
+    name: []const u8,
+    /// You got it or helped
+    you: bool,
+
+    pub const Kind = enum { tower, inhibitor, dragon, elder, grubs, herald, baron, atakhan };
+};
+
+pub const SeatStats = struct {
+    /// Lane and jungle minions
+    cs: u32,
+    gold: u32,
+    level: u8,
+    damage: u32,
+    taken: u32,
+    /// Gold minus the lane opponent's at 14 min; null without one or a frame 14
+    lane14: ?i32,
+};
+
+pub const Buy = struct { t_s: u32, item: u32 };
+
 pub const Input = struct {
     summary: Summary,
     slot: u8,
@@ -396,6 +456,8 @@ pub const Input = struct {
     platform: []const u8 = "",
     /// By slot, null unknown; empty when none are known
     riot_ids: []const ?[]const u8 = &.{},
+    /// Fill `Game.detail`
+    detail: bool = false,
 };
 
 /// `games` newest first
@@ -429,7 +491,10 @@ pub fn analyse(arena: Allocator, in: Input, rank: Rank, set: CurveSet) !Game {
         .lane = null,
         .players = try seats(arena, s, in.slot, in.riot_ids),
     };
-    if (!s.remake) if (in.timeline) |t| try wholeGame(arena, s, in.slot, t, in.platform, set.legendaries, &g);
+    if (!s.remake) if (in.timeline) |t| {
+        try wholeGame(arena, s, in.slot, t, in.platform, set.legendaries, &g);
+        if (in.detail and t.participants == s.players.len) g.detail = try detail(arena, s, in.slot, t);
+    };
     const r = role orelse return g;
     const opp_slot = for (s.players, 0..) |p, i| {
         if (p.team != me.team and std.mem.eql(u8, p.position, me.position)) break i;
@@ -601,10 +666,9 @@ fn involved(me: u8, killer: u8, assists: []const u8) bool {
     return killer == me or std.mem.findScalar(u8, assists, me) != null;
 }
 
-fn yourMoments(arena: Allocator, s: Summary, slot: u8, t: timeline.Timeline, chance: []const u16) ![]const Moment {
-    const team = s.players[slot].team;
-    const me: u8 = slot + 1;
-    const blue = team == 100;
+/// Champion kills grouped into fights, in time order; `mine` when `me` killed, helped or
+/// died in one
+fn clusterKills(arena: Allocator, s: Summary, t: timeline.Timeline, me: u8) ![]Fight {
     var fights: std.ArrayList(Fight) = .empty;
     for (t.events, 0..) |e, i| switch (e.data) {
         .champion_kill => |k| {
@@ -626,9 +690,15 @@ fn yourMoments(arena: Allocator, s: Summary, slot: u8, t: timeline.Timeline, cha
         },
         else => {},
     };
+    return fights.items;
+}
 
+fn yourMoments(arena: Allocator, s: Summary, slot: u8, t: timeline.Timeline, chance: []const u16) ![]const Moment {
+    const team = s.players[slot].team;
+    const me: u8 = slot + 1;
+    const blue = team == 100;
     var out: std.ArrayList(Moment) = .empty;
-    for (fights.items) |f| {
+    for (try clusterKills(arena, s, t, me)) |f| {
         if (!f.mine) continue;
         const start_ms = t.events[f.first].t_ms;
         var m: Moment = .{ .kind = .fight, .t_s = seconds(start_ms), .end_s = seconds(f.last_ms), .where = "" };
@@ -798,6 +868,118 @@ fn bestMinute(arena: Allocator, s: Summary, slot: u8, t: timeline.Timeline) !?Be
     b.deaths = countDeaths(t, me, b.minute - 1, b.minute);
     b.taken = try objectivesBy(arena, t, s.players[slot].team, from_ms, from_ms + 60_000, true);
     return b;
+}
+
+fn detail(arena: Allocator, s: Summary, slot: u8, t: timeline.Timeline) !Detail {
+    const team = s.players[slot].team;
+    const me: u8 = slot + 1;
+    const n: u8 = @intCast(s.players.len);
+    const toSlot = struct {
+        fn f(id: u8, count: u8) u8 {
+            return if (id >= 1 and id <= count) id - 1 else no_slot;
+        }
+    }.f;
+
+    const lead = try arena.alloc(i32, t.frames.len);
+    for (t.frames, lead) |f, *l| {
+        l.* = 0;
+        for (s.players, 1..) |p, id| {
+            const g = f.get(@intCast(id), .total_gold);
+            l.* += if (p.team == team) g else -g;
+        }
+    }
+
+    // Kill event index to its fight
+    const fight_of = try arena.alloc(u16, t.events.len);
+    for (try clusterKills(arena, s, t, me), 0..) |f, fi| for (f.kills.items) |i| {
+        fight_of[i] = @intCast(fi);
+    };
+    var kills: std.ArrayList(Kill) = .empty;
+    var objectives: std.ArrayList(Objective) = .empty;
+    var buys: std.ArrayList(Buy) = .empty;
+    var skills: std.ArrayList(u8) = .empty;
+    for (t.events, 0..) |e, i| switch (e.data) {
+        .champion_kill => |k| {
+            if (k.victim == 0 or k.victim > n) continue;
+            const assists = try arena.alloc(u8, k.assists.len);
+            var na: usize = 0;
+            for (k.assists) |a| if (toSlot(a, n) != no_slot) {
+                assists[na] = a - 1;
+                na += 1;
+            };
+            try kills.append(arena, .{
+                .t_s = seconds(e.t_ms),
+                .killer = toSlot(k.killer, n),
+                .victim = k.victim - 1,
+                .assists = assists[0..na],
+                .x = @intCast(std.math.clamp(k.x, 0, std.math.maxInt(u16))),
+                .y = @intCast(std.math.clamp(k.y, 0, std.math.maxInt(u16))),
+                .gold = k.bounty + k.shutdown,
+                .fight = fight_of[i],
+            });
+        },
+        .building_kill => |b| {
+            const taker = 300 - @as(i64, b.team);
+            if (taker != 100 and taker != 200) continue;
+            const inhib = std.mem.eql(u8, b.building, "INHIBITOR_BUILDING");
+            try objectives.append(arena, .{
+                .t_s = seconds(e.t_ms),
+                .ours = taker == team,
+                .kind = if (inhib) .inhibitor else .tower,
+                .name = try buildingLabel(arena, b.building, b.lane, b.tower),
+                .you = involved(me, b.killer, b.assists),
+            });
+        },
+        .elite_monster => |em| {
+            if (em.team != 100 and em.team != 200) continue;
+            const name = monsterLabel(em.monster, em.subtype) orelse continue;
+            const eql = std.mem.eql;
+            const kind: Objective.Kind = if (eql(u8, em.monster, "DRAGON"))
+                (if (eql(u8, em.subtype, "ELDER_DRAGON")) .elder else .dragon)
+            else if (eql(u8, em.monster, "HORDE")) .grubs else if (eql(u8, em.monster, "RIFTHERALD")) .herald else if (eql(u8, em.monster, "BARON_NASHOR")) .baron else .atakhan;
+            try objectives.append(arena, .{ .t_s = seconds(e.t_ms), .ours = em.team == team, .kind = kind, .name = name, .you = involved(me, em.killer, em.assists) });
+        },
+        .item_purchased => |it| if (it.participant == me) {
+            try buys.append(arena, .{ .t_s = seconds(e.t_ms), .item = it.item });
+        },
+        // Undoing a purchase: `before` goes back to the shop
+        .item_undo => |u| if (u.participant == me and u.before != 0) {
+            var j = buys.items.len;
+            while (j > 0) {
+                j -= 1;
+                if (buys.items[j].item == u.before) {
+                    _ = buys.orderedRemove(j);
+                    break;
+                }
+            }
+        },
+        // EVOLVE is Kha'Zix's and Viktor's upgrades, not a level
+        .skill_level_up => |sk| if (sk.participant == me and std.mem.eql(u8, sk.type, "NORMAL") and sk.slot >= 1 and sk.slot <= 4) {
+            try skills.append(arena, sk.slot);
+        },
+        else => {},
+    };
+
+    const seat_stats = try arena.alloc(SeatStats, n);
+    const last = if (t.frames.len > 0) t.frames[t.frames.len - 1] else timeline.Frame{ .t_ms = 0 };
+    for (seat_stats, s.players, 1..) |*o, p, id_| {
+        const id: u8 = @intCast(id_);
+        o.* = .{
+            .cs = @intCast(@max(0, last.get(id, .minions) + last.get(id, .jungle_minions))),
+            .gold = @intCast(@max(0, last.get(id, .total_gold))),
+            .level = @intCast(std.math.clamp(last.get(id, .level), 0, 255)),
+            .damage = @intCast(@max(0, last.get(id, .damage_to_champions))),
+            .taken = @intCast(@max(0, last.get(id, .damage_taken))),
+            .lane14 = null,
+        };
+        if (t.frames.len <= lane_end or Role.fromLcu(p.position) == null) continue;
+        const opp = for (s.players, 1..) |q, qid| {
+            if (q.team != p.team and std.mem.eql(u8, q.position, p.position)) break qid;
+        } else continue;
+        const f = t.frames[lane_end];
+        o.lane14 = f.get(id, .total_gold) - f.get(@intCast(opp), .total_gold);
+    }
+    return .{ .gold_lead = lead, .kills = kills.items, .objectives = objectives.items, .seats = seat_stats, .buys = buys.items, .skills = skills.items };
 }
 
 /// Objectives taken in [from_ms, to_ms) by `team` (`ours`) or by the other team, as
@@ -1237,6 +1419,60 @@ test "a real timeline from both sides, with and without a curve" {
     try testing.expectEqual(@as(u32, 1), r.weeks[0].lane_games);
     try testing.expectEqual(@as(usize, 1), r.matchups.len);
     try testing.expectEqual(@as(usize, 2), r.matchups[0].points.len);
+}
+
+test "detail: everyone's kills and objectives, mirrored from the other side" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const raw = try @import("store").raw.decompress(arena, @embedFile("../riot/testdata/timeline.json.gz"));
+    const t = try timeline.fromJson(arena, raw);
+    const s = try testSummary(arena);
+
+    const plain = try analyse(arena, .{ .summary = s, .slot = 0, .timeline = t }, .{}, .{});
+    try testing.expect(plain.detail == null);
+    const blue = (try analyse(arena, .{ .summary = s, .slot = 0, .timeline = t, .detail = true }, .{}, .{})).detail.?;
+    const red = (try analyse(arena, .{ .summary = s, .slot = 5, .timeline = t, .detail = true }, .{}, .{})).detail.?;
+
+    try testing.expectEqual(t.frames.len, blue.gold_lead.len);
+    try testing.expectEqual(@as(i32, 0), blue.gold_lead[0]);
+    for (blue.gold_lead, red.gold_lead) |b, r| try testing.expectEqual(b, -r);
+
+    try testing.expect(blue.kills.len >= plain.moments.len);
+    var fight: u16 = 0;
+    var blue_deaths: u32 = 0;
+    for (blue.kills, 0..) |k, i| {
+        if (i > 0) try testing.expect(k.t_s >= blue.kills[i - 1].t_s);
+        // Fights numbered in order of their first kill
+        try testing.expect(k.fight <= fight + @intFromBool(i > 0));
+        fight = @max(fight, k.fight);
+        try testing.expect(k.victim < 10 and (k.killer == no_slot or k.killer < 10));
+        for (k.assists) |a| try testing.expect(a < 10);
+        blue_deaths += @intFromBool(k.victim == 0);
+    }
+    try testing.expectEqual(plain.death_costs.len, blue_deaths);
+
+    try testing.expectEqual(blue.objectives.len, red.objectives.len);
+    for (blue.objectives, red.objectives) |b, r| {
+        try testing.expect(b.ours != r.ours and b.kind == r.kind);
+        try testing.expectEqualStrings(b.name, r.name);
+    }
+
+    var lanes: u32 = 0;
+    for (blue.seats, 0..) |st, i| {
+        try testing.expect(st.level >= 1 and st.gold > 0);
+        if (st.lane14) |l| {
+            lanes += 1;
+            try testing.expectEqual(-l, blue.seats[(i + 5) % 10].lane14.?);
+        }
+    }
+    try testing.expectEqual(@as(u32, 10), lanes);
+    try testing.expectEqual(plain.lane.?.gold[lane_end - 1], @as(i16, @intCast(blue.seats[0].lane14.?)));
+
+    try testing.expect(blue.buys.len > 0);
+    for (blue.buys[1..], blue.buys[0 .. blue.buys.len - 1]) |b, a| try testing.expect(b.t_s >= a.t_s);
+    try testing.expect(blue.skills.len >= 1 and blue.skills.len <= 18);
+    for (blue.skills) |sk| try testing.expect(sk >= 1 and sk <= 4);
 }
 
 test "a red lead past i16 reads as the largest, not an overflow" {
