@@ -18,10 +18,12 @@ pub const Opts = struct {
     /// No padding: a table or chart fills it to the edges
     flush: bool = false,
     label: ?tree.Text = null,
+    /// A link's target (Tabs to the page's sections)
+    id: ?[]const u8 = null,
 };
 
 pub fn view(h: *H, o: Opts, kids: []const N) N {
-    return h.section(.{ .class = "c-card", .data_v = if (o.flush) "flush" else null, .aria_label = o.label }, .{kids});
+    return h.section(.{ .class = "c-card", .data_v = if (o.flush) "flush" else null, .aria_label = o.label, .id = o.id }, .{kids});
 }
 
 /// The card's head band: its title, a count, then its own controls at the end

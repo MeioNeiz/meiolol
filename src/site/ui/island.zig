@@ -12,8 +12,8 @@
 //!
 //! `Dom` provides the diff's ops (el, text, attr, del, data, ins, rm, forget) and:
 //! adopt(sel, first) -> count, listen(island, sel, mask), rect(id) -> [3]f32 (left, top,
-//! width), capture(id, pointer), active() -> id, focus(id), scroll(id), popover(id,
-//! show), hash(buf) -> []const u8, setHash(s, push), warn(msg).
+//! width), capture(id, pointer), active() -> id, focus(id), scroll(id), jump(element
+//! id), popover(id, show), hash(buf) -> []const u8, setHash(s, push), warn(msg).
 const std = @import("std");
 const tree = @import("tree.zig");
 const diff = @import("diff.zig");
@@ -218,9 +218,9 @@ pub fn Island(comptime Root: type, comptime Dom: type) type {
             // Bubble to the first node with a handler for this kind
             const hd = while (true) {
                 const node = t.node(n);
-                // A link's click is the browser's
-                if (in.kind == .click and node.tag == .a) return false;
                 if (t.handler(n, in.kind)) |hd| break hd;
+                // A link's click is the browser's, unless the link itself handles it
+                if (in.kind == .click and node.tag == .a) return false;
                 // So is an unhandled one that opens a popover or falls inside one (a
                 // column head's Toggletip must not also sort)
                 if (in.kind == .click and (t.attr(n, "popovertarget") != null or t.attr(n, "popover") != null)) return false;
@@ -250,6 +250,7 @@ pub fn Island(comptime Root: type, comptime Dom: type) type {
 
         /// The handler's request for after the patch, on the node marked data-ref
         fn apply(i: *I, after: tree.After) void {
+            if (after.op == .jump) return i.rt.dom.jump(after.ref);
             const t = &i.trees[i.cur];
             const n = t.find(t.root, "data-ref", after.ref) orelse return;
             const id = t.node(n).dom;
@@ -259,6 +260,7 @@ pub fn Island(comptime Root: type, comptime Dom: type) type {
                 .show => i.rt.dom.popover(id, true),
                 .hide => i.rt.dom.popover(id, false),
                 .click => i.rt.dom.click(id),
+                .jump => unreachable,
             }
         }
 

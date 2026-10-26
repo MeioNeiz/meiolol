@@ -165,6 +165,9 @@ pub const Fake = struct {
     pub fn scroll(f: *Fake, _: u32) void {
         f.scrolled += 1;
     }
+    pub fn jump(f: *Fake, _: []const u8) void {
+        f.scrolled += 1;
+    }
     pub fn popover(f: *Fake, _: u32, show: bool) void {
         if (show) f.shown += 1 else f.shown -|= 1;
     }

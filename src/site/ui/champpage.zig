@@ -30,6 +30,7 @@ const trend = @import("trend.zig");
 const histogram = @import("histogram.zig");
 const champlist = @import("champlist.zig");
 const tiers = @import("tiers.zig");
+const tabs = @import("tabs.zig");
 const plain = phrase.plain;
 const Phrase = phrase.Phrase;
 const H = tree.H;
@@ -112,6 +113,8 @@ pub const Rel = struct {
     role: role.Role,
     /// Those in 1%+ of the champion's games, most played first
     opps: []const Opp,
+    /// How many met it less often, left out
+    rare: u16 = 0,
 };
 
 pub const Opp = struct {
@@ -176,6 +179,10 @@ const W = struct {
     pub const nth = Phrase("{n:int}{th:text}");
     pub const move_note = plain("Its win rate on this patch minus the previous one, and how far it may be off either way (95%).");
     pub const matchups = plain("Matchups");
+    pub const sections = plain("Sections");
+    pub const build = plain("Build");
+    pub const trends = plain("Trends");
+    pub const rare = Phrase("{n:count} · +{r:count} rare");
     pub const against = plain("Against");
     pub const with = plain("With");
     pub const rel_label = plain("Matchups against or with");
@@ -352,6 +359,15 @@ pub const Top = struct {
 
     const P = @This();
 
+    /// The section links: a plain `#build` would clear the fragment's role
+    pub const Msg = union(enum) { jump: Section };
+    pub const Section = enum { build, matchups, trends };
+
+    pub fn update(_: *P, m: Msg, ev: *tree.Event) void {
+        ev.handled = true;
+        ev.after = .{ .op = .jump, .ref = @tagName(m.jump) };
+    }
+
     /// The main role as written; fromUrl moves to the URL's
     pub fn init(data: *const TopData, prep: []champsearch.Index, root: []const u8) P {
         var p: P = .{ .data = data, .prep = prep, .root = root };
@@ -394,6 +410,11 @@ pub const Top = struct {
                     .vs = if (p.prep.len > 0) p.search.view(h) else null,
                     .strip = p.headline(h),
                 }),
+                tabs.view(h, W.sections, &.{
+                    .{ .label = W.build, .href = "#build", .on = h.on(p, .{ .jump = .build }) },
+                    .{ .label = W.matchups, .href = "#matchups", .on = h.on(p, .{ .jump = .matchups }), .n = @intCast(rl.lane.len) },
+                    .{ .label = W.trends, .href = "#trends", .on = h.on(p, .{ .jump = .trends }) },
+                }, &.{}),
                 h.p(.{ .class = "where" }, .{tree.Text{ .s = d.scope }}),
             }),
         });
@@ -498,6 +519,7 @@ pub const Build = struct {
     pub fn view(p: *P, h: *H) N {
         return h.div(.{
             .class = "part",
+            .id = "build",
             .data_island = "champbuild",
             .data_src = if (p.src.len > 0) p.src else null,
             .data_stamp = p.stamp,
@@ -611,7 +633,7 @@ pub const More = struct {
             .data_wasm = p.wasm,
         }, .{
             p.matchups(h),
-            h.div(.{ .class = "row3" }, .{ p.patchCard(h), p.lengthCard(h), p.playersCard(h) }),
+            h.div(.{ .class = "row3", .id = "trends" }, .{ p.patchCard(h), p.lengthCard(h), p.playersCard(h) }),
             h.div(.{ .class = "row2" }, .{ p.pickupCard(h), p.alsoCard(h) }),
         });
     }
@@ -619,7 +641,7 @@ pub const More = struct {
     fn matchups(p: *P, h: *H) N {
         const d = p.data;
         const rl = p.r();
-        if (rl.rels.len == 0) return card.view(h, .{}, &.{ card.head(h, W.matchups, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
+        if (rl.rels.len == 0) return card.view(h, .{ .id = "matchups" }, &.{ card.head(h, W.matchups, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
         const rel = rl.rels[p.rel];
         const own = rate(.{ .games = rl.games, .wins = rl.wins });
         const opps = rel.opps;
@@ -690,8 +712,9 @@ pub const More = struct {
                 .{ .label = W.m_gold, .selected = p.measure == .gold, .disabled = !p.goldShown(), .on = h.on(p, .{ .measure = .gold }) },
             }),
         };
-        return card.view(h, .{}, &.{
-            card.head(h, W.matchups, phrase.num(h, .count, @as(u32, @intCast(opps.len))), &controls),
+        const count: u32 = @intCast(opps.len);
+        return card.view(h, .{ .id = "matchups" }, &.{
+            card.head(h, W.matchups, if (rel.rare > 0) W.rare.with(h, .{ .n = count, .r = rel.rare }) else phrase.num(h, .count, count), &controls),
             h.div(.{ .class = "plot" }, .{p.dots.view(h)}),
             if (chosen) |o| h.div(.{ .class = "brief" }, .{matchbrief.view(h, p.brief(h, rel, o), chips[0..nc])}) else .none,
         });
@@ -878,6 +901,8 @@ pub const css =
     \\@layer components {
     \\  .c-cpage, .c-cpage > .part { display: flex; flex-direction: column; gap: var(--sp-4); }
     \\  .c-cpage > .part:empty { display: none; }
+    \\  .c-cpage .c-card > .c-tabs { margin-top: var(--sp-4); }
+    \\  .c-cpage [id] { scroll-margin-top: calc(var(--header) + var(--sp-3)); }
     \\  .c-cpage .where { margin: var(--sp-3) 0 0; font-size: var(--fs-s); color: var(--faint); }
     \\  .c-cpage .none { margin: var(--sp-3) 0; color: var(--muted); }
     \\  .c-cpage .note { margin-left: auto; font-size: var(--fs-s); color: var(--muted); }

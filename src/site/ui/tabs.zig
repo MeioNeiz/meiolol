@@ -25,7 +25,7 @@ pub fn view(h: *H, label: ?tree.Text, items: []const Item, end: []const N) N {
     for (items, 0..) |it, i| {
         const n: ?N = if (it.n) |c| h.span(.{ .class = "n" }, .{phrase.num(h, .count, c)}) else null;
         l.add(if (it.href) |href|
-            h.a(.{ .key = i, .href = href, .aria_current = if (it.selected) "page" else null }, .{ it.label, n })
+            h.a(.{ .key = i, .href = href, .aria_current = if (it.selected) "page" else null, .on_click = it.on }, .{ it.label, n })
         else
             h.button(.{ .key = i, .type = "button", .role = "tab", .aria_selected = it.selected, .on_click = it.on }, .{ it.label, n }));
     }

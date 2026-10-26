@@ -271,3 +271,47 @@ test "a server render that differs from the tree is reported" {
     _ = try p.rt.add(List, &state, &server, "[data-island]");
     try testing.expectEqual(@as(u32, 1), p.fake.warnings);
 }
+
+const Links = struct {
+    jumps: u8 = 0,
+
+    pub const Msg = union(enum) { jump, row };
+    pub const Url = struct {};
+
+    pub fn toUrl(_: *const Links) Url {
+        return .{};
+    }
+    pub fn fromUrl(_: *Links, _: Url) void {}
+
+    pub fn update(l: *Links, m: Msg, ev: *tree.Event) void {
+        switch (m) {
+            .jump => {
+                l.jumps += 1;
+                ev.handled = true;
+                ev.after = .{ .op = .jump, .ref = "matchups" };
+            },
+            .row => l.jumps += 100,
+        }
+    }
+
+    pub fn view(l: *Links, h: *tree.H) tree.N {
+        return h.div(.{ .class = "ui", .on_click = h.on(l, .row) }, .{
+            h.a(.{ .href = "#matchups", .data_k = "own", .on_click = h.on(l, .jump) }, .{"Matchups"}),
+            h.a(.{ .href = "other.html", .data_k = "plain" }, .{"Other"}),
+        });
+    }
+};
+
+test "a link's click is the browser's unless the link handles it" {
+    var p: Page = undefined;
+    p.init("");
+    defer p.arena.deinit();
+    var state: Links = .{};
+    var server: Links = .{};
+    const i = p.add(Links, &state, &server);
+    try testing.expect(p.rt.event(0, .{ .kind = .click, .target = Page.id(i, "data-k", "own") }));
+    try testing.expectEqual(@as(u8, 1), state.jumps);
+    try testing.expectEqual(@as(u32, 1), p.fake.scrolled);
+    try testing.expect(!p.rt.event(0, .{ .kind = .click, .target = Page.id(i, "data-k", "plain") }));
+    try testing.expectEqual(@as(u8, 1), state.jumps);
+}

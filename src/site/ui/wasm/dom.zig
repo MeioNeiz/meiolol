@@ -165,6 +165,14 @@ pub const Dom = struct {
         d.node(id).call("scrollIntoView", .{o}, void);
     }
 
+    pub fn jump(_: *Dom, id: []const u8) void {
+        const s = zjb.string(id);
+        defer s.release();
+        const t = zjb.global("document").call("getElementById", .{s}, zjb.Handle);
+        defer t.release();
+        if (t != .null) t.call("scrollIntoView", .{}, void);
+    }
+
     pub fn popover(d: *Dom, id: u32, show: bool) void {
         const n = d.node(id);
         const open = n.call("matches", .{zjb.constString(":popover-open")}, bool);

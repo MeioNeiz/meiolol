@@ -136,9 +136,10 @@ pub const Event = struct {
 };
 
 pub const After = struct {
-    /// click: a link chosen by keyboard follows itself
-    op: enum { focus, scroll, show, hide, click },
-    /// The `data-ref` value of the node in the new tree
+    /// click: a link chosen by keyboard follows itself. jump: scroll the page to the
+    /// element whose id is `ref`, anywhere on it (another island's section)
+    op: enum { focus, scroll, show, hide, click, jump },
+    /// The `data-ref` value of the node in the new tree; jump: an element id
     ref: []const u8,
 };
 

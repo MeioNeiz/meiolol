@@ -222,10 +222,14 @@ fn relOf(site: *const Site, ch: Champ, cr: Counts, pairs: Pairs) !cp.Rel {
     const k = pairsUsualK(pairs);
     const lane = !pairs.ally and pairs.r == pairs.r2;
     var opps: std.ArrayList(cp.Opp) = .empty;
+    var rare: u16 = 0;
     for (site.champs, 0..) |other, i| {
         if (other.c == ch.c) continue;
         const e = pairs.get(ch.c, other.c);
-        if (@as(f64, @floatFromInt(e.games)) < floor) continue;
+        if (@as(f64, @floatFromInt(e.games)) < floor) {
+            if (e.games > 0) rare += 1;
+            continue;
+        }
         const oc = st.champRole(pairs.r2, other.c);
         const u = VsUsual.of(e.wins, e.games, pairs.usualOf(base, ratio(oc.wins, oc.games)), k);
         const curve = if (lane) if (site.curves) |*c| c.get(pairs.r, .all, ch.id, other.id) else null else null;
@@ -243,7 +247,7 @@ fn relOf(site: *const Site, ch: Champ, cr: Counts, pairs: Pairs) !cp.Rel {
             return x.games > y.games;
         }
     }.f);
-    return .{ .ally = pairs.ally, .role = uiRole(pairs.r2), .opps = opps.items };
+    return .{ .ally = pairs.ally, .role = uiRole(pairs.r2), .opps = opps.items, .rare = rare };
 }
 
 fn spreadOf(site: *const Site, ch: Champ) ?cp.Spread {
