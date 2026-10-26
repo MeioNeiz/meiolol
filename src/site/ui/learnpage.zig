@@ -15,6 +15,7 @@ const guess = @import("guess.zig");
 const puzzle = @import("puzzle.zig");
 const ld = @import("learndata.zig");
 const champ = @import("champ.zig");
+const choice = @import("choice.zig");
 const role = @import("role.zig");
 const phrase = @import("phrase.zig");
 const url = @import("url.zig");
@@ -90,6 +91,14 @@ pub const Page = struct {
         }
     }
 
+    fn lockable(p: *const Page) bool {
+        if (p.revealed or p.end) return false;
+        return switch (p.cur().answer) {
+            .guess => p.g.value != null,
+            .pick => p.pick != null,
+        };
+    }
+
     fn reveal(p: *Page) void {
         p.revealed = true;
         const z = p.cur();
@@ -107,10 +116,9 @@ pub const Page = struct {
     pub fn update(p: *Page, m: Msg, ev: *tree.Event) void {
         switch (m) {
             .guess => return if (p.g.event(ev) == .commit) p.reveal(),
-            .lock => return if (!p.revealed and p.g.value != null) p.reveal(),
+            .lock => return if (p.lockable()) p.reveal(),
             .choose => |i| return if (!p.revealed) {
                 p.pick = i;
-                p.reveal();
             },
             .next => p.advance(),
             .again => {
@@ -124,9 +132,19 @@ pub const Page = struct {
                 ev.push = true;
             },
             .key => {
-                if (!std.mem.eql(u8, ev.text, "Enter") or !p.revealed) return;
-                p.advance();
-                ev.handled = true;
+                const z = p.cur();
+                if (std.mem.eql(u8, ev.text, "Enter")) {
+                    if (p.revealed) {
+                        p.advance();
+                    } else if (z.answer == .pick and p.lockable()) {
+                        return p.reveal();
+                    } else return;
+                    ev.handled = true;
+                } else if (!p.end and !p.revealed and z.answer == .pick and ev.text.len == 1 and ev.text[0] >= '1' and ev.text[0] - '1' < z.answer.pick.choices.len) {
+                    p.pick = ev.text[0] - '1';
+                    ev.handled = true;
+                    return;
+                } else return;
             },
         }
         // On a phone the answer sits below the stage: the next puzzle starts at its top
@@ -211,7 +229,7 @@ pub const Page = struct {
             .action = if (p.revealed)
                 button.view(h, .{ .v = .primary, .on = h.on(p, .next) }, .{W.next})
             else
-                button.view(h, .{ .v = .primary, .disabled = z.answer == .pick or p.g.value == null, .on = h.on(p, .lock) }, .{W.lock}),
+                button.view(h, .{ .v = .primary, .disabled = !p.lockable(), .on = h.on(p, .lock) }, .{W.lock}),
         });
     }
 
@@ -253,9 +271,12 @@ pub const Page = struct {
         return l.items;
     }
 
+    fn iconSrc(p: *const Page, h: *H, c: ld.Champ) []const u8 {
+        return h.fmt("https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png", .{ p.d.ddragon, c.key });
+    }
+
     fn icon(p: *const Page, h: *H, c: ld.Champ, px: champ.Px) N {
-        const src = h.fmt("https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png", .{ p.d.ddragon, c.key });
-        return champ.view(h, .{ .name = c.name, .src = src }, .{ .px = px });
+        return champ.view(h, .{ .name = c.name, .src = p.iconSrc(h, c) }, .{ .px = px });
     }
 
     fn duelStage(p: *const Page, h: *H, d: anytype) N {
@@ -295,16 +316,19 @@ pub const Page = struct {
     }
 
     fn choices(p: *Page, h: *H, x: ld.Pick) N {
-        var l = h.list();
-        for (x.choices, 0..) |c, i| l.add(h.button(.{
-            .key = i,
-            .class = "opt",
-            .type = "button",
-            .data_state = if (!p.revealed) null else if (i == x.right) "right" else if (p.pick != null and p.pick.? == i) "wrong" else null,
-            .disabled = p.revealed,
-            .on_click = if (p.revealed) null else h.on(p, .{ .choose = @as(u8, @intCast(i)) }),
-        }, .{ c.text, if (p.revealed and c.shown.len > 0) h.el(.small, .{}, .{c.shown}) else null }));
-        return h.div(.{ .class = "opts" }, .{l.done()});
+        const cs = h.mem.alloc(choice.Choice, x.choices.len) catch return .none;
+        for (x.choices, cs, 0..) |c, *o, i| {
+            const chosen = p.pick != null and p.pick.? == i;
+            o.* = .{
+                .champ = if (c.champ) |y| .{ .name = y.name, .src = p.iconSrc(h, y) } else null,
+                .label = .{ .s = c.text },
+                .chosen = chosen,
+                .mark = if (!p.revealed) .none else if (i == x.right) .right else if (chosen) .wrong else .none,
+                .sub = if (c.shown.len > 0) .{ .s = c.shown } else null,
+                .on = h.on(p, .{ .choose = @as(u8, @intCast(i)) }),
+            };
+        }
+        return choice.view(h, .{ .done = p.revealed, .label = .{ .s = p.cur().q } }, cs);
     }
 
     fn endCard(p: *Page, h: *H) N {
@@ -365,12 +389,6 @@ pub const css =
     \\    font-variant-numeric: tabular-nums; white-space: nowrap; }
     \\  .c-learn > .grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: var(--sp-3); align-items: start; }
     \\  .c-learn .main { min-width: 0; }
-    \\  .c-learn .opts { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
-    \\  .c-learn .opt { flex: 1 1 120px; min-height: 44px; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-m);
-    \\    border: 1px solid var(--line-2); background: var(--panel-2); color: var(--text); font: inherit; cursor: pointer; }
-    \\  .c-learn .opt[data-state="right"] { border-color: var(--good); }
-    \\  .c-learn .opt[data-state="wrong"] { border-color: var(--bad); }
-    \\  .c-learn .opt small { display: block; color: var(--muted); }
     \\  .c-learn .path { display: grid; gap: var(--sp-3); }
     \\  .c-learn .duel { display: flex; align-items: center; gap: var(--sp-4) var(--sp-5); flex-wrap: wrap; }
     \\  .c-learn .who { display: flex; align-items: center; gap: var(--sp-3); }
@@ -461,7 +479,7 @@ const chips_demo: ld.Data = .{ .ddragon = "16.21.1", .start = 0, .chapters = &.{
 
 const testing = std.testing;
 
-test "first visit on chapter 1; guess, lock in, pick, chapter end, next chapter" {
+test "first visit on chapter 1; guess, lock in, pick by key and click, chapter end, next chapter" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     var p: Page = .init(arena.allocator(), &ld.demo);
@@ -480,7 +498,13 @@ test "first visit on chapter 1; guess, lock in, pick, chapter end, next chapter"
     try testing.expect(p.dirty);
     p.update(.next, &ev);
     try testing.expectEqualStrings("counter-top", p.cur().id);
+    ev = .{ .kind = .keydown, .text = "1" };
+    p.update(.key, &ev);
     p.update(.{ .choose = 1 }, &ev);
+    try testing.expect(!p.revealed);
+    ev = .{ .kind = .keydown, .text = "Enter" };
+    p.update(.key, &ev);
+    try testing.expect(p.revealed);
     try testing.expectEqual(@as(?u2, 3), p.progress.get("counter-top"));
     p.update(.next, &ev);
     try testing.expect(p.end);

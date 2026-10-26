@@ -49,7 +49,7 @@ pub fn view(h: *H, o: Opts, choices: []const Choice) N {
             if (c.champ) |x| h.span(.{ .class = "nm" }, .{x.name}) else h.b(.{ .class = "nm", .data_side = c.side }, .{c.label}),
             if (c.icons.len > 0) icons(h, c.icons) else null,
             if (o.done) if (c.sub) |s| h.span(.{ .class = "sub" }, .{s}) else null else null,
-            if (o.done) mark(h, c.mark) else h.span(.{ .class = "key", .aria_hidden = true }, .{phrase.num(h, .int, i + 1)}),
+            if (o.done) mark(h, c.mark) else h.span(.{ .class = "kn", .aria_hidden = true }, .{phrase.num(h, .int, i + 1)}),
         };
         l.add(if (o.done) h.div(.{
             .key = i,
@@ -115,11 +115,11 @@ pub const css =
     \\  .c-choice .nm[data-side="them"] { color: var(--them); }
     \\  .c-choice .sub { font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
     \\  .c-choice .ics { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; }
-    \\  .c-choice .key { position: absolute; top: 6px; right: 6px; min-width: 18px; padding: 0 4px; box-sizing: border-box;
+    \\  .c-choice .kn { position: absolute; top: 6px; right: 6px; min-width: 18px; padding: 0 4px; box-sizing: border-box;
     \\    border: 1px solid var(--line-2); border-radius: var(--r-s); font-size: var(--fs-xs); line-height: 16px;
     \\    color: var(--faint); text-align: center; font-variant-numeric: tabular-nums; }
     \\  .c-choice[aria-pressed="true"] { border-color: var(--accent); background: var(--sel-bg); box-shadow: 0 0 0 1px var(--accent); }
-    \\  .c-choice[aria-pressed="true"] .key { border-color: var(--accent); background: var(--accent); color: var(--bg); }
+    \\  .c-choice[aria-pressed="true"] .kn { border-color: var(--accent); background: var(--accent); color: var(--bg); }
     \\  .c-choices[data-chosen] .c-choice:not([aria-pressed="true"]) .c-champ { opacity: 0.6; }
     \\  .c-choices[data-done] .c-choice:not([data-mark]) { opacity: 0.6; }
     \\  .c-choice[data-mark="right"] { border-color: var(--good); box-shadow: 0 0 0 1px var(--good); }
@@ -127,11 +127,12 @@ pub const css =
     \\  .c-choice .mk { position: absolute; top: 4px; right: 6px; font-weight: var(--w-b); color: var(--good); }
     \\  .c-choice[data-mark="wrong"] .mk { color: var(--bad); }
     \\  .c-choices[data-side] .c-choice { min-height: 96px; }
+    \\  @media (pointer: coarse) { .c-choice .kn { display: none; } }
     \\  @container (max-width: 420px) {
     \\    .c-choices[data-n="6"] { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
     \\    .c-choices[data-n="6"] .c-choice { padding: 4px; gap: 0; }
     \\    .c-choices[data-n="6"] .c-champ { --sz: 44px; }
-    \\    .c-choices[data-n="6"] :is(.nm, .key) { position: absolute; width: 1px; height: 1px; overflow: hidden;
+    \\    .c-choices[data-n="6"] :is(.nm, .kn) { position: absolute; width: 1px; height: 1px; overflow: hidden;
     \\      clip-path: inset(50%); white-space: nowrap; }
     \\    .c-choices[data-side] .c-choice { min-height: 0; padding: var(--sp-2); }
     \\  }
