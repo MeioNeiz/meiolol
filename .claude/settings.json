@@ -35,6 +35,28 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Read|Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "h=\"$HOME/.claude/skills/context-review/hook.sh\"; [ -x \"$h\" ] || exit 0; exec \"$h\" pre",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "h=\"$HOME/.claude/skills/context-review/hook.sh\"; [ -x \"$h\" ] || exit 0; exec \"$h\" post",
+            "timeout": 10
+          }
+        ]
       }
     ]
   }

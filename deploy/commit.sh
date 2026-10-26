@@ -6,14 +6,36 @@
 # A commit touching src/ or build.zig also gets src/testdata/site-files.txt rewritten
 # for its own tree (deploy/site-hashes.sh PATHS) and committed with it, so a page change
 # never needs a hand step; skip with SITE_HASHES=0.
+# The subject (first -m) is one short line; detail goes in a second -m, the body: every
+# session's opening context and `git log --oneline` carry subjects. Doc pages in PATHS
+# must not get worse than at HEAD (over budget and growing, or new dated-story lines):
+# the context-review skill's gate, budgets in .claude/doc-rules.json; skip CONTEXT_GATE=0.
 set -euo pipefail
 opts=()
+subject=""
 while [ $# -gt 0 ] && [ "$1" != -- ]; do
+    case "$1" in
+        -m) [ -n "$subject" ] || subject=${2:-} ;;
+        -m*) [ -n "$subject" ] || subject=${1#-m} ;;
+        --message=*) [ -n "$subject" ] || subject=${1#--message=} ;;
+    esac
     opts+=("$1")
     shift
 done
-[ $# -gt 1 ] || { echo "usage: deploy/commit.sh -m MSG [opts] -- PATH..." >&2; exit 2; }
+usage="usage: deploy/commit.sh -m SUBJECT [-m BODY] [opts] -- PATH..."
+[ $# -gt 1 ] || { echo "$usage" >&2; exit 2; }
 shift
+subject=${subject%%$'\n'*}
+max=$(jq -r '.commits.subjectMax // 90' .claude/doc-rules.json 2>/dev/null) || max=90
+if [ ${#subject} -gt "$max" ]; then
+    echo "commit subject is ${#subject} chars, max $max: say what changed in one line," >&2
+    echo "and put the detail in a second -m (the body)" >&2
+    exit 2
+fi
+gate="$HOME/.claude/skills/context-review/check.mjs"
+if [ "${CONTEXT_GATE:-1}" != 0 ] && [ -f "$gate" ]; then
+    node "$gate" --gate "$@" || exit 1
+fi
 new=()
 while IFS= read -r f; do
     new+=("$f")

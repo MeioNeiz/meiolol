@@ -1,0 +1,27 @@
+{
+  "_why": "Budgets for the context-review skill (~/.claude/skills/context-review): its sweep, the PostToolUse hook and deploy/commit.sh's gate all read this file, so a number lives once",
+  "classes": [
+    { "id": "root", "match": "^CLAUDE(\\.local)?\\.md$", "budget": 120, "kind": "always loaded" },
+    { "id": "record", "match": "^docs/model\\.md$", "budget": null, "shape": false,
+      "timeline": false, "twin": false, "pointer": false,
+      "kind": "lab record: dated sections, grep by heading" },
+    { "id": "legal", "match": "^docs/legal/", "budget": 300, "shape": false, "timeline": false,
+      "twin": false, "kind": "legal text: dates and repeats are the content" },
+    { "id": "learned", "match": "^docs/learned\\.md$", "budget": 450,
+      "kind": "read-first findings: current only, one short entry each" },
+    { "id": "index", "match": "^docs/(plan|frontend)\\.md$", "budget": 140,
+      "kind": "an index read first: pointers, not detail" },
+    { "id": "plan", "match": "^docs/plan/", "budget": 300, "kind": "a plan area file" },
+    { "id": "zig", "match": "^docs/zig/", "budget": 500, "kind": "Zig reference" },
+    { "id": "doc", "match": "^docs/.*\\.md$", "budget": 450, "kind": "a doc page (one subject)" }
+  ],
+  "routers": ["CLAUDE.md", "CLAUDE.local.md", "docs/plan.md", "docs/frontend.md",
+    "docs/plan/ui/README.md", "docs/archive/README.md"],
+  "archive": ["docs/archive/"],
+  "archiveNote": "Current state: docs/plan.md, the area file under docs/plan/, docs/learned.md; the experiment record is docs/model.md.",
+  "ignore": ["research/", "node_modules/", "data/"],
+  "orphanIgnore": ["docs/plan/ui/", "docs/legal/"],
+  "longLine": 400,
+  "dated": { "match": "\\d{4}-\\d{2}-\\d{2}[^/]*\\.md$", "graceDays": 2, "archiveAfterDays": 7 },
+  "commits": { "subjectMax": 90, "count": 50 }
+}

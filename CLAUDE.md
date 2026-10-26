@@ -11,8 +11,9 @@ docs/plan.md "Now". Read it first.
 ## Git and deploys
 
 - Work on main only (one developer); other sessions share the checkout. Commit with
-  `deploy/commit.sh -m msg -- <paths>`: by path, so others' dirty files stay out; adds
-  new files and the page hashes. A new file goes in the same commit as its first use
+  `deploy/commit.sh -m subject [-m body] -- <paths>`: by path, so others' dirty files
+  stay out; adds new files and the page hashes. A new file goes in the same commit as
+  its first use
 - Every push to main deploys (log .git/meiolol-deploy.log). Push the tested sha with
   `deploy/push.sh <sha>` (plain push can send a commit another session made meanwhile);
   pre-push runs `zig build ci` on it, once for a group of queued pushes
@@ -84,12 +85,14 @@ docs/plan.md "Now". Read it first.
 
 ## Docs (read the one you need, not all)
 
+Docs say what is true now; how it got there goes in the commit message. Budgets and
+guards: .claude/doc-rules.json, skill context-review.
+
 - Layout, modules, storage, model file format: docs/architecture.md
 - What we have learnt about the data (plain findings, read first): docs/learned.md. Add a
   line when a model or data check gives a final result
 - Draft model quality on held-out games (`meiolol eval`): docs/model.md, the lab record
-  (4.5k lines: read its Start here, then one section). Measure any recommender change
-  there first
+  (read its Start here, then one section). Measure any recommender change there first
 - Data sources and what was ruled out (and why): docs/data.md. Read before adding one
 - Front end, site and desktop (one UI, rebuilt from the ground up): docs/frontend.md;
   read before any UI work
