@@ -2,7 +2,8 @@
 //! mastery bands), a line with its ±95% band, each point a dot coloured on the scale
 //! against a reference (dashed), the point's name under it with a second line (rank in
 //! role, games), the last figure at the end. No per-point text: a tap or hover shows a
-//! point's numbers (ChartTip). OutcomeCurve (Pick-up) is the same preset over mastery
+//! point's numbers (ChartTip). A base line, faint dashed, compares each point with a
+//! wider group (the matchup page's all lanes) and takes the reference's place. OutcomeCurve (Pick-up) is the same preset over mastery
 //! bands
 const std = @import("std");
 const tree = @import("tree.zig");
@@ -34,6 +35,9 @@ pub const Trend = struct {
     points: []const Point,
     /// What the dots are coloured against, dashed: 50, or the champion's own rate
     ref: f32 = 50,
+    /// A rate to compare with at each point, faint dashed (all lanes): one per point, or
+    /// none
+    base: []const f32 = &.{},
     height: u16 = 130,
     /// ChartTip on this point
     tip: ?u8 = null,
@@ -63,6 +67,7 @@ pub const Trend = struct {
         const c = @round(t.ref / 2) * 2;
         var dev: f32 = 0;
         for (t.points) |p| dev = @max(dev, @abs(p.v + p.ci - c), @abs(p.v - p.ci - c));
+        for (t.base) |b| dev = @max(dev, @abs(b - c));
         var step: f32 = 4;
         for ([_]f32{ 4, 5, 8, 10, 15, 20, 25 }) |s| {
             step = s;
@@ -119,7 +124,13 @@ pub const Trend = struct {
             .right = 48,
             .y = ys.items,
             .x = xs.items,
-            .marks = &.{ chart.level(h, p, t.ref), chart.band(h, p, lo, hi), chart.line(h, p, v, .typ) },
+            .marks = &.{
+                // The base alone is dashed: the grid already marks 50%
+                if (t.base.len == n) .none else chart.level(h, p, t.ref),
+                chart.band(h, p, lo, hi),
+                if (t.base.len == n) chart.line(h, p, t.base, .prev) else .none,
+                chart.line(h, p, v, .typ),
+            },
             .over = over.done(),
             .press = true,
             .on = .{
@@ -172,6 +183,7 @@ pub fn gallery(g: *Gallery) void {
     const states = [_]struct { []const u8, Trend }{
         .{ "by patch, rank in role under each", .{ .label = plain("By patch"), .points = &demo_patch } },
         .{ "by game length, games under each; a point tapped", .{ .label = plain("By game length"), .points = &demo_length, .tip = 2 } },
+        .{ "against a base, faint dashed (all lanes)", .{ .label = plain("Won by gold at 10"), .points = &demo_length, .base = &.{ 46, 48.5, 50, 51.5, 54 } } },
         .{ "OutcomeCurve: by mastery, against his own rate", .{ .label = plain("Pick-up"), .points = &demo_mastery, .ref = 49.3, .height = 110 } },
     };
     for (states) |s| {
@@ -196,6 +208,9 @@ test "the scale centres on the reference, whole ticks, at least ±4" {
     t = .{ .label = plain("x"), .points = &wide, .ref = 49.3 };
     try testing.expectEqual(@as(f32, 50), t.scale().c);
     try testing.expectEqual(@as(f32, 15), t.scale().step);
+    // A base far off widens the scale too
+    t = .{ .label = plain("x"), .points = &demo_patch, .base = &.{ 50, 50, 60 } };
+    try testing.expectEqual(@as(f32, 10), t.scale().step);
 }
 
 test "a tap picks the nearest point; leaving clears the tip" {

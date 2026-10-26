@@ -325,8 +325,9 @@ test "fixture games to stats, curves and the website" {
         .{ "all/matchup/top/mordekaiser-vs-darius.html", &.{"href=\"../../../champion/darius.html?region=all\""} },
         // The matchup page (ui.matchpage): three islands with their data inline; the head
         // with both portraits, the swap and the headline figures, the lane by minute beside
-        // head to head, won by gold at 10, by rank and mastery
-        .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "<div class=\"c-cpage c-mpage\"><div class=\"part\" data-island=\"matchup\" data-bin=\"", "<h1>Mordekaiser<span class=\"and\">vs</span>Darius</h1>", "href=\"darius-vs-mordekaiser.html\"", "Mordekaiser wins", "Vs usual", "data-island=\"matchmore\" data-bin=\"", "data-js=\"../../" ++ assets.matchmore_js.path ++ "\" data-wasm=\"" ++ assets.matchmore_wasm.path ++ "\"", "<h2>Lane</h2>", "class=\"c-chart c-lane\"", "<h2>Head to head</h2>", "Kills to 6 min", "Level 6", "First item", "<h2>Won by gold at 10</h2>", "<h2>By rank and mastery</h2>", "All games", "<script src=\"../../" ++ assets.matchup_js.path ++ "\" data-wasm=\"" ++ assets.matchup_wasm.path ++ "\" defer></script>" } },
+        // head to head, won by gold at 10 and by game length (all lanes dashed), by rank and
+        // mastery
+        .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "<div class=\"c-cpage c-mpage\"><div class=\"part\" data-island=\"matchup\" data-bin=\"", "<h1>Mordekaiser<span class=\"and\">vs</span>Darius</h1>", "href=\"darius-vs-mordekaiser.html\"", "Mordekaiser wins", "Vs usual", "data-island=\"matchmore\" data-bin=\"", "data-js=\"../../" ++ assets.matchmore_js.path ++ "\" data-wasm=\"" ++ assets.matchmore_wasm.path ++ "\"", "<h2>Lane</h2>", "class=\"c-chart c-lane\"", "<h2>Head to head</h2>", "Kills to 6 min", "Level 6", "First item", "<h2>Won by gold at 10</h2>", "dashed: all lanes", "<h2>By game length</h2>", "dashed: Mordekaiser against everyone", "<h2>By rank and mastery</h2>", "All games", "<script src=\"../../" ++ assets.matchup_js.path ++ "\" data-wasm=\"" ++ assets.matchup_wasm.path ++ "\" defer></script>" } },
         // Bot lane partners (MU4): each side's supports, and a support matchup's bot laners
         .{ "matchup/bot/kaisa-vs-twitch.html", &.{ "First blood", "<h2>Twitch with</h2>" } },
         .{ "matchup/support/pyke-vs-rakan.html", &.{"<h2>Rakan with</h2>"} },

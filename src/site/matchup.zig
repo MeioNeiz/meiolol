@@ -10,6 +10,7 @@ const lanechart = @import("lanechart.zig");
 const text = @import("text.zig");
 const champion = @import("champion.zig");
 const tierlist = @import("tierlist.zig");
+const stats = @import("../stats.zig");
 const builds = @import("builds.zig");
 const buildblock = @import("buildblock.zig");
 const assets = @import("assets.zig");
@@ -504,6 +505,16 @@ fn moreData(site: *const Site, curves: *const Curves, r: Role, x: Champ, y: Cham
         const all = if (base) |bl| bl.comeback(.ten, i) else curvesfile.Counts{};
         b.* = .{ .games = c.games, .wins = c.wins, .all_games = all.games, .all_wins = all.wins };
     }
+    var by_length: [3]mp.Bucket = @splat(.{});
+    if (site.trend) |*t| if (t.lane(r, x.c, y.c)) |pair| {
+        var all: [stats.length_buckets]core.statsfile.Counts = undefined;
+        for (&all, 0..) |*c, b| c.* = t.length(r, x.c, b);
+        for (&by_length, [_][2]usize{ .{ 0, 2 }, .{ 2, 4 }, .{ 4, 5 } }) |*b, e| {
+            const c = stats.Trend.merged(pair, e[0], e[1]);
+            const o = stats.Trend.merged(all, e[0], e[1]);
+            b.* = .{ .games = c.games, .wins = c.wins, .all_games = o.games, .all_wins = o.wins };
+        }
+    };
     var ranks: std.ArrayList(mp.RankRow) = .empty;
     for (std.enums.values(Bracket)) |b| {
         const bv = curves.get(r, b, x.id, y.id) orelse continue;
@@ -534,6 +545,7 @@ fn moreData(site: *const Site, curves: *const Curves, r: Role, x: Champ, y: Cham
             .first_item = v.firstItem(),
         },
         .gold10 = gold10,
+        .by_length = by_length,
         .ranks = ranks.items,
         .duos = try duos(site, r, x, y),
     };

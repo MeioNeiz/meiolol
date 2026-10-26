@@ -2,8 +2,8 @@
 //! (docs/plan/ui/matchup.md), the champion page with its opponent slot filled, as three
 //! islands. Head: ChampHeader's pair with the headline figures, x's other lane opponents
 //! and the view links. Build: the champion page's Build island on the pair's build. More:
-//! the lane by minute beside head to head, won by gold at 10, by rank and mastery, and
-//! bot lane partners.
+//! the lane by minute beside head to head, won by gold at 10, by game length, by rank
+//! and mastery, and bot lane partners.
 //!
 //! Pages are rendered on request, so each island's data rides in its root's data-bin
 //! (base64 of ui.data) rather than a file: ui-matchup.wasm adopts Head and loads
@@ -124,6 +124,11 @@ const W = struct {
     pub const gold10 = plain("Won by gold at 10");
     pub const gold10_tip = Phrase("{l:text} at 10 min: {r:rate} in {n:count} games, all lanes {a:rate}");
     pub const buckets = [5]tree.Text{ plain("-1.5k"), plain("-1k"), plain("0"), plain("+1k"), plain("+1.5k") };
+    pub const all_lanes = plain("dashed: all lanes");
+    pub const by_length = plain("By game length");
+    pub const length_tip = Phrase("{l:text} min: {r:rate} in {n:count} games, against everyone {a:rate}");
+    pub const lengths = [3]tree.Text{ plain("<25"), plain("25-35"), plain("35+") };
+    pub const everyone = Phrase("dashed: {x:text} against everyone");
     pub const by_rank = plain("By rank and mastery");
     pub const with = Phrase("{x:text} with");
 };
@@ -253,6 +258,8 @@ pub const MoreData = struct {
     h2h: H2h,
     /// x's lead at 10 minutes from 1,500+ behind to 1,500+ ahead
     gold10: [5]Bucket,
+    /// By game length (W.lengths); all_* x's games against everyone in the role
+    by_length: [3]Bucket = @splat(.{}),
     ranks: []const RankRow,
     /// Bot and support: each side's lane partners, from all their games in the role
     duos: []const DuoSide = &.{},
@@ -367,6 +374,7 @@ pub const More = struct {
     data: *const MoreData,
     chart: lane.Lane,
     gold10: trend.Trend = .{ .label = W.gold10, .points = &.{} },
+    by_length: trend.Trend = .{ .label = W.by_length, .points = &.{} },
     ranks: Ranks,
     bin: []const u8 = "",
     /// ui-matchmore.js and .wasm, for ui-matchup.wasm to load
@@ -394,7 +402,7 @@ pub const More = struct {
     pub fn view(p: *P, h: *H) N {
         return h.div(.{ .class = "part", .data_island = "matchmore", .data_bin = if (p.bin.len > 0) p.bin else null, .data_js = p.js, .data_wasm = p.wasm }, .{
             h.div(.{ .class = "lanerow" }, .{ p.laneCard(h), p.h2hCard(h) }),
-            h.div(.{ .class = "row2" }, .{ p.gold10Card(h), p.rankCard(h) }),
+            h.div(.{ .class = "row3" }, .{ p.gold10Card(h), p.lengthCard(h), p.rankCard(h) }),
             p.duos(h),
         });
     }
@@ -443,27 +451,15 @@ pub const More = struct {
     }
 
     fn gold10Card(p: *P, h: *H) N {
-        const pts = h.mem.alloc(trend.Point, p.data.gold10.len) catch {
-            h.oom = true;
-            return .none;
-        };
-        var n: usize = 0;
-        for (p.data.gold10, W.buckets) |b, l| {
-            if (b.games == 0) continue;
-            pts[n] = .{
-                .label = l,
-                .sub = phrase.num(h, .kilo, b.games),
-                .v = rate(b.games, b.wins),
-                .ci = ci(b.games, b.wins),
-                .tip = W.gold10_tip.with(h, .{ .l = l.s, .r = rate(b.games, b.wins), .n = b.games, .a = rate(b.all_games, b.all_wins) }),
-            };
-            n += 1;
-        }
-        p.gold10.points = pts[0..n];
-        if (p.gold10.tip) |t| if (t >= n) {
-            p.gold10.tip = null;
-        };
-        return card.view(h, .{}, &.{ card.head(h, W.gold10, null, &.{}), if (n > 0) p.gold10.view(h) else h.p(.{ .class = "none" }, .{W.none}) });
+        const n = buckets(h, &p.gold10, &p.data.gold10, &W.buckets, W.gold10_tip);
+        const note: N = if (p.gold10.base.len > 0) h.span(.{ .class = "lg" }, .{W.all_lanes}) else .none;
+        return card.view(h, .{}, &.{ card.head(h, W.gold10, null, &.{note}), if (n > 0) p.gold10.view(h) else h.p(.{ .class = "none" }, .{W.none}) });
+    }
+
+    fn lengthCard(p: *P, h: *H) N {
+        const n = buckets(h, &p.by_length, &p.data.by_length, &W.lengths, W.length_tip);
+        const note: N = if (p.by_length.base.len > 0) h.span(.{ .class = "lg" }, .{W.everyone.with(h, .{ .x = p.data.x })}) else .none;
+        return card.view(h, .{}, &.{ card.head(h, W.by_length, null, &.{note}), if (n > 1) p.by_length.view(h) else h.p(.{ .class = "none" }, .{W.none}) });
     }
 
     fn rankCard(p: *P, h: *H) N {
@@ -490,6 +486,41 @@ pub const More = struct {
         return h.div(.{ .class = "row2" }, .{cards.done()});
     }
 };
+
+/// `t`'s points from the buckets with games, its base their wider group's rates when
+/// each has games; how many points
+fn buckets(h: *H, t: *trend.Trend, bs: []const Bucket, labels: []const tree.Text, tip: anytype) usize {
+    const pts = h.mem.alloc(trend.Point, bs.len) catch {
+        h.oom = true;
+        return 0;
+    };
+    const base = h.mem.alloc(f32, bs.len) catch {
+        h.oom = true;
+        return 0;
+    };
+    var n: usize = 0;
+    var all = true;
+    for (bs, labels) |b, l| {
+        if (b.games == 0) continue;
+        const a = rate(b.all_games, b.all_wins);
+        pts[n] = .{
+            .label = l,
+            .sub = phrase.num(h, .kilo, b.games),
+            .v = rate(b.games, b.wins),
+            .ci = ci(b.games, b.wins),
+            .tip = tip.with(h, .{ .l = l.s, .r = rate(b.games, b.wins), .n = b.games, .a = a }),
+        };
+        base[n] = a;
+        all = all and b.all_games > 0;
+        n += 1;
+    }
+    t.points = pts[0..n];
+    t.base = if (all) base[0..n] else &.{};
+    if (t.tip) |i| if (i >= n) {
+        t.tip = null;
+    };
+    return n;
+}
 
 /// A share row of head to head: each side's part of its games
 fn share(h: *H, label: tree.Text, a: [2]u32, b: [2]u32) versus.Row {
@@ -539,6 +570,7 @@ pub const css =
     \\@layer components {
     \\  .c-mpage .c-mstrip { margin-top: var(--sp-4); }
     \\  .c-mpage [data-thin] > .c-vs { opacity: 0.6; }
+    \\  .c-mpage .c-head .lg { font-size: var(--fs-s); color: var(--muted); }
     \\  .c-mpage .lanerow { display: grid; gap: var(--sp-4); grid-template-columns: minmax(0, 1fr); }
     \\  @media (min-width: 1000px) {
     \\    .c-mpage .lanerow { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
