@@ -1,6 +1,6 @@
 # Production key
 
-Researched 2026-10-11. Full answer, 13 rated claims and ~50 quoted sources:
+Full answer, 13 rated claims and ~50 quoted sources:
 research/questions/riot-production-key.md (josearch store; check it before
 re-researching anything here).
 
@@ -27,7 +27,7 @@ Uncertain, leaning approvable; the wait is the real cost.
 - `riot.txt` at the site root with the string Riot gives; their checker uses the
   `python-requests/2.11.1` user agent, so the host must not block it
 - Boilerplate, visible to players: on the site (every page footer, Terms); not in the
-  desktop app, either edition (Jacob, 23 Oct): "meiolol isn't endorsed by Riot Games and
+  desktop app, either edition: "meiolol isn't endorsed by Riot Games and
   doesn't reflect the views or opinions of Riot Games or anyone officially involved in
   producing or managing Riot Games properties. Riot Games, and all associated properties
   are trademarks or registered trademarks of Riot Games, Inc."
@@ -51,7 +51,7 @@ Uncertain, leaning approvable; the wait is the real cost.
   long the approval process ... takes", open betas included; do not advertise the site.
   Hence the site's preview mode (noindex, banner); research C8
 
-## Registration popup (seen 2026-10-11)
+## Registration popup
 
 Registering any product first shows "General Policies" with I Agree / I Disagree. Its
 "Please Don't" includes: "Utilize a Development or Interim API key to run a project
@@ -69,13 +69,16 @@ logos). Gray areas: ask in the application as an App Note.
   in champ select"
 - "Increases champion diversity by surfacing viable picks beyond the meta"
 
-## Application text (draft 2026-10-18)
+## Application text: revised draft, not submitted
 
-Paste field by field; each paragraph below is one line, no wraps. Field names are a
-guess at the form's (description, URL, app note): put the paragraphs where they fit.
+Not submitted: editing the queued application reportedly resets the queue, so it waits
+(docs/plan.md). Paste field by field; each paragraph in the block is one line. Field names
+are a guess at the form's (description, URL, app note): put the paragraphs where they
+fit.
 
 **Product description**
 
+```text
 meiolol is game review for League of Legends, the way chess.com reviews a chess game. A player types their own Riot ID and gets a review of their recent games (last 60 days; solo/duo, flex, draft and Swiftplay): their team's win chance at every minute, the turning minute (the one minute that moved it most, and what happened in it), what each of their deaths cost (who killed them, the gold the killer got, what the enemy took next, and the win chance it cost), their lane against the typical game in the same matchup at their rank (gold, level 6 and first item), and highlights across their recent games. All of this is after the game, about the player's own games. The win chance by minute is never shown in champ select.
 
 The benchmark behind the review is lane curves: how each lane matchup usually goes minute by minute (gold, XP and cs), from ranked solo/duo games in EUW, Platinum IV and up for now. Champion pages show win rates, every lane opponent and these curves, with the number of games behind each figure and how sure it is; matchups with too few games are marked and greyed out. The win chance model is trained on match and timeline data from ranked games; how the numbers are made is on the site's method page.
@@ -86,7 +89,8 @@ A desktop app for Windows is in development and not released. Once you have pick
 
 Riot API use: account-v1 (Riot ID to PUUID, and the region), match-v5 with timelines, league-exp-v4 and league-v4 (rank), champion-mastery-v4, and summoner-v4 (profile icon, only to check that someone removing their data owns the Riot ID). I need many games to cover specific matchups and less played champions: a curve needs a few hundred games per matchup per rank tier per patch, so that's millions of matches with timelines each patch. Today the site is built on about 210,000 EUW games from the last 30 days, Platinum IV and up; with a production key I'd lower the floor to Gold, then Silver, and add regions. Each match is fetched once and stored by match ID.
 
-Data kept: raw match records (which contain Riot IDs) stay on our server only until archived, usually a few days; the archive has Riot IDs removed and player identifiers replaced by one-way codes, and is deleted 24 months after the game. Player identifiers in stored matches are removed 24 months after the game. A Riot ID nobody has looked up for 30 days is deleted. Stored players are refreshed at least every 30 days and deleted when Riot reports them gone, and Riot's deletion lists are honoured. Anyone can remove their data with "Remove a Riot ID" on the Your games page (a profile icon check) or by mailing privacy@meio.lol. Data is stored in the UK. Privacy policy and terms are linked from every page.
+Data kept: raw match records (which contain Riot IDs) stay on our server only until archived, usually a few days; the archive has Riot IDs removed and player identifiers replaced by one-way codes, which are removed 24 months after the game. Player identifiers in stored matches are removed 24 months after the game. A Riot ID nobody has looked up for 30 days is deleted. Stored players are refreshed at least every 30 days and deleted when Riot reports them gone, and Riot's deletion lists are honoured. Anyone can remove their data with "Remove a Riot ID" on the Your games page (a profile icon check) or by mailing privacy@meio.lol. Data is stored in the UK. Privacy policy and terms are linked from every page.
+```
 
 **Product URL**
 
@@ -96,7 +100,7 @@ https://meio.lol
 
 Please link PUUID encryption to my personal app MEIOLOL (890240), so the PUUIDs stored under the personal key stay valid with the production key.
 
-What changed from 11 Oct and what to check:
+What differs from the submitted text, and what to check before pasting:
 
 - Rewritten around game review of your own games (the site's headline), lane curves as
   the benchmark, Platinum IV+ scope, Pool, the desktop app with its six read-only LCU
@@ -104,19 +108,17 @@ What changed from 11 Oct and what to check:
 - Squads left out: not on the site, and "squads promised but not found" was the first
   mismatch reviewers flagged (A2). Once built, a support ticket or edit can add them
 - 24-month PUUID blanking is built live (writer prune) and over backup segments on the
-  box and both mirrors (backup.sweepAged, 18 Oct, tested). The raw archive's step
-  removes the one-way codes, it doesn't delete the archive (24 Oct): "Data kept" above
-  says "is deleted 24 months after the game", so change it to "whose codes are removed
-  24 months after the game" (prodkey notes, data/team/2026-10-23-progress). Deletion lists: `meiolol forget --list FILE`
-  exists (docs/data-safety.md)
+  box and both mirrors (backup.sweepAged); the raw archive's step removes the one-way
+  codes rather than deleting the archive, as "Data kept" says. Deletion lists:
+  `meiolol forget --list FILE` (docs/data-safety.md)
 - Check: the download page doesn't yet say queues or before/after lock-in (A1); the app
   text matches it as is. Update both together after the real champ select run
 - Check: the game count (about 210,000) against the home page on the day you paste
-- Daily Draft from 20 Oct (J10): recent games, per seat rank and scoreboard, still no
-  names; "with no player names" above stays true. Privacy rules audit:
+- Daily Draft (J10): recent games, per seat rank and scoreboard, still no names; "with
+  no player names" above stays true. Privacy rules audit:
   docs/privacy-rules.md
 
-## Application text (draft 2026-10-11, Jacob's voice; application started same day)
+## Application text as submitted (11 Oct 2026, Jacob's voice)
 
 Meiolol is a learning tool for League of Legends. It shows how lane matchups usually go
 minute by minute. Showing gold, XP and cs curves per matchup and rank tier. Players can
