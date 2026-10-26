@@ -52,6 +52,12 @@ fn prefix(comptime T: type) []const u8 {
     return if (@hasDecl(T, "prefix")) T.prefix else "";
 }
 
+/// `key` is one of T's
+pub fn owns(comptime T: type, key: []const u8) bool {
+    inline for (comptime std.meta.fieldNames(T)) |f| if (std.mem.eql(u8, key, comptime prefix(T) ++ f)) return true;
+    return false;
+}
+
 pub fn write(comptime T: type, v: T, w: *Writer) Writer.Error!void {
     const d: T = .{};
     var first = true;

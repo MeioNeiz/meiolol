@@ -206,7 +206,9 @@ test "fixture games to stats, curves and the website" {
         "champions.html",
         "role/top.html",
         "table.js",
-        "filters.js",
+        "data/champion/darius.bin",
+        "data/champion/darius-build.bin",
+        "data/champion/darius-more.bin",
         "reasons.js",
         "patch/index.html",
         "all/patch/index.html",
@@ -247,25 +249,13 @@ test "fixture games to stats, curves and the website" {
         // every view, the champion pages per role, and a tab after Matchups
         .{ "patch/patch.html", &.{ "<h1>Patch 15.13: what changed</h1>", "Too early to tell: 0 champion roles" } },
         .{ "all/patch.html", &.{ "<h1>Patch 15.13: what changed</h1>", "across all regions" } },
-        // Its region's, whatever the period: the region pick shows every region's
-        .{ "champion/darius.html", &.{ "<div data-by-view><div data-view=\"0 1\"><p class=\"since muted\"><span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"patch:15.13\" data-rank=\"\"", "<span class=\"off\">Patch 15.13 vs 15.12<i>, not the 30 days picked</i></span><span>Plat+</span></span> Too early to tell: too few games on 15.13 so far. <a href=\"../patch/patch.html\">Patch changes</a>", "<div data-view=\"2 3\" hidden><p class=\"since muted\"><span class=\"scope\" data-chip data-region=\"all\"", "</span> Too early to tell: too few games on 15.13 so far. <a href=\"../all/patch/patch.html\">Patch changes</a>" } },
         .{ "champions.html", &.{"Matchups</a>\n<a href=\"patch.html\">Patch changes</a>"} },
-        // By patch and by game length, each with its line under it (trend.zig)
-        .{ "champion/darius.html", &.{ "<div class=\"trends\">\n<div class=\"trend\"><h3>By patch <span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"patches\"", "aria-label=\"Darius's win and pick rate in Top by patch\"", "Too early to tell: too few games on 15.13 so far.", "<h3>By game length <span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"days30\"", "aria-label=\"Darius&#39;s win rate in Top by game length\"", ">35+</text>", "<b>Early or late:</b> too few games yet to tell." } },
         .{ "index.html", &.{"New patch: <a href=\"patch/patch.html\">what changed in 15.13 since 15.12</a>."} },
-        // Champion table and page: raw win rate on the table's track, every lane opponent
-        // as a tile in one grid (few games: shown, faded) with its rate against usual
-        // (the opponent's own rate on the row for filters.js), it and the curve's gold at
-        // 14 linking to the matchup page from the champion's side
+        // Champion page: the ui.champpage island from the root view, its data file for
+        // the other roles; the head, the build, the matchups with the most met opponent's
+        // brief linking to the matchup page from the champion's side
+        .{ "champion/darius.html", &.{ "<div class=\"c-cpage\"><div class=\"part\" data-island=\"champion\" data-src=\"../data/champion/darius.bin\" data-stamp=\"", "<h1>Darius</h1>", "EUW, last 30 days, Platinum+ games", "data-island=\"champbuild\" data-src=\"../data/champion/darius-build.bin\"", "<section class=\"c-card\" data-v=\"flush\"><div class=\"c-build\">", "<h2>Matchups</h2>", "data-island=\"champmore\" data-src=\"../data/champion/darius-more.bin\"", "data-js=\"../" ++ assets.champmore_js.path ++ "\" data-wasm=\"" ++ assets.champmore_wasm.path ++ "\"", "class=\"c-dots\"", "class=\"c-mpick\"", "href=\"../matchup/top/darius-vs-mordekaiser.html\"", "<h2>By patch</h2>", "<h2>By game length</h2>", "<script src=\"../" ++ assets.champion_js.path ++ "\" data-wasm=\"" ++ assets.champion_wasm.path ++ "\" defer></script>" } },
         .{ "champions.html", &.{ "<div data-island=\"tiers\" data-src=\"data/tiers.bin\" data-root=\"\" data-base=\"\" data-stamp=\"", "class=\"ci\"", "own win rates spread around it", "id=\"wr-edge\"", "<b style=\"--f:", "<i class=\"d\" style=\"--x:", "<p class=\"wr-key\">Win rate colour <span class=\"wrc\" style=\"--c:var(--lo4)\">44.5%</span>", "<p class=\"tl-key\">Sorted by win rate; the minimum games keeps a few lucky games off the top.", "<details class=\"tl-knobs\" hidden=\"\"><summary>Minimums</summary>", "<symbol id=\"ri-top\"", "<th tabindex=\"0\" class=\"l\" data-sort=\"text\">Champion</th>", "<th tabindex=\"0\" data-sort=\"num\" aria-sort=\"descending\">Win rate</th>", "<td class=\"role\"><svg class=\"ri\" role=\"img\" aria-label=\"Top\"><title>Top</title><use href=\"#ri-top\">", "<script src=\"" ++ assets.stats_js.path ++ "\" data-wasm=\"" ++ assets.stats_wasm.path ++ "\" defer></script>" } },
-        .{ "champion/darius.html", &.{ "Lane opponents", "<a class=\"champ box\" href=\"../matchup/top/darius-vs-mordekaiser.html\" title=\"Darius vs Mordekaiser\">", "href=\"../matchup/top/darius-vs-mordekaiser.html\" title=\"Lane curves", "<th data-sort=\"num\" title=\"Lane curve estimate: Darius minus the opponent\">Gold at 14</th>", "Search opponent", "data-name=\"Mordekaiser\" data-q=\"", "<tr class=\"bx thin\" data-id=", "<table class=\"og\"", "data-ka=\"", "usually wins about", "Each tile: win rate, vs usual, gold at 14 min, games", "<small data-rank>", "<p class=\"wr-key\">Matchup win rate colour, on a scale twice as wide as the champions table's: <span class=\"wrc\" style=\"--c:var(--lo4)\">39%</span>" } },
-        // Hardest first by the rate shrunk with the role's k; opponents under 1% of the
-        // champion's games hidden by default (the Opponents filter's p1). Rank filter from
-        // Platinum, the tier the crawl samples
-        // Opponent tabs (champion.zig opponentTabs): Lane, vs each other role, Duos by ally
-        // role, the latter from the root view whatever the picks
-        .{ "champion/darius.html", &.{ "<div class=\"og-tabs\" data-tabset><nav class=\"tabs\" role=\"tablist\" aria-label=\"Opponents and duos\" hidden><button type=\"button\" role=\"tab\" data-tab=\"lane\" aria-selected=\"true\">Lane</button><button type=\"button\" role=\"tab\" data-tab=\"jungle\" aria-selected=\"false\">vs Jungle</button>", "data-tab=\"support\" aria-selected=\"false\">vs Support</button><button type=\"button\" role=\"tab\" data-tab=\"duo\" aria-selected=\"false\">Duos</button></nav>", "<div data-panel=\"jungle\" hidden>", "<table class=\"og\" id=\"opp-top-jungle\"", "<div data-panel=\"duo\" data-tabset hidden>", "data-tab=\"duo-jungle\" aria-selected=\"true\">with Jungle</button>", "<div data-panel=\"duo-mid\" hidden>", "<table class=\"og\" id=\"duo-top-jungle\"", "Jungle duos <span class=\"muted\">", "highest win rate first", "With an ally winning", "Each tile: win rate, vs usual, games" } },
-        .{ "champion/darius.html", &.{ "data-sortable data-k=\"", "<a aria-current=\"page\" data-min=\"p1\"", "<a href=\"../champion/darius.html?rank=7\" data-rank=\"7\">Master+</a>", "last 30 days, patch 15.13, Platinum+ games</span>" } },
         .{ "champions.html", &.{"Platinum+ ranked solo/duo games in EUW, last 30 days, patch 15.13."} },
         .{ "index.html", &.{"<a href=\"download.html\">Coming: a champ select helper for Windows</a>"} },
         // Daily Draft: a recent game, read in words (no draft win chance,
@@ -280,11 +270,7 @@ test "fixture games to stats, curves and the website" {
         // lead plain (J11, J12)
         .{ "matchup/index.html", &.{ "(searching one champion shows its side)", "row.toggleAttribute(\"data-f\")", "<span class=\"gold even\"" } },
         .{ "matchup/index.html", &.{ "data-min-search", "<tr class=\"bx thin\" data-games=\"3\" data-name=\"", "<section data-min-group data-r=\"top\" id=\"top\"><h2>Top ", "<nav class=\"tabs mu-roles\" aria-label=\"Role\"><a href=\"#all\">All roles</a><a href=\"#top\">Top</a>", "<table class=\"tl mu-table\" id=\"mu-top\" data-sortable>", "<option selected>50</option>", " vs usual", "</b></span></td><td class=\"opt\" data-v=\"", "<p class=\"wr-key\">" } },
-        // Champion page: each view's most played choice per kind, few games so no win
-        // rate, then that view's build page; filters.js shows the one its picks select
-        .{ "champion/darius.html", &.{ "<div data-by-view><div data-view=\"0\"><div class=\"bstrip\"><p class=\"bhead\"><b>Build</b> <span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"days30\" data-rank=\"\"", "<span>EUW</span><span>30 days</span><span>Plat+</span></span> <span class=\"muted\">last 30 days, in EUW, Platinum IV and up: 3 games.</span> <a href=\"../build/darius-top.html\">", "<div data-view=\"1\" hidden><div class=\"bstrip\"><p class=\"bhead\"><b>Build</b> <span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"patch:15.13\"", "<span class=\"off\">Patch 15.13<i>, not the 30 days picked</i></span><span>Plat+</span></span> <span class=\"muted\">patch 15.13, in EUW, Platinum IV and up: 3 games.</span> <a href=\"../patch/build/darius-top.html\">", "href=\"../all/build/darius-top.html\"", "<div class=\"bc runes\"><span>Runes</span><div class=\"bo thin\">", "<div class=\"rp\"><div class=\"rt\"><img class=\"rh on\" src=\"https://example.com/8000.png\" alt=\"Precision\"", "<img class=\"on\" src=\"https://example.com/8242.png\" alt=\"Unflinching\"", "<div class=\"rt rs\" title=\"Most played stat shards\">", "<div class=\"bc skills\"><span>Skill order</span>", "<div class=\"sg\"><b>Q</b>", "<i class=\"on\">18</i>", "<div class=\"bc core3\">", "<div class=\"bc boots\">", "players took this\">3 · 100%</small>", "<div class=\"rfold\">", "Games · share of players · % won from 100 games, grey under 400" } },
         .{ "patch/build/darius-top.html", &.{ "<div class=\"bpanel\"><div class=\"bp-bar\">", "<div class=\"bc runes\">", "<th>Levels 1 to 3</th>", "<th>Levels 1 to 18</th>", "<th>Fourth finished item</th>", ">Minute</th>", "<div class=\"rpages\">", "<div class=\"rpc thin\"><span class=\"tags\"><span class=\"tag mp\">most played</span></span><div class=\"rp\">", "<div class=\"rx\">", "<span class=\"rc on\" title=\"Conqueror: 3 games, 100.0%\">", "<span class=\"rc off\" title=\"Adaptive force: 0 games, 0.0%\">", "Most played rune pages first. Share of 3 players.", "<span class=\"key hw\"></span> highest win rate, adjusted for few games. <a href=\"../../method.html#builds\">How builds are counted</a></p>", "<h2>Spells and items</h2>\n<div class=\"bgrid\">" } },
-        .{ "champion/darius.html", &.{ "<div data-view=\"0\"><p class=\"muted small\">Players' win rates on Darius: more data needed (0 players in EUW with 10+ games on it, last 30 days; 20 needed).", "<div data-view=\"3\" hidden><p class=\"muted small\">Players' win rates on Darius: more data needed (0 players across all regions with 10+ games on it, patch 15.13; 20 needed).", "<div data-view=\"0 2\"></div><div data-view=\"1 3\" hidden></div>" } },
         .{ "build/darius-top.html", &.{ "ranked solo/duo in EUW, last 30 days, Platinum IV and up. 3 games.", "<title>Darius Top build: runes, items, skill order, last 30 days | meiolol</title>" } },
         .{ "champions.html", &.{"<a href=\"build/index.html\">Builds, last 30 days</a>."} },
         // Filters: the champion's counts by region, rank, patch, role and opponent, its
@@ -293,7 +279,6 @@ test "fixture games to stats, curves and the website" {
         // views link to it with their filters, and its switches set them
         .{ "data/filters/darius.json", &.{ "\"platforms\":[\"EUW1\"]", "\"rows\":[[", "\"bans\":[", "\"gold\":{\"EUW1|days30|\":[" } },
         .{ "data/filters.json", &.{ "\"roles\":[\"top\"", "\"slots\":[[" } },
-        .{ "champion/darius.html", &.{ "data-filters data-src=\"../data/filters/darius.json\"", "data-region=\"EUW1\"", "data-min=\"0\"", "filters.js", "data-id=\"", "data-tile=\"pick\"", "data-early=\"", "href=\"../champion/darius.html?region=all\" data-region=\"all\"" } },
         .{ "all/patch/role/top.html", &.{"href=\"../../../champion/darius.html?region=all&amp;period=patch\""} },
         .{ "all/matchup/top/mordekaiser-vs-darius.html", &.{"href=\"../../../champion/darius.html?region=all\""} },
         // Lane curves: the estimate (curvefit.zig) on the page, k on the method page
@@ -314,26 +299,14 @@ test "fixture games to stats, curves and the website" {
         // whose share moves (builds.runeShifts)
         .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<h2>Runes against Mordekaiser <span class=\"scope\" data-chip ", "Every rune picked within 10 points of Darius's other Top games.", "<div class=\"rx\">", "<span class=\"rc on\" title=\"Conqueror: 3 games, 100.0%\">" } },
         .{ "method.html", &.{ "Games to stabilise", "<li><b>Highest win rate</b>: marked among options", "<h2 id=\"lean\">Early or late</h2>" } },
-        // Early or late: three games, so no numbers, only that it can't tell yet
-        .{ "champion/darius.html", &.{ "<b>Early or late:</b> too few games yet to tell.", "Games still going at 20 min: 3 (every region, last 30 days)", "href=\"../method.html#lean\"" } },
-        // A pick the current patch has few games of: the previous patch's build, no link
-        // to the thin page (builds.zig pick)
-        .{ "champion/ahri.html", &.{"<span class=\"off\">Patch 15.12<i>, not the 30 days picked</i></span><span>Plat+</span></span> <span class=\"muted\">patch 15.12 (15.13: 3 games so far), in EUW"} },
         .{ "learn.html", &.{"From ranked games in EUW on patch 15.13"} },
         // Spread bars, pool and its section follow the view
         .{ "champions.html", &.{"games on it in any role, last 30 days (none under 20"} },
         .{ "patch/champions.html", &.{"games on it in any role, patch 15.13 (none under 20"} },
         .{ "all/pool.html", &.{"players across all regions so far)"} },
-        // The pool section's, one per view (the fixture has no mains)
-        .{ "champion/darius.html", &.{"<div data-by-view><div data-view=\"0\"></div><div data-view=\"1\" hidden></div><div data-view=\"2\" hidden></div><div data-view=\"3\" hidden></div></div>"} },
         .{ "daily.html", &.{"From ranked solo games in EUW on patch 15.13"} },
         // Scope chips (site/scope.zig): what each block covers, marked where it doesn't
-        // follow the page's picks; filters.js marks them again for each pick
-        .{ "champion/darius.html", &.{
-            "<section id=\"top\"><h2>Top <span class=\"scope\" data-chip data-region=\"*\" data-period=\"*\" data-rank=\"*\" title=\"Region, period and rank these numbers are from\"><span>EUW</span><span>30 days</span><span>Plat+</span></span></h2>",
-            "<p class=\"curves-links\"><span class=\"scope\" data-chip data-region=\"all\" data-period=\"days30\" data-rank=\"\" title=\"Region, period and rank these numbers are from\"><span class=\"off\">All regions<i>, not EUW alone</i></span><span>30 days</span><span>Plat+</span></span> <b>Early or late",
-            "patch 15.13; 20 needed). <span class=\"scope\" data-chip data-region=\"all\" data-period=\"patch:15.13\" data-rank=\"\"",
-        } },
+        // follow the page's picks
         .{ "patch/matchup/top/darius-vs-mordekaiser.html", &.{ "<h2>Build against Mordekaiser <span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"patch:15.13\" data-rank=\"\" title=\"Region, period and rank these numbers are from\"><span>EUW</span><span>Patch 15.13</span><span>Plat+</span></span></h2>", "<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"patch:15.13\"" } },
         // The fixture's every-region 30-day view has only a patch's curves
         .{ "all/matchup/top/darius-vs-mordekaiser.html", &.{"<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"all\" data-period=\"patch:15.13\" data-rank=\"\" title=\"Region, period and rank these numbers are from\"><span>All regions</span><span class=\"off\">Patch 15.13<i>, not the 30 days picked</i></span><span>Plat+</span></span> From Darius"} },
@@ -362,35 +335,6 @@ test "fixture games to stats, curves and the website" {
             }) + want.len;
         }
     }
-    // Every block on a champion page says its scope: each role section, and each
-    // variant written per view that has anything in it
-    for ([_][]const u8{ "champion/darius.html", "champion/ahri.html" }) |page| {
-        const path = try std.fs.path.join(arena, &.{ out, page });
-        const html = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 20));
-        var sections = std.mem.splitSequence(u8, html, "<section id=\"");
-        _ = sections.next();
-        while (sections.next()) |rest| {
-            const h2 = rest[0 .. std.mem.indexOf(u8, rest, "</h2>") orelse rest.len];
-            if (std.mem.indexOf(u8, h2, "data-chip") == null) {
-                std.debug.print("{s}: section without a scope chip: {s}\n", .{ page, h2 });
-                return error.TestUnexpectedResult;
-            }
-        }
-        var variants = std.mem.splitSequence(u8, html, "<div data-view=\"");
-        _ = variants.next();
-        var blocks: usize = 0;
-        while (variants.next()) |rest| {
-            const body = rest[std.mem.indexOfScalar(u8, rest, '>').? + 1 ..];
-            if (std.mem.startsWith(u8, body, "</div>")) continue;
-            blocks += 1;
-            const end = std.mem.indexOf(u8, body, "</div></div>\n") orelse body.len;
-            if (std.mem.indexOf(u8, body[0..end], "data-chip") == null) {
-                std.debug.print("{s}: block without a scope chip: {s}\n", .{ page, body[0..@min(body.len, 200)] });
-                return error.TestUnexpectedResult;
-            }
-        }
-        try testing.expect(blocks >= 8);
-    }
     // Data is Platinum+ (the crawl's floor): no lower tier to filter by, no "all ranks"
     for ([_][]const u8{ "champions.html", "champion/darius.html" }) |page| {
         const path = try std.fs.path.join(arena, &.{ out, page });
@@ -408,30 +352,6 @@ test "fixture games to stats, curves and the website" {
         try testing.expect(std.mem.find(u8, html, "whoever is ahead wins") == null);
         const pickers = std.mem.count(u8, html, "<details class=\"pick\">") + std.mem.count(u8, html, "<details class=\"regions\">");
         try testing.expectEqual(pickers, std.mem.count(u8, html, "<details"));
-    }
-    // table.js finds each search's, minimum's and rare button's table by id: every target on
-    // the page
-    for ([_][]const u8{"champion/darius.html"}) |page| {
-        const path = try std.fs.path.join(arena, &.{ out, page });
-        const html = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 20));
-        var found: usize = 0;
-        for ([_][]const u8{ "data-filter=\"", "data-show-rare=\"", "data-for=\"", "data-no-min=\"", "data-rare-count=\"" }) |attr| {
-            var it = std.mem.splitSequence(u8, html, attr);
-            _ = it.next();
-            while (it.next()) |rest| {
-                const id = rest[0..std.mem.findScalar(u8, rest, '"').?];
-                const want = try arena.print("id=\"{s}\"", .{id});
-                if (std.mem.find(u8, html, want) == null) {
-                    std.debug.print("{s}: {s}{s}\" has no table\n", .{ page, attr, id });
-                    return error.TestUnexpectedResult;
-                }
-                found += 1;
-            }
-        }
-        if (found == 0) {
-            std.debug.print("{s}: no table search\n", .{page});
-            return error.TestUnexpectedResult;
-        }
     }
 
     // The champions table island: what ui-stats.wasm renders from the data file, before

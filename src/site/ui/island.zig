@@ -4,7 +4,8 @@
 //! ui.wasm (src/site/ui/wasm/dom.zig), the fake DOM in tests (fakedom.zig).
 //!
 //! A page may hold several islands; they share one id space and one URL fragment, each
-//! writing its own fields. A root opts into the URL with `pub const Url = struct {...}`
+//! writing its own fields. Another ui.wasm on the page (its own runtime) shares the
+//! fragment too: keys none of ours owns are kept as they are. A root opts into the URL with `pub const Url = struct {...}`
 //! (url.zig: defaults written as nothing), `toUrl(*const Root) Url` and `fromUrl(*Root,
 //! Url)`. A handler sets `ev.push` for a history entry (a sort), else the entry is
 //! replaced (typing a search).
@@ -38,8 +39,6 @@ pub fn Runtime(comptime Dom: type) type {
         dom: *Dom,
         ids: diff.Ids = .{},
         islands: std.ArrayList(Slot) = .empty,
-        /// The fragment as last written, to skip a history call when nothing changed
-        hash: std.ArrayList(u8) = .empty,
         /// In a handler or a patch: removing a focused node fires focusout synchronously
         /// in some engines, and that event must not start a second patch
         busy: bool = false,
@@ -52,6 +51,7 @@ pub fn Runtime(comptime Dom: type) type {
             render: *const fn (*anyopaque) void,
             writeUrl: *const fn (*anyopaque, *std.Io.Writer) std.Io.Writer.Error!void,
             readUrl: *const fn (*anyopaque, []const u8) void,
+            owns: *const fn ([]const u8) bool,
         };
 
         pub fn init(gpa: std.mem.Allocator, dom: *Dom) R {
@@ -69,11 +69,11 @@ pub fn Runtime(comptime Dom: type) type {
                 .render = Island(Root, Dom).renderErased,
                 .writeUrl = Island(Root, Dom).writeUrlErased,
                 .readUrl = Island(Root, Dom).readUrlErased,
+                .owns = Island(Root, Dom).owns,
             });
             var buf: [1024]u8 = undefined;
             i.readUrl(r.dom.hash(&buf));
             i.hydrate(server);
-            try r.syncHash(false, true);
             return i;
         }
 
@@ -95,13 +95,25 @@ pub fn Runtime(comptime Dom: type) type {
                 s.readUrl(s.ctx, h);
                 s.render(s.ctx);
             }
-            r.syncHash(false, true) catch {};
         }
 
-        fn syncHash(r: *R, push: bool, quiet: bool) !void {
+        /// Keys no island of ours owns as they are, then each island's
+        fn syncHash(r: *R, push: bool) !void {
+            var buf: [1024]u8 = undefined;
+            const live = r.dom.hash(&buf);
             var w: std.Io.Writer.Allocating = .init(r.gpa);
             defer w.deinit();
             try w.writer.writeByte('#');
+            var it = std.mem.tokenizeScalar(u8, if (live.len > 0 and live[0] == '#') live[1..] else live, '&');
+            while (it.next()) |kv| {
+                const k = kv[0 .. std.mem.findScalar(u8, kv, '=') orelse kv.len];
+                for (r.islands.items) |s| {
+                    if (s.owns(k)) break;
+                } else {
+                    if (w.written().len > 1) try w.writer.writeByte('&');
+                    try w.writer.writeAll(kv);
+                }
+            }
             for (r.islands.items) |s| {
                 const before = w.written().len;
                 if (before > 1) try w.writer.writeByte('&');
@@ -111,11 +123,9 @@ pub fn Runtime(comptime Dom: type) type {
                 if (w.written().len == mark and before > 1) w.shrinkRetainingCapacity(before);
             }
             const now = w.written();
-            if (std.mem.eql(u8, now, r.hash.items)) return;
-            r.hash.clearRetainingCapacity();
-            try r.hash.appendSlice(r.gpa, now);
+            if (std.mem.eql(u8, now, if (live.len == 0) "#" else live)) return;
             // A bare "#" keeps the page from jumping to its top
-            if (!quiet) r.dom.setHash(now, push);
+            r.dom.setHash(now, push);
         }
     };
 }
@@ -234,7 +244,7 @@ pub fn Island(comptime Root: type, comptime Dom: type) type {
             if (ev.capture) i.rt.dom.capture(target.dom, in.pointer);
             i.render();
             if (ev.after) |after| i.apply(after);
-            i.rt.syncHash(ev.push, false) catch {};
+            i.rt.syncHash(ev.push) catch {};
             return ev.handled;
         }
 
@@ -276,6 +286,9 @@ pub fn Island(comptime Root: type, comptime Dom: type) type {
         fn writeUrlErased(p: *anyopaque, w: *std.Io.Writer) std.Io.Writer.Error!void {
             const i: *I = @ptrCast(@alignCast(p));
             if (has_url) try url.write(Root.Url, i.root.toUrl(), w);
+        }
+        fn owns(key: []const u8) bool {
+            return has_url and url.owns(Root.Url, key);
         }
         fn readUrlErased(p: *anyopaque, hash: []const u8) void {
             readUrl(@ptrCast(@alignCast(p)), hash);

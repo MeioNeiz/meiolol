@@ -19,6 +19,8 @@ pub const Kind = enum {
     int,
     /// 4.4: one decimal, no sign (a ± or an arrow carries it)
     dec,
+    /// 940, 2.3k, 34k: a count where the exact figure is not the point (chart subs)
+    kilo,
     text,
 };
 
@@ -42,6 +44,13 @@ pub fn write(w: *W, comptime k: Kind, v: anytype) W.Error!void {
         .time => try w.print("{d}:{d:0>2}", .{ @divTrunc(v, 60), @as(u64, @intCast(@mod(v, 60))) }),
         .int => try w.print("{d}", .{v}),
         .dec => try fixed(w, @abs(v), 1, false),
+        .kilo => {
+            const n: u64 = @intCast(v);
+            if (n < 1000) return w.print("{d}", .{n});
+            const th = @as(f64, @floatFromInt(n)) / 1000;
+            if (n < 9950) try fixed(w, th, 1, true) else try fixed(w, th, 0, true);
+            try w.writeByte('k');
+        },
         .text => try w.writeAll(v),
     }
 }
@@ -92,7 +101,7 @@ pub fn accepts(comptime k: Kind, comptime T: type) bool {
     const info = @typeInfo(T);
     return switch (k) {
         .rate, .points, .dec => info == .float or info == .comptime_float,
-        .pct, .count, .signed, .time, .int => info == .int or info == .comptime_int,
+        .pct, .count, .signed, .time, .int, .kilo => info == .int or info == .comptime_int,
         .text => T == []const u8 or (info == .pointer and info.pointer.size == .one),
     };
 }
@@ -234,6 +243,12 @@ test "numbers read as the mock's" {
     try write(&w, .time, @as(i64, 2196));
     try write(&w, .signed, -811);
     try std.testing.expectEqualStrings("403,364\u{2212}2.936:36\u{2212}811", w.buffered());
+    w = .fixed(&buf);
+    for ([_]u32{ 940, 2300, 2349, 9960, 34_120 }) |n| {
+        try write(&w, .kilo, n);
+        try w.writeByte(' ');
+    }
+    try std.testing.expectEqualStrings("940 2.3k 2.3k 10k 34k ", w.buffered());
     try std.testing.expectEqualStrings("hi3", ink(4, win_cuts));
     try std.testing.expectEqualStrings("lo1", ink(-1.5, win_cuts));
 }

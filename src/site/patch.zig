@@ -110,12 +110,6 @@ fn winOf(w: *Writer, c: core.curvesfile.Counts) !void {
     try w.print(" of {f}", .{root.Thousands{ .n = c.games }});
 }
 
-/// winOf when the change is clear, else in plain ink: a vivid rate beside "no clear
-/// change" reads as a change
-fn sinceRate(w: *Writer, c: core.curvesfile.Counts, clear: bool) !void {
-    return if (clear) winOf(w, c) else rateOf(w, c);
-}
-
 fn rateOf(w: *Writer, c: core.curvesfile.Counts) !void {
     try root.pct(w, c.wins, c.games);
     try w.print(" of {f}", .{root.Thousands{ .n = c.games }});
@@ -247,37 +241,3 @@ const Signed = struct {
         try w.print("{s}{d}", .{ if (s.v > 0) "+" else "", s.v });
     }
 };
-
-/// A champion page's line in role `r`: this patch against the previous one in `region`
-/// (`pd`, that region's). `to_view`: to the view whose patch page it links
-pub fn since(site: *const Site, w: *Writer, pd: *const PatchDay, region: html.Region, ch: Champ, r: core.Role, to_view: []const u8) !void {
-    const o = pd.opts;
-    const chip = site.chip(site.regionDim(region), .{
-        .key = try site.arena.print("patch:{s}", .{pd.cur_patch}),
-        .text = try site.arena.print("Patch {s} vs {s}", .{ pd.cur_patch, pd.prev_patch }),
-    }, .plat);
-    const m = pd.champion(ch.id, r) orelse {
-        if (early(pd)) try tpl.render(w,
-            \\<p class="since muted">{chip} Too early to tell: too few games on {cur} so far. <a href="{href}">Patch changes</a></p>
-            \\
-        , .{ .chip = chip, .cur = pd.cur_patch, .href = try std.mem.concat(site.arena, u8, &.{ to_view, path }) });
-        return;
-    };
-    const clear = m.win.clear(o.min_role_games, o.z);
-    try tpl.renderPart(w, "<p class=\"since muted\">{chip} {verdict}: {now} games won against {then}", .{
-        .chip = chip,
-        .verdict = if (!clear) "No clear change" else if (m.win.z > 0) "Won more often" else "Won less often",
-        .now = tpl.call(sinceRate, .{ m.win.cur, clear }),
-        .then = tpl.call(sinceRate, .{ m.win.prev, clear }),
-    });
-    if (clear) try tpl.renderPart(w, " ({change} points)", .{ .change = tpl.call(change, .{m.win}) });
-    if (m.ahead) |l| if (l.clear(o.min_role_games, o.z)) {
-        try tpl.renderPart(w, ". Ahead in lane at {minute} min {dir} often: {now} games against {then}", .{
-            .minute = core.curvesfile.lane_minute,
-            .dir = if (l.z > 0) "more" else "less",
-            .now = tpl.call(rateOf, .{l.cur}),
-            .then = tpl.call(rateOf, .{l.prev}),
-        });
-    };
-    try tpl.renderPart(w, ". <a href=\"{href}\">Patch changes</a></p>\n", .{ .href = try std.mem.concat(site.arena, u8, &.{ to_view, path }) });
-}

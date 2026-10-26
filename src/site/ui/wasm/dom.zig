@@ -264,6 +264,17 @@ pub fn start() void {
     zjb.global("window").call("addEventListener", .{ zjb.constString("popstate"), zjb.fnHandle("uiPopstate", &onPopstate) }, void);
 }
 
+/// An element's attribute, kept ("" when missing). The name is a runtime string: one
+/// copy of this however many attributes a family reads
+pub fn attrOf(el: zjb.Handle, name: []const u8) []const u8 {
+    const n = zjb.string(name);
+    defer n.release();
+    const v = el.call("getAttribute", .{n}, zjb.Handle);
+    defer v.release();
+    if (v == .null) return "";
+    return v.allocString(gpa) catch "";
+}
+
 /// GET `path` (relative to the page), then `done(ctx, bytes)`; bytes are gpa's, the
 /// callee's to keep. A failed fetch calls `done` with null
 pub fn fetch(path: []const u8, ctx: i32, done: *const fn (i32, ?[]u8) void) void {

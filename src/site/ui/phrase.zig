@@ -53,6 +53,7 @@ const Seg = struct { text: []const u8, hole: bool, kind: fmt.Kind = .text };
 
 fn parse(comptime src: []const u8) []const Seg {
     comptime {
+        @setEvalBranchQuota(10_000);
         var segs: []const Seg = &.{};
         var i: usize = 0;
         var lit: usize = 0;

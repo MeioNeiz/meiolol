@@ -395,7 +395,7 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
 }
 
 /// ui.wasm files, one per page family so each page loads only its islands (Jacob 25 Oct)
-const ui_families = [_][]const u8{ "stats", "app" };
+const ui_families = [_][]const u8{ "stats", "champion", "champbuild", "champmore", "app" };
 /// gzip bytes per family: stack.md's 40 KB
 const ui_budget = 40 * 1024;
 
@@ -424,7 +424,9 @@ fn uiWasm(b: *std.Build, family: []const u8) UiWasm {
     exe.rdynamic = true;
     const gen = b.addRunArtifact(zjb.artifact("generate_js"));
     const js = gen.addOutputFileArg(b.fmt("{s}.js", .{name}));
-    gen.addArg("Zjb");
+    // The loader's global class: one per family, as a page may load several (champion,
+    // champbuild, champmore) and a second classic script declaring the same name throws
+    gen.addArg(b.fmt("Zjb_{s}", .{family}));
     gen.addArtifactArg(exe);
     gen.addArg("--loader");
     return .{ .name = name, .wasm = exe.getEmittedBin(), .js = js };

@@ -245,6 +245,17 @@ test "two islands share the fragment; Back restores both" {
     try p.matches(li);
 }
 
+test "another runtime's keys in the fragment are kept as they are" {
+    var p: Page = undefined;
+    p.init("#by=gold&q=a&x=%41");
+    defer p.arena.deinit();
+    var state: List = .{};
+    var server: List = .{};
+    const i = p.add(List, &state, &server);
+    _ = p.rt.event(0, .{ .kind = .click, .target = Page.id(i, "aria-pressed", null) });
+    try testing.expectEqualStrings("#by=gold&x=%41&sort=name&q=a", p.fake.fragment.items);
+}
+
 test "a server render that differs from the tree is reported" {
     var p: Page = undefined;
     p.init("");

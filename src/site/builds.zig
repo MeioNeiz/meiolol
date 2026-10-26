@@ -72,7 +72,7 @@ fn periodDim(a: std.mem.Allocator, f: *const File, period: html.Period) !scope.D
 /// A strip's build: the view's, or in a patch view the previous patch's while the
 /// current one has under solid_games of it and the previous more (a new patch's first
 /// days)
-const Picked = struct {
+pub const Picked = struct {
     f: *const File,
     b: File.Build,
     period: html.Period,
@@ -97,6 +97,12 @@ fn pick(site: *const Site, v: html.View, get: anytype, args: anytype) ?Picked {
     const c = cur orelse return .{ .f = prev.f, .b = prev.b, .period = prev.period, .newer = 0 };
     if (c.b.games >= solid_games or prev.b.games <= c.b.games) return c;
     return .{ .f = prev.f, .b = prev.b, .period = prev.period, .newer = c.b.games };
+}
+
+/// The build the champion page shows for `ch` in `r`: this patch's, or the previous one's
+/// while this one's is thin
+pub fn forChampion(site: *const Site, v: html.View, ch: Champ, r: Role) ?Picked {
+    return pick(site, v, shown, .{ ch.id, r });
 }
 
 fn pickFrom(slot: *const ?File, period: html.Period, get: anytype, args: anytype) ?Picked {
@@ -161,33 +167,6 @@ pub fn route(site: *const Site, w: *Writer, f: *const File, rest: []const u8) !b
     const r = root.roleFromSlug(rest[dash + 1 ..]) orelse return false;
     const b = shown(f, ch.id, r) orelse return false;
     try writePage(site, w, f, ch, r, b);
-    return true;
-}
-
-/// Champion page, in `r`'s section: view `v`'s build panel (games, share and win rate,
-/// past-games facts in the build page's framing) and a link to v's build page; false
-/// when v has none. `from`: the champion page's path, at the site
-/// root
-pub fn strip(site: *const Site, w: *Writer, ch: Champ, r: Role, from: []const u8, v: html.View) !bool {
-    const picked = pick(site, v, shown, .{ ch.id, r }) orelse return false;
-    const f = picked.f;
-    const b = picked.b;
-    // The previous patch's build has no page
-    const href: ?html.Link = if (picked.newer != null) null else .{ .root = try site.toShared(from), .up = v.dir(), .path = try path(site.arena, ch, r) };
-    try tpl.renderPart(w,
-        \\<div class="bstrip"><p class="bhead"><b>Build</b> {chip} <span class="muted">{when}, {in}, {ranks}: {games} game{s}.</span>{link}</p>
-        \\
-    , .{
-        .chip = site.chip(site.regionDim(v.region), try picked.chipPeriod(site), rankDim(f.min_tier)),
-        .when = try picked.when(site),
-        .in = v.region.in(),
-        .ranks = try rankLabel(site.arena, f.min_tier),
-        .games = root.Thousands{ .n = b.games },
-        .s = plural(b.games),
-        .link = tpl.when(href != null, tpl.t(" <a href=\"{href}\">Full build: runes, items and skill order</a>", .{ .href = href orelse html.Link{ .root = "", .path = "" } })),
-    });
-    try panel(w, f, b, null, v.index());
-    try w.writeAll("</div>\n");
     return true;
 }
 

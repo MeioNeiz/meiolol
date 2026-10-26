@@ -334,7 +334,7 @@ pub const Site = struct {
 pub const File = daily.File;
 
 /// Also written by their plain names, with the same data (assets.zig)
-pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.search_js, assets.stats_js, assets.stats_wasm };
+pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.search_js, assets.stats_js, assets.stats_wasm, assets.champion_js, assets.champion_wasm, assets.champbuild_js, assets.champbuild_wasm, assets.champmore_js, assets.champmore_wasm };
 
 /// Front-end files at the site root; `Options.static_dir` serves them from disk instead
 pub const shared_assets = [_]File{
@@ -348,7 +348,6 @@ pub const shared_assets = [_]File{
     .{ .path = "inter.woff2", .data = @embedFile("static/inter.woff2") },
     .{ .path = "learn.js", .data = @embedFile("static/learn.js") },
     .{ .path = "table.js", .data = @embedFile("static/table.js") },
-    .{ .path = "filters.js", .data = @embedFile("static/filters.js") },
     .{ .path = "search.js", .data = @embedFile("static/search.js") },
     .{ .path = "account.js", .data = @embedFile("static/account.js") },
     // Linked for print, so it never holds up rendering; browsers still fetch it on each load
@@ -356,6 +355,12 @@ pub const shared_assets = [_]File{
     // Built (build.zig uiWasm), so never read from static_dir
     .{ .path = "ui-stats.wasm", .data = @embedFile("ui-stats.wasm") },
     .{ .path = "ui-stats.js", .data = @embedFile("ui-stats.js") },
+    .{ .path = "ui-champion.wasm", .data = @embedFile("ui-champion.wasm") },
+    .{ .path = "ui-champion.js", .data = @embedFile("ui-champion.js") },
+    .{ .path = "ui-champbuild.wasm", .data = @embedFile("ui-champbuild.wasm") },
+    .{ .path = "ui-champbuild.js", .data = @embedFile("ui-champbuild.js") },
+    .{ .path = "ui-champmore.wasm", .data = @embedFile("ui-champmore.wasm") },
+    .{ .path = "ui-champmore.js", .data = @embedFile("ui-champmore.js") },
 };
 /// And in every view's directory
 pub const view_assets = [_]File{

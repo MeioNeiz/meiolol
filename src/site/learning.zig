@@ -14,18 +14,6 @@ const Site = root.Site;
 const Champ = root.Champ;
 const Learning = learning.Learning;
 
-/// "Under 10k", "10k-30k", "300k+"
-fn binLabel(buf: []u8, i: usize) []const u8 {
-    const lo = learning.bins[i] / 1000;
-    if (i == 0) return std.mem.print(buf, "Under {d}k", .{learning.bins[1] / 1000}) catch "";
-    if (i + 1 == learning.bin_count) return std.mem.print(buf, "{d}k+", .{lo}) catch "";
-    return std.mem.print(buf, "{d}k-{d}k", .{ lo, learning.bins[i + 1] / 1000 }) catch "";
-}
-
-fn pct(x: f64) f64 {
-    return 100 * x;
-}
-
 const new_text = "under 30k mastery points on it";
 const practised_text = "100k+";
 
@@ -42,68 +30,6 @@ fn footnote(w: *Writer, l: *const Learning, period: []const u8) !void {
         .mean = l.mean_pp,
         .minute = learning.gold_minute,
     });
-}
-
-/// Champion page: results by mastery points on `ch` in `period`'s games
-pub fn section(site: *const Site, w: *Writer, l: *const Learning, ch: Champ, period: html.Period) !void {
-    if (l.games == 0) return;
-    const c = l.get(ch.id) orelse return;
-    try tpl.renderPart(w, "<h2>How hard {name} is to pick up {chip}</h2>\n<p>", .{ .name = ch.name, .chip = chip(site, period) });
-    if (c.gap) |g| {
-        try tpl.renderPart(w, "Players new to {name} ({new_text}) win {new:.1}%, practised ones ({practised_text}) {practised:.1}%. ", .{
-            .name = ch.name,
-            .new_text = new_text,
-            .practised_text = practised_text,
-            .new = pct(g.new.winRate()),
-            .practised = pct(g.practised.winRate()),
-        });
-        const args = .{ .pp = g.pp, .mean = l.mean_pp };
-        switch (g.kind) {
-            .harder => try tpl.render(w, "That gap of {pp:.1} points is bigger than most champions' ({mean:.1} on average): expect a rough start.", args),
-            .easier => try tpl.render(w, "That gap of {pp:.1} points is smaller than most champions' ({mean:.1} on average): players do nearly as well from the start.", args),
-            .usual => try tpl.render(w, "That gap of {pp:.1} points is about the usual one ({mean:.1} on average).", args),
-        }
-    } else {
-        const b = c.bins;
-        var new: u32 = 0;
-        var practised: u32 = 0;
-        for (b[0..learning.new_bins]) |x| new += x.games;
-        for (b[learning.practised_from..]) |x| practised += x.games;
-        try tpl.render(w, "More data needed to say how hard {name} is to pick up: it takes 200+ games each from players new to it and practised on it ({new} and {practised} so far).", .{
-            .name = ch.name,
-            .new = new,
-            .practised = practised,
-        });
-    }
-    try tpl.renderPart(w,
-        \\</p>
-        \\<div class="table-scroll"><table>
-        \\<thead><tr><th>Mastery points on {name}</th><th class="num">Win rate</th><th class="num">Gold at {minute} vs lane</th><th class="num">Games</th></tr></thead>
-        \\<tbody>
-        \\
-    , .{ .name = ch.name, .minute = learning.gold_minute });
-    var buf: [24]u8 = undefined;
-    for (c.bins, 0..) |b, i| {
-        const gold = if (b.gold()) |g| tpl.t("<span title=\"{n} games with a timeline\">{sign}{g:.0}</span>", .{
-            .n = b.gold_games,
-            .sign = if (g >= 0) "+" else "",
-            .g = g,
-        }) else null;
-        try tpl.render(w,
-            \\<tr{thin}><td>{bin}</td><td class="num">{dash}{rate}</td><td class="num">{gold}{none}</td><td class="num">{games}</td></tr>
-            \\
-        , .{
-            .thin = tpl.flag(b.games < l.thin_games, "class=\"thin\""),
-            .bin = binLabel(&buf, i),
-            .dash = tpl.when(b.games == 0, "-"),
-            .rate = tpl.when(b.games > 0, tpl.call(tierlist.wrText, .{ b.winRate(), b.games })),
-            .gold = gold,
-            .none = tpl.when(gold == null, "-"),
-            .games = root.Thousands{ .n = b.games },
-        });
-    }
-    try w.writeAll("</tbody></table></div>\n");
-    try footnote(w, l, site.periodText(period));
 }
 
 /// Every region's games (src/learning.zig), any rank
