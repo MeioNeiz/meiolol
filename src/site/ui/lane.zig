@@ -9,6 +9,7 @@ const tree = @import("tree.zig");
 const phrase = @import("phrase.zig");
 const chart = @import("chart.zig");
 const segmented = @import("segmented.zig");
+const card = @import("card.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
 const H = tree.H;
@@ -103,8 +104,9 @@ pub const Lane = struct {
         l.range = null;
     }
 
-    /// The Gold | XP | CS switch, for the page's chart head
+    /// The Gold | XP | CS switch, for the page's chart head; none for one measure
     pub fn switcher(l: *L, h: *H) N {
+        if (l.metrics.len < 2) return .none;
         var items: std.ArrayList(segmented.Item) = .empty;
         for (l.metrics, 0..) |m, i| items.append(h.mem, .{
             .label = m.label,
@@ -166,8 +168,6 @@ pub const Lane = struct {
             h.oom = true;
         };
         var over = h.list();
-        over.add(h.span(.{ .class = "side" }, .{W.ahead.with(h, .{ .n = l.a })}));
-        over.add(h.span(.{ .class = "side", .data_at = "bottom" }, .{W.ahead.with(h, .{ .n = l.b })}));
         if (l.range) |r| over.add(chart.range(h, p.px(r[0]), p.px(r[1])));
         if (s.you.len >= 2) over.add(h.el(.i, .{ .class = "dot", .data_k = "you", .style = h.vars(.{ .x = p.px(s.you.len - 1), .y = p.py(s.you[s.you.len - 1]) }) }, .{}));
         if (l.tip) |i| {
@@ -190,6 +190,8 @@ pub const Lane = struct {
                 chart.line(h, p, s.line, .typ),
                 chart.line(h, p, s.you, .you),
             },
+            .above = &.{h.div(.{ .class = "side" }, .{W.ahead.with(h, .{ .n = l.a })})},
+            .below = &.{h.div(.{ .class = "side" }, .{W.ahead.with(h, .{ .n = l.b })})},
             .over = over.done(),
             .press = true,
             .on = .{
@@ -209,8 +211,8 @@ fn round(v: f32) i32 {
 
 pub const css =
     \\@layer components {
-    \\  .c-lane .side { position: absolute; left: 6px; top: 4px; pointer-events: none; }
-    \\  .c-lane .side[data-at="bottom"] { top: auto; bottom: 4px; }
+    \\  .c-lane > .side { padding: 0 0 6px 6px; line-height: 1.2; }
+    \\  .c-lane > .plot + .side { padding: 6px 0 0 6px; }
     \\  .c-lane .dot[data-k="you"] { width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; background: var(--us); box-shadow: none; }
     \\}
     \\
@@ -255,7 +257,7 @@ pub fn gallery(g: *Gallery) void {
             return;
         };
         l.* = s[1];
-        g.addFill(s[0], h.div(.{}, .{ l.switcher(h), l.view(h) }));
+        g.addFill(s[0], card.view(h, .{}, &.{ card.head(h, plain("Lane"), null, &.{l.switcher(h)}), l.view(h) }));
     }
 }
 
