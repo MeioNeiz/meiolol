@@ -39,12 +39,15 @@ pub const Setup = union(enum) {
     /// RateRows; row `ask` is the asked one: its rate is the answer, hidden until then
     rates: struct { rows: []const Rate, ask: u8 },
     /// One champion and the options against it, each with a figure ("48%")
-    duel: struct { who: Champ, role: Role, label: []const u8, vs: []const Figure },
+    duel: Duel,
     /// Example tiles: a group's name and its champions (chapter 0's roles)
     tiles: []const Tile,
     /// Champions and short figures as Chips ("+850 gold at 14")
-    chips: struct { champs: []const Champ, chips: []const []const u8 },
+    chips: Chips,
 };
+
+pub const Duel = struct { who: Champ, role: Role, label: []const u8, vs: []const Figure };
+pub const Chips = struct { champs: []const Champ, chips: []const []const u8 };
 
 pub const Figure = struct { champ: Champ, text: []const u8 };
 pub const Tile = struct {
@@ -156,7 +159,7 @@ pub const Progress = struct {
     }
 };
 
-fn ch(comptime key: []const u8, comptime n: []const u8) Champ {
+pub fn ch(comptime key: []const u8, comptime n: []const u8) Champ {
     return .{ .key = key, .name = n };
 }
 

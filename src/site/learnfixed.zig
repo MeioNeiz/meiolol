@@ -11,9 +11,7 @@ const fed_from = "Ranked solo, Platinum IV and up, every region, patches 16.19-1
     "65,240 games of 15+ minutes";
 const all_regions = "Ranked solo, Platinum IV and up, every region, patches 16.19-16.20";
 
-fn ch(comptime key: []const u8, comptime n: []const u8) ld.Champ {
-    return .{ .key = key, .name = n };
-}
+const ch = ld.ch;
 
 pub const know: ld.Puzzle = .{
     .id = "know",

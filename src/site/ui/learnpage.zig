@@ -3,8 +3,6 @@
 //! on a phone) ChapterPath: this chapter's puzzles, the tips earned, every chapter with
 //! its progress. A chapter's end lists its takeaways with their stars. One island
 //! (ui-learn.wasm); progress in localStorage through the page's code (`progress`)
-//!
-//! WIP (L3): pick answers use plain buttons until ChoiceCards (cc) is on main
 const std = @import("std");
 const tree = @import("tree.zig");
 const card = @import("card.zig");
@@ -239,7 +237,10 @@ pub const Page = struct {
         const real: ?f32 = if (z.answer == .guess) z.answer.guess.real else null;
         var lo = p.g.lo;
         var hi = p.g.hi;
-        const rows = h.mem.alloc(puzzle.Row, src.len) catch return .none;
+        const rows = h.mem.alloc(puzzle.Row, src.len) catch {
+            h.oom = true;
+            return .none;
+        };
         for (src, 0..) |x, i| {
             const hit = p.revealed and real != null and @abs(x.v - real.?) < 0.05;
             rows[i] = .{
@@ -267,7 +268,10 @@ pub const Page = struct {
         const step: f32 = if (hi - lo > 30) 10 else 5;
         var l: std.ArrayList(f32) = .empty;
         var v = @ceil(lo / step) * step;
-        while (v <= hi) : (v += step) l.append(h.mem, v) catch break;
+        while (v <= hi) : (v += step) l.append(h.mem, v) catch {
+            h.oom = true;
+            break;
+        };
         return l.items;
     }
 
@@ -279,7 +283,7 @@ pub const Page = struct {
         return champ.view(h, .{ .name = c.name, .src = p.iconSrc(h, c) }, .{ .px = px });
     }
 
-    fn duelStage(p: *const Page, h: *H, d: anytype) N {
+    fn duelStage(p: *const Page, h: *H, d: ld.Duel) N {
         var l = h.list();
         for (d.vs, 0..) |f, i| l.add(h.span(.{ .key = i }, .{ p.icon(h, f.champ, .@"32"), h.b(.{}, .{f.text}) }));
         return h.div(.{ .class = "duel" }, .{
@@ -308,7 +312,7 @@ pub const Page = struct {
         return h.div(.{ .class = "tiles" }, .{l.done()});
     }
 
-    fn chipsStage(p: *const Page, h: *H, c: anytype) N {
+    fn chipsStage(p: *const Page, h: *H, c: ld.Chips) N {
         var l = h.list();
         for (c.champs) |x| l.add(p.icon(h, x, .@"40"));
         for (c.chips) |t| l.add(badge.view(h, .accent, .{t}));
@@ -316,7 +320,10 @@ pub const Page = struct {
     }
 
     fn choices(p: *Page, h: *H, x: ld.Pick) N {
-        const cs = h.mem.alloc(choice.Choice, x.choices.len) catch return .none;
+        const cs = h.mem.alloc(choice.Choice, x.choices.len) catch {
+            h.oom = true;
+            return .none;
+        };
         for (x.choices, cs, 0..) |c, *o, i| {
             const chosen = p.pick != null and p.pick.? == i;
             o.* = .{
@@ -437,7 +444,9 @@ pub fn gallery(g: *@import("gallery.zig").Gallery) void {
     if (shown(h.mem, &chips_demo, 0, 0, null)) |p| g.addFill("chips setup with a slider", p.view(h));
     if (shown(h.mem, &chips_demo, 0, 0, 60)) |p| g.addFill("chips setup revealed: the bands", p.view(h));
     if (shown(h.mem, &ld.demo, 1, 1, 1)) |p| {
-        p.progress.set(h.mem, "know", 2) catch {};
+        p.progress.set(h.mem, "know", 2) catch {
+            h.oom = true;
+        };
         p.end = true;
         g.addFill("chapter end", p.view(h));
     }
@@ -545,17 +554,13 @@ test "the island opens the linked puzzle" {
     try testing.expectEqualStrings("counter-top", state.cur().id);
 }
 
-fn demoChamp(comptime key: []const u8, comptime n: []const u8) ld.Champ {
-    return .{ .key = key, .name = n };
-}
-
 const counter_demo: ld.Data = .{ .ddragon = "16.21.1", .start = 0, .chapters = &.{.{ .title = "The basics", .puzzles = &.{.{
     .id = "basic-counter-mordekaiser-illaoi",
     .q = "Who wins this lane more often?",
     .ctx = "Illaoi against Mordekaiser, top lane",
     .setup = .{ .tiles = &.{
-        .{ .title = "Top", .role = .top, .champs = &.{ demoChamp("Malphite", "Malphite"), demoChamp("Vayne", "Vayne") }, .sep = "into" },
-        .{ .title = "Mid", .role = .mid, .champs = &.{ demoChamp("Yasuo", "Yasuo"), demoChamp("Akshan", "Akshan") }, .sep = "into" },
+        .{ .title = "Top", .role = .top, .champs = &.{ ld.ch("Malphite", "Malphite"), ld.ch("Vayne", "Vayne") }, .sep = "into" },
+        .{ .title = "Mid", .role = .mid, .champs = &.{ ld.ch("Yasuo", "Yasuo"), ld.ch("Akshan", "Akshan") }, .sep = "into" },
     } },
     .answer = .{ .pick = .{ .right = 1, .choices = &.{
         .{ .text = "Illaoi", .shown = "won 42%", .games = 1_965 },
