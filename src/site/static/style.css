@@ -326,7 +326,6 @@ section > h2 { margin-top: 28px; }
    numbers stay on one line until 380px; no rank or "at least" column */
 @media (max-width: 480px) {
   table { font-size: 14px; }
-  table.patch td { white-space: normal; }
   table.tl { font-size: 13px; }
   th, td { padding: 6px 4px; }
   .table-scroll th, .table-scroll td:first-child, table.tl th { white-space: normal; }

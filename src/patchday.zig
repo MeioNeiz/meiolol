@@ -120,6 +120,8 @@ pub const PatchDay = struct {
     champions: []const ChampionMove = &.{},
     /// Every matchup with curves on both patches
     matchups: []const MatchupMove = &.{},
+    /// Wins.thin
+    thin: []const ChampionMove = &.{},
 
     pub fn champion(p: *const PatchDay, id: u32, r: Role) ?ChampionMove {
         for (p.champions) |c| if (c.id == id and c.role == r) return c;
@@ -181,17 +183,30 @@ pub const Wins = struct {
     cur_games: u32 = 0,
     /// Every champion-role played enough on both patches, win rates only
     champions: []const ChampionMove = &.{},
+    /// Champions with no role in `champions`: each one's most played role on the current
+    /// patch, whatever its games (a champion Riot changed, from the patch's first day)
+    thin: []const ChampionMove = &.{},
 };
 
 pub fn championWins(arena: Allocator, prev: *const Stats, cur: *const Stats, opts: Options) !Wins {
     var champions: std.ArrayList(ChampionMove) = .empty;
+    var thin: std.ArrayList(ChampionMove) = .empty;
     for (cur.ids, 0..) |id, c| {
-        const pc = prev.index(id) orelse continue;
+        const pc = prev.index(id);
+        const had = champions.items.len;
+        var main: ?Role = null;
         for (Role.all) |r| {
-            const win = Rate.of(counts(prev.champRole(r, pc)), counts(cur.champRole(r, c)));
+            const now = cur.champRole(r, c);
+            if (now.games > 0 and (main == null or now.games > cur.champRole(main.?, c).games)) main = r;
+            const p = pc orelse continue;
+            const win = Rate.of(counts(prev.champRole(r, p)), counts(now));
             if (!win.enough(opts.min_role_games)) continue;
             try champions.append(arena, .{ .id = id, .role = r, .win = win });
         }
+        if (champions.items.len > had) continue;
+        const r = main orelse continue;
+        const before: Counts = if (pc) |p| counts(prev.champRole(r, p)) else .{};
+        try thin.append(arena, .{ .id = id, .role = r, .win = .of(before, counts(cur.champRole(r, c))) });
     }
     return .{
         .prev_patch = prev.patch,
@@ -199,6 +214,7 @@ pub fn championWins(arena: Allocator, prev: *const Stats, cur: *const Stats, opt
         .prev_games = prev.games,
         .cur_games = cur.games,
         .champions = champions.items,
+        .thin = thin.items,
     };
 }
 
@@ -244,6 +260,7 @@ pub fn withCurves(
         .opts = opts,
         .champions = champions,
         .matchups = matchups.items,
+        .thin = wins.thin,
     };
 }
 
@@ -356,6 +373,18 @@ test "champion and matchup moves between patches" {
     try testing.expectApproxEqAbs(6, top.win.delta(), 1e-9);
     try testing.expect(top.ahead.?.clear(300, p.opts.z)); // led at 14 in won games only
     try testing.expectEqual(null, p.champion(1, .jungle));
+    try testing.expectEqual(0, p.thin.len);
+
+    // A patch's first games: no role has enough, each champion's main one is thin
+    const early = try testPatch(arena, "16.21", 200, 120, 320);
+    const e = try championWins(arena, &prev[0], &early[0], .{});
+    try testing.expectEqual(0, e.champions.len);
+    try testing.expectEqual(10, e.thin.len);
+    for (e.thin) |t| if (t.id == 1) {
+        try testing.expectEqual(.top, t.role);
+        try testing.expectEqual(1000, t.win.prev.games);
+        try testing.expectEqual(200, t.win.cur.games);
+    };
 
     const m = p.matchup(.top, 1, 2).?;
     try testing.expectEqual(7, m.gold.?.minute);

@@ -29,6 +29,7 @@ const assets = @import("assets.zig");
 pub const gallery = @import("gallery.zig");
 pub const ui = @import("ui");
 const patchday = @import("../patchday.zig");
+const patchnotes = @import("../patchnotes.zig");
 const patch_page = @import("patch.zig");
 const stats = @import("../stats.zig");
 pub const scope = @import("scope.zig");
@@ -74,6 +75,8 @@ pub const Options = struct {
     /// the matchup charts' dashed line
     prev_patch: ?[]const u8 = null,
     curves_prev: [html.View.count]?[]const u8 = @splat(null),
+    /// Data Dragon's files by version (patchnotes.load): patch.html's Riot changes
+    ddragon_dir: ?[]const u8 = null,
     /// Builds file per view (`meiolol builds`): build pages in the patch views where set
     builds: [html.View.count]?[]const u8 = @splat(null),
     /// The previous patch's builds files, by view as `builds`: the champion and matchup
@@ -186,6 +189,8 @@ pub const Site = struct {
     patchday: ?patchday.PatchDay = null,
     /// The root view's only, for the champion pages: every region's
     patchday_all: ?patchday.PatchDay = null,
+    /// What Riot changed between the patch day's patches (Options.ddragon_dir)
+    notes: ?*const patchnotes.Notes = null,
     /// Every view's (html.View.index), so the switches skip matchups without a page
     view_curves: *const [html.View.count]?core.curvesfile.Curves,
     /// Every view's builds (html.View.index); the 30-day views link to their patch view's
@@ -342,7 +347,7 @@ pub const Site = struct {
 pub const File = daily.File;
 
 /// Also written by their plain names, with the same data (assets.zig)
-pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.search_js, assets.stats_js, assets.stats_wasm, assets.champion_js, assets.champion_wasm, assets.champbuild_js, assets.champbuild_wasm, assets.champmore_js, assets.champmore_wasm, assets.matchup_js, assets.matchup_wasm, assets.matchmore_js, assets.matchmore_wasm, assets.games_js, assets.games_wasm, assets.gamemore_js, assets.gamemore_wasm, assets.gamelane_js, assets.gamelane_wasm, assets.finder_js, assets.finder_wasm, assets.learn_js, assets.learn_wasm };
+pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.search_js, assets.stats_js, assets.stats_wasm, assets.champion_js, assets.champion_wasm, assets.champbuild_js, assets.champbuild_wasm, assets.champmore_js, assets.champmore_wasm, assets.matchup_js, assets.matchup_wasm, assets.matchmore_js, assets.matchmore_wasm, assets.games_js, assets.games_wasm, assets.gamemore_js, assets.gamemore_wasm, assets.gamelane_js, assets.gamelane_wasm, assets.finder_js, assets.finder_wasm, assets.learn_js, assets.learn_wasm, assets.patch_js, assets.patch_wasm };
 
 /// Front-end files at the site root; `Options.static_dir` serves them from disk instead
 pub const shared_assets = [_]File{
@@ -382,6 +387,8 @@ pub const shared_assets = [_]File{
     .{ .path = "ui-finder.js", .data = @embedFile("ui-finder.js") },
     .{ .path = "ui-learn.wasm", .data = @embedFile("ui-learn.wasm") },
     .{ .path = "ui-learn.js", .data = @embedFile("ui-learn.js") },
+    .{ .path = "ui-patch.wasm", .data = @embedFile("ui-patch.wasm") },
+    .{ .path = "ui-patch.js", .data = @embedFile("ui-patch.js") },
 };
 /// And in every view's directory
 pub const view_assets = [_]File{
@@ -428,6 +435,7 @@ pub fn robots(arena: std.mem.Allocator, opts: Options) ![]const u8 {
 
 test {
     _ = style;
+    _ = patch_page;
     _ = gallery;
     _ = evalchart;
     _ = flat;

@@ -49,7 +49,7 @@ pub const Role = enum(u8) {
         return names[@backingInt(r)];
     }
 
-    fn ui(r: Role) role.Role {
+    pub fn ui(r: Role) role.Role {
         return role.Role.all[@backingInt(r)];
     }
 };

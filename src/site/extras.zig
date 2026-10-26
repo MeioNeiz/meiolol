@@ -11,6 +11,7 @@ const builds = @import("../builds.zig");
 const stats = @import("../stats.zig");
 const lean = @import("../lean.zig");
 const partials = @import("../partials.zig");
+const patchnotes = @import("../patchnotes.zig");
 
 const Stats = core.Stats;
 
@@ -36,9 +37,13 @@ pub const Extras = struct {
     partials_dir: ?[]const u8 = null,
     /// Opened (and brought up to date) on the first load that reads games
     games: ?*partials.Store = null,
+    /// load's, for what is loaded on first use
+    arena: ?std.mem.Allocator = null,
+    notes: ?patchnotes.Notes = null,
+    notes_tried: bool = false,
 
     pub fn load(arena: std.mem.Allocator, io: std.Io, opts: Options) Extras {
-        var e: Extras = .{};
+        var e: Extras = .{ .arena = arena };
         for (opts.curves, &e.curves) |path, *c| {
             if (path) |p| c.* = loadCurves(arena, io, p);
         }
@@ -64,6 +69,21 @@ pub const Extras = struct {
         for (&e.curves_prev) |*c| if (c.*) |*x| x.unmap(arena, io);
         if (e.people) |*p| p.deinit(gpa);
         if (e.games) |g| g.deinit();
+    }
+
+    /// Riot's changes from `prev` to `cur` (Options.ddragon_dir), on the first call; null
+    /// without the directory or when they fail: the patch page goes without
+    pub fn notesFor(e: *Extras, gpa: std.mem.Allocator, io: std.Io, dir: ?[]const u8, prev: []const u8, cur: []const u8) ?*const patchnotes.Notes {
+        if (!e.notes_tried) {
+            e.notes_tried = true;
+            const d = dir orelse return null;
+            const arena = e.arena orelse return null;
+            e.notes = patchnotes.load(gpa, arena, io, d, prev, cur) catch |err| blk: {
+                log.warn("patch notes {s} to {s}: {t}", .{ prev, cur, err });
+                break :blk null;
+            };
+        }
+        return if (e.notes) |*n| n else null;
     }
 
     /// The partials, opened on the first call; null without partials_dir or when they

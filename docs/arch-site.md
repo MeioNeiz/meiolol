@@ -186,6 +186,23 @@ without names, PUUIDs hashed; compact timeline). Per-game numbers come from curv
 profile-icon check, then delete and block the PUUID. Players not looked up for 30 days
 are pruned.
 
+## Patch changes (src/site/patch.zig, src/patchday.zig, src/patchnotes.zig; ui/patchpage.zig)
+
+patch.html in every view: the region's current patch against the one before, whole
+patches whatever the period (plan docs/plan/ui/patch.md). ui.patchpage server-rendered
+from the view's data/patch.bin (stamped, as the champions board), ui-patch.wasm adopts it.
+
+- Rows: every champion role with 300+ games on both patches (patchday.champions), plus
+  the main role of a champion Riot changed that has none yet (patchday.thin). Clear =
+  z 2.58; the drawn whisker is the same 99%, so a whisker clear of 0 is coloured
+- Riot's changes: patchnotes.load from Options.ddragon_dir (DATA/ddragon), loaded once
+  per process (Extras.notesFor); a patch's version comes from the cache when it holds
+  all three files, so the renderer and tests never fetch. Load fails: logged, the page
+  goes without the Riot column and chip
+- Matchups: those whose win rate (400+ games both) or median gold moved clearly, from
+  the side that gained; a row's detail has its 3 biggest matchup moves
+- Riot's notes link: league-of-legends-patch-<major+10>-<minor>-notes (patchnotes.officialUrl)
+
 ## Learn (src/site/learn.zig, learnbuild.zig, learnfixed.zig; ui/learnpage.zig)
 
 Chapters of puzzles (plan docs/plan/ui/learn.md): a setup drawn as UI (RateRows, a duel,

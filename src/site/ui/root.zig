@@ -66,6 +66,7 @@ pub const learnpage = @import("learnpage.zig");
 pub const champrolepicker = @import("champrolepicker.zig");
 pub const puzzle = @import("puzzle.zig");
 pub const guess = @import("guess.zig");
+pub const choice = @import("choice.zig");
 pub const yourlist = @import("yourlist.zig");
 pub const gamepage = @import("gamepage.zig");
 pub const gamehead = @import("gamehead.zig");
@@ -92,12 +93,13 @@ pub const matchgrid = @import("matchgrid.zig");
 pub const violin = @import("violin.zig");
 pub const changeline = @import("changeline.zig");
 pub const patchhead = @import("patchhead.zig");
+pub const patchpage = @import("patchpage.zig");
 
 /// Components whose CSS ships (css.join): add one when a page first uses it
-pub const components = .{ button, chip, badge, segmented, card, toggletip, strip, role, champ, rolepicker, champsearch, champhead, matchbrief, matchstrip, champlist, table, chart, dotplot, trend, histogram, art, skillgrid, itempath, runetree, buildpanel, tabs, site, filterbar, champpage, kda, timeline, versus, objicon, minimap, gamestrip, inspector, gamehead, gamerow, spark, stat, scoreboard, laneduel, itemrow, gamepage, lane, matchpage, matchgrid, finder, delta, bar, violin, tiers, guess, puzzle, learnpage };
+pub const components = .{ button, chip, badge, segmented, card, toggletip, strip, role, champ, rolepicker, champsearch, champhead, matchbrief, matchstrip, champlist, table, chart, dotplot, trend, histogram, art, skillgrid, itempath, runetree, buildpanel, tabs, site, filterbar, champpage, kda, timeline, versus, objicon, minimap, gamestrip, inspector, gamehead, gamerow, spark, stat, scoreboard, laneduel, itemrow, gamepage, lane, matchpage, matchgrid, finder, delta, bar, violin, tiers, guess, puzzle, choice, learnpage, changeline, patchhead, patchpage };
 
 /// Every component, in the gallery's order
-pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, role, champ, site, rolepicker, filterbar, champsearch, champhead, matchbrief, matchstrip, champlist, draftboard, champselect, teamrows, loadscreen, gamescreen, postgame, signin, practice, app, table, chart, dotplot, trend, histogram, lane, timeline, spark, art, skillgrid, itempath, runetree, buildpanel, versus, objicon, minimap, gamestrip, inspector, gamehead, gamerow, scoreboard, laneduel, itemrow, gamepage, guess, puzzle, champrolepicker, matchgrid, finder, violin, learnpage, changeline, patchhead };
+pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, role, champ, site, rolepicker, filterbar, champsearch, champhead, matchbrief, matchstrip, champlist, draftboard, champselect, teamrows, loadscreen, gamescreen, postgame, signin, practice, app, table, chart, dotplot, trend, histogram, lane, timeline, spark, art, skillgrid, itempath, runetree, buildpanel, versus, objicon, minimap, gamestrip, inspector, gamehead, gamerow, scoreboard, laneduel, itemrow, gamepage, guess, puzzle, choice, champrolepicker, matchgrid, finder, violin, learnpage, changeline, patchhead, patchpage };
 
 pub const H = tree.H;
 pub const N = tree.N;
@@ -112,6 +114,7 @@ test {
     _ = @import("tests.zig");
     _ = @import("island_test.zig");
     _ = @import("tiers_test.zig");
+    _ = @import("patchpage_test.zig");
     _ = @import("table_test.zig");
     _ = @import("champsearch_test.zig");
 }

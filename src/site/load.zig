@@ -23,6 +23,7 @@ const log = std.log.scoped(.site);
 
 const root = @import("root.zig");
 const tierlist = @import("tierlist.zig");
+const patch_page = @import("patch.zig");
 const champion = @import("champion.zig");
 const champrank = @import("champrank.zig");
 const Options = root.Options;
@@ -314,6 +315,7 @@ fn loadPatchDay(site: *Site, db: store.Db, all_opts: Options, extras: *Extras, o
     const view = site.view;
     var keep = true;
     site.patchday = try regionPatchDay(site, db, all_opts, extras, old, phases, prev, view, &keep);
+    site.notes = extras.notesFor(site.gpa, site.io, all_opts.ddragon_dir, prev, site.patchday.?.cur_patch);
     if (view.index() == 0 and !all_opts.euw_only) {
         const all: html.View = .{ .region = .all, .period = view.period };
         site.patchday_all = try regionPatchDay(site, db, all_opts, extras, old, phases, prev, all, &keep);
@@ -459,6 +461,7 @@ fn addFiles(site: *Site) !void {
         try files.append(arena, .{ .path = stats_path, .data = site.model });
         try files.append(arena, .{ .path = "data/champions.json", .data = try championsJson(site) });
         try files.append(arena, .{ .path = tierlist.data_path, .data = try tierlist.dataFile(site) });
+        if (try patch_page.dataFile(site)) |d| try files.append(arena, .{ .path = patch_page.data_path, .data = d });
         // Every view's champion data, for the page's view picker; the rank filter's
         // from the root view's tally
         try champion.dataFiles(site, &files);

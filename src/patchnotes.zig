@@ -103,20 +103,54 @@ const context = 2;
 const max_hunks = 4;
 
 /// Notes from `old_patch` to `new_patch` ("16.20", "16.21"); files cached under
-/// `cache_dir`/<version>/. error.NoVersion when Data Dragon has no version of a patch
+/// `cache_dir`/<version>/, a patch's version from there when it has one (no network:
+/// the renderer and tests). error.NoVersion when Data Dragon has no version of a patch
 pub fn load(gpa: Allocator, arena: Allocator, io: std.Io, cache_dir: []const u8, old_patch: []const u8, new_patch: []const u8) !Notes {
     var http: std.http.Client = .{ .allocator = gpa, .io = io };
     defer http.deinit();
     var versions: [2][]const u8 = undefined;
     var files: [2]Files = undefined;
     for ([_][]const u8{ old_patch, new_patch }, &versions, &files) |patch, *v, *f| {
-        v.* = try ddragon.versionFor(&http, arena, patch);
-        if (v.*.len <= patch.len or !std.mem.startsWith(u8, v.*, patch) or v.*[patch.len] != '.') return error.NoVersion;
+        v.* = try cachedVersion(arena, io, cache_dir, patch) orelse try ddragon.versionFor(&http, arena, patch);
+        if (!isVersionOf(v.*, patch)) return error.NoVersion;
         var bodies: [3][]const u8 = undefined;
         for (file_names, &bodies) |name, *body| body.* = try cached(&http, arena, io, cache_dir, v.*, name);
         f.* = .{ .champions = bodies[0], .items = bodies[1], .runes = bodies[2] };
     }
     return diff(arena, versions[0], files[0], versions[1], files[1]);
+}
+
+fn isVersionOf(v: []const u8, patch: []const u8) bool {
+    return v.len > patch.len and std.mem.startsWith(u8, v, patch) and v[patch.len] == '.';
+}
+
+/// The newest version of `patch` with all three files in the cache
+fn cachedVersion(arena: Allocator, io: std.Io, cache_dir: []const u8, patch: []const u8) !?[]const u8 {
+    const cwd = std.Io.Dir.cwd();
+    var dir = cwd.openDir(io, cache_dir, .{ .iterate = true }) catch |err| switch (err) {
+        error.FileNotFound => return null,
+        else => return err,
+    };
+    defer dir.close(io);
+    var best: ?[]const u8 = null;
+    var it = dir.iterate();
+    next: while (try it.next(io)) |e| {
+        if (e.kind != .directory or !isVersionOf(e.name, patch)) continue;
+        for (file_names) |name| {
+            const p = try arena.print("{s}/{s}.json", .{ e.name, name });
+            dir.access(io, p, .{}) catch continue :next;
+        }
+        if (best == null or std.mem.order(u8, e.name, best.?) == .gt) best = try arena.dupe(u8, e.name);
+    }
+    return best;
+}
+
+/// Riot's own notes for `patch` ("16.21"): its page names it by year, 26.21
+pub fn officialUrl(arena: Allocator, patch: []const u8) !?[]const u8 {
+    const dot = std.mem.indexOfScalar(u8, patch, '.') orelse return null;
+    const major = std.fmt.parseInt(u16, patch[0..dot], 10) catch return null;
+    const minor = std.fmt.parseInt(u16, patch[dot + 1 ..], 10) catch return null;
+    return try arena.print("https://www.leagueoflegends.com/en-gb/news/game-updates/league-of-legends-patch-{d}-{d}-notes/", .{ major + 10, minor });
 }
 
 fn cached(http: *std.http.Client, arena: Allocator, io: std.Io, cache_dir: []const u8, version: []const u8, name: []const u8) ![]const u8 {
@@ -776,4 +810,37 @@ test "wordDiff: a rewrite past max_hunks is one text line" {
     try textLines(arena, &lines, .p, "", "a 1 b 2 c 3 d 4 e 5 f", "a 9 b 8 c 7 d 6 e 0.5 f", false);
     try testing.expectEqual(1, lines.items.len);
     try testing.expectEqual(.text, lines.items[0].dir);
+}
+
+test "load: versions from the cache, no network" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const io = testing.io;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const files = [_][3][]const u8{
+        .{ champJson(darius_old), items_old, runes_old },
+        .{ champJson(darius_new), items_new, runes_new },
+    };
+    for ([_][]const u8{ "16.20.1", "16.21.1" }, files) |v, f| {
+        try tmp.dir.createDirPath(io, v);
+        for (file_names, f) |name, body| try tmp.dir.writeFile(io, .{ .sub_path = try arena.print("{s}/{s}.json", .{ v, name }), .data = body });
+    }
+    // Not whole: never picked
+    try tmp.dir.createDirPath(io, "16.21.2");
+    const dir = try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path });
+    const n = try load(testing.allocator, arena, io, dir, "16.20", "16.21");
+    try testing.expectEqualStrings("16.21.1", n.new);
+    try testing.expectEqualStrings("Darius", n.champions[0].name);
+}
+
+test "officialUrl: Riot names patches by year" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    try testing.expectEqualStrings(
+        "https://www.leagueoflegends.com/en-gb/news/game-updates/league-of-legends-patch-26-21-notes/",
+        (try officialUrl(arena_state.allocator(), "16.21")).?,
+    );
+    try testing.expectEqual(null, try officialUrl(arena_state.allocator(), "x"));
 }

@@ -31,6 +31,8 @@ pub const finder_js = hashed("ui-finder.js", @embedFile("ui-finder.js"));
 pub const finder_wasm = hashed("ui-finder.wasm", @embedFile("ui-finder.wasm"));
 pub const learn_js = hashed("ui-learn.js", @embedFile("ui-learn.js"));
 pub const learn_wasm = hashed("ui-learn.wasm", @embedFile("ui-learn.wasm"));
+pub const patch_js = hashed("ui-patch.js", @embedFile("ui-patch.js"));
+pub const patch_wasm = hashed("ui-patch.wasm", @embedFile("ui-patch.wasm"));
 
 /// `plain` with 8 hex digits of `data`'s FNV-1a before its extension
 pub fn hashed(comptime plain: []const u8, comptime data: []const u8) Hashed {

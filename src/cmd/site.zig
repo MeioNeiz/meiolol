@@ -113,6 +113,7 @@ const SiteFlags = struct {
                 try buildsPath(arena, c.data_dir, chosen, true),
             }),
             .prev_patch = if (prev) |p| p[0] else null,
+            .ddragon_dir = try std.fs.path.join(arena, &.{ c.data_dir, "ddragon" }),
             .builds_prev = if (prev) |p| .{
                 null,
                 try buildsPath(arena, c.data_dir, p, false),

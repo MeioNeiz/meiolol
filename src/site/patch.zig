@@ -1,33 +1,38 @@
-//! patch.html in every view: how the current patch compares with the one before
-//! (src/patchday.zig) in the view's region, whole patches whatever its period. Clear
-//! moves only, as facts with games and a range; the champion pages' line per role
+//! patch.html in every view: the current patch against the one before (src/patchday.zig)
+//! in the view's region, whole patches whatever its period, with what Riot changed
+//! (src/patchnotes.zig). The ui.patchpage island, its data in the view's data/patch.bin
 
 const std = @import("std");
 const core = @import("core");
+const ui = @import("ui");
 const root = @import("root.zig");
 const html = root.html;
+const assets = @import("assets.zig");
 const matchup = @import("matchup.zig");
-const tierlist = @import("tierlist.zig");
 const patchday = @import("../patchday.zig");
+const patchnotes = @import("../patchnotes.zig");
 
 const Writer = std.Io.Writer;
 const Site = root.Site;
-const Champ = root.Champ;
 const tpl = html.tpl;
+const pp = ui.patchpage;
 const PatchDay = patchday.PatchDay;
-const ChampionMove = patchday.ChampionMove;
 const MatchupMove = patchday.MatchupMove;
 const Rate = patchday.Rate;
+const Role = core.Role;
 
 pub const path = "patch.html";
 
-/// Rows per table: the biggest moves
-const max_rows = 20;
-/// Fewer champion roles with enough games on both patches: a patch's first days
-const early_roles = 100;
+/// The island's data file, in each view's directory
+pub const data_path = "data/patch.bin";
 
-pub fn early(p: *const PatchDay) bool {
-    return p.champions.len < early_roles;
+/// A row's matchup moves in its detail
+const max_moves = 3;
+
+comptime {
+    for (Role.all, 0..) |r, i| std.debug.assert(std.mem.eql(u8, r.label(), pp.Role.slugs[i]));
+    std.debug.assert(pp.pair_games == (patchday.Options{}).min_pair_games);
+    std.debug.assert(pp.z == (patchday.Options{}).z);
 }
 
 pub fn writePage(site: *const Site, w: *Writer) !void {
@@ -39,205 +44,262 @@ pub fn writePage(site: *const Site, w: *Writer) !void {
         return html.foot(w, pg);
     };
     const pg = try site.page(
-        try a.print("Patch {s} against {s}: what changed | meiolol", .{ pd.cur_patch, pd.prev_patch }),
-        try a.print("Champions and lane matchups whose win rate or lane gold changed clearly from patch {s} to {s}, with the games behind each.", .{ pd.prev_patch, pd.cur_patch }),
+        try a.print("Patch {s} vs {s}: what changed | meiolol", .{ pd.cur_patch, pd.prev_patch }),
+        try a.print("What Riot changed in patch {s}, next to how each champion's and lane matchup's win rate moved from {s}, with the games behind each.", .{ pd.cur_patch, pd.prev_patch }),
         path,
         .patch,
     );
     try html.head(w, pg);
-    const o = pd.opts;
-    try tpl.render(w,
-        \\<h1>Patch {cur}: what changed</h1>
-        \\<p class="lead">Champions and lane matchups on patch {cur} against {prev}, ranked
-        \\solo/duo {in}, Platinum+ games: {cur_games} games on {cur} so far, {prev_games} on
-        \\{prev}. Whole patches, whichever period is picked above.</p>
-        \\<p class="muted">Listed: a champion with {role_games} games in the role on both
-        \\patches, a matchup with {pair_games}, and a change too big to be luck (under 1 in 100
-        \\by chance; with a few hundred tested, expect one or two). Change: {cur} minus
-        \\{prev}, in points; ± is a 95% range. <a href="{up}method.html">Method</a>.</p>
-        \\
-    , .{
-        .cur = pd.cur_patch,
-        .prev = pd.prev_patch,
-        .in = site.view.region.in(),
-        .cur_games = root.Thousands{ .n = pd.cur_games },
-        .prev_games = root.Thousands{ .n = pd.prev_games },
-        .role_games = o.min_role_games,
-        .pair_games = o.min_pair_games,
-        .up = site.view.up(),
+    const d = try a.create(pp.Data);
+    d.* = try data(site, &pd);
+    var bytes: std.ArrayList(u8) = .empty;
+    try ui.data.encode(a, pp.Data, d.*, &bytes);
+    const to_root = try site.toRoot(path);
+    const base = try std.mem.concat(a, u8, &.{ to_root, site.view.up() });
+    var p: pp.Page = .init(d, try pp.prepare(a, d, base));
+    p.base = base;
+    p.src = try std.mem.concat(a, u8, &.{ to_root, data_path });
+    p.stamp = pp.stamp(bytes.items);
+    var tree: ui.Tree = .{};
+    var h: ui.H = .init(a, &tree);
+    tree.root = p.view(&h);
+    if (h.oom) return error.OutOfMemory;
+    try root.roleIcons(w);
+    try ui.html.write(&tree, tree.root, w);
+    try tpl.render(w, "\n<script src=\"{js}\" data-wasm=\"{wasm}\" defer></script>\n", .{
+        .js = html.Link{ .root = to_root, .up = site.view.up(), .path = assets.patch_js.path },
+        .wasm = assets.patch_wasm.path,
     });
-
-    var up_rows: std.ArrayList(ChampionMove) = .empty;
-    var down_rows: std.ArrayList(ChampionMove) = .empty;
-    var lane_rows: std.ArrayList(ChampionMove) = .empty;
-    for (pd.champions) |m| {
-        if (m.win.clear(o.min_role_games, o.z)) try (if (m.win.z > 0) &up_rows else &down_rows).append(a, m);
-        if (m.ahead) |r| if (r.clear(o.min_role_games, o.z)) try lane_rows.append(a, m);
-    }
-    if (up_rows.items.len + down_rows.items.len == 0) {
-        if (early(&pd)) try tpl.render(w,
-            \\<p class="note">Too early to tell: {n} champion roles have {min} games on both
-            \\patches so far. Changes show here as games come in over the patch's first days.</p>
-            \\
-        , .{ .n = pd.champions.len, .min = o.min_role_games }) else try tpl.render(w,
-            \\<p class="note">No champion's win rate changed clearly between the patches.</p>
-            \\
-        , .{});
-    }
-    std.mem.sort(ChampionMove, up_rows.items, {}, byWinDelta);
-    std.mem.sort(ChampionMove, down_rows.items, {}, byWinDelta);
-    std.mem.sort(ChampionMove, lane_rows.items, {}, byAheadDelta);
-    try winTable(site, w, &pd, up_rows.items, "more");
-    try winTable(site, w, &pd, down_rows.items, "less");
-    try laneTable(site, w, &pd, lane_rows.items);
-    try matchupTable(site, w, &pd);
     try html.foot(w, pg);
 }
 
-fn byWinDelta(_: void, x: ChampionMove, y: ChampionMove) bool {
-    return @abs(x.win.delta()) > @abs(y.win.delta());
+/// data/patch.bin; null without a patch day
+pub fn dataFile(site: *const Site) !?[]const u8 {
+    const pd = site.patchday orelse return null;
+    var out: std.ArrayList(u8) = .empty;
+    try ui.data.encode(site.arena, pp.Data, try data(site, &pd), &out);
+    return out.items;
 }
 
-fn byAheadDelta(_: void, x: ChampionMove, y: ChampionMove) bool {
-    return @abs(x.ahead.?.delta()) > @abs(y.ahead.?.delta());
-}
-
-/// "52.1% of 8,400"
-/// As rateOf, the rate coloured as a win rate (tierlist.wrText)
-fn winOf(w: *Writer, c: core.curvesfile.Counts) !void {
-    if (c.games == 0) return rateOf(w, c);
-    try tierlist.wrText(w, root.ratio(c.wins, c.games), @intCast(c.games));
-    try w.print(" of {f}", .{root.Thousands{ .n = c.games }});
-}
-
-fn rateOf(w: *Writer, c: core.curvesfile.Counts) !void {
-    try root.pct(w, c.wins, c.games);
-    try w.print(" of {f}", .{root.Thousands{ .n = c.games }});
-}
-
-/// ± as on the rest of the site (builds, lean): 95%, not the listing's stricter z
-const range_z = 1.96;
-
-/// "+2.3 ±1.8": the change in points and its range
-fn change(w: *Writer, r: Rate) !void {
-    const g = r.range(range_z);
-    const sign = if (r.delta() > 0) "+" else "";
-    try w.print("<b>{s}{d:.1}</b> <span class=\"muted\">±{d:.1}</span>", .{
-        sign, r.delta(), (g[1] - g[0]) / 2,
-    });
-}
-
-fn winTable(site: *const Site, w: *Writer, pd: *const PatchDay, rows: []const ChampionMove, dir: []const u8) !void {
-    if (rows.len == 0) return;
-    try tpl.renderPart(w,
-        \\<h2>Won {dir} often than on {prev}</h2>
-        \\<div class="table-scroll"><table class="patch"><thead><tr><th>Champion</th><th>Role</th><th>{prev}</th><th>{cur}</th><th>Change</th></tr></thead><tbody>
-        \\
-    , .{ .dir = dir, .prev = pd.prev_patch, .cur = pd.cur_patch });
-    for (rows[0..@min(rows.len, max_rows)]) |m| {
-        const ch = matchup.champ(site, m.id) orelse continue;
-        try tpl.render(w, "<tr class=\"bx\"><td>{champ}</td><td>{role}</td><td>{prev}</td><td>{cur}</td><td>{change}</td></tr>\n", .{
-            .champ = tpl.call(champCell, .{ site, ch }),
-            .role = root.roleName(m.role),
-            .prev = tpl.call(winOf, .{m.win.prev}),
-            .cur = tpl.call(winOf, .{m.win.cur}),
-            .change = tpl.call(change, .{m.win}),
-        });
-    }
-    try tpl.renderPart(w, "</tbody></table></div>\n{more}", .{ .more = tpl.call(more, .{rows.len}) });
-}
-
-fn champCell(w: *Writer, site: *const Site, ch: Champ) !void {
-    try site.champBox(w, ch, site.view.up());
-}
-
-fn more(w: *Writer, n: usize) !void {
-    if (n > max_rows) try w.print("<p class=\"muted small\">And {d} more, smaller.</p>\n", .{n - max_rows});
-}
-
-fn laneTable(site: *const Site, w: *Writer, pd: *const PatchDay, rows: []const ChampionMove) !void {
-    if (rows.len == 0) return;
-    try tpl.renderPart(w,
-        \\<h2>Ahead in lane at {minute} min, more or less often</h2>
-        \\<div class="table-scroll"><table class="patch"><thead><tr><th>Champion</th><th>Role</th><th>{prev}</th><th>{cur}</th><th>Change</th></tr></thead><tbody>
-        \\
-    , .{ .minute = core.curvesfile.lane_minute, .prev = pd.prev_patch, .cur = pd.cur_patch });
-    for (rows[0..@min(rows.len, max_rows)]) |m| {
-        const ch = matchup.champ(site, m.id) orelse continue;
-        const r = m.ahead.?;
-        try tpl.render(w, "<tr class=\"bx\"><td>{champ}</td><td>{role}</td><td>{prev}</td><td>{cur}</td><td>{change}</td></tr>\n", .{
-            .champ = tpl.call(champCell, .{ site, ch }),
-            .role = root.roleName(m.role),
-            .prev = tpl.call(rateOf, .{r.prev}),
-            .cur = tpl.call(rateOf, .{r.cur}),
-            .change = tpl.call(change, .{r}),
-        });
-    }
-    try tpl.renderPart(w, "</tbody></table></div>\n{more}", .{ .more = tpl.call(more, .{rows.len}) });
-}
-
-/// Matchups whose median gold moved clearly at some minute, or whose win rate did, from
-/// the side that gained
-fn matchupTable(site: *const Site, w: *Writer, pd: *const PatchDay) !void {
+fn data(site: *const Site, pd: *const PatchDay) !pp.Data {
     const a = site.arena;
     const o = pd.opts;
-    var rows: std.ArrayList(MatchupMove) = .empty;
+    const champs = try a.alloc(pp.Champ, site.champs.len);
+    for (champs, site.champs) |*c, ch| c.* = .{ .name = ch.name, .key = ch.key, .slug = ch.slug };
+
+    var changes: std.ArrayList(pp.Change) = .empty;
+    // By champs index: its Change's
+    const changed = try a.alloc(?u16, site.champs.len);
+    @memset(changed, null);
+    var items: []const pp.Change = &.{};
+    var runes: []const pp.Change = &.{};
+    if (site.notes) |n| {
+        for (n.champions) |c| {
+            const i = index(site, c.id) orelse continue;
+            changed[i] = @intCast(changes.items.len);
+            try changes.append(a, try change(a, c, i));
+        }
+        items = try changeList(a, n.items);
+        runes = try changeList(a, n.runes);
+    }
+
+    var rows: std.ArrayList(pp.Row) = .empty;
+    for (pd.champions) |m| try addRow(site, pd, &rows, m, changed);
+    // A champion Riot changed with too few games yet for a role: its main one
+    for (pd.thin) |m| {
+        const i = index(site, m.id) orelse continue;
+        if (changed[i] != null) try addRow(site, pd, &rows, m, changed);
+    }
+    std.mem.sort(pp.Row, rows.items, {}, struct {
+        fn f(_: void, x: pp.Row, y: pp.Row) bool {
+            return points(x.prev, x.cur) > points(y.prev, y.cur);
+        }
+    }.f);
+
+    var mus: std.ArrayList(pp.Matchup) = .empty;
     for (pd.matchups) |m| {
-        const gold_up = if (m.gold) |g| g.cur > g.prev else false;
         const win_clear = m.win.clear(o.min_pair_games, o.z);
         if (m.gold == null and !win_clear) continue;
-        const up = if (m.gold != null) gold_up else m.win.z > 0;
-        try rows.append(a, if (up) m else pd.matchup(m.role, m.b, m.a).?);
-    }
-    if (rows.items.len == 0) return;
-    std.mem.sort(MatchupMove, rows.items, {}, byGold);
-    // Matchup pages with patch curves are in the patch view
-    const to_patch = if (site.view.period == .patch) "" else "patch/";
-    try tpl.renderPart(w,
-        \\<h2>Lane matchups that moved</h2>
-        \\<div class="table-scroll"><table class="patch"><thead><tr><th>Matchup</th><th>Role</th><th>Median gold lead</th><th>Won, {prev}</th><th>Won, {cur}</th></tr></thead><tbody>
-        \\
-    , .{ .prev = pd.prev_patch, .cur = pd.cur_patch });
-    for (rows.items[0..@min(rows.items.len, max_rows)]) |m| {
-        const x = matchup.champ(site, m.a) orelse continue;
-        const y = matchup.champ(site, m.b) orelse continue;
-        try tpl.render(w, "<tr class=\"bx\"><td><a class=\"box\" href=\"{href}\">{x} vs {y}</a></td><td>{role}</td><td>{gold}</td><td>{prev}</td><td>{cur}</td></tr>\n", .{
-            .href = try std.mem.concat(a, u8, &.{ to_patch, try matchup.path(a, m.role, x, y) }),
-            .x = x.name,
-            .y = y.name,
-            .role = root.roleName(m.role),
-            .gold = tpl.call(goldCell, .{m.gold}),
-            .prev = tpl.call(winOf, .{m.win.prev}),
-            .cur = tpl.call(winOf, .{m.win.cur}),
+        const up = if (win_clear) m.win.z > 0 else m.gold.?.cur > m.gold.?.prev;
+        const x = if (up) m else pd.matchup(m.role, m.b, m.a).?;
+        const ca = matchup.champ(site, x.a) orelse continue;
+        const cb = matchup.champ(site, x.b) orelse continue;
+        try mus.append(a, .{
+            .role = role(x.role),
+            .a = index(site, x.a).?,
+            .b = index(site, x.b).?,
+            .prev = count(x.win.prev),
+            .cur = count(x.win.cur),
+            .clear = win_clear,
+            .gold = if (x.gold) |g| .{ .minute = g.minute, .prev = g.prev, .cur = g.cur, .games = g.cur_n } else null,
+            .path = try matchup.path(a, x.role, ca, cb),
         });
     }
-    try tpl.renderPart(w,
-        \\</tbody></table></div>
-        \\{more}<p class="muted small">From the first champion's side. Gold: the minute its
-        \\median moved most, {prev} then {cur}, with games still going at that minute.</p>
-        \\
-    , .{ .more = tpl.call(more, .{rows.items.len}), .prev = pd.prev_patch, .cur = pd.cur_patch });
+    std.mem.sort(pp.Matchup, mus.items, {}, struct {
+        fn f(_: void, x: pp.Matchup, y: pp.Matchup) bool {
+            return points(x.prev, x.cur) > points(y.prev, y.cur);
+        }
+    }.f);
+
+    return .{
+        .cur_patch = pd.cur_patch,
+        .prev_patch = pd.prev_patch,
+        .games = pd.cur_games,
+        .min_games = o.min_role_games,
+        .lane_minute = core.curvesfile.lane_minute,
+        .ddragon = site.ddragon_version,
+        .patch_dir = (html.View{ .region = site.view.region, .period = .patch }).dir(),
+        .notes = try patchnotes.officialUrl(a, pd.cur_patch) orelse "",
+        .riot = site.notes != null,
+        .champs = champs,
+        .changes = changes.items,
+        .rows = rows.items,
+        .matchups = mus.items,
+        .items = items,
+        .runes = runes,
+    };
 }
 
-fn byGold(_: void, x: MatchupMove, y: MatchupMove) bool {
-    return goldDelta(x) > goldDelta(y);
-}
-
-fn goldDelta(m: MatchupMove) i32 {
-    const g = m.gold orelse return 0;
-    return @as(i32, g.cur) - g.prev;
-}
-
-fn goldCell(w: *Writer, gold: ?patchday.GoldMove) !void {
-    const g = gold orelse return w.writeAll("about the same");
-    try w.print("{f} then {f} at {d} min ({f} and {f} games)", .{
-        Signed{ .v = g.prev }, Signed{ .v = g.cur }, g.minute, root.Thousands{ .n = g.prev_n }, root.Thousands{ .n = g.cur_n },
+fn addRow(site: *const Site, pd: *const PatchDay, rows: *std.ArrayList(pp.Row), m: patchday.ChampionMove, changed: []const ?u16) !void {
+    const o = pd.opts;
+    const i = index(site, m.id) orelse return;
+    const lane: ?pp.Lane = if (m.ahead) |x| (if (x.prev.games > 0 and x.cur.games > 0) .{
+        .prev = count(x.prev),
+        .cur = count(x.cur),
+        .clear = x.clear(o.min_role_games, o.z),
+    } else null) else null;
+    try rows.append(site.arena, .{
+        .champ = i,
+        .role = role(m.role),
+        .prev = count(m.win.prev),
+        .cur = count(m.win.cur),
+        .clear = m.win.clear(o.min_role_games, o.z),
+        .lane = lane,
+        .change = changed[i],
+        .moves = try moves(site, pd, m.id, m.role),
     });
 }
 
-const Signed = struct {
-    v: i32,
-    pub fn format(s: Signed, w: *Writer) Writer.Error!void {
-        try w.print("{s}{d}", .{ if (s.v > 0) "+" else "", s.v });
+/// `id`'s biggest win rate moves in `r` among matchups with enough games on both
+/// patches, from its side
+fn moves(site: *const Site, pd: *const PatchDay, id: u32, r: Role) ![]const pp.Move {
+    const o = pd.opts;
+    var best: [max_moves]?MatchupMove = @splat(null);
+    for (pd.matchups) |m| {
+        if (m.role != r or (m.a != id and m.b != id)) continue;
+        if (!m.win.enough(o.min_pair_games)) continue;
+        const x = pd.matchup(r, id, if (m.a == id) m.b else m.a).?;
+        const by = @abs(x.win.delta());
+        var at: usize = best.len;
+        while (at > 0) : (at -= 1) {
+            const y = best[at - 1] orelse continue;
+            if (@abs(y.win.delta()) >= by) break;
+        }
+        if (at == best.len) continue;
+        var k = best.len - 1;
+        while (k > at) : (k -= 1) best[k] = best[k - 1];
+        best[at] = x;
     }
-};
+    var out: std.ArrayList(pp.Move) = .empty;
+    for (best) |x| if (x) |m| {
+        const them = index(site, m.b) orelse continue;
+        try out.append(site.arena, .{ .them = them, .prev = count(m.win.prev), .cur = count(m.win.cur), .clear = m.win.clear(o.min_pair_games, o.z) });
+    };
+    return out.items;
+}
+
+fn points(a: pp.Count, b: pp.Count) f64 {
+    const s = struct {
+        fn f(c: pp.Count) f64 {
+            return @as(f64, @floatFromInt(c[1])) / @as(f64, @floatFromInt(@max(c[0], 1)));
+        }
+    }.f;
+    return s(b) - s(a);
+}
+
+/// The champion's place in site.champs (pp.Data.champs)
+fn index(site: *const Site, id: u32) ?u16 {
+    const c = site.stats.index(id) orelse return null;
+    return @intCast(site.by_c[c] orelse return null);
+}
+
+fn role(r: Role) pp.Role {
+    return @fromBackingInt(@as(u8, @backingInt(r)));
+}
+
+fn count(c: core.curvesfile.Counts) pp.Count {
+    return .{ c.games, c.wins };
+}
+
+fn change(a: std.mem.Allocator, c: patchnotes.Change, id: u32) !pp.Change {
+    const lines = try a.alloc(ui.changeline.Line, c.lines.len);
+    for (lines, c.lines) |*l, x| l.* = try line(a, x);
+    return .{
+        .id = id,
+        .name = c.name,
+        .status = switch (c.status) {
+            inline else => |s| @field(pp.Status, @tagName(s)),
+        },
+        .tone = switch (c.dir()) {
+            .buff => .buff,
+            .nerf => .nerf,
+            else => .adjusted,
+        },
+        .slots = try c.slots(a),
+        .lines = lines,
+    };
+}
+
+fn changeList(a: std.mem.Allocator, list: []const patchnotes.Change) ![]const pp.Change {
+    const out = try a.alloc(pp.Change, list.len);
+    for (out, list) |*o, c| o.* = try change(a, c, c.id);
+    return out;
+}
+
+/// ChangeLine's: the slot's key, and what it is ("Decimate cooldown"; a stat's name; the
+/// spell's name when its words changed or Data Dragon lost its numbers; "" for a text
+/// hunk)
+fn line(a: std.mem.Allocator, l: patchnotes.Line) !ui.changeline.Line {
+    const key: []const u8 = switch (l.slot) {
+        .p => "P",
+        .q => "Q",
+        .w => "W",
+        .e => "E",
+        .r => "R",
+        .stats, .gold, .text => "",
+    };
+    const words = l.dir == .text or l.dir == .blanked;
+    const label = if (words)
+        (if (l.spell.len > 0) l.spell else l.field)
+    else if (l.field.len > 0 and l.spell.len > 0)
+        try std.mem.concat(a, u8, &.{ l.spell, " ", try std.ascii.allocLowerString(a, l.field) })
+    else
+        l.field;
+    return .{
+        .key = key,
+        .label = label,
+        .before = l.before,
+        .old = l.old,
+        .new = l.new,
+        .after = l.after,
+        .dir = switch (l.dir) {
+            inline else => |x| @field(ui.changeline.Dir, @tagName(x)),
+        },
+    };
+}
+
+test "line: labels and keys" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const q = try line(a, .{ .slot = .q, .spell = "Decimate", .field = "Cooldown", .old = "9", .new = "8", .dir = .buff });
+    try std.testing.expectEqualStrings("Q", q.key);
+    try std.testing.expectEqualStrings("Decimate cooldown", q.label);
+    const hp = try line(a, .{ .slot = .stats, .field = "Health", .old = "630", .new = "610", .dir = .nerf });
+    try std.testing.expectEqualStrings("Health", hp.label);
+    const lost = try line(a, .{ .slot = .q, .spell = "Piercing Arrow", .field = "Numbers", .dir = .blanked });
+    try std.testing.expectEqualStrings("Piercing Arrow", lost.label);
+    const hunk = try line(a, .{ .slot = .p, .spell = "Hemorrhage", .before = "Bleeds for", .old = "5", .new = "4", .dir = .adjusted });
+    try std.testing.expectEqualStrings("", hunk.label);
+    try std.testing.expectEqualStrings("P", hunk.key);
+}

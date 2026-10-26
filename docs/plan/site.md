@@ -251,20 +251,13 @@ bot) when the games allow; keep the pool page's mains in the browser (ask Jacob)
 
 ## Patch changes
 
-patch.html (src/site/patch.zig, src/patchday.zig) lists the champions and matchups that
-moved clearly from the previous patch, with games and ranges, but not why. J27: each
-move says what the patch changed.
+patch.html (docs/arch-site.md "Patch changes") shows what Riot changed (Data Dragon)
+beside each champion's and matchup's move; J27 asked for the why.
 
-- PC1 Why, from Data Dragon. Under each champion row what changed for it: base stats,
-  spell cooldowns, costs, ranges, effect numbers, spell and passive text, from the
-  championFull.json diff of the two versions (lab's changedList in patchdays.zig, moved
-  to the backend and extended to say which field and old -> new); items and runes the
-  champion builds often (its builds share) whose item.json or runes diff changed. A
-  matchup row shows either side's changes. A move with nothing listed says so: "no
-  change to this champion in Data Dragon" (knock-on from items or other champions, or a
-  change Data Dragon doesn't carry). Changed champions with no clear move yet listed
-  apart, with their games. Done when 16.20 -> 16.21 shows them and pipeline_test covers
-  a fixture diff. Start: src/ddragon.zig, src/site/patch.zig
+- PC1 Why, from Data Dragon: champion, item and rune changes on the page (done). Left:
+  each changed item with the champions that build it most and their change (builds
+  files); older patch pairs behind PatchHead's ‹ › (patch/<cur>-<prev>.html while the
+  db holds both patches whole)
 - PC2 Ability numbers: Data Dragon lacks most ability damage changes
   (research/questions/patch-transfer.md "Open"); CommunityDragon's data or Riot's patch
   notes page would complete PC1. Read docs/data.md before adding the source. Done when

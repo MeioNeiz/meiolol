@@ -200,6 +200,18 @@ test "fixture games to stats, curves and the website" {
     try tmp.dir.writeFile(io, .{ .sub_path = "curves-prev.bin", .data = prev_curves_bytes.written() });
     const prev_curves_path = try std.fs.path.join(arena, &.{ dir, "curves-prev.bin" });
 
+    // Data Dragon's files for both patches, as patchnotes caches them: Riot changed
+    // Darius' Q cooldown
+    for ([_][]const u8{ prev_patch ++ ".1", patch ++ ".1" }, [_][]const u8{ "9,8,7,6,5", "9,7.75,6.5,5.25,4" }) |v, cd| {
+        const vdir = try std.fs.path.join(arena, &.{ "ddragon", v });
+        try tmp.dir.createDirPath(io, vdir);
+        try tmp.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(arena, &.{ vdir, "championFull.json" }), .data = try arena.print(
+            \\{{"data":{{"Darius":{{"key":"122","name":"Darius","stats":{{"hp":652}},"spells":[{{"name":"Decimate","cooldown":[{s}],"cost":[25],"range":[425],"tooltip":"x"}}]}}}}}}
+        , .{cd}) });
+        try tmp.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(arena, &.{ vdir, "item.json" }), .data = "{\"data\":{}}" });
+        try tmp.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(arena, &.{ vdir, "runesReforged.json" }), .data = "[]" });
+    }
+
     const out = try std.fs.path.join(arena, &.{ dir, "site" });
     const opts: site.Options = .{
         .out_dir = out,
@@ -213,6 +225,7 @@ test "fixture games to stats, curves and the website" {
         .builds = .{ recent_builds_path, builds_path, recent_builds_path, builds_path },
         .prev_patch = prev_patch,
         .curves_prev = .{ null, prev_curves_path, null, prev_curves_path },
+        .ddragon_dir = try std.fs.path.join(arena, &.{ dir, "ddragon" }),
         .builds_prev = .{ null, prev_builds_path, null, prev_builds_path },
         .builds_rank = .{ .{ rank_paths[0], null, rank_paths[1] }, @splat(null), @splat(null), @splat(null) },
         .lean = lean_path,
@@ -292,10 +305,11 @@ test "fixture games to stats, curves and the website" {
     // into the patch view's
     const pages = [_]struct { []const u8, []const []const u8 }{
         .{ "patch/build/darius-top.html", &.{ "<meta name=\"robots\" content=\"noindex\">", "url=../../champion/darius.html?period=patch#role=top\"" } },
-        // Patch day: three games a patch is a patch's first day, too early to tell, in
-        // every view, the champion pages per role, and a tab after Matchups
-        .{ "patch/patch.html", &.{ "<h1>Patch 15.13: what changed</h1>", "Too early to tell: 0 champion roles" } },
-        .{ "all/patch.html", &.{ "<h1>Patch 15.13: what changed</h1>", "across all regions" } },
+        // Patch day: three games a patch is a patch's first day, no role with enough
+        // games; Darius, whom Riot changed, in his main role all the same; in every view,
+        // linking the patch view's pages, and a tab after Matchups
+        .{ "patch/patch.html", &.{ "<h1>Patch 15.13 vs 15.12</h1>", "<div class=\"c-patch\" data-island=\"patch\" data-src=\"data/patch.bin\" data-stamp=\"", "href=\"../patch/champion/darius.html#role=top\"", "<span class=\"ar\" aria-hidden=\"true\">▲</span>Q</span>", "league-of-legends-patch-25-13-notes/", "<script src=\"../" ++ assets.patch_js.path ++ "\" data-wasm=\"" ++ assets.patch_wasm.path ++ "\" defer></script>" } },
+        .{ "all/patch.html", &.{ "<h1>Patch 15.13 vs 15.12</h1>", "href=\"../all/patch/champion/darius.html#role=top\"" } },
         .{ "champions.html", &.{"Matchups</a>\n<a href=\"patch.html\">Patch changes</a>"} },
         .{ "index.html", &.{"New patch: <a href=\"patch/patch.html\">what changed in 15.13 since 15.12</a>."} },
         // Champion page: the ui.champpage island from the root view, its data file for
@@ -424,6 +438,30 @@ test "fixture games to stats, curves and the website" {
         try site.ui.html.write(&t, t.root, &w.writer);
         if (std.mem.find(u8, page, w.written()) == null) {
             std.debug.print("{s}: the island differs from ui.wasm's render of data/tiers.bin\n", .{c[0]});
+            return error.TestUnexpectedResult;
+        }
+    }
+
+    // The patch page: ui-patch.wasm's render of its view's data file is the page's own
+    for ([_][]const u8{ "patch.html", "patch/patch.html", "all/patch.html" }) |page_path| {
+        const page = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, page_path }), arena, .limited(1 << 22));
+        const vdir = std.fs.path.dirname(page_path) orelse "";
+        const bytes = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, vdir, "data/patch.bin" }), arena, .limited(1 << 22));
+        const pp = site.ui.patchpage;
+        const d = try arena.create(pp.Data);
+        d.* = try site.ui.data.decode(arena, pp.Data, bytes);
+        const base = if (vdir.len == 0) "" else if (std.mem.count(u8, vdir, "/") == 0) "../" else "../../";
+        var state: pp.Page = .init(d, try pp.prepare(arena, d, base));
+        state.base = base;
+        state.src = "data/patch.bin";
+        state.stamp = pp.stamp(bytes);
+        var t: site.ui.Tree = .{};
+        var h: site.ui.H = .init(arena, &t);
+        t.root = state.view(&h);
+        var w: std.Io.Writer.Allocating = .init(arena);
+        try site.ui.html.write(&t, t.root, &w.writer);
+        if (std.mem.find(u8, page, w.written()) == null) {
+            std.debug.print("{s}: the island differs from ui.wasm's render of data/patch.bin\n", .{page_path});
             return error.TestUnexpectedResult;
         }
     }

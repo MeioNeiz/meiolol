@@ -162,6 +162,7 @@ pub const Loaded = struct {
                 .prev_games = pd.prev_games,
                 .cur_games = pd.cur_games,
                 .champions = pd.champions,
+                .thin = pd.thin,
             });
             if (s.trend) |t| try writePart(w, &aw, keys, .trend, v, TrendPart{ .champs_key = champs_key, .trend = t });
             if (std.meta.eql(v, html.View.shared)) try writePart(w, &aw, keys, .daily, v, DailyPart{
