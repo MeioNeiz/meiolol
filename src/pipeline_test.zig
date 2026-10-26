@@ -302,8 +302,7 @@ test "fixture games to stats, curves and the website" {
         // the other roles; the head, the build, the matchups with the most met opponent's
         // brief linking to the matchup page from the champion's side
         .{ "champion/darius.html", &.{ "<div class=\"c-cpage\" data-id=\"122\" data-roles=\"top\"><div class=\"part\" data-island=\"champion\" data-src=\"../data/champion/darius.bin\" data-stamp=\"", "<h1>Darius</h1>", "<span class=\"sum\">EUW · 30 days · Plat+</span>", "data-island=\"champbuild\" data-src=\"../data/champion/darius-build.bin\"", "<section class=\"c-card\" data-v=\"flush\"><div class=\"c-build\">", "<h2>Matchups</h2>", "data-island=\"champmore\" data-src=\"../data/champion/darius-more.bin\"", "data-js=\"../" ++ assets.champmore_js.path ++ "\" data-wasm=\"" ++ assets.champmore_wasm.path ++ "\"", "class=\"c-dots\"", "class=\"c-mpick\"", "href=\"../matchup/top/darius-vs-mordekaiser.html\"", "<h2>By patch</h2>", "<h2>By game length</h2>", "<script src=\"../" ++ assets.champion_js.path ++ "\" data-wasm=\"" ++ assets.champion_wasm.path ++ "\" defer></script>" } },
-        .{ "champions.html", &.{ "<div data-island=\"tiers\" data-src=\"data/tiers.bin\" data-root=\"\" data-base=\"\" data-stamp=\"", "class=\"ci\"", "own win rates spread around it", "id=\"wr-edge\"", "<b style=\"--f:", "<i class=\"d\" style=\"--x:", "<p class=\"wr-key\">Win rate colour <span class=\"wrc\" style=\"--c:var(--lo4)\">44.5%</span>", "<p class=\"tl-key\">Sorted by win rate; the minimum games keeps a few lucky games off the top.", "<details class=\"tl-knobs\" hidden=\"\"><summary>Minimums</summary>", "<symbol id=\"ri-top\"", "<th tabindex=\"0\" class=\"l\" data-sort=\"text\">Champion</th>", "<th tabindex=\"0\" data-sort=\"num\" aria-sort=\"descending\">Win rate</th>", "<td class=\"role\"><svg class=\"ri\" role=\"img\" aria-label=\"Top\"><title>Top</title><use href=\"#ri-top\">", "<script src=\"" ++ assets.stats_js.path ++ "\" data-wasm=\"" ++ assets.stats_wasm.path ++ "\" defer></script>" } },
-        .{ "champions.html", &.{"Platinum+ ranked solo/duo games in EUW, last 30 days, patch 15.13."} },
+        .{ "champions.html", &.{ "<div class=\"c-tiers\" data-island=\"tiers\" data-src=\"data/tiers.bin\" data-stamp=\"", "data-base=\"\" data-view=\"0\" data-path=\"champions.html\"", "<h1>Champions</h1>", "<linearGradient id=\"c-violin-g\"", "<symbol id=\"ri-top\"", "<a href=\"all/champions.html\">All</a>", "<table class=\"c-table\">", "<script src=\"" ++ assets.stats_js.path ++ "\" data-wasm=\"" ++ assets.stats_wasm.path ++ "\" defer></script>" } },
         .{ "index.html", &.{"<a href=\"download.html\">Coming: a champ select helper for Windows</a>"} },
         // Daily Draft: a recent game, read in words (no draft win chance,
         // points or gold amounts); reasons from the list Learn uses; option cards and lane
@@ -318,7 +317,7 @@ test "fixture games to stats, curves and the website" {
         .{ "matchup/index.html", &.{ "<div class=\"c-finder\" data-island=\"finder\" data-root=\"../\" data-bin=\"", "<h1>Matchups</h1>", "<h2>Most played</h2>", "<a href=\"../matchup/top/", "<script src=\"../" ++ assets.finder_js.path ++ "\" data-wasm=\"" ++ assets.finder_wasm.path ++ "\" defer></script>" } },
         .{ "build/darius-top.html", &.{"<meta http-equiv=\"refresh\" content=\"0; url=../champion/darius.html#role=top\">"} },
         // One page per champion: the other views link to it with their view
-        .{ "all/patch/role/top.html", &.{"href=\"../../../champion/darius.html?region=all&amp;period=patch#role=top\""} },
+        .{ "all/patch/role/top.html", &.{ "<a href=\"../../../patch/role/top.html\">EUW</a>", "data-path=\"role/top.html\" data-role=\"top\"" } },
         .{ "all/matchup/top/mordekaiser-vs-darius.html", &.{"href=\"../../../champion/darius.html?region=all\""} },
         // The matchup page (ui.matchpage): three islands with their data inline; the head
         // with both portraits, the swap and the headline figures, the lane by minute beside
@@ -332,9 +331,8 @@ test "fixture games to stats, curves and the website" {
         .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<nav class=\"c-mstrip\" aria-label=\"Darius&#39;s Top opponents\">", "<a href=\"darius-vs-mordekaiser.html\" aria-current=\"page\"", "data-island=\"champbuild\" data-bin=\"", "<h2>Build against Mordekaiser</h2>", "href=\"../../champion/darius.html#role=top\"" } },
         .{ "method.html", &.{ "Games to stabilise", "<li><b>Highest win rate</b>: marked among options", "<h2 id=\"lean\">Early or late</h2>" } },
         .{ "learn.html", &.{"From ranked games in EUW on patch 15.13"} },
-        // Spread bars, pool and its section follow the view
-        .{ "champions.html", &.{"games on it in any role, last 30 days (none under 20"} },
-        .{ "patch/champions.html", &.{"games on it in any role, patch 15.13 (none under 20"} },
+        // The board, pool and its section follow the view
+        .{ "patch/champions.html", &.{ "data-view=\"1\"", "<a href=\"../champions.html\">30 days</a>" } },
         .{ "all/pool.html", &.{"players across all regions so far)"} },
         .{ "daily.html", &.{"From ranked solo games in EUW on patch 15.13"} },
         // Scope chips (site/scope.zig): what each block covers, marked where it doesn't
@@ -404,8 +402,8 @@ test "fixture games to stats, curves and the website" {
         }
     }
 
-    // The champions table island: what ui-stats.wasm renders from the data file, before
-    // the URL's state, is the page's own (hydration adopts the server's nodes as they are)
+    // The champions board: what ui-stats.wasm renders from the data file, before the
+    // URL's state, is the page's own (hydration adopts the server's nodes as they are)
     for ([_]struct { []const u8, []const u8, ?site.ui.tiers.Role }{
         .{ "champions.html", "", null },
         .{ "role/top.html", "../", .top },
@@ -415,15 +413,11 @@ test "fixture games to stats, curves and the website" {
         const tiers = site.ui.tiers;
         const d = try arena.create(tiers.Data);
         d.* = try site.ui.data.decode(arena, tiers.Data, bytes);
-        var state: tiers.Tiers = .{
-            .data = d,
-            .cells = try tiers.prepare(arena, d, c[2], c[1]),
-            .role = c[2],
-            .root = c[1],
-            .base = c[1],
-            .src = try std.mem.concat(arena, u8, &.{ c[1], "data/tiers.bin" }),
-            .stamp = tiers.stamp(bytes),
-        };
+        var state: tiers.Tiers = .init(d, try tiers.prepare(arena, d, c[1]), c[2]);
+        state.base = c[1];
+        state.path = c[0];
+        state.src = try std.mem.concat(arena, u8, &.{ c[1], "data/tiers.bin" });
+        state.stamp = tiers.stamp(bytes);
         var t: site.ui.Tree = .{};
         var h: site.ui.H = .init(arena, &t);
         t.root = state.view(&h);
@@ -433,7 +427,6 @@ test "fixture games to stats, curves and the website" {
             std.debug.print("{s}: the island differs from ui.wasm's render of data/tiers.bin\n", .{c[0]});
             return error.TestUnexpectedResult;
         }
-        try testing.expect(std.mem.count(u8, w.written(), "<tr class=\"bx\">") > 0);
     }
 
     // Rendered on request (site.Loaded, `meiolol serve --render` and `dev`): every file

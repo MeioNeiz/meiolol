@@ -1,17 +1,35 @@
-//! The champions table (champions.html, role/<slug>.html) as an island: every champion's
-//! win rate by role, sorted by any column, searched, rare picks under the player's
-//! minimums hidden until asked for. Writes the markup and classes tierlist.zig wrote
-//! before it, so the legacy CSS styles it until the visual pass rebuilds the page.
+//! Champions (champions.html, role/<slug>.html; docs/plan/ui/champions.md): every
+//! champion in every role on one board, a role at a time, and which way each moved this
+//! patch. A head card (role picked in place, search, the view's toolbar, the Games
+//! floor), then the movers band and a DataTable sorted by the rate shown.
 //!
-//! The server renders the default state from the same Data the page's data file
-//! (data/tiers.bin) carries; ui-stats.wasm decodes that file and adopts the table. Only
-//! the default state's rows are on the page: rare ones come with the data
+//! The server renders the default state from the same Data the view's data file
+//! (data/tiers.bin) carries; ui-stats.wasm decodes that file and adopts the page. A view
+//! (region, period) is its own page: the toolbar links to it, keeping the fragment
 const std = @import("std");
 const tree = @import("tree.zig");
-const fmt = @import("fmt.zig");
 const url = @import("url.zig");
+const phrase = @import("phrase.zig");
+const table = @import("table.zig");
+const card = @import("card.zig");
+const segmented = @import("segmented.zig");
+const filterbar = @import("filterbar.zig");
+const rolepicker = @import("rolepicker.zig");
+const chip = @import("chip.zig");
+const stat = @import("stat.zig");
+const delta = @import("delta.zig");
+const bar = @import("bar.zig");
+const badge = @import("badge.zig");
+const champ = @import("champ.zig");
+const role = @import("role.zig");
+const violin = @import("violin.zig");
+const plain = phrase.plain;
+const Phrase = phrase.Phrase;
 const H = tree.H;
 const N = tree.N;
+
+pub const name = "Champions";
+pub const scope = .{".c-tiers"};
 
 /// core.Role's order (tierlist.zig checks it)
 pub const Role = enum(u8) {
@@ -23,10 +41,13 @@ pub const Role = enum(u8) {
 
     pub const names = [_][]const u8{ "Top", "Jungle", "Mid", "Bot", "Support" };
     pub const slugs = [_][]const u8{ "top", "jungle", "mid", "bot", "support" };
-    const icons = [_][]const u8{ "#ri-top", "#ri-jungle", "#ri-mid", "#ri-bot", "#ri-support" };
 
     pub fn name(r: Role) []const u8 {
         return names[@backingInt(r)];
+    }
+
+    fn ui(r: Role) role.Role {
+        return role.Role.all[@backingInt(r)];
     }
 };
 
@@ -35,6 +56,9 @@ pub const Role = enum(u8) {
 pub const shape_reach = 36;
 pub const shape_step = 2;
 pub const shape_points = 2 * shape_reach / shape_step + 1;
+
+/// html.View.all's directories, by index (tierlist.zig checks they match)
+pub const view_dirs = [_][]const u8{ "", "patch/", "all/", "all/patch/" };
 
 /// A data file's stamp: the page carries its file's, so ui.wasm adopts a page only with
 /// the data it was rendered from (a cached page and a newer file would not match)
@@ -46,12 +70,11 @@ pub fn stamp(bytes: []const u8) u32 {
 pub const Data = struct {
     /// The view's games
     games: u32,
-    /// Default minimums: games in the role, and the role's share of the champion's games
-    min_games: u32,
-    min_share: u8,
+    /// The Games floor at first (min_games' index): bigger views start higher
+    min: u8,
     /// Players with this many games on a champion count in its spread
     spread_min_games: u32,
-    /// The patch change under each rate: "" without one
+    /// The patch change: "" without one
     cur_patch: []const u8,
     prev_patch: []const u8,
     /// "in EUW"
@@ -60,7 +83,7 @@ pub const Data = struct {
     /// The view's query, for links to champion pages (html.View.query)
     query: []const u8,
     champs: []const Champ,
-    /// By win rate pulled toward the role's average, ties most played first
+    /// By win rate, ties most played first
     rows: []const Row,
 };
 
@@ -79,11 +102,6 @@ pub const Row = struct {
     wins: u32,
     /// Of the champion's games, the share in this role
     share: f32,
-    /// Ban impact (core.banimpact), and its pulled edge as a share
-    impact: f32,
-    edge: f32,
-    /// Opacity of the rate: fainter with fewer games (curvesfile.fade)
-    fade: f32,
     spread: ?Spread,
     patch: ?Patch,
 };
@@ -103,467 +121,495 @@ pub const Patch = struct {
     clear: bool,
 };
 
-pub const Key = enum {
-    name,
-    role,
-    win,
-    pick,
-    ban,
-    impact,
-    games,
-
-    /// Numbers start high first, names A to Z
-    fn numeric(k: Key) bool {
-        return k != .name and k != .role;
-    }
-};
+/// Under this share of a champion's games a role is off-role: behind the "+N" chip
+pub const off_role = 0.1;
+/// Movers each way in the band
+const movers_each = 5;
 
 const W = struct {
-    const key = "Sorted by win rate; the minimum games keeps a few lucky games off the top.";
-    const share_title = "Share of the champion's games played in the role";
-    const search = "Search champion";
-    const impact_title = "Wins above the role's average per 10,000 games it was not banned";
-    const rare = " rare picks (under the minimum games, or a role the champion seldom plays) hidden. ";
+    pub const title = plain("Champions");
+    pub const scope_line = Phrase("{n:count} games {in:text}");
+    pub const versus = Phrase(" · {cur:text} vs {prev:text}");
+    pub const role_label = plain("Role");
+    pub const region = plain("Region");
+    pub const period = plain("Period");
+    pub const rank_pick = plain("Rank");
+    pub const regions = [_]tree.Text{ plain("EUW"), plain("All") };
+    pub const days = plain("30 days");
+    pub const ranks = [_]tree.Text{ plain("Plat+"), plain("Emerald+"), plain("Diamond+"), plain("Master+") };
+    pub const picked = Phrase("{r:text} · {p:text} · Plat+");
+    pub const min_games = plain("Min games");
+    pub const moved = Phrase("Moved in {p:text}");
+    pub const patch_link = plain("Patch changes ›");
+    pub const champion = plain("Champion");
+    pub const win = plain("Win rate");
+    pub const patch = plain("Patch");
+    pub const players = plain("Players");
+    pub const pick = plain("Pick");
+    pub const ban = plain("Ban");
+    pub const games = plain("Games");
+    pub const off = plain("off-role");
+    pub const win_note = plain("Faint under 1,000 games: could be luck.");
+    pub const patch_note = plain("Change in win rate, in points. Coloured when clear, faint when it could be luck.");
+    pub const players_note = plain("Each player's own win rate on it (10+ games), 25% to 75%. Thicker where more players are; the dot is the champion's. In 10-20 games luck alone moves a player by about 15 points.");
+    pub const change = Phrase("{d:points} ±{ci:dec} points");
+    pub const was = Phrase("{prev:text} {a:rate} of {an:count} → {cur:text} {b:rate} of {bn:count}");
+    pub const luck = plain("Could be luck.");
+    pub const spread = Phrase("{n:count} players");
+    pub const middle = Phrase("Middle half win {lo:pct} to {hi:pct}; the champion {at:rate}.");
+    pub const no_spread = plain("Too few players with 10+ games on it.");
+    pub const no_patch = plain("No games last patch.");
 };
 
-/// A row's text and styles: they never change, so they are made once (prepare)
-pub const Cells = struct {
-    href: []const u8 = "",
-    icon: []const u8 = "",
-    colour: tree.Vars = .{ .css = "" },
-    title: []const u8 = "",
-    shape: ?[]const u8 = null,
-    dot: tree.Vars = .{ .css = "" },
-    fade: tree.Vars = .{ .css = "" },
-    rate: []const u8 = "",
-    note: ?Note = null,
-    pick: []const u8 = "",
-    ban: []const u8 = "",
-    impact: []const u8 = "",
-    impact_title: []const u8 = "",
-    count: []const u8 = "",
-};
+/// One row: the data's row with what its cells need, made once (prepare)
+pub const Line = struct {
+    d: *const Data,
+    i: u16,
+    icon: []const u8,
+    href: []const u8,
+    /// The violin's outline
+    shape: ?[]const u8,
+    /// Under All: the role icon beside the name
+    all: bool,
 
-pub const Note = struct {
-    colour: tree.Vars,
-    title: []const u8,
-    text: []const u8,
-    faint: bool,
-};
-
-/// Every row's Cells in `role` (all when null), by row index; `base` from the page to the
-/// site root
-pub fn prepare(gpa: std.mem.Allocator, d: *const Data, role: ?Role, base: []const u8) ![]const Cells {
-    var t: tree.Tree = .{};
-    var h: H = .init(gpa, &t);
-    const cells = try gpa.alloc(Cells, d.rows.len);
-    for (cells, d.rows) |*c, r| {
-        c.* = .{};
-        if (role != null and role.? != r.role) continue;
-        const ch = d.champs[r.champ];
-        const p = share(r.wins, r.games);
-        // The row's role: the champion page opens on it (its main role drops the key)
-        c.href = h.fmt("{s}champion/{s}.html{s}#role={s}", .{ base, ch.slug, d.query, Role.slugs[@backingInt(r.role)] });
-        c.icon = h.fmt("https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png", .{ d.ddragon, ch.key });
-        c.colour = h.vars(.{ .c = fmt.wrColour(p, fmt.table_span) });
-        c.title = if (r.spread) |s|
-            h.fmt("{d} games; players with {d}+ games on {s}: middle half {d}% to {d}% ({d} players)", .{ r.games, d.spread_min_games, ch.name, s.p25, s.p75, s.players })
-        else
-            h.fmt("{d} games", .{r.games});
-        if (r.spread) |s| c.shape = try shapePath(gpa, s.shape, 100 * p);
-        // One decimal, as the dot sat before: a finer step only shifts antialiasing
-        c.dot = h.vars(.{ .x = @round(10 * trackX(100 * p)) / 10 });
-        c.fade = h.vars(.{ .f = r.fade });
-        c.rate = try text(gpa, "{rate}", .{ .rate = .{ .rate, 100 * p } });
-        if (r.patch) |pa| c.note = try note(gpa, &h, d, pa);
-        c.pick = try pct(gpa, r.games, d.games);
-        c.ban = try pct(gpa, ch.banned, d.games);
-        const available = d.games -| ch.banned;
-        const pick = if (available == 0) 0 else 100 * @as(f64, @floatFromInt(r.games)) / @as(f64, @floatFromInt(available));
-        // U+2212: tabular figures space a hyphen out as if it were a digit
-        c.impact = try text(gpa, "{minus}{abs}", .{ .minus = .{ .text, if (r.impact <= -0.5) "\u{2212}" else "" }, .abs = .{ .whole, @abs(r.impact) } });
-        c.impact_title = try text(gpa, "Win rate {edge} points {side} the role's average once pulled toward it, picked in {pick}% of games it was not banned: {abs} {more} games won per 10,000 such games", .{
-            .edge = .{ .one, 100 * @abs(r.edge) },
-            .side = .{ .text, if (r.edge < 0) "under" else "over" },
-            .pick = .{ .one, pick },
-            .abs = .{ .whole, @abs(r.impact) },
-            .more = .{ .text, if (r.impact < 0) "fewer" else "more" },
-        });
-        c.count = try text(gpa, "{n}", .{ .n = .{ .count, r.games } });
-    }
-    if (h.oom) return error.OutOfMemory;
-    return cells;
-}
-
-/// The win rate's change since the previous patch: coloured as win rates are when clear,
-/// faint when not
-fn note(gpa: std.mem.Allocator, h: *H, d: *const Data, pa: Patch) !Note {
-    const now = share(pa.cur[1], pa.cur[0]);
-    const then = share(pa.prev[1], pa.prev[0]);
-    const delta = 100 * (now - then);
-    return .{
-        .colour = h.vars(.{ .c = fmt.wrColour(0.5 + delta / 100, fmt.table_span) }),
-        .title = try text(gpa, "Patch {cur} against {prev} {in}: {now}% of {cur_n} games won against {then}% of {prev_n}; {verdict}", .{
-            .cur = .{ .text, d.cur_patch },
-            .prev = .{ .text, d.prev_patch },
-            .in = .{ .text, d.region_in },
-            .now = .{ .one, 100 * now },
-            .cur_n = .{ .count, pa.cur[0] },
-            .then = .{ .one, 100 * then },
-            .prev_n = .{ .count, pa.prev[0] },
-            .verdict = .{ .text, if (pa.clear) "a clear change" else "no clear change" },
-        }),
-        .text = try text(gpa, "{sign}{abs}", .{
-            .sign = .{ .text, if (delta >= 0.05) "+" else if (delta <= -0.05) "\u{2212}" else "" },
-            .abs = .{ .one, @abs(delta) },
-        }),
-        .faint = !pa.clear,
-    };
-}
-
-const Fig = enum { text, count, one, whole, rate };
-
-/// `src` with each `{name}` written by its figure: `.{ .n = .{ .count, 8068 } }`. Floats
-/// by fmt.fixed, never std's float formatter (ui.wasm size)
-fn text(gpa: std.mem.Allocator, comptime src: []const u8, args: anytype) ![]const u8 {
-    var out: std.Io.Writer.Allocating = .init(gpa);
-    const w = &out.writer;
-    comptime var i: usize = 0;
-    inline while (comptime i < src.len) {
-        const open = comptime std.mem.findScalarPos(u8, src, i, '{') orelse src.len;
-        try w.writeAll(src[i..open]);
-        if (open == src.len) break;
-        const close = comptime std.mem.findScalarPos(u8, src, open, '}').?;
-        const v = @field(args, src[open + 1 .. close]);
-        const fig: Fig = comptime v[0];
-        switch (fig) {
-            .text => try w.writeAll(v[1]),
-            .count => try fmt.write(w, .count, v[1]),
-            .one => try fmt.fixed(w, v[1], 1, false),
-            .whole => try fmt.fixed(w, v[1], 0, false),
-            .rate => try fmt.write(w, .rate, v[1]),
-        }
-        i = close + 1;
-    }
-    return out.toOwnedSlice();
-}
-
-/// As root.pct: "12.3%", "-" of nothing
-fn pct(gpa: std.mem.Allocator, part: u64, whole: u64) ![]const u8 {
-    if (whole == 0) return "-";
-    return text(gpa, "{p}", .{ .p = .{ .rate, 100 * @as(f64, @floatFromInt(part)) / @as(f64, @floatFromInt(whole)) } });
-}
-
-fn share(wins: u32, games: u32) f64 {
-    return @as(f64, @floatFromInt(wins)) / @as(f64, @floatFromInt(@max(games, 1)));
-}
-
-/// The track's scale: 25% to 75% as 0 to 100
-const track_lo = 25.0;
-const track_width = 50.0;
-
-fn trackX(rate: f64) f64 {
-    return 100 * (std.math.clamp(rate, track_lo, track_lo + track_width) - track_lo) / track_width;
-}
-
-/// The shape's outline centred on `centre`% in a 100 x 10 box: along the top, back
-/// along the bottom, pointed at both ends; it fades out towards the track's ends
-/// (#wr-edge), past them clipped
-fn shapePath(gpa: std.mem.Allocator, shape: [shape_points]u8, centre: f64) ![]const u8 {
-    const P = struct {
-        fn x(w: *std.Io.Writer, c: f64, k: usize) !void {
-            const off = @as(f64, @floatFromInt(shape_step * k)) - shape_reach;
-            try fmt.fixed(w, 100 * (c + off - track_lo) / track_width, 1, false);
-        }
-        fn y(w: *std.Io.Writer, v: u8, side: f64) !void {
-            try w.writeByte(' ');
-            try fmt.fixed(w, 5 + side * 5 * @as(f64, @floatFromInt(v)) / 255, 2, false);
-        }
-    };
-    var out: std.Io.Writer.Allocating = .init(gpa);
-    const w = &out.writer;
-    try w.writeByte('M');
-    try P.x(w, centre, 0);
-    try w.writeAll(" 5");
-    for (shape, 0..) |v, k| {
-        try w.writeByte('L');
-        try P.x(w, centre, k);
-        try P.y(w, v, -1);
-    }
-    try w.writeByte('L');
-    try P.x(w, centre, shape_points - 1);
-    try w.writeAll(" 5");
-    var k: usize = shape_points;
-    while (k > 0) {
-        k -= 1;
-        try w.writeByte('L');
-        try P.x(w, centre, k);
-        try P.y(w, shape[k], 1);
-    }
-    try w.writeByte('Z');
-    return out.toOwnedSlice();
-}
-
-/// The colour key under the table: rates at the scale's stops, each in its colour
-const legend_pts = [_]f64{ -5.5, -3.5, -2, 0, 2, 3.5, 5.5 };
-
-pub const Tiers = struct {
-    data: *const Data,
-    cells: []const Cells,
-    /// The page's role; null on the all-roles page
-    role: ?Role = null,
-    /// From the page to its view's root (role tabs) and to the site root (champions)
-    root: []const u8 = "",
-    base: []const u8 = "",
-    /// The data file, from the page
-    src: []const u8 = "",
-    /// The data file's hash (stamp): ui.wasm adopts the page only with the file it came
-    /// from
-    stamp: u32 = 0,
-    /// false: the server's render, minimums hidden (nothing sets them without ui.wasm)
-    live: bool = false,
-    sort: Key = .win,
-    desc: bool = true,
-    q: url.Str(24) = .{},
-    /// As typed, so a cleared field stays clear; null: the data's default
-    min: ?url.Str(7) = null,
-    share: ?url.Str(3) = null,
-
-    pub const Msg = union(enum) { sort: Key, search, min_games, min_share, show_all };
-    pub const Url = struct {
-        sort: Key = .win,
-        desc: bool = true,
-        q: url.Str(24) = .{},
-        min: ?url.Str(7) = null,
-        share: ?url.Str(3) = null,
-    };
-
-    pub fn toUrl(t: *const Tiers) Url {
-        return .{ .sort = t.sort, .desc = t.desc, .q = t.q, .min = t.min, .share = t.share };
+    fn row(l: *const Line) *const Row {
+        return &l.d.rows[l.i];
     }
 
-    pub fn fromUrl(t: *Tiers, u: Url) void {
-        t.sort = u.sort;
-        t.desc = u.desc;
-        t.q = u.q;
-        t.min = u.min;
-        t.share = u.share;
+    fn rate(l: *const Line) f64 {
+        const r = l.row();
+        return 100 * share(.{ r.games, r.wins });
     }
 
-    pub fn update(t: *Tiers, m: Msg, ev: *tree.Event) void {
-        switch (m) {
-            .sort => |k| {
-                if (ev.kind == .keydown) {
-                    if (!std.mem.eql(u8, ev.text, "Enter") and !std.mem.eql(u8, ev.text, " ")) return;
-                    ev.handled = true;
-                }
-                t.desc = if (t.sort == k) !t.desc else k.numeric();
-                t.sort = k;
-                ev.push = true;
-            },
-            .search => t.q.set(ev.text),
-            .min_games => t.min = typed(7, ev.text),
-            .min_share => t.share = typed(3, ev.text),
-            .show_all => {
-                t.min = typed(7, "0");
-                t.share = typed(3, "0");
-                ev.push = true;
-            },
-        }
-    }
-
-    fn typed(comptime cap: u8, s: []const u8) url.Str(cap) {
-        var v: url.Str(cap) = .{};
-        v.set(s);
-        return v;
-    }
-
-    fn minGames(t: *const Tiers) u32 {
-        const s = t.min orelse return t.data.min_games;
-        return std.fmt.parseInt(u32, s.slice(), 10) catch 0;
-    }
-
-    fn minShare(t: *const Tiers) f32 {
-        const s = t.share orelse return @floatFromInt(t.data.min_share);
-        return @floatFromInt(std.fmt.parseInt(u8, s.slice(), 10) catch 0);
-    }
-
-    fn rare(t: *const Tiers, r: Row, min_games: u32, min_share: f32) bool {
-        _ = t;
-        return r.games < min_games or 100 * r.share < min_share;
-    }
-
-    /// The rows shown, in order, and how many of the role's rows are rare
-    fn order(t: *const Tiers, out: []u16) struct { []u16, usize } {
-        const d = t.data;
-        const min_games = t.minGames();
-        const min_share = t.minShare();
-        const q = t.q.slice();
-        var n: usize = 0;
-        var rares: usize = 0;
-        for (d.rows, 0..) |r, i| {
-            if (t.role != null and t.role.? != r.role) continue;
-            const is_rare = t.rare(r, min_games, min_share);
-            rares += @intFromBool(is_rare);
-            // A search finds rare rows too
-            const shown = if (q.len > 0) std.ascii.findIgnoreCase(d.champs[r.champ].name, q) != null else !is_rare;
-            if (!shown) continue;
-            out[n] = @intCast(i);
-            n += 1;
-        }
-        // Stable, so ties keep the data's order (most played first)
-        std.sort.insertion(u16, out[0..n], t, before);
-        return .{ out[0..n], rares };
-    }
-
-    fn before(t: *const Tiers, a: u16, b: u16) bool {
-        const x = t.data.rows[if (t.desc) b else a];
-        const y = t.data.rows[if (t.desc) a else b];
-        return switch (t.sort) {
-            .name => std.ascii.orderIgnoreCase(t.data.champs[x.champ].name, t.data.champs[y.champ].name) == .lt,
-            .role => @backingInt(x.role) < @backingInt(y.role),
-            .win => share(x.wins, x.games) < share(y.wins, y.games),
-            .pick, .games => x.games < y.games,
-            .ban => t.data.champs[x.champ].banned < t.data.champs[y.champ].banned,
-            .impact => x.impact < y.impact,
-        };
-    }
-
-    fn ariaSort(t: *const Tiers, k: Key) ?[]const u8 {
-        if (t.sort != k) return null;
-        return if (t.desc) "descending" else "ascending";
-    }
-
-    pub fn view(t: *Tiers, h: *H) N {
-        const d = t.data;
-        const buf = h.mem.alloc(u16, d.rows.len) catch {
-            h.oom = true;
-            return .none;
-        };
-        const shown, const rares = t.order(buf);
-        var rows = h.list();
-        for (shown, 1..) |i, rank| rows.add(t.row(h, i, rank));
-        return h.div(.{
-            .data_island = "tiers",
-            .data_src = t.src,
-            .data_root = t.root,
-            .data_base = t.base,
-            .data_role = if (t.role) |r| Role.slugs[@backingInt(r)] else null,
-            .data_stamp = t.stamp,
-        }, .{
-            h.div(.{ .class = "tl-bar" }, .{
-                t.tabs(h),
-                h.el(.details, .{ .class = "tl-knobs", .hidden = !t.live }, .{
-                    h.el(.summary, .{}, .{"Minimums"}),
-                    h.span(.{ .class = "tl-mins" }, .{
-                        h.label(.{}, .{
-                            "Min games ",
-                            h.input(.{ .type = "number", .inputmode = "numeric", .min = 0, .step = 100, .value = if (t.min) |*s| s.slice() else h.fmt("{d}", .{d.min_games}), .on_input = h.on(t, .min_games) }),
-                        }),
-                        h.label(.{ .title = W.share_title }, .{
-                            "Min lane % ",
-                            h.input(.{ .type = "number", .inputmode = "numeric", .min = 0, .max = 100, .step = 5, .value = if (t.share) |*s| s.slice() else h.fmt("{d}", .{d.min_share}), .on_input = h.on(t, .min_share) }),
-                        }),
-                    }),
-                }),
-                h.input(.{ .type = "search", .placeholder = W.search, .aria_label = W.search, .value = t.q.slice(), .on_input = h.on(t, .search) }),
-            }),
-            h.p(.{ .class = "tl-key" }, .{
-                W.key,
-                if (d.prev_patch.len > 0) h.fmt(" Under it: the change since {s}, faint when not clear.", .{d.prev_patch}) else null,
-            }),
-            h.div(.{ .class = "tl-wrap" }, .{h.table(.{ .class = "tl tiers", .id = "tiers" }, .{
-                h.thead(.{}, .{h.tr(.{}, .{t.heads(h)})}),
-                h.tbody(.{}, .{rows.done()}),
-            })}),
-            legend(h),
-            h.p(.{ .class = "tl-more", .hidden = rares == 0 }, .{
-                h.span(.{}, .{rares}),
-                W.rare,
-                h.button(.{ .class = "link", .on_click = h.on(t, .show_all) }, .{"Show them"}),
-            }),
-        });
-    }
-
-    const Head = struct { key: Key, label: []const u8, class: ?[]const u8 = null, sort: []const u8 = "num", title: ?[]const u8 = null };
-    const heads_all = [_]Head{
-        .{ .key = .name, .label = "Champion", .class = "l", .sort = "text" },
-        .{ .key = .role, .label = "Role", .class = "role", .sort = "text" },
-        .{ .key = .win, .label = "Win rate" },
-        .{ .key = .pick, .label = "Pick", .class = "opt" },
-        .{ .key = .ban, .label = "Ban", .class = "opt" },
-        .{ .key = .impact, .label = "Influence", .title = W.impact_title },
-        .{ .key = .games, .label = "Games" },
-    };
-
-    /// The column headers: a click, Enter or Space sorts by the column
-    fn heads(t: *Tiers, h: *H) []const N {
-        var ths = h.list();
-        ths.add(h.th(.{ .class = "rank" }, .{"#"}));
-        // One call site in a loop rather than one per column: ui.wasm size
-        for (heads_all) |c| {
-            if (c.key == .role and t.role != null) continue;
-            ths.add(h.th(.{ .tabindex = 0, .class = c.class, .data_sort = c.sort, .title = c.title, .aria_sort = t.ariaSort(c.key), .on_click = h.on(t, .{ .sort = c.key }), .on_keydown = h.on(t, .{ .sort = c.key }) }, .{c.label}));
-        }
-        return ths.done();
-    }
-
-    fn tabs(t: *const Tiers, h: *H) N {
-        var links = h.list();
-        links.add(h.a(.{ .href = h.fmt("{s}champions.html", .{t.root}), .aria_current = if (t.role == null) "page" else null }, .{"All roles"}));
-        for (std.enums.values(Role)) |r| {
-            const i = @backingInt(r);
-            links.add(h.a(.{ .href = h.fmt("{s}role/{s}.html", .{ t.root, Role.slugs[i] }), .aria_current = if (t.role == r) "page" else null }, .{
-                h.svg(.{ .class = "ri", .aria_hidden = "true" }, .{h.el(.use, .{ .href = Role.icons[i] }, .{})}),
-                Role.names[i],
-            }));
-        }
-        return h.el(.nav, .{ .class = "tabs" }, .{links.done()});
-    }
-
-    fn row(t: *const Tiers, h: *H, i: u16, rank: usize) N {
-        const r = t.data.rows[i];
-        const c = &t.cells[i];
-        const rate = h.b(.{ .style = c.fade }, .{c.rate});
-        return h.tr(.{ .key = i, .class = "bx" }, .{
-            h.td(.{ .class = "rank" }, .{rank}),
-            h.td(.{ .class = "l" }, .{h.a(.{ .class = "champ box", .href = c.href }, .{
-                h.img(.{ .src = c.icon, .alt = "", .loading = "lazy", .width = 32, .height = 32 }),
-                t.data.champs[r.champ].name,
-            })}),
-            if (t.role == null) h.td(.{ .class = "role" }, .{roleIcon(h, r.role)}) else null,
-            h.td(.{}, .{h.span(.{ .class = "wr", .style = c.colour, .title = c.title }, .{
-                h.span(.{ .class = "ci" }, .{
-                    if (c.shape) |s| h.svg(.{ .class = "shape", .viewBox = "0 0 100 10", .preserveAspectRatio = "none", .aria_hidden = "true" }, .{h.path(.{ .d = s }, .{})}) else null,
-                    h.el(.i, .{ .class = "d", .style = c.dot }, .{}),
-                }),
-                if (c.note) |n| h.span(.{ .class = "wv" }, .{
-                    rate,
-                    h.small(.{ .class = if (n.faint) "pd faint" else "pd", .style = n.colour, .title = n.title }, .{n.text}),
-                }) else rate,
-            })}),
-            h.td(.{ .class = "opt" }, .{c.pick}),
-            h.td(.{ .class = "opt" }, .{c.ban}),
-            h.td(.{ .class = if (r.impact < 0) "bi dim" else "bi", .title = c.impact_title }, .{c.impact}),
-            h.td(.{ .class = "dim" }, .{c.count}),
-        });
+    /// This patch's rate minus the last one's, points
+    fn change(l: *const Line) ?f64 {
+        const p = l.row().patch orelse return null;
+        return 100 * (share(p.cur) - share(p.prev));
     }
 };
 
-/// The role's icon (root.roleIcons' symbols), named for screen readers and on hover
-fn roleIcon(h: *H, r: Role) N {
-    return h.svg(.{ .class = "ri", .role = "img", .aria_label = r.name() }, .{
-        h.el(.title, .{}, .{r.name()}),
-        h.el(.use, .{ .href = Role.icons[@backingInt(r)] }, .{}),
+fn share(c: [2]u32) f64 {
+    return @as(f64, @floatFromInt(c[1])) / @as(f64, @floatFromInt(@max(c[0], 1)));
+}
+
+/// 95% half-width of a difference of two rates, in points
+fn ci(p: Patch) f64 {
+    const a = share(p.prev);
+    const b = share(p.cur);
+    const na: f64 = @floatFromInt(@max(p.prev[0], 1));
+    const nb: f64 = @floatFromInt(@max(p.cur[0], 1));
+    return 196 * @sqrt(a * (1 - a) / na + b * (1 - b) / nb);
+}
+
+fn pctOf(n: u32, of: u32) f64 {
+    return if (of == 0) 0 else 100 * @as(f64, @floatFromInt(n)) / @as(f64, @floatFromInt(of));
+}
+
+fn nameOf(l: *const Line) []const u8 {
+    return l.d.champs[l.row().champ].name;
+}
+fn gamesOf(l: *const Line) u32 {
+    return l.row().games;
+}
+fn offRole(l: *const Line) bool {
+    return l.row().share < off_role;
+}
+fn rateOf(l: *const Line) f64 {
+    return l.rate();
+}
+fn changeOf(l: *const Line) f64 {
+    return l.change() orelse -99;
+}
+fn middleOf(l: *const Line) f64 {
+    const s = l.row().spread orelse return -1;
+    return @as(f64, @floatFromInt(s.p75)) - @as(f64, @floatFromInt(s.p25));
+}
+fn pickOf(l: *const Line) f64 {
+    return pctOf(l.row().games, l.d.games);
+}
+fn banOf(l: *const Line) f64 {
+    return pctOf(l.d.champs[l.row().champ].banned, l.d.games);
+}
+fn gamesF(l: *const Line) f64 {
+    return @floatFromInt(l.row().games);
+}
+
+fn who(h: *H, l: *const Line) N {
+    const r = l.row();
+    const c = l.d.champs[r.champ];
+    return h.a(.{ .class = "who", .href = l.href }, .{
+        champ.view(h, .{ .name = c.name, .src = l.icon }, .{ .named = false }),
+        h.span(.{ .class = "nm" }, .{c.name}),
+        if (r.share < off_role) badge.view(h, .few, .{W.off}) else null,
+        if (l.all) role.view(h, r.role.ui(), .{}) else null,
     });
 }
 
-fn legend(h: *H) N {
-    var spans = h.list();
-    for (legend_pts, 0..) |x, i| {
-        const p = 0.5 + x / 100;
-        spans.add(h.text(if (i == 0) "Win rate colour " else " "));
-        spans.add(h.span(.{ .class = "wrc", .style = h.vars(.{ .c = fmt.wrColour(p, fmt.table_span) }) }, .{ @round(1000 * p) / 10, "%" }));
-    }
-    return h.p(.{ .class = "wr-key" }, .{spans.done()});
+fn winCell(h: *H, l: *const Line) N {
+    return stat.view(h, .{ .value = l.rate(), .scale = .aggregate, .ref = 50, .games = l.row().games });
 }
+
+fn patchCell(h: *H, l: *const Line) N {
+    const p = l.row().patch orelse return h.span(.{ .class = "c-delta", .data_state = "unclear" }, .{"·"});
+    return delta.view(h, .{ .d = @floatCast(l.change().?), .ci = if (p.clear) null else @floatCast(ci(p)) });
+}
+
+fn patchTip(h: *H, l: *const Line) table.Tip {
+    const p = l.row().patch orelse return .{ .title = W.patch, .note = W.no_patch };
+    const was = W.was.with(h, .{ .prev = l.d.prev_patch, .a = 100 * share(p.prev), .an = p.prev[0], .cur = l.d.cur_patch, .b = 100 * share(p.cur), .bn = p.cur[0] });
+    return .{
+        .title = W.change.with(h, .{ .d = l.change().?, .ci = ci(p) }),
+        .note = if (p.clear) was else .{ .s = h.fmt("{s} {s}", .{ was.s, W.luck.s }) },
+    };
+}
+
+fn playersCell(h: *H, l: *const Line) N {
+    const s = l.row().spread;
+    return violin.view(h, .{
+        .path = l.shape,
+        .lo = if (s) |x| @floatFromInt(x.p25) else 0,
+        .hi = if (s) |x| @floatFromInt(x.p75) else 0,
+        .at = @floatCast(l.rate()),
+    });
+}
+
+fn playersTip(h: *H, l: *const Line) table.Tip {
+    const s = l.row().spread orelse return .{ .title = W.players, .note = W.no_spread };
+    return .{
+        .title = W.spread.with(h, .{ .n = s.players }),
+        .note = W.middle.with(h, .{ .lo = s.p25, .hi = s.p75, .at = l.rate() }),
+    };
+}
+
+fn pickCell(h: *H, l: *const Line) N {
+    const v = pickOf(l);
+    return bar.view(h, v, 20, stat.figure(h, .rate, v));
+}
+
+fn banCell(h: *H, l: *const Line) N {
+    const v = banOf(l);
+    return bar.view(h, v, 40, stat.figure(h, .rate, v));
+}
+
+fn gamesCell(h: *H, l: *const Line) N {
+    return h.span(.{ .class = "gm" }, .{phrase.num(h, .count, l.row().games)});
+}
+
+pub const min_games = [_]u32{ 500, 1500, 5000 };
+
+/// The highest floor under 0.4% of the view's games (as many as the old minimum games)
+pub fn defaultMin(games: u32) u8 {
+    var k: u8 = 0;
+    for (min_games, 0..) |g, i| if (@as(f64, @floatFromInt(g)) <= 0.004 * @as(f64, @floatFromInt(games))) {
+        k = @intCast(i);
+    };
+    return k;
+}
+
+pub const Table = table.DataTable(Line, .{
+    .title = W.title,
+    .columns = &.{
+        .{ .label = W.champion, .cell = who, .name = nameOf, .num = false, .key = "ch" },
+        .{ .label = W.win, .cell = winCell, .sort = rateOf, .answer = true, .tip = W.win_note, .key = "wr" },
+        .{ .label = W.patch, .cell = patchCell, .sort = changeOf, .tip = W.patch_note, .row_tip = patchTip, .key = "dl" },
+        .{ .label = W.players, .cell = playersCell, .sort = middleOf, .num = false, .tip = W.players_note, .row_tip = playersTip, .wordless = true, .pick = true, .key = "pl" },
+        .{ .label = W.pick, .cell = pickCell, .sort = pickOf, .pick = true, .key = "pk" },
+        .{ .label = W.ban, .cell = banCell, .sort = banOf, .pick = true, .key = "bn" },
+        .{ .label = W.games, .cell = gamesCell, .sort = gamesF, .pick = true, .key = "gm" },
+    },
+    .default_sort = 1,
+    .search = nameOf,
+    .games = gamesOf,
+    .min_games = &min_games,
+    .numbered = true,
+    .bare = true,
+    .rare = offRole,
+    .rare_name = W.off,
+});
+
+/// The board's lines: All's (index 0), then each role's in Role's order
+pub const Lines = [1 + Role.names.len][]const Line;
+
+/// Every row's Line, made once: `base` from the page to the site root
+pub fn prepare(a: std.mem.Allocator, d: *const Data, base: []const u8) !Lines {
+    var out: Lines = undefined;
+    const all = try a.alloc(Line, d.rows.len);
+    var n: [Role.names.len]usize = @splat(0);
+    for (d.rows, all, 0..) |x, *l, i| {
+        const c = d.champs[x.champ];
+        l.* = .{
+            .d = d,
+            .i = @intCast(i),
+            .icon = try std.fmt.allocPrint(a, "https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png", .{ d.ddragon, c.key }),
+            // The row's role: the champion page opens on it
+            .href = try std.fmt.allocPrint(a, "{s}champion/{s}.html{s}#role={s}", .{ base, c.slug, d.query, Role.slugs[@backingInt(x.role)] }),
+            .shape = if (x.spread) |s| try violin.path(a, &s.shape, 100 * share(.{ x.games, x.wins }) - shape_reach, shape_step) else null,
+            .all = true,
+        };
+        n[@backingInt(x.role)] += 1;
+    }
+    out[0] = all;
+    for (0..Role.names.len) |k| {
+        const mine = try a.alloc(Line, n[k]);
+        var j: usize = 0;
+        for (all) |l| if (@backingInt(l.row().role) == k) {
+            mine[j] = l;
+            mine[j].all = false;
+            j += 1;
+        };
+        out[1 + k] = mine;
+    }
+    return out;
+}
+
+pub const Tiers = struct {
+    data: *const Data,
+    lines: Lines,
+    table: Table,
+    /// The page's role (role/<slug>.html); null on champions.html
+    page_role: ?Role = null,
+    /// The role shown; null: All
+    role: ?Role = null,
+    /// From the page to the site root, the page's view (view_dirs' index) and its path in
+    /// the view's directory: the toolbar's links to the other views
+    base: []const u8 = "",
+    view_index: u8 = 0,
+    path: []const u8 = "champions.html",
+    /// The data file, from the page, and its hash (stamp)
+    src: []const u8 = "",
+    stamp: u32 = 0,
+    /// The toolbar's filters open (narrow screens)
+    open: bool = false,
+
+    const T = @This();
+
+    pub fn init(d: *const Data, lines: Lines, page_role: ?Role) T {
+        return .{
+            .data = d,
+            .lines = lines,
+            .table = .{ .rows = lines[slot(page_role)], .id = "tl", .min = d.min },
+            .page_role = page_role,
+            .role = page_role,
+        };
+    }
+
+    fn slot(r: ?Role) usize {
+        return if (r) |x| 1 + @as(usize, @backingInt(x)) else 0;
+    }
+
+    /// The role picked: All, then Role's order
+    pub const Shown = enum { all, top, jungle, mid, bot, support };
+
+    fn shownOf(r: ?Role) Shown {
+        return @fromBackingInt(@intCast(slot(r)));
+    }
+
+    fn roleOf(s: Shown) ?Role {
+        return if (s == .all) null else @fromBackingInt(@intCast(@backingInt(s) - 1));
+    }
+
+    pub const Msg = union(enum) { role: Shown, mover: u16, filters };
+
+    pub const Url = struct {
+        /// Null: the page's own
+        role: ?Shown = null,
+        sort: u8 = 1,
+        desc: bool = true,
+        q: url.Str(24) = .{},
+        /// Null: the data's own
+        min: ?u8 = null,
+    };
+
+    pub fn toUrl(t: *const T) Url {
+        const u = t.table.toUrl();
+        return .{
+            .role = if (t.role == t.page_role) null else shownOf(t.role),
+            .sort = u.sort,
+            .desc = u.desc,
+            .q = u.q,
+            .min = if (u.min == t.data.min) null else u.min,
+        };
+    }
+
+    pub fn fromUrl(t: *T, u: Url) void {
+        t.setRole(if (u.role) |s| roleOf(s) else t.page_role);
+        t.table.fromUrl(.{ .sort = u.sort, .desc = u.desc, .q = u.q, .min = u.min orelse t.data.min });
+    }
+
+    fn setRole(t: *T, r: ?Role) void {
+        t.role = r;
+        t.table.rows = t.lines[slot(r)];
+        t.table.tip = null;
+        t.table.open = null;
+    }
+
+    pub fn update(t: *T, m: Msg, ev: *tree.Event) void {
+        switch (m) {
+            .role => |s| {
+                t.setRole(roleOf(s));
+                ev.push = true;
+            },
+            .mover => |i| {
+                t.table.q.set(t.data.champs[t.data.rows[i].champ].name);
+                ev.push = true;
+            },
+            .filters => t.open = !t.open,
+        }
+    }
+
+    pub fn view(t: *T, h: *H) N {
+        const d = t.data;
+        const vs: ?tree.Text = if (d.cur_patch.len > 0 and d.prev_patch.len > 0) W.versus.with(h, .{ .cur = d.cur_patch, .prev = d.prev_patch }) else null;
+        var roles: [1 + Role.names.len]rolepicker.Item = undefined;
+        for (&roles, 0..) |*it, k| {
+            const s: Shown = @fromBackingInt(@intCast(k));
+            it.* = .{ .role = if (roleOf(s)) |r| r.ui() else null, .current = shownOf(t.role) == s, .on = h.on(t, .{ .role = s }) };
+        }
+        return h.div(.{
+            .class = "c-tiers",
+            .data_island = "tiers",
+            .data_src = if (t.src.len > 0) t.src else null,
+            .data_stamp = t.stamp,
+            .data_base = t.base,
+            .data_view = t.view_index,
+            .data_path = t.path,
+            .data_role = if (t.page_role) |r| Role.slugs[@backingInt(r)] else null,
+        }, .{
+            card.view(h, .{}, &.{
+                h.div(.{ .class = "hd" }, .{
+                    h.div(.{ .class = "ttl" }, .{
+                        h.el(.h1, .{}, .{W.title}),
+                        h.p(.{ .class = "sub" }, .{ W.scope_line.with(h, .{ .n = d.games, .in = d.region_in }), vs }),
+                    }),
+                    rolepicker.view(h, .{ .label = W.role_label }, &roles),
+                    t.table.searchBox(h),
+                }),
+                t.toolbar(h),
+            }),
+            card.view(h, .{ .flush = true }, &.{
+                t.movers(h),
+                t.table.view(h),
+            }),
+            violin.defs(h),
+        });
+    }
+
+    /// The same page in view `v`, keeping the fragment
+    fn viewHref(t: *const T, h: *H, v: usize) []const u8 {
+        var w: std.Io.Writer.Allocating = .init(h.mem);
+        url.write(Url, t.toUrl(), &w.writer) catch {
+            h.oom = true;
+        };
+        const frag = w.written();
+        return h.fmt("{s}{s}{s}{s}{s}", .{ t.base, view_dirs[v], t.path, if (frag.len > 0) "#" else "", frag });
+    }
+
+    fn toolbar(t: *T, h: *H) N {
+        const region = t.view_index / 2;
+        const period = t.view_index % 2;
+        const patch = if (t.data.cur_patch.len > 0) tree.Text{ .s = t.data.cur_patch } else W.patch;
+        var ranks: [W.ranks.len]segmented.Item = undefined;
+        for (&ranks, W.ranks, 0..) |*it, l, i| it.* = .{ .label = l, .selected = i == 0, .disabled = i > 0, .href = "" };
+        return card.toolbar(h, &.{
+            filterbar.view(h, .{
+                .summary = W.picked.with(h, .{ .r = W.regions[region].s, .p = if (period == 1) patch.s else W.days.s }),
+                .open = t.open,
+                .on_toggle = h.on(t, .filters),
+            }, &.{
+                segmented.view(h, .{ .label = W.region }, &.{
+                    .{ .label = W.regions[0], .selected = region == 0, .href = t.viewHref(h, period) },
+                    .{ .label = W.regions[1], .selected = region == 1, .href = t.viewHref(h, 2 + period) },
+                }),
+                segmented.view(h, .{ .label = W.period }, &.{
+                    .{ .label = W.days, .selected = period == 0, .href = t.viewHref(h, 2 * region) },
+                    .{ .label = patch, .selected = period == 1, .href = t.viewHref(h, 2 * region + 1) },
+                }),
+                segmented.view(h, .{ .label = W.rank_pick }, &ranks),
+            }),
+            filterbar.group(h, W.min_games, t.table.minPick(h).?),
+        });
+    }
+
+    /// This patch's clearest moves in the role shown (not off-role): risers, then fallers
+    fn movers(t: *T, h: *H) N {
+        const d = t.data;
+        if (d.cur_patch.len == 0) return .none;
+        var up: [movers_each]?*const Line = @splat(null);
+        var down: [movers_each]?*const Line = @splat(null);
+        for (t.table.rows) |*l| {
+            const p = l.row().patch orelse continue;
+            if (!p.clear or l.row().share < off_role) continue;
+            const c = l.change().?;
+            if (c > 0) keep(&up, l, c) else if (c < 0) keep(&down, l, -c);
+        }
+        if (up[0] == null and down[0] == null) return .none;
+        var chips = h.list();
+        for ([_][]?*const Line{ &up, &down }, 0..) |side, k| {
+            if (k == 1 and up[0] != null and down[0] != null) chips.add(h.span(.{ .class = "sep" }, .{}));
+            for (side) |x| if (x) |l| chips.add(chip.view(h, .{ .on = h.on(t, .{ .mover = l.i }), .label = .{ .s = nameOf(l) } }, .{
+                champ.view(h, .{ .name = nameOf(l), .src = l.icon }, .{ .px = .@"20" }),
+                delta.view(h, .{ .d = @floatCast(l.change().?) }),
+            }));
+        }
+        return h.div(.{ .class = "moved" }, .{
+            card.label(h, W.moved.with(h, .{ .p = d.cur_patch })),
+            h.div(.{ .class = "chips" }, .{chips.done()}),
+            h.a(.{ .class = "more", .href = h.fmt("{s}{s}patch.html", .{ t.base, view_dirs[t.view_index] }) }, .{W.patch_link}),
+        });
+    }
+
+    /// `l` into `best` (biggest `by` first) if it beats the smallest
+    fn keep(best: []?*const Line, l: *const Line, by: f64) void {
+        var at = best.len;
+        while (at > 0) : (at -= 1) {
+            const x = best[at - 1] orelse continue;
+            if (@abs(x.change().?) >= by) break;
+        }
+        if (at == best.len) return;
+        var k = best.len - 1;
+        while (k > at) : (k -= 1) best[k] = best[k - 1];
+        best[at] = l;
+    }
+};
+
+pub const css =
+    \\@layer components {
+    \\  .c-tiers { display: grid; gap: var(--sp-4); }
+    \\  .c-tiers .hd { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3) var(--sp-5); }
+    \\  .c-tiers .ttl { margin-right: var(--sp-2); }
+    \\  .c-tiers h1 { margin: 0; }
+    \\  .c-tiers .sub { margin: 0; color: var(--muted); font-size: var(--fs-s); }
+    \\  .c-tiers .hd > input { flex: 0 1 260px; margin-left: auto; }
+    \\  .c-tiers .moved { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-4);
+    \\    border-bottom: 1px solid var(--line); }
+    \\  .c-tiers .moved .chips { display: flex; flex-wrap: wrap; gap: var(--sp-1); align-items: center; }
+    \\  .c-tiers .moved .sep { width: 1px; height: 20px; margin: 0 var(--sp-1); background: var(--line); }
+    \\  .c-tiers .moved .more { margin-left: auto; font-size: var(--fs-s); white-space: nowrap; }
+    \\  .c-tiers .c-table-wrap { overflow-x: clip; }
+    \\  .c-tiers .c-toolbar { container-type: inline-size; }
+    \\  .c-tiers .c-toolbar > .grp { margin-left: auto; }
+    \\  .c-tiers .pl .rt { display: block; width: 100%; }
+    \\  .c-tiers .c-table thead th { top: var(--header); }
+    \\  .c-tiers .who { display: flex; align-items: center; gap: var(--sp-2); color: inherit; text-decoration: none; }
+    \\  .c-tiers .who .nm { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    \\  .c-tiers .who .c-role { margin-left: auto; color: var(--muted); }
+    \\  .c-tiers .wr .c-stat { font-size: var(--fs-l); }
+    \\  .c-tiers .gm { color: var(--muted); }
+    \\  .c-tiers td.num.p3 { color: var(--faint); }
+    \\  .c-tiers .num.p3 { width: 44px; }
+    \\  .c-tiers .wr { width: 96px; }
+    \\  .c-tiers .dl { width: 84px; }
+    \\  .c-tiers .pl { width: 340px; }
+    \\  .c-tiers .pk, .c-tiers .bn { width: 120px; }
+    \\  .c-tiers .gm { width: 88px; }
+    \\  @container (max-width: 620px) {
+    \\    .c-tiers .wr { width: 66px; }
+    \\    .c-tiers .dl { width: 52px; }
+    \\    .c-tiers .pl, .c-tiers .pk, .c-tiers .bn, .c-tiers .gm { width: 92px; }
+    \\    .c-tiers .c-violin { min-width: 0; }
+    \\    .c-tiers .who .c-badge { display: none; }
+    \\    .c-tiers td.ch { max-width: 120px; }
+    \\  }
+    \\}
+    \\
+;

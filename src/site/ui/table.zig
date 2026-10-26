@@ -74,6 +74,8 @@ pub fn Column(comptime Row: type) type {
         tip: ?tree.Text = null,
         /// What the cell opens on tap: a line on this row's figure
         row_tip: ?*const fn (*H, *const Row) Tip = null,
+        /// The cell is a picture with no text: its row_tip button takes the label as its name
+        wordless: bool = false,
         /// In a narrow container (620 px) one of the pick columns shows at a time
         pick: bool = false,
         /// A class on its cells, for the page's widths
@@ -307,6 +309,7 @@ pub fn DataTable(comptime Row: type, comptime spec: Spec(Row)) type {
                     }, .{if (col.row_tip != null) h.button(.{
                         .class = "rt",
                         .type = "button",
+                        .aria_label = if (col.wordless) col.label else null,
                         .popovertarget = tip_id,
                         .on_click = h.on(t, .{ .tip = @as(u32, @intCast(ri * ncols + i)) }),
                     }, .{content}) else content}));

@@ -174,16 +174,20 @@ test "views: a tree each, switches between them, shared pages once" {
         const page = try read(arena, out, c[0]);
         try std.testing.expect(std.mem.find(u8, page, c[1]) != null);
     }
+    // The champions board picks the view in its own toolbar; other view pages keep the
+    // switches
     const tiers = try read(arena, out, "all/champions.html");
+    try std.testing.expect(std.mem.find(u8, tiers, "data-region=\"EUW1\"") == null);
+    const pool = try read(arena, out, "all/pool.html");
     for ([_][]const u8{
-        "<a href=\"../all/patch/champions.html\" data-period=\"patch\">Patch 16.20</a>",
-        "<a href=\"../champions.html\" data-region=\"EUW1\">EUW</a>",
+        "<a href=\"../all/patch/pool.html\" data-period=\"patch\">Patch 16.20</a>",
+        "<a href=\"../pool.html\" data-region=\"EUW1\">EUW</a>",
         "<a aria-disabled=\"true\" title=\"Champion pages only\" data-region=\"KR\">KR</a>",
         "<a aria-disabled=\"true\" title=\"Champion pages only\" data-rank=\"6\">Diamond+</a>",
         "href=\"../" ++ @import("style.zig").file.path ++ "\"",
         "href=\"../daily.html\"",
-        "href=\"../champion/a.html?region=all#role=",
-    }) |s| try std.testing.expect(std.mem.find(u8, tiers, s) != null);
+    }) |s| try std.testing.expect(std.mem.find(u8, pool, s) != null);
+    try std.testing.expect(std.mem.find(u8, tiers, "<a href=\"../all/patch/champions.html\">Patch</a>") != null);
     // One page per champion, at the site root: the root view's, no switches until the
     // island takes the views
     const champ = try read(arena, out, "champion/a.html");

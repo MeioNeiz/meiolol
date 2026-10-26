@@ -334,20 +334,6 @@ table.build .path { letter-spacing: 1px; white-space: nowrap; margin-right: 6px;
 p.caption { font-size: 13px; margin: 4px 0 16px; }
 
 /* Champion tables (root.zig tierTable, opponentTable; static/table.js) */
-.tl-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin: 14px 0 10px; }
-.tl-bar .tabs { margin: 0; }
-.tl-bar input { flex: 0 1 220px; background: var(--panel); }
-.tl-bar nav.switch { margin-left: auto; }
-.tl-knobs { margin-left: auto; position: relative; }
-.tl-knobs summary { list-style: none; cursor: pointer; padding: 5px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--muted); font-size: 13px; }
-.tl-knobs summary::-webkit-details-marker { display: none; }
-.tl-knobs summary::after { content: " \25BE"; }
-.tl-knobs[open] summary { color: var(--text); }
-.tl-knobs[open] .tl-mins { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); }
-.tl-key { color: var(--faint); font-size: 12.5px; margin: -4px 2px 8px; }
-.tl-mins { display: flex; gap: 14px; margin-left: auto; }
-.tl-mins label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; white-space: nowrap; }
-.tl-bar .tl-mins input { flex: none; width: 76px; padding: 5px 8px; }
 .tl-wrap { border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
 table.tl { border-collapse: separate; border-spacing: 0; border-radius: 0; font-size: 14px; }
 table.tl th {
@@ -378,49 +364,18 @@ svg.ri { width: 22px; height: 22px; fill: currentColor; vertical-align: middle; 
 table.tl .dim { color: var(--muted); }
 table.tl small { color: var(--faint); font-size: 12px; margin-left: 4px; }
 table.tl th small.sub { display: block; margin: 1px 0 0; font-size: 11px; }
-.wr { display: inline-flex; align-items: center; gap: 10px; }
-.wr b { width: 48px; text-align: right; font-weight: 600; }
-.wr small { width: 36px; text-align: left; margin-left: 0 !important; }
-.ci { position: relative; display: inline-block; width: 150px; height: 18px; }
-.ci::before { content: ""; position: absolute; top: 8px; left: 0; right: 0; height: 2px; background: var(--axis); border-radius: 1px; }
-.ci::after { content: ""; position: absolute; top: 2px; left: 50%; width: 1px; height: 14px; background: var(--axis); }
-.ci .d { position: absolute; top: 4px; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; border: 2px solid var(--bg); z-index: 1; }
-/* The champions table island sets the dot and the rate's fade as numbers (ui/tiers.zig) */
-.ci .d { left: calc(var(--x, 50) * 1%); }
-.wr b { opacity: var(--f, 1); }
 b.up, a.up, .up { color: var(--good); }
 b.down, a.down, .down { color: var(--bad); }
-.ci .up { background: var(--good); }
-.ci .down { background: var(--bad); }
-.ci .even { background: var(--muted); }
-.wr b { color: var(--c); }
-/* Champions table: the patch change under the rate (tierlist.zig PatchNote) */
-.wv { display: inline-flex; flex-direction: column; align-items: flex-end; line-height: 1; }
-.wv b { line-height: 13px; }
-.wv .pd { margin: 0 !important; width: auto !important; font-size: 11px; line-height: 10px; color: var(--c); font-variant-numeric: tabular-nums; }
-.wv .pd.faint { color: var(--faint); }
-.wr .ci i { background: var(--c); }
 .wrc { color: var(--c); }
-.wr-key { color: var(--faint); font-size: 12px; margin: 6px 2px 0; }
-.wr-key .wrc { margin-left: 6px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .tiles small a { color: inherit; }
 /* Gold leads barely move a matchup: neutral */
 a.gold, a.gold.up, a.gold.down { color: var(--text); font-weight: 500; }
-.tl-more { color: var(--faint); font-size: 13px; margin: 8px 2px 0; }
-.tl-more button.link { font-size: 13px; }
 .tiles { display: flex; flex-wrap: wrap; gap: 10px; margin: 6px 0 14px; }
 .tiles > div { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; min-width: 130px; }
 .tiles span { display: block; color: var(--muted); font-size: 12px; }
 .tiles b { display: block; font-size: 21px; font-weight: 700; margin: 1px 0; }
 .tiles small { color: var(--faint); font-size: 12px; }
 section > h2 { margin-top: 28px; }
-@media (max-width: 760px) {
-  .ci, table.tl .opt { display: none; }
-  .tl-bar input[type="search"] { flex: 1 1 100%; }
-  .tl-mins { margin-left: 0; }
-  .tl-bar .tl-knobs ~ input[type="search"] { flex: 1 1 0; min-width: 0; }
-  .tl-key { font-size: 12px; margin-top: -2px; }
-}
 .tiles > div.stale { opacity: 0.45; }
 .choices button .tag { margin-left: 6px; vertical-align: middle; }
 .featured { margin: 8px 0 28px; }
@@ -719,11 +674,6 @@ td.wrap { white-space: normal; min-width: 140px; max-width: none; padding: 7px 1
 .scope > span + span::before { content: "·"; margin-right: 5px; color: var(--faint); }
 .scope .off { color: var(--turn); }
 .scope i { font-style: normal; }
-.ci .shape { position: absolute; top: 4px; left: 0; width: 100%; height: 10px; overflow: hidden; }
-.ci .shape path { fill: url(#wr-shape); mask: url(#wr-edge); opacity: 0.85; }
-#wr-shape .lo { stop-color: var(--bad); }
-#wr-shape .mid { stop-color: var(--muted); }
-#wr-shape .hi { stop-color: var(--good); }
 
 /* Matchup notes and the landing page's featured lane chart (matchup.featured) */
 /* A matchup's lean is a magnitude, not good or bad: neutral ink (design-ideas.md) */
