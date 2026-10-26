@@ -371,7 +371,7 @@ How to write a line:
   docs/model.md "The new pin, snap-20261023T2004Z"
 - Most lane matchups in a patch have a handful of games: of 166.5k matchup curves on
   EUW 16.20, 58% had under 5 games, only 9% 50+. Site: `meiolol curves` writes
-  matchups from 10 games (docs/architecture.md "Lane curves")
+  matchups from 10 games (docs/arch-stats.md "Lane curves")
 - Leaving out games that end before 15:00 without a remake flag (about 1.5%, mostly
   surrenders after a leaver) makes no detectable difference to draft predictions.
   Sure: 8,608 dev games, +0.00003 ± 0.00025 nats. Models: the lab harness and draft

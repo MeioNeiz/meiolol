@@ -158,7 +158,7 @@ player's own record). Gap list, measurements and target layout: docs/champion-ma
   the in-game page, skill priority over a 4x18 grid, spells, start, first 3 items, boots,
   items 4-6 top 3 each; games, share and % won per cell; most played by default, a
   highest win rate toggle only where marked() allows. Builds data has items 4-6,
-  skill_path and median minutes (architecture.md Builds). --max-keys is 1 << 20;
+  skill_path and median minutes (arch-stats.md "Builds"). --max-keys is 1 << 20;
   matchup keys 1 << 22 (floor 1 after a week: watch at patch end)
 - Opponents: 77x134 px tiles with unit words in one key line; tabs Lane, vs Jungle,
   vs Mid, vs Bot, vs Support, Duos (by ally role), vs usual with k per tab

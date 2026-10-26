@@ -111,6 +111,3 @@ For the next session, which reads only Now and one area file:
 - How something works goes in architecture.md, hosting.md or the area's reference doc,
   not the plan
 - Commit messages start with the step id when there is one (`git log --grep AC1`)
-- To convert: site.md, ops.md, data-and-model.md, lab-frontier.md; install history (old
-  shas, nginx .bak names) in hosting.md and your-games.md "Deploy" to
-  docs/archive/install-log.md

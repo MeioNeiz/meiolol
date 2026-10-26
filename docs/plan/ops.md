@@ -54,7 +54,7 @@ and bots. Next, only if needed:
 - Off-site and rolling window: Hetzner BX11 plus a ~30-day window on the box
   (decisions.md "Storage and hosting", data-and-model.md step 7). Jacob orders; the
   admin's "full in ~N days" is the deadline
-- gpu-box C: at 90% (the archive is on the P3, safe). Left: step 4 of docs/compute.md
+- gpu-box C: at 90% (the archive is on the P3, safe). Left: docs/compute.md "gpu-box storage", Open
   "gpu-box storage", compacting the WSL disk (~120 GB back, C: to ~77%); it stops WSL,
   so when the gpu-box is idle, after warning its sessions
 - jomify logs: /etc/logrotate.d/nginx (daily, 14 kept, delaycompress); traffic.sh

@@ -60,37 +60,37 @@ reveal and hints, src/site/learn.zig lessons.
 Each: finding (docs/learned.md section, date); size; surprise; clear?; puzzle.
 
 1. Your own lane in a game: 1,000-1,700 gold ahead at 14 wins 37-51 points more than as
-   far behind; 0 deaths before 15: 65-71% won, 4+: 31-39% (Early game, 20 Oct). Huge;
+   far behind; 0 deaths before 15: 65-71% won, 4+: 31-39% (learned.md Early game). Huge;
    medium surprise; clear, 878k games. "Guess the win rate" slider
 2. A matchup where one side is usually ahead at 14 is not one it usually wins: -2.6 to
    +2.3 points per 1,000 gold across matchups (same line). No effect, which is the
    point; high surprise; clear. "Ahead in lane, so wins?"
 3. Early and late champions: Draven's team ~900 gold up at 14 but from an even game at 20
-   wins ~8 points less; Kayle top ~800 behind and ~14 more (Win, 14 Oct). 8-14 points;
+   wins ~8 points less; Kayle top ~800 behind and ~14 more (learned.md Win). 8-14 points;
    high surprise; 153 of 429 champion-roles clear. "Who wins the long game?"
 4. Play what you know: new to a champion 44%, known 51.5% (external, 1M games); our
    model: 10 games vs none ~+4 points for one player (model.md "Player experience");
    counters 2 to 4. 4-7.5 points; high surprise; external clear, ours see caveat. The
    mastery vs counter duel Jacob liked
 5. Your win rate over 10-20 games is mostly luck: it swings ~15 points by chance, real
-   spread between players at most ~3 (Player, 15 Oct). High surprise; clear, 6,952
+   spread between players at most ~3 (learned.md Player). High surprise; clear, 6,952
    player-champion pairs. "Is this player good on Riven?"
 6. The bot laner's gold counts most: 1,000 gold is 6-12 points on bot, 1-3 on support
-   (Win, 13 Oct). Medium surprise; clear, 118k games. "Whose lead matters?"
+   (learned.md Win). Medium surprise; clear, 118k games. "Whose lead matters?"
 7. Almost no magic damage: under a fifth magic loses ~5 points, lopsided ~3, extremes ~10
-   (Win, 13 Oct). Low surprise; clear only for real extremes (1 team in 10 lopsided).
+   (learned.md Win). Low surprise; clear only for real extremes (1 team in 10 lopsided).
    Spot the problem draft
 8. Counters are real but mostly the enemy's own strength: matchups spread ~2 points in
    top and mid, ~1 in jungle and support; 40-90% of that is the opponent being strong or
-   weak (Win, 20 Oct, early). High surprise; clear by role, single matchups only far
+   weak (learned.md Win, early). High surprise; clear by role, single matchups only far
    from usual. "Counter or just strong?"
 9. A whole draft rarely leans: none of 9 Daily Drafts clear of even, a lean needs about
-   38/62; champions alone pick the winner ~55% (Win, 18 and 13 Oct). High surprise.
+   38/62; champions alone pick the winner ~55% (learned.md Win). High surprise.
    "Myth or measured"
 10. Not found in solo queue: dive vs peel, engage vs disengage, split vs waveclear, team
-    counters beyond lane, comeback champions (Win 14 Oct, Early game 13 Oct). Bounded
+    counters beyond lane, comeback champions (learned.md Win, Early game). Bounded
     nulls; high surprise. "Myth or measured"
-11. Bot and support pairing 1.3-1.6 points, no other ally pairing shows (Win, 14 Oct).
+11. Bot and support pairing 1.3-1.6 points, no other ally pairing shows (learned.md Win).
     Later
 12. Kit leans (Malphite into magic damage, Rammus into auto-attackers): 1-2 per step, dev
     only, no held-out look. After the held-out look

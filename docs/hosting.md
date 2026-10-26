@@ -83,7 +83,7 @@ without its slash with a 301.
   after each upload `meiolol site --views data/views.bin` (same flags as the core build)
   loads every view and writes them to one file, then touches data/render.reload; the
   renderer reads the file in seconds and swaps it in. A views file written by a binary
-  with other part keys (types or data code: docs/architecture.md "Views file") or a
+  with other part keys (types or data code: docs/arch-site.md "Views file") or a
   missing one makes the renderer load from the database instead. Render code changes
   show at the swap, in seconds
 - A deploy that changes a part waits for the forced round's `--reuse` write, which keeps
@@ -91,7 +91,7 @@ without its slash with a 301.
   finishes first and the deploy's write reuses its unchanged parts (stopping it costs
   far more). Kept parts refresh at the next upload's full write
 - A full write reads only new, REPLACEd or newly timelined games from data/partials
-  (docs/architecture.md "Views partials"); above ~150k games to read it reads whole
+  (docs/arch-site.md "Views partials"); above ~150k games to read it reads whole
   tables instead. Typical: ~320-470 s, ~1,040 s for a first build over all games. Learn
   reads its tallies and practice ids from the partials too (~10 s); raw JSON and
   practice games stay on the db. The heavy loads read in parallel: filters in 4 runs of
@@ -229,7 +229,7 @@ without its slash with a 301.
   disables, below the signed-in role only. Accounts by hand: `sudo -u meiolol-api
   meiolol account ... --data /var/lib/meiolol-api` on jomify (list, reset, link,
   revoke-links, delete; the owner only here).
-- Private site (/p/, docs/plan/accounts.md AC3): static, uploaded by the web loop to
+- Private site (/p/, docs/plan/accounts.md "private"): static, uploaded by the web loop to
   /var/www/meiolol/p (`meiolol admin --private-out`: the Draft tester in private mode, the
   shipped models in models/). nginx location /p/ with auth_request /_meiolol_private
   (/auth/check/view_private), 401 to the login page, X-Robots-Tag noindex. The loop

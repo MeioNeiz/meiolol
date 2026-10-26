@@ -15,7 +15,7 @@ between windows. Players have to trust it, so how each number is made must be pl
 the page. A rank pick should use all the data, adjusted for how ranks differ, rather
 than only the games at that rank. Per region later ("for now I don't mind"). Builds on
 docs/plan/patch-transfer.md (how champions move across a patch), the curves' shrinkage
-(architecture.md "Lane curves") and the site's usualK. Research:
+(arch-stats.md "Lane curves") and the site's usualK. Research:
 research/questions/patch-transfer.md and curve-statistics-method.md; partial pooling
 (gelman-2006-multilevel-can-cant, gelman-hill-2007-ch12-13), patch-decay n_eff
 (practools-design-effects ^f5).

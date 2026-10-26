@@ -70,8 +70,8 @@ through wasm. That is the cheapest route to removing JS copies of Zig markup.
 - Embedded with `@embedFile` (root.zig:280-298): style.css, favicon, inter.woff2 and 11
   JS files at the site root, pool.js and min-games.js again in every view directory.
 - No fingerprinting: pages link `style.css`, `../table.js` by fixed name. nginx serves
-  them `Cache-Control: no-cache` (docs/backlog.md:403); the renderer serves its own
-  files no-cache too (serve.zig:268), rendered pages `max-age=3600` (serve.zig:373).
+  them `Cache-Control: no-cache` (docs/hosting.md "Cache-Control"); the renderer serves
+  its own files no-cache too (serve.zig:268), rendered pages `max-age=3600` (serve.zig:373).
 - No build step: no minify, no bundling, no transpile. Script tags are hand-written in
   each page module with hand-made relative paths: champion.zig:130 `"../table.js"`,
   tierlist.zig:340 `{table_js}`, learning.zig:169 `{up}table.js`, daily.zig:55, your.zig:71.

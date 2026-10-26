@@ -15,7 +15,7 @@ development).
   deploy/desktop-shots.sh (`zig build desktop-shot --compare`: every state from pinned
   inputs, pixel for pixel against an approved set, NAME.diff.png for a change) and
   deploy/desktop-smoke.sh (`meiolol-desktop --self-test` on the gpu-box's Windows, ~6 s)
-  all run in the release script (architecture.md "Desktop window", accounts.md AC5)
+  all run in the release script (arch-app.md "Desktop window", accounts.md AC5)
 - HTTP server limits (what hyper and axum give): httpd.Limits per server (Your games
   API, the crawler's proxy, serve.zig, the mocks): connection cap (503), 64 KB heads
   (431), Content-Length body cap (413; chunked 411), malformed heads 400; idle, head

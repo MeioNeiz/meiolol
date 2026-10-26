@@ -11,6 +11,8 @@
       "kind": "read-first findings: current only, one short entry each" },
     { "id": "index", "match": "^docs/(plan|frontend)\\.md$", "budget": 140,
       "kind": "an index read first: pointers, not detail" },
+    { "id": "decisions", "match": "^docs/plan/decisions\\.md$", "budget": 300,
+      "timeline": false, "kind": "decision log: one date per decision is its job" },
     { "id": "plan", "match": "^docs/plan/", "budget": 300, "kind": "a plan area file" },
     { "id": "review", "match": "^docs/review/", "budget": null, "twin": false, "shape": false,
       "timeline": false, "longLine": 2000, "kind": "Jacob's review, quoted by the page plans" },
@@ -23,6 +25,7 @@
   "archiveNote": "Current state: docs/plan.md, the area file under docs/plan/, docs/learned.md; the experiment record is docs/model.md.",
   "ignore": ["research/", "node_modules/", "data/"],
   "orphanIgnore": ["docs/plan/ui/", "docs/legal/"],
+  "pointerIgnore": ["^(daily|learn|models|refs|probe)/"],
   "longLine": 400,
   "dated": { "match": "\\d{4}-\\d{2}-\\d{2}[^/]*\\.md$", "graceDays": 2, "archiveAfterDays": 7 },
   "commits": { "subjectMax": 90, "count": 50 }

@@ -199,7 +199,7 @@ CMD ARGS` samples the trials (SPACE: `--flag DIST ARGS` lines, `meiolol lab-swee
 builds once and queues the jobs; `status`, `table`, `stop`. State in data/sweeps/SWEEP.
 
 - Contract (meiolol-f1's `netcheck`): the sweeper appends the sampled `--flag value`
-  pairs and `--out tNN`; the command writes tNN/folds.tsv, one row per seed and block
+  pairs and `--out tNN`; the command writes tNN/folds.tsv, one row per seed and block <!-- hygiene-ok -->
   (folds 1-5 and dev): seed fold fit_games scored_games logloss ratings_logloss gain
   gain_se epochs seconds val_logloss auc
 - `table` ranks by val_logloss (inner validation on fit games), never by the fold gain,

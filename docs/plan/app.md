@@ -4,7 +4,7 @@ Two editions from one codebase (J21): a public app that fits what Riot
 reviews, and a private one for the private, admin and owner roles (Jacob's friends and
 testers; docs/plan/accounts.md). Paid accounts (later) get extras in the public
 edition, within the public rules. Public release: no date, "after Riot's production
-review" (J7). How it is built: docs/architecture.md "App" and "Desktop window";
+review" (J7). How it is built: docs/arch-app.md "App" and "Desktop window";
 `zig build desktop-shot` for PNGs.
 
 ## Two editions
@@ -142,7 +142,7 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
   else the last in-game tick, else inferred). Left: check APP1's real block; tabs
   (fighting, farming, vision); our draft call against the result
 - APP12 Practice, first pass done (private; Jacob: "test out different drafts
-  and see more of the UI before even getting into a lobby"): architecture.md "Desktop
+  and see more of the UI before even getting into a lobby"): arch-app.md "Desktop
   window". Left: Jacob's try on the PC; Data Dragon icons when the client is closed;
   a saved draft or two; the in-game and post game numbers are made up, not a replay
 - APP9 In-game companion, private first (below). First pass done (against the mock and
@@ -242,7 +242,7 @@ games.
   recent-curves. Not checked: 150% scaling. From WSL over ssh the window can't open
   (session 0): start it in Jacob's session with a one-off `schtasks /it` task
 - Admin download and self-update (J19, signed exe and data, release script only):
-  architecture.md "Desktop window", hosting.md "Desktop app files". A second exe update
+  arch-app.md "Desktop window", hosting.md "Desktop app files". A second exe update
   in one session waits for a restart
 - Installs itself: the zip's exe moves into %LOCALAPPDATA%\Programs\meiolol
   with a Start menu shortcut (Windows search finds it) and an Apps list entry with
@@ -259,7 +259,7 @@ games.
   champion, games in the role, rank, time since last played; keep a term only if
   `meiolol eval --replay` beats the error bar. Notes:
   data/team/2026-10-20-pooltest/notes.md
-- Lane gold colour: lanecard.zig colours by sign alone, architecture.md says only 2 SE
+- Lane gold colour: lanecard.zig colours by sign alone, arch-app.md says only 2 SE
   from even; one is wrong (also an open question in decisions.md)
 - Your own record in the matchup (concept part 6; LCU match history, needs a real reply)
 - Public download, after the key, in order: the public channel ("Two editions"),

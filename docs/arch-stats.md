@@ -1,8 +1,7 @@
 # Architecture: derived stats
 
-Lane curves, builds, early or late, pool, how hard to pick up: what the backend derives
-from games for the pages. Layout, storage, crawler, model file and packed rows:
-docs/architecture.md.
+What the backend derives from games for the stats pages. Layout, storage, crawler, model
+file and packed rows: docs/architecture.md.
 
 ## Lane curves (src/curves.zig, src/core/curvesfile.zig, curvefit.zig, src/site/matchup.zig)
 
