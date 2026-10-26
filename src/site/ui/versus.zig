@@ -4,7 +4,9 @@
 //! readers (game-detail.md "Objectives and firsts"). `race`: when you and your opponent
 //! got somewhere, the typical time a tick, the gap to typical a signed figure (later is
 //! worse). `band`: one figure on a track, the typical middle half shaded and its median
-//! a tick (game-detail.md "Lane")
+//! a tick (game-detail.md "Lane"). `rows`: one side against the other mirrored, a row per
+//! figure, bars growing out from the middle, the larger (or earlier) figure bold
+//! (matchup.md "Versus")
 const std = @import("std");
 const tree = @import("tree.zig");
 const phrase = @import("phrase.zig");
@@ -30,6 +32,7 @@ pub const Item = struct {
 
 const W = struct {
     pub const label = plain("Your team against theirs");
+    pub const rows = phrase.Phrase("{a:text} against {b:text}");
     pub const first = plain("1st");
     pub const first_at = phrase.Phrase("First at {t:time}");
     pub const times = phrase.Phrase("{a:text} {x:text} · {b:text} {y:text}");
@@ -127,6 +130,41 @@ pub fn band(h: *H, b: Band) N {
     });
 }
 
+pub const Row = struct {
+    label: tree.Text,
+    a: tree.Text,
+    b: tree.Text,
+    /// Bar lengths, of half the row: none for a timing
+    bars: ?[2]f32 = null,
+    /// The side shown bold
+    lead: ?Side = null,
+    /// Under the label, small: "8 s apart"
+    sub: ?tree.Text = null,
+};
+
+pub const Side = enum { a, b };
+
+/// `names`: the two sides, over their columns
+pub fn rows(h: *H, names: [2][]const u8, items: []const Row) N {
+    var l = h.list();
+    for (items, 0..) |r, i| l.add(h.div(.{ .key = i, .class = "mr" }, .{
+        h.span(.{ .class = "n us", .data_lead = r.lead == .a }, .{r.a}),
+        h.span(.{ .class = "mid" }, .{
+            h.span(.{ .class = "lab" }, .{ r.label, if (r.sub) |x| h.small(.{}, .{x}) else null }),
+            if (r.bars) |b| h.span(.{ .class = "bars", .aria_hidden = true, .style = h.vars(.{ .a = pct(b[0]), .b = pct(b[1]) }) }, .{}) else null,
+        }),
+        h.span(.{ .class = "n them", .data_lead = r.lead == .b }, .{r.b}),
+    }));
+    return h.div(.{ .class = "c-vs", .data_v = "rows", .role = "group", .aria_label = W.rows.with(h, .{ .a = names[0], .b = names[1] }) }, .{
+        h.div(.{ .class = "who", .aria_hidden = true }, .{ h.span(.{ .class = "us" }, .{names[0]}), h.span(.{ .class = "them" }, .{names[1]}) }),
+        l.done(),
+    });
+}
+
+fn pct(f: f32) f32 {
+    return @round(std.math.clamp(f, 0, 1) * 1000) / 10;
+}
+
 pub fn split(h: *H, items: []const Item) N {
     var l = h.list();
     for (items, 0..) |it, i| {
@@ -179,6 +217,19 @@ pub const css =
     \\  .c-vs .tr > .q { position: absolute; inset: 0 auto; left: calc(var(--a) * 1%); width: calc((var(--b) - var(--a)) * 1%); background: var(--wash); box-shadow: inset 0 0 0 1px var(--line-2); }
     \\  .c-vs .tr > .typ { top: 0; bottom: 0; }
     \\  .c-vs .tr > .you { position: absolute; top: -4px; bottom: -4px; left: calc(var(--x) * 1%); width: 8px; margin-left: -4px; border-radius: 3px; background: var(--us); box-shadow: 0 0 0 2px var(--panel); }
+    \\  .c-vs[data-v="rows"] { grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
+    \\  .c-vs > .who { display: flex; justify-content: space-between; font-weight: var(--w-b); }
+    \\  .c-vs > .who > .us { color: var(--us-hot); }
+    \\  .c-vs > .who > .them { color: var(--them-hot); }
+    \\  .c-vs > .mr { display: grid; grid-template-columns: 3.4em minmax(0, 1fr) 3.4em; align-items: center; gap: var(--sp-2); }
+    \\  .c-vs .mr > .n { font-size: var(--fs-m); font-weight: var(--w-m); font-variant-numeric: tabular-nums; color: var(--t2); }
+    \\  .c-vs .mr > .them { text-align: right; justify-content: flex-end; }
+    \\  .c-vs .mr > .n[data-lead] { font-weight: var(--w-b); color: var(--text); }
+    \\  .c-vs .mr > .mid { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
+    \\  .c-vs .mr .lab small { margin-left: 6px; color: var(--faint); }
+    \\  .c-vs .mr .bars { align-self: stretch; height: 5px;
+    \\    background: linear-gradient(90deg, transparent calc(50% - var(--a) * 0.5%), var(--us) 0 calc(50% - 1px), transparent 0 calc(50% + 1px),
+    \\      var(--them) 0 calc(50% + var(--b) * 0.5%), transparent 0); border-radius: 3px; }
     \\  .c-vs .bnd > .ends { grid-column: 1 / -1; display: flex; justify-content: space-between; font-size: var(--fs-xs); color: var(--faint); font-variant-numeric: tabular-nums; }
     \\}
     \\
@@ -203,6 +254,13 @@ pub fn gallery(g: *Gallery) void {
         race(h, .{ .label = plain("Level 6"), .you = 391, .them = 315, .typ = 339, .a = a, .b = b }),
         race(h, .{ .label = plain("First item"), .you = 650, .them = 714, .typ = 681, .a = a, .b = b }),
         race(h, .{ .label = plain("First item"), .you = null, .them = 714, .a = a, .b = b }),
+    }));
+    g.addFill("mirrored rows: a matchup's head to head", rows(h, .{ "Darius", "Garen" }, &.{
+        .{ .label = plain("Wins"), .a = plain("50%"), .b = plain("50%"), .bars = .{ 0.5, 0.5 } },
+        .{ .label = plain("Ahead at 14"), .a = plain("61%"), .b = plain("39%"), .bars = .{ 0.61, 0.39 }, .lead = .a },
+        .{ .label = plain("First blood"), .a = plain("15%"), .b = plain("17%"), .bars = .{ 0.15, 0.17 }, .lead = .b },
+        .{ .label = plain("Level 6"), .a = plain("5:19"), .b = plain("5:28"), .lead = .a, .sub = plain("9 s apart") },
+        .{ .label = plain("First item"), .a = plain("12:04"), .b = plain("–") },
     }));
     g.add("bands: below typical, above, no typical", h.div(.{ .class = "c-vs" }, .{
         band(h, .{ .label = plain("Gold lead at 14"), .you = -768, .typ = .{ -1677, -63, 511 }, .dom = 2500 }),
