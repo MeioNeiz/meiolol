@@ -9,6 +9,7 @@ const riot = @import("riot/root.zig");
 const stats = @import("stats.zig");
 const curves = @import("curves.zig");
 const builds = @import("builds.zig");
+const buildblock = @import("site/buildblock.zig");
 const lean = @import("lean.zig");
 const draftmodel = @import("draftmodel.zig");
 const lanemodel = @import("lanemodel.zig");
@@ -94,6 +95,27 @@ test "fixture games to stats, curves and the website" {
     try testing.expectEqual(games, darius.get(.skill_start).?.games);
     try testing.expectEqual(games, darius.get(.skill_path).?.games);
     try testing.expect(darius.minutes.len > 0);
+    // The champion page's build block: the file as BuildPanel's data, drawn
+    const block = try buildblock.data(arena, &build_file, darius, "Darius");
+    try testing.expectEqual(.spells, block.slots[0].kind);
+    try testing.expectEqualStrings("Flash Ghost", block.slots[0].options[0].name);
+    for (block.slots) |s| if (s.kind == .skill_path) try testing.expectEqual(18, s.options[0].keys.len);
+    try testing.expectEqual(games, block.runes.games);
+    // Precision first by keystone players (Conqueror), Resolve the secondary
+    try testing.expectEqual(2, block.runes.trees.len);
+    try testing.expectEqualStrings("Precision", block.runes.trees[0].art.name);
+    try testing.expectEqual(games, block.runes.trees[0].rows[0][3].games);
+    try testing.expectEqualStrings("Conqueror", block.runes.pages[0].keystone.name);
+    try testing.expectEqualStrings("Resolve", block.runes.pages[0].second.name);
+    try testing.expectEqual(3, block.runes.shards.len);
+    var panel: site.ui.buildpanel.BuildPanel = undefined;
+    try panel.init(arena, &block);
+    var panel_tree: site.ui.Tree = .{};
+    var panel_h: site.ui.H = .init(arena, &panel_tree);
+    panel_tree.root = panel.view(&panel_h);
+    var panel_html: std.Io.Writer.Allocating = .init(arena);
+    try site.ui.html.write(&panel_tree, panel_tree.root, &panel_html.writer);
+    try testing.expect(std.mem.find(u8, panel_html.written(), "alt=\"Conqueror\"") != null);
     const builds_json = try std.json.Stringify.valueAlloc(arena, build_file, .{});
     try tmp.dir.writeFile(io, .{ .sub_path = "builds.json", .data = builds_json });
     const builds_path = try std.fs.path.join(arena, &.{ dir, "builds.json" });
