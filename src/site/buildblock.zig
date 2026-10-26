@@ -19,6 +19,11 @@ const pages_shown = 4;
 
 /// `b` (a File.Build of `f`) as the panel's data, in `a`. `champion`: its name
 pub fn data(a: std.mem.Allocator, f: *const File, b: File.Build, champion: []const u8) !bp.Data {
+    return dataVs(a, f, b, champion, null);
+}
+
+/// A matchup's `b`, with the champion's `usual` build for the runes the matchup moves
+pub fn dataVs(a: std.mem.Allocator, f: *const File, b: File.Build, champion: []const u8, usual: ?File.Build) !bp.Data {
     var slots: std.ArrayList(bp.Slot) = .empty;
     const kinds = [_]struct { Kind, bp.Kind }{ .{ .spells, .spells }, .{ .start, .start }, .{ .boots, .boots }, .{ .core3, .core }, .{ .item4, .item4 }, .{ .item5, .item5 }, .{ .item6, .item6 }, .{ .skills, .skills }, .{ .skill_path, .skill_path } };
     for (kinds) |k| {
@@ -29,7 +34,7 @@ pub fn data(a: std.mem.Allocator, f: *const File, b: File.Build, champion: []con
         try slots.append(a, .{ .kind = k[1], .games = rows.games, .wins = rows.wins, .options = options });
     }
     return .{
-        .runes = try runes(a, f, b),
+        .runes = try runes(a, f, b, if (usual) |u| u.get(.rune) else null),
         .slots = slots.items,
         .champion = champion,
         .own = bp.rate(b.games, b.wins),
@@ -93,7 +98,7 @@ fn art(a: std.mem.Allocator, list: []const ddragon.Named, id: u32) !Art {
     return .{ .name = n.name, .src = n.icon };
 }
 
-fn runes(a: std.mem.Allocator, f: *const File, b: File.Build) !rt.Data {
+fn runes(a: std.mem.Allocator, f: *const File, b: File.Build, usual: ?File.Rows) !rt.Data {
     const rune = b.get(.rune) orelse File.Rows{ .kind = .rune, .games = 0, .wins = 0, .options = &.{} };
     const Shown = struct { t: rt.Tree, keystones: u32, most: u32 };
     var shown: std.ArrayList(Shown) = .empty;
@@ -104,7 +109,7 @@ fn runes(a: std.mem.Allocator, f: *const File, b: File.Build) !rt.Data {
             const cells = try a.alloc(rt.Rune, slot.len);
             for (cells, slot) |*c, id| {
                 const n = find(rune.options, &.{id});
-                c.* = .{ .id = id, .art = try art(a, f.runes, id), .games = n.games, .wins = n.wins };
+                c.* = .{ .id = id, .art = try art(a, f.runes, id), .games = n.games, .wins = n.wins, .usual = moved(rune, n, usual, id) };
                 if (i == 0) s.keystones += n.games;
                 s.most = @max(s.most, n.games);
             }
@@ -160,7 +165,60 @@ fn runes(a: std.mem.Allocator, f: *const File, b: File.Build) !rt.Data {
     return .{ .trees = trees, .shards = shards, .games = rune.games, .wins = rune.wins, .pages = pages, .top_shards = top_shards };
 }
 
+/// A rune counts as taken differently in a matchup when its pick share is this many
+/// points away from the champion's in the role. Win rates don't enter: pulled toward the
+/// row's by File.shrinkK (about 6,000 games for runes in matchups), no rune's moves 2
+/// points from its usual in any EUW matchup with a file (16.20, 2,002 pairs)
+const shift_points = 10;
+/// Under this many players a rune's share is left out either way
+const shift_games = bp.rate_games;
+
+/// The usual share of rune `id`, %, when the matchup's (`n` of `rune`) is shift_points
+/// or more away
+fn moved(rune: File.Rows, n: builds.Count, usual: ?File.Rows, id: u32) ?u8 {
+    const ur = usual orelse return null;
+    const u = find(ur.options, &.{id});
+    if (n.games < shift_games and u.games < shift_games) return null;
+    const here = share(n.games, rune.games);
+    const was = share(u.games, ur.games);
+    if (@abs(here - was) < shift_points) return null;
+    return @intFromFloat(@round(was));
+}
+
+fn share(n: u32, all: u32) f64 {
+    return 100 * @as(f64, @floatFromInt(n)) / @as(f64, @floatFromInt(@max(all, 1)));
+}
+
 fn find(options: []const File.Option, v: []const u32) builds.Count {
     for (options) |o| if (std.mem.eql(u32, o.v, v)) return .{ .games = o.games, .wins = o.wins };
     return .{};
+}
+
+test "moved runes: 10+ points from usual either way, under 100 players on both sides left out" {
+    const rows = struct {
+        fn of(options: []const File.Option) File.Rows {
+            return .{ .kind = .rune, .games = 1000, .wins = 500, .options = options };
+        }
+    };
+    const usual = rows.of(&.{
+        .{ .v = &.{8010}, .games = 600, .wins = 300 },
+        .{ .v = &.{8008}, .games = 400, .wins = 200 },
+        .{ .v = &.{8444}, .games = 300, .wins = 150 },
+        .{ .v = &.{8299}, .games = 50, .wins = 25 },
+    });
+    const vs = rows.of(&.{
+        .{ .v = &.{8010}, .games = 800, .wins = 400 },
+        .{ .v = &.{8008}, .games = 150, .wins = 75 },
+        .{ .v = &.{8021}, .games = 95, .wins = 45 },
+        .{ .v = &.{8299}, .games = 120, .wins = 60 },
+    });
+    const want = [_]struct { u32, ?u8 }{
+        .{ 8010, 60 }, // 80% here
+        .{ 8008, 40 }, // 15%
+        .{ 8444, 30 }, // left out of the matchup
+        .{ 8021, null }, // 9.5% from 0, and under 100 players on both sides
+        .{ 8299, null }, // 12% from 5%
+    };
+    for (want) |w| try std.testing.expectEqual(w[1], moved(vs, find(vs.options, &.{w[0]}), usual, w[0]));
+    try std.testing.expectEqual(null, moved(vs, find(vs.options, &.{8010}), null, 8010));
 }

@@ -4,7 +4,8 @@
 //! row is one choice), none under bp.rate_games, faded under bp.solid_games. The top rune
 //! pages sit above as cards; the chosen one lights its runes. In a narrow container the
 //! trees fold to the chosen page's (Every tree opens the rest). Tap a rune: its name and
-//! figures in the readout line. An island part: a host embeds it and re-renders on its
+//! figures in the readout line. On a matchup's, ▲▼ after a share the matchup moved from
+//! the champion's usual. An island part: a host embeds it and re-renders on its
 //! events
 const std = @import("std");
 const tree = @import("tree.zig");
@@ -21,7 +22,14 @@ const N = tree.N;
 pub const name = "RuneTree";
 pub const scope = .{".c-runes"};
 
-pub const Rune = struct { id: u32, art: art.Art, games: u32, wins: u32 };
+pub const Rune = struct {
+    id: u32,
+    art: art.Art,
+    games: u32,
+    wins: u32,
+    /// A matchup's: the champion's usual share of it, %, when the matchup moved it (▲▼)
+    usual: ?u8 = null,
+};
 
 pub const Tree = struct {
     id: u32,
@@ -63,6 +71,9 @@ const W = struct {
     pub const every = plain("Every tree");
     pub const chosen = plain("Chosen page");
     pub const rune_games = phrase.Phrase("{n:count} games");
+    pub const usually = phrase.Phrase("usually {p:pct}");
+    pub const more = plain("▲");
+    pub const less = plain("▼");
 };
 
 /// Which rune: tree index (shards: 15), row, column
@@ -181,7 +192,7 @@ pub const RuneTree = struct {
         const kids = .{
             art.view(h, r.art, .{ .k = .rune, .px = px }),
             h.span(.{ .class = "sh" }, .{h.el(.i, .{ .style = h.vars(.{ .w = @min(share, 100) }) }, .{})}),
-            if (r.games > 0) h.span(.{ .class = "pk" }, .{bp.pickText(h, share)}) else null,
+            if (r.games > 0 or r.usual != null) h.span(.{ .class = "pk" }, .{ bp.pickText(h, share), t.moved(h, r, share) }) else null,
             if (r.games > 0) bp.win(h, r.games, r.wins, ref) else null,
             if (r.games > 0) h.span(.{ .class = "g" }, .{bp.shortCount(h, r.games)}) else null,
         };
@@ -210,10 +221,17 @@ pub const RuneTree = struct {
         const share = 100 * @as(f64, @floatFromInt(r.games)) / @as(f64, @floatFromInt(@max(t.data.games, 1)));
         return h.div(.{ .class = "key", .data_v = "rune", .aria_live = "polite" }, .{
             h.b(.{}, .{r.art.name}),
-            h.span(.{ .class = "pk" }, .{ bp.pickText(h, share), " ", W.pick }),
+            h.span(.{ .class = "pk" }, .{ bp.pickText(h, share), " ", W.pick, t.moved(h, r, share) }),
+            if (r.usual) |u| h.span(.{ .class = "pk" }, .{W.usually.with(h, .{ .p = u })}) else null,
             h.span(.{}, .{ bp.win(h, r.games, r.wins, t.rowRate(pos)), " ", W.won }),
             h.span(.{ .class = "g" }, .{W.rune_games.with(h, .{ .n = r.games })}),
         });
+    }
+
+    /// ▲ or ▼ after a pick share the matchup moved from the usual; the readout says how
+    fn moved(_: *const RuneTree, h: *H, r: Rune, share: f64) N {
+        const u = r.usual orelse return .none;
+        return h.span(.{ .class = "mv", .aria_hidden = true }, .{if (share > @as(f64, @floatFromInt(u))) W.more else W.less});
     }
 
     fn rowOf(t: *const RuneTree, pos: Pos) ?[]const Rune {
@@ -289,6 +307,7 @@ pub const css =
     \\  .c-runes .rune > .sh { width: 100%; max-width: 40px; height: 3px; margin-top: 2px; border-radius: 2px; background: var(--bar-track); }
     \\  .c-runes .rune > .sh > i { display: block; height: 100%; width: calc(var(--w) * 1%); border-radius: 2px; background: var(--bar-hi); }
     \\  .c-runes .rune > .pk { font-size: var(--fs-xs); color: var(--muted); line-height: 1.2; }
+    \\  .c-runes .mv { margin-left: 2px; color: var(--t2); }
     \\  .c-runes .rune > .w { font-size: var(--fs-s); font-weight: var(--w-m); line-height: 1.2; color: var(--c, var(--faint)); }
     \\  .c-runes .rune > .g { font-size: var(--fs-xs); color: var(--faint); line-height: 1.1; }
     \\  .c-runes .rune[data-thin] > .pk, .c-runes .rune[data-thin] > .w { opacity: 0.55; }
@@ -318,4 +337,29 @@ pub fn gallery(g: *Gallery) void {
         t.* = s[1];
         g.addFill(s[0], t.view(h));
     }
+    const vs = matchup(h, &demo.runes) catch {
+        h.oom = true;
+        return;
+    };
+    const t = h.mem.create(RuneTree) catch {
+        h.oom = true;
+        return;
+    };
+    t.* = .{ .data = vs, .rune = .{ .tree = 0, .row = 0, .col = 0 } };
+    g.addFill("a matchup's: keystones moved from the usual, one tapped", t.view(h));
+}
+
+/// `d` with its first tree's first two keystones moved: one taken far more, one less
+fn matchup(h: *H, d: *const Data) !*const Data {
+    const trees = try h.mem.dupe(Tree, d.trees);
+    const rows = try h.mem.dupe([]const Rune, trees[0].rows);
+    const ks = try h.mem.dupe(Rune, rows[0]);
+    ks[0].usual = 12;
+    if (ks.len > 1) ks[1].usual = 70;
+    rows[0] = ks;
+    trees[0].rows = rows;
+    const out = try h.mem.create(Data);
+    out.* = d.*;
+    out.trees = trees;
+    return out;
 }
