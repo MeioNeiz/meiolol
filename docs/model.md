@@ -1,19 +1,18 @@
 # Draft model: how good is it?
 
-The lab record: every measured model and experiment since 11 Oct, dated sections, never
-rewritten (the curve over training size is evidence for the production key). 4.5k
-lines: never read it whole. Start here, then read only the section you need:
-`grep -n '^#' docs/model.md` for the map, `sed -n '/^## Shipped model/,/^## /p'
-docs/model.md` for one section. Source comments cite sections by name, so keep
-headings when editing.
+The lab record: every measured model and experiment since 11 Oct, never rewritten (the
+curve over training size is evidence for the production key). Never read it whole:
+`grep -n '^##' docs/model.md` for the map, `sed -n '/^## Shipped model/,/^## /p'
+docs/model.md` for one section. Source comments cite sections by name, so keep headings.
 
 - What the results mean, in plain words: docs/learned.md (read that first)
-- The model the site and app use now: "Shipped model, 2026-10-17"
-- Split, rows and outcomes every tool shares: "Shared protocol, 2026-10-12"
-- File formats: "Draft model file", "Lane model file", "In-game model file"
-- Planted-effect and regression tests: "Model tests"
-- Open work: "Next steps" (end of file). New results: a dated `###` section above
-  "Shipped model", a line in learned.md when final
+- Method, Baselines, Shared protocol: split, rows and outcomes every tool shares
+- Experiments: dated `###` sections, oldest first; a new one goes at its end, and a line
+  in learned.md when final
+- Shipped model: the model the site and app use now, newest first
+- Model files and tests: "Draft model file", "Lane model file", "In-game model file",
+  "Model tests" (planted-effect and regression)
+- Where results show (admin Models tab), Next steps
 
 Measured with `meiolol eval` (src/eval.zig) on a read-only copy of the box DB.
 
@@ -196,6 +195,10 @@ outcomes and readings decided by Jacob the same day.
   Use-time: champions, roles, the user's own rank and experience, aggregate facts only.
   Other players' stats and end-of-game stats: training covariates or post-game lessons,
   never champ-select inputs
+
+## Experiments
+
+Dated, oldest first; a new one goes at the end of this section.
 
 ### Team effects on early outcomes, 2026-10-12 (meiolol-3c)
 
@@ -4265,282 +4268,6 @@ pass, shipped to the admin tester.
   yet confirmed on fresh games) when its gamma is clear (G1, G4, G5, G11) and the team is
   that way, and the champion's own part beyond it only when that is clear
 
-### Draft model file (meiolol draft-model, meiolol-lab draft --export)
-
-`meiolol draft-model [--out DIR]` (src/draftmodel.zig, default DATA/tester) writes the
-shipped model (core.score, Options defaults, as the site and app score drafts) fitted on
-every played game in the database, every platform and patch: kind "draft", the same file
-as the win-draft export below (17 Oct, snap-20261017T1320Z: every term and pair cell
-equal, 800,302 games, 6 s on the Mac; meta.snapshot "box database"). It stops unless
-the file's scorer matches core.score.draftWin on 500 test games within 1e-4 (5e-9
-measured); meta.dev refits on the played games older than dev-val and scores dev-val per
-game, baseline champion strength alone. Daily on the box (deploy/web-loop.sh), served at
-/admin/models/ with the admin upload. The tester's Model switch picks the draft model:
-"Shipped model" (this file) or "Lab experiment" (/admin/training/, `lab-push.sh use`, with
-the set net when draft-setnet.json is there); the lane model is the box's, else the lab's;
-comp terms the lab's. It also writes champ/<id>.json (and .gz) per champion: by role, its team's
-chance against an average draft (95% range) and with each opponent ("vs") and ally
-("with") it has a cell with, [role, champion, chance, games], every other slot its
-role's average pick; the private site's pv.js shows them on champion and matchup pages
-(docs/plan/app.md "Private site"). The scorer and writer are src/draftfile.zig, shared
-with the lab.
-
-`meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has
-`exportModel`, today win-ratings) fits on every game in the snapshot and writes
-DIR/draft-model.json and DIR/draft-ref.json for the admin draft board (meiolol-3b).
-With `--model additive [--pair-floor N]` it fits the additive model instead (effects'
-v2 "full": champion strength, ally pairs, the 15 identified matchup blocks, damage mix;
-src/lab/addinputs.zig builds its inputs for both, so the shipped model is the evaluated
-one) on every played game, -Dcand unused; needs seat stats.
-Admin only: the public site never shows "this draft wins X%" (docs/learned.md). Run it
-into a run dir on the Mac (~/ml/runs/<stamp>-draft-export); lab-push.sh sends the newest.
-Built with -Dcand=src/lab/cand/win-draft it exports the shipped model (kind "draft",
-17 Oct): b the weighted base, pairs every ally pair and matchup cell with the term weight
-folded into theta (min_games 1, nothing left out), intercept 0, temperature 1 (pass
-`--temperature 1`: the cand default is 0.80); the scorer check came out at 3e-8 on 500
-test games, so the tester scores drafts as the app and site do. Its companion,
-`meiolol-lab champcomp SNAP --export DIR` (same cand), writes DIR/draft-comp.json:
-
-- format meiolol-champcomp, version 2 (1: 16 features, no groups; the tester reads both);
-  meta {snapshot, offset "win-draft", fit_games
-  (dev-val's: dev games, no test look), what, folds and devval {mean, half, n} (nats a
-  game against the offset), better (of 5), clear, tests, bh}
-- traits [9 labels, the last auto-attack build: `--aa`, 0 without]; features [18 {name,
-  label, mean, sd}]: the enemy's five, then the seat's four allies; mean and sd
-  standardise the raw set traits
-- seats [[champion, role, magic, dmg, v1..v8]] and role_seats [5][magic, dmg, v1..v8]
-  (an empty slot or a champion-role with no profile): a set's AP share is its summed
-  magic over summed dmg (0.5 with none), every other trait the sum of v
-- cells [{champion, role, games, centre[18], dev[18], sd[18], clear [feature indices],
-  group[18], member [group indices]}]: group[f] is the part of dev[f] its kit groups
-  predict (centred memberships, so a non-member's is small and the other way), dev[f] -
-  group[f] the champion's own; groups [{label, words, feature, gamma, sd, members}]
-  (`--groups`, else empty; gamma in logit per sd of the enemy feature);
-  champion-roles with any nonzero deviation only: a seat's term on its team's logit is
-  sum_f dev[f] * ((x[f] - mean[f]) / sd[f] - centre[f]); team terms left out
-  (-0.00001 ± 0.00005)
-- refs [{label, teams, blue}]: blue's part (blue's seat terms minus red's) on 6 dev-val
-  games; the tester checks itself against them (1e-6) and adds the part to the shipped
-  model's logit; draft-ref.json is still checked on the model alone
-
-
-draft-model.json (format meiolol-draft-model, version 4; 3 had no pairs, 2 no
-temperature, 1 no p and no comp):
-- meta: name ("win-ratings (ratings)"), run, snapshot, newest_game, training_games
-  (games that lasted 15:00, as the harness fits), patch (the share patch: the newest
-  with 20,000+ games every platform, else the newest; draftfile.min_share_games),
-  patch_games (its games), oldest_patch and newest_patch (training games'; 21 Oct, older
-  files lack them), platform (EUW1: the intercept used), dev {what, games, log_loss,
-  baseline_log_loss, coin_log_loss, accuracy, auc}: a refit on dev's games, scored on
-  dev-val, as described in `what`
-- roles: top, jungle, middle, bottom, utility; role fields are indices into it
-- has_pairs: false for rates and ratings. Then the other picks shift the numbers, not
-  the order of candidates for a slot. true for embeddings and additive
-- min_games: default floor of training games in the role to list a candidate (100)
-- champions [{id, name, alias}]: alias is the name lowercased, letters and digits only
-- cells [{champion, role, games, patch_games, patch_share}]: training games in the role
-  (every patch); games and share of the role's games on the share patch (random games,
-  picker order, role averages)
-- average[role] {b, u, v, s, p, raw}: the empty-slot term, patch_share-weighted mean of the
-  role's terms on the share patch
-- model {kind, dim, intercept, w[25], z[25], terms [{champion, role, games, b, sd, u, v,
-  s, p, raw}], comp, temperature}: temperature multiplies the whole logit and the
-  interval's ends (calibration; draft.zig default_temperature 0.80: win-ratings' preds on
-  win-comp's 5 forward folds of 2055Z, 44,353 games, fitted 0.80 ± 0.11, its top tenth
-  said 58.6% and won 55.8%; `--temperature T` overrides, 1 is the raw model; refitted per
-  pin on that pin's fold preds: snap-20261013T2253Z before its global re-cut, 78,036 fold
-  games, 0.89 ± 0.04, folds 0.71-1.30, dev-val 1.02 ± 0.10, so with ~2x the fit games
-  ratings is less over-confident; the shipped fit has more games than any fold, so the
-  folds' T may shrink slightly too much; after the all-platform re-cut, 134,375 fold
-  games: 0.965 ± 0.029, folds 0.86-1.11, dev-val 1.07 ± 0.06, top tenth said 59.8% and
-  won 59.3%. Export 20261014T004029Z-draft-export-2253Z (0c3e486, --temperature 0.965)
-  fits on all 363,472 played games, test and every platform included, as shipped models
-  now do). Every shown chance, slot list and comp reason
-  uses it; ratings, comp parts and the debug trace's
-  terms stay in the model's own logit; u, v, s are length dim (empty for rates and ratings); w and z
-  row-major 5 x 5; p the champion-role's profile (k numbers, z-scored within the role;
-  empty without comp); raw the profile in raw units, all 12 of win-comp's Feature order
-  (magic share of damage first, damage per minute third; empty without team terms). b
-  already holds any profile prior
-- pairs (null except additive): {min_games, groups [{name, kind ("ally" or "matchup"), r,
-  q, sd (the block's sd in logit: spread of true effects), fitted, shipped (cells in the
-  fit and in the file)}], cells [[group, a, b, theta, games]]}: group indexes groups;
-  theta in logit, rounded to 1e-5; cells on fewer than min_games fit games (default 20)
-  are left out and count 0, the prior mean (the export prints how far that moves blue's
-  logit). Additive's terms: b champion strength, sd 1 / sqrt(posterior curvature), raw
-  the champion-role's damage mix profile (magic share at 0, damage per minute at 2,
-  the rest 0); comp has no stats and one team term, mix at centre 0.5
-- comp (null without comp terms, win-comp): stats [{name, label}] (k; label plain English
-  for the tester's reasons), S and A (k x k row-major; S symmetric, an off-diagonal pair's
-  weight split half and half; A antisymmetric), S_sd and A_sd (Laplace sd per entry), team
-  [{kind, stat (unused), centre, weight, sd (optional)}] (within-team terms on f, the
-  team's damage-weighted magic share: kinds mix, ad_heavy, ap_heavy; any other kind stops
-  the export and the page), beta (5 x k profile prior per role, shown only)
-
-Scoring (Scorer in draft.zig, the reference). Each slot is a champion-role term; an
-empty slot, or a champion with no term in that role, is average[role] with sd 0. B_r and
-R_r are blue's and red's slot in role r:
-
-```
-logit = intercept + sum_r (B_r.b - R_r.b)
-      + sum_{ri,rj} w[ri*5+rj] * (<B_ri.u, R_rj.v> - <R_ri.u, B_rj.v>)
-      + sum_{a<b} z[a*5+b] * (<B_a.s, B_b.s> - <R_a.s, R_b.s>)
-      + P_b' S P_b - P_r' S P_r + P_b' A P_r     P_b = sum_r B_r.p, P_r = sum_r R_r.p
-      + sum_team weight * (form(f_b - centre) - form(f_r - centre))
-      + pairs (below)
-f = sum_r raw.dmg * raw.magic / sum_r raw.dmg (0.5 if no damage); form: mix d^2,
-ad_heavy min(d, 0)^2, ap_heavy max(d, 0)^2
-blue = 1 / (1 + exp(-T logit)); red = 1 - blue          T = model.temperature (1 if absent)
-var = sum over the 10 slots of sd^2;  interval = sigmoid(T (logit -/+ 1.96 sqrt(var)))
-```
-
-pairs, per group (an empty slot touches no cell): ally cell(B_r, B_q) - cell(R_r, R_q);
-matchup r < q cell(B_r, R_q) - cell(R_r, B_q); matchup r = q with a = B_r, b = R_r: 0
-if a = b, else cell(min, max) signed + if a < b, - if not. Additive's temperature:
-default_temperature_additive 1.01, fitted on effects' v2 "full" preds on 2253Z's 5
-forward folds (run 20261014T041809Z-e53v2-V0, 134,375 games): 1.01 ± 0.03, folds
-0.96-1.10, dev-val 1.14 ± 0.05; the top tenth said 61.1% and won 61.2%. Unlike ratings
-(0.80 on 2055Z, 0.965 on 2253Z) the shrunk additive model needs no calibration.
-
-sd is a Laplace approximation of each rating's own uncertainty, 1 / sqrt(games / 4 +
-prior precision), treated as independent: parameter uncertainty, not the game's.
-Slot query (the tester's list): candidates are champions with games >= min_games in the
-role, not picked by either team and not banned; win is the user's team's chance with it
-in the slot, change = win minus the chance with the slot empty, and "an average pick" is
-the mean of the candidates' win weighted by their games in the role.
-Comp reasons (the tester, with comp terms): each S and A entry's and team term's part of
-the picking side's logit change when the candidate fills the empty slot (A from that
-side: mine'A theirs), in pp through the sigmoid's secant over the whole change, +-1.96 sd
-of the entry ("no range exported" without one); pair reasons the same way, each cell the
-candidate touches as "with your X" or "against their X", with the cell's games for want
-of an sd; the two largest of either kind are shown. The win interval stays ratings-only.
-
-draft-ref.json: `tolerance` 1e-9; `drafts` [{label, teams[side][role] (0 empty), blue
-{p, lo, hi}, comp (the comp part of blue's logit), pairs (the pair part)}] (three EUW1 test games whole and with
-three slots empty, the empty board, every slot a champion with no term in its role, and
-Rammus jungle alone into a full AP and a full AD red team); `slots` [{label, role, side,
-teams (by side), bans, min_games, empty, average, options [{champion, games, win, lo, hi,
-change}] sorted by win, then champion id}] (blue middle to fill, red middle to fill, blue
-jungle to fill into 5 AP and into 5 AD). Export
-checks the scorer against the candidate's own predict (through the same temperature) on
-500 test games and stops if they differ by more than 1e-4 (f32: ~5e-8 measured); for
-additive, against additive.predict with the exported cells (floor and rounding applied),
-the shipped mix profiles and EUW1's side term. meta.dev for additive: log loss per game,
-baseline champion strength alone.
-
-### Lane model file (meiolol-lab lane --export)
-
-`meiolol-lab lane SNAP --export DIR` (src/lab/lane.zig, built with
--Dcand=src/lab/cand/team2, the candidate with `exportLane`) fits 3c-team2 on every game
-that reached 15:00 and writes DIR/lane-model.json and DIR/lane-ref.json for the admin
-Draft tester's champion suggester (meiolol-3b): early outcomes for a champion into a lane
-opponent. Champion-only inputs; admin only. Run it through deploy/lab-run.sh with
-`-- lane "~/ml/snaps/SNAP" --export .` (first run 20261012T2326Z-lane-export: 182,748
-games, 849 champion terms, 48,194 pairs, 2.8 MB).
-
-`meiolol lane-model [--out DIR]` (src/lanemodel.zig, default DATA/tester) fits the same
-candidate (team2's fitLane: its fit on compact rows, lane outcomes only) on every played
-game in the database and writes the same files, daily on the box beside `meiolol
-draft-model` (served at /admin/models/). Its rows are the lab's (gold14 from
-participants, else the timeline's; the rest from timelines that reached 15:00; one
-participants pass and one timelines pass), 0.9 GB peak for 800k games where the lab's
-full rows take 4.8 GB. On snap-20261017T1320Z (17 Oct) every term, pair cell, intercept
-and dev figure equals the lab export's; 137 s on the Mac. The scorer and writer are
-src/lanefile.zig, shared with lab/lane.zig.
-
-lane-model.json (format meiolol-lane-model, version 1); every number rounded to 0.01:
-- meta: name, run, snapshot, newest_game, training_games, patch (newest: its offset is
-  in the intercept), oldest_patch and newest_patch (training games'), platform
-  (EUW1), dev [{outcome, unit, rows, err_base, err_cand, removed_pct, removed_half}]: a
-  refit on dev's games scored on dev-val (typical miss in the unit, % of the champion-role
-  baseline's error removed, 95% half-width)
-- roles; outcomes [gold14, lanediff14, cs10, deaths15]; units [gold, gold, CS, deaths]:
-  every per-outcome array below is in this order
-- champions [{id, name, alias}]
-- intercept[o][role]: role mean + EUW1's platform offset + the newest patch's offset
-- others[o][role]: the other eight slots at their average (rows-weighted mean of the
-  duo, jungle and rest terms)
-- spread[o][role]: residual sd, the typical game-to-game spread around an expectation
-- champ, enemy [{champion, enemy (0), role, n, b[o], sd[o]}]: own champion's term, and
-  the lane opponent's own term for the player in that role; n training rows (gold14's)
-- pair_columns, pairs: lane cells (own champion vs opponent, every pair with a training
-  game) as arrays [champion, enemy, role, n, b x4, sd x4]
-
-Scoring (Scorer in lane.zig, the reference). For champion X in role r into opponent Y,
-per outcome o, a missing term counting 0:
-
-```
-value = intercept[o][r] + others[o][r] + champ(X, r).b[o] + enemy(Y, r).b[o] + pair(X, Y, r).b[o]
-range = value -/+ 1.96 sqrt(sum of the present terms' sd[o]^2)
-```
-
-sd is each shrunk effect's posterior, sigma / sqrt(n + k), in the outcome's units:
-uncertainty of the average, not of one game (spread is that). lane.zig checks the
-export against the model's predictions before writing (max |diff| 0.02, rounding).
-lane-ref.json: per role the 4 most played pairs, a champion into an opponent with no
-pair cell and an unknown champion (id 0), each with value, lo, hi, champ_games and
-pair_games from Scorer.value; the page's JS must match them to 0.01.
-
-### In-game model file (py/state/stateship.py)
-
-Your games' win chance by minute (src/statemodel.zig) is richc ("Rich state and
-champions (richc)"). `deploy/lab-run.sh start gpu-box state-ship --python
-py/state/stateship.py --with py/xcheck/nnsets.py -- '$HOME/ml/snaps/SNAP' --out out`
-fits it on every played game with a timeline (test included, as shipped exports do),
-the same procedure as one statemodels.py block: win-ratings L2 and richc's ridge
-picked on the newest 10% of games, the fit rows' draft logit cross-fitted in 5 parts,
-rows every other minute 1-40. It writes out/state-model.bin, copied to
-src/state_model.bin (embedded in the binary), and out/state-check.tsv (match_id,
-minute, p: blue's chance for 500 random fitted games from the file's numbers, which
-stateship checks against the fit's own predict, max |diff| under 1e-5). Then
-`meiolol-lab state-export SNAP --check state-model.bin state-check.tsv` recomputes
-those chances in Zig from the timelines (livestate.zig, the code state-export uses)
-and exits 1 when any differs by more than 1e-4.
-
-state-model.bin, little-endian, version 1:
-- header (180 bytes): magic "meiolol-state" padded with zeros to 16 bytes; u32
-  version, F (features, 91), K (knots), P (platforms), C (champion-role terms),
-  training games, 0; i64 newest game start (ms); snapshot and run names, 64 bytes each,
-  zero-padded
-- K f32 knots (minutes 1, 5, ..., 40)
-- F names, 24 bytes each, zero-padded: statecommon.features' order, which
-  statemodel.zig's `names` must equal (parse refuses the file otherwise)
-- F f32 mu, F f32 sd (standardisation from the fit rows), F x K f32 W (feature-major),
-  K f32 b (intercept by knot)
-- f32 default platform intercept (fit games' mean), then P x (8-byte platform id, f32
-  intercept): win-ratings' platform term
-- C x (u32 Riot champion id, u32 role 0-4 as core.Role, f32 rating, K f32 effect): the
-  champion-role's win-ratings term and its richc effect by knot; a champion-role not in
-  the file counts 0
-
-Scoring (statemodel.zig; seats s = side x 5 + role, blue 0-4):
-
-```
-draft  = intercept[platform] + sum_{s<5} rating(s) - sum_{s>=5} rating(s)
-x      = features(state at minute m, draft)       (91, blue minus red, units as statecommon)
-h      = hat(m): weights linear between knots, m clipped to [first, last] knot
-logit  = sum_k h_k (b_k + sum_f (x_f - mu_f) / sd_f W[f,k]
-                    + sum_{s<5} effect(s)_k - sum_{s>=5} effect(s)_k)
-blue   = 1 / (1 + exp(-logit)); 0.5 at minute 0; none once the game has ended
-```
-
-Shipped file: run 20261014T211923Z-state-ship-2253Zr (snap-20261013T2253Z re-cut, 6dd6bfe):
-286,721 played games with a timeline (358,334 played; test included), 4,160,946 fit
-rows, ratings L2 1e-3, ridge 1e-5 (newest 10%: 0.50797 at 1e-5, 0.51191 at 3e-4: the
-grid's edge again), champion effect sd by knot 0.09, 0.14, 0.16, 0.16, 0.16, 0.15,
-0.12, 0.09, 0.05; 863 champion-role terms, 48,048 bytes, default intercept 0.023; the
-file against the fit's predict on 500 games (14,087 game-minutes): max |diff| 2.2e-7;
-statemodel.zig from the timelines against the file's chances on the same game-minutes
-(run 20261014T215013Z-state-ship-check, e8cb4b0): max |diff| 2.1e-8.
-Rare champion-roles are shrunk hard (under 30 games: largest effect at any knot 0.10;
-1,000+ games: median 0.19, largest 0.77, Kayle middle late), so effects are those of
-picks seen often.
-
-Your games: every side's five teamPositions once, else winchance.zig; the platform
-from the match id; completed items from the newest curves patch's legendaries
-(ddragon), as the lab uses its patch's legendaries.tsv. Ranked solo fit, shown for
-flex, draft and Swiftplay too (as winchance was).
-
 ### PyTorch cross-check, 2026-10-14 (meiolol-58)
 
 Question: does each Zig model train as written? A second implementation in Python
@@ -4605,124 +4332,6 @@ Reading (dev, no test look):
   -0.00017 to -0.00019 vs ratings. The 2055Z gap above was small data
 - Tried in torch (cheap there): an exponential average of the weights (EMA 0.99) helps a
   single small net (-0.00024) but not a 10-seed ensemble (-0.00002 ± 0.00010): no
-
-### Model tests, 2026-10-13 (meiolol-tests: meiolol-0a [8b5601], then meiolol-d8)
-
-Question: do the models work and train properly, and could they have detected the effects
-we call "not detected"? Three kinds of check, all on the gpu-box:
-- Golden numbers: `deploy/golden.sh [--commit SHA] [--test] [CASE...]` reruns the reference
-  models of docs/golden.tsv on their snapshot and needs each published log loss to the
-  last digit; a miss is a finding, never a reason to edit the expected value. Test cases
-  (`*-test`) only with `--test` or by name: the test looks ledger (looks.zig) counts each
-  rerun as a look. Run it after any tooling or numeric change (~2 min)
-- Training health: `meiolol-lab health` (src/lab/health.zig, ~25 s) trains each net family
-  on synthetic games with a known logit through its healthFit entry point
-- Planted effects: any command's SNAP may be `plant:SPEC:PATH` (src/lab/synth.zig): the
-  real games, drafts, folds and seat stats, with only who won redrawn from a logit with
-  known planted terms (champion-role strengths, an ally pair, a lane matchup, every ally
-  pair or matchup with its own effect, the damage mix, per-player champion experience).
-  `meiolol-lab plant-score PLANT PREDS.tsv [REF]` then scores any model's per-game preds
-  against the truth: loss vs the reference, the oracle's loss, and the share of each
-  planted part the model's logit carries ("captured": slope on that part, 1 all of it)
-
-Golden, snap-20261012T2055Z: all 6 reproduce to the last digit at d87d8d7 (74cf241); the
-4 non-test cases again at a7961de (f98213f).
-Golden moved at 85fd62a (one time cut over every platform, 14 Oct), by design: dev-val
-went from 8,500 EUW1 games to 22,174 games on every platform (85,000 to 221,740 rows), the
-folds' cut moved with the test cut. Parent c4e8077 gives all 4 non-test cases exactly; from
-85fd62a on, ratings-dev 0.68867, comp-dev 0.68835, ratings-folds 0.68947, comp-folds
-0.68905 (same at 616e0a6 and e0ef0f5). Test cases not rerun (each is a look). golden.tsv
-still holds the old-protocol values: new ones are Jacob's call.
-
-| case | published | got |
-| --- | --- | --- |
-| win-ratings dev-val | 0.68969 | 0.68969 |
-| win-comp dev-val | 0.68999 | 0.68999 |
-| win-ratings folds | 0.69090 | 0.69090 |
-| win-comp folds | 0.69033 | 0.69033 |
-| win-ratings test (rerun of look 20261013T195618Z) | 0.69064 | 0.69064 |
-| win-comp test (rerun of look 20261013T195708Z) | 0.69065 | 0.69065 |
-
-Health: 0 of 45 checks failed (run 20261013T225211Z-tst-health3, c3347bb), 9 per family:
-big (draftnet), small and resid (winnet), set (setnet), player (playernet). Per family:
-loss at init within 0.01 of the base rate's (the offset's for residual nets: their output
-weights start at 0); logit sum with sides swapped constant at init and after training
-(antisymmetry); held-out loss below the base rate's by > 0.03 after training (largest
-seen 0.165, smallest 0.145, resid); trains a tiny random-label set to ~0 loss (set net
-0.0012, limit 0.45: dropout and mean pooling); same seed gives identical parameters, seed
-2 differs; no non-finite parameters. Not covered yet: win-ratings, win-comp, stacking and
-GBDT themselves (the golden numbers cover the first two).
-
-Planted sweep 1: netcheck --net small --max-epochs 1 --seeds 1 on planted copies of
-snap-20261012T2055Z (pinned commit d87d8d7), win-ratings or win-comp as the candidate,
-champion sd 2.5 pp (too wide: ratings reach 0.684 on folds vs 0.691 real; later sweeps use
-1.7). Folds, 44,353 games; mix in pp per sd of win-comp's mix form; oracle = what the
-planted term is worth in nats/game to the truth on these games.
-
-| planted mix | win-comp captured, seeds 1/2/3 (± ~0.03) | oracle value |
-| --- | --- | --- |
-| -1 | 0.74 / 0.61 / 1.01 | -0.00018, +0.00003, -0.00022 (± 0.0002) |
-| -2 | 0.91 / 0.60 / 0.99 | -0.00077, -0.00036, -0.00077 (± 0.0004) |
-| -4 | 0.92 / 0.83 / 0.94 | -0.00293, -0.00221, -0.00302 (± 0.0007) |
-
-Runs 20261013T221917Z-tst-wr-none-s1 to 20261013T222133Z-tst-wc-mix4-s3 (17, list in
-the tests progress file), scored by tst-score-*.
-- win-comp finds the planted mix in 9 of 9 runs, down to 1 pp per sd (at ~90k fit games
-  its se is ~0.17 pp, so 1 pp is ~6 se); the captured share's seed spread (0.6-1.0) is
-  estimation noise
-- But a 1 pp/sd effect is worth ~0.0001-0.0002 nats/game, under the folds' paired noise
-  (± ~0.0003, and the floor ± ~0.0005): a real effect of that size shows as an effect
-  estimate yet "not detected" as a gain. So report the effect with its interval beside
-  the gain. The real fit, mix -1.50 ± 0.33 pp/sd with a folds gain of -0.00057 ± 0.00028,
-  is in line with a true effect of ~1.5-2 pp/sd
-- win-ratings alone carries 39% of a planted -4 mix through champion strengths (paired at
-  mix -4, seed 1: win-comp -0.0009 vs ratings, against an oracle -0.0029): a comp term's
-  gain over ratings understates the comp effect
-- Controls (win-ratings, synergy 4, counter 4, skill 1): ratings carry 43% ± 4 of the top
-  ally pair (4,749 team-games) and 29% ± 5 of the top lane matchup (3,789 games) through
-  the two champions' strengths, and 3% ± 2 of skill (no experience input)
-- Nothing planted: win-comp equals win-ratings within 0.00002 (no false mix)
-- Small net, 1 epoch, one seed, is worse than its candidate on planted data (+0.0017 on
-  folds): as on real data, not a health failure
-
-Planted tests of the additive effects model ("Effects and the CPU model"): `effects
-plant:seed=1,champ=1.7[,X]:snap-20261012T2055Z --blocks 1,2,3,4,5 --boot 50 --drop 0`
-(a7961de, --null 10), fitted on dev's 88,706 fit games; block sd = sd_corr_pp, win pp at
-50%; covers = its 95% interval holds the planted value; captured from plant-score of the
-fold games files (44,353 games).
-
-| planted | blocks | mean sd | covers | detected | full: captured, vs ratings |
-| --- | --- | --- | --- | --- | --- |
-| nothing | 10 ally, 25 enemy | 0.00 | 10/10 ally | 0/35 | -, -0.00003 ± 0.00020 |
-| nothing | 5 champion (1.7) | 1.65 | 4/5 | 5/5 | |
-| ally pairs sd 2 | 10 ally | 1.21 | 1/10 | 6/10 | 10%, -0.00114 ± 0.00034 |
-| ally pairs sd 4 | 10 ally | 2.99 | 0/10 | 10/10 | 22%, -0.01272 ± 0.00115 |
-| matchups sd 2 | 5 same-role lanes (cell 1.0) | 0.90 | 2/5 | 3/5 | 13%, -0.00055 ± 0.00027 |
-| matchups sd 4 | 5 same-role lanes (cell 2.0) | 2.02 | 4/5 | 5/5 | 28%, -0.00578 ± 0.00078 |
-| mix -2 pp/sd | damage mix | -1.69 ± 0.33 | yes | yes | 94%, -0.00022 ± 0.00032 |
-
-Runs 20261013T230632Z-tst-eff-none, 230656Z-pair2, 230723Z-pair4, 230751Z-ctr2,
-230817Z-ctr4, 230841Z-mix2; scores 233602Z..233749Z-tst-score-eff-*.
-- No false effects: with nothing planted every pair block is ~0 and the gain is nil
-- Lane blocks are half the matchup's spread: a same-role matchup enters the logit as
-  theta(a, b) - theta(b, a) (additive.cells), so an antisymmetric matchup effect c is fitted
-  as c / 2 per cell. Read "X vs their X" x2 for a matchup's spread (top vs top 1.23 pp:
-  ~2.5 pp per matchup). Bottom vs support across lanes is one matchup split over two
-  blocks (planted 4: 3.43 and 0.00; 2: 0.87 and 0.53): one block, root sum of squares
-- Ally block sds run low, 40% at 2 pp and 25% at 4, always low, and their intervals rarely
-  hold the truth: a reported ally sd is a lower bound, and "not detected" ally blocks
-  could hide ~2 pp (6 of 10 detected at 2 pp)
-- At ally pair sd 4 the jungle and bottom champion blocks collapse to ~0 (strength moved
-  into pair cells); at the real ally sizes (< 1.5) champion blocks hold
-- A big planted pair term is mostly not learnable at 89k games: ally pairs sd 2 are worth
-  -0.016 nats/game to an oracle, the model gets 10% of that. Blocks, not single pairs
-- The mix comes back within its interval and nearly whole (94%), yet its gain over ratings
-  (-0.00022 ± 0.00032) is not detected: as with win-comp, report the effect estimate
-
-Rules of thumb for minimum detectable effects (MDE, 80% power at 5%): a binary term held
-by m games has se ~50/sqrt(m) pp, MDE ~140/sqrt(m) pp (a pair in 5,000 games: ~2 pp; in
-500: ~6 pp); a per-sd term on n games has se ~50/sqrt(n) pp (matches win-comp's -1.50 ±
-0.33 at 89k). As a log-loss gain the bar is far higher (above).
 
 ### Nets on the shipped model, 2026-10-18 (meiolol-2b)
 
@@ -5848,6 +5457,402 @@ accuracy 54.8% against 54.4%.
   (tuned priors, empirical Bayes, the tuning grid) sums its terms plainly as before
 - Values are fixed, not retuned daily: prior strengths reflect the real spread between
   champions, not the sample size. Revisit when the daily tuning drifts from them
+
+## Model files and tests
+
+### Draft model file (meiolol draft-model, meiolol-lab draft --export)
+
+`meiolol draft-model [--out DIR]` (src/draftmodel.zig, default DATA/tester) writes the
+shipped model (core.score, Options defaults, as the site and app score drafts) fitted on
+every played game in the database, every platform and patch: kind "draft", the same file
+as the win-draft export below (17 Oct, snap-20261017T1320Z: every term and pair cell
+equal, 800,302 games, 6 s on the Mac; meta.snapshot "box database"). It stops unless
+the file's scorer matches core.score.draftWin on 500 test games within 1e-4 (5e-9
+measured); meta.dev refits on the played games older than dev-val and scores dev-val per
+game, baseline champion strength alone. Daily on the box (deploy/web-loop.sh), served at
+/admin/models/ with the admin upload. The tester's Model switch picks the draft model:
+"Shipped model" (this file) or "Lab experiment" (/admin/training/, `lab-push.sh use`, with
+the set net when draft-setnet.json is there); the lane model is the box's, else the lab's;
+comp terms the lab's. It also writes champ/<id>.json (and .gz) per champion: by role, its team's
+chance against an average draft (95% range) and with each opponent ("vs") and ally
+("with") it has a cell with, [role, champion, chance, games], every other slot its
+role's average pick; the private site's pv.js shows them on champion and matchup pages
+(docs/plan/app.md "Private site"). The scorer and writer are src/draftfile.zig, shared
+with the lab.
+
+`meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has
+`exportModel`, today win-ratings) fits on every game in the snapshot and writes
+DIR/draft-model.json and DIR/draft-ref.json for the admin draft board (meiolol-3b).
+With `--model additive [--pair-floor N]` it fits the additive model instead (effects'
+v2 "full": champion strength, ally pairs, the 15 identified matchup blocks, damage mix;
+src/lab/addinputs.zig builds its inputs for both, so the shipped model is the evaluated
+one) on every played game, -Dcand unused; needs seat stats.
+Admin only: the public site never shows "this draft wins X%" (docs/learned.md). Run it
+into a run dir on the Mac (~/ml/runs/<stamp>-draft-export); lab-push.sh sends the newest.
+Built with -Dcand=src/lab/cand/win-draft it exports the shipped model (kind "draft",
+17 Oct): b the weighted base, pairs every ally pair and matchup cell with the term weight
+folded into theta (min_games 1, nothing left out), intercept 0, temperature 1 (pass
+`--temperature 1`: the cand default is 0.80); the scorer check came out at 3e-8 on 500
+test games, so the tester scores drafts as the app and site do. Its companion,
+`meiolol-lab champcomp SNAP --export DIR` (same cand), writes DIR/draft-comp.json:
+
+- format meiolol-champcomp, version 2 (1: 16 features, no groups; the tester reads both);
+  meta {snapshot, offset "win-draft", fit_games
+  (dev-val's: dev games, no test look), what, folds and devval {mean, half, n} (nats a
+  game against the offset), better (of 5), clear, tests, bh}
+- traits [9 labels, the last auto-attack build: `--aa`, 0 without]; features [18 {name,
+  label, mean, sd}]: the enemy's five, then the seat's four allies; mean and sd
+  standardise the raw set traits
+- seats [[champion, role, magic, dmg, v1..v8]] and role_seats [5][magic, dmg, v1..v8]
+  (an empty slot or a champion-role with no profile): a set's AP share is its summed
+  magic over summed dmg (0.5 with none), every other trait the sum of v
+- cells [{champion, role, games, centre[18], dev[18], sd[18], clear [feature indices],
+  group[18], member [group indices]}]: group[f] is the part of dev[f] its kit groups
+  predict (centred memberships, so a non-member's is small and the other way), dev[f] -
+  group[f] the champion's own; groups [{label, words, feature, gamma, sd, members}]
+  (`--groups`, else empty; gamma in logit per sd of the enemy feature);
+  champion-roles with any nonzero deviation only: a seat's term on its team's logit is
+  sum_f dev[f] * ((x[f] - mean[f]) / sd[f] - centre[f]); team terms left out
+  (-0.00001 ± 0.00005)
+- refs [{label, teams, blue}]: blue's part (blue's seat terms minus red's) on 6 dev-val
+  games; the tester checks itself against them (1e-6) and adds the part to the shipped
+  model's logit; draft-ref.json is still checked on the model alone
+
+
+draft-model.json (format meiolol-draft-model, version 4; 3 had no pairs, 2 no
+temperature, 1 no p and no comp):
+- meta: name ("win-ratings (ratings)"), run, snapshot, newest_game, training_games
+  (games that lasted 15:00, as the harness fits), patch (the share patch: the newest
+  with 20,000+ games every platform, else the newest; draftfile.min_share_games),
+  patch_games (its games), oldest_patch and newest_patch (training games'; 21 Oct, older
+  files lack them), platform (EUW1: the intercept used), dev {what, games, log_loss,
+  baseline_log_loss, coin_log_loss, accuracy, auc}: a refit on dev's games, scored on
+  dev-val, as described in `what`
+- roles: top, jungle, middle, bottom, utility; role fields are indices into it
+- has_pairs: false for rates and ratings. Then the other picks shift the numbers, not
+  the order of candidates for a slot. true for embeddings and additive
+- min_games: default floor of training games in the role to list a candidate (100)
+- champions [{id, name, alias}]: alias is the name lowercased, letters and digits only
+- cells [{champion, role, games, patch_games, patch_share}]: training games in the role
+  (every patch); games and share of the role's games on the share patch (random games,
+  picker order, role averages)
+- average[role] {b, u, v, s, p, raw}: the empty-slot term, patch_share-weighted mean of the
+  role's terms on the share patch
+- model {kind, dim, intercept, w[25], z[25], terms [{champion, role, games, b, sd, u, v,
+  s, p, raw}], comp, temperature}: temperature multiplies the whole logit and the
+  interval's ends (calibration; draft.zig default_temperature 0.80: win-ratings' preds on
+  win-comp's 5 forward folds of 2055Z, 44,353 games, fitted 0.80 ± 0.11, its top tenth
+  said 58.6% and won 55.8%; `--temperature T` overrides, 1 is the raw model; refitted per
+  pin on that pin's fold preds: snap-20261013T2253Z before its global re-cut, 78,036 fold
+  games, 0.89 ± 0.04, folds 0.71-1.30, dev-val 1.02 ± 0.10, so with ~2x the fit games
+  ratings is less over-confident; the shipped fit has more games than any fold, so the
+  folds' T may shrink slightly too much; after the all-platform re-cut, 134,375 fold
+  games: 0.965 ± 0.029, folds 0.86-1.11, dev-val 1.07 ± 0.06, top tenth said 59.8% and
+  won 59.3%. Export 20261014T004029Z-draft-export-2253Z (0c3e486, --temperature 0.965)
+  fits on all 363,472 played games, test and every platform included, as shipped models
+  now do). Every shown chance, slot list and comp reason
+  uses it; ratings, comp parts and the debug trace's
+  terms stay in the model's own logit; u, v, s are length dim (empty for rates and ratings); w and z
+  row-major 5 x 5; p the champion-role's profile (k numbers, z-scored within the role;
+  empty without comp); raw the profile in raw units, all 12 of win-comp's Feature order
+  (magic share of damage first, damage per minute third; empty without team terms). b
+  already holds any profile prior
+- pairs (null except additive): {min_games, groups [{name, kind ("ally" or "matchup"), r,
+  q, sd (the block's sd in logit: spread of true effects), fitted, shipped (cells in the
+  fit and in the file)}], cells [[group, a, b, theta, games]]}: group indexes groups;
+  theta in logit, rounded to 1e-5; cells on fewer than min_games fit games (default 20)
+  are left out and count 0, the prior mean (the export prints how far that moves blue's
+  logit). Additive's terms: b champion strength, sd 1 / sqrt(posterior curvature), raw
+  the champion-role's damage mix profile (magic share at 0, damage per minute at 2,
+  the rest 0); comp has no stats and one team term, mix at centre 0.5
+- comp (null without comp terms, win-comp): stats [{name, label}] (k; label plain English
+  for the tester's reasons), S and A (k x k row-major; S symmetric, an off-diagonal pair's
+  weight split half and half; A antisymmetric), S_sd and A_sd (Laplace sd per entry), team
+  [{kind, stat (unused), centre, weight, sd (optional)}] (within-team terms on f, the
+  team's damage-weighted magic share: kinds mix, ad_heavy, ap_heavy; any other kind stops
+  the export and the page), beta (5 x k profile prior per role, shown only)
+
+Scoring (Scorer in draft.zig, the reference). Each slot is a champion-role term; an
+empty slot, or a champion with no term in that role, is average[role] with sd 0. B_r and
+R_r are blue's and red's slot in role r:
+
+```
+logit = intercept + sum_r (B_r.b - R_r.b)
+      + sum_{ri,rj} w[ri*5+rj] * (<B_ri.u, R_rj.v> - <R_ri.u, B_rj.v>)
+      + sum_{a<b} z[a*5+b] * (<B_a.s, B_b.s> - <R_a.s, R_b.s>)
+      + P_b' S P_b - P_r' S P_r + P_b' A P_r     P_b = sum_r B_r.p, P_r = sum_r R_r.p
+      + sum_team weight * (form(f_b - centre) - form(f_r - centre))
+      + pairs (below)
+f = sum_r raw.dmg * raw.magic / sum_r raw.dmg (0.5 if no damage); form: mix d^2,
+ad_heavy min(d, 0)^2, ap_heavy max(d, 0)^2
+blue = 1 / (1 + exp(-T logit)); red = 1 - blue          T = model.temperature (1 if absent)
+var = sum over the 10 slots of sd^2;  interval = sigmoid(T (logit -/+ 1.96 sqrt(var)))
+```
+
+pairs, per group (an empty slot touches no cell): ally cell(B_r, B_q) - cell(R_r, R_q);
+matchup r < q cell(B_r, R_q) - cell(R_r, B_q); matchup r = q with a = B_r, b = R_r: 0
+if a = b, else cell(min, max) signed + if a < b, - if not. Additive's temperature:
+default_temperature_additive 1.01, fitted on effects' v2 "full" preds on 2253Z's 5
+forward folds (run 20261014T041809Z-e53v2-V0, 134,375 games): 1.01 ± 0.03, folds
+0.96-1.10, dev-val 1.14 ± 0.05; the top tenth said 61.1% and won 61.2%. Unlike ratings
+(0.80 on 2055Z, 0.965 on 2253Z) the shrunk additive model needs no calibration.
+
+sd is a Laplace approximation of each rating's own uncertainty, 1 / sqrt(games / 4 +
+prior precision), treated as independent: parameter uncertainty, not the game's.
+Slot query (the tester's list): candidates are champions with games >= min_games in the
+role, not picked by either team and not banned; win is the user's team's chance with it
+in the slot, change = win minus the chance with the slot empty, and "an average pick" is
+the mean of the candidates' win weighted by their games in the role.
+Comp reasons (the tester, with comp terms): each S and A entry's and team term's part of
+the picking side's logit change when the candidate fills the empty slot (A from that
+side: mine'A theirs), in pp through the sigmoid's secant over the whole change, +-1.96 sd
+of the entry ("no range exported" without one); pair reasons the same way, each cell the
+candidate touches as "with your X" or "against their X", with the cell's games for want
+of an sd; the two largest of either kind are shown. The win interval stays ratings-only.
+
+draft-ref.json: `tolerance` 1e-9; `drafts` [{label, teams[side][role] (0 empty), blue
+{p, lo, hi}, comp (the comp part of blue's logit), pairs (the pair part)}] (three EUW1 test games whole and with
+three slots empty, the empty board, every slot a champion with no term in its role, and
+Rammus jungle alone into a full AP and a full AD red team); `slots` [{label, role, side,
+teams (by side), bans, min_games, empty, average, options [{champion, games, win, lo, hi,
+change}] sorted by win, then champion id}] (blue middle to fill, red middle to fill, blue
+jungle to fill into 5 AP and into 5 AD). Export
+checks the scorer against the candidate's own predict (through the same temperature) on
+500 test games and stops if they differ by more than 1e-4 (f32: ~5e-8 measured); for
+additive, against additive.predict with the exported cells (floor and rounding applied),
+the shipped mix profiles and EUW1's side term. meta.dev for additive: log loss per game,
+baseline champion strength alone.
+
+### Lane model file (meiolol-lab lane --export)
+
+`meiolol-lab lane SNAP --export DIR` (src/lab/lane.zig, built with
+-Dcand=src/lab/cand/team2, the candidate with `exportLane`) fits 3c-team2 on every game
+that reached 15:00 and writes DIR/lane-model.json and DIR/lane-ref.json for the admin
+Draft tester's champion suggester (meiolol-3b): early outcomes for a champion into a lane
+opponent. Champion-only inputs; admin only. Run it through deploy/lab-run.sh with
+`-- lane "~/ml/snaps/SNAP" --export .` (first run 20261012T2326Z-lane-export: 182,748
+games, 849 champion terms, 48,194 pairs, 2.8 MB).
+
+`meiolol lane-model [--out DIR]` (src/lanemodel.zig, default DATA/tester) fits the same
+candidate (team2's fitLane: its fit on compact rows, lane outcomes only) on every played
+game in the database and writes the same files, daily on the box beside `meiolol
+draft-model` (served at /admin/models/). Its rows are the lab's (gold14 from
+participants, else the timeline's; the rest from timelines that reached 15:00; one
+participants pass and one timelines pass), 0.9 GB peak for 800k games where the lab's
+full rows take 4.8 GB. On snap-20261017T1320Z (17 Oct) every term, pair cell, intercept
+and dev figure equals the lab export's; 137 s on the Mac. The scorer and writer are
+src/lanefile.zig, shared with lab/lane.zig.
+
+lane-model.json (format meiolol-lane-model, version 1); every number rounded to 0.01:
+- meta: name, run, snapshot, newest_game, training_games, patch (newest: its offset is
+  in the intercept), oldest_patch and newest_patch (training games'), platform
+  (EUW1), dev [{outcome, unit, rows, err_base, err_cand, removed_pct, removed_half}]: a
+  refit on dev's games scored on dev-val (typical miss in the unit, % of the champion-role
+  baseline's error removed, 95% half-width)
+- roles; outcomes [gold14, lanediff14, cs10, deaths15]; units [gold, gold, CS, deaths]:
+  every per-outcome array below is in this order
+- champions [{id, name, alias}]
+- intercept[o][role]: role mean + EUW1's platform offset + the newest patch's offset
+- others[o][role]: the other eight slots at their average (rows-weighted mean of the
+  duo, jungle and rest terms)
+- spread[o][role]: residual sd, the typical game-to-game spread around an expectation
+- champ, enemy [{champion, enemy (0), role, n, b[o], sd[o]}]: own champion's term, and
+  the lane opponent's own term for the player in that role; n training rows (gold14's)
+- pair_columns, pairs: lane cells (own champion vs opponent, every pair with a training
+  game) as arrays [champion, enemy, role, n, b x4, sd x4]
+
+Scoring (Scorer in lane.zig, the reference). For champion X in role r into opponent Y,
+per outcome o, a missing term counting 0:
+
+```
+value = intercept[o][r] + others[o][r] + champ(X, r).b[o] + enemy(Y, r).b[o] + pair(X, Y, r).b[o]
+range = value -/+ 1.96 sqrt(sum of the present terms' sd[o]^2)
+```
+
+sd is each shrunk effect's posterior, sigma / sqrt(n + k), in the outcome's units:
+uncertainty of the average, not of one game (spread is that). lane.zig checks the
+export against the model's predictions before writing (max |diff| 0.02, rounding).
+lane-ref.json: per role the 4 most played pairs, a champion into an opponent with no
+pair cell and an unknown champion (id 0), each with value, lo, hi, champ_games and
+pair_games from Scorer.value; the page's JS must match them to 0.01.
+
+### In-game model file (py/state/stateship.py)
+
+Your games' win chance by minute (src/statemodel.zig) is richc ("Rich state and
+champions (richc)"). `deploy/lab-run.sh start gpu-box state-ship --python
+py/state/stateship.py --with py/xcheck/nnsets.py -- '$HOME/ml/snaps/SNAP' --out out`
+fits it on every played game with a timeline (test included, as shipped exports do),
+the same procedure as one statemodels.py block: win-ratings L2 and richc's ridge
+picked on the newest 10% of games, the fit rows' draft logit cross-fitted in 5 parts,
+rows every other minute 1-40. It writes out/state-model.bin, copied to
+src/state_model.bin (embedded in the binary), and out/state-check.tsv (match_id,
+minute, p: blue's chance for 500 random fitted games from the file's numbers, which
+stateship checks against the fit's own predict, max |diff| under 1e-5). Then
+`meiolol-lab state-export SNAP --check state-model.bin state-check.tsv` recomputes
+those chances in Zig from the timelines (livestate.zig, the code state-export uses)
+and exits 1 when any differs by more than 1e-4.
+
+state-model.bin, little-endian, version 1:
+- header (180 bytes): magic "meiolol-state" padded with zeros to 16 bytes; u32
+  version, F (features, 91), K (knots), P (platforms), C (champion-role terms),
+  training games, 0; i64 newest game start (ms); snapshot and run names, 64 bytes each,
+  zero-padded
+- K f32 knots (minutes 1, 5, ..., 40)
+- F names, 24 bytes each, zero-padded: statecommon.features' order, which
+  statemodel.zig's `names` must equal (parse refuses the file otherwise)
+- F f32 mu, F f32 sd (standardisation from the fit rows), F x K f32 W (feature-major),
+  K f32 b (intercept by knot)
+- f32 default platform intercept (fit games' mean), then P x (8-byte platform id, f32
+  intercept): win-ratings' platform term
+- C x (u32 Riot champion id, u32 role 0-4 as core.Role, f32 rating, K f32 effect): the
+  champion-role's win-ratings term and its richc effect by knot; a champion-role not in
+  the file counts 0
+
+Scoring (statemodel.zig; seats s = side x 5 + role, blue 0-4):
+
+```
+draft  = intercept[platform] + sum_{s<5} rating(s) - sum_{s>=5} rating(s)
+x      = features(state at minute m, draft)       (91, blue minus red, units as statecommon)
+h      = hat(m): weights linear between knots, m clipped to [first, last] knot
+logit  = sum_k h_k (b_k + sum_f (x_f - mu_f) / sd_f W[f,k]
+                    + sum_{s<5} effect(s)_k - sum_{s>=5} effect(s)_k)
+blue   = 1 / (1 + exp(-logit)); 0.5 at minute 0; none once the game has ended
+```
+
+Shipped file: run 20261014T211923Z-state-ship-2253Zr (snap-20261013T2253Z re-cut, 6dd6bfe):
+286,721 played games with a timeline (358,334 played; test included), 4,160,946 fit
+rows, ratings L2 1e-3, ridge 1e-5 (newest 10%: 0.50797 at 1e-5, 0.51191 at 3e-4: the
+grid's edge again), champion effect sd by knot 0.09, 0.14, 0.16, 0.16, 0.16, 0.15,
+0.12, 0.09, 0.05; 863 champion-role terms, 48,048 bytes, default intercept 0.023; the
+file against the fit's predict on 500 games (14,087 game-minutes): max |diff| 2.2e-7;
+statemodel.zig from the timelines against the file's chances on the same game-minutes
+(run 20261014T215013Z-state-ship-check, e8cb4b0): max |diff| 2.1e-8.
+Rare champion-roles are shrunk hard (under 30 games: largest effect at any knot 0.10;
+1,000+ games: median 0.19, largest 0.77, Kayle middle late), so effects are those of
+picks seen often.
+
+Your games: every side's five teamPositions once, else winchance.zig; the platform
+from the match id; completed items from the newest curves patch's legendaries
+(ddragon), as the lab uses its patch's legendaries.tsv. Ranked solo fit, shown for
+flex, draft and Swiftplay too (as winchance was).
+
+### Model tests, 2026-10-13 (meiolol-tests: meiolol-0a [8b5601], then meiolol-d8)
+
+Question: do the models work and train properly, and could they have detected the effects
+we call "not detected"? Three kinds of check, all on the gpu-box:
+- Golden numbers: `deploy/golden.sh [--commit SHA] [--test] [CASE...]` reruns the reference
+  models of docs/golden.tsv on their snapshot and needs each published log loss to the
+  last digit; a miss is a finding, never a reason to edit the expected value. Test cases
+  (`*-test`) only with `--test` or by name: the test looks ledger (looks.zig) counts each
+  rerun as a look. Run it after any tooling or numeric change (~2 min)
+- Training health: `meiolol-lab health` (src/lab/health.zig, ~25 s) trains each net family
+  on synthetic games with a known logit through its healthFit entry point
+- Planted effects: any command's SNAP may be `plant:SPEC:PATH` (src/lab/synth.zig): the
+  real games, drafts, folds and seat stats, with only who won redrawn from a logit with
+  known planted terms (champion-role strengths, an ally pair, a lane matchup, every ally
+  pair or matchup with its own effect, the damage mix, per-player champion experience).
+  `meiolol-lab plant-score PLANT PREDS.tsv [REF]` then scores any model's per-game preds
+  against the truth: loss vs the reference, the oracle's loss, and the share of each
+  planted part the model's logit carries ("captured": slope on that part, 1 all of it)
+
+Golden, snap-20261012T2055Z: all 6 reproduce to the last digit at d87d8d7 (74cf241); the
+4 non-test cases again at a7961de (f98213f).
+Golden moved at 85fd62a (one time cut over every platform, 14 Oct), by design: dev-val
+went from 8,500 EUW1 games to 22,174 games on every platform (85,000 to 221,740 rows), the
+folds' cut moved with the test cut. Parent c4e8077 gives all 4 non-test cases exactly; from
+85fd62a on, ratings-dev 0.68867, comp-dev 0.68835, ratings-folds 0.68947, comp-folds
+0.68905 (same at 616e0a6 and e0ef0f5). Test cases not rerun (each is a look). golden.tsv
+still holds the old-protocol values: new ones are Jacob's call.
+
+| case | published | got |
+| --- | --- | --- |
+| win-ratings dev-val | 0.68969 | 0.68969 |
+| win-comp dev-val | 0.68999 | 0.68999 |
+| win-ratings folds | 0.69090 | 0.69090 |
+| win-comp folds | 0.69033 | 0.69033 |
+| win-ratings test (rerun of look 20261013T195618Z) | 0.69064 | 0.69064 |
+| win-comp test (rerun of look 20261013T195708Z) | 0.69065 | 0.69065 |
+
+Health: 0 of 45 checks failed (run 20261013T225211Z-tst-health3, c3347bb), 9 per family:
+big (draftnet), small and resid (winnet), set (setnet), player (playernet). Per family:
+loss at init within 0.01 of the base rate's (the offset's for residual nets: their output
+weights start at 0); logit sum with sides swapped constant at init and after training
+(antisymmetry); held-out loss below the base rate's by > 0.03 after training (largest
+seen 0.165, smallest 0.145, resid); trains a tiny random-label set to ~0 loss (set net
+0.0012, limit 0.45: dropout and mean pooling); same seed gives identical parameters, seed
+2 differs; no non-finite parameters. Not covered yet: win-ratings, win-comp, stacking and
+GBDT themselves (the golden numbers cover the first two).
+
+Planted sweep 1: netcheck --net small --max-epochs 1 --seeds 1 on planted copies of
+snap-20261012T2055Z (pinned commit d87d8d7), win-ratings or win-comp as the candidate,
+champion sd 2.5 pp (too wide: ratings reach 0.684 on folds vs 0.691 real; later sweeps use
+1.7). Folds, 44,353 games; mix in pp per sd of win-comp's mix form; oracle = what the
+planted term is worth in nats/game to the truth on these games.
+
+| planted mix | win-comp captured, seeds 1/2/3 (± ~0.03) | oracle value |
+| --- | --- | --- |
+| -1 | 0.74 / 0.61 / 1.01 | -0.00018, +0.00003, -0.00022 (± 0.0002) |
+| -2 | 0.91 / 0.60 / 0.99 | -0.00077, -0.00036, -0.00077 (± 0.0004) |
+| -4 | 0.92 / 0.83 / 0.94 | -0.00293, -0.00221, -0.00302 (± 0.0007) |
+
+Runs 20261013T221917Z-tst-wr-none-s1 to 20261013T222133Z-tst-wc-mix4-s3 (17, list in
+the tests progress file), scored by tst-score-*.
+- win-comp finds the planted mix in 9 of 9 runs, down to 1 pp per sd (at ~90k fit games
+  its se is ~0.17 pp, so 1 pp is ~6 se); the captured share's seed spread (0.6-1.0) is
+  estimation noise
+- But a 1 pp/sd effect is worth ~0.0001-0.0002 nats/game, under the folds' paired noise
+  (± ~0.0003, and the floor ± ~0.0005): a real effect of that size shows as an effect
+  estimate yet "not detected" as a gain. So report the effect with its interval beside
+  the gain. The real fit, mix -1.50 ± 0.33 pp/sd with a folds gain of -0.00057 ± 0.00028,
+  is in line with a true effect of ~1.5-2 pp/sd
+- win-ratings alone carries 39% of a planted -4 mix through champion strengths (paired at
+  mix -4, seed 1: win-comp -0.0009 vs ratings, against an oracle -0.0029): a comp term's
+  gain over ratings understates the comp effect
+- Controls (win-ratings, synergy 4, counter 4, skill 1): ratings carry 43% ± 4 of the top
+  ally pair (4,749 team-games) and 29% ± 5 of the top lane matchup (3,789 games) through
+  the two champions' strengths, and 3% ± 2 of skill (no experience input)
+- Nothing planted: win-comp equals win-ratings within 0.00002 (no false mix)
+- Small net, 1 epoch, one seed, is worse than its candidate on planted data (+0.0017 on
+  folds): as on real data, not a health failure
+
+Planted tests of the additive effects model ("Effects and the CPU model"): `effects
+plant:seed=1,champ=1.7[,X]:snap-20261012T2055Z --blocks 1,2,3,4,5 --boot 50 --drop 0`
+(a7961de, --null 10), fitted on dev's 88,706 fit games; block sd = sd_corr_pp, win pp at
+50%; covers = its 95% interval holds the planted value; captured from plant-score of the
+fold games files (44,353 games).
+
+| planted | blocks | mean sd | covers | detected | full: captured, vs ratings |
+| --- | --- | --- | --- | --- | --- |
+| nothing | 10 ally, 25 enemy | 0.00 | 10/10 ally | 0/35 | -, -0.00003 ± 0.00020 |
+| nothing | 5 champion (1.7) | 1.65 | 4/5 | 5/5 | |
+| ally pairs sd 2 | 10 ally | 1.21 | 1/10 | 6/10 | 10%, -0.00114 ± 0.00034 |
+| ally pairs sd 4 | 10 ally | 2.99 | 0/10 | 10/10 | 22%, -0.01272 ± 0.00115 |
+| matchups sd 2 | 5 same-role lanes (cell 1.0) | 0.90 | 2/5 | 3/5 | 13%, -0.00055 ± 0.00027 |
+| matchups sd 4 | 5 same-role lanes (cell 2.0) | 2.02 | 4/5 | 5/5 | 28%, -0.00578 ± 0.00078 |
+| mix -2 pp/sd | damage mix | -1.69 ± 0.33 | yes | yes | 94%, -0.00022 ± 0.00032 |
+
+Runs 20261013T230632Z-tst-eff-none, 230656Z-pair2, 230723Z-pair4, 230751Z-ctr2,
+230817Z-ctr4, 230841Z-mix2; scores 233602Z..233749Z-tst-score-eff-*.
+- No false effects: with nothing planted every pair block is ~0 and the gain is nil
+- Lane blocks are half the matchup's spread: a same-role matchup enters the logit as
+  theta(a, b) - theta(b, a) (additive.cells), so an antisymmetric matchup effect c is fitted
+  as c / 2 per cell. Read "X vs their X" x2 for a matchup's spread (top vs top 1.23 pp:
+  ~2.5 pp per matchup). Bottom vs support across lanes is one matchup split over two
+  blocks (planted 4: 3.43 and 0.00; 2: 0.87 and 0.53): one block, root sum of squares
+- Ally block sds run low, 40% at 2 pp and 25% at 4, always low, and their intervals rarely
+  hold the truth: a reported ally sd is a lower bound, and "not detected" ally blocks
+  could hide ~2 pp (6 of 10 detected at 2 pp)
+- At ally pair sd 4 the jungle and bottom champion blocks collapse to ~0 (strength moved
+  into pair cells); at the real ally sizes (< 1.5) champion blocks hold
+- A big planted pair term is mostly not learnable at 89k games: ally pairs sd 2 are worth
+  -0.016 nats/game to an oracle, the model gets 10% of that. Blocks, not single pairs
+- The mix comes back within its interval and nearly whole (94%), yet its gain over ratings
+  (-0.00022 ± 0.00032) is not detected: as with win-comp, report the effect estimate
+
+Rules of thumb for minimum detectable effects (MDE, 80% power at 5%): a binary term held
+by m games has se ~50/sqrt(m) pp, MDE ~140/sqrt(m) pp (a pair in 5,000 games: ~2 pp; in
+500: ~6 pp); a per-sd term on n games has se ~50/sqrt(n) pp (matches win-comp's -1.50 ±
+0.33 at 89k). As a log-loss gain the bar is far higher (above).
 
 ## Where results show (admin Models tab)
 
