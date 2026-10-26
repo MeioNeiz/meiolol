@@ -323,23 +323,15 @@ test "fixture games to stats, curves and the website" {
         // One page per champion: the other views link to it with their view
         .{ "all/patch/role/top.html", &.{"href=\"../../../champion/darius.html?region=all&amp;period=patch#role=top\""} },
         .{ "all/matchup/top/mordekaiser-vs-darius.html", &.{"href=\"../../../champion/darius.html?region=all\""} },
-        // Lane curves: the estimate (curvefit.zig) on the page, k on the method page
-        .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "estimated average", "First finished item", "More data needed" } },
-        // All on screen as cards: a headline against usual, tiles (vs usual:
-        // champion.VsUsual), the gold curve beside head to head bars, XP and CS curves
-        // (hover titles per minute), comeback chart, by rank and mastery
-        .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "<p class=\"verdict mu-sum\">Mordekaiser wins ", "% against Darius, ", "% in all Top games.", "<small>Mordekaiser, in gold</small>", "<div class=\"tiles mu-tiles\">", "<span>Vs usual</span>", "Mordekaiser usually wins about", "<span>Gold at 14 min</span>", "<div class=\"mu-strip\">\n<div class=\"tiles mu-tiles\">", "<section class=\"mu-card mu-curves\"><div class=\"mu-trio\">\n<div><h2>Gold difference</h2>", "<p class=\"mu-cap\"><span class=\"k line\"></span>average", "<title>14 min: ", "<section class=\"mu-card mu-h2h thin\"><h2>Head to head</h2>", "<span class=\"h2h-l\">Kill on the other, 0 to 6 min</span>", "<span class=\"h2h-gap\"><span>Level 2</span>", "<span class=\"h2h-gap\"><span>Level 6</span>", "<h2>Experience difference</h2>", "<h2>CS difference</h2>", "<section class=\"mu-card mu-comeback\"><h2>Win rate by gold at 10 min</h2>", "<section class=\"mu-card mu-split\"><h2>By rank and mastery</h2>", "Iron to Silver" } },
-        // Either side's page, each swapping to the other
-        .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "<h1>Mordekaiser vs Darius</h1>", "class=\"swap\" href=\"darius-vs-mordekaiser.html\"" } },
+        // The matchup page (ui.matchpage): three islands with their data inline; the head
+        // with both portraits, the swap and the headline figures, the lane by minute beside
+        // head to head, won by gold at 10, by rank and mastery
+        .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "<div class=\"c-cpage c-mpage\"><div class=\"part\" data-island=\"matchup\" data-bin=\"", "<h1>Mordekaiser<span class=\"and\">vs</span>Darius</h1>", "href=\"darius-vs-mordekaiser.html\"", "Mordekaiser wins", "Vs usual", "data-island=\"matchmore\" data-bin=\"", "data-js=\"../../" ++ assets.matchmore_js.path ++ "\" data-wasm=\"" ++ assets.matchmore_wasm.path ++ "\"", "<h2>Lane</h2>", "class=\"c-chart c-lane\"", "<h2>Head to head</h2>", "Kills to 6 min", "Level 6", "First item", "<h2>Won by gold at 10</h2>", "<h2>By rank and mastery</h2>", "All games", "<script src=\"../../" ++ assets.matchup_js.path ++ "\" data-wasm=\"" ++ assets.matchup_wasm.path ++ "\" defer></script>" } },
         // Bot lane partners (MU4): each side's supports, and a support matchup's bot laners
-        .{ "matchup/bot/kaisa-vs-twitch.html", &.{ "<span class=\"h2h-l\">First blood, kill or assist</span>", "<section class=\"mu-card mu-duos\"><h2>Supports <span class=\"muted\">in all their Bot games</span></h2>", "<span class=\"sh\">Twitch with</span><span class=\"sh num\">Vs usual</span>", "title=\"Twitch with " } },
-        .{ "matchup/support/pyke-vs-rakan.html", &.{ "<h2>Bot laners <span class=\"muted\">in all their Support games</span></h2>", "<span class=\"sh\">Rakan with</span>" } },
-        // Opponent strip (MU2): the lane opponents with a page, the current one lit
-        .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<div class=\"mu-opps\"><input type=\"search\"", "<li data-name=\"Mordekaiser\"><a href=\"darius-vs-mordekaiser.html\" aria-current=\"page\" title=\"Darius vs Mordekaiser: Darius wins " } },
-        .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<h1>Darius vs Mordekaiser</h1>", "class=\"swap\" href=\"mordekaiser-vs-darius.html\"", "From Darius's side", "<div class=\"mu-build\"><section class=\"mu-card\"><h2>Build against Mordekaiser <span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"patch:15.13\"", "<span class=\"off\">Patch 15.13<i>, not the 30 days picked</i></span><span>Plat+</span></span></h2>", "games, patch ", "href=\"../../patch/build/darius-top.html\">Darius's full Top build</a>", "More data needed: no choice has 100 games in this matchup yet." } },
-        // Per rune in the matchup: share, win rate and games under each, beside the runes
-        // whose share moves (builds.runeShifts)
-        .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<h2>Runes against Mordekaiser <span class=\"scope\" data-chip ", "Every rune picked within 10 points of Darius's other Top games.", "<div class=\"rx\">", "<span class=\"rc on\" title=\"Conqueror: 3 games, 100.0%\">" } },
+        .{ "matchup/bot/kaisa-vs-twitch.html", &.{ "First blood", "<h2>Twitch with</h2>" } },
+        .{ "matchup/support/pyke-vs-rakan.html", &.{"<h2>Rakan with</h2>"} },
+        // MatchupStrip: the lane opponents with a page, the current one lit; the pair's build
+        .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<nav class=\"c-mstrip\" aria-label=\"Darius&#39;s Top opponents\">", "<a href=\"darius-vs-mordekaiser.html\" aria-current=\"page\"", "data-island=\"champbuild\" data-bin=\"", "<h2>Build against Mordekaiser</h2>", "href=\"../../champion/darius.html#role=top\"" } },
         .{ "method.html", &.{ "Games to stabilise", "<li><b>Highest win rate</b>: marked among options", "<h2 id=\"lean\">Early or late</h2>" } },
         .{ "learn.html", &.{"From ranked games in EUW on patch 15.13"} },
         // Spread bars, pool and its section follow the view
@@ -349,9 +341,8 @@ test "fixture games to stats, curves and the website" {
         .{ "daily.html", &.{"From ranked solo games in EUW on patch 15.13"} },
         // Scope chips (site/scope.zig): what each block covers, marked where it doesn't
         // follow the page's picks
-        .{ "patch/matchup/top/darius-vs-mordekaiser.html", &.{ "<h2>Build against Mordekaiser <span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"patch:15.13\" data-rank=\"\" title=\"Region, period and rank these numbers are from\"><span>EUW</span><span>Patch 15.13</span><span>Plat+</span></span></h2>", "<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"patch:15.13\"" } },
-        // The fixture's every-region 30-day view has only a patch's curves
-        .{ "all/matchup/top/darius-vs-mordekaiser.html", &.{"<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"all\" data-period=\"patch:15.13\" data-rank=\"\" title=\"Region, period and rank these numbers are from\"><span>All regions</span><span class=\"off\">Patch 15.13<i>, not the 30 days picked</i></span><span>Plat+</span></span> From Darius"} },
+        // View links: this page in each view, the current one lit, ranks greyed
+        .{ "patch/matchup/top/darius-vs-mordekaiser.html", &.{ "<a aria-current=\"page\">15.13</a>", "<a href=\"../../../matchup/top/darius-vs-mordekaiser.html\">30 days</a>", "<a aria-disabled=\"true\">Emerald+</a>" } },
         .{ "patch/build/darius-top.html", &.{"<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"patch:15.13\" data-rank=\"\" title=\"Region, period and rank these numbers are from\"><span>EUW</span><span>Patch 15.13</span><span>Plat+</span></span> What players take"} },
         .{ "pool.html", &.{ "<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"every\"", "<h2 id=\"pick-up\">How hard champions are to pick up <span class=\"scope\" data-chip data-region=\"all\" data-period=\"days30\"", "<span class=\"off\">All regions<i>, not EUW alone</i></span>" } },
         .{ "all/patch/pool.html", &.{"<h2 id=\"pick-up\">How hard champions are to pick up <span class=\"scope\" data-chip data-region=\"all\" data-period=\"patch:15.13\" data-rank=\"\" title=\"Region, period and rank these numbers are from\"><span>All regions</span><span>Patch 15.13</span><span>Plat+</span></span></h2>"} },
@@ -364,13 +355,13 @@ test "fixture games to stats, curves and the website" {
             return error.TestUnexpectedResult;
         };
     }
-    // Matchup first screen (MU3): the numbers, the pair's build, then the curves; the
-    // runes under everything
+    // Matchup first screen: the numbers and opponents, the pair's build, then the lane
+    // beside head to head, the outcome cards last
     {
         const path = try std.fs.path.join(arena, &.{ out, "matchup/top/darius-vs-mordekaiser.html" });
         const html = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 20));
         var at: usize = 0;
-        for ([_][]const u8{ "<div class=\"mu-strip\">", "<h2>Build against Mordekaiser", "<section class=\"mu-card mu-curves\">", "<h2>Head to head</h2>", "<h2>Runes against Mordekaiser" }) |want| {
+        for ([_][]const u8{ "<nav class=\"c-mstrip\"", "<h2>Build against Mordekaiser", "<h2>Lane</h2>", "<h2>Head to head</h2>", "<h2>Won by gold at 10</h2>" }) |want| {
             at = (std.mem.findPos(u8, html, at, want) orelse {
                 std.debug.print("darius-vs-mordekaiser: {s} missing or out of order\n", .{want});
                 return error.TestUnexpectedResult;
@@ -386,14 +377,34 @@ test "fixture games to stats, curves and the website" {
             return error.TestUnexpectedResult;
         };
     }
-    // Three games: greyed out, so the headline has no lane part (matchup.lead) and nothing
-    // is folded away
+    // The matchup page's islands: what ui-matchup.wasm and ui-matchmore.wasm render from
+    // their data-bin is the page's own (hydration adopts the server's nodes as they are)
     {
         const path = try std.fs.path.join(arena, &.{ out, "matchup/top/mordekaiser-vs-darius.html" });
-        const html = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 20));
-        try testing.expect(std.mem.find(u8, html, "whoever is ahead wins") == null);
-        const pickers = std.mem.count(u8, html, "<details class=\"pick\">") + std.mem.count(u8, html, "<details class=\"regions\">");
-        try testing.expectEqual(pickers, std.mem.count(u8, html, "<details"));
+        const page = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 22));
+        const mp = site.ui.matchpage;
+        var t: site.ui.Tree = .{};
+        var h: site.ui.H = .init(arena, &t);
+        const hb = try dataBin(arena, page, "matchup");
+        const hd = try arena.create(mp.HeadData);
+        hd.* = try site.ui.data.decode(arena, mp.HeadData, hb[1]);
+        var head: mp.Head = try .init(arena, hd);
+        head.bin = hb[0];
+        const mb = try dataBin(arena, page, "matchmore");
+        const md = try arena.create(mp.MoreData);
+        md.* = try site.ui.data.decode(arena, mp.MoreData, mb[1]);
+        var mo: mp.More = try .init(arena, md);
+        mo.bin = mb[0];
+        mo.js = "../../" ++ assets.matchmore_js.path;
+        mo.wasm = assets.matchmore_wasm.path;
+        for ([_]site.ui.N{ head.view(&h), mo.view(&h) }, [_][]const u8{ "matchup", "matchmore" }) |n, name| {
+            var w: std.Io.Writer.Allocating = .init(arena);
+            try site.ui.html.write(&t, n, &w.writer);
+            if (std.mem.find(u8, page, w.written()) == null) {
+                std.debug.print("mordekaiser-vs-darius: the {s} island differs from ui.wasm's render of its data-bin\n", .{name});
+                return error.TestUnexpectedResult;
+            }
+        }
     }
 
     // The champions table island: what ui-stats.wasm renders from the data file, before
@@ -1503,3 +1514,14 @@ const fixture_champions = [_]struct { id: u32, key: []const u8 }{
     .{ .id = 145, .key = "Kaisa" },
     .{ .id = 497, .key = "Rakan" },
 };
+
+/// An island root's data-bin in `page`: as written, and decoded
+fn dataBin(a: std.mem.Allocator, page: []const u8, island: []const u8) !struct { []const u8, []u8 } {
+    const key = try std.fmt.allocPrint(a, "data-island=\"{s}\" data-bin=\"", .{island});
+    const at = (std.mem.find(u8, page, key) orelse return error.NoIsland) + key.len;
+    const s = page[at .. std.mem.findScalarPos(u8, page, at, '"') orelse return error.NoIsland];
+    const d = std.base64.standard.Decoder;
+    const out = try a.alloc(u8, try d.calcSizeForSlice(s));
+    try d.decode(out, s);
+    return .{ s, out };
+}

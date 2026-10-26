@@ -186,68 +186,11 @@ pub fn route(site: *const Site, w: *Writer, f: *const File, rest: []const u8) !b
     return true;
 }
 
-/// Matchup page: what `x` players took against `y` in `r` (File.matchups), each cell
-/// marked when it is also x's most played in the role. Nothing when the pair has too few
-/// games for the file. `from`: the page's path
-pub fn vsStrip(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ, from: []const u8) !void {
-    const pv = patchView(site);
-    const picked = pick(site, pv, File.getVs, .{ x.id, r, y.id }) orelse return;
-    const f = picked.f;
-    const b = picked.b;
-    const usual = f.get(x.id, r);
-    const chip = site.chip(site.regionDim(pv.region), try picked.chipPeriod(site), rankDim(f.min_tier));
-    const href: ?html.Link = if (picked.newer != null or shown(f, x.id, r) == null) null else blk: {
-        const to = try path(site.arena, x, r);
-        break :blk if (site.view.period == .patch)
-            .{ .root = try site.toRoot(from), .path = to }
-        else
-            .{ .root = try site.toShared(from), .up = pv.dir(), .path = to };
-    };
-    try tpl.renderPart(w,
-        \\<div class="mu-build"><section class="mu-card"><h2>Build against {y} {chip}</h2><p class="mu-note">{games} game{s}, {patch}, {in}, {ranks}.{link}</p>
-        \\
-    , .{
-        .y = y.name,
-        .chip = chip,
-        .games = root.Thousands{ .n = b.games },
-        .s = plural(b.games),
-        .patch = try picked.when(site),
-        .in = pv.region.in(),
-        .ranks = try rankLabel(site.arena, f.min_tier),
-        .link = tpl.when(href != null, tpl.t(" <a href=\"{href}\">{x}'s full {lane} build</a>", .{ .href = href orelse html.Link{ .root = "", .path = "" }, .x = x.name, .lane = root.roleName(r) })),
-    });
-    try panel(w, f, b, usual, 0);
-    try w.writeAll("</section></div>\n");
-}
-
-/// Matchup page, under its charts: every rune's pick and win rate against `y`, the runes
-/// taken more or less often than in x's other games (runeShifts) beside them
-pub fn vsRunes(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ) !void {
-    const pv = patchView(site);
-    const picked = pick(site, pv, File.getVs, .{ x.id, r, y.id }) orelse return;
-    const f = picked.f;
-    const b = picked.b;
-    const usual = f.get(x.id, r);
-    const chip = site.chip(site.regionDim(pv.region), try picked.chipPeriod(site), rankDim(f.min_tier));
-    if (f.trees.len > 0 and b.get(.rune) != null) {
-        const shifts = try runeShifts(site.arena, b, usual);
-        try tpl.renderPart(w, "<div class=\"mu-build\"><section class=\"mu-card\"><h2>Runes against {y} {chip}</h2><div class=\"mu-rbody\"><div>\n", .{ .y = y.name, .chip = chip });
-        _ = try runeStats(w, f, b, true);
-        try tpl.renderPart(w, "</div><div>\n", .{});
-        if (shifts.len > 0) {
-            try tpl.renderPart(w, "<ul class=\"rshift\">\n", .{});
-            for ([_]bool{ true, false }) |more| {
-                var any = false;
-                for (shifts) |sh| any = any or (sh.here > sh.usual) == more;
-                if (!any) continue;
-                try tpl.renderPart(w, "<li><span>{label}</span>", .{ .label = if (more) "Taken more" else "Taken less" });
-                for (shifts) |sh| if ((sh.here > sh.usual) == more) try shiftChip(w, f, sh);
-                try tpl.renderPart(w, "</li>\n", .{});
-            }
-            try tpl.renderPart(w, "</ul>\n<p class=\"mu-note\">Share of {x} players against {y}, then in {x}'s other {lane} games; runes {gap}+ points apart.</p>\n", .{ .x = x.name, .y = y.name, .lane = root.roleName(r), .gap = shift_points });
-        } else try tpl.renderPart(w, "<p class=\"mu-note\">Every rune picked within {gap} points of {x}'s other {lane} games.</p>\n", .{ .gap = shift_points, .x = x.name, .lane = root.roleName(r) });
-        try w.writeAll("</div></div></section></div>\n");
-    }
+/// Matchup page: what `x` players took against `y` in `r` (File.matchups), from the
+/// patch view of the region; the previous patch's while this one's is thin. Null when
+/// the pair has too few games for the file
+pub fn forVs(site: *const Site, r: Role, x: Champ, y: Champ) ?Picked {
+    return pick(site, patchView(site), File.getVs, .{ x.id, r, y.id });
 }
 
 /// A rune counts as taken differently in a matchup when its pick share is this many

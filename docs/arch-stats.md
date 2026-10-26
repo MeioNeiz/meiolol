@@ -79,21 +79,22 @@ GB; the A1 (12 GB) holds it.
 `meiolol site` reads recent-curves.bin when present (curves-<patch>.bin with --patch;
 the rest of the site stays on the newest patch): two pages per matchup with an
 all-ranks curve, one from each side (matchup/<role>/<a>-vs-<b>.html, a's numbers
-first), as lolalytics' /vs/ pages: ⇄ swaps sides, Change opponent / Change champion
-list the other matchups with a page, and a champion page's opponent names link to the
-matchup from that champion's side; three SVG
-charts (line = estimated mean; band = the matchup's middle half of games from 200 games,
-below that the role's middle half drawn around the line, said in the caption; ±2 SE at
-14 min, period, tier and n in every caption; a dotted line at 15 min, surrender, and the
-share of games ended by 20 and 25 min), a lane and game table (incl. first finished item
-times), comeback odds (src/site/comeback.zig: win rate per gold bucket at 10/15 min
-beside the role baseline, one fact line), a by-rank table (estimate ±2 SE); champion
-pages link each lane opponent's gold at 14 to its page. "Games counted" radios (all games, X or Y players with
-100k+ mastery, offered from 10 such games) switch charts and table by CSS :has, no
-script. Every matchup gets a page, as on lolalytics; under 200 games or with own < 0.5
-("mostly the champions' baseline") charts and rows are grey, and a chart draws minutes
-with at least min(10, games) still going. The method page shows k by role and minute
-from the view with the most games. Size: 13.7k pages in the all-regions 30-day view at
+first), ui.matchpage's three islands (arch-site.md): the head (ChampHeader's pair, ⇄
+swaps sides, × back to a's champion page; StatStrip; MatchupStrip of a's other lane
+opponents with a page, by games), the pair's build (builds.forVs: the region's patch
+view, the previous patch's while this one's is thin), then one LaneChart with a Gold |
+XP | CS switch (line = estimated mean; band = the matchup's middle half of games from
+200 games, below that the role's middle half drawn around the line; the axis fits the
+band to 20 min; the previous patch's mean dashed in patch views) beside Versus rows
+(wins, ahead at 14, wins from ahead, first blood, kills by phase, level 2 and 6 and
+first item medians), won by gold at 10 (TrendChart over curvesfile.comeback buckets, the
+role's rate in each tip), by rank and mastery (DataTable: brackets, then either side
+with 100k+ mastery from 10 such games) and, bot and support, both sides' lane partners.
+Champion pages link each lane opponent to its page. Every matchup gets a page, as on
+lolalytics; under 200 games or with own < 0.5 ("mostly the champions' baseline") the
+lane and head to head are faded, and the chart draws minutes with at least min(10,
+games) still going. The method page shows k by role and minute from the view with the
+most games. Size: 13.7k pages in the all-regions 30-day view at
 18.8k games, 252 MB with .gz; raise --min-games if the upload grows too big. The index
 has a min games selector (html.minGames, static/min-games.js; default 50). Not yet:
 core-item split, older patches, rank filter. deploy/web-loop.sh rebuilds the four

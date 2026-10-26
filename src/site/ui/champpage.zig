@@ -274,6 +274,7 @@ const W = struct {
     pub const matchups = plain("Matchups");
     pub const sections = plain("Sections");
     pub const build = plain("Build");
+    pub const build_against = Phrase("Build against {y:text}");
     pub const trends = plain("Trends");
     pub const rare = Phrase("{n:count} · +{r:count} rare");
     pub const against = plain("Against");
@@ -320,6 +321,9 @@ const W = struct {
     pub const ranks = [4]tree.Text{ plain("Plat+"), plain("Emerald+"), plain("Diamond+"), plain("Master+") };
     pub const bands = [5]tree.Text{ plain("<10k"), plain("10k"), plain("30k"), plain("100k"), plain("300k+") };
 };
+
+/// Vs usual's Toggletip, the matchup page's too
+pub const usual_note = W.usual_note;
 
 fn rate(c: Counts) f32 {
     return @floatCast(buildpanel.rate(c.games, c.wins));
@@ -372,6 +376,8 @@ pub const TopRole = struct {
 /// ui-champbuild.wasm's: each role's build
 pub const BuildData = struct {
     roles: []const BuildRole,
+    /// The matchup page's opponent: the card heads "Build against {name}"
+    against: ?[]const u8 = null,
 };
 
 pub const BuildRole = struct {
@@ -687,6 +693,8 @@ pub const Build = struct {
     /// The data file and its stamp, for ui.wasm
     src: []const u8 = "",
     stamp: u32 = 0,
+    /// The data inline instead (the matchup page's, base64): no file, no other views
+    bin: ?[]const u8 = null,
     /// ui-champbuild.js and .wasm, for ui-champion.wasm to load
     js: ?[]const u8 = null,
     wasm: ?[]const u8 = null,
@@ -752,12 +760,17 @@ pub const Build = struct {
             .id = "build",
             .data_island = "champbuild",
             .data_src = if (p.src.len > 0) p.src else null,
-            .data_stamp = p.stamp,
-            .data_root = p.root,
+            .data_stamp = if (p.bin == null) p.stamp else null,
+            .data_root = if (p.bin == null) p.root else null,
+            .data_bin = p.bin,
             .data_js = p.js,
             .data_wasm = p.wasm,
             .data_busy = p.files.busy(),
-        }, .{if (p.panel()) |b| card.view(h, .{ .flush = true }, &.{ note, b.view(h) }) else .none});
+        }, .{if (p.panel()) |b| card.view(h, .{ .flush = true }, &.{
+            if (p.data.against) |y| card.head(h, W.build_against.with(h, .{ .y = y }), null, &.{}) else .none,
+            note,
+            b.view(h),
+        }) else .none});
     }
 };
 

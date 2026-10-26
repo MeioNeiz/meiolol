@@ -6,12 +6,16 @@ const std = @import("std");
 const core = @import("core");
 const root = @import("root.zig");
 const html = @import("html.zig");
-const comeback = @import("comeback.zig");
 const lanechart = @import("lanechart.zig");
 const text = @import("text.zig");
 const champion = @import("champion.zig");
 const tierlist = @import("tierlist.zig");
 const builds = @import("builds.zig");
+const buildblock = @import("buildblock.zig");
+const assets = @import("assets.zig");
+const ui = @import("ui");
+const mp = ui.matchpage;
+const cp = ui.champpage;
 const Dim = @import("scope.zig").Dim;
 
 const Writer = std.Io.Writer;
@@ -340,6 +344,8 @@ fn variants(a: std.mem.Allocator, curves: *const Curves, r: Role, x: Champ, y: C
     return list.items;
 }
 
+/// ui.matchpage's three islands, each with its data inline (data-bin): pages are rendered
+/// on request, so there are no data files to fetch
 fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: Champ, y: Champ) !void {
     const a = site.arena;
     const v = curves.get(r, .all, x.id, y.id).?;
@@ -354,73 +360,52 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     const page_path = try path(a, r, x, y);
     var p = try site.page(title, desc, page_path, .matchups);
     p.index = v.games() >= site.opts.index_min_games;
-    for (html.View.all, site.view_curves, &p.counterparts.?) |view, *other, *there| {
-        const has = if (other.*) |*o| o.get(r, .all, x.id, y.id) != null else false;
-        if (!has) there.* = try std.mem.concat(a, u8, &.{ view.dir(), "matchup/index.html" });
-    }
-    try html.head(w, p);
-    const swap = try file(a, y, x);
-    try tpl.render(w,
-        \\<div class="hero mu-hero"><img src="{x_icon}" alt="" width="44" height="44"><a class="swap" href="{swap}" title="Swap sides: {y} vs {x}" aria-label="Swap sides: {y} vs {x}">⇄</a><img src="{y_icon}" alt="" width="44" height="44"><div><h1>{x} vs {y}</h1>
-        \\<p class="muted">{chip} From {x}'s side: {lane} lane, ranked solo/duo {region}, {when}, Platinum+.</p></div></div>
-        \\<nav class="mu-nav" aria-label="Other matchups"><a class="btn" href="{swap}">⇄ From {y}'s side</a>
-        \\{champions}{opponents}</nav>
-        \\
-    , .{
-        .chip = site.chip(site.regionDim(site.view.region), try periodDim(site, curves), .plat),
-        .x_icon = try site.icon(x),
-        .y_icon = try site.icon(y),
-        .swap = swap,
-        .x = x.name,
-        .y = y.name,
-        .lane = lane,
-        .region = site.view.region.in(),
-        .when = try scope(site, curves),
-        .opponents = tpl.call(opponentStrip, .{ site, curves, r, x, y }),
-        .champions = tpl.call(picker, .{ site, curves, r, x, y }),
-    });
-    if (v.games() < thin_games) {
-        try tpl.render(w,
-            \\<p class="note">More data needed: {games} game{s} so far. Until {thin}, the line leans on how these two champions do against everyone (see the method), and the chart is greyed out.</p>
-            \\
-        , .{ .games = v.games(), .s = plural(v.games()), .thin = thin_games });
-    } else if (thin(v)) {
-        try tpl.render(w,
-            \\<p class="note">Mostly the champions' baseline: the line still leans more on how these two champions do against everyone than on their games against each other (see the method).</p>
-            \\
-        , .{});
-    }
-    const vs = try variants(a, curves, r, x, y);
-    const base = curves.baseline(r, .all);
-    const o = odds(&site.stats, r, x, y, champion.usualK(&site.stats, r));
-    // Everything on screen at once as cards: the numbers in one strip, the pair's build
-    // (what most players open a matchup for), the three curves beside both sides'
-    // numbers, then comebacks, splits and supports, the runes last
-    try tpl.renderPart(w, "<div class=\"mu-strip\">\n", .{});
-    try tiles(site, w, o, v, r, x, y, when);
-    try headline(w, o, v, r, x, y);
-    try tpl.renderPart(w, "</div>\n", .{});
-    try builds.vsStrip(site, w, r, x, y, page_path);
-    try tpl.renderPart(w, "<div class=\"mu-main\"><section class=\"mu-card mu-curves\"><div class=\"mu-trio\">\n", .{});
-    const prev = prevLine(site, r, x, y);
-    for ([_]struct { []const u8, curvesfile.Metric, []const u8 }{ .{ "Gold difference", .gold, "gold" }, .{ "Experience difference", .xp, "XP" }, .{ "CS difference", .cs, "CS" } }) |c| {
-        try tpl.renderPart(w, "<div><h2>{title}</h2>\n", .{ .title = c[0] });
-        try chartOne(w, v, base, if (c[1] == .gold) prev else null, c[1], c[2], x, y, when, lane, true);
-        try tpl.renderPart(w, "</div>\n", .{});
-    }
-    try tpl.renderPart(w, "</div>\n", .{});
-    if (reach(v) >= 2) try caption(w, v, base, if (prev != null and reach(prev.?.v) >= 2) prev else null, when, lane, false);
-    try tpl.renderPart(w, "</section>\n", .{});
-    try h2h(w, v, x, y);
-    try tpl.renderPart(w, "</div>\n<div class=\"mu-cards\">\n", .{});
-    try comeback.card(w, curves, r, x, y);
-    try splits(w, curves, vs, r, x, y);
-    try duos(site, w, r, x, y);
-    try tpl.renderPart(w, "</div>\n", .{});
-    try builds.vsRunes(site, w, r, x, y);
     const to_site = try site.toShared(page_path);
+    var views: [html.View.count][]const u8 = undefined;
+    for (site.view_curves, &views, p.counterparts.?) |*vc, *href, there| {
+        const has = if (vc.*) |*o| o.get(r, .all, x.id, y.id) != null else false;
+        href.* = if (has) try std.mem.concat(a, u8, &.{ to_site, there }) else "";
+    }
+    // The head's view links replace the subbar's switches
+    p.counterparts = null;
+    try html.head(w, p);
+
+    const head_data = try a.create(mp.HeadData);
+    head_data.* = try headData(site, curves, r, x, y, views, to_site);
+    var head: mp.Head = try .init(a, head_data);
+    head.bin = try bin(a, mp.HeadData, head_data.*);
+
+    const build_data: ?*cp.BuildData = if (builds.forVs(site, r, x, y)) |b| blk: {
+        const d = try a.create(cp.BuildData);
+        const roles = try a.alloc(cp.BuildRole, 1);
+        roles[0] = .{ .role = champion.uiRole(r), .build = try buildblock.data(a, b.f, b.b, x.name) };
+        d.* = .{ .roles = roles, .against = y.name };
+        break :blk d;
+    } else null;
+    var build: ?cp.Build = if (build_data) |d| .{
+        .data = d,
+        .panels = try cp.panels(a, d.roles),
+        .bin = try bin(a, cp.BuildData, d.*),
+        .js = try std.mem.concat(a, u8, &.{ to_site, assets.champbuild_js.path }),
+        .wasm = assets.champbuild_wasm.path,
+    } else null;
+    if (build) |*b| b.files.base[0] = b.data;
+
+    const more_data = try a.create(mp.MoreData);
+    more_data.* = try moreData(site, curves, r, x, y);
+    var more: mp.More = try .init(a, more_data);
+    more.bin = try bin(a, mp.MoreData, more_data.*);
+    more.js = try std.mem.concat(a, u8, &.{ to_site, assets.matchmore_js.path });
+    more.wasm = assets.matchmore_wasm.path;
+
+    var t: ui.Tree = .{};
+    var h: ui.H = .init(a, &t);
+    t.root = h.div(.{ .class = "c-cpage c-mpage" }, .{ head.view(&h), if (build) |*b| b.view(&h) else ui.N.none, more.view(&h) });
+    if (h.oom) return error.OutOfMemory;
+    try ui.html.write(&t, t.root, w);
     try tpl.render(w,
-        \\<p class="muted"><a href="{x_href}">{x}</a> · <a href="{y_href}">{y}</a> · <a href="{up}method.html">Method</a></p>
+        \\<p class="muted small"><a href="{x_href}">{x}</a> · <a href="{y_href}">{y}</a> · <a href="{up}method.html">Method</a></p>
+        \\<script src="{js}" data-wasm="{wasm}" defer></script>
         \\
     , .{
         .x_href = try site.champHref(x, to_site),
@@ -428,20 +413,179 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
         .y_href = try site.champHref(y, to_site),
         .y = y.name,
         .up = to_site,
+        .js = html.Link{ .root = to_site, .path = assets.matchup_js.path },
+        .wasm = assets.matchup_wasm.path,
     });
     try html.foot(w, p);
 }
 
-/// y's other lane opponents with a page as a closed list, most games first, each from
-/// that champion's side against y: "Change champion" swaps x
-fn picker(w: *Writer, site: *const Site, curves: *const Curves, r: Role, x: Champ, y: Champ) !void {
-    const list = try others(site, curves, r, y);
-    if (list.len < 2) return;
-    try tpl.render(w,
-        \\<details class="pick"><summary>Change champion <span class="muted">{n}</span></summary><ul class="pick-list">
-        \\{items}</ul></details>
-        \\
-    , .{ .n = list.len, .items = tpl.each(list, .{ site, x, y }, pickItem) });
+/// `v` as ui.data, base64: an island root's data-bin
+fn bin(a: std.mem.Allocator, comptime T: type, v: T) ![]const u8 {
+    var raw: std.ArrayList(u8) = .empty;
+    try ui.data.encode(a, T, v, &raw);
+    const e = std.base64.standard.Encoder;
+    const out = try a.alloc(u8, e.calcSize(raw.items.len));
+    return e.encode(out, raw.items);
+}
+
+fn other(ch: Champ) mp.Other {
+    return .{ .name = ch.name, .key = ch.key, .slug = ch.slug };
+}
+
+fn headData(site: *const Site, curves: *const Curves, r: Role, x: Champ, y: Champ, views: [html.View.count][]const u8, to_site: []const u8) !mp.HeadData {
+    const a = site.arena;
+    const v = curves.get(r, .all, x.id, y.id).?;
+    const o = odds(&site.stats, r, x, y, champion.usualK(&site.stats, r));
+    const i = curvesfile.lane_minute - 1;
+    const has_gold = i < v.minutes() and v.minute(i).n >= minuteFloor(v);
+    const lane = v.lane();
+    const list = try others(site, curves, r, x);
+    const opps = try a.alloc(mp.Opp, list.len);
+    for (opps, list) |*op, l| {
+        const e = site.stats.enemy(r, r, x.c, l.ch.c);
+        op.* = .{ .o = other(l.ch), .games = e.games, .wins = e.wins };
+    }
+    std.mem.sort(mp.Opp, opps, {}, struct {
+        fn f(_: void, p_: mp.Opp, q: mp.Opp) bool {
+            return p_.games > q.games;
+        }
+    }.f);
+    return .{
+        .x = other(x),
+        .y = other(y),
+        .role = champion.uiRole(r),
+        .patch = site.patch,
+        .ddragon = site.ddragon_version,
+        .swap = try file(a, y, x),
+        .clear = try a.print("{s}#role={s}", .{ try site.champHref(x, to_site), @tagName(champion.uiRole(r)) }),
+        .games = o.games,
+        .wins = o.wins,
+        .usual = @floatCast(100 * o.usual),
+        .vs_usual = @floatCast(100 * o.d.mean),
+        .gold = if (has_gold) v.estimate(.gold, i).mean else null,
+        .cs_gold = if (has_gold and r != .jungle and r != .utility) @intCast(round10(@as(i32, v.estimate(.cs, i).mean) * gold_per_cs)) else null,
+        .lane_games = lane.games,
+        .ahead = lane.ahead,
+        .thin = thin(v),
+        .opps = opps,
+        .views = views,
+        .view = @intCast(site.view.index()),
+    };
+}
+
+fn moreData(site: *const Site, curves: *const Curves, r: Role, x: Champ, y: Champ) !mp.MoreData {
+    const a = site.arena;
+    const v = curves.get(r, .all, x.id, y.id).?;
+    const base = curves.baseline(r, .all);
+    const last = reach(v);
+    const games = try a.alloc(u32, last);
+    for (games, 0..) |*g, i| g.* = v.minute(i).n;
+    var out: [3]mp.Curve = undefined;
+    const prev = prevLine(site, r, x, y);
+    for (&out, [_]curvesfile.Metric{ .gold, .xp, .cs }) |*c, m| {
+        const line = try a.alloc(i16, last);
+        const bands = try a.alloc([2]i16, last);
+        for (line, bands, 0..) |*l, *b, i| {
+            l.* = v.estimate(m, i).mean;
+            const q = band(v, base, m, i);
+            b.* = .{ clamp16(q[0]), clamp16(q[1]) };
+        }
+        var pl: []i16 = &.{};
+        if (m == .gold) if (prev) |pv| {
+            pl = try a.alloc(i16, @min(last, reach(pv.v)));
+            for (pl, 0..) |*l, i| l.* = pv.v.estimate(m, i).mean;
+        };
+        c.* = .{ .line = line, .band = bands, .prev = pl };
+    }
+    const lane = v.lane();
+    var gold10: [curvesfile.buckets]mp.Bucket = undefined;
+    for (&gold10, 0..) |*b, i| {
+        const c = v.comeback(.ten, i);
+        const all = if (base) |bl| bl.comeback(.ten, i) else curvesfile.Counts{};
+        b.* = .{ .games = c.games, .wins = c.wins, .all_games = all.games, .all_wins = all.wins };
+    }
+    var ranks: std.ArrayList(mp.RankRow) = .empty;
+    for (std.enums.values(Bracket)) |b| {
+        const bv = curves.get(r, b, x.id, y.id) orelse continue;
+        try ranks.append(a, rankRow(b.label(), bv, @intCast(ranks.items.len)));
+    }
+    for ((try variants(a, curves, r, x, y))[1..]) |s| try ranks.append(a, rankRow(s.label, s.v, @intCast(ranks.items.len)));
+    return .{
+        .x = x.name,
+        .y = y.name,
+        .ddragon = site.ddragon_version,
+        .role = champion.uiRole(r),
+        .thin = thin(v),
+        .games = games,
+        .curves = out,
+        .h2h = .{
+            .games = v.games(),
+            .wins = v.wins(),
+            .lane_games = lane.games,
+            .ahead = lane.ahead,
+            .behind = lane.behind,
+            .wins_ahead = lane.wins_ahead,
+            .wins_behind = lane.wins_behind,
+            .first_blood = v.firstBlood(),
+            .kills = .{ v.kills(0), v.kills(1), v.kills(2) },
+            .deaths = .{ v.deaths(0), v.deaths(1), v.deaths(2) },
+            .level2 = v.level2(),
+            .level6 = v.level6(),
+            .first_item = v.firstItem(),
+        },
+        .gold10 = gold10,
+        .ranks = ranks.items,
+        .duos = try duos(site, r, x, y),
+    };
+}
+
+fn rankRow(label: []const u8, v: View, order: u8) mp.RankRow {
+    const i = curvesfile.lane_minute - 1;
+    const has_gold = i < v.minutes() and v.minute(i).n >= minuteFloor(v);
+    return .{ .label = label, .games = v.games(), .wins = v.wins(), .gold = if (has_gold) v.estimate(.gold, i).mean else null, .order = order };
+}
+
+fn clamp16(v: i32) i16 {
+    return @intCast(std.math.clamp(v, std.math.minInt(i16), std.math.maxInt(i16)));
+}
+
+/// Most duo partners listed for each side
+const duo_rows = 5;
+
+/// Bot lane: the supports x and y each play with, most games first, vs usual as on the
+/// champion page's With view; a support matchup lists their bot laners. From all of each
+/// champion's games in the role, not only this matchup's: the stats count pairs, not
+/// threes
+fn duos(site: *const Site, r: Role, x: Champ, y: Champ) ![]const mp.DuoSide {
+    const r2: Role = switch (r) {
+        .bottom => .utility,
+        .utility => .bottom,
+        else => return &.{},
+    };
+    const a = site.arena;
+    const p: champion.Pairs = .{ .st = &site.stats, .r = r, .r2 = r2, .ally = true };
+    const k = champion.pairsUsualK(p);
+    const st = p.st;
+    const out = try a.alloc(mp.DuoSide, 2);
+    for (out, [_]Champ{ x, y }) |*side, ch| {
+        var list: std.ArrayList(mp.Duo) = .empty;
+        const cr = st.champRole(r, ch.c);
+        for (0..st.n) |c2| {
+            const e = p.get(ch.c, c2);
+            if (e.games == 0) continue;
+            const d = site.champs[site.by_c[c2] orelse continue];
+            const dr = st.champRole(r2, d.c);
+            const u = p.usualOf(root.ratio(cr.wins, cr.games), root.ratio(dr.wins, dr.games));
+            try list.append(a, .{ .champ = other(d), .games = e.games, .usual = @floatCast(100 * champion.VsUsual.of(e.wins, e.games, u, k).mean) });
+        }
+        std.mem.sort(mp.Duo, list.items, {}, struct {
+            fn f(_: void, p_: mp.Duo, q: mp.Duo) bool {
+                return p_.games > q.games;
+            }
+        }.f);
+        side.* = .{ .name = ch.name, .partners = list.items[0..@min(duo_rows, list.items.len)] };
+    }
+    return out;
 }
 
 const Other = struct { ch: Champ, games: u32 };
@@ -461,68 +605,6 @@ fn others(site: *const Site, curves: *const Curves, r: Role, fixed: Champ) ![]Ot
     }
     std.mem.sort(Other, list.items, {}, moreGames);
     return list.items;
-}
-
-fn pickItem(ctx: struct { *const Site, Champ, Champ }, w: *Writer, o: Other) !void {
-    const site, const x, const y = ctx;
-    try tpl.render(w,
-        \\<li class="bx{current}"{aria}><a class="box" href="{href}"><img src="{icon}" alt="" loading="lazy" width="32" height="32">{name}</a> <span class="muted">{games}</span></li>
-        \\
-    , .{
-        .current = tpl.when(o.ch.id == x.id, " current"),
-        .aria = tpl.flag(o.ch.id == x.id, "aria-current=\"page\""),
-        .href = try file(site.arena, o.ch, y),
-        .icon = try site.icon(o.ch),
-        .name = o.ch.name,
-        .games = o.games,
-    });
-}
-
-/// x's lane opponents with a page as one scrolling row under the header, most games
-/// first: icon and x's win rate against each (the stats, as the tiles), y lit and
-/// scrolled into view; the search hides the others, Enter opens the first left
-fn opponentStrip(w: *Writer, site: *const Site, curves: *const Curves, r: Role, x: Champ, y: Champ) !void {
-    const list = try others(site, curves, r, x);
-    if (list.len == 0) return;
-    for (list) |*o| o.games = site.stats.enemy(r, r, x.c, o.ch.c).games;
-    std.mem.sort(Other, list, {}, moreGames);
-    try tpl.render(w,
-        \\<div class="mu-opps"><input type="search" placeholder="Opponent" aria-label="Search {x}'s opponents"><ul aria-label="{x}'s {lane} lane opponents, most games first">
-        \\{items}</ul></div>
-        \\
-    , .{
-        .x = x.name,
-        .lane = root.roleName(r),
-        .items = tpl.each(list, .{ site, r, x, y }, opponentItem),
-    });
-    try w.writeAll(
-        \\<script>(()=>{const s=document.currentScript.previousElementSibling,q=s.querySelector("input"),l=s.querySelector("ul"),c=l.querySelector("[aria-current]");
-        \\if(c)l.scrollLeft=c.offsetLeft-(l.clientWidth-c.offsetWidth)/2;const k=(t)=>t.toLowerCase().replace(/[^a-z0-9]/g,"");
-        \\q.addEventListener("input",()=>{const v=k(q.value);for(const li of l.children)li.hidden=!k(li.dataset.name).includes(v);l.scrollLeft=0});
-        \\q.addEventListener("keydown",(e)=>{const a=[...l.children].find((li)=>!li.hidden);if(e.key==="Enter"&&a&&q.value.trim())location.href=a.querySelector("a").href})})()</script>
-        \\
-    );
-}
-
-fn opponentItem(ctx: struct { *const Site, Role, Champ, Champ }, w: *Writer, o: Other) !void {
-    const site, const r, const x, const y = ctx;
-    const e = site.stats.enemy(r, r, x.c, o.ch.c);
-    const current = o.ch.id == y.id;
-    try tpl.render(w,
-        \\<li data-name="{name}"><a href="{href}"{aria} title="{title}"><img src="{icon}" alt="{name}" loading="lazy" width="32" height="32"><b style="--c:{colour};opacity:{fade:.2}">{wr}</b></a></li>
-        \\
-    , .{
-        .name = o.ch.name,
-        .href = try file(site.arena, x, o.ch),
-        .aria = tpl.flag(current, "aria-current=\"page\""),
-        .title = try site.arena.print("{s} vs {s}: {s} wins {d:.1}% in {f} games", .{
-            x.name, o.ch.name, x.name, 100 * root.ratio(e.wins, e.games), root.Thousands{ .n = e.games },
-        }),
-        .wr = tpl.call(pct1, .{ e.wins, e.games }),
-        .icon = try site.icon(o.ch),
-        .colour = tierlist.wrColour(root.ratio(e.wins, e.games), tierlist.matchup_span),
-        .fade = curvesfile.fade(e.games),
-    });
 }
 
 /// The landing page's lead: one matchup's gold curve, the clearest lane among those
@@ -623,242 +705,6 @@ fn odds(st: *const core.Stats, r: Role, x: Champ, y: Champ, ka: f64) Odds {
     return .{ .wins = e.wins, .games = e.games, .base = base, .usual = u, .d = champion.VsUsual.of(e.wins, e.games, u, ka) };
 }
 
-/// The page's answer in a line, descriptive (docs/production-key.md product rules): x's
-/// win rate here, then in all its games in the role (the champion page's number; the
-/// Vs usual tile compares against this opponent's strength), then the lane (lead())
-fn headline(w: *Writer, o: Odds, v: View, r: Role, x: Champ, y: Champ) !void {
-    if (o.games == 0) return;
-    try tpl.render(w, "<p class=\"verdict mu-sum\">{x} wins {wr} against {y}, {base:.1}% in all {lane} games.{lead}</p>\n", .{
-        .x = x.name,
-        .wr = tpl.call(pct1, .{ o.wins, o.games }),
-        .y = y.name,
-        .base = 100 * o.base,
-        .lane = root.roleName(r),
-        .lead = tpl.call(lead, .{ v, x }),
-    });
-}
-
-/// The first screen's numbers: win rate, vs usual (odds()), the lane curve's gold at
-/// lane_minute (CS's part of it and when half of it is there in its title) and how often
-/// x leads, then games
-fn tiles(site: *const Site, w: *Writer, o: Odds, v: View, r: Role, x: Champ, y: Champ, when: []const u8) !void {
-    const z = 1.2816;
-    const i = curvesfile.lane_minute - 1;
-    const has_gold = i < v.minutes() and v.minute(i).n >= minuteFloor(v);
-    const g = v.estimate(.gold, i);
-    const cs_gold = if (has_gold and r != .jungle and r != .utility) round10(@as(i32, v.estimate(.cs, i).mean) * gold_per_cs) else null;
-    const lane = v.lane();
-    try tpl.render(w,
-        \\<div class="tiles mu-tiles"><div><span>Win rate</span><b class="wrc" style="--c:{wr_colour};opacity:{fade:.2}">{wr}</b><small>{x} against {y}</small></div><div title="{title}"><span>Vs usual</span><b class="vs" style="--c:{colour}">{pts}</b><small>usually {usual:.1}%</small></div><div{thin} title="{gold_title}"><span>Gold at {minute} min</span><b class="{side}">{gold}{dash}</b><small>{cs}</small></div><div{thin}><span>Ahead at {minute} min</span><b>{ahead}</b><small>{x}, in gold</small></div><div><span>Games</span><b>{games}</b><small>{when}</small></div></div>
-        \\
-    , .{
-        .wr_colour = tierlist.wrColour(root.ratio(o.wins, o.games), tierlist.matchup_span),
-        .fade = curvesfile.fade(o.games),
-        .wr = tpl.call(pct1, .{ o.wins, o.games }),
-        .x = x.name,
-        .y = y.name,
-        .title = try site.arena.print("Against {s} {s} wins {d:.1}% in {d} games. Against an opponent this strong in {s}, {s} usually wins about {d:.1}%. Vs usual {f} points, pulled toward 0 the fewer the games; 8 in 10 between {f} and {f}", .{
-            y.name,                                        x.name,                           100 * root.ratio(o.wins, o.games),
-            o.games,                                       root.roleName(r),                 x.name,
-            100 * o.usual,                                 champion.Points{ .v = o.d.mean }, champion.Points{ .v = o.d.mean - z * o.d.sd },
-            champion.Points{ .v = o.d.mean + z * o.d.sd },
-        }),
-        .colour = tierlist.wrColour(0.5 + o.d.mean, tierlist.table_span),
-        .pts = champion.Points{ .v = o.d.mean },
-        .usual = 100 * o.usual,
-        .thin = tpl.flag(thin(v), "class=\"stale\""),
-        .gold_title = if (!has_gold) "" else if (halfBy(v)) |m| try site.arena.print("{s} minus {s}, estimated average; half of it there by {d} min", .{ x.name, y.name, m }) else try site.arena.print("{s} minus {s}, estimated average", .{ x.name, y.name }),
-        .minute = curvesfile.lane_minute,
-        .side = if (!has_gold) "even" else if (clearSide(g) > 0) "up" else if (clearSide(g) < 0) "down" else "even",
-        .gold = tpl.when(has_gold, tpl.call(signed, .{g.mean})),
-        .dash = tpl.when(!has_gold, "-"),
-        .cs = if (cs_gold) |c| tpl.t("about {c} of it from CS", .{ .c = tpl.call(signed, .{c}) }) else null,
-        .ahead = tpl.call(percent, .{ lane.ahead, lane.games }),
-        .games = root.Thousands{ .n = o.games },
-        .when = when,
-    });
-}
-
-/// Both sides' shares as bars from the middle, x's growing left and y's right, then
-/// level 2, level 6 and first item timings; each row titled in full
-fn h2h(w: *Writer, v: View, x: Champ, y: Champ) !void {
-    const lane = v.lane();
-    const m = curvesfile.lane_minute;
-    try tpl.renderPart(w,
-        \\<section class="mu-card mu-h2h{thin}"><h2>Head to head</h2><div class="h2h"><span class="h2h-x">{x}</span><span></span><span></span><span class="h2h-y">{y}</span>
-        \\
-    , .{ .thin = tpl.when(thin(v), " thin"), .x = x.name, .y = y.name });
-    try bars(w, "Wins the game", .{ v.wins(), v.games() }, .{ v.games() - v.wins(), v.games() });
-    var buf: [64]u8 = undefined;
-    try bars(w, try std.mem.print(&buf, "Ahead in gold at {d} min", .{m}), .{ lane.ahead, lane.games }, .{ lane.behind, lane.games });
-    var buf2: [64]u8 = undefined;
-    try bars(w, try std.mem.print(&buf2, "Wins when ahead at {d} min", .{m}), .{ lane.wins_ahead, lane.ahead }, .{ lane.behind - lane.wins_behind, lane.behind });
-    // Curves files from before v6 have neither: no row rather than 0%
-    const fb = v.firstBlood();
-    if (fb[0] + fb[1] > 0) try bars(w, "First blood, kill or assist", .{ fb[0], v.games() }, .{ fb[1], v.games() });
-    const phases = [_][]const u8{ "Kill on the other, 0 to 6 min", "Kill on the other, 6 to 14 min", "Kill on the other, after 14 min" };
-    for (phases, 0..) |label, ph| try bars(w, label, .{ v.kills(ph), v.games() }, .{ v.deaths(ph), v.games() });
-    const l2 = v.level2();
-    if (l2[0] != 0 or l2[1] != 0) try times(w, "Level 2", l2);
-    try times(w, "Level 6", v.level6());
-    try times(w, "First finished item", v.firstItem());
-    try tpl.renderPart(w,
-        \\</div><p class="mu-note">Share of each side's games; kills count assists. Medians for timings.</p></section>
-        \\
-    , .{});
-}
-
-fn bars(w: *Writer, label: []const u8, a: [2]u32, b: [2]u32) !void {
-    const pa = root.ratio(a[0], a[1]);
-    const pb = root.ratio(b[0], b[1]);
-    const ra: i32 = @round(100 * pa);
-    const rb: i32 = @round(100 * pb);
-    try tpl.render(w,
-        \\<span class="h2h-l">{label}</span><b class="h2h-v{xa}">{pa}</b><span class="h2h-bar"><i class="x" style="width:{wa:.1}%"></i></span><span class="h2h-bar r"><i class="y" style="width:{wb:.1}%"></i></span><b class="h2h-v{yb}">{pb}</b>
-        \\
-    , .{
-        .label = label,
-        .xa = tpl.when(ra < rb, " lo"),
-        .pa = tpl.call(percent, .{ a[0], a[1] }),
-        .wa = 100 * pa,
-        .wb = 100 * pb,
-        .yb = tpl.when(rb < ra, " lo"),
-        .pb = tpl.call(percent, .{ b[0], b[1] }),
-    });
-}
-
-/// A timing row: both medians, the gap between them in the middle; "-" when fewer than
-/// half the games got there
-fn times(w: *Writer, label: []const u8, both: [2]u16) !void {
-    const diff = @as(i32, both[0]) - @as(i32, both[1]);
-    const known = both[0] != 0 and both[1] != 0;
-    try tpl.render(w,
-        \\<b class="h2h-v h2h-t{xa}">{a}</b><span class="h2h-gap"><span>{label}</span>{gap}</span><b class="h2h-v h2h-t{yb}">{b}</b>
-        \\
-    , .{
-        .label = label,
-        .xa = tpl.when(known and diff > 0, " lo"),
-        .a = tpl.call(clockOr, .{both[0]}),
-        .gap = tpl.when(known and diff != 0, tpl.t(" <small>{d} apart</small>", .{ .d = tpl.call(duration, .{@abs(diff)}) })),
-        .yb = tpl.when(known and diff < 0, " lo"),
-        .b = tpl.call(clockOr, .{both[1]}),
-    });
-}
-
-fn clockOr(w: *Writer, secs: u16) !void {
-    if (secs == 0) return w.writeAll("-");
-    try clock(w, secs);
-}
-
-/// x's win rate and gold at lane_minute by rank bracket, then with either side
-/// experienced on their champion (variants after the first); rows under thin_games faded
-fn splits(w: *Writer, curves: *const Curves, vs: []const Variant, r: Role, x: Champ, y: Champ) !void {
-    try tpl.renderPart(w,
-        \\<section class="mu-card mu-split"><h2>By rank and mastery</h2><div class="split"><span></span><span class="sh">{x} wins</span><span class="sh num">Gold at {minute}</span>
-        \\
-    , .{ .x = x.name, .minute = curvesfile.lane_minute });
-    for (std.enums.values(Bracket)) |b| {
-        const v = curves.get(r, b, x.id, y.id) orelse {
-            try tpl.render(w, "<span class=\"thin\">{rank}</span><span class=\"thin sh\">more data needed</span><span></span>\n", .{ .rank = b.label() });
-            continue;
-        };
-        try splitRow(w, b.label(), v, b != .all);
-    }
-    for (vs[1..]) |s| try splitRow(w, s.label, s.v, true);
-    try tpl.renderPart(w, "</div></section>\n", .{});
-}
-
-/// `count`: games under the label; all games' count is the Games tile's, so left out
-fn splitRow(w: *Writer, label: []const u8, v: View, count: bool) !void {
-    const i = curvesfile.lane_minute - 1;
-    const has_gold = i < v.minutes() and v.minute(i).n >= minuteFloor(v);
-    const p = root.ratio(v.wins(), v.games());
-    try tpl.render(w,
-        \\<span{thin}>{label}{count}</span><b class="wrc{thin_c}" style="--c:{colour}" title="{label}: {x_wins} of {games} games won">{rate}</b><span class="num{thin_c}">{gold}{dash}</span>
-        \\
-    , .{
-        .thin = tpl.flag(thin(v), "class=\"thin\""),
-        .label = label,
-        .count = tpl.when(count, tpl.t("<small>{games} games</small>", .{ .games = root.Thousands{ .n = v.games() } })),
-        .thin_c = tpl.when(thin(v), " thin"),
-        .colour = tierlist.wrColour(p, tierlist.matchup_span),
-        .x_wins = v.wins(),
-        .games = root.Thousands{ .n = v.games() },
-        .rate = tpl.call(percent, .{ v.wins(), v.games() }),
-        .gold = tpl.when(has_gold, tpl.call(signed, .{v.estimate(.gold, i).mean})),
-        .dash = tpl.when(!has_gold, "-"),
-    });
-}
-
-/// Most duo partners listed for each side
-const duo_rows = 5;
-
-/// Bot lane: the supports x and y each play with, most games first, vs usual as on the
-/// champion page's Duos tab; a support matchup lists their bot laners. From all of each
-/// champion's games in the role, not only this matchup's: the stats count pairs, not
-/// threes
-fn duos(site: *const Site, w: *Writer, r: Role, x: Champ, y: Champ) !void {
-    const r2: Role = switch (r) {
-        .bottom => .utility,
-        .utility => .bottom,
-        else => return,
-    };
-    const p: champion.Pairs = .{ .st = &site.stats, .r = r, .r2 = r2, .ally = true };
-    const k = champion.pairsUsualK(p);
-    try tpl.renderPart(w,
-        \\<section class="mu-card mu-duos"><h2>{title} <span class="muted">in all their {lane} games</span></h2><div class="split">
-        \\
-    , .{ .title = if (r2 == .utility) "Supports" else "Bot laners", .lane = root.roleName(r) });
-    const to_site = try site.toShared(try path(site.arena, r, x, y));
-    for ([_]Champ{ x, y }) |ch| try duoRows(site, w, p, k, ch, to_site);
-    try tpl.renderPart(w, "</div></section>\n", .{});
-}
-
-fn duoRows(site: *const Site, w: *Writer, p: champion.Pairs, k: f64, ch: Champ, to_site: []const u8) !void {
-    const st = p.st;
-    const Duo = struct { ch: Champ, wins: u32, games: u32 };
-    var list: std.ArrayList(Duo) = .empty;
-    for (0..st.n) |c2| {
-        const e = p.get(ch.c, c2);
-        if (e.games == 0) continue;
-        try list.append(site.arena, .{ .ch = site.champs[site.by_c[c2] orelse continue], .wins = e.wins, .games = e.games });
-    }
-    std.mem.sort(Duo, list.items, {}, struct {
-        fn f(_: void, a: Duo, b: Duo) bool {
-            return a.games > b.games;
-        }
-    }.f);
-    try tpl.render(w, "<span class=\"sh\">{x} with</span><span class=\"sh num\">Vs usual</span><span class=\"sh num\">Games</span>\n", .{ .x = ch.name });
-    if (list.items.len == 0) return tpl.render(w, "<span class=\"thin\">more data needed</span><span></span><span></span>\n", .{});
-    const cr = st.champRole(p.r, ch.c);
-    for (list.items[0..@min(duo_rows, list.items.len)]) |d| {
-        const dr = st.champRole(p.r2, d.ch.c);
-        const u = p.usualOf(root.ratio(cr.wins, cr.games), root.ratio(dr.wins, dr.games));
-        const v = champion.VsUsual.of(d.wins, d.games, u, k);
-        try tpl.render(w,
-            \\<a class="champ" href="{href}" style="opacity:{fade:.2}"><img src="{icon}" alt="" loading="lazy" width="24" height="24">{name}</a><span class="vs num" style="--c:{colour};opacity:{fade:.2}" title="{title}"><b>{pts}</b></span><span class="num dim">{games}</span>
-            \\
-        , .{
-            .href = try site.champHref(d.ch, to_site),
-            .fade = curvesfile.fade(d.games),
-            .icon = try site.icon(d.ch),
-            .name = d.ch.name,
-            .colour = tierlist.wrColour(0.5 + v.mean, tierlist.table_span),
-            .title = try site.arena.print("{s} with {s}: {d:.1}% won in {f} games, usually about {d:.1}%", .{
-                ch.name, d.ch.name, 100 * root.ratio(d.wins, d.games), root.Thousands{ .n = d.games }, 100 * u,
-            }),
-            .pts = champion.Points{ .v = v.mean },
-            .games = root.Thousands{ .n = d.games },
-        });
-    }
-}
-
-/// "50.3%"; "-" without games
-fn pct1(w: *Writer, part: u32, whole: u32) !void {
-    if (whole == 0) return w.writeAll("-");
-    try w.print("{d:.1}%", .{100 * root.ratio(part, whole)});
-}
-
 /// Lane minion gold per CS before 14 minutes: 3 melee (21), 3 casters (14) a wave and a
 /// cannon (60 to 70) every third, 381 gold over 19 minions. Jungle camps and support
 /// CS differ, so those roles get no split
@@ -868,78 +714,9 @@ fn round10(v: i32) i32 {
     return @divTrunc(v + if (v < 0) @as(i32, -5) else 5, 10) * 10;
 }
 
-/// The first minute x's estimated gold difference reaches half of its lane_minute one,
-/// on the same side; null while that is about even (min_lead_gold)
-fn halfBy(v: View) ?usize {
-    const i = curvesfile.lane_minute - 1;
-    const g: i32 = v.estimate(.gold, i).mean;
-    if (@abs(g) < min_lead_gold) return null;
-    for (0..i) |m| {
-        const e: i32 = v.estimate(.gold, m).mean;
-        if ((g > 0 and 2 * e >= g) or (g < 0 and 2 * e <= g)) return m + 1;
-    }
-    return curvesfile.lane_minute;
-}
-
-fn clock(w: *Writer, secs: u16) !void {
-    try w.print("{d}:{d:0>2}", .{ secs / 60, secs % 60 });
-}
-
-/// "12 s", "2:21"
-fn duration(w: *Writer, secs: u32) !void {
-    if (secs < 60) return w.print("{d} s", .{secs});
-    try w.print("{d}:{d:0>2}", .{ secs / 60, secs % 60 });
-}
-
-/// The headline's lane part: who is ahead by lane_minute, since when only where the
-/// estimate is more than 2 SE from 0, then how often the side ahead wins. Greyed-out
-/// (thin) curves get none: their note says why
-fn lead(w: *Writer, v: View, x: Champ) !void {
-    const i = curvesfile.lane_minute - 1;
-    if (thin(v) or i >= v.minutes() or v.minute(i).n < minuteFloor(v)) return;
-    const lane = v.lane();
-    const split = lane.ahead >= min_minute_games and lane.behind >= min_minute_games;
-    try tpl.render(w, " {gold}{wins}.", .{
-        .gold = tpl.call(leadSince, .{ v, x }),
-        .wins = tpl.when(split, tpl.t(", then whoever is ahead wins {share} of games", .{
-            .share = tpl.call(percent, .{ lane.wins_ahead + lane.behind - lane.wins_behind, lane.ahead + lane.behind }),
-        })),
-    });
-}
-
-/// Minutes up to this read as "from the start": gold differences barely exist yet
-const start_minute = 4;
 /// A clear lead under this at lane_minute (after rounding to 100) gets no "since when":
 /// just the number (J12)
 const min_lead_gold = 200;
-
-fn leadSince(w: *Writer, v: View, x: Champ) !void {
-    const i = curvesfile.lane_minute - 1;
-    const mean: i32 = v.estimate(.gold, i).mean;
-    const side = clearSide(v.estimate(.gold, i));
-    const gold = @divTrunc(@abs(mean) + 50, 100) * 100;
-    if (side == 0 or gold < min_lead_gold) {
-        const near = round10(mean);
-        if (near == 0) return tpl.render(w, "{x} is level in gold at {minute} minutes", .{ .x = x.name, .minute = curvesfile.lane_minute });
-        return tpl.render(w, "{x} is {gold} gold {side} at {minute} minutes", .{
-            .x = x.name,
-            .gold = @abs(near),
-            .side = if (near > 0) "ahead" else "behind",
-            .minute = curvesfile.lane_minute,
-        });
-    }
-    var from: usize = i;
-    while (from > 0 and clearSide(v.estimate(.gold, from - 1)) == side) from -= 1;
-    const early = from + 1 <= start_minute;
-    try tpl.render(w, "{x} is {side} from {start}{from}, about {gold} gold by {minute} minutes", .{
-        .x = x.name,
-        .side = if (side > 0) "ahead" else "behind",
-        .start = tpl.when(early, "the start"),
-        .from = tpl.when(!early, tpl.t("minute {m}", .{ .m = from + 1 })),
-        .gold = gold,
-        .minute = curvesfile.lane_minute,
-    });
-}
 
 /// 1 or -1 when the estimate is more than 2 standard errors from 0, else 0
 fn clearSide(e: curvesfile.Estimate) i2 {
@@ -1127,63 +904,4 @@ test "one page per matchup, though experienced players' curves share its pair" {
     }
     try std.testing.expectEqual(3, all_ranks);
     try std.testing.expectEqual(1, pages);
-}
-
-test lead {
-    const gpa = std.testing.allocator;
-    var minutes: [curvesfile.lane_minute]curvesfile.Minute = @splat(.{ .n = 400, .gold = .{}, .xp = .{}, .cs = .{} });
-    var header = std.mem.zeroes(curvesfile.Header);
-    header.games = 400;
-    header.own = 800;
-    header.lane_games = 400;
-    header.lane_a = 250;
-    header.lane_b = 150;
-    header.a_wins_lane_a = 160;
-    header.b_wins_lane_b = 96;
-    // Clear of 0 from minute 2, behind past 14: "from the start"
-    for (&minutes, 0..) |*m, i| m.est[0] = .{ .mean = @intCast(60 * i), .se = 20 };
-    minutes[curvesfile.lane_minute - 1].est[0].mean = 846;
-    const x: Champ = .{ .c = 0, .id = 1, .key = "", .name = "Ahri", .slug = "", .banned = 0, .games = 0 };
-    const cv: curvesfile.Curve = .{ .header = &header, .minutes = &minutes };
-    const Case = struct { flipped: bool, want: []const u8 };
-    const ahead = [_]Case{
-        .{ .flipped = false, .want = " Ahri is ahead from the start, about 800 gold by 14 minutes, then whoever is ahead wins 64% of games." },
-        .{ .flipped = true, .want = " Ahri is behind from the start, about 800 gold by 14 minutes, then whoever is ahead wins 64% of games." },
-    };
-    for (ahead) |case| {
-        var aw: Writer.Allocating = .init(gpa);
-        defer aw.deinit();
-        try lead(&aw.writer, .{ .curve = &cv, .flipped = case.flipped }, x);
-        try std.testing.expectEqualStrings(case.want, aw.written());
-    }
-
-    // Clear only from minute 9 on
-    for (minutes[0..8]) |*m| m.est[0].se = 1000;
-    var aw: Writer.Allocating = .init(gpa);
-    defer aw.deinit();
-    try lead(&aw.writer, .{ .curve = &cv, .flipped = false }, x);
-    try std.testing.expectEqualStrings(" Ahri is ahead from minute 9, about 800 gold by 14 minutes, then whoever is ahead wins 64% of games.", aw.written());
-
-    // Within 2 SE at 14, or clear but about 100 gold: the number, no "since when"
-    const small = [_]struct { e: curvesfile.Estimate, want: []const u8 }{
-        .{ .e = .{ .mean = 30, .se = 20 }, .want = "Ahri is 30 gold ahead" },
-        .{ .e = .{ .mean = -140, .se = 20 }, .want = "Ahri is 140 gold behind" },
-        .{ .e = .{ .mean = 4, .se = 20 }, .want = "Ahri is level in gold" },
-    };
-    for (small) |case| {
-        minutes[curvesfile.lane_minute - 1].est[0] = case.e;
-        aw.clearRetainingCapacity();
-        try lead(&aw.writer, .{ .curve = &cv, .flipped = false }, x);
-        const want = try gpa.print(" {s} at 14 minutes, then whoever is ahead wins 64% of games.", .{case.want});
-        defer gpa.free(want);
-        try std.testing.expectEqualStrings(want, aw.written());
-    }
-
-    // Mostly baseline: the page's note says so, no verdict
-    var thin_header = header;
-    thin_header.own = 300;
-    const thin_cv: curvesfile.Curve = .{ .header = &thin_header, .minutes = &minutes };
-    aw.clearRetainingCapacity();
-    try lead(&aw.writer, .{ .curve = &thin_cv, .flipped = false }, x);
-    try std.testing.expectEqualStrings("", aw.written());
 }

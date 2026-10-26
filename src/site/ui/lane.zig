@@ -57,6 +57,8 @@ pub const Lane = struct {
     tip: ?u8 = null,
     /// Minutes a..b
     range: ?[2]u8 = null,
+    /// False: a drag doesn't select minutes (nothing on the page reads them)
+    select: bool = true,
     press: chart.Press = .{},
 
     const L = @This();
@@ -91,6 +93,7 @@ pub const Lane = struct {
                     .hover, .tap => |f| l.tip = at(f, last),
                     .leave => l.tip = null,
                     .range => |r| {
+                        if (!l.select) return;
                         const a = at(r[0], last);
                         const b = at(r[1], last);
                         l.range = if (b > a) .{ a, b } else null;

@@ -214,43 +214,6 @@ tr.thin { opacity: 0.6; }
 tr.thin td { color: var(--muted); }
 .archive { list-style: none; padding: 0; }
 .archive li { display: flex; gap: 12px; padding: 3px 8px; margin: 0 -8px; border-radius: 6px; max-width: 420px; }
-.hero img + img { margin-left: -12px; }
-.hero .swap {
-  display: grid; place-items: center; width: 36px; height: 36px; margin: 0 -14px; z-index: 1;
-  border-radius: 50%; background: var(--panel); border: 1px solid var(--line-2);
-  color: var(--text); font-size: 18px; text-decoration: none;
-}
-.hero .swap:hover { border-color: var(--accent); color: var(--accent); }
-.mu-nav { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; margin: 14px 0 4px; }
-.mu-nav .btn, .mu-nav summary {
-  display: inline-block; border: 1px solid var(--line-2); border-radius: 8px; padding: 6px 12px;
-  background: var(--panel); color: var(--text); text-decoration: none; cursor: pointer;
-}
-.mu-nav .btn:hover, .mu-nav summary:hover { border-color: var(--accent); }
-.mu-nav details[open] { flex-basis: 100%; }
-.pick-list {
-  list-style: none; margin: 8px 0 0; padding: 0;
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 12px;
-}
-.pick-list li { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 2px 6px; border-radius: 6px; }
-.pick-list a { display: inline-flex; align-items: center; gap: 6px; color: var(--text); min-width: 0; }
-.pick-list img { width: 24px; height: 24px; border-radius: 5px; }
-.pick-list .current a { color: var(--accent); font-weight: 600; }
-/* Opponent strip (matchup.zig opponentStrip): one row that scrolls sideways */
-.mu-opps { flex: 1 1 480px; min-width: 0; display: flex; align-items: center; gap: 8px; }
-.mu-opps input { width: 110px; flex: none; }
-.mu-opps ul {
-  display: flex; gap: 2px; min-width: 0; overflow-x: auto; position: relative;
-  list-style: none; margin: 0; padding: 0 0 2px; scrollbar-width: thin;
-}
-.mu-opps a {
-  display: grid; justify-items: center; gap: 1px; width: 46px; padding: 3px 0 2px;
-  border: 1px solid transparent; border-radius: 8px; text-decoration: none;
-}
-.mu-opps a:hover { background: var(--panel); border-color: var(--line-2); }
-.mu-opps a[aria-current] { background: var(--panel); border-color: var(--accent); }
-.mu-opps img { width: 32px; height: 32px; border-radius: 6px; }
-.mu-opps b { font-size: 11px; font-weight: 600; color: var(--c); }
 /* SVG text scales with the chart: capped width keeps it near 15px on desktop, and phones
    get bigger units so it stays near 8.5px */
 .chart { margin: 0; max-width: 800px; }
@@ -443,8 +406,7 @@ b.down, a.down, .down { color: var(--bad); }
 .wr-key { color: var(--faint); font-size: 12px; margin: 6px 2px 0; }
 .wr-key .wrc { margin-left: 6px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .tiles small a { color: inherit; }
-/* Gold leads and ahead shares barely move a matchup: neutral */
-.mu-tiles b.up, .mu-tiles b.down { color: var(--text); }
+/* Gold leads barely move a matchup: neutral */
 a.gold, a.gold.up, a.gold.down, table.mu-table .gold { color: var(--text); font-weight: 500; }
 .tl-more { color: var(--faint); font-size: 13px; margin: 8px 2px 0; }
 .tl-more button.link { font-size: 13px; }
@@ -498,8 +460,6 @@ section > h2 { margin-top: 28px; }
   .tabs a .ri { display: none; }
   .wr { gap: 4px; }
   .wr b, .wr small { width: auto; }
-  table.comeback td.num { white-space: normal; }
-  table.comeback td .muted { display: block; font-size: 12px; }
 }
 @media (max-width: 380px) {
   table.tl .champ img { display: none; }
@@ -767,119 +727,22 @@ td.wrap { white-space: normal; min-width: 140px; max-width: none; padding: 7px 1
 #wr-shape .mid { stop-color: var(--muted); }
 #wr-shape .hi { stop-color: var(--good); }
 
-/* Matchup page (matchup.zig): cards, all on screen. x is the page's champion, y the
-   opponent: one colour each wherever a mark belongs to a side */
-main:has(.mu-tiles) { --mu-x: #3f97ee; --mu-y: #f0596b; }
-.mu-hero { gap: 16px; }
-.mu-hero img { width: 44px; height: 44px; border-radius: 10px; }
-.mu-hero .swap { width: 30px; height: 30px; font-size: 15px; }
-.mu-hero > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; }
-.mu-hero h1 { margin: 0; font-size: 24px; }
-@media (max-width: 640px) {
-  .mu-hero { flex-wrap: wrap; row-gap: 6px; }
-  .mu-hero > div { display: contents; }
-  .mu-hero p { flex-basis: 100%; }
-}
-.mu-nav { margin-top: 10px; }
-.mu-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; margin: 6px 0 12px; }
-.mu-strip .tiles { margin: 0; gap: 8px; }
-.mu-tiles > div { padding: 6px 12px; min-width: 112px; }
-.mu-tiles b { font-size: 19px; }
-p.mu-sum { flex: 1 1 360px; margin: 0; max-width: 820px; font-weight: 500; }
-.mu-tiles b.vs { color: var(--c); }
-.mu-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; min-width: 0; }
-.mu-card h2 { font-size: 13px; font-weight: 600; color: var(--t2); margin: 0 0 8px; letter-spacing: 0.01em; }
-.mu-card.thin > :not(h2) { opacity: 0.55; }
+/* Matchup notes and the landing page's featured lane chart (matchup.featured) */
 .mu-note { color: var(--faint); font-size: 12px; margin: 6px 0 0; }
-.mu-main, .mu-cards, .mu-build { display: grid; gap: 12px; margin: 0 0 12px; }
-@media (min-width: 1000px) {
-  .mu-main { grid-template-columns: minmax(0, 2.6fr) minmax(340px, 1fr); }
-}
-.mu-cards { grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); }
-.mu-trio { display: grid; gap: 10px 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); }
-.mu-cap { color: var(--faint); font-size: 12px; margin: 6px 0 0; }
-.mu-card .chart { max-width: none; }
-.mu-card .chart svg { background: none; border: 0; border-radius: 0; }
-.mu-card .chart figcaption { font-size: 12px; color: var(--faint); margin-top: 4px; }
 /* A matchup's lean is a magnitude, not good or bad: neutral ink (design-ideas.md) */
-.mu-card .chart:not(.thin) .median, .featured .chart:not(.thin) .median { stroke: #b4b7bd; }
-.mu-card .chart:not(.thin) .band, .featured .chart:not(.thin) .band { fill: #5d6169; opacity: 0.35; }
-.mu-card .k.line, .featured .k.line { background: #b4b7bd; }
-.mu-card .k.band, .featured .k.band { background: color-mix(in srgb, #5d6169 45%, transparent); }
-.mu-card .k.prev, .featured .k.prev { border-top-color: #b4b7bd; }
+.featured .chart:not(.thin) .median { stroke: #b4b7bd; }
+.featured .chart:not(.thin) .band { fill: #5d6169; opacity: 0.35; }
+.featured .k.line { background: #b4b7bd; }
+.featured .k.band { background: color-mix(in srgb, #5d6169 45%, transparent); }
+.featured .k.prev { border-top-color: #b4b7bd; }
 .chart .hit { fill: transparent; }
 .chart .hit:hover { fill: rgba(255, 255, 255, 0.06); }
-/* SVG units: the three charts (360 wide) draw at 300 to 380 px */
-.chart.mu-small text, .chart.mu-small .side { font-size: 11px; }
 .k { display: inline-block; width: 14px; height: 8px; margin: 0 4px 0 8px; vertical-align: 0; border-radius: 2px; }
 .k:first-child { margin-left: 0; }
 .k.line { height: 2.5px; background: var(--accent); }
 .k.band { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 .k.end { width: 0; height: 10px; border-left: 1px dotted var(--muted); border-radius: 0; }
 .k.prev { height: 0; border-top: 2px dashed var(--accent); opacity: 0.6; border-radius: 0; }
-.k.x { width: 10px; height: 10px; border-radius: 50%; background: var(--mu-x); }
-.k.all { width: 14px; height: 0; border-top: 2px dashed var(--muted); border-radius: 0; }
-/* Head to head: label over each row, x's share growing left from the middle, y's right */
-.h2h { display: grid; grid-template-columns: 3.4em minmax(0, 1fr) minmax(0, 1fr) 3.4em; gap: 1px 6px; align-items: center; font-size: 13px; }
-.h2h-x, .h2h-y { font-weight: 600; font-size: 13px; margin-bottom: 4px; white-space: nowrap; }
-.h2h-x { grid-column: 1 / 3; color: var(--text); }
-.h2h-y { grid-column: 3 / 5; text-align: right; color: var(--text); }
-.h2h-x::before, .h2h-y::after { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin: 0 6px; }
-.h2h-x::before { background: var(--mu-x); margin-left: 0; }
-.h2h-y::after { background: var(--mu-y); margin-right: 0; }
-.h2h > span:empty { display: none; }
-.h2h-l { grid-column: 1 / -1; text-align: center; color: var(--muted); font-size: 11.5px; margin-top: 3px; }
-.h2h-v { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text); }
-.h2h-v:last-child, .h2h-v + .h2h-gap + .h2h-v, .h2h-bar.r + .h2h-v { text-align: right; }
-.h2h-v.lo { color: var(--muted); font-weight: 500; }
-.h2h-bar { display: flex; justify-content: flex-end; height: 8px; background: var(--panel-3); border-radius: 4px 0 0 4px; overflow: hidden; }
-.h2h-bar.r { justify-content: flex-start; border-radius: 0 4px 4px 0; }
-.h2h-bar i { display: block; height: 100%; }
-.h2h-bar .x { background: var(--mu-x); border-radius: 4px 0 0 4px; }
-.h2h-bar .y { background: var(--mu-y); border-radius: 0 4px 4px 0; }
-.h2h-gap { grid-column: 2 / 4; text-align: center; color: var(--faint); font-size: 12px; margin-top: 6px; }
-.h2h-gap span { color: var(--muted); font-size: 11.5px; }
-.h2h-v.h2h-t { margin-top: 6px; }
-
-/* Comeback chart (comeback.card) */
-.mu-comeback svg { width: 100%; height: auto; display: block; }
-.mu-comeback text { fill: var(--muted); font-size: 10.5px; }
-.mu-comeback .side { fill: var(--faint); font-size: 10px; }
-.mu-comeback .grid { stroke: var(--line); }
-.mu-comeback .zero { stroke: var(--axis); stroke-dasharray: 4 4; }
-.mu-comeback polyline { fill: none; stroke-width: 2; stroke-linejoin: round; }
-.mu-comeback polyline.x { stroke: var(--mu-x); }
-.mu-comeback polyline.all { stroke: var(--muted); stroke-dasharray: 5 4; stroke-width: 1.5; }
-.mu-comeback .dot { fill: var(--mu-x); stroke: var(--panel); stroke-width: 2; }
-.mu-comeback .dot.thin { fill: var(--panel); stroke: var(--mu-x); stroke-width: 1.5; }
-.mu-key { font-size: 12px; color: var(--muted); margin: -2px 0 4px; }
-/* By rank and mastery */
-.split { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 7px 12px; align-items: center; font-size: 13px; }
-.split small { display: block; color: var(--faint); font-size: 11px; }
-.split .sh { color: var(--faint); font-size: 11.5px; }
-.split b.wrc { font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
-.split > span:not(.sh) { white-space: nowrap; }
-.split .num { text-align: right; font-variant-numeric: tabular-nums; }
-.split .thin { opacity: 0.5; }
-.mu-duos .champ { gap: 8px; }
-.mu-duos .champ img { width: 24px; height: 24px; border-radius: 5px; }
-.mu-duos .vs b { color: var(--c); font-weight: 600; }
-.mu-duos .sh:not(:first-child, .num) { margin-top: 6px; }
-.mu-card .rx { background: none; border: 0; padding: 4px 0 0; }
-.mu-rbody { display: grid; gap: 14px; }
-@media (min-width: 1000px) { .mu-rbody { grid-template-columns: auto minmax(0, 1fr); align-items: start; } }
-ul.rshift li > span { flex-basis: 100%; }
-/* Runes card hugs its trees; with no rune taken differently the note goes under them */
-.mu-build > .mu-card:has(> .mu-rbody) { justify-self: start; max-width: 100%; }
-.mu-rbody:not(:has(.rshift)) { grid-template-columns: auto; }
-@media (min-width: 1000px) { .mu-rbody:has(.rshift) { grid-template-columns: auto minmax(280px, 520px); } }
-@media (max-width: 600px) {
-  .mu-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-  .mu-tiles > div { min-width: 0; padding: 7px 9px; }
-  .mu-tiles b { font-size: 18px; }
-  .mu-tiles span, .mu-tiles small { font-size: 11px; }
-  .mu-card { padding: 10px 11px; }
-}
 /* Daily Draft: option cards that flip to their fact, side buttons, score, lanes */
 .dd-options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .dd-opt { padding: 0; border: none; background: none; perspective: 900px; text-align: center; border-radius: 10px; }
@@ -1234,9 +1097,6 @@ table.build tr.hw td:first-child { box-shadow: inset 2px 0 0 var(--good); }
 .key.mp { box-shadow: 0 0 0 2px var(--turn); }
 .key.hw { box-shadow: 0 0 0 2px var(--good); }
 /* Matchup page: runes taken more or less often than usual (builds.zig runeShifts) */
-ul.rshift { list-style: none; margin: 0 0 4px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-ul.rshift li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-ul.rshift li > span { color: var(--muted); font-size: 12px; min-width: 76px; }
 .rsh {
   display: inline-flex; align-items: center; gap: 6px; font-size: 13px; background: var(--panel);
   border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px 2px 3px;

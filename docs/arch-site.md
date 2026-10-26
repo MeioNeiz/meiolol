@@ -26,8 +26,15 @@ order doesn't say reliably which player banned. Cards that stay Platinum+ under 
 pick say so. Other views link in with their view in the query (html.View.query:
 ?region=all&period=patch), folded into the fragment at start.
 
-Scope chips (site/scope.zig Chip, J23): every block on the champion, matchup, build and
-pool pages says the region, period and rank its numbers are from in the subbar's words
+Matchup pages (matchup.zig, under each view's dir) are rendered on request, so
+ui.matchpage's three islands carry their data in the root's data-bin (base64 of
+ui.data; ~7 KB gz for Darius vs Garen's 126 opponents) instead of files: ui-matchup.wasm
+(Head) loads ui-champbuild.wasm (champpage.Build, its one pair build) and
+ui-matchmore.wasm (More). The head's region and period are links to the page in each
+view (Segmented with href), ranks greyed: one view per page, no fragment pick.
+
+Scope chips (site/scope.zig Chip, J23): every block on the build and pool pages says
+the region, period and rank its numbers are from in the subbar's words
 ("EUW · 30 days · Plat+"); a dimension the block doesn't follow is marked against the
 page's picks ("Plat+, not by rank", "Patch 16.21, not the 30 days picked"). Each chip
 carries its keys (data-region, data-period, data-rank; "*" for a block that follows

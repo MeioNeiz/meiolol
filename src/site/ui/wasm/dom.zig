@@ -368,6 +368,20 @@ pub fn attrOf(el: zjb.Handle, name: []const u8) []const u8 {
     return v.allocString(gpa) catch "";
 }
 
+/// An attribute's base64 decoded (an island's data-bin), gpa's; null when missing or bad
+pub fn binOf(el: zjb.Handle, name: []const u8) ?[]u8 {
+    const s = attrOf(el, name);
+    if (s.len == 0) return null;
+    defer gpa.free(s);
+    const d = std.base64.standard.Decoder;
+    const out = gpa.alloc(u8, d.calcSizeForSlice(s) catch return null) catch return null;
+    d.decode(out, s) catch {
+        gpa.free(out);
+        return null;
+    };
+    return out;
+}
+
 /// GET `path` (relative to the page), then `done(ctx, bytes)`; bytes are gpa's, the
 /// callee's to keep. A failed fetch calls `done` with null
 pub fn fetch(path: []const u8, ctx: i32, done: *const fn (i32, ?[]u8) void) void {
