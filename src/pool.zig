@@ -495,6 +495,9 @@ pub const Fallback = struct {
     lanes: []const Lane,
 };
 
+/// A champion playing the main's role, and how many of the main's players play it
+pub const Col = struct { id: u32, together: u32 };
+
 pub const Main = struct {
     id: u32,
     players: u32,
@@ -504,6 +507,10 @@ pub const Main = struct {
     /// The main's most played role; null when it has no games this patch
     role: ?Role = null,
     hard: []const Lane = &.{},
+    /// Best first
+    good: []const Lane = &.{},
+    /// Every champion playing the role: the main, then most played by its players
+    cols: []const Col = &.{},
     cover: []const Cover = &.{},
     fallback: []const Fallback = &.{},
 };
@@ -574,6 +581,20 @@ fn buildMain(arena: Allocator, t: *const Tally, st: *const Stats, m: usize, opts
     hard = try arena.dupe(Lane, hard);
     std.mem.reverse(Lane, hard);
     out.hard = hard;
+    out.good = good;
+
+    var cols: std.ArrayList(Col) = .empty;
+    try cols.append(arena, .{ .id = out.id, .together = out.players });
+    for (0..t.n) |o| {
+        if (o == m or !playsRole(st, o, r, opts)) continue;
+        try cols.append(arena, .{ .id = st.ids[o], .together = t.together[m * t.n + o] });
+    }
+    std.mem.sort(Col, cols.items[1..], {}, struct {
+        fn f(_: void, a: Col, b: Col) bool {
+            return a.together > b.together;
+        }
+    }.f);
+    out.cols = cols.items;
 
     // Candidates: every champion mained players play more than usual, in the main's role
     var cover: std.ArrayList(Cover) = .empty;
@@ -648,6 +669,25 @@ fn laneMatchups(arena: Allocator, st: *const Stats, c: usize, r: Role, opts: Opt
         }
     }.f);
     return list.items;
+}
+
+/// Each of m.cols against m.hard then m.good, row by row; thin and even cells too, so
+/// the pool page can show where a pool is weak
+pub fn grid(arena: Allocator, st: *const Stats, m: Main, opts: Options) ![]Lane {
+    const r = m.role orelse return &.{};
+    const lanes = m.hard.len + m.good.len;
+    const out = try arena.alloc(Lane, m.cols.len * lanes);
+    for (m.cols, 0..) |col, i| {
+        const y = st.index(col.id).?;
+        for (0..lanes) |k| {
+            const id = if (k < m.hard.len) m.hard[k].id else m.good[k - m.hard.len].id;
+            const e = st.index(id).?;
+            const games = if (e == y) 0 else st.enemy(r, r, y, e).games;
+            const pp = if (games == 0) 0 else score.matchupPp(st, opts.score, r, y, r, e);
+            out[i * lanes + k] = .{ .id = id, .pp = pp, .games = games };
+        }
+    }
+    return out;
 }
 
 /// `y`'s matchups in `r` against those of `enemies` it does well into
@@ -783,14 +823,13 @@ test "lift over popularity, shrunk for small n" {
     try testing.expectEqual(null, t.lift(one, st.index(100).?, 20));
 }
 
-test "options cover the main's hard lanes; fallbacks share its good ones" {
-    const gpa = testing.allocator;
-    var arena_state: std.heap.ArenaAllocator = .init(gpa);
-    defer arena_state.deinit();
-    const arena = arena_state.allocator();
+/// Fixture sized for the pre-17 Oct priors: its lanes sit near the thresholds
+pub const test_options: Options = .{ .score = .{ .base_prior_games = 1000, .prior_games = 1000, .weights = .{} } };
+
+/// Test fixture: top only. 1 (the main, 40 players) loses to 4 and beats 5; 2 beats 4;
+/// 3 beats 5 (and loses to 6, so its own rating does not already explain that)
+pub fn testPool(arena: Allocator) !struct { st: Stats, pool: Pool } {
     var games: std.ArrayList(struct { u32, u32, u1 }) = .empty;
-    // Top: 1 (the main) loses to 4 and beats 5; 2 beats 4; 3 beats 5 (and loses to 6,
-    // so its own rating does not already explain that)
     for (0..2000) |i| {
         const win30: u1 = @intFromBool(i % 10 < 7);
         const win70: u1 = @intFromBool(i % 10 >= 7);
@@ -803,8 +842,7 @@ test "options cover the main's hard lanes; fallbacks share its good ones" {
         try games.append(arena, .{ 6, 3, win70 });
     }
     const st = try testStats(arena, 6, games.items);
-    var t: Tally = try .init(gpa, st.n);
-    defer t.deinit(gpa);
+    var t: Tally = try .init(arena, st.n);
     for (0..40) |_| t.add(&st, &.{
         .{ .champion = 1, .weight = 30 },
         .{ .champion = 2, .weight = 8 },
@@ -814,9 +852,16 @@ test "options cover the main's hard lanes; fallbacks share its good ones" {
     for (0..60) |_| t.add(&st, &.{ .{ .champion = 4, .weight = 30 }, .{ .champion = 5, .weight = 3 } }, .games);
     for (0..10) |_| t.add(&st, &.{.{ .champion = 2, .weight = 30 }}, .games); // under min_players
 
-    // Fixture sized for the pre-17 Oct priors: its lanes sit near the thresholds
-    const old_priors: score.Options = .{ .base_prior_games = 1000, .prior_games = 1000, .weights = .{} };
-    const p = try build(arena, &t, &st, .games, .{ .score = old_priors });
+    return .{ .st = st, .pool = try build(arena, &t, &st, .games, test_options) };
+}
+
+test "options cover the main's hard lanes; fallbacks share its good ones" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const fx = try testPool(arena);
+    const st = fx.st;
+    const p = fx.pool;
     try testing.expectEqual(110, p.players);
     const m = p.mains[1];
     try testing.expectEqual(1, m.id);
@@ -829,6 +874,14 @@ test "options cover the main's hard lanes; fallbacks share its good ones" {
     try testing.expectEqual(1, m.fallback.len);
     try testing.expectEqual(3, m.fallback[0].id);
     try testing.expectEqual(5, m.fallback[0].lanes[0].id);
+    try testing.expectEqual(5, m.good[0].id);
+    try testing.expectEqual(1, m.cols[0].id);
+    try testing.expectEqual(40, m.cols[1].together);
+    const g = try grid(arena, &st, m, test_options);
+    try testing.expectEqual(m.cols.len * (m.hard.len + m.good.len), g.len);
+    try testing.expectEqual(m.hard[0].pp, g[0].pp);
+    const lanes = m.hard.len + m.good.len;
+    for (m.cols, 0..) |c, i| if (c.id == 2) try testing.expect(g[i * lanes].pp > 0);
     const thin = p.mains[2];
     try testing.expectEqual(2, thin.id);
     try testing.expectEqual(0, thin.also.len);

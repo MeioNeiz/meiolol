@@ -10,6 +10,10 @@ const pool = @import("../pool.zig");
 const learning = @import("../learning.zig");
 const learning_page = @import("learning.zig");
 const scope = @import("scope.zig");
+const champion = @import("champion.zig");
+const core = @import("core");
+const ui = @import("ui");
+const pd = ui.pooldata;
 
 const Writer = std.Io.Writer;
 const Site = root.Site;
@@ -29,6 +33,61 @@ pub fn sourceText(p: *const pool.Pool) []const u8 {
     };
 }
 
+/// One file per main with lists (from Options.min_players) and a role, in the view's
+/// directory: data/pool/<slug>.bin
+pub fn dataFiles(site: *const Site, files: anytype) !void {
+    const a = site.arena;
+    for (site.champs) |ch| {
+        const m = for (site.pool.mains) |m| {
+            if (m.id == ch.id) break m;
+        } else continue;
+        const f = try fileData(a, &site.stats, m, .{}) orelse continue;
+        var out: std.ArrayList(u8) = .empty;
+        try ui.data.encode(a, pd.File, f, &out);
+        try files.append(a, .{ .path = try a.print("data/pool/{s}.bin", .{ch.slug}), .data = out.items });
+    }
+}
+
+pub fn fileData(a: std.mem.Allocator, st: *const core.Stats, m: pool.Main, opts: pool.Options) !?pd.File {
+    const r = m.role orelse return null;
+    if (m.cols.len == 0) return null;
+    const cells = try a.alloc(pd.Cell, m.cols.len * (m.hard.len + m.good.len));
+    for (cells, try pool.grid(a, st, m, opts)) |*c, l| c.* = .{ .pp = tenths(l.pp), .games = l.games };
+    const cols = try a.alloc(pd.Col, m.cols.len);
+    for (cols, m.cols) |*c, x| c.* = .{ .id = try id16(x.id), .together = x.together };
+    const also = try a.alloc(pd.Also, m.also.len);
+    for (also, m.also) |*o, x| o.* = .{
+        .id = try id16(x.id),
+        .together = x.together,
+        .lift = std.math.lossyCast(u16, @round(100 * x.lift)),
+    };
+    return .{
+        .id = try id16(m.id),
+        .role = champion.uiRole(r),
+        .players = m.players,
+        .one_tricks = m.one_tricks,
+        .hard = try lanes(a, m.hard),
+        .good = try lanes(a, m.good),
+        .cols = cols,
+        .cells = cells,
+        .also = also,
+    };
+}
+
+fn lanes(a: std.mem.Allocator, from: []const pool.Lane) ![]const pd.Lane {
+    const out = try a.alloc(pd.Lane, from.len);
+    for (out, from) |*o, l| o.* = .{ .id = try id16(l.id), .pp = tenths(l.pp), .games = l.games };
+    return out;
+}
+
+fn tenths(pp: f64) i16 {
+    return std.math.lossyCast(i16, @round(10 * pp));
+}
+
+fn id16(id: u32) error{BadId}!u16 {
+    return std.math.cast(u16, id) orelse error.BadId;
+}
+
 /// With the learning-curve table under the picker (site/learning.zig)
 pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool, l: *const learning.Learning) !void {
     const pg = try site.page(
@@ -41,7 +100,7 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool, l: *const l
     try tpl.render(w,
         \\<h1>Champion pool</h1>
         \\<p class="lead">Looking for a second champion? Pick the one you main, or up to
-        \\three: see what else their players play, how hard each is to pick up, and which do
+        \\three: see what else their players play and which do
         \\well where your main struggles or when it is banned. Several options with the
         \\numbers behind each; the choice is yours. <a href="#pick-up">How hard every
         \\champion is to pick up</a>.</p>
@@ -75,4 +134,29 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool, l: *const l
     });
     try learning_page.table(site, w, l);
     try html.foot(w, pg);
+}
+
+test "pool file: a main's lanes and grid, through ui.data, as the page reads them" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const fx = try pool.testPool(a);
+    try std.testing.expectEqual(null, try fileData(a, &fx.st, fx.pool.mains[2], pool.test_options));
+
+    const f = (try fileData(a, &fx.st, fx.pool.mains[1], pool.test_options)).?;
+    var bytes: std.ArrayList(u8) = .empty;
+    try ui.data.encode(a, pd.File, f, &bytes);
+    const back = try ui.data.decode(a, pd.File, bytes.items);
+    try std.testing.expectEqual(1, back.id);
+    try std.testing.expectEqual(.top, back.role);
+    try std.testing.expectEqual(4, back.hard[0].id);
+    try std.testing.expect(back.hard[0].pp <= -pd.min_pp);
+    try std.testing.expectEqual(5, back.good[0].id);
+    try std.testing.expectEqual(back.cols.len * back.lanes(), back.cells.len);
+    try std.testing.expectEqual(back.hard[0].pp, back.cells[0].pp);
+    // 2 beats the main's hard lane, so the pool {1, 2} covers it and 2 is the first option
+    try std.testing.expectEqual(0, back.covered(&.{1}));
+    try std.testing.expectEqual(1, back.covered(&.{ 1, 2 }));
+    var buf: [5]pd.File.Option = undefined;
+    try std.testing.expectEqual(2, back.cols[back.options(&.{1}, .hard, &buf)[0].col].id);
 }

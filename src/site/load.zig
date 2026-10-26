@@ -26,6 +26,7 @@ const tierlist = @import("tierlist.zig");
 const patch_page = @import("patch.zig");
 const champion = @import("champion.zig");
 const champrank = @import("champrank.zig");
+const pool_page = @import("pool.zig");
 const Options = root.Options;
 const Site = root.Site;
 const File = root.File;
@@ -475,6 +476,7 @@ fn addFiles(site: *Site) !void {
             try pool.writeJson(&aw.writer, site.pool);
             try files.append(arena, .{ .path = "data/pool.json", .data = aw.written() });
         }
+        try pool_page.dataFiles(site, &files);
         {
             var aw: Writer.Allocating = .init(arena);
             try learning.writeJson(&aw.writer, site.learning);

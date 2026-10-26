@@ -62,6 +62,7 @@ pub const lane = @import("lane.zig");
 pub const timeline = @import("timeline.zig");
 pub const gamedata = @import("gamedata.zig");
 pub const learndata = @import("learndata.zig");
+pub const pooldata = @import("pooldata.zig");
 pub const learnpage = @import("learnpage.zig");
 pub const champrolepicker = @import("champrolepicker.zig");
 pub const puzzle = @import("puzzle.zig");
