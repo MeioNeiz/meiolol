@@ -118,6 +118,11 @@ pub const Lane = struct {
         return segmented.view(h, .{ .s = .s, .label = W.metric }, items.items);
     }
 
+    /// Minute m's x on the plot, %
+    pub fn px(l: *const L, m: usize) f32 {
+        return l.plane().px(m);
+    }
+
     fn plane(l: *const L) chart.Plane {
         const s = l.cur();
         const fit = l.metrics[l.k].fit;
@@ -140,6 +145,11 @@ pub const Lane = struct {
     }
 
     pub fn view(l: *L, h: *H) N {
+        return l.viewWith(h, .none);
+    }
+
+    /// `foot`: a row under the time axis, as wide as the plot (marks placed by minute)
+    pub fn viewWith(l: *L, h: *H, foot: N) N {
         const s = l.cur();
         const p = l.plane();
         const lo = h.mem.alloc(f32, s.band.len) catch {
@@ -193,6 +203,7 @@ pub const Lane = struct {
             .above = &.{h.div(.{ .class = "side" }, .{W.ahead.with(h, .{ .n = l.a })})},
             .below = &.{h.div(.{ .class = "side" }, .{W.ahead.with(h, .{ .n = l.b })})},
             .over = over.done(),
+            .foot = foot,
             .press = true,
             .on = .{
                 .down = h.on(l, .plot),

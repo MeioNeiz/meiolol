@@ -49,8 +49,8 @@ pub fn files(site: *const Site, json: []const u8, out: *std.ArrayList(File)) !vo
 /// Items, spells and runes from the view's builds file; none without one (icons then
 /// draw empty)
 fn names(site: *const Site) Names {
-    const f = &(site.view_builds[site.view.index()] orelse return .{});
-    return .{ .items = f.items, .spells = f.spells, .runes = f.runes };
+    const f = &(site.view_builds[site.view.index()] orelse return .{ .version = site.ddragon_version });
+    return .{ .version = site.ddragon_version, .items = f.items, .spells = f.spells, .runes = f.runes };
 }
 
 fn siteIcon(site: *const Site, ch: Champ) anyerror![]const u8 {
@@ -78,12 +78,20 @@ pub fn writePage(site: *const Site, w: *Writer) !bool {
         .js = assets.gamemore_js.path,
         .wasm = assets.gamemore_wasm.path,
     };
+    var lane: ui.gamepage.GameLane = .{
+        .a = a,
+        .data = d,
+        .src = f.path,
+        .stamp = gp.stamp,
+        .js = assets.gamelane_js.path,
+        .wasm = assets.gamelane_wasm.path,
+    };
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
-    t.root = ui.gamepage.page(&h, gp.view(&h), more.view(&h));
+    t.root = ui.gamepage.page(&h, gp.view(&h), more.view(&h), lane.view(&h));
     if (h.oom) return error.OutOfMemory;
     try ui.html.write(&t, t.root, w);
-    // Only GamePage's: it loads GameMore's (ui/wasm/games.zig)
+    // Only GamePage's: it loads GameMore's and GameLane's (ui/wasm/games.zig)
     try html.tpl.render(w,
         \\<script src="{js}" data-wasm="{wasm}" defer></script>
         \\
@@ -164,6 +172,8 @@ const months = [_][]const u8{ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "
 
 /// Data Dragon's names and icons, sorted by id (ddragon.find)
 pub const Names = struct {
+    /// Data Dragon's version, for items the lists don't name (potions, wards, parts)
+    version: []const u8 = "",
     items: []const ddragon.Named = &.{},
     spells: []const ddragon.Named = &.{},
     runes: []const ddragon.Named = &.{},
@@ -188,8 +198,10 @@ const Arts = struct {
             .spell => x.names.spells,
             .rune => x.names.runes,
         };
-        const n = ddragon.find(list, id);
-        try x.list.append(a, if (n) |v| .{ .name = v.name, .src = v.icon } else .{ .name = try a.print("#{d}", .{id}), .src = "" });
+        var art: ui.art.Art = if (ddragon.find(list, id)) |v| .{ .name = v.name, .src = v.icon } else .{ .name = try a.print("#{d}", .{id}), .src = "" };
+        if (art.src.len == 0 and k == .item and x.names.version.len > 0)
+            art.src = try a.print("https://ddragon.leagueoflegends.com/cdn/{s}/img/item/{d}.png", .{ x.names.version, id });
+        try x.list.append(a, art);
         try x.keys.append(a, key);
         return @intCast(x.list.items.len - 1);
     }
@@ -285,7 +297,7 @@ pub fn data(arena: Allocator, champs: []const Champ, nm: Names, games: []const g
             .best = if (g.best_minute) |b| .{ .minute = b.minute, .gold = b.gold } else null,
             .buys = buys,
             .skills = skills,
-            .lane = if (g.lane) |l| lane(l) else null,
+            .lane = if (g.lane) |l| laneOf(l) else null,
         });
     }
     return .{ .champs = used.items, .games = out.items, .arts = arts.list.items };
@@ -294,7 +306,7 @@ pub fn data(arena: Allocator, champs: []const Champ, nm: Names, games: []const g
 /// The curve's minutes with this many games; api/game.zig reads it the same way
 const min_minute_games = 10;
 
-fn lane(l: game.LaneReport) gd.Lane {
+fn laneOf(l: game.LaneReport) gd.Lane {
     const stretch = struct {
         fn f(x: ?game.Stretch) ?gd.Lane.Stretch {
             const v = x orelse return null;

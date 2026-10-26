@@ -15,6 +15,11 @@ const gamestrip = @import("gamestrip.zig");
 const gamehead = @import("gamehead.zig");
 const timeline = @import("timeline.zig");
 const inspector = @import("inspector.zig");
+const scoreboard = @import("scoreboard.zig");
+const laneduel = @import("laneduel.zig");
+const itemrow = @import("itemrow.zig");
+const skillgrid = @import("skillgrid.zig");
+const art = @import("art.zig");
 const gamedata = @import("gamedata.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
@@ -62,7 +67,13 @@ const W = struct {
     pub const herald = plain("Herald");
     pub const baron = plain("Baron");
     pub const inhibs = plain("Inhibitors");
+    pub const players = plain("Players");
+    pub const lane = plain("Lane");
+    pub const build = plain("Build");
 };
+
+/// The game graph card's id: a lane stretch pressed below scrolls back to it
+const graph_id = "g-graph";
 
 const Prep = struct {
     ms: []gamedata.Moment,
@@ -214,7 +225,7 @@ pub const GamePage = struct {
         }, .{
             gamestrip.view(h, games.items, .{ .all = p.all }),
             gamehead.view(h, g, p.data.champs),
-            card.view(h, .{}, &.{
+            card.view(h, .{ .id = graph_id }, &.{
                 h.div(.{ .class = "ctl" }, .{ p.tl.modes(h), p.chips(h), p.stepper(h) }),
                 p.tl.view(h),
                 p.cells(h),
@@ -319,13 +330,14 @@ pub const GamePage = struct {
     }
 };
 
-/// The page: GamePage's part (ui-games.wasm) and GameMore's (ui-gamemore.wasm), each
-/// root `display: contents` so the graph and the inspector share a grid row
-pub fn page(h: *H, top: N, more: N) N {
-    return h.div(.{ .class = "c-gpage" }, .{h.div(.{ .class = "g" }, .{ top, more })});
+/// The page: GamePage's part (ui-games.wasm), GameMore's (ui-gamemore.wasm) and
+/// GameLane's (ui-gamelane.wasm), each root `display: contents` so the graph and the
+/// inspector share a grid row
+pub fn page(h: *H, top: N, more: N, lane: N) N {
+    return h.div(.{ .class = "c-gpage" }, .{h.div(.{ .class = "g" }, .{ top, more, lane })});
 }
 
-/// The inspector beside the graph and the objectives row, ui-gamemore.wasm's. Keeps its
+/// The inspector beside the graph, the objectives row and Players, ui-gamemore.wasm's. Keeps its
 /// own GamePage state (game, graph, selection) in step with ui-games.wasm's through the
 /// URL (wasm/dom.zig's ui-hash); a moment picked in the inspector goes back the same way
 pub const GameMore = struct {
@@ -333,6 +345,7 @@ pub const GameMore = struct {
     /// ui-gamemore.js and .wasm, for ui-games.wasm to load (wasm/games.zig)
     js: []const u8 = "",
     wasm: []const u8 = "",
+    board: scoreboard.Board = .{},
 
     const P = @This();
 
@@ -350,6 +363,8 @@ pub const GameMore = struct {
 
     pub fn view(p: *P, h: *H) N {
         p.s.bind();
+        const g = p.s.game();
+        const d = p.s.data;
         return h.div(.{
             .class = "part",
             .data_island = "gamemore",
@@ -360,6 +375,10 @@ pub const GameMore = struct {
         }, .{
             card.view(h, .{}, &.{p.s.insp.view(h)}),
             card.view(h, .{}, &.{versus.split(h, p.objectives(h))}),
+            card.view(h, .{ .flush = true }, &.{
+                card.head(h, W.players, null, &.{p.board.switcher(h)}),
+                p.board.view(h, g, d),
+            }),
         });
     }
 
@@ -401,6 +420,117 @@ pub const GameMore = struct {
     }
 };
 
+/// Lane and Build, ui-gamelane.wasm's (below the fold, loaded as it nears). Follows the
+/// game in the URL; a lane stretch pressed selects its minutes on the game graph through
+/// it. Echoes the moment and range as read, so its own writes leave them be
+pub const GameLane = struct {
+    a: std.mem.Allocator,
+    data: *const gamedata.Data,
+    src: []const u8 = "",
+    stamp: u32 = 0,
+    /// ui-gamelane.js and .wasm, for ui-games.wasm to load (wasm/games.zig)
+    js: []const u8 = "",
+    wasm: []const u8 = "",
+    cur: u8 = 0,
+    m: u16 = 0,
+    r: [2]u16 = .{ 0, 0 },
+    duel: laneduel.Duel = .{},
+
+    const P = @This();
+
+    /// GameMore's keys
+    pub const Url = GameMore.Url;
+
+    /// A lane stretch, minutes from and to
+    pub const Msg = union(enum) { stretch: [2]u8 };
+
+    pub fn toUrl(p: *const P) Url {
+        return .{ .g = p.cur, .m = p.m, .r = p.r };
+    }
+
+    pub fn fromUrl(p: *P, u: Url) void {
+        if (u.g < p.data.games.len) p.cur = u.g;
+        p.m = u.m;
+        p.r = u.r;
+    }
+
+    pub fn update(p: *P, m: Msg, ev: *tree.Event) void {
+        switch (m) {
+            .stretch => |r| {
+                p.m = 0;
+                p.r = .{ @as(u16, r[0]) * 60, @as(u16, r[1]) * 60 };
+            },
+        }
+        ev.push = true;
+        ev.after = .{ .op = .jump, .ref = graph_id };
+    }
+
+    /// LaneDuel's stretch handlers
+    const Sel = struct {
+        p: *P,
+        pub fn on(x: Sel, h: *H, a: u8, b: u8) ?tree.Handler {
+            return h.on(x.p, .{ .stretch = .{ a, b } });
+        }
+    };
+
+    pub fn view(p: *P, h: *H) N {
+        const g = &p.data.games[p.cur];
+        const champs = p.data.champs;
+        return h.div(.{
+            .class = "part",
+            .data_island = "gamelane",
+            .data_src = if (p.src.len > 0) p.src else null,
+            .data_stamp = p.stamp,
+            .data_js = if (p.js.len > 0) p.js else null,
+            .data_wasm = if (p.wasm.len > 0) p.wasm else null,
+        }, .{
+            if (laneduel.has(g)) card.view(h, .{}, &.{
+                card.head(h, W.lane, null, p.duel.head(h, g, champs)),
+                p.duel.view(h, p.a, g, champs, Sel{ .p = p }),
+            }) else null,
+            p.build(h),
+        });
+    }
+
+    /// Your purchases by back and your skill order; the runes and spells in its head
+    fn build(p: *const P, h: *H) ?N {
+        const g = &p.data.games[p.cur];
+        const d = p.data;
+        if (g.buys.len == 0 and g.skills.len == 0) return null;
+        const me = g.me();
+        var icons = h.list();
+        for ([_]struct { u16, art.Kind, art.Px }{
+            .{ me.keystone, .rune, .@"22" },
+            .{ me.second, .rune, .@"16" },
+            .{ me.spells[0], .spell, .@"22" },
+            .{ me.spells[1], .spell, .@"22" },
+        }) |x| if (d.artAt(x[0])) |a| icons.add(art.view(h, a, .{ .k = x[1], .px = x[2] }));
+        const spans = gamedata.backs(h.mem, g.buys) catch {
+            h.oom = true;
+            return null;
+        };
+        const backs = h.mem.alloc(itemrow.Back, spans.len) catch {
+            h.oom = true;
+            return null;
+        };
+        for (spans, backs) |sp, *b| {
+            const its = h.mem.alloc(art.Art, sp[1] - sp[0]) catch {
+                h.oom = true;
+                return null;
+            };
+            for (g.buys[sp[0]..sp[1]], its) |x, *a| a.* = d.artAt(x.item) orelse .{ .name = "", .src = "" };
+            b.* = .{ .t = g.buys[sp[0]].t, .items = its };
+        }
+        return card.view(h, .{}, &.{
+            card.head(h, W.build, null, &.{h.span(.{ .class = "runes" }, .{icons.done()})}),
+            h.div(.{ .class = "bld" }, .{
+                if (backs.len > 0) itemrow.view(h, backs) else null,
+                if (g.skills.len > 0) skillgrid.order(h, g.skills) else null,
+            }),
+        });
+    }
+};
+
 pub const css =
     \\@layer components {
     \\  .c-gpage { min-width: 0; container-type: inline-size; }
@@ -408,7 +538,7 @@ pub const css =
     \\  .c-gpage .part { display: contents; }
     \\  .c-gpage .part > * { grid-column: 1 / -1; }
     \\  .c-gpage .part:first-child > :last-child { grid-column: 1; }
-    \\  .c-gpage .part:last-child > :first-child { grid-column: 2; }
+    \\  .c-gpage .part:nth-child(2) > :first-child { grid-column: 2; }
     \\  .c-gpage .ctl { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-2); }
     \\  .c-gpage .rg { display: flex; gap: 4px; flex-wrap: wrap; }
     \\  .c-gpage .st { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; }
@@ -419,10 +549,14 @@ pub const css =
     \\  .c-gpage .st > .n { font-size: var(--fs-s); color: var(--t2); font-variant-numeric: tabular-nums; min-width: 48px; text-align: center; }
     \\  .c-gpage .cells { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--line); }
     \\  .c-gpage .cells > .c-strip { justify-content: space-between; }
+    \\  .c-gpage [id] { scroll-margin-top: calc(var(--header) + var(--sp-3)); }
+    \\  .c-gpage .runes { display: inline-flex; align-items: center; gap: 4px; }
+    \\  .c-gpage .bld { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: var(--sp-5); align-items: start; }
     \\  @container (max-width: 820px) {
     \\    .c-gpage > .g { grid-template-columns: minmax(0, 1fr); }
-    \\    .c-gpage .part:last-child > :first-child { grid-column: 1; }
+    \\    .c-gpage .part:nth-child(2) > :first-child { grid-column: 1; }
     \\    .c-gpage .rg { order: 1; flex-basis: 100%; }
+    \\    .c-gpage .bld { grid-template-columns: minmax(0, 1fr); }
     \\  }
     \\}
     \\
@@ -440,7 +574,8 @@ pub fn gallery(g: *Gallery) void {
     };
     p.all = "#games";
     var more: GameMore = .{ .s = p.* };
-    g.addFill("a win, on its turn", page(h, p.view(h), more.view(h)));
+    var lane: GameLane = .{ .a = h.mem, .data = p.data };
+    g.addFill("a win, on its turn", page(h, p.view(h), more.view(h), lane.view(h)));
 }
 
 const testing = std.testing;

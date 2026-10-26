@@ -153,6 +153,19 @@ pub const Data = struct {
 
 pub const stamp = @import("tiers.zig").stamp;
 
+/// Purchases this close to the one before are the same shop visit
+pub const back_gap_s = 45;
+
+/// Your purchases split by shop visit: each is `buys[from..to]`
+pub fn backs(a: std.mem.Allocator, buys: []const Buy) ![][2]u16 {
+    var out: std.ArrayList([2]u16) = .empty;
+    for (buys, 0..) |b, i| {
+        if (i == 0 or b.t > buys[i - 1].t + back_gap_s) try out.append(a, .{ @intCast(i), @intCast(i) });
+        out.items[out.items.len - 1][1] = @intCast(i + 1);
+    }
+    return out.toOwnedSlice(a);
+}
+
 /// A moment: a fight, or an epic objective away from any fight
 pub const Moment = struct {
     t: u16,
@@ -518,4 +531,11 @@ test "data round trip" {
     const back = try data.decode(arena.allocator(), Data, bytes.items);
     try testing.expectEqual(demo.kills.len, back.games[0].kills.len);
     try testing.expectEqualStrings("Top outer tower", back.games[0].objs[3].name);
+}
+
+test "backs: purchases split where the gap passes 45 s" {
+    const buys = [_]Buy{ .{ .t = 0, .item = 1 }, .{ .t = 2, .item = 2 }, .{ .t = 400, .item = 3 }, .{ .t = 440, .item = 4 }, .{ .t = 900, .item = 5 } };
+    const b = try backs(std.testing.allocator, &buys);
+    defer std.testing.allocator.free(b);
+    try std.testing.expectEqualSlices([2]u16, &.{ .{ 0, 2 }, .{ 2, 4 }, .{ 4, 5 } }, b);
 }

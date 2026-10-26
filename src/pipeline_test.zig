@@ -615,7 +615,7 @@ test "fixture games to stats, curves and the website" {
     try testing.expect(std.mem.find(u8, served, "\"detail\"") == null);
     try testing.expect(std.mem.find(u8, served, "\"default\":\"mid\"") != null);
     const game_page = (try core_loaded.get(arena, "game.html")).?;
-    for ([_][]const u8{ "data-island=\"games\"", "data-src=\"data/your/mid.bin\"", "ui-games.", "noindex", "data-island=\"gamemore\"", "data-js=\"" ++ assets.gamemore_js.path ++ "\" data-wasm=\"" ++ assets.gamemore_wasm.path ++ "\"" }) |want| {
+    for ([_][]const u8{ "data-island=\"games\"", "data-src=\"data/your/mid.bin\"", "ui-games.", "noindex", "data-island=\"gamemore\"", "data-js=\"" ++ assets.gamemore_js.path ++ "\" data-wasm=\"" ++ assets.gamemore_wasm.path ++ "\"", "data-island=\"gamelane\"", "data-js=\"" ++ assets.gamelane_js.path ++ "\" data-wasm=\"" ++ assets.gamelane_wasm.path ++ "\"" }) |want| {
         try testing.expect(std.mem.find(u8, game_page, want) != null);
     }
     inline for (core.Role.all) |r| {

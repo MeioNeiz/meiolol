@@ -1,5 +1,5 @@
 //! ui-games.wasm: the game page's first screen (ui.gamepage.GamePage), and the loader of
-//! ui-gamemore.wasm for the rest. zjb's generated loader (ui-games.js, `<script src
+//! ui-gamemore.wasm and ui-gamelane.wasm for the rest. zjb's generated loader (ui-games.js, `<script src
 //! data-wasm>`) calls `main`
 const std = @import("std");
 const zjb = @import("zjb");
@@ -11,7 +11,7 @@ pub const panic = zjb.panic;
 
 const gpa = std.heap.wasm_allocator;
 const sel = "[data-island=games]";
-const lazy = [_][]const u8{"[data-island=gamemore]"};
+const lazy = [_][]const u8{ "[data-island=gamemore]", "[data-island=gamelane]" };
 
 var data: ui.gamedata.Data = undefined;
 var state: gp.GamePage = undefined;

@@ -23,18 +23,24 @@ const rows = "QWER";
 
 /// `ref`: the slot's win rate, %, the colour's middle
 pub fn view(h: *H, p: Path, ref: f64) N {
+    return h.div(.{ .class = "c-skills" }, .{ grid(h, p.keys), figures(h, p.share, p.games, p.wins, ref) });
+}
+
+/// One game's order: the grid alone
+pub fn order(h: *H, keys: []const u8) N {
+    return h.div(.{ .class = "c-skills" }, .{grid(h, keys)});
+}
+
+fn grid(h: *H, keys: []const u8) N {
     var cells = h.list();
     for (rows) |key| {
         cells.add(h.b(.{}, .{h.fmt("{c}", .{key})}));
         for (0..18) |i| {
-            const on = i < p.keys.len and p.keys[i] == key;
+            const on = i < keys.len and keys[i] == key;
             cells.add(h.el(.i, .{ .data_on = if (!on) null else if (key == 'R') "r" else "" }, .{if (on) @as(?u64, i + 1) else null}));
         }
     }
-    return h.div(.{ .class = "c-skills" }, .{
-        h.div(.{ .class = "grid", .role = "img", .aria_label = p.keys }, .{cells.done()}),
-        figures(h, p.share, p.games, p.wins, ref),
-    });
+    return h.div(.{ .class = "grid", .role = "img", .aria_label = keys }, .{cells.done()});
 }
 
 /// "39% 50.1 10.4k" under the grid
@@ -70,5 +76,6 @@ pub fn gallery(g: *Gallery) void {
     const h = g.h;
     g.add("most played order", view(h, .{ .keys = "WQEQQRQEQEREEWWRWW", .games = 10381, .wins = 5200, .share = 39 }, 50.6));
     g.add("thin: under 400 games", view(h, .{ .keys = "QWEQQRQWQWRWWEEREE", .games = 237, .wins = 106, .share = 0.9 }, 50.6));
+    g.add("one game's order", order(h, "QEWQQRQEQERE"));
     g.add("game ended before 18", view(h, .{ .keys = "QEWQQRQEQER", .games = 1200, .wins = 640, .share = 5 }, 50.6));
 }

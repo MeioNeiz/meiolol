@@ -339,7 +339,7 @@ pub const Site = struct {
 pub const File = daily.File;
 
 /// Also written by their plain names, with the same data (assets.zig)
-pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.search_js, assets.stats_js, assets.stats_wasm, assets.champion_js, assets.champion_wasm, assets.champbuild_js, assets.champbuild_wasm, assets.champmore_js, assets.champmore_wasm, assets.games_js, assets.games_wasm, assets.gamemore_js, assets.gamemore_wasm };
+pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.search_js, assets.stats_js, assets.stats_wasm, assets.champion_js, assets.champion_wasm, assets.champbuild_js, assets.champbuild_wasm, assets.champmore_js, assets.champmore_wasm, assets.games_js, assets.games_wasm, assets.gamemore_js, assets.gamemore_wasm, assets.gamelane_js, assets.gamelane_wasm };
 
 /// Front-end files at the site root; `Options.static_dir` serves them from disk instead
 pub const shared_assets = [_]File{
@@ -370,6 +370,8 @@ pub const shared_assets = [_]File{
     .{ .path = "ui-games.js", .data = @embedFile("ui-games.js") },
     .{ .path = "ui-gamemore.wasm", .data = @embedFile("ui-gamemore.wasm") },
     .{ .path = "ui-gamemore.js", .data = @embedFile("ui-gamemore.js") },
+    .{ .path = "ui-gamelane.wasm", .data = @embedFile("ui-gamelane.wasm") },
+    .{ .path = "ui-gamelane.js", .data = @embedFile("ui-gamelane.js") },
 };
 /// And in every view's directory
 pub const view_assets = [_]File{
