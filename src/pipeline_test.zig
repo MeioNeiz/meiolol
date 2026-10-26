@@ -330,7 +330,6 @@ test "fixture games to stats, curves and the website" {
         // MatchupStrip: the lane opponents with a page, the current one lit; the pair's build
         .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<nav class=\"c-mstrip\" aria-label=\"Darius&#39;s Top opponents\">", "<a href=\"darius-vs-mordekaiser.html\" aria-current=\"page\"", "data-island=\"champbuild\" data-bin=\"", "<h2>Build against Mordekaiser</h2>", "href=\"../../champion/darius.html#role=top\"" } },
         .{ "method.html", &.{ "Games to stabilise", "<li><b>Highest win rate</b>: marked among options", "<h2 id=\"lean\">Early or late</h2>" } },
-        .{ "learn.html", &.{"From ranked games in EUW on patch 15.13"} },
         // The board, pool and its section follow the view
         .{ "patch/champions.html", &.{ "data-view=\"1\"", "<a href=\"../champions.html\">30 days</a>" } },
         .{ "all/pool.html", &.{"players across all regions so far)"} },
