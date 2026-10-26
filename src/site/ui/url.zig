@@ -47,29 +47,48 @@ fn isStr(comptime T: type) bool {
     return @typeInfo(T) == .@"struct" and @hasDecl(T, "is_url_str");
 }
 
-/// `v`'s non-default fields as `k=v` pairs joined by `&`, no leading `#`
 fn prefix(comptime T: type) []const u8 {
     return if (@hasDecl(T, "prefix")) T.prefix else "";
 }
 
-/// `key` is one of T's
-pub fn owns(comptime T: type, key: []const u8) bool {
-    inline for (comptime std.meta.fieldNames(T)) |f| if (std.mem.eql(u8, key, comptime prefix(T) ++ f)) return true;
-    return false;
+fn keys(comptime T: type) []const []const u8 {
+    const fs = std.meta.fieldNames(T);
+    var k: [fs.len][]const u8 = undefined;
+    for (fs, &k) |f, *x| x.* = prefix(T) ++ f;
+    const out = k;
+    return &out;
 }
 
+/// `s`'s index in `names`: one loop shared by every struct and enum (unrolled compares
+/// per name cost each ui.wasm a few hundred bytes gz)
+fn find(names: []const []const u8, s: []const u8) ?usize {
+    for (names, 0..) |x, i| if (std.mem.eql(u8, x, s)) return i;
+    return null;
+}
+
+/// `key` is one of T's
+pub fn owns(comptime T: type, key: []const u8) bool {
+    return find(comptime keys(T), key) != null;
+}
+
+/// `v`'s non-default fields as `k=v` pairs joined by `&`, no leading `#`
 pub fn write(comptime T: type, v: T, w: *Writer) Writer.Error!void {
     const d: T = .{};
     var first = true;
-    inline for (comptime std.meta.fieldNames(T)) |f| {
+    inline for (comptime std.meta.fieldNames(T), comptime keys(T)) |f, k| {
         const x = @field(v, f);
         if (!same(@TypeOf(x), x, @field(d, f))) {
-            if (!first) try w.writeByte('&');
-            first = false;
-            try w.writeAll(comptime prefix(T) ++ f ++ "=");
+            try pair(w, &first, k);
             try value(@TypeOf(x), x, w);
         }
     }
+}
+
+fn pair(w: *Writer, first: *bool, k: []const u8) Writer.Error!void {
+    if (!first.*) try w.writeByte('&');
+    first.* = false;
+    try w.writeAll(k);
+    try w.writeByte('=');
 }
 
 fn same(comptime V: type, a: V, b: V) bool {
@@ -118,14 +137,12 @@ pub fn read(comptime T: type, s: []const u8) T {
     var it = std.mem.tokenizeScalar(u8, body, '&');
     while (it.next()) |kv| {
         const eq = std.mem.findScalar(u8, kv, '=') orelse continue;
-        const k = kv[0..eq];
-        inline for (comptime std.meta.fieldNames(T)) |f| {
-            if (std.mem.eql(u8, k, comptime prefix(T) ++ f)) {
-                var buf: [256]u8 = undefined;
-                const raw = unescape(kv[eq + 1 ..], &buf);
-                if (parse(@FieldType(T, f), raw)) |x| @field(v, f) = x;
-            }
-        }
+        const fi = find(comptime keys(T), kv[0..eq]) orelse continue;
+        var buf: [256]u8 = undefined;
+        const raw = unescape(kv[eq + 1 ..], &buf);
+        inline for (comptime std.meta.fieldNames(T), 0..) |f, c| if (fi == c) {
+            if (parse(@FieldType(T, f), raw)) |x| @field(v, f) = x;
+        };
     }
     return v;
 }
@@ -139,7 +156,7 @@ fn parse(comptime V: type, s: []const u8) ?V {
     return switch (@typeInfo(V)) {
         .int => std.fmt.parseInt(V, s, 10) catch null,
         .bool => if (std.mem.eql(u8, s, "1")) true else if (std.mem.eql(u8, s, "0")) false else null,
-        .@"enum" => std.meta.stringToEnum(V, s),
+        .@"enum" => std.enums.values(V)[find(std.meta.fieldNames(V), s) orelse return null],
         .optional => |o| if (s.len == 0) @as(V, null) else if (parse(o.child, s)) |y| @as(V, y) else null,
         .array => |a| blk: {
             var x: V = undefined;
@@ -151,18 +168,25 @@ fn parse(comptime V: type, s: []const u8) ?V {
     };
 }
 
+fn hex(c: u8) ?u8 {
+    return switch (c) {
+        '0'...'9' => c - '0',
+        'a'...'f' => c - 'a' + 10,
+        'A'...'F' => c - 'A' + 10,
+        else => null,
+    };
+}
+
 /// %XX decoded (and `+` left as is: we never write it), cut at `buf`'s length
 fn unescape(s: []const u8, buf: []u8) []const u8 {
     var n: usize = 0;
     var i: usize = 0;
     while (i < s.len and n < buf.len) : (n += 1) {
-        if (s[i] == '%' and i + 3 <= s.len) {
-            if (std.fmt.parseInt(u8, s[i + 1 .. i + 3], 16)) |c| {
-                buf[n] = c;
-                i += 3;
-                continue;
-            } else |_| {}
-        }
+        if (s[i] == '%' and i + 3 <= s.len) if (hex(s[i + 1])) |a| if (hex(s[i + 2])) |b| {
+            buf[n] = a << 4 | b;
+            i += 3;
+            continue;
+        };
         buf[n] = s[i];
         i += 1;
     }
