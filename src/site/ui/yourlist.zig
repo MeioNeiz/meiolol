@@ -7,7 +7,7 @@ const champ = @import("champ.zig");
 const role = @import("role.zig");
 const art = @import("art.zig");
 const gd = @import("gamedata.zig");
-const epoch = std.time.epoch;
+const fmt = @import("fmt.zig");
 
 pub const Queue = enum { solo, flex, draft, swift, other };
 
@@ -210,23 +210,6 @@ pub fn dayOf(ms: i64, tz_min: i32) i32 {
     return @intCast(@divFloor(ms + @as(i64, tz_min) * std.time.ms_per_min, std.time.ms_per_day));
 }
 
-pub const Civil = struct {
-    /// 0 Monday
-    weekday: u3,
-    /// 1..31
-    day: u8,
-    /// 1..12
-    month: u8,
-    year: u16,
-};
-
-pub fn civil(day: i32) Civil {
-    const yd = (epoch.EpochDay{ .day = @intCast(@max(day, 0)) }).calculateYearDay();
-    const md = yd.calculateMonthDay();
-    // 1 January 1970 was a Thursday
-    return .{ .weekday = @intCast(@mod(day + 3, 7)), .day = md.day_index + 1, .month = md.month.numeric(), .year = yd.year };
-}
-
 /// One day's games the filter keeps, newest first
 pub const Day = struct {
     day: i32,
@@ -298,8 +281,8 @@ test "days group by the viewer's date, newest first, remakes counted only in tim
     try testing.expectEqualSlices(u16, &.{ 1, 2 }, east[1].games);
     // The oldest game before a DST change, two hours east then: on the 22nd too
     try testing.expectEqual(1, (try days(arena.allocator(), &games, .{}, &.{ 0, 0, 0, 120 })).len);
-    const c = civil(dayOf(t0, 0));
-    try testing.expectEqual(Civil{ .weekday = 3, .day = 22, .month = 10, .year = 2026 }, c);
+    const c = fmt.civil(dayOf(t0, 0));
+    try testing.expectEqual(fmt.Civil{ .weekday = 3, .day = 22, .month = 10, .year = 2026 }, c);
 }
 
 test "the filter cuts days and totals; the summary rows ignore their own field" {

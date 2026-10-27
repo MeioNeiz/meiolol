@@ -5,6 +5,7 @@ const std = @import("std");
 const tree = @import("tree.zig");
 const phrase = @import("phrase.zig");
 const yl = @import("yourlist.zig");
+const fmt = @import("fmt.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
 const H = tree.H;
@@ -28,7 +29,7 @@ const months = [_][]const u8{ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "
 pub fn label(h: *H, day: i32, today: i32) tree.Text {
     if (day == today) return W.today;
     if (day == today - 1) return W.yesterday;
-    const c = yl.civil(day);
+    const c = fmt.civil(day);
     return W.date.with(h, .{ .wd = weekdays[c.weekday], .d = c.day, .m = months[c.month - 1] });
 }
 

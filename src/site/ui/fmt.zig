@@ -1,4 +1,5 @@
-//! The one formatter (every number a phrase or cell shows) and the colour step
+//! The one formatter (every number a phrase or cell shows), the colour step and calendar
+//! dates
 const std = @import("std");
 const W = std.Io.Writer;
 
@@ -211,6 +212,24 @@ pub const WrColour = struct {
         try w.print("color-mix(in oklab,var(--{s}{d}) {d}%,var(--{s}{d}))", .{ side, i, near, side, i + 1 });
     }
 };
+
+/// A day count since 1970-01-01 as a calendar date
+pub const Civil = struct {
+    /// 0 Monday
+    weekday: u3,
+    /// 1..31
+    day: u8,
+    /// 1..12
+    month: u8,
+    year: u16,
+};
+
+pub fn civil(day: i32) Civil {
+    const yd = (std.time.epoch.EpochDay{ .day = @intCast(@max(day, 0)) }).calculateYearDay();
+    const md = yd.calculateMonthDay();
+    // 1 January 1970 was a Thursday
+    return .{ .weekday = @intCast(@mod(day + 3, 7)), .day = md.day_index + 1, .month = md.month.numeric(), .year = yd.year };
+}
 
 test wrColour {
     var buf: [96]u8 = undefined;
