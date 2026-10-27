@@ -31,6 +31,31 @@ on 26 Oct), and its 2 cores sit at load ~3. The move replaces the Hetzner BX11 o
 - SQLite in WAL (src/store/schema.zig) can't live on a share (its -shm is mapped by every
   process); an ext4 image on a share, loop mounted, works but is no faster than the box
 
+## Running it
+
+One dedicated session runs VM1-VM8 back to back, each step starting when the last is
+done, without asking (J31); the coordinator (meiolol-8b) watches it and hands it over
+when its context fills. Decisions inside a step are the session's; Jacob only for
+what needs him off the keyboard (`cc-note needs`): the gpu-box Tailscale login link,
+Ethan's CPU type. VM6 runs by itself once VM3's benchmark shows no downgrade.
+
+Migration mode, set 26-27 Oct (undo in VM6, from the new host where moved):
+- Deploys held: `deploy/push.sh --mode bulk 1440` (sessions queue, check pages on
+  deploy/dev.sh). Undo: `--mode fast` once C01 is the deploy target
+- Box: meiolol-web and meiolol-render-swap stopped (the render@b of the 8b25a7c deploy's
+  predecessor keeps serving; the deploy's new binary is on disk, unswapped), cache-warm
+  stopped, archive pack killed. Running: crawl, render@b, health (alerts "site loop not
+  running"), backup
+- gpu-box: meiolol-archive-pull.timer stopped (backup-mirror runs). Undo: `systemctl
+  --user start meiolol-archive-pull.timer`
+- Copy: C01 user units meiolol-copy-{meiolol,timeline,raw,rest}, logs ~/copy-*.log
+  ("done" last line). The box's key runs rrsync at `ionice -c2 -n7`. The Oracle to
+  Essex route caps at ~5-6 MB/s in total (box disk 76 MB/s free, C01 idle, more
+  streams don't add): ~3 h for 58 GB from 27 Oct 00:00
+- Secrets: vault meiolol/essex-vm (SUDO_PASSWORD, NAS_PASSWORD); `head -1 | sudo -S -p ""
+  -v` once per ssh command, then plain sudo (sudo -S per call eats the stdin of what
+  it runs)
+
 ## Steps
 
 ### VM0: Jacob's choices
@@ -75,7 +100,9 @@ damaged cachevol can't be repaired)
   with `PRAGMA quick_check` before timing
 - Benchmark against the box before the switch (J31): views write and its phases
   (views.log), core build, renderer load, page render latency under concurrent load,
-  deploy/bench-crawl.sh on both disks
+  deploy/bench-crawl.sh on C01. Box figures from its own logs, never a benchmark run on
+  the box. No downgrade = C01 at or under the box's times, or over by under 10% where
+  retuning (Later) can't close it. A downgrade: retune first, then rerun
 - Never two crawlers: the key's rate is per key, so meiolol-crawl stays disabled on C01
   until VM6
 - Run the web loop, a views write and the renderer on C01; compare times with the box's
