@@ -175,7 +175,8 @@ pub const Time = struct {
             while (i < w[1]) : (i += 1) for (t.series) |s| if (t.value(s, i) != null) break :blk true;
             break :blk false;
         };
-        if (!any) return h.el(.figure, .{ .class = "c-time", .role = "group", .aria_label = t.label }, .{h.p(.{ .class = "note" }, .{W.none})});
+        // A zoom onto an outage keeps its way back
+        if (!any) return h.el(.figure, .{ .class = "c-time", .role = "group", .aria_label = t.label }, .{ h.p(.{ .class = "note" }, .{W.none}), t.foot(h) });
         const s = t.scale(w);
         // Bucket i's centre at domain value i
         const p: chart.Plane = .{
@@ -254,9 +255,14 @@ pub const Time = struct {
                 .leave = h.on(t, .plot),
                 .cancel = h.on(t, .plot),
             },
-            .foot = if (t.zoom != null) h.div(.{ .class = "foot" }, .{
-                h.button(.{ .class = "c-btn", .type = "button", .data_s = "s", .on_click = h.on(t, .all) }, .{W.all}),
-            }) else .none,
+            .foot = t.foot(h),
+        });
+    }
+
+    fn foot(t: *T, h: *H) N {
+        if (t.zoom == null) return .none;
+        return h.div(.{ .class = "foot" }, .{
+            h.button(.{ .class = "c-btn", .type = "button", .data_s = "s", .on_click = h.on(t, .all) }, .{W.all}),
         });
     }
 
@@ -599,7 +605,14 @@ test "view: series named at their ends, gaps break lines, ticks on UK hours, tip
     try testing.expectEqual(@as(usize, 24 * 3 - 2), std.mem.count(u8, s, "class=\"bk\""));
     t = .{ .label = plain("Q"), .start = demo.start, .series = &.{.{ .name = plain("q"), .values = &demo.empty }} };
     s = try x.html(&t);
-    try has(s, &.{"No data in this range"}, &.{"<svg"});
+    try has(s, &.{"No data in this range"}, &.{ "<svg", "Show all" });
+    // A drag across an outage: the note keeps Show all, and it goes back
+    t.zoom = .{ 0, 2 };
+    s = try x.html(&t);
+    try has(s, &.{ "No data in this range", "Show all" }, &.{"<svg"});
+    var ev: tree.Event = .{ .kind = .click };
+    t.update(.all, &ev);
+    try testing.expectEqual(@as(?[2]u32, null), t.zoom);
     t = .{ .label = plain("L"), .unit = .score, .fit = true, .start = demo.start, .series = &.{.{ .name = plain("l"), .values = &demo.loss }} };
     s = try x.html(&t);
     try has(s, &.{"<b>0.691</b>"}, &.{"data-s="});
