@@ -85,6 +85,17 @@ fn walk(r: *Report, t: *const tree.Tree, n: tree.N, rules: Rules) void {
         r.words += countWords(x.text);
         return;
     }
+    // Quoted docs (Prose: learned.md, the eval report) are their authors' words, not our
+    // copy: labels, answer columns and the word budget hold for the rest of the page only
+    if (t.attr(n, "data-prose") != null) {
+        const words = r.words;
+        var quoted = rules;
+        quoted.label = .off;
+        quoted.answer = .off;
+        for (t.kidsOf(n)) |k| walk(r, t, k, quoted);
+        r.words = words;
+        return;
+    }
     for ([_][]const u8{ "aria-label", "title", "placeholder" }) |name| {
         if (t.attr(n, name)) |v| r.words += countWords(v);
     }
@@ -147,4 +158,33 @@ test "a listbox row may run past the label budget" {
     var h: tree.H = .init(arena.allocator(), &t);
     t.root = h.div(.{ .role = "listbox" }, .{h.button(.{ .role = "option" }, .{"Live draft model Daily App"})});
     try testing.expectEqual(@as(usize, 0), (try run(arena.allocator(), &t, .{ .label = .err })).findings.items.len);
+}
+
+test "a quoted doc skips the text rules; the page around it keeps them" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var t: tree.Tree = .{};
+    var h: tree.H = .init(arena.allocator(), &t);
+    t.root = h.div(.{}, .{
+        h.div(.{ .data_prose = {} }, .{
+            h.p(.{}, .{"Lane gold at fourteen minutes predicts the result"}),
+            h.table(.{}, .{h.thead(.{}, .{h.tr(.{}, .{ h.th(.{}, .{"winners' mean pct"}), h.th(.{}, .{"games"}) })})}),
+            h.button(.{}, .{}),
+        }),
+        h.button(.{}, .{"Show every champion role"}),
+        h.table(.{}, .{h.thead(.{}, .{h.tr(.{}, .{h.th(.{}, .{"Champion"})})})}),
+    });
+    const r = try run(arena.allocator(), &t, .{ .word_budget = 4 });
+    try testing.expectEqual(@as(usize, 5), r.words);
+    try testing.expect(r.has("5 words, budget 4"));
+    try testing.expect(r.has("label \"Show every champion role\""));
+    try testing.expect(!r.has("winners"));
+    try testing.expect(r.has("a button has no name"));
+    try testing.expectEqual(@as(usize, 1), countHas(r, "answer columns"));
+}
+
+fn countHas(r: Report, needle: []const u8) usize {
+    var n: usize = 0;
+    for (r.findings.items) |f| n += @intFromBool(std.mem.find(u8, f.msg, needle) != null);
+    return n;
 }
