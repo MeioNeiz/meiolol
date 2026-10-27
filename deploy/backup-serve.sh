@@ -5,8 +5,8 @@
 # (lines "FILE SHA256" on stdin) and forgotten; deploy/backup-loop.sh runs prune after
 # each backup; deploy/health.sh reads status.
 #   list        one line per file: FILE SIZE SHA256 (sums cached by size and mtime)
-#   prune       delete files a mirror acked at their current sum (mastery files: both
-#               mirrors, as they keep them as history), except the newest state
+#   prune       delete files a mirror acked at their current sum (mastery files: two
+#               mirrors, as they keep them as history; Megatron's acks don't count), except the newest state
 #               snapshot, segment and mastery file (the next backup starts after them)
 #   mastery-size MIRROR:BYTES:FILES   a mirror's mastery history, for the admin page
 #               (backups/acks/MIRROR.mastery: time bytes files)
@@ -57,11 +57,15 @@ sum() {
 }
 
 # Files acked by some mirror at their current sum; `acked prune`: mastery files only once
-# two mirrors acked them (the Mac keeps 32 days, the gpu-box and Megatron 24 months: no
-# one alone may be the only copy of a file the box drops)
+# two mirrors acked them (the Mac keeps 32 days, the gpu-box 24 months: no one alone may
+# be the only copy of a file the box drops). Megatron's acks never prune: it is the NAS
+# the live data is on, so a file dropped on its ack alone would share the live copy's fate
 acked() {
     shopt -s nullglob
-    local rel s need tsv=("$acks"/*.tsv)
+    local rel s need f tsv=()
+    for f in "$acks"/*.tsv; do
+        [[ ${1:-} == prune && $f == */megatron.tsv ]] || tsv+=("$f")
+    done
     (( ${#tsv[@]} > 0 )) || return 0
     while read -r rel; do
         s=$(sum "$rel")
