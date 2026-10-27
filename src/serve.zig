@@ -202,6 +202,9 @@ fn proxyApi(ctx: *Context, d: Dev, request: *std.http.Server.Request) !void {
     });
 }
 
+const dev_marker_on = site.notes.dev_cookie ++ "=1; Path=/; SameSite=Lax";
+const dev_marker_off = site.notes.dev_cookie ++ "=; Path=/; Max-Age=0";
+
 fn notesMarked(request: *std.http.Server.Request) bool {
     var it = request.iterateHeaders();
     while (it.next()) |h| {
@@ -212,7 +215,7 @@ fn notesMarked(request: *std.http.Server.Request) bool {
 
 fn isNotes(target: []const u8) bool {
     const path = target[0 .. std.mem.findScalar(u8, target, '?') orelse target.len];
-    return std.mem.eql(u8, path, "/api/notes");
+    return std.mem.eql(u8, path, "/api/notes") or std.mem.eql(u8, path, "/api/notes/tool");
 }
 
 /// The site's /api/notes into the dev file, as user "dev"
@@ -229,6 +232,14 @@ fn devNotes(ctx: *Context, d: Dev, request: *std.http.Server.Request) !void {
     // Reading the body invalidates the head's strings
     const target = try arena.dupe(u8, request.head.target);
     const query = if (std.mem.findScalar(u8, target, '?')) |q| target[q + 1 ..] else "";
+    // The site's marker toggle, as the dev server's cookie
+    if (std.mem.startsWith(u8, target, "/api/notes/tool")) {
+        const on = std.mem.eql(u8, query, "on=1");
+        return request.respond("{\"ok\":true}", .{ .extra_headers = &.{
+            .{ .name = "content-type", .value = "application/json" },
+            .{ .name = "set-cookie", .value = if (on) dev_marker_on else dev_marker_off },
+        } });
+    }
     var body: []const u8 = "";
     if (method != .GET) {
         var body_buf: [1024]u8 = undefined;
@@ -254,6 +265,7 @@ fn devNotes(ctx: *Context, d: Dev, request: *std.http.Server.Request) !void {
 test isNotes {
     try std.testing.expect(isNotes("/api/notes"));
     try std.testing.expect(isNotes("/api/notes?path=/a"));
+    try std.testing.expect(isNotes("/api/notes/tool?on=1"));
     try std.testing.expect(!isNotes("/api/notesx"));
     try std.testing.expect(!isNotes("/api/games?id=a"));
 }
@@ -333,8 +345,13 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
             const on = std.mem.endsWith(u8, path, "on");
             return request.respond("", .{ .status = .found, .extra_headers = &.{
                 .{ .name = "location", .value = "/" },
-                .{ .name = "set-cookie", .value = if (on) site.notes.dev_cookie ++ "=1; Path=/; SameSite=Lax" else site.notes.dev_cookie ++ "=; Path=/; Max-Age=0" },
+                .{ .name = "set-cookie", .value = if (on) dev_marker_on else dev_marker_off },
             } });
+        }
+        if (std.mem.eql(u8, path, "admin/notes.html") or std.mem.eql(u8, path, "admin/notes")) {
+            var arena_state: std.heap.ArenaAllocator = .init(ctx.gpa);
+            defer arena_state.deinit();
+            return request.respond(try site.notes.adminPage(arena_state.allocator()), .{ .extra_headers = &.{.{ .name = "content-type", .value = "text/html; charset=utf-8" }} });
         }
     }
 

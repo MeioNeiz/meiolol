@@ -20,6 +20,8 @@
 //!   GET  /api/daily?n=N             how many picked each option and each side
 //!   /api/notes                      notes on the live site (notes.zig), for a login with
 //!                                   take_notes
+//!   POST /api/notes/tool?on=0|1     the tool on pages in this browser or not (its marker
+//!                                   cookie), for the same login
 
 const std = @import("std");
 const Io = std.Io;
@@ -379,7 +381,7 @@ fn handle(ctx: *Context, request: *std.http.Server.Request) !void {
         const r = try daily(arena, db, query, method == .POST, daily_today(ctx.io));
         return send(ctx, request, r);
     }
-    if (std.mem.eql(u8, path, "/api/notes")) return notesRequest(ctx, arena, request, query);
+    if (std.mem.eql(u8, path, "/api/notes") or std.mem.eql(u8, path, "/api/notes/tool")) return notesRequest(ctx, arena, request, path, query);
     if (std.mem.eql(u8, path, "/api/health") and method == .GET) {
         const db = try cache.open(ctx.opts.db_path);
         defer db.close();
@@ -389,11 +391,12 @@ fn handle(ctx: *Context, request: *std.http.Server.Request) !void {
     return send(ctx, request, .{ .status = .not_found, .body = "{\"error\":\"not found\"}" });
 }
 
-/// /api/notes for a login with take_notes; a write also needs X-Meiolol-Action: 1, which a
-/// cross-site form can't send
-fn notesRequest(ctx: *Context, arena: Allocator, request: *std.http.Server.Request, query_head: []const u8) !void {
+/// /api/notes and /api/notes/tool for a login with take_notes; a write also needs
+/// X-Meiolol-Action: 1, which a cross-site form can't send
+fn notesRequest(ctx: *Context, arena: Allocator, request: *std.http.Server.Request, path: []const u8, query_head: []const u8) !void {
+    const tool = std.mem.endsWith(u8, path, "/tool");
     const method: notes.Method = switch (request.head.method) {
-        .GET => .GET,
+        .GET => if (tool) return send(ctx, request, try errorReply(arena, .method_not_allowed, "error", "method not allowed")) else .GET,
         .POST => .POST,
         .PATCH => .PATCH,
         else => return send(ctx, request, try errorReply(arena, .method_not_allowed, "error", "method not allowed")),
@@ -412,6 +415,15 @@ fn notesRequest(ctx: *Context, arena: Allocator, request: *std.http.Server.Reque
     };
     if (!who.role.can(.take_notes)) return send(ctx, request, try errorReply(arena, .forbidden, "error", "your role cannot take notes"));
     if (method != .GET and !action) return send(ctx, request, try errorReply(arena, .forbidden, "error", "missing X-Meiolol-Action"));
+    if (tool) {
+        const on = try param(arena, query, "on") orelse "";
+        if (!std.mem.eql(u8, on, "0") and !std.mem.eql(u8, on, "1")) return send(ctx, request, try errorReply(arena, .bad_request, "error", "expected ?on=0|1"));
+        return request.respond("{\"ok\":true}", .{ .extra_headers = &.{
+            .{ .name = "content-type", .value = "application/json" },
+            .{ .name = "cache-control", .value = "no-store" },
+            .{ .name = "set-cookie", .value = if (on[0] == '1') accounts.marker_on else accounts.marker_off },
+        } });
+    }
     var body: []const u8 = "";
     if (method != .GET) {
         var body_buf: [1024]u8 = undefined;
@@ -1200,6 +1212,13 @@ test "/api/notes: a take_notes login only, and a write needs X-Meiolol-Action" {
         try std.testing.expectStringStartsWith(out, try arena.print("HTTP/1.1 {s} ", .{c[4]}));
     }
     try std.testing.expectStringStartsWith(try notesCall(&ctx, arena, "POST", "", &admin, true, new.items), "HTTP/1.1 200 ");
+    const off = try notesCall(&ctx, arena, "POST", "/tool?on=0", &admin, true, "");
+    try std.testing.expectStringStartsWith(off, "HTTP/1.1 200 ");
+    try std.testing.expect(std.mem.find(u8, off, accounts.marker_off) != null);
+    try std.testing.expect(std.mem.find(u8, try notesCall(&ctx, arena, "POST", "/tool?on=1", &admin, true, ""), accounts.marker_on) != null);
+    try std.testing.expectStringStartsWith(try notesCall(&ctx, arena, "POST", "/tool?on=1", &private, true, ""), "HTTP/1.1 403 ");
+    try std.testing.expectStringStartsWith(try notesCall(&ctx, arena, "POST", "/tool?on=1", &admin, false, ""), "HTTP/1.1 403 ");
+    try std.testing.expectStringStartsWith(try notesCall(&ctx, arena, "POST", "/tool?on=2", &admin, true, ""), "HTTP/1.1 400 ");
     const got = try notesCall(&ctx, arena, "GET", "?path=/a", &admin, false, "");
     try std.testing.expectStringStartsWith(got, "HTTP/1.1 200 ");
     const at = std.mem.find(u8, got, "\r\n\r\n") orelse return error.TestUnexpectedResult;

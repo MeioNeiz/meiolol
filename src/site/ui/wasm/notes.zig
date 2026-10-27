@@ -2,7 +2,8 @@
 //! login (nginx, or the dev server, adds its script for a request with the marker
 //! cookie). Its root goes at the end of <body>; the page's open notes come from
 //! /api/notes as pins; picking listens on window in the capture phase, so the page's own
-//! handlers never see the pointer until it ends; Save POSTs a ui.notesdata.New
+//! handlers never see the pointer until it ends; Save POSTs a ui.notesdata.New. On
+//! /admin/notes.html (its server-rendered ui.noteslist) the list instead
 const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
@@ -32,7 +33,7 @@ var hover: zjb.Handle = .null;
 var picking = false;
 var what_buf: [160]u8 = undefined;
 
-const Call = enum(i32) { list, save };
+const Call = enum(i32) { list, save, all, patch, tool_on, tool_off };
 
 /// What picking blocks outside the tool: the page's own presses never fire
 const blocked = [_][]const u8{ "pointerdown", "pointerup", "mousedown", "mouseup", "dblclick", "auxclick", "contextmenu", "submit" };
@@ -40,6 +41,11 @@ const blocked = [_][]const u8{ "pointerdown", "pointerup", "mousedown", "mouseup
 export fn main() void {
     dom.start();
     const doc = zjb.global("document");
+    const page = doc.call("querySelector", .{zjb.constString(ui.noteslist.sel)}, zjb.Handle);
+    if (page != .null) {
+        page.release();
+        return listMain();
+    }
     const existing = doc.call("querySelector", .{zjb.constString(ui.notes.sel)}, zjb.Handle);
     if (existing != .null) return existing.release();
     if (!mount()) return dom.dom.warn("notes: no root");
@@ -491,6 +497,28 @@ fn load() void {
 
 fn done(ctx: i32, bytes: ?[]u8) void {
     switch (std.enums.fromInt(Call, ctx) orelse return) {
+        .all => {
+            list.loading = false;
+            const b = bytes orelse return listFailed();
+            const l = ui.data.decode(gpa, nd.List, b) catch return listFailed();
+            notes.appendSlice(gpa, l.notes) catch return listFailed();
+            list.notes = notes.items;
+            listRender();
+        },
+        .patch => {
+            const b = bytes orelse return listFailed();
+            const n = ui.data.decode(gpa, nd.Note, b) catch return listFailed();
+            for (notes.items) |*x| {
+                if (x.id == n.id) x.* = n;
+            }
+            list.replying = null;
+            listRender();
+        },
+        .tool_on, .tool_off => {
+            if (bytes == null) return listFailed();
+            list.tool = ctx == @backingInt(Call.tool_on);
+            listRender();
+        },
         .list => {
             const b = bytes orelse return dom.dom.warn("notes: no list");
             const l = ui.data.decode(gpa, nd.List, b) catch return dom.dom.warn("notes: bad list");
@@ -569,8 +597,8 @@ fn textValue(a: std.mem.Allocator) []const u8 {
     defer t.release();
     const v = t.get("value", zjb.Handle);
     defer v.release();
-    const s = v.allocString(a) catch return "";
-    return s[0..@min(s.len, nd.max_text)];
+    // maxlength keeps it within max_text: no cut
+    return v.allocString(a) catch "";
 }
 
 /// Is a `.c-name` on the page: an "everywhere" note shows where its component does
@@ -647,4 +675,67 @@ fn onGrew(entries: zjb.Handle, observer: zjb.Handle) callconv(.c) void {
     entries.release();
     observer.release();
     place();
+}
+
+// The list (/admin/notes.html)
+
+var list: ui.noteslist.List = .{};
+var list_server: ui.noteslist.List = .{};
+var list_island: ?*ui.island.Island(ui.noteslist.List, dom.Dom) = null;
+
+fn listMain() void {
+    list_island = dom.rt.add(ui.noteslist.List, &list, &list_server, ui.noteslist.sel) catch return dom.dom.warn("notes: out of memory");
+    dom.rt.changed = listChanged;
+    dom.fetch("/api/notes?all=1&status=any", @backingInt(Call.all), done);
+}
+
+fn listRender() void {
+    if (list_island) |i| i.render();
+}
+
+fn listFailed() void {
+    list.loading = false;
+    list.failed = true;
+    listRender();
+}
+
+fn listChanged() void {
+    const w = list.want;
+    list.want = .none;
+    switch (w) {
+        .none => {},
+        .status => |s| patch(s.id, .{ .status = s.status }),
+        .reply => |id| {
+            var arena: std.heap.ArenaAllocator = .init(gpa);
+            defer arena.deinit();
+            patch(id, .{ .reply = replyValue(arena.allocator()) });
+        },
+        .tool => |on| if (on)
+            dom.send("POST", "/api/notes/tool?on=1", "", @backingInt(Call.tool_on), done)
+        else
+            dom.send("POST", "/api/notes/tool?on=0", "", @backingInt(Call.tool_off), done),
+    }
+}
+
+fn patch(id: u32, c: nd.Change) void {
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var body: std.ArrayList(u8) = .empty;
+    ui.data.encode(a, nd.Change, c, &body) catch return;
+    var buf: [32]u8 = undefined;
+    const path = std.fmt.bufPrint(&buf, "/api/notes?id={d}", .{id}) catch return;
+    dom.send("PATCH", path, body.items, @backingInt(Call.patch), done);
+}
+
+/// The open reply's input, cut on a whole character at max_reply
+fn replyValue(a: std.mem.Allocator) []const u8 {
+    const doc = zjb.global("document");
+    const el = doc.call("querySelector", .{zjb.constString("[data-ref=reply]")}, zjb.Handle);
+    if (el == .null) return "";
+    defer el.release();
+    const v = el.get("value", zjb.Handle);
+    defer v.release();
+    const s = v.allocString(a) catch return "";
+    return nd.cut(s, nd.max_reply);
 }
