@@ -29,14 +29,14 @@ pub const Api = struct {
     io: Io,
     data_dir: []const u8,
     mutex: Io.Mutex = .init,
-    /// gpa-owned
-    live: ?[]u8 = null,
-    live_at: i64 = 0,
+    /// gpa-owned, json then bin
+    live: [2]?[]u8 = @splat(null),
+    live_at: [2]i64 = @splat(0),
     health: ?[]u8 = null,
     health_at: i64 = 0,
 
     pub fn deinit(api: *Api) void {
-        if (api.live) |l| api.gpa.free(l);
+        for (api.live) |cached| if (cached) |l| api.gpa.free(l);
         if (api.health) |h| api.gpa.free(h);
     }
 };
@@ -60,10 +60,15 @@ pub fn handle(api: *Api, request: *Request) !bool {
         return true;
     }
     if (request.head.method != .GET) return reply(request, .method_not_allowed, "text/plain; charset=utf-8", "method not allowed\n");
-    if (std.mem.eql(u8, path, "live.json")) {
+    if (std.mem.eql(u8, path, "live.json") or std.mem.eql(u8, path, "live.bin")) {
         var arena_state: std.heap.ArenaAllocator = .init(api.gpa);
         defer arena_state.deinit();
-        return reply(request, .ok, "application/json", try liveJson(api, arena_state.allocator()));
+        const format: LiveFormat = if (std.mem.endsWith(u8, path, ".bin")) .bin else .json;
+        const content_type = switch (format) {
+            .json => "application/json",
+            .bin => "application/octet-stream",
+        };
+        return reply(request, .ok, content_type, try live(api, arena_state.allocator(), format));
     }
     if (std.mem.eql(u8, path, "log")) {
         var arena_state: std.heap.ArenaAllocator = .init(api.gpa);
@@ -218,9 +223,9 @@ fn runAction(api: *Api, request: *Request, action: Action) !void {
     appendActionLog(arena, io, try std.fs.path.join(arena, &.{ api.data_dir, admin.action_log }), now, action.name, outcome, output) catch |err| {
         log.warn("action log: {t}", .{err});
     };
-    // A new action shows in live.json at once
+    // A new action shows in live.json and live.bin at once
     api.mutex.lockUncancelable(io);
-    api.live_at = 0;
+    api.live_at = @splat(0);
     api.mutex.unlock(io);
     const body = try std.json.Stringify.valueAlloc(arena, .{ .ok = outcome == .ok, .output = output }, .{});
     _ = try reply(request, if (outcome == .refused) .conflict else .ok, "application/json", body);
@@ -299,13 +304,17 @@ fn evalSince(arena: std.mem.Allocator, io: Io, now: i64) !?i64 {
     return null;
 }
 
+/// live.json for the old page, live.bin (ui/admindata.zig) for the new
+const LiveFormat = enum { json, bin };
+
 /// Cached live_cache_s; one build at a time
-fn liveJson(api: *Api, arena: std.mem.Allocator) ![]const u8 {
+fn live(api: *Api, arena: std.mem.Allocator, format: LiveFormat) ![]const u8 {
     const io = api.io;
     api.mutex.lockUncancelable(io);
     defer api.mutex.unlock(io);
     const now = Io.Clock.real.now(io).toSeconds();
-    if (api.live) |l| if (now - api.live_at < live_cache_s) return arena.dupe(u8, l);
+    const f = @backingInt(format);
+    if (api.live[f]) |l| if (now - api.live_at[f] < live_cache_s) return arena.dupe(u8, l);
 
     if (api.health == null or now - api.health_at >= health_cache_s) {
         const h = run(arena, io, &.{"bin/health.sh"});
@@ -324,11 +333,14 @@ fn liveJson(api: *Api, arena: std.mem.Allocator) ![]const u8 {
     };
     const db = try store.schema.openReadOnly(api.gpa, api.data_dir);
     defer db.close();
-    const json = try admin.liveJson(arena, io, db, l);
-    if (api.live) |old| api.gpa.free(old);
-    api.live = try api.gpa.dupe(u8, json);
-    api.live_at = now;
-    return json;
+    const body = switch (format) {
+        .json => try admin.liveJson(arena, io, db, l),
+        .bin => try admin.liveBin(arena, io, db, l),
+    };
+    if (api.live[f]) |old| api.gpa.free(old);
+    api.live[f] = try api.gpa.dupe(u8, body);
+    api.live_at[f] = now;
+    return body;
 }
 
 fn services(arena: std.mem.Allocator, io: Io) admin.Services {

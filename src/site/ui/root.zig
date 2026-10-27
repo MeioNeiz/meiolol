@@ -64,6 +64,7 @@ pub const gamedata = @import("gamedata.zig");
 pub const testerdata = @import("testerdata.zig");
 pub const learndata = @import("learndata.zig");
 pub const pooldata = @import("pooldata.zig");
+pub const admindata = @import("admindata.zig");
 pub const learnpage = @import("learnpage.zig");
 pub const champrolepicker = @import("champrolepicker.zig");
 pub const poolslots = @import("poolslots.zig");

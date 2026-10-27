@@ -14,6 +14,8 @@ const ratelimit = @import("riot/ratelimit.zig");
 const tsvlog = @import("tsvlog.zig");
 const tpl = @import("tpl");
 const status = @import("status.zig");
+const ui = @import("ui");
+const ad = ui.admindata;
 
 const Io = std.Io;
 const Region = ep.Region;
@@ -50,26 +52,14 @@ const eval_report_max = 256 << 10;
 
 /// Crawl log lines that are not report lines, by what they say. riot_busy: 429s with
 /// limit type "server", from Riot's side rather than our key's limits
-const Kind = enum { rate_limit, riot_busy, riot_server, riot_blocked, db_busy, network, other };
+const Kind = ad.Kind;
 
-const Bucket = struct {
-    /// Seconds of crawler reports in this bucket; 0 = not running
-    covered: u32 = 0,
-    /// Per region: matches, timelines, match id calls, requests
-    m: [regions.len]u32 = @splat(0),
-    t: [regions.len]u32 = @splat(0),
-    ids: [regions.len]u32 = @splat(0),
-    req: [regions.len]u32 = @splat(0),
-    ladder: u32 = 0,
-    mastery: u32 = 0,
-    platform_req: u32 = 0,
-    jobs: u32 = 0,
-    commits: u32 = 0,
-    pages_written: u64 = 0,
-    pages_read: u64 = 0,
-    queued_max: u32 = 0,
-    warnings: [std.enums.values(Kind).len]u32 = @splat(0),
-};
+comptime {
+    for (std.meta.fieldNames(Region), std.meta.fieldNames(ad.Region)) |a, b| std.debug.assert(std.mem.eql(u8, a, b));
+    std.debug.assert(regions.len == ad.regions);
+}
+
+const Bucket = ad.Bucket;
 
 /// One crawler report line's cumulative counters
 const Report = struct {
@@ -87,7 +77,7 @@ const Report = struct {
     pages_read: u64 = 0,
 };
 
-const Message = struct { text: []const u8, kind: Kind, count: u32, last: i64 };
+const Message = ad.Message;
 
 const Crawl = struct {
     start: i64,
@@ -119,6 +109,15 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
     var key_problems: std.ArrayList(KeyProblem) = .empty;
     const crawl = try crawlSeries(arena, io, o.crawl_log, window_start, o.now_s, bucket_s, log_tail, &key_problems);
     const kp = key_problems.items;
+    const queue_groups = try queues(arena, db);
+    const drafts = try draftMix(arena, db, storedSince(history, "drafts", o.now_s - 86400, count(counts, "drafts")));
+    const eval = try tail(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "eval-history.tsv" }), 400);
+    const deployed = try tail(arena, io, "DEPLOYED", 15);
+    const deploy_events = try deployEvents(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, deploys_file }));
+    const eval_report = try readHead(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "eval-latest.md" }), eval_report_max);
+    const storage_rows = try storage(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "storage.tsv" }));
+    const crawl_args = std.mem.trim(u8, try readHead(arena, io, o.crawl_args orelse
+        try std.fs.path.join(arena, &.{ o.data_dir, "..", "crawl.args" }), 4096) orelse "", " \n");
     const page = .{
         .now = o.now_s,
         .days = days_shown,
@@ -127,34 +126,63 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
         .platforms = ep.platforms,
         .files = files,
         .counts = counts,
-        .queues = try queues(arena, db),
+        .queues = queue_groups,
         .players = try playersByRegion(arena, db, count(counts, "players")),
         .ladder = try ladderTiers(arena, db),
         .by_patch = try groups(arena, db, "SELECT patch, count(*) FROM matches GROUP BY 1 ORDER BY 1 DESC LIMIT 8"),
-        .drafts = try draftMix(arena, db, storedSince(history, "drafts", o.now_s - 86400, count(counts, "drafts"))),
+        .drafts = drafts,
         .crawl = crawl,
         .history = history,
-        .eval = try tail(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "eval-history.tsv" }), 400),
+        .eval = eval,
         .uploads = try uploads(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "web.log" }), window_start),
-        .deploys = try tail(arena, io, "DEPLOYED", 15),
-        .deploy_events = try deployEvents(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, deploys_file })),
+        .deploys = deployed,
+        .deploy_events = deploy_events,
         .logs = .{
             .health = try tail(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "health.log" }), 12),
             .backup = try tail(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "backup.log" }), 6),
             .builds = try tail(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "builds.log" }), 6),
         },
-        .eval_report = try readHead(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "eval-latest.md" }), eval_report_max),
-        .storage = try storage(arena, io, try std.fs.path.join(arena, &.{ o.data_dir, "storage.tsv" })),
+        .eval_report = eval_report,
+        .storage = storage_rows,
         .backups = try backups(arena, io, o.backups_dir orelse try std.fs.path.join(arena, &.{ o.data_dir, "..", "backups" })),
         .riot = .{
             .app_limit = ratelimit.personal_key,
             // None seeded: the limiter learns them from Riot's headers
             .method_limits = struct {}{},
-            .crawl_args = std.mem.trim(u8, try readHead(arena, io, o.crawl_args orelse
-                try std.fs.path.join(arena, &.{ o.data_dir, "..", "crawl.args" }), 4096) orelse "", " \n"),
+            .crawl_args = crawl_args,
             .key_problems = kp[kp.len -| 50..],
         },
     };
+    const snap: ad.Snapshot = .{
+        .now = page.now,
+        .days = page.days,
+        .health = page.health orelse "",
+        .disk = adDisk(page.disk),
+        .platforms = try adPlatforms(arena),
+        .files = try adFiles(arena, files),
+        .counts = counts,
+        .queues = queue_groups,
+        .players = page.players,
+        .ladder = page.ladder,
+        .by_patch = page.by_patch,
+        .drafts = try adDrafts(arena, drafts),
+        .crawl = adCrawl(crawl),
+        .history = try tsvRows(arena, ad.HistoryRow, history),
+        .eval = try tsvRows(arena, ad.EvalRow, eval),
+        .uploads = page.uploads,
+        .deploys = try adDeployed(arena, deployed),
+        .deploy_events = try adDeployEvents(arena, deploy_events),
+        .eval_report = eval_report orelse "",
+        .storage = if (storage_rows) |st| try adStorage(arena, st) else null,
+        .backups = page.backups,
+        .riot = .{
+            .app_limit = ratelimit.personal_key,
+            .crawl_args = crawl_args,
+            .key_problems = try adKeyProblems(arena, page.riot.key_problems),
+        },
+    };
+    var bin: std.ArrayList(u8) = .empty;
+    try ui.data.encode(arena, ad.Snapshot, snap, &bin);
     const json = try std.json.Stringify.valueAlloc(arena, page, .{});
 
     var out: Io.Writer.Allocating = .init(arena);
@@ -191,12 +219,161 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
     try writeGz(gpa, io, dir, "index.html", out.written());
     // The same data for the page to poll between rebuilds
     try writeGz(gpa, io, dir, "data.json", json);
+    try writeGz(gpa, io, dir, "admin.bin", bin.items);
     try writeGz(gpa, io, dir, "admin-setnet.js", @embedFile("site/static/admin-setnet.js"));
     try writeGz(gpa, io, dir, "admin-draft.js", @embedFile("site/static/admin-draft.js"));
     try writeGz(gpa, io, dir, "admin-nn.js", @embedFile("site/static/admin-nn.js"));
     try writeGz(gpa, io, dir, "admin-accounts.js", @embedFile("site/static/admin-accounts.js"));
     try writeGz(gpa, io, dir, "admin.js", @embedFile("site/static/admin.js"));
     try writeGz(gpa, io, dir, "admin.css", @embedFile("site/static/admin.css"));
+}
+
+// admin.bin (ui/admindata.zig) from the pieces data.json carries
+
+fn adDisk(d: ?[3]u64) ?ad.Disk {
+    const x = d orelse return null;
+    return .{ .size = x[0], .used = x[1], .free = x[2] };
+}
+
+fn adPlatforms(arena: std.mem.Allocator) ![]ad.Platform {
+    const out = try arena.alloc(ad.Platform, ep.platforms.len);
+    for (ep.platforms, out) |p, *o| o.* = .{ .id = p.id, .region = @fromBackingInt(@intCast(@backingInt(p.region))) };
+    return out;
+}
+
+fn adFiles(arena: std.mem.Allocator, files: []const FileSize) ![]ad.File {
+    const out = try arena.alloc(ad.File, files.len);
+    for (files, out) |f, *o| o.* = .{ .name = f.name, .bytes = f.bytes };
+    return out;
+}
+
+fn adDrafts(arena: std.mem.Allocator, m: DraftMix) !ad.Drafts {
+    const days = try arena.alloc(ad.DayRow, m.days.len);
+    for (m.days, days) |d, *o| o.* = .{ .day = std.math.cast(i32, d.day) orelse 0, .region = d.region, .recent = d.recent };
+    const tiers = try arena.alloc(ad.Group, m.tiers.len);
+    for (tiers, m.tiers, 0..) |*t, n, i| t.* = .{
+        .key = if (i < store.schema.tiers.len) store.schema.tiers[i] else "unknown",
+        .n = @intCast(n),
+    };
+    return .{
+        .rows = m.rows,
+        .days = days,
+        .platforms = m.platforms,
+        .patches = m.patches,
+        .tiers = tiers,
+        .blue_wins = m.blue_wins,
+        .minutes = m.minutes,
+    };
+}
+
+fn adCrawl(c: Crawl) ad.Crawl {
+    return .{
+        .start = c.start,
+        .step = c.step,
+        .buckets = c.buckets,
+        .restarts = c.restarts,
+        .messages = c.messages,
+        .last_report = c.last_report,
+    };
+}
+
+/// DEPLOYED lines: "<sha> <ISO time>"
+fn adDeployed(arena: std.mem.Allocator, text: []const u8) ![]ad.Deployed {
+    var out: std.ArrayList(ad.Deployed) = .empty;
+    var lines = std.mem.splitScalar(u8, text, '\n');
+    while (lines.next()) |line| {
+        const sp = std.mem.findScalar(u8, line, ' ') orelse continue;
+        const t = stamp(line[sp + 1 ..]) orelse continue;
+        try out.append(arena, .{ .sha = line[0..sp], .time = t });
+    }
+    return out.items;
+}
+
+fn adDeployEvents(arena: std.mem.Allocator, events: []const DeployEvent) ![]ad.DeployEvent {
+    const out = try arena.alloc(ad.DeployEvent, events.len);
+    for (events, out) |e, *o| o.* = .{ .time = e[0], .sha = e[1], .step = e[2], .status = e[3], .detail = e[4] };
+    return out;
+}
+
+fn adStorage(arena: std.mem.Allocator, st: Storage) !ad.Storage {
+    const rows = try arena.alloc(ad.StorageRow, st.rows.len);
+    for (st.rows, rows) |r, *o| o.* = .{ .db = r[0], .name = r[1], .kind = r[2], .bytes = r[3], .cells = r[4] };
+    return .{ .generated = st.generated, .rows = rows };
+}
+
+fn adKeyProblems(arena: std.mem.Allocator, kp: []const KeyProblem) ![]ad.KeyProblem {
+    const out = try arena.alloc(ad.KeyProblem, kp.len);
+    for (kp, out) |k, *o| o.* = .{ .time = k[0], .text = k[1] };
+    return out;
+}
+
+/// `T`'s rows from a TSV with a header: each field from the column of its name, so
+/// columns may be added or reordered. An empty or missing cell leaves an optional field
+/// null and drops the row for any other field; a `date` field reads YYYY-MM-DD as a day
+fn tsvRows(arena: std.mem.Allocator, comptime T: type, text: []const u8) ![]T {
+    const fields = @typeInfo(T).@"struct".field_names;
+    var lines = std.mem.splitScalar(u8, text, '\n');
+    var col: [fields.len]?usize = @splat(null);
+    var heads = std.mem.splitScalar(u8, lines.first(), '\t');
+    var i: usize = 0;
+    while (heads.next()) |h| : (i += 1) {
+        inline for (fields, &col) |f, *c| if (std.mem.eql(u8, h, f)) {
+            c.* = i;
+        };
+    }
+    var out: std.ArrayList(T) = .empty;
+    var cells: [64][]const u8 = undefined;
+    rows: while (lines.next()) |line| {
+        var n: usize = 0;
+        var it = std.mem.splitScalar(u8, line, '\t');
+        while (it.next()) |c| : (n += 1) {
+            if (n == cells.len) break;
+            cells[n] = c;
+        }
+        var row: T = undefined;
+        inline for (fields, col) |f, c| {
+            const cell = if (c) |x| (if (x < n) cells[x] else "") else "";
+            @field(row, f) = switch (@typeInfo(@FieldType(T, f))) {
+                .optional => |o| if (cell.len == 0) null else tsvCell(o.child, f, cell),
+                else => tsvCell(@FieldType(T, f), f, cell) orelse continue :rows,
+            };
+        }
+        try out.append(arena, row);
+    }
+    return out.items;
+}
+
+fn tsvCell(comptime V: type, comptime name: []const u8, cell: []const u8) ?V {
+    if (comptime std.mem.eql(u8, name, "date")) {
+        return std.math.cast(V, (date.Date.parse(cell) orelse return null).toDay());
+    }
+    return switch (@typeInfo(V)) {
+        .int => std.fmt.parseInt(V, cell, 10) catch null,
+        .float => std.fmt.parseFloat(V, cell) catch null,
+        else => @compileError("tsvRows: " ++ @typeName(V)),
+    };
+}
+
+test "tsv rows by column name: optional cells null, rows short of a required cell dropped" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const h = try tsvRows(a, ad.HistoryRow, "time\tmatches\tdisk_size\tdrafts\n" ++
+        "1760137700\t12\t9\t\nbad\t1\t\t\n\n1760138600\t13\t9\t4");
+    try std.testing.expectEqual(2, h.len);
+    try std.testing.expectEqual(@as(?u64, 12), h[0].matches);
+    try std.testing.expectEqual(@as(?u64, null), h[0].drafts);
+    try std.testing.expectEqual(@as(?u64, null), h[0].players);
+    try std.testing.expectEqual(@as(?u64, 4), h[1].drafts);
+    // An older line, short of the newer columns
+    const e = try tsvRows(a, ad.EvalRow, "date\tgames\ttest\tll_base\tll_tunedw\n" ++
+        "2026-10-11\t8303\t1458\t0.69299\n1970-01-02\t1\t1\t\t0.5\n2026-13-01\t1\t1");
+    try std.testing.expectEqual(2, e.len);
+    try std.testing.expectEqual(20737, e[0].date);
+    try std.testing.expectEqual(@as(?f32, null), e[0].ll_tunedw);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.69299), e[0].ll_base.?, 1e-6);
+    try std.testing.expectEqual(1, e[1].date);
+    try std.testing.expectEqual(@as(?f32, 0.5), e[1].ll_tunedw);
 }
 
 /// The private site's Draft tester (/p/, docs/plan/accounts.md AC3): the admin page in
@@ -246,7 +423,7 @@ fn writeGz(gpa: std.mem.Allocator, io: Io, dir: Io.Dir, path: []const u8, data: 
     try dir.writeFile(io, .{ .sub_path = try std.mem.print(&buf, "{s}.gz", .{path}), .data = gz });
 }
 
-const Count = struct { name: []const u8, rows: i64 };
+const Count = ad.Count;
 
 /// As `meiolol status`; a few seconds on the box, mostly players
 const tables = [_][]const u8{
@@ -306,9 +483,9 @@ fn appendHistory(arena: std.mem.Allocator, io: Io, path: []const u8, o: Options,
     try tsvlog.append(arena, io, path, history_header, row.written());
 }
 
-const Group = struct { key: []const u8, n: i64 };
+const Group = ad.Group;
 
-const Queues = struct { match: []Group, timeline: []Group };
+const Queues = ad.Queues;
 
 fn queues(arena: std.mem.Allocator, db: store.Db) !Queues {
     return .{
@@ -550,11 +727,11 @@ fn storage(arena: std.mem.Allocator, io: Io, path: []const u8) !?Storage {
     return .{ .generated = st.mtime.toSeconds(), .rows = rows.items };
 }
 
-const Backups = struct { bytes: u64, files: u64, newest: i64, mastery: []const MirrorMastery = &.{} };
+const Backups = ad.Backups;
 
 /// A mirror's mastery history (backups/acks/NAME.mastery: "time bytes files", sent by
 /// deploy/backup-mirror.sh after each round)
-const MirrorMastery = struct { mirror: []const u8, time: i64, bytes: u64, files: u64 };
+const MirrorMastery = ad.Mirror;
 
 /// Every file under the backups directory; null when there is none
 fn backups(arena: std.mem.Allocator, io: Io, path: []const u8) !?Backups {
@@ -641,6 +818,33 @@ pub fn liveJson(arena: std.mem.Allocator, io: Io, db: store.Db, l: Live) ![]cons
         .running = .{ .eval = l.eval_since, .action = l.action },
     };
     return std.json.Stringify.valueAlloc(arena, live, .{});
+}
+
+/// /admin/api/live.bin: live.json's data as ui/admindata.zig's Live, for the new page
+pub fn liveBin(arena: std.mem.Allocator, io: Io, db: store.Db, l: Live) ![]const u8 {
+    const crawl_log = try std.fs.path.join(arena, &.{ l.data_dir, "crawl.log" });
+    var services: std.ArrayList(ad.Service) = .empty;
+    inline for (comptime std.meta.fieldNames(Services)) |f| {
+        try services.append(arena, .{ .unit = f, .state = @field(l.services, f) });
+    }
+    const actions = try actionLog(arena, io, try std.fs.path.join(arena, &.{ l.data_dir, action_log }));
+    const ad_actions = try arena.alloc(ad.Action, actions.len);
+    for (actions, ad_actions) |x, *o| o.* = .{ .time = x[0], .name = x[1], .result = x[2], .output = x[3] };
+    const live: ad.Live = .{
+        .now = l.now_s,
+        .services = services.items,
+        .health = l.health,
+        .crawl = adCrawl(try crawlSeries(arena, io, crawl_log, l.now_s - live_window_s, l.now_s, live_step_s, 4 << 20, null)),
+        .queues = try queues(arena, db),
+        .disk = adDisk(l.disk),
+        .actions = ad_actions,
+        .deploys = try adDeployEvents(arena, try deployEvents(arena, io, try std.fs.path.join(arena, &.{ l.data_dir, deploys_file }))),
+        .eval_since = l.eval_since,
+        .action = if (l.action) |x| .{ .name = x.name, .since = x.since } else null,
+    };
+    var out: std.ArrayList(u8) = .empty;
+    try ui.data.encode(arena, ad.Live, live, &out);
+    return out.items;
 }
 
 /// Admin actions, one per line: ISO time, name, ok|failed|refused, output's start

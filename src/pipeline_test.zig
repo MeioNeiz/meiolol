@@ -809,6 +809,26 @@ test "admin page from the fixture games and a crawl log" {
         return error.TestUnexpectedResult;
     };
     try std.testing.expect(std.mem.find(u8, html, json) != null);
+    // admin.bin: the same snapshot typed, for the new page (ui/admindata.zig)
+    const bin = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "admin.bin" }), arena, .limited(4 << 20));
+    const snap = try ui.data.decode(arena, ui.admindata.Snapshot, bin);
+    try std.testing.expectEqual(1760224200, snap.now);
+    var europe: u64 = 0;
+    for (snap.crawl.buckets) |b| europe += b.m[@backingInt(ui.admindata.Region.europe)];
+    try std.testing.expectEqual(25, europe);
+    try std.testing.expectEqualSlices(i64, &.{1760223600}, snap.crawl.restarts);
+    try std.testing.expectEqual(3, snap.drafts.rows);
+    try std.testing.expectEqualStrings("unknown", snap.drafts.tiers[snap.drafts.tiers.len - 1].key);
+    try std.testing.expectEqual(3, snap.history.len);
+    try std.testing.expectEqual(@as(?u64, 2), snap.history[0].drafts);
+    try std.testing.expectEqual(3, snap.deploy_events.len);
+    try std.testing.expectEqualStrings("swap", snap.deploy_events[2].step);
+    try std.testing.expectEqualStrings("matches", snap.storage.?.rows[0].name);
+    try std.testing.expectEqualStrings("--proxy 10.0.0.3:8092", snap.riot.crawl_args);
+    try std.testing.expectEqual(2, snap.riot.key_problems.len);
+    try std.testing.expectEqual(1, snap.backups.?.files);
+    try std.testing.expectEqualStrings("# meiolol eval\n", snap.eval_report);
+    try std.testing.expect(std.mem.find(u8, bin, "EUW1_7123456") == null);
     // live.json (admin_api.zig), its command results given
     const live = try admin.liveJson(arena, io, db, .{
         .data_dir = dir,
@@ -832,6 +852,23 @@ test "admin page from the fixture games and a crawl log" {
         std.debug.print("live.json lacks {s}\n{s}\n", .{ want, live });
         return error.TestUnexpectedResult;
     };
+    // live.bin: the same for the new page
+    const live_bin = try ui.data.decode(arena, ui.admindata.Live, try admin.liveBin(arena, io, db, .{
+        .data_dir = dir,
+        .now_s = 1760224200,
+        .services = .{ .@"meiolol-crawl" = "active" },
+        .health = "crawler silent",
+        .disk = .{ 100, 40, 60 },
+        .action = .{ .name = "site-build", .since = 1760224190 },
+    }));
+    try std.testing.expectEqualStrings("meiolol-crawl", live_bin.services[0].unit);
+    try std.testing.expectEqualStrings("active", live_bin.services[0].state);
+    try std.testing.expectEqual(60, live_bin.crawl.step);
+    try std.testing.expectEqual(@as(u64, 40), live_bin.disk.?.used);
+    try std.testing.expectEqualStrings("crawl-restart", live_bin.actions[0].name);
+    try std.testing.expectEqual(3, live_bin.deploys.len);
+    try std.testing.expectEqualStrings("site-build", live_bin.action.?.name);
+    try std.testing.expectEqual(@as(?i64, null), live_bin.eval_since);
     for ([_][]const u8{ "admin.js", "admin.css", "index.html.gz", "data.json.gz" }) |f| {
         try std.Io.Dir.cwd().access(io, try std.fs.path.join(arena, &.{ out, f }), .{});
     }
