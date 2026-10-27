@@ -364,9 +364,15 @@ run_daily() {
     elif (( now - last_tester >= 86400 )); then
         last_tester=$now
         (rm -rf data/tester.new
+        # A refused draft-model.bin (scorer off its references) only drops the new
+        # page's file; the old page's JSON still goes up
         if batch bin/meiolol draft-model --out data/tester.new > data/tester.log 2>&1 \
             && batch bin/meiolol lane-model --out data/tester.new >> data/tester.log 2>&1 \
-            && batch gzip -kf data/tester.new/*.json data/tester.new/*.bin; then
+            && { batch bin/meiolol tester-bin data/tester.new >> data/tester.log 2>&1 \
+                || rm -f data/tester.new/draft-model.bin; } \
+            && batch gzip -kf data/tester.new/*.json \
+            && { [[ ! -f data/tester.new/draft-model.bin ]] \
+                || batch gzip -kf data/tester.new/draft-model.bin; }; then
             rm -rf data/tester.old
             [[ -d data/tester ]] && mv data/tester data/tester.old
             mv data/tester.new data/tester && rm -rf data/tester.old

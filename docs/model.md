@@ -5478,10 +5478,10 @@ chance against an average draft (95% range) and with each opponent ("vs") and al
 ("with") it has a cell with, [role, champion, chance, games], every other slot its
 role's average pick; the private site's pv.js shows them on champion and matchup pages
 (docs/plan/app.md "Private site"). The writer is src/draftfile.zig and the scorer
-src/core/draftscore.zig, shared with the lab and ui.wasm. `draft-model` also writes
-draft-model.bin, the same model encoded for the new tester page (ui/testerdata.zig),
-only when the Zig scorer reading it matches draft-ref.json; `meiolol tester-bin DIR`
-converts a lab export the same way (deploy/lab-push.sh).
+src/core/draftscore.zig, shared with the lab and ui.wasm. `meiolol tester-bin DIR`
+encodes DIR's export as draft-model.bin for the new tester page (ui/testerdata.zig),
+only when the Zig scorer reading it matches draft-ref.json; the web loop runs it after
+`draft-model`, deploy/lab-push.sh on a lab export.
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has
 `exportModel`, today win-ratings) fits on every game in the snapshot and writes

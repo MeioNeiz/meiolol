@@ -3,10 +3,10 @@
 # authorized_keys; docs/hosting.md). Reads a gzipped tar of the whole training view
 # (deploy/lab-push.sh) and makes it the one nginx serves at /admin/training/: current/ is
 # a symlink swapped atomically, so a page never reads a half-written upload.
-# The Draft tester's lab models (draft-*.json, lane-*.json, with .gz for gzip_static) also
-# go in current/tester/, which the private site serves as /p/lab/ through a symlink (the
-# box's p/ upload excludes it), only while /p/ sends a visitor without a login to the
-# login page: a draft win chance is never public
+# The Draft tester's lab models (draft-*.json, lane-*.json, draft-model.bin, with .gz for
+# gzip_static) also go in current/tester/, which the private site serves as /p/lab/
+# through a symlink (the box's p/ upload excludes it), only while /p/ sends a visitor
+# without a login to the login page: a draft win chance is never public
 set -eu
 d=/var/www/meiolol-training
 p=/var/www/meiolol/p
@@ -14,7 +14,7 @@ new=$d/v$(date +%s%N)
 mkdir "$new"
 tar -xzf - -C "$new" --no-same-owner --no-same-permissions
 mkdir "$new/tester"
-for f in "$new"/draft-*.json "$new"/lane-*.json; do
+for f in "$new"/draft-*.json "$new"/lane-*.json "$new"/draft-model.bin; do
     [ -f "$f" ] || continue
     ln "$f" "$new/tester/"
     gzip -c "$f" > "$new/tester/${f##*/}.gz"

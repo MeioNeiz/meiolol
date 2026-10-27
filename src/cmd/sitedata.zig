@@ -342,25 +342,18 @@ pub fn cmdLean(c: *Cmd) !u8 {
 pub const usage_draft_model =
     \\  draft-model the shipped draft model on every played game as the admin Draft
     \\              tester's draft-model.json and draft-ref.json (docs/model.md "Draft model
-    \\              file"), and draft-model.bin for the new tester page; daily on the box
+    \\              file"); daily on the box, then tester-bin
     \\              --out DIR        default DATA/tester
     \\
 ;
 
 pub fn cmdDraftModel(c: *Cmd) !u8 {
-    return testerModel(c, struct {
-        fn run(gpa: std.mem.Allocator, io: std.Io, db: anytype, dir: []const u8, w: *std.Io.Writer) !void {
-            try draftmodel.run(gpa, io, db, dir, w);
-            var arena: std.heap.ArenaAllocator = .init(gpa);
-            defer arena.deinit();
-            try testerbin.convert(arena.allocator(), io, dir, w);
-        }
-    }.run);
+    return testerModel(c, draftmodel.run);
 }
 
 pub const usage_tester_bin =
     \\  tester-bin  DIR/draft-model.json (the box's or a lab export) as DIR/draft-model.bin,
-    \\              the file the Draft tester page reads (deploy/lab-push.sh runs it)
+    \\              the file the Draft tester page reads (web-loop.sh, lab-push.sh)
     \\              DIR
     \\
 ;

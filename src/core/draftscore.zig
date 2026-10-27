@@ -82,6 +82,8 @@ pub const Comp = struct {
 };
 
 pub const max_k = 64;
+/// Factor length a file may ask for; vecs are 3 * dim
+pub const max_dim = 1024;
 
 /// The candidate's exported model as the scorer reads it (cand.Export, and comp if any)
 pub const Params = struct {
@@ -181,6 +183,7 @@ pub const Scorer = struct {
         // Parameters can come from a downloaded file (ui.wasm): every index and length
         // the scoring loops rely on is checked here
         if (platform >= e.intercept.len) return error.NoIntercept;
+        if (e.dim > max_dim) return error.BadTerm;
         for (e.terms) |t| {
             if (t.role >= n_role or t.u.len != e.dim or t.v.len != e.dim) return error.BadTerm;
             if (t.s.len != e.dim and t.s.len != 0) return error.BadTerm;
@@ -193,7 +196,7 @@ pub const Scorer = struct {
             for (kinds, c.team) |*kd, t| kd.* = std.meta.stringToEnum(TeamKind, t.kind) orelse return error.UnknownTeamTerm;
             sc.kinds = kinds;
             if (kinds.len > 0) for (e.terms) |t| if (t.raw.len != raw_len) return error.BadCompShape;
-        }
+        } else for (e.terms) |t| if (t.p.len != 0) return error.BadCompShape;
         if (e.pairs) |pr| {
             for (pr.groups) |g| if (g.r >= n_role or g.q >= n_role or (!std.mem.eql(u8, g.kind, "ally") and !std.mem.eql(u8, g.kind, "matchup"))) return error.BadPairGroup;
             for (pr.cells) |c| {
@@ -365,4 +368,17 @@ test "scorer: parameters a file got wrong are refused, not indexed" {
     _ = try Scorer.init(a, p, 0, &None{});
     p.pairs = .{ .min_games = 0, .groups = &.{}, .cells = &.{.{ .group = 0, .a = 1, .b = 2, .theta = 0, .games = 1 }} };
     try std.testing.expectError(error.BadPairGroup, Scorer.init(a, p, 0, &None{}));
+    p.pairs = null;
+    // A profile without comp terms to read it with
+    p.terms = &.{.{ .champion = 1, .role = 0, .games = 1, .b = 0, .sd = 0, .u = &one, .v = &one, .p = &one }};
+    try std.testing.expectError(error.BadCompShape, Scorer.init(a, p, 0, &None{}));
+    p.dim = max_dim + 1;
+    p.terms = &.{};
+    try std.testing.expectError(error.BadTerm, Scorer.init(a, p, 0, &None{}));
+    p.dim = 0;
+    const stats = [_]Stat{.{ .name = "magic", .label = "Magic" }};
+    p.comp = .{ .stats = &stats, .S = &.{}, .A = &one, .S_sd = &.{}, .A_sd = &.{} };
+    try std.testing.expectError(error.BadCompShape, Scorer.init(a, p, 0, &None{}));
+    p.comp = .{ .stats = &stats, .S = &one, .A = &one, .S_sd = &.{}, .A_sd = &.{}, .team = &.{.{ .kind = "balanced", .stat = 0, .weight = 1 }} };
+    try std.testing.expectError(error.UnknownTeamTerm, Scorer.init(a, p, 0, &None{}));
 }

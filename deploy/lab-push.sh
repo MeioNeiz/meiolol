@@ -157,19 +157,27 @@ model() {
     [[ -n "$pick" ]] || return 0
     for d in "$pick" "$RUNS/$pick" "$out/runs/$pick"; do
         if [[ "$d" == /* && -f "$d/$kind-model.json" ]]; then
-            rm -rf "$cache"
-            mkdir -p "$cache"
-            cp "$d/$kind"-*.json "$cache/"
-            echo "$pick" > "$cache/from"
+            # Copied once per pick (or a re-export), not every call: the bin below
+            # is made from the copy
+            if [[ "$(cat "$cache/from" 2>/dev/null)" != "$pick" \
+                || "$d/$kind-model.json" -nt "$cache/$kind-model.json" ]]; then
+                rm -rf "$cache"
+                mkdir -p "$cache"
+                cp "$d/$kind"-*.json "$cache/"
+                echo "$pick" > "$cache/from"
+            fi
             break
         fi
     done
     [[ "$(cat "$cache/from" 2>/dev/null)" == "$pick" ]] || return 0
-    # The new tester page reads draft-model.bin: made here once per pick, by this
-    # checkout's build (a build without tester-bin leaves the page this model short)
-    if [[ $kind == draft && ! -f "$cache/draft-model.bin" ]]; then
-        "$ROOT/zig-out/bin/meiolol" tester-bin "$cache" > /dev/null 2>&1 \
-            || echo "lab-push: no draft-model.bin for $pick (zig build, then it retries)" >&2
+    # The new tester page reads draft-model.bin, made by this checkout's build. Tried
+    # once per copy: no-bin holds why it failed (delete it to try again)
+    if [[ $kind == draft && ! -f "$cache/draft-model.bin" && ! -f "$cache/no-bin" ]]; then
+        if ! "$ROOT/zig-out/bin/meiolol" tester-bin "$cache" > "$cache/no-bin" 2>&1; then
+            echo "lab-push: no draft-model.bin for $pick: $(tail -1 "$cache/no-bin")" >&2
+        else
+            rm -f "$cache/no-bin"
+        fi
     fi
     cp "$cache/$kind"-*.json "$out/"
     [[ $kind == draft && -f "$cache/draft-model.bin" ]] && cp "$cache/draft-model.bin" "$out/"

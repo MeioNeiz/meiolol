@@ -76,7 +76,10 @@ pub const Model = struct {
         var worst: f64 = 0;
         for (m.refs) |r| {
             const c = sc.blue(r.teams);
-            worst = @max(worst, @abs(c.p - r.blue.p), @abs(c.lo - r.blue.lo), @abs(c.hi - r.blue.hi));
+            // Written so a NaN gap (a NaN parameter) counts as the worst, not as none
+            for ([_]f64{ c.p - r.blue.p, c.lo - r.blue.lo, c.hi - r.blue.hi }) |d| {
+                if (!(@abs(d) <= worst)) worst = if (std.math.isNan(d)) std.math.inf(f64) else @abs(d);
+            }
         }
         return .{ .drafts = @intCast(m.refs.len), .worst = worst };
     }
@@ -148,4 +151,31 @@ test "model: encode, decode and score as the parameters say" {
     // An empty slot: the role's share-weighted average, 0.75 * 0.2 + 0.25 * -0.1 = 0.125
     teams[1][0] = 0;
     try testing.expectApproxEqAbs(1 / (1 + @exp(@as(f64, -(0.01 + 0.2 - 0.125)))), sc.blue(teams).p, 1e-9);
+}
+
+test "model: a cut file, a bad term and a NaN parameter are refused" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // sd 0: the reference's range is its chance
+    const terms = [_]ds.Term{.{ .champion = 1, .role = 0, .games = 500, .b = 0.2, .sd = 0 }};
+    var m: Model = .{
+        .meta = .{ .name = "t", .run = "r", .snapshot = "s", .newest_game = "2026-10-26", .training_games = 1, .patch = "16.21", .patch_games = 1, .oldest_patch = "16.21", .newest_patch = "16.21", .platform = "EUW1", .dev = .{ .games = 1, .log_loss = 0.69, .baseline_log_loss = 0.69, .accuracy = 0.5, .auc = 0.5 } },
+        .min_games = 100,
+        .champions = &.{.{ .id = 1, .name = "Aatrox" }},
+        .cells = &.{.{ .champion = 1, .role = 0, .games = 500, .patch_share = 1 }},
+        .params = .{ .kind = "ratings", .dim = 0, .intercept = &.{0}, .w = @splat(0), .z = @splat(0), .terms = &terms },
+        .refs = &.{.{ .label = "top", .teams = .{ .{ 1, 0, 0, 0, 0 }, .{ 0, 0, 0, 0, 0 } }, .blue = .{ .p = 0.5, .lo = 0.5, .hi = 0.5 } }},
+    };
+    var out: std.ArrayList(u8) = .empty;
+    try m.encode(a, &out);
+    try testing.expectError(error.Truncated, Model.decode(a, out.items[0 .. out.items.len - 3]));
+    // Blue's only champion over the average of itself: 0, as the reference says
+    try testing.expect(m.check(&try m.scorer(a)).ok());
+    m.params.temperature = std.math.nan(f64);
+    try testing.expect(!m.check(&try m.scorer(a)).ok());
+    m.params.temperature = 1;
+    const bad = [_]ds.Term{.{ .champion = 1, .role = 5, .games = 500, .b = 0.2, .sd = 0.1 }};
+    m.params.terms = &bad;
+    try testing.expectError(error.BadTerm, m.scorer(a));
 }
