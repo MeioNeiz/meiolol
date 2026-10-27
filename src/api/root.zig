@@ -24,7 +24,7 @@ const Io = std.Io;
 const store = @import("store");
 const core = @import("core");
 const ddragon = @import("../ddragon.zig");
-const daily_first_day = @import("../daily.zig").first_day;
+const daily_today = @import("../daily.zig").todayNumber;
 const httpd = @import("net").server;
 pub const cache = @import("cache.zig");
 pub const fetch = @import("fetch.zig");
@@ -373,7 +373,7 @@ fn handle(ctx: *Context, request: *std.http.Server.Request) !void {
     if (std.mem.eql(u8, path, "/api/daily") and (method == .POST or method == .GET)) {
         const db = try cache.open(ctx.opts.db_path);
         defer db.close();
-        const r = try daily(arena, db, query, method == .POST, dailyToday(ctx.io));
+        const r = try daily(arena, db, query, method == .POST, daily_today(ctx.io));
         return send(ctx, request, r);
     }
     if (std.mem.eql(u8, path, "/api/health") and method == .GET) {
@@ -408,12 +408,6 @@ fn errorReply(arena: Allocator, status: Status, state: []const u8, message: []co
 
 /// Ranked puzzles have four, pro ones six (ui.dailydata.Puzzle.options)
 pub const daily_options = 6;
-
-/// Today's Daily Draft number (UTC), as site.daily.todayNumber
-fn dailyToday(io: Io) u32 {
-    const day = @divFloor(Io.Clock.real.now(io).toSeconds(), std.time.s_per_day);
-    return if (day < daily_first_day) 0 else @intCast(day - daily_first_day + 1);
-}
 
 pub const DailyOut = struct {
     n: u32,

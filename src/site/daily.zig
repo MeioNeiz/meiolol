@@ -86,7 +86,7 @@ fn body(a: std.mem.Allocator, w: *Writer, files: []const File, shown: Shown, at:
         .root = at.root,
         .utc = try a.print("{f}", .{dateOf(at.today)}),
         .days = try dayList(a, files, at.today + 1),
-        .answer = @intCast(std.mem.findScalar(u16, shown.p.options, dd.played(&shown.p)).?),
+        .answer = @intCast(std.mem.findScalar(u16, shown.p.options, dd.played(&shown.p)) orelse return error.BadPuzzle),
         .winner = shown.p.result.winner,
         .hidden_side = shown.p.hidden_side,
         .hidden_role = shown.p.hidden_role,
@@ -183,11 +183,7 @@ fn checked(a: std.mem.Allocator, raw: []const u8, n: u32) !?dd.Puzzle {
 
 pub const Shown = struct { p: dd.Puzzle, base64: []const u8 };
 
-/// Today's (UTC) puzzle number; puzzle n is dated first_day + n - 1 (daily.update)
-pub fn todayNumber(io: std.Io) u32 {
-    const day = @divFloor(std.Io.Clock.real.now(io).toSeconds(), std.time.s_per_day);
-    return if (day < daily.first_day) 0 else @intCast(day - daily.first_day + 1);
-}
+pub const todayNumber = daily.todayNumber;
 
 pub const Pick = struct {
     n: u32,

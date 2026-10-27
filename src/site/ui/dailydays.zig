@@ -72,7 +72,8 @@ pub const Page = struct {
 
     pub fn update(s: *Page, m: Msg, _: *tree.Event) void {
         switch (m) {
-            .share => s.sharing = true,
+            // Still "Copied": already done
+            .share => s.sharing = !s.copied,
         }
     }
 
@@ -117,14 +118,16 @@ pub const Page = struct {
         }
         const st = s.streak();
         const done = if (dp.read(s.saved, s.d.n)) |m| m.marks != null else false;
-        const crowd = if (s.crowd) |c| if (done and c.players > 0) c else null else null;
+        const crowd = if (s.crowd) |c| if (done and c.players > 1) c else null else null;
         return h.span(.{ .class = "c-days", .data_island = "days", .data_bin = if (s.bin.len > 0) s.bin else null }, .{
             h.el(.nav, .{ .class = "strip", .aria_label = W.past }, .{links}),
             h.span(.{ .class = "streak", .role = "img", .title = W.streak_tip, .aria_label = W.streak_read.with(h, .{ .n = st.run, .b = st.best }) }, .{
                 phrase.num(h, .int, st.run),
                 h.el(.small, .{ .aria_hidden = "true" }, .{W.streak}),
             }),
-            if (done and s.d.url.len > 0) button.view(h, .{ .s = .s, .on = h.on(s, .share) }, .{if (s.copied) W.copied else W.share}) else null,
+            if (done and s.d.url.len > 0) h.span(.{ .aria_live = "polite" }, .{
+                button.view(h, .{ .s = .s, .on = h.on(s, .share) }, .{if (s.copied) W.copied else W.share}),
+            }) else null,
             if (crowd) |c| h.span(.{ .class = "crowd" }, .{W.crowd.with(h, .{
                 .n = c.players,
                 .p = pct(c.pick, c.players),
@@ -151,12 +154,14 @@ fn out(days: []const Day, date: []const u8) usize {
     return end;
 }
 
+/// Rounded, but 1 to 99 unless none or all: 999 of 1000 isn't everyone
 fn pct(k: u32, n: u32) u32 {
-    return @intFromFloat(@round(100 * @as(f32, @floatFromInt(k)) / @as(f32, @floatFromInt(n))));
+    const p: u32 = @intFromFloat(@round(100 * @as(f32, @floatFromInt(k)) / @as(f32, @floatFromInt(n))));
+    return if (k == 0 or k == n) p else std.math.clamp(p, 1, 99);
 }
 
 /// What Share sends, Wordle style: the marks, both teams' seats by role with the hidden one
-/// as the pick's mark, the winner's mark and the page; null until the page's puzzle is
+/// as the pick's mark, the "Who won?" mark and the page; null until the page's puzzle is
 /// finished
 pub fn shareText(buf: []u8, d: *const Data, saved: []const u8) ?[]const u8 {
     const m = dp.read(saved, d.n) orelse return null;
@@ -172,7 +177,7 @@ pub fn shareText(buf: []u8, d: *const Data, saved: []const u8) ?[]const u8 {
         }
         w.writeByte('\n') catch return null;
     }
-    w.print("Winner {s}\n{s}", .{ mark[@intFromBool(k[1])], d.url }) catch return null;
+    w.print("Who won? {s}\n{s}", .{ mark[@intFromBool(k[1])], d.url }) catch return null;
     return w.buffered();
 }
 
@@ -219,20 +224,32 @@ pub fn sent(list: []const u8, n: u32) bool {
 /// Puzzles meiolol.daily.sent.v1 remembers: the newest, so the list stays small
 pub const keep_sent = 200;
 
-/// `list` with n added, the newest `keep_sent` kept; `list` when it doesn't fit `buf`
-pub fn withSent(buf: []u8, list: []const u8, n: u32) []const u8 {
-    var w: std.Io.Writer = .fixed(buf);
-    var skip = (std.mem.countScalar(u8, list, ',') + @intFromBool(list.len > 0) + 1) -| keep_sent;
+/// `list` with n added, the newest `keep_sent` kept and anything but puzzle numbers
+/// dropped; null when it doesn't fit `buf`
+pub fn withSent(buf: []u8, list: []const u8, n: u32) ?[]const u8 {
     var it = std.mem.splitScalar(u8, list, ',');
+    var nums: usize = 0;
+    while (it.next()) |x| nums += @intFromBool(isNum(x));
+    var skip = (nums + 1) -| keep_sent;
+    var w: std.Io.Writer = .fixed(buf);
+    it.reset();
     while (it.next()) |x| {
+        if (!isNum(x)) continue;
         if (skip > 0) {
             skip -= 1;
             continue;
         }
-        if (x.len > 0) w.print("{s},", .{x}) catch return list;
+        w.print("{s},", .{x}) catch return null;
     }
-    w.print("{d}", .{n}) catch return list;
+    w.print("{d}", .{n}) catch return null;
     return w.buffered();
+}
+
+/// A puzzle number as `sent` matches it: digits as printed, no sign, zero or underscore
+fn isNum(x: []const u8) bool {
+    const v = std.fmt.parseInt(u32, x, 10) catch return false;
+    var b: [10]u8 = undefined;
+    return std.mem.eql(u8, x, std.fmt.bufPrint(&b, "{d}", .{v}) catch return false);
 }
 
 /// `list` without n: its answers were not counted after all; `list` when it doesn't fit
@@ -560,9 +577,19 @@ test "the crowd: sent once finished, read back for the page's puzzle only" {
         "{\"n\":12,\"players\":40,\"picks\":[10,0,5,25,0,0]}",
         "{\"n\":12,\"players\":40,\"picks\":[10",
         "{\"n\":120,\"players\":40,\"picks\":[10,0,5,25,0,0],\"sides\":[30,10]}",
+        // Spaces: not what the API writes
+        "{\"n\": 12,\"players\":40,\"picks\":[10,0,5,25,0,0],\"sides\":[30,10]}",
         "<html>",
         "",
     }) |bad| try testing.expectEqual(null, crowdOf(bad, &demo_archive));
+    // Each key found alone: any order reads
+    try testing.expectEqual(Crowd{ .players = 40, .pick = 10, .side = 30 }, crowdOf("{\"sides\":[30,10],\"picks\":[10,0,5,25,0,0],\"players\":40,\"n\":12}", &demo_archive).?);
+
+    try testing.expectEqual(0, pct(0, 1000));
+    try testing.expectEqual(1, pct(1, 1000));
+    try testing.expectEqual(50, pct(1, 2));
+    try testing.expectEqual(99, pct(999, 1000));
+    try testing.expectEqual(100, pct(1000, 1000));
 
     try testing.expect(sent("15,12", 12));
     try testing.expect(!sent("15,120", 12));
@@ -570,8 +597,12 @@ test "the crowd: sent once finished, read back for the page's puzzle only" {
     try testing.expect(!sent("junk,99999999999", 12));
 
     var list: [4096]u8 = undefined;
-    try testing.expectEqualStrings("12", withSent(&list, "", 12));
-    try testing.expectEqualStrings("15,12", withSent(&list, "15", 12));
+    try testing.expectEqualStrings("12", withSent(&list, "", 12).?);
+    try testing.expectEqualStrings("15,12", withSent(&list, "15", 12).?);
+    try testing.expectEqualStrings("15,9,12", withSent(&list, "15,abc,07,+3,1_0,,9,99999999999", 12).?);
+    // One damaged item longer than the buffer: dropped, not kept for ever
+    const long: [4200]u8 = @splat('7');
+    try testing.expectEqualStrings("12", withSent(&list, &long, 12).?);
     try testing.expectEqualStrings("15", unsent(&list, "15,12", 12));
     try testing.expectEqualStrings("15,120", unsent(&list, "12,15,120", 12));
     try testing.expectEqualStrings("", unsent(&list, "12", 12));
@@ -579,12 +610,12 @@ test "the crowd: sent once finished, read back for the page's puzzle only" {
     var full: std.Io.Writer = .fixed(&list);
     for (1..keep_sent + 1) |i| try full.print("{s}{d}", .{ if (i > 1) "," else "", i });
     var next: [4096]u8 = undefined;
-    const kept = withSent(&next, full.buffered(), 999);
+    const kept = withSent(&next, full.buffered(), 999).?;
     try testing.expectEqual(keep_sent, std.mem.countScalar(u8, kept, ',') + 1);
     try testing.expect(std.mem.startsWith(u8, kept, "2,3,"));
     try testing.expect(std.mem.endsWith(u8, kept, ",200,999"));
-    // Too long for the buffer: unchanged
-    try testing.expectEqualStrings("15", withSent(list[0..3], "15", 12345));
+    // Too long for the buffer: not marked (crowd() then only GETs)
+    try testing.expectEqual(null, withSent(list[0..3], "15", 12345));
 }
 
 test "share: the marks on the hidden seat, only once finished and public" {
@@ -595,17 +626,19 @@ test "share: the marks on the hidden seat, only once finished and public" {
         "Daily Draft #12: 2/2\n" ++
             "\u{1F7E6}\u{1F7E6}\u{1F7E6}\u{1F7E6}\u{1F7E6}\n" ++
             "\u{1F7E5}\u{1F7E5}\u{2705}\u{1F7E5}\u{1F7E5}\n" ++
-            "Winner \u{2705}\nhttps://meio.lol/daily/12.html",
+            "Who won? \u{2705}\nhttps://meio.lol/daily/12.html",
         shareText(&buf, &demo_archive, demo_saved).?,
     );
     try testing.expectEqualStrings(
         "Daily Draft #12: 1/2, with a hint\n" ++
             "\u{1F7E6}\u{1F7E6}\u{1F7E6}\u{1F7E6}\u{1F7E6}\n" ++
             "\u{1F7E5}\u{1F7E5}\u{274C}\u{1F7E5}\u{1F7E5}\n" ++
-            "Winner \u{2705}\nhttps://meio.lol/daily/12.html",
+            "Who won? \u{2705}\nhttps://meio.lol/daily/12.html",
         shareText(&buf, &demo_archive, "{\"12\":{\"opt\":1,\"side\":0,\"hint\":1,\"marks\":\"01\"}}").?,
     );
     try testing.expectEqual(null, shareText(buf[0..20], &demo_archive, demo_saved));
+    // A hint taken, nothing finished
+    try testing.expectEqual(null, shareText(&buf, &demo_archive, "{\"12\":{\"hint\":1}}"));
 
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
@@ -615,6 +648,14 @@ test "share: the marks on the hidden seat, only once finished and public" {
     try testing.expectEqual(null, t.find(p.view(&h), "class", "c-btn"));
     p.saved = demo_saved;
     try testing.expect(t.find(p.view(&h), "class", "c-btn") != null);
+    var ev: tree.Event = .{ .kind = .click };
+    p.update(.share, &ev);
+    try testing.expect(p.sharing);
+    // A second press while "Copied" shows: already done
+    p.sharing = false;
+    p.copied = true;
+    p.update(.share, &ev);
+    try testing.expect(!p.sharing);
     // Preview: no address, no Share
     var private = demo_archive;
     private.url = "";
@@ -635,6 +676,9 @@ test "the crowd line: only once the page's puzzle is finished and someone played
     var text: std.Io.Writer.Allocating = .init(arena.allocator());
     try t.textOf(line, &text.writer);
     try testing.expectEqualStrings("1,234 played: 41% got the pick, 65% the winner", text.written());
-    p.crowd = .{ .players = 0, .pick = 0, .side = 0 };
-    try testing.expectEqual(null, t.find(p.view(&h), "class", "crowd"));
+    // One player is the viewer alone
+    for ([_]u32{ 0, 1 }) |n| {
+        p.crowd = .{ .players = n, .pick = n, .side = n };
+        try testing.expectEqual(null, t.find(p.view(&h), "class", "crowd"));
+    }
 }

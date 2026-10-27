@@ -31,6 +31,22 @@ const log = std.log.scoped(.daily);
 
 /// Puzzle #1 is 11 October 2026 (UTC); the number is the day after that
 pub const first_day = 20737;
+
+/// Today's puzzle number (UTC), 0 before #1's day
+pub fn todayNumber(io: std.Io) u32 {
+    return numberOn(@divFloor(std.Io.Clock.real.now(io).toSeconds(), std.time.s_per_day));
+}
+
+/// The puzzle number of unix day `day`
+pub fn numberOn(day: i64) u32 {
+    return if (day < first_day) 0 else @intCast(day - first_day + 1);
+}
+
+test "numberOn: #1 on first_day, none before" {
+    try std.testing.expectEqual(0, numberOn(first_day - 1));
+    try std.testing.expectEqual(1, numberOn(first_day));
+    try std.testing.expectEqual(18, numberOn(first_day + 17));
+}
 /// Shorter games are mostly early surrenders: little to explain
 const min_duration_s = 15 * 60;
 /// Each of the ten picks must be this share of its role's games: off-role and rare picks

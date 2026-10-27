@@ -191,9 +191,15 @@ detected reason that clears chance, else its usual gold at 14 against the enemy)
   opens (location.replace) the newest puzzle out by the viewer's date, or ?n= (old
   links), when that isn't the page's.
   Once the page's puzzle is finished, ui.dailydays POSTs its answers to /api/daily the
-  first time (localStorage meiolol.daily.sent.v1 lists the puzzles sent), else GETs, and
-  shows "N played: P% got the pick, S% the winner" under the strip.
-  Not yet: an archive past the strip's 14, share
+  first time (localStorage meiolol.daily.sent.v1 lists the newest 200 puzzles sent), else
+  GETs, and shows "N played: P% got the pick, S% the winner" under the strip from 2
+  players. A failed POST un-marks the puzzle (sent again next load) and GETs; a reply lost
+  after the server counted it counts twice. The API refuses puzzles past today + 1.
+  Share (once finished, and only on a --public build: a preview may not be advertised):
+  "Daily Draft #n: k/2", both teams' seats as squares by role with the hidden one as the
+  pick's mark, "Who won?" and its mark, the puzzle's page; the share sheet on phones,
+  else the clipboard, else a prompt to copy from.
+  Not yet: an archive past the strip's 14
 
 ## Your games service (src/api, src/site/your.zig, static/your.js)
 

@@ -40,7 +40,8 @@ export fn main() void {
     island.render();
     dom.rt.changed = changed;
     zjb.global("window").call("addEventListener", .{ zjb.constString("ui-daily"), zjb.fnHandle("daysSaved", &onSaved) }, void);
-    // Last: blocked storage throws, ending this call with the page already live
+    // Last: blocked storage throws (here or in a later store), ending that call with the
+    // page already live
     read();
 }
 
@@ -65,12 +66,15 @@ fn crowd() void {
     defer if (got) |g| gpa.free(g);
     const list = got orelse "";
     var buf: [96]u8 = undefined;
+    var next: [4096]u8 = undefined;
     if (!ds.sent(list, data.n)) if (ds.crowdPath(&buf, state.saved, data.n, true)) |path| {
-        asked = true;
-        // Before the request: a reload while it is out must not count it twice
-        var next: [4096]u8 = undefined;
-        dom.store(sent_key, ds.withSent(&next, list, data.n));
-        return dom.post(path, 1, onCrowd);
+        // Before the request: a reload while it is out must not count it twice. Unmarked,
+        // it would count on every load: then only a GET
+        if (ds.withSent(&next, list, data.n)) |marked| {
+            asked = true;
+            dom.store(sent_key, marked);
+            return dom.post(path, 1, onCrowd);
+        }
     };
     // Sent, or finished without the answers to send
     const path = ds.crowdPath(&buf, state.saved, data.n, false) orelse return;
@@ -80,12 +84,14 @@ fn crowd() void {
 
 fn onCrowd(post: i32, bytes: ?[]u8) void {
     const b = bytes orelse {
-        // Not counted (429, 5xx, offline): sent again next load, the line from a GET now
+        // Not counted (429, 5xx, offline): sent again next load, the line from a GET now.
+        // A reply lost after the server counted it reads the same, so that one answer
+        // counts twice: rare, and the server can't tell
         if (post == 1) {
-            const got = dom.stored(sent_key) orelse return;
-            defer gpa.free(got);
+            const got = dom.stored(sent_key);
+            defer if (got) |g| gpa.free(g);
             var next: [4096]u8 = undefined;
-            dom.store(sent_key, ds.unsent(&next, got, data.n));
+            dom.store(sent_key, ds.unsent(&next, got orelse "", data.n));
             var buf: [96]u8 = undefined;
             dom.fetch(ds.crowdPath(&buf, state.saved, data.n, false) orelse return, 0, onCrowd);
         }
@@ -115,20 +121,39 @@ fn changed() void {
         o.set("text", text);
         const p = nav.call("share", .{o}, zjb.Handle);
         defer p.release();
-        // Closing the sheet rejects
         p.call("catch", .{zjb.fnHandle("daysShared", &onShared)}, zjb.Handle).release();
         return;
     }
-    const clip = nav.get("clipboard", zjb.Handle);
+    copy(text);
+}
+
+/// To the clipboard; without one (not https, some webviews) or its access, a box to copy
+/// from
+fn copy(text: zjb.Handle) void {
+    const clip = zjb.global("navigator").get("clipboard", zjb.Handle);
     defer clip.release();
+    if (!zjb.global("window").call("Boolean", .{clip}, bool)) return ask(text);
     const p = clip.call("writeText", .{text}, zjb.Handle);
     defer p.release();
-    // No clipboard access: a box to copy from
     p.call("then", .{ zjb.fnHandle("daysCopied", &onCopied), zjb.fnHandle("daysNoCopy", &onNoCopy) }, zjb.Handle).release();
 }
 
+fn ask(text: zjb.Handle) void {
+    zjb.global("window").call("prompt", .{ zjb.constString("Your result:"), text }, void);
+}
+
+/// The sheet refused: closed by the viewer (AbortError) is the end of it, anything else
+/// (no activation left, a share it can't make) goes to the clipboard
 fn onShared(e: zjb.Handle) callconv(.c) void {
-    e.release();
+    defer e.release();
+    const name = e.get("name", zjb.Handle);
+    defer name.release();
+    var nb: [32]u8 = undefined;
+    if (std.mem.eql(u8, name.readString(&nb) catch "", "AbortError")) return;
+    var buf: [256]u8 = undefined;
+    const text = zjb.string(ds.shareText(&buf, &data, state.saved) orelse return);
+    defer text.release();
+    copy(text);
 }
 
 fn onCopied(e: zjb.Handle) callconv(.c) void {
@@ -148,7 +173,7 @@ fn onNoCopy(e: zjb.Handle) callconv(.c) void {
     var buf: [256]u8 = undefined;
     const text = zjb.string(ds.shareText(&buf, &data, state.saved) orelse return);
     defer text.release();
-    zjb.global("window").call("prompt", .{ zjb.constString("Your result:"), text }, void);
+    ask(text);
 }
 
 /// ?n= (an old link to a puzzle)

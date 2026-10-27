@@ -209,6 +209,7 @@ are overwritten. Logs counts only, never the PUUID or Riot ID.
 | drafts | nothing: no PUUID, Riot ID or match id, only platform, patch, day, median rank, result, length in minutes, champions, roles and bans, so no row can be found by player (see below) |
 | forgotten | PUUID and date added: the suppression list |
 | Daily Draft (daily/used.txt, puzzles) | nothing: match ids and anonymous puzzles only |
+| Daily Draft answer counts (api.db daily_answers) | nothing: counts per puzzle, pick and side, no identifier |
 | views partials (data/partials on the box) | their PUUID hash (Wyhash, 128 bits) blanked in every day file and their mastery entry dropped, at once under the directory's lock (a views write running finishes first); each views write also blanks every hash on `forgotten`, and drops keys from days past 24 months. Never backed up |
 | backup files | `--backups DIR` scrubs every state and segment file on the box at once (deploy/backup-loop.sh) |
 | backup mirrors (Mac, gpu-box) | each mirror run fetches the box's forgotten list and `meiolol backup --mirror` scrubs the PUUIDs new to it from every file it holds, including segments the box has pruned (applied list: forgotten-applied.txt in the mirror) |
