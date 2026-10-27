@@ -39,6 +39,10 @@ pub const pool_js = hashed("ui-pool.js", @embedFile("ui-pool.js"));
 pub const pool_wasm = hashed("ui-pool.wasm", @embedFile("ui-pool.wasm"));
 pub const daily_js = hashed("ui-daily.js", @embedFile("ui-daily.js"));
 pub const daily_wasm = hashed("ui-daily.wasm", @embedFile("ui-daily.wasm"));
+pub const home_js = hashed("ui-home.js", @embedFile("ui-home.js"));
+pub const home_wasm = hashed("ui-home.wasm", @embedFile("ui-home.wasm"));
+pub const homegame_js = hashed("ui-homegame.js", @embedFile("ui-homegame.js"));
+pub const homegame_wasm = hashed("ui-homegame.wasm", @embedFile("ui-homegame.wasm"));
 
 /// `plain` with 8 hex digits of `data`'s FNV-1a before its extension
 pub fn hashed(comptime plain: []const u8, comptime data: []const u8) Hashed {

@@ -118,7 +118,7 @@ pub const GamePage = struct {
         return p;
     }
 
-    fn game(p: *const P) *const gamedata.Game {
+    pub fn game(p: *const P) *const gamedata.Game {
         return &p.data.games[p.cur];
     }
 
@@ -269,8 +269,8 @@ pub const GamePage = struct {
         return t + 1 >= r[0] and t <= r[1] + 1;
     }
 
-    /// The stat cells: each selects its minute on the graph
-    fn cells(p: *P, h: *H) N {
+    /// The stat cells: each selects its minute on the graph (home's game too)
+    pub fn cells(p: *P, h: *H) N {
         const g = p.game();
         const sw = gamedata.swings(g);
         var items: [6]strip.Item = undefined;

@@ -39,6 +39,7 @@ const indexChamps = @import("champs.zig").indexChamps;
 const championsJson = @import("champs.zig").championsJson;
 const search = @import("search.zig");
 const yourgame = @import("yourgame.zig");
+const home_page = @import("home.zig");
 const dailydata = @import("dailydata.zig");
 const BasePart = @import("views.zig").BasePart;
 const FilterPart = @import("views.zig").FilterPart;
@@ -193,7 +194,7 @@ pub fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Opt
             site.trend = t.trend;
             phases.mark("trend kept");
         } else try loadTrend(site, db, try extras.partialsFor(gpa, io, db, &phases), &phases);
-    }
+    } else if (shared) try loadHome(site, &phases);
     try addFiles(site);
     if (old == null or !old.?.strict) log.info("view {d} ({s}) load:{s}", .{ view.index(), site.when, phases.text() });
     return site;
@@ -455,6 +456,34 @@ fn dailyInputs(io: std.Io, opts: Options) u64 {
     return h.final();
 }
 
+/// Static.core's home page: today's Daily Draft as made, read only (the views file's
+/// load makes puzzles, loadDaily), and the example
+fn loadHome(site: *Site, phases: *Phases) !void {
+    const arena = site.arena;
+    var files: std.ArrayList(File) = .empty;
+    if (site.opts.daily_dir) |d| {
+        const path = try arena.print("daily/{d}.json", .{home_page.todayPuzzle(site.io)});
+        const file = try std.fs.path.join(arena, &.{ d, path["daily/".len..] });
+        if (std.Io.Dir.cwd().readFileAlloc(site.io, file, arena, .limited(1 << 20))) |data| {
+            try files.append(arena, .{ .path = path, .data = data });
+        } else |err| if (err != error.FileNotFound) log.warn("home: {s}: {t}", .{ file, err });
+    }
+    try loadExample(site, &files);
+    site.daily_files = files.items;
+    phases.mark("home");
+}
+
+fn loadExample(site: *Site, files: *std.ArrayList(File)) !void {
+    const path = site.opts.your_example orelse return;
+    if (std.Io.Dir.cwd().readFileAlloc(site.io, path, site.arena, .limited(16 << 20))) |json| {
+        try yourgame.files(site, json, files);
+    } else |err| switch (err) {
+        // `meiolol your-example` removes it after a failed run
+        error.FileNotFound => {},
+        else => log.warn("your example at {s}: {t}", .{ path, err }),
+    }
+}
+
 /// The shared view's Daily Draft, your example, eval chart and Learn data
 fn loadDaily(site: *Site, db: store.Db, games: ?*const partials.Store, phases: *Phases) !void {
     const arena = site.arena;
@@ -475,15 +504,7 @@ fn loadDaily(site: *Site, db: store.Db, games: ?*const partials.Store, phases: *
         };
         try files.appendSlice(arena, daily_files);
     }
-    if (opts.your_example) |path| {
-        if (std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(16 << 20))) |json| {
-            try yourgame.files(site, json, &files);
-        } else |err| switch (err) {
-            // `meiolol your-example` removes it after a failed run
-            error.FileNotFound => {},
-            else => log.warn("your example at {s}: {t}", .{ path, err }),
-        }
-    }
+    try loadExample(site, &files);
     if (opts.eval_history) |path| {
         if (std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(16 << 20))) |tsv| {
             site.eval = try evalchart.parse(arena, tsv);
