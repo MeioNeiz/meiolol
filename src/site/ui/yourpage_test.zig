@@ -1,6 +1,6 @@
 //! The Your games list on the fake DOM: hydration with a URL's filter and the visitor's
-//! clock, the filter row's and the summary's presses into the URL, Show older, Back;
-//! each patch equal to a fresh render
+//! clock, the summary's presses into the URL, Show older, Back; each patch equal to a
+//! fresh render. With YourViews beside it: yourviews_test.zig
 const std = @import("std");
 const tree = @import("tree.zig");
 const diff = @import("diff.zig");
@@ -89,18 +89,6 @@ const Page = struct {
         unreachable;
     }
 
-    /// `by` inside the element with `class`
-    fn in(p: *Page, class: []const u8, tag: tree.Tag, label: []const u8) u32 {
-        const t = p.i.current();
-        return t.node(within(t, t.find(t.root, "class", class).?, tag, label).?).dom;
-    }
-
-    fn within(t: *const tree.Tree, n: tree.N, tag: tree.Tag, label: []const u8) ?tree.N {
-        if (t.node(n).tag == tag and has(t, n, label)) return n;
-        for (t.kidsOf(n)) |k| if (within(t, k, tag, label)) |x| return x;
-        return null;
-    }
-
     fn has(t: *const tree.Tree, n: tree.N, label: []const u8) bool {
         if (std.mem.eql(u8, t.node(n).text, label)) return true;
         for (t.kidsOf(n)) |k| if (has(t, k, label)) return true;
@@ -141,11 +129,12 @@ test "a URL's filter hydrates; the clock adds Today; presses write the URL; Back
     try testing.expectEqual(3, try p.rows());
     try testing.expect(std.mem.find(u8, try p.shown(), "Today") != null);
 
-    p.click(p.in("c-seg", .button, "All"));
-    try testing.expectEqualStrings("#role=jungle", p.fake.fragment.items);
-    try testing.expectEqual(5, try p.rows());
-    p.click(p.in("c-roles", .button, "All"));
-    try testing.expectEqualStrings("#", p.fake.fragment.items);
+    // The summary's role press again: All roles
+    p.click(p.titled("Jungle:"));
+    try testing.expectEqualStrings("#q=solo", p.fake.fragment.items);
+    try testing.expectEqual(8, try p.rows());
+    p.fake.fragment.clearRetainingCapacity();
+    p.rt.popstate();
     try testing.expectEqual(10, try p.rows());
 
     // The summary's champion press: the URL names it
@@ -171,8 +160,9 @@ test "Show older adds days; a filter press starts again from the newest" {
     p.click(p.by(.button, "Show older"));
     try testing.expectEqual(10, try p.rows());
     try testing.expect(std.mem.find(u8, try p.shown(), "Show older") == null);
-    p.click(p.by(.button, "Flex"));
-    try testing.expectEqualStrings("#q=flex", p.fake.fragment.items);
+    p.click(p.titled("Karthus:"));
+    try testing.expectEqualStrings("#champ=Karthus", p.fake.fragment.items);
+    try testing.expectEqual(5, try p.rows());
 }
 
 test "a URL nothing could clear is dropped: an unchipped queue, an unplayed champion" {

@@ -103,6 +103,12 @@ fn hand(l: ?[]u8) void {
     if (el == .null) return;
     defer el.release();
     if (l) |b| {
+        // The server's example, for ui-yourviews if it loads after this
+        if (!el.call("hasAttribute", .{zjb.constString("data-example")}, bool)) {
+            const ex = el.call("getAttribute", .{zjb.constString("data-bin")}, zjb.Handle);
+            defer ex.release();
+            if (ex != .null) el.call("setAttribute", .{ zjb.constString("data-example"), ex }, void);
+        }
         const enc = std.base64.standard.Encoder;
         const s = gpa.alloc(u8, enc.calcSize(b.len)) catch return;
         defer gpa.free(s);

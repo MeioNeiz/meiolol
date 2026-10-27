@@ -728,7 +728,7 @@ test "fixture games to stats, curves and the website" {
     }
     // The list page: the example's list in the island, rows opening game.html
     const games_page = (try core_loaded.get(arena, "games.html")).?;
-    for ([_][]const u8{ "data-island=\"your\" data-bin=\"", "class=\"c-player\"", "class=\"c-psum\"", "href=\"game.html#g=0\"", "noindex", "data-wasm=\"" ++ assets.your_wasm.path ++ "\"", "data-island=\"yourlookup\"", "data-js=\"" ++ assets.yourlookup_js.path ++ "\" data-wasm=\"" ++ assets.yourlookup_wasm.path ++ "\"", "An example player" }) |want| {
+    for ([_][]const u8{ "data-island=\"your\" data-bin=\"", "class=\"c-player\"", "class=\"c-psum\"", "href=\"game.html#g=0\"", "noindex", "data-wasm=\"" ++ assets.your_wasm.path ++ "\"", "data-island=\"yourviews\"", "data-wasm=\"" ++ assets.yourviews_wasm.path ++ "\"", "data-island=\"yourlookup\"", "data-js=\"" ++ assets.yourlookup_js.path ++ "\" data-wasm=\"" ++ assets.yourlookup_wasm.path ++ "\"", "An example player" }) |want| {
         try testing.expect(std.mem.find(u8, games_page, want) != null);
     }
     // Home in every view: the shared view's example, its game file loaded lazily; the
