@@ -242,6 +242,10 @@ than the spread between runs
 
 ## Later
 
+- Views write on more than one core (code, both hosts; C01 tuning baseline): load the
+  four views at once on sibling connections, or split stats inside a view (par.each).
+  At once: ~375 s (the longest view's stats) plus people and filters, against 766 s;
+  helps C01 (16 vCPU) far more than the 2-core Oracle box, so it moves the benchmark
 - Plain local calls in place of the localhost ssh aliases (VM4)
 - Retune for C01 (after VM3's baseline): the box's limits were set for 2 cores and a
   72 MB/s disk. More parallel read runs in the views write (4 today), more reads in
