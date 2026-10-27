@@ -505,8 +505,8 @@ fn label(arena: Allocator, x: cdragon.Number, key: []const u8) ![]const u8 {
 }
 
 /// An internal name as words: the champion's name and a one-letter type prefix
-/// ("tADRatioMin") dropped, split at case changes, acronyms kept, "Tooltip" and "Calc"
-/// dropped: "VarusWOnHitDamage" "W on hit damage"
+/// ("tADRatioMin") dropped, split at case changes and "_", acronyms kept, "Tooltip" and
+/// "Calc" dropped: "VarusWOnHitDamage" "W on hit damage"
 fn nameWords(arena: Allocator, name: []const u8, key: []const u8) ![]const u8 {
     var s = name;
     if (s.len > key.len and std.ascii.startsWithIgnoreCase(s, key) and std.ascii.isUpper(s[key.len])) s = s[key.len..];
@@ -514,17 +514,21 @@ fn nameWords(arena: Allocator, name: []const u8, key: []const u8) ![]const u8 {
     var out: std.ArrayList(u8) = .empty;
     var i: usize = 0;
     while (i < s.len) {
+        if (s[i] == '_') {
+            i += 1;
+            continue;
+        }
         var j = i + 1;
         if (std.ascii.isUpper(s[i])) {
             // An acronym runs to the capital that starts the next word: "HPPer" "HP"
             while (j < s.len and std.ascii.isUpper(s[j]) and !(j + 1 < s.len and std.ascii.isLower(s[j + 1]))) j += 1;
         }
         if (j == i + 1 or !std.ascii.isUpper(s[j - 1])) {
-            while (j < s.len and !std.ascii.isUpper(s[j])) j += 1;
+            while (j < s.len and !std.ascii.isUpper(s[j]) and s[j] != '_') j += 1;
         }
         const w = s[i..j];
         i = j;
-        if (std.mem.eql(u8, w, "Tooltip") or std.mem.eql(u8, w, "Calc") or std.mem.eql(u8, w, "TT")) continue;
+        if (std.mem.eql(u8, w, "Tooltip") or std.ascii.eqlIgnoreCase(w, "Calc") or std.mem.eql(u8, w, "TT")) continue;
         if (out.items.len > 0) try out.append(arena, ' ');
         if (std.mem.eql(u8, w, "BAD")) {
             try out.appendSlice(arena, if (out.items.len == 0) "Bonus AD" else "bonus AD");
@@ -1096,6 +1100,9 @@ test "nameWords: internal names as words" {
         .{ "HealCapLevel18Value", "Heal cap level18 value" },
         .{ "BADRatio", "Bonus AD ratio" },
         .{ "AmmoRecharge", "Ammo recharge" },
+        .{ "Calc_OnHit_Damage_Flat", "On hit damage flat" },
+        .{ "APRatio_Max", "AP ratio max" },
+        .{ "Attack_Buff_Max_Stacks", "Attack buff max stacks" },
     }) |c| try testing.expectEqualStrings(c[1], try nameWords(a, c[0], "Varus"));
 }
 

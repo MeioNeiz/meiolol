@@ -49,7 +49,7 @@ pub const Number = struct {
 
 /// A patch's numbers under a Data Dragon version's cache directory; a new name when
 /// `extract` changes, so old caches are read again
-pub const cache_file = "cdragon-1.json";
+pub const cache_file = "cdragon-2.json";
 
 pub const Champion = struct {
     /// Data Dragon's id ("MonkeyKing")
