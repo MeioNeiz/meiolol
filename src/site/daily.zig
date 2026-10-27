@@ -31,7 +31,7 @@ pub fn write(site: *const Site, w: *Writer) !void {
     const today = todayNumber(site.io);
     const got = try pick(a, site.daily_files, today);
     if (if (got) |g| g.page else null) |shown| {
-        try body(a, w, site.daily_files, shown, .{ .today = today, .redirects = true, .root = "" });
+        try body(a, w, site.daily_files, shown, .{ .today = today, .redirects = true, .root = "", .origin = origin(site) });
     } else try w.writeAll(
         \\<h1>Daily Draft</h1>
         \\<p class="note">No puzzle today. Come back tomorrow.</p>
@@ -57,7 +57,7 @@ fn routeOn(site: *const Site, w: *Writer, slug: []const u8, today: u32) !bool {
     p.root = "../";
     p.index = false;
     try html.head(w, p);
-    try body(a, w, site.daily_files, shown, .{ .today = today, .redirects = false, .root = "../" });
+    try body(a, w, site.daily_files, shown, .{ .today = today, .redirects = false, .root = "../", .origin = origin(site) });
     try html.foot(w, p);
     return true;
 }
@@ -69,7 +69,14 @@ const Where = struct {
     redirects: bool,
     /// From the page to the site root
     root: []const u8,
+    /// "https://meio.lol" for Share's link; null hides Share
+    origin: ?[]const u8 = null,
 };
+
+/// Share only once the site is public: a preview may not be advertised
+fn origin(site: *const Site) ?[]const u8 {
+    return if (site.opts.public) site.opts.origin else null;
+}
 
 /// The head with its days island, then the puzzle's island
 fn body(a: std.mem.Allocator, w: *Writer, files: []const File, shown: Shown, at: Where) !void {
@@ -81,6 +88,9 @@ fn body(a: std.mem.Allocator, w: *Writer, files: []const File, shown: Shown, at:
         .days = try dayList(a, files, at.today + 1),
         .answer = @intCast(std.mem.findScalar(u16, shown.p.options, dd.played(&shown.p)).?),
         .winner = shown.p.result.winner,
+        .hidden_side = shown.p.hidden_side,
+        .hidden_role = shown.p.hidden_role,
+        .url = if (at.origin) |o| try a.print("{s}/daily/{d}.html", .{ o, shown.p.n }) else "",
     };
     var raw: std.ArrayList(u8) = .empty;
     try ui.data.encode(a, ds.Data, days, &raw);
@@ -345,10 +355,12 @@ test "route: a good n renders noindex from daily/, any other slug or n past tomo
         .contact = "",
         .updated = "",
         .public = true,
+        .origin = "https://x.io",
     };
     var out: std.Io.Writer.Allocating = .init(a);
     try std.testing.expect(try routeOn(&site, &out.writer, try a.print("{d}", .{n}), n));
     const s = out.written();
+    try std.testing.expectEqualStrings(try a.print("https://x.io/daily/{d}.html", .{n}), (try daysData(a, s)).url);
     try std.testing.expect(std.mem.find(u8, s, try a.print("<title>Daily Draft #{d} | meiolol</title>", .{n})) != null);
     try std.testing.expect(std.mem.find(u8, s, "content=\"noindex") != null);
     try std.testing.expect(std.mem.find(u8, s, "rel=\"canonical\"") == null);
@@ -361,4 +373,21 @@ test "route: a good n renders noindex from daily/, any other slug or n past tomo
     }
     try std.testing.expect(!try routeOn(&site, &out.writer, try a.print("{d}", .{n + 2}), n));
     try std.testing.expect(!try routeOn(&site, &out.writer, try a.print("{d}", .{n}), n - 2));
+
+    // Preview: no Share
+    site.opts.public = false;
+    var preview: std.Io.Writer.Allocating = .init(a);
+    try std.testing.expect(try routeOn(&site, &preview.writer, try a.print("{d}", .{n}), n));
+    try std.testing.expectEqualStrings("", (try daysData(a, preview.written())).url);
+}
+
+/// The days island's data in a rendered page
+fn daysData(a: std.mem.Allocator, page: []const u8) !ds.Data {
+    const at = std.mem.find(u8, page, "data-island=\"days\" data-bin=\"") orelse return error.TestUnexpectedResult;
+    const from = page[at + "data-island=\"days\" data-bin=\"".len ..];
+    const b64 = from[0 .. std.mem.findScalar(u8, from, '"') orelse return error.TestUnexpectedResult];
+    const dec = std.base64.standard.Decoder;
+    const raw = try a.alloc(u8, try dec.calcSizeForSlice(b64));
+    try dec.decode(raw, b64);
+    return ui.data.decode(a, ds.Data, raw);
 }

@@ -2,10 +2,12 @@
 //! its own island (ui-dailydays.wasm) so ui-daily.wasm stays the puzzle's. Each day
 //! links its puzzle's page (daily/<n>.html); answers come from localStorage
 //! meiolol.daily.v1 (dailypage.read), so the server renders none. Once the page's puzzle
-//! is finished, how everyone did (/api/daily: the browser's answers sent once)
+//! is finished, how everyone did (/api/daily: the browser's answers sent once) and Share
 const std = @import("std");
 const tree = @import("tree.zig");
 const badge = @import("badge.zig");
+const button = @import("button.zig");
+const role = @import("role.zig");
 const dd = @import("dailydata.zig");
 const dp = @import("dailypage.zig");
 const phrase = @import("phrase.zig");
@@ -38,6 +40,11 @@ pub const Data = struct {
     /// The played pick's place in the page's puzzle's options, and who won: the crowd line
     answer: u8,
     winner: dd.Side,
+    hidden_side: dd.Side,
+    hidden_role: role.Role,
+    /// The page's own address for the share text; "" hides Share (preview: the site may
+    /// not be advertised, docs/production-key.md)
+    url: []const u8 = "",
 };
 
 /// /api/daily's counts for the page's puzzle: players, those who got the pick, the winner
@@ -52,14 +59,22 @@ pub const Page = struct {
     /// The server's render: Data as ui.data, base64, for the island
     bin: []const u8 = "",
     crowd: ?Crowd = null,
+    /// Share pressed: the glue sends shareText and clears it
+    sharing: bool = false,
+    /// The share text went to the clipboard (a share sheet says nothing)
+    copied: bool = false,
 
-    pub const Msg = union(enum) { none };
+    pub const Msg = union(enum) { share };
 
     pub fn init(_: std.mem.Allocator, d: *const Data) Page {
         return .{ .d = d, .date = d.utc };
     }
 
-    pub fn update(_: *Page, _: Msg, _: *tree.Event) void {}
+    pub fn update(s: *Page, m: Msg, _: *tree.Event) void {
+        switch (m) {
+            .share => s.sharing = true,
+        }
+    }
 
     /// The days out by the viewer's date
     fn live(s: *const Page) []const Day {
@@ -109,10 +124,11 @@ pub const Page = struct {
                 phrase.num(h, .int, st.run),
                 h.el(.small, .{ .aria_hidden = "true" }, .{W.streak}),
             }),
+            if (done and s.d.url.len > 0) button.view(h, .{ .s = .s, .on = h.on(s, .share) }, .{if (s.copied) W.copied else W.share}) else null,
             if (crowd) |c| h.span(.{ .class = "crowd" }, .{W.crowd.with(h, .{
                 .n = c.players,
-                .p = share(c.pick, c.players),
-                .s = share(c.side, c.players),
+                .p = pct(c.pick, c.players),
+                .s = pct(c.side, c.players),
             })}) else null,
         });
     }
@@ -135,8 +151,29 @@ fn out(days: []const Day, date: []const u8) usize {
     return end;
 }
 
-fn share(k: u32, n: u32) u32 {
+fn pct(k: u32, n: u32) u32 {
     return @intFromFloat(@round(100 * @as(f32, @floatFromInt(k)) / @as(f32, @floatFromInt(n))));
+}
+
+/// What Share sends, Wordle style: the marks, both teams' seats by role with the hidden one
+/// as the pick's mark, the winner's mark and the page; null until the page's puzzle is
+/// finished
+pub fn shareText(buf: []u8, d: *const Data, saved: []const u8) ?[]const u8 {
+    const m = dp.read(saved, d.n) orelse return null;
+    const k = m.marks orelse return null;
+    const mark = [2][]const u8{ "\u{274C}", "\u{2705}" };
+    const seat = [2][]const u8{ "\u{1F7E6}", "\u{1F7E5}" };
+    var w: std.Io.Writer = .fixed(buf);
+    w.print("Daily Draft #{d}: {d}/2{s}\n", .{ d.n, @as(u8, @intFromBool(k[0])) + @intFromBool(k[1]), if (m.hint) ", with a hint" else "" }) catch return null;
+    for ([_]dd.Side{ .blue, .red }) |side| {
+        for (role.Role.all) |r| {
+            const hidden = side == d.hidden_side and r == d.hidden_role;
+            w.writeAll(if (hidden) mark[@intFromBool(k[0])] else seat[@backingInt(side)]) catch return null;
+        }
+        w.writeByte('\n') catch return null;
+    }
+    w.print("Winner {s}\n{s}", .{ mark[@intFromBool(k[1])], d.url }) catch return null;
+    return w.buffered();
 }
 
 /// /api/daily for puzzle `n` once finished in `saved`, with its answers when `send`
@@ -230,6 +267,8 @@ const W = struct {
     const streak = plain("streak");
     const streak_read = Phrase("Streak {n:int}, best {b:int}");
     const crowd = Phrase("{n:count} played: {p:pct} got the pick, {s:pct} the winner");
+    const share = plain("Share");
+    const copied = plain("Copied");
     const streak_tip = plain("Puzzles finished on their own day. One missed day is forgiven; two in a row end it.");
 };
 
@@ -266,8 +305,19 @@ const demo_days = [_]Day{
     .{ .n = 16, .date = "2026-10-26" }, .{ .n = 17, .date = "2026-10-27" }, .{ .n = 18, .date = "2026-10-28" },
 };
 
-const demo: Data = .{ .n = 17, .redirects = true, .root = "", .utc = "2026-10-27", .days = &demo_days, .answer = 2, .winner = .red };
-const demo_archive: Data = .{ .n = 12, .redirects = false, .root = "../", .utc = "2026-10-27", .days = &demo_days, .answer = 0, .winner = .blue };
+const demo: Data = .{ .n = 17, .redirects = true, .root = "", .utc = "2026-10-27", .days = &demo_days, .answer = 2, .winner = .red, .hidden_side = .red, .hidden_role = .support };
+const demo_archive: Data = .{
+    .n = 12,
+    .redirects = false,
+    .root = "../",
+    .utc = "2026-10-27",
+    .days = &demo_days,
+    .answer = 0,
+    .winner = .blue,
+    .hidden_side = .red,
+    .hidden_role = .mid,
+    .url = "https://meio.lol/daily/12.html",
+};
 
 /// Finished on their days but #11 (late) and #15 (missed): the streak forgives #15, and
 /// #11 and #12 both late would have ended it
@@ -292,7 +342,7 @@ pub fn gallery(g: *@import("gallery.zig").Gallery) void {
     if (demoPage(h, &demo, demo_saved)) |p| g.add("both, one and none right; #15 missed and forgiven; today started", head(h, &dd.sample, p.view(h)));
     if (demoPage(h, &demo_archive, demo_saved)) |p| {
         p.crowd = .{ .players = 1234, .pick = 512, .side = 802 };
-        g.add("an archive puzzle's page (#12, dashed), finished: how everyone did", head(h, &dd.sample, p.view(h)));
+        g.add("an archive puzzle's page (#12, dashed), finished: how everyone did, Share", head(h, &dd.sample, p.view(h)));
     }
 }
 
@@ -423,7 +473,7 @@ test "streak: more days than it counts keeps the newest 512" {
         try saved.writer.print("{s}\"{d}\":{{\"marks\":\"11\",\"on\":\"{s}\"}}", .{ if (i > 0) "," else "", i + 1, date });
     }
     try saved.writer.writeByte('}');
-    const d: Data = .{ .n = 600, .redirects = true, .root = "", .utc = many[599].date, .days = many, .answer = 0, .winner = .blue };
+    const d: Data = .{ .n = 600, .redirects = true, .root = "", .utc = many[599].date, .days = many, .answer = 0, .winner = .blue, .hidden_side = .red, .hidden_role = .bot };
     var p: Page = .init(a, &d);
     p.saved = saved.written();
     try testing.expectEqual(Streak{ .run = 512, .best = 512 }, p.streak());
@@ -464,6 +514,41 @@ test "the crowd: sent once finished, read back for the page's puzzle only" {
     try testing.expect(sent("15,12", 12));
     try testing.expect(!sent("15,120", 12));
     try testing.expect(!sent("", 12));
+}
+
+test "share: the marks on the hidden seat, only once finished and public" {
+    var buf: [256]u8 = undefined;
+    try testing.expectEqual(null, shareText(&buf, &demo_archive, ""));
+    try testing.expectEqual(null, shareText(&buf, &demo_archive, "{\"12\":{\"opt\":3}}"));
+    try testing.expectEqualStrings(
+        "Daily Draft #12: 2/2\n" ++
+            "\u{1F7E6}\u{1F7E6}\u{1F7E6}\u{1F7E6}\u{1F7E6}\n" ++
+            "\u{1F7E5}\u{1F7E5}\u{2705}\u{1F7E5}\u{1F7E5}\n" ++
+            "Winner \u{2705}\nhttps://meio.lol/daily/12.html",
+        shareText(&buf, &demo_archive, demo_saved).?,
+    );
+    try testing.expectEqualStrings(
+        "Daily Draft #12: 1/2, with a hint\n" ++
+            "\u{1F7E6}\u{1F7E6}\u{1F7E6}\u{1F7E6}\u{1F7E6}\n" ++
+            "\u{1F7E5}\u{1F7E5}\u{274C}\u{1F7E5}\u{1F7E5}\n" ++
+            "Winner \u{2705}\nhttps://meio.lol/daily/12.html",
+        shareText(&buf, &demo_archive, "{\"12\":{\"opt\":1,\"side\":0,\"hint\":1,\"marks\":\"01\"}}").?,
+    );
+    try testing.expectEqual(null, shareText(buf[0..20], &demo_archive, demo_saved));
+
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var t: tree.Tree = .{};
+    var h: H = .init(arena.allocator(), &t);
+    var p: Page = .init(arena.allocator(), &demo_archive);
+    try testing.expectEqual(null, t.find(p.view(&h), "class", "c-btn"));
+    p.saved = demo_saved;
+    try testing.expect(t.find(p.view(&h), "class", "c-btn") != null);
+    // Preview: no address, no Share
+    var private = demo_archive;
+    private.url = "";
+    p.d = &private;
+    try testing.expectEqual(null, t.find(p.view(&h), "class", "c-btn"));
 }
 
 test "the crowd line: only once the page's puzzle is finished and someone played" {

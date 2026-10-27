@@ -2,8 +2,9 @@
 //! data-bin and localStorage meiolol.daily.v1, again on ui-daily.wasm's "ui-daily" event
 //! (a puzzle finished). On daily.html it also opens the viewer's own day's puzzle (their
 //! date, not UTC's) or ?n='s. Once the page's puzzle is finished, /api/daily's counts:
-//! POSTed with the answers the first time (meiolol.daily.sent.v1), else a GET. zjb's
-//! generated loader (ui-dailydays.js) calls `main`
+//! POSTed with the answers the first time (meiolol.daily.sent.v1), else a GET. Share: the
+//! share sheet on phones, else the clipboard. zjb's generated loader (ui-dailydays.js)
+//! calls `main`
 const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
@@ -37,6 +38,7 @@ export fn main() void {
     island = dom.rt.add(ds.Page, &state, &server, ds.sel) catch return dom.dom.warn("days: out of memory");
     state.date = &date;
     island.render();
+    dom.rt.changed = changed;
     zjb.global("window").call("addEventListener", .{ zjb.constString("ui-daily"), zjb.fnHandle("daysSaved", &onSaved) }, void);
     // Last: blocked storage throws, ending this call with the page already live
     read();
@@ -75,6 +77,61 @@ fn onCrowd(_: i32, bytes: ?[]u8) void {
     defer gpa.free(b);
     state.crowd = ds.crowdOf(gpa, b, &data) orelse return;
     island.render();
+}
+
+fn changed() void {
+    if (!state.sharing) return;
+    state.sharing = false;
+    var buf: [256]u8 = undefined;
+    const text = zjb.string(ds.shareText(&buf, &data, state.saved) orelse return);
+    defer text.release();
+    const nav = zjb.global("navigator");
+    const w = zjb.global("window");
+    // review.js's rule: a desktop share sheet is a detour
+    const sheet = nav.get("share", zjb.Handle);
+    defer sheet.release();
+    const mq = w.call("matchMedia", .{zjb.constString("(pointer: coarse)")}, zjb.Handle);
+    defer mq.release();
+    if (w.call("Boolean", .{sheet}, bool) and mq.get("matches", bool)) {
+        const o = zjb.global("Object").new(.{});
+        defer o.release();
+        o.set("text", text);
+        const p = nav.call("share", .{o}, zjb.Handle);
+        defer p.release();
+        // Closing the sheet rejects
+        p.call("catch", .{zjb.fnHandle("daysShared", &onShared)}, zjb.Handle).release();
+        return;
+    }
+    const clip = nav.get("clipboard", zjb.Handle);
+    defer clip.release();
+    const p = clip.call("writeText", .{text}, zjb.Handle);
+    defer p.release();
+    // No clipboard access: a box to copy from
+    p.call("then", .{ zjb.fnHandle("daysCopied", &onCopied), zjb.fnHandle("daysNoCopy", &onNoCopy) }, zjb.Handle).release();
+}
+
+fn onShared(e: zjb.Handle) callconv(.c) void {
+    e.release();
+}
+
+fn onCopied(e: zjb.Handle) callconv(.c) void {
+    e.release();
+    state.copied = true;
+    island.render();
+    zjb.global("window").call("setTimeout", .{ zjb.fnHandle("daysCopiedEnd", &onCopiedEnd), @as(i32, 2000) }, void);
+}
+
+fn onCopiedEnd() callconv(.c) void {
+    state.copied = false;
+    island.render();
+}
+
+fn onNoCopy(e: zjb.Handle) callconv(.c) void {
+    e.release();
+    var buf: [256]u8 = undefined;
+    const text = zjb.string(ds.shareText(&buf, &data, state.saved) orelse return);
+    defer text.release();
+    zjb.global("window").call("prompt", .{ zjb.constString("Your result:"), text }, void);
 }
 
 /// ?n= (an old link to a puzzle)
