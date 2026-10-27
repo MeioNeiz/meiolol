@@ -22,7 +22,9 @@ args=(--contact "$(cat contact)" --origin https://meio.lol)
 # render swap (box.sh web start): the runs keep one binary, the exit catches up
 cp bin/meiolol "$S/meiolol"
 systemctl --user stop meiolol-web
-trap 'rm -rf data/site.tune data/views.tune.bin data/render-tune.ready;
+# Not in a fork of this shell: a renderer killed before its exec runs this trap too
+trap '[[ $BASHPID == "$$" ]] || exit
+    rm -rf data/site.tune data/views.tune.bin data/render-tune.ready;
     systemctl --user start meiolol-web
     cmp -s bin/meiolol "$S/meiolol" || systemctl --user -q is-active meiolol-render-swap \
         || systemd-run --user -q --collect --unit meiolol-render-swap \
@@ -52,6 +54,8 @@ for i in $(seq "$n"); do
     # A renderer of its own on a spare port, loading the file just written
     log "run $i: renderer load"
     rm -f data/render-tune.ready
+    # Emptied first: the wait below would otherwise find the previous run's line
+    : > "$S/render.log"
     "$S/meiolol" render --contact "$(cat contact)" --host 127.0.0.1 --port 8099 \
         --views data/views.tune.bin --ready data/render-tune.ready > "$S/render.log" 2>&1 &
     pid=$!
