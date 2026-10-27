@@ -49,8 +49,10 @@ const W = struct {
     pub const empty = plain("Empty");
     pub const no_match = plain("No lines match");
     pub const shown = phrase.Phrase("{n:count} of {m:count} lines");
-    pub const errors = phrase.Phrase("{n:count} errors");
-    pub const warnings = phrase.Phrase("{n:count} warnings");
+    pub const counted = phrase.Phrase("{n:count} {w:text}");
+    pub const file_ew = phrase.Phrase("{f:text}, {e:count} {en:text}, {w:count} {wn:text}");
+    pub const file_e = phrase.Phrase("{f:text}, {e:count} {en:text}");
+    pub const file_w = phrase.Phrase("{f:text}, {w:count} {wn:text}");
 };
 
 /// A line's std.log level after its stamp, backup's FAILED and health's "problem:"; an
@@ -82,17 +84,32 @@ fn stampLen(l: []const u8) usize {
     return n;
 }
 
+fn noun(n: u32, one: []const u8, many: []const u8) []const u8 {
+    return if (n == 1) one else many;
+}
+
+/// The counts' meaning is only in titles otherwise, which screen readers skip
+fn fileLabel(h: *H, f: File) ?tree.Text {
+    const en = noun(f.errors, "error", "errors");
+    const wn = noun(f.warnings, "warning", "warnings");
+    if (f.errors > 0 and f.warnings > 0) return W.file_ew.with(h, .{ .f = f.name, .e = f.errors, .en = en, .w = f.warnings, .wn = wn });
+    if (f.errors > 0) return W.file_e.with(h, .{ .f = f.name, .e = f.errors, .en = en });
+    if (f.warnings > 0) return W.file_w.with(h, .{ .f = f.name, .w = f.warnings, .wn = wn });
+    return null;
+}
+
 pub fn view(h: *H, o: Log) N {
     var tabs = h.list();
     for (o.files, 0..) |f, i| tabs.add(h.button(.{
         .key = i,
         .type = "button",
         .aria_pressed = i == o.shown,
+        .aria_label = fileLabel(h, f),
         .on_click = f.on,
     }, .{
         f.name,
-        if (f.errors > 0) h.span(.{ .class = "n", .data_k = Level.err, .title = W.errors.with(h, .{ .n = f.errors }).s }, .{phrase.num(h, .count, f.errors)}) else null,
-        if (f.warnings > 0) h.span(.{ .class = "n", .data_k = Level.warn, .title = W.warnings.with(h, .{ .n = f.warnings }).s }, .{phrase.num(h, .count, f.warnings)}) else null,
+        if (f.errors > 0) h.span(.{ .class = "n", .data_k = Level.err, .title = W.counted.with(h, .{ .n = f.errors, .w = noun(f.errors, "error", "errors") }).s }, .{phrase.num(h, .count, f.errors)}) else null,
+        if (f.warnings > 0) h.span(.{ .class = "n", .data_k = Level.warn, .title = W.counted.with(h, .{ .n = f.warnings, .w = noun(f.warnings, "warning", "warnings") }).s }, .{phrase.num(h, .count, f.warnings)}) else null,
     }));
     var rows = h.list();
     var n: u32 = 0;
@@ -246,12 +263,18 @@ test "view: filter marks matches, counts, colours by level; states" {
     var x: T = undefined;
     x.init();
     defer x.arena.deinit();
-    const files = [_]File{ .{ .name = "crawl", .errors = 1, .warnings = 12 }, .{ .name = "web" } };
+    const files = [_]File{ .{ .name = "crawl", .errors = 1, .warnings = 12 }, .{ .name = "web" }, .{ .name = "api", .warnings = 1 }, .{ .name = "backup", .errors = 2 } };
     var s = try x.html(.{ .files = &files, .lines = &demo_lines, .filter = "EUW1" });
     try testing.expectEqual(2, std.mem.count(u8, s, "<mark>EUW1</mark>"));
     try testing.expect(std.mem.find(u8, s, "2 of 6 lines") != null);
-    try testing.expect(std.mem.find(u8, s, "aria-pressed=\"true\">crawl") != null);
+    try testing.expect(std.mem.find(u8, s, "aria-pressed=\"true\" aria-label=\"crawl,") != null);
     try testing.expect(std.mem.find(u8, s, "title=\"12 warnings\"") != null);
+    try testing.expect(std.mem.find(u8, s, "title=\"1 error\"") != null);
+    try testing.expect(std.mem.find(u8, s, "aria-label=\"crawl, 1 error, 12 warnings\"") != null);
+    try testing.expectEqual(1, std.mem.count(u8, s, "aria-label=\"crawl,"));
+    try testing.expect(std.mem.find(u8, s, "aria-label=\"web") == null);
+    try testing.expect(std.mem.find(u8, s, "aria-label=\"api, 1 warning\"") != null);
+    try testing.expect(std.mem.find(u8, s, "aria-label=\"backup, 2 errors\"") != null);
     s = try x.html(.{ .files = &files, .lines = &demo_lines, .filter = "euw1 18" });
     try testing.expectEqual(1, std.mem.count(u8, s, "<mark>EUW1 18</mark>2"));
     s = try x.html(.{ .files = &files, .lines = &demo_lines });
