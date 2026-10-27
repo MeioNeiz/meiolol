@@ -85,6 +85,7 @@ install -d -o meiolol-traffic -g meiolol-traffic -m 755 /var/www/meiolol-ops
 install -d -o meiolol-api -g meiolol-api -m 750 /var/lib/meiolol-api
 install -d -o meiolol -g meiolol-api -m 2770 /var/lib/meiolol-api/exchange
 install -d -o meiolol -g meiolol-api -m 775 /var/lib/meiolol-api/exchange/curves
+install -d -o www-data -g root -m 700 /var/cache/nginx/meiolol
 
 if (( with_data )); then
     d=$st/data
