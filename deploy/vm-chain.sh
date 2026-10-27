@@ -221,6 +221,10 @@ crawl_bench() {
 # the checks take ~2 h with the crawler down. A stopped writer removes its -wal; an older
 # one left here would be replayed over the fresh .db
 if [[ ${1:-} == final ]]; then
+    if fuser data/*.db 2> /dev/null | grep -q .; then
+        log "final: a database is open here: $(fuser data/*.db 2>&1 | paste -sd' ' -)"
+        exit 1
+    fi
     rm -f data/*.db-wal
     catch_up || { log "final catch-up failed: $STATE/catch-up.log"; exit 1; }
     log "final catch-up done"
