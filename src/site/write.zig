@@ -183,7 +183,7 @@ test "views: a tree each, switches between them, shared pages once" {
         "<a href=\"../all/patch/pool.html\" data-period=\"patch\">Patch 16.20</a>",
         "<a href=\"../pool.html\" data-region=\"EUW1\">EUW</a>",
         "<a aria-disabled=\"true\" title=\"Champion pages only\" data-region=\"KR\">KR</a>",
-        "<a aria-disabled=\"true\" title=\"Champion pages only\" data-rank=\"6\">Diamond+</a>",
+        "<a aria-disabled=\"true\" title=\"Champion pages and the champions board only\" data-rank=\"6\">Diamond+</a>",
         "href=\"../" ++ @import("style.zig").file.path ++ "\"",
         "href=\"../daily.html\"",
     }) |s| try std.testing.expect(std.mem.find(u8, pool, s) != null);

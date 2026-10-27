@@ -15,6 +15,7 @@ const card = @import("card.zig");
 const chip = @import("chip.zig");
 const strip = @import("strip.zig");
 const rolepicker = @import("rolepicker.zig");
+const role = @import("role.zig");
 const delta = @import("delta.zig");
 const badge = @import("badge.zig");
 const champ = @import("champ.zig");
@@ -81,10 +82,10 @@ pub const Kit = struct {
     users: []const User,
 };
 
-/// `share`: of a champion role's players, those with the item in their first three
-/// finished items (boots: as their boots; a starting item: in their start), a floor as
-/// the builds file keeps the commonest only; or with the rune on their page. `row`: its
-/// Data.rows index
+/// `share`: the biggest of three: of a champion role's players who finished three items,
+/// those with the item among them; of those with boots, as their boots; of those with a
+/// start, in it. A floor, as the builds file keeps the commonest only. Or of all its
+/// players, those with the rune on their page. `row`: its Data.rows index
 pub const User = struct { champ: u16, role: Role, share: f32, row: ?u16 };
 
 pub const Champ = struct {
@@ -277,7 +278,7 @@ fn who(h: *H, l: *const Line) N {
     return h.a(.{ .class = "who", .href = l.href }, .{
         icon(h, l.d, r.champ),
         h.span(.{ .class = "nm" }, .{nameOf(l)}),
-        @import("role.zig").view(h, r.role.ui(), .{}),
+        role.view(h, r.role.ui(), .{}),
     });
 }
 
@@ -307,19 +308,22 @@ fn curCell(h: *H, l: *const Line) N {
 
 /// The change drawn with its range, and its number
 fn moveCell(h: *H, a: Count, b: Count, clear: bool, span: f32) N {
-    const d: f32 = @floatCast(points(a, b));
-    const ci: f32 = @floatCast(halfWidth(a, b));
+    const m = moveOf(a, b);
     return h.span(.{ .class = "mv", .data_clear = clear }, .{
-        delta.bar(h, .{ .d = d, .ci = ci, .span = span }),
-        moveText(h, a, b, clear),
+        delta.bar(h, .{ .d = m.d, .ci = m.ci, .span = span }),
+        moveText(h, m, clear),
     });
 }
 
+const Shift = struct { d: f32, ci: f32 };
+
+fn moveOf(a: Count, b: Count) Shift {
+    return .{ .d = @floatCast(points(a, b)), .ci = @floatCast(halfWidth(a, b)) };
+}
+
 /// The change's number, grey when it could be luck
-fn moveText(h: *H, a: Count, b: Count, clear: bool) N {
-    const d: f32 = @floatCast(points(a, b));
-    const ci: f32 = @floatCast(halfWidth(a, b));
-    return delta.view(h, .{ .d = d, .ci = if (clear) null else @max(ci, @abs(d) + 0.01) });
+fn moveText(h: *H, m: Shift, clear: bool) N {
+    return delta.view(h, .{ .d = m.d, .ci = if (clear) null else @max(m.ci, @abs(m.d) + 0.01) });
 }
 
 fn changeCell(h: *H, l: *const Line) N {
@@ -463,7 +467,7 @@ fn pairCell(h: *H, l: *const MLine) N {
         side(h, l.d, x.a),
         h.span(.{ .class = "vs" }, .{W.vs}),
         side(h, l.d, x.b),
-        @import("role.zig").view(h, x.role.ui(), .{}),
+        role.view(h, x.role.ui(), .{}),
     });
 }
 
@@ -792,14 +796,18 @@ fn users(h: *H, d: *const Data, list: []const User, used: tree.Text, base: []con
     var l = h.list();
     for (list, 0..) |u, i| {
         const row = if (u.row) |x| &d.rows[x] else null;
+        const href = champHref(h.mem, d, base, u.champ, u.role) catch blk: {
+            h.oom = true;
+            break :blk "";
+        };
         l.add(h.li(.{ .key = i }, .{
-            h.a(.{ .class = "who", .href = h.fmt("{s}{s}champion/{s}.html#role={s}", .{ base, d.patch_dir, d.champs[u.champ].slug, Role.slugs[@backingInt(u.role)] }) }, .{
+            h.a(.{ .class = "who", .href = href }, .{
                 icon(h, d, u.champ),
                 h.span(.{ .class = "nm" }, .{d.champs[u.champ].name}),
-                @import("role.zig").view(h, u.role.ui(), .{}),
+                role.view(h, u.role.ui(), .{}),
             }),
             h.span(.{ .class = "r" }, .{phrase.num(h, .rate, 100 * u.share)}),
-            if (row) |x| moveText(h, x.prev, x.cur, x.clear) else null,
+            if (row) |x| moveText(h, moveOf(x.prev, x.cur), x.clear) else null,
         }));
     }
     return h.div(.{ .class = "blk" }, .{

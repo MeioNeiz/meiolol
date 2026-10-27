@@ -120,7 +120,7 @@ pub const Page = struct {
     /// False: noindex even when public (thin matchups, Options.index_min_games)
     index: bool = true,
     /// Why the rank picks past Plat+ are greyed, on pages with a view
-    rank_off: []const u8 = "Champion pages only",
+    rank_off: []const u8 = "Champion pages and the champions board only",
 };
 
 /// A link to `path` under a root: for href and src holes

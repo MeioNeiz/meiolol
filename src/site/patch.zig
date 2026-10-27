@@ -259,35 +259,41 @@ fn change(a: std.mem.Allocator, c: patchnotes.Change, id: u32) !pp.Change {
 fn riot(site: *const Site, d: *const pp.Data) !pp.Riot {
     const n = site.notes orelse return .{ .items = &.{}, .runes = &.{} };
     const a = site.arena;
-    const f = &site.view_builds[(html.View{ .region = site.view.region, .period = .patch }).index()];
+    const f = if (site.view_builds[(html.View{ .region = site.view.region, .period = .patch }).index()]) |*b| b else null;
+    const champs = try a.alloc(?u16, if (f) |b| b.builds.len else 0);
+    if (f) |b| for (champs, b.builds) |*c, x| {
+        c.* = index(site, x.champion);
+    };
     const items = try a.alloc(pp.Kit, n.items.len);
     for (items, n.items) |*k, c| k.* = .{
         .change = try change(a, c, c.id),
-        .icon = try a.print("https://ddragon.leagueoflegends.com/cdn/{s}/img/item/{d}.png", .{ d.ddragon, c.id }),
-        .users = if (f.*) |*b| try users(site, d, b, c.id, false) else &.{},
+        // A gone item has no image in the new version: art's placeholder
+        .icon = if (c.status == .gone) "" else try a.print("https://ddragon.leagueoflegends.com/cdn/{s}/img/item/{d}.png", .{ d.ddragon, c.id }),
+        .users = if (f) |b| try users(a, d, b, champs, c.id, false) else &.{},
     };
     const runes = try a.alloc(pp.Kit, n.runes.len);
     for (runes, n.runes) |*k, c| k.* = .{
         .change = try change(a, c, c.id),
         .icon = if (c.icon.len > 0) try a.print("https://ddragon.leagueoflegends.com/cdn/img/{s}", .{c.icon}) else "",
-        .users = if (f.*) |*b| try users(site, d, b, c.id, true) else &.{},
+        .users = if (f) |b| try users(a, d, b, champs, c.id, true) else &.{},
     };
     return .{ .items = items, .runes = runes };
 }
 
 /// The champion roles with the biggest share of players using item or rune `id`, among
-/// those with the page's games
-fn users(site: *const Site, d: *const pp.Data, f: *const builds.File, id: u32, rune: bool) ![]const pp.User {
+/// those with the page's games. `champs`: each of f.builds' champion as a Data.champs
+/// index
+fn users(a: std.mem.Allocator, d: *const pp.Data, f: *const builds.File, champs: []const ?u16, id: u32, rune: bool) ![]const pp.User {
     var all: std.ArrayList(pp.User) = .empty;
-    for (f.builds) |b| {
+    for (f.builds, champs) |b, champ| {
         if (b.games < d.min_games) continue;
         const sh = (if (rune) runeShare(b, id) else itemShare(b, id)) orelse continue;
-        const c = index(site, b.champion) orelse continue;
+        const c = champ orelse continue;
         const r = role(b.role);
         const row: ?u16 = for (d.rows, 0..) |x, i| {
             if (x.champ == c and x.role == r) break @intCast(i);
         } else null;
-        try all.append(site.arena, .{ .champ = c, .role = r, .share = @floatCast(sh), .row = row });
+        try all.append(a, .{ .champ = c, .role = r, .share = @floatCast(sh), .row = row });
     }
     std.mem.sort(pp.User, all.items, {}, struct {
         fn more(_: void, x: pp.User, y: pp.User) bool {
@@ -383,4 +389,46 @@ test "itemShare and runeShare: of every player with boots, a first three, runes"
     try std.testing.expectEqual(@as(?f64, null), itemShare(b, 1054));
     try std.testing.expectEqual(@as(?f64, 0.7), runeShare(b, 8010));
     try std.testing.expectEqual(@as(?f64, null), runeShare(b, 8005));
+}
+
+test "users: by share, top max_users, enough games, a row only for a listed role" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const T = struct {
+        fn build(comptime champion: u32, comptime r: Role, comptime games: u32, comptime with: u32) builds.File.Build {
+            return .{ .champion = champion, .role = r, .games = games, .wins = games / 2, .kinds = &.{
+                .{ .kind = .core3, .games = games, .wins = games / 2, .options = &.{.{ .v = &.{ 3031, 3006 }, .games = with, .wins = with / 2 }} },
+            } };
+        }
+    };
+    // demo's rows: champ 1 bottom is row 1, champ 4 bottom row 5; champ 0 plays top only
+    const f: builds.File = .{
+        .label = "16.21",
+        .min_tier = "PLATINUM",
+        .games = 0,
+        .timelines = 0,
+        .items = &.{},
+        .runes = &.{},
+        .spells = &.{},
+        .builds = &.{
+            T.build(10, .bottom, 1000, 500),
+            T.build(20, .bottom, 500, 100),
+            T.build(30, .jungle, 400, 300),
+            // Not a champion of the page
+            T.build(40, .top, 2000, 2000),
+            // Under min_games
+            T.build(50, .bottom, 200, 180),
+            // Fourth by share
+            T.build(60, .middle, 900, 90),
+        },
+    };
+    const champs = [_]?u16{ 1, 4, 0, null, 3, 2 };
+    const got = try users(a, &pp.demo, &f, &champs, 3031, false);
+    try std.testing.expectEqualDeep(&[_]pp.User{
+        .{ .champ = 0, .role = .jungle, .share = 0.75, .row = null },
+        .{ .champ = 1, .role = .bottom, .share = 0.5, .row = 1 },
+        .{ .champ = 4, .role = .bottom, .share = 0.2, .row = 5 },
+    }, got);
+    try std.testing.expectEqual(0, (try users(a, &pp.demo, &f, &champs, 1001, false)).len);
 }
