@@ -228,7 +228,7 @@ fn halfWidth(a: Count, b: Count) f64 {
 
 fn icon(h: *H, d: *const Data, c: u16) N {
     const x = d.champs[c];
-    return champ.view(h, .{ .name = x.name, .src = h.fmt("https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png", .{ d.ddragon, x.key }) }, .{ .named = false, .px = .@"20" });
+    return champ.view(h, .{ .name = x.name, .src = h.fmt(champ.icon_fmt, .{ d.ddragon, x.key }) }, .{ .named = false, .px = .@"20" });
 }
 
 /// One champion row: the data's with what its cells need

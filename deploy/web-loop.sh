@@ -438,10 +438,11 @@ while true; do
             echo "$out"
             t=$SECONDS
             asset_glob='*.[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].*'
-            find data/site -maxdepth 1 -type f -name "$asset_glob" -mtime +30 -delete
             changed=$(rsync -rlpD --checksum --delete --filter="protect /$asset_glob" --stats \
                 data/site.new/ data/site/ \
                 | sed -nE 's/^Number of regular files transferred: ([0-9,]+)/\1/p')
+            # Replaced hashed copies, three days after (times kept above: when each came)
+            bin/meiolol site --prune-assets data/site 2>&1 || echo "prune failed"
             copy_s=$(( SECONDS - t )) t=$SECONDS
             if ! stats=$(rsync -az --delete-delay --delay-updates --exclude /admin/ --exclude /p/ --stats \
                 data/site/ meiolol-web:./); then

@@ -163,12 +163,14 @@ without its slash with a 301.
   and serves in 1.3 s (file in page cache) to 16.6 s (evicted, as after a boot); swaps
   take as long; with the renderer stopped a warmed page is ANY-HIT, an unwarmed one 503
 - Cache-Control: `map $uri $meiolol_cache_control` gives hashed assets
-  (src/site/assets.zig: `style.1a2b3c4d.css`, the font, search.js, ui-stats.js and
-  .wasm; `name.<8 hex>.ext` at the root) `public, max-age=31536000, immutable`,
+  (src/site/assets.zig: `style.1a2b3c4d.css`, the font, search.js, the islands' .js and
+  .wasm; `name.<8 hex>.ext` at the root) and champion portraits (src/icons.zig:
+  `/icon/<Data Dragon version>/<Key>.jpg`) `public, max-age=31536000, immutable`,
   everything else `no-cache`, in `/`, @render and @render_any (which hide the renderer's
-  own no-cache). A page after the first asks for none of them. Old hashed files stay 30
-  days (deploy/web-loop.sh); one missing from the upload falls through to the renderer,
-  which serves its own
+  own no-cache). A page after the first asks for none of them. A replaced hashed file
+  stays 3 days after its replacement came (`meiolol site --prune-assets`, from
+  deploy/web-loop.sh); one missing from the upload falls through to the renderer, which
+  serves its own
 - Training view (/admin/training/, same login as /admin/; data for the admin Models
   tab): lab runs of the Mac and the gpu-box (staged over ssh, home network only),
   learned.md, model.md, campaigns, uploaded by deploy/lab-push.sh (launchd, every 30 s

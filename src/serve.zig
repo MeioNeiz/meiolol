@@ -413,6 +413,7 @@ fn contentType(name: []const u8) []const u8 {
         .{ ".json", "application/json" },
         .{ ".wasm", "application/wasm" },
         .{ ".svg", "image/svg+xml" },
+        .{ ".jpg", "image/jpeg" },
         .{ ".woff2", "font/woff2" },
         .{ ".txt", "text/plain; charset=utf-8" },
     };

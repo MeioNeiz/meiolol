@@ -74,7 +74,7 @@ function setup(pool, meta, learning) {
   const out = document.getElementById("results");
 
   const icon = (c) =>
-    `https://ddragon.leagueoflegends.com/cdn/${meta.ddragon}/img/champion/${c.key}.png`;
+    `/icon/${meta.ddragon}/${c.key}.jpg`;
   const link = (id) => {
     const c = byId.get(id);
     if (!c) return el("span", {}, "?");

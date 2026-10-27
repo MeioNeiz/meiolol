@@ -1,8 +1,8 @@
 //! Front-end files every page or island loads, linked by a name with their content's hash
 //! (`search.1a2b3c4d.js`), which nginx serves as immutable for a year (docs/hosting.md).
-//! A deploy changes the name, so a browser never revalidates them. The plain names stay
-//! too (pages rendered before still link them); the web loop keeps old hashed names a
-//! while for pages cached before a deploy
+//! A deploy changes the name, so a browser never revalidates them. Only hashed names are
+//! written; the web loop keeps a replaced copy three days (prune) for pages loaded or
+//! cached before a deploy
 const std = @import("std");
 const ui = @import("ui");
 
@@ -46,4 +46,120 @@ pub fn hashed(comptime plain: []const u8, comptime data: []const u8) Hashed {
 
 test hashed {
     try std.testing.expectEqualStrings("ui-stats.fd0c5087.js", hashed("ui-stats.js", "x").path);
+}
+
+/// The site's hashed copies a deploy replaced, in the uploaded site `dir` (the web loop's
+/// data/site: a file's time is when it first came): each goes with its .gz once the copy
+/// that replaced it is `grace` old, so a page or island loaded before a deploy still finds
+/// its files that long. The count removed
+pub fn prune(gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, current: []const Hashed, now: std.Io.Timestamp, grace: std.Io.Duration) !usize {
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var copies: std.ArrayList(Copy) = .empty;
+    var it = dir.iterate();
+    while (try it.next(io)) |e| {
+        if (e.kind != .file or std.mem.endsWith(u8, e.name, ".gz")) continue;
+        const st = try dir.statFile(io, e.name, .{});
+        try copies.append(arena, .{ .name = try arena.dupe(u8, e.name), .time = st.mtime });
+    }
+    const gone = try stale(arena, current, copies.items, now, grace);
+    for (gone) |name| {
+        try dir.deleteFile(io, name);
+        dir.deleteFile(io, try arena.print("{s}.gz", .{name})) catch |err| switch (err) {
+            error.FileNotFound => {},
+            else => return err,
+        };
+    }
+    return gone.len;
+}
+
+const Copy = struct { name: []const u8, time: std.Io.Timestamp };
+
+/// The names prune deletes from `files`
+fn stale(arena: std.mem.Allocator, current: []const Hashed, files: []const Copy, now: std.Io.Timestamp, grace: std.Io.Duration) ![]const []const u8 {
+    var out: std.ArrayList([]const u8) = .empty;
+    var mine: std.ArrayList(Copy) = .empty;
+    for (current) |h| {
+        mine.clearRetainingCapacity();
+        for (files) |f| if (copyOf(h, f.name)) try mine.append(arena, f);
+        // Oldest first; a copy as old as the current one is older (one upload)
+        std.mem.sort(Copy, mine.items, h.path, struct {
+            fn lt(path: []const u8, a: Copy, b: Copy) bool {
+                if (a.time.nanoseconds != b.time.nanoseconds) return a.time.nanoseconds < b.time.nanoseconds;
+                return !std.mem.eql(u8, a.name, path) and std.mem.eql(u8, b.name, path);
+            }
+        }.lt);
+        if (mine.items.len < 2) continue;
+        for (mine.items[0 .. mine.items.len - 1], mine.items[1..]) |old, next| {
+            if (std.mem.eql(u8, old.name, h.path)) continue;
+            if (next.time.durationTo(now).nanoseconds >= grace.nanoseconds) try out.append(arena, old.name);
+        }
+    }
+    return out.items;
+}
+
+/// `name` is `h`'s plain name with some 8 hex digits, as hashed() makes it
+fn copyOf(h: Hashed, name: []const u8) bool {
+    const dot = std.mem.findScalarLast(u8, h.plain, '.') orelse return false;
+    const stem = h.plain[0 .. dot + 1];
+    const ext = h.plain[dot..];
+    if (name.len != stem.len + 8 + ext.len) return false;
+    if (!std.mem.startsWith(u8, name, stem) or !std.mem.endsWith(u8, name, ext)) return false;
+    for (name[stem.len..][0..8]) |c| if (!std.ascii.isHex(c) or std.ascii.isUpper(c)) return false;
+    return true;
+}
+
+test "stale: a replaced copy goes once its replacement is grace old" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const cur = hashed("ui-stats.js", "x");
+    const day: i96 = std.time.ns_per_day;
+    const at = struct {
+        fn f(d: i96) std.Io.Timestamp {
+            return .fromNanoseconds(d * std.time.ns_per_day);
+        }
+    }.f;
+    const files = [_]Copy{
+        .{ .name = "ui-stats.00000001.js", .time = at(1) },
+        .{ .name = "ui-stats.00000002.js", .time = at(5) },
+        .{ .name = "ui-stats.00000003.js", .time = at(9) },
+        .{ .name = cur.path, .time = at(10) },
+        // Not a copy of it
+        .{ .name = "ui-stats.js", .time = at(0) },
+        .{ .name = "ui-statsx.00000001.js", .time = at(0) },
+        .{ .name = "ui-stats.0000000g.js", .time = at(0) },
+        .{ .name = "ui-stats.00000001.wasm", .time = at(0) },
+    };
+    const grace: std.Io.Duration = .fromNanoseconds(3 * day);
+    // Day 11: 1 replaced on day 5, 2 on day 9 (2 days ago), 3 on day 10
+    const got = try stale(arena, &.{cur}, &files, at(11), grace);
+    try std.testing.expectEqual(1, got.len);
+    try std.testing.expectEqualStrings("ui-stats.00000001.js", got[0]);
+    try std.testing.expectEqual(3, (try stale(arena, &.{cur}, &files, at(13), grace)).len);
+    // Uploaded with the current one: replaced now
+    const same = [_]Copy{ .{ .name = cur.path, .time = at(10) }, .{ .name = "ui-stats.00000009.js", .time = at(10) } };
+    try std.testing.expectEqual(0, (try stale(arena, &.{cur}, &same, at(12), grace)).len);
+    try std.testing.expectEqual(1, (try stale(arena, &.{cur}, &same, at(13), grace)).len);
+    // Back on an older build: the newer copy stays, nothing replaced it
+    const back = [_]Copy{ .{ .name = cur.path, .time = at(1) }, .{ .name = "ui-stats.00000009.js", .time = at(2) } };
+    try std.testing.expectEqual(0, (try stale(arena, &.{cur}, &back, at(30), grace)).len);
+}
+
+test "prune deletes the copy and its .gz, keeps the current one" {
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer tmp.cleanup();
+    const cur = hashed("search.js", "x");
+    for ([_][]const u8{ "search.00000001.js", "search.00000001.js.gz", cur.path, "search.js" }) |name| {
+        try tmp.dir.writeFile(io, .{ .sub_path = name, .data = "x" });
+    }
+    const now = std.Io.Timestamp.now(io, .real);
+    try std.testing.expectEqual(0, try prune(std.testing.allocator, io, tmp.dir, &.{cur}, now, .fromNanoseconds(std.time.ns_per_day)));
+    try std.testing.expectEqual(1, try prune(std.testing.allocator, io, tmp.dir, &.{cur}, now, .fromNanoseconds(0)));
+    try std.testing.expectError(error.FileNotFound, tmp.dir.access(io, "search.00000001.js", .{}));
+    try std.testing.expectError(error.FileNotFound, tmp.dir.access(io, "search.00000001.js.gz", .{}));
+    try tmp.dir.access(io, cur.path, .{});
+    try tmp.dir.access(io, "search.js", .{});
 }

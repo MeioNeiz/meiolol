@@ -242,7 +242,7 @@ document.addEventListener("keydown", (e) => {
   let active = -1;
   const icon = (key) => {
     const img = document.createElement("img");
-    img.src = `https://ddragon.leagueoflegends.com/cdn/${index.ddragon}/img/champion/${key}.png`;
+    img.src = `/icon/${index.ddragon}/${key}.jpg`;
     img.alt = "";
     img.width = img.height = 22;
     return img;

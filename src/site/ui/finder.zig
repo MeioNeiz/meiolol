@@ -182,7 +182,7 @@ pub const Finder = struct {
 
     fn icon(f: *const F, h: *H, i: u16) champ.Champ {
         const c = f.data.champs[i];
-        return .{ .name = c.name, .src = h.fmt("https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png", .{ f.data.ddragon, c.key }) };
+        return .{ .name = c.name, .src = h.fmt(champ.icon_fmt, .{ f.data.ddragon, c.key }) };
     }
 
     fn href(f: *const F, h: *H, dir: []const u8, r: role.Role, x: u16, y: u16) []const u8 {

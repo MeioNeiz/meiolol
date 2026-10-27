@@ -195,7 +195,7 @@ class Game {
     if (c) {
       a.href = `champion/${c.slug}.html`;
       const img = document.createElement("img");
-      img.src = `https://ddragon.leagueoflegends.com/cdn/${this.ddragon}/img/champion/${c.key}.png`;
+      img.src = `/icon/${this.ddragon}/${c.key}.jpg`;
       img.alt = "";
       img.width = img.height = size;
       img.loading = "lazy";

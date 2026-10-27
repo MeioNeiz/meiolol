@@ -26,7 +26,7 @@ const filters = @import("filters.zig");
 const evalchart = @import("evalchart.zig");
 const flat = @import("flat.zig");
 const style = @import("style.zig");
-const assets = @import("assets.zig");
+pub const assets = @import("assets.zig");
 pub const gallery = @import("gallery.zig");
 pub const ui = @import("ui");
 const patchday = @import("../patchday.zig");
@@ -315,10 +315,7 @@ pub const Site = struct {
     }
 
     pub fn icon(s: *const Site, ch: Champ) ![]const u8 {
-        return s.arena.print(
-            "https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png",
-            .{ s.ddragon_version, ch.key },
-        );
+        return s.arena.print(ui.champ.icon_fmt, .{ s.ddragon_version, ch.key });
     }
 
     /// To the champion's page (one per champion, at the site root), its filters set to
@@ -352,46 +349,16 @@ pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.searc
 
 /// Front-end files at the site root; `Options.static_dir` serves them from disk instead
 pub const shared_assets = [_]File{
-    .{ .path = "style.css", .data = style.bundle },
     .{ .path = "favicon.svg", .data = @embedFile("static/favicon.svg") },
     .{ .path = "daily.js", .data = @embedFile("static/daily.js") },
     .{ .path = "reasons.js", .data = @embedFile("static/reasons.js") },
     .{ .path = "your.js", .data = @embedFile("static/your.js") },
     .{ .path = "review.js", .data = @embedFile("static/review.js") },
     .{ .path = "home.js", .data = @embedFile("static/home.js") },
-    .{ .path = "inter.woff2", .data = @embedFile("static/inter.woff2") },
     .{ .path = "table.js", .data = @embedFile("static/table.js") },
-    .{ .path = "search.js", .data = @embedFile("static/search.js") },
     .{ .path = "account.js", .data = @embedFile("static/account.js") },
     // Linked for print, so it never holds up rendering; browsers still fetch it on each load
     .{ .path = "print.css", .data = @embedFile("static/print.css") },
-    // Built (build.zig uiWasm), so never read from static_dir
-    .{ .path = "ui-stats.wasm", .data = @embedFile("ui-stats.wasm") },
-    .{ .path = "ui-stats.js", .data = @embedFile("ui-stats.js") },
-    .{ .path = "ui-champion.wasm", .data = @embedFile("ui-champion.wasm") },
-    .{ .path = "ui-champion.js", .data = @embedFile("ui-champion.js") },
-    .{ .path = "ui-champbuild.wasm", .data = @embedFile("ui-champbuild.wasm") },
-    .{ .path = "ui-champbuild.js", .data = @embedFile("ui-champbuild.js") },
-    .{ .path = "ui-champmore.wasm", .data = @embedFile("ui-champmore.wasm") },
-    .{ .path = "ui-champmore.js", .data = @embedFile("ui-champmore.js") },
-    .{ .path = "ui-matchup.wasm", .data = @embedFile("ui-matchup.wasm") },
-    .{ .path = "ui-matchup.js", .data = @embedFile("ui-matchup.js") },
-    .{ .path = "ui-matchmore.wasm", .data = @embedFile("ui-matchmore.wasm") },
-    .{ .path = "ui-matchmore.js", .data = @embedFile("ui-matchmore.js") },
-    .{ .path = "ui-games.wasm", .data = @embedFile("ui-games.wasm") },
-    .{ .path = "ui-games.js", .data = @embedFile("ui-games.js") },
-    .{ .path = "ui-gamemore.wasm", .data = @embedFile("ui-gamemore.wasm") },
-    .{ .path = "ui-gamemore.js", .data = @embedFile("ui-gamemore.js") },
-    .{ .path = "ui-gamelane.wasm", .data = @embedFile("ui-gamelane.wasm") },
-    .{ .path = "ui-gamelane.js", .data = @embedFile("ui-gamelane.js") },
-    .{ .path = "ui-finder.wasm", .data = @embedFile("ui-finder.wasm") },
-    .{ .path = "ui-finder.js", .data = @embedFile("ui-finder.js") },
-    .{ .path = "ui-findergrid.wasm", .data = @embedFile("ui-findergrid.wasm") },
-    .{ .path = "ui-findergrid.js", .data = @embedFile("ui-findergrid.js") },
-    .{ .path = "ui-learn.wasm", .data = @embedFile("ui-learn.wasm") },
-    .{ .path = "ui-learn.js", .data = @embedFile("ui-learn.js") },
-    .{ .path = "ui-patch.wasm", .data = @embedFile("ui-patch.wasm") },
-    .{ .path = "ui-patch.js", .data = @embedFile("ui-patch.js") },
 };
 /// And in every view's directory
 pub const view_assets = [_]File{
@@ -401,12 +368,10 @@ pub const view_assets = [_]File{
 /// Asset `wanted` (a hashed name as its plain one) from Options.static_dir when set (edits
 /// show without a rebuild), else as embedded; null for anything else
 pub fn asset(arena: std.mem.Allocator, io: std.Io, opts: Options, wanted: []const u8) !?[]const u8 {
-    const name = for (hashed_assets) |h| {
-        if (std.mem.eql(u8, h.path, wanted)) break h.plain;
-    } else wanted;
-    const all = shared_assets ++ view_assets;
-    const embedded = for (all) |f| {
-        if (std.mem.eql(u8, f.path, name)) break f.data;
+    const name: []const u8, const embedded: []const u8 = for (hashed_assets) |h| {
+        if (std.mem.eql(u8, h.path, wanted)) break .{ h.plain, h.data };
+    } else for (shared_assets ++ view_assets) |f| {
+        if (std.mem.eql(u8, f.path, wanted)) break .{ f.path, f.data };
     } else return null;
     const dir = opts.static_dir orelse return embedded;
     if (std.mem.startsWith(u8, name, "ui-")) return embedded;

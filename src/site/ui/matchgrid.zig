@@ -237,7 +237,7 @@ fn matchHref(h: *H, in: *const Input, o: Opp) ?[]const u8 {
 
 fn icon(h: *H, in: *const Input, i: u16) champ.Champ {
     const c = in.champs[i];
-    return .{ .name = c.name, .src = h.fmt("https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png", .{ in.ddragon, c.key }) };
+    return .{ .name = c.name, .src = h.fmt(champ.icon_fmt, .{ in.ddragon, c.key }) };
 }
 
 fn rate(c: Counts) f32 {

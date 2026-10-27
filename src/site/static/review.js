@@ -63,7 +63,7 @@ const Review = (() => {
   const champName = (id) => champs.get(id)?.name ?? "?";
   const iconUrl = (id) => {
     const c = champs.get(id);
-    return c && ddragon ? `https://ddragon.leagueoflegends.com/cdn/${ddragon}/img/champion/${c.key}.png` : "";
+    return c && ddragon ? `/icon/${ddragon}/${c.key}.jpg` : "";
   };
   function icon(id, cls) {
     const img = el("img", cls);

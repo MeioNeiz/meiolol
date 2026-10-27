@@ -172,16 +172,31 @@ pub const usage_site =
     \\                               partials"), which is left alone
     \\              --patch-games    print the EUW patch the site would show and its
     \\                               game count (no site; deploy/web-loop.sh)
+    \\              --prune-assets DIR  delete the front-end files' older hashed
+    \\                               copies in DIR three days after a newer one came
+    \\                               (no site; deploy/web-loop.sh, on data/site)
     \\
 ;
 
 pub fn cmdSite(c: *Cmd) !u8 {
     var f: SiteFlags = .{};
     var patch_games = false;
+    var prune: ?[]const u8 = null;
     while (c.next()) |_| {
         if (c.is("--patch-games")) {
             patch_games = true;
+        } else if (c.is("--prune-assets")) {
+            prune = try c.value();
         } else if (!try f.parse(c)) return error.Usage;
+    }
+    if (prune) |path| {
+        const io = c.init.io;
+        var dir = try std.Io.Dir.cwd().openDir(io, path, .{ .iterate = true });
+        defer dir.close(io);
+        const grace: std.Io.Duration = .fromNanoseconds(3 * std.time.ns_per_day);
+        const n = try site.assets.prune(c.init.gpa, io, dir, &site.hashed_assets, .now(io, .real), grace);
+        std.log.info("{d} old front-end files deleted", .{n});
+        return 0;
     }
     // A fraction of a second: the web loop asks every round whether to build and upload
     if (patch_games) {
@@ -213,8 +228,25 @@ pub fn cmdSite(c: *Cmd) !u8 {
         std.log.info("views: {s}", .{path});
         return 0;
     }
-    try site.generate(c.init.gpa, c.init.io, db, try f.options(c, c.arena, db, email));
+    const opts = try f.options(c, c.arena, db, email);
+    try site.generate(c.init.gpa, c.init.io, db, opts);
+    makeIcons(c, db, opts.out_dir);
     return 0;
+}
+
+/// Champion portraits (src/icons.zig) cached in DIR/ddragon, copied into `out_dir` unless
+/// null. Failing, it warns: the pages go out, their portraits where cached
+fn makeIcons(c: *Cmd, db: store.Db, out_dir: ?[]const u8) void {
+    var http: std.http.Client = .{ .allocator = c.init.gpa, .io = c.init.io };
+    defer http.deinit();
+    const cache = std.fs.path.join(c.arena, &.{ c.data_dir, "ddragon" }) catch return;
+    const n = main.icons.sync(c.init.gpa, c.init.io, db, cache, out_dir, .{ .http = &http }) catch |err| {
+        std.log.warn("icons: {t}", .{err});
+        return;
+    };
+    if (n.failed > 0) {
+        std.log.warn("icons: {d} made, {d} failed (tried again next run)", .{ n.made, n.failed });
+    } else if (n.made > 0) std.log.info("icons: {d} made", .{n.made});
 }
 
 pub const usage_dev =
@@ -249,7 +281,10 @@ pub fn cmdDev(c: *Cmd) !u8 {
     defer rendered.deinit();
     // Before listening, so the browser reloads once it is ready; the others on request
     _ = try loaded.site(site.html.View.all[0]);
+    // Portraits straight from their cache, laid out as the site's
+    makeIcons(c, db, null);
     try serve.run(c.init.gpa, c.init.io, .{
+        .root = try std.fs.path.join(c.arena, &.{ c.data_dir, "ddragon" }),
         .port = port,
         .render = rendered,
         .dev = dev,

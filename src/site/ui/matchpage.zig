@@ -38,7 +38,7 @@ pub const scope = .{".c-mpage"};
 pub const Other = champpage.Other;
 
 fn icon(a: std.mem.Allocator, ddragon: []const u8, c: Other) !champ.Champ {
-    return .{ .name = c.name, .src = try std.fmt.allocPrint(a, "https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png", .{ ddragon, c.key }) };
+    return .{ .name = c.name, .src = try std.fmt.allocPrint(a, champ.icon_fmt, .{ ddragon, c.key }) };
 }
 
 fn rate(games: u32, wins: u32) f32 {
@@ -175,10 +175,10 @@ pub const Head = struct {
         const d = p.data;
         return h.div(.{ .class = "part", .data_island = "matchup", .data_bin = if (p.bin.len > 0) p.bin else null, .data_thin = d.thin }, .{card.view(h, .{}, &.{
             champhead.view(h, .{
-                .champ = .{ .name = d.x.name, .src = h.fmt("https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png", .{ d.ddragon, d.x.key }) },
+                .champ = .{ .name = d.x.name, .src = h.fmt(champ.icon_fmt, .{ d.ddragon, d.x.key }) },
                 .sub = W.sub.with(h, .{ .r = d.role.label().s, .p = d.patch }),
                 .pair = .{
-                    .champ = .{ .name = d.y.name, .src = h.fmt("https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png", .{ d.ddragon, d.y.key }) },
+                    .champ = .{ .name = d.y.name, .src = h.fmt(champ.icon_fmt, .{ d.ddragon, d.y.key }) },
                     .swap = d.swap,
                     .clear = d.clear,
                 },
@@ -480,7 +480,7 @@ pub const More = struct {
                 return .none;
             };
             for (rows, side.partners) |*r, x| r.* = .{
-                .champ = .{ .name = x.champ.name, .src = h.fmt("https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png", .{ d.ddragon, x.champ.key }) },
+                .champ = .{ .name = x.champ.name, .src = h.fmt(champ.icon_fmt, .{ d.ddragon, x.champ.key }) },
                 .value = h.span(.{ .style = h.vars(.{ .c = fmt.WrColour{ .pts = x.usual } }) }, .{phrase.num(h, .points, x.usual)}),
                 .note = phrase.num(h, .count, x.games),
             };

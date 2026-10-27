@@ -79,7 +79,7 @@ pub const Other = struct {
 };
 
 fn icon(h: *H, ddragon: []const u8, c: Other) champ.Champ {
-    return .{ .name = c.name, .src = h.fmt("https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png", .{ ddragon, c.key }) };
+    return .{ .name = c.name, .src = h.fmt(champ.icon_fmt, .{ ddragon, c.key }) };
 }
 
 pub const Role = struct {
@@ -455,7 +455,7 @@ pub fn prepare(a: std.mem.Allocator, d: *const TopData, root: []const u8) ![]cha
             const c = d.champs[o.champ];
             try entries.append(a, .{
                 .name = c.name,
-                .src = try std.fmt.allocPrint(a, "https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png", .{ d.ddragon, c.key }),
+                .src = try std.fmt.allocPrint(a, champ.icon_fmt, .{ d.ddragon, c.key }),
                 .href = if (o.page) try std.fmt.allocPrint(a, "{s}matchup/{s}/{s}-vs-{s}.html", .{ root, @tagName(r.role), d.slug, c.slug }) else null,
             });
         }

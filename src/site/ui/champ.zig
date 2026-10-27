@@ -111,6 +111,11 @@ pub const css =
     \\
 ;
 
+/// The site's portraits, by Data Dragon version and key ("MonkeyKing"): `meiolol site`
+/// makes them (src/icons.zig) as icon_px squares; a name never changes what it shows
+pub const icon_fmt = "/icon/{s}/{s}.jpg";
+pub const icon_px = 80;
+
 pub const demo_version = "16.21.1";
 
 /// A gallery portrait from Data Dragon
