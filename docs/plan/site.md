@@ -189,12 +189,7 @@ head are ahead.
 
 ### Steps
 
-- MU7 Clarity: docs/ui-audit.md "Matchup page" items (one game count on screen, one
-  "usual" with the champion page, gold line not in accent violet); runes section
-  without the empty right 40%
-- MU8 Matchups index: leaner rows (short icon paths, or rows from JSON) to list thinner
-  matchups; a search for one champion flips its pairs to its side; phone drops icons to
-  keep Games
+None open: the Later list below.
 
 ### Status
 
@@ -213,8 +208,11 @@ head are ahead.
   current one lit, an Opponent search); By game length beside Won by gold at 10 (the
   pair's 3 buckets, x against everyone dashed); Lane partners on bot and support pages,
   each side's 5 most played partners with vs usual and games
-- Matchups index: role tabs, one sortable table per role, rows from the lowest Min
-  games floor keeping 5,000 or fewer; under 200 gold at 14 coloured by sign (J11)
+- Matchups index: the finder (docs/plan/ui/matchups.md): Your champion ⇄ Opponent in
+  one row, Most played and Moved this patch, one picked champion's matchup grid
+- MU7 audit items: gold line grey, runes without the empty band; the header's "usually"
+  is x's expected rate against an opponent this strong (its tip says so), not the
+  champion page's overall rate
 
 ### Later
 

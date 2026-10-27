@@ -129,18 +129,15 @@ pub const css =
     \\  .c-crp { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); min-width: 0; }
     \\  .c-crp > .c-search { flex: 1 1 200px; width: auto; }
     \\  .c-crp > .c-search:has(> .c-chosen) { flex: 0 1 auto; }
-    \\  .c-crp-pair { container-type: inline-size; display: grid; grid-template-columns: 1fr auto 1fr;
-    \\    align-items: center; gap: var(--sp-2); }
+    \\  /* One row; narrow, the second picker wraps under the first, the swap before it */
+    \\  .c-crp-pair { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+    \\  .c-crp-pair > .c-crp { flex: 0 1 auto; }
     \\  .c-crp-pair > .sw { all: unset; display: grid; place-items: center; width: var(--ctl); height: var(--ctl);
     \\    border-radius: var(--r-ctl); color: var(--t2); font-size: var(--fs-l); cursor: pointer;
     \\    box-shadow: inset 0 0 0 1px var(--ctl-line); }
     \\  .c-crp-pair > .sw:hover { background: var(--ctl-bg-2); color: var(--text); }
     \\  .c-crp-pair > .sw:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
     \\  .c-crp-pair > .sw:disabled { opacity: 0.35; cursor: default; background: none; }
-    \\  @container (max-width: 520px) {
-    \\    .c-crp-pair { grid-template-columns: 1fr; justify-items: start; }
-    \\    .c-crp-pair > .sw { transform: rotate(90deg); }
-    \\  }
     \\}
     \\
 ;

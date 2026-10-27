@@ -135,7 +135,7 @@ pub const patchhead = @import("patchhead.zig");
 pub const patchpage = @import("patchpage.zig");
 
 /// Components whose CSS ships (css.join): add one when a page first uses it
-pub const components = .{ button, chip, badge, segmented, card, toggletip, strip, role, champ, rolepicker, champsearch, champhead, matchbrief, matchstrip, champlist, table, chart, dotplot, trend, histogram, art, skillgrid, itempath, runetree, buildpanel, tabs, site, filterbar, champpage, kda, timeline, versus, objicon, minimap, gamestrip, inspector, gamehead, gamerow, spark, stat, scoreboard, laneduel, itemrow, gamepage, lane, matchpage, matchgrid, finder, delta, bar, violin, tiers, guess, puzzle, choice, reasons, candlist, learnpage, split, draftboard, draftflow, dailypage, dailydays, changeline, patchhead, patchpage, poolslots, heatgrid, poolpage, dayhead, resultstrip, playerbar, profilesum, recordtile, highlights, gametrend, yourpage, yourviews, yourtime, yourlookup, idlookup, today, homepage };
+pub const components = .{ button, chip, badge, segmented, card, toggletip, strip, role, champ, rolepicker, champsearch, champhead, matchbrief, matchstrip, champlist, table, chart, dotplot, trend, histogram, art, skillgrid, itempath, runetree, buildpanel, tabs, site, filterbar, champpage, kda, timeline, versus, objicon, minimap, gamestrip, inspector, gamehead, gamerow, spark, stat, scoreboard, laneduel, itemrow, gamepage, lane, matchpage, matchgrid, champrolepicker, finder, delta, bar, violin, tiers, guess, puzzle, choice, reasons, candlist, learnpage, split, draftboard, draftflow, dailypage, dailydays, changeline, patchhead, patchpage, poolslots, heatgrid, poolpage, dayhead, resultstrip, playerbar, profilesum, recordtile, highlights, gametrend, yourpage, yourviews, yourtime, yourlookup, idlookup, today, homepage };
 
 /// Every component, in the gallery's order
 pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, alertband, actionbutton, logview, steptimeline, prose, modelbadge, role, champ, site, rolepicker, filterbar, champsearch, champhead, matchbrief, matchstrip, champlist, draftboard, champselect, teamrows, loadscreen, gamescreen, postgame, signin, practice, app, table, chart, dotplot, trend, timechart, histogram, lane, timeline, spark, art, skillgrid, itempath, runetree, buildpanel, versus, objicon, minimap, gamestrip, inspector, gamehead, gamerow, scoreboard, laneduel, itemrow, gamepage, guess, puzzle, choice, rankstrip, draftflow, reasons, candlist, champrolepicker, poolslots, heatgrid, matchgrid, finder, violin, learnpage, dailypage, dailydays, changeline, patchhead, patchpage, poolpage, dayhead, resultstrip, playerbar, profilesum, recordtile, highlights, gametrend, yourpage, yourviews, yourtime, yourlookup, idlookup, today, homepage, testerpage, testercand, notes, noteslist };
@@ -167,4 +167,31 @@ test {
 
 test "every component: scoped, linted CSS; clean states; no dead class" {
     try gallery.expectSound(all);
+}
+
+test "site components: one a site component imports is one too, so its CSS ships" {
+    @setEvalBranchQuota(100_000);
+    // filterbar's select is its gallery's only
+    const gallery_only = .{.{ "filterbar", "select" }};
+    inline for (components) |C| {
+        const name = comptime fileName(C);
+        var parts = std.mem.splitSequence(u8, @embedFile(name ++ ".zig"), "@import(\"");
+        _ = parts.next();
+        next: while (parts.next()) |rest| {
+            const dep = rest[0 .. std.mem.findScalar(u8, rest, '"') orelse continue];
+            if (!std.mem.endsWith(u8, dep, ".zig")) continue;
+            const d = dep[0 .. dep.len - ".zig".len];
+            inline for (gallery_only) |g| if (std.mem.eql(u8, g[0], name) and std.mem.eql(u8, g[1], d)) continue :next;
+            inline for (components) |S| if (std.mem.eql(u8, fileName(S), d)) continue :next;
+            inline for (all) |A| if (std.mem.eql(u8, fileName(A), d)) {
+                std.debug.print("{s} imports {s}, not in components\n", .{ name, d });
+                return error.TestUnexpectedResult;
+            };
+        }
+    }
+}
+
+fn fileName(comptime C: type) []const u8 {
+    const t = @typeName(C);
+    return t[(std.mem.findScalarLast(u8, t, '.') orelse return t) + 1 ..];
 }
