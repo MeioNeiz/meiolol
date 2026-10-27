@@ -48,7 +48,7 @@ all/data/tiers.bin b2e742edbe527240
 all/index.html 75aad58e790391fc
 all/matchup/bot/kaisa-vs-twitch.html bdd484df79bfe1aa
 all/matchup/bot/twitch-vs-kaisa.html 79691cafddd91d45
-all/matchup/index.html f66752c9f38dc361
+all/matchup/index.html 40669d064c543917
 all/matchup/jungle/amumu-vs-leesin.html 42456dc62132ad8c
 all/matchup/jungle/leesin-vs-amumu.html 334b3c3d2552db0e
 all/matchup/mid/ahri-vs-orianna.html 5c9abae94130998f
@@ -107,7 +107,7 @@ all/patch/data/tiers.bin cc08dd7acdba407a
 all/patch/index.html 06f25c010d6c8e8a
 all/patch/matchup/bot/kaisa-vs-twitch.html 90ec1a43d036ff8c
 all/patch/matchup/bot/twitch-vs-kaisa.html 59a3ae6b613d64b0
-all/patch/matchup/index.html fec2165366cbe35a
+all/patch/matchup/index.html bd43a713ddddda01
 all/patch/matchup/jungle/amumu-vs-leesin.html e5240d051eb5c012
 all/patch/matchup/jungle/leesin-vs-amumu.html df8388d707308b7b
 all/patch/matchup/mid/ahri-vs-orianna.html 775764e26f3cc6e2
@@ -224,7 +224,7 @@ learn/champs.json 7c5a77a4464faa98
 learn/practice.json 4f53cda18c2baa0c
 matchup/bot/kaisa-vs-twitch.html 07a410fca1810fb7
 matchup/bot/twitch-vs-kaisa.html 62de3bfe8d52fd78
-matchup/index.html d23c475490d86b16
+matchup/index.html dd5305e0c03fe69b
 matchup/jungle/amumu-vs-leesin.html ba291449e6e8cde3
 matchup/jungle/leesin-vs-amumu.html c0bebfc8532bba6c
 matchup/mid/ahri-vs-orianna.html dcc96c70c8bf8efe
@@ -284,7 +284,7 @@ patch/data/tiers.bin 4595bc16146d87cc
 patch/index.html 717d0e07f27cf1a3
 patch/matchup/bot/kaisa-vs-twitch.html 8f8bf221d70e4d18
 patch/matchup/bot/twitch-vs-kaisa.html 92680aa3423aeec3
-patch/matchup/index.html 1b352e4fb927cebc
+patch/matchup/index.html b18134c6c1bee1d7
 patch/matchup/jungle/amumu-vs-leesin.html e06c980f8a17bcca
 patch/matchup/jungle/leesin-vs-amumu.html 159c5f419d06e70f
 patch/matchup/mid/ahri-vs-orianna.html f47ab2fabb25662c

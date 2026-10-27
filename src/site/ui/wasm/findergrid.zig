@@ -73,18 +73,21 @@ fn check() void {
 }
 
 /// A file that came but doesn't decode is cached as none; a failed fetch (offline, a
-/// server error) only for this pick, so picking the champion again fetches again
+/// server error) only for this pick, so picking the champion again fetches again. A
+/// decoded file keeps its bytes: its names point into them
 fn loaded(_: i32, bytes: ?[]u8) void {
     const slug = asked orelse return;
     asked = null;
     var d: ?*const MoreData = null;
     if (bytes) |b| {
-        defer gpa.free(b);
         if (ui.data.decode(gpa, MoreData, b)) |v| {
-            const p = gpa.create(MoreData) catch return gpa.free(slug);
+            const p = gpa.create(MoreData) catch {
+                gpa.free(b);
+                return gpa.free(slug);
+            };
             p.* = v;
             d = p;
-        } else |_| {}
+        } else |_| gpa.free(b);
     }
     if (d == null) dom.dom.warn("findergrid: no matchups for the pick");
     const kept = bytes != null and if (cache.put(gpa, slug, d)) true else |_| false;

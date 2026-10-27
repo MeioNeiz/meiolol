@@ -50,7 +50,8 @@ pub fn encode(a: Allocator, comptime T: type, v: T, out: *std.ArrayList(u8)) All
     try put(a, out, T, v);
 }
 
-/// A value of `T` from bytes written by `encode`; slices are allocated with `a` (an arena)
+/// A value of `T` from bytes written by `encode`; slices are allocated with `a` (an arena),
+/// except `[]const u8`, which point into `bytes`: keep them as long as the value
 pub fn decode(a: Allocator, comptime T: type, bytes: []const u8) Error!T {
     var r: Reader = .{ .bytes = bytes, .a = a };
     if (r.read(u32) != fingerprint(T)) return r.err orelse error.WrongType;
