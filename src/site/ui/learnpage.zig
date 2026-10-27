@@ -243,8 +243,9 @@ pub const Page = struct {
         const ask: ?usize = if (z.setup == .rates and !p.revealed) z.setup.rates.ask else null;
         const src = if (p.revealed and z.reveal.len > 0) z.reveal else z.setup.rates.rows;
         const real: ?f32 = if (z.answer == .guess) z.answer.guess.real else null;
-        var lo = p.g.lo;
-        var hi = p.g.hi;
+        // A pick's scale is its rows' alone (p.g is the last guess's)
+        var lo: f32 = if (z.answer == .guess) p.g.lo else 100;
+        var hi: f32 = if (z.answer == .guess) p.g.hi else 0;
         const rows = h.mem.alloc(puzzle.Row, src.len) catch {
             h.oom = true;
             return .none;
@@ -446,7 +447,8 @@ pub fn gallery(g: *@import("gallery.zig").Gallery) void {
     const h = g.h;
     if (shown(h.mem, &ld.demo, 1, 0, null)) |p| g.addFill("first visit: chapter 1, the mastery guess", p.view(h));
     if (shown(h.mem, &ld.demo, 1, 0, 55)) |p| g.addFill("mastery guess locked in: every band, 3.3 off", p.view(h));
-    if (shown(h.mem, &ld.demo, 1, 1, 0)) |p| g.addFill("counter duel, a wrong pick revealed", p.view(h));
+    if (shown(h.mem, &ld.demo, 1, 1, null)) |p| g.addFill("counter duel", p.view(h));
+    if (shown(h.mem, &ld.demo, 1, 1, 0)) |p| g.addFill("counter, a wrong pick revealed: each into Yone and against everyone", p.view(h));
     if (shown(h.mem, &ld.demo, 0, 0, null)) |p| g.addFill("chapter 0: role tiles", p.view(h));
     if (shown(h.mem, &counter_demo, 0, 0, null)) |p| g.addFill("chapter 0: counter tiles, one phrase each", p.view(h));
     if (shown(h.mem, &chips_demo, 0, 0, null)) |p| g.addFill("chips setup with a slider", p.view(h));

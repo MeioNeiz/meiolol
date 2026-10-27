@@ -475,9 +475,13 @@ fn counterPuzzle(site: *const Site, r: Role) !?ld.Puzzle {
     std.mem.sort(Named, three, {}, by_name.less);
     const choices = try a.alloc(ld.Choice, three.len);
     const vs = try a.alloc(ld.Figure, three.len);
+    // Per opponent, its rate into x over its rate against everyone
+    const reveal = try a.alloc(ld.Rate, 2 * three.len);
     var right: u8 = 0;
     var games: u32 = 0;
     for (three, choices, vs, 0..) |n, *ch, *f, i| {
+        reveal[2 * i] = .{ .label = n.c.name, .sub = try a.print("into {s}", .{x.name}), .v = @floatCast(100 * (1 - root.ratio(n.t.wins, n.t.games))), .games = n.t.games };
+        reveal[2 * i + 1] = .{ .label = n.c.name, .sub = "vs everyone", .v = @floatCast(100 * n.t.own.rate()), .games = @intCast(@min(n.t.own.games, std.math.maxInt(u32))) };
         if (n.t.o == b.counter.o) right = @intCast(i);
         games += n.t.games;
         // x's rate into the opponent: the setup; the reveal, how much worse than usual
@@ -496,6 +500,7 @@ fn counterPuzzle(site: *const Site, r: Role) !?ld.Puzzle {
         .term = .{ .word = "counter", .note = "Wins more against this champion than against everyone else." },
         .setup = .{ .duel = .{ .who = uiChamp(x), .role = champion.uiRole(r), .label = "wins into", .vs = vs } },
         .answer = .{ .pick = .{ .right = right, .choices = choices } },
+        .reveal = reveal,
         .why = try a.print("{s} wins {d:.0}% against everyone, {d:.0}% against {s}.", .{
             c.c.name, @round(100 * c.t.own.rate()), 100 - @round(100 * root.ratio(c.t.wins, c.t.games)), x.name,
         }),
