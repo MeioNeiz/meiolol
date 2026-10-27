@@ -14,7 +14,8 @@ const Site = root.Site;
 const File = root.File;
 const log = std.log.scoped(.site);
 
-/// The waterfall's start: a pick's win chance is this plus its terms and rest
+/// The waterfall's start, an even game: a pick's win chance is this plus its terms and
+/// rest. The puzzle has no per-role average to start from
 const base = 50;
 
 comptime {
@@ -22,17 +23,40 @@ comptime {
     for (leaguepedia.order, dd.pro_sides) |c, side| std.debug.assert(c.side == @backingInt(side));
 }
 
-/// daily/<n>.bin beside each daily/<n>.json in `daily_files`. A puzzle that doesn't
-/// parse (made before a field it needs) gets none
+/// daily/<n>.bin beside each daily/<n>.json in `daily_files`; none without Learn's facts
+/// (the damage mix: a cached part would keep it wrong). A puzzle that doesn't parse (made
+/// before a field it needs) or names a champion the site doesn't know gets none: the page
+/// says so
 pub fn files(site: *const Site, daily_files: []const File, out: *std.ArrayList(File)) !void {
-    const a = site.arena;
+    if (site.learn == null) return log.info("daily page data: no Learn facts", .{});
+    try filesWith(site.arena, daily_files, out, site, siteChamp, siteMagic);
+}
+
+fn filesWith(
+    a: std.mem.Allocator,
+    daily_files: []const File,
+    out: *std.ArrayList(File),
+    ctx: anytype,
+    champ: fn (@TypeOf(ctx), u32) anyerror!Champ,
+    magic: fn (@TypeOf(ctx), u32) ?f32,
+) !void {
     for (daily_files) |f| {
         const n = puzzleName(f.path) orelse continue;
-        const p = std.json.parseFromSliceLeaky(daily.Puzzle, a, f.data, .{ .ignore_unknown_fields = true }) catch |err| {
-            log.info("{s}: no page data: {t}", .{ f.path, err });
-            continue;
+        const opts: std.json.ParseOptions = .{ .ignore_unknown_fields = true };
+        const p = std.json.parseFromSliceLeaky(daily.Puzzle, a, f.data, opts) catch |err| switch (err) {
+            error.OutOfMemory => return err,
+            else => {
+                log.info("{s}: no page data: {t}", .{ f.path, err });
+                continue;
+            },
         };
-        const d = try puzzle(a, p, site, siteChamp, siteMagic);
+        const d = puzzle(a, p, ctx, champ, magic) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            else => {
+                log.info("{s}: no page data: {t}", .{ f.path, err });
+                continue;
+            },
+        };
         if (!d.valid()) {
             log.warn("{s}: page data fails its check", .{f.path});
             continue;
@@ -81,10 +105,12 @@ pub fn puzzle(
         const pl: daily.Player = if (p.players) |ps| ps[t][r] else .{};
         const rs: ?daily.Seat = if (p.review) |rv| rv.seats[t][r] else null;
         var cands: std.ArrayList(dd.Cand) = .empty;
-        if (rs) |x| {
+        // The hidden seat's come from the review's picks (hiddenCands)
+        const hidden = t == p.hidden_team and r == @backingInt(p.hidden_role);
+        if (rs) |x| if (!hidden) {
             if (x.top != id) try cands.append(a, try plain(&ids, x.top, 1, x.top_win));
             try cands.append(a, try plain(&ids, id, x.rank, x.win));
-        }
+        };
         seats[t][r] = .{
             .champ = try ids.at(id),
             .dmg = dmgOf(magic(ctx, id)),
@@ -143,7 +169,7 @@ pub fn puzzle(
         .lanes = lanes,
         .result = .{
             .winner = @fromBackingInt(@intCast(p.winner)),
-            .secs = p.minutes * 60,
+            .secs = std.math.mul(u32, p.minutes, 60) catch std.math.maxInt(u32),
             .kills = .{ clamp16(p.kills[0]), clamp16(p.kills[1]) },
             .gold = p.gold,
         },
@@ -167,29 +193,25 @@ fn plain(ids: *Ids, id: u32, rank: u32, win: f64) !dd.Cand {
 }
 
 /// The review's top picks with their reasons as terms, then the played one where it is
-/// not among them (its reasons from the options). Picks from before win chances were
-/// kept are left out
+/// not among them (its reasons from the options, its win chance the seat's). A pick from
+/// before win chances were kept is left out; the others keep the model's rank, so the
+/// shown ranks can skip one
 fn hiddenCands(a: std.mem.Allocator, ids: *Ids, p: daily.Puzzle, rv: daily.Review) ![]const dd.Cand {
     var out: std.ArrayList(dd.Cand) = .empty;
     var has_played = false;
     for (rv.picks, 1..) |o, rank| {
-        const c = try cand(a, ids, o, @intCast(rank)) orelse continue;
-        try out.append(a, c);
+        const win = o.win orelse continue;
+        try out.append(a, try cand(a, ids, o, @intCast(rank), win));
         has_played = has_played or o.id == p.played;
     }
     if (!has_played) {
         const s = rv.seats[p.hidden_team][@backingInt(p.hidden_role)];
-        for (p.options) |o| if (o.id == p.played) {
-            var c = try cand(a, ids, o, s.rank) orelse try plain(ids, o.id, s.rank, s.win);
-            c.win = @floatCast(s.win);
-            try out.append(a, c);
-        };
+        for (p.options) |o| if (o.id == p.played) try out.append(a, try cand(a, ids, o, s.rank, s.win));
     }
     return out.toOwnedSlice(a);
 }
 
-fn cand(a: std.mem.Allocator, ids: *Ids, o: daily.Option, rank: u32) !?dd.Cand {
-    const win = o.win orelse return null;
+fn cand(a: std.mem.Allocator, ids: *Ids, o: daily.Option, rank: u32, win: f64) !dd.Cand {
     const terms = try a.alloc(dd.Term, o.reasons.len);
     var rest = win - base;
     for (terms, o.reasons) |*t, r| {
@@ -222,8 +244,9 @@ fn clamp16(x: u32) u16 {
     return @intCast(@min(x, std.math.maxInt(u16)));
 }
 
-fn dmgOf(m: ?f32) dd.Dmg {
-    const x = m orelse return .mixed;
+/// Under about a third magic reads as AD, over two thirds as AP
+fn dmgOf(m: ?f32) ?dd.Dmg {
+    const x = m orelse return null;
     return if (x < 0.35) .ad else if (x > 0.65) .ap else .mixed;
 }
 
@@ -231,6 +254,7 @@ const testing = std.testing;
 
 const Fake = struct {
     fn champ(_: Fake, id: u32) anyerror!Champ {
+        if (id == 0 or id > names.len) return error.UnknownChampion;
         return .{ .name = names[id - 1], .src = "" };
     }
     fn magic(_: Fake, id: u32) ?f32 {
@@ -242,6 +266,12 @@ const Fake = struct {
 fn reason(kind: @FieldType(daily.Reason, "kind"), id: u32, pp: f64) daily.Reason {
     return .{ .kind = kind, .id = id, .role = .middle, .pp = pp, .games = 900 };
 }
+
+// File scope: built inside testPuzzle they would be stack temporaries
+const test_options = [_]daily.Option{
+    .{ .id = 12, .games = 50, .reasons = &.{} },
+    .{ .id = 8, .games = 80, .reasons = &.{reason(.enemy, 3, 1.5)}, .win = 49 },
+};
 
 fn testPuzzle(turns: ?[]const daily.Turn, review: ?daily.Review) daily.Puzzle {
     return .{
@@ -255,10 +285,7 @@ fn testPuzzle(turns: ?[]const daily.Turn, review: ?daily.Review) daily.Puzzle {
         .hidden_team = 1,
         .hidden_role = .middle,
         .played = 8,
-        .options = &.{
-            .{ .id = 12, .games = 50, .reasons = &.{} },
-            .{ .id = 8, .games = 80, .reasons = &.{reason(.enemy, 3, 1.5)}, .win = 49 },
-        },
+        .options = &test_options,
         .winner = 0,
         .minutes = 31,
         .kills = .{ 20, 12 },
@@ -293,9 +320,9 @@ test "a ranked puzzle: bans per side, the played pick's reasons from its option,
     try testing.expectEqual(@as(usize, 0), bare.turns.len);
     try testing.expectEqualStrings("K", bare.champs[bare.bans[0][0]].name);
     try testing.expectEqual(@as(usize, 0), bare.seats[1][2].cands.len);
-    try testing.expectEqual(dd.Dmg.ap, bare.seats[0][2].dmg);
-    try testing.expectEqual(dd.Dmg.ad, bare.seats[0][0].dmg);
-    try testing.expectEqual(dd.Dmg.mixed, bare.seats[0][1].dmg);
+    try testing.expectEqual(dd.Dmg.ap, bare.seats[0][2].dmg.?);
+    try testing.expectEqual(dd.Dmg.ad, bare.seats[0][0].dmg.?);
+    try testing.expectEqual(null, bare.seats[0][1].dmg);
 
     const p = try puzzle(a, testPuzzle(null, test_review), Fake{}, Fake.champ, Fake.magic);
     try testing.expect(p.valid());
@@ -313,6 +340,13 @@ test "a ranked puzzle: bans per side, the played pick's reasons from its option,
     try testing.expectEqual(@as(u16, 2), hidden[1].rank);
     try testing.expectEqual(dd.Kind.into, hidden[1].terms[0].kind);
     try testing.expectApproxEqAbs(@as(f32, 48), hidden[1].win, 1e-4);
+    for (hidden) |c| {
+        var sum: f32 = base + c.rest;
+        for (c.terms) |t| sum += t.pp;
+        try testing.expectApproxEqAbs(c.win, sum, 1e-4);
+    }
+    // Every champion in the table is named somewhere (none left from the hidden seat)
+    for (0..p.champs.len) |i| try testing.expect(named(&p, @intCast(i)));
     // Another seat: the model's top, then the played one, no reasons
     const other = p.seats[0][0].cands;
     try testing.expectEqual(@as(usize, 2), other.len);
@@ -323,6 +357,50 @@ test "a ranked puzzle: bans per side, the played pick's reasons from its option,
     const back = try dd.decode(a, try dd.encode(a, p));
     try testing.expect(back.valid());
     try testing.expectEqualStrings("H", back.champs[dd.played(&back)].name);
+}
+
+fn named(p: *const dd.Puzzle, i: u16) bool {
+    if (std.mem.findScalar(u16, p.options, i) != null) return true;
+    for (p.bans) |b| if (std.mem.findScalar(u16, b, i) != null) return true;
+    for (p.turns) |t| if (t.champ == i) return true;
+    for (p.seats) |side| for (side) |st| {
+        if (st.champ == i) return true;
+        for (st.cands) |c| {
+            if (c.champ == i) return true;
+            for (c.terms) |t| if (t.other == i) return true;
+        }
+    };
+    return false;
+}
+
+test "files: a bin per numbered puzzle that converts; an unknown champion or bad JSON skips it" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var unknown = testPuzzle(null, test_review);
+    unknown.n = 8;
+    unknown.teams[0][0] = 99;
+    const in = [_]File{
+        .{ .path = "daily/7.json", .data = try std.json.Stringify.valueAlloc(a, testPuzzle(null, test_review), .{}) },
+        .{ .path = "daily/8.json", .data = try std.json.Stringify.valueAlloc(a, unknown, .{}) },
+        .{ .path = "daily/9.json", .data = "{" },
+        .{ .path = "daily/index.json", .data = "[]" },
+    };
+    var out: std.ArrayList(File) = .empty;
+    try filesWith(a, &in, &out, Fake{}, Fake.champ, Fake.magic);
+    try testing.expectEqual(@as(usize, 1), out.items.len);
+    try testing.expectEqualStrings("daily/7.bin", out.items[0].path);
+    const back = try dd.decode(a, out.items[0].data);
+    try testing.expect(back.valid());
+    try testing.expectEqual(@as(u32, 7), back.n);
+}
+
+test "dmgOf: a third and two thirds magic are mixed, past them AD or AP" {
+    try testing.expectEqual(dd.Dmg.ad, dmgOf(0.34).?);
+    try testing.expectEqual(dd.Dmg.mixed, dmgOf(0.35).?);
+    try testing.expectEqual(dd.Dmg.mixed, dmgOf(0.65).?);
+    try testing.expectEqual(dd.Dmg.ap, dmgOf(0.66).?);
+    try testing.expectEqual(null, dmgOf(null));
 }
 
 test "puzzleName: numbered puzzles only" {

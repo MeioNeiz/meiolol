@@ -288,7 +288,7 @@ fn partKeys() [part_count]u64 {
         partKey(BasePart, &.{ @embedFile("../stats.zig"), @embedFile("../partials.zig") }),
         partKey(FilterPart, &.{ @embedFile("filters.zig"), @embedFile("../partials.zig") }),
         partKey(PeoplePart, &.{ @embedFile("../pool.zig"), @embedFile("../learning.zig"), @embedFile("../spread.zig"), @embedFile("../partials.zig") }),
-        partKey(DailyPart, &.{ @embedFile("../daily.zig"), @embedFile("../learn.zig"), @embedFile("evalchart.zig"), @embedFile("yourgame.zig"), @embedFile("../api/pagedata.zig"), @embedFile("ui/gamedata.zig"), @embedFile("ui/yourlist.zig"), @embedFile("dailydata.zig"), @embedFile("ui/dailydata.zig"), @embedFile("../leaguepedia.zig"), @embedFile("../partials.zig") }),
+        partKey(DailyPart, &.{ @embedFile("../daily.zig"), @embedFile("../learn.zig"), @embedFile("evalchart.zig"), @embedFile("yourgame.zig"), @embedFile("../api/pagedata.zig"), @embedFile("ui/gamedata.zig"), @embedFile("ui/yourlist.zig"), @embedFile("dailydata.zig"), @embedFile("ui/dailydata.zig"), @embedFile("ui/data.zig"), @embedFile("ui/champ.zig"), @embedFile("ui/role.zig"), @embedFile("../leaguepedia.zig"), @embedFile("../core/score.zig"), @embedFile("../core/roles.zig"), @embedFile("../partials.zig") }),
         partKey(patchday.Wins, &.{ @embedFile("../patchday.zig"), @embedFile("../stats.zig"), @embedFile("../partials.zig") }),
         partKey(TrendPart, &.{ @embedFile("../stats.zig"), @embedFile("../partials.zig") }),
     };

@@ -87,7 +87,8 @@ pub const Turn = struct {
 
 pub const Seat = struct {
     champ: u16,
-    dmg: Dmg,
+    /// Null when the champion's damage wasn't sampled
+    dmg: ?Dmg,
     kills: u16,
     deaths: u16,
     assists: u16,
