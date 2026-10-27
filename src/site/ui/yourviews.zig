@@ -28,6 +28,11 @@ pub const sel = "[data-island=yourviews]";
 
 pub const View = enum { games, highlights, time };
 
+/// The views on the page: each one's tab once it is built (Highlights L3c (2), Over time
+/// (3)); one view shows no tabs
+pub const shipped = [_]View{.games};
+pub const every = [_]View{ .games, .highlights, .time };
+
 const W = struct {
     pub const views = plain("Views");
     pub const games = plain("Games");
@@ -43,6 +48,7 @@ pub const YourViews = struct {
     l: *const yl.List,
     filter: yl.Filter = .{},
     tab: View = .games,
+    views: []const View = &shipped,
 
     const P = @This();
 
@@ -55,14 +61,17 @@ pub const YourViews = struct {
         return .{ .view = p.tab, .q = f.q, .role = f.role, .champ = f.champ };
     }
 
+    /// A view not on the page is Games
     pub fn fromUrl(p: *P, u: Url) void {
-        p.tab = u.view;
+        p.tab = if (p.has(u.view)) u.view else .games;
         p.filter = yp.filterOf(p.l, .{ .q = u.q, .role = u.role, .champ = u.champ });
     }
 
     pub fn update(p: *P, m: Msg, ev: *tree.Event) void {
         switch (m) {
-            .view => |v| p.tab = v,
+            .view => |v| if (p.has(v)) {
+                p.tab = v;
+            },
             .queue => |i| {
                 if (i >= yp.queues.len) return;
                 p.filter.queue = yp.queues[i];
@@ -72,6 +81,10 @@ pub const YourViews = struct {
         ev.push = true;
     }
 
+    fn has(p: *const P, v: View) bool {
+        return std.mem.findScalar(View, p.views, v) != null;
+    }
+
     pub fn view(p: *P, h: *H) N {
         var kept: std.ArrayList(yl.Game) = .empty;
         for (p.l.games) |g| if (p.filter.keeps(g)) kept.append(h.mem, g) catch {
@@ -79,17 +92,22 @@ pub const YourViews = struct {
             return .none;
         };
         return h.div(.{ .class = "c-yviews", .data_island = "yourviews", .data_view = @tagName(p.tab) }, .{
-            playerbar.view(h, p.l, .{ .games = kept.items, .bands = &.{ p.tabBand(h), p.filters(h) } }),
+            playerbar.view(h, p.l, .{ .games = kept.items, .bands = &.{ if (p.views.len > 1) p.tabBand(h) else .none, p.filters(h) } }),
             if (p.tab != .games) h.div(.{ .class = "panel", .role = "tabpanel" }, .{h.p(.{ .class = "note" }, .{W.soon})}) else null,
         });
     }
 
     fn tabBand(p: *P, h: *H) N {
-        var items: [3]tabs.Item = undefined;
-        for (&items, [_]View{ .games, .highlights, .time }, [_]tree.Text{ W.games, W.highlights, W.time }) |*it, v, label| {
+        var items: [every.len]tabs.Item = undefined;
+        for (items[0..p.views.len], p.views) |*it, v| {
+            const label = switch (v) {
+                .games => W.games,
+                .highlights => W.highlights,
+                .time => W.time,
+            };
             it.* = .{ .label = label, .selected = p.tab == v, .on = h.on(p, .{ .view = v }) };
         }
-        return tabs.view(h, W.views, &items, &.{});
+        return tabs.view(h, W.views, items[0..p.views.len], &.{});
     }
 
     /// Queue chips and role icons; a choice without games is shown but not choosable
@@ -135,11 +153,11 @@ pub fn gallery(g: *Gallery) void {
     const demo = struct {
         var games: YourViews = .{ .l = &yp.demo.list };
         var flex: YourViews = .{ .l = &yp.demo.list, .filter = .{ .queue = .flex } };
-        var highlights: YourViews = .{ .l = &yp.demo.list, .tab = .highlights };
+        var highlights: YourViews = .{ .l = &yp.demo.list, .tab = .highlights, .views = &every };
     };
     g.addFill("Games, all queues", demo.games.view(h));
     g.addFill("Flex only", demo.flex.view(h));
-    g.addFill("Highlights", demo.highlights.view(h));
+    g.addFill("every view, Highlights", demo.highlights.view(h));
 }
 
 const testing = std.testing;
@@ -150,7 +168,7 @@ test "tabs and filter row: the bar's figures follow the filter, the URL carries 
     const a = arena.allocator();
     var t: tree.Tree = .{};
     var h: H = .init(a, &t);
-    var p: YourViews = .{ .l = &yp.demo.list };
+    var p: YourViews = .{ .l = &yp.demo.list, .views = &every };
     var ev: tree.Event = .{ .kind = .click };
 
     var n = p.view(&h);
@@ -178,4 +196,21 @@ test "tabs and filter row: the bar's figures follow the filter, the URL carries 
     try testing.expectEqual(null, p.filter.champ);
     try testing.expectEqual(.mid, p.filter.role);
     try testing.expect(!h.oom);
+}
+
+test "only built views: no tabs for one, another's URL shows Games" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var t: tree.Tree = .{};
+    var h: H = .init(arena.allocator(), &t);
+    var p: YourViews = .{ .l = &yp.demo.list, .views = &.{.games} };
+    var ev: tree.Event = .{ .kind = .click };
+    p.fromUrl(.{ .view = .highlights, .q = .flex });
+    try testing.expectEqual(.games, p.tab);
+    try testing.expectEqual(.flex, p.filter.queue);
+    p.update(.{ .view = .time }, &ev);
+    try testing.expectEqual(.games, p.tab);
+    const n = p.view(&h);
+    try testing.expectEqual(null, t.find(n, "role", "tablist"));
+    try testing.expectEqualStrings("games", t.attr(n, "data-view").?);
 }

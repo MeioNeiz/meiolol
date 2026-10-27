@@ -22,6 +22,7 @@ fn Side(comptime Root: type) type {
 
         fn init(s: *S, a: std.mem.Allocator, fragment: []const u8, sel: []const u8) !void {
             s.server = .{ .l = &yp.demo.list };
+            if (Root == yv.YourViews) s.server.views = &yv.every;
             s.state = s.server;
             s.fake = .{ .a = a };
             try s.fake.fragment.appendSlice(a, fragment);
