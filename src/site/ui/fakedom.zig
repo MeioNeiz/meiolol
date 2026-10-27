@@ -127,6 +127,8 @@ pub const Fake = struct {
         detach(f.nodes.get(id).?);
     }
     pub fn forget(f: *Fake, id: u32) void {
+        // As the browser: a removed node's focus goes to the body
+        if (id == f.focused) f.focused = 0;
         _ = f.nodes.remove(id);
         f.forgotten += 1;
     }

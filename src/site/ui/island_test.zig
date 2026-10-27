@@ -315,3 +315,28 @@ test "a link's click is the browser's unless the link handles it" {
     try testing.expect(!p.rt.event(0, .{ .kind = .click, .target = Page.id(i, "data-k", "plain") }));
     try testing.expectEqual(@as(u8, 1), state.jumps);
 }
+
+const Answer = struct {
+    done: bool = false,
+    pub const Msg = union(enum) { answer };
+    pub fn update(a: *Answer, _: Msg, _: *tree.Event) void {
+        a.done = true;
+    }
+    pub fn view(a: *Answer, h: *tree.H) tree.N {
+        return h.div(.{ .data_island = "a" }, .{if (a.done) h.p(.{}, .{"Done"}) else h.button(.{ .on_click = h.on(a, .answer) }, .{"Blue"})});
+    }
+};
+
+test "a focused node removed: its id may go to a text node, which focus would throw on" {
+    var p: Page = undefined;
+    p.init("");
+    defer p.arena.deinit();
+    var state: Answer = .{};
+    var server: Answer = .{};
+    const i = p.add(Answer, &state, &server);
+    const blue = Page.id(i, "data-island", null) + 1;
+    p.fake.focus(blue);
+    _ = p.rt.event(0, .{ .kind = .click, .target = blue });
+    try testing.expect(state.done);
+    if (p.fake.nodes.get(p.fake.focused)) |n| try testing.expect(!std.mem.eql(u8, n.tag, "#text"));
+}

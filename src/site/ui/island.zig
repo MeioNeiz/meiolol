@@ -200,12 +200,14 @@ pub fn Island(comptime Root: type, comptime Dom: type) type {
                 .ids = &i.rt.ids,
                 .a = scratch.allocator(),
                 .gpa = i.rt.gpa,
+                .focused = focused,
             };
             d.run();
             i.cur = next;
             i.index();
-            // Moving a node drops focus inside it: put it back, without scrolling
-            if (focused != 0 and focused < i.by_dom.items.len and i.by_dom.items[focused] != none and i.rt.dom.active() != focused) {
+            // Moving a node drops focus inside it: put it back, without scrolling. Not a
+            // removed one's: its id may be a new node's now, maybe text (focus throws)
+            if (focused != 0 and !d.lost and focused < i.by_dom.items.len and i.by_dom.items[focused] != none and i.rt.dom.active() != focused) {
                 i.rt.dom.focus(focused);
             }
             const mask = i.trees[i.cur].events;

@@ -32,6 +32,9 @@ pub fn Diff(comptime O: type) type {
         /// Scratch, and the free list's allocator
         a: std.mem.Allocator,
         gpa: std.mem.Allocator,
+        /// The focused node's id; `lost` once it is removed (its id may go to a new node)
+        focused: u32 = 0,
+        lost: bool = false,
 
         const D = @This();
 
@@ -88,6 +91,7 @@ pub fn Diff(comptime O: type) type {
         /// Every node of a removed subtree: its id is free and its handle released
         fn recycle(d: *D, o: N) void {
             d.o.forget(d.old.node(o).dom);
+            if (d.old.node(o).dom == d.focused) d.lost = true;
             d.ids.free.append(d.gpa, d.old.node(o).dom) catch {};
             for (d.old.kidsOf(o)) |k| d.recycle(k);
         }
