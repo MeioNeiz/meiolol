@@ -281,6 +281,11 @@ fn onEvent(slot: i32, bit: i32, e: zjb.Handle) callconv(.c) void {
             if (kind == .pointerleave) in.related = nearest(e.get("relatedTarget", zjb.Handle));
         },
         .focusout => in.related = nearest(e.get("relatedTarget", zjb.Handle)),
+        .toggle => {
+            const t = e.get("target", zjb.Handle);
+            defer t.release();
+            in.text = if (t.get("open", bool)) "open" else "";
+        },
         else => {},
     }
     if (rt.event(@intCast(slot), in)) e.call("preventDefault", .{}, void);

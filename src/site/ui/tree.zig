@@ -120,7 +120,7 @@ pub const Event = struct {
     y: f32 = 0,
     w: f32 = 0,
     pointer: i32 = 0,
-    /// The input's value, or the key for keydown
+    /// The input's value, the key for keydown, "open" or "" for toggle (opened())
     text: []const u8 = "",
     /// The handler's node: its DOM id (for pointer capture)
     dom: u32 = 0,
@@ -133,6 +133,12 @@ pub const Event = struct {
     push: bool = false,
     /// Set by the handler: done to the node marked `data_ref` once the DOM is patched
     after: ?After = null,
+
+    /// toggle: the <details> is open now. The diff setting `open` fires a toggle too, so
+    /// a handler sets its state from this and never flips it
+    pub fn opened(ev: *const Event) bool {
+        return std.mem.eql(u8, ev.text, "open");
+    }
 };
 
 pub const After = struct {

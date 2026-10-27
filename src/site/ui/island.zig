@@ -29,7 +29,7 @@ pub const Input = struct {
     pointer: i32 = 0,
     /// pointerleave and focusout: the node the pointer or focus went to (0: outside)
     related: u32 = 0,
-    /// An input's value, or keydown's key
+    /// An input's value, keydown's key, or toggle's "open" or ""
     text: []const u8 = "",
 };
 
