@@ -7,7 +7,6 @@
 const std = @import("std");
 const Io = std.Io;
 const site = @import("site/root.zig");
-const matchup = @import("site/matchup.zig");
 const store = @import("store");
 const httpd = @import("net").server;
 const client = @import("net").client;
@@ -449,10 +448,7 @@ fn notFoundPage(ctx: *Context, rendered: *Rendered, request: *std.http.Server.Re
     });
 }
 
-/// The pages and files of the views loaded so far, a path from the site root a line,
-/// matchups from matchup.thin_games up; the shared ones with the view they take their
-/// numbers from. deploy/cache-warm.sh requests each through nginx after a reload, so each
-/// has a cached copy to fall back on while the box is down
+/// Loaded.pageList, a path from the site root a line
 fn pages(ctx: *Context, rendered: *Rendered, request: *std.http.Server.Request) !void {
     const entry = rendered.acquire();
     defer rendered.release(entry);
@@ -460,22 +456,7 @@ fn pages(ctx: *Context, rendered: *Rendered, request: *std.http.Server.Request) 
     defer arena_state.deinit();
     const arena = arena_state.allocator();
     var out: std.ArrayList(u8) = .empty;
-    const l = entry.loaded;
-    for (site.html.View.all) |v| {
-        if (l.opts.euw_only and v.region != .euw) continue;
-        var s = (l.site(v) catch |err| switch (err) {
-            error.Loading => continue,
-            else => return err,
-        }).*;
-        s.arena = arena;
-        // Every thinner matchup would be ~54k pages a view
-        s.opts.static_min_games = matchup.thin_games;
-        for (try site.pagePaths(&s)) |p| try out.print(arena, "/{s}{s}\n", .{ v.dir(), p });
-        for (s.files) |f| try out.print(arena, "/{s}{s}\n", .{ v.dir(), f.path });
-        if (!std.meta.eql(v, site.html.View.shared)) continue;
-        for (site.shared_pages) |p| try out.print(arena, "/{s}\n", .{p});
-        for (s.shared_files) |f| try out.print(arena, "/{s}\n", .{f.path});
-    }
+    for (try entry.loaded.pageList(arena)) |p| try out.print(arena, "/{s}\n", .{p});
     return request.respond(out.items, .{ .extra_headers = &.{
         .{ .name = "content-type", .value = "text/plain; charset=utf-8" },
         .{ .name = "cache-control", .value = "no-store" },

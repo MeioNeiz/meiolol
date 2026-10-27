@@ -715,6 +715,25 @@ test "fixture games to stats, curves and the website" {
         }
         try testing.expect(std.mem.find(u8, try loaded.notFound(arena, "nosuch"), "href=\"index.html\">Home</a>") != null);
     }
+    // /admin/api/pages.txt, cache-warm's list: each once and each rendered, the home and
+    // the shared pages in it, the fixture's thin matchups not
+    {
+        const list = try loaded.pageList(arena);
+        var seen: std.StringHashMapUnmanaged(void) = .empty;
+        for (list) |p| {
+            if ((try seen.fetchPut(arena, p, {})) != null or try loaded.get(arena, p) == null) {
+                std.debug.print("pages.txt: {s} twice or not rendered\n", .{p});
+                return error.TestUnexpectedResult;
+            }
+        }
+        for ([_][]const u8{ "index.html", "champions.html", "champion/darius.html", "all/index.html" } ++ site.shared_pages) |want| {
+            if (!seen.contains(want)) {
+                std.debug.print("pages.txt lacks {s}\n", .{want});
+                return error.TestUnexpectedResult;
+            }
+        }
+        try testing.expect(!seen.contains("matchup/top/mordekaiser-vs-darius.html"));
+    }
 
     // `--static core` (deploy/web-loop.sh): only core_static and the front-end files, all
     // at the site root; everything the full build writes is still served (public here,

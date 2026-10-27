@@ -13,6 +13,7 @@ const filters = @import("filters.zig");
 const evalchart = @import("evalchart.zig");
 const flat = @import("flat.zig");
 const patchday = @import("../patchday.zig");
+const matchup = @import("matchup.zig");
 const stats = @import("../stats.zig");
 
 const Writer = std.Io.Writer;
@@ -147,6 +148,30 @@ pub const Loaded = struct {
         var aw: Writer.Allocating = .init(arena);
         try root.renderNotFound(&shared, &aw.writer, path);
         return aw.written();
+    }
+
+    /// The pages and files of the views loaded so far, each path from the site root,
+    /// matchups from matchup.thin_games up (every thinner one would be ~54k pages a view);
+    /// the shared ones with the view they take their numbers from. deploy/cache-warm.sh
+    /// requests each through nginx (/admin/api/pages.txt), so each has a cached copy to
+    /// fall back on while the box is down
+    pub fn pageList(l: *Loaded, arena: std.mem.Allocator) ![]const []const u8 {
+        var out: std.ArrayList([]const u8) = .empty;
+        for (html.View.all) |v| {
+            if (l.opts.euw_only and v.region != .euw) continue;
+            var s = (l.site(v) catch |err| switch (err) {
+                error.Loading => continue,
+                else => return err,
+            }).*;
+            s.arena = arena;
+            s.opts.static_min_games = matchup.thin_games;
+            for (try root.pagePaths(&s)) |p| try out.append(arena, try std.mem.concat(arena, u8, &.{ v.dir(), p }));
+            for (s.files) |f| try out.append(arena, try std.mem.concat(arena, u8, &.{ v.dir(), f.path }));
+            if (!std.meta.eql(v, html.View.shared)) continue;
+            try out.appendSlice(arena, &root.shared_pages);
+            for (s.shared_files) |f| try out.append(arena, f.path);
+        }
+        return out.items;
     }
 
     /// The u64 after the magic: a file with another came from a binary whose types or

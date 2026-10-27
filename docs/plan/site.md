@@ -274,7 +274,6 @@ detected cross-role kinds. Admin and /p/ only; the public draft tool follows J2.
   the live API serves names (`deploy/jomify.sh install api` if not); Daily Draft stays
   nameless unless Jacob says otherwise
 - Reviewer walk (screenshots docs/review-shots/), left: GIFs and a short demo video
-- Outage copies, left: home page from the renderer (core build without the DB), a
-  pipeline test for /admin/api/pages.txt
+- Outage copies, left: home page from the renderer (core build without the DB)
 - Admin polish, low while the panel is Jacob's only (J9): fix3 leftovers R48-R50, R58,
   R60, R61 (plans in docs/archive/review-2026-10-17/fix3-notes-2026-10-17.md)
