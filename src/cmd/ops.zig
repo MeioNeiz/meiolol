@@ -2,6 +2,7 @@
 
 const std = @import("std");
 const store = @import("store");
+const ui = @import("ui");
 const core = @import("core");
 const api = @import("../api/root.zig");
 const admin = @import("../admin.zig");
@@ -214,6 +215,162 @@ pub fn cmdAccount(c: *Cmd) !u8 {
         },
     }
     return 0;
+}
+
+pub const usage_notes =
+    \\  notes       notes on the live site (src/api/notes.zig) in DIR/api.db; on C01 --data
+    \\              /var/lib/meiolol-api (deploy/notes.sh runs it there)
+    \\              list             open notes, one per line: id, status, scope, page,
+    \\                               component, target, viewport, text
+    \\                --status S     open (default), done or any
+    \\                --by page|component  grouped under a heading line each
+    \\              show N           every field of note N
+    \\              done N [REPLY]   N done, with REPLY (e.g. the fixing commit) if given
+    \\              reopen N
+    \\              reply N TEXT
+    \\              --db FILE        another notes file (the dev server's data/snap/dev-notes.db)
+    \\
+;
+
+pub fn cmdNotes(c: *Cmd) !u8 {
+    const notes = api.notes;
+    const nd = ui.notesdata;
+    const arena = c.arena;
+    const io = c.init.io;
+    const Verb = enum { list, show, done, reopen, reply };
+    const v = std.meta.stringToEnum(Verb, c.next() orelse return error.Usage) orelse return error.Usage;
+    var db_path: ?[]const u8 = null;
+    var status_s: []const u8 = "open";
+    var by: ?enum { page, component } = null;
+    var words: std.ArrayList([]const u8) = .empty;
+    while (c.next()) |a| {
+        if (c.is("--db")) {
+            db_path = try c.value();
+        } else if (c.is("--status") and v == .list) {
+            status_s = try c.value();
+            if (std.meta.stringToEnum(enum { open, done, any }, status_s) == null) return error.Usage;
+        } else if (c.is("--by") and v == .list) {
+            by = std.meta.stringToEnum(@TypeOf(by.?), try c.value()) orelse return error.Usage;
+        } else if (std.mem.startsWith(u8, a, "--")) {
+            return error.Usage;
+        } else try words.append(arena, a);
+    }
+    const max_words: usize = switch (v) {
+        .list => 0,
+        .show, .reopen => 1,
+        .done, .reply => 2,
+    };
+    if (words.items.len > max_words or (v != .list and words.items.len == 0) or (v == .reply and words.items.len < 2)) return error.Usage;
+    const id: u32 = if (v == .list) 0 else std.fmt.parseInt(u32, words.items[0], 10) catch return error.Usage;
+
+    const path = if (db_path) |p| try arena.printSentinel("{s}", .{p}, 0) else try arena.printSentinel("{s}/api.db", .{c.data_dir}, 0);
+    const db = try store.Db.open(path);
+    defer db.close();
+    try db.exec(notes.schema);
+    var buf: [4096]u8 = undefined;
+    var stdout = std.Io.File.stdout().writerStreaming(io, &buf);
+    const out = &stdout.interface;
+    defer out.flush() catch {};
+    const now = std.Io.Clock.real.now(io).toSeconds();
+
+    // Through the API's own handler: the same checks and queries as the site
+    const r = switch (v) {
+        .list => try notes.handle(arena, db, .GET, try arena.print("all=1&status={s}", .{status_s}), "", "", now),
+        .show => try notes.handle(arena, db, .GET, "all=1&status=any", "", "", now),
+        .done, .reopen, .reply => blk: {
+            const reply: ?[]const u8 = if (words.items.len == 2) words.items[1] else null;
+            const change: nd.Change = switch (v) {
+                .done => .{ .status = .done, .reply = reply },
+                .reopen => .{ .status = .open },
+                else => .{ .reply = reply },
+            };
+            var body: std.ArrayList(u8) = .empty;
+            try ui.data.encode(arena, nd.Change, change, &body);
+            break :blk try notes.handle(arena, db, .PATCH, try arena.print("id={d}", .{id}), body.items, "", now);
+        },
+    };
+    if (r.status != .ok) {
+        std.log.err("{s}", .{r.body});
+        return 1;
+    }
+    switch (v) {
+        .list => {
+            const l = try ui.data.decode(arena, nd.List, r.body);
+            const items = try arena.dupe(nd.Note, l.notes);
+            const key = struct {
+                fn of(g: @TypeOf(by), n: nd.Note) []const u8 {
+                    return switch (g orelse return "") {
+                        .page => n.path,
+                        .component => n.target.component(),
+                    };
+                }
+            }.of;
+            // Grouped: by heading, then oldest first; else oldest first
+            std.mem.sort(nd.Note, items, by, struct {
+                fn lt(g: @TypeOf(by), a: nd.Note, b: nd.Note) bool {
+                    return switch (std.mem.order(u8, key(g, a), key(g, b))) {
+                        .lt => true,
+                        .gt => false,
+                        .eq => a.id < b.id,
+                    };
+                }
+            }.lt);
+            var last: ?[]const u8 = null;
+            for (items) |n| {
+                if (by != null and (last == null or !std.mem.eql(u8, last.?, key(by, n)))) {
+                    last = key(by, n);
+                    try out.print("== {s}\n", .{if (last.?.len > 0) last.? else "(no component)"});
+                }
+                try noteLine(out, n);
+            }
+            if (l.more) try out.print("(more than {d}: only the newest shown)\n", .{items.len});
+        },
+        .show => {
+            const l = try ui.data.decode(arena, nd.List, r.body);
+            for (l.notes) |n| if (n.id == id) {
+                try noteFull(out, n);
+                return 0;
+            };
+            std.log.err("no note {d}", .{id});
+            return 1;
+        },
+        .done, .reopen, .reply => try noteLine(out, try ui.data.decode(arena, nd.Note, r.body)),
+    }
+    return 0;
+}
+
+fn noteLine(out: *std.Io.Writer, n: ui.notesdata.Note) !void {
+    const component = n.target.component();
+    try out.print("{d}\t{t}\t{t}\t{s}{s}\t{s}\t{s}\t{d}x{d} {t}\t", .{
+        n.id,                                      n.status,                                                n.scope, n.path, n.hash,
+        if (component.len > 0) component else "-", if (n.target.snippet.len > 0) n.target.snippet else "-", n.vw,    n.vh,   n.theme,
+    });
+    // One line: the text's line breaks as spaces, cut at 160 bytes on a whole character
+    const text = ui.notesdata.cut(n.text, 160);
+    for (text) |ch| try out.writeByte(if (ch == '\n' or ch == '\r' or ch == '\t') ' ' else ch);
+    if (text.len < n.text.len) try out.writeAll("…");
+    if (n.reply.len > 0) try out.print("\t↳ {s}", .{n.reply});
+    try out.writeByte('\n');
+}
+
+fn noteFull(out: *std.Io.Writer, n: ui.notesdata.Note) !void {
+    const t = n.target;
+    try out.print(
+        \\id        {d}
+        \\status    {t}
+        \\scope     {t}
+        \\page      {s}{s}
+        \\target    {t} {s} nth {d} steps {s}
+        \\snippet   {s}
+        \\viewport  {d}x{d} {t}
+        \\author    {s}
+        \\created   {d}
+        \\updated   {d}
+        \\reply     {s}
+        \\
+        \\{s}
+        \\
+    , .{ n.id, n.status, n.scope, n.path, n.hash, t.kind, t.name, t.nth, t.steps, t.snippet, n.vw, n.vh, n.theme, n.author, n.created, n.updated, n.reply, n.text });
 }
 
 pub const usage_your_example =

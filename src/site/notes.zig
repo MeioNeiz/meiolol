@@ -17,6 +17,7 @@ pub const files = [_]struct { []const u8, []const u8 }{
     .{ "notes.wasm", @embedFile("ui-notes.wasm") },
 };
 
+/// deploy/nginx/meiolol.conf's @notes holds this verbatim
 pub const tag = "<link rel=\"stylesheet\" href=\"/p/notes.css\"><script src=\"/p/notes.js\" data-wasm=\"/p/notes.wasm\" defer></script>";
 
 /// The marker; the dev server's has no __Host- prefix (that needs HTTPS)

@@ -321,7 +321,7 @@ test "notes: a New with every field at its cap fits max_body" {
     try path.appendNTimes(a, 'a', nd.max_path - 1);
     const n: nd.New = .{
         .path = path.items,
-        .hash = try a.dupe(u8, &@as([nd.max_hash]u8, @splat('a'))),
+        .hash = "#" ++ @as([nd.max_hash - 1]u8, @splat('a')),
         .scope = .everywhere,
         .target = .{
             .kind = .component,

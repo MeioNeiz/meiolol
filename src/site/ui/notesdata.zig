@@ -97,9 +97,10 @@ pub const marker = "__Host-meiolol_notes";
 
 /// Why `n` is refused; null when every field is in bounds
 pub fn check(n: New) ?[]const u8 {
+    // The list links path ++ hash: "//host" or "/\\host" would be another site
     if (n.path.len == 0 or n.path.len > max_path or n.path[0] != '/' or !urlish(n.path) or
-        std.mem.findAny(u8, n.path, "?#") != null) return "bad path";
-    if (n.hash.len > max_hash or !urlish(n.hash)) return "bad hash";
+        std.mem.startsWith(u8, n.path, "//") or std.mem.findAny(u8, n.path, "?#\\") != null) return "bad path";
+    if (n.hash.len > max_hash or !urlish(n.hash) or (n.hash.len > 0 and n.hash[0] != '?' and n.hash[0] != '#')) return "bad hash";
     if (checkTarget(n.target)) |why| return why;
     if (n.scope == .everywhere and n.target.kind != .component) return "everywhere needs a component";
     const text = std.mem.trim(u8, n.text, " \t\r\n");
@@ -236,7 +237,10 @@ test "check: refuses fields out of bounds" {
         .{ .path = "champion", .text = "x" },
         .{ .path = "/a?b", .text = "x" },
         .{ .path = "/a b", .text = "x" },
+        .{ .path = "//evil.example/x", .text = "x" },
+        .{ .path = "/\\evil.example/x", .text = "x" },
         .{ .path = "/a", .hash = "#\x00", .text = "x" },
+        .{ .path = "/a", .hash = "/x", .text = "x" },
         .{ .path = "/a", .text = " \n" },
         .{ .path = "/a", .text = &long },
         .{ .path = "/a", .text = "\xff" },
