@@ -333,8 +333,8 @@ fn loadOlder(site: *Site, db: store.Db, all_opts: Options, extras: *Extras, old:
     const pairs = all_opts.older_pairs;
     if (pairs.len == 0) return;
     const arena = site.arena;
-    const kept = try Parts.of(old, OlderPart, .older, site.view, arena);
-    const wins = if (kept != null and samePairs(kept.?.pairs, pairs)) kept.?.pairs else blk: {
+    const kept: ?OlderPart = if (try Parts.of(old, OlderPart, .older, site.view, arena)) |k| (if (samePairs(k.pairs, pairs)) k else null) else null;
+    const wins = if (kept) |k| k.pairs else blk: {
         if (old) |o| if (o.strict) return error.ViewsMismatch;
         keep.* = false;
         const platforms = switch (site.view.region) {
@@ -343,13 +343,21 @@ fn loadOlder(site: *Site, db: store.Db, all_opts: Options, extras: *Extras, old:
         };
         const games = try extras.partialsFor(site.gpa, site.io, db, phases);
         // Adjacent pairs share a patch: each one's stats built once
-        var built: std.StringHashMapUnmanaged(Stats) = .empty;
-        for (pairs) |pair| for (pair) |p| {
-            const gop = try built.getOrPut(arena, p);
-            if (!gop.found_existing) gop.value_ptr.* = try patchStats(site, db, &.{p}, platforms, games);
-        };
+        var built: std.StringHashMapUnmanaged(*const Stats) = .empty;
         const out = try arena.alloc(patchday.Wins, pairs.len);
-        for (out, pairs) |*x, pair| x.* = try patchday.championWins(arena, built.getPtr(pair[1]).?, built.getPtr(pair[0]).?, .{});
+        for (out, pairs) |*x, pair| {
+            var both: [2]*const Stats = undefined;
+            for (pair, &both) |p, *st| {
+                const gop = try built.getOrPut(arena, p);
+                if (!gop.found_existing) {
+                    const made = try arena.create(Stats);
+                    made.* = try patchStats(site, db, &.{p}, platforms, games);
+                    gop.value_ptr.* = made;
+                }
+                st.* = gop.value_ptr.*;
+            }
+            x.* = try patchday.championWins(arena, both[1], both[0], .{});
+        }
         break :blk out;
     };
     const older = try arena.alloc(root.Older, wins.len);
@@ -366,6 +374,18 @@ fn samePairs(wins: []const patchday.Wins, pairs: []const [2][]const u8) bool {
         if (!std.mem.eql(u8, x.cur_patch, p[0]) or !std.mem.eql(u8, x.prev_patch, p[1])) return false;
     }
     return true;
+}
+
+test "samePairs: a new patch moves every pair, so the kept part is rebuilt" {
+    const kept = [_]patchday.Wins{
+        .{ .cur_patch = "16.21", .prev_patch = "16.20" },
+        .{ .cur_patch = "16.20", .prev_patch = "16.19" },
+    };
+    try std.testing.expect(samePairs(&kept, &.{ .{ "16.21", "16.20" }, .{ "16.20", "16.19" } }));
+    try std.testing.expect(!samePairs(&kept, &.{ .{ "16.22", "16.21" }, .{ "16.21", "16.20" } }));
+    try std.testing.expect(!samePairs(&kept, &.{.{ "16.21", "16.20" }}));
+    try std.testing.expect(!samePairs(&kept, &.{ .{ "16.21", "16.20" }, .{ "16.20", "16.18" } }));
+    try std.testing.expect(samePairs(&.{}, &.{}));
 }
 
 /// `v`'s patch day, its wins from `old`'s Part.prev for v when current; `keep` false

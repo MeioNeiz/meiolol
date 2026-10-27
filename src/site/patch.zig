@@ -75,9 +75,10 @@ fn pagePath(site: *const Site, pair: Pair) ![]const u8 {
     return pairPath(site.arena, .{ pair.pd.cur_patch, pair.pd.prev_patch });
 }
 
-/// The older pairs' pages
+/// The older pairs' pages, from the options: a core static build loads no patch days
 pub fn paths(site: *const Site, list: *std.ArrayList([]const u8)) !void {
-    for (site.older) |o| try list.append(site.arena, try pairPath(site.arena, .{ o.pd.cur_patch, o.pd.prev_patch }));
+    if (site.view.period != .days30) return;
+    for (site.opts.older_pairs) |pair| try list.append(site.arena, try pairPath(site.arena, pair));
 }
 
 /// patches/<cur>-<prev>.html (`name` without either); false when it isn't one of
@@ -126,6 +127,10 @@ fn writePair(site: *const Site, w: *Writer, pair: Pair) !void {
         .patch,
     );
     pg.rank_off = "This page counts every game we crawl (Plat+)";
+    // A pair's page is the 30-day views' only, its numbers the same in either period
+    if (pair.older != null) if (pg.counterparts) |*c| for (html.View.all) |v| {
+        if (v.period == .patch) c[v.index()] = c[(html.View{ .region = v.region, .period = .days30 }).index()];
+    };
     try html.head(w, pg);
     const d = try a.create(pp.Data);
     d.* = try data(site, pair);
@@ -169,29 +174,44 @@ fn navHref(site: *const Site, page_path: []const u8, rest: []const u8) ![]const 
     return std.mem.concat(site.arena, u8, &.{ try site.toRoot(page_path), site.view.up(), region.dir(), rest });
 }
 
+/// Where ‹ or › goes: an Options.older_pairs index, or the newest pair (patch.html)
+const Step = union(enum) { newest, pair: usize };
+
+/// ‹ and › from the newest pair's page (`at` null) or older pair `at`'s, of `n`
+fn steps(n: usize, at: ?usize) [2]?Step {
+    const next = if (at) |i| i + 1 else 0;
+    const older: ?Step = if (next < n) .{ .pair = next } else null;
+    const i = at orelse return .{ older, null };
+    return .{ older, if (i == 0) .newest else .{ .pair = i - 1 } };
+}
+
+test steps {
+    const T = [2]?Step;
+    try std.testing.expectEqual(T{ null, null }, steps(0, null));
+    try std.testing.expectEqual(T{ .{ .pair = 0 }, null }, steps(2, null));
+    try std.testing.expectEqual(T{ .{ .pair = 1 }, .newest }, steps(2, 0));
+    try std.testing.expectEqual(T{ null, .{ .pair = 0 } }, steps(2, 1));
+    try std.testing.expectEqual(T{ null, .newest }, steps(1, 0));
+}
+
 /// PatchHead's ‹ ›: Options.older_pairs' pages, the newest pair's at patch.html
 fn nav(site: *const Site, pair: Pair) ![2]?ui.patchhead.Pair {
-    const a = site.arena;
     const pairs = site.opts.older_pairs;
     const page_path = try pagePath(site, pair);
-    const at = pair.older orelse 0;
-    const next = if (pair.older == null) 0 else at + 1;
-    const older: ?ui.patchhead.Pair = if (next < pairs.len) .{
-        .cur = pairs[next][0],
-        .prev = pairs[next][1],
-        .href = try navHref(site, page_path, try pairPath(a, pairs[next])),
-    } else null;
-    const i = pair.older orelse return .{ older, null };
-    const newer: ?ui.patchhead.Pair = if (i == 0) (if (site.patchday) |pd| .{
-        .cur = pd.cur_patch,
-        .prev = pd.prev_patch,
-        .href = try navHref(site, page_path, path),
-    } else null) else .{
-        .cur = pairs[i - 1][0],
-        .prev = pairs[i - 1][1],
-        .href = try navHref(site, page_path, try pairPath(a, pairs[i - 1])),
+    var out: [2]?ui.patchhead.Pair = .{ null, null };
+    for (steps(pairs.len, pair.older), &out) |step, *o| o.* = switch (step orelse continue) {
+        .newest => if (site.patchday) |pd| .{
+            .cur = pd.cur_patch,
+            .prev = pd.prev_patch,
+            .href = try navHref(site, page_path, path),
+        } else null,
+        .pair => |k| .{
+            .cur = pairs[k][0],
+            .prev = pairs[k][1],
+            .href = try navHref(site, page_path, try pairPath(site.arena, pairs[k])),
+        },
     };
-    return .{ older, newer };
+    return out;
 }
 
 fn data(site: *const Site, pair: Pair) !pp.Data {

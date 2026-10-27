@@ -199,13 +199,16 @@ test "an older pair's data: ‹ › and finished through the data file, games wi
     try testing.expectEqualDeep(d.newer, got.newer);
     try testing.expect(got.finished);
     var p: pp.Page = .init(&got, try pp.prepare(a, &got, ""));
+    // The first row's Change tip open
+    p.table.tip = 4;
     var t: tree.Tree = .{};
     var h: tree.H = .init(a, &t);
     t.root = p.view(&h);
     var out: std.Io.Writer.Allocating = .init(a);
     try html.write(&t, t.root, &out.writer);
     const s = out.written();
-    try testing.expect(std.mem.indexOf(u8, s, "href=\"16.20-16.19.html\"") != null);
-    try testing.expect(std.mem.indexOf(u8, s, "href=\"../patch.html\"") != null);
-    try testing.expect(std.mem.indexOf(u8, s, "so far") == null);
+    try testing.expect(std.mem.find(u8, s, "href=\"16.20-16.19.html\"") != null);
+    try testing.expect(std.mem.find(u8, s, "href=\"../patch.html\"") != null);
+    try testing.expect(std.mem.find(u8, s, "so far") == null);
+    try testing.expect(std.mem.find(u8, s, "games on 16.21.") != null);
 }

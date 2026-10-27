@@ -77,20 +77,22 @@ pub const Extras = struct {
     pub fn notesFor(e: *Extras, gpa: std.mem.Allocator, io: std.Io, dir: ?[]const u8, prev: []const u8, cur: []const u8) !?*const patchnotes.Notes {
         const d = dir orelse return null;
         const arena = e.arena orelse return null;
-        const gop = try e.notes.getOrPut(arena, try arena.print("{s} {s}", .{ prev, cur }));
-        if (gop.found_existing) return gop.value_ptr.*;
-        gop.value_ptr.* = null;
-        const n = patchnotes.load(gpa, arena, io, d, prev, cur) catch |err| switch (err) {
+        var buf: [64]u8 = undefined;
+        const key = std.fmt.bufPrint(&buf, "{s} {s}", .{ prev, cur }) catch return null;
+        if (e.notes.get(key)) |n| return n;
+        const n: ?*const patchnotes.Notes = if (patchnotes.load(gpa, arena, io, d, prev, cur)) |loaded| blk: {
+            const p = try arena.create(patchnotes.Notes);
+            p.* = loaded;
+            break :blk p;
+        } else |err| switch (err) {
             error.OutOfMemory => return err,
-            else => {
+            else => blk: {
                 log.warn("patch notes {s} to {s}: {t}", .{ prev, cur, err });
-                return null;
+                break :blk null;
             },
         };
-        const p = try arena.create(patchnotes.Notes);
-        p.* = n;
-        gop.value_ptr.* = p;
-        return p;
+        try e.notes.put(arena, try arena.dupe(u8, key), n);
+        return n;
     }
 
     /// The partials, opened on the first call; null without partials_dir or when they
