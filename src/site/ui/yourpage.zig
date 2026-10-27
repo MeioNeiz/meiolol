@@ -169,9 +169,10 @@ pub const css =
     \\@layer components {
     \\  .c-your { display: grid; gap: var(--sp-3); }
     \\  .c-your > .cols { display: grid; grid-template-columns: 288px minmax(0, 1fr); gap: var(--sp-3); align-items: start; }
-    \\  .c-your .filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); }
-    \\  .c-your .list { display: grid; gap: var(--sp-3); min-width: 0; }
-    \\  .c-your .day { display: grid; gap: var(--sp-1); }
+    \\  .c-your .filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-4); }
+    \\  .c-your .list { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); min-width: 0; }
+    \\  /* GameRow's layouts follow its container's width */
+    \\  .c-your .day { container-type: inline-size; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
     \\  .c-your .none { margin: 0; padding: var(--sp-4); color: var(--faint); }
     \\  .c-your .list > .c-btn { justify-self: center; }
     \\  @media (max-width: 1000px) {
