@@ -409,6 +409,7 @@ test {
     _ = flat;
     _ = yourgame;
     _ = scope;
+    _ = @import("dailydata.zig");
 }
 
 test robots {

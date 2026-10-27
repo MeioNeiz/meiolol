@@ -39,6 +39,7 @@ const indexChamps = @import("champs.zig").indexChamps;
 const championsJson = @import("champs.zig").championsJson;
 const search = @import("search.zig");
 const yourgame = @import("yourgame.zig");
+const dailydata = @import("dailydata.zig");
 const BasePart = @import("views.zig").BasePart;
 const FilterPart = @import("views.zig").FilterPart;
 const PeoplePart = @import("views.zig").PeoplePart;
@@ -437,6 +438,10 @@ fn loadDaily(site: *Site, db: store.Db, games: ?*const partials.Store, phases: *
         site.learn = l.facts;
     } else |err| log.warn("learn: {t}", .{err});
     phases.mark("learn");
+    // After Learn: its facts give the board's damage mix
+    var bins: std.ArrayList(File) = .empty;
+    try dailydata.files(site, files.items, &bins);
+    try files.appendSlice(arena, bins.items);
     site.daily_files = files.items;
 }
 
