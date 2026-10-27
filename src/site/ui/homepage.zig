@@ -2,7 +2,8 @@
 //! lookup and today's things beside it, each role's most played under them. Islands
 //! (ui-home.wasm): HomeReview (the example's game, its role switch, the stat cells
 //! select on the graph), IdLookup (recent Riot IDs on this device), HomeChamps (one role
-//! at a time in a narrow card). The Today cards are static but the Daily Draft marks
+//! at a time in a narrow card), HomeDaily (this device's Daily Draft marks). The patch
+//! card is static
 const std = @import("std");
 const tree = @import("tree.zig");
 const phrase = @import("phrase.zig");
@@ -66,11 +67,14 @@ pub const HomeReview = struct {
     /// The site root, relative to the page
     up: []const u8 = "",
     default: Role,
-    /// This device's newest looked-up player's newest game in place of the example
+    /// This device's newest looked-up player's newest game in place of the example; set
+    /// by H3's lookup (notes/home.md), until then by the gallery and tests only
     you: ?You = null,
     /// ui-homegame's loader and wasm (dom.lazyLoad), from the page
     js: []const u8 = "",
     wasm: []const u8 = "",
+    /// Set by the island once the game's data is in: the role picker works
+    live: bool = false,
 
     const P = @This();
 
@@ -95,7 +99,7 @@ pub const HomeReview = struct {
         for (&roles, Role.all) |*it, r| it.* = .{
             .role = r,
             .current = r == p.want,
-            .disabled = !p.roles[@backingInt(r)],
+            .disabled = !p.live or !p.roles[@backingInt(r)],
             .on = h.on(p, .{ .role = r }),
         };
         // game.html opens the default role's games only
@@ -174,7 +178,7 @@ pub fn idQuery(a: std.mem.Allocator, id: []const u8) ![]const u8 {
 }
 
 /// The API calls for a returning visitor, cache only (api/root.zig): their newest games
-/// with record and form, then the newest game
+/// with record and form, then the newest game. For H3; tests only until then
 pub fn listApi(a: std.mem.Allocator, id: []const u8) ![]const u8 {
     return a.print("/api/list?cached=1&n=20&{s}", .{try idQuery(a, id)});
 }
@@ -245,6 +249,8 @@ pub const HomeChamps = struct {
         for (Role.all, d.roles) |r, ps| {
             var rows = h.list();
             for (ps, 0..) |x, i| {
+                // The island's from data-bin
+                if (x.champ >= d.champs.len) continue;
                 const c = d.champs[x.champ];
                 const wr: f64 = if (x.games == 0) 50 else 100 * @as(f64, @floatFromInt(x.wins)) / @as(f64, @floatFromInt(x.games));
                 rows.add(h.li(.{ .key = i }, .{h.a(.{ .href = x.href }, .{
@@ -396,7 +402,7 @@ pub const css =
 ;
 
 /// The gallery's: the demo game and a few champions
-fn demo(h: *H) ?struct { HomeReview, HomeChamps } {
+pub fn demo(h: *H) ?struct { HomeReview, HomeChamps } {
     const s = gamepage.GamePage.init(h.mem, &@import("game_demo.zig").data) catch return null;
     const d = h.mem.create(Champs) catch return null;
     const c = champ.demo;

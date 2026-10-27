@@ -5,7 +5,7 @@ const std = @import("std");
 const root = @import("root.zig");
 const html = @import("html.zig");
 const assets = @import("assets.zig");
-const Date = @import("../date.zig").Date;
+const daily = @import("../daily.zig");
 const ui = @import("ui");
 const dd = ui.dailydata;
 
@@ -23,14 +23,14 @@ pub fn write(site: *const Site, w: *Writer) !void {
         .daily,
     );
     try html.head(w, p);
-    const day = @divFloor(std.Io.Clock.real.now(site.io).toSeconds(), std.time.s_per_day);
-    try body(a, w, site.daily_files, try a.print("{f}", .{Date.fromDay(day)}));
+    try body(a, w, site.daily_files, todayNumber(site.io));
     try html.foot(w, p);
 }
 
-/// The island on the newest puzzle up to `today`, else a note
-fn body(a: std.mem.Allocator, w: *Writer, files: []const File, today: []const u8) !void {
-    const bin = try todays(a, files, today) orelse return w.writeAll(
+/// The island on the newest puzzle up to number `today` (pick), else a note
+fn body(a: std.mem.Allocator, w: *Writer, files: []const File, today: u32) !void {
+    const got = try pick(a, files, today);
+    const bin = (if (got) |g| g.page else null) orelse return w.writeAll(
         \\<h1>Daily Draft</h1>
         \\<p class="note">No puzzle today. Come back tomorrow.</p>
         \\
@@ -48,42 +48,60 @@ fn body(a: std.mem.Allocator, w: *Writer, files: []const File, today: []const u8
     , .{ .js = assets.daily_js.path, .wasm = assets.daily_wasm.path });
 }
 
-const Shown = struct { p: dd.Puzzle, base64: []const u8 };
+pub const Shown = struct { p: dd.Puzzle, base64: []const u8 };
 
-/// The newest puzzle dated `today` or before with page data that reads and checks out
-fn todays(a: std.mem.Allocator, files: []const File, today: []const u8) !?Shown {
-    const index = find(files, "daily/index.json") orelse return null;
-    const Entry = struct { n: u32, date: []const u8 };
-    const list = std.json.parseFromSliceLeaky([]const Entry, a, index, .{ .ignore_unknown_fields = true }) catch |err| switch (err) {
-        error.OutOfMemory => return err,
-        else => {
-            log.warn("daily/index.json: {t}", .{err});
-            return null;
-        },
-    };
-    var best: ?Shown = null;
-    var best_date: []const u8 = "";
-    for (list) |e| {
-        if (std.mem.order(u8, e.date, today) == .gt) continue;
-        if (best != null and std.mem.order(u8, e.date, best_date) != .gt) continue;
-        const raw = find(files, try a.print("daily/{d}.bin", .{e.n})) orelse continue;
-        const p = dd.decode(a, raw) catch |err| switch (err) {
-            error.OutOfMemory => return err,
-            else => {
-                log.warn("daily/{d}.bin: {t}", .{ e.n, err });
+/// Today's (UTC) puzzle number; puzzle n is dated first_day + n - 1 (daily.update)
+pub fn todayNumber(io: std.Io) u32 {
+    const day = @divFloor(std.Io.Clock.real.now(io).toSeconds(), std.time.s_per_day);
+    return if (day < daily.first_day) 0 else @intCast(day - daily.first_day + 1);
+}
+
+pub const Pick = struct {
+    n: u32,
+    /// daily/<n>.json; null in files without it
+    json: ?[]const u8,
+    /// daily/<n>.bin, decoded; null in files without page data
+    page: ?Shown,
+};
+
+/// The newest puzzle numbered `today` or before, the Daily page's and home's: when `files`
+/// hold page data (daily/<n>.bin), one whose data reads and checks out; else (the box's
+/// core build reads only puzzle files) one with its JSON
+pub fn pick(a: std.mem.Allocator, files: []const File, today: u32) !?Pick {
+    var bins = false;
+    for (files) |f| bins = bins or puzzleOf(f.path, ".bin") != null;
+    const ext = if (bins) ".bin" else ".json";
+    var best: ?Pick = null;
+    for (files) |f| {
+        const n = puzzleOf(f.path, ext) orelse continue;
+        if (n > today) continue;
+        if (best) |b| if (n <= b.n) continue;
+        var got: Pick = .{ .n = n, .json = find(files, try a.print("daily/{d}.json", .{n})), .page = null };
+        if (bins) {
+            const p = dd.decode(a, f.data) catch |err| switch (err) {
+                error.OutOfMemory => return err,
+                else => {
+                    log.warn("daily/{d}.bin: {t}", .{ n, err });
+                    continue;
+                },
+            };
+            if (!p.valid()) {
+                log.warn("daily/{d}.bin: not a valid puzzle", .{n});
                 continue;
-            },
-        };
-        if (!p.valid()) {
-            log.warn("daily/{d}.bin: not a valid puzzle", .{e.n});
-            continue;
+            }
+            const enc = std.base64.standard.Encoder;
+            const out = try a.alloc(u8, enc.calcSize(f.data.len));
+            got.page = .{ .p = p, .base64 = enc.encode(out, f.data) };
         }
-        const enc = std.base64.standard.Encoder;
-        const out = try a.alloc(u8, enc.calcSize(raw.len));
-        best = .{ .p = p, .base64 = enc.encode(out, raw) };
-        best_date = e.date;
+        best = got;
     }
     return best;
+}
+
+/// n of daily/<n><ext>
+fn puzzleOf(path: []const u8, ext: []const u8) ?u32 {
+    if (!std.mem.startsWith(u8, path, "daily/") or !std.mem.endsWith(u8, path, ext)) return null;
+    return std.fmt.parseInt(u32, path["daily/".len .. path.len - ext.len], 10) catch null;
 }
 
 fn find(files: []const File, path: []const u8) ?[]const u8 {
@@ -91,7 +109,7 @@ fn find(files: []const File, path: []const u8) ?[]const u8 {
     return null;
 }
 
-test "today's puzzle: the newest dated today or before with page data" {
+test "today's puzzle: the newest numbered today or before with page data, else its JSON" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -100,22 +118,29 @@ test "today's puzzle: the newest dated today or before with page data" {
     var p9 = dd.sample;
     p9.n = 9;
     const files = [_]File{
-        .{ .path = "daily/index.json", .data = "[{\"n\":7,\"date\":\"2026-10-26\"},{\"n\":8,\"date\":\"2026-10-27\"},{\"n\":9,\"date\":\"2026-10-28\"}]" },
+        .{ .path = "daily/7.json", .data = "{}" },
+        .{ .path = "daily/8.json", .data = "{}" },
+        .{ .path = "daily/9.json", .data = "{}" },
+        .{ .path = "daily/index.json", .data = "[]" },
         .{ .path = "daily/8.bin", .data = try dd.encode(a, p8) },
         .{ .path = "daily/9.bin", .data = try dd.encode(a, p9) },
     };
-    try std.testing.expectEqual(@as(u32, 8), (try todays(a, &files, "2026-10-27")).?.p.n);
-    try std.testing.expectEqual(@as(u32, 9), (try todays(a, &files, "2026-10-29")).?.p.n);
+    try std.testing.expectEqual(@as(u32, 8), (try pick(a, &files, 8)).?.page.?.p.n);
+    const nine = (try pick(a, &files, 12)).?;
+    try std.testing.expectEqual(@as(u32, 9), nine.page.?.p.n);
+    try std.testing.expectEqualStrings("{}", nine.json.?);
+    // The newest number wins, not the last file
+    const unsorted = [_]File{ files[5], files[4] };
+    try std.testing.expectEqual(@as(u32, 9), (try pick(a, &unsorted, 12)).?.page.?.p.n);
     // 7 has no page data
-    try std.testing.expectEqual(null, try todays(a, &files, "2026-10-26"));
-    try std.testing.expectEqual(null, try todays(a, files[1..], "2026-10-27"));
-    // The newest date wins, not the last entry
-    const unsorted = [_]File{
-        .{ .path = "daily/index.json", .data = "[{\"n\":9,\"date\":\"2026-10-28\"},{\"n\":8,\"date\":\"2026-10-27\"}]" },
-        files[1],
-        files[2],
-    };
-    try std.testing.expectEqual(@as(u32, 9), (try todays(a, &unsorted, "2026-10-29")).?.p.n);
+    try std.testing.expectEqual(null, try pick(a, &files, 7));
+    // The core build's: puzzle files only
+    const core = (try pick(a, files[0..4], 8)).?;
+    try std.testing.expectEqual(@as(u32, 8), core.n);
+    try std.testing.expectEqual(null, core.page);
+    try std.testing.expectEqual(@as(u32, 9), (try pick(a, files[0..4], 100)).?.n);
+    try std.testing.expectEqual(null, try pick(a, files[0..4], 0));
+    try std.testing.expectEqual(null, try pick(a, &.{}, 8));
 }
 
 test "the island with its data, or the note without a puzzle" {
@@ -124,11 +149,10 @@ test "the island with its data, or the note without a puzzle" {
     const a = arena.allocator();
     const raw = try dd.encode(a, dd.sample);
     const files = [_]File{
-        .{ .path = "daily/index.json", .data = try a.print("[{{\"n\":{d},\"date\":\"2026-10-27\"}}]", .{dd.sample.n}) },
         .{ .path = try a.print("daily/{d}.bin", .{dd.sample.n}), .data = raw },
     };
     var out: std.Io.Writer.Allocating = .init(a);
-    try body(a, &out.writer, &files, "2026-10-27");
+    try body(a, &out.writer, &files, dd.sample.n);
     const s = out.written();
     try std.testing.expect(std.mem.find(u8, s, "data-island=\"daily\"") != null);
     const enc = std.base64.standard.Encoder;
@@ -139,6 +163,6 @@ test "the island with its data, or the note without a puzzle" {
     try std.testing.expect(std.mem.find(u8, s, "No puzzle today") == null);
 
     var none: std.Io.Writer.Allocating = .init(a);
-    try body(a, &none.writer, &files, "2026-10-26");
+    try body(a, &none.writer, &files, dd.sample.n - 1);
     try std.testing.expect(std.mem.find(u8, none.written(), "No puzzle today") != null);
 }

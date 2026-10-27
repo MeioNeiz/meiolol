@@ -1,7 +1,7 @@
 //! IdLookup: a Riot ID box and Review as one control, the Riot IDs this device looked up
 //! as chips under it. Goes to the Your games page with the ID in the fragment, so it never
-//! reaches a server log; before the island runs the form sends it as ?id= instead (the
-//! page moves it to the fragment)
+//! reaches a server log; before the island runs Review submits the form, which sends it
+//! as ?id= instead (the page moves it to the fragment)
 const std = @import("std");
 const tree = @import("tree.zig");
 const url = @import("url.zig");
@@ -34,6 +34,8 @@ pub const IdLookup = struct {
     q: Id = .{},
     /// Newest first (your-recent on this device)
     recent: []const Id = &.{},
+    /// Set by the island: Review becomes a link with the ID in the fragment
+    live: bool = false,
 
     const L = @This();
 
@@ -68,7 +70,10 @@ pub const IdLookup = struct {
                     .on_input = h.on(l, .input),
                     .on_keydown = h.on(l, .key),
                 }),
-                button.view(h, .{ .v = .primary, .href = if (q.len > 0) l.href(h, q) else l.to, .ref = "go" }, .{W.review}),
+                if (l.live)
+                    button.view(h, .{ .v = .primary, .href = if (q.len > 0) l.href(h, q) else l.to, .ref = "go" }, .{W.review})
+                else
+                    button.view(h, .{ .v = .primary, .submit = true, .ref = "go" }, .{W.review}),
             }),
             if (l.recent.len > 0) h.ul(.{ .class = "rec", .aria_label = W.recent }, .{chips.done()}) else null,
         });

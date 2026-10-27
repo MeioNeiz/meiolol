@@ -73,7 +73,7 @@ Lines are rough (comments and blank lines included in the feature they sit in).
   `search.html?q=` gives a no-JS submit (today it only does Riot IDs)
 - [G] :226-336 (131) combobox DOM, ARIA, arrow keys, submit, "/" shortcut
 
-### home.js (175): home demo
+### home.js (175): home demo (gone: ui.homepage, ui-home.wasm)
 
 - [G] :11-41 (31) "On this device" Riot IDs and forget (localStorage)
 - [S] :43-68 (26) fetch your-example.json, build role tabs: the example is build-time data

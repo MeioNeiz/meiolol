@@ -268,6 +268,8 @@ fn onEvent(slot: i32, bit: i32, e: zjb.Handle) callconv(.c) void {
             in.text = v.readString(&buf) catch buf[0..0];
         },
         .keydown => {
+            // Keys that pick from an IME (Korean, Japanese names) aren't the page's
+            if (e.get("isComposing", bool)) return;
             const k = e.get("key", zjb.Handle);
             defer k.release();
             in.text = k.readString(&buf) catch buf[0..0];

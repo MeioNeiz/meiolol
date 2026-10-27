@@ -39,7 +39,7 @@ const indexChamps = @import("champs.zig").indexChamps;
 const championsJson = @import("champs.zig").championsJson;
 const search = @import("search.zig");
 const yourgame = @import("yourgame.zig");
-const home_page = @import("home.zig");
+const daily_page = @import("daily.zig");
 const dailydata = @import("dailydata.zig");
 const BasePart = @import("views.zig").BasePart;
 const FilterPart = @import("views.zig").FilterPart;
@@ -456,17 +456,22 @@ fn dailyInputs(io: std.Io, opts: Options) u64 {
     return h.final();
 }
 
-/// Static.core's home page: today's Daily Draft as made, read only (the views file's
-/// load makes puzzles, loadDaily), and the example
+/// Static.core's home page: the newest Daily Draft puzzles up to today as made, read only
+/// (the views file's load makes puzzles, loadDaily), and the example
 fn loadHome(site: *Site, phases: *Phases) !void {
     const arena = site.arena;
     var files: std.ArrayList(File) = .empty;
     if (site.opts.daily_dir) |d| {
-        const path = try arena.print("daily/{d}.json", .{home_page.todayPuzzle(site.io)});
-        const file = try std.fs.path.join(arena, &.{ d, path["daily/".len..] });
-        if (std.Io.Dir.cwd().readFileAlloc(site.io, file, arena, .limited(1 << 20))) |data| {
-            try files.append(arena, .{ .path = path, .data = data });
-        } else |err| if (err != error.FileNotFound) log.warn("home: {s}: {t}", .{ file, err });
+        // Today's is made just after 00:00 UTC: until then the newest before it
+        const today = daily_page.todayNumber(site.io);
+        var n = today;
+        while (n > 0 and today - n < 3) : (n -= 1) {
+            const path = try arena.print("daily/{d}.json", .{n});
+            const file = try std.fs.path.join(arena, &.{ d, path["daily/".len..] });
+            if (std.Io.Dir.cwd().readFileAlloc(site.io, file, arena, .limited(1 << 20))) |data| {
+                try files.append(arena, .{ .path = path, .data = data });
+            } else |err| if (err != error.FileNotFound) log.warn("home: {s}: {t}", .{ file, err });
+        }
     }
     try loadExample(site, &files);
     site.daily_files = files.items;

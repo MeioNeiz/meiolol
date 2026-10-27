@@ -347,8 +347,8 @@ test "fixture games to stats, curves and the website" {
         .{ "champion/darius.html", &.{ "<div class=\"c-cpage\" data-id=\"122\" data-roles=\"top\"><div class=\"part\" data-island=\"champion\" data-src=\"../data/champion/darius.bin\" data-stamp=\"", "<h1>Darius</h1>", "<span class=\"sum\">EUW · 30 days · Plat+</span>", "data-island=\"champbuild\" data-src=\"../data/champion/darius-build.bin\"", "<section class=\"c-card\" data-v=\"flush\"><div class=\"c-build\">", "<h2>Matchups</h2>", "data-island=\"champmore\" data-src=\"../data/champion/darius-more.bin\"", "data-js=\"../" ++ assets.champmore_js.path ++ "\" data-wasm=\"" ++ assets.champmore_wasm.path ++ "\"", "class=\"c-dots\"", "class=\"c-mpick\"", "href=\"../matchup/top/darius-vs-mordekaiser.html\"", "<h2>By patch</h2>", "<h2>By game length</h2>", "<script src=\"../" ++ assets.champion_js.path ++ "\" data-wasm=\"" ++ assets.champion_wasm.path ++ "\" defer></script>" } },
         .{ "champions.html", &.{ "<div class=\"c-tiers\" data-island=\"tiers\" data-src=\"data/tiers.bin\" data-stamp=\"", "data-base=\"\" data-view=\"0\" data-path=\"champions.html\"", "<h1>Champions</h1>", "<linearGradient id=\"c-violin-g\"", "<symbol id=\"ri-top\"", "<a href=\"all/champions.html\">All</a>", "<table class=\"c-table\">", "<script src=\"" ++ assets.stats_js.path ++ "\" data-wasm=\"" ++ assets.stats_wasm.path ++ "\" defer></script>" } },
         // Home: the lookup, each role's most played (the example's game: core_loaded); no
-        // clear patch move on a patch's first day, so no Patch card
-        .{ "index.html", &.{ "data-island=\"lookup\" data-to=\"your.html\"", "data-island=\"homechamps\" data-bin=\"", "<script src=\"" ++ assets.home_js.path ++ "\" data-wasm=\"" ++ assets.home_wasm.path ++ "\" defer></script>" } },
+        // clear patch move on a patch's first day, so the Patch card is its link alone
+        .{ "index.html", &.{ "data-island=\"lookup\" data-to=\"your.html\"", "data-island=\"homechamps\" data-bin=\"", "Patch 15.13", "vs 15.12", "href=\"patch/patch.html\">All changes</a>", "<script src=\"" ++ assets.home_js.path ++ "\" data-wasm=\"" ++ assets.home_wasm.path ++ "\" defer></script>" } },
         // Daily Draft (ui.dailypage): the fixture makes no puzzle, so the page says so
         .{ "daily.html", &.{ "<h1>Daily Draft</h1>", "No puzzle today." } },
         .{ "privacy.html", &.{ "the date\nshown is the puzzle's, not the game's", "we keep only each puzzle's totals", "<h2 id=\"accounts\">Accounts</h2>" } },
@@ -726,9 +726,11 @@ test "fixture games to stats, curves and the website" {
     for ([_][]const u8{ "data-island=\"games\"", "data-src=\"data/your/mid.bin\"", "ui-games.", "noindex", "data-island=\"gamemore\"", "data-js=\"" ++ assets.gamemore_js.path ++ "\" data-wasm=\"" ++ assets.gamemore_wasm.path ++ "\"", "data-island=\"gamelane\"", "data-js=\"" ++ assets.gamelane_js.path ++ "\" data-wasm=\"" ++ assets.gamelane_wasm.path ++ "\"" }) |want| {
         try testing.expect(std.mem.find(u8, game_page, want) != null);
     }
-    // Home in every view: the shared view's example, its game file loaded lazily
+    // Home in every view: the shared view's example, its game file loaded lazily; the
+    // Patch card's link without a patch day loaded
     for ([_][]const u8{ "index.html", "all/index.html" }) |path| {
         const home = (try core_loaded.get(arena, path)).?;
+        try testing.expect(std.mem.find(u8, home, "vs 15.12") != null);
         for ([_][]const u8{ "data-island=\"home\" data-src=\"", "data/your/mid.bin\"", "data-js=\"", assets.homegame_js.path ++ "\" data-wasm=\"" ++ assets.homegame_wasm.path ++ "\"" }) |want| {
             try testing.expect(std.mem.find(u8, home, want) != null);
         }

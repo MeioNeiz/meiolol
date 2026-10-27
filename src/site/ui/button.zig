@@ -23,6 +23,8 @@ pub const Opts = struct {
     href: ?[]const u8 = null,
     /// data-ref, for ev.after (focus after a patch)
     ref: ?[]const u8 = null,
+    /// Sends its form
+    submit: bool = false,
 };
 
 pub fn view(h: *H, o: Opts, kids: anytype) N {
@@ -31,7 +33,7 @@ pub fn view(h: *H, o: Opts, kids: anytype) N {
     if (o.href) |href| return h.a(.{ .class = "c-btn", .href = href, .data_v = v, .data_s = s, .aria_label = o.label, .data_ref = o.ref }, kids);
     return h.button(.{
         .class = "c-btn",
-        .type = "button",
+        .type = if (o.submit) "submit" else "button",
         .data_v = v,
         .data_s = s,
         .disabled = o.disabled,

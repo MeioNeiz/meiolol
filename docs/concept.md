@@ -11,7 +11,7 @@ API doesn't send them yet). Look: Linear-like (small type, dark, violet accent, 
 colour); Jacob rejected League-site looks (splash art, big condensed type), editorial,
 terminal and Wrapped styles. Home leads with the lookup and a review demo. Menu: Your
 games, Daily Draft, Learn, Champions (Matchups and Champion pool as its tabs). Code:
-static/review.js, your.js, home.js; home.zig writeIndex; html.zig nav
+static/review.js, your.js; home.zig writeIndex (ui.homepage); html.zig nav
 
 ## Identity draft four: scout your own games (Jacob, 2026-10-12)
 

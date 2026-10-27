@@ -52,6 +52,7 @@ fn lookup() void {
     defer el.release();
     look0 = .{ .to = dom.attrOf(el, "data-to") };
     look = look0;
+    look.live = true;
     look_i = dom.rt.add(ui.idlookup.IdLookup, &look, &look0, sel) catch return dom.dom.warn("lookup: out of memory");
 }
 

@@ -193,7 +193,7 @@ that colours it are four separate files with no declared contract.
   ids, `.tiles`, `[data-tile]`, `.tl-more`, `[data-show-all]`, `[data-reset]`), table.js
   and min-games.js by data- attributes.
 - Shared code is by globals and order: review.js defines `Review` (review.js:7) for
-  your.js and home.js; reasons.js defines `detectedReason`/`reasonWords` for daily.js and
+  your.js; reasons.js defines `detectedReason`/`reasonWords` for daily.js and
   learn.js. Order is the order of the `<script>` lines in your.zig:71, home.zig:75,
   daily.zig:55, learn.zig:232. Classic scripts with "use strict", no ES modules.
 - Build: none. `@embedFile` and serve. CI: `node --check` per file (build.zig:159), a

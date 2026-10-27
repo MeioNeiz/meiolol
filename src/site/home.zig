@@ -9,6 +9,7 @@ const core = @import("core");
 const html = @import("html.zig");
 const assets = @import("assets.zig");
 const daily = @import("../daily.zig");
+const daily_page = @import("daily.zig");
 const patchday = @import("../patchday.zig");
 const patch_page = @import("patch.zig");
 const champion = @import("champion.zig");
@@ -68,7 +69,7 @@ comptime {
 }
 
 /// Of the shared view's daily_files, those home reads (the example's games, the Daily
-/// Draft puzzles), copied into `a`: every view's home shows them
+/// Draft puzzles and their page data), copied into `a`: every view's home shows them
 pub fn files(a: Allocator, all: []const root.File) ![]const root.File {
     var out: std.ArrayList(root.File) = .empty;
     for (all) |f| if (std.mem.startsWith(u8, f.path, your_dir) or isPuzzle(f.path)) {
@@ -77,24 +78,23 @@ pub fn files(a: Allocator, all: []const root.File) ![]const root.File {
     return out.items;
 }
 
-/// daily/<n>.json, not its index or daily/<n>.bin
+/// daily/<n>.json or daily/<n>.bin, not the index
 fn isPuzzle(path: []const u8) bool {
-    return std.mem.startsWith(u8, path, "daily/") and std.mem.endsWith(u8, path, ".json") and !std.mem.endsWith(u8, path, "index.json");
+    if (!std.mem.startsWith(u8, path, "daily/") or std.mem.endsWith(u8, path, "index.json")) return false;
+    return std.mem.endsWith(u8, path, ".json") or std.mem.endsWith(u8, path, ".bin");
 }
 
-/// Today's (UTC) puzzle number; daily.update makes a few days ahead
-pub fn todayPuzzle(io: std.Io) u32 {
-    const day: u32 = @intCast(@divFloor(std.Io.Clock.real.now(io).toSeconds(), std.time.s_per_day));
-    return day - daily.first_day + 1;
-}
-
-/// The default role's newest game (the first data/your file); null without the example
 fn reviewOf(site: *const Site, up: []const u8) !?*hp.HomeReview {
-    const a = site.arena;
+    return reviewFor(site.arena, site.daily_files, up);
+}
+
+/// The default role's newest game (the first data/your/<role>.bin); null without the
+/// example or games
+fn reviewFor(a: Allocator, all: []const root.File, up: []const u8) !?*hp.HomeReview {
     var roles: [5]bool = @splat(false);
     var first: ?root.File = null;
     var default: ui.role.Role = .mid;
-    for (site.daily_files) |f| {
+    for (all) |f| {
         if (!std.mem.startsWith(u8, f.path, your_dir) or !std.mem.endsWith(u8, f.path, ".bin")) continue;
         const r = std.meta.stringToEnum(ui.role.Role, f.path[your_dir.len .. f.path.len - ".bin".len]) orelse continue;
         roles[@backingInt(r)] = true;
@@ -105,7 +105,13 @@ fn reviewOf(site: *const Site, up: []const u8) !?*hp.HomeReview {
     }
     const f = first orelse return null;
     const d = try a.create(gd.Data);
-    d.* = try ui.data.decode(a, gd.Data, f.data);
+    d.* = ui.data.decode(a, gd.Data, f.data) catch |err| switch (err) {
+        error.OutOfMemory => return err,
+        else => {
+            log.warn("home: {s}: {t}", .{ f.path, err });
+            return null;
+        },
+    };
     if (d.games.len == 0) return null;
     const r = try a.create(hp.HomeReview);
     r.* = .{
@@ -123,45 +129,56 @@ fn reviewOf(site: *const Site, up: []const u8) !?*hp.HomeReview {
     return r;
 }
 
-/// Today's Daily Draft puzzle, else the newest before it; null without one
 fn dailyOf(site: *const Site, up: []const u8) !?*hp.HomeDaily {
-    const a = site.arena;
-    const today = todayPuzzle(site.io);
-    var newest: ?struct { n: u32, data: []const u8 } = null;
-    for (site.daily_files) |f| {
-        if (!isPuzzle(f.path)) continue;
-        const n = std.fmt.parseInt(u32, f.path["daily/".len .. f.path.len - ".json".len], 10) catch continue;
-        if (n > today) continue;
-        if (newest) |b| if (n <= b.n) continue;
-        newest = .{ .n = n, .data = f.data };
-    }
-    const f = newest orelse return null;
-    const pz = std.json.parseFromSliceLeaky(daily.Puzzle, a, f.data, .{ .ignore_unknown_fields = true }) catch |err| {
-        log.warn("home: puzzle {d}: {t}", .{ f.n, err });
-        return null;
+    return dailyFor(site.arena, site.daily_files, daily_page.todayNumber(site.io), up, site, champOf);
+}
+
+/// The Daily page's puzzle (daily_page.pick) on or before puzzle `today`; null without one
+fn dailyFor(
+    a: Allocator,
+    all: []const root.File,
+    today: u32,
+    up: []const u8,
+    ctx: anytype,
+    champ: fn (@TypeOf(ctx), u32) anyerror!?ui.champ.Champ,
+) !?*hp.HomeDaily {
+    const got = try daily_page.pick(a, all, today) orelse return null;
+    const json = got.json orelse return null;
+    const pz = std.json.parseFromSliceLeaky(daily.Puzzle, a, json, .{ .ignore_unknown_fields = true }) catch |err| switch (err) {
+        error.OutOfMemory => return err,
+        else => {
+            // dailydata.files says so too
+            log.info("home: puzzle {d}: {t}", .{ got.n, err });
+            return null;
+        },
     };
     const d = try a.create(hp.Daily);
     d.* = .{ .n = pz.n, .href = try std.mem.concat(a, u8, &.{ up, "daily.html" }) };
     for (0..2) |side| for (0..5) |i| {
         const hidden = side == pz.hidden_team and i == @backingInt(pz.hidden_role);
-        d.teams[side][i] = if (hidden) null else try champOf(site, pz.teams[side][i]);
+        d.teams[side][i] = if (hidden) null else try champ(ctx, pz.teams[side][i]);
     };
     const x = try a.create(hp.HomeDaily);
     x.* = .{ .data = d, .bin = try bin(a, hp.Daily, d.*) };
     return x;
 }
 
-fn champOf(site: *const Site, id: u32) !?ui.champ.Champ {
+fn champOf(site: *const Site, id: u32) anyerror!?ui.champ.Champ {
     for (site.champs) |ch| if (ch.id == id) return .{ .name = ch.name, .src = try site.icon(ch) };
     return null;
 }
 
-/// The biggest clear win rate moves since the last patch, up then down
+/// The biggest clear win rate moves since the last patch, up then down; the link alone
+/// without them (the box's core build loads no patch day); null on a patch's first day
 fn patchCard(site: *const Site, h: *ui.H, up: []const u8) !?ui.N {
     const a = site.arena;
-    const pd = site.patchday orelse return null;
+    const pd = site.patchday orelse {
+        const prev = site.opts.prev_patch orelse return null;
+        return ui.today.view(h, try patchHead(a, up, site.patch, prev), null, .none);
+    };
     const moves = try biggest(a, pd.champions, pd.opts);
-    if (moves.len == 0) return null;
+    const head = try patchHead(a, up, pd.cur_patch, pd.prev_patch);
+    if (moves.len == 0) return ui.today.view(h, head, null, .none);
     var rows: std.ArrayList(ui.today.Change) = .empty;
     for (moves) |m| {
         const ch = for (site.champs) |c| {
@@ -177,12 +194,16 @@ fn patchCard(site: *const Site, h: *ui.H, up: []const u8) !?ui.N {
             .ci = @floatCast((g[1] - g[0]) / 2),
         });
     }
-    return ui.today.view(h, .{
-        .title = .{ .s = try a.print("Patch {s}", .{pd.cur_patch}) },
-        .count = .{ .s = try a.print("vs {s}", .{pd.prev_patch}) },
+    return ui.today.view(h, head, null, ui.today.changes(h, rows.items));
+}
+
+fn patchHead(a: Allocator, up: []const u8, cur: []const u8, prev: []const u8) !ui.today.Head {
+    return .{
+        .title = .{ .s = try a.print("Patch {s}", .{cur}) },
+        .count = .{ .s = try a.print("vs {s}", .{prev}) },
         .action = ui.plain("All changes"),
         .href = try std.mem.concat(a, u8, &.{ up, "patch/", patch_page.path }),
-    }, null, ui.today.changes(h, rows.items));
+    };
 }
 
 /// The clear moves, the per_way biggest up then the per_way biggest down
@@ -213,22 +234,12 @@ fn champsOf(site: *const Site, up: []const u8) !?*hp.HomeChamps {
     const d = try a.create(hp.Champs);
     var champs: std.ArrayList(ui.champ.Champ) = .empty;
     d.* = .{ .champs = &.{}, .games = site.games, .roles = @splat(&.{}) };
+    const counts = try a.alloc(u32, site.champs.len);
     for (Role.all, &d.roles) |r, *out| {
-        var best: [per_role]?Champ = @splat(null);
-        var games: [per_role]u32 = @splat(0);
-        for (site.champs) |ch| {
-            const n = site.stats.champRole(r, ch.c).games;
-            var i: usize = per_role;
-            while (i > 0 and n > games[i - 1]) i -= 1;
-            if (i == per_role) continue;
-            std.mem.copyBackwards(?Champ, best[i + 1 ..], best[i .. per_role - 1]);
-            std.mem.copyBackwards(u32, games[i + 1 ..], games[i .. per_role - 1]);
-            best[i] = ch;
-            games[i] = n;
-        }
+        for (site.champs, counts) |ch, *n| n.* = site.stats.champRole(r, ch.c).games;
         var picks: std.ArrayList(hp.Champs.Pick) = .empty;
-        for (best) |b| {
-            const ch = b orelse break;
+        for (mostPlayed(counts)) |b| {
+            const ch = site.champs[b orelse break];
             const cr = site.stats.champRole(r, ch.c);
             try picks.append(a, .{
                 .champ = @intCast(champs.items.len),
@@ -246,6 +257,23 @@ fn champsOf(site: *const Site, up: []const u8) !?*hp.HomeChamps {
     const x = try a.create(hp.HomeChamps);
     x.* = .{ .data = d, .bin = try bin(a, hp.Champs, d.*) };
     return x;
+}
+
+/// Indexes of the per_role largest counts, largest first, the earlier on a tie; none
+/// with no games
+fn mostPlayed(counts: []const u32) [per_role]?usize {
+    var best: [per_role]?usize = @splat(null);
+    var games: [per_role]u32 = @splat(0);
+    for (counts, 0..) |n, k| {
+        var i: usize = per_role;
+        while (i > 0 and n > games[i - 1]) i -= 1;
+        if (i == per_role) continue;
+        std.mem.copyBackwards(?usize, best[i + 1 ..], best[i .. per_role - 1]);
+        std.mem.copyBackwards(u32, games[i + 1 ..], games[i .. per_role - 1]);
+        best[i] = k;
+        games[i] = n;
+    }
+    return best;
 }
 
 /// The win rate change since the last patch; null when either patch has too few games
@@ -286,4 +314,89 @@ test "the patch card: clear moves only, biggest first, up to per_way each way" {
     var ids: [4]u32 = undefined;
     for (got, 0..) |m, i| ids[i] = m.id;
     try std.testing.expectEqualSlices(u32, &.{ 2, 5, 6, 7 }, ids[0..got.len]);
+}
+
+test "home's files: the example's and the puzzles with their page data, not the index" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const all = [_]root.File{
+        .{ .path = "data/your/mid.bin", .data = "m" },
+        .{ .path = "daily/index.json", .data = "[]" },
+        .{ .path = "daily/7.json", .data = "{}" },
+        .{ .path = "daily/7.bin", .data = "b" },
+        .{ .path = "learn/1.json", .data = "{}" },
+        .{ .path = "data/stats.bin", .data = "s" },
+    };
+    const got = try files(arena.allocator(), &all);
+    try std.testing.expectEqual(3, got.len);
+    try std.testing.expectEqualStrings("data/your/mid.bin", got[0].path);
+    try std.testing.expectEqualStrings("daily/7.json", got[1].path);
+    try std.testing.expectEqualStrings("daily/7.bin", got[2].path);
+}
+
+test "the Daily card: the newest puzzle up to today, the hidden seat empty" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const names = struct {
+        fn f(_: void, id: u32) anyerror!?ui.champ.Champ {
+            const all = [_][]const u8{ "", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J" };
+            return if (id < all.len) .{ .name = all[id], .src = "" } else null;
+        }
+    }.f;
+    var p: daily.Puzzle = .{
+        .n = 7,
+        .date = "2026-10-17",
+        .patch = "16.20",
+        .tier = null,
+        .games = 1000,
+        .teams = .{ .{ 1, 2, 3, 4, 5 }, .{ 6, 7, 8, 99, 10 } },
+        .bans = .{ &.{}, &.{} },
+        .hidden_team = 1,
+        .hidden_role = .middle,
+        .played = 8,
+        .options = &.{},
+        .winner = 0,
+        .minutes = 31,
+        .kills = .{ 20, 12 },
+        .gold = .{ 60000, 52000 },
+        .lanes = @splat(.{ .pp = 0, .games = 0 }),
+    };
+    const seven = try std.json.Stringify.valueAlloc(a, p, .{});
+    p.n = 9;
+    const all = [_]root.File{
+        .{ .path = "daily/7.json", .data = seven },
+        .{ .path = "daily/8.json", .data = "{\"n\":" },
+        .{ .path = "daily/9.json", .data = try std.json.Stringify.valueAlloc(a, p, .{}) },
+    };
+    const d = (try dailyFor(a, &all, 7, "../", {}, names)).?.data;
+    try std.testing.expectEqual(7, d.n);
+    try std.testing.expectEqualStrings("../daily.html", d.href);
+    try std.testing.expectEqualStrings("A", d.teams[0][0].?.name);
+    try std.testing.expectEqualStrings("J", d.teams[1][4].?.name);
+    // Red's mid hidden; an id the site doesn't know empty too
+    try std.testing.expectEqual(null, d.teams[1][2]);
+    try std.testing.expectEqual(null, d.teams[1][3]);
+    // Today's (8) unreadable: no card
+    try std.testing.expectEqual(null, try dailyFor(a, &all, 8, "", {}, names));
+    try std.testing.expectEqual(9, (try dailyFor(a, &all, 30, "", {}, names)).?.data.n);
+    try std.testing.expectEqual(null, try dailyFor(a, &all, 6, "", {}, names));
+}
+
+test "the example's game: none without a role file or games" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var empty: std.ArrayList(u8) = .empty;
+    try ui.data.encode(a, gd.Data, .{ .champs = &.{}, .games = &.{} }, &empty);
+    const list = [_]root.File{.{ .path = your_dir ++ "list.bin", .data = "x" }};
+    try std.testing.expectEqual(null, try reviewFor(a, &list, ""));
+    const none = [_]root.File{ list[0], .{ .path = your_dir ++ "top.bin", .data = empty.items } };
+    try std.testing.expectEqual(null, try reviewFor(a, &none, ""));
+}
+
+test "most played: largest first, the earlier on a tie, none without games" {
+    try std.testing.expectEqual([per_role]?usize{ 2, 0, 3, 5, 1 }, mostPlayed(&.{ 50, 10, 90, 50, 0, 20, 5 }));
+    try std.testing.expectEqual([per_role]?usize{ 1, null, null, null, null }, mostPlayed(&.{ 0, 3, 0 }));
+    try std.testing.expectEqual([per_role]?usize{ null, null, null, null, null }, mostPlayed(&.{}));
 }

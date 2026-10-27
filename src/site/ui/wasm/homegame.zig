@@ -26,6 +26,8 @@ var js: []const u8 = "";
 var wasm: []const u8 = "";
 var roles: [5]bool = @splat(false);
 var default: Role = .mid;
+/// Each role's game once shown, as left: a switch back needs no fetch
+var pages: [5]?ui.gamepage.GamePage = @splat(null);
 
 export fn main() void {
     dom.start();
@@ -55,6 +57,7 @@ fn loaded(_: i32, bytes: ?[]u8) void {
     // Each its own prepared game: the server's stays as rendered for hydration
     review0 = init(&data) catch return dom.dom.warn("home: out of memory");
     review = init(&data) catch return dom.dom.warn("home: out of memory");
+    review.live = true;
     review_i = dom.rt.add(hp.HomeReview, &review, &review0, sel) catch return dom.dom.warn("home: out of memory");
     dom.rt.changed = check;
 }
@@ -66,32 +69,40 @@ fn init(d: *const ui.gamedata.Data) !hp.HomeReview {
     return p;
 }
 
-/// A role picked: its file, then the review shows it
+/// A role picked: its game, fetched the first time
 fn check() void {
     if (review.want == review.shown or asked != null) return;
+    if (pages[@backingInt(review.want)]) |s| return show(review.want, s);
+    const path = review.path(gpa, review.want) catch return dom.dom.warn("home: out of memory");
     asked = review.want;
-    const path = review.path(gpa, review.want) catch return;
     dom.fetch(path, 1, switched);
 }
 
 fn switched(_: i32, bytes: ?[]u8) void {
     const r = asked orelse return;
     asked = null;
-    const ok = blk: {
-        const b = bytes orelse break :blk false;
-        const d = gpa.create(ui.gamedata.Data) catch break :blk false;
-        d.* = ui.data.decode(gpa, ui.gamedata.Data, b) catch break :blk false;
-        if (d.games.len == 0) break :blk false;
-        review.s = ui.gamepage.GamePage.init(gpa, d) catch break :blk false;
-        review.s.src = src;
-        review.s.stamp = want;
-        review.shown = r;
-        break :blk true;
-    };
-    if (!ok) {
+    if (page(bytes)) |s| show(r, s) else |_| {
         dom.dom.warn("home: no games for the role");
         if (review.want == r) review.want = review.shown;
+        review_i.render();
     }
-    review_i.render();
     check();
+}
+
+fn page(bytes: ?[]u8) !ui.gamepage.GamePage {
+    const d = try gpa.create(ui.gamedata.Data);
+    d.* = try ui.data.decode(gpa, ui.gamedata.Data, bytes orelse return error.NoData);
+    if (d.games.len == 0) return error.NoGames;
+    var s: ui.gamepage.GamePage = try .init(gpa, d);
+    s.src = src;
+    s.stamp = want;
+    return s;
+}
+
+/// The shown role's game kept as left
+fn show(r: Role, s: ui.gamepage.GamePage) void {
+    pages[@backingInt(review.shown)] = review.s;
+    review.s = s;
+    review.shown = r;
+    review_i.render();
 }

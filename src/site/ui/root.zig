@@ -142,6 +142,7 @@ test {
     _ = @import("poolpage_test.zig");
     _ = @import("table_test.zig");
     _ = @import("champsearch_test.zig");
+    _ = @import("homepage_test.zig");
 }
 
 test "every component: scoped, linted CSS; clean states; no dead class" {

@@ -1,4 +1,4 @@
-// Game review, shared by Your games (your.js) and the home page's demo (home.js): one
+// Game review, for Your games (your.js): one
 // game's win chance by minute with its bar, the key moments that moved it, what each
 // death cost and the lane against the typical game. Facts about the player's own game,
 // never advice. Strings from the service go in with textContent, never as HTML.
