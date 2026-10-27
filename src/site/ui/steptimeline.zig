@@ -39,7 +39,12 @@ pub const Deploy = struct {
     steps: []const Step = &.{},
     /// "sha subject" each
     commits: []const []const u8 = &.{},
+    /// The page owns it (opens the newest and a running one, keeps what the viewer folded)
     open: bool = false,
+    on_toggle: ?tree.Handler = null,
+    /// A failure the viewer should hear: a deploy that failed while the page was open.
+    /// Otherwise a failed step's detail is plain text, so history doesn't announce itself
+    alert: bool = false,
 };
 
 const W = struct {
@@ -68,6 +73,18 @@ fn stateWord(s: State) tree.Text {
     };
 }
 
+fn stepWord(s: StepState) tree.Text {
+    return switch (s) {
+        .done => plain("done"),
+        .running => plain("running"),
+        .waiting => plain("waiting"),
+        .failed => plain("failed"),
+        .skipped => plain("skipped"),
+        .pending => plain("pending"),
+        .none => plain("not reached"),
+    };
+}
+
 fn glyph(s: StepState) []const u8 {
     return switch (s) {
         .done => "✓",
@@ -90,9 +107,11 @@ pub fn view(h: *H, d: Deploy) N {
         pills.add(h.li(.{ .key = i, .data_state = s.state, .title = if (s.what.len > 0) s.what else null }, .{
             h.span(.{ .class = "g", .aria_hidden = true }, .{glyph(s.state)}),
             s.name,
+            // The glyph is aria-hidden and colour isn't read
+            h.span(.{ .class = "sr" }, .{ ", ", stepWord(s.state) }),
             if (took) |t| h.span(.{ .class = "t" }, .{t}) else null,
         }));
-        if (s.detail.len > 0) notes.add(h.li(.{ .key = i, .data_state = s.state, .role = if (s.state == .failed) "alert" else null }, .{
+        if (s.detail.len > 0) notes.add(h.li(.{ .key = i, .data_state = s.state, .role = if (d.alert and s.state == .failed) "alert" else null }, .{
             h.b(.{}, .{s.name}),
             " ",
             s.detail,
@@ -107,7 +126,7 @@ pub fn view(h: *H, d: Deploy) N {
             if (sp < c.len) c[sp..] else "",
         }));
     }
-    return h.el(.details, .{ .class = "c-steps", .data_state = d.state, .open = d.open or d.state == .running }, .{
+    return h.el(.details, .{ .class = "c-steps", .data_state = d.state, .open = d.open, .on_toggle = d.on_toggle }, .{
         h.el(.summary, .{}, .{
             h.span(.{ .class = "st" }, .{stateWord(d.state)}),
             h.span(.{ .class = "sha" }, .{d.sha}),
@@ -144,6 +163,7 @@ pub const css =
     \\  .c-steps .pills li { display: inline-flex; align-items: center; gap: 6px; min-height: var(--ctl-s);
     \\    padding: 0 var(--sp-2); border: 1px solid var(--line-2); border-radius: var(--r-pill);
     \\    font-size: var(--fs-xs); color: var(--t2); }
+    \\  .c-steps .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     \\  .c-steps .pills .g { font-weight: var(--w-b); }
     \\  .c-steps .pills .t { color: var(--muted); font-variant-numeric: tabular-nums; }
     \\  .c-steps .pills [data-state="done"] .g { color: var(--good); }
@@ -188,8 +208,8 @@ const demo_commits = [_][]const u8{
 
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
-    g.addFill("running", view(h, .{ .state = .running, .sha = "e80f952e", .subject = demo_commits[0][9..], .when = plain("pushed 04:12, expected live around 04:21 (median 8:40 over the last 20 deploys)"), .steps = &demo_steps, .commits = &demo_commits }));
-    g.addFill("failed", view(h, .{ .state = .failed, .sha = "11b1467d", .subject = demo_commits[1][9..], .when = plain("pushed 03:58"), .steps = &failed_steps, .commits = demo_commits[1..], .open = true }));
+    g.addFill("running", view(h, .{ .state = .running, .sha = "e80f952e", .subject = demo_commits[0][9..], .when = plain("pushed 04:12, expected live around 04:21 (median 8:40 over the last 20 deploys)"), .steps = &demo_steps, .commits = &demo_commits, .open = true }));
+    g.addFill("failed", view(h, .{ .state = .failed, .sha = "11b1467d", .subject = demo_commits[1][9..], .when = plain("pushed 03:58"), .steps = &failed_steps, .commits = demo_commits[1..], .open = true, .alert = true }));
     g.addFill("live, folded", view(h, .{ .state = .live, .sha = "459b807f", .subject = "Learn: Enter is the focused control's; digits choose and focus Lock in", .when = plain("pushed 03:30, live at 03:38 after 8:02"), .steps = demo_steps[0..4], .commits = demo_commits[0..1] }));
     g.addFill("skipped, no subject", view(h, .{ .state = .skipped, .sha = "6cdb1381", .subject = "", .when = plain("pushed 03:02, nothing on the box changed, so no round of its own") }));
     g.addFill("superseded", view(h, .{ .state = .superseded, .sha = "f034c7ef", .subject = "api --fixture: players in DIR/api-fixture.db, made afresh", .when = plain("pushed 02:40, replaced by a newer deploy before it went live"), .steps = demo_steps[0..3] }));
@@ -230,11 +250,11 @@ fn has(s: []const u8, want: []const []const u8, not: []const []const u8) !void {
     };
 }
 
-test "view: pills per step with times, running opens, details and commits" {
+test "view: pills per step with times and state words, details and commits" {
     var x: T = undefined;
     x.init();
     defer x.arena.deinit();
-    var s = try x.html(.{ .state = .running, .sha = "e80f952e", .subject = "Fix", .when = plain("pushed 04:12"), .steps = &demo_steps, .commits = &demo_commits });
+    var s = try x.html(.{ .state = .running, .sha = "e80f952e", .subject = "Fix", .when = plain("pushed 04:12"), .steps = &demo_steps, .commits = &demo_commits, .open = true });
     try has(s, &.{
         "<details class=\"c-steps\" data-state=\"running\" open",
         ">Deploying<",
@@ -244,11 +264,18 @@ test "view: pills per step with times, running opens, details and commits" {
         "data-state=\"skipped\"",
         "<b>Web loop</b> signalled the running loop",
         "2 commits",
+        "Build and copy<span class=\"sr\">, done</span>",
+        "Upload<span class=\"sr\">, pending</span>",
         "<span class=\"sha\">11b1467d</span> game.html",
     }, &.{"role=\"alert\""});
     try testing.expectEqual(demo_steps.len, std.mem.count(u8, s, "<li data-state=") - 1);
     s = try x.html(.{ .state = .failed, .sha = "11b1467d", .subject = "", .when = plain("pushed 03:58"), .steps = &failed_steps, .commits = demo_commits[1..] });
-    try has(s, &.{ "(no commit message recorded)", "role=\"alert\"><b>Build and copy</b>", "1 commit", "data-state=\"none\"" }, &.{ " open", "so far" });
+    try has(s, &.{ "(no commit message recorded)", "<li data-state=\"failed\"><b>Build and copy</b>", "1 commit", ", not reached<" }, &.{ " open", "so far", "role=\"alert\"" });
+    s = try x.html(.{ .state = .failed, .sha = "11b1467d", .subject = "", .when = plain("pushed 03:58"), .steps = &failed_steps, .alert = true });
+    try has(s, &.{"role=\"alert\"><b>Build and copy</b>"}, &.{});
+    // A running row the viewer folded stays folded
+    s = try x.html(.{ .state = .running, .sha = "a", .subject = "b", .when = plain(""), .steps = &demo_steps });
+    try has(s, &.{"data-state=\"running\">"}, &.{" open"});
     s = try x.html(.{ .state = .skipped, .sha = "6cdb1381", .subject = "Docs", .when = plain("pushed") });
     try has(s, &.{">Skipped<"}, &.{ "<ol", "<ul", "commit" });
     s = try x.html(.{ .state = .running, .sha = "a", .subject = "b", .when = plain(""), .steps = &.{.{ .name = plain("Upload"), .state = .waiting, .took = 5 }} });
