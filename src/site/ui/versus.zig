@@ -6,8 +6,9 @@
 //! worse). `band`: one figure on a track, the typical middle half shaded and its median
 //! a tick (game-detail.md "Lane"); `cell` the same at a list row's size, the figure under
 //! the track and the label only for screen readers (GameRow's lane at 14). `rows`: one
-//! side against the other mirrored, a row per figure, bars growing out from the middle,
-//! the larger (or earlier) figure bold (matchup.md "Versus"). `dumbbell`: a row per item,
+//! side against the other, a row per figure: both rates as dots on one 0-100% track, each
+//! number beside its dot, the larger bold; a timing as both times and the gap (matchup.md
+//! "Versus"); `key` names the sides, for the card head. `dumbbell`: a row per item,
 //! two rates on a shared axis as dots, the line between them the gap, the gap a figure
 //! (pool.md "How hard to pick up": new against practised players)
 const std = @import("std");
@@ -158,31 +159,48 @@ pub const Row = struct {
     label: tree.Text,
     a: tree.Text,
     b: tree.Text,
-    /// Bar lengths, of half the row: none for a timing
+    /// The two rates, 0-1: none for a timing
     bars: ?[2]f32 = null,
     /// The side shown bold
     lead: ?Side = null,
-    /// Under the label, small: "8 s apart"
+    /// After a timing's two times, small: "8 s apart"
     sub: ?tree.Text = null,
 };
 
 pub const Side = enum { a, b };
 
-/// `names`: the two sides, over their columns
+/// `names`: the two sides, for screen readers (`key` shows them)
 pub fn rows(h: *H, names: [2][]const u8, items: []const Row) N {
     var l = h.list();
     for (items, 0..) |r, i| l.add(h.div(.{ .key = i, .class = "mr" }, .{
-        h.span(.{ .class = "n us", .data_lead = r.lead == .a }, .{r.a}),
-        h.span(.{ .class = "mid" }, .{
-            h.span(.{ .class = "lab" }, .{ r.label, if (r.sub) |x| h.small(.{}, .{x}) else null }),
-            if (r.bars) |b| h.span(.{ .class = "bars", .aria_hidden = true, .style = h.vars(.{ .a = pct(b[0]), .b = pct(b[1]) }) }, .{}) else null,
+        h.span(.{ .class = "lab" }, .{r.label}),
+        if (r.bars) |b| dots(h, r, b) else h.span(.{ .class = "tm" }, .{
+            h.span(.{ .class = "n us", .data_lead = r.lead == .a }, .{r.a}),
+            h.span(.{ .class = "n them", .data_lead = r.lead == .b }, .{r.b}),
+            if (r.sub) |x| h.small(.{}, .{x}) else null,
         }),
-        h.span(.{ .class = "n them", .data_lead = r.lead == .b }, .{r.b}),
     }));
-    return h.div(.{ .class = "c-vs", .data_v = "rows", .role = "group", .aria_label = W.rows.with(h, .{ .a = names[0], .b = names[1] }) }, .{
-        h.div(.{ .class = "who", .aria_hidden = true }, .{ h.span(.{ .class = "us" }, .{names[0]}), h.span(.{ .class = "them" }, .{names[1]}) }),
-        l.done(),
+    return h.div(.{ .class = "c-vs", .data_v = "rows", .role = "group", .aria_label = W.rows.with(h, .{ .a = names[0], .b = names[1] }) }, .{l.done()});
+}
+
+/// The lower number sits left of its dot, the higher right of its own: each beside its
+/// dot whatever the gap
+fn dots(h: *H, r: Row, b: [2]f32) N {
+    const x = pct(b[0]);
+    const y = pct(b[1]);
+    const a_lo = x <= y;
+    return h.span(.{ .class = "tk", .style = h.vars(.{ .l = @min(x, y), .w = @abs(y - x) }) }, .{
+        h.span(.{ .class = "ln", .aria_hidden = true }, .{}),
+        h.span(.{ .class = "d us", .aria_hidden = true, .style = h.vars(.{ .x = x }) }, .{}),
+        h.span(.{ .class = "d them", .aria_hidden = true, .style = h.vars(.{ .x = y }) }, .{}),
+        h.span(.{ .class = "n us", .data_lead = r.lead == .a, .data_at = if (a_lo) "lo" else "hi", .style = h.vars(.{ .x = x }) }, .{r.a}),
+        h.span(.{ .class = "n them", .data_lead = r.lead == .b, .data_at = if (a_lo) "hi" else "lo", .style = h.vars(.{ .x = y }) }, .{r.b}),
     });
+}
+
+/// The two sides' names in their colours, for a card head over `rows`
+pub fn key(h: *H, names: [2][]const u8) N {
+    return h.span(.{ .class = "c-vs", .data_v = "key", .aria_hidden = true }, .{ h.span(.{ .class = "us" }, .{names[0]}), h.span(.{ .class = "them" }, .{names[1]}) });
 }
 
 pub const Bell = struct {
@@ -298,19 +316,32 @@ pub const css =
     \\  .c-vs .tr > .q { position: absolute; inset: 0 auto; left: calc(var(--a) * 1%); width: calc((var(--b) - var(--a)) * 1%); background: var(--wash); box-shadow: inset 0 0 0 1px var(--line-2); }
     \\  .c-vs .tr > .typ { top: 0; bottom: 0; }
     \\  .c-vs .tr > .you { position: absolute; top: -4px; bottom: -4px; left: calc(var(--x) * 1%); width: 8px; margin-left: -4px; border-radius: 3px; background: var(--us); box-shadow: 0 0 0 2px var(--panel); }
-    \\  .c-vs[data-v="rows"] { grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); }
-    \\  .c-vs > .who { display: flex; justify-content: space-between; font-weight: var(--w-b); }
-    \\  .c-vs > .who > .us { color: var(--us-hot); }
-    \\  .c-vs > .who > .them { color: var(--them-hot); }
-    \\  .c-vs > .mr { display: grid; grid-template-columns: 3.4em minmax(0, 1fr) 3.4em; align-items: center; gap: var(--sp-2); }
-    \\  .c-vs .mr > .n { font-size: var(--fs-m); font-weight: var(--w-m); font-variant-numeric: tabular-nums; color: var(--t2); }
-    \\  .c-vs .mr > .them { text-align: right; justify-content: flex-end; }
-    \\  .c-vs .mr > .n[data-lead] { font-weight: var(--w-b); color: var(--text); }
-    \\  .c-vs .mr > .mid { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
-    \\  .c-vs .mr .lab small { margin-left: 6px; color: var(--faint); }
-    \\  .c-vs .mr .bars { align-self: stretch; height: 5px;
-    \\    background: linear-gradient(90deg, transparent calc(50% - var(--a) * 0.5%), var(--us) 0 calc(50% - 1px), transparent 0 calc(50% + 1px),
-    \\      var(--them) 0 calc(50% + var(--b) * 0.5%), transparent 0); border-radius: 3px; }
+    \\  .c-vs[data-v="rows"] { grid-template-columns: minmax(0, 1fr); gap: 0; }
+    \\  .c-vs[data-v="key"] { display: inline-flex; gap: var(--sp-3); font-size: var(--fs-s); font-weight: var(--w-b); }
+    \\  .c-vs[data-v="key"] > span::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 50%; background: currentColor; }
+    \\  .c-vs[data-v="key"] > .us, .c-vs .mr .us { color: var(--us-hot); }
+    \\  .c-vs[data-v="key"] > .them, .c-vs .mr .them { color: var(--them-hot); }
+    \\  .c-vs > .mr { display: grid; grid-template-columns: minmax(0, 8em) minmax(0, 1fr); align-items: center; gap: var(--sp-3); min-height: 30px; }
+    \\  .c-vs > .mr + .mr { border-top: 1px solid var(--line); }
+    \\  .c-vs .mr > .lab { grid-column: 1; justify-self: start; display: block; color: var(--t2); font-size: var(--fs-s); }
+    \\  .c-vs .mr .n { font-size: var(--fs-m); font-weight: var(--w-m); font-variant-numeric: tabular-nums; white-space: nowrap; opacity: 0.8; }
+    \\  .c-vs .mr .n[data-lead] { font-weight: var(--w-b); opacity: 1; }
+    \\  .c-vs .mr > .tk { position: relative; height: 26px; margin: 0 3.4em; }
+    \\  .c-vs .tk::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 2px; margin-top: -1px; border-radius: 1px; background: var(--line-2); }
+    \\  .c-vs .tk::after { content: ""; position: absolute; left: 50%; top: 5px; bottom: 5px; width: 1px; background: var(--muted); opacity: 0.5; }
+    \\  .c-vs .tk > .ln { position: absolute; top: 50%; height: 4px; margin-top: -2px; left: calc(var(--l) * 1%); width: calc(var(--w) * 1%); border-radius: 2px; background: var(--muted); }
+    \\  .c-vs .tk > .d { position: absolute; z-index: 1; top: 50%; left: calc(var(--x) * 1%); width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; box-shadow: 0 0 0 2px var(--panel); }
+    \\  .c-vs .tk > .d.us { background: var(--us-hot); }
+    \\  .c-vs .tk > .d.them { background: var(--them-hot); }
+    \\  .c-vs .tk > .n { position: absolute; z-index: 1; top: 50%; width: max-content; padding: 0 2px; transform: translateY(-50%); background: var(--panel); }
+    \\  .c-vs .tk > .n[data-at="lo"] { right: calc(100% - var(--x) * 1% + 10px); }
+    \\  .c-vs .tk > .n[data-at="hi"] { left: calc(var(--x) * 1% + 10px); }
+    \\  .c-vs .mr > .tm { display: flex; align-items: baseline; gap: var(--sp-3); }
+    \\  .c-vs .tm > small { color: var(--faint); font-size: var(--fs-xs); }
+    \\  @media (max-width: 760px) {
+    \\    .c-vs > .mr { grid-template-columns: minmax(0, 6.5em) minmax(0, 1fr); gap: var(--sp-2); }
+    \\    .c-vs .mr > .tk { margin: 0 2.8em; }
+    \\  }
     \\  .c-vs[data-v="cell"] { display: flex; flex-direction: column; gap: 3px; width: 96px; }
     \\  .c-vs[data-v="cell"] > .tr { display: block; height: 8px; margin-top: 3px; }
     \\  .c-vs[data-v="cell"] .tr > .you { top: -3px; bottom: -3px; width: 6px; margin-left: -3px; }
@@ -360,10 +391,12 @@ pub fn gallery(g: *Gallery) void {
         race(h, .{ .label = plain("First item"), .you = 650, .them = 714, .typ = 681, .a = a, .b = b }),
         race(h, .{ .label = plain("First item"), .you = null, .them = 714, .a = a, .b = b }),
     }));
-    g.addFill("mirrored rows: a matchup's head to head", rows(h, .{ "Darius", "Garen" }, &.{
+    g.add("key: the sides' names", key(h, .{ "Darius", "Garen" }));
+    g.addFill("rows: a matchup's head to head", rows(h, .{ "Darius", "Garen" }, &.{
         .{ .label = plain("Wins"), .a = plain("50%"), .b = plain("50%"), .bars = .{ 0.5, 0.5 } },
         .{ .label = plain("Ahead at 14"), .a = plain("61%"), .b = plain("39%"), .bars = .{ 0.61, 0.39 }, .lead = .a },
         .{ .label = plain("First blood"), .a = plain("15%"), .b = plain("17%"), .bars = .{ 0.15, 0.17 }, .lead = .b },
+        .{ .label = plain("Kills after 14"), .a = plain("98%"), .b = plain("3%"), .bars = .{ 0.98, 0.03 }, .lead = .a },
         .{ .label = plain("Level 6"), .a = plain("5:19"), .b = plain("5:28"), .lead = .a, .sub = plain("9 s apart") },
         .{ .label = plain("First item"), .a = plain("12:04"), .b = plain("–") },
     }));
@@ -385,8 +418,8 @@ pub fn gallery(g: *Gallery) void {
     }));
 }
 
-fn bellHead(h: *H, comptime key: []const u8) N {
-    return h.a(.{ .href = "#" }, .{ champ.view(h, champ.demo(key, key), .{ .named = false }), key });
+fn bellHead(h: *H, comptime nm: []const u8) N {
+    return h.a(.{ .href = "#" }, .{ champ.view(h, champ.demo(nm, nm), .{ .named = false }), nm });
 }
 
 test "dumbbell: dots and the gap on the axis, legend and ticks, thin rows marked" {

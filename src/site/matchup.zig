@@ -174,11 +174,19 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     var head: mp.Head = try .init(a, head_data);
     head.bin = try bin(a, mp.HeadData, head_data.*);
 
+    // A pair too thin for its own build gets x's usual one: the build is what the page is
+    // read for, before the lane
     const build_data: ?*cp.BuildData = if (builds.forVs(site, r, x, y)) |b| blk: {
         const d = try a.create(cp.BuildData);
         const roles = try a.alloc(cp.BuildRole, 1);
         roles[0] = .{ .role = champion.uiRole(r), .build = try buildblock.dataVs(a, b.f, b.b, x.name, b.f.get(x.id, r)) };
         d.* = .{ .roles = roles, .against = y.name };
+        break :blk d;
+    } else if (builds.forChampion(site, site.view, x, r)) |b| blk: {
+        const d = try a.create(cp.BuildData);
+        const roles = try a.alloc(cp.BuildRole, 1);
+        roles[0] = .{ .role = champion.uiRole(r), .build = try buildblock.data(a, b.f, b.b, x.name) };
+        d.* = .{ .roles = roles, .against = y.name, .usual_of = x.name };
         break :blk d;
     } else null;
     var build: ?cp.Build = if (build_data) |d| .{

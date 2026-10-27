@@ -279,6 +279,8 @@ pub const W = struct {
     pub const sections = plain("Sections");
     pub const build = plain("Build");
     pub const build_against = Phrase("Build against {y:text}");
+    pub const build_usual = Phrase("{x:text}'s build");
+    pub const few_vs = Phrase("few games vs {y:text}");
     pub const trends = plain("Trends");
     pub const rare = Phrase("{n:count} · +{r:count} rare");
     pub const against = plain("Against");
@@ -384,6 +386,9 @@ pub const BuildData = struct {
     roles: []const BuildRole,
     /// The matchup page's opponent: the card heads "Build against {name}"
     against: ?[]const u8 = null,
+    /// The matchup page's champion when the pair has too few games for its own build: its
+    /// usual build instead, headed so
+    usual_of: ?[]const u8 = null,
 };
 
 pub const BuildRole = struct {
@@ -788,10 +793,16 @@ pub const Build = struct {
             .data_busy = p.files.busy(),
             .data_thin = p.data.roles[p.cur].thin,
         }, .{if (p.panel()) |b| card.view(h, .{ .flush = true }, &.{
-            if (p.data.against) |y| card.head(h, W.build_against.with(h, .{ .y = y }), null, &.{}) else .none,
+            p.head(h),
             note,
             b.view(h),
         }) else .none});
+    }
+
+    fn head(p: *P, h: *H) N {
+        const y = p.data.against orelse return .none;
+        if (p.data.usual_of) |x| return card.head(h, W.build_usual.with(h, .{ .x = x }), null, &.{badge.view(h, .few, .{W.few_vs.with(h, .{ .y = y })})});
+        return card.head(h, W.build_against.with(h, .{ .y = y }), null, &.{});
     }
 };
 

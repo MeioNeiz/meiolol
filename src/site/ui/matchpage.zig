@@ -1,9 +1,9 @@
 //! The matchup page (matchup/<role>/<x>-vs-<y>.html): one lane pair from x's side
 //! (docs/plan/ui/matchup.md), the champion page with its opponent slot filled, as three
 //! islands. Head: ChampHeader's pair with the headline figures, x's other lane opponents
-//! and the view links. Build: the champion page's Build island on the pair's build. More:
-//! the lane by minute beside head to head, won by gold at 10, by game length, by rank
-//! and mastery, and bot lane partners.
+//! and the view links. Build: the champion page's Build island on the pair's build (its
+//! usual one when the pair is thin). More: head to head beside the lane by minute, won by
+//! gold at 10, by game length, by rank and mastery, and bot lane partners.
 //!
 //! Pages are rendered on request, so each island's data rides in its root's data-bin
 //! (base64 of ui.data) rather than a file: ui-matchup.wasm adopts Head and loads
@@ -403,7 +403,7 @@ pub const More = struct {
 
     pub fn view(p: *P, h: *H) N {
         return h.div(.{ .class = "part", .data_island = "matchmore", .data_bin = if (p.bin.len > 0) p.bin else null, .data_js = p.js, .data_wasm = p.wasm }, .{
-            h.div(.{ .class = "lanerow" }, .{ p.laneCard(h), p.h2hCard(h) }),
+            h.div(.{ .class = "lanerow" }, .{ p.h2hCard(h), p.laneCard(h) }),
             h.div(.{ .class = "row3" }, .{ p.gold10Card(h), p.lengthCard(h), p.rankCard(h) }),
             p.duos(h),
         });
@@ -447,7 +447,7 @@ pub const More = struct {
         rows[n + 1] = timing(h, W.first_item, v.first_item);
         n += 2;
         return card.view(h, .{}, &.{
-            card.head(h, W.h2h, null, &.{}),
+            card.head(h, W.h2h, null, &.{versus.key(h, .{ p.data.x, p.data.y })}),
             h.div(.{ .data_thin = p.data.thin }, .{versus.rows(h, .{ p.data.x, p.data.y }, rows[0..n])}),
         });
     }
@@ -579,7 +579,7 @@ pub const css =
     \\  .c-mpage .c-head .lg { font-size: var(--fs-s); color: var(--muted); }
     \\  .c-mpage .lanerow { display: grid; gap: var(--sp-4); grid-template-columns: minmax(0, 1fr); }
     \\  @media (min-width: 1000px) {
-    \\    .c-mpage .lanerow { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+    \\    .c-mpage .lanerow { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
     \\  }
     \\}
     \\
