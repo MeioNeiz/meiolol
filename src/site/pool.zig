@@ -7,6 +7,8 @@ const root = @import("root.zig");
 const html = @import("html.zig");
 const tpl = html.tpl;
 const pool = @import("../pool.zig");
+const learning = @import("../learning.zig");
+const pickup = @import("pickup.zig");
 const champion = @import("champion.zig");
 const core = @import("core");
 const ui = @import("ui");
@@ -112,7 +114,8 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool) !void {
         \\
         \\<p class="muted">{chip} Lanes: points of win chance beyond what the two champions'
         \\own win rates predict, from {games} games. A main is a player's most played champion,
-        \\from {source}. <a href="{up}method.html">Method</a>.</p>
+        \\from {source}. Harder or easier to pick up: new players against practised ones, every
+        \\region (<a href="{pickup}">How hard to pick up</a>). <a href="{up}method.html">Method</a>.</p>
         \\<script src="{js}" data-wasm="{wasm}" defer></script>
         \\
     , .{
@@ -120,6 +123,7 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool) !void {
         .games = pd.min_games,
         .source = sourceText(p),
         .up = site.view.up(),
+        .pickup = pickup.path,
         .js = html.Link{ .root = to_root, .up = site.view.up(), .path = assets.pool_js.path },
         .wasm = assets.pool_wasm.path,
     });
@@ -130,7 +134,13 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool) !void {
 fn pageData(site: *const Site, p: *const pool.Pool) !page_ui.Data {
     const a = site.arena;
     const champs = try a.alloc(page_ui.Champ, site.champs.len);
-    for (champs, site.champs) |*c, ch| c.* = .{ .id = try id16(ch.id), .name = ch.name, .key = ch.key, .slug = ch.slug };
+    for (champs, site.champs) |*c, ch| c.* = .{
+        .id = try id16(ch.id),
+        .name = ch.name,
+        .key = ch.key,
+        .slug = ch.slug,
+        .pickup = pickupOf(&site.learning, ch.id),
+    };
     var mains: std.ArrayList(page_ui.Main) = .empty;
     for (p.mains) |m| {
         const r = m.role orelse continue;
@@ -141,6 +151,15 @@ fn pageData(site: *const Site, p: *const pool.Pool) !page_ui.Data {
         try mains.append(a, .{ .c = @intCast(c), .role = champion.uiRole(r), .players = m.players });
     }
     return .{ .ddragon = site.ddragon_version, .champs = champs, .mains = mains.items };
+}
+
+fn pickupOf(l: *const learning.Learning, id: u32) page_ui.Pickup {
+    const g = (l.get(id) orelse return .usual).gap orelse return .usual;
+    return switch (g.kind) {
+        .harder => .harder,
+        .usual => .usual,
+        .easier => .easier,
+    };
 }
 
 /// `v` as ui.data, base64: the island root's data-bin

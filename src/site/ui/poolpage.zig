@@ -70,7 +70,12 @@ const W = struct {
     pub const failed = plain("The lanes didn't load. Reload the page to try again.");
     pub const few = Phrase("Too few {c:text} mains yet for lanes.");
     pub const nothing = plain("Nothing to add for these lanes yet.");
+    pub const harder = plain("harder to pick up");
+    pub const easier = plain("easier to pick up");
 };
+
+/// How hard a champion is to pick up (src/learning.zig): new against practised players
+pub const Pickup = enum(u8) { usual, harder, easier };
 
 pub const Champ = struct {
     id: u16,
@@ -78,6 +83,7 @@ pub const Champ = struct {
     /// Data Dragon's
     key: []const u8,
     slug: []const u8,
+    pickup: Pickup = .usual,
 };
 
 /// A champion with a pool file
@@ -434,6 +440,11 @@ pub const Page = struct {
                 .rank = @intCast(rank),
                 .win = if (p.why == .also) share(f, f.cols[o.col].together) else null,
                 .reasons = p.reasons(h, f, o),
+                .tag = if (indexOf(p.d, id)) |i| switch (p.d.champs[i].pickup) {
+                    .usual => null,
+                    .harder => W.harder,
+                    .easier => W.easier,
+                } else null,
                 .label = W.add.with(h, .{ .c = c.name }),
                 .on = h.on(p, .{ .add = id }),
             };
@@ -555,8 +566,8 @@ pub const Demo = struct {
         .{ .id = 1, .name = "Darius", .key = "Darius", .slug = "darius" },
         .{ .id = 4, .name = "Dr. Mundo", .key = "DrMundo", .slug = "drmundo" },
         .{ .id = 10, .name = "Fiora", .key = "Fiora", .slug = "fiora" },
-        .{ .id = 2, .name = "Garen", .key = "Garen", .slug = "garen" },
-        .{ .id = 3, .name = "Jax", .key = "Jax", .slug = "jax" },
+        .{ .id = 2, .name = "Garen", .key = "Garen", .slug = "garen", .pickup = .easier },
+        .{ .id = 3, .name = "Jax", .key = "Jax", .slug = "jax", .pickup = .harder },
         .{ .id = 20, .name = "Teemo", .key = "Teemo", .slug = "teemo" },
         .{ .id = 11, .name = "Yone", .key = "Yone", .slug = "yone" },
         .{ .id = 30, .name = "Ahri", .key = "Ahri", .slug = "ahri" },
@@ -664,6 +675,9 @@ test "pool page: the main's file, its need, the grid, the best answers and what 
     try testing.expect(std.mem.find(u8, out, "class=\"c-cand\"") != null);
     // What to add rows name their button for what it does
     try testing.expect(std.mem.find(u8, out, "class=\"pk\" type=\"button\" aria-label=\"Add ") != null);
+    // Jax (harder) and Garen (easier) are options; Mundo is usual and has no badge
+    try testing.expectEqual(1, std.mem.count(u8, out, ">harder to pick up<"));
+    try testing.expectEqual(1, std.mem.count(u8, out, ">easier to pick up<"));
 
     p.add(3);
     const both = try render(a, &p);

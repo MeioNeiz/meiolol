@@ -381,7 +381,7 @@ test "fixture games to stats, curves and the website" {
         // View links: this page in each view, the current one lit, ranks greyed
         .{ "patch/matchup/top/darius-vs-mordekaiser.html", &.{ "<a aria-current=\"page\">15.13</a>", "<a href=\"../../../matchup/top/darius-vs-mordekaiser.html\">30 days</a>", "<a aria-disabled=\"true\">Emerald+</a>" } },
         // Pool: the island empty (the picker), the lanes' scope, ui-pool.wasm
-        .{ "pool.html", &.{ "<h2>Choose your pool</h2>", "<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"days30\"", "<script src=\"" ++ assets.pool_js.path ++ "\" data-wasm=\"" ++ assets.pool_wasm.path ++ "\" defer></script>" } },
+        .{ "pool.html", &.{ "<h2>Choose your pool</h2>", "<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"days30\"", "(<a href=\"pickup.html\">How hard to pick up</a>)", "<script src=\"" ++ assets.pool_js.path ++ "\" data-wasm=\"" ++ assets.pool_wasm.path ++ "\" defer></script>" } },
         .{ "pickup.html", &.{ "<h1>How hard to pick up <span class=\"scope\" data-chip data-region=\"all\" data-period=\"days30\"", "<a aria-current=\"page\">All</a><a href=\"pickup/top.html\">Top</a>" } },
         .{ "patch/pickup/mid.html", &.{ "<a href=\"../pickup.html\">All</a><a href=\"../pickup/top.html\">Top</a>", "<a aria-current=\"page\">Mid</a>" } },
         .{ "all/patch/pool.html", &.{"<span class=\"scope\" data-chip data-region=\"all\" data-period=\"patch:15.13\" data-rank=\"\" title=\"Region, period and rank these numbers are from\"><span>All regions</span><span>Patch 15.13</span><span>Plat+</span></span> Lanes:"} },

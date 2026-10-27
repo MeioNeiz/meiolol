@@ -43,6 +43,8 @@ pub const Row = struct {
     /// Points against the reference row; null on that row
     vs: ?f32 = null,
     reasons: []const Reason = &.{},
+    /// A neutral Badge after the reasons ("harder to pick up")
+    tag: ?tree.Text = null,
     /// Rows left out above this one (the played pick far down the list)
     gap: bool = false,
     open: bool = false,
@@ -129,7 +131,10 @@ fn row(h: *H, l: List, r: Row, key: usize) N {
             .class = "d",
             .style = if (r.vs) |d| h.vars(.{ .c = fmt.Step.of(d, fmt.win_cuts) }) else null,
         }, .{if (r.vs) |d| phrase.num(h, .points, d) else null}) else null,
-        if (r.reasons.len > 0) h.span(.{ .class = "why" }, .{chips.done()}) else null,
+        if (r.reasons.len > 0 or r.tag != null) h.span(.{ .class = "why" }, .{
+            chips.done(),
+            if (r.tag) |t| badge.view(h, .neutral, .{t}) else null,
+        }) else null,
     });
     const det: ?N = if (r.open) if (r.detail) |d| h.div(.{
         .key = 1,
