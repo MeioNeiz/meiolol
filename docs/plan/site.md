@@ -9,6 +9,7 @@ theme: fewer words, clearer facts, denser layouts, more engaging.
 
 ## Site-wide
 
+URLs: docs/plan/urls.md (J32) is the scheme; no new page path or href shape outside it.
 Colour and density ("more colour", "space inefficient"): docs/design-ideas.md (measured
 layout, colour by impact, build order).
 - Win rates: continuous colour (tierlist.wrColour mixes the stops in oklab, grey only at

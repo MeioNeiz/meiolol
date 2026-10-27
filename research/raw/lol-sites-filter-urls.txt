@@ -1,0 +1,22 @@
+Filter URLs and canonical tags on LoL stat sites, fetched 2026-10-27 (curl, browse html, Wayback for League of Graphs).
+
+Requested: https://lolalytics.com/lol/darius/build/?tier=diamond_plus&region=euw&patch=30
+Canonical URL: https://lolalytics.com/lol/darius/build/?tier=diamond_plus&region=euw&patch=30
+
+Requested: https://op.gg/lol/champions/darius/build/top?region=euw&tier=diamond_plus
+Canonical URL: https://op.gg/lol/champions/darius/build/top
+
+Requested: https://blitz.gg/lol/champions/darius/build/top?rank=diamond (curl -L landed on https://blitz.gg/lol/champions/Darius/build/top?rank=diamond)
+Canonical URL: https://blitz.gg/lol/champions/Darius/build/top
+
+Requested: https://u.gg/lol/champions/darius/build?rank=diamond_plus&region=euw1
+Canonical URL: https://u.gg/lol/champions/darius/build
+
+Requested: https://mobalytics.gg/lol/champions/darius/build?rank=diamond
+Canonical URL: https://mobalytics.gg/lol/champions/darius/build
+
+League of Graphs, Wayback copy of https://www.leagueofgraphs.com/champions/stats/darius (2026-03-08), filter links on the page:
+/champions/stats/darius /champions/stats/darius/adc /champions/stats/darius/aram /champions/stats/darius/arena /champions/stats/darius/br /champions/stats/darius/bronze /champions/stats/darius/diamond /champions/stats/darius/emerald /champions/stats/darius/eune /champions/stats/darius/euw /champions/stats/darius/gold /champions/stats/darius/iron /champions/stats/darius/jp /champions/stats/darius/jungle /champions/stats/darius/kr /champions/stats/darius/lan /champions/stats/darius/las /champions/stats/darius/master /champions/stats/darius/me /champions/stats/darius/middle /champions/stats/darius/na /champions/stats/darius/oce /champions/stats/darius/ru /champions/stats/darius/sg /champions/stats/darius/silver /champions/stats/darius/sr-ranked /champions/stats/darius/support /champions/stats/darius/top /champions/stats/darius/tr /champions/stats/darius/tw /champions/stats/darius/vn 
+
+League of Graphs, Wayback copy of https://www.leagueofgraphs.com/rankings/summoners/euw (2026-04-13), ranking links on the page:
+/rankings/challenges/euw /rankings/champion-masteries/euw /rankings/rank-distribution/euw /rankings/records/euw /rankings/summoners /rankings/summoners/aatrox/euw /rankings/summoners/ahri/euw /rankings/summoners/akali/euw /rankings/summoners/akshan/euw /rankings/summoners/alistar/euw /rankings/summoners/ambessa/euw /rankings/summoners/amumu/euw 

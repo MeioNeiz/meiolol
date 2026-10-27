@@ -14,7 +14,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | [data](areas/data.md) | what the Riot API serves and how to crawl it | 4 | 179 | 457 |
 | [stats](areas/stats.md) | estimation and recommendation methods | 26 | 340 | 2443 |
 | [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 12 | 365 | 1842 |
-| [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 7 | 152 | 580 |
+| [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 8 | 161 | 620 |
 | [code](areas/code.md) | how we write code: Zig practice, idiom and style from docs and respected projects | 9 | 174 | 1966 |
 
 ## Questions
@@ -110,6 +110,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | decided | now | [How should a small cloud VM prioritise IO between a latency-sensitive writer, a web renderer and heavy batch readers: scheduler, ionice, cgroup io controls, or memory?](questions/box-io-priority.md): How should a small cloud VM prioritise IO between a latency-sensitive writer, a web renderer and heavy batch readers: scheduler, ionice, cgroup io controls, or memory? | 6 strong, 2 moderate, 1 contested | 10 | 5 (growing) | 2 |
 | decided | now | [How do servers that hold large in-memory data built from a database deploy new code quickly, without rebuilding that data on every restart?](questions/fast-deploy-data-servers.md): How do servers that hold large in-memory data built from a database deploy new code quickly, without rebuilding that data on every restart? | 7 strong, 1 moderate, 1 contested | 7 | 8 (growing) | 5 |
 | decided | soon | [How do sites prerender pages by popularity and invalidate cached pages when code or data changes?](questions/render-cache-invalidation.md): How do sites prerender pages by popularity and invalidate cached pages when code or data changes? | 5 strong, 1 moderate | 8 | 4 (growing) | 2 |
+| decided | soon | [What URL scheme should meio.lol use for its pages, filters and page state, and how do we move to it without losing links or search standing?](questions/site-url-scheme.md): What URL scheme should meio.lol use for its pages, filters and page state, and how do we move to it without losing links or search standing? | 8 strong, 1 moderate | 9 | 2 (thin) |  |
 
 ### code
 
@@ -127,6 +128,6 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 ## Health
 
-- 71 questions, 1121 sources, 8618 findings
+- 72 questions, 1130 sources, 8658 findings
 - Open leads: 284 (`josearch leads`)
 - Lint: 0 errors, 5 warnings (`josearch lint`)

@@ -108,6 +108,9 @@ recommendations"). A later decision that overrides an earlier one says so.
 - J31 (26 Oct) meiolol leaves Oracle for Ethan's VM C01, all of it, benchmarked on the
   real data before the switch so it is no downgrade; jomify stays for jomove only.
   Storage: C01's 60 GB disk plus Megatron, not a new local disk (docs/plan/vm.md)
+- J32 (28 Oct) Professional URLs: Jacob's hierarchy (/champions/<c>/<role>,
+  /matchups/<role>/<a>-vs-<b>, no .html, 301 from every old URL) plus the five
+  additions in docs/plan/urls.md; built after the notes run
 - nn on the GPU: planned, not now
 - Q1 Rewrite the application around game review of your own games, lane curves as the
   benchmark; squads worded as planned, or out until built
