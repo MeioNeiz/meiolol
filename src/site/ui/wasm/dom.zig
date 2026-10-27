@@ -442,7 +442,9 @@ fn onResponse(ctx: i32, resp: zjb.Handle) callconv(.c) void {
     defer p.release();
     const step = zjb.fnHandle("uiBytes", &onBytes).bind(.{ctx});
     defer step.release();
-    p.call("then", .{step}, zjb.Handle).release();
+    const bad = zjb.fnHandle("uiFailed", &onFailed).bind(.{ctx});
+    defer bad.release();
+    p.call("then", .{ step, bad }, zjb.Handle).release();
 }
 
 fn onFailed(ctx: i32, err: zjb.Handle) callconv(.c) void {

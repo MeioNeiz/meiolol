@@ -22,6 +22,8 @@ var cache: std.StringHashMapUnmanaged(?*const MoreData) = .empty;
 var asked: ?[]const u8 = null;
 
 export fn main() void {
+    // Before dom.start's: popstate listeners run in order, and Grid.fromUrl reads `back`
+    zjb.global("window").call("addEventListener", .{ zjb.constString("popstate"), zjb.fnHandle("fgBack", &onBack) }, void);
     dom.start();
     const root = zjb.global("document").call("querySelector", .{zjb.constString(sel)}, zjb.Handle);
     if (root == .null) return;
@@ -40,9 +42,15 @@ export fn main() void {
     check();
 }
 
+fn onBack(e: zjb.Handle) callconv(.c) void {
+    e.release();
+    state.back = true;
+}
+
 /// The first pick's matchups: from the cache, else fetched (one at a time; a pick made
 /// meanwhile is fetched after); then a fresh second pick with a page goes there
 fn check() void {
+    state.back = false;
     const slug = state.want() orelse return;
     if (!state.more_of.eql(&state.u.c)) {
         if (cache.get(slug)) |d| {
@@ -64,17 +72,26 @@ fn check() void {
     zjb.global("location").call("assign", .{u}, void);
 }
 
+/// A file that came but doesn't decode is cached as none; a failed fetch (offline, a
+/// server error) only for this pick, so picking the champion again fetches again
 fn loaded(_: i32, bytes: ?[]u8) void {
     const slug = asked orelse return;
     asked = null;
-    const d: ?*const MoreData = if (bytes) |b| blk: {
+    var d: ?*const MoreData = null;
+    if (bytes) |b| {
         defer gpa.free(b);
-        const v = ui.data.decode(gpa, MoreData, b) catch break :blk null;
-        const p = gpa.create(MoreData) catch break :blk null;
-        p.* = v;
-        break :blk p;
-    } else null;
+        if (ui.data.decode(gpa, MoreData, b)) |v| {
+            const p = gpa.create(MoreData) catch return gpa.free(slug);
+            p.* = v;
+            d = p;
+        } else |_| {}
+    }
     if (d == null) dom.dom.warn("findergrid: no matchups for the pick");
-    cache.put(gpa, slug, d) catch return;
+    const kept = bytes != null and if (cache.put(gpa, slug, d)) true else |_| false;
+    defer if (!kept) gpa.free(slug);
+    if (std.mem.eql(u8, state.want() orelse "", slug)) {
+        state.got(slug, d);
+        island.render();
+    }
     check();
 }
