@@ -607,7 +607,7 @@ test "fixture games to stats, curves and the website" {
             defer again.deinit();
             try again.reuseViews(views_path);
             for (site.html.View.all) |v| try again.loadView(v);
-            try testing.expect(again.extras.people == null);
+            try testing.expectEqual(0, again.extras.people.items.len);
             try again.writeViews(again_path);
             try testing.expectEqualSlices(u8, views_bytes, try std.Io.Dir.cwd().readFileAlloc(io, again_path, arena, .limited(1 << 30)));
         }
@@ -627,7 +627,7 @@ test "fixture games to stats, curves and the website" {
             defer again.deinit();
             try again.reuseViews(again_path);
             for (site.html.View.all) |v| try again.loadView(v);
-            try testing.expect(again.extras.people != null);
+            try testing.expectEqual(1, again.extras.people.items.len);
             try again.writeViews(again_path);
             try testing.expectEqualSlices(u8, views_bytes, try std.Io.Dir.cwd().readFileAlloc(io, again_path, arena, .limited(1 << 30)));
         }
@@ -647,6 +647,31 @@ test "fixture games to stats, curves and the website" {
             for (site.html.View.all) |v| try again.loadView(v);
             try again.writeViews(again_path);
             try testing.expectEqualSlices(u8, views_bytes, try std.Io.Dir.cwd().readFileAlloc(io, again_path, arena, .limited(1 << 30)));
+            // Views at once (Options.view_loads), each on its own connection: the same
+            // bytes, the people tallies made once
+            for ([_]usize{ 2, 4 }) |n| {
+                var at_once_opts = opts;
+                at_once_opts.view_loads = n;
+                const at_once = try site.Loaded.init(gpa, io, file_db, at_once_opts);
+                defer at_once.deinit();
+                at_once.lazy = false;
+                try at_once.loadAll();
+                try testing.expectEqual(1, at_once.extras.people.items.len);
+                // The options part holds it
+                at_once.opts.view_loads = 1;
+                try at_once.writeViews(again_path);
+                try testing.expectEqualSlices(u8, views_bytes, try std.Io.Dir.cwd().readFileAlloc(io, again_path, arena, .limited(1 << 30)));
+            }
+            // A view that fails stops the build with its own error, not a stopped
+            // view's, and no load waits on it for ever. Every 30-day view has no games
+            for ([_]usize{ 2, 4 }) |n| {
+                var failing = opts;
+                failing.view_loads = n;
+                failing.since_ms = std.math.maxInt(i64);
+                const at_once = try site.Loaded.init(gpa, io, file_db, failing);
+                defer at_once.deinit();
+                try testing.expectError(error.NoMatches, at_once.loadAll());
+            }
         }
         // Another binary's types: refused, for the database load instead
         const bytes = try std.Io.Dir.cwd().readFileAlloc(io, views_path, arena, .limited(1 << 30));

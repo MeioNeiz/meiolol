@@ -45,7 +45,8 @@ the web loop's MemoryHigh (docs/plan/vm.md Later).
 - ~/ml/meiolol: bin/ (deployed by deploy/box.sh, built for the host's CPU), data/,
   backups/, .env (copied from the Mac), contact, riot.txt, crawl.args, host.env
   (MEIOLOL_BACKUPS, MEIOLOL_NO_EVAL; tuning per host, default when unset:
-  MEIOLOL_FILTER_RUNS, the views write's parallel filter tally, 4)
+  MEIOLOL_FILTER_RUNS, the views write's parallel filter tally, 4, 1 to 64;
+  MEIOLOL_VIEW_LOADS, views the views write loads at once, 1, 1 to 4)
 - systemd --user services, lingering: meiolol-crawl, meiolol-web, meiolol-backup,
   meiolol-health (deploy/systemd). `systemctl --user status meiolol-crawl`; logs in data/
 - Disk scheduler: mq-deadline, on trial, set at runtime only (a reboot reverts to the

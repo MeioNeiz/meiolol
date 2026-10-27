@@ -94,7 +94,7 @@ pub fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Opt
         .view_builds_rank = &extras.builds_rank,
         .lean = if (extras.lean) |*l| l else null,
     };
-    var phases: Phases = .init(io);
+    var phases: Phases = .init(io, if (extras.at_once) .cpu_thread else .cpu_process);
     // A kept patch view's patch must still be the current one
     const base = try Parts.of(old, BasePart, .base, view, arena);
     if (base != null and (view.period == .days30 or eqlStrings(base.?.patches, opts.patches))) {
@@ -115,6 +115,7 @@ pub fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Opt
         if (old) |o| if (o.strict) return error.ViewsMismatch;
         try loadBase(site, db, all_opts, &phases, try extras.partialsFor(gpa, io, db, &phases));
     }
+    try extras.going();
     const champs_key = champsKey(site.champs);
 
     // Static.core writes none of what follows (rendered on request), and skipping it is
@@ -148,6 +149,7 @@ pub fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Opt
             if (i == 0 and loading.want_filter) phases.mark("filters");
             if (i == 1 and loading.want_people) phases.mark("people");
         }
+        try extras.going();
         if (loading.want_filter) site.filter = loading.filter;
         if (kept_people) |p| {
             site.pool = p.pool;
@@ -189,7 +191,9 @@ pub fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Opt
                 phases.mark("daily and learn kept");
             } else try loadDaily(site, db, try extras.partialsFor(gpa, io, db, &phases), &phases);
         }
+        try extras.going();
         try loadPatchDay(site, db, all_opts, extras, old, &phases);
+        try extras.going();
         if (try Parts.ofFor(old, TrendPart, .trend, view, arena, champs_key)) |t| {
             site.trend = t.trend;
             phases.mark("trend kept");
@@ -223,7 +227,7 @@ const Loading = struct {
         if (i == 0) {
             if (l.want_filter) l.filter = if (l.games) |g| try filters.makeFrom(l.site, g, l.opts) else try filters.make(l.site, l.db, l.opts);
         } else if (l.want_people) {
-            l.people = try l.extras.tallies(l.site.gpa, l.sibling orelse l.db, &l.site.stats, l.opts);
+            l.people = try l.extras.tallies(l.site.gpa, io, l.sibling orelse l.db, &l.site.stats, l.opts);
         }
         l.ms[i] = std.Io.Clock.awake.now(io).toMilliseconds() - start;
     }
@@ -591,22 +595,24 @@ fn eqlStrings(a: []const []const u8, b: []const []const u8) bool {
 
 /// Seconds per step of a view's load, for its log line: on the box a load runs minutes
 /// to an hour depending on the disk, and this says where
-/// Each phase's time and the process's CPU time in it: far less CPU than time is a
-/// phase waiting on the disk
+/// Each phase's time and the CPU time in it: far less CPU than time is a phase waiting
+/// on the disk
 pub const Phases = struct {
     io: std.Io,
+    /// The process's, or the thread's when views load at once (Extras.at_once)
+    cpu: std.Io.Clock,
     last_ms: i64,
     last_cpu_ms: i64,
     buf: [256]u8 = undefined,
     len: usize = 0,
 
-    fn init(io: std.Io) Phases {
-        return .{ .io = io, .last_ms = std.Io.Clock.awake.now(io).toMilliseconds(), .last_cpu_ms = cpuMs(io) };
+    fn init(io: std.Io, cpu: std.Io.Clock) Phases {
+        return .{ .io = io, .cpu = cpu, .last_ms = std.Io.Clock.awake.now(io).toMilliseconds(), .last_cpu_ms = cpu.now(io).toMilliseconds() };
     }
 
     pub fn mark(p: *Phases, name: []const u8) void {
         const now = std.Io.Clock.awake.now(p.io).toMilliseconds();
-        const cpu = cpuMs(p.io);
+        const cpu = p.cpu.now(p.io).toMilliseconds();
         const ms: f64 = @floatFromInt(now - p.last_ms);
         const cpu_ms: f64 = @floatFromInt(cpu - p.last_cpu_ms);
         p.last_ms = now;
@@ -620,10 +626,6 @@ pub const Phases = struct {
         const sec: f64 = @floatFromInt(ms);
         const s = std.mem.print(p.buf[p.len..], " {s} {d:.1}s", .{ name, sec / 1000 }) catch return;
         p.len += s.len;
-    }
-
-    fn cpuMs(io: std.Io) i64 {
-        return std.Io.Clock.cpu_process.now(io).toMilliseconds();
     }
 
     fn text(p: *const Phases) []const u8 {

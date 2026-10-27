@@ -30,8 +30,9 @@ pub const Extras = struct {
     builds_rank: [html.View.count][builds.rank_tiers.len]?builds.File = @splat(@splat(null)),
     lean: ?lean.File = null,
     /// Pool and learning tallies, on the first view's load: one pass over the database
-    /// serves every view
-    people: ?People = null,
+    /// serves every view with the same champions. A view with others adds its own:
+    /// views loading at once may still hold the first
+    people: std.ArrayList(*People) = .empty,
     /// `site --views`: the views partials' directory (data/partials), whose games the
     /// loads read instead of the database's tables; null: the database
     partials_dir: ?[]const u8 = null,
@@ -41,6 +42,16 @@ pub const Extras = struct {
     arena: ?std.mem.Allocator = null,
     /// notesFor's, by "<prev> <cur>": null where they failed
     notes: std.StringHashMapUnmanaged(?*const patchnotes.Notes) = .empty,
+    /// For views loading at once (Options.view_loads): one each for partialsFor, tallies
+    /// and notesFor, so a view reading the open partials never waits on a minute of tallies
+    games_mutex: std.Io.Mutex = .init,
+    people_mutex: std.Io.Mutex = .init,
+    notes_mutex: std.Io.Mutex = .init,
+    /// Views loading at once: the first to fail sets it, and the others stop at their
+    /// next step (going)
+    stopped: std.atomic.Value(bool) = .init(false),
+    /// Views loading at once: each phase's CPU time is its thread's, not the process's
+    at_once: bool = false,
 
     pub fn load(arena: std.mem.Allocator, io: std.Io, opts: Options) Extras {
         var e: Extras = .{ .arena = arena };
@@ -67,7 +78,11 @@ pub const Extras = struct {
     pub fn deinit(e: *Extras, gpa: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io) void {
         for (&e.curves) |*c| if (c.*) |*x| x.unmap(arena, io);
         for (&e.curves_prev) |*c| if (c.*) |*x| x.unmap(arena, io);
-        if (e.people) |*p| p.deinit(gpa);
+        for (e.people.items) |p| {
+            p.deinit(gpa);
+            gpa.destroy(p);
+        }
+        e.people.deinit(gpa);
         if (e.games) |g| g.deinit();
     }
 
@@ -77,6 +92,8 @@ pub const Extras = struct {
     pub fn notesFor(e: *Extras, gpa: std.mem.Allocator, io: std.Io, dir: ?[]const u8, prev: []const u8, cur: []const u8) !?*const patchnotes.Notes {
         const d = dir orelse return null;
         const arena = e.arena orelse return null;
+        try e.notes_mutex.lock(io);
+        defer e.notes_mutex.unlock(io);
         var buf: [64]u8 = undefined;
         const key = std.fmt.bufPrint(&buf, "{s} {s}", .{ prev, cur }) catch return null;
         if (e.notes.get(key)) |n| return n;
@@ -96,8 +113,10 @@ pub const Extras = struct {
     }
 
     /// The partials, opened on the first call; null without partials_dir or when they
-    /// fail. On the loading thread, before any reader of them starts
+    /// fail. Readers get them only once opened
     pub fn partialsFor(e: *Extras, gpa: std.mem.Allocator, io: std.Io, db: store.Db, phases: *Phases) !?*partials.Store {
+        try e.games_mutex.lock(io);
+        defer e.games_mutex.unlock(io);
         const dir = e.partials_dir orelse return null;
         if (e.games) |g| return g;
         // A write from the tables beats none: each file is replaced whole and the state
@@ -125,13 +144,14 @@ pub const Extras = struct {
         return g;
     }
 
-    pub fn tallies(e: *Extras, gpa: std.mem.Allocator, db: store.Db, st: *const Stats, opts: Options) !*const People {
-        if (e.people) |*p| {
-            if (std.mem.eql(u32, p.ids, st.ids)) return p;
-            // A champion added since (a new release): tally again
-            p.deinit(gpa);
-            e.people = null;
-        }
+    /// The tallies for st's champions, made on the first call with them: they read st
+    /// only for its ids, so whichever view comes first makes the same
+    pub fn tallies(e: *Extras, gpa: std.mem.Allocator, io: std.Io, db: store.Db, st: *const Stats, opts: Options) !*const People {
+        try e.people_mutex.lock(io);
+        defer e.people_mutex.unlock(io);
+        for (e.people.items) |p| if (std.mem.eql(u32, p.ids, st.ids)) return p;
+        // Waited on another view's that failed
+        try e.going();
         const sets: []const []const []const u8 = if (opts.euw_only)
             &.{opts.platforms}
         else
@@ -140,15 +160,24 @@ pub const Extras = struct {
         for (html.View.all, &spreads) |v, *s| s.* = viewSlice(opts, v.region, v.period);
         var learnings: [2]stats.Slice = undefined;
         for ([_]html.Period{ .days30, .patch }, &learnings) |period, *s| s.* = viewSlice(opts, .all, period);
+        try e.people.ensureUnusedCapacity(gpa, 1);
+        const p = try gpa.create(People);
+        errdefer gpa.destroy(p);
         const ids = try gpa.dupe(u32, st.ids);
         errdefer gpa.free(ids);
         // Learning after pool: it reads the bins pool's mastery pass finds
         var pools = try pool.tally(gpa, db, st, sets, &spreads, e.games);
         errdefer pools.deinit(gpa);
         const learnt = try learning.tallyWith(gpa, db, st, &learnings, e.games);
-        e.people = .{ .ids = ids, .pool = pools, .learning = learnt };
+        p.* = .{ .ids = ids, .pool = pools, .learning = learnt };
+        e.people.appendAssumeCapacity(p);
         if (e.games) |g| log.info("partials: {d} mastery rows, {d} read", .{ g.counts.mastery, g.counts.mastery_read });
-        return &e.people.?;
+        return p;
+    }
+
+    /// error.Stopped once another view loading at once has failed
+    pub fn going(e: *const Extras) !void {
+        if (e.stopped.load(.monotonic)) return error.Stopped;
     }
 };
 

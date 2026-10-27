@@ -128,9 +128,15 @@ const SiteFlags = struct {
                 try curvesPath(arena, c.data_dir, p, true),
             } else @splat(null),
         };
+        // Each run or view opens its own SQLite connection: a typo like 400 must stop the
+        // build, not open hundreds
         if (c.init.environ_map.get("MEIOLOL_FILTER_RUNS")) |v| {
             opts.filter_runs = std.fmt.parseInt(usize, v, 10) catch 0;
-            if (opts.filter_runs == 0) return error.BadFilterRuns;
+            if (opts.filter_runs == 0 or opts.filter_runs > 64) return error.BadFilterRuns;
+        }
+        if (c.init.environ_map.get("MEIOLOL_VIEW_LOADS")) |v| {
+            opts.view_loads = std.fmt.parseInt(usize, v, 10) catch 0;
+            if (opts.view_loads == 0 or opts.view_loads > site.html.View.count) return error.BadViewLoads;
         }
         return opts;
     }
@@ -354,7 +360,7 @@ pub fn cmdRender(c: *Cmd) !u8 {
     first.loaded.lazy = false;
     // From the database in the background once listening (alone), else before
     const background_load = from_file == null and alone;
-    if (from_file == null and !alone) loadViews(first.loaded) catch |err| {
+    if (from_file == null and !alone) first.loaded.loadAll() catch |err| {
         first.free(gpa);
         return err;
     };
@@ -384,7 +390,7 @@ fn listening(io: std.Io, host: []const u8, port: u16) bool {
 /// (exiting on failure, for systemd to start again; `ready` after it), then reloads
 fn background(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u8, rendered: *serve.Rendered, first: ?*site.Loaded, ready: ?[]const u8, reload: ?[]const u8) void {
     if (first) |l| {
-        loadViews(l) catch |err| {
+        l.loadAll() catch |err| {
             std.log.err("render load: {t}", .{err});
             std.process.exit(1);
         };
@@ -420,14 +426,6 @@ fn prepare(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u8) !Loa
     return .{ .loaded = try site.Loaded.init(gpa, c.init.io, db, opts), .arena = arena };
 }
 
-/// Every view, the root (most visited) and the shared one first
-fn loadViews(loaded: *site.Loaded) !void {
-    for (site.html.View.all) |v| {
-        if (loaded.opts.euw_only and v.region != .euw) continue;
-        try loaded.loadView(v);
-    }
-}
-
 /// Every view from the --views file; null without one, or when it can't be read
 /// (missing, or another binary's types wrote it: a deploy that changed them)
 fn fromViewsFile(c: *Cmd, f: *const SiteFlags, db: store.Db) ?LoadedAll {
@@ -450,14 +448,14 @@ fn fromViewsFile(c: *Cmd, f: *const SiteFlags, db: store.Db) ?LoadedAll {
     return .{ .loaded = loaded, .arena = arena };
 }
 
-/// prepare and loadViews: every view loaded, not on its first request
+/// prepare and Loaded.loadAll: every view loaded, not on its first request
 fn loadAll(c: *Cmd, f: *const SiteFlags, db: store.Db, contact: []const u8) !LoadedAll {
     const l = try prepare(c, f, db, contact);
     errdefer l.free(c.init.gpa);
     if (f.reuse) if (f.views) |path| try l.loaded.reuseViews(path);
     l.loaded.extras.partials_dir = f.partials_dir;
     l.loaded.lazy = false;
-    try loadViews(l.loaded);
+    try l.loaded.loadAll();
     return l;
 }
 

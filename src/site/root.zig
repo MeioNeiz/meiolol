@@ -114,6 +114,10 @@ pub const Options = struct {
     /// connection: the walk waits on the disk (cold B-tree pages one at a time), not the
     /// CPUs. MEIOLOL_FILTER_RUNS (host.env) sets it per host
     filter_runs: usize = 4,
+    /// Views loaded at once, each on its own connection (Loaded.loadAll): each view's
+    /// stats take one CPU for minutes. 1, one after another, suits a 2-CPU host.
+    /// MEIOLOL_VIEW_LOADS (host.env) sets it per host
+    view_loads: usize = 1,
 };
 
 pub const Static = enum {
