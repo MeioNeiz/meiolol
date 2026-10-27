@@ -5,6 +5,7 @@
 //! at most). Chips sit under the name in a narrow panel (Daily's seat panel), inline in
 //! a wide one (draft tester). Words mode (the public app: product rules, why.md): no
 //! numbers, reasons as words with a direction
+const std = @import("std");
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
 const champ = @import("champ.zig");
@@ -45,8 +46,12 @@ pub const Row = struct {
     /// Rows left out above this one (the played pick far down the list)
     gap: bool = false,
     open: bool = false,
-    /// What opens under the row
+    /// What opens under the row, in the list's mode
     detail: ?reasons.Breakdown = null,
+    /// The button's name when it opens a detail ("Why Gnar"); null: the champion's name
+    label: ?tree.Text = null,
+    /// Page-unique id of the open detail, for aria-controls; "" for none
+    id: []const u8 = "",
     on: ?tree.Handler = null,
     /// The app's click (ui/practice.zig Act); "" for none
     act: []const u8 = "",
@@ -84,8 +89,8 @@ pub fn view(h: *H, l: List) N {
         if (l.base) |b| h.div(.{ .class = "r base" }, .{
             h.span(.{ .class = "rk" }, .{}),
             h.span(.{ .class = "nm" }, .{b.label}),
-            h.span(.{ .class = "v" }, .{phrase.num(h, .rate, b.win)}),
-            h.span(.{ .class = "d" }, .{}),
+            if (l.mode == .points) h.span(.{ .class = "v" }, .{phrase.num(h, .rate, b.win)}) else null,
+            if (l.mode == .points) h.span(.{ .class = "d" }, .{}) else null,
         }) else null,
         rows.done(),
     });
@@ -93,13 +98,13 @@ pub fn view(h: *H, l: List) N {
 
 fn row(h: *H, l: List, r: Row, key: usize) N {
     var chips = h.list();
-    for (r.reasons[0..@min(3, r.reasons.len)], 0..) |x, j| chips.add(chip.view(h, .{ .v = .reason }, .{
+    for (r.reasons[0..@min(3, r.reasons.len)]) |x| chips.add(chip.view(h, .{ .v = .reason }, .{
         x.text,
         " ",
         if (l.mode == .points)
-            h.b(.{ .key = j, .style = h.vars(.{ .c = fmt.Step.of(x.pp, fmt.win_cuts) }) }, .{phrase.num(h, .points, x.pp)})
+            h.b(.{ .style = h.vars(.{ .c = fmt.Step.of(x.pp, fmt.win_cuts) }) }, .{phrase.num(h, .points, x.pp)})
         else
-            h.b(.{ .key = j, .data_up = x.pp > 0, .aria_label = if (x.pp > 0) W.up else W.down }, .{if (x.pp > 0) "▲" else "▼"}),
+            reasons.arrow(h, x.pp),
     }));
     const pressable = r.on != null or r.act.len > 0;
     // Only the name is the button (a short label); its ::after stretches over the row
@@ -110,7 +115,9 @@ fn row(h: *H, l: List, r: Row, key: usize) N {
             if (pressable) h.button(.{
                 .class = "pk",
                 .type = "button",
+                .aria_label = r.label,
                 .aria_expanded = if (r.detail != null or r.open) r.open else null,
+                .aria_controls = if (r.open and r.detail != null and r.id.len > 0) r.id else null,
                 .on_click = r.on,
                 .data_act = if (r.act.len > 0) r.act else null,
             }, who) else h.span(.{ .class = "pk" }, who),
@@ -124,15 +131,17 @@ fn row(h: *H, l: List, r: Row, key: usize) N {
         }, .{if (r.vs) |d| phrase.num(h, .points, d) else null}) else null,
         if (r.reasons.len > 0) h.span(.{ .class = "why" }, .{chips.done()}) else null,
     });
-    const det: ?N = if (r.open) if (r.detail) |d| h.div(.{ .key = 1, .class = "det" }, .{reasons.view(h, d)}) else null else null;
+    const det: ?N = if (r.open) if (r.detail) |d| h.div(.{
+        .key = 1,
+        .class = "det",
+        .id = if (r.id.len > 0) r.id else null,
+    }, .{reasons.view(h, d, l.mode)}) else null else null;
     return h.div(.{ .key = key, .class = "row" }, .{ head, det });
 }
 
 const W = struct {
     const played = plain("played");
     const star = plain("The model's pick");
-    const up = plain("helps");
-    const down = plain("hurts");
 };
 
 pub const css =
@@ -159,8 +168,8 @@ pub const css =
     \\  .c-cand .hd .v, .c-cand .hd .d { font-weight: var(--w-r); color: var(--faint); font-size: var(--fs-xs); }
     \\  .c-cand .why { grid-column: 2 / -1; display: flex; gap: 4px; flex-wrap: wrap; padding-left: 32px; }
     \\  .c-cand .why b { color: var(--c); font-weight: var(--w-b); }
-    \\  .c-cand .why b[data-up] { color: var(--hi2); }
-    \\  .c-cand .why b:not([data-up]):not([style]) { color: var(--lo2); }
+    \\  .c-cand .why b[data-dir="up"] { color: var(--hi2); }
+    \\  .c-cand .why b[data-dir="down"] { color: var(--lo2); }
     \\  .c-cand .base { color: var(--muted); }
     \\  .c-cand .base .v { font-weight: var(--w-r); }
     \\  .c-cand .det { padding: 0 var(--sp-2) var(--sp-1) 38px; background: var(--panel-2); border-bottom: 1px solid var(--line); }
@@ -214,10 +223,15 @@ const words_rows = [_]Row{
 };
 
 fn sample(h: *H, g: *Gallery, open: bool) List {
-    const rows = h.mem.dupe(Row, &sample_rows) catch return .{ .rows = &.{} };
+    const rows = h.mem.dupe(Row, &sample_rows) catch {
+        h.oom = true;
+        return .{ .rows = &.{} };
+    };
     for (rows) |*r| r.act = "x";
     rows[2].open = open;
-    rows[2].detail.?.tip_id = g.id("cand-rest");
+    rows[2].label = plain("Why Jayce");
+    rows[2].id = g.id("cand-why");
+    if (rows[2].detail) |*d| d.tip_id = g.id("cand-rest");
     return .{ .rows = rows, .head = .{ plain("Red's win chance"), plain("with"), plain("vs played") } };
 }
 
@@ -226,11 +240,83 @@ pub fn gallery(g: *Gallery) void {
     g.addFill("seat panel, played row open", view(h, sample(h, g, true)));
     var gap = sample(h, g, false);
     gap.base = .{ .label = plain("Average top"), .win = 47.5 };
-    const rows = h.mem.alloc(Row, gap.rows.len) catch return;
+    if (gap.rows.len != sample_rows.len) return;
+    const rows = h.mem.alloc(Row, gap.rows.len) catch {
+        h.oom = true;
+        return;
+    };
     for (rows, [_]usize{ 0, 1, 3, 4, 2 }) |*r, i| r.* = gap.rows[i];
     rows[4].rank = 10;
     rows[4].gap = true;
     gap.rows = rows;
     g.addFill("average pinned, played far down", view(h, gap));
     g.addFill("words, public app", view(h, .{ .mode = .words, .ref_label = plain("locked in"), .rows = &words_rows }));
+}
+
+const testing = std.testing;
+
+fn render(a: std.mem.Allocator, l: List) ![]const u8 {
+    const html = @import("html.zig");
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    var out: std.Io.Writer.Allocating = .init(a);
+    try html.write(&t, view(&h, l), &out.writer);
+    return out.written();
+}
+
+test "rows: empty, one, three chips at most, no rank, a gap; buttons only when pressable" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const count = std.mem.count;
+    var s = try render(a, .{ .rows = &.{} });
+    try testing.expectEqual(0, count(u8, s, "class=\"row\""));
+
+    const four = [_]Reason{
+        .{ .text = plain("a"), .pp = 1 },  .{ .text = plain("b"), .pp = 1 },
+        .{ .text = plain("c"), .pp = -1 }, .{ .text = plain("d"), .pp = 1 },
+    };
+    s = try render(a, .{ .rows = &.{.{ .champ = demo("Jax", "Jax"), .reasons = &four, .gap = true }} });
+    try testing.expectEqual(1, count(u8, s, "class=\"row\""));
+    try testing.expectEqual(3, count(u8, s, "c-chip"));
+    try testing.expectEqual(1, count(u8, s, "class=\"gap\""));
+    try testing.expectEqual(0, count(u8, s, "<button"));
+    try testing.expect(std.mem.find(u8, s, "<span class=\"rk\"></span>") != null);
+}
+
+test "open: the detail under its row, controlled by its button; closed or without one, none" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const find = std.mem.find;
+    var r: Row = .{ .champ = demo("Jayce", "Jayce"), .act = "x", .detail = reasons.sample, .label = plain("Why Jayce"), .id = "why-1" };
+    var s = try render(a, .{ .rows = &.{r} });
+    try testing.expect(find(u8, s, "aria-expanded=\"false\"") != null);
+    try testing.expect(find(u8, s, "aria-controls") == null);
+    try testing.expect(find(u8, s, "c-wf") == null);
+    r.open = true;
+    s = try render(a, .{ .rows = &.{r} });
+    try testing.expect(find(u8, s, "aria-expanded=\"true\"") != null);
+    try testing.expect(find(u8, s, "aria-controls=\"why-1\"") != null);
+    try testing.expect(find(u8, s, "id=\"why-1\"") != null);
+    try testing.expect(find(u8, s, "aria-label=\"Why Jayce\"") != null);
+    r.detail = null;
+    s = try render(a, .{ .rows = &.{r} });
+    try testing.expect(find(u8, s, "c-wf") == null);
+    try testing.expect(find(u8, s, "aria-expanded=\"true\"") != null);
+    try testing.expect(find(u8, s, "aria-controls") == null);
+}
+
+test "words: no numbers anywhere, the pinned base and an open detail included" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var rows = sample_rows;
+    rows[2].open = true;
+    rows[2].act = "x";
+    const s = try render(a, .{ .rows = &rows, .mode = .words, .base = .{ .label = plain("Average top"), .win = 47.5 } });
+    try testing.expectEqual(0, std.mem.count(u8, s, "%"));
+    try testing.expect(std.mem.find(u8, s, "+0.") == null);
+    try testing.expect(std.mem.find(u8, s, "data-v=\"words\"") != null);
+    try testing.expect(std.mem.find(u8, s, "aria-label=\"helps\"") != null);
 }

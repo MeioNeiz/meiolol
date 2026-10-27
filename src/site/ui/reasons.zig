@@ -4,6 +4,7 @@
 //! seat panel, the draft tester, the desktop's "why"). Words mode (the public app, no
 //! numbers: production-key product rules; docs/plan/ui/why.md) keeps the terms as words
 //! with a direction only
+const std = @import("std");
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
 const toggletip = @import("toggletip.zig");
@@ -40,7 +41,6 @@ pub const Breakdown = struct {
     /// 95% range of the total, %
     low: ?f32 = null,
     high: ?f32 = null,
-    mode: Mode = .points,
     /// Page-unique id for the rest's toggletip; "" for none
     tip_id: []const u8 = "",
 };
@@ -51,8 +51,23 @@ pub fn total(b: Breakdown) f32 {
     return t;
 }
 
-pub fn view(h: *H, b: Breakdown) N {
-    if (b.mode == .words) return words(h, b);
+pub const Dir = enum { up, down, none };
+
+/// Zero and NaN have no direction
+pub fn dir(pp: f32) Dir {
+    return if (pp > 0) .up else if (pp < 0) .down else .none;
+}
+
+/// ▲ or ▼ with "helps" or "hurts" for screen readers; null for no direction. Colour it by
+/// [data-dir]
+pub fn arrow(h: *H, pp: f32) ?N {
+    const d = dir(pp);
+    if (d == .none) return null;
+    return h.b(.{ .role = "img", .data_dir = d, .aria_label = if (d == .up) W.up else W.down }, .{if (d == .up) "▲" else "▼"});
+}
+
+pub fn view(h: *H, b: Breakdown, mode: Mode) N {
+    if (mode == .words) return words(h, b);
     const sc = Scale.of(b);
     var rows = h.list();
     var cum = b.base;
@@ -84,16 +99,18 @@ pub fn view(h: *H, b: Breakdown) N {
         rows.add(h.span(.{ .key = k + 3, .class = "g" }, .{}));
         cum += r;
     }
-    const band: ?N = if (b.low != null and b.high != null) h.el(.s, .{ .style = h.vars(.{
-        .l = sc.x(b.low.?),
-        .w = sc.x(b.high.?) - sc.x(b.low.?),
-    }) }, .{}) else null;
+    var band: ?N = null;
+    var range: ?tree.Text = null;
+    if (b.low) |lo| if (b.high) |hi| {
+        band = h.el(.s, .{ .style = h.vars(.{ .l = sc.x(@min(lo, hi)), .w = sc.x(@max(lo, hi)) - sc.x(@min(lo, hi)) }) }, .{});
+        range = W.range.with(h, .{ .lo = lo, .hi = hi });
+    };
     return h.div(.{ .class = "c-wf" }, .{
         rows.done(),
         h.span(.{ .class = "lab tot" }, .{b.total_label}),
         h.span(.{ .class = "trk tot" }, .{ band, h.b(.{ .class = "at", .style = h.vars(.{ .l = sc.x(cum) }) }, .{}) }),
         h.span(.{ .class = "v tot" }, .{phrase.num(h, .rate, cum)}),
-        h.span(.{ .class = "g tot" }, .{if (band != null) W.range.with(h, .{ .lo = b.low.?, .hi = b.high.? }) else null}),
+        h.span(.{ .class = "g tot" }, .{range}),
         tip,
     });
 }
@@ -114,10 +131,7 @@ fn value(h: *H, pp: f32, key: usize) N {
 /// No numbers: each term as words and a direction
 fn words(h: *H, b: Breakdown) N {
     var rows = h.list();
-    for (b.terms, 0..) |t, i| rows.add(h.span(.{ .key = i, .class = "dir", .data_up = t.pp > 0 }, .{
-        t.label,
-        h.span(.{ .aria_hidden = true }, .{if (t.pp > 0) "▲" else "▼"}),
-    }));
+    for (b.terms, 0..) |t, i| rows.add(h.span(.{ .key = i, .class = "dir" }, .{ t.label, arrow(h, t.pp) }));
     return h.div(.{ .class = "c-wf", .data_v = Mode.words }, .{rows.done()});
 }
 
@@ -154,6 +168,8 @@ const W = struct {
     const rest = plain("Rest");
     const rest_note = plain("Every other pairing in the draft, summed.");
     const range = phrase.Phrase("{lo:dec}–{hi:dec}");
+    const up = plain("helps");
+    const down = plain("hurts");
 };
 
 pub const css =
@@ -178,8 +194,8 @@ pub const css =
     \\  .c-wf .trk.tot { display: block; height: auto; min-height: 14px; }
     \\  .c-wf[data-v="words"] { display: flex; flex-wrap: wrap; gap: 4px var(--sp-3); }
     \\  .c-wf .dir { display: inline-flex; align-items: center; gap: 4px; color: var(--t2); }
-    \\  .c-wf .dir > span { color: var(--lo2); font-size: var(--fs-xs); }
-    \\  .c-wf .dir[data-up] > span { color: var(--hi2); }
+    \\  .c-wf .dir > b { color: var(--lo2); font-size: var(--fs-xs); font-weight: var(--w-r); }
+    \\  .c-wf .dir > b[data-dir="up"] { color: var(--hi2); }
     \\  @container (max-width: 340px) {
     \\    .c-wf { grid-template-columns: minmax(72px, auto) minmax(40px, 1fr) auto; }
     \\    .c-wf .g { display: none; }
@@ -208,7 +224,7 @@ pub fn gallery(g: *Gallery) void {
     const h = g.h;
     var s = sample;
     s.tip_id = g.id("wf-rest");
-    g.addFill("points, range, rest", view(h, s));
+    g.addFill("points, range, rest", view(h, s, .points));
     g.addFill("below the average, no range", view(h, .{
         .base_label = plain("Average bot"),
         .base = 48.9,
@@ -218,8 +234,77 @@ pub fn gallery(g: *Gallery) void {
             .{ .label = plain("With Leona"), .pp = 0.3, .games = 660 },
         },
         .total_label = plain("Blue with Jinx"),
-    }));
-    var t = sample;
-    t.mode = .words;
-    g.addFill("words, public app", view(h, t));
+    }, .points));
+    g.addFill("words, public app", view(h, sample, .words));
+}
+
+const testing = std.testing;
+
+fn render(a: std.mem.Allocator, b: Breakdown, mode: Mode) ![]const u8 {
+    const html = @import("html.zig");
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    var out: std.Io.Writer.Allocating = .init(a);
+    try html.write(&t, view(&h, b, mode), &out.writer);
+    return out.written();
+}
+
+test "dir: zero and NaN have none" {
+    try testing.expectEqual(Dir.up, dir(0.1));
+    try testing.expectEqual(Dir.down, dir(-0.1));
+    try testing.expectEqual(Dir.none, dir(0));
+    try testing.expectEqual(Dir.none, dir(-0.0));
+    try testing.expectEqual(Dir.none, dir(std.math.nan(f32)));
+}
+
+test "the shown total is total(b); no terms, no rest, a lone low and a reversed band" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const find = std.mem.find;
+    try testing.expectApproxEqAbs(@as(f32, 48.9), total(sample), 0.001);
+    var s = try render(a, sample, .points);
+    try testing.expect(find(u8, s, "48.9%") != null);
+    try testing.expect(find(u8, s, "47.6–50.2") != null);
+    try testing.expect(find(u8, s, "4.1k games") != null);
+
+    const bare: Breakdown = .{ .base_label = plain("Average mid"), .base = 50, .terms = &.{}, .total_label = plain("Blue") };
+    s = try render(a, bare, .points);
+    try testing.expect(find(u8, s, "Rest") == null);
+    try testing.expect(find(u8, s, "<s style") == null);
+    try testing.expectEqual(2, std.mem.count(u8, s, "50.0%"));
+
+    var lone = bare;
+    lone.low = 48;
+    s = try render(a, lone, .points);
+    try testing.expect(find(u8, s, "<s style") == null);
+
+    var reversed = bare;
+    reversed.low = 52;
+    reversed.high = 48;
+    s = try render(a, reversed, .points);
+    try testing.expect(find(u8, s, "--w:-") == null);
+}
+
+test "words: no numbers, an arrow with a name only where a term has a direction" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const count = std.mem.count;
+    const s = try render(a, .{
+        .base_label = plain("Average top"),
+        .base = 47.5,
+        .terms = &.{
+            .{ .label = plain("Top strength"), .pp = 0.6 },
+            .{ .label = plain("Into Viktor"), .pp = -0.4 },
+            .{ .label = plain("With Vi"), .pp = 0 },
+            .{ .label = plain("Into Ahri"), .pp = std.math.nan(f32) },
+        },
+        .total_label = plain("Red"),
+    }, .words);
+    try testing.expectEqual(0, count(u8, s, "%"));
+    try testing.expectEqual(1, count(u8, s, "aria-label=\"helps\""));
+    try testing.expectEqual(1, count(u8, s, "aria-label=\"hurts\""));
+    try testing.expectEqual(2, count(u8, s, "role=\"img\""));
+    try testing.expectEqual(4, count(u8, s, "class=\"dir\""));
 }
