@@ -75,7 +75,7 @@ const SiteFlags = struct {
         const chosen = if (f.patches.items.len > 0) f.patches.items else try newestPatch(arena, db, &.{"EUW1"});
         const prev = try previousPatch(arena, db, chosen);
         const now_ms = std.Io.Clock.real.now(c.init.io).toMilliseconds();
-        return .{
+        var opts: site.Options = .{
             .out_dir = f.out orelse try std.fs.path.join(arena, &.{ c.data_dir, "site" }),
             .patches = chosen,
             .since_ms = now_ms - main.recent_days * std.time.ms_per_day,
@@ -128,6 +128,11 @@ const SiteFlags = struct {
                 try curvesPath(arena, c.data_dir, p, true),
             } else @splat(null),
         };
+        if (c.init.environ_map.get("MEIOLOL_FILTER_RUNS")) |v| {
+            opts.filter_runs = std.fmt.parseInt(usize, v, 10) catch 0;
+            if (opts.filter_runs == 0) return error.BadFilterRuns;
+        }
+        return opts;
     }
 };
 

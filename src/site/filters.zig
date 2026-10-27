@@ -127,10 +127,6 @@ const games_sql =
     \\ORDER BY +match_id
 ;
 
-/// Contiguous runs of the games counted at once, each on its own connection: the walk
-/// waits on the box's disk (cold B-tree pages one at a time), not its CPUs
-const runs = 4;
-
 const Match = struct {
     id: []const u8,
     winner: i64,
@@ -185,12 +181,12 @@ const Counting = struct {
 /// stats.scan (ten players, one per team and role, a winner), for every champion. In
 /// runs of games at once, merged in game order, so the tally matches a single walk's
 pub fn make(site: *const root.Site, db: store.Db, opts: root.Options) !Made {
-    return figures(site, opts, try tally(site, db, opts, runs, null));
+    return figures(site, opts, try tally(site, db, opts, opts.filter_runs, null));
 }
 
 /// As make, the games from the views partials
 pub fn makeFrom(site: *const root.Site, games: *const partials.Store, opts: root.Options) !Made {
-    return figures(site, opts, try tally(site, null, opts, runs, games));
+    return figures(site, opts, try tally(site, null, opts, opts.filter_runs, games));
 }
 
 fn figures(site: *const root.Site, opts: root.Options, t: Tally) !Made {
@@ -759,7 +755,7 @@ test "a game's rows, slots and bans, once per game" {
     site.arena = a;
     site.champs = &champs;
     site.view_curves = &no_curves;
-    const t = try tally(&site, db, opts, runs, null);
+    const t = try tally(&site, db, opts, opts.filter_runs, null);
     const slice: Slice = .{ .platform = 0, .patch = 0, .recent = true };
     const counts = struct {
         fn f(c: Cells, tier: u8, r: Role, opp: u16) !Counts {
@@ -843,7 +839,7 @@ test "runs on their own connections tally as one walk does" {
     site.champs = &champs;
     site.view_curves = &no_curves;
     const one = try tally(&site, memory_db, opts, 1, null);
-    const several = try tally(&site, file_db, opts, runs, null);
+    const several = try tally(&site, file_db, opts, opts.filter_runs, null);
     for (one.patches, several.patches) |x, y| try std.testing.expectEqualStrings(x, y);
     for (one.cells, several.cells) |x, y| {
         try std.testing.expectEqualSlices(Key, x.keys(), y.keys());

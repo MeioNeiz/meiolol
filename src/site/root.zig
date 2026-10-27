@@ -110,6 +110,10 @@ pub const Options = struct {
     lean: ?[]const u8 = null,
     /// `meiolol your-example`'s file, served as data/your-example.json where it exists
     your_example: ?[]const u8 = null,
+    /// Contiguous runs of the games filters.zig counts at once, each on its own
+    /// connection: the walk waits on the disk (cold B-tree pages one at a time), not the
+    /// CPUs. MEIOLOL_FILTER_RUNS (host.env) sets it per host
+    filter_runs: usize = 4,
 };
 
 pub const Static = enum {
