@@ -6,7 +6,7 @@
 # MEIOLOL_HOST points it elsewhere (the old gpu-box); the binary matches the host's CPU.
 set -euo pipefail
 
-HOST=${MEIOLOL_HOST:-meiolol-cloud}
+HOST=${MEIOLOL_HOST:-essex-vm}
 DIR=ml/meiolol
 # MEIOLOL_ROOT: the repo when this runs from on-push.sh's snapshot of deploy/
 ROOT=${MEIOLOL_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}

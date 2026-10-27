@@ -10,7 +10,7 @@ ROOT=${MEIOLOL_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
 common=$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)
 queue=$common/meiolol-deploy-events.tsv
 lock=$common/meiolol-deploy-events.lock
-host=${MEIOLOL_HOST:-meiolol-cloud}
+host=${MEIOLOL_HOST:-essex-vm}
 
 case "${1:-}" in
     add)

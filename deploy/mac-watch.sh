@@ -4,7 +4,7 @@
 # the box's backups (deploy/backup-mirror.sh: acked, so the box can drop its copy).
 # Catches what the box cannot report itself: the box down or unreachable.
 set -u
-HOST=${MEIOLOL_HOST:-meiolol-cloud}
+HOST=${MEIOLOL_HOST:-essex-vm}
 MIRROR=${MEIOLOL_MIRROR:-$HOME/Backups/meiolol}
 STATE=$HOME/.cache/meiolol-watch
 ROOT=$(cd "$(dirname "$0")/.." && pwd)

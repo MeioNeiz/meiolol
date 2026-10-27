@@ -15,7 +15,7 @@ data=${MEIOLOL_DEV_DATA:-data/snap}
 if [[ "${1:-}" == --exports ]]; then
     shift
     mkdir -p "$data/export"
-    box=${MEIOLOL_HOST:-meiolol-cloud}:ml/meiolol/data
+    box=${MEIOLOL_HOST:-essex-vm}:ml/meiolol/data
     rsync -az --include='*curves*.bin' --include='*builds*.json' --exclude='*' \
         "$box/export/" "$data/export/"
     rsync -az "$box/daily/" "$data/daily/"

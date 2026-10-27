@@ -82,7 +82,7 @@ while [[ -e "$state.pending" ]]; do
     # Docs and research pushes change nothing on the box: skip the build and site round
     # Timeouts as box.sh's: a hung connect would hold the lock (15 Oct: 3 h 25 min)
     deployed=$(ssh -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
-        "${MEIOLOL_HOST:-meiolol-cloud}" "tail -n 1 ml/meiolol/DEPLOYED" 2> /dev/null | cut -d' ' -f1)
+        "${MEIOLOL_HOST:-essex-vm}" "tail -n 1 ml/meiolol/DEPLOYED" 2> /dev/null | cut -d' ' -f1)
     if [[ -n "$deployed" ]] && git -C "$ROOT" cat-file -e "$deployed^{commit}" 2> /dev/null \
         && git -C "$ROOT" diff --quiet "$deployed" "$sha" -- src deploy build.zig build.zig.zon; then
         echo "$(now) origin/main: nothing to deploy since ${deployed:0:7}"

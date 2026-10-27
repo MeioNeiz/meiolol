@@ -21,7 +21,7 @@
 #   deploy/desktop-release.sh status            the box's release and the past ones
 set -euo pipefail
 
-HOST=${MEIOLOL_HOST:-meiolol-cloud}
+HOST=${MEIOLOL_HOST:-essex-vm}
 DIR=ml/meiolol
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 HERE=$ROOT/deploy
