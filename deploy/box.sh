@@ -418,6 +418,12 @@ SQL
                 contact=${3:-$(ssh "$HOST" "cat $DIR/contact 2>/dev/null" || true)}
                 [[ -n "$contact" ]] || { echo "usage: deploy/box.sh web start <contact email>"; exit 2; }
                 sync
+                # A c01-bench.sh run has the loop paused: restarting it or swapping the
+                # renderer would skew its timings. Its exit does both
+                if ssh "$HOST" "systemctl --user -q is-active meiolol-tune"; then
+                    echo "web held on $HOST: meiolol-tune runs, its exit starts meiolol-web and the render swap"
+                    exit 0
+                fi
                 if (( unchanged )) && [[ -z "${3:-}" ]] \
                     && ssh "$HOST" "systemctl --user -q is-active meiolol-web"; then
                     echo "meiolol-web keeps running on $HOST: nothing it runs changed"

@@ -105,6 +105,7 @@ while [[ -e "$state.pending" ]]; do
         case $line in
             "deployed "*) event "$sha" build ok "binary and scripts on the box"; flush ;;
             "signalled meiolol-web"* | "restarted meiolol-web"*) event "$sha" web ok "${line% on *}" ;;
+            "web held"*) event "$sha" web info "$line" ;;
         esac
     done
     rc=${PIPESTATUS[0]}

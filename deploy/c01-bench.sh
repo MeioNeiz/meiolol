@@ -18,16 +18,22 @@ median() { sort -n | awk '{a[NR] = $1} END {print NR ? a[int((NR + 1) / 2)] : ""
 args=(--contact "$(cat contact)" --origin https://meio.lol)
 [[ -s riot.txt ]] && args+=(--riot-txt "$(< riot.txt)")
 
+# While this runs a deploy copies a new bin/meiolol but holds the web loop and the
+# render swap (box.sh web start): the runs keep one binary, the exit catches up
+cp bin/meiolol "$S/meiolol"
 systemctl --user stop meiolol-web
 trap 'rm -rf data/site.tune data/views.tune.bin data/render-tune.ready;
-    systemctl --user start meiolol-web' EXIT
+    systemctl --user start meiolol-web
+    cmp -s bin/meiolol "$S/meiolol" || systemctl --user -q is-active meiolol-render-swap \
+        || systemd-run --user -q --collect --unit meiolol-render-swap \
+            --working-directory="$D" "$D/bin/render-swap.sh"' EXIT
 
 cores=() views=() loads=()
 for i in $(seq "$n"); do
     log "run $i: core build"
     rm -rf data/site.tune
     t=$SECONDS
-    if bin/meiolol site "${args[@]}" --out data/site.tune --static core \
+    if "$S/meiolol" site "${args[@]}" --out data/site.tune --static core \
         > "$S/core.log" 2>&1; then
         cores+=($((SECONDS - t)))
     else
@@ -37,7 +43,7 @@ for i in $(seq "$n"); do
     log "run $i: views write, every part fresh"
     rm -f data/views.tune.bin
     t=$SECONDS
-    if bin/meiolol site --views data/views.tune.bin "${args[@]}" > "$S/views.log" 2>&1; then
+    if "$S/meiolol" site --views data/views.tune.bin "${args[@]}" > "$S/views.log" 2>&1; then
         views+=($((SECONDS - t)))
     else
         log "views write failed: $S/views.log"
@@ -46,7 +52,7 @@ for i in $(seq "$n"); do
     # A renderer of its own on a spare port, loading the file just written
     log "run $i: renderer load"
     rm -f data/render-tune.ready
-    bin/meiolol render --contact "$(cat contact)" --host 127.0.0.1 --port 8099 \
+    "$S/meiolol" render --contact "$(cat contact)" --host 127.0.0.1 --port 8099 \
         --views data/views.tune.bin --ready data/render-tune.ready > "$S/render.log" 2>&1 &
     pid=$!
     until grep -q 'views file read in' "$S/render.log" || ! kill -0 "$pid" 2> /dev/null; do
