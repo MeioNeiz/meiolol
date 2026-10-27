@@ -135,7 +135,7 @@ nav.tabs a:hover { color: var(--text); }
 nav.tabs a[aria-current] { color: var(--text); border-bottom-color: var(--accent); }
 nav.switch button[aria-pressed="true"] { background: var(--panel-2); color: var(--text); }
 .chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
-.chips button, button.zoom, button.ghost {
+.chips button, button.zoom, button.ghost, a.ghost {
   font: inherit; font-size: 12px; color: var(--muted); background: var(--panel); border: 1px solid var(--line);
   border-radius: 999px; padding: 3px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
 }
@@ -149,7 +149,8 @@ a.download {
 }
 a.download span { font-weight: 500; opacity: 0.75; }
 a.download:hover { filter: brightness(1.1); }
-button.ghost:hover, .chips button:hover { color: var(--text); }
+button.ghost:hover, a.ghost:hover, .chips button:hover { color: var(--text); }
+a.ghost { text-decoration: none; }
 /* The signed-in account: one pill, name then Log out */
 .me {
   display: inline-flex; align-items: center; font-size: 12px; color: var(--muted); background: var(--panel);

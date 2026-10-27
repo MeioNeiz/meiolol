@@ -777,6 +777,8 @@ function render(keep) {
   }
   if (!PRIVATE) {
     controls.append(desktopLink());
+    // The notes tool's own "All notes" link shows only once it is on: this is the way in
+    controls.append(el("a", { class: "ghost", href: "notes.html", title: "Notes on the site, and the tool's on/off switch" }, "Notes"));
     controls.append(el("button", { type: "button", class: "ghost", title: "Fetch everything now", onclick: () => refreshAll() }, "Refresh"));
   }
   if (ME) controls.append(el("span", { class: "me", title: `Signed in as ${ME.username} (${ME.role})` },
