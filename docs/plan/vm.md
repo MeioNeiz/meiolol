@@ -271,7 +271,11 @@ than the spread between runs
   phase of both builds has cpu = wall (core build stats 29.4 s and 86.8 s; views write
   stats 398 s; partials 13.8 s wall vs 13.6 s cpu), with 47-49 GB of page cache warm
 - Core build: its two views (29 s, 87 s) load at once too, behind the same
-  MEIOLOL_VIEW_LOADS (write.zig: loaded at once, then written in the serial order)
+  MEIOLOL_VIEW_LOADS (55602bbf; write.zig: loaded at once, then written in the serial
+  order). C01, crawler paused, builds at 1 and 2 started together: all 285 files the
+  same (with it running, index.html's game count moves between the views' reads). Web
+  loop's site step 101 s on its first round (19:16), against 121-138 s, median ~127,
+  that day: ~26 s a round
 - Hyperthreads: `openssl speed -multi N sha256` 16 KB blocks, 27 Oct, web loop running:
   8 at 2.68 GB/s, 16 at 5.11 GB/s (1.9x): the 16 vCPU act as near 16 cores
 - Knob 4 (unit limits): a views write's peak at view loads 2 still to read, from
