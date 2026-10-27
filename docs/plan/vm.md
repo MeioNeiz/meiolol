@@ -43,6 +43,9 @@ VM6 done 27 Oct 06:34 UTC: meio.lol and www on C01's tunnel, C01 runs crawl, web
 render, backup, health, API; the Oracle box's units stopped and masked (kept, not
 terminated); the Mac's scripts default to essex-vm. VM3 results on C01:
 ~/vm-chain/results.md (core build 1.7x, views write 1.9x the box, render p50 8 ms).
+After CPU type host and 62 GB, AVX2 build, crawler and site live (~/vm-chain/bench-after.md):
+core build 222 s (box 287), site step 202-230 s, render p50 13 ms p95 22 ms at load 4-13
+with the page cache refilling after the reboot (IO pressure ~10%); measure render again.
 Left: push mode back to fast (Jacob), the gpu-box step (`deploy/vm-cutover.sh` again
 once it is on Tailscale), bench-crawl.sh seed on C01 (base db not created), then VM7-8.
 
