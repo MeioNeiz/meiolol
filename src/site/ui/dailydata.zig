@@ -254,7 +254,7 @@ test "valid: an index past the champions or the played pick missing from the opt
 }
 
 /// A pro draft for `sample`: red's last pick its played top, one ban not made
-const pro_turns = blk: {
+pub const pro_turns = blk: {
     var t: [20]Turn = undefined;
     for (&t, pro_sides, 0..) |*x, side, i| x.* = .{ .champ = @intCast(i % 12), .side = side };
     t[13].champ = null;

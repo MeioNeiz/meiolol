@@ -37,6 +37,8 @@ pub const patch_js = hashed("ui-patch.js", @embedFile("ui-patch.js"));
 pub const patch_wasm = hashed("ui-patch.wasm", @embedFile("ui-patch.wasm"));
 pub const pool_js = hashed("ui-pool.js", @embedFile("ui-pool.js"));
 pub const pool_wasm = hashed("ui-pool.wasm", @embedFile("ui-pool.wasm"));
+pub const daily_js = hashed("ui-daily.js", @embedFile("ui-daily.js"));
+pub const daily_wasm = hashed("ui-daily.wasm", @embedFile("ui-daily.wasm"));
 
 /// `plain` with 8 hex digits of `data`'s FNV-1a before its extension
 pub fn hashed(comptime plain: []const u8, comptime data: []const u8) Hashed {

@@ -356,7 +356,7 @@ pub const Site = struct {
 pub const File = daily.File;
 
 /// Also written by their plain names, with the same data (assets.zig)
-pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.search_js, assets.stats_js, assets.stats_wasm, assets.champion_js, assets.champion_wasm, assets.champbuild_js, assets.champbuild_wasm, assets.champmore_js, assets.champmore_wasm, assets.matchup_js, assets.matchup_wasm, assets.matchmore_js, assets.matchmore_wasm, assets.games_js, assets.games_wasm, assets.gamemore_js, assets.gamemore_wasm, assets.gamelane_js, assets.gamelane_wasm, assets.finder_js, assets.finder_wasm, assets.findergrid_js, assets.findergrid_wasm, assets.learn_js, assets.learn_wasm, assets.patch_js, assets.patch_wasm, assets.pool_js, assets.pool_wasm };
+pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.search_js, assets.stats_js, assets.stats_wasm, assets.champion_js, assets.champion_wasm, assets.champbuild_js, assets.champbuild_wasm, assets.champmore_js, assets.champmore_wasm, assets.matchup_js, assets.matchup_wasm, assets.matchmore_js, assets.matchmore_wasm, assets.games_js, assets.games_wasm, assets.gamemore_js, assets.gamemore_wasm, assets.gamelane_js, assets.gamelane_wasm, assets.finder_js, assets.finder_wasm, assets.findergrid_js, assets.findergrid_wasm, assets.learn_js, assets.learn_wasm, assets.patch_js, assets.patch_wasm, assets.pool_js, assets.pool_wasm, assets.daily_js, assets.daily_wasm };
 
 /// Front-end files at the site root; `Options.static_dir` serves them from disk instead
 pub const shared_assets = [_]File{
@@ -417,6 +417,7 @@ test {
     _ = yourgame;
     _ = scope;
     _ = @import("dailydata.zig");
+    _ = @import("daily.zig");
 }
 
 test robots {
@@ -518,10 +519,13 @@ pub fn renderShared(site: *const Site, w: *Writer, path: []const u8) !bool {
         try learn_page.write(site, w);
         return true;
     }
+    if (std.mem.eql(u8, path, "daily.html")) {
+        try daily_page.write(site, w);
+        return true;
+    }
     if (std.mem.eql(u8, path, yourgame.page_path)) return yourgame.writePage(site, w);
     const fixed = [_]struct { []const u8, []const u8, []const u8, html.Nav, *const fn (*Writer, prose.Info) Writer.Error!void }{
         .{ "method.html", "Method", "Where meiolol's numbers come from and how lane curves, champion statistics and the Daily Draft are made.", .method, prose.method },
-        .{ "daily.html", "Daily Draft", "Guess the hidden champion and the winner of a real ranked draft, then see what this patch's games say about it.", .daily, daily_page.page },
         .{ "download.html", "Champ select helper", "The meiolol champ select helper, a desktop app for Windows, in development.", .none, prose.download },
         .{ "your.html", "Your games", "Look yourself up: your lane in each recent ranked game against how the matchup typically goes, with your highlights, streaks and record per matchup.", .your, your_page.page },
         .{ "privacy.html", "Privacy policy", "What meiolol collects and why.", .none, prose.privacy },

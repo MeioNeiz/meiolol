@@ -336,10 +336,8 @@ test "fixture games to stats, curves and the website" {
         .{ "champion/darius.html", &.{ "<div class=\"c-cpage\" data-id=\"122\" data-roles=\"top\"><div class=\"part\" data-island=\"champion\" data-src=\"../data/champion/darius.bin\" data-stamp=\"", "<h1>Darius</h1>", "<span class=\"sum\">EUW · 30 days · Plat+</span>", "data-island=\"champbuild\" data-src=\"../data/champion/darius-build.bin\"", "<section class=\"c-card\" data-v=\"flush\"><div class=\"c-build\">", "<h2>Matchups</h2>", "data-island=\"champmore\" data-src=\"../data/champion/darius-more.bin\"", "data-js=\"../" ++ assets.champmore_js.path ++ "\" data-wasm=\"" ++ assets.champmore_wasm.path ++ "\"", "class=\"c-dots\"", "class=\"c-mpick\"", "href=\"../matchup/top/darius-vs-mordekaiser.html\"", "<h2>By patch</h2>", "<h2>By game length</h2>", "<script src=\"../" ++ assets.champion_js.path ++ "\" data-wasm=\"" ++ assets.champion_wasm.path ++ "\" defer></script>" } },
         .{ "champions.html", &.{ "<div class=\"c-tiers\" data-island=\"tiers\" data-src=\"data/tiers.bin\" data-stamp=\"", "data-base=\"\" data-view=\"0\" data-path=\"champions.html\"", "<h1>Champions</h1>", "<linearGradient id=\"c-violin-g\"", "<symbol id=\"ri-top\"", "<a href=\"all/champions.html\">All</a>", "<table class=\"c-table\">", "<script src=\"" ++ assets.stats_js.path ++ "\" data-wasm=\"" ++ assets.stats_wasm.path ++ "\" defer></script>" } },
         .{ "index.html", &.{"<a href=\"download.html\">Coming: a champ select helper for Windows</a>"} },
-        // Daily Draft: a recent game, read in words (no draft win chance,
-        // points or gold amounts); reasons from the list Learn uses; option cards and lane
-        // rows that static/daily.js fills
-        .{ "daily.html", &.{ "from recent games", "rated as if it were the last", "two standard errors on 200+ games", "<div id=\"options\" class=\"dd-options\"></div>", "<ul id=\"lanes\" class=\"dd-lanes\"></ul>", "<script src=\"reasons.js\" defer></script>", "<p id=\"crowd\" class=\"muted dd-crowd-note\" hidden></p>" } },
+        // Daily Draft (ui.dailypage): the fixture makes no puzzle, so the page says so
+        .{ "daily.html", &.{ "<h1>Daily Draft</h1>", "No puzzle today." } },
         .{ "privacy.html", &.{ "the date\nshown is the puzzle's, not the game's", "we keep only each puzzle's totals", "<h2 id=\"accounts\">Accounts</h2>" } },
         // Learn (ui.learnpage): the island with its chapters inline, a first visit on
         // chapter 1's first puzzle
@@ -365,7 +363,6 @@ test "fixture games to stats, curves and the website" {
         // The board, pool and its section follow the view
         .{ "patch/champions.html", &.{ "data-view=\"1\"", "<a href=\"../champions.html\">30 days</a>" } },
         .{ "all/pool.html", &.{ "<div class=\"c-poolpage\" data-island=\"pool\" data-bin=\"", "<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"all\"" } },
-        .{ "daily.html", &.{"From ranked solo games in EUW on patch 15.13"} },
         // Scope chips (site/scope.zig): what each block covers, marked where it doesn't
         // follow the page's picks
         // View links: this page in each view, the current one lit, ranks greyed

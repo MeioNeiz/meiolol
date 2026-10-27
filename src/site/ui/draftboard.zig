@@ -252,6 +252,8 @@ fn fullSeat(h: *H, s: Seat, side: Side, on: ?tree.Handler) N {
         .data_hidden = asked,
         .data_preview = asked and s.preview != null,
         .aria_pressed = s.sel,
+        // The game line's cells would make a long name
+        .aria_label = if (shown) |c| tree.Text{ .s = c.name } else words.hidden,
         .on_click = on,
     }, kids);
 }

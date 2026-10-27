@@ -170,10 +170,13 @@ detected reason that clears chance, else its usual gold at 14 against the enemy)
   CS, gold, damage to champions, gold14 (null without a timeline; new puzzles prefer
   games with one). Puzzles made before it get `players` from the used.txt game with the
   same ten champions (`backfillPlayers`). `tier` is the median of the known ranks
-- Site: daily.html + daily.js, daily/index.json ([{n, date}]) and daily/<n>.json. The
-  page shows the viewer's local date's puzzle (hence two days ahead), ?n= for the
-  archive. Guesses, streak and archive in localStorage (key meiolol.daily.v1); share
-  text is an emoji grid with the link
+- Site: daily/index.json ([{n, date}]), daily/<n>.json and daily/<n>.bin (the page's
+  data, site/dailydata.zig). daily.html (site/daily.zig, per request) is the island
+  (ui.dailypage, ui-daily.wasm) with the newest puzzle up to today (UTC) in its data-bin:
+  pick, Lock in, who won, then the board grown, the seat panel and On paper. Answers in
+  localStorage meiolol.daily.v1 (object by n, {opt, side, marks, on}; Home reads marks).
+  Not yet in the island: the viewer's local date, ?n= archive, streak, share, crowd
+  counts (daily.js had them; it and reasons.js are no longer linked)
 
 ## Your games service (src/api, src/site/your.zig, static/your.js)
 
