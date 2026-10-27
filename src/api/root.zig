@@ -18,6 +18,8 @@
 //!                                   index 0-5, side 0 blue or 1 red), counted; returns
 //!                                   the counts as GET does
 //!   GET  /api/daily?n=N             how many picked each option and each side
+//!   /api/notes                      notes on the live site (notes.zig), for a login with
+//!                                   take_notes
 
 const std = @import("std");
 const Io = std.Io;
@@ -36,6 +38,7 @@ pub const pagedata = @import("pagedata.zig");
 pub const devfixture = @import("devfixture.zig");
 const ui = @import("ui");
 pub const friends = @import("friends.zig");
+pub const notes = @import("notes.zig");
 
 const Allocator = std.mem.Allocator;
 const log = std.log.scoped(.api);
@@ -376,6 +379,7 @@ fn handle(ctx: *Context, request: *std.http.Server.Request) !void {
         const r = try daily(arena, db, query, method == .POST, daily_today(ctx.io));
         return send(ctx, request, r);
     }
+    if (std.mem.eql(u8, path, "/api/notes")) return notesRequest(ctx, arena, request, query);
     if (std.mem.eql(u8, path, "/api/health") and method == .GET) {
         const db = try cache.open(ctx.opts.db_path);
         defer db.close();
@@ -383,6 +387,44 @@ fn handle(ctx: *Context, request: *std.http.Server.Request) !void {
         return send(ctx, request, .{ .status = .ok, .body = try arena.print("{{\"ok\":true,\"jobs\":{d}}}", .{jobs}) });
     }
     return send(ctx, request, .{ .status = .not_found, .body = "{\"error\":\"not found\"}" });
+}
+
+/// /api/notes for a login with take_notes; a write also needs X-Meiolol-Action: 1, which a
+/// cross-site form can't send
+fn notesRequest(ctx: *Context, arena: Allocator, request: *std.http.Server.Request, query_head: []const u8) !void {
+    const method: notes.Method = switch (request.head.method) {
+        .GET => .GET,
+        .POST => .POST,
+        .PATCH => .PATCH,
+        else => return send(ctx, request, try errorReply(arena, .method_not_allowed, "error", "method not allowed")),
+    };
+    // Reading the body invalidates the head's strings
+    const query = try arena.dupe(u8, query_head);
+    const action = if (accounts.header(request, "x-meiolol-action")) |v| std.mem.eql(u8, v, "1") else false;
+    const now = Io.Clock.real.now(ctx.io).toSeconds();
+    const who = who: {
+        const token = accounts.cookieToken(request) orelse
+            return send(ctx, request, try errorReply(arena, .unauthorized, "error", "not signed in"));
+        const db = try accounts.open(ctx.opts.accounts_path);
+        defer db.close();
+        break :who try accounts.session(db, arena, token, now) orelse
+            return send(ctx, request, try errorReply(arena, .unauthorized, "error", "not signed in"));
+    };
+    if (!who.role.can(.take_notes)) return send(ctx, request, try errorReply(arena, .forbidden, "error", "your role cannot take notes"));
+    if (method != .GET and !action) return send(ctx, request, try errorReply(arena, .forbidden, "error", "missing X-Meiolol-Action"));
+    var body: []const u8 = "";
+    if (method != .GET) {
+        var body_buf: [1024]u8 = undefined;
+        const r = try request.readerExpectContinue(&body_buf);
+        body = r.allocRemaining(arena, .limited(notes.max_body)) catch |err| switch (err) {
+            error.StreamTooLong => return send(ctx, request, try errorReply(arena, .payload_too_large, "error", "too long")),
+            else => return err,
+        };
+    }
+    const db = try cache.open(ctx.opts.db_path);
+    defer db.close();
+    const r = try notes.handle(arena, db, method, query, body, who.username, now);
+    return send(ctx, request, .{ .status = r.status, .body = r.body, .binary = r.binary });
 }
 
 /// JSON, or ui.data's binary when 200 from a binary call (errors stay JSON)
@@ -1113,6 +1155,60 @@ test "daily: counts a finished puzzle's answers, refuses junk and puzzles not ou
     try std.testing.expectEqual(@as(?i64, 4), try db.scalar("SELECT sum(count) FROM daily_answers", .{}));
 }
 
+/// One request on its own connection, as nginx passes it on; the answer's bytes
+fn notesCall(ctx: *Context, arena: Allocator, method: []const u8, query: []const u8, token: ?[]const u8, action: bool, body: []const u8) ![]const u8 {
+    var req: Io.Writer.Allocating = .init(arena);
+    try req.writer.print("{s} /api/notes{s} HTTP/1.1\r\nHost: x\r\nContent-Length: {d}\r\n", .{ method, query, body.len });
+    if (token) |t| try req.writer.print("Cookie: a=b; " ++ accounts.cookie_name ++ "={s}\r\n", .{t});
+    if (action) try req.writer.writeAll("X-Meiolol-Action: 1\r\n");
+    try req.writer.print("\r\n{s}", .{body});
+    var out: Io.Writer.Allocating = .init(arena);
+    serveBytes(ctx, req.written(), &out.writer);
+    return out.written();
+}
+
+test "/api/notes: a take_notes login only, and a write needs X-Meiolol-Action" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var ctx = testContext();
+    defer ctx.accounts.deinit();
+    ctx.opts.db_path = try arena.printSentinel(".zig-cache/tmp/{s}/api.db", .{&tmp.sub_path}, 0);
+    ctx.opts.accounts_path = try arena.printSentinel(".zig-cache/tmp/{s}/accounts.db", .{&tmp.sub_path}, 0);
+    const now = Io.Clock.real.now(io).toSeconds();
+    const adb = try accounts.open(ctx.opts.accounts_path);
+    defer adb.close();
+    const admin = try accounts.startSession(adb, io, try accounts.create(adb, "jacob", "x", .admin, now), now);
+    const private = try accounts.startSession(adb, io, try accounts.create(adb, "friend", "x", .private, now), now);
+    var new: std.ArrayList(u8) = .empty;
+    try ui.data.encode(arena, ui.notesdata.New, .{ .path = "/a", .text = "Too wide" }, &new);
+    const big: [notes.max_body + 1]u8 = @splat(0);
+
+    const refused = [_]struct { []const u8, ?[]const u8, bool, []const u8, []const u8 }{
+        .{ "GET", null, false, "", "401" },
+        .{ "GET", &private, false, "", "403" },
+        .{ "POST", &private, true, new.items, "403" },
+        .{ "POST", &admin, false, new.items, "403" },
+        .{ "PUT", &admin, true, new.items, "405" },
+        .{ "POST", &admin, true, &big, "413" },
+    };
+    for (refused) |c| {
+        const out = try notesCall(&ctx, arena, c[0], "?path=/a", c[1], c[2], c[3]);
+        try std.testing.expectStringStartsWith(out, try arena.print("HTTP/1.1 {s} ", .{c[4]}));
+    }
+    try std.testing.expectStringStartsWith(try notesCall(&ctx, arena, "POST", "", &admin, true, new.items), "HTTP/1.1 200 ");
+    const got = try notesCall(&ctx, arena, "GET", "?path=/a", &admin, false, "");
+    try std.testing.expectStringStartsWith(got, "HTTP/1.1 200 ");
+    const at = std.mem.find(u8, got, "\r\n\r\n") orelse return error.TestUnexpectedResult;
+    const list = try ui.data.decode(arena, ui.notesdata.List, got[at + 4 ..]);
+    try std.testing.expectEqual(1, list.notes.len);
+    try std.testing.expectEqualStrings("jacob", list.notes[0].author);
+    try std.testing.expectEqualStrings("Too wide", list.notes[0].text);
+}
+
 const fuzz_token: accounts.Token = @splat('A');
 
 /// What nginx passes on, each followed by a second request on the same connection
@@ -1122,6 +1218,8 @@ const fuzz_requests = [_][]const u8{
     "GET /api/forget?id=A%231 HTTP/1.1\r\nHost: x\r\n\r\n",
     "POST /api/daily?n=3&pick=2&side=0 HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n",
     "GET /api/daily?n=3 HTTP/1.1\r\nHost: x\r\n\r\n",
+    "GET /api/notes?path=/a HTTP/1.1\r\nHost: x\r\nCookie: " ++ accounts.cookie_name ++ "=" ++ fuzz_token ++ "\r\n\r\n",
+    "PATCH /api/notes?id=1 HTTP/1.1\r\nHost: x\r\nX-Meiolol-Action: 1\r\nContent-Length: 3\r\n\r\nabc",
     "GET /api/game?id=A%231&start=1791720000000 HTTP/1.1\r\nHost: x\r\n\r\n",
     "GET /api/list?id=A%231&refresh=1 HTTP/1.1\r\nHost: x\r\n\r\n",
     "GET /api/list?id=A%231&cached=1&n=20 HTTP/1.1\r\nHost: x\r\n\r\n",

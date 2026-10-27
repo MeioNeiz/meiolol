@@ -34,6 +34,8 @@ pub const Capability = enum {
     view_private,
     download_private_app,
     view_admin,
+    /// Notes on the live site (api/notes.zig), and the marker cookie that loads the tool
+    take_notes,
     manage_accounts,
     /// The admin page's controls: crawl, site build, eval, health check
     run_actions,
@@ -60,6 +62,7 @@ const lowest: std.EnumArray(Capability, Role) = .init(.{
     .view_private = .private,
     .download_private_app = .private,
     .view_admin = .admin,
+    .take_notes = .admin,
     .manage_accounts = .admin,
     .run_actions = .owner,
     .manage_admins = .owner,

@@ -1,10 +1,11 @@
-//! api.db: looked-up accounts and players, the refresh queue, matches cached by id, and
-//! Daily Draft answer counts. Own file, separate from the crawler's databases: the
+//! api.db: looked-up accounts and players, the refresh queue, matches cached by id, Daily
+//! Draft answer counts and notes on the site (notes.zig). Own file, separate from the crawler's databases: the
 //! service runs on the web server.
 
 const std = @import("std");
 const store = @import("store");
 const game = @import("game.zig");
+const notes = @import("notes.zig");
 
 const Db = store.Db;
 
@@ -106,7 +107,8 @@ pub const schema =
     \\    count INTEGER NOT NULL,
     \\    PRIMARY KEY (n, pick, side)
     \\) WITHOUT ROWID;
-;
+    \\
+++ notes.schema;
 
 /// Job keys for a player's backlog: this prefix, then the PUUID
 pub const history_prefix = "history:";

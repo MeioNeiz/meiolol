@@ -12,6 +12,7 @@ const store = @import("store");
 const httpd = @import("net").server;
 const client = @import("net").client;
 pub const admin_api = @import("admin_api.zig");
+const notes = @import("api/notes.zig");
 
 const log = std.log.scoped(.serve);
 
@@ -131,6 +132,8 @@ pub const Dev = struct {
     mtime: i96,
     /// Where /api/ goes, as nginx sends it on the site: `meiolol api --fixture`'s default
     api: []const u8 = "http://127.0.0.1:8090",
+    /// /api/notes answered here (notes.zig) without a login: the notes tool runs on its own
+    notes_db: [:0]const u8 = "",
 
     pub fn init(gpa: std.mem.Allocator, io: Io, argv: []const []const u8, static_dir: []const u8) !Dev {
         const args = try gpa.dupe([]const u8, argv);
@@ -199,6 +202,54 @@ fn proxyApi(ctx: *Context, d: Dev, request: *std.http.Server.Request) !void {
     });
 }
 
+fn isNotes(target: []const u8) bool {
+    const path = target[0 .. std.mem.findScalar(u8, target, '?') orelse target.len];
+    return std.mem.eql(u8, path, "/api/notes");
+}
+
+/// The site's /api/notes into the dev file, as user "dev"
+fn devNotes(ctx: *Context, d: Dev, request: *std.http.Server.Request) !void {
+    var arena_state: std.heap.ArenaAllocator = .init(ctx.gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const method: notes.Method = switch (request.head.method) {
+        .GET => .GET,
+        .POST => .POST,
+        .PATCH => .PATCH,
+        else => return request.respond("method not allowed\n", .{ .status = .method_not_allowed, .keep_alive = false }),
+    };
+    // Reading the body invalidates the head's strings
+    const target = try arena.dupe(u8, request.head.target);
+    const query = if (std.mem.findScalar(u8, target, '?')) |q| target[q + 1 ..] else "";
+    var body: []const u8 = "";
+    if (method != .GET) {
+        var body_buf: [1024]u8 = undefined;
+        const r = try request.readerExpectContinue(&body_buf);
+        body = r.allocRemaining(arena, .limited(notes.max_body)) catch |err| switch (err) {
+            error.StreamTooLong => return request.respond("too long\n", .{ .status = .payload_too_large, .keep_alive = false }),
+            else => return err,
+        };
+    }
+    const db = try store.Db.open(d.notes_db);
+    defer db.close();
+    try db.exec(notes.schema);
+    const r = try notes.handle(arena, db, method, query, body, "dev", Io.Clock.real.now(ctx.io).toSeconds());
+    return request.respond(r.body, .{
+        .status = r.status,
+        .extra_headers = &.{
+            .{ .name = "content-type", .value = if (r.binary) "application/octet-stream" else "application/json" },
+            .{ .name = "cache-control", .value = "no-store" },
+        },
+    });
+}
+
+test isNotes {
+    try std.testing.expect(isNotes("/api/notes"));
+    try std.testing.expect(isNotes("/api/notes?path=/a"));
+    try std.testing.expect(!isNotes("/api/notesx"));
+    try std.testing.expect(!isNotes("/api/games?id=a"));
+}
+
 fn mtime(io: Io, dir: Io.Dir, path: []const u8) i96 {
     const st = dir.statFile(io, path, .{}) catch return 0;
     return st.mtime.toNanoseconds();
@@ -230,6 +281,7 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
             request.head.method == .GET and admin_api.allowed(api, request)) return pages(ctx, r, request);
         if (try admin_api.handle(api, request)) return;
     }
+    if (ctx.opts.dev) |d| if (d.notes_db.len > 0 and isNotes(request.head.target)) return devNotes(ctx, d, request);
     if (ctx.opts.dev) |d| if (std.mem.startsWith(u8, request.head.target, "/api/")) return proxyApi(ctx, d, request);
     if (request.head.method != .GET and request.head.method != .HEAD) {
         return request.respond("method not allowed\n", .{ .status = .method_not_allowed, .keep_alive = false });

@@ -80,6 +80,7 @@ pub const learndata = @import("learndata.zig");
 pub const dailydata = @import("dailydata.zig");
 pub const pooldata = @import("pooldata.zig");
 pub const admindata = @import("admindata.zig");
+pub const notesdata = @import("notesdata.zig");
 pub const alertband = @import("alertband.zig");
 pub const actionbutton = @import("actionbutton.zig");
 pub const logview = @import("logview.zig");

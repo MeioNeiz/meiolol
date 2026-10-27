@@ -283,7 +283,8 @@ pub fn cmdDev(c: *Cmd) !u8 {
         } else if (!try f.parse(c)) return error.Usage;
     }
     const static_dir = "src/site/static";
-    const dev: serve.Dev = try .init(c.arena, c.init.io, try c.init.minimal.args.toSlice(c.arena), static_dir);
+    var dev: serve.Dev = try .init(c.arena, c.init.io, try c.init.minimal.args.toSlice(c.arena), static_dir);
+    dev.notes_db = try std.fs.path.joinZ(c.arena, &.{ c.data_dir, "dev-notes.db" });
     const db = try c.open();
     defer db.close();
     var opts = try f.options(c, c.arena, db, f.contact orelse "dev@example.com");

@@ -899,7 +899,7 @@ fn respond(request: *Request, out: Out, keep_alive: bool) !void {
 }
 
 /// The header's value; null when absent or sent more than once
-fn header(request: *Request, name: []const u8) ?[]const u8 {
+pub fn header(request: *Request, name: []const u8) ?[]const u8 {
     var found: ?[]const u8 = null;
     var it = request.iterateHeaders();
     while (it.next()) |h| {
@@ -911,7 +911,7 @@ fn header(request: *Request, name: []const u8) ?[]const u8 {
 }
 
 /// The session cookie's token from any Cookie header; null when absent or malformed
-fn cookieToken(request: *Request) ?[]const u8 {
+pub fn cookieToken(request: *Request) ?[]const u8 {
     var it = request.iterateHeaders();
     while (it.next()) |h| {
         if (!std.ascii.eqlIgnoreCase(h.name, "cookie")) continue;
