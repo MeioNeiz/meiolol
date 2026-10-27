@@ -216,6 +216,38 @@ pub fn sent(list: []const u8, n: u32) bool {
     return false;
 }
 
+/// Puzzles meiolol.daily.sent.v1 remembers: the newest, so the list stays small
+pub const keep_sent = 200;
+
+/// `list` with n added, the newest `keep_sent` kept; `list` when it doesn't fit `buf`
+pub fn withSent(buf: []u8, list: []const u8, n: u32) []const u8 {
+    var w: std.Io.Writer = .fixed(buf);
+    var skip = (std.mem.countScalar(u8, list, ',') + @intFromBool(list.len > 0) + 1) -| keep_sent;
+    var it = std.mem.splitScalar(u8, list, ',');
+    while (it.next()) |x| {
+        if (skip > 0) {
+            skip -= 1;
+            continue;
+        }
+        if (x.len > 0) w.print("{s},", .{x}) catch return list;
+    }
+    w.print("{d}", .{n}) catch return list;
+    return w.buffered();
+}
+
+/// `list` without n: its answers were not counted after all; `list` when it doesn't fit
+pub fn unsent(buf: []u8, list: []const u8, n: u32) []const u8 {
+    var w: std.Io.Writer = .fixed(buf);
+    var it = std.mem.splitScalar(u8, list, ',');
+    var num: [10]u8 = undefined;
+    const k = std.fmt.bufPrint(&num, "{d}", .{n}) catch return list;
+    while (it.next()) |x| {
+        if (x.len == 0 or std.mem.eql(u8, x, k)) continue;
+        w.print("{s}{s}", .{ if (w.end > 0) "," else "", x }) catch return list;
+    }
+    return w.buffered();
+}
+
 /// ?n= of a location.search ("?n=5&x"): an old link to a puzzle
 pub fn wantedOf(search: []const u8) ?u32 {
     var it = std.mem.splitScalar(u8, if (std.mem.startsWith(u8, search, "?")) search[1..] else search, '&');
@@ -535,6 +567,24 @@ test "the crowd: sent once finished, read back for the page's puzzle only" {
     try testing.expect(sent("15,12", 12));
     try testing.expect(!sent("15,120", 12));
     try testing.expect(!sent("", 12));
+    try testing.expect(!sent("junk,99999999999", 12));
+
+    var list: [4096]u8 = undefined;
+    try testing.expectEqualStrings("12", withSent(&list, "", 12));
+    try testing.expectEqualStrings("15,12", withSent(&list, "15", 12));
+    try testing.expectEqualStrings("15", unsent(&list, "15,12", 12));
+    try testing.expectEqualStrings("15,120", unsent(&list, "12,15,120", 12));
+    try testing.expectEqualStrings("", unsent(&list, "12", 12));
+    // Full: the oldest goes
+    var full: std.Io.Writer = .fixed(&list);
+    for (1..keep_sent + 1) |i| try full.print("{s}{d}", .{ if (i > 1) "," else "", i });
+    var next: [4096]u8 = undefined;
+    const kept = withSent(&next, full.buffered(), 999);
+    try testing.expectEqual(keep_sent, std.mem.countScalar(u8, kept, ',') + 1);
+    try testing.expect(std.mem.startsWith(u8, kept, "2,3,"));
+    try testing.expect(std.mem.endsWith(u8, kept, ",200,999"));
+    // Too long for the buffer: unchanged
+    try testing.expectEqualStrings("15", withSent(list[0..3], "15", 12345));
 }
 
 test "share: the marks on the hidden seat, only once finished and public" {

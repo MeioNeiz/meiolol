@@ -2,9 +2,9 @@
 //! data-bin and localStorage meiolol.daily.v1, again on ui-daily.wasm's "ui-daily" event
 //! (a puzzle finished). On daily.html it also opens the viewer's own day's puzzle (their
 //! date, not UTC's) or ?n='s. Once the page's puzzle is finished, /api/daily's counts:
-//! POSTed with the answers the first time (meiolol.daily.sent.v1), else a GET. Share: the
-//! share sheet on phones, else the clipboard. zjb's generated loader (ui-dailydays.js)
-//! calls `main`
+//! POSTed with the answers the first time (meiolol.daily.sent.v1; a failed POST unmarked
+//! and sent again next load), else a GET. Share: the share sheet on phones, else the
+//! clipboard. zjb's generated loader (ui-dailydays.js) calls `main`
 const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
@@ -57,23 +57,40 @@ fn read() void {
     crowd();
 }
 
-/// Once per page load, the first time the puzzle reads as finished
+/// Once per page load, the first time the puzzle reads as finished: a POST the first time
+/// (its answers counted), else a GET
 fn crowd() void {
     if (asked) return;
-    const list = dom.stored(sent_key) orelse "";
-    const send = !ds.sent(list, data.n);
+    const got = dom.stored(sent_key);
+    defer if (got) |g| gpa.free(g);
+    const list = got orelse "";
     var buf: [96]u8 = undefined;
-    const path = ds.crowdPath(&buf, state.saved, data.n, send) orelse return;
+    if (!ds.sent(list, data.n)) if (ds.crowdPath(&buf, state.saved, data.n, true)) |path| {
+        asked = true;
+        // Before the request: a reload while it is out must not count it twice
+        var next: [4096]u8 = undefined;
+        dom.store(sent_key, ds.withSent(&next, list, data.n));
+        return dom.post(path, 1, onCrowd);
+    };
+    // Sent, or finished without the answers to send
+    const path = ds.crowdPath(&buf, state.saved, data.n, false) orelse return;
     asked = true;
-    if (!send) return dom.fetch(path, 0, onCrowd);
-    // Before the request: a reload while it is out must not count it twice
-    var next: [4096]u8 = undefined;
-    dom.store(sent_key, std.fmt.bufPrint(&next, "{s}{s}{d}", .{ list, if (list.len > 0) "," else "", data.n }) catch return);
-    dom.post(path, 0, onCrowd);
+    dom.fetch(path, 0, onCrowd);
 }
 
-fn onCrowd(_: i32, bytes: ?[]u8) void {
-    const b = bytes orelse return;
+fn onCrowd(post: i32, bytes: ?[]u8) void {
+    const b = bytes orelse {
+        // Not counted (429, 5xx, offline): sent again next load, the line from a GET now
+        if (post == 1) {
+            const got = dom.stored(sent_key) orelse return;
+            defer gpa.free(got);
+            var next: [4096]u8 = undefined;
+            dom.store(sent_key, ds.unsent(&next, got, data.n));
+            var buf: [96]u8 = undefined;
+            dom.fetch(ds.crowdPath(&buf, state.saved, data.n, false) orelse return, 0, onCrowd);
+        }
+        return;
+    };
     defer gpa.free(b);
     state.crowd = ds.crowdOf(b, &data) orelse return;
     island.render();
