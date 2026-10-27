@@ -32,4 +32,17 @@ export fn main() void {
 
 fn swapped() void {
     page.id = src.id();
+    markTime();
+}
+
+/// Until ui-yourtime runs (it marks its root data-live), the Over time view holds the
+/// server's example: busy for a looked-up list
+fn markTime() void {
+    const el = zjb.global("document").call("querySelector", .{zjb.constString(ui.yourtime.sel)}, zjb.Handle);
+    if (el == .null) return;
+    defer el.release();
+    if (el.call("hasAttribute", .{zjb.constString("data-live")}, bool)) return;
+    if (page.id.len > 0) {
+        el.call("setAttribute", .{ zjb.constString("aria-busy"), zjb.constString("true") }, void);
+    } else el.call("removeAttribute", .{zjb.constString("aria-busy")}, void);
 }

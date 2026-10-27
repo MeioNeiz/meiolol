@@ -627,6 +627,9 @@ pub const css =
     \\  .c-ytime .wl .bar { width: 48px; height: 4px; border-radius: 2px;
     \\    background: linear-gradient(90deg, var(--us) calc(var(--p) * 1%), var(--them) 0); }
     \\  .c-ytime .v { color: var(--c); }
+    \\  /* A looked-up list before ui-yourtime runs: the example's content, kept for its size */
+    \\  .c-ytime[aria-busy="true"] { border-radius: var(--r-l); background: var(--panel); }
+    \\  .c-ytime[aria-busy="true"] > * { visibility: hidden; }
     \\  .c-ytime .na { color: var(--faint); }
     \\  .c-tcard { position: relative; display: grid; align-content: start; gap: 2px; min-width: 0;
     \\    padding: var(--sp-3) var(--sp-4); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-l); }

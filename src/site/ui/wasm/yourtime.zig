@@ -26,6 +26,9 @@ export fn main() void {
     page.tz_min = src.tzMin();
     island.?.render();
     if (handed) src.swap();
+    // ui-yourviews' markTime
+    root.call("setAttribute", .{ zjb.constString("data-live"), zjb.constString("") }, void);
+    root.call("removeAttribute", .{zjb.constString("aria-busy")}, void);
 }
 
 fn swapped() void {
