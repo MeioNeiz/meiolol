@@ -426,11 +426,18 @@ fn makePro(
 ) !?[]const u8 {
     const body = dir.readFileAlloc(io, pro_file, arena, .limited(16 << 20)) catch |err| switch (err) {
         error.FileNotFound => return null,
-        else => return err,
+        error.OutOfMemory => return err,
+        else => {
+            log.warn("{s} unread: {t}", .{ pro_file, err });
+            return null;
+        },
     };
-    const games = leaguepedia.parse(arena, body) catch |err| {
-        log.warn("{s} unread: {t}", .{ pro_file, err });
-        return null;
+    const games = leaguepedia.parse(arena, body) catch |err| switch (err) {
+        error.OutOfMemory => return err,
+        else => {
+            log.warn("{s} unread: {t}", .{ pro_file, err });
+            return null;
+        },
     };
     var prng: std.Random.DefaultPrng = .init(std.hash.Wyhash.hash(n, std.mem.asBytes(&used.items.len)));
     for (games) |g| {
@@ -453,7 +460,8 @@ fn makePro(
 pub const pro_file = "pro.json";
 
 /// A pro game up to the options: Leaguepedia's champion names as ids, its turns, red's
-/// last pick hidden. Null when a name is unknown or `st` can't score a champion
+/// last pick hidden. Null when a pick's name is unknown or `st` can't score a champion;
+/// a ban with an unknown name counts as not made
 pub fn readPro(arena: std.mem.Allocator, db: store.Db, st: *const Stats, g: leaguepedia.Game) !?Puzzle {
     var p: Puzzle = .{
         .n = 0,
@@ -490,7 +498,9 @@ pub fn readPro(arena: std.mem.Allocator, db: store.Db, st: *const Stats, g: leag
     const turns = try arena.alloc(Turn, g.turns.len);
     var bans: [2]std.ArrayList(u32) = .{ .empty, .empty };
     for (g.turns, turns, leaguepedia.order) |t, *dst, cell| {
-        const id = if (t.champ) |name| try champId(db, name) orelse return null else null;
+        const name = t.champ orelse "";
+        const id = if (t.champ == null) null else try champId(db, name) orelse
+            if (cell.ban) null else return null;
         dst.* = .{ .id = id, .side = t.side };
         if (cell.ban) if (id) |b| try bans[t.side].append(arena, b);
     }
@@ -883,12 +893,11 @@ pub fn hiddenDraft(arena: std.mem.Allocator, p: Puzzle) !core.Draft {
     };
 }
 
-/// The played champion and three others from the 20 the numbers rate highest in this
-/// draft, shuffled. Picking among the top keeps them plausible, so the guess is about
-/// the draft rather than spotting the odd one out.
 const max_options = 6;
 
-/// The played champion and `n` - 1 others the page would suggest, shuffled
+/// The played champion and `n` - 1 others the page would suggest, shuffled. Picking among
+/// the top keeps them plausible, so the guess is about the draft rather than spotting the
+/// odd one out
 fn options(arena: std.mem.Allocator, st: *const Stats, p: Puzzle, rand: std.Random, n: usize) !?[]u32 {
     const draft = try hiddenDraft(arena, p);
     var top: [20]core.Suggestion = undefined;
@@ -1216,4 +1225,13 @@ test "a pro game first: red's last pick behind six options, the turns kept; then
     try testing.expectEqual(4, q.options.len);
     const used = try std.Io.Dir.cwd().readFileAlloc(io, try arena.print("{s}/used.txt", .{dir}), arena, .unlimited);
     try testing.expectEqual(1, std.mem.count(u8, used, "pro:"));
+
+    // A ban with a name we don't know counts as not made; such a pick drops the game
+    var g = (try leaguepedia.parse(arena, @embedFile("testdata/leaguepedia-cargo.json")))[0];
+    g.turns[0].champ = "Nobody";
+    const unknown_ban = (try readPro(arena, db, &st, g)).?;
+    try testing.expectEqual(null, unknown_ban.turns.?[0].id);
+    try testing.expectEqual(4, unknown_ban.bans[0].len);
+    g.champs[0][0] = "Nobody";
+    try testing.expectEqual(null, try readPro(arena, db, &st, g));
 }

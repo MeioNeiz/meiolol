@@ -1,5 +1,5 @@
 //! Pro games for Daily Draft from Leaguepedia's Cargo API (CC BY-SA 3.0): one query joins
-//! ScoreboardGames, PicksAndBansS7, Tournaments and ScoreboardPlayers, 10 rows a game.
+//! ScoreboardGames, PicksAndBansS7 and ScoreboardPlayers, 10 rows a game.
 //! `parse` keeps champions, draft order, result and the players' lines and drops players,
 //! teams, events and dates: nothing that names who played reaches a Game.
 //! Facts the parse leans on (research/questions/leaguepedia-daily-fetch.md): ScoreboardGames
@@ -64,7 +64,7 @@ pub const order = blk: {
 };
 
 /// The query's fields, aliased so each row's keys are plain names
-pub const fields = "SG.GameId,SG.Team1,SG.WinTeam,SG.Gamelength_Number=Minutes,SG.Patch," ++
+pub const fields = "SG.GameId,SG.Team1,SG.Team2,SG.WinTeam,SG.Gamelength_Number=Minutes,SG.Patch," ++
     "PB.Team1=PBTeam1,PB.SwitchedSides," ++ cells ++
     "SP.Side,SP.Role,SP.Champion,SP.Kills,SP.Deaths,SP.Assists,SP.CS,SP.Gold,SP.DamageToChampions";
 
@@ -72,7 +72,8 @@ pub const fields = "SG.GameId,SG.Team1,SG.WinTeam,SG.Gamelength_Number=Minutes,S
 const cell_names = blk: {
     var names: [2][2][5][]const u8 = undefined;
     for (0..2) |t| for (0..2) |k| for (0..5) |n| {
-        names[t][k][n] = std.fmt.comptimePrint("Team{d}{s}{d}", .{ t + 1, if (k == 1) "Ban" else "Pick", n + 1 });
+        const kind = if (k == 1) "Ban" else "Pick";
+        names[t][k][n] = std.fmt.comptimePrint("Team{d}{s}{d}", .{ t + 1, kind, n + 1 });
     };
     break :blk names;
 };
@@ -86,8 +87,9 @@ const cells = blk: {
 };
 
 /// The games in a cargoquery answer, newest first as asked. A game whose rows don't make
-/// a whole draft (10 players, one per side and role, picks matching the scoreboard, a
-/// patch as text) is left out, not an error
+/// a whole draft (10 players, one per side and role, each side's five picks its
+/// scoreboard's five, a winner among the two teams, a patch as text) is left out, not an
+/// error
 pub fn parse(a: Allocator, body: []const u8) ![]Game {
     const doc = try std.json.parseFromSliceLeaky(std.json.Value, a, body, .{});
     if (doc != .object) return error.BadAnswer;
@@ -100,11 +102,12 @@ pub fn parse(a: Allocator, body: []const u8) ![]Game {
 
     var games: std.ArrayList(Game) = .empty;
     var i: usize = 0;
-    while (i < rows.array.items.len) {
-        const id = str(field(rows.array.items[i], "GameId")) orelse "";
+    const all = rows.array.items;
+    while (i < all.len) {
+        const id = gameId(all[i]);
         var end = i + 1;
-        while (end < rows.array.items.len and std.mem.eql(u8, str(field(rows.array.items[end], "GameId")) orelse "", id)) end += 1;
-        if (id.len > 0) if (try game(a, id, rows.array.items[i..end])) |g| try games.append(a, g);
+        while (end < all.len and std.mem.eql(u8, gameId(all[end]), id)) end += 1;
+        if (id.len > 0) if (try game(a, id, all[i..end])) |g| try games.append(a, g);
         i = end;
     }
     return games.items;
@@ -119,9 +122,12 @@ fn game(a: Allocator, id: []const u8, rows: []const std.json.Value) !?Game {
     const minutes = num(field(first, "Minutes")) orelse return null;
     if (!(minutes > 0 and minutes < 200)) return null;
     g.minutes = @intFromFloat(@round(minutes));
+    // WinTeam is empty on a remake or a game still being entered
     const blue = str(field(first, "Team1")) orelse return null;
+    const red = str(field(first, "Team2")) orelse return null;
     const win = str(field(first, "WinTeam")) orelse return null;
-    g.winner = if (std.mem.eql(u8, win, blue)) 0 else 1;
+    if (std.mem.eql(u8, blue, red)) return null;
+    g.winner = if (std.mem.eql(u8, win, blue)) 0 else if (std.mem.eql(u8, win, red)) 1 else return null;
 
     var seen: [2][5]bool = @splat(@splat(false));
     for (rows) |row| {
@@ -144,6 +150,7 @@ fn game(a: Allocator, id: []const u8, rows: []const std.json.Value) !?Game {
 
     // PB Team1 on red when the series' sides were switched
     const switched = (num(field(first, "SwitchedSides")) orelse 0) == 1;
+    var taken: [2][5]bool = @splat(@splat(false));
     for (order, &g.turns) |c, *t| {
         const pb_team: usize = if ((c.side == 1) == switched) 0 else 1;
         const champ = str(field(first, cell_names[pb_team][@intFromBool(c.ban)][c.n - 1]));
@@ -153,15 +160,22 @@ fn game(a: Allocator, id: []const u8, rows: []const std.json.Value) !?Game {
             continue;
         }
         const pick = champ orelse return null;
-        if (!picked(g.champs[c.side], pick)) return null;
+        // Five distinct picks a side, so each is one of the scoreboard's five once
+        const at = seat(g.champs[c.side], &taken[c.side], pick) orelse return null;
+        taken[c.side][at] = true;
         t.champ = pick;
     }
     return g;
 }
 
-fn picked(side: [5][]const u8, champ: []const u8) bool {
-    for (side) |c| if (std.mem.eql(u8, c, champ)) return true;
-    return false;
+/// The scoreboard seat not yet taken that played `champ`
+fn seat(side: [5][]const u8, taken: *const [5]bool, champ: []const u8) ?usize {
+    for (side, taken, 0..) |c, t, i| if (!t and std.mem.eql(u8, c, champ)) return i;
+    return null;
+}
+
+fn gameId(row: std.json.Value) []const u8 {
+    return str(field(row, "GameId")) orelse "";
 }
 
 fn isBan(name: []const u8) bool {
@@ -173,15 +187,23 @@ fn isBan(name: []const u8) bool {
 /// Leaguepedia's "26.20" as Riot's "16.20"; null for anything else
 fn riotPatch(a: Allocator, p: []const u8) !?[]const u8 {
     const dot = std.mem.findScalar(u8, p, '.') orelse return null;
+    if (!digits(p[0..dot]) or p.len - dot - 1 != 2 or !digits(p[dot + 1 ..])) return null;
     const major = std.fmt.parseInt(u32, p[0..dot], 10) catch return null;
     const minor = std.fmt.parseInt(u32, p[dot + 1 ..], 10) catch return null;
-    if (major < 20 or p.len - dot - 1 != 2) return null;
+    if (major < 20) return null;
     return try a.print("{d}.{d}", .{ major - 10, minor });
+}
+
+fn digits(s: []const u8) bool {
+    if (s.len == 0) return false;
+    for (s) |c| if (!std.ascii.isDigit(c)) return false;
+    return true;
 }
 
 fn role(r: []const u8) ?Role {
     const names = [_]struct { []const u8, Role }{
-        .{ "Top", .top }, .{ "Jungle", .jungle }, .{ "Mid", .middle }, .{ "Bot", .bottom }, .{ "Support", .utility },
+        .{ "Top", .top },    .{ "Jungle", .jungle },   .{ "Mid", .middle },
+        .{ "Bot", .bottom }, .{ "Support", .utility },
     };
     for (names) |n| if (std.mem.eql(u8, r, n[0])) return n[1];
     return null;
@@ -269,4 +291,39 @@ test "an error answer, a short game, a pick off the scoreboard and a number patc
     try testing.expectEqual(0, (try parse(a, float)).len);
     try testing.expectEqual(null, try riotPatch(a, "26.2"));
     try testing.expectEqualStrings("16.9", (try riotPatch(a, "26.09")).?);
+}
+
+test "a game is left out on: no winner, a repeated pick, a bad side or role, no minutes" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const body = @embedFile("testdata/leaguepedia-cargo.json");
+    // All in the first game
+    const cases = [_][2][]const u8{
+        // A remake, then a winner that is neither team
+        .{ "\"WinTeam\": \"Team Alpha\"", "\"WinTeam\": \"\"" },
+        .{ "\"WinTeam\": \"Team Alpha\"", "\"WinTeam\": \"Team Gamma\"" },
+        // Blue picks Ezreal twice, its Nautilus never
+        .{ "\"Team1Pick3\": \"Nautilus\"", "\"Team1Pick3\": \"Ezreal\"" },
+        .{ "\"Side\": \"1\"", "\"Side\": \"3\"" },
+        .{ "\"Role\": \"Top\"", "\"Role\": \"Coach\"" },
+        .{ "\"Minutes\": \"31.95\"", "\"Mins\": \"31.95\"" },
+    };
+    for (cases) |c| {
+        // The first row's only: game fields are read from a game's first row
+        const at = std.mem.find(u8, body, c[0]).?;
+        const changed = try std.mem.concat(a, u8, &.{ body[0..at], c[1], body[at + c[0].len ..] });
+        const games = try parse(a, changed);
+        try testing.expectEqual(1, games.len);
+        try testing.expect(games[0].key != std.hash.Wyhash.hash(0, "Example Cup 2026_Round 1_1_1"));
+    }
+}
+
+test "riotPatch: two-digit minors and a 20s major only, digits only" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try testing.expectEqualStrings("16.20", (try riotPatch(a, "26.20")).?);
+    for ([_][]const u8{ "14.20", "26.200", "+26.20", "26.+5", "26.", ".20", "26-20" }) |p|
+        try testing.expectEqual(null, try riotPatch(a, p));
 }

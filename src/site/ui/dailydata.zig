@@ -26,33 +26,57 @@ pub const Puzzle = struct {
     bans: [2][]const u16 = .{ &.{}, &.{} },
     hidden_side: Side,
     hidden_role: role.Role,
-    /// Six, in display order; the played one among them
+    /// Up to six (four on ranked puzzles), in display order; the played one among them
     options: []const u16,
-    /// Hint: the hidden champion is ranged
-    ranged: bool,
+    /// Hint: the hidden champion is ranged; null without the champion's range
+    ranged: ?bool = null,
     /// Blue's win chance from each lane alone, %, by role
     lanes: [5]?f32,
     result: Result,
-    paper: Paper,
+    /// Null until the model can read the draft
+    paper: ?Paper = null,
 
-    /// Every index names a champion, the order is whole or absent and the played pick is
-    /// among the options; check a decoded file before use
+    /// Every index names a champion, a whole order follows the pro draft's sides and ends
+    /// on the played pick, the options are distinct and hold the played pick, and every
+    /// number is finite; check a decoded file before use
     pub fn valid(p: *const Puzzle) bool {
         const n = p.champs.len;
         if (p.turns.len != 0 and p.turns.len != 20) return false;
         if (p.options.len == 0 or p.options.len > 6) return false;
-        for (p.turns) |t| if (t.champ) |c| if (c >= n) return false;
+        for (p.turns, 0..) |t, i| {
+            if (t.side != pro_sides[i]) return false;
+            if (t.champ) |c| if (c >= n) return false;
+        }
+        if (p.turns.len == 20 and p.turns[19].champ != played(p)) return false;
         for (p.bans) |side| for (side) |c| if (c >= n) return false;
-        for (p.options) |c| if (c >= n) return false;
+        for (p.options, 0..) |c, i| {
+            if (c >= n) return false;
+            if (std.mem.findScalar(u16, p.options[i + 1 ..], c) != null) return false;
+        }
+        for (p.lanes) |l| if (l) |x| if (!std.math.isFinite(x)) return false;
+        if (p.paper) |pp| {
+            for ([_]f32{ pp.blue, pp.low, pp.high } ++ pp.edges) |x| if (!std.math.isFinite(x)) return false;
+        }
         for (p.seats) |side| for (side) |st| {
-            if (st.champ >= n) return false;
+            if (st.champ >= n or !std.math.isFinite(st.base)) return false;
             for (st.cands) |c| {
-                if (c.champ >= n) return false;
-                for (c.terms) |t| if (t.other) |o| if (o >= n) return false;
+                if (c.champ >= n or !c.finite()) return false;
+                for (c.terms) |t| {
+                    if (t.other) |o| if (o >= n) return false;
+                    if (!std.math.isFinite(t.pp)) return false;
+                }
             }
         };
         return std.mem.findScalar(u16, p.options, played(p)) != null;
     }
+};
+
+/// Each turn's side in a pro draft: bans B R B R B R, picks B R R B B R, bans R B R B,
+/// picks R B B R (src/leaguepedia.zig order)
+pub const pro_sides = blk: {
+    const b: Side = .blue;
+    const r: Side = .red;
+    break :blk [20]Side{ b, r, b, r, b, r, b, r, r, b, b, r, r, b, r, b, r, b, b, r };
 };
 
 pub const Turn = struct {
@@ -86,12 +110,17 @@ pub const Cand = struct {
     rank: u16,
     /// The seat's team's win chance with it, %
     win: f32,
-    /// 95% range of win, %
-    low: f32,
-    high: f32,
+    /// 95% range of win, %; null when unknown
+    low: ?f32 = null,
+    high: ?f32 = null,
     terms: []const Term,
     /// Every term not named, summed, points
     rest: f32,
+
+    fn finite(c: Cand) bool {
+        const ok = std.math.isFinite;
+        return ok(c.win) and ok(c.rest) and ok(c.low orelse 0) and ok(c.high orelse 0);
+    }
 };
 
 pub const Kind = enum(u8) { strength, into, with };
@@ -109,9 +138,10 @@ pub const Result = struct {
     secs: u32,
     kills: [2]u16,
     gold: [2]u32,
-    towers: [2]u8,
-    dragons: [2]u8,
-    barons: [2]u8,
+    /// Null when the source doesn't have them
+    towers: ?[2]u8 = null,
+    dragons: ?[2]u8 = null,
+    barons: ?[2]u8 = null,
 };
 
 pub const Paper = struct {
@@ -211,4 +241,58 @@ test "valid: an index past the champions or the played pick missing from the opt
     p = sample;
     p.turns = &.{.{ .champ = 0, .side = .blue }};
     try std.testing.expect(!p.valid());
+    p = sample;
+    p.options = &.{ 5, 11, 5 };
+    try std.testing.expect(!p.valid());
+    p = sample;
+    p.paper.?.blue = std.math.nan(f32);
+    try std.testing.expect(!p.valid());
+    p = sample;
+    p.lanes[2] = std.math.inf(f32);
+    try std.testing.expect(!p.valid());
+}
+
+/// A pro draft for `sample`: red's last pick its played top, one ban not made
+const pro_turns = blk: {
+    var t: [20]Turn = undefined;
+    for (&t, pro_sides, 0..) |*x, side, i| x.* = .{ .champ = @intCast(i % 12), .side = side };
+    t[13].champ = null;
+    t[19].champ = 5;
+    break :blk t;
+};
+
+test "a pro puzzle survives the binary file: 20 turns with a ban not made, bans, no rank, nulls" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var p = sample;
+    p.turns = &pro_turns;
+    p.bans = .{ &.{ 0, 1 }, &.{2} };
+    p.seats[0][1].rank = null;
+    p.paper = null;
+    p.lanes[1] = null;
+    p.result.towers = null;
+    p.ranged = true;
+    try std.testing.expect(p.valid());
+    const back = try decode(a, try encode(a, p));
+    try std.testing.expect(back.valid());
+    try std.testing.expectEqual(@as(usize, 20), back.turns.len);
+    try std.testing.expectEqual(@as(?u16, null), back.turns[13].champ);
+    try std.testing.expectEqual(Side.red, back.turns[19].side);
+    try std.testing.expectEqual(@as(usize, 2), back.bans[0].len);
+    try std.testing.expectEqual(@as(?u16, null), back.seats[0][1].rank);
+    try std.testing.expect(back.paper == null and back.lanes[1] == null);
+    try std.testing.expect(back.result.towers == null and back.result.dragons != null);
+    try std.testing.expectEqual(@as(?bool, true), back.ranged);
+    try std.testing.expectEqual(@as(?f32, 48.5), back.seats[1][0].cands[0].low);
+
+    var bad = p;
+    var swapped = pro_turns;
+    swapped[0].side = .red;
+    bad.turns = &swapped;
+    try std.testing.expect(!bad.valid());
+    var other_last = pro_turns;
+    other_last[19].champ = 11;
+    bad.turns = &other_last;
+    try std.testing.expect(!bad.valid());
 }
