@@ -268,8 +268,9 @@ fn onEvent(slot: i32, bit: i32, e: zjb.Handle) callconv(.c) void {
             in.text = v.readString(&buf) catch buf[0..0];
         },
         .keydown => {
-            // Keys that pick from an IME (Korean, Japanese names) aren't the page's
-            if (e.get("isComposing", bool)) return;
+            // Keys that pick from an IME (Korean, Japanese names) aren't the page's, nor
+            // modified ones: Ctrl/Cmd + or - zooms, Alt+Arrow goes back
+            if (e.get("isComposing", bool) or e.get("ctrlKey", bool) or e.get("metaKey", bool) or e.get("altKey", bool)) return;
             const k = e.get("key", zjb.Handle);
             defer k.release();
             in.text = k.readString(&buf) catch buf[0..0];

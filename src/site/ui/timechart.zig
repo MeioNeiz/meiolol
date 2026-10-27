@@ -160,7 +160,7 @@ pub const Time = struct {
         const n = t.len();
         if (t.zoom) |z| {
             const a = std.math.clamp(@divFloor(z[0] -| t.start, t.st()), 0, n);
-            const b = std.math.clamp(-@divFloor(t.start -| z[1], t.st()), 0, n);
+            const b = std.math.clamp(0 -| @divFloor(t.start -| z[1], t.st()), 0, n);
             if (b >= a + 2) return .{ @intCast(a), @intCast(b) };
         }
         return .{ 0, n };
@@ -284,6 +284,7 @@ pub const Time = struct {
                 .area => t.areas(h, p, k, w),
                 .bars => t.bars(h, p, k, w),
             };
+            // Six colours, then round again: past six, only the end names tell lines apart
             const ds = if (t.series.len > 1) k % 6 else null;
             marks.add(h.el(.g, .{ .key = k, .data_s = ds }, .{kids}));
             if (lone.items.items.len > 0) over.add(h.span(.{ .key = 200 + k, .class = "lone", .data_s = ds }, .{lone.done()}));
@@ -297,7 +298,7 @@ pub const Time = struct {
             }
         }
         spread(ends.items);
-        // The summary reads them out with their times
+        // Hidden from screen readers: the summary has the latest figures with their times
         for (ends.items) |e| over.add(h.span(.{
             .key = e.k,
             .class = "end",
@@ -322,7 +323,7 @@ pub const Time = struct {
             for (chart.tip(h, p.px(i), .{kids.done()})) |x| over.add(x);
         };
         // The keyboard's way in: a slider over the plot, stepping the tip
-        const now = t.tip orelse w[1] - 1;
+        const now = if (t.tip) |i| std.math.clamp(i, w[0], w[1] - 1) else w[1] - 1;
         over.add(h.span(.{
             .key = 300,
             .class = "kb",
@@ -358,8 +359,11 @@ pub const Time = struct {
         });
     }
 
+    /// Show all, while the zoom hides some buckets: a re-fetched window can leave a zoom
+    /// that no longer does
     fn foot(t: *T, h: *H) N {
-        if (t.zoom == null) return .none;
+        const w = t.window();
+        if (t.zoom == null or (w[0] == 0 and w[1] == t.len())) return .none;
         return h.div(.{ .class = "foot" }, .{
             h.button(.{ .class = "c-btn", .type = "button", .data_s = "s", .on_click = h.on(t, .all) }, .{W.all}),
         });
@@ -403,11 +407,23 @@ pub const Time = struct {
                 first = false;
                 if (t.series.len > 1) wr.print("{s} ", .{sr.name.s}) catch |e| break :blk e;
                 wr.writeAll(t.exact(h, t.value(sr, i) orelse 0).s) catch |e| break :blk e;
+                // Older than the last bucket: say when
+                if (i + 1 < w[1]) wr.print(" {s} {s}", .{ W.at.s, t.when(h, t.time(i), true).s }) catch |e| break :blk e;
             };
             if (!first) wr.writeByte('.') catch |e| break :blk e;
             const t0 = t.time(w[0]);
             const t1 = t.time(w[1]);
-            for (t.marks) |m| if (m >= t0 and m < t1) wr.print(" {s} {s}.", .{ t.mark.s, t.when(h, m, true).s }) catch |e| break :blk e;
+            // The first few marks by time, then how many more
+            const cap = 5;
+            var n: usize = 0;
+            for (t.marks) |m| if (m >= t0 and m < t1) {
+                if (n == 0) {
+                    wr.print(" {s} {s}", .{ t.mark.s, t.when(h, m, true).s }) catch |e| break :blk e;
+                } else if (n < cap) wr.print(", {s}", .{t.when(h, m, true).s}) catch |e| break :blk e;
+                n += 1;
+            };
+            if (n > cap) wr.print(" {s} {d} {s}", .{ W.@"and".s, n - cap, W.more.s }) catch |e| break :blk e;
+            if (n > 0) wr.writeByte('.') catch |e| break :blk e;
         }) catch {
             h.oom = true;
         };
@@ -531,19 +547,21 @@ pub const Time = struct {
         const every = t.tickStep(t1 - t0);
         var l: std.ArrayList(chart.Tick) = .empty;
         var prev: i64 = std.math.minInt(i64);
-        // Walk the clock's own time (UK midnight, not UTC's), each tick back to UTC by the
-        // offset there: the hour BST gives back shows once
-        var local = @divFloor(t0 +| t.off(t0) +| (every - 1), every) * every;
-        while (l.items.len < 16) : (local +|= every) {
-            const x = local - t.off(local - t.off(local));
+        // Up to an hour, UTC's whole steps are the clock's (offsets are whole hours), and the
+        // hour BST gives back is ticked twice. Longer, walk the clock's own time (UK
+        // midnight, not UTC's), each tick back to UTC by the offset there
+        const local = every > 3600;
+        var u = @divFloor((if (local) t0 +| t.off(t0) else t0) +| (every - 1), every) * every;
+        while (l.items.len < 16) : (u +|= every) {
+            const x = if (local) u - t.off(u - t.off(u)) else u;
             if (x > t1) break;
             if (x <= prev) continue;
             prev = x;
             const at_p = p.x.at(t.domain(x));
             if (at_p <= 0 or at_p >= 100) continue;
-            // A narrow chart keeps every other tick: those on a double step, so midnights
-            // stay among 12-hourly ones
-            l.append(h.mem, .{ .at = at_p, .label = t.when(h, x, false), .minor = @mod(local, 2 * every) != 0 }) catch {
+            // A narrow chart keeps every other tick: those on a double step of the printed
+            // time, so midnights stay among 12-hourly ones
+            l.append(h.mem, .{ .at = at_p, .label = t.when(h, x, false), .minor = @mod(x +| t.off(x), 2 * every) != 0 }) catch {
                 h.oom = true;
             };
         }
@@ -649,6 +667,9 @@ const W = struct {
     pub const to = plain("to");
     pub const latest = plain("Latest");
     pub const gap = plain("nothing recorded");
+    pub const at = plain("at");
+    pub const @"and" = plain("and");
+    pub const more = plain("more");
 };
 
 pub const css =
@@ -840,6 +861,24 @@ test "keys: arrows step the tip from the latest, + zooms round it, - and Escape 
     _ = press(&t, "+");
     try testing.expect(press(&t, "-"));
     try testing.expectEqual(@as(?[2]i64, null), t.zoom);
+    // + at the right edge keeps the window on the data; = is +, unshifted
+    t.tip = 71;
+    try testing.expect(press(&t, "="));
+    try testing.expectEqual([2]u32{ 36, 72 }, t.window());
+    _ = press(&t, "Home");
+    try testing.expectEqual(@as(?u32, 36), t.tip);
+    _ = press(&t, "End");
+    try testing.expectEqual(@as(?u32, 71), t.tip);
+    // A tip a re-fetch left outside the window steps from its edge
+    t.tip = 5;
+    _ = press(&t, "ArrowRight");
+    try testing.expectEqual(@as(?u32, 37), t.tip);
+    // Too few buckets to halve; none at all
+    var few: Time = .{ .label = plain("x"), .start = 0, .series = &.{.{ .name = plain("f"), .values = &.{ 1, 2, 3 } }} };
+    try testing.expect(!press(&few, "+"));
+    try testing.expect(!press(&few, "-"));
+    var none: Time = .{ .label = plain("x"), .start = 0, .series = &.{} };
+    try testing.expect(!press(&none, "ArrowLeft"));
 }
 
 test "view: series named at their ends, gaps break lines, ticks on UK hours, tip, summary" {
@@ -877,6 +916,15 @@ test "view: series named at their ends, gaps break lines, ticks on UK hours, tip
     var ev: tree.Event = .{ .kind = .click };
     t.update(.all, &ev);
     try testing.expectEqual(@as(?[2]i64, null), t.zoom);
+    // A zoom a re-fetch left behind the data shows it all, so no Show all; a stale tip
+    // puts the slider at the last bucket
+    t = .{ .label = plain("M"), .start = demo.start, .series = &demo.series, .zoom = .{ demo.start + 80 * 3600, demo.start + 90 * 3600 }, .tip = 100 };
+    try has(try x.html(&t), &.{"aria-valuenow=\"71\""}, &.{"Show all"});
+    // A series that stopped early says when; marks past five are counted
+    var marks: [7]i64 = undefined;
+    for (&marks, 0..) |*m, i| m.* = demo.start + @as(i64, @intCast(i)) * 3600;
+    t = .{ .label = plain("S"), .start = demo.start, .series = &.{.{ .name = plain("s"), .values = &.{ 1, 2, null, null, null, null, null, null } }}, .marks = &marks };
+    try has(try x.html(&t), &.{"Latest 2 at 25 Oct 02:00. Restart 25 Oct 01:00, 25 Oct 02:00, 25 Oct 03:00, 25 Oct 04:00, 25 Oct 05:00 and 2 more."}, &.{});
     t = .{ .label = plain("L"), .unit = .score, .fit = true, .start = demo.start, .series = &.{.{ .name = plain("l"), .values = &demo.loss }} };
     s = try x.html(&t);
     try has(s, &.{"<b>0.691</b>"}, &.{"data-s="});
@@ -900,11 +948,51 @@ test "UK clock: BST until 01:00 UTC on October's last Sunday, one 01:00 tick aft
     t.clock = .utc;
     try has(try x.html(&t), &.{"<b>25 Oct 10:00</b>"}, &.{});
     // 23:00 to 04:00 UTC over the switch: hourly ticks, UK midnight at 23:00 UTC, the hour
-    // given back (01:00 BST, then 01:00 GMT) once
+    // given back ticked twice (01:00 BST, then 01:00 GMT)
     t = .{ .label = plain("M"), .start = demo.start, .series = &demo.series, .zoom = .{ demo.start + 23 * 3600, demo.start + 28 * 3600 } };
     const s = try x.html(&t);
     try has(s, &.{ ">26 Oct<", ">01:00<", ">02:00<", ">03:00<" }, &.{">00:00<"});
-    try testing.expectEqual(@as(usize, 1), std.mem.count(u8, s, ">01:00<"));
+    try testing.expectEqual(@as(usize, 2), std.mem.count(u8, s, ">01:00<"));
+}
+
+test "ticks: March's missing hour, October's twice at sub-hour steps" {
+    var x: X = undefined;
+    x.init();
+    defer x.arena.deinit();
+    const mar = lastSunday(2025, 3) * 86400;
+    var t: Time = .{ .label = plain("M"), .start = mar, .series = &demo.series, .zoom = .{ mar, mar + 4 * 3600 } };
+    var s = try x.html(&t);
+    try has(s, &.{ ">30 Mar<", ">02:00<", ">03:00<" }, &.{ ">00:00<", ">01:00<" });
+    // Narrow keeps the printed even hours: 02:00 BST is 01:00 UTC
+    const p: chart.Plane = .{ .x = .{ .lo = -0.5, .hi = 3.5 }, .y = .{ .lo = 0, .hi = 1 } };
+    for (t.ticks(&x.h, p, .{ 0, 4 })) |k| try testing.expectEqual(eql(k.label.s, "03:00"), k.minor);
+    // 00:30 to 01:30 UTC on 26 Oct by minute: 01:30 to 01:50 BST, then 01:00 to 01:20 GMT
+    const mins = try x.arena.allocator().alloc(?f32, 60);
+    @memset(mins, 1);
+    t = .{ .label = plain("R"), .start = lastSunday(2025, 10) * 86400 + 1800, .step = 60, .series = &.{.{ .name = plain("r"), .values = mins }} };
+    s = try x.html(&t);
+    try has(s, &.{ ">01:30<", ">01:40<", ">01:50<", ">01:00<", ">01:10<", ">01:20<" }, &.{});
+}
+
+test "tickStep: never finer than a bucket, 1 minute to 28 days, then a sixth in days" {
+    var t: Time = .{ .label = plain("x"), .start = 0, .step = 60, .series = &.{} };
+    const hr = 3600;
+    const day = 86400;
+    for ([_][2]i64{
+        .{ 360, 60 },
+        .{ 1800, 300 },
+        .{ hr, 600 },
+        .{ 5400, 900 },
+        .{ 3 * hr, 1800 },
+        .{ 6 * hr, hr },
+        .{ 3 * day, 12 * hr },
+        .{ 42 * day, 7 * day },
+        .{ 84 * day, 14 * day },
+        .{ 168 * day, 28 * day },
+        .{ 365 * day, 61 * day },
+    }) |c| try testing.expectEqual(c[1], t.tickStep(c[0]));
+    t.step = 3600;
+    try testing.expectEqual(@as(i64, hr), t.tickStep(1800));
 }
 
 test "ticks: per minute zoomed to 20 minutes, a year by day" {
