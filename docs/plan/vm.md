@@ -206,8 +206,9 @@ Your games once C01 crawls (its Riot calls go through the crawler's proxy)
 ## C01 tuning
 
 For a fair C01 vs Oracle benchmark: each host tuned for itself first. Code knobs become
-host settings (host.env or a flag), defaults = today's values, so the Oracle box later
-runs with its own tuned values; the box stays untouched until then.
+host settings (host.env or a flag), defaults = today's values. The defaults are the
+Oracle box's tuned values (its 2 cores gained nothing from parallel loads), so its own
+logs give its side, as VM3 says: never a run on the box, which stays stopped.
 
 - Measure: deploy/c01-bench.sh LABEL [N] on C01 (copy at ~/vm-chain/deploy/, run as a
   user unit: `systemd-run --user --collect --unit meiolol-tune bash
@@ -244,43 +245,43 @@ late, behind a views round)
 | view loads 2: kept, C01 host.env MEIOLOL_VIEW_LOADS=2; the new baseline | 127 (131 127 123) | 436 (434 438 436) | 45 (45 43 47) | 9/20/25 | 48 | 154666 |
 | filter runs 16 at view loads 2: not kept (filters 3.6 s, beside people's 62 s) | 129 (125 129 135) | 453 (454 453 439) | 45 (45 45 44) | 10/20/26 | 47 | 154467 |
 
-Baseline's views write by phase (views.log): stats 371 s (view 2), 144 s (view 3),
-75 s (view 0), 29 s (view 1), single-threaded (cpu = wall); people 53 s; filters 6 s,
-from the partials. The four views load one after another on one connection, so the
-write uses about one of the 16 vCPU: knob 1 can save at most the filters' 6 s, less
-than the spread between runs
-- Views write on more than one core, in this run (Jacob, 27 Oct: an optimisation the
-  Oracle box could have had too, only not worth it on 2 cores, so the benchmark stays
-  fair): the four views at once on sibling connections, MEIOLOL_VIEW_LOADS (1-4, default
-  1 = serial, the Oracle box's value). Not par inside stats: chunked float sums in
-  additive.fit would change the output and the eval. Expected ~400 s against 754 (the
-  longest view plus partials). Then a new baseline row at C01's value; the row above
-  stays, labelled serial. Built (95f9063d): views at once on par.forEachUpTo, longest
-  first; the people tallies behind a mutex (they read stats only for champion ids, so
-  any view may make them); the first view to fail stops the others. Checked on C01 (27 Oct,
-  crawler and web loop paused): views written at 1 and at 4 match byte for byte in
-  every part the clock leaves alone (views 1 and 3 whole, every view's patch day; the
-  30-day views' window moved 13 min between the writes); core builds by the old and new
-  binary started together match in all 285 files. Views write 769 s at 1, 471 s at 4
-  (one run, not the bench). Benched: 2 at once is as fast as 4 (436 s vs 460 s, -42% on
-  serial) with less memory beside the renderer and crawler, so C01 runs 2. Its floor is
-  the longest view: view 2's stats 396 s (371 s serial; the views slow each other a
-  little), the other worker's views 0, 3, 1 fit beside it. Lower only by splitting
-  stats, ruled out above
+Serial views write by phase (views.log): stats 371 s (view 2), 144 s (view 3), 75 s
+(view 0), 29 s (view 1), cpu = wall; people 53 s; filters 6 s, from the partials. So
+knob 1 can save at most the filters' 6 s
+- Views at once (95f9063d; Jacob 27 Oct: the Oracle box could have had it too, only not
+  worth it on 2 cores, so the benchmark stays fair): MEIOLOL_VIEW_LOADS 1-4, default 1
+  (the box's), each view on a sibling connection. Not par inside stats: chunked float
+  sums in additive.fit would change the output and the eval. Checked on C01 byte for
+  byte at 1 vs 4 in every part the clock leaves alone. 2 is as fast as 4 with less
+  memory, so C01 runs 2; its floor is view 2's stats (396 s), the other views beside it
 - Knobs 2 (reader cache, mmap) and 5 (lvmcache): not run, nothing waits on reads. Every
   phase of both builds has cpu = wall (core build stats 29.4 s and 86.8 s; views write
   stats 398 s; partials 13.8 s wall vs 13.6 s cpu), with 47-49 GB of page cache warm
-- Core build: its two views (29 s, 87 s) load at once too, behind the same
-  MEIOLOL_VIEW_LOADS (55602bbf; write.zig: loaded at once, then written in the serial
-  order). C01, crawler paused, builds at 1 and 2 started together: all 285 files the
-  same (with it running, index.html's game count moves between the views' reads). Web
-  loop's site step 101 s on its first round (19:16), against 121-138 s, median ~127,
-  that day: ~26 s a round
+- Core build: its two views (29 s, 87 s) load at once too (55602bbf), byte for byte
+  the same on C01 at 1 vs 2 (crawler paused); its web loop step ~101 s against ~127 s
+- Knob 3: no par.zig user has a hard cap. The eval's folds, replay and additive's
+  sims use par.forEach, one worker per CPU (16 on C01; the eval took 45 min); the
+  site's loads are already host settings (MEIOLOL_VIEW_LOADS, MEIOLOL_FILTER_RUNS)
 - Hyperthreads: `openssl speed -multi N sha256` 16 KB blocks, 27 Oct, web loop running:
   8 at 2.68 GB/s, 16 at 5.11 GB/s (1.9x): the 16 vCPU act as near 16 cores
 - Knob 4 (unit limits): a views write's peak at view loads 2 still to read, from
-  meiolol-web's MemoryPeak after its next full round (restarted 27 Oct 17:57). Web was
-  down 17:03-17:57 that day: a probe's ssh dropped before its trap restarted it
+  meiolol-web's MemoryPeak after its next full round (restarted 27 Oct 17:57)
+
+### C01 vs the Oracle box
+
+C01 tuned (27 Oct: MEIOLOL_VIEW_LOADS=2, its last c01-bench row and web.log) against the
+box on its defaults, from its own logs as mirrored at the cut-over (C01
+~/vm-chain/box/: web.log, render.log, crawl.log). Both with their crawlers running.
+
+| | C01 | Oracle box | C01 vs box |
+|---|---|---|---|
+| core build s | 127 bench; 101 in the web loop with its views at once | 287 (median of its last 10 rounds, 204-409) | 2.3x / 2.8x faster |
+| views write, full, s | 436 (434 438 436) | 769 (median of its last 5 full writes, 719-1184; 907 the last, 26 Oct) | 1.8x faster |
+| views write by phase | view 2 stats 396, view 3 146, view 0 103 + people 60, view 1 30, partials 16 | not in the box's logs (views.log, rewritten each round) | |
+| renderer load s | 45 (45 43 47) | 41 (its reloads 26 Oct, 37-48) | about the same |
+| render ms p50/p95/p99 | 9/20/25 (every page, 8 at a time) | not in the box's logs | |
+| crawl matches/day | 154666 | 156295 (its last report, 27 Oct 03:42) | the same: both at the key's rate |
+| daily eval | 45 min (27 Oct) | 8 h 57 min (26 Oct) | 12x faster |
 
 ## Later
 
