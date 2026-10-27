@@ -288,7 +288,7 @@ pub fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {
     // The island's toolbar picks the view
     p.counterparts = null;
     try html.head(w, p);
-    try earlyNote(site, w, false);
+    try earlyNote(site, w);
     try writeIsland(site, w, role, path);
     try html.foot(w, p);
 }
