@@ -7,6 +7,7 @@
 # Each finished stage leaves STATE/<stage>, so a rerun goes on from where it stopped.
 # Results and the verdict in STATE/results.md; the last line is "VERDICT: ...".
 #   systemd-run --user --unit meiolol-vm-chain bash ~/vm-chain/deploy/vm-chain.sh
+#   vm-chain.sh final    VM6's last pass, the box's writers stopped: exit 0 when checked
 set -uo pipefail
 
 STATE=$HOME/vm-chain
@@ -194,6 +195,16 @@ crawl_bench() {
     done_stage crawl
 }
 
+# VM6 (deploy/vm-cutover.sh): the box's writers stopped, one pass and its check
+if [[ ${1:-} == final ]]; then
+    catch_up || { log "final catch-up failed: $STATE/catch-up.log"; exit 1; }
+    for db in meiolol timeline raw; do
+        r=$(sqlite3 "data/$db.db" 'PRAGMA quick_check' 2>&1 | head -n 3)
+        log "final quick_check $db.db: $r"
+        [[ $r == ok ]] || exit 1
+    done
+    exit 0
+fi
 [[ -e $STATE/copy ]] || wait_copy
 if [[ ! -e $STATE/check ]]; then
     : > "$out"

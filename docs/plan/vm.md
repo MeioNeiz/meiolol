@@ -59,6 +59,9 @@ Migration mode, set 26-27 Oct (undo in VM6, from the new host where moved):
   ~/vm-chain/deploy/): waits for the copy, catch-up and quick_check, then VM3's
   benchmark; ~/vm-chain/results.md ends "VERDICT: ...". C01 has 8b25a7c's x86 build
   (box.sh sync), no unit enabled
+- Then deploy/vm-cutover.sh on the Mac (background) waits for that verdict and runs VM6
+  and VM5's switches by itself; state and log in data/vm-cutover/, `cc-note needs` when
+  it stops or finishes
 - Secrets: vault meiolol/essex-vm (SUDO_PASSWORD, NAS_PASSWORD); `head -1 | sudo -S -p ""
   -v` once per ssh command, then plain sudo (sudo -S per call eats the stdin of what
   it runs)
@@ -92,9 +95,10 @@ damaged cachevol can't be repaired)
 
 ### VM2: base host
 
-- Lingering for jacob: done. Left: unattended upgrades, UTC, journald limits, ufw (ssh
-  on tailscale0 only), Tailscale on the gpu-box WSL (its mirror and archive pulls)
-- Done when: `MEIOLOL_HOST=essex-vm deploy/box.sh status` answers
+- Done: lingering, unattended upgrades, UTC, journald 1 GB, ufw (all on tailscale0, ssh
+  from 192.168.18.0/24 for Ethan), sqlite3; `box.sh status` answers
+- Left: Tailscale on the gpu-box WSL (its sudo password: Jacob), for its mirror and
+  archive pulls; its aliases are switched to C01 by the cut-over
 
 ### VM3: backend on a copy, crawler off
 
@@ -116,6 +120,16 @@ damaged cachevol can't be repaired)
   views.log. Done when: pages render on C01 from the copy
 
 ### VM4: web side on C01
+
+Built 27 Oct by deploy/vm-web.sh (repeatable; `data` also copies jomify's site, training
+view, traffic history and API data): nginx (deploy/nginx/meiolol.conf) on 127.0.0.1:8080,
+cloudflared with tunnel meiolol-c01 (1c7e296d-91e9-4538-8598-10833de3b9b0, token vault
+meiolol/essex-vm TUNNEL_TOKEN), vm.meio.lol on it; meiolol-api, traffic timer, user
+meiolol with C01's own keys for the meiolol-web/exchange/cache aliases (now 127.0.0.1),
+the Mac's training and gpu-box's accounts keys; the gpu-box's archive and backup keys in
+jacob's authorized_keys. cache-warm.sh goes to 127.0.0.1:8080. Static pages and the
+admin login answer on vm.meio.lol; rendered pages once the chain starts the renderer;
+Your games once C01 crawls (its Riot calls go through the crawler's proxy)
 
 - nginx with jomify's conf.d/meiolol.conf and its include files
   (meiolol-admin-token.conf, meiolol-api.htpasswd, meiolol-desktop-key.conf,

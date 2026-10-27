@@ -6,7 +6,8 @@
 # only: always fetched anew and stored whatever the version), which nginx's @render_any
 # serves when there is no current copy. Requests every page and file the renderer serves
 # (/admin/api/pages.txt) through nginx, the site's most visited first
-# (data/cache-warm-top.txt, from jomify's traffic.json), over the private network.
+# (data/cache-warm-top.txt, from traffic.json), through the local nginx (plain http on
+# 127.0.0.1:8080, which cloudflared serves).
 # Pages render from memory in milliseconds, so one at a time, paced: a little CPU and no
 # disk, which the crawler needs. Again while the version changed during a run.
 # meiolol-cache-warm.service, started by cache-version.sh. Log in data/render.log
@@ -33,9 +34,9 @@ while true; do
     cat data/cache-warm-top.txt "$tmp/pages" 2> /dev/null | grep -E '^/[A-Za-z0-9._/-]*$' \
         | awk '!seen[$0]++' > "$tmp/urls"
     start=$SECONDS
-    # Unlogged by jomify's nginx (this user agent), so traffic.json counts visitors only
-    sed 's|.*|url = "https://meio.lol&"\noutput = /dev/null|' "$tmp/urls" \
-        | curl -s -K - --rate "$RATE" --max-time 30 --resolve meio.lol:443:10.0.0.214 \
+    # Unlogged by nginx (this user agent), so traffic.json counts visitors only
+    sed 's|.*|url = "http://meio.lol&"\noutput = /dev/null|' "$tmp/urls" \
+        | curl -s -K - --rate "$RATE" --max-time 30 --connect-to meio.lol:80:127.0.0.1:8080 \
             -A meiolol-cache-warm -H 'X-Meiolol-Warm: 1' -H 'Accept-Encoding: gzip' \
             -w '%{http_code} %header{x-meiolol-render}\n' > "$tmp/status"
     summary=$(awk '{n[$1 ($2 == "" ? "" : "/" $2)]++} END {for (k in n) printf "%s %d, ", k, n[k]}' \
