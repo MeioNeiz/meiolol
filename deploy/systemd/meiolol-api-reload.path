@@ -1,0 +1,8 @@
+[Unit]
+Description=Restart meiolol-api when new curves arrive from the box
+
+[Path]
+PathChanged=/var/lib/meiolol-api/exchange/curves
+
+[Install]
+WantedBy=multi-user.target

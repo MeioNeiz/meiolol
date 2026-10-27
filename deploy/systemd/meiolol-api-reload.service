@@ -1,0 +1,6 @@
+[Unit]
+Description=Restart meiolol-api (new curves files)
+
+[Service]
+Type=oneshot
+ExecStart=/bin/systemctl restart meiolol-api.service

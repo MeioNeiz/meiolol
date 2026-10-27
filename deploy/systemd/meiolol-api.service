@@ -1,0 +1,22 @@
+[Unit]
+Description=meiolol Your games API (docs/your-games.md)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=meiolol-api
+ExecStart=/usr/local/bin/meiolol api --data /var/lib/meiolol-api --exchange /var/lib/meiolol-api/exchange --riot-proxy http://127.0.0.1:8092
+UMask=0007
+Restart=on-failure
+RestartSec=10
+# 3: Riot rejected the key; restarting would not help
+RestartPreventExitStatus=3
+MemoryMax=400M
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/meiolol-api
+
+[Install]
+WantedBy=multi-user.target
