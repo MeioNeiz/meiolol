@@ -232,20 +232,23 @@ renderer, 8 at a time; crawl: the crawler's rate at the end.
 
 | setting | core build s | views write s | renderer load s | render ms p50/p95/p99 | buff/cache GB | crawl matches/day |
 |---|---|---|---|---|---|---|
-| baseline (27 Oct, host CPU, 62 GB, AVX2 build) | 129 (129 120 132) | 754 (758 750 754) | 44 (44 43 45) | 10/19/25 | 49 | 152121 |
+| baseline, serial (27 Oct, host CPU, 62 GB, AVX2 build) | 129 (129 120 132) | 754 (758 750 754) | 44 (44 43 45) | 10/19/25 | 49 | 152121 |
 
 Baseline's views write by phase (views.log): stats 371 s (view 2), 144 s (view 3),
 75 s (view 0), 29 s (view 1), single-threaded (cpu = wall); people 53 s; filters 6 s,
 from the partials. The four views load one after another on one connection, so the
 write uses about one of the 16 vCPU: knob 1 can save at most the filters' 6 s, less
 than the spread between runs
+- Views write on more than one core, in this run (Jacob, 27 Oct: an optimisation the
+  Oracle box could have had too, only not worth it on 2 cores, so the benchmark stays
+  fair): the four views at once on sibling connections, MEIOLOL_VIEW_LOADS (1-4, default
+  1 = serial, the Oracle box's value). Not par inside stats: chunked float sums in
+  additive.fit would change the output and the eval. Expected ~400 s against 754 (the
+  longest view plus partials). Then a new baseline row at C01's value; the row above
+  stays, labelled serial
 
 ## Later
 
-- Views write on more than one core (code, both hosts; C01 tuning baseline): load the
-  four views at once on sibling connections, or split stats inside a view (par.each).
-  At once: ~375 s (the longest view's stats) plus people and filters, against 766 s;
-  helps C01 (16 vCPU) far more than the 2-core Oracle box, so it moves the benchmark
 - Plain local calls in place of the localhost ssh aliases (VM4)
 - Retune for C01 (after VM3's baseline): the box's limits were set for 2 cores and a
   72 MB/s disk. More parallel read runs in the views write (4 today), more reads in
