@@ -17,7 +17,9 @@ bin=${MEIOLOL_BIN:-zig-out/bin/meiolol}
 
 seed() {
     rm -rf "$dir/base" && mkdir -p "$dir/base"
-    "$bin" status --data "$dir/base" > /dev/null
+    # The schema from a crawl that stops at once (status opens read-only); its ladder
+    # fetch from the fixtures is cleared below
+    "$bin" crawl --data "$dir/base" --fake-api 20 --hours 0 > /dev/null 2>&1
     local now
     now=$(date +%s)
     sqlite3 "$dir/base/meiolol.db" <<SQL
@@ -25,6 +27,10 @@ ATTACH '$dir/base/raw.db' AS raw;
 ATTACH '$dir/base/timeline.db' AS timeline;
 PRAGMA journal_mode=WAL;
 BEGIN;
+DELETE FROM players;
+DELETE FROM ladder_pages;
+DELETE FROM ranks;
+DELETE FROM rank_history;
 WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 1000000)
 INSERT INTO players (puuid, tier, division, lp, wins, losses, rank_seen_at,
     matches_checked_at, source, platform, region, seen_at)
