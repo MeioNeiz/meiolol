@@ -86,10 +86,14 @@ site_args() {
     [[ -s riot.txt ]] && args+=(--riot-txt "$(< riot.txt)")
 }
 
-# 1.1x the box or under (docs/plan/vm.md VM3)
+# 1.1x the box or under (docs/plan/vm.md VM3). C01 with no figure is a failed step: a
+# downgrade until looked at, never a pass
 compare() {
     local name=$1 c01=$2 box=$3
-    if [[ -z $box || -z $c01 ]]; then
+    if [[ -z $c01 ]]; then
+        note "| $name | failed | ${box:-?} | FAILED |"
+        slower+=" $name"
+    elif [[ -z $box ]]; then
         note "| $name | ${c01:-?} | ${box:-?} | no figure |"
     elif (( c01 * 10 <= box * 11 )); then
         note "| $name | $c01 | $box | ok |"
@@ -111,16 +115,24 @@ bench() {
     log "core build"
     rm -rf data/site.bench
     t=$SECONDS
-    bin/meiolol site "${args[@]}" --out data/site.bench --static core \
-        > "$STATE/core.log" 2>&1 || log "core build failed: $STATE/core.log"
-    core=$((SECONDS - t))
+    if bin/meiolol site "${args[@]}" --out data/site.bench --static core \
+        > "$STATE/core.log" 2>&1; then
+        core=$((SECONDS - t))
+    else
+        core=''
+        log "core build failed: $STATE/core.log"
+    fi
     rm -rf data/site.bench
 
     log "views write, every part fresh"
     t=$SECONDS
-    nice -n 10 ionice -c 3 bin/meiolol site --views data/views.bin "${args[@]}" \
-        > data/views.log 2>&1 || log "views write failed: data/views.log"
-    views=$((SECONDS - t))
+    if nice -n 10 ionice -c 3 bin/meiolol site --views data/views.bin "${args[@]}" \
+        > data/views.log 2>&1; then
+        views=$((SECONDS - t))
+    else
+        views=''
+        log "views write failed: data/views.log"
+    fi
 
     log "renderer"
     systemctl --user stop meiolol-render@a 2> /dev/null
@@ -132,7 +144,11 @@ bench() {
     reload=$(tail -n +$((lines + 1)) data/render.log \
         | grep -oE 'views file read in [0-9]+ ms' | tail -n 1 \
         | grep -oE '[0-9]+')
-    reload=$(( ${reload:-0} / 1000 ))
+    if [[ -e data/render-a.ready && -n $reload ]]; then
+        reload=$((reload / 1000))
+    else
+        reload=''
+    fi
     latency
 
     box_core=$(grep -oE 'upload: site [0-9]+s' "$STATE/box/web.log" | tail -n 10 \

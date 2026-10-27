@@ -92,7 +92,14 @@ if (( with_data )); then
     rsync -a --delete "$d/www/meiolol/" /var/www/meiolol/
     rsync -a --delete "$d/www/meiolol-training/" /var/www/meiolol-training/
     rsync -a --delete "$d/www/meiolol-ops/" /var/www/meiolol-ops/
+    systemctl stop meiolol-api meiolol-api-reload.path 2> /dev/null || true
     rsync -a --delete "$d/lib/meiolol-api/" /var/lib/meiolol-api/
+    for f in /var/lib/meiolol-api/*.db; do
+        [[ -e $f ]] || continue
+        r=$(sqlite3 "$f" 'PRAGMA quick_check' 2>&1 | head -n 3)
+        echo "quick_check $f: $r"
+        [[ $r == ok ]] || exit 1
+    done
     install -d -o meiolol-traffic -g meiolol-traffic -m 755 /var/lib/meiolol-traffic
     rsync -a --delete "$d/lib/meiolol-traffic/" /var/lib/meiolol-traffic/
     chown -R meiolol:meiolol /var/www/meiolol /var/www/meiolol-training

@@ -3,12 +3,13 @@
 # the VM3 chain's verdict (C01 ~/vm-chain/results.md) and goes on only on "no downgrade"
 # with vm.meio.lol serving static and rendered pages. Then: the box's units stopped and
 # masked (a bulk push's deploy can't start its crawler beside C01's), the last copy pass
-# and its check, jomify's API stopped and its data copied (deploy/vm-web.sh data), C01's
-# loops started (crawler last), meio.lol and www to the tunnel, the Mac's scripts pointed
-# at essex-vm, push mode fast. Each done step leaves data/vm-cutover/<step>, so a rerun
-# goes on from where it stopped; log in data/vm-cutover/log. Rollback:
-# data/vm-cutover/dns-before.json back, the box's units unmasked, enabled and started (the
-# data since the switch copied back first if C01 crawled).
+# and its check, jomify's API data copied (deploy/vm-web.sh data; jomify itself left as
+# it is, Jacob 27 Oct), C01's loops started (crawler last), meio.lol and www to the
+# tunnel, the Mac's scripts pointed at essex-vm. Push mode stays bulk: Jacob sets fast.
+# Each done step leaves data/vm-cutover/<step>, so a rerun goes on from where it stopped;
+# log in data/vm-cutover/log. Rollback: data/vm-cutover/dns-before.json back, the box's
+# units unmasked, enabled and started (the data since the switch copied back first if
+# C01 crawled).
 #   deploy/vm-cutover.sh      run on the Mac: nohup, or a session's background task
 set -uo pipefail
 
@@ -76,10 +77,16 @@ final_copy() {
             && bash vm-chain/deploy/vm-chain.sh final'
 }
 
+# Read only on jomify, its API still running: a copy caught mid-write fails vm-web.sh's
+# quick_check and is taken again
 jomify_data() {
-    ssh jomify 'sudo systemctl disable -q --now meiolol-api meiolol-api-reload.path \
-        meiolol-traffic.timer' || return 1
-    deploy/vm-web.sh data
+    local try
+    for try in 1 2 3; do
+        deploy/vm-web.sh data && return 0
+        log "vm-web.sh data failed, try $try"
+        sleep 20
+    done
+    return 1
 }
 
 c01_config() {
@@ -134,7 +141,7 @@ verify() {
 }
 
 # The Mac's scripts at essex-vm, the training upload at C01's meiolol user; then
-# deploys go to C01 as they come
+# the queued bulk batch deploys to C01
 mac_switch() {
     local f
     for f in deploy/box.sh deploy/desktop-release.sh deploy/dev.sh deploy/deploy-events.sh \
@@ -146,7 +153,7 @@ mac_switch() {
     deploy/commit.sh -m "Backend host is C01 (essex-vm): the Mac's scripts and the training upload" \
         -- deploy/box.sh deploy/desktop-release.sh deploy/dev.sh deploy/deploy-events.sh \
         deploy/mac-watch.sh deploy/on-push.sh deploy/lab-push.sh || return 1
-    deploy/push.sh --mode fast && deploy/push.sh "$(git log -1 --format=%H -- deploy/lab-push.sh)"
+    deploy/push.sh "$(git log -1 --format=%H -- deploy/lab-push.sh)"
 }
 
 # Its mirrors and archive pulls reach C01 only over Tailscale; until it has it they fail
