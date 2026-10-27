@@ -24,7 +24,8 @@ pub const Line = []const Run;
 
 pub const Item = struct { line: Line, sub: []const Line = &.{} };
 
-pub const Heading = struct { level: u8, line: Line };
+/// `id`: the text's slug, unique in the doc ("lane-model", a second one "lane-model-2")
+pub const Heading = struct { level: u8, line: Line, id: []const u8 = "" };
 
 /// `head` empty when the table has no separator row
 pub const Table = struct { head: []const Line, rows: []const []const Line };
@@ -62,7 +63,26 @@ pub fn parse(a: Allocator, src: []const u8) Allocator.Error!Doc {
             try blocks.append(a, .{ .para = try inline_(a, try p.para()) });
         }
     }
+    try slugs(a, blocks.items);
     return .{ .blocks = blocks.items };
+}
+
+fn slugs(a: Allocator, blocks: []Block) Allocator.Error!void {
+    var seen: std.StringHashMapUnmanaged(void) = .empty;
+    for (blocks) |*b| if (b.* == .heading) {
+        var w: std.ArrayList(u8) = .empty;
+        for (b.heading.line) |r| for (r.s) |c| {
+            if (std.ascii.isAlphanumeric(c)) {
+                try w.append(a, std.ascii.toLower(c));
+            } else if (w.items.len > 0 and w.items[w.items.len - 1] != '-') try w.append(a, '-');
+        };
+        const base = std.mem.trimEnd(u8, w.items, "-");
+        var id = if (base.len > 0) base else "s";
+        var n: usize = 2;
+        while (seen.contains(id)) : (n += 1) id = try a.print("{s}-{d}", .{ base, n });
+        try seen.put(a, id, {});
+        b.heading.id = id;
+    };
 }
 
 const Parser = struct {
@@ -106,6 +126,12 @@ const Parser = struct {
             }
             try rows.append(p.a, try p.cells(l));
         }
+        // Rows as wide as the head, as GitHub draws them: a short one padded, a long one cut
+        if (head.len > 0) for (rows.items) |*r| if (r.len != head.len) {
+            const fit = try p.a.alloc(Line, head.len);
+            for (fit, 0..) |*c, i| c.* = if (i < r.len) r.*[i] else &.{};
+            r.* = fit;
+        };
         return .{ .head = head, .rows = rows.items };
     }
 
@@ -266,42 +292,84 @@ pub const Opts = struct {
     top: u3 = 2,
     /// Each `##` section in a <details>, closed: model.md runs to 6,000 lines
     fold: bool = false,
+    /// With fold: the id of the section shown open (the URL's hash)
+    open: []const u8 = "",
+    /// Before each heading id, when a page shows two docs
+    id_prefix: []const u8 = "",
 };
 
 const W = struct {
     pub const empty = phrase.plain("Nothing written yet");
+    pub const loading = phrase.plain("Loading");
 };
 
 pub fn view(h: *H, d: Doc, o: Opts) N {
     if (d.blocks.len == 0) return h.div(.{ .class = "c-prose", .data_prose = {} }, .{h.p(.{ .class = "empty" }, .{W.empty})});
-    var out = h.list();
-    var i: usize = 0;
+    if (!o.fold) return h.div(.{ .class = "c-prose", .data_prose = {} }, .{many(h, d.blocks, o)});
+    const sp = split(h.mem, d) catch {
+        h.oom = true;
+        return .none;
+    };
+    const fs = h.mem.alloc(Fold, sp.sections.len) catch {
+        h.oom = true;
+        return .none;
+    };
+    for (sp.sections, fs) |s, *f| f.* = .{ .heading = s.heading, .body = s.body, .open = std.mem.eql(u8, s.heading.id, o.open) };
+    return folded(h, sp.intro, fs, o);
+}
+
+/// A doc cut at its `##` headings: the intro before the first, then each section
+pub const Split = struct { intro: Doc, sections: []const Section };
+pub const Section = struct { heading: Heading, body: Doc };
+
+/// Slices of `d`, nothing copied, except the section list (`a`)
+pub fn split(a: Allocator, d: Doc) Allocator.Error!Split {
+    var secs: std.ArrayList(Section) = .empty;
+    var i = firstSection(d.blocks);
+    const intro: Doc = .{ .blocks = d.blocks[0..i] };
     while (i < d.blocks.len) {
-        const b = d.blocks[i];
-        const sec = o.fold and b == .heading and b.heading.level == 2;
-        if (!sec) {
-            out.add(block(h, b, o));
-            i += 1;
-            continue;
-        }
-        var body = h.list();
-        i += 1;
-        while (i < d.blocks.len) : (i += 1) {
-            const x = d.blocks[i];
-            if (x == .heading and x.heading.level <= 2) break;
-            body.add(block(h, x, o));
-        }
-        out.add(h.el(.details, .{ .class = "sec" }, .{
-            h.el(.summary, .{}, .{block(h, b, o)}),
-            body.done(),
-        }));
+        const j = i + 1 + firstSection(d.blocks[i + 1 ..]);
+        try secs.append(a, .{ .heading = d.blocks[i].heading, .body = .{ .blocks = d.blocks[i + 1 .. j] } });
+        i = j;
     }
-    return h.div(.{ .class = "c-prose", .data_prose = {} }, .{out.done()});
+    return .{ .intro = intro, .sections = secs.items };
+}
+
+fn firstSection(bs: []const Block) usize {
+    for (bs, 0..) |b, i| if (b == .heading and b.heading.level == 2) return i;
+    return bs.len;
+}
+
+/// A `##` section in a closed <details>. `body` null until the page has fetched it (one
+/// .bin per section: model.md is 456 KB encoded, 13,600 nodes, as one doc); a closed
+/// section builds nothing of its body
+pub const Fold = struct {
+    heading: Heading,
+    body: ?Doc = null,
+    open: bool = false,
+    /// The page's: it fetches the body on the first open
+    on_toggle: ?tree.Handler = null,
+};
+
+pub fn folded(h: *H, intro: Doc, secs: []const Fold, o: Opts) N {
+    var out = h.list();
+    for (secs) |f| out.add(h.el(.details, .{ .key = f.heading.id, .class = "sec", .open = f.open, .on_toggle = f.on_toggle }, .{
+        h.el(.summary, .{}, .{block(h, .{ .heading = f.heading }, o)}),
+        if (f.open) (if (f.body) |b| many(h, b.blocks, o) else null) else null,
+        if (f.open and f.body == null) h.p(.{ .class = "empty" }, .{W.loading}) else null,
+    }));
+    return h.div(.{ .class = "c-prose", .data_prose = {} }, .{ many(h, intro.blocks, o), out.done() });
+}
+
+fn many(h: *H, bs: []const Block, o: Opts) []const N {
+    var l = h.list();
+    for (bs) |b| l.add(block(h, b, o));
+    return l.done();
 }
 
 fn block(h: *H, b: Block, o: Opts) N {
     return switch (b) {
-        .heading => |x| heading(h, std.math.clamp(@as(i16, o.top) + x.level - 2, 1, 4), runs(h, x.line)),
+        .heading => |x| heading(h, std.math.clamp(@as(i16, o.top) + x.level - 2, 1, 4), if (x.id.len > 0) h.fmt("{s}{s}", .{ o.id_prefix, x.id }) else null, runs(h, x.line)),
         .para => |x| h.p(.{}, .{runs(h, x)}),
         .list => |items| blk: {
             var lis = h.list();
@@ -330,12 +398,12 @@ fn block(h: *H, b: Block, o: Opts) N {
     };
 }
 
-fn heading(h: *H, tag: i16, kids: []const N) N {
+fn heading(h: *H, tag: i16, id: ?[]const u8, kids: []const N) N {
     return switch (tag) {
-        1 => h.el(.h1, .{}, .{kids}),
-        2 => h.el(.h2, .{}, .{kids}),
-        3 => h.el(.h3, .{}, .{kids}),
-        else => h.el(.h4, .{}, .{kids}),
+        1 => h.el(.h1, .{ .id = id }, .{kids}),
+        2 => h.el(.h2, .{ .id = id }, .{kids}),
+        3 => h.el(.h3, .{ .id = id }, .{kids}),
+        else => h.el(.h4, .{ .id = id }, .{kids}),
     };
 }
 
@@ -446,11 +514,22 @@ fn demo(g: *Gallery, caption: []const u8, src: []const u8, o: Opts) void {
     g.add(caption, view(g.h, d, o));
 }
 
+/// A section opened before the page has fetched its body
+fn loading(g: *Gallery) !void {
+    const sp = try split(g.h.mem, try parse(g.h.mem, demo_folded));
+    const fs = try g.h.mem.alloc(Fold, sp.sections.len);
+    for (sp.sections, fs, 0..) |x, *f, i| f.* = .{ .heading = x.heading, .open = i == 0 };
+    g.add("a section opened, its body loading", folded(g.h, sp.intro, fs, .{ .top = 3 }));
+}
+
 pub fn gallery(g: *Gallery) void {
     demo(g, "learned.md: bullets, nested, code, bold", demo_learned, .{ .top = 3 });
     demo(g, "eval report table", demo_eval, .{ .top = 3 });
     demo(g, "fenced code", demo_code, .{});
-    demo(g, "model.md folded by section", demo_folded, .{ .top = 3, .fold = true });
+    demo(g, "model.md folded, a section open from the hash", demo_folded, .{ .top = 3, .fold = true, .open = "lane-model" });
+    loading(g) catch {
+        g.h.oom = true;
+    };
     g.add("empty", view(g.h, .{ .blocks = &.{} }, .{}));
 }
 
@@ -526,7 +605,7 @@ test "parse: each block kind, wrapped lines joined, the rest literal" {
     try testing.expectEqual(@as(usize, 2), t.rows.len);
     try expectRuns(&.{.{ .kind = .code, .s = "p|q" }}, t.rows[0][0]);
     try expectRuns(&.{.{ .s = "1.5" }}, t.rows[0][1]);
-    try testing.expectEqual(@as(usize, 1), t.rows[1].len);
+    try testing.expectEqual(@as(usize, 2), t.rows[1].len);
     try testing.expectEqualStrings("  keep  indent\n", bs[5].code);
     try expectRuns(&.{.{ .s = "| only | rows |" }}, bs[6].para);
     try testing.expectEqualStrings("unclosed fence", bs[7].code);
@@ -566,12 +645,12 @@ test "view: heading tags from top, figures right, text escaped, sections folded"
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const s = try render(a, demo_folded ++ "\n#### Deep\n\n| a | b | c | d | e | f |\n| --- | --- | --- | --- | --- | --- |\n| x | 2 | -0.1 | - | +3 | -x |\n\nw[<role>] & co\n", .{ .top = 3, .fold = true });
+    const s = try render(a, demo_folded ++ "\n#### Deep\n\n| a | b | c | d | e | f |\n| --- | --- | --- | --- | --- | --- |\n| x | 2 | -0.1 | - | +3 | -x |\n\nw[<role>] & co\n", .{ .top = 3, .fold = true, .open = "lane-model" });
     for ([_][]const u8{
         "data-prose",
-        "<p>Model quality on held-out games. Start here, then one section.</p><details class=\"sec\"><summary><h3>Start here</h3></summary>",
-        "<details class=\"sec\"><summary><h3>Lane model</h3></summary><h4>Features</h4>",
-        "<h4>Deep</h4>",
+        "<p>Model quality on held-out games. Start here, then one section.</p><details class=\"sec\"><summary><h3 id=\"start-here\">Start here</h3></summary></details>",
+        "<details class=\"sec\" open=\"\"><summary><h3 id=\"lane-model\">Lane model</h3></summary><h4 id=\"features\">Features</h4>",
+        "<h4 id=\"deep\">Deep</h4>",
         "<td>x</td><td class=\"num\">2</td><td class=\"num\">-0.1</td><td class=\"num\">-</td><td class=\"num\">+3</td><td>-x</td>",
         "w[&lt;role&gt;] &amp; co",
     }) |w| if (std.mem.find(u8, s, w) == null) {
@@ -580,7 +659,7 @@ test "view: heading tags from top, figures right, text escaped, sections folded"
     };
     try testing.expectEqual(@as(usize, 2), std.mem.count(u8, s, "<details"));
     const flat = try render(a, "# T\n\n## S\n", .{});
-    try testing.expect(std.mem.find(u8, flat, "<h1>T</h1><h2>S</h2>") != null);
+    try testing.expect(std.mem.find(u8, flat, "<h1 id=\"t\">T</h1><h2 id=\"s\">S</h2>") != null);
     try testing.expect(std.mem.find(u8, flat, "details") == null);
     try testing.expect(std.mem.find(u8, try render(a, "", .{}), "Nothing written yet") != null);
 }
@@ -601,6 +680,8 @@ test "parse: wrapped lines stay text; \\| stays in its cell; a row of dashes is 
         \\| --- | --- |
         \\| ratings | -0.00002 \| +0.00006 |
         \\| none | - |
+        \\| short |
+        \\| long | 1 | 2 |
         \\| - | - |
     ++ "\n\t\n" ++
         \\| a |
@@ -611,14 +692,16 @@ test "parse: wrapped lines stay text; \\| stays in its cell; a row of dashes is 
     try expectRuns(&.{.{ .s = "Controls (pre-declared: |mean| <= 0.0015 or an interval covering 0, else void) # of games is the other Reading:" }}, bs[0].para);
     try expectRuns(&.{.{ .s = "a list after text # of games, wrapped" }}, bs[1].list[0].line);
     const t = bs[2].table;
-    try testing.expectEqual(@as(usize, 3), t.rows.len);
-    try testing.expectEqual(@as(usize, 2), t.rows[0].len);
+    try testing.expectEqual(@as(usize, 5), t.rows.len);
+    for (t.rows) |r| try testing.expectEqual(@as(usize, 2), r.len);
     try expectRuns(&.{.{ .s = "-0.00002 | +0.00006" }}, t.rows[0][1]);
-    try expectRuns(&.{.{ .s = "-" }}, t.rows[2][0]);
+    try expectRuns(&.{}, t.rows[2][1]);
+    try expectRuns(&.{.{ .s = "1" }}, t.rows[3][1]);
+    try expectRuns(&.{.{ .s = "-" }}, t.rows[4][0]);
     try expectRuns(&.{.{ .s = "| a | | -- |" }}, bs[3].para);
 }
 
-test "parse the real docs: fences paired, every row as wide as its head" {
+test "parse the real docs: fences paired, rows as wide as their head" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -645,4 +728,44 @@ test "parse the real docs: fences paired, every row as wide as its head" {
         _ = view(&h, d, .{ .fold = true });
         try testing.expect(!h.oom);
     }
+}
+
+test "heading ids: slugs, unique in the doc; split cuts at ##; a section builds only when open" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const d = try parse(a, "intro\n\n## Lane model: `gold14`\n\nx\n\n### Lane model gold14\n\n## Lane model -- gold14!\n\n## ***\n\n## C#\n");
+    var ids: std.ArrayList([]const u8) = .empty;
+    for (d.blocks) |b| if (b == .heading) try ids.append(a, b.heading.id);
+    const want = [_][]const u8{ "lane-model-gold14", "lane-model-gold14-2", "lane-model-gold14-3", "s", "c" };
+    try testing.expectEqual(want.len, ids.items.len);
+    for (want, ids.items) |w, x| try testing.expectEqualStrings(w, x);
+
+    const sp = try split(a, d);
+    try testing.expectEqual(@as(usize, 1), sp.intro.blocks.len);
+    try testing.expectEqual(@as(usize, 4), sp.sections.len);
+    // The ### stays in its ## section's body
+    try testing.expectEqual(@as(usize, 2), sp.sections[0].body.blocks.len);
+    try testing.expectEqual(@as(usize, 0), sp.sections[3].body.blocks.len);
+
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    var out: std.Io.Writer.Allocating = .init(a);
+    const fs = [_]Fold{
+        .{ .heading = sp.sections[0].heading, .body = sp.sections[0].body },
+        .{ .heading = sp.sections[1].heading, .open = true },
+        .{ .heading = sp.sections[2].heading, .body = sp.sections[2].body, .open = true },
+    };
+    try @import("html.zig").write(&t, folded(&h, sp.intro, &fs, .{ .id_prefix = "m-" }), &out.writer);
+    try testing.expect(!h.oom);
+    const s = out.written();
+    for ([_][]const u8{
+        "<p>intro</p><details class=\"sec\"><summary><h2 id=\"m-lane-model-gold14\">Lane model: <span class=\"c\">gold14</span></h2></summary></details>",
+        "<details class=\"sec\" open=\"\"><summary><h2 id=\"m-lane-model-gold14-3\">Lane model -- gold14!</h2></summary><p class=\"empty\">Loading</p></details>",
+        "<summary><h2 id=\"m-s\">***</h2></summary></details>",
+    }) |w| if (std.mem.find(u8, s, w) == null) {
+        std.debug.print("missing {s} in {s}\n", .{ w, s });
+        return error.TestExpectedEqual;
+    };
+    try testing.expect(std.mem.find(u8, s, "<p>x</p>") == null);
 }
