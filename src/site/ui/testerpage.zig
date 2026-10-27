@@ -411,14 +411,22 @@ pub fn saved(p: *const Page, w: *std.Io.Writer) !void {
     for (p.teams, 0..) |team, s| for (team, 0..) |id, r| try w.print("{s}{d}", .{ if (s == 0 and r == 0) " " else ",", id });
 }
 
-/// The saved board on a page opened with none (`p` as the URL set it, `server` its
-/// default): true if it took it. A link's board and model win over the saved ones
-pub fn restoreSaved(p: *Page, server: *const Page, s: []const u8) bool {
+/// The saved board on a page opened with none (`p` as the URL `fragment` set it,
+/// `server` its default): true if it took it. A link's board and model win over the
+/// saved ones
+pub fn restoreSaved(p: *Page, server: *const Page, fragment: []const u8, s: []const u8) bool {
     if (!std.meta.eql(p.teams, server.teams)) return false;
     const linked = p.which;
     restore(p, s);
-    if (linked != server.which) p.which = linked;
+    if (linksModel(fragment)) p.which = linked;
     return true;
+}
+
+/// The fragment names a model, the default one too
+fn linksModel(fragment: []const u8) bool {
+    var it = std.mem.tokenizeScalar(u8, std.mem.trimStart(u8, fragment, "#"), '&');
+    while (it.next()) |kv| if (std.mem.startsWith(u8, kv, "m=")) return true;
+    return false;
 }
 
 /// Back from `saved`; anything malformed leaves the page as it is. A champion the head

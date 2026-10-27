@@ -252,15 +252,19 @@ test "the saved board: taken on a page opened without one, a linked model kept" 
     var p = server;
     p.which = .comp;
     p.tab = .terms;
-    try testing.expect(tp.restoreSaved(&p, &server, saved));
+    try testing.expect(tp.restoreSaved(&p, &server, "#m=comp&t=terms", saved));
     try testing.expectEqual(.comp, p.which);
     try testing.expectEqual(266, p.teams[0][0]);
     p = server;
-    try testing.expect(tp.restoreSaved(&p, &server, "1 266,0,0,0,0,122,0,0,0,0"));
+    try testing.expect(tp.restoreSaved(&p, &server, "", "1 266,0,0,0,0,122,0,0,0,0"));
     try testing.expectEqual(.comp, p.which);
+    // The default model linked: kept too
+    p = server;
+    try testing.expect(tp.restoreSaved(&p, &server, "#t=terms&m=live", "1 266,0,0,0,0,122,0,0,0,0"));
+    try testing.expectEqual(.live, p.which);
     p = server;
     p.teams[1][0] = 266;
-    try testing.expect(!tp.restoreSaved(&p, &server, saved));
+    try testing.expect(!tp.restoreSaved(&p, &server, "#r=266-0-0-0-0", saved));
     try testing.expectEqual([_][n_role]u32{ @splat(0), .{ 266, 0, 0, 0, 0 } }, p.teams);
 }
 

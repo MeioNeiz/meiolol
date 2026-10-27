@@ -43,10 +43,11 @@ export fn main() void {
     // run when blocked storage throws below
     zjb.global("window").call("setTimeout", .{ zjb.fnHandle("testerStart", &start), @as(i32, 0) }, void);
     // Last: blocked storage throws, ending this call with the page already live
-    if (!std.meta.eql(state.teams, server.teams)) return;
+    var buf: [256]u8 = undefined;
+    const fragment = dom.dom.hash(&buf);
     if (dom.stored(key)) |s| {
         defer gpa.free(s);
-        if (!tp.restoreSaved(&state, &server, s)) return;
+        if (!tp.restoreSaved(&state, &server, fragment, s)) return;
         if (island) |i| i.render();
         dom.rt.syncHash(false) catch {};
     }
