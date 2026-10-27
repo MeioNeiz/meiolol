@@ -56,9 +56,8 @@ robots.txt disallow, banner): Riot forbids serving the public on a personal key;
 and files the static build leaves out from the same code, its data swapped whole on reload
 (serve.Rendered; docs/hosting.md "Rendering on request"), read from the views file
 that `site --views` writes (below). `--static core` (the web loop's) writes only
-core_static (root.zig: home, robots.txt, riot.txt, root sitemap)
-and the front-end assets, loading only the root and shared views' stats and champions
-(no pool tallies, filters, Daily Draft or Learn) and rendering one page;
+core_static (root.zig: robots.txt, riot.txt, the two wasm files) and the front-end
+assets, loading no view; the home and root sitemap are rendered like any page;
 `--static-min-games N` (Static.all) leaves out thin matchups only. `meiolol serve`
 (src/serve.zig) serves a site directory over HTTP with .gz siblings; handy for local
 previews.
@@ -156,8 +155,8 @@ team, and per lane this game's gold difference at 14 beside the lane curves' usu
 (a side only for 200+ gold, 2 SE, 200+ games: J11); each option flips to one fact (a
 detected reason that clears chance, else its usual gold at 14 against the enemy).
 
-- Made by every full site load (the web loop's `site --views`, after each upload;
-  its `--static core` build skips it): puzzles for today to today+2 (UTC) that
+- Made by every full site load (the web loop's `site --views`, after each upload):
+  puzzles for today to today+2 (UTC) that
   do not exist yet, from the site's patches and platforms. Puzzle #1 = 2026-10-11
 - data/daily/<n>.json is the public puzzle, written once and never remade (the numbers
   are frozen at that day's data); data/daily/used.txt holds the match ids behind them so

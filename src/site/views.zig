@@ -303,21 +303,6 @@ pub const Loaded = struct {
     }
 };
 
-/// `v`'s patch day part (Part.prev) of the views file at `path`, in `arena`; null when
-/// there is no file, it has another layout or the part isn't this binary's
-pub fn keptWins(gpa: std.mem.Allocator, io: std.Io, path: []const u8, v: html.View, arena: std.mem.Allocator) !?patchday.Wins {
-    const bytes = std.Io.Dir.cwd().readFileAlloc(io, path, gpa, views_size_max) catch |err| switch (err) {
-        error.FileNotFound => return null,
-        else => |e| return e,
-    };
-    defer gpa.free(bytes);
-    const parts = Parts.parse(bytes, false) catch |err| switch (err) {
-        error.ViewsMismatch => return null,
-        else => |e| return e,
-    };
-    return parts.get(patchday.Wins, .prev, v, arena);
-}
-
 const views_magic = "MEIOVIE2";
 /// The box's file: 143 MB on 23 Oct
 const views_size_max: std.Io.Limit = .limited(1 << 30);

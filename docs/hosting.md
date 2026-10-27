@@ -46,7 +46,7 @@ the web loop's MemoryHigh (docs/plan/vm.md Later).
   backups/, .env (copied from the Mac), contact, riot.txt, crawl.args, host.env
   (MEIOLOL_BACKUPS, MEIOLOL_NO_EVAL; tuning per host, default when unset:
   MEIOLOL_FILTER_RUNS, the views write's parallel filter tally, 4, 1 to 64;
-  MEIOLOL_VIEW_LOADS, views the views write and core build load at once, 1, 1 to 4)
+  MEIOLOL_VIEW_LOADS, views the views write loads at once, 1, 1 to 4)
 - systemd --user services, lingering: meiolol-crawl, meiolol-web, meiolol-backup,
   meiolol-health (deploy/systemd). `systemctl --user status meiolol-crawl`; logs in data/
 - Disk scheduler: mq-deadline, on trial, set at runtime only (a reboot reverts to the
@@ -69,18 +69,17 @@ the web loop's MemoryHigh (docs/plan/vm.md Later).
 ## Rendering on request
 
 The static upload is only what nginx must serve itself (`meiolol site --static core`,
-deploy/web-loop.sh; the list is core_static in src/site/root.zig): the home page,
-robots.txt, riot.txt, the root sitemap, CSS, JS, wasm, font and icon, ~30 files with
-their .gz twins, all at the site root. The core build loads only two views' stats
-(17-550 s on the box, mostly disk wait); the home's Patch card comes from the last
-round's views file (`--patch-day-from`), a round behind. The web loop builds only in a
+deploy/web-loop.sh; the list is core_static in src/site/root.zig): robots.txt,
+riot.txt, CSS, JS, wasm, font and icon, ~30 files with their .gz twins, all at the site
+root, from the options alone (no view loaded, seconds). The web loop builds only in a
 round that uploads; the others read the patch and game count with `meiolol site --patch-games`
-(1-8 s). meiolol-render on the box serves every other page and file (champion, role,
-matchup, build, Daily Draft, Learn, legal and method pages, the patch/ and all/ views,
-data/ files, the views' sitemaps, data/your-example.json).
-The home page stays static because the root directory always exists, and nginx's
-try_files answers an existing directory's URL with its index.html or 403, never
-@render; for the same reason nothing is uploaded into a subdirectory. The renderer
+(1-8 s). meiolol-render on the box serves every page and data file (the home, champion,
+role, matchup, build, Daily Draft, Learn, legal and method pages, the patch/ and all/
+views, data/ files, the sitemaps, data/your-example.json).
+The root directory always exists, and nginx's try_files answers an existing directory's
+URL with its index.html or 403, never @render: so `location = /` rewrites to
+/index.html, which always goes to @render (deploy/cache-warm.sh warms it first), and
+nothing is uploaded into a subdirectory. The renderer
 gzips what it sends when the client accepts it (nginx compresses only HTML itself;
 stats.bin is ~12 MB raw), with Vary: Accept-Encoding, and answers a directory URL
 without its slash with a 301.
@@ -112,7 +111,7 @@ without its slash with a 301.
   one (both listen, SO_REUSEPORT), and stops the old once the new one writes
   data/render-<a|b>.ready, so there is no gap. It first waits (up to 30 min) for the
   deploy's round to upload, since the new pages link the front-end files that upload
-  ships (swapping first shows new pages unstyled for the core build's 25-110 s).
+  ships (swapping first would show new pages unstyled until it does).
   Connections queued on the stopping one move to the new one (sysctl
   net.ipv4.tcp_migrate_req=1, /etc/sysctl.d/60-meiolol-render.conf) and nginx retries a
   dropped one once. Alone (a boot) it listens at once and serves each view as it loads

@@ -49,7 +49,6 @@ const TrendPart = @import("views.zig").TrendPart;
 const OlderPart = @import("views.zig").OlderPart;
 const champsKey = @import("views.zig").champsKey;
 const Parts = @import("views.zig").Parts;
-const keptWins = @import("views.zig").keptWins;
 
 /// Reads the view's data (the slow part of a site build), each part (Part) from `old`
 /// where it is there with this binary's key, the rest from the database; with
@@ -119,87 +118,83 @@ pub fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Opt
     try extras.going();
     const champs_key = champsKey(site.champs);
 
-    // Static.core writes none of what follows (rendered on request), and skipping it is
-    // most of the build: the pool tallies alone take minutes on the box
-    if (all_opts.static != .core) {
-        // The root view's directory is the site root, where champion pages are
-        const kept_filter = if (view.index() == 0) try Parts.ofFor(old, FilterPart, .filter, view, arena, champs_key) else null;
-        const kept_people = try Parts.ofFor(old, PeoplePart, .people, view, arena, champs_key);
-        if (kept_filter) |f| {
-            site.filter = f.filter;
-            phases.mark("filters kept");
+    // The root view's directory is the site root, where champion pages are
+    const kept_filter = if (view.index() == 0) try Parts.ofFor(old, FilterPart, .filter, view, arena, champs_key) else null;
+    const kept_people = try Parts.ofFor(old, PeoplePart, .people, view, arena, champs_key);
+    if (kept_filter) |f| {
+        site.filter = f.filter;
+        phases.mark("filters kept");
+    }
+    var loading: Loading = .{
+        .site = site,
+        .db = db,
+        .extras = extras,
+        .opts = all_opts,
+        .want_filter = view.index() == 0 and kept_filter == null,
+        .want_people = kept_people == null,
+    };
+    if (loading.want_filter or loading.want_people) loading.games = try extras.partialsFor(gpa, io, db, &phases);
+    if (loading.want_filter and loading.want_people) loading.sibling = try store.schema.openSibling(gpa, db);
+    defer if (loading.sibling) |sibling| sibling.close();
+    if (loading.sibling != null) {
+        try par.each(io, 2, &loading, Loading.run);
+        phases.add("filters", loading.ms[0]);
+        phases.add("people", loading.ms[1]);
+        phases.mark("at once");
+    } else for (0..2) |i| {
+        try loading.run(i);
+        if (i == 0 and loading.want_filter) phases.mark("filters");
+        if (i == 1 and loading.want_people) phases.mark("people");
+    }
+    try extras.going();
+    if (loading.want_filter) site.filter = loading.filter;
+    if (kept_people) |p| {
+        site.pool = p.pool;
+        site.spread = p.spread;
+        site.learning = p.learning;
+        site.by_view = p.by_view;
+        phases.mark("people kept");
+    } else {
+        const people = loading.people.?;
+        const set = @backingInt(view.region);
+        if (set >= people.pool.games.len) return error.NoView;
+        site.pool = try pool.make(arena, &people.pool, set, &site.stats, .{});
+        site.spread = try spread.make(arena, &people.pool.spread[view.index()], &site.stats);
+        // Every region's, whatever the view's region (learning.zig)
+        site.learning = try learning.make(arena, &people.learning[@backingInt(view.period)], &site.stats);
+        // The champion pages' filters pick a view: each one's, as its own load makes them
+        if (view.index() == 0) {
+            const by = try arena.alloc(root.ByView, html.View.count);
+            for (html.View.all, by) |v, *b| b.* = .{
+                .spread = try spread.make(arena, &people.pool.spread[v.index()], &site.stats),
+                .learning = try learning.build(arena, &people.learning[@backingInt(v.period)], &site.stats),
+                // Options.euw_only tallies EUW's alone
+                .pool = try pool.make(arena, &people.pool, @min(@backingInt(v.region), people.pool.games.len - 1), &site.stats, .{}),
+            };
+            site.by_view = by;
         }
-        var loading: Loading = .{
-            .site = site,
-            .db = db,
-            .extras = extras,
-            .opts = all_opts,
-            .want_filter = view.index() == 0 and kept_filter == null,
-            .want_people = kept_people == null,
-        };
-        if (loading.want_filter or loading.want_people) loading.games = try extras.partialsFor(gpa, io, db, &phases);
-        if (loading.want_filter and loading.want_people) loading.sibling = try store.schema.openSibling(gpa, db);
-        defer if (loading.sibling) |sibling| sibling.close();
-        if (loading.sibling != null) {
-            try par.each(io, 2, &loading, Loading.run);
-            phases.add("filters", loading.ms[0]);
-            phases.add("people", loading.ms[1]);
-            phases.mark("at once");
-        } else for (0..2) |i| {
-            try loading.run(i);
-            if (i == 0 and loading.want_filter) phases.mark("filters");
-            if (i == 1 and loading.want_people) phases.mark("people");
-        }
-        try extras.going();
-        if (loading.want_filter) site.filter = loading.filter;
-        if (kept_people) |p| {
-            site.pool = p.pool;
-            site.spread = p.spread;
-            site.learning = p.learning;
-            site.by_view = p.by_view;
-            phases.mark("people kept");
-        } else {
-            const people = loading.people.?;
-            const set = @backingInt(view.region);
-            if (set >= people.pool.games.len) return error.NoView;
-            site.pool = try pool.make(arena, &people.pool, set, &site.stats, .{});
-            site.spread = try spread.make(arena, &people.pool.spread[view.index()], &site.stats);
-            // Every region's, whatever the view's region (learning.zig)
-            site.learning = try learning.make(arena, &people.learning[@backingInt(view.period)], &site.stats);
-            // The champion pages' filters pick a view: each one's, as its own load makes them
-            if (view.index() == 0) {
-                const by = try arena.alloc(root.ByView, html.View.count);
-                for (html.View.all, by) |v, *b| b.* = .{
-                    .spread = try spread.make(arena, &people.pool.spread[v.index()], &site.stats),
-                    .learning = try learning.build(arena, &people.learning[@backingInt(v.period)], &site.stats),
-                    // Options.euw_only tallies EUW's alone
-                    .pool = try pool.make(arena, &people.pool, @min(@backingInt(v.region), people.pool.games.len - 1), &site.stats, .{}),
-                };
-                site.by_view = by;
-            }
-        }
-        if (shared) {
-            site.daily_inputs = dailyInputs(io, opts);
-            const kept = try Parts.ofFor(old, DailyPart, .daily, view, arena, champs_key);
-            // A deploy round keeps the part, and deploys can come all day: without this
-            // check, yesterday's Daily Draft and example would stay
-            if (kept != null and (kept.?.inputs == site.daily_inputs or old.?.strict)) {
-                const d = kept.?;
-                site.daily_inputs = d.inputs;
-                site.daily_files = d.files;
-                site.learn = d.learn;
-                site.eval = d.eval;
-                phases.mark("daily and learn kept");
-            } else try loadDaily(site, db, try extras.partialsFor(gpa, io, db, &phases), &phases);
-        }
-        try extras.going();
-        try loadPatchDay(site, db, all_opts, extras, old, &phases);
-        try extras.going();
-        if (try Parts.ofFor(old, TrendPart, .trend, view, arena, champs_key)) |t| {
-            site.trend = t.trend;
-            phases.mark("trend kept");
-        } else try loadTrend(site, db, try extras.partialsFor(gpa, io, db, &phases), &phases);
-    } else if (shared) try loadHome(site, &phases) else try keptPatchDay(site, all_opts, extras, &phases);
+    }
+    if (shared) {
+        site.daily_inputs = dailyInputs(io, opts);
+        const kept = try Parts.ofFor(old, DailyPart, .daily, view, arena, champs_key);
+        // A deploy round keeps the part, and deploys can come all day: without this
+        // check, yesterday's Daily Draft and example would stay
+        if (kept != null and (kept.?.inputs == site.daily_inputs or old.?.strict)) {
+            const d = kept.?;
+            site.daily_inputs = d.inputs;
+            site.daily_files = d.files;
+            site.learn = d.learn;
+            site.eval = d.eval;
+            phases.mark("daily and learn kept");
+        } else try loadDaily(site, db, try extras.partialsFor(gpa, io, db, &phases), &phases);
+    }
+    try extras.going();
+    try loadPatchDay(site, db, all_opts, extras, old, &phases);
+    try extras.going();
+    if (try Parts.ofFor(old, TrendPart, .trend, view, arena, champs_key)) |t| {
+        site.trend = t.trend;
+        phases.mark("trend kept");
+    } else try loadTrend(site, db, try extras.partialsFor(gpa, io, db, &phases), &phases);
     try addFiles(site);
     if (old == null or !old.?.strict) log.info("view {d} ({s}) load:{s}", .{ view.index(), site.when, phases.text() });
     return site;
@@ -477,26 +472,6 @@ fn curved(arena: std.mem.Allocator, wins: patchday.Wins, extras: *const Extras, 
     );
 }
 
-/// Static.core's home Patch card (the root view's): the patch day from
-/// Options.patch_day_from when current. That file is the web loop's last round's, so
-/// the card lags the rest of the home by a round; making it here takes both patches'
-/// stats from the database, minutes on the box. Without it the card is its link alone
-fn keptPatchDay(site: *Site, all_opts: Options, extras: *const Extras, phases: *Phases) !void {
-    const prev = all_opts.prev_patch orelse return;
-    const path = all_opts.patch_day_from orelse return;
-    // A bad file costs the card, not the home's upload
-    const wins = keptWins(site.gpa, site.io, path, site.view, site.arena) catch |err| {
-        log.warn("home: patch day from {s}: {t}", .{ path, err });
-        return;
-    };
-    const kept = try current(wins, prev, all_opts.patches);
-    site.patchday = try curved(site.arena, kept orelse {
-        log.info("home: no current patch day in {s}", .{path});
-        return;
-    }, extras, site.view.region);
-    phases.mark("patch day kept");
-}
-
 /// `platforms`' stats over `patches`, all of each
 fn patchStats(site: *Site, db: store.Db, patches: []const []const u8, platforms: []const []const u8, games: ?*const partials.Store) !Stats {
     var built = try stats.buildSince(site.gpa, db, games, patches, platforms, 0, .none);
@@ -532,28 +507,6 @@ fn dailyInputs(io: std.Io, opts: Options) u64 {
         h.update(std.mem.asBytes(&st.size));
     } else |_| {};
     return h.final();
-}
-
-/// Static.core's home page: the newest Daily Draft puzzles up to today as made, read only
-/// (the views file's load makes puzzles, loadDaily), and the example
-fn loadHome(site: *Site, phases: *Phases) !void {
-    const arena = site.arena;
-    var files: std.ArrayList(File) = .empty;
-    if (site.opts.daily_dir) |d| {
-        // Today's is made just after 00:00 UTC: until then the newest before it
-        const today = daily_page.todayNumber(site.io);
-        var n = today;
-        while (n > 0 and today - n < 3) : (n -= 1) {
-            const path = try arena.print("daily/{d}.json", .{n});
-            const file = try std.fs.path.join(arena, &.{ d, path["daily/".len..] });
-            if (std.Io.Dir.cwd().readFileAlloc(site.io, file, arena, .limited(1 << 20))) |data| {
-                try files.append(arena, .{ .path = path, .data = data });
-            } else |err| if (err != error.FileNotFound) log.warn("home: {s}: {t}", .{ file, err });
-        }
-    }
-    try loadExample(site, &files);
-    site.daily_files = files.items;
-    phases.mark("home");
 }
 
 fn loadExample(site: *Site, files: *std.ArrayList(File)) !void {
@@ -621,32 +574,25 @@ fn addFiles(site: *Site) !void {
     const opts = site.opts;
     var files: std.ArrayList(File) = .empty;
     var shared_files: std.ArrayList(File) = .empty;
-    if (std.meta.eql(site.view, html.View.shared)) {
-        try shared_files.append(arena, .{ .path = "meiolol.wasm", .data = @embedFile("draft.wasm") });
-        try shared_files.append(arena, .{ .path = "chart.wasm", .data = @embedFile("chart.wasm") });
-        if (opts.riot_txt) |t| try shared_files.append(arena, .{ .path = "riot.txt", .data = t });
-        try shared_files.append(arena, .{ .path = "robots.txt", .data = try robots(arena, opts) });
-    }
+    if (std.meta.eql(site.view, html.View.shared)) try shared_files.appendSlice(arena, try root.coreFiles(arena, opts));
     if (opts.public and opts.origin != null) {
         try files.append(arena, .{ .path = "sitemap.xml", .data = try sitemap(site) });
     }
-    if (opts.static != .core) {
-        try files.append(arena, .{ .path = stats_path, .data = site.model });
-        try files.append(arena, .{ .path = "data/champions.json", .data = try championsJson(site) });
-        try files.append(arena, .{ .path = tierlist.data_path, .data = try tierlist.dataFile(site) });
-        try patch_page.dataFiles(site, &files);
-        // Every view's champion data, for the page's view picker; the rank filter's
-        // from the root view's tally
-        try champion.dataFiles(site, &files);
-        if (site.view.index() == 0) {
-            try champrank.dataFiles(site, &files);
-            try tierlist.rankFiles(site, &files);
-        }
-        try files.append(arena, .{ .path = search.path, .data = try search.json(site) });
-        try pool_page.dataFiles(site, &files);
-        try shared_files.appendSlice(arena, site.daily_files);
-        if (site.learn) |facts| try shared_files.append(arena, .{ .path = "data/champ-facts.tsv", .data = try champFacts(site, facts) });
+    try files.append(arena, .{ .path = stats_path, .data = site.model });
+    try files.append(arena, .{ .path = "data/champions.json", .data = try championsJson(site) });
+    try files.append(arena, .{ .path = tierlist.data_path, .data = try tierlist.dataFile(site) });
+    try patch_page.dataFiles(site, &files);
+    // Every view's champion data, for the page's view picker; the rank filter's
+    // from the root view's tally
+    try champion.dataFiles(site, &files);
+    if (site.view.index() == 0) {
+        try champrank.dataFiles(site, &files);
+        try tierlist.rankFiles(site, &files);
     }
+    try files.append(arena, .{ .path = search.path, .data = try search.json(site) });
+    try pool_page.dataFiles(site, &files);
+    try shared_files.appendSlice(arena, site.daily_files);
+    if (site.learn) |facts| try shared_files.append(arena, .{ .path = "data/champ-facts.tsv", .data = try champFacts(site, facts) });
     site.files = files.items;
     site.shared_files = shared_files.items;
 }

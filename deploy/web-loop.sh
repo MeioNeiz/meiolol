@@ -3,17 +3,14 @@
 # and its game count (`meiolol site --patch-games`, a count query: under a second), then
 # builds the static core and uploads it to the jomify server when the patch changed, a
 # deploy asked, curves are fresh, or there are new games and `interval` passed: 6 h, or
-# 1 h for a patch's first day (data/patch-<patch>.seen). Only then: until 18 Oct every
-# round built it (17-265 s, mostly waiting on the disk) to read those two numbers, and a
-# build changes only the home page (index.html), which the upload ships. Heavy work runs
-# one job at a time, the loop's first
+# 1 h for a patch's first day (data/patch-<patch>.seen). Heavy work runs one job at a
+# time, the loop's first
 # (curves, views file), then at most one daily job per round, which the loop waits for:
 # on 14-15 Oct several at once held the disk at its 70 MB/s cap and a curves pass took
 # 45-60 min every hour (research/questions/box-io-priority.md). The build is
-# `--static core`: the home
-# page, robots.txt, riot.txt, the root sitemap and the front-end files (~30 files, two
-# views loaded; the home's Patch card from the last views file, a round behind: making
-# it takes a patch's stats); meiolol-render serves every other page and file. After each upload,
+# `--static core`: robots.txt,
+# riot.txt and the front-end files (~30 files, no data loaded, seconds); meiolol-render
+# serves every page and data file, the home too. After each upload,
 # `meiolol site --views` loads every view from the database into data/views.bin and
 # touches data/render.reload: the renderer reads that file in seconds, so the
 # database work happens once, here (docs/hosting.md "Rendering on request"). The
@@ -430,8 +427,7 @@ while true; do
         || (( games > last_games && now - last_upload >= interval )); }; then
         rm -rf data/site.new
         site_start=$SECONDS
-        if ! out=$(bin/meiolol site "${site_args[@]}" --out data/site.new --static core \
-            --patch-day-from data/views.bin 2>&1); then
+        if ! out=$(bin/meiolol site "${site_args[@]}" --out data/site.new --static core 2>&1); then
             echo "$out"
             round_event site failed "$(tail -n 1 <<< "$out")"
         else

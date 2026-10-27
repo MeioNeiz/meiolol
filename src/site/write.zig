@@ -30,22 +30,21 @@ const unload = @import("load.zig").unload;
 pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options) !void {
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
-    var extras: Extras = .load(arena_state.allocator(), io, opts);
-    defer extras.deinit(gpa, arena_state.allocator(), io);
     const cwd = std.Io.Dir.cwd();
     try cwd.createDirPath(io, opts.out_dir);
     var root_dir = try cwd.openDir(io, opts.out_dir, .{});
     defer root_dir.close(io);
     const gz_window = try gpa.alloc(u8, store.raw.window_len);
     defer gpa.free(gz_window);
+    if (opts.static == .core) return writeCore(gpa, io, opts, root_dir, gz_window, arena_state.allocator());
+    var extras: Extras = .load(arena_state.allocator(), io, opts);
+    defer extras.deinit(gpa, arena_state.allocator(), io);
     // The shared view first: every view's home shows its example and Daily Draft
     var views: [html.View.count]html.View = undefined;
     var n: usize = 0;
     for ([_]html.View{html.View.shared} ++ html.View.all, 0..) |v, i| {
         if (i > 0 and std.meta.eql(v, html.View.shared)) continue;
         if (opts.euw_only and v.region != .euw) continue;
-        // Static.core: only the root's files, from the root view and the shared one
-        if (opts.static == .core and v.index() != 0 and !std.meta.eql(v, html.View.shared)) continue;
         views[n] = v;
         n += 1;
     }
@@ -64,6 +63,14 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
     }
 }
 
+/// Static.core: its files from the options, no view loaded
+fn writeCore(gpa: std.mem.Allocator, io: std.Io, opts: Options, root_dir: std.Io.Dir, gz_window: []u8, arena: std.mem.Allocator) !void {
+    const w: FileWriter = .{ .gpa = gpa, .io = io, .gz_window = gz_window };
+    for (try root.coreFiles(arena, opts)) |f| try w.write(root_dir, f.path, f.data);
+    for (shared_assets) |f| try w.write(root_dir, f.path, f.data);
+    for (root.hashed_assets) |h| try w.write(root_dir, h.path, h.data);
+}
+
 fn keep(sites: *[html.View.count]?*Site, v: html.View, s: *Site) void {
     sites[v.index()] = s;
 }
@@ -74,11 +81,9 @@ fn writeSite(site: *const Site, root_dir: std.Io.Dir, gz_window: []u8) !void {
     const io = site.io;
     const opts = site.opts;
     const vdir = site.view.dir();
-    // Static.core writes nothing into a view's own directory, so makes none
-    const own = vdir.len == 0 or opts.static == .all;
-    if (own and vdir.len > 0) try root_dir.createDirPath(io, vdir);
-    var dir = if (own) try root_dir.openDir(io, if (vdir.len == 0) "." else vdir, .{}) else root_dir;
-    defer if (own) dir.close(io);
+    if (vdir.len > 0) try root_dir.createDirPath(io, vdir);
+    var dir = if (vdir.len > 0) try root_dir.openDir(io, vdir, .{}) else root_dir;
+    defer if (vdir.len > 0) dir.close(io);
     const w: FileWriter = .{ .gpa = site.gpa, .io = io, .gz_window = gz_window };
     for (site.files) |f| if (isStatic(opts, vdir, f.path)) try w.write(dir, f.path, f.data);
     for (site.shared_files) |f| if (isStatic(opts, "", f.path)) try w.write(root_dir, f.path, f.data);

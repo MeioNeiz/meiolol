@@ -736,9 +736,9 @@ test "fixture games to stats, curves and the website" {
     }
 
     // `--static core` (deploy/web-loop.sh): only core_static and the front-end files, all
-    // at the site root; everything the full build writes is still served (public here,
-    // so the pages differ from the full build's by the preview banner), and the core
-    // files are the renderer's bytes too
+    // at the site root, no view loaded; everything the full build writes, the home and
+    // root sitemap too, is rendered (public here, so the pages differ from the full
+    // build's by the preview banner), and the core files are the renderer's bytes too
     try tmp.dir.writeFile(io, .{ .sub_path = "your-example.json", .data = example_json });
     var core_opts = opts;
     core_opts.out_dir = try std.fs.path.join(arena, &.{ dir, "core" });
@@ -747,15 +747,14 @@ test "fixture games to stats, curves and the website" {
     core_opts.origin = "https://x.io";
     core_opts.riot_txt = "riot-check";
     core_opts.your_example = try std.fs.path.join(arena, &.{ dir, "your-example.json" });
-    // The home's Patch card from the web loop's last views file (--patch-day-from), its
-    // root patch day given a clear move (the fixture's patch has none); the renderer
-    // keeps the same part, so serves the same home
-    core_opts.patch_day_from = try std.fs.path.join(arena, &.{ dir, "views-moved.bin" });
-    try withClearMove(arena, io, try std.fs.path.join(arena, &.{ dir, "views-again.bin" }), core_opts.patch_day_from.?);
     try site.generate(gpa, io, db, core_opts);
+    // The renderer's views file with the root view's patch day given a clear move (the
+    // fixture's patch has none), for the home's Patch card
+    const moved = try std.fs.path.join(arena, &.{ dir, "views-moved.bin" });
+    try withClearMove(arena, io, try std.fs.path.join(arena, &.{ dir, "views-again.bin" }), moved);
     const core_loaded = try site.Loaded.init(gpa, io, db, core_opts);
     defer core_loaded.deinit();
-    try core_loaded.reuseViews(core_opts.patch_day_from.?);
+    try core_loaded.reuseViews(moved);
     var core_dir = try std.Io.Dir.cwd().openDir(io, core_opts.out_dir, .{ .iterate = true });
     defer core_dir.close(io);
     var core_walker = try core_dir.walk(gpa);
@@ -770,9 +769,12 @@ test "fixture games to stats, curves and the website" {
         core_files += 1;
     }
     for (site.core_static) |name| try core_dir.access(io, name, .{});
-    // Both builds with their views loaded at once (Options.view_loads), from the database
-    // in files as on the box: the same files. A view that fails stops the build with its
-    // own error, nothing written
+    for ([_][]const u8{ "index.html", "sitemap.xml" }) |name| {
+        try testing.expectError(error.FileNotFound, core_dir.access(io, name, .{}));
+    }
+    // The full build with its views loaded at once (Options.view_loads), from the
+    // database in files as on the box: the same files. A view that fails stops the build
+    // with its own error, nothing written
     {
         const files = try std.fs.path.join(arena, &.{ dir, "db-core" });
         try std.Io.Dir.cwd().createDirPath(io, files);
@@ -781,12 +783,12 @@ test "fixture games to stats, curves and the website" {
         }
         const file_db = try store.schema.open(gpa, files);
         defer file_db.close();
-        for ([_]site.Options{ opts, core_opts }) |base| for ([_]usize{ 2, 4 }) |n| {
-            var at_once = base;
+        for ([_]usize{ 2, 4 }) |n| {
+            var at_once = opts;
             at_once.view_loads = n;
-            at_once.out_dir = try std.fmt.allocPrint(arena, "{s}-at-{d}", .{ base.out_dir, n });
+            at_once.out_dir = try std.fmt.allocPrint(arena, "{s}-at-{d}", .{ opts.out_dir, n });
             try site.generate(gpa, io, file_db, at_once);
-            try expectSameTree(arena, io, base.out_dir, at_once.out_dir);
+            try expectSameTree(arena, io, opts.out_dir, at_once.out_dir);
             var failing = at_once;
             failing.since_ms = std.math.maxInt(i64);
             failing.out_dir = try std.fmt.allocPrint(arena, "{s}-failing", .{at_once.out_dir});
@@ -795,7 +797,7 @@ test "fixture games to stats, curves and the website" {
             defer empty.close(io);
             var it = empty.iterate();
             try testing.expectEqual(null, try it.next(io));
-        };
+        }
     }
     walker.deinit();
     walker = try out_dir.walk(gpa);
@@ -825,8 +827,7 @@ test "fixture games to stats, curves and the website" {
     // Home in every view: the shared view's example, its game file loaded lazily; the
     // Patch card's moves (all/ has none: its patch day isn't in views-moved.bin)
     {
-        const home = try core_dir.readFileAlloc(io, "index.html", arena, .limited(1 << 24));
-        try testing.expect(std.mem.find(u8, home, "vs 15.12") != null);
+        const home = (try core_loaded.get(arena, "index.html")).?;
         try testing.expect(std.mem.find(u8, home, "<ul class=\"c-today\" data-v=\"changes\"><li><a href=\"champion/darius.html#role=top\">") != null);
         try testing.expect(std.mem.find(u8, home, "<small>45.0% → 56.0%</small>") != null);
     }
@@ -852,8 +853,8 @@ test "fixture games to stats, curves and the website" {
         try testing.expectEqual(g.me().cs, row.cs.?);
         try testing.expectEqualStrings(mid.champs[g.me().champ].name, list.champs[row.champ].name);
     }
-    // Sitemaps list rendered pages: the root one static, the views' rendered
-    const sitemap = try core_dir.readFileAlloc(io, "sitemap.xml", arena, .limited(1 << 20));
+    // Sitemaps list rendered pages
+    const sitemap = (try core_loaded.get(arena, "sitemap.xml")).?;
     for ([_][]const u8{ "https://x.io/champion/darius.html", "https://x.io/matchup/top/mordekaiser-vs-darius.html", "https://x.io/daily.html", "https://x.io/learn.html" }) |want| {
         try testing.expect(std.mem.find(u8, sitemap, want) != null);
     }

@@ -27,7 +27,6 @@ const SiteFlags = struct {
     euw_only: bool = false,
     static: site.Static = .all,
     static_min_games: u32 = 0,
-    patch_day_from: ?[]const u8 = null,
     origin: ?[]const u8 = null,
     index_min_games: u32 = 0,
     views: ?[]const u8 = null,
@@ -55,8 +54,6 @@ const SiteFlags = struct {
             f.static = std.meta.stringToEnum(site.Static, try c.value()) orelse return error.Usage;
         } else if (c.is("--static-min-games")) {
             f.static_min_games = try c.int(u32);
-        } else if (c.is("--patch-day-from")) {
-            f.patch_day_from = try c.value();
         } else if (c.is("--origin")) {
             f.origin = std.mem.trimEnd(u8, try c.value(), "/");
         } else if (c.is("--index-min-games")) {
@@ -90,7 +87,6 @@ const SiteFlags = struct {
             .euw_only = f.euw_only,
             .static = f.static,
             .static_min_games = f.static_min_games,
-            .patch_day_from = f.patch_day_from,
             .origin = f.origin,
             .eval_history = try std.fs.path.join(arena, &.{ c.data_dir, "eval-history.tsv" }),
             .lean = try std.fs.path.join(arena, &.{ c.data_dir, "lean.tsv" }),
@@ -170,12 +166,9 @@ pub const usage_site =
     \\              --euw-only       the EUW views only (root, patch/): a quick preview
     \\              --static-min-games N  leave out matchup pages under N games (for
     \\                               `render` to serve on request)
-    \\              --static core    write only the home page, robots.txt, riot.txt,
-    \\                               the root sitemap and the front-end files;
-    \\                               `render` serves every other page and file
-    \\              --patch-day-from FILE  with --static core: the home's Patch card
-    \\                               from FILE's patch day (a views file) when for
-    \\                               the same patches; else its link alone
+    \\              --static core    write only robots.txt, riot.txt and the front-end
+    \\                               files, loading no data; `render` serves every
+    \\                               page, the home too
     \\              --origin URL     site URL for canonical links and sitemaps (public)
     \\              --index-min-games N  matchup pages under N games noindex and out of
     \\                               the sitemaps

@@ -101,9 +101,6 @@ pub const Options = struct {
     static: Static = .all,
     /// Matchup pages with fewer games are left out of the static build (Static.all)
     static_min_games: u32 = 0,
-    /// Static.core: a views file (the web loop's last) whose patch day, when for the same
-    /// patches, the home's Patch card shows
-    patch_day_from: ?[]const u8 = null,
     /// "https://meio.lol": canonical links and sitemaps, when public
     origin: ?[]const u8 = null,
     /// Matchup pages with fewer games are noindex and left out of the sitemaps
@@ -132,13 +129,21 @@ pub const Static = enum {
 };
 
 /// `--static core`: the only files the static build writes, besides the front-end assets
-/// (shared_assets); nginx serves them itself and hands every other path to
-/// `meiolol render`. All at the site root: nginx's try_files answers the URL of a
-/// directory that exists with its index.html or 403, never the renderer, so the root
-/// keeps its home page and no subdirectory is written
-pub const core_static = [_][]const u8{
-    "index.html", "sitemap.xml", "robots.txt", "riot.txt", "meiolol.wasm", "chart.wasm",
-};
+/// (shared_assets), none from the data, so it loads no view; nginx serves them itself and
+/// hands every other path, the home too, to `meiolol render`. All at the site root:
+/// nginx's try_files answers the URL of a directory that exists with its index.html or
+/// 403, never the renderer, so no subdirectory is written
+pub const core_static = [_][]const u8{ "robots.txt", "riot.txt", "meiolol.wasm", "chart.wasm" };
+
+/// The core_static files, from the options alone
+pub fn coreFiles(arena: std.mem.Allocator, opts: Options) ![]const File {
+    var files: std.ArrayList(File) = .empty;
+    try files.append(arena, .{ .path = "meiolol.wasm", .data = @embedFile("draft.wasm") });
+    try files.append(arena, .{ .path = "chart.wasm", .data = @embedFile("chart.wasm") });
+    if (opts.riot_txt) |t| try files.append(arena, .{ .path = "riot.txt", .data = t });
+    try files.append(arena, .{ .path = "robots.txt", .data = try robots(arena, opts) });
+    return files.items;
+}
 
 /// Whether the static build writes the file at `dir` ++ `path` from the site root
 pub fn isStatic(opts: Options, dir: []const u8, path: []const u8) bool {
