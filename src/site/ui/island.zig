@@ -102,7 +102,7 @@ pub fn Runtime(comptime Dom: type) type {
         }
 
         /// Keys no island of ours owns as they are, then each island's
-        fn syncHash(r: *R, push: bool) !void {
+        pub fn syncHash(r: *R, push: bool) !void {
             var buf: [1024]u8 = undefined;
             const live = r.dom.hash(&buf);
             var w: std.Io.Writer.Allocating = .init(r.gpa);

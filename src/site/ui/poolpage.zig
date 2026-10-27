@@ -48,6 +48,7 @@ const W = struct {
     pub const any = plain("Any champion");
     pub const by_role = plain("By role");
     pub const all = Phrase("All {n:int}");
+    pub const fewer = plain("Fewer");
     pub const weak = plain("Weak lanes");
     pub const covered = Phrase("{a:int} of {b:int} covered");
     pub const vs = plain("vs");
@@ -62,6 +63,9 @@ const W = struct {
     pub const why_hard = plain("Weak lanes");
     pub const why_banned = plain("Banned");
     pub const why_also = plain("Also played");
+    pub const champion = plain("Champion");
+    pub const mains_play = plain("Mains");
+    pub const blank = plain("");
     pub const loading = plain("Loading lanes…");
     pub const failed = plain("The lanes didn't load. Reload the page to try again.");
     pub const few = Phrase("Too few {c:text} mains yet for lanes.");
@@ -107,8 +111,10 @@ pub const Page = struct {
     all: bool = false,
     /// The main's file once fetched; another champion's after the main changed
     file: ?*const pd.File = null,
-    /// The champion whose fetch failed
+    /// The main whose fetch failed; cleared when the main changes
     failed: u16 = 0,
+    /// The pool changed by a message (not the URL), for the wasm to store
+    dirty: bool = false,
     /// The server's render: Data as ui.data, base64, for the island
     bin: []const u8 = "",
 
@@ -159,6 +165,10 @@ pub const Page = struct {
     }
 
     pub fn update(p: *P, m: Msg, ev: *tree.Event) void {
+        const main = p.mainId();
+        defer if (p.mainId() != main) {
+            p.failed = 0;
+        };
         switch (m) {
             .picked => {
                 const e = p.search.chosen orelse return;
@@ -182,7 +192,16 @@ pub const Page = struct {
                 return;
             },
         }
-        ev.push = m != .cell;
+        // Only what Url holds makes a history entry
+        ev.push = switch (m) {
+            .picked, .add, .remove, .why => true,
+            else => false,
+        };
+        if (m == .picked or m == .add or m == .remove) p.dirty = true;
+    }
+
+    fn mainId(p: *const P) u16 {
+        return if (p.n > 0) p.pool[0] else 0;
     }
 
     fn add(p: *P, id: u16) void {
@@ -199,6 +218,10 @@ pub const Page = struct {
 
     /// Ids of known champions, repeats and the rest past five dropped
     pub fn read(p: *P, s: []const u8) void {
+        const main = p.mainId();
+        defer if (p.mainId() != main) {
+            p.failed = 0;
+        };
         p.n = 0;
         p.cell = null;
         var it = std.mem.tokenizeScalar(u8, s, '-');
@@ -282,7 +305,7 @@ pub const Page = struct {
                         rolepicker.view(h, .{ .v = .compact, .label = W.by_role }, &items),
                     }),
                     h.div(.{ .class = "icons" }, .{icons.done()}),
-                    if (n > role_shown) h.button(.{ .type = "button", .aria_expanded = p.all, .on_click = h.on(p, .all) }, .{W.all.with(h, .{ .n = n })}) else null,
+                    if (n > role_shown) h.button(.{ .type = "button", .aria_expanded = p.all, .on_click = h.on(p, .all) }, .{if (p.all) W.fewer else W.all.with(h, .{ .n = n })}) else null,
                 }),
             }),
         });
@@ -405,16 +428,22 @@ pub const Page = struct {
         const rows = h.mem.alloc(candlist.Row, opts.len) catch return oom(h);
         for (rows, opts, 1..) |*r, o, rank| {
             const id = f.cols[o.col].id;
+            const c = p.icon(h, id);
             r.* = .{
-                .champ = p.icon(h, id),
+                .champ = c,
                 .rank = @intCast(rank),
+                .win = if (p.why == .also) share(f, f.cols[o.col].together) else null,
                 .reasons = p.reasons(h, f, o),
+                .label = W.add.with(h, .{ .c = c.name }),
                 .on = h.on(p, .{ .add = id }),
             };
         }
         return card.view(h, .{ .label = W.what }, &.{
             card.head(h, W.what, null, &.{segmented.view(h, .{ .s = .s, .label = W.why_label }, &items)}),
-            if (rows.len == 0) h.p(.{ .class = "none" }, .{W.nothing}) else candlist.view(h, .{ .rows = rows }),
+            if (rows.len == 0) h.p(.{ .class = "none" }, .{W.nothing}) else candlist.view(h, .{
+                .rows = rows,
+                .head = if (p.why == .also) .{ W.champion, W.mains_play, W.blank } else null,
+            }),
         });
     }
 
@@ -435,13 +464,19 @@ pub const Page = struct {
         }
         out = out[0..n];
         // Best first; at most 8 lanes
-        for (1..n) |i| {
+        if (n > 1) for (1..n) |i| {
             var j = i;
             while (j > 0 and out[j - 1].pp < out[j].pp) : (j -= 1) std.mem.swap(candlist.Reason, &out[j - 1], &out[j]);
-        }
+        };
         return out;
     }
 };
+
+/// Of the main's players, %
+fn share(f: *const pd.File, together: u32) ?f32 {
+    if (f.players == 0) return null;
+    return 100 * @as(f32, @floatFromInt(together)) / @as(f32, @floatFromInt(f.players));
+}
 
 const icon_fmt = "https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png";
 
@@ -627,6 +662,8 @@ test "pool page: the main's file, its need, the grid, the best answers and what 
     try testing.expect(std.mem.find(u8, out, "class=\"best\"") != null);
     try testing.expect(std.mem.find(u8, out, "aria-label=\"Add Jax\"") != null);
     try testing.expect(std.mem.find(u8, out, "class=\"c-cand\"") != null);
+    // What to add rows name their button for what it does
+    try testing.expect(std.mem.find(u8, out, "class=\"pk\" type=\"button\" aria-label=\"Add ") != null);
 
     p.add(3);
     const both = try render(a, &p);
@@ -638,4 +675,40 @@ test "pool page: the main's file, its need, the grid, the best answers and what 
     p.read("20");
     try testing.expectEqual(null, p.need());
     try testing.expect(std.mem.find(u8, try render(a, &p), "Too few Teemo mains yet") != null);
+}
+
+test "pool page: also played rows covering no lane, history and storage, a failed main" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var p: Page = try .init(a, &Demo.data);
+    // Garen into neither hard lane
+    var cells = pd.demo.cells[0..].*;
+    cells[3].pp = 3;
+    var f = pd.demo;
+    f.cells = &cells;
+    p.read("1");
+    p.loaded(1, &f);
+    var ev: tree.Event = .{ .kind = .click };
+    p.update(.{ .why = .also }, &ev);
+    try testing.expect(ev.push);
+    try testing.expect(!p.dirty);
+    const also = try render(a, &p);
+    // 196 of Darius's 400 players
+    try testing.expect(std.mem.find(u8, also, "49.0%") != null);
+    try testing.expect(std.mem.find(u8, also, "Mains") != null);
+
+    ev = .{ .kind = .click };
+    p.update(.{ .role = .jungle }, &ev);
+    try testing.expect(!ev.push);
+    p.update(.{ .add = 3 }, &ev);
+    try testing.expect(ev.push and p.dirty);
+
+    // A failed main is asked for again once it has left the pool and come back
+    p.read("2");
+    p.loaded(2, null);
+    try testing.expectEqual(null, p.need());
+    p.update(.{ .remove = 0 }, &ev);
+    p.update(.{ .add = 2 }, &ev);
+    try testing.expectEqual(2, p.need());
 }

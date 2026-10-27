@@ -1,6 +1,7 @@
 //! ui-pool.wasm: the pool page (ui.poolpage.Page) from its data-bin; the main's file
-//! (data/pool/<slug>.bin) fetched when the main changes; the pool from and to
-//! localStorage (meiolol.pool.v1) when the URL has none. zjb's generated loader
+//! (data/pool/<slug>.bin) fetched when the main changes; the pool from localStorage
+//! (meiolol.pool.v1) when the URL has none, and to it when the visitor changes it (a
+//! shared link or Back never overwrites it). zjb's generated loader
 //! (ui-pool.js, `<script src data-wasm>`) calls `main`
 const std = @import("std");
 const zjb = @import("zjb");
@@ -19,9 +20,8 @@ var server: pp.Page = undefined;
 var island: *ui.island.Island(pp.Page, dom.Dom) = undefined;
 /// The champion whose file is being fetched
 var asked: ?u16 = null;
-/// The pool as last stored
-var saved: [32]u8 = undefined;
-var saved_len: usize = 0;
+/// The page's file: decoded into the arena, its strings in the fetched bytes
+var held: ?struct { arena: std.heap.ArenaAllocator, bytes: []u8 } = null;
 
 export fn main() void {
     dom.start();
@@ -38,8 +38,8 @@ export fn main() void {
     // Last: blocked storage throws, ending this call with the page already live
     if (dom.stored(key)) |s| {
         state.read(s);
-        remember(s);
         island.render();
+        dom.rt.syncHash(false) catch {};
         changed();
     }
 }
@@ -62,29 +62,39 @@ fn fetchMain() void {
 fn loaded(ctx: i32, bytes: ?[]u8) void {
     const id: u16 = @intCast(ctx);
     asked = null;
-    var f: ?*const ui.pooldata.File = null;
-    if (bytes) |b| if (ui.data.decode(gpa, ui.pooldata.File, b)) |v| {
-        const p = gpa.create(ui.pooldata.File) catch return;
-        p.* = v;
-        f = p;
-    } else |_| dom.dom.warn("pool: bad file");
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    const f = if (bytes) |b| decoded(arena.allocator(), b) else null;
     state.loaded(id, f);
+    // One file kept: the page's new one replaces the last, or a refused one goes
+    if (f != null and state.file == f) {
+        if (held) |*x| {
+            x.arena.deinit();
+            gpa.free(x.bytes);
+        }
+        held = .{ .arena = arena, .bytes = bytes.? };
+    } else {
+        arena.deinit();
+        if (bytes) |b| gpa.free(b);
+    }
     island.render();
     // The main may have changed while this was out
     fetchMain();
 }
 
+fn decoded(a: std.mem.Allocator, b: []const u8) ?*const ui.pooldata.File {
+    const f = a.create(ui.pooldata.File) catch return null;
+    f.* = ui.data.decode(a, ui.pooldata.File, b) catch {
+        dom.dom.warn("pool: bad file");
+        return null;
+    };
+    return f;
+}
+
 fn save() void {
+    if (!state.dirty) return;
+    state.dirty = false;
     var buf: [32]u8 = undefined;
     var w: std.Io.Writer = .fixed(&buf);
     state.write(&w) catch return;
-    const s = w.buffered();
-    if (std.mem.eql(u8, s, saved[0..saved_len])) return;
-    remember(s);
-    dom.store(key, s);
-}
-
-fn remember(s: []const u8) void {
-    saved_len = @min(s.len, saved.len);
-    @memcpy(saved[0..saved_len], s[0..saved_len]);
+    dom.store(key, w.buffered());
 }

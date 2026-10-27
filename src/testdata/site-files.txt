@@ -126,7 +126,7 @@ all/patch/pickup/jungle.html 1bbeb500004fb584
 all/patch/pickup/mid.html 043480abf9059105
 all/patch/pickup/support.html 82c3a658fc2bb0c5
 all/patch/pickup/top.html 88792bb572bc250e
-all/patch/pool.html 41f8cee5db25c28e
+all/patch/pool.html 48a63972f3d659b4
 all/patch/role/bot.html ee7fc92b90d568a4
 all/patch/role/jungle.html ad44315c1380c60e
 all/patch/role/mid.html 2f331ad453d2b811
@@ -138,7 +138,7 @@ all/pickup/jungle.html d1a65df2a13c48e4
 all/pickup/mid.html 9498bf64921aeeef
 all/pickup/support.html 1804ea8c4be8e6be
 all/pickup/top.html 8f854f0d80fe0f5b
-all/pool.html 6b6c320fb29ea95d
+all/pool.html e88757d299021b70
 all/role/bot.html 1ab0e0127c2385ff
 all/role/jungle.html 3aa23841f3cb44f2
 all/role/mid.html 064d200a2e03f81f
@@ -305,7 +305,7 @@ patch/pickup/jungle.html a832e25025ba242e
 patch/pickup/mid.html 70f4cd00ae5a8e6d
 patch/pickup/support.html 65f18d070cdc2305
 patch/pickup/top.html 4ef383b3074039f3
-patch/pool.html 1c861426602d829d
+patch/pool.html aa36bd9e535db507
 patch/role/bot.html fc3569f8a021ecd6
 patch/role/jungle.html 2b0cc266eaa511a7
 patch/role/mid.html f316b91360d8f364
@@ -317,7 +317,7 @@ pickup/jungle.html a216f23f498e05eb
 pickup/mid.html aeb2854bcd5d8ea1
 pickup/support.html a2d4b6c7ac949378
 pickup/top.html bfe0c26828554d86
-pool.html 59e2aa25297281b2
+pool.html cb2dac65ddd4ecf8
 privacy.html e7d64c3a3af58145
 robots.txt 331ea9090db0c9f6
 role/bot.html bfe5e24b6cc8d615
