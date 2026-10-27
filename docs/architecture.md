@@ -50,8 +50,10 @@ src/
   admin.zig          `meiolol admin`: private ops page (/admin/, static/admin.js charts)
   admin_api.zig      /admin/api/ in `meiolol render`: live data, logs, actions (hosting.md)
   site/tester.zig    /p/tester.html (`admin --private-out`): the new Draft tester island
-                     (ui/testerpage.zig, ui-tester.wasm fetches /p/ model bins), beside
-                     admin.zig private()'s old page until it reaches parity
+                     (ui/testerpage.zig, ui-tester.wasm fetches /p/ model bins) and its
+                     candidate panel (ui/testercand.zig, lazy ui-testercand.wasm, no
+                     model: the board via the URL, the seat's options handed over as a
+                     Feed), beside admin.zig private()'s old page until it reaches parity
   backup.zig         `meiolol backup|restore`: state snapshots + append-only segments
   forget.zig         `meiolol forget`: GDPR erasure, `forgotten` suppression list
                      (both: docs/data-safety.md)
@@ -75,7 +77,7 @@ src/
                      write their own forward and backward (no autograd)
   core/              pure, std only, shared: roles, statsfile (model file format),
                      score (recommender), curvesfile (lane curves format), draftscore
-                     (Draft tester scorer)
+                     (Draft tester scorer, a pick's why)
   lcu/               League client: lockfile/process discovery, https (TLS to
                      127.0.0.1 trusting only riotgames.pem), session (champ select),
                      me (own mastery and solo tier)

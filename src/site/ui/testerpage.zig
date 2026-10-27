@@ -1,15 +1,15 @@
 //! The Draft tester page (docs/plan/ui/draft-tester.md, /p/tester.html, private): build a
 //! draft, see blue's win chance under a named model, each seat's term and the model's
 //! checks. One model at a time from a Select of ModelBadges; the board is DraftBoard's
-//! full variant, a seat chosen by a click and filled from ChampSearch. Board | Terms |
-//! Files under it. Models are draft-model.bin files the page's code fetches
-//! (testerdata.zig); champion keys and names come inline (data-bin)
+//! full variant, a click choosing the seat the candidate panel (testercand.zig, its own
+//! island and wasm) fills. Board | Terms | Files under it. The model, board, seat and tab
+//! are the URL fragment's (Url), which the panel shares. Models are draft-model.bin files
+//! the page's code fetches (testerdata.zig); champion keys and names come inline (data-bin)
 const std = @import("std");
 const tree = @import("tree.zig");
 const ds = @import("core").draftscore;
 const td = @import("testerdata.zig");
 const champ = @import("champ.zig");
-const champsearch = @import("champsearch.zig");
 const draftboard = @import("draftboard.zig");
 const modelbadge = @import("modelbadge.zig");
 const role = @import("role.zig");
@@ -20,6 +20,7 @@ const button = @import("button.zig");
 const phrase = @import("phrase.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const fmt = @import("fmt.zig");
+const url = @import("url.zig");
 const plain = phrase.plain;
 const Phrase = phrase.Phrase;
 const H = tree.H;
@@ -43,7 +44,6 @@ const W = struct {
     pub const failed = plain("Could not load the model file: choose it again to retry");
     pub const bad_file = plain("The model file is damaged");
     pub const not_loaded = plain("not loaded");
-    pub const pick = Phrase("{side:text} {role:text}: pick a champion");
     pub const blue = plain("Blue");
     pub const red = plain("Red");
     pub const board = plain("Board");
@@ -106,6 +106,38 @@ pub const Loaded = struct {
     }
 };
 
+/// The seat the candidate panel fills: the chosen one, else the first empty; null when
+/// the board is full
+pub fn shownSeat(teams: [2][n_role]u32, seat: ?u8) ?u8 {
+    if (seat) |i| if (i < 2 * n_role) return i;
+    for (0..2 * n_role) |i| if (teams[i / n_role][i % n_role] == 0) return @intCast(i);
+    return null;
+}
+
+/// `teams` with champions the head lacks (removed since) or seen on an earlier seat
+/// emptied
+pub fn clean(head: *const Head, teams: [2][n_role]u32) [2][n_role]u32 {
+    var out = teams;
+    var seen: [2 * n_role]u32 = undefined;
+    var n: usize = 0;
+    for (&out) |*team| for (team) |*x| {
+        if (x.* == 0) continue;
+        if (champOf(head, x.*) == null or std.mem.findScalar(u32, seen[0..n], x.*) != null) {
+            x.* = 0;
+            continue;
+        }
+        seen[n] = x.*;
+        n += 1;
+    };
+    return out;
+}
+
+pub fn champOf(head: *const Head, id: u32) ?*const Champ {
+    if (id == 0) return null;
+    for (head.champs) |*c| if (c.id == id) return c;
+    return null;
+}
+
 /// `failed`: not fetched (a network error, no file); `bad`: fetched, didn't decode or score
 pub const Load = union(enum) { none, loading, failed, bad, ready: *const Loaded };
 
@@ -113,24 +145,46 @@ pub const Tab = enum(u8) { board, terms, files };
 
 pub const Page = struct {
     head: *const Head,
-    index: *const champsearch.Index,
     which: Which = .live,
     loads: std.enums.EnumArray(Which, Load) = .initFill(.none),
     /// By side (0 blue) and role; 0 empty
     teams: [2][n_role]u32 = @splat(@splat(0)),
-    /// The seat being filled: side * n_role + role, side 0 blue
+    /// The seat being filled: side * n_role + role, side 0 blue; null: the first empty
     seat: ?u8 = null,
     tab: Tab = .board,
-    search: champsearch.ChampSearch,
     /// The server's render: Head as ui.data, base64
     bin: []const u8 = "",
     /// Set when the model or the board changed: the page's code saves them
     dirty: bool = false,
 
-    pub const Msg = union(enum) { model: Which, tab: Tab, seat: u8, picked, clear };
+    /// The state both islands read and write: `b` blue's and `r` red's champions by role
+    /// (0 empty), `s` the seat being filled (side * n_role + role; null: the first empty)
+    pub const Url = struct {
+        m: Which = .live,
+        b: [n_role]u32 = @splat(0),
+        r: [n_role]u32 = @splat(0),
+        s: ?u8 = null,
+        t: Tab = .board,
+    };
 
-    pub fn init(head: *const Head, ix: *const champsearch.Index) Page {
-        return .{ .head = head, .index = ix, .search = .{ .index = ix, .id = "tester-pick", .mode = .pick, .in_flow = true } };
+    pub const Msg = union(enum) { model: Which, tab: Tab, seat: u8, clear };
+
+    pub fn init(head: *const Head) Page {
+        return .{ .head = head };
+    }
+
+    pub fn toUrl(p: *const Page) Url {
+        return .{ .m = p.which, .b = p.teams[0], .r = p.teams[1], .s = p.seat, .t = p.tab };
+    }
+
+    /// The other island's change (a pick) or Back: saved again when it moved the board
+    pub fn fromUrl(p: *Page, u: Url) void {
+        const teams = clean(p.head, .{ u.b, u.r });
+        if (u.m != p.which or !std.meta.eql(teams, p.teams)) p.dirty = true;
+        p.which = u.m;
+        p.teams = teams;
+        p.seat = if (u.s) |i| (if (i < 2 * n_role) i else null) else null;
+        p.tab = u.t;
     }
 
     pub fn update(p: *Page, m: Msg, _: *tree.Event) void {
@@ -148,22 +202,6 @@ pub const Page = struct {
             .seat => |i| {
                 if (i >= 2 * n_role) return;
                 p.seat = if (p.seat == i) null else i;
-                p.search.chosen = null;
-                p.search.q = .{};
-            },
-            .picked => {
-                const i = p.seat orelse return;
-                const e = p.search.chosen orelse return;
-                if (e >= p.head.champs.len) return;
-                const id = p.head.champs[e].id;
-                // A champion plays one seat a draft
-                for (&p.teams) |*team| for (team) |*x| {
-                    if (x.* == id) x.* = 0;
-                };
-                p.teams[i / n_role][i % n_role] = id;
-                p.seat = null;
-                p.search.chosen = null;
-                p.dirty = true;
             },
             .clear => {
                 p.teams = @splat(@splat(0));
@@ -181,14 +219,8 @@ pub const Page = struct {
         };
     }
 
-    fn champOf(p: *const Page, id: u32) ?*const Champ {
-        if (id == 0) return null;
-        for (p.head.champs) |*c| if (c.id == id) return c;
-        return null;
-    }
-
     fn icon(p: *const Page, h: *H, id: u32) ?champ.Champ {
-        const c = p.champOf(id) orelse return null;
+        const c = champOf(p.head, id) orelse return null;
         return .{ .name = c.name, .src = h.fmt(champ.icon_fmt, .{ p.head.ddragon, c.key }) };
     }
 
@@ -267,14 +299,8 @@ pub const Page = struct {
             lane.* = .{ .role = role.Role.all[r], .us = p.seatOf(h, l, 0, r), .them = p.seatOf(h, l, 1, r) };
             o.* = .{ h.on(p, .{ .seat = @intCast(r) }), h.on(p, .{ .seat = @intCast(n_role + r) }) };
         }
-        p.search.on_pick = h.on(p, .picked);
-        const s = p.seat;
         return h.div(.{ .class = "bd" }, .{
             draftboard.fullOn(h, .{ .v = .full, .lanes = &lanes }, &on),
-            if (s) |i| h.div(.{ .class = "pick" }, .{
-                h.p(.{}, .{W.pick.with(h, .{ .side = (if (i < n_role) W.blue else W.red).s, .role = role.Role.all[i % n_role].label().s })}),
-                p.search.view(h),
-            }) else null,
             button.view(h, .{ .v = .quiet, .s = .s, .on = h.on(p, .clear) }, .{W.clear}),
         });
     }
@@ -286,7 +312,7 @@ pub const Page = struct {
             .champ = p.icon(h, id),
             .state = if (id != 0) .locked else .empty,
             .sub = if (pts) |x| W.seat_pts.with(h, .{ .p = x }) else .{ .s = "" },
-            .sel = if (p.seat) |i| i == @as(usize, side) * n_role + r else false,
+            .sel = if (shownSeat(p.teams, p.seat)) |i| i == @as(usize, side) * n_role + r else false,
         };
     }
 
@@ -295,7 +321,7 @@ pub const Page = struct {
         var rows = h.list();
         for (0..2) |side| for (0..n_role) |r| {
             const id = p.teams[side][r];
-            const c = p.champOf(id) orelse continue;
+            const c = champOf(p.head, id) orelse continue;
             const s = l.sc.slot(id, r);
             const games: u32 = if (l.sc.terms.get(ds.termKey(id, r))) |i| l.m.params.terms[i].games else 0;
             rows.add(h.tr(.{ .key = side * n_role + r }, .{
@@ -370,11 +396,13 @@ fn shortDate(h: *H, ymd: []const u8) []const u8 {
     return h.fmt("{d} {s}", .{ d, months[m - 1] });
 }
 
-/// The search's entries, in Head.champs' order (a pick's index is a champion's)
-pub fn index(a: std.mem.Allocator, head: *const Head) !champsearch.Index {
-    const entries = try a.alloc(champsearch.Entry, head.champs.len);
-    for (entries, head.champs) |*e, c| e.* = .{ .name = c.name, .src = try a.print(champ.icon_fmt, .{ head.ddragon, c.key }) };
-    return .init(a, entries);
+/// `id` into seat `i` (side * n_role + role): a champion plays one seat a draft
+pub fn place(teams: *[2][n_role]u32, i: u8, id: u32) void {
+    if (i >= 2 * n_role) return;
+    for (teams) |*team| for (team) |*x| {
+        if (x.* == id) x.* = 0;
+    };
+    teams[i / n_role][i % n_role] = id;
 }
 
 /// The board as saved: "w t0,..,t9", w the model's index
@@ -394,19 +422,8 @@ pub fn restore(p: *Page, s: []const u8) void {
         x.* = std.fmt.parseInt(u32, it.next() orelse return, 10) catch return;
     };
     if (it.next() != null) return;
-    var seen: [2 * n_role]u32 = undefined;
-    var n: usize = 0;
-    for (&teams) |*team| for (team) |*x| {
-        if (x.* == 0) continue;
-        if (p.champOf(x.*) == null or std.mem.findScalar(u32, seen[0..n], x.*) != null) {
-            x.* = 0;
-            continue;
-        }
-        seen[n] = x.*;
-        n += 1;
-    };
     p.which = which;
-    p.teams = teams;
+    p.teams = clean(p.head, teams);
 }
 
 pub const css =
@@ -418,8 +435,6 @@ pub const css =
     \\  .c-tester .wait { color: var(--muted); margin: 0; }
     \\  .c-tester .bd { display: grid; gap: var(--sp-2); justify-items: start; }
     \\  .c-tester .bd > .c-draft { width: 100%; }
-    \\  .c-tester .pick { display: grid; gap: var(--sp-1); width: min(100%, 360px); }
-    \\  .c-tester .pick p { margin: 0; font-size: var(--fs-s); }
     \\  .c-tester .files { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--sp-1); font-size: var(--fs-s); }
     \\}
     \\
@@ -448,15 +463,13 @@ pub const Demo = struct {
 
 pub fn gallery(g: *Gallery) void {
     const a = g.h.mem;
-    const ix = a.create(champsearch.Index) catch return;
-    ix.* = index(a, &Demo.head) catch return;
     const l = a.create(Loaded) catch return;
     l.* = .{ .m = Demo.model(), .sc = undefined, .check = .{ .drafts = 0, .worst = 0 } };
     l.sc = l.m.scorer(a) catch return;
-    const states = [_][]const u8{ "loading", "a draft", "picking", "terms", "files" };
+    const states = [_][]const u8{ "loading", "a draft", "a seat chosen", "terms", "files" };
     for (states, 0..) |caption, i| {
         const p = a.create(Page) catch return;
-        p.* = .init(&Demo.head, ix);
+        p.* = .init(&Demo.head);
         if (i > 0) p.loads.set(.live, .{ .ready = l });
         p.loads.set(.comp, .failed);
         p.teams[0][0] = 266;
@@ -473,32 +486,54 @@ pub fn gallery(g: *Gallery) void {
 
 const testing = std.testing;
 
-test "tester page: a pick fills the seat, moves a champion off its other seat, scores" {
+test "tester page: a placed champion leaves its other seat; seats, the URL both ways; scores" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const ix = try index(a, &Demo.head);
     var l: Loaded = .{ .m = Demo.model(), .sc = undefined, .check = undefined };
     l.sc = try l.m.scorer(a);
-    var p: Page = .init(&Demo.head, &ix);
+    var p: Page = .init(&Demo.head);
     p.loads.set(.live, .{ .ready = &l });
-    var ev: tree.Event = .{ .kind = .click };
-    p.update(.{ .seat = 0 }, &ev);
-    p.search.chosen = 0;
-    p.update(.picked, &ev);
+    place(&p.teams, 0, 266);
     try testing.expectEqual(266, p.teams[0][0]);
-    try testing.expect(p.seat == null);
-    p.update(.{ .seat = n_role }, &ev);
-    p.search.chosen = 0;
-    p.update(.picked, &ev);
+    place(&p.teams, n_role, 266);
     // Aatrox moved to red top
     try testing.expectEqual(0, p.teams[0][0]);
     try testing.expectEqual(266, p.teams[1][0]);
+    place(&p.teams, 2 * n_role, 122);
+    try testing.expectEqual(0, p.teams[0][0] + p.teams[0][1]);
+    try testing.expectEqual(0, shownSeat(p.teams, null));
+    var ev: tree.Event = .{ .kind = .click };
     p.update(.{ .seat = 2 * n_role }, &ev);
     try testing.expect(p.seat == null);
     p.update(.{ .seat = 3 }, &ev);
     p.update(.{ .seat = 3 }, &ev);
     try testing.expect(p.seat == null);
+    p.update(.{ .seat = 3 }, &ev);
+    try testing.expectEqual(3, shownSeat(p.teams, p.seat));
+    var full: [2][n_role]u32 = @splat(@splat(1));
+    try testing.expect(shownSeat(full, null) == null);
+    full[1][4] = 0;
+    try testing.expectEqual(9, shownSeat(full, null));
+    try testing.expectEqual(2, shownSeat(full, 2));
+    // To the URL and back; a stranger's link: unknown, repeated, out-of-range values
+    var buf: [256]u8 = undefined;
+    var w: std.Io.Writer = .fixed(&buf);
+    try url.write(Page.Url, p.toUrl(), &w);
+    try testing.expectEqualStrings("r=266-0-0-0-0&s=3", w.buffered());
+    var q: Page = .init(&Demo.head);
+    q.fromUrl(url.read(Page.Url, w.buffered()));
+    try testing.expectEqual(p.teams, q.teams);
+    try testing.expect(q.dirty);
+    try testing.expectEqual(3, q.seat);
+    q.fromUrl(url.read(Page.Url, "#m=comp&b=266-7-266-122&r=266-0-0-0-99999999999&s=10&t=files"));
+    try testing.expectEqual(Which.comp, q.which);
+    try testing.expectEqual([2][n_role]u32{ @splat(0), @splat(0) }, q.teams);
+    try testing.expect(q.seat == null);
+    try testing.expectEqual(Tab.files, q.tab);
+    q.fromUrl(url.read(Page.Url, "#b=266-7-266-122-0&r=122-0-0-0-0&s=9"));
+    try testing.expectEqual([2][n_role]u32{ .{ 266, 0, 0, 122, 0 }, @splat(0) }, q.teams);
+    try testing.expectEqual(9, q.seat);
     // Red Aatrox (0.2) over the share-weighted average 0.6 * 0.2 + 0.4 * -0.1 = 0.08
     const red = seatPoints(&l, p.teams, 1, 0);
     const with: f64 = 0.02 + 0.08 - 0.2;
@@ -507,7 +542,7 @@ test "tester page: a pick fills the seat, moves a champion off its other seat, s
     var out: std.Io.Writer.Allocating = .init(a);
     try saved(&p, &out.writer);
     try testing.expectEqualStrings("0 0,0,0,0,0,266,0,0,0,0", out.written());
-    var q: Page = .init(&Demo.head, &ix);
+    q = .init(&Demo.head);
     restore(&q, out.written());
     try testing.expectEqual(266, q.teams[1][0]);
     restore(&q, "9 1,2");

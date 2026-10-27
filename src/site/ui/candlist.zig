@@ -3,7 +3,8 @@
 //! the team's win chance with it and the gap to the reference row, up to three reason
 //! chips; pressing a row opens its ReasonBreakdown under it (the owner keeps which, two
 //! at most). Chips sit under the name in a narrow panel (Daily's seat panel), inline in
-//! a wide one (draft tester). Words mode (the public app: product rules, why.md): no
+//! a wide one (draft tester), a Pick button after them when the owner fills the seat
+//! from the list. Words mode (the public app: product rules, why.md): no
 //! numbers, reasons as words with a direction
 const std = @import("std");
 const tree = @import("tree.zig");
@@ -11,6 +12,7 @@ const fmt = @import("fmt.zig");
 const champ = @import("champ.zig");
 const chip = @import("chip.zig");
 const badge = @import("badge.zig");
+const button = @import("button.zig");
 const reasons = @import("reasons.zig");
 const phrase = @import("phrase.zig");
 const Gallery = @import("gallery.zig").Gallery;
@@ -57,6 +59,10 @@ pub const Row = struct {
     on: ?tree.Handler = null,
     /// The app's click (ui/practice.zig Act); "" for none
     act: []const u8 = "",
+    /// Puts the champion in the seat (withPick only); null: no Pick button
+    pick: ?tree.Handler = null,
+    /// The Pick button's name ("Pick Gnar")
+    pick_label: ?tree.Text = null,
 };
 
 pub const Base = struct {
@@ -77,10 +83,20 @@ pub const List = struct {
 };
 
 pub fn view(h: *H, l: List) N {
+    return viewOf(h, l, false);
+}
+
+/// With the rows' Pick buttons: a separate instance, so a page without them (Daily, at
+/// its wasm budget) carries none of their code
+pub fn withPick(h: *H, l: List) N {
+    return viewOf(h, l, true);
+}
+
+fn viewOf(h: *H, l: List, comptime pick: bool) N {
     var rows = h.list();
     for (l.rows, 0..) |r, i| {
         if (r.gap) rows.add(h.div(.{ .key = 3 * i + 1, .class = "gap", .aria_hidden = true }, .{"⋯"}));
-        rows.add(row(h, l, r, 3 * i + 2));
+        rows.add(row(h, l, r, 3 * i + 2, pick));
     }
     return h.div(.{ .class = "c-cand", .data_v = if (l.mode == .points) null else l.mode }, .{
         if (l.head) |hd| h.div(.{ .class = "hd" }, .{
@@ -98,7 +114,7 @@ pub fn view(h: *H, l: List) N {
     });
 }
 
-fn row(h: *H, l: List, r: Row, key: usize) N {
+fn row(h: *H, l: List, r: Row, key: usize, comptime pick: bool) N {
     var chips = h.list();
     for (r.reasons[0..@min(3, r.reasons.len)]) |x| chips.add(chip.view(h, .{ .v = .reason }, .{
         x.text,
@@ -131,9 +147,10 @@ fn row(h: *H, l: List, r: Row, key: usize) N {
             .class = "d",
             .style = if (r.vs) |d| h.vars(.{ .c = fmt.Step.of(d, fmt.win_cuts) }) else null,
         }, .{if (r.vs) |d| phrase.num(h, .points, d) else null}) else null,
-        if (r.reasons.len > 0 or r.tag != null) h.span(.{ .class = "why" }, .{
+        if (r.reasons.len > 0 or r.tag != null or (pick and r.pick != null)) h.span(.{ .class = "why" }, .{
             chips.done(),
             if (r.tag) |t| badge.view(h, .neutral, .{t}) else null,
+            goButton(h, r, pick),
         }) else null,
     });
     const det: ?N = if (r.open) if (r.detail) |d| h.div(.{
@@ -144,9 +161,16 @@ fn row(h: *H, l: List, r: Row, key: usize) N {
     return h.div(.{ .key = key, .class = "row" }, .{ head, det });
 }
 
+fn goButton(h: *H, r: Row, comptime pick: bool) ?N {
+    if (!pick) return null;
+    const hd = r.pick orelse return null;
+    return h.span(.{ .class = "go" }, .{button.view(h, .{ .v = .quiet, .s = .s, .label = r.pick_label, .on = hd }, .{W.pick})});
+}
+
 const W = struct {
     const played = plain("played");
     const star = plain("The model's pick");
+    const pick = plain("Pick");
 };
 
 pub const css =
@@ -173,6 +197,7 @@ pub const css =
     \\  .c-cand .hd .v, .c-cand .hd .d { font-weight: var(--w-r); color: var(--faint); font-size: var(--fs-xs); }
     \\  .c-cand .why { grid-column: 2 / -1; display: flex; gap: 4px; flex-wrap: wrap; padding-left: 32px; }
     \\  .c-cand .why b { color: var(--c); font-weight: var(--w-b); }
+    \\  .c-cand .go { margin-left: auto; position: relative; z-index: 1; }
     \\  .c-cand .why b[data-dir="up"] { color: var(--hi2); }
     \\  .c-cand .why b[data-dir="down"] { color: var(--lo2); }
     \\  .c-cand .base { color: var(--muted); }
@@ -196,6 +221,12 @@ pub const css =
 ;
 
 const demo = champ.demo;
+
+/// The gallery's Pick buttons' target
+const Owner = struct {
+    pub const Msg = enum { pick };
+    pub fn update(_: *Owner, _: Msg, _: *tree.Event) void {}
+};
 
 /// Daily #11's red top: the model's five and the played Jayce third
 pub const sample_rows = [_]Row{
@@ -253,8 +284,16 @@ pub fn gallery(g: *Gallery) void {
     for (rows, [_]usize{ 0, 1, 3, 4, 2 }) |*r, i| r.* = gap.rows[i];
     rows[4].rank = 10;
     rows[4].gap = true;
+    const owner = h.mem.create(Owner) catch {
+        h.oom = true;
+        return;
+    };
+    for (rows[0..4]) |*r| {
+        r.pick = h.on(owner, .pick);
+        r.pick_label = plain("Pick it");
+    }
     gap.rows = rows;
-    g.addFill("average pinned, played far down", view(h, gap));
+    g.addFill("average pinned, played far down, Pick", withPick(h, gap));
     g.addFill("words, public app", view(h, .{ .mode = .words, .ref_label = plain("locked in"), .rows = &words_rows }));
 }
 

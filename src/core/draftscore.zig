@@ -256,25 +256,30 @@ pub const Scorer = struct {
 
     /// Blue's win chance and 95% interval; 0 is an empty slot
     pub fn blue(sc: *const Scorer, teams: [2][n_role]u32) Chance {
+        const x = sc.logit(teams);
+        const t = sc.e.temperature;
+        return .{ .p = sigmoid(t * x.l), .lo = sigmoid(t * (x.l - x.half)), .hi = sigmoid(t * (x.l + x.half)) };
+    }
+
+    /// Blue's logit before the temperature, and its 95% half-width
+    fn logit(sc: *const Scorer, teams: [2][n_role]u32) struct { l: f64, half: f64 } {
         var sl: [2][n_role]Slot = undefined;
         for (0..2) |side| for (0..n_role) |r| {
             sl[side][r] = sc.slot(teams[side][r], r);
         };
-        var logit: f64 = sc.e.intercept[sc.platform] + sc.compLogit(&sl) + sc.pairLogit(teams);
+        var l: f64 = sc.e.intercept[sc.platform] + sc.compLogit(&sl) + sc.pairLogit(teams);
         var v: f64 = 0;
         for (0..n_role) |r| {
-            logit += sl[0][r].b - sl[1][r].b;
+            l += sl[0][r].b - sl[1][r].b;
             v += sl[0][r].sd * sl[0][r].sd + sl[1][r].sd * sl[1][r].sd;
         }
         for (0..n_role) |ri| for (0..n_role) |rj| {
             const w = sc.e.w[ri * n_role + rj];
-            if (w != 0) logit += w * (dot(sl[0][ri].u, sl[1][rj].v) - dot(sl[1][ri].u, sl[0][rj].v));
+            if (w != 0) l += w * (dot(sl[0][ri].u, sl[1][rj].v) - dot(sl[1][ri].u, sl[0][rj].v));
             const z = sc.e.z[ri * n_role + rj];
-            if (z != 0 and ri < rj) logit += z * (dot(sl[0][ri].s, sl[0][rj].s) - dot(sl[1][ri].s, sl[1][rj].s));
+            if (z != 0 and ri < rj) l += z * (dot(sl[0][ri].s, sl[0][rj].s) - dot(sl[1][ri].s, sl[1][rj].s));
         };
-        const t = sc.e.temperature;
-        const half = z95 * @sqrt(v);
-        return .{ .p = sigmoid(t * logit), .lo = sigmoid(t * (logit - half)), .hi = sigmoid(t * (logit + half)) };
+        return .{ .l = l, .half = z95 * @sqrt(v) };
     }
 
     /// The comp terms' part of blue's logit, 0 without them
@@ -350,13 +355,17 @@ pub const Scorer = struct {
         var t = teams;
         t[side][r] = 0;
         const c0 = sc.blue(t);
+        const x0 = sc.logit(t).l;
         t[side][r] = id;
         const c1 = sc.blue(t);
+        const x1 = sc.logit(t).l;
         var w: Why = .{ .empty = if (side == 0) c0 else c0.flip(), .with = if (side == 0) c1 else c1.flip() };
         const d = w.with.p - w.empty.p;
-        const dl = logitOf(w.with.p) - logitOf(w.empty.p);
+        const temp = sc.e.temperature;
+        // The side's logit moves by dl; no @log (its table costs ui.wasm 4 KB)
+        const dl = temp * (if (side == 0) x1 - x0 else x0 - x1);
         const slope = if (@abs(dl) > 1e-9) d / dl else w.with.p * (1 - w.with.p);
-        const k = 100 * slope * sc.e.temperature;
+        const k = 100 * slope * temp;
         const games = if (sc.terms.get(termKey(id, r))) |i| sc.e.terms[i].games else 0;
         w.add(.{ .kind = .base, .other = id, .role = @intCast(r), .pp = k * (sc.slot(id, r).b - sc.average[r].b), .games = games });
         const mine = t[side];
@@ -389,11 +398,6 @@ pub const Scorer = struct {
         return w;
     }
 };
-
-fn logitOf(p: f64) f64 {
-    const q = std.math.clamp(p, 1e-12, 1 - 1e-12);
-    return @log(q / (1 - q));
-}
 
 /// A named part's kind: the pick's own strength, a duo, a matchup (core.score's, so the
 /// tester and Daily word them alike)

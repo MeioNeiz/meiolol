@@ -51,6 +51,8 @@ pub const yourlookup_js = hashed("ui-yourlookup.js", @embedFile("ui-yourlookup.j
 pub const yourlookup_wasm = hashed("ui-yourlookup.wasm", @embedFile("ui-yourlookup.wasm"));
 pub const tester_js = hashed("ui-tester.js", @embedFile("ui-tester.js"));
 pub const tester_wasm = hashed("ui-tester.wasm", @embedFile("ui-tester.wasm"));
+pub const testercand_js = hashed("ui-testercand.js", @embedFile("ui-testercand.js"));
+pub const testercand_wasm = hashed("ui-testercand.wasm", @embedFile("ui-testercand.wasm"));
 
 /// `plain` with 8 hex digits of `data`'s FNV-1a before its extension
 pub fn hashed(comptime plain: []const u8, comptime data: []const u8) Hashed {

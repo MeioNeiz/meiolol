@@ -1,6 +1,7 @@
-//! The Draft tester on the fake DOM: the server's render, hydration, a seat filled from
-//! the search, the model Select, the tabs with each load state, Clear; each patch equal to
-//! a fresh render. Then restore's edge cases and the model file's bad bytes
+//! The Draft tester on the fake DOM: the server's render, hydration, seats chosen, the
+//! board from the URL (the candidate panel's picks) and into it, the model Select, the
+//! tabs with each load state, Clear; each patch equal to a fresh render. Then restore's
+//! edge cases and the model file's bad bytes
 const std = @import("std");
 const tree = @import("tree.zig");
 const diff = @import("diff.zig");
@@ -19,7 +20,6 @@ const Page = struct {
     arena: std.heap.ArenaAllocator,
     fake: Fake = undefined,
     rt: island.Runtime(Fake) = undefined,
-    ix: @import("champsearch.zig").Index = undefined,
     l: tp.Loaded = undefined,
     state: tp.Page = undefined,
     server: tp.Page = undefined,
@@ -30,10 +30,9 @@ const Page = struct {
         const a = p.arena.allocator();
         p.fake = .{ .a = a };
         p.rt = .init(a, &p.fake);
-        p.ix = try tp.index(a, &tp.Demo.head);
         p.l = .{ .m = tp.Demo.model(), .sc = undefined, .check = .{ .drafts = 3, .worst = 0 } };
         p.l.sc = try p.l.m.scorer(a);
-        p.server = .init(&tp.Demo.head, &p.ix);
+        p.server = .init(&tp.Demo.head);
         p.state = p.server;
         const t = try a.create(tree.Tree);
         t.* = .{};
@@ -85,10 +84,11 @@ const Page = struct {
         _ = p.rt.event(0, .{ .kind = .click, .target = target });
     }
 
-    /// Types `q` in the seat's search and takes the first hit
-    fn pick(p: *Page, q: []const u8) void {
-        _ = p.rt.event(0, .{ .kind = .input, .target = p.nth("data-ref", "input", 0), .text = q });
-        _ = p.rt.event(0, .{ .kind = .keydown, .target = p.nth("data-ref", "input", 0), .text = "Enter" });
+    /// The other runtime's change: the fragment set, then its ui-hash
+    fn hashed(p: *Page, s: []const u8) !void {
+        p.fake.fragment.clearRetainingCapacity();
+        try p.fake.fragment.appendSlice(p.arena.allocator(), s);
+        p.rt.popstate();
     }
 
     fn deinit(p: *Page) void {
@@ -107,8 +107,7 @@ test "the server renders the tester, clean, the model loading" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const ix = try tp.index(a, &tp.Demo.head);
-    var s: tp.Page = .init(&tp.Demo.head, &ix);
+    var s: tp.Page = .init(&tp.Demo.head);
     s.bin = "AAAA";
     var t: tree.Tree = .{};
     var h: tree.H = .init(a, &t);
@@ -123,7 +122,7 @@ test "the server renders the tester, clean, the model loading" {
     try testing.expectEqual(@as(usize, 0), report.findings.items.len);
 }
 
-test "a seat filled from the search, moved to the other side, scored; Clear empties" {
+test "seats chosen into the URL, a pick from it, moved to the other side, scored; Clear empties" {
     var p: Page = undefined;
     try p.init();
     defer p.deinit();
@@ -133,10 +132,11 @@ test "a seat filled from the search, moved to the other side, scored; Clear empt
     p.i.render();
     try has(try p.shown(), "Blue 50.5%");
 
-    p.click(p.nth("aria-label", "Blue Top, Empty seat", 0));
-    try testing.expectEqual(@as(?u8, 0), p.state.seat);
-    try has(try p.shown(), "Blue Top: pick a champion");
-    p.pick("Aat");
+    p.click(p.nth("aria-label", "Red Top, Empty seat", 0));
+    try testing.expectEqual(@as(?u8, n_role), p.state.seat);
+    try testing.expectEqualStrings("#s=5", p.fake.fragment.items);
+    _ = try p.shown();
+    try p.hashed("#b=266-0-0-0-0&o=fit");
     try testing.expectEqual(266, p.state.teams[0][0]);
     try testing.expect(p.state.seat == null);
     try testing.expect(p.state.dirty);
@@ -145,22 +145,24 @@ test "a seat filled from the search, moved to the other side, scored; Clear empt
     try has(one, "vs average");
     try testing.expect(std.mem.find(u8, one, "Blue 50.5%") == null);
 
-    // Red top takes Aatrox: blue top empties
-    p.click(p.nth("aria-label", "Red Top, Empty seat", 0));
-    p.pick("Aat");
-    try testing.expectEqual(0, p.state.teams[0][0]);
-    try testing.expectEqual(266, p.state.teams[1][0]);
-    _ = try p.shown();
-
-    // A second click on the chosen seat closes the search
+    // A key it doesn't own (the panel's sort) stays as it was
     p.click(p.nth("aria-label", "Blue Jungle, Empty seat", 0));
     try testing.expectEqual(@as(?u8, 1), p.state.seat);
+    try testing.expectEqualStrings("#o=fit&b=266-0-0-0-0&s=1", p.fake.fragment.items);
+    // A second click on the chosen seat goes back to the first empty
     p.click(p.nth("aria-label", "Blue Jungle, Empty seat", 0));
     try testing.expect(p.state.seat == null);
     _ = try p.shown();
 
+    // Red top takes Aatrox: blue top empties
+    try p.hashed("#r=266-0-0-0-0");
+    try testing.expectEqual(0, p.state.teams[0][0]);
+    try testing.expectEqual(266, p.state.teams[1][0]);
+    _ = try p.shown();
+
     p.click(p.nth("data-v", "quiet", 0));
     try testing.expectEqual(@as([2][n_role]u32, @splat(@splat(0))), p.state.teams);
+    try testing.expectEqualStrings("#", p.fake.fragment.items);
     try has(try p.shown(), "Blue 50.5%");
 }
 
@@ -221,8 +223,7 @@ test "the model Select switches, a failed model retries; tabs show terms and fil
 test "restore: malformed leaves the page, unknown and repeated champions empty" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
-    const ix = try tp.index(arena.allocator(), &tp.Demo.head);
-    var p: tp.Page = .init(&tp.Demo.head, &ix);
+    var p: tp.Page = .init(&tp.Demo.head);
     p.teams[0][1] = 122;
     const before = p.teams;
     for ([_][]const u8{
@@ -249,7 +250,7 @@ fn refused(a: std.mem.Allocator, bytes: []const u8) !void {
     if (tp.Loaded.init(a, bytes)) |_| return error.TestUnexpectedResult else |_| {}
 }
 
-test "a model file: bad bytes refused, the demo's round trip scores; the search's index" {
+test "a model file: bad bytes refused, the demo's round trip scores" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -261,8 +262,4 @@ test "a model file: bad bytes refused, the demo's round trip scores; the search'
     try testing.expectEqual(0, l.check.drafts);
     try testing.expectApproxEqAbs(1 / (1 + @exp(@as(f64, -0.02))), l.sc.blue(@splat(@splat(0))).p, 1e-9);
     try refused(a, raw.items[0 .. raw.items.len / 2]);
-
-    const ix = try tp.index(a, &tp.Demo.head);
-    try testing.expectEqual(2, ix.entries.len);
-    try testing.expectEqualStrings("/icon/16.21.1/Darius.jpg", ix.entries[1].src);
 }

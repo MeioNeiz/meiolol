@@ -1,5 +1,6 @@
-//! The new Draft tester page (/p/tester.html, ui.testerpage): its HTML with the champion
-//! list inline, its stylesheet and ui-tester.wasm, written into the private site's dir
+//! The new Draft tester page (/p/tester.html, ui.testerpage and ui.testercand): its HTML
+//! with the champion list inline, its stylesheet, ui-tester.wasm and the candidate panel's
+//! ui-testercand.wasm (which ui-tester.wasm loads), written into the private site's dir
 //! beside the old page (admin.private) by `meiolol admin --private-out`. Never public:
 //! nginx serves /p/ to view_private logins only
 const std = @import("std");
@@ -12,7 +13,7 @@ const Io = std.Io;
 const tp = ui.testerpage;
 
 /// What the public stylesheet leaves out (ui.components): it is linked first
-pub const css = ui.css.join(.{ ui.select, ui.split, ui.draftboard, ui.modelbadge, ui.testerpage });
+pub const css = ui.css.join(.{ ui.select, ui.split, ui.draftboard, ui.modelbadge, ui.rankstrip, ui.testerpage, ui.testercand });
 pub const css_file = assets.hashed("tester.css", css);
 
 /// Champion keys, names and the Data Dragon version, from the champions table
@@ -36,13 +37,15 @@ pub fn page(a: std.mem.Allocator, h: *const tp.Head) ![]const u8 {
     var raw: std.ArrayList(u8) = .empty;
     try ui.data.encode(a, tp.Head, h.*, &raw);
     const e = std.base64.standard.Encoder;
-    const ix = try a.create(ui.champsearch.Index);
-    ix.* = try tp.index(a, h);
-    var p: tp.Page = .init(h, ix);
+    var p: tp.Page = .init(h);
     p.bin = e.encode(try a.alloc(u8, e.calcSize(raw.items.len)), raw.items);
+    var c: ui.testercand.Panel = .init(h);
+    c.js = assets.testercand_js.path;
+    c.wasm = assets.testercand_wasm.path;
     var t: ui.Tree = .{};
     var hh: ui.H = .init(a, &t);
-    t.root = p.view(&hh);
+    const top = p.view(&hh);
+    const panel = c.view(&hh);
     if (hh.oom) return error.OutOfMemory;
     var out: Io.Writer.Allocating = .init(a);
     const w = &out.writer;
@@ -61,7 +64,8 @@ pub fn page(a: std.mem.Allocator, h: *const tp.Head) ![]const u8 {
         \\<main class="wrap">
         \\
     , .{ style.file.path, css_file.path });
-    try ui.html.write(&t, t.root, w);
+    try ui.html.write(&t, top, w);
+    try ui.html.write(&t, panel, w);
     try w.print(
         \\
         \\</main>
@@ -86,6 +90,8 @@ pub fn write(gpa: std.mem.Allocator, io: Io, out_dir: []const u8, db: store.Db) 
         .{ css_file.path, css_file.data },
         .{ assets.tester_js.path, assets.tester_js.data },
         .{ assets.tester_wasm.path, assets.tester_wasm.data },
+        .{ assets.testercand_js.path, assets.testercand_js.data },
+        .{ assets.testercand_wasm.path, assets.testercand_wasm.data },
     };
     for (files) |f| {
         try dir.writeFile(io, .{ .sub_path = f[0], .data = f[1] });
