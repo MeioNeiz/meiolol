@@ -1,15 +1,19 @@
 # Hosting the backend (the box)
 
-Off Jacob's PC so it and the laptop can be off: everything runs on Oracle Cloud Always
+Off Jacob's PC so it and the laptop can be off. The box is C01, a VM Ethan lent
+(docs/plan/vm.md: storage, web side, the move); the old box ran on Oracle Cloud Always
 Free, home region uk-london-1 (tenancy `jacobmaschler`; free
-accounts may use Always Free only in the home region).
+accounts may use Always Free only in the home region). Sections below on the Oracle
+hosts and the box's limits describe the Oracle setup; C01 runs the same layout
+(~/ml/meiolol, user units) untuned for its own hardware yet.
 
 ## Hosts
 
 | alias | what | shape | disk |
 |---|---|---|---|
-| meiolol-cloud | the box: crawler, site build + upload, backups, health | A1 `meiolol`, VM.Standard.A1.Flex 2 OCPU / 12 GB (aarch64), AD-1, 140.238.101.20 | 150 GB boot |
-| jomify | nginx: site, Your games service (also jomove, not meiolol's) | E2.1.Micro, 193.123.180.81 | 47 GB boot |
+| essex-vm | the box (C01): crawler, site build, renderer, backups, health; nginx, the Your games API and traffic behind Cloudflare Tunnel `meiolol-c01` | KVM, 8 vCPU (generic QEMU CPU), 15 GB, Tailscale 100.95.95.44 | /srv/meiolol 492 GB on Megatron, 30 GB local cache |
+| meiolol-cloud | the old box, stopped: units masked, data as of the move; kept (Jacob decides standby or termination) | A1 `meiolol`, VM.Standard.A1.Flex 2 OCPU / 12 GB (aarch64), AD-1, 140.238.101.20 | 150 GB boot |
+| jomify | jomove's server; its old meiolol web units still run, unused (meio.lol points at C01). Leave alone | E2.1.Micro, 193.123.180.81 | 47 GB boot |
 
 - Free tier: A1 up to 2 OCPU / 12 GB in total (1500 OCPU-h + 9000 GB-h a month), so the
   box takes all of it. Boot volume grown online (rescan, growpart, resize2fs); balanced

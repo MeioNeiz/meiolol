@@ -82,11 +82,10 @@ median, ~5 min p90. `deploy/box.sh wait-deployed --live` waits for the swap too.
 
 ## Reference
 
-- Hosting: jomify server (Oracle uk-london-1, `ssh jomify`: alias in the Mac's
-  ~/.ssh/config for ubuntu@193.123.180.81; jomove.conf is an unrelated house-moving
-  app's nginx config: leave alone). /etc/nginx/conf.d/meiolol.conf, root
-  /var/www/meiolol, user `meiolol` with an rrsync key from the box; Let's Encrypt via
-  webroot. The box: docs/hosting.md (Oracle Cloud, `meiolol-cloud`).
+- Hosting: C01 (`ssh essex-vm`, docs/hosting.md), nginx behind Cloudflare Tunnel
+  `meiolol-c01` (TLS at Cloudflare; deploy/vm-web.sh installs it):
+  /etc/nginx/conf.d/meiolol.conf, root /var/www/meiolol, user `meiolol` with rrsync
+  keys from the box's localhost aliases.
   deploy/web-loop.sh on the box builds and uploads (often early in a patch, then hourly
   on new games); riot.txt from ml/meiolol/riot.txt
 - Admin page: https://meio.lol/admin/ (/api/ basic auth; src/admin.zig). Crawl rates

@@ -16,7 +16,7 @@ overtaken: check the code and git log before acting.
 - Smart timeline picking (only matches with an under-sampled lane matchup) adds only
   +2-12% matches today, since 77-95% of matches still need one: revisit with the
   production key, when matchups saturate
-- Box loose ends, not checked since the move to the A1: one-off `meiolol rebuild` for
+- Oracle box loose ends (it is stopped since the move to C01; moot if terminated): one-off `meiolol rebuild` for
   the gold10/14/15 migration; remove OCI dynamic group meiolol-box, policy
   meiolol-box-launch and service meiolol-a1-launch; remove gpu-box ~/.ssh/migrate_cloud
   and its pubkey from meiolol-cloud's authorized_keys; jodrive oracle login's enrolment
