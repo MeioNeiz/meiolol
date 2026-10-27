@@ -1,6 +1,6 @@
 //! ui-daily.wasm: the Daily Draft page (ui.dailypage.Page) from its data-bin, answers from
-//! and to localStorage (meiolol.daily.v1, Home reads it too). zjb's generated loader
-//! (ui-daily.js, `<script src data-wasm>`) calls `main`
+//! and to localStorage (meiolol.daily.v1, Home and the days strip read it too). zjb's
+//! generated loader (ui-daily.js, `<script src data-wasm>`) calls `main`
 const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
@@ -42,6 +42,10 @@ fn save() void {
     const s = dp.write(gpa, old, data.n, state.saved(), &today()) catch return;
     defer gpa.free(s);
     dom.store(key, s);
+    // The head's days strip (ui-dailydays.wasm) reads them again
+    const e = zjb.global("Event").new(.{zjb.constString("ui-daily")});
+    defer e.release();
+    zjb.global("window").call("dispatchEvent", .{e}, void);
 }
 
 /// The viewer's own date, "2026-10-27": days in a row count puzzles finished on theirs

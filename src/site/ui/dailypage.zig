@@ -152,7 +152,6 @@ pub const Page = struct {
     }
 
     pub fn view(s: *Page, h: *H) N {
-        const p = s.p;
         const ph = s.phase();
         return h.div(.{
             .class = "c-daily",
@@ -161,11 +160,6 @@ pub const Page = struct {
             .data_phase = ph,
             .on_keydown = h.on(s, .key),
         }, .{
-            h.div(.{ .class = "head" }, .{
-                h.el(.h1, .{}, .{ W.title, " ", h.span(.{ .class = "n" }, .{W.number.with(h, .{ .n = p.n })}) }),
-                if (p.turns.len > 0) badge.view(h, .neutral, .{W.pro}) else null,
-                badge.view(h, .neutral, .{p.patch}),
-            }),
             h.div(.{ .class = "cols" }, .{
                 h.div(.{ .class = "left" }, .{
                     card.view(h, .{ .label = W.draft }, &.{ if (ph == .done) s.result(h) else .none, s.board(h) }),
@@ -606,6 +600,13 @@ pub fn read(json: []const u8, n: u32) ?Saved {
     return s;
 }
 
+/// The viewer's date puzzle `n` was finished on ("2026-10-27"), for days in a row
+pub fn finishedOn(json: []const u8, n: u32) ?[]const u8 {
+    const v = field(entry(json, n) orelse return null, "on") orelse return null;
+    if (v.len != 12 or v[0] != '"' or v[11] != '"') return null;
+    return v[1..11];
+}
+
 fn bit(c: u8) bool {
     return c == '0' or c == '1';
 }
@@ -649,9 +650,6 @@ pub fn write(a: std.mem.Allocator, json: []const u8, n: u32, s: Saved, on: []con
 }
 
 const W = struct {
-    const title = plain("Daily Draft");
-    const number = Phrase("#{n:int}");
-    const pro = plain("Pro game");
     const draft = plain("The draft");
     const ad = plain("AD");
     const ap = plain("AP");
@@ -702,9 +700,6 @@ const W = struct {
 pub const css =
     \\@layer components {
     \\  .c-daily { display: grid; gap: var(--sp-3); container: daily / inline-size; scroll-margin-top: calc(var(--header) + var(--sp-3)); }
-    \\  .c-daily > .head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); }
-    \\  .c-daily > .head h1 { margin: 0 var(--sp-1) 0 0; font-size: var(--fs-l); }
-    \\  .c-daily > .head .n { color: var(--muted); font-weight: var(--w-m); }
     \\  .c-daily > .cols { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: var(--sp-3); align-items: start; }
     \\  .c-daily[data-phase="done"] > .cols { grid-template-columns: minmax(0, 1fr) 380px; }
     \\  .c-daily .left { display: grid; gap: var(--sp-3); min-width: 0; }

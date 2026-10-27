@@ -51,6 +51,8 @@ pub fn states(h: *H, comptime C: type, width: u16) []const State {
 
 /// The gallery's body: a section per component in `all` (ui.all)
 pub fn page(h: *H, comptime all: anytype) N {
+    // A branch per component unrolled: the default 1000 runs out near a hundred
+    @setEvalBranchQuota(4000);
     var toc = h.list();
     var secs = h.list();
     inline for (all) |C| {

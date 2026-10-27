@@ -176,8 +176,18 @@ detected reason that clears chance, else its usual gold at 14 against the enemy)
   pick, Lock in, who won, then the board grown, the seat panel and On paper. Answers in
   localStorage meiolol.daily.v1 (object by n, {opt, side, hint, marks, on}; Home reads
   marks). The Range hint costs the clean tick ("Pick, with a hint").
-  Not yet in the island: the viewer's local date, ?n= archive, streak, share. Crowd
-  counts (/api/daily) are paused: nothing sends or shows them until the island does
+- daily/<n>.html: puzzle n's own page, the same island; none past tomorrow (UTC), so a
+  viewer a day ahead of UTC can play theirs and later ones 404. Rendered on request under
+  --static core (the renderer, from the shared view's daily files), written by --static
+  all; not in the sitemap. The head (title, badges) sits outside the puzzle's island with
+  its own island, ui.dailydays (ui-dailydays.wasm): the last 14 puzzles out by the
+  viewer's date as links (right answers by colour, today ringed, the page's own dashed)
+  and the streak (finished on its own day; one miss forgiven). It reads meiolol.daily.v1
+  again on ui-daily.wasm's window event "ui-daily" (after each save). On daily.html it
+  opens (location.replace) the newest puzzle out by the viewer's date, or ?n= (old
+  links), when that isn't the page's.
+  Not yet: an archive past the strip's 14, share. Crowd counts (/api/daily) are paused:
+  nothing sends or shows them until the island does
 
 ## Your games service (src/api, src/site/your.zig, static/your.js)
 

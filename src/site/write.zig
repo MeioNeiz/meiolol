@@ -4,6 +4,7 @@ const std = @import("std");
 const store = @import("store");
 const html = @import("html.zig");
 const home_page = @import("home.zig");
+const daily_page = @import("daily.zig");
 
 const Writer = std.Io.Writer;
 
@@ -88,19 +89,27 @@ fn writeSite(site: *const Site, root_dir: std.Io.Dir, gz_window: []u8) !void {
         if (std.mem.startsWith(u8, path, "build/")) build_pages += 1;
         if (std.mem.startsWith(u8, path, "champion/")) champion_pages += 1;
     }
-    if (std.meta.eql(site.view, html.View.shared)) for (shared_pages ++ unlisted_pages) |path| {
-        if (!isStatic(opts, "", path)) continue;
-        _ = page_arena.reset(.retain_capacity);
-        var aw: Writer.Allocating = .init(s.arena);
-        if (!try renderShared(&s, &aw.writer, path)) continue;
-        try w.write(root_dir, path, aw.written());
-    };
+    if (std.meta.eql(site.view, html.View.shared)) {
+        // In the site's arena: the page arena is reset per page
+        const daily_pages = try daily_page.pagePaths(site);
+        for (shared_pages ++ unlisted_pages) |path| try writeShared(&s, w, root_dir, &page_arena, path);
+        for (daily_pages) |path| try writeShared(&s, w, root_dir, &page_arena, path);
+    }
     if (site.curves != null) log.info("{d} matchup pages", .{matchups});
     if (build_pages > 0) log.info("{d} build pages", .{build_pages});
     // deploy/web-loop.sh reads the first "patch" line: EUW's
     log.info("{s}/{s}: {s}, {d} games, {d} champion pages", .{
         site.opts.out_dir, site.view.dir(), site.when, site.games, champion_pages,
     });
+}
+
+/// A shared view's page at the site root, unless the static build leaves it to the renderer
+fn writeShared(s: *const Site, w: FileWriter, root_dir: std.Io.Dir, page_arena: *std.heap.ArenaAllocator, path: []const u8) !void {
+    if (!isStatic(s.opts, "", path)) return;
+    _ = page_arena.reset(.retain_capacity);
+    var aw: Writer.Allocating = .init(s.arena);
+    if (!try renderShared(s, &aw.writer, path)) return;
+    try w.write(root_dir, path, aw.written());
 }
 
 const FileWriter = struct {
