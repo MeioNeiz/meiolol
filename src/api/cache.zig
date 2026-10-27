@@ -97,7 +97,7 @@ pub const schema =
     \\) WITHOUT ROWID;
     \\CREATE INDEX IF NOT EXISTS match_names_hash ON match_names (hash);
     \\
-    \\-- Daily Draft: how many finished puzzle n with each option (0-3, the puzzle's order)
+    \\-- Daily Draft: how many finished puzzle n with each option (0-5, the puzzle's order)
     \\-- and side (0 blue, 1 red). Counts only: nothing about who answered
     \\CREATE TABLE IF NOT EXISTS daily_answers (
     \\    n INTEGER NOT NULL,

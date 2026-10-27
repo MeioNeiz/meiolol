@@ -24,6 +24,7 @@ const Io = std.Io;
 const store = @import("store");
 const core = @import("core");
 const ddragon = @import("../ddragon.zig");
+const daily_first_day = @import("../daily.zig").first_day;
 const httpd = @import("net").server;
 pub const cache = @import("cache.zig");
 pub const fetch = @import("fetch.zig");
@@ -372,7 +373,7 @@ fn handle(ctx: *Context, request: *std.http.Server.Request) !void {
     if (std.mem.eql(u8, path, "/api/daily") and (method == .POST or method == .GET)) {
         const db = try cache.open(ctx.opts.db_path);
         defer db.close();
-        const r = try daily(arena, db, query, method == .POST);
+        const r = try daily(arena, db, query, method == .POST, dailyToday(ctx.io));
         return send(ctx, request, r);
     }
     if (std.mem.eql(u8, path, "/api/health") and method == .GET) {
@@ -407,8 +408,12 @@ fn errorReply(arena: Allocator, status: Status, state: []const u8, message: []co
 
 /// Ranked puzzles have four, pro ones six (ui.dailydata.Puzzle.options)
 pub const daily_options = 6;
-/// Puzzle numbers past this are refused, so junk can't grow the table without bound
-const max_daily = 100_000;
+
+/// Today's Daily Draft number (UTC), as site.daily.todayNumber
+fn dailyToday(io: Io) u32 {
+    const day = @divFloor(Io.Clock.real.now(io).toSeconds(), std.time.s_per_day);
+    return if (day < daily_first_day) 0 else @intCast(day - daily_first_day + 1);
+}
 
 pub const DailyOut = struct {
     n: u32,
@@ -419,15 +424,17 @@ pub const DailyOut = struct {
 };
 
 /// Daily Draft answer counts, sent once per browser when a puzzle is finished; a repeat or
-/// a script can add more, which nginx's rate limit bounds. ui.dailydays sends and shows them
-fn daily(arena: Allocator, db: store.Db, query: []const u8, post: bool) !Reply {
-    const n = try intParam(arena, query, "n", max_daily) orelse
+/// a script can add more, which nginx's rate limit bounds. Puzzles past tomorrow (`today`
+/// + 1, as the site's pages) are refused, so none can be seeded before it is out and junk
+/// can't grow the table. ui.dailydays sends and shows them
+fn daily(arena: Allocator, db: store.Db, query: []const u8, post: bool, today: u32) !Reply {
+    const n = try intParam(arena, query, "n", today + 1) orelse
         return errorReply(arena, .bad_request, "error", "expected ?n=puzzle");
     if (n == 0) return errorReply(arena, .bad_request, "error", "expected ?n=puzzle");
     if (post) {
         const pick = try intParam(arena, query, "pick", daily_options - 1);
         const side = try intParam(arena, query, "side", 1);
-        if (pick == null or side == null) return errorReply(arena, .bad_request, "error", "expected &pick=0-3&side=0-1");
+        if (pick == null or side == null) return errorReply(arena, .bad_request, "error", "expected &pick=0-5&side=0-1");
         try db.run("INSERT INTO daily_answers VALUES (?, ?, ?, 1) ON CONFLICT DO UPDATE SET count = count + 1", .{ n, pick.?, side.? });
     }
     var out: DailyOut = .{ .n = n, .players = 0, .picks = @splat(0), .sides = @splat(0) };
@@ -1091,21 +1098,24 @@ test {
     _ = devfixture;
 }
 
-test "daily: counts a finished puzzle's answers, refuses junk" {
+test "daily: counts a finished puzzle's answers, refuses junk and puzzles not out yet" {
     var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
     const db = try cache.open(":memory:");
     defer db.close();
-    _ = try daily(arena, db, "n=3&pick=2&side=0", true);
-    _ = try daily(arena, db, "n=3&pick=2&side=1", true);
-    _ = try daily(arena, db, "n=3&pick=0&side=1", true);
-    _ = try daily(arena, db, "n=4&pick=1&side=1", true);
-    const got = try daily(arena, db, "n=3", false);
-    try std.testing.expectEqualStrings("{\"n\":3,\"players\":3,\"picks\":[1,0,2,0,0,0],\"sides\":[1,2]}", got.body);
-    for ([_][]const u8{ "n=3&pick=6&side=0", "n=3&pick=1&side=2", "n=3&pick=-1&side=0", "n=0&pick=1&side=0", "n=100001&pick=1&side=0", "n=3&pick=1", "pick=1&side=0" }) |bad| {
-        try std.testing.expectEqual(Status.bad_request, (try daily(arena, db, bad, true)).status);
+    const today = 3;
+    _ = try daily(arena, db, "n=3&pick=2&side=0", true, today);
+    _ = try daily(arena, db, "n=3&pick=2&side=1", true, today);
+    _ = try daily(arena, db, "n=3&pick=5&side=1", true, today);
+    // Tomorrow's: out for a viewer a timezone ahead
+    _ = try daily(arena, db, "n=4&pick=1&side=1", true, today);
+    const got = try daily(arena, db, "n=3", false, today);
+    try std.testing.expectEqualStrings("{\"n\":3,\"players\":3,\"picks\":[0,0,2,0,0,1],\"sides\":[1,2]}", got.body);
+    for ([_][]const u8{ "n=3&pick=6&side=0", "n=3&pick=1&side=2", "n=3&pick=-1&side=0", "n=0&pick=1&side=0", "n=5&pick=1&side=0", "n=100001&pick=1&side=0", "n=3&pick=1", "pick=1&side=0" }) |bad| {
+        try std.testing.expectEqual(Status.bad_request, (try daily(arena, db, bad, true, today)).status);
     }
+    try std.testing.expectEqual(Status.bad_request, (try daily(arena, db, "n=5", false, today)).status);
     try std.testing.expectEqual(@as(?i64, 4), try db.scalar("SELECT sum(count) FROM daily_answers", .{}));
 }
 
