@@ -1,9 +1,13 @@
 //! The matchup finder (matchup/index.html, docs/plan/ui/matchups.md): a way to a matchup
-//! page, not a list of them. Nothing picked: each role's most played lane pairs (the
-//! role picked in place) and this patch's clearest movers, each a link to its page.
+//! page, not a list of them. Two islands. Finder: two ChampRolePickers, one lane for both;
+//! nothing picked, each role's most played lane pairs (the role picked in place) and this
+//! patch's clearest movers, each a link to its page. Grid (its own, lazily loaded file):
+//! the first pick's MatchupGrid, Against its lane, from the champion page's
+//! data/champion/<slug>-more.bin; the second pick is that opponent's dot, and its page when
+//! there is one. Finder writes the picks to the URL, Grid reads them (same keys).
 //!
-//! Pages are rendered on request, so the data rides in the island's data-bin, as the
-//! matchup page's do: ui-finder.wasm adopts it
+//! Pages are rendered on request, so Finder's data rides in its data-bin, as the matchup
+//! page's do: ui-finder.wasm adopts it
 const std = @import("std");
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
@@ -15,6 +19,11 @@ const delta = @import("delta.zig");
 const rolepicker = @import("rolepicker.zig");
 const champlist = @import("champlist.zig");
 const champpage = @import("champpage.zig");
+const champsearch = @import("champsearch.zig");
+const champrolepicker = @import("champrolepicker.zig");
+const matchgrid = @import("matchgrid.zig");
+const button = @import("button.zig");
+const url = @import("url.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
 const Phrase = phrase.Phrase;
@@ -22,7 +31,7 @@ const H = tree.H;
 const N = tree.N;
 
 pub const name = "Finder";
-pub const scope = .{".c-finder"};
+pub const scope = .{ ".c-finder", ".c-fgrid" };
 
 pub const Other = champpage.Other;
 
@@ -30,6 +39,8 @@ pub const Data = struct {
     ddragon: []const u8,
     /// Pair.x and .y index it
     champs: []const Other,
+    /// Each champion's roles with games, most played first (its main role first)
+    roles: []const []const role.Role = &.{},
     /// Role.all's order: most games first, each from the side that won more
     most: []const []const Pair,
     /// The clearest win rate moves this patch, from the side that gained, biggest first
@@ -61,6 +72,10 @@ const W = struct {
     pub const patch = Phrase("Patch {p:text}");
     pub const role_label = plain("Role");
     pub const none = plain("Not enough games yet.");
+    pub const yours = plain("Your champion");
+    pub const opponent = plain("Opponent");
+    pub const go = plain("Matchup ›");
+    pub const no_page = Phrase("Too few {a:text} vs {b:text} games in {r:text} for a matchup page.");
 };
 
 pub const Finder = struct {
@@ -68,34 +83,100 @@ pub const Finder = struct {
     /// "../" from the page to the view's root
     root: []const u8,
     bin: []const u8 = "",
+    /// Most played's; the pair's lane once a champion is picked
     role: role.Role = .top,
+    /// Search entries are data.champs, by index
+    pair: champrolepicker.Pair,
+    /// The second champion as last seen: a new one is a pick, the same a role change
+    b_seen: ?u16 = null,
 
     const F = @This();
 
-    pub const Msg = union(enum) { role: role.Role };
+    pub const Msg = union(enum) { role: role.Role, a, b, swap };
 
-    pub const Url = struct { role: ?role.Role = null };
+    pub const Url = struct { role: ?role.Role = null, c: url.Str(24) = .{}, vs: url.Str(24) = .{} };
+
+    pub fn init(a: std.mem.Allocator, data: *const Data, root: []const u8) !F {
+        const entries = try a.alloc(champsearch.Entry, data.champs.len);
+        for (entries, data.champs, 0..) |*e, c, i| e.* = .{
+            .name = c.name,
+            .src = try std.mem.concat(a, u8, &.{ "https://ddragon.leagueoflegends.com/cdn/", data.ddragon, "/img/champion/", c.key, ".png" }),
+            .roles = if (i < data.roles.len) data.roles[i] else &.{},
+        };
+        const ix = try a.create(champsearch.Index);
+        ix.* = try .init(a, entries);
+        return .{ .data = data, .root = root, .pair = .{
+            .a = .{ .search = .{ .index = ix, .id = "fd-a", .label = W.yours } },
+            .b = .{ .search = .{ .index = ix, .id = "fd-b", .label = W.opponent } },
+        } };
+    }
 
     pub fn toUrl(f: *const F) Url {
-        return .{ .role = if (f.role == .top) null else f.role };
+        const p = &f.pair;
+        const r = if (p.a.search.chosen != null) p.a.role orelse f.role else f.role;
+        var u: Url = .{ .role = if (r == .top) null else r };
+        if (p.a.search.chosen) |e| {
+            u.c.set(f.data.champs[e].slug);
+            if (p.b.search.chosen) |o| u.vs.set(f.data.champs[o].slug);
+        }
+        return u;
     }
 
     pub fn fromUrl(f: *F, u: Url) void {
+        const p = &f.pair;
         f.role = u.role orelse .top;
+        p.a.search.chosen = f.find(u.c.slice());
+        p.a.role = if (p.a.search.chosen != null) f.role else null;
+        p.b.search.chosen = if (p.a.search.chosen != null) f.find(u.vs.slice()) else null;
+        p.b.role = if (p.b.search.chosen != null) f.role else null;
+        f.b_seen = p.b.search.chosen;
+    }
+
+    fn find(f: *const F, slug: []const u8) ?u16 {
+        if (slug.len == 0) return null;
+        for (f.data.champs, 0..) |c, i| if (std.mem.eql(u8, c.slug, slug)) return @intCast(i);
+        return null;
     }
 
     pub fn update(f: *F, m: Msg, ev: *tree.Event) void {
+        const p = &f.pair;
         switch (m) {
-            .role => |r| f.role = r,
+            .role => |r| {
+                f.role = r;
+                ev.push = true;
+            },
+            .a, .swap => {
+                if (p.a.role) |r| {
+                    f.role = r;
+                    if (p.b.search.chosen != null) p.b.role = r;
+                }
+                f.b_seen = p.b.search.chosen;
+            },
+            .b => {
+                const new = p.b.search.chosen != f.b_seen;
+                f.b_seen = p.b.search.chosen;
+                if (p.b.search.chosen == null) return;
+                if (new) {
+                    p.b.role = p.a.role orelse p.b.role;
+                } else if (p.a.search.chosen != null) {
+                    p.a.role = p.b.role;
+                    if (p.b.role) |r| f.role = r;
+                }
+            },
         }
-        ev.push = true;
     }
 
     pub fn view(f: *F, h: *H) N {
+        const p = &f.pair;
+        p.a.on_pick = h.on(f, .a);
+        p.b.on_pick = h.on(f, .b);
+        p.on_swap = h.on(f, .swap);
+        const picked = p.a.search.chosen != null;
         return h.div(.{ .class = "c-finder", .data_island = "finder", .data_root = f.root, .data_bin = if (f.bin.len > 0) f.bin else null }, .{
             h.el(.h1, .{}, .{W.title}),
-            f.mostCard(h),
-            f.movedCard(h),
+            p.view(h),
+            if (picked) N.none else f.mostCard(h),
+            if (picked) N.none else f.movedCard(h),
         });
     }
 
@@ -155,6 +236,152 @@ pub const Finder = struct {
     }
 };
 
+/// The first pick's matchups. Its URL is Finder's: it reads the picks and writes them back
+/// unchanged (each runtime rewrites the keys it owns)
+pub const Grid = struct {
+    /// "../" from the page to the view's root
+    root: []const u8,
+    /// ui-findergrid.js and .wasm, for ui-finder.wasm to load
+    js: ?[]const u8 = null,
+    wasm: ?[]const u8 = null,
+    u: Url = .{},
+    /// The first champion's matchups, once fetched (null: its file failed)
+    more: ?*const champpage.MoreData = null,
+    /// The slug `more` is for
+    more_of: url.Str(24) = .{},
+    grid: matchgrid.MatchupGrid = .{},
+    /// Set after the page's first read of the URL: a second pick after it goes to its page
+    live: bool = false,
+    /// A second pick not yet taken to its page (`goTo`)
+    fresh: bool = false,
+
+    const G = @This();
+
+    pub const Msg = matchgrid.Msg;
+    pub const Url = Finder.Url;
+
+    pub fn toUrl(g: *const G) Url {
+        return g.u;
+    }
+
+    pub fn fromUrl(g: *G, u: Url) void {
+        g.fresh = g.live and u.vs.len > 0 and !u.vs.eql(&g.u.vs);
+        g.u = u;
+        g.aim();
+    }
+
+    /// The champion whose file the page needs: its slug, letters and digits only (it goes
+    /// into a path)
+    pub fn want(g: *const G) ?[]const u8 {
+        const s = g.u.c.slice();
+        if (s.len == 0) return null;
+        for (s) |ch| if (!std.ascii.isAlphanumeric(ch)) return null;
+        return s;
+    }
+
+    /// `slug`'s matchups are in (null: its file failed)
+    pub fn got(g: *G, slug: []const u8, d: ?*const champpage.MoreData) void {
+        g.more = d;
+        g.more_of.set(slug);
+        g.aim();
+    }
+
+    /// A fresh second pick's page, once its first champion's matchups are in
+    pub fn goTo(g: *G, a: std.mem.Allocator) ?[]const u8 {
+        if (!g.fresh) return null;
+        const in = g.input() orelse return null;
+        g.fresh = false;
+        const k = g.opp(&in) orelse return null;
+        return pageOf(a, &in, in.rels[g.grid.rel].opps[k]) catch null;
+    }
+
+    pub fn update(g: *G, m: Msg, _: *tree.Event) void {
+        const in = g.input() orelse return;
+        g.grid.update(&in, m);
+    }
+
+    fn lane(g: *const G) role.Role {
+        return g.u.role orelse .top;
+    }
+
+    /// The first champion in its role, once its matchups are in
+    fn input(g: *const G) ?matchgrid.Input {
+        if (g.u.c.len == 0 or !g.more_of.eql(&g.u.c)) return null;
+        const d = g.more orelse return null;
+        const r = g.lane();
+        for (d.roles) |*x| if (x.role == r) return .{
+            .name = d.name,
+            .slug = d.slug,
+            .ddragon = d.ddragon,
+            .champs = d.champs,
+            .root = g.root,
+            .role = r,
+            .counts = .{ .games = x.games, .wins = x.wins },
+            .rels = x.rels,
+        };
+        return null;
+    }
+
+    /// The grid back on the lane, the second champion's dot chosen
+    fn aim(g: *G) void {
+        const in = g.input() orelse return;
+        g.grid.set(&in, false, null, .win);
+        if (g.opp(&in)) |k| g.grid.dots.sel = k;
+    }
+
+    /// The second champion among the lane opponents (the dots' index by win rate)
+    fn opp(g: *const G, in: *const matchgrid.Input) ?u16 {
+        if (g.u.vs.len == 0 or in.rels.len == 0) return null;
+        const rel = in.rels[g.grid.rel];
+        if (rel.ally or rel.role != in.role) return null;
+        for (rel.opps, 0..) |o, k| {
+            if (o.champ < in.champs.len and std.mem.eql(u8, in.champs[o.champ].slug, g.u.vs.slice())) return @intCast(k);
+        }
+        return null;
+    }
+
+    pub fn view(g: *G, h: *H) N {
+        return h.div(.{ .class = "c-fgrid", .data_island = "findergrid", .data_root = g.root, .data_js = g.js, .data_wasm = g.wasm }, .{
+            if (g.u.c.len == 0) N.none else g.goLine(h),
+            if (g.u.c.len == 0) N.none else g.gridCard(h),
+        });
+    }
+
+    /// Both picked: the way to their page, or why there is none
+    fn goLine(g: *G, h: *H) N {
+        if (g.u.vs.len == 0) return .none;
+        const in = g.input() orelse return .none;
+        const b = g.u.vs.slice();
+        if (g.opp(&in)) |k| {
+            const o = in.rels[g.grid.rel].opps[k];
+            const href = pageOf(h.mem, &in, o) catch {
+                h.oom = true;
+                return .none;
+            };
+            if (href) |x| return h.p(.{ .class = "go" }, .{button.view(h, .{ .v = .primary, .href = x, .ref = "go" }, .{W.go})});
+        }
+        const b_name = for (in.champs) |c| {
+            if (std.mem.eql(u8, c.slug, b)) break c.name;
+        } else b;
+        return h.p(.{ .class = "none" }, .{W.no_page.with(h, .{ .a = in.name, .b = b_name, .r = in.role.label().s })});
+    }
+
+    fn gridCard(g: *G, h: *H) N {
+        if (!g.more_of.eql(&g.u.c)) return cardWith(h, h.div(.{ .class = "wait", .data_busy = true }, .{}));
+        var in = g.input() orelse return cardWith(h, h.p(.{ .class = "none" }, .{W.none}));
+        return g.grid.view(h, g, &in);
+    }
+};
+
+fn cardWith(h: *H, body: N) N {
+    return card.view(h, .{ .id = "matchups" }, &.{ card.head(h, champpage.W.matchups, null, &.{}), body });
+}
+
+fn pageOf(a: std.mem.Allocator, in: *const matchgrid.Input, o: champpage.Opp) !?[]const u8 {
+    if (!o.page or o.champ >= in.champs.len) return null;
+    return try std.mem.concat(a, u8, &.{ in.root, "matchup/", @tagName(in.role), "/", in.slug, "-vs-", in.champs[o.champ].slug, ".html" });
+}
+
 fn rate(games: u32, wins: u32) f32 {
     return 100 * @as(f32, @floatFromInt(wins)) / @as(f32, @floatFromInt(@max(games, 1)));
 }
@@ -165,6 +392,10 @@ pub const css =
     \\  .c-finder > h1 { margin: 0; }
     \\  .c-finder .c-head > .more { margin-left: auto; font-size: var(--fs-s); }
     \\  .c-finder .none { margin: 0; color: var(--faint); }
+    \\  .c-fgrid:not(:empty) { display: grid; gap: var(--sp-4); margin-top: var(--sp-4); }
+    \\  .c-fgrid > .go, .c-fgrid > .none { margin: 0; }
+    \\  .c-fgrid > .none { color: var(--faint); }
+    \\  .c-fgrid .wait { min-height: 220px; }
     \\}
     \\
 ;
@@ -183,28 +414,149 @@ pub const Demo = struct {
         .{ .x = 2, .y = 3, .games = 1204, .wins = 655 },
     };
     const mid = [_]Pair{.{ .x = 4, .y = 5, .games = 2410, .wins = 1230 }};
+    const top_only = [_]role.Role{.top};
+    const mid_only = [_]role.Role{.mid};
     pub const data: Data = .{
         .ddragon = "16.21.1",
         .champs = &champs,
+        .roles = &.{ &top_only, &.{ .top, .mid }, &.{ .top, .support }, &top_only, &mid_only, &mid_only },
         .most = &.{ &top, &.{}, &mid, &.{}, &.{} },
         .moved = &.{.{ .role = .mid, .x = 5, .y = 4, .d = 3.4, .ci = 2.1, .games = 1630 }},
         .patch = "16.21",
         .patch_dir = "patch/",
     };
+
+    /// Darius's file: Opp.champ indexes matchgrid's demo champions (Garen first)
+    pub const more: champpage.MoreData = .{
+        .name = "Darius",
+        .slug = "darius",
+        .ddragon = "16.21.1",
+        .champs = &matchgrid.demo_champs,
+        .roles = &.{.{ .role = .top, .games = 20412, .wins = 10063, .rels = &matchgrid.demo_rels, .by_patch = &.{}, .by_length = &.{} }},
+        .lengths = &.{},
+    };
 };
 
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
-    const states = [_]struct { []const u8, role.Role }{
-        .{ "nothing picked: Top's most played, this patch's movers", .top },
-        .{ "a role with no pairs yet", .jungle },
+    // Picked: Darius, then Garen; Tryndamere: not in his file
+    const states = [_]struct { []const u8, role.Role, ?u16, ?u16, bool }{
+        .{ "nothing picked: Top's most played, this patch's movers", .top, null, null, false },
+        .{ "a role with no pairs yet", .jungle, null, null, false },
+        .{ "one picked, its matchups on the way", .top, 0, null, false },
+        .{ "one picked: its lane opponents", .top, 0, null, true },
+        .{ "both picked: the opponent's brief and the way to their page", .top, 0, 1, true },
+        .{ "both picked, too few games for a page", .top, 0, 3, true },
     };
     for (states) |st| {
         const f = h.mem.create(Finder) catch {
             h.oom = true;
             return;
         };
-        f.* = .{ .data = &Demo.data, .root = "", .role = st[1] };
-        g.addFill(st[0], f.view(h));
+        f.* = Finder.init(h.mem, &Demo.data, "") catch {
+            h.oom = true;
+            return;
+        };
+        f.pair.a.search.id = h.fmt("{s}-a", .{g.id("fd")});
+        f.pair.b.search.id = h.fmt("{s}-b", .{g.id("fd")});
+        var u: Finder.Url = .{ .role = st[1] };
+        if (st[2]) |e| u.c.set(Demo.champs[e].slug);
+        if (st[3]) |e| u.vs.set(Demo.champs[e].slug);
+        f.fromUrl(u);
+        const gr = h.mem.create(Grid) catch {
+            h.oom = true;
+            return;
+        };
+        gr.* = .{ .root = "" };
+        gr.fromUrl(u);
+        if (st[4]) gr.got("darius", &Demo.more);
+        g.addFill(st[0], h.div(.{}, .{ f.view(h), gr.view(h) }));
     }
+}
+
+const testing = std.testing;
+
+test "Finder: one lane for both picks; the URL keeps them" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    var f = try Finder.init(a, &Demo.data, "../");
+    _ = f.view(&h);
+
+    var ev: tree.Event = .{ .kind = .click };
+    // Ahri: mid only
+    f.pair.a.search.update(.{ .pick = 4 }, &ev);
+    try testing.expectEqual(role.Role.mid, f.role);
+    _ = f.view(&h);
+    f.pair.a.search.update(.clear, &ev);
+    f.pair.a.search.update(.{ .pick = 0 }, &ev);
+    try testing.expectEqual(role.Role.top, f.role);
+
+    // Garen (main top, also mid) takes Darius's lane; his role chip moves both
+    _ = f.view(&h);
+    f.pair.b.search.update(.{ .pick = 1 }, &ev);
+    try testing.expectEqual(role.Role.top, f.pair.b.role.?);
+    var w: std.Io.Writer.Allocating = .init(a);
+    try url.write(Finder.Url, f.toUrl(), &w.writer);
+    try testing.expectEqualStrings("c=darius&vs=garen", w.written());
+    _ = f.view(&h);
+    f.pair.b.update(.{ .role = .mid }, &ev);
+    try testing.expectEqual(role.Role.mid, f.pair.a.role.?);
+    try testing.expectEqual(role.Role.mid, f.role);
+
+    var g = try Finder.init(a, &Demo.data, "../");
+    g.fromUrl(url.read(Finder.Url, w.written()));
+    try testing.expectEqual(0, g.pair.a.search.chosen.?);
+    try testing.expectEqual(1, g.pair.b.search.chosen.?);
+    try testing.expectEqual(role.Role.top, g.pair.b.role.?);
+}
+
+test "Grid: the first pick's file, the second its dot and once its page" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    var g: Grid = .{ .root = "../" };
+    try testing.expect(g.want() == null);
+    var u: Finder.Url = .{};
+    u.c.set("../x");
+    g.fromUrl(u);
+    try testing.expect(g.want() == null);
+
+    // The page opens on a pair: no jump, its dot chosen once the file is in
+    u.c.set("darius");
+    u.vs.set("garen");
+    g.fromUrl(u);
+    g.live = true;
+    try testing.expectEqualStrings("darius", g.want().?);
+    try testing.expect(g.input() == null);
+    g.got("darius", &Demo.more);
+    try testing.expectEqual(0, g.grid.dots.sel.?);
+    try testing.expect(g.goTo(a) == null);
+    t.root = g.view(&h);
+    var out: std.Io.Writer.Allocating = .init(a);
+    try @import("html.zig").write(&t, t.root, &out.writer);
+    try testing.expect(std.mem.find(u8, out.written(), "<p class=\"go\"><a class=\"c-btn\" href=\"../matchup/top/darius-vs-garen.html\"") != null);
+
+    // A new second pick: its page, once
+    u.vs.set("sett");
+    g.fromUrl(u);
+    try testing.expectEqualStrings("../matchup/top/darius-vs-sett.html", g.goTo(a).?);
+    try testing.expect(g.goTo(a) == null);
+
+    // Not in his file: no page, one line why; another role: nothing in his file
+    u.vs.set("tryndamere");
+    g.fromUrl(u);
+    try testing.expect(g.goTo(a) == null);
+    try testing.expect(g.grid.dots.sel == null);
+    t.root = g.view(&h);
+    out.clearRetainingCapacity();
+    try @import("html.zig").write(&t, t.root, &out.writer);
+    try testing.expect(std.mem.find(u8, out.written(), "Too few Darius vs tryndamere games in Top") != null);
+    u.role = .mid;
+    g.fromUrl(u);
+    try testing.expect(g.input() == null);
 }

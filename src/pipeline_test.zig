@@ -304,6 +304,21 @@ test "fixture games to stats, curves and the website" {
         try testing.expectEqual(games, facts.leanOf(122, .top).?.games);
         try testing.expectEqualStrings("15.13", facts.patch);
     }
+    // Matchup finder: each champion's roles for its picker; a pick's grid fetches the
+    // champion page's -more.bin under the view's root (checked above for every view)
+    {
+        const page = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "matchup/index.html" }), arena, .limited(1 << 22));
+        const key = "data-bin=\"";
+        const at = (std.mem.find(u8, page, key) orelse return error.TestUnexpectedResult) + key.len;
+        const b64 = page[at .. at + (std.mem.findScalar(u8, page[at..], '"') orelse return error.TestUnexpectedResult)];
+        const raw = try arena.alloc(u8, try std.base64.standard.Decoder.calcSizeForSlice(b64));
+        try std.base64.standard.Decoder.decode(raw, b64);
+        const fd = try site.ui.data.decode(arena, site.ui.finder.Data, raw);
+        try testing.expectEqual(fd.champs.len, fd.roles.len);
+        for (fd.champs, fd.roles) |c, rs| if (std.mem.eql(u8, c.slug, "darius")) {
+            try testing.expectEqualSlices(site.ui.role.Role, &.{.top}, rs);
+        };
+    }
     // Build page: three games, so no bare win rates; the champion page (root view) links
     // into the patch view's
     const pages = [_]struct { []const u8, []const []const u8 }{
@@ -331,7 +346,7 @@ test "fixture games to stats, curves and the website" {
         .{ "learn.html", &.{ "<div class=\"c-learn\" data-island=\"learn\" data-bin=\"", "Does knowing your champion matter?", "How often do mains win?", "<script src=\"" ++ assets.learn_js.path ++ "\" data-wasm=\"" ++ assets.learn_wasm.path ++ "\" defer></script>" } },
         // A search for one champion turns its rows to its side (MU8); gold under a clear
         // lead plain (J11, J12)
-        .{ "matchup/index.html", &.{ "<div class=\"c-finder\" data-island=\"finder\" data-root=\"../\" data-bin=\"", "<h1>Matchups</h1>", "<h2>Most played</h2>", "<a href=\"../matchup/top/", "<script src=\"../" ++ assets.finder_js.path ++ "\" data-wasm=\"" ++ assets.finder_wasm.path ++ "\" defer></script>" } },
+        .{ "matchup/index.html", &.{ "<div class=\"c-finder\" data-island=\"finder\" data-root=\"../\" data-bin=\"", "<h1>Matchups</h1>", "<div class=\"c-crp-pair\">", "Your champion", "Opponent", "<div class=\"c-fgrid\" data-island=\"findergrid\" data-root=\"../\" data-js=\"../" ++ assets.findergrid_js.path ++ "\" data-wasm=\"" ++ assets.findergrid_wasm.path ++ "\"></div>", "<h2>Most played</h2>", "<a href=\"../matchup/top/", "<script src=\"../" ++ assets.finder_js.path ++ "\" data-wasm=\"" ++ assets.finder_wasm.path ++ "\" defer></script>" } },
         .{ "build/darius-top.html", &.{"<meta http-equiv=\"refresh\" content=\"0; url=../champion/darius.html#role=top\">"} },
         // One page per champion: the other views link to it with their view
         .{ "all/patch/role/top.html", &.{ "<a href=\"../../../patch/role/top.html\">EUW</a>", "data-path=\"role/top.html\" data-role=\"top\"" } },

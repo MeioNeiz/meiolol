@@ -1,6 +1,7 @@
-//! matchup/index.html: the matchup finder (ui.finder). Each role's most played lane pairs
-//! with a matchup page, and the patch's clearest win rate moves (as the patch page
-//! picks them), in the island's data-bin
+//! matchup/index.html: the matchup finder (ui.finder). Each champion's roles, each role's
+//! most played lane pairs with a matchup page, and the patch's clearest win rate moves
+//! (as the patch page picks them), in the island's data-bin. A pick's matchups are the
+//! champion page's data files (champion.dataFiles), fetched by ui-findergrid.wasm
 const std = @import("std");
 const core = @import("core");
 const root = @import("root.zig");
@@ -38,12 +39,23 @@ pub fn writePage(site: *const Site, w: *Writer) !void {
     const to_site = try site.toShared(path);
     const d = try a.create(fd.Data);
     d.* = try data(site, if (site.curves) |*c| c else null);
-    var f: fd.Finder = .{ .data = d, .root = try site.toRoot(path), .bin = try bin(a, d.*) };
+    var f: fd.Finder = try .init(a, d, try site.toRoot(path));
+    f.bin = try bin(a, d.*);
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
     t.root = f.view(&h);
     if (h.oom) return error.OutOfMemory;
     try ui.html.write(&t, t.root, w);
+    var g: fd.Grid = .{
+        .root = f.root,
+        .js = try std.mem.concat(a, u8, &.{ to_site, assets.findergrid_js.path }),
+        .wasm = assets.findergrid_wasm.path,
+    };
+    var tg: ui.Tree = .{};
+    var hg: ui.H = .init(a, &tg);
+    tg.root = g.view(&hg);
+    if (hg.oom) return error.OutOfMemory;
+    try ui.html.write(&tg, tg.root, w);
     try tpl.render(w,
         \\<script src="{js}" data-wasm="{wasm}" defer></script>
         \\
@@ -57,10 +69,14 @@ pub fn writePage(site: *const Site, w: *Writer) !void {
 pub fn data(site: *const Site, curves: ?*const Curves) !fd.Data {
     const a = site.arena;
     const champs = try a.alloc(fd.Other, site.champs.len);
-    for (site.champs, champs) |ch, *o| o.* = .{ .name = ch.name, .key = ch.key, .slug = ch.slug };
+    const roles = try a.alloc([]const ui.role.Role, site.champs.len);
+    for (site.champs, champs, roles) |ch, *o, *rs| {
+        o.* = .{ .name = ch.name, .key = ch.key, .slug = ch.slug };
+        rs.* = try rolesOf(site, ch.c);
+    }
     const most = try a.alloc([]const fd.Pair, Role.all.len);
     for (Role.all, most) |r, *list| list.* = if (curves) |c| try mostPlayed(site, c, r) else &.{};
-    var d: fd.Data = .{ .ddragon = site.ddragon_version, .champs = champs, .most = most };
+    var d: fd.Data = .{ .ddragon = site.ddragon_version, .champs = champs, .roles = roles, .most = most };
     if (site.patchday) |*pd| {
         d.moved = try moved(site, pd);
         d.patch = pd.cur_patch;
@@ -68,6 +84,25 @@ pub fn data(site: *const Site, curves: ?*const Curves) !fd.Data {
     }
     return d;
 }
+
+/// Roles with games, most first: the champion page's order
+fn rolesOf(site: *const Site, c: usize) ![]const ui.role.Role {
+    const a = site.arena;
+    var list: std.ArrayList(Role) = .empty;
+    for (Role.all) |r| if (site.stats.champRole(r, c).games > 0) try list.append(a, r);
+    std.mem.sort(Role, list.items, RoleGames{ .site = site, .c = c }, RoleGames.more);
+    const out = try a.alloc(ui.role.Role, list.items.len);
+    for (list.items, out) |r, *o| o.* = champion.uiRole(r);
+    return out;
+}
+
+const RoleGames = struct {
+    site: *const Site,
+    c: usize,
+    fn more(ctx: RoleGames, x: Role, y: Role) bool {
+        return ctx.site.stats.champRole(x, ctx.c).games > ctx.site.stats.champRole(y, ctx.c).games;
+    }
+};
 
 /// site.champs' index of champion `id`
 fn index(site: *const Site, id: u32) ?u16 {

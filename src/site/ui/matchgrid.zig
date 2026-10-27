@@ -267,7 +267,7 @@ pub const css =
 
 const Gallery = @import("gallery.zig").Gallery;
 
-const demo_champs = [_]cp.Other{
+pub const demo_champs = [_]cp.Other{
     .{ .name = "Garen", .key = "Garen", .slug = "garen" },                   .{ .name = "Sett", .key = "Sett", .slug = "sett" },
     .{ .name = "Mordekaiser", .key = "Mordekaiser", .slug = "mordekaiser" }, .{ .name = "Yone", .key = "Yone", .slug = "yone" },
     .{ .name = "Dr. Mundo", .key = "DrMundo", .slug = "drmundo" },           .{ .name = "Volibear", .key = "Volibear", .slug = "volibear" },
@@ -289,7 +289,7 @@ const demo_lane = [_]Opp{
     demoOpp(9, 747, 49.9, 0.3, 70),    demoOpp(10, 798, 53.3, 3.2, 180),  demoOpp(11, 353, 60.3, 9.1, 240),
 };
 const demo_with = [_]Opp{ demoOpp(12, 2104, 50.8, 0.6, null), demoOpp(13, 1530, 48.9, -0.7, null), demoOpp(14, 1122, 51.6, 1.1, null) };
-const demo_rels = [_]Rel{ .{ .ally = false, .role = .top, .opps = &demo_lane, .rare = 31 }, .{ .ally = true, .role = .jungle, .opps = &demo_with } };
+pub const demo_rels = [_]Rel{ .{ .ally = false, .role = .top, .opps = &demo_lane, .rare = 31 }, .{ .ally = true, .role = .jungle, .opps = &demo_with } };
 
 const GridMsg = Msg;
 

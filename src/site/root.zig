@@ -348,7 +348,7 @@ pub const Site = struct {
 pub const File = daily.File;
 
 /// Also written by their plain names, with the same data (assets.zig)
-pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.search_js, assets.stats_js, assets.stats_wasm, assets.champion_js, assets.champion_wasm, assets.champbuild_js, assets.champbuild_wasm, assets.champmore_js, assets.champmore_wasm, assets.matchup_js, assets.matchup_wasm, assets.matchmore_js, assets.matchmore_wasm, assets.games_js, assets.games_wasm, assets.gamemore_js, assets.gamemore_wasm, assets.gamelane_js, assets.gamelane_wasm, assets.finder_js, assets.finder_wasm, assets.learn_js, assets.learn_wasm, assets.patch_js, assets.patch_wasm };
+pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.search_js, assets.stats_js, assets.stats_wasm, assets.champion_js, assets.champion_wasm, assets.champbuild_js, assets.champbuild_wasm, assets.champmore_js, assets.champmore_wasm, assets.matchup_js, assets.matchup_wasm, assets.matchmore_js, assets.matchmore_wasm, assets.games_js, assets.games_wasm, assets.gamemore_js, assets.gamemore_wasm, assets.gamelane_js, assets.gamelane_wasm, assets.finder_js, assets.finder_wasm, assets.findergrid_js, assets.findergrid_wasm, assets.learn_js, assets.learn_wasm, assets.patch_js, assets.patch_wasm };
 
 /// Front-end files at the site root; `Options.static_dir` serves them from disk instead
 pub const shared_assets = [_]File{
@@ -386,6 +386,8 @@ pub const shared_assets = [_]File{
     .{ .path = "ui-gamelane.js", .data = @embedFile("ui-gamelane.js") },
     .{ .path = "ui-finder.wasm", .data = @embedFile("ui-finder.wasm") },
     .{ .path = "ui-finder.js", .data = @embedFile("ui-finder.js") },
+    .{ .path = "ui-findergrid.wasm", .data = @embedFile("ui-findergrid.wasm") },
+    .{ .path = "ui-findergrid.js", .data = @embedFile("ui-findergrid.js") },
     .{ .path = "ui-learn.wasm", .data = @embedFile("ui-learn.wasm") },
     .{ .path = "ui-learn.js", .data = @embedFile("ui-learn.js") },
     .{ .path = "ui-patch.wasm", .data = @embedFile("ui-patch.wasm") },
