@@ -25,8 +25,9 @@ pub const Day = struct { n: u32, date: []const u8 };
 pub const Data = struct {
     /// The page's puzzle
     n: u32,
-    /// daily.html, whose puzzle is the newest up to the viewer's date (else a puzzle's own page)
-    today: bool,
+    /// daily.html, which opens the newest puzzle up to the viewer's date (else a puzzle's
+    /// own page)
+    redirects: bool,
     /// "" from the site root, "../" from daily/
     root: []const u8,
     /// The server's date (UTC): the first render's, before the viewer's own
@@ -61,7 +62,13 @@ pub const Page = struct {
         var on_time: [512]bool = undefined;
         const days = s.live();
         const from = days.len -| on_time.len;
-        for (days[from..], 0..) |x, i| on_time[i] = if (dp.finishedOn(s.saved, x.n)) |on| std.mem.eql(u8, on, x.date) else false;
+        for (days[from..], 0..) |x, i| on_time[i] = if (dp.finishedOn(s.saved, x.n)) |on|
+            std.mem.eql(u8, on, x.date)
+        else if (dp.read(s.saved, x.n)) |m|
+            // Finished before `on` was saved: taken as on time, not a lost streak
+            m.marks != null
+        else
+            false;
         return streakOf(on_time[0 .. days.len - from]);
     }
 
@@ -73,7 +80,7 @@ pub const Page = struct {
             return .none;
         };
         for (days[from..], links) |x, *l| {
-            const m = if (dp.read(s.saved, x.n)) |v| v else null;
+            const m = dp.read(s.saved, x.n);
             const right: ?u8 = if (m) |v| if (v.marks) |k| @as(u8, @intFromBool(k[0])) + @intFromBool(k[1]) else null else null;
             const what = if (right) |r| W.right[r] else if (m != null) W.started else W.not_played;
             const label = W.day.with(h, .{ .n = x.n, .d = shortDate(h, x.date), .r = what.s });
@@ -88,7 +95,7 @@ pub const Page = struct {
         const st = s.streak();
         return h.span(.{ .class = "c-days", .data_island = "days", .data_bin = if (s.bin.len > 0) s.bin else null }, .{
             h.el(.nav, .{ .class = "strip", .aria_label = W.past }, .{links}),
-            h.span(.{ .class = "streak", .title = W.streak_tip, .aria_label = W.streak_read.with(h, .{ .n = st.run, .b = st.best }) }, .{
+            h.span(.{ .class = "streak", .role = "img", .title = W.streak_tip, .aria_label = W.streak_read.with(h, .{ .n = st.run, .b = st.best }) }, .{
                 phrase.num(h, .int, st.run),
                 h.el(.small, .{ .aria_hidden = "true" }, .{W.streak}),
             }),
@@ -111,6 +118,13 @@ fn out(days: []const Day, date: []const u8) usize {
     var end = days.len;
     while (end > 0 and std.mem.order(u8, days[end - 1].date, date) == .gt) end -= 1;
     return end;
+}
+
+/// ?n= of a location.search ("?n=5&x"): an old link to a puzzle
+pub fn wantedOf(search: []const u8) ?u32 {
+    var it = std.mem.splitScalar(u8, if (std.mem.startsWith(u8, search, "?")) search[1..] else search, '&');
+    while (it.next()) |kv| if (std.mem.startsWith(u8, kv, "n=")) return std.fmt.parseInt(u32, kv[2..], 10) catch null;
+    return null;
 }
 
 /// The puzzle daily.html shows on the viewer's `date`: `wanted` (?n=, an old link) when it
@@ -165,7 +179,7 @@ const W = struct {
     const started = plain("started");
     const not_played = plain("not played");
     const streak = plain("streak");
-    const streak_read = Phrase("{n:int} days in a row, best {b:int}");
+    const streak_read = Phrase("Streak {n:int}, best {b:int}");
     const streak_tip = plain("Puzzles finished on their own day. One missed day is forgiven; two in a row end it.");
 };
 
@@ -200,8 +214,8 @@ const demo_days = [_]Day{
     .{ .n = 16, .date = "2026-10-26" }, .{ .n = 17, .date = "2026-10-27" }, .{ .n = 18, .date = "2026-10-28" },
 };
 
-const demo: Data = .{ .n = 17, .today = true, .root = "", .utc = "2026-10-27", .days = &demo_days };
-const demo_archive: Data = .{ .n = 12, .today = false, .root = "../", .utc = "2026-10-27", .days = &demo_days };
+const demo: Data = .{ .n = 17, .redirects = true, .root = "", .utc = "2026-10-27", .days = &demo_days };
+const demo_archive: Data = .{ .n = 12, .redirects = false, .root = "../", .utc = "2026-10-27", .days = &demo_days };
 
 /// Finished on their days but #11 (late) and #15 (missed): the streak forgives #15, and
 /// #11 and #12 both late would have ended it
@@ -273,7 +287,7 @@ test "the strip: last 14 out, marks as data-r, today ringed, the page's own dash
     // 8, 9, 10 on time; 11 late (one miss, forgiven), 12-14 on time; 15 missed (forgiven); 16 on
     // time; 17 pending
     try testing.expectEqual(Streak{ .run = 7, .best = 7 }, p.streak());
-    try testing.expectEqualStrings("7 days in a row, best 7", t.attr(t.find(v, "class", "streak").?, "aria-label").?);
+    try testing.expectEqualStrings("Streak 7, best 7", t.attr(t.find(v, "class", "streak").?, "aria-label").?);
 
     // The viewer a day ahead: #18 out and today's, the page's own (#17) still marked
     p.date = "2026-10-28";
@@ -295,4 +309,80 @@ test "an archive page links from daily/" {
     try testing.expectEqualStrings("../daily/4.html", t.attr(days[0], "href").?);
     try testing.expectEqualStrings("page", t.attr(days[8], "aria-current").?);
     try testing.expectEqualStrings("date", t.attr(days[13], "aria-current").?);
+}
+
+test "wantedOf: n= as its own key only" {
+    try testing.expectEqual(@as(?u32, 5), wantedOf("?n=5"));
+    try testing.expectEqual(@as(?u32, 5), wantedOf("?n=5&x=1"));
+    try testing.expectEqual(@as(?u32, 5), wantedOf("?x=1&n=5"));
+    for ([_][]const u8{ "", "?", "?n=", "?n=-1", "?n=99999999999", "?column=3", "?fn=9", "?n=5x" }) |q| {
+        try testing.expectEqual(null, wantedOf(q));
+    }
+}
+
+test "days out and today's target across a year end and February" {
+    const year = [_]Day{
+        .{ .n = 1, .date = "2026-12-30" }, .{ .n = 2, .date = "2026-12-31" },
+        .{ .n = 3, .date = "2027-01-01" }, .{ .n = 4, .date = "2027-01-02" },
+    };
+    try testing.expectEqual(2, out(&year, "2026-12-31"));
+    try testing.expectEqual(@as(?u32, 3), target(&year, "2027-01-01", null));
+    try testing.expectEqual(@as(?u32, 2), target(&year, "2027-01-01", 2));
+    const feb = [_]Day{
+        .{ .n = 1, .date = "2027-02-27" }, .{ .n = 2, .date = "2027-02-28" },
+        .{ .n = 3, .date = "2027-03-01" },
+    };
+    try testing.expectEqual(2, out(&feb, "2027-02-28"));
+    try testing.expectEqual(@as(?u32, 3), target(&feb, "2027-03-01", null));
+}
+
+test "streak: nothing or junk saved is no run; entries from before `on` count on time" {
+    var p: Page = .init(testing.allocator, &demo);
+    try testing.expectEqual(Streak{ .run = 0, .best = 0 }, p.streak());
+    p.saved = "{not json";
+    try testing.expectEqual(Streak{ .run = 0, .best = 0 }, p.streak());
+    // 14 and 15 finished before `on`, 16 on its day, 17 (today) a hint only
+    p.saved =
+        \\{"14":{"opt":1,"marks":"11"},"15":{"opt":0,"side":1,"marks":"01"},
+        \\"16":{"opt":5,"side":1,"marks":"01","on":"2026-10-26"},"17":{"hint":1}}
+    ;
+    try testing.expectEqual(Streak{ .run = 3, .best = 3 }, p.streak());
+    // Finished late: misses
+    p.saved =
+        \\{"14":{"marks":"11","on":"2026-10-25"},"15":{"marks":"01","on":"2026-10-27"},
+        \\"16":{"marks":"01","on":"2026-10-27"}}
+    ;
+    try testing.expectEqual(Streak{ .run = 0, .best = 0 }, p.streak());
+}
+
+test "streak: more days than it counts keeps the newest 512" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const many = try a.alloc(Day, 600);
+    var saved: std.Io.Writer.Allocating = .init(a);
+    try saved.writer.writeByte('{');
+    for (many, 0..) |*d, i| {
+        const date = try a.print("{d}-01-01", .{1000 + i});
+        d.* = .{ .n = @intCast(i + 1), .date = date };
+        try saved.writer.print("{s}\"{d}\":{{\"marks\":\"11\",\"on\":\"{s}\"}}", .{ if (i > 0) "," else "", i + 1, date });
+    }
+    try saved.writer.writeByte('}');
+    const d: Data = .{ .n = 600, .redirects = true, .root = "", .utc = many[599].date, .days = many };
+    var p: Page = .init(a, &d);
+    p.saved = saved.written();
+    try testing.expectEqual(Streak{ .run = 512, .best = 512 }, p.streak());
+}
+
+test "out of memory in the strip sets oom" {
+    var buf: [256]u8 = undefined;
+    for ([_]usize{ 0, buf.len }) |size| {
+        var fba: std.heap.FixedBufferAllocator = .init(buf[0..size]);
+        var p: Page = .init(fba.allocator(), &demo);
+        p.saved = demo_saved;
+        var t: tree.Tree = .{};
+        var h: H = .init(fba.allocator(), &t);
+        _ = p.view(&h);
+        try testing.expect(h.oom);
+    }
 }

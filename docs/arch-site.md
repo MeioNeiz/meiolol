@@ -180,11 +180,14 @@ detected reason that clears chance, else its usual gold at 14 against the enemy)
 - daily/<n>.html: puzzle n's own page, the same island; none past tomorrow (UTC), so a
   viewer a day ahead of UTC can play theirs and later ones 404. Rendered on request under
   --static core (the renderer, from the shared view's daily files), written by --static
-  all; not in the sitemap. The head (title, badges) sits outside the puzzle's island with
+  all; noindex, not in the sitemap; only the slug as printed ("07" 404s), only puzzles
+  whose page data decodes. The head (title, badges) sits outside the puzzle's island with
   its own island, ui.dailydays (ui-dailydays.wasm): the last 14 puzzles out by the
   viewer's date as links (right answers by colour, today ringed, the page's own dashed)
-  and the streak (finished on its own day; one miss forgiven). It reads meiolol.daily.v1
-  again on ui-daily.wasm's window event "ui-daily" (after each save). On daily.html it
+  and the streak (finished on its own day; one miss forgiven; an entry saved before `on`
+  existed counts on time). It reads meiolol.daily.v1 again on ui-daily.wasm's window event
+  "ui-daily" (after each save), not on a storage event or at the viewer's midnight: a
+  second tab's finish or a new day shows on reload. On daily.html it
   opens (location.replace) the newest puzzle out by the viewer's date, or ?n= (old
   links), when that isn't the page's.
   Not yet: an archive past the strip's 14, share. Crowd counts (/api/daily) are paused:

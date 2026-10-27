@@ -27,7 +27,7 @@ export fn main() void {
     const b = dom.binOf(root, "data-bin") orelse return dom.dom.warn("days: no data");
     data = ui.data.decode(gpa, ds.Data, b) catch return dom.dom.warn("days: bad data");
     date = today();
-    if (data.today) if (ds.target(data.days, &date, wanted())) |n| if (n != data.n) return open(n);
+    if (data.redirects) if (ds.target(data.days, &date, wanted())) |n| if (n != data.n) return open(n);
     server = .init(gpa, &data);
     state = .init(gpa, &data);
     island = dom.rt.add(ds.Page, &state, &server, ds.sel) catch return dom.dom.warn("days: out of memory");
@@ -55,10 +55,7 @@ fn wanted() ?u32 {
     const s = zjb.global("location").get("search", zjb.Handle);
     defer s.release();
     var buf: [64]u8 = undefined;
-    const q = s.readString(&buf) catch return null;
-    const at = std.mem.find(u8, q, "n=") orelse return null;
-    const v = q[at + 2 ..];
-    return std.fmt.parseInt(u32, v[0 .. std.mem.findScalar(u8, v, '&') orelse v.len], 10) catch null;
+    return ds.wantedOf(s.readString(&buf) catch return null);
 }
 
 fn open(n: u32) void {

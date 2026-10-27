@@ -254,6 +254,39 @@ test "read: malformed or foreign entries give nothing wrong" {
     }
 }
 
+test "finishedOn: only a quoted 10-character date, from the entry's own fields" {
+    const Case = struct { json: []const u8, want: ?[]const u8 };
+    const cases = [_]Case{
+        .{ .json = "{\"11\":{\"marks\":\"10\",\"on\":\"2026-10-27\"}}", .want = "2026-10-27" },
+        .{ .json = "{\"11\":{\"marks\":\"10\",\"on\":\"2026-10-2\"}}", .want = null },
+        .{ .json = "{\"11\":{\"marks\":\"10\",\"on\": \"2026-10-27\"}}", .want = null },
+        .{ .json = "{\"11\":{\"marks\":\"10\",\"on\":null}}", .want = null },
+        // Saved before `on` existed
+        .{ .json = "{\"11\":{\"marks\":\"10\"}}", .want = null },
+        .{ .json = "{\"11\":{\"hint\":1,\"on\":\"2026-10-27\"}}", .want = "2026-10-27" },
+        .{ .json = "{\"7\":{\"on\":\"2026-10-17\"},\"11\":{\"opt\":1}}", .want = null },
+    };
+    for (cases) |c| {
+        const got = dp.finishedOn(c.json, 11);
+        if (c.want) |w| try testing.expectEqualStrings(w, got orelse return error.TestExpectedEqual) else try testing.expectEqual(null, got);
+    }
+}
+
+test "write then finishedOn: the date only with marks, other entries kept" {
+    const a = testing.allocator;
+    const one = try dp.write(a, "", 11, .{ .opt = 2 }, "2026-10-27");
+    defer a.free(one);
+    try testing.expectEqual(null, dp.finishedOn(one, 11));
+    const two = try dp.write(a, one, 11, .{ .opt = 2, .side = .red, .marks = .{ true, false } }, "2026-10-27");
+    defer a.free(two);
+    try testing.expectEqualStrings("2026-10-27", dp.finishedOn(two, 11).?);
+    const three = try dp.write(a, two, 12, .{ .opt = 1, .marks = .{ false, false } }, "2026-10-29");
+    defer a.free(three);
+    try testing.expectEqualStrings("2026-10-27", dp.finishedOn(three, 11).?);
+    try testing.expectEqualStrings("2026-10-29", dp.finishedOn(three, 12).?);
+    try testing.expectEqual(.red, dp.read(three, 11).?.side);
+}
+
 test "the reveal's views: result line, seat panel parts, On paper and the mix" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
