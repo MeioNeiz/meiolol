@@ -45,7 +45,7 @@ pub fn data(site: *const Site) !ld.Data {
 /// Chapter 0 (plan "Chapter 0"): tiles of clear examples, the question on another
 fn starter(site: *const Site) ![]const ld.Puzzle {
     var out: std.ArrayList(ld.Puzzle) = .empty;
-    const all = [_]?ld.Puzzle{ try roles(site), try counterBasic(site), try leanBasic(site), try damageBasic(site), try duoBasic(site) };
+    const all = [_]?ld.Puzzle{ try roles(site), try counterBasic(site), try leanBasic(site), try damageBasic(site) };
     for (all) |x| if (x) |p| try out.append(site.arena, p);
     return out.items;
 }
@@ -718,88 +718,6 @@ fn damageBasic(site: *const Site) !?ld.Puzzle {
     };
 }
 
-/// A bot and support pair counts from this many games together
-const duo_min_games = 300;
-
-const Duo = struct { bot: Champ, sup: Champ, wins: u32, games: u32, vs: champion.VsUsual };
-
-/// "Which pair wins more together?": a bot and support pair clearly over usual (2 sd)
-/// against the two most played pairs as usual, both clearly under it in raw win rate;
-/// none when no pair is clear (learned.md: duos move 1.3-1.6 points)
-fn duoBasic(site: *const Site) !?ld.Puzzle {
-    const st = &site.stats;
-    const a = site.arena;
-    const pairs: champion.Pairs = .{ .st = st, .r = .bottom, .r2 = .utility, .ally = true };
-    const k = champion.pairsUsualK(pairs);
-    var duos: std.ArrayList(Duo) = .empty;
-    for (site.champs) |x| {
-        const xs = st.champRole(.bottom, x.c);
-        if (xs.games < duo_min_games) continue;
-        for (site.champs) |y| {
-            const n = pairs.get(x.c, y.c);
-            if (x.c == y.c or n.games < duo_min_games) continue;
-            const ys = st.champRole(.utility, y.c);
-            const u = pairs.usualOf(root.ratio(xs.wins, xs.games), root.ratio(ys.wins, ys.games));
-            try duos.append(a, .{ .bot = x, .sup = y, .wins = n.wins, .games = n.games, .vs = .of(n.wins, n.games, u, k) });
-        }
-    }
-    var best: ?Duo = null;
-    for (duos.items) |d| {
-        if (d.vs.mean < 2 * d.vs.sd) continue;
-        if (best == null or d.vs.mean / d.vs.sd > best.?.vs.mean / best.?.vs.sd) best = d;
-    }
-    const b = best orelse return null;
-    const first = usualDuo(duos.items, b, null) orelse return null;
-    var three = [_]Duo{ b, first, usualDuo(duos.items, b, first) orelse return null };
-    std.mem.sort(Duo, &three, {}, struct {
-        fn less(_: void, x: Duo, y: Duo) bool {
-            return std.mem.lessThan(u8, x.bot.name, y.bot.name);
-        }
-    }.less);
-    var tiles: [3]ld.Tile = undefined;
-    var choices: [3]ld.Choice = undefined;
-    var right: u8 = 0;
-    var games: u32 = 0;
-    for (three, &tiles, &choices, 0..) |d, *t, *ch, i| {
-        if (d.bot.c == b.bot.c) right = @intCast(i);
-        games += d.games;
-        const name = try a.print("{s} + {s}", .{ d.bot.name, d.sup.name });
-        t.* = .{ .title = "", .champs = try a.dupe(ld.Champ, &.{ uiChamp(d.bot), uiChamp(d.sup) }), .sep = "+" };
-        ch.* = .{ .text = name, .shown = try a.print("won {d:.0}%", .{@round(100 * root.ratio(d.wins, d.games))}), .games = d.games };
-    }
-    return .{
-        .id = try a.print("basic-duo-{s}-{s}", .{ b.bot.slug, b.sup.slug }),
-        .q = "Which pair wins more together?",
-        .ctx = "A bot laner and a support, same team",
-        .setup = .{ .tiles = try a.dupe(ld.Tile, &tiles) },
-        .answer = .{ .pick = .{ .right = right, .choices = try a.dupe(ld.Choice, &choices) } },
-        .why = try a.print("{s} and {s} win more together than each does with others.", .{ b.bot.name, b.sup.name }),
-        .tip = "Bot and support is the pairing that matters: pick with your partner.",
-        .games = games,
-        .from = try a.print("Ranked games, patch {s}, bot laners and supports on one team", .{site.patch}),
-    };
-}
-
-/// The most played pair as usual (within 1 sd of it) that b clearly beats, with none of
-/// b's champions nor other's bot
-fn usualDuo(duos: []const Duo, b: Duo, other: ?Duo) ?Duo {
-    var out: ?Duo = null;
-    for (duos) |d| {
-        if (d.bot.c == b.bot.c or d.sup.c == b.sup.c or @abs(d.vs.mean) > d.vs.sd or !clearlyAbove(b, d)) continue;
-        if (other) |o| if (d.bot.c == o.bot.c) continue;
-        if (out == null or d.games > out.?.games) out = d;
-    }
-    return out;
-}
-
-/// x wins more than y by 2 standard errors of the difference
-fn clearlyAbove(x: Duo, y: Duo) bool {
-    const p = root.ratio(x.wins, x.games);
-    const q = root.ratio(y.wins, y.games);
-    const v = p * (1 - p) / @as(f64, @floatFromInt(x.games)) + q * (1 - q) / @as(f64, @floatFromInt(y.games));
-    return p - q >= 2 * @sqrt(v);
-}
-
 test leanRows {
     const row = struct {
         fn f(id: u32, role: Role, games: u32, gold: f64, win: f64) lean.Row {
@@ -872,32 +790,4 @@ test lopsidedPicks {
     const got = lopsidedPicks(&ls).?;
     for (got, [_]u32{ 1, 3, 5 }) |p, x| try std.testing.expectEqual(x, p.x);
     try std.testing.expectEqual(null, lopsidedPicks(ls[0..4]));
-}
-
-test usualDuo {
-    const duo = struct {
-        fn f(bot: usize, sup: usize, wins: u32, games: u32, mean: f64) Duo {
-            const c = struct {
-                fn c(i: usize) Champ {
-                    return .{ .c = i, .id = @intCast(i), .key = "", .name = "", .slug = "", .banned = 0, .games = 0 };
-                }
-            }.c;
-            return .{ .bot = c(bot), .sup = c(sup), .wins = wins, .games = games, .vs = .{ .mean = mean, .sd = 0.01 } };
-        }
-    }.f;
-    const b = duo(1, 2, 5_600, 10_000, 0.03);
-    const duos = [_]Duo{
-        b,
-        duo(3, 4, 4_900, 10_000, 0), // most played as usual
-        duo(5, 6, 2_450, 5_000, 0),
-        duo(5, 7, 3_920, 8_000, 0), // 5's more played pair: it, not 5 + 6
-        duo(3, 8, 9_800, 20_000, 0), // 3's more played pair, so the second has another bot
-        duo(9, 2, 9_800, 20_000, 0), // b's support
-        duo(10, 11, 9_800, 20_000, -0.02), // not as usual
-        duo(12, 13, 5_500, 10_000, 0), // not clearly under b
-    };
-    const first = usualDuo(&duos, b, null).?;
-    try std.testing.expectEqual(8, first.sup.c);
-    const second = usualDuo(&duos, b, first).?;
-    try std.testing.expectEqual(7, second.sup.c);
 }

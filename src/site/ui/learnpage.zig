@@ -188,8 +188,9 @@ pub const Page = struct {
 
     fn strip(p: *const Page, h: *H) N {
         const ch = p.d.chapters[p.c];
+        // Over this data's puzzles: stored ids of puzzles no longer made don't count
         var total: u32 = 0;
-        for (p.progress.stars.items) |n| total += n;
+        for (p.d.chapters) |c| total += p.progress.chapter(c).stars;
         return h.div(.{ .class = "strip" }, .{
             h.el(.h1, .{}, .{W.title}),
             badge.view(h, .neutral, .{W.chapter.with(h, .{ .n = p.c })}),
@@ -250,8 +251,13 @@ pub const Page = struct {
             h.oom = true;
             return .none;
         };
+        // The answer's row: the first nearest the real rate, so equal bands light one
+        var hit_row: ?usize = null;
+        if (p.revealed) if (real) |r| for (src, 0..) |x, i| {
+            if (@abs(x.v - r) < 0.05 and (hit_row == null or @abs(x.v - r) < @abs(src[hit_row.?].v - r))) hit_row = i;
+        };
         for (src, 0..) |x, i| {
-            const hit = p.revealed and real != null and @abs(x.v - real.?) < 0.05;
+            const hit = hit_row == i;
             rows[i] = .{
                 .label = .{ .s = x.label },
                 .sub = if (x.sub.len > 0) tree.Text{ .s = x.sub } else null,
