@@ -189,15 +189,6 @@ head are ahead.
 
 ### Steps
 
-- MU2 Opponent strip under the header: x's lane opponents sorted by games, icon and x's
-  win rate, the current one lit, a search; replaces "Change opponent" (the swap stays).
-  Done when another opponent is one click from the first screen; the strip scrolls on
-  the phone. Start: src/site/matchup.zig
-- MU4 Bot lane supports: on bot matchups x's and y's supports (ally pairs), each with
-  games and vs usual; support matchups show their ADCs. Nobody else shows this. Done
-  when Kai'Sa vs Jinx lists both. Data exists (statsfile ally)
-- MU5 Win rate by game length for the pair (300+ games, 3 buckets by Trend.merged)
-  beside win rate by gold at 10, from stats.Trend.lane
 - MU7 Clarity: docs/ui-audit.md "Matchup page" items (one game count on screen, one
   "usual" with the champion page, gold line not in accent violet); runes section
   without the empty right 40%
@@ -218,6 +209,10 @@ head are ahead.
   (builds.runeShifts; win rate left out: shrunk by k ~6,245, no rune moves 2 points)
 - Per-matchup builds: Builder.vs per lane opponent; File.matchups for pairs with 300+
   games; a strip folds to one line when every cell is as usual
+- Opponent strip under the header (x's lane opponents by games, x's win rate, the
+  current one lit, an Opponent search); By game length beside Won by gold at 10 (the
+  pair's 3 buckets, x against everyone dashed); Lane partners on bot and support pages,
+  each side's 5 most played partners with vs usual and games
 - Matchups index: role tabs, one sortable table per role, rows from the lowest Min
   games floor keeping 5,000 or fewer; under 200 gold at 14 coloured by sign (J11)
 
