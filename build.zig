@@ -718,6 +718,7 @@ fn labModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang
         .imports = &.{
             .{ .name = "store", .module = m.store },
             .{ .name = "core", .module = m.core },
+            .{ .name = "net", .module = m.net },
         },
     });
     const api = b.createModule(.{ .root_source_file = b.path("src/lab/api.zig"), .target = target, .optimize = optimize });
