@@ -35,6 +35,8 @@ pub const learn_js = hashed("ui-learn.js", @embedFile("ui-learn.js"));
 pub const learn_wasm = hashed("ui-learn.wasm", @embedFile("ui-learn.wasm"));
 pub const patch_js = hashed("ui-patch.js", @embedFile("ui-patch.js"));
 pub const patch_wasm = hashed("ui-patch.wasm", @embedFile("ui-patch.wasm"));
+pub const pool_js = hashed("ui-pool.js", @embedFile("ui-pool.js"));
+pub const pool_wasm = hashed("ui-pool.wasm", @embedFile("ui-pool.wasm"));
 
 /// `plain` with 8 hex digits of `data`'s FNV-1a before its extension
 pub fn hashed(comptime plain: []const u8, comptime data: []const u8) Hashed {

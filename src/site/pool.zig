@@ -1,30 +1,21 @@
-//! Pool on the site: the pool.html skeleton that static/pool.js fills from
-//! data/pool.json (src/pool.zig), and the "also play" section of each champion page.
-//! Several options with their numbers and n, never "the best pick" (docs/concept.md).
+//! Pool on the site: pool.html (the ui.poolpage island, ui-pool.wasm) and its files,
+//! one per main and view (data/pool/<slug>.bin). Several options with their numbers and
+//! n, never "the best pick" (docs/concept.md).
 
 const std = @import("std");
 const root = @import("root.zig");
 const html = @import("html.zig");
 const tpl = html.tpl;
 const pool = @import("../pool.zig");
-const learning = @import("../learning.zig");
-const learning_page = @import("learning.zig");
-const scope = @import("scope.zig");
 const champion = @import("champion.zig");
 const core = @import("core");
 const ui = @import("ui");
 const pd = ui.pooldata;
+const page_ui = ui.poolpage;
+const assets = @import("assets.zig");
 
 const Writer = std.Io.Writer;
 const Site = root.Site;
-
-/// A pool's period as a scope chip: games over every patch, or lifetime mastery
-pub fn periodDim(p: *const pool.Pool) scope.Dim {
-    return switch (p.source) {
-        .games => .every_patch,
-        .mastery => .{ .key = "every", .text = "All time" },
-    };
-}
 
 pub fn sourceText(p: *const pool.Pool) []const u8 {
     return switch (p.source) {
@@ -94,52 +85,71 @@ fn id16(id: u32) error{BadId}!u16 {
     return std.math.cast(u16, id) orelse error.BadId;
 }
 
-/// With the learning-curve table under the picker (site/learning.zig)
-pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool, l: *const learning.Learning) !void {
+pub const path = "pool.html";
+
+/// The island, empty (the picker), with every champion and the mains with a file in its
+/// data-bin; the lanes' scope under it
+pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool) !void {
+    const a = site.arena;
     const pg = try site.page(
         "Champion pool | meiolol",
-        "Pick the champions you main: what their players also play, how hard each champion is to pick up, and which do well where your main struggles.",
-        "pool.html",
+        "Pick your champions: the lanes your main struggles in, which champions cover them, what to play when it is banned and what its players also play.",
+        path,
         .pool,
     );
     try html.head(w, pg);
+    const d = try a.create(page_ui.Data);
+    d.* = try pageData(site, p);
+    var page: page_ui.Page = try .init(a, d);
+    page.bin = try bin(a, d.*);
+    var t: ui.Tree = .{};
+    var h: ui.H = .init(a, &t);
+    t.root = page.view(&h);
+    if (h.oom) return error.OutOfMemory;
+    try ui.html.write(&t, t.root, w);
+    const to_root = try site.toRoot(path);
     try tpl.render(w,
-        \\<h1>Champion pool</h1>
-        \\<p class="lead">Looking for a second champion? Pick the one you main, or up to
-        \\three: see what else their players play and which do
-        \\well where your main struggles or when it is banned. Several options with the
-        \\numbers behind each; the choice is yours. <a href="pickup.html">How hard every
-        \\champion is to pick up</a>.</p>
-        \\<p id="status" class="note">Loading…</p>
-        \\<form id="pool" class="pool-form" autocomplete="off" onsubmit="return false">
-        \\<datalist id="champions"></datalist>
-        \\<label><span>Main</span><input data-main list="champions" placeholder="Champion"></label>
-        \\<label><span>Also</span><input data-main list="champions" placeholder="Champion (optional)"></label>
-        \\<label><span>Also</span><input data-main list="champions" placeholder="Champion (optional)"></label>
-        \\</form>
-        \\<div id="results" data-to-site="{up}" data-query="{query}"></div>
-        \\<p class="muted">{chip} A player's main is their most played champion, from {source}
-        \\({players} players {in} so far); they play another when it has at least a tenth of their
-        \\main's games or points. "59% (28%)": 59% of the main's players play it, 28% of other players do.
-        \\Listed are those played most beyond their usual share (small groups count for less),
-        \\from {min} players per main. Lane numbers are points of win chance beyond what the two
-        \\champions' own win rates predict, {in} {when}, shown from 1 point either way (most
-        \\matchups are closer to even).
-        \\<a href="{up}method.html">Method</a>.</p>
-        \\<script src="pool.js" defer></script>
+        \\
+        \\<p class="muted">{chip} Lanes: points of win chance beyond what the two champions'
+        \\own win rates predict, from {games} games. A main is a player's most played champion,
+        \\from {source}. <a href="{up}method.html">Method</a>.</p>
+        \\<script src="{js}" data-wasm="{wasm}" defer></script>
         \\
     , .{
-        .chip = site.chip(site.regionDim(site.view.region), periodDim(p), .plat),
-        .up = site.view.up(),
-        .query = site.view.query(),
+        .chip = site.chip(site.regionDim(site.view.region), site.periodDim(site.view.period), .plat),
+        .games = pd.min_games,
         .source = sourceText(p),
-        .players = root.Thousands{ .n = p.players },
-        .min = p.min_players,
-        .in = site.view.region.in(),
-        .when = site.when,
+        .up = site.view.up(),
+        .js = html.Link{ .root = to_root, .up = site.view.up(), .path = assets.pool_js.path },
+        .wasm = assets.pool_wasm.path,
     });
-    try learning_page.table(site, w, l);
     try html.foot(w, pg);
+}
+
+/// Champions with a file (dataFiles' rule), most players first as pool.mains are
+fn pageData(site: *const Site, p: *const pool.Pool) !page_ui.Data {
+    const a = site.arena;
+    const champs = try a.alloc(page_ui.Champ, site.champs.len);
+    for (champs, site.champs) |*c, ch| c.* = .{ .id = try id16(ch.id), .name = ch.name, .key = ch.key, .slug = ch.slug };
+    var mains: std.ArrayList(page_ui.Main) = .empty;
+    for (p.mains) |m| {
+        const r = m.role orelse continue;
+        if (m.cols.len == 0) continue;
+        const c = for (site.champs, 0..) |ch, i| {
+            if (ch.id == m.id) break i;
+        } else continue;
+        try mains.append(a, .{ .c = @intCast(c), .role = champion.uiRole(r), .players = m.players });
+    }
+    return .{ .ddragon = site.ddragon_version, .champs = champs, .mains = mains.items };
+}
+
+/// `v` as ui.data, base64: the island root's data-bin
+fn bin(a: std.mem.Allocator, v: page_ui.Data) ![]const u8 {
+    var raw: std.ArrayList(u8) = .empty;
+    try ui.data.encode(a, page_ui.Data, v, &raw);
+    const e = std.base64.standard.Encoder;
+    const out = try a.alloc(u8, e.calcSize(raw.items.len));
+    return e.encode(out, raw.items);
 }
 
 test "pool file: a main's lanes and grid, through ui.data, as the page reads them" {
