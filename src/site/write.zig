@@ -13,7 +13,6 @@ const Options = root.Options;
 const isStatic = root.isStatic;
 const Site = root.Site;
 const shared_assets = root.shared_assets;
-const view_assets = root.view_assets;
 const shared_pages = root.shared_pages;
 const unlisted_pages = root.unlisted_pages;
 const pagePaths = root.pagePaths;
@@ -62,7 +61,6 @@ fn writeSite(site: *const Site, root_dir: std.Io.Dir, gz_window: []u8) !void {
         for (shared_assets) |f| try w.write(root_dir, f.path, f.data);
         for (root.hashed_assets) |h| try w.write(root_dir, h.path, h.data);
     }
-    for (view_assets) |f| if (isStatic(opts, vdir, f.path)) try w.write(dir, f.path, f.data);
 
     var page_arena: std.heap.ArenaAllocator = .init(site.gpa);
     defer page_arena.deinit();

@@ -119,7 +119,7 @@ pub const Static = enum {
 };
 
 /// `--static core`: the only files the static build writes, besides the front-end assets
-/// (shared_assets, view_assets); nginx serves them itself and hands every other path to
+/// (shared_assets); nginx serves them itself and hands every other path to
 /// `meiolol render`. All at the site root: nginx's try_files answers the URL of a
 /// directory that exists with its index.html or 403, never the renderer, so the root
 /// keeps its home page and no subdirectory is written
@@ -132,7 +132,7 @@ pub fn isStatic(opts: Options, dir: []const u8, path: []const u8) bool {
     if (opts.static == .all) return true;
     if (dir.len > 0 or std.mem.findScalar(u8, path, '/') != null) return false;
     for (core_static) |name| if (std.mem.eql(u8, name, path)) return true;
-    for (shared_assets ++ view_assets) |f| if (std.mem.eql(u8, f.path, path)) return true;
+    for (shared_assets) |f| if (std.mem.eql(u8, f.path, path)) return true;
     for (hashed_assets) |h| if (std.mem.eql(u8, h.path, path)) return true;
     return false;
 }
@@ -371,17 +371,13 @@ pub const shared_assets = [_]File{
     // Linked for print, so it never holds up rendering; browsers still fetch it on each load
     .{ .path = "print.css", .data = @embedFile("static/print.css") },
 };
-/// And in every view's directory
-pub const view_assets = [_]File{
-    .{ .path = "pool.js", .data = @embedFile("static/pool.js") },
-};
 
 /// Asset `wanted` (a hashed name as its plain one) from Options.static_dir when set (edits
 /// show without a rebuild), else as embedded; null for anything else
 pub fn asset(arena: std.mem.Allocator, io: std.Io, opts: Options, wanted: []const u8) !?[]const u8 {
     const name: []const u8, const embedded: []const u8 = for (hashed_assets) |h| {
         if (std.mem.eql(u8, h.path, wanted)) break .{ h.plain, h.data };
-    } else for (shared_assets ++ view_assets) |f| {
+    } else for (shared_assets) |f| {
         if (std.mem.eql(u8, f.path, wanted)) break .{ f.path, f.data };
     } else return null;
     const dir = opts.static_dir orelse return embedded;

@@ -412,22 +412,6 @@ pub fn make(arena: Allocator, t: *const Tally, st: *const Stats) !Learning {
     return l;
 }
 
-/// data/learning.json, the champions with a gap: win rates of new and practised players
-/// and their games
-pub fn writeJson(w: *std.Io.Writer, l: Learning) !void {
-    try w.print("{{\"games\":{d},\"mean_pp\":{d:.1},\"champions\":[", .{ l.games, l.mean_pp });
-    var first = true;
-    for (l.champions) |c| {
-        const g = c.gap orelse continue;
-        if (!first) try w.writeByte(',');
-        first = false;
-        try w.print("{{\"id\":{d},\"kind\":\"{t}\",\"new\":[{d:.4},{d}],\"practised\":[{d:.4},{d}]}}", .{
-            c.id, g.kind, g.new.winRate(), g.new.games, g.practised.winRate(), g.practised.games,
-        });
-    }
-    try w.writeAll("]}\n");
-}
-
 const testing = std.testing;
 
 test "bins" {
@@ -478,10 +462,6 @@ test "gaps: off the average only when clear" {
     // champion 3's 50 practised don't; no champion has bins 1 to 3
     try testing.expect(l.usual[0] < -1 and l.usual[4] > 1);
     try testing.expectEqual(0, l.usual[2]);
-    var out: std.Io.Writer.Allocating = .init(arena);
-    try writeJson(&out.writer, l);
-    const parsed = try std.json.parseFromSliceLeaky(std.json.Value, arena, out.written(), .{});
-    try testing.expectEqual(7, parsed.object.get("champions").?.array.items.len);
 }
 
 test "db: games after the player's fetch, by the points then" {

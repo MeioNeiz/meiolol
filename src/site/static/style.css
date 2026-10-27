@@ -229,12 +229,6 @@ tr.thin td { color: var(--muted); }
 .chart .median.prev { stroke-width: 2; stroke-dasharray: 8 5; opacity: 0.55; }
 .chart .ending { stroke: var(--muted); stroke-dasharray: 2 4; }
 .chart figcaption { color: var(--muted); font-size: 13px; margin-top: 6px; }
-.pool-form { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 16px 0; }
-.pool-form label { display: flex; align-items: center; gap: 8px; flex: 1 1 220px; }
-.pool-form label span { color: var(--muted); font-size: 14px; }
-.pool-main { margin-top: 24px; }
-.pool-main h2 .champ img { width: 40px; height: 40px; }
-.pool-h { margin: 20px 0 4px; }
 td.thin { color: var(--muted); opacity: 0.6; }
 .chart .you { fill: none; stroke: var(--text); stroke-width: 2.5; }
 .small { font-size: 13px; }

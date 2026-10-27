@@ -172,7 +172,7 @@ otherwise, "no clear early or late lean" when neither, "too few games" under 200
 own scope ("every region, last 30 days"), not the filters'. Method page `#lean`.
 `meiolol lean --check` is the lab check (folds and dev-val, never the test window).
 
-## Pool (src/pool.zig, src/site/pool.zig, static/pool.js)
+## Pool (src/pool.zig, src/site/pool.zig, ui/poolpage.zig)
 
 A player's main is their top champion; they play another when it has at least 10% of the
 main's weight (games now, mastery points once that table fills; min 10 games). "Players
@@ -183,10 +183,11 @@ options' and fallbacks') only from 1 point either way (Options.min_lane_pp). Fro
 model file's lane pairs (score.matchupPp, 30+ games): X's five worst lane matchups, the
 also-played champions in X's role that are positive into them ("options", several, with
 reasons), and those positive into X's best lanes (ban fallback). `meiolol site` writes
-data/pool.json, pool.html (pick up to three mains; pool.html#garen,darius) and a section
-on each champion page. Mastery source (points, champions played in the last year, 50k
-total and 10k per champion) is used once it has more players than the games source. Not
-yet: curves instead of win rates for hard lanes, your own record per matchup.
+data/pool/<slug>.bin per main (ui/pooldata.zig), pool.html (an island, ui-pool.wasm: up
+to five champions, main first; #pool=ids) and a section on each champion page. Mastery
+source (points, champions played in the last year, 50k total and 10k per champion) is
+used once it has more players than the games source. Not yet: curves instead of win
+rates for hard lanes, your own record per matchup.
 
 ## How hard to pick up (src/learning.zig, src/site/learning.zig)
 
@@ -199,7 +200,7 @@ Ruled out: the row's last game on a champion (its points are that game's), which
 losses (docs/learned.md). Per champion, all roles: new (under 30k) against practised
 (100k+), 200+ games each; the gap's average over champions, and harder or easier when the
 gap is 2 standard errors off it; the table sorts by the gap pulled toward the average by
-the between-champion spread over its own noise. `meiolol site` writes data/learning.json
-(pool.js lines), a section on each champion page and a table on pool.html, both over
-the view's period (all regions). Partials:
+the between-champion spread over its own noise. `meiolol site` writes pickup.html (and
+pickup/<role>.html) and a section on each champion page, both over the view's period
+(all regions). Partials:
 learning.bin (arch-site.md "Views partials"); the database path joins participants to mastery.

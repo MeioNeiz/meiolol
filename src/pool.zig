@@ -712,62 +712,6 @@ fn into(
     return list.items;
 }
 
-/// data/pool.json for the site: ids, counts and percentage points rounded for size
-pub fn writeJson(w: *std.Io.Writer, p: Pool) !void {
-    try w.print("{{\"source\":\"{s}\",\"patch\":", .{@tagName(p.source)});
-    try std.json.Stringify.value(p.patch, .{}, w);
-    try w.print(",\"players\":{d},\"min_players\":{d},\"mains\":[", .{ p.players, p.min_players });
-    for (p.mains, 0..) |m, i| {
-        if (i > 0) try w.writeByte(',');
-        try w.print("{{\"id\":{d},\"players\":{d},\"one_tricks\":{d}", .{ m.id, m.players, m.one_tricks });
-        if (m.role) |r| try w.print(",\"role\":\"{s}\"", .{@tagName(r)});
-        if (m.also.len > 0) {
-            try w.writeAll(",\"also\":[");
-            for (m.also, 0..) |a, j| {
-                if (j > 0) try w.writeByte(',');
-                try w.print("[{d},{d},{d:.2},{d:.3}]", .{ a.id, a.together, a.lift, a.base });
-            }
-            try w.writeByte(']');
-        }
-        if (m.hard.len > 0) {
-            try w.writeAll(",\"hard\":");
-            try lanesJson(w, m.hard);
-        }
-        if (m.cover.len > 0) {
-            try w.writeAll(",\"cover\":[");
-            for (m.cover, 0..) |c, j| {
-                if (j > 0) try w.writeByte(',');
-                try w.print("{{\"id\":{d},\"lift\":{d:.2},\"lanes\":", .{ c.id, c.lift });
-                try lanesJson(w, c.lanes);
-                try w.writeByte('}');
-            }
-            try w.writeByte(']');
-        }
-        if (m.fallback.len > 0) {
-            try w.writeAll(",\"fallback\":[");
-            for (m.fallback, 0..) |f, j| {
-                if (j > 0) try w.writeByte(',');
-                try w.print("{{\"id\":{d},\"together\":{d},\"lift\":{d:.2},\"lanes\":", .{ f.id, f.together, f.lift });
-                try lanesJson(w, f.lanes);
-                try w.writeByte('}');
-            }
-            try w.writeByte(']');
-        }
-        try w.writeByte('}');
-    }
-    try w.writeAll("]}\n");
-}
-
-/// [[id, pp, games], ...]
-fn lanesJson(w: *std.Io.Writer, lanes: []const Lane) !void {
-    try w.writeByte('[');
-    for (lanes, 0..) |l, i| {
-        if (i > 0) try w.writeByte(',');
-        try w.print("[{d},{d:.1},{d}]", .{ l.id, l.pp, l.games });
-    }
-    try w.writeByte(']');
-}
-
 const testing = std.testing;
 
 /// Champions 1..n and fillers 100..107; each game is (blue top, red top, winner) with
@@ -886,12 +830,6 @@ test "options cover the main's hard lanes; fallbacks share its good ones" {
     const thin = p.mains[2];
     try testing.expectEqual(2, thin.id);
     try testing.expectEqual(0, thin.also.len);
-
-    var aw: std.Io.Writer.Allocating = .init(arena);
-    try writeJson(&aw.writer, p);
-    const parsed = try std.json.parseFromSliceLeaky(std.json.Value, arena, aw.written(), .{});
-    try testing.expectEqualStrings("games", parsed.object.get("source").?.string);
-    try testing.expectEqual(3, parsed.object.get("mains").?.array.items.len);
 }
 
 test "mastery: points as weight, stale and small champions left out" {

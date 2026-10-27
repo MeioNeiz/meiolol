@@ -519,17 +519,7 @@ fn addFiles(site: *Site) !void {
             try tierlist.rankFiles(site, &files);
         }
         try files.append(arena, .{ .path = search.path, .data = try search.json(site) });
-        {
-            var aw: Writer.Allocating = .init(arena);
-            try pool.writeJson(&aw.writer, site.pool);
-            try files.append(arena, .{ .path = "data/pool.json", .data = aw.written() });
-        }
         try pool_page.dataFiles(site, &files);
-        {
-            var aw: Writer.Allocating = .init(arena);
-            try learning.writeJson(&aw.writer, site.learning);
-            try files.append(arena, .{ .path = "data/learning.json", .data = aw.written() });
-        }
         try shared_files.appendSlice(arena, site.daily_files);
         if (site.learn) |facts| try shared_files.append(arena, .{ .path = "data/champ-facts.tsv", .data = try champFacts(site, facts) });
     }
