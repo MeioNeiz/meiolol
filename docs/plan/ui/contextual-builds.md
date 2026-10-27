@@ -85,6 +85,11 @@ same cost, so no list to choose. The panel says the context's games; under rate_
   the rows too, so a filtered panel follows every pick (E8 for builds)
 - Hash: `#top/f=ks8010,i1-3071` so a link keeps the context
 
+- Rune pages (Jacob 27 Oct, site note 31): a tap on a page card is the main way in:
+  it locks that page and the rest of the panel, then the page's other blocks
+  (matchups, trends), follow it. He expects the models to help: a thin condition
+  borrows from the unfiltered panel (E6's shrink) rather than showing raw small counts
+
 ## Cost per web round
 
 - Daily (as builds --site): read 30 day files (~450 MB gz every region), write ~1,700

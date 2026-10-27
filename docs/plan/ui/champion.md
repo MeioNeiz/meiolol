@@ -112,6 +112,21 @@ the first screen, 1,154 on the page (frontend-rework.md).
      pick up as a Badge. Link to the pool page
 4. Footer: one "Method" link. The two method paragraphs move to method.html
 
+## More charts (Jacob 27 Oct, site note 28)
+
+"So many more graphs i wanna see": the Pick-up card is liked, the page wants more of
+its kind. Candidates, data we have first (arch-stats.md):
+- Pick-up across all five mastery bins (learning.zig has them; the card shows two)
+- Lane curve: gold, XP and CS lead by minute 1-25 against the average lane opponent,
+  p25-p75 band (lane curves, as the matchup page draws per pair)
+- Comeback odds: win rate by lane gold lead at 10 and 15 min (curves' five buckets)
+- Early kills: who takes part in killing the lane opponent before 6, 6-14, after 14
+- By rank bracket: Iron-Silver, Gold-Emerald, Diamond+ (curves brackets; stats by rank)
+- Item timing: first core item minute against win rate (builds' minutes per game:
+  new counting)
+- Side (blue, red) and games played on it in the last 30 days: new counting
+One chart style for all (Chart frame), two per row as Pick-up and Also play.
+
 ## References (research refs/champion/notes.md, 27 shots)
 
 | Element | Model on | Take | Leave |
