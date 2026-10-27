@@ -36,13 +36,17 @@ fn swapped() void {
 }
 
 /// Until ui-yourtime runs (it marks its root data-live), the Over time view holds the
-/// server's example: busy for a looked-up list
+/// server's example: busy for a looked-up list, or "Couldn't load" once its file failed
+/// (dom's data-failed)
 fn markTime() void {
     const el = zjb.global("document").call("querySelector", .{zjb.constString(ui.yourtime.sel)}, zjb.Handle);
     if (el == .null) return;
     defer el.release();
     if (el.call("hasAttribute", .{zjb.constString("data-live")}, bool)) return;
-    if (page.id.len > 0) {
+    if (el.call("hasAttribute", .{zjb.constString("data-failed")}, bool)) {
+        const v = if (page.id.len > 0) zjb.constString("show") else zjb.constString("");
+        el.call("setAttribute", .{ zjb.constString("data-failed"), v }, void);
+    } else if (page.id.len > 0) {
         el.call("setAttribute", .{ zjb.constString("aria-busy"), zjb.constString("true") }, void);
     } else el.call("removeAttribute", .{zjb.constString("aria-busy")}, void);
 }

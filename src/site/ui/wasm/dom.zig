@@ -380,10 +380,30 @@ pub fn script(sel: []const u8) void {
     const s = doc.call("createElement", .{zjb.constString("script")}, zjb.Handle);
     defer s.release();
     s.call("setAttribute", .{ zjb.constString("data-wasm"), wasm }, void);
+    s.call("setAttribute", .{ zjb.constString("data-for"), q }, void);
+    s.call("addEventListener", .{ zjb.constString("error"), zjb.fnHandle("uiScriptError", &onScriptError) }, void);
     s.set("src", js);
     const head = doc.get("head", zjb.Handle);
     defer head.release();
     head.call("appendChild", .{s}, void);
+}
+
+/// An island whose file failed (a 404 mid-deploy, the network): its root gets
+/// data-failed, "show" if it was busy so its CSS can say so, as no file will clear it.
+/// A failed .wasm fetch rejects inside zjb's loader and isn't caught here
+fn onScriptError(e: zjb.Handle) callconv(.c) void {
+    defer e.release();
+    const s = e.get("target", zjb.Handle);
+    defer s.release();
+    const q = s.call("getAttribute", .{zjb.constString("data-for")}, zjb.Handle);
+    defer q.release();
+    const el = zjb.global("document").call("querySelector", .{q}, zjb.Handle);
+    if (el == .null) return;
+    defer el.release();
+    const busy = el.call("hasAttribute", .{zjb.constString("aria-busy")}, bool);
+    const v = if (busy) zjb.constString("show") else zjb.constString("");
+    el.call("setAttribute", .{ zjb.constString("data-failed"), v }, void);
+    el.call("removeAttribute", .{zjb.constString("aria-busy")}, void);
 }
 
 /// An element's attribute, kept ("" when missing). The name is a runtime string: one

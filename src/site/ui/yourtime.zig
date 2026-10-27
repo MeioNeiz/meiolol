@@ -630,6 +630,10 @@ pub const css =
     \\  /* A looked-up list before ui-yourtime runs: the example's content, kept for its size */
     \\  .c-ytime[aria-busy="true"] { border-radius: var(--r-l); background: var(--panel); }
     \\  .c-ytime[aria-busy="true"] > * { visibility: hidden; }
+    \\  .c-ytime[data-failed="show"] { position: relative; border-radius: var(--r-l); background: var(--panel); }
+    \\  .c-ytime[data-failed="show"] > * { visibility: hidden; }
+    \\  .c-ytime[data-failed="show"]::after { content: "Couldn't load this view."; position: absolute; inset: 0;
+    \\    display: grid; place-items: center; color: var(--faint); font-size: var(--fs-s); }
     \\  .c-ytime .na { color: var(--faint); }
     \\  .c-tcard { position: relative; display: grid; align-content: start; gap: 2px; min-width: 0;
     \\    padding: var(--sp-3) var(--sp-4); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-l); }
