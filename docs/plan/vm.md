@@ -233,6 +233,7 @@ renderer, 8 at a time; crawl: the crawler's rate at the end.
 | setting | core build s | views write s | renderer load s | render ms p50/p95/p99 | buff/cache GB | crawl matches/day |
 |---|---|---|---|---|---|---|
 | baseline, serial (27 Oct, host CPU, 62 GB, AVX2 build) | 129 (129 120 132) | 754 (758 750 754) | 44 (44 43 45) | 10/19/25 | 49 | 152121 |
+| filter runs 8, serial: not kept (filters 4.8 s vs 6.0 s; views write within noise) | 126 (121 135 126) | 788 (742 788 792) | 45 (45 46 44) | 10/20/27 | 49 | 153775 |
 
 Baseline's views write by phase (views.log): stats 371 s (view 2), 144 s (view 3),
 75 s (view 0), 29 s (view 1), single-threaded (cpu = wall); people 53 s; filters 6 s,
@@ -245,7 +246,14 @@ than the spread between runs
   1 = serial, the Oracle box's value). Not par inside stats: chunked float sums in
   additive.fit would change the output and the eval. Expected ~400 s against 754 (the
   longest view plus partials). Then a new baseline row at C01's value; the row above
-  stays, labelled serial
+  stays, labelled serial. Built (95f9063d): views at once on par.forEachUpTo, longest
+  first; the people tallies behind a mutex (they read stats only for champion ids, so
+  any view may make them); the first view to fail stops the others. Checked on C01 (27 Oct,
+  crawler and web loop paused): views written at 1 and at 4 match byte for byte in
+  every part the clock leaves alone (views 1 and 3 whole, every view's patch day; the
+  30-day views' window moved 13 min between the writes); core builds by the old and new
+  binary started together match in all 285 files. Views write 769 s at 1, 471 s at 4
+  (one run, not the bench)
 
 ## Later
 
