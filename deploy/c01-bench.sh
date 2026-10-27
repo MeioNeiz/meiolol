@@ -15,6 +15,19 @@ cd "$D" || exit 1
 log() { echo "$(date -u +%FT%TZ) $label: $*" | tee -a "$S/bench.log"; }
 median() { sort -n | awk '{a[NR] = $1} END {print NR ? a[int((NR + 1) / 2)] : ""}'; }
 
+# The daily eval runs inside the web loop, 24 h after data/eval.log's last write
+# (web-loop.sh), and pausing the loop kills it: refuse while one runs or falls due before
+# the bench ends (~16 min a run, 20 min margin)
+if ! flock -n data/eval.lock true; then
+    log "refused: an eval is running (data/eval.lock)"
+    exit 3
+fi
+due=$(($(stat -c %Y data/eval.log 2> /dev/null || echo 0) + 86400 - $(date +%s)))
+if ((due < n * 16 * 60 + 20 * 60)); then
+    log "refused: the daily eval is due in $((due / 60)) min"
+    exit 3
+fi
+
 args=(--contact "$(cat contact)" --origin https://meio.lol)
 [[ -s riot.txt ]] && args+=(--riot-txt "$(< riot.txt)")
 
