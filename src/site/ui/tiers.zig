@@ -670,8 +670,8 @@ pub const css =
     \\  .c-tiers td.num.p3 { color: var(--faint); }
     \\  .c-tiers .num.p3 { width: 44px; }
     \\  .c-tiers .wr { width: 96px; }
+    \\  .c-tiers .ch { width: 210px; }
     \\  .c-tiers .dl { width: 84px; }
-    \\  .c-tiers .pl { width: 340px; }
     \\  .c-tiers .pk, .c-tiers .bn { width: 120px; }
     \\  .c-tiers .gm { width: 88px; }
     \\  @container (max-width: 520px) {
@@ -684,6 +684,7 @@ pub const css =
     \\    .c-tiers .moved .more { display: none; }
     \\  }
     \\  @container (max-width: 620px) {
+    \\    .c-tiers .ch { width: auto; }
     \\    .c-tiers .wr { width: 66px; }
     \\    .c-tiers .dl { width: 52px; }
     \\    .c-tiers .pl, .c-tiers .pk, .c-tiers .bn, .c-tiers .gm { width: 92px; }

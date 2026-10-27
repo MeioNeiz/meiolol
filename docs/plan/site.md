@@ -147,8 +147,6 @@ player's own record). Gap list, measurements and target layout: docs/champion-ma
 - CH7 Phone. Subbar's three rows into one (a filters button; design build order 6),
   histogram folded. Done when Darius at 390x844 has its stat strip and build panel on
   the first screen
-- CH8 Champions index, left: heat cells and pick/ban bars (design build order 5), the
-  empty band between Role and Win rate at 1280, phone role tabs wrapping Support
 
 ### Status
 
@@ -169,9 +167,10 @@ player's own record). Gap list, measurements and target layout: docs/champion-ma
 - Build page: tables in a grid of ~490 px cells, rune pages drawn as in game with
   per-rune pick and win rate, "highest win rate" marks pulled by k per kind (File.shrink,
   builds.zig Spread; learned.md Items), never "best"
-- Champions index: 29 px rows, the change since the previous patch under each rate, the
-  sort key above the table, minimums folded; Influence column on champions and role
-  tables (core/banimpact.zig; research/questions/ban-impact-score.md)
+- Champions index (ui.tiers): role in place (RolePicker, All first), Games floor
+  500 | 1.5k | 5k, movers band, DataTable with win rate as StatCell ink (no heat box:
+  Jacob v7, v9), patch delta, players' violin, pick and ban Bars, games; Champion column
+  210 px, the role icon at its end under All. Role tabs are icons, one row at 360 px
 
 ### Later
 

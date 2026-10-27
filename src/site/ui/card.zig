@@ -70,6 +70,8 @@ pub const css =
     \\  .c-card > :is(.c-head, .c-tabs, .c-toolbar) { margin-inline: calc(-1 * var(--card-px)); padding-inline: var(--card-px); }
     \\  .c-card > :is(.c-head, .c-tabs, .c-toolbar):first-child { margin-top: calc(-1 * var(--card-py)); }
     \\  .c-card > :is(.c-head, .c-tabs, .c-toolbar) + :not(.c-tabs, .c-toolbar, .c-head) { margin-top: var(--card-py); }
+    \\  .c-card > .c-toolbar:last-child { margin-bottom: calc(-1 * var(--card-py)); border-bottom: 0;
+    \\    border-radius: 0 0 calc(var(--r-m) - 1px) calc(var(--r-m) - 1px); }
     \\  .c-card[data-v="flush"] > :is(.c-head, .c-tabs, .c-toolbar) { margin: 0; }
     \\  .c-head { display: flex; align-items: center; gap: var(--sp-2) var(--sp-3); flex-wrap: wrap;
     \\    min-height: calc(var(--ctl) + 2 * var(--sp-2)); padding-block: var(--sp-2); border-bottom: 1px solid var(--line); }
