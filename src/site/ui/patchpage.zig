@@ -162,6 +162,7 @@ const W = struct {
     pub const games = plain("Games");
     pub const matchup = plain("Matchup");
     pub const gold = plain("Gold");
+    pub const listed = plain(std.fmt.comptimePrint("Every champion role with {d}+ games on both patches, and the main role of each champion Riot changed.", .{role_games}));
     pub const riot_note = plain("What Riot changed in the champion this patch, from Riot's data files.");
     pub const change_note = plain("Win rate this patch minus last, in points. The line is where the real change likely is; coloured when too big to be luck.");
     pub const lane_note = plain("Games ahead in lane gold, this patch minus last, in points.");
@@ -389,13 +390,16 @@ fn detail(h: *H, l: *const Line) N {
     });
 }
 
+/// Games a champion role needs on both patches to be listed (patchday.Options.min_role_games)
+pub const role_games = 300;
+
 /// Games a matchup needs on both patches (patchday.Options.min_pair_games)
 pub const pair_games = 400;
 
 pub const Table = table.DataTable(Line, .{
     .title = W.champion,
     .columns = &.{
-        .{ .label = W.champion, .cell = who, .name = nameOf, .num = false, .key = "ch" },
+        .{ .label = W.champion, .cell = who, .name = nameOf, .num = false, .tip = W.listed, .key = "ch" },
         .{ .label = W.riot, .cell = riotCell, .sort = riotOf, .num = false, .tip = W.riot_note, .key = "ri" },
         .{ .label = W.last, .cell = prevCell, .sort = prevOf, .priority = 3, .key = "pv" },
         .{ .label = W.this, .cell = curCell, .sort = curOf, .priority = 2, .key = "cu" },
