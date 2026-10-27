@@ -210,9 +210,9 @@ const demo = struct {
 
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
-    g.add("13 games, nothing chosen", demo.all.view(h, &demo.list, &demo.games));
-    g.add("jungle chosen", demo.jungle.view(h, &demo.list, &demo.games));
-    g.add("no games", demo.empty.view(h, &demo.list, &.{}));
+    g.addFill("13 games, nothing chosen", demo.all.view(h, &demo.list, &demo.games));
+    g.addFill("jungle chosen", demo.jungle.view(h, &demo.list, &demo.games));
+    g.addFill("no games", demo.empty.view(h, &demo.list, &.{}));
 }
 
 const testing = std.testing;

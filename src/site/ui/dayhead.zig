@@ -52,7 +52,7 @@ pub const css =
     \\  .c-dayhead > .wl { font-size: var(--fs-s); font-variant-numeric: tabular-nums; color: var(--faint); }
     \\  .c-dayhead .w { color: var(--us); }
     \\  .c-dayhead .l { color: var(--them); }
-    \\  .c-dayhead > .pl { margin-left: auto; font-size: var(--fs-xs); color: var(--faint); font-variant-numeric: tabular-nums; }
+    \\  .c-dayhead > .pl { font-size: var(--fs-xs); color: var(--faint); font-variant-numeric: tabular-nums; }
     \\}
     \\
 ;

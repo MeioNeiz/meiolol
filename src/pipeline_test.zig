@@ -726,6 +726,11 @@ test "fixture games to stats, curves and the website" {
     for ([_][]const u8{ "data-island=\"games\"", "data-src=\"data/your/mid.bin\"", "ui-games.", "noindex", "data-island=\"gamemore\"", "data-js=\"" ++ assets.gamemore_js.path ++ "\" data-wasm=\"" ++ assets.gamemore_wasm.path ++ "\"", "data-island=\"gamelane\"", "data-js=\"" ++ assets.gamelane_js.path ++ "\" data-wasm=\"" ++ assets.gamelane_wasm.path ++ "\"" }) |want| {
         try testing.expect(std.mem.find(u8, game_page, want) != null);
     }
+    // The list page: the example's list in the island, rows opening game.html
+    const games_page = (try core_loaded.get(arena, "games.html")).?;
+    for ([_][]const u8{ "data-island=\"your\" data-bin=\"", "class=\"c-player\"", "class=\"c-psum\"", "href=\"game.html#g=0\"", "noindex", "data-wasm=\"" ++ assets.your_wasm.path ++ "\"" }) |want| {
+        try testing.expect(std.mem.find(u8, games_page, want) != null);
+    }
     // Home in every view: the shared view's example, its game file loaded lazily; the
     // Patch card's link without a patch day loaded
     for ([_][]const u8{ "index.html", "all/index.html" }) |path| {

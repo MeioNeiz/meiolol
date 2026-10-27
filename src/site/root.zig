@@ -9,6 +9,7 @@ const account_page = @import("account.zig");
 const daily_page = @import("daily.zig");
 const your_page = @import("your.zig");
 const yourgame = @import("yourgame.zig");
+const yourpage = @import("yourpage.zig");
 const daily = @import("../daily.zig");
 const learn = @import("../learn.zig");
 const learn_page = @import("learn.zig");
@@ -356,7 +357,7 @@ pub const Site = struct {
 pub const File = daily.File;
 
 /// Also written by their plain names, with the same data (assets.zig)
-pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.search_js, assets.stats_js, assets.stats_wasm, assets.champion_js, assets.champion_wasm, assets.champbuild_js, assets.champbuild_wasm, assets.champmore_js, assets.champmore_wasm, assets.matchup_js, assets.matchup_wasm, assets.matchmore_js, assets.matchmore_wasm, assets.games_js, assets.games_wasm, assets.gamemore_js, assets.gamemore_wasm, assets.gamelane_js, assets.gamelane_wasm, assets.finder_js, assets.finder_wasm, assets.findergrid_js, assets.findergrid_wasm, assets.learn_js, assets.learn_wasm, assets.patch_js, assets.patch_wasm, assets.pool_js, assets.pool_wasm, assets.daily_js, assets.daily_wasm, assets.dailydays_js, assets.dailydays_wasm, assets.home_js, assets.home_wasm, assets.homegame_js, assets.homegame_wasm };
+pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.search_js, assets.stats_js, assets.stats_wasm, assets.champion_js, assets.champion_wasm, assets.champbuild_js, assets.champbuild_wasm, assets.champmore_js, assets.champmore_wasm, assets.matchup_js, assets.matchup_wasm, assets.matchmore_js, assets.matchmore_wasm, assets.games_js, assets.games_wasm, assets.gamemore_js, assets.gamemore_wasm, assets.gamelane_js, assets.gamelane_wasm, assets.finder_js, assets.finder_wasm, assets.findergrid_js, assets.findergrid_wasm, assets.learn_js, assets.learn_wasm, assets.patch_js, assets.patch_wasm, assets.pool_js, assets.pool_wasm, assets.daily_js, assets.daily_wasm, assets.dailydays_js, assets.dailydays_wasm, assets.home_js, assets.home_wasm, assets.homegame_js, assets.homegame_wasm, assets.your_js, assets.your_wasm };
 
 /// Front-end files at the site root; `Options.static_dir` serves them from disk instead
 pub const shared_assets = [_]File{
@@ -390,7 +391,7 @@ pub const shared_pages = [_][]const u8{
 };
 
 /// Shared pages the static build writes but the sitemap leaves out
-pub const unlisted_pages = [_][]const u8{yourgame.page_path};
+pub const unlisted_pages = [_][]const u8{ yourgame.page_path, yourpage.page_path };
 
 pub fn robots(arena: std.mem.Allocator, opts: Options) ![]const u8 {
     if (!opts.public) return "User-agent: *\nDisallow: /\n";
@@ -412,6 +413,7 @@ test {
     _ = evalchart;
     _ = flat;
     _ = yourgame;
+    _ = yourpage;
     _ = scope;
     _ = @import("dailydata.zig");
     _ = @import("daily.zig");
@@ -522,6 +524,7 @@ pub fn renderShared(site: *const Site, w: *Writer, path: []const u8) !bool {
     }
     if (strip(path, "daily/", ".html")) |s| return daily_page.route(site, w, s);
     if (std.mem.eql(u8, path, yourgame.page_path)) return yourgame.writePage(site, w);
+    if (std.mem.eql(u8, path, yourpage.page_path)) return yourpage.writePage(site, w);
     const fixed = [_]struct { []const u8, []const u8, []const u8, html.Nav, *const fn (*Writer, prose.Info) Writer.Error!void }{
         .{ "method.html", "Method", "Where meiolol's numbers come from and how lane curves, champion statistics and the Daily Draft are made.", .method, prose.method },
         .{ "download.html", "Champ select helper", "The meiolol champ select helper, a desktop app for Windows, in development.", .none, prose.download },
