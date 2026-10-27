@@ -70,11 +70,11 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
         .imports = &.{
-            .{ .name = "desktop", .module = desktopModule(b, target, optimize, shell_options) },
+            .{ .name = "desktop", .module = desktopModule(b, m, target, optimize, shell_options) },
             .{ .name = "build_options", .module = shell_options },
         },
     });
-    shellUi(b, shell_test, target, optimize);
+    shellUi(b, shell_test, m.ui);
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = shell_test, .filters = test_filters })).step);
 
     b.step("fmt", "Format the Zig sources").dependOn(&b.addFmt(.{ .paths = &fmt_paths }).step);
@@ -278,13 +278,13 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
         .optimize = optimize,
     });
 
-    // The component system (docs/plan/ui/stack.md): std and tpl only, as it builds for
-    // the backend and for ui.wasm
+    // The component system (docs/plan/ui/stack.md): std, tpl and core only, as it builds
+    // for the backend and for ui.wasm
     const ui = b.createModule(.{
         .root_source_file = b.path("src/site/ui/root.zig"),
         .target = target,
         .optimize = optimize,
-        .imports = &.{.{ .name = "tpl", .module = tpl }},
+        .imports = &.{ .{ .name = "tpl", .module = tpl }, .{ .name = "core", .module = core } },
     });
 
     // HTTP pieces std leaves out (rate limits, signatures): std only, library-grade (src/net/root.zig)
@@ -406,9 +406,10 @@ fn uiWasm(b: *std.Build, family: []const u8) UiWasm {
     const wasm_target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .freestanding });
     const zjb = b.dependency("zjb", .{});
     const tpl = b.createModule(.{ .root_source_file = b.path("src/tpl/root.zig") });
+    const core = b.createModule(.{ .root_source_file = b.path("src/core/root.zig") });
     const ui = b.createModule(.{
         .root_source_file = b.path("src/site/ui/root.zig"),
-        .imports = &.{.{ .name = "tpl", .module = tpl }},
+        .imports = &.{ .{ .name = "tpl", .module = tpl }, .{ .name = "core", .module = core } },
     });
     const name = b.fmt("ui-{s}", .{family});
     const exe = b.addExecutable(.{ .name = name, .root_module = b.createModule(.{
@@ -492,9 +493,9 @@ fn desktopOptions(b: *std.Build, version: u64, edition: Edition) *std.Build.Step
 
 /// The app's poller and what it publishes (src/desktop_app.zig), for the shell: the dvui
 /// window imports the same files by path from src/
-/// `options` is the importer's build_options too: one module, as Zig refuses a file in two
-fn desktopModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode, options: *std.Build.Module) *std.Build.Module {
-    const m = modules(b, target, optimize);
+/// `options` is the importer's build_options too, and `m` gives the shell its ui: one
+/// module each, as Zig refuses a file in two (core, which ui imports)
+fn desktopModule(b: *std.Build, m: Modules, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode, options: *std.Build.Module) *std.Build.Module {
     return b.createModule(.{
         .root_source_file = b.path("src/desktop_app.zig"),
         .target = target,
@@ -516,6 +517,7 @@ fn shellExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.
         .optimize = optimize,
     });
     const options = desktopOptions(b, version, edition).createModule();
+    const m = modules(b, target, optimize);
     const exe = b.addExecutable(.{
         .name = "meiolol-shell",
         .root_module = b.createModule(.{
@@ -524,12 +526,12 @@ fn shellExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "c", .module = wv2.mod },
-                .{ .name = "desktop", .module = desktopModule(b, target, optimize, options) },
+                .{ .name = "desktop", .module = desktopModule(b, m, target, optimize, options) },
                 .{ .name = "build_options", .module = options },
             },
         }),
     });
-    shellUi(b, exe.root_module, target, optimize);
+    shellUi(b, exe.root_module, m.ui);
     exe.root_module.addWin32ResourceFile(.{ .file = b.path("src/desktop/meiolol.rc") });
     for ([_][]const u8{ "user32", "gdi32", "ole32", "shlwapi", "shell32", "advapi32", "psapi" }) |l|
         exe.root_module.linkSystemLibrary(l, .{});
@@ -539,8 +541,8 @@ fn shellExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.
 
 /// The app's page (src/shell/screens.zig): the ui module, ui-app.wasm and ui-practice.wasm
 /// with their loaders
-fn shellUi(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode) void {
-    mod.addImport("ui", modules(b, target, optimize).ui);
+fn shellUi(b: *std.Build, mod: *std.Build.Module, ui: *std.Build.Module) void {
+    mod.addImport("ui", ui);
     // Practice's file is embedded in the private edition only (files.zig)
     for ([_][]const u8{ "app", "practice" }) |f| {
         const u = uiWasm(b, f);
@@ -551,16 +553,17 @@ fn shellUi(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedTarg
 
 fn shellMac(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.OptimizeMode) *std.Build.Step.Compile {
     const options = desktopOptions(b, 0, .private).createModule();
+    const m = modules(b, target, optimize);
     const mod = b.createModule(.{
         .root_source_file = b.path("src/shell/mac.zig"),
         .target = target,
         .optimize = optimize,
         .imports = &.{
-            .{ .name = "desktop", .module = desktopModule(b, target, optimize, options) },
+            .{ .name = "desktop", .module = desktopModule(b, m, target, optimize, options) },
             .{ .name = "build_options", .module = options },
         },
     });
-    shellUi(b, mod, target, optimize);
+    shellUi(b, mod, m.ui);
     mod.linkFramework("AppKit", .{});
     mod.linkFramework("WebKit", .{});
     mod.linkSystemLibrary("objc", .{});

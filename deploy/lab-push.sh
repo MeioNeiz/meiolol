@@ -164,7 +164,15 @@ model() {
             break
         fi
     done
-    [[ "$(cat "$cache/from" 2>/dev/null)" == "$pick" ]] && cp "$cache/$kind"-*.json "$out/"
+    [[ "$(cat "$cache/from" 2>/dev/null)" == "$pick" ]] || return 0
+    # The new tester page reads draft-model.bin: made here once per pick, by this
+    # checkout's build (a build without tester-bin leaves the page this model short)
+    if [[ $kind == draft && ! -f "$cache/draft-model.bin" ]]; then
+        "$ROOT/zig-out/bin/meiolol" tester-bin "$cache" > /dev/null 2>&1 \
+            || echo "lab-push: no draft-model.bin for $pick (zig build, then it retries)" >&2
+    fi
+    cp "$cache/$kind"-*.json "$out/"
+    [[ $kind == draft && -f "$cache/draft-model.bin" ]] && cp "$cache/draft-model.bin" "$out/"
     return 0
 }
 

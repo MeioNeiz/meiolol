@@ -78,6 +78,7 @@ const usage = usage_head ++
     cmd_sitedata.usage_lean ++
     cmd_sitedata.usage_draft_model ++
     cmd_sitedata.usage_lane_model ++
+    cmd_sitedata.usage_tester_bin ++
     cmd_data.usage_raw_export ++
     cmd_site.usage_site ++
     cmd_site.usage_dev ++
@@ -146,6 +147,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "lean", cmd_sitedata.cmdLean },
     .{ "draft-model", cmd_sitedata.cmdDraftModel },
     .{ "lane-model", cmd_sitedata.cmdLaneModel },
+    .{ "tester-bin", cmd_sitedata.cmdTesterBin },
     .{ "raw-export", cmd_data.cmdRawExport },
     .{ "site", cmd_site.cmdSite },
     .{ "serve", cmd_site.cmdServe },

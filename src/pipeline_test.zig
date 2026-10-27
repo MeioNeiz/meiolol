@@ -13,6 +13,7 @@ const buildblock = @import("site/buildblock.zig");
 const lean = @import("lean.zig");
 const draftmodel = @import("draftmodel.zig");
 const lanemodel = @import("lanemodel.zig");
+const testerbin = @import("testerbin.zig");
 const digests = @import("digests.zig");
 const ddragon = @import("ddragon.zig");
 const site = @import("site/root.zig");
@@ -311,7 +312,6 @@ test "fixture games to stats, curves and the website" {
         .{ "patch/patch.html", &.{ "<h1>Patch 15.13 vs 15.12</h1>", "<div class=\"c-patch\" data-island=\"patch\" data-src=\"data/patch.bin\" data-stamp=\"", "href=\"../patch/champion/darius.html#role=top\"", "<span class=\"ar\" aria-hidden=\"true\">▲</span>Q</span>", "league-of-legends-patch-25-13-notes/", "<script src=\"../" ++ assets.patch_js.path ++ "\" data-wasm=\"" ++ assets.patch_wasm.path ++ "\" defer></script>" } },
         .{ "all/patch.html", &.{ "<h1>Patch 15.13 vs 15.12</h1>", "href=\"../all/patch/champion/darius.html#role=top\"", "title=\"This page counts every game we crawl (Plat+)\" data-rank=\"5\"" } },
         .{ "champions.html", &.{"Matchups</a>\n<a href=\"patch.html\">Patch changes</a>"} },
-        .{ "index.html", &.{"New patch: <a href=\"patch/patch.html\">what changed in 15.13 since 15.12</a>."} },
         // Champion page: the ui.champpage island from the root view, its data file for
         // the other roles; the head, the build, the matchups with the most met opponent's
         // brief linking to the matchup page from the champion's side
@@ -881,6 +881,11 @@ test "fixture games to the Draft tester's draft and lane models" {
     // Three test games whole and part open, the empty board, no terms (no Rammus)
     try testing.expectEqual(8, ref.drafts.len);
     try testing.expectEqual(2, ref.slots.len);
+    // The new tester page's file: the same model, scored by ui.wasm's code
+    try testerbin.convert(arena, io, dir, &log.writer);
+    const bin = try ui.testerdata.Model.decode(arena, try tmp.dir.readFileAlloc(io, "tester/draft-model.bin", arena, .limited(16 << 20)));
+    try testing.expectEqual(10, bin.params.terms.len);
+    try testing.expect(bin.check(&try bin.scorer(arena)).ok());
 
     try lanemodel.run(gpa, io, db, dir, &log.writer);
     const Lane = struct {

@@ -26,8 +26,10 @@ src/
   partials.zig       views partials (data/partials): the views write's games and mastery
                      contributions kept between writes (arch-site.md "Views partials")
   eval.zig           draft model on held-out newer games (`meiolol eval`, docs/model.md)
-  draftfile.zig      the admin Draft tester's model file: shapes, reference scorer,
-                     writer (shared with lab/draft.zig; docs/model.md "Draft model file")
+  draftfile.zig      the admin Draft tester's model file: shapes, writer (shared with
+                     lab/draft.zig; docs/model.md "Draft model file"); its scorer is
+                     core/draftscore.zig, which ui.wasm scores the tester page with
+  testerbin.zig      `meiolol tester-bin`: that file as draft-model.bin (ui/testerdata.zig)
   draftmodel.zig     `meiolol draft-model`: the shipped model as that file, daily on the box
   lanefile.zig       the tester's lane model file, as draftfile.zig (lab/lane.zig shares it)
   lanemodel.zig      `meiolol lane-model`: lab candidate team2 (imported as a module,
@@ -67,7 +69,8 @@ src/
                      a gradient checker; a worked example in root.zig's header. Nets
                      write their own forward and backward (no autograd)
   core/              pure, std only, shared: roles, statsfile (model file format),
-                     score (recommender), curvesfile (lane curves format)
+                     score (recommender), curvesfile (lane curves format), draftscore
+                     (Draft tester scorer)
   lcu/               League client: lockfile/process discovery, https (TLS to
                      127.0.0.1 trusting only riotgames.pem), session (champ select),
                      me (own mastery and solo tier)

@@ -9,6 +9,7 @@ const curves = @import("../curves.zig");
 const builds = @import("../builds.zig");
 const lean = @import("../lean.zig");
 const draftmodel = @import("../draftmodel.zig");
+const testerbin = @import("../testerbin.zig");
 const lanemodel = @import("../lanemodel.zig");
 const analysis = @import("../analysis.zig");
 const main = @import("../main.zig");
@@ -341,13 +342,37 @@ pub fn cmdLean(c: *Cmd) !u8 {
 pub const usage_draft_model =
     \\  draft-model the shipped draft model on every played game as the admin Draft
     \\              tester's draft-model.json and draft-ref.json (docs/model.md "Draft model
-    \\              file"); daily on the box
+    \\              file"), and draft-model.bin for the new tester page; daily on the box
     \\              --out DIR        default DATA/tester
     \\
 ;
 
 pub fn cmdDraftModel(c: *Cmd) !u8 {
-    return testerModel(c, draftmodel.run);
+    return testerModel(c, struct {
+        fn run(gpa: std.mem.Allocator, io: std.Io, db: anytype, dir: []const u8, w: *std.Io.Writer) !void {
+            try draftmodel.run(gpa, io, db, dir, w);
+            var arena: std.heap.ArenaAllocator = .init(gpa);
+            defer arena.deinit();
+            try testerbin.convert(arena.allocator(), io, dir, w);
+        }
+    }.run);
+}
+
+pub const usage_tester_bin =
+    \\  tester-bin  DIR/draft-model.json (the box's or a lab export) as DIR/draft-model.bin,
+    \\              the file the Draft tester page reads (deploy/lab-push.sh runs it)
+    \\              DIR
+    \\
+;
+
+pub fn cmdTesterBin(c: *Cmd) !u8 {
+    const dir = c.next() orelse return error.Usage;
+    if (c.next() != null) return error.Usage;
+    var buf: [256]u8 = undefined;
+    var stdout = std.Io.File.stdout().writerStreaming(c.init.io, &buf);
+    defer stdout.interface.flush() catch {};
+    try testerbin.convert(c.arena, c.init.io, dir, &stdout.interface);
+    return 0;
 }
 
 pub const usage_lane_model =

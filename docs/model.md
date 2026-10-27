@@ -5477,8 +5477,11 @@ comp terms the lab's. It also writes champ/<id>.json (and .gz) per champion: by 
 chance against an average draft (95% range) and with each opponent ("vs") and ally
 ("with") it has a cell with, [role, champion, chance, games], every other slot its
 role's average pick; the private site's pv.js shows them on champion and matchup pages
-(docs/plan/app.md "Private site"). The scorer and writer are src/draftfile.zig, shared
-with the lab.
+(docs/plan/app.md "Private site"). The writer is src/draftfile.zig and the scorer
+src/core/draftscore.zig, shared with the lab and ui.wasm. `draft-model` also writes
+draft-model.bin, the same model encoded for the new tester page (ui/testerdata.zig),
+only when the Zig scorer reading it matches draft-ref.json; `meiolol tester-bin DIR`
+converts a lab export the same way (deploy/lab-push.sh).
 
 `meiolol-lab draft SNAP --export DIR` (src/lab/draft.zig, built with a candidate that has
 `exportModel`, today win-ratings) fits on every game in the snapshot and writes

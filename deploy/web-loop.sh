@@ -366,7 +366,7 @@ run_daily() {
         (rm -rf data/tester.new
         if batch bin/meiolol draft-model --out data/tester.new > data/tester.log 2>&1 \
             && batch bin/meiolol lane-model --out data/tester.new >> data/tester.log 2>&1 \
-            && batch gzip -kf data/tester.new/*.json; then
+            && batch gzip -kf data/tester.new/*.json data/tester.new/*.bin; then
             rm -rf data/tester.old
             [[ -d data/tester ]] && mv data/tester data/tester.old
             mv data/tester.new data/tester && rm -rf data/tester.old
