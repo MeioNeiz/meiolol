@@ -12,9 +12,9 @@ on 26 Oct), and its 2 cores sit at load ~3. The move replaces the Hetzner BX11 o
 - ssh alias `essex-vm` (user jacob, key ~/.ssh/essex_vm), Tailscale 100.95.95.44 on
   Jacob's tailnet (MeioNeiz@github), direct from the Mac. Sudo asks for the password
   (from Ethan's note; goes into vault meiolol/essex-vm)
-- KVM, 8 vCPU shown as "QEMU Virtual CPU" (no AVX2 until the CPU type is host), 15 GB,
-  Ubuntu 24.04 x86_64, 60 GB disk (45 GB free). box.sh builds for `uname -m`, so
-  x86_64-linux-musl with no change
+- KVM, 16 vCPU of a Xeon E5-2630 v3 (CPU type host since 27 Oct: AVX2, builds at
+  x86_64_v3 from box.sh's host_target), 62 GB, Ubuntu 24.04 x86_64, 60 GB disk (14 GB
+  free; data is on /srv/meiolol)
 - Network shares, CIFS, both mounted `soft`: /mnt/storage (Essex Storage, 192.168.18.12,
   14.5 TB free) and /mnt/jacob (Megatron, 192.168.18.54, 3.1 TB free)
 - Measured 26 Oct (Python, O_DIRECT, 2 GB file; SQLite test 2.8 GB WAL db, writer of
@@ -99,7 +99,8 @@ damaged cachevol can't be repaired)
 - SQLite test with the cache: commits 11-12/s (p50 ~62 ms), lookups beside the writer
   243-260/s, cold scan 147-171 MB/s, cold row reads 1,450-1,640/s: scans near local
   disk, row reads ~2x the bare image, writes still at Megatron's pace
-- Left: a reboot test (disk back, services after it); fstrim.timer; backups/ to
+- Reboot (27 Oct, Ethan's RAM and CPU change): disk back, but the user units start
+  before it and fail CHDIR once, then come up on Restart's 60 s. Left: fstrim.timer; backups/ to
   Megatron outside the image (VM8)
 
 ### VM2: base host
@@ -201,7 +202,6 @@ Your games once C01 crawls (its Riot calls go through the crawler's proxy)
 
 ## Later
 
-- `-Dcpu` for C01's real CPU once its type is host
 - Plain local calls in place of the localhost ssh aliases (VM4)
 - Retune for C01 (after VM3's baseline): the box's limits were set for 2 cores and a
   72 MB/s disk. More parallel read runs in the views write (4 today), more reads in

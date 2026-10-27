@@ -20,6 +20,25 @@ export RSYNC_RSH="ssh ${ssh_opts[*]}"
 # sync sets it when the box already had this build's binary, scripts and units
 unchanged=0
 
+# The host's target and CPU level as "TARGET CPU". A cross build is baseline x86-64
+# otherwise: no popcnt or SSE4, which C01's QEMU CPU has; its AVX2 shows once Ethan sets
+# the VM's CPU type to host, and the next build picks v3 up
+host_target() {
+    ssh "$HOST" 'uname -m; grep -m1 "^flags" /proc/cpuinfo' | awk '
+        NR == 1 { arch = $1; next }
+        { for (i = 2; i <= NF; i++) f[$i] = 1 }
+        END {
+            cpu = "baseline"
+            if (arch == "x86_64" && f["cx16"] && f["lahf_lm"] && f["popcnt"] && f["pni"] \
+                && f["ssse3"] && f["sse4_1"] && f["sse4_2"]) {
+                cpu = "x86_64_v2"
+                if (f["avx"] && f["avx2"] && f["bmi1"] && f["bmi2"] && f["f16c"] && f["fma"] \
+                    && f["abm"] && f["movbe"] && f["xsave"]) cpu = "x86_64_v3"
+            }
+            print arch "-linux-musl", cpu
+        }'
+}
+
 # Builds a clean checkout of REV (default HEAD) in deploy/build-tree.sh's tree, never the
 # working tree: other sessions keep uncommitted work there. The binary and scripts are
 # staged so the tree is free again before the copy. The box logs each deploy in DEPLOYED.
@@ -28,19 +47,20 @@ unchanged=0
 # Only commits on origin/main: those passed the pre-push ci and are what DEPLOYED and the
 # Deploys tab name; a by-hand start from an unpushed HEAD skipped both
 sync() {
-    local rev tree target
+    local rev tree t target cpu
     rev=$(git -C "$ROOT" rev-parse "${REV:-HEAD}")
     git -C "$ROOT" merge-base --is-ancestor "$rev" origin/main \
         || { echo "box.sh: ${rev:0:7} is not on origin/main: push it first (the pre-push ci)"; exit 1; }
-    target=$(ssh "$HOST" uname -m)-linux-musl
+    t=$(host_target)
+    read -r target cpu <<< "$t"
     tree=$(mktemp -d)
     # shellcheck disable=SC2064 # expand now: tree is local to sync
     trap "rm -rf '$tree'" EXIT
     # Not the Windows desktop app: only deploy/desktop-release.sh puts a new one on the box
-    "$HERE/build-tree.sh" box "$rev" sh -c 'zig build backend -Dtarget="$1" \
+    "$HERE/build-tree.sh" box "$rev" sh -c 'zig build backend -Dtarget="$1" -Dcpu="$4" \
         -Doptimize=ReleaseSafe --prefix zig-out/box --cache-dir "$2/.zig-cache" \
         && mkdir "$3/zig-out" && cp -R zig-out/box "$3/zig-out/" && cp -R deploy "$3/"' \
-        _ "$target" "$ROOT" "$tree"
+        _ "$target" "$ROOT" "$tree" "$cpu"
     # check-deploy.sh (zig build ci) reads both lists: each committed, every unit that runs
     # in ~/ml/meiolol listed, every script a unit or listed script runs listed
     local scripts="web-loop.sh health.sh health-loop.sh backup-loop.sh backup-serve.sh render-swap.sh archive-serve.sh cache-version.sh cache-warm.sh box-lib.sh" s
@@ -354,7 +374,8 @@ SQL
         fi
         paths=("${@:2}")
         (( ${#paths[@]} )) || paths=(src/site)
-        target=$(ssh "$HOST" uname -m)-linux-musl
+        t=$(host_target)
+        read -r target cpu <<< "$t"
         tree=$(mktemp -d)
         git -C "$ROOT" worktree add -q --detach "$tree" HEAD
         # shellcheck disable=SC2064 # expand now
@@ -362,7 +383,7 @@ SQL
         git -C "$ROOT" diff --binary HEAD -- "${paths[@]}" | git -C "$tree" apply --allow-empty
         git -C "$ROOT" ls-files -z --others --exclude-standard -- "${paths[@]}" \
             | (cd "$ROOT" && xargs -0 -I{} rsync -R {} "$tree/")
-        (cd "$tree" && zig build backend -Dtarget="$target" -Doptimize=ReleaseSafe \
+        (cd "$tree" && zig build backend -Dtarget="$target" -Dcpu="$cpu" -Doptimize=ReleaseSafe \
             --prefix zig-out/preview --cache-dir "$ROOT/.zig-cache")
         stop_preview
         scp -q "$tree/zig-out/preview/bin/meiolol" "$HOST:$DIR/bin/meiolol-preview"
