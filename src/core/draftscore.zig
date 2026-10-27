@@ -174,8 +174,8 @@ pub const Scorer = struct {
     k: usize = 0,
     /// comp.team's kinds, parsed
     kinds: []const TeamKind = &.{},
-    /// pairs.cells by pairKey
-    cells: std.AutoHashMapUnmanaged(u64, f64) = .empty,
+    /// Index into pairs.cells by pairKey
+    cells: std.AutoHashMapUnmanaged(u64, u32) = .empty,
 
     /// champs: patchShare(champion, role) f64, the role averages' weights
     pub fn init(arena: std.mem.Allocator, e: Params, platform: u8, champs: anytype) !Scorer {
@@ -199,9 +199,9 @@ pub const Scorer = struct {
         } else for (e.terms) |t| if (t.p.len != 0) return error.BadCompShape;
         if (e.pairs) |pr| {
             for (pr.groups) |g| if (g.r >= n_role or g.q >= n_role or (!std.mem.eql(u8, g.kind, "ally") and !std.mem.eql(u8, g.kind, "matchup"))) return error.BadPairGroup;
-            for (pr.cells) |c| {
+            for (pr.cells, 0..) |c, i| {
                 if (c.group >= pr.groups.len) return error.BadPairGroup;
-                try sc.cells.put(arena, pairKey(c.group, c.a, c.b), c.theta);
+                try sc.cells.put(arena, pairKey(c.group, c.a, c.b), @intCast(i));
             }
         }
         const n_raw: usize = if (sc.kinds.len > 0) raw_len else 0;
@@ -321,8 +321,15 @@ pub const Scorer = struct {
     }
 
     pub fn cell(sc: *const Scorer, group: usize, a: u32, b: u32) f64 {
-        if (a == 0 or b == 0) return 0;
-        return sc.cells.get(pairKey(group, a, b)) orelse 0;
+        const c = sc.cellOf(group, a, b) orelse return 0;
+        return c.theta;
+    }
+
+    pub fn cellOf(sc: *const Scorer, group: usize, a: u32, b: u32) ?PairCell {
+        if (a == 0 or b == 0) return null;
+        const pr = sc.e.pairs orelse return null;
+        const i = sc.cells.get(pairKey(group, a, b)) orelse return null;
+        return pr.cells[i];
     }
 
     /// The comp part for whole teams, by side (0 blue) and role
@@ -332,6 +339,111 @@ pub const Scorer = struct {
             sl[side][r] = sc.slot(teams[side][r], r);
         };
         return sc.compLogit(&sl);
+    }
+
+    /// The change `id` in seat (side, r) makes to its side's chance over the role's average
+    /// pick, split into the parts that test as real (docs/learned.md "Win"): its strength,
+    /// the bot duo, the lane matchup, bot against support. Every other part (other pairs,
+    /// factor and comp terms) is the rest. Parts are logit terms times the secant slope
+    /// over the whole change, so parts and rest sum to the change exactly
+    pub fn why(sc: *const Scorer, teams: [2][n_role]u32, side: u1, r: usize, id: u32) Why {
+        var t = teams;
+        t[side][r] = 0;
+        const c0 = sc.blue(t);
+        t[side][r] = id;
+        const c1 = sc.blue(t);
+        var w: Why = .{ .empty = if (side == 0) c0 else c0.flip(), .with = if (side == 0) c1 else c1.flip() };
+        const d = w.with.p - w.empty.p;
+        const dl = logitOf(w.with.p) - logitOf(w.empty.p);
+        const slope = if (@abs(dl) > 1e-9) d / dl else w.with.p * (1 - w.with.p);
+        const k = 100 * slope * sc.e.temperature;
+        const games = if (sc.terms.get(termKey(id, r))) |i| sc.e.terms[i].games else 0;
+        w.add(.{ .kind = .base, .other = id, .role = @intCast(r), .pp = k * (sc.slot(id, r).b - sc.average[r].b), .games = games });
+        const mine = t[side];
+        const theirs = t[1 - side];
+        if (sc.e.pairs) |pr| for (pr.groups, 0..) |g, gi| {
+            if (g.r != r and g.q != r) continue;
+            const ally = std.mem.eql(u8, g.kind, "ally");
+            const bot = g.r != g.q and g.r >= 3 and g.q >= 3;
+            if (!bot and (ally or g.r != g.q)) continue;
+            const o: u8 = if (g.r == r) g.q else g.r;
+            var sign: f64 = 1;
+            const c = if (ally)
+                (if (g.r == r) sc.cellOf(gi, id, mine[o]) else sc.cellOf(gi, mine[o], id))
+            else if (g.r != g.q)
+                (if (g.r == r) sc.cellOf(gi, id, theirs[o]) else blk: {
+                    sign = -1;
+                    break :blk sc.cellOf(gi, theirs[o], id);
+                })
+            else blk: {
+                const e = theirs[o];
+                if (e == id) continue;
+                if (e < id) sign = -1;
+                break :blk sc.cellOf(gi, @min(id, e), @max(id, e));
+            };
+            const x = c orelse continue;
+            w.add(.{ .kind = if (ally) .ally else .enemy, .other = if (ally) mine[o] else theirs[o], .role = o, .pp = k * sign * x.theta, .games = x.games });
+        };
+        w.rest = 100 * d;
+        for (w.parts()) |x| w.rest -= x.pp;
+        return w;
+    }
+};
+
+fn logitOf(p: f64) f64 {
+    const q = std.math.clamp(p, 1e-12, 1 - 1e-12);
+    return @log(q / (1 - q));
+}
+
+/// A named part's kind: the pick's own strength, a duo, a matchup (core.score's, so the
+/// tester and Daily word them alike)
+pub const Kind = @import("score.zig").Reason.Kind;
+
+pub const Part = struct {
+    kind: Kind,
+    /// The other champion; the pick itself for base
+    other: u32,
+    /// The other champion's role
+    role: u8,
+    /// Points of the pick's side's win chance
+    pp: f64,
+    /// The champion-role's games for base, the pair cell's otherwise
+    games: u32,
+};
+
+pub const max_parts = 6;
+
+pub const Why = struct {
+    /// The side's chance with the role's average pick in the seat, and with the pick
+    empty: Chance,
+    with: Chance,
+    buf: [max_parts]Part = undefined,
+    n: u8 = 0,
+    /// Every part not named, points
+    rest: f64 = 0,
+
+    fn add(w: *Why, p: Part) void {
+        if (w.n == max_parts) return;
+        w.buf[w.n] = p;
+        w.n += 1;
+    }
+
+    pub fn parts(w: *const Why) []const Part {
+        return w.buf[0..w.n];
+    }
+
+    /// Points over the role's average pick: the parts and the rest
+    pub fn total(w: *const Why) f64 {
+        return 100 * (w.with.p - w.empty.p);
+    }
+
+    /// What the draft adds: the total less the pick's own strength
+    pub fn fit(w: *const Why) f64 {
+        var f = w.total();
+        for (w.parts()) |x| if (x.kind == .base) {
+            f -= x.pp;
+        };
+        return f;
     }
 };
 
@@ -381,4 +493,75 @@ test "scorer: parameters a file got wrong are refused, not indexed" {
     try std.testing.expectError(error.BadCompShape, Scorer.init(a, p, 0, &None{}));
     p.comp = .{ .stats = &stats, .S = &one, .A = &one, .S_sd = &.{}, .A_sd = &.{}, .team = &.{.{ .kind = "balanced", .stat = 0, .weight = 1 }} };
     try std.testing.expectError(error.UnknownTeamTerm, Scorer.init(a, p, 0, &None{}));
+}
+
+test "why: strength, bot duo, lane and bot-support matchups named, the rest summed, all adding up" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const Even = struct {
+        fn patchShare(_: *const @This(), _: u32, _: usize) f64 {
+            return 1;
+        }
+    };
+    const t = struct {
+        fn term(c: u32, r: u8, b: f32) Term {
+            return .{ .champion = c, .role = r, .games = 100 * c, .b = b, .sd = 0.05 };
+        }
+    }.term;
+    const terms = [_]Term{ t(10, 0, 0.1), t(11, 0, -0.1), t(20, 2, 0.2), t(21, 2, 0), t(30, 3, 0.3), t(31, 3, -0.3), t(40, 4, 0), t(41, 4, 0.2) };
+    const g = struct {
+        fn group(kind: []const u8, r: u8, q: u8) PairGroup {
+            return .{ .name = "", .kind = kind, .r = r, .q = q, .sd = 0.1, .fitted = 1, .shipped = 1 };
+        }
+    }.group;
+    const groups = [_]PairGroup{ g("ally", 3, 4), g("ally", 0, 1), g("matchup", 2, 2), g("matchup", 3, 4), g("matchup", 0, 2) };
+    const cells = [_]PairCell{
+        .{ .group = 0, .a = 30, .b = 40, .theta = 0.5, .games = 900 },
+        .{ .group = 2, .a = 20, .b = 21, .theta = 0.4, .games = 800 },
+        .{ .group = 3, .a = 30, .b = 41, .theta = 0.2, .games = 700 },
+        .{ .group = 4, .a = 10, .b = 21, .theta = 0.3, .games = 600 },
+    };
+    const p: Params = .{ .kind = "ratings", .dim = 0, .intercept = &.{0.02}, .w = @splat(0), .z = @splat(0), .terms = &terms, .pairs = .{ .min_games = 0, .groups = &groups, .cells = &cells }, .temperature = 0.9 };
+    const sc = try Scorer.init(a, p, 0, &Even{});
+    const teams: [2][n_role]u32 = .{ .{ 10, 0, 20, 30, 40 }, .{ 0, 0, 21, 31, 41 } };
+    const eps = 1e-9;
+    for (0..2) |side| for (0..n_role) |r| {
+        const id = teams[side][r];
+        if (id == 0) continue;
+        const w = sc.why(teams, @intCast(side), r, id);
+        var sum = w.rest;
+        for (w.parts()) |x| sum += x.pp;
+        try std.testing.expectApproxEqAbs(w.total(), sum, eps);
+        try std.testing.expectEqual(Kind.base, w.parts()[0].kind);
+        try std.testing.expectEqual(100 * id, w.parts()[0].games);
+    };
+    // Blue mid: strength and the lane, nothing left over (no factors, no comp)
+    var w = sc.why(teams, 0, 2, 20);
+    try std.testing.expectEqual(2, w.n);
+    try std.testing.expectEqual(Part{ .kind = .enemy, .other = 21, .role = 2, .pp = w.parts()[1].pp, .games = 800 }, w.parts()[1]);
+    try std.testing.expect(w.parts()[1].pp > 0);
+    try std.testing.expectApproxEqAbs(0, w.rest, eps);
+    // Red's view of the same lane: hurt by it
+    w = sc.why(teams, 1, 2, 21);
+    try std.testing.expect(w.parts()[1].pp < 0);
+    // Blue top: top against their mid isn't named, so it is all rest
+    w = sc.why(teams, 0, 0, 10);
+    try std.testing.expectEqual(1, w.n);
+    try std.testing.expect(w.rest > 0);
+    // Blue support: the duo with its bot; red's support isn't its matchup
+    w = sc.why(teams, 0, 4, 40);
+    try std.testing.expectEqual(2, w.n);
+    try std.testing.expectEqual(Kind.ally, w.parts()[1].kind);
+    try std.testing.expectEqual(30, w.parts()[1].other);
+    // Red support: into blue's bot, a loss; Fit leaves its strength out
+    w = sc.why(teams, 1, 4, 41);
+    try std.testing.expectEqual(2, w.n);
+    try std.testing.expectEqual(Kind.enemy, w.parts()[1].kind);
+    try std.testing.expectEqual(30, w.parts()[1].other);
+    try std.testing.expect(w.parts()[1].pp < 0);
+    try std.testing.expectApproxEqAbs(w.total() - w.parts()[0].pp, w.fit(), eps);
+    // An empty seat's average: no change, nothing named but its zero strength
+    w = sc.why(teams, 1, 0, 0);
+    try std.testing.expectApproxEqAbs(0, w.total(), eps);
 }
