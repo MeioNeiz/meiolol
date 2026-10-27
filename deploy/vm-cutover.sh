@@ -22,7 +22,12 @@ TUNNEL=1c7e296d-91e9-4538-8598-10833de3b9b0
 BOX_UNITS="meiolol-crawl meiolol-web meiolol-render@a meiolol-render@b meiolol-backup \
 meiolol-health meiolol-cache-version.path"
 log() { echo "$(date -u +%FT%TZ) $*" | tee -a "$S/log"; }
-die() { log "STOPPED: $*"; cc-note needs --now "VM6 cut-over stopped: $* ($S/log)"; exit 1; }
+# A toast on the Mac (as mac-watch.sh), and the note of the session that started this
+notify() {
+    wz notify --for 3600 "meiolol VM6" "$1" 2> /dev/null || true
+    cc-note needs --now "$1" 2> /dev/null || true
+}
+die() { log "STOPPED: $*"; notify "VM6 cut-over stopped: $* ($S/log)"; exit 1; }
 step() {
     [[ -e $S/$1 ]] && return 0
     log "step $1"
@@ -157,9 +162,9 @@ mac_switch() {
 }
 
 # Its mirrors and archive pulls reach C01 only over Tailscale; until it has it they fail
-# and log, nothing else
+# and log, nothing else. The gpu-box may be off: then left for a rerun
 gpu_box() {
-    ssh gpu-box 'f=~/.ssh/config; cp "$f" "$f.bak-vm6" && awk "
+    ssh -o ConnectTimeout=20 gpu-box 'f=~/.ssh/config; cp "$f" "$f.bak-vm6" && awk "
         /^Host / { h = \$2 }
         h ~ /^meiolol-(archive|backup)\$/ && \$1 == \"HostName\" { \$0 = \"  HostName 100.95.95.44\" }
         h ~ /^meiolol-(archive|backup)\$/ && \$1 == \"User\" { \$0 = \"  User jacob\" }
@@ -177,6 +182,9 @@ step c01_start
 step dns
 step verify
 step mac_switch
-step gpu_box
-log "VM6 done: watch a day of crawl, a web round, a backup mirrored, a cache-warm run"
-cc-note needs --now "VM6 cut-over done: meio.lol is on C01 ($S/log)"
+left=''
+if [[ ! -e $S/gpu_box ]]; then
+    if gpu_box; then touch "$S/gpu_box"; else left='; gpu-box off: rerun deploy/vm-cutover.sh'; fi
+fi
+log "VM6 done$left. Watch a day of crawl, a web round, a backup mirrored, a cache-warm run"
+notify "VM6 cut-over done: meio.lol is on C01$left ($S/log)"
