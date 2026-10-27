@@ -36,9 +36,9 @@ docs/plan.md "Now". Read it first.
 - Local site: `deploy/dev.sh`, one server for all sessions at localhost:8080, rebuilt
   on each edit (data/snap; `--exports` refreshes the box's curves and builds when it
   warns the curves are an old version)
-- Zig 0.16/0.17 std changed a lot (std.Io everywhere, renames): LSP hover/goToDefinition
-  (ZLS; ToolSearch "select:LSP") first; grep the std source (`$(zig env | grep
-  lib_dir)`) only when LSP has no answer
+- Zig 0.16/0.17 std changed a lot (std.Io everywhere, renames): look it up, don't recall
+  it. `deploy/zigstd.sh PATTERN [PATH under std]` greps the std source; the exact
+  signature at an existing call site: LSP hover (ZLS; ToolSearch "select:LSP")
 
 ## Hosts
 
