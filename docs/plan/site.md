@@ -273,9 +273,7 @@ detected cross-role kinds. Admin and /p/ only; the public draft tool follows J2.
   PUUIDs); streamer mode only hides names live, so finished games show everyone. Check
   the live API serves names (`deploy/jomify.sh install api` if not); Daily Draft stays
   nameless unless Jacob says otherwise
-- Reviewer walk (screenshots docs/review-shots/), left: unknown URLs get a plain-text
-  "not found" from meiolol-render (a site 404 page needs nginx error_page); GIFs and a
-  short demo video
+- Reviewer walk (screenshots docs/review-shots/), left: GIFs and a short demo video
 - Outage copies, left: home page from the renderer (core build without the DB), a
   pipeline test for /admin/api/pages.txt
 - Admin polish, low while the panel is Jacob's only (J9): fix3 leftovers R48-R50, R58,

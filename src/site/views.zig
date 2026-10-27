@@ -139,6 +139,16 @@ pub const Loaded = struct {
         return null;
     }
 
+    /// The 404 page for `path`, from the shared view, in `arena`; error.Loading before
+    /// that view loads
+    pub fn notFound(l: *Loaded, arena: std.mem.Allocator, path: []const u8) ![]const u8 {
+        var shared = (try l.site(html.View.shared)).*;
+        shared.arena = arena;
+        var aw: Writer.Allocating = .init(arena);
+        try root.renderNotFound(&shared, &aw.writer, path);
+        return aw.written();
+    }
+
     /// The u64 after the magic: a file with another came from a binary whose types or
     /// part sources differ (partKeys); this one renders from it only when they match
     pub fn viewsFormat() u64 {

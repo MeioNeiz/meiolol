@@ -130,7 +130,8 @@ without its slash with a 301.
   /home/ubuntu/meiolol.conf.bak-*); `ls` them to roll back
 - jomify nginx (/etc/nginx/conf.d/meiolol.conf): try_files, then `@render` (upstream
   meiolol_render: the box twice, for the retry): proxy cache /var/cache/nginx/meiolol (2
-  GB, key `$uri|$meiolol_version`), 200s 10 min, 404s 1 min, stale copies while the box
+  GB, key `$uri|$meiolol_version`), 200s 10 min, 404s 1 min (the site's own 404 page,
+  status kept: only 5xx are intercepted), stale copies while the box
   is down or refreshing, one render per page under a burst. Header X-Meiolol-Render:
   HIT, MISS, STALE, UPDATING
 - Cache version: each renderer load (start or reload) gets a version, its load time in

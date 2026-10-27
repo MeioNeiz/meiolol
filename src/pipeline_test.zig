@@ -703,6 +703,18 @@ test "fixture games to stats, curves and the website" {
     for ([_][]const u8{ "champion/nobody.html", "all/champion/darius.html", "matchup/top/darius-vs-darius.html", "matchup/mid/darius-vs-mordekaiser.html", "all/daily.html", "patch/learn.html", "patch/", "nosuch/index.html", "data/your-example.json" }) |path| {
         try testing.expectEqual(null, try loaded.get(arena, path));
     }
+    // The renderer's 404 page for them (serve.notFoundPage): the site's chrome, links
+    // and assets from the request's directory, never indexed
+    {
+        const page = try loaded.notFound(arena, "matchup/top/nobody.html");
+        for ([_][]const u8{ "<h1>Page not found</h1>", "href=\"../../index.html\">Home</a>", "href=\"../../champions.html\">Champions</a>", "<meta name=\"robots\" content=\"noindex\">", "<link rel=\"stylesheet\" href=\"../../" }) |want| {
+            if (std.mem.find(u8, page, want) == null) {
+                std.debug.print("404 page lacks {s}\n", .{want});
+                return error.TestUnexpectedResult;
+            }
+        }
+        try testing.expect(std.mem.find(u8, try loaded.notFound(arena, "nosuch"), "href=\"index.html\">Home</a>") != null);
+    }
 
     // `--static core` (deploy/web-loop.sh): only core_static and the front-end files, all
     // at the site root; everything the full build writes is still served (public here,

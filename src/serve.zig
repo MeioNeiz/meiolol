@@ -425,7 +425,28 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
     if (ctx.opts.root != null) for (candidates[0..n]) |name| {
         if (try serveFile(ctx, request, name, gzip)) return;
     };
+    if (ctx.opts.render) |rendered| return notFoundPage(ctx, rendered, request, path);
     return notFound(request);
+}
+
+/// The site's own 404 page, status kept: nginx passes it through (@render intercepts
+/// only 5xx), and a reviewer's mistyped URL gets the site, not a line of text
+fn notFoundPage(ctx: *Context, rendered: *Rendered, request: *std.http.Server.Request, path: []const u8) !void {
+    const entry = rendered.acquire();
+    defer rendered.release(entry);
+    var arena_state: std.heap.ArenaAllocator = .init(ctx.gpa);
+    defer arena_state.deinit();
+    const body = entry.loaded.notFound(arena_state.allocator(), path) catch |err| switch (err) {
+        error.Loading => return notFound(request),
+        else => return err,
+    };
+    try request.respond(body, .{
+        .status = .not_found,
+        .extra_headers = &.{
+            .{ .name = "content-type", .value = "text/html; charset=utf-8" },
+            .{ .name = "cache-control", .value = "no-cache" },
+        },
+    });
 }
 
 /// The pages and files of the views loaded so far, a path from the site root a line,

@@ -564,6 +564,27 @@ pub fn renderShared(site: *const Site, w: *Writer, path: []const u8) !bool {
     return false;
 }
 
+/// The site's 404 page for a request to `path` (from the site root, no page there): its
+/// links and assets relative to that path's directory, never indexed
+pub fn renderNotFound(site: *const Site, w: *Writer, path: []const u8) !void {
+    var p = try site.sharedPage("Page not found | meiolol", "No page at this address.", .none);
+    const depth = std.mem.countScalar(u8, path, '/');
+    const root_buf = try site.arena.alloc(u8, 3 * depth);
+    for (0..depth) |i| @memcpy(root_buf[3 * i ..][0..3], "../");
+    p.root = root_buf;
+    p.index = false;
+    try html.head(w, p);
+    try w.print(
+        \\<div class="prose">
+        \\<h1>Page not found</h1>
+        \\<p class="lead">There's no page at this address: it may have moved, or the link has a typo.</p>
+        \\<p><a href="{s}index.html">Home</a> · <a href="{s}champions.html">Champions</a> · <a href="{s}matchup/index.html">Matchups</a></p>
+        \\</div>
+        \\
+    , .{ p.root, p.root, p.root });
+    try html.foot(w, p);
+}
+
 /// `path` without `prefix` and `suffix`; null unless it has both
 fn strip(path: []const u8, prefix: []const u8, suffix: []const u8) ?[]const u8 {
     if (path.len < prefix.len + suffix.len) return null;
