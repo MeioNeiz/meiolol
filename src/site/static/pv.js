@@ -20,12 +20,12 @@
     return r.json();
   };
   const slice = id => getJson(`/p/models/champ/${id}.json`);
-  const about = "The shipped draft model (every region and patch, refitted daily): the team's win chance with every other pick its role's average. Private: the public site never shows it.";
+  const about = "Private, for admin logins only: the shipped draft model's estimate (every region and patch, refitted daily) of the team's win chance with every other pick its role's average. The public site never shows it.";
 
   if (document.readyState === "loading") await new Promise(r => document.addEventListener("DOMContentLoaded", r));
   const style = document.createElement("style");
   style.textContent = ".pv-line{margin:8px 0 0;font-size:13px;color:var(--t2)}.pv-line b{color:var(--accent)}" +
-    ".pv-tag{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin-right:6px}" +
+    ".pv-tag{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin-right:6px;cursor:help;text-decoration:underline dotted}" +
     ".pv-box{padding:0 var(--sp-4,16px)}.pv-box .pv-line{margin:0 0 4px}";
   const para = (...parts) => {
     const p = document.createElement("p");
@@ -63,9 +63,8 @@
       // Our own redraw is a mutation too: only a change of what's shown draws
       if (key === drawn) return;
       drawn = key;
-      const parts = ["Model, against an average draft: "];
-      s.roles.filter(x => roles.includes(ROLES[x.role])).forEach((x, i) => parts.push(i ? ", " : "", `${WORDS[x.role]} `, bold(pct(x.win[0])), ` (${pct(x.win[1])} to ${pct(x.win[2])})`));
-      const lines = [para(...parts)];
+      // The shown role only: every role on one line read as clutter
+      const lines = r ? [para("Draft model: ", bold(pct(r.win[0])), ` in ${WORDS[role]} against an average draft (${pct(r.win[1])} to ${pct(r.win[2])})`)] : [];
       const other = rel ? WORDS.indexOf(rel[1]) : -1;
       const ally = rel?.[2] === "ally";
       const x = r && other >= 0 && (ally ? r.with : r.vs).find(v => v[0] === other && v[1] === ids.get(who));

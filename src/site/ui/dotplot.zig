@@ -26,8 +26,8 @@ pub const Dot = struct {
     /// The figure read out with the name ("49.9%")
     fig: tree.Text,
     thin: bool = false,
-    /// The matchup page: a double click opens it (Jacob v9: one click shows the brief, a
-    /// double click is the shortcut)
+    /// The matchup page: a click on the chosen dot opens it, so a double click does too
+    /// (Jacob v9: one click shows the brief); a badge on the chosen dot says so
     href: ?[]const u8 = null,
 };
 
@@ -48,6 +48,8 @@ const W = struct {
     pub const harder = plain("harder");
     pub const easier = plain("easier");
     pub const dot = phrase.Phrase("{n:text} {v:text}");
+    pub const open_dot = phrase.Phrase("{n:text} {v:text}, open matchup");
+    pub const open = plain(" · open ›");
     pub const games = phrase.Phrase("{n:count} games");
 };
 
@@ -144,6 +146,7 @@ pub const DotPlot = struct {
                 const k = o[i];
                 const x = d.dots[k];
                 const on = ch == k;
+                const opens = on and x.href != null;
                 // The tip beside the button, not in it: its words aren't the button's label
                 kids.add(h.span(.{ .key = k, .class = "d" }, .{
                     h.button(.{
@@ -152,12 +155,12 @@ pub const DotPlot = struct {
                         .tabindex = if (on) @as(i8, 0) else -1,
                         .data_thin = x.thin,
                         .data_ref = if (on) "dot" else null,
+                        .data_opens = opens,
                         .aria_pressed = on,
-                        .aria_label = W.dot.with(h, .{ .n = x.champ.name, .v = x.fig.s }),
-                        .on_click = h.on(d, .{ .pick = k }),
-                        .on_dblclick = if (x.href != null) h.on(d, .{ .open = k }) else null,
+                        .aria_label = if (opens) W.open_dot.with(h, .{ .n = x.champ.name, .v = x.fig.s }) else W.dot.with(h, .{ .n = x.champ.name, .v = x.fig.s }),
+                        .on_click = if (opens) h.on(d, .{ .open = k }) else h.on(d, .{ .pick = k }),
                     }, .{h.img(.{ .src = x.champ.src, .alt = "" })}),
-                    h.span(.{ .class = "tt", .aria_hidden = true }, .{ h.b(.{}, .{x.champ.name}), " ", x.fig, " · ", W.games.with(h, .{ .n = x.games }) }),
+                    h.span(.{ .class = "tt", .aria_hidden = true }, .{ h.b(.{}, .{x.champ.name}), " ", x.fig, " · ", W.games.with(h, .{ .n = x.games }), if (opens) h.span(.{ .class = "go" }, .{W.open}) else null }),
                 }));
             }
             // A tip opens toward the middle, so it never leaves the chart
@@ -214,6 +217,10 @@ pub const css =
     \\  .c-dots .m[data-thin] { opacity: 0.4; }
     \\  .c-dots .m:hover { z-index: 2; opacity: 1; transform: scale(1.3); box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--text); }
     \\  .c-dots .m[aria-pressed="true"] { z-index: 2; opacity: 1; box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--accent); }
+    \\  .c-dots .m[data-opens]::after { content: "›"; position: absolute; top: -6px; right: -6px; display: grid; place-items: center;
+    \\    width: 14px; height: 14px; border-radius: 50%; background: var(--accent); color: var(--panel);
+    \\    box-shadow: 0 0 0 1.5px var(--panel); font: 700 12px/1 var(--font); padding-bottom: 1px; box-sizing: border-box; }
+    \\  .c-dots .tt > .go { color: var(--accent); font-weight: var(--w-b); }
     \\  .c-dots .tt { display: none; position: absolute; z-index: 3; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
     \\    padding: 2px var(--sp-2); border-radius: var(--r-m); background: var(--panel-3); border: 1px solid var(--line-2);
     \\    box-shadow: var(--shadow-pop); color: var(--t2); font-size: var(--fs-s); white-space: nowrap; pointer-events: none; }
@@ -314,7 +321,7 @@ test "the most played is chosen first; arrows walk bins left to right" {
     try testing.expectEqual(@as(?u16, 0), d.chosen());
 }
 
-test "on the fake DOM: a double click picks the dot and follows its matchup link" {
+test "on the fake DOM: a click picks the dot, a click on the chosen one follows its matchup link" {
     const island = @import("island.zig");
     const Fake = @import("fakedom.zig").Fake;
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
@@ -334,10 +341,9 @@ test "on the fake DOM: a double click picks the dot and follows its matchup link
     // Dr. Mundo, the hardest
     const mundo = cur.node(cur.find(cur.root, "aria-label", "Dr. Mundo 43.2%").?).dom;
     _ = rt.event(0, .{ .kind = .click, .target = mundo });
-    _ = rt.event(0, .{ .kind = .click, .target = mundo });
     try testing.expectEqual(@as(?u16, 0), state.sel);
     try testing.expectEqual(@as(u32, 0), fake.clicked);
-    _ = rt.event(0, .{ .kind = .dblclick, .target = mundo });
+    _ = rt.event(0, .{ .kind = .click, .target = mundo });
     try testing.expectEqual(@as(u32, 1), fake.clicked);
     const now = i.current();
     try testing.expectEqualStrings("#vs-DrMundo", now.attr(now.find(now.root, "data-ref", "dot-go").?, "href").?);
