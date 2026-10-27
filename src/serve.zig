@@ -250,7 +250,7 @@ fn devNotes(ctx: *Context, d: Dev, request: *std.http.Server.Request) !void {
     }
     const db = try store.Db.open(d.notes_db);
     defer db.close();
-    try db.exec(notes.schema);
+    try notes.setUp(db);
     const r = try notes.handle(arena, db, method, query, body, "dev", Io.Clock.real.now(ctx.io).toSeconds());
     return request.respond(r.body, .{
         .status = r.status,

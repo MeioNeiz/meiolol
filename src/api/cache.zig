@@ -117,6 +117,7 @@ pub fn open(path: [:0]const u8) !Db {
     const db = try Db.open(path);
     errdefer db.close();
     try db.exec(schema);
+    try notes.migrate(db);
     return db;
 }
 

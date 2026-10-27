@@ -270,7 +270,7 @@ pub fn cmdNotes(c: *Cmd) !u8 {
     const path = if (db_path) |p| try arena.printSentinel("{s}", .{p}, 0) else try arena.printSentinel("{s}/api.db", .{c.data_dir}, 0);
     const db = try store.Db.open(path);
     defer db.close();
-    try db.exec(notes.schema);
+    try notes.setUp(db);
     var buf: [4096]u8 = undefined;
     var stdout = std.Io.File.stdout().writerStreaming(io, &buf);
     const out = &stdout.interface;

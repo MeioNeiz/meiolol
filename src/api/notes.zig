@@ -42,10 +42,33 @@ pub const schema =
     \\);
     \\CREATE INDEX IF NOT EXISTS notes_path ON notes (status, path);
     \\CREATE INDEX IF NOT EXISTS notes_scope ON notes (status, scope);
-    \\-- Paths as nd.canonical keeps them (rows from before it: /index.html, /matchup/index.html)
-    \\UPDATE notes SET path = substr(path, 1, length(path) - 10) WHERE path LIKE '%/index.html';
     \\
 ;
+
+/// The schema, then every row's path as nd.canonical has it now (rows saved before a
+/// change to it); after each open
+pub fn setUp(db: store.Db) !void {
+    try db.exec(schema);
+    try migrate(db);
+}
+
+pub fn migrate(db: store.Db) !void {
+    var arena: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const Move = struct { id: i64, path: []const u8 };
+    var moves: std.ArrayList(Move) = .empty;
+    {
+        var q = try db.prepare("SELECT id, path FROM notes");
+        defer q.deinit();
+        while (try q.step()) {
+            const r = q.row(Move);
+            const to = nd.canonical(r.path);
+            if (to.len != r.path.len) try moves.append(a, .{ .id = r.id, .path = try a.dupe(u8, to) });
+        }
+    }
+    for (moves.items) |m| try db.run("UPDATE notes SET path = ? WHERE id = ?", .{ m.path, m.id });
+}
 
 /// Notes kept; more are refused (507) until some are deleted by hand
 pub const max_notes = 5000;
@@ -351,7 +374,7 @@ test "notes: / and /index.html are one page, rows from before moved too" {
     const db = try testDb();
     defer db.close();
     try fill(db, 1, "/matchup/index.html");
-    try db.exec(schema);
+    try setUp(db);
     try std.testing.expectEqual(1, (try decoded(a, nd.List, try handle(a, db, .GET, "path=/matchup/", "", "", 0))).notes.len);
     const got = try decoded(a, nd.Note, try handle(a, db, .POST, "", try encoded(a, nd.New, .{ .path = "/index.html", .text = "x" }), "jacob", 1));
     try std.testing.expectEqualStrings("/", got.path);
