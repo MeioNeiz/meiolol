@@ -57,6 +57,7 @@ pub const table = @import("table.zig");
 pub const chart = @import("chart.zig");
 pub const dotplot = @import("dotplot.zig");
 pub const trend = @import("trend.zig");
+pub const timechart = @import("timechart.zig");
 pub const histogram = @import("histogram.zig");
 pub const lane = @import("lane.zig");
 pub const timeline = @import("timeline.zig");
@@ -126,7 +127,7 @@ pub const patchpage = @import("patchpage.zig");
 pub const components = .{ button, chip, badge, segmented, card, toggletip, strip, role, champ, rolepicker, champsearch, champhead, matchbrief, matchstrip, champlist, table, chart, dotplot, trend, histogram, art, skillgrid, itempath, runetree, buildpanel, tabs, site, filterbar, champpage, kda, timeline, versus, objicon, minimap, gamestrip, inspector, gamehead, gamerow, spark, stat, scoreboard, laneduel, itemrow, gamepage, lane, matchpage, matchgrid, finder, delta, bar, violin, tiers, guess, puzzle, choice, reasons, candlist, learnpage, split, draftboard, draftflow, dailypage, dailydays, changeline, patchhead, patchpage, poolslots, heatgrid, poolpage, dayhead, resultstrip, playerbar, profilesum, yourpage, idlookup, today, homepage };
 
 /// Every component, in the gallery's order
-pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, alertband, actionbutton, logview, steptimeline, modelbadge, role, champ, site, rolepicker, filterbar, champsearch, champhead, matchbrief, matchstrip, champlist, draftboard, champselect, teamrows, loadscreen, gamescreen, postgame, signin, practice, app, table, chart, dotplot, trend, histogram, lane, timeline, spark, art, skillgrid, itempath, runetree, buildpanel, versus, objicon, minimap, gamestrip, inspector, gamehead, gamerow, scoreboard, laneduel, itemrow, gamepage, guess, puzzle, choice, rankstrip, draftflow, reasons, candlist, champrolepicker, poolslots, heatgrid, matchgrid, finder, violin, learnpage, dailypage, dailydays, changeline, patchhead, patchpage, poolpage, dayhead, resultstrip, playerbar, profilesum, yourpage, idlookup, today, homepage, testerpage };
+pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, alertband, actionbutton, logview, steptimeline, modelbadge, role, champ, site, rolepicker, filterbar, champsearch, champhead, matchbrief, matchstrip, champlist, draftboard, champselect, teamrows, loadscreen, gamescreen, postgame, signin, practice, app, table, chart, dotplot, trend, timechart, histogram, lane, timeline, spark, art, skillgrid, itempath, runetree, buildpanel, versus, objicon, minimap, gamestrip, inspector, gamehead, gamerow, scoreboard, laneduel, itemrow, gamepage, guess, puzzle, choice, rankstrip, draftflow, reasons, candlist, champrolepicker, poolslots, heatgrid, matchgrid, finder, violin, learnpage, dailypage, dailydays, changeline, patchhead, patchpage, poolpage, dayhead, resultstrip, playerbar, profilesum, yourpage, idlookup, today, homepage, testerpage };
 
 pub const H = tree.H;
 pub const N = tree.N;
