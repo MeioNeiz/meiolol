@@ -227,7 +227,17 @@ if [[ ${1:-} == final ]]; then
     fi
     rm -f data/*.db-wal
     catch_up || { log "final catch-up failed: $STATE/catch-up.log"; exit 1; }
-    log "final catch-up done"
+    # Something opening the box's databases during the pass (a checkpoint on close) shows
+    # as a size or time that differs now
+    changed=$(rsync -ain --ignore-missing-args meiolol-box:data/meiolol.db \
+        meiolol-box:data/meiolol.db-wal meiolol-box:data/timeline.db \
+        meiolol-box:data/timeline.db-wal meiolol-box:data/raw.db meiolol-box:data/raw.db-wal \
+        data/ 2>&1)
+    if [[ -n $changed ]]; then
+        log "final: the box's databases changed during the pass: $changed"
+        exit 1
+    fi
+    log "final catch-up done, the box's databases unchanged since"
     exit 0
 fi
 [[ -e $STATE/copy ]] || wait_copy
