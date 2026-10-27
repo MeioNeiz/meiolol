@@ -270,9 +270,8 @@ detected cross-role kinds. Admin and /p/ only; the public draft tool follows J2.
   quotes); Jacob's list at its end
 - Names (J18): Your games' Players panel lists all ten with champion, K/D/A and Riot ID
   as at the game, from api.db `match_names` (erased with the player, none for blocked
-  PUUIDs); streamer mode only hides names live, so finished games show everyone. Check
-  the live API serves names (`deploy/jomify.sh install api` if not); Daily Draft stays
-  nameless unless Jacob says otherwise
+  PUUIDs; live API serves them); streamer mode only hides names live, so finished games
+  show everyone. Daily Draft stays nameless unless Jacob says otherwise
 - Reviewer walk (screenshots docs/review-shots/), left: GIFs and a short demo video
 - Admin polish, low while the panel is Jacob's only (J9): fix3 leftovers R48-R50, R58,
   R60, R61 (plans in docs/archive/review-2026-10-17/fix3-notes-2026-10-17.md)
