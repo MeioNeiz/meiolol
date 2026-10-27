@@ -43,7 +43,7 @@ pub fn files(site: *const Site, json: []const u8, out: *std.ArrayList(File)) !vo
         try ui.data.encode(a, gd.Data, d, &bytes);
         try out.append(a, .{ .path = try a.print(data_dir ++ "{s}.bin", .{r}), .data = bytes.items });
     }
-    // After the role files: writePage reads the first file in data_dir
+    // After the role files, which may be none (an example without detail)
     if (ex.player(ex.default)) |pl| if (pl.report) |report| {
         const l = try pagedata.list(a, pl.player orelse .{}, report.games, names(site), site, siteChamp);
         var bytes: std.ArrayList(u8) = .empty;
@@ -66,11 +66,15 @@ fn siteChamp(site: *const Site, id: u32) anyerror!ui.champ.Champ {
     return .{ .name = ch.name, .src = try site.icon(ch) };
 }
 
+/// The first role's file: the default role's (files)
+fn gameFile(all: []const File) ?File {
+    for (all) |f| if (std.mem.startsWith(u8, f.path, data_dir) and !std.mem.eql(u8, f.path, list_path)) return f;
+    return null;
+}
+
 /// The default role's newest game; false without the example's files
 pub fn writePage(site: *const Site, w: *Writer) !bool {
-    const f = for (site.daily_files) |f| {
-        if (std.mem.startsWith(u8, f.path, data_dir)) break f;
-    } else return false;
+    const f = gameFile(site.daily_files) orelse return false;
     const a = site.arena;
     const d = try a.create(gd.Data);
     d.* = try ui.data.decode(a, gd.Data, f.data);
@@ -190,4 +194,15 @@ test "stripped drops only the detail" {
     try testing.expectEqualStrings(
         \\{"default":"mid","mid":{"state":"ready","report":{"games":[{"win":true}],"weeks":[]}}}
     , try stripped(arena, json));
+}
+
+test "the game page's file: the default role's, never the list" {
+    const list: File = .{ .path = list_path, .data = "" };
+    const mid: File = .{ .path = data_dir ++ "mid.bin", .data = "" };
+    const top: File = .{ .path = data_dir ++ "top.bin", .data = "" };
+    const ex: File = .{ .path = example_path, .data = "" };
+    try std.testing.expectEqualStrings(mid.path, gameFile(&.{ ex, mid, top, list }).?.path);
+    try std.testing.expectEqualStrings(mid.path, gameFile(&.{ list, ex, mid, top }).?.path);
+    // An example without detail: no role file, the list alone
+    try std.testing.expectEqual(null, gameFile(&.{ ex, list }));
 }

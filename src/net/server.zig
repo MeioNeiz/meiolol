@@ -236,6 +236,9 @@ pub fn requests(
                 },
                 .error_only => log.warn("request: {t}", .{err}),
             }
+            // Failed before answering (respond() leaves received_head before it writes):
+            // a status, not a dropped connection
+            if (server.reader.state == .received_head) answer(&conn_writer.interface, "500 Internal Server Error");
             return;
         };
     }

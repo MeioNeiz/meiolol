@@ -348,7 +348,7 @@ test "fixture games to stats, curves and the website" {
         .{ "champions.html", &.{ "<div class=\"c-tiers\" data-island=\"tiers\" data-src=\"data/tiers.bin\" data-stamp=\"", "data-base=\"\" data-view=\"0\" data-path=\"champions.html\"", "<h1>Champions</h1>", "<linearGradient id=\"c-violin-g\"", "<symbol id=\"ri-top\"", "<a href=\"all/champions.html\">All</a>", "<table class=\"c-table\">", "<script src=\"" ++ assets.stats_js.path ++ "\" data-wasm=\"" ++ assets.stats_wasm.path ++ "\" defer></script>" } },
         // Home: the lookup, each role's most played (the example's game: core_loaded); no
         // clear patch move on a patch's first day, so the Patch card is its link alone
-        .{ "index.html", &.{ "data-island=\"lookup\" data-to=\"your.html\"", "data-island=\"homechamps\" data-bin=\"", "Patch 15.13", "vs 15.12", "href=\"patch/patch.html\">All changes</a>", "<script src=\"" ++ assets.home_js.path ++ "\" data-wasm=\"" ++ assets.home_wasm.path ++ "\" defer></script>" } },
+        .{ "index.html", &.{ "data-island=\"lookup\" data-to=\"your.html\"", "data-island=\"homechamps\" data-bin=\"", "Patch 15.13", "vs 15.12", "href=\"patch/patch.html\" data-s=\"s\">All changes</a>", "<script src=\"" ++ assets.home_js.path ++ "\" data-wasm=\"" ++ assets.home_wasm.path ++ "\" defer></script>" } },
         // Daily Draft (ui.dailypage): the fixture makes no puzzle, so the page says so
         .{ "daily.html", &.{ "<h1>Daily Draft</h1>", "No puzzle today." } },
         .{ "privacy.html", &.{ "the date\nshown is the puzzle's, not the game's", "we keep only each puzzle's totals", "<h2 id=\"accounts\">Accounts</h2>" } },
