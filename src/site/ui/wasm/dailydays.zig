@@ -75,7 +75,7 @@ fn crowd() void {
 fn onCrowd(_: i32, bytes: ?[]u8) void {
     const b = bytes orelse return;
     defer gpa.free(b);
-    state.crowd = ds.crowdOf(gpa, b, &data) orelse return;
+    state.crowd = ds.crowdOf(b, &data) orelse return;
     island.render();
 }
 

@@ -186,15 +186,25 @@ pub fn crowdPath(buf: []u8, saved: []const u8, n: u32, send: bool) ?[]const u8 {
     return std.fmt.bufPrint(buf, "/api/daily?n={d}&pick={d}&side={d}", .{ n, m.opt orelse return null, @backingInt(side) }) catch null;
 }
 
-/// /api/daily's reply ({n, players, picks, sides}) for `d`'s puzzle; null when it does not
-/// read or is another's
-pub fn crowdOf(a: std.mem.Allocator, json: []const u8, d: *const Data) ?Crowd {
-    const R = struct { n: u32, players: u32, picks: []const u32, sides: [2]u32 };
-    const r = std.json.parseFromSlice(R, a, json, .{ .ignore_unknown_fields = true }) catch return null;
-    defer r.deinit();
-    const v = r.value;
-    if (v.n != d.n or d.answer >= v.picks.len) return null;
-    return .{ .players = v.players, .pick = v.picks[d.answer], .side = v.sides[@backingInt(d.winner)] };
+/// /api/daily's reply ({"n":3,"players":3,"picks":[1,0,2,0,0,0],"sides":[1,2]}) for `d`'s
+/// puzzle; null when it does not read, is another's, or counts more than its players.
+/// Scanned by hand: std.json doubled the wasm
+pub fn crowdOf(json: []const u8, d: *const Data) ?Crowd {
+    if (numAt(json, "\"n\":", 0) != d.n) return null;
+    const players = numAt(json, "\"players\":", 0) orelse return null;
+    const c: Crowd = .{
+        .players = players,
+        .pick = numAt(json, "\"picks\":[", d.answer) orelse return null,
+        .side = numAt(json, "\"sides\":[", @backingInt(d.winner)) orelse return null,
+    };
+    return if (c.pick <= players and c.side <= players) c else null;
+}
+
+/// The `i`th whole number after `key` (a list's items comma-separated)
+fn numAt(json: []const u8, key: []const u8, i: usize) ?u32 {
+    var rest = json[(std.mem.find(u8, json, key) orelse return null) + key.len ..];
+    for (0..i) |_| rest = rest[(std.mem.findScalar(u8, rest, ',') orelse return null) + 1 ..];
+    return std.fmt.parseInt(u32, rest[0 .. std.mem.findAny(u8, rest, ",]}") orelse return null], 10) catch null;
 }
 
 /// Whether `list` (localStorage meiolol.daily.sent.v1: "15,17") holds n
@@ -504,12 +514,23 @@ test "the crowd: sent once finished, read back for the page's puzzle only" {
     // Marks without the answers behind them: nothing to count
     try testing.expectEqual(null, crowdPath(&buf, "{\"12\":{\"marks\":\"01\"}}", 12, true));
 
-    const a = testing.allocator;
     const reply = "{\"n\":12,\"players\":40,\"picks\":[10,0,5,25,0,0],\"sides\":[30,10]}";
-    try testing.expectEqual(Crowd{ .players = 40, .pick = 10, .side = 30 }, crowdOf(a, reply, &demo_archive).?);
-    try testing.expectEqual(null, crowdOf(a, reply, &demo));
-    try testing.expectEqual(null, crowdOf(a, "{\"n\":12,\"players\":40,\"picks\":[],\"sides\":[30,10]}", &demo_archive));
-    try testing.expectEqual(null, crowdOf(a, "<html>", &demo_archive));
+    try testing.expectEqual(Crowd{ .players = 40, .pick = 10, .side = 30 }, crowdOf(reply, &demo_archive).?);
+    var red = demo_archive;
+    red.answer = 5;
+    red.winner = .red;
+    try testing.expectEqual(Crowd{ .players = 40, .pick = 0, .side = 10 }, crowdOf(reply, &red).?);
+    try testing.expectEqual(null, crowdOf(reply, &demo));
+    for ([_][]const u8{
+        "{\"n\":12,\"players\":40,\"picks\":[],\"sides\":[30,10]}",
+        "{\"n\":12,\"players\":40,\"picks\":[41,0,0,0,0,0],\"sides\":[30,10]}",
+        "{\"n\":12,\"players\":-1,\"picks\":[0,0,0,0,0,0],\"sides\":[0,0]}",
+        "{\"n\":12,\"players\":40,\"picks\":[10,0,5,25,0,0]}",
+        "{\"n\":12,\"players\":40,\"picks\":[10",
+        "{\"n\":120,\"players\":40,\"picks\":[10,0,5,25,0,0],\"sides\":[30,10]}",
+        "<html>",
+        "",
+    }) |bad| try testing.expectEqual(null, crowdOf(bad, &demo_archive));
 
     try testing.expect(sent("15,12", 12));
     try testing.expect(!sent("15,120", 12));
