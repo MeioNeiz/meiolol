@@ -5,13 +5,14 @@ Off Jacob's PC so it and the laptop can be off. The box is C01, a VM Ethan lent
 Free, home region uk-london-1 (tenancy `jacobmaschler`; free
 accounts may use Always Free only in the home region). Sections below on the Oracle
 hosts and the box's limits describe the Oracle setup; C01 runs the same layout
-(~/ml/meiolol, user units) untuned for its own hardware yet.
+(~/ml/meiolol, user units), builds for x86_64_v3; its limits are still the box's except
+the web loop's MemoryHigh (docs/plan/vm.md Later).
 
 ## Hosts
 
 | alias | what | shape | disk |
 |---|---|---|---|
-| essex-vm | the box (C01): crawler, site build, renderer, backups, health; nginx, the Your games API and traffic behind Cloudflare Tunnel `meiolol-c01` | KVM, 8 vCPU (generic QEMU CPU), 15 GB, Tailscale 100.95.95.44 | /srv/meiolol 492 GB on Megatron, 30 GB local cache |
+| essex-vm | the box (C01): crawler, site build, renderer, backups, health; nginx, the Your games API and traffic behind Cloudflare Tunnel `meiolol-c01` | KVM, 16 vCPU (host CPU: Xeon E5-2630 v3, AVX2), 62 GB, Tailscale 100.95.95.44 | /srv/meiolol 492 GB on Megatron, 30 GB local cache |
 | meiolol-cloud | the old box, stopped: units masked, data as of the move; kept (Jacob decides standby or termination) | A1 `meiolol`, VM.Standard.A1.Flex 2 OCPU / 12 GB (aarch64), AD-1, 140.238.101.20 | 150 GB boot |
 | jomify | jomove's server; its old meiolol web units still run, unused (meio.lol points at C01). Leave alone | E2.1.Micro, 193.123.180.81 | 47 GB boot |
 
