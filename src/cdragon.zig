@@ -1,8 +1,8 @@
 //! Ability numbers from CommunityDragon, a fan mirror of the game's own data files
 //! (raw.communitydragon.org/<patch>/game/data/characters/<id>/<id>.bin.json; static, not
 //! the Riot API): what Data Dragon leaves out, most damage numbers, ratios and scalings.
-//! Per patch, not per Data Dragon version, so a patch's mid-patch updates count until it
-//! is cached.
+//! Fetched per patch, cached per Data Dragon version: a patch's later version (a hotfix)
+//! fetches again, with what changed mid-patch.
 //!
 //! Per champion: the CharacterRecord's base stats, and for P Q W E R (its
 //! mCharacterPassiveSpell and spellNames) the spell's DataValues and the numbers in its
@@ -10,9 +10,10 @@
 //! files keep only as a hash ("{0508ccce}").
 
 const std = @import("std");
-const ddragon = @import("ddragon.zig");
+const client = @import("net").client;
 const Allocator = std.mem.Allocator;
 const Value = std.json.Value;
+const log = std.log.scoped(.cdragon);
 
 pub const Slot = enum { stats, p, q, w, e, r };
 
@@ -56,29 +57,61 @@ pub const Champion = struct {
     numbers: []const Number,
 };
 
+/// CommunityDragon over HTTP
+pub const Web = struct {
+    http: *std.http.Client,
+
+    /// The body; null when there is none (404)
+    pub fn get(w: Web, arena: Allocator, url: []const u8) !?[]const u8 {
+        const res = try client.get(w.http, arena, .{ .url = url });
+        return switch (res.status) {
+            .ok => res.body,
+            .not_found => null,
+            else => error.UnexpectedStatus,
+        };
+    }
+};
+
+/// Champions fetched before a patch with none of them is not up yet
+const probe = 5;
+/// A whole fetch's limit (~170 champions take under a minute)
+const max_seconds = 600;
+
 /// The numbers of the champions `keys` (Data Dragon ids) on `patch` ("16.21"), cached as
-/// `path`. A champion CommunityDragon lacks is left out (a new one); any other failure
-/// fails it all, unsaved, so the next call tries again. error.NotPublished when the
-/// first champions are all missing: the patch is not up yet (patch day)
-pub fn cached(http: *std.http.Client, arena: Allocator, io: std.Io, path: []const u8, patch: []const u8, keys: []const []const u8) ![]const Champion {
+/// `path`, from `src` (Web, or a test's) when the cache is missing or unreadable. A
+/// champion CommunityDragon lacks (a new one) or whose file has no record is left out;
+/// any other failure fails it all, unsaved, so the next call tries again.
+/// error.NotPublished when the first `probe` champions are all missing: the patch is not
+/// up yet (patch day)
+pub fn cached(src: anytype, arena: Allocator, io: std.Io, path: []const u8, patch: []const u8, keys: []const []const u8) ![]const Champion {
     const cwd = std.Io.Dir.cwd();
     if (cwd.readFileAlloc(io, path, arena, .limited(64 << 20))) |body| {
-        return std.json.parseFromSliceLeaky([]const Champion, arena, body, .{});
+        if (std.json.parseFromSliceLeaky([]const Champion, arena, body, .{})) |champs| return champs else |err| switch (err) {
+            error.OutOfMemory => return err,
+            else => log.info("{s} unreadable, fetching again: {t}", .{ path, err }),
+        }
     } else |err| switch (err) {
         error.FileNotFound => {},
         else => return err,
     }
+    const start = std.Io.Clock.awake.now(io).toSeconds();
     var out: std.ArrayList(Champion) = .empty;
     for (keys, 0..) |key, i| {
-        if (i == 5 and out.items.len == 0) return error.NotPublished;
+        if (i == probe and out.items.len == 0) return error.NotPublished;
+        if (std.Io.Clock.awake.now(io).toSeconds() - start > max_seconds) return error.Timeout;
         const id = try std.ascii.allocLowerString(arena, key);
         const url = try arena.print("https://raw.communitydragon.org/{s}/game/data/characters/{s}/{s}.bin.json", .{ patch, id, id });
-        const body = ddragon.fetch(http, arena, url) catch |err| switch (err) {
-            error.UnexpectedStatus => continue,
-            else => return err,
+        const body = try src.get(arena, url) orelse continue;
+        const numbers = extract(arena, body) catch |err| switch (err) {
+            error.OutOfMemory => return err,
+            else => {
+                log.info("{s} on {s} left out: {t}", .{ key, patch, err });
+                continue;
+            },
         };
-        try out.append(arena, .{ .key = key, .numbers = try extract(arena, body) });
+        try out.append(arena, .{ .key = key, .numbers = numbers });
     }
+    if (out.items.len == 0) return error.NotPublished;
     var file = try cwd.createFileAtomic(io, path, .{ .make_path = true, .replace = true });
     defer file.deinit(io);
     try file.file.writeStreamingAll(io, try std.json.Stringify.valueAlloc(arena, out.items, .{}));
@@ -188,10 +221,11 @@ fn calcNumbers(arena: Allocator, out: *std.ArrayList(Number), slot: Slot, calc: 
             var it = o.iterator();
             while (it.next()) |e| {
                 const k = e.key_ptr.*;
-                const sub = try arena.print("{s}{s}{s}", .{ path, if (path.len > 0) "/" else "", k });
+                const part = e.value_ptr.*;
                 if (isNumberField(k)) {
-                    if (num(e.value_ptr.*)) |x| try out.append(arena, .{ .slot = slot, .kind = .number, .name = calc, .of = sub, .values = try arena.dupe(f64, &.{x}) });
-                } else try calcNumbers(arena, out, slot, calc, e.value_ptr.*, sub);
+                    const x = num(part) orelse continue;
+                    try out.append(arena, .{ .slot = slot, .kind = .number, .name = calc, .of = try subPath(arena, path, k), .values = try arena.dupe(f64, &.{x}) });
+                } else if (part == .object or part == .array) try calcNumbers(arena, out, slot, calc, part, try subPath(arena, path, k));
             }
         },
         .array => |a| for (a.items, 0..) |x, i| {
@@ -199,6 +233,10 @@ fn calcNumbers(arena: Allocator, out: *std.ArrayList(Number), slot: Slot, calc: 
         },
         else => {},
     }
+}
+
+fn subPath(arena: Allocator, path: []const u8, k: []const u8) ![]const u8 {
+    return arena.print("{s}{s}{s}", .{ path, if (path.len > 0) "/" else "", k });
 }
 
 fn isNumberField(k: []const u8) bool {
@@ -304,18 +342,96 @@ test "extract: base stats, main spells' values and calculation numbers" {
     try testing.expectEqualDeep(@as([]const Number, &want), ns);
 }
 
-test "cached: read back without the network" {
+test "extract: passive and short spellNames, cooldownTime, stat names, repeated parts" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const ns = try extract(arena_state.allocator(),
+        \\{"R":{"__type":"CharacterRecord","mCharacterPassiveSpell":"Sion/SionP","spellNames":["SionQ"]},
+        \\"S":{"__type":"SpellObject","mScriptName":"SionP","mSpell":{"cooldownTime":[0,0]}},
+        \\"T":{"__type":"SpellObject","mScriptName":"sionq","mSpell":{"cooldownTime":[0,8,7],
+        \\ "mSpellCalculations":{"Dmg":{"mFormulaParts":[{"mStat":12,"mStatFormula":1,"mCoefficient":0.1},
+        \\  {"mStat":12,"mStatFormula":1,"mCoefficient":0.2},{"mStat":99,"mStatFormula":2,"mCoefficient":0.3},
+        \\  {"mStat":6,"mStatFormula":7,"mCoefficient":0.4},{"mNumber":"x","mLabel":"y"}]}}}}}
+    );
+    const want = [_]Number{
+        // The passive's all-zero cooldown: absent
+        .{ .slot = .q, .kind = .spell, .name = "Cooldown", .values = &.{ 0, 8, 7 } },
+        .{ .slot = .q, .kind = .ratio, .name = "Dmg", .of = "base health", .values = &.{0.1} },
+        .{ .slot = .q, .kind = .ratio, .name = "Dmg", .of = "", .values = &.{0.3} },
+    };
+    try testing.expectEqualDeep(@as([]const Number, &want), ns);
+}
+
+test "extract: not a champion's file" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    try testing.expectError(error.NotBinJson, extract(arena_state.allocator(), "[]"));
+    try testing.expectError(error.NoRecord, extract(arena_state.allocator(), "{\"a\":{\"__type\":\"SpellObject\"}}"));
+}
+
+/// CommunityDragon as a test's: Varus' file for every champion but those 404 or broken
+const Fake = struct {
+    missing: []const []const u8 = &.{},
+    broken: []const []const u8 = &.{},
+    /// error.UnexpectedStatus for this one
+    down: ?[]const u8 = null,
+
+    pub fn get(f: Fake, _: Allocator, url: []const u8) !?[]const u8 {
+        const id = url[std.mem.findScalarLast(u8, url, '/').? + 1 ..];
+        const is = struct {
+            fn in(list: []const []const u8, x: []const u8) bool {
+                for (list) |l| if (std.ascii.startsWithIgnoreCase(x, l) and x[l.len] == '.') return true;
+                return false;
+            }
+        }.in;
+        if (is(f.missing, id)) return null;
+        if (is(f.broken, id)) return "{}";
+        if (f.down) |d| if (is(&.{d}, id)) return error.UnexpectedStatus;
+        return varus_old;
+    }
+};
+
+test "cached: fetched and saved, missing and broken champions left out" {
     var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
     const io = testing.io;
     var tmp = testing.tmpDir(.{});
     defer tmp.cleanup();
-    const champs = [_]Champion{.{ .key = "Varus", .numbers = try extract(arena, varus_old) }};
-    try tmp.dir.writeFile(io, .{ .sub_path = "cdragon.json", .data = try std.json.Stringify.valueAlloc(arena, champs, .{}) });
+    const path = try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path, "v", "cdragon.json" });
+    const got = try cached(Fake{ .missing = &.{"Zaahen"}, .broken = &.{"Ahri"} }, arena, io, path, "16.20", &.{ "Ahri", "Varus", "Zaahen" });
+    try testing.expectEqual(1, got.len);
+    try testing.expectEqualStrings("Varus", got[0].key);
+    // Read back: every get fails
+    const again = try cached(Fake{ .down = "varus" }, arena, io, path, "16.20", &.{"Varus"});
+    try testing.expectEqualDeep(got, again);
+}
+
+test "cached: a broken cache is fetched again" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const io = testing.io;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(io, .{ .sub_path = "cdragon.json", .data = "[{\"key\":\"Varus\",\"numb" });
     const path = try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path, "cdragon.json" });
-    var http: std.http.Client = .{ .allocator = testing.allocator, .io = io };
-    defer http.deinit();
-    const got = try cached(&http, arena, io, path, "16.20", &.{"Varus"});
-    try testing.expectEqualDeep(@as([]const Champion, &champs), got);
+    const got = try cached(Fake{}, arena, io, path, "16.20", &.{"Varus"});
+    try testing.expectEqualDeep(try extract(arena, varus_old), got[0].numbers);
+}
+
+test "cached: not published, or a failure: nothing saved" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const io = testing.io;
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const path = try std.fs.path.join(arena, &.{ ".zig-cache", "tmp", &tmp.sub_path, "cdragon.json" });
+    const six = [_][]const u8{ "A", "B", "C", "D", "E", "Varus" };
+    try testing.expectError(error.NotPublished, cached(Fake{ .missing = &six }, arena, io, path, "16.20", &six));
+    // Fewer than `probe`, all missing
+    try testing.expectError(error.NotPublished, cached(Fake{ .missing = &.{"A"} }, arena, io, path, "16.20", &.{"A"}));
+    try testing.expectError(error.UnexpectedStatus, cached(Fake{ .down = "B" }, arena, io, path, "16.20", &.{ "Varus", "B" }));
+    try testing.expectError(error.FileNotFound, tmp.dir.access(io, "cdragon.json", .{}));
 }

@@ -369,6 +369,15 @@ fn lowerFirst(a: std.mem.Allocator, s: []const u8) ![]const u8 {
     return out;
 }
 
+test "lowerFirst: short words as they are" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    for ([_][2][]const u8{ .{ "", "" }, .{ "A", "A" }, .{ "AD ratio", "AD ratio" }, .{ "Base damage", "base damage" } }) |c| {
+        try std.testing.expectEqualStrings(c[1], try lowerFirst(a, c[0]));
+    }
+}
+
 test "line: labels and keys" {
     var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena_state.deinit();
