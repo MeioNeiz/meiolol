@@ -148,16 +148,21 @@ verify() {
 # The Mac's scripts at essex-vm, the training upload at C01's meiolol user; then
 # the queued bulk batch deploys to C01
 mac_switch() {
-    local f
-    for f in deploy/box.sh deploy/desktop-release.sh deploy/dev.sh deploy/deploy-events.sh \
-        deploy/mac-watch.sh deploy/on-push.sh; do
+    local f t=$SECONDS files=(deploy/box.sh deploy/desktop-release.sh deploy/dev.sh
+        deploy/deploy-events.sh deploy/mac-watch.sh deploy/on-push.sh deploy/lab-push.sh)
+    # Another session's uncommitted hunks there would be swept into this commit
+    until git diff --quiet HEAD -- "${files[@]}"; do
+        (( SECONDS - t > 1800 )) && { log "still dirty after 30 min:" \
+            "$(git diff --name-only HEAD -- "${files[@]}" | paste -sd' ' -)"; return 1; }
+        sleep 60
+    done
+    for f in "${files[@]:0:6}"; do
         sed -i '' 's/\${MEIOLOL_HOST:-meiolol-cloud}/${MEIOLOL_HOST:-essex-vm}/' "$f"
     done
     sed -i '' 's/^WEB=meiolol@193\.123\.180\.81$/WEB=meiolol@100.95.95.44/' deploy/lab-push.sh
     grep -q 'meiolol-cloud}' deploy/box.sh && return 1
     deploy/commit.sh -m "Backend host is C01 (essex-vm): the Mac's scripts and the training upload" \
-        -- deploy/box.sh deploy/desktop-release.sh deploy/dev.sh deploy/deploy-events.sh \
-        deploy/mac-watch.sh deploy/on-push.sh deploy/lab-push.sh || return 1
+        -- "${files[@]}" || return 1
     deploy/push.sh "$(git log -1 --format=%H -- deploy/lab-push.sh)"
 }
 
