@@ -37,7 +37,7 @@ One dedicated session runs VM1-VM8 back to back, each step starting when the las
 done, without asking (J31); the coordinator (meiolol-8b) watches it and hands it over
 when its context fills. Decisions inside a step are the session's; Jacob only for
 what needs him off the keyboard (`cc-note needs`): the gpu-box Tailscale login link,
-Ethan's CPU type. VM6 runs by itself once VM3's benchmark shows no downgrade.
+Ethan's CPU type. VM6 runs by itself once VM3's benchmark is under 2x the box.
 
 Migration mode, set 26-27 Oct (undo in VM6, from the new host where moved):
 - Deploys held: `deploy/push.sh --mode bulk 1440` (sessions queue, check pages on
@@ -114,8 +114,10 @@ damaged cachevol can't be repaired)
 - Benchmark against the box before the switch (J31): views write and its phases
   (views.log), core build, renderer load, page render latency under concurrent load,
   deploy/bench-crawl.sh on C01. Box figures from its own logs, never a benchmark run on
-  the box. No downgrade = C01 at or under the box's times, or over by under 10% where
-  retuning (Later) can't close it. A downgrade: retune first, then rerun
+  the box. Up to 1.1x the box: no downgrade. Up to 2x (or 5 s): slower but the move
+  goes ahead (Jacob 27 Oct: slightly slower pages are fine for now; C01 is tuned for its
+  cores, network and disk after the move, and a local 1 TB M.2 is planned). Over 2x or
+  a failed step: blocked, retune first, then rerun
 - Never two crawlers: the key's rate is per key, so meiolol-crawl stays disabled on C01
   until VM6
 - Run the web loop, a views write and the renderer on C01; compare times with the box's

@@ -86,25 +86,29 @@ site_args() {
     [[ -s riot.txt ]] && args+=(--riot-txt "$(< riot.txt)")
 }
 
-# 1.1x the box or under (docs/plan/vm.md VM3). C01 with no figure is a failed step: a
-# downgrade until looked at, never a pass
+# 1.1x the box or under is ok. Up to 2x (or 5 s) is slower but no block (Jacob 27 Oct:
+# C01 is tuned after the move, a local M.2 planned); beyond that, or a failed step (no
+# figure), blocks
 compare() {
     local name=$1 c01=$2 box=$3
     if [[ -z $c01 ]]; then
         note "| $name | failed | ${box:-?} | FAILED |"
-        slower+=" $name"
+        blocking+=" $name"
     elif [[ -z $box ]]; then
-        note "| $name | ${c01:-?} | ${box:-?} | no figure |"
+        note "| $name | $c01 | ? | no figure |"
     elif (( c01 * 10 <= box * 11 )); then
         note "| $name | $c01 | $box | ok |"
-    else
-        note "| $name | $c01 | $box | SLOWER |"
+    elif (( c01 <= box * 2 || c01 - box <= 5 )); then
+        note "| $name | $c01 | $box | slower, accepted |"
         slower+=" $name"
+    else
+        note "| $name | $c01 | $box | over 2x |"
+        blocking+=" $name"
     fi
 }
 
 bench() {
-    local args t core views reload lines box_core box_views box_reload slower=''
+    local args t core views reload lines box_core box_views box_reload slower='' blocking=''
     box_logs
     site_args
     if [[ ! -x bin/meiolol ]]; then
@@ -170,6 +174,7 @@ bench() {
     note "- render latency, $(cat "$STATE/latency.txt")"
     done_stage bench
     echo "$slower" > "$STATE/slower"
+    echo "$blocking" > "$STATE/blocking"
 }
 
 # Every page the renderer serves, 8 at a time, straight to it
@@ -231,8 +236,11 @@ fi
 [[ -e $STATE/bench ]] || bench
 [[ -e $STATE/crawl ]] || crawl_bench
 slower=$(cat "$STATE/slower" 2> /dev/null)
-if [[ -n ${slower// /} ]]; then
-    note "VERDICT: downgrade in$slower: retune (docs/plan/vm.md Later), then rerun"
+blocking=$(cat "$STATE/blocking" 2> /dev/null)
+if [[ -n ${blocking// /} ]]; then
+    note "VERDICT: downgrade in$blocking: retune (docs/plan/vm.md Later), then rerun"
+elif [[ -n ${slower// /} ]]; then
+    note "VERDICT: go, slower in$slower (under 2x, accepted: tuned after the move)"
 else
     note "VERDICT: no downgrade"
 fi

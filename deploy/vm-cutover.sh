@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # VM6 (docs/plan/vm.md): meiolol moves from the Oracle box and jomify to C01. Waits for
-# the VM3 chain's verdict (C01 ~/vm-chain/results.md) and goes on only on "no downgrade"
-# with vm.meio.lol serving static and rendered pages. Then: the box's units stopped and
-# masked (a bulk push's deploy can't start its crawler beside C01's), the last copy pass
-# and its check, jomify's API data copied (deploy/vm-web.sh data; jomify itself left as
-# it is, Jacob 27 Oct), C01's loops started (crawler last), meio.lol and www to the
-# tunnel, the Mac's scripts pointed at essex-vm. Push mode stays bulk: Jacob sets fast.
-# Each done step leaves data/vm-cutover/<step>, so a rerun goes on from where it stopped;
-# log in data/vm-cutover/log. Rollback: data/vm-cutover/dns-before.json back, the box's
-# units unmasked, enabled and started (the data since the switch copied back first if
-# C01 crawled).
+# the VM3 chain's verdict (C01 ~/vm-chain/results.md) and goes on on "no downgrade" or
+# "go" (slower under 2x) with vm.meio.lol serving static and rendered pages. Then: the
+# box's units stopped and masked (a bulk push's deploy can't start its crawler beside
+# C01's), the last copy pass and its check, jomify's API data copied (deploy/vm-web.sh
+# data; jomify itself left as it is, Jacob 27 Oct), C01's loops started (crawler last),
+# meio.lol and www to the tunnel, the Mac's scripts pointed at essex-vm. Push mode stays
+# bulk: Jacob sets fast. Each done step leaves data/vm-cutover/<step>, so a rerun goes on
+# from where it stopped; log in data/vm-cutover/log. Rollback:
+# data/vm-cutover/dns-before.json back, the box's units unmasked, enabled and started (the
+# data since the switch copied back first if C01 crawled).
 #   deploy/vm-cutover.sh      run on the Mac: nohup, or a session's background task
 set -uo pipefail
 
@@ -49,7 +49,7 @@ verdict() {
         sleep 60
     done
     log "$v"
-    [[ $v == "VERDICT: no downgrade" ]]
+    [[ $v == "VERDICT: no downgrade" || $v == "VERDICT: go,"* ]]
 }
 
 # Static pages, the admin login and rendered pages (the chain's page list, its renderer)
