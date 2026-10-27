@@ -62,6 +62,15 @@ pub fn filterOf(l: *const yl.List, u: FilterUrl) yl.Filter {
     return f;
 }
 
+/// A game on `page` (game.html): a lookup's (`id`) by start, the example's by page; at
+/// second `m` when not 0
+pub fn gameHref(h: *H, page: []const u8, id: []const u8, g: yl.Game, m: u16) ?[]const u8 {
+    const at = if (m > 0) h.fmt("&m={d}", .{m}) else "";
+    if (id.len > 0) return h.fmt("{s}#id={s}&game={d}{s}", .{ page, id, g.start_ms, at });
+    const i = g.page orelse return null;
+    return h.fmt("{s}#g={d}{s}", .{ page, i, at });
+}
+
 pub fn any(games: []const yl.Game, f: yl.Filter) bool {
     for (games) |g| if (f.keeps(g)) return true;
     return false;
@@ -109,13 +118,6 @@ pub const YourList = struct {
         };
     }
 
-    /// The row's game on game.html: a lookup's by start, the example's by page
-    fn href(p: *const P, h: *H, g: yl.Game) ?[]const u8 {
-        if (p.id.len > 0) return h.fmt("{s}#id={s}&game={d}", .{ p.game, p.id, g.start_ms });
-        const i = g.page orelse return null;
-        return h.fmt("{s}#g={d}", .{ p.game, i });
-    }
-
     pub fn view(p: *P, h: *H) N {
         const l = p.l;
         const f = p.sum.filter;
@@ -128,7 +130,7 @@ pub const YourList = struct {
             var rows = h.list();
             for (d.games) |i| {
                 const g = l.games[i];
-                rows.add(gamerow.view(h, l, g, .{ .key = @as(u32, i) + 1, .href = p.href(h, g), .now_ms = p.now_ms }));
+                rows.add(gamerow.view(h, l, g, .{ .key = @as(u32, i) + 1, .href = gameHref(h, p.game, p.id, g, 0), .now_ms = p.now_ms }));
             }
             groups.add(h.el(.section, .{ .key = @as(u32, @bitCast(d.day)), .class = "day", .data_day = d.day }, .{ dayhead.view(h, d, today), rows.done() }));
         }

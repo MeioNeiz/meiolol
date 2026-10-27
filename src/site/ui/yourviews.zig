@@ -10,6 +10,7 @@ const phrase = @import("phrase.zig");
 const yl = @import("yourlist.zig");
 const yp = @import("yourpage.zig");
 const playerbar = @import("playerbar.zig");
+const highlights = @import("highlights.zig");
 const tabs = @import("tabs.zig");
 const segmented = @import("segmented.zig");
 const rolepicker = @import("rolepicker.zig");
@@ -28,9 +29,9 @@ pub const sel = "[data-island=yourviews]";
 
 pub const View = enum { games, highlights, time };
 
-/// The views on the page: each one's tab once it is built (Highlights L3c (2), Over time
-/// (3)); one view shows no tabs
-pub const shipped = [_]View{.games};
+/// The views on the page: each one's tab once it is built (Over time: L3c (3)); one view
+/// shows no tabs
+pub const shipped = [_]View{ .games, .highlights };
 pub const every = [_]View{ .games, .highlights, .time };
 
 const W = struct {
@@ -39,6 +40,7 @@ const W = struct {
     pub const highlights = plain("Highlights");
     pub const time = plain("Over time");
     pub const soon = plain("Coming soon.");
+    pub const none = plain("No games match");
     pub const queue = plain("Queue");
     pub const role = plain("Role");
     pub const all = plain("All");
@@ -49,6 +51,12 @@ pub const YourViews = struct {
     filter: yl.Filter = .{},
     tab: View = .games,
     views: []const View = &shipped,
+    /// game.html, relative to the page
+    game: []const u8 = "game.html",
+    /// A looked-up player's Riot ID, percent-encoded; "" the example
+    id: []const u8 = "",
+    /// Minutes east of UTC, for the records' dates; the server's: UTC
+    tz_min: i32 = 0,
 
     const P = @This();
 
@@ -91,9 +99,16 @@ pub const YourViews = struct {
             h.oom = true;
             return .none;
         };
+        const to: highlights.Links = .{ .page = p.game, .id = p.id, .tz_min = p.tz_min };
         return h.div(.{ .class = "c-yviews", .data_island = "yourviews", .data_view = @tagName(p.tab) }, .{
             playerbar.view(h, p.l, .{ .games = kept.items, .bands = &.{ if (p.views.len > 1) p.tabBand(h) else .none, p.filters(h) } }),
-            if (p.tab != .games) h.div(.{ .class = "panel", .role = "tabpanel" }, .{h.p(.{ .class = "note" }, .{W.soon})}) else null,
+            switch (p.tab) {
+                .games => highlights.top(h, p.l, kept.items, to, if (p.has(.highlights)) h.on(p, .{ .view = .highlights }) else null),
+                .highlights => h.div(.{ .class = "view", .role = "tabpanel" }, .{
+                    if (kept.items.len == 0) h.p(.{ .class = "note" }, .{W.none}) else highlights.view(h, p.l, kept.items, to),
+                }),
+                .time => h.div(.{ .class = "view", .role = "tabpanel" }, .{h.p(.{ .class = "note" }, .{W.soon})}),
+            },
         });
     }
 
@@ -154,10 +169,12 @@ pub fn gallery(g: *Gallery) void {
         var games: YourViews = .{ .l = &yp.demo.list };
         var flex: YourViews = .{ .l = &yp.demo.list, .filter = .{ .queue = .flex } };
         var highlights: YourViews = .{ .l = &yp.demo.list, .tab = .highlights, .views = &every };
+        var empty: YourViews = .{ .l = &yp.demo.list, .tab = .highlights, .filter = .{ .queue = .draft } };
     };
     g.addFill("Games, all queues", demo.games.view(h));
     g.addFill("Flex only", demo.flex.view(h));
     g.addFill("every view, Highlights", demo.highlights.view(h));
+    g.addFill("Highlights, a filter without games", demo.empty.view(h));
 }
 
 const testing = std.testing;
@@ -195,6 +212,29 @@ test "tabs and filter row: the bar's figures follow the filter, the URL carries 
     try testing.expectEqual(.time, p.tab);
     try testing.expectEqual(null, p.filter.champ);
     try testing.expectEqual(.mid, p.filter.role);
+    try testing.expect(!h.oom);
+}
+
+test "the Games view's three records open Highlights; Highlights groups them" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var t: tree.Tree = .{};
+    var h: H = .init(arena.allocator(), &t);
+    var p: YourViews = .{ .l = &yp.demo.list, .id = "MeioNeiz%23EUW" };
+    var n = p.view(&h);
+    const top = t.find(n, "data-top", null).?;
+    try testing.expect(t.find(top, "class", "more") != null);
+    // A lookup's game by start
+    try testing.expect(std.mem.startsWith(u8, t.attr(t.find(top, "class", "chip").?, "href").?, "game.html#id=MeioNeiz%23EUW&game="));
+    p.tab = .highlights;
+    n = p.view(&h);
+    try testing.expect(t.find(n, "data-top", null) == null);
+    try testing.expect(t.find(n, "class", "grp") != null);
+    // A filter without games says so
+    p.filter = .{ .queue = .draft };
+    n = p.view(&h);
+    try testing.expect(t.find(n, "class", "grp") == null);
+    try testing.expect(t.find(n, "class", "note") != null);
     try testing.expect(!h.oom);
 }
 

@@ -32,6 +32,10 @@ export fn main() void {
     page0 = .{ .l = &list };
     page = page0;
     island = dom.rt.add(yv.YourViews, &page, &page0, yv.sel) catch return dom.dom.warn("yourviews: out of memory");
+    const d = zjb.global("Date").new(.{});
+    defer d.release();
+    page.tz_min = -d.call("getTimezoneOffset", .{}, i32);
+    island.?.render();
     zjb.global("window").call("addEventListener", .{ zjb.constString(yk.event), zjb.fnHandle("yourViewsList", &onList) }, void);
     if (handed != null) swap();
 }
@@ -56,7 +60,11 @@ fn onList(e: zjb.Handle) callconv(.c) void {
 fn swap() void {
     cur +%= 1;
     _ = arenas[cur].reset(.free_all);
-    list = load(arenas[cur].allocator(), "data-bin") orelse example;
+    const a = arenas[cur].allocator();
+    list = load(a, "data-bin") orelse example;
+    // The example has no tag; a lookup's records open game.html by the URL's id
+    var buf: [1024]u8 = undefined;
+    page.id = if (list.player.tag.len > 0) a.dupe(u8, yk.idOf(dom.dom.hash(&buf)) orelse "") catch "" else "";
     // The URL's filter again, against this list's champions
     dom.rt.popstate();
 }

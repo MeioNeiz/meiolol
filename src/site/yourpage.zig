@@ -35,7 +35,7 @@ pub fn writePage(site: *const Site, w: *Writer) !bool {
     const bin = try a.alloc(u8, enc.calcSize(f.data.len));
     // The lookup's status line above the list; ui-your loads its file for a URL's id
     var look: ui.yourlookup.YourLookup = .{ .js = assets.yourlookup_js.path, .wasm = assets.yourlookup_wasm.path };
-    var v: ui.yourviews.YourViews = .{ .l = l };
+    var v: ui.yourviews.YourViews = .{ .l = l, .game = yourgame.page_path };
     var y: ui.yourpage.YourList = .{ .l = l, .bin = enc.encode(bin, f.data), .game = yourgame.page_path };
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
