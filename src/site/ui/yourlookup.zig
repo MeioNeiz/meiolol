@@ -175,7 +175,11 @@ pub fn gallery(g: *Gallery) void {
         .{ "queued behind others", demo(.answered, .{ .state = .queued, .ahead = 3 }) },
         .{ "fetching", demo(.answered, .{ .state = .fetching, .pending = 12, .total = 40 }) },
         .{ "ready after a failed refresh", demo(.answered, .{ .state = .ready, .failed = "RateLimited" }) },
+        .{ "queued", demo(.answered, .{ .state = .queued }) },
         .{ "not found", demo(.answered, .{ .state = .not_found }) },
+        .{ "opted out", demo(.answered, .{ .state = .opted_out }) },
+        .{ "busy", demo(.answered, .{ .state = .busy }) },
+        .{ "still working at the cap", demo(.slow, .{ .state = .fetching }) },
         .{ "the API down: the example below", demo(.down, .{ .state = .none }) },
     };
     inline for (states) |s| {
@@ -290,6 +294,39 @@ fn expectLine(a: std.mem.Allocator, t: *tree.Tree, n: N, want: []const u8) !void
     var w: std.Io.Writer.Allocating = .init(a);
     try t.textOf(n, &w.writer);
     try testing.expectEqualStrings(want, w.written());
+}
+
+test "each answer's status line; none once ready" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    const cases = .{
+        .{ yl.Head{ .state = .queued }, "Queued…" },
+        .{ yl.Head{ .state = .queued, .ahead = 0 }, "Queued…" },
+        .{ yl.Head{ .state = .queued, .ahead = 3 }, "Queued behind 3 other lookups…" },
+        .{ yl.Head{ .state = .fetching, .pending = 12, .total = 40 }, "Fetching games from Riot: 28 of 40…" },
+        .{ yl.Head{ .state = .not_found }, "No Riot account with that name and tag. Check the spelling and the part after #." },
+        .{ yl.Head{ .state = .opted_out }, "This player has asked us not to show their games." },
+        .{ yl.Head{ .state = .busy }, "Lots of lookups right now. Try again in a few minutes." },
+        .{ yl.Head{ .state = .ready }, "" },
+    };
+    inline for (cases) |c| {
+        var p = demo(.answered, c[0]);
+        try expectLine(a, &t, p.view(&h), c[1]);
+    }
+}
+
+test "a none answer is a failed one, its list freed" {
+    var p = demo(.asking, .{ .state = .none });
+    const l: yl.List = .{ .player = .{ .name = "A", .tag = "1" }, .champs = &.{}, .games = &.{} };
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const bytes = try reply(arena.allocator(), .{ .state = .none, .list = l });
+    // testing.allocator fails the test on a leak
+    try testing.expectError(error.Failed, p.answer(testing.allocator, bytes));
+    try testing.expectEqual(.down, p.at);
 }
 
 test idOf {

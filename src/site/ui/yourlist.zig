@@ -119,9 +119,18 @@ pub const Head = struct {
 /// /api/list's answer as its head, and its list as a List's own file (data.decode); the
 /// list's bytes are copied behind List's fingerprint, never decoded here
 pub fn split(a: std.mem.Allocator, bytes: []const u8) data.Error!struct { head: Head, list: ?[]u8 } {
+    comptime {
+        const lf = std.meta.fieldNames(Lookup);
+        if (lf.len != std.meta.fieldNames(Head).len + 1 or !std.mem.eql(u8, lf[lf.len - 1], "list"))
+            @compileError("yourlist: Head must be every Lookup field but a last `list`");
+    }
     const got = try data.decodeHead(Lookup, Head, bytes);
+    // The list's presence byte, then all the rest is the list
     const rest = got.rest;
-    if (rest.len < 2 or rest[0] != 1) return .{ .head = got.head, .list = null };
+    if (rest.len == 0) return error.Truncated;
+    if (rest[0] == 0 and rest.len == 1) return .{ .head = got.head, .list = null };
+    if (rest[0] != 1) return error.BadValue;
+    if (rest.len < 2) return error.Truncated;
     const out = try a.alloc(u8, 4 + rest.len - 1);
     std.mem.writeInt(u32, out[0..4], data.fingerprint(List), .little);
     @memcpy(out[4..], rest[1..]);
@@ -295,6 +304,34 @@ test "split: the head, and the list as its own file" {
     out.clearRetainingCapacity();
     try data.encode(a, Lookup, .{ .state = .not_found }, &out);
     try testing.expectEqual(null, (try split(a, out.items)).list);
+    try testing.expectEqual(.not_found, (try split(a, out.items)).head.state);
+}
+
+test "split: a cut, stale or damaged answer fails" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var out: std.ArrayList(u8) = .empty;
+    try data.encode(a, Lookup, .{ .state = .ready, .failed = "Timeout" }, &out);
+    const ok = out.items;
+    try testing.expectError(error.Truncated, split(a, ok[0..6]));
+    try testing.expectError(error.Truncated, split(a, ok[0 .. ok.len - 1]));
+    var bad = try a.dupe(u8, ok);
+    bad[0] +%= 1;
+    try testing.expectError(error.WrongType, split(a, bad));
+    // failed's length past the end
+    bad = try a.dupe(u8, ok);
+    const at = std.mem.find(u8, bad, "Timeout").?;
+    @memset(bad[at - 4 .. at], 0xff);
+    try testing.expectError(error.Truncated, split(a, bad));
+    // The list's presence byte: 0 with bytes after it, or neither 0 nor 1
+    bad = try std.mem.concat(a, u8, &.{ ok, &.{ 1, 2, 3 } });
+    try testing.expectError(error.BadValue, split(a, bad));
+    bad = try a.dupe(u8, ok);
+    bad[bad.len - 1] = 2;
+    try testing.expectError(error.BadValue, split(a, bad));
+    bad[bad.len - 1] = 1;
+    try testing.expectError(error.Truncated, split(a, bad));
 }
 
 test "days group by the viewer's date, newest first, remakes counted only in time" {
