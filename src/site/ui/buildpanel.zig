@@ -2,14 +2,15 @@
 //! left; on the right the slot cells (Spells, Start, Boots / Core / Item 4, 5, 6 /
 //! Skills) in a 3-column grid, pairs in a narrow container. Each cell lists its top 3
 //! options as compact DataTable rows, most played first: pick share, win rate coloured
-//! against the slot's own (which choice is better here, Jacob 25 Oct), the quieter
-//! reading after it (the rate minus the champion's, wide cells only), games. The slot's
+//! against the slot's own (which choice is better here, Jacob 25 Oct), games; the
+//! quieter reading (the rate minus the champion's) only in an open cell. The slot's
 //! highest win rate on solid_games is marked "best", a 4th row when not in the top 3.
 //! Most picked | Highest WR (lolalytics' build toggle, Jacob 26 Oct) re-sorts every cell
 //! by win rate, options under solid_games after. A matchup's marks the champion's usual
-//! choice "as usual" and dims a cell led by it. Tap a cell's "all" to open it across
+//! choice "as usual" and dims a cell led by it. Tap a cell's "N more" to open it across
 //! the panel: every option, named, sortable. One open at a time; it and the order in
-//! the URL. The figures' names are said once, above the cells. Data is plain, so a page
+//! the URL. Each cell's head names its columns over fixed widths, so they line up (one
+//! legend for the panel read as a toggle, Jacob 27 Oct). Data is plain, so a page
 //! can hand it builds filtered by a choice (contextual builds, builds.md answers) later
 const std = @import("std");
 const tree = @import("tree.zig");
@@ -17,7 +18,6 @@ const fmt = @import("fmt.zig");
 const phrase = @import("phrase.zig");
 const art = @import("art.zig");
 const button = @import("button.zig");
-const toggletip = @import("toggletip.zig");
 const segmented = @import("segmented.zig");
 const table = @import("table.zig");
 const runetree = @import("runetree.zig");
@@ -109,14 +109,13 @@ const W = struct {
     pub const won = plain("won");
     pub const games = plain("games");
     pub const fewer = plain("fewer");
-    pub const all = Phrase("all {n:int}");
-    pub const own_term = Phrase("vs {r:rate}");
-    pub const own_title = plain("The small figure");
-    pub const own_note = Phrase("The choice's win rate minus {c:text}'s {r:rate}. Late items read high: games that reach them were often won already.");
+    pub const more = Phrase("{n:int} more");
+    pub const own_note = plain("The option's win rate minus the champion's in the role. Late items read high: games that reach them were often won already.");
     pub const min = plain("min");
     pub const best = plain("best");
     pub const as_usual = plain("as usual");
-    pub const order = plain("Order");
+    pub const sort = plain("Sort");
+    pub const levels = plain("Levels");
     pub const most_picked = plain("Most picked");
     pub const highest = plain("Highest WR");
 };
@@ -193,6 +192,9 @@ pub const Row = struct {
     fn winSort(r: *const Row) f64 {
         return if (r.o.games < solid_games) -1 else rate(r.o.games, r.o.wins);
     }
+    fn ownSort(r: *const Row) f64 {
+        return if (r.o.games < rate_games) -100 else rate(r.o.games, r.o.wins) - r.c.own;
+    }
 
     fn what(h: *H, r: *const Row) N {
         const o = r.o;
@@ -238,8 +240,12 @@ pub const Row = struct {
     }
 
     fn wonCell(h: *H, r: *const Row) N {
-        const own: ?N = if (r.o.games < rate_games) null else h.span(.{ .class = "own" }, .{phrase.num(h, .points, rate(r.o.games, r.o.wins) - r.c.own)});
-        return h.span(.{ .class = "won" }, .{ win(h, r.o.games, r.o.wins, r.c.ref), own });
+        return win(h, r.o.games, r.o.wins, r.c.ref);
+    }
+
+    fn ownCell(h: *H, r: *const Row) N {
+        if (r.o.games < rate_games) return h.span(.{ .class = "own" }, .{"·"});
+        return h.span(.{ .class = "own" }, .{phrase.num(h, .points, rate(r.o.games, r.o.wins) - r.c.own)});
     }
 
     fn gamesCell(h: *H, r: *const Row) N {
@@ -252,9 +258,11 @@ pub const Table = table.DataTable(Row, .{
     .columns = &.{
         .{ .label = plain(""), .cell = Row.what, .num = false },
         // Under 150 px (320 phones) games stay, pick gives way
-        .{ .label = plain("Pick"), .cell = Row.pickCell, .sort = Row.share, .priority = 2 },
-        .{ .label = plain("Won"), .cell = Row.wonCell, .sort = Row.winSort, .answer = true },
-        .{ .label = plain("Games"), .cell = Row.gamesCell, .sort = Row.gamesF },
+        .{ .label = plain("Pick"), .cell = Row.pickCell, .sort = Row.share, .priority = 2, .key = "p" },
+        .{ .label = plain("Won"), .cell = Row.wonCell, .sort = Row.winSort, .answer = true, .key = "w" },
+        // In an open cell only (css)
+        .{ .label = plain("vs all"), .cell = Row.ownCell, .sort = Row.ownSort, .priority = 3, .tip = W.own_note, .key = "o" },
+        .{ .label = plain("Games"), .cell = Row.gamesCell, .sort = Row.gamesF, .key = "g" },
     },
     .default_sort = 1,
     .games = Row.games,
@@ -358,19 +366,15 @@ pub const BuildPanel = struct {
         var cells = h.list();
         for ([_]Kind{ .spells, .start, .boots, .core, .item4, .item5, .item6 }) |k| if (p.cell(h, k)) |c| cells.add(c);
         if (p.skillsCell(h)) |c| cells.add(c);
-        const tip = toggletip.view(h, h.fmt("{s}-own", .{p.id}), .{W.own_term.with(h, .{ .r = p.data.own })}, W.own_title, W.own_note.with(h, .{ .c = p.data.champion, .r = p.data.own }));
         return h.div(.{ .class = "c-build" }, .{h.div(.{ .class = "in" }, .{
             h.div(.{ .class = "runes" }, .{p.runes.view(h)}),
             h.div(.{ .class = "slots" }, .{
-                h.div(.{ .class = "names" }, .{
-                    segmented.view(h, .{ .s = .s, .label = W.order }, &.{
+                h.div(.{ .class = "sort" }, .{
+                    h.span(.{ .aria_hidden = true }, .{W.sort}),
+                    segmented.view(h, .{ .s = .s, .label = W.sort }, &.{
                         .{ .label = W.most_picked, .selected = p.order == .pick, .on = h.on(p, .{ .order = .pick }) },
                         .{ .label = W.highest, .selected = p.order == .win, .on = h.on(p, .{ .order = .win }) },
                     }),
-                    h.span(.{}, .{W.pick}),
-                    h.span(.{ .class = "w" }, .{W.won}),
-                    h.span(.{ .class = "own" }, .{&tip}),
-                    h.span(.{ .class = "g" }, .{W.games}),
                 }),
                 h.div(.{ .class = "cells" }, .{cells.done()}),
             }),
@@ -383,13 +387,28 @@ pub const BuildPanel = struct {
         };
     }
 
-    /// A cell's head band: its title and, with more options than shown, all / fewer
-    fn head(p: *BuildPanel, h: *H, k: Kind, total: usize) N {
-        const open = p.open == k;
-        return h.div(.{ .class = "sh" }, .{
-            h.h3(.{}, .{k.title()}),
-            if (total > shown) button.view(h, .{ .v = .quiet, .s = .s, .on = h.on(p, .{ .open = k }), .ref = allRef(k) }, .{if (open) W.fewer else W.all.with(h, .{ .n = total })}) else null,
+    /// A cell's head band: its title, then its column heads; open, "fewer" instead (the
+    /// open table heads its own columns)
+    fn head(p: *BuildPanel, h: *H, k: Kind, title: tree.Text) N {
+        if (p.open == k) return h.div(.{ .class = "sh" }, .{
+            h.h3(.{}, .{title}),
+            button.view(h, .{ .v = .quiet, .s = .s, .on = h.on(p, .{ .open = k }), .ref = allRef(k) }, .{W.fewer}),
         });
+        return h.div(.{ .class = "sh" }, .{ h.h3(.{}, .{title}), heads(h) });
+    }
+
+    fn heads(h: *H) N {
+        return h.span(.{ .class = "hd" }, .{
+            h.span(.{ .class = "p" }, .{W.pick}),
+            h.span(.{ .class = "w" }, .{W.won}),
+            h.span(.{ .class = "g" }, .{W.games}),
+        });
+    }
+
+    /// Under a closed cell with options it doesn't show: "7 more", which opens it
+    fn more(p: *BuildPanel, h: *H, k: Kind, hidden: usize) ?N {
+        if (p.open == k or hidden == 0) return null;
+        return button.view(h, .{ .v = .quiet, .s = .s, .on = h.on(p, .{ .open = k }), .ref = allRef(k) }, .{W.more.with(h, .{ .n = hidden })});
     }
 
     fn tableFor(p: *BuildPanel, h: *H, k: Kind, open: bool, max: usize) N {
@@ -457,6 +476,7 @@ pub const BuildPanel = struct {
     fn cell(p: *BuildPanel, h: *H, k: Kind) ?N {
         const rows = p.rows[@backingInt(k)];
         if (rows.len == 0) return null;
+        const t = p.tableFor(h, k, p.open == k, shown);
         return h.div(.{
             .class = "slot",
             .key = @backingInt(k),
@@ -464,74 +484,122 @@ pub const BuildPanel = struct {
             .data_open = p.open == k,
             .data_usual = p.open != k and p.asUsual(k),
             .on_keydown = if (p.open == k) h.on(p, .key) else null,
-        }, .{ p.head(h, k, rows.len), p.tableFor(h, k, p.open == k, shown) });
+        }, .{ p.head(h, k, k.title()), t, p.more(h, k, rows.len - p.tables[@backingInt(k)].rows.len) });
     }
 
-    /// Priorities as rows, the most played level path as the SkillGrid; open: every
-    /// priority and every path
+    /// Closed, two parts side by side: the priorities as rows, and the shown level path
+    /// as the SkillGrid with its figures beside it, each under its own column heads.
+    /// Open: every priority, the grid, every path, one under the other
     fn skillsCell(p: *BuildPanel, h: *H) ?N {
         const pri = p.rows[@backingInt(Kind.skills)];
         const paths = p.rows[@backingInt(Kind.skill_path)];
         if (pri.len == 0 and paths.len == 0) return null;
         const open = p.open == .skills;
-        const path_c = &p.ctx[@backingInt(Kind.skill_path)];
-        return h.div(.{ .class = "slot", .key = @backingInt(Kind.skills), .data_k = Kind.skills, .data_open = open, .data_usual = !open and p.asUsual(.skills), .on_keydown = if (open) h.on(p, .key) else null }, .{
-            p.head(h, .skills, @max(pri.len, paths.len)),
-            if (pri.len > 0) p.tableFor(h, .skills, open, 1) else null,
-            if (paths.len > 0) skillgrid.view(h, .{
-                .keys = p.shownPath().o.keys,
-                .games = p.shownPath().o.games,
-                .wins = p.shownPath().o.wins,
-                .share = p.shownPath().share(),
-            }, path_c.ref) else null,
-            if (open and paths.len > 0) p.tableFor(h, .skill_path, true, paths.len) else null,
+        const pri_t: ?N = if (pri.len > 0) p.tableFor(h, .skills, open, shown) else null;
+        const path: ?N = if (paths.len > 0) p.pathRow(h, p.shownPath()) else null;
+        const attrs = .{ .class = "slot", .key = @backingInt(Kind.skills), .data_k = Kind.skills, .data_open = open, .data_usual = !open and p.asUsual(.skills), .on_keydown = if (open) h.on(p, .key) else null };
+        if (open) return h.div(attrs, .{
+            p.head(h, .skills, Kind.skills.title()),
+            pri_t,
+            path,
+            if (paths.len > 0) p.tableFor(h, .skill_path, true, paths.len) else null,
+        });
+        const hidden = @max(pri.len -| p.tables[@backingInt(Kind.skills)].rows.len, paths.len -| 1);
+        return h.div(attrs, .{
+            h.div(.{ .class = "part" }, .{ p.head(h, .skills, Kind.skills.title()), pri_t, p.more(h, .skills, hidden) }),
+            if (path) |x| h.div(.{ .class = "part" }, .{ h.div(.{ .class = "sh" }, .{ h.h3(.{}, .{W.levels}), heads(h) }), x }) else null,
+        });
+    }
+
+    /// The level path's grid, then its pick, won and games in the cells' columns
+    fn pathRow(p: *BuildPanel, h: *H, r: *const Row) N {
+        const ref = p.ctx[@backingInt(Kind.skill_path)].ref;
+        return h.div(.{ .class = "lp", .data_state = if (r.o.games < solid_games) "thin" else null }, .{
+            skillgrid.order(h, r.o.keys),
+            h.span(.{ .class = "p" }, .{pickText(h, r.share())}),
+            win(h, r.o.games, r.o.wins, ref),
+            h.span(.{ .class = "g" }, .{shortCount(h, r.o.games)}),
         });
     }
 };
 
 pub const css =
     \\@layer components {
-    \\  .c-build { container-type: inline-size; min-width: 0; }
-    \\  .c-build > .in { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4) var(--sp-5); }
+    \\  .c-build { container-type: inline-size; min-width: 0; --cwp: 40px; --cww: 46px; --cwg: 42px; }
+    \\  .c-build > .in { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-4) var(--sp-5);
+    \\    padding: var(--sp-3) var(--card-px) var(--card-px); }
+    \\  @container (min-width: 900px) { .c-build > .in { padding: var(--sp-4) var(--sp-5) var(--sp-5); } }
     \\  @container (min-width: 900px) { .c-build > .in { grid-template-columns: minmax(0, 600px) minmax(0, 1fr); } }
+    \\  @container (min-width: 1400px) { .c-build > .in { grid-template-columns: minmax(0, 660px) minmax(0, 1fr); } }
     \\  .c-build > .in > * { min-width: 0; }
     \\  .c-build .slots { container-type: inline-size; display: flex; flex-direction: column; }
-    \\  .c-build .slots > .names { display: flex; justify-content: flex-end; align-items: center; gap: var(--sp-2);
-    \\    margin-bottom: var(--sp-2); font-size: var(--fs-xs); color: var(--faint); }
-    \\  .c-build .names > .c-seg { margin-right: auto; }
-    \\  .c-build .names > .c-seg + span { color: var(--muted); }
-    \\  .c-build .names > .w { color: var(--t2); font-weight: var(--w-b); }
-    \\  .c-build .slots > .cells { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-3) var(--sp-4); }
-    \\  @container (max-width: 520px) { .c-build .slots > .cells { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); } }
-    \\  .c-build .slot { container-type: inline-size; display: flex; flex-direction: column; min-width: 0; }
-    \\  .c-build .slot[data-k="core"], .c-build .slot[data-k="skills"], .c-build .slot[data-open] { grid-column: 1 / -1; }
-    \\  .c-build .slot > .sh { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2);
+    \\  .c-build .slots > .sort { display: flex; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-3);
+    \\    font-size: var(--fs-s); color: var(--muted); }
+    \\  .c-build .slots > .cells { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-flow: dense;
+    \\    gap: var(--sp-4) var(--sp-5); }
+    \\  .c-build .slots > .cells:has(> [data-open]) { grid-auto-flow: row; }
+    \\  @container (max-width: 520px) { .c-build .slots > .cells { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4) var(--sp-3); } }
+    \\  .c-build .slot, .c-build .part { container-type: inline-size; display: flex; flex-direction: column; min-width: 0; }
+    \\  .c-build .slot[data-k="core"] { grid-column: span 2; }
+    \\  .c-build .slot[data-k="skills"], .c-build .slot[data-open] { grid-column: 1 / -1; }
+    \\  .c-build .slot[data-k="skills"]:not([data-open]) { display: contents; }
+    \\  .c-build .slot[data-k="skills"] > .part + .part { grid-column: 1 / -1; }
+    \\  .c-build .slots .sh { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2);
     \\    height: var(--ctl-s); border-bottom: 1px solid var(--line); }
-    \\  .c-build .slot > .sh > h3 { margin: 0; font-size: var(--fs-xs); font-weight: var(--w-b); color: var(--muted);
-    \\    text-transform: uppercase; letter-spacing: 0.06em; }
-    \\  .c-build .slot > .sh > .c-btn { margin-right: -10px; }
+    \\  .c-build .slots .sh > h3 { margin: 0; font-size: var(--fs-s); font-weight: var(--w-b); color: var(--t2);
+    \\    text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; }
+    \\  .c-build .slots .sh > .c-btn { margin-right: -10px; }
+    \\  .c-build .slots .sh > .hd { display: flex; font-size: var(--fs-xs); color: var(--faint); }
+    \\  .c-build .hd > *, .c-build .lp > :not(.c-skills) { box-sizing: border-box; text-align: right; padding: 0 3px; }
+    \\  .c-build :is(.hd, .lp) > .p, .c-build .slot:not([data-open]) .c-table .p { width: var(--cwp); }
+    \\  .c-build :is(.hd, .lp) > .w, .c-build .slot:not([data-open]) .c-table .w { width: var(--cww); }
+    \\  .c-build :is(.hd, .lp) > .g, .c-build .slot:not([data-open]) .c-table .g { width: var(--cwg); padding-right: 0; }
+    \\  .c-build .slot:not([data-open]) .c-table { table-layout: fixed; width: 100%; }
+    \\  .c-build .slot:not([data-open]) .c-table .o { display: none; }
+    \\  .c-build .slot .c-table[data-v="compact"] { font-size: var(--fs-m); }
+    \\  .c-build .slot .c-table[data-v="compact"] td { height: 40px; }
     \\  .c-build .slot .c-table td { border-bottom-color: var(--line); }
-    \\  .c-build .what { display: flex; align-items: center; gap: 3px; min-width: 0; }
+    \\  .c-build .slot .c-table .g, .c-build .lp > .g { color: var(--muted); }
+    \\  .c-build .slot > .c-btn, .c-build .part > .c-btn { align-self: flex-start; margin: 2px 0 0 -10px; color: var(--muted); }
+    \\  .c-build .what { display: flex; align-items: center; gap: 4px; min-width: 0; }
+    \\  .c-build .what .c-art { --sz: 30px; }
     \\  .c-build .what > .nm { margin-left: 6px; color: var(--t2); overflow: hidden; text-overflow: ellipsis; }
-    \\  .c-build .what > .min, .c-build .won > .own { color: var(--faint); font-size: var(--fs-xs); }
+    \\  .c-build .what > .min, .c-build .own { color: var(--faint); font-size: var(--fs-s); }
     \\  .c-build .what > .min { margin-left: var(--sp-2); }
-    \\  .c-build .won { display: inline-flex; align-items: baseline; justify-content: flex-end; gap: 5px; }
-    \\  .c-build .won > .w { font-weight: var(--w-b); color: var(--c, var(--faint)); min-width: 30px; text-align: right; }
-    \\  .c-build .won > .own { min-width: 28px; text-align: right; }
+    \\  .c-build :is(td, .lp) > .w { font-weight: var(--w-b); color: var(--c, var(--faint)); }
     \\  .c-build .keys { font-family: ui-monospace, monospace; letter-spacing: 0.06em; color: var(--t2); }
     \\  .c-build .keys > b { color: var(--text); }
-    \\  .c-build .keys > .ar { color: var(--faint); margin: 0 3px; font-family: var(--font); }
-    \\  .c-build .slot > .c-skills { margin: var(--sp-2) 0 var(--sp-1); }
+    \\  .c-build .keys > .ar { color: var(--faint); margin: 0 4px; font-family: var(--font); }
+    \\  .c-build .lp { display: flex; align-items: center; gap: 0; min-height: 40px; padding: var(--sp-2) 0;
+    \\    font-size: var(--fs-m); font-variant-numeric: tabular-nums; border-bottom: 1px solid var(--line); }
+    \\  .c-build .lp > .c-skills { flex: 1; min-width: 0; margin-right: var(--sp-2); }
+    \\  .c-build .lp > .c-skills > .grid { font-size: var(--fs-s); gap: 3px 2px; }
+    \\  .c-build .lp > .c-skills > .grid > i { height: 22px; }
+    \\  .c-build .lp > .p { color: var(--t2); }
+    \\  .c-build .lp[data-state="thin"] > :not(.c-skills) { opacity: 0.55; }
     \\  .c-build .what > .best { margin-left: 4px; font-size: var(--fs-xs); font-weight: var(--w-b); color: var(--accent); }
     \\  .c-build .what > .usual { margin-left: 4px; font-size: var(--fs-xs); color: var(--faint); white-space: nowrap; }
-    \\  .c-build .slot[data-usual] > :not(.sh) { opacity: 0.55; }
-    \\  @container (max-width: 260px) { .c-build .won > .own { display: none; } }
+    \\  .c-build .slot[data-usual] > :not(.sh), .c-build .slot[data-usual] > .part > :not(.sh) { opacity: 0.55; }
     \\  @container (max-width: 200px) {
     \\    .c-build .what > .best { flex: none; width: 6px; height: 6px; margin-left: 5px; border-radius: 50%;
     \\      overflow: hidden; color: transparent; background: var(--accent); }
     \\    .c-build .c-table[data-v="compact"] :is(th, td) { padding: 0 2px; }
     \\    .c-build .what > .usual { display: none; }
-    \\    .c-build .what > .c-art + .c-art { margin-left: -8px; box-shadow: -1.5px 0 0 var(--panel); }
+    \\    .c-build .what > .c-art + .c-art { margin-left: -10px; box-shadow: -1.5px 0 0 var(--panel); }
+    \\  }
+    \\  @container (max-width: 260px) {
+    \\    .c-build :is(.slot, .part) > * { --cwp: 32px; --cww: 36px; --cwg: 32px; }
+    \\    .c-build .slot .c-table[data-v="compact"] { font-size: var(--fs-s); }
+    \\    .c-build .what .c-art { --sz: 26px; }
+    \\  }
+    \\  @container (max-width: 170px) { .c-build .hd > .p, .c-build .slot:not([data-open]) .c-table .p { display: none; } }
+    \\  @container (max-width: 420px) { .c-build .what > .c-path > .min { display: none; } }
+    \\  @container (max-width: 480px) {
+    \\    .c-build .lp { flex-wrap: wrap; }
+    \\    .c-build .lp > .c-skills { flex-basis: 100%; margin: 0 0 var(--sp-1); }
+    \\    .c-build .lp > .c-skills > .grid { font-size: var(--fs-xs); gap: 2px 1px; }
+    \\    .c-build .lp > .c-skills > .grid > i { height: 18px; }
+    \\    .c-build .lp > .p { margin-left: auto; }
     \\  }
     \\}
     \\

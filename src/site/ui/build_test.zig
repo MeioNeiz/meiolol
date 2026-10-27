@@ -1,5 +1,5 @@
 //! BuildPanel on the fake DOM (build_demo.zig's Darius): a cell opens from the URL or its
-//! "all", closes by "fewer", Escape or Back; the best row and Highest WR; RuneTree's
+//! "N more", closes by "fewer", Escape or Back; the best row and Highest WR; RuneTree's
 //! pages, runes and Every tree. Each patch equal to a fresh render
 const std = @import("std");
 const tree = @import("tree.zig");

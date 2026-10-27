@@ -67,6 +67,7 @@ const W = struct {
     pub const pick = plain("pick");
     pub const won = plain("won");
     pub const games = plain("games");
+    pub const legend = plain("Under each rune: pick, won, games");
     pub const shards = plain("Shards");
     pub const every = plain("Every tree");
     pub const chosen = plain("Chosen page");
@@ -210,16 +211,13 @@ pub const RuneTree = struct {
         }, kids);
     }
 
-    /// The chosen rune's name and figures, else the figures' names once
+    /// The chosen rune's name and figures, else the figures' names once, as a caption
+    /// in their order under a rune (spaced words with one bold read as tabs)
     fn readout(t: *RuneTree, h: *H) N {
-        const pos = t.rune orelse return h.div(.{ .class = "key", .aria_hidden = true }, .{
-            h.span(.{ .class = "pk" }, .{W.pick}),
-            h.span(.{ .class = "w" }, .{W.won}),
-            h.span(.{ .class = "g" }, .{W.games}),
-        });
-        const r = t.at(pos) orelse return h.div(.{ .class = "key" }, .{});
+        const pos = t.rune orelse return h.div(.{ .class = "read", .aria_hidden = true }, .{W.legend});
+        const r = t.at(pos) orelse return h.div(.{ .class = "read" }, .{});
         const share = 100 * @as(f64, @floatFromInt(r.games)) / @as(f64, @floatFromInt(@max(t.data.games, 1)));
-        return h.div(.{ .class = "key", .data_v = "rune", .aria_live = "polite" }, .{
+        return h.div(.{ .class = "read", .data_v = "rune", .aria_live = "polite" }, .{
             h.b(.{}, .{r.art.name}),
             h.span(.{ .class = "pk" }, .{ bp.pickText(h, share), " ", W.pick, t.moved(h, r, share) }),
             if (r.usual) |u| h.span(.{ .class = "pk" }, .{W.usually.with(h, .{ .p = u })}) else null,
@@ -266,11 +264,13 @@ fn ci(h: *H, games: u32, wins: u32) ?N {
 pub const css =
     \\@layer components {
     \\  .c-runes { container-type: inline-size; display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
-    \\  .c-runes > .top { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--sp-2) var(--sp-3); flex-wrap: wrap; }
+    \\  .c-runes > .top { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-2); }
     \\  .c-runes .pages { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
     \\  .c-runes .page { position: relative; display: grid; grid-template-columns: auto auto; gap: 0 var(--sp-2);
-    \\    align-items: center; padding: 5px 10px 5px 8px; border: 1px solid var(--line); border-radius: var(--r-m);
-    \\    font-size: var(--fs-s); font-variant-numeric: tabular-nums; }
+    \\    align-items: center; padding: 6px 12px 6px 8px; border: 1px solid var(--line); border-radius: var(--r-m);
+    \\    font-size: var(--fs-m); font-variant-numeric: tabular-nums; }
+    \\  .c-runes .page > .ks > .c-art:first-child { --sz: 34px; }
+    \\  .c-runes .page > .ks > .c-art + .c-art { --sz: 18px; }
     \\  .c-runes .page:hover { background: var(--panel-2); }
     \\  .c-runes .page:has(> .ks[aria-pressed="true"]) { border-color: var(--sel-line); background: var(--accent-bg); }
     \\  .c-runes .page > .ks { all: unset; display: flex; align-items: center; gap: 2px; grid-row: span 2; cursor: pointer; }
@@ -278,19 +278,17 @@ pub const css =
     \\  .c-runes .page > .ks:focus-visible::after { outline: 2px solid var(--focus); }
     \\  .c-runes .page > .fig { display: flex; align-items: baseline; gap: 3px; }
     \\  .c-runes .page .w { font-weight: var(--w-b); color: var(--c, var(--faint)); }
-    \\  .c-runes .page .ci, .c-runes .page > .g { color: var(--faint); font-size: var(--fs-xs); }
+    \\  .c-runes .page .ci, .c-runes .page > .g { color: var(--faint); font-size: var(--fs-s); }
     \\  .c-runes .page[data-state="thin"] > .fig { opacity: 0.55; }
-    \\  .c-runes .key { display: flex; align-items: baseline; gap: var(--sp-2); font-size: var(--fs-xs); color: var(--faint);
+    \\  .c-runes .read { display: flex; align-items: baseline; gap: var(--sp-2); font-size: var(--fs-s); color: var(--faint);
     \\    font-variant-numeric: tabular-nums; min-height: 18px; }
-    \\  .c-runes .key > .pk { color: var(--muted); }
-    \\  .c-runes .key > .w { color: var(--t2); font-weight: var(--w-b); font-size: var(--fs-s); }
-    \\  .c-runes .key[data-v="rune"] { font-size: var(--fs-s); color: var(--t2); }
-    \\  .c-runes .key[data-v="rune"] > b { color: var(--text); font-weight: var(--w-m); }
-    \\  .c-runes .key[data-v="rune"] .w { font-weight: var(--w-b); color: var(--c, var(--faint)); }
-    \\  .c-runes .trees { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: var(--sp-3); }
+    \\  .c-runes .read[data-v="rune"] { font-size: var(--fs-m); color: var(--t2); }
+    \\  .c-runes .read[data-v="rune"] > b { color: var(--text); font-weight: var(--w-m); }
+    \\  .c-runes .read[data-v="rune"] .w { font-weight: var(--w-b); color: var(--c, var(--faint)); }
+    \\  .c-runes .trees { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--sp-3); }
     \\  .c-runes .tree { min-width: 0; }
     \\  .c-runes .tree > h4 { display: flex; align-items: center; gap: 6px; height: 20px; margin: 0 0 4px;
-    \\    font-size: var(--fs-s); font-weight: var(--w-m); color: var(--t2); }
+    \\    font-size: var(--fs-m); font-weight: var(--w-m); color: var(--t2); }
     \\  .c-runes .row { display: grid; grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); gap: 2px;
     \\    padding: 3px 0; border-top: 1px solid var(--line); }
     \\  .c-runes .row:first-of-type { border-top: 0; }
@@ -299,17 +297,19 @@ pub const css =
     \\  .c-runes button.rune { cursor: pointer; }
     \\  .c-runes button.rune:hover { background: var(--panel-2); }
     \\  .c-runes button.rune:focus-visible { outline: 2px solid var(--focus); }
-    \\  .c-runes .rune > .c-art { opacity: 0.35; filter: grayscale(1); }
+    \\  .c-runes .rune > .c-art { --sz: 32px; opacity: 0.35; filter: grayscale(1); }
+    \\  .c-runes .row[data-v="ks"] .rune > .c-art { --sz: 38px; }
+    \\  .c-runes .tree[data-v="shards"] .rune > .c-art { --sz: 24px; }
     \\  .c-runes .rune[data-share="mid"] > .c-art { opacity: 0.7; filter: none; }
     \\  .c-runes .rune[data-share="hi"] > .c-art, .c-runes .rune[data-state] > .c-art { opacity: 1; filter: none; }
     \\  .c-runes .rune[data-state="lit"] { background: var(--accent-bg); box-shadow: inset 0 0 0 1px var(--sel-line); }
     \\  .c-runes .rune[data-state="sel"] { background: var(--panel-3); box-shadow: inset 0 0 0 1px var(--line-2); }
     \\  .c-runes .rune > .sh { width: 100%; max-width: 40px; height: 3px; margin-top: 2px; border-radius: 2px; background: var(--bar-track); }
     \\  .c-runes .rune > .sh > i { display: block; height: 100%; width: calc(var(--w) * 1%); border-radius: 2px; background: var(--bar-hi); }
-    \\  .c-runes .rune > .pk { font-size: var(--fs-xs); color: var(--muted); line-height: 1.2; }
+    \\  .c-runes .rune > .pk { font-size: var(--fs-s); color: var(--muted); line-height: 1.25; }
     \\  .c-runes .mv { margin-left: 2px; color: var(--t2); }
-    \\  .c-runes .rune > .w { font-size: var(--fs-s); font-weight: var(--w-m); line-height: 1.2; color: var(--c, var(--faint)); }
-    \\  .c-runes .rune > .g { font-size: var(--fs-xs); color: var(--faint); line-height: 1.1; }
+    \\  .c-runes .rune > .w { font-size: var(--fs-m); font-weight: var(--w-b); line-height: 1.25; color: var(--c, var(--faint)); }
+    \\  .c-runes .rune > .g { font-size: var(--fs-s); color: var(--faint); line-height: 1.2; }
     \\  .c-runes .rune[data-thin] > .pk, .c-runes .rune[data-thin] > .w { opacity: 0.55; }
     \\  .c-runes > .c-btn { display: none; align-self: flex-start; }
     \\  @container (max-width: 540px) {
