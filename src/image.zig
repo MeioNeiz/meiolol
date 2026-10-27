@@ -1,5 +1,5 @@
 //! Champion icons for the site: Data Dragon's PNG squares shrunk and saved as JPEG
-//! (64 px ~3 KB against ~29 KB for the 128 px PNG, drawn at 20-56 px). Reads the PNGs
+//! (80 px ~3 KB against ~29 KB for the 128 px PNG, drawn at 20-56 px). Reads the PNGs
 //! Data Dragon serves (8-bit RGB or RGBA, not interlaced; alpha dropped: the squares are
 //! opaque); writes baseline JPEG, no chroma subsampling (small art keeps its edges)
 
@@ -17,7 +17,8 @@ pub const Image = struct {
     }
 };
 
-const max_side = 4096;
+/// Data Dragon's are 120 or 128: the raw rows of a bigger header would be megabytes
+const max_side = 1024;
 
 pub const PngError = error{ NotPng, Unsupported, Corrupt };
 
@@ -38,7 +39,7 @@ pub fn decodePng(gpa: Allocator, data: []const u8) (PngError || Allocator.Error)
         const body = data[pos + 8 ..][0..len];
         pos += 12 + len;
         if (std.mem.eql(u8, kind, "IHDR")) {
-            if (len != 13) return error.Corrupt;
+            if (len != 13 or channels != 0) return error.Corrupt;
             w = std.mem.readInt(u32, body[0..4], .big);
             h = std.mem.readInt(u32, body[4..8], .big);
             if (w == 0 or h == 0 or w > max_side or h > max_side) return error.Unsupported;
@@ -63,6 +64,12 @@ pub fn decodePng(gpa: Allocator, data: []const u8) (PngError || Allocator.Error)
     var in: std.Io.Reader = .fixed(z.items);
     var d: std.compress.flate.Decompress = .init(&in, .zlib, window);
     d.reader.readSliceAll(raw) catch return error.Corrupt;
+    // The stream ends with the rows: reading on takes its checksum
+    if (d.reader.takeByte()) |_| return error.Corrupt else |err| switch (err) {
+        error.EndOfStream => {},
+        error.ReadFailed => return error.Corrupt,
+    }
+    if (d.container_metadata.zlib.adler != std.hash.Adler32.hash(raw) or in.bufferedLen() != 0) return error.Corrupt;
 
     const px = try gpa.alloc(u8, stride * h);
     defer gpa.free(px);
@@ -409,20 +416,41 @@ comptime {
     }
 }
 
-/// Tests: a PNG of `rgb` (w x h, colour type 2) in a stored deflate block, each row
-/// filtered with `filter`: what decodePng must read back
-pub fn testPng(gpa: Allocator, w: u32, h: u32, rgb: []const u8, filter: u8) ![]u8 {
+pub const TestPng = struct {
+    /// Every row's filter
+    filter: u8 = 0,
+    /// 3 RGB, 4 RGBA
+    channels: u8 = 3,
+    /// Compressed, else one stored block
+    deflate: bool = false,
+};
+
+/// Tests: a PNG of `px` (w x h, `o.channels` each) as decodePng must read it back
+pub fn testPng(gpa: Allocator, w: u32, h: u32, px: []const u8, o: TestPng) ![]u8 {
+    const z = try testZlib(gpa, w, h, px, o);
+    defer gpa.free(z);
+    var ihdr: [13]u8 = undefined;
+    std.mem.writeInt(u32, ihdr[0..4], w, .big);
+    std.mem.writeInt(u32, ihdr[4..8], h, .big);
+    ihdr[8..13].* = .{ 8, if (o.channels == 4) 6 else 2, 0, 0, 0 };
+    return testChunks(gpa, &.{ .{ "IHDR", &ihdr }, .{ "IDAT", z }, .{ "IEND", "" } });
+}
+
+/// The filtered rows in a zlib stream
+fn testZlib(gpa: Allocator, w: u32, h: u32, px: []const u8, o: TestPng) ![]u8 {
+    const n = o.channels;
+    const stride = w * n;
     var raw: std.ArrayList(u8) = .empty;
     defer raw.deinit(gpa);
     for (0..h) |y| {
-        try raw.append(gpa, filter);
-        const row = rgb[y * w * 3 ..][0 .. w * 3];
-        const up: ?[]const u8 = if (y > 0) rgb[(y - 1) * w * 3 ..][0 .. w * 3] else null;
+        try raw.append(gpa, o.filter);
+        const row = px[y * stride ..][0..stride];
+        const up: ?[]const u8 = if (y > 0) px[(y - 1) * stride ..][0..stride] else null;
         for (row, 0..) |v, i| {
-            const a: u8 = if (i >= 3) row[i - 3] else 0;
+            const a: u8 = if (i >= n) row[i - n] else 0;
             const b: u8 = if (up) |u| u[i] else 0;
-            const c: u8 = if (up) |u| (if (i >= 3) u[i - 3] else 0) else 0;
-            try raw.append(gpa, v -% switch (filter) {
+            const c: u8 = if (up) |u| (if (i >= n) u[i - n] else 0) else 0;
+            try raw.append(gpa, v -% switch (o.filter) {
                 0 => 0,
                 1 => a,
                 2 => b,
@@ -431,23 +459,30 @@ pub fn testPng(gpa: Allocator, w: u32, h: u32, rgb: []const u8, filter: u8) ![]u
             });
         }
     }
-    var z: std.ArrayList(u8) = .empty;
-    defer z.deinit(gpa);
-    try z.appendSlice(gpa, &.{ 0x78, 0x01, 0x01 });
-    const len: u16 = @intCast(raw.items.len);
-    try z.appendSlice(gpa, &std.mem.toBytes(std.mem.nativeToLittle(u16, len)));
-    try z.appendSlice(gpa, &std.mem.toBytes(std.mem.nativeToLittle(u16, ~len)));
-    try z.appendSlice(gpa, raw.items);
-    try z.appendSlice(gpa, &std.mem.toBytes(std.mem.nativeToBig(u32, std.hash.Adler32.hash(raw.items))));
+    var z: std.Io.Writer.Allocating = try .initCapacity(gpa, 64);
+    errdefer z.deinit();
+    if (o.deflate) {
+        const window = try gpa.alloc(u8, std.compress.flate.max_window_len);
+        defer gpa.free(window);
+        var c: std.compress.flate.Compress = try .init(&z.writer, window, .zlib, .default);
+        try c.writer.writeAll(raw.items);
+        try c.finish();
+    } else {
+        const len: u16 = @intCast(raw.items.len);
+        try z.writer.writeAll(&.{ 0x78, 0x01, 0x01 });
+        try z.writer.writeInt(u16, len, .little);
+        try z.writer.writeInt(u16, ~len, .little);
+        try z.writer.writeAll(raw.items);
+        try z.writer.writeInt(u32, std.hash.Adler32.hash(raw.items), .big);
+    }
+    return z.toOwnedSlice();
+}
 
+fn testChunks(gpa: Allocator, chunks: []const struct { []const u8, []const u8 }) ![]u8 {
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(gpa);
     try out.appendSlice(gpa, "\x89PNG\r\n\x1a\n");
-    var ihdr: [13]u8 = undefined;
-    std.mem.writeInt(u32, ihdr[0..4], w, .big);
-    std.mem.writeInt(u32, ihdr[4..8], h, .big);
-    ihdr[8..13].* = .{ 8, 2, 0, 0, 0 };
-    for ([_]struct { []const u8, []const u8 }{ .{ "IHDR", &ihdr }, .{ "IDAT", z.items }, .{ "IEND", "" } }) |c| {
+    for (chunks) |c| {
         try out.appendSlice(gpa, &std.mem.toBytes(std.mem.nativeToBig(u32, @intCast(c[1].len))));
         try out.appendSlice(gpa, c[0]);
         try out.appendSlice(gpa, c[1]);
@@ -462,7 +497,7 @@ test "decodePng reads every filter back" {
     var rgb: [5 * 4 * 3]u8 = undefined;
     for (&rgb, 0..) |*v, i| v.* = @intCast((i * 37 + 11) % 256);
     for (0..5) |filter| {
-        const png = try testPng(gpa, 5, 4, &rgb, @intCast(filter));
+        const png = try testPng(gpa, 5, 4, &rgb, .{ .filter = @intCast(filter) });
         defer gpa.free(png);
         const img = try decodePng(gpa, png);
         defer img.deinit(gpa);
@@ -476,7 +511,7 @@ test "decodePng refuses what it can't read" {
     const gpa = std.testing.allocator;
     try std.testing.expectError(error.NotPng, decodePng(gpa, "GIF89a"));
     const rgb: [3]u8 = .{ 1, 2, 3 };
-    const png = try testPng(gpa, 1, 1, &rgb, 0);
+    const png = try testPng(gpa, 1, 1, &rgb, .{});
     defer gpa.free(png);
     // Cut inside IDAT
     try std.testing.expectError(error.Corrupt, decodePng(gpa, png[0 .. png.len - 20]));
@@ -491,6 +526,76 @@ test "decodePng refuses what it can't read" {
     const idat = std.mem.find(u8, bad, "IDAT").? + 4;
     bad[idat + 7] = 9;
     try std.testing.expectError(error.Corrupt, decodePng(gpa, bad));
+}
+
+test "decodePng: RGBA drops alpha; compressed rows" {
+    const gpa = std.testing.allocator;
+    var rgba: [7 * 3 * 4]u8 = undefined;
+    for (&rgba, 0..) |*v, i| v.* = @intCast((i * 53 + 5) % 256);
+    for ([_]bool{ false, true }) |deflate| {
+        const png = try testPng(gpa, 7, 3, &rgba, .{ .channels = 4, .filter = 4, .deflate = deflate });
+        defer gpa.free(png);
+        const img = try decodePng(gpa, png);
+        defer img.deinit(gpa);
+        for (0..7 * 3) |i| try std.testing.expectEqualSlices(u8, rgba[4 * i ..][0..3], img.rgb[3 * i ..][0..3]);
+    }
+    // Repeats compress: a real deflate stream, not stored
+    const flat: [16 * 16 * 3]u8 = @splat(9);
+    const png = try testPng(gpa, 16, 16, &flat, .{ .deflate = true });
+    defer gpa.free(png);
+    try std.testing.expect(png.len < 200);
+    const img = try decodePng(gpa, png);
+    defer img.deinit(gpa);
+    try std.testing.expectEqualSlices(u8, &flat, img.rgb);
+}
+
+test "decodePng refuses malformed files" {
+    const gpa = std.testing.allocator;
+    const rgb: [2 * 2 * 3]u8 = .{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 };
+    const z = try testZlib(gpa, 2, 2, &rgb, .{});
+    defer gpa.free(z);
+    const ihdr = [13]u8{ 0, 0, 0, 2, 0, 0, 0, 2, 8, 2, 0, 0, 0 };
+    const Case = struct { []const u8, PngError, []const struct { []const u8, []const u8 } };
+    var sixteen = ihdr;
+    sixteen[8] = 16;
+    var laced = ihdr;
+    laced[12] = 1;
+    var big = ihdr;
+    big[2..4].* = .{ 0x04, 0x01 };
+    var bad_sum = try gpa.dupe(u8, z);
+    defer gpa.free(bad_sum);
+    bad_sum[bad_sum.len - 1] ^= 1;
+    const trailing = try std.mem.concat(gpa, u8, &.{ z, "x" });
+    defer gpa.free(trailing);
+    const cases = [_]Case{
+        .{ "16-bit", error.Unsupported, &.{ .{ "IHDR", &sixteen }, .{ "IDAT", z }, .{ "IEND", "" } } },
+        .{ "interlaced", error.Unsupported, &.{ .{ "IHDR", &laced }, .{ "IDAT", z }, .{ "IEND", "" } } },
+        .{ "1025 wide", error.Unsupported, &.{ .{ "IHDR", &big }, .{ "IDAT", z }, .{ "IEND", "" } } },
+        .{ "IDAT first", error.Corrupt, &.{ .{ "IDAT", z }, .{ "IHDR", &ihdr }, .{ "IEND", "" } } },
+        .{ "second IHDR", error.Corrupt, &.{ .{ "IHDR", &ihdr }, .{ "IDAT", z }, .{ "IHDR", &ihdr }, .{ "IEND", "" } } },
+        .{ "no IEND", error.Corrupt, &.{ .{ "IHDR", &ihdr }, .{ "IDAT", z } } },
+        .{ "zlib cut", error.Corrupt, &.{ .{ "IHDR", &ihdr }, .{ "IDAT", z[0 .. z.len - 6] }, .{ "IEND", "" } } },
+        .{ "bad checksum", error.Corrupt, &.{ .{ "IHDR", &ihdr }, .{ "IDAT", bad_sum }, .{ "IEND", "" } } },
+        .{ "after the stream", error.Corrupt, &.{ .{ "IHDR", &ihdr }, .{ "IDAT", trailing }, .{ "IEND", "" } } },
+    };
+    for (cases) |c| {
+        const png = try testChunks(gpa, c[2]);
+        defer gpa.free(png);
+        if (decodePng(gpa, png)) |img| {
+            img.deinit(gpa);
+            std.debug.print("{s}: read\n", .{c[0]});
+            return error.TestUnexpectedResult;
+        } else |err| {
+            if (err != c[1]) std.debug.print("{s}: {t}\n", .{ c[0], err });
+            try std.testing.expectEqual(c[1], err);
+        }
+    }
+    // The same chunks, well formed, read
+    const png = try testChunks(gpa, &.{ .{ "IHDR", &ihdr }, .{ "IDAT", z }, .{ "IEND", "" } });
+    defer gpa.free(png);
+    const img = try decodePng(gpa, png);
+    defer img.deinit(gpa);
+    try std.testing.expectEqualSlices(u8, &rgb, img.rgb);
 }
 
 test "resize averages the area under each pixel" {
@@ -525,6 +630,57 @@ test "encodeJpeg: markers, size and a flat block's few bytes" {
     // No marker inside the entropy-coded data
     const data = jpg[sos + 14 .. jpg.len - 2];
     for (data[0 .. data.len - 1], data[1..]) |a, b| try std.testing.expect(a != 0xFF or b == 0);
+}
+
+/// Tests: noise over gradients, every block busy
+fn testNoise(gpa: Allocator, w: u32, h: u32) !Image {
+    const rgb = try gpa.alloc(u8, @as(usize, w) * h * 3);
+    var rng: std.Random.DefaultPrng = .init(1);
+    for (rgb, 0..) |*v, i| {
+        const x = i / 3 % w;
+        const y = i / 3 / w;
+        v.* = @intCast((x * 5 + y * 3 + i % 3 * 80 + rng.random().uintLessThan(u32, 90)) % 256);
+    }
+    return .{ .w = w, .h = h, .rgb = rgb };
+}
+
+test "encodeJpeg: noisy art as the reference decoded it" {
+    const gpa = std.testing.allocator;
+    const img = try testNoise(gpa, 37, 29);
+    defer img.deinit(gpa);
+    const jpg = try encodeJpeg(gpa, img, 82);
+    defer gpa.free(jpg);
+    // These bytes, decoded by libjpeg (macOS sips) when written: 24.8 dB PSNR against the
+    // source (libjpeg's own encode, 4:2:0 at about this size: 15.1). Stuffed 0xFF bytes in
+    // the data
+    try std.testing.expectEqual(8009050683375926371, std.hash.Wyhash.hash(0, jpg));
+    const sos = std.mem.find(u8, jpg, &.{ 0xFF, 0xDA }).?;
+    try std.testing.expect(std.mem.find(u8, jpg[sos + 14 ..], &.{ 0xFF, 0x00 }) != null);
+}
+
+test "encodeBlock: a zero run past 15 as ZRL" {
+    // One coefficient, zigzag 20 (u 0, v 5): 19 zeros before it
+    var samples: [64]f32 = undefined;
+    for (0..8) |y| for (0..8) |x| {
+        samples[y * 8 + x] = 10 * @cos(@as(f32, @floatFromInt((2 * y + 1) * 5)) * std.math.pi / 16);
+    };
+    const codes: [2]Codes = .{ .of(specs[0]), .of(specs[1]) };
+    var got_buf: [16]u8 = undefined;
+    var got_w: std.Io.Writer = .fixed(&got_buf);
+    var got: Bits = .{ .w = &got_w };
+    var dc: i32 = 0;
+    try encodeBlock(&got, samples, @splat(1), &dc, codes[0], codes[1]);
+    try got.flush();
+    var want_buf: [16]u8 = undefined;
+    var want_w: std.Io.Writer = .fixed(&want_buf);
+    var want: Bits = .{ .w = &want_w };
+    try want.value(codes[0], 0, 0);
+    try want.code(codes[1], 0xF0);
+    // 0.25 * sqrt1_2 * 32 * 10
+    try want.value(codes[1], 3 << 4, 57);
+    try want.code(codes[1], 0x00);
+    try want.flush();
+    try std.testing.expectEqualSlices(u8, want_w.buffered(), got_w.buffered());
 }
 
 test "Bits.value: negative values as their ones' complement" {

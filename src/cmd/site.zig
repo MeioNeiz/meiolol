@@ -174,8 +174,9 @@ pub const usage_site =
     \\              --patch-games    print the EUW patch the site would show and its
     \\                               game count (no site; deploy/web-loop.sh)
     \\              --prune-assets DIR  delete the front-end files' older hashed
-    \\                               copies in DIR three days after a newer one came
-    \\                               (no site; deploy/web-loop.sh, on data/site)
+    \\                               copies and portrait folders in DIR three days
+    \\                               after a newer one came (no site;
+    \\                               deploy/web-loop.sh, on data/site)
     \\
 ;
 
@@ -195,8 +196,10 @@ pub fn cmdSite(c: *Cmd) !u8 {
         var dir = try std.Io.Dir.cwd().openDir(io, path, .{ .iterate = true });
         defer dir.close(io);
         const grace: std.Io.Duration = .fromNanoseconds(3 * std.time.ns_per_day);
-        const n = try site.assets.prune(c.init.gpa, io, dir, &site.hashed_assets, .now(io, .real), grace);
-        std.log.info("{d} old front-end files deleted", .{n});
+        const now: std.Io.Timestamp = .now(io, .real);
+        const n = try site.assets.prune(c.init.gpa, io, dir, &site.hashed_assets, now, grace);
+        const v = try main.icons.prune(c.init.gpa, io, dir, now, grace);
+        std.log.info("{d} old front-end files, {d} portrait versions deleted", .{ n, v });
         return 0;
     }
     // A fraction of a second: the web loop asks every round whether to build and upload

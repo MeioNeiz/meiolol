@@ -1,7 +1,8 @@
 //! The site's champion portraits (ui.champ.icon_fmt): Data Dragon's squares shrunk to
 //! ui.champ.icon_px JPEGs (~3 KB against ~29 KB), made once per Data Dragon version into
 //! a cache laid out as the site (<cache>/icon/<version>/<Key>.jpg), then copied into each
-//! build: the web round builds into a fresh folder
+//! build: the web round builds into a fresh folder. The uploaded site keeps a version's
+//! folder `prune` long after a newer one came, for pages loaded or cached before
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -13,9 +14,11 @@ const image = @import("image.zig");
 
 const log = std.log.scoped(.icons);
 
+/// With ui.champ.icon_px and the encoder: a change shows under the same URLs, which
+/// browsers keep a year, so it needs a new folder in ui.champ.icon_fmt (test "make")
 const quality = 82;
 /// Failures in a row that mean Data Dragon is down, not one icon missing: the rest wait
-/// for the next run instead of a timeout each
+/// for the next run instead of a timeout each; cached ones are still copied
 const give_up_after = 3;
 
 pub const Source = union(enum) {
@@ -62,6 +65,7 @@ pub fn syncKeys(gpa: Allocator, io: Io, cache_dir: []const u8, site_dir: ?[]cons
     defer arena_state.deinit();
     const cwd = Io.Dir.cwd();
     var in_a_row: u32 = 0;
+    var down = false;
     for (keys) |key| {
         _ = arena_state.reset(.retain_capacity);
         const arena = arena_state.allocator();
@@ -75,13 +79,17 @@ pub fn syncKeys(gpa: Allocator, io: Io, cache_dir: []const u8, site_dir: ?[]cons
             counts.had += 1;
         } else |err| switch (err) {
             error.FileNotFound => {
+                if (down) {
+                    counts.failed += 1;
+                    continue;
+                }
                 const jpg = make(gpa, arena, io, version, key, source) catch |e| switch (e) {
                     error.OutOfMemory => return e,
                     else => {
                         log.info("{s}: {t}", .{ key, e });
                         counts.failed += 1;
                         in_a_row += 1;
-                        if (in_a_row == give_up_after) break;
+                        down = in_a_row == give_up_after;
                         continue;
                     },
                 };
@@ -114,6 +122,63 @@ fn make(gpa: Allocator, arena: Allocator, io: Io, version: []const u8, key: []co
     return image.encodeJpeg(arena, small, quality);
 }
 
+/// The version folders in `site`'s icon/ older than the newest, each once the next newer
+/// one is `grace` old (a folder's time: when it came or last gained a file). The count
+/// removed
+pub fn prune(gpa: Allocator, io: Io, site: Io.Dir, now: Io.Timestamp, grace: Io.Duration) !usize {
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var dir = site.openDir(io, "icon", .{ .iterate = true }) catch |err| switch (err) {
+        error.FileNotFound => return 0,
+        else => return err,
+    };
+    defer dir.close(io);
+    var folders: std.ArrayList(Folder) = .empty;
+    var it = dir.iterate();
+    while (try it.next(io)) |e| {
+        if (e.kind != .directory or !plain(e.name, ".")) continue;
+        const st = dir.statFile(io, e.name, .{}) catch |err| switch (err) {
+            error.FileNotFound => continue,
+            else => return err,
+        };
+        try folders.append(arena, .{ .name = try arena.dupe(u8, e.name), .time = st.mtime });
+    }
+    const gone = try stale(arena, folders.items, now, grace);
+    for (gone) |name| try dir.deleteTree(io, name);
+    return gone.len;
+}
+
+const Folder = struct { name: []const u8, time: Io.Timestamp };
+
+fn stale(arena: Allocator, folders: []Folder, now: Io.Timestamp, grace: Io.Duration) ![]const []const u8 {
+    std.mem.sort(Folder, folders, {}, struct {
+        fn lt(_: void, a: Folder, b: Folder) bool {
+            return older(a.name, b.name);
+        }
+    }.lt);
+    var out: std.ArrayList([]const u8) = .empty;
+    if (folders.len < 2) return out.items;
+    for (folders[0 .. folders.len - 1], folders[1..]) |old, next| {
+        if (next.time.durationTo(now).nanoseconds >= grace.nanoseconds) try out.append(arena, old.name);
+    }
+    return out.items;
+}
+
+/// Version `a` before `b`, part by part as numbers ("16.9.1" before "16.10.1")
+fn older(a: []const u8, b: []const u8) bool {
+    var ia = std.mem.splitScalar(u8, a, '.');
+    var ib = std.mem.splitScalar(u8, b, '.');
+    while (true) {
+        const pa = ia.next() orelse return ib.next() != null;
+        const pb = ib.next() orelse return false;
+        const na = std.fmt.parseInt(u64, pa, 10) catch 0;
+        const nb = std.fmt.parseInt(u64, pb, 10) catch 0;
+        if (na != nb) return na < nb;
+        if (!std.mem.eql(u8, pa, pb)) return std.mem.lessThan(u8, pa, pb);
+    }
+}
+
 /// Letters and digits, and `extra`
 fn plain(s: []const u8, extra: []const u8) bool {
     if (s.len == 0) return false;
@@ -134,7 +199,7 @@ test "syncKeys: made once, kept after; bad keys and missing art counted" {
     const base = try arena.print(".zig-cache/tmp/{s}", .{&tmp.sub_path});
     var rgb: [6 * 6 * 3]u8 = undefined;
     for (&rgb, 0..) |*v, i| v.* = @intCast(i * 7 % 256);
-    try tmp.dir.writeFile(io, .{ .sub_path = "Ahri.png", .data = try image.testPng(arena, 6, 6, &rgb, 1) });
+    try tmp.dir.writeFile(io, .{ .sub_path = "Ahri.png", .data = try image.testPng(arena, 6, 6, &rgb, .{ .filter = 1 }) });
     const keys: []const []const u8 = &.{ "Ahri", "Nope", "../x" };
 
     const cache = try arena.print("{s}/cache", .{base});
@@ -159,12 +224,86 @@ test "syncKeys: made once, kept after; bad keys and missing art counted" {
     try std.testing.expectEqual(Counts{ .failed = 3 }, try syncKeys(gpa, io, cache, null, "../16", keys, .{ .dir = tmp.dir }));
 }
 
-test "syncKeys: gives up after a few failures in a row" {
+test "syncKeys: gives up after a few failures in a row, still copies cached ones" {
     const gpa = std.testing.allocator;
     const io = std.testing.io;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
+    const base = try arena.print(".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    const rgb: [3]u8 = .{ 1, 2, 3 };
+    // E could be made, but after three failures nothing is tried
+    try tmp.dir.writeFile(io, .{ .sub_path = "E.png", .data = try image.testPng(arena, 1, 1, &rgb, .{}) });
+    try tmp.dir.createDirPath(io, "cache/icon/16.21.1");
+    try tmp.dir.writeFile(io, .{ .sub_path = "cache/icon/16.21.1/D.jpg", .data = "jpg" });
     const keys: []const []const u8 = &.{ "A", "B", "C", "D", "E" };
-    const got = try syncKeys(gpa, io, ".zig-cache/tmp/none", null, "16.21.1", keys, .{ .dir = tmp.dir });
-    try std.testing.expectEqual(Counts{ .failed = give_up_after }, got);
+    const cache = try arena.print("{s}/cache", .{base});
+    const site = try arena.print("{s}/site", .{base});
+    const got = try syncKeys(gpa, io, cache, site, "16.21.1", keys, .{ .dir = tmp.dir });
+    try std.testing.expectEqual(Counts{ .had = 1, .failed = 4 }, got);
+    try tmp.dir.access(io, "site/icon/16.21.1/D.jpg", .{});
+    try std.testing.expectError(error.FileNotFound, tmp.dir.access(io, "cache/icon/16.21.1/E.jpg", .{}));
+}
+
+test "make: the portraits the URLs promise" {
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const rgba = try arena.alloc(u8, 128 * 128 * 4);
+    var rng: std.Random.DefaultPrng = .init(7);
+    for (rgba, 0..) |*v, i| v.* = @intCast((i / 4 % 128 + i / 512 + rng.random().uintLessThan(u8, 64)) % 256);
+    try tmp.dir.writeFile(io, .{ .sub_path = "Ahri.png", .data = try image.testPng(arena, 128, 128, rgba, .{ .channels = 4, .filter = 4, .deflate = true }) });
+    const jpg = try make(gpa, arena, io, "16.21.1", "Ahri", .{ .dir = tmp.dir });
+    // Fails when icon_px, quality, resize or the encoder change what a portrait looks
+    // like: give ui.champ.icon_fmt a new folder, then update the hash
+    try std.testing.expectEqual(5946943054216529250, std.hash.Wyhash.hash(0, jpg));
+}
+
+test "prune: an old version's folder goes once the next is grace old" {
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer tmp.cleanup();
+    var buf: [32]u8 = undefined;
+    for ([_][]const u8{ "16.9.1", "16.10.1", "x-y" }) |v| {
+        const d = try tmp.dir.createDirPathOpen(io, try std.fmt.bufPrint(&buf, "icon/{s}", .{v}), .{});
+        defer d.close(io);
+        try d.writeFile(io, .{ .sub_path = "A.jpg", .data = "x" });
+    }
+    const now = Io.Timestamp.now(io, .real);
+    const gpa = std.testing.allocator;
+    try std.testing.expectEqual(0, try prune(gpa, io, tmp.dir, now, .fromNanoseconds(std.time.ns_per_day)));
+    try std.testing.expectEqual(1, try prune(gpa, io, tmp.dir, now, .fromNanoseconds(0)));
+    try std.testing.expectError(error.FileNotFound, tmp.dir.access(io, "icon/16.9.1", .{}));
+    try tmp.dir.access(io, "icon/16.10.1/A.jpg", .{});
+    try tmp.dir.access(io, "icon/x-y/A.jpg", .{});
+    var empty = std.testing.tmpDir(.{});
+    defer empty.cleanup();
+    try std.testing.expectEqual(0, try prune(gpa, io, empty.dir, now, .fromNanoseconds(0)));
+}
+
+test "stale: by version order, each against the next newer" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const at = struct {
+        fn f(d: i96) Io.Timestamp {
+            return .fromNanoseconds(d * std.time.ns_per_day);
+        }
+    }.f;
+    var folders = [_]Folder{
+        .{ .name = "16.10.1", .time = at(9) },
+        .{ .name = "16.8.1", .time = at(1) },
+        .{ .name = "16.9.1", .time = at(5) },
+    };
+    const got = try stale(arena, &folders, at(9), .fromNanoseconds(3 * std.time.ns_per_day));
+    try std.testing.expectEqual(1, got.len);
+    try std.testing.expectEqualStrings("16.8.1", got[0]);
+    try std.testing.expect(older("16.9", "16.9.1"));
+    try std.testing.expect(!older("16.9.1", "16.9.1"));
 }

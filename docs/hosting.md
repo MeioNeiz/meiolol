@@ -168,7 +168,8 @@ without its slash with a 301.
   `/icon/<Data Dragon version>/<Key>.jpg`) `public, max-age=31536000, immutable`,
   everything else `no-cache`, in `/`, @render and @render_any (which hide the renderer's
   own no-cache). A page after the first asks for none of them. A replaced hashed file
-  stays 3 days after its replacement came (`meiolol site --prune-assets`, from
+  stays 3 days after its replacement came, as does an older portrait folder, and a
+  hashed name no longer built 30 days (`meiolol site --prune-assets`, from
   deploy/web-loop.sh); one missing from the upload falls through to the renderer, which
   serves its own
 - Training view (/admin/training/, same login as /admin/; data for the admin Models

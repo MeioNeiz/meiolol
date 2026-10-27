@@ -51,7 +51,8 @@ test hashed {
 /// The site's hashed copies a deploy replaced, in the uploaded site `dir` (the web loop's
 /// data/site: a file's time is when it first came): each goes with its .gz once the copy
 /// that replaced it is `grace` old, so a page or island loaded before a deploy still finds
-/// its files that long. The count removed
+/// its files that long. A hashed name no current asset has (removed or renamed) goes
+/// `orphan_grace` after it came. The count removed
 pub fn prune(gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, current: []const Hashed, now: std.Io.Timestamp, grace: std.Io.Duration) !usize {
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
@@ -60,21 +61,26 @@ pub fn prune(gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, current: []con
     var it = dir.iterate();
     while (try it.next(io)) |e| {
         if (e.kind != .file or std.mem.endsWith(u8, e.name, ".gz")) continue;
-        const st = try dir.statFile(io, e.name, .{});
+        // rsync may be replacing it
+        const st = dir.statFile(io, e.name, .{}) catch |err| switch (err) {
+            error.FileNotFound => continue,
+            else => return err,
+        };
         try copies.append(arena, .{ .name = try arena.dupe(u8, e.name), .time = st.mtime });
     }
     const gone = try stale(arena, current, copies.items, now, grace);
-    for (gone) |name| {
-        try dir.deleteFile(io, name);
-        dir.deleteFile(io, try arena.print("{s}.gz", .{name})) catch |err| switch (err) {
+    for (gone) |name| for ([_][]const u8{ name, try arena.print("{s}.gz", .{name}) }) |n| {
+        dir.deleteFile(io, n) catch |err| switch (err) {
             error.FileNotFound => {},
             else => return err,
         };
-    }
+    };
     return gone.len;
 }
 
 const Copy = struct { name: []const u8, time: std.Io.Timestamp };
+
+pub const orphan_grace: std.Io.Duration = .fromNanoseconds(30 * std.time.ns_per_day);
 
 /// The names prune deletes from `files`
 fn stale(arena: std.mem.Allocator, current: []const Hashed, files: []const Copy, now: std.Io.Timestamp, grace: std.Io.Duration) ![]const []const u8 {
@@ -96,6 +102,12 @@ fn stale(arena: std.mem.Allocator, current: []const Hashed, files: []const Copy,
             if (next.time.durationTo(now).nanoseconds >= grace.nanoseconds) try out.append(arena, old.name);
         }
     }
+    for (files) |f| {
+        if (!looksHashed(f.name) or f.time.durationTo(now).nanoseconds < orphan_grace.nanoseconds) continue;
+        for (current) |h| {
+            if (copyOf(h, f.name)) break;
+        } else try out.append(arena, f.name);
+    }
     return out.items;
 }
 
@@ -107,6 +119,16 @@ fn copyOf(h: Hashed, name: []const u8) bool {
     if (name.len != stem.len + 8 + ext.len) return false;
     if (!std.mem.startsWith(u8, name, stem) or !std.mem.endsWith(u8, name, ext)) return false;
     for (name[stem.len..][0..8]) |c| if (!std.ascii.isHex(c) or std.ascii.isUpper(c)) return false;
+    return true;
+}
+
+/// `stem.<8 hex>.ext`, as hashed() names them and nginx serves them immutable
+fn looksHashed(name: []const u8) bool {
+    const dot = std.mem.findScalarLast(u8, name, '.') orelse return false;
+    if (dot < 10 or name[dot - 9] != '.' or dot + 1 == name.len) return false;
+    for (name[0 .. dot - 9]) |c| if (!std.ascii.isAlphanumeric(c) and c != '-' and c != '_') return false;
+    for (name[dot - 8 .. dot]) |c| if (!std.ascii.isHex(c) or std.ascii.isUpper(c)) return false;
+    for (name[dot + 1 ..]) |c| if (!std.ascii.isAlphanumeric(c)) return false;
     return true;
 }
 
@@ -145,6 +167,19 @@ test "stale: a replaced copy goes once its replacement is grace old" {
     // Back on an older build: the newer copy stays, nothing replaced it
     const back = [_]Copy{ .{ .name = cur.path, .time = at(1) }, .{ .name = "ui-stats.00000009.js", .time = at(2) } };
     try std.testing.expectEqual(0, (try stale(arena, &.{cur}, &back, at(30), grace)).len);
+    // Not built any more: gone 30 days after it came
+    const orphans = [_]Copy{ .{ .name = cur.path, .time = at(1) }, .{ .name = "ui-old.0000000a.wasm", .time = at(2) }, .{ .name = "notes.txt", .time = at(0) } };
+    try std.testing.expectEqual(0, (try stale(arena, &.{cur}, &orphans, at(31), grace)).len);
+    const gone = try stale(arena, &.{cur}, &orphans, at(32), grace);
+    try std.testing.expectEqual(1, gone.len);
+    try std.testing.expectEqualStrings("ui-old.0000000a.wasm", gone[0]);
+}
+
+test looksHashed {
+    try std.testing.expect(looksHashed("ui-champ_more.1a2b3c4d.wasm"));
+    for ([_][]const u8{ "ui-stats.js", ".1a2b3c4d.js", "a.1a2b3c4D.js", "a.1a2b3c4d.", "a.b.1a2b3c4d.js", "a.1a2b3c4.js", "a.1a2b3c4d.j-s" }) |n| {
+        try std.testing.expect(!looksHashed(n));
+    }
 }
 
 test "prune deletes the copy and its .gz, keeps the current one" {

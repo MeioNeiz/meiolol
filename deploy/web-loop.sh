@@ -73,10 +73,10 @@
 # Upload: the new build is copied into data/site by checksum without times, so only
 # files whose content changed get a new mtime, and the upload's quick check sends just
 # those. --delete removes what the build no longer writes; nginx then hands those paths
-# to meiolol-render. Except hashed assets (src/site/assets.zig: style.1a2b3c4d.css), which
-# stay 30 days from when first written, for pages cached before a deploy (nginx's
-# @render_any copies, a browser's restored tab); an older one is pruned before the copy,
-# which writes it again if the build still does
+# to meiolol-render. Except hashed assets (src/site/assets.zig: style.1a2b3c4d.css) and
+# portrait folders (icon/<Data Dragon version>/), which stay 3 days after a newer one
+# came, for pages cached before a deploy (nginx's @render_any copies, a browser's restored
+# tab): meiolol site --prune-assets
 set -u
 contact=$1
 cd "$(dirname "$0")/.." || exit 1
@@ -438,10 +438,12 @@ while true; do
             echo "$out"
             t=$SECONDS
             asset_glob='*.[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].*'
-            changed=$(rsync -rlpD --checksum --delete --filter="protect /$asset_glob" --stats \
+            changed=$(rsync -rlpD --checksum --delete --filter="protect /$asset_glob" \
+                --filter="protect /icon/" --stats \
                 data/site.new/ data/site/ \
                 | sed -nE 's/^Number of regular files transferred: ([0-9,]+)/\1/p')
-            # Replaced hashed copies, three days after (times kept above: when each came)
+            # Replaced hashed copies and portrait versions, three days after (times kept
+            # above: when each came)
             bin/meiolol site --prune-assets data/site 2>&1 || echo "prune failed"
             copy_s=$(( SECONDS - t )) t=$SECONDS
             if ! stats=$(rsync -az --delete-delay --delay-updates --exclude /admin/ --exclude /p/ --stats \
