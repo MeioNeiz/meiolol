@@ -214,7 +214,8 @@ fn fullSeat(h: *H, s: Seat, side: Side, on: ?tree.Handler, head: tree.Text, rl: 
     // A hidden seat with its champion set has been revealed
     const asked = s.hidden and s.champ == null;
     const shown = if (asked) s.preview else s.champ;
-    const nm: []const u8 = if (shown) |c| c.name else "?";
+    // The asked seat's "?" is the question; an empty one has only its label
+    const nm: []const u8 = if (shown) |c| c.name else if (asked) "?" else "";
     return h.div(.{
         .class = "seat",
         .data_side = side,
@@ -473,9 +474,11 @@ pub const css =
     \\    .c-draft .seat[data-side="them"] > .st { justify-self: start; }
     \\  }
     \\  @container (max-width: 760px) {
-    \\    .c-draft[data-v="full"] .seat { grid-template-areas: "ic who" "ic st"; grid-template-columns: 40px minmax(0, 1fr);
+    \\    .c-draft[data-v="full"] .seat { grid-template-areas: "ic who"; grid-template-columns: 40px minmax(0, 1fr);
     \\      column-gap: var(--sp-2); row-gap: 2px; padding: 6px 2px; }
-    \\    .c-draft[data-v="full"] .seat[data-side="them"] { grid-template-areas: "who ic" "st ic"; grid-template-columns: minmax(0, 1fr) 40px; }
+    \\    .c-draft[data-v="full"] .seat:has(> .st) { grid-template-areas: "ic who" "ic st"; }
+    \\    .c-draft[data-v="full"] .seat[data-side="them"] { grid-template-areas: "who ic"; grid-template-columns: minmax(0, 1fr) 40px; }
+    \\    .c-draft[data-v="full"] .seat[data-side="them"]:has(> .st) { grid-template-areas: "who ic" "st ic"; }
     \\    .c-draft[data-v="full"] .seat > .ic > .c-champ { --sz: 40px; }
     \\    .c-draft .st { display: flex; gap: 6px; font-size: var(--fs-xs); }
     \\    .c-draft .st[data-side="them"] { justify-content: flex-end; }
