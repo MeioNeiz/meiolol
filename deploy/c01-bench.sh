@@ -9,6 +9,12 @@
 set -uo pipefail
 
 label=$1 n=${2:-3}
+# It stops meiolol-web, and only its EXIT trap starts it again: under a bare ssh, a
+# dropped connection kills the shell before the trap runs (27 Oct, web down an hour)
+if [[ -z ${INVOCATION_ID:-} ]]; then
+    echo "run it as a user unit: systemd-run --user --collect --unit meiolol-tune bash $0 $*" >&2
+    exit 2
+fi
 D=$HOME/ml/meiolol
 S=$HOME/vm-chain/tune
 mkdir -p "$S"

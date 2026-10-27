@@ -24,6 +24,7 @@ const renderPage = root.renderPage;
 const renderShared = root.renderShared;
 const Extras = @import("extras.zig").Extras;
 const loadParts = @import("load.zig").loadParts;
+const loadAtOnce = @import("load.zig").loadAtOnce;
 const unload = @import("load.zig").unload;
 
 pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options) !void {
@@ -38,18 +39,33 @@ pub fn generate(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options)
     const gz_window = try gpa.alloc(u8, store.raw.window_len);
     defer gpa.free(gz_window);
     // The shared view first: every view's home shows its example and Daily Draft
-    var home_files: []const File = &.{};
+    var views: [html.View.count]html.View = undefined;
+    var n: usize = 0;
     for ([_]html.View{html.View.shared} ++ html.View.all, 0..) |v, i| {
-        const shared = i == 0;
-        if (!shared and std.meta.eql(v, html.View.shared)) continue;
+        if (i > 0 and std.meta.eql(v, html.View.shared)) continue;
         if (opts.euw_only and v.region != .euw) continue;
         // Static.core: only the root's files, from the root view and the shared one
         if (opts.static == .core and v.index() != 0 and !std.meta.eql(v, html.View.shared)) continue;
-        const site = try loadParts(gpa, io, db, opts, v, &extras, null);
+        views[n] = v;
+        n += 1;
+    }
+    // Loaded at once (Options.view_loads), then written in the order above; else each
+    // loaded as it is written, one view in memory at a time
+    var sites: [html.View.count]?*Site = @splat(null);
+    defer for (sites) |s| if (s) |site| unload(site);
+    if (opts.view_loads > 1) _ = try loadAtOnce(gpa, io, db, opts, views[0..n], &extras, null, &sites, keep);
+    var home_files: []const File = &.{};
+    for (views[0..n], 0..) |v, i| {
+        const site = sites[v.index()] orelse try loadParts(gpa, io, db, opts, v, &extras, null);
+        sites[v.index()] = null;
         defer unload(site);
-        if (shared) home_files = try home_page.files(arena_state.allocator(), site.daily_files) else site.daily_files = home_files;
+        if (i == 0) home_files = try home_page.files(arena_state.allocator(), site.daily_files) else site.daily_files = home_files;
         try writeSite(site, root_dir, gz_window);
     }
+}
+
+fn keep(sites: *[html.View.count]?*Site, v: html.View, s: *Site) void {
+    sites[v.index()] = s;
 }
 
 /// Every page and file of the view into its directory under `root_dir`, each with a .gz

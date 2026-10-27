@@ -211,11 +211,12 @@ runs with its own tuned values; the box stays untouched until then.
 
 - Measure: deploy/c01-bench.sh LABEL [N] on C01 (copy at ~/vm-chain/deploy/, run as a
   user unit: `systemd-run --user --collect --unit meiolol-tune bash
-  ~/vm-chain/deploy/c01-bench.sh LABEL 3`). It pauses meiolol-web (its trap restarts it),
-  times core build, a full views write and a renderer load into scratch files, then
-  render latency over every page; one row of medians per setting in
+  ~/vm-chain/deploy/c01-bench.sh LABEL 3`; it refuses otherwise). It pauses meiolol-web
+  (its trap restarts it), times core build, a full views write and a renderer load into
+  scratch files, then render latency over every page; one row of medians per setting in
   ~/vm-chain/tune/results.md, log ~/vm-chain/tune/bench.log. Setting under test in the
-  environment. Page cache warmed first (all dbs read once: 60 GB in ~4 min, 50 GB
+  environment, over host.env's. Any other step that pauses web runs as a unit too
+  (box.sh job run), never from a bare ssh: a dropped one skips the restart. Page cache warmed first (all dbs read once: 60 GB in ~4 min, 50 GB
   buff/cache); record buff/cache with each row
 - Order, one at a time against the baseline, a row each (value, median of 3, kept or
   not): 1. views write parallel runs (src/site/filters.zig `runs = 4`): 8, then 16;
@@ -269,8 +270,8 @@ than the spread between runs
 - Knobs 2 (reader cache, mmap) and 5 (lvmcache): not run, nothing waits on reads. Every
   phase of both builds has cpu = wall (core build stats 29.4 s and 86.8 s; views write
   stats 398 s; partials 13.8 s wall vs 13.6 s cpu), with 47-49 GB of page cache warm
-- Core build: its two views still load one after another (write.zig, 29 s then 87 s);
-  at once would save ~30 s a round
+- Core build: its two views (29 s, 87 s) load at once too, behind the same
+  MEIOLOL_VIEW_LOADS (write.zig: loaded at once, then written in the serial order)
 - Hyperthreads: `openssl speed -multi N sha256` 16 KB blocks, 27 Oct, web loop running:
   8 at 2.68 GB/s, 16 at 5.11 GB/s (1.9x): the 16 vCPU act as near 16 cores
 - Knob 4 (unit limits): a views write's peak at view loads 2 still to read, from

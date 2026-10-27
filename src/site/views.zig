@@ -14,7 +14,6 @@ const evalchart = @import("evalchart.zig");
 const flat = @import("flat.zig");
 const patchday = @import("../patchday.zig");
 const stats = @import("../stats.zig");
-const par = @import("../par.zig");
 
 const Writer = std.Io.Writer;
 
@@ -30,6 +29,7 @@ const renderPage = root.renderPage;
 const renderShared = root.renderShared;
 const Extras = @import("extras.zig").Extras;
 const loadParts = @import("load.zig").loadParts;
+const loadAtOnce = @import("load.zig").loadAtOnce;
 const unload = @import("load.zig").unload;
 
 /// The whole site in memory for rendering on request (`meiolol serve --render`, `meiolol
@@ -78,66 +78,40 @@ pub const Loaded = struct {
     /// Loads `v` without holding the lock, so requests for loaded views go on meanwhile.
     /// Only one caller at a time: the database connection isn't shared
     pub fn loadView(l: *Loaded, v: html.View) !void {
-        return l.loadViewOn(v, l.db);
-    }
-
-    /// loadView on `db`, a connection of this caller's own
-    fn loadViewOn(l: *Loaded, v: html.View, db: store.Db) !void {
         {
             try l.mutex.lock(l.io);
             defer l.mutex.unlock(l.io);
             if (l.sites[v.index()] != null) return;
         }
-        const s = try loadParts(l.gpa, l.io, db, l.opts, v, &l.extras, l.old);
+        const s = try loadParts(l.gpa, l.io, l.db, l.opts, v, &l.extras, l.old);
         l.mutex.lockUncancelable(l.io);
         defer l.mutex.unlock(l.io);
         l.sites[v.index()] = s;
     }
 
-    /// Every view (Options.euw_only: EUW's), opts.view_loads at once, each on a read-only
-    /// connection of its own. One after another on db, the root view first, at 1 or with
-    /// db in memory (no siblings). The first view to fail stops the others at their next
-    /// step, and its error is the one returned
+    /// Every view (Options.euw_only: EUW's), opts.view_loads at once (loadAtOnce). One
+    /// after another on db, the root view first, at 1 or with db in memory (no siblings)
     pub fn loadAll(l: *Loaded) anyerror!void {
-        var views: [html.View.count]html.View = undefined;
-        var n: usize = 0;
-        // Longest first, as the box's views.log has them: all regions' 30 days, the root
-        // (filters and the people tallies), all regions' patch, EUW's patch
-        for ([_]usize{ 2, 0, 3, 1 }) |i| {
-            const v = html.View.all[i];
-            if (l.opts.euw_only and v.region != .euw) continue;
-            views[n] = v;
-            n += 1;
-        }
-        if (l.opts.view_loads == 1) return l.loadInTurn();
-        var dbs: [html.View.count]?store.Db = @splat(null);
-        defer for (dbs) |d| if (d) |x| x.close();
-        for (dbs[0..n]) |*d| d.* = try store.schema.openSibling(l.gpa, l.db) orelse return l.loadInTurn();
-        const AtOnce = struct {
-            l: *Loaded,
-            views: []const html.View,
-            dbs: []const ?store.Db,
-            first: ?anyerror = null,
-
-            fn run(a: *@This(), i: usize) !void {
-                a.l.loadViewOn(a.views[i], a.dbs[i].?) catch |err| {
-                    if (err != error.Stopped and !a.l.extras.stopped.swap(true, .monotonic)) a.first = err;
-                    return err;
-                };
+        if (l.opts.view_loads > 1) {
+            var views: [html.View.count]html.View = undefined;
+            var n: usize = 0;
+            for (html.View.all) |v| {
+                if (l.opts.euw_only and v.region != .euw) continue;
+                views[n] = v;
+                n += 1;
             }
-        };
-        var at_once: AtOnce = .{ .l = l, .views = views[0..n], .dbs = dbs[0..n] };
-        l.extras.stopped.store(false, .monotonic);
-        l.extras.at_once = true;
-        defer l.extras.at_once = false;
-        par.forEachUpTo(l.io, n, l.opts.view_loads, &at_once, AtOnce.run) catch |err| return at_once.first orelse err;
-    }
-
-    fn loadInTurn(l: *Loaded) !void {
+            if (try loadAtOnce(l.gpa, l.io, l.db, l.opts, views[0..n], &l.extras, l.old, l, Loaded.put)) return;
+        }
         for (html.View.all) |v| {
             if (l.opts.euw_only and v.region != .euw) continue;
             try l.loadView(v);
         }
+    }
+
+    fn put(l: *Loaded, v: html.View, s: *Site) void {
+        l.mutex.lockUncancelable(l.io);
+        defer l.mutex.unlock(l.io);
+        l.sites[v.index()] = s;
     }
 
     /// The page or file at `path` from the site root, in `arena`; null when there is none

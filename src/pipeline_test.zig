@@ -731,6 +731,33 @@ test "fixture games to stats, curves and the website" {
         core_files += 1;
     }
     for (site.core_static) |name| try core_dir.access(io, name, .{});
+    // Both builds with their views loaded at once (Options.view_loads), from the database
+    // in files as on the box: the same files. A view that fails stops the build with its
+    // own error, nothing written
+    {
+        const files = try std.fs.path.join(arena, &.{ dir, "db-core" });
+        try std.Io.Dir.cwd().createDirPath(io, files);
+        for ([_][]const u8{ "main", "raw", "timeline" }, [_][]const u8{ "meiolol.db", "raw.db", "timeline.db" }) |schema, name| {
+            try db.exec(try arena.printSentinel("VACUUM {s} INTO '{s}/{s}'", .{ schema, files, name }, 0));
+        }
+        const file_db = try store.schema.open(gpa, files);
+        defer file_db.close();
+        for ([_]site.Options{ opts, core_opts }) |base| for ([_]usize{ 2, 4 }) |n| {
+            var at_once = base;
+            at_once.view_loads = n;
+            at_once.out_dir = try std.fmt.allocPrint(arena, "{s}-at-{d}", .{ base.out_dir, n });
+            try site.generate(gpa, io, file_db, at_once);
+            try expectSameTree(arena, io, base.out_dir, at_once.out_dir);
+            var failing = at_once;
+            failing.since_ms = std.math.maxInt(i64);
+            failing.out_dir = try std.fmt.allocPrint(arena, "{s}-failing", .{at_once.out_dir});
+            try testing.expectError(error.NoMatches, site.generate(gpa, io, file_db, failing));
+            var empty = try std.Io.Dir.cwd().openDir(io, failing.out_dir, .{ .iterate = true });
+            defer empty.close(io);
+            var it = empty.iterate();
+            try testing.expectEqual(null, try it.next(io));
+        };
+    }
     walker.deinit();
     walker = try out_dir.walk(gpa);
     while (try walker.next(io)) |e| {
@@ -1323,6 +1350,37 @@ test "fixture games to lab rows, from SQLite and packed" {
 /// Every generated file's hash, against src/testdata/site-files.txt: a refactor that
 /// claims the same output shows it, and a change on purpose shows which files it moved.
 /// Assets copied from static/ or compiled (wasm) are left out
+/// Every file under `want` in `got` with the same bytes, and no others
+fn expectSameTree(arena: std.mem.Allocator, io: std.Io, want: []const u8, got: []const u8) !void {
+    var want_dir = try std.Io.Dir.cwd().openDir(io, want, .{ .iterate = true });
+    defer want_dir.close(io);
+    var got_dir = try std.Io.Dir.cwd().openDir(io, got, .{ .iterate = true });
+    defer got_dir.close(io);
+    var counts: [2]usize = .{ 0, 0 };
+    for ([_]std.Io.Dir{ want_dir, got_dir }, &counts) |d, *count| {
+        var walker = try d.walk(arena);
+        defer walker.deinit();
+        while (try walker.next(io)) |e| if (e.kind == .file) {
+            count.* += 1;
+        };
+    }
+    try testing.expectEqual(counts[0], counts[1]);
+    var walker = try want_dir.walk(arena);
+    defer walker.deinit();
+    while (try walker.next(io)) |e| {
+        if (e.kind != .file) continue;
+        const a = try want_dir.readFileAlloc(io, e.path, arena, .limited(1 << 26));
+        const b = got_dir.readFileAlloc(io, e.path, arena, .limited(1 << 26)) catch |err| {
+            std.debug.print("{s}: {t}\n", .{ e.path, err });
+            return err;
+        };
+        if (!std.mem.eql(u8, a, b)) {
+            std.debug.print("differs: {s}\n", .{e.path});
+            return error.TestUnexpectedResult;
+        }
+    }
+}
+
 fn expectSiteFiles(arena: std.mem.Allocator, io: std.Io, out: []const u8) !void {
     var dir = try std.Io.Dir.cwd().openDir(io, out, .{ .iterate = true });
     defer dir.close(io);

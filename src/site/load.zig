@@ -204,6 +204,49 @@ pub fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Opt
     return site;
 }
 
+/// Loads `views` up to opts.view_loads at once, longest first, each on a read-only
+/// connection of its own, handing each to `put` as it loads. False, loading none, when
+/// db has no siblings (in memory). The first view to fail stops the others at their next
+/// step (Extras.stopped), and its error is the one returned
+pub fn loadAtOnce(gpa: std.mem.Allocator, io: std.Io, db: store.Db, opts: Options, views: []const html.View, extras: *Extras, old: ?*const Parts, ctx: anytype, comptime put: fn (@TypeOf(ctx), html.View, *Site) void) anyerror!bool {
+    var order: [html.View.count]html.View = undefined;
+    var n: usize = 0;
+    // Longest first, as the box's views.log has them: all regions' 30 days, the root
+    // (filters and the people tallies), all regions' patch, EUW's patch
+    for ([_]usize{ 2, 0, 3, 1 }) |i| for (views) |v| if (v.index() == i) {
+        order[n] = v;
+        n += 1;
+    };
+    var dbs: [html.View.count]?store.Db = @splat(null);
+    defer for (dbs) |d| if (d) |x| x.close();
+    for (dbs[0..n]) |*d| d.* = try store.schema.openSibling(gpa, db) orelse return false;
+    const AtOnce = struct {
+        gpa: std.mem.Allocator,
+        io: std.Io,
+        opts: Options,
+        views: []const html.View,
+        dbs: []const ?store.Db,
+        extras: *Extras,
+        old: ?*const Parts,
+        ctx: @TypeOf(ctx),
+        first: ?anyerror = null,
+
+        fn run(a: *@This(), i: usize) !void {
+            const site = loadParts(a.gpa, a.io, a.dbs[i].?, a.opts, a.views[i], a.extras, a.old) catch |err| {
+                if (err != error.Stopped and !a.extras.stopped.swap(true, .monotonic)) a.first = err;
+                return err;
+            };
+            put(a.ctx, a.views[i], site);
+        }
+    };
+    var at_once: AtOnce = .{ .gpa = gpa, .io = io, .opts = opts, .views = order[0..n], .dbs = dbs[0..n], .extras = extras, .old = old, .ctx = ctx };
+    extras.stopped.store(false, .monotonic);
+    extras.at_once = true;
+    defer extras.at_once = false;
+    par.forEachUpTo(io, n, opts.view_loads, &at_once, AtOnce.run) catch |err| return at_once.first orelse err;
+    return true;
+}
+
 /// Filters and the people tallies, at once when both are wanted and db is in a file
 /// (sibling set): each waits on its own cold pages
 const Loading = struct {
