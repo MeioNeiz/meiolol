@@ -3,7 +3,8 @@
 //! bars, one bucket each from `start`; a null breaks a line. Each series named at its
 //! end, not in a legend; reference levels dashed with their name; events (crawler
 //! restarts) as thin marks. Hover or tap shows the bucket's figures (ChartTip), a drag
-//! zooms to its buckets, "Show all" goes back
+//! zooms to its buckets, "Show all" goes back. By keyboard the plot is a slider: arrows
+//! step the tip, + zooms round it, - shows all; a hidden summary states what it draws
 const std = @import("std");
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
@@ -37,6 +38,10 @@ pub const Series = struct {
 
 pub const Ref = struct { v: f32, label: tree.Text };
 
+/// The clock ticks and times read in. UK moves between GMT and BST, so a range over the
+/// last Sunday of October or March has an hour more or less
+pub const Clock = enum { utc, uk };
+
 pub const Time = struct {
     label: tree.Text,
     kind: Kind = .line,
@@ -44,24 +49,25 @@ pub const Time = struct {
     /// Unix seconds of the first bucket's start, and the bucket width
     start: i64,
     step: u32 = 3600,
-    /// Seconds added for the clock the ticks read in (UK: 0 or 3600)
-    offset: i32 = 0,
+    clock: Clock = .uk,
     series: []const Series,
     refs: []const Ref = &.{},
-    /// Unix seconds of events drawn as thin marks (crawler restarts)
+    /// Unix seconds of events drawn as thin marks (crawler restarts), and what one is
     marks: []const i64 = &.{},
+    mark: tree.Text = W.restart,
     /// y around the data, not from zero
     fit: bool = false,
     height: u16 = 160,
-    /// Buckets shown [a, b), after a drag; null for all
-    zoom: ?[2]u32 = null,
+    /// Unix seconds shown [a, b), after a drag; null for all. Times, not buckets: a page
+    /// that re-fetches a sliding window keeps showing the same stretch
+    zoom: ?[2]i64 = null,
     tip: ?u32 = null,
     drag: ?[2]f32 = null,
     press: chart.Press = .{},
 
     const T = @This();
 
-    pub const Msg = union(enum) { plot, all };
+    pub const Msg = union(enum) { plot, all, key };
 
     pub fn update(t: *T, m: Msg, ev: *tree.Event) void {
         switch (m) {
@@ -69,6 +75,7 @@ pub const Time = struct {
                 t.zoom = null;
                 t.tip = null;
             },
+            .key => t.key(ev),
             .plot => {
                 const was = t.drag;
                 switch (t.press.pointer(ev)) {
@@ -93,18 +100,68 @@ pub const Time = struct {
         }
     }
 
+    /// Arrows step the tip (from the latest bucket), Home and End jump, + halves the window
+    /// round the tip, - shows all, Escape drops the tip, then the zoom
+    fn key(t: *T, ev: *tree.Event) void {
+        const w = t.window();
+        if (w[1] <= w[0]) return;
+        const end = w[1] - 1;
+        const cur = if (t.tip) |i| std.math.clamp(i, w[0], end) else end;
+        const k = ev.text;
+        if (eql(k, "ArrowLeft")) {
+            t.tip = if (cur > w[0]) cur - 1 else cur;
+        } else if (eql(k, "ArrowRight")) {
+            t.tip = if (t.tip == null) end else @min(cur + 1, end);
+        } else if (eql(k, "Home")) {
+            t.tip = w[0];
+        } else if (eql(k, "End")) {
+            t.tip = end;
+        } else if (eql(k, "+") or eql(k, "=")) {
+            const half = (w[1] - w[0]) / 2;
+            if (half < 2) return;
+            const a = std.math.clamp(cur -| half / 2, w[0], w[1] - half);
+            t.zoom = .{ t.time(a), t.time(a + half) };
+            t.tip = cur;
+        } else if (eql(k, "-")) {
+            if (t.zoom == null) return;
+            t.zoom = null;
+        } else if (eql(k, "Escape")) {
+            if (t.tip != null) t.tip = null else if (t.zoom != null) t.zoom = null else return;
+        } else return;
+        ev.handled = true;
+    }
+
+    /// The bucket width, never 0
+    fn st(t: *const T) i64 {
+        return @max(t.step, 1);
+    }
+
+    /// Bucket i's start
+    fn time(t: *const T, i: u32) i64 {
+        return t.start +| @as(i64, i) * t.st();
+    }
+
+    fn off(t: *const T, at_s: i64) i64 {
+        return switch (t.clock) {
+            .utc => 0,
+            .uk => ukOffset(at_s),
+        };
+    }
+
     fn len(t: *const T) u32 {
         var n: usize = 0;
         for (t.series) |s| n = @max(n, s.values.len);
         return @intCast(@min(n, std.math.maxInt(u32)));
     }
 
-    /// The buckets shown, [a, b)
+    /// The buckets shown, [a, b): every bucket the zoom's times touch, all of them when
+    /// that is under two
     fn window(t: *const T) [2]u32 {
         const n = t.len();
         if (t.zoom) |z| {
-            const b = @min(z[1], n);
-            if (z[0] + 1 < b) return .{ z[0], b };
+            const a = std.math.clamp(@divFloor(z[0] -| t.start, t.st()), 0, n);
+            const b = std.math.clamp(-@divFloor(t.start -| z[1], t.st()), 0, n);
+            if (b >= a + 2) return .{ @intCast(a), @intCast(b) };
         }
         return .{ 0, n };
     }
@@ -112,17 +169,19 @@ pub const Time = struct {
     /// The bucket under a fraction of the plot's width
     fn at(t: *const T, f: f32) ?u32 {
         const w = t.window();
-        if (w[1] <= w[0]) return null;
+        if (w[1] <= w[0] or std.math.isNan(f)) return null;
         const k: u32 = @intFromFloat(@floor(std.math.clamp(f, 0, 1) * @as(f32, @floatFromInt(w[1] - w[0]))));
         return @min(w[0] + k, w[1] - 1);
     }
 
+    /// A drag under two buckets wide is ignored
     fn zoomTo(t: *T, r: [2]f32) void {
+        if (std.math.isNan(r[0]) or std.math.isNan(r[1])) return;
         const w = t.window();
         const span: f32 = @floatFromInt(w[1] - w[0]);
         const a = w[0] + @as(u32, @intFromFloat(@floor(std.math.clamp(r[0], 0, 1) * span)));
-        const b = w[0] + @as(u32, @intFromFloat(@ceil(std.math.clamp(r[1], 0, 1) * span)));
-        if (b >= a + 2) t.zoom = .{ a, @min(b, w[1]) };
+        const b = @min(w[0] + @as(u32, @intFromFloat(@ceil(std.math.clamp(r[1], 0, 1) * span))), w[1]);
+        if (b >= a + 2) t.zoom = .{ t.time(a), t.time(b) };
     }
 
     fn value(t: *const T, s: Series, i: u32) ?f32 {
@@ -132,7 +191,8 @@ pub const Time = struct {
         return if (std.math.isFinite(v)) v else null;
     }
 
-    /// Bucket i's stack top below series k (stacked kinds), 0 at the floor
+    /// Bucket i's stack top below series k (stacked kinds), 0 at the floor: a null or
+    /// negative value stacks as 0
     fn under(t: *const T, k: usize, i: u32) f32 {
         var sum: f32 = 0;
         for (t.series[0..k]) |s| sum += @max(0, t.value(s, i) orelse 0);
@@ -151,20 +211,32 @@ pub const Time = struct {
                 };
             } else hi = @max(hi, t.under(t.series.len, i));
         }
-        for (t.refs) |r| {
+        for (t.refs) |r| if (std.math.isFinite(r.v)) {
             lo = @min(lo, r.v);
             hi = @max(hi, r.v);
-        }
+        };
         if (!(hi > -std.math.inf(f32))) return .{ .y = .{ .lo = 0, .hi = 4 }, .step = 1 };
+        // A stack summed past f32's range, or a 1e30: still an axis niceStep can walk
+        lo = @max(lo, -1e15);
+        hi = @min(hi, 1e15);
         if (t.fit and t.kind == .line) {
-            const st = chart.niceStep(@max(hi - lo, @abs(hi) * 0.01, 1e-6), 4);
-            const base = @floor(lo / st) * st;
-            var top = base + 4 * st;
-            if (top < hi) top += st;
-            return .{ .y = .{ .lo = base, .hi = top }, .step = st };
+            const s = t.whole(chart.niceStep(@max(hi - lo, @abs(hi) * 0.01, 1e-6), 4));
+            const base = @floor(lo / s) * s;
+            var top = base + 4 * s;
+            if (top < hi) top += s;
+            return .{ .y = .{ .lo = base, .hi = top }, .step = s };
         }
-        const st = chart.niceStep(@max(hi, 1e-6), 4);
-        return .{ .y = .{ .lo = 0, .hi = @ceil(hi / st) * st }, .step = st };
+        // From zero; a line below it (a signed score) takes the axis down with it
+        const a = if (t.kind == .line) @min(0, lo) else 0;
+        const b = @max(0, hi);
+        const s = t.whole(chart.niceStep(if (b > a) b - a else 1, 4));
+        const base = @floor(a / s) * s;
+        return .{ .y = .{ .lo = base, .hi = @max(@ceil(b / s) * s, base + s) }, .step = s };
+    }
+
+    /// A count's ticks a whole number apart, so none repeat a label
+    fn whole(t: *const T, s: f32) f32 {
+        return if (t.unit == .count) @max(s, 1) else s;
     }
 
     pub fn view(t: *T, h: *H) N {
@@ -177,35 +249,45 @@ pub const Time = struct {
         // A zoom onto an outage keeps its way back
         if (!any) return h.el(.figure, .{ .class = "c-time", .role = "group", .aria_label = t.label }, .{ h.p(.{ .class = "note" }, .{W.none}), t.foot(h) });
         const s = t.scale(w);
-        // Bucket i's centre at domain value i
+        // Bucket i's centre at domain value i: a time at the bucket it starts, as its point
         const p: chart.Plane = .{
             .x = .{ .lo = @as(f32, @floatFromInt(w[0])) - 0.5, .hi = @as(f32, @floatFromInt(w[1])) - 0.5 },
             .y = s.y,
         };
         var ys: std.ArrayList(chart.Tick) = .empty;
-        var v = s.y.lo;
-        while (v <= s.y.hi + s.step * 0.01) : (v += s.step) {
-            ys.append(h.mem, .{ .at = p.py(v), .label = t.tick(h, v), .zero = v == 0 }) catch {
+        const nt: usize = @intFromFloat(@min(@round((s.y.hi - s.y.lo) / s.step), 20));
+        for (0..nt + 1) |i| {
+            const raw = s.y.lo + @as(f32, @floatFromInt(i)) * s.step;
+            const zero = @abs(raw) < s.step * 1e-3;
+            const v = if (zero) 0 else raw;
+            ys.append(h.mem, .{ .at = p.py(v), .label = t.tick(h, v), .zero = zero }) catch {
                 h.oom = true;
             };
         }
+        const t0 = t.time(w[0]);
+        const t1 = t.time(w[1]);
         var marks = h.list();
-        for (t.refs) |r| marks.add(chart.level(h, p, r.v));
-        for (t.marks) |m| {
-            const d = t.domain(m);
-            if (d >= p.x.lo and d <= p.x.hi) marks.add(chart.span(h, p, d, d, "mark"));
-        }
+        for (t.refs) |r| if (std.math.isFinite(r.v)) marks.add(chart.level(h, p, r.v));
+        for (t.marks) |m| if (m >= t0 and m < t1) {
+            const d = @min(t.domain(m), p.x.hi);
+            marks.add(chart.span(h, p, d, d, "mark"));
+        };
+        // One bucket has no width to fill: bars draw it
+        const kind: Kind = if (t.kind == .area and w[1] - w[0] < 2) .bars else t.kind;
         var ends: std.ArrayList(End) = .empty;
         var over = h.list();
+        var most: usize = 0;
         for (t.series, 0..) |sr, k| {
             var lone = h.list();
-            const kids = switch (t.kind) {
+            const kids = switch (kind) {
                 .line => t.lines(h, p, sr, w, &lone),
                 .area => t.areas(h, p, k, w),
                 .bars => t.bars(h, p, k, w),
             };
-            marks.add(h.el(.g, .{ .key = k, .data_s = if (t.series.len > 1) k else null }, .{kids}));
-            if (lone.items.items.len > 0) over.add(h.span(.{ .key = 200 + k, .class = "lone", .data_s = if (t.series.len > 1) k else null }, .{lone.done()}));
+            const ds = if (t.series.len > 1) k % 6 else null;
+            marks.add(h.el(.g, .{ .key = k, .data_s = ds }, .{kids}));
+            if (lone.items.items.len > 0) over.add(h.span(.{ .key = 200 + k, .class = "lone", .data_s = ds }, .{lone.done()}));
+            most = @max(most, sr.name.s.len);
             if (t.last(sr, w)) |li| {
                 const top = if (t.kind == .line) t.value(sr, li) orelse 0 else t.under(k + 1, li);
                 const mid = if (t.kind == .line) top else (top + t.under(k, li)) / 2;
@@ -215,21 +297,23 @@ pub const Time = struct {
             }
         }
         spread(ends.items);
+        // The summary reads them out with their times
         for (ends.items) |e| over.add(h.span(.{
             .key = e.k,
             .class = "end",
-            .data_s = if (t.series.len > 1) e.k else null,
+            .data_s = if (t.series.len > 1) e.k % 6 else null,
+            .aria_hidden = true,
             .style = h.vars(.{ .y = e.y }),
         }, .{
             if (t.series.len > 1) t.series[e.k].name else null,
             if (t.series.len > 1) " " else null,
             h.b(.{}, .{t.exact(h, e.v)}),
         }));
-        for (t.refs, 0..) |r, i| over.add(h.span(.{ .key = 100 + i, .class = "rl", .style = h.vars(.{ .y = p.py(r.v) }) }, .{r.label}));
+        for (t.refs, 0..) |r, i| if (std.math.isFinite(r.v)) over.add(h.span(.{ .key = 100 + i, .class = "rl", .style = h.vars(.{ .y = p.py(r.v) }) }, .{r.label}));
         if (t.drag) |r| over.add(chart.range(h, r[0] * 100, r[1] * 100));
         if (t.tip) |i| if (i >= w[0] and i < w[1]) {
             var kids = h.list();
-            kids.add(h.b(.{}, .{t.when(h, t.start + @as(i64, i) * t.step, true)}));
+            kids.add(h.b(.{}, .{t.when(h, t.time(i), true)}));
             for (t.series) |sr| if (t.value(sr, i)) |x| {
                 kids.add(h.text(" · "));
                 if (t.series.len > 1) kids.add(h.span(.{}, .{ sr.name, " " }));
@@ -237,13 +321,28 @@ pub const Time = struct {
             };
             for (chart.tip(h, p.px(i), .{kids.done()})) |x| over.add(x);
         };
+        // The keyboard's way in: a slider over the plot, stepping the tip
+        const now = t.tip orelse w[1] - 1;
+        over.add(h.span(.{
+            .key = 300,
+            .class = "kb",
+            .tabindex = @as(u8, 0),
+            .role = "slider",
+            .aria_label = t.label,
+            .aria_valuemin = w[0],
+            .aria_valuemax = w[1] - 1,
+            .aria_valuenow = now,
+            .aria_valuetext = t.reading(h, now),
+        }, .{}));
         return chart.frame(h, .{
             .label = t.label,
             .class = "c-chart c-time",
             .height = t.height,
-            .right = if (t.series.len > 1) 96 else 56,
+            // Room for the longest "name 1,234", within reason at 320 px
+            .right = if (t.series.len > 1) @intCast(std.math.clamp(7 * (most + 6), 96, 140)) else 56,
             .y = ys.items,
             .x = t.ticks(h, p, w),
+            .above = &.{h.p(.{ .class = "sr" }, .{t.summary(h, w)})},
             .marks = marks.done(),
             .over = over.done(),
             .press = true,
@@ -254,6 +353,7 @@ pub const Time = struct {
                 .leave = h.on(t, .plot),
                 .cancel = h.on(t, .plot),
             },
+            .on_key = h.on(t, .key),
             .foot = t.foot(h),
         });
     }
@@ -265,10 +365,53 @@ pub const Time = struct {
         });
     }
 
-    /// A unix time in the plot's domain (bucket centres at whole numbers)
+    /// A unix time in the plot's domain: bucket i's start at i, where its point is
     fn domain(t: *const T, at_s: i64) f32 {
-        const step: f32 = @floatFromInt(@max(t.step, 1));
-        return @as(f32, @floatFromInt(at_s - t.start)) / step - 0.5;
+        return @as(f32, @floatFromInt(at_s -| t.start)) / @as(f32, @floatFromInt(t.st()));
+    }
+
+    /// The slider's value: "26 Oct 16:00: EUW1 522, EUN1 205"
+    fn reading(t: *const T, h: *H, i: u32) tree.Text {
+        var out: std.Io.Writer.Allocating = .init(h.mem);
+        const wr = &out.writer;
+        (blk: {
+            wr.writeAll(t.when(h, t.time(i), true).s) catch |e| break :blk e;
+            var first = true;
+            for (t.series) |sr| if (t.value(sr, i)) |v| {
+                wr.writeAll(if (first) ": " else ", ") catch |e| break :blk e;
+                first = false;
+                if (t.series.len > 1) wr.print("{s} ", .{sr.name.s}) catch |e| break :blk e;
+                wr.writeAll(t.exact(h, v).s) catch |e| break :blk e;
+            };
+            if (first) wr.print(", {s}", .{W.gap.s}) catch |e| break :blk e;
+        }) catch {
+            h.oom = true;
+        };
+        return .{ .s = out.written() };
+    }
+
+    /// What the svg draws, for screen readers: the range, each series' latest figure, the
+    /// marks in it
+    fn summary(t: *const T, h: *H, w: [2]u32) tree.Text {
+        var out: std.Io.Writer.Allocating = .init(h.mem);
+        const wr = &out.writer;
+        (blk: {
+            wr.print("{s} {s} {s}.", .{ t.when(h, t.time(w[0]), true).s, W.to.s, t.when(h, t.time(w[1] - 1), true).s }) catch |e| break :blk e;
+            var first = true;
+            for (t.series) |sr| if (t.last(sr, w)) |i| {
+                wr.writeAll(if (first) " " ++ W.latest.s ++ " " else ", ") catch |e| break :blk e;
+                first = false;
+                if (t.series.len > 1) wr.print("{s} ", .{sr.name.s}) catch |e| break :blk e;
+                wr.writeAll(t.exact(h, t.value(sr, i) orelse 0).s) catch |e| break :blk e;
+            };
+            if (!first) wr.writeByte('.') catch |e| break :blk e;
+            const t0 = t.time(w[0]);
+            const t1 = t.time(w[1]);
+            for (t.marks) |m| if (m >= t0 and m < t1) wr.print(" {s} {s}.", .{ t.mark.s, t.when(h, m, true).s }) catch |e| break :blk e;
+        }) catch {
+            h.oom = true;
+        };
+        return .{ .s = out.written() };
     }
 
     fn last(t: *const T, s: Series, w: [2]u32) ?u32 {
@@ -333,20 +476,22 @@ pub const Time = struct {
         const bw = 100 / @as(f32, @floatFromInt(@max(w[1] - w[0], 1)));
         // A hairline gap between bars once they are wide enough to show one
         const gap: f32 = if (bw > 1.2) 0.15 * bw else 0;
+        // At least a pixel tall: a small figure on a big stack still shows
+        const px1 = 100 / @as(f32, @floatFromInt(@max(t.height, 1)));
         var i = w[0];
         while (i < w[1]) : (i += 1) {
             const v = t.value(t.series[k], i) orelse continue;
             if (v <= 0) continue;
-            const b = t.under(k, i);
-            const y0 = p.py(b + v);
-            l.add(h.rect(.{ .key = i, .class = "bk", .x = p.px(i) - bw / 2 + gap / 2, .y = y0, .width = bw - gap, .height = @max(0, p.py(b) - y0) }, .{}));
+            const y1 = p.py(t.under(k, i));
+            const ht = @max(y1 - p.py(t.under(k + 1, i)), px1);
+            l.add(h.rect(.{ .key = i, .class = "bk", .x = p.px(i) - bw / 2 + gap / 2, .y = y1 - ht, .width = bw - gap, .height = ht }, .{}));
         }
         return l.done();
     }
 
     fn tick(t: *const T, h: *H, v: f32) tree.Text {
         return switch (t.unit) {
-            .count => phrase.num(h, .kilo, @as(u64, @intFromFloat(@max(0, @round(v))))),
+            .count => phrase.num(h, .kilo, count(v)),
             .rate => phrase.num(h, .rate, v),
             .score => score(h, v),
         };
@@ -354,7 +499,7 @@ pub const Time = struct {
 
     fn exact(t: *const T, h: *H, v: f32) tree.Text {
         return switch (t.unit) {
-            .count => phrase.num(h, .count, @as(u64, @intFromFloat(@max(0, @round(v))))),
+            .count => phrase.num(h, .count, count(v)),
             .rate => phrase.num(h, .rate, v),
             .score => score(h, v),
         };
@@ -362,10 +507,9 @@ pub const Time = struct {
 
     /// "14:00", or "27 Oct" at midnight; `long` puts the day before the hour
     fn when(t: *const T, h: *H, at_s: i64, long: bool) tree.Text {
-        const local = at_s + t.offset;
-        const day: i32 = @intCast(@divFloor(local, 86400));
+        const local = at_s +| t.off(at_s);
         const sec: u32 = @intCast(@mod(local, 86400));
-        const c = fmt.civil(day);
+        const c = fmt.civil(dayOf(local));
         var out: std.Io.Writer.Allocating = .init(h.mem);
         const wr = &out.writer;
         const mon = months[@min(c.month -| 1, 11)];
@@ -380,40 +524,91 @@ pub const Time = struct {
         return .{ .s = out.written() };
     }
 
-    /// Hour ticks while the window is under three days, else midnights; about six
+    /// About six ticks, on the clock's whole minutes, hours or midnights
     fn ticks(t: *const T, h: *H, p: chart.Plane, w: [2]u32) []const chart.Tick {
-        const t0 = t.start + @as(i64, w[0]) * t.step;
-        const t1 = t.start + @as(i64, w[1]) * t.step;
-        var st: i64 = 7 * 86400;
-        for ([_]i64{ 3600, 2 * 3600, 3 * 3600, 6 * 3600, 12 * 3600, 86400, 2 * 86400, 7 * 86400 }) |c| if (@divFloor(t1 - t0, c) <= 6) {
-            st = c;
-            break;
-        };
+        const t0 = t.time(w[0]);
+        const t1 = t.time(w[1]);
+        const every = t.tickStep(t1 - t0);
         var l: std.ArrayList(chart.Tick) = .empty;
-        // On the clock's whole steps: UK midnight, not UTC's
-        var x = @divFloor(t0 + t.offset + st - 1, st) * st - t.offset;
-        var k: u32 = 0;
-        while (x <= t1 and l.items.len < 16) : ({
-            x += st;
-            k += 1;
-        }) {
-            const at_p = p.x.at(t.domain(x) + 0.5);
+        var prev: i64 = std.math.minInt(i64);
+        // Walk the clock's own time (UK midnight, not UTC's), each tick back to UTC by the
+        // offset there: the hour BST gives back shows once
+        var local = @divFloor(t0 +| t.off(t0) +| (every - 1), every) * every;
+        while (l.items.len < 16) : (local +|= every) {
+            const x = local - t.off(local - t.off(local));
+            if (x > t1) break;
+            if (x <= prev) continue;
+            prev = x;
+            const at_p = p.x.at(t.domain(x));
             if (at_p <= 0 or at_p >= 100) continue;
-            l.append(h.mem, .{ .at = at_p, .label = t.when(h, x, false), .minor = k % 2 == 1 }) catch {
+            // A narrow chart keeps every other tick: those on a double step, so midnights
+            // stay among 12-hourly ones
+            l.append(h.mem, .{ .at = at_p, .label = t.when(h, x, false), .minor = @mod(local, 2 * every) != 0 }) catch {
                 h.oom = true;
             };
         }
         return l.items;
     }
+
+    /// The first step no finer than a bucket that gives six ticks or fewer; past four weeks,
+    /// a sixth of the span in whole days
+    fn tickStep(t: *const T, span: i64) i64 {
+        const hr = 3600;
+        const day = 86400;
+        for ([_]i64{ 60, 300, 600, 900, 1800, hr, 2 * hr, 3 * hr, 6 * hr, 12 * hr, day, 2 * day, 7 * day, 14 * day, 28 * day }) |c| {
+            if (c >= t.st() and @divFloor(span, c) <= 6) return c;
+        }
+        return @max(@divFloor(span + 6 * day - 1, 6 * day), 1) * day;
+    }
 };
+
+fn eql(a: []const u8, b: []const u8) bool {
+    return std.mem.eql(u8, a, b);
+}
+
+/// A count for phrase.num: NaN and negatives 0, past u64 clamped
+fn count(v: f32) u64 {
+    if (!(v > 0)) return 0;
+    return @intFromFloat(@min(@round(v), 1.8e19));
+}
+
+fn dayOf(at_s: i64) i32 {
+    return @intCast(std.math.clamp(@divFloor(at_s, 86400), 0, std.math.maxInt(i32)));
+}
+
+/// BST: from 01:00 UTC on March's last Sunday to 01:00 UTC on October's
+fn ukOffset(at_s: i64) i64 {
+    const y: i64 = fmt.civil(dayOf(at_s)).year;
+    const on = lastSunday(y, 3) * 86400 + 3600;
+    const end = lastSunday(y, 10) * 86400 + 3600;
+    return if (at_s >= on and at_s < end) 3600 else 0;
+}
+
+/// Day count since 1970 of month m's last Sunday (March and October: 31 days)
+fn lastSunday(y: i64, m: i64) i64 {
+    const d = days(y, m, 31);
+    // 1 January 1970 was a Thursday: d + 4 is 0 on a Sunday
+    return d - @mod(d + 4, 7);
+}
+
+/// Days since 1970-01-01 of a civil date (Hinnant's days_from_civil)
+fn days(y0: i64, m: i64, d: i64) i64 {
+    const y = if (m <= 2) y0 - 1 else y0;
+    const era = @divFloor(y, 400);
+    const yoe = y - era * 400;
+    const doy = @divFloor(153 * @mod(m + 9, 12) + 2, 5) + d - 1;
+    const doe = yoe * 365 + @divFloor(yoe, 4) - @divFloor(yoe, 100) + doy;
+    return era * 146097 + doe - 719468;
+}
 
 const months = [_][]const u8{ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
 
 const End = struct { k: usize, y: f32, v: f32 };
 
-/// Moves end labels apart, top to bottom, so none sits within `gap` % of the one above
+/// Moves end labels apart, top to bottom, so none sits within `gap` % of the one above;
+/// with many, the gap shrinks so all fit
 fn spread(es: []End) void {
-    const gap = 11;
+    const gap: f32 = if (es.len > 1) @min(11, 100 / @as(f32, @floatFromInt(es.len - 1))) else 11;
     std.mem.sort(End, es, {}, struct {
         fn lt(_: void, a: End, b: End) bool {
             return a.y < b.y;
@@ -426,7 +621,7 @@ fn spread(es: []End) void {
     if (es.len > 0 and es[es.len - 1].y > 100) {
         es[es.len - 1].y = 100;
         var i = es.len - 1;
-        while (i > 0) : (i -= 1) es[i - 1].y = @min(es[i - 1].y, es[i].y - gap);
+        while (i > 0) : (i -= 1) es[i - 1].y = @max(0, @min(es[i - 1].y, es[i].y - gap));
     }
 }
 
@@ -450,6 +645,10 @@ fn score(h: *H, v: f32) tree.Text {
 const W = struct {
     pub const none = plain("No data in this range");
     pub const all = plain("Show all");
+    pub const restart = plain("Restart");
+    pub const to = plain("to");
+    pub const latest = plain("Latest");
+    pub const gap = plain("nothing recorded");
 };
 
 pub const css =
@@ -471,6 +670,9 @@ pub const css =
     \\    color: var(--muted); white-space: nowrap; pointer-events: none; }
     \\  .c-time .foot { display: flex; justify-content: flex-end; margin-top: var(--sp-1); }
     \\  .c-time > .note { margin: 0; color: var(--muted); font-size: var(--fs-s); }
+    \\  .c-time .kb { position: absolute; inset: 0; pointer-events: none; border-radius: 2px; }
+    \\  .c-time .kb:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+    \\  .c-time .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     \\}
     \\
 ;
@@ -497,7 +699,7 @@ pub fn gallery(g: *Gallery) void {
     const states = [_]struct { []const u8, Time }{
         .{ "lines by region, a restart, NA's gaps", .{ .label = plain("Matches stored per hour"), .start = demo.start, .series = &demo.series, .marks = &.{demo.start + 30 * 3600} } },
         .{ "stacked area, a bucket tipped", .{ .label = plain("Timelines stored per hour"), .kind = .area, .start = demo.start, .series = &demo.series, .tip = 40 } },
-        .{ "stacked bars, zoomed, against a limit", .{ .label = plain("Requests per minute"), .kind = .bars, .start = demo.start, .series = &demo.series, .refs = &.{.{ .v = 1000, .label = plain("Limit 1,000") }}, .zoom = .{ 30, 54 } } },
+        .{ "stacked bars, zoomed, against a limit", .{ .label = plain("Requests per minute"), .kind = .bars, .start = demo.start, .series = &demo.series, .refs = &.{.{ .v = 1000, .label = plain("Limit 1,000") }}, .zoom = .{ demo.start + 30 * 3600, demo.start + 54 * 3600 } } },
         .{ "one series fitted to its range, 6-hourly", .{ .label = plain("Validation loss"), .unit = .score, .fit = true, .start = demo.start, .step = 6 * 3600, .series = &.{.{ .name = plain("loss"), .values = &demo.loss }} } },
         .{ "nothing recorded", .{ .label = plain("Queue depth"), .start = demo.start, .series = &.{.{ .name = plain("queue"), .values = &demo.empty }} } },
     };
@@ -554,7 +756,7 @@ test "scale: from zero to a nice top, stacks summed, fit around the data" {
     s = t.scale(.{ 0, 72 });
     // The tallest stack is 952 (hour 20: 560 + 221 + 171)
     try testing.expectEqual(@as(f32, 1000), s.y.hi);
-    t = .{ .label = plain("x"), .start = 0, .series = &.{.{ .name = plain("l"), .values = &demo.loss }}, .fit = true };
+    t = .{ .label = plain("x"), .unit = .score, .start = 0, .series = &.{.{ .name = plain("l"), .values = &demo.loss }}, .fit = true };
     s = t.scale(.{ 0, 12 });
     // At least 1% of the value tall, as the old page: 0.690 to 0.698 in steps of 0.002
     try testing.expect(s.y.lo <= 0.6913 and s.y.lo >= 0.6899);
@@ -564,41 +766,104 @@ test "scale: from zero to a nice top, stacks summed, fit around the data" {
     try testing.expectEqual(@as(f32, 3), t.scale(.{ 0, 3 }).y.hi);
 }
 
-test "a drag zooms to its buckets, a tap tips one, Show all resets" {
-    var t: Time = .{ .label = plain("x"), .start = 0, .series = &demo.series };
-    var ev: tree.Event = .{ .kind = .pointerdown, .x = 100, .w = 720 };
+fn drag(t: *Time, a: f32, b: f32) !void {
+    var ev: tree.Event = .{ .kind = .pointerdown, .x = a, .w = 720 };
     t.update(.plot, &ev);
-    ev = .{ .kind = .pointermove, .x = 200, .w = 720 };
+    ev = .{ .kind = .pointermove, .x = b, .w = 720 };
     t.update(.plot, &ev);
     try testing.expect(t.drag != null);
-    ev = .{ .kind = .pointerup, .x = 200, .w = 720 };
+    ev = .{ .kind = .pointerup, .x = b, .w = 720 };
     t.update(.plot, &ev);
-    // 72 buckets over 720 px: 100..200 px is buckets 10..20
-    try testing.expectEqual(@as(?[2]u32, .{ 10, 20 }), t.zoom);
     try testing.expectEqual(@as(?[2]f32, null), t.drag);
-    ev = .{ .kind = .pointerdown, .x = 360, .w = 720 };
+}
+
+fn press(t: *Time, k: []const u8) bool {
+    var ev: tree.Event = .{ .kind = .keydown, .text = k };
+    t.update(.key, &ev);
+    return ev.handled;
+}
+
+test "a drag zooms to its buckets' times, a tap tips one, Show all resets" {
+    var t: Time = .{ .label = plain("x"), .start = 0, .series = &demo.series };
+    try drag(&t, 100, 200);
+    // 72 buckets over 720 px: 100..200 px is buckets 10..20
+    try testing.expectEqual(@as(?[2]i64, .{ 10 * 3600, 20 * 3600 }), t.zoom);
+    var ev: tree.Event = .{ .kind = .pointerdown, .x = 360, .w = 720 };
     t.update(.plot, &ev);
     ev = .{ .kind = .pointerup, .x = 360, .w = 720 };
     t.update(.plot, &ev);
     try testing.expectEqual(@as(?u32, 15), t.tip);
     t.update(.all, &ev);
-    try testing.expectEqual(@as(?[2]u32, null), t.zoom);
+    try testing.expectEqual(@as(?[2]i64, null), t.zoom);
+    // Under two buckets wide: ignored
+    try drag(&t, 100, 108);
+    try testing.expectEqual(@as(?[2]i64, null), t.zoom);
+    // Released past the plot: to its end
+    try drag(&t, 360, 900);
+    try testing.expectEqual(@as(?[2]i64, .{ 36 * 3600, 72 * 3600 }), t.zoom);
     // A zoom past the data falls back to all of it
-    t.zoom = .{ 80, 90 };
+    t.zoom = .{ 80 * 3600, 90 * 3600 };
     try testing.expectEqual([2]u32{ 0, 72 }, t.window());
+    // Times between bucket starts take every bucket they touch
+    t.zoom = .{ 10 * 3600 + 1, 12 * 3600 - 1 };
+    try testing.expectEqual([2]u32{ 10, 12 }, t.window());
+    // The page re-fetched the series an hour on: the same times, a bucket earlier
+    t.start = 3600;
+    t.zoom = .{ 10 * 3600, 20 * 3600 };
+    try testing.expectEqual([2]u32{ 9, 19 }, t.window());
+    try testing.expectEqual(@as(?u32, null), t.at(std.math.nan(f32)));
 }
 
-test "view: series named at their ends, gaps break lines, ticks on UK hours, tip" {
+test "keys: arrows step the tip from the latest, + zooms round it, - and Escape go back" {
+    var t: Time = .{ .label = plain("x"), .start = 0, .series = &demo.series };
+    try testing.expect(press(&t, "ArrowLeft"));
+    try testing.expectEqual(@as(?u32, 70), t.tip);
+    _ = press(&t, "Home");
+    _ = press(&t, "ArrowLeft");
+    try testing.expectEqual(@as(?u32, 0), t.tip);
+    _ = press(&t, "End");
+    _ = press(&t, "ArrowRight");
+    try testing.expectEqual(@as(?u32, 71), t.tip);
+    t.tip = 40;
+    try testing.expect(press(&t, "+"));
+    try testing.expectEqual([2]u32{ 22, 58 }, t.window());
+    _ = press(&t, "+");
+    try testing.expectEqual([2]u32{ 31, 49 }, t.window());
+    try testing.expectEqual(@as(?u32, 40), t.tip);
+    try testing.expect(press(&t, "Escape"));
+    try testing.expectEqual(@as(?u32, null), t.tip);
+    try testing.expect(press(&t, "Escape"));
+    try testing.expectEqual(@as(?[2]i64, null), t.zoom);
+    try testing.expect(!press(&t, "Escape"));
+    try testing.expect(!press(&t, "-"));
+    try testing.expect(!press(&t, "x"));
+    _ = press(&t, "+");
+    try testing.expect(press(&t, "-"));
+    try testing.expectEqual(@as(?[2]i64, null), t.zoom);
+}
+
+test "view: series named at their ends, gaps break lines, ticks on UK hours, tip, summary" {
     var x: X = undefined;
     x.init();
     defer x.arena.deinit();
-    var t: Time = .{ .label = plain("Matches"), .start = demo.start, .series = &demo.series, .marks = &.{demo.start + 30 * 3600}, .tip = 40, .offset = 3600 };
+    var t: Time = .{ .label = plain("Matches"), .start = demo.start, .series = &demo.series, .marks = &.{demo.start + 30 * 3600}, .tip = 40 };
     var s = try x.html(&t);
-    // NA's gaps split it into four runs and three lone hours
-    try has(s, &.{ "class=\"mark\"", "EUW1 <b>441</b>", "NA1 <b>212</b>", "<b>26 Oct 17:00</b>", "<b>26 Oct 17:00</b> · <span>EUW1 </span>522", "26 Oct<", "aria-label=\"Matches\"" }, &.{ "Show all", "No data" });
+    // NA's gaps split it into four runs and three lone hours. Bucket 40 is after the
+    // switch to GMT (26 Oct 01:00 UTC): 16:00 UTC reads 16:00
+    try has(s, &.{
+        "class=\"mark\"",
+        "EUW1 <b>441</b>",
+        "NA1 <b>212</b>",
+        "<b>26 Oct 16:00</b> · <span>EUW1 </span>522",
+        "26 Oct<",
+        "aria-label=\"Matches\"",
+        "role=\"slider\"",
+        "aria-valuetext=\"26 Oct 16:00: EUW1 522, EUN1 205\"",
+        "25 Oct 01:00 to 27 Oct 23:00. Latest EUW1 441, EUN1 174, NA1 212. Restart 26 Oct 06:00.",
+    }, &.{ "Show all", "No data" });
     try testing.expectEqual(@as(usize, 2 + 4), std.mem.count(u8, s, "<path class=\"ln\""));
     try testing.expectEqual(@as(usize, 3), std.mem.count(u8, s, "class=\"dot\""));
-    t = .{ .label = plain("Q"), .kind = .bars, .start = demo.start, .series = &demo.series, .zoom = .{ 30, 54 }, .refs = &.{.{ .v = 1000, .label = plain("Limit") }} };
+    t = .{ .label = plain("Q"), .kind = .bars, .start = demo.start, .series = &demo.series, .zoom = .{ demo.start + 30 * 3600, demo.start + 54 * 3600 }, .refs = &.{.{ .v = 1000, .label = plain("Limit") }} };
     s = try x.html(&t);
     try has(s, &.{ "Show all", "class=\"bk\"", ">Limit<", "data-k=\"ref\"" }, &.{});
     try testing.expectEqual(@as(usize, 24 * 3 - 2), std.mem.count(u8, s, "class=\"bk\""));
@@ -606,15 +871,113 @@ test "view: series named at their ends, gaps break lines, ticks on UK hours, tip
     s = try x.html(&t);
     try has(s, &.{"No data in this range"}, &.{ "<svg", "Show all" });
     // A drag across an outage: the note keeps Show all, and it goes back
-    t.zoom = .{ 0, 2 };
+    t.zoom = .{ demo.start, demo.start + 2 * 3600 };
     s = try x.html(&t);
     try has(s, &.{ "No data in this range", "Show all" }, &.{"<svg"});
     var ev: tree.Event = .{ .kind = .click };
     t.update(.all, &ev);
-    try testing.expectEqual(@as(?[2]u32, null), t.zoom);
+    try testing.expectEqual(@as(?[2]i64, null), t.zoom);
     t = .{ .label = plain("L"), .unit = .score, .fit = true, .start = demo.start, .series = &.{.{ .name = plain("l"), .values = &demo.loss }} };
     s = try x.html(&t);
     try has(s, &.{"<b>0.691</b>"}, &.{"data-s="});
+}
+
+test "UK clock: BST until 01:00 UTC on October's last Sunday, one 01:00 tick after" {
+    try testing.expectEqual(@as(i64, 0), days(1970, 1, 1));
+    // 30 March and 26 October 2025
+    try testing.expectEqual(@as(i64, 20177), lastSunday(2025, 3));
+    try testing.expectEqual(@as(i64, 20387), lastSunday(2025, 10));
+    try testing.expectEqual(@as(i64, 3600), ukOffset(demo.start + 25 * 3600 - 1));
+    try testing.expectEqual(@as(i64, 0), ukOffset(demo.start + 25 * 3600));
+    try testing.expectEqual(@as(i64, 0), ukOffset(lastSunday(2025, 3) * 86400 + 3599));
+    try testing.expectEqual(@as(i64, 3600), ukOffset(lastSunday(2025, 3) * 86400 + 3600));
+
+    var x: X = undefined;
+    x.init();
+    defer x.arena.deinit();
+    var t: Time = .{ .label = plain("M"), .start = demo.start, .series = &demo.series, .tip = 10 };
+    try has(try x.html(&t), &.{"<b>25 Oct 11:00</b>"}, &.{});
+    t.clock = .utc;
+    try has(try x.html(&t), &.{"<b>25 Oct 10:00</b>"}, &.{});
+    // 23:00 to 04:00 UTC over the switch: hourly ticks, UK midnight at 23:00 UTC, the hour
+    // given back (01:00 BST, then 01:00 GMT) once
+    t = .{ .label = plain("M"), .start = demo.start, .series = &demo.series, .zoom = .{ demo.start + 23 * 3600, demo.start + 28 * 3600 } };
+    const s = try x.html(&t);
+    try has(s, &.{ ">26 Oct<", ">01:00<", ">02:00<", ">03:00<" }, &.{">00:00<"});
+    try testing.expectEqual(@as(usize, 1), std.mem.count(u8, s, ">01:00<"));
+}
+
+test "ticks: per minute zoomed to 20 minutes, a year by day" {
+    var x: X = undefined;
+    x.init();
+    defer x.arena.deinit();
+    const a = x.arena.allocator();
+    const mins = try a.alloc(?f32, 120);
+    for (mins, 0..) |*v, i| v.* = @floatFromInt(i % 7);
+    var t: Time = .{ .label = plain("R"), .clock = .utc, .start = demo.start, .step = 60, .series = &.{.{ .name = plain("r"), .values = mins }}, .zoom = .{ demo.start + 600, demo.start + 1800 } };
+    var s = try x.html(&t);
+    try has(s, &.{ ">00:10<", ">00:15<", ">00:20<", ">00:25<" }, &.{">00:30<"});
+    const year = try a.alloc(?f32, 365);
+    for (year, 0..) |*v, i| v.* = @floatFromInt(1000 + i);
+    t = .{ .label = plain("D"), .clock = .utc, .start = demo.start, .step = 86400, .series = &.{.{ .name = plain("d"), .values = year }} };
+    s = try x.html(&t);
+    const n = std.mem.count(u8, s, "class=\"xt\"");
+    try testing.expect(n >= 5 and n <= 7);
+    // A step of 0 is a step of 1 s
+    t.step = 0;
+    _ = try x.html(&t);
+}
+
+test "scale: signed lines, odd figures and refs neither hang nor panic" {
+    var t: Time = .{ .label = plain("x"), .start = 0, .series = &.{.{ .name = plain("d"), .values = &.{ -5, -2, 3 } }} };
+    var s = t.scale(.{ 0, 3 });
+    try testing.expect(s.y.lo <= -5 and s.y.hi >= 3);
+    t.series = &.{.{ .name = plain("d"), .values = &.{ -5, -2 } }};
+    s = t.scale(.{ 0, 2 });
+    try testing.expect(s.y.lo <= -5 and s.y.hi == 0);
+    t.series = &.{.{ .name = plain("z"), .values = &.{ 0, 0 } }};
+    s = t.scale(.{ 0, 2 });
+    try testing.expect(s.y.hi > s.y.lo and s.step >= 1);
+
+    var x: X = undefined;
+    x.init();
+    defer x.arena.deinit();
+    t = .{ .label = plain("x"), .start = demo.start, .series = &.{.{ .name = plain("d"), .values = &.{ -5, -2, 3 } }} };
+    try testing.expectEqual(@as(usize, 1), std.mem.count(u8, try x.html(&t), "class=\"axis\""));
+    t = .{
+        .label = plain("x"),
+        .start = demo.start,
+        .series = &.{.{ .name = plain("big"), .values = &.{ 1e30, 2, null } }},
+        .refs = &.{ .{ .v = std.math.inf(f32), .label = plain("inf") }, .{ .v = std.math.nan(f32), .label = plain("nan") }, .{ .v = 10, .label = plain("ten") } },
+    };
+    try testing.expect(t.scale(.{ 0, 3 }).y.hi <= 1e15);
+    const h = try x.html(&t);
+    try has(h, &.{">ten<"}, &.{ ">inf<", ">nan<" });
+    t.kind = .bars;
+    t.series = &.{ .{ .name = plain("a"), .values = &.{ 3e38, 1 } }, .{ .name = plain("b"), .values = &.{ 3e38, 1 } } };
+    _ = try x.html(&t);
+}
+
+test "view: a mark on its bucket's tick, marks outside left out, areas, one bucket" {
+    var x: X = undefined;
+    x.init();
+    defer x.arena.deinit();
+    var t: Time = .{ .label = plain("M"), .clock = .utc, .start = demo.start, .series = &demo.series, .marks = &.{ demo.start - 3600, demo.start + 36 * 3600, demo.start + 72 * 3600 } };
+    try testing.expectEqual(@as(usize, 1), std.mem.count(u8, try x.html(&t), "class=\"mark\""));
+    const p: chart.Plane = .{ .x = .{ .lo = -0.5, .hi = 71.5 }, .y = .{ .lo = 0, .hi = 1 } };
+    const m = p.x.at(t.domain(demo.start + 36 * 3600));
+    try testing.expectEqual(p.px(36), m);
+    var on = false;
+    for (t.ticks(&x.h, p, .{ 0, 72 })) |k| {
+        on = on or k.at == m;
+        // Narrow, the midnights stay and the noons go
+        try testing.expectEqual(std.mem.findScalar(u8, k.label.s, ' ') == null, k.minor);
+    }
+    try testing.expect(on);
+    t = .{ .label = plain("A"), .kind = .area, .start = demo.start, .series = &demo.series, .tip = 3 };
+    try testing.expectEqual(@as(usize, 3), std.mem.count(u8, try x.html(&t), "class=\"band\""));
+    t.series = &.{ .{ .name = plain("a"), .values = &.{4} }, .{ .name = plain("b"), .values = &.{2} } };
+    try testing.expectEqual(@as(usize, 2), std.mem.count(u8, try x.html(&t), "class=\"bk\""));
 }
 
 test "spread keeps end labels apart and inside the plot" {
@@ -627,4 +990,12 @@ test "spread keeps end labels apart and inside the plot" {
     spread(&low);
     try testing.expectEqual(@as(f32, 100), low[1].y);
     try testing.expectEqual(@as(f32, 89), low[0].y);
+    // Twelve at one height: a smaller gap, all on the plot
+    var many: [12]End = undefined;
+    for (&many, 0..) |*e, i| e.* = .{ .k = i, .y = 50, .v = 0 };
+    spread(&many);
+    for (many, 0..) |e, i| {
+        try testing.expect(e.y >= 0 and e.y <= 100);
+        if (i > 0) try testing.expect(e.y - many[i - 1].y >= 100.0 / 11.0 - 1e-3);
+    }
 }
