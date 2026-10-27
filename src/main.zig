@@ -360,13 +360,28 @@ pub fn olderPairs(arena: std.mem.Allocator, db: store.Db, chosen: []const []cons
     const games = try arena.alloc(u64, all.len);
     @memset(games, 0);
     // Only the patches a pair could rest on: each count reads its patch's rows
-    for (at + 3..@min(all.len, at + 3 + max_older_pairs)) |i| {
+    const from, const to = restRange(all.len, at);
+    for (from..to) |i| {
         games[i] = try stats.countGames(db, &.{all[i]}, &.{"EUW1"});
     }
     return pairsBelow(arena, all, games, at);
 }
 
 const max_older_pairs = 4;
+
+/// Indices of the patches the pairs below all[at] could rest on, of `n` patches
+fn restRange(n: usize, at: usize) [2]usize {
+    const from = @min(n, at + 3);
+    return .{ from, @min(n, from + max_older_pairs) };
+}
+
+test restRange {
+    try std.testing.expectEqual([2]usize{ 1, 1 }, restRange(1, 0));
+    try std.testing.expectEqual([2]usize{ 2, 2 }, restRange(2, 0));
+    try std.testing.expectEqual([2]usize{ 3, 3 }, restRange(3, 1));
+    try std.testing.expectEqual([2]usize{ 3, 4 }, restRange(4, 0));
+    try std.testing.expectEqual([2]usize{ 4, 8 }, restRange(20, 1));
+}
 
 /// EUW games the patch below a pair needs to count as crawled: a crawled patch has tens
 /// of thousands, stray games from before the crawl began (players' match histories
