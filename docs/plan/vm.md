@@ -50,8 +50,15 @@ Migration mode, set 26-27 Oct (undo in VM6, from the new host where moved):
   --user start meiolol-archive-pull.timer`
 - Copy: C01 user units meiolol-copy-{meiolol,timeline,raw,rest}, logs ~/copy-*.log
   ("done" last line). The box's key runs rrsync at `ionice -c2 -n7`. The Oracle to
-  Essex route caps at ~5-6 MB/s in total (box disk 76 MB/s free, C01 idle, more
-  streams don't add): ~3 h for 58 GB from 27 Oct 00:00
+  Essex route is policed to ~5.8 MB/s in total (3% retransmits on cubic, 16% on BBR for
+  the same rate; C01's line takes 28 MB/s elsewhere, the box sends 98). meiolol.db and
+  timeline.db go through the Mac instead (box to Mac 82 MB/s, Mac to C01 14): C01 alias
+  meiolol-box-mac = localhost:2222, a reverse tunnel the Mac holds (`caffeinate -i ssh -N
+  -R 2222:140.238.101.20:22 essex-vm`), `--bwlimit=6m` each to spare Jacob's upload
+- Chain: C01 unit meiolol-vm-chain runs deploy/vm-chain.sh (copy at
+  ~/vm-chain/deploy/): waits for the copy, catch-up and quick_check, then VM3's
+  benchmark; ~/vm-chain/results.md ends "VERDICT: ...". C01 has 8b25a7c's x86 build
+  (box.sh sync), no unit enabled
 - Secrets: vault meiolol/essex-vm (SUDO_PASSWORD, NAS_PASSWORD); `head -1 | sudo -S -p ""
   -v` once per ssh command, then plain sudo (sudo -S per call eats the stdin of what
   it runs)
