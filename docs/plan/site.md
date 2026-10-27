@@ -78,9 +78,11 @@ beside the patch's usual and which champion should win them, and the draft revie
 top five for the hidden slot), "Every pick, rated" (all ten seats as the last pick).
 Pick shares: answers go once per browser to POST /api/daily, counted in api.db
 daily_answers with nothing about the sender. Share is hidden in preview mode (keyed on
-html.zig's preview banner; production-key.md "do not advertise").
+html.zig's preview banner; production-key.md "do not advertise"). Hint before the
+guess: Range (the hidden champion melee or ranged, Data Dragon attackrange; none for
+champions whose range changes, dailydata.no_range), costing the clean tick.
 
-Next: a hint before the guess; share text with the facts. Later: puzzles from clear
+Next: share text with the facts. Later: puzzles from clear
 comp leans (data-and-model.md step 5).
 
 ## Learn

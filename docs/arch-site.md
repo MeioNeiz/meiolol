@@ -175,7 +175,9 @@ detected reason that clears chance, else its usual gold at 14 against the enemy)
   (ui.dailypage, ui-daily.wasm) with the newest puzzle up to today (UTC) in its data-bin:
   pick, Lock in, who won, then the board grown, the seat panel and On paper. Answers in
   localStorage meiolol.daily.v1 (object by n, {opt, side, hint, marks, on}; Home reads
-  marks). The Range hint costs the clean tick ("Pick, with a hint").
+  marks). The Range hint (melee or ranged, from Options.ddragon_dir's championFull.json
+  attackrange; hidden where unknown or form-changing) costs the clean tick ("Pick, with
+  a hint").
 - daily/<n>.html: puzzle n's own page, the same island; none past tomorrow (UTC), so a
   viewer a day ahead of UTC can play theirs and later ones 404. Rendered on request under
   --static core (the renderer, from the shared view's daily files), written by --static

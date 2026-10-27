@@ -29,7 +29,60 @@ comptime {
 /// says so
 pub fn files(site: *const Site, daily_files: []const File, out: *std.ArrayList(File)) !void {
     if (site.learn == null) return log.info("daily page data: no Learn facts", .{});
-    try filesWith(site.arena, daily_files, out, site, siteChamp, siteMagic);
+    const ctx: SiteCtx = .{ .site = site, .ranges = try loadRanges(site) };
+    try filesWith(site.arena, daily_files, out, ctx, siteChamp, siteMagic, siteRanged);
+}
+
+const SiteCtx = struct {
+    site: *const Site,
+    ranges: Ranges,
+};
+
+/// Ranged or melee by champion id
+const Ranges = std.AutoHashMapUnmanaged(u32, bool);
+
+/// Champions whose attack range changes with a form or a level (Gnar's mini form is
+/// ranged, Kayle's turns at 6), and Lillia (325, between the two):
+/// Data Dragon's one number would guess, so no hint
+const no_range = [_][]const u8{ "Elise", "Gnar", "Jayce", "Kayle", "Lillia", "Nidalee" };
+
+/// From the site's Data Dragon version in Options.ddragon_dir (championFull.json, as
+/// patchnotes caches it); empty without it, and the hint hides
+fn loadRanges(site: *const Site) !Ranges {
+    const dir = site.opts.ddragon_dir orelse return .empty;
+    if (site.ddragon_version.len == 0) return .empty;
+    const path = try std.fs.path.join(site.arena, &.{ dir, site.ddragon_version, "championFull.json" });
+    const body = std.Io.Dir.cwd().readFileAlloc(site.io, path, site.arena, .limited(1 << 26)) catch |err| {
+        log.info("daily range hint: {s}: {t}", .{ path, err });
+        return .empty;
+    };
+    return rangesOf(site.arena, body) catch |err| switch (err) {
+        error.OutOfMemory => return err,
+        else => {
+            log.warn("daily range hint: {s}: {t}", .{ path, err });
+            return .empty;
+        },
+    };
+}
+
+/// Data Dragon 16.20: melee attack ranges 125 to 225, ranged from 300 (Rakan)
+fn rangesOf(a: std.mem.Allocator, champion_full: []const u8) !Ranges {
+    const Entry = struct {
+        id: []const u8 = "",
+        key: []const u8 = "",
+        stats: struct { attackrange: ?f64 = null } = .{},
+    };
+    const doc = try std.json.parseFromSliceLeaky(struct { data: std.json.ArrayHashMap(Entry) }, a, champion_full, .{ .ignore_unknown_fields = true });
+    var out: Ranges = .empty;
+    for (doc.data.map.values()) |e| {
+        if (for (no_range) |n| {
+            if (std.mem.eql(u8, n, e.id)) break true;
+        } else false) continue;
+        const range = e.stats.attackrange orelse continue;
+        const id = std.fmt.parseInt(u32, e.key, 10) catch continue;
+        try out.put(a, id, range > 250);
+    }
+    return out;
 }
 
 fn filesWith(
@@ -39,6 +92,7 @@ fn filesWith(
     ctx: anytype,
     champ: fn (@TypeOf(ctx), u32) anyerror!Champ,
     magic: fn (@TypeOf(ctx), u32) ?f32,
+    ranged: fn (@TypeOf(ctx), u32) ?bool,
 ) !void {
     for (daily_files) |f| {
         const n = puzzleName(f.path) orelse continue;
@@ -50,7 +104,7 @@ fn filesWith(
                 continue;
             },
         };
-        const d = puzzle(a, p, ctx, champ, magic) catch |err| switch (err) {
+        const d = puzzle(a, p, ctx, champ, magic, ranged) catch |err| switch (err) {
             error.OutOfMemory => return error.OutOfMemory,
             else => {
                 log.info("{s}: no page data: {t}", .{ f.path, err });
@@ -76,14 +130,20 @@ fn puzzleName(path: []const u8) ?[]const u8 {
     return n;
 }
 
-fn siteChamp(site: *const Site, id: u32) anyerror!Champ {
+fn siteChamp(ctx: SiteCtx, id: u32) anyerror!Champ {
+    const site = ctx.site;
     const ch = for (site.champs) |c| {
         if (c.id == id) break c;
     } else return error.UnknownChampion;
     return .{ .name = ch.name, .src = try site.icon(ch) };
 }
 
-fn siteMagic(site: *const Site, id: u32) ?f32 {
+fn siteRanged(ctx: SiteCtx, id: u32) ?bool {
+    return ctx.ranges.get(id);
+}
+
+fn siteMagic(ctx: SiteCtx, id: u32) ?f32 {
+    const site = ctx.site;
     const facts = site.learn orelse return null;
     const i = site.stats.index(id) orelse return null;
     if (i >= facts.champs.len) return null;
@@ -97,6 +157,8 @@ pub fn puzzle(
     champ: fn (@TypeOf(ctx), u32) anyerror!Champ,
     /// Magic share of a champion's damage to champions, 0..1; null unsampled
     magic: fn (@TypeOf(ctx), u32) ?f32,
+    /// The champion's basic attack is ranged; null where it changes or is unknown
+    ranged: fn (@TypeOf(ctx), u32) ?bool,
 ) !dd.Puzzle {
     var ids: Ids = .{ .a = a };
     var seats: [2][5]dd.Seat = undefined;
@@ -166,6 +228,7 @@ pub fn puzzle(
         .hidden_side = @fromBackingInt(@intCast(p.hidden_team)),
         .hidden_role = uiRole(p.hidden_role),
         .options = options,
+        .ranged = ranged(ctx, p.played),
         .lanes = lanes,
         .result = .{
             .winner = @fromBackingInt(@intCast(p.winner)),
@@ -260,6 +323,9 @@ const Fake = struct {
     fn magic(_: Fake, id: u32) ?f32 {
         return if (id == 3) 0.9 else if (id == 1) 0.1 else null;
     }
+    fn ranged(_: Fake, id: u32) ?bool {
+        return if (id == 8) true else null;
+    }
     const names = [_][]const u8{ "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M" };
 };
 
@@ -313,7 +379,7 @@ test "a ranked puzzle: bans per side, the played pick's reasons from its option,
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const bare = try puzzle(a, testPuzzle(null, null), Fake{}, Fake.champ, Fake.magic);
+    const bare = try puzzle(a, testPuzzle(null, null), Fake{}, Fake.champ, Fake.magic, Fake.ranged);
     try testing.expect(bare.valid());
     try testing.expect(bare.paper == null);
     try testing.expectEqual(ui.role.Role.mid, bare.hidden_role);
@@ -324,7 +390,7 @@ test "a ranked puzzle: bans per side, the played pick's reasons from its option,
     try testing.expectEqual(dd.Dmg.ad, bare.seats[0][0].dmg.?);
     try testing.expectEqual(null, bare.seats[0][1].dmg);
 
-    const p = try puzzle(a, testPuzzle(null, test_review), Fake{}, Fake.champ, Fake.magic);
+    const p = try puzzle(a, testPuzzle(null, test_review), Fake{}, Fake.champ, Fake.magic, Fake.ranged);
     try testing.expect(p.valid());
     try testing.expectApproxEqAbs(@as(f32, 52.5), p.paper.?.blue, 1e-4);
     // The top pick with its two reasons; the second pick has no win chance (left out);
@@ -357,6 +423,8 @@ test "a ranked puzzle: bans per side, the played pick's reasons from its option,
     const back = try dd.decode(a, try dd.encode(a, p));
     try testing.expect(back.valid());
     try testing.expectEqualStrings("H", back.champs[dd.played(&back)].name);
+    // The played champion's range: the hint
+    try testing.expectEqual(@as(?bool, true), back.ranged);
 }
 
 fn named(p: *const dd.Puzzle, i: u16) bool {
@@ -387,12 +455,34 @@ test "files: a bin per numbered puzzle that converts; an unknown champion or bad
         .{ .path = "daily/index.json", .data = "[]" },
     };
     var out: std.ArrayList(File) = .empty;
-    try filesWith(a, &in, &out, Fake{}, Fake.champ, Fake.magic);
+    try filesWith(a, &in, &out, Fake{}, Fake.champ, Fake.magic, Fake.ranged);
     try testing.expectEqual(@as(usize, 1), out.items.len);
     try testing.expectEqualStrings("daily/7.bin", out.items[0].path);
     const back = try dd.decode(a, out.items[0].data);
     try testing.expect(back.valid());
     try testing.expectEqual(@as(u32, 7), back.n);
+}
+
+test "rangesOf: melee up to 250, ranged past it, champions whose range changes left out" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const r = try rangesOf(arena.allocator(),
+        \\{"type":"champion","data":{
+        \\"Aatrox":{"id":"Aatrox","key":"266","name":"Aatrox","stats":{"hp":650,"attackrange":175}},
+        \\"Fiora":{"id":"Fiora","key":"114","stats":{"attackrange":150}},
+        \\"Rakan":{"id":"Rakan","key":"497","stats":{"attackrange":300}},
+        \\"Jinx":{"id":"Jinx","key":"222","stats":{"attackrange":525}},
+        \\"Gnar":{"id":"Gnar","key":"150","stats":{"attackrange":175}},
+        \\"Jayce":{"id":"Jayce","key":"126","stats":{"attackrange":125}},
+        \\"Darius":{"key":"122","stats":{"hp":652}}}}
+    );
+    try testing.expectEqual(@as(?bool, false), r.get(266));
+    try testing.expectEqual(@as(?bool, false), r.get(114));
+    try testing.expectEqual(@as(?bool, true), r.get(497));
+    try testing.expectEqual(@as(?bool, true), r.get(222));
+    try testing.expectEqual(null, r.get(150));
+    try testing.expectEqual(null, r.get(126));
+    try testing.expectEqual(null, r.get(122));
 }
 
 test "dmgOf: a third and two thirds magic are mixed, past them AD or AP" {
@@ -417,7 +507,7 @@ test "a pro puzzle keeps its 20 turns, a skipped ban as none, and no bans apart"
     for (&turns, leaguepedia.order, 0..) |*t, c, i| t.* = .{ .id = @intCast(i % 10 + 1), .side = c.side };
     turns[3].id = null;
     turns[19] = .{ .id = 8, .side = 1 };
-    const p = try puzzle(a, testPuzzle(&turns, test_review), Fake{}, Fake.champ, Fake.magic);
+    const p = try puzzle(a, testPuzzle(&turns, test_review), Fake{}, Fake.champ, Fake.magic, Fake.ranged);
     try testing.expect(p.valid());
     try testing.expectEqual(@as(usize, 20), p.turns.len);
     try testing.expect(p.turns[3].champ == null);
