@@ -38,7 +38,7 @@ pub const scope = .{".c-mpage"};
 pub const Other = champpage.Other;
 
 fn icon(a: std.mem.Allocator, ddragon: []const u8, c: Other) !champ.Champ {
-    return .{ .name = c.name, .src = try std.fmt.allocPrint(a, champ.icon_fmt, .{ ddragon, c.key }) };
+    return .{ .name = c.name, .src = try a.print(champ.icon_fmt, .{ ddragon, c.key }) };
 }
 
 fn rate(games: u32, wins: u32) f32 {
@@ -154,14 +154,14 @@ pub const Head = struct {
             const r = rate(o.games, o.wins);
             it.* = .{
                 .champ = try icon(a, d.ddragon, o.o),
-                .fig = .{ .s = try std.fmt.allocPrint(a, "{d:.1}", .{r}) },
+                .fig = .{ .s = try a.print("{d:.1}", .{r}) },
                 .colour = .{ .pts = r - 50 },
-                .href = try std.fmt.allocPrint(a, "{s}-vs-{s}.html", .{ d.x.slug, o.o.slug }),
+                .href = try a.print("{s}-vs-{s}.html", .{ d.x.slug, o.o.slug }),
                 .current = std.mem.eql(u8, o.o.slug, d.y.slug),
                 .thin = o.games < fmt.thin_games,
             };
         }
-        const label = try std.fmt.allocPrint(a, "{s}'s {s} opponents", .{ d.x.name, d.role.label().s });
+        const label = try a.print("{s}'s {s} opponents", .{ d.x.name, d.role.label().s });
         return .{ .data = d, .strip = try .init(a, items, "mu-opp", .{ .s = label }) };
     }
 

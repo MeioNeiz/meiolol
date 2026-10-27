@@ -2,12 +2,10 @@
 //! site's bundle ships only the components a page uses) and no legacy layer
 const std = @import("std");
 const ui = @import("ui");
+const style = @import("style.zig");
 
-const font =
-    \\@font-face { font-family: "Inter"; font-style: normal; font-weight: 100 900; font-display: swap;
-    \\  src: url("inter.woff2") format("woff2"); }
-    \\
-;
+const font = "@font-face { font-family: \"Inter\"; font-style: normal; font-weight: 100 900; font-display: swap;\n" ++
+    "  src: url(\"" ++ style.font.path ++ "\") format(\"woff2\"); }\n";
 
 pub const css = ui.css.head ++ font ++ ui.css.join(ui.all) ++ ui.gallery.css;
 
