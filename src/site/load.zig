@@ -484,7 +484,12 @@ fn curved(arena: std.mem.Allocator, wins: patchday.Wins, extras: *const Extras, 
 fn keptPatchDay(site: *Site, all_opts: Options, extras: *const Extras, phases: *Phases) !void {
     const prev = all_opts.prev_patch orelse return;
     const path = all_opts.patch_day_from orelse return;
-    const kept = try current(try keptWins(site.gpa, site.io, path, site.view, site.arena), prev, all_opts.patches);
+    // A bad file costs the card, not the home's upload
+    const wins = keptWins(site.gpa, site.io, path, site.view, site.arena) catch |err| {
+        log.warn("home: patch day from {s}: {t}", .{ path, err });
+        return;
+    };
+    const kept = try current(wins, prev, all_opts.patches);
     site.patchday = try curved(site.arena, kept orelse {
         log.info("home: no current patch day in {s}", .{path});
         return;
