@@ -51,8 +51,9 @@ pub const Options = struct {
     /// Access-Control-Allow-Origin, for a page served from another origin in testing
     cors: ?[]const u8 = null,
     fetch: fetch.Options = .{},
-    /// devfixture's players in `db_path` (empty: in memory), run from the repo root; the
-    /// fetcher doesn't run, so no Riot call and no key
+    /// devfixture's players in `db_path`, emptied first (a file: each request opens its own
+    /// connection), run from the repo root; the fetcher doesn't run, so no Riot call and no
+    /// key
     fixture: bool = false,
 };
 
@@ -112,7 +113,11 @@ pub fn run(gpa: Allocator, io: Io, opts: Options) !void {
     // Schema now, so a broken accounts.db stops the service at start, not at a login
     (try accounts.open(opts.accounts_path)).close();
 
-    const db = try cache.open(if (opts.fixture and opts.db_path.len == 0) ":memory:" else opts.db_path);
+    if (opts.fixture) for ([_][]const u8{ "", "-wal", "-shm" }) |ext| {
+        const path = try std.mem.concat(arena, u8, &.{ opts.db_path, ext });
+        Io.Dir.cwd().deleteFile(io, path) catch |err| if (err != error.FileNotFound) return err;
+    };
+    const db = try cache.open(opts.db_path);
     defer db.close();
     if (opts.fixture) try devfixture.seed(
         arena,
