@@ -45,7 +45,7 @@ pub const Options = struct {
     platforms: []const []const u8,
     /// Epoch day (UTC) of today
     today: u32,
-    /// Puzzles made in advance, so a viewer whose date is ahead of UTC finds theirs
+    /// Puzzles made in advance; only up to tomorrow are site files (`published_ahead`)
     ahead: u32 = 2,
     /// The lane curves behind the gold facts; without them puzzles have none
     curves: ?*const curvesfile.Curves = null,
@@ -235,10 +235,14 @@ pub const Puzzle = struct {
 
 pub const File = struct { path: []const u8, data: []const u8 };
 
+/// A viewer up to UTC+14 is a day ahead of UTC; later puzzles stay on the box, since a
+/// published puzzle's answer is readable
+pub const published_ahead = 1;
+
 /// Makes any missing puzzle up to today + ahead, then returns the site files: every
-/// puzzle up to that day as daily/<n>.json and daily/index.json listing them. A puzzle
-/// on a patch still in `opts.patches` gets its numbers from `st` (see `refresh`).
-/// Allocates in `arena`.
+/// puzzle up to today + published_ahead as daily/<n>.json and daily/index.json listing
+/// them. A puzzle on a patch still in `opts.patches` gets its numbers from `st` (see
+/// `refresh`). Allocates in `arena`.
 pub fn update(
     arena: std.mem.Allocator,
     io: std.Io,
@@ -274,6 +278,7 @@ pub fn update(
             },
             else => return err,
         };
+        if (day > opts.today + published_ahead) continue;
         const data = try refresh(arena, io, dir, st, opts, name, read_data);
         const path = try arena.print("daily/{s}", .{name});
         try files.append(arena, .{ .path = path, .data = data });
@@ -1055,7 +1060,9 @@ test "puzzles are made once, anonymised and published" {
     const again = try update(arena, io, db, &st, next);
     try testing.expectEqualStrings(files[0].data, again[0].data);
     try testing.expectEqualStrings(files[1].data, again[1].data);
-    try testing.expectEqual(5, again.len);
+    // Made 2 ahead, published 1 ahead (7.json is read below)
+    try testing.expectEqual(4, again.len);
+    try testing.expectEqualStrings("daily/6.json", again[2].path);
     const used_path = try arena.print("{s}/used.txt", .{dir});
     const used = try std.Io.Dir.cwd().readFileAlloc(io, used_path, arena, .unlimited);
     try testing.expectEqual(4, std.mem.count(u8, used, "\n"));
@@ -1088,7 +1095,9 @@ test "puzzles are made once, anonymised and published" {
     try db.exec("UPDATE matches SET patch = '16.19', remake = 0 WHERE match_id LIKE '%0'");
     next.today += 1;
     const fourth = try update(arena, io, db, &st, next);
-    const prev = try std.json.parseFromSliceLeaky(Puzzle, arena, fourth[4].data, .{});
+    try testing.expectEqualStrings("daily/7.json", fourth[3].path);
+    const eight = try std.Io.Dir.cwd().readFileAlloc(io, try arena.print("{s}/8.json", .{dir}), arena, .unlimited);
+    const prev = try std.json.parseFromSliceLeaky(Puzzle, arena, eight, .{});
     try testing.expectEqual(8, prev.n);
     try testing.expectEqualStrings("16.19", prev.patch);
     try testing.expectEqualStrings("16.20", prev.numbers_patch.?);

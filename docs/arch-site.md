@@ -171,7 +171,8 @@ detected reason that clears chance, else its usual gold at 14 against the enemy)
   games with one). Puzzles made before it get `players` from the used.txt game with the
   same ten champions (`backfillPlayers`). `tier` is the median of the known ranks
 - Site: daily/index.json ([{n, date}]), daily/<n>.json and daily/<n>.bin (the page's
-  data, site/dailydata.zig). daily.html (site/daily.zig, per request) is the island
+  data, site/dailydata.zig), up to tomorrow (UTC): today+2's answer stays on the box
+  (`daily.published_ahead`). daily.html (site/daily.zig, per request) is the island
   (ui.dailypage, ui-daily.wasm) with the newest puzzle up to today (UTC) in its data-bin:
   pick, Lock in, who won, then the board grown, the seat panel and On paper. Answers in
   localStorage meiolol.daily.v1 (object by n, {opt, side, hint, marks, on}; Home reads
