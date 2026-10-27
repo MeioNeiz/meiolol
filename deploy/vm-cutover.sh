@@ -8,8 +8,8 @@
 # meio.lol and www to the tunnel, the Mac's scripts pointed at essex-vm. Push mode stays
 # bulk: Jacob sets fast. Each done step leaves data/vm-cutover/<step>, so a rerun goes on
 # from where it stopped; log in data/vm-cutover/log. Rollback:
-# data/vm-cutover/dns-before.json back, the box's units unmasked, enabled and started (the
-# data since the switch copied back first if C01 crawled).
+# data/vm-cutover/dns-before.json back, the box's units unmasked, box.sh sync, enabled and
+# started (the data since the switch copied back first if C01 crawled).
 #   deploy/vm-cutover.sh      run on the Mac: nohup, or a session's background task
 set -uo pipefail
 
@@ -65,10 +65,14 @@ precheck() {
             | sed 's/$/ 200/')
 }
 
+# mask refuses a unit whose file is in ~/.config/systemd/user, so the files go first
+# (box.sh sync puts them back for a rollback)
 freeze_box() {
     # shellcheck disable=SC2086 # unit list is words
     ssh meiolol-cloud "systemctl --user disable -q --now $BOX_UNITS; \
-        systemctl --user mask -q $BOX_UNITS \
+        cd ~/.config/systemd/user && for u in $BOX_UNITS; do \
+            [[ -L \$u || \$u == *@* ]] || rm -f \$u.service \$u; done; \
+        systemctl --user daemon-reload && systemctl --user mask -q $BOX_UNITS \
         && systemctl --user is-active $BOX_UNITS | sort | uniq -c"
 }
 
