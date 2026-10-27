@@ -27,6 +27,8 @@ const lab_seatstats = @import("lab/seatstats.zig");
 const lab_events = @import("lab/events.zig");
 const objectives = @import("objectives.zig");
 const partials = @import("partials.zig");
+const patchday = @import("patchday.zig");
+const flat = @import("site/flat.zig");
 const forget = @import("forget.zig");
 const ui = @import("ui");
 
@@ -714,9 +716,15 @@ test "fixture games to stats, curves and the website" {
     core_opts.origin = "https://x.io";
     core_opts.riot_txt = "riot-check";
     core_opts.your_example = try std.fs.path.join(arena, &.{ dir, "your-example.json" });
+    // The home's Patch card from the web loop's last views file (--patch-day-from), its
+    // root patch day given a clear move (the fixture's patch has none); the renderer
+    // keeps the same part, so serves the same home
+    core_opts.patch_day_from = try std.fs.path.join(arena, &.{ dir, "views-moved.bin" });
+    try withClearMove(arena, io, try std.fs.path.join(arena, &.{ dir, "views-again.bin" }), core_opts.patch_day_from.?);
     try site.generate(gpa, io, db, core_opts);
     const core_loaded = try site.Loaded.init(gpa, io, db, core_opts);
     defer core_loaded.deinit();
+    try core_loaded.reuseViews(core_opts.patch_day_from.?);
     var core_dir = try std.Io.Dir.cwd().openDir(io, core_opts.out_dir, .{ .iterate = true });
     defer core_dir.close(io);
     var core_walker = try core_dir.walk(gpa);
@@ -784,7 +792,13 @@ test "fixture games to stats, curves and the website" {
         try testing.expect(std.mem.find(u8, games_page, want) != null);
     }
     // Home in every view: the shared view's example, its game file loaded lazily; the
-    // Patch card's link without a patch day loaded
+    // Patch card's moves (all/ has none: its patch day isn't in views-moved.bin)
+    {
+        const home = try core_dir.readFileAlloc(io, "index.html", arena, .limited(1 << 24));
+        try testing.expect(std.mem.find(u8, home, "vs 15.12") != null);
+        try testing.expect(std.mem.find(u8, home, "<ul class=\"c-today\" data-v=\"changes\"><li><a href=\"champion/darius.html#role=top\">") != null);
+        try testing.expect(std.mem.find(u8, home, "<small>45.0% → 56.0%</small>") != null);
+    }
     for ([_][]const u8{ "index.html", "all/index.html" }) |path| {
         const home = (try core_loaded.get(arena, path)).?;
         try testing.expect(std.mem.find(u8, home, "vs 15.12") != null);
@@ -1646,6 +1660,31 @@ fn viewsFile(arena: std.mem.Allocator, io: std.Io, db: store.Db, opts: site.Opti
     if (counts) |c| c.* = loaded.extras.games.?.counts;
     try loaded.writeViews(path);
     return std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 30));
+}
+
+/// The views file at `from` to `to`, the root view's patch day (Part.prev) with Darius
+/// top up from 45% to 56% over 1,000 games each patch
+fn withClearMove(arena: std.mem.Allocator, io: std.Io, from: []const u8, to: []const u8) !void {
+    const bytes = try std.Io.Dir.cwd().readFileAlloc(io, from, arena, .limited(1 << 30));
+    // After the magic and format: part tag, view, key, length, data
+    var at: usize = 16;
+    const prev_tag = 5;
+    while (bytes[at] != prev_tag or bytes[at + 1] != 0) {
+        at += 18 + std.mem.readInt(u64, bytes[at + 10 ..][0..8], .little);
+    }
+    const len = std.mem.readInt(u64, bytes[at + 10 ..][0..8], .little);
+    var r: std.Io.Reader = .fixed(bytes[at + 18 ..][0..len]);
+    var wins = try flat.read(patchday.Wins, &r, arena);
+    const moved = [_]patchday.ChampionMove{.{ .id = 122, .role = .top, .win = .of(.{ .games = 1000, .wins = 450 }, .{ .games = 1000, .wins = 560 }) }};
+    wins.champions = try std.mem.concat(arena, patchday.ChampionMove, &.{ wins.champions, &moved });
+    var part: std.Io.Writer.Allocating = .init(arena);
+    try flat.write(&part.writer, wins);
+    var out: std.Io.Writer.Allocating = .init(arena);
+    try out.writer.writeAll(bytes[0 .. at + 10]);
+    try out.writer.writeInt(u64, part.written().len, .little);
+    try out.writer.writeAll(part.written());
+    try out.writer.writeAll(bytes[at + 18 + len ..]);
+    try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = to, .data = out.written() });
 }
 
 fn readStrings(arena: std.mem.Allocator, db: store.Db, sql: []const u8) ![]const []const u8 {

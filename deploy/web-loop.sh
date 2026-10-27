@@ -12,7 +12,8 @@
 # 45-60 min every hour (research/questions/box-io-priority.md). The build is
 # `--static core`: the home
 # page, robots.txt, riot.txt, the root sitemap and the front-end files (~30 files, two
-# views loaded); meiolol-render serves every other page and file. After each upload,
+# views loaded; the home's Patch card from the last views file, a round behind: making
+# it takes a patch's stats); meiolol-render serves every other page and file. After each upload,
 # `meiolol site --views` loads every view from the database into data/views.bin and
 # touches data/render.reload: the renderer reads that file in seconds, so the
 # database work happens once, here (docs/hosting.md "Rendering on request"). The
@@ -429,7 +430,8 @@ while true; do
         || (( games > last_games && now - last_upload >= interval )); }; then
         rm -rf data/site.new
         site_start=$SECONDS
-        if ! out=$(bin/meiolol site "${site_args[@]}" --out data/site.new --static core 2>&1); then
+        if ! out=$(bin/meiolol site "${site_args[@]}" --out data/site.new --static core \
+            --patch-day-from data/views.bin 2>&1); then
             echo "$out"
             round_event site failed "$(tail -n 1 <<< "$out")"
         else

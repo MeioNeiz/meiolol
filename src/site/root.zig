@@ -101,6 +101,9 @@ pub const Options = struct {
     static: Static = .all,
     /// Matchup pages with fewer games are left out of the static build (Static.all)
     static_min_games: u32 = 0,
+    /// Static.core: a views file (the web loop's last) whose patch day, when for the same
+    /// patches, the home's Patch card shows
+    patch_day_from: ?[]const u8 = null,
     /// "https://meio.lol": canonical links and sitemaps, when public
     origin: ?[]const u8 = null,
     /// Matchup pages with fewer games are noindex and left out of the sitemaps

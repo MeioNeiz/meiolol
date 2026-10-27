@@ -49,6 +49,7 @@ const TrendPart = @import("views.zig").TrendPart;
 const OlderPart = @import("views.zig").OlderPart;
 const champsKey = @import("views.zig").champsKey;
 const Parts = @import("views.zig").Parts;
+const keptWins = @import("views.zig").keptWins;
 
 /// Reads the view's data (the slow part of a site build), each part (Part) from `old`
 /// where it is there with this binary's key, the rest from the database; with
@@ -198,7 +199,7 @@ pub fn loadParts(gpa: std.mem.Allocator, io: std.Io, db: store.Db, all_opts: Opt
             site.trend = t.trend;
             phases.mark("trend kept");
         } else try loadTrend(site, db, try extras.partialsFor(gpa, io, db, &phases), &phases);
-    } else if (shared) try loadHome(site, &phases);
+    } else if (shared) try loadHome(site, &phases) else try keptPatchDay(site, all_opts, extras, &phases);
     try addFiles(site);
     if (old == null or !old.?.strict) log.info("view {d} ({s}) load:{s}", .{ view.index(), site.when, phases.text() });
     return site;
@@ -440,11 +441,8 @@ test "samePairs: a new patch moves every pair, so the kept part is rebuilt" {
 /// when made here
 fn regionPatchDay(site: *Site, db: store.Db, all_opts: Options, extras: *Extras, old: ?*const Parts, phases: *Phases, prev: []const u8, v: html.View, keep: *bool) !patchday.PatchDay {
     const arena = site.arena;
-    var label_buf: [core.statsfile.patch_len]u8 = undefined;
-    const cur = try stats.label(&label_buf, all_opts.patches);
-    const kept = try Parts.of(old, patchday.Wins, .prev, v, arena);
-    const current = if (kept) |k| std.mem.eql(u8, k.prev_patch, prev) and std.mem.eql(u8, k.cur_patch, cur) else false;
-    const wins = if (current) kept.? else blk: {
+    const kept = try current(try Parts.of(old, patchday.Wins, .prev, v, arena), prev, all_opts.patches);
+    const wins = kept orelse blk: {
         if (old) |o| if (o.strict) return error.ViewsMismatch;
         keep.* = false;
         const platforms = switch (v.region) {
@@ -456,7 +454,20 @@ fn regionPatchDay(site: *Site, db: store.Db, all_opts: Options, extras: *Extras,
         const cur_stats = if (std.meta.eql(v, site.view) and v.period == .patch) site.stats else try patchStats(site, db, all_opts.patches, platforms, games);
         break :blk try patchday.championWins(arena, &prev_stats, &cur_stats, .{});
     };
-    const pv = (html.View{ .region = v.region, .period = .patch }).index();
+    return curved(arena, wins, extras, v.region);
+}
+
+/// `kept` when it compares `patches` with `prev`
+fn current(kept: ?patchday.Wins, prev: []const u8, patches: []const []const u8) !?patchday.Wins {
+    const k = kept orelse return null;
+    var label_buf: [core.statsfile.patch_len]u8 = undefined;
+    const cur = try stats.label(&label_buf, patches);
+    return if (std.mem.eql(u8, k.prev_patch, prev) and std.mem.eql(u8, k.cur_patch, cur)) k else null;
+}
+
+/// `wins` with its region's patch curves
+fn curved(arena: std.mem.Allocator, wins: patchday.Wins, extras: *const Extras, region: html.Region) !patchday.PatchDay {
+    const pv = (html.View{ .region = region, .period = .patch }).index();
     return patchday.withCurves(
         arena,
         wins,
@@ -464,6 +475,21 @@ fn regionPatchDay(site: *Site, db: store.Db, all_opts: Options, extras: *Extras,
         if (extras.curves[pv]) |*c| c else null,
         .{},
     );
+}
+
+/// Static.core's home Patch card (the root view's): the patch day from
+/// Options.patch_day_from when current. That file is the web loop's last round's, so
+/// the card lags the rest of the home by a round; making it here takes both patches'
+/// stats from the database, minutes on the box. Without it the card is its link alone
+fn keptPatchDay(site: *Site, all_opts: Options, extras: *const Extras, phases: *Phases) !void {
+    const prev = all_opts.prev_patch orelse return;
+    const path = all_opts.patch_day_from orelse return;
+    const kept = try current(try keptWins(site.gpa, site.io, path, site.view, site.arena), prev, all_opts.patches);
+    site.patchday = try curved(site.arena, kept orelse {
+        log.info("home: no current patch day in {s}", .{path});
+        return;
+    }, extras, site.view.region);
+    phases.mark("patch day kept");
 }
 
 /// `platforms`' stats over `patches`, all of each
