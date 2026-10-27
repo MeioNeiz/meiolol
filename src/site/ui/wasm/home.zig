@@ -1,6 +1,7 @@
 //! ui-home.wasm: the home page's islands (ui.homepage): the lookup with this device's
 //! recent Riot IDs; the Daily Draft card with this device's answers; the champions card's
-//! role switch; and the loader of ui-homegame.wasm for the game. zjb's generated loader
+//! role switch; the loader of ui-homegame.wasm for the game, and a returning visitor's
+//! list call, whose newest game it hands to the game (hp.Mine). zjb's generated loader
 //! (ui-home.js, `<script src data-wasm>`) calls `main`
 const std = @import("std");
 const zjb = @import("zjb");
@@ -82,9 +83,34 @@ fn stored() void {
     if (dom.stored("your-recent")) |s| {
         look.recent = hp.recentIds(s, &recent);
         if (look_i) |i| if (look.recent.len > 0) i.render();
+        mine();
     }
     if (daily_i) |i| if (dom.stored("meiolol.daily.v1")) |s| {
         daily.marks = hp.dailyMarks(s, daily_d.n);
         if (daily.marks != null) i.render();
     };
+}
+
+/// The newest looked-up player's list from the API's cache; the example stays when it
+/// has no games for them (or the API is down, or the page is from disk)
+fn mine() void {
+    if (look.recent.len == 0) return;
+    const id = look.recent[0].slice();
+    const u = hp.listApi(gpa, id) catch return;
+    dom.fetch(u, 0, listed);
+}
+
+fn listed(_: i32, bytes: ?[]u8) void {
+    const b = bytes orelse return;
+    const el = query("[data-island=home]") orelse return;
+    defer el.release();
+    const m = (hp.Mine.of(gpa, look.recent[0].slice(), b, dom.attrOf(el, "data-up")) catch return dom.dom.warn("home: out of memory")) orelse return;
+    inline for (.{ .{ hp.Mine.you_attr, m.you }, .{ hp.Mine.game_attr, m.game } }) |kv| {
+        const v = zjb.string(kv[1]);
+        defer v.release();
+        el.call("setAttribute", .{ zjb.constString(kv[0]), v }, void);
+    }
+    const e = zjb.global("Event").new(.{zjb.constString(hp.Mine.event)});
+    defer e.release();
+    zjb.global("window").call("dispatchEvent", .{e}, void);
 }

@@ -1,7 +1,7 @@
 //! The home page (index.html, docs/plan/ui/home.md): a game on the first screen with the
 //! lookup and today's things beside it, each role's most played under them. Islands
 //! (ui-home.wasm): HomeReview (the example's game, its role switch, the stat cells
-//! select on the graph), IdLookup (recent Riot IDs on this device), HomeChamps (one role
+//! select on the graph; a returning visitor's newest game in its place), IdLookup (recent Riot IDs on this device), HomeChamps (one role
 //! at a time in a narrow card), HomeDaily (this device's Daily Draft marks). The patch
 //! card is static
 const std = @import("std");
@@ -24,6 +24,7 @@ const yourlist = @import("yourlist.zig");
 const url = @import("url.zig");
 const today = @import("today.zig");
 const dailypage = @import("dailypage.zig");
+const data = @import("data.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
 const H = tree.H;
@@ -67,8 +68,8 @@ pub const HomeReview = struct {
     /// The site root, relative to the page
     up: []const u8 = "",
     default: Role,
-    /// This device's newest looked-up player's newest game in place of the example; set
-    /// by H3's lookup (notes/home.md), until then by the gallery and tests only
+    /// This device's newest looked-up player's newest game in place of the example
+    /// (Mine); the role picker goes
     you: ?You = null,
     /// ui-homegame's loader and wasm (dom.lazyLoad), from the page
     js: []const u8 = "",
@@ -156,6 +157,34 @@ pub const You = struct {
         };
     }
 
+    /// Mine's attribute: "<wins> <losses> f<form as 1/0> <open> <id>" (the ID may have
+    /// spaces, so last; open is URL-encoded). Plain text, so ui-homegame has no decoder
+    pub fn text(y: You, a: std.mem.Allocator) ![]const u8 {
+        const form = y.form[0..@min(y.form.len, form_n)];
+        var f: [form_n]u8 = undefined;
+        for (form, 0..) |w, i| f[i] = if (w) '1' else '0';
+        return a.print("{d} {d} f{s} {s} {s}", .{ y.wins, y.losses, f[0..form.len], y.open, y.id });
+    }
+
+    /// `text`'s; slices point into `s`
+    pub fn parse(a: std.mem.Allocator, s: []const u8) !You {
+        var it = std.mem.splitScalar(u8, s, ' ');
+        const wins = try std.fmt.parseInt(u16, it.next() orelse return error.BadValue, 10);
+        const losses = try std.fmt.parseInt(u16, it.next() orelse return error.BadValue, 10);
+        const f = it.next() orelse return error.BadValue;
+        if (f.len == 0 or f[0] != 'f' or f.len - 1 > form_n) return error.BadValue;
+        const form = try a.alloc(bool, f.len - 1);
+        for (form, f[1..]) |*w, c| w.* = switch (c) {
+            '1' => true,
+            '0' => false,
+            else => return error.BadValue,
+        };
+        const open = it.next() orelse return error.BadValue;
+        const id = it.rest();
+        if (open.len == 0 or id.len == 0) return error.BadValue;
+        return .{ .id = id, .open = open, .wins = wins, .losses = losses, .form = form };
+    }
+
     fn view(y: *const You, h: *H) N {
         var f = h.list();
         for (y.form, 0..) |w, i| f.add(h.el(.i, .{ .key = i, .data_ok = w }, .{if (w) W.win else W.loss}));
@@ -178,7 +207,7 @@ pub fn idQuery(a: std.mem.Allocator, id: []const u8) ![]const u8 {
 }
 
 /// The API calls for a returning visitor, cache only (api/root.zig): their newest games
-/// with record and form, then the newest game. For H3; tests only until then
+/// with record and form, then the newest game
 pub fn listApi(a: std.mem.Allocator, id: []const u8) ![]const u8 {
     return a.print("/api/list?cached=1&n=20&{s}", .{try idQuery(a, id)});
 }
@@ -186,6 +215,33 @@ pub fn listApi(a: std.mem.Allocator, id: []const u8) ![]const u8 {
 pub fn gameApi(a: std.mem.Allocator, id: []const u8, start_ms: i64) ![]const u8 {
     return a.print("/api/game?{s}&start={d}", .{ try idQuery(a, id), start_ms });
 }
+
+/// A returning visitor's game, from ui-home (which has the list) to ui-homegame (which
+/// has the review): `you` and `game` attributes on the review's root, then `event` on
+/// the window, as homegame may be in before or after
+pub const Mine = struct {
+    /// You.text
+    you: []const u8,
+    /// gameApi of their newest game
+    game: []const u8,
+
+    pub const you_attr = "data-you";
+    pub const game_attr = "data-game";
+    pub const event = "ui-you";
+
+    /// From /api/list's body; null when the cache has no games for `id` (never looked
+    /// up, opted out) or the body isn't a Lookup (an older API: no list call)
+    pub fn of(a: std.mem.Allocator, id: []const u8, body: []const u8, up: []const u8) !?Mine {
+        const look = data.decode(a, yourlist.Lookup, body) catch |e| switch (e) {
+            error.OutOfMemory => return e,
+            else => return null,
+        };
+        if (look.state != .ready) return null;
+        const l = look.list orelse return null;
+        const y = try You.of(a, id, &l, up) orelse return null;
+        return .{ .you = try y.text(a), .game = try gameApi(a, id, l.games[0].start_ms) };
+    }
+};
 
 /// HomeReview.roles as bits, top first: the island's data-roles
 pub fn rolesMask(roles: [5]bool) u8 {
@@ -495,4 +551,27 @@ test "a returning visitor: record, form and the calls by their Riot ID" {
     try std.testing.expectEqualStrings("/api/game?id=Hide%20on%20bush%23KR1&start=5", try gameApi(a, "Hide on bush#KR1", 5));
     const none: yourlist.List = .{ .player = .{ .name = "x" }, .champs = &.{}, .games = &.{} };
     try std.testing.expectEqual(null, try You.of(a, "x#1", &none, ""));
+
+    var body: std.ArrayList(u8) = .empty;
+    try data.encode(a, yourlist.Lookup, .{ .state = .ready, .list = l }, &body);
+    const m = (try Mine.of(a, "Hide on bush#KR1", body.items, "../")).?;
+    try std.testing.expectEqualStrings("/api/game?id=Hide%20on%20bush%23KR1&start=1791720000000", m.game);
+    try std.testing.expectEqualStrings("4 2 f10101 ../game.html#id=Hide%20on%20bush%23KR1&game=1791720000000 Hide on bush#KR1", m.you);
+    const back = try You.parse(a, m.you);
+    try std.testing.expectEqualStrings(y.open, back.open);
+    try std.testing.expectEqualStrings("Hide on bush#KR1", back.id);
+    try std.testing.expectEqual(4, back.wins);
+    try std.testing.expectEqualSlices(bool, y.form, back.form);
+    // Cache misses and an older API keep the example
+    for ([_]yourlist.Lookup{ .{ .state = .none }, .{ .state = .opted_out }, .{ .state = .ready, .list = none } }) |v| {
+        body.clearRetainingCapacity();
+        try data.encode(a, yourlist.Lookup, v, &body);
+        try std.testing.expectEqual(null, try Mine.of(a, "x#1", body.items, ""));
+    }
+    try std.testing.expectEqual(null, try Mine.of(a, "x#1", "{\"state\":\"none\"}", ""));
+    try std.testing.expectEqual(null, try Mine.of(a, "x#1", "", ""));
+    const no_form = try You.parse(a, "0 0 f # x#1");
+    try std.testing.expectEqual(0, no_form.form.len);
+    for ([_][]const u8{ "", "1 2", "1 2 101 # x#1", "1 2 f1x # x#1", "1 2 f111111 # x#1", "1 2 f1 #", "-1 2 f1 # x#1" }) |bad|
+        try std.testing.expect(std.meta.isError(You.parse(a, bad)));
 }

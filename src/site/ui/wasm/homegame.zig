@@ -1,5 +1,6 @@
 //! ui-homegame.wasm: the home page's game (ui.homepage.HomeReview), whose role switch
-//! fetches that role's file. Loaded by ui-home.wasm (dom.lazyLoad); zjb's generated loader
+//! fetches that role's file; a returning visitor's newest game in its place once ui-home
+//! hands it over (hp.Mine). Loaded by ui-home.wasm (dom.lazyLoad); zjb's generated loader
 //! (ui-homegame.js) calls `main`
 const std = @import("std");
 const zjb = @import("zjb");
@@ -28,9 +29,15 @@ var roles: [5]bool = @splat(false);
 var default: Role = .mid;
 /// Each role's game once shown, as left: a switch back needs no fetch
 var pages: [5]?ui.gamepage.GamePage = @splat(null);
+var ready = false;
+/// The visitor's game: asked for once, and no role fetch meanwhile (dom.fetch has one
+/// callback)
+var mine_at: enum { none, asked, done } = .none;
+var mine_you: hp.You = undefined;
 
 export fn main() void {
     dom.start();
+    zjb.global("window").call("addEventListener", .{ zjb.constString(hp.Mine.event), zjb.fnHandle("uiYou", &onYou) }, void);
     game();
 }
 
@@ -60,6 +67,36 @@ fn loaded(_: i32, bytes: ?[]u8) void {
     review.live = true;
     review_i = dom.rt.add(hp.HomeReview, &review, &review0, sel) catch return dom.dom.warn("home: out of memory");
     dom.rt.changed = check;
+    ready = true;
+    mine();
+}
+
+fn onYou(e: zjb.Handle) callconv(.c) void {
+    e.release();
+    mine();
+}
+
+/// ui-home's hand-over on the root, if in yet (else its event calls again)
+fn mine() void {
+    if (!ready or mine_at != .none or asked != null) return;
+    const el = zjb.global("document").call("querySelector", .{zjb.constString(sel)}, zjb.Handle);
+    if (el == .null) return;
+    defer el.release();
+    const u = dom.attrOf(el, hp.Mine.game_attr);
+    if (u.len == 0) return;
+    mine_you = hp.You.parse(gpa, dom.attrOf(el, hp.Mine.you_attr)) catch return dom.dom.warn("home: bad visitor data");
+    mine_at = .asked;
+    dom.fetch(u, 2, mineIn);
+}
+
+fn mineIn(_: i32, bytes: ?[]u8) void {
+    mine_at = .done;
+    // A role picked meanwhile, when the example stays
+    defer check();
+    const s = page(bytes) catch return dom.dom.warn("home: no visitor game");
+    review.s = s;
+    review.you = mine_you;
+    review_i.render();
 }
 
 fn init(d: *const ui.gamedata.Data) !hp.HomeReview {
@@ -71,7 +108,7 @@ fn init(d: *const ui.gamedata.Data) !hp.HomeReview {
 
 /// A role picked: its game, fetched the first time
 fn check() void {
-    if (review.want == review.shown or asked != null) return;
+    if (review.want == review.shown or asked != null or mine_at == .asked) return;
     if (pages[@backingInt(review.want)]) |s| return show(review.want, s);
     const path = review.path(gpa, review.want) catch return dom.dom.warn("home: out of memory");
     asked = review.want;
@@ -87,6 +124,7 @@ fn switched(_: i32, bytes: ?[]u8) void {
         review_i.render();
     }
     check();
+    mine();
 }
 
 fn page(bytes: ?[]u8) !ui.gamepage.GamePage {
