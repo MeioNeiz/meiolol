@@ -45,6 +45,11 @@ pub const z = 2.58;
 pub const Data = struct {
     cur_patch: []const u8,
     prev_patch: []const u8,
+    /// PatchHead's ‹ ›, hrefs from the page
+    older: ?patchhead.Pair = null,
+    newer: ?patchhead.Pair = null,
+    /// An older pair's page: cur_patch is over, its games all in
+    finished: bool = false,
     /// The region's games on the current patch so far
     games: u32,
     /// Games a champion role needs on both patches (patchday.Options.min_role_games)
@@ -170,6 +175,7 @@ const W = struct {
     pub const gold_note = plain("The median gold lead, at the minute it moved most.");
     pub const points = Phrase("{d:points} points");
     pub const likely = Phrase("Likely between {lo:points} and {hi:points}. {n:count} games on {p:text} so far.");
+    pub const likely_done = Phrase("Likely between {lo:points} and {hi:points}. {n:count} games on {p:text}.");
     pub const luck = plain(" Could be luck.");
     pub const ahead = Phrase("Ahead in {a:rate} of games, then {b:rate}.");
     pub const gold_tip = Phrase("{a:signed} then {b:signed} at {m:int} minutes");
@@ -334,7 +340,8 @@ fn changeCell(h: *H, l: *const Line) N {
 fn rangeTip(h: *H, d: *const Data, a: Count, b: Count, clear: bool) table.Tip {
     const c = points(a, b);
     const w = halfWidth(a, b);
-    const likely = W.likely.with(h, .{ .lo = c - w, .hi = c + w, .n = b[0], .p = d.cur_patch });
+    const args = .{ .lo = c - w, .hi = c + w, .n = b[0], .p = d.cur_patch };
+    const likely = if (d.finished) W.likely_done.with(h, args) else W.likely.with(h, args);
     return .{
         .title = W.points.with(h, .{ .d = c }),
         .note = if (clear) likely else .{ .s = h.fmt("{s}{s}", .{ likely.s, W.luck.s }) },
@@ -725,7 +732,10 @@ pub const Page = struct {
         }, .{
             patchhead.view(h, .{
                 .pair = .{ .cur = d.cur_patch, .prev = d.prev_patch },
+                .older = d.older,
+                .newer = d.newer,
                 .games = d.games,
+                .finished = d.finished,
                 .notes = if (d.notes.len > 0) d.notes else null,
             }),
             p.countStrip(h, c),

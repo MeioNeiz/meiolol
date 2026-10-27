@@ -41,7 +41,7 @@ all/data/champion/twitch-more.bin 7473e54361419a5e
 all/data/champion/twitch.bin 628c36239fe4dcb6
 all/data/champions.json 00926860dfeebe26
 all/data/learning.json f360732099c4c801
-all/data/patch.bin 8a1d4b0ba2c97736
+all/data/patch.bin 5cb7799daf93b148
 all/data/pool.json c49c24af4a83207c
 all/data/search.json bfd236184c673343
 all/data/stats.bin 7b37d059d60f077f
@@ -58,7 +58,7 @@ all/matchup/support/pyke-vs-rakan.html 541000b2026551a3
 all/matchup/support/rakan-vs-pyke.html aed3c2ccd5a6facb
 all/matchup/top/darius-vs-mordekaiser.html 55b2b1c0d3268021
 all/matchup/top/mordekaiser-vs-darius.html 0a395f74bf64b2bf
-all/patch.html 2b53a713e19ddcde
+all/patch.html 7a8c27de592cda69
 all/patch/build/ahri-mid.html 1f0c1a22ddaffa3c
 all/patch/build/amumu-jungle.html ce4f7199afbfe0fa
 all/patch/build/darius-top.html 6448e74dcf6d5799
@@ -102,7 +102,7 @@ all/patch/data/champion/twitch-more.bin 7473e54361419a5e
 all/patch/data/champion/twitch.bin 628c36239fe4dcb6
 all/patch/data/champions.json 00926860dfeebe26
 all/patch/data/learning.json f360732099c4c801
-all/patch/data/patch.bin 8a1d4b0ba2c97736
+all/patch/data/patch.bin 5cb7799daf93b148
 all/patch/data/pool.json 7d1d4f7e19454d8f
 all/patch/data/search.json bfd236184c673343
 all/patch/data/stats.bin 1c6b64a93978f120
@@ -119,7 +119,7 @@ all/patch/matchup/support/pyke-vs-rakan.html af8d8cb287ac4887
 all/patch/matchup/support/rakan-vs-pyke.html 9137385108c2d729
 all/patch/matchup/top/darius-vs-mordekaiser.html 513e3f63a21ec9dd
 all/patch/matchup/top/mordekaiser-vs-darius.html 2ee74d29a0f4c67c
-all/patch/patch.html 7b2c4e4dbf2b3db0
+all/patch/patch.html 91129e3368126b19
 all/patch/pickup.html ddfb5acb9e699b0f
 all/patch/pickup/bot.html 96203d851d752b07
 all/patch/pickup/jungle.html 1bbeb500004fb584
@@ -211,7 +211,7 @@ data/champion/twitch-more.bin 7473e54361419a5e
 data/champion/twitch.bin 628c36239fe4dcb6
 data/champions.json 00926860dfeebe26
 data/learning.json f360732099c4c801
-data/patch.bin aca6c93b7837cde2
+data/patch.bin 48c71c3dfa7c4811
 data/pool.json c49c24af4a83207c
 data/search.json bfd236184c673343
 data/stats.bin 7b37d059d60f077f
@@ -237,7 +237,7 @@ matchup/support/rakan-vs-pyke.html bd1eee5f6aa21c6a
 matchup/top/darius-vs-mordekaiser.html 637558213e6c87a7
 matchup/top/mordekaiser-vs-darius.html b659ee1f4212d45a
 method.html d5cfd2323da36730
-patch.html 1f044f8245431f0d
+patch.html 24ce544548b72f81
 patch/build/ahri-mid.html ebf13fdf3a61d6ed
 patch/build/amumu-jungle.html 34970c47007add72
 patch/build/darius-top.html 8318f0c09e6730ef
@@ -281,7 +281,7 @@ patch/data/champion/twitch-more.bin 7473e54361419a5e
 patch/data/champion/twitch.bin 628c36239fe4dcb6
 patch/data/champions.json 00926860dfeebe26
 patch/data/learning.json f360732099c4c801
-patch/data/patch.bin aca6c93b7837cde2
+patch/data/patch.bin 48c71c3dfa7c4811
 patch/data/pool.json 7d1d4f7e19454d8f
 patch/data/search.json bfd236184c673343
 patch/data/stats.bin 1c6b64a93978f120
@@ -298,7 +298,7 @@ patch/matchup/support/pyke-vs-rakan.html aae07e1cb1711604
 patch/matchup/support/rakan-vs-pyke.html 96f5caf8b07c1c5f
 patch/matchup/top/darius-vs-mordekaiser.html e258daef3f75b12a
 patch/matchup/top/mordekaiser-vs-darius.html 7d4ce52167549888
-patch/patch.html 8d2e035da6565279
+patch/patch.html 8a49b1c0ca5c2902
 patch/pickup.html 6fb150c5fd1b93ed
 patch/pickup/bot.html a5618d2a2911a056
 patch/pickup/jungle.html a832e25025ba242e

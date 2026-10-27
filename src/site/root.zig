@@ -76,6 +76,9 @@ pub const Options = struct {
     /// the matchup charts' dashed line
     prev_patch: ?[]const u8 = null,
     curves_prev: [html.View.count]?[]const u8 = @splat(null),
+    /// Older patch pairs {cur, prev} below prev_patch's, newest first (main.olderPairs):
+    /// patches/<cur>-<prev>.html in the 30-day views, win rates only
+    older_pairs: []const [2][]const u8 = &.{},
     /// Data Dragon's files by version (patchnotes.load): patch.html's Riot changes
     ddragon_dir: ?[]const u8 = null,
     /// Builds file per view (`meiolol builds`): build pages in the patch views where set
@@ -152,6 +155,12 @@ pub const ByView = struct {
     pool: pool.Pool,
 };
 
+/// An older patch pair's page (Site.older)
+pub const Older = struct {
+    pd: patchday.PatchDay,
+    notes: ?*const patchnotes.Notes = null,
+};
+
 /// One view's data, loaded once (`load`), and what every page of it renders from
 /// (`renderPage`, `renderShared`): the static build and the request renderer (`Loaded`)
 /// share one function per page type
@@ -192,6 +201,8 @@ pub const Site = struct {
     patchday_all: ?patchday.PatchDay = null,
     /// What Riot changed between the patch day's patches (Options.ddragon_dir)
     notes: ?*const patchnotes.Notes = null,
+    /// The 30-day views' only: Options.older_pairs' patch days, each with no curves
+    older: []const Older = &.{},
     /// Every view's (html.View.index), so the switches skip matchups without a page
     view_curves: *const [html.View.count]?core.curvesfile.Curves,
     /// Every view's builds (html.View.index); the 30-day views link to their patch view's
@@ -467,6 +478,7 @@ fn pagePathsMin(site: *const Site, min_games: u32) ![]const []const u8 {
     try list.append(a, "pool.html");
     try pickup_page.paths(site, &list);
     try list.append(a, patch_page.path);
+    try patch_page.paths(site, &list);
     return list.items;
 }
 
@@ -498,6 +510,8 @@ pub fn renderPage(site: *const Site, w: *Writer, path: []const u8) !bool {
         try pickup_page.writePage(site, w, roleFromSlug(s) orelse return false);
     } else if (eql(u8, path, patch_page.path)) {
         try patch_page.writePage(site, w);
+    } else if (strip(path, "patches/", ".html")) |s| {
+        return patch_page.writeOlder(site, w, s);
     } else return false;
     return true;
 }

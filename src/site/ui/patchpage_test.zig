@@ -183,3 +183,29 @@ test "a row opens Riot's lines and its matchup moves" {
     try testing.expect(std.mem.find(u8, page, "Won 48.7% of 23,166 → 51.3% of 6,678") != null);
     try testing.expect(std.mem.find(u8, page, "Darius on 16.21 ›") != null);
 }
+
+test "an older pair's data: ‹ › and finished through the data file, games without so far" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var d = pp.demo;
+    d.older = .{ .cur = "16.20", .prev = "16.19", .href = "16.20-16.19.html" };
+    d.newer = .{ .cur = "16.22", .prev = "16.21", .href = "../patch.html" };
+    d.finished = true;
+    var bytes: std.ArrayList(u8) = .empty;
+    try @import("data.zig").encode(a, pp.Data, d, &bytes);
+    const got = try @import("data.zig").decode(a, pp.Data, bytes.items);
+    try testing.expectEqualDeep(d.older, got.older);
+    try testing.expectEqualDeep(d.newer, got.newer);
+    try testing.expect(got.finished);
+    var p: pp.Page = .init(&got, try pp.prepare(a, &got, ""));
+    var t: tree.Tree = .{};
+    var h: tree.H = .init(a, &t);
+    t.root = p.view(&h);
+    var out: std.Io.Writer.Allocating = .init(a);
+    try html.write(&t, t.root, &out.writer);
+    const s = out.written();
+    try testing.expect(std.mem.indexOf(u8, s, "href=\"16.20-16.19.html\"") != null);
+    try testing.expect(std.mem.indexOf(u8, s, "href=\"../patch.html\"") != null);
+    try testing.expect(std.mem.indexOf(u8, s, "so far") == null);
+}

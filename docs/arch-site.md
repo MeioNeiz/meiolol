@@ -196,7 +196,7 @@ from the view's data/patch.bin (stamped, as the champions board), ui-patch.wasm 
   the main role of a champion Riot changed that has none yet (patchday.thin). Clear =
   z 2.58; the drawn whisker is the same 99%, so a whisker clear of 0 is coloured
 - Riot's changes: patchnotes.load from Options.ddragon_dir (DATA/ddragon), loaded once
-  per process (Extras.notesFor); a patch's version comes from the cache when it holds
+  per pair per process (Extras.notesFor); a patch's version comes from the cache when it holds
   all three files, so the renderer and tests never fetch them. CommunityDragon's
   ability numbers (cdragon.zig) are fetched per patch into the same version directory,
   so a patch's later version fetches them again (~170 requests, under a minute, ten
@@ -211,6 +211,13 @@ from the view's data/patch.bin (stamped, as the champions board), ui-patch.wasm 
   in the view's patch builds file: an item as boots, in the start or first three
   finished items (a floor: the file keeps the commonest only), a rune on the page
 - Riot's notes link: league-of-legends-patch-<major+10>-<minor>-notes (patchnotes.officialUrl)
+- Older pairs: patches/<cur>-<prev>.html and data/patch-<cur>-<prev>.bin in the 30-day
+  views (EUW and all), up to 4 adjacent EUW pairs below the newest (main.olderPairs) whose
+  patches are both whole: the database's oldest patch was crawled from partway, so a pair
+  needs an older patch with games. Win rates only (no curves: no matchups or lane lead),
+  Riot's changes per pair (notesFor caches each), no item users (the builds are the
+  current patch's). Kept in the views file (Part.older). PatchHead's ‹ › step through
+  them from every view's patch.html
 
 ## Learn (src/site/learn.zig, learnbuild.zig, learnfixed.zig; ui/learnpage.zig)
 

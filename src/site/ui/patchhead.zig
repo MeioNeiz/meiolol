@@ -1,6 +1,6 @@
 //! PatchHead: the patch page's title, the pair it compares, with ‹ › to the older and
-//! newer pair (disabled at either end), and a small line under it: how many games so
-//! far and a link to Riot's own notes
+//! newer pair (disabled at either end), and a small line under it: how many games (so
+//! far, on the newest pair) and a link to Riot's own notes
 const std = @import("std");
 const tree = @import("tree.zig");
 const button = @import("button.zig");
@@ -24,6 +24,8 @@ pub const Opts = struct {
     older: ?Pair = null,
     newer: ?Pair = null,
     games: u64,
+    /// `pair.cur` is over: its games all in
+    finished: bool = false,
     /// Riot's notes for `pair.cur`
     notes: ?[]const u8 = null,
 };
@@ -31,6 +33,7 @@ pub const Opts = struct {
 const W = struct {
     const title = phrase.Phrase("Patch {c:text} vs {p:text}");
     const games = phrase.Phrase("{n:count} games so far");
+    const games_done = phrase.Phrase("{n:count} games");
     const notes = phrase.plain("official notes ↗");
     const no_older = phrase.plain("no older patch");
     const no_newer = phrase.plain("no newer patch");
@@ -44,7 +47,7 @@ pub fn view(h: *H, o: Opts) N {
             nav(h, o.newer, "›", W.no_newer),
         }),
         h.p(.{ .class = "m" }, .{
-            W.games.with(h, .{ .n = o.games }),
+            if (o.finished) W.games_done.with(h, .{ .n = o.games }) else W.games.with(h, .{ .n = o.games }),
             if (o.notes != null) h.span(.{ .class = "sep", .aria_hidden = true }, .{"·"}) else null,
             if (o.notes) |href| h.a(.{ .href = href, .rel = "noopener", .target = "_blank" }, .{W.notes}) else null,
         }),
@@ -73,14 +76,15 @@ pub fn gallery(g: *Gallery) void {
     const h = g.h;
     g.add("newest pair", view(h, .{
         .pair = .{ .cur = "16.21", .prev = "16.20" },
-        .older = .{ .cur = "16.20", .prev = "16.19", .href = "patch/16.20-16.19.html" },
+        .older = .{ .cur = "16.20", .prev = "16.19", .href = "patches/16.20-16.19.html" },
         .games = 79549,
         .notes = "https://www.leagueoflegends.com/en-gb/news/game-updates/",
     }));
     g.add("oldest pair", view(h, .{
         .pair = .{ .cur = "16.19", .prev = "16.18" },
-        .newer = .{ .cur = "16.20", .prev = "16.19", .href = "patch/16.20-16.19.html" },
+        .newer = .{ .cur = "16.20", .prev = "16.19", .href = "patches/16.20-16.19.html" },
         .games = 412003,
+        .finished = true,
     }));
 }
 

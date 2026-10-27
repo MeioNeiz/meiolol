@@ -156,14 +156,13 @@ pub const Loaded = struct {
                 .spread = s.spread,
                 .by_view = s.by_view,
             });
-            if (s.patchday) |pd| try writePart(w, &aw, keys, .prev, v, patchday.Wins{
-                .prev_patch = pd.prev_patch,
-                .cur_patch = pd.cur_patch,
-                .prev_games = pd.prev_games,
-                .cur_games = pd.cur_games,
-                .champions = pd.champions,
-                .thin = pd.thin,
-            });
+            if (s.patchday) |pd| try writePart(w, &aw, keys, .prev, v, winsOf(pd));
+            if (s.older.len > 0) {
+                const wins = try l.gpa.alloc(patchday.Wins, s.older.len);
+                defer l.gpa.free(wins);
+                for (wins, s.older) |*x, o| x.* = winsOf(o.pd);
+                try writePart(w, &aw, keys, .older, v, OlderPart{ .pairs = wins });
+            }
             if (s.trend) |t| try writePart(w, &aw, keys, .trend, v, TrendPart{ .champs_key = champs_key, .trend = t });
             if (std.meta.eql(v, html.View.shared)) try writePart(w, &aw, keys, .daily, v, DailyPart{
                 .champs_key = champs_key,
@@ -175,6 +174,17 @@ pub const Loaded = struct {
         }
         try w.flush();
         try file.replace(io);
+    }
+
+    fn winsOf(pd: patchday.PatchDay) patchday.Wins {
+        return .{
+            .prev_patch = pd.prev_patch,
+            .cur_patch = pd.cur_patch,
+            .prev_games = pd.prev_games,
+            .cur_games = pd.cur_games,
+            .champions = pd.champions,
+            .thin = pd.thin,
+        };
     }
 
     fn writePart(w: *Writer, aw: *Writer.Allocating, keys: [part_count]u64, part: Part, v: html.View, value: anytype) !void {
@@ -232,7 +242,7 @@ const views_magic = "MEIOVIE2";
 const views_size_max: std.Io.Limit = .limited(1 << 30);
 /// A views file's parts. Each has its own key (partKeys), so a write after a deploy
 /// keeps those whose types and sources the deploy left alone and loads only the rest
-const Part = enum(u8) { opts, base, filter, people, daily, prev, trend };
+const Part = enum(u8) { opts, base, filter, people, daily, prev, trend, older };
 const part_count = @typeInfo(Part).@"enum".field_names.len;
 
 /// A view's stats and champions; the parts after it are made from these. The rest of
@@ -265,6 +275,9 @@ pub const PeoplePart = struct {
 
 pub const TrendPart = struct { champs_key: u64, trend: stats.Trend };
 
+/// A 30-day view's Options.older_pairs, in order
+pub const OlderPart = struct { pairs: []const patchday.Wins };
+
 /// The shared view's
 pub const DailyPart = struct {
     champs_key: u64,
@@ -291,6 +304,7 @@ fn partKeys() [part_count]u64 {
         partKey(DailyPart, &.{ @embedFile("../daily.zig"), @embedFile("../learn.zig"), @embedFile("evalchart.zig"), @embedFile("yourgame.zig"), @embedFile("../api/pagedata.zig"), @embedFile("ui/gamedata.zig"), @embedFile("ui/yourlist.zig"), @embedFile("dailydata.zig"), @embedFile("ui/dailydata.zig"), @embedFile("ui/data.zig"), @embedFile("ui/champ.zig"), @embedFile("ui/role.zig"), @embedFile("../leaguepedia.zig"), @embedFile("../core/score.zig"), @embedFile("../core/roles.zig"), @embedFile("../partials.zig") }),
         partKey(patchday.Wins, &.{ @embedFile("../patchday.zig"), @embedFile("../stats.zig"), @embedFile("../partials.zig") }),
         partKey(TrendPart, &.{ @embedFile("../stats.zig"), @embedFile("../partials.zig") }),
+        partKey(OlderPart, &.{ @embedFile("../patchday.zig"), @embedFile("../stats.zig"), @embedFile("../partials.zig") }),
     };
 }
 

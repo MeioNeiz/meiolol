@@ -45,6 +45,7 @@ const FilterPart = @import("views.zig").FilterPart;
 const PeoplePart = @import("views.zig").PeoplePart;
 const DailyPart = @import("views.zig").DailyPart;
 const TrendPart = @import("views.zig").TrendPart;
+const OlderPart = @import("views.zig").OlderPart;
 const champsKey = @import("views.zig").champsKey;
 const Parts = @import("views.zig").Parts;
 
@@ -317,12 +318,54 @@ fn loadPatchDay(site: *Site, db: store.Db, all_opts: Options, extras: *Extras, o
     const view = site.view;
     var keep = true;
     site.patchday = try regionPatchDay(site, db, all_opts, extras, old, phases, prev, view, &keep);
-    site.notes = extras.notesFor(site.gpa, site.io, all_opts.ddragon_dir, prev, site.patchday.?.cur_patch);
+    site.notes = try extras.notesFor(site.gpa, site.io, all_opts.ddragon_dir, prev, site.patchday.?.cur_patch);
     if (view.index() == 0 and !all_opts.euw_only) {
         const all: html.View = .{ .region = .all, .period = view.period };
         site.patchday_all = try regionPatchDay(site, db, all_opts, extras, old, phases, prev, all, &keep);
     }
+    if (view.period == .days30) try loadOlder(site, db, all_opts, extras, old, phases, &keep);
     phases.mark(if (keep) "patch day kept" else "patch day");
+}
+
+/// The view's Options.older_pairs (Site.older), win rates only: from `old`'s Part.older
+/// when it has the same pairs, else from each patch's stats
+fn loadOlder(site: *Site, db: store.Db, all_opts: Options, extras: *Extras, old: ?*const Parts, phases: *Phases, keep: *bool) !void {
+    const pairs = all_opts.older_pairs;
+    if (pairs.len == 0) return;
+    const arena = site.arena;
+    const kept = try Parts.of(old, OlderPart, .older, site.view, arena);
+    const wins = if (kept != null and samePairs(kept.?.pairs, pairs)) kept.?.pairs else blk: {
+        if (old) |o| if (o.strict) return error.ViewsMismatch;
+        keep.* = false;
+        const platforms = switch (site.view.region) {
+            .euw => all_opts.platforms,
+            .all => all_opts.all_platforms,
+        };
+        const games = try extras.partialsFor(site.gpa, site.io, db, phases);
+        // Adjacent pairs share a patch: each one's stats built once
+        var built: std.StringHashMapUnmanaged(Stats) = .empty;
+        for (pairs) |pair| for (pair) |p| {
+            const gop = try built.getOrPut(arena, p);
+            if (!gop.found_existing) gop.value_ptr.* = try patchStats(site, db, &.{p}, platforms, games);
+        };
+        const out = try arena.alloc(patchday.Wins, pairs.len);
+        for (out, pairs) |*x, pair| x.* = try patchday.championWins(arena, built.getPtr(pair[1]).?, built.getPtr(pair[0]).?, .{});
+        break :blk out;
+    };
+    const older = try arena.alloc(root.Older, wins.len);
+    for (older, wins) |*o, x| o.* = .{
+        .pd = try patchday.withCurves(arena, x, null, null, .{}),
+        .notes = try extras.notesFor(site.gpa, site.io, all_opts.ddragon_dir, x.prev_patch, x.cur_patch),
+    };
+    site.older = older;
+}
+
+fn samePairs(wins: []const patchday.Wins, pairs: []const [2][]const u8) bool {
+    if (wins.len != pairs.len) return false;
+    for (wins, pairs) |x, p| {
+        if (!std.mem.eql(u8, x.cur_patch, p[0]) or !std.mem.eql(u8, x.prev_patch, p[1])) return false;
+    }
+    return true;
 }
 
 /// `v`'s patch day, its wins from `old`'s Part.prev for v when current; `keep` false
@@ -467,7 +510,7 @@ fn addFiles(site: *Site) !void {
         try files.append(arena, .{ .path = stats_path, .data = site.model });
         try files.append(arena, .{ .path = "data/champions.json", .data = try championsJson(site) });
         try files.append(arena, .{ .path = tierlist.data_path, .data = try tierlist.dataFile(site) });
-        if (try patch_page.dataFile(site)) |d| try files.append(arena, .{ .path = patch_page.data_path, .data = d });
+        try patch_page.dataFiles(site, &files);
         // Every view's champion data, for the page's view picker; the rank filter's
         // from the root view's tally
         try champion.dataFiles(site, &files);

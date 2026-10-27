@@ -39,8 +39,8 @@ pub const Extras = struct {
     games: ?*partials.Store = null,
     /// load's, for what is loaded on first use
     arena: ?std.mem.Allocator = null,
-    notes: ?patchnotes.Notes = null,
-    notes_tried: bool = false,
+    /// notesFor's, by "<prev> <cur>": null where they failed
+    notes: std.StringHashMapUnmanaged(?*const patchnotes.Notes) = .empty,
 
     pub fn load(arena: std.mem.Allocator, io: std.Io, opts: Options) Extras {
         var e: Extras = .{ .arena = arena };
@@ -71,19 +71,26 @@ pub const Extras = struct {
         if (e.games) |g| g.deinit();
     }
 
-    /// Riot's changes from `prev` to `cur` (Options.ddragon_dir), on the first call; null
-    /// without the directory or when they fail: the patch page goes without
-    pub fn notesFor(e: *Extras, gpa: std.mem.Allocator, io: std.Io, dir: ?[]const u8, prev: []const u8, cur: []const u8) ?*const patchnotes.Notes {
-        if (!e.notes_tried) {
-            e.notes_tried = true;
-            const d = dir orelse return null;
-            const arena = e.arena orelse return null;
-            e.notes = patchnotes.load(gpa, arena, io, d, prev, cur) catch |err| blk: {
+    /// Riot's changes from `prev` to `cur` (Options.ddragon_dir), loaded on the pair's
+    /// first call; null without the directory or when they fail: the patch page goes
+    /// without
+    pub fn notesFor(e: *Extras, gpa: std.mem.Allocator, io: std.Io, dir: ?[]const u8, prev: []const u8, cur: []const u8) !?*const patchnotes.Notes {
+        const d = dir orelse return null;
+        const arena = e.arena orelse return null;
+        const gop = try e.notes.getOrPut(arena, try arena.print("{s} {s}", .{ prev, cur }));
+        if (gop.found_existing) return gop.value_ptr.*;
+        gop.value_ptr.* = null;
+        const n = patchnotes.load(gpa, arena, io, d, prev, cur) catch |err| switch (err) {
+            error.OutOfMemory => return err,
+            else => {
                 log.warn("patch notes {s} to {s}: {t}", .{ prev, cur, err });
-                break :blk null;
-            };
-        }
-        return if (e.notes) |*n| n else null;
+                return null;
+            },
+        };
+        const p = try arena.create(patchnotes.Notes);
+        p.* = n;
+        gop.value_ptr.* = p;
+        return p;
     }
 
     /// The partials, opened on the first call; null without partials_dir or when they

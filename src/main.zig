@@ -350,6 +350,43 @@ pub fn previousPatch(arena: std.mem.Allocator, db: store.Db, chosen: []const []c
     return null;
 }
 
+/// The site's older patch pages: adjacent EUW pairs {cur, prev} below `chosen`, newest
+/// first. The oldest patch in the database was crawled from partway, so a pair's
+/// patches are both whole only when an older patch has games too
+pub fn olderPairs(arena: std.mem.Allocator, db: store.Db, chosen: []const []const u8) ![]const [2][]const u8 {
+    if (chosen.len != 1) return &.{};
+    return pairsBelow(arena, try stats.patches(arena, db, &.{"EUW1"}), chosen[0]);
+}
+
+const max_older_pairs = 4;
+
+/// `all` newest first
+fn pairsBelow(arena: std.mem.Allocator, all: []const []const u8, chosen: []const u8) ![]const [2][]const u8 {
+    var out: std.ArrayList([2][]const u8) = .empty;
+    const at = for (all, 0..) |p, i| {
+        if (std.mem.eql(u8, p, chosen)) break i;
+    } else return &.{};
+    var j = at + 1;
+    while (j + 2 < all.len and out.items.len < max_older_pairs) : (j += 1) {
+        try out.append(arena, .{ all[j], all[j + 1] });
+    }
+    return out.items;
+}
+
+test pairsBelow {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const all = [_][]const u8{ "16.22", "16.21", "16.20", "16.19" };
+    try std.testing.expectEqualDeep(&[_][2][]const u8{.{ "16.21", "16.20" }}, try pairsBelow(a, &all, "16.22"));
+    try std.testing.expectEqual(0, (try pairsBelow(a, all[1..], "16.21")).len);
+    try std.testing.expectEqual(0, (try pairsBelow(a, &all, "15.1")).len);
+    const many = [_][]const u8{ "16.9", "16.8", "16.7", "16.6", "16.5", "16.4", "16.3", "16.2" };
+    const got = try pairsBelow(a, &many, "16.9");
+    try std.testing.expectEqual(max_older_pairs, got.len);
+    try std.testing.expectEqualDeep([2][]const u8{ "16.5", "16.4" }, got[3]);
+}
+
 /// Default log format plus a UTC timestamp, for the crawl log on the box
 fn logFn(
     comptime level: std.log.Level,
