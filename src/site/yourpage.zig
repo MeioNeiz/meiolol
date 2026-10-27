@@ -1,7 +1,7 @@
 //! The Your games list (games.html, unlisted): the example player's list
 //! (yourgame.list_path) as ui.yourviews.YourViews (the head), ui.yourtime.YourTime (Over
-//! time, hidden until chosen) and ui.yourpage.YourList,
-//! its rows opening game.html; a URL's id is looked up in its place (ui.yourlookup)
+//! time, hidden until chosen) and ui.yourpage.YourList, its rows opening game.html; a
+//! URL's id is looked up in its place (ui.yourlookup)
 const std = @import("std");
 const ui = @import("ui");
 const html = @import("html.zig");

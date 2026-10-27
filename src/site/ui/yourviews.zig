@@ -1,9 +1,9 @@
 //! The Your games page's head (games.html, docs/plan/ui/your-games.md "Structure"):
 //! PlayerBar with the views' tabs and the filter row as its bands, then the chosen view.
 //! The Games view is YourList and Over time YourTime, the next islands on the page, each
-//! hidden in the other views (CSS: the DOM order is the reading order). Island YourViews (ui-yourviews.wasm). It and
-//! YourList both hold the filter, each writing q/role/champ and reading the other's
-//! presses from the URL
+//! hidden in the other views (CSS: the DOM order is the reading order). Island YourViews
+//! (ui-yourviews.wasm). It and YourList both hold the filter, each writing q/role/champ
+//! and reading the other's presses from the URL
 const std = @import("std");
 const tree = @import("tree.zig");
 const phrase = @import("phrase.zig");
