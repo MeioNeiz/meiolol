@@ -13,6 +13,8 @@ src/
   ddragon.zig        Data Dragon: champion ids/names; item classes, rune and spell names
   patchnotes.zig     what Riot changed between two patches, from Data Dragon (cached
                      in DATA/ddragon/<version>/; `meiolol patchnotes OLD NEW`)
+  cdragon.zig        CommunityDragon's ability numbers per champion and patch (cached
+                     beside Data Dragon's version, cdragon.cache_file)
   date.zig           UTC dates (Date: format, parse, epoch days)
   pipeline_test.zig  fixture games through stats, curves and the site
   daily.zig          Daily Draft puzzles (data/daily), made by full loads (site --views)

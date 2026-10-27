@@ -211,6 +211,8 @@ test "fixture games to stats, curves and the website" {
         , .{cd}) });
         try tmp.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(arena, &.{ vdir, "item.json" }), .data = "{\"data\":{}}" });
         try tmp.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(arena, &.{ vdir, "runesReforged.json" }), .data = "[]" });
+        // No CommunityDragon numbers: Data Dragon's alone, no network
+        try tmp.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(arena, &.{ vdir, @import("cdragon.zig").cache_file }), .data = "[]" });
     }
 
     const out = try std.fs.path.join(arena, &.{ dir, "site" });

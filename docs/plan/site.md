@@ -257,10 +257,8 @@ beside each champion's and matchup's move; J27 asked for the why.
 - PC1 Why, from Data Dragon: champion, item and rune changes on the page, each item
   and rune with who uses it most (done). Left: older patch pairs behind PatchHead's ‹ ›
   (patch/<cur>-<prev>.html while the db holds both patches whole)
-- PC2 Ability numbers: Data Dragon lacks most ability damage changes
-  (research/questions/patch-transfer.md "Open"); CommunityDragon's data or Riot's patch
-  notes page would complete PC1. Read docs/data.md before adding the source. Done when
-  16.21's notes' champion changes all appear
+- PC2 Ability numbers from CommunityDragon (done; docs/data.md says what is still
+  missing: behaviour changes, a few numbers in neither source)
 
 ## Draft tester
 

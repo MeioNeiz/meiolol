@@ -197,8 +197,12 @@ from the view's data/patch.bin (stamped, as the champions board), ui-patch.wasm 
   z 2.58; the drawn whisker is the same 99%, so a whisker clear of 0 is coloured
 - Riot's changes: patchnotes.load from Options.ddragon_dir (DATA/ddragon), loaded once
   per process (Extras.notesFor); a patch's version comes from the cache when it holds
-  all three files, so the renderer and tests never fetch. Load fails: logged, the page
-  goes without the Riot column and chip
+  all three files, so the renderer and tests never fetch them. CommunityDragon's
+  ability numbers (cdragon.zig) are fetched once per patch into the same version
+  directory (~170 requests, under a minute), then replace Data Dragon's effect and
+  blanked lines; without them (not published yet, down) the lines are Data Dragon's
+  and the next load tries again. Load fails: logged, the page goes without the Riot
+  column and chip
 - Matchups: those whose win rate (400+ games both) or median gold moved clearly, from
   the side that gained; a row's detail has its 3 biggest matchup moves
 - Items and runes Riot changed: server-rendered under the island (patchpage.riotView;

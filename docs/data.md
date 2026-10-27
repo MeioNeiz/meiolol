@@ -54,6 +54,21 @@ Production key details: production-key.md.
   than personal. Only worth it for the public app
 - One developer account per person and no key sharing (API Terms); one product per key
 
+## Static game data (not the Riot API)
+
+- Data Dragon (Riot's CDN): champion, item and rune names, ids, icons; patchnotes'
+  base stats, cooldowns, costs, item gold and texts. Many ability numbers missing or
+  blanked to 0
+- CommunityDragon (raw.communitydragon.org, a fan mirror of the game files): the
+  per-champion bin JSON's spell DataValues, calculations and base stats, for the patch
+  page's ability numbers (src/cdragon.zig); rune shard and position icons. Unofficial,
+  so optional: without it the notes are Data Dragon's. Per patch (16.21), not per
+  build: mid-patch updates count only until the patch is cached. Behaviour changes and
+  game-mode overrides (Arena, ARAM) are not read. Checked 27 Oct on 16.20 -> 16.21:
+  23 champions changed against Data Dragon's 11; of Riot's notes for the Rift, all
+  numbers appear except Vel'Koz Q cooldown 7 -> 6 (7 in both sources) and Varus'
+  22 Oct passive and Viktor's shield uptime (not found in the files)
+
 ## Dropped, and why
 
 - lolalytics API: response says "private API ... may not be used by third parties".

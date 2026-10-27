@@ -345,7 +345,7 @@ fn line(a: std.mem.Allocator, l: patchnotes.Line) !ui.changeline.Line {
     const label = if (words)
         (if (l.spell.len > 0) l.spell else l.field)
     else if (l.field.len > 0 and l.spell.len > 0)
-        try std.mem.concat(a, u8, &.{ l.spell, " ", try std.ascii.allocLowerString(a, l.field) })
+        try std.mem.concat(a, u8, &.{ l.spell, " ", try lowerFirst(a, l.field) })
     else
         l.field;
     return .{
@@ -361,6 +361,14 @@ fn line(a: std.mem.Allocator, l: patchnotes.Line) !ui.changeline.Line {
     };
 }
 
+/// "Cooldown" "cooldown"; "AD ratio" and "W on hit damage" kept
+fn lowerFirst(a: std.mem.Allocator, s: []const u8) ![]const u8 {
+    if (s.len < 2 or !std.ascii.isLower(s[1])) return s;
+    const out = try a.dupe(u8, s);
+    out[0] = std.ascii.toLower(out[0]);
+    return out;
+}
+
 test "line: labels and keys" {
     var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena_state.deinit();
@@ -368,6 +376,8 @@ test "line: labels and keys" {
     const q = try line(a, .{ .slot = .q, .spell = "Decimate", .field = "Cooldown", .old = "9", .new = "8", .dir = .buff });
     try std.testing.expectEqualStrings("Q", q.key);
     try std.testing.expectEqualStrings("Decimate cooldown", q.label);
+    const ratio = try line(a, .{ .slot = .q, .spell = "Piercing Arrow", .field = "AD ratio", .old = "120%", .new = "136%", .dir = .buff });
+    try std.testing.expectEqualStrings("Piercing Arrow AD ratio", ratio.label);
     const hp = try line(a, .{ .slot = .stats, .field = "Health", .old = "630", .new = "610", .dir = .nerf });
     try std.testing.expectEqualStrings("Health", hp.label);
     const lost = try line(a, .{ .slot = .q, .spell = "Piercing Arrow", .field = "Numbers", .dir = .blanked });

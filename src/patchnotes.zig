@@ -8,12 +8,21 @@
 //! (Orianna Q, Varus Q on 16.21) and writes 0 or 25000 into item texts (Hubris,
 //! Bastionbreaker): those are `blanked` lines, never a buff or nerf. Spell tooltips are
 //! templates ({{ totaldamage }}), so a tooltip edit is only "text changed".
+//!
+//! Ability numbers come from CommunityDragon (cdragon.zig) where it has both patches:
+//! they replace Data Dragon's effect numbers and blanked lines, and add the base stats
+//! Data Dragon missed (Jinx's attack damage per level on 16.21). Its internal names
+//! become words ("BasePercentHPPerStack": "Base percent HP per stack"); whether higher
+//! is better is guessed from them (damage, ratio, heal, shield, armour up: buff;
+//! cooldown, cost down: buff), else adjusted.
 
 const std = @import("std");
 const ddragon = @import("ddragon.zig");
+const cdragon = @import("cdragon.zig");
 const Allocator = std.mem.Allocator;
 const Value = std.json.Value;
 const ObjectMap = std.json.ObjectMap;
+const log = std.log.scoped(.patchnotes);
 
 pub const Slot = enum { stats, p, q, w, e, r, gold, text };
 
@@ -94,8 +103,14 @@ pub const Notes = struct {
     runes: []const Change,
 };
 
-/// One version's three files, raw JSON
-pub const Files = struct { champions: []const u8, items: []const u8, runes: []const u8 };
+/// One version's three files, raw JSON, and CommunityDragon's numbers for its patch
+pub const Files = struct {
+    champions: []const u8,
+    items: []const u8,
+    runes: []const u8,
+    /// None: Data Dragon's numbers alone
+    abilities: []const cdragon.Champion = &.{},
+};
 
 const file_names = [_][]const u8{ "championFull", "item", "runesReforged" };
 
@@ -106,7 +121,8 @@ const max_hunks = 4;
 
 /// Notes from `old_patch` to `new_patch` ("16.20", "16.21"); files cached under
 /// `cache_dir`/<version>/, a patch's version from there when it has one (no network:
-/// the renderer and tests). error.NoVersion when Data Dragon has no version of a patch
+/// the renderer and tests), CommunityDragon's numbers as <version>/cdragon.cache_file.
+/// error.NoVersion when Data Dragon has no version of a patch
 pub fn load(gpa: Allocator, arena: Allocator, io: std.Io, cache_dir: []const u8, old_patch: []const u8, new_patch: []const u8) !Notes {
     var http: std.http.Client = .{ .allocator = gpa, .io = io };
     defer http.deinit();
@@ -118,6 +134,15 @@ pub fn load(gpa: Allocator, arena: Allocator, io: std.Io, cache_dir: []const u8,
         var bodies: [3][]const u8 = undefined;
         for (file_names, &bodies) |name, *body| body.* = try cached(&http, arena, io, cache_dir, v.*, name);
         f.* = .{ .champions = bodies[0], .items = bodies[1], .runes = bodies[2] };
+    }
+    // Extra: without them the notes are Data Dragon's
+    for ([_][]const u8{ old_patch, new_patch }, versions, &files) |patch, v, *f| {
+        const path = try std.fs.path.join(arena, &.{ cache_dir, v, cdragon.cache_file });
+        const keys = (try dataOf(arena, f.champions)).keys();
+        f.abilities = cdragon.cached(&http, arena, io, path, patch, keys) catch |err| blk: {
+            log.warn("CommunityDragon's numbers for {s}: {t}", .{ patch, err });
+            break :blk &.{};
+        };
     }
     return diff(arena, versions[0], files[0], versions[1], files[1]);
 }
@@ -177,7 +202,7 @@ pub fn diff(arena: Allocator, old_version: []const u8, old: Files, new_version: 
     return .{
         .old = old_version,
         .new = new_version,
-        .champions = try champions(arena, try dataOf(arena, old.champions), try dataOf(arena, new.champions)),
+        .champions = try champions(arena, try dataOf(arena, old.champions), try dataOf(arena, new.champions), old.abilities, new.abilities),
         .items = try items(arena, try dataOf(arena, old.items), try dataOf(arena, new.items)),
         .runes = try runes(arena, old.runes, new.runes),
     };
@@ -213,7 +238,7 @@ const stat_names = [_][2][]const u8{
     .{ "attackspeed", "Attack speed" },
 };
 
-fn champions(arena: Allocator, old: ObjectMap, new: ObjectMap) ![]const Change {
+fn champions(arena: Allocator, old: ObjectMap, new: ObjectMap, old_ab: []const cdragon.Champion, new_ab: []const cdragon.Champion) ![]const Change {
     var out: std.ArrayList(Change) = .empty;
     var it = new.iterator();
     while (it.next()) |e| {
@@ -243,6 +268,9 @@ fn champions(arena: Allocator, old: ObjectMap, new: ObjectMap) ![]const Change {
         for (so[0..@min(so.len, sn.len, 4)], sn[0..@min(so.len, sn.len, 4)], 0..) |x, y, i| {
             try spell(arena, &lines, @fromBackingInt(@intCast(@backingInt(Slot.q) + i)), x, y);
         }
+        if (abilitiesOf(old_ab, e.key_ptr.*)) |x| if (abilitiesOf(new_ab, e.key_ptr.*)) |y| {
+            try abilityLines(arena, &lines, c, e.key_ptr.*, x, y);
+        };
         if (lines.items.len > 0) try out.append(arena, .{ .id = id, .key = e.key_ptr.*, .name = name, .lines = lines.items });
     }
     it = old.iterator();
@@ -297,6 +325,190 @@ fn spell(arena: Allocator, lines: *std.ArrayList(Line), slot: Slot, old: Value, 
         const y = str(field(new, "tooltip")) orelse "";
         if (!std.mem.eql(u8, x, y)) try lines.append(arena, .{ .slot = slot, .spell = name, .field = "Text", .dir = .text });
     }
+}
+
+fn abilitiesOf(list: []const cdragon.Champion, key: []const u8) ?[]const cdragon.Number {
+    for (list) |c| if (std.mem.eql(u8, c.key, key)) return c.numbers;
+    return null;
+}
+
+/// CommunityDragon's changed numbers in place of Data Dragon's effect numbers and
+/// blanked lines; its base stats only where Data Dragon has no line. Kit order after
+fn abilityLines(arena: Allocator, lines: *std.ArrayList(Line), champ: Value, key: []const u8, old: []const cdragon.Number, new: []const cdragon.Number) !void {
+    var n: usize = 0;
+    for (lines.items) |l| {
+        if (l.dir == .blanked or std.mem.startsWith(u8, l.field, "Effect ")) continue;
+        lines.items[n] = l;
+        n += 1;
+    }
+    lines.shrinkRetainingCapacity(n);
+    const dd = lines.items.len;
+    for (new) |y| {
+        const x = for (old) |o| {
+            if (o.same(y)) break o;
+        } else null;
+        // Only a DataValue that came or went is news: a calculation's part is its formula
+        // rebuilt, a spell field a file that left it out
+        if (x == null and y.kind != .value) continue;
+        try addLine(arena, lines, dd, try abilityLine(arena, champ, key, x, y));
+    }
+    for (old) |x| {
+        if (x.kind != .value) continue;
+        for (new) |y| {
+            if (y.same(x)) break;
+        } else try addLine(arena, lines, dd, try abilityLine(arena, champ, key, x, null));
+    }
+    std.sort.insertion(Line, lines.items, {}, struct {
+        fn lt(_: void, a: Line, b: Line) bool {
+            return @backingInt(a.slot) < @backingInt(b.slot);
+        }
+    }.lt);
+}
+
+/// Unless Data Dragon's lines (`lines[0..dd]`) have its field, or the same line is
+/// there (two parts of one calculation)
+fn addLine(arena: Allocator, lines: *std.ArrayList(Line), dd: usize, line: ?Line) !void {
+    const l = line orelse return;
+    for (lines.items, 0..) |x, i| {
+        if (x.slot != l.slot or !std.mem.eql(u8, x.field, l.field)) continue;
+        if (i < dd) return;
+        if (std.mem.eql(u8, x.old, l.old) and std.mem.eql(u8, x.new, l.new)) return;
+    }
+    try lines.append(arena, l);
+}
+
+/// One number's line, if its text changed; `old` or `new` null: a number that came or
+/// went ("none")
+fn abilityLine(arena: Allocator, champ: Value, key: []const u8, old: ?cdragon.Number, new: ?cdragon.Number) !?Line {
+    const any = new orelse old.?;
+    const slot: Slot = switch (any.slot) {
+        inline else => |s| @field(Slot, @tagName(s)),
+    };
+    const sp: ?Value = switch (slot) {
+        .p => field(champ, "passive"),
+        .q, .w, .e, .r => blk: {
+            const ss = arr(field(champ, "spells"));
+            const i = @backingInt(slot) - @backingInt(Slot.q);
+            break :blk if (i < ss.len) ss[i] else null;
+        },
+        else => null,
+    };
+    const maxrank: usize = if (slot == .p) 5 else if (sp) |v| @intFromFloat(num(field(v, "maxrank") orelse .null) orelse 5) else 5;
+    const a = if (old) |x| try numberText(arena, x, maxrank) else "none";
+    const b = if (new) |x| try numberText(arena, x, maxrank) else "none";
+    if (std.mem.eql(u8, a, b)) return null;
+    var dir: Dir = .adjusted;
+    if (old != null and new != null) if (higherBetter(any)) |better| {
+        const x = shown(old.?, maxrank);
+        const y = shown(new.?, maxrank);
+        if (x.len == y.len) dir = numsDir(x, y, better);
+    };
+    return .{
+        .slot = slot,
+        .spell = if (sp) |v| str(field(v, "name")) orelse "" else "",
+        .field = try label(arena, any, key),
+        .old = a,
+        .new = b,
+        .dir = dir,
+    };
+}
+
+/// The values a line shows: ranks 1 to `maxrank` of a per-rank number
+fn shown(x: cdragon.Number, maxrank: usize) []const f64 {
+    if (x.kind != .value and x.kind != .spell) return x.values;
+    return x.values[@min(1, x.values.len)..@min(x.values.len, maxrank + 1)];
+}
+
+/// "50/95/140", one number when every rank agrees, "40 to 140" for a level scaling;
+/// ratios and names saying so as percent
+fn numberText(arena: Allocator, x: cdragon.Number, maxrank: usize) ![]const u8 {
+    const vs = shown(x, maxrank);
+    if (vs.len == 0) return "";
+    const pct = isPercent(x);
+    if (x.kind == .levels and vs.len == 2) return arena.print("{s} to {s}", .{ try fmtAbility(arena, vs[0], pct), try fmtAbility(arena, vs[1], pct) });
+    const same = std.mem.allEqual(f64, vs, vs[0]);
+    var out: std.ArrayList(u8) = .empty;
+    for (vs, 0..) |v, k| {
+        if (same and k > 0) break;
+        if (k > 0) try out.append(arena, '/');
+        try out.appendSlice(arena, try fmtAbility(arena, v, pct));
+    }
+    return out.items;
+}
+
+/// The files keep 32-bit floats (0.800000011920929): rounded to what Riot meant
+fn fmtAbility(arena: Allocator, v: f64, pct: bool) ![]const u8 {
+    if (pct) return arena.print("{d}%", .{@round(v * 10_000) / 100});
+    return arena.print("{d}", .{@round(v * 1000) / 1000});
+}
+
+fn isPercent(x: cdragon.Number) bool {
+    switch (x.kind) {
+        .ratio => return true,
+        .stat, .levels, .number, .spell => return false,
+        .value => {},
+    }
+    // Xin Zhao's "PermanentASToASRatio" 5 is 1% per 5%, not 500%
+    for (x.values) |v| if (@abs(v) > 3) return false;
+    for ([_][]const u8{ "ratio", "percent", "pct", "amp", "mod" }) |w| {
+        if (std.ascii.findIgnoreCase(x.name, w) != null) return true;
+    }
+    return false;
+}
+
+/// Guessed from the name; null when it could go either way
+fn higherBetter(x: cdragon.Number) ?bool {
+    if (x.kind == .stat) return true;
+    for ([_][]const u8{ "taken", "reduc", "self" }) |w| if (std.ascii.findIgnoreCase(x.name, w) != null) return null;
+    for ([_][]const u8{ "cooldown", "cost", "recharge" }) |w| if (std.ascii.findIgnoreCase(x.name, w) != null) return false;
+    if (x.kind == .ratio) return true;
+    for ([_][]const u8{ "damage", "ratio", "heal", "shield", "armor" }) |w| if (std.ascii.findIgnoreCase(x.name, w) != null) return true;
+    return null;
+}
+
+/// What the number is, in words: "Base damage", "Total damage bonus AD ratio"
+fn label(arena: Allocator, x: cdragon.Number, key: []const u8) ![]const u8 {
+    return switch (x.kind) {
+        .stat => x.name,
+        .value, .spell, .number => try nameWords(arena, x.name, key),
+        .ratio => try std.mem.join(arena, " ", if (x.of.len > 0)
+            &.{ try nameWords(arena, x.name, key), x.of, "ratio" }
+        else
+            &.{ try nameWords(arena, x.name, key), "ratio" }),
+        .levels => try std.mem.concat(arena, u8, &.{ try nameWords(arena, x.name, key), " by level" }),
+    };
+}
+
+/// An internal name as words: the champion's name and a one-letter type prefix
+/// ("tADRatioMin") dropped, split at case changes, acronyms kept, "Tooltip" and "Calc"
+/// dropped: "VarusWOnHitDamage" "W on hit damage"
+fn nameWords(arena: Allocator, name: []const u8, key: []const u8) ![]const u8 {
+    var s = name;
+    if (s.len > key.len and std.ascii.startsWithIgnoreCase(s, key) and std.ascii.isUpper(s[key.len])) s = s[key.len..];
+    if (s.len > 2 and std.ascii.isLower(s[0]) and std.ascii.isUpper(s[1])) s = s[1..];
+    var out: std.ArrayList(u8) = .empty;
+    var i: usize = 0;
+    while (i < s.len) {
+        var j = i + 1;
+        if (std.ascii.isUpper(s[i])) {
+            // An acronym runs to the capital that starts the next word: "HPPer" "HP"
+            while (j < s.len and std.ascii.isUpper(s[j]) and !(j + 1 < s.len and std.ascii.isLower(s[j + 1]))) j += 1;
+        }
+        if (j == i + 1 or !std.ascii.isUpper(s[j - 1])) {
+            while (j < s.len and !std.ascii.isUpper(s[j])) j += 1;
+        }
+        const w = s[i..j];
+        i = j;
+        if (std.mem.eql(u8, w, "Tooltip") or std.mem.eql(u8, w, "Calc") or std.mem.eql(u8, w, "TT")) continue;
+        if (out.items.len > 0) try out.append(arena, ' ');
+        if (std.mem.eql(u8, w, "BAD")) {
+            try out.appendSlice(arena, if (out.items.len == 0) "Bonus AD" else "bonus AD");
+            continue;
+        }
+        const acronym = w.len > 1 and std.ascii.isUpper(w[1]);
+        for (w, 0..) |ch, k| try out.append(arena, if (acronym) ch else if (k == 0 and out.items.len == 0) std.ascii.toUpper(ch) else std.ascii.toLower(ch));
+    }
+    return if (out.items.len > 0) out.items else name;
 }
 
 /// Every effect number of `new` is 0 or missing where `old` had some
@@ -779,6 +991,91 @@ test "champions: stats, per-rank cooldowns, passive words, blanked effects, new"
     try testing.expectEqual(.new, n.champions[3].status);
 }
 
+test "abilities: CommunityDragon's numbers replace blanked and effect lines" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const N = cdragon.Number;
+    const old = [_]cdragon.Champion{.{
+        .key = "Varus",
+        .numbers = &[_]N{
+            .{ .slot = .stats, .kind = .stat, .name = "Health", .values = &.{600} },
+            .{ .slot = .stats, .kind = .stat, .name = "Attack damage per level", .values = &.{3.25} },
+            .{ .slot = .q, .kind = .value, .name = "BaseDamageMax", .values = &.{ 10, 80, 150, 220, 290, 360, 430 } },
+            .{ .slot = .q, .kind = .value, .name = "tADRatioMax", .values = &.{ 1.2000000476837158, 1.2000000476837158, 1.2000000476837158, 1.2000000476837158, 1.2000000476837158, 1.2000000476837158, 1.2000000476837158 } },
+            .{ .slot = .q, .kind = .ratio, .name = "TotalDamage", .of = "AP", .values = &.{0.550000011920929} },
+            .{ .slot = .q, .kind = .levels, .name = "ShieldTooltip", .values = &.{ 40, 140 } },
+            .{ .slot = .q, .kind = .value, .name = "CDRefund", .values = &.{ 3, 3, 3, 3, 3, 3, 3 } },
+            .{ .slot = .q, .kind = .spell, .name = "Cost", .values = &.{ 0, 70, 70, 70, 70, 70, 70 } },
+            .{ .slot = .q, .kind = .spell, .name = "AmmoRecharge", .values = &.{ 18, 18, 16, 14, 12, 10, 8 } },
+            // Rebuilt formulas: a part that goes is no line
+            .{ .slot = .q, .kind = .number, .name = "TotalDamage", .of = "mNumber", .values = &.{1} },
+        },
+    }};
+    const new = [_]cdragon.Champion{.{
+        .key = "Varus",
+        .numbers = &[_]N{
+            .{ .slot = .stats, .kind = .stat, .name = "Health", .values = &.{610} },
+            .{ .slot = .stats, .kind = .stat, .name = "Attack damage per level", .values = &.{3} },
+            .{ .slot = .q, .kind = .value, .name = "BaseDamageMin", .values = &.{ 5, 50, 95, 140, 185, 230, 275 } },
+            // Ranks past maxrank changed only: no line
+            .{ .slot = .q, .kind = .value, .name = "CDRefund", .values = &.{ 3, 3, 3, 3, 3, 3, 9 } },
+            .{ .slot = .q, .kind = .value, .name = "tADRatioMax", .values = &.{ 1.36, 1.36, 1.36, 1.36, 1.36, 1.36, 1.36 } },
+            .{ .slot = .q, .kind = .ratio, .name = "TotalDamage", .of = "AP", .values = &.{0.6000000238418579} },
+            .{ .slot = .q, .kind = .levels, .name = "ShieldTooltip", .values = &.{ 30, 130 } },
+            // Data Dragon's cost line stands
+            .{ .slot = .q, .kind = .spell, .name = "Cost", .values = &.{ 0, 80, 80, 80, 80, 80, 80 } },
+            .{ .slot = .q, .kind = .spell, .name = "AmmoRecharge", .values = &.{ 17.5, 16, 14.5, 13, 11.5, 10, 8.5 } },
+        },
+    }};
+    const n = try diff(arena, "16.20.1", .{
+        .champions = champJson(varus_old),
+        .items = "{\"data\":{}}",
+        .runes = "[]",
+        .abilities = &old,
+    }, "16.21.1", .{
+        // Health also in Data Dragon: its line stays, CommunityDragon's is dropped
+        .champions = champJson(
+            \\"Varus":{"key":"110","name":"Varus","stats":{"hp":610},
+            \\"spells":[{"name":"Piercing Arrow","maxrank":5,"cooldown":[16],"cost":[80],"range":[925],
+            \\"effectBurn":[null,"0","0","0"],"tooltip":"{{ new }}"}]}
+        ),
+        .items = "{\"data\":{}}",
+        .runes = "[]",
+        .abilities = &new,
+    });
+    const v = n.champions[0];
+    try testing.expectEqual(9, v.lines.len);
+    try expectLine(v.lines[0], .stats, "Health", "600", "610", .buff);
+    try expectLine(v.lines[1], .stats, "Attack damage per level", "3.25", "3", .nerf);
+    try expectLine(v.lines[2], .q, "Cost", "70", "80", .nerf);
+    try expectLine(v.lines[3], .q, "Base damage min", "none", "50/95/140/185/230", .adjusted);
+    try testing.expectEqualStrings("Piercing Arrow", v.lines[3].spell);
+    try expectLine(v.lines[4], .q, "AD ratio max", "120%", "136%", .buff);
+    try expectLine(v.lines[5], .q, "Total damage AP ratio", "55%", "60%", .buff);
+    try expectLine(v.lines[6], .q, "Shield by level", "40 to 140", "30 to 130", .nerf);
+    try expectLine(v.lines[7], .q, "Ammo recharge", "18/16/14/12/10", "16/14.5/13/11.5/10", .buff);
+    try expectLine(v.lines[8], .q, "Base damage max", "80/150/220/290/360", "none", .adjusted);
+}
+
+test "nameWords: internal names as words" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    for ([_][2][]const u8{
+        .{ "BasePercentHPPerStack", "Base percent HP per stack" },
+        .{ "VarusWOnHitDamage", "W on hit damage" },
+        .{ "tADRatioMin", "AD ratio min" },
+        .{ "TotalDamageTooltip", "Total damage" },
+        .{ "CDRPerBlightStack", "CDR per blight stack" },
+        .{ "HealCapLevel18Value", "Heal cap level18 value" },
+        .{ "BADRatio", "Bonus AD ratio" },
+        .{ "AmmoRecharge", "Ammo recharge" },
+        .{ "BADRatio", "Bonus AD ratio" },
+        .{ "AmmoRecharge", "Ammo recharge" },
+    }) |c| try testing.expectEqualStrings(c[1], try nameWords(a, c[0], "Varus"));
+}
+
 test "items: gold, stats numbers, blanked texts, off-Rift skipped, new and gone" {
     var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena_state.deinit();
@@ -855,6 +1152,7 @@ test "load: versions from the cache, no network" {
     for ([_][]const u8{ "16.20.1", "16.21.1" }, files) |v, f| {
         try tmp.dir.createDirPath(io, v);
         for (file_names, f) |name, body| try tmp.dir.writeFile(io, .{ .sub_path = try arena.print("{s}/{s}.json", .{ v, name }), .data = body });
+        try tmp.dir.writeFile(io, .{ .sub_path = try arena.print("{s}/{s}", .{ v, cdragon.cache_file }), .data = "[]" });
     }
     // Not whole: never picked
     try tmp.dir.createDirPath(io, "16.21.2");
