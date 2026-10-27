@@ -27,6 +27,8 @@ pub fn head(a: std.mem.Allocator, db: store.Db) !tp.Head {
         try list.append(a, .{ .id = r.id, .key = try a.dupe(u8, r.key), .name = try a.dupe(u8, r.name) });
         if (version.len == 0) version = try a.dupe(u8, r.ddragon_version);
     }
+    // Icons need the version; an empty page would hide a broken champions table
+    if (list.items.len == 0 or version.len == 0) return error.NoChampions;
     return .{ .ddragon = version, .champs = list.items };
 }
 

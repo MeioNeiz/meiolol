@@ -840,7 +840,11 @@ test "admin page from the fixture games and a crawl log" {
     // The new tester beside it: the island with the champions inline, its code and style
     try site_tester.write(gpa, io, private, db);
     const t_html = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ private, "tester.html" }), arena, .limited(1 << 20));
-    for ([_][]const u8{ "data-island=\"tester\"", "data-bin=\"", assets.tester_js.path, site_tester.css_file.path }) |s| {
+    // Private: never indexed, its code never among the public site's assets
+    for (site.hashed_assets) |x| {
+        try std.testing.expect(!std.mem.eql(u8, x.path, assets.tester_js.path) and !std.mem.eql(u8, x.path, assets.tester_wasm.path));
+    }
+    for ([_][]const u8{ "<meta name=\"robots\" content=\"noindex\">", "data-island=\"tester\"", "data-bin=\"", assets.tester_js.path, site_tester.css_file.path }) |s| {
         try std.testing.expect(std.mem.find(u8, t_html, s) != null);
     }
     for ([_][]const u8{ assets.tester_js.path, assets.tester_wasm.path, site_tester.css_file.path, "tester.html.gz" }) |f| {

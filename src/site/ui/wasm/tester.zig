@@ -32,13 +32,20 @@ export fn main() void {
     state = .init(&head, &index);
     island = dom.rt.add(tp.Page, &state, &server, tp.sel) catch return dom.dom.warn("tester: out of memory");
     dom.rt.changed = changed;
-    fetchShown();
+    // The first fetch waits a task, so it is the saved model's and still runs when
+    // blocked storage throws below
+    zjb.global("window").call("setTimeout", .{ zjb.fnHandle("testerStart", &start), @as(i32, 0) }, void);
     // Last: blocked storage throws, ending this call with the page already live
     if (dom.stored(key)) |s| {
+        defer gpa.free(s);
         tp.restore(&state, s);
-        fetchShown();
         if (island) |i| i.render();
     }
+}
+
+fn start() callconv(.c) void {
+    fetchShown();
+    if (island) |i| i.render();
 }
 
 /// After each update: fetch a newly chosen model, save the board
@@ -61,19 +68,16 @@ fn fetchShown() void {
 
 fn done(ctx: i32, bytes: ?[]u8) void {
     const w = std.enums.fromInt(tp.Which, ctx) orelse return;
-    const b = bytes orelse {
-        state.loads.set(w, .missing);
-        if (island) |i| i.render();
-        return;
-    };
+    defer if (island) |i| i.render();
+    const b = bytes orelse return state.loads.set(w, .failed);
+    // Decoded slices point into the bytes: both stay while the model does
+    var arena: std.heap.ArenaAllocator = .init(gpa);
     const l = loaded.getPtr(w);
-    l.* = tp.Loaded.init(gpa, b) catch {
+    l.* = tp.Loaded.init(arena.allocator(), b) catch {
         dom.dom.warn("tester: bad model file");
-        state.loads.set(w, .missing);
-        if (island) |i| i.render();
-        return;
+        arena.deinit();
+        gpa.free(b);
+        return state.loads.set(w, .bad);
     };
-    // The file stays decoded: the model's slices point into it
     state.loads.set(w, .{ .ready = l });
-    if (island) |i| i.render();
 }

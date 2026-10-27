@@ -1,8 +1,9 @@
 //! The Draft tester page (docs/plan/ui/draft-tester.md, /p/tester.html, private): build a
 //! draft, see blue's win chance under a named model, each seat's term and the model's
 //! checks. One model at a time from a Select of ModelBadges; the board is DraftBoard's
-//! full variant, a seat chosen by a click and filled from ChampSearch. Board | Terms | Files under it. Models are draft-model.bin files the
-//! page's code fetches (testerdata.zig); champion keys and names come inline (data-bin)
+//! full variant, a seat chosen by a click and filled from ChampSearch. Board | Terms |
+//! Files under it. Models are draft-model.bin files the page's code fetches
+//! (testerdata.zig); champion keys and names come inline (data-bin)
 const std = @import("std");
 const tree = @import("tree.zig");
 const ds = @import("core").draftscore;
@@ -18,6 +19,7 @@ const split = @import("split.zig");
 const button = @import("button.zig");
 const phrase = @import("phrase.zig");
 const Gallery = @import("gallery.zig").Gallery;
+const fmt = @import("fmt.zig");
 const plain = phrase.plain;
 const Phrase = phrase.Phrase;
 const H = tree.H;
@@ -38,7 +40,8 @@ const W = struct {
     pub const model = plain("Model");
     pub const clear = plain("Clear");
     pub const loading = plain("Loading the model…");
-    pub const missing = plain("No model file here yet");
+    pub const failed = plain("Could not load the model file: choose it again to retry");
+    pub const bad_file = plain("The model file is damaged");
     pub const not_loaded = plain("not loaded");
     pub const pick = Phrase("{side:text} {role:text}: pick a champion");
     pub const blue = plain("Blue");
@@ -51,6 +54,7 @@ const W = struct {
     pub const from = Phrase("{where:text} {date:text}");
     pub const ok = Phrase("✓ {file:text}: {n:int} reference drafts match");
     pub const bad = Phrase("✗ {file:text}: {n:int} reference drafts, worst {gap:text} off");
+    pub const no_refs = Phrase("✗ {file:text}: no reference drafts");
     pub const empty_terms = plain("Pick champions to see their terms");
     pub const side = plain("Side");
     pub const champion = plain("Champion");
@@ -102,7 +106,8 @@ pub const Loaded = struct {
     }
 };
 
-pub const Load = union(enum) { none, loading, missing, ready: *const Loaded };
+/// `failed`: not fetched (a network error, no file); `bad`: fetched, didn't decode or score
+pub const Load = union(enum) { none, loading, failed, bad, ready: *const Loaded };
 
 pub const Tab = enum(u8) { board, terms, files };
 
@@ -132,6 +137,11 @@ pub const Page = struct {
         switch (m) {
             .model => |w| {
                 p.which = w;
+                // Chosen again after a failure: the page's code fetches it again
+                switch (p.loads.get(w)) {
+                    .failed, .bad => p.loads.set(w, .none),
+                    else => {},
+                }
                 p.dirty = true;
             },
             .tab => |t| p.tab = t,
@@ -241,7 +251,8 @@ pub const Page = struct {
 
     fn chance(p: *Page, h: *H) N {
         const l = p.ready() orelse return h.p(.{ .class = "wait" }, .{switch (p.loads.get(p.which)) {
-            .missing => W.missing,
+            .failed => W.failed,
+            .bad => W.bad_file,
             else => W.loading,
         }});
         const c = l.sc.blue(p.teams);
@@ -317,10 +328,12 @@ pub const Page = struct {
             const i = infos.get(w);
             lines.add(h.li(.{ .key = @backingInt(w) }, .{switch (p.loads.get(w)) {
                 .ready => |l| blk: {
+                    if (l.check.drafts == 0) break :blk W.no_refs.with(h, .{ .file = i.file });
                     if (l.check.ok()) break :blk W.ok.with(h, .{ .file = i.file, .n = l.check.drafts });
                     break :blk W.bad.with(h, .{ .file = i.file, .n = l.check.drafts, .gap = fixed(h, l.check.worst, 9) });
                 },
-                .missing => tree.Text{ .s = h.fmt("{s}: {s}", .{ i.file, W.missing.s }) },
+                .failed => tree.Text{ .s = h.fmt("{s}: {s}", .{ i.file, W.failed.s }) },
+                .bad => tree.Text{ .s = h.fmt("{s}: {s}", .{ i.file, W.bad_file.s }) },
                 .loading => tree.Text{ .s = h.fmt("{s}: …", .{i.file}) },
                 .none => tree.Text{ .s = h.fmt("{s}: {s}", .{ i.file, W.not_loaded.s }) },
             }}));
@@ -337,14 +350,14 @@ fn seatPoints(l: *const Loaded, teams: [2][n_role]u32, side: u1, r: usize) f64 {
     return 100 * if (side == 0) d else -d;
 }
 
-/// `x` with `digits` decimals, by integers: std's float printing would add kilobytes to
-/// the wasm. "?" when out of range
-fn fixed(h: *H, x: f64, comptime digits: u8) []const u8 {
-    const scale = comptime std.math.pow(f64, 10, digits);
-    if (!std.math.isFinite(x) or @abs(x) >= 1e6) return "?";
-    const n: u64 = @intFromFloat(@round(@abs(x) * scale));
-    const one: u64 = @intFromFloat(scale);
-    return h.fmt("{s}{d}.{d:0>[3]}", .{ if (x < 0 and n > 0) "-" else "", n / one, n % one, digits });
+/// fmt.fixed's, "?" for NaN or infinity
+fn fixed(h: *H, x: f64, comptime places: u4) []const u8 {
+    if (!std.math.isFinite(x)) return "?";
+    var out: std.Io.Writer.Allocating = .init(h.mem);
+    fmt.fixed(&out.writer, x, places, false) catch {
+        h.oom = true;
+    };
+    return out.written();
 }
 
 /// "2026-10-24" as "24 Oct"
@@ -370,7 +383,8 @@ pub fn saved(p: *const Page, w: *std.Io.Writer) !void {
     for (p.teams, 0..) |team, s| for (team, 0..) |id, r| try w.print("{s}{d}", .{ if (s == 0 and r == 0) " " else ",", id });
 }
 
-/// Back from `saved`; anything off leaves the page as it is
+/// Back from `saved`; anything malformed leaves the page as it is. A champion the head
+/// lacks (removed since) or seen on an earlier seat leaves its seat empty
 pub fn restore(p: *Page, s: []const u8) void {
     var it = std.mem.tokenizeAny(u8, s, " ,");
     const w = std.fmt.parseInt(u8, it.next() orelse return, 10) catch return;
@@ -378,6 +392,18 @@ pub fn restore(p: *Page, s: []const u8) void {
     var teams: [2][n_role]u32 = undefined;
     for (&teams) |*team| for (team) |*x| {
         x.* = std.fmt.parseInt(u32, it.next() orelse return, 10) catch return;
+    };
+    if (it.next() != null) return;
+    var seen: [2 * n_role]u32 = undefined;
+    var n: usize = 0;
+    for (&teams) |*team| for (team) |*x| {
+        if (x.* == 0) continue;
+        if (p.champOf(x.*) == null or std.mem.findScalar(u32, seen[0..n], x.*) != null) {
+            x.* = 0;
+            continue;
+        }
+        seen[n] = x.*;
+        n += 1;
     };
     p.which = which;
     p.teams = teams;
@@ -432,7 +458,7 @@ pub fn gallery(g: *Gallery) void {
         const p = a.create(Page) catch return;
         p.* = .init(&Demo.head, ix);
         if (i > 0) p.loads.set(.live, .{ .ready = l });
-        p.loads.set(.comp, .missing);
+        p.loads.set(.comp, .failed);
         p.teams[0][0] = 266;
         if (i != 2) p.teams[1][0] = 122;
         if (i == 2) p.seat = n_role;

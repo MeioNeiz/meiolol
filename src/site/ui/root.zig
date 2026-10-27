@@ -140,6 +140,7 @@ test {
     _ = @import("patchpage_test.zig");
     _ = @import("dailypage_test.zig");
     _ = @import("poolpage_test.zig");
+    _ = @import("testerpage_test.zig");
     _ = @import("table_test.zig");
     _ = @import("champsearch_test.zig");
     _ = @import("homepage_test.zig");

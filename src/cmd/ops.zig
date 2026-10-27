@@ -319,7 +319,11 @@ pub fn cmdAdmin(c: *Cmd) !u8 {
     const db = try store.open(c.init.gpa, c.data_dir);
     defer db.close();
     try admin.generate(c.init.gpa, c.init.io, db, o);
-    if (private_out) |p| try admin.private(c.init.gpa, c.init.io, p, now);
-    if (private_out) |p| try site_tester.write(c.init.gpa, c.init.io, p, db);
+    if (private_out) |p| {
+        try admin.private(c.init.gpa, c.init.io, p, now);
+        // web-loop.sh skips the admin and private uploads when this exits non-zero: the
+        // new tester must not freeze the admin page
+        site_tester.write(c.init.gpa, c.init.io, p, db) catch |e| std.log.err("tester page: {t}", .{e});
+    }
     return 0;
 }

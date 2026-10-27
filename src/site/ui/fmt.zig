@@ -57,7 +57,8 @@ pub fn write(w: *W, comptime k: Kind, v: anytype) W.Error!void {
 
 /// `x` with `places` decimals (trailing zeros dropped when `trim`), by integer
 /// arithmetic: std's float formatter is several KB of ui.wasm
-pub fn fixed(w: *W, x: anytype, comptime places: u2, trim: bool) W.Error!void {
+pub fn fixed(w: *W, x: anytype, comptime places: u4, trim: bool) W.Error!void {
+    comptime std.debug.assert(places <= 9);
     const scale: f64 = comptime std.math.pow(f64, 10, places);
     const v: f64 = @floatCast(x);
     const r = @round(@abs(v) * scale);
@@ -68,7 +69,7 @@ pub fn fixed(w: *W, x: anytype, comptime places: u2, trim: bool) W.Error!void {
     try w.print("{d}", .{n / unit});
     var frac = n % unit;
     if (places == 0 or (trim and frac == 0)) return;
-    var digits: [3]u8 = undefined;
+    var digits: [9]u8 = undefined;
     var k: usize = places;
     while (k > 0) {
         k -= 1;
@@ -251,4 +252,9 @@ test "numbers read as the mock's" {
     try std.testing.expectEqualStrings("940 2.3k 2.3k 10k 34k ", w.buffered());
     try std.testing.expectEqualStrings("hi3", ink(4, win_cuts));
     try std.testing.expectEqualStrings("lo1", ink(-1.5, win_cuts));
+    w = .fixed(&buf);
+    try fixed(&w, @as(f64, 2e-9), 9, false);
+    try w.writeByte(' ');
+    try fixed(&w, @as(f64, -0.1234567894), 9, true);
+    try std.testing.expectEqualStrings("0.000000002 -0.123456789", w.buffered());
 }
