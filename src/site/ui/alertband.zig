@@ -33,7 +33,7 @@ pub fn view(h: *H, a: Alert) N {
             .warn => "!",
             .down => "✕",
         }}),
-        h.span(.{ .class = "t" }, .{a.text}),
+        h.span(.{ .class = "t", .title = a.text.s }, .{a.text}),
         if (a.more > 0) h.span(.{ .class = "more" }, .{W.more.with(h, .{ .n = a.more })}) else null,
         if (a.link) |l| h.a(.{ .href = l.href }, .{l.label}) else null,
     });
@@ -48,6 +48,10 @@ pub const css =
     \\  .c-alert .t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     \\  .c-alert .more { flex: none; color: var(--muted); }
     \\  .c-alert a { flex: none; color: var(--accent); }
+    \\  @media (max-width: 480px) {
+    \\    .c-alert { align-items: flex-start; padding-block: var(--sp-2); }
+    \\    .c-alert .t { white-space: normal; overflow-wrap: anywhere; }
+    \\  }
     \\  .c-alert[data-state="warn"] { border-color: var(--turn-line); }
     \\  .c-alert[data-state="warn"] .g { color: var(--turn); }
     \\  .c-alert[data-state="down"] { border-color: var(--bad-line); background: var(--them-bg); }
@@ -77,19 +81,27 @@ pub fn gallery(g: *Gallery) void {
     }));
 }
 
-test "glyph and role follow the state; more only when there are others" {
+test "each state: its glyph and role; more and the link only when given" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     var t: tree.Tree = .{};
     var h: H = .init(arena.allocator(), &t);
     var out: std.Io.Writer.Allocating = .init(arena.allocator());
-    try @import("html.zig").write(&t, view(&h, .{ .state = .ok, .text = plain("All running") }), &out.writer);
-    try std.testing.expect(std.mem.find(u8, out.written(), "role=\"status\"") != null);
-    try std.testing.expect(std.mem.find(u8, out.written(), "more") == null);
-    out.clearRetainingCapacity();
-    try @import("html.zig").write(&t, view(&h, .{ .state = .down, .text = plain("x"), .more = 3 }), &out.writer);
-    const s = out.written();
-    try std.testing.expect(std.mem.find(u8, s, "role=\"alert\"") != null);
-    try std.testing.expect(std.mem.find(u8, s, "data-state=\"down\"") != null);
-    try std.testing.expect(std.mem.find(u8, s, "+3 more") != null);
+    const cases = [_]struct { a: Alert, want: []const []const u8, not: []const []const u8 }{
+        .{ .a = .{ .state = .ok, .text = plain("All running") }, .want = &.{ "role=\"status\"", "✓", "title=\"All running\"" }, .not = &.{ "more", "<a " } },
+        .{ .a = .{ .state = .warn, .text = plain("disk"), .link = .{ .href = "#storage", .label = plain("Storage") } }, .want = &.{ "role=\"alert\"", ">!<", "data-state=\"warn\"", "<a href=\"#storage\">Storage</a>" }, .not = &.{"more"} },
+        .{ .a = .{ .state = .down, .text = plain("x"), .more = 3 }, .want = &.{ "role=\"alert\"", "✕", "data-state=\"down\"", "+3 more" }, .not = &.{"<a "} },
+    };
+    for (cases) |c| {
+        out.clearRetainingCapacity();
+        const n = view(&h, c.a);
+        try std.testing.expect(!h.oom);
+        try @import("html.zig").write(&t, n, &out.writer);
+        const s = out.written();
+        for (c.want) |w| if (std.mem.find(u8, s, w) == null) {
+            std.debug.print("missing {s} in {s}\n", .{ w, s });
+            return error.TestExpectedEqual;
+        };
+        for (c.not) |w| try std.testing.expect(std.mem.find(u8, s, w) == null);
+    }
 }
