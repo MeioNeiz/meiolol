@@ -47,7 +47,6 @@ const W = struct {
     pub const wl = phrase.Phrase("{w:int}–{l:int}");
     pub const ratio = phrase.Phrase("{r:dec}");
     pub const moved = phrase.Phrase("{a:int}% → {b:int}%");
-    pub const date = phrase.Phrase("{d:int} {m:text}");
     pub const all = plain("All highlights");
 };
 
@@ -118,8 +117,6 @@ fn champsIn(games: []const yl.Game) usize {
     return n;
 }
 
-const months = [_][]const u8{ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
-
 /// Where the tiles' games link: game.html, a lookup's id ("" the example), the zone
 pub const Links = struct { page: []const u8 = "game.html", id: []const u8 = "", tz_min: i32 = 0 };
 
@@ -132,12 +129,11 @@ const Tiles = struct {
 
     fn chip(t: Tiles, i: usize, m: u16) recordtile.Chip {
         const g = t.games[i];
-        const c = fmt.civil(yl.dayOf(g.start_ms, t.to.tz_min));
         return .{
             .me = t.l.champs[g.champ],
             .opp = if (g.opp) |o| t.l.champs[o] else null,
             .win = g.win,
-            .date = W.date.with(t.h, .{ .d = c.day, .m = months[c.month - 1] }),
+            .date = yp.dayText(t.h, yl.dayOf(g.start_ms, t.to.tz_min)),
             .href = yp.gameHref(t.h, t.to.page, t.to.id, g, m),
         };
     }

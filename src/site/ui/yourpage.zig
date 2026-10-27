@@ -7,6 +7,7 @@
 const std = @import("std");
 const tree = @import("tree.zig");
 const phrase = @import("phrase.zig");
+const fmt = @import("fmt.zig");
 const yl = @import("yourlist.zig");
 const profilesum = @import("profilesum.zig");
 const dayhead = @import("dayhead.zig");
@@ -69,6 +70,15 @@ pub fn gameHref(h: *H, page: []const u8, id: []const u8, g: yl.Game, m: u16) ?[]
     if (id.len > 0) return h.fmt("{s}#id={s}&game={d}{s}", .{ page, id, g.start_ms, at });
     const i = g.page orelse return null;
     return h.fmt("{s}#g={d}{s}", .{ page, i, at });
+}
+
+const months = [_][]const u8{ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+const date = phrase.Phrase("{d:int} {m:text}");
+
+/// "19 Oct": a yl.dayOf day
+pub fn dayText(h: *H, day: i32) tree.Text {
+    const c = fmt.civil(day);
+    return date.with(h, .{ .d = c.day, .m = months[c.month - 1] });
 }
 
 pub fn any(games: []const yl.Game, f: yl.Filter) bool {

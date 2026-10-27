@@ -1,7 +1,7 @@
 //! The Your games page's head (games.html, docs/plan/ui/your-games.md "Structure"):
 //! PlayerBar with the views' tabs and the filter row as its bands, then the chosen view.
-//! The Games view is YourList, the next island on the page, hidden in the others (CSS:
-//! the DOM order is the reading order). Island YourViews (ui-yourviews.wasm). It and
+//! The Games view is YourList and Over time YourTime, the next islands on the page, each
+//! hidden in the other views (CSS: the DOM order is the reading order). Island YourViews (ui-yourviews.wasm). It and
 //! YourList both hold the filter, each writing q/role/champ and reading the other's
 //! presses from the URL
 const std = @import("std");
@@ -11,6 +11,7 @@ const yl = @import("yourlist.zig");
 const yp = @import("yourpage.zig");
 const playerbar = @import("playerbar.zig");
 const highlights = @import("highlights.zig");
+const yourtime = @import("yourtime.zig");
 const tabs = @import("tabs.zig");
 const segmented = @import("segmented.zig");
 const rolepicker = @import("rolepicker.zig");
@@ -29,9 +30,8 @@ pub const sel = "[data-island=yourviews]";
 
 pub const View = enum { games, highlights, time };
 
-/// The views on the page: each one's tab once it is built (Over time: L3c (3)); one view
-/// shows no tabs
-pub const shipped = [_]View{ .games, .highlights };
+/// The views on the page: each one's tab once it is built; one view shows no tabs
+pub const shipped = [_]View{ .games, .highlights, .time };
 pub const every = [_]View{ .games, .highlights, .time };
 
 const W = struct {
@@ -39,7 +39,6 @@ const W = struct {
     pub const games = plain("Games");
     pub const highlights = plain("Highlights");
     pub const time = plain("Over time");
-    pub const soon = plain("Coming soon.");
     pub const none = plain("No games match");
     pub const queue = plain("Queue");
     pub const role = plain("Role");
@@ -103,11 +102,15 @@ pub const YourViews = struct {
         return h.div(.{ .class = "c-yviews", .data_island = "yourviews", .data_view = @tagName(p.tab) }, .{
             playerbar.view(h, p.l, .{ .games = kept.items, .bands = &.{ if (p.views.len > 1) p.tabBand(h) else .none, p.filters(h) } }),
             switch (p.tab) {
-                .games => highlights.top(h, p.l, kept.items, to, if (p.has(.highlights)) h.on(p, .{ .view = .highlights }) else null),
+                .games => h.div(.{ .class = "cards" }, .{
+                    highlights.top(h, p.l, kept.items, to, if (p.has(.highlights)) h.on(p, .{ .view = .highlights }) else null),
+                    if (p.has(.time)) yourtime.summary(h, kept.items, h.on(p, .{ .view = .time })) else null,
+                }),
                 .highlights => h.div(.{ .class = "view", .role = "tabpanel" }, .{
                     if (kept.items.len == 0) h.p(.{ .class = "note" }, .{W.none}) else highlights.view(h, p.l, kept.items, to),
                 }),
-                .time => h.div(.{ .class = "view", .role = "tabpanel" }, .{h.p(.{ .class = "note" }, .{W.soon})}),
+                // YourTime's island
+                .time => .none,
             },
         });
     }
@@ -158,7 +161,14 @@ pub const css =
     \\  .c-yviews { display: grid; gap: var(--sp-3); }
     \\  .c-yviews .filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-4); }
     \\  .c-yviews .note { margin: 0; color: var(--muted); font-size: var(--fs-s); }
+    \\  .c-yviews > .cards { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 1fr); gap: var(--sp-2); align-items: start; }
     \\  .c-yviews:not([data-view="games"]) ~ [data-island="your"] { display: none; }
+    \\  .c-yviews:not([data-view="time"]) ~ [data-island="yourtime"] { display: none; }
+    \\  @media (max-width: 760px) {
+    \\    .c-yviews > .cards { grid-template-columns: minmax(0, 1fr); }
+    \\    /* Two tiles a row: a third would sit alone */
+    \\    .c-yviews .c-hl[data-top] .c-rtile:nth-child(3) { display: none; }
+    \\  }
     \\}
     \\
 ;
