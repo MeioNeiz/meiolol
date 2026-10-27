@@ -651,7 +651,7 @@ pub fn finishGame(
 /// Hides the slot whose champion its allies and enemies explain best, not its own strength
 /// in the role (meta picks would make the guess "the strongest champion"). Fit: its ally
 /// and enemy points plus a quarter of its points in the draft, so a pick weak this patch
-/// with one good matchup does not win. Few pairs clear chance alone (static/daily.js), so
+/// with one good matchup does not win. Few pairs clear chance alone, so
 /// it takes the points as they are. False when no slot scores
 fn hideBestFit(arena: std.mem.Allocator, st: *const Stats, p: *Puzzle) !bool {
     const Fit = struct { team: u1, role: Role, fit: f64 };

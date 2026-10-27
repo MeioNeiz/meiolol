@@ -278,7 +278,6 @@ test "fixture games to stats, curves and the website" {
         "data/champion/darius.bin",
         "data/champion/darius-build.bin",
         "data/champion/darius-more.bin",
-        "reasons.js",
         "patch/index.html",
         "all/patch/index.html",
         "data/stats.bin",

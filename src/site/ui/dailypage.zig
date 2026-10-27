@@ -67,12 +67,21 @@ pub const Page = struct {
 
     fn answer(s: *Page, w: dd.Side) void {
         if (s.phase() != .winner) return;
+        const g = s.guess orelse return;
         s.winner = w;
-        s.marks = .{ s.p.options[s.guess.?] == dd.played(s.p), w == s.p.result.winner };
+        s.marks = .{ s.p.options[g] == dd.played(s.p), w == s.p.result.winner };
         s.dirty = true;
     }
 
     pub fn update(s: *Page, m: Msg, ev: *tree.Event) void {
+        const was = s.phase();
+        s.apply(m, ev);
+        // The panel that had focus is gone: focus the next one's question, or the result
+        const now = s.phase();
+        if (now != was) ev.after = .{ .op = .focus, .ref = if (now == .done) "res" else "q" };
+    }
+
+    fn apply(s: *Page, m: Msg, ev: *tree.Event) void {
         switch (m) {
             .choose => |i| if (s.phase() == .pick and i < s.p.options.len) {
                 s.choice = i;
@@ -88,30 +97,33 @@ pub const Page = struct {
                     s.open = .{ s.open[1], null };
                 } else if (s.open[1] == c) {
                     s.open[1] = null;
-                } else s.open = .{ c, s.open[0] };
+                } else {
+                    const keep = s.open[0];
+                    s.open = .{ c, keep };
+                }
             },
-            .hint => s.hint = true,
-            .key => return s.key(ev),
+            .hint => if (s.phase() == .pick and !s.hint) {
+                s.hint = true;
+                s.dirty = true;
+            },
+            .key => s.key(ev),
         }
-        if (m == .winner and s.phase() == .done) ev.after = .{ .op = .scroll, .ref = "top" };
     }
 
-    /// 1-6 choose and Enter locks in; then 1 and 2 answer blue and red
+    /// 1-6 choose and focus Lock in, so Enter locks in (Enter itself stays the focused
+    /// button's: on a card it chooses that card); then 1 and 2 answer blue and red
     fn key(s: *Page, ev: *tree.Event) void {
         const t = ev.text;
-        const digit: ?u8 = if (t.len == 1 and t[0] >= '1' and t[0] <= '9') t[0] - '1' else null;
+        const digit: u8 = if (t.len == 1 and t[0] >= '1' and t[0] <= '9') t[0] - '1' else return;
         switch (s.phase()) {
-            .pick => if (digit) |i| {
-                if (i >= s.p.options.len) return;
-                s.choice = i;
-            } else if (std.mem.eql(u8, t, "Enter") and s.choice != null) {
-                s.lock();
-            } else return,
+            .pick => {
+                if (digit >= s.p.options.len) return;
+                s.choice = digit;
+                ev.after = .{ .op = .focus, .ref = "lock" };
+            },
             .winner => {
-                const i = digit orelse return;
-                if (i > 1) return;
-                s.answer(if (i == 0) .blue else .red);
-                ev.after = .{ .op = .scroll, .ref = "top" };
+                if (digit > 1) return;
+                s.answer(if (digit == 0) .blue else .red);
             },
             .done => return,
         }
@@ -120,7 +132,7 @@ pub const Page = struct {
 
     /// The answers for localStorage: the option locked in, the side, the marks
     pub fn saved(s: *const Page) Saved {
-        return .{ .opt = s.guess, .side = s.winner, .marks = s.marks };
+        return .{ .opt = s.guess, .side = s.winner, .marks = s.marks, .hint = s.hint };
     }
 
     /// The answers saved for this puzzle, from localStorage's whole value
@@ -136,6 +148,7 @@ pub const Page = struct {
             s.guess = o;
             s.choice = o;
         }
+        s.hint = x.hint;
     }
 
     pub fn view(s: *Page, h: *H) N {
@@ -146,7 +159,6 @@ pub const Page = struct {
             .data_island = "daily",
             .data_bin = if (s.bin.len > 0) s.bin else null,
             .data_phase = ph,
-            .data_ref = "top",
             .on_keydown = h.on(s, .key),
         }, .{
             h.div(.{ .class = "head" }, .{
@@ -294,7 +306,7 @@ pub const Page = struct {
         return card.view(h, .{ .label = ask }, &.{h.div(.{ .class = "ask" }, .{
             h.h2(.{}, .{ask}),
             choice.view(h, .{ .label = ask }, cs),
-            h.div(.{ .class = "lock" }, .{button.view(h, .{ .v = .primary, .disabled = s.choice == null, .on = h.on(s, .lock) }, .{W.lock})}),
+            h.div(.{ .class = "lock" }, .{button.view(h, .{ .v = .primary, .disabled = s.choice == null, .on = h.on(s, .lock), .ref = "lock" }, .{W.lock})}),
             if (p.ranged) |r| h.div(.{ .class = "hints" }, .{
                 h.span(.{ .class = "lab" }, .{W.hints}),
                 if (s.hint)
@@ -315,11 +327,11 @@ pub const Page = struct {
             };
             for (side.*, 0..) |*c, r| {
                 const hid = t == @backingInt(p.hidden_side) and r == @backingInt(p.hidden_role);
-                c.* = if (hid) s.shownAnswer().? else s.champOf(p.seats[t][r].champ);
+                c.* = if (hid) s.shownAnswer() orelse .{ .name = "?", .src = "" } else s.champOf(p.seats[t][r].champ);
             }
         }
         return card.view(h, .{ .label = W.who_won }, &.{h.div(.{ .class = "ask" }, .{
-            h.h2(.{}, .{W.who_won}),
+            h.h2(.{ .tabindex = @as(i8, -1), .data_ref = "q" }, .{W.who_won}),
             choice.view(h, .{ .label = W.who_won }, &.{
                 .{ .label = W.blue, .side = .us, .icons = sides[0], .on = h.on(s, .{ .winner = .blue }) },
                 .{ .label = W.red, .side = .them, .icons = sides[1], .on = h.on(s, .{ .winner = .red }) },
@@ -329,10 +341,11 @@ pub const Page = struct {
 
     fn result(s: *Page, h: *H) N {
         const r = s.p.result;
-        const m = s.marks.?;
-        return h.div(.{ .class = "res" }, .{
-            badge.view(h, if (m[0]) .us else .them, .{ if (m[0]) "✓ " else "✕ ", W.pick }),
-            badge.view(h, if (m[1]) .us else .them, .{ if (m[1]) "✓ " else "✕ ", W.winner }),
+        const m = s.marks orelse return .none;
+        return h.div(.{ .class = "res", .tabindex = @as(i8, -1), .data_ref = "res" }, .{
+            // A hint costs the clean tick
+            badge.view(h, if (!m[0]) .nerf else if (s.hint) .neutral else .buff, .{ if (m[0]) "✓ " else "✕ ", if (s.hint) W.pick_hint else W.pick }),
+            badge.view(h, if (m[1]) .buff else .nerf, .{ if (m[1]) "✓ " else "✕ ", W.winner }),
             h.span(.{ .class = "gl" }, .{
                 h.b(.{ .data_side = sideOf(r.winner) }, .{W.won.with(h, .{ .side = sideWord(r.winner).s, .t = r.secs })}),
                 pair(h, W.kills, r.kills[0], r.kills[1]),
@@ -370,7 +383,7 @@ pub const Page = struct {
                 .win = c.win,
                 .vs = if (c.champ == x.champ) null else if (played) |pc| c.win - pc.win else null,
                 .reasons = s.chips(h, c, rl),
-                .gap = c.rank > last + 1,
+                .gap = @as(u32, c.rank) > @as(u32, last) + 1,
                 .open = detail != null and (s.open[0] == c.champ or s.open[1] == c.champ),
                 .detail = detail,
                 .label = if (detail != null) W.why.with(h, .{ .n = nm }) else null,
@@ -381,7 +394,8 @@ pub const Page = struct {
         }
         const pick = pickOf(p, t, x.champ);
         return card.view(h, .{ .label = W.seat }, &.{
-            h.div(.{ .class = "sh" }, .{
+            // Kept across seats, so a screen reader hears which seat the panel now shows
+            h.div(.{ .class = "sh", .aria_live = "polite" }, .{
                 champ.view(h, s.champOf(x.champ), .{ .px = .@"40", .named = false }),
                 h.div(.{}, .{
                     h.b(.{}, .{s.champOf(x.champ).name}),
@@ -413,10 +427,11 @@ pub const Page = struct {
         }
         return h.p(.{ .class = "yours" }, .{
             champ.view(h, s.champOf(c), .{ .px = .@"20", .named = false }),
-            if (mine != null and played != null)
-                W.yours_at.with(h, .{ .n = nm, .w = mine.?, .d = mine.? - played.? })
-            else
-                W.yours.with(h, .{ .n = nm }),
+            if (mine != null and played != null) W.yours_at.with(h, .{
+                .n = nm,
+                .w = mine orelse 0,
+                .d = (mine orelse 0) - (played orelse 0),
+            }) else W.yours.with(h, .{ .n = nm }),
         });
     }
 
@@ -530,7 +545,7 @@ fn pair(h: *H, label: tree.Text, b: anytype, r: anytype) N {
         h.span(.{ .class = "k" }, .{label}),
         " ",
         h.b(.{ .data_side = draftboard.Side.us }, .{phrase.num(h, if (@TypeOf(b) == u32) .kilo else .int, b)}),
-        " – ",
+        " v ",
         h.b(.{ .data_side = draftboard.Side.them }, .{phrase.num(h, if (@TypeOf(r) == u32) .kilo else .int, r)}),
     });
 }
@@ -552,12 +567,13 @@ fn dmgWord(d: ?dd.Dmg) tree.Text {
 }
 
 /// One puzzle's answers in localStorage "meiolol.daily.v1": an object keyed by n, each
-/// entry flat, {"opt":2,"side":1,"marks":"10","on":"2026-10-27"}; done = marks set (Home
+/// entry flat, {"opt":2,"side":1,"hint":1,"marks":"10","on":"2026-10-27"}; done = marks set (Home
 /// reads them). daily.js's entries name the champion ("pick") instead of the option
 pub const Saved = struct {
     opt: ?u8 = null,
     side: ?dd.Side = null,
     marks: ?[2]bool = null,
+    hint: bool = false,
 };
 
 /// Puzzle `n`'s entry in the stored object, braces included
@@ -583,10 +599,15 @@ pub fn read(json: []const u8, n: u32) ?Saved {
     var s: Saved = .{};
     if (field(e, "opt")) |v| s.opt = std.fmt.parseInt(u8, v, 10) catch null;
     if (field(e, "side")) |v| s.side = if (std.mem.eql(u8, v, "0")) .blue else if (std.mem.eql(u8, v, "1")) .red else null;
-    if (field(e, "marks")) |v| if (v.len == 4 and v[0] == '"') {
+    if (field(e, "marks")) |v| if (v.len == 4 and v[0] == '"' and v[3] == '"' and bit(v[1]) and bit(v[2])) {
         s.marks = .{ v[1] == '1', v[2] == '1' };
     };
+    if (field(e, "hint")) |v| s.hint = std.mem.eql(u8, v, "1");
     return s;
+}
+
+fn bit(c: u8) bool {
+    return c == '0' or c == '1';
 }
 
 /// The stored object with puzzle `n`'s entry set to `s`, finished on `on` (the viewer's
@@ -612,6 +633,10 @@ pub fn write(a: std.mem.Allocator, json: []const u8, n: u32, s: Saved, on: []con
     }
     if (s.side) |x| {
         try w.writer.print("{s}\"side\":{d}", .{ sep, @backingInt(x) });
+        sep = ",";
+    }
+    if (s.hint) {
+        try w.writer.print("{s}\"hint\":1", .{sep});
         sep = ",";
     }
     if (s.marks) |m| try w.writer.print("{s}\"marks\":\"{d}{d}\",\"on\":\"{s}\"", .{ sep, @intFromBool(m[0]), @intFromBool(m[1]), on });
@@ -642,6 +667,7 @@ const W = struct {
     const melee = plain("Melee");
     const who_won = plain("Who won?");
     const pick = plain("Pick");
+    const pick_hint = plain("Pick, with a hint");
     const winner = plain("Winner");
     const won = Phrase("{side:text} won · {t:time}");
     const kills = plain("kills");
@@ -685,6 +711,8 @@ pub const css =
     \\  .c-daily .bd { display: grid; gap: var(--sp-3); }
     \\  .c-daily .ask { display: grid; gap: var(--sp-3); }
     \\  .c-daily .ask h2 { margin: 0; font-size: var(--fs-xl); }
+    \\  .c-daily :is(.ask h2, .res) { scroll-margin: calc(var(--header) + var(--sp-3)) 0 var(--sp-3); }
+    \\  .c-daily [tabindex="-1"]:focus { outline: none; }
     \\  .c-daily .cols > .c-card:has(.ask) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--panel)); }
     \\  .c-daily .lock { display: grid; }
     \\  .c-daily .hints { display: flex; align-items: center; gap: var(--sp-2); padding-top: var(--sp-2); border-top: 1px solid var(--line); }
@@ -757,7 +785,7 @@ fn shown(h: *H, p: *const dd.Puzzle, c: ?u8, locked: ?u8, w: ?dd.Side) ?*Page {
 }
 
 /// The sample with its pro draft, six options and a range hint
-const pro = blk: {
+pub const pro = blk: {
     var p = dd.sample;
     p.turns = &dd.pro_turns;
     p.options = &.{ 5, 11, 10, 9, 7, 8 };
@@ -779,9 +807,13 @@ test "choose, lock in, then the winner: marks, the saved answers, the seat panel
     s.update(.key, &ev);
     try testing.expect(ev.handled);
     try testing.expectEqual(@as(?u8, 1), s.choice);
+    try testing.expectEqualStrings("lock", ev.after.?.ref);
     s.update(.{ .choose = 0 }, &ev);
     ev = .{ .kind = .keydown, .text = "Enter" };
     s.update(.key, &ev);
+    try testing.expect(!ev.handled);
+    try testing.expectEqual(Phase.pick, s.phase());
+    s.update(.lock, &ev);
     try testing.expectEqual(Phase.winner, s.phase());
     try testing.expect(s.dirty);
     s.update(.{ .choose = 3 }, &ev);

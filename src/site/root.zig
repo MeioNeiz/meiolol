@@ -361,8 +361,6 @@ pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.searc
 /// Front-end files at the site root; `Options.static_dir` serves them from disk instead
 pub const shared_assets = [_]File{
     .{ .path = "favicon.svg", .data = @embedFile("static/favicon.svg") },
-    .{ .path = "daily.js", .data = @embedFile("static/daily.js") },
-    .{ .path = "reasons.js", .data = @embedFile("static/reasons.js") },
     .{ .path = "your.js", .data = @embedFile("static/your.js") },
     .{ .path = "review.js", .data = @embedFile("static/review.js") },
     .{ .path = "table.js", .data = @embedFile("static/table.js") },

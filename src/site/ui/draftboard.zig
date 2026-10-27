@@ -100,8 +100,8 @@ pub const Board = struct {
 
 pub const Side = enum { us, them };
 
+/// The app's board; the full variant is fullOn's (kept apart so ui-app.wasm doesn't carry it)
 pub fn view(h: *H, b: Board) N {
-    if (b.v == .full) return full(h, b, &.{});
     var rows = h.list();
     for (b.lanes) |l| rows.add(h.div(.{ .key = @as(u32, @backingInt(l.role)), .class = "lane" }, .{
         seat(h, l.us, .us),
@@ -174,22 +174,18 @@ fn bans(h: *H, b: Board) ?N {
     });
 }
 
-/// The full variant with its seats as buttons: `on[i]` is lane i's us and them click
-/// (kept off Seat, which the app encodes and a handler can't be)
+/// The full variant (Daily, Learn), seats as buttons where `on[i]` has lane i's us and
+/// them click (kept off Seat, which the app encodes and a handler can't be)
 pub fn fullOn(h: *H, b: Board, on: []const [2]?tree.Handler) N {
-    return full(h, b, on);
-}
-
-fn full(h: *H, b: Board, on: []const [2]?tree.Handler) N {
     var grown = false;
     for (b.lanes) |l| grown = grown or l.us.game != null or l.them.game != null;
     var rows = h.list();
     for (b.lanes, 0..) |l, i| {
         const ons: [2]?tree.Handler = if (i < on.len) on[i] else .{ null, null };
         rows.add(h.div(.{ .key = @as(u32, @backingInt(l.role)), .class = "lane", .data_ask = l.ask }, .{
-            fullSeat(h, l.us, .us, ons[0]),
+            fullSeat(h, l.us, .us, ons[0], b.heads[0], l.role),
             mid(h, l, b.heads),
-            fullSeat(h, l.them, .them, ons[1]),
+            fullSeat(h, l.them, .them, ons[1], b.heads[1], l.role),
         }));
     }
     return h.div(.{ .class = "c-draft", .data_v = Variant.full }, .{
@@ -214,11 +210,18 @@ fn statHead(h: *H, side: Side) N {
     });
 }
 
-fn fullSeat(h: *H, s: Seat, side: Side, on: ?tree.Handler) N {
+fn fullSeat(h: *H, s: Seat, side: Side, on: ?tree.Handler, head: tree.Text, rl: role.Role) N {
     // A hidden seat with its champion set has been revealed
     const asked = s.hidden and s.champ == null;
     const shown = if (asked) s.preview else s.champ;
-    const kids = .{
+    const nm: []const u8 = if (shown) |c| c.name else "?";
+    return h.div(.{
+        .class = "seat",
+        .data_side = side,
+        .data_hidden = asked,
+        .data_preview = asked and s.preview != null,
+        .data_sel = s.sel,
+    }, .{
         h.span(.{ .class = "ic" }, .{
             champ.view(h, shown, .{
                 .px = .@"48",
@@ -232,30 +235,23 @@ fn fullSeat(h: *H, s: Seat, side: Side, on: ?tree.Handler) N {
             if (s.pick) |n| h.span(.{ .class = "pn", .role = "img", .aria_label = words.pick.with(h, .{ .n = n }) }, .{n}) else null,
         }),
         h.span(.{ .class = "who" }, .{
-            h.b(.{}, .{if (shown) |c| c.name else "?"}),
+            // Only the name is the button (a short label); its ::after covers the seat
+            if (on) |o| h.button(.{
+                .class = "nb",
+                .type = "button",
+                .aria_pressed = s.sel,
+                .aria_label = seatLabel(h, s, head, rl, if (shown) |c| c.name else if (asked) words.hidden.s else words.empty.s),
+                .on_click = o,
+            }, .{nm}) else h.b(.{}, .{nm}),
             if (s.sub.s.len > 0) h.span(.{ .class = "line" }, .{s.sub}) else null,
         }),
         if (s.game) |g| gameLine(h, g, side) else null,
-    };
-    const attrs = .{
-        .class = "seat",
-        .data_side = side,
-        .data_hidden = asked,
-        .data_preview = asked and s.preview != null,
-        .data_sel = s.sel,
-    };
-    if (on == null) return h.div(attrs, kids);
-    return h.button(.{
-        .class = "seat",
-        .type = "button",
-        .data_side = side,
-        .data_hidden = asked,
-        .data_preview = asked and s.preview != null,
-        .aria_pressed = s.sel,
-        // The game line's cells would make a long name
-        .aria_label = if (shown) |c| tree.Text{ .s = c.name } else words.hidden,
-        .on_click = on,
-    }, kids);
+    });
+}
+
+fn seatLabel(h: *H, s: Seat, head: tree.Text, rl: role.Role, who: []const u8) tree.Text {
+    if (s.pick) |n| return words.seat_pick.with(h, .{ .side = head.s, .r = rl.label().s, .n = who, .p = n });
+    return words.seat.with(h, .{ .side = head.s, .r = rl.label().s, .n = who });
 }
 
 fn gameLine(h: *H, g: Game, side: Side) N {
@@ -349,6 +345,8 @@ const words = struct {
     const won = plain("Won");
     const hidden = plain("Hidden pick");
     const pick = phrase.Phrase("Pick {n:int}");
+    const seat = phrase.Phrase("{side:text} {r:text}, {n:text}");
+    const seat_pick = phrase.Phrase("{side:text} {r:text}, {n:text}, pick {p:int}");
     const nth = phrase.Phrase("{n:int}{s:text}");
     const lane = phrase.Phrase("{s:text} {w:rate} from the lane");
     const even = plain("Even");
@@ -383,7 +381,7 @@ pub const css =
     \\    padding: 3px; margin: -3px; }
     \\  .c-draft .who { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
     \\  .c-draft .seat[data-side="them"] .who { align-items: flex-end; text-align: right; }
-    \\  .c-draft .who > b { font-weight: var(--w-m); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    \\  .c-draft .who > b { max-width: 100%; font-weight: var(--w-m); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     \\  .c-draft .line { font-size: var(--fs-xs); color: var(--muted); }
     \\  .c-draft .fact { font-size: var(--fs-xs); color: var(--t2); max-width: 100%; overflow: hidden;
     \\    text-overflow: ellipsis; white-space: nowrap; }
@@ -406,10 +404,13 @@ pub const css =
     \\    column-gap: var(--sp-3); padding: 6px var(--sp-2); border-radius: var(--r-m); flex-direction: initial; }
     \\  .c-draft[data-v="full"] .seat[data-side="them"] { grid-template-columns: auto minmax(0, 1fr) 48px;
     \\    grid-template-areas: "st who ic"; text-align: right; }
-    \\  .c-draft[data-v="full"] button.seat { cursor: pointer; }
-    \\  .c-draft[data-v="full"] button.seat:hover { background: var(--panel-2); }
-    \\  .c-draft[data-v="full"] button.seat:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-    \\  .c-draft[data-v="full"] .seat:is([aria-pressed="true"], [data-sel]) { background: var(--accent-bg); box-shadow: inset 0 0 0 1px var(--focus); }
+    \\  .c-draft[data-v="full"] .seat { position: relative; }
+    \\  .c-draft .nb { all: unset; display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    \\    font-weight: var(--w-b); cursor: pointer; }
+    \\  .c-draft .nb::after { content: ""; position: absolute; inset: 0; border-radius: var(--r-m); }
+    \\  .c-draft[data-v="full"] .seat:has(.nb:hover) { background: var(--panel-2); }
+    \\  .c-draft[data-v="full"] .seat:has(.nb:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
+    \\  .c-draft[data-v="full"] .seat[data-sel] { background: var(--accent-bg); box-shadow: inset 0 0 0 1px var(--focus); }
     \\  .c-draft .ic { grid-area: ic; position: relative; line-height: 0; }
     \\  .c-draft[data-v="full"] .who { grid-area: who; }
     \\  .c-draft[data-v="full"] .who > b { font-weight: var(--w-b); }
@@ -419,13 +420,13 @@ pub const css =
     \\    font-variant-numeric: tabular-nums; }
     \\  .c-draft .seat[data-side="them"] .pn { left: auto; right: -4px; box-shadow: inset 0 0 0 1px var(--them); }
     \\  .c-draft .seat[data-hidden] .c-champ { box-shadow: inset 0 0 0 1.5px var(--accent); animation: c-draft-pulse 1.6s var(--ease) infinite; }
-    \\  .c-draft .seat[data-hidden] .who > b, .c-draft .seat[data-preview] .who > b { color: var(--accent); }
+    \\  .c-draft .seat:is([data-hidden], [data-preview]) .who > :is(b, .nb) { color: var(--accent); }
     \\  .c-draft .seat[data-preview] .c-champ { box-shadow: none; outline: 2px dashed var(--accent); outline-offset: 2px; opacity: 0.8; }
     \\  .c-draft .st { grid-area: st; display: grid; grid-template-columns: 64px 32px 40px 48px 36px; gap: var(--sp-2);
     \\    align-items: center; font-size: var(--fs-s); font-variant-numeric: tabular-nums; white-space: nowrap; }
     \\  .c-draft .st[data-side="them"] { direction: rtl; }
     \\  .c-draft .st[data-side="them"] > * { direction: ltr; }
-    \\  .c-draft .lane.hd .st { font-size: var(--fs-xs); color: var(--faint); justify-self: end; padding: 0 var(--sp-2); }
+    \\  .c-draft .lane.hd .st { grid-area: auto; font-size: var(--fs-xs); color: var(--faint); justify-self: end; padding: 0 var(--sp-2); }
     \\  .c-draft .lane.hd .st[data-side="them"] { justify-self: start; }
     \\  .c-draft .dm > span { display: block; position: relative; height: 4px; border-radius: 2px; background: var(--bar-track);
     \\    overflow: hidden; }
@@ -463,7 +464,15 @@ pub const css =
     \\  .c-draft[data-v="full"] .bans { padding-top: var(--sp-2); }
     \\  @keyframes c-draft-pulse { 50% { box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 4px var(--accent-bg); } }
     \\  @media (prefers-reduced-motion: reduce) { .c-draft .seat[data-hidden] .c-champ { animation: none; } }
-    \\  @container (max-width: 720px) {
+    \\  @container (max-width: 1000px) {
+    \\    .c-draft[data-v="full"] .seat:has(> .st) { grid-template-areas: "ic who" "ic st"; grid-template-columns: 48px minmax(0, 1fr);
+    \\      row-gap: 2px; }
+    \\    .c-draft[data-v="full"] .seat[data-side="them"]:has(> .st) { grid-template-areas: "who ic" "st ic"; grid-template-columns: minmax(0, 1fr) 48px; }
+    \\    .c-draft .st { gap: var(--sp-1); }
+    \\    .c-draft .seat > .st { justify-self: end; }
+    \\    .c-draft .seat[data-side="them"] > .st { justify-self: start; }
+    \\  }
+    \\  @container (max-width: 760px) {
     \\    .c-draft[data-v="full"] .seat { grid-template-areas: "ic who" "ic st"; grid-template-columns: 40px minmax(0, 1fr);
     \\      column-gap: var(--sp-2); row-gap: 2px; padding: 6px 2px; }
     \\    .c-draft[data-v="full"] .seat[data-side="them"] { grid-template-areas: "who ic" "st ic"; grid-template-columns: minmax(0, 1fr) 40px; }
@@ -569,7 +578,7 @@ pub fn gallery(g: *Gallery) void {
         .{ .role = .bot },
         .{ .role = .support },
     } }));
-    g.addFill("full: hidden pick asked", view(h, daily_before));
+    g.addFill("full: hidden pick asked", fullOn(h, daily_before, &.{}));
     var chosen = daily_before;
     const lanes = h.mem.dupe(Lane, daily_before.lanes) catch {
         h.oom = true;
@@ -577,8 +586,14 @@ pub fn gallery(g: *Gallery) void {
     };
     lanes[0].them.preview = demo("Ambessa", "Ambessa");
     chosen.lanes = lanes;
-    g.addFill("full: an answer chosen", view(h, chosen));
-    g.addFill("full: after the reveal, a seat selected", view(h, revealed(h)));
+    g.addFill("full: an answer chosen", fullOn(h, chosen, &.{}));
+    g.addFill("full: after the reveal, a seat selected", fullOn(h, revealed(h), &.{}));
+    const on = h.mem.alloc([2]?tree.Handler, 5) catch {
+        h.oom = true;
+        return;
+    };
+    for (on, 0..) |*o, i| o.* = .{ h.on(&gallery_tap, .{ .seat = @intCast(i) }), h.on(&gallery_tap, .{ .seat = @intCast(5 + i) }) };
+    g.addFill("full: after the reveal, seats as buttons", fullOn(h, revealed(h), on));
 }
 
 test "full variant: pick numbers, the hidden seat, seats as buttons only with a handler" {
@@ -589,7 +604,7 @@ test "full variant: pick numbers, the hidden seat, seats as buttons only with a 
     var t: tree.Tree = .{};
     var h: H = .init(a, &t);
     var out: std.Io.Writer.Allocating = .init(a);
-    try html.write(&t, view(&h, daily_before), &out.writer);
+    try html.write(&t, fullOn(&h, daily_before, &.{}), &out.writer);
     var s = out.written();
     try std.testing.expect(std.mem.find(u8, s, "data-v=\"full\"") != null);
     try std.testing.expectEqual(1, std.mem.count(u8, s, "data-hidden"));
@@ -598,7 +613,7 @@ test "full variant: pick numbers, the hidden seat, seats as buttons only with a 
     try std.testing.expect(std.mem.find(u8, s, "<button") == null);
     try std.testing.expect(std.mem.find(u8, s, "class=\"lane hd\"") == null);
     out = .init(a);
-    try html.write(&t, view(&h, revealed(&h)), &out.writer);
+    try html.write(&t, fullOn(&h, revealed(&h), &.{}), &out.writer);
     s = out.written();
     try std.testing.expect(std.mem.find(u8, s, "data-hidden") == null);
     try std.testing.expect(std.mem.find(u8, s, "Jayce") != null);
@@ -608,6 +623,8 @@ test "full variant: pick numbers, the hidden seat, seats as buttons only with a 
     try std.testing.expectEqual(0, share(std.math.nan(f32)));
     try std.testing.expectEqual(100, share(3));
 }
+
+var gallery_tap: Tap = .{};
 
 const Tap = struct {
     pub const Msg = union(enum) { seat: u8 };
@@ -630,19 +647,27 @@ test "full variant by hand: buttons from a short `on`, lane middles, a red win, 
         .mix = .{ .{ .phys = 0.5, .magic = 0.5 }, .{ .phys = 1.4, .magic = std.math.nan(f32), .unknown = 0.2 } },
         .lanes = &.{
             .{ .role = .top, .win = 47.9, .us = .{ .champ = demo("Gnar", "Gnar"), .sel = true }, .them = .{ .hidden = true, .preview = demo("Jax", "Jax") } },
-            .{ .role = .jungle, .win = 130, .us = .{ .game = game }, .them = .{} },
+            .{ .role = .jungle, .win = 130, .us = .{ .game = game }, .them = .{ .hidden = true, .pick = 10 } },
             .{ .role = .mid, .win = std.math.nan(f32) },
             .{ .role = .bot },
             .{ .role = .support, .win = 50.2 },
         },
     };
     var out: std.Io.Writer.Allocating = .init(a);
-    try html.write(&t, fullOn(&h, b, &.{.{ h.on(&tap, .{ .seat = 0 }), null }}), &out.writer);
+    const on = [_][2]?tree.Handler{
+        .{ h.on(&tap, .{ .seat = 0 }), h.on(&tap, .{ .seat = 5 }) },
+        .{ h.on(&tap, .{ .seat = 1 }), h.on(&tap, .{ .seat = 6 }) },
+    };
+    try html.write(&t, fullOn(&h, b, &on), &out.writer);
     const s = out.written();
-    try std.testing.expectEqual(1, std.mem.count(u8, s, "<button"));
+    try std.testing.expectEqual(4, std.mem.count(u8, s, "<button"));
+    try std.testing.expect(std.mem.find(u8, s, "aria-label=\"Red Top, Jax\"") != null);
+    try std.testing.expect(std.mem.find(u8, s, "aria-label=\"Blue Jungle, Empty seat\"") != null);
+    try std.testing.expect(std.mem.find(u8, s, "aria-label=\"Red Jungle, Hidden pick, pick 10\"") != null);
     try std.testing.expectEqual(1, std.mem.count(u8, s, "aria-pressed=\"true\""));
     try std.testing.expectEqual(1, std.mem.count(u8, s, "data-preview"));
     try std.testing.expect(std.mem.find(u8, s, "Jax") != null);
+    try std.testing.expect(std.mem.find(u8, s, "aria-label=\"Blue Top, Gnar\"") != null);
     try std.testing.expect(std.mem.find(u8, s, "Red 52.1% from the lane") != null);
     try std.testing.expect(std.mem.find(u8, s, "aria-label=\"Blue 100") != null);
     try std.testing.expectEqual(1, std.mem.count(u8, s, "aria-label=\"Even\""));
@@ -654,7 +679,7 @@ test "full variant by hand: buttons from a short `on`, lane middles, a red win, 
         try std.testing.expectEqualStrings(want, ordinal(n));
     }
     out = .init(a);
-    try html.write(&t, view(&h, .{ .v = .full, .lanes = &.{} }), &out.writer);
+    try html.write(&t, fullOn(&h, .{ .v = .full, .lanes = &.{} }, &.{}), &out.writer);
     try std.testing.expect(std.mem.find(u8, out.written(), "class=\"lanes\"") != null);
 }
 

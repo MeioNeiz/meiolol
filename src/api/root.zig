@@ -412,8 +412,9 @@ pub const DailyOut = struct {
     sides: [2]i64,
 };
 
-/// Daily Draft answer counts. The page sends a puzzle's once per browser when finished
-/// (daily.js); a repeat or a script can add more, which nginx's rate limit bounds
+/// Daily Draft answer counts, sent once per browser when a puzzle is finished; a repeat or
+/// a script can add more, which nginx's rate limit bounds. Paused: the island page
+/// (ui.dailypage) doesn't send or show them yet
 fn daily(arena: Allocator, db: store.Db, query: []const u8, post: bool) !Reply {
     const n = try intParam(arena, query, "n", max_daily) orelse
         return errorReply(arena, .bad_request, "error", "expected ?n=puzzle");

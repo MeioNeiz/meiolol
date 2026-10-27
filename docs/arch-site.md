@@ -142,7 +142,7 @@ each upload.
 Known gaps: stats.bin is dense (~12 MB raw; brotli helps while sparse), no rank
 brackets (statsfile has none), no per-patch history.
 
-## Daily Draft (src/daily.zig, src/site/daily.zig, static/daily.js)
+## Daily Draft (src/daily.zig, src/site/daily.zig, src/site/ui/dailypage.zig)
 
 One real ranked solo game a day, same for everyone: one slot hidden behind four options
 (the played champion plus three from the 20 core.recommend rates highest in that draft),
@@ -174,9 +174,10 @@ detected reason that clears chance, else its usual gold at 14 against the enemy)
   data, site/dailydata.zig). daily.html (site/daily.zig, per request) is the island
   (ui.dailypage, ui-daily.wasm) with the newest puzzle up to today (UTC) in its data-bin:
   pick, Lock in, who won, then the board grown, the seat panel and On paper. Answers in
-  localStorage meiolol.daily.v1 (object by n, {opt, side, marks, on}; Home reads marks).
-  Not yet in the island: the viewer's local date, ?n= archive, streak, share, crowd
-  counts (daily.js had them; it and reasons.js are no longer linked)
+  localStorage meiolol.daily.v1 (object by n, {opt, side, hint, marks, on}; Home reads
+  marks). The Range hint costs the clean tick ("Pick, with a hint").
+  Not yet in the island: the viewer's local date, ?n= archive, streak, share. Crowd
+  counts (/api/daily) are paused: nothing sends or shows them until the island does
 
 ## Your games service (src/api, src/site/your.zig, static/your.js)
 

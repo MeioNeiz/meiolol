@@ -121,6 +121,8 @@ best minute, lane curves); review.js turns it into words and SVG. S here means t
 
 ### daily.js (650): Daily Draft
 
+Deleted: the ui.dailypage island (ui-daily.wasm) replaced it.
+
 One puzzle a day, all reveal content fixed per puzzle: daily.zig can write
 daily/<n>.html (1 page a day, ~15 KB; 14 so far).
 - [G] :1-164 (118) constants, getJson, local-date puzzle choice, ?n= archive, load
@@ -138,6 +140,8 @@ daily/<n>.html (1 page a day, ~15 KB; 14 so far).
 - [S] :45-58, :96-114 (34) helpers rankText, longDate, shortReason, glyphs
 
 ### reasons.js (27)
+
+Deleted with daily.js.
 
 - [S] all: which model reasons public pages may show. Moves to the Zig that writes
   Daily and Learn; wasm.zig suggest can apply it for practice pool picks

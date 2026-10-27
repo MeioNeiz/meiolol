@@ -50,9 +50,9 @@ fn today() [10]u8 {
     defer d.release();
     var out: [10]u8 = undefined;
     _ = std.fmt.bufPrint(&out, "{d:0>4}-{d:0>2}-{d:0>2}", .{
-        @as(u32, @intCast(@max(d.call("getFullYear", .{}, i32), 0))),
+        @as(u32, @intCast(std.math.clamp(d.call("getFullYear", .{}, i32), 0, 9999))),
         @as(u32, @intCast(@max(d.call("getMonth", .{}, i32) + 1, 0))),
         @as(u32, @intCast(@max(d.call("getDate", .{}, i32), 0))),
-    }) catch {};
+    }) catch return "0000-00-00".*;
     return out;
 }

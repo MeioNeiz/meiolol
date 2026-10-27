@@ -138,6 +138,7 @@ test {
     _ = @import("island_test.zig");
     _ = @import("tiers_test.zig");
     _ = @import("patchpage_test.zig");
+    _ = @import("dailypage_test.zig");
     _ = @import("poolpage_test.zig");
     _ = @import("table_test.zig");
     _ = @import("champsearch_test.zig");
