@@ -11,8 +11,8 @@ pushes from the box.
   (`MEIOLOL_BACKUPS` in host.env). Kept data grows ~1.6 GB/day at the full rate; raw
   JSON leaves through the raw archive, and under 10 GB free the valve drops unarchived
   raw (Raw archive). More storage: docs/plan/ops.md "Storage and hosts"
-- Off-host: backups mirrored to the Mac and the gpu-box (Backups); raw on the gpu-box's
-  archive partition
+- Off-host: backups mirrored to Megatron outside C01's disk image, the Mac and the
+  gpu-box (Backups); raw on the gpu-box's archive partition
 - The gpu-box keeps its pre-cloud data and backup in /mnt/d/meiolol-backups
   (restore-tested) as an old restore point. Its disks: docs/compute.md
 
@@ -75,7 +75,13 @@ under the write lock they starve the crawler on a slow host.
   install`; key ~/.ssh/meiolol_backup, alias meiolol-backup, forced command
   deploy/backup-serve.sh on the box). Both 700: tables hold real PUUIDs. Never in git.
   The partition's root is root's: once, on the gpu-box, `sudo install -d -o jmu -g jmu
-  -m 700 /mnt/wsl/archive/meiolol-backups` (until then each hourly run fails at mkdir)
+  -m 700 /mnt/wsl/archive/meiolol-backups` (until then each hourly run fails at mkdir).
+  Megatron, from C01 itself: /srv/megatron-backups/meiolol/backups (timer
+  meiolol-megatron-mirror, hourly, enabled by `deploy/box.sh backup start`; HOST local,
+  no ssh; log data/backup-mirror.log). Its own fstab mount of the share with `nobrl`:
+  on /srv/megatron SQLite's locks fail ("database is locked"), and the disk image's
+  mount stays as it is. Same NAS as the live data: it covers a damaged image or a
+  mistake, the Mac covers losing the house
 - A mirror fetches each file the box lists that is new or changed there (a scrub),
   checks size and SHA-256 and acks it (backups/acks/<mirror>.tsv on the box: file, sum,
   time). After each backup the box deletes files some mirror acked at their current sum,

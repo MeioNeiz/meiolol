@@ -63,8 +63,8 @@ sync() {
         _ "$target" "$ROOT" "$tree" "$cpu"
     # check-deploy.sh (zig build ci) reads both lists: each committed, every unit that runs
     # in ~/ml/meiolol listed, every script a unit or listed script runs listed
-    local scripts="web-loop.sh health.sh health-loop.sh backup-loop.sh backup-serve.sh render-swap.sh archive-serve.sh cache-version.sh cache-warm.sh box-lib.sh" s
-    local units="meiolol-crawl.service meiolol-web.service meiolol-render@.service meiolol-health.service meiolol-backup.service meiolol-cache-version.service meiolol-cache-version.path meiolol-cache-warm.service" u
+    local scripts="web-loop.sh health.sh health-loop.sh backup-loop.sh backup-serve.sh backup-mirror.sh render-swap.sh archive-serve.sh cache-version.sh cache-warm.sh box-lib.sh" s
+    local units="meiolol-crawl.service meiolol-web.service meiolol-render@.service meiolol-health.service meiolol-backup.service meiolol-cache-version.service meiolol-cache-version.path meiolol-cache-warm.service meiolol-megatron-mirror.service meiolol-megatron-mirror.timer" u
     local files=("$tree/zig-out/box/bin/meiolol")
     local on_box=("$DIR/bin/meiolol") want=() i
     local have stamp
@@ -84,7 +84,7 @@ sync() {
         scp -q "${files[@]}" "$HOST:$DIR/bin/new/"
         ssh "$HOST" "cd $DIR && mv bin/new/meiolol bin/ \
             && for s in $scripts; do mv bin/new/\$s bin/\$s; done \
-            && mv bin/new/*.service bin/new/*.path \$HOME/.config/systemd/user/ \
+            && mv bin/new/*.service bin/new/*.path bin/new/*.timer \$HOME/.config/systemd/user/ \
             && systemctl --user daemon-reload \
             && echo '$stamp' >> DEPLOYED"
         echo "deployed $rev"
@@ -467,6 +467,9 @@ SQL
             start)
                 sync
                 ssh "$HOST" "systemctl --user enable -q $name && systemctl --user restart $name"
+                # Megatron's copy of the backups: skipped where /srv/megatron-backups isn't mounted
+                [[ $1 == backup ]] && ssh "$HOST" \
+                    "systemctl --user enable -q --now meiolol-megatron-mirror.timer"
                 echo "started $name on $HOST"
                 ;;
             stop) ssh "$HOST" "systemctl --user disable -q --now $name" ;;

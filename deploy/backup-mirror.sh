@@ -1,21 +1,26 @@
 #!/usr/bin/env bash
 # A mirror of the box's backups (docs/data-safety.md "Backups"): the Mac (mac-watch.sh,
-# daily) and the gpu-box (systemd user timer meiolol-backup-mirror, hourly). Fetches every
-# file the box lists that is new here or changed there (a scrub), checks size and
+# daily), the gpu-box (systemd user timer meiolol-backup-mirror, hourly) and Megatron from
+# the box itself (meiolol-megatron-mirror, hourly, outside C01's disk image). Fetches
+# every file the box lists that is new here or changed there (a scrub), checks size and
 # SHA-256, then acks it so the box may drop its copy. Then `meiolol backup --mirror`
-# scrubs players the box has forgotten since and rotates state and mastery files (kept
-# as history: the gpu-box 730 days, the privacy policy's cap, the Mac 32). Never
+# scrubs players the box has forgotten since and rotates state and mastery files (kept as
+# history: the gpu-box and Megatron 730 days, the privacy policy's cap, the Mac 32). Never
 # deletes a segment: the box keeps only its newest, so this copy may be the only one.
 #   backup-mirror.sh NAME DIR MEIOLOL HOST [REMOTE]
-# NAME: mac or gpu-box; REMOTE: the command on HOST before the verb (the Mac's full-shell
-# key: ml/meiolol/bin/backup-serve.sh; the gpu-box's forced-command key: none)
+# NAME: mac, gpu-box or megatron; REMOTE: the command on HOST before the verb (the Mac's
+# full-shell key: ml/meiolol/bin/backup-serve.sh; the gpu-box's forced-command key: none).
+# HOST local: REMOTE runs here, no ssh (the box mirroring onto its own NAS)
 set -euo pipefail
 name=$1 dir=$2 bin=$3 host=$4 remote=${5:-}
 log() { echo "$(date -u +%FT%TZ) backup mirror: $*"; }
 # Keepalives: the home router drops idle connections (archive-pull.sh, 14 Oct)
 ssh_opts=(-o ServerAliveInterval=30 -o ServerAliveCountMax=10 -o BatchMode=yes)
 # shellcheck disable=SC2086 # remote is words
-serve() { ssh -n "${ssh_opts[@]}" "$host" $remote "$@"; }
+serve() {
+    if [[ $host == local ]]; then $remote "$@" < /dev/null
+    else ssh -n "${ssh_opts[@]}" "$host" $remote "$@"; fi
+}
 sha() {
     if command -v sha256sum > /dev/null; then sha256sum "$1" | cut -d' ' -f1
     else shasum -a 256 "$1" | cut -d' ' -f1; fi
@@ -64,11 +69,12 @@ done < "$dir/.list"
 # Ack everything listed that this mirror holds, in one connection
 # shellcheck disable=SC2086 # remote is words
 grep -xFf <(awk '{ print $1 " " $3 }' "$dir/.list") "$manifest" \
-    | ssh "${ssh_opts[@]}" "$host" $remote acks "$name" || log "acks failed"
+    | if [[ $host == local ]]; then $remote acks "$name"
+      else ssh "${ssh_opts[@]}" "$host" $remote acks "$name"; fi || log "acks failed"
 
 serve forgotten > "$dir/forgotten.txt.tmp"
 mv "$dir/forgotten.txt.tmp" "$dir/forgotten.txt"
-if [[ $name == gpu-box ]]; then echo 730 > "$dir/mastery-keep-days"; else echo 32 > "$dir/mastery-keep-days"; fi
+if [[ $name == gpu-box || $name == megatron ]]; then echo 730 > "$dir/mastery-keep-days"; else echo 32 > "$dir/mastery-keep-days"; fi
 "$bin" backup --mirror "$dir" --forgotten "$dir/forgotten.txt"
 kb=$(du -sk "$dir/mastery" | cut -f1)
 n=$(find "$dir/mastery" -name '[0-9]*.db' | wc -l | tr -d ' ')

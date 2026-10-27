@@ -33,7 +33,7 @@ mkdir -p "$acks" "$sums"
 read -r cmd arg _ <<< "${SSH_ORIGINAL_COMMAND:-$*}"
 
 file_ok() { [[ "$1" =~ ^(state/state-[0-9]{4}-[0-9]{2}-[0-9]{2}|(segments|mastery)/[0-9]{6})\.db$ ]]; }
-mirror_ok() { [[ "$1" =~ ^(mac|gpu-box)$ ]]; }
+mirror_ok() { [[ "$1" =~ ^(mac|gpu-box|megatron)$ ]]; }
 
 files() {
     shopt -s nullglob
@@ -57,8 +57,8 @@ sum() {
 }
 
 # Files acked by some mirror at their current sum; `acked prune`: mastery files only once
-# both mirrors acked them (the Mac keeps 32 days, the gpu-box 24 months: neither alone
-# may be the only copy of a file the box drops)
+# two mirrors acked them (the Mac keeps 32 days, the gpu-box and Megatron 24 months: no
+# one alone may be the only copy of a file the box drops)
 acked() {
     shopt -s nullglob
     local rel s need tsv=("$acks"/*.tsv)
@@ -112,7 +112,7 @@ case "${cmd:-}" in
         echo "$(date -u +%FT%TZ) backup prune: $n files mirrored, $(( bytes >> 20 )) MB freed"
         ;;
     mastery-size)
-        [[ "$arg" =~ ^(mac|gpu-box):([0-9]+):([0-9]+)$ ]] || { echo "bad size" >&2; exit 2; }
+        [[ "$arg" =~ ^(mac|gpu-box|megatron):([0-9]+):([0-9]+)$ ]] || { echo "bad size" >&2; exit 2; }
         out=$acks/${BASH_REMATCH[1]}.mastery
         echo "$(date +%s) ${BASH_REMATCH[2]} ${BASH_REMATCH[3]}" > "$out.tmp"
         mv "$out.tmp" "$out"
