@@ -232,10 +232,10 @@ renderer, 8 at a time; crawl: the crawler's rate at the end.
 
 | setting | core build s | views write s | renderer load s | render ms p50/p95/p99 | buff/cache GB | crawl matches/day |
 |---|---|---|---|---|---|---|
-| baseline (27 Oct, host CPU, 62 GB, AVX2 build) | 126 (126 123 129) | 766 (774 766 764) | 46 | 11/21/27 | 48 | 148833 |
+| baseline (27 Oct, host CPU, 62 GB, AVX2 build) | 129 (129 120 132) | 754 (758 750 754) | 44 (44 43 45) | 10/19/25 | 49 | 152121 |
 
-Baseline's views write by phase (views.log): stats 375 s (view 2), 136 s (view 3),
-82 s (view 0), 28 s (view 1), single-threaded (cpu = wall); people 54 s; filters 6 s,
+Baseline's views write by phase (views.log): stats 371 s (view 2), 144 s (view 3),
+75 s (view 0), 29 s (view 1), single-threaded (cpu = wall); people 53 s; filters 6 s,
 from the partials. The four views load one after another on one connection, so the
 write uses about one of the 16 vCPU: knob 1 can save at most the filters' 6 s, less
 than the spread between runs
