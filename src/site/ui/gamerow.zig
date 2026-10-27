@@ -25,6 +25,8 @@ pub const name = "GameRow";
 pub const scope = .{".c-grow"};
 
 pub const Opts = struct {
+    /// Among the list's rows: the game's, so a filter change keeps focus on it
+    key: u32 = 0,
     /// The game's page; none: a plain row
     href: ?[]const u8 = null,
     /// For "12h" ago; none: left out
@@ -65,7 +67,7 @@ const lane_dom = 3000;
 pub fn view(h: *H, l: *const yl.List, g: yl.Game, o: Opts) N {
     const me = l.champs[g.champ];
     const opp: ?champ.Champ = if (g.opp) |i| l.champs[i] else null;
-    const attrs = .{ .class = "c-grow", .href = o.href, .data_win = g.win and !g.remake, .data_remake = g.remake };
+    const attrs = .{ .key = o.key, .class = "c-grow", .href = o.href, .data_win = g.win and !g.remake, .data_remake = g.remake };
     const kids = .{
         h.span(.{ .class = "mu" }, .{
             champ.view(h, me, .{ .px = .@"40", .level = g.level }),

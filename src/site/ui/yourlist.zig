@@ -237,13 +237,14 @@ pub const Day = struct {
     played: u32,
 };
 
-pub fn days(a: std.mem.Allocator, games: []const Game, f: Filter, tz_min: i32) ![]Day {
+/// `tz`: each game's minutes east of UTC; empty is UTC
+pub fn days(a: std.mem.Allocator, games: []const Game, f: Filter, tz: []const i32) ![]Day {
     var out: std.ArrayList(Day) = .empty;
     var idx: std.ArrayList(u16) = .empty;
     var starts: std.ArrayList(usize) = .empty;
     for (games, 0..) |g, i| {
         if (!f.keeps(g)) continue;
-        const d = dayOf(g.start_ms, tz_min);
+        const d = dayOf(g.start_ms, if (i < tz.len) tz[i] else 0);
         if (out.items.len == 0 or out.items[out.items.len - 1].day != d) {
             try out.append(a, .{ .day = d, .games = &.{}, .t = .{}, .played = 0 });
             try starts.append(a, idx.items.len);
@@ -282,7 +283,7 @@ test "days group by the viewer's date, newest first, remakes counted only in tim
         demoGame(t0 + 10 * std.time.ms_per_hour, 0, .mid, false),
         demoGame(t0 - 2 * std.time.ms_per_hour, 1, .top, true),
     };
-    const ds = try days(arena.allocator(), &games, .{}, 0);
+    const ds = try days(arena.allocator(), &games, .{}, &.{});
     try testing.expectEqual(2, ds.len);
     try testing.expectEqual(dayOf(t0, 0), ds[0].day);
     try testing.expectEqualSlices(u16, &.{ 0, 1, 2 }, ds[0].games);
@@ -290,11 +291,13 @@ test "days group by the viewer's date, newest first, remakes counted only in tim
     try testing.expectEqual(1, ds[0].t.wins);
     try testing.expectEqual(3800, ds[0].played);
     try testing.expectEqualSlices(u16, &.{3}, ds[1].games);
-    // An hour east of UTC, the newest game falls on the next day
-    const east = try days(arena.allocator(), &games, .{}, 60);
+    // An hour east of UTC, the newest game falls on the next day; each game its own offset
+    const east = try days(arena.allocator(), &games, .{}, &.{ 60, 60, 60, 60 });
     try testing.expectEqual(3, east.len);
     try testing.expectEqualSlices(u16, &.{0}, east[0].games);
     try testing.expectEqualSlices(u16, &.{ 1, 2 }, east[1].games);
+    // The oldest game before a DST change, two hours east then: on the 22nd too
+    try testing.expectEqual(1, (try days(arena.allocator(), &games, .{}, &.{ 0, 0, 0, 120 })).len);
     const c = civil(dayOf(t0, 0));
     try testing.expectEqual(Civil{ .weekday = 3, .day = 22, .month = 10, .year = 2026 }, c);
 }
@@ -306,7 +309,7 @@ test "the filter cuts days and totals; the summary rows ignore their own field" 
     flex.queue = .flex;
     const games = [_]Game{ flex, demoGame(t0 + 2 * day_ms, 1, .top, false), demoGame(t0 + day_ms, 0, .mid, true), demoGame(t0, 0, .mid, true) };
     const mid: Filter = .{ .role = .mid };
-    try testing.expectEqual(2, (try days(arena.allocator(), &games, mid, 0)).len);
+    try testing.expectEqual(2, (try days(arena.allocator(), &games, mid, &.{})).len);
     try testing.expectEqual(Totals{ .games = 2, .wins = 2, .k = 10, .d = 4, .a = 14 }, totals(&games, mid));
     const rs = byRole(&games, mid);
     try testing.expectEqual(1, rs[@backingInt(role.Role.top)].games);
@@ -315,7 +318,7 @@ test "the filter cuts days and totals; the summary rows ignore their own field" 
     try testing.expectEqual(3, cs.len);
     try testing.expectEqual(0, cs[0].champ);
     try testing.expectEqual(2, cs[0].t.wins);
-    try testing.expectEqual(0, (try days(arena.allocator(), &games, .{ .queue = .flex, .role = .top }, 0)).len);
+    try testing.expectEqual(0, (try days(arena.allocator(), &games, .{ .queue = .flex, .role = .top }, &.{})).len);
     try testing.expectApproxEqAbs(6.0, totals(&games, .{}).kda(), 0.001);
 }
 

@@ -16,6 +16,7 @@ const rolepicker = @import("rolepicker.zig");
 const button = @import("button.zig");
 const champ = @import("champ.zig");
 const role = @import("role.zig");
+const url = @import("url.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
 const H = tree.H;
@@ -37,7 +38,11 @@ const W = struct {
     pub const none = plain("No games match");
 };
 
+/// The filter row's chips; `.other` games show under All only
 const queues = [_]?yl.Queue{ null, .solo, .flex, .draft, .swift };
+comptime {
+    std.debug.assert(queues.len == @typeInfo(yl.Queue).@"enum".field_names.len);
+}
 
 pub const YourList = struct {
     l: *const yl.List,
@@ -49,30 +54,44 @@ pub const YourList = struct {
     shown: u16 = step,
     /// The visitor's clock; none on the server
     now_ms: ?i64 = null,
-    /// Minutes east of UTC
+    /// Minutes east of UTC, now
     tz_min: i32 = 0,
+    /// Each game's offset (a DST change moves it); empty on the server: UTC
+    tz: []const i32 = &.{},
     /// game.html, relative to the page
     game: []const u8 = "game.html",
 
     const P = @This();
 
-    pub const Url = struct { q: ?yl.Queue = null, role: ?Role = null, champ: ?u16 = null };
+    /// The champion by name: `List.champs` order changes with the list
+    pub const Url = struct { q: ?yl.Queue = null, role: ?Role = null, champ: url.Str(24) = .{} };
 
     pub const Msg = union(enum) { queue: u8, role: ?Role, older, filtered };
 
     pub fn toUrl(p: *const P) Url {
         const f = p.sum.filter;
-        return .{ .q = f.queue, .role = f.role, .champ = f.champ };
+        var u: Url = .{ .q = f.queue, .role = f.role };
+        if (f.champ) |c| u.champ.set(p.l.champs[c].name);
+        return u;
     }
 
+    /// A queue without its chip or a champion without games under the filter is dropped:
+    /// nothing on the page could clear it
     pub fn fromUrl(p: *P, u: Url) void {
-        const c = if (u.champ) |c| (if (c < p.l.champs.len) c else null) else null;
-        p.sum.filter = .{ .queue = u.q, .role = u.role, .champ = c };
+        var f: yl.Filter = .{ .role = u.role };
+        if (std.mem.findScalar(?yl.Queue, &queues, u.q) != null) f.queue = u.q;
+        for (p.l.champs, 0..) |c, i| if (std.mem.eql(u8, c.name, u.champ.slice())) {
+            f.champ = @intCast(i);
+        };
+        if (f.champ != null and !any(p.l.games, f)) f.champ = null;
+        p.sum.filter = f;
+        p.shown = step;
     }
 
     pub fn update(p: *P, m: Msg, ev: *tree.Event) void {
         switch (m) {
-            .queue => |i| if (i < queues.len) {
+            .queue => |i| {
+                if (i >= queues.len) return;
                 p.sum.filter.queue = queues[i];
             },
             .role => |r| p.sum.filter.role = r,
@@ -96,7 +115,7 @@ pub const YourList = struct {
         const l = p.l;
         const f = p.sum.filter;
         p.sum.on_change = h.on(p, .filtered);
-        const days = yl.days(h.mem, l.games, f, p.tz_min) catch return oom(h);
+        const days = yl.days(h.mem, l.games, f, p.tz) catch return oom(h);
         var kept: std.ArrayList(yl.Game) = .empty;
         for (l.games) |g| if (f.keeps(g)) kept.append(h.mem, g) catch return oom(h);
         const today = if (p.now_ms) |ms| yl.dayOf(ms, p.tz_min) else std.math.maxInt(i32);
@@ -106,7 +125,7 @@ pub const YourList = struct {
             var rows = h.list();
             for (d.games) |i| {
                 const g = l.games[i];
-                rows.add(gamerow.view(h, l, g, .{ .href = p.href(h, g), .now_ms = p.now_ms }));
+                rows.add(gamerow.view(h, l, g, .{ .key = @as(u32, i) + 1, .href = p.href(h, g), .now_ms = p.now_ms }));
             }
             groups.add(h.el(.section, .{ .key = @as(u32, @bitCast(d.day)), .class = "day", .data_day = d.day }, .{ dayhead.view(h, d, today), rows.done() }));
         }
@@ -182,11 +201,11 @@ pub const css =
     \\
 ;
 
-const demo = struct {
+pub const demo = struct {
     const champs = [_]champ.Champ{ .{ .name = "Aurelion Sol", .src = "" }, .{ .name = "Karthus", .src = "" } };
     const day_ms = std.time.ms_per_day;
-    const now: i64 = 20_000 * day_ms + 20 * std.time.ms_per_hour;
-    const games = blk: {
+    pub const now: i64 = 20_000 * day_ms + 20 * std.time.ms_per_hour;
+    pub const games = blk: {
         const results = "wwlwlwwlwl";
         var gs: [results.len]yl.Game = undefined;
         for (&gs, results, 0..) |*x, r, i| x.* = .{
@@ -204,7 +223,7 @@ const demo = struct {
         };
         break :blk gs;
     };
-    const list: yl.List = .{ .player = .{ .name = "MeioNeiz", .tag = "EUW", .tier = "PLATINUM", .division = "II", .lp = 2 }, .champs = &champs, .games = &games };
+    pub const list: yl.List = .{ .player = .{ .name = "MeioNeiz", .tag = "EUW", .tier = "PLATINUM", .division = "II", .lp = 2 }, .champs = &champs, .games = &games };
     var all: YourList = .{ .l = &list, .now_ms = now };
     var flex: YourList = .{ .l = &list, .now_ms = now, .sum = .{ .filter = .{ .queue = .flex } } };
     var none: YourList = .{ .l = &list, .now_ms = now, .sum = .{ .filter = .{ .queue = .draft } } };
@@ -254,14 +273,16 @@ test "filter row, day groups and Show older" {
     try testing.expect(ev.push);
     n = p.view(&h);
     try testing.expectEqual(2, rowCount(&t, n));
-    try testing.expectEqual(YourList.Url{ .q = .flex }, p.toUrl());
+    try testing.expectEqual(.flex, p.toUrl().q);
     p.update(.{ .queue = 0 }, &ev);
     p.update(.{ .role = .jungle }, &ev);
     n = p.view(&h);
     try testing.expectEqual(5, rowCount(&t, n));
 
     // A filter with no games says so; Show older only when more days are left
-    p.fromUrl(.{ .q = .draft, .champ = 99 });
+    var u: YourList.Url = .{ .q = .draft };
+    u.champ.set("Karthus");
+    p.fromUrl(u);
     try testing.expectEqual(null, p.sum.filter.champ);
     n = p.view(&h);
     try testing.expect(t.find(n, "class", "none") != null);

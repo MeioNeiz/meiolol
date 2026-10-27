@@ -760,6 +760,10 @@ test "fixture games to stats, curves and the website" {
     for ([_][]const u8{ "https://x.io/champion/darius.html", "https://x.io/matchup/top/mordekaiser-vs-darius.html", "https://x.io/daily.html", "https://x.io/learn.html" }) |want| {
         try testing.expect(std.mem.find(u8, sitemap, want) != null);
     }
+    // Unlisted pages stay out
+    for ([_][]const u8{ "game.html", "games.html" }) |page| {
+        try testing.expect(std.mem.find(u8, sitemap, page) == null);
+    }
     const patch_sitemap = (try core_loaded.get(arena, "patch/sitemap.xml")).?;
     try testing.expect(std.mem.find(u8, patch_sitemap, "https://x.io/patch/build/darius-top.html") == null);
 }
