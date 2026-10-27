@@ -29,14 +29,14 @@ pub const Api = struct {
     io: Io,
     data_dir: []const u8,
     mutex: Io.Mutex = .init,
-    /// gpa-owned, json then bin
-    live: [2]?[]u8 = @splat(null),
-    live_at: [2]i64 = @splat(0),
+    /// gpa-owned
+    live: std.EnumArray(LiveFormat, ?[]u8) = .initFill(null),
+    live_at: std.EnumArray(LiveFormat, i64) = .initFill(0),
     health: ?[]u8 = null,
     health_at: i64 = 0,
 
     pub fn deinit(api: *Api) void {
-        for (api.live) |cached| if (cached) |l| api.gpa.free(l);
+        for (api.live.values) |cached| if (cached) |l| api.gpa.free(l);
         if (api.health) |h| api.gpa.free(h);
     }
 };
@@ -225,7 +225,7 @@ fn runAction(api: *Api, request: *Request, action: Action) !void {
     };
     // A new action shows in live.json and live.bin at once
     api.mutex.lockUncancelable(io);
-    api.live_at = @splat(0);
+    api.live_at = .initFill(0);
     api.mutex.unlock(io);
     const body = try std.json.Stringify.valueAlloc(arena, .{ .ok = outcome == .ok, .output = output }, .{});
     _ = try reply(request, if (outcome == .refused) .conflict else .ok, "application/json", body);
@@ -313,8 +313,7 @@ fn live(api: *Api, arena: std.mem.Allocator, format: LiveFormat) ![]const u8 {
     api.mutex.lockUncancelable(io);
     defer api.mutex.unlock(io);
     const now = Io.Clock.real.now(io).toSeconds();
-    const f = @backingInt(format);
-    if (api.live[f]) |l| if (now - api.live_at[f] < live_cache_s) return arena.dupe(u8, l);
+    if (api.live.get(format)) |l| if (now - api.live_at.get(format) < live_cache_s) return arena.dupe(u8, l);
 
     if (api.health == null or now - api.health_at >= health_cache_s) {
         const h = run(arena, io, &.{"bin/health.sh"});
@@ -337,9 +336,9 @@ fn live(api: *Api, arena: std.mem.Allocator, format: LiveFormat) ![]const u8 {
         .json => try admin.liveJson(arena, io, db, l),
         .bin => try admin.liveBin(arena, io, db, l),
     };
-    if (api.live[f]) |old| api.gpa.free(old);
-    api.live[f] = try api.gpa.dupe(u8, body);
-    api.live_at[f] = now;
+    if (api.live.get(format)) |old| api.gpa.free(old);
+    api.live.set(format, try api.gpa.dupe(u8, body));
+    api.live_at.set(format, now);
     return body;
 }
 

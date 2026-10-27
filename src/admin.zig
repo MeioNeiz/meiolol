@@ -50,8 +50,6 @@ const draft_tail = 1_000_000;
 const history_lines = 2880;
 const eval_report_max = 256 << 10;
 
-/// Crawl log lines that are not report lines, by what they say. riot_busy: 429s with
-/// limit type "server", from Riot's side rather than our key's limits
 const Kind = ad.Kind;
 
 comptime {
@@ -287,6 +285,16 @@ fn adDeployed(arena: std.mem.Allocator, text: []const u8) ![]ad.Deployed {
         try out.append(arena, .{ .sha = line[0..sp], .time = t });
     }
     return out.items;
+}
+
+test "DEPLOYED lines: a sha and its time, others skipped" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const d = try adDeployed(arena_state.allocator(), "20db56f 2026-10-27T00:54:48Z\nab12cd\nab12cd yesterday\n\n");
+    try std.testing.expectEqual(1, d.len);
+    try std.testing.expectEqualStrings("20db56f", d[0].sha);
+    try std.testing.expectEqual(1793062488, d[0].time);
+    try std.testing.expectEqual(0, (try adDeployed(arena_state.allocator(), "")).len);
 }
 
 fn adDeployEvents(arena: std.mem.Allocator, events: []const DeployEvent) ![]ad.DeployEvent {

@@ -7,8 +7,8 @@ const std = @import("std");
 pub const Region = enum(u8) { americas, asia, europe, sea };
 pub const regions = std.enums.values(Region).len;
 
-/// Crawl log lines that are not report lines, by what they say (names asserted in
-/// admin.zig). riot_busy: 429s with limit type "server", Riot's side, not our key's
+/// Crawl log lines that are not report lines, by what they say. riot_busy: 429s with
+/// limit type "server", Riot's side, not our key's
 pub const Kind = enum(u8) { rate_limit, riot_busy, riot_server, riot_blocked, db_busy, network, other };
 pub const kinds = std.enums.values(Kind).len;
 
