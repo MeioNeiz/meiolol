@@ -241,6 +241,7 @@ late, behind a views round)
 | filter runs 8, serial: not kept (filters 4.8 s vs 6.0 s; views write within noise) | 126 (121 135 126) | 788 (742 788 792) | 45 (45 46 44) | 10/20/27 | 49 | 153775 |
 | view loads 4 (95f9063d) | 128 (128 127 128) | 460 (473 433 460) | 44 (44 41 48) | 11/20/26 | 47 | 154216 |
 | view loads 2: kept, C01 host.env MEIOLOL_VIEW_LOADS=2; the new baseline | 127 (131 127 123) | 436 (434 438 436) | 45 (45 43 47) | 9/20/25 | 48 | 154666 |
+| filter runs 16 at view loads 2: not kept (filters 3.6 s, beside people's 62 s) | 129 (125 129 135) | 453 (454 453 439) | 45 (45 45 44) | 10/20/26 | 47 | 154467 |
 
 Baseline's views write by phase (views.log): stats 371 s (view 2), 144 s (view 3),
 75 s (view 0), 29 s (view 1), single-threaded (cpu = wall); people 53 s; filters 6 s,
@@ -265,6 +266,16 @@ than the spread between runs
   the longest view: view 2's stats 396 s (371 s serial; the views slow each other a
   little), the other worker's views 0, 3, 1 fit beside it. Lower only by splitting
   stats, ruled out above
+- Knobs 2 (reader cache, mmap) and 5 (lvmcache): not run, nothing waits on reads. Every
+  phase of both builds has cpu = wall (core build stats 29.4 s and 86.8 s; views write
+  stats 398 s; partials 13.8 s wall vs 13.6 s cpu), with 47-49 GB of page cache warm
+- Core build: its two views still load one after another (write.zig, 29 s then 87 s);
+  at once would save ~30 s a round
+- Hyperthreads: `openssl speed -multi N sha256` 16 KB blocks, 27 Oct, web loop running:
+  8 at 2.68 GB/s, 16 at 5.11 GB/s (1.9x): the 16 vCPU act as near 16 cores
+- Knob 4 (unit limits): a views write's peak at view loads 2 still to read, from
+  meiolol-web's MemoryPeak after its next full round (restarted 27 Oct 17:57). Web was
+  down 17:03-17:57 that day: a probe's ssh dropped before its trap restarted it
 
 ## Later
 
