@@ -28,8 +28,6 @@ pub const Strip = struct {
     dots: []const Dot,
     /// What the dots are, for screen readers ("Every pick for red top")
     label: tree.Text,
-    /// Dots are buttons (the owner sets each `on`; the gallery has none)
-    pressable: bool = false,
 };
 
 pub fn view(h: *H, s: Strip) N {
@@ -45,7 +43,7 @@ pub fn view(h: *H, s: Strip) N {
     for (s.dots, 0..) |d, i| {
         const style = h.vars(.{ .x = 100 * (d.win - lo) / span });
         const label = W.dot.with(h, .{ .n = d.champ.name, .w = d.win });
-        l.add(if (s.pressable) h.button(.{
+        l.add(if (d.on != null) h.button(.{
             .key = i,
             .type = "button",
             .style = style,
@@ -61,6 +59,7 @@ pub fn view(h: *H, s: Strip) N {
             .aria_label = label,
             .data_star = d.star,
             .data_ref = d.ref,
+            .data_chosen = d.chosen,
         }, .{}));
     }
     return h.div(.{ .class = "c-rank", .role = "group", .aria_label = s.label }, .{
@@ -85,7 +84,7 @@ pub const css =
     \\    margin: -4px 0 0 -4px; border-radius: 50%; background: var(--bar-hi); opacity: 0.5; }
     \\  .c-rank .trk > button { cursor: pointer; }
     \\  .c-rank .trk > button::after { content: ""; position: absolute; inset: -8px -3px; }
-    \\  .c-rank .trk > button:hover, .c-rank .trk > [aria-pressed="true"] { opacity: 1;
+    \\  .c-rank .trk > button:hover, .c-rank .trk > :is([aria-pressed="true"], [data-chosen]) { opacity: 1;
     \\    box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--focus); }
     \\  .c-rank .trk > button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
     \\  .c-rank .trk > [data-ref] { opacity: 1; background: var(--accent); box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--accent); }
@@ -121,10 +120,15 @@ pub fn gallery(g: *Gallery) void {
         return;
     };
     dots[1].chosen = true;
-    g.addFill("pressable, one chosen", view(h, .{ .dots = dots, .label = plain("Every pick for red top"), .pressable = true }));
+    g.addFill("one chosen", view(h, .{ .dots = dots, .label = plain("Every pick for red top") }));
 }
 
-test "dots placed from the lowest to the highest chance; buttons only when pressable" {
+const Tap = struct {
+    pub const Msg = union(enum) { dot: u8 };
+    pub fn update(_: *Tap, _: Msg, _: *tree.Event) void {}
+};
+
+test "dots placed from the lowest to the highest chance; buttons only with a handler" {
     const std = @import("std");
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -141,12 +145,15 @@ test "dots placed from the lowest to the highest chance; buttons only when press
     try std.testing.expect(std.mem.find(u8, s, "--x:0") != null);
     try std.testing.expectEqual(1, std.mem.count(u8, s, "data-star"));
     try std.testing.expectEqual(1, std.mem.count(u8, s, "data-ref"));
+    var tap: Tap = .{};
     var dots = sample;
     dots[2].chosen = true;
+    for (dots[0..3], 0..) |*d, i| d.on = h.on(&tap, .{ .dot = @intCast(i) });
     out = .init(a);
-    try html.write(&t, view(&h, .{ .dots = &dots, .label = plain("x"), .pressable = true }), &out.writer);
+    try html.write(&t, view(&h, .{ .dots = &dots, .label = plain("x") }), &out.writer);
     s = out.written();
-    try std.testing.expectEqual(sample.len, std.mem.count(u8, s, "<button"));
+    try std.testing.expectEqual(3, std.mem.count(u8, s, "<button"));
     try std.testing.expectEqual(1, std.mem.count(u8, s, "aria-pressed=\"true\""));
+    try std.testing.expectEqual(sample.len - 3, std.mem.count(u8, s, "role=\"img\""));
     try std.testing.expectEqual(.none, view(&h, .{ .dots = &.{}, .label = plain("x") }));
 }

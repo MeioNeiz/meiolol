@@ -7,6 +7,7 @@
 //! seats with their pick number, the hidden seat asked about, a chosen answer previewed
 //! dashed, seats selectable, the game's line grown under each name after a reveal, each
 //! lane's middle its win chance from the matchup, and each side's damage mix
+const std = @import("std");
 const tree = @import("tree.zig");
 const champ = @import("champ.zig");
 const role = @import("role.zig");
@@ -187,7 +188,7 @@ fn full(h: *H, b: Board, on: []const [2]?tree.Handler) N {
         const ons: [2]?tree.Handler = if (i < on.len) on[i] else .{ null, null };
         rows.add(h.div(.{ .key = @as(u32, @backingInt(l.role)), .class = "lane", .data_ask = l.ask }, .{
             fullSeat(h, l.us, .us, ons[0]),
-            mid(h, l),
+            mid(h, l, b.heads),
             fullSeat(h, l.them, .them, ons[1]),
         }));
     }
@@ -226,9 +227,9 @@ fn fullSeat(h: *H, s: Seat, side: Side, on: ?tree.Handler) N {
                     .them => .them,
                 },
                 .named = false,
-                .label = words.hidden,
+                .label = if (asked) words.hidden else words.empty,
             }),
-            if (s.pick) |n| h.span(.{ .class = "pn", .aria_label = words.pick.with(h, .{ .n = n }) }, .{n}) else null,
+            if (s.pick) |n| h.span(.{ .class = "pn", .role = "img", .aria_label = words.pick.with(h, .{ .n = n }) }, .{n}) else null,
         }),
         h.span(.{ .class = "who" }, .{
             h.b(.{}, .{if (shown) |c| c.name else "?"}),
@@ -261,7 +262,7 @@ fn gameLine(h: *H, g: Game, side: Side) N {
         h.span(.{}, .{phrase.num(h, .int, g.cs)}),
         h.span(.{}, .{phrase.num(h, .kilo, g.gold)}),
         h.span(.{ .class = "dm" }, .{h.span(.{ .aria_hidden = true }, .{h.el(.i, .{ .style = h.vars(.{
-            .w = if (g.dmg_of > 0) 100 * @as(f32, @floatFromInt(g.dmg)) / @as(f32, @floatFromInt(g.dmg_of)) else 0,
+            .w = if (g.dmg_of > 0) pct(@as(f32, @floatFromInt(g.dmg)) / @as(f32, @floatFromInt(g.dmg_of))) else 0,
         }) }, .{})})}),
         h.span(.{ .class = "rk", .data_star = g.star }, .{if (g.rated) |r| words.nth.with(h, .{ .n = r, .s = ordinal(r) }) else null}),
     });
@@ -279,34 +280,40 @@ pub fn ordinal(n: u32) []const u8 {
 
 /// The lane's middle: role, and our side's win chance from the lane, as a bar out from
 /// even toward the side it favours
-fn mid(h: *H, l: Lane) N {
-    const w = l.win orelse return h.span(.{ .class = "mid" }, .{role.view(h, l.role, .{ .s = .s })});
+fn mid(h: *H, l: Lane, heads: [2]tree.Text) N {
+    const bare = h.span(.{ .class = "mid" }, .{role.view(h, l.role, .{ .s = .s })});
+    const raw = l.win orelse return bare;
+    if (!std.math.isFinite(raw)) return bare;
     if (l.ask) return h.span(.{ .class = "mid", .data_ask = true }, .{
         role.view(h, l.role, .{ .s = .s }),
         h.span(.{ .class = "lb" }, .{}),
         h.span(.{ .class = "v" }, .{"?"}),
     });
+    const w = @min(@max(raw, 0), 100);
     const d = w - 50;
     const even = @abs(d) < 0.5;
     const side: Side = if (d >= 0) .us else .them;
+    const fav = if (side == .us) w else 100 - w;
+    const head = heads[@backingInt(side)];
+    const said = if (even) words.even else words.lane.with(h, .{ .s = head.s, .w = fav });
     // Half the bar is 5 points
     const reach = @min(@abs(d), 5) * 10;
-    return h.span(.{ .class = "mid", .data_side = if (even) null else side, .title = words.lane.with(h, .{ .w = w }) }, .{
+    return h.span(.{ .class = "mid", .data_side = if (even) null else side, .title = said, .role = "img", .aria_label = said }, .{
         role.view(h, l.role, .{ .s = .s }),
         h.span(.{ .class = "lb", .aria_hidden = true }, .{if (even) null else h.el(.i, .{ .style = h.vars(.{
             .l = if (side == .us) 50 - reach else 50,
             .w = reach,
         }) }, .{})}),
-        h.span(.{ .class = "v" }, .{if (even) words.even else phrase.num(h, .rate, if (side == .us) w else 100 - w)}),
+        h.span(.{ .class = "v", .aria_hidden = true }, .{if (even) words.even else phrase.num(h, .rate, fav)}),
     });
 }
 
 fn mixBar(h: *H, m: Mix, side: Side) N {
     return h.span(.{ .class = "mx", .data_side = side }, .{
         h.span(.{ .class = "bar", .aria_hidden = true }, .{
-            h.el(.i, .{ .class = "ph", .style = h.vars(.{ .w = 100 * m.phys }) }, .{}),
-            h.el(.i, .{ .class = "mg", .style = h.vars(.{ .w = 100 * m.magic }) }, .{}),
-            if (m.unknown > 0) h.el(.i, .{ .class = "uk", .style = h.vars(.{ .w = 100 * m.unknown }) }, .{}) else null,
+            h.el(.i, .{ .class = "ph", .style = h.vars(.{ .w = pct(m.phys) }) }, .{}),
+            h.el(.i, .{ .class = "mg", .style = h.vars(.{ .w = pct(m.magic) }) }, .{}),
+            if (m.unknown > 0) h.el(.i, .{ .class = "uk", .style = h.vars(.{ .w = pct(m.unknown) }) }, .{}) else null,
         }),
         h.span(.{ .class = "ends" }, .{
             h.span(.{}, .{ words.ad, " ", h.b(.{}, .{phrase.num(h, .pct, share(m.phys))}) }),
@@ -315,9 +322,14 @@ fn mixBar(h: *H, m: Mix, side: Side) N {
     });
 }
 
-/// A 0-1 share from the data as a whole percent; NaN or out of range clamps
+/// A 0-1 share from the data as a percent for a width; NaN or out of range clamps
+fn pct(x: f32) f32 {
+    return @min(@max(100 * x, 0), 100);
+}
+
+/// `pct` as a whole number
 fn share(x: f32) u32 {
-    return @intFromFloat(@round(@min(@max(100 * x, 0), 100)));
+    return @intFromFloat(@round(pct(x)));
 }
 
 const words = struct {
@@ -336,8 +348,8 @@ const words = struct {
     const hidden = plain("Hidden pick");
     const pick = phrase.Phrase("Pick {n:int}");
     const nth = phrase.Phrase("{n:int}{s:text}");
-    const lane = phrase.Phrase("Blue's lane win chance {w:rate}");
-    const even = plain("even");
+    const lane = phrase.Phrase("{s:text} {w:rate} from the lane");
+    const even = plain("Even");
     const damage = plain("Damage");
     const ad = plain("AD");
     const ap = plain("AP");
@@ -568,7 +580,6 @@ pub fn gallery(g: *Gallery) void {
 }
 
 test "full variant: pick numbers, the hidden seat, seats as buttons only with a handler" {
-    const std = @import("std");
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -594,6 +605,55 @@ test "full variant: pick numbers, the hidden seat, seats as buttons only with a 
     try std.testing.expect(std.mem.find(u8, s, "4th") != null);
     try std.testing.expectEqual(0, share(std.math.nan(f32)));
     try std.testing.expectEqual(100, share(3));
+}
+
+const Tap = struct {
+    pub const Msg = union(enum) { seat: u8 };
+    pub fn update(_: *Tap, _: Msg, _: *tree.Event) void {}
+};
+
+test "full variant by hand: buttons from a short `on`, lane middles, a red win, odd data" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const html = @import("html.zig");
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    var tap: Tap = .{};
+    const game: Game = .{ .kda = .{ .k = 1, .d = 2, .a = 3 }, .cs = 100, .gold = 9000, .dmg = 5000, .dmg_of = 0, .rated = 12 };
+    const b: Board = .{
+        .v = .full,
+        .heads = .{ plain("Blue"), plain("Red") },
+        .won = .them,
+        .mix = .{ .{ .phys = 0.5, .magic = 0.5 }, .{ .phys = 1.4, .magic = std.math.nan(f32), .unknown = 0.2 } },
+        .lanes = &.{
+            .{ .role = .top, .win = 47.9, .us = .{ .champ = demo("Gnar", "Gnar"), .sel = true }, .them = .{ .hidden = true, .preview = demo("Jax", "Jax") } },
+            .{ .role = .jungle, .win = 130, .us = .{ .game = game }, .them = .{} },
+            .{ .role = .mid, .win = std.math.nan(f32) },
+            .{ .role = .bot },
+            .{ .role = .support, .win = 50.2 },
+        },
+    };
+    var out: std.Io.Writer.Allocating = .init(a);
+    try html.write(&t, fullOn(&h, b, &.{.{ h.on(&tap, .{ .seat = 0 }), null }}), &out.writer);
+    const s = out.written();
+    try std.testing.expectEqual(1, std.mem.count(u8, s, "<button"));
+    try std.testing.expectEqual(1, std.mem.count(u8, s, "aria-pressed=\"true\""));
+    try std.testing.expectEqual(1, std.mem.count(u8, s, "data-preview"));
+    try std.testing.expect(std.mem.find(u8, s, "Jax") != null);
+    try std.testing.expect(std.mem.find(u8, s, "Red 52.1% from the lane") != null);
+    try std.testing.expect(std.mem.find(u8, s, "aria-label=\"Blue 100") != null);
+    try std.testing.expectEqual(1, std.mem.count(u8, s, "aria-label=\"Even\""));
+    try std.testing.expect(std.mem.find(u8, s, "Empty seat") != null);
+    try std.testing.expect(std.mem.find(u8, s, "class=\"uk\"") != null);
+    try std.testing.expect(std.mem.find(u8, s, "12th") != null);
+    try std.testing.expect(std.mem.find(u8, s, "NaN") == null and std.mem.find(u8, s, "nan") == null);
+    for ([_]u32{ 1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 111 }, [_][]const u8{ "st", "nd", "rd", "th", "th", "th", "th", "st", "nd", "rd", "th" }) |n, want| {
+        try std.testing.expectEqualStrings(want, ordinal(n));
+    }
+    out = .init(a);
+    try html.write(&t, view(&h, .{ .v = .full, .lanes = &.{} }), &out.writer);
+    try std.testing.expect(std.mem.find(u8, out.written(), "class=\"lanes\"") != null);
 }
 
 test "the app's board stays encodable" {

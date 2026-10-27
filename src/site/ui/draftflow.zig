@@ -64,7 +64,7 @@ pub fn view(h: *H, turns: []const Turn) N {
                 champ.view(h, shown, .{
                     .px = if (ph.ban) .@"24" else .@"32",
                     .state = if (ph.ban and shown != null) .banned else .normal,
-                    .label = if (t.open) W.open else W.none,
+                    .label = if (t.open) W.open else if (ph.ban) W.none else W.no_pick,
                 }),
             }));
             at += 1;
@@ -82,6 +82,7 @@ const W = struct {
     const picks = plain("Picks");
     const open = plain("The hidden pick");
     const none = plain("No ban");
+    const no_pick = plain("Pick not made");
 };
 
 pub const css =
