@@ -2,8 +2,8 @@
 //! /api/notes, for logins with take_notes (root.zig checks), and the dev server's local
 //! file (serve.zig), the same handler without a login.
 //!
-//!   GET   /api/notes?path=P        open notes for P and every "everywhere" one (List)
-//!   GET   /api/notes?all=1[&status=open|done|any]  every note, default open (List)
+//!   GET   /api/notes?path=P        open and fixed notes for P and every "everywhere" one
+//!   GET   /api/notes?all=1[&status=open|fixed|kept|done|any]  every note, default open
 //!   POST  /api/notes               a ui.notesdata.New; the stored Note
 //!   PATCH /api/notes?id=N          a ui.notesdata.Change; the stored Note
 //!
@@ -19,7 +19,7 @@ const nd = ui.notesdata;
 
 pub const schema =
     \\-- Notes on the live site (notes.zig): ui.notesdata.Note; scope 0 page, 1 everywhere;
-    \\-- kind 0 page, 1 component, 2 island; theme 0 light, 1 dark; status 0 open, 1 done
+    \\-- kind 0 page, 1 component, 2 island; theme 0 light, 1 dark; status nd.Status
     \\CREATE TABLE IF NOT EXISTS notes (
     \\    id INTEGER PRIMARY KEY,
     \\    created INTEGER NOT NULL,
@@ -42,12 +42,14 @@ pub const schema =
     \\);
     \\CREATE INDEX IF NOT EXISTS notes_path ON notes (status, path);
     \\CREATE INDEX IF NOT EXISTS notes_scope ON notes (status, scope);
+    \\-- Paths as nd.canonical keeps them (rows from before it: /index.html, /matchup/index.html)
+    \\UPDATE notes SET path = substr(path, 1, length(path) - 10) WHERE path LIKE '%/index.html';
     \\
 ;
 
 /// Notes kept; more are refused (507) until some are deleted by hand
 pub const max_notes = 5000;
-/// Open notes one page's GET returns, newest first
+/// Open and fixed notes one page's GET returns, newest first
 pub const max_page = 200;
 /// A New with every field at its cap fits (about 7.4 KB)
 pub const max_body = 12 * 1024;
@@ -68,13 +70,13 @@ fn list(arena: Allocator, db: store.Db, query: []const u8) !Reply {
     if (try param(arena, query, "all")) |_| {
         const s = try param(arena, query, "status") orelse "open";
         const status: ?nd.Status = if (std.mem.eql(u8, s, "any")) null else std.meta.stringToEnum(nd.Status, s) orelse
-            return try failed(arena, .bad_request, "expected status=open|done|any");
+            return try failed(arena, .bad_request, "expected status=open|fixed|kept|done|any");
         if (status) |v| return found(arena, db, "WHERE status = ?", .{@backingInt(v)}, max_notes);
         return found(arena, db, "", .{}, max_notes);
     }
-    const path = try param(arena, query, "path") orelse return try failed(arena, .bad_request, "expected ?path= or ?all=1");
+    const path = nd.canonical(try param(arena, query, "path") orelse return try failed(arena, .bad_request, "expected ?path= or ?all=1"));
     if (path.len > nd.max_path) return try failed(arena, .bad_request, "path too long");
-    return found(arena, db, "WHERE status = 0 AND (path = ? OR scope = 1)", .{path}, max_page);
+    return found(arena, db, "WHERE status IN (?, ?) AND (path = ? OR scope = 1)", .{ @backingInt(nd.Status.open), @backingInt(nd.Status.fixed), path }, max_page);
 }
 
 const columns = "id, created, updated, author, path, hash, scope, kind, name, nth, steps, snippet, vw, vh, theme, text, status, reply";
@@ -150,7 +152,7 @@ fn add(arena: Allocator, db: store.Db, body: []const u8, author: []const u8, now
     if ((try db.scalar("SELECT count(*) FROM notes", .{}) orelse 0) >= max_notes) return try failed(arena, .insufficient_storage, "too many notes");
     const t = n.target;
     try db.run("INSERT INTO notes (" ++ columns ++ ") VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '')", .{
-        now,       now,  author, n.path,               n.hash, @backingInt(n.scope), @backingInt(t.kind), t.name, t.nth, t.steps,
+        now,       now,  author, nd.canonical(n.path), n.hash, @backingInt(n.scope), @backingInt(t.kind), t.name, t.nth, t.steps,
         t.snippet, n.vw, n.vh,   @backingInt(n.theme), n.text,
     });
     const id = try db.scalar("SELECT last_insert_rowid()", .{}) orelse return error.BadNote;
@@ -248,8 +250,14 @@ test "notes: a page gets its own open notes and every everywhere one; done ones 
     const replied = try decoded(a, nd.Note, try handle(a, db, .PATCH, "id=1", try encoded(a, nd.Change, .{ .reply = "and 5e6f" }), "", 201));
     try std.testing.expectEqual(nd.Status.done, replied.status);
     try std.testing.expectEqual(1, (try decoded(a, nd.List, try handle(a, db, .GET, "path=/tier/", "", "", 0))).notes.len);
+    // A fixed note keeps its pin for Jacob's check; a kept one leaves
+    _ = try decoded(a, nd.Note, try handle(a, db, .PATCH, "id=2", try encoded(a, nd.Change, .{ .status = .fixed, .reply = "9f8e7d6c" }), "", 202));
+    try std.testing.expectEqual(1, (try decoded(a, nd.List, try handle(a, db, .GET, "path=/tier/", "", "", 0))).notes.len);
+    try std.testing.expectEqual(1, (try decoded(a, nd.List, try handle(a, db, .GET, "all=1&status=fixed", "", "", 0))).notes.len);
+    _ = try decoded(a, nd.Note, try handle(a, db, .PATCH, "id=2", try encoded(a, nd.Change, .{ .status = .kept, .reply = "fine as is" }), "", 203));
+    try std.testing.expectEqual(0, (try decoded(a, nd.List, try handle(a, db, .GET, "path=/tier/", "", "", 0))).notes.len);
 
-    try std.testing.expectEqual(2, (try decoded(a, nd.List, try handle(a, db, .GET, "all=1", "", "", 0))).notes.len);
+    try std.testing.expectEqual(1, (try decoded(a, nd.List, try handle(a, db, .GET, "all=1", "", "", 0))).notes.len);
     try std.testing.expectEqual(1, (try decoded(a, nd.List, try handle(a, db, .GET, "all=1&status=done", "", "", 0))).notes.len);
     try std.testing.expectEqual(3, (try decoded(a, nd.List, try handle(a, db, .GET, "all=1&status=any", "", "", 0))).notes.len);
 }
@@ -334,4 +342,18 @@ test "notes: a New with every field at its cap fits max_body" {
     };
     try std.testing.expectEqual(null, nd.check(n));
     try std.testing.expect((try encoded(a, nd.New, n)).len <= max_body);
+}
+
+test "notes: / and /index.html are one page, rows from before moved too" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const db = try testDb();
+    defer db.close();
+    try fill(db, 1, "/matchup/index.html");
+    try db.exec(schema);
+    try std.testing.expectEqual(1, (try decoded(a, nd.List, try handle(a, db, .GET, "path=/matchup/", "", "", 0))).notes.len);
+    const got = try decoded(a, nd.Note, try handle(a, db, .POST, "", try encoded(a, nd.New, .{ .path = "/index.html", .text = "x" }), "jacob", 1));
+    try std.testing.expectEqualStrings("/", got.path);
+    try std.testing.expectEqual(1, (try decoded(a, nd.List, try handle(a, db, .GET, "path=/index.html", "", "", 0))).notes.len);
 }

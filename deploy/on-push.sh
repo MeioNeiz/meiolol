@@ -75,6 +75,23 @@ commits() {
     git -C "$ROOT" log --format='%h %s' "${range[@]}" | cut -c1-2000 \
         | while IFS= read -r c; do event "$2" commit info "$c"; done
 }
+# The deploy's "Note: N" trailers (deploy/commit.sh --note) mark site notes fixed, the
+# commit as the reply, once it is on the box; the site round shows it minutes later
+mark_notes() {
+    local range=("$2" --max-count=1) h subject ids id
+    [[ -n "$1" ]] && git -C "$ROOT" cat-file -e "$1^{commit}" 2> /dev/null && range=("$1..$2")
+    git -C "$ROOT" log --reverse --format='%h%x1f%(trailers:key=Note,valueonly,separator=%x20)%x1f%s' \
+        "${range[@]}" | while IFS=$'\x1f' read -r h ids subject; do
+        for id in $ids; do
+            [[ $id =~ ^[0-9]+$ ]] || continue
+            if "$snap/deploy/notes.sh" fixed "$id" "$h ${subject:0:400}" > /dev/null 2>&1; then
+                echo "$(now) note $id fixed by $h"
+            else
+                echo "$(now) note $id: marking fixed by $h FAILED"
+            fi
+        done
+    done
+}
 while [[ -e "$state.pending" ]]; do
     sha=$(git -C "$ROOT" rev-parse origin/main)
     [[ $sha == "$deploy_sha" ]] || relaunch
@@ -90,6 +107,7 @@ while [[ -e "$state.pending" ]]; do
             commits "$deployed" "$sha"
             event "$sha" deploy skipped "nothing to deploy since ${deployed:0:7}: no change in src, deploy or build files"
             flush
+            mark_notes "$deployed" "$sha"
         fi
         continue
     fi
@@ -137,6 +155,7 @@ while [[ -e "$state.pending" ]]; do
     fi
     rm -f "$out"
     flush
+    (( rc == 0 )) && mark_notes "$deployed" "$sha"
 done
 "$snap/deploy/zig-cache-prune.sh"
 # A push that landed between the last check and rmdir

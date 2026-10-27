@@ -3,7 +3,8 @@
 //! cookie). Its root goes at the end of <body>; the page's open notes come from
 //! /api/notes as pins; picking listens on window in the capture phase, so the page's own
 //! handlers never see the pointer until it ends; Save POSTs a ui.notesdata.New. On
-//! /admin/notes.html (its server-rendered ui.noteslist) the list instead
+//! /admin/notes.html (its server-rendered ui.noteslist) the list instead, fetched again
+//! every 20 s while the tab shows and when it comes back
 const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
@@ -521,14 +522,29 @@ fn load() void {
 fn done(ctx: i32, bytes: ?[]u8) void {
     switch (std.enums.fromInt(Call, ctx) orelse return) {
         .all => {
+            fetching = false;
             list.loading = false;
+            // An answer from before a change saved since would undo it on screen
+            if (patching > 0) return;
             const b = bytes orelse return listFailed();
-            const l = ui.data.decode(gpa, nd.List, b) catch return listFailed();
-            notes.appendSlice(gpa, l.notes) catch return listFailed();
+            var next: std.heap.ArenaAllocator = .init(gpa);
+            const l = ui.data.decode(next.allocator(), nd.List, b) catch {
+                next.deinit();
+                return listFailed();
+            };
+            notes.clearRetainingCapacity();
+            notes.appendSlice(gpa, l.notes) catch {
+                next.deinit();
+                return listFailed();
+            };
+            if (list_mem) |*m| m.deinit();
+            list_mem = next;
             list.notes = notes.items;
+            list.failed = false;
             listRender();
         },
         .patch => {
+            patching -|= 1;
             const b = bytes orelse return listFailed();
             const n = ui.data.decode(gpa, nd.Note, b) catch return listFailed();
             for (notes.items) |*x| {
@@ -649,7 +665,7 @@ fn place() void {
     for (notes.items) |n| {
         if (n.status != .open) continue;
         const here = switch (n.scope) {
-            .page => std.mem.eql(u8, n.path, path),
+            .page => std.mem.eql(u8, nd.canonical(n.path), nd.canonical(path)),
             .everywhere => onPage(a, n.target.component()),
         };
         if (!here) continue;
@@ -705,11 +721,34 @@ fn onGrew(entries: zjb.Handle, observer: zjb.Handle) callconv(.c) void {
 var list: ui.noteslist.List = .{};
 var list_server: ui.noteslist.List = .{};
 var list_island: ?*ui.island.Island(ui.noteslist.List, dom.Dom) = null;
+/// The latest list answer's notes live here, freed when the next one lands
+var list_mem: ?std.heap.ArenaAllocator = null;
+var fetching = false;
+/// PATCHes sent and not answered
+var patching: u32 = 0;
 
 fn listMain() void {
     list_island = dom.rt.add(ui.noteslist.List, &list, &list_server, ui.noteslist.sel) catch return dom.dom.warn("notes: out of memory");
     dom.rt.changed = listChanged;
+    fetchAll();
+    zjb.global("window").call("setInterval", .{ zjb.fnHandle("notesPoll", &onPoll), @as(i32, 20_000) }, void);
+    zjb.global("document").call("addEventListener", .{ zjb.constString("visibilitychange"), zjb.fnHandle("notesShown", &onShown), @as(i32, 0) }, void);
+}
+
+fn fetchAll() void {
+    if (fetching) return;
+    fetching = true;
     dom.fetch("/api/notes?all=1&status=any", @backingInt(Call.all), done);
+}
+
+/// Only while the tab shows: a hidden one catches up when it comes back
+fn onPoll() callconv(.c) void {
+    if (!zjb.global("document").get("hidden", bool)) fetchAll();
+}
+
+fn onShown(e: zjb.Handle) callconv(.c) void {
+    e.release();
+    onPoll();
 }
 
 fn listRender() void {
@@ -733,6 +772,12 @@ fn listChanged() void {
             defer arena.deinit();
             patch(id, .{ .reply = replyValue(arena.allocator()) });
         },
+        .reopen => |id| {
+            var arena: std.heap.ArenaAllocator = .init(gpa);
+            defer arena.deinit();
+            const words = replyValue(arena.allocator());
+            patch(id, .{ .status = .open, .reply = if (words.len > 0) words else null });
+        },
         .tool => |on| if (on)
             dom.send("POST", "/api/notes/tool?on=1", "", @backingInt(Call.tool_on), done)
         else
@@ -748,6 +793,7 @@ fn patch(id: u32, c: nd.Change) void {
     ui.data.encode(a, nd.Change, c, &body) catch return;
     var buf: [32]u8 = undefined;
     const path = std.fmt.bufPrint(&buf, "/api/notes?id={d}", .{id}) catch return;
+    patching += 1;
     dom.send("PATCH", path, body.items, @backingInt(Call.patch), done);
 }
 

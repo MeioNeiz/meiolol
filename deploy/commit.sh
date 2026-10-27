@@ -12,10 +12,18 @@
 # session's opening context and `git log --oneline` carry subjects. Doc pages in PATHS
 # must not get worse than at HEAD (over budget and growing, or new dated-story lines):
 # the context-review skill's gate, budgets in .claude/doc-rules.json; skip CONTEXT_GATE=0.
+# --note N (repeatable): a "Note: N" trailer; the deploy that takes the commit live marks
+# site note N fixed (deploy/on-push.sh)
 set -euo pipefail
 opts=()
 subject=""
 while [ $# -gt 0 ] && [ "$1" != -- ]; do
+    if [ "$1" = --note ]; then
+        [[ ${2:-} =~ ^[0-9]+$ ]] || { echo "--note takes a note number" >&2; exit 2; }
+        opts+=(--trailer "Note: $2")
+        shift 2
+        continue
+    fi
     case "$1" in
         -m) [ -n "$subject" ] || subject=${2:-} ;;
         -m*) [ -n "$subject" ] || subject=${1#-m} ;;
@@ -24,7 +32,7 @@ while [ $# -gt 0 ] && [ "$1" != -- ]; do
     opts+=("$1")
     shift
 done
-usage="usage: deploy/commit.sh -m SUBJECT [-m BODY] [opts] -- PATH..."
+usage="usage: deploy/commit.sh -m SUBJECT [-m BODY] [--note N] [opts] -- PATH..."
 [ $# -gt 1 ] || { echo "$usage" >&2; exit 2; }
 shift
 subject=${subject%%$'\n'*}

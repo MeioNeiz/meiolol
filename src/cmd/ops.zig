@@ -222,11 +222,14 @@ pub const usage_notes =
     \\              /var/lib/meiolol-api (deploy/notes.sh runs it there)
     \\              list             open notes, one per line: id, status, scope, page,
     \\                               component, target, viewport, text
-    \\                --status S     open (default), done or any
+    \\                --status S     open (default), fixed, kept, done or any
     \\                --by page|component  grouped under a heading line each
     \\              show N           every field of note N
-    \\              done N [REPLY]   N done, with REPLY (e.g. the fixing commit) if given
-    \\              reopen N
+    \\              fixed N REPLY    dealt with (REPLY: the commit or plan doc); its pin
+    \\                               stays for Jacob's check. A done note stays done
+    \\              kept N REPLY     nothing to change, REPLY says why
+    \\              done N [REPLY]   Jacob checked it
+    \\              reopen N [REPLY]
     \\              reply N TEXT
     \\              --db FILE        another notes file (the dev server's data/snap/dev-notes.db)
     \\
@@ -237,7 +240,7 @@ pub fn cmdNotes(c: *Cmd) !u8 {
     const nd = ui.notesdata;
     const arena = c.arena;
     const io = c.init.io;
-    const Verb = enum { list, show, done, reopen, reply };
+    const Verb = enum { list, show, done, fixed, kept, reopen, reply };
     const v = std.meta.stringToEnum(Verb, c.next() orelse return error.Usage) orelse return error.Usage;
     var db_path: ?[]const u8 = null;
     var status_s: []const u8 = "open";
@@ -248,7 +251,7 @@ pub fn cmdNotes(c: *Cmd) !u8 {
             db_path = try c.value();
         } else if (c.is("--status") and v == .list) {
             status_s = try c.value();
-            if (std.meta.stringToEnum(enum { open, done, any }, status_s) == null) return error.Usage;
+            if (!std.mem.eql(u8, status_s, "any") and std.meta.stringToEnum(nd.Status, status_s) == null) return error.Usage;
         } else if (c.is("--by") and v == .list) {
             by = std.meta.stringToEnum(@TypeOf(by.?), try c.value()) orelse return error.Usage;
         } else if (std.mem.startsWith(u8, a, "--")) {
@@ -257,10 +260,11 @@ pub fn cmdNotes(c: *Cmd) !u8 {
     }
     const max_words: usize = switch (v) {
         .list => 0,
-        .show, .reopen => 1,
-        .done, .reply => 2,
+        .show => 1,
+        .done, .fixed, .kept, .reopen, .reply => 2,
     };
-    if (words.items.len > max_words or (v != .list and words.items.len == 0) or (v == .reply and words.items.len < 2)) return error.Usage;
+    const needs_reply = v == .reply or v == .fixed or v == .kept;
+    if (words.items.len > max_words or (v != .list and words.items.len == 0) or (needs_reply and words.items.len < 2)) return error.Usage;
     const id: u32 = if (v == .list) 0 else std.fmt.parseInt(u32, words.items[0], 10) catch return error.Usage;
 
     const path = if (db_path) |p| try arena.printSentinel("{s}", .{p}, 0) else try arena.printSentinel("{s}/api.db", .{c.data_dir}, 0);
@@ -277,11 +281,19 @@ pub fn cmdNotes(c: *Cmd) !u8 {
     const r = switch (v) {
         .list => try notes.handle(arena, db, .GET, try arena.print("all=1&status={s}", .{status_s}), "", "", now),
         .show => try notes.handle(arena, db, .GET, "all=1&status=any", "", "", now),
-        .done, .reopen, .reply => blk: {
+        .done, .fixed, .kept, .reopen, .reply => blk: {
+            // A deploy marks its commits' notes fixed (deploy/on-push.sh), maybe after
+            // Jacob already checked one
+            if (v == .fixed and (try db.scalar("SELECT status FROM notes WHERE id = ?", .{id}) orelse -1) == @backingInt(nd.Status.done)) {
+                try out.print("note {d} is done already: left as it is\n", .{id});
+                return 0;
+            }
             const reply: ?[]const u8 = if (words.items.len == 2) words.items[1] else null;
             const change: nd.Change = switch (v) {
                 .done => .{ .status = .done, .reply = reply },
-                .reopen => .{ .status = .open },
+                .fixed => .{ .status = .fixed, .reply = reply },
+                .kept => .{ .status = .kept, .reply = reply },
+                .reopen => .{ .status = .open, .reply = reply },
                 else => .{ .reply = reply },
             };
             var body: std.ArrayList(u8) = .empty;
@@ -334,7 +346,7 @@ pub fn cmdNotes(c: *Cmd) !u8 {
             std.log.err("no note {d}", .{id});
             return 1;
         },
-        .done, .reopen, .reply => try noteLine(out, try ui.data.decode(arena, nd.Note, r.body)),
+        .done, .fixed, .kept, .reopen, .reply => try noteLine(out, try ui.data.decode(arena, nd.Note, r.body)),
     }
     return 0;
 }

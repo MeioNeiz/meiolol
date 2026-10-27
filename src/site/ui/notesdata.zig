@@ -3,7 +3,9 @@
 const std = @import("std");
 
 pub const Scope = enum(u8) { page, everywhere };
-pub const Status = enum(u8) { open, done };
+/// fixed: a session's work is live and the note waits for Jacob's check (its pin stays,
+/// the reply says what changed); kept: nothing to change, with why; done: Jacob checked
+pub const Status = enum(u8) { open, done, fixed, kept };
 pub const Theme = enum(u8) { light, dark };
 
 /// How the noted element is found again after a rebuild: its anchor (the nearest
@@ -59,7 +61,7 @@ pub const Note = struct {
     theme: Theme,
     text: []const u8,
     status: Status,
-    /// e.g. the fixing commit
+    /// The fixing commit or plan doc, why it was kept, or Jacob's "not yet"
     reply: []const u8,
 };
 
@@ -94,6 +96,20 @@ const max_index = 999;
 /// The marker cookie: set at an admin's login (or the /admin/notes toggle), it has
 /// nginx add the tool's tag to pages (site/notes.zig)
 pub const marker = "__Host-meiolol_notes";
+
+/// A page's path as notes keep it: / and /index.html are one page, so a trailing
+/// index.html goes
+pub fn canonical(path: []const u8) []const u8 {
+    const index = "index.html";
+    return if (std.mem.endsWith(u8, path, "/" ++ index)) path[0 .. path.len - index.len] else path;
+}
+
+test canonical {
+    try std.testing.expectEqualStrings("/", canonical("/index.html"));
+    try std.testing.expectEqualStrings("/matchup/", canonical("/matchup/index.html"));
+    try std.testing.expectEqualStrings("/champions.html", canonical("/champions.html"));
+    try std.testing.expectEqualStrings("/xindex.html", canonical("/xindex.html"));
+}
 
 /// Why `n` is refused; null when every field is in bounds
 pub fn check(n: New) ?[]const u8 {

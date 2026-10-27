@@ -226,14 +226,22 @@ bytes.
   (keep the two in step) before `</body>`, private, no-store. Status codes go through;
   assets skip the hop. Not a boundary: /p/ (view_private) and the API check the login
 - Files: p/notes.{css,js,wasm} (fixed names, no-cache) and admin/notes.html (list mode of
-  the same wasm), written by `meiolol admin`
+  the same wasm, fetched again every 20 s while shown), written by `meiolol admin`
+- Paths: notesdata.canonical drops a trailing index.html (/ and /index.html one page), on
+  POST, GET and the pins' match; the schema moves older rows
 - API: /api/notes GET/POST/PATCH, ui.notesdata binary, bounds in notesdata.check;
   api.db's notes table. Writes need X-Meiolol-Action. Never cached (nginx or Cloudflare)
 - A note's element: nearest c-* component or [data-island], its index on the page, a
   child path and a 60-byte text snippet (ties only); "everywhere" notes pin wherever
   their component shows
-- Shell: `deploy/notes.sh list [--by component] | show N | done N [REPLY] | reopen N |
-  reply N TEXT` (C01's api.db over ssh; `--dev` the dev server's file)
+- Status: open; fixed (a session dealt with it, reply the commit or plan doc: the pin
+  stays, Looks good / Not yet on it and on /admin/notes); kept (nothing to change, reply
+  why); done (Jacob checked). Not yet reopens with his words as the reply
+- Commits: `deploy/commit.sh --note N` adds a `Note: N` trailer; deploy/on-push.sh marks
+  each trailer's note fixed once the deploy succeeds (a done note stays done)
+- Shell: `deploy/notes.sh list [--status S] [--by component] | show N | fixed N REPLY |
+  kept N REPLY | done N [REPLY] | reopen N [REPLY] | reply N TEXT` (C01's api.db over
+  ssh, its binary installed by `deploy/jomify.sh install api`; `--dev` the dev file)
 - Dev: `meiolol dev` answers /api/notes into data/snap/dev-notes.db as user "dev";
   /__notes/on|off sets the marker (meiolol_notes, no __Host- on http)
 

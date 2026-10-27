@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Jacob's notes on the live site (meiolol notes, src/api/notes.zig) from a session: C01's
 # api.db over ssh, as meiolol-api; --dev the dev server's file with this checkout's binary
-#   deploy/notes.sh list [--status open|done|any] [--by page|component]
-#   deploy/notes.sh show N | done N [REPLY] | reopen N | reply N TEXT
+#   deploy/notes.sh list [--status open|fixed|kept|done|any] [--by page|component]
+#   deploy/notes.sh show N | fixed N REPLY | kept N REPLY | done N [REPLY]
+#   deploy/notes.sh reopen N [REPLY] | reply N TEXT
 #   deploy/notes.sh --dev list
 set -euo pipefail
 cd "$(dirname "$0")/.."
