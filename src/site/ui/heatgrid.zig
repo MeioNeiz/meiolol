@@ -4,7 +4,7 @@
 //! the columns (a pool, then suggestions), a row can be flagged (a lane nothing covers),
 //! a column head can carry a control (Add). Cells can be pressed: both heads light and
 //! the host gives one readout line. Pool's weak lanes first; the draft tester's pair
-//! square (wip/tester.patch) is rows = columns = seats with a gap between teams
+//! square (docs/plan/ui/draft-tester.md) is rows = columns = seats, a gap between teams
 const std = @import("std");
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
@@ -47,7 +47,8 @@ pub const Grid = struct {
     corner: ?tree.Text = null,
     rows: []const Head,
     cols: []const Head,
-    /// rows.len * cols.len, row-major: the column's champion into the row's; null: no games
+    /// rows.len * cols.len, row-major: the column's champion into the row's; null: no
+    /// games. Any other length: every cell shows none
     cells: []const ?Cell,
     /// The pressed cell (row, column)
     sel: ?[2]u8 = null,
@@ -58,17 +59,19 @@ pub const Grid = struct {
 };
 
 pub fn view(h: *H, g: Grid) N {
+    // Keys: cells and heads j, gaps cols.len + j; rows i, the head row rows.len
+    const gk = g.cols.len;
     var head = h.list();
     head.add(h.span(.{ .class = "rh" }, .{if (g.corner) |c| h.span(.{ .class = "nm" }, .{c}) else null}));
     for (g.cols, 0..) |c, j| {
-        if (c.gap) head.add(h.span(.{ .key = 100 + j, .class = "gap" }, .{}));
+        if (c.gap) head.add(h.span(.{ .key = gk + j, .class = "gap" }, .{}));
         head.add(h.span(.{ .key = j, .class = "ch", .data_lit = lit(g, 1, j) }, .{
-            champ.view(h, c.champ, .{ .px = .@"32", .state = c.state, .named = c.label == null }),
+            champ.view(h, c.champ, .{ .px = .@"32", .state = c.state, .named = c.label == null or c.under != .none }),
             if (c.under != .none) c.under else if (c.label) |l| h.span(.{ .class = "nm" }, .{l}) else null,
         }));
     }
     var rows = h.list();
-    rows.add(h.div(.{ .key = 1000, .class = "r hd" }, .{head.done()}));
+    rows.add(h.div(.{ .key = g.rows.len, .class = "r hd" }, .{head.done()}));
     for (g.rows, 0..) |r, i| {
         var cs = h.list();
         cs.add(h.span(.{ .class = "rh", .data_lit = lit(g, 0, i), .data_flag = r.flag }, .{
@@ -76,7 +79,7 @@ pub fn view(h: *H, g: Grid) N {
             if (r.label) |l| h.span(.{ .class = "nm" }, .{l}) else null,
         }));
         for (g.cols, 0..) |c, j| {
-            if (c.gap) cs.add(h.span(.{ .key = 100 + j, .class = "gap" }, .{}));
+            if (c.gap) cs.add(h.span(.{ .key = gk + j, .class = "gap" }, .{}));
             cs.add(cell(h, g, i, j));
         }
         rows.add(h.div(.{ .key = i, .class = "r" }, .{cs.done()}));
@@ -97,7 +100,8 @@ fn cell(h: *H, g: Grid, i: usize, j: usize) N {
     const at = i * g.cols.len + j;
     const a = g.cols[j].champ.name;
     const b = g.rows[i].champ.name;
-    const x = (if (at < g.cells.len) g.cells[at] else null) orelse
+    const whole = g.cells.len == g.rows.len * g.cols.len;
+    const x = (if (whole) g.cells[at] else null) orelse
         return h.span(.{ .key = j, .class = "c", .data_k = "none", .role = "img", .aria_label = W.empty.with(h, .{ .a = a, .b = b }) }, .{W.none});
     const num = phrase.num(h, .points, x.pp);
     const label = W.cell.with(h, .{ .a = a, .b = b, .v = num.s, .g = phrase.num(h, .count, x.games).s });
@@ -248,4 +252,55 @@ test "heat grid: cells by row and column, thin faded, none dotted, gap before su
     try testing.expectEqual(6, std.mem.count(u8, out, "class=\"gap\""));
     try testing.expectEqual(3, std.mem.count(u8, out, "data-flag"));
     try testing.expectEqual(2, std.mem.count(u8, out, "data-lit"));
+}
+
+test "heat grid: inert cells are images with a fill unless thin; a readout; no rows, the head" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    var rows: [5]Head = undefined;
+    var cols: [6]Head = undefined;
+    demo(&h, &rows, &cols);
+    var w: std.Io.Writer.Allocating = .init(a);
+    try @import("html.zig").write(&t, view(&h, .{
+        .corner = plain("vs"),
+        .rows = &rows,
+        .cols = &cols,
+        .cells = &demo_cells,
+        .readout = h.span(.{}, .{plain("Press a cell")}),
+    }), &w.writer);
+    const out = w.written();
+    try testing.expectEqual(0, std.mem.count(u8, out, "<button class=\"c\""));
+    try testing.expectEqual(30, std.mem.count(u8, out, "class=\"c\""));
+    try testing.expectEqual(30, std.mem.count(u8, out, "role=\"img\""));
+    try testing.expect(std.mem.find(u8, out, "<p class=\"read\"><span>Press a cell</span></p>") != null);
+    // Ornn into Fiora: 2,104 games, filled; Sion into Yorick: 80, thin and unfilled
+    const fiora = std.mem.find(u8, out, "aria-label=\"Ornn into Fiora").?;
+    try testing.expect(std.mem.find(u8, cellAt(out, fiora), "--f:") != null);
+    const yorick = std.mem.find(u8, out, "aria-label=\"Sion into Yorick").?;
+    try testing.expect(std.mem.find(u8, cellAt(out, yorick), "--f:") == null);
+    try testing.expect(std.mem.find(u8, cellAt(out, yorick), "data-k=\"thin\"") != null);
+
+    // Cells that don't fit the heads: every one none
+    w.clearRetainingCapacity();
+    try @import("html.zig").write(&t, view(&h, .{ .rows = &rows, .cols = &cols, .cells = demo_cells[1..] }), &w.writer);
+    try testing.expectEqual(30, std.mem.count(u8, w.written(), "data-k=\"none\""));
+
+    w.clearRetainingCapacity();
+    try @import("html.zig").write(&t, view(&h, .{ .rows = &.{}, .cols = &cols, .cells = &.{} }), &w.writer);
+    const head = w.written();
+    try testing.expectEqual(1, std.mem.count(u8, head, "class=\"r hd\""));
+    try testing.expectEqual(0, std.mem.count(u8, head, "class=\"r\""));
+    try testing.expectEqual(6, std.mem.count(u8, head, "class=\"ch\""));
+    // A suggestion's head carries its Add button: the icon keeps its name
+    try testing.expect(std.mem.find(u8, head, "alt=\"Darius\"") != null);
+}
+
+/// The cell element starting before `at` (its tag up to `at`'s attribute)
+fn cellAt(out: []const u8, at: usize) []const u8 {
+    const start = std.mem.findScalarLast(u8, out[0..at], '<').?;
+    const end = std.mem.findScalarPos(u8, out, at, '>').?;
+    return out[start..end];
 }
