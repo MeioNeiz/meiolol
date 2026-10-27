@@ -234,9 +234,10 @@ bytes.
 - A note's element: nearest c-* component or [data-island], its index on the page, a
   child path and a 60-byte text snippet (ties only); "everywhere" notes pin wherever
   their component shows
-- Status: open; fixed (a session dealt with it, reply the commit or plan doc: the pin
-  stays, Looks good / Not yet on it and on /admin/notes); kept (nothing to change, reply
-  why); done (Jacob checked). Not yet reopens with his words as the reply
+- Status: open; fixed (a session dealt with it, reply the commit or plan doc; To check
+  on /admin/notes, with Looks good / Not yet; the page GET returns it but pins show
+  open ones only); kept (nothing to change, reply why); done (Jacob checked). Not yet
+  reopens with his words as the reply
 - Commits: `deploy/commit.sh --note N` adds a `Note: N` trailer; deploy/on-push.sh marks
   each trailer's note fixed once the deploy succeeds (a done note stays done)
 - Shell: `deploy/notes.sh list [--status S] [--by component] | show N | fixed N REPLY |
