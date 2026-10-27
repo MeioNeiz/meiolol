@@ -106,6 +106,15 @@ const Panel = struct {
     }
 };
 
+/// Opt.fit by hand: the change over the average pick less the champion's own strength
+fn fitOf(f: *const tc.Feed, o: *const tc.Opt) f32 {
+    var x = o.p - f.empty;
+    for (o.parts) |q| if (q.kind == .base) {
+        x -= q.pp;
+    };
+    return x;
+}
+
 fn has(s: []const u8, want: []const u8) !void {
     if (std.mem.find(u8, s, want) == null) {
         std.debug.print("missing {s}\n", .{want});
@@ -149,9 +158,19 @@ test "the first empty seat, Pick into it, the next seat from the URL, Enter pick
     p.click("aria-label", "Pick Darius");
     try testing.expectEqual(122, p.state.teams[0][0]);
     try testing.expectEqualStrings("#b=122-0-0-0-0", p.fake.fragment.items);
-    // The old seat's feed is stale: nothing to pick from until the new one
-    try has(try p.shown(), "Loading the model");
+    // The old seat's feed is stale: its rows stay, busy, with nothing to pick
+    s = try p.shown();
+    try has(s, "aria-busy=\"true\"");
+    try has(s, "Aatrox");
+    try testing.expect(std.mem.find(u8, s, "Pick Aatrox") == null);
+    try testing.expect(std.mem.find(u8, s, "Loading the model") == null);
+    // A Pick racing the board change: from a stale list, or not in the list, changes nothing
+    var ev: tree.Event = .{ .kind = .click };
+    p.state.update(.{ .pick = 266 }, &ev);
+    try testing.expectEqual(0, p.state.teams[0][1]);
+    try testing.expectEqual(266, p.feed.opts[0].id);
     try p.fed();
+    try testing.expect(std.mem.find(u8, try p.shown(), "aria-busy=\"true\"") == null);
     // Blue jungle next: the demo has no junglers
     s = try p.shown();
     try has(s, "Blue Jungle");
@@ -242,6 +261,18 @@ test "the feed: the seat's options, sorted by the low end or by fit, another sea
     }
     c = try tc.sorted(a, &f, .fit);
     try testing.expectEqual(2, c.len);
+    try testing.expect(fitOf(&f, c[0]) >= fitOf(&f, c[1]));
+    try testing.expect(c[0].id != c[1].id);
+    // Ties by champion id, under both sorts
+    const tie: tc.Feed = .{ .which = .live, .teams = empty, .seat = 0, .load = .ready, .empty = 50, .opts = &.{
+        .{ .id = 9, .p = 52, .lo = 51, .hi = 53, .parts = &.{.{ .kind = .base, .other = 0, .pp = 1, .games = 900 }}, .rest = 1 },
+        .{ .id = 3, .p = 53, .lo = 51, .hi = 55, .parts = &.{.{ .kind = .base, .other = 0, .pp = 2, .games = 400 }}, .rest = 1 },
+    } };
+    for ([_]tc.Sort{ .win, .fit }) |o| {
+        c = try tc.sorted(a, &tie, o);
+        try testing.expectEqual(3, c[0].id);
+        try testing.expectEqual(9, c[1].id);
+    }
     f = try tc.feed(a, head, .{ .ready = &l }, .live, .{ @splat(0), .{ 266, 0, 0, 0, 0 } }, 0);
     try testing.expectEqual(1, f.opts.len);
     try testing.expectEqual(122, f.opts[0].id);

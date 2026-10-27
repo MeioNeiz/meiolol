@@ -42,12 +42,11 @@ export fn main() void {
     // The first fetch and the panel wait a task, so they see the saved board and still
     // run when blocked storage throws below
     zjb.global("window").call("setTimeout", .{ zjb.fnHandle("testerStart", &start), @as(i32, 0) }, void);
-    // Last: blocked storage throws, ending this call with the page already live. A link's
-    // board wins over the saved one
+    // Last: blocked storage throws, ending this call with the page already live
     if (!std.meta.eql(state.teams, server.teams)) return;
     if (dom.stored(key)) |s| {
         defer gpa.free(s);
-        tp.restore(&state, s);
+        if (!tp.restoreSaved(&state, &server, s)) return;
         if (island) |i| i.render();
         dom.rt.syncHash(false) catch {};
     }

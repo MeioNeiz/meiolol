@@ -316,25 +316,36 @@ pub const Panel = struct {
         return if (f.of(p.which, p.teams, seat)) f else null;
     }
 
+    /// The last feed under the shown model, while ui-tester computes the shown board's
+    pub fn stale(p: *const Panel) ?*const Feed {
+        const f = p.feed orelse return null;
+        return if (f.which == p.which and f.load == .ready) f else null;
+    }
+
     pub fn view(p: *Panel, h: *H) N {
+        const shown = tp.shownSeat(p.teams, p.seat);
+        const cur = p.current();
         const attrs = .{
             .class = "c-tcand",
             .data_island = "testercand",
             .data_js = if (p.js.len > 0) p.js else null,
             .data_wasm = if (p.wasm.len > 0) p.wasm else null,
             .hidden = p.tab != .board,
+            .aria_busy = shown != null and cur == null,
         };
-        const seat = tp.shownSeat(p.teams, p.seat) orelse return h.div(attrs, .{h.p(.{ .class = "wait" }, .{W.full})});
+        const seat = shown orelse return h.div(attrs, .{h.p(.{ .class = "wait" }, .{W.full})});
         const side = if (seat < n_role) W.blue else W.red;
         const r = role.Role.all[seat % n_role];
-        const f = p.current() orelse return p.waiting(h, attrs, side, r, .loading);
+        // Between a board change and the next feed the last list stays, without Pick, so
+        // the panel doesn't collapse and refill on every pick
+        const f = cur orelse p.stale() orelse return p.waiting(h, attrs, side, r, .loading);
         if (f.load != .ready) return p.waiting(h, attrs, side, r, f.load);
         const all = sorted(h.mem, f, p.sort) catch {
             h.oom = true;
             return h.div(attrs, .{});
         };
-        const in_seat = p.teams[seat / n_role][seat % n_role];
-        const rows = p.rowsOf(h, f, all, in_seat);
+        const in_seat = f.teams[f.seat / n_role][f.seat % n_role];
+        const rows = p.rowsOf(h, f, all, in_seat, cur != null);
         return h.div(attrs, .{
             p.top(h, side, r, all.len),
             p.strip(h, all, side, r, in_seat),
@@ -399,14 +410,14 @@ pub const Panel = struct {
 
     /// The first max_rows and the seat's own champion below them, or every row the search
     /// keeps
-    fn rowsOf(p: *Panel, h: *H, f: *const Feed, all: []const *const Opt, in_seat: u32) []const candlist.Row {
+    fn rowsOf(p: *Panel, h: *H, f: *const Feed, all: []const *const Opt, in_seat: u32, live: bool) []const candlist.Row {
         var rows: std.ArrayList(candlist.Row) = .empty;
         const searching = p.q.len > 0;
         var last: usize = 0;
         for (all, 0..) |o, i| {
             const keep = if (searching) matches(p.nameOf(o.id), p.q.slice()) else i < max_rows or o.id == in_seat;
             if (!keep) continue;
-            rows.append(h.mem, p.row(h, f, o, i, in_seat, !searching and i > last + 1)) catch {
+            rows.append(h.mem, p.row(h, f, o, i, in_seat, !searching and i > last + 1, live)) catch {
                 h.oom = true;
                 return &.{};
             };
@@ -415,7 +426,7 @@ pub const Panel = struct {
         return rows.items;
     }
 
-    fn row(p: *Panel, h: *H, f: *const Feed, o: *const Opt, i: usize, in_seat: u32, gap: bool) candlist.Row {
+    fn row(p: *Panel, h: *H, f: *const Feed, o: *const Opt, i: usize, in_seat: u32, gap: bool, live: bool) candlist.Row {
         const open = p.open == o.id;
         const nm = p.nameOf(o.id);
         return .{
@@ -432,7 +443,7 @@ pub const Panel = struct {
             .label = W.why.with(h, .{ .n = nm }),
             .id = h.fmt("tc-{d}", .{o.id}),
             .on = h.on(p, .{ .open = o.id }),
-            .pick = if (o.id != in_seat) h.on(p, .{ .pick = o.id }) else null,
+            .pick = if (live and o.id != in_seat) h.on(p, .{ .pick = o.id }) else null,
             .pick_label = W.pick.with(h, .{ .n = nm }),
         };
     }
@@ -515,6 +526,7 @@ pub const css =
     \\  .c-tcand .hd .n { color: var(--muted); font-size: var(--fs-s); }
     \\  .c-tcand .hd input { flex: 1 1 140px; min-width: 0; max-width: 240px; }
     \\  .c-tcand .wait { color: var(--muted); margin: 0; }
+    \\  .c-tcand[aria-busy="true"] > :not(.hd) { opacity: 0.55; transition: opacity 0.2s; }
     \\}
     \\
 ;

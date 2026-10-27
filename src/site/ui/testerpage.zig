@@ -411,6 +411,16 @@ pub fn saved(p: *const Page, w: *std.Io.Writer) !void {
     for (p.teams, 0..) |team, s| for (team, 0..) |id, r| try w.print("{s}{d}", .{ if (s == 0 and r == 0) " " else ",", id });
 }
 
+/// The saved board on a page opened with none (`p` as the URL set it, `server` its
+/// default): true if it took it. A link's board and model win over the saved ones
+pub fn restoreSaved(p: *Page, server: *const Page, s: []const u8) bool {
+    if (!std.meta.eql(p.teams, server.teams)) return false;
+    const linked = p.which;
+    restore(p, s);
+    if (linked != server.which) p.which = linked;
+    return true;
+}
+
 /// Back from `saved`; anything malformed leaves the page as it is. A champion the head
 /// lacks (removed since) or seen on an earlier seat leaves its seat empty
 pub fn restore(p: *Page, s: []const u8) void {
