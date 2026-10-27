@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# The jomify web server's meiolol pieces, which the box's push deploy doesn't touch and
-# were installed by hand (17 Oct: meiolol-traffic ran a copy 3 commits old, and two by-hand
-# scp's broke on zsh word splitting of "ssh -i ..." in a variable). Host alias jomify
-# (~/.ssh/config); jomove, an unrelated house-moving app, shares the server, so this
-# touches only meiolol's files. Scripts install from HEAD's committed copy, never the
-# working tree.
+# C01's meiolol pieces that the push deploy doesn't install, once installed by hand (17
+# Oct: meiolol-traffic ran a copy 3 commits old, and two by-hand scp's broke on zsh word
+# splitting of "ssh -i ..." in a variable). Host alias essex-vm (~/.ssh/config;
+# JOMIFY_HOST overrides). Named for jomify, which ran them until the VM move
+# (docs/plan/vm.md) and now keeps only jomove: never point this at it. Scripts install
+# from HEAD's committed copy, never the working tree.
 #
 #   deploy/jomify.sh drift                 installed vs HEAD, per piece
 #   deploy/jomify.sh install traffic|cache-version|training-receive|accounts-send
@@ -16,7 +16,7 @@
 # /usr/local/share/meiolol/installed ("api SHA TIME"), which drift reads
 set -euo pipefail
 
-HOST=${JOMIFY_HOST:-jomify}
+HOST=${JOMIFY_HOST:-essex-vm}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 RECORD=/usr/local/share/meiolol/installed
 PIECES=(traffic cache-version training-receive accounts-send)
@@ -36,6 +36,8 @@ UNITS=(meiolol-traffic.service meiolol-traffic.timer)
 API_PATHS=(src/api src/core src/net src/riot src/curves.zig src/date.zig src/ddragon.zig
     src/livestate.zig src/statemodel.zig src/winchance.zig)
 
+# C01's sudo wants a password (vault); never printed, only piped to sudo -S
+sudo_pw() { printf '%s\n' "$(vault get meiolol/essex-vm SUDO_PASSWORD)"; }
 remote_hash() { ssh "$HOST" "sha256sum $1 2> /dev/null | cut -d' ' -f1"; }
 head_hash() { git -C "$ROOT" show "HEAD:$1" | shasum -a 256 | cut -d' ' -f1; }
 
@@ -73,7 +75,7 @@ install_script() {
     git -C "$ROOT" show "HEAD:$(src "$p")" > "$tmp"
     scp -q "$tmp" "$HOST:/tmp/meiolol-$p.new"
     rm -f "$tmp"
-    ssh "$HOST" "sudo install -m 755 /tmp/meiolol-$p.new /usr/local/bin/meiolol-$p && rm /tmp/meiolol-$p.new"
+    sudo_pw | ssh "$HOST" "head -1 | sudo -S -p '' -v && sudo install -m 755 /tmp/meiolol-$p.new /usr/local/bin/meiolol-$p && rm /tmp/meiolol-$p.new"
     echo "$p: installed $(src "$p") at $(git -C "$ROOT" rev-parse --short HEAD) as /usr/local/bin/meiolol-$p"
 }
 
@@ -88,16 +90,20 @@ install_api() {
         -Doptimize=ReleaseSafe --prefix zig-out/jomify --cache-dir "$1/.zig-cache" \
         && cp zig-out/jomify/bin/meiolol "$2/meiolol"' _ "$ROOT" "$out"
     scp -q "$out/meiolol" "$HOST:/tmp/meiolol-api.new"
-    ssh "$HOST" "bash -s" "$rev" "$short" "$RECORD" <<'EOF'
-set -u
+    # As root: the sudo password, then the script, on stdin (sudo reads one line)
+    {
+        sudo_pw
+        cat <<'EOF'
+set -euo pipefail
 rev=$1 short=$2 record=$3
 bin=/usr/local/bin/meiolol bak=/usr/local/bin/meiolol.bak-pre-$short
-sudo cp -p "$bin" "$bak"
-sudo install -m 755 /tmp/meiolol-api.new "$bin" && rm /tmp/meiolol-api.new
+cp -p "$bin" "$bak"
+install -m 755 /tmp/meiolol-api.new "$bin"
+rm /tmp/meiolol-api.new
 restarts() { systemctl show -p NRestarts --value meiolol-api; }
 steady() {
     local n i
-    sudo systemctl restart meiolol-api
+    systemctl restart meiolol-api
     n=$(restarts)
     for i in $(seq 30); do
         sleep 1
@@ -106,17 +112,18 @@ steady() {
     systemctl -q is-active meiolol-api
 }
 if steady; then
-    sudo mkdir -p "$(dirname "$record")"
-    echo "api $rev $(date -u +%FT%TZ)" | sudo tee -a "$record" > /dev/null
+    mkdir -p "$(dirname "$record")"
+    echo "api $rev $(date -u +%FT%TZ)" >> "$record"
     echo "api: $short installed and steady for 30 s; old binary kept as $bak"
     exit 0
 fi
 echo "api: $short not steady after restart, rolling back"
-sudo journalctl -u meiolol-api -n 8 --no-pager
-sudo install -m 755 "$bak" "$bin"
-sudo systemctl restart meiolol-api
+journalctl -u meiolol-api -n 8 --no-pager
+install -m 755 "$bak" "$bin"
+systemctl restart meiolol-api
 exit 1
 EOF
+    } | ssh "$HOST" "sudo -S -p '' bash -s $rev $short $RECORD"
 }
 
 case "${1:-}" in
