@@ -61,6 +61,23 @@ pub fn decode(a: Allocator, comptime T: type, bytes: []const u8) Error!T {
     return v;
 }
 
+/// The first fields of a `T` written by `encode`, as `Head` (the same names and types in
+/// order), and the bytes after them: a reader of the head alone needs no decoder for the
+/// rest. Slices point into `bytes`; `Head` holds no other slices
+pub fn decodeHead(comptime T: type, comptime Head: type, bytes: []const u8) Error!struct { head: Head, rest: []const u8 } {
+    comptime {
+        const tf = std.meta.fieldNames(T);
+        for (std.meta.fieldNames(Head), 0..) |f, i| {
+            if (!std.mem.eql(u8, f, tf[i]) or @FieldType(Head, f) != @FieldType(T, f)) @compileError("data: " ++ @typeName(Head) ++ " isn't the start of " ++ @typeName(T));
+        }
+    }
+    var r: Reader = .{ .bytes = bytes, .a = std.mem.Allocator.failing };
+    if (r.read(u32) != fingerprint(T)) return r.err orelse error.WrongType;
+    const v = r.read(Head);
+    if (r.err) |e| return e;
+    return .{ .head = v, .rest = bytes[r.i..] };
+}
+
 fn put(a: Allocator, out: *std.ArrayList(u8), comptime T: type, v: T) Allocator.Error!void {
     switch (@typeInfo(T)) {
         .int => |i| {
@@ -229,6 +246,18 @@ test "a champion list round-trips" {
     try testing.expectEqual(rows[0].spark, back[0].spark);
     try testing.expectEqual(rows[1].role, back[1].role);
     try testing.expectEqual(@as(?f32, null), back[0].change);
+}
+
+test "a head without the rest's decoder" {
+    const T = struct { n: u8, name: []const u8, rest: []const u16 };
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(testing.allocator);
+    try encode(testing.allocator, T, .{ .n = 3, .name = "Ahri", .rest = &.{ 1, 2 } }, &out);
+    const got = try decodeHead(T, struct { n: u8, name: []const u8 }, out.items);
+    try testing.expectEqual(3, got.head.n);
+    try testing.expectEqualStrings("Ahri", got.head.name);
+    try testing.expectEqualSlices(u8, &.{ 2, 0, 0, 0, 1, 0, 2, 0 }, got.rest);
+    try testing.expectError(error.WrongType, decodeHead(struct { n: u8 }, struct { n: u8 }, out.items));
 }
 
 test "a stale, cut or damaged file fails to decode" {

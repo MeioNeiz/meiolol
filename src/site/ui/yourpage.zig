@@ -36,6 +36,7 @@ const W = struct {
     pub const all = plain("All");
     pub const older = plain("Show older");
     pub const none = plain("No games match");
+    pub const example = plain("An example player's games. Look yourself up on the home page for yours.");
 };
 
 /// The filter row's chips; `.other` games show under All only
@@ -60,6 +61,8 @@ pub const YourList = struct {
     tz: []const i32 = &.{},
     /// game.html, relative to the page
     game: []const u8 = "game.html",
+    /// A looked-up player's Riot ID, percent-encoded; "" the example
+    id: []const u8 = "",
 
     const P = @This();
 
@@ -105,8 +108,9 @@ pub const YourList = struct {
         ev.push = true;
     }
 
-    /// The row's game: its page on game.html; none without one
+    /// The row's game on game.html: a lookup's by start, the example's by page
     fn href(p: *const P, h: *H, g: yl.Game) ?[]const u8 {
+        if (p.id.len > 0) return h.fmt("{s}#id={s}&game={d}", .{ p.game, p.id, g.start_ms });
         const i = g.page orelse return null;
         return h.fmt("{s}#g={d}", .{ p.game, i });
     }
@@ -138,6 +142,7 @@ pub const YourList = struct {
             h.div(.{ .class = "cols" }, .{
                 p.sum.view(h, l, l.games),
                 h.div(.{ .class = "list" }, .{
+                    if (p.id.len == 0) h.p(.{ .class = "note" }, .{W.example}) else null,
                     if (days.len == 0) h.p(.{ .class = "none" }, .{W.none}) else null,
                     groups.done(),
                     if (days.len > p.shown) button.view(h, .{ .on = h.on(p, .older) }, .{W.older}) else null,
@@ -193,6 +198,7 @@ pub const css =
     \\  /* GameRow's layouts follow its container's width */
     \\  .c-your .day { container-type: inline-size; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
     \\  .c-your .none { margin: 0; padding: var(--sp-4); color: var(--faint); }
+    \\  .c-your .note { margin: 0; color: var(--muted); font-size: var(--fs-s); }
     \\  .c-your .list > .c-btn { justify-self: center; }
     \\  @media (max-width: 1000px) {
     \\    .c-your > .cols { grid-template-columns: minmax(0, 1fr); }
@@ -294,4 +300,19 @@ test "filter row, day groups and Show older" {
     n = p.view(&h);
     try testing.expectEqual(10, rowCount(&t, n));
     try testing.expect(!h.oom);
+}
+
+test "a looked-up list: rows open game.html by id and start, no example note" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    var p: YourList = .{ .l = &demo.list };
+    try testing.expect(t.find(p.view(&h), "class", "note") != null);
+    p.id = "MeioNeiz%23EUW";
+    const n = p.view(&h);
+    try testing.expect(t.find(n, "class", "note") == null);
+    const want = try std.fmt.allocPrint(a, "game.html#id=MeioNeiz%23EUW&game={d}", .{demo.games[0].start_ms});
+    try testing.expectEqualStrings(want, t.attr(t.find(n, "class", "c-grow").?, "href").?);
 }

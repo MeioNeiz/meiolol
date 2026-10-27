@@ -8,6 +8,7 @@ const role = @import("role.zig");
 const art = @import("art.zig");
 const gd = @import("gamedata.zig");
 const fmt = @import("fmt.zig");
+const data = @import("data.zig");
 
 pub const Queue = enum { solo, flex, draft, swift, other };
 
@@ -104,6 +105,28 @@ pub const Lookup = struct {
     /// cache doesn't know the player
     pub const State = enum { queued, fetching, ready, not_found, opted_out, busy, none };
 };
+
+/// Lookup's fields before `list`: all the lookup island reads (data.decodeHead)
+pub const Head = struct {
+    state: Lookup.State,
+    ahead: ?u16 = null,
+    pending: ?u16 = null,
+    total: ?u16 = null,
+    check_at: ?i64 = null,
+    failed: ?[]const u8 = null,
+};
+
+/// /api/list's answer as its head, and its list as a List's own file (data.decode); the
+/// list's bytes are copied behind List's fingerprint, never decoded here
+pub fn split(a: std.mem.Allocator, bytes: []const u8) data.Error!struct { head: Head, list: ?[]u8 } {
+    const got = try data.decodeHead(Lookup, Head, bytes);
+    const rest = got.rest;
+    if (rest.len < 2 or rest[0] != 1) return .{ .head = got.head, .list = null };
+    const out = try a.alloc(u8, 4 + rest.len - 1);
+    std.mem.writeInt(u32, out[0..4], data.fingerprint(List), .little);
+    @memcpy(out[4..], rest[1..]);
+    return .{ .head = got.head, .list = out };
+}
 
 /// The filter row and the summary's presses; null is All
 pub const Filter = struct {
@@ -253,6 +276,26 @@ fn demoGame(start_ms: i64, c: u16, r: role.Role, win: bool) Game {
 const day_ms = std.time.ms_per_day;
 // 22 Oct 2026 00:00 UTC, a Thursday
 const t0: i64 = 20748 * day_ms;
+
+test "split: the head, and the list as its own file" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const games = [_]Game{demoGame(t0, 0, .mid, true)};
+    const l: List = .{ .player = .{ .name = "A", .tag = "1" }, .champs = &.{champ.demo("Ahri", "Ahri")}, .games = &games };
+    var out: std.ArrayList(u8) = .empty;
+    try data.encode(a, Lookup, .{ .state = .fetching, .pending = 3, .total = 9, .failed = "Timeout", .list = l }, &out);
+    const s = try split(a, out.items);
+    try testing.expectEqual(.fetching, s.head.state);
+    try testing.expectEqual(3, s.head.pending.?);
+    try testing.expectEqualStrings("Timeout", s.head.failed.?);
+    const back = try data.decode(a, List, s.list.?);
+    try testing.expectEqualStrings("1", back.player.tag);
+    try testing.expectEqual(t0, back.games[0].start_ms);
+    out.clearRetainingCapacity();
+    try data.encode(a, Lookup, .{ .state = .not_found }, &out);
+    try testing.expectEqual(null, (try split(a, out.items)).list);
+}
 
 test "days group by the viewer's date, newest first, remakes counted only in time" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);

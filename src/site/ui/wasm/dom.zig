@@ -350,13 +350,18 @@ fn onLater() callconv(.c) void {
     for (0..lazy.len) |i| load(i);
 }
 
-/// The island's file: a <script> as the page's own, src and data-wasm from its root
 fn load(i: usize) void {
     const bit = @as(u32, 1) << @intCast(i);
     if (started & bit != 0) return;
     started |= bit;
+    script(lazy[i]);
+}
+
+/// The file of the island under `sel`: a <script> as the page's own, src and data-wasm
+/// from its root. Once per island: the caller keeps track
+pub fn script(sel: []const u8) void {
     const doc = zjb.global("document");
-    const q = zjb.string(lazy[i]);
+    const q = zjb.string(sel);
     defer q.release();
     const el = doc.call("querySelector", .{q}, zjb.Handle);
     if (el == .null) return;

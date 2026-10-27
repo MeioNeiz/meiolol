@@ -1,5 +1,6 @@
 //! The Your games list (games.html, unlisted): the example player's list
-//! (yourgame.list_path) as ui.yourpage.YourList, its rows opening game.html
+//! (yourgame.list_path) as ui.yourpage.YourList, its rows opening game.html; a URL's id
+//! is looked up in its place (ui.yourlookup)
 const std = @import("std");
 const ui = @import("ui");
 const html = @import("html.zig");
@@ -32,12 +33,15 @@ pub fn writePage(site: *const Site, w: *Writer) !bool {
     try html.head(w, p);
     const enc = std.base64.standard.Encoder;
     const bin = try a.alloc(u8, enc.calcSize(f.data.len));
+    // The lookup's status line above the list; ui-your loads its file for a URL's id
+    var look: ui.yourlookup.YourLookup = .{ .js = assets.yourlookup_js.path, .wasm = assets.yourlookup_wasm.path };
     var y: ui.yourpage.YourList = .{ .l = l, .bin = enc.encode(bin, f.data), .game = yourgame.page_path };
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
-    t.root = y.view(&h);
-    if (h.oom) return error.OutOfMemory;
-    try ui.html.write(&t, t.root, w);
+    for ([_]ui.N{ look.view(&h), y.view(&h) }) |n| {
+        if (h.oom) return error.OutOfMemory;
+        try ui.html.write(&t, n, w);
+    }
     try html.tpl.render(w,
         \\<script src="{js}" data-wasm="{wasm}" defer></script>
         \\
