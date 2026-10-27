@@ -1,7 +1,7 @@
 //! The UI's component system (docs/plan/ui/stack.md): components build a typed node tree
 //! with `H`; html.zig writes it on the server, ui.wasm patches the DOM from it, check.zig
-//! lints it in plain tests. Std and tpl only, so the same files build for the backend
-//! and for wasm32.
+//! lints it in plain tests. Std, tpl and core (std only), so the same files build for
+//! the backend and for wasm32.
 const std = @import("std");
 
 pub const tree = @import("tree.zig");
@@ -62,6 +62,7 @@ pub const lane = @import("lane.zig");
 pub const timeline = @import("timeline.zig");
 pub const gamedata = @import("gamedata.zig");
 pub const testerdata = @import("testerdata.zig");
+pub const modelbadge = @import("modelbadge.zig");
 pub const learndata = @import("learndata.zig");
 pub const pooldata = @import("pooldata.zig");
 pub const admindata = @import("admindata.zig");
@@ -108,7 +109,7 @@ pub const patchpage = @import("patchpage.zig");
 pub const components = .{ button, chip, badge, segmented, card, toggletip, strip, role, champ, rolepicker, champsearch, champhead, matchbrief, matchstrip, champlist, table, chart, dotplot, trend, histogram, art, skillgrid, itempath, runetree, buildpanel, tabs, site, filterbar, champpage, kda, timeline, versus, objicon, minimap, gamestrip, inspector, gamehead, gamerow, spark, stat, scoreboard, laneduel, itemrow, gamepage, lane, matchpage, matchgrid, finder, delta, bar, violin, tiers, guess, puzzle, choice, reasons, candlist, learnpage, changeline, patchhead, patchpage };
 
 /// Every component, in the gallery's order
-pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, role, champ, site, rolepicker, filterbar, champsearch, champhead, matchbrief, matchstrip, champlist, draftboard, champselect, teamrows, loadscreen, gamescreen, postgame, signin, practice, app, table, chart, dotplot, trend, histogram, lane, timeline, spark, art, skillgrid, itempath, runetree, buildpanel, versus, objicon, minimap, gamestrip, inspector, gamehead, gamerow, scoreboard, laneduel, itemrow, gamepage, guess, puzzle, choice, rankstrip, draftflow, reasons, candlist, champrolepicker, poolslots, heatgrid, matchgrid, finder, violin, learnpage, changeline, patchhead, patchpage };
+pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, modelbadge, role, champ, site, rolepicker, filterbar, champsearch, champhead, matchbrief, matchstrip, champlist, draftboard, champselect, teamrows, loadscreen, gamescreen, postgame, signin, practice, app, table, chart, dotplot, trend, histogram, lane, timeline, spark, art, skillgrid, itempath, runetree, buildpanel, versus, objicon, minimap, gamestrip, inspector, gamehead, gamerow, scoreboard, laneduel, itemrow, gamepage, guess, puzzle, choice, rankstrip, draftflow, reasons, candlist, champrolepicker, poolslots, heatgrid, matchgrid, finder, violin, learnpage, changeline, patchhead, patchpage };
 
 pub const H = tree.H;
 pub const N = tree.N;

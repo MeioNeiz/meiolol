@@ -13,6 +13,8 @@ pub const scope = .{ ".c-select", ".c-menu" };
 
 pub const Item = struct {
     label: tree.Text,
+    /// Drawn in place of the label (a ModelBadge with its facts line)
+    node: ?N = null,
     selected: bool = false,
     on: ?tree.Handler = null,
     /// Takes a whole row of the menu ("All regions")
@@ -53,7 +55,7 @@ pub fn menu(h: *H, o: Opts, items: []const Item, open: bool) N {
         .class = if (it.wide) "wide" else null,
         .aria_selected = it.selected,
         .on_click = it.on,
-    }, .{it.label}));
+    }, .{ it.node, if (it.node == null) it.label else null }));
     return h.div(.{
         .class = if (open) "c-menu static" else "c-menu",
         .id = if (open) null else o.id,

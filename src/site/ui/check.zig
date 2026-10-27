@@ -92,7 +92,10 @@ fn walk(r: *Report, t: *const tree.Tree, n: tree.N, rules: Rules) void {
         .button => {
             const label = t.attr(n, "aria-label") orelse textOf(r, t, n);
             if (label.len == 0) r.add(rules.button_name, "a button has no name (text or aria-label)", .{});
-            if (label.len > rules.label_chars or countWords(label) > rules.label_words) {
+            // A listbox row (Select's menu) is a choice in a list, as a table cell, not an
+            // action's label: it may carry a ModelBadge and its facts line
+            const row = if (t.attr(n, "role")) |v| std.mem.eql(u8, v, "option") else false;
+            if (!row and (label.len > rules.label_chars or countWords(label) > rules.label_words)) {
                 // An aria-label may be longer than what shows; the visible text is the label
                 const shown = textOf(r, t, n);
                 if (shown.len > rules.label_chars or countWords(shown) > rules.label_words) {
@@ -135,4 +138,13 @@ test "a label over budget is a warning, not a failure; a raised rule fails" {
     try testing.expectEqual(@as(usize, 0), r.errors());
     try testing.expectEqual(@as(usize, 1), (try run(arena.allocator(), &t, .{ .button_name = .err })).errors());
     try testing.expectEqual(@as(usize, 5), r.words);
+}
+
+test "a listbox row may run past the label budget" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var t: tree.Tree = .{};
+    var h: tree.H = .init(arena.allocator(), &t);
+    t.root = h.div(.{ .role = "listbox" }, .{h.button(.{ .role = "option" }, .{"Live draft model Daily App"})});
+    try testing.expectEqual(@as(usize, 0), (try run(arena.allocator(), &t, .{ .label = .err })).findings.items.len);
 }
