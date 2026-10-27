@@ -97,8 +97,9 @@ pub const Page = struct {
         };
     }
 
-    fn reveal(p: *Page) void {
+    fn reveal(p: *Page, ev: *tree.Event) void {
         p.revealed = true;
+        ev.after = .{ .op = .focus, .ref = "next" };
         const z = p.cur();
         const n: u2 = switch (z.answer) {
             .guess => |x| blk: {
@@ -113,8 +114,8 @@ pub const Page = struct {
 
     pub fn update(p: *Page, m: Msg, ev: *tree.Event) void {
         switch (m) {
-            .guess => return if (p.g.event(ev) == .commit) p.reveal(),
-            .lock => return if (p.lockable()) p.reveal(),
+            .guess => return if (p.g.event(ev) == .commit) p.reveal(ev),
+            .lock => return if (p.lockable()) p.reveal(ev),
             .choose => |i| return if (!p.revealed) {
                 p.pick = i;
             },
@@ -129,20 +130,18 @@ pub const Page = struct {
                 p.reset();
                 ev.push = true;
             },
+            // 1-9 choose and focus Lock in, so Enter locks in; Enter itself stays the focused
+            // control's (on a card it chooses that card, after the reveal it presses Next)
             .key => {
                 const z = p.cur();
-                if (std.mem.eql(u8, ev.text, "Enter")) {
-                    if (p.revealed) {
-                        p.advance();
-                    } else if (z.answer == .pick and p.lockable()) {
-                        return p.reveal();
-                    } else return;
-                    ev.handled = true;
-                } else if (!p.end and !p.revealed and z.answer == .pick and ev.text.len == 1 and ev.text[0] >= '1' and ev.text[0] - '1' < z.answer.pick.choices.len) {
-                    p.pick = ev.text[0] - '1';
-                    ev.handled = true;
-                    return;
-                } else return;
+                const t = ev.text;
+                if (p.end or p.revealed or z.answer != .pick or t.len != 1 or t[0] < '1') return;
+                const i = t[0] - '1';
+                if (i >= z.answer.pick.choices.len) return;
+                p.pick = i;
+                ev.handled = true;
+                ev.after = .{ .op = .focus, .ref = "lock" };
+                return;
             },
         }
         // On a phone the answer sits below the stage: the next puzzle starts at its top
@@ -226,9 +225,9 @@ pub const Page = struct {
             .take = if (p.revealed) .{ .s = z.tip } else null,
             .games = h.span(.{}, .{&tt}),
             .action = if (p.revealed)
-                button.view(h, .{ .v = .primary, .on = h.on(p, .next) }, .{W.next})
+                button.view(h, .{ .v = .primary, .on = h.on(p, .next), .ref = "next" }, .{W.next})
             else
-                button.view(h, .{ .v = .primary, .disabled = !p.lockable(), .on = h.on(p, .lock) }, .{W.lock}),
+                button.view(h, .{ .v = .primary, .disabled = !p.lockable(), .on = h.on(p, .lock), .ref = "lock" }, .{W.lock}),
         });
     }
 
@@ -480,7 +479,8 @@ fn shown(a: std.mem.Allocator, d: *const ld.Data, c: u8, z: u8, answer: ?f32) ?*
             .guess => p.g.value = x,
             .pick => p.pick = @intFromFloat(x),
         }
-        p.reveal();
+        var ev: tree.Event = .{ .kind = .click };
+        p.reveal(&ev);
     }
     return p;
 }
@@ -525,11 +525,23 @@ test "first visit on chapter 1; guess, lock in, pick by key and click, chapter e
     try testing.expectEqualStrings("counter-top", p.cur().id);
     ev = .{ .kind = .keydown, .text = "1" };
     p.update(.key, &ev);
+    try testing.expectEqual(@as(?u8, 0), p.pick);
+    try testing.expectEqualStrings("lock", ev.after.?.ref);
     p.update(.{ .choose = 1 }, &ev);
     try testing.expect(!p.revealed);
+    // Enter is the focused button's: on a card it chooses that card, not the last pick
     ev = .{ .kind = .keydown, .text = "Enter" };
     p.update(.key, &ev);
+    try testing.expect(!ev.handled);
+    try testing.expect(!p.revealed);
+    ev = .{ .kind = .click };
+    p.update(.lock, &ev);
     try testing.expect(p.revealed);
+    try testing.expectEqualStrings("next", ev.after.?.ref);
+    ev = .{ .kind = .keydown, .text = "Enter" };
+    p.update(.key, &ev);
+    try testing.expect(!ev.handled);
+    try testing.expectEqualStrings("counter-top", p.cur().id);
     try testing.expectEqual(@as(?u2, 3), p.progress.get("counter-top"));
     p.update(.next, &ev);
     try testing.expect(p.end);

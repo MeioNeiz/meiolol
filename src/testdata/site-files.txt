@@ -219,7 +219,7 @@ data/tiers-rank.bin 061698ea172da830
 data/tiers.bin a17e546e59c118df
 download.html 6e3fb07c4b89a7e3
 index.html dfb87e8c660a70a8
-learn.html 777d9ab02c5d8981
+learn.html 2bba940284f1526b
 learn/champs.json 7c5a77a4464faa98
 learn/practice.json 4f53cda18c2baa0c
 matchup/bot/kaisa-vs-twitch.html 007b32d7278bfb2e
