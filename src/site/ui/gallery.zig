@@ -99,6 +99,7 @@ pub const css =
     \\.g-state { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-1); min-width: 0; }
     \\.g-state > :first-child { max-width: 100%; }
     \\.g-state[data-fill] { align-items: stretch; }
+    \\.g-state:has([aria-modal="true"]) { contain: layout; min-height: 600px; }
     \\.g-cap { font-size: var(--fs-xs); color: var(--faint); }
     \\.g-col { display: flex; flex-direction: column; gap: var(--sp-2); }
     \\.g-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
