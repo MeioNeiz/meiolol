@@ -79,6 +79,8 @@ fn body(a: std.mem.Allocator, w: *Writer, files: []const File, shown: Shown, at:
         .root = at.root,
         .utc = try a.print("{f}", .{dateOf(at.today)}),
         .days = try dayList(a, files, at.today + 1),
+        .answer = @intCast(std.mem.findScalar(u16, shown.p.options, dd.played(&shown.p)).?),
+        .winner = shown.p.result.winner,
     };
     var raw: std.ArrayList(u8) = .empty;
     try ui.data.encode(a, ds.Data, days, &raw);

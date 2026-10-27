@@ -1,7 +1,8 @@
 //! DailyDays: Daily Draft's head (title, badges) with the days strip and streak, the strip
 //! its own island (ui-dailydays.wasm) so ui-daily.wasm stays the puzzle's. Each day
 //! links its puzzle's page (daily/<n>.html); answers come from localStorage
-//! meiolol.daily.v1 (dailypage.read), so the server renders none
+//! meiolol.daily.v1 (dailypage.read), so the server renders none. Once the page's puzzle
+//! is finished, how everyone did (/api/daily: the browser's answers sent once)
 const std = @import("std");
 const tree = @import("tree.zig");
 const badge = @import("badge.zig");
@@ -34,7 +35,13 @@ pub const Data = struct {
     utc: []const u8,
     /// Every puzzle with a page, oldest first
     days: []const Day,
+    /// The played pick's place in the page's puzzle's options, and who won: the crowd line
+    answer: u8,
+    winner: dd.Side,
 };
+
+/// /api/daily's counts for the page's puzzle: players, those who got the pick, the winner
+pub const Crowd = struct { players: u32, pick: u32, side: u32 };
 
 pub const Page = struct {
     d: *const Data,
@@ -44,6 +51,7 @@ pub const Page = struct {
     saved: []const u8 = "",
     /// The server's render: Data as ui.data, base64, for the island
     bin: []const u8 = "",
+    crowd: ?Crowd = null,
 
     pub const Msg = union(enum) { none };
 
@@ -93,12 +101,19 @@ pub const Page = struct {
             }, .{});
         }
         const st = s.streak();
+        const done = if (dp.read(s.saved, s.d.n)) |m| m.marks != null else false;
+        const crowd = if (s.crowd) |c| if (done and c.players > 0) c else null else null;
         return h.span(.{ .class = "c-days", .data_island = "days", .data_bin = if (s.bin.len > 0) s.bin else null }, .{
             h.el(.nav, .{ .class = "strip", .aria_label = W.past }, .{links}),
             h.span(.{ .class = "streak", .role = "img", .title = W.streak_tip, .aria_label = W.streak_read.with(h, .{ .n = st.run, .b = st.best }) }, .{
                 phrase.num(h, .int, st.run),
                 h.el(.small, .{ .aria_hidden = "true" }, .{W.streak}),
             }),
+            if (crowd) |c| h.span(.{ .class = "crowd" }, .{W.crowd.with(h, .{
+                .n = c.players,
+                .p = share(c.pick, c.players),
+                .s = share(c.side, c.players),
+            })}) else null,
         });
     }
 };
@@ -118,6 +133,40 @@ fn out(days: []const Day, date: []const u8) usize {
     var end = days.len;
     while (end > 0 and std.mem.order(u8, days[end - 1].date, date) == .gt) end -= 1;
     return end;
+}
+
+fn share(k: u32, n: u32) u32 {
+    return @intFromFloat(@round(100 * @as(f32, @floatFromInt(k)) / @as(f32, @floatFromInt(n))));
+}
+
+/// /api/daily for puzzle `n` once finished in `saved`, with its answers when `send`
+/// (POST: counted), else without (GET); null until finished
+pub fn crowdPath(buf: []u8, saved: []const u8, n: u32, send: bool) ?[]const u8 {
+    const m = dp.read(saved, n) orelse return null;
+    if (m.marks == null) return null;
+    if (!send) return std.fmt.bufPrint(buf, "/api/daily?n={d}", .{n}) catch null;
+    const side = m.side orelse return null;
+    return std.fmt.bufPrint(buf, "/api/daily?n={d}&pick={d}&side={d}", .{ n, m.opt orelse return null, @backingInt(side) }) catch null;
+}
+
+/// /api/daily's reply ({n, players, picks, sides}) for `d`'s puzzle; null when it does not
+/// read or is another's
+pub fn crowdOf(a: std.mem.Allocator, json: []const u8, d: *const Data) ?Crowd {
+    const R = struct { n: u32, players: u32, picks: []const u32, sides: [2]u32 };
+    const r = std.json.parseFromSlice(R, a, json, .{ .ignore_unknown_fields = true }) catch return null;
+    defer r.deinit();
+    const v = r.value;
+    if (v.n != d.n or d.answer >= v.picks.len) return null;
+    return .{ .players = v.players, .pick = v.picks[d.answer], .side = v.sides[@backingInt(d.winner)] };
+}
+
+/// Whether `list` (localStorage meiolol.daily.sent.v1: "15,17") holds n
+pub fn sent(list: []const u8, n: u32) bool {
+    var it = std.mem.splitScalar(u8, list, ',');
+    var buf: [10]u8 = undefined;
+    const k = std.fmt.bufPrint(&buf, "{d}", .{n}) catch return false;
+    while (it.next()) |x| if (std.mem.eql(u8, x, k)) return true;
+    return false;
 }
 
 /// ?n= of a location.search ("?n=5&x"): an old link to a puzzle
@@ -180,6 +229,7 @@ const W = struct {
     const not_played = plain("not played");
     const streak = plain("streak");
     const streak_read = Phrase("Streak {n:int}, best {b:int}");
+    const crowd = Phrase("{n:count} played: {p:pct} got the pick, {s:pct} the winner");
     const streak_tip = plain("Puzzles finished on their own day. One missed day is forgiven; two in a row end it.");
 };
 
@@ -188,7 +238,7 @@ pub const css =
     \\  .c-dhead { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); }
     \\  .c-dhead h1 { margin: 0 var(--sp-1) 0 0; font-size: var(--fs-l); }
     \\  .c-dhead .n { color: var(--muted); font-weight: var(--w-m); }
-    \\  .c-days { display: flex; align-items: center; gap: var(--sp-3); margin-left: auto; }
+    \\  .c-days { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; column-gap: var(--sp-3); row-gap: var(--sp-1); margin-left: auto; }
     \\  .c-days .strip { display: flex; gap: 3px; }
     \\  .c-days .strip a { width: 18px; height: 18px; border-radius: 4px; background: var(--panel-3); }
     \\  .c-days .strip a[data-r="2"] { background: var(--hi2); }
@@ -197,9 +247,11 @@ pub const css =
     \\  .c-days .strip a[aria-current="date"] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--text); }
     \\  .c-days .strip a[aria-current="page"] { outline: 1.5px dashed var(--text); outline-offset: 2px; }
     \\  .c-days .streak { font-size: var(--fs-l); font-weight: var(--w-b); font-variant-numeric: tabular-nums; }
+    \\  .c-days .crowd { flex-basis: 100%; text-align: right; font-size: var(--fs-s); color: var(--muted); }
     \\  .c-days .streak small { margin-left: 3px; font-size: var(--fs-s); font-weight: var(--w-r); color: var(--faint); }
     \\  @media (max-width: 760px) {
-    \\    .c-days { margin-left: 0; width: 100%; }
+    \\    .c-days { margin-left: 0; width: 100%; justify-content: flex-start; }
+    \\    .c-days .crowd { text-align: left; }
     \\    .c-days .strip a { width: 15px; height: 15px; }
     \\  }
     \\}
@@ -214,8 +266,8 @@ const demo_days = [_]Day{
     .{ .n = 16, .date = "2026-10-26" }, .{ .n = 17, .date = "2026-10-27" }, .{ .n = 18, .date = "2026-10-28" },
 };
 
-const demo: Data = .{ .n = 17, .redirects = true, .root = "", .utc = "2026-10-27", .days = &demo_days };
-const demo_archive: Data = .{ .n = 12, .redirects = false, .root = "../", .utc = "2026-10-27", .days = &demo_days };
+const demo: Data = .{ .n = 17, .redirects = true, .root = "", .utc = "2026-10-27", .days = &demo_days, .answer = 2, .winner = .red };
+const demo_archive: Data = .{ .n = 12, .redirects = false, .root = "../", .utc = "2026-10-27", .days = &demo_days, .answer = 0, .winner = .blue };
 
 /// Finished on their days but #11 (late) and #15 (missed): the streak forgives #15, and
 /// #11 and #12 both late would have ended it
@@ -238,7 +290,10 @@ pub fn gallery(g: *@import("gallery.zig").Gallery) void {
     const h = g.h;
     if (demoPage(h, &demo, "")) |p| g.add("first visit: today ringed, nothing played", head(h, &dd.sample, p.view(h)));
     if (demoPage(h, &demo, demo_saved)) |p| g.add("both, one and none right; #15 missed and forgiven; today started", head(h, &dd.sample, p.view(h)));
-    if (demoPage(h, &demo_archive, demo_saved)) |p| g.add("an archive puzzle's page (#12, dashed)", head(h, &dd.sample, p.view(h)));
+    if (demoPage(h, &demo_archive, demo_saved)) |p| {
+        p.crowd = .{ .players = 1234, .pick = 512, .side = 802 };
+        g.add("an archive puzzle's page (#12, dashed), finished: how everyone did", head(h, &dd.sample, p.view(h)));
+    }
 }
 
 const testing = std.testing;
@@ -368,7 +423,7 @@ test "streak: more days than it counts keeps the newest 512" {
         try saved.writer.print("{s}\"{d}\":{{\"marks\":\"11\",\"on\":\"{s}\"}}", .{ if (i > 0) "," else "", i + 1, date });
     }
     try saved.writer.writeByte('}');
-    const d: Data = .{ .n = 600, .redirects = true, .root = "", .utc = many[599].date, .days = many };
+    const d: Data = .{ .n = 600, .redirects = true, .root = "", .utc = many[599].date, .days = many, .answer = 0, .winner = .blue };
     var p: Page = .init(a, &d);
     p.saved = saved.written();
     try testing.expectEqual(Streak{ .run = 512, .best = 512 }, p.streak());
@@ -385,4 +440,45 @@ test "out of memory in the strip sets oom" {
         _ = p.view(&h);
         try testing.expect(h.oom);
     }
+}
+
+test "the crowd: sent once finished, read back for the page's puzzle only" {
+    var buf: [96]u8 = undefined;
+    const saved =
+        \\{"12":{"opt":3,"side":1,"marks":"01","on":"2026-10-22"},"17":{"opt":2}}
+    ;
+    try testing.expectEqualStrings("/api/daily?n=12&pick=3&side=1", crowdPath(&buf, saved, 12, true).?);
+    try testing.expectEqualStrings("/api/daily?n=12", crowdPath(&buf, saved, 12, false).?);
+    try testing.expectEqual(null, crowdPath(&buf, saved, 17, false));
+    try testing.expectEqual(null, crowdPath(&buf, saved, 9, true));
+    // Marks without the answers behind them: nothing to count
+    try testing.expectEqual(null, crowdPath(&buf, "{\"12\":{\"marks\":\"01\"}}", 12, true));
+
+    const a = testing.allocator;
+    const reply = "{\"n\":12,\"players\":40,\"picks\":[10,0,5,25,0,0],\"sides\":[30,10]}";
+    try testing.expectEqual(Crowd{ .players = 40, .pick = 10, .side = 30 }, crowdOf(a, reply, &demo_archive).?);
+    try testing.expectEqual(null, crowdOf(a, reply, &demo));
+    try testing.expectEqual(null, crowdOf(a, "{\"n\":12,\"players\":40,\"picks\":[],\"sides\":[30,10]}", &demo_archive));
+    try testing.expectEqual(null, crowdOf(a, "<html>", &demo_archive));
+
+    try testing.expect(sent("15,12", 12));
+    try testing.expect(!sent("15,120", 12));
+    try testing.expect(!sent("", 12));
+}
+
+test "the crowd line: only once the page's puzzle is finished and someone played" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var t: tree.Tree = .{};
+    var h: H = .init(arena.allocator(), &t);
+    var p: Page = .init(arena.allocator(), &demo_archive);
+    p.crowd = .{ .players = 1234, .pick = 512, .side = 802 };
+    try testing.expectEqual(null, t.find(p.view(&h), "class", "crowd"));
+    p.saved = demo_saved;
+    const line = t.find(p.view(&h), "class", "crowd").?;
+    var text: std.Io.Writer.Allocating = .init(arena.allocator());
+    try t.textOf(line, &text.writer);
+    try testing.expectEqualStrings("1,234 played: 41% got the pick, 65% the winner", text.written());
+    p.crowd = .{ .players = 0, .pick = 0, .side = 0 };
+    try testing.expectEqual(null, t.find(p.view(&h), "class", "crowd"));
 }

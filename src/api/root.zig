@@ -15,7 +15,7 @@
 //!   GET  /api/forget?id=Name%23TAG  the objection's state
 //!   GET  /api/health                queue length
 //!   POST /api/daily?n=N&pick=I&side=S  a finished Daily Draft puzzle's answers (option
-//!                                   index 0-3, side 0 blue or 1 red), counted; returns
+//!                                   index 0-5, side 0 blue or 1 red), counted; returns
 //!                                   the counts as GET does
 //!   GET  /api/daily?n=N             how many picked each option and each side
 
@@ -405,7 +405,8 @@ fn errorReply(arena: Allocator, status: Status, state: []const u8, message: []co
     return .{ .status = status, .body = try std.json.Stringify.valueAlloc(arena, .{ .state = state, .@"error" = message }, .{}) };
 }
 
-pub const daily_options = 4;
+/// Ranked puzzles have four, pro ones six (ui.dailydata.Puzzle.options)
+pub const daily_options = 6;
 /// Puzzle numbers past this are refused, so junk can't grow the table without bound
 const max_daily = 100_000;
 
@@ -418,8 +419,7 @@ pub const DailyOut = struct {
 };
 
 /// Daily Draft answer counts, sent once per browser when a puzzle is finished; a repeat or
-/// a script can add more, which nginx's rate limit bounds. Paused: the island page
-/// (ui.dailypage) doesn't send or show them yet
+/// a script can add more, which nginx's rate limit bounds. ui.dailydays sends and shows them
 fn daily(arena: Allocator, db: store.Db, query: []const u8, post: bool) !Reply {
     const n = try intParam(arena, query, "n", max_daily) orelse
         return errorReply(arena, .bad_request, "error", "expected ?n=puzzle");
@@ -1102,8 +1102,8 @@ test "daily: counts a finished puzzle's answers, refuses junk" {
     _ = try daily(arena, db, "n=3&pick=0&side=1", true);
     _ = try daily(arena, db, "n=4&pick=1&side=1", true);
     const got = try daily(arena, db, "n=3", false);
-    try std.testing.expectEqualStrings("{\"n\":3,\"players\":3,\"picks\":[1,0,2,0],\"sides\":[1,2]}", got.body);
-    for ([_][]const u8{ "n=3&pick=4&side=0", "n=3&pick=1&side=2", "n=3&pick=-1&side=0", "n=0&pick=1&side=0", "n=100001&pick=1&side=0", "n=3&pick=1", "pick=1&side=0" }) |bad| {
+    try std.testing.expectEqualStrings("{\"n\":3,\"players\":3,\"picks\":[1,0,2,0,0,0],\"sides\":[1,2]}", got.body);
+    for ([_][]const u8{ "n=3&pick=6&side=0", "n=3&pick=1&side=2", "n=3&pick=-1&side=0", "n=0&pick=1&side=0", "n=100001&pick=1&side=0", "n=3&pick=1", "pick=1&side=0" }) |bad| {
         try std.testing.expectEqual(Status.bad_request, (try daily(arena, db, bad, true)).status);
     }
     try std.testing.expectEqual(@as(?i64, 4), try db.scalar("SELECT sum(count) FROM daily_answers", .{}));

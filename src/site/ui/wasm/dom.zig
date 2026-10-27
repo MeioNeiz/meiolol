@@ -423,10 +423,23 @@ pub fn binOf(el: zjb.Handle, name: []const u8) ?[]u8 {
 /// GET `path` (relative to the page), then `done(ctx, bytes)`; bytes are gpa's, the
 /// callee's to keep. A failed fetch calls `done` with null
 pub fn fetch(path: []const u8, ctx: i32, done: *const fn (i32, ?[]u8) void) void {
-    on_bytes = done;
     const u = zjb.string(path);
     defer u.release();
-    const p = zjb.ConstHandle.global.call("fetch", .{u}, zjb.Handle);
+    request(zjb.ConstHandle.global.call("fetch", .{u}, zjb.Handle), ctx, done);
+}
+
+/// POST `path` with no body, then as `fetch`
+pub fn post(path: []const u8, ctx: i32, done: *const fn (i32, ?[]u8) void) void {
+    const u = zjb.string(path);
+    defer u.release();
+    const init = zjb.global("Object").new(.{});
+    defer init.release();
+    init.set("method", zjb.constString("POST"));
+    request(zjb.ConstHandle.global.call("fetch", .{ u, init }, zjb.Handle), ctx, done);
+}
+
+fn request(p: zjb.Handle, ctx: i32, done: *const fn (i32, ?[]u8) void) void {
+    on_bytes = done;
     defer p.release();
     const ok = zjb.fnHandle("uiResponse", &onResponse).bind(.{ctx});
     defer ok.release();

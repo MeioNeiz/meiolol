@@ -98,8 +98,8 @@ copies the file into each site build; a failed run deletes it, so no stale examp
 | GET /api/friends?id=Name%23TAG | state (none, opted_out, ready), friends (src/api/friends.zig): games, waiting (backlog), with_friends and alone, and per friend (3+ games on the same team, top 20): riot_id, together, against, last_ms, you and them (with, apart, apart_rate, diff, lo, hi), their_games, top 3 champion and role pairs. Fetches nothing |
 | GET /api/forget?id=... | the objection's state (none, pending, issued, checking, mismatch, done, not_found, failed, expired) |
 | GET /api/health | {ok, jobs} |
-| POST /api/daily?n=N&pick=0-3&side=0-1 | Daily Draft: one finished puzzle's answers counted (option index in the puzzle's order, side 0 blue); replies as GET |
-| GET /api/daily?n=N | {n, players, picks[4], sides[2]}: counts only, daily_answers in api.db |
+| POST /api/daily?n=N&pick=0-5&side=0-1 | Daily Draft: one finished puzzle's answers counted (option index in the puzzle's order, side 0 blue); replies as GET |
+| GET /api/daily?n=N | {n, players, picks[6], sides[2]}: counts only, daily_answers in api.db |
 
 Queue capped at 30 jobs (503 "busy" beyond); objection checks jump the queue.
 

@@ -1,7 +1,9 @@
 //! ui-dailydays.wasm: Daily Draft's days strip and streak (ui.dailydays.Page) from its
 //! data-bin and localStorage meiolol.daily.v1, again on ui-daily.wasm's "ui-daily" event
 //! (a puzzle finished). On daily.html it also opens the viewer's own day's puzzle (their
-//! date, not UTC's) or ?n='s. zjb's generated loader (ui-dailydays.js) calls `main`
+//! date, not UTC's) or ?n='s. Once the page's puzzle is finished, /api/daily's counts:
+//! POSTed with the answers the first time (meiolol.daily.sent.v1), else a GET. zjb's
+//! generated loader (ui-dailydays.js) calls `main`
 const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
@@ -12,12 +14,14 @@ pub const panic = zjb.panic;
 
 const gpa = std.heap.wasm_allocator;
 const key = "meiolol.daily.v1";
+const sent_key = "meiolol.daily.sent.v1";
 
 var data: ds.Data = undefined;
 var state: ds.Page = undefined;
 var server: ds.Page = undefined;
 var island: *ui.island.Island(ds.Page, dom.Dom) = undefined;
 var date: [10]u8 = undefined;
+var asked = false;
 
 export fn main() void {
     dom.start();
@@ -47,6 +51,29 @@ fn read() void {
     const s = dom.stored(key) orelse return;
     if (state.saved.len > 0) gpa.free(state.saved);
     state.saved = s;
+    island.render();
+    crowd();
+}
+
+/// Once per page load, the first time the puzzle reads as finished
+fn crowd() void {
+    if (asked) return;
+    const list = dom.stored(sent_key) orelse "";
+    const send = !ds.sent(list, data.n);
+    var buf: [96]u8 = undefined;
+    const path = ds.crowdPath(&buf, state.saved, data.n, send) orelse return;
+    asked = true;
+    if (!send) return dom.fetch(path, 0, onCrowd);
+    // Before the request: a reload while it is out must not count it twice
+    var next: [4096]u8 = undefined;
+    dom.store(sent_key, std.fmt.bufPrint(&next, "{s}{s}{d}", .{ list, if (list.len > 0) "," else "", data.n }) catch return);
+    dom.post(path, 0, onCrowd);
+}
+
+fn onCrowd(_: i32, bytes: ?[]u8) void {
+    const b = bytes orelse return;
+    defer gpa.free(b);
+    state.crowd = ds.crowdOf(gpa, b, &data) orelse return;
     island.render();
 }
 

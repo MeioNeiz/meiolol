@@ -190,8 +190,10 @@ detected reason that clears chance, else its usual gold at 14 against the enemy)
   second tab's finish or a new day shows on reload. On daily.html it
   opens (location.replace) the newest puzzle out by the viewer's date, or ?n= (old
   links), when that isn't the page's.
-  Not yet: an archive past the strip's 14, share. Crowd counts (/api/daily) are paused:
-  nothing sends or shows them until the island does
+  Once the page's puzzle is finished, ui.dailydays POSTs its answers to /api/daily the
+  first time (localStorage meiolol.daily.sent.v1 lists the puzzles sent), else GETs, and
+  shows "N played: P% got the pick, S% the winner" under the strip.
+  Not yet: an archive past the strip's 14, share
 
 ## Your games service (src/api, src/site/your.zig, static/your.js)
 
