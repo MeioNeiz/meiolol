@@ -72,6 +72,8 @@ pub const heatgrid = @import("heatgrid.zig");
 pub const puzzle = @import("puzzle.zig");
 pub const guess = @import("guess.zig");
 pub const choice = @import("choice.zig");
+pub const rankstrip = @import("rankstrip.zig");
+pub const draftflow = @import("draftflow.zig");
 pub const yourlist = @import("yourlist.zig");
 pub const gamepage = @import("gamepage.zig");
 pub const gamehead = @import("gamehead.zig");
@@ -104,7 +106,7 @@ pub const patchpage = @import("patchpage.zig");
 pub const components = .{ button, chip, badge, segmented, card, toggletip, strip, role, champ, rolepicker, champsearch, champhead, matchbrief, matchstrip, champlist, table, chart, dotplot, trend, histogram, art, skillgrid, itempath, runetree, buildpanel, tabs, site, filterbar, champpage, kda, timeline, versus, objicon, minimap, gamestrip, inspector, gamehead, gamerow, spark, stat, scoreboard, laneduel, itemrow, gamepage, lane, matchpage, matchgrid, finder, delta, bar, violin, tiers, guess, puzzle, choice, learnpage, changeline, patchhead, patchpage };
 
 /// Every component, in the gallery's order
-pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, role, champ, site, rolepicker, filterbar, champsearch, champhead, matchbrief, matchstrip, champlist, draftboard, champselect, teamrows, loadscreen, gamescreen, postgame, signin, practice, app, table, chart, dotplot, trend, histogram, lane, timeline, spark, art, skillgrid, itempath, runetree, buildpanel, versus, objicon, minimap, gamestrip, inspector, gamehead, gamerow, scoreboard, laneduel, itemrow, gamepage, guess, puzzle, choice, champrolepicker, poolslots, heatgrid, matchgrid, finder, violin, learnpage, changeline, patchhead, patchpage };
+pub const all = .{ button, chip, badge, segmented, tabs, card, select, toggletip, stat, delta, bar, kda, strip, split, role, champ, site, rolepicker, filterbar, champsearch, champhead, matchbrief, matchstrip, champlist, draftboard, champselect, teamrows, loadscreen, gamescreen, postgame, signin, practice, app, table, chart, dotplot, trend, histogram, lane, timeline, spark, art, skillgrid, itempath, runetree, buildpanel, versus, objicon, minimap, gamestrip, inspector, gamehead, gamerow, scoreboard, laneduel, itemrow, gamepage, guess, puzzle, choice, rankstrip, draftflow, champrolepicker, poolslots, heatgrid, matchgrid, finder, violin, learnpage, changeline, patchhead, patchpage };
 
 pub const H = tree.H;
 pub const N = tree.N;

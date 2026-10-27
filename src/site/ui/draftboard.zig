@@ -3,11 +3,17 @@
 //! state (hovering, picking) and an optional short fact coloured by its lean; an ally
 //! still to pick can carry ideas for the role. The desktop's champ select first, then
 //! the draft tester and Daily Draft (draft-tester.md). Champions and roles only: no
-//! player names or ranks (product rules)
+//! player names or ranks (product rules). The full variant (Daily, the tester): 48 px
+//! seats with their pick number, the hidden seat asked about, a chosen answer previewed
+//! dashed, seats selectable, the game's line grown under each name after a reveal, each
+//! lane's middle its win chance from the matchup, and each side's damage mix
 const tree = @import("tree.zig");
 const champ = @import("champ.zig");
 const role = @import("role.zig");
 const badge = @import("badge.zig");
+const kda = @import("kda.zig");
+const fmt = @import("fmt.zig");
+const phrase = @import("phrase.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = @import("phrase.zig").plain;
 const H = tree.H;
@@ -36,24 +42,65 @@ pub const Seat = struct {
     /// Practice's click on the seat and on each idea (ui/practice.zig Act); "" for none
     act: []const u8 = "",
     idea_acts: []const []const u8 = &.{},
+    // Full variant from here
+    /// In the draft's order, 1-10; null when the order isn't known
+    pick: ?u8 = null,
+    /// The seat asked about: a "?" while `champ` is null, the answer once set
+    hidden: bool = false,
+    /// An answer chosen, not locked in: shown dashed in the hidden seat
+    preview: ?champ.Champ = null,
+    /// A short line under the name ("AD", "pick 10")
+    sub: tree.Text = .{ .s = "" },
+    /// The game's line, after a reveal
+    game: ?Game = null,
+    sel: bool = false,
+};
+
+pub const Game = struct {
+    kda: kda.Kda,
+    cs: u32,
+    gold: u32,
+    /// Damage to champions; `dmg_of` the board's most, for the bar
+    dmg: u32,
+    dmg_of: u32,
+    /// The played pick's place among the seat's options; null unrated
+    rated: ?u32 = null,
+    /// The model's own pick was played
+    star: bool = false,
 };
 
 pub const Lane = struct {
     role: role.Role,
     us: Seat = .{},
     them: Seat = .{},
+    /// Full variant: our side's win chance from this lane alone, %
+    win: ?f32 = null,
+    /// The lane asked about: the middle hides its figure, the row carries the accent
+    ask: bool = false,
 };
+
+pub const Variant = enum { app, full };
+
+/// A side's damage to champions: physical and magic shares (the rest true damage), and
+/// the share of the hidden seat, unknown until answered
+pub const Mix = struct { phys: f32, magic: f32, unknown: f32 = 0 };
 
 pub const Board = struct {
     /// Role order, five in a normal draft
     lanes: []const Lane,
     bans_us: []const champ.Champ = &.{},
     bans_them: []const champ.Champ = &.{},
+    v: Variant = .app,
+    /// Full variant: the sides' names ("Blue", "Red") and the winner once known
+    heads: [2]tree.Text = .{ words.blue, words.red },
+    won: ?Side = null,
+    mix: ?[2]Mix = null,
 };
 
-const Side = enum { us, them };
+pub const Side = enum { us, them };
 
 pub fn view(h: *H, b: Board) N {
+    if (b.v == .full) return full(h, b, &.{});
     var rows = h.list();
     for (b.lanes) |l| rows.add(h.div(.{ .key = @as(u32, @backingInt(l.role)), .class = "lane" }, .{
         seat(h, l.us, .us),
@@ -126,6 +173,153 @@ fn bans(h: *H, b: Board) ?N {
     });
 }
 
+/// The full variant with its seats as buttons: `on[i]` is lane i's us and them click
+/// (kept off Seat, which the app encodes and a handler can't be)
+pub fn fullOn(h: *H, b: Board, on: []const [2]?tree.Handler) N {
+    return full(h, b, on);
+}
+
+fn full(h: *H, b: Board, on: []const [2]?tree.Handler) N {
+    var grown = false;
+    for (b.lanes) |l| grown = grown or l.us.game != null or l.them.game != null;
+    var rows = h.list();
+    for (b.lanes, 0..) |l, i| {
+        const ons: [2]?tree.Handler = if (i < on.len) on[i] else .{ null, null };
+        rows.add(h.div(.{ .key = @as(u32, @backingInt(l.role)), .class = "lane", .data_ask = l.ask }, .{
+            fullSeat(h, l.us, .us, ons[0]),
+            mid(h, l),
+            fullSeat(h, l.them, .them, ons[1]),
+        }));
+    }
+    return h.div(.{ .class = "c-draft", .data_v = Variant.full }, .{
+        h.div(.{ .class = "heads" }, .{
+            h.span(.{ .data_side = Side.us }, .{ h.b(.{}, .{b.heads[0]}), if (b.won == .us) badge.view(h, .us, .{words.won}) else null }),
+            h.span(.{ .data_side = Side.them }, .{ if (b.won == .them) badge.view(h, .them, .{words.won}) else null, h.b(.{}, .{b.heads[1]}) }),
+        }),
+        if (grown) h.div(.{ .class = "lane hd", .aria_hidden = true }, .{ statHead(h, .us), h.span(.{}, .{}), statHead(h, .them) }) else null,
+        h.div(.{ .class = "lanes" }, .{rows.done()}),
+        if (b.mix) |m| h.div(.{ .class = "mix" }, .{ mixBar(h, m[0], .us), h.span(.{ .class = "line" }, .{words.damage}), mixBar(h, m[1], .them) }) else null,
+        bans(h, b),
+    });
+}
+
+fn statHead(h: *H, side: Side) N {
+    return h.span(.{ .class = "st", .data_side = side }, .{
+        h.span(.{}, .{words.kda_h}),
+        h.span(.{}, .{words.cs}),
+        h.span(.{}, .{words.gold}),
+        h.span(.{}, .{words.dmg}),
+        h.span(.{}, .{words.rated}),
+    });
+}
+
+fn fullSeat(h: *H, s: Seat, side: Side, on: ?tree.Handler) N {
+    // A hidden seat with its champion set has been revealed
+    const asked = s.hidden and s.champ == null;
+    const shown = if (asked) s.preview else s.champ;
+    const kids = .{
+        h.span(.{ .class = "ic" }, .{
+            champ.view(h, shown, .{
+                .px = .@"48",
+                .side = switch (side) {
+                    .us => .us,
+                    .them => .them,
+                },
+                .named = false,
+                .label = words.hidden,
+            }),
+            if (s.pick) |n| h.span(.{ .class = "pn", .aria_label = words.pick.with(h, .{ .n = n }) }, .{n}) else null,
+        }),
+        h.span(.{ .class = "who" }, .{
+            h.b(.{}, .{if (shown) |c| c.name else "?"}),
+            if (s.sub.s.len > 0) h.span(.{ .class = "line" }, .{s.sub}) else null,
+        }),
+        if (s.game) |g| gameLine(h, g, side) else null,
+    };
+    const attrs = .{
+        .class = "seat",
+        .data_side = side,
+        .data_hidden = asked,
+        .data_preview = asked and s.preview != null,
+        .data_sel = s.sel,
+    };
+    if (on == null) return h.div(attrs, kids);
+    return h.button(.{
+        .class = "seat",
+        .type = "button",
+        .data_side = side,
+        .data_hidden = asked,
+        .data_preview = asked and s.preview != null,
+        .aria_pressed = s.sel,
+        .on_click = on,
+    }, kids);
+}
+
+fn gameLine(h: *H, g: Game, side: Side) N {
+    return h.span(.{ .class = "st", .data_side = side }, .{
+        kda.view(h, g.kda, .{}),
+        h.span(.{}, .{phrase.num(h, .int, g.cs)}),
+        h.span(.{}, .{phrase.num(h, .kilo, g.gold)}),
+        h.span(.{ .class = "dm" }, .{h.span(.{ .aria_hidden = true }, .{h.el(.i, .{ .style = h.vars(.{
+            .w = if (g.dmg_of > 0) 100 * @as(f32, @floatFromInt(g.dmg)) / @as(f32, @floatFromInt(g.dmg_of)) else 0,
+        }) }, .{})})}),
+        h.span(.{ .class = "rk", .data_star = g.star }, .{if (g.rated) |r| words.nth.with(h, .{ .n = r, .s = ordinal(r) }) else null}),
+    });
+}
+
+pub fn ordinal(n: u32) []const u8 {
+    if (n % 100 >= 11 and n % 100 <= 13) return "th";
+    return switch (n % 10) {
+        1 => "st",
+        2 => "nd",
+        3 => "rd",
+        else => "th",
+    };
+}
+
+/// The lane's middle: role, and our side's win chance from the lane, as a bar out from
+/// even toward the side it favours
+fn mid(h: *H, l: Lane) N {
+    const w = l.win orelse return h.span(.{ .class = "mid" }, .{role.view(h, l.role, .{ .s = .s })});
+    if (l.ask) return h.span(.{ .class = "mid", .data_ask = true }, .{
+        role.view(h, l.role, .{ .s = .s }),
+        h.span(.{ .class = "lb" }, .{}),
+        h.span(.{ .class = "v" }, .{"?"}),
+    });
+    const d = w - 50;
+    const even = @abs(d) < 0.5;
+    const side: Side = if (d >= 0) .us else .them;
+    // Half the bar is 5 points
+    const reach = @min(@abs(d), 5) * 10;
+    return h.span(.{ .class = "mid", .data_side = if (even) null else side, .title = words.lane.with(h, .{ .w = w }) }, .{
+        role.view(h, l.role, .{ .s = .s }),
+        h.span(.{ .class = "lb", .aria_hidden = true }, .{if (even) null else h.el(.i, .{ .style = h.vars(.{
+            .l = if (side == .us) 50 - reach else 50,
+            .w = reach,
+        }) }, .{})}),
+        h.span(.{ .class = "v" }, .{if (even) words.even else phrase.num(h, .rate, if (side == .us) w else 100 - w)}),
+    });
+}
+
+fn mixBar(h: *H, m: Mix, side: Side) N {
+    return h.span(.{ .class = "mx", .data_side = side }, .{
+        h.span(.{ .class = "bar", .aria_hidden = true }, .{
+            h.el(.i, .{ .class = "ph", .style = h.vars(.{ .w = 100 * m.phys }) }, .{}),
+            h.el(.i, .{ .class = "mg", .style = h.vars(.{ .w = 100 * m.magic }) }, .{}),
+            if (m.unknown > 0) h.el(.i, .{ .class = "uk", .style = h.vars(.{ .w = 100 * m.unknown }) }, .{}) else null,
+        }),
+        h.span(.{ .class = "ends" }, .{
+            h.span(.{}, .{ words.ad, " ", h.b(.{}, .{phrase.num(h, .pct, share(m.phys))}) }),
+            h.span(.{}, .{ words.ap, " ", h.b(.{}, .{phrase.num(h, .pct, share(m.magic))}) }),
+        }),
+    });
+}
+
+/// A 0-1 share from the data as a whole percent; NaN or out of range clamps
+fn share(x: f32) u32 {
+    return @intFromFloat(@round(@min(@max(100 * x, 0), 100)));
+}
+
 const words = struct {
     const us = plain("Your team");
     const them = plain("Enemy team");
@@ -136,6 +330,22 @@ const words = struct {
     const bans = plain("Bans");
     const empty = plain("Empty seat");
     const guessed = plain("Role guessed");
+    const blue = plain("Blue");
+    const red = plain("Red");
+    const won = plain("Won");
+    const hidden = plain("Hidden pick");
+    const pick = phrase.Phrase("Pick {n:int}");
+    const nth = phrase.Phrase("{n:int}{s:text}");
+    const lane = phrase.Phrase("Blue's lane win chance {w:rate}");
+    const even = plain("even");
+    const damage = plain("Damage");
+    const ad = plain("AD");
+    const ap = plain("AP");
+    const kda_h = plain("K/D/A");
+    const cs = plain("CS");
+    const gold = plain("Gold");
+    const dmg = plain("Dmg");
+    const rated = plain("Rated");
 };
 
 pub const css =
@@ -168,6 +378,89 @@ pub const css =
     \\  .c-draft .ideas { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
     \\  .c-draft .bans > span { display: flex; gap: 4px; flex-wrap: wrap; }
     \\  .c-draft .bans > [data-side="them"] { justify-content: flex-end; }
+    \\  .c-draft[data-v="full"] { max-width: none; gap: 0; }
+    \\  .c-draft[data-v="full"] .heads { padding: 0 var(--sp-2) var(--sp-2); font-size: var(--fs-l); }
+    \\  .c-draft[data-v="full"] .heads > span { display: flex; align-items: center; gap: var(--sp-2); }
+    \\  .c-draft[data-v="full"] .heads > [data-side="them"] { justify-content: flex-end; }
+    \\  .c-draft[data-v="full"] .lanes { gap: 0; border-top: 1px solid var(--line); }
+    \\  .c-draft[data-v="full"] .lane { grid-template-columns: minmax(0, 1fr) 120px minmax(0, 1fr); gap: 0; min-height: 60px;
+    \\    padding: 0; border-radius: 0; background: none; border-bottom: 1px solid var(--line); }
+    \\  .c-draft[data-v="full"] .lane[data-ask] { background: linear-gradient(90deg, transparent, var(--accent-bg) 70%); }
+    \\  .c-draft[data-v="full"] .lane.hd { min-height: 26px; font-size: var(--fs-xs); color: var(--faint); border-bottom: 0; }
+    \\  .c-draft[data-v="full"] .seat { all: unset; box-sizing: border-box; display: grid; min-width: 0;
+    \\    grid-template-columns: 48px minmax(0, 1fr) auto; grid-template-areas: "ic who st"; align-items: center;
+    \\    column-gap: var(--sp-3); padding: 6px var(--sp-2); border-radius: var(--r-m); flex-direction: initial; }
+    \\  .c-draft[data-v="full"] .seat[data-side="them"] { grid-template-columns: auto minmax(0, 1fr) 48px;
+    \\    grid-template-areas: "st who ic"; text-align: right; }
+    \\  .c-draft[data-v="full"] button.seat { cursor: pointer; }
+    \\  .c-draft[data-v="full"] button.seat:hover { background: var(--panel-2); }
+    \\  .c-draft[data-v="full"] button.seat:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+    \\  .c-draft[data-v="full"] .seat:is([aria-pressed="true"], [data-sel]) { background: var(--accent-bg); box-shadow: inset 0 0 0 1px var(--focus); }
+    \\  .c-draft .ic { grid-area: ic; position: relative; line-height: 0; }
+    \\  .c-draft[data-v="full"] .who { grid-area: who; }
+    \\  .c-draft[data-v="full"] .who > b { font-weight: var(--w-b); }
+    \\  .c-draft .pn { position: absolute; bottom: -4px; left: -4px; min-width: 18px; height: 18px; padding: 0 4px;
+    \\    box-sizing: border-box; display: grid; place-items: center; border-radius: var(--r-s); background: var(--bg);
+    \\    box-shadow: inset 0 0 0 1px var(--us); font-size: var(--fs-xs); font-weight: var(--w-b); line-height: 1;
+    \\    font-variant-numeric: tabular-nums; }
+    \\  .c-draft .seat[data-side="them"] .pn { left: auto; right: -4px; box-shadow: inset 0 0 0 1px var(--them); }
+    \\  .c-draft .seat[data-hidden] .c-champ { box-shadow: inset 0 0 0 1.5px var(--accent); animation: c-draft-pulse 1.6s var(--ease) infinite; }
+    \\  .c-draft .seat[data-hidden] .who > b, .c-draft .seat[data-preview] .who > b { color: var(--accent); }
+    \\  .c-draft .seat[data-preview] .c-champ { box-shadow: none; outline: 2px dashed var(--accent); outline-offset: 2px; opacity: 0.8; }
+    \\  .c-draft .st { grid-area: st; display: grid; grid-template-columns: 64px 32px 40px 48px 36px; gap: var(--sp-2);
+    \\    align-items: center; font-size: var(--fs-s); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    \\  .c-draft .st[data-side="them"] { direction: rtl; }
+    \\  .c-draft .st[data-side="them"] > * { direction: ltr; }
+    \\  .c-draft .lane.hd .st { font-size: var(--fs-xs); color: var(--faint); justify-self: end; padding: 0 var(--sp-2); }
+    \\  .c-draft .lane.hd .st[data-side="them"] { justify-self: start; }
+    \\  .c-draft .dm > span { display: block; position: relative; height: 4px; border-radius: 2px; background: var(--bar-track);
+    \\    overflow: hidden; }
+    \\  .c-draft .dm i { position: absolute; inset: 0 auto 0 0; width: calc(var(--w) * 1%); background: var(--bar-hi); }
+    \\  .c-draft .rk { font-weight: var(--w-b); }
+    \\  .c-draft .rk[data-star] { color: var(--turn); }
+    \\  .c-draft[data-v="full"] .mid { display: grid; justify-items: center; gap: 3px; padding: 0 var(--sp-1); min-width: 0;
+    \\    color: var(--t2); }
+    \\  .c-draft .mid .lb { position: relative; width: 100%; height: 8px; }
+    \\  .c-draft .mid .lb::before { content: ""; position: absolute; left: 0; right: 0; top: 3px; height: 2px; border-radius: 1px;
+    \\    background: var(--bar-track); }
+    \\  .c-draft .mid .lb::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--axis); }
+    \\  .c-draft .mid .lb > i { position: absolute; top: 1px; height: 6px; left: calc(var(--l) * 1%); width: calc(var(--w) * 1%);
+    \\    border-radius: 2px; background: var(--c, var(--bar-hi)); }
+    \\  .c-draft .mid[data-side="us"] { --c: var(--us); }
+    \\  .c-draft .mid[data-side="them"] { --c: var(--them); }
+    \\  .c-draft .mid .v { font-size: var(--fs-xs); font-weight: var(--w-b); font-variant-numeric: tabular-nums; color: var(--c, var(--muted));
+    \\    line-height: 14px; }
+    \\  .c-draft .mid[data-ask] { color: var(--accent); --c: var(--accent); }
+    \\  .c-draft .mix { display: grid; grid-template-columns: minmax(0, 1fr) 120px minmax(0, 1fr); align-items: center;
+    \\    padding: var(--sp-3) 0 var(--sp-2); }
+    \\  .c-draft .mix > .line { text-align: center; text-transform: uppercase; letter-spacing: 0.06em; font-weight: var(--w-b);
+    \\    color: var(--faint); }
+    \\  .c-draft .mx { display: grid; gap: 4px; padding: 0 var(--sp-2); min-width: 0; }
+    \\  .c-draft .mx .bar { display: flex; height: 10px; border-radius: 3px; overflow: hidden; background: var(--bar-track); }
+    \\  .c-draft .mx .bar > i { display: block; height: 100%; width: calc(var(--w) * 1%); }
+    \\  .c-draft .mx[data-side="them"] .bar { flex-direction: row-reverse; }
+    \\  .c-draft .mx .ph { background: var(--bar-hi); }
+    \\  .c-draft .mx .mg { background: var(--bar-lo); }
+    \\  .c-draft .mx .uk { background: repeating-linear-gradient(135deg, var(--accent-bg) 0 4px, transparent 4px 8px);
+    \\    box-shadow: inset 0 0 0 1px var(--sel-line); }
+    \\  .c-draft .mx .ends { display: flex; justify-content: space-between; font-size: var(--fs-xs); color: var(--muted);
+    \\    font-variant-numeric: tabular-nums; }
+    \\  .c-draft .mx .ends b { color: var(--text); }
+    \\  .c-draft[data-v="full"] .bans { padding-top: var(--sp-2); }
+    \\  @keyframes c-draft-pulse { 50% { box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 4px var(--accent-bg); } }
+    \\  @media (prefers-reduced-motion: reduce) { .c-draft .seat[data-hidden] .c-champ { animation: none; } }
+    \\  @container (max-width: 720px) {
+    \\    .c-draft[data-v="full"] .seat { grid-template-areas: "ic who" "ic st"; grid-template-columns: 40px minmax(0, 1fr);
+    \\      column-gap: var(--sp-2); row-gap: 2px; padding: 6px 2px; }
+    \\    .c-draft[data-v="full"] .seat[data-side="them"] { grid-template-areas: "who ic" "st ic"; grid-template-columns: minmax(0, 1fr) 40px; }
+    \\    .c-draft[data-v="full"] .seat > .ic > .c-champ { --sz: 40px; }
+    \\    .c-draft .st { display: flex; gap: 6px; font-size: var(--fs-xs); }
+    \\    .c-draft .st[data-side="them"] { justify-content: flex-end; }
+    \\    .c-draft .st > :nth-child(n+2):not(.rk) { display: none; }
+    \\    .c-draft[data-v="full"] .lane.hd { display: none; }
+    \\    .c-draft[data-v="full"] .lane, .c-draft .mix { grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr); }
+    \\    .c-draft[data-v="full"] .heads { font-size: var(--fs-m); }
+    \\  }
     \\  @container (max-width: 360px) {
     \\    .c-draft .seat > .c-champ { --sz: var(--icon-m); }
     \\    .c-draft .lane { gap: var(--sp-1); padding: 4px; }
@@ -209,6 +502,49 @@ pub const sample: Board = .{
     .bans_them = &.{ demo("Vex", "Vex"), demo("Aurora", "Aurora"), demo("Smolder", "Smolder") },
 };
 
+/// Daily #11 before the guess: red's last pick hidden, the top lane asked
+pub const daily_before: Board = .{
+    .v = .full,
+    .lanes = &.{
+        .{ .role = .top, .ask = true, .win = 51.4, .us = .{ .champ = demo("KSante", "K'Sante"), .pick = 9, .sub = plain("AD") }, .them = .{ .hidden = true, .pick = 10, .sub = plain("pick 10") } },
+        .{ .role = .jungle, .win = 50.1, .us = .{ .champ = demo("JarvanIV", "Jarvan IV"), .pick = 5, .sub = plain("AD") }, .them = .{ .champ = demo("Vi", "Vi"), .pick = 2, .sub = plain("AD") } },
+        .{ .role = .mid, .win = 49.1, .us = .{ .champ = demo("Viktor", "Viktor"), .pick = 8, .sub = plain("AP") }, .them = .{ .champ = demo("Anivia", "Anivia"), .pick = 7, .sub = plain("AP") } },
+        .{ .role = .bot, .win = 50.9, .us = .{ .champ = demo("Kalista", "Kalista"), .pick = 1, .sub = plain("AD") }, .them = .{ .champ = demo("Caitlyn", "Caitlyn"), .pick = 6, .sub = plain("AD") } },
+        .{ .role = .support, .win = 51.3, .us = .{ .champ = demo("Renata", "Renata"), .pick = 4, .sub = plain("AD and AP") }, .them = .{ .champ = demo("Neeko", "Neeko"), .pick = 3, .sub = plain("AP") } },
+    },
+    .mix = .{ .{ .phys = 0.61, .magic = 0.39 }, .{ .phys = 0.44, .magic = 0.36, .unknown = 0.2 } },
+    .bans_us = &.{ demo("Yasuo", "Yasuo"), demo("Zed", "Zed") },
+    .bans_them = &.{ demo("Vex", "Vex"), demo("Aurora", "Aurora") },
+};
+
+fn revealed(h: *H) Board {
+    const lanes = h.mem.dupe(Lane, daily_before.lanes) catch {
+        h.oom = true;
+        return daily_before;
+    };
+    const lines = [5][2]Game{
+        .{ .{ .kda = .{ .k = 0, .d = 2, .a = 3 }, .cs = 398, .gold = 17500, .dmg = 9100, .dmg_of = 24000, .rated = 4 }, .{ .kda = .{ .k = 1, .d = 3, .a = 1 }, .cs = 429, .gold = 16200, .dmg = 21000, .dmg_of = 24000, .rated = 3 } },
+        .{ .{ .kda = .{ .k = 2, .d = 3, .a = 6 }, .cs = 306, .gold = 16500, .dmg = 9800, .dmg_of = 24000, .rated = 2 }, .{ .kda = .{ .k = 2, .d = 3, .a = 5 }, .cs = 299, .gold = 15100, .dmg = 8200, .dmg_of = 24000, .rated = 5 } },
+        .{ .{ .kda = .{ .k = 2, .d = 2, .a = 4 }, .cs = 379, .gold = 16100, .dmg = 19000, .dmg_of = 24000, .rated = 6 }, .{ .kda = .{ .k = 1, .d = 2, .a = 4 }, .cs = 371, .gold = 15500, .dmg = 16000, .dmg_of = 24000, .rated = 9 } },
+        .{ .{ .kda = .{ .k = 4, .d = 0, .a = 3 }, .cs = 507, .gold = 22100, .dmg = 18000, .dmg_of = 24000, .rated = 1, .star = true }, .{ .kda = .{ .k = 4, .d = 1, .a = 2 }, .cs = 472, .gold = 21700, .dmg = 24000, .dmg_of = 24000, .rated = 2 } },
+        .{ .{ .kda = .{ .k = 2, .d = 1, .a = 6 }, .cs = 64, .gold = 12000, .dmg = 5000, .dmg_of = 24000, .rated = 3 }, .{ .kda = .{ .k = 0, .d = 1, .a = 5 }, .cs = 68, .gold = 10900, .dmg = 7000, .dmg_of = 24000, .rated = 7 } },
+    };
+    for (lanes, lines) |*l, g| {
+        l.ask = false;
+        l.us.game = g[0];
+        l.them.game = g[1];
+        l.us.sub = .{ .s = "" };
+        l.them.sub = .{ .s = "" };
+    }
+    lanes[0].them.champ = demo("Jayce", "Jayce");
+    lanes[0].them.sel = true;
+    var b = daily_before;
+    b.lanes = lanes;
+    b.won = .us;
+    b.mix = .{ .{ .phys = 0.61, .magic = 0.39 }, .{ .phys = 0.6, .magic = 0.4 } };
+    return b;
+}
+
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
     g.addFill("mid draft", view(h, sample));
@@ -219,4 +555,48 @@ pub fn gallery(g: *Gallery) void {
         .{ .role = .bot },
         .{ .role = .support },
     } }));
+    g.addFill("full: hidden pick asked", view(h, daily_before));
+    var chosen = daily_before;
+    const lanes = h.mem.dupe(Lane, daily_before.lanes) catch {
+        h.oom = true;
+        return;
+    };
+    lanes[0].them.preview = demo("Ambessa", "Ambessa");
+    chosen.lanes = lanes;
+    g.addFill("full: an answer chosen", view(h, chosen));
+    g.addFill("full: after the reveal, a seat selected", view(h, revealed(h)));
+}
+
+test "full variant: pick numbers, the hidden seat, seats as buttons only with a handler" {
+    const std = @import("std");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const html = @import("html.zig");
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    var out: std.Io.Writer.Allocating = .init(a);
+    try html.write(&t, view(&h, daily_before), &out.writer);
+    var s = out.written();
+    try std.testing.expect(std.mem.find(u8, s, "data-v=\"full\"") != null);
+    try std.testing.expectEqual(1, std.mem.count(u8, s, "data-hidden"));
+    try std.testing.expectEqual(2, std.mem.count(u8, s, "data-ask"));
+    try std.testing.expectEqual(10, std.mem.count(u8, s, "class=\"pn\""));
+    try std.testing.expect(std.mem.find(u8, s, "<button") == null);
+    try std.testing.expect(std.mem.find(u8, s, "class=\"lane hd\"") == null);
+    out = .init(a);
+    try html.write(&t, view(&h, revealed(&h)), &out.writer);
+    s = out.written();
+    try std.testing.expect(std.mem.find(u8, s, "data-hidden") == null);
+    try std.testing.expect(std.mem.find(u8, s, "Jayce") != null);
+    try std.testing.expectEqual(1, std.mem.count(u8, s, "data-sel"));
+    try std.testing.expect(std.mem.find(u8, s, "class=\"lane hd\"") != null);
+    try std.testing.expect(std.mem.find(u8, s, "4th") != null);
+    try std.testing.expectEqual(0, share(std.math.nan(f32)));
+    try std.testing.expectEqual(100, share(3));
+}
+
+test "the app's board stays encodable" {
+    const data = @import("data.zig");
+    _ = data.fingerprint(Board);
 }
