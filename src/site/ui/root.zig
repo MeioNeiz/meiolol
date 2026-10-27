@@ -64,6 +64,7 @@ pub const gamedata = @import("gamedata.zig");
 pub const testerdata = @import("testerdata.zig");
 pub const modelbadge = @import("modelbadge.zig");
 pub const learndata = @import("learndata.zig");
+pub const dailydata = @import("dailydata.zig");
 pub const pooldata = @import("pooldata.zig");
 pub const admindata = @import("admindata.zig");
 pub const alertband = @import("alertband.zig");

@@ -18,6 +18,7 @@ pub const learning = @import("learning.zig");
 pub const spread = @import("spread.zig");
 pub const patchday = @import("patchday.zig");
 pub const patchnotes = @import("patchnotes.zig");
+pub const leaguepedia = @import("leaguepedia.zig");
 pub const eval = @import("eval.zig");
 pub const fitted = @import("fitted.zig");
 pub const objectives = @import("objectives.zig");
