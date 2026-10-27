@@ -230,10 +230,17 @@ runs with its own tuned values; the box stays untouched until then.
 Medians of 3 (the runs in brackets); render ms: every page (30085) from the live
 renderer, 8 at a time; crawl: the crawler's rate at the end.
 
+Daily eval (`meiolol eval --platform all`, in the web loop; no setting touches it):
+C01 27 Oct 14:00:25-14:45:46 UTC, 45 min (2.24M games); Oracle 26 Oct 12:46:48-21:43:43,
+8 h 57 min (2.11M). Starts at the first round boundary after it falls due (C01: 54 min
+late, behind a views round)
+
 | setting | core build s | views write s | renderer load s | render ms p50/p95/p99 | buff/cache GB | crawl matches/day |
 |---|---|---|---|---|---|---|
 | baseline, serial (27 Oct, host CPU, 62 GB, AVX2 build) | 129 (129 120 132) | 754 (758 750 754) | 44 (44 43 45) | 10/19/25 | 49 | 152121 |
 | filter runs 8, serial: not kept (filters 4.8 s vs 6.0 s; views write within noise) | 126 (121 135 126) | 788 (742 788 792) | 45 (45 46 44) | 10/20/27 | 49 | 153775 |
+| view loads 4 (95f9063d) | 128 (128 127 128) | 460 (473 433 460) | 44 (44 41 48) | 11/20/26 | 47 | 154216 |
+| view loads 2: kept, C01 host.env MEIOLOL_VIEW_LOADS=2; the new baseline | 127 (131 127 123) | 436 (434 438 436) | 45 (45 43 47) | 9/20/25 | 48 | 154666 |
 
 Baseline's views write by phase (views.log): stats 371 s (view 2), 144 s (view 3),
 75 s (view 0), 29 s (view 1), single-threaded (cpu = wall); people 53 s; filters 6 s,
@@ -253,7 +260,11 @@ than the spread between runs
   every part the clock leaves alone (views 1 and 3 whole, every view's patch day; the
   30-day views' window moved 13 min between the writes); core builds by the old and new
   binary started together match in all 285 files. Views write 769 s at 1, 471 s at 4
-  (one run, not the bench)
+  (one run, not the bench). Benched: 2 at once is as fast as 4 (436 s vs 460 s, -42% on
+  serial) with less memory beside the renderer and crawler, so C01 runs 2. Its floor is
+  the longest view: view 2's stats 396 s (371 s serial; the views slow each other a
+  little), the other worker's views 0, 3, 1 fit beside it. Lower only by splitting
+  stats, ruled out above
 
 ## Later
 

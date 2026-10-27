@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # C01 tuning (docs/plan/vm.md "C01 tuning"): times the site's heavy steps on the live data
 # with the web loop paused, N runs each into scratch files, and appends one row of
-# medians to ~/vm-chain/tune/results.md. The setting under test goes in the environment:
+# medians to ~/vm-chain/tune/results.md. The setting under test goes in the environment,
+# over host.env's:
 #   MEIOLOL_FILTER_RUNS=8 c01-bench.sh runs-8 [N]
 # Runs on C01 from ~/vm-chain/deploy (scp'd there, like vm-chain.sh); the crawler keeps
 # running, as on the box when its figures were logged.
@@ -12,6 +13,10 @@ D=$HOME/ml/meiolol
 S=$HOME/vm-chain/tune
 mkdir -p "$S"
 cd "$D" || exit 1
+# As the web loop runs (host.env is its EnvironmentFile); the setting under test wins
+while IFS='=' read -r k v; do
+    [[ -n $k && -z ${!k+x} ]] && export "$k=$v"
+done < <(grep -E '^[A-Z_]+=' host.env 2> /dev/null)
 log() { echo "$(date -u +%FT%TZ) $label: $*" | tee -a "$S/bench.log"; }
 median() { sort -n | awk '{a[NR] = $1} END {print NR ? a[int((NR + 1) / 2)] : ""}'; }
 
