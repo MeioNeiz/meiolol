@@ -139,9 +139,10 @@ dns() {
 
 verify() {
     local code
+    # Public DNS: the Mac's resolver can hold the old record well past its TTL
     for _ in $(seq 30); do
         code=$(curl -s -o /dev/null -w '%{http_code} %header{cf-ray}' --max-time 20 \
-            https://meio.lol/)
+            --doh-url https://1.1.1.1/dns-query https://meio.lol/)
         [[ $code == 200\ ?* ]] && { log "meio.lol through Cloudflare: $code"; return 0; }
         sleep 10
     done
