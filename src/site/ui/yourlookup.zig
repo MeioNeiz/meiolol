@@ -66,20 +66,34 @@ pub const YourLookup = struct {
     }
 
     /// /api/list's answer for this id, null when the fetch failed (not 200, offline): the
-    /// list's file for YourList, if it has one
-    pub fn answer(p: *P, a: std.mem.Allocator, bytes: ?[]const u8) ?[]u8 {
-        p.at = .down;
-        const s = yl.split(a, bytes orelse return null) catch return null;
+    /// list's file for YourList, if it has one. Failed: the answer isn't kept (the status
+    /// line's strings still point into the last); while waiting the shown list stays and
+    /// the next ask is a retry, else `.down`
+    pub fn answer(p: *P, a: std.mem.Allocator, bytes: ?[]const u8) error{Failed}!?[]u8 {
+        const s = (if (bytes) |b| yl.split(a, b) catch null else null) orelse return p.failed();
         // none: the cache-only answer, which this page never asks for
-        if (s.head.state == .none) return null;
+        if (s.head.state == .none) {
+            if (s.list) |l| a.free(l);
+            return p.failed();
+        }
         p.head = s.head;
         p.at = .answered;
         return s.list;
     }
 
-    /// The wait before asking again; null: no more asks
+    fn failed(p: *P) error{Failed} {
+        if (!p.waiting()) p.at = .down;
+        return error.Failed;
+    }
+
+    fn waiting(p: *const P) bool {
+        return p.at == .answered and (p.head.state == .queued or p.head.state == .fetching);
+    }
+
+    /// The wait before asking again; null: no more asks. Before rendering: at the cap it
+    /// sets `.slow`
     pub fn next(p: *P) ?u32 {
-        if (p.at != .answered or (p.head.state != .queued and p.head.state != .fetching)) return null;
+        if (!p.waiting()) return null;
         if (p.asks >= max_asks) {
             p.at = .slow;
             return null;
@@ -188,14 +202,14 @@ test "asks again while queued or fetching, backing off; stops once ready" {
     u.id.set("A#1");
     p.fromUrl(u);
     try testing.expectEqual(.asking, p.at);
-    try testing.expectEqual(null, p.answer(a, try reply(a, .{ .state = .queued, .ahead = 2 })));
+    try testing.expectEqual(null, try p.answer(a, try reply(a, .{ .state = .queued, .ahead = 2 })));
     try testing.expectEqual(2000, p.next().?);
     try testing.expectEqual(3000, p.next().?);
-    try testing.expectEqual(null, p.answer(a, try reply(a, .{ .state = .fetching, .pending = 1, .total = 4 })));
+    try testing.expectEqual(null, try p.answer(a, try reply(a, .{ .state = .fetching, .pending = 1, .total = 4 })));
     try testing.expectEqual(4500, p.next().?);
     // Ready: no more asks
     const l: yl.List = .{ .player = .{ .name = "A", .tag = "1" }, .champs = &.{}, .games = &.{} };
-    const file = p.answer(a, try reply(a, .{ .state = .ready, .list = l })).?;
+    const file = (try p.answer(a, try reply(a, .{ .state = .ready, .list = l }))).?;
     try testing.expectEqualStrings("1", (try data.decode(a, yl.List, file)).player.tag);
     try testing.expectEqual(null, p.next());
 }
@@ -204,13 +218,31 @@ test "stops at the cap, saying so" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var p: YourLookup = .{ .at = .asking };
-    _ = p.answer(a, try reply(a, .{ .state = .fetching }));
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    var p = demo(.asking, .{ .state = .none });
+    _ = try p.answer(a, try reply(a, .{ .state = .fetching }));
     var waited: u64 = 0;
     while (p.next()) |ms| waited += ms;
     try testing.expectEqual(.slow, p.at);
     try testing.expectEqual(max_asks, p.asks);
     try testing.expect(waited > 10 * std.time.ms_per_min);
+    try expectLine(a, &t, p.view(&h), "Still working on it. Reload the page to check again.");
+}
+
+test "a failed ask while waiting keeps the list and asks again, within the cap" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var p = demo(.asking, .{ .state = .none });
+    _ = try p.answer(a, try reply(a, .{ .state = .fetching, .pending = 1, .total = 4 }));
+    try testing.expectEqual(2000, p.next().?);
+    try testing.expectError(error.Failed, p.answer(a, null));
+    try testing.expectError(error.Failed, p.answer(a, "garbage"));
+    try testing.expectEqual(.answered, p.at);
+    try testing.expectEqual(4, p.head.total.?);
+    try testing.expectEqual(3000, p.next().?);
+    try testing.expectEqual(2, p.asks);
 }
 
 test "a new id starts again and drops the old one's ask; none clears" {
@@ -238,20 +270,26 @@ test "a hidden tab pauses the asks" {
     try testing.expect(!p.paused);
 }
 
-test "a failed fetch or a bad answer: the example, said so" {
+test "a failed first ask or a bad answer: the example, said so" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     var t: tree.Tree = .{};
     var h: H = .init(a, &t);
     var p = demo(.asking, .{ .state = .none });
-    _ = p.answer(a, null);
+    try testing.expectError(error.Failed, p.answer(a, null));
     try testing.expectEqual(.down, p.at);
     try testing.expectEqual(null, p.next());
-    _ = p.answer(a, "garbage");
+    p.at = .asking;
+    try testing.expectError(error.Failed, p.answer(a, "garbage"));
+    try testing.expectEqual(.down, p.at);
+    try expectLine(a, &t, p.view(&h), "Couldn't load MeioNeiz#EUW; showing an example.");
+}
+
+fn expectLine(a: std.mem.Allocator, t: *tree.Tree, n: N, want: []const u8) !void {
     var w: std.Io.Writer.Allocating = .init(a);
-    try t.textOf(p.view(&h), &w.writer);
-    try testing.expectEqualStrings("Couldn't load MeioNeiz#EUW; showing an example.", w.written());
+    try t.textOf(n, &w.writer);
+    try testing.expectEqualStrings(want, w.written());
 }
 
 test idOf {

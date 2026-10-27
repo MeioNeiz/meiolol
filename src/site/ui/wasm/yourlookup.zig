@@ -57,15 +57,26 @@ fn answered(gen: i32, bytes: ?[]u8) void {
         if (bytes) |b| gpa.free(b);
         return;
     }
+    const l = look.answer(gpa, bytes) catch {
+        if (bytes) |b| gpa.free(b);
+        if (look.at == .down) hand(null);
+        return after(gen);
+    };
     gpa.free(last);
-    last = bytes orelse &.{};
-    const l = look.answer(gpa, bytes);
-    if (l != null or look.at == .down) hand(l);
+    last = bytes.?;
+    if (l != null) hand(l);
+    after(gen);
+}
+
+/// The status line, and the next ask's timer
+fn after(gen: i32) void {
+    // Before the render: at the cap it says so
+    const ms = look.next();
     if (island) |i| i.render();
-    const ms = look.next() orelse return;
+    const wait = ms orelse return;
     const f = zjb.fnHandle("yourAsk", &onDue).bind(.{gen});
     defer f.release();
-    zjb.global("window").call("setTimeout", .{ f, @as(i32, @intCast(ms)) }, void);
+    zjb.global("window").call("setTimeout", .{ f, @as(i32, @intCast(wait)) }, void);
 }
 
 /// A wait ended; a new id since stops this one's asks
