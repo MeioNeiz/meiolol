@@ -44,8 +44,8 @@ pub fn parse(a: Allocator, src: []const u8) Allocator.Error!Doc {
     var p: Parser = .{ .a = a, .lines = std.mem.splitScalar(u8, src, '\n') };
     var blocks: std.ArrayList(Block) = .empty;
     while (p.peek()) |raw| {
-        const l = std.mem.trimEnd(u8, raw, " \r");
-        const lead = l.len - std.mem.trimStart(u8, l, " ").len;
+        const l = std.mem.trimEnd(u8, raw, ws);
+        const lead = l.len - std.mem.trimStart(u8, l, ws).len;
         const t = l[lead..];
         if (t.len == 0) {
             p.skip();
@@ -54,7 +54,7 @@ pub fn parse(a: Allocator, src: []const u8) Allocator.Error!Doc {
         } else if (headingLevel(t)) |n| {
             p.skip();
             try blocks.append(a, .{ .heading = .{ .level = n, .line = try inline_(a, std.mem.trim(u8, t[n..], " #")) } });
-        } else if (t[0] == '|') {
+        } else if (p.tableAhead(t)) {
             try blocks.append(a, .{ .table = try p.table() });
         } else if (bullet(t) != null) {
             try blocks.append(a, .{ .list = try p.list() });
@@ -94,7 +94,7 @@ const Parser = struct {
         var rows: std.ArrayList([]const Line) = .empty;
         var head: []const Line = &.{};
         while (p.peek()) |raw| {
-            const l = std.mem.trim(u8, raw, " \r");
+            const l = std.mem.trim(u8, raw, ws);
             if (l.len == 0 or l[0] != '|') break;
             p.skip();
             if (isSeparator(l)) {
@@ -109,22 +109,46 @@ const Parser = struct {
         return .{ .head = head, .rows = rows.items };
     }
 
-    /// A row's cells: split on | outside `code`
+    /// A row's cells: split on | outside `code`, `\|` kept as |. A lone backtick pairs
+    /// with the next one as in inline_, so the split and the cell's runs agree
     fn cells(p: *Parser, l: []const u8) ![]const Line {
         var out: std.ArrayList(Line) = .empty;
         var start: usize = 1;
         var in_code = false;
-        for (l[1..], 1..) |c, i| switch (c) {
+        var i: usize = 1;
+        while (i < l.len) : (i += 1) switch (l[i]) {
+            '\\' => if (i + 1 < l.len and l[i + 1] == '|') {
+                i += 1;
+            },
             '`' => in_code = !in_code,
             '|' => if (!in_code) {
-                try out.append(p.a, try inline_(p.a, std.mem.trim(u8, l[start..i], " ")));
+                try out.append(p.a, try p.cell(l[start..i]));
                 start = i + 1;
             },
             else => {},
         };
-        const last = std.mem.trim(u8, l[start..], " ");
-        if (last.len > 0) try out.append(p.a, try inline_(p.a, last));
+        if (std.mem.trim(u8, l[start..], ws).len > 0) try out.append(p.a, try p.cell(l[start..]));
         return out.items;
+    }
+
+    fn cell(p: *Parser, raw: []const u8) !Line {
+        const t = std.mem.trim(u8, raw, ws);
+        if (std.mem.find(u8, t, "\\|") == null) return inline_(p.a, t);
+        return inline_(p.a, try std.mem.replaceOwned(u8, p.a, t, "\\|", "|"));
+    }
+
+    /// A | line opens a table only above a separator row: the docs wrap at 90, so a
+    /// wrapped line may start with one ("|mean| <= 0.0015")
+    fn tableAhead(p: *const Parser, t: []const u8) bool {
+        if (t[0] != '|') return false;
+        var it = p.lines;
+        _ = it.next();
+        const next = it.next() orelse return false;
+        return isSeparator(std.mem.trim(u8, next, ws));
+    }
+
+    fn interrupts(p: *const Parser, t: []const u8) bool {
+        return std.mem.startsWith(u8, t, "```") or p.tableAhead(t);
     }
 
     /// Items start at "- " or "* "; indented ones nest under the item before; any
@@ -133,9 +157,10 @@ const Parser = struct {
         const Open = struct { text: std.ArrayList(u8) = .empty, sub: std.ArrayList(std.ArrayList(u8)) = .empty };
         var items: std.ArrayList(Open) = .empty;
         while (p.peek()) |raw| {
-            const l = std.mem.trimEnd(u8, raw, " \r");
-            const t = std.mem.trimStart(u8, l, " ");
-            if (t.len == 0 or startsBlock(t)) break;
+            const l = std.mem.trimEnd(u8, raw, ws);
+            const t = std.mem.trimStart(u8, l, ws);
+            // A heading ends a list only from the margin: a wrapped "# of games" is indented
+            if (t.len == 0 or p.interrupts(t) or (l.len == t.len and headingLevel(t) != null)) break;
             p.skip();
             const nested = l.len - t.len >= 2 and items.items.len > 0;
             if (bullet(t)) |rest| {
@@ -164,12 +189,13 @@ const Parser = struct {
         return out;
     }
 
-    /// Lines up to a blank or a new block, joined by spaces (the docs wrap at 90)
+    /// Lines up to a blank, a list, a fence or a table, joined by spaces (the docs wrap at
+    /// 90). A heading needs the blank before it: a wrapped line may start "# of games"
     fn para(p: *Parser) ![]const u8 {
         var w: std.ArrayList(u8) = .empty;
         while (p.peek()) |raw| {
-            const t = std.mem.trim(u8, raw, " \r");
-            if (t.len == 0 or (w.items.len > 0 and (startsBlock(t) or bullet(t) != null))) break;
+            const t = std.mem.trim(u8, raw, ws);
+            if (t.len == 0 or (w.items.len > 0 and (p.interrupts(t) or bullet(t) != null))) break;
             p.skip();
             if (w.items.len > 0) try w.append(p.a, ' ');
             try w.appendSlice(p.a, t);
@@ -190,18 +216,22 @@ fn bullet(t: []const u8) ?[]const u8 {
     return std.mem.trimStart(u8, t[2..], " ");
 }
 
-fn startsBlock(t: []const u8) bool {
-    return t[0] == '|' or std.mem.startsWith(u8, t, "```") or headingLevel(t) != null;
-}
+/// Tabs count as spaces: a line of only tabs is blank
+const ws = " \t\r";
 
+/// Every cell :?-{3,}:?, so a data row of "-" (no figure) is not one
 fn isSeparator(l: []const u8) bool {
-    var dash = false;
-    for (l) |c| switch (c) {
-        '-' => dash = true,
-        '|', ':', ' ' => {},
-        else => return false,
-    };
-    return dash;
+    if (l.len == 0 or l[0] != '|') return false;
+    var it = std.mem.splitScalar(u8, l[1..], '|');
+    var n: usize = 0;
+    while (it.next()) |raw| {
+        const c = std.mem.trim(u8, raw, ws);
+        if (c.len == 0) continue;
+        const d = std.mem.trim(u8, c, ":");
+        if (d.len < 3 or c.len - d.len > 2 or std.mem.trim(u8, d, "-").len > 0) return false;
+        n += 1;
+    }
+    return n > 0;
 }
 
 /// `code` and **bold** spans; an unclosed marker is literal
@@ -461,7 +491,7 @@ test "parse: each block kind, wrapped lines joined, the rest literal" {
         \\* second, `unclosed
         \\### Three
         \\| a | b |
-        \\|---|--:|
+        \\|---|---:|
         \\| `p|q` | 1.5 |
         \\| no sep |
         \\```zig
@@ -498,7 +528,7 @@ test "parse: each block kind, wrapped lines joined, the rest literal" {
     try expectRuns(&.{.{ .s = "1.5" }}, t.rows[0][1]);
     try testing.expectEqual(@as(usize, 1), t.rows[1].len);
     try testing.expectEqualStrings("  keep  indent\n", bs[5].code);
-    try testing.expectEqual(@as(usize, 0), bs[6].table.head.len);
+    try expectRuns(&.{.{ .s = "| only | rows |" }}, bs[6].para);
     try testing.expectEqualStrings("unclosed fence", bs[7].code);
 }
 
@@ -536,7 +566,7 @@ test "view: heading tags from top, figures right, text escaped, sections folded"
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const s = try render(a, demo_folded ++ "\n#### Deep\n\n| x | 2 | -0.1 | - | +3 | -x |\n\nw[<role>] & co\n", .{ .top = 3, .fold = true });
+    const s = try render(a, demo_folded ++ "\n#### Deep\n\n| a | b | c | d | e | f |\n| --- | --- | --- | --- | --- | --- |\n| x | 2 | -0.1 | - | +3 | -x |\n\nw[<role>] & co\n", .{ .top = 3, .fold = true });
     for ([_][]const u8{
         "data-prose",
         "<p>Model quality on held-out games. Start here, then one section.</p><details class=\"sec\"><summary><h3>Start here</h3></summary>",
@@ -553,4 +583,66 @@ test "view: heading tags from top, figures right, text escaped, sections folded"
     try testing.expect(std.mem.find(u8, flat, "<h1>T</h1><h2>S</h2>") != null);
     try testing.expect(std.mem.find(u8, flat, "details") == null);
     try testing.expect(std.mem.find(u8, try render(a, "", .{}), "Nothing written yet") != null);
+}
+
+test "parse: wrapped lines stay text; \\| stays in its cell; a row of dashes is data" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const d = try parse(a,
+        \\Controls (pre-declared:
+        \\|mean| <= 0.0015 or an interval covering 0, else void)
+        \\# of games is the other
+        \\Reading:
+        \\- a list after text
+        \\  # of games, wrapped
+        \\
+        \\| model | vs ratings |
+        \\| --- | --- |
+        \\| ratings | -0.00002 \| +0.00006 |
+        \\| none | - |
+        \\| - | - |
+    ++ "\n\t\n" ++
+        \\| a |
+        \\| -- |
+    );
+    const bs = d.blocks;
+    try testing.expectEqual(@as(usize, 4), bs.len);
+    try expectRuns(&.{.{ .s = "Controls (pre-declared: |mean| <= 0.0015 or an interval covering 0, else void) # of games is the other Reading:" }}, bs[0].para);
+    try expectRuns(&.{.{ .s = "a list after text # of games, wrapped" }}, bs[1].list[0].line);
+    const t = bs[2].table;
+    try testing.expectEqual(@as(usize, 3), t.rows.len);
+    try testing.expectEqual(@as(usize, 2), t.rows[0].len);
+    try expectRuns(&.{.{ .s = "-0.00002 | +0.00006" }}, t.rows[0][1]);
+    try expectRuns(&.{.{ .s = "-" }}, t.rows[2][0]);
+    try expectRuns(&.{.{ .s = "| a | | -- |" }}, bs[3].para);
+}
+
+test "parse the real docs: fences paired, every row as wide as its head" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const io = testing.io;
+    for ([_][]const u8{ "docs/learned.md", "docs/model.md" }) |path| {
+        errdefer std.debug.print("{s}\n", .{path});
+        const src = try std.Io.Dir.cwd().readFileAlloc(io, path, a, .limited(4 << 20));
+        const d = try parse(a, src);
+        var fences: usize = 0;
+        var lines = std.mem.splitScalar(u8, src, '\n');
+        while (lines.next()) |l| fences += @intFromBool(std.mem.startsWith(u8, l, "```"));
+        var code: usize = 0;
+        var heads: usize = 0;
+        for (d.blocks) |b| switch (b) {
+            .code => code += 1,
+            .heading => heads += 1,
+            .table => |t| for (t.rows) |r| try testing.expectEqual(t.head.len, r.len),
+            else => {},
+        };
+        try testing.expectEqual(fences / 2, code);
+        try testing.expect(heads > 4);
+        var t: tree.Tree = .{};
+        var h: H = .init(a, &t);
+        _ = view(&h, d, .{ .fold = true });
+        try testing.expect(!h.oom);
+    }
 }
