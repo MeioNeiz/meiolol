@@ -203,6 +203,34 @@ Your games once C01 crawls (its Riot calls go through the crawler's proxy)
 - Ethan's hardware and goodwill: keep the Oracle setup restorable until VM8, and the
   gpu-box mirror current
 
+## C01 tuning
+
+For a fair C01 vs Oracle benchmark: each host tuned for itself first. Code knobs become
+host settings (host.env or a flag), defaults = today's values, so the Oracle box later
+runs with its own tuned values; the box stays untouched until then.
+
+- Measure: deploy/c01-bench.sh LABEL [N] on C01 (copy at ~/vm-chain/deploy/, run as a
+  user unit: `systemd-run --user --collect --unit meiolol-tune bash
+  ~/vm-chain/deploy/c01-bench.sh LABEL 3`). It pauses meiolol-web (its trap restarts it),
+  times core build, a full views write and a renderer load into scratch files, then
+  render latency over every page; one row of medians per setting in
+  ~/vm-chain/tune/results.md, log ~/vm-chain/tune/bench.log. Setting under test in the
+  environment. Page cache warmed first (all dbs read once: 60 GB in ~4 min, 50 GB
+  buff/cache); record buff/cache with each row
+- Order, one at a time against the baseline, a row each (value, median of 3, kept or
+  not): 1. views write parallel runs (src/site/filters.zig `runs = 4`): 8, then 16;
+  2. reader SQLite cache (schema.zig read_cache_kib 64 MB) and mmap_size (2 GB) up to
+  covering the dbs; 3. par.zig users' hard caps; 4. unit limits (web MemoryHigh 30G;
+  render, crawl none) so web + render + crawl + page cache fit 62 GB; 5. lvmcache hit
+  and miss counters after a views write (likely moot with 62 GB RAM). Writer cache and
+  crawler threads only if crawl figures show the database as the limit
+- 16 vCPU = E5-2630 v3, 8 cores 16 threads: if one socket they are hyperthreads, so
+  measure 8 before 16 and expect little past 8 (Jacob asking Ethan)
+
+| setting | core build s | views write s | renderer load s | render ms | buff/cache GB |
+|---|---|---|---|---|---|
+| baseline (27 Oct, host CPU, 62 GB, AVX2 build) | running | | | | |
+
 ## Later
 
 - Plain local calls in place of the localhost ssh aliases (VM4)
