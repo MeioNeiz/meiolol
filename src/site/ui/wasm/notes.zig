@@ -201,17 +201,40 @@ fn onPick(e: zjb.Handle) callconv(.c) void {
     focusText();
 }
 
+/// Escape closes whatever is open; n, with nothing open, starts a note as the Note button
 fn onKey(e: zjb.Handle) callconv(.c) void {
     defer e.release();
-    if (tool.mode == .idle and tool.open == null) return;
     const k = e.get("key", zjb.Handle);
     defer k.release();
     var buf: [16]u8 = undefined;
     const key = k.readString(&buf) catch return;
+    if (tool.mode == .idle and tool.open == null) {
+        if (!std.mem.eql(u8, key, "n") or !plainKey(e)) return;
+        swallow(e);
+        tool.open = null;
+        tool.mode = .picking;
+        tool.want = .pick;
+        return changed();
+    }
     if (!std.mem.eql(u8, key, "Escape")) return;
     swallow(e);
     tool.reset();
     changed();
+}
+
+/// No modifier, not held down, and not typed into a field (the site's search, a form)
+fn plainKey(e: zjb.Handle) bool {
+    inline for (.{ "ctrlKey", "metaKey", "altKey", "repeat" }) |m| if (e.get(m, bool)) return false;
+    const t = e.get("target", zjb.Handle);
+    defer t.release();
+    if (t == .null) return true;
+    if (t.get("isContentEditable", bool)) return false;
+    const name = t.get("localName", zjb.Handle);
+    defer name.release();
+    var buf: [8]u8 = undefined;
+    const tag = name.readString(&buf) catch return true;
+    inline for (.{ "input", "textarea", "select" }) |f| if (std.mem.eql(u8, tag, f)) return false;
+    return true;
 }
 
 fn wider() void {
