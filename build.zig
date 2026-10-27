@@ -395,9 +395,12 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
 }
 
 /// ui.wasm files, one per page family so each page loads only its islands (Jacob 25 Oct)
-const ui_families = [_][]const u8{ "stats", "champion", "champbuild", "champmore", "matchup", "matchmore", "app", "games", "gamemore", "gamelane", "practice", "finder", "findergrid", "learn", "patch", "pool", "daily", "dailydays", "home", "homegame", "tester", "testercand", "your", "yourviews", "yourtime", "yourlookup" };
+const ui_families = [_][]const u8{ "stats", "champion", "champbuild", "champmore", "matchup", "matchmore", "app", "games", "gamemore", "gamelane", "practice", "finder", "findergrid", "learn", "patch", "pool", "daily", "dailydays", "home", "homegame", "tester", "testercand", "your", "yourviews", "yourtime", "yourlookup", "notes" };
 /// gzip bytes per family: stack.md's 40 KB
 const ui_budget = 40 * 1024;
+/// Families only logins load (/p/): 64 KB (Jacob 27 Oct)
+const ui_private = [_][]const u8{ "ui-tester", "ui-testercand", "ui-notes" };
+const ui_private_budget = 64 * 1024;
 
 const UiWasm = struct { name: []const u8, wasm: std.Build.LazyPath, js: std.Build.LazyPath };
 
@@ -433,15 +436,18 @@ fn uiWasm(b: *std.Build, family: []const u8) UiWasm {
     return .{ .name = name, .wasm = exe.getEmittedBin(), .js = js };
 }
 
-/// A size line per ui.wasm (raw and gzip), failing over ui_budget
+/// A size line per ui.wasm (raw and gzip), failing over its budget
 fn uiSize(b: *std.Build, w: UiWasm) *std.Build.Step {
+    const budget: u32 = for (ui_private) |p| {
+        if (std.mem.eql(u8, p, w.name)) break ui_private_budget;
+    } else ui_budget;
     const run = b.addSystemCommand(&.{
         "sh",      "-c",
         b.fmt(
             \\raw=$(wc -c < "$1"); gz=$(gzip -9 -c "$1" | wc -c); js=$(gzip -9 -c "$2" | wc -c)
             \\echo "{s}.wasm: $raw B, $gz B gz; loader $js B gz (budget {d} B gz)"
             \\[ "$gz" -le {d} ] || {{ echo "{s}.wasm over its budget"; exit 1; }}
-        , .{ w.name, ui_budget, ui_budget, w.name }),
+        , .{ w.name, budget, budget, w.name }),
         "ui-size",
     });
     run.addFileArg(w.wasm);

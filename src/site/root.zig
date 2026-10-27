@@ -29,6 +29,7 @@ const flat = @import("flat.zig");
 const style = @import("style.zig");
 pub const assets = @import("assets.zig");
 pub const gallery = @import("gallery.zig");
+pub const notes = @import("notes.zig");
 pub const ui = @import("ui");
 const patchday = @import("../patchday.zig");
 const patchnotes = @import("../patchnotes.zig");

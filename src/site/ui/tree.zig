@@ -63,6 +63,7 @@ pub const Tag = enum(u8) {
     table,
     tbody,
     td,
+    textarea,
     th,
     thead,
     time,

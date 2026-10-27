@@ -202,6 +202,14 @@ fn proxyApi(ctx: *Context, d: Dev, request: *std.http.Server.Request) !void {
     });
 }
 
+fn notesMarked(request: *std.http.Server.Request) bool {
+    var it = request.iterateHeaders();
+    while (it.next()) |h| {
+        if (std.ascii.eqlIgnoreCase(h.name, "cookie") and site.notes.marked(h.value)) return true;
+    }
+    return false;
+}
+
 fn isNotes(target: []const u8) bool {
     const path = target[0 .. std.mem.findScalar(u8, target, '?') orelse target.len];
     return std.mem.eql(u8, path, "/api/notes");
@@ -314,6 +322,20 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
         if (std.mem.eql(u8, path, "gallery.css")) {
             return request.respond(site.gallery.css, .{ .extra_headers = &.{.{ .name = "content-type", .value = "text/css; charset=utf-8" }} });
         }
+        // The notes tool (site/notes.zig): its files, and the marker that adds its tag
+        if (std.mem.startsWith(u8, path, "p/")) if (site.notes.file(path["p/".len..])) |data| {
+            return request.respond(data, .{ .extra_headers = &.{
+                .{ .name = "content-type", .value = contentType(path) },
+                .{ .name = "cache-control", .value = "no-cache" },
+            } });
+        };
+        if (std.mem.eql(u8, path, "__notes/on") or std.mem.eql(u8, path, "__notes/off")) {
+            const on = std.mem.endsWith(u8, path, "on");
+            return request.respond("", .{ .status = .found, .extra_headers = &.{
+                .{ .name = "location", .value = "/" },
+                .{ .name = "set-cookie", .value = if (on) site.notes.dev_cookie ++ "=1; Path=/; SameSite=Lax" else site.notes.dev_cookie ++ "=; Path=/; Max-Age=0" },
+            } });
+        }
     }
 
     // Clean URLs: /about serves about.html, /tier/ serves tier/index.html
@@ -353,7 +375,8 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
             var body = got orelse continue;
             if (ctx.opts.dev != null and std.mem.endsWith(u8, name, ".html")) {
                 if (std.mem.findLast(u8, body, "</body>")) |at| {
-                    body = try std.mem.concat(arena, u8, &.{ body[0..at], reload_script, body[at..] });
+                    const notes_tag = if (notesMarked(request)) site.notes.tag else "";
+                    body = try std.mem.concat(arena, u8, &.{ body[0..at], reload_script, notes_tag, body[at..] });
                 }
             }
             // As the static build's .gz twins: jomify's nginx compresses only HTML itself

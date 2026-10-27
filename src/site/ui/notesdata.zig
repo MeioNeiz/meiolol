@@ -7,7 +7,7 @@ pub const Status = enum(u8) { open, done };
 pub const Theme = enum(u8) { light, dark };
 
 /// How the noted element is found again after a rebuild: its anchor (the nearest
-/// ancestor-or-self with a c-* class, else with data-island, else none: the whole page),
+/// ancestor-or-self with a c-* class, else with data-island, else <body>: kind page),
 /// the anchor's index among the page's matches, the child path from it, and the start of
 /// the element's text, which breaks ties when data changed the page
 pub const Target = struct {
@@ -15,8 +15,8 @@ pub const Target = struct {
     /// The c-* class or data-island value; "" for the whole page
     name: []const u8 = "",
     nth: u16 = 0,
-    /// Child steps from the anchor, "tag:i" (the i-th element child with that tag)
-    /// joined by '>'; "" for the anchor itself
+    /// Child steps from the anchor, "tag:i" (the i-th element child with that tag, lower
+    /// case) joined by '>'; "" for the anchor itself (kind page: the whole page)
     steps: []const u8 = "",
     /// Trimmed, whitespace-collapsed text, at most max_snippet bytes
     snippet: []const u8 = "",
@@ -109,15 +109,55 @@ pub fn checkChange(c: Change) ?[]const u8 {
 
 fn checkTarget(t: Target) ?[]const u8 {
     if (t.kind == .page) {
-        if (t.name.len != 0 or t.nth != 0 or t.steps.len != 0 or t.snippet.len != 0) return "bad target";
-        return null;
+        if (t.name.len != 0 or t.nth != 0) return "bad target";
+    } else {
+        if (t.name.len == 0 or t.name.len > max_name) return "bad target name";
+        for (t.name) |ch| if (!std.ascii.isAlphanumeric(ch) and ch != '-' and ch != '_') return "bad target name";
+        if (t.kind == .component and !std.mem.startsWith(u8, t.name, "c-")) return "bad target name";
     }
-    if (t.name.len == 0 or t.name.len > max_name) return "bad target name";
-    for (t.name) |ch| if (!std.ascii.isAlphanumeric(ch) and ch != '-' and ch != '_') return "bad target name";
-    if (t.kind == .component and !std.mem.startsWith(u8, t.name, "c-")) return "bad target name";
     if (!stepsOk(t.steps)) return "bad steps";
     if (t.snippet.len > max_snippet or !std.unicode.utf8ValidateSlice(t.snippet)) return "bad snippet";
     return null;
+}
+
+/// `raw` (an element's text) as a snippet in `out`: whitespace runs as one space, none
+/// at either end, cut on a whole character at out.len
+pub fn snippet(out: []u8, raw: []const u8) []const u8 {
+    var n: usize = 0;
+    var space = false;
+    for (raw) |ch| {
+        if (std.ascii.isWhitespace(ch)) {
+            space = n > 0;
+            continue;
+        }
+        if (n + @intFromBool(space) >= out.len) break;
+        if (space) {
+            out[n] = ' ';
+            n += 1;
+            space = false;
+        }
+        out[n] = ch;
+        n += 1;
+    }
+    // A character cut short goes whole
+    var lead = n;
+    while (lead > 0 and out[lead - 1] & 0xC0 == 0x80) lead -= 1;
+    if (lead > 0) {
+        const len = std.unicode.utf8ByteSequenceLength(out[lead - 1]) catch 1;
+        if (lead - 1 + len > n) n = lead - 1;
+    }
+    while (n > 0 and out[n - 1] == ' ') n -= 1;
+    return out[0..n];
+}
+
+test snippet {
+    var buf: [max_snippet]u8 = undefined;
+    try std.testing.expectEqualStrings("Ahri 52.3%", snippet(&buf, "  Ahri\n\t 52.3%  "));
+    var small: [6]u8 = undefined;
+    try std.testing.expectEqualStrings("abcd", snippet(&small, "abcd é"));
+    try std.testing.expectEqualStrings("abc é", snippet(&small, "abc é"));
+    try std.testing.expectEqualStrings("ab €", snippet(&small, "ab €x"));
+    try std.testing.expectEqualStrings("", snippet(&small, " \n "));
 }
 
 /// Printable ASCII without spaces: what location gives, percent-encoded
@@ -153,6 +193,8 @@ test check {
     try std.testing.expectEqual(null, check(n));
     n.target = .{ .kind = .island, .name = "top", .steps = "svg:0>g:12" };
     n.scope = .page;
+    try std.testing.expectEqual(null, check(n));
+    n.target = .{ .kind = .page, .steps = "main:0>table:1", .snippet = "Old table" };
     try std.testing.expectEqual(null, check(n));
 }
 

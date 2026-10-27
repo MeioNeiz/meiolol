@@ -449,6 +449,25 @@ pub fn post(path: []const u8, ctx: i32, done: *const fn (i32, ?[]u8) void) void 
     request(zjb.ConstHandle.global.call("fetch", .{ u, init }, zjb.Handle), ctx, done);
 }
 
+/// `method` `path` with a ui.data `body` and X-Meiolol-Action (the API's writes), then as
+/// `fetch`
+pub fn send(comptime method: []const u8, path: []const u8, body: []const u8, ctx: i32, done: *const fn (i32, ?[]u8) void) void {
+    const u = zjb.string(path);
+    defer u.release();
+    const headers = zjb.global("Headers").new(.{});
+    defer headers.release();
+    headers.call("set", .{ zjb.constString("X-Meiolol-Action"), zjb.constString("1") }, void);
+    // fetch copies the bytes before returning, so a view of wasm memory is enough
+    const view = zjb.u8ArrayView(body);
+    defer view.release();
+    const init = zjb.global("Object").new(.{});
+    defer init.release();
+    init.set("method", zjb.constString(method));
+    init.set("headers", headers);
+    init.set("body", view);
+    request(zjb.ConstHandle.global.call("fetch", .{ u, init }, zjb.Handle), ctx, done);
+}
+
 fn request(p: zjb.Handle, ctx: i32, done: *const fn (i32, ?[]u8) void) void {
     on_bytes = done;
     defer p.release();
