@@ -10,6 +10,7 @@ const site = @import("site/root.zig");
 const matchup = @import("site/matchup.zig");
 const store = @import("store");
 const httpd = @import("net").server;
+const client = @import("net").client;
 pub const admin_api = @import("admin_api.zig");
 
 const log = std.log.scoped(.serve);
@@ -128,6 +129,8 @@ pub const Dev = struct {
     static_dir: []const u8,
     /// The binary's at process start: a rebuild during the data load still restarts
     mtime: i96,
+    /// Where /api/ goes, as nginx sends it on the site: `meiolol api --fixture`'s default
+    api: []const u8 = "http://127.0.0.1:8090",
 
     pub fn init(gpa: std.mem.Allocator, io: Io, argv: []const []const u8, static_dir: []const u8) !Dev {
         const args = try gpa.dupe([]const u8, argv);
@@ -168,6 +171,34 @@ pub fn run(gpa: std.mem.Allocator, io: Io, opts: Options) !void {
     httpd.accept(.serve, io, &server, limits, &ctx, connection);
 }
 
+fn proxyApi(ctx: *Context, d: Dev, request: *std.http.Server.Request) !void {
+    var arena_state: std.heap.ArenaAllocator = .init(ctx.gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const method = request.head.method;
+    const url = try std.mem.concat(arena, u8, &.{ d.api, request.head.target });
+    var body_buf: [256]u8 = undefined;
+    const payload: ?[]const u8 = if (method == .POST)
+        try (try request.readerExpectContinue(&body_buf)).allocRemaining(arena, .limited(4096))
+    else
+        null;
+    var http: std.http.Client = .{ .allocator = ctx.gpa, .io = ctx.io };
+    defer http.deinit();
+    const res = client.get(&http, arena, .{ .url = url, .method = method, .payload = payload }) catch |err| {
+        log.warn("{s}: {t}", .{ url, err });
+        return request.respond("{\"state\":\"error\",\"message\":\"no local API: meiolol api --fixture\"}", .{
+            .status = .bad_gateway,
+            .extra_headers = &.{.{ .name = "content-type", .value = "application/json" }},
+        });
+    };
+    // client.get keeps no headers: the API answers JSON or ui.data binary
+    const json = res.body.len > 0 and res.body[0] == '{';
+    return request.respond(res.body, .{
+        .status = res.status,
+        .extra_headers = &.{.{ .name = "content-type", .value = if (json) "application/json" else "application/octet-stream" }},
+    });
+}
+
 fn mtime(io: Io, dir: Io.Dir, path: []const u8) i96 {
     const st = dir.statFile(io, path, .{}) catch return 0;
     return st.mtime.toNanoseconds();
@@ -199,6 +230,7 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
             request.head.method == .GET and admin_api.allowed(api, request)) return pages(ctx, r, request);
         if (try admin_api.handle(api, request)) return;
     }
+    if (ctx.opts.dev) |d| if (std.mem.startsWith(u8, request.head.target, "/api/")) return proxyApi(ctx, d, request);
     if (request.head.method != .GET and request.head.method != .HEAD) {
         return request.respond("method not allowed\n", .{ .status = .method_not_allowed, .keep_alive = false });
     }

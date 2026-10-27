@@ -21,24 +21,61 @@ pub fn refresh(gpa: std.mem.Allocator, io: std.Io, db: store.Db) !usize {
     );
     const version = versions[0];
     const url = try a.print(base ++ "/cdn/{s}/data/en_GB/champion.json", .{version});
-    const Champion = struct { key: []const u8, id: []const u8, name: []const u8, tags: []const []const u8 = &.{} };
-    const doc = try std.json.parseFromSliceLeaky(
-        struct { data: std.json.ArrayHashMap(Champion) },
-        a,
-        try fetch(&http, a, url),
-        .{ .ignore_unknown_fields = true },
-    );
+    const list = try parseChampions(a, try fetch(&http, a, url));
 
     try db.begin();
     errdefer db.rollback();
     var ins = try db.prepare("INSERT OR REPLACE INTO champions VALUES (?,?,?,?,?)");
     defer ins.deinit();
-    for (doc.data.map.values()) |c| {
+    for (list.map.values()) |c| {
         const tags = try std.mem.join(a, ",", c.tags);
         try ins.exec(.{ try std.fmt.parseInt(i64, c.key, 10), c.id, c.name, tags, version });
     }
     try db.commit();
-    return doc.data.map.count();
+    return list.map.count();
+}
+
+/// Data Dragon's `key` is the numeric id, `id` the image name ("MonkeyKing")
+const ChampionJson = struct {
+    key: []const u8,
+    id: []const u8,
+    name: []const u8,
+    tags: []const []const u8 = &.{},
+    image: struct { full: []const u8 = "" } = .{},
+};
+
+fn parseChampions(arena: std.mem.Allocator, body: []const u8) !std.json.ArrayHashMap(ChampionJson) {
+    const doc = try std.json.parseFromSliceLeaky(
+        struct { data: std.json.ArrayHashMap(ChampionJson) },
+        arena,
+        body,
+        .{ .ignore_unknown_fields = true },
+    );
+    return doc.data;
+}
+
+/// Champions for display at Data Dragon `version` (BuildData.version), sorted by id
+pub fn champions(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io, version: []const u8) ![]Named {
+    var http: std.http.Client = .{ .allocator = gpa, .io = io };
+    defer http.deinit();
+    const url = try arena.print(base ++ "/cdn/{s}/data/en_GB/champion.json", .{version});
+    return championList(arena, version, try fetch(&http, arena, url));
+}
+
+fn championList(arena: std.mem.Allocator, version: []const u8, body: []const u8) ![]Named {
+    const list = try parseChampions(arena, body);
+    var out: std.ArrayList(Named) = .empty;
+    for (list.map.values()) |c| try out.append(arena, .{
+        .id = std.fmt.parseInt(u32, c.key, 10) catch continue,
+        .name = c.name,
+        .icon = try arena.print(base ++ "/cdn/{s}/img/champion/{s}", .{ version, c.image.full }),
+    });
+    std.mem.sort(Named, out.items, {}, struct {
+        fn f(_: void, a: Named, b: Named) bool {
+            return a.id < b.id;
+        }
+    }.f);
+    return out.items;
 }
 
 pub fn fetch(http: *std.http.Client, arena: std.mem.Allocator, url: []const u8) ![]u8 {
@@ -127,7 +164,7 @@ fn parseLegendaries(gpa: std.mem.Allocator, arena: std.mem.Allocator, body: []co
     return ids.toOwnedSlice(gpa);
 }
 
-/// An item, rune, rune tree or summoner spell for display; icon is a full Data Dragon
+/// A champion, item, rune, rune tree or summoner spell for display; icon is a full Data Dragon
 /// URL ("" for stat shards, which have no icon there)
 pub const Named = struct { id: u32, name: []const u8, icon: []const u8 = "" };
 
@@ -404,4 +441,25 @@ test "build data: boots tiers, trinkets, names" {
     try std.testing.expectEqual(8010, d.trees[0].slots[0][0]);
     try std.testing.expectEqualStrings("Adaptive force", find(d.runes, 5008).?.name);
     try std.testing.expectEqualStrings("Flash", find(d.spells, 4).?.name);
+}
+
+test "champions: by id, with their image" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const body =
+        \\{"data": {
+        \\ "MonkeyKing": {"key": "62", "id": "MonkeyKing", "name": "Wukong",
+        \\                "image": {"full": "MonkeyKing.png"}},
+        \\ "Aatrox": {"key": "266", "id": "Aatrox", "name": "Aatrox", "image": {"full": "Aatrox.png"}},
+        \\ "Annie": {"key": "1", "id": "Annie", "name": "Annie", "image": {"full": "Annie.png"}}
+        \\}}
+    ;
+    const list = try championList(arena.allocator(), "16.20.1", body);
+    try std.testing.expectEqual(3, list.len);
+    try std.testing.expectEqualStrings("Annie", list[0].name);
+    try std.testing.expectEqualStrings("Wukong", find(list, 62).?.name);
+    try std.testing.expectEqualStrings(
+        "https://ddragon.leagueoflegends.com/cdn/16.20.1/img/champion/MonkeyKing.png",
+        find(list, 62).?.icon,
+    );
 }

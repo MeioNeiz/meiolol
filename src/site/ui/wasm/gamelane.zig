@@ -4,6 +4,7 @@ const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
 const dom = @import("dom.zig");
+const gamesrc = @import("gamesrc.zig");
 const gp = ui.gamepage;
 
 pub const panic = zjb.panic;
@@ -11,7 +12,6 @@ pub const panic = zjb.panic;
 const gpa = std.heap.wasm_allocator;
 const sel = "[data-island=gamelane]";
 
-var data: ui.gamedata.Data = undefined;
 var state: gp.GameLane = undefined;
 var server: gp.GameLane = undefined;
 var src: []const u8 = "";
@@ -28,19 +28,18 @@ export fn main() void {
     js = dom.attrOf(root, "data-js");
     wasm = dom.attrOf(root, "data-wasm");
     want = std.fmt.parseInt(u32, dom.attrOf(root, "data-stamp"), 10) catch return;
-    dom.fetch(src, 0, loaded);
+    gamesrc.load("gamelane", sel, src, want, loaded);
 }
 
-fn loaded(_: i32, bytes: ?[]u8) void {
-    const b = bytes orelse return dom.dom.warn("gamelane: no data");
-    if (ui.gamedata.stamp(b) != want) return dom.dom.warn("gamelane: the page and its data differ");
-    data = ui.data.decode(gpa, ui.gamedata.Data, b) catch return dom.dom.warn("gamelane: bad data");
+fn loaded(ok: bool) void {
+    if (!ok) return;
     // Each its own: the server's stays as rendered for hydration
-    server = init() catch return dom.dom.warn("gamelane: out of memory");
-    state = init() catch return dom.dom.warn("gamelane: out of memory");
+    server = init(&gamesrc.server) catch return dom.dom.warn("gamelane: out of memory");
+    state = init(gamesrc.shown) catch return dom.dom.warn("gamelane: out of memory");
     _ = dom.rt.add(gp.GameLane, &state, &server, sel) catch return dom.dom.warn("gamelane: out of memory");
+    gamesrc.ready();
 }
 
-fn init() !gp.GameLane {
-    return .{ .a = gpa, .data = &data, .src = src, .stamp = want, .js = js, .wasm = wasm };
+fn init(data: *const ui.gamedata.Data) !gp.GameLane {
+    return .{ .a = gpa, .data = data, .src = src, .stamp = want, .js = js, .wasm = wasm };
 }

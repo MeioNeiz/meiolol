@@ -37,6 +37,10 @@ static/your.js) is the page. Live, /api/ open without login: Deploy below.
   numbers are computed exactly as the curves are: per minute gold/XP/CS difference to
   the lane opponent (same teamPosition, other team), deaths and kills before 14 min,
   CS at 10, level 6 and first legendary item times (yours and theirs)
+- Binary answers (/api/list, /api/game) name champions, items, spells and runes from
+  Data Dragon, fetched at start for the newest curves patch with the legendary items
+  (src/api/pagedata.zig converts, as the site build does for the example); Data Dragon
+  down at start: blank names and icons until the next restart
 - Typical curve: `Curves.get(role, bracket, me, them)` from the curves file covering
   the game's patch (else the newest), bracket from the player's visible solo tier at the
   last refresh; all ranks when that bracket is too thin (the page says so). Curves are
@@ -86,7 +90,9 @@ copies the file into each site build; a failed run deletes it, so no stale examp
 
 | Call | Answer |
 | --- | --- |
-| GET /api/games?id=Name%23TAG | state (queued, fetching, ready, not_found, opted_out), progress (ahead, pending, total), player, report |
+| GET /api/games?id=Name%23TAG | state (queued, fetching, ready, not_found, opted_out), progress (ahead, pending, total), player, report; `api: 2` where /api/list and /api/game exist (pages built for both APIs check it) |
+| GET /api/list?id=Name%23TAG | the same lookup as ui.yourlist.Lookup in ui.data's binary (games.html's wasm reads no JSON): state, progress, check_at, the report's games as ui.yourlist.List; always 200 (busy a state) but 400. &n=1..100: the newest n games. &cached=1: a glance, not a visit (Home's player bar): the cache only, nothing queued, looked_up kept; state none, opted_out or ready |
+| GET /api/game?id=Name%23TAG&start=MS | one game of the report (its start_ms) with its detail as ui.gamedata.Data in ui.data's binary, for game.html#id=Name%23TAG&game=MS; 404 JSON (state none or opted_out) when not cached or no timeline. Cache only, no Riot call, no refresh |
 | POST /api/forget?id=... | starts an objection: state pending, then issued with an icon |
 | POST /api/forget?id=...&check=1 | checks the icon: checking, then done or mismatch |
 | GET /api/friends?id=Name%23TAG | state (none, opted_out, ready), friends (src/api/friends.zig): games, waiting (backlog), with_friends and alone, and per friend (3+ games on the same team, top 20): riot_id, together, against, last_ms, you and them (with, apart, apart_rate, diff, lo, hi), their_games, top 3 champion and role pairs. Fetches nothing |
@@ -209,7 +215,7 @@ patches load whatever their size. Never copy them to the heap: one patch's file 
   meiolol-api` (or `deploy/jomify.sh install api`, which records what is installed for
   `deploy/jomify.sh drift`). Previous binaries are kept as
   /usr/local/bin/meiolol.bak-pre-<sha>. Mapped, it starts in ~0.3 s at ~10 MB RSS,
-  ~23 MB after a lookup; a first lookup through the proxy fetches 9 new games in ~5 s
+  ~23 MB after a lookup, plus Data Dragon's fetch at start; a first lookup through the proxy fetches 9 new games in ~5 s
 - User `meiolol-api` (system, no shell). /var/lib/meiolol-api (750): api.db. Exchange
   /var/lib/meiolol-api/exchange (meiolol:meiolol-api, 2770; `meiolol` is in the group):
   curves/ from the box, forgotten.txt out, box-forgotten.txt in

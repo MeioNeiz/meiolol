@@ -21,6 +21,9 @@ pub const usage_api =
     \\                               else DIR/export)
     \\              --riot-proxy URL the crawler's --proxy (box: http://10.0.0.3:8092)
     \\              --cors ORIGIN    allow a page on ORIGIN (local testing)
+    \\              --fixture        made-up players in memory (src/api/devfixture.zig),
+    \\                               no Riot call, no key; run from the repo root.
+    \\                               `meiolol dev` sends /api/ here (port 8090)
     \\
 ;
 
@@ -40,9 +43,16 @@ pub fn cmdApi(c: *Cmd) !u8 {
             o.fetch.proxy = try c.value();
         } else if (c.is("--cors")) {
             o.cors = try c.value();
+        } else if (c.is("--fixture")) {
+            o.fixture = true;
         } else return error.Usage;
     }
     const arena = c.arena;
+    if (o.fixture) {
+        o.curves_dir = curves_dir orelse try std.fs.path.join(arena, &.{ c.data_dir, "export" });
+        try api.run(c.init.gpa, c.init.io, o);
+        return 0;
+    }
     if (o.fetch.proxy == null) o.fetch.key = try c.apiKey();
     o.db_path = try arena.printSentinel("{s}/api.db", .{c.data_dir}, 0);
     o.accounts_path = try arena.printSentinel("{s}/accounts.db", .{c.data_dir}, 0);

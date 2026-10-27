@@ -329,6 +329,11 @@ const Review = (() => {
       p.append(prev, label, next);
       s.append(p);
     }
+    if (opts.page) {
+      const a = el("a", "link", "Whole game");
+      a.href = opts.page;
+      (s.querySelector(".pager") ?? s).append(a);
+    }
     if (opts.link) (s.querySelector(".pager") ?? s).append(share(opts.link));
     return s;
   }

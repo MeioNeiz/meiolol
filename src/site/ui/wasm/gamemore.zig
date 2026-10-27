@@ -4,6 +4,7 @@ const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
 const dom = @import("dom.zig");
+const gamesrc = @import("gamesrc.zig");
 const gp = ui.gamepage;
 
 pub const panic = zjb.panic;
@@ -11,7 +12,6 @@ pub const panic = zjb.panic;
 const gpa = std.heap.wasm_allocator;
 const sel = "[data-island=gamemore]";
 
-var data: ui.gamedata.Data = undefined;
 var state: gp.GameMore = undefined;
 var server: gp.GameMore = undefined;
 var src: []const u8 = "";
@@ -28,21 +28,20 @@ export fn main() void {
     js = dom.attrOf(root, "data-js");
     wasm = dom.attrOf(root, "data-wasm");
     want = std.fmt.parseInt(u32, dom.attrOf(root, "data-stamp"), 10) catch return;
-    dom.fetch(src, 0, loaded);
+    gamesrc.load("gamemore", sel, src, want, loaded);
 }
 
-fn loaded(_: i32, bytes: ?[]u8) void {
-    const b = bytes orelse return dom.dom.warn("gamemore: no data");
-    if (ui.gamedata.stamp(b) != want) return dom.dom.warn("gamemore: the page and its data differ");
-    data = ui.data.decode(gpa, ui.gamedata.Data, b) catch return dom.dom.warn("gamemore: bad data");
+fn loaded(ok: bool) void {
+    if (!ok) return;
     // Each its own prepared games: the server's stays as rendered for hydration
-    server = init() catch return dom.dom.warn("gamemore: out of memory");
-    state = init() catch return dom.dom.warn("gamemore: out of memory");
+    server = init(&gamesrc.server) catch return dom.dom.warn("gamemore: out of memory");
+    state = init(gamesrc.shown) catch return dom.dom.warn("gamemore: out of memory");
     _ = dom.rt.add(gp.GameMore, &state, &server, sel) catch return dom.dom.warn("gamemore: out of memory");
+    gamesrc.ready();
 }
 
-fn init() !gp.GameMore {
-    var s: gp.GamePage = try .init(gpa, &data);
+fn init(data: *const ui.gamedata.Data) !gp.GameMore {
+    var s: gp.GamePage = try .init(gpa, data);
     s.src = src;
     s.stamp = want;
     return .{ .s = s, .js = js, .wasm = wasm };

@@ -153,6 +153,33 @@ pub const Data = struct {
 
 pub const stamp = @import("tiers.zig").stamp;
 
+/// game.html#id=Name%23TAG&game=ms: a looked-up player's game (its start_ms in the Your
+/// games report; your.js's keys), which the API answers in place of the example's
+pub const Lookup = struct {
+    /// Percent-encoded as in the fragment
+    id: []const u8,
+    start: i64,
+
+    pub fn ofHash(hash: []const u8) ?Lookup {
+        var id: ?[]const u8 = null;
+        var start: ?i64 = null;
+        var it = std.mem.tokenizeScalar(u8, if (hash.len > 0 and hash[0] == '#') hash[1..] else hash, '&');
+        while (it.next()) |kv| {
+            const eq = std.mem.findScalar(u8, kv, '=') orelse continue;
+            const v = kv[eq + 1 ..];
+            if (std.mem.eql(u8, kv[0..eq], "id")) id = v;
+            if (std.mem.eql(u8, kv[0..eq], "game")) start = std.fmt.parseInt(i64, v, 10) catch null;
+        }
+        const i = id orelse return null;
+        if (i.len == 0 or std.mem.findAny(u8, i, " ?") != null) return null;
+        return .{ .id = i, .start = start orelse return null };
+    }
+
+    pub fn api(l: Lookup, buf: []u8) ?[]const u8 {
+        return std.fmt.bufPrint(buf, "/api/game?id={s}&start={d}", .{ l.id, l.start }) catch null;
+    }
+};
+
 /// Purchases this close to the one before are the same shop visit
 pub const back_gap_s = 45;
 
@@ -538,4 +565,14 @@ test "backs: purchases split where the gap passes 45 s" {
     const b = try backs(std.testing.allocator, &buys);
     defer std.testing.allocator.free(b);
     try std.testing.expectEqualSlices([2]u16, &.{ .{ 0, 2 }, .{ 2, 4 }, .{ 4, 5 } }, b);
+}
+
+test "lookup: a looked-up game's fragment as its API call" {
+    var buf: [128]u8 = undefined;
+    const l = Lookup.ofHash("#m=300&id=Hide%20on%20bush%23KR1&game=1791720000000").?;
+    try std.testing.expectEqualStrings("/api/game?id=Hide%20on%20bush%23KR1&start=1791720000000", l.api(&buf).?);
+    try std.testing.expectEqual(null, Lookup.ofHash("#g=2"));
+    try std.testing.expectEqual(null, Lookup.ofHash("#id=A%231"));
+    try std.testing.expectEqual(null, Lookup.ofHash("#id=A%231&game=x"));
+    try std.testing.expectEqual(null, Lookup.ofHash("#id=&game=1"));
 }

@@ -5,6 +5,10 @@
 //!
 //!   GET  /api/games?id=Name%23TAG   state, player, report (game.zig); &refresh=1 checks
 //!                                   for new games sooner than a visit does
+//!   GET  /api/list?id=Name%23TAG    /api/games as games.html's binary data
+//!                                   (ui.yourlist.Lookup); &refresh=1 the same
+//!   GET  /api/game?id=Name%23TAG&start=MS  one of the report's games with its detail, as
+//!                                   the game page's binary data (ui.gamedata.Data)
 //!   GET  /api/friends?id=Name%23TAG who the player plays with (friends.zig), from the
 //!                                   games /api/games fetched; fetches nothing itself
 //!   POST /api/forget?id=Name%23TAG  objection: issue a profile icon; &check=1 checks it
@@ -27,6 +31,9 @@ pub const game = @import("game.zig");
 pub const example = @import("example.zig");
 pub const accounts = @import("accounts.zig");
 pub const roles = @import("roles.zig");
+pub const pagedata = @import("pagedata.zig");
+pub const devfixture = @import("devfixture.zig");
+const ui = @import("ui");
 pub const friends = @import("friends.zig");
 
 const Allocator = std.mem.Allocator;
@@ -44,6 +51,9 @@ pub const Options = struct {
     /// Access-Control-Allow-Origin, for a page served from another origin in testing
     cors: ?[]const u8 = null,
     fetch: fetch.Options = .{},
+    /// devfixture's players in `db_path` (empty: in memory), run from the repo root; the
+    /// fetcher doesn't run, so no Riot call and no key
+    fixture: bool = false,
 };
 
 /// A visit refreshes a player's games when the last refresh is older than this
@@ -67,6 +77,19 @@ const Context = struct {
     opts: Options,
     curves: game.CurveSet,
     accounts: accounts.Service,
+    /// For the binary answers; empty when Data Dragon was down at start (names then
+    /// show as ids, icons empty)
+    shown: Shown = .{},
+};
+
+const Shown = struct {
+    names: pagedata.Names = .{},
+    champs: []const ddragon.Named = &.{},
+
+    fn champ(s: *const Shown, id: u32) anyerror!ui.champ.Champ {
+        const c = ddragon.find(s.champs, id) orelse return .{ .name = "", .src = "" };
+        return .{ .name = c.name, .src = c.icon };
+    }
 };
 
 pub fn run(gpa: Allocator, io: Io, opts: Options) !void {
@@ -77,15 +100,27 @@ pub fn run(gpa: Allocator, io: Io, opts: Options) !void {
         .gpa = gpa,
         .io = io,
         .opts = opts,
-        .curves = try loadCurveSet(arena, io, opts.curves_dir),
+        .curves = try loadCurves(arena, io, opts.curves_dir),
         .accounts = .{ .gpa = gpa, .io = io, .db_path = opts.accounts_path },
     };
+    const patch = newestCurvesPatch(ctx.curves);
+    if (loadShown(gpa, arena, io, patch)) |sh| {
+        ctx.shown = sh.shown;
+        ctx.curves.legendaries = sh.legendary;
+    } else |err| log.warn("Data Dragon for {s}: {t}; first items, names and icons left out", .{ patch, err });
     defer ctx.accounts.deinit();
     // Schema now, so a broken accounts.db stops the service at start, not at a login
     (try accounts.open(opts.accounts_path)).close();
 
-    const db = try cache.open(opts.db_path);
+    const db = try cache.open(if (opts.fixture and opts.db_path.len == 0) ":memory:" else opts.db_path);
     defer db.close();
+    if (opts.fixture) try devfixture.seed(
+        arena,
+        db,
+        try Io.Dir.cwd().readFileAlloc(io, devfixture.match_path, arena, .limited(1 << 20)),
+        try Io.Dir.cwd().readFileAlloc(io, devfixture.timeline_path, arena, .limited(1 << 20)),
+        Io.Clock.real.now(io).toSeconds(),
+    );
     var fetcher: fetch.Fetcher = .{ .gpa = gpa, .io = io, .db = db, .opts = opts.fetch };
     defer fetcher.deinit();
 
@@ -93,9 +128,11 @@ pub fn run(gpa: Allocator, io: Io, opts: Options) !void {
     var server = try address.listen(io, .{ .reuse_address = true });
     defer server.deinit(io);
     log.info("api on http://{s}:{d}/api/, {d} curves files, Riot via {s}", .{
-        opts.host, opts.port, ctx.curves.files.len, opts.fetch.proxy orelse "this process's key",
+        opts.host,                                                                               opts.port, ctx.curves.files.len,
+        if (opts.fixture) "nothing (fixture)" else opts.fetch.proxy orelse "this process's key",
     });
 
+    if (opts.fixture) return serve(&ctx, &server);
     var worker = try io.concurrent(work, .{&fetcher});
     defer worker.cancel(io);
     serve(&ctx, &server);
@@ -154,15 +191,50 @@ fn work(f: *fetch.Fetcher) void {
 /// The newest curves files in `dir_path` with the legendary items for first-item timing
 pub fn loadCurveSet(arena: Allocator, io: Io, dir_path: []const u8) !game.CurveSet {
     var set = try loadCurves(arena, io, dir_path);
-    // Item lists change little between patches: the newest curves patch's serves all
     if (set.files.len > 0) {
-        const label = set.files[0].label;
-        const patch = label[if (std.mem.findScalar(u8, label, '-')) |d| d + 1 else 0..];
+        const patch = newestCurvesPatch(set);
         if (ddragon.legendaries(arena, io, patch)) |ids| {
             set.legendaries = ids;
         } else |err| log.warn("legendary items for {s}: {t}; first items left out", .{ patch, err });
     }
     return set;
+}
+
+/// Item lists change little between patches: the newest curves patch's serves all. ""
+/// (Data Dragon's newest) without curves
+fn newestCurvesPatch(set: game.CurveSet) []const u8 {
+    if (set.files.len == 0) return "";
+    const label = set.files[0].label;
+    return label[if (std.mem.findScalar(u8, label, '-')) |d| d + 1 else 0..];
+}
+
+/// Data Dragon's names and icons and the legendary items, kept in `arena` without the
+/// JSON they came from (a few MB parsed)
+fn loadShown(gpa: Allocator, arena: Allocator, io: Io, patch: []const u8) !struct { shown: Shown, legendary: []const u32 } {
+    var tmp_state: std.heap.ArenaAllocator = .init(gpa);
+    defer tmp_state.deinit();
+    const tmp = tmp_state.allocator();
+    const d = try ddragon.buildData(gpa, tmp, io, patch);
+    const champs = try ddragon.champions(gpa, tmp, io, d.version);
+    const keep = struct {
+        fn f(a: Allocator, list: []const ddragon.Named) ![]const ddragon.Named {
+            const out = try a.alloc(ddragon.Named, list.len);
+            for (list, out) |x, *o| o.* = .{ .id = x.id, .name = try a.dupe(u8, x.name), .icon = try a.dupe(u8, x.icon) };
+            return out;
+        }
+    }.f;
+    return .{
+        .shown = .{
+            .names = .{
+                .version = try arena.dupe(u8, d.version),
+                .items = try keep(arena, d.items),
+                .spells = try keep(arena, d.spells),
+                .runes = try keep(arena, d.runes),
+            },
+            .champs = try keep(arena, champs),
+        },
+        .legendary = try arena.dupe(u32, d.legendary),
+    };
 }
 
 /// curves-<label>.bin files, newest patch first, at most max_curve_files. Mapped, not
@@ -266,39 +338,52 @@ fn handle(ctx: *Context, request: *std.http.Server.Request) !void {
         const db = try cache.open(ctx.opts.db_path);
         defer db.close();
         const r = try games(ctx, arena, db, query);
-        return send(ctx, request, r.status, r.body);
+        return send(ctx, request, r);
+    }
+    if (std.mem.eql(u8, path, "/api/list") and method == .GET) {
+        const db = try cache.open(ctx.opts.db_path);
+        defer db.close();
+        const r = try listOf(ctx, arena, db, query);
+        return send(ctx, request, r);
+    }
+    if (std.mem.eql(u8, path, "/api/game") and method == .GET) {
+        const db = try cache.open(ctx.opts.db_path);
+        defer db.close();
+        const r = try oneGame(ctx, arena, db, query);
+        return send(ctx, request, r);
     }
     if (std.mem.eql(u8, path, "/api/friends") and method == .GET) {
         const db = try cache.open(ctx.opts.db_path);
         defer db.close();
         const r = try friendsOf(arena, db, query);
-        return send(ctx, request, r.status, r.body);
+        return send(ctx, request, r);
     }
     if (std.mem.eql(u8, path, "/api/forget") and (method == .POST or method == .GET)) {
         const db = try cache.open(ctx.opts.db_path);
         defer db.close();
         const r = try forget(ctx, arena, db, query, method == .POST);
-        return send(ctx, request, r.status, r.body);
+        return send(ctx, request, r);
     }
     if (std.mem.eql(u8, path, "/api/daily") and (method == .POST or method == .GET)) {
         const db = try cache.open(ctx.opts.db_path);
         defer db.close();
         const r = try daily(arena, db, query, method == .POST);
-        return send(ctx, request, r.status, r.body);
+        return send(ctx, request, r);
     }
     if (std.mem.eql(u8, path, "/api/health") and method == .GET) {
         const db = try cache.open(ctx.opts.db_path);
         defer db.close();
         const jobs = try db.scalar("SELECT count(*) FROM jobs", .{}) orelse 0;
-        return send(ctx, request, .ok, try arena.print("{{\"ok\":true,\"jobs\":{d}}}", .{jobs}));
+        return send(ctx, request, .{ .status = .ok, .body = try arena.print("{{\"ok\":true,\"jobs\":{d}}}", .{jobs}) });
     }
-    return send(ctx, request, .not_found, "{\"error\":\"not found\"}");
+    return send(ctx, request, .{ .status = .not_found, .body = "{\"error\":\"not found\"}" });
 }
 
-fn send(ctx: *Context, request: *std.http.Server.Request, status: Status, body: []const u8) !void {
+/// JSON, or ui.data's binary when 200 from a binary call (errors stay JSON)
+fn send(ctx: *Context, request: *std.http.Server.Request, r: Reply) !void {
     var headers: [3]std.http.Header = undefined;
     var n: usize = 0;
-    headers[n] = .{ .name = "content-type", .value = "application/json" };
+    headers[n] = .{ .name = "content-type", .value = if (r.binary) "application/octet-stream" else "application/json" };
     n += 1;
     headers[n] = .{ .name = "cache-control", .value = "no-store" };
     n += 1;
@@ -306,10 +391,10 @@ fn send(ctx: *Context, request: *std.http.Server.Request, status: Status, body: 
         headers[n] = .{ .name = "access-control-allow-origin", .value = origin };
         n += 1;
     }
-    try request.respond(body, .{ .status = status, .extra_headers = headers[0..n] });
+    try request.respond(r.body, .{ .status = r.status, .extra_headers = headers[0..n] });
 }
 
-const Reply = struct { status: Status, body: []const u8 };
+const Reply = struct { status: Status, body: []const u8, binary: bool = false };
 
 fn errorReply(arena: Allocator, status: Status, state: []const u8, message: []const u8) !Reply {
     return .{ .status = status, .body = try std.json.Stringify.valueAlloc(arena, .{ .state = state, .@"error" = message }, .{}) };
@@ -394,6 +479,9 @@ pub const PlayerOut = struct {
 pub const GamesOut = struct {
     /// queued: waiting for the fetcher; fetching: in progress; ready; not_found
     state: []const u8,
+    /// 2: /api/list and /api/game answer. Absent from the API before them, so pages
+    /// served beside either can tell (your.js links a game's page only from 2)
+    api: u8 = 2,
     /// Jobs ahead in the queue
     ahead: ?i64 = null,
     /// Games left to fetch and in this refresh
@@ -408,36 +496,106 @@ pub const GamesOut = struct {
 fn games(ctx: *Context, arena: Allocator, db: store.Db, query: []const u8) !Reply {
     const key = try riotIdParam(arena, query) orelse
         return errorReply(arena, .bad_request, "error", "expected ?id=Name#TAG");
+    const l = try lookUp(ctx, arena, db, key, try param(arena, query, "refresh") != null);
+    if (l.status == .service_unavailable) return busy(arena);
+    var out = l.out;
+    if (l.puuid) |p| out.report = try report(ctx, arena, db, p, rankOf(out.player.?), false, max_games);
+    return .{ .status = l.status, .body = try gamesJson(arena, out) };
+}
+
+/// /api/games for a page with no JSON parser: always 200 but for a bad query, the state
+/// says the rest. Each game's detail too, for its CS and level. &n=N: the newest N games.
+/// &cached=1: the cache only, as a glance and not a visit (Home's player bar): nothing
+/// queued, looked_up untouched, state none when the cache doesn't know the player
+fn listOf(ctx: *Context, arena: Allocator, db: store.Db, query: []const u8) !Reply {
+    const bad = "expected ?id=Name#TAG[&n=1..100][&cached=1][&refresh=1]";
+    const key = try riotIdParam(arena, query) orelse return errorReply(arena, .bad_request, "error", bad);
+    const n: u32 = if (try param(arena, query, "n") == null) max_games else switch (try intParam(arena, query, "n", max_games) orelse 0) {
+        0 => return errorReply(arena, .bad_request, "error", bad),
+        else => |x| x,
+    };
+    const l = if (try param(arena, query, "cached") != null)
+        try cachedLookUp(arena, db, key)
+    else
+        try lookUp(ctx, arena, db, key, try param(arena, query, "refresh") != null);
+    const o = l.out;
+    const small = struct {
+        fn f(v: ?i64) ?u16 {
+            return if (v) |x| @intCast(std.math.clamp(x, 0, std.math.maxInt(u16))) else null;
+        }
+    }.f;
+    var out: ui.yourlist.Lookup = .{
+        .state = std.meta.stringToEnum(ui.yourlist.Lookup.State, o.state) orelse return error.UnknownState,
+        .ahead = small(o.ahead),
+        .pending = small(o.pending),
+        .total = small(o.total),
+        .check_at = o.check_at,
+    };
+    if (l.puuid) |puuid| {
+        const p = o.player.?;
+        out.failed = p.@"error";
+        const r = try report(ctx, arena, db, puuid, rankOf(p), true, n);
+        const who: pagedata.Who = .{ .name = p.name, .tag = p.tag, .platform = p.platform, .tier = p.tier, .division = p.division, .lp = p.lp, .refreshed = p.refreshed };
+        var list = try pagedata.list(arena, who, r.games, ctx.shown.names, &ctx.shown, Shown.champ);
+        // Rows link by start (/api/game), not into a page's file
+        const rows = try arena.dupe(ui.yourlist.Game, list.games);
+        for (rows) |*g| g.page = null;
+        list.games = rows;
+        out.list = list;
+    }
+    var bytes: std.ArrayList(u8) = .empty;
+    try ui.data.encode(arena, ui.yourlist.Lookup, out, &bytes);
+    return .{ .status = .ok, .body = bytes.items, .binary = true };
+}
+
+/// lookUp from the cache alone: none, opted_out or ready, whatever the refresh's age
+fn cachedLookUp(arena: Allocator, db: store.Db, key: []const u8) !Looked {
+    const none: Looked = .{ .out = .{ .state = "none" } };
+    const acct = try account(arena, db, key) orelse return none;
+    const puuid = acct.puuid orelse return none;
+    if (try db.scalar("SELECT 1 FROM blocked WHERE puuid = ?", .{puuid}) != null) {
+        return .{ .out = .{ .state = "opted_out" } };
+    }
+    const player = try loadPlayer(arena, db, puuid) orelse return none;
+    return .{ .out = .{ .state = "ready", .player = player, .check_at = player.refreshed + check_after_s }, .puuid = puuid };
+}
+
+/// A lookup's state; the report is the caller's to make, for `puuid` when ready
+const Looked = struct { status: Status = .ok, out: GamesOut, puuid: ?[]const u8 = null };
+
+/// Queues a refresh as a visit or a check (`asked`) calls for. 503 busy when the queue
+/// is full
+fn lookUp(ctx: *Context, arena: Allocator, db: store.Db, key: []const u8, asked: bool) !Looked {
     const now = std.Io.Clock.real.now(ctx.io).toSeconds();
+    const busy_now: Looked = .{ .status = .service_unavailable, .out = .{ .state = "busy" } };
 
     // Every read statement is finished before a write (see fetch.cachedSummary)
     const acct = try account(arena, db, key);
     if (acct == null or (acct.?.puuid == null and now - acct.?.checked > not_found_s)) {
-        if (!try enqueue(db, key, now)) return busy(arena);
-        return reply(arena, try progress(db, key, .{ .state = "queued" }));
+        if (!try enqueue(db, key, now)) return busy_now;
+        return .{ .out = try progress(db, key, .{ .state = "queued" }) };
     }
-    const puuid = acct.?.puuid orelse return .{
-        .status = .not_found,
-        .body = try std.json.Stringify.valueAlloc(arena, GamesOut{ .state = "not_found" }, .{}),
-    };
+    const puuid = acct.?.puuid orelse return .{ .status = .not_found, .out = .{ .state = "not_found" } };
     if (try db.scalar("SELECT 1 FROM blocked WHERE puuid = ?", .{puuid}) != null) {
-        return reply(arena, .{ .state = "opted_out" });
+        return .{ .out = .{ .state = "opted_out" } };
     }
     const player = try loadPlayer(arena, db, puuid) orelse {
-        if (!try enqueue(db, key, now)) return busy(arena);
-        return reply(arena, try progress(db, key, .{ .state = "queued" }));
+        if (!try enqueue(db, key, now)) return busy_now;
+        return .{ .out = try progress(db, key, .{ .state = "queued" }) };
     };
     try db.run("UPDATE players SET looked_up = ? WHERE puuid = ?", .{ now, puuid });
     // A job for this player under either key: the Riot ID while resolving, else PUUID
     const job_key = if (try db.scalar("SELECT 1 FROM jobs WHERE key = ?", .{key}) != null) key else puuid;
-    const asked = try param(arena, query, "refresh") != null;
     const gate = if (asked) check_after_s else refresh_after_s;
-    if (now - player.refreshed > gate and !try enqueue(db, job_key, now) and asked) return busy(arena);
+    if (now - player.refreshed > gate and !try enqueue(db, job_key, now) and asked) return busy_now;
 
     var out = try progress(db, job_key, .{ .state = "ready", .player = player });
     out.check_at = player.refreshed + check_after_s;
-    out.report = try report(ctx, arena, db, puuid, .{ .tier = player.tier, .division = player.division, .lp = player.lp });
-    return reply(arena, out);
+    return .{ .out = out, .puuid = puuid };
+}
+
+fn rankOf(p: PlayerOut) game.Rank {
+    return .{ .tier = p.tier, .division = p.division, .lp = p.lp };
 }
 
 fn account(arena: Allocator, db: store.Db, key: []const u8) !?struct { puuid: ?[]const u8, checked: i64 } {
@@ -520,41 +678,82 @@ fn progress(db: store.Db, key: []const u8, out: GamesOut) !GamesOut {
     return o;
 }
 
-fn report(ctx: *Context, arena: Allocator, db: store.Db, puuid: []const u8, rank: game.Rank) !game.Report {
+/// The newest `n` games; `detail`: each game's Game.detail too
+fn report(ctx: *Context, arena: Allocator, db: store.Db, puuid: []const u8, rank: game.Rank, detail: bool, n: u32) !game.Report {
     var q = try db.prepare(
         \\SELECT pg.match_id, pg.slot, m.summary, m.timeline
         \\FROM player_games pg JOIN matches m USING (match_id)
         \\WHERE pg.puuid = ? ORDER BY pg.start_ms DESC LIMIT ?
     );
     defer q.deinit();
-    try q.bind(.{ puuid, max_games });
+    try q.bind(.{ puuid, n });
     var inputs: std.ArrayList(game.Input) = .empty;
     while (try q.step()) {
-        const r = q.row(struct {
-            match_id: []const u8,
-            slot: u8,
-            summary: []const u8,
-            timeline: ?[]const u8,
-        });
-        const summary = fetch.readSummary(arena, r.summary) catch |err| {
-            log.warn("{s}: summary {t}", .{ r.match_id, err });
-            continue;
-        };
-        if (r.slot >= summary.players.len) continue;
-        const t = if (r.timeline != null and r.timeline.?.len > 0) fetch.readTimeline(arena, r.timeline.?) catch |err| blk: {
-            log.warn("{s}: timeline {t}", .{ r.match_id, err });
-            break :blk null;
-        } else null;
-        const platform = r.match_id[0 .. std.mem.findScalar(u8, r.match_id, '_') orelse 0];
-        try inputs.append(arena, .{
-            .summary = summary,
-            .slot = r.slot,
-            .timeline = t,
-            .platform = try arena.dupe(u8, platform),
-            .riot_ids = try riotIds(arena, db, r.match_id, summary.players.len),
-        });
+        var in = try input(arena, db, q.row(GameRow)) orelse continue;
+        in.detail = detail;
+        try inputs.append(arena, in);
     }
     return game.report(arena, inputs.items, rank, ctx.curves);
+}
+
+const GameRow = struct {
+    match_id: []const u8,
+    slot: u8,
+    summary: []const u8,
+    timeline: ?[]const u8,
+};
+
+/// Null when the summary is unreadable
+fn input(arena: Allocator, db: store.Db, r: GameRow) !?game.Input {
+    const summary = fetch.readSummary(arena, r.summary) catch |err| {
+        log.warn("{s}: summary {t}", .{ r.match_id, err });
+        return null;
+    };
+    if (r.slot >= summary.players.len) return null;
+    const t = if (r.timeline != null and r.timeline.?.len > 0) fetch.readTimeline(arena, r.timeline.?) catch |err| blk: {
+        log.warn("{s}: timeline {t}", .{ r.match_id, err });
+        break :blk null;
+    } else null;
+    const platform = r.match_id[0 .. std.mem.findScalar(u8, r.match_id, '_') orelse 0];
+    return .{
+        .summary = summary,
+        .slot = r.slot,
+        .timeline = t,
+        .platform = try arena.dupe(u8, platform),
+        .riot_ids = try riotIds(arena, db, r.match_id, summary.players.len),
+    };
+}
+
+/// One game of a looked-up player's report (by `Game.start_ms`) with its detail, as
+/// game.html reads it. The cache only: the player's lookup fetched it
+fn oneGame(ctx: *Context, arena: Allocator, db: store.Db, query: []const u8) !Reply {
+    const key = try riotIdParam(arena, query) orelse
+        return errorReply(arena, .bad_request, "error", "expected ?id=Name#TAG&start=ms");
+    const start = std.fmt.parseInt(i64, try param(arena, query, "start") orelse "", 10) catch
+        return errorReply(arena, .bad_request, "error", "expected ?id=Name#TAG&start=ms");
+    const none = try errorReply(arena, .not_found, "none", "no such game: look the player up first");
+    const acct = try account(arena, db, key) orelse return none;
+    const puuid = acct.puuid orelse return none;
+    if (try db.scalar("SELECT 1 FROM blocked WHERE puuid = ?", .{puuid}) != null) {
+        return errorReply(arena, .not_found, "opted_out", "this player opted out");
+    }
+    const player = try loadPlayer(arena, db, puuid) orelse return none;
+    var q = try db.prepare(
+        \\SELECT pg.match_id, pg.slot, m.summary, m.timeline
+        \\FROM player_games pg JOIN matches m USING (match_id)
+        \\WHERE pg.puuid = ? AND pg.start_ms = ? LIMIT 1
+    );
+    defer q.deinit();
+    try q.bind(.{ puuid, start });
+    if (!try q.step()) return none;
+    var in = try input(arena, db, q.row(GameRow)) orelse return none;
+    in.detail = true;
+    const g = try game.analyse(arena, in, rankOf(player), ctx.curves);
+    const d = try pagedata.data(arena, ctx.shown.names, &.{g}, &ctx.shown, Shown.champ);
+    if (d.games.len == 0) return errorReply(arena, .not_found, "none", "no timeline for this game");
+    var bytes: std.ArrayList(u8) = .empty;
+    try ui.data.encode(arena, ui.gamedata.Data, d, &bytes);
+    return .{ .status = .ok, .body = bytes.items, .binary = true };
 }
 
 pub const FriendsOut = struct {
@@ -774,6 +973,118 @@ test "friends: a friend's record with and without the player once both are looke
     try std.testing.expectEqualStrings("{\"state\":\"none\"}", (try friendsOf(arena, db, "id=C%231")).body);
 }
 
+test "game: one looked-up game with its detail as the game page's data" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var ctx = testContext();
+    defer ctx.accounts.deinit();
+    ctx.shown.champs = &.{.{ .id = 3, .name = "Annie", .icon = "annie.png" }};
+    const db = try cache.open(":memory:");
+    defer db.close();
+    const raw = try store.raw.decompress(arena, @embedFile("../riot/testdata/timeline.json.gz"));
+    const t = try @import("../riot/root.zig").timeline.fromJson(arena, raw);
+    const players = try arena.alloc(game.Summary.Player, 10);
+    const positions = [_][]const u8{ "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY" };
+    for (players, 0..) |*p, i| {
+        p.* = .{ .hash = "", .team = if (i < 5) 100 else 200, .position = positions[i % 5], .champion = @intCast(i + 1), .win = i < 5, .kills = 0, .deaths = 0, .assists = 0 };
+    }
+    const summary: game.Summary = .{ .patch = "16.20", .queue = 420, .start_ms = 1791720000000, .duration_s = 1800, .remake = false, .players = players };
+    const json = try std.json.Stringify.valueAlloc(arena, summary, .{});
+    try db.run("INSERT INTO matches VALUES ('EUW1_1', 0, ?, ?)", .{
+        store.Blob{ .bytes = try store.raw.compress(arena, json) },
+        store.Blob{ .bytes = try store.raw.compress(arena, try @import("../riot/root.zig").timeline.encode(arena, t)) },
+    });
+    try db.run("INSERT INTO accounts VALUES ('a#1', 'p', 0)", .{});
+    try db.run("INSERT INTO players (puuid, game_name, tag_line, platform) VALUES ('p', 'A', '1', 'EUW1')", .{});
+    try db.run("INSERT INTO player_games VALUES ('p', 'EUW1_1', 1791720000000, 7)", .{});
+    try db.run("INSERT INTO match_names VALUES ('EUW1_1', 2, '', 'C#1')", .{});
+
+    const r = try oneGame(&ctx, arena, db, "id=A%231&start=1791720000000");
+    try std.testing.expectEqual(Status.ok, r.status);
+    try std.testing.expect(r.binary);
+    const d = try ui.data.decode(arena, ui.gamedata.Data, r.body);
+    try std.testing.expectEqual(1, d.games.len);
+    const g = d.games[0];
+    try std.testing.expectEqual(7, g.you);
+    try std.testing.expect(g.kills.len > 0 and g.wc.len > 1);
+    try std.testing.expectEqualStrings("C#1", g.seats[2].riot_id);
+    try std.testing.expectEqualStrings("Annie", d.champs[g.seats[2].champ].name);
+    // Not in Data Dragon's list: no name, no icon
+    try std.testing.expectEqualStrings("", d.champs[g.seats[0].champ].name);
+
+    try std.testing.expectEqual(Status.not_found, (try oneGame(&ctx, arena, db, "id=A%231&start=1")).status);
+    try std.testing.expectEqual(Status.not_found, (try oneGame(&ctx, arena, db, "id=B%231&start=1791720000000")).status);
+    try std.testing.expectEqual(Status.bad_request, (try oneGame(&ctx, arena, db, "id=A%231")).status);
+    try db.run("INSERT INTO blocked VALUES ('p', 0)", .{});
+    const out = try oneGame(&ctx, arena, db, "id=A%231&start=1791720000000");
+    try std.testing.expect(!out.binary and std.mem.find(u8, out.body, "opted_out") != null);
+}
+
+test "list: the lookup's state, then its games as games.html reads them" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var ctx = testContext();
+    defer ctx.accounts.deinit();
+    const db = try cache.open(":memory:");
+    defer db.close();
+    const decode = struct {
+        fn f(a: Allocator, r: Reply) !ui.yourlist.Lookup {
+            try std.testing.expect(r.binary and r.status == .ok);
+            return ui.data.decode(a, ui.yourlist.Lookup, r.body);
+        }
+    }.f;
+
+    const first = try decode(arena, try listOf(&ctx, arena, db, "id=A%231"));
+    try std.testing.expectEqual(.queued, first.state);
+    try std.testing.expectEqual(0, first.ahead.?);
+    try std.testing.expectEqual(null, first.list);
+
+    const now = std.Io.Clock.real.now(std.testing.io).toSeconds();
+    try db.run("DELETE FROM jobs", .{});
+    try db.run("INSERT INTO accounts VALUES ('a#1', 'p', ?)", .{now});
+    try db.run("INSERT INTO players (puuid, game_name, tag_line, platform, tier, division, lp, refreshed) VALUES ('p', 'A', '1', 'EUW1', 'GOLD', 'II', 40, ?)", .{now});
+    const players = try arena.alloc(game.Summary.Player, 10);
+    for (players, 0..) |*p, i| {
+        p.* = .{ .hash = "", .team = if (i < 5) 100 else 200, .position = "MIDDLE", .champion = @intCast(i + 1), .win = i < 5, .kills = 2, .deaths = 1, .assists = 3 };
+    }
+    const summary: game.Summary = .{ .patch = "16.20", .queue = 440, .start_ms = 1791720000000, .duration_s = 1800, .remake = false, .players = players };
+    const json = try std.json.Stringify.valueAlloc(arena, summary, .{});
+    try db.run("INSERT INTO matches VALUES ('EUW1_1', 0, ?, NULL)", .{store.Blob{ .bytes = try store.raw.compress(arena, json) }});
+    try db.run("INSERT INTO player_games VALUES ('p', 'EUW1_1', 1791720000000, 0)", .{});
+
+    const ready = try decode(arena, try listOf(&ctx, arena, db, "id=A%231"));
+    try std.testing.expectEqual(.ready, ready.state);
+    const l = ready.list.?;
+    try std.testing.expectEqualStrings("GOLD", l.player.tier.?);
+    try std.testing.expectEqual(1, l.games.len);
+    try std.testing.expectEqual(1791720000000, l.games[0].start_ms);
+    try std.testing.expectEqual(.flex, l.games[0].queue);
+    try std.testing.expectEqual(null, l.games[0].page);
+
+    // A glance: the cache only, nothing queued, looked_up kept
+    try db.run("UPDATE players SET looked_up = 5, refreshed = 0", .{});
+    const glance = try decode(arena, try listOf(&ctx, arena, db, "id=A%231&cached=1&n=20"));
+    try std.testing.expectEqual(.ready, glance.state);
+    try std.testing.expectEqual(1, glance.list.?.games.len);
+    try std.testing.expectEqual(@as(?i64, 5), try db.scalar("SELECT looked_up FROM players", .{}));
+    try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM jobs", .{}));
+    try std.testing.expectEqual(.none, (try decode(arena, try listOf(&ctx, arena, db, "id=B%231&cached=1"))).state);
+    try std.testing.expectEqual(@as(?i64, 0), try db.scalar("SELECT count(*) FROM jobs", .{}));
+    for ([_][]const u8{ "id=A%231&n=0", "id=A%231&n=101", "id=A%231&n=x", "x=1" }) |bad| {
+        try std.testing.expectEqual(Status.bad_request, (try listOf(&ctx, arena, db, bad)).status);
+    }
+
+    try db.run("INSERT INTO blocked VALUES ('p', 0)", .{});
+    try std.testing.expectEqual(.opted_out, (try decode(arena, try listOf(&ctx, arena, db, "id=A%231"))).state);
+    try std.testing.expectEqual(.opted_out, (try decode(arena, try listOf(&ctx, arena, db, "id=A%231&cached=1"))).state);
+}
+
+test {
+    _ = devfixture;
+}
+
 test "daily: counts a finished puzzle's answers, refuses junk" {
     var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena_state.deinit();
@@ -801,6 +1112,9 @@ const fuzz_requests = [_][]const u8{
     "GET /api/forget?id=A%231 HTTP/1.1\r\nHost: x\r\n\r\n",
     "POST /api/daily?n=3&pick=2&side=0 HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n",
     "GET /api/daily?n=3 HTTP/1.1\r\nHost: x\r\n\r\n",
+    "GET /api/game?id=A%231&start=1791720000000 HTTP/1.1\r\nHost: x\r\n\r\n",
+    "GET /api/list?id=A%231&refresh=1 HTTP/1.1\r\nHost: x\r\n\r\n",
+    "GET /api/list?id=A%231&cached=1&n=20 HTTP/1.1\r\nHost: x\r\n\r\n",
     "POST /auth/login HTTP/1.1\r\nHost: x\r\nX-Meiolol-Action: 1\r\nContent-Length: 42\r\n\r\n" ++
         "{\"username\":\"owner\",\"password\":\"12345678\"}",
     "POST /auth/signup HTTP/1.1\r\nHost: x\r\nX-Meiolol-Action: 1\r\nContent-Length: 50\r\n\r\n" ++

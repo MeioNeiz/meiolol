@@ -85,6 +85,26 @@ pub const List = struct {
     }
 };
 
+/// /api/list's answer (api/root.zig): a lookup's state, and the list once ready. The
+/// page polls while queued or fetching, as your.js does /api/games
+pub const Lookup = struct {
+    state: State,
+    /// Jobs ahead in the queue
+    ahead: ?u16 = null,
+    /// Games left to fetch, and in this refresh
+    pending: ?u16 = null,
+    total: ?u16 = null,
+    /// Unix seconds from which &refresh=1 checks for new games
+    check_at: ?i64 = null,
+    /// The last refresh failed (an error name): the list is from before it
+    failed: ?[]const u8 = null,
+    list: ?List = null,
+
+    /// busy: the queue is full, try again in a few minutes; none: &cached=1 and the
+    /// cache doesn't know the player
+    pub const State = enum { queued, fetching, ready, not_found, opted_out, busy, none };
+};
+
 /// The filter row and the summary's presses; null is All
 pub const Filter = struct {
     queue: ?Queue = null,
