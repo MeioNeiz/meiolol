@@ -80,6 +80,12 @@ fn lanes(a: std.mem.Allocator, from: []const pool.Lane) ![]const pd.Lane {
     return out;
 }
 
+comptime {
+    const o: pool.Options = .{};
+    std.debug.assert(pd.min_games == o.min_pair_games);
+    std.debug.assert(pd.min_pp == tenths(o.min_lane_pp));
+}
+
 fn tenths(pp: f64) i16 {
     return std.math.lossyCast(i16, @round(10 * pp));
 }

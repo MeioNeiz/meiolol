@@ -113,7 +113,7 @@ pub const File = struct {
             o.score = switch (why) {
                 .hard => if (o.with == have) continue else 10_000 * @as(i32, @popCount(o.with)) + 1_000 * @as(i32, @popCount(o.lanes)) + sum,
                 .banned => if (o.lanes == 0) continue else 1_000 * @as(i32, @popCount(o.lanes)) + sum,
-                .also => @as(i32, @intCast(f.liftOf(c.id) orelse continue)),
+                .also => @as(i32, f.liftOf(c.id) orelse continue),
             };
             var pos = n;
             while (pos > 0 and out[pos - 1].score < o.score) pos -= 1;

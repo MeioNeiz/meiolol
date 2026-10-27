@@ -644,7 +644,8 @@ fn mainRole(st: *const Stats, c: usize) ?Role {
     return best;
 }
 
-fn playsRole(st: *const Stats, c: usize, r: Role, opts: Options) bool {
+/// `c` (stats index) has min_pair_games and min_role_share of its games in `r`
+pub fn playsRole(st: *const Stats, c: usize, r: Role, opts: Options) bool {
     const g: f64 = @floatFromInt(st.champRole(r, c).games);
     return g >= @as(f64, @floatFromInt(opts.min_pair_games)) and
         g >= opts.min_role_share * @as(f64, @floatFromInt(st.champGames(c)));

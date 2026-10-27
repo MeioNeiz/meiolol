@@ -211,6 +211,7 @@ pub const Bells = struct {
 };
 
 pub fn dumbbell(h: *H, o: Bells, items: []const Bell) N {
+    std.debug.assert(o.hi > o.lo);
     const at = struct {
         fn f(b: Bells, v: f32) f32 {
             return pct((v - b.lo) / (b.hi - b.lo));
@@ -400,10 +401,10 @@ test "dumbbell: dots and the gap on the axis, legend and ticks, thin rows marked
     var out: std.Io.Writer.Allocating = .init(arena.allocator());
     try @import("html.zig").write(&t, fig, &out.writer);
     const s = out.written();
-    try std.testing.expect(std.mem.indexOf(u8, s, "--a:25;--b:75;--l:25;--w:50") != null);
+    try std.testing.expect(std.mem.find(u8, s, "--a:25;--b:75;--l:25;--w:50") != null);
     // Practised below new: the line still runs left to right
-    try std.testing.expect(std.mem.indexOf(u8, s, "--a:60;--b:50;--l:50;--w:10") != null);
-    try std.testing.expect(std.mem.indexOf(u8, s, "aria-label=\"New 45.0%, Practised 55.0%\"") != null);
+    try std.testing.expect(std.mem.find(u8, s, "--a:60;--b:50;--l:50;--w:10") != null);
+    try std.testing.expect(std.mem.find(u8, s, "aria-label=\"New 45.0%, Practised 55.0%\"") != null);
     try std.testing.expectEqual(1, std.mem.count(u8, s, "data-thin"));
-    try std.testing.expect(std.mem.indexOf(u8, s, ">50%</span>") != null);
+    try std.testing.expect(std.mem.find(u8, s, ">50%</span>") != null);
 }
