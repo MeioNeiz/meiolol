@@ -39,6 +39,13 @@ when its context fills. Decisions inside a step are the session's; Jacob only fo
 what needs him off the keyboard (`cc-note needs`): the gpu-box Tailscale login link,
 Ethan's CPU type. VM6 runs by itself once VM3's benchmark is under 2x the box.
 
+VM6 done 27 Oct 06:34 UTC: meio.lol and www on C01's tunnel, C01 runs crawl, web loop,
+render, backup, health, API; the Oracle box's units stopped and masked (kept, not
+terminated); the Mac's scripts default to essex-vm. VM3 results on C01:
+~/vm-chain/results.md (core build 1.7x, views write 1.9x the box, render p50 8 ms).
+Left: push mode back to fast (Jacob), the gpu-box step (`deploy/vm-cutover.sh` again
+once it is on Tailscale), bench-crawl.sh seed on C01 (base db not created), then VM7-8.
+
 Migration mode, set 26-27 Oct (undo in VM6, from the new host where moved):
 - Deploys held: `deploy/push.sh --mode bulk 1440` (sessions queue, check pages on
   deploy/dev.sh). Undo: `--mode fast` once C01 is the deploy target
