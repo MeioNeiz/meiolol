@@ -41,15 +41,20 @@ export fn main() void {
     zjb.global("window").call("setInterval", .{ zjb.fnHandle("yourTick", &tick), @as(i32, std.time.ms_per_min) }, void);
 }
 
-/// The list on the root (data-bin): the server's example, or a lookup's once handed over
+/// The list on the root (data-bin): the server's example, or a lookup's once handed over.
+/// One that doesn't decode is removed, which tells the lookup (yk.event) to say so
 fn load(a: std.mem.Allocator) ?ui.yourlist.List {
     const el = zjb.global("document").call("querySelector", .{zjb.constString(yp.sel)}, zjb.Handle);
     defer el.release();
     const b = dom.binOf(el, "data-bin") orelse return null;
+    defer gpa.free(b);
     // Decoded strings point into the bytes
     const kept = a.dupe(u8, b) catch return null;
-    gpa.free(b);
-    return ui.data.decode(a, ui.yourlist.List, kept) catch null;
+    return ui.data.decode(a, ui.yourlist.List, kept) catch {
+        el.call("removeAttribute", .{zjb.constString("data-bin")}, void);
+        dom.dom.warn("your: bad list");
+        return null;
+    };
 }
 
 /// Each game's minutes east of UTC here: a DST change between games moves it

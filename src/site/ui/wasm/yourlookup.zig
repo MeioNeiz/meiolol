@@ -113,4 +113,6 @@ fn hand(l: ?[]u8) void {
     const e = zjb.global("Event").new(.{zjb.constString(yk.event)});
     defer e.release();
     zjb.global("window").call("dispatchEvent", .{e}, void);
+    // ui-your's listener has run: it removes a list it can't read (a stale cached file)
+    if (l != null and !el.call("hasAttribute", .{zjb.constString("data-bin")}, bool)) look.at = .down;
 }

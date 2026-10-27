@@ -28,7 +28,7 @@ const W = struct {
     pub const queued = plain("Queued…");
     pub const behind = phrase.Phrase("Queued behind {n:count} other lookups…");
     pub const fetching = phrase.Phrase("Fetching games from Riot: {done:count} of {total:count}…");
-    pub const failed = phrase.Phrase("Last update failed ({e:text}); showing what is stored.");
+    pub const failed = plain("Last update failed; showing what is stored.");
     pub const not_found = plain("No Riot account with that name and tag. Check the spelling and the part after #.");
     pub const opted_out = plain("This player has asked us not to show their games.");
     pub const busy = plain("Lots of lookups right now. Try again in a few minutes.");
@@ -131,7 +131,7 @@ pub const YourLookup = struct {
             .answered => switch (hd.state) {
                 .queued => if (hd.ahead) |n| (if (n > 0) W.behind.with(h, .{ .n = n }) else W.queued) else W.queued,
                 .fetching => W.fetching.with(h, .{ .done = (hd.total orelse 0) -| (hd.pending orelse 0), .total = hd.total orelse 0 }),
-                .ready => if (hd.failed) |e| W.failed.with(h, .{ .e = e }) else null,
+                .ready => if (hd.failed != null) W.failed else null,
                 .not_found => W.not_found,
                 .opted_out => W.opted_out,
                 .busy => W.busy,
@@ -142,16 +142,14 @@ pub const YourLookup = struct {
 };
 
 /// The URL's lookup id, percent-encoded as there (game.html's links take it so); null
-/// without one
+/// without one. The last id= wins, as in url.read
 pub fn idOf(hash: []const u8) ?[]const u8 {
-    var i: usize = 0;
-    while (std.mem.findPos(u8, hash, i, "id=")) |at| : (i = at + 3) {
-        if (at > 0 and hash[at - 1] != '#' and hash[at - 1] != '&') continue;
-        const v = hash[at + 3 ..];
-        const end = std.mem.findScalar(u8, v, '&') orelse v.len;
-        return if (end > 0) v[0..end] else null;
+    var id: []const u8 = "";
+    var it = std.mem.tokenizeScalar(u8, if (hash.len > 0 and (hash[0] == '#' or hash[0] == '?')) hash[1..] else hash, '&');
+    while (it.next()) |kv| {
+        if (std.mem.startsWith(u8, kv, "id=")) id = kv[3..];
     }
-    return null;
+    return if (id.len > 0) id else null;
 }
 
 pub const css =
@@ -190,6 +188,7 @@ pub fn gallery(g: *Gallery) void {
 
 const testing = std.testing;
 const data = @import("data.zig");
+const url = @import("url.zig");
 
 fn reply(a: std.mem.Allocator, l: yl.Lookup) ![]const u8 {
     var out: std.ArrayList(u8) = .empty;
@@ -311,6 +310,7 @@ test "each answer's status line; none once ready" {
         .{ yl.Head{ .state = .opted_out }, "This player has asked us not to show their games." },
         .{ yl.Head{ .state = .busy }, "Lots of lookups right now. Try again in a few minutes." },
         .{ yl.Head{ .state = .ready }, "" },
+        .{ yl.Head{ .state = .ready, .failed = "RateLimited" }, "Last update failed; showing what is stored." },
     };
     inline for (cases) |c| {
         var p = demo(.answered, c[0]);
@@ -334,4 +334,11 @@ test idOf {
     try testing.expectEqualStrings("A%231", idOf("#id=A%231").?);
     try testing.expectEqual(null, idOf("#q=solo&id="));
     try testing.expectEqual(null, idOf("#champ=Kid=1"));
+    // As url.read: the last
+    try testing.expectEqualStrings("B%232", idOf("#id=A%231&id=B%232").?);
+    try testing.expectEqual(null, idOf("#id=A%231&id="));
+    var u: YourLookup.Url = url.read(YourLookup.Url, "#id=A%231&id=B%232");
+    try testing.expectEqualStrings("B#2", u.id.slice());
+    u = url.read(YourLookup.Url, "#id=A%231&id=");
+    try testing.expectEqual(0, u.id.len);
 }
