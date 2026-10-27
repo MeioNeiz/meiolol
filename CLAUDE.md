@@ -43,23 +43,25 @@ docs/plan.md "Now". Read it first.
 ## Hosts
 
 - Two executables: `meiolol` (backend: crawl, stats, site, status, champions; runs on
-  the box, an Oracle Cloud server) and `meiolol-app` (player tool: suggest, watch,
+  the box, C01: a VM Ethan lent) and `meiolol-app` (player tool: suggest, watch,
   session, get). `zig build lab`: `meiolol-lab`, modelling experiments on the gpu-box
   (CUDA via libcuda, kernels in src/gpu compiled to PTX)
-- The box: `ssh meiolol-cloud`. Crawler 24/7: `deploy/box.sh start|stop|restart|status|
-  logs|run`. Data lives
-  only there (~/ml/meiolol/data); the gpu-box keeps a copy as a restore point. Hosts,
-  limits: docs/hosting.md
+- The box: `ssh essex-vm` (C01; sudo password: vault meiolol/essex-vm). Crawler 24/7:
+  `deploy/box.sh start|stop|restart|status|logs|run`. Data lives there
+  (~/ml/meiolol/data, on Megatron); backups mirrored to Megatron, the Mac and the
+  gpu-box. Hosts, limits: docs/hosting.md, docs/plan/vm.md. The old Oracle box
+  (`meiolol-cloud`) is stopped and kept as is for a benchmark: don't change it
 - Box jobs over a minute: `deploy/box.sh job run NAME 'CMD'` (a user unit, outlives
   ssh), `job status|wait NAME`. Waiting for a push: `deploy/box.sh wait-deployed [REV]
   [--live]` (exits 0, 1 failed, 3 timeout). Hand-edited Daily or Learn
   files: `deploy/box.sh web rebuild` (a forced round keeps the old ones)
 - Website: https://meio.lol (DNS on Cloudflare: docs/arch-site.md; mail to @meio.lol:
-  deploy/mail.sh), static nginx and the Your games API on the jomify server (`ssh
-  jomify`; it also runs jomove, an unrelated house-moving app: leave its config alone).
-  The box builds and uploads on new data: `deploy/box.sh web start
-  [privacy@meio.lol]|stop|status`. jomify's pieces are installed by hand:
-  `deploy/jomify.sh drift`, `install api|traffic|...`. Admin pages: `deploy/admin-get.sh
+  deploy/mail.sh), static nginx and the Your games API on C01 behind Cloudflare
+  Tunnel `meiolol-c01`. The box builds and uploads on new data: `deploy/box.sh web start
+  [privacy@meio.lol]|stop|status`. Pieces installed by hand (named for jomify, which ran
+  them until the move; it now runs only jomove: never touch it): `deploy/jomify.sh
+  drift`, `install api|traffic|...`. The Mac can't reach meio.lol (Sophos filter
+  re-signs TLS): check live pages from C01. Admin pages: `deploy/admin-get.sh
   PATH` (keeps the login off screen). Preview mode until prod key
 - A scripted headed browser visiting meio.lol appends `meiolol-agent` to its user agent,
   so traffic counts it as a bot (deploy/traffic.sh)
