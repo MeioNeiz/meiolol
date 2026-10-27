@@ -49,6 +49,9 @@ src/
                      when a game lacks full roles
   admin.zig          `meiolol admin`: private ops page (/admin/, static/admin.js charts)
   admin_api.zig      /admin/api/ in `meiolol render`: live data, logs, actions (hosting.md)
+  site/tester.zig    /p/tester.html (`admin --private-out`): the new Draft tester island
+                     (ui/testerpage.zig, ui-tester.wasm fetches /p/ model bins), beside
+                     admin.zig private()'s old page until it reaches parity
   backup.zig         `meiolol backup|restore`: state snapshots + append-only segments
   forget.zig         `meiolol forget`: GDPR erasure, `forgotten` suppression list
                      (both: docs/data-safety.md)

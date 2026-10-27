@@ -19,6 +19,7 @@ const ddragon = @import("ddragon.zig");
 const site = @import("site/root.zig");
 const assets = @import("site/assets.zig");
 const admin = @import("admin.zig");
+const site_tester = @import("site/tester.zig");
 const api = @import("api/root.zig");
 const lab_rows = @import("lab/rows.zig");
 const lab_pack = @import("lab/pack.zig");
@@ -835,6 +836,15 @@ test "admin page from the fixture games and a crawl log" {
         try std.Io.Dir.cwd().access(io, try std.fs.path.join(arena, &.{ private, f }), .{});
     }
     try std.testing.expectError(error.FileNotFound, std.Io.Dir.cwd().access(io, try std.fs.path.join(arena, &.{ private, "data.json" }), .{}));
+    // The new tester beside it: the island with the champions inline, its code and style
+    try site_tester.write(gpa, io, private, db);
+    const t_html = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ private, "tester.html" }), arena, .limited(1 << 20));
+    for ([_][]const u8{ "data-island=\"tester\"", "data-bin=\"", assets.tester_js.path, site_tester.css_file.path }) |s| {
+        try std.testing.expect(std.mem.find(u8, t_html, s) != null);
+    }
+    for ([_][]const u8{ assets.tester_js.path, assets.tester_wasm.path, site_tester.css_file.path, "tester.html.gz" }) |f| {
+        try std.Io.Dir.cwd().access(io, try std.fs.path.join(arena, &.{ private, f }), .{});
+    }
     // data.json: the page's data, for polling between rebuilds
     const json = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "data.json" }), arena, .limited(4 << 20));
     for ([_][]const u8{

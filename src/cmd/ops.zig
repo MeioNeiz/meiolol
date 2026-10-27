@@ -5,6 +5,7 @@ const store = @import("store");
 const core = @import("core");
 const api = @import("../api/root.zig");
 const admin = @import("../admin.zig");
+const site_tester = @import("../site/tester.zig");
 const status = @import("../status.zig");
 const main = @import("../main.zig");
 const Cmd = main.Cmd;
@@ -317,5 +318,6 @@ pub fn cmdAdmin(c: *Cmd) !u8 {
     defer db.close();
     try admin.generate(c.init.gpa, c.init.io, db, o);
     if (private_out) |p| try admin.private(c.init.gpa, c.init.io, p, now);
+    if (private_out) |p| try site_tester.write(c.init.gpa, c.init.io, p, db);
     return 0;
 }
