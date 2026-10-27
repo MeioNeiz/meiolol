@@ -225,11 +225,20 @@ runs with its own tuned values; the box stays untouched until then.
   and miss counters after a views write (likely moot with 62 GB RAM). Writer cache and
   crawler threads only if crawl figures show the database as the limit
 - 16 vCPU = E5-2630 v3, 8 cores 16 threads: if one socket they are hyperthreads, so
-  measure 8 before 16 and expect little past 8 (Jacob asking Ethan)
+  measure 8 before 16 and expect little past 8; settled by those runs, not by asking
 
-| setting | core build s | views write s | renderer load s | render ms | buff/cache GB |
-|---|---|---|---|---|---|
-| baseline (27 Oct, host CPU, 62 GB, AVX2 build) | running | | | | |
+Medians of 3 (the runs in brackets); render ms: every page (30085) from the live
+renderer, 8 at a time; crawl: the crawler's rate at the end.
+
+| setting | core build s | views write s | renderer load s | render ms p50/p95/p99 | buff/cache GB | crawl matches/day |
+|---|---|---|---|---|---|---|
+| baseline (27 Oct, host CPU, 62 GB, AVX2 build) | 126 (126 123 129) | 766 (774 766 764) | 46 | 11/21/27 | 48 | 148833 |
+
+Baseline's views write by phase (views.log): stats 375 s (view 2), 136 s (view 3),
+82 s (view 0), 28 s (view 1), single-threaded (cpu = wall); people 54 s; filters 6 s,
+from the partials. The four views load one after another on one connection, so the
+write uses about one of the 16 vCPU: knob 1 can save at most the filters' 6 s, less
+than the spread between runs
 
 ## Later
 
