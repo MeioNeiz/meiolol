@@ -29,6 +29,7 @@ pub const sel = "[data-island=learn]";
 const W = struct {
     pub const title = plain("Learn");
     pub const chapter = Phrase("Chapter {n:int}");
+    pub const drag = Phrase("Tap or drag the {r:text} line to guess");
     pub const of = Phrase("{a:int} / {b:int}");
     pub const done = Phrase("Chapter {n:int} done");
     pub const lock = plain("Lock in");
@@ -275,6 +276,7 @@ pub const Page = struct {
             .ticks = ticks(h, lo, hi),
             .ask = if (ask != null) &p.g else null,
             .on = h.on(p, .guess),
+            .hint = if (ask) |i| W.drag.with(h, .{ .r = src[i].label }) else null,
         });
     }
 
@@ -427,7 +429,7 @@ pub const css =
     \\    font-size: var(--fs-xs); line-height: 1.2; color: var(--t2); text-align: center; }
     \\  .c-learn > .grid > .main { scroll-margin-top: calc(var(--header) + var(--sp-3)); }
     \\  .c-learn .tile .sep { padding-top: 8px; font-size: var(--fs-xs); color: var(--faint); }
-    \\  .c-learn .lab { font-size: var(--fs-xs); font-weight: var(--w-b); color: var(--faint); text-transform: uppercase; letter-spacing: 0.06em; }
+    \\  .c-learn :is(.tips, .chs) > .lab { font-size: var(--fs-xs); font-weight: var(--w-b); color: var(--faint); text-transform: uppercase; letter-spacing: 0.06em; }
     \\  .c-learn .tips, .c-learn .chs { display: grid; gap: var(--sp-2); }
     \\  .c-learn .ch { all: unset; display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: var(--sp-2); align-items: center;
     \\    min-height: 36px; padding: 0 var(--sp-2); border-radius: var(--r-ctl); color: var(--t2); font-size: var(--fs-s); cursor: pointer; }

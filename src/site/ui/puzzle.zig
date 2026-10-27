@@ -1,4 +1,4 @@
-//! PuzzleCard: one puzzle a screen. The setup as a picture on a lit stage band across the
+//! PuzzleCard: one puzzle a screen. The setup as a picture on a stage band across the
 //! card's top (RateRows, champion icons, tiles), one short question, the answer (a
 //! GuessSlider in the stage, or ChoiceCards under the question), then in place the
 //! closeness Badge and stars, one line why and the takeaway; the foot holds the games
@@ -150,7 +150,7 @@ pub const css =
     \\@layer components {
     \\  .c-puzzle { display: grid; gap: var(--sp-4); container-type: inline-size; }
     \\  .c-puzzle > .stage { margin: calc(-1 * var(--card-py)) calc(-1 * var(--card-px)) 0; padding: var(--sp-5) var(--card-px) var(--sp-4);
-    \\    background: radial-gradient(90% 120% at 50% 0%, var(--accent-bg), transparent 70%), var(--panel-2);
+    \\    background: var(--panel-2);
     \\    border-bottom: 1px solid var(--line); border-radius: var(--r-m) var(--r-m) 0 0; display: grid; gap: var(--sp-3); min-width: 0; }
     \\  .c-puzzle .qrow { display: flex; align-items: center; gap: var(--sp-2) var(--sp-3); flex-wrap: wrap; }
     \\  .c-puzzle .q { margin: 0; font-size: var(--fs-xl); font-weight: var(--w-b); letter-spacing: -0.01em; line-height: 1.25; }
