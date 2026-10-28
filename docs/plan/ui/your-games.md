@@ -178,13 +178,13 @@ small bar each. Client side from the report; not mocked.
 
 ## Your data
 
-Today: two paragraphs and a button at the foot of every page.
-
-New: nothing on the page but the "⋯" menu item "Remove my data", which opens a dialog
-(`dialog`) with the icon check as three steps in UI: the icon at 64 px, a 15:00
-countdown, a Check button; one line "Set this profile icon, then press Check." and a
-"What we keep" link to the privacy page, where the paragraphs go. The site footer of
-Your games gains "What we keep" next to Privacy.
+Built (ui.forget, island ui-forget.wasm, loaded lazily as the foot nears): a closed
+"Remove my data" disclosure at the page's foot. Open: a "What we keep" link to the
+privacy page, a Riot ID box (any ID: lia.md's objection is open to anyone) and Start;
+then the icon at 64 px, one line "Set this profile icon on X before 18:05, then press
+Check" and Check. Done drops the ID from your-recent and your-last. It reads /api/forget's
+JSON as is. Still planned: the "⋯" menu item opening it as a `dialog`, once the menu
+exists.
 
 ## Model site (research's refs, refs/README.md kind 2)
 

@@ -1,7 +1,8 @@
 //! The Your games list (games.html, unlisted): the example player's list
 //! (yourgame.list_path) as ui.yourviews.YourViews (the head), ui.yourtime.YourTime (Over
 //! time, hidden until chosen) and ui.yourpage.YourList, its rows opening game.html; a
-//! URL's id is looked up in its place (ui.yourlookup)
+//! URL's id is looked up in its place (ui.yourlookup). Remove my data at the foot
+//! (ui.forget)
 const std = @import("std");
 const ui = @import("ui");
 const html = @import("html.zig");
@@ -39,9 +40,10 @@ pub fn writePage(site: *const Site, w: *Writer) !bool {
     var v: ui.yourviews.YourViews = .{ .l = l, .game = yourgame.page_path };
     var o: ui.yourtime.YourTime = .{ .l = l, .game = yourgame.page_path, .js = assets.yourtime_js.path, .wasm = assets.yourtime_wasm.path };
     var y: ui.yourpage.YourList = .{ .l = l, .bin = enc.encode(bin, f.data), .game = yourgame.page_path };
+    var fg: ui.forget.Forget = .{ .js = assets.forget_js.path, .wasm = assets.forget_wasm.path, .ddragon = site.ddragon_version };
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
-    for ([_]ui.N{ look.view(&h), v.view(&h), o.view(&h), y.view(&h) }) |n| {
+    for ([_]ui.N{ look.view(&h), v.view(&h), o.view(&h), y.view(&h), fg.view(&h) }) |n| {
         if (h.oom) return error.OutOfMemory;
         try ui.html.write(&t, n, w);
     }

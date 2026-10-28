@@ -11,8 +11,9 @@ const yv = ui.yourviews;
 pub const panic = zjb.panic;
 
 const gpa = std.heap.wasm_allocator;
-/// Hidden by CSS until its tab is chosen, so it nears the viewport only then
-const lazy = [_][]const u8{ui.yourtime.sel};
+/// Over time is hidden by CSS until its tab is chosen, so it nears the viewport only then;
+/// Remove my data at the page's foot
+const lazy = [_][]const u8{ ui.yourtime.sel, ui.forget.sel };
 
 var page: yv.YourViews = undefined;
 var page0: yv.YourViews = undefined;
