@@ -586,6 +586,7 @@ test "fixture games to stats, curves and the website" {
         };
         try testing.expectEqualStrings(want, got);
         checked += 1;
+        if (std.mem.endsWith(u8, e.path, ".html")) try expectNewUrl(arena, e.path);
         if (std.mem.endsWith(u8, e.path, ".html") and std.mem.find(u8, want, "data-sortable") != null and
             std.mem.find(u8, want, "table.js\"") == null)
         {
@@ -1409,6 +1410,23 @@ test "fixture games to lab rows, from SQLite and packed" {
         try testing.expectEqual(@as(f32, lab_seatstats.count - 1), r.stats[lab_seatstats.count - 1]);
     }
     try testing.expectEqual(1, filled);
+}
+
+/// An old page path's new URL (docs/plan/urls.md) parses back as the same kind of page:
+/// a champion page stays a champion, never a role list
+fn expectNewUrl(arena: std.mem.Allocator, old: []const u8) !void {
+    const new = try ui.urls.legacy(arena, old) orelse {
+        std.debug.print("{s}: no new URL\n", .{old});
+        return error.TestUnexpectedResult;
+    };
+    const page = ui.urls.parse(new[0 .. std.mem.findScalar(u8, new, '?') orelse new.len]) orelse {
+        std.debug.print("{s}: new URL {s} isn't a page\n", .{ old, new });
+        return error.TestUnexpectedResult;
+    };
+    if (std.mem.startsWith(u8, old, "champion/") and page != .champion) {
+        std.debug.print("{s}: champion slug reads as a role\n", .{old});
+        return error.TestUnexpectedResult;
+    }
 }
 
 /// Every generated file's hash, against src/testdata/site-files.txt: a refactor that

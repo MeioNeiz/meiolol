@@ -53,9 +53,10 @@ legacy keys with replaceState.
 
 ## Steps
 
-- URL1 src/site/urls.zig: the only place that spells a page path, plus `legacy(old)
-  ?new`; tests that every old pagePaths entry maps to a page that exists. No behaviour
-  change; own commit
+- URL1 (done) src/site/ui/urls.zig (in ui: ui/*.zig and the wasm spell hrefs too; site
+  reaches it as ui.urls): `Page` spelt with `{f}` and read back by `parse`, `Data` the
+  query, `legacy(old) ?new`; the pipeline test maps every page the fixture site writes;
+  loadChamps refuses a champion slug that is a role name. Nothing calls it yet
 - URL2 one push, done when every old URL on dev.sh lands on the right page with its
   state:
   - Generator: root-relative hrefs (drop toRoot, toShared, toSite, View.up/dir/query;

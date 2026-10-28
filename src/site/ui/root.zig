@@ -10,6 +10,7 @@ pub const fmt = @import("fmt.zig");
 pub const phrase = @import("phrase.zig");
 pub const check = @import("check.zig");
 pub const url = @import("url.zig");
+pub const urls = @import("urls.zig");
 pub const data = @import("data.zig");
 pub const tokens = @import("tokens.zig");
 pub const css = @import("css.zig");

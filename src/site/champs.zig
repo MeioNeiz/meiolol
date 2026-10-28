@@ -60,12 +60,15 @@ pub fn loadChamps(site: *Site, db: store.Db, games: ?*const partials.Store) !voi
         const id = r.id;
         const c = site.stats.index(id) orelse continue;
         const name = try a.dupe(u8, r.name);
+        const slug = root.ui.champ.slug(try a.alloc(u8, name.len), name);
+        // /champions/<role> is the role's list (ui/urls.zig)
+        if (std.meta.stringToEnum(root.ui.role.Role, slug) != null) return error.ChampionSlugIsRole;
         try list.append(a, .{
             .c = c,
             .id = id,
             .key = try a.dupe(u8, r.key),
             .name = name,
-            .slug = root.ui.champ.slug(try a.alloc(u8, name.len), name),
+            .slug = slug,
             .banned = banned.get(id) orelse 0,
             .games = site.stats.champGames(c),
         });
