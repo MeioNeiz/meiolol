@@ -217,8 +217,7 @@ pub const css =
     \\  @container (min-width: 640px) {
     \\    .c-cand .r, .c-cand .hd { grid-template-columns: 22px minmax(140px, 200px) 64px 56px minmax(0, 1fr); }
     \\    .c-cand[data-v="words"] .r { grid-template-columns: 22px minmax(140px, 200px) minmax(0, 1fr); }
-    \\    .c-cand .why { grid-column: auto; grid-row: 1; grid-column-end: -1; padding-left: var(--sp-2); flex-wrap: nowrap;
-    \\      overflow: hidden; }
+    \\    .c-cand .why { grid-column: auto; grid-row: 1; grid-column-end: -1; padding-left: var(--sp-2); }
     \\  }
     \\  @container (max-width: 340px) {
     \\    .c-cand .why { padding-left: 0; }
