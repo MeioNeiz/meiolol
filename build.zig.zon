@@ -21,8 +21,8 @@
         },
         // ui.wasm's bridge to the page: our fork, branch meiolol (its docs/meiolol.md)
         .zjb = .{
-            .url = "git+https://github.com/MeioNeiz/zig-javascript-bridge?ref=meiolol#362fc04277c547adf2724a4cc285425974232dc5",
-            .hash = "javascript_bridge-0.0.0-E-FZAWjUAACy2D4eJXtfQ6hza6L4YNd_NYn7fULmHDcS",
+            .url = "git+https://github.com/MeioNeiz/zig-javascript-bridge?ref=meiolol#34bdde45a58cb1683a7d92ce1938f2599adecd85",
+            .hash = "javascript_bridge-0.0.0-E-FZAZXbAAAWK6EkvXIiWOBlyFUeULPZ9RUWU4TwoOGp",
         },
     },
     .paths = .{ "build.zig", "build.zig.zon", "src" },

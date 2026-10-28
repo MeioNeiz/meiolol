@@ -26,6 +26,8 @@ const ci_targets = [_]std.Target.Query{
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    wasm_dev = b.option(bool, "wasm-dev", "ui.wasm with safety checks and a zjb handle " ++
+        "leak check after each event, over its size budget (qa.sh)") orelse false;
     const test_filters = b.option(
         []const []const u8,
         "test-filter",
@@ -398,6 +400,8 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
 const ui_families = [_][]const u8{ "stats", "champion", "champbuild", "champmore", "matchup", "matchmore", "app", "games", "gamemore", "gamelane", "practice", "finder", "findergrid", "learn", "patch", "pool", "daily", "dailydays", "home", "homegame", "tester", "testercand", "your", "yourviews", "yourtime", "yourlookup", "notes" };
 /// gzip bytes per family: stack.md's 40 KB
 const ui_budget = 40 * 1024;
+/// -Dwasm-dev
+var wasm_dev = false;
 /// Families only logins load (/p/): 64 KB (Jacob 27 Oct)
 const ui_private = [_][]const u8{ "ui-tester", "ui-testercand", "ui-notes" };
 const ui_private_budget = 64 * 1024;
@@ -415,13 +419,19 @@ fn uiWasm(b: *std.Build, family: []const u8) UiWasm {
         .imports = &.{ .{ .name = "tpl", .module = tpl }, .{ .name = "core", .module = core } },
     });
     const name = b.fmt("ui-{s}", .{family});
+    const options = b.addOptions();
+    options.addOption(bool, "dev", wasm_dev);
+    // Stripped: assets.zig hashes each file at compile time, which stalls on ReleaseSafe's
+    // 1.2 MB of DWARF
     const exe = b.addExecutable(.{ .name = name, .root_module = b.createModule(.{
         .root_source_file = b.path(b.fmt("src/site/ui/wasm/{s}.zig", .{family})),
         .target = wasm_target,
-        .optimize = .ReleaseSmall,
+        .optimize = if (wasm_dev) .ReleaseSafe else .ReleaseSmall,
+        .strip = true,
         .imports = &.{
             .{ .name = "ui", .module = ui },
             .{ .name = "zjb", .module = zjb.module("zjb") },
+            .{ .name = "wasm_options", .module = options.createModule() },
         },
     }) });
     exe.entry = .disabled;
@@ -438,7 +448,7 @@ fn uiWasm(b: *std.Build, family: []const u8) UiWasm {
 
 /// A size line per ui.wasm (raw and gzip), failing over its budget
 fn uiSize(b: *std.Build, w: UiWasm) *std.Build.Step {
-    const budget: u32 = for (ui_private) |p| {
+    const budget: u32 = if (wasm_dev) std.math.maxInt(u32) else for (ui_private) |p| {
         if (std.mem.eql(u8, p, w.name)) break ui_private_budget;
     } else ui_budget;
     const run = b.addSystemCommand(&.{

@@ -52,7 +52,7 @@ export fn main() void {
     if (!mount()) return dom.dom.warn("notes: no root");
     island = dom.rt.add(Tool, &tool, &server, ui.notes.sel) catch return dom.dom.warn("notes: out of memory");
     dom.rt.changed = changed;
-    root = doc.call("querySelector", .{zjb.constString(ui.notes.sel)}, zjb.Handle);
+    root = doc.call("querySelector", .{zjb.constString(ui.notes.sel)}, zjb.Handle).kept();
     const w = zjb.global("window");
     w.call("addEventListener", .{ zjb.constString("keydown"), zjb.fnHandle("notesKey", &onKey), @as(i32, 1) }, void);
     w.call("addEventListener", .{ zjb.constString("resize"), zjb.fnHandle("notesResize", &onPlace), @as(i32, 0) }, void);
@@ -145,10 +145,10 @@ fn dropPick() void {
     below.clearRetainingCapacity();
 }
 
-/// Sets `slot` to `h`, releasing what it held
+/// Sets `slot` to `h`, kept, releasing what it held
 fn swap(slot: *zjb.Handle, h: zjb.Handle) void {
     if (slot.* != .null) slot.release();
-    slot.* = h;
+    slot.* = h.kept();
 }
 
 fn inTool(el: zjb.Handle) bool {
@@ -194,7 +194,7 @@ fn onPick(e: zjb.Handle) callconv(.c) void {
     swallow(e);
     stopPick();
     dropPick();
-    picked = t;
+    picked = t.kept();
     tool.mode = .form;
     tool.scope = .page;
     describe();
@@ -248,7 +248,7 @@ fn wider() void {
     const tag = name.readString(&buf) catch "";
     if (std.mem.eql(u8, tag, "body") or std.mem.eql(u8, tag, "html")) return p.release();
     below.append(gpa, picked) catch return p.release();
-    picked = p;
+    picked = p.kept();
     describe();
 }
 
@@ -685,7 +685,7 @@ fn place() void {
             if (q.x == p.x and q.y == p.y) p.y += 26;
         }
         pins.append(gpa, p) catch break;
-        pin_els.append(gpa, el orelse .null) catch break;
+        pin_els.append(gpa, (el orelse zjb.Handle.null).kept()) catch break;
     }
     tool.pins = pins.items;
     if (tool.open) |i| {

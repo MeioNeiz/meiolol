@@ -1,10 +1,16 @@
 //! ui.wasm's only door to the page: the island runtime's Dom (island.zig) as zjb calls.
 //! No JS of ours beyond zjb's generated loader (Jacob 22 and 25 Oct). Each DOM node we
 //! made or adopted is a zjb handle in `nodes`, by DOM id, and carries its id as `__n` so
-//! an event's target finds its node; a removed node's handle is released
+//! an event's target finds its node; a removed node's handle is released.
+//!
+//! Every callback from the page here runs in a zjb scope: the handles it makes are
+//! released when it returns. Rule, here and in the entries: a handle that outlives the
+//! callback it was made in is kept (`kept()`), or the scope releases it under you.
+//! -Dwasm-dev reports any handle neither kept nor released
 const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
+const options = @import("wasm_options");
 const tree = ui.tree;
 
 const gpa = std.heap.wasm_allocator;
@@ -22,7 +28,7 @@ pub const Dom = struct {
 
     fn put(d: *Dom, id: u32, h: zjb.Handle) void {
         if (id >= d.nodes.items.len) d.nodes.appendNTimes(gpa, .null, id + 1 - d.nodes.items.len) catch @panic("out of memory");
-        d.nodes.items[id] = h;
+        d.nodes.items[id] = h.kept();
         h.set("__n", @as(i32, @intCast(id)));
     }
 
@@ -93,7 +99,7 @@ pub const Dom = struct {
         defer s.release();
         const root = zjb.global("document").call("querySelector", .{s}, zjb.Handle);
         if (root == .null) return 0;
-        d.roots.append(gpa, root) catch @panic("out of memory");
+        d.roots.append(gpa, root.kept()) catch @panic("out of memory");
         d.listening.append(gpa, 0) catch @panic("out of memory");
         var id = first;
         d.walk(root, &id);
@@ -148,7 +154,7 @@ pub const Dom = struct {
 
     pub fn focus(d: *Dom, id: u32) void {
         if (d.no_scroll == .null) {
-            d.no_scroll = zjb.global("Object").new(.{});
+            d.no_scroll = zjb.global("Object").new(.{}).kept();
             d.no_scroll.set("preventScroll", @as(i32, 1));
         }
         d.node(id).call("focus", .{d.no_scroll}, void);
@@ -237,43 +243,62 @@ pub const Dom = struct {
 pub var dom: Dom = .{};
 pub var rt: ui.island.Runtime(Dom) = .{ .gpa = gpa, .dom = &dom };
 
-/// The id of the nearest node we know at or above `h` (0: none); releases `h`
+fn enter() zjb.Scope {
+    return zjb.scope();
+}
+
+fn leave(s: zjb.Scope) void {
+    s.end();
+    if (options.dev) checkLater();
+}
+
+// -Dwasm-dev: on the next task nothing of ours is on the stack, so every live handle is
+// kept or leaked. Not at the scope's end: an event can fire inside another callback (a
+// patch removing the focused node fires focusout) while that one holds handles
+
+var check_due = false;
+var leaks_told: u32 = 0;
+
+fn checkLater() void {
+    if (check_due) return;
+    check_due = true;
+    zjb.global("window").call("setTimeout", .{ zjb.fnHandle("uiLeaks", &onLeakCheck), @as(i32, 0) }, void);
+}
+
+fn onLeakCheck() callconv(.c) void {
+    check_due = false;
+    const n = zjb.unkeptHandleCount();
+    if (n <= leaks_told) return;
+    leaks_told = n;
+    var buf: [80]u8 = undefined;
+    dom.warn(std.fmt.bufPrint(&buf, "zjb: {d} handles neither released nor kept", .{n}) catch "zjb: leaked handles");
+}
+
+/// The id of the nearest node we know at or above `h` (0: none). In a scope
 fn nearest(h: zjb.Handle) u32 {
     var k = h;
-    while (k != .null) {
+    while (k != .null) : (k = k.get("parentNode", zjb.Handle)) {
         const id = k.get("__n", i32);
-        if (id > 0) {
-            k.release();
-            return @intCast(id);
-        }
-        const up = k.get("parentNode", zjb.Handle);
-        k.release();
-        k = up;
+        if (id > 0) return @intCast(id);
     }
     return 0;
 }
 
 fn onEvent(slot: i32, bit: i32, e: zjb.Handle) callconv(.c) void {
+    const s = enter();
+    defer leave(s);
     defer e.release();
     const kind: tree.Ev = @fromBackingInt(@intCast(bit));
     var in: ui.island.Input = .{ .kind = kind, .target = nearest(e.get("target", zjb.Handle)) };
     if (in.target == 0) return;
     var buf: [256]u8 = undefined;
     switch (kind) {
-        .input, .change => {
-            const t = e.get("target", zjb.Handle);
-            defer t.release();
-            const v = t.get("value", zjb.Handle);
-            defer v.release();
-            in.text = v.readString(&buf) catch buf[0..0];
-        },
+        .input, .change => in.text = e.get("target", zjb.Handle).get("value", zjb.Handle).readString(&buf) catch buf[0..0],
         .keydown => {
             // Keys that pick from an IME (Korean, Japanese names) aren't the page's, nor
             // modified ones: Ctrl/Cmd + or - zooms, Alt+Arrow goes back
             if (e.get("isComposing", bool) or e.get("ctrlKey", bool) or e.get("metaKey", bool) or e.get("altKey", bool)) return;
-            const k = e.get("key", zjb.Handle);
-            defer k.release();
-            in.text = k.readString(&buf) catch buf[0..0];
+            in.text = e.get("key", zjb.Handle).readString(&buf) catch buf[0..0];
         },
         .pointerdown, .pointermove, .pointerup, .pointerleave, .pointercancel => {
             in.x = @floatCast(e.get("clientX", f64));
@@ -282,11 +307,7 @@ fn onEvent(slot: i32, bit: i32, e: zjb.Handle) callconv(.c) void {
             if (kind == .pointerleave) in.related = nearest(e.get("relatedTarget", zjb.Handle));
         },
         .focusout => in.related = nearest(e.get("relatedTarget", zjb.Handle)),
-        .toggle => {
-            const t = e.get("target", zjb.Handle);
-            defer t.release();
-            in.text = if (t.get("open", bool)) "open" else "";
-        },
+        .toggle => in.text = if (e.get("target", zjb.Handle).get("open", bool)) "open" else "",
         else => {},
     }
     if (rt.event(@intCast(slot), in)) e.call("preventDefault", .{}, void);
@@ -296,6 +317,8 @@ fn onEvent(slot: i32, bit: i32, e: zjb.Handle) callconv(.c) void {
 var sending = false;
 
 fn onPopstate(e: zjb.Handle) callconv(.c) void {
+    const s = enter();
+    defer leave(s);
     e.release();
     if (!sending) rt.popstate();
 }
@@ -306,6 +329,7 @@ pub fn start() void {
     const f = zjb.fnHandle("uiPopstate", &onPopstate);
     w.call("addEventListener", .{ zjb.constString("popstate"), f }, void);
     w.call("addEventListener", .{ zjb.constString("ui-hash"), f }, void);
+    if (options.dev) checkLater();
 }
 
 // The page's other ui.wasm files (lazyLoad's selectors: island roots with data-js and
@@ -337,11 +361,12 @@ fn watch(i: i32) void {
 }
 
 fn onNear(i: i32, entries: zjb.Handle, io: zjb.Handle) callconv(.c) void {
+    const s = enter();
+    defer leave(s);
     defer entries.release();
     defer io.release();
     // Not get("0"): zjb writes the name as a property (`.0`), not valid JS
     const first = entries.call("at", .{@as(i32, 0)}, zjb.Handle);
-    defer first.release();
     if (first == .null or !first.get("isIntersecting", bool)) return;
     io.call("disconnect", .{}, void);
     load(@intCast(i));
@@ -353,6 +378,8 @@ pub fn lazyLater() void {
 }
 
 fn onLater() callconv(.c) void {
+    const s = enter();
+    defer leave(s);
     for (0..lazy.len) |i| load(i);
 }
 
@@ -392,14 +419,12 @@ pub fn script(sel: []const u8) void {
 /// data-failed, "show" if it was busy so its CSS can say so, as no file will clear it.
 /// A failed .wasm fetch rejects inside zjb's loader and isn't caught here
 fn onScriptError(e: zjb.Handle) callconv(.c) void {
+    const s = enter();
+    defer leave(s);
     defer e.release();
-    const s = e.get("target", zjb.Handle);
-    defer s.release();
-    const q = s.call("getAttribute", .{zjb.constString("data-for")}, zjb.Handle);
-    defer q.release();
+    const q = e.get("target", zjb.Handle).call("getAttribute", .{zjb.constString("data-for")}, zjb.Handle);
     const el = zjb.global("document").call("querySelector", .{q}, zjb.Handle);
     if (el == .null) return;
-    defer el.release();
     const busy = el.call("hasAttribute", .{zjb.constString("aria-busy")}, bool);
     const v = if (busy) zjb.constString("show") else zjb.constString("");
     el.call("setAttribute", .{ zjb.constString("data-failed"), v }, void);
@@ -501,27 +526,27 @@ fn request(p: zjb.Handle, ctx: i32, done: *const fn (i32, ?[]u8) void) void {
 var on_bytes: *const fn (i32, ?[]u8) void = undefined;
 
 fn onResponse(ctx: i32, resp: zjb.Handle) callconv(.c) void {
+    const s = enter();
+    defer leave(s);
     defer resp.release();
     if (!resp.get("ok", bool)) return on_bytes(ctx, null);
-    const p = resp.call("arrayBuffer", .{}, zjb.Handle);
-    defer p.release();
     const step = zjb.fnHandle("uiBytes", &onBytes).bind(.{ctx});
-    defer step.release();
     const bad = zjb.fnHandle("uiFailed", &onFailed).bind(.{ctx});
-    defer bad.release();
-    p.call("then", .{ step, bad }, zjb.Handle).release();
+    _ = resp.call("arrayBuffer", .{}, zjb.Handle).call("then", .{ step, bad }, zjb.Handle);
 }
 
 fn onFailed(ctx: i32, err: zjb.Handle) callconv(.c) void {
+    const s = enter();
+    defer leave(s);
     err.release();
     on_bytes(ctx, null);
 }
 
 fn onBytes(ctx: i32, buf: zjb.Handle) callconv(.c) void {
+    const s = enter();
+    defer leave(s);
     defer buf.release();
-    const view = zjb.global("Uint8Array").new(.{buf});
-    defer view.release();
-    on_bytes(ctx, view.allocBytes(gpa) catch null);
+    on_bytes(ctx, zjb.global("Uint8Array").new(.{buf}).allocBytes(gpa) catch null);
 }
 
 /// Fetches what an island's toolbar pick needs (ui.champpage.Files: `files`, with the

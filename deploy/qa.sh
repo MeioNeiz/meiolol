@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # The UI sweep (deploy/qa.mjs): overflow, small text, tap targets, console errors and
 # failed requests on each page type at 320-1280, and the gallery's components in 320 and
-# 390 px containers. Warnings only. Without a URL it builds the backend, serves
-# data/snap on a spare port and stops it after.
+# 390 px containers. Warnings only. Without a URL it builds the backend with -Dwasm-dev
+# (ui.wasm safety checks, zjb handle leaks as console errors), serves data/snap on a
+# spare port and stops it after.
 #   deploy/qa.sh [URL] [--webkit] [--shots DIR] [--only /a.html,/b.html]
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -12,7 +13,7 @@ if [[ "${1:-}" =~ ^https?:// ]]; then
 fi
 
 port=8097
-deploy/slots.sh 1 zig build backend --prefix zig-out/qa
+deploy/slots.sh 1 zig build backend -Dwasm-dev --prefix zig-out/qa
 log=$(mktemp)
 zig-out/qa/bin/meiolol dev --data data/snap --port "$port" >"$log" 2>&1 &
 pid=$!

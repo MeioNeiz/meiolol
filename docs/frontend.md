@@ -52,5 +52,7 @@ into its own design trap. Use judgement per case.
 - Components: src/site/ui/<name>.zig (view, css and gallery states in one file), listed
   in ui.all. Gallery: /gallery on `meiolol dev` (deploy/dev.sh), every state at 320, 390
   and wide. Sweep: deploy/qa.sh (overflow, text under 11 px, tap targets, console
-  errors, failed requests; warnings only; --webkit, --shots DIR)
+  errors, failed requests; warnings only; --webkit, --shots DIR). Its own build is
+  -Dwasm-dev: ui.wasm with safety checks, and zjb handles neither kept nor released
+  reported (rule: src/site/ui/wasm/dom.zig's top)
 - Status: docs/plan.md "Now" item 3
