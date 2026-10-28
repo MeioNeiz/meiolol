@@ -37,7 +37,7 @@ pub const scope = .{ ".c-home", ".c-hrev", ".c-hch" };
 
 /// The example's files (site/yourgame.zig)
 pub const your_dir = "data/your/";
-pub const game_page = "game.html";
+pub const game_page = "game";
 
 const W = struct {
     pub const title = plain("Review your games");
@@ -111,7 +111,7 @@ pub const HomeReview = struct {
             .disabled = !p.live or !p.roles[@backingInt(r)],
             .on = h.on(p, .{ .role = r }),
         };
-        // game.html opens the default role's games only
+        // /game opens the default role's games only
         const open = if (p.you) |y| y.open else if (p.shown == p.default) h.fmt("{s}" ++ game_page, .{p.up}) else null;
         return h.div(.{
             .class = "c-hrev",
@@ -138,7 +138,7 @@ pub const HomeReview = struct {
 /// The player bar, compact: Riot ID, record and form of their newest games
 pub const You = struct {
     id: []const u8,
-    /// game.html with the game in the fragment (gamedata.Lookup)
+    /// /game with the game in the fragment (gamedata.Lookup)
     open: []const u8,
     wins: u16,
     losses: u16,
@@ -205,7 +205,7 @@ pub const You = struct {
     }
 };
 
-/// `id=Name%23TAG`: the API's query and game.html's fragment
+/// `id=Name%23TAG`: the API's query and /game's fragment
 pub fn idQuery(a: std.mem.Allocator, id: []const u8) ![]const u8 {
     var f: struct { id: idlookup.Id = .{} } = .{};
     f.id.set(id);
@@ -572,8 +572,8 @@ test "a role switch waits for its file; Open only on the default role" {
     x[0].update(.{ .role = .top }, &ev);
     try std.testing.expectEqual(Role.top, x[0].want);
     try std.testing.expectEqual(Role.mid, x[0].shown);
-    x[0].up = "../";
-    try std.testing.expectEqualStrings("../data/your/top.bin", try x[0].path(arena.allocator(), .top));
+    x[0].up = "/";
+    try std.testing.expectEqualStrings("/data/your/top.bin", try x[0].path(arena.allocator(), .top));
 }
 
 test "recent IDs and Daily marks from the browser's storage" {
@@ -604,11 +604,11 @@ test "a returning visitor: record, form and the calls by their Riot ID" {
     games[4].win = false;
     games[0].start_ms = 1791720000000;
     const l: yourlist.List = .{ .player = .{ .name = "Hide on bush" }, .champs = &.{}, .games = &games };
-    const y = (try You.of(a, "Hide on bush#KR1", &l, "../")).?;
+    const y = (try You.of(a, "Hide on bush#KR1", &l, "/")).?;
     try std.testing.expectEqual(4, y.wins);
     try std.testing.expectEqual(2, y.losses);
     try std.testing.expectEqualSlices(bool, &.{ true, false, true, false, true }, y.form);
-    try std.testing.expectEqualStrings("../game.html#id=Hide%20on%20bush%23KR1&game=1791720000000", y.open);
+    try std.testing.expectEqualStrings("/game#id=Hide%20on%20bush%23KR1&game=1791720000000", y.open);
     try std.testing.expectEqualStrings("/api/list?cached=1&n=20&id=Hide%20on%20bush%23KR1", try listApi(a, "Hide on bush#KR1"));
     try std.testing.expectEqualStrings("/api/game?id=Hide%20on%20bush%23KR1&start=5", try gameApi(a, "Hide on bush#KR1", 5));
     const none: yourlist.List = .{ .player = .{ .name = "x" }, .champs = &.{}, .games = &.{} };
@@ -616,9 +616,9 @@ test "a returning visitor: record, form and the calls by their Riot ID" {
 
     var body: std.ArrayList(u8) = .empty;
     try data.encode(a, yourlist.Lookup, .{ .state = .ready, .list = l }, &body);
-    const m = (try Mine.of(a, "Hide on bush#KR1", body.items, "../")).?;
+    const m = (try Mine.of(a, "Hide on bush#KR1", body.items, "/")).?;
     try std.testing.expectEqualStrings("/api/game?id=Hide%20on%20bush%23KR1&start=1791720000000", m.game);
-    try std.testing.expectEqualStrings("4 2 f10101 ../game.html#id=Hide%20on%20bush%23KR1&game=1791720000000 Hide on bush#KR1", m.you);
+    try std.testing.expectEqualStrings("4 2 f10101 /game#id=Hide%20on%20bush%23KR1&game=1791720000000 Hide on bush#KR1", m.you);
     const back = try You.parse(a, m.you);
     try std.testing.expectEqualStrings(y.open, back.open);
     try std.testing.expectEqualStrings("Hide on bush#KR1", back.id);

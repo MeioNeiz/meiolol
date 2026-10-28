@@ -1,4 +1,4 @@
-//! The matchup page (matchup/<role>/<x>-vs-<y>.html): one lane pair from x's side
+//! The matchup page (/matchups/<role>/<x>-vs-<y>): one lane pair from x's side
 //! (docs/plan/ui/matchup.md), the champion page with its opponent slot filled, as three
 //! islands. Head: ChampHeader's pair with the headline figures, x's other lane opponents
 //! and the view links. Build: the champion page's Build island on the pair's build (its
@@ -11,6 +11,7 @@
 const std = @import("std");
 const tree = @import("tree.zig");
 const fmt = @import("fmt.zig");
+const urls = @import("urls.zig");
 const phrase = @import("phrase.zig");
 const champ = @import("champ.zig");
 const role = @import("role.zig");
@@ -156,7 +157,7 @@ pub const Head = struct {
                 .champ = try icon(a, d.ddragon, o.o),
                 .fig = .{ .s = try a.print("{d:.1}", .{r}) },
                 .colour = .{ .pts = r - 50 },
-                .href = try a.print("{s}-vs-{s}.html", .{ d.x.slug, o.o.slug }),
+                .href = try a.print("/matchups/{t}/{s}-vs-{s}{s}", .{ d.role, d.x.slug, o.o.slug, urls.view_queries[d.view] }),
                 .current = std.mem.eql(u8, o.o.slug, d.y.slug),
                 .thin = o.games < fmt.thin_games,
             };

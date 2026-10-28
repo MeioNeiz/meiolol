@@ -20,8 +20,6 @@ const Curves = core.curvesfile.Curves;
 const Site = root.Site;
 const tpl = html.tpl;
 
-pub const path = "matchup/index.html";
-
 /// Pairs per role in each list
 const shown = 8;
 /// Hardest lanes and lane bullies: fewer games and a pair's luck tops the lists (at 500 a
@@ -35,14 +33,13 @@ pub fn writePage(site: *const Site, w: *Writer) !void {
     const p = try site.page(
         "Lane matchups | meiolol",
         "Find a lane matchup: the most played pairs in each role and this patch's biggest win rate moves, each with how the lane unfolds minute by minute.",
-        path,
+        .matchups,
         .matchups,
     );
     try html.head(w, p);
-    const to_site = try site.toShared(path);
     const d = try a.create(fd.Data);
     d.* = try data(site, if (site.curves) |*c| c else null);
-    var f: fd.Finder = try .init(a, d, try site.toRoot(path));
+    var f: fd.Finder = try .init(a, d, site.view.query());
     f.bin = try bin(a, d.*);
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
@@ -50,8 +47,9 @@ pub fn writePage(site: *const Site, w: *Writer) !void {
     if (h.oom) return error.OutOfMemory;
     try ui.html.write(&t, t.root, w);
     var g: fd.Grid = .{
-        .root = f.root,
-        .js = try std.mem.concat(a, u8, &.{ to_site, assets.findergrid_js.path }),
+        .root = try std.mem.concat(a, u8, &.{ "/", site.view.dir() }),
+        .query = site.view.query(),
+        .js = try std.mem.concat(a, u8, &.{ "/", assets.findergrid_js.path }),
         .wasm = assets.findergrid_wasm.path,
     };
     var tg: ui.Tree = .{};
@@ -63,7 +61,7 @@ pub fn writePage(site: *const Site, w: *Writer) !void {
         \\<script src="{js}" data-wasm="{wasm}" defer></script>
         \\
     , .{
-        .js = html.Link{ .root = to_site, .path = assets.finder_js.path },
+        .js = html.Link{ .path = assets.finder_js.path },
         .wasm = assets.finder_wasm.path,
     });
     try html.foot(w, p);
@@ -88,7 +86,7 @@ pub fn data(site: *const Site, curves: ?*const Curves) !fd.Data {
     if (site.patchday) |*pd| {
         d.moved = try moved(site, pd);
         d.patch = pd.cur_patch;
-        d.patch_dir = if (site.view.period == .patch) "" else "patch/";
+        d.patch_query = (html.View{ .region = site.view.region, .period = .patch }).query();
     }
     return d;
 }

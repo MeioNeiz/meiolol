@@ -1,7 +1,7 @@
-//! daily.html: Daily Draft (ui.dailypage), the newest puzzle up to today (UTC) from
+//! /daily: Daily Draft (ui.dailypage), the newest puzzle up to today (UTC) from
 //! daily/<n>.bin (dailydata.zig) in the island's data-bin; a note when there is none.
-//! daily/<n>.html: puzzle n's own page (the days strip links them), none past tomorrow
-//! (UTC): a viewer a day ahead of UTC plays it. Noindex: today's would repeat daily.html
+//! /daily/<n>: puzzle n's own page (the days strip links them), none past tomorrow
+//! (UTC): a viewer a day ahead of UTC plays it. Noindex: today's would repeat /daily
 //! and tomorrow's is not out for most. The head's days strip is its own island
 //! (ui.dailydays). Answers stay in the browser
 const std = @import("std");
@@ -31,7 +31,7 @@ pub fn write(site: *const Site, w: *Writer) !void {
     const today = todayNumber(site.io);
     const got = try pick(a, site.daily_files, today);
     if (if (got) |g| g.page else null) |shown| {
-        try body(a, w, site.daily_files, shown, .{ .today = today, .redirects = true, .root = "", .origin = origin(site) });
+        try body(a, w, site.daily_files, shown, .{ .today = today, .redirects = true, .root = "/", .origin = origin(site) });
     } else try w.writeAll(
         \\<h1>Daily Draft</h1>
         \\<p class="note">No puzzle today. Come back tomorrow.</p>
@@ -40,9 +40,10 @@ pub fn write(site: *const Site, w: *Writer) !void {
     try html.foot(w, p);
 }
 
-/// daily/<n>.html for `slug` "n"; false (not found) past tomorrow or without page data
-pub fn route(site: *const Site, w: *Writer, slug: []const u8) !bool {
-    return routeOn(site, w, slug, todayNumber(site.io));
+/// /daily/<n>; false (not found) past tomorrow or without page data
+pub fn route(site: *const Site, w: *Writer, n: u32) !bool {
+    var buf: [10]u8 = undefined;
+    return routeOn(site, w, std.fmt.bufPrint(&buf, "{d}", .{n}) catch unreachable, todayNumber(site.io));
 }
 
 fn routeOn(site: *const Site, w: *Writer, slug: []const u8, today: u32) !bool {
@@ -54,10 +55,9 @@ fn routeOn(site: *const Site, w: *Writer, slug: []const u8, today: u32) !bool {
         "A past Daily Draft: guess the last pick and the winner of a real pro draft, then see how the model reads every seat.",
         .daily,
     );
-    p.root = "../";
     p.index = false;
     try html.head(w, p);
-    try body(a, w, site.daily_files, shown, .{ .today = today, .redirects = false, .root = "../", .origin = origin(site) });
+    try body(a, w, site.daily_files, shown, .{ .today = today, .redirects = false, .root = "/", .origin = origin(site) });
     try html.foot(w, p);
     return true;
 }
@@ -65,7 +65,7 @@ fn routeOn(site: *const Site, w: *Writer, slug: []const u8, today: u32) !bool {
 const Where = struct {
     /// Today's (UTC) puzzle number
     today: u32,
-    /// daily.html (the days island opens the viewer's own day's puzzle from there)
+    /// /daily (the days island opens the viewer's own day's puzzle from there)
     redirects: bool,
     /// From the page to the site root
     root: []const u8,
@@ -90,7 +90,7 @@ fn body(a: std.mem.Allocator, w: *Writer, files: []const File, shown: Shown, at:
         .winner = shown.p.result.winner,
         .hidden_side = shown.p.hidden_side,
         .hidden_role = shown.p.hidden_role,
-        .url = if (at.origin) |o| try a.print("{s}/daily/{d}.html", .{ o, shown.p.n }) else "",
+        .url = if (at.origin) |o| try a.print("{s}/daily/{d}", .{ o, shown.p.n }) else "",
     };
     var raw: std.ArrayList(u8) = .empty;
     try ui.data.encode(a, ds.Data, days, &raw);
@@ -111,23 +111,23 @@ fn body(a: std.mem.Allocator, w: *Writer, files: []const File, shown: Shown, at:
         \\<script src="{djs}" data-wasm="{dwasm}" defer></script>
         \\
     , .{
-        .js = html.Link{ .root = at.root, .path = assets.daily_js.path },
-        .wasm = html.Link{ .root = at.root, .path = assets.daily_wasm.path },
-        .djs = html.Link{ .root = at.root, .path = assets.dailydays_js.path },
-        .dwasm = html.Link{ .root = at.root, .path = assets.dailydays_wasm.path },
+        .js = html.Link{ .path = assets.daily_js.path },
+        .wasm = html.Link{ .path = assets.daily_wasm.path },
+        .djs = html.Link{ .path = assets.dailydays_js.path },
+        .dwasm = html.Link{ .path = assets.dailydays_wasm.path },
     });
 }
 
 /// The puzzles' own pages the static build writes (route answers the same)
-pub fn pagePaths(site: *const Site) ![]const []const u8 {
+pub fn pagePaths(site: *const Site) ![]const ui.urls.Page {
     const a = site.arena;
     const days = try dayList(a, site.daily_files, todayNumber(site.io) + 1);
-    const paths = try a.alloc([]const u8, days.len);
-    for (paths, days) |*p, d| p.* = try a.print("daily/{d}.html", .{d.n});
-    return paths;
+    const pages = try a.alloc(ui.urls.Page, days.len);
+    for (pages, days) |*p, d| p.* = .{ .daily = d.n };
+    return pages;
 }
 
-/// n of daily/<n>.html, only as written: "07", "+7" and "1_7" would each be a copy of a
+/// n of /daily/<n>, only as written: "07", "+7" and "1_7" would each be a copy of a
 /// page (and a cache entry)
 fn slugN(slug: []const u8) ?u32 {
     const n = std.fmt.parseInt(u32, slug, 10) catch return null;
@@ -274,7 +274,7 @@ test "the head's days island and the puzzle's, from the site root or daily/" {
     defer std.testing.log_level = saved;
     std.testing.log_level = .err;
     var out: std.Io.Writer.Allocating = .init(a);
-    try body(a, &out.writer, &files, shown, .{ .today = n, .redirects = true, .root = "" });
+    try body(a, &out.writer, &files, shown, .{ .today = n, .redirects = true, .root = "/" });
     const s = out.written();
     const enc = std.base64.standard.Encoder;
     const b64 = try a.alloc(u8, enc.calcSize(raw.len));
@@ -282,19 +282,19 @@ test "the head's days island and the puzzle's, from the site root or daily/" {
     try std.testing.expect(std.mem.find(u8, s, "<div class=\"c-dhead\"><h1>") != null);
     try std.testing.expect(std.mem.find(u8, s, "data-island=\"days\"") != null);
     try std.testing.expect(std.mem.find(u8, s, "data-island=\"daily\"") != null);
-    try std.testing.expect(std.mem.find(u8, s, try a.print("<script src=\"{s}\" data-wasm=\"{s}\"", .{ assets.daily_js.path, assets.daily_wasm.path })) != null);
-    try std.testing.expect(std.mem.find(u8, s, try a.print("<script src=\"{s}\" data-wasm=\"{s}\"", .{ assets.dailydays_js.path, assets.dailydays_wasm.path })) != null);
+    try std.testing.expect(std.mem.find(u8, s, try a.print("<script src=\"/{s}\" data-wasm=\"/{s}\"", .{ assets.daily_js.path, assets.daily_wasm.path })) != null);
+    try std.testing.expect(std.mem.find(u8, s, try a.print("<script src=\"/{s}\" data-wasm=\"/{s}\"", .{ assets.dailydays_js.path, assets.dailydays_wasm.path })) != null);
     // The strip: puzzles with good page data up to tomorrow; n + 2 not yet, n - 1's
     // would be a link to a 404
     const days = try dayList(a, &files, n + 1);
     try std.testing.expectEqual(1, days.len);
     try std.testing.expectEqualStrings(try a.print("{f}", .{dateOf(n)}), days[0].date);
-    try std.testing.expect(std.mem.find(u8, s, try a.print("href=\"daily/{d}.html\"", .{n})) != null);
+    try std.testing.expect(std.mem.find(u8, s, try a.print("href=\"/daily/{d}\"", .{n})) != null);
 
     var past: std.Io.Writer.Allocating = .init(a);
-    try body(a, &past.writer, &files, shown, .{ .today = n + 1, .redirects = false, .root = "../" });
-    try std.testing.expect(std.mem.find(u8, past.written(), try a.print("<script src=\"../{s}\"", .{assets.dailydays_js.path})) != null);
-    try std.testing.expect(std.mem.find(u8, past.written(), try a.print("href=\"../daily/{d}.html\"", .{n})) != null);
+    try body(a, &past.writer, &files, shown, .{ .today = n + 1, .redirects = false, .root = "/" });
+    try std.testing.expect(std.mem.find(u8, past.written(), try a.print("<script src=\"/{s}\"", .{assets.dailydays_js.path})) != null);
+    try std.testing.expect(std.mem.find(u8, past.written(), try a.print("href=\"/daily/{d}\"", .{n})) != null);
 }
 
 test "a puzzle's own page: none past tomorrow, none without good page data" {
@@ -356,12 +356,12 @@ test "route: a good n renders noindex from daily/, any other slug or n past tomo
     var out: std.Io.Writer.Allocating = .init(a);
     try std.testing.expect(try routeOn(&site, &out.writer, try a.print("{d}", .{n}), n));
     const s = out.written();
-    try std.testing.expectEqualStrings(try a.print("https://x.io/daily/{d}.html", .{n}), (try daysData(a, s)).url);
+    try std.testing.expectEqualStrings(try a.print("https://x.io/daily/{d}", .{n}), (try daysData(a, s)).url);
     try std.testing.expect(std.mem.find(u8, s, try a.print("<title>Daily Draft #{d} | meiolol</title>", .{n})) != null);
     try std.testing.expect(std.mem.find(u8, s, "content=\"noindex") != null);
     try std.testing.expect(std.mem.find(u8, s, "rel=\"canonical\"") == null);
-    try std.testing.expect(std.mem.find(u8, s, try a.print("href=\"../daily/{d}.html\"", .{n})) != null);
-    try std.testing.expect(std.mem.find(u8, s, try a.print("<script src=\"../{s}\"", .{assets.daily_js.path})) != null);
+    try std.testing.expect(std.mem.find(u8, s, try a.print("href=\"/daily/{d}\"", .{n})) != null);
+    try std.testing.expect(std.mem.find(u8, s, try a.print("<script src=\"/{s}\"", .{assets.daily_js.path})) != null);
     // Tomorrow's is out for a viewer a day ahead
     try std.testing.expect(try routeOn(&site, &out.writer, try a.print("{d}", .{n}), n - 1));
     for ([_][]const u8{ try a.print("0{d}", .{n}), try a.print("+{d}", .{n}), "0", "", "99999999999" }) |slug| {

@@ -244,24 +244,20 @@ comptime {
         std.debug.assert(std.mem.eql(u8, roleName(r), ui.tiers.Role.names[i]));
         std.debug.assert(std.mem.eql(u8, r.label(), ui.tiers.Role.slugs[i]));
     }
-    for (html.View.all, ui.tiers.view_dirs) |v, d| std.debug.assert(std.mem.eql(u8, v.dir(), d));
 }
 
 /// The ui.tiers island, rendered from the same data its file carries (ui-stats.wasm
 /// adopts it). The role icons stay outside it: string styles, which the tree refuses
-fn writeIsland(site: *const Site, w: *Writer, role: ?Role, path: []const u8) !void {
+fn writeIsland(site: *const Site, w: *Writer, role: ?Role, at: ui.urls.Page) !void {
     const a = site.arena;
     const d = try a.create(ui.tiers.Data);
     d.* = try tiersData(site);
     var bytes: std.ArrayList(u8) = .empty;
     try ui.data.encode(a, ui.tiers.Data, d.*, &bytes);
-    const root = try site.toRoot(path);
-    const base = try std.mem.concat(a, u8, &.{ root, site.view.up() });
-    var t: ui.tiers.Tiers = .init(d, try ui.tiers.prepare(a, d, base), if (role) |x| @fromBackingInt(@as(u8, @backingInt(x))) else null);
-    t.base = base;
+    var t: ui.tiers.Tiers = .init(d, try ui.tiers.prepare(a, d, "/"), if (role) |x| @fromBackingInt(@as(u8, @backingInt(x))) else null);
     t.view_index = @intCast(site.view.index());
-    t.path = path;
-    t.src = try std.mem.concat(a, u8, &.{ root, data_path });
+    t.path = try a.print("{f}", .{at});
+    t.src = try std.mem.concat(a, u8, &.{ "/", site.view.dir(), data_path });
     t.stamp = ui.tiers.stamp(bytes.items);
     var tree: ui.Tree = .{};
     var h: ui.H = .init(a, &tree);
@@ -270,7 +266,7 @@ fn writeIsland(site: *const Site, w: *Writer, role: ?Role, path: []const u8) !vo
     try roleIcons(w);
     try ui.html.write(&tree, tree.root, w);
     try tpl.render(w, "\n<script src=\"{js}\" data-wasm=\"{wasm}\" defer></script>\n", .{
-        .js = html.Link{ .root = root, .up = site.view.up(), .path = assets.stats_js.path },
+        .js = html.Link{ .path = assets.stats_js.path },
         .wasm = assets.stats_wasm.path,
     });
 }
@@ -283,12 +279,12 @@ pub fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {
     else
         try a.print("Champions, {s} | meiolol", .{site.period()});
     const desc = try a.print("{s} champions in ranked solo queue {s}, {s}: win rate, its change this patch, how players' own win rates spread, pick and ban rates.", .{ name, site.view.region.in(), site.when });
-    const path = try @import("root.zig").championsPath(a, role);
-    var p = try site.page(title, desc, path, .champions);
+    const at: ui.urls.Page = .{ .champions = if (role) |r| @import("root.zig").urlRole(r) else null };
+    var p = try site.page(title, desc, at, .champions);
     // The island's toolbar picks the view
     p.counterparts = null;
     try html.head(w, p);
     try earlyNote(site, w);
-    try writeIsland(site, w, role, path);
+    try writeIsland(site, w, role, at);
     try html.foot(w, p);
 }

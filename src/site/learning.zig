@@ -38,7 +38,7 @@ fn chip(site: *const Site, period: html.Period) root.scope.Chip {
 }
 
 fn champCell(w: *Writer, site: *const Site, ch: Champ) !void {
-    try site.champBox(w, ch, site.view.up());
+    try site.champBox(w, ch);
 }
 
 fn kindText(w: *Writer, k: learning.Kind) !void {
@@ -100,6 +100,6 @@ pub fn table(site: *const Site, w: *Writer, l: *const Learning) !void {
         });
     }
     try w.writeAll("</tbody></table></div>\n");
-    try tpl.render(w, "<script src=\"{up}table.js\" defer></script>\n", .{ .up = site.view.up() });
+    try w.writeAll("<script src=\"/table.js\" defer></script>\n");
     try footnote(w, l, site.period());
 }

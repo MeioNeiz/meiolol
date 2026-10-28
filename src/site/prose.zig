@@ -278,7 +278,7 @@ pub fn download(w: *Writer, info: Info) Writer.Error!void {
         \\names or statistics.</li>
         \\</ul>
         \\<div id="admin-download"></div>
-        \\<p class="note">Not released yet. Meanwhile the <a href="matchup/index.html">matchup
+        \\<p class="note">Not released yet. Meanwhile the <a href="/matchups">matchup
         \\curves</a> on this site show the same lane data.</p>
         \\</div>
         \\
@@ -334,7 +334,7 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\and each player's rank and game statistics (kills, gold and the like); the date
         \\shown is the puzzle's, not the game's.</p>
         \\<h2>Your games</h2>
-        \\<p>When you enter a Riot ID on <a href="your.html">Your games</a>, we ask the Riot
+        \\<p>When you enter a Riot ID on <a href="/your">Your games</a>, we ask the Riot
         \\Games API for that player's recent Summoner's Rift games and show their own lane
         \\against the typical curve for each matchup. Anyone can look up any Riot ID, as on other
         \\League statistics sites (legal basis: legitimate interests). The page shows that

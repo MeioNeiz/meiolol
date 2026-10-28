@@ -13,7 +13,7 @@ const Site = root.Site;
 const Writer = std.Io.Writer;
 const log = std.log.scoped(.site);
 
-pub const page_path = "games.html";
+pub const page_path = "/games";
 
 /// False without the example's list
 pub fn writePage(site: *const Site, w: *Writer) !bool {
@@ -50,9 +50,9 @@ pub fn writePage(site: *const Site, w: *Writer) !bool {
         \\<script src="{vjs}" data-wasm="{vwasm}" defer></script>
         \\
     , .{
-        .js = html.Link{ .root = "", .path = assets.your_js.path },
+        .js = html.Link{ .path = assets.your_js.path },
         .wasm = assets.your_wasm.path,
-        .vjs = html.Link{ .root = "", .path = assets.yourviews_js.path },
+        .vjs = html.Link{ .path = assets.yourviews_js.path },
         .vwasm = assets.yourviews_wasm.path,
     });
     try html.foot(w, p);

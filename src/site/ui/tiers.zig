@@ -60,8 +60,7 @@ pub const shape_reach = 36;
 pub const shape_step = 2;
 pub const shape_points = 2 * shape_reach / shape_step + 1;
 
-/// html.View.all's directories, by index (tierlist.zig checks they match)
-pub const view_dirs = [_][]const u8{ "", "patch/", "all/", "all/patch/" };
+const view_queries = @import("urls.zig").view_queries;
 
 /// Platinum+ (the view's data file), then RankData's groups; the champion page's, so a
 /// link carries it
@@ -372,7 +371,7 @@ pub fn prepare(a: std.mem.Allocator, d: *const Data, base: []const u8) !Lines {
             .i = @intCast(i),
             .icon = try a.print(champ.icon_fmt, .{ d.ddragon, c.key }),
             // The row's role and rank: the champion page opens on them
-            .href = try a.print("{s}champion/{s}.html{s}#role={s}{s}{s}", .{ base, c.slug, d.query, Role.slugs[@backingInt(x.role)], if (d.rank == .plat) "" else "&rank=", if (d.rank == .plat) "" else @tagName(d.rank) }),
+            .href = try a.print("{s}champions/{s}/{s}{s}{s}{s}", .{ base, c.slug, Role.slugs[@backingInt(x.role)], d.query, if (d.rank == .plat) "" else "#rank=", if (d.rank == .plat) "" else @tagName(d.rank) }),
             .shape = if (x.spread) |s| try violin.path(a, &s.shape, 100 * share(.{ x.games, x.wins }) - shape_reach, shape_step) else null,
             .all = true,
         };
@@ -407,15 +406,15 @@ pub const Tiers = struct {
     ranks: ?*const RankData = null,
     none: bool = false,
     rank_lines: [n_groups]?Lines = @splat(null),
-    /// The page's role (role/<slug>.html); null on champions.html
+    /// The page's role (/champions/<slug>); null on /champions
     page_role: ?Role = null,
     /// The role shown; null: All
     role: ?Role = null,
-    /// From the page to the site root, the page's view (view_dirs' index) and its path in
-    /// the view's directory: the toolbar's links to the other views
-    base: []const u8 = "",
+    /// The site root, the page's view (view_queries' index) and its URL path: the
+    /// toolbar's links to the other views
+    base: []const u8 = "/",
     view_index: u8 = 0,
-    path: []const u8 = "champions.html",
+    path: []const u8 = "/champions",
     /// The data file, from the page, and its hash (stamp)
     src: []const u8 = "",
     stamp: u32 = 0,
@@ -650,7 +649,7 @@ pub const Tiers = struct {
             h.oom = true;
         };
         const frag = w.written();
-        return h.fmt("{s}{s}{s}{s}{s}", .{ t.base, view_dirs[v], t.path, if (frag.len > 0) "#" else "", frag });
+        return h.fmt("{s}{s}{s}{s}", .{ t.path, view_queries[v], if (frag.len > 0) "#" else "", frag });
     }
 
     fn toolbar(t: *T, h: *H) N {
@@ -703,7 +702,7 @@ pub const Tiers = struct {
         return h.div(.{ .class = "moved" }, .{
             card.label(h, W.moved.with(h, .{ .p = d.cur_patch })),
             h.div(.{ .class = "chips" }, .{chips.done()}),
-            h.a(.{ .class = "more", .href = h.fmt("{s}{s}patch.html", .{ t.base, view_dirs[t.view_index] }) }, .{W.patch_link}),
+            h.a(.{ .class = "more", .href = h.fmt("{s}patch{s}", .{ t.base, view_queries[t.view_index] }) }, .{W.patch_link}),
         });
     }
 

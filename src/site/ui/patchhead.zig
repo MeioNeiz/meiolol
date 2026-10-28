@@ -76,13 +76,13 @@ pub fn gallery(g: *Gallery) void {
     const h = g.h;
     g.add("newest pair", view(h, .{
         .pair = .{ .cur = "16.21", .prev = "16.20" },
-        .older = .{ .cur = "16.20", .prev = "16.19", .href = "patches/16.20-16.19.html" },
+        .older = .{ .cur = "16.20", .prev = "16.19", .href = "/patch/16-20" },
         .games = 79549,
         .notes = "https://www.leagueoflegends.com/en-gb/news/game-updates/",
     }));
     g.add("oldest pair", view(h, .{
         .pair = .{ .cur = "16.19", .prev = "16.18" },
-        .newer = .{ .cur = "16.20", .prev = "16.19", .href = "patches/16.20-16.19.html" },
+        .newer = .{ .cur = "16.20", .prev = "16.19", .href = "/patch/16-20" },
         .games = 412003,
         .finished = true,
     }));

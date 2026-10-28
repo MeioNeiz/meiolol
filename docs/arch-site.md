@@ -7,15 +7,22 @@ storage, crawler, model file and packed rows: docs/architecture.md.
 
 Views (html.View), as lolalytics' filters: region (EUW, or every platform) by period
 (games started in the last 30 days, or EUW's newest patch). EUW over 30 days is the
-default at the site root; the others under patch/, all/ and all/patch/. Each has its own
-stats, pool and curves file (recent-curves.bin, curves-<patch>.bin, and all- versions
-from `meiolol curves --platform all`). Header switches link to the same page in another
-view (a matchup that view lacks: its matchup index); localStorage remembers the last
-view so shared pages (Daily Draft, Learn, Your games, legal: at the root only, made
-from the EUW patch view) link back into it.
+default; the others are the same URL with ?region=all, ?period=patch or both, their
+files in an internal tree _v/all/, _v/patch/, _v/all-patch/ (nginx maps the query to
+it; never in a URL). URLs: src/site/ui/urls.zig spells every page (`Page`, `{f}`) and
+reads it back (`parse`); a page's file is its path + ".html" (root.filePath; home
+index.html), all hrefs root-relative. Each view has its own stats, pool and curves file
+(recent-curves.bin, curves-<patch>.bin, and all- versions from `meiolol curves
+--platform all`). Header switches link to the same page in another view (a matchup that
+view lacks: the matchups finder); localStorage remembers the last view's query so shared
+pages (Daily Draft, Learn, Your games, legal: root only, made from the EUW patch view)
+link back into it. Old .html URLs 302 to the new ones: urls.legacy, mirrored by nginx's
+$meiolol_old map (deploy/nginx/redirect-samples.tsv checks both).
 
-Champion pages are the exception: one per champion at the site root (champion/<slug>.html,
-written from the root view): ui.champpage's three islands (Top, Build, More, each its
+Champion pages are the exception: root view only, /champions/<slug> (main role, canonical)
+and /champions/<slug>/<role> per role it plays (the main role's canonical to the bare
+URL); a thin role (under min_role_share) has no file but renders on request, canonical
+to the bare URL. ui.champpage's three islands (Top, Build, More, each its
 own ui-*.wasm) with a toolbar for region, period and rank, kept in the fragment
 (region=, period=, rank=). Each view's data files sit under its dir
 (data/champion/<slug>{,-build,-more}.bin); a rank pick above Platinum+ fetches
@@ -23,10 +30,15 @@ own ui-*.wasm) with a toolbar for region, period and rank, kept in the fragment
 filters.zig's tally of every view's games by region, rank, patch, role and opponent).
 A ban counts under its game's rank, the median ladder tier of its players: Riot's ban
 order doesn't say reliably which player banned. Cards that stay Platinum+ under a rank
-pick say so. Other views link in with their view in the query (html.View.query:
-?region=all&period=patch), folded into the fragment at start.
+pick say so. Other views link in with their view in the query (html.View.query). The
+wasms that opt in (`pub const url_map`, dom.zig UrlMap) keep one virtual fragment and
+spread it over the address: role as the path's last segment, region and period in the
+query, the rest in the fragment; dom.normalise() turns legacy #role=, #pool=, #p= into
+that at start. On the champion page ui-champion.wasm owns the address and the other two
+follow it (url_map .follow: window.meioFrag, meioSetHash), so they don't carry the
+mapping (ui-champmore's budget); role tabs are links to the role's page.
 
-Matchup pages (matchup.zig, under each view's dir) are rendered on request, so
+Matchup pages (matchup.zig, /matchups/<role>/<a>-vs-<b>, each view) are rendered on request, so
 ui.matchpage's three islands carry their data in the root's data-bin (base64 of
 ui.data; ~7 KB gz for Darius vs Garen's 126 opponents) instead of files: ui-matchup.wasm
 (Head) loads ui-champbuild.wasm (champpage.Build, its one pair build) and
@@ -45,7 +57,7 @@ it can move into the frontend rework's ui.zig.
 `meiolol site --contact EMAIL` writes static files to data/site, framed as "learn your
 lane" for the production review (docs/concept.md "Application wording": no tier list,
 draft helper, best pick or recommend wording): landing page, matchup index and pages,
-Daily Draft, a page per role (role/<role>.html, most played first, no tier grades), a
+Daily Draft, a page per role (/champions/<role>, most played first, no tier grades), a
 page per champion (above), method,
 download (desktop app, in development), privacy, terms, robots.txt, optional riot.txt,
 data/stats.bin (for the app) + data/champions.json, meiolol.wasm (core.recommend in the
@@ -171,14 +183,14 @@ detected reason that clears chance, else its usual gold at 14 against the enemy)
   same ten champions (`backfillPlayers`). `tier` is the median of the known ranks
 - Site: daily/index.json ([{n, date}]), daily/<n>.json and daily/<n>.bin (the page's
   data, site/dailydata.zig), up to tomorrow (UTC): today+2's answer stays on the box
-  (`daily.published_ahead`). daily.html (site/daily.zig, per request) is the island
+  (`daily.published_ahead`). /daily (site/daily.zig, per request) is the island
   (ui.dailypage, ui-daily.wasm) with the newest puzzle up to today (UTC) in its data-bin:
   pick, Lock in, who won, then the board grown, the seat panel and On paper. Answers in
   localStorage meiolol.daily.v1 (object by n, {opt, side, hint, marks, on}; Home reads
   marks). The Range hint (melee or ranged, from Options.ddragon_dir's championFull.json
   attackrange; hidden where unknown or form-changing) costs the clean tick ("Pick, with
   a hint").
-- daily/<n>.html: puzzle n's own page, the same island; none past tomorrow (UTC), so a
+- /daily/<n>: puzzle n's own page, the same island; none past tomorrow (UTC), so a
   viewer a day ahead of UTC can play theirs and later ones 404. Rendered on request under
   --static core (the renderer, from the shared view's daily files), written by --static
   all; noindex, not in the sitemap; only the slug as printed ("07" 404s), only puzzles
@@ -188,7 +200,7 @@ detected reason that clears chance, else its usual gold at 14 against the enemy)
   and the streak (finished on its own day; one miss forgiven; an entry saved before `on`
   existed counts on time). It reads meiolol.daily.v1 again on ui-daily.wasm's window event
   "ui-daily" (after each save), not on a storage event or at the viewer's midnight: a
-  second tab's finish or a new day shows on reload. On daily.html it
+  second tab's finish or a new day shows on reload. On /daily it
   opens (location.replace) the newest puzzle out by the viewer's date, or ?n= (old
   links), when that isn't the page's.
   Once the page's puzzle is finished, ui.dailydays POSTs its answers to /api/daily the
@@ -248,7 +260,7 @@ bytes.
 
 ## Patch changes (src/site/patch.zig, src/patchday.zig, src/patchnotes.zig; ui/patchpage.zig)
 
-patch.html in every view: the region's current patch against the one before, whole
+/patch in every view: the region's current patch against the one before, whole
 patches whatever the period (plan docs/plan/ui/patch.md). ui.patchpage server-rendered
 from the view's data/patch.bin (stamped, as the champions board), ui-patch.wasm adopts it.
 
@@ -271,13 +283,13 @@ from the view's data/patch.bin (stamped, as the champions board), ui-patch.wasm 
   in the view's patch builds file: an item as boots, in the start or first three
   finished items (a floor: the file keeps the commonest only), a rune on the page
 - Riot's notes link: league-of-legends-patch-<major+10>-<minor>-notes (patchnotes.officialUrl)
-- Older pairs: patches/<cur>-<prev>.html and data/patch-<cur>-<prev>.bin in the 30-day
+- Older pairs: /patch/<cur> (hyphens: /patch/16-20) and data/patch-<cur>-<prev>.bin in the 30-day
   views (EUW and all), up to 4 adjacent EUW pairs below the newest (main.olderPairs) whose
   patches are both whole: the database's oldest patch was crawled from partway, so a pair
   needs an older patch with games. Win rates only (no curves: no matchups or lane lead),
   Riot's changes per pair (notesFor caches each), no item users (the builds are the
   current patch's). Kept in the views file (Part.older). PatchHead's ‹ › step through
-  them from every view's patch.html
+  them from every view's /patch
 
 ## Learn (src/site/learn.zig, learnbuild.zig, learnfixed.zig; ui/learnpage.zig)
 
@@ -286,7 +298,7 @@ role tiles, champion icons with chips), a short question, a guess on a GuessSlid
 pick, then the reveal (all bands as rows when the puzzle has them), one line why and a
 takeaway. A first visit lands on chapter 1; chapter 0 (basics) one tap away.
 
-- learn.html is rendered per request: ui.learndata.Data in the island's data-bin,
+- /learn is rendered per request: ui.learndata.Data in the island's data-bin,
   ui-learn.wasm runs it. `#p=<id>` links a puzzle
 - learnfixed.zig: hand-written puzzles from finished checks (chapters 1, 2, 5); edit
   there, a deploy makes it live

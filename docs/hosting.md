@@ -74,15 +74,19 @@ riot.txt, CSS, JS, wasm, font and icon, ~30 files with their .gz twins, all at t
 root, from the options alone (no view loaded, seconds). The web loop builds only in a
 round that uploads; the others read the patch and game count with `meiolol site --patch-games`
 (1-8 s). meiolol-render on the box serves every page and data file (the home, champion,
-role, matchup, build, Daily Draft, Learn, legal and method pages, the patch/ and all/
-views, data/ files, the sitemaps, data/your-example.json).
-The root directory always exists, and nginx's try_files answers an existing directory's
-URL with its index.html or 403, never @render: so `location = /` rewrites to
-/index.html, which always goes to @render (deploy/cache-warm.sh warms it first), and
-nothing is uploaded into a subdirectory. The renderer
-gzips what it sends when the client accepts it (nginx compresses only HTML itself;
-stats.bin is ~12 MB raw), with Vary: Accept-Encoding, and answers a directory URL
-without its slash with a 301.
+champions board, matchup, Daily Draft, Learn, legal and method pages, the views' _v/
+trees, data/ files, the sitemap, data/your-example.json).
+URLs are clean (docs/plan/urls.md; arch-site.md "Website"): nginx's
+`try_files $meiolol_view$uri.html $uri $uri.html @render`, $meiolol_view mapped from
+?region= and ?period= to the internal view tree (also in both proxy_cache_keys; other
+query keys such as the pool's ?champs= are state and stay out). `location = /` goes
+straight to @render (deploy/cache-warm.sh warms it first). Old .html URLs: a
+server-level `return 302` from the $meiolol_old map (mirrors urls.legacy, the old view
+dirs turned into the query; deploy/url-smoke.sh curls deploy/nginx/redirect-samples.tsv
+on C01); a trailing slash 301s off. The renderer does the same (serve.zig) and gzips
+what it sends when the client accepts it (nginx compresses only HTML itself; stats.bin
+is ~12 MB raw), with Vary: Accept-Encoding; on a miss whose lowercase is a page, a 302
+to it.
 - `meiolol render` (systemd meiolol-render@a or @b) on the box's private address
   10.0.0.3:8091, every view loaded up front from data/views.bin. Loading views from the
   database beside the crawler takes 10-105 min and ~2.5 GB, so that work happens once
@@ -234,8 +238,8 @@ without its slash with a 301.
   their token as Authorization: Bearer, good for /auth/check/download_private_app only
   (accounts.md AC4). nginx auth_request /_meiolol_admin (/auth/check/view_admin) guards
   /admin/, /admin/api/, /admin/ops/ and /admin/training/; no login sends a page to
-  /login.html?next=, a lower role gets 403 (meiolol-api.htpasswd is unused).
-  /account.html: own password, log out everywhere. The admin page's Accounts tab
+  /login?next=, a lower role gets 403 (meiolol-api.htpasswd is unused).
+  /account: own password, log out everywhere. The admin page's Accounts tab
   (manage_accounts) lists logins, makes invite and reset links, changes roles and
   disables, below the signed-in role only. Accounts by hand: `sudo -u meiolol-api
   meiolol account ... --data /var/lib/meiolol-api` on jomify (list, reset, link,

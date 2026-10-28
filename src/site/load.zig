@@ -575,7 +575,7 @@ fn addFiles(site: *Site) !void {
     var files: std.ArrayList(File) = .empty;
     var shared_files: std.ArrayList(File) = .empty;
     if (std.meta.eql(site.view, html.View.shared)) try shared_files.appendSlice(arena, try root.coreFiles(arena, opts));
-    if (opts.public and opts.origin != null) {
+    if (opts.public and opts.origin != null and site.view.index() == 0) {
         try files.append(arena, .{ .path = "sitemap.xml", .data = try sitemap(site) });
     }
     try files.append(arena, .{ .path = stats_path, .data = site.model });

@@ -70,6 +70,8 @@ pub const Data = struct {
     champs: []const Champ,
     /// Most players first
     mains: []const Main,
+    /// The page's html.View index: its files' tree and its links' query (ui.urls)
+    view: u8 = 0,
 };
 
 pub const Pick = struct { id: u16, role: Role };

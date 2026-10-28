@@ -20,6 +20,8 @@ const shared_assets = root.shared_assets;
 const shared_pages = root.shared_pages;
 const unlisted_pages = root.unlisted_pages;
 const pagePaths = root.pagePaths;
+const filePath = root.filePath;
+const urls = root.ui.urls;
 const renderPage = root.renderPage;
 const renderShared = root.renderShared;
 const Extras = @import("extras.zig").Extras;
@@ -96,41 +98,38 @@ fn writeSite(site: *const Site, root_dir: std.Io.Dir, gz_window: []u8) !void {
     defer page_arena.deinit();
     var s = site.*;
     s.arena = page_arena.allocator();
-    const paths = try pagePaths(site);
+    const pages = try pagePaths(site);
     var matchups: usize = 0;
-    var build_pages: usize = 0;
     var champion_pages: usize = 0;
-    for (paths) |path| {
-        if (!isStatic(opts, vdir, path)) continue;
+    for (pages) |at| {
+        if (opts.static != .all) continue;
         _ = page_arena.reset(.retain_capacity);
         var aw: Writer.Allocating = .init(s.arena);
-        if (!try renderPage(&s, &aw.writer, path)) return error.PageNotRouted;
-        try w.write(dir, path, aw.written());
-        if (std.mem.startsWith(u8, path, "matchup/") and !std.mem.eql(u8, path, "matchup/index.html")) matchups += 1;
-        if (std.mem.startsWith(u8, path, "build/")) build_pages += 1;
-        if (std.mem.startsWith(u8, path, "champion/")) champion_pages += 1;
+        if (!try renderPage(&s, &aw.writer, at)) return error.PageNotRouted;
+        try w.write(root_dir, try filePath(s.arena, site.view, at), aw.written());
+        if (at == .matchup) matchups += 1;
+        if (at == .champion and at.champion.role == null) champion_pages += 1;
     }
     if (std.meta.eql(site.view, html.View.shared)) {
         // In the site's arena: the page arena is reset per page
         const daily_pages = try daily_page.pagePaths(site);
-        for (shared_pages ++ unlisted_pages) |path| try writeShared(&s, w, root_dir, &page_arena, path);
-        for (daily_pages) |path| try writeShared(&s, w, root_dir, &page_arena, path);
+        for (shared_pages ++ unlisted_pages) |at| try writeShared(&s, w, root_dir, &page_arena, at);
+        for (daily_pages) |at| try writeShared(&s, w, root_dir, &page_arena, at);
     }
     if (site.curves != null) log.info("{d} matchup pages", .{matchups});
-    if (build_pages > 0) log.info("{d} build pages", .{build_pages});
     // deploy/web-loop.sh reads the first "patch" line: EUW's
     log.info("{s}/{s}: {s}, {d} games, {d} champion pages", .{
         site.opts.out_dir, site.view.dir(), site.when, site.games, champion_pages,
     });
 }
 
-/// A shared view's page at the site root, unless the static build leaves it to the renderer
-fn writeShared(s: *const Site, w: FileWriter, root_dir: std.Io.Dir, page_arena: *std.heap.ArenaAllocator, path: []const u8) !void {
-    if (!isStatic(s.opts, "", path)) return;
+/// A shared view's page, unless the static build leaves it to the renderer
+fn writeShared(s: *const Site, w: FileWriter, root_dir: std.Io.Dir, page_arena: *std.heap.ArenaAllocator, at: urls.Page) !void {
+    if (s.opts.static != .all) return;
     _ = page_arena.reset(.retain_capacity);
     var aw: Writer.Allocating = .init(s.arena);
-    if (!try renderShared(s, &aw.writer, path)) return;
-    try w.write(root_dir, path, aw.written());
+    if (!try renderShared(s, &aw.writer, at)) return;
+    try w.write(root_dir, try filePath(s.arena, html.View.all[0], at), aw.written());
 }
 
 const FileWriter = struct {
@@ -200,10 +199,10 @@ test "views: a tree each, switches between them, shared pages once" {
         }
     }.f;
     const want = [_]struct { []const u8, []const u8 }{
-        .{ "role/top.html", "in EUW, last 30 days, patch 16.20, 1 games" },
-        .{ "patch/role/top.html", "in EUW, patch 16.20, 2 games" },
-        .{ "all/role/top.html", "across all regions, last 30 days, patch 16.20, 2 games" },
-        .{ "all/patch/role/top.html", "across all regions, patch 16.20, 3 games" },
+        .{ "champions/top.html", "in EUW, last 30 days, patch 16.20, 1 games" },
+        .{ "_v/patch/champions/top.html", "in EUW, patch 16.20, 2 games" },
+        .{ "_v/all/champions/top.html", "across all regions, last 30 days, patch 16.20, 2 games" },
+        .{ "_v/all-patch/champions/top.html", "across all regions, patch 16.20, 3 games" },
         .{ "daily.html", "in EUW, patch 16.20, 2 games" },
     };
     for (want) |c| {
@@ -212,45 +211,45 @@ test "views: a tree each, switches between them, shared pages once" {
     }
     // The champions board picks the view in its own toolbar; other view pages keep the
     // switches
-    const tiers = try read(arena, out, "all/champions.html");
+    const tiers = try read(arena, out, "_v/all/champions.html");
     try std.testing.expect(std.mem.find(u8, tiers, "data-region=\"EUW1\"") == null);
-    const pool = try read(arena, out, "all/pool.html");
+    const pool = try read(arena, out, "_v/all/pool.html");
     for ([_][]const u8{
-        "<a href=\"../all/patch/pool.html\" data-period=\"patch\">Patch 16.20</a>",
-        "<a href=\"../pool.html\" data-region=\"EUW1\">EUW</a>",
+        "<a href=\"/pool?region=all&amp;period=patch\" data-period=\"patch\">Patch 16.20</a>",
+        "<a href=\"/pool\" data-region=\"EUW1\">EUW</a>",
         "<a aria-disabled=\"true\" title=\"Champion pages only\" data-region=\"KR\">KR</a>",
         "<a aria-disabled=\"true\" title=\"Champion pages and the champions board only\" data-rank=\"6\">Diamond+</a>",
-        "href=\"../" ++ @import("style.zig").file.path ++ "\"",
-        "href=\"../daily.html\"",
+        "href=\"/" ++ @import("style.zig").file.path ++ "\"",
+        "href=\"/daily\"",
     }) |s| try std.testing.expect(std.mem.find(u8, pool, s) != null);
-    try std.testing.expect(std.mem.find(u8, tiers, "<a href=\"../all/patch/champions.html\">Patch</a>") != null);
+    try std.testing.expect(std.mem.find(u8, tiers, "<a href=\"/champions?region=all&amp;period=patch\">Patch</a>") != null);
     // One page per champion, at the site root: the root view's, no switches until the
     // island takes the views
-    const champ = try read(arena, out, "champion/a.html");
+    const champ = try read(arena, out, "champions/a.html");
     for ([_][]const u8{
-        "data-island=\"champion\" data-src=\"../data/champion/a.bin\"",
+        "data-island=\"champion\" data-src=\"/data/champion/a.bin\"",
         "<span data-foot>in EUW, last 30 days",
-        "href=\"../" ++ @import("style.zig").file.path ++ "\"",
-        "<a href=\"../champions.html\" aria-current=\"page\" data-view=\"\">",
+        "href=\"/" ++ @import("style.zig").file.path ++ "\"",
+        "<a href=\"/champions\" aria-current=\"page\" data-view=\"\">",
     }) |s| try std.testing.expect(std.mem.find(u8, champ, s) != null);
     try std.testing.expect(std.mem.find(u8, champ, "data-region=\"KR\"") == null);
-    try std.testing.expectError(error.FileNotFound, read(arena, out, "all/champion/a.html"));
+    try std.testing.expectError(error.FileNotFound, read(arena, out, "_v/all/champions/a.html"));
     const shared_page = try read(arena, out, "daily.html");
-    try std.testing.expect(std.mem.find(u8, shared_page, "<a href=\"champions.html\" data-view=\"\">") != null);
-    try std.testing.expectError(error.FileNotFound, read(arena, out, "all/daily.html"));
-    try std.testing.expectError(error.FileNotFound, read(arena, out, "patch/style.css"));
+    try std.testing.expect(std.mem.find(u8, shared_page, "<a href=\"/champions\" data-view=\"\">") != null);
+    try std.testing.expectError(error.FileNotFound, read(arena, out, "_v/all/daily.html"));
+    try std.testing.expectError(error.FileNotFound, read(arena, out, "_v/patch/style.css"));
     // Under Champions: the section's tabs and the switches; not on home or shared pages
     for ([_][]const u8{
         "<nav class=\"section\" aria-label=\"Champions\">",
-        "<a href=\"matchup/index.html\">Matchups</a>",
+        "<a href=\"/matchups?region=all\">Matchups</a>",
     }) |s| try std.testing.expect(std.mem.find(u8, tiers, s) != null);
     try std.testing.expect(std.mem.find(u8, shared_page, "class=\"subbar\"") == null);
     // Home in a view: the lookup and its islands, their script at the site root
-    const home = try read(arena, out, "all/index.html");
+    const home = try read(arena, out, "_v/all/index.html");
     for ([_][]const u8{
-        "data-island=\"lookup\" data-to=\"../your.html\"",
-        "<form class=\"box\" method=\"get\" role=\"search\" action=\"../your.html\"",
-        "<script src=\"../" ++ assets.home_js.path ++ "\" data-wasm=\"",
+        "data-island=\"lookup\" data-to=\"/your\"",
+        "<form class=\"box\" method=\"get\" role=\"search\" action=\"/your\"",
+        "<script src=\"/" ++ assets.home_js.path ++ "\" data-wasm=\"",
     }) |s| try std.testing.expect(std.mem.find(u8, home, s) != null);
     try std.testing.expect(std.mem.find(u8, home, "class=\"subbar\"") == null);
     const your = try read(arena, out, "your.html");

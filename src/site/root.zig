@@ -4,6 +4,7 @@
 const std = @import("std");
 const core = @import("core");
 pub const html = @import("html.zig");
+const urls = ui.urls;
 const prose = @import("prose.zig");
 const account_page = @import("account.zig");
 const daily_page = @import("daily.zig");
@@ -48,7 +49,8 @@ const biggestCurves = @import("extras.zig").biggestCurves;
 pub const Loaded = @import("views.zig").Loaded;
 const writeIndex = @import("home.zig").writeIndex;
 const writeTierList = @import("tierlist.zig").writeTierList;
-const writeChampion = @import("champion.zig").writeChampion;
+const champion = @import("champion.zig");
+const writeChampion = champion.writeChampion;
 
 pub const Options = struct {
     out_dir: []const u8,
@@ -256,23 +258,28 @@ pub const Site = struct {
     /// Champion page filter data; the root view's only, as the champion pages
     filter: filters.Made = .{},
 
-    /// A page of the view at `path` within it
-    pub fn page(s: *const Site, title: []const u8, description: []const u8, path: []const u8, nav: html.Nav) !html.Page {
+    /// The view's page `at`
+    pub fn page(s: *const Site, title: []const u8, description: []const u8, at: urls.Page, nav: html.Nav) !html.Page {
         var p = try s.sharedPage(title, description, nav);
         p.view = s.view;
         p.counterparts = @as([html.View.count][]const u8, undefined);
         for (html.View.all, &p.counterparts.?) |v, *there| {
-            there.* = try std.mem.concat(s.arena, u8, &.{ v.dir(), path });
+            there.* = try s.arena.print("{f}{s}", .{ at, v.query() });
         }
-        p.root = try s.toRoot(path);
-        p.canonical = try s.canonical(s.view.dir(), path);
+        p.canonical = try s.canonical(at);
         return p;
     }
 
-    /// `origin/dir/path`; null without Options.origin
-    pub fn canonical(s: *const Site, dir: []const u8, path: []const u8) !?[]const u8 {
+    /// `at` under Options.origin, no query: every view's copy files under one URL; null
+    /// without an origin
+    pub fn canonical(s: *const Site, at: urls.Page) !?[]const u8 {
         const origin = s.opts.origin orelse return null;
-        return try std.mem.concat(s.arena, u8, &.{ origin, "/", dir, path });
+        return try s.arena.print("{s}{f}", .{ origin, at });
+    }
+
+    /// To the page `to` in this view. Raw: escape it
+    pub fn href(s: *const Site, to: urls.Page) ![]const u8 {
+        return s.arena.print("{f}{s}", .{ to, s.view.query() });
     }
 
     /// A page at the site root, written once (from html.View.shared)
@@ -330,39 +337,25 @@ pub const Site = struct {
         } };
     }
 
-    /// From `path` up to its view's root
-    pub fn toRoot(s: *const Site, path: []const u8) ![]const u8 {
-        const depth = std.mem.count(u8, path, "/");
-        const out = try s.arena.alloc(u8, 3 * depth);
-        for (0..depth) |i| @memcpy(out[3 * i ..][0..3], "../");
-        return out;
-    }
-
-    /// From `path` to the site root, where the shared pages are
-    pub fn toShared(s: *const Site, path: []const u8) ![]const u8 {
-        return std.mem.concat(s.arena, u8, &.{ try s.toRoot(path), s.view.up() });
-    }
-
     pub fn icon(s: *const Site, ch: Champ) ![]const u8 {
         return s.arena.print(ui.champ.icon_fmt, .{ s.ddragon_version, ch.key });
     }
 
-    /// To the champion's page (one per champion, at the site root), its filters set to
-    /// this view. `to_site`: from the linking page to the site root. Raw: escape it
-    pub fn champHref(s: *const Site, ch: Champ, to_site: []const u8) ![]const u8 {
-        return s.arena.print("{s}champion/{s}.html{s}", .{ to_site, ch.slug, s.view.query() });
+    /// To the champion's page (main role; one per champion and role, in the default
+    /// view), its filters set to this view. Raw: escape it
+    pub fn champHref(s: *const Site, ch: Champ) ![]const u8 {
+        return s.href(.{ .champion = .{ .slug = ch.slug } });
     }
 
-    /// To the champions table, a role's (null: All), in the view's directory as the
-    /// linking page is. `to_site` as champHref
-    pub fn championsHref(s: *const Site, r: ?Role, to_site: []const u8) ![]const u8 {
-        return s.arena.print("{s}{s}", .{ to_site, try championsPath(s.arena, r) });
+    /// To the champions table, a role's (null: All)
+    pub fn championsHref(s: *const Site, r: ?Role) ![]const u8 {
+        return s.href(.{ .champions = if (r) |x| urlRole(x) else null });
     }
 
     /// A champion link as the main link of a row or tile (class bx) that it covers whole
-    pub fn champBox(s: *const Site, w: *Writer, ch: Champ, to_site: []const u8) !void {
+    pub fn champBox(s: *const Site, w: *Writer, ch: Champ) !void {
         try tpl.render(w, "<a class=\"champ box\" href=\"{href}\"><img src=\"{icon}\" alt=\"\" loading=\"lazy\" width=\"32\" height=\"32\">{name}</a>", .{
-            .href = try s.champHref(ch, to_site),
+            .href = try s.champHref(ch),
             .icon = try s.icon(ch),
             .name = ch.name,
         });
@@ -408,13 +401,63 @@ pub fn asset(arena: std.mem.Allocator, io: std.Io, opts: Options, wanted: []cons
     return if (std.mem.eql(u8, name, "style.css")) try style.rebuild(arena, data) else data;
 }
 
-/// Pages at the site root, from the shared view (renderShared)
-pub const shared_pages = [_][]const u8{
-    "learn.html", "method.html", "daily.html", "download.html", "your.html", "privacy.html", "terms.html",
-};
+/// Pages in no view, from the shared view (renderShared)
+pub const shared_pages = [_]urls.Page{ .learn, .method, .{ .daily = null }, .download, .your, .privacy, .terms };
 
 /// Shared pages the static build writes but the sitemap leaves out
-pub const unlisted_pages = [_][]const u8{ yourgame.page_path, yourpage.page_path };
+pub const unlisted_pages = [_]urls.Page{ .game, .games };
+
+/// `at`'s file in view `v`'s tree, from the site root: "_v/all/champions/top.html"
+/// (nginx: $uri.html), "index.html" for home
+pub fn filePath(a: std.mem.Allocator, v: html.View, at: urls.Page) ![]const u8 {
+    const url = try a.print("{f}", .{at});
+    return std.mem.concat(a, u8, &.{ v.dir(), if (at == .home) "index" else url[1..], ".html" });
+}
+
+/// The page whose file is `path` within a view's tree (filePath's inverse); null: none
+pub fn pageOf(a: std.mem.Allocator, path: []const u8) !?urls.Page {
+    if (!std.mem.endsWith(u8, path, ".html")) return null;
+    const name = path[0 .. path.len - ".html".len];
+    if (std.mem.eql(u8, name, "index")) return .home;
+    return urls.parse(try std.mem.concat(a, u8, &.{ "/", name }));
+}
+
+/// The URL that serves file `path` (from the site root): a page's with its view's query,
+/// any other file's path
+pub fn urlOf(a: std.mem.Allocator, path: []const u8) ![]const u8 {
+    const v = for ([_]html.View{ html.View.all[3], html.View.all[2], html.View.all[1] }) |v| {
+        if (std.mem.startsWith(u8, path, v.dir())) break v;
+    } else html.View.all[0];
+    const rest = path[v.dir().len..];
+    const at = try pageOf(a, rest) orelse return std.mem.concat(a, u8, &.{ "/", path });
+    return a.print("{f}{s}", .{ at, v.query() });
+}
+
+test urlOf {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try std.testing.expectEqualStrings("/", try urlOf(a, "index.html"));
+    try std.testing.expectEqualStrings("/?region=all", try urlOf(a, "_v/all/index.html"));
+    try std.testing.expectEqualStrings("/champions/top?region=all&period=patch", try urlOf(a, "_v/all-patch/champions/top.html"));
+    try std.testing.expectEqualStrings("/patch/16-20?period=patch", try urlOf(a, "_v/patch/patch/16-20.html"));
+    try std.testing.expectEqualStrings("/_v/all/data/tiers.bin", try urlOf(a, "_v/all/data/tiers.bin"));
+}
+
+/// `r` as URLs spell it
+pub fn urlRole(r: Role) ui.role.Role {
+    return @import("champion.zig").uiRole(r);
+}
+
+pub fn coreRole(r: ui.role.Role) Role {
+    return switch (r) {
+        .top => .top,
+        .jungle => .jungle,
+        .mid => .middle,
+        .bot => .bottom,
+        .support => .utility,
+    };
+}
 
 pub fn robots(arena: std.mem.Allocator, opts: Options) ![]const u8 {
     if (!opts.public) return "User-agent: *\nDisallow: /\n";
@@ -422,10 +465,7 @@ pub fn robots(arena: std.mem.Allocator, opts: Options) ![]const u8 {
     // Your games answers name players (docs/legal/lia.md safeguards): never crawled. /p/:
     // the private site, behind a login
     try out.appendSlice(arena, "User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /p/\n");
-    if (opts.origin) |origin| for (html.View.all) |v| {
-        if (opts.euw_only and v.region != .euw) continue;
-        try out.print(arena, "Sitemap: {s}/{s}sitemap.xml\n", .{ origin, v.dir() });
-    };
+    if (opts.origin) |origin| try out.print(arena, "Sitemap: {s}/sitemap.xml\n", .{origin});
     return out.items;
 }
 
@@ -452,160 +492,151 @@ test robots {
     public.origin = "https://x.io";
     public.euw_only = true;
     try std.testing.expectEqualStrings(
-        "User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /p/\nSitemap: https://x.io/sitemap.xml\nSitemap: https://x.io/patch/sitemap.xml\n",
+        "User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /p/\nSitemap: https://x.io/sitemap.xml\n",
         try robots(arena.allocator(), public),
     );
 }
 
-/// The view's pages search engines may index, at its root; the root view's (at the
-/// site root) also lists the shared pages
+/// The pages search engines may index, by canonical URL (no view's query: each view's
+/// copy files under it), with the data's date; the root view's
 pub fn sitemap(site: *const Site) ![]const u8 {
     const a = site.arena;
     var out: std.ArrayList(u8) = .empty;
     try out.appendSlice(a, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n");
-    var paths: std.ArrayList([]const u8) = .empty;
-    try paths.appendSlice(a, try pagePathsMin(site, site.opts.index_min_games));
+    var pages: std.ArrayList(urls.Page) = .empty;
+    try pages.appendSlice(a, try pagePathsMin(site, site.opts.index_min_games));
     // Listed from the root view, before the shared view (whose learn build may fail) loads
-    if (site.view.index() == 0) try paths.appendSlice(a, &shared_pages);
-    for (paths.items) |path| {
-        // Old build pages only redirect to champion pages
-        if (std.mem.startsWith(u8, path, "build/")) continue;
-        // Paths are slugs and fixed names: nothing XML needs escaped
-        try out.print(a, "<url><loc>{s}</loc></url>\n", .{(try site.canonical(site.view.dir(), path)).?});
+    try pages.appendSlice(a, &shared_pages);
+    const day = @import("../date.zig").Date.fromMs(site.since_ms + 30 * std.time.ms_per_day);
+    for (pages.items) |at| {
+        // The main role's page files under the bare champion URL
+        if (at == .champion and at.champion.role != null and site.champBySlug(at.champion.slug) != null and
+            mainRole(site, site.champBySlug(at.champion.slug).?) == coreRole(at.champion.role.?)) continue;
+        // Slugs and fixed names: nothing XML needs escaped
+        try out.print(a, "<url><loc>{s}</loc><lastmod>{f}</lastmod></url>\n", .{ (try site.canonical(at)).?, day });
     }
     try out.appendSlice(a, "</urlset>\n");
     return out.items;
 }
 
-/// Every page of the view the static build writes, by path within its directory
-pub fn pagePaths(site: *const Site) ![]const []const u8 {
+/// Every page of the view the static build writes
+pub fn pagePaths(site: *const Site) ![]const urls.Page {
     return pagePathsMin(site, site.opts.static_min_games);
 }
 
-/// The champions table's page in a view's directory: All's, or role `r`'s
-pub fn championsPath(a: std.mem.Allocator, r: ?Role) ![]const u8 {
-    return if (r) |x| a.print("role/{s}.html", .{x.label()}) else "champions.html";
+/// The role a champion's bare URL shows: its most played
+pub fn mainRole(site: *const Site, ch: Champ) ?Role {
+    var best: ?Role = null;
+    var most: u64 = 0;
+    for (Role.all) |r| {
+        const g = site.stats.champRole(r, ch.c).games;
+        if (g > most) {
+            best = r;
+            most = g;
+        }
+    }
+    return best;
 }
 
 /// As pagePaths, but matchup pages from `min_games` up
-fn pagePathsMin(site: *const Site, min_games: u32) ![]const []const u8 {
+fn pagePathsMin(site: *const Site, min_games: u32) ![]const urls.Page {
     const a = site.arena;
-    var list: std.ArrayList([]const u8) = .empty;
-    try list.appendSlice(a, &.{ "index.html", try championsPath(a, null) });
-    for (Role.all) |r| try list.append(a, try championsPath(a, r));
+    var list: std.ArrayList(urls.Page) = .empty;
+    try list.appendSlice(a, &.{ .home, .{ .champions = null } });
+    for (ui.role.Role.all) |r| try list.append(a, .{ .champions = r });
+    // Champion pages in the default view only: their filters pick the view
     if (site.view.index() == 0) for (site.champs) |ch| {
-        try list.append(a, try a.print("champion/{s}.html", .{ch.slug}));
+        try list.append(a, .{ .champion = .{ .slug = ch.slug } });
+        for (Role.all) |r| if (champion.plays(site, ch, r)) try list.append(a, .{ .champion = .{ .slug = ch.slug, .role = urlRole(r) } });
     };
-    try list.append(a, "matchup/index.html");
+    try list.append(a, .matchups);
     if (site.curves) |*c| try matchup.paths(site, c, &list, min_games);
-    if (site.view_builds[site.view.index()]) |*b| try builds_page.paths(site, b, &list);
-    try list.append(a, "pool.html");
+    try list.append(a, .pool);
     try pickup_page.paths(site, &list);
-    try list.append(a, patch_page.path);
+    try list.append(a, .{ .patch = null });
     try patch_page.paths(site, &list);
     return list.items;
 }
 
-/// The view's page at `path` (within its directory) into `w`; false when it has none
-pub fn renderPage(site: *const Site, w: *Writer, path: []const u8) !bool {
-    const eql = std.mem.eql;
-    if (eql(u8, path, "index.html")) {
-        try writeIndex(site, w);
-    } else if (eql(u8, path, "champions.html")) {
-        try writeTierList(site, w, null);
-    } else if (strip(path, "role/", ".html")) |s| {
-        try writeTierList(site, w, roleFromSlug(s) orelse return false);
-    } else if (strip(path, "champion/", ".html")) |s| {
-        if (site.view.index() != 0) return false;
-        try writeChampion(site, w, site.champBySlug(s) orelse return false);
-    } else if (eql(u8, path, "matchup/index.html")) {
-        try finder.writePage(site, w);
-    } else if (strip(path, "matchup/", ".html")) |s| {
-        return matchup.route(site, w, if (site.curves) |*c| c else return false, s);
-    } else if (eql(u8, path, builds_page.index_path)) {
-        try builds_page.writeIndex(site, w);
-    } else if (strip(path, "build/", ".html")) |s| {
-        return builds_page.route(site, w, s);
-    } else if (eql(u8, path, "pool.html")) {
-        try pool_page.writePage(site, w, &site.pool);
-    } else if (eql(u8, path, pickup_page.path)) {
-        try pickup_page.writePage(site, w, null);
-    } else if (strip(path, "pickup/", ".html")) |s| {
-        try pickup_page.writePage(site, w, roleFromSlug(s) orelse return false);
-    } else if (eql(u8, path, patch_page.path)) {
-        try patch_page.writePage(site, w);
-    } else if (strip(path, "patches/", ".html")) |s| {
-        return patch_page.writeOlder(site, w, s);
-    } else return false;
+/// The view's page `at` into `w`; false when it has none
+pub fn renderPage(site: *const Site, w: *Writer, at: urls.Page) !bool {
+    switch (at) {
+        .home => try writeIndex(site, w),
+        .champions => |r| try writeTierList(site, w, if (r) |x| coreRole(x) else null),
+        .champion => |c| {
+            if (site.view.index() != 0) return false;
+            const ch = site.champBySlug(c.slug) orelse return false;
+            const main = mainRole(site, ch) orelse return false;
+            const r = if (c.role) |x| coreRole(x) else main;
+            // A thin role has no file (not in pagePaths) but tier rows and role tabs link
+            // it: rendered on request, canonical to the bare URL
+            if (site.stats.champRole(r, ch.c).games == 0) return false;
+            try writeChampion(site, w, ch, r, c.role != null, c.role != null and r != main and champion.plays(site, ch, r));
+        },
+        .matchups => try finder.writePage(site, w),
+        .matchup => |m| return matchup.route(site, w, if (site.curves) |*c| c else return false, m),
+        .pool => try pool_page.writePage(site, w, &site.pool),
+        .pickup => |r| try pickup_page.writePage(site, w, if (r) |x| coreRole(x) else null),
+        .patch => |cur| if (cur) |x| return patch_page.writeOlder(site, w, x) else try patch_page.writePage(site, w),
+        else => return false,
+    }
     return true;
 }
 
-/// A page at the site root from the shared view (shared_pages); false for any other path
-pub fn renderShared(site: *const Site, w: *Writer, path: []const u8) !bool {
-    if (std.mem.eql(u8, path, "learn.html")) {
-        try learn_page.write(site, w);
-        return true;
+/// A page from the shared view (shared_pages, unlisted_pages, the account pages); false
+/// for any other
+pub fn renderShared(site: *const Site, w: *Writer, at: urls.Page) !bool {
+    switch (at) {
+        .learn => try learn_page.write(site, w),
+        .daily => |n| if (n) |x| return daily_page.route(site, w, x) else try daily_page.write(site, w),
+        .game => return yourgame.writePage(site, w),
+        .games => return yourpage.writePage(site, w),
+        else => {
+            const fixed = [_]struct { std.meta.Tag(urls.Page), []const u8, []const u8, html.Nav, *const fn (*Writer, prose.Info) Writer.Error!void }{
+                .{ .method, "Method", "Where meiolol's numbers come from and how lane curves, champion statistics and the Daily Draft are made.", .method, prose.method },
+                .{ .download, "Champ select helper", "The meiolol champ select helper, a desktop app for Windows, in development.", .none, prose.download },
+                .{ .your, "Your games", "Look yourself up: your lane in each recent ranked game against how the matchup typically goes, with your highlights, streaks and record per matchup.", .your, your_page.page },
+                .{ .privacy, "Privacy policy", "What meiolol collects and why.", .none, prose.privacy },
+                .{ .terms, "Terms of use", "Terms for using meiolol.", .none, prose.terms },
+                .{ .login, "Log in", "Log in to meiolol.", .none, account_page.login },
+                .{ .signup, "Make your account", "Make a meiolol account from a sign-up link.", .none, account_page.signup },
+                .{ .join, "Set up your login", "Set up a meiolol login from an invite link.", .none, account_page.join },
+                .{ .account, "Your account", "Your meiolol login: password and sign out.", .none, account_page.account },
+            };
+            for (fixed) |f| {
+                if (f[0] != at) continue;
+                var p = try site.sharedPage(try site.arena.print("{s} | meiolol", .{f[1]}), f[2], f[3]);
+                p.canonical = try site.canonical(at);
+                // The account pages: not in shared_pages (the sitemap), never indexed
+                p.index = for (shared_pages) |s| {
+                    if (std.meta.eql(s, at)) break true;
+                } else false;
+                try html.head(w, p);
+                try f[4](w, site.info());
+                if (f[3] == .method) try evalchart.section(w, site.eval);
+                try html.foot(w, p);
+                return true;
+            }
+            return false;
+        },
     }
-    if (std.mem.eql(u8, path, "daily.html")) {
-        try daily_page.write(site, w);
-        return true;
-    }
-    if (strip(path, "daily/", ".html")) |s| return daily_page.route(site, w, s);
-    if (std.mem.eql(u8, path, yourgame.page_path)) return yourgame.writePage(site, w);
-    if (std.mem.eql(u8, path, yourpage.page_path)) return yourpage.writePage(site, w);
-    const fixed = [_]struct { []const u8, []const u8, []const u8, html.Nav, *const fn (*Writer, prose.Info) Writer.Error!void }{
-        .{ "method.html", "Method", "Where meiolol's numbers come from and how lane curves, champion statistics and the Daily Draft are made.", .method, prose.method },
-        .{ "download.html", "Champ select helper", "The meiolol champ select helper, a desktop app for Windows, in development.", .none, prose.download },
-        .{ "your.html", "Your games", "Look yourself up: your lane in each recent ranked game against how the matchup typically goes, with your highlights, streaks and record per matchup.", .your, your_page.page },
-        .{ "privacy.html", "Privacy policy", "What meiolol collects and why.", .none, prose.privacy },
-        .{ "terms.html", "Terms of use", "Terms for using meiolol.", .none, prose.terms },
-        .{ "login.html", "Log in", "Log in to meiolol.", .none, account_page.login },
-        .{ "signup.html", "Make your account", "Make a meiolol account from a sign-up link.", .none, account_page.signup },
-        .{ "join.html", "Set up your login", "Set up a meiolol login from an invite link.", .none, account_page.join },
-        .{ "account.html", "Your account", "Your meiolol login: password and sign out.", .none, account_page.account },
-    };
-    for (fixed) |f| {
-        if (!std.mem.eql(u8, path, f[0])) continue;
-        var p = try site.sharedPage(try site.arena.print("{s} | meiolol", .{f[1]}), f[2], f[3]);
-        // The account pages: not in shared_pages (the sitemap), never indexed
-        p.index = for (shared_pages) |s| {
-            if (std.mem.eql(u8, s, f[0])) break true;
-        } else false;
-        try html.head(w, p);
-        try f[4](w, site.info());
-        if (f[3] == .method) try evalchart.section(w, site.eval);
-        try html.foot(w, p);
-        return true;
-    }
-    return false;
+    return true;
 }
 
-/// The site's 404 page for a request to `path` (from the site root, no page there): its
-/// links and assets relative to that path's directory, never indexed
-pub fn renderNotFound(site: *const Site, w: *Writer, path: []const u8) !void {
+/// The site's 404 page, never indexed
+pub fn renderNotFound(site: *const Site, w: *Writer) !void {
     var p = try site.sharedPage("Page not found | meiolol", "No page at this address.", .none);
-    const depth = std.mem.countScalar(u8, path, '/');
-    const root_buf = try site.arena.alloc(u8, 3 * depth);
-    for (0..depth) |i| @memcpy(root_buf[3 * i ..][0..3], "../");
-    p.root = root_buf;
     p.index = false;
     try html.head(w, p);
-    try w.print(
+    try w.writeAll(
         \\<div class="prose">
         \\<h1>Page not found</h1>
         \\<p class="lead">There's no page at this address: it may have moved, or the link has a typo.</p>
-        \\<p><a href="{s}index.html">Home</a> · <a href="{s}champions.html">Champions</a> · <a href="{s}matchup/index.html">Matchups</a></p>
+        \\<p><a href="/">Home</a> · <a href="/champions">Champions</a> · <a href="/matchups">Matchups</a></p>
         \\</div>
         \\
-    , .{ p.root, p.root, p.root });
+    );
     try html.foot(w, p);
-}
-
-/// `path` without `prefix` and `suffix`; null unless it has both
-fn strip(path: []const u8, prefix: []const u8, suffix: []const u8) ?[]const u8 {
-    if (path.len < prefix.len + suffix.len) return null;
-    if (!std.mem.startsWith(u8, path, prefix) or !std.mem.endsWith(u8, path, suffix)) return null;
-    return path[prefix.len .. path.len - suffix.len];
 }
 
 pub fn pct(w: *Writer, part: u64, whole: u64) !void {
@@ -626,11 +657,6 @@ pub fn earlyNote(site: *const Site, w: *Writer) !void {
         \\<p class="note">Early data: {games} games so far.</p>
         \\
     , .{ .games = Thousands{ .n = site.games } });
-}
-
-pub fn roleFromSlug(s: []const u8) ?Role {
-    for (Role.all) |r| if (std.mem.eql(u8, r.label(), s)) return r;
-    return null;
 }
 
 pub fn roleName(r: Role) []const u8 {

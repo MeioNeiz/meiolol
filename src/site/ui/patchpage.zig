@@ -1,4 +1,4 @@
-//! Patch changes (patch.html; docs/plan/ui/patch.md): what Riot changed this patch, next
+//! Patch changes (/patch; docs/plan/ui/patch.md): what Riot changed this patch, next
 //! to what moved. PatchHead, the counts (each filters the table), filter chips and the
 //! role in place, then every champion role with enough games on both patches in one
 //! DataTable: Riot's badge, both rates, the change drawn with its range, the lane lead,
@@ -57,9 +57,8 @@ pub const Data = struct {
     /// The minute "lane lead" is at (curvesfile.lane_minute)
     lane_minute: u8,
     ddragon: []const u8,
-    /// From the site root, the patch view's directory: champion and matchup pages on
-    /// this patch's numbers
-    patch_dir: []const u8,
+    /// The patch view's query: champion and matchup pages on this patch's numbers
+    patch_query: []const u8,
     /// Riot's notes page, "" without
     notes: []const u8,
     /// Riot's changes are known (Data Dragon read): else no Riot column or filter
@@ -402,7 +401,7 @@ fn detail(h: *H, l: *const Line) N {
     var moves = h.list();
     for (r.moves, 0..) |m, k| moves.add(h.li(.{ .key = k }, .{
         icon(h, d, m.them),
-        if (m.path.len > 0) h.a(.{ .class = "nm", .href = h.fmt("{s}{s}{s}", .{ l.base, d.patch_dir, m.path }) }, .{d.champs[m.them].name}) else h.span(.{ .class = "nm" }, .{d.champs[m.them].name}),
+        if (m.path.len > 0) h.a(.{ .class = "nm", .href = h.fmt("{s}{s}", .{ m.path, d.patch_query }) }, .{d.champs[m.them].name}) else h.span(.{ .class = "nm" }, .{d.champs[m.them].name}),
         moveCell(h, m.prev, m.cur, m.clear, l.span),
         if (m.gold) |g| h.span(.{ .class = "gd" }, .{ W.gold_short.with(h, .{ .a = g.prev, .b = g.cur }), h.small(.{}, .{W.at.with(h, .{ .m = g.minute })}) }) else null,
     }));
@@ -456,7 +455,7 @@ pub const Lines = struct {
 
 /// Its champion page on this patch's numbers, open on `r`
 fn champHref(a: std.mem.Allocator, d: *const Data, base: []const u8, c: u16, r: Role) ![]const u8 {
-    return a.print("{s}{s}champion/{s}.html#role={s}", .{ base, d.patch_dir, d.champs[c].slug, Role.slugs[@backingInt(r)] });
+    return a.print("{s}champions/{s}/{s}{s}", .{ base, d.champs[c].slug, Role.slugs[@backingInt(r)], d.patch_query });
 }
 
 /// `base`: from the page to the site root
@@ -840,7 +839,7 @@ pub const demo: Data = .{
     .min_games = 300,
     .lane_minute = 14,
     .ddragon = "16.21.1",
-    .patch_dir = "patch/",
+    .patch_query = "?period=patch",
     .notes = "https://www.leagueoflegends.com/en-gb/news/game-updates/league-of-legends-patch-26-21-notes/",
     .riot = true,
     .champs = &.{
@@ -870,16 +869,16 @@ pub const demo: Data = .{
             .{ .them = 2, .prev = .{ 900, 430 }, .cur = .{ 450, 250 }, .clear = false },
         } },
         .{ .champ = 1, .role = .bottom, .prev = .{ 30_000, 14_790 }, .cur = .{ 10_280, 5_284 }, .clear = true, .lane = null, .change = null, .moves = &.{
-            .{ .them = 4, .prev = .{ 800, 386 }, .cur = .{ 520, 286 }, .clear = true, .gold = .{ .minute = 11, .prev = 40, .cur = 209, .games = 510 }, .path = "matchup/bot/missfortune-vs-tristana.html" },
-            .{ .them = 3, .prev = .{ 900, 465 }, .cur = .{ 864, 427 }, .clear = false, .path = "matchup/bot/missfortune-vs-jinx.html" },
+            .{ .them = 4, .prev = .{ 800, 386 }, .cur = .{ 520, 286 }, .clear = true, .gold = .{ .minute = 11, .prev = 40, .cur = 209, .games = 510 }, .path = "/matchups/bot/missfortune-vs-tristana" },
+            .{ .them = 3, .prev = .{ 900, 465 }, .cur = .{ 864, 427 }, .clear = false, .path = "/matchups/bot/missfortune-vs-jinx" },
         } },
         .{ .champ = 5, .role = .middle, .prev = .{ 9_000, 4_122 }, .cur = .{ 3_029, 1_417 }, .clear = false, .lane = null, .change = 3, .moves = &.{} },
         .{ .champ = 3, .role = .bottom, .prev = .{ 40_000, 20_680 }, .cur = .{ 11_328, 5_800 }, .clear = false, .lane = .{ .prev = .{ 38_000, 19_000 }, .cur = .{ 11_000, 5_346 }, .clear = true }, .change = 2, .moves = &.{} },
         .{ .champ = 2, .role = .middle, .prev = .{ 15_000, 7_575 }, .cur = .{ 5_094, 2_407 }, .clear = true, .lane = null, .change = 1, .moves = &.{} },
         .{ .champ = 4, .role = .bottom, .prev = .{ 20_000, 10_280 }, .cur = .{ 7_484, 3_660 }, .clear = true, .lane = null, .change = null, .moves = &.{
-            .{ .them = 1, .prev = .{ 800, 414 }, .cur = .{ 520, 234 }, .clear = true, .gold = .{ .minute = 11, .prev = -40, .cur = -209, .games = 510 }, .path = "matchup/bot/tristana-vs-missfortune.html" },
-            .{ .them = 2, .prev = .{ 700, 371 }, .cur = .{ 480, 216 }, .clear = true, .path = "matchup/bot/tristana-vs-viktor.html" },
-            .{ .them = 5, .prev = .{ 600, 288 }, .cur = .{ 420, 248 }, .clear = true, .path = "matchup/bot/tristana-vs-orianna.html" },
+            .{ .them = 1, .prev = .{ 800, 414 }, .cur = .{ 520, 234 }, .clear = true, .gold = .{ .minute = 11, .prev = -40, .cur = -209, .games = 510 }, .path = "/matchups/bot/tristana-vs-missfortune" },
+            .{ .them = 2, .prev = .{ 700, 371 }, .cur = .{ 480, 216 }, .clear = true, .path = "/matchups/bot/tristana-vs-viktor" },
+            .{ .them = 5, .prev = .{ 600, 288 }, .cur = .{ 420, 248 }, .clear = true, .path = "/matchups/bot/tristana-vs-orianna" },
         } },
     },
     .items = &.{

@@ -24,7 +24,7 @@ const Page = struct {
         p.fake = .{ .a = a };
         try p.fake.fragment.appendSlice(a, fragment);
         p.rt = .init(a, &p.fake);
-        p.server = .init(&pp.demo, try pp.prepare(a, &pp.demo, ""));
+        p.server = .init(&pp.demo, try pp.prepare(a, &pp.demo, "/"));
         p.state = p.server;
         try p.state.own(a);
         const t = try a.create(tree.Tree);
@@ -104,7 +104,7 @@ test "the server renders every listed row by change, the strip and Riot's lines"
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var s: pp.Page = .init(&pp.demo, try pp.prepare(a, &pp.demo, "../"));
+    var s: pp.Page = .init(&pp.demo, try pp.prepare(a, &pp.demo, "/"));
     var t: tree.Tree = .{};
     var h: tree.H = .init(a, &t);
     t.root = s.view(&h);
@@ -112,7 +112,7 @@ test "the server renders every listed row by change, the strip and Riot's lines"
     try html.write(&t, t.root, &w.writer);
     const page = w.written();
     try testing.expect(std.mem.find(u8, page, "<h1>Patch 16.21 vs 16.20</h1>") != null);
-    try testing.expect(std.mem.find(u8, page, "href=\"../patch/champion/darius.html#role=top\"") != null);
+    try testing.expect(std.mem.find(u8, page, "href=\"/champions/darius/top?period=patch\"") != null);
     // The kit chips' labels are item and rune names ("Press the Attack"), not wording
     const report = try check.run(a, &t, .{ .words = .off, .answer = .off, .label = .off });
     for (report.findings.items) |f| std.debug.print("{s}\n", .{f.msg});
@@ -131,7 +131,7 @@ test "items and runes over the table: a chip opens its lines and who uses it mos
     p.click(p.by(.button, "Bastionbreaker"));
     page = try p.shown();
     try testing.expect(std.mem.find(u8, page, "Bought most by") != null);
-    try testing.expect(std.mem.find(u8, page, "href=\"patch/champion/missfortune.html#role=bot\"") != null);
+    try testing.expect(std.mem.find(u8, page, "href=\"/champions/missfortune/bot?period=patch\"") != null);
     // The URL keeps the filters only
     try testing.expectEqualStrings("", p.fake.fragment.items);
     p.click(p.by(.button, "Bastionbreaker"));
@@ -146,7 +146,7 @@ test "matchups that moved: a column, a count that filters, the row's links" {
     try testing.expectEqualStrings("Miss Fortune,Tristana", try p.names());
     p.click(p.by(.tr, "Miss Fortune"));
     const page = try p.shown();
-    try testing.expect(std.mem.find(u8, page, "href=\"patch/matchup/bot/missfortune-vs-tristana.html\"") != null);
+    try testing.expect(std.mem.find(u8, page, "href=\"/matchups/bot/missfortune-vs-tristana?period=patch\"") != null);
     try testing.expect(std.mem.find(u8, page, "gold +40 → +209") != null);
     try testing.expect(std.mem.find(u8, page, "Jinx") != null);
 }
@@ -202,8 +202,8 @@ test "an older pair's data: ‹ › and finished through the data file, games wi
     defer arena.deinit();
     const a = arena.allocator();
     var d = pp.demo;
-    d.older = .{ .cur = "16.20", .prev = "16.19", .href = "16.20-16.19.html" };
-    d.newer = .{ .cur = "16.22", .prev = "16.21", .href = "../patch.html" };
+    d.older = .{ .cur = "16.20", .prev = "16.19", .href = "/patch/16-20" };
+    d.newer = .{ .cur = "16.22", .prev = "16.21", .href = "/patch" };
     d.finished = true;
     var bytes: std.ArrayList(u8) = .empty;
     try @import("data.zig").encode(a, pp.Data, d, &bytes);
@@ -220,8 +220,8 @@ test "an older pair's data: ‹ › and finished through the data file, games wi
     var out: std.Io.Writer.Allocating = .init(a);
     try html.write(&t, t.root, &out.writer);
     const s = out.written();
-    try testing.expect(std.mem.find(u8, s, "href=\"16.20-16.19.html\"") != null);
-    try testing.expect(std.mem.find(u8, s, "href=\"../patch.html\"") != null);
+    try testing.expect(std.mem.find(u8, s, "href=\"/patch/16-20\"") != null);
+    try testing.expect(std.mem.find(u8, s, "href=\"/patch\"") != null);
     try testing.expect(std.mem.find(u8, s, "so far") == null);
     try testing.expect(std.mem.find(u8, s, "games on 16.21.") != null);
 }

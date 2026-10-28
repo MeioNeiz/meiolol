@@ -1,6 +1,6 @@
 //! Build data for the champion and matchup pages (src/builds.zig files): which view's
 //! file each page reads, with the previous patch's or a wider rank's when the asked one
-//! is thin. Old build/ pages are redirects to the champion page (docs/plan/ui/builds.md)
+//! is thin. Old build/ pages redirect to the champion page in nginx (docs/plan/urls.md)
 
 const std = @import("std");
 const core = @import("core");
@@ -20,28 +20,11 @@ const File = builds.File;
 
 /// Below this a row is greyed out
 pub const solid_games = 400;
-/// A role gets a page when it has this share of the champion's games in the file
-const min_role_share = 0.1;
-
-pub fn path(a: std.mem.Allocator, ch: Champ, r: Role) ![]const u8 {
-    return a.print("build/{s}-{s}.html", .{ ch.slug, r.label() });
-}
 
 /// Any games of `ch` in `r`: the champion page shows every role it has
 fn played(f: *const File, champion: u32, r: Role) ?File.Build {
     const b = f.get(champion, r) orelse return null;
     return if (b.games > 0) b else null;
-}
-
-/// The build `ch` has a page for in `r`
-pub fn shown(f: *const File, champion: u32, r: Role) ?File.Build {
-    const b = f.get(champion, r) orelse return null;
-    var all: u64 = 0;
-    for (Role.all) |other| {
-        if (f.get(champion, other)) |o| all += o.games;
-    }
-    if (b.games == 0 or @as(f64, @floatFromInt(b.games)) < min_role_share * @as(f64, @floatFromInt(all))) return null;
-    return b;
 }
 
 /// The patch view of the site view's region, whose builds matchup pages show
@@ -119,52 +102,6 @@ pub fn forRank(site: *const Site, v: html.View, ch: Champ, r: Role, rank: u8) ?R
 fn pickFrom(slot: *const ?File, period: html.Period, get: anytype, args: anytype) ?Picked {
     const f = if (slot.*) |*f| f else return null;
     return .{ .f = f, .b = @call(.auto, get, .{f} ++ args) orelse return null, .period = period };
-}
-
-/// A page per champion and role with enough of the champion's games
-pub fn paths(site: *const Site, f: *const File, list: *std.ArrayList([]const u8)) !void {
-    try list.append(site.arena, index_path);
-    for (site.champs) |ch| for (Role.all) |r| {
-        if (shown(f, ch.id, r) == null) continue;
-        try list.append(site.arena, try path(site.arena, ch, r));
-    };
-}
-
-pub const index_path = "build/index.html";
-
-/// Build pages are retired (docs/plan/ui/builds.md): the champion page's BuildPanel opens
-/// every slot. Old links (search engines, shared ones) land there: build/index.html on
-/// the champions list
-pub fn writeIndex(site: *const Site, w: *Writer) !void {
-    try redirect(site, w, "champions.html", "../champions.html");
-}
-
-/// `rest`: "<champion>-<role>" from build/<rest>.html, to its champion page's role; false
-/// for no such champion or role
-pub fn route(site: *const Site, w: *Writer, rest: []const u8) !bool {
-    const dash = std.mem.findScalarLast(u8, rest, '-') orelse return false;
-    const ch = site.champBySlug(rest[0..dash]) orelse return false;
-    const r = root.roleFromSlug(rest[dash + 1 ..]) orelse return false;
-    const to_site = try site.toShared(try path(site.arena, ch, r));
-    const href = try site.arena.print("{s}#role={s}", .{ try site.champHref(ch, to_site), r.label() });
-    try redirect(site, w, try site.arena.print("champion/{s}.html", .{ch.slug}), href);
-    return true;
-}
-
-/// A page that sends the browser on to `href` at once, its canonical the site's `target`
-/// (in the root view, where champion pages live); never indexed
-fn redirect(site: *const Site, w: *Writer, target: []const u8, href: []const u8) !void {
-    const dir = if (std.mem.eql(u8, target, "champions.html")) site.view.dir() else "";
-    const canonical = try site.canonical(dir, target);
-    try tpl.render(w,
-        \\<!doctype html>
-        \\<html lang="en"><head><meta charset="utf-8"><title>meiolol</title><meta name="robots" content="noindex">{canonical}<meta http-equiv="refresh" content="0; url={href}"></head>
-        \\<body><a href="{href}">meiolol</a></body></html>
-        \\
-    , .{
-        .canonical = tpl.when(canonical != null, tpl.t("<link rel=\"canonical\" href=\"{url}\">", .{ .url = canonical orelse "" })),
-        .href = href,
-    });
 }
 
 /// Matchup page: what `x` players took against `y` in `r` (File.matchups), from the

@@ -32,7 +32,7 @@ pub const scope = .{".c-gpage"};
 pub const stamp = gamedata.stamp;
 
 /// "All games" on the site's game page
-pub const all_games = "your.html";
+pub const all_games = "/your";
 
 /// The range chips; `turn` is the default selection
 pub const Span = enum { game, early, mid, late, turn };

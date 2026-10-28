@@ -65,13 +65,8 @@ fn periodDim(site: *const Site, curves: *const Curves) !Dim {
 }
 
 /// From x's side: x's gold, wins and timings first
-pub fn path(a: std.mem.Allocator, r: Role, x: Champ, y: Champ) ![]const u8 {
-    return a.print("matchup/{s}/{s}", .{ r.label(), try file(a, x, y) });
-}
-
-/// path within its role's directory
-fn file(a: std.mem.Allocator, x: Champ, y: Champ) ![]const u8 {
-    return a.print("{s}-vs-{s}.html", .{ x.slug, y.slug });
+pub fn page(r: Role, x: Champ, y: Champ) ui.urls.Page {
+    return .{ .matchup = .{ .role = champion.uiRole(r), .a = x.slug, .b = y.slug } };
 }
 
 /// A matchup's page curve: all ranks, all games. The file has one per bracket and
@@ -82,26 +77,24 @@ pub fn isPage(h: *const curvesfile.Header) bool {
 
 /// Two pages per lane matchup with an all-ranks curve of `min_games` or more, one from
 /// each champion's side
-pub fn paths(site: *const Site, curves: *const Curves, list: *std.ArrayList([]const u8), min_games: u32) !void {
+pub fn paths(site: *const Site, curves: *const Curves, list: *std.ArrayList(ui.urls.Page), min_games: u32) !void {
     for (curves.curves) |c| {
         const h = c.header;
         if (!isPage(h) or h.games < min_games) continue;
         const x = champ(site, h.a) orelse continue;
         const y = champ(site, h.b) orelse continue;
         const r: Role = @fromBackingInt(@intCast(h.role));
-        try list.append(site.arena, try path(site.arena, r, x, y));
-        try list.append(site.arena, try path(site.arena, r, y, x));
+        try list.append(site.arena, page(r, x, y));
+        try list.append(site.arena, page(r, y, x));
     }
 }
 
-/// `rest`: "<role>/<a>-vs-<b>" from matchup/<rest>.html; false for no such page
-pub fn route(site: *const Site, w: *Writer, curves: *const Curves, rest: []const u8) !bool {
-    const slash = std.mem.findScalar(u8, rest, '/') orelse return false;
-    const r = root.roleFromSlug(rest[0..slash]) orelse return false;
-    var it = std.mem.splitSequence(u8, rest[slash + 1 ..], "-vs-");
-    const x = site.champBySlug(it.next().?) orelse return false;
-    const y = site.champBySlug(it.next() orelse return false) orelse return false;
-    if (it.next() != null or x.id == y.id) return false;
+/// /matchups/<role>/<a>-vs-<b>; false for no such page
+pub fn route(site: *const Site, w: *Writer, curves: *const Curves, m: ui.urls.Matchup) !bool {
+    const r = root.coreRole(m.role);
+    const x = site.champBySlug(m.a) orelse return false;
+    const y = site.champBySlug(m.b) orelse return false;
+    if (x.id == y.id) return false;
     if (curves.get(r, .all, x.id, y.id) == null) return false;
     try writePage(site, w, curves, r, x, y);
     return true;
@@ -156,21 +149,19 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     const desc = try a.print("How {s} against {s} in {s} lane unfolds minute by minute: gold, experience and CS difference, kills, level 6 and first item timing.", .{
         x.name, y.name, lane,
     });
-    const page_path = try path(a, r, x, y);
-    var p = try site.page(title, desc, page_path, .matchups);
+    var p = try site.page(title, desc, page(r, x, y), .matchups);
     p.index = v.games() >= site.opts.index_min_games;
-    const to_site = try site.toShared(page_path);
     var views: [html.View.count][]const u8 = undefined;
     for (site.view_curves, &views, p.counterparts.?) |*vc, *href, there| {
         const has = if (vc.*) |*o| o.get(r, .all, x.id, y.id) != null else false;
-        href.* = if (has) try std.mem.concat(a, u8, &.{ to_site, there }) else "";
+        href.* = if (has) there else "";
     }
     // The head's view links replace the subbar's switches
     p.counterparts = null;
     try html.head(w, p);
 
     const head_data = try a.create(mp.HeadData);
-    head_data.* = try headData(site, curves, r, x, y, views, to_site);
+    head_data.* = try headData(site, curves, r, x, y, views);
     var head: mp.Head = try .init(a, head_data);
     head.bin = try bin(a, mp.HeadData, head_data.*);
 
@@ -193,7 +184,7 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
         .data = d,
         .panels = try cp.panels(a, d.roles),
         .bin = try bin(a, cp.BuildData, d.*),
-        .js = try std.mem.concat(a, u8, &.{ to_site, assets.champbuild_js.path }),
+        .js = "/" ++ assets.champbuild_js.path,
         .wasm = assets.champbuild_wasm.path,
     } else null;
     if (build) |*b| b.files.base[0] = b.data;
@@ -202,7 +193,7 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     more_data.* = try moreData(site, curves, r, x, y);
     var more: mp.More = try .init(a, more_data);
     more.bin = try bin(a, mp.MoreData, more_data.*);
-    more.js = try std.mem.concat(a, u8, &.{ to_site, assets.matchmore_js.path });
+    more.js = "/" ++ assets.matchmore_js.path;
     more.wasm = assets.matchmore_wasm.path;
 
     var t: ui.Tree = .{};
@@ -211,16 +202,15 @@ fn writePage(site: *const Site, w: *Writer, curves: *const Curves, r: Role, x: C
     if (h.oom) return error.OutOfMemory;
     try ui.html.write(&t, t.root, w);
     try tpl.render(w,
-        \\<p class="muted small"><a href="{x_href}">{x}</a> · <a href="{y_href}">{y}</a> · <a href="{up}method.html">Method</a></p>
+        \\<p class="muted small"><a href="{x_href}">{x}</a> · <a href="{y_href}">{y}</a> · <a href="/method">Method</a></p>
         \\<script src="{js}" data-wasm="{wasm}" defer></script>
         \\
     , .{
-        .x_href = try site.champHref(x, to_site),
+        .x_href = try site.champHref(x),
         .x = x.name,
-        .y_href = try site.champHref(y, to_site),
+        .y_href = try site.champHref(y),
         .y = y.name,
-        .up = to_site,
-        .js = html.Link{ .root = to_site, .path = assets.matchup_js.path },
+        .js = html.Link{ .path = assets.matchup_js.path },
         .wasm = assets.matchup_wasm.path,
     });
     try html.foot(w, p);
@@ -239,7 +229,7 @@ fn other(ch: Champ) mp.Other {
     return .{ .name = ch.name, .key = ch.key, .slug = ch.slug };
 }
 
-fn headData(site: *const Site, curves: *const Curves, r: Role, x: Champ, y: Champ, views: [html.View.count][]const u8, to_site: []const u8) !mp.HeadData {
+fn headData(site: *const Site, curves: *const Curves, r: Role, x: Champ, y: Champ, views: [html.View.count][]const u8) !mp.HeadData {
     const a = site.arena;
     const v = curves.get(r, .all, x.id, y.id).?;
     const o = odds(&site.stats, r, x, y, champion.usualK(&site.stats, r));
@@ -263,8 +253,8 @@ fn headData(site: *const Site, curves: *const Curves, r: Role, x: Champ, y: Cham
         .role = champion.uiRole(r),
         .patch = site.patch,
         .ddragon = site.ddragon_version,
-        .swap = try file(a, y, x),
-        .clear = try a.print("{s}#role={s}", .{ try site.champHref(x, to_site), @tagName(champion.uiRole(r)) }),
+        .swap = try site.href(page(r, y, x)),
+        .clear = try site.href(.{ .champion = .{ .slug = x.slug, .role = champion.uiRole(r) } }),
         .games = o.games,
         .wins = o.wins,
         .usual = @floatCast(100 * o.usual),
@@ -449,7 +439,6 @@ pub fn featured(site: *const Site, w: *Writer, curves: *const Curves, matchups: 
     const v = curves.get(b.r, .all, x.id, y.id).?;
     const lane = root.roleName(b.r);
     const when = try period(site.arena, curves);
-    const page_path = try path(site.arena, b.r, x, y);
     try tpl.renderPart(w,
         \\<section class="featured"><h2>{x} vs {y}, {lane} lane: gold difference by minute</h2>
         \\
@@ -460,8 +449,8 @@ pub fn featured(site: *const Site, w: *Writer, curves: *const Curves, matchups: 
         \\<p><a href="{href}">Experience, CS, kills, item timings and ranks for this matchup</a> · <a href="{all}">All {n} matchups</a></p></section>
         \\
     , .{
-        .href = page_path,
-        .all = @as([]const u8, "matchup/index.html"),
+        .href = try site.href(page(b.r, x, y)),
+        .all = try site.href(.matchups),
         .n = matchups,
     });
 }

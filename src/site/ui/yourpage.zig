@@ -101,7 +101,7 @@ pub const YourList = struct {
     /// Each game's offset (a DST change moves it); empty on the server: UTC
     tz: []const i32 = &.{},
     /// game.html, relative to the page
-    game: []const u8 = "game.html",
+    game: []const u8 = "/game",
     /// A looked-up player's Riot ID, percent-encoded; "" the example
     id: []const u8 = "",
 
@@ -238,7 +238,7 @@ test "the URL's filter, day groups and Show older" {
     var n = p.view(&h);
     try testing.expectEqual(4, t.count(n, "data-day"));
     try testing.expectEqual(10, rowCount(&t, n));
-    try testing.expectEqualStrings("game.html#g=0", t.attr(t.find(n, "class", "c-grow").?, "href").?);
+    try testing.expectEqualStrings("/game#g=0", t.attr(t.find(n, "class", "c-grow").?, "href").?);
     var text: std.Io.Writer.Allocating = .init(a);
     try t.textOf(n, &text.writer);
     try testing.expect(std.mem.find(u8, text.written(), "Today") != null);
@@ -274,7 +274,7 @@ test "the URL's filter, day groups and Show older" {
     try testing.expect(!h.oom);
 }
 
-test "a looked-up list: rows open game.html by id and start, no example note" {
+test "a looked-up list: rows open /game by id and start, no example note" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -285,6 +285,6 @@ test "a looked-up list: rows open game.html by id and start, no example note" {
     p.id = "MeioNeiz%23EUW";
     const n = p.view(&h);
     try testing.expect(t.find(n, "class", "note") == null);
-    const want = try std.fmt.allocPrint(a, "game.html#id=MeioNeiz%23EUW&game={d}", .{demo.games[0].start_ms});
+    const want = try std.fmt.allocPrint(a, "/game#id=MeioNeiz%23EUW&game={d}", .{demo.games[0].start_ms});
     try testing.expectEqualStrings(want, t.attr(t.find(n, "class", "c-grow").?, "href").?);
 }

@@ -109,7 +109,7 @@ fn seat(h: *H, c: champ.Champ, r: ?role.Role, you: bool) N {
     const icon = champ.view(h, c, .{ .you = you });
     if (c.name.len == 0) return icon;
     const buf = h.mem.alloc(u8, c.name.len) catch return icon;
-    const parts = [_][]const u8{ "champion/", champ.slug(buf, c.name), ".html", if (r != null) "#role=" else "", if (r) |x| @tagName(x) else "" };
+    const parts = [_][]const u8{ "/champions/", champ.slug(buf, c.name), if (r != null) "/" else "", if (r) |x| @tagName(x) else "" };
     return h.a(.{ .href = std.mem.concat(h.mem, u8, &parts) catch return icon }, .{icon});
 }
 

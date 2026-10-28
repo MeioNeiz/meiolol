@@ -130,23 +130,24 @@ pub const Loaded = struct {
             if (l.site(html.View.shared)) |sh| s.daily_files = sh.daily_files else |err| if (err != error.Loading) return err;
         }
         var aw: Writer.Allocating = .init(arena);
-        if (try renderPage(&s, &aw.writer, rest)) return aw.written();
+        const at = try root.pageOf(arena, rest);
+        if (at) |x| if (try renderPage(&s, &aw.writer, x)) return aw.written();
         for (s.files) |f| if (std.mem.eql(u8, f.path, rest)) return f.data;
         if (view.index() != 0) return null;
         var shared = (try l.site(html.View.shared)).*;
         shared.arena = arena;
-        if (try renderShared(&shared, &aw.writer, rest)) return aw.written();
+        if (at) |x| if (try renderShared(&shared, &aw.writer, x)) return aw.written();
         for (shared.shared_files) |f| if (std.mem.eql(u8, f.path, rest)) return f.data;
         return null;
     }
 
-    /// The 404 page for `path`, from the shared view, in `arena`; error.Loading before
-    /// that view loads
-    pub fn notFound(l: *Loaded, arena: std.mem.Allocator, path: []const u8) ![]const u8 {
+    /// The 404 page, from the shared view, in `arena`; error.Loading before that view
+    /// loads
+    pub fn notFound(l: *Loaded, arena: std.mem.Allocator) ![]const u8 {
         var shared = (try l.site(html.View.shared)).*;
         shared.arena = arena;
         var aw: Writer.Allocating = .init(arena);
-        try root.renderNotFound(&shared, &aw.writer, path);
+        try root.renderNotFound(&shared, &aw.writer);
         return aw.written();
     }
 
@@ -165,10 +166,10 @@ pub const Loaded = struct {
             }).*;
             s.arena = arena;
             s.opts.static_min_games = matchup.thin_games;
-            for (try root.pagePaths(&s)) |p| try out.append(arena, try std.mem.concat(arena, u8, &.{ v.dir(), p }));
+            for (try root.pagePaths(&s)) |p| try out.append(arena, try root.filePath(arena, v, p));
             for (s.files) |f| try out.append(arena, try std.mem.concat(arena, u8, &.{ v.dir(), f.path }));
             if (!std.meta.eql(v, html.View.shared)) continue;
-            try out.appendSlice(arena, &root.shared_pages);
+            for (root.shared_pages) |p| try out.append(arena, try root.filePath(arena, html.View.all[0], p));
             for (s.shared_files) |f| try out.append(arena, f.path);
         }
         return out.items;

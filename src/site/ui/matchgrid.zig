@@ -34,8 +34,8 @@ pub const Input = struct {
     slug: []const u8,
     ddragon: []const u8,
     champs: []const cp.Other,
-    /// "../" from the page to the site root
-    root: []const u8,
+    /// The view's query its matchup links keep ("" for the default)
+    query: []const u8 = "",
     role: role.Role,
     counts: Counts,
     rels: []const Rel,
@@ -232,7 +232,7 @@ fn brief(h: *H, in: *const Input, rel: Rel, rl: Counts, o: Opp) matchbrief.Brief
 
 fn matchHref(h: *H, in: *const Input, o: Opp) ?[]const u8 {
     if (!o.page) return null;
-    return h.fmt("{s}matchup/{s}/{s}-vs-{s}.html", .{ in.root, @tagName(in.role), in.slug, in.champs[o.champ].slug });
+    return h.fmt("/matchups/{s}/{s}-vs-{s}{s}", .{ @tagName(in.role), in.slug, in.champs[o.champ].slug, in.query });
 }
 
 fn icon(h: *H, in: *const Input, i: u16) champ.Champ {
@@ -312,7 +312,6 @@ pub fn gallery(g: *Gallery) void {
         .slug = "darius",
         .ddragon = champ.demo_version,
         .champs = &demo_champs,
-        .root = "",
         .role = .top,
         .counts = .{ .games = 20412, .wins = 10063 },
         .rels = &demo_rels,

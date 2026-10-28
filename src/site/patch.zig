@@ -1,7 +1,7 @@
-//! patch.html in every view: the current patch against the one before (src/patchday.zig)
+//! /patch in every view: the current patch against the one before (src/patchday.zig)
 //! in the view's region, whole patches whatever its period, with what Riot changed
 //! (src/patchnotes.zig). The ui.patchpage island, its data in the view's data/patch.bin.
-//! The 30-day views also have patches/<cur>-<prev>.html, one per older pair
+//! The 30-day views also have /patch/<cur> (hyphens), one per older pair
 //! (Site.older), win rates only
 
 const std = @import("std");
@@ -23,8 +23,6 @@ const PatchDay = patchday.PatchDay;
 const Rate = patchday.Rate;
 const Role = core.Role;
 
-pub const path = "patch.html";
-
 /// The island's data file, in each view's directory
 pub const data_path = "data/patch.bin";
 
@@ -43,7 +41,7 @@ comptime {
     std.debug.assert(std.enums.values(patchnotes.Status).len == std.enums.values(pp.Status).len);
 }
 
-/// A pair's page: the newest (patch.html) or one of Site.older's
+/// A pair's page: the newest (/patch) or one of Site.older's
 const Pair = struct {
     pd: *const PatchDay,
     notes: ?*const patchnotes.Notes,
@@ -59,9 +57,11 @@ fn olderPair(site: *const Site, i: usize) Pair {
     return .{ .pd = &site.older[i].pd, .notes = site.older[i].notes, .older = i };
 }
 
-/// "patches/16.20-16.19.html"
-fn pairPath(a: std.mem.Allocator, pair: [2][]const u8) ![]const u8 {
-    return a.print("patches/{s}-{s}.html", .{ pair[0], pair[1] });
+/// /patch/16-20 for the pair 16.20 vs 16.19: a dot reads as an extension
+fn pairPage(a: std.mem.Allocator, pair: [2][]const u8) !ui.urls.Page {
+    const cur = try a.dupe(u8, pair[0]);
+    std.mem.replaceScalar(u8, cur, '.', '-');
+    return .{ .patch = cur };
 }
 
 fn dataPath(site: *const Site, pair: Pair) ![]const u8 {
@@ -69,45 +69,45 @@ fn dataPath(site: *const Site, pair: Pair) ![]const u8 {
     return site.arena.print("data/patch-{s}-{s}.bin", .{ pair.pd.cur_patch, pair.pd.prev_patch });
 }
 
-fn pagePath(site: *const Site, pair: Pair) ![]const u8 {
-    if (pair.older == null) return path;
-    return pairPath(site.arena, .{ pair.pd.cur_patch, pair.pd.prev_patch });
+fn pageOf(site: *const Site, pair: Pair) !ui.urls.Page {
+    if (pair.older == null) return .{ .patch = null };
+    return pairPage(site.arena, .{ pair.pd.cur_patch, pair.pd.prev_patch });
 }
 
 /// The older pairs' pages, from the options: a core static build loads no patch days
-pub fn paths(site: *const Site, list: *std.ArrayList([]const u8)) !void {
+pub fn paths(site: *const Site, list: *std.ArrayList(ui.urls.Page)) !void {
     if (site.view.period != .days30) return;
-    for (site.opts.older_pairs) |pair| try list.append(site.arena, try pairPath(site.arena, pair));
+    for (site.opts.older_pairs) |pair| try list.append(site.arena, try pairPage(site.arena, pair));
 }
 
-/// patches/<cur>-<prev>.html (`name` without either); false when it isn't one of
-/// Site.older's
-pub fn writeOlder(site: *const Site, w: *Writer, name: []const u8) !bool {
+/// /patch/<cur> with hyphens ("16-20"); false when it isn't one of Site.older's
+pub fn writeOlder(site: *const Site, w: *Writer, cur: []const u8) !bool {
     for (site.older, 0..) |o, i| {
-        if (!named(o.pd.cur_patch, o.pd.prev_patch, name)) continue;
+        if (!named(o.pd.cur_patch, cur)) continue;
         try writePair(site, w, olderPair(site, i));
         return true;
     }
     return false;
 }
 
-/// Whether `name` is "<cur>-<prev>"
-fn named(cur: []const u8, prev: []const u8, name: []const u8) bool {
-    if (name.len != cur.len + 1 + prev.len) return false;
-    return std.mem.startsWith(u8, name, cur) and name[cur.len] == '-' and std.mem.endsWith(u8, name, prev);
+/// Whether `cur` ("16-20") spells `patch` ("16.20")
+fn named(patch: []const u8, cur: []const u8) bool {
+    if (patch.len != cur.len) return false;
+    for (patch, cur) |p, c| if (p != c and !(p == '.' and c == '-')) return false;
+    return true;
 }
 
 test named {
-    try std.testing.expect(named("16.20", "16.19", "16.20-16.19"));
-    try std.testing.expect(!named("16.20", "16.19", "16.20-16.1"));
-    try std.testing.expect(!named("16.2", "16.19", "16.20-16.19"));
-    try std.testing.expect(!named("16.20", "16.19", "16.20_16.19"));
-    try std.testing.expect(!named("16.20", "16.19", ""));
+    try std.testing.expect(named("16.20", "16-20"));
+    try std.testing.expect(!named("16.20", "16-2"));
+    try std.testing.expect(!named("16.2", "16-20"));
+    try std.testing.expect(!named("16.20", "16.20x"));
+    try std.testing.expect(!named("16.20", ""));
 }
 
 pub fn writePage(site: *const Site, w: *Writer) !void {
     const pair = newest(site) orelse {
-        const pg = try site.page("Patch changes | meiolol", "How champions and lane matchups changed from the previous patch.", path, .patch);
+        const pg = try site.page("Patch changes | meiolol", "How champions and lane matchups changed from the previous patch.", .{ .patch = null }, .patch);
         try html.head(w, pg);
         try tpl.render(w, "<h1>Patch changes</h1>\n<p>No earlier patch in the data yet to compare with.</p>\n", .{});
         return html.foot(w, pg);
@@ -118,11 +118,10 @@ pub fn writePage(site: *const Site, w: *Writer) !void {
 fn writePair(site: *const Site, w: *Writer, pair: Pair) !void {
     const a = site.arena;
     const pd = pair.pd;
-    const page_path = try pagePath(site, pair);
     var pg = try site.page(
         try a.print("Patch {s} vs {s}: what changed | meiolol", .{ pd.cur_patch, pd.prev_patch }),
         try a.print("What Riot changed in patch {s}, next to how each champion's and lane matchup's win rate moved from {s}, with the games behind each.", .{ pd.cur_patch, pd.prev_patch }),
-        page_path,
+        try pageOf(site, pair),
         .patch,
     );
     pg.rank_off = "This page counts every game we crawl (Plat+)";
@@ -135,11 +134,9 @@ fn writePair(site: *const Site, w: *Writer, pair: Pair) !void {
     d.* = try data(site, pair);
     var bytes: std.ArrayList(u8) = .empty;
     try ui.data.encode(a, pp.Data, d.*, &bytes);
-    const to_root = try site.toRoot(page_path);
-    const base = try std.mem.concat(a, u8, &.{ to_root, site.view.up() });
-    var p: pp.Page = .init(d, try pp.prepare(a, d, base));
-    p.base = base;
-    p.src = try std.mem.concat(a, u8, &.{ to_root, try dataPath(site, pair) });
+    var p: pp.Page = .init(d, try pp.prepare(a, d, "/"));
+    p.base = "/";
+    p.src = try std.mem.concat(a, u8, &.{ "/", site.view.dir(), try dataPath(site, pair) });
     p.stamp = pp.stamp(bytes.items);
     var tree: ui.Tree = .{};
     var h: ui.H = .init(a, &tree);
@@ -148,7 +145,7 @@ fn writePair(site: *const Site, w: *Writer, pair: Pair) !void {
     try root.roleIcons(w);
     try ui.html.write(&tree, tree.root, w);
     try tpl.render(w, "\n<script src=\"{js}\" data-wasm=\"{wasm}\" defer></script>\n", .{
-        .js = html.Link{ .root = to_root, .up = site.view.up(), .path = assets.patch_js.path },
+        .js = html.Link{ .path = assets.patch_js.path },
         .wasm = assets.patch_wasm.path,
     });
     try html.foot(w, pg);
@@ -165,13 +162,13 @@ pub fn dataFiles(site: *const Site, files: *std.ArrayList(root.File)) !void {
     }
 }
 
-/// From the page to the region's 30-day view's `rest` ("patch.html", a pair's page)
-fn navHref(site: *const Site, page_path: []const u8, rest: []const u8) ![]const u8 {
+/// To `to` (/patch, a pair's page) in the region's 30-day view
+fn navHref(site: *const Site, to: ui.urls.Page) ![]const u8 {
     const region: html.View = .{ .region = site.view.region, .period = .days30 };
-    return std.mem.concat(site.arena, u8, &.{ try site.toRoot(page_path), site.view.up(), region.dir(), rest });
+    return site.arena.print("{f}{s}", .{ to, region.query() });
 }
 
-/// Where ‹ or › goes: an Options.older_pairs index, or the newest pair (patch.html)
+/// Where ‹ or › goes: an Options.older_pairs index, or the newest pair (/patch)
 const Step = union(enum) { newest, pair: usize };
 
 /// ‹ and › from the newest pair's page (`at` null) or older pair `at`'s, of `n`
@@ -191,21 +188,20 @@ test steps {
     try std.testing.expectEqual(T{ null, .newest }, steps(1, 0));
 }
 
-/// PatchHead's ‹ ›: Options.older_pairs' pages, the newest pair's at patch.html
+/// PatchHead's ‹ ›: Options.older_pairs' pages, the newest pair's at /patch
 fn nav(site: *const Site, pair: Pair) ![2]?ui.patchhead.Pair {
     const pairs = site.opts.older_pairs;
-    const page_path = try pagePath(site, pair);
     var out: [2]?ui.patchhead.Pair = .{ null, null };
     for (steps(pairs.len, pair.older), &out) |step, *o| o.* = switch (step orelse continue) {
         .newest => if (site.patchday) |pd| .{
             .cur = pd.cur_patch,
             .prev = pd.prev_patch,
-            .href = try navHref(site, page_path, path),
+            .href = try navHref(site, .{ .patch = null }),
         } else null,
         .pair => |k| .{
             .cur = pairs[k][0],
             .prev = pairs[k][1],
-            .href = try navHref(site, page_path, try pairPath(site.arena, pairs[k])),
+            .href = try navHref(site, try pairPage(site.arena, pairs[k])),
         },
     };
     return out;
@@ -254,7 +250,7 @@ fn data(site: *const Site, pair: Pair) !pp.Data {
         .min_games = o.min_role_games,
         .lane_minute = core.curvesfile.lane_minute,
         .ddragon = site.ddragon_version,
-        .patch_dir = (html.View{ .region = site.view.region, .period = .patch }).dir(),
+        .patch_query = (html.View{ .region = site.view.region, .period = .patch }).query(),
         .notes = try patchnotes.officialUrl(a, pd.cur_patch) orelse "",
         .riot = pair.notes != null,
         .champs = champs,
@@ -305,7 +301,7 @@ fn moves(site: *const Site, pd: *const PatchDay, id: u32, r: Role) ![]const pp.M
             .cur = count(x.win.cur),
             .clear = clear,
             .gold = if (x.gold) |g| .{ .minute = g.minute, .prev = g.prev, .cur = g.cur, .games = g.cur_n } else null,
-            .path = try matchup.path(a, r, me, them),
+            .path = try a.print("{f}", .{matchup.page(r, me, them)}),
         });
     }
     std.mem.sort(pp.Move, all.items, {}, struct {

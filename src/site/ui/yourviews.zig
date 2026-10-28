@@ -51,7 +51,7 @@ pub const YourViews = struct {
     tab: View = .games,
     views: []const View = &shipped,
     /// game.html, relative to the page
-    game: []const u8 = "game.html",
+    game: []const u8 = "/game",
     /// A looked-up player's Riot ID, percent-encoded; "" the example
     id: []const u8 = "",
     /// Minutes east of UTC, for the records' dates; the server's: UTC
@@ -235,7 +235,7 @@ test "the Games view's three records open Highlights; Highlights groups them" {
     const top = t.find(n, "data-top", null).?;
     try testing.expect(t.find(top, "class", "more") != null);
     // A lookup's game by start
-    try testing.expect(std.mem.startsWith(u8, t.attr(t.find(top, "class", "chip").?, "href").?, "game.html#id=MeioNeiz%23EUW&game="));
+    try testing.expect(std.mem.startsWith(u8, t.attr(t.find(top, "class", "chip").?, "href").?, "/game#id=MeioNeiz%23EUW&game="));
     p.tab = .highlights;
     n = p.view(&h);
     try testing.expect(t.find(n, "data-top", null) == null);

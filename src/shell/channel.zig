@@ -132,7 +132,7 @@ test "from page: each kind parses, anything else is an error" {
 }
 
 test "openable: our site and Riot's, nothing that breaks out of a command line" {
-    try std.testing.expect(openable("https://meio.lol/champion/ahri.html"));
+    try std.testing.expect(openable("https://meio.lol/champions/ahri"));
     try std.testing.expect(openable("https://www.leagueoflegends.com/en-gb/"));
     try std.testing.expect(!openable("http://meio.lol/"));
     try std.testing.expect(!openable("https://meio.lol.evil.example/"));

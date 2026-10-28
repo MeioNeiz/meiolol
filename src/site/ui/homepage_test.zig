@@ -88,15 +88,15 @@ test "the server's home passes the page checks" {
     var t: tree.Tree = .{};
     var h: tree.H = .init(a, &t);
     var x = hp.demo(&h).?;
-    var look: idlookup.IdLookup = .{ .to = "your.html" };
-    const d: hp.Daily = .{ .n = 14, .href = "daily.html" };
+    var look: idlookup.IdLookup = .{ .to = "/your" };
+    const d: hp.Daily = .{ .n = 14, .href = "/daily" };
     var daily: hp.HomeDaily = .{ .data = &d };
     t.root = hp.page(&h, look.view(&h), x[0].view(&h), &.{daily.view(&h)}, x[1].view(&h));
     try testing.expect(!h.oom);
     var w: std.Io.Writer.Allocating = .init(a);
     try html.write(&t, t.root, &w.writer);
     // Before the island: Review submits the form
-    try testing.expect(std.mem.find(u8, w.written(), "<form class=\"box\" method=\"get\" role=\"search\" action=\"your.html\">") != null);
+    try testing.expect(std.mem.find(u8, w.written(), "<form class=\"box\" method=\"get\" role=\"search\" action=\"/your\">") != null);
     try testing.expect(std.mem.find(u8, w.written(), "<button class=\"c-btn\" type=\"submit\" data-v=\"primary\" data-ref=\"go\">Review</button>") != null);
     const report = try check.run(a, &t, .{ .words = .off, .answer = .off });
     for (report.findings.items) |f| std.debug.print("{s}\n", .{f.msg});
@@ -105,14 +105,14 @@ test "the server's home passes the page checks" {
 
 test "the lookup: Review a link once live, its href follows what is typed, Enter follows it" {
     var p: Page(idlookup.IdLookup) = undefined;
-    const server: idlookup.IdLookup = .{ .to = "your.html" };
+    const server: idlookup.IdLookup = .{ .to = "/your" };
     var live = server;
     live.live = true;
     try p.init(server, live);
     defer p.deinit();
     var page = try p.shown();
     try testing.expect(std.mem.find(u8, page, "type=\"submit\"") == null);
-    try testing.expect(std.mem.find(u8, page, "href=\"your.html\"") != null);
+    try testing.expect(std.mem.find(u8, page, "href=\"/your\"") != null);
     const input = p.id("name", "id");
     // Enter with nothing typed: the form's own, no click
     _ = p.ev(.input, input, "  ");
@@ -120,7 +120,7 @@ test "the lookup: Review a link once live, its href follows what is typed, Enter
     try testing.expectEqual(@as(u32, 0), p.fake.clicked);
     _ = p.ev(.input, input, "Hide on bush#KR1");
     page = try p.shown();
-    try testing.expect(std.mem.find(u8, page, "href=\"your.html#id=Hide%20on%20bush%23KR1\"") != null);
+    try testing.expect(std.mem.find(u8, page, "href=\"/your#id=Hide%20on%20bush%23KR1\"") != null);
     _ = p.ev(.keydown, input, "a");
     try testing.expectEqual(@as(u32, 0), p.fake.clicked);
     try testing.expect(p.ev(.keydown, input, "Enter"));
@@ -130,13 +130,13 @@ test "the lookup: Review a link once live, its href follows what is typed, Enter
 test "the lookup: this device's IDs as chips" {
     var p: Page(idlookup.IdLookup) = undefined;
     var recent: [5]idlookup.Id = undefined;
-    var live: idlookup.IdLookup = .{ .to = "../your.html", .live = true };
+    var live: idlookup.IdLookup = .{ .to = "/your", .live = true };
     live.recent = hp.recentIds("[{\"id\":\"Faker#KR1\"},{\"id\":\"Agurin#EUW\"}]", &recent);
-    try p.init(.{ .to = "../your.html" }, live);
+    try p.init(.{ .to = "/your" }, live);
     defer p.deinit();
     const page = try p.shown();
-    try testing.expect(std.mem.find(u8, page, "href=\"../your.html#id=Faker%23KR1\"") != null);
-    try testing.expect(std.mem.find(u8, page, "href=\"../your.html#id=Agurin%23EUW\"") != null);
+    try testing.expect(std.mem.find(u8, page, "href=\"/your#id=Faker%23KR1\"") != null);
+    try testing.expect(std.mem.find(u8, page, "href=\"/your#id=Agurin%23EUW\"") != null);
 }
 
 test "the review: roles off until live, then a pick waits for its file; Open on the default only" {
@@ -177,7 +177,7 @@ test "the review for a returning visitor: their record and form, Open on their g
     var t: tree.Tree = .{};
     var h: tree.H = .init(arena.allocator(), &t);
     var x = hp.demo(&h).?;
-    x[0].you = .{ .id = "Agurin#EUW", .open = "game.html#id=Agurin%23EUW&game=5", .wins = 12, .losses = 8, .form = &.{ true, false } };
+    x[0].you = .{ .id = "Agurin#EUW", .open = "/game#id=Agurin%23EUW&game=5", .wins = 12, .losses = 8, .form = &.{ true, false } };
     x[0].live = true;
     t.root = x[0].view(&h);
     var w: std.Io.Writer.Allocating = .init(arena.allocator());
@@ -185,7 +185,7 @@ test "the review for a returning visitor: their record and form, Open on their g
     const page = w.written();
     try testing.expect(std.mem.find(u8, page, "<b>Agurin#EUW</b>") != null);
     try testing.expect(std.mem.find(u8, page, "12W 8L") != null);
-    try testing.expect(std.mem.find(u8, page, "href=\"game.html#id=Agurin%23EUW&amp;game=5\"") != null);
+    try testing.expect(std.mem.find(u8, page, "href=\"/game#id=Agurin%23EUW&amp;game=5\"") != null);
     try testing.expect(std.mem.find(u8, page, "aria-label=\"Bot\"") == null);
 }
 
@@ -223,29 +223,29 @@ test "the champions: Most played, Win rate, Rising once there are risers; links 
     var t: tree.Tree = .{};
     var h: tree.H = .init(arena.allocator(), &t);
     var d = hp.demo(&h).?[1].data.*;
-    d.index = "champions.html";
+    d.index = "/champions";
     var p: Page(hp.HomeChamps) = undefined;
     try p.init(.{ .data = &d }, .{ .data = &d });
     defer p.deinit();
     var page = try p.shown();
     try testing.expect(std.mem.find(u8, page, ">Rising</button>") == null);
-    try testing.expect(std.mem.find(u8, page, "href=\"champions.html#sort=6\"") != null);
+    try testing.expect(std.mem.find(u8, page, "href=\"/champions#sort=6\"") != null);
     _ = p.ev(.click, p.id("aria-pressed", "false"), "");
     try testing.expectEqual(.best, p.state.list);
     page = try p.shown();
-    try testing.expect(std.mem.find(u8, page, "href=\"champions.html\"") != null);
+    try testing.expect(std.mem.find(u8, page, "href=\"/champions\"") != null);
     var rising = d.rising;
     rising[0] = d.roles[0][0..1];
     d.rising = rising;
     p.state.list = .rising;
     p.i.render();
     page = try p.shown();
-    try testing.expect(std.mem.find(u8, page, "href=\"champions.html#sort=2\"") != null);
+    try testing.expect(std.mem.find(u8, page, "href=\"/champions#sort=2\"") != null);
     try testing.expectEqual(@as(usize, 4), count(page, ">None clear yet<"));
 }
 
 test "the Daily Draft card: Guess, then Open with the marks once played" {
-    const d: hp.Daily = .{ .n = 14, .href = "daily.html" };
+    const d: hp.Daily = .{ .n = 14, .href = "/daily" };
     var p: Page(hp.HomeDaily) = undefined;
     try p.init(.{ .data = &d }, .{ .data = &d });
     defer p.deinit();

@@ -41,59 +41,64 @@ pub fn dataPath(a: std.mem.Allocator, ch: Champ, part: Part) ![]const u8 {
 
 pub const Part = enum { top, build, more };
 
-/// One page per champion, from the root view (EUW, 30 days) at the site root; its toolbar
-/// fetches the other views' files and the rank files (champrank.zig)
-pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ) !void {
+/// `ch` in role `r`, from the root view (EUW, 30 days); its toolbar fetches the other
+/// views' files and the rank files (champrank.zig). `in_url`: the address names `r`
+/// (/champions/<slug>/<r>), else it is the bare /champions/<slug>. `own_canonical`: that
+/// address is canonical, else the bare one is (main role, thin role)
+pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ, r: Role, in_url: bool, own_canonical: bool) !void {
     const a = site.arena;
     const title = try a.print("{s} build, matchups and win rate | meiolol", .{ch.name});
     const desc = try a.print("{s} in ranked solo queue: runes, items and skills with their win rates, every lane opponent, by patch and game length.", .{ch.name});
-    const path = try a.print("champion/{s}.html", .{ch.slug});
     var p = try site.sharedPage(title, desc, .champions);
-    p.root = "../";
-    p.canonical = try site.canonical("", path);
+    p.canonical = try site.canonical(.{ .champion = .{ .slug = ch.slug, .role = if (own_canonical) uiRole(r) else null } });
     try html.head(w, p);
+    const shown: cp.Top.Url = .{ .role = if (in_url) uiRole(r) else null };
 
     const d = try a.create(cp.Data);
     d.* = try pageData(site, ch);
     const parts = try a.create(cp.Split);
     parts.* = try cp.split(a, d);
     const bytes = try encode(site, parts);
-    var top: cp.Top = .init(&parts.top, try cp.prepare(a, &parts.top, "../"), "../");
-    top.src = try std.mem.concat(a, u8, &.{ "../", try dataPath(a, ch, .top) });
+    var top: cp.Top = .init(&parts.top, try cp.prepare(a, &parts.top, "/"), "/");
+    top.fromUrl(shown);
+    top.src = try std.mem.concat(a, u8, &.{ "/", try dataPath(a, ch, .top) });
     top.stamp = cp.stamp(bytes[0]);
     var build: cp.Build = .{
         .data = &parts.build,
         .panels = try cp.panels(a, parts.build.roles),
-        .root = "../",
-        .src = try std.mem.concat(a, u8, &.{ "../", try dataPath(a, ch, .build) }),
+        .root = "/",
+        .src = try std.mem.concat(a, u8, &.{ "/", try dataPath(a, ch, .build) }),
         .stamp = cp.stamp(bytes[1]),
-        .js = "../" ++ assets.champbuild_js.path,
+        .js = "/" ++ assets.champbuild_js.path,
         .wasm = assets.champbuild_wasm.path,
     };
     var more: cp.More = .{
         .data = &parts.more,
-        .root = "../",
-        .src = try std.mem.concat(a, u8, &.{ "../", try dataPath(a, ch, .more) }),
+        .root = "/",
+        .src = try std.mem.concat(a, u8, &.{ "/", try dataPath(a, ch, .more) }),
         .stamp = cp.stamp(bytes[2]),
-        .js = "../" ++ assets.champmore_js.path,
+        .js = "/" ++ assets.champmore_js.path,
         .wasm = assets.champmore_wasm.path,
     };
     // The champion and its roles, most played first, for /p/pv.js (no island's root, so
     // no wasm reads or writes them)
     var roles: std.ArrayList(u8) = .empty;
-    for (d.roles, 0..) |r, i| try roles.print(a, "{s}{s}", .{ if (i > 0) " " else "", @tagName(r.role) });
+    for (d.roles, 0..) |x, i| try roles.print(a, "{s}{s}", .{ if (i > 0) " " else "", @tagName(x.role) });
+    build.fromUrl(.{ .role = shown.role });
+    more.fromUrl(.{ .role = shown.role });
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
-    t.root = h.div(.{ .class = "c-cpage", .data_id = ch.id, .data_roles = roles.items }, .{ top.view(&h), build.view(&h), more.view(&h) });
+    // The role rendered for, when the path names it: the wasms' server state (dom.pageRole)
+    t.root = h.div(.{ .class = "c-cpage", .data_id = ch.id, .data_roles = roles.items, .data_role = shown.role }, .{ top.view(&h), build.view(&h), more.view(&h) });
     if (h.oom) return error.OutOfMemory;
     try ui.html.write(&t, t.root, w);
     // Only Top's: it loads the others' (ui/wasm/champion.zig)
     try tpl.render(w,
-        \\<p class="muted small"><a href="../method.html">Method</a></p>
+        \\<p class="muted small"><a href="/method">Method</a></p>
         \\<script src="{js}" data-wasm="{wasm}" defer></script>
         \\
     , .{
-        .js = html.Link{ .root = "../", .up = "", .path = assets.champion_js.path },
+        .js = html.Link{ .path = assets.champion_js.path },
         .wasm = assets.champion_wasm.path,
     });
     try html.foot(w, p);
@@ -149,6 +154,7 @@ pub fn pageData(site: *const Site, ch: Champ) !cp.Data {
     return .{
         .name = ch.name,
         .slug = ch.slug,
+        .id = std.math.cast(u16, ch.id) orelse 0,
         .icon = try site.icon(ch),
         .patch = site.patch,
         .ddragon = site.ddragon_version,

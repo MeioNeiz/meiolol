@@ -155,7 +155,7 @@ pub const usage_site =
     \\  site       write the public website (static files): EUW over the last 30 days
     \\              at the root, the patch under patch/, every region under all/ and
     \\              all/patch/ (lane curves and builds: the curves and builds
-    \\              commands' default files); patch.html compares the patch with
+    \\              commands' default files); /patch compares the patch with
     \\              the one before (its curves too, where `curves --patch` wrote them)
     \\              --patch P        the patch views' (default: EUW's newest patch)
     \\              --out DIR        default DIR/site

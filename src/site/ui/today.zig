@@ -175,9 +175,9 @@ test "the hidden seat, marks and signed changes" {
         .{ .champ = d("Darius", "Darius"), .role = .top, .href = "c/darius", .from = 48.7, .to = 51.3, .ci = 1.4 },
         .{ .champ = d("Viktor", "Viktor"), .role = .mid, .from = 50.5, .to = 47.3, .ci = 1.5 },
     };
-    const head: Head = .{ .title = plain("Daily Draft"), .action = plain("Open"), .href = "daily.html" };
+    const head: Head = .{ .title = plain("Daily Draft"), .action = plain("Open"), .href = "/daily" };
     const n = h.div(.{}, .{
-        view(&h, head, marks(&h, .{ .pick = true, .side = false }), draft(&h, &teams, "daily.html", head.title)),
+        view(&h, head, marks(&h, .{ .pick = true, .side = false }), draft(&h, &teams, "/daily", head.title)),
         changes(&h, &rows),
     });
     try std.testing.expect(!h.oom);
@@ -186,7 +186,7 @@ test "the hidden seat, marks and signed changes" {
     const s = out.written();
     try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, s, "Hidden seat"));
     try std.testing.expect(std.mem.find(u8, s, "Pick right, winner wrong") != null);
-    try std.testing.expectEqual(@as(usize, 2), std.mem.count(u8, s, "href=\"daily.html\""));
+    try std.testing.expectEqual(@as(usize, 2), std.mem.count(u8, s, "href=\"/daily\""));
     try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, s, "href=\"c/darius\""));
     try std.testing.expect(std.mem.find(u8, s, "±1.4") != null);
 }

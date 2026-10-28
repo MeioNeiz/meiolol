@@ -35,7 +35,7 @@ pub fn signup(w: *Writer, _: prose.Info) Writer.Error!void {
         \\<button type="submit" class="primary">Make account</button>
         \\<p id="auth-msg" class="note" role="alert" hidden></p>
         \\</form>
-        \\<p class="muted">Your email is only your login: nothing is sent to it. See the <a href="privacy.html#accounts">privacy policy</a>.</p>
+        \\<p class="muted">Your email is only your login: nothing is sent to it. See the <a href="/privacy#accounts">privacy policy</a>.</p>
         \\</div>
         \\<script src="account.js" defer></script>
         \\
@@ -55,7 +55,7 @@ pub fn join(w: *Writer, _: prose.Info) Writer.Error!void {
         \\<button type="submit" class="primary">Save</button>
         \\<p id="auth-msg" class="note" role="alert" hidden></p>
         \\</form>
-        \\<p class="muted">See the <a href="privacy.html#accounts">privacy policy</a>.</p>
+        \\<p class="muted">See the <a href="/privacy#accounts">privacy policy</a>.</p>
         \\</div>
         \\<script src="account.js" defer></script>
         \\
@@ -85,7 +85,7 @@ pub fn account(w: *Writer, _: prose.Info) Writer.Error!void {
         \\<p class="auth-out"><button type="button" data-out="">Log out</button>
         \\<button type="button" data-out="all">Log out everywhere</button></p>
         \\<p class="muted">Everywhere includes your desktop apps.</p>
-        \\<p class="muted">See the <a href="privacy.html#accounts">privacy policy</a>.</p>
+        \\<p class="muted">See the <a href="/privacy#accounts">privacy policy</a>.</p>
         \\</div>
         \\<script src="account.js" defer></script>
         \\

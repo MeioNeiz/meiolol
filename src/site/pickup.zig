@@ -21,17 +21,10 @@ const N = ui.N;
 const plain = ui.plain;
 const Phrase = ui.Phrase;
 
-pub const path = "pickup.html";
-
-/// pickup.html, then pickup/<role>.html
-pub fn paths(site: *const Site, list: *std.ArrayList([]const u8)) !void {
-    try list.append(site.arena, path);
-    for (Role.all) |r| try list.append(site.arena, try rolePath(site.arena, r));
-}
-
-/// Within the view; root.renderPage reads the role back with roleFromSlug
-pub fn rolePath(a: std.mem.Allocator, r: ?Role) ![]const u8 {
-    return if (r) |x| a.print("pickup/{s}.html", .{x.label()}) else path;
+/// /pickup, then /pickup/<role>
+pub fn paths(site: *const Site, list: *std.ArrayList(ui.urls.Page)) !void {
+    try list.append(site.arena, .{ .pickup = null });
+    for (Role.all) |r| try list.append(site.arena, .{ .pickup = champion.uiRole(r) });
 }
 
 const W = struct {
@@ -49,11 +42,10 @@ const W = struct {
 
 pub fn writePage(site: *const Site, w: *Writer, r: ?Role) !void {
     const a = site.arena;
-    const here = try rolePath(a, r);
     const pg = try site.page(
         "How hard each champion is to pick up | meiolol",
         "Win rate of players new to each champion against practised ones: the gap shows which champions take longest to learn.",
-        here,
+        .{ .pickup = if (r) |x| champion.uiRole(x) else null },
         .pool,
     );
     try html.head(w, pg);
@@ -64,28 +56,28 @@ pub fn writePage(site: *const Site, w: *Writer, r: ?Role) !void {
     });
     var tree: ui.Tree = .{};
     var h: H = .init(a, &tree);
-    tree.root = try view(site, &h, r, try site.toRoot(here), try site.toShared(here));
+    tree.root = try view(site, &h, r);
     if (h.oom) return error.OutOfMemory;
     try ui.html.write(&tree, tree.root, w);
     try html.foot(w, pg);
 }
 
-fn view(site: *const Site, h: *H, r: ?Role, to_root: []const u8, to_site: []const u8) !N {
+fn view(site: *const Site, h: *H, r: ?Role) !N {
     const a = site.arena;
     const l = &site.learning;
     var segs: [1 + Role.all.len]ui.segmented.Item = undefined;
-    segs[0] = .{ .label = W.all, .selected = r == null, .href = try a.print("{s}{s}", .{ to_root, path }) };
+    segs[0] = .{ .label = W.all, .selected = r == null, .href = try site.href(.{ .pickup = null }) };
     for (Role.all, segs[1..]) |x, *s| s.* = .{
         .label = champion.uiRole(x).label(),
         .selected = r == x,
-        .href = try a.print("{s}{s}", .{ to_root, try rolePath(a, x) }),
+        .href = try site.href(.{ .pickup = champion.uiRole(x) }),
     };
     var rows: std.ArrayList(Row) = .empty;
     for (try order(a, l, &site.stats, r)) |c| {
         const ch = matchup.champ(site, c.id) orelse continue;
         try rows.append(a, .{
             .champ = .{ .name = ch.name, .src = try site.icon(ch) },
-            .href = try site.champHref(ch, to_site),
+            .href = try site.champHref(ch),
             .gap = c.gap.?,
         });
     }

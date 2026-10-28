@@ -76,6 +76,14 @@ pub const Data = struct {
     }
 };
 
+/// Data spelt for each html.View, by its index (View.query reads it here); for wasm,
+/// which spells by concat
+pub const view_queries = [_][]const u8{ "", "?period=patch", "?region=all", "?region=all&period=patch" };
+
+/// Each view's tree of pages and data under the site root, by View index (View.dir), never
+/// in a page's URL: nginx maps the query to it
+pub const view_dirs = [_][]const u8{ "", "_v/patch/", "_v/all/", "_v/all-patch/" };
+
 /// `path`'s page (no query or fragment); null: not a page
 pub fn parse(path: []const u8) ?Page {
     if (std.mem.eql(u8, path, "/")) return .home;
@@ -132,7 +140,8 @@ pub fn legacy(a: std.mem.Allocator, old: []const u8) !?[]const u8 {
         d.patch = true;
         rest = rest[6..];
     }
-    if (std.mem.eql(u8, rest, "sitemap.xml")) return "/sitemap.xml";
+    // The views' own sitemaps; the root's is still one
+    if (std.mem.eql(u8, rest, "sitemap.xml")) return if (d.all or d.patch) "/sitemap.xml" else null;
     const name = if (rest.len == 0 or rest[rest.len - 1] == '/')
         try std.mem.concat(a, u8, &.{ rest, "index" })
     else if (std.mem.endsWith(u8, rest, ".html")) rest[0 .. rest.len - 5] else return null;
@@ -322,6 +331,7 @@ test "urls: old paths to new, views as the query" {
         "/matchup/bot/kaisa.html",
         "/nope.html",
         "/index.htm",
+        "/sitemap.xml",
     };
     for (none) |s| try testing.expectEqual(null, try legacy(a, s));
 }

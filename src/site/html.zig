@@ -52,10 +52,11 @@ pub const Region = enum {
 
 pub const Period = enum { days30, patch };
 
-/// The site's stats views, as lolalytics' filters: EUW over the last 30 days at the site
-/// root, the rest in directories. Stats pages exist in each, but champion pages: one per
-/// champion at the site root, whose filters pick the view (View.query). Shared pages
-/// (Daily Draft, Learn, legal: EUW, current patch) only at the site root
+/// The site's stats views, as lolalytics' filters: EUW over the last 30 days by default,
+/// the rest picked by the URL's query (View.query; docs/plan/urls.md). Stats pages exist
+/// in each, but champion pages: one per champion and role in the default view, whose
+/// filters pick the view. Shared pages (Daily Draft, Learn, legal: EUW, current patch)
+/// once
 pub const View = struct {
     region: Region,
     period: Period,
@@ -74,34 +75,26 @@ pub const View = struct {
         return 2 * @as(usize, @backingInt(v.region)) + @backingInt(v.period);
     }
 
-    /// Under the site root
+    /// Its pages' and data's tree under the site root, never in a page's URL: nginx maps
+    /// the query to it (deploy/nginx/meiolol.conf $meiolol_view)
     pub fn dir(v: View) []const u8 {
-        return ([_][]const u8{ "", "patch/", "all/", "all/patch/" })[v.index()];
+        return ui.urls.view_dirs[v.index()];
     }
 
-    /// From this view's root to the site root
-    pub fn up(v: View) []const u8 {
-        return ([_][]const u8{ "", "../", "../", "../../" })[v.index()];
-    }
-
-    /// Picks this view on a champion page (one per champion, at the site root; the
-    /// filter bar reads it). Raw: escape it in HTML
+    /// Picks this view: ui.urls.Data spelt, "" for the default. Raw: escape it in HTML
     pub fn query(v: View) []const u8 {
-        return ([_][]const u8{ "", "?period=patch", "?region=all", "?region=all&period=patch" })[v.index()];
+        return ui.urls.view_queries[v.index()];
     }
 };
 
 pub const Page = struct {
     title: []const u8,
     description: []const u8,
-    /// "" for pages at their view's root, "../" one directory down; links are relative
-    /// so the site also works from disk
-    root: []const u8 = "",
     /// View the page belongs to; null for shared pages and champion pages
     view: ?View = null,
-    /// This page's counterpart in each view (View.index) for the switches, from the site
-    /// root: usually the same path in that view's directory. Null: no switches. Without
-    /// a view, the switches start on View.all[0] (champion pages: filters.js moves them)
+    /// This page's href in each view (View.index) for the switches: usually its URL with
+    /// that view's query. Null: no switches. Without a view, the switches start on
+    /// View.all[0] (champion pages: filters.js moves them)
     counterparts: ?[View.count][]const u8 = null,
     nav: Nav = .none,
     /// Current patch, for the period switch
@@ -123,22 +116,18 @@ pub const Page = struct {
     rank_off: []const u8 = "Champion pages and the champions board only",
 };
 
-/// A link to `path` under a root: for href and src holes
+/// `path` under the site root, root-relative: for href and src holes
 pub const Link = struct {
-    root: []const u8,
-    up: []const u8 = "",
     path: []const u8,
 
     pub fn render(l: Link, w: *Writer) Writer.Error!void {
-        try w.writeAll(l.root);
-        try w.writeAll(l.up);
+        try w.writeByte('/');
         try w.writeAll(l.path);
     }
 };
 
-/// From the page to `path` under the site root (shared pages and assets)
-fn toSite(p: Page, path: []const u8) Link {
-    return .{ .root = p.root, .up = if (p.view) |v| v.up() else "", .path = path };
+fn toSite(path: []const u8) Link {
+    return .{ .path = path };
 }
 
 /// no-referrer: Your games has a Riot ID in its URL, and the access log keeps Referer
@@ -164,9 +153,9 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
     , .{
         .title = p.title,
         .description = p.description,
-        .css = toSite(p, style.file.path),
-        .print = toSite(p, "print.css"),
-        .icon = toSite(p, "favicon.svg"),
+        .css = toSite(style.file.path),
+        .print = toSite("print.css"),
+        .icon = toSite("favicon.svg"),
         .robots = tpl.when(!p.public or !p.index, tpl.trusted("<meta name=\"robots\" content=\"noindex\">\n")),
         .canonical = if (p.public and p.index) if (p.canonical) |url|
             tpl.t("<link rel=\"canonical\" href=\"{url}\">\n", .{ .url = url })
@@ -175,19 +164,18 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
         .header = SiteHeader{ .p = p },
         // static/search.js
         .look = tpl.t(
-            \\<script src="{js}" data-site="{site}"{view} defer></script>
+            \\<script src="{js}"{view} defer></script>
             \\
         , .{
-            .js = toSite(p, assets.search_js.path),
-            .site = toSite(p, ""),
-            .view = if (p.view) |v| tpl.attr("data-view", v.dir()) else null,
+            .js = toSite(assets.search_js.path),
+            .view = if (p.view) |v| tpl.attr("data-view", v.query()) else null,
         }),
         .subbar = tpl.when(p.nav.inChampions() or p.counterparts != null, tpl.call(subbar, .{p})),
         // Remembered so shared pages link back into this view
         .remember = if (p.view) |v| tpl.t(
             \\<script>try{localStorage.setItem("view","{dir}")}catch(e){}</script>
             \\
-        , .{ .dir = tpl.trusted(v.dir()) }) else null,
+        , .{ .dir = tpl.trusted(v.query()) }) else null,
         .meio_view = tpl.when(p.view == null, tpl.trusted(meio_view)),
         .admin = tpl.trusted(admin_link),
         .banner = tpl.when(!p.public, tpl.trusted(preview_banner)),
@@ -212,7 +200,7 @@ const SiteHeader = struct {
         }
         var more: [champion_tabs.len - 1]ui.site.Link = undefined;
         for (champion_tabs[1..], &more) |it, *l| l.* = link(a, p, it, it.nav == p.nav) catch return error.WriteFailed;
-        const look = h.el(.form, .{ .class = "look c-search", .action = siteHref(a, p, "your.html") catch return error.WriteFailed, .method = "get", .role = "search" }, .{
+        const look = h.el(.form, .{ .class = "look c-search", .action = "/your", .method = "get", .role = "search" }, .{
             h.input(.{
                 .name = "id",
                 .placeholder = "Champion, matchup or Riot ID",
@@ -223,7 +211,7 @@ const SiteHeader = struct {
             }),
         });
         t.root = ui.site.view(&h, .{
-            .home = std.mem.concat(a, u8, &.{ p.root, "index.html" }) catch return error.WriteFailed,
+            .home = if (p.view) |v| std.mem.concat(a, u8, &.{ "/", v.query() }) catch return error.WriteFailed else "/",
             .home_view = p.view == null,
             .links = &links,
             .more = &more,
@@ -233,22 +221,22 @@ const SiteHeader = struct {
         try ui.html.write(&t, t.root, w);
     }
 
-    /// Pages in a view link within it; from a shared page (all at the site root), to the
-    /// default view's, moved by the header script into the last one visited
+    /// Pages in a view link within it; from a shared page, to the default view's, moved
+    /// by the header script into the last one visited
     fn link(a: std.mem.Allocator, p: Page, it: NavItem, here: bool) !ui.site.Link {
         return .{
             .label = .{ .s = it.label },
-            .href = if (it.in_view) try std.mem.concat(a, u8, &.{ p.root, it.path }) else try siteHref(a, p, it.path),
+            .href = try navHref(a, p, it),
             .current = here,
             .view = it.in_view and p.view == null,
         };
     }
-
-    fn siteHref(a: std.mem.Allocator, p: Page, path: []const u8) ![]const u8 {
-        const l = toSite(p, path);
-        return std.mem.concat(a, u8, &.{ l.root, l.up, l.path });
-    }
 };
+
+fn navHref(a: std.mem.Allocator, p: Page, it: NavItem) ![]const u8 {
+    const q = if (it.in_view) if (p.view) |v| v.query() else "" else "";
+    return std.mem.concat(a, u8, &.{ it.path, q });
+}
 
 /// A menu link to the Draft tester for logins that opened it: the admin page (/admin/) or the
 /// private one (/p/) stores it in this origin's localStorage, so visitors' pages carry
@@ -260,12 +248,13 @@ const admin_link =
     \\
 ;
 
-/// On shared and champion pages: moves data-view links into the last view visited;
-/// meioView(v) again from the champion page's filters, which move between views
+/// On shared and champion pages: moves data-view links into the last view visited (its
+/// query, View.query); meioView(v) again from the champion page's filters, which move
+/// between views
 const meio_view =
     \\<script>function meioView(v){try{if(v==null)v=localStorage.getItem("view");else localStorage.setItem("view",v)}catch(e){}
-    \\if(!["patch/","all/","all/patch/"].includes(v))v="";for(const a of document.querySelectorAll("a[data-view]")){
-    \\const h=a.dataset.base??=a.getAttribute("href"),up=h.match(/^(\.\.\/)*/)[0];a.href=up+v+h.slice(up.length)}}meioView()</script>
+    \\if(!["?period=patch","?region=all","?region=all&period=patch"].includes(v))v="";for(const a of document.querySelectorAll("a[data-view]")){
+    \\a.href=(a.dataset.base??=a.getAttribute("href"))+v}}meioView()</script>
     \\
 ;
 
@@ -273,18 +262,18 @@ const NavItem = struct { nav: Nav, path: []const u8, label: []const u8, in_view:
 
 /// The menu: the player's own games first; the stats pages sit under Champions
 const nav_items = [_]NavItem{
-    .{ .nav = .your, .path = "your.html", .label = "Your games", .in_view = false },
-    .{ .nav = .daily, .path = "daily.html", .label = "Daily Draft", .in_view = false },
-    .{ .nav = .learn, .path = "learn.html", .label = "Learn", .in_view = false },
-    .{ .nav = .champions, .path = "champions.html", .label = "Champions", .in_view = true },
+    .{ .nav = .your, .path = "/your", .label = "Your games", .in_view = false },
+    .{ .nav = .daily, .path = "/daily", .label = "Daily Draft", .in_view = false },
+    .{ .nav = .learn, .path = "/learn", .label = "Learn", .in_view = false },
+    .{ .nav = .champions, .path = "/champions", .label = "Champions", .in_view = true },
 };
 
 /// Tabs on the pages under Champions
 const champion_tabs = [_]NavItem{
-    .{ .nav = .champions, .path = "champions.html", .label = "Champions", .in_view = true },
-    .{ .nav = .matchups, .path = "matchup/index.html", .label = "Matchups", .in_view = true },
-    .{ .nav = .patch, .path = "patch.html", .label = "Patch changes", .in_view = true },
-    .{ .nav = .pool, .path = "pool.html", .label = "Champion pool", .in_view = true },
+    .{ .nav = .champions, .path = "/champions", .label = "Champions", .in_view = true },
+    .{ .nav = .matchups, .path = "/matchups", .label = "Matchups", .in_view = true },
+    .{ .nav = .patch, .path = "/patch", .label = "Patch changes", .in_view = true },
+    .{ .nav = .pool, .path = "/pool", .label = "Champion pool", .in_view = true },
 };
 
 fn tabItem(p: Page, w: *Writer, it: NavItem) Writer.Error!void {
@@ -292,8 +281,10 @@ fn tabItem(p: Page, w: *Writer, it: NavItem) Writer.Error!void {
 }
 
 fn navLink(p: Page, w: *Writer, it: NavItem, here: bool) Writer.Error!void {
+    var buf: [64]u8 = undefined;
+    var fba: std.heap.FixedBufferAllocator = .init(&buf);
     try tpl.render(w, "<a href=\"{href}\"{current}{view}>{label}</a>\n", .{
-        .href = if (it.in_view) Link{ .root = p.root, .path = it.path } else toSite(p, it.path),
+        .href = navHref(fba.allocator(), p, it) catch return error.WriteFailed,
         .current = tpl.flag(here, "aria-current=\"page\""),
         .view = tpl.flag(it.in_view and p.view == null, "data-view"),
         .label = it.label,
@@ -372,7 +363,7 @@ fn switches(w: *Writer, p: Page) Writer.Error!void {
 fn pick(w: *Writer, p: Page, live: bool, comptime key: []const u8, value: []const u8, label: []const u8) Writer.Error!void {
     if (live) {
         try tpl.render(w, "<a href=\"{to}?" ++ key ++ "={value}\" data-" ++ key ++ "=\"{value}\">{label}</a>", .{
-            .to = toSite(p, p.counterparts.?[0]),
+            .to = p.counterparts.?[0],
             .value = value,
             .label = label,
         });
@@ -390,7 +381,7 @@ fn viewLink(w: *Writer, p: Page, to: View, v: View, comptime key: []const u8, va
     const here = to.index() == v.index();
     try tpl.render(w, "<a{current}{href} data-" ++ key ++ "=\"{value}\">{label}{tail}</a>", .{
         .current = tpl.flag(here, "aria-current=\"page\""),
-        .href = tpl.when(!here, tpl.attr("href", toSite(p, p.counterparts.?[to.index()]))),
+        .href = tpl.when(!here, tpl.attr("href", p.counterparts.?[to.index()])),
         .value = value,
         .label = label,
         .tail = tail,
@@ -411,10 +402,10 @@ pub fn foot(w: *Writer, p: Page) Writer.Error!void {
         \\
     , .{
         .data = p.data,
-        .privacy = toSite(p, "privacy.html"),
-        .terms = toSite(p, "terms.html"),
-        .method = toSite(p, "method.html"),
-        .download = toSite(p, "download.html"),
+        .privacy = "/privacy",
+        .terms = "/terms",
+        .method = "/method",
+        .download = "/download",
         .legal = tpl.trusted(boilerplate),
     });
 }

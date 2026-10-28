@@ -1,4 +1,4 @@
-//! learn.html: Learn (ui.learnpage), chapters of puzzles (learnbuild.zig) in the island's
+//! /learn: Learn (ui.learnpage), chapters of puzzles (learnbuild.zig) in the island's
 //! data-bin. Rendered on request, so a hand edit of learnfixed.zig is live after a deploy
 const std = @import("std");
 const root = @import("root.zig");
@@ -32,7 +32,7 @@ pub fn write(site: *const Site, w: *Writer) !void {
     try tpl.render(w,
         \\<script src="{js}" data-wasm="{wasm}" defer></script>
         \\
-    , .{ .js = assets.learn_js.path, .wasm = assets.learn_wasm.path });
+    , .{ .js = html.Link{ .path = assets.learn_js.path }, .wasm = assets.learn_wasm.path });
     try html.foot(w, p);
 }
 

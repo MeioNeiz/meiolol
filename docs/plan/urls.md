@@ -15,7 +15,9 @@ filter URLs and canonicals). Any URL work follows this file; change it here firs
 - Bare champion = main role: /champions/karthus serves the main role, self canonical
   (u.gg, mobalytics); /champions/karthus/<main role> 200s with canonical to the bare
   URL, other roles self canonical. Canonical, not redirect: the main role moves between
-  patches and browsers cache 301s forever
+  patches and browsers cache 301s forever. A thin role (under min_role_share, linked from
+  tier rows and role tabs) has no file: rendered on request, canonical to the bare URL,
+  not in the sitemap; a role with no games 404s
 - State: query = which data (region, period; rank, queue later): shareable, the server
   can serve a prerendered view, canonical drops it (op.gg, u.gg, mobalytics, Blitz).
   Fragment = in-page state (sort, tab, slot, puzzle) and identities that must not reach
@@ -47,7 +49,7 @@ filter URLs and canonicals). Any URL work follows this file; change it here firs
 | /patch/X, /all/X, /all/patch/X (old views) | new(X) + ?period=patch, ?region=all, both |
 | /sitemap.xml per view | one /sitemap.xml, canonical URLs only |
 
-/admin/ and /p/ (private, noindex) drop .html too, no redirects needed. The server never
+/admin/ and /p/ (private, noindex) keep .html for now (not in URL2). The server never
 sees fragments; a 301 keeps them (RFC 9110 10.2.2), so the new page's wasm translates
 legacy keys with replaceState.
 

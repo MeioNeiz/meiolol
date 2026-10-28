@@ -140,7 +140,7 @@ test "the grid: empty from the server, the pool handed over, files in, cells and
     p.i.render();
     try testing.expect(std.mem.find(u8, try p.shown(), "2 of 5 lanes covered") != null);
     p.click(p.id("aria-label", "Darius into Fiora −2.6, 900 games"));
-    try testing.expect(std.mem.find(u8, try p.shown(), "darius-vs-fiora.html") != null);
+    try testing.expect(std.mem.find(u8, try p.shown(), "/matchups/top/darius-vs-fiora") != null);
     // The top section's Sort: Most met, the first not pressed
     p.click(p.id("aria-pressed", "false"));
     try testing.expectEqual(.met, p.state.sort);

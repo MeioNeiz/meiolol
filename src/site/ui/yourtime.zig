@@ -344,7 +344,7 @@ pub const YourTime = struct {
     matchups: MatchupTable = .{ .rows = &.{} },
     weeks: WeekTable = .{ .rows = &.{} },
     /// game.html, relative to the page
-    game: []const u8 = "game.html",
+    game: []const u8 = "/game",
     /// A looked-up player's Riot ID, percent-encoded; "" the example
     id: []const u8 = "",
     /// Minutes east of UTC; the server's: UTC

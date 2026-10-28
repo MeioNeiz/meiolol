@@ -370,6 +370,8 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
     wasm.entry = .disabled;
     wasm.rdynamic = true;
     backend.addAnonymousImport("draft.wasm", .{ .root_source_file = wasm.getEmittedBin() });
+    // serve.zig's test of nginx's redirects against urls.legacy
+    backend.addAnonymousImport("redirect-samples.tsv", .{ .root_source_file = b.path("deploy/nginx/redirect-samples.tsv") });
 
     // The lane chart for Your games (src/site/chart_wasm.zig), embedded the same way
     const chart_wasm = b.addExecutable(.{

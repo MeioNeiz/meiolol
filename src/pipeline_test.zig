@@ -37,10 +37,10 @@ const games = 3;
 const patch = "15.13";
 /// Fixed game start; the 30-day views start there
 const start_ms = 1_752_000_000_000;
-/// The patch before, its games a day earlier: in the patch day only (patch.html)
+/// The patch before, its games a day earlier: in the patch day only (/patch)
 const prev_patch = "15.12";
 /// Two days earlier: prev_patch against it is the older pair's page
-/// (patches/15.12-15.11.html)
+/// (/patch/15-12)
 const older_patch = "15.11";
 
 test "fixture games to stats, curves and the website" {
@@ -250,7 +250,7 @@ test "fixture games to stats, curves and the website" {
             _ = try std.Io.Dir.cwd().statFile(io, try std.fs.path.join(arena, &.{ out, try arena.print("data/champion/darius{s}-rank{s}.bin", .{ part, suffix }) }), .{});
         };
         // Every view's own champion data
-        for ([_][]const u8{ "patch/", "all/", "all/patch/" }) |dir_of| {
+        for ([_][]const u8{ "_v/patch/", "_v/all/", "_v/all-patch/" }) |dir_of| {
             _ = try std.Io.Dir.cwd().statFile(io, try std.fs.path.join(arena, &.{ out, dir_of, "data/champion/darius-more.bin" }), .{});
         }
         const cr = site.ui.champrank;
@@ -275,21 +275,19 @@ test "fixture games to stats, curves and the website" {
     for ([_][]const u8{
         "index.html",
         "champions.html",
-        "role/top.html",
+        "champions/top.html",
+        "champions/darius.html",
+        "champions/darius/top.html",
         "table.js",
         "data/champion/darius.bin",
         "data/champion/darius-build.bin",
         "data/champion/darius-more.bin",
-        "patch/index.html",
-        "all/patch/index.html",
+        "_v/patch/index.html",
+        "_v/all-patch/index.html",
         "data/stats.bin",
-        "matchup/index.html",
+        "matchups.html",
         "learn.html",
         "privacy.html",
-        "patch/build/darius-top.html",
-        "all/patch/build/darius-top.html",
-        "build/darius-top.html",
-        "all/build/darius-top.html",
     }) |page| {
         const path = try std.fs.path.join(arena, &.{ out, page });
         std.Io.Dir.cwd().access(io, path, .{}) catch |err| {
@@ -313,7 +311,7 @@ test "fixture games to stats, curves and the website" {
     }
     // Pool grid: a lanes file per champion and view, the champion page's lane opponents
     {
-        for ([_][]const u8{ "", "patch/", "all/", "all/patch/" }) |dir_of| {
+        for ([_][]const u8{ "", "_v/patch/", "_v/all/", "_v/all-patch/" }) |dir_of| {
             _ = try std.Io.Dir.cwd().statFile(io, try std.fs.path.join(arena, &.{ out, dir_of, "data/pool/lanes/darius.bin" }), .{});
         }
         const lanes = try site.ui.data.decode(arena, site.ui.pooldata.Lanes, try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "data/pool/lanes/darius.bin" }), arena, .limited(1 << 20)));
@@ -331,7 +329,7 @@ test "fixture games to stats, curves and the website" {
     // Matchup finder: each champion's roles for its picker; a pick's grid fetches the
     // champion page's -more.bin under the view's root (checked above for every view)
     {
-        const page = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "matchup/index.html" }), arena, .limited(1 << 22));
+        const page = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "matchups.html" }), arena, .limited(1 << 22));
         const key = "data-bin=\"";
         const at = (std.mem.find(u8, page, key) orelse return error.TestUnexpectedResult) + key.len;
         const b64 = page[at .. at + (std.mem.findScalar(u8, page[at..], '"') orelse return error.TestUnexpectedResult)];
@@ -346,65 +344,63 @@ test "fixture games to stats, curves and the website" {
     // Build page: three games, so no bare win rates; the champion page (root view) links
     // into the patch view's
     const pages = [_]struct { []const u8, []const []const u8 }{
-        .{ "patch/build/darius-top.html", &.{ "<meta name=\"robots\" content=\"noindex\">", "url=../../champion/darius.html?period=patch#role=top\"" } },
         // Patch day: three games a patch is a patch's first day, no role with enough
         // games; Darius, whom Riot changed, in his main role all the same; in every view,
         // linking the patch view's pages, and a tab after Matchups
-        .{ "patch/patch.html", &.{ "<h1>Patch 15.13 vs 15.12</h1>", "<div class=\"c-patch\" data-island=\"patch\" data-src=\"data/patch.bin\" data-stamp=\"", "href=\"../patch/champion/darius.html#role=top\"", "<span class=\"ar\" aria-hidden=\"true\">▲</span>Q</span>", "league-of-legends-patch-25-13-notes/", "<script src=\"../" ++ assets.patch_js.path ++ "\" data-wasm=\"" ++ assets.patch_wasm.path ++ "\" defer></script>" } },
+        .{ "_v/patch/patch.html", &.{ "<h1>Patch 15.13 vs 15.12</h1>", "<div class=\"c-patch\" data-island=\"patch\" data-src=\"/_v/patch/data/patch.bin\" data-stamp=\"", "href=\"/champions/darius/top?period=patch\"", "<span class=\"ar\" aria-hidden=\"true\">▲</span>Q</span>", "league-of-legends-patch-25-13-notes/", "<script src=\"/" ++ assets.patch_js.path ++ "\" data-wasm=\"" ++ assets.patch_wasm.path ++ "\" defer></script>" } },
         // The older pair's page: PatchHead's ‹ › from every patch.html, back to the
         // newest; win rates only, Riot's changes its own
-        .{ "patches/15.12-15.11.html", &.{ "<h1>Patch 15.12 vs 15.11</h1>", "data-src=\"../data/patch-15.12-15.11.bin\"", "href=\"../patch.html\"", "<span class=\"ar\" aria-hidden=\"true\">▲</span>Q</span>" } },
-        .{ "all/patches/15.12-15.11.html", &.{ "<h1>Patch 15.12 vs 15.11</h1>", "href=\"../../all/patch.html\"" } },
-        .{ "patch.html", &.{"href=\"patches/15.12-15.11.html\""} },
-        .{ "patch/patch.html", &.{"href=\"../patches/15.12-15.11.html\""} },
-        .{ "all/patch/patch.html", &.{"href=\"../../all/patches/15.12-15.11.html\""} },
-        .{ "all/patch.html", &.{ "<h1>Patch 15.13 vs 15.12</h1>", "href=\"../all/patch/champion/darius.html#role=top\"", "title=\"This page counts every game we crawl (Plat+)\" data-rank=\"5\"" } },
-        .{ "champions.html", &.{"Matchups</a>\n<a href=\"patch.html\">Patch changes</a>"} },
+        .{ "patch/15-12.html", &.{ "<h1>Patch 15.12 vs 15.11</h1>", "data-src=\"/data/patch-15.12-15.11.bin\"", "href=\"/patch\"", "<span class=\"ar\" aria-hidden=\"true\">▲</span>Q</span>" } },
+        .{ "_v/all/patch/15-12.html", &.{ "<h1>Patch 15.12 vs 15.11</h1>", "href=\"/patch?region=all\"" } },
+        .{ "patch.html", &.{"href=\"/patch/15-12\""} },
+        .{ "_v/patch/patch.html", &.{"href=\"/patch/15-12\""} },
+        .{ "_v/all-patch/patch.html", &.{"href=\"/patch/15-12?region=all\""} },
+        .{ "_v/all/patch.html", &.{ "<h1>Patch 15.13 vs 15.12</h1>", "href=\"/champions/darius/top?region=all&amp;period=patch\"", "title=\"This page counts every game we crawl (Plat+)\" data-rank=\"5\"" } },
+        .{ "champions.html", &.{"Matchups</a>\n<a href=\"/patch\">Patch changes</a>"} },
         // Champion page: the ui.champpage island from the root view, its data file for
         // the other roles; the head, the build, the matchups with the most met opponent's
         // brief linking to the matchup page from the champion's side
-        .{ "champion/darius.html", &.{ "<div class=\"c-cpage\" data-id=\"122\" data-roles=\"top\"><div class=\"part\" data-island=\"champion\" data-src=\"../data/champion/darius.bin\" data-stamp=\"", "<h1>Darius</h1>", "<span class=\"sum\">EUW · 30 days · Plat+</span>", "data-island=\"champbuild\" data-src=\"../data/champion/darius-build.bin\"", "<section class=\"c-card\" data-v=\"flush\"><div class=\"c-build\">", "<h2>Matchups</h2>", "data-island=\"champmore\" data-src=\"../data/champion/darius-more.bin\"", "data-js=\"../" ++ assets.champmore_js.path ++ "\" data-wasm=\"" ++ assets.champmore_wasm.path ++ "\"", "class=\"c-dots\"", "class=\"c-mpick\"", "href=\"../matchup/top/darius-vs-mordekaiser.html\"", "<h2>By patch</h2>", "<h2>By game length</h2>", "<script src=\"../" ++ assets.champion_js.path ++ "\" data-wasm=\"" ++ assets.champion_wasm.path ++ "\" defer></script>" } },
-        .{ "champions.html", &.{ "<div class=\"c-tiers\" data-island=\"tiers\" data-src=\"data/tiers.bin\" data-stamp=\"", "data-base=\"\" data-view=\"0\" data-path=\"champions.html\"", "<h1>Champions</h1>", "<linearGradient id=\"c-violin-g\"", "<symbol id=\"ri-top\"", "<a href=\"all/champions.html\">All</a>", "<div class=\"rb\">", "<script src=\"" ++ assets.stats_js.path ++ "\" data-wasm=\"" ++ assets.stats_wasm.path ++ "\" defer></script>" } },
+        .{ "champions/darius.html", &.{ "<div class=\"c-cpage\" data-id=\"122\" data-roles=\"top\"><div class=\"part\" data-island=\"champion\" data-src=\"/data/champion/darius.bin\" data-stamp=\"", "<h1>Darius</h1>", "<span class=\"sum\">EUW · 30 days · Plat+</span>", "data-island=\"champbuild\" data-src=\"/data/champion/darius-build.bin\"", "<section class=\"c-card\" data-v=\"flush\"><div class=\"c-build\">", "<h2>Matchups</h2>", "data-island=\"champmore\" data-src=\"/data/champion/darius-more.bin\"", "data-js=\"/" ++ assets.champmore_js.path ++ "\" data-wasm=\"" ++ assets.champmore_wasm.path ++ "\"", "class=\"c-dots\"", "class=\"c-mpick\"", "href=\"/matchups/top/darius-vs-mordekaiser\"", "<h2>By patch</h2>", "<h2>By game length</h2>", "<script src=\"/" ++ assets.champion_js.path ++ "\" data-wasm=\"" ++ assets.champion_wasm.path ++ "\" defer></script>" } },
+        .{ "champions.html", &.{ "<div class=\"c-tiers\" data-island=\"tiers\" data-src=\"/data/tiers.bin\" data-stamp=\"", "data-base=\"/\" data-view=\"0\" data-path=\"/champions\"", "<h1>Champions</h1>", "<linearGradient id=\"c-violin-g\"", "<symbol id=\"ri-top\"", "<a href=\"/champions?region=all\">All</a>", "<div class=\"rb\">", "<script src=\"/" ++ assets.stats_js.path ++ "\" data-wasm=\"" ++ assets.stats_wasm.path ++ "\" defer></script>" } },
         // Home: the lookup, each role's most played (the example's game: core_loaded); no
         // clear patch move on a patch's first day, so the Patch card is its link alone
-        .{ "index.html", &.{ "data-island=\"lookup\" data-to=\"your.html\"", "data-island=\"homechamps\" data-bin=\"", "Patch 15.13", "vs 15.12", "href=\"patch/patch.html\" data-s=\"s\">All changes</a>", "<script src=\"" ++ assets.home_js.path ++ "\" data-wasm=\"" ++ assets.home_wasm.path ++ "\" defer></script>" } },
+        .{ "index.html", &.{ "data-island=\"lookup\" data-to=\"/your\"", "data-island=\"homechamps\" data-bin=\"", "Patch 15.13", "vs 15.12", "href=\"/patch?period=patch\" data-s=\"s\">All changes</a>", "<script src=\"/" ++ assets.home_js.path ++ "\" data-wasm=\"" ++ assets.home_wasm.path ++ "\" defer></script>" } },
         // Daily Draft (ui.dailypage): the fixture makes no puzzle, so the page says so
         .{ "daily.html", &.{ "<h1>Daily Draft</h1>", "No puzzle today." } },
         .{ "privacy.html", &.{ "the date\nshown is the puzzle's, not the game's", "we keep only each puzzle's totals", "<h2 id=\"accounts\">Accounts</h2>" } },
         // Learn (ui.learnpage): the island with its chapters inline, a first visit on
         // chapter 1's first puzzle
-        .{ "learn.html", &.{ "<div class=\"c-learn\" data-island=\"learn\" data-bin=\"", "Does knowing your champion matter?", "How often do mains win?", "<script src=\"" ++ assets.learn_js.path ++ "\" data-wasm=\"" ++ assets.learn_wasm.path ++ "\" defer></script>" } },
+        .{ "learn.html", &.{ "<div class=\"c-learn\" data-island=\"learn\" data-bin=\"", "Does knowing your champion matter?", "How often do mains win?", "<script src=\"/" ++ assets.learn_js.path ++ "\" data-wasm=\"" ++ assets.learn_wasm.path ++ "\" defer></script>" } },
         // A search for one champion turns its rows to its side (MU8); gold under a clear
         // lead plain (J11, J12)
-        .{ "matchup/index.html", &.{ "<div class=\"c-finder\" data-island=\"finder\" data-root=\"../\" data-bin=\"", "<h1>Matchups</h1>", "<div class=\"c-crp-pair\">", "Your champion", "Opponent", "<div class=\"c-fgrid\" data-island=\"findergrid\" data-root=\"../\" data-js=\"../" ++ assets.findergrid_js.path ++ "\" data-wasm=\"" ++ assets.findergrid_wasm.path ++ "\"></div>", "<h2>Hardest lanes</h2>", "<h2>Lane bullies</h2>", "<script src=\"../" ++ assets.finder_js.path ++ "\" data-wasm=\"" ++ assets.finder_wasm.path ++ "\" defer></script>" } },
-        .{ "build/darius-top.html", &.{"<meta http-equiv=\"refresh\" content=\"0; url=../champion/darius.html#role=top\">"} },
+        .{ "matchups.html", &.{ "<div class=\"c-finder\" data-island=\"finder\" data-query=\"\" data-bin=\"", "<h1>Matchups</h1>", "<div class=\"c-crp-pair\">", "Your champion", "Opponent", "<div class=\"c-fgrid\" data-island=\"findergrid\" data-root=\"/\" data-query=\"\" data-js=\"/" ++ assets.findergrid_js.path ++ "\" data-wasm=\"" ++ assets.findergrid_wasm.path ++ "\"></div>", "<h2>Hardest lanes</h2>", "<h2>Lane bullies</h2>", "<script src=\"/" ++ assets.finder_js.path ++ "\" data-wasm=\"" ++ assets.finder_wasm.path ++ "\" defer></script>" } },
         // One page per champion: the other views link to it with their view
-        .{ "all/patch/role/top.html", &.{ "<a href=\"../../../patch/role/top.html\">EUW</a>", "data-path=\"role/top.html\" data-role=\"top\"" } },
-        .{ "all/matchup/top/mordekaiser-vs-darius.html", &.{"href=\"../../../champion/darius.html?region=all\""} },
+        .{ "_v/all-patch/champions/top.html", &.{ "<a href=\"/champions/top?period=patch\">EUW</a>", "data-path=\"/champions/top\" data-role=\"top\"" } },
+        .{ "_v/all/matchups/top/mordekaiser-vs-darius.html", &.{"href=\"/champions/darius?region=all\""} },
         // The matchup page (ui.matchpage): three islands with their data inline; the head
         // with both portraits, the swap and the headline figures, the lane by minute beside
         // head to head, won by gold at 10 and by game length (all lanes dashed), by rank and
         // mastery
-        .{ "matchup/top/mordekaiser-vs-darius.html", &.{ "<div class=\"c-cpage c-mpage\"><div class=\"part\" data-island=\"matchup\" data-bin=\"", "<h1>Mordekaiser<span class=\"and\">vs</span>Darius</h1>", "href=\"darius-vs-mordekaiser.html\"", "Mordekaiser wins", "Vs usual", "data-island=\"matchmore\" data-bin=\"", "data-js=\"../../" ++ assets.matchmore_js.path ++ "\" data-wasm=\"" ++ assets.matchmore_wasm.path ++ "\"", "<h2>Lane</h2>", "class=\"c-chart c-lane\"", "<h2>Head to head</h2>", "Kills to 6 min", "Level 6", "First item", "<h2>Won by gold at 10</h2>", "dashed: all lanes", "<h2>By game length</h2>", "dashed: Mordekaiser against everyone", "<h2>By rank and mastery</h2>", "All games", "<script src=\"../../" ++ assets.matchup_js.path ++ "\" data-wasm=\"" ++ assets.matchup_wasm.path ++ "\" defer></script>" } },
+        .{ "matchups/top/mordekaiser-vs-darius.html", &.{ "<div class=\"c-cpage c-mpage\"><div class=\"part\" data-island=\"matchup\" data-bin=\"", "<h1>Mordekaiser<span class=\"and\">vs</span>Darius</h1>", "href=\"/matchups/top/darius-vs-mordekaiser\"", "Mordekaiser wins", "Vs usual", "data-island=\"matchmore\" data-bin=\"", "data-js=\"/" ++ assets.matchmore_js.path ++ "\" data-wasm=\"" ++ assets.matchmore_wasm.path ++ "\"", "<h2>Lane</h2>", "class=\"c-chart c-lane\"", "<h2>Head to head</h2>", "Kills to 6 min", "Level 6", "First item", "<h2>Won by gold at 10</h2>", "dashed: all lanes", "<h2>By game length</h2>", "dashed: Mordekaiser against everyone", "<h2>By rank and mastery</h2>", "All games", "<script src=\"/" ++ assets.matchup_js.path ++ "\" data-wasm=\"" ++ assets.matchup_wasm.path ++ "\" defer></script>" } },
         // Bot lane partners (MU4): each side's supports, and a support matchup's bot laners
-        .{ "matchup/bot/kaisa-vs-twitch.html", &.{ "First blood", "<h2>Lane partners</h2>", "<h3>Twitch with</h3>" } },
-        .{ "matchup/support/pyke-vs-rakan.html", &.{"<h3>Rakan with</h3>"} },
+        .{ "matchups/bot/kaisa-vs-twitch.html", &.{ "First blood", "<h2>Lane partners</h2>", "<h3>Twitch with</h3>" } },
+        .{ "matchups/support/pyke-vs-rakan.html", &.{"<h3>Rakan with</h3>"} },
         // MatchupStrip: the lane opponents with a page, the current one lit; the pair's build
-        .{ "matchup/top/darius-vs-mordekaiser.html", &.{ "<nav class=\"c-mstrip\" aria-label=\"Darius&#39;s Top opponents\">", "<a href=\"darius-vs-mordekaiser.html\" aria-current=\"page\"", "data-island=\"champbuild\" data-bin=\"", "<h2>Build against Mordekaiser</h2>", "href=\"../../champion/darius.html#role=top\"" } },
+        .{ "matchups/top/darius-vs-mordekaiser.html", &.{ "<nav class=\"c-mstrip\" aria-label=\"Darius&#39;s Top opponents\">", "<a href=\"/matchups/top/darius-vs-mordekaiser\" aria-current=\"page\"", "data-island=\"champbuild\" data-bin=\"", "<h2>Build against Mordekaiser</h2>", "href=\"/champions/darius/top\"" } },
         .{ "method.html", &.{ "Games to stabilise", "<li><b>Highest win rate</b>: marked among options", "<h2 id=\"lean\">Early or late</h2>" } },
         // The board, pool and its section follow the view
-        .{ "patch/champions.html", &.{ "data-view=\"1\"", "<a href=\"../champions.html\">30 days</a>" } },
-        .{ "all/pool.html", &.{ "<div class=\"c-poolwrap\"><div class=\"c-poolpage\" data-island=\"pool\" data-bin=\"", "<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"all\"" } },
+        .{ "_v/patch/champions.html", &.{ "data-view=\"1\"", "<a href=\"/champions\">30 days</a>" } },
+        .{ "_v/all/pool.html", &.{ "<div class=\"c-poolwrap\"><div class=\"c-poolpage\" data-island=\"pool\" data-bin=\"", "<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"all\"" } },
         // Scope chips (site/scope.zig): what each block covers, marked where it doesn't
         // follow the page's picks
         // View links: this page in each view, the current one lit, ranks greyed
-        .{ "patch/matchup/top/darius-vs-mordekaiser.html", &.{ "<a aria-current=\"page\">15.13</a>", "<a href=\"../../../matchup/top/darius-vs-mordekaiser.html\">30 days</a>", "<a aria-disabled=\"true\">Emerald+</a>" } },
+        .{ "_v/patch/matchups/top/darius-vs-mordekaiser.html", &.{ "<a aria-current=\"page\">15.13</a>", "<a href=\"/matchups/top/darius-vs-mordekaiser\">30 days</a>", "<a aria-disabled=\"true\">Emerald+</a>" } },
         // Pool: the island empty (the picker), the grid's island empty beside it, the
         // lanes' scope, ui-pool.wasm and ui-poolgrid.wasm
-        .{ "pool.html", &.{ "<h2>Choose your pool</h2>", "<div class=\"c-poolgrid\" data-island=\"poolgrid\"></div></div>", "<script src=\"" ++ assets.poolgrid_js.path ++ "\" data-wasm=\"" ++ assets.poolgrid_wasm.path ++ "\" defer></script>", "<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"days30\"", "(<a href=\"pickup.html\">How hard to pick up</a>)", "<script src=\"" ++ assets.pool_js.path ++ "\" data-wasm=\"" ++ assets.pool_wasm.path ++ "\" defer></script>" } },
-        .{ "pickup.html", &.{ "<h1>How hard to pick up <span class=\"scope\" data-chip data-region=\"all\" data-period=\"days30\"", "<a aria-current=\"page\">All</a><a href=\"pickup/top.html\">Top</a>" } },
-        .{ "patch/pickup/mid.html", &.{ "<a href=\"../pickup.html\">All</a><a href=\"../pickup/top.html\">Top</a>", "<a aria-current=\"page\">Mid</a>" } },
-        .{ "all/patch/pool.html", &.{"<span class=\"scope\" data-chip data-region=\"all\" data-period=\"patch:15.13\" data-rank=\"\" title=\"Region, period and rank these numbers are from\"><span>All regions</span><span>Patch 15.13</span><span>Plat+</span></span> Lanes:"} },
+        .{ "pool.html", &.{ "<h2>Choose your pool</h2>", "<div class=\"c-poolgrid\" data-island=\"poolgrid\"></div></div>", "<script src=\"/" ++ assets.poolgrid_js.path ++ "\" data-wasm=\"" ++ assets.poolgrid_wasm.path ++ "\" defer></script>", "<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"days30\"", "(<a href=\"/pickup\">How hard to pick up</a>)", "<script src=\"/" ++ assets.pool_js.path ++ "\" data-wasm=\"" ++ assets.pool_wasm.path ++ "\" defer></script>" } },
+        .{ "pickup.html", &.{ "<h1>How hard to pick up <span class=\"scope\" data-chip data-region=\"all\" data-period=\"days30\"", "<a aria-current=\"page\">All</a><a href=\"/pickup/top\">Top</a>" } },
+        .{ "_v/patch/pickup/mid.html", &.{ "<a href=\"/pickup?period=patch\">All</a><a href=\"/pickup/top?period=patch\">Top</a>", "<a aria-current=\"page\">Mid</a>" } },
+        .{ "_v/all-patch/pool.html", &.{"<span class=\"scope\" data-chip data-region=\"all\" data-period=\"patch:15.13\" data-rank=\"\" title=\"Region, period and rank these numbers are from\"><span>All regions</span><span>Patch 15.13</span><span>Plat+</span></span> Lanes:"} },
     };
     for (pages) |pg| {
         const path = try std.fs.path.join(arena, &.{ out, pg[0] });
@@ -416,14 +412,14 @@ test "fixture games to stats, curves and the website" {
     }
     // The older pair's period switch stays on it: no patch view has the page
     {
-        const pair_page = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "patches/15.12-15.11.html" }), arena, .limited(1 << 20));
-        try testing.expect(std.mem.find(u8, pair_page, "patch/patches/") == null);
+        const pair_page = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "patch/15-12.html" }), arena, .limited(1 << 20));
+        try testing.expect(std.mem.find(u8, pair_page, "/patch/15-12?period=patch") == null);
         try testing.expect(std.mem.find(u8, pair_page, "so far") == null);
     }
     // Matchup first screen: the numbers and opponents, the pair's build, then head to head
     // beside the lane, the outcome cards last
     {
-        const path = try std.fs.path.join(arena, &.{ out, "matchup/top/darius-vs-mordekaiser.html" });
+        const path = try std.fs.path.join(arena, &.{ out, "matchups/top/darius-vs-mordekaiser.html" });
         const html = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 20));
         var at: usize = 0;
         for ([_][]const u8{ "<nav class=\"c-mstrip\"", "<h2>Build against Mordekaiser", "<h2>Head to head</h2>", "<h2>Lane</h2>", "<h2>Won by gold at 10</h2>" }) |want| {
@@ -434,7 +430,7 @@ test "fixture games to stats, curves and the website" {
         }
     }
     // Data is Platinum+ (the crawl's floor): no lower tier to filter by, no "all ranks"
-    for ([_][]const u8{ "champions.html", "champion/darius.html" }) |page| {
+    for ([_][]const u8{ "champions.html", "champions/darius.html" }) |page| {
         const path = try std.fs.path.join(arena, &.{ out, page });
         const html = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 20));
         for ([_][]const u8{ "all ranks", "All ranks", ">Gold+" }) |bad| if (std.mem.find(u8, html, bad) != null) {
@@ -445,7 +441,7 @@ test "fixture games to stats, curves and the website" {
     // The matchup page's islands: what ui-matchup.wasm and ui-matchmore.wasm render from
     // their data-bin is the page's own (hydration adopts the server's nodes as they are)
     {
-        const path = try std.fs.path.join(arena, &.{ out, "matchup/top/mordekaiser-vs-darius.html" });
+        const path = try std.fs.path.join(arena, &.{ out, "matchups/top/mordekaiser-vs-darius.html" });
         const page = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 22));
         const mp = site.ui.matchpage;
         var t: site.ui.Tree = .{};
@@ -460,7 +456,7 @@ test "fixture games to stats, curves and the website" {
         md.* = try site.ui.data.decode(arena, mp.MoreData, mb[1]);
         var mo: mp.More = try .init(arena, md);
         mo.bin = mb[0];
-        mo.js = "../../" ++ assets.matchmore_js.path;
+        mo.js = "/" ++ assets.matchmore_js.path;
         mo.wasm = assets.matchmore_wasm.path;
         for ([_]site.ui.N{ head.view(&h), mo.view(&h) }, [_][]const u8{ "matchup", "matchmore" }) |n, name| {
             var w: std.Io.Writer.Allocating = .init(arena);
@@ -475,18 +471,17 @@ test "fixture games to stats, curves and the website" {
     // The champions board: what ui-stats.wasm renders from the data file, before the
     // URL's state, is the page's own (hydration adopts the server's nodes as they are)
     for ([_]struct { []const u8, []const u8, ?site.ui.tiers.Role }{
-        .{ "champions.html", "", null },
-        .{ "role/top.html", "../", .top },
+        .{ "champions.html", "/champions", null },
+        .{ "champions/top.html", "/champions/top", .top },
     }) |c| {
         const page = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, c[0] }), arena, .limited(1 << 22));
         const bytes = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "data/tiers.bin" }), arena, .limited(1 << 22));
         const tiers = site.ui.tiers;
         const d = try arena.create(tiers.Data);
         d.* = try site.ui.data.decode(arena, tiers.Data, bytes);
-        var state: tiers.Tiers = .init(d, try tiers.prepare(arena, d, c[1]), c[2]);
-        state.base = c[1];
-        state.path = c[0];
-        state.src = try std.mem.concat(arena, u8, &.{ c[1], "data/tiers.bin" });
+        var state: tiers.Tiers = .init(d, try tiers.prepare(arena, d, "/"), c[2]);
+        state.path = c[1];
+        state.src = "/data/tiers.bin";
         state.stamp = tiers.stamp(bytes);
         var t: site.ui.Tree = .{};
         var h: site.ui.H = .init(arena, &t);
@@ -500,17 +495,16 @@ test "fixture games to stats, curves and the website" {
     }
 
     // The patch page: ui-patch.wasm's render of its view's data file is the page's own
-    for ([_][]const u8{ "patch.html", "patch/patch.html", "all/patch.html" }) |page_path| {
+    for ([_][]const u8{ "", "_v/patch/", "_v/all/" }) |vdir| {
+        const page_path = try std.mem.concat(arena, u8, &.{ vdir, "patch.html" });
         const page = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, page_path }), arena, .limited(1 << 22));
-        const vdir = std.fs.path.dirname(page_path) orelse "";
         const bytes = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, vdir, "data/patch.bin" }), arena, .limited(1 << 22));
         const pp = site.ui.patchpage;
         const d = try arena.create(pp.Data);
         d.* = try site.ui.data.decode(arena, pp.Data, bytes);
-        const base = if (vdir.len == 0) "" else if (std.mem.count(u8, vdir, "/") == 0) "../" else "../../";
-        var state: pp.Page = .init(d, try pp.prepare(arena, d, base));
-        state.base = base;
-        state.src = "data/patch.bin";
+        var state: pp.Page = .init(d, try pp.prepare(arena, d, "/"));
+        state.base = "/";
+        state.src = try std.mem.concat(arena, u8, &.{ "/", vdir, "data/patch.bin" });
         state.stamp = pp.stamp(bytes);
         var t: site.ui.Tree = .{};
         var h: site.ui.H = .init(arena, &t);
@@ -537,7 +531,7 @@ test "fixture games to stats, curves and the website" {
         } else return error.TestUnexpectedResult;
         try testing.expect(top.games > 0 and top.spread == null and top.rates != null);
         const plat = try site.ui.data.decode(arena, tiers.Data, try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "data/tiers.bin" }), arena, .limited(1 << 22)));
-        var state: tiers.Tiers = .init(&plat, try tiers.prepare(arena, &plat, ""), null);
+        var state: tiers.Tiers = .init(&plat, try tiers.prepare(arena, &plat, "/"), null);
         state.want = .emerald;
         try testing.expect(state.need());
         state.ranks = &rk;
@@ -551,9 +545,9 @@ test "fixture games to stats, curves and the website" {
         try testing.expect(std.mem.find(u8, w.written(), " · Emerald+") != null);
         // Under the Games floor here, so off the table, but its link carries the rank
         const line = for (state.lines[1]) |*l| {
-            if (std.mem.find(u8, l.href, "champion/darius.html") != null) break l;
+            if (std.mem.find(u8, l.href, "/champions/darius/") != null) break l;
         } else return error.TestUnexpectedResult;
-        try testing.expectEqualStrings("champion/darius.html#role=top&rank=emerald", line.href);
+        try testing.expectEqualStrings("/champions/darius/top#rank=emerald", line.href);
     }
 
     // Rendered on request (site.Loaded, `meiolol serve --render` and `dev`): every file
@@ -586,7 +580,7 @@ test "fixture games to stats, curves and the website" {
         };
         try testing.expectEqualStrings(want, got);
         checked += 1;
-        if (std.mem.endsWith(u8, e.path, ".html")) try expectNewUrl(arena, e.path);
+        if (std.mem.endsWith(u8, e.path, ".html")) try expectPageLinks(arena, e.path, want);
         if (std.mem.endsWith(u8, e.path, ".html") and std.mem.find(u8, want, "data-sortable") != null and
             std.mem.find(u8, want, "table.js\"") == null)
         {
@@ -709,30 +703,29 @@ test "fixture games to stats, curves and the website" {
         try testing.expectError(error.Loading, early.get(arena, "index.html"));
         try early.loadView(site.html.View.all[0]);
         try testing.expect(try early.get(arena, "index.html") != null);
-        try testing.expectError(error.Loading, early.get(arena, "patch/index.html"));
+        try testing.expectError(error.Loading, early.get(arena, "_v/patch/index.html"));
     }
     // Thin matchups left out of the static build are still rendered on request
     {
         var s = (try loaded.site(site.html.View.all[0])).*;
         s.arena = arena;
         s.opts.static_min_games = std.math.maxInt(u32);
-        for (try site.pagePaths(&s)) |p| try testing.expect(!std.mem.startsWith(u8, p, "matchup/") or std.mem.eql(u8, p, "matchup/index.html"));
-        try testing.expect(try loaded.get(arena, "matchup/top/mordekaiser-vs-darius.html") != null);
+        for (try site.pagePaths(&s)) |p| try testing.expect(p != .matchup);
+        try testing.expect(try loaded.get(arena, "matchups/top/mordekaiser-vs-darius.html") != null);
     }
-    for ([_][]const u8{ "champion/nobody.html", "all/champion/darius.html", "matchup/top/darius-vs-darius.html", "matchup/mid/darius-vs-mordekaiser.html", "all/daily.html", "patch/learn.html", "patch/", "nosuch/index.html", "data/your-example.json" }) |path| {
+    for ([_][]const u8{ "champions/nobody.html", "champions/darius/mid.html", "_v/all/champions/darius.html", "matchups/top/darius-vs-darius.html", "matchups/mid/darius-vs-mordekaiser.html", "_v/all/daily.html", "_v/patch/learn.html", "_v/patch/", "nosuch.html", "data/your-example.json" }) |path| {
         try testing.expectEqual(null, try loaded.get(arena, path));
     }
     // The renderer's 404 page for them (serve.notFoundPage): the site's chrome, links
-    // and assets from the request's directory, never indexed
+    // and assets root-relative (any depth), never indexed
     {
-        const page = try loaded.notFound(arena, "matchup/top/nobody.html");
-        for ([_][]const u8{ "<h1>Page not found</h1>", "href=\"../../index.html\">Home</a>", "href=\"../../champions.html\">Champions</a>", "<meta name=\"robots\" content=\"noindex\">", "<link rel=\"stylesheet\" href=\"../../" }) |want| {
+        const page = try loaded.notFound(arena);
+        for ([_][]const u8{ "<h1>Page not found</h1>", "href=\"/\">Home</a>", "href=\"/champions\">Champions</a>", "<meta name=\"robots\" content=\"noindex\">", "<link rel=\"stylesheet\" href=\"/" }) |want| {
             if (std.mem.find(u8, page, want) == null) {
                 std.debug.print("404 page lacks {s}\n", .{want});
                 return error.TestUnexpectedResult;
             }
         }
-        try testing.expect(std.mem.find(u8, try loaded.notFound(arena, "nosuch"), "href=\"index.html\">Home</a>") != null);
     }
     // /admin/api/pages.txt, cache-warm's list: each once and each rendered, the home and
     // the shared pages in it, the fixture's thin matchups not
@@ -745,13 +738,16 @@ test "fixture games to stats, curves and the website" {
                 return error.TestUnexpectedResult;
             }
         }
-        for ([_][]const u8{ "index.html", "champions.html", "champion/darius.html", "all/index.html" } ++ site.shared_pages) |want| {
+        var wants: std.ArrayList([]const u8) = .empty;
+        try wants.appendSlice(arena, &.{ "index.html", "champions.html", "champions/darius.html", "champions/darius/top.html", "_v/all/index.html" });
+        for (site.shared_pages) |p| try wants.append(arena, try site.filePath(arena, site.html.View.all[0], p));
+        for (wants.items) |want| {
             if (!seen.contains(want)) {
                 std.debug.print("pages.txt lacks {s}\n", .{want});
                 return error.TestUnexpectedResult;
             }
         }
-        try testing.expect(!seen.contains("matchup/top/mordekaiser-vs-darius.html"));
+        try testing.expect(!seen.contains("matchups/top/mordekaiser-vs-darius.html"));
     }
 
     // `--static core` (deploy/web-loop.sh): only core_static and the front-end files, all
@@ -838,19 +834,19 @@ test "fixture games to stats, curves and the website" {
     for ([_][]const u8{ "data-island=\"games\"", "data-src=\"data/your/mid.bin\"", "ui-games.", "noindex", "data-island=\"gamemore\"", "data-js=\"" ++ assets.gamemore_js.path ++ "\" data-wasm=\"" ++ assets.gamemore_wasm.path ++ "\"", "data-island=\"gamelane\"", "data-js=\"" ++ assets.gamelane_js.path ++ "\" data-wasm=\"" ++ assets.gamelane_wasm.path ++ "\"" }) |want| {
         try testing.expect(std.mem.find(u8, game_page, want) != null);
     }
-    // The list page: the example's list in the island, rows opening game.html
+    // The list page: the example's list in the island, rows opening /game
     const games_page = (try core_loaded.get(arena, "games.html")).?;
-    for ([_][]const u8{ "data-island=\"your\" data-bin=\"", "class=\"c-player\"", "class=\"c-psum\"", "href=\"game.html#g=0\"", "noindex", "data-wasm=\"" ++ assets.your_wasm.path ++ "\"", "data-island=\"yourviews\"", "data-island=\"yourtime\"", "data-js=\"" ++ assets.yourtime_js.path ++ "\" data-wasm=\"" ++ assets.yourtime_wasm.path ++ "\"", "data-wasm=\"" ++ assets.yourviews_wasm.path ++ "\"", "data-island=\"yourlookup\"", "data-js=\"" ++ assets.yourlookup_js.path ++ "\" data-wasm=\"" ++ assets.yourlookup_wasm.path ++ "\"", "An example player" }) |want| {
+    for ([_][]const u8{ "data-island=\"your\" data-bin=\"", "class=\"c-player\"", "class=\"c-psum\"", "href=\"/game#g=0\"", "noindex", "data-wasm=\"" ++ assets.your_wasm.path ++ "\"", "data-island=\"yourviews\"", "data-island=\"yourtime\"", "data-js=\"" ++ assets.yourtime_js.path ++ "\" data-wasm=\"" ++ assets.yourtime_wasm.path ++ "\"", "data-wasm=\"" ++ assets.yourviews_wasm.path ++ "\"", "data-island=\"yourlookup\"", "data-js=\"" ++ assets.yourlookup_js.path ++ "\" data-wasm=\"" ++ assets.yourlookup_wasm.path ++ "\"", "An example player" }) |want| {
         try testing.expect(std.mem.find(u8, games_page, want) != null);
     }
     // Home in every view: the shared view's example, its game file loaded lazily; the
     // Patch card's moves (all/ has none: its patch day isn't in views-moved.bin)
     {
         const home = (try core_loaded.get(arena, "index.html")).?;
-        try testing.expect(std.mem.find(u8, home, "<ul class=\"c-today\" data-v=\"changes\"><li><a href=\"champion/darius.html#role=top\">") != null);
+        try testing.expect(std.mem.find(u8, home, "<ul class=\"c-today\" data-v=\"changes\"><li><a href=\"/champions/darius/top\">") != null);
         try testing.expect(std.mem.find(u8, home, "<small>45.0% → 56.0%</small>") != null);
     }
-    for ([_][]const u8{ "index.html", "all/index.html" }) |path| {
+    for ([_][]const u8{ "index.html", "_v/all/index.html" }) |path| {
         const home = (try core_loaded.get(arena, path)).?;
         try testing.expect(std.mem.find(u8, home, "vs 15.12") != null);
         for ([_][]const u8{ "data-island=\"home\" data-src=\"", "data/your/mid.bin\"", "data-js=\"", assets.homegame_js.path ++ "\" data-wasm=\"" ++ assets.homegame_wasm.path ++ "\"" }) |want| {
@@ -874,15 +870,14 @@ test "fixture games to stats, curves and the website" {
     }
     // Sitemaps list rendered pages
     const sitemap = (try core_loaded.get(arena, "sitemap.xml")).?;
-    for ([_][]const u8{ "https://x.io/champion/darius.html", "https://x.io/matchup/top/mordekaiser-vs-darius.html", "https://x.io/daily.html", "https://x.io/learn.html" }) |want| {
+    for ([_][]const u8{ "<loc>https://x.io/champions/darius</loc>", "<loc>https://x.io/matchups/top/mordekaiser-vs-darius</loc>", "<loc>https://x.io/daily</loc>", "<loc>https://x.io/learn</loc>" }) |want| {
         try testing.expect(std.mem.find(u8, sitemap, want) != null);
     }
-    // Unlisted pages stay out
-    for ([_][]const u8{ "game.html", "games.html" }) |page| {
+    // Unlisted pages, a main role's own URL and the views stay out: one sitemap
+    for ([_][]const u8{ "x.io/game<", "x.io/games<", "x.io/champions/darius/top<", "region=", "period=" }) |page| {
         try testing.expect(std.mem.find(u8, sitemap, page) == null);
     }
-    const patch_sitemap = (try core_loaded.get(arena, "patch/sitemap.xml")).?;
-    try testing.expect(std.mem.find(u8, patch_sitemap, "https://x.io/patch/build/darius-top.html") == null);
+    try testing.expectEqual(null, try core_loaded.get(arena, "_v/patch/sitemap.xml"));
 }
 
 test "admin page from the fixture games and a crawl log" {
@@ -1414,17 +1409,26 @@ test "fixture games to lab rows, from SQLite and packed" {
 
 /// An old page path's new URL (docs/plan/urls.md) parses back as the same kind of page:
 /// a champion page stays a champion, never a role list
-fn expectNewUrl(arena: std.mem.Allocator, old: []const u8) !void {
-    const new = try ui.urls.legacy(arena, old) orelse {
-        std.debug.print("{s}: no new URL\n", .{old});
+/// File `path` is a page (its URL parses back) and every href in it is a page's URL, a
+/// file (asset, data), a fragment or external: a relative or misspelt link fails
+fn expectPageLinks(arena: std.mem.Allocator, path: []const u8, page: []const u8) !void {
+    const url = try site.urlOf(arena, path);
+    if (ui.urls.parse(url[0 .. std.mem.findScalar(u8, url, '?') orelse url.len]) == null) {
+        std.debug.print("{s}: URL {s} isn't a page\n", .{ path, url });
         return error.TestUnexpectedResult;
-    };
-    const page = ui.urls.parse(new[0 .. std.mem.findScalar(u8, new, '?') orelse new.len]) orelse {
-        std.debug.print("{s}: new URL {s} isn't a page\n", .{ old, new });
-        return error.TestUnexpectedResult;
-    };
-    if (std.mem.startsWith(u8, old, "champion/") and page != .champion) {
-        std.debug.print("{s}: champion slug reads as a role\n", .{old});
+    }
+    var it = std.mem.splitSequence(u8, page, "href=\"");
+    _ = it.next();
+    while (it.next()) |rest| {
+        const href = rest[0 .. std.mem.findScalar(u8, rest, '"') orelse rest.len];
+        if (href.len == 0 or href[0] == '#') continue;
+        if (std.mem.startsWith(u8, href, "https://") or std.mem.startsWith(u8, href, "http://") or std.mem.startsWith(u8, href, "mailto:")) continue;
+        const end = std.mem.findAny(u8, href, "?#") orelse href.len;
+        const bare = href[0..end];
+        const last = bare[(std.mem.findScalarLast(u8, bare, '/') orelse 0)..];
+        const file = std.mem.findScalar(u8, last, '.') != null;
+        if (bare.len > 0 and bare[0] == '/' and (file or ui.urls.parse(bare) != null)) continue;
+        std.debug.print("{s}: href {s} is neither a page's URL nor a file\n", .{ path, href });
         return error.TestUnexpectedResult;
     }
 }

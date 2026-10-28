@@ -13,6 +13,7 @@ const candlist = @import("candlist.zig");
 const role = @import("role.zig");
 const pd = @import("pooldata.zig");
 const pp = @import("poolpage.zig");
+const urls = @import("urls.zig");
 const phrase = @import("phrase.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
@@ -248,7 +249,7 @@ pub const Page = struct {
             break :blk h.span(.{}, .{
                 W.read.with(h, .{ .a = a, .b = b, .v = phrase.num(h, .points, @as(f32, @floatFromInt(v.pp)) / 10).s, .g = phrase.num(h, .count, v.games).s }),
                 if (v.gold) |g| h.span(.{}, .{ " · ", W.gold.with(h, .{ .v = phrase.num(h, .signed, g).s }) }) else null,
-                if (v.gold != null) h.a(.{ .href = h.fmt("matchup/{s}/{s}-vs-{s}.html", .{ @tagName(r), p.slug(ids[x[1]]), p.slug(lanes[x[0]].id) }) }, .{W.matchup}) else null,
+                if (v.gold != null) h.a(.{ .href = h.fmt("/matchups/{s}/{s}-vs-{s}{s}", .{ @tagName(r), p.slug(ids[x[1]]), p.slug(lanes[x[0]].id), urls.view_queries[p.d.view] }) }, .{W.matchup}) else null,
             });
         } else h.span(.{}, .{W.press});
         return h.div(.{}, .{
@@ -536,7 +537,7 @@ test "pool grid: needs lanes then mains, a section per role, what to add, add as
     // Most met: Fiora, with gold and the matchup page
     const fiora = try render(a, &p);
     try testing.expect(std.mem.find(u8, fiora, "Darius into Fiora −2.6 · 900 games") != null);
-    try testing.expect(std.mem.find(u8, fiora, "href=\"matchup/top/darius-vs-fiora.html\"") != null);
+    try testing.expect(std.mem.find(u8, fiora, "href=\"/matchups/top/darius-vs-fiora\"") != null);
 
     p.update(.{ .add = .{ .id = 3, .role = .top } }, &ev);
     try testing.expectEqual(pp.Pick{ .id = 3, .role = .top }, p.adding.?);

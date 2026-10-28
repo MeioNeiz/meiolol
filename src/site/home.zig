@@ -36,16 +36,17 @@ pub fn writeIndex(site: *const Site, w: *Writer) !void {
     var p = try site.page(
         "meiolol: game review for League of Legends",
         "Look yourself up: every recent game reviewed like a chess game. Your team's win chance minute by minute, the moments that moved it, what each death cost, and your lane against the typical game at your rank. Free, no sign-up.",
-        "index.html",
+        .home,
         .home,
     );
     p.counterparts = null;
     try html.head(w, p);
-    const up = site.view.up();
+    // Root-relative: home's own view copies sit under /_v/
+    const up = "/";
 
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
-    var look: ui.idlookup.IdLookup = .{ .to = try std.mem.concat(a, u8, &.{ up, "your.html" }) };
+    var look: ui.idlookup.IdLookup = .{ .to = try std.mem.concat(a, u8, &.{ up, "your" }) };
     const review: ui.N = if (try reviewOf(site, up)) |r| r.view(&h) else .none;
     var cards: std.ArrayList(ui.N) = .empty;
     if (try dailyOf(site, up)) |d| try cards.append(a, d.view(&h));
@@ -58,14 +59,14 @@ pub fn writeIndex(site: *const Site, w: *Writer) !void {
         \\<script src="{js}" data-wasm="{wasm}" defer></script>
         \\
     , .{
-        .js = html.Link{ .root = up, .path = assets.home_js.path },
+        .js = html.Link{ .path = assets.home_js.path },
         .wasm = assets.home_wasm.path,
     });
     try html.foot(w, p);
 }
 
 comptime {
-    std.debug.assert(std.mem.eql(u8, hp.game_page, yourgame.page_path));
+    std.debug.assert(std.mem.eql(u8, "/" ++ hp.game_page, yourgame.page_path));
 }
 
 /// Of the shared view's daily_files, those home reads (the example's games, the Daily
@@ -153,7 +154,7 @@ fn dailyFor(
         },
     };
     const d = try a.create(hp.Daily);
-    d.* = .{ .n = pz.n, .href = try std.mem.concat(a, u8, &.{ up, "daily.html" }) };
+    d.* = .{ .n = pz.n, .href = try std.mem.concat(a, u8, &.{ up, "daily" }) };
     for (0..2) |side| for (0..5) |i| {
         const hidden = side == pz.hidden_team and i == @backingInt(pz.hidden_role);
         d.teams[side][i] = if (hidden) null else try champ(ctx, pz.teams[side][i]);
@@ -188,7 +189,7 @@ fn patchCard(site: *const Site, h: *ui.H, up: []const u8) !?ui.N {
         try rows.append(a, .{
             .champ = .{ .name = ch.name, .src = try site.icon(ch) },
             .role = champion.uiRole(m.role),
-            .href = try champHref(site, up, ch, m.role),
+            .href = try champHref(site, ch, m.role),
             .from = @floatCast(100 * patchday.Rate.share(m.win.prev)),
             .to = @floatCast(100 * patchday.Rate.share(m.win.cur)),
             .ci = @floatCast((g[1] - g[0]) / 2),
@@ -202,7 +203,7 @@ fn patchHead(a: Allocator, up: []const u8, cur: []const u8, prev: []const u8) !u
         .title = .{ .s = try a.print("Patch {s}", .{cur}) },
         .count = .{ .s = try a.print("vs {s}", .{prev}) },
         .action = ui.plain("All changes"),
-        .href = try std.mem.concat(a, u8, &.{ up, "patch/", patch_page.path }),
+        .href = try std.mem.concat(a, u8, &.{ up, "patch?period=patch" }),
     };
 }
 
@@ -223,8 +224,8 @@ fn biggest(a: Allocator, moves: []const patchday.ChampionMove, o: patchday.Optio
     return std.mem.concat(a, patchday.ChampionMove, &.{ ups.items[0..@min(per_way, ups.items.len)], downs.items[0..@min(per_way, downs.items.len)] });
 }
 
-fn champHref(site: *const Site, up: []const u8, ch: Champ, r: Role) ![]const u8 {
-    return site.arena.print("{s}#role={s}", .{ try site.champHref(ch, up), r.label() });
+fn champHref(site: *const Site, ch: Champ, r: Role) ![]const u8 {
+    return site.href(.{ .champion = .{ .slug = ch.slug, .role = root.urlRole(r) } });
 }
 
 /// Each role's most played, best win rate over the champions table's games floor and
@@ -233,8 +234,8 @@ fn champsOf(site: *const Site, up: []const u8) !?*hp.HomeChamps {
     const a = site.arena;
     if (site.games == 0) return null;
     const d = try a.create(hp.Champs);
-    d.* = .{ .champs = &.{}, .games = site.games, .index = try site.championsHref(null, up), .roles = @splat(&.{}) };
-    for (Role.all, &d.role_hrefs) |r, *href| href.* = try site.championsHref(r, up);
+    d.* = .{ .champs = &.{}, .games = site.games, .index = try site.championsHref(null), .roles = @splat(&.{}) };
+    for (Role.all, &d.role_hrefs) |r, *href| href.* = try site.championsHref(r);
     var l: Lists = .{ .site = site, .up = up, .slot = try a.alloc(?u16, site.champs.len) };
     @memset(l.slot, null);
     const scores = try a.alloc(?f64, site.champs.len);
@@ -287,7 +288,7 @@ const Lists = struct {
             }
             try out.append(a, .{
                 .champ = l.slot[k].?,
-                .href = try champHref(site, l.up, ch, r),
+                .href = try champHref(site, ch, r),
                 .games = cr.games,
                 .wins = cr.wins,
                 .share = @floatCast(100 * @as(f64, @floatFromInt(cr.games)) / @as(f64, @floatFromInt(site.games))),
@@ -409,9 +410,9 @@ test "the Daily card: the newest puzzle up to today, the hidden seat empty" {
         .{ .path = "daily/8.json", .data = "{\"n\":" },
         .{ .path = "daily/9.json", .data = try std.json.Stringify.valueAlloc(a, p, .{}) },
     };
-    const d = (try dailyFor(a, &all, 7, "../", {}, names)).?.data;
+    const d = (try dailyFor(a, &all, 7, "/", {}, names)).?.data;
     try std.testing.expectEqual(7, d.n);
-    try std.testing.expectEqualStrings("../daily.html", d.href);
+    try std.testing.expectEqualStrings("/daily", d.href);
     try std.testing.expectEqualStrings("A", d.teams[0][0].?.name);
     try std.testing.expectEqualStrings("J", d.teams[1][4].?.name);
     // Red's mid hidden; an id the site doesn't know empty too

@@ -147,7 +147,7 @@ pub fn cmdAccount(c: *Cmd) !u8 {
                     },
                     else => return err,
                 };
-                try out.print("https://meio.lol/signup.html#{s}\n", .{&t});
+                try out.print("https://meio.lol/signup#{s}\n", .{&t});
             } else if (v == .add) {
                 _ = accounts.create(db, name, phc, role.?, now) catch |err| switch (err) {
                     error.Taken, error.OwnerExists => {
@@ -172,7 +172,7 @@ pub fn cmdAccount(c: *Cmd) !u8 {
                 try accounts.makeInvite(db, io, role.?, null, "cli", now)
             else
                 try accounts.makeInvite(db, io, found.?.role, found.?.id, "cli", now);
-            try out.print("https://meio.lol/join.html#{s}\n", .{&t});
+            try out.print("https://meio.lol/join#{s}\n", .{&t});
         },
         .list => {
             var q = try db.prepare("SELECT username, role, disabled, created, last_seen FROM accounts ORDER BY id");
@@ -387,7 +387,7 @@ fn noteFull(out: *std.Io.Writer, n: ui.notesdata.Note) !void {
 
 pub const usage_your_example =
     \\  your-example  an anonymised player's recent games per role as GET /api/games
-    \\              answers, for your.html's example (src/api/example.zig); read-only
+    \\              answers, for /your's example (src/api/example.zig); read-only
     \\              --out FILE       default DIR/your-example.json
     \\              --curves DIR     curves-<patch>.bin files (default DIR/export)
     \\              --days N         recent days a player is picked from (default 7)

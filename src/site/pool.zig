@@ -1,4 +1,4 @@
-//! Pool on the site: pool.html (the ui.poolpage island, ui-pool.wasm: the pool and its
+//! Pool on the site: /pool (the ui.poolpage island, ui-pool.wasm: the pool and its
 //! picker; the ui.poolgrid island, ui-poolgrid.wasm: a section per role) and its files
 //! per view: one per main (data/pool/<slug>.bin), one per champion with its lane
 //! opponents in each role (data/pool/lanes/<slug>.bin). Several options with their
@@ -113,8 +113,6 @@ fn id16(id: u32) error{BadId}!u16 {
     return std.math.cast(u16, id) orelse error.BadId;
 }
 
-pub const path = "pool.html";
-
 /// The island, empty (the picker), with every champion and the mains with a file in its
 /// data-bin; the lanes' scope under it
 pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool) !void {
@@ -122,7 +120,7 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool) !void {
     const pg = try site.page(
         "Champion pool | meiolol",
         "Pick your champions in each role: the lanes they leave open, which champions cover them, what to play when one is banned and what their players also play.",
-        path,
+        .pool,
         .pool,
     );
     try html.head(w, pg);
@@ -140,13 +138,12 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool) !void {
         try ui.html.write(&t, t.root, w);
     }
     try w.writeAll("</div>");
-    const to_root = try site.toRoot(path);
     try tpl.render(w,
         \\
         \\<p class="muted">{chip} Lanes: points of win chance beyond what the two champions'
         \\own win rates predict, from {games} games. A main is a player's most played champion,
         \\from {source}. Harder or easier to pick up: new players against practised ones, every
-        \\region (<a href="{pickup}">How hard to pick up</a>). <a href="{up}method.html">Method</a>.</p>
+        \\region (<a href="{pickup}">How hard to pick up</a>). <a href="/method">Method</a>.</p>
         \\<script src="{js}" data-wasm="{wasm}" defer></script>
         \\<script src="{grid_js}" data-wasm="{grid_wasm}" defer></script>
         \\
@@ -154,11 +151,10 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool) !void {
         .chip = site.chip(site.regionDim(site.view.region), site.periodDim(site.view.period), .plat),
         .games = pd.min_games,
         .source = sourceText(p),
-        .up = site.view.up(),
-        .pickup = pickup.path,
-        .js = html.Link{ .root = to_root, .up = site.view.up(), .path = assets.pool_js.path },
+        .pickup = try site.href(.{ .pickup = null }),
+        .js = html.Link{ .path = assets.pool_js.path },
         .wasm = assets.pool_wasm.path,
-        .grid_js = html.Link{ .root = to_root, .up = site.view.up(), .path = assets.poolgrid_js.path },
+        .grid_js = html.Link{ .path = assets.poolgrid_js.path },
         .grid_wasm = assets.poolgrid_wasm.path,
     });
     try html.foot(w, pg);
@@ -185,7 +181,7 @@ fn pageData(site: *const Site, p: *const pool.Pool) !page_ui.Data {
         } else continue;
         try mains.append(a, .{ .c = @intCast(c), .role = champion.uiRole(r), .players = m.players });
     }
-    return .{ .ddragon = site.ddragon_version, .champs = champs, .mains = mains.items };
+    return .{ .ddragon = site.ddragon_version, .champs = champs, .mains = mains.items, .view = @intCast(site.view.index()) };
 }
 
 /// A bit per role with a lanes file (ui.role.Role order)

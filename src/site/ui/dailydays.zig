@@ -1,6 +1,6 @@
 //! DailyDays: Daily Draft's head (title, badges) with the days strip and streak, the strip
 //! its own island (ui-dailydays.wasm) so ui-daily.wasm stays the puzzle's. Each day
-//! links its puzzle's page (daily/<n>.html); answers come from localStorage
+//! links its puzzle's page (/daily/<n>); answers come from localStorage
 //! meiolol.daily.v1 (dailypage.read), so the server renders none. Once the page's puzzle
 //! is finished, how everyone did (/api/daily: the browser's answers sent once) and Share
 const std = @import("std");
@@ -28,10 +28,10 @@ pub const Day = struct { n: u32, date: []const u8 };
 pub const Data = struct {
     /// The page's puzzle
     n: u32,
-    /// daily.html, which opens the newest puzzle up to the viewer's date (else a puzzle's
+    /// /daily, which opens the newest puzzle up to the viewer's date (else a puzzle's
     /// own page)
     redirects: bool,
-    /// "" from the site root, "../" from daily/
+    /// The site root: "/"
     root: []const u8,
     /// The server's date (UTC): the first render's, before the viewer's own
     utc: []const u8,
@@ -109,7 +109,7 @@ pub const Page = struct {
             const what = if (right) |r| W.right[r] else if (m != null) W.started else W.not_played;
             const label = W.day.with(h, .{ .n = x.n, .d = shortDate(h, x.date), .r = what.s });
             l.* = h.a(.{
-                .href = h.fmt("{s}daily/{d}.html", .{ s.d.root, x.n }),
+                .href = h.fmt("{s}daily/{d}", .{ s.d.root, x.n }),
                 .data_r = if (right) |r| "012"[r .. r + 1] else null,
                 .aria_current = if (x.n == s.d.n) "page" else if (std.mem.eql(u8, x.date, s.date)) "date" else null,
                 .aria_label = label,
@@ -272,7 +272,7 @@ pub fn wantedOf(search: []const u8) ?u32 {
     return null;
 }
 
-/// The puzzle daily.html shows on the viewer's `date`: `wanted` (?n=, an old link) when it
+/// The puzzle /daily shows on the viewer's `date`: `wanted` (?n=, an old link) when it
 /// is out by then, else the newest out; null when none is
 pub fn target(days: []const Day, date: []const u8, wanted: ?u32) ?u32 {
     const live = days[0..out(days, date)];
@@ -364,18 +364,18 @@ const demo_days = [_]Day{
     .{ .n = 16, .date = "2026-10-26" }, .{ .n = 17, .date = "2026-10-27" }, .{ .n = 18, .date = "2026-10-28" },
 };
 
-const demo: Data = .{ .n = 17, .redirects = true, .root = "", .utc = "2026-10-27", .days = &demo_days, .answer = 2, .winner = .red, .hidden_side = .red, .hidden_role = .support };
+const demo: Data = .{ .n = 17, .redirects = true, .root = "/", .utc = "2026-10-27", .days = &demo_days, .answer = 2, .winner = .red, .hidden_side = .red, .hidden_role = .support };
 const demo_archive: Data = .{
     .n = 12,
     .redirects = false,
-    .root = "../",
+    .root = "/",
     .utc = "2026-10-27",
     .days = &demo_days,
     .answer = 0,
     .winner = .blue,
     .hidden_side = .red,
     .hidden_role = .mid,
-    .url = "https://meio.lol/daily/12.html",
+    .url = "https://meio.lol/daily/12",
 };
 
 /// Finished on their days but #11 (late) and #15 (missed): the streak forgives #15, and
@@ -441,7 +441,7 @@ test "the strip: last 14 out, marks as data-r, today ringed, the page's own dash
     const days = t.kidsOf(strip);
     // #18 is out tomorrow
     try testing.expectEqual(14, days.len);
-    try testing.expectEqualStrings("daily/4.html", t.attr(days[0], "href").?);
+    try testing.expectEqualStrings("/daily/4", t.attr(days[0], "href").?);
     try testing.expectEqualStrings("2", t.attr(days[4], "data-r").?);
     try testing.expectEqualStrings("#8, 18 Oct: both right", t.attr(days[4], "aria-label").?);
     try testing.expectEqual(null, t.attr(days[11], "data-r"));
@@ -457,7 +457,7 @@ test "the strip: last 14 out, marks as data-r, today ringed, the page's own dash
     p.date = "2026-10-28";
     const ahead = p.view(&h);
     const kids = t.kidsOf(t.find(ahead, "class", "strip").?);
-    try testing.expectEqualStrings("daily/5.html", t.attr(kids[0], "href").?);
+    try testing.expectEqualStrings("/daily/5", t.attr(kids[0], "href").?);
     try testing.expectEqualStrings("date", t.attr(kids[13], "aria-current").?);
     try testing.expectEqualStrings("page", t.attr(kids[12], "aria-current").?);
 }
@@ -470,7 +470,7 @@ test "an archive page links from daily/" {
     var p: Page = .init(arena.allocator(), &demo_archive);
     const v = p.view(&h);
     const days = t.kidsOf(t.find(v, "class", "strip").?);
-    try testing.expectEqualStrings("../daily/4.html", t.attr(days[0], "href").?);
+    try testing.expectEqualStrings("/daily/4", t.attr(days[0], "href").?);
     try testing.expectEqualStrings("page", t.attr(days[8], "aria-current").?);
     try testing.expectEqualStrings("date", t.attr(days[13], "aria-current").?);
 }
@@ -532,7 +532,7 @@ test "streak: more days than it counts keeps the newest 512" {
         try saved.writer.print("{s}\"{d}\":{{\"marks\":\"11\",\"on\":\"{s}\"}}", .{ if (i > 0) "," else "", i + 1, date });
     }
     try saved.writer.writeByte('}');
-    const d: Data = .{ .n = 600, .redirects = true, .root = "", .utc = many[599].date, .days = many, .answer = 0, .winner = .blue, .hidden_side = .red, .hidden_role = .bot };
+    const d: Data = .{ .n = 600, .redirects = true, .root = "/", .utc = many[599].date, .days = many, .answer = 0, .winner = .blue, .hidden_side = .red, .hidden_role = .bot };
     var p: Page = .init(a, &d);
     p.saved = saved.written();
     try testing.expectEqual(Streak{ .run = 512, .best = 512 }, p.streak());
@@ -626,14 +626,14 @@ test "share: the marks on the hidden seat, only once finished and public" {
         "Daily Draft #12: 2/2\n" ++
             "\u{1F7E6}\u{1F7E6}\u{1F7E6}\u{1F7E6}\u{1F7E6}\n" ++
             "\u{1F7E5}\u{1F7E5}\u{2705}\u{1F7E5}\u{1F7E5}\n" ++
-            "Who won? \u{2705}\nhttps://meio.lol/daily/12.html",
+            "Who won? \u{2705}\nhttps://meio.lol/daily/12",
         shareText(&buf, &demo_archive, demo_saved).?,
     );
     try testing.expectEqualStrings(
         "Daily Draft #12: 1/2, with a hint\n" ++
             "\u{1F7E6}\u{1F7E6}\u{1F7E6}\u{1F7E6}\u{1F7E6}\n" ++
             "\u{1F7E5}\u{1F7E5}\u{274C}\u{1F7E5}\u{1F7E5}\n" ++
-            "Who won? \u{2705}\nhttps://meio.lol/daily/12.html",
+            "Who won? \u{2705}\nhttps://meio.lol/daily/12",
         shareText(&buf, &demo_archive, "{\"12\":{\"opt\":1,\"side\":0,\"hint\":1,\"marks\":\"01\"}}").?,
     );
     try testing.expectEqual(null, shareText(buf[0..20], &demo_archive, demo_saved));

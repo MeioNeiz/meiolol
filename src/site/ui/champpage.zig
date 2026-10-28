@@ -1,16 +1,17 @@
-//! The champion page (champion/<slug>.html): one champion in one role
-//! (docs/plan/ui/champion.md), as three islands. Top: the head with the role picker,
+//! The champion page (/champions/<slug>, /champions/<slug>/<role>): one champion in one
+//! role (docs/plan/ui/champion.md), as three islands. Top: the head with the role picker,
 //! the opponent search and the headline figures. Build: the build panel. More: the
 //! matchups as a dot plot with the chosen opponent's brief; by patch, by game length and
 //! the players' spread; pick-up and what its mains also play.
 //!
-//! The server renders the main role from the same data the page's data files carry
-//! (data/champion/<slug>.bin, -build.bin, -more.bin: `split`). ui-champion.wasm adopts
-//! Top and fetches ui-champbuild.wasm and ui-champmore.wasm for the others (one file
-//! would be over the 40 KB gz budget: stack.md); each reads the role from the fragment,
-//! so the other roles switch in place (`#role=jungle`).
+//! The server renders the path's role (bare: the main role) from the same data the
+//! page's data files carry (data/champion/<slug>.bin, -build.bin, -more.bin: `split`).
+//! ui-champion.wasm adopts Top and fetches ui-champbuild.wasm and ui-champmore.wasm for
+//! the others (one file would be over the 40 KB gz budget: stack.md). Role tabs are
+//! links to the role's page; the islands see one fragment (role=, region=, ...), which
+//! dom.zig's url_map spreads over the path, query and fragment.
 //!
-//! Top's toolbar picks the region, period and rank, kept in the fragment beside the role:
+//! Top's toolbar picks the region, period and rank, kept beside the role:
 //! each island then fetches its own file for the pick (`Files`: another view's base
 //! file, or the view's rank file, ui.champrank) and shows the old figures faded until
 //! it's in
@@ -54,6 +55,8 @@ pub const stamp = tiers.stamp;
 pub const Data = struct {
     name: []const u8,
     slug: []const u8,
+    /// Riot's champion id: the pool link's
+    id: u16 = 0,
     /// The portrait's URL
     icon: []const u8,
     /// The newest patch: "16.21"
@@ -202,8 +205,9 @@ pub const Pick = struct {
 };
 
 const n_views = 4;
-/// html.View's dir() and site/champrank.zig's suffixes
-const view_dirs = [n_views][]const u8{ "", "patch/", "all/", "all/patch/" };
+/// site/champrank.zig's suffixes, by view
+const view_dirs = @import("urls.zig").view_dirs;
+const view_queries = @import("urls.zig").view_queries;
 const rank_suffixes = [n_views][]const u8{ "", "-patch", "-all", "-all-patch" };
 
 /// Figures of a rank group's role under this many games are faded; under min_games, games
@@ -404,6 +408,7 @@ pub const BuildRole = struct {
 pub const MoreData = struct {
     name: []const u8,
     slug: []const u8,
+    id: u16 = 0,
     ddragon: []const u8,
     champs: []const Other,
     roles: []const MoreRole,
@@ -439,7 +444,7 @@ pub fn split(a: std.mem.Allocator, d: *const Data) !Split {
     return .{
         .top = .{ .name = d.name, .slug = d.slug, .icon = d.icon, .patch = d.patch, .ddragon = d.ddragon, .champs = d.champs, .roles = top },
         .build = .{ .roles = build },
-        .more = .{ .name = d.name, .slug = d.slug, .ddragon = d.ddragon, .champs = d.champs, .roles = more, .lengths = d.lengths, .spread = d.spread, .pickup = d.pickup, .also = d.also },
+        .more = .{ .name = d.name, .slug = d.slug, .id = d.id, .ddragon = d.ddragon, .champs = d.champs, .roles = more, .lengths = d.lengths, .spread = d.spread, .pickup = d.pickup, .also = d.also },
     };
 }
 
@@ -461,7 +466,7 @@ pub fn prepare(a: std.mem.Allocator, d: *const TopData, root: []const u8) ![]cha
             try entries.append(a, .{
                 .name = c.name,
                 .src = try std.fmt.allocPrint(a, champ.icon_fmt, .{ d.ddragon, c.key }),
-                .href = if (o.page) try std.fmt.allocPrint(a, "{s}matchup/{s}/{s}-vs-{s}.html", .{ root, @tagName(r.role), d.slug, c.slug }) else null,
+                .href = if (o.page) try std.fmt.allocPrint(a, "{s}matchups/{s}/{s}-vs-{s}", .{ root, @tagName(r.role), d.slug, c.slug }) else null,
             });
         }
         p.* = try .init(a, entries.items);
@@ -623,11 +628,20 @@ pub const Top = struct {
         })});
     }
 
-    /// A role link keeps the pick
-    const Frag = struct {
+    /// A role tab's URL, keeping the pick: the role's page (bare for the main role), the
+    /// view in the query, the rank in the fragment
+    const RoleHref = struct {
+        root: []const u8,
+        slug: []const u8,
+        role: ?role.Role,
         u: Url,
-        pub fn format(f: Frag, w: *std.Io.Writer) std.Io.Writer.Error!void {
-            try url.write(Url, f.u, w);
+        pub fn format(l: RoleHref, w: *std.Io.Writer) std.Io.Writer.Error!void {
+            try w.print("{s}champions/{s}", .{ l.root, l.slug });
+            if (l.role) |x| try w.print("/{t}", .{x});
+            try w.writeAll(view_queries[Pick.of(l.u).view]);
+            if (l.u.rank == .plat) return;
+            try w.writeByte('#');
+            try url.write(Url, .{ .rank = l.u.rank }, w);
         }
     };
 
@@ -637,13 +651,11 @@ pub const Top = struct {
         for (role.Role.all, &items) |x, *it| {
             it.* = .{ .role = x, .disabled = true, .href = "#" };
             for (p.data.roles, 0..) |dr, i| if (dr.role == x) {
-                var to = u;
-                to.role = if (i == 0) null else x;
                 it.* = .{
                     .role = x,
                     .share = dr.share,
                     .current = i == p.cur,
-                    .href = h.fmt("#{f}", .{Frag{ .u = to }}),
+                    .href = h.fmt("{f}", .{RoleHref{ .root = p.root, .slug = p.data.slug, .role = if (i == 0) null else x, .u = u }}),
                 };
             };
         }
@@ -900,7 +912,7 @@ pub const More = struct {
     /// The grid's champion and role
     fn input(p: *const P) matchgrid.Input {
         const rl = p.r();
-        return .{ .name = p.data.name, .slug = p.data.slug, .ddragon = p.data.ddragon, .champs = p.data.champs, .root = p.root, .role = rl.role, .counts = .{ .games = rl.games, .wins = rl.wins }, .rels = rl.rels };
+        return .{ .name = p.data.name, .slug = p.data.slug, .ddragon = p.data.ddragon, .champs = p.data.champs, .role = rl.role, .counts = .{ .games = rl.games, .wins = rl.wins }, .rels = rl.rels };
     }
 
     pub fn view(p: *P, h: *H) N {
@@ -1047,7 +1059,7 @@ pub const More = struct {
             const c = d.champs[a.champ];
             x.* = .{
                 .champ = icon(h, d.ddragon, c),
-                .href = h.fmt("{s}.html", .{c.slug}),
+                .href = h.fmt("{s}champions/{s}", .{ p.root, c.slug }),
                 .tag = if (a.harder) badge.view(h, .neutral, .{W.harder}) else null,
                 .value = h.span(.{}, .{W.lift.with(h, .{ .x = a.lift })}),
                 .note = W.share.with(h, .{ .s = @as(u32, @intFromFloat(@round(a.share))) }),
@@ -1055,7 +1067,7 @@ pub const More = struct {
         }
         const title = W.also.with(h, .{ .c = d.name });
         return card.view(h, .{}, &.{
-            card.head(h, title, null, &.{ p.plat(h), h.a(.{ .class = "more", .href = h.fmt("{s}pool.html#{s}", .{ p.root, d.slug }) }, .{W.pool}) }),
+            card.head(h, title, null, &.{ p.plat(h), h.a(.{ .class = "more", .href = h.fmt("{s}pool?champs={d}", .{ p.root, d.id }) }, .{W.pool}) }),
             if (rows.len > 0) champlist.view(h, .{ .label = title }, rows) else h.p(.{ .class = "none" }, .{W.none}),
         });
     }
@@ -1091,10 +1103,10 @@ test "a view's files sit beside the page's; rank files at the root" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const src = "../data/champion/darius-more.bin";
-    try std.testing.expectEqualStrings("../all/patch/data/champion/darius-more.bin", try viewPath(a, src, "../", 3, false));
-    try std.testing.expectEqualStrings("../data/champion/darius-more-rank-all.bin", try viewPath(a, src, "../", 2, true));
-    try std.testing.expectEqualStrings("../data/champion/darius-more-rank.bin", try viewPath(a, src, "../", 0, true));
+    const src = "/data/champion/darius-more.bin";
+    try std.testing.expectEqualStrings("/_v/all-patch/data/champion/darius-more.bin", try viewPath(a, src, "/", 3, false));
+    try std.testing.expectEqualStrings("/data/champion/darius-more-rank-all.bin", try viewPath(a, src, "/", 2, true));
+    try std.testing.expectEqualStrings("/data/champion/darius-more-rank.bin", try viewPath(a, src, "/", 0, true));
     const p: Pick = .of(Top.Url{ .region = .all, .period = .patch, .rank = .diamond });
     try std.testing.expectEqual(3, p.view);
     try std.testing.expectEqual(.all, p.region());
@@ -1109,7 +1121,7 @@ test "a rare role is listed and opens faded, with its games" {
         .{ .role = .jungle, .games = 9000, .wins = 4700, .share = 95, .pick = 4, .ban = 2, .lane = &.{} },
         .{ .role = .top, .games = 120, .wins = 55, .share = 1.3, .thin = true, .pick = 0.1, .ban = 2, .lane = &.{} },
     } };
-    var p: Top = .init(&d, try prepare(a, &d, "../"), "../");
+    var p: Top = .init(&d, try prepare(a, &d, "/"), "/");
     var t: tree.Tree = .{};
     var h: H = .init(a, &t);
     var w: std.Io.Writer.Allocating = .init(a);

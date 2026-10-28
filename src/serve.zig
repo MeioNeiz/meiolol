@@ -354,29 +354,18 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
         }
     }
 
-    // Clean URLs: /about serves about.html, /tier/ serves tier/index.html
-    var candidates: [3][]const u8 = undefined;
-    var n: usize = 0;
-    var html_buf: [520]u8 = undefined;
-    var index_buf: [530]u8 = undefined;
-    if (path.len == 0 or path[path.len - 1] == '/') {
-        candidates[n] = try std.mem.print(&index_buf, "{s}index.html", .{path});
-        n += 1;
-    } else {
-        candidates[n] = path;
-        n += 1;
-        if (std.fs.path.extension(path).len == 0) {
-            candidates[n] = try std.mem.print(&html_buf, "{s}.html", .{path});
-            n += 1;
-        }
-    }
+    var arena_state: std.heap.ArenaAllocator = .init(ctx.gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const query = queryOf(request.head.target);
+    // As nginx's redirect include (deploy/nginx/meiolol-redirects.conf): an old .html URL
+    // to its new one, 302 until URL4 (docs/plan/urls.md)
+    if (std.mem.endsWith(u8, path, ".html")) if (try oldTo(arena, path, query)) |to| return redirect(request, .found, to);
+    const names = try candidates(arena, path, viewDir(query));
     if (ctx.opts.render) |rendered| {
         const entry = rendered.acquire();
         defer rendered.release(entry);
-        var arena_state: std.heap.ArenaAllocator = .init(ctx.gpa);
-        defer arena_state.deinit();
-        const arena = arena_state.allocator();
-        for (candidates[0..n]) |name| {
+        for (names) |name| {
             const got = entry.loaded.get(arena, name) catch |err| switch (err) {
                 // `meiolol render` just started: nginx serves its cached copy if it has one
                 error.Loading => return request.respond("This page is being updated. Try again in a minute.\n", .{
@@ -411,31 +400,33 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
             };
             return request.respond(body, .{ .extra_headers = headers[0..if (compress) 4 else 3] });
         }
-        // A directory without its slash, as nginx answered when its directory was
-        // uploaded: relative links need the slash
-        if (path.len > 0 and path[path.len - 1] != '/' and std.fs.path.extension(path).len == 0) {
-            const index = try std.mem.concat(arena, u8, &.{ path, "/index.html" });
-            if ((entry.loaded.get(arena, index) catch null) != null) {
-                const to = try std.mem.concat(arena, u8, &.{ "/", path, "/" });
-                return request.respond("", .{ .status = .moved_permanently, .extra_headers = &.{.{ .name = "location", .value = to }} });
-            }
-        }
     }
-    if (ctx.opts.root != null) for (candidates[0..n]) |name| {
+    if (ctx.opts.root != null) for (names) |name| {
         if (try serveFile(ctx, request, name, gzip)) return;
     };
-    if (ctx.opts.render) |rendered| return notFoundPage(ctx, rendered, request, path);
+    if (try oldTo(arena, path, query)) |to| return redirect(request, .found, to);
+    if (path.len > 0 and path[path.len - 1] == '/') {
+        return redirect(request, .moved_permanently, try std.mem.concat(arena, u8, &.{ "/", std.mem.trimEnd(u8, path, "/"), query }));
+    }
+    // A mistyped capital: the lowercase page, when there is one
+    if (std.mem.findAny(u8, path, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") != null) {
+        const lower = try std.ascii.allocLowerString(arena, path);
+        if (try exists(ctx, arena, try candidates(arena, lower, viewDir(query)))) {
+            return redirect(request, .found, try std.mem.concat(arena, u8, &.{ "/", lower, query }));
+        }
+    }
+    if (ctx.opts.render) |rendered| return notFoundPage(ctx, rendered, request);
     return notFound(request);
 }
 
 /// The site's own 404 page, status kept: nginx passes it through (@render intercepts
 /// only 5xx), and a reviewer's mistyped URL gets the site, not a line of text
-fn notFoundPage(ctx: *Context, rendered: *Rendered, request: *std.http.Server.Request, path: []const u8) !void {
+fn notFoundPage(ctx: *Context, rendered: *Rendered, request: *std.http.Server.Request) !void {
     const entry = rendered.acquire();
     defer rendered.release(entry);
     var arena_state: std.heap.ArenaAllocator = .init(ctx.gpa);
     defer arena_state.deinit();
-    const body = entry.loaded.notFound(arena_state.allocator(), path) catch |err| switch (err) {
+    const body = entry.loaded.notFound(arena_state.allocator()) catch |err| switch (err) {
         error.Loading => return notFound(request),
         else => return err,
     };
@@ -448,7 +439,7 @@ fn notFoundPage(ctx: *Context, rendered: *Rendered, request: *std.http.Server.Re
     });
 }
 
-/// Loaded.pageList, a path from the site root a line
+/// Loaded.pageList, a URL a line
 fn pages(ctx: *Context, rendered: *Rendered, request: *std.http.Server.Request) !void {
     const entry = rendered.acquire();
     defer rendered.release(entry);
@@ -456,7 +447,7 @@ fn pages(ctx: *Context, rendered: *Rendered, request: *std.http.Server.Request) 
     defer arena_state.deinit();
     const arena = arena_state.allocator();
     var out: std.ArrayList(u8) = .empty;
-    for (try entry.loaded.pageList(arena)) |p| try out.print(arena, "/{s}\n", .{p});
+    for (try entry.loaded.pageList(arena)) |p| try out.print(arena, "{s}\n", .{try site.urlOf(arena, p)});
     return request.respond(out.items, .{ .extra_headers = &.{
         .{ .name = "content-type", .value = "text/plain; charset=utf-8" },
         .{ .name = "cache-control", .value = "no-store" },
@@ -471,6 +462,67 @@ fn staticVersion(io: Io, path: []const u8) i96 {
     var it = dir.iterate();
     while (it.next(io) catch null) |e| latest = @max(latest, mtime(io, dir, e.name));
     return latest;
+}
+
+/// "?region=all" of the target, "" without a query
+fn queryOf(target: []const u8) []const u8 {
+    const end = std.mem.findScalar(u8, target, '#') orelse target.len;
+    const at = std.mem.findScalar(u8, target[0..end], '?') orelse return "";
+    return target[at..end];
+}
+
+/// The view tree the query picks (html.View.dir): nginx's $meiolol_view
+fn viewDir(query: []const u8) []const u8 {
+    var v: site.html.View = .{ .region = .euw, .period = .days30 };
+    var it = std.mem.splitScalar(u8, if (query.len > 0) query[1..] else "", '&');
+    while (it.next()) |kv| {
+        if (std.mem.eql(u8, kv, "region=all")) v.region = .all;
+        if (std.mem.eql(u8, kv, "period=patch")) v.period = .patch;
+    }
+    return v.dir();
+}
+
+/// The files `path` may be, first found wins: /champions/top is champions/top.html, in
+/// the query's view tree first, then at the site root (shared and champion pages, files)
+fn candidates(arena: std.mem.Allocator, path: []const u8, dir: []const u8) ![]const []const u8 {
+    var out: std.ArrayList([]const u8) = .empty;
+    // Home is "/" only, its file never a URL (nginx: location = /index.html internal)
+    if (std.mem.eql(u8, path, "index") or std.mem.eql(u8, path, "index.html")) return out.items;
+    const page = if (path.len == 0) "index.html" else if (std.fs.path.extension(path).len == 0 and path[path.len - 1] != '/')
+        try std.mem.concat(arena, u8, &.{ path, ".html" })
+    else {
+        try out.append(arena, path);
+        return out.items;
+    };
+    if (dir.len > 0) try out.append(arena, try std.mem.concat(arena, u8, &.{ dir, page }));
+    try out.append(arena, page);
+    return out.items;
+}
+
+/// Whether any of `names` is a page or file
+fn exists(ctx: *Context, arena: std.mem.Allocator, names: []const []const u8) !bool {
+    if (ctx.opts.render) |rendered| {
+        const entry = rendered.acquire();
+        defer rendered.release(entry);
+        for (names) |name| if ((entry.loaded.get(arena, name) catch null) != null) return true;
+    }
+    if (ctx.opts.root) |r| for (names) |name| {
+        const full = try std.mem.concat(arena, u8, &.{ r, "/", name });
+        if (Io.Dir.cwd().statFile(ctx.io, full, .{})) |_| return true else |_| {}
+    };
+    return false;
+}
+
+/// An old URL's new one (ui.urls.legacy), keeping the request's query
+fn oldTo(arena: std.mem.Allocator, path: []const u8, query: []const u8) !?[]const u8 {
+    const to = try site.ui.urls.legacy(arena, path) orelse return null;
+    if (query.len == 0) return to;
+    const join: []const u8 = if (std.mem.findScalar(u8, to, '?') != null) "&" else "?";
+    return try std.mem.concat(arena, u8, &.{ to, join, query[1..] });
+}
+
+fn redirect(request: *std.http.Server.Request, status: std.http.Status, to: []const u8) !void {
+    return request.respond("", .{ .status = status, .extra_headers = &.{.{ .name = "location", .value = to }} });
 }
 
 /// The request target as a path relative to the site root; null for anything that
@@ -558,6 +610,41 @@ test "resolve" {
     try std.testing.expectEqual(null, resolve(&buf, "/%2e%2e/x"));
     try std.testing.expectEqual(null, resolve(&buf, "/.env"));
     try std.testing.expectEqual(null, resolve(&buf, "relative"));
+}
+
+test "clean URLs: the query's view tree first, then the site root" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const eq = std.testing.expectEqualDeep;
+    try eq(@as([]const []const u8, &.{"index.html"}), try candidates(a, "", viewDir("")));
+    try eq(@as([]const []const u8, &.{ "_v/all/index.html", "index.html" }), try candidates(a, "", viewDir("?region=all")));
+    try eq(@as([]const []const u8, &.{ "_v/all-patch/champions/top.html", "champions/top.html" }), try candidates(a, "champions/top", viewDir("?period=patch&region=all")));
+    try eq(@as([]const []const u8, &.{"learn.html"}), try candidates(a, "learn", viewDir("?x=1")));
+    try eq(@as([]const []const u8, &.{"_v/patch/data/tiers.bin"}), try candidates(a, "_v/patch/data/tiers.bin", viewDir("?period=patch")));
+    try eq(@as([]const []const u8, &.{}), try candidates(a, "index", ""));
+    try eq(@as([]const []const u8, &.{"champions/"}), try candidates(a, "champions/", ""));
+    try std.testing.expectEqualStrings("?region=all", queryOf("/x?region=all#role=mid"));
+    try std.testing.expectEqualStrings("", queryOf("/x#a?b"));
+    try std.testing.expectEqualStrings("/champions/top?region=all&n=1", (try oldTo(a, "all/role/top.html", "?n=1")).?);
+    try std.testing.expectEqualStrings("/daily?n=12", (try oldTo(a, "daily.html", "?n=12")).?);
+    try std.testing.expectEqual(null, try oldTo(a, "admin/index.html", ""));
+}
+
+test "old URLs: nginx's samples (deploy/nginx/redirect-samples.tsv) through urls.legacy" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var lines = std.mem.tokenizeScalar(u8, @embedFile("redirect-samples.tsv"), '\n');
+    while (lines.next()) |line| {
+        const tab = std.mem.findScalar(u8, line, '\t') orelse return error.BadSample;
+        const old = line[1..tab];
+        const q = std.mem.findScalar(u8, old, '?') orelse old.len;
+        const got = try oldTo(arena.allocator(), old[0..q], old[q..]) orelse {
+            std.debug.print("no new URL for {s}\n", .{line[0..tab]});
+            return error.TestUnexpectedResult;
+        };
+        try std.testing.expectEqualStrings(line[tab + 1 ..], got);
+    }
 }
 
 test "Rendered: a swapped-out site is freed after its last request" {

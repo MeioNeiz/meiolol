@@ -22,7 +22,7 @@ pub fn page(w: *Writer, info: prose.Info) Writer.Error!void {
         \\<input id="riot-id" name="id" placeholder="Riot ID, like Name#EUW" aria-label="Riot ID, as Name#TAG" autocomplete="off" spellcheck="false" required>
         \\<button type="submit">Review my games</button>
         \\</form>
-        \\<p id="example-offer" class="sub-links" hidden><a href="your.html#example" id="example-link">See an example review →</a></p>
+        \\<p id="example-offer" class="sub-links" hidden><a href="/your#example" id="example-link">See an example review →</a></p>
         \\</section>
         \\<p id="status" class="note" hidden></p>
         \\<div id="player" hidden>
@@ -73,7 +73,7 @@ pub fn page(w: *Writer, info: prose.Info) Writer.Error!void {
         \\Games API and keeps them, so the page loads fast and your history builds up. Each
         \\game lists its ten players with their Riot IDs as at that game, as other League
         \\statistics sites do, and Friends lists the players you team up with most and how
-        \\those games went. Details in the <a href="privacy.html">privacy policy</a>.</p>
+        \\those games went. Details in the <a href="/privacy">privacy policy</a>.</p>
         \\<p class="muted">Don't want your games here? Remove them and stop us collecting
         \\them again. To prove the account is yours, you set a given profile icon for a
         \\moment.</p>

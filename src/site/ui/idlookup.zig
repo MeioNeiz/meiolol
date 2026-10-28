@@ -117,7 +117,7 @@ pub const css =
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
     const empty = h.mem.create(IdLookup) catch return;
-    empty.* = .{ .to = "your.html" };
+    empty.* = .{ .to = "/your" };
     g.addFill("empty", empty.view(h));
     const recent = h.mem.alloc(Id, 2) catch return;
     recent[0] = .{};
@@ -125,7 +125,7 @@ pub fn gallery(g: *Gallery) void {
     recent[1] = .{};
     recent[1].set("Agurin#EUW");
     const typed = h.mem.create(IdLookup) catch return;
-    typed.* = .{ .to = "your.html", .recent = recent };
+    typed.* = .{ .to = "/your", .recent = recent };
     typed.q.set("Caps#G2");
     g.addFill("typed, recent IDs", typed.view(h));
 }
@@ -135,6 +135,6 @@ test "an ID goes in the fragment, encoded" {
     defer arena.deinit();
     var t: tree.Tree = .{};
     var h: H = .init(arena.allocator(), &t);
-    const l: IdLookup = .{ .to = "your.html" };
-    try std.testing.expectEqualStrings("your.html#id=Hide%20on%20bush%23KR1", l.href(&h, "Hide on bush#KR1"));
+    const l: IdLookup = .{ .to = "/your" };
+    try std.testing.expectEqualStrings("/your#id=Hide%20on%20bush%23KR1", l.href(&h, "Hide on bush#KR1"));
 }

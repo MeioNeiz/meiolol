@@ -17,7 +17,7 @@ const Writer = std.Io.Writer;
 const gd = ui.gamedata;
 const log = std.log.scoped(.site);
 
-pub const page_path = "game.html";
+pub const page_path = "/game";
 pub const example_path = "data/your-example.json";
 const data_dir = "data/your/";
 pub const list_path = data_dir ++ "list.bin";
@@ -109,7 +109,7 @@ pub fn writePage(site: *const Site, w: *Writer) !bool {
         \\<script src="{js}" data-wasm="{wasm}" defer></script>
         \\
     , .{
-        .js = html.Link{ .root = "", .path = assets.games_js.path },
+        .js = html.Link{ .path = assets.games_js.path },
         .wasm = assets.games_wasm.path,
     });
     try html.foot(w, p);

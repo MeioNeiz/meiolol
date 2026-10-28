@@ -132,7 +132,7 @@ test "the server renders All over 1.5k games as the role board, off-role behind 
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var s: tiers.Tiers = .init(&data, try tiers.prepare(a, &data, "../"), null);
+    var s: tiers.Tiers = .init(&data, try tiers.prepare(a, &data, "/"), null);
     var t: tree.Tree = .{};
     var h: tree.H = .init(a, &t);
     t.root = s.view(&h);
@@ -142,7 +142,7 @@ test "the server renders All over 1.5k games as the role board, off-role behind 
     // Kai'Sa under 1.5k games
     try testing.expectEqual(@as(usize, 3), std.mem.count(u8, page, "class=\"nm\""));
     try testing.expect(std.mem.find(u8, page, "<p class=\"sub\">400,000 games in EUW · 16.21 vs 16.20</p>") != null);
-    try testing.expect(std.mem.find(u8, page, "href=\"../champion/ahri.html#role=mid\"") != null);
+    try testing.expect(std.mem.find(u8, page, "href=\"/champions/ahri/mid\"") != null);
     try testing.expect(std.mem.find(u8, page, "Moved in 16.21") != null);
     // All without a search: the role board, not one long table
     try testing.expect(std.mem.find(u8, page, "class=\"rb\"") != null);
