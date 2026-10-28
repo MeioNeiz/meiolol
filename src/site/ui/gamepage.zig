@@ -582,6 +582,18 @@ pub fn gallery(g: *Gallery) void {
     var more: GameMore = .{ .s = p.* };
     var lane: GameLane = .{ .a = h.mem, .data = p.data };
     g.addFill("a win, on its turn", page(h, p.view(h), more.view(h), lane.view(h)));
+    // Every moment: past the inspector's cap, its "more" button
+    const whole = h.mem.create(GamePage) catch {
+        h.oom = true;
+        return;
+    };
+    whole.* = GamePage.init(h.mem, &@import("game_demo.zig").data) catch {
+        h.oom = true;
+        return;
+    };
+    whole.bind();
+    whole.tl.range = null;
+    g.addFill("the whole game's moments", whole.insp.view(h));
 }
 
 const testing = std.testing;
