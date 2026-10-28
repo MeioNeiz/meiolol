@@ -1,20 +1,15 @@
-//! The pool page (pool.html, docs/plan/ui/pool.md): up to five champions, main first,
-//! the main's hard lanes against them (HeatGrid) and what to add (CandidateList: hard
-//! lanes, when banned, also played). Empty by default: the picker is the page. The main's
-//! lanes come from its file (data/pool/<slug>.bin, ui.pooldata), fetched by
-//! ui-pool.wasm; the pool rides in the URL (#pool=86-122) and localStorage
+//! The pool page's own island (pool.html, docs/plan/ui/pool.md): the pool, up to ten
+//! champion-role pairs grouped by role, and the picker. Empty by default: the picker is
+//! the page. The sections per role are ui.poolgrid's island beside it, which ui-pool.wasm
+//! tells the pool; the pool rides in the URL (#pool=86t-122j) and localStorage
 const std = @import("std");
 const tree = @import("tree.zig");
 const card = @import("card.zig");
 const champ = @import("champ.zig");
 const role = @import("role.zig");
 const rolepicker = @import("rolepicker.zig");
-const segmented = @import("segmented.zig");
 const champsearch = @import("champsearch.zig");
 const poolslots = @import("poolslots.zig");
-const heatgrid = @import("heatgrid.zig");
-const candlist = @import("candlist.zig");
-const pd = @import("pooldata.zig");
 const phrase = @import("phrase.zig");
 const url = @import("url.zig");
 const Gallery = @import("gallery.zig").Gallery;
@@ -23,55 +18,28 @@ const Phrase = phrase.Phrase;
 const H = tree.H;
 const N = tree.N;
 const Role = role.Role;
-const Why = pd.File.Why;
 
 pub const name = "PoolPage";
-pub const scope = .{".c-poolpage"};
+pub const scope = .{ ".c-poolpage", ".c-poolwrap" };
 pub const sel = "[data-island=pool]";
 
-/// Champions in a pool
-pub const max = 5;
-/// Columns the grid suggests after the pool
-const grid_options = 3;
-/// What to add rows (product rule: 3-5 options)
-const list_options = 5;
+/// Champion-role pairs in a pool
+pub const max = 10;
 /// By role icons before "All"
 const role_shown = 24;
 
 const W = struct {
     pub const title = plain("Champion pool");
-    pub const lead = plain("Your champions, their weak lanes, what to add");
+    pub const lead = plain("Your champions in each role, the lanes they leave open, what to add");
     pub const choose = plain("Choose your pool");
-    pub const choose_sub = plain("up to 5, main first");
+    pub const choose_sub = plain("up to 10, any roles");
     pub const add_champs = plain("Add champions");
-    pub const of_max = Phrase("{n:int} of 5");
+    pub const of_max = Phrase("{n:int} of 10");
     pub const any = plain("Any champion");
     pub const by_role = plain("By role");
     pub const all = Phrase("All {n:int}");
     pub const fewer = plain("Fewer");
-    pub const weak = plain("Weak lanes");
-    pub const covered = Phrase("{a:int} of {b:int} covered");
-    pub const vs = plain("vs");
-    pub const best = plain("Best answer");
     pub const add = Phrase("Add {c:text}");
-    pub const add_short = plain("+ Add");
-    pub const press = plain("Press a cell for its games");
-    pub const read = Phrase("{a:text} into {b:text} {v:text} · {g:text} games");
-    pub const read_none = Phrase("{a:text} into {b:text}: no games");
-    pub const what = plain("What to add");
-    pub const why_label = plain("Reason");
-    pub const why_hard = plain("Weak lanes");
-    pub const why_banned = plain("Banned");
-    pub const why_also = plain("Also played");
-    pub const champion = plain("Champion");
-    pub const mains_play = plain("Mains");
-    pub const blank = plain("");
-    pub const loading = plain("Loading lanes…");
-    pub const failed = plain("The lanes didn't load. Reload the page to try again.");
-    pub const few = Phrase("Too few {c:text} mains yet for lanes.");
-    pub const nothing = plain("Nothing to add for these lanes yet.");
-    pub const harder = plain("harder to pick up");
-    pub const easier = plain("easier to pick up");
 };
 
 /// How hard a champion is to pick up (src/learning.zig): new against practised players
@@ -84,6 +52,8 @@ pub const Champ = struct {
     key: []const u8,
     slug: []const u8,
     pickup: Pickup = .usual,
+    /// A bit per role it has lanes in (Role order): By role lists it there
+    roles: u8 = 0,
 };
 
 /// A champion with a pool file
@@ -102,23 +72,57 @@ pub const Data = struct {
     mains: []const Main,
 };
 
+pub const Pick = struct { id: u16, role: Role };
+
+/// The pool as the URL and localStorage hold it: "86t-122j", a role letter each
+pub fn write(pool: []const Pick, w: *std.Io.Writer) std.Io.Writer.Error!void {
+    for (pool, 0..) |x, i| try w.print("{s}{d}{c}", .{ if (i > 0) "-" else "", x.id, letters[@backingInt(x.role)] });
+}
+
+const letters = "tjmbs";
+
+/// Known champions' pairs from `s` into `out`, role order, repeats and the rest past
+/// `max` dropped; an id without a letter (older links) in its main role
+pub fn read(d: *const Data, s: []const u8, out: *[max]Pick) u8 {
+    var n: u8 = 0;
+    var it = std.mem.tokenizeScalar(u8, s, '-');
+    while (it.next()) |x| {
+        const end = std.mem.findNone(u8, x, "0123456789") orelse x.len;
+        const id = std.fmt.parseInt(u16, x[0..end], 10) catch continue;
+        const c = indexOf(d, id) orelse continue;
+        const r: Role = if (end == x.len) defaultRole(d, c) else if (std.mem.findScalar(u8, letters, x[end])) |k| @fromBackingInt(@intCast(k)) else continue;
+        n = insert(out, n, .{ .id = id, .role = r });
+    }
+    return n;
+}
+
+/// `x` into `pool[0..n]` after its role's others; the new length
+fn insert(pool: *[max]Pick, n: u8, x: Pick) u8 {
+    if (n == max) return n;
+    for (pool[0..n]) |y| if (y.id == x.id and y.role == x.role) return n;
+    var at: usize = n;
+    while (at > 0 and @backingInt(pool[at - 1].role) > @backingInt(x.role)) at -= 1;
+    std.mem.copyBackwards(Pick, pool[at + 1 .. n + 1], pool[at..n]);
+    pool[at] = x;
+    return n + 1;
+}
+
+/// Its main role, else its first role with lanes, else top
+pub fn defaultRole(d: *const Data, c: usize) Role {
+    if (mainOf(d, c)) |m| return m.role;
+    const bits = d.champs[c].roles;
+    return if (bits == 0) .top else @fromBackingInt(@intCast(@ctz(bits)));
+}
+
 pub const Page = struct {
     d: *const Data,
     search: champsearch.ChampSearch,
-    /// Champion ids, main first
-    pool: [max]u16 = @splat(0),
+    pool: [max]Pick = undefined,
     n: u8 = 0,
-    why: Why = .hard,
-    /// The pressed grid cell (row, column)
-    cell: ?[2]u8 = null,
-    /// By role's tab
+    /// By role's tab: its icons add in this role
     role: Role = .top,
-    /// By role shows every main
+    /// By role shows every champion
     all: bool = false,
-    /// The main's file once fetched; another champion's after the main changed
-    file: ?*const pd.File = null,
-    /// The main whose fetch failed; cleared when the main changes
-    failed: u16 = 0,
     /// The pool changed by a message (not the URL), for the wasm to store
     dirty: bool = false,
     /// The server's render: Data as ui.data, base64, for the island
@@ -126,9 +130,9 @@ pub const Page = struct {
 
     const P = @This();
 
-    pub const Url = struct { pool: url.Str(32) = .{}, why: Why = .hard };
+    pub const Url = struct { pool: url.Str(64) = .{} };
 
-    pub const Msg = union(enum) { picked, add: u16, remove: u8, why: Why, cell: [2]u8, role: Role, all, focus };
+    pub const Msg = union(enum) { picked, add: u16, remove: u8, role: Role, all, focus };
 
     /// Builds the search's index over `d.champs`, in `a`
     pub fn init(a: std.mem.Allocator, d: *const Data) !P {
@@ -143,54 +147,24 @@ pub const Page = struct {
         return .{ .d = d, .search = .{ .index = ix, .id = "pool-pick", .mode = .pick, .label = W.any } };
     }
 
-    pub fn ids(p: *const P) []const u16 {
+    pub fn picks(p: *const P) []const Pick {
         return p.pool[0..p.n];
     }
 
-    /// The champion whose file the page needs and lacks: the main, when it has one
-    pub fn need(p: *const P) ?u16 {
-        if (p.n == 0) return null;
-        const id = p.pool[0];
-        if (p.mainFile() != null or p.failed == id) return null;
-        const c = indexOf(p.d, id) orelse return null;
-        return if (mainOf(p.d, c) != null) id else null;
-    }
-
-    /// The fetch for `id` ended: its file, or null when it failed
-    pub fn loaded(p: *P, id: u16, f: ?*const pd.File) void {
-        if (f) |x| {
-            if (x.id != id or !x.valid()) return p.loaded(id, null);
-            p.file = x;
-            p.cell = null;
-        } else p.failed = id;
-    }
-
-    fn mainFile(p: *const P) ?*const pd.File {
-        const f = p.file orelse return null;
-        return if (p.n > 0 and f.id == p.pool[0]) f else null;
-    }
-
     pub fn update(p: *P, m: Msg, ev: *tree.Event) void {
-        const main = p.mainId();
-        defer if (p.mainId() != main) {
-            p.failed = 0;
-        };
         switch (m) {
             .picked => {
                 const e = p.search.chosen orelse return;
                 p.search.chosen = null;
-                if (e < p.d.champs.len) p.add(p.d.champs[e].id);
+                if (e < p.d.champs.len) p.add(.{ .id = p.d.champs[e].id, .role = defaultRole(p.d, e) });
                 ev.after = .{ .op = .focus, .ref = "input" };
             },
-            .add => |id| p.add(id),
+            .add => |id| p.add(.{ .id = id, .role = p.role }),
             .remove => |i| {
                 if (i >= p.n) return;
-                std.mem.copyForwards(u16, p.pool[i .. p.n - 1], p.pool[i + 1 .. p.n]);
+                std.mem.copyForwards(Pick, p.pool[i .. p.n - 1], p.pool[i + 1 .. p.n]);
                 p.n -= 1;
-                p.cell = null;
             },
-            .why => |w| p.why = w,
-            .cell => |c| p.cell = if (p.cell != null and p.cell.?[0] == c[0] and p.cell.?[1] == c[1]) null else c,
             .role => |r| p.role = r,
             .all => p.all = !p.all,
             .focus => {
@@ -199,56 +173,25 @@ pub const Page = struct {
             },
         }
         // Only what Url holds makes a history entry
-        ev.push = switch (m) {
-            .picked, .add, .remove, .why => true,
-            else => false,
-        };
-        if (m == .picked or m == .add or m == .remove) p.dirty = true;
+        ev.push = m == .picked or m == .add or m == .remove;
+        if (ev.push) p.dirty = true;
     }
 
-    fn mainId(p: *const P) u16 {
-        return if (p.n > 0) p.pool[0] else 0;
-    }
-
-    fn add(p: *P, id: u16) void {
-        if (p.n == max or std.mem.findScalar(u16, p.ids(), id) != null) return;
-        p.pool[p.n] = id;
-        p.n += 1;
-        p.cell = null;
-    }
-
-    /// The pool as the URL and localStorage hold it: ids joined by "-"
-    pub fn write(p: *const P, w: *std.Io.Writer) std.Io.Writer.Error!void {
-        for (p.ids(), 0..) |id, i| try w.print("{s}{d}", .{ if (i > 0) "-" else "", id });
-    }
-
-    /// Ids of known champions, repeats and the rest past five dropped
-    pub fn read(p: *P, s: []const u8) void {
-        const main = p.mainId();
-        defer if (p.mainId() != main) {
-            p.failed = 0;
-        };
-        p.n = 0;
-        p.cell = null;
-        var it = std.mem.tokenizeScalar(u8, s, '-');
-        while (it.next()) |x| {
-            const id = std.fmt.parseInt(u16, x, 10) catch continue;
-            if (indexOf(p.d, id) != null) p.add(id);
-        }
+    pub fn add(p: *P, x: Pick) void {
+        p.n = insert(&p.pool, p.n, x);
     }
 
     pub fn toUrl(p: *const P) Url {
-        var u: Url = .{ .why = p.why };
-        var buf: [32]u8 = undefined;
+        var u: Url = .{};
+        var buf: [64]u8 = undefined;
         var w: std.Io.Writer = .fixed(&buf);
-        p.write(&w) catch {};
+        write(p.picks(), &w) catch {};
         u.pool.set(w.buffered());
         return u;
     }
 
     pub fn fromUrl(p: *P, u: Url) void {
-        p.read(u.pool.slice());
-        p.why = u.why;
+        p.n = read(p.d, u.pool.slice(), &p.pool);
     }
 
     pub fn view(p: *P, h: *H) N {
@@ -258,17 +201,8 @@ pub const Page = struct {
                 h.p(.{ .class = "lead" }, .{W.lead}),
             }),
             if (p.n > 0) p.slots(h) else null,
-            if (p.n == 0) p.picker(h, W.choose, W.choose_sub) else h.div(.{ .class = "cols" }, .{
-                h.div(.{ .class = "body" }, .{ p.weak(h), p.what(h) }),
-                if (p.n < max) p.picker(h, W.add_champs, W.of_max.with(h, .{ .n = p.n })) else null,
-            }),
+            if (p.n < max) h.div(.{ .class = "side" }, .{if (p.n == 0) p.picker(h, W.choose, W.choose_sub) else p.picker(h, W.add_champs, W.of_max.with(h, .{ .n = p.n }))}) else null,
         });
-    }
-
-    fn icon(p: *const P, h: *H, id: u16) champ.Champ {
-        const c = indexOf(p.d, id) orelse return .{ .name = "?", .src = "" };
-        const x = p.d.champs[c];
-        return .{ .name = x.name, .src = h.fmt(icon_fmt, .{ p.d.ddragon, x.key }) };
     }
 
     fn slots(p: *P, h: *H) N {
@@ -276,12 +210,12 @@ pub const Page = struct {
             h.oom = true;
             return .none;
         };
-        for (ss, p.ids(), 0..) |*s, id, i| s.* = .{
-            .champ = p.icon(h, id),
-            .role = if (indexOf(p.d, id)) |c| if (mainOf(p.d, c)) |m| m.role else null else null,
+        for (ss, p.picks(), 0..) |*s, x, i| s.* = .{
+            .champ = iconOf(p.d, h, x.id),
+            .role = x.role,
             .on_remove = h.on(p, .{ .remove = @intCast(i) }),
         };
-        return poolslots.view(h, .{ .slots = ss, .max = max, .on_add = h.on(p, .focus) });
+        return poolslots.view(h, .{ .slots = ss, .max = max, .main = false, .on_add = h.on(p, .focus) });
     }
 
     fn picker(p: *P, h: *H, title: tree.Text, sub: tree.Text) N {
@@ -290,16 +224,16 @@ pub const Page = struct {
         p.search.on_pick = h.on(p, .picked);
         var icons = h.list();
         var n: u32 = 0;
+        // The role's mains by players, then the rest playing it by name
         for (p.d.mains) |m| {
             if (m.role != p.role or m.c >= p.d.champs.len) continue;
-            const id = p.d.champs[m.c].id;
-            if (std.mem.findScalar(u16, p.ids(), id) != null) continue;
-            n += 1;
-            if (!p.all and n > role_shown) continue;
-            const c = p.icon(h, id);
-            icons.add(h.button(.{ .key = id, .type = "button", .class = "pk", .aria_label = W.add.with(h, .{ .c = c.name }), .on_click = h.on(p, .{ .add = id }) }, .{
-                champ.view(h, c, .{ .px = .@"40", .named = false }),
-            }));
+            p.pickIcon(h, &icons, &n, m.c);
+        }
+        const bit = @as(u8, 1) << @backingInt(p.role);
+        for (p.d.champs, 0..) |c, i| {
+            if (c.roles & bit == 0) continue;
+            if (mainOf(p.d, i)) |m| if (m.role == p.role) continue;
+            p.pickIcon(h, &icons, &n, i);
         }
         return card.view(h, .{ .label = title }, &.{
             card.head(h, title, sub, &.{}),
@@ -317,198 +251,24 @@ pub const Page = struct {
         });
     }
 
-    fn status(p: *const P, h: *H) tree.Text {
-        const id = p.pool[0];
-        const c = indexOf(p.d, id) orelse return W.few.with(h, .{ .c = "?" });
-        if (mainOf(p.d, c) == null) return W.few.with(h, .{ .c = p.d.champs[c].name });
-        return if (p.failed == id) W.failed else W.loading;
-    }
-
-    fn weak(p: *P, h: *H) N {
-        const f = p.mainFile() orelse return card.view(h, .{ .label = W.weak }, &.{
-            card.head(h, W.weak, null, &.{}),
-            h.p(.{ .class = "none" }, .{p.status(h)}),
-        });
-        const have = f.covered(p.ids());
-        var opts_buf: [grid_options]pd.File.Option = undefined;
-        const opts = f.options(p.ids(), .hard, &opts_buf);
-        const rows = h.mem.alloc(heatgrid.Head, f.hard.len) catch return oom(h);
-        for (rows, f.hard, 0..) |*r, l, k| {
-            const c = p.icon(h, l.id);
-            r.* = .{ .champ = c, .label = .{ .s = c.name }, .flag = have & bit(k) == 0 };
-        }
-        const cols = h.mem.alloc(heatgrid.Head, p.n + opts.len) catch return oom(h);
-        // Each column's index in the file; null: a pool champion not playing the role
-        const at = h.mem.alloc(?usize, cols.len) catch return oom(h);
-        for (p.ids(), 0..) |id, j| {
-            const c = p.icon(h, id);
-            cols[j] = .{ .champ = c, .label = .{ .s = c.name } };
-            at[j] = f.col(id);
-        }
-        for (opts, p.n..) |o, j| {
-            const id = f.cols[o.col].id;
-            const c = p.icon(h, id);
-            cols[j] = .{ .champ = c, .state = .add, .gap = j == p.n, .under = addButton(p, h, id, c.name) };
-            at[j] = o.col;
-        }
-        const cells = h.mem.alloc(?heatgrid.Cell, rows.len * cols.len) catch return oom(h);
-        const on = h.mem.alloc(tree.Handler, cells.len) catch return oom(h);
-        for (0..rows.len) |i| for (0..cols.len) |j| {
-            cells[i * cols.len + j] = if (at[j]) |c| raw(f, c, i) else null;
-            on[i * cols.len + j] = h.on(p, .{ .cell = .{ @intCast(i), @intCast(j) } });
-        };
-        const s = p.cell;
-        const shown = if (s) |x| x[0] < rows.len and x[1] < cols.len else false;
-        const readout: N = if (shown) blk: {
-            const x = s.?;
-            const a = cols[x[1]].champ.name;
-            const b = rows[x[0]].champ.name;
-            break :blk h.span(.{}, .{if (cells[@as(usize, x[0]) * cols.len + x[1]]) |v| W.read.with(h, .{
-                .a = a,
-                .b = b,
-                .v = phrase.num(h, .points, v.pp).s,
-                .g = phrase.num(h, .count, v.games).s,
-            }) else W.read_none.with(h, .{ .a = a, .b = b })});
-        } else h.span(.{}, .{W.press});
-        const count = W.covered.with(h, .{ .a = @popCount(have), .b = f.hard.len });
-        return card.view(h, .{ .label = W.weak }, &.{
-            card.head(h, W.weak, count, &.{}),
-            h.div(.{ .class = "weak" }, .{
-                heatgrid.view(h, .{
-                    .corner = W.vs,
-                    .rows = rows,
-                    .cols = cols,
-                    .cells = cells,
-                    .sel = if (shown) s else null,
-                    .on = on,
-                    .readout = readout,
-                }),
-                p.best(h, f, have),
-            }),
-        });
-    }
-
-    /// Each lane the pool leaves open: the champion outside it best into that enemy
-    fn best(p: *P, h: *H, f: *const pd.File, have: u8) ?N {
-        var list = h.list();
-        var n: usize = 0;
-        for (f.hard, 0..) |l, k| {
-            if (have & bit(k) != 0) continue;
-            var top: ?usize = null;
-            var top_pp: i16 = pd.min_pp - 1;
-            for (f.cols, 0..) |c, i| {
-                if (std.mem.findScalar(u16, p.ids(), c.id) != null) continue;
-                const x = f.cell(i, k) orelse continue;
-                if (x.pp > top_pp) {
-                    top = i;
-                    top_pp = x.pp;
-                }
-            }
-            const i = top orelse continue;
-            const id = f.cols[i].id;
-            const c = p.icon(h, id);
-            n += 1;
-            list.add(h.li(.{ .key = l.id }, .{
-                champ.view(h, p.icon(h, l.id), .{}),
-                h.span(.{ .class = "to", .aria_hidden = true }, .{"→"}),
-                champ.view(h, c, .{ .state = .add, .named = false }),
-                h.span(.{ .class = "nm" }, .{c.name}),
-                h.b(.{}, .{phrase.num(h, .points, @as(f32, @floatFromInt(top_pp)) / 10)}),
-                addButton(p, h, id, c.name),
-            }));
-        }
-        if (n == 0) return null;
-        return h.div(.{ .class = "best" }, .{
-            h.span(.{ .class = "lab" }, .{W.best}),
-            h.ul(.{}, .{list.done()}),
-        });
-    }
-
-    fn what(p: *P, h: *H) ?N {
-        const f = p.mainFile() orelse return null;
-        const whys = [_]struct { Why, tree.Text }{ .{ .hard, W.why_hard }, .{ .banned, W.why_banned }, .{ .also, W.why_also } };
-        var items: [whys.len]segmented.Item = undefined;
-        for (whys, &items) |w, *it| it.* = .{ .label = w[1], .selected = p.why == w[0], .on = h.on(p, .{ .why = w[0] }) };
-        var buf: [list_options]pd.File.Option = undefined;
-        const opts = f.options(p.ids(), p.why, &buf);
-        const rows = h.mem.alloc(candlist.Row, opts.len) catch return oom(h);
-        for (rows, opts, 1..) |*r, o, rank| {
-            const id = f.cols[o.col].id;
-            const c = p.icon(h, id);
-            r.* = .{
-                .champ = c,
-                .rank = @intCast(rank),
-                .win = if (p.why == .also) share(f, f.cols[o.col].together) else null,
-                .reasons = p.reasons(h, f, o),
-                .tag = if (indexOf(p.d, id)) |i| switch (p.d.champs[i].pickup) {
-                    .usual => null,
-                    .harder => W.harder,
-                    .easier => W.easier,
-                } else null,
-                .label = W.add.with(h, .{ .c = c.name }),
-                .on = h.on(p, .{ .add = id }),
-            };
-        }
-        return card.view(h, .{ .label = W.what }, &.{
-            card.head(h, W.what, null, &.{segmented.view(h, .{ .s = .s, .label = W.why_label }, &items)}),
-            if (rows.len == 0) h.p(.{ .class = "none" }, .{W.nothing}) else candlist.view(h, .{
-                .rows = rows,
-                .head = if (p.why == .also) .{ W.champion, W.mains_play, W.blank } else null,
-            }),
-        });
-    }
-
-    /// The lanes an option covers, best first: hard lanes, or good ones when banned
-    fn reasons(p: *const P, h: *H, f: *const pd.File, o: pd.File.Option) []const candlist.Reason {
-        const from = if (p.why == .banned) f.hard.len else 0;
-        const lanes = if (p.why == .banned) f.good else f.hard;
-        var out = h.mem.alloc(candlist.Reason, @popCount(o.lanes)) catch {
-            h.oom = true;
-            return &.{};
-        };
-        var n: usize = 0;
-        for (lanes, 0..) |l, k| {
-            if (o.lanes & bit(k) == 0 or n == out.len) continue;
-            const x = f.cell(o.col, from + k) orelse continue;
-            out[n] = .{ .text = .{ .s = p.icon(h, l.id).name }, .pp = @as(f32, @floatFromInt(x.pp)) / 10 };
-            n += 1;
-        }
-        out = out[0..n];
-        // Best first; at most 8 lanes
-        if (n > 1) for (1..n) |i| {
-            var j = i;
-            while (j > 0 and out[j - 1].pp < out[j].pp) : (j -= 1) std.mem.swap(candlist.Reason, &out[j - 1], &out[j]);
-        };
-        return out;
+    fn pickIcon(p: *P, h: *H, icons: *tree.List, n: *u32, c: usize) void {
+        const id = p.d.champs[c].id;
+        for (p.picks()) |x| if (x.id == id and x.role == p.role) return;
+        n.* += 1;
+        if (!p.all and n.* > role_shown) return;
+        const ic = iconOf(p.d, h, id);
+        icons.add(h.button(.{ .key = id, .type = "button", .class = "pk", .aria_label = W.add.with(h, .{ .c = ic.name }), .on_click = h.on(p, .{ .add = id }) }, .{
+            champ.view(h, ic, .{ .px = .@"40", .named = false }),
+        }));
     }
 };
 
-/// Of the main's players, %
-fn share(f: *const pd.File, together: u32) ?f32 {
-    if (f.players == 0) return null;
-    return 100 * @as(f32, @floatFromInt(together)) / @as(f32, @floatFromInt(f.players));
-}
+pub const icon_fmt = "https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png";
 
-const icon_fmt = "https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png";
-
-fn addButton(p: *Page, h: *H, id: u16, nm: []const u8) N {
-    return h.button(.{ .type = "button", .class = "add", .aria_label = W.add.with(h, .{ .c = nm }), .on_click = h.on(p, .{ .add = id }) }, .{W.add_short});
-}
-
-/// Column `c` into lane `k` as the grid shows it: thin cells faded, not dropped
-fn raw(f: *const pd.File, c: usize, k: usize) ?heatgrid.Cell {
-    const x = f.cells[c * f.lanes() + k];
-    if (x.games == 0) return null;
-    return .{ .pp = @as(f32, @floatFromInt(x.pp)) / 10, .games = x.games };
-}
-
-fn bit(k: usize) u8 {
-    return @as(u8, 1) << @intCast(k);
-}
-
-fn oom(h: *H) N {
-    h.oom = true;
-    return .none;
+pub fn iconOf(d: *const Data, h: *H, id: u16) champ.Champ {
+    const c = indexOf(d, id) orelse return .{ .name = "?", .src = "" };
+    const x = d.champs[c];
+    return .{ .name = x.name, .src = h.fmt(icon_fmt, .{ d.ddragon, x.key }) };
 }
 
 pub fn indexOf(d: *const Data, id: u16) ?usize {
@@ -523,16 +283,19 @@ pub fn mainOf(d: *const Data, c: usize) ?Main {
 
 pub const css =
     \\@layer components {
-    \\  .c-poolpage { container-type: inline-size; display: grid; gap: var(--sp-4); }
+    \\  .c-poolwrap { container-type: inline-size; display: grid; gap: var(--sp-4); }
+    \\  .c-poolwrap > .c-poolpage { display: contents; }
+    \\  .c-poolpage { display: grid; gap: var(--sp-4); }
     \\  .c-poolpage > .top { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-3); }
     \\  .c-poolpage > .top > h1 { margin: 0; }
     \\  .c-poolpage > .top > .lead { margin: 0; color: var(--muted); }
-    \\  .c-poolpage .cols { display: grid; gap: var(--sp-4); }
-    \\  .c-poolpage .body { display: grid; gap: var(--sp-4); min-width: 0; }
     \\  @container (min-width: 960px) {
-    \\    .c-poolpage .cols { grid-template-columns: minmax(0, 1fr) 340px; align-items: start; }
+    \\    .c-poolwrap:has(.c-slots) { grid-template-columns: minmax(0, 1fr) 340px; align-items: start; }
+    \\    .c-poolwrap > .c-poolpage > :is(.top, .c-slots) { grid-column: 1 / -1; }
+    \\    .c-poolwrap:has(.c-slots) > .c-poolpage > .side { grid-column: 2; grid-row: 3; position: sticky; top: var(--sp-4); }
+    \\    .c-poolwrap:has(.c-slots) > .c-poolgrid { grid-column: 1; grid-row: 3; }
     \\  }
-    \\  .c-poolpage .none { margin: 0; color: var(--faint); }
+    \\  .c-poolwrap > .c-poolgrid:empty { display: none; }
     \\  .c-poolpage .lab { font-size: var(--fs-xs); font-weight: var(--w-m); text-transform: uppercase;
     \\    letter-spacing: 0.06em; color: var(--muted); }
     \\  .c-poolpage .pick { display: grid; gap: var(--sp-3); }
@@ -543,53 +306,40 @@ pub const css =
     \\  .c-poolpage .icons > .pk { all: unset; cursor: pointer; border-radius: var(--r-ctl); }
     \\  .c-poolpage .icons > .pk:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
     \\  .c-poolpage .icons > .pk:hover { filter: brightness(1.15); }
-    \\  .c-poolpage .weak { display: flex; flex-wrap: wrap; gap: var(--sp-4); align-items: flex-start; }
-    \\  .c-poolpage .weak > .c-heat { flex: 1 1 340px; width: auto; }
-    \\  .c-poolpage .best { flex: 1 1 220px; display: grid; gap: var(--sp-2); min-width: 0; }
-    \\  .c-poolpage .best > ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-2); }
-    \\  .c-poolpage .best li { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
-    \\  .c-poolpage .best .to { color: var(--faint); }
-    \\  .c-poolpage .best .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    \\  .c-poolpage .best b { color: var(--hi2); font-variant-numeric: tabular-nums; }
-    \\  .c-poolpage .best .add { margin-left: auto; }
-    \\  .c-poolpage .add { min-height: 28px; padding: 0 var(--sp-2); border: 1px solid var(--line);
-    \\    border-radius: var(--r-ctl); background: var(--panel-2); color: var(--t2); font: inherit;
-    \\    font-size: var(--fs-xs); cursor: pointer; white-space: nowrap; }
-    \\  .c-poolpage .c-heat .add { min-height: 22px; padding: 0 3px; }
-    \\  .c-poolpage .add:hover { color: var(--t1); border-color: var(--sel-line); }
     \\}
     \\
 ;
 
 pub const Demo = struct {
     pub const champs = [_]Champ{
-        .{ .id = 1, .name = "Darius", .key = "Darius", .slug = "darius" },
-        .{ .id = 4, .name = "Dr. Mundo", .key = "DrMundo", .slug = "drmundo" },
-        .{ .id = 10, .name = "Fiora", .key = "Fiora", .slug = "fiora" },
-        .{ .id = 2, .name = "Garen", .key = "Garen", .slug = "garen", .pickup = .easier },
-        .{ .id = 3, .name = "Jax", .key = "Jax", .slug = "jax", .pickup = .harder },
-        .{ .id = 20, .name = "Teemo", .key = "Teemo", .slug = "teemo" },
-        .{ .id = 11, .name = "Yone", .key = "Yone", .slug = "yone" },
-        .{ .id = 30, .name = "Ahri", .key = "Ahri", .slug = "ahri" },
+        .{ .id = 30, .name = "Ahri", .key = "Ahri", .slug = "ahri", .roles = 0b00100 },
+        .{ .id = 1, .name = "Darius", .key = "Darius", .slug = "darius", .roles = 0b00001 },
+        .{ .id = 4, .name = "Dr. Mundo", .key = "DrMundo", .slug = "drmundo", .roles = 0b00011 },
+        .{ .id = 10, .name = "Fiora", .key = "Fiora", .slug = "fiora", .roles = 0b00001 },
+        .{ .id = 2, .name = "Garen", .key = "Garen", .slug = "garen", .pickup = .easier, .roles = 0b00001 },
+        .{ .id = 3, .name = "Jax", .key = "Jax", .slug = "jax", .pickup = .harder, .roles = 0b00011 },
+        .{ .id = 20, .name = "Teemo", .key = "Teemo", .slug = "teemo", .roles = 0b00001 },
+        .{ .id = 40, .name = "Vi", .key = "Vi", .slug = "vi", .roles = 0b00010 },
+        .{ .id = 11, .name = "Yone", .key = "Yone", .slug = "yone", .roles = 0b00101 },
     };
     pub const data: Data = .{
         .ddragon = "16.21.1",
         .champs = &champs,
         .mains = &.{
-            .{ .c = 0, .role = .top, .players = 400 },
-            .{ .c = 3, .role = .top, .players = 310 },
-            .{ .c = 4, .role = .top, .players = 120 },
-            .{ .c = 7, .role = .mid, .players = 520 },
+            .{ .c = 1, .role = .top, .players = 400 },
+            .{ .c = 4, .role = .top, .players = 310 },
+            .{ .c = 5, .role = .top, .players = 120 },
+            .{ .c = 0, .role = .mid, .players = 520 },
+            .{ .c = 7, .role = .jungle, .players = 450 },
         },
     };
 };
 
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
-    const states = [_]struct { []const u8, []const u16, bool }{
-        .{ "empty: the picker is the page", &.{}, false },
-        .{ "Darius and Garen: weak lanes, what to add, the picker beside", &.{ 1, 2 }, true },
-        .{ "a main with no file: too few mains", &.{20}, false },
+    const states = [_]struct { []const u8, []const u8 }{
+        .{ "empty: the picker is the page", "" },
+        .{ "Darius, Garen top and Vi jungle: the slots by role, the grid, the picker beside", "1t-2t-40j" },
     };
     for (states, 0..) |st, k| {
         const p = h.mem.create(Page) catch {
@@ -601,9 +351,10 @@ pub fn gallery(g: *Gallery) void {
             return;
         };
         p.search.id = h.fmt("{s}-{d}", .{ g.id("pool-pick"), k });
-        for (st[1]) |id| p.add(id);
-        if (st[2]) p.file = &pd.demo;
-        g.addFill(st[0], p.view(h));
+        p.n = read(&Demo.data, st[1], &p.pool);
+        // As the page has it: the grid island beside, in the wrapper
+        const grid: N = if (p.n > 0) if (@import("poolgrid.zig").demoPage(h, st[1])) |x| x.view(h) else .none else .none;
+        g.addFill(st[0], h.div(.{ .class = "c-poolwrap" }, .{ p.view(h), grid }));
     }
 }
 
@@ -619,7 +370,18 @@ fn render(a: std.mem.Allocator, p: *Page) ![]const u8 {
     return w.written();
 }
 
-test "pool page: empty is the picker; the URL's pool keeps known champions, five at most" {
+fn urlOf(a: std.mem.Allocator, p: *const Page) ![]const u8 {
+    const u = p.toUrl();
+    return a.dupe(u8, u.pool.slice());
+}
+
+fn link(s: []const u8) Page.Url {
+    var u: Page.Url = .{};
+    u.pool.set(s);
+    return u;
+}
+
+test "pool page: empty is the picker; the URL's pool keeps known pairs by role, ten at most" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -627,102 +389,41 @@ test "pool page: empty is the picker; the URL's pool keeps known champions, five
     const empty = try render(a, &p);
     try testing.expect(std.mem.find(u8, empty, "Choose your pool") != null);
     try testing.expect(std.mem.find(u8, empty, "c-slots") == null);
-    // By role, top: Darius, Garen, Jax; Ahri plays mid
-    try testing.expectEqual(3, std.mem.count(u8, empty, "class=\"pk\""));
+    // By role, top: the mains Darius, Mundo, Jax, then Fiora, Garen, Teemo, Yone by name
+    try testing.expectEqual(7, std.mem.count(u8, empty, "class=\"pk\""));
+    try testing.expect(std.mem.find(u8, empty, "Add Darius").? < std.mem.find(u8, empty, "Add Fiora").?);
 
-    p.read("2-1-999-2-3-4-10-11");
-    try testing.expectEqual(5, p.n);
-    try testing.expectEqualSlices(u16, &.{ 2, 1, 3, 4, 10 }, p.ids());
-    try testing.expectEqualStrings("2-1-3-4-10", p.toUrl().pool.slice());
-    const full = try render(a, &p);
-    try testing.expect(std.mem.find(u8, full, "Add champions") == null);
-    p.read("");
+    // Older links: ids alone, each in its main role; a letter picks the role
+    p.fromUrl(link("40-2-999-2-3j-1m-4"));
+    try testing.expectEqualStrings("2t-4t-40j-3j-1m", try urlOf(a, &p));
+    // Ahri has no lanes in top: still kept, in top (the link asked for it)
+    p.fromUrl(link("30t-1t-2t-3t-4t-10t-20t-11t-11m-40j-1j-2j"));
+    try testing.expectEqual(max, p.n);
+    try testing.expect(std.mem.find(u8, try render(a, &p), "Add champions") == null);
+    p.fromUrl(.{});
     try testing.expectEqual(0, p.n);
 }
 
-test "pool page: the main's file, its need, the grid, the best answers and what to add" {
+test "pool page: the tab's role for its icons, the main role for a search, history and storage" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     var p: Page = try .init(a, &Demo.data);
-    try testing.expectEqual(null, p.need());
-    p.read("1");
-    try testing.expectEqual(1, p.need());
-    const loading = try render(a, &p);
-    try testing.expect(std.mem.find(u8, loading, "Loading lanes") != null);
-    p.loaded(1, null);
-    try testing.expectEqual(null, p.need());
-    try testing.expect(std.mem.find(u8, try render(a, &p), "load. Reload") != null);
-
-    // Another champion's file never stands in for the main's
-    var bad = pd.demo;
-    bad.id = 2;
-    p.failed = 0;
-    p.loaded(1, &bad);
-    try testing.expectEqual(null, p.file);
-
-    p.loaded(1, &pd.demo);
-    try testing.expectEqual(null, p.need());
-    const out = try render(a, &p);
-    try testing.expect(std.mem.find(u8, out, "0 of 2 covered") != null);
-    // Add under the three suggested columns (Jax, Garen, Mundo), both best answers (Jax)
-    // and PoolSlots' own
-    try testing.expectEqual(6, std.mem.count(u8, out, "<button type=\"button\" class=\"add\""));
-    try testing.expectEqual(2, std.mem.count(u8, out, "data-flag"));
-    // Best answers: Jax into Fiora +2.5, Jax into Yone +1.8
-    try testing.expect(std.mem.find(u8, out, "class=\"best\"") != null);
-    try testing.expect(std.mem.find(u8, out, "aria-label=\"Add Jax\"") != null);
-    try testing.expect(std.mem.find(u8, out, "class=\"c-cand\"") != null);
-    // What to add rows name their button for what it does
-    try testing.expect(std.mem.find(u8, out, "class=\"pk\" type=\"button\" aria-label=\"Add ") != null);
-    // Jax (harder) and Garen (easier) are options; Mundo is usual and has no badge
-    try testing.expectEqual(1, std.mem.count(u8, out, ">harder to pick up<"));
-    try testing.expectEqual(1, std.mem.count(u8, out, ">easier to pick up<"));
-
-    p.add(3);
-    const both = try render(a, &p);
-    try testing.expect(std.mem.find(u8, both, "2 of 2 covered") != null);
-    try testing.expect(std.mem.find(u8, both, "class=\"best\"") == null);
-    try testing.expectEqual(0, std.mem.count(u8, both, "data-flag"));
-
-    // A main without a file needs none and says so
-    p.read("20");
-    try testing.expectEqual(null, p.need());
-    try testing.expect(std.mem.find(u8, try render(a, &p), "Too few Teemo mains yet") != null);
-}
-
-test "pool page: also played rows covering no lane, history and storage, a failed main" {
-    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-    var p: Page = try .init(a, &Demo.data);
-    // Garen into neither hard lane
-    var cells = pd.demo.cells[0..].*;
-    cells[3].pp = 3;
-    var f = pd.demo;
-    f.cells = &cells;
-    p.read("1");
-    p.loaded(1, &f);
     var ev: tree.Event = .{ .kind = .click };
-    p.update(.{ .why = .also }, &ev);
-    try testing.expect(ev.push);
-    try testing.expect(!p.dirty);
-    const also = try render(a, &p);
-    // 196 of Darius's 400 players
-    try testing.expect(std.mem.find(u8, also, "49.0%") != null);
-    try testing.expect(std.mem.find(u8, also, "Mains") != null);
-
-    ev = .{ .kind = .click };
     p.update(.{ .role = .jungle }, &ev);
-    try testing.expect(!ev.push);
+    try testing.expect(!ev.push and !p.dirty);
+    // Jungle: Vi (main), then Mundo and Jax by name
+    const jungle = try render(a, &p);
+    try testing.expectEqual(3, std.mem.count(u8, jungle, "class=\"pk\""));
     p.update(.{ .add = 3 }, &ev);
     try testing.expect(ev.push and p.dirty);
-
-    // A failed main is asked for again once it has left the pool and come back
-    p.read("2");
-    p.loaded(2, null);
-    try testing.expectEqual(null, p.need());
+    p.search.chosen = 3; // Fiora
+    p.update(.picked, &ev);
+    try testing.expectEqualStrings("10t-3j", try urlOf(a, &p));
+    // Jax in jungle is in the pool: off jungle's icons, still on top's
+    try testing.expect(std.mem.find(u8, try render(a, &p), "Add Jax") == null);
+    p.update(.{ .role = .top }, &ev);
+    try testing.expect(std.mem.find(u8, try render(a, &p), "Add Jax") != null);
     p.update(.{ .remove = 0 }, &ev);
-    p.update(.{ .add = 2 }, &ev);
-    try testing.expectEqual(2, p.need());
+    try testing.expectEqualStrings("3j", try urlOf(a, &p));
 }

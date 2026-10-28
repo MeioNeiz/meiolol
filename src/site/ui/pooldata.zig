@@ -132,6 +132,34 @@ pub const File = struct {
     }
 };
 
+/// A champion's lane opponents in each role it plays (data/pool/lanes/<slug>.bin): the
+/// pool grid's columns
+pub const Lanes = struct {
+    id: u16,
+    roles: []const LaneRole,
+
+    pub fn of(l: *const Lanes, r: Role) ?*const LaneRole {
+        for (l.roles) |*x| if (x.role == r) return x;
+        return null;
+    }
+};
+
+pub const LaneRole = struct {
+    role: Role,
+    games: u32,
+    /// In 1%+ of its games there, most played first
+    opps: []const Opp,
+};
+
+pub const Opp = struct {
+    id: u16,
+    games: u32,
+    /// Points vs usual, tenths
+    pp: i16,
+    /// Lane gold at 14, the champion minus the opponent; set when the pair has a page
+    gold: ?i16 = null,
+};
+
 const testing = std.testing;
 
 /// Darius top: hard into 10, 11; good into 20. Cols: Darius 1, Garen 2, Jax 3, Mundo 4

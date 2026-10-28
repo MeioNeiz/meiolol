@@ -198,8 +198,8 @@ Overrides the sections above where they differ. Jacob on the live page ("Weak la
 more opponents, the pool across roles, more information.
 
 - **Pool**: up to 10 champion-role pairs (Vi jungle and Darius top in one pool; the same
-  champion may sit in two roles). Added in its main role; its slot's role icon is a
-  menu to move it. Slots grouped by role, role order as the board. URL `#pool=122t-
+  champion may sit in two roles). Search adds in its main role, the By role tab in that
+  role. Slots grouped by role, role order as the board. URL `#pool=122t-
   254j-58t` (role letter t j m b s); old URLs without letters read as the main role
 - **One section per role in the pool** (Top, then Jungle...), each a Card:
   - head: role icon, "Top", the pool's champions there, "17 of 20 lanes covered"

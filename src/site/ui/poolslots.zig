@@ -32,6 +32,8 @@ pub const Pool = struct {
     /// The main first
     slots: []const Slot,
     max: u8 = 5,
+    /// The first slot marked main; off for a pool across roles
+    main: bool = true,
     /// The Add slot, shown while there's room; null: none
     on_add: ?tree.Handler = null,
 };
@@ -41,7 +43,7 @@ pub fn view(h: *H, p: Pool) N {
     for (p.slots, 0..) |s, i| ms.add(h.span(.{ .key = i, .class = "m" }, .{
         champ.view(h, s.champ, .{ .px = .@"32", .named = false, .role = s.role }),
         h.b(.{}, .{s.champ.name}),
-        if (i == 0) h.small(.{}, .{W.main}) else null,
+        if (i == 0 and p.main) h.small(.{}, .{W.main}) else null,
         if (s.on_remove) |on| h.button(.{
             .type = "button",
             .aria_label = W.remove.with(h, .{ .c = s.champ.name }),

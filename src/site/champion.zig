@@ -214,6 +214,19 @@ fn roleData(site: *const Site, ch: Champ, r: Role) !cp.Role {
     };
 }
 
+/// `ch`'s lane opponents in `r` as the matchups table has them; null when `r` is thin for
+/// it (the pool grid's lanes file)
+pub fn laneRel(site: *const Site, ch: Champ, r: Role) !?cp.Rel {
+    if (!plays(site, ch, r)) return null;
+    return try relOf(site, ch, site.stats.champRole(r, ch.c), .{ .st = &site.stats, .r = r, .r2 = r });
+}
+
+/// Games in `r` and not thin there
+pub fn plays(site: *const Site, ch: Champ, r: Role) bool {
+    const g = site.stats.champRole(r, ch.c).games;
+    return g > 0 and ratio(g, ch.games) >= tierlist.min_role_share;
+}
+
 /// Those against (or with) ch in 1%+ of its games in the role, most played first
 fn relOf(site: *const Site, ch: Champ, cr: Counts, pairs: Pairs) !cp.Rel {
     const a = site.arena;

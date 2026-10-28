@@ -1,6 +1,8 @@
-//! Pool on the site: pool.html (the ui.poolpage island, ui-pool.wasm) and its files,
-//! one per main and view (data/pool/<slug>.bin). Several options with their numbers and
-//! n, never "the best pick" (docs/concept.md).
+//! Pool on the site: pool.html (the ui.poolpage island, ui-pool.wasm: the pool and its
+//! picker; the ui.poolgrid island, ui-poolgrid.wasm: a section per role) and its files
+//! per view: one per main (data/pool/<slug>.bin), one per champion with its lane
+//! opponents in each role (data/pool/lanes/<slug>.bin). Several options with their
+//! numbers and n, never "the best pick" (docs/concept.md).
 
 const std = @import("std");
 const root = @import("root.zig");
@@ -27,10 +29,15 @@ pub fn sourceText(p: *const pool.Pool) []const u8 {
 }
 
 /// One file per main with lists (from Options.min_players) and a role, in the view's
-/// directory: data/pool/<slug>.bin
+/// directory: data/pool/<slug>.bin; a lanes file per champion playing a role
 pub fn dataFiles(site: *const Site, files: anytype) !void {
     const a = site.arena;
     for (site.champs) |ch| {
+        if (try lanesData(site, ch)) |l| {
+            var out: std.ArrayList(u8) = .empty;
+            try ui.data.encode(a, pd.Lanes, l, &out);
+            try files.append(a, .{ .path = try a.print("data/pool/lanes/{s}.bin", .{ch.slug}), .data = out.items });
+        }
         const m = for (site.pool.mains) |m| {
             if (m.id == ch.id) break m;
         } else continue;
@@ -67,6 +74,25 @@ pub fn fileData(a: std.mem.Allocator, st: *const core.Stats, m: pool.Main, opts:
     };
 }
 
+/// `ch`'s lane opponents in each role it isn't thin in; null: none
+pub fn lanesData(site: *const Site, ch: root.Champ) !?pd.Lanes {
+    const a = site.arena;
+    var roles: std.ArrayList(pd.LaneRole) = .empty;
+    for (core.Role.all) |r| {
+        const rel = try champion.laneRel(site, ch, r) orelse continue;
+        const opps = try a.alloc(pd.Opp, rel.opps.len);
+        for (opps, rel.opps) |*o, x| o.* = .{
+            .id = try id16(site.champs[x.champ].id),
+            .games = x.games,
+            .pp = tenths(x.usual),
+            .gold = x.gold,
+        };
+        try roles.append(a, .{ .role = champion.uiRole(r), .games = site.stats.champRole(r, ch.c).games, .opps = opps });
+    }
+    if (roles.items.len == 0) return null;
+    return .{ .id = try id16(ch.id), .roles = roles.items };
+}
+
 fn lanes(a: std.mem.Allocator, from: []const pool.Lane) ![]const pd.Lane {
     const out = try a.alloc(pd.Lane, from.len);
     for (out, from) |*o, l| o.* = .{ .id = try id16(l.id), .pp = tenths(l.pp), .games = l.games };
@@ -95,7 +121,7 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool) !void {
     const a = site.arena;
     const pg = try site.page(
         "Champion pool | meiolol",
-        "Pick your champions: the lanes your main struggles in, which champions cover them, what to play when it is banned and what its players also play.",
+        "Pick your champions in each role: the lanes they leave open, which champions cover them, what to play when one is banned and what their players also play.",
         path,
         .pool,
     );
@@ -104,11 +130,16 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool) !void {
     d.* = try pageData(site, p);
     var page: page_ui.Page = try .init(a, d);
     page.bin = try bin(a, d.*);
-    var t: ui.Tree = .{};
-    var h: ui.H = .init(a, &t);
-    t.root = page.view(&h);
-    if (h.oom) return error.OutOfMemory;
-    try ui.html.write(&t, t.root, w);
+    var grid: ui.poolgrid.Page = .{ .d = d };
+    try w.writeAll("<div class=\"c-poolwrap\">");
+    inline for (.{ &page, &grid }) |x| {
+        var t: ui.Tree = .{};
+        var h: ui.H = .init(a, &t);
+        t.root = x.view(&h);
+        if (h.oom) return error.OutOfMemory;
+        try ui.html.write(&t, t.root, w);
+    }
+    try w.writeAll("</div>");
     const to_root = try site.toRoot(path);
     try tpl.render(w,
         \\
@@ -117,6 +148,7 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool) !void {
         \\from {source}. Harder or easier to pick up: new players against practised ones, every
         \\region (<a href="{pickup}">How hard to pick up</a>). <a href="{up}method.html">Method</a>.</p>
         \\<script src="{js}" data-wasm="{wasm}" defer></script>
+        \\<script src="{grid_js}" data-wasm="{grid_wasm}" defer></script>
         \\
     , .{
         .chip = site.chip(site.regionDim(site.view.region), site.periodDim(site.view.period), .plat),
@@ -126,6 +158,8 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool) !void {
         .pickup = pickup.path,
         .js = html.Link{ .root = to_root, .up = site.view.up(), .path = assets.pool_js.path },
         .wasm = assets.pool_wasm.path,
+        .grid_js = html.Link{ .root = to_root, .up = site.view.up(), .path = assets.poolgrid_js.path },
+        .grid_wasm = assets.poolgrid_wasm.path,
     });
     try html.foot(w, pg);
 }
@@ -140,6 +174,7 @@ fn pageData(site: *const Site, p: *const pool.Pool) !page_ui.Data {
         .key = ch.key,
         .slug = ch.slug,
         .pickup = pickupOf(&site.learning, ch.id),
+        .roles = rolesOf(site, ch),
     };
     var mains: std.ArrayList(page_ui.Main) = .empty;
     for (p.mains) |m| {
@@ -151,6 +186,15 @@ fn pageData(site: *const Site, p: *const pool.Pool) !page_ui.Data {
         try mains.append(a, .{ .c = @intCast(c), .role = champion.uiRole(r), .players = m.players });
     }
     return .{ .ddragon = site.ddragon_version, .champs = champs, .mains = mains.items };
+}
+
+/// A bit per role with a lanes file (ui.role.Role order)
+fn rolesOf(site: *const Site, ch: root.Champ) u8 {
+    var bits: u8 = 0;
+    for (core.Role.all) |r| if (champion.plays(site, ch, r)) {
+        bits |= @as(u8, 1) << @backingInt(champion.uiRole(r));
+    };
+    return bits;
 }
 
 fn pickupOf(l: *const learning.Learning, id: u32) page_ui.Pickup {

@@ -38,9 +38,16 @@ pub const Head = struct {
     flag: bool = false,
     /// A gap before this column
     gap: bool = false,
+    /// A row's after its name (how often it's met)
+    tail: ?tree.Text = null,
 };
 
-pub const Cell = struct { pp: f32, games: u32 };
+pub const Cell = struct {
+    pp: f32,
+    games: u32,
+    /// The row's best answer, ringed
+    best: bool = false,
+};
 
 pub const Grid = struct {
     /// Over the row heads ("vs")
@@ -77,6 +84,7 @@ pub fn view(h: *H, g: Grid) N {
         cs.add(h.span(.{ .class = "rh", .data_lit = lit(g, 0, i), .data_flag = r.flag }, .{
             champ.view(h, r.champ, .{ .state = r.state, .named = r.label == null }),
             if (r.label) |l| h.span(.{ .class = "nm" }, .{l}) else null,
+            if (r.tail) |t| h.small(.{}, .{t}) else null,
         }));
         for (g.cols, 0..) |c, j| {
             if (c.gap) cs.add(h.span(.{ .key = gk + j, .class = "gap" }, .{}));
@@ -107,7 +115,7 @@ fn cell(h: *H, g: Grid, i: usize, j: usize) N {
     const label = W.cell.with(h, .{ .a = a, .b = b, .v = num.s, .g = phrase.num(h, .count, x.games).s });
     const thin = x.games < fmt.thin_games;
     const style = if (thin) null else h.vars(.{ .f = fmt.Step.of(x.pp, fmt.win_cuts).fill() });
-    const k: ?[]const u8 = if (thin) "thin" else null;
+    const k: ?[]const u8 = if (thin) "thin" else if (x.best) "best" else null;
     if (at >= g.on.len) return h.span(.{ .key = j, .class = "c", .data_k = k, .style = style, .role = "img", .aria_label = label }, .{num});
     const pressed = if (g.sel) |s| s[0] == i and s[1] == j else false;
     return h.button(.{ .key = j, .class = "c", .type = "button", .data_k = k, .style = style, .aria_pressed = pressed, .aria_label = label, .on_click = g.on[at] }, .{num});
@@ -136,6 +144,9 @@ pub const css =
     \\  .c-heat button.c { min-height: 0; cursor: pointer; }
     \\  .c-heat button.c:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
     \\  .c-heat .c[data-k="thin"] { color: var(--muted); }
+    \\  .c-heat .c[data-k="best"] { box-shadow: inset 0 0 0 1.5px var(--text); }
+    \\  .c-heat .rh > small { margin-left: auto; min-width: 4ch; text-align: right; font-size: var(--fs-xs);
+    \\    color: var(--faint); font-variant-numeric: tabular-nums; }
     \\  .c-heat .c[data-k="none"] { background: none; color: var(--faint); box-shadow: inset 0 0 0 1px var(--line); }
     \\  .c-heat .c[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--text); }
     \\  .c-heat [data-lit] > .c-champ { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--text); }
@@ -143,7 +154,8 @@ pub const css =
     \\  .c-heat .read { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2);
     \\    margin: var(--sp-2) 0 0; font-size: var(--fs-s); color: var(--t2); }
     \\  @container (max-width: 480px) {
-    \\    .c-heat .rh { width: auto; }
+    \\    .c-heat .rh { width: 24px; }
+    \\    .c-heat:has(.rh > small) .rh { width: 64px; }
     \\    .c-heat .rh > .nm { display: none; }
     \\    .c-heat :is(.ch, .c) { width: 38px; }
     \\    .c-heat .ch > .c-btn { min-width: 38px; }
