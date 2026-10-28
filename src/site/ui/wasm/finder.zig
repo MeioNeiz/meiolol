@@ -27,7 +27,7 @@ export fn main() void {
     defer root.release();
     const b = dom.binOf(root, "data-bin") orelse return dom.dom.warn("finder: no data");
     data = ui.data.decode(gpa, fd.Data, b) catch return dom.dom.warn("finder: bad data");
-    server = fd.Finder.init(gpa, &data, dom.attrOf(root, "data-root")) catch return dom.dom.warn("finder: out of memory");
+    server = fd.Finder.init(gpa, &data, dom.attrOf(root, "data-query")) catch return dom.dom.warn("finder: out of memory");
     state = server;
     _ = dom.rt.add(fd.Finder, &state, &server, sel) catch return dom.dom.warn("finder: out of memory");
 }

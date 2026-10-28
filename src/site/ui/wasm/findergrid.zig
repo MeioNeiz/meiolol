@@ -32,6 +32,7 @@ export fn main() void {
     const wasm = dom.attrOf(root, "data-wasm");
     server = .{
         .root = dom.attrOf(root, "data-root"),
+        .query = dom.attrOf(root, "data-query"),
         .js = if (js.len > 0) js else null,
         .wasm = if (wasm.len > 0) wasm else null,
     };

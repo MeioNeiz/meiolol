@@ -84,7 +84,8 @@ fn fetch() void {
     const n = state.need() orelse return;
     const c = pp.indexOf(&data, n.id) orelse return;
     const slug = data.champs[c].slug;
-    const path = (if (n.main) gpa.print("data/pool/{s}.bin", .{slug}) else gpa.print("data/pool/lanes/{s}.bin", .{slug})) catch return;
+    const dir = ui.urls.view_dirs[data.view];
+    const path = (if (n.main) gpa.print("/{s}data/pool/{s}.bin", .{ dir, slug }) else gpa.print("/{s}data/pool/lanes/{s}.bin", .{ dir, slug })) catch return;
     defer gpa.free(path);
     asked = true;
     dom.fetch(path, @as(i32, n.id) | (@as(i32, @intFromBool(n.main)) << 16), loaded);

@@ -8,6 +8,7 @@ const dom = @import("dom.zig");
 const cp = ui.champpage;
 
 pub const panic = zjb.panic;
+pub const url_map: dom.UrlMap = .follow;
 
 const gpa = std.heap.wasm_allocator;
 const sel = "[data-island=champbuild]";
@@ -57,6 +58,7 @@ fn adopt(b: []u8) ?*ui.island.Island(cp.Build, dom.Dom) {
     const pp = cp.panels(gpa, data.roles) catch return oom();
     server = .{ .data = &data, .panels = sp, .root = root_path, .src = src, .stamp = want, .js = js, .wasm = wasm };
     server.files.base[0] = &data;
+    server.fromUrl(.{ .role = dom.pageRole() });
     state = server;
     state.panels = pp;
     return dom.rt.add(cp.Build, &state, &server, sel) catch oom();

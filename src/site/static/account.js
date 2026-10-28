@@ -28,7 +28,7 @@
   if (kind === "password") {
     const me = document.getElementById("me");
     fetch("/auth/me", { credentials: "same-origin", cache: "no-store" }).then(async r => {
-      if (r.status === 401) return location.assign("/login.html?next=/account.html");
+      if (r.status === 401) return location.assign("/login?next=/account");
       if (!r.ok) throw new Error(r.status);
       const a = await r.json();
       me.replaceChildren(`Logged in as `, Object.assign(document.createElement("b"), { textContent: a.username }), ` (${a.role}).`);
@@ -60,7 +60,7 @@
     for (const b of document.querySelectorAll("[data-out]")) {
       b.addEventListener("click", async () => {
         await fetch("/auth/logout" + (b.dataset.out ? "?all=1" : ""), { method: "POST", headers: { "X-Meiolol-Action": "1" }, credentials: "same-origin" }).catch(() => {});
-        location.assign("/login.html");
+        location.assign("/login");
       });
     }
   } else if (kind !== "login" && !token) say("This page needs the link you were sent.");
@@ -82,7 +82,7 @@
         form.reset();
         say("Password changed. Your other devices are signed out.");
       } else if (r.ok) return location.assign(next(j));
-      else if (r.status === 401 && kind === "password") return location.assign("/login.html?next=/account.html");
+      else if (r.status === 401 && kind === "password") return location.assign("/login?next=/account");
       else if (r.status === 429) say(`Too many tries: wait ${Math.ceil((j.retry_s || 60) / 60)} min.`);
       else say(j.error ? j.error.charAt(0).toUpperCase() + j.error.slice(1) + "." : `Something went wrong (${r.status}).`);
     } catch {

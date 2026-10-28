@@ -202,29 +202,47 @@ pub const Dom = struct {
         if (!show and open) n.call("hidePopover", .{}, void);
     }
 
+    /// The islands' fragment: with a url_map, the address bar's mapped parts as keys
+    /// ahead of the fragment's own
     pub fn hash(_: *Dom, buf: []u8) []const u8 {
-        const h = zjb.global("location").get("hash", zjb.Handle);
-        defer h.release();
-        return h.readString(buf) catch "";
+        if (url_map == .follow and leader()) {
+            const v = zjb.global("window").get("meioFrag", zjb.Handle);
+            defer v.release();
+            return v.readString(buf) catch "";
+        }
+        if (url_map == .none or url_map == .follow) return location("hash", buf);
+        var frag: [1024]u8 = undefined;
+        const h = location("hash", &frag);
+        var w: std.Io.Writer = .fixed(buf);
+        virtual(&w, h) catch return "";
+        return w.buffered();
     }
 
-    /// `#` alone: the page's own URL without a fragment
+    /// `#` alone: the page's own URL without a fragment. With a url_map, its keys go to
+    /// the path or query
     pub fn setHash(_: *Dom, s: []const u8, push: bool) void {
-        var buf: [1024]u8 = undefined;
-        const target = if (s.len > 1) s else blk: {
-            const loc = zjb.global("location");
-            const path = loc.get("pathname", zjb.Handle);
-            defer path.release();
-            const p = path.readString(&buf) catch return;
-            const search = loc.get("search", zjb.Handle);
-            defer search.release();
-            const q = search.readString(buf[p.len..]) catch return;
+        if (url_map == .follow and leader()) {
+            const t = zjb.string(s);
+            defer t.release();
+            sending = true;
+            defer sending = false;
+            return zjb.global("window").call("meioSetHash", .{ t, push }, void);
+        }
+        var buf: [2048]u8 = undefined;
+        const target = if (url_map == .none or url_map == .follow) if (s.len > 1) s else blk: {
+            const p = location("pathname", &buf);
+            const q = location("search", buf[p.len..]);
             break :blk buf[0 .. p.len + q.len];
+        } else blk: {
+            var w: std.Io.Writer = .fixed(&buf);
+            address(&w, s) catch return;
+            break :blk w.buffered();
         };
         const t = zjb.string(target);
         defer t.release();
         const args = .{ zjb.ConstHandle.null, zjb.ConstHandle.empty_string, t };
         if (push) zjb.global("history").call("pushState", args, void) else zjb.global("history").call("replaceState", args, void);
+        share();
         // The page's other ui.wasm files (each its own runtime) read the fragment again
         sending = true;
         defer sending = false;
@@ -313,13 +331,183 @@ fn onEvent(slot: i32, bit: i32, e: zjb.Handle) callconv(.c) void {
     if (rt.event(@intCast(slot), in)) e.call("preventDefault", .{}, void);
 }
 
+/// Which island keys a page's address bar keeps outside the fragment (docs/plan/urls.md);
+/// the islands still see one fragment (Dom.hash, setHash). A wasm opts in with `pub const
+/// url_map` in its root file, so the others don't grow. champion: role as the path's last
+/// segment (/champions/<c>/<r>), region and period in the query; pool: pool as ?champs=;
+/// learn: p as the bare fragment (#<id>). follow: the page's champion wasm keeps the
+/// address (window.meioFrag, meioSetHash), so the champion page's other wasms don't carry
+/// the mapping; the plain fragment without one (the matchup page's build)
+pub const UrlMap = enum { none, champion, pool, learn, follow };
+const url_map: UrlMap = if (@hasDecl(@import("root"), "url_map")) @import("root").url_map else .none;
+
+/// A mapped key: where it lives in the address bar, and its name there
+const Out = struct { key: []const u8, to: enum { path, query, bare }, as: []const u8 = "" };
+
+const outs: []const Out = switch (url_map) {
+    .none, .follow => &.{},
+    .champion => &.{ .{ .key = "role", .to = .path }, .{ .key = "region", .to = .query, .as = "region" }, .{ .key = "period", .to = .query, .as = "period" } },
+    .pool => &.{.{ .key = "pool", .to = .query, .as = "champs" }},
+    .learn => &.{.{ .key = "p", .to = .bare }},
+};
+
+fn location(comptime part: []const u8, buf: []u8) []const u8 {
+    const v = zjb.global("location").get(part, zjb.Handle);
+    defer v.release();
+    return v.readString(buf) catch "";
+}
+
+fn mapped(key: []const u8) ?Out {
+    for (outs) |o| if (std.mem.eql(u8, o.key, key)) return o;
+    return null;
+}
+
+/// "a=1&b=2"'s value of `key`
+fn param(list: []const u8, key: []const u8) ?[]const u8 {
+    var it = std.mem.tokenizeScalar(u8, list, '&');
+    while (it.next()) |kv| {
+        const eq = std.mem.findScalar(u8, kv, '=') orelse continue;
+        if (std.mem.eql(u8, kv[0..eq], key)) return kv[eq + 1 ..];
+    }
+    return null;
+}
+
+/// /champions/<c>/<r>: the path's role segment, after the champion's
+fn pathRole(path: []const u8) ?[]const u8 {
+    var it = std.mem.tokenizeScalar(u8, path, '/');
+    _ = it.next() orelse return null;
+    _ = it.next() orelse return null;
+    return it.next();
+}
+
+/// The role the server rendered the champion page for (its path's, /champions/<c>/<r>),
+/// for an island's server state before hydration. From the page, not the address:
+/// normalise() may have moved a legacy #role= into the path since
+pub fn pageRole() ?ui.role.Role {
+    const el = zjb.global("document").call("querySelector", .{zjb.constString(".c-cpage")}, zjb.Handle);
+    if (el == .null) return null;
+    defer el.release();
+    return std.meta.stringToEnum(ui.role.Role, attrOf(el, "data-role"));
+}
+
+/// The fragment the islands read: `h` (location.hash) with the address bar's mapped keys
+fn virtual(w: *std.Io.Writer, h: []const u8) !void {
+    var pbuf: [512]u8 = undefined;
+    var qbuf: [512]u8 = undefined;
+    const path = location("pathname", &pbuf);
+    const search = location("search", &qbuf);
+    const query = if (search.len > 0) search[1..] else "";
+    const own = if (h.len > 0) h[1..] else "";
+    try w.writeByte('#');
+    var n: usize = 0;
+    for (outs) |o| {
+        const v = switch (o.to) {
+            .path => pathRole(path),
+            .query => param(query, o.as),
+            .bare => if (own.len > 0 and std.mem.findScalar(u8, own, '=') == null) own else null,
+        } orelse continue;
+        if (n > 0) try w.writeByte('&');
+        try w.print("{s}={s}", .{ o.key, v });
+        n += 1;
+    }
+    if (own.len == 0 or std.mem.findScalar(u8, own, '=') == null) return;
+    if (n > 0) try w.writeByte('&');
+    try w.writeAll(own);
+}
+
+/// The address for fragment `s`: its mapped keys into the path and query (keeping the
+/// query's other keys), the rest as the fragment
+fn address(w: *std.Io.Writer, s: []const u8) !void {
+    var pbuf: [512]u8 = undefined;
+    var qbuf: [512]u8 = undefined;
+    const path = location("pathname", &pbuf);
+    const search = location("search", &qbuf);
+    const keys = if (s.len > 0 and s[0] == '#') s[1..] else s;
+    // The path without its role segment: /champions/<c>
+    const base = if (pathRole(path)) |r| path[0 .. path.len - r.len - 1] else path;
+    try w.writeAll(base);
+    if (param(keys, "role")) |r| if (mapped("role") != null and r.len > 0) try w.print("/{s}", .{r});
+    var n: usize = 0;
+    var qs = std.mem.tokenizeScalar(u8, if (search.len > 0) search[1..] else "", '&');
+    while (qs.next()) |kv| {
+        const k = kv[0 .. std.mem.findScalar(u8, kv, '=') orelse kv.len];
+        if (for (outs) |o| {
+            if (o.to == .query and std.mem.eql(u8, o.as, k)) break true;
+        } else false) continue;
+        try w.print("{c}{s}", .{ @as(u8, if (n == 0) '?' else '&'), kv });
+        n += 1;
+    }
+    for (outs) |o| if (o.to == .query) if (param(keys, o.key)) |v| if (v.len > 0) {
+        try w.print("{c}{s}={s}", .{ @as(u8, if (n == 0) '?' else '&'), o.as, v });
+        n += 1;
+    };
+    var rest: usize = 0;
+    var bare: ?[]const u8 = null;
+    var it = std.mem.tokenizeScalar(u8, keys, '&');
+    while (it.next()) |kv| {
+        const k = kv[0 .. std.mem.findScalar(u8, kv, '=') orelse kv.len];
+        if (mapped(k)) |o| {
+            if (o.to == .bare) bare = kv[k.len + 1 ..];
+            continue;
+        }
+        try w.print("{c}{s}", .{ @as(u8, if (rest == 0) '#' else '&'), kv });
+        rest += 1;
+    }
+    if (bare) |b| if (b.len > 0) {
+        // The bare form only alone: beside other keys, p= stays a key
+        if (rest == 0) try w.print("#{s}", .{b}) else try w.print("&p={s}", .{b});
+    };
+}
+
+/// A legacy fragment's mapped keys (an old link's #role=, #pool=, #p=) into the address
+/// bar, once at start, before any island reads it
+pub fn normalise() void {
+    var frag: [1024]u8 = undefined;
+    const h = location("hash", &frag);
+    var it = std.mem.tokenizeScalar(u8, if (h.len > 0) h[1..] else "", '&');
+    while (it.next()) |kv| {
+        const eq = std.mem.findScalar(u8, kv, '=') orelse continue;
+        if (mapped(kv[0..eq]) == null) continue;
+        var buf: [1024]u8 = undefined;
+        dom.setHash(dom.hash(&buf), false);
+        return;
+    }
+}
+
 /// In this runtime's own setHash: its ui-hash is for the others
 var sending = false;
+
+/// A follower's: the page's champion wasm keeps the address
+fn leader() bool {
+    return zjb.global("window").call("hasOwnProperty", .{zjb.constString("meioSetHash")}, bool);
+}
+
+/// The champion wasm's: the islands' fragment for the page's followers (before they read
+/// it on ui-hash or popstate)
+fn share() void {
+    if (url_map != .champion) return;
+    var buf: [1024]u8 = undefined;
+    const v = zjb.string(dom.hash(&buf));
+    defer v.release();
+    zjb.global("window").set("meioFrag", v);
+}
+
+/// A follower's setHash: the address, then this runtime's islands (setHash's ui-hash
+/// skips its own)
+fn onSetHash(v: zjb.Handle, push: bool) callconv(.c) void {
+    const s = enter();
+    defer leave(s);
+    defer v.release();
+    var buf: [1024]u8 = undefined;
+    dom.setHash(v.readString(&buf) catch return, push);
+    rt.popstate();
+}
 
 fn onPopstate(e: zjb.Handle) callconv(.c) void {
     const s = enter();
     defer leave(s);
     e.release();
+    share();
     if (!sending) rt.popstate();
 }
 
@@ -329,6 +517,10 @@ pub fn start() void {
     const f = zjb.fnHandle("uiPopstate", &onPopstate);
     w.call("addEventListener", .{ zjb.constString("popstate"), f }, void);
     w.call("addEventListener", .{ zjb.constString("ui-hash"), f }, void);
+    if (url_map == .champion) {
+        w.set("meioSetHash", zjb.fnHandle("uiSetHash", &onSetHash));
+        share();
+    }
     if (options.dev) checkLater();
 }
 

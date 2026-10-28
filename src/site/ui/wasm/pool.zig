@@ -11,6 +11,7 @@ const dom = @import("dom.zig");
 const pp = ui.poolpage;
 
 pub const panic = zjb.panic;
+pub const url_map: dom.UrlMap = .pool;
 
 const gpa = std.heap.wasm_allocator;
 const key = "meiolol.pool.v1";
@@ -23,6 +24,7 @@ var island: *ui.island.Island(pp.Page, dom.Dom) = undefined;
 
 export fn main() void {
     dom.start();
+    dom.normalise();
     const root = zjb.global("document").call("querySelector", .{zjb.constString(pp.sel)}, zjb.Handle);
     if (root == .null) return;
     defer root.release();

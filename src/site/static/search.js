@@ -19,9 +19,9 @@ document.addEventListener("keydown", (e) => {
   const form = document.querySelector("header form.look");
   if (!form) return;
   const input = form.elements.namedItem("id");
-  const site = script.dataset.site ?? "";
-  const views = ["", "patch/", "all/", "all/patch/"];
+  // By html.View index: the query a page's URL picks it by, and its data's tree
   const queries = ["", "?period=patch", "?region=all", "?region=all&period=patch"];
+  const dirs = ["", "_v/patch/", "_v/all/", "_v/all-patch/"];
   const roleNames = { top: "Top", jungle: "Jungle", mid: "Mid", bot: "Bot", support: "Support" };
   const aliases = {
     "Miss Fortune": ["mf"], "Twisted Fate": ["tf"], "Jarvan IV": ["j4"], "Aurelion Sol": ["asol"],
@@ -48,11 +48,11 @@ document.addEventListener("keydown", (e) => {
       } catch {}
     });
   }
-  const viewDir = () => {
+  const viewQuery = () => {
     if (script.hasAttribute("data-view")) return script.dataset.view;
     try {
       const v = localStorage.getItem("view");
-      if (views.includes(v)) return v;
+      if (queries.includes(v)) return v;
     } catch {}
     return "";
   };
@@ -61,10 +61,10 @@ document.addEventListener("keydown", (e) => {
   let loading = null;
   let loadedView = null;
   const load = () => {
-    const v = viewDir();
+    const v = viewQuery();
     if (loading && loadedView === v) return loading;
     loadedView = v;
-    loading = fetch(`${site}${v}data/search.json`)
+    loading = fetch(`/${dirs[queries.indexOf(v)]}data/search.json`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status))))
       .then((j) => {
         const n = j.champs.length;
@@ -144,9 +144,9 @@ document.addEventListener("keydown", (e) => {
     return ch === "." || ch === undefined ? null : index.roles[Number(ch)];
   };
 
-  const champHref = (c) => `${site}champion/${c.slug}.html${queries[views.indexOf(viewDir())]}`;
-  const pairHref = (a, b, r) => `${site}${viewDir()}matchup/${r}/${a.slug}-vs-${b.slug}.html`;
-  const idHref = (id) => `${site}your.html#id=${encodeURIComponent(id)}`;
+  const champHref = (c) => `/champions/${c.slug}${viewQuery()}`;
+  const pairHref = (a, b, r) => `/matchups/${r}/${a.slug}-vs-${b.slug}${viewQuery()}`;
+  const idHref = (id) => `/your#id=${encodeURIComponent(id)}`;
 
   const recent = () => {
     try {

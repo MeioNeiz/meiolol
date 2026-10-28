@@ -6,7 +6,7 @@
 // which never runs. Data: /p/models/champ/<id>.json (draftmodel.zig writeSlices).
 // Champion pages (ui.champpage): a box under the head, outside every island so no wasm
 // diff meets it, with each role's line and the model's figure for the matchup brief's
-// opponent, redrawn as the islands change. Matchup pages (matchup/ROLE/A-vs-B.html): a
+// opponent, redrawn as the islands change. Matchup pages (/matchups/ROLE/A-vs-B): a
 // line in .hero
 "use strict";
 
@@ -82,7 +82,7 @@
   // Under the title's text, not a cell of its own in the hero's grid
   const line = (...parts) => (hero.querySelector("h1")?.parentElement || hero).append(para(...parts));
 
-  const m = location.pathname.match(/\/matchup\/([a-z]+)\/(.+)-vs-(.+)\.html$/);
+  const m = location.pathname.match(/\/matchups\/([a-z]+)\/(.+)-vs-(.+)$/);
   const role = m ? ROLES.indexOf(m[1]) : -1;
   if (role < 0) return;
   const list = await champions();

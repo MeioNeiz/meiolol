@@ -8,6 +8,7 @@ const dom = @import("dom.zig");
 const lp = ui.learnpage;
 
 pub const panic = zjb.panic;
+pub const url_map: dom.UrlMap = .learn;
 
 const gpa = std.heap.wasm_allocator;
 const key = "meiolol.learn.v2";
@@ -18,6 +19,7 @@ var server: lp.Page = undefined;
 
 export fn main() void {
     dom.start();
+    dom.normalise();
     const root = zjb.global("document").call("querySelector", .{zjb.constString(lp.sel)}, zjb.Handle);
     if (root == .null) return;
     defer root.release();

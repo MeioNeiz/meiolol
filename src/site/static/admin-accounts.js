@@ -26,7 +26,7 @@ async function accountChange(name, body, link) {
   ACCOUNTS.busy = true;
   try {
     const j = await accountPost(name, body);
-    if (j.invite) ACCOUNTS.link = { url: `${location.origin}/join.html#${j.invite}`, label: link };
+    if (j.invite) ACCOUNTS.link = { url: `${location.origin}/join#${j.invite}`, label: link };
     ACCOUNTS.err = null;
   } catch (e) {
     ACCOUNTS.err = e.message;

@@ -1,6 +1,6 @@
 //! ui-dailydays.wasm: Daily Draft's days strip and streak (ui.dailydays.Page) from its
 //! data-bin and localStorage meiolol.daily.v1, again on ui-daily.wasm's "ui-daily" event
-//! (a puzzle finished). On daily.html it also opens the viewer's own day's puzzle (their
+//! (a puzzle finished). On /daily it also opens the viewer's own day's puzzle (their
 //! date, not UTC's) or ?n='s. Once the page's puzzle is finished, /api/daily's counts:
 //! POSTed with the answers the first time (meiolol.daily.sent.v1; a failed POST unmarked
 //! and sent again next load), else a GET. Share: the share sheet on phones, else the
@@ -186,7 +186,7 @@ fn wanted() ?u32 {
 
 fn open(n: u32) void {
     var buf: [64]u8 = undefined;
-    const url = std.fmt.bufPrint(&buf, "{s}daily/{d}.html", .{ data.root, n }) catch return;
+    const url = std.fmt.bufPrint(&buf, "{s}daily/{d}", .{ data.root, n }) catch return;
     const u = zjb.string(url);
     defer u.release();
     zjb.global("location").call("replace", .{u}, void);

@@ -628,7 +628,7 @@ const Review = (() => {
         who.append(img, " ", champName(x.champion));
         if (x.riot_id) {
           const name = x.you ? el("span", "muted", x.riot_id) : el("a", "muted", x.riot_id);
-          if (!x.you) name.href = `your.html#id=${encodeURIComponent(x.riot_id)}`;
+          if (!x.you) name.href = `/your#id=${encodeURIComponent(x.riot_id)}`;
           who.append(el("br"), name);
         }
         tr.append(who, el("td", "num", `${x.kills}/${x.deaths}/${x.assists}`));

@@ -71,7 +71,7 @@ const apiFetch = (url, opts = {}) => fetch(url, { ...opts, credentials: signIn ?
 
 function previewNote() {
   const example = el("a", "", "See the example review");
-  example.href = "your.html#example";
+  example.href = "/your#example";
   example.addEventListener("click", (e) => {
     e.preventDefault();
     showExample();
@@ -181,7 +181,7 @@ function renderRecent() {
   box.append(el("span", "", "On this device:"));
   for (const r of list) {
     const a = el("a", "", r.id);
-    a.href = `your.html#${idHash(r.id)}`;
+    a.href = `/your#${idHash(r.id)}`;
     a.addEventListener("click", (e) => {
       e.preventDefault();
       $("riot-id").value = r.id;
@@ -504,9 +504,9 @@ function renderReview(games) {
     return;
   }
   const link = current.example ? undefined : `${location.origin}${location.pathname}#${idHash(playerId(current.player), g.start_ms)}`;
-  // game.html reads the same fragment; it needs the game's timeline, and an API that
+  // /game reads the same fragment; it needs the game's timeline, and an API that
   // answers /api/game (api 2: older ones send no `api`)
-  const page = current.example || !(current.api >= 2) || (g.win_chance?.length ?? 0) < 2 ? undefined : `game.html#${idHash(playerId(current.player), g.start_ms)}`;
+  const page = current.example || !(current.api >= 2) || (g.win_chance?.length ?? 0) < 2 ? undefined : `/game#${idHash(playerId(current.player), g.start_ms)}`;
   pager = { index: shown, count: games.length, go: show };
   Review.render(box, g, { date, pager, link, page });
 }
