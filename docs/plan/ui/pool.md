@@ -190,3 +190,43 @@ Override the sections above where they differ. Raw: review artifact db, ids v4-*
 2. Pick-up difficulty (chat, 25 Oct): not yet, later. The champion page shows its own
    difficulty; for now at most a very lean page of every champion's pick-up, linked from
    champion pages and the pool; design it properly later
+
+## v2: wider pool, more lanes, across roles (note 17, 28 Oct)
+
+Overrides the sections above where they differ. Jacob on the live page ("Weak lanes 5 of
+5 covered", Darius Yone Renekton Jax): close but too limiting; wants a bigger pool, many
+more opponents, the pool across roles, more information.
+
+- **Pool**: up to 10 champion-role pairs (Vi jungle and Darius top in one pool; the same
+  champion may sit in two roles). Added in its main role; its slot's role icon is a
+  menu to move it. Slots grouped by role, role order as the board. URL `#pool=122t-
+  254j-58t` (role letter t j m b s); old URLs without letters read as the main role
+- **One section per role in the pool** (Top, then Jungle...), each a Card:
+  - head: role icon, "Top", the pool's champions there, "17 of 20 lanes covered"
+  - **Lanes grid** (HeatGrid): rows the role's opponents your pool meets, columns your
+    champions in that role. Rows: every lane opponent in 1%+ of any pool champion's
+    games, merged; 20 shown, "All N" expands in place. Sort Segmented: "Worst first"
+    (default: the pool's best answer in the row, lowest first) or "Most met" (games
+    summed over the columns). Each cell points vs usual on the fill scale, thin (<30
+    games) faded with "·"; the row's best cell ringed (your answer to that lane); a row
+    with no cell above +1.0 is flagged open (row head in the warning tone)
+  - a row's tail: how often you meet it (share of your champions' games there), so a
+    rare open lane reads as rare
+  - cell press: readout "Jax into Dr. Mundo +2.1 · 1,234 games · +180 gold at 14" and
+    the matchup page link; column head: the champion's page in that role
+  - **What to add** (CandidateList, as now) from the role's main file: the first pool
+    champion whose pool file is that role (data/pool/<slug>.bin). None: one line "Add
+    a champion whose main role is Top to see what covers its lanes", no list
+- **Data**: a lanes file per champion and view, data/pool/lanes/<slug>.bin (ui.data):
+  per role it plays (champion page's thin rule), its lane opponents from champion.zig
+  `relOf` (same role, not ally): id, games, points vs usual (tenths), gold at 14.
+  ~1 KB a role, 1-3 KB gz a champion; the island fetches one per pool champion (10 at
+  most). Not the champion page's -more.bin (16 KB gz each, mostly trends)
+- **Size**: ui-pool.wasm is at 39.9 of 40 KB gz. The role sections go to their own
+  island, ui-poolgrid.wasm (stack.md: one wasm per page family at the budget), loaded
+  once the pool has a champion; ui-pool keeps the slots, picker and What to add
+- **360**: sections stack; grid row heads 96 px (icon + short name), 44 px cells, 5
+  columns fit; 6+ columns scroll inside the grid with the row heads pinned. Tap a cell
+  for its readout
+- **Words**: one head line per role and the counts; no paragraphs (lane meaning stays
+  in the scope note under the page)
