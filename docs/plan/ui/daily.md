@@ -126,7 +126,9 @@ Daily Draft #14  ...                                                 [ResultStri
 - On paper (under the board, beside the seat panel): `WinSplit`, the bar with blue and red shares,
   the 95% range as a whisker around the split, the result as a flag on the winner's end;
   then the edge by kind as one row of four diverging mini bars (DivergingBars variant of
-  Bar). Words: "On paper", the four kind labels, numbers
+  Bar). Words: "On paper", the four kind labels, numbers. As the data grows, more kinds
+  split out of these four (Jacob 27 Oct: "with more data hopefully we can show more of
+  these"): a kind gets its own bar once its edges hold on held-out games (model.md)
 - No method block. Toggletips on: "the model's pick" (which model, ModelBadge), the
   range, "rank" ("among champions with 100+ games in the role on this patch"), lane
   usual. The ones today's "How these facts are read" explains, a line each
