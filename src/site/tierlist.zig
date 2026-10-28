@@ -18,7 +18,6 @@ const Site = @import("root.zig").Site;
 const ratio = @import("root.zig").ratio;
 const earlyNote = @import("root.zig").earlyNote;
 const roleName = @import("root.zig").roleName;
-const roleIcons = @import("root.zig").roleIcons;
 
 /// Below this share of all games a champion's row is a rare pick, listed on request
 pub const min_pick_rate = 0.004;
@@ -89,16 +88,6 @@ pub fn roleRank(site: *const Site, r: Role, id: u32) !?Rank {
 pub const table_span = ui.fmt.table_span;
 
 pub const wrColour = ui.fmt.wrColour;
-
-/// A win rate in text (.wrc), coloured by wrColour on the champions table's scale and
-/// fainter with fewer games, as the table's own
-pub fn wrText(w: *Writer, p: f64, games: u32) !void {
-    try tpl.render(w, "<span class=\"wrc\" style=\"--c:{colour};opacity:{fade:.2}\">{rate:.1}%</span>", .{
-        .colour = wrColour(p, table_span),
-        .fade = core.curvesfile.fade(games),
-        .rate = 100 * p,
-    });
-}
 
 /// The champions table's data file, in each view's directory
 pub const data_path = "data/tiers.bin";
@@ -263,7 +252,6 @@ fn writeIsland(site: *const Site, w: *Writer, role: ?Role, at: ui.urls.Page) !vo
     var h: ui.H = .init(a, &tree);
     tree.root = t.view(&h);
     if (h.oom) return error.OutOfMemory;
-    try roleIcons(w);
     try ui.html.write(&tree, tree.root, w);
     try tpl.render(w, "\n<script src=\"{js}\" data-wasm=\"{wasm}\" defer></script>\n", .{
         .js = html.Link{ .path = assets.stats_js.path },

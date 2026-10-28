@@ -278,7 +278,6 @@ test "fixture games to stats, curves and the website" {
         "champions/top.html",
         "champions/darius.html",
         "champions/darius/top.html",
-        "table.js",
         "data/champion/darius.bin",
         "data/champion/darius-build.bin",
         "data/champion/darius-more.bin",
@@ -361,7 +360,7 @@ test "fixture games to stats, curves and the website" {
         // the other roles; the head, the build, the matchups with the most met opponent's
         // brief linking to the matchup page from the champion's side
         .{ "champions/darius.html", &.{ "<div class=\"c-cpage\" data-id=\"122\" data-roles=\"top\"><div class=\"part\" data-island=\"champion\" data-src=\"/data/champion/darius.bin\" data-stamp=\"", "<h1>Darius</h1>", "<span class=\"sum\">EUW · 30 days · Plat+</span>", "data-island=\"champbuild\" data-src=\"/data/champion/darius-build.bin\"", "<section class=\"c-card\" data-v=\"flush\"><div class=\"c-build\">", "<h2>Matchups</h2>", "data-island=\"champmore\" data-src=\"/data/champion/darius-more.bin\"", "data-js=\"/" ++ assets.champmore_js.path ++ "\" data-wasm=\"" ++ assets.champmore_wasm.path ++ "\"", "class=\"c-dots\"", "class=\"c-mpick\"", "href=\"/matchups/top/darius-vs-mordekaiser\"", "<h2>By patch</h2>", "<h2>By game length</h2>", "<script src=\"/" ++ assets.champion_js.path ++ "\" data-wasm=\"" ++ assets.champion_wasm.path ++ "\" defer></script>" } },
-        .{ "champions.html", &.{ "<div class=\"c-tiers\" data-island=\"tiers\" data-src=\"/data/tiers.bin\" data-stamp=\"", "data-base=\"/\" data-view=\"0\" data-path=\"/champions\"", "<h1>Champions</h1>", "<linearGradient id=\"c-violin-g\"", "<symbol id=\"ri-top\"", "<a href=\"/champions?region=all\">All</a>", "<div class=\"rb\">", "<script src=\"/" ++ assets.stats_js.path ++ "\" data-wasm=\"" ++ assets.stats_wasm.path ++ "\" defer></script>" } },
+        .{ "champions.html", &.{ "<div class=\"c-tiers\" data-island=\"tiers\" data-src=\"/data/tiers.bin\" data-stamp=\"", "data-base=\"/\" data-view=\"0\" data-path=\"/champions\"", "<h1>Champions</h1>", "<linearGradient id=\"c-violin-g\"", "<a href=\"/champions?region=all\">All</a>", "<div class=\"rb\">", "<script src=\"/" ++ assets.stats_js.path ++ "\" data-wasm=\"" ++ assets.stats_wasm.path ++ "\" defer></script>" } },
         // Home: the lookup, each role's most played (the example's game: core_loaded); no
         // clear patch move on a patch's first day, so the Patch card is its link alone
         .{ "index.html", &.{ "data-island=\"lookup\" data-to=\"/your\"", "data-island=\"homechamps\" data-bin=\"", "Patch 15.13", "vs 15.12", "href=\"/patch?period=patch\" data-s=\"s\">All changes</a>", "<script src=\"/" ++ assets.home_js.path ++ "\" data-wasm=\"" ++ assets.home_wasm.path ++ "\" defer></script>" } },
@@ -581,12 +580,6 @@ test "fixture games to stats, curves and the website" {
         try testing.expectEqualStrings(want, got);
         checked += 1;
         if (std.mem.endsWith(u8, e.path, ".html")) try expectPageLinks(arena, e.path, want);
-        if (std.mem.endsWith(u8, e.path, ".html") and std.mem.find(u8, want, "data-sortable") != null and
-            std.mem.find(u8, want, "table.js\"") == null)
-        {
-            std.debug.print("{s}: sortable table without table.js\n", .{e.path});
-            return error.TestUnexpectedResult;
-        }
     }
     try testing.expect(checked > 50);
     // The account pages (site/account.zig): rendered on request only, never indexed

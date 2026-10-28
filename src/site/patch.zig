@@ -142,7 +142,6 @@ fn writePair(site: *const Site, w: *Writer, pair: Pair) !void {
     var h: ui.H = .init(a, &tree);
     tree.root = p.view(&h);
     if (h.oom) return error.OutOfMemory;
-    try root.roleIcons(w);
     try ui.html.write(&tree, tree.root, w);
     try tpl.render(w, "\n<script src=\"{js}\" data-wasm=\"{wasm}\" defer></script>\n", .{
         .js = html.Link{ .path = assets.patch_js.path },

@@ -355,21 +355,6 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
         .imports = &.{ .{ .name = "core", .module = core }, .{ .name = "net", .module = net } },
     });
 
-    // The recommender for the website's draft helper, embedded by `meiolol site`
-    const wasm = b.addExecutable(.{
-        .name = "meiolol",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/wasm.zig"),
-            .target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .freestanding }),
-            .optimize = .ReleaseSmall,
-            .imports = &.{.{ .name = "core", .module = b.createModule(.{
-                .root_source_file = b.path("src/core/root.zig"),
-            }) }},
-        }),
-    });
-    wasm.entry = .disabled;
-    wasm.rdynamic = true;
-    backend.addAnonymousImport("draft.wasm", .{ .root_source_file = wasm.getEmittedBin() });
     // serve.zig's test of nginx's redirects against urls.legacy
     backend.addAnonymousImport("redirect-samples.tsv", .{ .root_source_file = b.path("deploy/nginx/redirect-samples.tsv") });
 

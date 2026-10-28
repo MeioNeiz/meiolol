@@ -6,7 +6,6 @@ const std = @import("std");
 const core = @import("core");
 const root = @import("root.zig");
 const html = @import("html.zig");
-const lanechart = @import("lanechart.zig");
 const text = @import("text.zig");
 const champion = @import("champion.zig");
 const stats = @import("../stats.zig");
@@ -415,89 +414,6 @@ fn others(site: *const Site, curves: *const Curves, r: Role, fixed: Champ) ![]Ot
     return list.items;
 }
 
-/// The landing page's lead: one matchup's gold curve, the clearest lane among those
-/// out of "more data needed" (the most games while none is)
-pub fn featured(site: *const Site, w: *Writer, curves: *const Curves, matchups: usize) !void {
-    var best: ?struct { r: Role, x: Champ, y: Champ, v: View, score: f64 } = null;
-    for (curves.curves) |c| {
-        const h = c.header;
-        if (!isPage(h)) continue;
-        const x = champ(site, h.a) orelse continue;
-        const y = champ(site, h.b) orelse continue;
-        const r: Role = @fromBackingInt(@intCast(h.role));
-        const v = curves.get(r, .all, x.id, y.id) orelse continue;
-        const e = v.estimate(.gold, curvesfile.lane_minute - 1);
-        const games: f64 = @floatFromInt(v.games());
-        const score = if (thin(v)) games else 1e9 + @as(f64, @floatFromInt(@abs(e.mean)));
-        if (best == null or score > best.?.score) best = .{ .r = r, .x = x, .y = y, .v = v, .score = score };
-    }
-    const b = best orelse return;
-    // From x's side, the side ahead at 14 minutes, so the line reads upwards
-    const flip = b.v.estimate(.gold, curvesfile.lane_minute - 1).mean < 0;
-    const x = if (flip) b.y else b.x;
-    const y = if (flip) b.x else b.y;
-    const v = curves.get(b.r, .all, x.id, y.id).?;
-    const lane = root.roleName(b.r);
-    const when = try period(site.arena, curves);
-    try tpl.renderPart(w,
-        \\<section class="featured"><h2>{x} vs {y}, {lane} lane: gold difference by minute</h2>
-        \\
-    , .{ .x = x.name, .y = y.name, .lane = lane });
-    try summary(w, v, x, y);
-    try chartOne(w, v, curves.baseline(b.r, .all), null, .gold, "gold", x, y, when, lane, false);
-    try tpl.renderPart(w,
-        \\<p><a href="{href}">Experience, CS, kills, item timings and ranks for this matchup</a> · <a href="{all}">All {n} matchups</a></p></section>
-        \\
-    , .{
-        .href = try site.href(page(b.r, x, y)),
-        .all = try site.href(.matchups),
-        .n = matchups,
-    });
-}
-
-fn summary(w: *Writer, v: View, x: Champ, y: Champ) !void {
-    const lane = v.lane();
-    const i = curvesfile.lane_minute - 1;
-    const m = v.minute(i);
-    const ahead = tpl.call(percent, .{ lane.ahead, lane.games });
-    const gold = if (m.n >= minuteFloor(v)) blk: {
-        const e = v.estimate(.gold, i);
-        // The share in the thin case is raw and can disagree with a line that leans on the
-        // baseline
-        break :blk tpl.t("At {minute} minutes {x} is on average {amount} against {y}{thin}{own}", .{
-            .minute = curvesfile.lane_minute,
-            .x = x.name,
-            .amount = tpl.call(amount, .{ e.mean, "gold" }),
-            .y = y.name,
-            .thin = tpl.when(thin(v), tpl.t(", mostly from how both champions do against everyone. In these {games} game{s} {x} led in gold at {minute} minutes in {ahead}. ", .{
-                .games = v.games(),
-                .s = plural(v.games()),
-                .x = x.name,
-                .minute = curvesfile.lane_minute,
-                .ahead = ahead,
-            })),
-            .own = tpl.when(!thin(v), tpl.t(" (8 games in 10 between {p10} and {p90}), and leads in gold in {ahead} of games. ", .{
-                .p10 = tpl.call(signed, .{m.gold.p10}),
-                .p90 = tpl.call(signed, .{m.gold.p90}),
-                .ahead = ahead,
-            })),
-        });
-    } else null;
-    try tpl.render(w,
-        \\<p class="lead">{gold}{x} wins {wins} of these games{split}.</p>
-        \\
-    , .{
-        .gold = gold,
-        .x = x.name,
-        .wins = tpl.call(percent, .{ v.wins(), v.games() }),
-        .split = tpl.when(lane.ahead >= min_minute_games and lane.behind >= min_minute_games, tpl.t(": {ahead} when ahead at {minute} minutes, {behind} when behind", .{
-            .ahead = tpl.call(percent, .{ lane.wins_ahead, lane.ahead }),
-            .minute = curvesfile.lane_minute,
-            .behind = tpl.call(percent, .{ lane.wins_behind, lane.behind }),
-        })),
-    });
-}
-
 /// x's win rate against y (the view's stats) and against usual (champion.VsUsual, as
 /// the champion page's opponent grid); `ka`: champion.usualK of `r`
 /// `base`: x's win rate in the role, the champion page's
@@ -521,19 +437,6 @@ fn round10(v: i32) i32 {
     return @divTrunc(v + if (v < 0) @as(i32, -5) else 5, 10) * 10;
 }
 
-fn amount(w: *Writer, value: i16, unit: []const u8) !void {
-    if (value == 0) return tpl.render(w, "even in {unit}", .{ .unit = unit });
-    try tpl.render(w, "{gold} {unit} {side}", .{
-        .gold = @abs(value),
-        .unit = unit,
-        .side = if (value > 0) "ahead" else "behind",
-    });
-}
-
-fn signed(w: *Writer, value: i32) !void {
-    try tpl.render(w, "{sign}{value}", .{ .sign = if (value > 0) "+" else "", .value = value });
-}
-
 /// Minutes drawn: while at least minuteFloor games are still going
 fn reach(v: View) usize {
     var last: usize = 0;
@@ -546,12 +449,6 @@ fn reach(v: View) usize {
 fn band(v: View, base: ?View, metric: curvesfile.Metric, i: usize) [2]i32 {
     const q = spreadAt(v, base, metric, i);
     return .{ q.p25, q.p75 };
-}
-
-/// Where 8 games in 10 end at minute i, from the same games as band
-pub fn range(v: View, base: ?View, metric: curvesfile.Metric, i: usize) [2]i32 {
-    const q = spreadAt(v, base, metric, i);
-    return .{ q.p10, q.p90 };
 }
 
 const Spread32 = struct { p10: i32, p25: i32, p75: i32, p90: i32 };
@@ -581,92 +478,6 @@ fn prevLine(site: *const Site, r: Role, x: Champ, y: Champ) ?Prev {
     const v = c.get(r, .all, x.id, y.id) orelse return null;
     if (v.games() < thin_games) return null;
     return .{ .v = v, .patch = c.patch() };
-}
-
-/// Estimated average line and middle-half band of `metric` by minute, each minute
-/// titled with both; `prev` dashed. A `small` chart (one of the matchup page's three) has
-/// no caption: the page gives one for all three
-fn chartOne(
-    w: *Writer,
-    v: View,
-    base: ?View,
-    prev: ?Prev,
-    metric: curvesfile.Metric,
-    unit: []const u8,
-    x: Champ,
-    y: Champ,
-    when: []const u8,
-    lane: []const u8,
-    small: bool,
-) !void {
-    const last = reach(v);
-    const figure = .{ .thin = tpl.when(thin(v), " thin"), .small = tpl.when(small, " mu-small") };
-    if (last < 2) {
-        return tpl.render(w,
-            \\<figure class="chart{thin}{small}">
-            \\<p class="muted">Not enough games yet.</p></figure>
-            \\
-        , figure);
-    }
-    var bands: [curvesfile.max_minutes][2]i32 = undefined;
-    var line: [curvesfile.max_minutes]i32 = undefined;
-    var prev_line: [curvesfile.max_minutes]i32 = undefined;
-    for (0..last) |i| {
-        bands[i] = band(v, base, metric, i);
-        line[i] = v.estimate(metric, i).mean;
-    }
-    const prev_last = if (prev) |pv| @min(last, reach(pv.v)) else 0;
-    for (0..prev_last) |i| prev_line[i] = prev.?.v.estimate(metric, i).mean;
-    var aria_buf: [160]u8 = undefined;
-    const aria = std.mem.print(&aria_buf, "{s} of {s} minus {s} by minute", .{ unit, x.name, y.name }) catch unit;
-    try tpl.renderPart(w, "<figure class=\"chart{thin}{small}\">\n", figure);
-    try lanechart.render(w, .{
-        .aria = aria,
-        .a = x.name,
-        .b = y.name,
-        .band = bands[0..last],
-        .line = line[0..last],
-        .prev = prev_line[0..prev_last],
-        .tips = unit,
-        .width = if (small) 360 else 640,
-        .height = if (small) 270 else 250,
-        .fit = fit_minutes,
-    });
-    if (!small) try caption(w, v, base, if (prev_last >= 2) prev else null, when, lane, true);
-    try tpl.renderPart(w, "</figure>\n", .{});
-}
-
-/// The axis fits the band to here: the lane and the first fights, before the spread of
-/// long games (±3,000 gold) flattens every line to 0
-const fit_minutes = 20;
-
-/// What the marks are, in one line; the minutes' numbers are in the chart's hover titles.
-/// Outside a figure: the matchup page's one line under its three charts
-fn caption(w: *Writer, v: View, base: ?View, prev: ?Prev, when: []const u8, lane: []const u8, in_figure: bool) !void {
-    const last = reach(v);
-    const own = v.games() >= thin_games or base == null;
-    try w.writeAll(if (in_figure) "<figcaption>" else "<p class=\"mu-cap\">");
-    try tpl.render(w,
-        \\<span class="k line"></span>average <span class="k band"></span>middle half of {band}{base}{ended}{prev} · games with timelines, {when}
-    , .{
-        .band = tpl.when(own, "games"),
-        .base = tpl.when(!own, tpl.t("all {lane} lanes (few games here)", .{ .lane = lane })),
-        .ended = tpl.when(last > surrender_minute, tpl.t(" <span class=\"k end\"></span>{m} min, after it only games still going", .{ .m = surrender_minute })),
-        .prev = if (prev) |pv| tpl.t(" <span class=\"k prev\"></span>patch {patch}", .{ .patch = pv.patch }) else null,
-        .when = when,
-    });
-    try w.writeAll(if (in_figure) "</figcaption>\n" else "</p>\n");
-}
-
-/// Surrender opens at 15 minutes: before it nearly all games are still running
-const surrender_minute = lanechart.surrender_minute;
-
-test "nice scale" {
-    try std.testing.expectEqual(1, lanechart.niceCeil(0));
-    try std.testing.expectEqual(500, lanechart.niceCeil(420));
-    try std.testing.expectEqual(600, lanechart.niceCeil(501));
-    try std.testing.expectEqual(1500, lanechart.niceCeil(1001));
-    try std.testing.expectEqual(2500, lanechart.niceCeil(2120));
 }
 
 test "one page per matchup, though experienced players' curves share its pair" {

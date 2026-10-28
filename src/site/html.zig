@@ -305,17 +305,6 @@ fn subbar(w: *Writer, p: Page) Writer.Error!void {
     });
 }
 
-/// Riot ID lookup forms: to Your games with the ID in the fragment, which never reaches
-/// the server; without JS, the query (your.js moves it to the fragment)
-pub const lookup_submit =
-    \\ onsubmit="location.href=this.action+'#id='+encodeURIComponent(this.elements.namedItem('id').value.trim());return false"
-;
-
-/// The mark: a win chance line through its turning minute
-pub const logo =
-    \\<svg width="20" height="20" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#8b7cf6"/><path d="M6 21.5 11.5 14l5 4.5L26 7" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16.5" cy="18.5" r="2.6" fill="#f5c451"/></svg>
-;
-
 /// Rank picks: tier index as filters.zig tiers ("" all games: the crawl samples
 /// Platinum IV+ players, so its lobbies are Platinum+); higher tiers are too thin to offer
 pub const ranks = [_][2][]const u8{ .{ "", "Plat+" }, .{ "5", "Emerald+" }, .{ "6", "Diamond+" }, .{ "7", "Master+" } };
