@@ -20,7 +20,6 @@ const Site = root.Site;
 const tpl = html.tpl;
 const pp = ui.patchpage;
 const PatchDay = patchday.PatchDay;
-const MatchupMove = patchday.MatchupMove;
 const Rate = patchday.Rate;
 const Role = core.Role;
 
@@ -29,7 +28,7 @@ pub const path = "patch.html";
 /// The island's data file, in each view's directory
 pub const data_path = "data/patch.bin";
 
-/// A row's matchup moves in its detail
+/// A row's matchup moves: every one that moved clearly, then its biggest others up to this
 const max_moves = 3;
 /// A changed item's or rune's champions
 const max_users = 3;
@@ -148,8 +147,6 @@ fn writePair(site: *const Site, w: *Writer, pair: Pair) !void {
     if (h.oom) return error.OutOfMemory;
     try root.roleIcons(w);
     try ui.html.write(&tree, tree.root, w);
-    if (pp.riotView(&h, d, try riot(site, d, pair), base)) |n| try ui.html.write(&tree, n, w);
-    if (h.oom) return error.OutOfMemory;
     try tpl.render(w, "\n<script src=\"{js}\" data-wasm=\"{wasm}\" defer></script>\n", .{
         .js = html.Link{ .root = to_root, .up = site.view.up(), .path = assets.patch_js.path },
         .wasm = assets.patch_wasm.path,
@@ -246,33 +243,8 @@ fn data(site: *const Site, pair: Pair) !pp.Data {
         }
     }.f);
 
-    var mus: std.ArrayList(pp.Matchup) = .empty;
-    for (pd.matchups) |m| {
-        const win_clear = m.win.clear(o.min_pair_games, o.z);
-        if (m.gold == null and !win_clear) continue;
-        const up = if (win_clear) m.win.z > 0 else m.gold.?.cur > m.gold.?.prev;
-        const x = if (up) m else pd.matchup(m.role, m.b, m.a).?;
-        const ca = matchup.champ(site, x.a) orelse continue;
-        const cb = matchup.champ(site, x.b) orelse continue;
-        try mus.append(a, .{
-            .role = role(x.role),
-            .a = index(site, x.a).?,
-            .b = index(site, x.b).?,
-            .prev = count(x.win.prev),
-            .cur = count(x.win.cur),
-            .clear = win_clear,
-            .gold = if (x.gold) |g| .{ .minute = g.minute, .prev = g.prev, .cur = g.cur, .games = g.cur_n } else null,
-            .path = try matchup.path(a, x.role, ca, cb),
-        });
-    }
-    std.mem.sort(pp.Matchup, mus.items, {}, struct {
-        fn f(_: void, x: pp.Matchup, y: pp.Matchup) bool {
-            return points(x.prev, x.cur) > points(y.prev, y.cur);
-        }
-    }.f);
-
     const older, const newer = try nav(site, pair);
-    return .{
+    var d: pp.Data = .{
         .cur_patch = pd.cur_patch,
         .prev_patch = pd.prev_patch,
         .older = older,
@@ -288,8 +260,9 @@ fn data(site: *const Site, pair: Pair) !pp.Data {
         .champs = champs,
         .changes = changes.items,
         .rows = rows.items,
-        .matchups = mus.items,
     };
+    try riot(site, &d, pair);
+    return d;
 }
 
 fn addRow(site: *const Site, pd: *const PatchDay, rows: *std.ArrayList(pp.Row), m: patchday.ChampionMove, changed: []const ?u16) !void {
@@ -312,32 +285,40 @@ fn addRow(site: *const Site, pd: *const PatchDay, rows: *std.ArrayList(pp.Row), 
     });
 }
 
-/// `id`'s biggest win rate moves in `r` among matchups with enough games on both
-/// patches, from its side
+/// `id`'s matchups in `r` with enough games on both patches, from its side: those whose
+/// win rate or gold lead moved clearly, then the biggest other win rate moves up to
+/// max_moves; biggest first within each
 fn moves(site: *const Site, pd: *const PatchDay, id: u32, r: Role) ![]const pp.Move {
+    const a = site.arena;
     const o = pd.opts;
-    var best: [max_moves]?MatchupMove = @splat(null);
+    const me = matchup.champ(site, id) orelse return &.{};
+    var all: std.ArrayList(pp.Move) = .empty;
     for (pd.matchups) |m| {
         if (m.role != r or (m.a != id and m.b != id)) continue;
-        if (!m.win.enough(o.min_pair_games)) continue;
         const x = pd.matchup(r, id, if (m.a == id) m.b else m.a).?;
-        const by = @abs(x.win.delta());
-        var at: usize = best.len;
-        while (at > 0) : (at -= 1) {
-            const y = best[at - 1] orelse continue;
-            if (@abs(y.win.delta()) >= by) break;
-        }
-        if (at == best.len) continue;
-        var k = best.len - 1;
-        while (k > at) : (k -= 1) best[k] = best[k - 1];
-        best[at] = x;
+        const clear = x.win.clear(o.min_pair_games, o.z);
+        if (!x.win.enough(o.min_pair_games) and x.gold == null) continue;
+        const them = matchup.champ(site, x.b) orelse continue;
+        try all.append(a, .{
+            .them = index(site, x.b) orelse continue,
+            .prev = count(x.win.prev),
+            .cur = count(x.win.cur),
+            .clear = clear,
+            .gold = if (x.gold) |g| .{ .minute = g.minute, .prev = g.prev, .cur = g.cur, .games = g.cur_n } else null,
+            .path = try matchup.path(a, r, me, them),
+        });
     }
-    var out: std.ArrayList(pp.Move) = .empty;
-    for (best) |x| if (x) |m| {
-        const them = index(site, m.b) orelse continue;
-        try out.append(site.arena, .{ .them = them, .prev = count(m.win.prev), .cur = count(m.win.cur), .clear = m.win.clear(o.min_pair_games, o.z) });
-    };
-    return out.items;
+    std.mem.sort(pp.Move, all.items, {}, struct {
+        fn f(_: void, x: pp.Move, y: pp.Move) bool {
+            const mx = x.clear or x.gold != null;
+            const my = y.clear or y.gold != null;
+            if (mx != my) return mx;
+            return @abs(points(x.prev, x.cur)) > @abs(points(y.prev, y.cur));
+        }
+    }.f);
+    var n: usize = 0;
+    while (n < all.items.len and (all.items[n].clear or all.items[n].gold != null)) n += 1;
+    return all.items[0..@min(all.items.len, @max(n, max_moves))];
 }
 
 fn points(a: pp.Count, b: pp.Count) f64 {
@@ -384,8 +365,8 @@ fn change(a: std.mem.Allocator, c: patchnotes.Change, id: u32) !pp.Change {
 
 /// The items and runes Riot changed, each with who uses it most in this patch view's
 /// builds file (the newest pair's only: the builds are the current patch's)
-fn riot(site: *const Site, d: *const pp.Data, pair: Pair) !pp.Riot {
-    const n = pair.notes orelse return .{ .items = &.{}, .runes = &.{} };
+fn riot(site: *const Site, d: *pp.Data, pair: Pair) !void {
+    const n = pair.notes orelse return;
     const a = site.arena;
     const view_builds = site.view_builds[(html.View{ .region = site.view.region, .period = .patch }).index()];
     const f = if (pair.older != null) null else if (view_builds) |*b| b else null;
@@ -406,7 +387,8 @@ fn riot(site: *const Site, d: *const pp.Data, pair: Pair) !pp.Riot {
         .icon = if (c.icon.len > 0) try a.print("https://ddragon.leagueoflegends.com/cdn/img/{s}", .{c.icon}) else "",
         .users = if (f) |b| try users(a, d, b, champs, c.id, true) else &.{},
     };
-    return .{ .items = items, .runes = runes };
+    d.items = items;
+    d.runes = runes;
 }
 
 /// The champion roles with the biggest share of players using item or rune `id`, among

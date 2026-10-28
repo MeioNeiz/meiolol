@@ -113,29 +113,42 @@ test "the server renders every listed row by change, the strip and Riot's lines"
     const page = w.written();
     try testing.expect(std.mem.find(u8, page, "<h1>Patch 16.21 vs 16.20</h1>") != null);
     try testing.expect(std.mem.find(u8, page, "href=\"../patch/champion/darius.html#role=top\"") != null);
-    try testing.expect(std.mem.find(u8, page, "href=\"../patch/matchup/bot/missfortune-vs-tristana.html\"") != null);
-    const report = try check.run(a, &t, .{ .words = .off, .answer = .off });
+    // The kit chips' labels are item and rune names ("Press the Attack"), not wording
+    const report = try check.run(a, &t, .{ .words = .off, .answer = .off, .label = .off });
     for (report.findings.items) |f| std.debug.print("{s}\n", .{f.msg});
     try testing.expectEqual(@as(usize, 0), report.findings.items.len);
 }
 
-test "items and runes under the island, each with who uses it most" {
-    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-    var t: tree.Tree = .{};
-    var h: tree.H = .init(a, &t);
-    t.root = pp.riotView(&h, &pp.demo, pp.demo_riot, "../").?;
-    var w: std.Io.Writer.Allocating = .init(a);
-    try html.write(&t, t.root, &w.writer);
-    const page = w.written();
-    try testing.expect(std.mem.find(u8, page, "data-island") == null);
-    try testing.expect(std.mem.find(u8, page, "Bastionbreaker") != null);
-    try testing.expect(std.mem.find(u8, page, "href=\"../patch/champion/missfortune.html#role=bot\"") != null);
+test "items and runes over the table: a chip opens its lines and who uses it most" {
+    var p: Page = undefined;
+    try p.init("");
+    defer p.deinit();
+    var page = try p.shown();
     try testing.expect(std.mem.find(u8, page, "PressTheAttack.png") != null);
-    const report = try check.run(a, &t, .{ .words = .off, .answer = .off });
-    for (report.findings.items) |f| std.debug.print("{s}\n", .{f.msg});
-    try testing.expectEqual(@as(usize, 0), report.findings.items.len);
+    try testing.expect(std.mem.find(u8, page, "Bought most by") == null);
+    // Before the table: never under a long one
+    try testing.expect(std.mem.find(u8, page, "Bastionbreaker").? < std.mem.find(u8, page, "<table").?);
+    p.click(p.by(.button, "Bastionbreaker"));
+    page = try p.shown();
+    try testing.expect(std.mem.find(u8, page, "Bought most by") != null);
+    try testing.expect(std.mem.find(u8, page, "href=\"patch/champion/missfortune.html#role=bot\"") != null);
+    // The URL keeps the filters only
+    try testing.expectEqualStrings("", p.fake.fragment.items);
+    p.click(p.by(.button, "Bastionbreaker"));
+    try testing.expect(std.mem.find(u8, try p.shown(), "Bought most by") == null);
+}
+
+test "matchups that moved: a column, a count that filters, the row's links" {
+    var p: Page = undefined;
+    try p.init("#only=mu");
+    defer p.deinit();
+    // Miss Fortune into Tristana, from both sides; counted once
+    try testing.expectEqualStrings("Miss Fortune,Tristana", try p.names());
+    p.click(p.by(.tr, "Miss Fortune"));
+    const page = try p.shown();
+    try testing.expect(std.mem.find(u8, page, "href=\"patch/matchup/bot/missfortune-vs-tristana.html\"") != null);
+    try testing.expect(std.mem.find(u8, page, "gold +40 → +209") != null);
+    try testing.expect(std.mem.find(u8, page, "Jinx") != null);
 }
 
 test "chips: moved and Riot's by default; each toggles; All shows every row" {

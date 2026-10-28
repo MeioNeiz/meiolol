@@ -58,7 +58,7 @@ pub const css =
     \\    transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
     \\  .c-chip:is(a):hover { text-decoration: none; }
     \\  .c-chip:hover { color: var(--text); background: var(--ctl-bg-2); }
-    \\  .c-chip[aria-pressed="true"] { color: var(--sel-ink); background: var(--sel-bg); border-color: var(--sel-line); }
+    \\  .c-chip:is([aria-pressed="true"], [aria-selected="true"]) { color: var(--sel-ink); background: var(--sel-bg); border-color: var(--sel-line); }
     \\  .c-chip[aria-disabled="true"] { color: var(--faint); cursor: default; background: none; }
     \\  .c-chip .x { margin-right: -4px; color: var(--muted); font-size: var(--fs-l); line-height: 1; }
     \\  .c-chip[data-v="expand"] { border-style: dashed; color: var(--muted); background: none; }

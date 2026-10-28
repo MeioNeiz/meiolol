@@ -1,9 +1,9 @@
 //! Patch changes (patch.html; docs/plan/ui/patch.md): what Riot changed this patch, next
 //! to what moved. PatchHead, the counts (each filters the table), filter chips and the
 //! role in place, then every champion role with enough games on both patches in one
-//! DataTable: Riot's badge, both rates, the change drawn with its range, the lane lead.
-//! A row opens what Riot changed and its biggest matchup moves. Then the matchups that
-//! moved and the items and runes Riot changed.
+//! DataTable: Riot's badge, both rates, the change drawn with its range, the lane lead,
+//! its matchups that moved. A row opens what Riot changed and its matchup moves. The
+//! items and runes Riot changed sit over the table as chips, one open at a time.
 //!
 //! The server renders the default state from the same Data the view's data file
 //! (data/patch.bin) carries; ui-patch.wasm decodes that file and adopts the page
@@ -69,15 +69,9 @@ pub const Data = struct {
     changes: []const Change,
     /// By change in win rate, biggest rise first
     rows: []const Row,
-    /// Moved clearly, biggest win rate change first
-    matchups: []const Matchup,
-};
-
-/// The items and runes Riot changed: server-rendered under the island (riotView), as
-/// nothing in them filters
-pub const Riot = struct {
-    items: []const Kit,
-    runes: []const Kit,
+    /// The items and runes Riot changed
+    items: []const Kit = &.{},
+    runes: []const Kit = &.{},
 };
 
 /// A changed item or rune (Change.id: Data Dragon's) and the champions using it most
@@ -126,25 +120,25 @@ pub const Row = struct {
     lane: ?Lane,
     /// Index into changes
     change: ?u16,
-    /// Its biggest matchup moves, from its side
+    /// Its matchups that moved clearly, then its biggest other moves, from its side
     moves: []const Move,
 };
 
 pub const Lane = struct { prev: Count, cur: Count, clear: bool };
 
-pub const Move = struct { them: u16, prev: Count, cur: Count, clear: bool };
-
-pub const Matchup = struct {
-    role: Role,
-    /// From a's side, the one whose win rate rose (or whose gold did)
-    a: u16,
-    b: u16,
+pub const Move = struct {
+    them: u16,
     prev: Count,
     cur: Count,
     clear: bool,
-    gold: ?Gold,
-    /// Its page in the patch view's directory
-    path: []const u8,
+    /// Its gold lead moved clearly
+    gold: ?Gold = null,
+    /// Its page in the patch view's directory, from its side
+    path: []const u8 = "",
+
+    fn moved(m: Move) bool {
+        return m.clear or m.gold != null;
+    }
 };
 
 /// The minute a matchup's median gold lead moved most, among clear moves
@@ -166,22 +160,20 @@ const W = struct {
     pub const change = plain("Change");
     pub const lane = plain("Lane lead");
     pub const games = plain("Games");
-    pub const matchup = plain("Matchup");
-    pub const gold = plain("Gold");
+    pub const mus = plain("Matchups");
+    pub const mus_note = plain("Its lane matchups whose win rate or gold lead moved clearly, biggest first.");
+    pub const more = Phrase("+{n:int}");
     pub const listed = plain(std.fmt.comptimePrint("Every champion role with {d}+ games on both patches, and the main role of each champion Riot changed.", .{role_games}));
     pub const riot_note = plain("What Riot changed in the champion this patch, from Riot's data files.");
     pub const change_note = plain("Win rate this patch minus last, in points. The line is where the real change likely is; coloured when too big to be luck.");
     pub const lane_note = plain("Games ahead in lane gold, this patch minus last, in points.");
-    pub const gold_note = plain("The median gold lead, at the minute it moved most.");
     pub const points = Phrase("{d:points} points");
     pub const likely = Phrase("Likely between {lo:points} and {hi:points}. {n:count} games on {p:text} so far.");
     pub const likely_done = Phrase("Likely between {lo:points} and {hi:points}. {n:count} games on {p:text}.");
     pub const luck = plain(" Could be luck.");
     pub const ahead = Phrase("Ahead in {a:rate} of games, then {b:rate}.");
-    pub const gold_tip = Phrase("{a:signed} then {b:signed} at {m:int} minutes");
-    pub const gold_games = Phrase("{n:count} games on {p:text} still going then.");
     pub const at = Phrase(" at {m:int}′");
-    pub const vs = plain("vs");
+    pub const gold_short = Phrase("gold {a:signed} → {b:signed}");
     pub const changed = plain("Riot changed");
     pub const unchanged = plain("Nothing in Riot's data.");
     pub const pair = Phrase("{r:text}, {a:text} → {b:text}");
@@ -192,12 +184,13 @@ const W = struct {
     pub const on = Phrase("{n:text} on {p:text} ›");
     pub const new = plain("new");
     pub const gone = plain("removed");
-    pub const matchups = plain("Matchups that moved");
-    pub const items = plain("Items changed");
-    pub const runes = plain("Runes changed");
+    pub const items = plain("Items");
+    pub const runes = plain("Runes");
     pub const bought = plain("Bought most by");
     pub const taken = plain("Taken most by");
     pub const none = plain("Nothing listed here yet.");
+    pub const buffed = plain("buffed");
+    pub const nerfed = plain("nerfed");
 };
 
 pub const Shown = enum { all, top, jungle, mid, bot, support };
@@ -212,7 +205,7 @@ fn inRole(s: Shown, r: Role) bool {
 }
 
 /// The counts above the table, each a filter of it
-pub const Only = enum { up, down, lane, riot };
+pub const Only = enum { up, down, lane, riot, mu };
 
 fn share(c: Count) f64 {
     return @as(f64, @floatFromInt(c[1])) / @as(f64, @floatFromInt(@max(c[0], 1)));
@@ -242,6 +235,8 @@ pub const Line = struct {
     d: *const Data,
     i: u16,
     href: []const u8,
+    /// From the page to the site root
+    base: []const u8,
     /// The bars' edge, every row's
     span: f32,
 
@@ -251,7 +246,14 @@ pub const Line = struct {
 
     fn moved(l: *const Line) bool {
         const r = l.row();
-        return r.clear or (if (r.lane) |x| x.clear else false);
+        return r.clear or (if (r.lane) |x| x.clear else false) or l.mus() > 0;
+    }
+
+    /// Its matchups that moved clearly (Row.moves' first)
+    fn mus(l: *const Line) usize {
+        var n: usize = 0;
+        for (l.row().moves) |m| n += @intFromBool(m.moved());
+        return n;
     }
 };
 
@@ -368,6 +370,26 @@ fn laneTip(h: *H, l: *const Line) table.Tip {
     };
 }
 
+fn musOf(l: *const Line) f64 {
+    return @floatFromInt(l.mus());
+}
+
+/// How many moved, and the two biggest: the opponent and its change
+fn musCell(h: *H, l: *const Line) N {
+    const n = l.mus();
+    if (n == 0) return h.span(.{ .class = "c-delta", .data_state = "unclear" }, .{"·"});
+    var top = h.list();
+    for (l.row().moves[0..@min(n, 2)], 0..) |m, k| top.add(h.span(.{ .key = k, .class = "mo" }, .{
+        icon(h, l.d, m.them),
+        moveText(h, moveOf(m.prev, m.cur), m.clear),
+    }));
+    return h.span(.{ .class = "mus" }, .{
+        h.span(.{ .class = "k" }, .{phrase.num(h, .count, n)}),
+        top.done(),
+        if (n > 2) h.span(.{ .class = "mo more" }, .{W.more.with(h, .{ .n = n - 2 })}) else null,
+    });
+}
+
 fn gamesCell(h: *H, l: *const Line) N {
     return h.span(.{ .class = "gm" }, .{phrase.num(h, .count, l.row().cur[0])});
 }
@@ -380,8 +402,9 @@ fn detail(h: *H, l: *const Line) N {
     var moves = h.list();
     for (r.moves, 0..) |m, k| moves.add(h.li(.{ .key = k }, .{
         icon(h, d, m.them),
-        h.span(.{ .class = "nm" }, .{d.champs[m.them].name}),
+        if (m.path.len > 0) h.a(.{ .class = "nm", .href = h.fmt("{s}{s}{s}", .{ l.base, d.patch_dir, m.path }) }, .{d.champs[m.them].name}) else h.span(.{ .class = "nm" }, .{d.champs[m.them].name}),
         moveCell(h, m.prev, m.cur, m.clear, l.span),
+        if (m.gold) |g| h.span(.{ .class = "gd" }, .{ W.gold_short.with(h, .{ .a = g.prev, .b = g.cur }), h.small(.{}, .{W.at.with(h, .{ .m = g.minute })}) }) else null,
     }));
     return h.div(.{ .class = "rd" }, .{
         if (d.riot) h.div(.{ .class = "blk" }, .{
@@ -416,6 +439,7 @@ pub const Table = table.DataTable(Line, .{
         .{ .label = W.this, .cell = curCell, .sort = curOf, .priority = 2, .key = "cu" },
         .{ .label = W.change, .cell = changeCell, .sort = changeOf, .answer = true, .tip = W.change_note, .row_tip = changeTip, .key = "dl" },
         .{ .label = W.lane, .cell = laneCell, .sort = laneOf, .priority = 2, .tip = W.lane_note, .row_tip = laneTip, .key = "ln" },
+        .{ .label = W.mus, .cell = musCell, .sort = musOf, .num = false, .priority = 2, .tip = W.mus_note, .key = "mu" },
         .{ .label = W.games, .cell = gamesCell, .sort = gamesOf, .priority = 3, .key = "gm" },
     },
     .default_sort = 4,
@@ -424,115 +448,10 @@ pub const Table = table.DataTable(Line, .{
     .bare = true,
 });
 
-/// One matchup row
-pub const MLine = struct {
-    d: *const Data,
-    i: u16,
-    href: []const u8,
-    span: f32,
-
-    fn m(l: *const MLine) *const Matchup {
-        return &l.d.matchups[l.i];
-    }
-};
-
-fn pairOf(l: *const MLine) []const u8 {
-    return l.d.champs[l.m().a].name;
-}
-fn mPrevOf(l: *const MLine) f64 {
-    return share(l.m().prev);
-}
-fn mCurOf(l: *const MLine) f64 {
-    return share(l.m().cur);
-}
-fn mChangeOf(l: *const MLine) f64 {
-    return points(l.m().prev, l.m().cur);
-}
-fn goldOf(l: *const MLine) f64 {
-    const g = l.m().gold orelse return -99999;
-    return @floatFromInt(@as(i32, g.cur) - g.prev);
-}
-fn mGamesOf(l: *const MLine) f64 {
-    return @floatFromInt(l.m().cur[0]);
-}
-
-/// "Miss Fortune ▲Q vs Tristana": Riot's badge on the side it changed
-fn side(h: *H, d: *const Data, c: u16) N {
-    const ch: ?u16 = for (d.changes, 0..) |x, k| {
-        if (x.id == c) break @intCast(k);
-    } else null;
-    return h.span(.{ .class = "sd" }, .{
-        icon(h, d, c),
-        h.span(.{ .class = "nm" }, .{d.champs[c].name}),
-        if (ch) |k| riotBadge(h, d.changes[k]) else null,
-    });
-}
-
-fn pairCell(h: *H, l: *const MLine) N {
-    const x = l.m();
-    return h.a(.{ .class = "pr", .href = l.href }, .{
-        side(h, l.d, x.a),
-        h.span(.{ .class = "vs" }, .{W.vs}),
-        side(h, l.d, x.b),
-        role.view(h, x.role.ui(), .{}),
-    });
-}
-
-fn mPrevCell(h: *H, l: *const MLine) N {
-    return rate(h, l.m().prev);
-}
-fn mCurCell(h: *H, l: *const MLine) N {
-    return rate(h, l.m().cur);
-}
-fn mChangeCell(h: *H, l: *const MLine) N {
-    const x = l.m();
-    return moveCell(h, x.prev, x.cur, x.clear, l.span);
-}
-fn mChangeTip(h: *H, l: *const MLine) table.Tip {
-    const x = l.m();
-    return rangeTip(h, l.d, x.prev, x.cur, x.clear);
-}
-
-fn goldCell(h: *H, l: *const MLine) N {
-    const g = l.m().gold orelse return h.span(.{ .class = "c-delta", .data_state = "unclear" }, .{"·"});
-    return h.span(.{ .class = "gd" }, .{
-        phrase.num(h, .signed, @as(i32, g.cur) - g.prev),
-        h.small(.{}, .{W.at.with(h, .{ .m = g.minute })}),
-    });
-}
-
-fn goldTip(h: *H, l: *const MLine) table.Tip {
-    const g = l.m().gold orelse return .{ .title = W.gold, .note = W.none };
-    return .{
-        .title = W.gold_tip.with(h, .{ .a = g.prev, .b = g.cur, .m = g.minute }),
-        .note = W.gold_games.with(h, .{ .n = g.games, .p = l.d.cur_patch }),
-    };
-}
-
-fn mGamesCell(h: *H, l: *const MLine) N {
-    return h.span(.{ .class = "gm" }, .{phrase.num(h, .count, l.m().cur[0])});
-}
-
-pub const MTable = table.DataTable(MLine, .{
-    .title = W.matchups,
-    .columns = &.{
-        .{ .label = W.matchup, .cell = pairCell, .name = pairOf, .num = false, .key = "mp" },
-        .{ .label = W.last, .cell = mPrevCell, .sort = mPrevOf, .priority = 3, .key = "pv" },
-        .{ .label = W.this, .cell = mCurCell, .sort = mCurOf, .priority = 2, .key = "cu" },
-        .{ .label = W.change, .cell = mChangeCell, .sort = mChangeOf, .answer = true, .row_tip = mChangeTip, .key = "dl" },
-        .{ .label = W.gold, .cell = goldCell, .sort = goldOf, .priority = 2, .tip = W.gold_note, .row_tip = goldTip, .key = "gl" },
-        .{ .label = W.games, .cell = mGamesCell, .sort = mGamesOf, .priority = 3, .key = "gm" },
-    },
-    .default_sort = 3,
-    .key = "mu",
-});
-
 /// Every row's Line, made once; the shown ones are copied into `shown` per filter
 pub const Lines = struct {
     rows: []const Line,
-    matchups: []const MLine,
     shown: []Line,
-    shown_mu: []MLine,
 };
 
 /// Its champion page on this patch's numbers, open on `r`
@@ -547,7 +466,7 @@ pub fn prepare(a: std.mem.Allocator, d: *const Data, base: []const u8) !Lines {
     for (d.rows) |r| if (r.clear) {
         span = @max(span, @abs(points(r.prev, r.cur)));
     };
-    for (d.matchups) |m| if (m.clear) {
+    for (d.rows) |r| for (r.moves) |m| if (m.clear) {
         span = @max(span, @abs(points(m.prev, m.cur)));
     };
     const edge: f32 = @floatCast(@ceil(span));
@@ -556,29 +475,24 @@ pub fn prepare(a: std.mem.Allocator, d: *const Data, base: []const u8) !Lines {
         .d = d,
         .i = @intCast(i),
         .href = try champHref(a, d, base, r.champ, r.role),
+        .base = base,
         .span = edge,
     };
-    const mus = try a.alloc(MLine, d.matchups.len);
-    for (mus, d.matchups, 0..) |*l, m, i| l.* = .{
-        .d = d,
-        .i = @intCast(i),
-        .href = try a.print("{s}{s}{s}", .{ base, d.patch_dir, m.path }),
-        .span = edge,
-    };
-    return .{ .rows = rows, .matchups = mus, .shown = try a.alloc(Line, rows.len), .shown_mu = try a.alloc(MLine, mus.len) };
+    return .{ .rows = rows, .shown = try a.alloc(Line, rows.len) };
 }
 
 pub const Page = struct {
     d: *const Data,
     lines: Lines,
     table: Table,
-    mu: MTable,
     role: Shown = .all,
     /// The chips: neither is All
     moved: bool = true,
     riot: bool = true,
     /// A count pressed: only its rows, over the chips
     only: ?Only = null,
+    /// The item or rune open over the table: Data.items' index, then runes' after them
+    kit: ?u16 = null,
     /// From the page to the site root; the data file from the page and its hash (stamp)
     base: []const u8 = "",
     src: []const u8 = "",
@@ -587,12 +501,12 @@ pub const Page = struct {
     const P = @This();
 
     pub fn init(d: *const Data, lines: Lines) P {
-        var p: P = .{ .d = d, .lines = lines, .table = .{ .rows = &.{}, .id = "pc" }, .mu = .{ .rows = &.{} }, .riot = d.riot };
+        var p: P = .{ .d = d, .lines = lines, .table = .{ .rows = &.{}, .id = "pc" }, .riot = d.riot };
         p.refilter();
         return p;
     }
 
-    pub const Msg = union(enum) { role: Shown, moved, riot, all, only: Only };
+    pub const Msg = union(enum) { role: Shown, moved, riot, all, only: Only, kit: u16 };
 
     pub const Url = struct {
         role: Shown = .all,
@@ -601,8 +515,6 @@ pub const Page = struct {
         only: ?Only = null,
         sort: u8 = 4,
         desc: bool = true,
-        mu_sort: u8 = 3,
-        mu_desc: bool = true,
     };
 
     pub fn toUrl(p: *const P) Url {
@@ -613,8 +525,6 @@ pub const Page = struct {
             .only = p.only,
             .sort = p.table.sort,
             .desc = p.table.desc,
-            .mu_sort = p.mu.sort,
-            .mu_desc = p.mu.desc,
         };
     }
 
@@ -624,7 +534,6 @@ pub const Page = struct {
         p.riot = u.riot and p.d.riot;
         p.only = u.only;
         p.table.fromUrl(.{ .sort = u.sort, .desc = u.desc });
-        p.mu.fromUrl(.{ .sort = u.mu_sort, .desc = u.mu_desc });
         p.refilter();
     }
 
@@ -636,6 +545,7 @@ pub const Page = struct {
             .down => r.clear and points(r.prev, r.cur) < 0,
             .lane => if (r.lane) |x| x.clear else false,
             .riot => r.change != null,
+            .mu => l.mus() > 0,
         };
         if (!p.moved and !p.riot) return true;
         return (p.moved and l.moved()) or (p.riot and r.change != null);
@@ -644,7 +554,6 @@ pub const Page = struct {
     /// A copy's own shown rows, so filtering it leaves the original's alone
     pub fn own(p: *P, a: std.mem.Allocator) !void {
         p.lines.shown = try a.alloc(Line, p.lines.rows.len);
-        p.lines.shown_mu = try a.alloc(MLine, p.lines.matchups.len);
         p.refilter();
     }
 
@@ -658,13 +567,6 @@ pub const Page = struct {
         p.table.rows = p.lines.shown[0..n];
         p.table.open = null;
         p.table.tip = null;
-        var k: usize = 0;
-        for (p.lines.matchups) |l| if (inRole(p.role, l.m().role)) {
-            p.lines.shown_mu[k] = l;
-            k += 1;
-        };
-        p.mu.rows = p.lines.shown_mu[0..k];
-        p.mu.tip = null;
     }
 
     pub fn update(p: *P, m: Msg, ev: *tree.Event) void {
@@ -684,6 +586,10 @@ pub const Page = struct {
                 p.only = null;
             },
             .only => |o| p.only = if (p.only == o) null else o,
+            .kit => |k| {
+                p.kit = if (p.kit == k) null else k;
+                return;
+            },
         }
         ev.push = true;
         p.refilter();
@@ -710,8 +616,19 @@ pub const Page = struct {
                 c.riot += 1;
             }
         }
-        for (p.d.matchups) |m| c.mu += @intFromBool(inRole(p.role, m.role));
+        // Each pair once: from the side first in Data.champs, or the side with a row
+        for (p.d.rows) |r| {
+            if (!inRole(p.role, r.role)) continue;
+            for (r.moves) |m| {
+                if (m.moved() and (r.champ < m.them or !p.hasRow(m.them, r.role))) c.mu += 1;
+            }
+        }
         return c;
+    }
+
+    fn hasRow(p: *const P, c: u16, r: Role) bool {
+        for (p.d.rows) |x| if (x.champ == c and x.role == r) return true;
+        return false;
     }
 
     pub fn view(p: *P, h: *H) N {
@@ -739,6 +656,7 @@ pub const Page = struct {
                 .notes = if (d.notes.len > 0) d.notes else null,
             }),
             p.countStrip(h, c),
+            p.kits(h),
             card.view(h, .{ .flush = true }, &.{
                 card.toolbar(h, &.{
                     h.div(.{ .class = "chips" }, .{
@@ -750,7 +668,6 @@ pub const Page = struct {
                 }),
                 if (p.table.rows.len > 0) p.table.view(h) else h.p(.{ .class = "empty" }, .{W.none}),
             }),
-            if (p.mu.rows.len > 0) h.div(.{ .id = "mu" }, .{p.mu.view(h)}) else null,
         });
     }
 
@@ -763,42 +680,66 @@ pub const Page = struct {
             .{ .o = .down, .n = c.down, .l = W.won_less },
             .{ .o = .lane, .n = c.lane, .l = W.lanes },
             .{ .o = .riot, .n = c.riot, .l = W.changed },
+            .{ .o = .mu, .n = c.mu, .l = W.mu_moved },
         }) |x| {
             if (x.o == .riot and !p.d.riot) continue;
             cells[n] = .{ .label = x.l, .value = phrase.num(h, .count, x.n), .on = h.on(p, .{ .only = x.o }), .pressed = p.only == x.o };
             n += 1;
         }
-        cells[n] = .{ .label = W.mu_moved, .value = phrase.num(h, .count, c.mu), .href = "#mu" };
-        n += 1;
         return strip.view(h, cells[0..n]);
+    }
+
+    /// Items then runes Riot changed, a chip each; the open one's lines and who uses it
+    /// under them
+    fn kits(p: *P, h: *H) N {
+        const d = p.d;
+        if (d.items.len + d.runes.len == 0) return .none;
+        const open: ?Kit = if (p.kit) |k| (if (k < d.items.len) d.items[k] else d.runes[k - d.items.len]) else null;
+        const rune = if (p.kit) |k| k >= d.items.len else false;
+        return h.div(.{ .class = "kits" }, .{
+            p.kitRow(h, W.items, d.items, 0),
+            p.kitRow(h, W.runes, d.runes, @intCast(d.items.len)),
+            if (open) |k| h.div(.{ .class = "kd" }, .{
+                h.div(.{ .class = "blk" }, .{ h.b(.{}, .{k.change.name}), changeline.view(h, k.change.lines) }),
+                users(h, d, k.users, if (rune) W.taken else W.bought, p.base),
+            }) else null,
+        });
+    }
+
+    fn kitRow(p: *P, h: *H, title: tree.Text, list: []const Kit, first: u16) ?N {
+        if (list.len == 0) return null;
+        var l = h.list();
+        for (list, 0..) |k, i| {
+            const at: u16 = first + @as(u16, @intCast(i));
+            // One of the list to read, as Select's menu: names, not action labels
+            l.add(h.button(.{
+                .key = i,
+                .class = "c-chip",
+                .type = "button",
+                .role = "option",
+                .aria_selected = p.kit == at,
+                .on_click = h.on(p, .{ .kit = at }),
+            }, .{
+                art.view(h, .{ .name = k.change.name, .src = k.icon }, .{ .px = .@"20", .named = false }),
+                k.change.name,
+                toneMark(h, k.change),
+            }));
+        }
+        return h.div(.{ .class = "kr" }, .{
+            card.label(h, title),
+            h.div(.{ .class = "chips", .role = "listbox", .aria_label = title }, .{l.done()}),
+        });
     }
 };
 
-/// The items and runes Riot changed; `base` from the page to the site root
-pub fn riotView(h: *H, d: *const Data, r: Riot, base: []const u8) ?N {
-    if (r.items.len == 0 and r.runes.len == 0) return null;
-    return h.div(.{ .class = "c-patch" }, .{
-        kits(h, d, r.items, W.items, W.bought, base),
-        kits(h, d, r.runes, W.runes, W.taken, base),
-    });
-}
-
-fn kits(h: *H, d: *const Data, list: []const Kit, title: tree.Text, used: tree.Text, base: []const u8) ?N {
-    if (list.len == 0) return null;
-    var l = h.list();
-    for (list, 0..) |k, i| l.add(h.li(.{ .key = i }, .{
-        h.div(.{ .class = "nh" }, .{
-            art.view(h, .{ .name = k.change.name, .src = k.icon }, .{ .px = .@"28", .named = false }),
-            h.b(.{}, .{k.change.name}),
-            if (k.change.status != .changed) riotBadge(h, k.change) else null,
-        }),
-        changeline.view(h, k.change.lines),
-        users(h, d, k.users, used, base),
-    }));
-    return h.section(.{ .class = "chg" }, .{
-        card.sechead(h, title, phrase.num(h, .count, list.len), &.{}),
-        h.ul(.{}, .{l.done()}),
-    });
+/// A kit chip's ▲▼ (new and removed as their badge); nothing for a mixed change
+fn toneMark(h: *H, c: Change) ?N {
+    if (c.status != .changed) return riotBadge(h, c);
+    return switch (c.tone) {
+        .buff => h.span(.{ .class = "tn", .data_dir = "buff", .aria_label = W.buffed }, .{"▲"}),
+        .nerf => h.span(.{ .class = "tn", .data_dir = "nerf", .aria_label = W.nerfed }, .{"▼"}),
+        .adjusted => null,
+    };
 }
 
 fn users(h: *H, d: *const Data, list: []const User, used: tree.Text, base: []const u8) ?N {
@@ -833,11 +774,21 @@ pub const css =
     \\  .c-patch .chips { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
     \\  .c-patch .c-table-wrap { overflow-x: clip; }
     \\  .c-patch .c-table thead th { top: var(--header); }
-    \\  .c-patch .who, .c-patch .pr { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; color: inherit; text-decoration: none; }
+    \\  .c-patch .who { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; color: inherit; text-decoration: none; }
     \\  .c-patch .nm { font-weight: var(--w-b); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    \\  .c-patch .who .c-role, .c-patch .pr .c-role { margin-left: auto; color: var(--muted); }
-    \\  .c-patch .sd { display: inline-flex; align-items: center; gap: var(--sp-1); min-width: 0; }
-    \\  .c-patch .vs { color: var(--faint); font-size: var(--fs-s); }
+    \\  .c-patch .who .c-role { margin-left: auto; color: var(--muted); }
+    \\  .c-patch .mus { display: flex; align-items: center; gap: var(--sp-3); white-space: nowrap; }
+    \\  .c-patch .mus > .k { min-width: 1.2em; color: var(--t2); font-variant-numeric: tabular-nums; }
+    \\  .c-patch .mo { display: inline-flex; align-items: center; gap: var(--sp-1); }
+    \\  .c-patch .mo.more { color: var(--muted); font-size: var(--fs-s); }
+    \\  .c-patch .kits { display: grid; gap: var(--sp-2); }
+    \\  .c-patch .kr { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); }
+    \\  .c-patch .kr > .lab { min-width: 4em; }
+    \\  .c-patch .kr .c-chip { gap: 6px; }
+    \\  .c-patch .tn { font-size: var(--fs-xs); }
+    \\  .c-patch .tn[data-dir="buff"] { color: var(--good); }
+    \\  .c-patch .tn[data-dir="nerf"] { color: var(--bad); }
+    \\  .c-patch .kd { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, max-content)); gap: var(--sp-3) var(--sp-6); padding: var(--sp-3); border-radius: var(--r-m); background: var(--panel); border: 1px solid var(--line); }
     \\  .c-patch .r { color: var(--t2); font-variant-numeric: tabular-nums; }
     \\  .c-patch td.cu .r { color: var(--text); }
     \\  .c-patch .mv { display: flex; align-items: center; gap: var(--sp-2); }
@@ -856,10 +807,7 @@ pub const css =
     \\  .c-patch .x, .c-patch .empty { color: var(--faint); }
     \\  .c-patch .empty { margin: 0; padding: var(--sp-4); }
     \\  .c-patch .mvs { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-1); }
-    \\  .c-patch .mvs li { display: grid; grid-template-columns: auto minmax(0, 8em) minmax(0, 1fr); align-items: center; gap: var(--sp-2); font-size: var(--fs-s); }
-    \\  .c-patch .chg > ul { list-style: none; margin: var(--sp-2) 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--sp-2); }
-    \\  .c-patch .chg > ul > li { display: grid; gap: var(--sp-2); align-content: start; padding: var(--sp-3); border-radius: var(--r-m); background: var(--panel); border: 1px solid var(--line); min-width: 0; }
-    \\  .c-patch .nh { display: flex; align-items: center; gap: var(--sp-2); }
+    \\  .c-patch .mvs li { display: grid; grid-template-columns: auto minmax(0, 8em) minmax(0, 1fr) auto; align-items: center; gap: var(--sp-2); font-size: var(--fs-s); }
     \\  .c-patch .us { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-1); }
     \\  .c-patch .us li { display: grid; grid-template-columns: minmax(0, 1fr) auto 3.5em; align-items: center; gap: var(--sp-2); font-size: var(--fs-s); }
     \\  .c-patch .us .c-delta { text-align: right; }
@@ -867,7 +815,15 @@ pub const css =
     \\  @container (max-width: 620px) {
     \\    .c-patch .dl { width: 150px; }
     \\    .c-patch .ln { width: 120px; }
-    \\    .c-patch .sd .c-badge, .c-patch .pr .c-role { display: none; }
+    \\    .c-patch .mus > .mo { display: none; }
+    \\    .c-patch .mvs li { grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr); }
+    \\    .c-patch .mvs .gd { grid-column: 2 / -1; }
+    \\  }
+    \\  @container (max-width: 300px) {
+    \\    .c-patch .dl { width: 96px; }
+    \\    .c-patch .mv .c-dbar { min-width: 40px; }
+    \\    .c-patch td.ch .who { max-width: 92px; }
+    \\    .c-patch td.ch .who .c-role { display: none; }
     \\  }
     \\}
     \\
@@ -913,19 +869,19 @@ pub const demo: Data = .{
         .{ .champ = 0, .role = .top, .prev = .{ 23_166, 11_282 }, .cur = .{ 6_678, 3_426 }, .clear = true, .lane = .{ .prev = .{ 20_000, 10_920 }, .cur = .{ 6_000, 3_396 }, .clear = true }, .change = 0, .moves = &.{
             .{ .them = 2, .prev = .{ 900, 430 }, .cur = .{ 450, 250 }, .clear = false },
         } },
-        .{ .champ = 1, .role = .bottom, .prev = .{ 30_000, 14_790 }, .cur = .{ 10_280, 5_284 }, .clear = true, .lane = null, .change = null, .moves = &.{} },
+        .{ .champ = 1, .role = .bottom, .prev = .{ 30_000, 14_790 }, .cur = .{ 10_280, 5_284 }, .clear = true, .lane = null, .change = null, .moves = &.{
+            .{ .them = 4, .prev = .{ 800, 386 }, .cur = .{ 520, 286 }, .clear = true, .gold = .{ .minute = 11, .prev = 40, .cur = 209, .games = 510 }, .path = "matchup/bot/missfortune-vs-tristana.html" },
+            .{ .them = 3, .prev = .{ 900, 465 }, .cur = .{ 864, 427 }, .clear = false, .path = "matchup/bot/missfortune-vs-jinx.html" },
+        } },
         .{ .champ = 5, .role = .middle, .prev = .{ 9_000, 4_122 }, .cur = .{ 3_029, 1_417 }, .clear = false, .lane = null, .change = 3, .moves = &.{} },
         .{ .champ = 3, .role = .bottom, .prev = .{ 40_000, 20_680 }, .cur = .{ 11_328, 5_800 }, .clear = false, .lane = .{ .prev = .{ 38_000, 19_000 }, .cur = .{ 11_000, 5_346 }, .clear = true }, .change = 2, .moves = &.{} },
         .{ .champ = 2, .role = .middle, .prev = .{ 15_000, 7_575 }, .cur = .{ 5_094, 2_407 }, .clear = true, .lane = null, .change = 1, .moves = &.{} },
-        .{ .champ = 4, .role = .bottom, .prev = .{ 20_000, 10_280 }, .cur = .{ 7_484, 3_660 }, .clear = true, .lane = null, .change = null, .moves = &.{} },
+        .{ .champ = 4, .role = .bottom, .prev = .{ 20_000, 10_280 }, .cur = .{ 7_484, 3_660 }, .clear = true, .lane = null, .change = null, .moves = &.{
+            .{ .them = 1, .prev = .{ 800, 414 }, .cur = .{ 520, 234 }, .clear = true, .gold = .{ .minute = 11, .prev = -40, .cur = -209, .games = 510 }, .path = "matchup/bot/tristana-vs-missfortune.html" },
+            .{ .them = 2, .prev = .{ 700, 371 }, .cur = .{ 480, 216 }, .clear = true, .path = "matchup/bot/tristana-vs-viktor.html" },
+            .{ .them = 5, .prev = .{ 600, 288 }, .cur = .{ 420, 248 }, .clear = true, .path = "matchup/bot/tristana-vs-orianna.html" },
+        } },
     },
-    .matchups = &.{
-        .{ .role = .bottom, .a = 1, .b = 4, .prev = .{ 800, 386 }, .cur = .{ 520, 286 }, .clear = true, .gold = .{ .minute = 11, .prev = 40, .cur = 209, .games = 510 }, .path = "matchup/bot/missfortune-vs-tristana.html" },
-        .{ .role = .bottom, .a = 3, .b = 4, .prev = .{ 900, 435 }, .cur = .{ 864, 437 }, .clear = false, .gold = null, .path = "matchup/bot/jinx-vs-tristana.html" },
-    },
-};
-
-pub const demo_riot: Riot = .{
     .items = &.{
         .{ .change = .{ .id = 2520, .name = "Bastionbreaker", .tone = .nerf, .slots = "", .lines = &.{
             .{ .before = "", .old = "22", .new = "18", .after = "Lethality", .dir = .nerf },
@@ -956,7 +912,13 @@ pub fn shown(a: std.mem.Allocator, d: *const Data, open: bool) ?*Page {
 pub fn gallery(g: *Gallery) void {
     const h = g.h;
     if (shown(h.mem, &demo, true)) |p| g.addFill("moved clearly and changed by Riot, Darius open", p.view(h));
-    if (riotView(h, &demo, demo_riot, "")) |n| g.addFill("items and runes Riot changed, with who uses them", n);
+    if (shown(h.mem, &demo, false)) |p| {
+        p.kit = 0;
+        p.only = .mu;
+        p.refilter();
+        p.table.open = 0;
+        g.addFill("Bastionbreaker open over the table; matchups moved pressed, Miss Fortune open", p.view(h));
+    }
     if (shown(h.mem, &demo, false)) |p| {
         p.role = .bot;
         p.only = .lane;
@@ -966,7 +928,8 @@ pub fn gallery(g: *Gallery) void {
     }
     var no_riot = demo;
     no_riot.riot = false;
-    no_riot.matchups = &.{};
+    no_riot.items = &.{};
+    no_riot.runes = &.{};
     const d = h.mem.create(Data) catch return;
     d.* = no_riot;
     if (shown(h.mem, d, false)) |p| {
