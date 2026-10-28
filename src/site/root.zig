@@ -353,6 +353,12 @@ pub const Site = struct {
         return s.arena.print("{s}champion/{s}.html{s}", .{ to_site, ch.slug, s.view.query() });
     }
 
+    /// To the champions table, a role's (null: All), in the view's directory as the
+    /// linking page is. `to_site` as champHref
+    pub fn championsHref(s: *const Site, r: ?Role, to_site: []const u8) ![]const u8 {
+        return s.arena.print("{s}{s}", .{ to_site, try championsPath(s.arena, r) });
+    }
+
     /// A champion link as the main link of a row or tile (class bx) that it covers whole
     pub fn champBox(s: *const Site, w: *Writer, ch: Champ, to_site: []const u8) !void {
         try tpl.render(w, "<a class=\"champ box\" href=\"{href}\"><img src=\"{icon}\" alt=\"\" loading=\"lazy\" width=\"32\" height=\"32\">{name}</a>", .{
@@ -476,12 +482,17 @@ pub fn pagePaths(site: *const Site) ![]const []const u8 {
     return pagePathsMin(site, site.opts.static_min_games);
 }
 
+/// The champions table's page in a view's directory: All's, or role `r`'s
+pub fn championsPath(a: std.mem.Allocator, r: ?Role) ![]const u8 {
+    return if (r) |x| a.print("role/{s}.html", .{x.label()}) else "champions.html";
+}
+
 /// As pagePaths, but matchup pages from `min_games` up
 fn pagePathsMin(site: *const Site, min_games: u32) ![]const []const u8 {
     const a = site.arena;
     var list: std.ArrayList([]const u8) = .empty;
-    try list.appendSlice(a, &.{ "index.html", "champions.html" });
-    for (Role.all) |r| try list.append(a, try a.print("role/{s}.html", .{r.label()}));
+    try list.appendSlice(a, &.{ "index.html", try championsPath(a, null) });
+    for (Role.all) |r| try list.append(a, try championsPath(a, r));
     if (site.view.index() == 0) for (site.champs) |ch| {
         try list.append(a, try a.print("champion/{s}.html", .{ch.slug}));
     };

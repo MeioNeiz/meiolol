@@ -168,6 +168,7 @@ const W = struct {
     pub const ban = plain("Ban");
     pub const games = plain("Games");
     pub const off = plain("off-role");
+    pub const clear = plain("Clear search");
     pub const win_note = plain("Faint under 1,000 games: could be luck.");
     pub const patch_note = plain("Change in win rate, in points. Coloured when clear, faint when it could be luck.");
     pub const players_note = plain("Each player's own win rate on it (10+ games), 25% to 75%. Thicker where more players are; the dot is the champion's. In 10-20 games luck alone moves a player by about 15 points.");
@@ -443,7 +444,7 @@ pub const Tiers = struct {
         return if (s == .all) null else @fromBackingInt(@intCast(@backingInt(s) - 1));
     }
 
-    pub const Msg = union(enum) { role: Shown, rank: Rank, mover: u16, filters };
+    pub const Msg = union(enum) { role: Shown, rank: Rank, mover: u16, clear, filters };
 
     pub const Url = struct {
         /// Null: the page's own
@@ -518,12 +519,30 @@ pub const Tiers = struct {
                 t.want = r;
                 ev.push = true;
             },
+            // Pressed again: back to every champion
             .mover => |i| {
-                t.table.q.set(t.data.champs[t.data.rows[i].champ].name);
+                const n = t.data.champs[t.data.rows[i].champ].name;
+                t.table.q.set(if (t.isQuery(n)) "" else n);
+                ev.push = true;
+            },
+            .clear => {
+                t.table.q.set("");
                 ev.push = true;
             },
             .filters => t.open = !t.open,
         }
+    }
+
+    fn isQuery(t: *const T, n: []const u8) bool {
+        return std.ascii.eqlIgnoreCase(t.table.q.slice(), n);
+    }
+
+    /// The table's search with a × while it has text
+    fn find(t: *T, h: *H) N {
+        return h.span(.{ .class = "find" }, .{
+            t.table.searchBox(h),
+            if (t.table.q.slice().len > 0) h.button(.{ .type = "button", .class = "x", .aria_label = W.clear, .on_click = h.on(t, .clear) }, .{"×"}) else null,
+        });
     }
 
     pub fn view(t: *T, h: *H) N {
@@ -552,7 +571,7 @@ pub const Tiers = struct {
                         h.p(.{ .class = "sub" }, .{ W.scope_line.with(h, .{ .n = d.games, .in = d.region_in }), vs }),
                     }),
                     rolepicker.view(h, .{ .label = W.role_label }, &roles),
-                    t.table.searchBox(h),
+                    t.find(h),
                 }),
                 t.toolbar(h),
             }),
@@ -616,7 +635,7 @@ pub const Tiers = struct {
         var chips = h.list();
         for ([_][]?*const Line{ &up, &down }, 0..) |side, k| {
             if (k == 1 and up[0] != null and down[0] != null) chips.add(h.span(.{ .class = "sep" }, .{}));
-            for (side) |x| if (x) |l| chips.add(chip.view(h, .{ .on = h.on(t, .{ .mover = l.i }), .label = .{ .s = nameOf(l) } }, .{
+            for (side) |x| if (x) |l| chips.add(chip.view(h, .{ .on = h.on(t, .{ .mover = l.i }), .pressed = t.isQuery(nameOf(l)), .label = .{ .s = nameOf(l) } }, .{
                 champ.view(h, .{ .name = nameOf(l), .src = l.icon }, .{ .px = .@"20" }),
                 delta.view(h, .{ .d = @floatCast(l.change().?) }),
             }));
@@ -649,9 +668,19 @@ pub const css =
     \\  .c-tiers .ttl { margin-right: var(--sp-2); }
     \\  .c-tiers h1 { margin: 0; }
     \\  .c-tiers .sub { margin: 0; color: var(--muted); font-size: var(--fs-s); }
-    \\  .c-tiers .hd > input { flex: 0 1 260px; margin-left: auto; }
-    \\  .c-tiers .moved { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-4);
+    \\  .c-tiers .find { position: relative; display: flex; flex: 0 1 260px; margin-left: auto; }
+    \\  .c-tiers .find > input { flex: 1; min-width: 0; padding-right: 32px; }
+    \\  .c-tiers .find > input::-webkit-search-cancel-button { display: none; }
+    \\  .c-tiers .find > .x { all: unset; position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+    \\    width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; cursor: pointer;
+    \\    color: var(--muted); font-size: var(--fs-l); line-height: 1; }
+    \\  .c-tiers .find > .x:hover { color: var(--text); background: var(--ctl-bg-2); }
+    \\  .c-tiers .find > .x:focus-visible { outline: 2px solid var(--focus); }
+    \\  .c-tiers .moved { position: relative; display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-4);
     \\    border-bottom: 1px solid var(--line); }
+    \\  .c-tiers .moved:hover { background: var(--panel-2); }
+    \\  .c-tiers .moved .more::after { content: ""; position: absolute; inset: 0; }
+    \\  .c-tiers .moved .chips { position: relative; z-index: 1; }
     \\  .c-tiers .moved .chips { display: flex; flex-wrap: wrap; gap: var(--sp-1); align-items: center; }
     \\  .c-tiers .moved .sep { width: 1px; height: 20px; margin: 0 var(--sp-1); background: var(--line); }
     \\  .c-tiers .moved > .lab { white-space: nowrap; }
@@ -679,9 +708,9 @@ pub const css =
     \\    .c-tiers .c-filters[data-open] { flex-basis: 100%; }
     \\  }
     \\  @media (max-width: 620px) {
-    \\    .c-tiers .hd > input { flex-basis: 100%; margin-left: 0; }
+    \\    .c-tiers .hd > .find { flex-basis: 100%; margin-left: 0; }
     \\    .c-tiers .moved .chips { flex: 1; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-    \\    .c-tiers .moved .more { display: none; }
+    \\    .c-tiers .moved .more { font-size: 0; }
     \\  }
     \\  @container (max-width: 620px) {
     \\    .c-tiers .ch { width: auto; }

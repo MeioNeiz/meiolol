@@ -283,7 +283,7 @@ pub fn writeTierList(site: *const Site, w: *Writer, role: ?Role) !void {
     else
         try a.print("Champions, {s} | meiolol", .{site.period()});
     const desc = try a.print("{s} champions in ranked solo queue {s}, {s}: win rate, its change this patch, how players' own win rates spread, pick and ban rates.", .{ name, site.view.region.in(), site.when });
-    const path = if (role) |r| try a.print("role/{s}.html", .{r.label()}) else "champions.html";
+    const path = try @import("root.zig").championsPath(a, role);
     var p = try site.page(title, desc, path, .champions);
     // The island's toolbar picks the view
     p.counterparts = null;

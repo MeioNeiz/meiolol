@@ -36,11 +36,12 @@ pub const Head = struct {
     href: []const u8,
 };
 
+/// The whole head band is the action's link
 pub fn view(h: *H, hd: Head, extra: ?N, body: N) N {
-    return card.view(h, .{}, &.{
+    return h.div(.{ .class = "c-today", .data_v = "card" }, .{card.view(h, .{}, &.{
         card.head(h, hd.title, hd.count, &.{ extra orelse .none, button.view(h, .{ .s = .s, .href = hd.href }, .{hd.action}) }),
         body,
-    });
+    })});
 }
 
 /// [blue, red], by role; null: the hidden seat
@@ -49,14 +50,15 @@ pub const Teams = [2][5]?champ.Champ;
 /// Daily Draft's two answers once played
 pub const Marks = struct { pick: bool, side: bool };
 
-pub fn draft(h: *H, teams: *const Teams) N {
+/// The board links to the puzzle (`href`, named `label`)
+pub fn draft(h: *H, teams: *const Teams, href: []const u8, label: tree.Text) N {
     var cols = h.list();
     for (std.enums.values(Role), 0..) |r, i| cols.add(h.div(.{ .key = i }, .{
         seat(h, teams[0][i], .us),
         role.view(h, r, .{ .s = .s }),
         seat(h, teams[1][i], .them),
     }));
-    return h.div(.{ .class = "c-today", .data_v = "draft" }, .{cols.done()});
+    return h.a(.{ .class = "c-today", .data_v = "draft", .href = href, .aria_label = label }, .{cols.done()});
 }
 
 fn seat(h: *H, c: ?champ.Champ, side: @FieldType(champ.Opts, "side")) N {
@@ -108,10 +110,16 @@ pub fn changes(h: *H, rows: []const Change) N {
 
 pub const css =
     \\@layer components {
+    \\  .c-today[data-v="card"] .c-head { position: relative; }
+    \\  .c-today[data-v="card"] .c-head > .c-btn { position: static; }
+    \\  .c-today[data-v="card"] .c-head > .c-btn::after { content: ""; position: absolute; inset: 0; height: auto; transform: none; }
+    \\  .c-today[data-v="card"] .c-head:hover h2 { color: var(--accent); }
     \\  .c-today[data-v="draft"] { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--sp-1);
     \\    padding-block: var(--sp-1); }
     \\  .c-today[data-v="draft"] > div { display: flex; flex-direction: column; align-items: center; gap: 6px; }
     \\  .c-today[data-v="draft"] > div > .c-role { color: var(--faint); }
+    \\  .c-today[data-v="draft"]:hover { text-decoration: none; }
+    \\  .c-today[data-v="draft"]:hover .c-champ { filter: brightness(1.15); }
     \\  .c-today .c-champ[data-state="empty"] { border-color: var(--them); box-shadow: none; }
     \\  .c-today .c-champ[data-state="empty"]::before { content: "?"; display: grid; place-items: center; height: 100%;
     \\    color: var(--accent); font-weight: var(--w-b); font-size: var(--fs-l); }
@@ -142,10 +150,10 @@ pub fn gallery(g: *Gallery) void {
         .{ d("Garen", "Garen"), d("Vi", "Vi"), d("Syndra", "Syndra"), null, d("Nami", "Nami") },
     };
     const head: Head = .{ .title = plain("Daily Draft"), .count = plain("#14"), .action = plain("Guess"), .href = "#" };
-    g.addFill("draft", view(h, head, null, draft(h, &teams)));
+    g.addFill("draft", view(h, head, null, draft(h, &teams, "#", head.title)));
     var done = head;
     done.action = plain("Open");
-    g.addFill("draft, played", view(h, done, marks(h, .{ .pick = true, .side = false }), draft(h, &teams)));
+    g.addFill("draft, played", view(h, done, marks(h, .{ .pick = true, .side = false }), draft(h, &teams, "#", head.title)));
     const rows = [_]Change{
         .{ .champ = d("Darius", "Darius"), .role = .top, .href = "#", .from = 48.7, .to = 51.3, .ci = 1.4 },
         .{ .champ = d("Khazix", "Kha'Zix"), .role = .jungle, .href = "#", .from = 48.8, .to = 51.4, .ci = 1.5 },
@@ -169,7 +177,7 @@ test "the hidden seat, marks and signed changes" {
     };
     const head: Head = .{ .title = plain("Daily Draft"), .action = plain("Open"), .href = "daily.html" };
     const n = h.div(.{}, .{
-        view(&h, head, marks(&h, .{ .pick = true, .side = false }), draft(&h, &teams)),
+        view(&h, head, marks(&h, .{ .pick = true, .side = false }), draft(&h, &teams, "daily.html", head.title)),
         changes(&h, &rows),
     });
     try std.testing.expect(!h.oom);
@@ -178,7 +186,7 @@ test "the hidden seat, marks and signed changes" {
     const s = out.written();
     try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, s, "Hidden seat"));
     try std.testing.expect(std.mem.find(u8, s, "Pick right, winner wrong") != null);
-    try std.testing.expect(std.mem.find(u8, s, "href=\"daily.html\"") != null);
+    try std.testing.expectEqual(@as(usize, 2), std.mem.count(u8, s, "href=\"daily.html\""));
     try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, s, "href=\"c/darius\""));
     try std.testing.expect(std.mem.find(u8, s, "±1.4") != null);
 }

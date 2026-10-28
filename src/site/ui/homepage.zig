@@ -50,6 +50,7 @@ const W = struct {
     pub const daily = plain("Daily Draft");
     pub const number = phrase.Phrase("#{n:int}");
     pub const guess = plain("Guess");
+    pub const play = plain("Today's Daily Draft");
     pub const yours = plain("Your last game");
     pub const record = phrase.Phrase("{w:int}W {l:int}L");
     pub const form = plain("Newest results, newest first");
@@ -96,6 +97,8 @@ pub const HomeReview = struct {
 
     pub fn view(p: *P, h: *H) N {
         const s = &p.s;
+        // Each game opened makes a new Timeline
+        s.tl.compact = true;
         var roles: [5]rolepicker.Item = undefined;
         for (&roles, Role.all) |*it, r| it.* = .{
             .role = r,
@@ -262,6 +265,9 @@ pub fn rolesOf(mask: u8) [5]bool {
 pub const Champs = struct {
     champs: []const champ.Champ,
     games: u32,
+    /// The champions table's, then each role's (the heads' links)
+    index: []const u8 = "",
+    role_hrefs: [5][]const u8 = @splat(""),
     /// By role
     roles: [5][]const Pick,
     pub const Pick = struct {
@@ -322,12 +328,16 @@ pub const HomeChamps = struct {
                 })}));
             }
             cols.add(h.div(.{ .key = @backingInt(r), .class = "col", .data_on = r == p.on }, .{
-                h.h3(.{}, .{ role.view(h, r, .{ .s = .s, .named = false }), r.label() }),
+                h.h3(.{}, .{h.a(.{ .href = d.role_hrefs[@backingInt(r)] }, .{ role.view(h, r, .{ .s = .s, .named = false }), r.label() })}),
                 h.ul(.{}, .{rows.done()}),
             }));
         }
         return h.div(.{ .class = "c-hch", .data_island = "homechamps", .data_bin = if (p.bin.len > 0) p.bin else null }, .{card.view(h, .{ .flush = true }, &.{
-            card.head(h, W.champions, W.games.with(h, .{ .n = d.games }), &.{rolepicker.view(h, .{ .v = .compact, .label = W.role }, &roles)}),
+            h.div(.{ .class = "c-head" }, .{
+                h.h2(.{}, .{h.a(.{ .href = d.index }, .{W.champions})}),
+                h.span(.{ .class = "count" }, .{W.games.with(h, .{ .n = d.games })}),
+                rolepicker.view(h, .{ .v = .compact, .label = W.role }, &roles),
+            }),
             h.div(.{ .class = "cols" }, .{cols.done()}),
         })});
     }
@@ -356,7 +366,7 @@ pub const HomeDaily = struct {
             .count = W.number.with(h, .{ .n = d.n }),
             .action = if (p.marks == null) W.guess else W.open,
             .href = d.href,
-        }, if (p.marks) |m| today.marks(h, m) else null, today.draft(h, &d.teams))});
+        }, if (p.marks) |m| today.marks(h, m) else null, today.draft(h, &d.teams, d.href, W.play))});
     }
 };
 
@@ -393,9 +403,11 @@ pub fn page(h: *H, lookup: N, review: N, cards: []const N, champs: N) N {
     return h.div(.{ .class = "c-home" }, .{
         h.div(.{ .class = "hero" }, .{
             h.el(.h1, .{}, .{W.title}),
-            h.div(.{ .class = "look" }, .{lookup}),
+            h.div(.{ .class = "side" }, .{
+                h.div(.{ .class = "look" }, .{lookup}),
+                h.div(.{ .class = "td" }, .{cards}),
+            }),
             h.div(.{ .class = "rv" }, .{review}),
-            h.div(.{ .class = "td" }, .{cards}),
         }),
         champs,
     });
@@ -405,13 +417,19 @@ pub const css =
     \\@layer components {
     \\  .c-home { display: grid; gap: var(--sp-4); min-width: 0; }
     \\  .c-home > .hero { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); gap: var(--sp-3) var(--sp-5);
-    \\    grid-template-areas: "h1 rv" "look rv" "td rv"; grid-template-rows: auto auto 1fr; align-items: start; }
+    \\    grid-template-areas: "h1 h1" "side rv"; align-items: stretch; }
     \\  .c-home > .hero > h1 { grid-area: h1; margin: 0; }
-    \\  .c-home > .hero > .look { grid-area: look; min-width: 0; }
-    \\  .c-home > .hero > .rv { grid-area: rv; min-width: 0; }
-    \\  .c-home > .hero > .td { grid-area: td; display: grid; gap: var(--sp-3); min-width: 0; }
+    \\  .c-home > .hero > .side { grid-area: side; display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+    \\  .c-home > .hero > .rv { grid-area: rv; min-width: 0; display: flex; flex-direction: column; }
+    \\  .c-home :is(.rv, .td > :last-child) > * { flex: 1; }
+    \\  .c-home :is(.rv, .td > :last-child) .c-card { height: 100%; }
+    \\  .c-home > .hero .td { flex: 1; display: flex; flex-direction: column; gap: var(--sp-3); }
+    \\  .c-home > .hero .td > :last-child { flex: 1; display: flex; flex-direction: column; }
     \\  @media (max-width: 1000px) {
-    \\    .c-home > .hero { grid-template-columns: minmax(0, 1fr); grid-template-areas: "h1" "look" "rv" "td"; grid-template-rows: none; }
+    \\    .c-home > .hero { grid-template-columns: minmax(0, 1fr); grid-template-areas: "h1" "look" "rv" "td"; }
+    \\    .c-home > .hero > .side { display: contents; }
+    \\    .c-home > .hero .look { grid-area: look; }
+    \\    .c-home > .hero .td { grid-area: td; }
     \\  }
     \\  .c-hrev { container-type: inline-size; }
     \\  .c-hrev .c-head { padding-inline: var(--card-px); }
@@ -437,6 +455,8 @@ pub const css =
     \\  .c-hch h3 { display: flex; align-items: center; gap: 6px; height: 32px; margin: 0; padding: 0 var(--card-px);
     \\    background: var(--panel-2); border-bottom: 1px solid var(--line); font-size: var(--fs-xs); font-weight: var(--w-b);
     \\    color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    \\  .c-hch :is(h2, h3) > a { display: inline-flex; align-items: center; gap: 6px; color: inherit; }
+    \\  .c-hch :is(h2, h3) > a:hover { color: var(--accent); text-decoration: none; }
     \\  .c-hch ul { list-style: none; margin: 0; padding: 0; }
     \\  .c-hch li > a { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: var(--sp-2); align-items: center;
     \\    padding: 6px var(--card-px); color: var(--text); border-bottom: 1px solid var(--line); }

@@ -95,7 +95,8 @@ pub const Timeline = struct {
     /// ChartTip at this second
     tip: ?u16 = null,
     press: chart.Press = .{},
-    /// Home's small game: no presses, deaths as ticks
+    /// Home's small game: no presses, deaths as ticks, epic objectives only, no fight
+    /// marks
     compact: bool = false,
 
     const T = @This();
@@ -321,6 +322,7 @@ pub const Timeline = struct {
         var l = h.list();
         var last: [2][2]f32 = .{ .{ -100, -100 }, .{ -100, -100 } };
         for (t.game.objectives) |o| {
+            if (t.compact and !o.kind.epic()) continue;
             const x = p.x.at(@floatFromInt(o.t));
             const side = &last[@intFromBool(!o.ours)];
             const row: u8 = if (x - side[0] >= 1.6) 0 else if (x - side[1] >= 1.6) 1 else 0;
@@ -341,22 +343,22 @@ pub const Timeline = struct {
             stop = i;
             break;
         };
-        for (t.game.moments, 0..) |m, i| {
+        if (!t.compact) for (t.game.moments, 0..) |m, i| {
             const on = is(t.cur, i);
             l.add(h.button(.{
                 .key = i,
                 .class = "fm",
                 .type = "button",
-                .tabindex = if (!t.compact and is(stop, i)) @as(i8, 0) else -1,
+                .tabindex = if (is(stop, i)) @as(i8, 0) else -1,
                 .data_won = if (m.us > m.them) "us" else if (m.them > m.us) "them" else "even",
                 .data_dim = !t.inRange(m.t),
                 .data_ref = if (on) "tl-cur" else null,
                 .aria_current = on,
                 .aria_label = W.mark.with(h, .{ .t = m.t, .a = m.us, .b = m.them }),
                 .style = h.vars(.{ .x = p.x.at(@floatFromInt(m.t)) }),
-                .on_click = if (t.compact) null else h.on(t, .{ .mark = @as(u8, @intCast(i)) }),
+                .on_click = h.on(t, .{ .mark = @as(u8, @intCast(i)) }),
             }, .{}));
-        }
+        };
         return h.div(.{ .class = "fs", .role = "group", .aria_label = W.fights }, .{l.done()});
     }
 
