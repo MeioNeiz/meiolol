@@ -402,13 +402,13 @@ test "fixture games to stats, curves and the website" {
         try testing.expect(std.mem.find(u8, pair_page, "patch/patches/") == null);
         try testing.expect(std.mem.find(u8, pair_page, "so far") == null);
     }
-    // Matchup first screen: the numbers and opponents, the pair's build, then the lane
-    // beside head to head, the outcome cards last
+    // Matchup first screen: the numbers and opponents, the pair's build, then head to head
+    // beside the lane, the outcome cards last
     {
         const path = try std.fs.path.join(arena, &.{ out, "matchup/top/darius-vs-mordekaiser.html" });
         const html = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(1 << 20));
         var at: usize = 0;
-        for ([_][]const u8{ "<nav class=\"c-mstrip\"", "<h2>Build against Mordekaiser", "<h2>Lane</h2>", "<h2>Head to head</h2>", "<h2>Won by gold at 10</h2>" }) |want| {
+        for ([_][]const u8{ "<nav class=\"c-mstrip\"", "<h2>Build against Mordekaiser", "<h2>Head to head</h2>", "<h2>Lane</h2>", "<h2>Won by gold at 10</h2>" }) |want| {
             at = (std.mem.findPos(u8, html, at, want) orelse {
                 std.debug.print("darius-vs-mordekaiser: {s} missing or out of order\n", .{want});
                 return error.TestUnexpectedResult;
