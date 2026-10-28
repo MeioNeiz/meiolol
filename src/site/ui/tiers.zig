@@ -746,7 +746,6 @@ pub const css =
     \\  .c-tiers .moved > .lab { white-space: nowrap; }
     \\  .c-tiers .moved .more { margin-left: auto; font-size: var(--fs-s); white-space: nowrap; }
     \\  .c-tiers .c-table-wrap { overflow-x: clip; }
-    \\  .c-tiers .c-card[data-v="flush"] { overflow: clip; }
     \\  .c-tiers .rb { container-type: inline-size; }
     \\  .c-tiers .bs { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-4);
     \\    border-bottom: 1px solid var(--line); }

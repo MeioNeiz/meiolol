@@ -66,7 +66,7 @@ pub const css =
     \\@layer components {
     \\  .c-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m);
     \\    padding: var(--card-pad); min-width: 0; }
-    \\  .c-card[data-v="flush"] { padding: 0; overflow: hidden; }
+    \\  .c-card[data-v="flush"] { padding: 0; overflow: clip; display: flow-root; }
     \\  .c-card > :is(.c-head, .c-tabs, .c-toolbar) { margin-inline: calc(-1 * var(--card-px)); padding-inline: var(--card-px); }
     \\  .c-card > :is(.c-head, .c-tabs, .c-toolbar):first-child { margin-top: calc(-1 * var(--card-py)); }
     \\  .c-card > :is(.c-head, .c-tabs, .c-toolbar) + :not(.c-tabs, .c-toolbar, .c-head) { margin-top: var(--card-py); }
