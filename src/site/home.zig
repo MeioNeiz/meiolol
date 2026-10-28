@@ -227,52 +227,91 @@ fn champHref(site: *const Site, up: []const u8, ch: Champ, r: Role) ![]const u8 
     return site.arena.print("{s}#role={s}", .{ try site.champHref(ch, up), r.label() });
 }
 
-/// Each role's most played in the view, with the change since the last patch
+/// Each role's most played, best win rate over the champions table's games floor and
+/// clear risers since the last patch, with the change since the last patch
 fn champsOf(site: *const Site, up: []const u8) !?*hp.HomeChamps {
     const a = site.arena;
     if (site.games == 0) return null;
     const d = try a.create(hp.Champs);
-    var champs: std.ArrayList(ui.champ.Champ) = .empty;
     d.* = .{ .champs = &.{}, .games = site.games, .index = try site.championsHref(null, up), .roles = @splat(&.{}) };
     for (Role.all, &d.role_hrefs) |r, *href| href.* = try site.championsHref(r, up);
-    const counts = try a.alloc(u32, site.champs.len);
-    for (Role.all, &d.roles) |r, *out| {
-        for (site.champs, counts) |ch, *n| n.* = site.stats.champRole(r, ch.c).games;
-        var picks: std.ArrayList(hp.Champs.Pick) = .empty;
-        for (mostPlayed(counts)) |b| {
-            const ch = site.champs[b orelse break];
+    var l: Lists = .{ .site = site, .up = up, .slot = try a.alloc(?u16, site.champs.len) };
+    @memset(l.slot, null);
+    const scores = try a.alloc(?f64, site.champs.len);
+    const floor = ui.tiers.min_games[ui.tiers.defaultMin(site.games)];
+    for (Role.all, &d.roles, &d.best, &d.rising) |r, *played, *best, *rising| {
+        for (site.champs, scores) |ch, *x| {
             const cr = site.stats.champRole(r, ch.c);
-            try picks.append(a, .{
-                .champ = @intCast(champs.items.len),
-                .href = try champHref(site, up, ch, r),
-                .games = cr.games,
-                .wins = cr.wins,
-                .share = @floatCast(100 * @as(f64, @floatFromInt(cr.games)) / @as(f64, @floatFromInt(site.games))),
-                .d = changeOf(site, ch.id, r),
-            });
-            try champs.append(a, .{ .name = ch.name, .src = try site.icon(ch) });
+            x.* = if (cr.games == 0) null else @floatFromInt(cr.games);
         }
-        out.* = picks.items;
+        played.* = try l.picks(r, scores);
+        for (site.champs, scores) |ch, *x| {
+            const cr = site.stats.champRole(r, ch.c);
+            x.* = if (cr.games < floor) null else @as(f64, @floatFromInt(cr.wins)) / @as(f64, @floatFromInt(cr.games));
+        }
+        best.* = try l.picks(r, scores);
+        @memset(scores, null);
+        if (site.patchday) |*pd| for (pd.champions) |m| {
+            if (m.role != r or m.win.z <= 0 or !m.win.clear(pd.opts.min_role_games, pd.opts.z)) continue;
+            for (site.champs, scores) |ch, *x| if (ch.id == m.id) {
+                x.* = m.win.delta();
+            };
+        };
+        rising.* = try l.picks(r, scores);
     }
-    d.champs = champs.items;
+    d.champs = l.champs.items;
     const x = try a.create(hp.HomeChamps);
     x.* = .{ .data = d, .bin = try bin(a, hp.Champs, d.*) };
     return x;
 }
 
-/// Indexes of the per_role largest counts, largest first, the earlier on a tie; none
-/// with no games
-fn mostPlayed(counts: []const u32) [per_role]?usize {
+/// The card's picks, each champion once in its champs however many lists show it
+const Lists = struct {
+    site: *const Site,
+    up: []const u8,
+    champs: std.ArrayList(ui.champ.Champ) = .empty,
+    /// By site.champs index: its index in champs
+    slot: []?u16,
+
+    fn picks(l: *Lists, r: Role, scores: []const ?f64) ![]const hp.Champs.Pick {
+        const site = l.site;
+        const a = site.arena;
+        var out: std.ArrayList(hp.Champs.Pick) = .empty;
+        for (topOf(scores)) |b| {
+            const k = b orelse break;
+            const ch = site.champs[k];
+            const cr = site.stats.champRole(r, ch.c);
+            if (l.slot[k] == null) {
+                l.slot[k] = @intCast(l.champs.items.len);
+                try l.champs.append(a, .{ .name = ch.name, .src = try site.icon(ch) });
+            }
+            try out.append(a, .{
+                .champ = l.slot[k].?,
+                .href = try champHref(site, l.up, ch, r),
+                .games = cr.games,
+                .wins = cr.wins,
+                .share = @floatCast(100 * @as(f64, @floatFromInt(cr.games)) / @as(f64, @floatFromInt(site.games))),
+                .d = changeOf(site, ch.id, r),
+            });
+        }
+        return out.items;
+    }
+};
+
+/// Indexes of the per_role highest scores, highest first, the earlier on a tie; null
+/// scores never
+fn topOf(scores: []const ?f64) [per_role]?usize {
     var best: [per_role]?usize = @splat(null);
-    var games: [per_role]u32 = @splat(0);
-    for (counts, 0..) |n, k| {
+    var top: [per_role]f64 = undefined;
+    for (scores, 0..) |s, k| {
+        const v = s orelse continue;
         var i: usize = per_role;
-        while (i > 0 and n > games[i - 1]) i -= 1;
+        while (i > 0 and (best[i - 1] == null or v > top[i - 1])) i -= 1;
         if (i == per_role) continue;
         std.mem.copyBackwards(?usize, best[i + 1 ..], best[i .. per_role - 1]);
-        std.mem.copyBackwards(u32, games[i + 1 ..], games[i .. per_role - 1]);
+        std.mem.copyBackwards(f64, top[i + 1 ..], top[i .. per_role - 1]);
         best[i] = k;
-        games[i] = n;
+        top[i] = v;
     }
     return best;
 }
@@ -396,8 +435,8 @@ test "the example's game: none without a role file or games" {
     try std.testing.expectEqual(null, try reviewFor(a, &none, ""));
 }
 
-test "most played: largest first, the earlier on a tie, none without games" {
-    try std.testing.expectEqual([per_role]?usize{ 2, 0, 3, 5, 1 }, mostPlayed(&.{ 50, 10, 90, 50, 0, 20, 5 }));
-    try std.testing.expectEqual([per_role]?usize{ 1, null, null, null, null }, mostPlayed(&.{ 0, 3, 0 }));
-    try std.testing.expectEqual([per_role]?usize{ null, null, null, null, null }, mostPlayed(&.{}));
+test "the top: highest first, the earlier on a tie, null scores never" {
+    try std.testing.expectEqual([per_role]?usize{ 2, 0, 3, 6, 5 }, topOf(&.{ 50, 10, 90, 50, null, 20, 30 }));
+    try std.testing.expectEqual([per_role]?usize{ 1, 0, null, null, null }, topOf(&.{ -1, 3, null }));
+    try std.testing.expectEqual([per_role]?usize{ null, null, null, null, null }, topOf(&.{}));
 }

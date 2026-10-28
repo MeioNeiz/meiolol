@@ -48,10 +48,11 @@ Desktop 1280, a 12-column grid under the site header:
 
 Below (still the first screen at 1280x800 in part, the rest one scroll):
 
-- Champions: role row (`role-picker`, the stats session's) and the `champion-search`;
-  under them each role's three most picked this patch as icons. Pressing goes to the
-  champion page in that role (Jacob: "if i pick on champion with its role ... i want
-  that role")
+- Champions: a role column each (one role and the role picker on a phone), five rows,
+  three lists: Most played, Win rate (over the champions table's games floor), Rising
+  (clear rises this patch; the choice hidden when none). A row goes to the champion page
+  in that role (Jacob: "if i pick on champion with its role ... i want that role"); the
+  card and role heads to the champions table sorted as the list is
 - Footer as today, with Method and Desktop app in it
 
 Cut: the lockup, the paragraph, the three steps, "See an example review" and "How the
@@ -92,7 +93,7 @@ ChampSearch, PlayerBar (compact), ResultStrip (form).
 | Today's Daily Draft teams and the visitor's result | exists (daily data, localStorage) |
 | Patch top 3 changes | exists (the patch page's data); new: written as a small JSON for home in the site build (small) |
 | Learn lesson and progress | exists (learn.js state in localStorage) |
-| Top 3 champions per role this patch | exists (champions index data) |
+| Top 5 per role, three ways | exists (stats, patch day) |
 
 ## Desktop reuse
 

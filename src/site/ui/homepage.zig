@@ -15,6 +15,7 @@ const champ = @import("champ.zig");
 const role = @import("role.zig");
 const rolepicker = @import("rolepicker.zig");
 const stat = @import("stat.zig");
+const segmented = @import("segmented.zig");
 const bar = @import("bar.zig");
 const gamehead = @import("gamehead.zig");
 const gamepage = @import("gamepage.zig");
@@ -46,7 +47,6 @@ const W = struct {
     pub const champions = plain("Champions");
     pub const games = phrase.Phrase("{n:count} games");
     pub const role = plain("Role");
-    pub const new = plain("new");
     pub const daily = plain("Daily Draft");
     pub const number = phrase.Phrase("#{n:int}");
     pub const guess = plain("Guess");
@@ -56,6 +56,11 @@ const W = struct {
     pub const form = plain("Newest results, newest first");
     pub const win = plain("W");
     pub const loss = plain("L");
+    pub const list = plain("List");
+    pub const played = plain("Most played");
+    pub const best = plain("Win rate");
+    pub const rising = plain("Rising");
+    pub const none = plain("None clear yet");
 };
 
 /// The example's game: the data file's first (newest) game. Switching role fetches that
@@ -261,15 +266,19 @@ pub fn rolesOf(mask: u8) [5]bool {
     return r;
 }
 
-/// Each role's most played: picks per role, most games first
+/// Each role's top picks three ways
 pub const Champs = struct {
     champs: []const champ.Champ,
     games: u32,
     /// The champions table's, then each role's (the heads' links)
     index: []const u8 = "",
     role_hrefs: [5][]const u8 = @splat(""),
-    /// By role
+    /// Most played by role, most games first
     roles: [5][]const Pick,
+    /// Best win rate over the champions table's games floor, by role
+    best: [5][]const Pick = @splat(&.{}),
+    /// Clear win rate rises since the last patch, biggest first, by role
+    rising: [5][]const Pick = @splat(&.{}),
     pub const Pick = struct {
         champ: u16,
         href: []const u8,
@@ -286,30 +295,57 @@ pub const HomeChamps = struct {
     data: *const Champs,
     /// Shown alone when the card is narrow
     on: Role = .mid,
+    list: List = .played,
     /// Base64 of `data` for the island (ui.data)
     bin: []const u8 = "",
 
     const P = @This();
 
-    pub const Msg = union(enum) { role: Role };
+    pub const List = enum { played, best, rising };
+
+    pub const Msg = union(enum) { role: Role, list: List };
 
     pub fn update(p: *P, m: Msg, _: *tree.Event) void {
         switch (m) {
             .role => |r| p.on = r,
+            .list => |l| p.list = l,
         }
+    }
+
+    /// The champions table sorted as the list is (its Games, Win rate and Patch columns)
+    fn sorted(p: *const P, h: *H, href: []const u8) []const u8 {
+        const frag = switch (p.list) {
+            .played => "#sort=6",
+            .best => return href,
+            .rising => "#sort=2",
+        };
+        return std.mem.concat(h.mem, u8, &.{ href, frag }) catch {
+            h.oom = true;
+            return href;
+        };
     }
 
     pub fn view(p: *P, h: *H) N {
         const d = p.data;
         var roles: [5]rolepicker.Item = undefined;
         for (&roles, Role.all) |*it, r| it.* = .{ .role = r, .current = r == p.on, .on = h.on(p, .{ .role = r }) };
+        const lists = switch (p.list) {
+            .played => d.roles,
+            .best => d.best,
+            .rising => d.rising,
+        };
+        var any_rising = false;
+        for (d.rising) |ps| any_rising = any_rising or ps.len > 0;
+        var items: [3]segmented.Item = undefined;
+        for (&items, std.enums.values(List), [_]tree.Text{ W.played, W.best, W.rising }) |*it, l, label| it.* = .{ .label = label, .selected = p.list == l, .on = h.on(p, .{ .list = l }) };
         var top: f32 = 1;
-        for (d.roles) |ps| for (ps) |x| {
+        for (lists) |ps| for (ps) |x| {
             top = @max(top, x.share);
         };
         var cols = h.list();
-        for (Role.all, d.roles) |r, ps| {
+        for (Role.all, lists) |r, ps| {
             var rows = h.list();
+            if (ps.len == 0) rows.add(h.li(.{ .class = "none" }, .{W.none}));
             for (ps, 0..) |x, i| {
                 // The island's from data-bin
                 if (x.champ >= d.champs.len) continue;
@@ -323,19 +359,20 @@ pub const HomeChamps = struct {
                         .scale = .aggregate,
                         .ref = 50,
                         .games = x.games,
-                        .ctx = if (x.d) |dd| phrase.num(h, .points, dd) else W.new,
+                        .ctx = if (x.d) |dd| phrase.num(h, .points, dd) else null,
                     }),
                 })}));
             }
             cols.add(h.div(.{ .key = @backingInt(r), .class = "col", .data_on = r == p.on }, .{
-                h.h3(.{}, .{h.a(.{ .href = d.role_hrefs[@backingInt(r)] }, .{ role.view(h, r, .{ .s = .s, .named = false }), r.label() })}),
+                h.h3(.{}, .{h.a(.{ .href = p.sorted(h, d.role_hrefs[@backingInt(r)]) }, .{ role.view(h, r, .{ .s = .s, .named = false }), r.label() })}),
                 h.ul(.{}, .{rows.done()}),
             }));
         }
         return h.div(.{ .class = "c-hch", .data_island = "homechamps", .data_bin = if (p.bin.len > 0) p.bin else null }, .{card.view(h, .{ .flush = true }, &.{
             h.div(.{ .class = "c-head" }, .{
-                h.h2(.{}, .{h.a(.{ .href = d.index }, .{W.champions})}),
+                h.h2(.{}, .{h.a(.{ .href = p.sorted(h, d.index) }, .{W.champions})}),
                 h.span(.{ .class = "count" }, .{W.games.with(h, .{ .n = d.games })}),
+                segmented.view(h, .{ .s = .s, .label = W.list }, items[0..if (any_rising) 3 else 2]),
                 rolepicker.view(h, .{ .v = .compact, .label = W.role }, &roles),
             }),
             h.div(.{ .class = "cols" }, .{cols.done()}),
@@ -448,6 +485,7 @@ pub const css =
     \\  .c-hrev .cells > .c-strip { justify-content: space-between; }
     \\  .c-hch { container-type: inline-size; }
     \\  .c-hch .c-head { padding-inline: var(--card-px); }
+    \\  .c-hch .c-head > .c-seg { margin-left: auto; }
     \\  .c-hch .c-head > .c-roles { display: none; }
     \\  .c-hch .cols { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
     \\  .c-hch .col { min-width: 0; border-right: 1px solid var(--line); }
@@ -461,6 +499,7 @@ pub const css =
     \\  .c-hch li > a { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: var(--sp-2); align-items: center;
     \\    padding: 6px var(--card-px); color: var(--text); border-bottom: 1px solid var(--line); }
     \\  .c-hch li:last-child > a { border-bottom: 0; }
+    \\  .c-hch li.none { padding: var(--sp-3) var(--card-px); color: var(--faint); font-size: var(--fs-s); }
     \\  .c-hch li > a:hover { background: var(--panel-2); text-decoration: none; }
     \\  .c-hch .nm { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
     \\  .c-hch .nm > b { font-weight: var(--w-m); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -493,6 +532,7 @@ pub fn demo(h: *H) ?struct { HomeReview, HomeChamps } {
         .champs = h.mem.dupe(champ.Champ, &.{ c("Garen", "Garen"), c("Yone", "Yone"), c("MonkeyKing", "Wukong"), c("Ahri", "Ahri"), c("Jinx", "Jinx"), c("Thresh", "Thresh") }) catch return null,
         .games = 403364,
         .roles = picks,
+        .best = .{ picks[2], picks[0], picks[1], &.{}, picks[4] },
     };
     return .{ .{ .s = s, .roles = .{ true, true, true, false, true }, .shown = .mid, .want = .mid, .default = .mid }, .{ .data = d } };
 }
@@ -516,6 +556,8 @@ pub fn gallery(g: *Gallery) void {
     g.addFill("Daily Draft played", daily.view(h));
     x[0].you = .{ .id = "Agurin#EUW", .open = "#", .wins = 12, .losses = 8, .form = &.{ true, true, false, true, false } };
     g.addFill("returning visitor", x[0].view(h));
+    x[1].list = .best;
+    g.addFill("champions by win rate, a role with none", x[1].view(h));
 }
 
 test "a role switch waits for its file; Open only on the default role" {
