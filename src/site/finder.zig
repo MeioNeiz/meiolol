@@ -1,6 +1,7 @@
-//! matchup/index.html: the matchup finder (ui.finder). Each champion's roles, each role's
-//! most played lane pairs with a matchup page, and the patch's clearest win rate moves
-//! (as the patch page picks them), in the island's data-bin. A pick's matchups are the
+//! matchup/index.html: the matchup finder (ui.finder). Each champion's roles and, per
+//! role, three short lists of lane pairs with a matchup page: the patch's clearest win
+//! rate moves (as the patch page picks them), the hardest lanes and the lane bullies, in
+//! the island's data-bin. A pick's matchups are the
 //! champion page's data files (champion.dataFiles), fetched by ui-findergrid.wasm
 const std = @import("std");
 const core = @import("core");
@@ -21,9 +22,11 @@ const tpl = html.tpl;
 
 pub const path = "matchup/index.html";
 
-/// Pairs per role under Most played
-const most_shown = 8;
-const moved_shown = 6;
+/// Pairs per role in each list
+const shown = 8;
+/// Hardest lanes and lane bullies: fewer games and a pair's luck tops the lists (at 500 a
+/// win rate's 95% range is still about ±4.4 points: Hardest ranks by its edge)
+const list_games = 500;
 /// The 95% half width of a move: 1.96 standard errors
 const ci_z = 1.96;
 
@@ -74,9 +77,14 @@ pub fn data(site: *const Site, curves: ?*const Curves) !fd.Data {
         o.* = .{ .name = ch.name, .key = ch.key, .slug = ch.slug };
         rs.* = try rolesOf(site, ch.c);
     }
-    const most = try a.alloc([]const fd.Pair, Role.all.len);
-    for (Role.all, most) |r, *list| list.* = if (curves) |c| try mostPlayed(site, c, r) else &.{};
-    var d: fd.Data = .{ .ddragon = site.ddragon_version, .champs = champs, .roles = roles, .most = most };
+    const hard = try a.alloc([]const fd.Pair, Role.all.len);
+    const bully = try a.alloc([]const fd.Lead, Role.all.len);
+    for (Role.all, hard, bully) |r, *h, *b| {
+        const pairs = if (curves) |c| try lanePairs(site, c, r) else &.{};
+        h.* = try hardest(a, pairs);
+        b.* = try bullies(a, pairs);
+    }
+    var d: fd.Data = .{ .ddragon = site.ddragon_version, .champs = champs, .roles = roles, .hard = hard, .bully = bully };
     if (site.patchday) |*pd| {
         d.moved = try moved(site, pd);
         d.patch = pd.cur_patch;
@@ -110,40 +118,78 @@ fn index(site: *const Site, id: u32) ?u16 {
     return @intCast(site.by_c[c] orelse return null);
 }
 
-/// Lane pairs with a page, most games first, from the side that won more
-fn mostPlayed(site: *const Site, curves: *const Curves, r: Role) ![]const fd.Pair {
-    const a = site.arena;
-    var list: std.ArrayList(fd.Pair) = .empty;
-    for (curves.curves) |cv| {
+/// A role's lane pairs with a page and list_games, from the curve's side
+const LanePair = struct { x: u16, y: u16, games: u32, wins: u32, gold: i16 };
+
+fn lanePairs(site: *const Site, curves: *const Curves, r: Role) ![]const LanePair {
+    var list: std.ArrayList(LanePair) = .empty;
+    for (curves.curves) |*cv| {
         const hd = cv.header;
         if (hd.role != @backingInt(r) or !matchup.isPage(hd)) continue;
         const x = index(site, hd.a) orelse continue;
         const y = index(site, hd.b) orelse continue;
         const e = site.stats.enemy(r, r, site.champs[x].c, site.champs[y].c);
-        if (e.games == 0) continue;
-        const swap = 2 * e.wins < e.games;
-        try list.append(a, .{
-            .x = if (swap) y else x,
-            .y = if (swap) x else y,
-            .games = e.games,
-            .wins = if (swap) e.games - e.wins else e.wins,
-        });
+        if (e.games < list_games) continue;
+        const v: core.curvesfile.View = .{ .curve = cv, .flipped = false };
+        const gold = v.estimate(.gold, core.curvesfile.lane_minute - 1).mean;
+        try list.append(site.arena, .{ .x = x, .y = y, .games = e.games, .wins = e.wins, .gold = gold });
     }
-    std.mem.sort(fd.Pair, list.items, {}, struct {
-        fn f(_: void, p: fd.Pair, q: fd.Pair) bool {
-            return p.games > q.games;
-        }
-    }.f);
-    return list.items[0..@min(list.items.len, most_shown)];
+    return list.items;
 }
 
-/// Win rate moves too big to be luck (the patch page's test), from the side that gained
-fn moved(site: *const Site, pd: *const patchday.PatchDay) ![]const fd.Move {
+/// From the side that wins less, surest edge first: the lowest upper end of its win
+/// rate's 95% range
+fn hardest(a: std.mem.Allocator, pairs: []const LanePair) ![]const fd.Pair {
+    const list = try a.alloc(fd.Pair, pairs.len);
+    for (pairs, list) |p, *o| {
+        const swap = 2 * p.wins > p.games;
+        o.* = .{ .x = if (swap) p.y else p.x, .y = if (swap) p.x else p.y, .games = p.games, .wins = if (swap) p.games - p.wins else p.wins };
+    }
+    std.mem.sort(fd.Pair, list, {}, struct {
+        fn f(_: void, p: fd.Pair, q: fd.Pair) bool {
+            return upper(p) < upper(q);
+        }
+    }.f);
+    return list[0..@min(list.len, shown)];
+}
+
+fn upper(p: fd.Pair) f64 {
+    const n: f64 = @floatFromInt(p.games);
+    const w = @as(f64, @floatFromInt(p.wins)) / n;
+    return w + ci_z * @sqrt(w * (1 - w) / n);
+}
+
+/// From the side ahead, the biggest gold lead at lane_minute first (the curve's estimate,
+/// already shrunk toward the champions' usual lanes)
+fn bullies(a: std.mem.Allocator, pairs: []const LanePair) ![]const fd.Lead {
+    const list = try a.alloc(fd.Lead, pairs.len);
+    for (pairs, list) |p, *o| {
+        const swap = p.gold < 0;
+        o.* = .{ .x = if (swap) p.y else p.x, .y = if (swap) p.x else p.y, .games = p.games, .gold = if (swap) -p.gold else p.gold };
+    }
+    std.mem.sort(fd.Lead, list, {}, struct {
+        fn f(_: void, p: fd.Lead, q: fd.Lead) bool {
+            return p.gold > q.gold;
+        }
+    }.f);
+    return list[0..@min(list.len, shown)];
+}
+
+/// Per role, win rate moves too big to be luck (the patch page's test), from the side
+/// that gained
+fn moved(site: *const Site, pd: *const patchday.PatchDay) ![]const []const fd.Move {
     const a = site.arena;
     const o = pd.opts;
+    const out = try a.alloc([]const fd.Move, Role.all.len);
+    for (Role.all, out) |r, *x| x.* = try movedIn(site, pd, r, o);
+    return out;
+}
+
+fn movedIn(site: *const Site, pd: *const patchday.PatchDay, r: Role, o: patchday.Options) ![]const fd.Move {
+    const a = site.arena;
     var list: std.ArrayList(fd.Move) = .empty;
     for (pd.matchups) |m0| {
-        if (!m0.win.clear(o.min_pair_games, o.z)) continue;
+        if (m0.role != r or !m0.win.clear(o.min_pair_games, o.z)) continue;
         const m = if (m0.win.z > 0) m0 else pd.matchup(m0.role, m0.b, m0.a).?;
         const x = index(site, m.a) orelse continue;
         const y = index(site, m.b) orelse continue;
@@ -162,7 +208,7 @@ fn moved(site: *const Site, pd: *const patchday.PatchDay) ![]const fd.Move {
             return p.d > q.d;
         }
     }.f);
-    return list.items[0..@min(list.items.len, moved_shown)];
+    return list.items[0..@min(list.items.len, shown)];
 }
 
 /// `v` as ui.data, base64: the island root's data-bin

@@ -1,7 +1,7 @@
 //! The matchup finder (matchup/index.html, docs/plan/ui/matchups.md): a way to a matchup
 //! page, not a list of them. Two islands. Finder: two ChampRolePickers, one lane for both;
-//! nothing picked, each role's most played lane pairs (the role picked in place) and this
-//! patch's clearest movers, each a link to its page. Grid (its own, lazily loaded file):
+//! nothing picked, a role and three short lists of its lane pairs (this patch's clearest
+//! movers, the hardest lanes, the lane bullies), each a link to its page. Grid (its own, lazily loaded file):
 //! the first pick's MatchupGrid, Against its lane, from the champion page's
 //! data/champion/<slug>-more.bin; the second pick is that opponent's dot, and its page when
 //! there is one. Finder writes the picks to the URL, Grid reads them (same keys).
@@ -41,10 +41,12 @@ pub const Data = struct {
     champs: []const Other,
     /// Each champion's roles with games, most played first (its main role first)
     roles: []const []const role.Role = &.{},
-    /// Role.all's order: most games first, each from the side that won more
-    most: []const []const Pair,
+    /// Role.all's order, each list's: the lowest win rates, from the side that wins less
+    hard: []const []const Pair = &.{},
+    /// The biggest gold leads at 14 minutes, from the side ahead
+    bully: []const []const Lead = &.{},
     /// The clearest win rate moves this patch, from the side that gained, biggest first
-    moved: []const Move = &.{},
+    moved: []const []const Move = &.{},
     /// "16.21"; "" without an earlier patch to compare with
     patch: []const u8 = "",
     /// From the view's root to the view whose matchup pages have whole patches: "patch/"
@@ -53,6 +55,9 @@ pub const Data = struct {
 };
 
 pub const Pair = struct { x: u16, y: u16, games: u32, wins: u32 };
+
+/// x's median gold lead over y at 14 minutes
+pub const Lead = struct { x: u16, y: u16, games: u32, gold: i16 };
 
 pub const Move = struct {
     role: role.Role,
@@ -67,8 +72,10 @@ pub const Move = struct {
 
 const W = struct {
     pub const title = plain("Matchups");
-    pub const most = plain("Most played");
     pub const moved = plain("Moved this patch");
+    pub const hard = plain("Hardest lanes");
+    pub const bully = plain("Lane bullies");
+    pub const gold = Phrase("{g:signed} gold");
     pub const patch = Phrase("Patch {p:text}");
     pub const role_label = plain("Role");
     pub const none = plain("Not enough games yet.");
@@ -187,8 +194,7 @@ pub const Finder = struct {
         return h.div(.{ .class = "c-finder", .data_island = "finder", .data_root = f.root, .data_bin = if (f.bin.len > 0) f.bin else null }, .{
             h.el(.h1, .{}, .{W.title}),
             p.view(h),
-            if (picked) N.none else f.mostCard(h),
-            if (picked) N.none else f.movedCard(h),
+            if (picked) N.none else f.lists(h),
         });
     }
 
@@ -201,50 +207,77 @@ pub const Finder = struct {
         return h.fmt("{s}{s}matchup/{s}/{s}-vs-{s}.html", .{ f.root, dir, @tagName(r), f.data.champs[x].slug, f.data.champs[y].slug });
     }
 
-    fn mostCard(f: *F, h: *H) N {
+    /// Nothing picked: a role, then its three lists side by side
+    fn lists(f: *F, h: *H) N {
         var items: [role.Role.all.len]rolepicker.Item = undefined;
         for (role.Role.all, &items) |r, *it| it.* = .{ .role = r, .current = r == f.role, .on = h.on(f, .{ .role = r }) };
-        const pairs = if (f.data.most.len > @backingInt(f.role)) f.data.most[@backingInt(f.role)] else &.{};
-        const rows = h.mem.alloc(champlist.Row, pairs.len) catch {
-            h.oom = true;
-            return .none;
-        };
-        for (pairs, rows) |p, *row| {
-            const won = rate(p.games, p.wins);
-            row.* = .{
-                .champ = f.icon(h, p.x),
-                .vs = f.icon(h, p.y),
-                .href = f.href(h, "", f.role, p.x, p.y),
-                .value = h.span(.{ .style = h.vars(.{ .c = fmt.Step.of(won - 50, fmt.win_cuts) }) }, .{phrase.num(h, .rate, won)}),
-                .note = phrase.num(h, .count, p.games),
-            };
-        }
-        return card.view(h, .{}, &.{
-            card.head(h, W.most, null, &.{rolepicker.view(h, .{ .v = .compact, .label = W.role_label }, &items)}),
-            if (rows.len == 0) h.p(.{ .class = "none" }, .{W.none}) else champlist.view(h, .{ .cols = true, .label = W.most }, rows),
+        return h.div(.{ .class = "lists" }, .{
+            rolepicker.view(h, .{ .v = .compact, .label = W.role_label }, &items),
+            h.div(.{ .class = "cols" }, .{ f.movedCard(h), f.hardCard(h), f.bullyCard(h) }),
         });
+    }
+
+    fn of(comptime T: type, by_role: []const []const T, r: role.Role) []const T {
+        return if (by_role.len > @backingInt(r)) by_role[@backingInt(r)] else &.{};
+    }
+
+    fn listCard(h: *H, title: tree.Text, controls: []const N, rows: []const champlist.Row) N {
+        return card.view(h, .{}, &.{
+            card.head(h, title, null, controls),
+            if (rows.len == 0) h.p(.{ .class = "none" }, .{W.none}) else champlist.view(h, .{ .label = title }, rows),
+        });
+    }
+
+    fn rowsOf(h: *H, n: usize) []champlist.Row {
+        return h.mem.alloc(champlist.Row, n) catch {
+            h.oom = true;
+            return &.{};
+        };
     }
 
     fn movedCard(f: *F, h: *H) N {
         const d = f.data;
-        if (d.moved.len == 0) return .none;
-        const rows = h.mem.alloc(champlist.Row, d.moved.len) catch {
-            h.oom = true;
-            return .none;
-        };
-        for (d.moved, rows) |m, *row| row.* = .{
+        if (d.patch.len == 0) return .none;
+        const moves = of(Move, d.moved, f.role);
+        const rows = rowsOf(h, moves.len);
+        for (moves[0..rows.len], rows) |m, *row| row.* = .{
             .champ = f.icon(h, m.x),
             .vs = f.icon(h, m.y),
-            .role = m.role,
             .href = f.href(h, d.patch_dir, m.role, m.x, m.y),
             .value = delta.view(h, .{ .d = m.d, .ci = m.ci }),
             .note = phrase.num(h, .count, m.games),
         };
         const link = h.a(.{ .class = "more", .href = h.fmt("{s}patch.html", .{f.root}) }, .{W.patch.with(h, .{ .p = d.patch })});
-        return card.view(h, .{}, &.{
-            card.head(h, W.moved, null, &.{link}),
-            champlist.view(h, .{ .cols = true, .label = W.moved }, rows),
-        });
+        return listCard(h, W.moved, &.{link}, rows);
+    }
+
+    fn hardCard(f: *F, h: *H) N {
+        const pairs = of(Pair, f.data.hard, f.role);
+        const rows = rowsOf(h, pairs.len);
+        for (pairs[0..rows.len], rows) |p, *row| {
+            const won = rate(p.games, p.wins);
+            row.* = .{
+                .champ = f.icon(h, p.x),
+                .vs = f.icon(h, p.y),
+                .href = f.href(h, "", f.role, p.x, p.y),
+                .value = h.span(.{}, .{phrase.num(h, .rate, won)}),
+                .note = phrase.num(h, .count, p.games),
+            };
+        }
+        return listCard(h, W.hard, &.{}, rows);
+    }
+
+    fn bullyCard(f: *F, h: *H) N {
+        const leads = of(Lead, f.data.bully, f.role);
+        const rows = rowsOf(h, leads.len);
+        for (leads[0..rows.len], rows) |l, *row| row.* = .{
+            .champ = f.icon(h, l.x),
+            .vs = f.icon(h, l.y),
+            .href = f.href(h, "", f.role, l.x, l.y),
+            .value = h.span(.{}, .{W.gold.with(h, .{ .g = l.gold })}),
+            .note = phrase.num(h, .count, l.games),
+        };
+        return listCard(h, W.bully, &.{}, rows);
     }
 };
 
@@ -406,6 +439,8 @@ pub const css =
     \\  .c-finder { display: grid; gap: var(--sp-4); }
     \\  .c-finder > h1 { margin: 0; }
     \\  .c-finder .c-head > .more { margin-left: auto; font-size: var(--fs-s); }
+    \\  .c-finder .lists { display: grid; gap: var(--sp-3); justify-items: start; }
+    \\  .c-finder .cols { justify-self: stretch; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--sp-4); align-items: start; }
     \\  .c-finder .none { margin: 0; color: var(--faint); }
     \\  .c-fgrid:not(:empty) { display: grid; gap: var(--sp-4); margin-top: var(--sp-4); }
     \\  .c-fgrid > .go, .c-fgrid > .none { margin: 0; }
@@ -426,18 +461,23 @@ pub const Demo = struct {
         .{ .name = "Lee Sin", .key = "LeeSin", .slug = "leesin" },
     };
     const top = [_]Pair{
-        .{ .x = 0, .y = 1, .games = 1788, .wins = 915 },
-        .{ .x = 2, .y = 3, .games = 1204, .wins = 655 },
+        .{ .x = 3, .y = 2, .games = 1204, .wins = 549 },
+        .{ .x = 1, .y = 0, .games = 1788, .wins = 873 },
     };
-    const mid = [_]Pair{.{ .x = 4, .y = 5, .games = 2410, .wins = 1230 }};
+    const mid = [_]Pair{.{ .x = 4, .y = 5, .games = 2410, .wins = 1180 }};
+    const top_leads = [_]Lead{
+        .{ .x = 0, .y = 1, .games = 1788, .gold = 412 },
+        .{ .x = 3, .y = 2, .games = 1204, .gold = 168 },
+    };
     const top_only = [_]role.Role{.top};
     const mid_only = [_]role.Role{.mid};
     pub const data: Data = .{
         .ddragon = "16.21.1",
         .champs = &champs,
         .roles = &.{ &top_only, &.{ .top, .mid }, &.{ .top, .support }, &top_only, &mid_only, &mid_only, &.{.jungle} },
-        .most = &.{ &top, &.{}, &mid, &.{}, &.{} },
-        .moved = &.{.{ .role = .mid, .x = 5, .y = 4, .d = 3.4, .ci = 2.1, .games = 1630 }},
+        .hard = &.{ &top, &.{}, &mid, &.{}, &.{} },
+        .bully = &.{ &top_leads, &.{}, &.{}, &.{}, &.{} },
+        .moved = &.{ &.{.{ .role = .top, .x = 2, .y = 0, .d = 3.4, .ci = 2.1, .games = 1630 }}, &.{}, &.{.{ .role = .mid, .x = 5, .y = 4, .d = 2.8, .ci = 1.9, .games = 1310 }}, &.{}, &.{} },
         .patch = "16.21",
         .patch_dir = "patch/",
     };
@@ -457,7 +497,7 @@ pub fn gallery(g: *Gallery) void {
     const h = g.h;
     // Picked: Darius, then Garen; Lee Sin: in his file, not in his lane
     const states = [_]struct { []const u8, role.Role, ?u16, ?u16, bool }{
-        .{ "nothing picked: Top's most played, this patch's movers", .top, null, null, false },
+        .{ "nothing picked: Top's movers, hardest lanes and bullies", .top, null, null, false },
         .{ "a role with no pairs yet", .jungle, null, null, false },
         .{ "one picked, its matchups on the way", .top, 0, null, false },
         .{ "one picked: its lane opponents", .top, 0, null, true },

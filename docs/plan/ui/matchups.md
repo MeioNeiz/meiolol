@@ -28,9 +28,13 @@ champion": they know one. Nobody comes to read 5,000 rows.
 - With one champion picked: its MatchupGrid (the champion page's component, same
   RelationPicker, Against preselected) under the slots, so the second pick can be a tile
   tap
-- Nothing picked: the visitor's champions first when known (Your games or pool); else
-  two short `ChampList`s per role: most played matchups (top 8 by games) and moved this
-  patch (links to patch.md's matchup section). About 40 tiles, not 5,000 rows
+- Nothing picked: a RolePicker, then three short `ChampList`s for that role side by side
+  (8 rows each, every row a matchup page): Moved this patch (clearest win rate moves,
+  from the side that gained, Delta with range, link to the patch page), Hardest lanes
+  (lowest win rates from the losing side, ranked by the upper end of the 95% range),
+  Lane bullies (biggest median gold lead at 14). Hardest and bullies need 500 games a
+  pair. Most played is gone (Jacob 27 Oct: "almost feels silly except the moved this
+  patch")
 - Header search keeps doing "ahri zed" from any page; this page is its slower twin
 
 ## First screen
@@ -38,12 +42,13 @@ champion": they know one. Nobody comes to read 5,000 rows.
 ```
 h1 Matchups
 ChampRolePicker pair  [ Your champion ▾ ] ⇄ [ Opponent ▾ ]   RolePicker (after 1st pick)
-(nothing picked)  Most played: Top 8 tiles | Jungle | Mid | Bot | Support   (RolePicker)
-                  Moved this patch: 6 tiles → patch page
+(nothing picked)  RolePicker
+                  Moved this patch | Hardest lanes | Lane bullies   (8 rows each)
 (one picked)      MatchupGrid of that champion, Against its lane
 ```
 
-Words: "Matchups", "Your champion", "Opponent", "Most played", "Moved this patch": ~8.
+Words: "Matchups", "Your champion", "Opponent", "Moved this patch", "Hardest lanes",
+"Lane bullies": ~11.
 
 ## References (research refs/matchups/notes.md)
 
@@ -67,8 +72,8 @@ first champion (`matchup/index.html#darius-top`) so back returns to the grid.
 
 Exists: the champion pages' matchup data. The grid for any champion needs its opponents
 without loading 5,000 rows: one small JSON per champion role (already written per view
-for filters.js) or a fragment. Most played and moved this patch: from the stats and
-patchday files, ~5 KB.
+for filters.js) or a fragment. The three lists: from the stats, curves and patchday
+files, in the island's data-bin.
 
 ## Cut
 
