@@ -239,8 +239,9 @@ bytes.
   assets skip the hop. Not a boundary: /p/ (view_private) and the API check the login
 - Files: p/notes.{css,js,wasm} (fixed names, no-cache) and admin/notes.html (list mode of
   the same wasm, fetched again every 20 s while shown), written by `meiolol admin`
-- Paths: notesdata.canonical drops a trailing index.html (/ and /index.html one page), on
-  POST, GET and the pins' match; notes.migrate moves older rows through it at each open
+- Paths: notesdata.canonical is urls.legacy (old .html pages, their #role=, #pool=, #p=
+  moved by urls.moveState as the wasm moves them) then a trailing index.html dropped, on
+  POST and GET; notes.migrate moves older rows' path and hash through it at each open
 - API: /api/notes GET/POST/PATCH, ui.notesdata binary, bounds in notesdata.check;
   api.db's notes table. Writes need X-Meiolol-Action. Never cached (nginx or Cloudflare)
 - A note's element: nearest c-* component or [data-island], its index on the page, a

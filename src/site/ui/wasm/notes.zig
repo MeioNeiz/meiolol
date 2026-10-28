@@ -665,7 +665,7 @@ fn place() void {
     for (notes.items) |n| {
         if (n.status != .open) continue;
         const here = switch (n.scope) {
-            .page => std.mem.eql(u8, nd.canonical(n.path), nd.canonical(path)),
+            .page => std.mem.eql(u8, n.path, nd.stripIndex(path)),
             .everywhere => onPage(a, n.target.component()),
         };
         if (!here) continue;

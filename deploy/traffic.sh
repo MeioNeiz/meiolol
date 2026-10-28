@@ -199,8 +199,16 @@ jq -n -r --slurpfile all "$tmp/all.json" --rawfile tsv "$HOURLY" --argjson now "
 ' > "$tmp/hourly.tsv"
 mv "$tmp/hourly.tsv" "$HOURLY"
 
-jq -n -c --slurpfile all "$tmp/all.json" --rawfile tsv "$HOURLY" --argjson now "$now" '
+# Page paths from before the URL move (docs/plan/urls.md) counted as their new ones: the
+# API binary maps them through urls.legacy. Without it, each keeps its own row
+jq -r '[.hours[].pg | keys[]] | unique[]' "$tmp/all.json" \
+    | "${MEIOLOL_BIN:-/usr/local/bin/meiolol}" urls > "$tmp/moved.tsv" || : > "$tmp/moved.tsv"
+
+jq -n -c --slurpfile all "$tmp/all.json" --rawfile tsv "$HOURLY" --rawfile moved "$tmp/moved.tsv" \
+    --argjson now "$now" '
     def addmap($a; $b): reduce ($b | to_entries[]) as $e ($a // {}; .[$e.key] += $e.value);
+    ($moved | split("\n") | map(select(length > 0) | split("\t") | {(.[0]): .[1]}) | add // {}) as $new
+    | def joined: reduce to_entries[] as $e ({}; .[$new[$e.key] // $e.key] += $e.value);
     def since($s): [$all[0].hours | to_entries[] | select((.key | tonumber) >= $s) | .value];
     def sum($hs; f): reduce ($hs[] | f) as $m ({}; addmap(.; $m));
     def rows($n): to_entries | sort_by(-.value) | .[:$n] | map([.key, .value]);
@@ -217,7 +225,7 @@ jq -n -c --slurpfile all "$tmp/all.json" --rawfile tsv "$HOURLY" --argjson now "
         generated: $now,
         from: $all[0].from,
         hours: ($tsv | split("\n") | map(select(length > 0) | split("\t") | map(tonumber))),
-        top_pages: {"24h": (sum($d; .pg) | rows(30)), "7d": (sum($w; .pg) | rows(30))},
+        top_pages: {"24h": (sum($d; .pg) | joined | rows(30)), "7d": (sum($w; .pg) | joined | rows(30))},
         referrers: {"7d": (sum($w; .rf) | rows(20))},
         status: {"24h": (sum($d; .st) | to_entries | sort_by(.key) | map([(.key | tonumber), .value]))},
         not_found: {"24h": (sum($d; .nf) | rows(20))},

@@ -94,6 +94,7 @@ const usage = usage_head ++
     cmd_ops.usage_status ++
     cmd_ops.usage_admin ++
     cmd_ops.usage_notes ++
+    cmd_ops.usage_urls ++
     cmd_data.usage_rebuild ++
     cmd_data.usage_rekey ++
     cmd_crawl.usage_champions ++
@@ -127,8 +128,10 @@ pub fn main(init: std.process.Init) !u8 {
         } else try flags.append(arena, argv[i]);
     }
     c.args = flags.items;
-    // The lab tools and desktop-sign and -curves run from deploy/ scripts in any directory
-    if (!std.mem.startsWith(u8, argv[1], "lab-") and !std.mem.startsWith(u8, argv[1], "desktop-")) try std.Io.Dir.cwd().createDirPath(init.io, c.data_dir);
+    // The lab tools, desktop-sign and -curves run from deploy/ scripts in any directory;
+    // urls from traffic.sh's sandbox, where nothing is writable
+    if (!std.mem.startsWith(u8, argv[1], "lab-") and !std.mem.startsWith(u8, argv[1], "desktop-") and
+        !std.mem.eql(u8, argv[1], "urls")) try std.Io.Dir.cwd().createDirPath(init.io, c.data_dir);
     return run(&c) catch |err| switch (err) {
         error.Usage => usageError(c.flag),
         // Logged where it happened
@@ -164,6 +167,7 @@ const commands = std.StaticStringMap(*const fn (*Cmd) anyerror!u8).initComptime(
     .{ "status", cmd_ops.cmdStatus },
     .{ "admin", cmd_ops.cmdAdmin },
     .{ "notes", cmd_ops.cmdNotes },
+    .{ "urls", cmd_ops.cmdUrls },
     .{ "rebuild", cmd_data.cmdRebuild },
     .{ "rekey", cmd_data.cmdRekey },
     .{ "champions", cmd_crawl.cmdChampions },

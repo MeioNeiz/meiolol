@@ -149,6 +149,75 @@ pub fn legacy(a: std.mem.Allocator, old: []const u8) !?[]const u8 {
     return try a.print("{f}{f}", .{ p, d });
 }
 
+/// A page's path and its state: location.search ++ location.hash
+pub const Located = struct { path: []const u8, state: []const u8 };
+
+/// New URL `url` (path and query) with an old page's `state` (search ++ hash): its legacy
+/// fragment keys moved where the page's wasm moves them (wasm/dom.zig address): a
+/// champion's #role= into the path, region= and period= into the query; pool's #pool= to
+/// ?champs=; learn's #p= alone to the bare fragment. Other keys stay put, and a state
+/// already new comes back the same
+pub fn moveState(a: std.mem.Allocator, url: []const u8, state: []const u8) !Located {
+    const eql = std.mem.eql;
+    const qi = std.mem.findScalar(u8, url, '?');
+    var path = url[0 .. qi orelse url.len];
+    const hi = std.mem.findScalar(u8, state, '#');
+    var query: std.ArrayList([]const u8) = .empty;
+    try setKeys(a, &query, if (qi) |i| url[i + 1 ..] else "");
+    try setKeys(a, &query, if (std.mem.startsWith(u8, state, "?")) state[1 .. hi orelse state.len] else "");
+    var rest: std.ArrayList([]const u8) = .empty;
+    var bare: ?[]const u8 = null;
+    const page = parse(path);
+    var it = std.mem.tokenizeScalar(u8, if (hi) |i| state[i + 1 ..] else "", '&');
+    while (it.next()) |kv| {
+        const eq = std.mem.findScalar(u8, kv, '=') orelse kv.len;
+        const k = kv[0..eq];
+        const v = if (eq < kv.len) kv[eq + 1 ..] else "";
+        const moved = if (page) |p| switch (p) {
+            .champion => |c| if (eql(u8, k, "role")) m: {
+                const r = std.meta.stringToEnum(Role, v) orelse break :m false;
+                path = try a.print("{f}", .{Page{ .champion = .{ .slug = c.slug, .role = r } }});
+                break :m true;
+            } else if (eql(u8, k, "region") or eql(u8, k, "period")) m: {
+                if (v.len > 0) try setKeys(a, &query, kv);
+                break :m true;
+            } else false,
+            .pool => eql(u8, k, "pool") and m: {
+                if (v.len > 0) try setKeys(a, &query, try std.mem.concat(a, u8, &.{ "champs=", v }));
+                break :m true;
+            },
+            .learn => eql(u8, k, "p") and m: {
+                if (v.len > 0) bare = v;
+                break :m true;
+            },
+            else => false,
+        } else false;
+        if (!moved) try rest.append(a, kv);
+    }
+    // The bare form only alone: beside other keys, p= stays a key
+    if (bare) |b| try rest.append(a, if (rest.items.len == 0) b else try std.mem.concat(a, u8, &.{ "p=", b }));
+    var out: std.Io.Writer.Allocating = .init(a);
+    for (query.items, 0..) |kv, i| try out.writer.print("{c}{s}", .{ @as(u8, if (i == 0) '?' else '&'), kv });
+    for (rest.items, 0..) |kv, i| try out.writer.print("{c}{s}", .{ @as(u8, if (i == 0) '#' else '&'), kv });
+    return .{ .path = path, .state = out.written() };
+}
+
+/// `list`'s "k=v" pairs into `query`, each replacing one there with its key
+fn setKeys(a: std.mem.Allocator, query: *std.ArrayList([]const u8), list: []const u8) !void {
+    var it = std.mem.tokenizeScalar(u8, list, '&');
+    while (it.next()) |kv| {
+        for (query.items, 0..) |q, i| if (std.mem.eql(u8, keyOf(q), keyOf(kv))) {
+            _ = query.orderedRemove(i);
+            break;
+        };
+        try query.append(a, kv);
+    }
+}
+
+fn keyOf(kv: []const u8) []const u8 {
+    return kv[0 .. std.mem.findScalar(u8, kv, '=') orelse kv.len];
+}
+
 fn oldPage(a: std.mem.Allocator, name: []const u8) !?Page {
     const eql = std.mem.eql;
     if (eql(u8, name, "index")) return .home;
@@ -334,4 +403,32 @@ test "urls: old paths to new, views as the query" {
         "/sitemap.xml",
     };
     for (none) |s| try testing.expectEqual(null, try legacy(a, s));
+}
+
+test "urls: an old page's fragment keys move as its wasm moves them" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const cases = [_][4][]const u8{
+        .{ "/champions/ahri", "#role=mid", "/champions/ahri/mid", "" },
+        .{ "/champions/ahri?region=all", "#role=support&period=patch&rank=diamond", "/champions/ahri/support", "?region=all&period=patch#rank=diamond" },
+        .{ "/champions/ahri/top", "#role=mid", "/champions/ahri/mid", "" },
+        .{ "/champions/ahri", "#role=adc&tab=2", "/champions/ahri", "#role=adc&tab=2" },
+        .{ "/champions/ahri", "?region=all#region=", "/champions/ahri", "?region=all" },
+        .{ "/pool", "#pool=ahri.zed", "/pool", "?champs=ahri.zed" },
+        .{ "/learn", "#p=waves", "/learn", "#waves" },
+        .{ "/learn", "#p=waves&x=1", "/learn", "#x=1&p=waves" },
+        .{ "/your", "#id=a%23b", "/your", "#id=a%23b" },
+        .{ "/matchups/mid/ahri-vs-zed?period=patch", "#role=top", "/matchups/mid/ahri-vs-zed", "?period=patch#role=top" },
+        .{ "/admin/index.html", "#x", "/admin/index.html", "#x" },
+    };
+    for (cases) |c| {
+        const got = try moveState(a, c[0], c[1]);
+        try testing.expectEqualStrings(c[2], got.path);
+        try testing.expectEqualStrings(c[3], got.state);
+        // Once moved, the same again: stored notes move at every open
+        const again = try moveState(a, got.path, got.state);
+        try testing.expectEqualStrings(got.path, again.path);
+        try testing.expectEqualStrings(got.state, again.state);
+    }
 }

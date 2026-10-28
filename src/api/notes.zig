@@ -45,8 +45,8 @@ pub const schema =
     \\
 ;
 
-/// The schema, then every row's path as nd.canonical has it now (rows saved before a
-/// change to it); after each open
+/// The schema, then every row's path and state as nd.canonical has them now (rows saved
+/// before a change to it, such as the URL move); after each open
 pub fn setUp(db: store.Db) !void {
     try db.exec(schema);
     try migrate(db);
@@ -56,18 +56,19 @@ pub fn migrate(db: store.Db) !void {
     var arena: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const Move = struct { id: i64, path: []const u8 };
+    const Move = struct { id: i64, path: []const u8, hash: []const u8 };
     var moves: std.ArrayList(Move) = .empty;
     {
-        var q = try db.prepare("SELECT id, path FROM notes");
+        var q = try db.prepare("SELECT id, path, hash FROM notes");
         defer q.deinit();
         while (try q.step()) {
             const r = q.row(Move);
-            const to = nd.canonical(r.path);
-            if (to.len != r.path.len) try moves.append(a, .{ .id = r.id, .path = try a.dupe(u8, to) });
+            const to = try nd.canonical(a, r.path, r.hash);
+            if (!std.mem.eql(u8, to.path, r.path) or !std.mem.eql(u8, to.state, r.hash))
+                try moves.append(a, .{ .id = r.id, .path = try a.dupe(u8, to.path), .hash = try a.dupe(u8, to.state) });
         }
     }
-    for (moves.items) |m| try db.run("UPDATE notes SET path = ? WHERE id = ?", .{ m.path, m.id });
+    for (moves.items) |m| try db.run("UPDATE notes SET path = ?, hash = ? WHERE id = ?", .{ m.path, m.hash, m.id });
 }
 
 /// Notes kept; more are refused (507) until some are deleted by hand
@@ -97,7 +98,8 @@ fn list(arena: Allocator, db: store.Db, query: []const u8) !Reply {
         if (status) |v| return found(arena, db, "WHERE status = ?", .{@backingInt(v)}, max_notes);
         return found(arena, db, "", .{}, max_notes);
     }
-    const path = nd.canonical(try param(arena, query, "path") orelse return try failed(arena, .bad_request, "expected ?path= or ?all=1"));
+    const asked = try param(arena, query, "path") orelse return try failed(arena, .bad_request, "expected ?path= or ?all=1");
+    const path = (try nd.canonical(arena, asked, "")).path;
     if (path.len > nd.max_path) return try failed(arena, .bad_request, "path too long");
     return found(arena, db, "WHERE status IN (?, ?) AND (path = ? OR scope = 1)", .{ @backingInt(nd.Status.open), @backingInt(nd.Status.fixed), path }, max_page);
 }
@@ -174,8 +176,9 @@ fn add(arena: Allocator, db: store.Db, body: []const u8, author: []const u8, now
     if (nd.check(n)) |why| return try failed(arena, .bad_request, why);
     if ((try db.scalar("SELECT count(*) FROM notes", .{}) orelse 0) >= max_notes) return try failed(arena, .insufficient_storage, "too many notes");
     const t = n.target;
+    const at = try nd.canonical(arena, n.path, n.hash);
     try db.run("INSERT INTO notes (" ++ columns ++ ") VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '')", .{
-        now,       now,  author, nd.canonical(n.path), n.hash, @backingInt(n.scope), @backingInt(t.kind), t.name, t.nth, t.steps,
+        now,       now,  author, at.path,              at.state, @backingInt(n.scope), @backingInt(t.kind), t.name, t.nth, t.steps,
         t.snippet, n.vw, n.vh,   @backingInt(n.theme), n.text,
     });
     const id = try db.scalar("SELECT last_insert_rowid()", .{}) orelse return error.BadNote;
@@ -367,16 +370,23 @@ test "notes: a New with every field at its cap fits max_body" {
     try std.testing.expect((try encoded(a, nd.New, n)).len <= max_body);
 }
 
-test "notes: / and /index.html are one page, rows from before moved too" {
+test "notes: old URLs are their new pages, rows from before moved too" {
     var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena_state.deinit();
     const a = arena_state.allocator();
     const db = try testDb();
     defer db.close();
     try fill(db, 1, "/matchup/index.html");
+    try fill(db, 1, "/all/champion/ahri.html");
+    try db.run("UPDATE notes SET hash = '#role=mid&rank=master' WHERE path LIKE '%ahri%'", .{});
     try setUp(db);
+    try std.testing.expectEqual(1, (try decoded(a, nd.List, try handle(a, db, .GET, "path=/matchups", "", "", 0))).notes.len);
     try std.testing.expectEqual(1, (try decoded(a, nd.List, try handle(a, db, .GET, "path=/matchup/", "", "", 0))).notes.len);
-    const got = try decoded(a, nd.Note, try handle(a, db, .POST, "", try encoded(a, nd.New, .{ .path = "/index.html", .text = "x" }), "jacob", 1));
-    try std.testing.expectEqualStrings("/", got.path);
-    try std.testing.expectEqual(1, (try decoded(a, nd.List, try handle(a, db, .GET, "path=/index.html", "", "", 0))).notes.len);
+    const moved = (try decoded(a, nd.List, try handle(a, db, .GET, "path=/champions/ahri/mid", "", "", 0))).notes;
+    try std.testing.expectEqual(1, moved.len);
+    try std.testing.expectEqualStrings("?region=all#rank=master", moved[0].hash);
+    const got = try decoded(a, nd.Note, try handle(a, db, .POST, "", try encoded(a, nd.New, .{ .path = "/pool.html", .hash = "#pool=zed", .text = "x" }), "jacob", 1));
+    try std.testing.expectEqualStrings("/pool", got.path);
+    try std.testing.expectEqualStrings("?champs=zed", got.hash);
+    try std.testing.expectEqual(1, (try decoded(a, nd.List, try handle(a, db, .GET, "path=/pool.html", "", "", 0))).notes.len);
 }

@@ -59,8 +59,8 @@ legacy keys with replaceState.
   reaches it as ui.urls): `Page` spelt with `{f}` and read back by `parse`, `Data` the
   query, `legacy(old) ?new`; the pipeline test maps every page the fixture site writes;
   loadChamps refuses a champion slug that is a role name. Nothing calls it yet
-- URL2 one push, done when every old URL on dev.sh lands on the right page with its
-  state:
+- URL2 (done 28 Oct) one push, done when every old URL on dev.sh lands on the right
+  page with its state:
   - Generator: root-relative hrefs (drop toRoot, toShared, toSite, View.up/dir/query;
     the 404's ../); canonical absolute without query; one sitemap with lastmod;
     per-role champion files; view copies in an internal /_v/<view>/ tree; every ui/*.zig
@@ -76,10 +76,10 @@ legacy keys with replaceState.
   - serve.zig: drop the add-a-slash dir 301; lowercase 301 on a miss when that page
     exists
   - Smoke script: curl old samples on C01, expect each Location
-- URL3 notes: notesdata.canonical = urls.legacy then the index strip; migrate stored
-  rows once through the Zig function (not SQL LIKE), legacy hash keys too. traffic.sh
-  joins old and new paths through the map
-- URL4 a day after URL2: 302 to 301. Docs (arch-site.md, hosting.md, frontend.md) in
+- URL3 (done) notes: notesdata.canonical = urls.legacy then the index strip; migrate
+  stored rows once through the Zig function (not SQL LIKE), legacy hash keys too
+  (urls.moveState). traffic.sh joins old and new paths through the map (`meiolol urls`)
+- URL4 (302 to 301) from 29 Oct ~06:00 UTC. Docs (arch-site.md, hosting.md, frontend.md) in
   the commits that change the code
 
 ## Risks

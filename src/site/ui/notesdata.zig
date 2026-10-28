@@ -1,6 +1,7 @@
 //! Notes on the live site (the notes island, /api/notes, src/api/notes.zig): what a note
 //! holds, as ui.data binary both ways, and the bounds the API holds every field to
 const std = @import("std");
+const urls = @import("urls.zig");
 
 pub const Scope = enum(u8) { page, everywhere };
 /// fixed: a session's work is live and the note waits for Jacob's check (its pin stays,
@@ -97,18 +98,45 @@ const max_index = 999;
 /// nginx add the tool's tag to pages (site/notes.zig)
 pub const marker = "__Host-meiolol_notes";
 
-/// A page's path as notes keep it: / and /index.html are one page, so a trailing
-/// index.html goes
-pub fn canonical(path: []const u8) []const u8 {
+/// A note's page and state as the site spells them now: an old page's new URL
+/// (urls.legacy) with its legacy fragment keys moved (urls.moveState), then a trailing
+/// index.html stripped. A note already there stays, so stored rows move at each open
+pub fn canonical(a: std.mem.Allocator, path: []const u8, state: []const u8) !urls.Located {
+    const url = try urls.legacy(a, path) orelse path;
+    const got = try urls.moveState(a, url, state);
+    return .{ .path = stripIndex(got.path), .state = got.state };
+}
+
+/// / and /index.html are one page (/admin/ and /p/ keep their .html)
+pub fn stripIndex(path: []const u8) []const u8 {
     const index = "index.html";
     return if (std.mem.endsWith(u8, path, "/" ++ index)) path[0 .. path.len - index.len] else path;
 }
 
 test canonical {
-    try std.testing.expectEqualStrings("/", canonical("/index.html"));
-    try std.testing.expectEqualStrings("/matchup/", canonical("/matchup/index.html"));
-    try std.testing.expectEqualStrings("/champions.html", canonical("/champions.html"));
-    try std.testing.expectEqualStrings("/xindex.html", canonical("/xindex.html"));
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const cases = [_][4][]const u8{
+        .{ "/index.html", "", "/", "" },
+        .{ "/matchup/index.html", "", "/matchups", "" },
+        .{ "/champions.html", "", "/champions", "" },
+        .{ "/all/champion/ahri.html", "#role=mid&rank=master", "/champions/ahri/mid", "?region=all#rank=master" },
+        .{ "/pool.html", "#pool=ahri", "/pool", "?champs=ahri" },
+        .{ "/learn.html", "#p=waves", "/learn", "#waves" },
+        .{ "/your.html", "#id=x", "/your", "#id=x" },
+        .{ "/admin/index.html", "", "/admin/", "" },
+        .{ "/p/notes.html", "?all=1", "/p/notes.html", "?all=1" },
+        .{ "/xindex.html", "", "/xindex.html", "" },
+    };
+    for (cases) |c| {
+        const got = try canonical(a, c[0], c[1]);
+        try std.testing.expectEqualStrings(c[2], got.path);
+        try std.testing.expectEqualStrings(c[3], got.state);
+        const again = try canonical(a, got.path, got.state);
+        try std.testing.expectEqualStrings(got.path, again.path);
+        try std.testing.expectEqualStrings(got.state, again.state);
+    }
 }
 
 /// Why `n` is refused; null when every field is in bounds
