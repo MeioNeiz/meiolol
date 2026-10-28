@@ -28,6 +28,8 @@ pub const Opts = struct {
     /// A × after the content: pressing removes it
     remove: bool = false,
     label: ?tree.Text = null,
+    /// A reason chip drawn as a picture: its words, on hover
+    title: ?[]const u8 = null,
     on: ?tree.Handler = null,
     /// A link (recent Riot IDs): goes there, not pressed
     href: ?[]const u8 = null,
@@ -36,7 +38,7 @@ pub const Opts = struct {
 pub fn view(h: *H, o: Opts, kids: anytype) N {
     const x: ?N = if (o.remove) h.span(.{ .class = "x", .aria_hidden = true }, .{"×"}) else null;
     if (o.v == .scope or o.v == .reason or o.disabled) {
-        return h.span(.{ .class = "c-chip", .data_v = if (o.disabled) null else o.v, .aria_disabled = if (o.disabled) true else null }, kids ++ .{x});
+        return h.span(.{ .class = "c-chip", .data_v = if (o.disabled) null else o.v, .aria_disabled = if (o.disabled) true else null, .title = o.title }, kids ++ .{x});
     }
     if (o.href) |href| return h.a(.{ .class = "c-chip", .href = href, .aria_label = o.label }, kids ++ .{x});
     return h.button(.{

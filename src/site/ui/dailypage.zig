@@ -376,7 +376,7 @@ pub const Page = struct {
                 .ref = c.champ == x.champ,
                 .win = c.win,
                 .vs = if (c.champ == x.champ) null else if (played) |pc| c.win - pc.win else null,
-                .reasons = s.chips(h, c, rl),
+                .reasons = s.chips(h, c, rl, side),
                 .gap = @as(u32, c.rank) > @as(u32, last) + 1,
                 .open = detail != null and (s.open[0] == c.champ or s.open[1] == c.champ),
                 .detail = detail,
@@ -430,7 +430,9 @@ pub const Page = struct {
     }
 
     /// Up to three of the pick's largest terms as words
-    fn chips(s: *const Page, h: *H, c: dd.Cand, rl: role.Role) []const candlist.Reason {
+    /// Strength as the role icon, a pair as the other champion in its team's ring: the
+    /// words go to the chip's title and the opened breakdown
+    fn chips(s: *const Page, h: *H, c: dd.Cand, rl: role.Role, side: dd.Side) []const candlist.Reason {
         var idx: [3]usize = undefined;
         var n: usize = 0;
         for (c.terms, 0..) |t, i| {
@@ -452,6 +454,13 @@ pub const Page = struct {
                 .into => W.into_l.with(h, .{ .n = s.otherName(t) }),
                 .with => W.with_l.with(h, .{ .n = s.otherName(t) }),
             } };
+            // The board's rings: blue is us
+            o.pic = if (t.kind == .strength)
+                role.view(h, rl, .{ .s = .s, .named = false })
+            else if (t.other) |x|
+                champ.view(h, s.champOf(x), .{ .px = .@"20", .side = if ((t.kind == .with) == (side == .blue)) .us else .them, .named = false })
+            else
+                null;
         }
         return out;
     }
@@ -572,12 +581,28 @@ pub const Saved = struct {
 
 /// Puzzle `n`'s entry in the stored object, braces included
 fn entry(json: []const u8, n: u32) ?[]const u8 {
-    var buf: [16]u8 = undefined;
-    const k = std.fmt.bufPrint(&buf, "\"{d}\":{{", .{n}) catch return null;
+    var buf: [14]u8 = undefined;
+    const k = keyOf(&buf, n);
     const at = std.mem.find(u8, json, k) orelse return null;
     const start = at + k.len - 1;
     const end = std.mem.findScalarPos(u8, json, start, '}') orelse return null;
     return json[start .. end + 1];
+}
+
+/// `"n":{`, by hand: std.fmt's print paths cost ui-daily.wasm bytes it lacks
+fn keyOf(buf: *[14]u8, n: u32) []const u8 {
+    var i: usize = buf.len - 3;
+    buf[i..][0..3].* = "\":{".*;
+    var x = n;
+    while (true) {
+        i -= 1;
+        buf[i] = '0' + @as(u8, @intCast(x % 10));
+        x /= 10;
+        if (x == 0) break;
+    }
+    i -= 1;
+    buf[i] = '"';
+    return buf[i..];
 }
 
 /// A field's raw value in a flat entry: up to the next comma or brace
@@ -591,7 +616,8 @@ fn field(e: []const u8, comptime f: []const u8) ?[]const u8 {
 pub fn read(json: []const u8, n: u32) ?Saved {
     const e = entry(json, n) orelse return null;
     var s: Saved = .{};
-    if (field(e, "opt")) |v| s.opt = std.fmt.parseInt(u8, v, 10) catch null;
+    // An option's index: one digit, as there are never ten
+    if (field(e, "opt")) |v| s.opt = if (v.len == 1 and v[0] >= '0' and v[0] <= '9') v[0] - '0' else null;
     if (field(e, "side")) |v| s.side = if (std.mem.eql(u8, v, "0")) .blue else if (std.mem.eql(u8, v, "1")) .red else null;
     if (field(e, "marks")) |v| if (v.len == 4 and v[0] == '"' and v[3] == '"' and bit(v[1]) and bit(v[2])) {
         s.marks = .{ v[1] == '1', v[2] == '1' };
@@ -614,39 +640,54 @@ fn bit(c: u8) bool {
 /// The stored object with puzzle `n`'s entry set to `s`, finished on `on` (the viewer's
 /// date, for days in a row) when it has marks; other entries kept as they are
 pub fn write(a: std.mem.Allocator, json: []const u8, n: u32, s: Saved, on: []const u8) ![]u8 {
-    var w: std.Io.Writer.Allocating = .init(a);
-    defer w.deinit();
+    var aw: std.Io.Writer.Allocating = .init(a);
+    defer aw.deinit();
+    const w = &aw.writer;
+    var buf: [14]u8 = undefined;
+    const k = keyOf(&buf, n);
     const old = entry(json, n);
     const body = std.mem.trim(u8, json, " \n\t");
     const whole = body.len >= 2 and body[0] == '{' and body[body.len - 1] == '}';
     if (old) |e| {
         const at = @intFromPtr(e.ptr) - @intFromPtr(json.ptr);
-        try w.writer.writeAll(json[0..at]);
+        try w.writeAll(json[0 .. at - (k.len - 1)]);
     } else if (whole) {
         const inner = std.mem.trimEnd(u8, body[0 .. body.len - 1], " \n\t");
-        try w.writer.print("{s}{s}\"{d}\":", .{ inner, if (inner.len > 1) "," else "", n });
-    } else try w.writer.print("{{\"{d}\":", .{n});
-    try w.writer.writeByte('{');
+        try w.writeAll(inner);
+        if (inner.len > 1) try w.writeByte(',');
+    } else try w.writeByte('{');
+    try w.writeAll(k);
     var sep: []const u8 = "";
     if (s.opt) |o| {
-        try w.writer.print("\"opt\":{d}", .{o});
+        try w.writeAll("\"opt\":");
+        try w.writeByte('0' + o);
         sep = ",";
     }
     if (s.side) |x| {
-        try w.writer.print("{s}\"side\":{d}", .{ sep, @backingInt(x) });
+        try w.writeAll(sep);
+        try w.writeAll(if (x == .blue) "\"side\":0" else "\"side\":1");
         sep = ",";
     }
     if (s.hint) {
-        try w.writer.print("{s}\"hint\":1", .{sep});
+        try w.writeAll(sep);
+        try w.writeAll("\"hint\":1");
         sep = ",";
     }
-    if (s.marks) |m| try w.writer.print("{s}\"marks\":\"{d}{d}\",\"on\":\"{s}\"", .{ sep, @intFromBool(m[0]), @intFromBool(m[1]), on });
-    try w.writer.writeByte('}');
+    if (s.marks) |m| {
+        try w.writeAll(sep);
+        try w.writeAll("\"marks\":\"");
+        try w.writeByte(if (m[0]) '1' else '0');
+        try w.writeByte(if (m[1]) '1' else '0');
+        try w.writeAll("\",\"on\":\"");
+        try w.writeAll(on);
+        try w.writeByte('"');
+    }
+    try w.writeByte('}');
     if (old) |e| {
         const end = @intFromPtr(e.ptr) - @intFromPtr(json.ptr) + e.len;
-        try w.writer.writeAll(json[end..]);
-    } else try w.writer.writeByte('}');
-    return w.toOwnedSlice();
+        try w.writeAll(json[end..]);
+    } else try w.writeByte('}');
+    return aw.toOwnedSlice();
 }
 
 const W = struct {

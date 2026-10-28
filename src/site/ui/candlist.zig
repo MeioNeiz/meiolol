@@ -14,6 +14,7 @@ const chip = @import("chip.zig");
 const badge = @import("badge.zig");
 const button = @import("button.zig");
 const reasons = @import("reasons.zig");
+const role = @import("role.zig");
 const phrase = @import("phrase.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
@@ -30,6 +31,9 @@ pub const Reason = struct {
     text: tree.Text,
     /// Points it gives the row's team (points mode shows them, words the direction)
     pp: f32,
+    /// Drawn in place of the words, which move to the chip's title and a screen reader:
+    /// the other champion in its team's ring (champ.view 20 px), or the role (strength)
+    pic: ?N = null,
 };
 
 pub const Row = struct {
@@ -116,14 +120,17 @@ fn viewOf(h: *H, l: List, comptime pick: bool) N {
 
 fn row(h: *H, l: List, r: Row, key: usize, comptime pick: bool) N {
     var chips = h.list();
-    for (r.reasons[0..@min(3, r.reasons.len)]) |x| chips.add(chip.view(h, .{ .v = .reason }, .{
-        x.text,
-        " ",
-        if (l.mode == .points)
+    for (r.reasons[0..@min(3, r.reasons.len)]) |x| {
+        const v = if (l.mode == .points)
             h.b(.{ .style = h.vars(.{ .c = fmt.Step.of(x.pp, fmt.win_cuts) }) }, .{phrase.num(h, .points, x.pp)})
         else
-            reasons.arrow(h, x.pp),
-    }));
+            reasons.arrow(h, x.pp);
+        chips.add(chip.view(h, .{ .v = .reason, .title = if (x.pic != null) x.text.s else null }, .{
+            x.pic orelse h.text(x.text.s),
+            if (x.pic != null) h.span(.{ .class = "sr" }, .{x.text}) else h.text(" "),
+            v,
+        }));
+    }
     const pressable = r.on != null or r.act.len > 0;
     // Only the name is the button (a short label); its ::after stretches over the row
     const who = .{ champ.view(h, r.champ, .{ .named = false }), h.b(.{}, .{r.champ.name}) };
@@ -175,6 +182,7 @@ const W = struct {
 
 pub const css =
     \\@layer components {
+    \\  .c-cand .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     \\  .c-cand { container-type: inline-size; display: grid; min-width: 0; font-variant-numeric: tabular-nums; }
     \\  .c-cand .hd { display: grid; grid-template-columns: 22px minmax(0, 1fr) 56px 48px;
     \\    column-gap: var(--sp-2); align-items: center; padding: 0 var(--sp-2); }
@@ -265,6 +273,16 @@ fn sample(h: *H, g: *Gallery, open: bool) List {
     };
     for (rows) |*r| r.act = "x";
     rows[2].open = open;
+    // Daily's reasons as pictures, blue (us) ringing the enemy
+    const pics = h.mem.dupe(Reason, rows[2].reasons) catch {
+        h.oom = true;
+        return .{ .rows = &.{} };
+    };
+    const px: champ.Px = .@"20";
+    pics[0].pic = champ.view(h, demo("K'Sante", "KSante"), .{ .px = px, .side = .us, .named = false });
+    pics[1].pic = role.view(h, .top, .{ .s = .s, .named = false });
+    pics[2].pic = champ.view(h, demo("Viktor", "Viktor"), .{ .px = px, .side = .us, .named = false });
+    rows[2].reasons = pics;
     rows[2].label = plain("Why Jayce");
     rows[2].id = g.id("cand-why");
     if (rows[2].detail) |*d| d.tip_id = g.id("cand-rest");
