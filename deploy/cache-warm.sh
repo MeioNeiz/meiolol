@@ -29,9 +29,9 @@ while true; do
         log "no page list from the renderer"
         exit 1
     fi
-    # The home first, then the top ones (from visitors' requests), so plain paths only:
-    # each goes into a curl config line
-    { echo /index.html; cat data/cache-warm-top.txt "$tmp/pages" 2> /dev/null; } | grep -E '^/[A-Za-z0-9._/-]*$' \
+    # The home first, then the top ones (from visitors' requests), so plain URLs only (a
+    # view's query too): each goes into a curl config line
+    { echo /; cat data/cache-warm-top.txt "$tmp/pages" 2> /dev/null; } | grep -E '^/[A-Za-z0-9._/-]*(\?[a-z=&]+)?$' \
         | awk '!seen[$0]++' > "$tmp/urls"
     start=$SECONDS
     # Unlogged by nginx (this user agent), so traffic.json counts visitors only

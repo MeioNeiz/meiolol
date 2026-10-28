@@ -15,8 +15,8 @@ const shots = opt('--shots');
 if (shots) mkdirSync(shots, { recursive: true });
 
 const pages = opt('--only')?.split(',') || [
-  '/', '/champions.html', '/role/mid.html', '/champion/ahri.html', '/matchup/index.html', '/pool.html',
-  '/learn.html', '/daily.html', '/your.html', '/method.html',
+  '/', '/champions', '/champions/mid?region=all', '/champions/ahri', '/champions/ahri/top', '/matchups',
+  '/matchups/top/darius-vs-garen', '/pool?champs=ahri', '/learn', '/daily', '/your', '/method',
 ];
 const widths = [[320, true], [390, true], [768, false], [1280, false]];
 
