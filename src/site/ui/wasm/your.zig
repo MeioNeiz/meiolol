@@ -39,6 +39,27 @@ export fn main() void {
     tick();
     // "Today" and "2h ago" move on while the tab stays open
     zjb.global("window").call("setInterval", .{ zjb.fnHandle("yourTick", &tick), @as(i32, std.time.ms_per_min) }, void);
+    reopen();
+}
+
+/// A visit without an id (nor #example) opens the player last looked up here, until Not
+/// you?. Throws with storage blocked: last
+fn reopen() void {
+    var buf: [1024]u8 = undefined;
+    const h = dom.dom.hash(&buf);
+    if (yk.idOf(h) != null or std.mem.find(u8, h, "example") != null) return;
+    const s = dom.stored(yk.last_key) orelse return;
+    defer gpa.free(s);
+    var ids: [1]ui.idlookup.Id = undefined;
+    const got = ui.homepage.recentIds(s, &ids);
+    if (got.len == 0) return;
+    const q = ui.homepage.idQuery(gpa, got[0].slice()) catch return;
+    defer gpa.free(q);
+    const rest = if (h.len > 1) h[1..] else "";
+    const to = std.fmt.allocPrint(gpa, "#{s}{s}{s}", .{ q, if (rest.len > 0) "&" else "", rest }) catch return;
+    defer gpa.free(to);
+    dom.dom.setHash(to, false);
+    dom.rt.popstate();
 }
 
 /// The list on the root (data-bin): the server's example, or a lookup's once handed over.

@@ -1,7 +1,8 @@
 //! ui-yourlookup.wasm: the Your games lookup (ui.yourlookup.YourLookup). Asks /api/list
 //! for the URL's id, again while queued or fetching, and hands each new list to ui-your:
-//! the list's root data-bin, then yk.event. Loaded by ui-your.wasm (dom.script) once the
-//! URL has an id; zjb's generated loader (ui-yourlookup.js) calls `main`
+//! the list's root data-bin, then yk.event. Check for new games asks with &refresh=1; a
+//! ready answer goes into your-recent and your-last. Loaded by ui-your.wasm (dom.script)
+//! once the URL has an id; zjb's generated loader (ui-yourlookup.js) calls `main`
 const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
@@ -21,6 +22,8 @@ var asked: u32 = 0;
 var last: []u8 = &.{};
 /// The list last handed over: the same again is not
 var handed: []u8 = &.{};
+/// Check for new games: the handed list's hash at the press
+var from: u64 = 0;
 
 export fn main() void {
     dom.start();
@@ -35,18 +38,38 @@ export fn main() void {
     changed();
 }
 
-/// Another id in the URL (or none): the example until its list comes, and ask
+/// Another id in the URL (or none): the example until its list comes, and ask. After
+/// Check for new games or Not you?, what they need
 fn changed() void {
-    if (look.gen == asked) return;
-    asked = look.gen;
-    hand(null);
-    if (look.id.len > 0) ask();
+    if (look.want == .check) {
+        look.started(now());
+        from = std.hash.Wyhash.hash(0, handed);
+        return askFor(true);
+    }
+    if (look.gen != asked) {
+        asked = look.gen;
+        hand(null);
+        if (look.id.len > 0) ask();
+    }
+    if (look.want == .forget) {
+        look.want = .none;
+        // Throws with storage blocked: last
+        dom.store(yk.last_key, "");
+    }
+}
+
+fn now() i64 {
+    return @intFromFloat(zjb.global("Date").call("now", .{}, f64));
 }
 
 fn ask() void {
+    askFor(false);
+}
+
+fn askFor(refresh: bool) void {
     const q = ui.homepage.idQuery(gpa, look.id.slice()) catch return;
     defer gpa.free(q);
-    const path = std.fmt.allocPrint(gpa, "/api/list?{s}", .{q}) catch return;
+    const path = std.fmt.allocPrint(gpa, "/api/list?{s}{s}", .{ q, if (refresh) "&refresh=1" else "" }) catch return;
     defer gpa.free(path);
     dom.fetch(path, @bitCast(look.gen), answered);
 }
@@ -65,7 +88,36 @@ fn answered(gen: i32, bytes: ?[]u8) void {
     gpa.free(last);
     last = bytes.?;
     if (l != null) hand(l);
+    const ready = look.head.state == .ready;
+    if (ready and look.watching()) {
+        look.now_ms = now();
+        if (look.checked(std.hash.Wyhash.hash(0, handed) != from)) |ms| {
+            const f = zjb.fnHandle("yourCheck", &onCheck).bind(.{gen});
+            defer f.release();
+            zjb.global("window").call("setTimeout", .{ f, @as(i32, @intCast(ms)) }, void);
+        }
+    }
     after(gen);
+    if (ready) remember();
+}
+
+/// A check found nothing new a minute ago: again, unless stopped or another id since
+fn onCheck(gen: i32) callconv(.c) void {
+    if (@as(u32, @bitCast(gen)) != look.gen or look.check != .waiting) return;
+    askFor(true);
+}
+
+/// The id first in your-recent, and as your-last. Throws with storage blocked: last
+fn remember() void {
+    const id = look.id.slice();
+    const old = dom.stored(yk.recent_key);
+    defer if (old) |o| gpa.free(o);
+    const j = yk.recentJson(gpa, old, id) catch return;
+    defer gpa.free(j);
+    dom.store(yk.recent_key, j);
+    const l = (yk.lastJson(gpa, id) catch return) orelse return;
+    defer gpa.free(l);
+    dom.store(yk.last_key, l);
 }
 
 /// The status line, and the next ask's timer
