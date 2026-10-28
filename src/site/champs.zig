@@ -65,7 +65,7 @@ pub fn loadChamps(site: *Site, db: store.Db, games: ?*const partials.Store) !voi
             .id = id,
             .key = try a.dupe(u8, r.key),
             .name = name,
-            .slug = try slug(a, name),
+            .slug = root.ui.champ.slug(try a.alloc(u8, name.len), name),
             .banned = banned.get(id) orelse 0,
             .games = site.stats.champGames(c),
         });
@@ -82,22 +82,6 @@ pub fn indexChamps(site: *Site) !void {
     @memset(site.by_c, null);
     for (site.champs, 0..) |ch, i| site.by_c[ch.c] = i;
     for (site.champs, 0..) |ch, i| try site.by_slug.put(a, ch.slug, i);
-}
-
-/// "Kai'Sa" -> "kaisa", "Nunu & Willump" -> "nunu-willump"
-fn slug(a: std.mem.Allocator, name: []const u8) ![]const u8 {
-    var out: std.ArrayList(u8) = .empty;
-    var gap = false;
-    for (name) |ch| {
-        if (std.ascii.isAlphanumeric(ch)) {
-            if (gap and out.items.len > 0) try out.append(a, '-');
-            gap = false;
-            try out.append(a, std.ascii.toLower(ch));
-        } else if (ch == ' ' or ch == '&') {
-            gap = true;
-        }
-    }
-    return out.toOwnedSlice(a);
 }
 
 pub fn championsJson(site: *const Site) ![]const u8 {
@@ -121,19 +105,4 @@ pub fn championsJson(site: *const Site) ![]const u8 {
     }
     try w.writeAll("]}\n");
     return aw.written();
-}
-
-test "slug" {
-    const a = std.testing.allocator;
-    const cases = [_][2][]const u8{
-        .{ "Kai'Sa", "kaisa" },
-        .{ "Nunu & Willump", "nunu-willump" },
-        .{ "Dr. Mundo", "dr-mundo" },
-        .{ "Lee Sin", "lee-sin" },
-    };
-    for (cases) |c| {
-        const s = try slug(a, c[0]);
-        defer a.free(s);
-        try std.testing.expectEqualStrings(c[1], s);
-    }
 }

@@ -3,6 +3,7 @@
 //! K/D/A large, KDA and kill share under it. How: CS, gold, damage and lane gold at 14
 //! and vision as figures, then your final items, spells and runes; the game's meta beside
 //! the names; the two teams as icon rows, you ringed
+const std = @import("std");
 const tree = @import("tree.zig");
 const phrase = @import("phrase.zig");
 const fmt = @import("fmt.zig");
@@ -71,7 +72,7 @@ pub fn view(h: *H, g: *const gamedata.Game, champs: []const champ.Champ, arts: [
     }
 
     var rows: [2]tree.List = .{ h.list(), h.list() };
-    for (g.seats, 0..) |s, i| rows[@intFromBool(!s.us)].add(champ.view(h, champs[s.champ], .{ .you = i == g.you }));
+    for (g.seats, 0..) |s, i| rows[@intFromBool(!s.us)].add(seat(h, champs[s.champ], s.role, i == g.you));
     const opp_name = if (opp) |o| champs[o.champ].name else "";
 
     return h.el(.section, .{ .class = "c-ghead", .data_win = g.win, .aria_label = W.label }, .{
@@ -101,6 +102,15 @@ pub fn view(h: *H, g: *const gamedata.Game, champs: []const champ.Champ, arts: [
             h.div(.{ .aria_label = W.theirs, .role = "group" }, .{rows[1].done()}),
         }),
     });
+}
+
+/// A team's champion, linked to its page in the seat's role
+fn seat(h: *H, c: champ.Champ, r: ?role.Role, you: bool) N {
+    const icon = champ.view(h, c, .{ .you = you });
+    if (c.name.len == 0) return icon;
+    const buf = h.mem.alloc(u8, c.name.len) catch return icon;
+    const parts = [_][]const u8{ "champion/", champ.slug(buf, c.name), ".html", if (r != null) "#role=" else "", if (r) |x| @tagName(x) else "" };
+    return h.a(.{ .href = std.mem.concat(h.mem, u8, &parts) catch return icon }, .{icon});
 }
 
 /// Six items and the trinket, then spells and keystone; none before Summary had them
@@ -152,6 +162,7 @@ pub const css =
     \\  .c-ghead .kit > span { display: flex; align-items: center; gap: 3px; }
     \\  .c-ghead > .teams { grid-area: teams; display: flex; flex-direction: column; gap: 6px; align-self: start; }
     \\  .c-ghead > .teams > div { display: flex; gap: 4px; }
+    \\  .c-ghead > .teams a { display: flex; border-radius: calc(var(--icon) / 6); }
     \\  @container (max-width: 640px) {
     \\    .c-ghead { grid-template-columns: auto 1fr; grid-template-areas: "who res" "how how" "teams teams"; }
     \\    .c-ghead > .teams { flex-direction: row; justify-content: space-between; }
