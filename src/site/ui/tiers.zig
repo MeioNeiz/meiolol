@@ -144,6 +144,11 @@ pub const Patch = struct {
 pub const off_role = 0.1;
 /// Movers each way in the band
 const movers_each = 5;
+/// Each role's column on the All board
+const board_rows = 10;
+/// The board's sort choices: Table's columns
+const board_sorts = [_]u8{ 1, 2, 4, 5, 6 };
+const board_labels = [_]tree.Text{ W.win, W.patch, W.pick, W.ban, W.games };
 
 const W = struct {
     pub const title = plain("Champions");
@@ -169,6 +174,8 @@ const W = struct {
     pub const games = plain("Games");
     pub const off = plain("off-role");
     pub const clear = plain("Clear search");
+    pub const sort_by = plain("Sort");
+    pub const all_n = Phrase("All {n:int} ›");
     pub const win_note = plain("Faint under 1,000 games: could be luck.");
     pub const patch_note = plain("Change in win rate, in points. Coloured when clear, faint when it could be luck.");
     pub const players_note = plain("Each player's own win rate on it (10+ games), 25% to 75%. Thicker where more players are; the dot is the champion's. In 10-20 games luck alone moves a player by about 15 points.");
@@ -444,7 +451,7 @@ pub const Tiers = struct {
         return if (s == .all) null else @fromBackingInt(@intCast(@backingInt(s) - 1));
     }
 
-    pub const Msg = union(enum) { role: Shown, rank: Rank, mover: u16, clear, filters };
+    pub const Msg = union(enum) { role: Shown, rank: Rank, mover: u16, clear, sort: u8, filters };
 
     pub const Url = struct {
         /// Null: the page's own
@@ -529,6 +536,7 @@ pub const Tiers = struct {
                 t.table.q.set("");
                 ev.push = true;
             },
+            .sort => |i| t.table.update(.{ .sort = i }, ev),
             .filters => t.open = !t.open,
         }
     }
@@ -577,10 +585,62 @@ pub const Tiers = struct {
             }),
             card.view(h, .{ .flush = true }, &.{
                 t.movers(h),
-                t.table.view(h),
+                if (t.onBoard()) t.board(h) else t.table.view(h),
             }),
             violin.defs(h),
         });
+    }
+
+    /// All with no search: each role's column side by side, not one long table
+    fn onBoard(t: *const T) bool {
+        return t.role == null and t.table.q.slice().len == 0;
+    }
+
+    fn board(t: *T, h: *H) N {
+        var sorts: [board_sorts.len]segmented.Item = undefined;
+        for (&sorts, board_sorts, board_labels) |*it, i, label| it.* = .{ .label = label, .selected = t.table.sort == i, .on = h.on(t, .{ .sort = i }) };
+        var cols = h.list();
+        for (0..Role.names.len) |k| {
+            var tb = t.table;
+            tb.rows = t.lines[1 + k];
+            const order = tb.order(h.mem) catch {
+                h.oom = true;
+                return .none;
+            };
+            const r: Role = @fromBackingInt(@intCast(k));
+            var rows = h.list();
+            for (order[0..@min(order.len, board_rows)], 1..) |i, place| {
+                const l = &tb.rows[i];
+                const c = l.d.champs[l.row().champ];
+                rows.add(h.li(.{ .key = l.i }, .{h.a(.{ .href = l.href }, .{
+                    h.span(.{ .class = "n" }, .{place}),
+                    champ.view(h, .{ .name = c.name, .src = l.icon }, .{ .named = false }),
+                    h.span(.{ .class = "nm" }, .{c.name}),
+                    winCell(h, l),
+                    h.span(.{ .class = "sc" }, .{t.second(h, l)}),
+                })}));
+            }
+            const to: Shown = @fromBackingInt(@intCast(k + 1));
+            cols.add(h.div(.{ .key = k, .class = "col" }, .{
+                h.button(.{ .type = "button", .class = "rh", .on_click = h.on(t, .{ .role = to }) }, .{ role.view(h, r.ui(), .{ .s = .s }), h.b(.{}, .{r.name()}), h.span(.{ .class = "ct" }, .{order.len}) }),
+                h.el(.ol, .{}, .{rows.done()}),
+                if (order.len > board_rows) h.button(.{ .type = "button", .class = "all", .on_click = h.on(t, .{ .role = to }) }, .{W.all_n.with(h, .{ .n = order.len })}) else null,
+            }));
+        }
+        return h.div(.{ .class = "rb" }, .{
+            h.div(.{ .class = "bs" }, .{ card.label(h, W.sort_by), segmented.view(h, .{ .s = .s, .label = W.sort_by }, &sorts) }),
+            h.div(.{ .class = "cols" }, .{cols.done()}),
+        });
+    }
+
+    /// The board row's second figure: the sorted column's, the patch change under Win rate
+    fn second(t: *const T, h: *H, l: *const Line) N {
+        return switch (t.table.sort) {
+            4 => h.text(stat.figure(h, .rate, pickOf(l)).s),
+            5 => h.text(stat.figure(h, .rate, banOf(l)).s),
+            6 => gamesCell(h, l),
+            else => patchCell(h, l),
+        };
     }
 
     /// The same page in view `v`, keeping the fragment
@@ -686,6 +746,41 @@ pub const css =
     \\  .c-tiers .moved > .lab { white-space: nowrap; }
     \\  .c-tiers .moved .more { margin-left: auto; font-size: var(--fs-s); white-space: nowrap; }
     \\  .c-tiers .c-table-wrap { overflow-x: clip; }
+    \\  .c-tiers .c-card[data-v="flush"] { overflow: clip; }
+    \\  .c-tiers .rb { container-type: inline-size; }
+    \\  .c-tiers .bs { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-4);
+    \\    border-bottom: 1px solid var(--line); }
+    \\  .c-tiers .rb .cols { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    \\  .c-tiers .rb .col { min-width: 0; border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+    \\  .c-tiers .rb .col:last-child { border-right: 0; }
+    \\  .c-tiers .rb .rh { all: unset; display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 var(--sp-3);
+    \\    background: var(--panel-2); border-bottom: 1px solid var(--line); cursor: pointer; font-size: var(--fs-s); }
+    \\  .c-tiers .rb .rh:hover b { color: var(--accent); }
+    \\  .c-tiers .rb .rh:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+    \\  .c-tiers .rb .rh > .c-role { color: var(--muted); }
+    \\  .c-tiers .rb .rh > .ct { margin-left: auto; color: var(--faint); font-variant-numeric: tabular-nums; }
+    \\  .c-tiers .rb ol { list-style: none; margin: 0; padding: 0; flex: 1; }
+    \\  .c-tiers .rb li > a { display: grid; grid-template-columns: 18px 24px minmax(0, 1fr) auto 44px; gap: var(--sp-2);
+    \\    align-items: center; height: 34px; padding: 0 var(--sp-3); color: inherit; border-bottom: 1px solid var(--line); }
+    \\  .c-tiers .rb li > a:hover { background: var(--panel-2); text-decoration: none; }
+    \\  .c-tiers .rb li > a:hover .nm { color: var(--accent); }
+    \\  .c-tiers .rb .n { color: var(--faint); font-size: var(--fs-xs); text-align: right; font-variant-numeric: tabular-nums; }
+    \\  .c-tiers .rb .nm { font-weight: var(--w-m); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    \\  .c-tiers .rb .c-stat { font-weight: var(--w-b); }
+    \\  .c-tiers .rb .sc { text-align: right; font-size: var(--fs-s); color: var(--muted); font-variant-numeric: tabular-nums; }
+    \\  .c-tiers .rb .all { all: unset; padding: var(--sp-2) var(--sp-3); font-size: var(--fs-s); color: var(--accent); cursor: pointer; }
+    \\  .c-tiers .rb .all:hover { text-decoration: underline; }
+    \\  .c-tiers .rb .all:focus-visible { outline: 2px solid var(--focus); }
+    \\  .c-tiers .rb .bs > .c-seg { min-width: 0; overflow-x: auto; scrollbar-width: none; }
+    \\  @container (max-width: 420px) {
+    \\    .c-tiers .rb .bs { padding-inline: var(--sp-3); }
+    \\    .c-tiers .rb .bs > .lab { display: none; }
+    \\  }
+    \\  @container (max-width: 900px) {
+    \\    .c-tiers .rb .cols { grid-template-columns: minmax(0, 1fr); }
+    \\    .c-tiers .rb .col { border-right: 0; }
+    \\    .c-tiers .rb li:nth-child(n+6) { display: none; }
+    \\  }
     \\  .c-tiers[data-busy] .moved, .c-tiers[data-busy] .c-table { opacity: 0.55; transition: opacity 0.2s; }
     \\  .c-tiers .c-toolbar { container-type: inline-size; }
     \\  .c-tiers .c-toolbar > .grp { margin-left: auto; }
@@ -701,7 +796,11 @@ pub const css =
     \\  .c-tiers .wr { width: 96px; }
     \\  .c-tiers .ch { width: 210px; }
     \\  .c-tiers .dl { width: 84px; }
-    \\  .c-tiers .pk, .c-tiers .bn { width: 120px; }
+    \\  .c-tiers .pk, .c-tiers .bn { width: 18%; }
+    \\  .c-tiers .pl { width: 24%; }
+    \\  .c-tiers td:is(.pk, .bn) .c-bar { display: flex; }
+    \\  .c-tiers td:is(.pk, .bn) .c-bar > span { flex: 1; width: auto; height: 6px; border-radius: 3px; }
+    \\  .c-tiers td:is(.pk, .bn) .c-bar > span > i { border-radius: 3px; }
     \\  .c-tiers .gm { width: 88px; }
     \\  @container (max-width: 520px) {
     \\    .c-tiers .c-toolbar > .grp > .lab { display: none; }

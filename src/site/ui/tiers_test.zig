@@ -90,12 +90,13 @@ const Page = struct {
         for (t.kidsOf(n)) |k| number(t, k, ids);
     }
 
-    /// Champion names in row order
+    /// Champion names in row order: the table's, or the All board's role by role
     fn names(p: *Page) ![]const u8 {
         const page = try p.shown();
         const a = p.arena.allocator();
         var out: std.ArrayList(u8) = .empty;
-        var it = std.mem.splitSequence(u8, page[std.mem.find(u8, page, "<tbody>").?..], "class=\"nm\">");
+        const at = std.mem.find(u8, page, "<tbody>") orelse std.mem.find(u8, page, "class=\"rb\"").?;
+        var it = std.mem.splitSequence(u8, page[at..], "class=\"nm\">");
         _ = it.next();
         while (it.next()) |rest| {
             if (out.items.len > 0) try out.append(a, ',');
@@ -127,7 +128,7 @@ const Page = struct {
     }
 };
 
-test "the server renders All over 1.5k games, off-role behind the chip" {
+test "the server renders All over 1.5k games as the role board, off-role behind the chip" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -143,6 +144,9 @@ test "the server renders All over 1.5k games, off-role behind the chip" {
     try testing.expect(std.mem.find(u8, page, "<p class=\"sub\">400,000 games in EUW · 16.21 vs 16.20</p>") != null);
     try testing.expect(std.mem.find(u8, page, "href=\"../champion/ahri.html#role=mid\"") != null);
     try testing.expect(std.mem.find(u8, page, "Moved in 16.21") != null);
+    // All without a search: the role board, not one long table
+    try testing.expect(std.mem.find(u8, page, "class=\"rb\"") != null);
+    try testing.expect(std.mem.find(u8, page, "<tbody>") == null);
     try testing.expect(std.mem.find(u8, page, "<linearGradient id=\"c-violin-g\"") != null);
     const report = try check.run(a, &t, .{ .words = .off, .answer = .off });
     for (report.findings.items) |f| std.debug.print("{s}\n", .{f.msg});
@@ -154,10 +158,12 @@ test "hydration takes the URL's state; sorting pushes history; back restores" {
     try p.init("#sort=0&desc=0&min=0", null);
     defer p.deinit();
     try testing.expectEqual(@as(u32, 0), p.fake.warnings);
-    try testing.expectEqualStrings("Ahri,Kai'Sa,Lux,Zed", try p.names());
-    _ = p.rt.event(0, .{ .kind = .click, .target = p.by(.th, "Games") });
+    // Role by role: mid, bot, support
+    try testing.expectEqualStrings("Ahri,Zed,Kai'Sa,Lux", try p.names());
+    // The board's sort: no table head under All
+    _ = p.rt.event(0, .{ .kind = .click, .target = p.by(.button, "Games") });
     try testing.expectEqualStrings("#sort=6&min=0", p.fake.fragment.items);
-    try testing.expectEqualStrings("Lux,Zed,Ahri,Kai'Sa", try p.names());
+    try testing.expectEqualStrings("Zed,Ahri,Kai'Sa,Lux", try p.names());
     p.fake.fragment.clearRetainingCapacity();
     p.rt.popstate();
     try testing.expectEqualStrings("Ahri,Zed,Lux", try p.names());
