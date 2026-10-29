@@ -627,7 +627,7 @@ fn painted(page: []const u8) void {
 
 fn clientChanged() void {
     if (opt.self_test) return;
-    if (screens.refresh(std.heap.page_allocator, true)) |n| send(.{ .app = n });
+    if (screens.refresh(std.heap.page_allocator, true)) |c| send(c.message());
     const now = client.current();
     if (sent_client != null and now != sent_client.?) {
         sent_client = now;

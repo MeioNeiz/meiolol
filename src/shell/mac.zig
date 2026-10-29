@@ -158,7 +158,7 @@ fn tick(_: Id, _: Sel, _: Id) callconv(.c) void {
         msg(void, msg(Id, cls("NSApplication"), "sharedApplication", .{}), "terminate:", .{@as(Id, null)});
         return;
     }
-    if (screens.refresh(gpa, true)) |n| send(.{ .app = n });
+    if (screens.refresh(gpa, true)) |c| send(c.message());
     const now = client.current();
     if (sent_client != null and now != sent_client.?) {
         sent_client = now;
@@ -219,9 +219,9 @@ pub fn main(init: std.process.Init) !void {
         // No window: each change of the page into its own folder until --seconds
         for (0..if (seconds > 0) seconds else 30) |_| {
             if (practise and practice.edit(.{ .on = true }, 0)) _ = practice.edit(.random, 7);
-            if (screens.refresh(gpa, true)) |n| {
+            if (screens.refresh(gpa, true)) |c| {
                 try screens.dump(io, gpa, d);
-                std.debug.print("{d:8.1} ms page {d}: {t}\n", .{ nowMs(), n, client.current() });
+                std.debug.print("{d:8.1} ms page {d}: {t}\n", .{ nowMs(), c.seq, client.current() });
             }
             std.Io.sleep(io, .fromSeconds(1), .awake) catch {};
         }
