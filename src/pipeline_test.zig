@@ -356,7 +356,7 @@ test "fixture games to stats, curves and the website" {
         .{ "_v/patch/patch.html", &.{"href=\"/patch/15-12\""} },
         .{ "_v/all-patch/patch.html", &.{"href=\"/patch/15-12?region=all\""} },
         .{ "_v/all/patch.html", &.{ "<h1>Patch 15.13 vs 15.12</h1>", "href=\"/champions/darius/top?region=all&amp;period=patch\"", "title=\"This page counts every game we crawl (Plat+)\">Emerald+</a>" } },
-        .{ "champions.html", &.{"Matchups</a>\n<a href=\"/patch\">Patch changes</a>"} },
+        .{ "champions.html", &.{"Matchups</a><a href=\"/patch\">Patch changes</a>"} },
         // Champion page: the ui.champpage island from the root view, its data file for
         // the other roles; the head, the build, the matchups with the most met opponent's
         // brief linking to the matchup page from the champion's side
