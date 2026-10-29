@@ -61,8 +61,7 @@ this page but again too generic, could be so much better".
 
 ```
 ChampHeader patch  ‹ Patch 16.21 vs 16.20 ›  day 5 · 79,549 games · official notes ↗
-StatStrip  3 won more | 4 won less | 14 lanes moved | 22 changed by Riot | 9 matchups
-FilterBar [Moved clearly | Changed by Riot | All]   RolePicker [All | Top | ...]
+FilterBar [Moved clearly ▲3 ▼4 | Riot changed 22 | All 160]   RolePicker [All | ...]
 DataTable   champion | role | Riot | 16.20 | 16.21 | Change (Delta bar) | Ahead at 14
             (Delta bar, small) | games 16.21
 ```
@@ -71,8 +70,9 @@ Rows 30 px; about 15 on the first screen. Phone: champion, Change (bar + number)
 Riot badge; rates and lane in RowDetail.
 
 Words on the first screen (without names, numbers): "Patch", "vs", "day", "games",
-"official notes", summary labels (won more, won less, lanes moved, changed by Riot,
-matchups), chip labels, column heads: ~30. Today: ~95 above the first table.
+"official notes", chip labels, column heads: ~20. No summary strip (Jacob, note 37:
+too many words): the counts sit in the chips they filter by, the role's; lanes and
+matchups that moved are the Lane lead and Matchups columns' sorts.
 
 ## References (research refs/patch/notes.md)
 
@@ -86,7 +86,7 @@ matchups), chip labels, column heads: ~30. Today: ~95 above the first table.
 
 ## Components used
 
-ChampHeader patch, Select, StatStrip, FilterBar, RolePicker,
+ChampHeader patch, Select, FilterBar, RolePicker,
 DataTable, Delta bar, Toggletip, Badge patch, RowDetail, ChampList.
 
 ## Interactions
@@ -95,7 +95,6 @@ DataTable, Delta bar, Toggletip, Badge patch, RowDetail, ChampList.
 - Filter chips and RolePicker: filter rows in place; sort by any column
 - Row tap: RowDetail (one open at a time); champion name: champion page on the patch view
 - ± and Delta bar: Toggletip with the range in words and the games
-- StatStrip cells: filter the table to that set
 
 ## Data
 

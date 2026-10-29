@@ -100,7 +100,7 @@ const Page = struct {
     }
 };
 
-test "the server renders every listed row by change, the strip and Riot's lines" {
+test "the server renders every listed row by change, the chips' counts and Riot's lines" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -138,12 +138,10 @@ test "items and runes over the table: a chip opens its lines and who uses it mos
     try testing.expect(std.mem.find(u8, try p.shown(), "Bought most by") == null);
 }
 
-test "matchups that moved: a column, a count that filters, the row's links" {
+test "matchups that moved: a column, the row's links" {
     var p: Page = undefined;
-    try p.init("#only=mu");
+    try p.init("");
     defer p.deinit();
-    // Miss Fortune into Tristana, from both sides; counted once
-    try testing.expectEqualStrings("Miss Fortune,Tristana", try p.names());
     p.click(p.by(.tr, "Miss Fortune"));
     const page = try p.shown();
     try testing.expect(std.mem.find(u8, page, "href=\"/matchups/bot/missfortune-vs-tristana?period=patch\"") != null);
@@ -172,15 +170,16 @@ test "chips: moved and Riot's by default; each toggles; All shows every row" {
     try testing.expectEqualStrings("Darius,Miss Fortune,Orianna,Jinx,Tristana,Viktor", try p.names());
 }
 
-test "a count filters to its rows; the role in place; the URL restores both" {
+test "the chips count the role's rows; the role in place; the URL restores both" {
     var p: Page = undefined;
-    try p.init("#only=down");
+    try p.init("");
     defer p.deinit();
     try testing.expectEqual(@as(u32, 0), p.fake.warnings);
-    try testing.expectEqualStrings("Tristana,Viktor", try p.names());
+    try testing.expect(std.mem.find(u8, try p.shown(), "▲2") != null);
+    try testing.expect(std.mem.find(u8, try p.shown(), "▼2") != null);
     p.click(p.id("aria-label", "Bot"));
-    try testing.expectEqualStrings("#role=bot&only=down", p.fake.fragment.items);
-    try testing.expectEqualStrings("Tristana", try p.names());
+    try testing.expectEqualStrings("#role=bot", p.fake.fragment.items);
+    try testing.expect(std.mem.find(u8, try p.shown(), "▼1") != null);
     p.click(p.by(.button, "Moved clearly"));
     try testing.expectEqualStrings("#role=bot&moved=0", p.fake.fragment.items);
     try testing.expectEqualStrings("Jinx", try p.names());
