@@ -115,13 +115,11 @@ URLs are clean (docs/plan/urls.md; arch-site.md "Website"): nginx's
 `try_files $meiolol_view$uri.html $uri $uri.html @render`, $meiolol_view mapped from
 ?region= and ?period= to the internal view tree (also in both proxy_cache_keys; other
 query keys such as the pool's ?champs= are state and stay out). `location = /` goes
-straight to @render (deploy/cache-warm.sh warms it first). Old .html URLs: a
-server-level `return 301` from the $meiolol_old map (mirrors urls.legacy, the old view
-dirs turned into the query; deploy/url-smoke.sh curls deploy/nginx/redirect-samples.tsv
-on C01); a trailing slash 301s off. The renderer does the same (serve.zig) and gzips
-what it sends when the client accepts it (nginx compresses only HTML itself; stats.bin
-is ~12 MB raw), with Vary: Accept-Encoding; on a miss whose lowercase is a page, a 301
-to it.
+straight to @render (deploy/cache-warm.sh warms it first). Old URLs get no redirects
+(Jacob, 29 Oct); a trailing slash 301s off. The renderer does the same (serve.zig) and
+gzips what it sends when the client accepts it (nginx compresses only HTML itself;
+stats.bin is ~12 MB raw), with Vary: Accept-Encoding; on a miss whose lowercase is a page,
+a 301 to it.
 - `meiolol render` (systemd meiolol-render@a or @b) on C01's LAN address
   (192.168.18.71:8091, `hostname -I`'s first; ufw keeps it to the host), every view loaded up front from data/views.bin. Loading views from the
   database beside the crawler takes 10-105 min and ~2.5 GB, so that work happens once
@@ -233,9 +231,8 @@ to it.
   whose page view is matched to a /print.css fetch by the same agent within 60 s (every
   page links it for print, so it never holds up rendering, and revalidates it); browser
   agents with no such fetch are "unconfirmed" (hours column 6), nearly all of them.
-  Top pages count an old path as its new one (`meiolol urls`, the API binary). The new
-  admin page reads it as /admin/api/traffic.bin: `meiolol render` converts the file on
-  each request (src/admin.zig trafficBin, last 30 days)
+  The new admin page reads it as /admin/api/traffic.bin: `meiolol render` converts the
+  file on each request (src/admin.zig trafficBin, last 30 days)
   Reinstall: `deploy/jomify.sh install traffic`; units by hand into /etc/systemd/system,
   then `daemon-reload` (`deploy/jomify.sh drift` shows what differs)
 - Desktop app files (/admin/desktop/: zip, update.signed, update.json (unsigned, for

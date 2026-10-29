@@ -16,8 +16,7 @@ index.html), all hrefs root-relative. Each view has its own stats, pool and curv
 --platform all`). Header switches link to the same page in another view (a matchup that
 view lacks: the matchups finder); localStorage remembers the last view's query so shared
 pages (Daily Draft, Learn, Your games, legal: root only, made from the EUW patch view)
-link back into it. Old .html URLs 301 to the new ones: urls.legacy, mirrored by nginx's
-$meiolol_old map (deploy/nginx/redirect-samples.tsv checks both).
+link back into it. Old URLs get no redirects (Jacob, 29 Oct).
 
 Champion pages are the exception: root view only, /champions/<slug> (main role, canonical)
 and /champions/<slug>/<role> per role it plays (the main role's canonical to the bare
@@ -238,9 +237,7 @@ bytes.
   assets skip the hop. Not a boundary: /p/ (view_private) and the API check the login
 - Files: p/notes.{css,js,wasm} (fixed names, no-cache) and admin/notes.html (list mode of
   the same wasm, fetched again every 20 s while shown), written by `meiolol admin`
-- Paths: notesdata.canonical is urls.legacy (old .html pages, their #role=, #pool=, #p=
-  moved by urls.moveState as the wasm moves them) then a trailing index.html dropped, on
-  POST and GET; notes.migrate moves older rows' path and hash through it at each open
+- Paths: notesdata.canonical drops a trailing index.html, on POST and GET
 - API: /api/notes GET/POST/PATCH, ui.notesdata binary, bounds in notesdata.check;
   api.db's notes table. Writes need X-Meiolol-Action. Never cached (nginx or Cloudflare)
 - A note's element: nearest c-* component or [data-island], its index on the page, a

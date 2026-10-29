@@ -98,13 +98,9 @@ const max_index = 999;
 /// nginx add the tool's tag to pages (site/notes.zig)
 pub const marker = "__Host-meiolol_notes";
 
-/// A note's page and state as the site spells them now: an old page's new URL
-/// (urls.legacy) with its legacy fragment keys moved (urls.moveState), then a trailing
-/// index.html stripped. A note already there stays, so stored rows move at each open
-pub fn canonical(a: std.mem.Allocator, path: []const u8, state: []const u8) !urls.Located {
-    const url = try urls.legacy(a, path) orelse path;
-    const got = try urls.moveState(a, url, state);
-    return .{ .path = stripIndex(got.path), .state = got.state };
+/// A note's page and state as stored: / and /index.html are one page
+pub fn canonical(path: []const u8, state: []const u8) urls.Located {
+    return .{ .path = stripIndex(path), .state = state };
 }
 
 /// / and /index.html are one page (/admin/ and /p/ keep their .html)
@@ -114,28 +110,17 @@ pub fn stripIndex(path: []const u8) []const u8 {
 }
 
 test canonical {
-    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-    const cases = [_][4][]const u8{
-        .{ "/index.html", "", "/", "" },
-        .{ "/matchup/index.html", "", "/matchups", "" },
-        .{ "/champions.html", "", "/champions", "" },
-        .{ "/all/champion/ahri.html", "#role=mid&rank=master", "/champions/ahri/mid", "?region=all#rank=master" },
-        .{ "/pool.html", "#pool=ahri", "/pool", "?champs=ahri" },
-        .{ "/learn.html", "#p=waves", "/learn", "#waves" },
-        .{ "/your.html", "#id=x", "/your", "#id=x" },
-        .{ "/admin/index.html", "", "/admin/", "" },
-        .{ "/p/notes.html", "?all=1", "/p/notes.html", "?all=1" },
-        .{ "/xindex.html", "", "/xindex.html", "" },
+    const cases = [_][3][]const u8{
+        .{ "/index.html", "/", "" },
+        .{ "/champions", "/champions", "" },
+        .{ "/admin/index.html", "/admin/", "" },
+        .{ "/p/notes.html", "/p/notes.html", "?all=1" },
+        .{ "/xindex.html", "/xindex.html", "" },
     };
     for (cases) |c| {
-        const got = try canonical(a, c[0], c[1]);
-        try std.testing.expectEqualStrings(c[2], got.path);
-        try std.testing.expectEqualStrings(c[3], got.state);
-        const again = try canonical(a, got.path, got.state);
-        try std.testing.expectEqualStrings(got.path, again.path);
-        try std.testing.expectEqualStrings(got.state, again.state);
+        const got = canonical(c[0], c[2]);
+        try std.testing.expectEqualStrings(c[1], got.path);
+        try std.testing.expectEqualStrings(c[2], got.state);
     }
 }
 

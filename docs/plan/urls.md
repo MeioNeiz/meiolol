@@ -1,8 +1,8 @@
 # Plan: professional URLs (J32)
 
-Every page moves to clean, extensionless URLs; every old URL 301s straight to its new
-one. Jacob chose the hierarchy and approved the five additions below (J32). Build after
-the notes run (data/team/2026-10-27-notes), one owner: every page's hrefs change.
+Every page on clean, extensionless URLs (done: URL1-URL4). Jacob chose the hierarchy and
+approved the five additions below (J32). Old URLs get no redirects and never shape a new
+one (Jacob, 29 Oct: no URL made worse to match an old one, no complexity for them).
 Evidence: research/questions/site-url-scheme.md (Google docs, RFC 9110, six LoL sites'
 filter URLs and canonicals). Any URL work follows this file; change it here first.
 
@@ -31,59 +31,14 @@ filter URLs and canonicals). Any URL work follows this file; change it here firs
   filters as path segments; matchups under the champion (/matchups is its own section,
   `a-vs-b` mirrors the search)
 
-## Old to new
-
-| Old | New |
-| --- | --- |
-| / and /index.html | / |
-| /champions.html, /role/<r>.html | /champions, /champions/<r> |
-| /champion/<c>.html (#role=r) | /champions/<c>; wasm turns #role=r into /champions/<c>/<r> |
-| /build/index.html, /build/<c>-<r>.html | /champions, /champions/<c>/<r> |
-| /matchup/index.html, /matchup/<r>/<a>-vs-<b>.html | /matchups, /matchups/<r>/<a>-vs-<b> |
-| /daily.html, /daily/<n>.html | /daily, /daily/<n> |
-| /patch.html, /patches/<cur>-<prev>.html | /patch, /patch/<cur> |
-| /pool.html#pool=X | /pool; wasm turns #pool=X into ?champs=X |
-| /learn.html#p=id | /learn; wasm turns #p=id into #id |
-| /pickup.html, /pickup/<r>.html | /pickup, /pickup/<r> |
-| your, games, game, method, download, privacy, terms, login, signup, join, account .html | same name, no .html; #id=, #game=, ?next= kept |
-| /patch/X, /all/X, /all/patch/X (old views) | new(X) + ?period=patch, ?region=all, both |
-| /sitemap.xml per view | one /sitemap.xml, canonical URLs only |
-
-/admin/ and /p/ (private, noindex) keep .html for now (not in URL2). The server never
-sees fragments; a 301 keeps them (RFC 9110 10.2.2), so the new page's wasm translates
-legacy keys with replaceState.
-
 ## Steps
 
-- URL1 (done) src/site/ui/urls.zig (in ui: ui/*.zig and the wasm spell hrefs too; site
-  reaches it as ui.urls): `Page` spelt with `{f}` and read back by `parse`, `Data` the
-  query, `legacy(old) ?new`; the pipeline test maps every page the fixture site writes;
-  loadChamps refuses a champion slug that is a role name. Nothing calls it yet
-- URL2 (done 28 Oct) one push, done when every old URL on dev.sh lands on the right
-  page with its state:
-  - Generator: root-relative hrefs (drop toRoot, toShared, toSite, View.up/dir/query;
-    the 404's ../); canonical absolute without query; one sitemap with lastmod;
-    per-role champion files; view copies in an internal /_v/<view>/ tree; every ui/*.zig
-    href; pipeline_test.zig page list and hrefs
-  - wasm and JS: url.zig/island.zig query keys beside the fragment; champion.zig fold
-    inverted (fragment to query); legacy translation (champion, pool, learn); pv.js
-    matchup regex, search.js, gamesrc.zig, dailydays.zig, your.js; champpage's
-    `pool.html#slug` (no pool= key)
-  - nginx: redirect include before try_files (regex rules mirrored by urls.legacy); slash
-    strip; `location = /index.html` becomes internal; `map $arg_region:$arg_period` to
-    the view tree; proxy_cache_key adds the view (else @render serves the wrong view);
-    host 308 stays
-  - serve.zig: drop the add-a-slash dir 301; lowercase 301 on a miss when that page
-    exists
-  - Smoke script: curl old samples on C01, expect each Location
-- URL3 (done) notes: notesdata.canonical = urls.legacy then the index strip; migrate
-  stored rows once through the Zig function (not SQL LIKE), legacy hash keys too
-  (urls.moveState). traffic.sh joins old and new paths through the map (`meiolol urls`)
-- URL4 (done): old URLs and the lowercase fix 301
+- URL1-URL4 (done 28-29 Oct): ui/urls.zig spells every page's URL and reads it back;
+  the generator, wasm, nginx and serve.zig on the scheme; old-URL redirects removed 29 Oct
+- URL5 (W2, legacy run): /admin and /private without .html; no redirects from the old
+  paths
 
 ## Risks
 
-- Relative links count depth: a partial move breaks data-src ../; all at once (URL2)
 - Shared desktop shell test paths (shell/channel.zig) and qa.mjs page list
-- The production key application quotes meio.lol URLs: they keep working via 301;
-  update the text only if it is resubmitted. noindex in preview: no ranking at risk
+- The production key application must quote today's URLs

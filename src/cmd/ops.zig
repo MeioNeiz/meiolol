@@ -218,31 +218,6 @@ pub fn cmdAccount(c: *Cmd) !u8 {
     return 0;
 }
 
-pub const usage_urls =
-    \\  urls        page paths on stdin, one a line, to the site's current ones (old .html
-    \\              pages' new paths without the view query, index.html stripped): "old
-    \\              TAB new" for each that changed (deploy/traffic.sh joins their counts)
-    \\
-;
-
-pub fn cmdUrls(c: *Cmd) !u8 {
-    try c.noFlags();
-    const io = c.init.io;
-    var in_buf: [4096]u8 = undefined;
-    var stdin = std.Io.File.stdin().reader(io, &in_buf);
-    const all = try stdin.interface.allocRemaining(c.arena, .limited(64 << 20));
-    var buf: [4096]u8 = undefined;
-    var stdout = std.Io.File.stdout().writerStreaming(io, &buf);
-    const out = &stdout.interface;
-    var lines = std.mem.tokenizeAny(u8, all, "\r\n");
-    while (lines.next()) |old| {
-        const new = (try ui.notesdata.canonical(c.arena, old, "")).path;
-        if (!std.mem.eql(u8, new, old)) try out.print("{s}\t{s}\n", .{ old, new });
-    }
-    try out.flush();
-    return 0;
-}
-
 pub const usage_notes =
     \\  notes       notes on the live site (src/api/notes.zig) in DIR/api.db; on C01 --data
     \\              /var/lib/meiolol-api (deploy/notes.sh runs it there)

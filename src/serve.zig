@@ -366,9 +366,6 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
     defer arena_state.deinit();
     const arena = arena_state.allocator();
     const query = queryOf(request.head.target);
-    // As nginx's $meiolol_old map (deploy/nginx/meiolol.conf): an old .html URL to its new
-    // one
-    if (std.mem.endsWith(u8, path, ".html")) if (try oldTo(arena, path, query)) |to| return redirect(request, .moved_permanently, to);
     const names = try candidates(arena, path, viewDir(query));
     if (ctx.opts.render) |rendered| {
         const entry = rendered.acquire();
@@ -412,7 +409,6 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
     if (ctx.opts.root != null) for (names) |name| {
         if (try serveFile(ctx, request, name, gzip)) return;
     };
-    if (try oldTo(arena, path, query)) |to| return redirect(request, .moved_permanently, to);
     if (path.len > 0 and path[path.len - 1] == '/') {
         return redirect(request, .moved_permanently, try std.mem.concat(arena, u8, &.{ "/", std.mem.trimEnd(u8, path, "/"), query }));
     }
@@ -519,14 +515,6 @@ fn exists(ctx: *Context, arena: std.mem.Allocator, names: []const []const u8) !b
         if (Io.Dir.cwd().statFile(ctx.io, full, .{})) |_| return true else |_| {}
     };
     return false;
-}
-
-/// An old URL's new one (ui.urls.legacy), keeping the request's query
-fn oldTo(arena: std.mem.Allocator, path: []const u8, query: []const u8) !?[]const u8 {
-    const to = try site.ui.urls.legacy(arena, path) orelse return null;
-    if (query.len == 0) return to;
-    const join: []const u8 = if (std.mem.findScalar(u8, to, '?') != null) "&" else "?";
-    return try std.mem.concat(arena, u8, &.{ to, join, query[1..] });
 }
 
 fn redirect(request: *std.http.Server.Request, status: std.http.Status, to: []const u8) !void {
@@ -656,25 +644,6 @@ test "clean URLs: the query's view tree first, then the site root" {
     try eq(@as([]const []const u8, &.{"champions/"}), try candidates(a, "champions/", ""));
     try std.testing.expectEqualStrings("?region=all", queryOf("/x?region=all#role=mid"));
     try std.testing.expectEqualStrings("", queryOf("/x#a?b"));
-    try std.testing.expectEqualStrings("/champions/top?region=all&n=1", (try oldTo(a, "all/role/top.html", "?n=1")).?);
-    try std.testing.expectEqualStrings("/daily?n=12", (try oldTo(a, "daily.html", "?n=12")).?);
-    try std.testing.expectEqual(null, try oldTo(a, "admin/index.html", ""));
-}
-
-test "old URLs: nginx's samples (deploy/nginx/redirect-samples.tsv) through urls.legacy" {
-    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-    defer arena.deinit();
-    var lines = std.mem.tokenizeScalar(u8, @embedFile("redirect-samples.tsv"), '\n');
-    while (lines.next()) |line| {
-        const tab = std.mem.findScalar(u8, line, '\t') orelse return error.BadSample;
-        const old = line[1..tab];
-        const q = std.mem.findScalar(u8, old, '?') orelse old.len;
-        const got = try oldTo(arena.allocator(), old[0..q], old[q..]) orelse {
-            std.debug.print("no new URL for {s}\n", .{line[0..tab]});
-            return error.TestUnexpectedResult;
-        };
-        try std.testing.expectEqualStrings(line[tab + 1 ..], got);
-    }
 }
 
 test "Rendered: a swapped-out site is freed after its last request" {

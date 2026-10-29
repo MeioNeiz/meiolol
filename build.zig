@@ -355,9 +355,6 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
         .imports = &.{ .{ .name = "core", .module = core }, .{ .name = "net", .module = net } },
     });
 
-    // serve.zig's test of nginx's redirects against urls.legacy
-    backend.addAnonymousImport("redirect-samples.tsv", .{ .root_source_file = b.path("deploy/nginx/redirect-samples.tsv") });
-
     // The site's islands, per page family (src/site/ui/wasm), with zjb's loaders
     for (ui_families) |f| {
         const u = uiWasm(b, f);
