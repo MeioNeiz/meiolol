@@ -47,7 +47,7 @@ const W = struct {
     pub const wl = phrase.Phrase("{w:int}–{l:int}");
     pub const ratio = phrase.Phrase("{r:dec}");
     pub const moved = phrase.Phrase("{a:int}% → {b:int}%");
-    pub const all = plain("All highlights");
+    pub const all = plain("Highlights");
 };
 
 /// Indices into the games given to `of`
@@ -204,8 +204,9 @@ fn tilesOf(h: *H, l: *const yl.List, games: []const yl.Game, to: Links) ?Tiles {
 fn group(h: *H, title: tree.Text, tiles: []const ?Tile) ?N {
     var row = h.list();
     for (tiles) |t| if (t) |x| row.add(recordtile.view(h, x));
-    if (row.items.items.len == 0) return null;
-    return h.section(.{ .class = "grp" }, .{ h.el(.h3, .{}, .{title}), h.div(.{ .class = "tiles" }, .{row.done()}) });
+    const n = row.items.items.len;
+    if (n == 0) return null;
+    return h.section(.{ .class = "grp", .style = h.vars(.{ .n = n }) }, .{ h.el(.h3, .{}, .{title}), h.div(.{ .class = "tiles" }, .{row.done()}) });
 }
 
 /// The Highlights view: `games` the filtered list, newest first
@@ -233,30 +234,41 @@ pub fn top(h: *H, l: *const yl.List, games: []const yl.Game, to: Links, more: ?t
     };
     if (n == 0) return .none;
     return h.div(.{ .class = "c-hl", .data_top = true }, .{
-        h.div(.{ .class = "tiles" }, .{row.done()}),
         if (more) |m| h.button(.{ .type = "button", .class = "more", .on_click = m }, .{W.all}) else null,
+        h.div(.{ .class = "tiles" }, .{row.done()}),
     });
 }
 
 pub const css =
     \\@layer components {
-    \\  .c-hl { display: grid; gap: var(--sp-4); }
-    \\  .c-hl > .grp { display: grid; gap: var(--sp-2); }
-    \\  .c-hl h3 { margin: 0; font-size: var(--fs-s); font-weight: var(--w-b); color: var(--t2); }
-    \\  .c-hl .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: var(--sp-2); }
-    \\  .c-hl[data-top] { gap: var(--sp-2); }
+    \\  /* Each group one card, wide as its records (--n), filling the row; records split by 1 px lines, from
+    \\     each tile's shadow so a short last row leaves no line-coloured hole */
+    \\  .c-hl { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+    \\  .c-hl > .grp { flex: var(--n) 1 calc(var(--n) * 190px); min-width: 0; display: flex; flex-direction: column;
+    \\    background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-l); overflow: hidden; }
+    \\  .c-hl h3 { margin: 0; padding: var(--sp-2) var(--sp-4); background: var(--panel-2); border-bottom: 1px solid var(--line);
+    \\    font-size: var(--fs-s); font-weight: var(--w-b); color: var(--t2); }
+    \\  .c-hl .tiles { flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1px; }
+    \\  .c-hl .tiles > .c-rtile { border: 0; border-radius: 0; padding: var(--sp-4); background: none;
+    \\    box-shadow: 1px 0 0 var(--line), 0 1px 0 var(--line), 1px 1px 0 var(--line); }
+    \\  /* One card: its label opens Highlights, the records cells split by lines */
+    \\  .c-hl[data-top] { display: flex; flex-direction: column; gap: var(--sp-1); padding-top: var(--sp-3);
+    \\    background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-l); overflow: hidden; }
     \\  .c-hl[data-top] .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    \\  .c-hl > .more { all: unset; justify-self: end; cursor: pointer; color: var(--accent); font-size: var(--fs-s); }
+    \\  .c-hl[data-top] .c-rtile { padding: var(--sp-1) var(--sp-4) var(--sp-3); box-shadow: none; border-left: 1px solid var(--line); }
+    \\  .c-hl[data-top] .c-rtile:first-child { border-left: 0; }
+    \\  .c-hl > .more { all: unset; align-self: start; margin-inline: var(--sp-4); cursor: pointer; color: var(--accent); font-size: var(--fs-s); }
     \\  .c-hl > .more:hover { text-decoration: underline; }
     \\  .c-hl > .more:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-ctl); }
     \\  @media (max-width: 760px) {
     \\    .c-hl .tiles, .c-hl[data-top] .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    \\    .c-hl > .grp { flex-basis: 100%; }
     \\  }
     \\}
     \\
 ;
 
-/// The gallery's "All highlights" press, which goes nowhere
+/// The gallery's "Highlights" press, which goes nowhere
 const Tap = struct {
     pub const Msg = union(enum) { more };
     pub fn update(_: *Tap, _: Msg, _: *tree.Event) void {}
