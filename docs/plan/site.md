@@ -115,10 +115,11 @@ Next (order and detail: data/team/2026-10-29-next/notes/w5.md):
 ## Search
 
 One header search on every page: champion, "Ahri vs Zed" ("ahri zed", "ahri v zed") or
-Name#TAG, aliases and typos, keyboard and phone (static/search.js, data/search.json
-from src/site/search.zig). Next: the same matching in table.js filters (champions index,
-opponents) and a filter on build/index.html; "Ahri build", "Ahri top" queries;
-pipeline_test checks for the header script and search.json.
+Name#TAG, aliases and typos, keyboard and phone: ui.sitesearch.SiteSearch, its island
+ui-sitesearch.wasm loaded on the box's first focus or "/" (html.zig's inline script),
+each view's data/search.bin from src/site/search.zig; without JS a Riot ID lookup.
+write.zig's test checks the island's files and each view's index. Next: "Ahri build",
+"Ahri top" queries.
 
 ## Champion page
 

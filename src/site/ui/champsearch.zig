@@ -1,5 +1,5 @@
 //! ChampSearch: a box that finds a champion as you type, the way the header search does
-//! (search.js): whole name or alias (mf, j4), a prefix of the name or one of its words,
+//! (SiteSearch): whole name or alias (mf, j4), a prefix of the name or one of its words,
 //! part of it, then a typo (one, two from 7 letters); case and punctuation ignored. The
 //! list under it is an ARIA combobox: arrows move, Enter takes, Escape closes then
 //! clears, focus leaving the box closes it. Modes: link (each option is a link: the

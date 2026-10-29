@@ -235,6 +235,12 @@ test "views: a tree each, switches between them, shared pages once" {
     try std.testing.expectError(error.FileNotFound, read(arena, out, "_v/all/champions/a.html"));
     const shared_page = try read(arena, out, "daily.html");
     try std.testing.expect(std.mem.find(u8, shared_page, "<a href=\"/champions\" data-view=\"\">") != null);
+    // The header search: its island's files; the view's query on a page in one, else the
+    // island takes the last visited. Each view has its index
+    const island = "role=\"search\" data-js=\"/" ++ assets.sitesearch_js.path ++ "\" data-wasm=\"/" ++ assets.sitesearch_wasm.path ++ "\"";
+    try std.testing.expect(std.mem.find(u8, tiers, island ++ " data-view=\"?region=all\">") != null);
+    try std.testing.expect(std.mem.find(u8, shared_page, island ++ ">") != null);
+    for (html.View.all) |v| _ = try read(arena, out, try std.mem.concat(arena, u8, &.{ v.dir(), "data/search.bin" }));
     try std.testing.expectError(error.FileNotFound, read(arena, out, "_v/all/daily.html"));
     try std.testing.expectError(error.FileNotFound, read(arena, out, "_v/patch/style.css"));
     // Under Champions: the section's tabs and the switches; not on home or shared pages

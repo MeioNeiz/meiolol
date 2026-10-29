@@ -1,37 +1,26 @@
-//! data/search.json, the header search's index (static/search.js): each champion's name,
-//! slug and icon key, and for every pair of champions the role of their matchup page with
-//! the most games. "pairs" holds one character per pair i < j of `champs`, at
-//! i * (2n - i - 1) / 2 + j - i - 1: the role's place in `roles`, or "." for no page
+//! data/search.bin, the header search's index (ui.sitesearch.Data, its island
+//! ui-sitesearch.wasm): each champion's name, slug and icon key, and for every pair of
+//! champions the role of their matchup page with the most games
 
 const std = @import("std");
 const core = @import("core");
+const ui = @import("ui");
 const root = @import("root.zig");
 const matchup = @import("matchup.zig");
 
-const Writer = std.Io.Writer;
 const Role = core.Role;
 const Site = root.Site;
+const Data = ui.sitesearch.Data;
 
-pub const path = "data/search.json";
+pub const path = ui.sitesearch.data_path;
 
-pub fn json(site: *const Site) ![]const u8 {
+pub fn bin(site: *const Site) ![]const u8 {
     const a = site.arena;
     const n = site.champs.len;
-    var aw: Writer.Allocating = .init(a);
-    const w = &aw.writer;
-    try w.print("{{\"ddragon\":\"{s}\",\"roles\":[", .{site.ddragon_version});
-    for (Role.all, 0..) |r, i| try w.print("{s}\"{s}\"", .{ if (i > 0) "," else "", r.label() });
-    try w.writeAll("],\"champs\":[");
-    for (site.champs, 0..) |ch, i| {
-        if (i > 0) try w.writeByte(',');
-        try w.writeByte('[');
-        try std.json.Stringify.value(ch.name, .{}, w);
-        try w.print(",\"{s}\",", .{ch.slug});
-        try std.json.Stringify.value(ch.key, .{}, w);
-        try w.writeByte(']');
-    }
+    const champs = try a.alloc(Data.Champ, n);
+    for (site.champs, champs) |ch, *c| c.* = .{ .name = ch.name, .slug = ch.slug, .key = ch.key };
     const pairs = try a.alloc(u8, n * (n -| 1) / 2);
-    @memset(pairs, '.');
+    @memset(pairs, Data.no_page);
     const best = try a.alloc(u32, pairs.len);
     @memset(best, 0);
     if (site.curves) |*curves| for (curves.curves) |c| {
@@ -45,10 +34,11 @@ pub fn json(site: *const Site) ![]const u8 {
         const at = i * (2 * n - i - 1) / 2 + j - i - 1;
         if (h.games <= best[at]) continue;
         best[at] = h.games;
-        pairs[at] = '0' + h.role;
+        pairs[at] = h.role;
     };
-    try w.print("],\"pairs\":\"{s}\"}}\n", .{pairs});
-    return aw.written();
+    var out: std.ArrayList(u8) = .empty;
+    try ui.data.encode(a, Data, .{ .ddragon = site.ddragon_version, .champs = champs, .pairs = pairs }, &out);
+    return out.items;
 }
 
 /// Place in site.champs of champion `id`

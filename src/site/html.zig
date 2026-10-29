@@ -152,14 +152,7 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
         else
             null else null,
         .header = SiteHeader{ .p = p },
-        // static/search.js
-        .look = tpl.t(
-            \\<script src="{js}"{view} defer></script>
-            \\
-        , .{
-            .js = toSite(assets.search_js.path),
-            .view = if (p.view) |v| tpl.attr("data-view", v.query()) else null,
-        }),
+        .look = tpl.trusted(search_loader),
         .subbar = tpl.when(p.nav.inChampions() or p.counterparts != null, Subbar{ .p = p }),
         // Remembered so shared pages link back into this view
         .remember = if (p.view) |v| tpl.t(
@@ -172,7 +165,7 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
     });
 }
 
-/// ui.site's bar. Its search: static/search.js; without JS a Riot ID lookup
+/// ui.site's bar. Its search: ui.sitesearch's island; without JS a Riot ID lookup
 const SiteHeader = struct {
     p: Page,
 
@@ -190,16 +183,12 @@ const SiteHeader = struct {
         }
         var more: [champion_tabs.len - 1]ui.site.Link = undefined;
         for (champion_tabs[1..], &more) |it, *l| l.* = link(a, p, it, it.nav == p.nav) catch return error.WriteFailed;
-        const look = h.el(.form, .{ .class = "look c-search", .action = "/your", .method = "get", .role = "search" }, .{
-            h.input(.{
-                .name = "id",
-                .placeholder = "Champion, matchup or Riot ID",
-                .aria_label = "Search a champion, a matchup (Ahri vs Zed) or a Riot ID (Name#TAG)",
-                .autocomplete = "off",
-                .spellcheck = "false",
-                .required = true,
-            }),
-        });
+        var search: ui.sitesearch.SiteSearch = .{
+            .js = "/" ++ assets.sitesearch_js.path,
+            .wasm = "/" ++ assets.sitesearch_wasm.path,
+            .view_q = if (p.view) |v| v.query() else null,
+        };
+        const look = search.view(&h);
         t.root = ui.site.view(&h, .{
             .home = if (p.view) |v| std.mem.concat(a, u8, &.{ "/", v.query() }) catch return error.WriteFailed else "/",
             .home_view = p.view == null,
@@ -227,6 +216,17 @@ fn navHref(a: std.mem.Allocator, p: Page, it: NavItem) ![]const u8 {
     const q = if (it.in_view) if (p.view) |v| v.query() else "" else "";
     return std.mem.concat(a, u8, &.{ it.path, q });
 }
+
+/// The header search's file (ui-sitesearch.js) on the box's first use, so a page that
+/// never searches loads none of it; "/" focuses the box. A submit before the island runs
+/// (window.meioSearch) that isn't a Riot ID waits for it: meioSearchGo, its first option
+const search_loader =
+    \\<script>{const f=document.querySelector("[data-island=search]");let on=false;const go=()=>{if(on||!f)return;on=true;const s=document.createElement("script");
+    \\s.src=f.dataset.js;s.dataset.wasm=f.dataset.wasm;document.head.append(s)};f?.addEventListener("focusin",go);f?.addEventListener("pointerdown",go);
+    \\f?.addEventListener("submit",e=>{if(window.meioSearch||f.querySelector("input").value.includes("#"))return;e.preventDefault();window.meioSearchGo=1;go()});
+    \\addEventListener("keydown",e=>{if(!f||e.key!="/"||e.ctrlKey||e.metaKey||e.altKey||e.target.closest?.("input,textarea,select,[contenteditable]"))return;e.preventDefault();go();f.querySelector("input").focus()})}</script>
+    \\
+;
 
 /// A menu link to the Draft tester for logins that opened it: the admin page (/admin/) or the
 /// private one (/p/) stores it in this origin's localStorage, so visitors' pages carry

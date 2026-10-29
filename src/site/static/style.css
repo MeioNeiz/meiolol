@@ -66,19 +66,6 @@ a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 .wrap { max-width: 1560px; margin: 0 auto; padding: 0 24px; }
 @media (max-width: 600px) { .wrap { padding: 0 16px; } }
-/* Header search suggestions (search.js) */
-.look-list {
-  position: absolute; top: 38px; right: 0; width: max(100%, 320px); max-height: min(70vh, 420px); overflow-y: auto;
-  background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 10px; padding: 4px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
-}
-.look-list a { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 7px; color: var(--text); font-size: 13.5px; }
-.look-list a:hover, .look-list a[aria-selected="true"] { background: var(--panel-3); text-decoration: none; }
-.look-list img { border-radius: 5px; flex: none; }
-.look-list img + img { margin-left: -4px; }
-.look-list span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.look-list small { color: var(--muted); font-size: 12px; }
-.look-list p { margin: 0; padding: 8px; color: var(--muted); font-size: 13px; }
 /* main.wrap: .wrap's padding shorthand would win over a plain main rule */
 main.wrap { padding-top: 16px; padding-bottom: 32px; }
 h1 { font-size: 22px; line-height: 1.2; margin: 4px 0 6px; letter-spacing: -0.025em; font-weight: 650; }

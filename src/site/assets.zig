@@ -8,7 +8,6 @@ const ui = @import("ui");
 
 pub const Hashed = struct { plain: []const u8, path: []const u8, data: []const u8 };
 
-pub const search_js = hashed("search.js", @embedFile("static/search.js"));
 pub const stats_js = hashed("ui-stats.js", @embedFile("ui-stats.js"));
 pub const stats_wasm = hashed("ui-stats.wasm", @embedFile("ui-stats.wasm"));
 pub const champion_js = hashed("ui-champion.js", @embedFile("ui-champion.js"));
@@ -61,6 +60,8 @@ pub const yourfriends_js = hashed("ui-yourfriends.js", @embedFile("ui-yourfriend
 pub const yourfriends_wasm = hashed("ui-yourfriends.wasm", @embedFile("ui-yourfriends.wasm"));
 pub const forget_js = hashed("ui-forget.js", @embedFile("ui-forget.js"));
 pub const forget_wasm = hashed("ui-forget.wasm", @embedFile("ui-forget.wasm"));
+pub const sitesearch_js = hashed("ui-sitesearch.js", @embedFile("ui-sitesearch.js"));
+pub const sitesearch_wasm = hashed("ui-sitesearch.wasm", @embedFile("ui-sitesearch.wasm"));
 pub const tester_js = hashed("ui-tester.js", @embedFile("ui-tester.js"));
 pub const tester_wasm = hashed("ui-tester.wasm", @embedFile("ui-tester.wasm"));
 pub const testercand_js = hashed("ui-testercand.js", @embedFile("ui-testercand.js"));

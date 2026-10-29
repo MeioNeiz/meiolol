@@ -2,7 +2,8 @@
 //! ("Ahri vs Zed", "ahri zed", "ahri/zed") or a Riot ID (Name#TAG, and the ones looked up
 //! on this device); every option is a link. An ARIA combobox as ChampSearch: arrows move,
 //! Enter takes the active option, Escape closes. Before the island runs, and before its
-//! index is in for a Riot ID, the form is a plain lookup (GET /your?id=)
+//! index is in for a Riot ID, the form is a plain lookup (GET /your?id=). Its file loads
+//! on the form's first focus or pointerdown, or "/" (html.zig's inline script)
 const std = @import("std");
 const tree = @import("tree.zig");
 const url = @import("url.zig");
@@ -22,7 +23,9 @@ pub const name = "SiteSearch";
 pub const scope = .{".c-sitesearch"};
 pub const sel = "[data-island=search]";
 
-/// data/search.bin in each view's tree
+/// In each view's tree (urls.view_dirs)
+pub const data_path = "data/search.bin";
+
 pub const Data = struct {
     ddragon: []const u8,
     champs: []const Champ,
@@ -81,6 +84,11 @@ const W = struct {
 };
 
 pub const SiteSearch = struct {
+    /// The island's files, from the site root
+    js: []const u8 = "",
+    wasm: []const u8 = "",
+    /// The page's view query; null on a page in none (the island takes the last visited)
+    view_q: ?[]const u8 = null,
     /// Null until the island loads the view's search.bin
     index: ?*const Index = null,
     /// The view's query, on every champion and matchup link ("" the default view)
@@ -157,11 +165,19 @@ pub const SiteSearch = struct {
         }
     }
 
+    /// The box as the island finds it: typed into or focused before its file came
+    pub fn adopted(s: *S, value: []const u8, focused: bool) void {
+        s.q.set(value);
+        s.open = focused;
+        s.active = if (focused and s.text().len > 0) 0 else null;
+        s.want = s.index == null;
+    }
+
     fn text(s: *const S) []const u8 {
         return std.mem.trim(u8, s.q.slice(), " \t");
     }
 
-    /// The options for the text, best first: as search.js was
+    /// The options for the text, best first
     pub fn options(s: *const S, out: *[max_opts]Opt) []Opt {
         const t = s.text();
         var n: usize = 0;
@@ -258,6 +274,9 @@ pub const SiteSearch = struct {
         return h.el(.form, .{
             .class = "c-search c-sitesearch",
             .data_island = "search",
+            .data_js = if (s.js.len > 0) s.js else null,
+            .data_wasm = if (s.wasm.len > 0) s.wasm else null,
+            .data_view = s.view_q,
             .action = "/your",
             .method = "get",
             .role = "search",
@@ -528,4 +547,14 @@ test "Enter before the index: waits for a champion, follows a Riot ID's link" {
     ev = .{ .kind = .keydown, .text = "Enter" };
     t.update(.key, &ev);
     try std.testing.expect(!t.go and ev.after != null);
+}
+
+test "adopted: typed into or focused before the island came" {
+    var s: SiteSearch = .{};
+    s.adopted("ahri", true);
+    try std.testing.expect(s.open and s.want and s.active.? == 0);
+    try std.testing.expectEqualStrings("ahri", s.q.slice());
+    var t: SiteSearch = .{};
+    t.adopted("", false);
+    try std.testing.expect(!t.open and t.active == null);
 }

@@ -589,7 +589,7 @@ fn addFiles(site: *Site) !void {
         try champrank.dataFiles(site, &files);
         try tierlist.rankFiles(site, &files);
     }
-    try files.append(arena, .{ .path = search.path, .data = try search.json(site) });
+    try files.append(arena, .{ .path = search.path, .data = try search.bin(site) });
     try pool_page.dataFiles(site, &files);
     try shared_files.appendSlice(arena, site.daily_files);
     if (site.learn) |facts| try shared_files.append(arena, .{ .path = "data/champ-facts.tsv", .data = try champFacts(site, facts) });
