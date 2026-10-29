@@ -7,10 +7,12 @@
 # that went to sleep. Also sent: docs/learned.md, docs/model.md and docs/nn-results/*.tsv
 # (nn.txt lists them) from this checkout, each lab campaign's digest.md and hypotheses.tsv
 # (~/ml/agent/<campaign>, LAB_CANDS), and a run's result.tsv, findings.tsv and
-# effects-*.tsv (meiolol-lab); and the admin Draft tester's models (draft-model.json,
-# lane-model.json and their -ref.json) from the export a human chose with `use`, never
-# just the newest (a smoke or agent run may export one). The tester reads the box's daily
-# files (admin/models/, `meiolol draft-model`) as "Shipped model"; these are "Lab experiment".
+# effects-*.tsv (meiolol-lab), all also read into training.bin for the new admin
+# page (`meiolol admin --training`); and the admin Draft tester's models
+# (draft-model.json, lane-model.json and their -ref.json) from the export a human chose
+# with `use`, never just the newest (a smoke or agent run may export one). The tester
+# reads the box's daily files (admin/models/, `meiolol draft-model`) as "Shipped model";
+# these are "Lab experiment".
 # The gpu-box (home network only) is staged over ssh at most once a minute; when
 # unreachable its last staged copy is sent and hosts.tsv says when it was last reached.
 # launchd calls it every 30 s once installed. Upload: a gzipped tar over ssh with a key
@@ -140,6 +142,10 @@ stage() {
         cp "$d"digest.md "$d"hypotheses.tsv "$out/campaigns/$f/" 2>/dev/null || true
     done
     (cd "$out/campaigns" && find . -mindepth 1 -maxdepth 1 -type d | cut -c3- | sort) > "$out/campaigns.txt"
+    # The new admin page's Models tab reads these files as training.bin and
+    # runs/*/metrics.bin, made by this checkout's build
+    "$ROOT/zig-out/bin/meiolol" admin --training "$out" \
+        || echo "lab-push: no training.bin (meiolol admin --training failed)" >&2
     # Seen to 10 min, so an idle gpu-box doesn't cause an upload a minute
     seen=$(cat "$STATE/gpu-seen" 2>/dev/null || true)
     printf 'host\tseen\n' > "$out/hosts.tsv"

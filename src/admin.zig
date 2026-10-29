@@ -15,6 +15,7 @@ const tsvlog = @import("tsvlog.zig");
 const tpl = @import("tpl");
 const status = @import("status.zig");
 const ui = @import("ui");
+const adminmodels = @import("adminmodels.zig");
 const ad = ui.admindata;
 
 const Io = std.Io;
@@ -181,6 +182,8 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
     };
     var bin: std.ArrayList(u8) = .empty;
     try ui.data.encode(arena, ad.Snapshot, snap, &bin);
+    var models_bin: std.ArrayList(u8) = .empty;
+    try ui.data.encode(arena, ui.modelsdata.Models, try adminmodels.models(arena, o.now_s, snap.eval, eval_report, snap.history), &models_bin);
     const json = try std.json.Stringify.valueAlloc(arena, page, .{});
 
     var out: Io.Writer.Allocating = .init(arena);
@@ -218,6 +221,7 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
     // The same data for the page to poll between rebuilds
     try writeGz(gpa, io, dir, "data.json", json);
     try writeGz(gpa, io, dir, "admin.bin", bin.items);
+    try writeGz(gpa, io, dir, "models.bin", models_bin.items);
     try writeGz(gpa, io, dir, "admin-setnet.js", @embedFile("site/static/admin-setnet.js"));
     try writeGz(gpa, io, dir, "admin-draft.js", @embedFile("site/static/admin-draft.js"));
     try writeGz(gpa, io, dir, "admin-nn.js", @embedFile("site/static/admin-nn.js"));

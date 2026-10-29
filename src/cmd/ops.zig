@@ -6,6 +6,7 @@ const ui = @import("ui");
 const core = @import("core");
 const api = @import("../api/root.zig");
 const admin = @import("../admin.zig");
+const adminmodels = @import("../adminmodels.zig");
 const site_tester = @import("../site/tester.zig");
 const site_notes = @import("../site/notes.zig");
 const site_admin = @import("../site/adminpage.zig");
@@ -461,6 +462,9 @@ pub const usage_admin =
     \\              --health TEXT    deploy/health.sh output
     \\              --private-out DIR  also the private site's Draft tester and the
     \\                               notes tool's files (/p/)
+    \\              --training DIR   only the Models tab's lab view: DIR/training.bin
+    \\                               and runs/*/metrics.bin from the files
+    \\                               deploy/lab-push.sh staged there (the Mac)
     \\
 ;
 
@@ -484,6 +488,9 @@ pub fn cmdAdmin(c: *Cmd) !u8 {
             o.health = try c.value();
         } else if (c.is("--private-out")) {
             private_out = try c.value();
+        } else if (c.is("--training")) {
+            try adminmodels.training(c.init.gpa, c.init.io, try c.value(), now);
+            return 0;
         } else return error.Usage;
     }
     o.out_dir = out orelse try std.fs.path.join(c.arena, &.{ c.data_dir, "admin" });

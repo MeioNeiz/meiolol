@@ -83,6 +83,7 @@ pub const learndata = @import("learndata.zig");
 pub const dailydata = @import("dailydata.zig");
 pub const pooldata = @import("pooldata.zig");
 pub const admindata = @import("admindata.zig");
+pub const modelsdata = @import("modelsdata.zig");
 pub const accountsdata = @import("accountsdata.zig");
 pub const adminpage = @import("adminpage.zig");
 pub const admincharts = @import("admincharts.zig");

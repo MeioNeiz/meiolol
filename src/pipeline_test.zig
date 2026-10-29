@@ -998,6 +998,10 @@ test "admin page from the fixture games and a crawl log" {
     var europe: u64 = 0;
     for (snap.crawl.buckets) |b| europe += b.m[@backingInt(ui.admindata.Region.europe)];
     try std.testing.expectEqual(25, europe);
+    // models.bin: the Models tab's eval digest (ui/modelsdata.zig)
+    const models = try ui.data.decode(arena, ui.modelsdata.Models, try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "models.bin" }), arena, .limited(4 << 20)));
+    try std.testing.expectEqual(snap.now, models.now);
+    try std.testing.expectEqual(snap.eval.len, models.eval.len);
     try std.testing.expectEqualSlices(i64, &.{1760223600}, snap.crawl.restarts);
     try std.testing.expectEqual(3, snap.drafts.rows);
     try std.testing.expectEqualStrings("unknown", snap.drafts.tiers[snap.drafts.tiers.len - 1].key);

@@ -37,6 +37,7 @@ pub const backup = @import("backup.zig");
 pub const forget = @import("forget.zig");
 pub const rekey = @import("rekey.zig");
 pub const admin = @import("admin.zig");
+pub const adminmodels = @import("adminmodels.zig");
 pub const status = @import("status.zig");
 const cmd_crawl = @import("cmd/crawl.zig");
 const cmd_sitedata = @import("cmd/sitedata.zig");
