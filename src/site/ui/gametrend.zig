@@ -2,14 +2,22 @@
 //! each a dot at its figure, filled for a win and hollow for a loss, the rolling mean of 5
 //! filled against a base (50%, zero or the average), patch changes as dashed dividers
 //! named by the new patch, each week's first game dated under the axis. Games are evenly
-//! spaced, not by date, so a busy evening doesn't pile up. A dot links to its game; a
-//! hover or focus shows its label (CSS, no wasm)
+//! spaced, not by date, so a busy evening doesn't pile up. A dot links to its game. The
+//! pointer anywhere on the plot (or a tap, which stays) picks the nearest game: its dot
+//! ringed, its figure and the mean in a tip (the caller's state, `at`); keyboard focus
+//! on a dot shows its label. A key under the plot names the dots and the line
 const std = @import("std");
 const tree = @import("tree.zig");
 const phrase = @import("phrase.zig");
 const chart = @import("chart.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
+
+const W = struct {
+    pub const win = plain("Win");
+    pub const loss = plain("Loss");
+    pub const mean = plain("Average of 5");
+};
 const H = tree.H;
 const N = tree.N;
 
@@ -36,7 +44,18 @@ pub const Trend = struct {
     ticks: []const chart.Tick,
     base: f32,
     height: u16 = 220,
+    /// The game picked by the pointer and the tip's content for it
+    at: ?usize = null,
+    tip: N = .none,
+    on: chart.PlotOn = .{},
 };
+
+/// The game under a pointer at fraction f of the plot's width, of n
+pub fn pick(f: f32, n: usize) usize {
+    if (n == 0) return 0;
+    const i: usize = @intFromFloat(@max(0, @floor(f * @as(f32, @floatFromInt(n)))));
+    return @min(i, n - 1);
+}
 
 const roll = 5;
 
@@ -78,11 +97,15 @@ pub fn view(h: *H, t: Trend) N {
         }
         if (pt.week) |w| xs.add(h.span(.{ .class = "xt", .style = h.vars(.{ .x = p.px(i) }) }, .{w}));
         const st = h.vars(.{ .x = p.px(i), .y = p.py(pt.v) });
+        const on = t.at == i;
         over.add(if (pt.href) |href|
-            h.a(.{ .class = "g", .href = href, .data_win = pt.win, .aria_label = pt.label, .style = st }, .{})
+            h.a(.{ .class = "g", .href = href, .data_win = pt.win, .data_at = on, .aria_label = pt.label, .style = st }, .{})
         else
-            h.span(.{ .class = "g", .role = "img", .data_win = pt.win, .aria_label = pt.label, .style = st }, .{}));
+            h.span(.{ .class = "g", .role = "img", .data_win = pt.win, .data_at = on, .aria_label = pt.label, .style = st }, .{}));
     }
+    if (t.at) |i| if (i < n) {
+        for (chart.tip(h, p.px(i), .{t.tip})) |x| over.add(x);
+    };
     return chart.frame(h, .{
         .label = t.label,
         .class = "c-chart c-gtrend",
@@ -91,6 +114,13 @@ pub fn view(h: *H, t: Trend) N {
         .marks = marks.done(),
         .over = over.done(),
         .below = &.{h.div(.{ .class = "xax", .aria_hidden = true }, .{xs.done()})},
+        .on = t.on,
+        .press = t.on.move != null,
+        .foot = h.div(.{ .class = "key", .aria_hidden = true }, .{
+            h.span(.{}, .{ h.el(.i, .{ .data_k = "win" }, .{}), W.win }),
+            h.span(.{}, .{ h.el(.i, .{ .data_k = "loss" }, .{}), W.loss }),
+            h.span(.{}, .{ h.el(.i, .{ .data_k = "mean" }, .{}), W.mean }),
+        }),
     });
 }
 
@@ -103,12 +133,18 @@ pub const css =
     \\    margin: -5px 0 0 -5px; border-radius: 50%; border: 2px solid var(--them); background: var(--panel); }
     \\  .c-gtrend .g[data-win] { border-color: var(--us); background: var(--us); }
     \\  .c-gtrend .g::before { content: ""; position: absolute; inset: -6px; border-radius: 50%; }
-    \\  .c-gtrend .g:hover, .c-gtrend .g:focus-visible { z-index: 3; outline: 2px solid var(--focus); outline-offset: 1px; }
-    \\  .c-gtrend .g:hover::after, .c-gtrend .g:focus-visible::after { content: attr(aria-label); position: absolute;
+    \\  .c-gtrend .g[data-at], .c-gtrend .g:focus-visible { z-index: 3; outline: 2px solid var(--focus); outline-offset: 1px; }
+    \\  .c-gtrend .g:focus-visible::after { content: attr(aria-label); position: absolute;
     \\    bottom: calc(100% + 8px); left: 50%; transform: translateX(calc(var(--x) * -1%)); padding: 2px var(--sp-2);
     \\    border-radius: var(--r-m); background: var(--panel-3); border: 1px solid var(--line-2); box-shadow: var(--shadow-pop);
     \\    color: var(--text); font-size: var(--fs-s); white-space: nowrap; pointer-events: none; }
     \\  .c-gtrend > .xax { position: relative; height: 18px; }
+    \\  .c-gtrend .tip small { margin-left: var(--sp-2); color: var(--faint); font-size: var(--fs-xs); }
+    \\  .c-gtrend > .key { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-4); margin-top: var(--sp-2); color: var(--muted); }
+    \\  .c-gtrend > .key > span { display: inline-flex; align-items: center; gap: 6px; }
+    \\  .c-gtrend > .key i { width: 6px; height: 6px; border-radius: 50%; border: 2px solid var(--them); }
+    \\  .c-gtrend > .key i[data-k="win"] { border-color: var(--us); background: var(--us); }
+    \\  .c-gtrend > .key i[data-k="mean"] { width: 14px; height: 0; border-radius: 0; border: 0; border-top: 1.5px solid var(--text); }
     \\}
     \\
 ;
@@ -134,6 +170,8 @@ pub fn gallery(g: *Gallery) void {
     const h = g.h;
     const p: chart.Plane = .{ .x = .{ .lo = 0, .hi = 1 }, .y = .{ .lo = 0, .hi = 100 } };
     g.addFill("win chance at 15, 20 games over three patches", view(h, .{ .label = plain("Win chance at 15"), .points = &demo.points, .y = p.y, .ticks = chart.chanceTicks(h, p), .base = 50 }));
+    const tip = h.span(.{}, .{ h.b(.{}, .{plain("98%")}), plain(" Win · Karthus vs Ahri · 2 Oct"), h.small(.{}, .{plain("Average of 5: 74%")}) });
+    g.addFill("a game picked: its dot ringed, the tip", view(h, .{ .label = plain("Win chance at 15"), .points = &demo.points, .y = p.y, .ticks = chart.chanceTicks(h, p), .base = 50, .at = 10, .tip = tip }));
 }
 
 const testing = std.testing;
