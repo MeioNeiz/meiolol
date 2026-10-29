@@ -1,7 +1,8 @@
 //! TodayCard: a Card with a one-line title, real content and one action (home's Today;
 //! the desktop's between games panel). Bodies: `draft` (Daily Draft's teams lane by lane,
 //! blue over red, the hidden seat a dashed ?, your marks once played) and `changes` (a
-//! patch's biggest win rate moves: champion and role, before and after, DeltaBar, Delta)
+//! patch's biggest win rate moves, biggest rise to biggest fall, a rule where the sign
+//! turns: champion and role, before and after, DeltaBar on one axis down the list, Delta)
 const std = @import("std");
 const tree = @import("tree.zig");
 const card = @import("card.zig");
@@ -26,7 +27,6 @@ const W = struct {
     pub const wrong = plain("wrong");
     pub const pick = phrase.Phrase("Pick {r:text}, winner {w:text}");
     pub const from_to = phrase.Phrase("{a:rate} → {b:rate}");
-    pub const range = phrase.Phrase("±{c:dec}");
 };
 
 pub const Head = struct {
@@ -91,7 +91,16 @@ pub const Change = struct {
     ci: f32,
 };
 
-pub fn changes(h: *H, rows: []const Change) N {
+pub fn changes(h: *H, given: []const Change) N {
+    const rows = h.mem.dupe(Change, given) catch {
+        h.oom = true;
+        return .none;
+    };
+    std.mem.sort(Change, rows, {}, struct {
+        fn f(_: void, a: Change, b: Change) bool {
+            return a.to - a.from > b.to - b.from;
+        }
+    }.f);
     var span: f32 = 2;
     for (rows) |r| span = @max(span, @abs(r.to - r.from) + r.ci);
     var l = h.list();
@@ -101,9 +110,10 @@ pub fn changes(h: *H, rows: []const Change) N {
             champ.view(h, r.champ, .{ .px = .@"32", .role = r.role, .named = false }),
             h.span(.{ .class = "nm" }, .{ h.b(.{}, .{r.champ.name}), h.small(.{}, .{W.from_to.with(h, .{ .a = r.from, .b = r.to })}) }),
             delta.bar(h, .{ .d = d, .ci = r.ci, .span = span }),
-            h.span(.{ .class = "end" }, .{ delta.view(h, .{ .d = d, .ci = r.ci }), h.small(.{}, .{W.range.with(h, .{ .c = r.ci })}) }),
+            h.span(.{ .class = "end" }, .{delta.view(h, .{ .d = d, .ci = r.ci })}),
         };
-        l.add(h.li(.{ .key = i }, .{if (r.href) |href| h.a(.{ .href = href }, kids) else h.div(.{}, kids)}));
+        const turn = i > 0 and (rows[i - 1].to - rows[i - 1].from >= 0) != (d >= 0);
+        l.add(h.li(.{ .key = i, .data_turn = turn }, .{if (r.href) |href| h.a(.{ .href = href }, kids) else h.div(.{}, kids)}));
     }
     return h.ul(.{ .class = "c-today", .data_v = "changes" }, .{l.done()});
 }
@@ -127,16 +137,24 @@ pub const css =
     \\  .c-today[data-v="marks"] > i { width: 14px; height: 14px; border-radius: 3px; background: var(--them); }
     \\  .c-today[data-v="marks"] > i[data-ok] { background: var(--good); }
     \\  .c-today[data-v="changes"] { list-style: none; margin: 0; padding: 0; }
-    \\  .c-today[data-v="changes"] li > * { display: grid; grid-template-columns: 32px minmax(0, auto) minmax(56px, 1fr) auto;
+    \\  .c-today[data-v="changes"] li > * { display: grid; grid-template-columns: 32px minmax(7em, 1fr) minmax(80px, 1.4fr) 3.2em;
     \\    align-items: center; gap: var(--sp-2) var(--sp-3); padding: 6px 0; color: inherit; }
+    \\  /* Where rises turn to falls: a rule across, the bars' axis carried through it */
+    \\  .c-today[data-v="changes"] li[data-turn] { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
+    \\  .c-today[data-v="changes"] .c-dbar { height: 18px; }
+    \\  .c-today[data-v="changes"] .c-dbar::before { top: -8px; bottom: -8px; }
+    \\  .c-today[data-v="changes"] li[data-turn] .c-dbar::before { top: -20px; }
+    \\  .c-today[data-v="changes"] li:first-child .c-dbar::before { top: -2px; }
+    \\  .c-today[data-v="changes"] li:last-child .c-dbar::before { bottom: -2px; }
+    \\  .c-today[data-v="changes"] .c-dbar > i { top: 3px; height: 12px; border-radius: 3px; }
+    \\  .c-today[data-v="changes"] .c-dbar > s { top: 8px; }
     \\  .c-today[data-v="changes"] li > a:hover { text-decoration: none; }
     \\  .c-today[data-v="changes"] li > a:hover b { color: var(--accent); }
     \\  .c-today .nm { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
     \\  .c-today .nm > b { font-weight: var(--w-m); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     \\  .c-today small { font-size: var(--fs-xs); color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
     \\  .c-today .end { text-align: right; }
-    \\  .c-today .end > .c-delta { font-weight: var(--w-b); }
-    \\  .c-today .end > small { margin-left: 3px; }
+    \\  .c-today .end > .c-delta { font-size: var(--fs-l); font-weight: var(--w-b); }
     \\  .c-today .c-dbar { min-width: 0; }
     \\}
     \\
@@ -188,5 +206,7 @@ test "the hidden seat, marks and signed changes" {
     try std.testing.expect(std.mem.find(u8, s, "Pick right, winner wrong") != null);
     try std.testing.expectEqual(@as(usize, 2), std.mem.count(u8, s, "href=\"/daily\""));
     try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, s, "href=\"c/darius\""));
-    try std.testing.expect(std.mem.find(u8, s, "±1.4") != null);
+    // Biggest rise to biggest fall, a rule at the turn
+    try std.testing.expect(std.mem.find(u8, s, "Darius").? < std.mem.find(u8, s, "Viktor").?);
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, s, "data-turn"));
 }
