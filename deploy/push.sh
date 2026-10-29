@@ -19,6 +19,18 @@ set -o pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 q=${MEIOLOL_PUSH_QUEUE:-$HOME/.cache/meiolol-push}
 lock=${MEIOLOL_PUSH_LOCK:-$HOME/.cache/meiolol-push.lock}
+# with_lock [-n] CMD...: CMD under $lock; -n gives up at once with 75 when it's held.
+# lockf is macOS's, flock Linux's (the gpu-box)
+with_lock() {
+    if command -v lockf > /dev/null; then
+        if [ "$1" = -n ]; then shift; lockf -s -t 0 "$lock" "$@"; else lockf "$lock" "$@"; fi
+    elif [ "$1" = -n ]; then
+        shift
+        flock -n -E 75 "$lock" "$@"
+    else
+        flock "$lock" "$@"
+    fi
+}
 mkdir -p "$q/failed" "$q/bulk"
 cd "$root" || exit 1
 
@@ -124,7 +136,7 @@ case ${1-} in
         exit $?
         ;;
     --flush)
-        lockf "$lock" "$root/deploy/push.sh" --locked flush
+        with_lock "$root/deploy/push.sh" --locked flush
         exit $?
         ;;
     --status) status; exit 0 ;;
@@ -133,7 +145,7 @@ case ${1-} in
             fast)
                 echo fast > "$q/mode"
                 pid=$(timer_pid) && kill "$pid"
-                lockf "$lock" "$root/deploy/push.sh" --locked flush
+                with_lock "$root/deploy/push.sh" --locked flush
                 exit $?
                 ;;
             bulk)
@@ -183,7 +195,7 @@ while :; do
         exit 0
     fi
     [ -f "$q/failed/$rev" ] && { echo "push: ci failed on $(short "$rev")"; exit 1; }
-    lockf -s -t 0 "$lock" "$root/deploy/push.sh" --locked "$rev"
+    with_lock -n "$root/deploy/push.sh" --locked "$rev"
     code=$?
     [ $code = 75 ] || exit $code
     sleep 1
