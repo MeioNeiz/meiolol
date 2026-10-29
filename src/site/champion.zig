@@ -14,6 +14,7 @@ const buildblock = @import("buildblock.zig");
 const stats = @import("../stats.zig");
 const builds = @import("../builds.zig");
 const learning = @import("../learning.zig");
+const ddragon = @import("../ddragon.zig");
 const curvesfile = core.curvesfile;
 
 const Writer = std.Io.Writer;
@@ -231,7 +232,8 @@ fn roleData(site: *const Site, ch: Champ, r: Role) !cp.Role {
         .comeback = try comebackOf(site, ch, r),
         .kills = try killsOf(site, ch, r),
         .ranks = try ranksOf(site, ch, r),
-        .timing = if (picked) |b| try timingOf(a, b.b.first_item, cp.min_games) else &.{},
+        // The card has no period label: this view's games only, as the head's
+        .timing = if (builds_page.forChampionHere(site, site.view, ch, r)) |b| try timingOf(a, b.first_item, cp.min_games) else &.{},
         .build = if (picked) |b| try buildblock.data(a, b.f, b.b, ch.name) else null,
         .rels = rels.items,
         .by_patch = by_patch,
@@ -407,8 +409,10 @@ fn goldAt14(site: *const Site, ch: Champ, r: Role, b: curvesfile.Bracket) !?i16 
 }
 
 /// Games by the minute the first item was finished (builds.File.Build.first_item) in
-/// buckets: each tail holds a twentieth of the games and at least `thin`, the minutes
-/// between in steps of 2 or wider, at most 7 buckets. Empty under two tails' worth
+/// buckets: the minutes between two tails in steps of 2 or wider, at most 7 buckets, the
+/// steps' remainder split between the tails. Each tail holds at least a twentieth of the
+/// games and `thin`, but the late one less when they meet (most games in a minute or
+/// two). Empty under two tails' worth
 pub fn timingOf(a: std.mem.Allocator, hist: []const builds.Count, thin: u32) ![]const cp.Timed {
     var total: u32 = 0;
     for (hist) |x| total += x.games;
@@ -426,7 +430,9 @@ pub fn timingOf(a: std.mem.Allocator, hist: []const builds.Count, thin: u32) ![]
     hi = @max(hi, lo);
     var step: usize = 2;
     while ((hi - lo + step - 1) / step > 5) step += 1;
-    hi = lo + (hi - lo) / step * step;
+    const steps = (hi - lo) / step;
+    lo += (hi - lo - steps * step) / 2;
+    hi = lo + steps * step;
 
     var out: std.ArrayList(cp.Timed) = .empty;
     const sum = struct {
@@ -474,12 +480,66 @@ test "first item timing: tails of a twentieth, two-minute steps between" {
     try std.testing.expectEqual(2000, games);
     // Under two tails: nothing
     try std.testing.expectEqual(0, (try timingOf(a, hist[0..8], 100)).len);
-    // Spread over 20 minutes: steps of 4, the last tail takes the remainder
+    // Spread over 20 minutes: steps of 4 from 1 to 19, the 2 left over one to each tail
     for (&hist) |*x| x.* = .{ .games = 100, .wins = 50 };
     const wide = try timingOf(a, &hist, 100);
     try std.testing.expectEqual(6, wide.len);
-    try std.testing.expectEqualStrings("1-5", wide[1].label);
-    try std.testing.expectEqualStrings("17+", wide[5].label);
+    try std.testing.expectEqual(200, wide[0].games);
+    try std.testing.expectEqualStrings("2-6", wide[1].label);
+    try std.testing.expectEqualStrings("18+", wide[5].label);
+    try std.testing.expectEqual(200, wide[5].games);
+    // Every game in minute 10: the tails meet, the late one empty, every game kept
+    var one: [11]builds.Count = @splat(.{});
+    one[10] = .{ .games = 2000, .wins = 1000 };
+    const met = try timingOf(a, &one, 100);
+    try std.testing.expectEqual(2, met.len);
+    try std.testing.expectEqualStrings("<11", met[0].label);
+    try std.testing.expectEqual(2000, met[0].games);
+    try std.testing.expectEqual(0, met[1].games);
+}
+
+test "first item done: players counted by the builder to a drawn card" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const d: ddragon.BuildData = .{ .version = "16.21.1", .legendary = &.{ 3078, 6631 }, .trinkets = &.{}, .boots = &.{}, .items = &.{}, .runes = &.{}, .spells = &.{} };
+    var b: builds.Builder = .{ .gpa = std.testing.allocator, .max_keys = 64 };
+    defer b.deinit();
+    // 1,200 Darius players, first item at minutes 6 to 17 (100 each), the earlier the
+    // more won; 100 more who never finished one
+    for (0..1300) |i| {
+        var k: builds.Picks = .{};
+        const m: i64 = @intCast(6 + i % 12);
+        if (i < 1200) {
+            k.core = .{ 3078, 6631, 0, 0, 0, 0 };
+            k.core_ms = .{ m * std.time.ms_per_min + 30_000, m * std.time.ms_per_min + 400_000, 0, 0, 0, 0 };
+            k.core_len = 2;
+        }
+        try b.addPlayer(.{ .champion = 122, .role = .top, .won = i % 20 < 22 - m }, k, &d);
+    }
+    const f = try b.file(a, &d, "16.21", "PLATINUM", 3);
+    const timing = try timingOf(a, f.get(122, .top).?.first_item, cp.min_games);
+    // Tails of 100 (minutes 6 and 17), 2-minute steps between
+    try std.testing.expectEqual(7, timing.len);
+    try std.testing.expectEqualStrings("<7", timing[0].label);
+    try std.testing.expectEqual(100, timing[0].games);
+    try std.testing.expectEqualStrings("7-9", timing[1].label);
+    try std.testing.expectEqual(200, timing[1].games);
+    try std.testing.expectEqualStrings("17+", timing[6].label);
+
+    var roles = [_]cp.ChartsRole{.{ .role = .top, .timing = timing }};
+    const data: cp.ChartsData = .{ .name = "Darius", .ddragon = "", .champs = &.{}, .roles = &roles };
+    var p: cp.Charts = .{ .data = &data, .root = "/" };
+    var t: ui.Tree = .{};
+    var h: ui.H = .init(a, &t);
+    var w: std.Io.Writer.Allocating = .init(a);
+    try ui.html.write(&t, p.view(&h), &w.writer);
+    for ([_][]const u8{ "First item done", "&lt;7", "7-9", "15-17", "17+", "dashed: games with an item" }) |s|
+        try std.testing.expect(std.mem.indexOf(u8, w.written(), s) != null);
+    // Dashed at the 1,200 players' rate, the 100 without an item out
+    var wins: u32 = 0;
+    for (timing) |x| wins += x.wins;
+    try std.testing.expectApproxEqAbs(@as(f32, @floatFromInt(wins)) * 100 / 1200, p.timing.ref, 0.01);
 }
 
 /// Minutes drawn while this many lanes are still going, as a matchup page's

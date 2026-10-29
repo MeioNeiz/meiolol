@@ -70,6 +70,13 @@ pub fn forChampion(site: *const Site, v: html.View, ch: Champ, r: Role) ?Picked 
     return pick(site, v, played, .{ ch.id, r });
 }
 
+/// The view's own build for `ch` in `r`, never the previous patch's: for figures shown
+/// without the strip's period label
+pub fn forChampionHere(site: *const Site, v: html.View, ch: Champ, r: Role) ?File.Build {
+    const f = if (site.view_builds[v.index()]) |*f| f else return null;
+    return played(f, ch.id, r);
+}
+
 /// As forChampion under the rank filter: `rank` 0 Platinum+ (forChampion), 1 to 3
 /// builds.rank_tiers. A rank with under solid_games of it falls back to the next wider
 /// one, `rank` saying which is shown: a few one-tricks are much of a thin high-rank slice

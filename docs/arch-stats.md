@@ -121,7 +121,7 @@ past 5, only from a full 18). Per build `minutes`: median minute bought (one-min
 histogram, interpolated) of each boots and finished item in its slot (0 boots, 1-6 nth
 item), for the items in the file's options; role-wide only. Per build `first_item`:
 players and wins by the minute their first finished item was bought (one-minute buckets;
-the champion page's First item card); role-wide only. Matchups count every kind but
+the champion page's First item done card); role-wide only. Matchups count every kind but
 keystone and skill_start. Needs Data Dragon's item.json,
 runesReforged.json and summoner.json for the patch (ddragon.buildData); stat shard names
 are a table in ddragon.zig.

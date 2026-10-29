@@ -130,9 +130,10 @@ its kind. Candidates, data we have first (arch-stats.md):
   at 14 from the bracket's pair curves in the tip; brackets under 100 games left out, so
   on our Platinum+ crawl mostly two)
 - Item timing: done ("First item done": win rate by the minute the first finished item
-  was bought, builds' first_item from the view's builds file, Platinum+; tails of a
-  twentieth of the games, 2-minute steps between, at most 7 buckets, under 100 games
-  left out)
+  was bought, builds' first_item from the view's own builds file (never the previous
+  patch's: the card has no period label), Platinum+; tails of at least a twentieth of
+  the games, 2-minute steps between, at most 7 buckets, under 100 games left out; dashed
+  at the rate of the games with an item)
 - Side (blue, red) and games played on it in the last 30 days: new counting
 One chart style for all (Chart frame), two per row as Pick-up and Also play. The
 Charts island (ui-champcharts.wasm) holds Lane, comeback odds, Pick-up, Also play, and
