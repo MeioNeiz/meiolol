@@ -1,6 +1,6 @@
 //! Champion pages (champion/<slug>.html): ui.champpage's three islands, rendered from
-//! the root view, and their data files (data/champion/<slug>.bin, -build.bin, -more.bin)
-//! for the other roles
+//! the root view, and their data files (data/champion/<slug>.bin, -build.bin, -more.bin,
+//! -charts.bin) for the other roles
 
 const std = @import("std");
 const core = @import("core");
@@ -13,6 +13,7 @@ const builds_page = @import("builds.zig");
 const buildblock = @import("buildblock.zig");
 const stats = @import("../stats.zig");
 const learning = @import("../learning.zig");
+const curvesfile = core.curvesfile;
 
 const Writer = std.Io.Writer;
 const Stats = core.Stats;
@@ -36,10 +37,11 @@ pub fn dataPath(a: std.mem.Allocator, ch: Champ, part: Part) ![]const u8 {
         .top => "",
         .build => "-build",
         .more => "-more",
+        .charts => "-charts",
     } });
 }
 
-pub const Part = enum { top, build, more };
+pub const Part = enum { top, build, more, charts };
 
 /// `ch` in role `r`, from the root view (EUW, 30 days); its toolbar fetches the other
 /// views' files and the rank files (champrank.zig). `in_url`: the address names `r`
@@ -80,16 +82,25 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ, r: Role, in_url: 
         .js = "/" ++ assets.champmore_js.path,
         .wasm = assets.champmore_wasm.path,
     };
+    var charts: cp.Charts = .{
+        .data = &parts.charts,
+        .root = "/",
+        .src = try std.mem.concat(a, u8, &.{ "/", try dataPath(a, ch, .charts) }),
+        .stamp = cp.stamp(bytes[3]),
+        .js = "/" ++ assets.champcharts_js.path,
+        .wasm = assets.champcharts_wasm.path,
+    };
     // The champion and its roles, most played first, for /p/pv.js (no island's root, so
     // no wasm reads or writes them)
     var roles: std.ArrayList(u8) = .empty;
     for (d.roles, 0..) |x, i| try roles.print(a, "{s}{s}", .{ if (i > 0) " " else "", @tagName(x.role) });
     build.fromUrl(.{ .role = shown.role });
     more.fromUrl(.{ .role = shown.role });
+    charts.fromUrl(.{ .role = shown.role });
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
     // The role rendered for, when the path names it: the wasms' server state (dom.pageRole)
-    t.root = h.div(.{ .class = "c-cpage", .data_id = ch.id, .data_roles = roles.items, .data_role = shown.role }, .{ top.view(&h), build.view(&h), more.view(&h) });
+    t.root = h.div(.{ .class = "c-cpage", .data_id = ch.id, .data_roles = roles.items, .data_role = shown.role }, .{ top.view(&h), build.view(&h), more.view(&h), charts.view(&h) });
     if (h.oom) return error.OutOfMemory;
     try ui.html.write(&t, t.root, w);
     // Only Top's: it loads the others' (ui/wasm/champion.zig)
@@ -105,12 +116,13 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ, r: Role, in_url: 
 }
 
 /// Each island's data file, in Part order: what the page renders from
-fn encode(site: *const Site, parts: *const cp.Split) ![3][]const u8 {
-    var out: [3]std.ArrayList(u8) = @splat(.empty);
+fn encode(site: *const Site, parts: *const cp.Split) ![4][]const u8 {
+    var out: [4]std.ArrayList(u8) = @splat(.empty);
     try ui.data.encode(site.arena, cp.TopData, parts.top, &out[0]);
     try ui.data.encode(site.arena, cp.BuildData, parts.build, &out[1]);
     try ui.data.encode(site.arena, cp.MoreData, parts.more, &out[2]);
-    return .{ out[0].items, out[1].items, out[2].items };
+    try ui.data.encode(site.arena, cp.ChartsData, parts.charts, &out[3]);
+    return .{ out[0].items, out[1].items, out[2].items, out[3].items };
 }
 
 /// Every champion's data files, under the view's directory
@@ -213,6 +225,7 @@ fn roleData(site: *const Site, ch: Champ, r: Role) !cp.Role {
         .ban = pct(ch.banned, site.games),
         .patch_move = move,
         .lean = lean,
+        .lane = try laneOf(site, ch, r),
         .build = if (builds_page.forChampion(site, site.view, ch, r)) |b| try buildblock.data(a, b.f, b.b, ch.name) else null,
         .rels = rels.items,
         .by_patch = by_patch,
@@ -269,6 +282,51 @@ fn relOf(site: *const Site, ch: Champ, cr: Counts, pairs: Pairs) !cp.Rel {
     }.f);
     return .{ .ally = pairs.ally, .role = uiRole(pairs.r2), .opps = opps.items, .rare = rare };
 }
+
+/// ch's lane against the average opponent in r, by minute: its pairs' estimates from its
+/// side, weighted by their lanes still going; the band is the role's middle half of
+/// lanes around that line, as a thin matchup page's. Null under cp.min_games lanes
+fn laneOf(site: *const Site, ch: Champ, r: Role) !?cp.LaneCurves {
+    const a = site.arena;
+    const c = if (site.curves) |*c| c else return null;
+    const base = c.baseline(r, .all) orelse return null;
+    var pairs: std.ArrayList(curvesfile.View) = .empty;
+    for (site.champs) |o| if (o.id != ch.id) if (c.get(r, .all, ch.id, o.id)) |v| try pairs.append(a, v);
+    var games: std.ArrayList(u32) = .empty;
+    for (0..base.minutes()) |i| {
+        var n: u32 = 0;
+        for (pairs.items) |v| if (i < v.minutes()) {
+            n += v.minute(i).n;
+        };
+        if (n < lane_min_games) break;
+        try games.append(a, n);
+    }
+    if (games.items.len < 2 or games.items[0] < cp.min_games) return null;
+    var out: cp.LaneCurves = .{ .games = games.items, .metrics = undefined };
+    for (&out.metrics, [_]curvesfile.Metric{ .gold, .xp, .cs }) |*o, m| {
+        const line = try a.alloc(f32, games.items.len);
+        const band = try a.alloc([2]f32, games.items.len);
+        for (line, band, games.items, 0..) |*l, *b, n, i| {
+            var sum: f64 = 0;
+            for (pairs.items) |v| if (i < v.minutes()) {
+                const x = v.minute(i);
+                sum += @as(f64, @floatFromInt(x.n)) * @as(f64, @floatFromInt(x.est[@backingInt(m)].mean));
+            };
+            l.* = @round(@as(f32, @floatCast(sum / @as(f64, @floatFromInt(n)))));
+            const q = switch (m) {
+                .gold => base.minute(i).gold,
+                .xp => base.minute(i).xp,
+                .cs => base.minute(i).cs,
+            };
+            b.* = .{ l.* + @as(f32, @floatFromInt(q.p25)), l.* + @as(f32, @floatFromInt(q.p75)) };
+        }
+        o.* = .{ .line = line, .band = band };
+    }
+    return out;
+}
+
+/// Minutes drawn while this many lanes are still going, as a matchup page's
+const lane_min_games = 10;
 
 fn spreadOf(site: *const Site, ch: Champ) ?cp.Spread {
     const s = &site.spread;

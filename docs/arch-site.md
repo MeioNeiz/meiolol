@@ -22,11 +22,12 @@ root only, made from the EUW patch view) link back into it. Old URLs get no redi
 Champion pages are the exception: root view only, /champions/<slug> (main role, canonical)
 and /champions/<slug>/<role> per role it plays (the main role's canonical to the bare
 URL); a thin role (under min_role_share) has no file but renders on request, canonical
-to the bare URL. ui.champpage's three islands (Top, Build, More, each its
+to the bare URL. ui.champpage's four islands (Top, Build, More, Charts, each its
 own ui-*.wasm) with a toolbar for region, period and rank, kept in the fragment
 (region=, period=, rank=). Each view's data files sit under its dir
-(data/champion/<slug>{,-build,-more}.bin); a rank pick above Platinum+ fetches
-<slug>{,-build,-more}-rank{,-patch,-all,-all-patch}.bin (champrank.zig, from
+(data/champion/<slug>{,-build,-more,-charts}.bin); a rank pick above Platinum+ fetches
+<slug>{,-build,-more}-rank{,-patch,-all,-all-patch}.bin (Charts are from every rank: no
+rank files) (champrank.zig, from
 filters.zig's tally of every view's games by region, rank, patch, role and opponent).
 A ban counts under its game's rank, the median ladder tier of its players: Riot's ban
 order doesn't say reliably which player banned. Cards that stay Platinum+ under a rank
@@ -34,7 +35,7 @@ pick say so. Other views link in with their view in the query (html.View.query).
 wasms that opt in (`pub const url_map`, dom.zig UrlMap) keep one virtual fragment and
 spread it over the address: role as the path's last segment, region and period in the
 query, the rest in the fragment; dom.normalise() turns legacy #role=, #pool=, #p= into
-that at start. On the champion page ui-champion.wasm owns the address and the other two
+that at start. On the champion page ui-champion.wasm owns the address and the others
 follow it (url_map .follow: window.meioFrag, meioSetHash), so they don't carry the
 mapping (ui-champmore's budget); role tabs are links to the role's page.
 

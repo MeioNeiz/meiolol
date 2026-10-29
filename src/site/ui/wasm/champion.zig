@@ -1,6 +1,6 @@
 //! ui-champion.wasm: the champion page's head (ui.champpage.Top), and the loader of
-//! ui-champbuild.wasm and ui-champmore.wasm for the rest. zjb's generated loader
-//! (ui-champion.js, `<script src data-wasm>`) calls `main`
+//! ui-champbuild.wasm, ui-champmore.wasm and ui-champcharts.wasm for the rest. zjb's
+//! generated loader (ui-champion.js, `<script src data-wasm>`) calls `main`
 const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
@@ -13,7 +13,7 @@ pub const url_map: dom.UrlMap = .champion;
 const gpa = std.heap.wasm_allocator;
 const sel = "[data-island=champion]";
 /// The islands of the page's other files (dom.lazyLoad)
-const lazy = [_][]const u8{ "[data-island=champbuild]", "[data-island=champmore]" };
+const lazy = [_][]const u8{ "[data-island=champbuild]", "[data-island=champmore]", "[data-island=champcharts]" };
 
 var data: cp.TopData = undefined;
 var state: cp.Top = undefined;

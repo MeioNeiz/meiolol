@@ -117,8 +117,9 @@ the first screen, 1,154 on the page (frontend-rework.md).
 "So many more graphs i wanna see": the Pick-up card is liked, the page wants more of
 its kind. Candidates, data we have first (arch-stats.md):
 - Pick-up across all five mastery bins (learning.zig has them; the card shows two)
-- Lane curve: gold, XP and CS lead by minute 1-25 against the average lane opponent,
-  p25-p75 band (lane curves, as the matchup page draws per pair)
+- Lane curve: done (Charts island, Lane card): gold, XP and CS lead by minute against
+  the average lane opponent (its pairs' estimates weighted by lanes), the role's middle
+  half around it; all ranks
 - Comeback odds: win rate by lane gold lead at 10 and 15 min (curves' five buckets)
 - Early kills: who takes part in killing the lane opponent before 6, 6-14, after 14
 - By rank bracket: Iron-Silver, Gold-Emerald, Diamond+ (curves brackets; stats by rank)

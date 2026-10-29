@@ -42,6 +42,7 @@ const tabs = @import("tabs.zig");
 const filterbar = @import("filterbar.zig");
 const url = @import("url.zig");
 const champrank = @import("champrank.zig");
+const lane = @import("lane.zig");
 const plain = phrase.plain;
 const Phrase = phrase.Phrase;
 const H = tree.H;
@@ -103,6 +104,7 @@ pub const Role = struct {
     patch_move: ?[2]f32 = null,
     /// Early lean: gold at 14 against an average opponent
     lean: ?i16 = null,
+    lane: ?LaneCurves = null,
     build: ?buildpanel.Data = null,
     /// Against or with each role: lane opponents first
     rels: []const Rel,
@@ -112,6 +114,21 @@ pub const Role = struct {
 };
 
 pub const Counts = struct { games: u32, wins: u32 };
+
+/// The champion minus its lane opponent by minute, against the average one (all ranks)
+pub const LaneCurves = struct {
+    /// Lanes still going at each minute
+    games: []const u32,
+    /// Gold, XP, CS
+    metrics: [3]LaneCurve,
+};
+
+/// Index i is minute i
+pub const LaneCurve = struct {
+    line: []const f32,
+    /// The middle half of lanes
+    band: []const [2]f32,
+};
 
 pub const Patch = struct {
     patch: []const u8,
@@ -213,6 +230,9 @@ const rank_suffixes = [n_views][]const u8{ "", "-patch", "-all", "-all-patch" };
 /// Figures of a rank group's role under this many games are faded; under min_games, games
 /// only (builds.md)
 pub const solid_games = 400;
+/// The lane chart's scale fits its first minutes, as the matchup page's: the band widens
+/// far past the line later
+const lane_fit = 20;
 pub const min_games = 100;
 
 /// An island's data in each view: the base file (0: the page's) and its rank file,
@@ -303,6 +323,11 @@ pub const W = struct {
     pub const by_length = plain("By game length");
     pub const lean = Phrase("Early lean {g:signed} gold");
     pub const lean_note = plain("Gold at 14 minutes against an average lane opponent, from games of every length: whether it wins lanes, apart from how long its games last.");
+    pub const lane_head = plain("Lane");
+    pub const lane_them = "Opponent";
+    pub const lane_term = plain("vs the average opponent");
+    pub const lane_note = Phrase("{c:text} minus its lane opponent by minute, averaged over its opponents by games; the band holds the middle half of lanes. All ranks.");
+    pub const lane_metrics = [3]tree.Text{ plain("Gold"), plain("XP"), plain("CS") };
     pub const players = plain("Players");
     pub const spread_head = Phrase("{n:count} · middle half {lo:pct}-{hi:pct}");
     pub const spread_note = Phrase("Players with 10+ games on it. Luck alone would spread the middle half over {lo:pct}-{hi:pct}.");
@@ -429,22 +454,39 @@ pub const MoreRole = struct {
     by_length: []const Counts,
 };
 
-pub const Split = struct { top: TopData, build: BuildData, more: MoreData };
+/// ui-champcharts.wasm's: the charts under the trends, from every rank
+pub const ChartsData = struct {
+    name: []const u8,
+    roles: []const ChartsRole,
+};
+
+pub const ChartsRole = struct {
+    role: role.Role,
+    lane: ?LaneCurves = null,
+};
+
+/// Files' rank type for the charts, which have no rank files
+pub const NoRank = struct { groups: [1][]const ChartsRole };
+
+pub const Split = struct { top: TopData, build: BuildData, more: MoreData, charts: ChartsData };
 
 /// Each island's data, pointing into `d`
 pub fn split(a: std.mem.Allocator, d: *const Data) !Split {
     const top = try a.alloc(TopRole, d.roles.len);
     const build = try a.alloc(BuildRole, d.roles.len);
     const more = try a.alloc(MoreRole, d.roles.len);
-    for (d.roles, top, build, more) |x, *t, *b, *m| {
+    const charts = try a.alloc(ChartsRole, d.roles.len);
+    for (d.roles, top, build, more, charts) |x, *t, *b, *m, *c| {
         t.* = .{ .role = x.role, .games = x.games, .wins = x.wins, .share = x.share, .thin = x.thin, .rank = x.rank, .of = x.of, .pick = x.pick, .ban = x.ban, .patch_move = x.patch_move, .lane = if (x.rels.len > 0) x.rels[0].opps else &.{} };
         b.* = .{ .role = x.role, .thin = x.thin, .build = x.build };
         m.* = .{ .role = x.role, .thin = x.thin, .games = x.games, .wins = x.wins, .lean = x.lean, .rels = x.rels, .by_patch = x.by_patch, .by_length = x.by_length };
+        c.* = .{ .role = x.role, .lane = x.lane };
     }
     return .{
         .top = .{ .name = d.name, .slug = d.slug, .icon = d.icon, .patch = d.patch, .ddragon = d.ddragon, .champs = d.champs, .roles = top },
         .build = .{ .roles = build },
         .more = .{ .name = d.name, .slug = d.slug, .id = d.id, .ddragon = d.ddragon, .champs = d.champs, .roles = more, .lengths = d.lengths, .spread = d.spread, .pickup = d.pickup, .also = d.also },
+        .charts = .{ .name = d.name, .roles = charts },
     };
 }
 
@@ -1070,6 +1112,89 @@ pub const More = struct {
             card.head(h, title, null, &.{ p.plat(h), h.a(.{ .class = "more", .href = h.fmt("{s}pool?champs={d}", .{ p.root, d.id }) }, .{W.pool}) }),
             if (rows.len > 0) champlist.view(h, .{ .label = title }, rows) else h.p(.{ .class = "none" }, .{W.none}),
         });
+    }
+};
+
+/// The charts under the trends (ui-champcharts.wasm, loaded by ui-champion.wasm). From
+/// every rank: a rank pick changes nothing here
+pub const Charts = struct {
+    data: *const ChartsData,
+    /// "../" from the page to the site root
+    root: []const u8,
+    /// The data file and its stamp, for ui.wasm
+    src: []const u8 = "",
+    stamp: u32 = 0,
+    /// ui-champcharts.js and .wasm, for ui-champion.wasm to load
+    js: ?[]const u8 = null,
+    wasm: ?[]const u8 = null,
+    files: Files(ChartsData, NoRank) = .{},
+    want_role: ?role.Role = null,
+    /// The URL's, given back to it: files.want stays at Platinum+
+    rank: Rank = .plat,
+    /// Data.roles' index
+    cur: u8 = 0,
+    lane: lane.Lane = .{ .a = "", .b = W.lane_them, .metrics = &.{}, .select = false },
+    /// lane's, pointed at the shown role's curves on each view
+    lane_metrics: [3]lane.Metric = undefined,
+
+    const P = @This();
+
+    pub const Msg = union(enum) { none };
+
+    pub const Url = struct {
+        role: ?role.Role = null,
+        region: Region = .euw,
+        period: Period = .days30,
+        rank: Rank = .plat,
+    };
+
+    fn r(p: *const P) *const ChartsRole {
+        return &p.data.roles[p.cur];
+    }
+
+    pub fn toUrl(p: *const P) Url {
+        const w = p.files.want;
+        return .{ .role = p.want_role, .region = w.region(), .period = w.period(), .rank = p.rank };
+    }
+
+    pub fn fromUrl(p: *P, u: Url) void {
+        p.want_role = u.role;
+        p.rank = u.rank;
+        p.files.want = .{ .view = Pick.of(u).view };
+        p.cur = roleIndex(p.data.roles, u.role);
+    }
+
+    /// The loader's, once what files.want needs is in
+    pub fn show(p: *P, _: std.mem.Allocator) void {
+        const u = p.toUrl();
+        p.files.shown = p.files.want;
+        p.data = p.files.base[p.files.shown.view].?;
+        p.fromUrl(u);
+    }
+
+    pub fn update(_: *P, _: Msg, _: *tree.Event) void {}
+
+    pub fn view(p: *P, h: *H) N {
+        return h.div(.{
+            .class = "part",
+            .data_island = "champcharts",
+            .data_src = if (p.src.len > 0) p.src else null,
+            .data_stamp = p.stamp,
+            .data_root = p.root,
+            .data_js = p.js,
+            .data_wasm = p.wasm,
+            .data_busy = p.files.busy(),
+        }, .{h.div(.{ .class = "row2" }, .{p.laneCard(h)})});
+    }
+
+    fn laneCard(p: *P, h: *H) N {
+        const c = p.r().lane orelse return card.view(h, .{}, &.{ card.head(h, W.lane_head, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
+        for (&p.lane_metrics, c.metrics, W.lane_metrics) |*m, x, l| m.* = .{ .label = l, .fit = lane_fit, .s = .{ .line = x.line, .band = x.band } };
+        p.lane.a = p.data.name;
+        p.lane.metrics = &p.lane_metrics;
+        p.lane.games = c.games;
+        const tip = toggletip.view(h, "cp-lane", .{W.lane_term}, W.lane_head, W.lane_note.with(h, .{ .c = p.data.name }));
+        return card.view(h, .{}, &.{ card.head(h, W.lane_head, null, &.{ h.span(.{ .class = "note" }, .{&tip}), p.lane.switcher(h) }), p.lane.view(h) });
     }
 };
 
