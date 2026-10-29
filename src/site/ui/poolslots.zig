@@ -131,4 +131,10 @@ test "pool slots: main marked, a remove each, Add only while there's room" {
     w.clearRetainingCapacity();
     try @import("html.zig").write(&t, view(&h, .{ .slots = &two, .max = 2, .on_add = on }), &w.writer);
     try testing.expectEqual(0, std.mem.count(u8, w.written(), "class=\"add\""));
+
+    // Empty: the Add slot alone
+    w.clearRetainingCapacity();
+    try @import("html.zig").write(&t, view(&h, .{ .slots = &.{}, .on_add = on }), &w.writer);
+    try testing.expectEqual(1, std.mem.count(u8, w.written(), "class=\"add\""));
+    try testing.expectEqual(0, std.mem.count(u8, w.written(), "<small>"));
 }
