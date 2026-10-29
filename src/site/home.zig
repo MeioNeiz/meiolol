@@ -228,8 +228,8 @@ fn champHref(site: *const Site, ch: Champ, r: Role) ![]const u8 {
     return site.href(.{ .champion = .{ .slug = ch.slug, .role = root.urlRole(r) } });
 }
 
-/// Each role's most played, best win rate over the champions table's games floor and
-/// clear risers since the last patch, with the change since the last patch
+/// Each role's most played and best win rate over the champions table's games floor,
+/// with the change since the last patch
 fn champsOf(site: *const Site, up: []const u8) !?*hp.HomeChamps {
     const a = site.arena;
     if (site.games == 0) return null;
@@ -240,7 +240,7 @@ fn champsOf(site: *const Site, up: []const u8) !?*hp.HomeChamps {
     @memset(l.slot, null);
     const scores = try a.alloc(?f64, site.champs.len);
     const floor = ui.tiers.min_games[ui.tiers.defaultMin(site.games)];
-    for (Role.all, &d.roles, &d.best, &d.rising) |r, *played, *best, *rising| {
+    for (Role.all, &d.roles, &d.best) |r, *played, *best| {
         for (site.champs, scores) |ch, *x| {
             const cr = site.stats.champRole(r, ch.c);
             x.* = if (cr.games == 0) null else @floatFromInt(cr.games);
@@ -251,14 +251,6 @@ fn champsOf(site: *const Site, up: []const u8) !?*hp.HomeChamps {
             x.* = if (cr.games < floor) null else @as(f64, @floatFromInt(cr.wins)) / @as(f64, @floatFromInt(cr.games));
         }
         best.* = try l.picks(r, scores);
-        @memset(scores, null);
-        if (site.patchday) |*pd| for (pd.champions) |m| {
-            if (m.role != r or m.win.z <= 0 or !m.win.clear(pd.opts.min_role_games, pd.opts.z)) continue;
-            for (site.champs, scores) |ch, *x| if (ch.id == m.id) {
-                x.* = m.win.delta();
-            };
-        };
-        rising.* = try l.picks(r, scores);
     }
     d.champs = l.champs.items;
     const x = try a.create(hp.HomeChamps);
