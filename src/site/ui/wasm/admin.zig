@@ -1,4 +1,5 @@
-//! ui-admin.wasm: /admin/ (ui.adminpage.Page), server-rendered empty. Fetches admin.bin
+//! ui-admin.wasm: /admin/ (ui.adminpage.Page), server-rendered empty, and the loader of
+//! ui-admincharts.wasm for the chart tabs. Fetches admin.bin
 //! (the box's snapshot, again each 5 min), api/live.bin (each minute) and /auth/me.bin;
 //! accounts.bin once the Accounts tab shows. Polls only while the tab shows, catching up
 //! when it comes back. Runs what the page's `want` asks: an action (its result from the
@@ -8,6 +9,7 @@ const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
 const dom = @import("dom.zig");
+const Held = @import("held.zig").Held;
 const ap = ui.adminpage;
 const ad = ui.admindata;
 const ac = ui.accountsdata;
@@ -21,33 +23,6 @@ const Call = enum(i32) { snap, live, me, accounts, action, write, link, logout }
 var page: ap.Page = .{};
 var server: ap.Page = .{};
 var island: ?*ui.island.Island(ap.Page, dom.Dom) = null;
-
-/// A decoded answer and the bytes its slices point into, freed when the next lands
-fn Held(comptime T: type) type {
-    return struct {
-        mem: ?std.heap.ArenaAllocator = null,
-        bytes: []u8 = &.{},
-        v: T = undefined,
-
-        fn set(s: *@This(), b: []u8) ?*const T {
-            var next: std.heap.ArenaAllocator = .init(gpa);
-            const v = ui.data.decode(next.allocator(), T, b) catch {
-                next.deinit();
-                gpa.free(b);
-                return null;
-            };
-            s.drop();
-            s.* = .{ .mem = next, .bytes = b, .v = v };
-            return &s.v;
-        }
-
-        fn drop(s: *@This()) void {
-            if (s.mem) |*m| m.deinit();
-            if (s.bytes.len > 0) gpa.free(s.bytes);
-            s.* = .{};
-        }
-    };
-}
 
 var snap: Held(ad.Snapshot) = .{};
 var live: Held(ad.Live) = .{};
@@ -70,8 +45,13 @@ var linking: ap.Link = .{ .token = "" };
 const live_ms = 60_000;
 const snap_s = 300;
 
+/// The chart tabs' island (dom.lazyLoad)
+const lazy = [_][]const u8{ui.admincharts.sel};
+
 export fn main() void {
     dom.start();
+    dom.lazyLoad(&lazy);
+    defer dom.lazyLater();
     island = dom.rt.add(ap.Page, &page, &server, ap.sel) catch return dom.dom.warn("admin: out of memory");
     dom.rt.changed = changed;
     get(.snap, "admin.bin");

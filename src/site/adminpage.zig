@@ -1,5 +1,6 @@
 //! The new admin page (/admin/new.html, ui.adminpage): an empty shell ui-admin.wasm fills
-//! from admin.bin, api/live.bin and /auth/, its stylesheet and code, written into the
+//! from admin.bin, api/live.bin and /auth/ (the chart tabs: ui.admincharts in
+//! ui-admincharts.wasm, which it loads), its stylesheet and code, written into the
 //! admin dir beside the old page by `meiolol admin`. Never public: nginx serves /admin/ to
 //! view_admin logins only
 const std = @import("std");
@@ -11,16 +12,20 @@ const style = @import("style.zig");
 const Io = std.Io;
 
 /// What the public stylesheet leaves out (ui.components): it is linked first
-pub const css = ui.css.join(.{ ui.alertband, ui.actionbutton, ui.adminpage });
+pub const css = ui.css.join(.{ ui.alertband, ui.actionbutton, ui.adminpage, ui.timechart, ui.admincharts });
 pub const css_file = assets.hashed("admin.css", css);
 pub const js = assets.hashed("ui-admin.js", @embedFile("ui-admin.js"));
 pub const wasm = assets.hashed("ui-admin.wasm", @embedFile("ui-admin.wasm"));
+pub const charts_js = assets.hashed("ui-admincharts.js", @embedFile("ui-admincharts.js"));
+pub const charts_wasm = assets.hashed("ui-admincharts.wasm", @embedFile("ui-admincharts.wasm"));
 
 pub fn page(a: std.mem.Allocator) ![]const u8 {
     var p: ui.adminpage.Page = .{};
     var t: ui.Tree = .{};
     var h: ui.H = .init(a, &t);
     const n = p.view(&h);
+    var c: ui.admincharts.Charts = .{ .js = charts_js.path, .wasm = charts_wasm.path };
+    const cn = c.view(&h);
     if (h.oom) return error.OutOfMemory;
     var out: Io.Writer.Allocating = .init(a);
     const w = &out.writer;
@@ -41,6 +46,7 @@ pub fn page(a: std.mem.Allocator) ![]const u8 {
         \\
     , .{ style.file.path, css_file.path });
     try ui.html.write(&t, n, w);
+    try ui.html.write(&t, cn, w);
     try w.print(
         \\
         \\</main>
@@ -54,7 +60,7 @@ pub fn page(a: std.mem.Allocator) ![]const u8 {
 
 /// One of the page's files by its name under /admin/ (the dev server)
 pub fn file(name: []const u8) ?[]const u8 {
-    for ([_]assets.Hashed{ css_file, js, wasm }) |f| if (std.mem.eql(u8, f.path, name)) return f.data;
+    for ([_]assets.Hashed{ css_file, js, wasm, charts_js, charts_wasm }) |f| if (std.mem.eql(u8, f.path, name)) return f.data;
     return null;
 }
 
@@ -70,6 +76,8 @@ pub fn write(gpa: std.mem.Allocator, io: Io, out_dir: []const u8) !void {
         .{ css_file.path, css_file.data },
         .{ js.path, js.data },
         .{ wasm.path, wasm.data },
+        .{ charts_js.path, charts_js.data },
+        .{ charts_wasm.path, charts_wasm.data },
     };
     for (files) |f| {
         try dir.writeFile(io, .{ .sub_path = f[0], .data = f[1] });

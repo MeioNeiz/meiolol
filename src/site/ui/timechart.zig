@@ -34,6 +34,9 @@ pub const Series = struct {
     name: tree.Text,
     /// One per bucket from `start`; null where nothing was recorded
     values: []const ?f32,
+    /// Its colour (0-5), kept when the series beside it change (a region filter); null
+    /// is its place
+    colour: ?u8 = null,
 };
 
 pub const Ref = struct { v: f32, label: tree.Text };
@@ -285,7 +288,7 @@ pub const Time = struct {
                 .bars => t.bars(h, p, k, w),
             };
             // Six colours, then round again: past six, only the end names tell lines apart
-            const ds = if (t.series.len > 1) k % 6 else null;
+            const ds = t.shade(k);
             marks.add(h.el(.g, .{ .key = k, .data_s = ds }, .{kids}));
             if (lone.items.items.len > 0) over.add(h.span(.{ .key = 200 + k, .class = "lone", .data_s = ds }, .{lone.done()}));
             most = @max(most, sr.name.s.len);
@@ -302,7 +305,7 @@ pub const Time = struct {
         for (ends.items) |e| over.add(h.span(.{
             .key = e.k,
             .class = "end",
-            .data_s = if (t.series.len > 1) e.k % 6 else null,
+            .data_s = t.shade(e.k),
             .aria_hidden = true,
             .style = h.vars(.{ .y = e.y }),
         }, .{
@@ -367,6 +370,11 @@ pub const Time = struct {
         return h.div(.{ .class = "foot" }, .{
             h.button(.{ .class = "c-btn", .type = "button", .data_s = "s", .on_click = h.on(t, .all) }, .{W.all}),
         });
+    }
+
+    fn shade(t: *const T, k: usize) ?usize {
+        if (t.series[k].colour) |c| return c % 6;
+        return if (t.series.len > 1) k % 6 else null;
     }
 
     /// A unix time in the plot's domain: bucket i's start at i, where its point is

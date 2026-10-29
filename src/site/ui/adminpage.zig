@@ -17,6 +17,7 @@ const alertband = @import("alertband.zig");
 const actionbutton = @import("actionbutton.zig");
 const segmented = @import("segmented.zig");
 const timechart = @import("timechart.zig");
+const charts = @import("admincharts.zig");
 const ad = @import("admindata.zig");
 const ac = @import("accountsdata.zig");
 const Gallery = @import("gallery.zig").Gallery;
@@ -101,8 +102,10 @@ pub const Page = struct {
     /// An account change failed
     acct_failed: bool = false,
     copied: bool = false,
+    /// AdminCharts' (the chart tabs), kept so this island's URL writes keep it
+    range: charts.Range = .day,
 
-    pub const Url = struct { tab: Tab = .overview };
+    pub const Url = struct { tab: Tab = .overview, range: charts.Range = .day };
 
     pub const Msg = union(enum) {
         tab: Tab,
@@ -122,11 +125,12 @@ pub const Page = struct {
     };
 
     pub fn toUrl(p: *const Page) Url {
-        return .{ .tab = p.tab };
+        return .{ .tab = p.tab, .range = p.range };
     }
 
     pub fn fromUrl(p: *Page, u: Url) void {
         p.tab = u.tab;
+        p.range = u.range;
     }
 
     pub fn update(p: *Page, m: Msg, ev: *tree.Event) void {
@@ -181,7 +185,7 @@ pub const Page = struct {
     }
 };
 
-const W = struct {
+pub const W = struct {
     pub const title = plain("Admin");
     pub const loading = plain("Loading");
     pub const no_snap = plain("The snapshot (admin.bin) didn't load: Refresh to try again");
@@ -304,7 +308,7 @@ const act_confirm = std.enums.EnumArray(Act, ?Text).init(.{
     .health_check = null,
 });
 
-const kind_names = std.enums.EnumArray(ad.Kind, Text).init(.{
+pub const kind_names = std.enums.EnumArray(ad.Kind, Text).init(.{
     .rate_limit = plain("our key's 429s"),
     .riot_busy = plain("Riot busy (429 server)"),
     .riot_server = plain("Riot 5xx"),
@@ -327,7 +331,7 @@ const units = [_]struct { []const u8, Text }{
 /// A crawler with no report line this long is silent
 const silent_s = 900;
 /// Riot's per-region app limit we run at, per minute
-const per_region_min = 50;
+pub const per_region_min = 50;
 
 fn head(p: *Page, h: *H) N {
     const live = p.live != null and !p.live_down;
@@ -361,6 +365,8 @@ fn body(p: *Page, h: *H, s: *const ad.Snapshot) N {
             .overview => overview(p, h, s),
             .ops => controls(p, h, s),
             .accounts => accountsTab(p, h),
+            // AdminCharts, the island below
+            .crawler, .riot => .none,
             else => |t| card.view(h, .{}, &.{h.p(.{}, .{
                 W.old.with(h, .{ .t = tab_names.get(t).s }),
                 ": ",
@@ -691,7 +697,7 @@ fn count(h: *H, n: u64) Text {
     return Phrase("{n:count}").with(h, .{ .n = n });
 }
 
-fn ago(h: *H, s: i64) Text {
+pub fn ago(h: *H, s: i64) Text {
     if (s < 60) return W.just;
     const m = @divFloor(s, 60);
     if (m < 60) return W.mins.with(h, .{ .n = m });
@@ -702,7 +708,7 @@ fn ago(h: *H, s: i64) Text {
 const months = [_][]const u8{ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
 
 /// UK time ("28 Oct 14:05")
-fn when(h: *H, at: i64) Text {
+pub fn when(h: *H, at: i64) Text {
     const t = at + timechart.ukOffset(at);
     const c = fmt.civil(@intCast(@divFloor(t, 86400)));
     const sec = @mod(t, 86400);
@@ -749,7 +755,7 @@ pub const css =
 
 pub const Demo = struct {
     /// Tue 28 Oct 2026 14:00 UTC
-    const now: i64 = 1_793_196_000;
+    pub const now: i64 = 1_793_196_000;
     const step = 300;
     const n = 24;
 
@@ -760,12 +766,37 @@ pub const Demo = struct {
             b.m = .{ 40, 12, 95, 8 };
             b.t = .{ 38, 11, 90, 7 };
             b.req = .{ 190, 185, 195, 180 };
+            b.ids = .{ 3, 2, 6, 1 };
+            b.ladder = 10;
+            b.mastery = 25;
+            b.platform_req = 40 + @as(u32, @intCast(i));
+            b.commits = 60;
+            b.pages_written = 9000;
+            b.pages_read = 2500;
+            b.queued_max = @intCast(20 + i * 4);
             if (i >= n - 12) b.warnings[@backingInt(ad.Kind.riot_busy)] = 4;
+            if (i == 7) b.warnings[@backingInt(ad.Kind.rate_limit)] = 9;
         }
+        // Not running for two buckets
+        out[10] = .{};
+        out[11] = .{};
         return out;
     }
     const bs = buckets();
-    const crawl: ad.Crawl = .{ .start = now - n * step, .step = step, .buckets = &bs, .restarts = &.{}, .messages = &.{}, .last_report = now - 40 };
+    const messages = [_]ad.Message{
+        .{ .text = "429 server: retry after 2 s (europe match-v5)", .kind = .riot_busy, .count = 48, .last = now - 120 },
+        .{ .text = "429 application: backing off 11 s", .kind = .rate_limit, .count = 9, .last = now - 4 * 3600 },
+    };
+    const crawl: ad.Crawl = .{ .start = now - n * step, .step = step, .buckets = &bs, .restarts = &.{now - 12 * step}, .messages = &messages, .last_report = now - 40 };
+    fn hist() [16]ad.HistoryRow {
+        var out: [16]ad.HistoryRow = undefined;
+        for (&out, 0..) |*r, i| {
+            const k: u64 = @intCast(i);
+            r.* = .{ .time = now - 600 - @as(i64, @intCast(15 - i)) * 900, .matches = 2_400_000 + k * 1300, .timelines = 2_100_000 + k * 1200, .match_queue = 1840 + k * 30, .timeline_queue = 900 - k * 20, .mastery = 500_000 + k * 400 };
+        }
+        return out;
+    }
+    const history = hist();
     pub const snap: ad.Snapshot = .{
         .now = now - 600,
         .days = 7,
@@ -780,7 +811,7 @@ pub const Demo = struct {
         .by_patch = &.{},
         .drafts = .{},
         .crawl = crawl,
-        .history = &.{},
+        .history = &history,
         .eval = &.{},
         .uploads = &.{ now - 90_000, now - 5_400 },
         .deploys = &.{ .{ .sha = "13c90240aa12bb34", .time = now - 26_000 }, .{ .sha = "c9e836bf23992353", .time = now - 3_000 } },
@@ -788,7 +819,11 @@ pub const Demo = struct {
         .eval_report = "",
         .storage = null,
         .backups = null,
-        .riot = .{ .app_limit = "20:1,100:120", .crawl_args = "", .key_problems = &.{} },
+        .riot = .{
+            .app_limit = "20:1,100:120",
+            .crawl_args = "--proxy 127.0.0.1:9090 --timelines 90 --raw-match-days 14 --raw-timeline-days 3 --keep-days 0 --min-tier emerald --ladder-per-hour 60 --ladder-refresh-hours 24",
+            .key_problems = &.{.{ .time = now - 50_000, .text = "403 Forbidden: key rejected (match-v5 by-puuid)" }},
+        },
     };
     const services = [_]ad.Service{
         .{ .unit = "meiolol-crawl", .state = "active" },
@@ -840,7 +875,7 @@ pub fn gallery(g: *Gallery) void {
             2 => Demo.page(.ops),
             3 => Demo.page(.ops),
             4 => Demo.page(.accounts),
-            5 => Demo.page(.crawler),
+            5 => Demo.page(.storage),
             else => .{ .snap_failed = true },
         };
         switch (i) {
