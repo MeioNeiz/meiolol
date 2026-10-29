@@ -12,6 +12,7 @@ const phrase = @import("phrase.zig");
 const chart = @import("chart.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const plain = phrase.plain;
+const Phrase = phrase.Phrase;
 const H = tree.H;
 const N = tree.N;
 
@@ -28,6 +29,8 @@ pub const Unit = enum {
     rate,
     /// 0.693: model scores that move in the third decimal
     score,
+    /// 132.4 GB: sizes, the values in GB
+    gb,
 };
 
 pub const Series = struct {
@@ -518,6 +521,7 @@ pub const Time = struct {
             .count => phrase.num(h, .kilo, count(v)),
             .rate => phrase.num(h, .rate, v),
             .score => score(h, v),
+            .gb => W.gb.with(h, .{ .n = v }),
         };
     }
 
@@ -526,6 +530,7 @@ pub const Time = struct {
             .count => phrase.num(h, .count, count(v)),
             .rate => phrase.num(h, .rate, v),
             .score => score(h, v),
+            .gb => W.gb.with(h, .{ .n = v }),
         };
     }
 
@@ -670,6 +675,7 @@ fn score(h: *H, v: f32) tree.Text {
 
 const W = struct {
     pub const none = plain("No data in this range");
+    pub const gb = Phrase("{n:dec} GB");
     pub const all = plain("Show all");
     pub const restart = plain("Restart");
     pub const to = plain("to");

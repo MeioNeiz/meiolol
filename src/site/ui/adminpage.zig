@@ -366,7 +366,7 @@ fn body(p: *Page, h: *H, s: *const ad.Snapshot) N {
             .ops => controls(p, h, s),
             .accounts => accountsTab(p, h),
             // AdminCharts, the island below
-            .crawler, .riot => .none,
+            .crawler, .riot, .storage, .ingest => .none,
             else => |t| card.view(h, .{}, &.{h.p(.{}, .{
                 W.old.with(h, .{ .t = tab_names.get(t).s }),
                 ": ",
@@ -715,7 +715,7 @@ pub fn when(h: *H, at: i64) Text {
     return W.when.with(h, .{ .d = c.day, .m = months[c.month - 1], .hh = h.fmt("{d:0>2}", .{@as(u32, @intCast(@divFloor(sec, 3600)))}), .mm = h.fmt("{d:0>2}", .{@as(u32, @intCast(@divFloor(@mod(sec, 3600), 60)))}) });
 }
 
-fn day(h: *H, at: i64) Text {
+pub fn day(h: *H, at: i64) Text {
     const c = fmt.civil(@intCast(@divFloor(at + timechart.ukOffset(at), 86400)));
     return Phrase("{d:int} {m:text} {y:int}").with(h, .{ .d = c.day, .m = months[c.month - 1], .y = c.year });
 }
@@ -792,7 +792,22 @@ pub const Demo = struct {
         var out: [16]ad.HistoryRow = undefined;
         for (&out, 0..) |*r, i| {
             const k: u64 = @intCast(i);
-            r.* = .{ .time = now - 600 - @as(i64, @intCast(15 - i)) * 900, .matches = 2_400_000 + k * 1300, .timelines = 2_100_000 + k * 1200, .match_queue = 1840 + k * 30, .timeline_queue = 900 - k * 20, .mastery = 500_000 + k * 400 };
+            r.* = .{
+                .time = now - 600 - @as(i64, @intCast(15 - i)) * 900,
+                .matches = 2_400_000 + k * 1300,
+                .timelines = 2_100_000 + k * 1200,
+                .drafts = 1_900_000 + k * 1100,
+                .players = 310_000 + k * 90,
+                .ranks = 820_000,
+                .match_queue = 1840 + k * 30,
+                .timeline_queue = 900 - k * 20,
+                .mastery = 500_000 + k * 400,
+                .meiolol_db = 41_000_000_000 + k * 9_000_000,
+                .timeline_db = 52_000_000_000 + k * 14_000_000,
+                .raw_db = 18_000_000_000 + k * 6_000_000,
+                .meiolol_wal = (k % 4) * 200_000_000,
+                .disk_used = 131_000_000_000 + k * 30_000_000,
+            };
         }
         return out;
     }
@@ -802,14 +817,27 @@ pub const Demo = struct {
         .days = 7,
         .health = "",
         .disk = .{ .size = 200e9, .used = 132e9, .free = 68e9 },
-        .platforms = &.{},
-        .files = &.{},
-        .counts = &.{},
+        .platforms = &.{ .{ .id = "euw1", .region = .europe }, .{ .id = "eun1", .region = .europe }, .{ .id = "kr", .region = .asia }, .{ .id = "na1", .region = .americas } },
+        .files = &.{ .{ .name = "meiolol.db", .bytes = 41_100_000_000 }, .{ .name = "timeline.db", .bytes = 52_200_000_000 }, .{ .name = "raw.db", .bytes = 18_100_000_000 } },
+        .counts = &.{ .{ .name = "matches", .rows = 2_419_500 }, .{ .name = "timeline.timelines", .rows = 2_118_000 }, .{ .name = "ranks", .rows = 820_000 } },
         .queues = .{ .match = &.{ .{ .key = "euw1 pending", .n = 1840 }, .{ .key = "euw1 done", .n = 90000 } }, .timeline = &.{.{ .key = "pending", .n = 312 }} },
-        .players = &.{},
-        .ladder = &.{},
-        .by_patch = &.{},
-        .drafts = .{},
+        .players = &.{ .{ .key = "europe", .n = 190_000 }, .{ .key = "asia", .n = 70_000 }, .{ .key = "americas", .n = 50_000 } },
+        .ladder = &.{ .{ .key = "emerald", .n = 410_000 }, .{ .key = "diamond", .n = 120_000 }, .{ .key = "master", .n = 9_000 } },
+        .by_patch = &.{ .{ .key = "16.21", .n = 1_300_000 }, .{ .key = "16.20", .n = 1_100_000 } },
+        .drafts = .{
+            .rows = 400_000,
+            .days = &.{
+                .{ .day = @divFloor(now, 86400) - 3, .region = .{ 9_000, 4_000, 30_000, 0 }, .recent = .{ 0, 0, 0, 0 } },
+                .{ .day = @divFloor(now, 86400) - 2, .region = .{ 40_000, 22_000, 120_000, 0 }, .recent = .{ 2_000, 1_000, 6_000, 0 } },
+                .{ .day = @divFloor(now, 86400) - 1, .region = .{ 35_000, 20_000, 100_000, 0 }, .recent = .{ 9_000, 5_000, 30_000, 0 } },
+                .{ .day = @divFloor(now, 86400), .region = .{ 6_000, 3_000, 11_000, 0 }, .recent = .{ 6_000, 3_000, 11_000, 0 } },
+            },
+            .platforms = &.{ .{ .key = "euw1", .n = 180_000 }, .{ .key = "eun1", .n = 81_000 }, .{ .key = "kr", .n = 49_000 }, .{ .key = "na1", .n = 90_000 } },
+            .patches = &.{ .{ .key = "16.21", .n = 300_000 }, .{ .key = "16.20", .n = 100_000 } },
+            .tiers = &.{ .{ .key = "emerald", .n = 250_000 }, .{ .key = "diamond", .n = 120_000 }, .{ .key = "unknown", .n = 30_000 } },
+            .blue_wins = 201_000,
+            .minutes = .{ 0, 0, 0, 3_000, 30_000, 110_000, 130_000, 80_000, 35_000, 9_000, 2_000, 600, 100 },
+        },
         .crawl = crawl,
         .history = &history,
         .eval = &.{},
@@ -817,8 +845,14 @@ pub const Demo = struct {
         .deploys = &.{ .{ .sha = "13c90240aa12bb34", .time = now - 26_000 }, .{ .sha = "c9e836bf23992353", .time = now - 3_000 } },
         .deploy_events = &.{.{ .time = now - 3_000, .sha = "c9e836bf23992353", .step = "live", .status = "ok", .detail = "" }},
         .eval_report = "",
-        .storage = null,
-        .backups = null,
+        .storage = .{ .generated = now - 30_000, .rows = &.{
+            .{ .db = "timeline", .name = "timelines", .kind = "table", .bytes = 47_000_000_000, .cells = 2_100_000 },
+            .{ .db = "timeline", .name = "sqlite_autoindex_timelines_1", .kind = "index", .bytes = 120_000_000, .cells = 2_100_000 },
+            .{ .db = "meiolol", .name = "matches", .kind = "table", .bytes = 21_000_000_000, .cells = 2_400_000 },
+            .{ .db = "meiolol", .name = "drafts", .kind = "table", .bytes = 9_000_000_000, .cells = 1_900_000 },
+            .{ .db = "meiolol", .name = "drafts_day", .kind = "index", .bytes = 400_000_000, .cells = 1_900_000 },
+        } },
+        .backups = .{ .bytes = 61_000_000_000, .files = 14, .newest = now - 20_000 },
         .riot = .{
             .app_limit = "20:1,100:120",
             .crawl_args = "--proxy 127.0.0.1:9090 --timelines 90 --raw-match-days 14 --raw-timeline-days 3 --keep-days 0 --min-tier emerald --ladder-per-hour 60 --ladder-refresh-hours 24",

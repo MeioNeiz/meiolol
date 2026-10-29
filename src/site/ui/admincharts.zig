@@ -76,7 +76,10 @@ pub const Charts = struct {
     }
 
     pub fn shows(ch: *const Charts) bool {
-        return ch.tab == .crawler or ch.tab == .riot;
+        return switch (ch.tab) {
+            .crawler, .riot, .storage, .ingest => true,
+            else => false,
+        };
     }
 
     pub fn view(ch: *Charts, h: *H) N {
@@ -84,6 +87,8 @@ pub const Charts = struct {
         return h.div(.{ .class = "c-adcharts", .data_island = "admincharts", .data_js = ch.js, .data_wasm = ch.wasm, .hidden = !on }, .{
             if (!on) null else if (ch.snap) |s| switch (ch.tab) {
                 .riot => riot(ch, h, s),
+                .storage => storage(ch, h, s),
+                .ingest => ingest(ch, h, s),
                 else => crawler(ch, h, s),
             } else h.p(.{ .class = "lead", .role = "status" }, .{if (ch.snap_failed) ap.W.no_snap else ap.W.loading}),
         });
@@ -91,7 +96,7 @@ pub const Charts = struct {
 };
 
 /// One per chart on these tabs: its slot in Charts.times
-pub const Chart = enum { matches, timelines, calls, commits, writer, pages, warnings, backlog, requests, platform, errors };
+pub const Chart = enum { matches, timelines, calls, commits, writer, pages, warnings, backlog, requests, platform, errors, dbfiles, disk, m_matches, m_timelines, m_drafts, m_players, m_ranks, m_mastery, gamedays };
 pub const n = std.enums.values(Chart).len;
 pub const idle: [n]timechart.Time = @splat(.{ .label = .{ .s = "" }, .start = 0, .series = &.{} });
 
@@ -197,6 +202,85 @@ const W = struct {
     pub const no_problems = plain("No rejected-key answers in the crawl log window.");
     pub const c_when = plain("When");
     pub const c_text = plain("Message");
+
+    pub const space = plain("Space");
+    pub const space_sub = plain("Snapshots every 15 min; growth over the newest week.");
+    pub const disk_used = plain("Disk used");
+    pub const of = Phrase("{a:text} of {b:text}");
+    pub const disk_growth = plain("Disk growth");
+    pub const per_day = Phrase("{b:text} / day");
+    pub const over = Phrase("over the last {t:text}, WAL excluded");
+    pub const over_day = Phrase("over the last {t:text}, WAL excluded; last 24 h {b:text} / day");
+    pub const full_at = plain("Disk full around");
+    pub const full_in = Phrase("in ~{n:count} days at the week's rate");
+    pub const full_in2 = Phrase("in ~{n:count} days at the week's rate, ~{m:count} at the last 24 h's");
+    pub const databases = plain("Databases");
+    pub const per_stored = plain("Per stored match");
+    pub const all_dbs = plain("all databases, WAL included");
+    pub const db_growth = plain("Database growth");
+    pub const db_growth_sub = Phrase("meiolol {a:text}, timeline {b:text}, raw {c:text}; newest week, WAL excluded");
+    pub const backups = plain("Backups");
+    pub const backups_sub = Phrase("{n:count} files, newest {t:text}");
+    pub const files = plain("Database files on disk");
+    pub const files_sub = plain("WAL files included: a sharp drop is a checkpoint folding the WAL back into its database.");
+    pub const used = plain("used");
+    pub const disk_size = plain("disk size");
+    pub const what = plain("What takes the space");
+    pub const what_sub = Phrase("Daily dbstat scan, {t:text}. Sizes are pages in the file, so free pages and the WAL are not counted.");
+    pub const no_scan = plain("No dbstat scan yet (daily on the box, data/storage.tsv).");
+    pub const db_total = Phrase("{d:text}.db: {b:text}");
+    pub const indexes = Phrase("Indexes {p:pct} of the file.");
+    pub const more = Phrase("{n:count} more");
+    pub const index = plain("index");
+    pub const every = Phrase("Every table and index ({n:count})");
+    pub const c_db = plain("DB");
+    pub const c_name = plain("Name");
+    pub const c_size = plain("Size");
+    pub const c_share = plain("Share of DB");
+    pub const c_cells = plain("Cells");
+    pub const c_per_cell = plain("Bytes / cell");
+    pub const rows = plain("Rows");
+    pub const rows_sub = plain("Row counts per snapshot; growth over the newest week.");
+    pub const r_matches = plain("Matches");
+    pub const r_timelines = plain("Timelines");
+    pub const r_drafts = plain("Draft rows");
+    pub const r_players = plain("Players (scan pool)");
+    pub const r_ranks = plain("Ladder ranks");
+    pub const r_mastery = plain("Mastery rows");
+    pub const c_table = plain("Table");
+    pub const c_rows = plain("Rows");
+    pub const c_day = plain("24 h change");
+    pub const c_week = plain("Per day (week)");
+
+    pub const ingest = plain("What we ingest");
+    pub const ingest_sub = Phrase("Complete ranked games (draft rows): the newest {n:count} stored, by the day each was played.");
+    pub const by_day = plain("Games by game day");
+    pub const by_day_sub = plain("By the day the game was played, not the day it was stored. Old days keep gaining a few thousand games a day, so no day is complete and the newest few are far from it; the first day is cut by the window.");
+    pub const recent = plain("stored in the last 24 h");
+    pub const cut = plain("cut by the window");
+    pub const length = plain("Game length");
+    pub const c_minutes = plain("Minutes");
+    pub const c_games = plain("Games");
+    pub const mins = Phrase("{a:count} to {b:count}");
+    pub const mins_last = plain("60 and over");
+    pub const sanity = plain("Sanity");
+    pub const c_check = plain("Check");
+    pub const c_value = plain("Value");
+    pub const blue = plain("Blue side wins");
+    pub const ranked = plain("With a median rank");
+    pub const platforms = plain("Platforms");
+    pub const patches = plain("Patches");
+    pub const by_platform = plain("Games by platform");
+    pub const by_rank = plain("Games by median rank");
+    pub const ladder_tiers = plain("Ladder players by tier");
+    pub const pool = plain("Scan pool by region");
+    pub const by_patch = plain("Matches by patch");
+    pub const c_platform = plain("Platform");
+    pub const c_tier = plain("Tier");
+    pub const c_players = plain("Players");
+    pub const c_region = plain("Region");
+    pub const c_patch = plain("Patch");
+    pub const c_matches = plain("Matches");
 };
 
 const region_names = std.enums.EnumArray(ad.Region, Text).init(.{
@@ -212,8 +296,8 @@ const writer_cap = 128;
 const warn: fmt.Step = .{ .s = 2, .low = true };
 const bad: fmt.Step = .{ .s = 4, .low = true };
 
-/// The range switcher and region chips over a crawl tab
-fn controls(ch: *Charts, h: *H, s: *const ad.Snapshot) N {
+/// The range switcher (crawl tabs) and region chips
+fn controls(ch: *Charts, h: *H, s: *const ad.Snapshot, range: bool) N {
     const items = [_]segmented.Item{
         .{ .label = W.hours, .selected = ch.range == .hours, .on = h.on(ch, .{ .range = .hours }) },
         .{ .label = W.day, .selected = ch.range == .day, .on = h.on(ch, .{ .range = .day }) },
@@ -228,7 +312,7 @@ fn controls(ch: *Charts, h: *H, s: *const ad.Snapshot) N {
         }));
     }
     return h.div(.{ .class = "ctl" }, .{
-        segmented.view(h, .{ .s = .s, .label = W.range }, &items),
+        if (range) segmented.view(h, .{ .s = .s, .label = W.range }, &items) else null,
         h.div(.{ .class = "chips", .role = "group", .aria_label = W.regions }, .{chips.done()}),
     });
 }
@@ -342,34 +426,83 @@ fn chart(ch: *Charts, h: *H, c: Chart, sub: ?Text, o: timechart.Time) N {
     });
 }
 
+/// A history column, chosen at run time: one copy of each function that reads one
+const Col = std.meta.FieldEnum(ad.HistoryRow);
+
+fn at(r: ad.HistoryRow, c: Col) ?u64 {
+    return switch (c) {
+        .time => null,
+        inline else => |t| @field(r, @tagName(t)),
+    };
+}
+
 /// Rate of a history column per day over the newest `days`, least squares; null under
 /// ~5 h of history
-fn growth(hist: []const ad.HistoryRow, comptime col: []const u8, days: f64) ?f64 {
+fn growth(hist: []const ad.HistoryRow, c: Col, days: f64) ?f64 {
+    return growthLess(hist, c, &.{}, days);
+}
+
+/// A size's growth without its WAL columns `wal`, and with them on the lower envelope
+/// (points no later point undercuts): a WAL swing would read as growth, then shrinkage
+fn growthLess(hist: []const ad.HistoryRow, c: Col, wal: []const Col, days: f64) ?f64 {
     if (hist.len < 2) return null;
     const end = hist[hist.len - 1].time;
     const from = end - @as(i64, @intFromFloat(days * 86400));
     var k: f64 = 0;
     var sx: f64 = 0;
     var sy: f64 = 0;
-    var t0: ?i64 = null;
-    for (hist) |r| if (r.time >= from) if (@field(r, col)) |v| {
-        if (t0 == null) t0 = r.time;
+    var t0: i64 = end;
+    var it: Envelope = .{ .hist = hist, .from = from, .c = c, .wal = wal };
+    while (it.next()) |pt| {
+        t0 = pt[0];
         k += 1;
-        sx += @floatFromInt(r.time - end);
-        sy += @floatFromInt(v);
-    };
-    if (k < 2 or end - t0.? < 86400 / 5) return null;
+        sx += @floatFromInt(pt[0] - end);
+        sy += pt[1];
+    }
+    if (k < 2 or end - t0 < 86400 / 5) return null;
     const mx = sx / k;
     const my = sy / k;
     var sxy: f64 = 0;
     var sxx: f64 = 0;
-    for (hist) |r| if (r.time >= from) if (@field(r, col)) |v| {
-        const dx = @as(f64, @floatFromInt(r.time - end)) - mx;
-        sxy += dx * (@as(f64, @floatFromInt(v)) - my);
+    it = .{ .hist = hist, .from = from, .c = c, .wal = wal };
+    while (it.next()) |pt| {
+        const dx = @as(f64, @floatFromInt(pt[0] - end)) - mx;
+        sxy += dx * (pt[1] - my);
         sxx += dx * dx;
-    };
+    }
     return if (sxx > 0) sxy / sxx * 86400 else 0;
 }
+
+/// A column's points from `from` on, newest first; with WAL columns, only those no later
+/// point undercuts
+const Envelope = struct {
+    hist: []const ad.HistoryRow,
+    from: i64,
+    c: Col,
+    wal: []const Col,
+    i: ?usize = null,
+    min: f64 = std.math.inf(f64),
+
+    fn next(e: *Envelope) ?struct { i64, f64 } {
+        var i = e.i orelse e.hist.len;
+        defer e.i = i;
+        while (i > 0) {
+            i -= 1;
+            const r = e.hist[i];
+            if (r.time < e.from) return null;
+            var v: f64 = @floatFromInt(at(r, e.c) orelse continue);
+            for (e.wal) |w| v -= @floatFromInt(at(r, w) orelse 0);
+            if (e.wal.len > 0) {
+                if (v > e.min) continue;
+                e.min = v;
+            }
+            return .{ r.time, v };
+        }
+        return null;
+    }
+};
+
+const wal_all: []const Col = &.{ .meiolol_wal, .timeline_wal, .raw_wal };
 
 fn kilo(h: *H, v: ?f64) Text {
     const x = v orelse return .{ .s = "–" };
@@ -395,7 +528,7 @@ fn readings(h: *H, s: *const ad.Snapshot) N {
     const hist = s.history;
     if (hist.len < 2) return .none;
     var tiles: std.ArrayList(strip.Item) = .empty;
-    inline for (.{ .{ "matches", W.matches_day }, .{ "timelines", W.timelines_day } }) |x| {
+    for ([_]struct { Col, Text }{ .{ .matches, W.matches_day }, .{ .timelines, W.timelines_day } }) |x| {
         const r6 = growth(hist, x[0], 0.25);
         const r24 = growth(hist, x[0], 1);
         const wk = growth(hist, x[0], 7);
@@ -414,16 +547,16 @@ fn readings(h: *H, s: *const ad.Snapshot) N {
         });
     }
     const args = s.riot.crawl_args;
-    const m24 = growth(hist, "matches", 1);
-    const t24 = growth(hist, "timelines", 1);
+    const m24 = growth(hist, .matches, 1);
+    const t24 = growth(hist, .timelines, 1);
     if (m24 != null and t24 != null and m24.? > 0) add(h, &tiles, .{
         .label = W.per_match,
         .value = phrase.num(h, .rate, t24.? / m24.? * 100),
         .ctx = if (flag(args, "timelines")) |v| W.asks.with(h, .{ .n = v }) else W.share,
     });
     const lastr = hist[hist.len - 1];
-    inline for (.{ .{ "match_queue", W.match_queue }, .{ "timeline_queue", W.timeline_queue } }) |x| {
-        if (@field(lastr, x[0])) |q| if (growth(hist, x[0], 1)) |r| {
+    for ([_]struct { Col, Text }{ .{ .match_queue, W.match_queue }, .{ .timeline_queue, W.timeline_queue } }) |x| {
+        if (at(lastr, x[0])) |q| if (growth(hist, x[0], 1)) |r| {
             const qf: f64 = @floatFromInt(q);
             const flat = @abs(r) < qf * 0.02;
             add(h, &tiles, .{
@@ -434,7 +567,7 @@ fn readings(h: *H, s: *const ad.Snapshot) N {
             });
         };
     }
-    if (growth(hist, "mastery", 1)) |ms| add(h, &tiles, .{ .label = W.mastery_day, .value = kilo(h, ms), .ctx = if (ms > 0) W.collecting else W.not_collecting });
+    if (growth(hist, .mastery, 1)) |ms| add(h, &tiles, .{ .label = W.mastery_day, .value = kilo(h, ms), .ctx = if (ms > 0) W.collecting else W.not_collecting });
     var lines = h.list();
     if (args.len > 0) {
         const keep = struct {
@@ -528,7 +661,7 @@ pub fn crawler(ch: *Charts, h: *H, s: *const ad.Snapshot) N {
 
     return h.div(.{ .class = "tab" }, .{
         readings(h, s),
-        controls(ch, h, s),
+        controls(ch, h, s, true),
         h.p(.{ .class = "lead" }, .{if (sp.live) W.live_sub else W.crawler_sub}),
         h.div(.{ .class = "charts" }, .{charts.done()}),
         messages(ch, h, sp.c),
@@ -574,7 +707,7 @@ fn messages(ch: *Charts, h: *H, c: ad.Crawl) N {
 }
 
 /// A queue's groups as bars on one scale
-fn groupBars(h: *H, title: Text, gs: []const ad.Group) N {
+fn groupBars(h: *H, title: Text, gs: []const ad.Group, key: Text, value: Text) N {
     var most: i64 = 0;
     for (gs) |g| most = @max(most, g.n);
     var rows = h.list();
@@ -585,41 +718,58 @@ fn groupBars(h: *H, title: Text, gs: []const ad.Group) N {
     return card.view(h, .{}, &.{
         card.head(h, title, null, &.{}),
         if (gs.len == 0) h.p(.{ .class = "lead" }, .{W.no_rows}) else h.table(.{ .class = "bars" }, .{
-            h.thead(.{}, .{h.tr(.{}, .{ h.th(.{}, .{W.c_state}), h.th(.{ .data_answer = true }, .{W.c_jobs}) })}),
+            h.thead(.{}, .{h.tr(.{}, .{ h.th(.{}, .{key}), h.th(.{ .data_answer = true }, .{value}) })}),
             h.tbody(.{}, .{rows.done()}),
         }),
     });
 }
 
+/// The snapshots, 15 minutes apart, as 15-minute buckets
+const hist_step = 900;
+
+fn histStart(hist: []const ad.HistoryRow) i64 {
+    return @divFloor(hist[0].time, hist_step) * hist_step;
+}
+
+/// A history column per bucket from histStart, times `scale`; null without a snapshot
+fn histValues(h: *H, hist: []const ad.HistoryRow, c: Col, scale: f64) []const ?f32 {
+    const start = histStart(hist);
+    const len: usize = @intCast(@divFloor(hist[hist.len - 1].time - start, hist_step) + 1);
+    const out = h.mem.alloc(?f32, len) catch {
+        h.oom = true;
+        return &.{};
+    };
+    @memset(out, null);
+    for (hist) |r| if (at(r, c)) |v| {
+        out[@intCast(@divFloor(r.time - start, hist_step))] = @floatCast(@as(f64, @floatFromInt(v)) * scale);
+    };
+    return out;
+}
+
+fn histChart(ch: *Charts, h: *H, c: Chart, hist: []const ad.HistoryRow, o: timechart.Time) N {
+    var x = o;
+    x.start = histStart(hist);
+    x.step = hist_step;
+    return chart(ch, h, c, null, x);
+}
+
 fn queues(ch: *Charts, h: *H, s: *const ad.Snapshot) N {
     const q = if (ch.live) |l| l.queues else s.queues;
-    // The snapshots, 15 minutes apart, into 15-minute buckets
-    const step = 900;
     const hist = s.history;
-    var backlog: ?N = null;
-    if (hist.len >= 2) {
-        const start = @divFloor(hist[0].time, step) * step;
-        const len: usize = @intCast(@divFloor(hist[hist.len - 1].time - start, step) + 1);
-        const mq = h.mem.alloc(?f32, len) catch return oom(h);
-        const tq = h.mem.alloc(?f32, len) catch return oom(h);
-        @memset(mq, null);
-        @memset(tq, null);
-        for (hist) |r| {
-            const i: usize = @intCast(@divFloor(r.time - start, step));
-            if (r.match_queue) |v| mq[i] = @floatFromInt(v);
-            if (r.timeline_queue) |v| tq[i] = @floatFromInt(v);
-        }
-        backlog = chart(ch, h, .backlog, null, .{
-            .label = W.backlog,
-            .start = start,
-            .step = step,
-            .series = series(h, &.{ .{ .name = W.match_q, .values = mq }, .{ .name = W.timeline_q, .values = tq } }),
-        });
-    }
     return h.div(.{ .class = "tab" }, .{
         card.sechead(h, W.queues, null, &.{}),
-        h.div(.{ .class = "cards" }, .{ groupBars(h, W.match_queue, q.match), groupBars(h, W.timeline_queue, q.timeline) }),
-        backlog,
+        h.div(.{ .class = "cards" }, .{
+            groupBars(h, W.match_queue, q.match, W.c_state, W.c_jobs),
+            groupBars(h, W.timeline_queue, q.timeline, W.c_state, W.c_jobs),
+        }),
+        if (hist.len >= 2) histChart(ch, h, .backlog, hist, .{
+            .label = W.backlog,
+            .start = 0,
+            .series = series(h, &.{
+                .{ .name = W.match_q, .values = histValues(h, hist, .match_queue, 1) },
+                .{ .name = W.timeline_q, .values = histValues(h, hist, .timeline_queue, 1) },
+            }),
+        }) else null,
     });
 }
 
@@ -712,7 +862,7 @@ pub fn riot(ch: *Charts, h: *H, s: *const ad.Snapshot) N {
             h.p(.{ .class = "lead" }, .{W.key_sub}),
             strip.view(h, tiles.items),
         }),
-        controls(ch, h, s),
+        controls(ch, h, s, true),
         h.div(.{ .class = "charts" }, .{charts.done()}),
         h.div(.{ .class = "cards" }, .{ limits(h, s.riot), keyProblems(h, kp) }),
     });
@@ -764,6 +914,366 @@ fn keyProblems(h: *H, kp: []const ad.KeyProblem) N {
     });
 }
 
+// Storage
+
+/// "132.4 GB", "512.0 MB"
+fn bytes(h: *H, v: ?f64) Text {
+    const x = v orelse return .{ .s = "–" };
+    const a = @abs(x);
+    const sign: []const u8 = if (x < 0) "-" else "";
+    if (a >= 1e9) return Phrase("{s:text}{n:dec} GB").with(h, .{ .s = sign, .n = a / 1e9 });
+    if (a >= 1e6) return Phrase("{s:text}{n:dec} MB").with(h, .{ .s = sign, .n = a / 1e6 });
+    if (a >= 1e3) return Phrase("{s:text}{n:dec} KB").with(h, .{ .s = sign, .n = a / 1e3 });
+    return Phrase("{s:text}{n:count} B").with(h, .{ .s = sign, .n = @as(u64, @intFromFloat(a)) });
+}
+
+/// A history column named as the counts' table (timeline.timelines is timelines)
+fn colOf(table: []const u8) ?Col {
+    return std.meta.stringToEnum(Col, if (std.mem.eql(u8, table, "timeline.timelines")) "timelines" else table);
+}
+
+pub fn storage(ch: *Charts, h: *H, s: *const ad.Snapshot) N {
+    const hist = s.history;
+    const dk = if (ch.live) |l| l.disk orelse s.disk else s.disk;
+    var tiles: std.ArrayList(strip.Item) = .empty;
+    const span_s: f64 = if (hist.len > 1) @min(7 * 86400, @as(f64, @floatFromInt(hist[hist.len - 1].time - hist[0].time))) else 0;
+    if (dk) |d| if (d.size > 0) {
+        const used = @as(f64, @floatFromInt(d.used)) / @as(f64, @floatFromInt(d.size));
+        add(h, &tiles, .{
+            .label = W.disk_used,
+            .value = phrase.num(h, .rate, used * 100),
+            .ctx = W.of.with(h, .{ .a = bytes(h, @floatFromInt(d.used)).s, .b = bytes(h, @floatFromInt(d.size)).s }),
+            .step = if (used > 0.8) bad else if (used > 0.65) warn else null,
+        });
+        const g = growthLess(hist, .disk_used, wal_all, 7);
+        const g1 = growthLess(hist, .disk_used, wal_all, 1);
+        add(h, &tiles, .{
+            .label = W.disk_growth,
+            .value = if (g) |x| W.per_day.with(h, .{ .b = bytes(h, x).s }) else Text{ .s = "–" },
+            .ctx = if (g1) |x| W.over_day.with(h, .{ .t = span(h, span_s).s, .b = bytes(h, x).s }) else W.over.with(h, .{ .t = span(h, span_s).s }),
+        });
+        if (g) |x| if (x > 0) {
+            const left = @as(f64, @floatFromInt(d.free)) / x;
+            const faster: ?f64 = if (g1) |y| (if (y > x) @as(f64, @floatFromInt(d.free)) / y else null) else null;
+            const ld: u64 = @intFromFloat(@round(left));
+            add(h, &tiles, .{
+                .label = W.full_at,
+                .value = ap.day(h, s.now + @as(i64, @intFromFloat(@min(left, 1e5) * 86400))),
+                .ctx = if (faster) |f| W.full_in2.with(h, .{ .n = ld, .m = @as(u64, @intFromFloat(@round(f))) }) else W.full_in.with(h, .{ .n = ld }),
+                .step = if (left < 14) bad else if (left < 30) warn else null,
+            });
+        };
+    };
+    var total: f64 = 0;
+    var parts: std.Io.Writer.Allocating = .init(h.mem);
+    for (s.files, 0..) |f, i| {
+        total += @floatFromInt(f.bytes);
+        const nm = if (std.mem.endsWith(u8, f.name, ".db")) f.name[0 .. f.name.len - 3] else f.name;
+        parts.writer.print("{s}{s} {s}", .{ if (i > 0) ", " else "", nm, bytes(h, @floatFromInt(f.bytes)).s }) catch {
+            h.oom = true;
+        };
+    }
+    add(h, &tiles, .{ .label = W.databases, .value = bytes(h, total), .ctx = .{ .s = parts.written() } });
+    for (s.counts) |c| if (std.mem.eql(u8, c.name, "matches") and c.rows > 0) {
+        add(h, &tiles, .{ .label = W.per_stored, .value = bytes(h, total / @as(f64, @floatFromInt(c.rows))), .ctx = W.all_dbs });
+    };
+    const gm = growthLess(hist, .meiolol_db, &.{.meiolol_wal}, 7);
+    const gt = growthLess(hist, .timeline_db, &.{.timeline_wal}, 7);
+    const gr = growthLess(hist, .raw_db, &.{.raw_wal}, 7);
+    add(h, &tiles, .{
+        .label = W.db_growth,
+        .value = if (gm == null and gt == null and gr == null) Text{ .s = "–" } else W.per_day.with(h, .{ .b = bytes(h, (gm orelse 0) + (gt orelse 0) + (gr orelse 0)).s }),
+        .ctx = W.db_growth_sub.with(h, .{ .a = bytes(h, gm).s, .b = bytes(h, gt).s, .c = bytes(h, gr).s }),
+    });
+    if (s.backups) |b| add(h, &tiles, .{
+        .label = W.backups,
+        .value = bytes(h, @floatFromInt(b.bytes)),
+        .ctx = W.backups_sub.with(h, .{ .n = b.files, .t = ap.ago(h, s.now - b.newest).s }),
+        .step = if (b.newest > 0 and s.now - b.newest > 2 * 86400) warn else null,
+    });
+
+    var charts = h.list();
+    if (hist.len >= 2) {
+        charts.add(histChart(ch, h, .dbfiles, hist, .{
+            .label = W.files,
+            .kind = .area,
+            .unit = .gb,
+            .start = 0,
+            .series = series(h, &.{
+                .{ .name = .{ .s = "meiolol.db" }, .values = histValues(h, hist, .meiolol_db, 1e-9) },
+                .{ .name = .{ .s = "timeline.db" }, .values = histValues(h, hist, .timeline_db, 1e-9) },
+                .{ .name = .{ .s = "raw.db" }, .values = histValues(h, hist, .raw_db, 1e-9) },
+            }),
+        }));
+        if (dk) |d| charts.add(histChart(ch, h, .disk, hist, .{
+            .label = W.disk_used,
+            .unit = .gb,
+            .start = 0,
+            .series = series(h, &.{.{ .name = W.used, .values = histValues(h, hist, .disk_used, 1e-9), .colour = 1 }}),
+            .refs = refs(h, &.{.{ .v = @floatCast(@as(f64, @floatFromInt(d.size)) / 1e9), .label = W.disk_size }}),
+        }));
+    }
+    return h.div(.{ .class = "tab" }, .{
+        card.view(h, .{}, &.{
+            card.head(h, W.space, null, &.{}),
+            h.p(.{ .class = "lead" }, .{W.space_sub}),
+            strip.view(h, tiles.items),
+        }),
+        if (hist.len >= 2) h.p(.{ .class = "lead" }, .{W.files_sub}) else null,
+        h.div(.{ .class = "charts" }, .{charts.done()}),
+        space(h, s),
+        rowsOf(ch, h, s),
+    });
+}
+
+/// Per table and index, from the daily dbstat scan
+fn space(h: *H, s: *const ad.Snapshot) N {
+    const st = s.storage orelse return h.div(.{ .class = "tab" }, .{ card.sechead(h, W.what, null, &.{}), h.p(.{ .class = "lead" }, .{W.no_scan}) });
+    const rows = h.mem.dupe(ad.StorageRow, st.rows) catch return oom(h);
+    std.mem.sort(ad.StorageRow, rows, {}, struct {
+        fn f(_: void, a: ad.StorageRow, b: ad.StorageRow) bool {
+            return a.bytes > b.bytes;
+        }
+    }.f);
+    var cards = h.list();
+    var dbs: std.ArrayList([]const u8) = .empty;
+    for (rows) |x| {
+        for (dbs.items) |d| {
+            if (std.mem.eql(u8, d, x.db)) break;
+        } else dbs.append(h.mem, x.db) catch return oom(h);
+    }
+    const totals = h.mem.alloc(f64, dbs.items.len) catch return oom(h);
+    for (dbs.items, totals) |d, *t| {
+        var sum: f64 = 0;
+        var idx: f64 = 0;
+        var most: f64 = 0;
+        var listed: usize = 0;
+        var rest: f64 = 0;
+        var restn: usize = 0;
+        var list = h.list();
+        for (rows) |x| if (std.mem.eql(u8, x.db, d)) {
+            const b: f64 = @floatFromInt(x.bytes);
+            sum += b;
+            if (std.mem.eql(u8, x.kind, "index")) idx += b;
+            most = @max(most, b);
+        };
+        t.* = sum;
+        for (rows) |x| if (std.mem.eql(u8, x.db, d)) {
+            const b: f64 = @floatFromInt(x.bytes);
+            if (listed == 8) {
+                rest += b;
+                restn += 1;
+                continue;
+            }
+            listed += 1;
+            list.add(h.tr(.{}, .{
+                h.th(.{ .scope = "row" }, .{ x.name, if (std.mem.eql(u8, x.kind, "index")) h.small(.{}, .{ " ", W.index }) else null }),
+                h.td(.{ .class = "barcell" }, .{bar.view(h, b, most, bytes(h, b))}),
+            }));
+        };
+        if (restn > 0) list.add(h.tr(.{}, .{
+            h.th(.{ .scope = "row" }, .{W.more.with(h, .{ .n = restn })}),
+            h.td(.{ .class = "barcell" }, .{bar.view(h, rest, most, bytes(h, rest))}),
+        }));
+        cards.add(card.view(h, .{}, &.{
+            card.head(h, W.db_total.with(h, .{ .d = d, .b = bytes(h, sum).s }), null, &.{}),
+            h.p(.{ .class = "lead" }, .{W.indexes.with(h, .{ .p = @as(u64, @intFromFloat(@round(if (sum > 0) idx / sum * 100 else 0))) })}),
+            h.table(.{ .class = "bars" }, .{
+                h.thead(.{}, .{h.tr(.{}, .{ h.th(.{}, .{W.c_name}), h.th(.{ .data_answer = true }, .{W.c_size}) })}),
+                h.tbody(.{}, .{list.done()}),
+            }),
+        }));
+    }
+    var all = h.list();
+    for (rows) |x| {
+        var t: f64 = 0;
+        for (dbs.items, totals) |d, v| if (std.mem.eql(u8, d, x.db)) {
+            t = v;
+        };
+        const b: f64 = @floatFromInt(x.bytes);
+        all.add(h.tr(.{}, .{
+            h.td(.{}, .{x.db}),
+            h.td(.{ .class = "msg" }, .{x.name}),
+            h.td(.{}, .{x.kind}),
+            h.td(.{ .class = "num" }, .{bytes(h, b)}),
+            h.td(.{ .class = "num" }, .{phrase.num(h, .rate, if (t > 0) b / t * 100 else 0)}),
+            h.td(.{ .class = "num" }, .{phrase.num(h, .count, x.cells)}),
+            h.td(.{ .class = "num" }, .{if (x.cells > 0) phrase.num(h, .count, x.bytes / x.cells) else Text{ .s = "–" }}),
+        }));
+    }
+    return h.div(.{ .class = "tab" }, .{
+        card.sechead(h, W.what, null, &.{}),
+        h.p(.{ .class = "lead" }, .{W.what_sub.with(h, .{ .t = ap.ago(h, s.now - st.generated).s })}),
+        h.div(.{ .class = "cards" }, .{cards.done()}),
+        h.el(.details, .{ .class = "c-card" }, .{
+            h.el(.summary, .{}, .{W.every.with(h, .{ .n = rows.len })}),
+            h.div(.{ .class = "tw" }, .{h.table(.{}, .{
+                h.thead(.{}, .{h.tr(.{}, .{
+                    h.th(.{}, .{W.c_db}),
+                    h.th(.{}, .{W.c_name}),
+                    h.th(.{}, .{W.c_kind}),
+                    h.th(.{ .class = "num", .data_answer = true }, .{W.c_size}),
+                    h.th(.{ .class = "num" }, .{W.c_share}),
+                    h.th(.{ .class = "num" }, .{W.c_cells}),
+                    h.th(.{ .class = "num" }, .{W.c_per_cell}),
+                })}),
+                h.tbody(.{}, .{all.done()}),
+            })}),
+        }),
+    });
+}
+
+/// Row counts: a small chart each, and the table
+fn rowsOf(ch: *Charts, h: *H, s: *const ad.Snapshot) N {
+    const hist = s.history;
+    var minis = h.list();
+    if (hist.len >= 2) {
+        for ([_]struct { Chart, Col, Text }{
+            .{ .m_matches, .matches, W.r_matches },
+            .{ .m_timelines, .timelines, W.r_timelines },
+            .{ .m_drafts, .drafts, W.r_drafts },
+            .{ .m_players, .players, W.r_players },
+            .{ .m_ranks, .ranks, W.r_ranks },
+            .{ .m_mastery, .mastery, W.r_mastery },
+        }) |x| minis.add(histChart(ch, h, x[0], hist, .{
+            .label = x[2],
+            .start = 0,
+            .height = 100,
+            .series = series(h, &.{.{ .name = x[2], .values = histValues(h, hist, x[1], 1) }}),
+        }));
+    }
+    var day_ago: ?ad.HistoryRow = null;
+    for (hist) |r| if (r.time >= s.now - 86400) {
+        day_ago = r;
+        break;
+    };
+    var rows = h.list();
+    for (s.counts) |c| {
+        const col = colOf(c.name);
+        const before = if (day_ago) |r| (if (col) |x| at(r, x) else null) else null;
+        rows.add(h.tr(.{}, .{
+            h.th(.{ .scope = "row" }, .{c.name}),
+            h.td(.{ .class = "num" }, .{phrase.num(h, .count, c.rows)}),
+            h.td(.{ .class = "num" }, .{if (before) |b| phrase.num(h, .signed, c.rows - @as(i64, @intCast(b))) else null}),
+            h.td(.{ .class = "num" }, .{if (if (col) |x| growth(hist, x, 7) else null) |g| kilo(h, g) else null}),
+        }));
+    }
+    return h.div(.{ .class = "tab" }, .{
+        card.sechead(h, W.rows, null, &.{}),
+        h.p(.{ .class = "lead" }, .{W.rows_sub}),
+        h.div(.{ .class = "minis" }, .{minis.done()}),
+        card.view(h, .{ .flush = true }, &.{h.div(.{ .class = "tw" }, .{h.table(.{}, .{
+            h.thead(.{}, .{h.tr(.{}, .{
+                h.th(.{}, .{W.c_table}),
+                h.th(.{ .class = "num", .data_answer = true }, .{W.c_rows}),
+                h.th(.{ .class = "num" }, .{W.c_day}),
+                h.th(.{ .class = "num" }, .{W.c_week}),
+            })}),
+            h.tbody(.{}, .{rows.done()}),
+        })})}),
+    });
+}
+
+// Ingest
+
+fn regionOf(s: *const ad.Snapshot, platform: []const u8) ?ad.Region {
+    for (s.platforms) |p| if (std.mem.eql(u8, p.id, platform)) return p.region;
+    return null;
+}
+
+fn shown(ch: *const Charts, r: ad.Region) bool {
+    return ch.regions & bit(@backingInt(r)) != 0;
+}
+
+pub fn ingest(ch: *Charts, h: *H, s: *const ad.Snapshot) N {
+    const m = s.drafts;
+    const days = m.days;
+    var day_chart: ?N = null;
+    if (days.len > 0) {
+        var l: std.ArrayList(timechart.Series) = .empty;
+        const recent = h.mem.alloc(?f32, days.len) catch return oom(h);
+        const cut = h.mem.alloc(?f32, days.len) catch return oom(h);
+        @memset(recent, 0);
+        @memset(cut, 0);
+        for (std.enums.values(ad.Region)) |r| {
+            if (!shown(ch, r)) continue;
+            const i = @backingInt(r);
+            const v = h.mem.alloc(?f32, days.len) catch return oom(h);
+            for (days, v, 0..) |d, *o, k| {
+                // The window's first day is cut by the row limit
+                if (k == 0) {
+                    o.* = 0;
+                    cut[0].? += @floatFromInt(d.region[i]);
+                    continue;
+                }
+                o.* = @floatFromInt(d.region[i] -| d.recent[i]);
+                recent[k].? += @floatFromInt(d.recent[i]);
+            }
+            l.append(h.mem, .{ .name = region_names.get(r), .values = v, .colour = i }) catch return oom(h);
+        }
+        l.append(h.mem, .{ .name = W.recent, .values = recent, .colour = 4 }) catch return oom(h);
+        l.append(h.mem, .{ .name = W.cut, .values = cut, .colour = 5 }) catch return oom(h);
+        day_chart = chart(ch, h, .gamedays, W.by_day_sub, .{
+            .label = W.by_day,
+            .kind = .bars,
+            .clock = .utc,
+            .start = @as(i64, days[0].day) * 86400,
+            .step = 86400,
+            .series = l.items,
+        });
+    }
+    var most: u64 = 0;
+    for (m.minutes) |x| most = @max(most, x);
+    var lens = h.list();
+    for (m.minutes, 0..) |x, i| lens.add(h.tr(.{}, .{
+        h.th(.{ .scope = "row" }, .{if (i + 1 == m.minutes.len) W.mins_last else W.mins.with(h, .{ .a = i * 5, .b = i * 5 + 5 })}),
+        h.td(.{ .class = "barcell" }, .{bar.view(h, @floatFromInt(x), @floatFromInt(most), phrase.num(h, .count, x))}),
+    }));
+    const unknown: u64 = if (m.tiers.len > 0) @intCast(@max(m.tiers[m.tiers.len - 1].n, 0)) else 0;
+    var patches: std.Io.Writer.Allocating = .init(h.mem);
+    for (m.patches, 0..) |p, i| patches.writer.print("{s}{s}", .{ if (i > 0) ", " else "", p.key }) catch {
+        h.oom = true;
+    };
+    var plats: std.ArrayList(ad.Group) = .empty;
+    for (m.platforms) |g| if (if (regionOf(s, g.key)) |r| shown(ch, r) else true) plats.append(h.mem, g) catch return oom(h);
+    var pool: std.ArrayList(ad.Group) = .empty;
+    for (s.players) |g| {
+        const r = std.meta.stringToEnum(ad.Region, g.key);
+        if (r == null or shown(ch, r.?)) pool.append(h.mem, g) catch return oom(h);
+    }
+    return h.div(.{ .class = "tab" }, .{
+        controls(ch, h, s, false),
+        h.p(.{ .class = "lead" }, .{W.ingest_sub.with(h, .{ .n = m.rows })}),
+        day_chart,
+        h.div(.{ .class = "cards" }, .{
+            card.view(h, .{}, &.{
+                card.head(h, W.length, null, &.{}),
+                h.table(.{ .class = "bars" }, .{
+                    h.thead(.{}, .{h.tr(.{}, .{ h.th(.{}, .{W.c_minutes}), h.th(.{ .data_answer = true }, .{W.c_games}) })}),
+                    h.tbody(.{}, .{lens.done()}),
+                }),
+            }),
+            card.view(h, .{}, &.{
+                card.head(h, W.sanity, null, &.{}),
+                h.table(.{ .class = "kv" }, .{
+                    h.thead(.{}, .{h.tr(.{}, .{ h.th(.{}, .{W.c_check}), h.th(.{ .data_answer = true }, .{W.c_value}) })}),
+                    h.tbody(.{}, .{
+                        h.tr(.{}, .{ h.th(.{ .scope = "row" }, .{W.blue}), h.td(.{}, .{if (m.rows > 0) phrase.num(h, .rate, @as(f64, @floatFromInt(m.blue_wins)) / @as(f64, @floatFromInt(m.rows)) * 100) else Text{ .s = "–" }}) }),
+                        h.tr(.{}, .{ h.th(.{ .scope = "row" }, .{W.ranked}), h.td(.{}, .{if (m.rows > 0) phrase.num(h, .rate, (1 - @as(f64, @floatFromInt(unknown)) / @as(f64, @floatFromInt(m.rows))) * 100) else Text{ .s = "–" }}) }),
+                        h.tr(.{}, .{ h.th(.{ .scope = "row" }, .{W.platforms}), h.td(.{}, .{phrase.num(h, .count, m.platforms.len)}) }),
+                        h.tr(.{}, .{ h.th(.{ .scope = "row" }, .{W.patches}), h.td(.{}, .{if (m.patches.len > 0) Text{ .s = patches.written() } else Text{ .s = "–" }}) }),
+                    }),
+                }),
+            }),
+            groupBars(h, W.by_platform, plats.items, W.c_platform, W.c_games),
+            groupBars(h, W.by_rank, m.tiers, W.c_tier, W.c_games),
+            groupBars(h, W.ladder_tiers, s.ladder, W.c_tier, W.c_players),
+            groupBars(h, W.pool, pool.items, W.c_region, W.c_players),
+            groupBars(h, W.by_patch, s.by_patch, W.c_patch, W.c_matches),
+        }),
+    });
+}
+
 pub const Demo = struct {
     pub fn charts(tab: ap.Tab) Charts {
         const d = ap.Demo;
@@ -773,13 +1283,15 @@ pub const Demo = struct {
 
 pub fn gallery(g: *Gallery) void {
     const a = g.h.mem;
-    const states = [_][]const u8{ "crawler: a day, all regions", "crawler: 3 hours live, europe and asia", "Riot API: a key problem, one chart tipped", "loading", "another tab: hidden" };
+    const states = [_][]const u8{ "crawler: a day, all regions", "crawler: 3 hours live, europe and asia", "Riot API: a key problem, one chart tipped", "loading", "another tab: hidden", "storage", "ingest: no sea" };
     for (states, 0..) |caption, i| {
         const ch = a.create(Charts) catch return;
         ch.* = switch (i) {
             0, 1 => Demo.charts(.crawler),
             2 => Demo.charts(.riot),
             3 => .{ .tab = .riot },
+            5 => Demo.charts(.storage),
+            6 => Demo.charts(.ingest),
             else => .{},
         };
         switch (i) {
@@ -788,6 +1300,7 @@ pub fn gallery(g: *Gallery) void {
                 ch.regions = 0b0110;
             },
             2 => ch.times[@backingInt(Chart.requests)].tip = 20,
+            6 => ch.regions = 0b0111,
             else => {},
         }
         g.addFill(caption, ch.view(g.h));
@@ -809,6 +1322,9 @@ pub const css =
     \\  .c-adcharts .sw[data-s="3"] { --s: var(--accent); }
     \\  .c-adcharts .charts, .c-adcharts .cards { display: grid; gap: var(--sp-3);
     \\    grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); }
+    \\  .c-adcharts .minis { display: grid; gap: var(--sp-3);
+    \\    grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); }
+    \\  .c-adcharts th small { color: var(--muted); }
     \\  .c-adcharts .readings { margin: 0; padding-inline-start: var(--sp-4); font-size: var(--fs-s); color: var(--muted); }
     \\  .c-adcharts .tw { overflow-x: auto; }
     \\  .c-adcharts table { width: 100%; border-collapse: collapse; font-size: var(--fs-s); }
@@ -821,9 +1337,25 @@ pub const css =
     \\  .c-adcharts .nw { white-space: nowrap; }
     \\  .c-adcharts .msg { overflow-wrap: anywhere; }
     \\  .c-adcharts .mono { font-family: ui-monospace, monospace; font-size: var(--fs-xs); }
-    \\  .c-adcharts table.bars th { width: 40%; }
+    \\  .c-adcharts table.bars th { width: 40%; overflow-wrap: anywhere; }
     \\  .c-adcharts details.c-card > summary { cursor: pointer; font-weight: var(--w-b); }
     \\  .c-adcharts summary .sub { font-weight: var(--w-r); font-size: var(--fs-s); }
     \\}
     \\
 ;
+
+const testing = std.testing;
+
+test "admin charts: growth per day by least squares, WAL swings left out" {
+    var hist: [9]ad.HistoryRow = undefined;
+    for (&hist, 0..) |*r, i| {
+        const k: u64 = @intCast(i);
+        // 1 GB a day in the file, 3 h apart; the WAL swings by 4 GB and back
+        r.* = .{ .time = @as(i64, @intCast(i)) * 3 * 3600, .meiolol_db = 100_000_000_000 + k * 125_000_000 + (if (i % 2 == 1) @as(u64, 4_000_000_000) else 0), .meiolol_wal = if (i % 2 == 1) 4_000_000_000 else 0, .matches = 1000 + k * 300 };
+    }
+    try testing.expectApproxEqAbs(@as(f64, 2400), growth(&hist, .matches, 7).?, 1e-6);
+    try testing.expectApproxEqAbs(@as(f64, 1e9), growthLess(&hist, .meiolol_db, &.{.meiolol_wal}, 7).?, 1);
+    // Under ~5 h of history: no rate
+    try testing.expectEqual(@as(?f64, null), growth(hist[0..2], .matches, 7));
+    try testing.expectEqual(@as(?f64, null), growth(&hist, .raw_db, 7));
+}
