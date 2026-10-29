@@ -44,6 +44,9 @@ docs/production-key.md "Product rules".
 | U.GG Darius build | 2,408 | about 10 | build column 1,014 of 1,920 px |
 | OP.GG Darius build | 4,220 | about 40 (most in the sidebar) | build starts at y 815 |
 
+Re-measured 29 Oct (Darius, 1920x1080): build panel y 266-953, first lane opponent at
+y 1,059; on the phone the strip and the rune-page row by y 700.
+
 Where our space goes, champion page (Darius, 1920x1080):
 - Player win rate histogram: a 420x220 px card with about 1,100 px of nothing beside it,
   before the champion's own win rate
@@ -80,31 +83,31 @@ Matchup page (Kai'Sa vs Jinx):
 
 ## What the leaders have, by section
 
-Y: shown; f: as a filter of the build page; -: not there. "Us" is the live site.
+Y: shown; f: as a filter of the build page; -: not there. "Us" is the live site, 29 Oct.
 
 | Section | LoLalytics | U.GG | OP.GG | Others | Us |
 | --- | --- | --- | --- | --- | --- |
-| Role tabs with role share | Y | Y | Y | Blitz, LoG | roles stacked, share in prose |
-| Stat strip: win, pick, ban, games, rank in role | Y (8 figures) | Y (6) | Y (3, trend arrows) | all | 4 big tiles, rank under win rate |
-| Tier letter | Y | Y | Y | all | - (Jacob's call, CH0) |
-| Build on the first screen | Y, one panel | runes, spells only | n (y 815) | Blitz Y | strip, partly |
-| Most played vs highest win rate build toggle | Y | - | - | - | per cell "Highest win rate" |
+| Role tabs with role share | Y | Y | Y | Blitz, LoG | Y (RolePicker, share under each role) |
+| Stat strip: win, pick, ban, games, rank in role | Y (8 figures) | Y (6) | Y (3, trend arrows) | all | Y (6: rank in role, patch change) |
+| Tier letter | Y | Y | Y | all | - (Jacob 25 Oct: none) |
+| Build on the first screen | Y, one panel | runes, spells only | n (y 815) | Blitz Y | Y, one panel |
+| Most played vs highest win rate build toggle | Y | - | - | - | Y, and "best" per slot |
 | Build variants (AP, lethality, ...) | - | Y | - | Blitz | - |
-| Full skill order, levels 1-18 | Y (4x18 grid) | Y (grid) | Y (15 squares) | LoG | - (priority, levels 1-3) |
-| Items 4, 5, 6 options by slot | Y (2-3 each) | Y (5-7 columns) | Y (5 rows each) | Blitz | - (core 2, core 3 only) |
-| Item purchase minute | Y | - | - | - | - |
+| Full skill order, levels 1-18 | Y (4x18 grid) | Y (grid) | Y (15 squares) | LoG | Y (4x18 grid) |
+| Items 4, 5, 6 options by slot | Y (2-3 each) | Y (5-7 columns) | Y (5 rows each) | Blitz | Y (3 each, all when opened) |
+| Item purchase minute | Y | - | - | - | Y (core path) |
 | Item win rate before buying (WRI) | - | - | - | Blitz | - |
-| Every rune with win rate and pick | Y | - | Y | | Y (build page) |
-| Lane opponents, all on screen | strips by role | 8-card strip, counters tab | 5+5 sidebar icons | | grid, below the fold |
-| Counters against every enemy role | Y (5 strips) | - | - | | - (data in stats file) |
-| Lane result per opponent (gold at 15) | - | Y (GD@15 list, table) | - | Blitz lane WR | Y (gold at 14 on tiles) |
-| Duos by ally role | Y (synergy tabs) | - | Y (4 tables) | DeepLoL | - (data in stats file) |
-| Win rate, pick, ban over time | Y (by day, per rank) | - | Y (by patch, with rank) | | patch line in prose |
-| Win rate by game length | Y | - | Y (5 buckets) | LoG graphs | - (early lean prose) |
+| Every rune with win rate and pick | Y | - | Y | | Y (in the panel) |
+| Lane opponents, all on screen | strips by role | 8-card strip, counters tab | 5+5 sidebar icons | | dot plot by win rate, first at y 1,059 |
+| Counters against every enemy role | Y (5 strips) | - | - | | Y (Against + role) |
+| Lane result per opponent (gold at 15) | - | Y (GD@15 list, table) | - | Blitz lane WR | Y (gold at 14 in the brief) |
+| Duos by ally role | Y (synergy tabs) | - | Y (4 tables) | DeepLoL | Y (With + role) |
+| Win rate, pick, ban over time | Y (by day, per rank) | - | Y (by patch, with rank) | | Y (by patch: win, pick, rank) |
+| Win rate by game length | Y | - | Y (5 buckets) | LoG graphs | Y (5 buckets, early lean) |
 | Objectives secured and won | Y | - | - | | - |
 | End-of-game stats ranked in role | Y | - | - | | - |
 | Players' win rate spread | - | - | - | | Y (histogram) |
-| Lane curves, early/late lean, vs usual, pick-up difficulty | - | - | - | | Y, ours alone |
+| Lane curves, early/late lean, vs usual, pick-up difficulty | - | - | - | | Y, ours alone (curves on the matchup page) |
 
 Matchup (one opponent):
 
@@ -113,12 +116,12 @@ Matchup (one opponent):
 | Own page or a filter | f (VS block in filter bar) | f (?opp=) | f (?target_champion=) | Mobalytics page; Blitz, LoG filter | own page |
 | Matchup win rate and games | Y | Y | Y | all | Y |
 | Delta against the average opponent | Y (prose) | - | - | Mobalytics "than expected" | Y (vs usual) |
-| Whole build refiltered to the pair | Y | Y (items 4-6 not refiltered) | Y | Blitz builds card, LoG | part: runes, start, boots, core, skills |
-| Spells, items 4-6, skill order for the pair | Y | partly | Y | | - |
+| Whole build refiltered to the pair | Y | Y (items 4-6 not refiltered) | Y | Blitz builds card, LoG | Y, slots with the pair's games (the usual build when thin) |
+| Spells, items 4-6, skill order for the pair | Y | partly | Y | | same panel; often thin per pair |
 | Lane stats at 15 (gold, XP, CS) | - | table only | - | Mobalytics, METAsrc, LoG | Y, over time |
-| Level 2, first blood | - | - | - | METAsrc, Mobalytics | - (kills by phase) |
-| Opponent list on the page to switch | VS block | search chip | sidebar list | METAsrc master-detail | behind a button |
-| Win rate by game length for the pair | Y | - | - | | - |
+| Level 2, first blood | - | - | - | METAsrc, Mobalytics | Y (Head to head) |
+| Opponent list on the page to switch | VS block | search chip | sidebar list | METAsrc master-detail | strip of every opponent in the head |
+| Win rate by game length for the pair | Y | - | - | | Y |
 | Supports in a bot lane matchup | - | - | - | - | - (data in stats file) |
 | Matchup tips | - | - | user tips, empty | Mobalytics paid | - |
 
