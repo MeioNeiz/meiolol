@@ -373,13 +373,13 @@ fn riot(site: *const Site, d: *pp.Data, pair: Pair) !void {
     for (items, n.items) |*k, c| k.* = .{
         .change = try change(a, c, c.id),
         // A gone item has no image in the new version: art's placeholder
-        .icon = if (c.status == .gone) "" else try a.print("https://ddragon.leagueoflegends.com/cdn/{s}/img/item/{d}.png", .{ d.ddragon, c.id }),
+        .icon = if (c.status == .gone) "" else try ui.art.local(a, try a.print("https://ddragon.leagueoflegends.com/cdn/{s}/img/item/{d}.png", .{ d.ddragon, c.id })),
         .users = if (f) |b| try users(a, d, b, champs, c.id, false) else &.{},
     };
     const runes = try a.alloc(pp.Kit, n.runes.len);
     for (runes, n.runes) |*k, c| k.* = .{
         .change = try change(a, c, c.id),
-        .icon = if (c.icon.len > 0) try a.print("https://ddragon.leagueoflegends.com/cdn/img/{s}", .{c.icon}) else "",
+        .icon = if (c.icon.len > 0) try ui.art.local(a, try a.print("https://ddragon.leagueoflegends.com/cdn/img/{s}", .{c.icon})) else "",
         .users = if (f) |b| try users(a, d, b, champs, c.id, true) else &.{},
     };
     d.items = items;

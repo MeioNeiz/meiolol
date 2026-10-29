@@ -61,7 +61,7 @@ pub const Arts = struct {
         };
         var art: ui.art.Art = if (ddragon.find(named, id)) |v| .{ .name = v.name, .src = v.icon } else .{ .name = try a.print("#{d}", .{id}), .src = "" };
         if (art.src.len == 0 and k == .item and x.names.version.len > 0)
-            art.src = try a.print("https://ddragon.leagueoflegends.com/cdn/{s}/img/item/{d}.png", .{ x.names.version, id });
+            art.src = try ui.art.local(a, try a.print("https://ddragon.leagueoflegends.com/cdn/{s}/img/item/{d}.png", .{ x.names.version, id }));
         try x.list.append(a, art);
         try x.keys.append(a, key);
         return @intCast(x.list.items.len - 1);

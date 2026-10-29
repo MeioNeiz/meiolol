@@ -884,7 +884,7 @@ pub const demo: Data = .{
     .items = &.{
         .{ .change = .{ .id = 2520, .name = "Bastionbreaker", .tone = .nerf, .slots = "", .lines = &.{
             .{ .before = "", .old = "22", .new = "18", .after = "Lethality", .dir = .nerf },
-        } }, .icon = "https://ddragon.leagueoflegends.com/cdn/16.21.1/img/item/2520.png", .users = &.{
+        } }, .icon = "/dd/16.21.1/img/item/2520.jpg", .users = &.{
             .{ .champ = 1, .role = .bottom, .share = 0.62, .row = 1 },
             .{ .champ = 4, .role = .bottom, .share = 0.31, .row = 5 },
             .{ .champ = 0, .role = .top, .share = 0.08, .row = null },
@@ -894,7 +894,7 @@ pub const demo: Data = .{
     .runes = &.{
         .{ .change = .{ .id = 8005, .name = "Press the Attack", .tone = .adjusted, .slots = "", .lines = &.{
             .{ .before = "Deals", .old = "40", .new = "45", .after = "damage", .dir = .adjusted },
-        } }, .icon = "https://ddragon.leagueoflegends.com/cdn/img/perk-images/Styles/Precision/PressTheAttack/PressTheAttack.png", .users = &.{
+        } }, .icon = "/dd/img/perk-images/Styles/Precision/PressTheAttack/PressTheAttack.png", .users = &.{
             .{ .champ = 3, .role = .bottom, .share = 0.41, .row = 3 },
         } },
     },

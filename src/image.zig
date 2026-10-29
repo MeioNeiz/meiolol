@@ -1,7 +1,8 @@
-//! Champion icons for the site: Data Dragon's PNG squares shrunk and saved as JPEG
-//! (80 px ~3 KB against ~29 KB for the 128 px PNG, drawn at 20-56 px). Reads the PNGs
-//! Data Dragon serves (8-bit RGB or RGBA, not interlaced; alpha dropped: the squares are
-//! opaque); writes baseline JPEG, no chroma subsampling (small art keeps its edges)
+//! Icons for the site: Data Dragon's PNGs shrunk and saved as JPEG (champion portraits
+//! 80 px ~3 KB against ~29 KB for the 128 px PNG, drawn at 20-56 px; items, spells) or
+//! PNG (runes: see-through). Reads the PNGs Data Dragon serves (8-bit RGB or RGBA, not
+//! interlaced; alpha kept only when some pixel uses it); writes baseline JPEG, no chroma
+//! subsampling (small art keeps its edges), or PNG
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -11,13 +12,16 @@ pub const Image = struct {
     w: u32,
     h: u32,
     rgb: []u8,
+    /// One byte a pixel, straight (not premultiplied); empty when opaque
+    alpha: []u8 = &.{},
 
     pub fn deinit(i: Image, gpa: Allocator) void {
         gpa.free(i.rgb);
+        gpa.free(i.alpha);
     }
 };
 
-/// Data Dragon's are 120 or 128: the raw rows of a bigger header would be megabytes
+/// Data Dragon's are 64 to 512: the raw rows of a bigger header would be megabytes
 const max_side = 1024;
 
 pub const PngError = error{ NotPng, Unsupported, Corrupt };
@@ -91,9 +95,17 @@ pub fn decodePng(gpa: Allocator, data: []const u8) (PngError || Allocator.Error)
             };
         }
     }
-    const rgb = try gpa.alloc(u8, @as(usize, w) * h * 3);
-    for (0..@as(usize, w) * h) |i| @memcpy(rgb[3 * i ..][0..3], px[channels * i ..][0..3]);
-    return .{ .w = w, .h = h, .rgb = rgb };
+    const n = @as(usize, w) * h;
+    const rgb = try gpa.alloc(u8, n * 3);
+    errdefer gpa.free(rgb);
+    for (0..n) |i| @memcpy(rgb[3 * i ..][0..3], px[channels * i ..][0..3]);
+    const see_through = channels == 4 and for (0..n) |i| {
+        if (px[4 * i + 3] != 255) break true;
+    } else false;
+    if (!see_through) return .{ .w = w, .h = h, .rgb = rgb };
+    const alpha = try gpa.alloc(u8, n);
+    for (alpha, 0..) |*o, i| o.* = px[4 * i + 3];
+    return .{ .w = w, .h = h, .rgb = rgb, .alpha = alpha };
 }
 
 fn paeth(a: u8, b: u8, c: u8) u8 {
@@ -106,34 +118,49 @@ fn paeth(a: u8, b: u8, c: u8) u8 {
 }
 
 /// Each output pixel the mean of the source area it covers (in sRGB values: close
-/// enough for icons)
+/// enough for icons), colour weighted by alpha so clear pixels' colour doesn't bleed
 pub fn resize(gpa: Allocator, src: Image, w: u32, h: u32) Allocator.Error!Image {
     std.debug.assert(w > 0 and h > 0);
+    const see_through = src.alpha.len > 0;
+    // Premultiplied colour, then alpha (1 when opaque)
+    const n = 4;
     // Rows first: w x src.h, then columns
-    const tmp = try gpa.alloc(f32, @as(usize, w) * src.h * 3);
+    const tmp = try gpa.alloc(f32, @as(usize, w) * src.h * n);
     defer gpa.free(tmp);
     for (0..src.h) |y| for (0..w) |x| {
-        var sum: [3]f32 = @splat(0);
+        var sum: [n]f32 = @splat(0);
         const span = spanOf(x, w, src.w);
         var i = span.first;
         while (i < span.end) : (i += 1) {
+            const p = y * src.w + i;
             const k = span.cover(i);
-            for (&sum, src.rgb[3 * (y * src.w + i) ..][0..3]) |*s, v| s.* += k * @as(f32, @floatFromInt(v));
+            const a: f32 = if (see_through) @as(f32, @floatFromInt(src.alpha[p])) / 255 else 1;
+            for (sum[0..3], src.rgb[3 * p ..][0..3]) |*s, v| s.* += k * a * @as(f32, @floatFromInt(v));
+            sum[3] += k * a;
         }
-        for (sum, tmp[3 * (y * w + x) ..][0..3]) |s, *t| t.* = s / span.len;
+        for (sum, tmp[n * (y * w + x) ..][0..n]) |s, *t| t.* = s / span.len;
     };
     const rgb = try gpa.alloc(u8, @as(usize, w) * h * 3);
+    errdefer gpa.free(rgb);
+    const alpha = try gpa.alloc(u8, if (see_through) @as(usize, w) * h else 0);
     for (0..h) |y| for (0..w) |x| {
-        var sum: [3]f32 = @splat(0);
+        var sum: [n]f32 = @splat(0);
         const span = spanOf(y, h, src.h);
         var i = span.first;
         while (i < span.end) : (i += 1) {
             const k = span.cover(i);
-            for (&sum, tmp[3 * (i * w + x) ..][0..3]) |*s, v| s.* += k * v;
+            for (&sum, tmp[n * (i * w + x) ..][0..n]) |*s, v| s.* += k * v;
         }
-        for (sum, rgb[3 * (y * w + x) ..][0..3]) |s, *o| o.* = @intFromFloat(std.math.clamp(@round(s / span.len), 0, 255));
+        const a = sum[3] / span.len;
+        const p = y * w + x;
+        for (sum[0..3], rgb[3 * p ..][0..3]) |s, *o| o.* = if (!see_through) toByte(s / span.len) else if (a > 0) toByte(s / span.len / a) else 0;
+        if (see_through) alpha[p] = toByte(a * 255);
     };
-    return .{ .w = w, .h = h, .rgb = rgb };
+    return .{ .w = w, .h = h, .rgb = rgb, .alpha = alpha };
+}
+
+fn toByte(v: f32) u8 {
+    return @intFromFloat(std.math.clamp(@round(v), 0, 255));
 }
 
 const Span = struct {
@@ -166,6 +193,84 @@ pub fn encodeJpeg(gpa: Allocator, img: Image, quality: u8) Allocator.Error![]u8 
     errdefer aw.deinit();
     writeJpeg(&aw.writer, img, quality) catch return error.OutOfMemory;
     return aw.toOwnedSlice();
+}
+
+/// PNG, RGBA when `img` has alpha, else RGB; each row's filter the one with the smallest
+/// sum of residuals (libpng's heuristic); caller owns it
+pub fn encodePng(gpa: Allocator, img: Image) Allocator.Error![]u8 {
+    const n: usize = if (img.alpha.len > 0) 4 else 3;
+    const stride = img.w * n;
+    const px = try gpa.alloc(u8, stride * img.h);
+    defer gpa.free(px);
+    for (0..@as(usize, img.w) * img.h) |i| {
+        @memcpy(px[n * i ..][0..3], img.rgb[3 * i ..][0..3]);
+        if (n == 4) px[4 * i + 3] = img.alpha[i];
+    }
+    const raw = try gpa.alloc(u8, (stride + 1) * img.h);
+    defer gpa.free(raw);
+    const trial = try gpa.alloc(u8, stride);
+    defer gpa.free(trial);
+    for (0..img.h) |y| {
+        const row = px[y * stride ..][0..stride];
+        const up: ?[]const u8 = if (y > 0) px[(y - 1) * stride ..][0..stride] else null;
+        const out = raw[y * (stride + 1) ..][0 .. stride + 1];
+        var best: u64 = std.math.maxInt(u64);
+        for (0..5) |f| {
+            filterRow(@intCast(f), row, up, n, trial);
+            var cost: u64 = 0;
+            for (trial) |v| cost += @abs(@as(i8, @bitCast(v)));
+            if (cost >= best) continue;
+            best = cost;
+            out[0] = @intCast(f);
+            @memcpy(out[1..], trial);
+        }
+    }
+
+    var z: std.Io.Writer.Allocating = try .initCapacity(gpa, 64);
+    defer z.deinit();
+    const window = try gpa.alloc(u8, std.compress.flate.max_window_len);
+    defer gpa.free(window);
+    // ~224 KB: off the stack
+    const c = try gpa.create(std.compress.flate.Compress);
+    defer gpa.destroy(c);
+    c.* = std.compress.flate.Compress.init(&z.writer, window, .zlib, .best) catch return error.OutOfMemory;
+    c.writer.writeAll(raw) catch return error.OutOfMemory;
+    c.finish() catch return error.OutOfMemory;
+
+    var ihdr: [13]u8 = undefined;
+    std.mem.writeInt(u32, ihdr[0..4], img.w, .big);
+    std.mem.writeInt(u32, ihdr[4..8], img.h, .big);
+    ihdr[8..13].* = .{ 8, if (n == 4) 6 else 2, 0, 0, 0 };
+    var aw: std.Io.Writer.Allocating = .init(gpa);
+    errdefer aw.deinit();
+    aw.writer.writeAll("\x89PNG\r\n\x1a\n") catch return error.OutOfMemory;
+    for ([_]struct { []const u8, []const u8 }{ .{ "IHDR", &ihdr }, .{ "IDAT", z.written() }, .{ "IEND", "" } }) |ch| {
+        var crc: std.hash.Crc32 = .init();
+        crc.update(ch[0]);
+        crc.update(ch[1]);
+        const w = &aw.writer;
+        w.writeInt(u32, @intCast(ch[1].len), .big) catch return error.OutOfMemory;
+        w.writeAll(ch[0]) catch return error.OutOfMemory;
+        w.writeAll(ch[1]) catch return error.OutOfMemory;
+        w.writeInt(u32, crc.final(), .big) catch return error.OutOfMemory;
+    }
+    return aw.toOwnedSlice();
+}
+
+/// `row` as PNG filter `f` leaves it, `n` bytes a pixel, `up` the row above
+fn filterRow(f: u8, row: []const u8, up: ?[]const u8, n: usize, out: []u8) void {
+    for (row, out, 0..) |v, *o, i| {
+        const a: u8 = if (i >= n) row[i - n] else 0;
+        const b: u8 = if (up) |u| u[i] else 0;
+        const c: u8 = if (up) |u| (if (i >= n) u[i - n] else 0) else 0;
+        o.* = v -% switch (f) {
+            0 => 0,
+            1 => a,
+            2 => b,
+            3 => @as(u8, @intCast((@as(u16, a) + b) / 2)),
+            else => paeth(a, b, c),
+        };
+    }
 }
 
 fn writeJpeg(w: *std.Io.Writer, img: Image, quality: u8) std.Io.Writer.Error!void {
@@ -446,18 +551,7 @@ fn testZlib(gpa: Allocator, w: u32, h: u32, px: []const u8, o: TestPng) ![]u8 {
         try raw.append(gpa, o.filter);
         const row = px[y * stride ..][0..stride];
         const up: ?[]const u8 = if (y > 0) px[(y - 1) * stride ..][0..stride] else null;
-        for (row, 0..) |v, i| {
-            const a: u8 = if (i >= n) row[i - n] else 0;
-            const b: u8 = if (up) |u| u[i] else 0;
-            const c: u8 = if (up) |u| (if (i >= n) u[i - n] else 0) else 0;
-            try raw.append(gpa, v -% switch (o.filter) {
-                0 => 0,
-                1 => a,
-                2 => b,
-                3 => @as(u8, @intCast((@as(u16, a) + b) / 2)),
-                else => paeth(a, b, c),
-            });
-        }
+        filterRow(o.filter, row, up, n, try raw.addManyAsSlice(gpa, stride));
     }
     var z: std.Io.Writer.Allocating = try .initCapacity(gpa, 64);
     errdefer z.deinit();
@@ -528,7 +622,7 @@ test "decodePng refuses what it can't read" {
     try std.testing.expectError(error.Corrupt, decodePng(gpa, bad));
 }
 
-test "decodePng: RGBA drops alpha; compressed rows" {
+test "decodePng: RGBA keeps alpha only when used; compressed rows" {
     const gpa = std.testing.allocator;
     var rgba: [7 * 3 * 4]u8 = undefined;
     for (&rgba, 0..) |*v, i| v.* = @intCast((i * 53 + 5) % 256);
@@ -537,8 +631,17 @@ test "decodePng: RGBA drops alpha; compressed rows" {
         defer gpa.free(png);
         const img = try decodePng(gpa, png);
         defer img.deinit(gpa);
-        for (0..7 * 3) |i| try std.testing.expectEqualSlices(u8, rgba[4 * i ..][0..3], img.rgb[3 * i ..][0..3]);
+        for (0..7 * 3) |i| {
+            try std.testing.expectEqualSlices(u8, rgba[4 * i ..][0..3], img.rgb[3 * i ..][0..3]);
+            try std.testing.expectEqual(rgba[4 * i + 3], img.alpha[i]);
+        }
     }
+    var solid: [2 * 4]u8 = .{ 1, 2, 3, 255, 4, 5, 6, 255 };
+    const opaque_png = try testPng(gpa, 2, 1, &solid, .{ .channels = 4 });
+    defer gpa.free(opaque_png);
+    const opaque_img = try decodePng(gpa, opaque_png);
+    defer opaque_img.deinit(gpa);
+    try std.testing.expectEqual(0, opaque_img.alpha.len);
     // Repeats compress: a real deflate stream, not stored
     const flat: [16 * 16 * 3]u8 = @splat(9);
     const png = try testPng(gpa, 16, 16, &flat, .{ .deflate = true });
@@ -610,6 +713,36 @@ test "resize averages the area under each pixel" {
     const two = try resize(gpa, .{ .w = 3, .h = 1, .rgb = &three }, 2, 1);
     defer two.deinit(gpa);
     try std.testing.expectEqualSlices(u8, &.{ 30, 30, 30, 150, 150, 150 }, two.rgb);
+    // A clear pixel's colour doesn't tint its opaque neighbour; alpha averaged
+    var lit = [_]u8{ 255, 0, 0, 0, 0, 200 };
+    var a = [_]u8{ 0, 255 };
+    const one = try resize(gpa, .{ .w = 2, .h = 1, .rgb = &lit, .alpha = &a }, 1, 1);
+    defer one.deinit(gpa);
+    try std.testing.expectEqualSlices(u8, &.{ 0, 0, 200 }, one.rgb);
+    try std.testing.expectEqualSlices(u8, &.{128}, one.alpha);
+}
+
+test "encodePng: decodePng reads it back, alpha or not; smaller than stored" {
+    const gpa = std.testing.allocator;
+    const w = 24;
+    const h = 24;
+    var rgb: [w * h * 3]u8 = undefined;
+    var alpha: [w * h]u8 = undefined;
+    for (0..w * h) |i| {
+        const x = i % w;
+        const y = i / w;
+        rgb[3 * i ..][0..3].* = .{ @intCast(x * 10), @intCast(y * 10), @intCast((x + y) * 5) };
+        alpha[i] = if ((x + y) % 7 == 0) 0 else @intCast(255 - y * 3);
+    }
+    for ([_][]u8{ &.{}, &alpha }) |al| {
+        const png = try encodePng(gpa, .{ .w = w, .h = h, .rgb = &rgb, .alpha = al });
+        defer gpa.free(png);
+        try std.testing.expect(png.len < w * h * (3 + al.len / (w * h)));
+        const back = try decodePng(gpa, png);
+        defer back.deinit(gpa);
+        try std.testing.expectEqualSlices(u8, &rgb, back.rgb);
+        try std.testing.expectEqualSlices(u8, al, back.alpha);
+    }
 }
 
 test "encodeJpeg: markers, size and a flat block's few bytes" {

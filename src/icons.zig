@@ -1,8 +1,11 @@
 //! The site's champion portraits (ui.champ.icon_fmt): Data Dragon's squares shrunk to
-//! ui.champ.icon_px JPEGs (~3 KB against ~29 KB), made once per Data Dragon version into
-//! a cache laid out as the site (<cache>/icon/<version>/<Key>.jpg), then copied into each
-//! build: the web round builds into a fresh folder. The uploaded site keeps a version's
-//! folder `prune` long after a newer one came, for pages loaded or cached before
+//! ui.champ.icon_px JPEGs (~3 KB against ~29 KB), and its item, spell and rune art
+//! (ui.art.local: items and spells JPEG, runes PNG at most art_px; a keystone is up to
+//! 512 px, 360 KB). Made once into a cache laid out as the site (<cache>/icon/<version>/
+//! <Key>.jpg, <cache>/dd/...), then copied into each build: the web round builds into a
+//! fresh folder. The uploaded site keeps a version's folder `prune` long after a newer one
+//! came, for pages loaded or cached before. Runes have no version in Data Dragon's paths:
+//! one made stays
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -14,16 +17,19 @@ const image = @import("image.zig");
 
 const log = std.log.scoped(.icons);
 
-/// With ui.champ.icon_px and the encoder: a change shows under the same URLs, which
-/// browsers keep a year, so it needs a new folder in ui.champ.icon_fmt (test "make")
+/// With ui.champ.icon_px, art_px and the encoders: a change shows under the same URLs,
+/// which browsers keep a year, so it needs a new folder (test "make")
 const quality = 82;
+/// Drawn at most 36 px (ui.art.Px): twice that for sharp screens. Items and spells are
+/// 64, never grown
+const art_px = 72;
 /// Failures in a row that mean Data Dragon is down, not one icon missing: the rest wait
 /// for the next run instead of a timeout each; cached ones are still copied
 const give_up_after = 3;
 
 pub const Source = union(enum) {
     http: *std.http.Client,
-    /// <Key>.png files (tests)
+    /// Files named as the URL's last part (Ahri.png, 1058.png; tests)
     dir: Io.Dir,
 };
 
@@ -55,26 +61,62 @@ pub fn sync(gpa: Allocator, io: Io, db: store.Db, cache_dir: []const u8, site_di
 }
 
 pub fn syncKeys(gpa: Allocator, io: Io, cache_dir: []const u8, site_dir: ?[]const u8, version: []const u8, keys: []const []const u8, source: Source) !Counts {
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
     var counts: Counts = .{};
-    // Both go into a path
-    if (!plain(version, ".")) {
-        counts.failed = @intCast(keys.len);
-        return counts;
+    var wants: std.ArrayList(Want) = .empty;
+    for (keys) |key| {
+        // Both go into a path
+        if (!plain(version, ".") or !plain(key, "")) {
+            counts.failed += 1;
+            continue;
+        }
+        try wants.append(arena, .{
+            .rel = try arena.print(ui.champ.icon_fmt[1..], .{ version, key }),
+            .url = try arena.print("https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png", .{ version, key }),
+            .side = ui.champ.icon_px,
+        });
     }
+    return syncWants(gpa, io, cache_dir, site_dir, wants.items, source, counts);
+}
+
+/// The art at `paths` (ui.art.local's; others counted failed), as syncKeys
+pub fn syncArt(gpa: Allocator, io: Io, cache_dir: []const u8, site_dir: ?[]const u8, paths: []const []const u8, source: Source) !Counts {
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var counts: Counts = .{};
+    var wants: std.ArrayList(Want) = .empty;
+    for (paths) |path| {
+        const url = try ui.art.remote(arena, path) orelse {
+            counts.failed += 1;
+            continue;
+        };
+        if (!plain(path, "/._-") or std.mem.find(u8, path, "..") != null) {
+            counts.failed += 1;
+            continue;
+        }
+        try wants.append(arena, .{ .rel = path[1..], .url = url, .side = art_px, .png = std.mem.endsWith(u8, path, ".png") });
+    }
+    return syncWants(gpa, io, cache_dir, site_dir, wants.items, source, counts);
+}
+
+/// One icon: its path under the site (and the cache), the PNG it is made from, its
+/// largest side (never grown) and format
+const Want = struct { rel: []const u8, url: []const u8, side: u32, png: bool = false };
+
+fn syncWants(gpa: Allocator, io: Io, cache_dir: []const u8, site_dir: ?[]const u8, wants: []const Want, source: Source, start: Counts) !Counts {
+    var counts = start;
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
     const cwd = Io.Dir.cwd();
     var in_a_row: u32 = 0;
     var down = false;
-    for (keys) |key| {
+    for (wants) |want| {
         _ = arena_state.reset(.retain_capacity);
         const arena = arena_state.allocator();
-        if (!plain(key, "")) {
-            counts.failed += 1;
-            continue;
-        }
-        const rel = try arena.print(ui.champ.icon_fmt[1..], .{ version, key });
-        const path = try std.fs.path.join(arena, &.{ cache_dir, rel });
+        const path = try std.fs.path.join(arena, &.{ cache_dir, want.rel });
         if (cwd.access(io, path, .{})) |_| {
             counts.had += 1;
         } else |err| switch (err) {
@@ -83,10 +125,10 @@ pub fn syncKeys(gpa: Allocator, io: Io, cache_dir: []const u8, site_dir: ?[]cons
                     counts.failed += 1;
                     continue;
                 }
-                const jpg = make(gpa, arena, io, version, key, source) catch |e| switch (e) {
+                const bytes = make(gpa, arena, io, want, source) catch |e| switch (e) {
                     error.OutOfMemory => return e,
                     else => {
-                        log.info("{s}: {t}", .{ key, e });
+                        log.info("{s}: {t}", .{ want.rel, e });
                         counts.failed += 1;
                         in_a_row += 1;
                         down = in_a_row == give_up_after;
@@ -96,40 +138,49 @@ pub fn syncKeys(gpa: Allocator, io: Io, cache_dir: []const u8, site_dir: ?[]cons
                 in_a_row = 0;
                 var file = try cwd.createFileAtomic(io, path, .{ .make_path = true, .replace = true });
                 defer file.deinit(io);
-                try file.file.writeStreamingAll(io, jpg);
+                try file.file.writeStreamingAll(io, bytes);
                 try file.replace(io);
                 counts.made += 1;
             },
             else => return err,
         }
-        if (site_dir) |d| try cwd.copyFile(path, cwd, try std.fs.path.join(arena, &.{ d, rel }), io, .{ .make_path = true });
+        if (site_dir) |d| try cwd.copyFile(path, cwd, try std.fs.path.join(arena, &.{ d, want.rel }), io, .{ .make_path = true });
     }
     return counts;
 }
 
-fn make(gpa: Allocator, arena: Allocator, io: Io, version: []const u8, key: []const u8, source: Source) ![]u8 {
+fn make(gpa: Allocator, arena: Allocator, io: Io, want: Want, source: Source) ![]u8 {
     const png = switch (source) {
-        .http => |http| try ddragon.fetch(http, arena, try arena.print(
-            "https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png",
-            .{ version, key },
-        )),
-        .dir => |d| try d.readFileAlloc(io, try arena.print("{s}.png", .{key}), arena, .limited(1 << 20)),
+        .http => |http| try ddragon.fetch(http, arena, want.url),
+        .dir => |d| try d.readFileAlloc(io, std.fs.path.basename(want.url), arena, .limited(1 << 20)),
     };
-    const img = try image.decodePng(gpa, png);
+    var img = try image.decodePng(gpa, png);
     defer img.deinit(gpa);
-    const small = try image.resize(gpa, img, ui.champ.icon_px, ui.champ.icon_px);
+    if (!want.png) {
+        // Opaque art: alpha would only shift its colours
+        gpa.free(img.alpha);
+        img.alpha = &.{};
+    }
+    const side = @min(want.side, img.w);
+    const small = try image.resize(gpa, img, side, @max(1, img.h * side / img.w));
     defer small.deinit(gpa);
-    return image.encodeJpeg(arena, small, quality);
+    return if (want.png) image.encodePng(arena, small) else image.encodeJpeg(arena, small, quality);
 }
 
-/// The version folders in `site`'s icon/ older than the newest, each once the next newer
+/// The version folders in `site`'s icon/ and dd/ older than the newest, each once the next newer
 /// one is `grace` old (a folder's time: when it came or last gained a file). The count
 /// removed
 pub fn prune(gpa: Allocator, io: Io, site: Io.Dir, now: Io.Timestamp, grace: Io.Duration) !usize {
+    var n: usize = 0;
+    for ([_][]const u8{ "icon", "dd" }) |top| n += try pruneIn(gpa, io, site, top, now, grace);
+    return n;
+}
+
+fn pruneIn(gpa: Allocator, io: Io, site: Io.Dir, top: []const u8, now: Io.Timestamp, grace: Io.Duration) !usize {
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    var dir = site.openDir(io, "icon", .{ .iterate = true }) catch |err| switch (err) {
+    var dir = site.openDir(io, top, .{ .iterate = true }) catch |err| switch (err) {
         error.FileNotFound => return 0,
         else => return err,
     };
@@ -137,7 +188,8 @@ pub fn prune(gpa: Allocator, io: Io, site: Io.Dir, now: Io.Timestamp, grace: Io.
     var folders: std.ArrayList(Folder) = .empty;
     var it = dir.iterate();
     while (try it.next(io)) |e| {
-        if (e.kind != .directory or !plain(e.name, ".")) continue;
+        // dd/img: the runes, no version
+        if (e.kind != .directory or !plain(e.name, ".") or !std.ascii.isDigit(e.name[0])) continue;
         const st = dir.statFile(io, e.name, .{}) catch |err| switch (err) {
             error.FileNotFound => continue,
             else => return err,
@@ -197,9 +249,10 @@ test "syncKeys: made once, kept after; bad keys and missing art counted" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     const base = try arena.print(".zig-cache/tmp/{s}", .{&tmp.sub_path});
-    var rgb: [6 * 6 * 3]u8 = undefined;
+    // Data Dragon's 120 px square
+    var rgb: [120 * 120 * 3]u8 = undefined;
     for (&rgb, 0..) |*v, i| v.* = @intCast(i * 7 % 256);
-    try tmp.dir.writeFile(io, .{ .sub_path = "Ahri.png", .data = try image.testPng(arena, 6, 6, &rgb, .{ .filter = 1 }) });
+    try tmp.dir.writeFile(io, .{ .sub_path = "Ahri.png", .data = try image.testPng(arena, 120, 120, &rgb, .{ .filter = 1, .deflate = true }) });
     const keys: []const []const u8 = &.{ "Ahri", "Nope", "../x" };
 
     const cache = try arena.print("{s}/cache", .{base});
@@ -259,10 +312,44 @@ test "make: the portraits the URLs promise" {
     var rng: std.Random.DefaultPrng = .init(7);
     for (rgba, 0..) |*v, i| v.* = @intCast((i / 4 % 128 + i / 512 + rng.random().uintLessThan(u8, 64)) % 256);
     try tmp.dir.writeFile(io, .{ .sub_path = "Ahri.png", .data = try image.testPng(arena, 128, 128, rgba, .{ .channels = 4, .filter = 4, .deflate = true }) });
-    const jpg = try make(gpa, arena, io, "16.21.1", "Ahri", .{ .dir = tmp.dir });
+    const want: Want = .{ .rel = "", .url = "https://ddragon.leagueoflegends.com/cdn/16.21.1/img/champion/Ahri.png", .side = ui.champ.icon_px };
+    const jpg = try make(gpa, arena, io, want, .{ .dir = tmp.dir });
     // Fails when icon_px, quality, resize or the encoder change what a portrait looks
     // like: give ui.champ.icon_fmt a new folder, then update the hash
     try std.testing.expectEqual(5946943054216529250, std.hash.Wyhash.hash(0, jpg));
+}
+
+test "syncArt: runes shrunk to see-through PNG, items JPEG at their size; others refused" {
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const base = try arena.print(".zig-cache/tmp/{s}", .{&tmp.sub_path});
+    const rgba = try arena.alloc(u8, 256 * 256 * 4);
+    for (rgba, 0..) |*v, i| v.* = if (i % 4 == 3) @intCast(i / 1024 % 256) else @intCast(i % 251);
+    try tmp.dir.writeFile(io, .{ .sub_path = "KEY.png", .data = try image.testPng(arena, 256, 256, rgba, .{ .channels = 4, .deflate = true }) });
+    const rgb: [64 * 64 * 3]u8 = @splat(90);
+    try tmp.dir.writeFile(io, .{ .sub_path = "1058.png", .data = try image.testPng(arena, 64, 64, &rgb, .{ .deflate = true }) });
+    const paths: []const []const u8 = &.{
+        "/dd/img/perk-images/Styles/Sorcery/KEY.png",
+        "/dd/16.21.1/img/item/1058.jpg",
+        "/dd/../x.png",
+        "/icon/16.21.1/Ahri.jpg",
+    };
+    const site = try arena.print("{s}/site", .{base});
+    const got = try syncArt(gpa, io, try arena.print("{s}/cache", .{base}), site, paths, .{ .dir = tmp.dir });
+    try std.testing.expectEqual(Counts{ .made = 2, .failed = 2 }, got);
+    const png = try tmp.dir.readFileAlloc(io, "site/dd/img/perk-images/Styles/Sorcery/KEY.png", arena, .limited(1 << 20));
+    const rune = try image.decodePng(gpa, png);
+    defer rune.deinit(gpa);
+    try std.testing.expectEqual(art_px, rune.w);
+    try std.testing.expectEqual(art_px * art_px, rune.alpha.len);
+    const jpg = try tmp.dir.readFileAlloc(io, "site/dd/16.21.1/img/item/1058.jpg", arena, .limited(1 << 16));
+    const sof = std.mem.find(u8, jpg, &.{ 0xFF, 0xC0 }) orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqual(64, std.mem.readInt(u16, jpg[sof + 5 ..][0..2], .big));
 }
 
 test "prune: an old version's folder goes once the next is grace old" {
@@ -270,16 +357,18 @@ test "prune: an old version's folder goes once the next is grace old" {
     var tmp = std.testing.tmpDir(.{ .iterate = true });
     defer tmp.cleanup();
     var buf: [32]u8 = undefined;
-    for ([_][]const u8{ "16.9.1", "16.10.1", "x-y" }) |v| {
-        const d = try tmp.dir.createDirPathOpen(io, try std.fmt.bufPrint(&buf, "icon/{s}", .{v}), .{});
+    for ([_][]const u8{ "icon/16.9.1", "icon/16.10.1", "icon/x-y", "dd/16.9.1", "dd/16.10.1", "dd/img" }) |v| {
+        const d = try tmp.dir.createDirPathOpen(io, try std.fmt.bufPrint(&buf, "{s}", .{v}), .{});
         defer d.close(io);
         try d.writeFile(io, .{ .sub_path = "A.jpg", .data = "x" });
     }
     const now = Io.Timestamp.now(io, .real);
     const gpa = std.testing.allocator;
     try std.testing.expectEqual(0, try prune(gpa, io, tmp.dir, now, .fromNanoseconds(std.time.ns_per_day)));
-    try std.testing.expectEqual(1, try prune(gpa, io, tmp.dir, now, .fromNanoseconds(0)));
+    try std.testing.expectEqual(2, try prune(gpa, io, tmp.dir, now, .fromNanoseconds(0)));
     try std.testing.expectError(error.FileNotFound, tmp.dir.access(io, "icon/16.9.1", .{}));
+    try std.testing.expectError(error.FileNotFound, tmp.dir.access(io, "dd/16.9.1", .{}));
+    try tmp.dir.access(io, "dd/img/A.jpg", .{});
     try tmp.dir.access(io, "icon/16.10.1/A.jpg", .{});
     try tmp.dir.access(io, "icon/x-y/A.jpg", .{});
     var empty = std.testing.tmpDir(.{});

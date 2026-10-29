@@ -3,6 +3,7 @@
 const std = @import("std");
 const store = @import("store");
 const client = @import("net").client;
+const ui = @import("ui");
 
 const base = "https://ddragon.leagueoflegends.com";
 
@@ -241,7 +242,8 @@ pub const shards = [_]Named{
 /// The shard page's rows (offense, flex, defense), left to right as in game
 pub const shard_rows = [3][3]u32{ .{ 5008, 5005, 5007 }, .{ 5008, 5010, 5001 }, .{ 5011, 5013, 5001 } };
 
-/// Item, rune and summoner spell data for `patch` (as legendaries), in `arena`
+/// Item, rune and summoner spell data for `patch` (as legendaries), in `arena`; icons as
+/// the site serves them (ui.art.local)
 pub fn buildData(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io, patch: []const u8) !BuildData {
     var http: std.http.Client = .{ .allocator = gpa, .io = io };
     defer http.deinit();
@@ -275,7 +277,7 @@ pub fn parseBuildData(
         try named.append(arena, .{
             .id = id,
             .name = item.name,
-            .icon = try arena.print(base ++ "/cdn/{s}/img/item/{s}", .{ version, item.image.full }),
+            .icon = try ui.art.local(arena, try arena.print(base ++ "/cdn/{s}/img/item/{s}", .{ version, item.image.full })),
         });
         try gold.append(arena, .{ id, item.gold.total });
         if (item.legendary()) try legendary.append(arena, id);
@@ -339,7 +341,7 @@ pub fn parseBuildData(
     for (doc.data.map.values()) |s| try spells.append(arena, .{
         .id = std.fmt.parseInt(u32, s.key, 10) catch continue,
         .name = s.name,
-        .icon = try arena.print(base ++ "/cdn/{s}/img/spell/{s}", .{ version, s.image.full }),
+        .icon = try ui.art.local(arena, try arena.print(base ++ "/cdn/{s}/img/spell/{s}", .{ version, s.image.full })),
     });
 
     for ([_][]Named{ named.items, runes.items, spells.items }) |list| {
@@ -363,7 +365,7 @@ pub fn parseBuildData(
 }
 
 fn runeIcon(arena: std.mem.Allocator, path: []const u8) ![]const u8 {
-    return arena.print(base ++ "/cdn/img/{s}", .{path});
+    return ui.art.local(arena, try arena.print(base ++ "/cdn/img/{s}", .{path}));
 }
 
 /// `id` in a list sorted by id
@@ -434,7 +436,7 @@ test "build data: boots tiers, trinkets, names" {
     try std.testing.expectEqual(0, d.goldOf(9999));
     try std.testing.expectEqual(null, d.bootsOf(1001));
     try std.testing.expectEqualStrings(
-        "https://ddragon.leagueoflegends.com/cdn/16.20.1/img/item/3006.png",
+        "/dd/16.20.1/img/item/3006.jpg",
         find(d.items, 3006).?.icon,
     );
     try std.testing.expectEqualStrings("Conqueror", find(d.runes, 8010).?.name);

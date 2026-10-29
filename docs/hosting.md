@@ -204,11 +204,13 @@ a 301 to it.
   take as long; with the renderer stopped a warmed page is ANY-HIT, an unwarmed one 503
 - Cache-Control: `map $uri $meiolol_cache_control` gives hashed assets
   (src/site/assets.zig: `style.1a2b3c4d.css`, the font, search.js, the islands' .js and
-  .wasm; `name.<8 hex>.ext` at the root) and champion portraits (src/icons.zig:
-  `/icon/<Data Dragon version>/<Key>.jpg`) `public, max-age=31536000, immutable`,
-  everything else `no-cache`, in `/`, @render and @render_any (which hide the renderer's
-  own no-cache). A page after the first asks for none of them. A replaced hashed file
-  stays 3 days after its replacement came, as does an older portrait folder, and a
+  .wasm; `name.<8 hex>.ext` at the root), champion portraits and item and spell art
+  (src/icons.zig: `/icon/<Data Dragon version>/<Key>.jpg`, `/dd/<version>/img/item/<id>.jpg`)
+  `public, max-age=31536000, immutable`, rune art (`/dd/img/perk-images/...png`, no
+  version) a week, everything else `no-cache`, in `/`, @render and @render_any (which
+  hide the renderer's own no-cache). A page after the first asks for none of them. Art
+  not made yet (`location ~ ^/dd/`) 302s to Data Dragon's own. A replaced hashed file
+  stays 3 days after its replacement came, as does an older icon or art folder, and a
   hashed name no longer built 30 days (`meiolol site --prune-assets`, from
   deploy/web-loop.sh); one missing from the upload falls through to the renderer, which
   serves its own

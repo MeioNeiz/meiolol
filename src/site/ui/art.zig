@@ -1,6 +1,7 @@
 //! GameArt: an item, rune, rune tree, stat shard or summoner spell icon. Items and spells
 //! are rounded squares, runes and shards round; dim greys an option not taken (a rune
 //! page's other runes). The name is its alt unless written beside it
+const std = @import("std");
 const tree = @import("tree.zig");
 const Gallery = @import("gallery.zig").Gallery;
 const H = tree.H;
@@ -11,7 +12,7 @@ pub const scope = .{".c-art"};
 
 pub const Art = struct {
     name: []const u8,
-    /// Full URL (Data Dragon, CommunityDragon for shards); "" draws an empty square
+    /// A `local` path, or a full URL (CommunityDragon for shards); "" draws an empty square
     src: []const u8,
 };
 
@@ -75,20 +76,67 @@ pub const css =
 ;
 
 pub const demo_version = "16.21.1";
-const dd = "https://ddragon.leagueoflegends.com/cdn/";
+/// The patch of demo_version ("16.21"), whose art the site makes too
+pub const demo_patch = demo_version[0..std.mem.findScalarLast(u8, demo_version, '.').?];
 
-/// Gallery icons from Data Dragon
+const dd = "https://ddragon.leagueoflegends.com/cdn/";
+const site_dd = "/dd/";
+
+/// Where the site serves Data Dragon's item, spell and rune `url` (src/icons.zig makes
+/// them: a rune shrunk, items and spells as JPEG): /dd/ and the path under its cdn/; a
+/// path not made yet redirects to `remote`'s. Any other URL as it is
+pub fn local(a: std.mem.Allocator, url: []const u8) ![]const u8 {
+    const rest = if (std.mem.startsWith(u8, url, dd)) url[dd.len..] else return url;
+    if (!std.mem.endsWith(u8, rest, ".png")) return url;
+    if (std.mem.startsWith(u8, rest, "img/perk-images/")) return std.mem.concat(a, u8, &.{ site_dd, rest });
+    var parts = std.mem.splitScalar(u8, rest, '/');
+    const version = parts.next().?;
+    if (version.len == 0 or !std.ascii.isDigit(version[0]) or !std.mem.eql(u8, parts.next() orelse "", "img")) return url;
+    const kind = parts.next() orelse return url;
+    if (!std.mem.eql(u8, kind, "item") and !std.mem.eql(u8, kind, "spell")) return url;
+    return std.mem.concat(a, u8, &.{ site_dd, rest[0 .. rest.len - 4], ".jpg" });
+}
+
+/// Data Dragon's URL for a `local` path, else null
+pub fn remote(a: std.mem.Allocator, path: []const u8) !?[]const u8 {
+    if (!std.mem.startsWith(u8, path, site_dd)) return null;
+    const rest = path[site_dd.len..];
+    if (!std.mem.endsWith(u8, rest, ".jpg") and !std.mem.endsWith(u8, rest, ".png")) return null;
+    return try std.mem.concat(a, u8, &.{ dd, rest[0 .. rest.len - 4], ".png" });
+}
+
+/// Gallery icons from Data Dragon, as `local` makes them
 pub fn item(comptime id: []const u8, comptime shown: []const u8) Art {
-    return .{ .name = shown, .src = dd ++ demo_version ++ "/img/item/" ++ id ++ ".png" };
+    return .{ .name = shown, .src = site_dd ++ demo_version ++ "/img/item/" ++ id ++ ".jpg" };
 }
 
 pub fn spell(comptime key: []const u8, comptime shown: []const u8) Art {
-    return .{ .name = shown, .src = dd ++ demo_version ++ "/img/spell/Summoner" ++ key ++ ".png" };
+    return .{ .name = shown, .src = site_dd ++ demo_version ++ "/img/spell/Summoner" ++ key ++ ".jpg" };
 }
 
 /// `path` under perk-images/Styles/
 pub fn rune(comptime path: []const u8, comptime shown: []const u8) Art {
-    return .{ .name = shown, .src = dd ++ "img/perk-images/Styles/" ++ path ++ ".png" };
+    return .{ .name = shown, .src = site_dd ++ "img/perk-images/Styles/" ++ path ++ ".png" };
+}
+
+test "local and remote: item, spell and rune art one way and back; others as given" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const cases = [_][2][]const u8{
+        .{ dd ++ "16.21.1/img/item/1058.png", "/dd/16.21.1/img/item/1058.jpg" },
+        .{ dd ++ "16.21.1/img/spell/SummonerFlash.png", "/dd/16.21.1/img/spell/SummonerFlash.jpg" },
+        .{ dd ++ "img/perk-images/Styles/Sorcery/DeathfireTouch/DEATHFIRE_TOUCH_KEYSTONE.png", "/dd/img/perk-images/Styles/Sorcery/DeathfireTouch/DEATHFIRE_TOUCH_KEYSTONE.png" },
+    };
+    for (cases) |c| {
+        try std.testing.expectEqualStrings(c[1], try local(a, c[0]));
+        try std.testing.expectEqualStrings(c[0], (try remote(a, c[1])).?);
+    }
+    for ([_][]const u8{ dd ++ "16.21.1/img/champion/Ahri.png", dd ++ "16.21.1/img/profileicon/1.png", "https://raw.communitydragon.org/x.png", "" }) |u|
+        try std.testing.expectEqualStrings(u, try local(a, u));
+    try std.testing.expectEqualStrings(item("1058", "x").src, try local(a, dd ++ demo_version ++ "/img/item/1058.png"));
+    try std.testing.expectEqual(null, try remote(a, "/icon/16.21.1/Ahri.jpg"));
+    try std.testing.expectEqualStrings("16.21", demo_patch);
 }
 
 pub fn gallery(g: *Gallery) void {

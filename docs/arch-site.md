@@ -59,7 +59,9 @@ draft helper, best pick or recommend wording): landing page, matchup index and p
 Daily Draft, a page per role (/champions/<role>, most played first, no tier grades), a
 page per champion (above), method,
 download (desktop app, in development), privacy, terms, robots.txt, optional riot.txt,
-data/stats.bin (for the app) + data/champions.json. Champion icons hotlink Data Dragon.
+data/stats.bin (for the app) + data/champions.json. Champion portraits and item, spell and
+rune art are ours, shrunk from Data Dragon's (src/icons.zig, ui.art.local; made in each web
+round, Data Dragon's own until then).
 Edges use the same maths as the app (score.matchupPp, duoPp). Preview mode by default (noindex,
 robots.txt disallow, banner): Riot forbids serving the public on a personal key;
 `--public` only once the production key is granted. `meiolol render` serves the pages

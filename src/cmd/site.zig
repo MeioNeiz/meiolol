@@ -3,6 +3,7 @@
 const std = @import("std");
 const store = @import("store");
 const core = @import("core");
+const ui = @import("ui");
 const stats = @import("../stats.zig");
 const site = @import("../site/root.zig");
 const serve = @import("../serve.zig");
@@ -245,23 +246,48 @@ pub fn cmdSite(c: *Cmd) !u8 {
     }
     const opts = try f.options(c, c.arena, db, email);
     try site.generate(c.init.gpa, c.init.io, db, opts);
-    makeIcons(c, db, opts.out_dir);
+    makeIcons(c, db, opts.out_dir, opts.patches[0]);
     return 0;
 }
 
-/// Champion portraits (src/icons.zig) cached in DIR/ddragon, copied into `out_dir` unless
-/// null. Failing, it warns: the pages go out, their portraits where cached
-fn makeIcons(c: *Cmd, db: store.Db, out_dir: ?[]const u8) void {
-    var http: std.http.Client = .{ .allocator = c.init.gpa, .io = c.init.io };
+/// Champion portraits and, unless `patch` is null (the dev server: a restart each edit),
+/// the item, spell and rune art of `patch` and the demos (src/icons.zig) cached in DIR/ddragon, copied into `out_dir` unless null. Failing, it
+/// warns: the pages go out, their art where cached (nginx redirects the rest to Data
+/// Dragon)
+fn makeIcons(c: *Cmd, db: store.Db, out_dir: ?[]const u8, patch: ?[]const u8) void {
+    const gpa = c.init.gpa;
+    const io = c.init.io;
+    var http: std.http.Client = .{ .allocator = gpa, .io = io };
     defer http.deinit();
     const cache = std.fs.path.join(c.arena, &.{ c.data_dir, "ddragon" }) catch return;
-    const n = main.icons.sync(c.init.gpa, c.init.io, db, cache, out_dir, .{ .http = &http }) catch |err| {
+    const n = main.icons.sync(gpa, io, db, cache, out_dir, .{ .http = &http }) catch |err| {
         std.log.warn("icons: {t}", .{err});
         return;
     };
+    report("icons", n);
+    const live = patch orelse return;
+    var paths: std.ArrayList([]const u8) = .empty;
+    for ([_][]const u8{ live, ui.art.demo_patch }, 0..) |p, i| {
+        if (i > 0 and std.mem.eql(u8, p, live)) break;
+        const d = main.ddragon.buildData(gpa, c.arena, io, p) catch |err| {
+            std.log.warn("art: {s}: {t}", .{ p, err });
+            continue;
+        };
+        for ([_][]const main.ddragon.Named{ d.items, d.spells, d.runes }) |list| for (list) |x| {
+            if (std.mem.startsWith(u8, x.icon, "/dd/")) paths.append(c.arena, x.icon) catch return;
+        };
+    }
+    const art = main.icons.syncArt(gpa, io, cache, out_dir, paths.items, .{ .http = &http }) catch |err| {
+        std.log.warn("art: {t}", .{err});
+        return;
+    };
+    report("art", art);
+}
+
+fn report(what: []const u8, n: main.icons.Counts) void {
     if (n.failed > 0) {
-        std.log.warn("icons: {d} made, {d} failed (tried again next run)", .{ n.made, n.failed });
-    } else if (n.made > 0) std.log.info("icons: {d} made", .{n.made});
+        std.log.warn("{s}: {d} made, {d} failed (tried again next run)", .{ what, n.made, n.failed });
+    } else if (n.made > 0) std.log.info("{s}: {d} made", .{ what, n.made });
 }
 
 pub const usage_dev =
@@ -297,8 +323,9 @@ pub fn cmdDev(c: *Cmd) !u8 {
     defer rendered.deinit();
     // Before listening, so the browser reloads once it is ready; the others on request
     _ = try loaded.site(site.html.View.all[0]);
-    // Portraits straight from their cache, laid out as the site's
-    makeIcons(c, db, null);
+    // Portraits and art straight from their cache, laid out as the site's; art not made
+    // yet redirects to Data Dragon (serve.zig)
+    makeIcons(c, db, null, null);
     try serve.run(c.init.gpa, c.init.io, .{
         .root = try std.fs.path.join(c.arena, &.{ c.data_dir, "ddragon" }),
         .port = port,

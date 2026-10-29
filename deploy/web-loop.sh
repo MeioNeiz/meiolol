@@ -72,9 +72,9 @@
 # files whose content changed get a new mtime, and the upload's quick check sends just
 # those. --delete removes what the build no longer writes; nginx then hands those paths
 # to meiolol-render. Except hashed assets (src/site/assets.zig: style.1a2b3c4d.css) and
-# portrait folders (icon/<Data Dragon version>/), which stay 3 days after a newer one
-# came, for pages cached before a deploy (nginx's @render_any copies, a browser's restored
-# tab): meiolol site --prune-assets
+# portrait and art folders (icon/, dd/<Data Dragon version>/), which stay 3 days after a
+# newer one came, for pages cached before a deploy (nginx's @render_any copies, a
+# browser's restored tab): meiolol site --prune-assets
 set -u
 contact=$1
 cd "$(dirname "$0")/.." || exit 1
@@ -437,7 +437,7 @@ while true; do
             t=$SECONDS
             asset_glob='*.[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].*'
             changed=$(rsync -rlpD --checksum --delete --filter="protect /$asset_glob" \
-                --filter="protect /icon/" --stats \
+                --filter="protect /icon/" --filter="protect /dd/" --stats \
                 data/site.new/ data/site/ \
                 | sed -nE 's/^Number of regular files transferred: ([0-9,]+)/\1/p')
             # Replaced hashed copies and portrait versions, three days after (times kept

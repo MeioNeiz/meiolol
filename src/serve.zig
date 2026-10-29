@@ -409,6 +409,8 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
     if (ctx.opts.root != null) for (names) |name| {
         if (try serveFile(ctx, request, name, gzip)) return;
     };
+    // Art not made yet: Data Dragon's own, as nginx
+    if (try site.ui.art.remote(arena, request.head.target)) |to| return redirect(request, .found, to);
     if (path.len > 0 and path[path.len - 1] == '/') {
         return redirect(request, .moved_permanently, try std.mem.concat(arena, u8, &.{ "/", std.mem.trimEnd(u8, path, "/"), query }));
     }
