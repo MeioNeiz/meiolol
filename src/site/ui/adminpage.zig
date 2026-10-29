@@ -365,8 +365,8 @@ fn body(p: *Page, h: *H, s: *const ad.Snapshot) N {
             .overview => overview(p, h, s),
             .ops => controls(p, h, s),
             .accounts => accountsTab(p, h),
-            // AdminCharts, the island below
-            .crawler, .riot, .storage, .ingest => .none,
+            // AdminCharts and AdminTraffic, the islands below
+            .crawler, .riot, .storage, .ingest, .traffic => .none,
             else => |t| card.view(h, .{}, &.{h.p(.{}, .{
                 W.old.with(h, .{ .t = tab_names.get(t).s }),
                 ": ",
@@ -909,7 +909,7 @@ pub fn gallery(g: *Gallery) void {
             2 => Demo.page(.ops),
             3 => Demo.page(.ops),
             4 => Demo.page(.accounts),
-            5 => Demo.page(.storage),
+            5 => Demo.page(.models),
             else => .{ .snap_failed = true },
         };
         switch (i) {

@@ -232,7 +232,9 @@ to it.
   whose page view is matched to a /print.css fetch by the same agent within 60 s (every
   page links it for print, so it never holds up rendering, and revalidates it); browser
   agents with no such fetch are "unconfirmed" (hours column 6), nearly all of them.
-  Top pages count an old path as its new one (`meiolol urls`, the API binary).
+  Top pages count an old path as its new one (`meiolol urls`, the API binary). The new
+  admin page reads it as /admin/api/traffic.bin: `meiolol render` converts the file on
+  each request (src/admin.zig trafficBin, last 30 days)
   Reinstall: `deploy/jomify.sh install traffic`; units by hand into /etc/systemd/system,
   then `daemon-reload` (`deploy/jomify.sh drift` shows what differs)
 - Desktop app files (/admin/desktop/: zip, update.signed, update.json (unsigned, for

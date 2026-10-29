@@ -855,6 +855,94 @@ pub fn liveBin(arena: std.mem.Allocator, io: Io, db: store.Db, l: Live) ![]const
     return out.items;
 }
 
+/// Where deploy/traffic.sh writes the site's traffic (nginx serves it at /admin/ops/)
+pub const traffic_file = "/var/www/meiolol-ops/traffic.json";
+const traffic_days = 30;
+
+/// traffic.json as written by deploy/traffic.sh
+const TrafficJson = struct {
+    const Pairs = []const struct { []const u8, i64 };
+    generated: i64,
+    /// time, people, bots, assets, 5xx, bytes, unconfirmed (older rows lack the last)
+    hours: []const []const i64 = &.{},
+    top_pages: struct { @"24h": Pairs = &.{}, @"7d": Pairs = &.{} } = .{},
+    referrers: struct { @"7d": Pairs = &.{} } = .{},
+    status: struct { @"24h": []const struct { i64, i64 } = &.{} } = .{},
+    not_found: struct { @"24h": Pairs = &.{} } = .{},
+    render_cache: struct { @"24h": Pairs = &.{} } = .{},
+    latency_ms: struct { @"24h": ?struct { p50: ?u32 = null, p95: ?u32 = null, p99: ?u32 = null } = null } = .{},
+    agents: struct { @"7d": Pairs = &.{} } = .{},
+};
+
+/// /admin/api/traffic.bin: traffic.json's last traffic_days as ui/admindata.zig's Traffic
+pub fn trafficBin(arena: std.mem.Allocator, json: []const u8) ![]const u8 {
+    const t = try std.json.parseFromSliceLeaky(TrafficJson, arena, json, .{ .ignore_unknown_fields = true });
+    var hours: std.ArrayList(ad.Hour) = .empty;
+    for (t.hours) |r| {
+        if (r.len < 6 or r[0] < t.generated - traffic_days * 86400) continue;
+        const n = struct {
+            fn n(v: i64) u32 {
+                return std.math.cast(u32, v) orelse 0;
+            }
+        }.n;
+        try hours.append(arena, .{ .time = r[0], .people = n(r[1]), .bots = n(r[2]), .assets = n(r[3]), .errors = n(r[4]), .bytes = std.math.cast(u64, r[5]) orelse 0, .unconfirmed = if (r.len > 6) n(r[6]) else 0 });
+    }
+    const codes = try arena.alloc(ad.Group, t.status.@"24h".len);
+    for (t.status.@"24h", codes) |x, *o| o.* = .{ .key = try arena.print("{d}", .{x[0]}), .n = x[1] };
+    const lat = t.latency_ms.@"24h";
+    const traffic: ad.Traffic = .{
+        .generated = t.generated,
+        .hours = hours.items,
+        .pages_day = try pairGroups(arena, t.top_pages.@"24h"),
+        .pages_week = try pairGroups(arena, t.top_pages.@"7d"),
+        .referrers_week = try pairGroups(arena, t.referrers.@"7d"),
+        .agents_week = try pairGroups(arena, t.agents.@"7d"),
+        .status_day = codes,
+        .not_found_day = try pairGroups(arena, t.not_found.@"24h"),
+        .render_cache_day = try pairGroups(arena, t.render_cache.@"24h"),
+        .latency_day = if (lat) |l| .{ .p50 = l.p50, .p95 = l.p95, .p99 = l.p99 } else null,
+    };
+    var out: std.ArrayList(u8) = .empty;
+    try ui.data.encode(arena, ad.Traffic, traffic, &out);
+    return out.items;
+}
+
+/// Keys cut to 200 bytes: a scanner's 404 can be any length
+fn pairGroups(arena: std.mem.Allocator, pairs: TrafficJson.Pairs) ![]const ad.Group {
+    const out = try arena.alloc(ad.Group, pairs.len);
+    for (pairs, out) |p, *o| o.* = .{ .key = p[0][0..@min(p[0].len, 200)], .n = p[1] };
+    return out;
+}
+
+test "traffic.json to traffic.bin: old rows dropped, short rows read, keys cut" {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const long: [300]u8 = @splat('x');
+    const json = try a.print(
+        \\{{"generated": 3000000, "from": 1, "hours": [[1, 9, 9, 9, 9, 9, 9], [2990000, 5, 2, 30, 1, 4000, 3],
+        \\  [2993600, 7, 1, 20, 0, 5000]],
+        \\ "top_pages": {{"24h": [["/", 3]], "7d": [["/", 13], ["/your", 6]]}}, "referrers": {{"7d": []}},
+        \\ "status": {{"24h": [[200, 470], [503, 1]]}}, "not_found": {{"24h": [["{s}", 75]]}},
+        \\ "render_cache": {{"24h": [["MISS", 45], ["", 4]]}},
+        \\ "latency_ms": {{"24h": {{"p50": 25, "p95": 50, "p99": null}}}}, "agents": {{"7d": [["Chrome", 50]]}}}}
+    , .{&long});
+    const t = try ui.data.decode(a, ad.Traffic, try trafficBin(a, json));
+    try std.testing.expectEqual(3000000, t.generated);
+    try std.testing.expectEqual(2, t.hours.len);
+    try std.testing.expectEqual(ad.Hour{ .time = 2990000, .people = 5, .bots = 2, .assets = 30, .errors = 1, .bytes = 4000, .unconfirmed = 3 }, t.hours[0]);
+    try std.testing.expectEqual(0, t.hours[1].unconfirmed);
+    try std.testing.expectEqual(2, t.pages_week.len);
+    try std.testing.expectEqualStrings("503", t.status_day[1].key);
+    try std.testing.expectEqual(200, t.not_found_day[0].key.len);
+    try std.testing.expectEqual(null, t.latency_day.?.p99);
+    try std.testing.expectEqual(50, t.latency_day.?.p95);
+    // No pages yet: traffic.sh's empty shape
+    const empty = try ui.data.decode(a, ad.Traffic, try trafficBin(a, "{\"generated\": 5, \"from\": null, \"hours\": []}"));
+    try std.testing.expectEqual(0, empty.hours.len);
+    try std.testing.expectEqual(null, empty.latency_day);
+}
+
 /// Admin actions, one per line: ISO time, name, ok|failed|refused, output's start
 pub const action_log = "admin-actions.log";
 

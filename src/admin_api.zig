@@ -1,8 +1,9 @@
-//! /admin/api/ in `meiolol render`: live data, log tails and a few fixed actions for the
-//! admin page (src/site/static/admin.js). nginx checks the login (/auth/check/view_admin)
-//! and adds X-Meiolol-Admin with the token in admin.token (cwd); without exactly that token,
-//! a request here is answered as if these routes did not exist. Actions also need the
-//! X-Meiolol-Role nginx passes on to have run_actions (the owner). docs/hosting.md
+//! /admin/api/ in `meiolol render`: live data, site traffic, log tails and a few fixed
+//! actions for the admin page (src/site/static/admin.js). nginx checks the login
+//! (/auth/check/view_admin) and adds X-Meiolol-Admin with the token in admin.token (cwd);
+//! without exactly that token, a request here is answered as if these routes did not
+//! exist. Actions also need the X-Meiolol-Role nginx passes on to have run_actions (the
+//! owner). docs/hosting.md
 
 const std = @import("std");
 const store = @import("store");
@@ -69,6 +70,16 @@ pub fn handle(api: *Api, request: *Request) !bool {
             .bin => "application/octet-stream",
         };
         return reply(request, .ok, content_type, try live(api, arena_state.allocator(), format));
+    }
+    if (std.mem.eql(u8, path, "traffic.bin")) {
+        var arena_state: std.heap.ArenaAllocator = .init(api.gpa);
+        defer arena_state.deinit();
+        const arena = arena_state.allocator();
+        const json = Io.Dir.cwd().readFileAlloc(api.io, admin.traffic_file, arena, .limited(16 << 20)) catch |err| {
+            log.warn("traffic: {s}: {t}", .{ admin.traffic_file, err });
+            return reply(request, .service_unavailable, "text/plain; charset=utf-8", "no traffic data\n");
+        };
+        return reply(request, .ok, "application/octet-stream", try admin.trafficBin(arena, json));
     }
     if (std.mem.eql(u8, path, "log")) {
         var arena_state: std.heap.ArenaAllocator = .init(api.gpa);

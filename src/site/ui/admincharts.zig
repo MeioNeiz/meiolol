@@ -295,7 +295,7 @@ const region_names = std.enums.EnumArray(ad.Region, Text).init(.{
 /// Highest jobs the writer queue holds before workers block (crawl.zig)
 const writer_cap = 128;
 /// Warn steps for figures, as the old page's warn and bad
-const warn: fmt.Step = .{ .s = 2, .low = true };
+pub const warn: fmt.Step = .{ .s = 2, .low = true };
 const bad: fmt.Step = .{ .s = 4, .low = true };
 
 /// The range switcher (crawl tabs) and region chips
@@ -708,8 +708,8 @@ fn messages(ch: *Charts, h: *H, c: ad.Crawl) N {
     });
 }
 
-/// A queue's groups as bars on one scale
-fn groupBars(h: *H, title: Text, gs: []const ad.Group, key: Text, value: Text) N {
+/// Groups as bars on one scale (AdminTraffic's too)
+pub fn groupBars(h: *H, title: Text, sub: ?Text, gs: []const ad.Group, key: Text, value: Text) N {
     var most: i64 = 0;
     for (gs) |g| most = @max(most, g.n);
     var rows = h.list();
@@ -719,6 +719,7 @@ fn groupBars(h: *H, title: Text, gs: []const ad.Group, key: Text, value: Text) N
     }));
     return card.view(h, .{}, &.{
         card.head(h, title, null, &.{}),
+        if (sub) |x| h.p(.{ .class = "lead" }, .{x}) else .none,
         if (gs.len == 0) h.p(.{ .class = "lead" }, .{W.no_rows}) else h.table(.{ .class = "bars" }, .{
             h.thead(.{}, .{h.tr(.{}, .{ h.th(.{}, .{key}), h.th(.{ .data_answer = true }, .{value}) })}),
             h.tbody(.{}, .{rows.done()}),
@@ -761,8 +762,8 @@ fn queues(ch: *Charts, h: *H, s: *const ad.Snapshot) N {
     return h.div(.{ .class = "tab" }, .{
         card.sechead(h, W.queues, null, &.{}),
         h.div(.{ .class = "cards" }, .{
-            groupBars(h, W.match_queue, q.match, W.c_state, W.c_jobs),
-            groupBars(h, W.timeline_queue, q.timeline, W.c_state, W.c_jobs),
+            groupBars(h, W.match_queue, null, q.match, W.c_state, W.c_jobs),
+            groupBars(h, W.timeline_queue, null, q.timeline, W.c_state, W.c_jobs),
         }),
         if (hist.len >= 2) histChart(ch, h, .backlog, hist, .{
             .label = W.backlog,
@@ -919,7 +920,7 @@ fn keyProblems(h: *H, kp: []const ad.KeyProblem) N {
 // Storage
 
 /// "132.4 GB", "512.0 MB"
-fn bytes(h: *H, v: ?f64) Text {
+pub fn bytes(h: *H, v: ?f64) Text {
     const x = v orelse return .{ .s = "–" };
     const a = @abs(x);
     const sign: []const u8 = if (x < 0) "-" else "";
@@ -1267,11 +1268,11 @@ pub fn ingest(ch: *Charts, h: *H, s: *const ad.Snapshot) N {
                     }),
                 }),
             }),
-            groupBars(h, W.by_platform, plats.items, W.c_platform, W.c_games),
-            groupBars(h, W.by_rank, m.tiers, W.c_tier, W.c_games),
-            groupBars(h, W.ladder_tiers, s.ladder, W.c_tier, W.c_players),
-            groupBars(h, W.pool, pool.items, W.c_region, W.c_players),
-            groupBars(h, W.by_patch, s.by_patch, W.c_patch, W.c_matches),
+            groupBars(h, W.by_platform, null, plats.items, W.c_platform, W.c_games),
+            groupBars(h, W.by_rank, null, m.tiers, W.c_tier, W.c_games),
+            groupBars(h, W.ladder_tiers, null, s.ladder, W.c_tier, W.c_players),
+            groupBars(h, W.pool, null, pool.items, W.c_region, W.c_players),
+            groupBars(h, W.by_patch, null, s.by_patch, W.c_patch, W.c_matches),
         }),
     });
 }

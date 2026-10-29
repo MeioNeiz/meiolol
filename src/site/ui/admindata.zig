@@ -1,6 +1,7 @@
 //! Admin page data (/admin/, private), ui.data encoded: admin.bin, the box's snapshot
-//! each web round (src/admin.zig generate), and live.bin, the admin API's last 3 h
-//! (src/admin_api.zig). Aggregates only: no PUUIDs, Riot IDs or match ids
+//! each web round (src/admin.zig generate), live.bin, the admin API's last 3 h, and
+//! traffic.bin, the site's nginx log as deploy/traffic.sh counts it (both
+//! src/admin_api.zig). Aggregates only: no PUUIDs, Riot IDs or match ids
 const std = @import("std");
 
 /// Riot routing regions (riot/endpoints.zig Region; names asserted in admin.zig)
@@ -185,4 +186,39 @@ pub const Live = struct {
     /// Start of a running `meiolol eval`
     eval_since: ?i64,
     action: ?Running,
+};
+
+/// One hour of the site's nginx log
+pub const Hour = struct {
+    time: i64,
+    /// Page views by people: a browser agent that also fetched the print stylesheet
+    people: u32,
+    /// Named by their user agent
+    bots: u32,
+    assets: u32,
+    /// 5xx answers
+    errors: u32,
+    bytes: u64,
+    /// A browser agent with no stylesheet fetch, mostly bots
+    unconfirmed: u32,
+};
+
+pub const Latency = struct { p50: ?u32, p95: ?u32, p99: ?u32 };
+
+/// traffic.bin. Lists most first; key is a path, a referrer domain, an agent family, a
+/// status code or a render cache state ("" for static files)
+pub const Traffic = struct {
+    /// When deploy/traffic.sh last ran
+    generated: i64,
+    /// Oldest first, the last 30 days
+    hours: []const Hour,
+    pages_day: []const Group,
+    pages_week: []const Group,
+    referrers_week: []const Group,
+    agents_week: []const Group,
+    status_day: []const Group,
+    not_found_day: []const Group,
+    render_cache_day: []const Group,
+    /// Page time bucket bounds, 24 h; null with no pages
+    latency_day: ?Latency,
 };

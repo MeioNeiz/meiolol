@@ -45,8 +45,8 @@ var linking: ap.Link = .{ .token = "" };
 const live_ms = 60_000;
 const snap_s = 300;
 
-/// The chart tabs' island (dom.lazyLoad)
-const lazy = [_][]const u8{ui.admincharts.sel};
+/// The chart and traffic tabs' islands (dom.lazyLoad)
+const lazy = [_][]const u8{ ui.admincharts.sel, ui.admintraffic.sel };
 
 export fn main() void {
     dom.start();
