@@ -317,8 +317,10 @@ fn live(api: *Api, arena: std.mem.Allocator, format: LiveFormat) ![]const u8 {
 
     if (api.health == null or now - api.health_at >= health_cache_s) {
         const h = run(arena, io, &.{"bin/health.sh"});
+        // Copy before freeing: a failed copy keeps the old one, never a freed pointer
+        const copy = try api.gpa.dupe(u8, h.output);
         if (api.health) |old| api.gpa.free(old);
-        api.health = try api.gpa.dupe(u8, h.output);
+        api.health = copy;
         api.health_at = now;
     }
     const l: admin.Live = .{
@@ -336,8 +338,9 @@ fn live(api: *Api, arena: std.mem.Allocator, format: LiveFormat) ![]const u8 {
         .json => try admin.liveJson(arena, io, db, l),
         .bin => try admin.liveBin(arena, io, db, l),
     };
+    const copy = try api.gpa.dupe(u8, body);
     if (api.live.get(format)) |old| api.gpa.free(old);
-    api.live.set(format, try api.gpa.dupe(u8, body));
+    api.live.set(format, copy);
     api.live_at.set(format, now);
     return body;
 }
