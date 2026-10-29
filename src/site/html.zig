@@ -219,11 +219,13 @@ fn navHref(a: std.mem.Allocator, p: Page, it: NavItem) ![]const u8 {
 
 /// The header search's file (ui-sitesearch.js) on the box's first use, so a page that
 /// never searches loads none of it; "/" focuses the box. A submit before the island runs
-/// (window.meioSearch) that isn't a Riot ID waits for it: meioSearchGo, its first option
+/// (window.meioSearch) that isn't a Riot ID waits for it: meioSearchGo, its first option.
+/// If the island fails (script error, or the page still here 8 s on) that submit and later
+/// ones go as without JS
 const search_loader =
-    \\<script>{const f=document.querySelector("[data-island=search]");let on=false;const go=()=>{if(on||!f)return;on=true;const s=document.createElement("script");
-    \\s.src=f.dataset.js;s.dataset.wasm=f.dataset.wasm;document.head.append(s)};f?.addEventListener("focusin",go);f?.addEventListener("pointerdown",go);
-    \\f?.addEventListener("submit",e=>{if(window.meioSearch||f.querySelector("input").value.includes("#"))return;e.preventDefault();window.meioSearchGo=1;go()});
+    \\<script>{const f=document.querySelector("[data-island=search]");let on=false,bad=false;const own=()=>{bad=true;f.submit()};const go=()=>{if(on||!f)return;on=true;const s=document.createElement("script");
+    \\s.src=f.dataset.js;s.dataset.wasm=f.dataset.wasm;s.onerror=()=>{bad=true;if(window.meioSearchGo)own()};document.head.append(s)};f?.addEventListener("focusin",go);f?.addEventListener("pointerdown",go);
+    \\f?.addEventListener("submit",e=>{if(window.meioSearch||bad||f.querySelector("input").value.includes("#"))return;e.preventDefault();window.meioSearchGo=1;go();const h=location.href;setTimeout(()=>{if(location.href==h)own()},8000)});
     \\addEventListener("keydown",e=>{if(!f||e.key!="/"||e.ctrlKey||e.metaKey||e.altKey||e.target.closest?.("input,textarea,select,[contenteditable]"))return;e.preventDefault();go();f.querySelector("input").focus()})}</script>
     \\
 ;
