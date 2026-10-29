@@ -242,16 +242,6 @@ button.primary { background: var(--text); color: var(--bg); border-color: var(--
   .chart text, .chart .side { font-size: 15px; }
   main.wrap { padding-top: 18px; padding-bottom: 28px; }
 }
-/* Scope chip (scope.zig): the region, period and rank a block's numbers are from; .off
-   a pick the block doesn't follow */
-.scope {
-  display: inline-flex; flex-wrap: wrap; gap: 0 5px; padding: 0 8px; border: 1px solid var(--line-2);
-  border-radius: 10px; color: var(--t2); font-size: 12px; font-weight: 500; line-height: 1.6;
-  letter-spacing: 0; vertical-align: 1px;
-}
-.scope > span + span::before { content: "·"; margin-right: 5px; color: var(--faint); }
-.scope .off { color: var(--turn); }
-.scope i { font-style: normal; }
 
 .chart .hit { fill: transparent; }
 .chart .hit:hover { fill: rgba(255, 255, 255, 0.06); }

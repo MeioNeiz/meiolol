@@ -59,8 +59,8 @@ pub const Kind = enum {
 };
 
 pub const max_values = 8;
-/// The rank filter's floors above Platinum (site html.ranks): `builds --site` writes a
-/// file per view for each
+/// The rank filter's floors above Platinum (Emerald+, Diamond+, Master+): `builds --site`
+/// writes a file per view for each
 pub const rank_tiers = [_][]const u8{ "EMERALD", "DIAMOND", "MASTER" };
 /// What `builds --site` writes per lane opponent: matchups with this many games, this
 /// many options per kind

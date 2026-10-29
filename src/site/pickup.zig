@@ -50,10 +50,9 @@ pub fn writePage(site: *const Site, w: *Writer, r: ?Role) !void {
     );
     try html.head(w, pg);
     // Every region's games, by the view's period (load.zig)
-    try tpl.render(w, "<h1>{title} {chip}</h1>\n", .{
-        .title = W.title,
-        .chip = site.chip(site.regionDim(.all), site.periodDim(site.view.period), .plat),
-    });
+    try tpl.renderPart(w, "<h1>{title} ", .{ .title = W.title });
+    try site.writeChip(w, .all_regions, site.periodDim(site.view.period), .plat);
+    try w.writeAll("</h1>\n");
     var tree: ui.Tree = .{};
     var h: H = .init(a, &tree);
     tree.root = try view(site, &h, r);

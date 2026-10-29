@@ -30,11 +30,11 @@ pub const assets = @import("assets.zig");
 pub const gallery = @import("gallery.zig");
 pub const notes = @import("notes.zig");
 pub const ui = @import("ui");
+const ScopeDim = ui.scopechip.Dim;
 const patchday = @import("../patchday.zig");
 const patchnotes = @import("../patchnotes.zig");
 const patch_page = @import("patch.zig");
 const stats = @import("../stats.zig");
-pub const scope = @import("scope.zig");
 
 const Writer = std.Io.Writer;
 const Stats = core.Stats;
@@ -312,23 +312,32 @@ pub const Site = struct {
     }
 
     /// Scope chip dimensions in this site's words: EUW is opts' home platform
-    pub fn regionDim(s: *const Site, r: html.Region) scope.Dim {
-        return .region(r, s.opts.platforms[0]);
+    pub fn regionDim(s: *const Site, r: html.Region) ScopeDim {
+        const home = s.opts.platforms[0];
+        return switch (r) {
+            .euw => .{ .key = home, .text = html.platformName(home) },
+            .all => .all_regions,
+        };
     }
 
-    pub fn periodDim(s: *const Site, p: html.Period) scope.Dim {
+    pub fn periodDim(s: *const Site, p: html.Period) ScopeDim {
         return switch (p) {
             .days30 => .days30,
-            .patch => scope.Dim.patch(s.arena, s.patch) catch .{ .key = "patch", .text = s.patch },
+            .patch => ScopeDim.patch(s.arena, s.patch) catch .{ .key = "patch", .text = s.patch },
         };
     }
 
     /// A block's scope chip, marked against this view's picks
-    pub fn chip(s: *const Site, where: scope.Dim, when: scope.Dim, rank: scope.Dim) scope.Chip {
-        return .{ .region = where, .period = when, .rank = rank, .picks = .{
+    pub fn writeChip(s: *const Site, w: *Writer, where: ScopeDim, when: ScopeDim, rank: ScopeDim) !void {
+        const c: ui.scopechip.ScopeChip = .{ .region = where, .period = when, .rank = rank, .picks = .{
             .region = s.regionDim(s.view.region),
             .period = s.periodDim(s.view.period),
         } };
+        var t: ui.Tree = .{};
+        var h: ui.H = .init(s.arena, &t);
+        const n = c.view(&h);
+        if (h.oom) return error.OutOfMemory;
+        try ui.html.write(&t, n, w);
     }
 
     pub fn icon(s: *const Site, ch: Champ) ![]const u8 {
@@ -460,7 +469,6 @@ test {
     _ = flat;
     _ = yourgame;
     _ = yourpage;
-    _ = scope;
     _ = textpages;
     _ = @import("dailydata.zig");
     _ = @import("daily.zig");

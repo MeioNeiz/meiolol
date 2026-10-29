@@ -137,21 +137,25 @@ pub fn writePage(site: *const Site, w: *Writer, p: *const pool.Pool) !void {
         if (h.oom) return error.OutOfMemory;
         try ui.html.write(&t, t.root, w);
     }
-    try w.writeAll("</div>");
+    try w.writeAll("</div>\n<p class=\"muted\">");
+    try site.writeChip(w, site.regionDim(site.view.region), site.periodDim(site.view.period), .plat);
     try tpl.render(w,
-        \\
-        \\<p class="muted">{chip} Lanes: points of win chance beyond what the two champions'
+        \\ Lanes: points of win chance beyond what the two champions'
         \\own win rates predict, from {games} games. A main is a player's most played champion,
         \\from {source}. Harder or easier to pick up: new players against practised ones, every
-        \\region (<a href="{pickup}">How hard to pick up</a>). <a href="/method">Method</a>.</p>
+        \\region (<a href="{pickup}">How hard to pick up</a>). <a href="/method">Method</a>.
+    , .{
+        .games = pd.min_games,
+        .source = sourceText(p),
+        .pickup = try site.href(.{ .pickup = null }),
+    });
+    // Opened outside the template, before the chip
+    try w.writeAll("</p>\n");
+    try tpl.render(w,
         \\<script src="{js}" data-wasm="{wasm}" defer></script>
         \\<script src="{grid_js}" data-wasm="{grid_wasm}" defer></script>
         \\
     , .{
-        .chip = site.chip(site.regionDim(site.view.region), site.periodDim(site.view.period), .plat),
-        .games = pd.min_games,
-        .source = sourceText(p),
-        .pickup = try site.href(.{ .pickup = null }),
         .js = html.Link{ .path = assets.pool_js.path },
         .wasm = assets.pool_wasm.path,
         .grid_js = html.Link{ .path = assets.poolgrid_js.path },

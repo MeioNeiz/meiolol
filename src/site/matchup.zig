@@ -15,7 +15,6 @@ const assets = @import("assets.zig");
 const ui = @import("ui");
 const mp = ui.matchpage;
 const cp = ui.champpage;
-const Dim = @import("scope.zig").Dim;
 
 const Writer = std.Io.Writer;
 const Role = core.Role;
@@ -54,13 +53,6 @@ fn scope(site: *const Site, curves: *const Curves) ![]const u8 {
     const label = curves.patch();
     if (label.len > 0 and std.ascii.isDigit(label[0])) return site.arena.print("patch {s}", .{label});
     return if (site.view.period == .days30) site.when else label;
-}
-
-/// The curves' period as a scope chip: a patch file's patch, else the view's
-fn periodDim(site: *const Site, curves: *const Curves) !Dim {
-    const label = curves.patch();
-    if (label.len > 0 and std.ascii.isDigit(label[0])) return .patch(site.arena, label);
-    return site.periodDim(site.view.period);
 }
 
 /// From x's side: x's gold, wins and timings first

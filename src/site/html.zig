@@ -308,10 +308,6 @@ const Subbar = struct {
     }
 };
 
-/// Rank picks: tier index as filters.zig tiers ("" all games: the crawl samples
-/// Platinum IV+ players, so its lobbies are Platinum+); higher tiers are too thin to offer
-pub const ranks = [_][2][]const u8{ .{ "", "Plat+" }, .{ "5", "Emerald+" }, .{ "6", "Diamond+" }, .{ "7", "Master+" } };
-
 /// "EUW1" -> "EUW", "EUN1" -> "EUNE"
 pub fn platformName(p: []const u8) []const u8 {
     const names = [_][2][]const u8{ .{ "EUN1", "EUNE" }, .{ "LA1", "LAN" }, .{ "LA2", "LAS" }, .{ "OC1", "OCE" } };

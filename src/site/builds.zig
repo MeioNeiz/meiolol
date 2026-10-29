@@ -9,7 +9,6 @@ const html = @import("html.zig");
 const tpl = html.tpl;
 const plural = @import("text.zig").plural;
 const builds = @import("../builds.zig");
-const scope = @import("scope.zig");
 const filters = @import("filters.zig");
 
 const Writer = std.Io.Writer;
@@ -40,13 +39,6 @@ fn periodText(a: std.mem.Allocator, f: *const File, period: html.Period) ![]cons
     };
 }
 
-fn periodDim(a: std.mem.Allocator, f: *const File, period: html.Period) !scope.Dim {
-    return switch (period) {
-        .days30 => .days30,
-        .patch => .patch(a, f.label),
-    };
-}
-
 /// A strip's build: the view's, or in a patch view the previous patch's while the
 /// current one has under solid_games of it and the previous more (a new patch's first
 /// days)
@@ -56,11 +48,6 @@ pub const Picked = struct {
     period: html.Period,
     /// The current patch's games of it when the previous patch's is shown
     newer: ?u64 = null,
-
-    /// As a scope chip: the patch shown, the previous one while the current is thin
-    fn chipPeriod(p: Picked, site: *const Site) !scope.Dim {
-        return periodDim(site.arena, p.f, p.period);
-    }
 
     /// "patch 16.21", "patch 16.20 (16.21: 57 games so far)", "last 30 days"
     fn when(p: Picked, site: *const Site) ![]const u8 {

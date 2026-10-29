@@ -390,17 +390,17 @@ test "fixture games to stats, curves and the website" {
         .{ "method.html", &.{ "Games to stabilise", "<li><strong>Highest win rate</strong>: marked among options", "<h2 id=\"lean\">Early or late</h2>" } },
         // The board, pool and its section follow the view
         .{ "_v/patch/champions.html", &.{ "data-view=\"1\"", "<a href=\"/champions\">30 days</a>" } },
-        .{ "_v/all/pool.html", &.{ "<div class=\"c-poolwrap\"><div class=\"c-poolpage\" data-island=\"pool\" data-bin=\"", "<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"all\"" } },
-        // Scope chips (site/scope.zig): what each block covers, marked where it doesn't
+        .{ "_v/all/pool.html", &.{ "<div class=\"c-poolwrap\"><div class=\"c-poolpage\" data-island=\"pool\" data-bin=\"", "<p class=\"muted\"><span class=\"c-scope\"><span class=\"c-chip\" data-v=\"scope\" title=\"Region, period and rank these numbers are from\"><span class=\"part\">All regions</span>" } },
+        // Scope chips (ui.scopechip): what each block covers, marked where it doesn't
         // follow the page's picks
         // View links: this page in each view, the current one lit, ranks greyed
         .{ "_v/patch/matchups/top/darius-vs-mordekaiser.html", &.{ "<a aria-current=\"page\">15.13</a>", "<a href=\"/matchups/top/darius-vs-mordekaiser\">30 days</a>", "<a aria-disabled=\"true\">Emerald+</a>" } },
         // Pool: the island empty (the picker), the grid's island empty beside it, the
         // lanes' scope, ui-pool.wasm and ui-poolgrid.wasm
-        .{ "pool.html", &.{ "<h2>Choose your pool</h2>", "<div class=\"c-poolgrid\" data-island=\"poolgrid\"></div></div>", "<script src=\"/" ++ assets.poolgrid_js.path ++ "\" data-wasm=\"" ++ assets.poolgrid_wasm.path ++ "\" defer></script>", "<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"EUW1\" data-period=\"days30\"", "(<a href=\"/pickup\">How hard to pick up</a>)", "<script src=\"/" ++ assets.pool_js.path ++ "\" data-wasm=\"" ++ assets.pool_wasm.path ++ "\" defer></script>" } },
-        .{ "pickup.html", &.{ "<h1>How hard to pick up <span class=\"scope\" data-chip data-region=\"all\" data-period=\"days30\"", "<a aria-current=\"page\">All</a><a href=\"/pickup/top\">Top</a>" } },
+        .{ "pool.html", &.{ "<h2>Choose your pool</h2>", "<div class=\"c-poolgrid\" data-island=\"poolgrid\"></div></div>", "<script src=\"/" ++ assets.poolgrid_js.path ++ "\" data-wasm=\"" ++ assets.poolgrid_wasm.path ++ "\" defer></script>", "<p class=\"muted\"><span class=\"c-scope\"><span class=\"c-chip\" data-v=\"scope\" title=\"Region, period and rank these numbers are from\"><span class=\"part\">EUW</span><span class=\"part\">30 days</span>", "(<a href=\"/pickup\">How hard to pick up</a>)", "<script src=\"/" ++ assets.pool_js.path ++ "\" data-wasm=\"" ++ assets.pool_wasm.path ++ "\" defer></script>" } },
+        .{ "pickup.html", &.{ "<h1>How hard to pick up <span class=\"c-scope\"><span class=\"c-chip\" data-v=\"scope\" title=\"Region, period and rank these numbers are from\"><span class=\"part off\">All regions, not EUW alone</span><span class=\"part\">30 days</span>", "<a aria-current=\"page\">All</a><a href=\"/pickup/top\">Top</a>" } },
         .{ "_v/patch/pickup/mid.html", &.{ "<a href=\"/pickup?period=patch\">All</a><a href=\"/pickup/top?period=patch\">Top</a>", "<a aria-current=\"page\">Mid</a>" } },
-        .{ "_v/all-patch/pool.html", &.{"<span class=\"scope\" data-chip data-region=\"all\" data-period=\"patch:15.13\" data-rank=\"\" title=\"Region, period and rank these numbers are from\"><span>All regions</span><span>Patch 15.13</span><span>Plat+</span></span> Lanes:"} },
+        .{ "_v/all-patch/pool.html", &.{"<span class=\"c-scope\"><span class=\"c-chip\" data-v=\"scope\" title=\"Region, period and rank these numbers are from\"><span class=\"part\">All regions</span><span class=\"part\">Patch 15.13</span><span class=\"part\">Plat+</span></span></span> Lanes:"} },
     };
     for (pages) |pg| {
         const path = try std.fs.path.join(arena, &.{ out, pg[0] });
