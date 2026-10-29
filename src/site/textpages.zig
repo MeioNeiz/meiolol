@@ -3,8 +3,8 @@
 const std = @import("std");
 const ui = @import("ui");
 const html = @import("html.zig");
-const prose = @import("prose.zig");
 const root = @import("root.zig");
+const assets = @import("assets.zig");
 const urls = ui.urls;
 const Site = root.Site;
 const core = @import("core");
@@ -499,12 +499,24 @@ pub fn body(site: *const Site, w: *Writer, at: std.meta.Tag(urls.Page)) !bool {
             .title = "Champ select helper (desktop app)",
             .lead = "In development: a small Windows app that, once you have picked your champion in champ select, shows how your lane matchup usually unfolds and your own record in it.",
             .body = try ui.prose.parse(a, download_md),
-            .extra = h.div(.{ .id = "admin-download" }, .{}),
         },
         else => return false,
     });
-    if (at == .download) try w.writeAll(prose.admin_download);
     return true;
+}
+
+/// An account page's body (ui.account), its island's script after it
+pub fn account(site: *const Site, w: *Writer, kind: ui.account.Kind) !void {
+    var t: ui.Tree = .{};
+    var h: ui.H = .init(site.arena, &t);
+    var p: ui.account.Account = .{ .kind = kind };
+    const n = p.view(&h);
+    if (h.oom) return error.OutOfMemory;
+    try ui.html.write(&t, n, w);
+    try html.tpl.render(w,
+        \\<script src="{js}" data-wasm="{wasm}" defer></script>
+        \\
+    , .{ .js = html.Link{ .path = assets.account_js.path }, .wasm = assets.account_wasm.path });
 }
 
 /// The site's 404 page, never indexed

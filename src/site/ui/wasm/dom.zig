@@ -705,6 +705,58 @@ pub fn send(comptime method: []const u8, path: []const u8, body: []const u8, ctx
     request(zjb.ConstHandle.global.call("fetch", .{ u, init }, zjb.Handle), ctx, done);
 }
 
+/// As `send` (no body for null), then `done(ctx, status, bytes)` with any answer's body,
+/// an error's too; status 0 and null when the fetch failed
+pub fn ask(comptime method: []const u8, path: []const u8, body: ?[]const u8, ctx: i32, done: *const fn (i32, u16, ?[]u8) void) void {
+    const u = zjb.string(path);
+    defer u.release();
+    const init = zjb.global("Object").new(.{});
+    defer init.release();
+    init.set("method", zjb.constString(method));
+    if (body) |b| {
+        const headers = zjb.global("Headers").new(.{});
+        defer headers.release();
+        headers.call("set", .{ zjb.constString("X-Meiolol-Action"), zjb.constString("1") }, void);
+        const view = zjb.u8ArrayView(b);
+        defer view.release();
+        init.set("headers", headers);
+        init.set("body", view);
+    }
+    on_answer = done;
+    const p = zjb.ConstHandle.global.call("fetch", .{ u, init }, zjb.Handle);
+    defer p.release();
+    const ok = zjb.fnHandle("uiAnswer", &onAnswer).bind(.{ctx});
+    defer ok.release();
+    const bad = zjb.fnHandle("uiNoAnswer", &onNoAnswer).bind(.{ctx});
+    defer bad.release();
+    p.call("then", .{ ok, bad }, zjb.Handle).release();
+}
+
+var on_answer: *const fn (i32, u16, ?[]u8) void = undefined;
+
+fn onAnswer(ctx: i32, resp: zjb.Handle) callconv(.c) void {
+    const s = enter();
+    defer leave(s);
+    defer resp.release();
+    const step = zjb.fnHandle("uiAnswerBytes", &onAnswerBytes).bind(.{ ctx, resp.get("status", i32) });
+    const bad = zjb.fnHandle("uiNoAnswer", &onNoAnswer).bind(.{ctx});
+    _ = resp.call("arrayBuffer", .{}, zjb.Handle).call("then", .{ step, bad }, zjb.Handle);
+}
+
+fn onNoAnswer(ctx: i32, err: zjb.Handle) callconv(.c) void {
+    const s = enter();
+    defer leave(s);
+    err.release();
+    on_answer(ctx, 0, null);
+}
+
+fn onAnswerBytes(ctx: i32, status: i32, buf: zjb.Handle) callconv(.c) void {
+    const s = enter();
+    defer leave(s);
+    defer buf.release();
+    on_answer(ctx, @intCast(std.math.clamp(status, 0, 999)), zjb.global("Uint8Array").new(.{buf}).allocBytes(gpa) catch null);
+}
+
 fn request(p: zjb.Handle, ctx: i32, done: *const fn (i32, ?[]u8) void) void {
     on_bytes = done;
     defer p.release();

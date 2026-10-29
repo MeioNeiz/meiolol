@@ -5,9 +5,7 @@ const std = @import("std");
 const core = @import("core");
 pub const html = @import("html.zig");
 const urls = ui.urls;
-const prose = @import("prose.zig");
 const textpages = @import("textpages.zig");
-const account_page = @import("account.zig");
 const daily_page = @import("daily.zig");
 const yourgame = @import("yourgame.zig");
 const yourpage = @import("yourpage.zig");
@@ -351,21 +349,16 @@ pub const Site = struct {
     pub fn champBySlug(s: *const Site, slug_: []const u8) ?Champ {
         return s.champs[s.by_slug.get(slug_) orelse return null];
     }
-
-    fn info(s: *const Site) prose.Info {
-        return .{ .contact = s.opts.contact, .updated = s.opts.updated, .patch = s.patch };
-    }
 };
 
 pub const File = daily.File;
 
 /// Also written by their plain names, with the same data (assets.zig)
-pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.stats_js, assets.stats_wasm, assets.champion_js, assets.champion_wasm, assets.champbuild_js, assets.champbuild_wasm, assets.champmore_js, assets.champmore_wasm, assets.champcharts_js, assets.champcharts_wasm, assets.matchup_js, assets.matchup_wasm, assets.matchmore_js, assets.matchmore_wasm, assets.games_js, assets.games_wasm, assets.gamemore_js, assets.gamemore_wasm, assets.gamelane_js, assets.gamelane_wasm, assets.finder_js, assets.finder_wasm, assets.findergrid_js, assets.findergrid_wasm, assets.learn_js, assets.learn_wasm, assets.patch_js, assets.patch_wasm, assets.pool_js, assets.pool_wasm, assets.poolgrid_js, assets.poolgrid_wasm, assets.daily_js, assets.daily_wasm, assets.dailydays_js, assets.dailydays_wasm, assets.home_js, assets.home_wasm, assets.homegame_js, assets.homegame_wasm, assets.your_js, assets.your_wasm, assets.yourviews_js, assets.yourviews_wasm, assets.yourtime_js, assets.yourtime_wasm, assets.yourlookup_js, assets.yourlookup_wasm, assets.yourfriends_js, assets.yourfriends_wasm, assets.forget_js, assets.forget_wasm, assets.sitesearch_js, assets.sitesearch_wasm };
+pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.stats_js, assets.stats_wasm, assets.champion_js, assets.champion_wasm, assets.champbuild_js, assets.champbuild_wasm, assets.champmore_js, assets.champmore_wasm, assets.champcharts_js, assets.champcharts_wasm, assets.matchup_js, assets.matchup_wasm, assets.matchmore_js, assets.matchmore_wasm, assets.games_js, assets.games_wasm, assets.gamemore_js, assets.gamemore_wasm, assets.gamelane_js, assets.gamelane_wasm, assets.finder_js, assets.finder_wasm, assets.findergrid_js, assets.findergrid_wasm, assets.learn_js, assets.learn_wasm, assets.patch_js, assets.patch_wasm, assets.pool_js, assets.pool_wasm, assets.poolgrid_js, assets.poolgrid_wasm, assets.daily_js, assets.daily_wasm, assets.dailydays_js, assets.dailydays_wasm, assets.home_js, assets.home_wasm, assets.homegame_js, assets.homegame_wasm, assets.your_js, assets.your_wasm, assets.yourviews_js, assets.yourviews_wasm, assets.yourtime_js, assets.yourtime_wasm, assets.yourlookup_js, assets.yourlookup_wasm, assets.yourfriends_js, assets.yourfriends_wasm, assets.forget_js, assets.forget_wasm, assets.account_js, assets.account_wasm, assets.sitesearch_js, assets.sitesearch_wasm };
 
 /// Front-end files at the site root; `Options.static_dir` serves them from disk instead
 pub const shared_assets = [_]File{
     .{ .path = "favicon.svg", .data = @embedFile("static/favicon.svg") },
-    .{ .path = "account.js", .data = @embedFile("static/account.js") },
     // Linked for print, so it never holds up rendering; browsers still fetch it on each load
     .{ .path = "print.css", .data = @embedFile("static/print.css") },
 };
@@ -584,15 +577,15 @@ pub fn renderShared(site: *const Site, w: *Writer, at: urls.Page) !bool {
         .your => return yourpage.writePage(site, w),
         else => {
             // null: the body is textpages.body's
-            const fixed = [_]struct { std.meta.Tag(urls.Page), []const u8, []const u8, html.Nav, ?*const fn (*Writer, prose.Info) Writer.Error!void }{
+            const fixed = [_]struct { std.meta.Tag(urls.Page), []const u8, []const u8, html.Nav, ?ui.account.Kind }{
                 .{ .method, "Method", "Where meiolol's numbers come from and how lane curves, champion statistics and the Daily Draft are made.", .method, null },
                 .{ .download, "Champ select helper", "The meiolol champ select helper, a desktop app for Windows, in development.", .none, null },
                 .{ .privacy, "Privacy policy", "What meiolol collects and why.", .none, null },
                 .{ .terms, "Terms of use", "Terms for using meiolol.", .none, null },
-                .{ .login, "Log in", "Log in to meiolol.", .none, account_page.login },
-                .{ .signup, "Make your account", "Make a meiolol account from a sign-up link.", .none, account_page.signup },
-                .{ .join, "Set up your login", "Set up a meiolol login from an invite link.", .none, account_page.join },
-                .{ .account, "Your account", "Your meiolol login: password and sign out.", .none, account_page.account },
+                .{ .login, "Log in", "Log in to meiolol.", .none, .login },
+                .{ .signup, "Make your account", "Make a meiolol account from a sign-up link.", .none, .signup },
+                .{ .join, "Set up your login", "Set up a meiolol login from an invite link.", .none, .join },
+                .{ .account, "Your account", "Your meiolol login: password and sign out.", .none, .account },
             };
             for (fixed) |f| {
                 if (f[0] != at) continue;
@@ -603,7 +596,7 @@ pub fn renderShared(site: *const Site, w: *Writer, at: urls.Page) !bool {
                     if (std.meta.eql(s, at)) break true;
                 } else false;
                 try html.head(w, p);
-                if (f[4]) |body| try body(w, site.info()) else _ = try textpages.body(site, w, at);
+                if (f[4]) |kind| try textpages.account(site, w, kind) else _ = try textpages.body(site, w, at);
                 try html.foot(w, p);
                 return true;
             }

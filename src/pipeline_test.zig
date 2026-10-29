@@ -583,12 +583,13 @@ test "fixture games to stats, curves and the website" {
         if (std.mem.endsWith(u8, e.path, ".html")) try expectPageLinks(arena, e.path, want);
     }
     try testing.expect(checked > 50);
-    // The account pages (site/account.zig): rendered on request only, never indexed
-    for ([_][]const u8{ "login.html", "signup.html", "join.html", "account.html" }) |p| {
-        const page = try loaded.get(arena, p) orelse return error.TestUnexpectedResult;
+    // The account pages (ui.account): rendered on request only, never indexed
+    for ([_][]const u8{ "login", "signup", "join", "account" }) |p| {
+        const page = try loaded.get(arena, try std.fmt.allocPrint(arena, "{s}.html", .{p})) orelse return error.TestUnexpectedResult;
         try testing.expect(std.mem.find(u8, page, "<meta name=\"robots\" content=\"noindex\">") != null);
-        try testing.expect(std.mem.find(u8, page, "<form id=\"auth\" class=\"auth-form\" data-kind=\"") != null);
-        try testing.expect(std.mem.find(u8, page, "<script src=\"account.js\" defer></script>") != null);
+        try testing.expect(std.mem.find(u8, page, try std.fmt.allocPrint(arena, "data-island=\"account\" data-kind=\"{s}\"", .{p})) != null);
+        try testing.expect(std.mem.find(u8, page, "<form method=\"post\">") != null);
+        try testing.expect(std.mem.find(u8, page, "data-wasm=\"" ++ assets.account_wasm.path ++ "\"") != null);
     }
     // `meiolol site --views` and `render` reading it: the same bytes for every file
     {

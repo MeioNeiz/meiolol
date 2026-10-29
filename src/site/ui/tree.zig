@@ -112,6 +112,8 @@ pub const Ev = enum(u4) {
     pointercancel,
     toggle,
     dblclick,
+    /// A form's: preventDefault (ev.handled) keeps the page
+    submit,
 };
 
 /// A DOM event as Zig sees it. Pointer x is relative to the handler's element, w its width
