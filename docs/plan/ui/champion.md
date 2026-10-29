@@ -122,7 +122,8 @@ its kind. Candidates, data we have first (arch-stats.md):
   half around it; all ranks
 - Comeback odds: done ("Won by lane gold", 10 | 15 min, the pairs' buckets summed
   against all lanes dashed; all ranks)
-- Early kills: who takes part in killing the lane opponent before 6, 6-14, after 14
+- Early kills: done ("Lane kills", Versus rows as the matchup page's head to head:
+  first blood, kills before 6, 6-14, after 14, against the average opponent; all ranks)
 - By rank bracket: Iron-Silver, Gold-Emerald, Diamond+ (curves brackets; stats by rank)
 - Item timing: first core item minute against win rate (builds' minutes per game:
   new counting)
