@@ -124,10 +124,11 @@ its kind. Candidates, data we have first (arch-stats.md):
   against all lanes dashed; all ranks)
 - Early kills: done ("Lane kills", Versus rows as the matchup page's head to head:
   first blood, kills before 6, 6-14, after 14, against the average opponent; all ranks)
-- By rank bracket: done ("By rank", beside Lane kills: win rate over the curves' brackets
-  Iron-Silver, Gold-Emerald, Diamond+ (the game's median tier), its rate at every rank
-  dashed, gold at 14 in the tip; brackets under 100 lanes left out, so on our Platinum+
-  crawl mostly two)
+- By rank bracket: done ("By rank", beside Lane kills: the view's games (stats.Trend
+  brackets) by the curves' Iron-Silver, Gold-Emerald, Diamond+ (median tier of the
+  players, 5+ known; the rest in none), dashed at the head's rate over every game, gold
+  at 14 from the bracket's pair curves in the tip; brackets under 100 games left out, so
+  on our Platinum+ crawl mostly two)
 - Item timing: first core item minute against win rate (builds' minutes per game:
   new counting)
 - Side (blue, red) and games played on it in the last 30 days: new counting

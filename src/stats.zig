@@ -9,6 +9,7 @@ const fitted = @import("fitted.zig");
 const additive = @import("additive.zig");
 const Role = core.Role;
 const Counts = statsfile.Counts;
+const curvesfile = core.curvesfile;
 
 const log = std.log.scoped(.stats);
 
@@ -110,6 +111,8 @@ pub const Row = struct {
     teams: [2][5]u32,
     winner: u1,
     duration_s: u32 = 0,
+    /// As the curves': the median visible tier of its players, null under 5 known
+    bracket: ?curvesfile.Bracket = null,
 };
 
 pub fn matchKey(match_id: []const u8) u64 {
@@ -239,7 +242,7 @@ pub fn scan(
         \\
         \\)
         \\SELECT m.match_id, m.winning_team, m.game_start, m.patch, m.platform, m.duration_s,
-        \\  p.team_id, p.position, p.champion_id
+        \\  p.team_id, p.position, p.champion_id, p.tier
         \\FROM m CROSS JOIN participants p USING (match_id)
         \\ORDER BY m.match_id
     );
@@ -266,6 +269,7 @@ pub fn scan(
             team_id: i64,
             position: []const u8,
             champion_id: i64,
+            tier: ?[]const u8,
         });
         if (!std.mem.eql(u8, r.match_id, current.items)) {
             if (ahead) |a| a.next();
@@ -281,7 +285,7 @@ pub fn scan(
                 .duration_s = @intCast(r.duration_s),
             };
         }
-        game.add(r.team_id, r.position, r.champion_id);
+        game.add(r.team_id, r.position, r.champion_id, r.tier);
     }
     try game.finish(sink, &summary);
     return summary;
@@ -314,7 +318,7 @@ pub fn scanFrom(
             .duration_s = @intCast(g.duration_s),
         };
         // A NULL position reads as "" from SQLite
-        for (g.players) |p| game.add(p.team, games.string(p.position) orelse "", p.champion);
+        for (g.players) |p| game.add(p.team, games.string(p.position) orelse "", p.champion, games.string(p.tier));
         try game.finish(sink, &summary);
     }
     return summary;
@@ -388,9 +392,16 @@ const Game = struct {
     teams: [2][5]u32 = @splat(@splat(0)),
     rows: u8 = 0,
     bad: bool = false,
+    /// curvesfile.tierRank of the players with a known tier
+    ranks: [10]usize = undefined,
+    n_ranks: u8 = 0,
 
-    fn add(g: *Game, team_id: i64, position: []const u8, champion: i64) void {
+    fn add(g: *Game, team_id: i64, position: []const u8, champion: i64, tier: ?[]const u8) void {
         g.rows += 1;
+        if (curvesfile.tierRank(tier orelse "")) |rank| if (g.n_ranks < g.ranks.len) {
+            g.ranks[g.n_ranks] = rank;
+            g.n_ranks += 1;
+        };
         const side: usize = switch (team_id) {
             100 => 0,
             200 => 1,
@@ -409,6 +420,12 @@ const Game = struct {
             return;
         }
         slot.* = @intCast(champion);
+    }
+
+    fn bracket(g: *const Game) ?curvesfile.Bracket {
+        var ranks = g.ranks;
+        const rank = curvesfile.medianRank(ranks[0..g.n_ranks]) orelse return null;
+        return .ofRank(rank);
     }
 
     fn finish(g: *const Game, sink: anytype, summary: *Summary) !void {
@@ -430,6 +447,7 @@ const Game = struct {
             .teams = g.teams,
             .winner = winner.?,
             .duration_s = g.duration_s,
+            .bracket = g.bracket(),
         });
         summary.games += 1;
         summary.by_patch.add(g.patch);
@@ -510,6 +528,9 @@ pub const Trend = struct {
     n: usize,
     /// By role, champion, length bucket
     lengths: []Counts,
+    /// The same games by role, champion and rank bracket (Row.bracket), those of none left
+    /// out
+    brackets: []Counts,
     /// Lane opponents (same role, either side) that met, by key (laneKey) with the lower
     /// index first; wins are the lower index's
     lanes: []Lane,
@@ -538,6 +559,15 @@ pub const Trend = struct {
 
     pub fn length(t: *const Trend, r: Role, c: usize, b: usize) Counts {
         return t.lengths[(@as(usize, @backingInt(r)) * t.n + c) * length_buckets + b];
+    }
+
+    /// b: not .all
+    pub fn bracket(t: *const Trend, r: Role, c: usize, b: curvesfile.Bracket) Counts {
+        return t.brackets[bracketIndex(t.n, @backingInt(r), c, b)];
+    }
+
+    fn bracketIndex(n: usize, role: usize, c: usize, b: curvesfile.Bracket) usize {
+        return (role * n + c) * 3 + @backingInt(b) - 1;
     }
 
     /// c1 against c2 in lane r by length, from c1's side; null when they never met
@@ -584,6 +614,7 @@ pub fn buildTrend(
     var t: Trend = .{
         .n = st.n,
         .lengths = try arena.alloc(Counts, Role.count * st.n * length_buckets),
+        .brackets = try arena.alloc(Counts, Role.count * st.n * 3),
         .lanes = &.{},
         .patches = undefined,
         .patch_games = try arena.alloc(u32, recent.len),
@@ -593,6 +624,7 @@ pub fn buildTrend(
     for (names, recent) |*name, p| name.* = try arena.dupe(u8, p);
     t.patches = names;
     @memset(t.lengths, .{ .games = 0, .wins = 0 });
+    @memset(t.brackets, .{ .games = 0, .wins = 0 });
     @memset(t.patch_games, 0);
     @memset(t.by_patch, .{ .games = 0, .wins = 0 });
 
@@ -665,8 +697,10 @@ const TrendSink = struct {
         }
         if (r.start < s.since_ms or std.mem.findScalar(u32, s.window, r.patch) == null) return;
         const b = lengthBucket(r.duration_s);
-        for (cs, 0..) |team, side| for (team, 0..) |c, role| {
-            add1(&t.lengths[(role * t.n + (c orelse continue)) * length_buckets + b], side == r.winner);
+        for (cs, 0..) |team, side| for (team, 0..) |maybe, role| {
+            const c = maybe orelse continue;
+            add1(&t.lengths[(role * t.n + c) * length_buckets + b], side == r.winner);
+            if (r.bracket) |x| add1(&t.brackets[Trend.bracketIndex(t.n, role, c, x)], side == r.winner);
         };
         for (cs[0], cs[1], 0..) |a, z, role| {
             const c0 = a orelse continue;
@@ -828,6 +862,14 @@ test "trend: lengths in the view's window, patch counts over the newest patches"
     try timed(db, "EUW1_2", "16.20", 200, 2000, 1900);
     try timed(db, "EUW1_3", "16.20", 100, 500, 1500); // before since: patch counts only
     try timed(db, "EUW1_4", "16.19", 100, 2000, 2400); // outside the window
+    // 1: six known, the upper middle Platinum: Gold-Emerald. 2: four known, no bracket.
+    // 3: before since
+    try db.exec(
+        \\UPDATE participants SET tier = CASE WHEN slot < 3 THEN 'SILVER' ELSE 'PLATINUM' END
+        \\  WHERE match_id = 'EUW1_1' AND slot < 6;
+        \\UPDATE participants SET tier = 'DIAMOND' WHERE match_id = 'EUW1_2' AND slot < 4;
+        \\UPDATE participants SET tier = 'DIAMOND' WHERE match_id = 'EUW1_3';
+    );
     var built = try build(gpa, db, &.{ "16.19", "16.20" }, euw);
     defer built.builder.deinit();
     var aw: std.Io.Writer.Allocating = .init(gpa);
@@ -859,6 +901,10 @@ test "trend: lengths in the view's window, patch counts over the newest patches"
     try testing.expectEqual(c(3, 2), t.onPatch(0, .top, a));
     try testing.expectEqual(c(1, 1), t.onPatch(1, .top, a));
     try testing.expectEqual(c(1, 0), t.onPatch(1, .top, j));
+    try testing.expectEqual(c(1, 1), t.bracket(.top, a, .mid));
+    try testing.expectEqual(c(1, 0), t.bracket(.top, j, .mid));
+    try testing.expectEqual(c(0, 0), t.bracket(.top, a, .low));
+    try testing.expectEqual(c(0, 0), t.bracket(.top, a, .high));
 }
 
 test lengthBucket {

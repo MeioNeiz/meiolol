@@ -344,10 +344,10 @@ pub const W = struct {
     pub const kills = [3]tree.Text{ plain("Kills to 6 min"), plain("Kills 6-14 min"), plain("Kills after 14") };
     pub const by_rank = plain("By rank");
     pub const brackets = [3]tree.Text{ plain("Iron-Silver"), plain("Gold-Emerald"), plain("Diamond+") };
-    pub const rank_tip = Phrase("{r:rate} in {n:count} lanes · gold at 14 {g:signed}");
-    pub const rank_tip_thin = Phrase("{r:rate} in {n:count} lanes");
+    pub const rank_tip = Phrase("{r:rate} in {n:count} games · gold at 14 {g:signed}");
+    pub const rank_tip_thin = Phrase("{r:rate} in {n:count} games");
     pub const rank_key = plain("dashed: every rank");
-    pub const rank_note = plain("Lanes by the middle rank of the game's ten players. We crawl from Platinum up, so lower brackets are thin.");
+    pub const rank_note = plain("Games by the middle rank of the players, when 5 or more are known. We crawl from Platinum up, so the lowest bracket is thin and the middle one mostly Platinum and Emerald.");
     pub const players = plain("Players");
     pub const spread_head = Phrase("{n:count} · middle half {lo:pct}-{hi:pct}");
     pub const spread_note = Phrase("Players with 10+ games on it. Luck alone would spread the middle half over {lo:pct}-{hi:pct}.");
@@ -524,9 +524,13 @@ pub const Kills = struct {
     deaths: [3]u32,
 };
 
-/// Lanes by the game's rank bracket (W.brackets: the curves' Iron-Silver, Gold-Emerald,
-/// Diamond+ by the players' median tier), summed over the champion's pairs
-pub const Ranks = [3]Bracket;
+/// Games by the game's rank bracket (W.brackets: the curves' Iron-Silver, Gold-Emerald,
+/// Diamond+ by the players' median tier)
+pub const Ranks = struct {
+    by: [3]Bracket,
+    /// Every game in the role, those of no bracket too: the head's
+    all: Counts,
+};
 
 pub const Bracket = struct {
     games: u32,
@@ -1286,20 +1290,17 @@ pub const Charts = struct {
         return card.view(h, .{}, &.{ card.head(h, W.kills_head, null, &.{versus.key(h, names)}), versus.rows(h, names, rows[0..n]) });
     }
 
-    /// Win rate by rank bracket, dashed at its rate over every rank; brackets under
+    /// Win rate by rank bracket, dashed at its rate over every game (the head's); brackets under
     /// min_games left out
     fn rankCard(p: *P, h: *H) N {
         const none = card.view(h, .{}, &.{ card.head(h, W.by_rank, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
         const k = p.r().ranks orelse return none;
-        const pts = h.mem.alloc(trend.Point, k.len) catch {
+        const pts = h.mem.alloc(trend.Point, k.by.len) catch {
             h.oom = true;
             return .none;
         };
-        var all: Counts = .{ .games = 0, .wins = 0 };
         var n: usize = 0;
-        for (k, W.brackets) |b, l| {
-            all.games += b.games;
-            all.wins += b.wins;
+        for (k.by, W.brackets) |b, l| {
             if (b.games < min_games) continue;
             const c: Counts = .{ .games = b.games, .wins = b.wins };
             pts[n] = .{
@@ -1313,7 +1314,7 @@ pub const Charts = struct {
         }
         if (n < 2) return none;
         p.ranks.points = pts[0..n];
-        p.ranks.ref = rate(all);
+        p.ranks.ref = rate(k.all);
         if (p.ranks.tip) |t| if (t >= n) {
             p.ranks.tip = null;
         };
@@ -1457,11 +1458,11 @@ test "by rank: brackets under min_games left out, no chart under two" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var roles = [_]ChartsRole{.{ .role = .top, .ranks = .{
+    var roles = [_]ChartsRole{.{ .role = .top, .ranks = .{ .by = .{
         .{ .games = 40, .wins = 20 },
         .{ .games = 900, .wins = 470, .gold = 120 },
         .{ .games = 300, .wins = 140 },
-    } }};
+    }, .all = .{ .games = 1600, .wins = 800 } } }};
     const d: ChartsData = .{ .name = "Darius", .ddragon = "", .champs = &.{}, .roles = &roles };
     var p: Charts = .{ .data = &d, .root = "/" };
     var t: tree.Tree = .{};
@@ -1471,8 +1472,10 @@ test "by rank: brackets under min_games left out, no chart under two" {
     try std.testing.expect(std.mem.indexOf(u8, w.written(), "Iron-Silver") == null);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), "Gold-Emerald") != null);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), "Diamond+") != null);
+    // Dashed at every game's rate, not the brackets' sum's (50.8%)
+    try std.testing.expectEqual(@as(f32, 50), p.ranks.ref);
 
-    roles[0].ranks.?[2].games = 99;
+    roles[0].ranks.?.by[2].games = 99;
     w.clearRetainingCapacity();
     try html.write(&t, p.view(&h), &w.writer);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), "Gold-Emerald") == null);

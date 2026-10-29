@@ -273,6 +273,15 @@ test "fixture games to stats, curves and the website" {
         try testing.expectEqual(0, rank_top.groups[2].len);
         try testing.expectError(error.FileNotFound, std.Io.Dir.cwd().statFile(io, try std.fs.path.join(arena, &.{ out, "data/champion/mordekaiser-rank.bin" }), .{}));
     }
+    {
+        // By rank: every game counted in its bracket, each with ten known players, the
+        // median Platinum: all Gold-Emerald, dashed at the head's rate
+        const charts = try site.ui.data.decode(arena, site.ui.champpage.ChartsData, try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "data/champion/darius-charts.bin" }), arena, .limited(1 << 20)));
+        const k = charts.roles[0].ranks.?;
+        try testing.expectEqual(games, k.all.games);
+        try testing.expectEqual([3]u32{ 0, games, 0 }, [3]u32{ k.by[0].games, k.by[1].games, k.by[2].games });
+        try testing.expectEqual(k.all.wins, k.by[1].wins);
+    }
     for ([_][]const u8{
         "index.html",
         "champions.html",

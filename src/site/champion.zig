@@ -372,31 +372,35 @@ fn killsOf(site: *const Site, ch: Champ, r: Role) !?cp.Kills {
     return if (out.games < cp.min_games) null else out;
 }
 
-/// ch's lanes in r by rank bracket, summed over its pairs as laneOf, with its gold lead
-/// at 14 minutes weighted by lanes still going then; null under two brackets of
-/// cp.min_games lanes
+/// ch's games in r by the game's rank bracket (stats.Trend.brackets: the view's games, as
+/// the head's), with its gold lead at 14 minutes from the bracket's pair curves; the card
+/// leaves out thin brackets
 fn ranksOf(site: *const Site, ch: Champ, r: Role) !?cp.Ranks {
+    const t = if (site.trend) |*t| t else return null;
+    const all = site.stats.champRole(r, ch.c);
+    var out: cp.Ranks = .{ .by = undefined, .all = .{ .games = all.games, .wins = all.wins } };
+    for (&out.by, [_]curvesfile.Bracket{ .low, .mid, .high }) |*o, b| {
+        const n = t.bracket(r, ch.c, b);
+        o.* = .{ .games = n.games, .wins = n.wins, .gold = try goldAt14(site, ch, r, b) };
+    }
+    return out;
+}
+
+/// ch's gold lead at 14 minutes in r over its pairs' curves in bracket b, weighted by lanes
+/// still going then; null under cp.min_games such lanes
+fn goldAt14(site: *const Site, ch: Champ, r: Role, b: curvesfile.Bracket) !?i16 {
     const c = if (site.curves) |*c| c else return null;
     const at = curvesfile.lane_minute - 1;
-    var out: cp.Ranks = undefined;
-    var shown: usize = 0;
-    for (&out, [_]curvesfile.Bracket{ .low, .mid, .high }) |*o, b| {
-        o.* = .{ .games = 0, .wins = 0 };
-        var lanes: u32 = 0;
-        var sum: f64 = 0;
-        for ((try lanePairs(site, c, ch, r, b)).items) |v| {
-            o.games += v.games();
-            o.wins += v.wins();
-            if (at < v.minutes()) {
-                const n = v.minute(at).n;
-                lanes += n;
-                sum += @as(f64, @floatFromInt(n)) * @as(f64, @floatFromInt(v.estimate(.gold, at).mean));
-            }
-        }
-        if (lanes >= cp.min_games) o.gold = @intFromFloat(@round(sum / @as(f64, @floatFromInt(lanes))));
-        shown += @intFromBool(o.games >= cp.min_games);
+    var lanes: u32 = 0;
+    var sum: f64 = 0;
+    for ((try lanePairs(site, c, ch, r, b)).items) |v| {
+        if (at >= v.minutes()) continue;
+        const n = v.minute(at).n;
+        lanes += n;
+        sum += @as(f64, @floatFromInt(n)) * @as(f64, @floatFromInt(v.estimate(.gold, at).mean));
     }
-    return if (shown < 2) null else out;
+    if (lanes < cp.min_games) return null;
+    return @intFromFloat(@round(sum / @as(f64, @floatFromInt(lanes))));
 }
 
 /// Minutes drawn while this many lanes are still going, as a matchup page's
