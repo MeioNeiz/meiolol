@@ -111,8 +111,8 @@ pub fn modeOf(card: *const lanecard.Card) Mode {
 
 /// The lane card's input seen from the ally in `role`: their champion as mine, the rest
 /// of my team (me too) as allies. Their pool, mastery and rank aren't known: options
-/// come from everyone who plays the role, by the draft alone. Null when no other ally
-/// has the role
+/// come from everyone who plays the role, by the draft alone, and none once they lock
+/// (lanecard.Input.ally). Null when no other ally has the role
 pub fn allyLane(arena: std.mem.Allocator, mine: lanecard.Input, cs: session.ChampSelect, role: Role) !?lanecard.Input {
     if (cs.my_role == role) return null;
     const ally = for (cs.my_team) |sl| {
@@ -130,6 +130,7 @@ pub fn allyLane(arena: std.mem.Allocator, mine: lanecard.Input, cs: session.Cham
     in.mastery = &.{};
     in.tier = null;
     in.expertise = null;
+    in.ally = true;
     return in;
 }
 
@@ -372,6 +373,7 @@ test "board: an ally's lane as the card sees it" {
     try testing.expect(top.locked);
     try testing.expectEqual(null, top.pickable);
     try testing.expectEqual(null, top.expertise);
+    try testing.expect(top.ally);
     try testing.expectEqualSlices(core.Pick, &.{.{ .champion = 103, .role = .middle, .hover = true }}, top.allies);
     const jungle = (try allyLane(arena, base, cs, .jungle)).?;
     try testing.expectEqual(0, jungle.me);

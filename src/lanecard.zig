@@ -70,6 +70,10 @@ pub const Input = struct {
     /// Null ranks the pool by the draft alone (the window's toggle)
     expertise: ?Expertise = .fitted,
     opts: core.Options = .{},
+    /// An ally's lane (board.allyLane), `me` theirs. Nothing rates a teammate's pick
+    /// (docs/production-key.md): once locked only the matchup, no options; while they
+    /// hover, options without a row forced in for the hover
+    ally: bool = false,
 };
 
 pub const Opponent = struct {
@@ -170,7 +174,7 @@ pub fn build(arena: std.mem.Allocator, in: Input) !Card {
             "";
     };
 
-    card.options = try options(arena, in, opp, bracket);
+    if (!(in.ally and in.locked)) card.options = try options(arena, in, opp, bracket);
     return card;
 }
 
@@ -337,7 +341,7 @@ fn options(arena: std.mem.Allocator, in: Input, opp: ?Opponent, bracket: Bracket
     const shown = for (list) |s| {
         if (s.champion == in.me) break true;
     } else false;
-    if (in.me != 0 and !shown) {
+    if (in.me != 0 and !shown and !in.ally) {
         var solo = draft;
         solo.pool = &.{in.me};
         var one: [1]core.Suggestion = undefined;
@@ -669,6 +673,32 @@ test "my hover from outside the pool still gets a row" {
     });
     try testing.expectEqual(4, card.options.len);
     try testing.expectEqual(lux, card.options[3].champion);
+}
+
+test "an ally's lane: the matchup only once they lock, options before" {
+    var f = try fixture();
+    defer f.deinit();
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var in: Input = .{
+        .stats = &f.stats,
+        .curves = &f.curves,
+        .role = .top,
+        .me = lux,
+        .expertise = null,
+        .opts = test_opts,
+        .ally = true,
+    };
+    // Lux ranks below the three tops: my hover would get a fourth row, theirs none
+    const hovering = try build(arena.allocator(), in);
+    try testing.expectEqual(3, hovering.options.len);
+    for (hovering.options) |o| try testing.expect(o.champion != lux);
+    in.enemies = &.{.{ .champion = garen, .role = .top }};
+    in.locked = true;
+    const locked = try build(arena.allocator(), in);
+    try testing.expectEqual(0, locked.options.len);
+    try testing.expectEqual(garen, locked.opponent.?.champion);
+    try testing.expect(locked.sentence.len > 0);
 }
 
 test compact {

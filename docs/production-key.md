@@ -41,7 +41,8 @@ Uncertain, leaning approvable; the wait is the real cost.
 
 - Ranked Solo/Duo champ select: no other players' names or stats, ever ("Ally 1..5")
 - Show 3 to 5 options with reasons, never a single forced pick; no auto pick/ban/lock,
-  no dodge advice, no per-teammate judgements
+  no dodge advice, no per-teammate judgements (the app's ally lane: options while they
+  still pick, their matchup only once they lock; nothing rates a teammate's pick)
 - Avoid "best pick", "solve draft", "+X% win rate" wording; frame as highlighting key
   decisions and champion diversity
 - State ML training on match data in the application; support deletion by PUUID

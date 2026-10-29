@@ -356,11 +356,14 @@ fn lanes(a: Allocator, c: Ctx, b: *const board.Board, shown: ?core.Role) ![]cons
     var rows: [5]ui.draftboard.Lane = undefined;
     for (&rows, ui.role.Role.all) |*r, role| r.* = .{ .role = role };
     var filled: [2][5]bool = @splat(@splat(false));
+    // My seats in their own role's row: board.allyLane finds an ally by role
+    var roled: [5]bool = @splat(false);
     for ([_][]const board.Seat{ b.allies, b.enemies }, 0..) |seats, side| {
         for (seats, 0..) |s, k| if (s.role) |r| {
             const i = @backingInt(r);
             if (filled[side][i]) continue;
             filled[side][i] = true;
+            roled[i] = side == 0;
             setSeat(&rows[i], side, try seat(a, c, s, side, k));
         };
         for (seats, 0..) |s, k| if (s.role == null) for (&rows, 0..) |*row, i| if (!filled[side][i]) {
@@ -372,11 +375,10 @@ fn lanes(a: Allocator, c: Ctx, b: *const board.Board, shown: ?core.Role) ![]cons
     if (shown) |r| rows[@backingInt(r)].us.sel = true;
     // A click on an ally's seat shows their lane, on mine (while an ally's shows) mine
     // again (bridge.js sends the act); under practice the seats' clicks place champions
-    if (!c.practice) for (&rows, filled[0], 0..) |*row, seated, i| {
-        if (!seated) continue;
+    if (!c.practice) for (&rows, roled, 0..) |*row, by_role, i| {
         if (row.us.you) {
             if (shown != null) row.us.act = try a.print("lane {d}", .{state.own_lane});
-        } else if (!row.us.sel) row.us.act = try a.print("lane {d}", .{i});
+        } else if (by_role and !row.us.sel) row.us.act = try a.print("lane {d}", .{i});
     };
     return a.dupe(ui.draftboard.Lane, &rows);
 }
@@ -906,6 +908,65 @@ test "an ally's lane: their seat marked, no mastery toggle, their name in the ca
     try testing.expect(std.mem.startsWith(u8, s.lane.caption, "Gold, Galio minus them"));
     // The board's mode is still mine; the panel's is the card's
     try testing.expectEqual(.counter, s.lane.mode);
+    // Still to lock: options as for my lane
+    try testing.expect(std.mem.find(u8, html, "Options into them") != null);
+    try testing.expect(std.mem.find(u8, html, "<ol class=\"opts\"") != null);
+}
+
+test "an ally's lane: once they lock the matchup only, nothing rates their pick" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var f = try fixture();
+    defer f.deinit();
+    var sel = testSelect();
+    sel.ally = true;
+    sel.card.role = .top;
+    sel.card.me = galio;
+    sel.card.locked = true;
+    // As lanecard builds it for a locked ally
+    sel.card.options = &.{};
+    sel.card.sentence = "Galio usually trails Syndra.";
+    const allies = [_]board.Seat{
+        sel.board.allies[0],
+        .{ .slot = .{ .champion = galio, .role = .top, .state = .locked }, .role = .top, .guessed = false, .games = 900, .win = 0.5 },
+    };
+    sel.board.allies = &allies;
+    // Their list is an <ol class="opts"> too
+    sel.board.ban_options = &.{};
+    for ([_]bool{ false, true }) |private| {
+        const c: Ctx = .{ .stats = &f.stats, .icons = null, .private = private };
+        const s = (try data(a, c, .{ .select = &sel }, .none)).screen.select;
+        try testing.expectEqual(.locked, s.lane.mode);
+        try testing.expectEqual(0, s.lane.options.len);
+        const html = try render(a, try data(a, c, .{ .select = &sel }, .none), null, null);
+        try testing.expect(std.mem.find(u8, html, "Galio usually trails Syndra.") != null);
+        try testing.expect(std.mem.find(u8, html, "Your lane</button>") != null);
+        for ([_][]const u8{ "Other options", "<ol class=\"opts\"", "enough games", "team win" }) |no|
+            try testing.expect(std.mem.find(u8, html, no) == null);
+    }
+    // Still to pick, nothing with enough games: not "you can pick"
+    sel.card.locked = false;
+    sel.card.me = 0;
+    const html = try render(a, try data(a, .{ .stats = &f.stats, .icons = null, .private = false }, .{ .select = &sel }, .none), null, null);
+    try testing.expect(std.mem.find(u8, html, "No champion has enough games in this role.") != null);
+}
+
+test "role-less seats: no lane click (an ally's lane is found by role)" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var f = try fixture();
+    defer f.deinit();
+    var sel = testSelect();
+    const allies = [_]board.Seat{
+        .{ .slot = .{ .champion = ahri, .state = .hover, .me = true }, .role = null, .guessed = false, .games = 0, .win = 0.5 },
+        .{ .slot = .{ .champion = galio, .state = .locked }, .role = null, .guessed = false, .games = 0, .win = 0.5 },
+    };
+    sel.board.allies = &allies;
+    const s = (try data(a, .{ .stats = &f.stats, .icons = null, .private = false }, .{ .select = &sel }, .none)).screen.select;
+    for (s.board.lanes) |row| try testing.expectEqualStrings("", row.us.act);
+    try testing.expect(s.board.lanes[1].us.champ != null);
 }
 
 test "comp view: once all ten are locked, words for everyone and numbers for testers" {

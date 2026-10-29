@@ -52,7 +52,8 @@ pub const Lane = struct {
     caption: []const u8 = "",
     options: []const Option = &.{},
     /// Options weigh your mastery points; null shows no toggle: an ally's lane (a click
-    /// on their seat), `me` theirs, without a pool to weigh
+    /// on their seat), `me` theirs, without a pool to weigh; once they lock (mode locked)
+    /// the matchup only
     mastery: ?bool = null,
     /// "EUW, last 30 days"
     scope: []const u8 = "",
@@ -105,6 +106,9 @@ pub fn view(h: *H, s: Screen, held: ?*lanechart.Held, mastery: ?tree.Handler) N 
 
 fn lane(h: *H, l: Lane, held: ?*lanechart.Held, on_mastery: ?tree.Handler) N {
     const ally = l.mastery == null;
+    // Nothing rates a teammate's pick (docs/production-key.md): their lane once they
+    // lock is the matchup only
+    const rated = !(ally and l.mode == .locked);
     var opts = h.list();
     for (l.options, 0..) |o, i| opts.add(option(h, i, o, l.mode == .locked));
     return h.section(.{ .class = "lane" }, .{
@@ -131,16 +135,16 @@ fn lane(h: *H, l: Lane, held: ?*lanechart.Held, on_mastery: ?tree.Handler) N {
         if (l.chart) |c| if (held) |x| x.at(c, W.gold).view(h) else null else null,
         if (l.chart != null and l.caption.len > 0) h.p(.{ .class = "scope" }, .{l.caption}) else null,
         h.div(.{ .class = "opts-head" }, .{
-            h.h3(.{}, .{switch (l.mode) {
+            if (rated) h.h3(.{}, .{switch (l.mode) {
                 .blind => W.head_blind,
                 .counter => W.head_counter,
                 .locked => W.head_locked,
-            }}),
+            }}) else null,
             if (l.mastery) |m| chip.view(h, .{ .pressed = m, .on = on_mastery }, .{W.mastery}) else null,
             // bridge.js sends the act: no handler in ui-app.wasm
             if (ally) h.button(.{ .class = "c-btn", .type = "button", .data_s = "s", .data_act = "lane 255" }, .{W.own}) else null,
         }),
-        if (l.options.len == 0) h.p(.{ .class = "say" }, .{W.none}) else h.el(.ol, .{ .class = "opts" }, .{opts.done()}),
+        if (!rated) null else if (l.options.len == 0) h.p(.{ .class = "say" }, .{if (ally) W.none_ally else W.none}) else h.el(.ol, .{ .class = "opts" }, .{opts.done()}),
         if (l.scope.len > 0) h.p(.{ .class = "scope" }, .{l.scope}) else null,
     });
 }
@@ -207,6 +211,7 @@ const W = struct {
     const ally = plain("Ally");
     const own = plain("Your lane");
     const none = plain("No champion you can pick has enough games in this role.");
+    const none_ally = plain("No champion has enough games in this role.");
     const your_lane = plain("your lane");
     const ban_now = plain("Your ban");
     const ban_options = plain("Ban options");
@@ -310,7 +315,7 @@ fn private(h: *H, s: Screen) Screen {
     return p;
 }
 
-/// Top's seat clicked: their lane, options from everyone who plays it
+/// Top's seat clicked once they locked: their matchup only
 fn allyLane(h: *H) Screen {
     var s = sample;
     const lanes = h.mem.dupe(draftboard.Lane, sample.board.lanes) catch {
@@ -324,7 +329,6 @@ fn allyLane(h: *H) Screen {
         .me = lanes[0].us.champ,
         .mode = .locked,
         .sentence = "",
-        .options = sample.lane.options[1..],
         .scope = "EUW, last 30 days",
     };
     return s;
