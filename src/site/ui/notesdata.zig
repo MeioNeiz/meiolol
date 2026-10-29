@@ -103,7 +103,7 @@ pub fn canonical(path: []const u8, state: []const u8) urls.Located {
     return .{ .path = stripIndex(path), .state = state };
 }
 
-/// / and /index.html are one page (/admin/ and /p/ keep their .html)
+/// / and /index.html are one page
 pub fn stripIndex(path: []const u8) []const u8 {
     const index = "index.html";
     return if (std.mem.endsWith(u8, path, "/" ++ index)) path[0 .. path.len - index.len] else path;
@@ -113,8 +113,8 @@ test canonical {
     const cases = [_][3][]const u8{
         .{ "/index.html", "/", "" },
         .{ "/champions", "/champions", "" },
-        .{ "/admin/index.html", "/admin/", "" },
-        .{ "/p/notes.html", "/p/notes.html", "?all=1" },
+        .{ "/admin", "/admin", "" },
+        .{ "/admin/notes", "/admin/notes", "?all=1" },
         .{ "/xindex.html", "/xindex.html", "" },
     };
     for (cases) |c| {

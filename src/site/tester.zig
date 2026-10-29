@@ -1,8 +1,8 @@
-//! The new Draft tester page (/p/tester.html, ui.testerpage and ui.testercand): its HTML
+//! The new Draft tester page (/private/tester, ui.testerpage and ui.testercand): its HTML
 //! with the champion list inline, its stylesheet, ui-tester.wasm and the candidate panel's
 //! ui-testercand.wasm (which ui-tester.wasm loads), written into the private site's dir
 //! beside the old page (admin.private) by `meiolol admin --private-out`. Never public:
-//! nginx serves /p/ to view_private logins only
+//! nginx serves /private to view_private logins only
 const std = @import("std");
 const store = @import("store");
 const ui = @import("ui");

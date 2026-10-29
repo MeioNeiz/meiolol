@@ -117,7 +117,7 @@ pub const Tool = struct {
             if (t.open) |i| if (i < t.pins.len) card(t, h, t.pins[i]) else null else null,
             switch (t.mode) {
                 .idle => h.div(.{ .key = "bar", .class = "bar" }, .{
-                    button.view(h, .{ .s = .s, .v = .quiet, .href = "/admin/notes.html" }, .{"All notes"}),
+                    button.view(h, .{ .s = .s, .v = .quiet, .href = "/admin/notes" }, .{"All notes"}),
                     button.view(h, .{ .v = .primary, .on = h.on(t, .note) }, .{
                         "Note",
                         if (t.pins.len > 0) h.span(.{ .class = "n" }, .{t.pins.len}) else null,

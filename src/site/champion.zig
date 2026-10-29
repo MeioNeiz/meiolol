@@ -90,7 +90,7 @@ pub fn writeChampion(site: *const Site, w: *Writer, ch: Champ, r: Role, in_url: 
         .js = "/" ++ assets.champcharts_js.path,
         .wasm = assets.champcharts_wasm.path,
     };
-    // The champion and its roles, most played first, for /p/pv.js (no island's root, so
+    // The champion and its roles, most played first, for /private/pv.js (no island's root, so
     // no wasm reads or writes them)
     var roles: std.ArrayList(u8) = .empty;
     for (d.roles, 0..) |x, i| try roles.print(a, "{s}{s}", .{ if (i > 0) " " else "", @tagName(x.role) });

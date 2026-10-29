@@ -91,7 +91,7 @@ pub fn run(gpa: std.mem.Allocator, io: std.Io, db: store.Db, dir: []const u8, w:
 /// the champion's team with both in, the rest its role's average pick
 const Paired = struct { role: u8, champion: u32, p: f64, games: u32 };
 
-/// DIR/champ/<id>.json for the private site's champion and matchup pages (/p/pv.js, built
+/// DIR/champ/<id>.json for the private site's champion and matchup pages (/private/pv.js, built
 /// by admin.zig): per role the champion plays, its team's chance against an average draft
 /// (95% range) and with each opponent ("vs") or ally ("with") it has games beside, every
 /// other slot its role's average pick. Numbers the public pages never show
@@ -144,7 +144,7 @@ fn writeSlices(arena: std.mem.Allocator, io: std.Io, sc: *const df.Scorer, info:
         var buf: [32]u8 = undefined;
         const path = try std.fs.path.join(arena, &.{ out_dir, try std.fmt.bufPrint(&buf, "{d}.json", .{id.*}) });
         try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = out.written() });
-        // For nginx's gzip_static: /p/ compresses nothing itself, and a slice runs to 100 KB
+        // For nginx's gzip_static: /private/ compresses nothing itself, and a slice runs to 100 KB
         try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = try arena.print("{s}.gz", .{path}), .data = try store.raw.compressWith(arena, window, out.written()) });
         files += 1;
     }

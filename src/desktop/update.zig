@@ -18,9 +18,9 @@ const sign = @import("sign.zig");
 const device = @import("device.zig");
 const client = @import("net").client;
 
-/// Apps from before sign in check /admin/desktop/, which serves the same files until they
-/// have all updated (accounts.md AC5)
-pub const default_base = "https://meio.lol/p/desktop/";
+/// Older apps check /admin/desktop/ (before sign in) or /p/desktop/, which serve the same
+/// files until they have all updated (accounts.md AC5)
+pub const default_base = "https://meio.lol/private/desktop/";
 pub const key_file = "update.key";
 pub const old_exe = "meiolol-desktop.old.exe";
 pub const exe_name = "meiolol-desktop.exe";

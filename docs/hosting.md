@@ -253,8 +253,9 @@ a 301 to it.
   above); the key opens this directory only. Key: box ml/meiolol/desktop.token (64 hex,
   made by web-loop.sh if missing), shipped in the zip as update.key and after the zip's
   exe (install.zig bundled). Rotate: new token on the box, the same in the conf, `nginx
-  -t`, reload; old zips stop updating. The same files under /p/desktop/ (accounts.md
-  AC5; the web loop's p/ upload, same gate) for the private edition's channel
+  -t`, reload; old zips stop updating. The same files under /private/desktop/
+  (accounts.md AC5; the web loop's private/ upload, same gate) for the private edition's
+  channel, and under /p/desktop/ while older apps check there
 - Admin API (/admin/api/, src/admin_api.zig): `meiolol render` on the box answers
   live.json (crawler's last 3 h by minute, queues, services, health; cached 30 s),
   log?file=&lines= (crawl, web, eval, render, health, backup, builds; ids and Riot IDs
@@ -282,12 +283,13 @@ a 301 to it.
   disables, below the signed-in role only. Accounts by hand: `sudo -u meiolol-api
   meiolol account ... --data /var/lib/meiolol-api` on C01 (list, reset, link,
   revoke-links, delete; the owner only here).
-- Private site (/p/, docs/plan/accounts.md "private"): static, uploaded by the web loop to
-  /var/www/meiolol/p (`meiolol admin --private-out`: the Draft tester in private mode, the
-  shipped models in models/). nginx location /p/ with auth_request /_meiolol_private
-  (/auth/check/view_private), 401 to the login page, X-Robots-Tag noindex. The loop
-  uploads p/ only while meio.lol/p/ answers 302 (the gate), so nothing private is public
-  without it; the site's rsync leaves p/ alone
+- Private site (/private, docs/plan/accounts.md "private"; pages without .html, as
+  /admin): static, uploaded by the web loop to /var/www/meiolol/private (`meiolol admin
+  --private-out`: the Draft tester in private mode, the shipped models in models/). nginx
+  location /private/ with auth_request /_meiolol_private (/auth/check/view_private), 401
+  to the login page, X-Robots-Tag noindex. The loop uploads private/ only while
+  meio.lol/private answers 302 (the gate), so nothing private is public without it; the
+  site's rsync leaves private/ alone
 
 ### Deploy events
 

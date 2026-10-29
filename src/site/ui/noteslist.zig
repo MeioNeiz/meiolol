@@ -98,7 +98,7 @@ pub const List = struct {
         return h.div(.{ .class = "c-noteslist", .data_island = "noteslist" }, .{
             h.el(.header, .{ .class = "top" }, .{
                 h.el(.h1, .{}, .{"Notes"}),
-                h.a(.{ .href = "/admin/" }, .{"Admin"}),
+                h.a(.{ .href = "/admin" }, .{"Admin"}),
                 h.a(.{ .href = "/" }, .{"Site"}),
             }),
             h.div(.{ .class = "bar" }, .{

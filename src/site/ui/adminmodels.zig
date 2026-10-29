@@ -57,7 +57,7 @@ fn viewOf(c: md.Cat) View {
 }
 
 /// The tester's page (admin.js PRIVATE until T6)
-const tester_href = "/p/";
+const tester_href = "/private";
 
 /// meiolol-lab's targets; short: the outcome pick's label
 const Outcome = struct { key: []const u8, label: []const u8, short: []const u8, cat: md.Cat };

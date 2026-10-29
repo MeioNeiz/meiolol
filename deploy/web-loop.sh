@@ -45,11 +45,11 @@
 # Every round, the private admin page (`meiolol admin`) goes to admin/ on the server,
 # behind basic auth there; the site's rsync leaves that directory alone. data/desktop
 # (the Windows app's files and zip, desktop_files) goes with it to admin/desktop/. The
-# private site's Draft tester (`--private-out`, with the tester's files) goes to p/, but only
-# while meio.lol/p/ sends a visitor without a login to the login page: the draft win
-# chances must never be public, and nginx's /p/ gate is installed by hand. Daily, a dbstat
-# scan (system sqlite3, read-only) leaves space by table and index in data/storage.tsv
-# for it.
+# private site's Draft tester (`--private-out`, with the tester's files) goes to private/,
+# but only while meio.lol/private sends a visitor without a login to the login page: the
+# draft win chances must never be public, and nginx's /private gate is installed by hand.
+# Daily, a dbstat scan (system sqlite3, read-only) leaves space by table and index in
+# data/storage.tsv for it.
 # The daily jobs' timers start from the files each leaves, and curves' from their files,
 # so a restart doesn't run them all again. Batch work runs under ionice -c 3, which the
 # disk honours only under mq-deadline or bfq (not `none`).
@@ -301,7 +301,7 @@ views_parts() {
     echo "loaded again: ${loaded:-none}; kept: ${kept:-none}"
 }
 round_sha=''
-# meio.lol/p/'s last answer, so a held private upload is logged once
+# meio.lol/private's last answer, so a held private upload is logged once
 private_gate=''
 # `meiolol site --views data/views.bin` with these flags, in the background so a
 # deploy's signal (force=1) lands during the wait; the write always finishes, and the
@@ -444,7 +444,7 @@ while true; do
             # above: when each came)
             bin/meiolol site --prune-assets data/site 2>&1 || echo "prune failed"
             copy_s=$(( SECONDS - t )) t=$SECONDS
-            if ! stats=$(rsync -az --delete-delay --delay-updates --exclude /admin/ --exclude /p/ --stats \
+            if ! stats=$(rsync -az --delete-delay --delay-updates --exclude /admin/ --exclude /private/ --stats \
                 data/site/ meiolol-web:./); then
                 round_event upload failed "rsync to the web server failed"
             else
@@ -486,7 +486,7 @@ while true; do
         # Times kept, so the upload sends the tester's files only when the daily job changed them
         [[ -d data/tester ]] && cp -pR data/tester data/admin.new/models
         [[ -d data/tester ]] && cp -pR data/tester data/private.new/models
-        # The private edition's channel, p/desktop/ (app.md "Two editions"); admin/desktop/
+        # The private edition's channel, private/desktop/ (app.md "Two editions"); admin/desktop/
         # too while installed apps check there
         [[ -d data/desktop ]] && cp -al data/desktop data/private.new/desktop
         # Linked, not copied (~50 MB)
@@ -494,11 +494,11 @@ while true; do
         rm -rf data/admin && mv data/admin.new data/admin
         rsync -a --delete data/admin/ meiolol-web:admin/ || echo "$(date -u +%FT%TZ) admin upload FAILED"
         rm -rf data/private && mv data/private.new data/private
-        gate=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://meio.lol/p/ || true)
+        gate=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://meio.lol/private || true)
         if [[ "$gate" == 302 ]]; then
-            rsync -a --delete --exclude=/lab data/private/ meiolol-web:p/ || echo "$(date -u +%FT%TZ) private upload FAILED"
+            rsync -a --delete --exclude=/lab data/private/ meiolol-web:private/ || echo "$(date -u +%FT%TZ) private upload FAILED"
         elif [[ "$gate" != "$private_gate" ]]; then
-            echo "$(date -u +%FT%TZ) private upload held: meio.lol/p/ answers ${gate:-nothing}, not the login redirect"
+            echo "$(date -u +%FT%TZ) private upload held: meio.lol/private answers ${gate:-nothing}, not the login redirect"
         fi
         private_gate=$gate
     fi

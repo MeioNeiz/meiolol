@@ -1,4 +1,4 @@
-# Draft tester (/p/, private)
+# Draft tester (/private)
 
 Identity: the model's workbench: build any draft, see the win chance, every term behind
 it and every candidate for a seat, under a named model. Private (view_private logins);
@@ -24,7 +24,7 @@ data/team/2026-10-24-ui/mocks/draft-tester.html.
   more creative"; ideas: picks linked to the terms they move, a grid or arrows sized by
   effect, words only on hover. J3: name the three detected cross-role kinds
 
-## What is wrong today (local copy of /p/, 24 Oct)
+## What is wrong today (local copy of /private, 24 Oct)
 
 - 170 words before the board: a sub header, a model description sentence, a 60-word
   facts line, a fills sentence, the bans heading sentence
@@ -38,7 +38,7 @@ data/team/2026-10-24-ui/mocks/draft-tester.html.
 ## Models, named and tagged
 
 Each model gets a short name and two kinds of tag: where it is used, and where it is from.
-From the files on /p/ today:
+From the files on /private today:
 
 | Name | What it is | Used in | From |
 | --- | --- | --- | --- |
@@ -139,8 +139,8 @@ public risk), then Daily Draft (80% the same parts), then the desktop's champ se
 
 ## Data needed
 
-- Model files: exist (/p/models/: draft-model.json, lane-model.json and refs from the box;
-  /p/lab/: draft-model.json, lane-model.json, draft-setnet.json, refs from the lab)
+- Model files: exist (/private/models/: draft-model.json, lane-model.json and refs from the box;
+  /private/lab/: draft-model.json, lane-model.json, draft-setnet.json, refs from the lab)
 - Names: exist partly (meta.name: "shipped model (site and app)", "additive v2: champion
   strength, ally pairs, matchups, damage mix", lane "3c-team2"; set nets have candidate
   "win-additive"). New: a short `label` per model kind in meta, and a registry the web

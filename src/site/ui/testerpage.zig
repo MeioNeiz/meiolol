@@ -1,4 +1,4 @@
-//! The Draft tester page (docs/plan/ui/draft-tester.md, /p/tester.html, private): build a
+//! The Draft tester page (docs/plan/ui/draft-tester.md, /private/tester): build a
 //! draft, see blue's win chance under a named model, each seat's term and the model's
 //! checks. One model at a time from a Select of ModelBadges; the board is DraftBoard's
 //! full variant, a click choosing the seat the candidate panel (testercand.zig, its own
@@ -82,13 +82,13 @@ pub const Info = struct {
     /// Where the model's numbers show today (from the code, draft-tester.md)
     used_in: []const tree.Text,
     where: tree.Text,
-    /// Relative to /p/
+    /// On the private site
     file: []const u8,
 };
 
 pub const infos = std.enums.EnumArray(Which, Info).init(.{
-    .live = .{ .name = plain("Live draft model"), .short = plain("Live model"), .used_in = &.{ plain("Daily"), plain("App") }, .where = plain("Box"), .file = "models/draft-model.bin" },
-    .comp = .{ .name = plain("Comp model"), .short = plain("Comp model"), .used_in = &.{}, .where = plain("Lab"), .file = "lab/draft-model.bin" },
+    .live = .{ .name = plain("Live draft model"), .short = plain("Live model"), .used_in = &.{ plain("Daily"), plain("App") }, .where = plain("Box"), .file = "/private/models/draft-model.bin" },
+    .comp = .{ .name = plain("Comp model"), .short = plain("Comp model"), .used_in = &.{}, .where = plain("Lab"), .file = "/private/lab/draft-model.bin" },
 });
 
 /// A model file, decoded, with its scorer and self-check

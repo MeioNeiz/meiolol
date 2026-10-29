@@ -14,7 +14,7 @@ Five, in order, each with everything the one before has.
 | --- | --- | --- |
 | public | the site, the public app once released (no login; a free signed-in account may come later, same role) | anything below |
 | paid | extras in the public site and app, within the public product rules (app.md "Policy line") | private pages, private app |
-| private | Jacob's friends and testers: private site pages (/p/), private app, read-only admin views opened to them | actions, logs, accounts, settings, raw data |
+| private | Jacob's friends and testers: private site pages (/private), private app, read-only admin views opened to them | actions, logs, accounts, settings, raw data |
 | admin | everything private, /admin/ views, manage public, paid and private accounts | the admin page's controls, other admins or the owner, irreversible things below |
 | owner | Jacob only: everything, plus the admin page's controls (crawl, site build, eval, health check), admins, keys and secrets, billing, data deletion and restores, the Riot application | |
 
@@ -51,12 +51,12 @@ Five, in order, each with everything the one before has.
   account add`. Revisit if admins grow past friends
 - Login limits in memory: per username and overall, slower after 5 fails. No IPs stored
   (traffic logs keep none either)
-- nginx: `auth_request /_auth` on /admin/ (needs view_admin) and /p/ (needs
+- nginx: `auth_request /_auth` on /admin/ (needs view_admin) and /private (needs
   view_private); /_auth answers 204 plus role, or 401, which becomes a redirect to
   /login?next=. Pages stay cached per URI (everyone with access sees the same page;
-  "you" bits come from /auth/me in JS). The renderer serves /p/ only with a header
+  "you" bits come from /auth/me in JS). The renderer serves /private only with a header
   nginx adds after auth, like X-Meiolol-Admin today; warm-up and the public cache never
-  hold /p/ pages. noindex and robots.txt cover /p/
+  hold /private pages. noindex and robots.txt cover /private
 - Desktop: the app signs in once and gets a device token (named, revocable, listed on
   the account page), sent as `Authorization: Bearer`; nginx checks it with the same
   /_auth. Replaces the shared update.key (hosting.md "Desktop app files"), which is
@@ -73,8 +73,8 @@ Live on meio.lol: accounts core in `meiolol api` (src/api/accounts.zig, roles.zi
 `meiolol account add|password|role|disable|enable|delete|invite|reset|list|link|devices`),
 the check route /auth/check/CAP (nginx maps /_auth to it), tested by route x role over
 HTTP; the owner login and admin sign-up links (email plus a shared password); nginx
-gates /admin/ and /p/; /account.html (password, devices, log out everywhere); the admin
-Accounts tab; /p/ serves the Draft tester in private mode (hosting.md "Private site").
+gates /admin/ and /private; /account (password, devices, log out everywhere); the admin
+Accounts tab; /private serves the Draft tester in private mode (hosting.md "Private site").
 accounts.db is backed up to the gpu-box every 6 h (data-safety.md "Logins backup").
 Desktop sign in is built on both sides: POST /auth/device gives a device token (hash
 only, 90 days unused, 10 per account) that opens download_private_app only; the app's
@@ -82,8 +82,8 @@ device.zig and signin.zig send it with update checks, a 401 brings the form back
 removed device stops at its next check (3 h, or the next start); `meiolol-app signin DIR`
 does the same from a terminal. The release script builds, checks and signs both
 editions (private to the box's release/, public to release/public/, served nowhere
-yet); /p/desktop/ serves them with /admin/desktop/'s gate, and the app's update base is
-/p/desktop/.
+yet); /private/desktop/ serves them with /admin/desktop/'s gate, and the app's update base
+is /private/desktop/ (/p/desktop/ for older apps).
 
 ## Steps
 
@@ -109,7 +109,7 @@ Each step ends tested and deployed; nginx and systemd changes on jomify need Jac
      "Desktop app files" follows. The privacy page's desktop app paragraph says the app
      signs in (with step 1)
 - AC5 Retire admin/desktop/ and its nginx location once every installed app updates
-  from /p/desktop/ (the account page's devices, or nginx's log for
+  from /private/desktop/ (the account page's devices, or nginx's log for
   /admin/desktop/update.signed)
 - AC6 Later: friends link their Riot ID (profile icon check, as Remove a Riot ID does);
   friends' groups become Squads (backlog.md "Your games and Squads") for the private

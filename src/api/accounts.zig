@@ -1,7 +1,7 @@
 //! accounts.db: logins for the private site, the admin pages and later the private app
 //! (docs/plan/accounts.md). Own file beside api.db, so backups, erasure and migrations
 //! stay apart from Riot data. Served by `meiolol api` under /auth/; nginx asks
-//! /auth/check/CAP before /admin/ and /p/ (auth_request). Writes need the header
+//! /auth/check/CAP before /admin and /private (auth_request). Writes need the header
 //! X-Meiolol-Action: 1, which a cross-site form cannot send.
 //!
 //!   POST /auth/login      {"username","password"}: sets the session cookie

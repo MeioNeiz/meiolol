@@ -452,9 +452,9 @@ pub fn coreRole(r: ui.role.Role) Role {
 pub fn robots(arena: std.mem.Allocator, opts: Options) ![]const u8 {
     if (!opts.public) return "User-agent: *\nDisallow: /\n";
     var out: std.ArrayList(u8) = .empty;
-    // Your games answers name players (docs/legal/lia.md safeguards): never crawled. /p/:
+    // Your games answers name players (docs/legal/lia.md safeguards): never crawled. /private:
     // the private site, behind a login
-    try out.appendSlice(arena, "User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /p/\n");
+    try out.appendSlice(arena, "User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /private\n");
     if (opts.origin) |origin| try out.print(arena, "Sitemap: {s}/sitemap.xml\n", .{origin});
     return out.items;
 }
@@ -482,7 +482,7 @@ test robots {
     public.origin = "https://x.io";
     public.euw_only = true;
     try std.testing.expectEqualStrings(
-        "User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /p/\nSitemap: https://x.io/sitemap.xml\n",
+        "User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /private\nSitemap: https://x.io/sitemap.xml\n",
         try robots(arena.allocator(), public),
     );
 }

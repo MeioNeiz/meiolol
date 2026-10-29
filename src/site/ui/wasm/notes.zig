@@ -3,7 +3,7 @@
 //! cookie). Its root goes at the end of <body>; the page's open notes come from
 //! /api/notes as pins; picking listens on window in the capture phase, so the page's own
 //! handlers never see the pointer until it ends; Save POSTs a ui.notesdata.New. On
-//! /admin/notes.html (its server-rendered ui.noteslist) the list instead, fetched again
+//! /admin/notes (its server-rendered ui.noteslist) the list instead, fetched again
 //! every 20 s while the tab shows and when it comes back
 const std = @import("std");
 const zjb = @import("zjb");
@@ -716,7 +716,7 @@ fn onGrew(entries: zjb.Handle, observer: zjb.Handle) callconv(.c) void {
     place();
 }
 
-// The list (/admin/notes.html)
+// The list (/admin/notes)
 
 var list: ui.noteslist.List = .{};
 var list_server: ui.noteslist.List = .{};

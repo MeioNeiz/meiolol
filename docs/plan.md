@@ -68,8 +68,7 @@ players back.
 9. Our Zig "libraries" toward what the Rust crates give, checks outside ci: the open
    additions in docs/plan/libraries.md
 10. Jacob's open decisions: decisions.md "Open decisions"
-11. Professional URLs (J32): public pages on the scheme (URL1-URL4); left: URL5,
-    /admin and /private without .html (docs/plan/urls.md)
+11. Professional URLs (J32): done, every page on the scheme (docs/plan/urls.md)
 
 Others own: the TW2 mastery retry (meiolol-8f); neural nets vs today's model; the
 draft's "Rammus into high AD/AP" check.
@@ -94,7 +93,7 @@ draft's "Rammus into high AD/AP" check.
 - docs/plan/libraries.md: our Zig pieces toward Rust-crate quality, with fuzzing and
   ThreadSanitizer outside ci
 - docs/plan/ops.md: crawler speed, traffic, storage and hosts, hosting reference
-- docs/plan/urls.md: clean URLs, old-to-new map, 301s, steps URL1-URL4
+- docs/plan/urls.md: clean URLs, old-to-new map, 301s, steps URL1-URL5
 - docs/plan/vm.md: moving off Oracle onto the Essex VM, steps VM0-VM8
 - docs/plan/decisions.md: Jacob's decisions (J, Q, G ids), open decisions, ruled out
 - docs/plan/how-we-work.md: sessions, team size, unattended runs

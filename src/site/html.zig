@@ -228,13 +228,13 @@ const search_loader =
     \\
 ;
 
-/// A menu link to the Draft tester for logins that opened it: the admin page (/admin/) or the
-/// private one (/p/) stores it in this origin's localStorage, so visitors' pages carry
-/// neither link nor path. Those browsers also load /p/pv.js (static/pv.js), the private
+/// A menu link to the Draft tester for logins that opened it: the admin page (/admin) or the
+/// private one (/private) stores it in this origin's localStorage, so visitors' pages carry
+/// neither link nor path. Those browsers also load /private/pv.js (static/pv.js), the private
 /// numbers, which nginx serves to private logins only
 const admin_link =
-    \\<script>try{const l=JSON.parse(localStorage.getItem("admin-link"));if(l&&typeof l.href=="string"&&/^\/(admin|p)\//.test(l.href)){const a=document.createElement("a");
-    \\a.href=l.href;a.textContent=l.label;document.querySelector("header .links").append(a);const s=document.createElement("script");s.src="/p/pv.js";document.head.append(s)}}catch(e){}</script>
+    \\<script>try{const l=JSON.parse(localStorage.getItem("admin-link"));if(l&&typeof l.href=="string"&&/^\/(admin|private)[/#]/.test(l.href)){const a=document.createElement("a");
+    \\a.href=l.href;a.textContent=l.label;document.querySelector("header .links").append(a);const s=document.createElement("script");s.src="/private/pv.js";document.head.append(s)}}catch(e){}</script>
     \\
 ;
 

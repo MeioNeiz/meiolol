@@ -17,9 +17,9 @@ review" (J7). How it is built: docs/arch-app.md "App" and "Desktop window";
   exe, every one in the private exe (else the check is blind). Every `ctx.private()`
   branch sits behind widgets.private_code, comptime false in the public exe
 - Both share the poller, the lane card, data files, signing and updates. The private
-  edition reads extra data files (e.g. raw model outputs) that only /p/desktop/ serves
+  edition reads extra data files (e.g. raw model outputs) that only /private/desktop/ serves
 - deploy/desktop-release.sh builds, fuzzes, checks and signs both; each has its own
-  update channel: public /desktop/ (after the key), private /p/desktop/ (device token,
+  update channel: public /desktop/ (after the key), private /private/desktop/ (device token,
   accounts.md AC4). Today's downloaded exe is the private edition
 - The public edition is built and shot from now on, for the application's screenshots,
   even while only the private one is downloaded
@@ -212,12 +212,12 @@ this on the site)
 
 ## Private site
 
-The /p/ pages (accounts.md "Status"). Live: the Draft tester with the shipped model and
+The /private pages (accounts.md "Status"). Live: the Draft tester with the shipped model and
 a Lab experiment switch (J15: labelled with the export's name; jomify's
-training-receive.sh puts only the tester's model files in p/lab); the shipped model's
-win chances on the public champion and matchup pages for private logins (/p/pv.js,
-loaded by the header script in browsers that opened /admin/ or /p/, data
-p/models/champ/<id>.json from `meiolol draft-model`): a line in the hero and a last line
+training-receive.sh puts only the tester's model files in private/lab); the shipped model's
+win chances on the public champion and matchup pages for private logins (/private/pv.js,
+loaded by the header script in browsers that opened /admin/ or /private, data
+private/models/champ/<id>.json from `meiolol draft-model`): a line in the hero and a last line
 on every opponent and duo tile. Next: all regions and patches without the public
 page-weight cuts.
 

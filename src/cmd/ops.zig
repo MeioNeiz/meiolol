@@ -461,7 +461,7 @@ pub const usage_admin =
     \\              --disk "S U A"   data disk size, used, available in bytes
     \\              --health TEXT    deploy/health.sh output
     \\              --private-out DIR  also the private site's Draft tester and the
-    \\                               notes tool's files (/p/)
+    \\                               notes tool's files (/private/)
     \\              --training DIR   only the Models tab's lab view: DIR/training.bin
     \\                               and runs/*/metrics.bin from the files
     \\                               deploy/lab-push.sh staged there (the Mac)
