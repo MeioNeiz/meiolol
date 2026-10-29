@@ -55,6 +55,10 @@ First screen, desktop 1280: player bar, tabs, then two columns:
   ("3-0 · 1h 52m", deeplol's session line); net LP as dpm has it needs LP per game,
   which we don't store (Data needed)
 
+Above both columns, two cards of one height (notes 40-41): Highlights (its accent label
+opens the Highlights view, three records inside as cells) and Over time (its label opens
+that view: win chance at 15 over the last 5, a spark).
+
 `game-row`, 56 px, one line at desktop:
 result edge (--us win, --them loss, 3 px) | champion 40 px with level and role badge |
 "vs" opponent 24 px | K/D/A at --fs-l with KDA under | CS and per minute | items, 7 at
@@ -96,6 +100,9 @@ New: `record-tile`s in four labelled groups, each a row of tiles of one size:
   objective
 - Games: won from furthest behind, lost from furthest ahead, biggest one-minute swing,
   longest game, fastest win, most played
+
+Each group is one card (its title the head), as wide as its records, the cards filling
+the row; records inside split by 1 px lines (Jacob chose this, note 42).
 
 `record-tile`: the figure at --fs-xl, a label of 1-3 words, and a `game-chip` (your
 champion and theirs as 20 px icons, W/L dot, date) in place of the sentence. Pressing
