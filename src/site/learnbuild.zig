@@ -498,7 +498,7 @@ fn counterPuzzle(site: *const Site, r: Role) !?ld.Puzzle {
         .id = try a.print("counter-{t}", .{r}),
         .q = "Which is a real counter?",
         .term = .{ .word = "counter", .note = "Wins more against this champion than against everyone else." },
-        .setup = .{ .duel = .{ .who = uiChamp(x), .role = champion.uiRole(r), .label = "wins into", .vs = vs } },
+        .setup = .{ .duel = .{ .who = uiChamp(x), .role = champion.uiRole(r), .label = "wins against", .vs = vs } },
         .answer = .{ .pick = .{ .right = right, .choices = choices } },
         .reveal = reveal,
         .why = try a.print("{s} wins {d:.0}% against everyone, {d:.0}% against {s}.", .{
@@ -575,7 +575,7 @@ fn counterBasic(site: *const Site) !?ld.Puzzle {
             .title = root.roleName(p.r),
             .role = champion.uiRole(p.r),
             .champs = try a.dupe(ld.Champ, &.{ uiChamp(o), uiChamp(x) }),
-            .sep = "into",
+            .sep = "beats",
         };
     }
     const l = picks[2];

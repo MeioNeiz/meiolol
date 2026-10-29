@@ -38,8 +38,7 @@ pub const know: ld.Puzzle = .{
 pub const newcomer: ld.Puzzle = .{
     .id = "newcomer",
     .q = "New players struggle most on...?",
-    .ctx = "New: under 30k mastery points; practised: 100k+",
-    .setup = .{ .chips = .{ .champs = &.{ ch("Vayne", "Vayne"), ch("Rengar", "Rengar") }, .chips = &.{ "Vayne bot", "Rengar jungle" } } },
+    .setup = .{ .facts = &.{ .{ .v = "Under 30k", .label = "new: mastery points on it" }, .{ .v = "100k+", .label = "practised" } } },
     .answer = .{ .pick = .{ .right = 1, .choices = &.{
         .{ .text = "Vayne", .champ = ch("Vayne", "Vayne"), .shown = "54.6% new, 49.7% practised", .games = 5_613 },
         .{ .text = "Rengar", .champ = ch("Rengar", "Rengar"), .shown = "39.4% new, 50.7% practised", .games = 5_141 },
@@ -53,8 +52,7 @@ pub const newcomer: ld.Puzzle = .{
 pub const fed: ld.Puzzle = .{
     .id = "fed",
     .q = "How often does your team win?",
-    .ctx = "You: 1,000+ gold up at 14. The other four: behind",
-    .setup = .{ .chips = .{ .champs = &.{}, .chips = &.{ "You +1,000 at 14", "Other four behind" } } },
+    .setup = .{ .facts = &.{ .{ .v = "+1,000 gold", .label = "you, at 14 min" }, .{ .v = "Behind", .label = "the other four" } } },
     .answer = .{ .guess = .{ .lo = 20, .hi = 80, .real = 47.3, .tol = 2 } },
     .reveal = &.{
         .{ .label = "Other four", .sub = "3k+ behind", .v = 27.6, .games = 16_328 },
@@ -72,8 +70,7 @@ pub const fed: ld.Puzzle = .{
 pub const fed_role: ld.Puzzle = .{
     .id = "fed-role",
     .q = "Whose lead wins more?",
-    .ctx = "1,000+ gold up at 14, the other four behind",
-    .setup = .{ .chips = .{ .champs = &.{}, .chips = &.{ "Top +1,000", "Bot +1,000" } } },
+    .setup = .{ .facts = &.{ .{ .v = "+1,000 gold", .label = "one laner, at 14 min" }, .{ .v = "Behind", .label = "the other four" } } },
     .answer = .{ .pick = .{ .right = 1, .choices = &.{
         .{ .text = "Top", .role = .top, .shown = "44.6%", .games = 17_476 },
         .{ .text = "Bot", .role = .bot, .shown = "50.4%", .games = 14_808 },
@@ -87,8 +84,7 @@ pub const fed_role: ld.Puzzle = .{
 pub const surrender: ld.Puzzle = .{
     .id = "ff15",
     .q = "How often does it still win?",
-    .ctx = "5,000 gold behind at 15 minutes, someone types /ff",
-    .setup = .{ .chips = .{ .champs = &.{}, .chips = &.{ "−5,000 gold at 15", "/ff" } } },
+    .setup = .{ .facts = &.{ .{ .v = "−5,000 gold", .label = "your team, at 15 min" }, .{ .v = "/ff", .label = "someone types" } } },
     .answer = .{ .guess = .{ .lo = 0, .hi = 50, .real = 13.0, .tol = 2 } },
     .reveal = &.{
         .{ .label = "At 10 min", .v = 7.2, .games = 6_217 },
@@ -105,8 +101,8 @@ pub const surrender: ld.Puzzle = .{
 
 pub const bounty: ld.Puzzle = .{
     .id = "bounty",
-    .q = "Behind by 3,000+: what does a kill pay?",
-    .setup = .{ .chips = .{ .champs = &.{}, .chips = &.{"A kill: ~300 gold"} } },
+    .q = "What does your kill pay?",
+    .setup = .{ .facts = &.{ .{ .v = "−3,000+ gold", .label = "your team" }, .{ .v = "~300 gold", .label = "a kill, usually" } } },
     .answer = .{ .guess = .{ .lo = 200, .hi = 600, .step = 10, .unit = .gold, .real = 481, .tol = 20 } },
     .why = "Bounties: 37% of kills by a team 3k+ behind pay over 450 gold.",
     .tip = "Behind? Fights pay you more: hunt the enemy with a bounty.",
@@ -133,8 +129,7 @@ pub const splitpush: ld.Puzzle = .{
 pub const luck: ld.Puzzle = .{
     .id = "luck",
     .q = "How much of that spread is skill?",
-    .ctx = "Players with 10+ games on a champion: the middle half win 46% to 64%",
-    .setup = .{ .chips = .{ .champs = &.{}, .chips = &.{ "46%", "64%" } } },
+    .setup = .{ .facts = &.{ .{ .v = "46% to 64%", .label = "the middle half of players win" }, .{ .v = "10+ games", .label = "each, on one champion" } } },
     .answer = .{ .pick = .{ .right = 2, .choices = &.{ .{ .text = "Most of it" }, .{ .text = "About half" }, .{ .text = "Almost none" } } } },
     .why = "Over 10 to 20 games, chance alone moves a win rate about 15 points.",
     .tip = "A bad 10 games on a champion is mostly luck: don't drop it yet.",
@@ -161,6 +156,8 @@ test "fixed puzzles: answers in range, games on every bar, no pick advice" {
             else => {},
         }
         for (p.reveal) |row| try std.testing.expect(row.games > 0);
+        // Numbers go in the setup (plan "Questions: short, the setup as a picture")
+        try std.testing.expect(std.mem.findAny(u8, p.q, "0123456789") == null);
         try std.testing.expect(p.games > 0);
         for ([_][]const u8{ p.q, p.ctx, p.why, p.tip }) |text| {
             try std.testing.expect(std.ascii.findIgnoreCase(text, "best") == null);

@@ -30,6 +30,7 @@ const W = struct {
     pub const title = plain("Learn");
     pub const chapter = Phrase("Chapter {n:int}");
     pub const drag = Phrase("Tap or drag the {r:text} line to guess");
+    pub const drag_line = plain("Tap or drag the line to guess");
     pub const of = Phrase("{a:int} / {b:int}");
     pub const done = Phrase("Chapter {n:int} done");
     pub const lock = plain("Lock in");
@@ -210,6 +211,7 @@ pub const Page = struct {
             .duel => |d| p.duelStage(h, d),
             .tiles => |t| p.tilesStage(h, t),
             .chips => |c| p.chipsStage(h, c),
+            .facts => |f| factsStage(h, f),
         };
         const tt = toggletip.view(h, "lp-src", .{W.games.with(h, .{ .n = z.games })}, W.games.with(h, .{ .n = z.games }), .{ .s = z.from });
         return puzzle.view(h, .{
@@ -218,7 +220,7 @@ pub const Page = struct {
             .ctx = if (!p.revealed and z.ctx.len > 0) h.span(.{}, .{z.ctx}) else null,
             .answer = switch (z.answer) {
                 .pick => |x| p.choices(h, x),
-                .guess => if (z.setup == .rates) null else guess.view(h, &p.g, .{ .on = h.on(p, .guess) }),
+                .guess => if (z.setup == .rates) null else p.slider(h),
             },
             .off = if (p.revealed and z.answer == .guess) guess.offText(h, &p.g) else null,
             .stars = if (p.revealed) p.progress.get(z.id) else null,
@@ -229,6 +231,14 @@ pub const Page = struct {
                 button.view(h, .{ .v = .primary, .on = h.on(p, .next), .ref = "next" }, .{W.next})
             else
                 button.view(h, .{ .v = .primary, .disabled = !p.lockable(), .on = h.on(p, .lock), .ref = "lock" }, .{W.lock}),
+        });
+    }
+
+    /// A guess outside RateRows: its scale and, until the first move, how to guess
+    fn slider(p: *Page, h: *H) N {
+        return h.div(.{ .class = "gs" }, .{
+            guess.view(h, &p.g, .{ .on = h.on(p, .guess), .ticks = ticks(h, p.g.lo, p.g.hi, p.g.unit) }),
+            h.div(.{ .class = "hint", .data_gone = p.g.value != null or p.revealed }, .{W.drag_line}),
         });
     }
 
@@ -273,15 +283,21 @@ pub const Page = struct {
             .lo = lo,
             .hi = hi,
             .rows = rows,
-            .ticks = ticks(h, lo, hi),
+            .ticks = ticks(h, lo, hi, .rate),
             .ask = if (ask != null) &p.g else null,
             .on = h.on(p, .guess),
             .hint = if (ask) |i| W.drag.with(h, .{ .r = src[i].label }) else null,
         });
     }
 
-    fn ticks(h: *H, lo: f32, hi: f32) []const f32 {
-        const step: f32 = if (hi - lo > 30) 10 else 5;
+    /// The smallest round step that keeps the labels apart (gold's are longer)
+    fn ticks(h: *H, lo: f32, hi: f32, unit: guess.Unit) []const f32 {
+        const most: f32 = if (unit == .gold) 4 else 8;
+        var step: f32 = 1000;
+        for ([_]f32{ 5, 10, 25, 50, 100, 250, 500 }) |s| if ((hi - lo) / s <= most) {
+            step = s;
+            break;
+        };
         var l: std.ArrayList(f32) = .empty;
         var v = @ceil(lo / step) * step;
         while (v <= hi) : (v += step) l.append(h.mem, v) catch {
@@ -333,6 +349,12 @@ pub const Page = struct {
         for (c.champs) |x| l.add(p.icon(h, x, .@"40"));
         for (c.chips) |t| l.add(badge.view(h, .accent, .{t}));
         return h.div(.{ .class = "chips" }, .{l.done()});
+    }
+
+    fn factsStage(h: *H, fs: []const ld.Fact) N {
+        var l = h.list();
+        for (fs, 0..) |f, i| l.add(h.div(.{ .key = i, .class = "f" }, .{ h.b(.{}, .{f.v}), h.span(.{}, .{f.label}) }));
+        return h.div(.{ .class = "facts" }, .{l.done()});
     }
 
     fn choices(p: *Page, h: *H, x: ld.Pick) N {
@@ -393,7 +415,8 @@ pub const Page = struct {
                 h.span(.{ .class = "t" }, .{ch.title}),
                 h.span(.{ .class = "p" }, .{W.of.with(h, .{ .a = s.done, .b = ch.puzzles.len })}),
             }));
-            for (ch.puzzles) |z| if (p.progress.get(z.id) != null) tips.add(puzzle.take(h, .{ .s = z.tip }));
+            // This chapter's only: all of them would push Chapters off the screen
+            if (ci == p.c) for (ch.puzzles) |z| if (p.progress.get(z.id) != null) tips.add(puzzle.take(h, .{ .s = z.tip }));
         }
         return card.view(h, .{ .label = W.chapters }, &.{h.div(.{ .class = "path" }, .{
             if (tips.done().len > 0) h.div(.{ .class = "tips" }, .{ h.span(.{ .class = "lab" }, .{W.tips}), tips.done() }) else null,
@@ -436,6 +459,13 @@ pub const css =
     \\  .c-learn .ch[aria-current] { color: var(--text); font-weight: var(--w-m); background: var(--panel-2); }
     \\  .c-learn .ch .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     \\  .c-learn .ch .n, .c-learn .ch .p { font-size: var(--fs-xs); color: var(--faint); font-variant-numeric: tabular-nums; }
+    \\  .c-learn .facts { display: flex; flex-wrap: wrap; gap: var(--sp-3) var(--sp-6); }
+    \\  .c-learn .facts > .f { display: grid; gap: 2px; }
+    \\  .c-learn .facts > .f > b { font-size: var(--fs-xl); font-weight: var(--w-b); font-variant-numeric: tabular-nums; }
+    \\  .c-learn .facts > .f > span { font-size: var(--fs-s); color: var(--muted); }
+    \\  .c-learn .gs { display: grid; gap: 2px; }
+    \\  .c-learn .gs > .hint { font-size: var(--fs-xs); color: var(--faint); text-align: center; }
+    \\  .c-learn .gs > .hint[data-gone] { visibility: hidden; }
     \\  .c-learn .end { display: grid; gap: var(--sp-4); }
     \\  .c-learn .done-h { display: grid; justify-items: center; gap: var(--sp-2); text-align: center; }
     \\  .c-learn .done-h .k { font-size: var(--fs-xs); font-weight: var(--w-b); letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
@@ -458,8 +488,9 @@ pub fn gallery(g: *@import("gallery.zig").Gallery) void {
     if (shown(h.mem, &ld.demo, 1, 1, 0)) |p| g.addFill("counter, a wrong pick revealed: each into Yone and against everyone", p.view(h));
     if (shown(h.mem, &ld.demo, 0, 0, null)) |p| g.addFill("chapter 0: role tiles", p.view(h));
     if (shown(h.mem, &counter_demo, 0, 0, null)) |p| g.addFill("chapter 0: counter tiles, one phrase each", p.view(h));
-    if (shown(h.mem, &chips_demo, 0, 0, null)) |p| g.addFill("chips setup with a slider", p.view(h));
-    if (shown(h.mem, &chips_demo, 0, 0, 60)) |p| g.addFill("chips setup revealed: the bands", p.view(h));
+    if (shown(h.mem, &facts_demo, 0, 0, null)) |p| g.addFill("facts setup with a slider", p.view(h));
+    if (shown(h.mem, &facts_demo, 0, 0, 60)) |p| g.addFill("facts setup revealed: the bands", p.view(h));
+    if (shown(h.mem, &chips_demo, 0, 0, null)) |p| g.addFill("chips setup: a champion and its figure", p.view(h));
     if (shown(h.mem, &ld.demo, 1, 1, 1)) |p| {
         p.progress.set(h.mem, "know", 2) catch {
             h.oom = true;
@@ -487,11 +518,22 @@ fn shown(a: std.mem.Allocator, d: *const ld.Data, c: u8, z: u8, answer: ?f32) ?*
     return p;
 }
 
-const chips_demo: ld.Data = .{ .ddragon = "16.21.1", .start = 0, .chapters = &.{.{ .title = "Does a lead in lane win?", .puzzles = &.{.{
+const chips_demo: ld.Data = .{ .ddragon = "16.21.1", .start = 0, .chapters = &.{.{ .title = "Does winning lane win the game?", .puzzles = &.{.{
+    .id = "lean-hook",
+    .q = "Even at 20 minutes: does it win more or less?",
+    .ctx = "Draven in bot lane, against an average bot laner",
+    .setup = .{ .chips = .{ .champs = &.{ld.ch("Draven", "Draven")}, .chips = &.{"+860 gold at 14"} } },
+    .answer = .{ .pick = .{ .right = 1, .choices = &.{ .{ .text = "More" }, .{ .text = "Less", .shown = "8 points less", .games = 58_299 } } } },
+    .why = "Early champions win lanes, not long games.",
+    .tip = "Ahead with an early champion? Spend the lead before 20 minutes.",
+    .games = 58_299,
+    .from = "Ranked solo, Platinum IV and up",
+}} }} };
+
+const facts_demo: ld.Data = .{ .ddragon = "16.21.1", .start = 0, .chapters = &.{.{ .title = "Does a lead in lane win?", .puzzles = &.{.{
     .id = "fed",
     .q = "How often does your team win?",
-    .ctx = "You: 1,000+ gold up at 14. The other four: behind",
-    .setup = .{ .chips = .{ .champs = &.{}, .chips = &.{ "You +1,000 at 14", "Other four behind" } } },
+    .setup = .{ .facts = &.{ .{ .v = "+1,000 gold", .label = "you, at 14 min" }, .{ .v = "Behind", .label = "the other four" } } },
     .answer = .{ .guess = .{ .lo = 20, .hi = 80, .real = 47.3, .tol = 2 } },
     .reveal = &.{
         .{ .label = "Other four", .sub = "3k+ behind", .v = 27.6, .games = 16_328 },
@@ -556,6 +598,16 @@ test "first visit on chapter 1; guess, lock in, pick by key and click, chapter e
     try testing.expect(!h.oom);
 }
 
+test "ticks: a round step per range, fewer for gold's longer labels" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var t: tree.Tree = .{};
+    var h: H = .init(arena.allocator(), &t);
+    try testing.expectEqualSlices(f32, &.{ 40, 45, 50, 55, 60 }, Page.ticks(&h, 40, 60, .rate));
+    try testing.expectEqual(@as(usize, 8), Page.ticks(&h, 20, 90, .rate).len);
+    try testing.expectEqualSlices(f32, &.{ 200, 300, 400, 500, 600 }, Page.ticks(&h, 200, 600, .gold));
+}
+
 test "a puzzle's link opens it" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
@@ -589,8 +641,8 @@ const counter_demo: ld.Data = .{ .ddragon = "16.21.1", .start = 0, .chapters = &
     .q = "Who wins this lane more often?",
     .ctx = "Illaoi against Mordekaiser, top lane",
     .setup = .{ .tiles = &.{
-        .{ .title = "Top", .role = .top, .champs = &.{ ld.ch("Malphite", "Malphite"), ld.ch("Vayne", "Vayne") }, .sep = "into" },
-        .{ .title = "Mid", .role = .mid, .champs = &.{ ld.ch("Yasuo", "Yasuo"), ld.ch("Akshan", "Akshan") }, .sep = "into" },
+        .{ .title = "Top", .role = .top, .champs = &.{ ld.ch("Malphite", "Malphite"), ld.ch("Vayne", "Vayne") }, .sep = "beats" },
+        .{ .title = "Mid", .role = .mid, .champs = &.{ ld.ch("Yasuo", "Yasuo"), ld.ch("Akshan", "Akshan") }, .sep = "beats" },
     } },
     .answer = .{ .pick = .{ .right = 1, .choices = &.{
         .{ .text = "Illaoi", .shown = "won 42%", .games = 1_965 },

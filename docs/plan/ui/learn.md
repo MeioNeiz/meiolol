@@ -143,10 +143,11 @@ label and games; foundation to say if that is its own entry), Toggletip, Card, B
 
 ## Interactions
 
-- Slider: no value until touched; drag or arrow keys; Lock in enables on first move;
-  Enter commits
-- ChoiceCards: tap commits; keys 1-5
-- Chapter strip: tap a dot to jump; ChapterMap sheet lists all chapters
+- Slider: no value until touched, its scale and "Tap or drag" shown; drag or arrow keys;
+  Lock in enables on first move; Enter commits
+- ChoiceCards: choose, then Lock in; keys 1-9
+- Chapters aside (mock round 4, in place of the dots and sheet): every chapter with
+  its progress, tap to jump; Your tips: this chapter's earned ones
 - Progress, stars and tips earned in localStorage (try/catch, as now)
 
 ## Data needed

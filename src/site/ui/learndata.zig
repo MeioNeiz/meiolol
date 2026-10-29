@@ -44,7 +44,11 @@ pub const Setup = union(enum) {
     tiles: []const Tile,
     /// Champions and short figures as Chips ("+850 gold at 14")
     chips: Chips,
+    /// A few big figures, each with what it counts ("+1,000 gold", "you, at 14 min")
+    facts: []const Fact,
 };
+
+pub const Fact = struct { v: []const u8, label: []const u8 };
 
 pub const Duel = struct { who: Champ, role: Role, label: []const u8, vs: []const Figure };
 pub const Chips = struct { champs: []const Champ, chips: []const []const u8 };
@@ -54,7 +58,7 @@ pub const Tile = struct {
     title: []const u8,
     role: ?Role = null,
     champs: []const Champ,
-    /// Between the champions, so the tile reads as one phrase ("into", "+")
+    /// Between the champions, so the tile reads as one phrase ("beats", "+")
     sep: []const u8 = "",
 };
 
@@ -215,7 +219,7 @@ pub const demo: Data = .{
                 .id = "counter-top",
                 .q = "Which is a real counter?",
                 .term = .{ .word = "counter", .note = "Wins more against this champion than against everyone else." },
-                .setup = .{ .duel = .{ .who = ch("Yone", "Yone"), .role = .top, .label = "wins into", .vs = &.{
+                .setup = .{ .duel = .{ .who = ch("Yone", "Yone"), .role = .top, .label = "wins against", .vs = &.{
                     .{ .champ = ch("Garen", "Garen"), .text = "48%" },
                     .{ .champ = ch("Jax", "Jax"), .text = "46%" },
                     .{ .champ = ch("Malphite", "Malphite"), .text = "48%" },
