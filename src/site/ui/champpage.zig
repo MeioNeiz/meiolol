@@ -1080,6 +1080,15 @@ pub const css =
     \\  .c-cpage .c-card > .c-tabs { margin-top: var(--sp-4); }
     \\  .c-cpage [id] { scroll-margin-top: calc(var(--header) + var(--sp-3)); }
     \\  .c-cpage .c-toolbar { container-type: inline-size; margin-top: var(--sp-3); }
+    \\  @media (min-width: 1100px) {
+    \\    .c-cpage [data-island=champion] > .c-card { display: grid; grid-template-columns: auto minmax(0, 1fr); }
+    \\    .c-cpage [data-island=champion] > .c-card > :not(.c-tabs, .c-toolbar) { grid-column: 1 / -1; }
+    \\    .c-cpage [data-island=champion] > .c-card > :is(.c-tabs, .c-toolbar) { margin-bottom: calc(-1 * var(--card-py)); }
+    \\    .c-cpage [data-island=champion] > .c-card > .c-tabs { margin-right: 0; box-shadow: none; }
+    \\    .c-cpage [data-island=champion] > .c-card > .c-toolbar { margin: var(--sp-4) calc(-1 * var(--card-px)) calc(-1 * var(--card-py)) 0;
+    \\      padding-block: 0; background: none; border: 0; justify-content: flex-end; }
+    \\    .c-cpage [data-island=champion] .c-toolbar > .c-filters { flex: none; }
+    \\  }
     \\  .c-cpage > [data-busy]:not([data-island=champion]), .c-cpage > [data-busy] .c-champhead { opacity: 0.55; transition: opacity 0.2s; }
     \\  .c-cpage [data-thin] .c-champhead > .c-strip, .c-cpage .plot[data-thin] { opacity: 0.6; }
     \\  .c-cpage > [data-thin] :is(.c-build > .in, .plot, .c-mpick, #trends .c-trend) { opacity: 0.6; }
@@ -1089,7 +1098,7 @@ pub const css =
     \\  .c-cpage .none { margin: var(--sp-3) 0; color: var(--muted); }
     \\  .c-cpage .note { margin-left: auto; font-size: var(--fs-s); color: var(--muted); }
     \\  .c-cpage .more { margin-left: auto; font-size: var(--fs-s); }
-    \\  .c-cpage .plot { padding: var(--sp-3) 0; }
+    \\  .c-cpage .plot { padding: var(--sp-1) 0 var(--sp-3); }
     \\  .c-cpage .row3, .c-cpage .row2 { display: grid; gap: var(--sp-4); grid-template-columns: minmax(0, 1fr); }
     \\  @media (min-width: 1000px) {
     \\    .c-cpage .row3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }

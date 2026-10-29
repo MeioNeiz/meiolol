@@ -133,26 +133,17 @@ player's own record). Gap list, measurements and target layout: docs/champion-ma
 
 ### Steps
 
-- CH0 Jacob's choices: (a) one role on screen at a time, as tabs with the role's share
-  (every leader does; recommended) or stacked as now; (b) the build panel's default:
-  most played, with highest win rate as the toggle (recommended; LoLalytics defaults to
-  highest win); (c) a tier letter per champion or not (LoLalytics, U.GG, OP.GG all show
-  one; ours would come from the pulled win rate); (d) trends by patch or by day; (e) a
-  blind-safe score, rune rows split by melee or ranged opponent, purchases split by
-  gold lead
-- CH1 First screen. Hero line with role tabs and share, one stat strip (win rate, rank
-  in role, pick, ban, games, patch change, early lean as a word with the gold), then
-  the build panel; the histogram and both prose paragraphs move below the opponents.
-  Done when Darius at 1920x1080 shows strip and build panel above y 700 and opponent
-  tiles start on the first screen (today y 1,271); on the phone the strip and the
-  panel's first row are inside 844 px. Start: src/site/champion.zig, src/site/builds.zig
-  (strip), style.css. Design build order 7. Blocks: CH0 (a)
-- CH7 Phone. Subbar's three rows into one (a filters button; design build order 6),
-  histogram folded. Done when Darius at 390x844 has its stat strip and build panel on
-  the first screen
+- CH0 Jacob's choices still open: (d) trends by patch or by day; (e) a blind-safe score,
+  rune rows split by melee or ranged opponent, purchases split by gold lead. (a)-(c)
+  answered: docs/plan/ui/champion.md (one role on screen, most played and highest win
+  rate at once, no tier letters)
 
 ### Status
 
+- First screen (CH1, CH7): head card (RolePicker with shares, stat strip), section tabs
+  and filters on one row (phone: a Filters button), then the build panel with the level
+  grid under the runes. Darius 1920x1080: panel y 266-953, first opponent y 1059;
+  390x844: strip and the rune-page row by y 700
 - Filters: one row in the subbar on every Champions page (region grid, 30 days | patch,
   Plat+ to Master+), greyed where a page lacks them; footer follows them
 - Build panel (builds.panel) on the champion page and the build page's top: runes as
