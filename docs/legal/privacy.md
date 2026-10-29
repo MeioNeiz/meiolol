@@ -109,11 +109,16 @@ email routing, which keeps a copy, and reaches a Gmail inbox.
 
 ## Daily Draft
 
-Each puzzle is a real ranked game shown without names, Riot IDs, player identifiers,
-match ids or game dates: at most champions, bans, patch, game length, and each player's
-rank and game statistics (kills, gold and the like). The date shown is the puzzle's, not
-the game's. Your guesses, streak and archive stay in your own browser (local storage).
-They are never sent to us; clearing this site's data removes them.
+Daily Draft puzzles are real ranked games shown without names, Riot IDs, player
+identifiers, match ids or game dates: at most champions, bans, patch, game length,
+and each player's rank and game statistics (kills, gold and the like); the date
+shown is the puzzle's, not the game's.
+
+The Daily Draft keeps your guesses, streak and archive in your own browser (local
+storage), and clearing site data removes them. When you finish a puzzle, its two answers
+(which champion, which side) are sent once with nothing that identifies you; we keep
+only each puzzle's totals, to show what share of players picked each answer, and these
+requests are not in our server logs.
 
 ## Your games
 

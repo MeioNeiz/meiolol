@@ -59,8 +59,10 @@ src/
                      (both: docs/data-safety.md)
   status.zig         `meiolol status`: read-only counts, estimates for big tables
   site/              public website generator (`meiolol site`): html.zig layout and
-                     boilerplate (all markup goes through tpl/), textpages.zig fixed
-                     text pages (markdown on ui.textpage), static/ (css, draft.js)
+                     boilerplate (markup through tpl/ or ui trees), textpages.zig fixed
+                     text pages (markdown on ui.textpage), prose.zig what's left
+                     (account pages' Info, the download page's admin script),
+                     static/ (css, draft.js)
   wasm.zig           recommender in the browser (wasm32-freestanding),
                      embedded into the backend binary by build.zig
   riot/              Riot API: ratelimit, client (std.http), endpoints (platforms and
