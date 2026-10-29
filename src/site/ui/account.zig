@@ -273,7 +273,11 @@ const Day = struct {
     pub fn format(d: Day, w: *std.Io.Writer) std.Io.Writer.Error!void {
         const months = [_][]const u8{ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
         const c = fmt.civil(@intCast(@divFloor(d.s, std.time.s_per_day)));
-        try w.print("{d} {s} {d}", .{ c.day, months[c.month - 1], c.year });
+        try fmt.write(w, .int, c.day);
+        try w.writeByte(' ');
+        try w.writeAll(months[c.month - 1]);
+        try w.writeByte(' ');
+        try fmt.write(w, .int, c.year);
     }
 };
 
@@ -440,4 +444,9 @@ test "the form's fields by kind, and a removed app by its id" {
     p.want = .none;
     p.update(.{ .revoke = 2 }, &ev);
     try testing.expectEqual(.none, p.want);
+}
+
+test Day {
+    var buf: [16]u8 = undefined;
+    try testing.expectEqualStrings("3 Oct 2026", try std.fmt.bufPrint(&buf, "{f}", .{Day{ .s = 1791000000 }}));
 }
