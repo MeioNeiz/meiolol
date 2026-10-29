@@ -116,17 +116,20 @@ the first screen, 1,154 on the page (frontend-rework.md).
 
 "So many more graphs i wanna see": the Pick-up card is liked, the page wants more of
 its kind. Candidates, data we have first (arch-stats.md):
-- Pick-up across all five mastery bins (learning.zig has them; the card shows two)
+- Pick-up across all five mastery bins: done (bins under 200 games left out)
 - Lane curve: done (Charts island, Lane card): gold, XP and CS lead by minute against
   the average lane opponent (its pairs' estimates weighted by lanes), the role's middle
   half around it; all ranks
-- Comeback odds: win rate by lane gold lead at 10 and 15 min (curves' five buckets)
+- Comeback odds: done ("Won by lane gold", 10 | 15 min, the pairs' buckets summed
+  against all lanes dashed; all ranks)
 - Early kills: who takes part in killing the lane opponent before 6, 6-14, after 14
 - By rank bracket: Iron-Silver, Gold-Emerald, Diamond+ (curves brackets; stats by rank)
 - Item timing: first core item minute against win rate (builds' minutes per game:
   new counting)
 - Side (blue, red) and games played on it in the last 30 days: new counting
-One chart style for all (Chart frame), two per row as Pick-up and Also play.
+One chart style for all (Chart frame), two per row as Pick-up and Also play. The
+Charts island (ui-champcharts.wasm) holds Lane, comeback odds, Pick-up and Also play;
+ui-champmore.wasm the matchups and trends.
 
 ## References (research refs/champion/notes.md, 27 shots)
 

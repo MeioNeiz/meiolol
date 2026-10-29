@@ -105,6 +105,7 @@ pub const Role = struct {
     /// Early lean: gold at 14 against an average opponent
     lean: ?i16 = null,
     lane: ?LaneCurves = null,
+    comeback: ?Comeback = null,
     build: ?buildpanel.Data = null,
     /// Against or with each role: lane opponents first
     rels: []const Rel,
@@ -328,6 +329,12 @@ pub const W = struct {
     pub const lane_term = plain("vs the average opponent");
     pub const lane_note = Phrase("{c:text} minus its lane opponent by minute, averaged over its opponents by games; the band holds the middle half of lanes. All ranks.");
     pub const lane_metrics = [3]tree.Text{ plain("Gold"), plain("XP"), plain("CS") };
+    pub const comeback = plain("Won by lane gold");
+    pub const comeback_at = plain("Minute");
+    pub const comeback_mins = [2]tree.Text{ plain("10 min"), plain("15 min") };
+    pub const comeback_buckets = [5]tree.Text{ plain("-1.5k"), plain("-1k"), plain("0"), plain("+1k"), plain("+1.5k") };
+    pub const comeback_tip = Phrase("{l:text} at {m:text}: {r:rate} in {n:count} games, all lanes {a:rate}");
+    pub const all_lanes = plain("dashed: all lanes");
     pub const players = plain("Players");
     pub const spread_head = Phrase("{n:count} · middle half {lo:pct}-{hi:pct}");
     pub const spread_note = Phrase("Players with 10+ games on it. Luck alone would spread the middle half over {lo:pct}-{hi:pct}.");
@@ -439,8 +446,6 @@ pub const MoreData = struct {
     roles: []const MoreRole,
     lengths: []const []const u8,
     spread: ?Spread = null,
-    pickup: ?Pickup = null,
-    also: []const Also = &.{},
 };
 
 pub const MoreRole = struct {
@@ -454,15 +459,30 @@ pub const MoreRole = struct {
     by_length: []const Counts,
 };
 
-/// ui-champcharts.wasm's: the charts under the trends, from every rank
+/// ui-champcharts.wasm's: the cards under the trends. Lane and comeback odds from every
+/// rank, Pick-up and Also play from Platinum+ (whatever the rank pick)
 pub const ChartsData = struct {
     name: []const u8,
+    /// Riot's champion id: the pool link's
+    id: u16 = 0,
+    ddragon: []const u8,
+    champs: []const Other,
     roles: []const ChartsRole,
+    pickup: ?Pickup = null,
+    also: []const Also = &.{},
 };
 
 pub const ChartsRole = struct {
     role: role.Role,
     lane: ?LaneCurves = null,
+    comeback: ?Comeback = null,
+};
+
+/// Games and wins by the champion's lane gold lead at 10 and 15 minutes, in the curves'
+/// buckets from 1,500+ behind to 1,500+ ahead; `all`: every lane in the role
+pub const Comeback = struct {
+    at: [2][5]Counts,
+    all: [2][5]Counts,
 };
 
 /// Files' rank type for the charts, which have no rank files
@@ -480,13 +500,13 @@ pub fn split(a: std.mem.Allocator, d: *const Data) !Split {
         t.* = .{ .role = x.role, .games = x.games, .wins = x.wins, .share = x.share, .thin = x.thin, .rank = x.rank, .of = x.of, .pick = x.pick, .ban = x.ban, .patch_move = x.patch_move, .lane = if (x.rels.len > 0) x.rels[0].opps else &.{} };
         b.* = .{ .role = x.role, .thin = x.thin, .build = x.build };
         m.* = .{ .role = x.role, .thin = x.thin, .games = x.games, .wins = x.wins, .lean = x.lean, .rels = x.rels, .by_patch = x.by_patch, .by_length = x.by_length };
-        c.* = .{ .role = x.role, .lane = x.lane };
+        c.* = .{ .role = x.role, .lane = x.lane, .comeback = x.comeback };
     }
     return .{
         .top = .{ .name = d.name, .slug = d.slug, .icon = d.icon, .patch = d.patch, .ddragon = d.ddragon, .champs = d.champs, .roles = top },
         .build = .{ .roles = build },
-        .more = .{ .name = d.name, .slug = d.slug, .id = d.id, .ddragon = d.ddragon, .champs = d.champs, .roles = more, .lengths = d.lengths, .spread = d.spread, .pickup = d.pickup, .also = d.also },
-        .charts = .{ .name = d.name, .roles = charts },
+        .more = .{ .name = d.name, .slug = d.slug, .id = d.id, .ddragon = d.ddragon, .champs = d.champs, .roles = more, .lengths = d.lengths, .spread = d.spread },
+        .charts = .{ .name = d.name, .id = d.id, .ddragon = d.ddragon, .champs = d.champs, .roles = charts, .pickup = d.pickup, .also = d.also },
     };
 }
 
@@ -878,7 +898,6 @@ pub const More = struct {
     grid: matchgrid.MatchupGrid = .{},
     by_patch: trend.Trend = .{ .label = W.by_patch, .points = &.{} },
     by_length: trend.Trend = .{ .label = W.by_length, .points = &.{} },
-    pickup: trend.Trend = .{ .label = W.pickup, .points = &.{}, .height = 110 },
 
     const P = @This();
 
@@ -971,7 +990,6 @@ pub const More = struct {
         }, .{
             p.matchups(h),
             h.div(.{ .class = "row3", .id = "trends" }, .{ p.patchCard(h), p.lengthCard(h), p.playersCard(h) }),
-            h.div(.{ .class = "row2" }, .{ p.pickupCard(h), p.alsoCard(h) }),
         });
     }
 
@@ -1055,6 +1073,148 @@ pub const More = struct {
             }),
         });
     }
+};
+
+/// The charts under the trends (ui-champcharts.wasm, loaded by ui-champion.wasm). From
+/// every rank: a rank pick changes nothing here
+pub const Charts = struct {
+    data: *const ChartsData,
+    /// "../" from the page to the site root
+    root: []const u8,
+    /// The data file and its stamp, for ui.wasm
+    src: []const u8 = "",
+    stamp: u32 = 0,
+    /// ui-champcharts.js and .wasm, for ui-champion.wasm to load
+    js: ?[]const u8 = null,
+    wasm: ?[]const u8 = null,
+    files: Files(ChartsData, NoRank) = .{},
+    want_role: ?role.Role = null,
+    /// The URL's, given back to it: files.want stays at Platinum+
+    rank: Rank = .plat,
+    /// Data.roles' index
+    cur: u8 = 0,
+    lane: lane.Lane = .{ .a = "", .b = W.lane_them, .metrics = &.{}, .select = false },
+    /// lane's, pointed at the shown role's curves on each view
+    lane_metrics: [3]lane.Metric = undefined,
+    comeback: trend.Trend = .{ .label = W.comeback, .points = &.{} },
+    pickup: trend.Trend = .{ .label = W.pickup, .points = &.{}, .height = 110 },
+    /// Comeback.at's index: 10 or 15 minutes
+    at: u8 = 0,
+
+    const P = @This();
+
+    pub const Msg = union(enum) { at: u8 };
+
+    pub const Url = struct {
+        role: ?role.Role = null,
+        region: Region = .euw,
+        period: Period = .days30,
+        rank: Rank = .plat,
+    };
+
+    fn r(p: *const P) *const ChartsRole {
+        return &p.data.roles[p.cur];
+    }
+
+    pub fn toUrl(p: *const P) Url {
+        const w = p.files.want;
+        return .{ .role = p.want_role, .region = w.region(), .period = w.period(), .rank = p.rank };
+    }
+
+    pub fn fromUrl(p: *P, u: Url) void {
+        p.want_role = u.role;
+        p.rank = u.rank;
+        p.files.want = .{ .view = Pick.of(u).view };
+        p.cur = roleIndex(p.data.roles, u.role);
+    }
+
+    /// The loader's, once what files.want needs is in
+    pub fn show(p: *P, _: std.mem.Allocator) void {
+        const u = p.toUrl();
+        p.files.shown = p.files.want;
+        p.data = p.files.base[p.files.shown.view].?;
+        p.fromUrl(u);
+    }
+
+    pub fn update(p: *P, m: Msg, _: *tree.Event) void {
+        switch (m) {
+            .at => |i| if (i < W.comeback_mins.len) {
+                p.at = i;
+            },
+        }
+    }
+
+    pub fn view(p: *P, h: *H) N {
+        return h.div(.{
+            .class = "part",
+            .data_island = "champcharts",
+            .data_src = if (p.src.len > 0) p.src else null,
+            .data_stamp = p.stamp,
+            .data_root = p.root,
+            .data_js = p.js,
+            .data_wasm = p.wasm,
+            .data_busy = p.files.busy(),
+        }, .{
+            h.div(.{ .class = "row2" }, .{ p.laneCard(h), p.comebackCard(h) }),
+            h.div(.{ .class = "row2" }, .{ p.pickupCard(h), p.alsoCard(h) }),
+        });
+    }
+
+    /// On Pick-up and Also play under a rank pick: they stay Platinum+
+    fn plat(p: *const P, h: *H) N {
+        return if (p.rank != .plat) badge.view(h, .neutral, .{W.plat}) else .none;
+    }
+
+    fn laneCard(p: *P, h: *H) N {
+        const c = p.r().lane orelse return card.view(h, .{}, &.{ card.head(h, W.lane_head, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
+        for (&p.lane_metrics, c.metrics, W.lane_metrics) |*m, x, l| m.* = .{ .label = l, .fit = lane_fit, .s = .{ .line = x.line, .band = x.band } };
+        p.lane.a = p.data.name;
+        p.lane.metrics = &p.lane_metrics;
+        p.lane.games = c.games;
+        const tip = toggletip.view(h, "cp-lane", .{W.lane_term}, W.lane_head, W.lane_note.with(h, .{ .c = p.data.name }));
+        return card.view(h, .{}, &.{ card.head(h, W.lane_head, null, &.{ h.span(.{ .class = "note" }, .{&tip}), p.lane.switcher(h) }), p.lane.view(h) });
+    }
+
+    fn comebackCard(p: *P, h: *H) N {
+        const none = card.view(h, .{}, &.{ card.head(h, W.comeback, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
+        const c = p.r().comeback orelse return none;
+        const pts = h.mem.alloc(trend.Point, 5) catch {
+            h.oom = true;
+            return .none;
+        };
+        const base = h.mem.alloc(f32, 5) catch {
+            h.oom = true;
+            return .none;
+        };
+        var n: usize = 0;
+        var all = true;
+        for (c.at[p.at], c.all[p.at], W.comeback_buckets) |b, a, l| {
+            if (b.games == 0) continue;
+            pts[n] = .{
+                .label = l,
+                .sub = phrase.num(h, .kilo, b.games),
+                .v = rate(b),
+                .ci = ci(b),
+                .tip = W.comeback_tip.with(h, .{ .l = l.s, .m = W.comeback_mins[p.at].s, .r = rate(b), .n = b.games, .a = rate(a) }),
+            };
+            base[n] = rate(a);
+            all = all and a.games > 0;
+            n += 1;
+        }
+        if (n < 2) return none;
+        p.comeback.points = pts[0..n];
+        p.comeback.base = if (all) base[0..n] else &.{};
+        if (p.comeback.tip) |t| if (t >= n) {
+            p.comeback.tip = null;
+        };
+        var items: [2]segmented.Item = undefined;
+        for (&items, W.comeback_mins, 0..) |*x, l, i| x.* = .{ .label = l, .selected = i == p.at, .on = h.on(p, .{ .at = @as(u8, @intCast(i)) }) };
+        const key: N = if (p.comeback.base.len > 0) h.span(.{ .class = "lg" }, .{W.all_lanes}) else .none;
+        return card.view(h, .{}, &.{
+            card.head(h, W.comeback, null, &.{ key, segmented.view(h, .{ .s = .s, .label = W.comeback_at }, &items) }),
+            p.comeback.view(h),
+        });
+    }
 
     fn pickupCard(p: *P, h: *H) N {
         const k = p.data.pickup orelse return card.view(h, .{}, &.{ card.head(h, W.pickup, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
@@ -1115,89 +1275,6 @@ pub const More = struct {
     }
 };
 
-/// The charts under the trends (ui-champcharts.wasm, loaded by ui-champion.wasm). From
-/// every rank: a rank pick changes nothing here
-pub const Charts = struct {
-    data: *const ChartsData,
-    /// "../" from the page to the site root
-    root: []const u8,
-    /// The data file and its stamp, for ui.wasm
-    src: []const u8 = "",
-    stamp: u32 = 0,
-    /// ui-champcharts.js and .wasm, for ui-champion.wasm to load
-    js: ?[]const u8 = null,
-    wasm: ?[]const u8 = null,
-    files: Files(ChartsData, NoRank) = .{},
-    want_role: ?role.Role = null,
-    /// The URL's, given back to it: files.want stays at Platinum+
-    rank: Rank = .plat,
-    /// Data.roles' index
-    cur: u8 = 0,
-    lane: lane.Lane = .{ .a = "", .b = W.lane_them, .metrics = &.{}, .select = false },
-    /// lane's, pointed at the shown role's curves on each view
-    lane_metrics: [3]lane.Metric = undefined,
-
-    const P = @This();
-
-    pub const Msg = union(enum) { none };
-
-    pub const Url = struct {
-        role: ?role.Role = null,
-        region: Region = .euw,
-        period: Period = .days30,
-        rank: Rank = .plat,
-    };
-
-    fn r(p: *const P) *const ChartsRole {
-        return &p.data.roles[p.cur];
-    }
-
-    pub fn toUrl(p: *const P) Url {
-        const w = p.files.want;
-        return .{ .role = p.want_role, .region = w.region(), .period = w.period(), .rank = p.rank };
-    }
-
-    pub fn fromUrl(p: *P, u: Url) void {
-        p.want_role = u.role;
-        p.rank = u.rank;
-        p.files.want = .{ .view = Pick.of(u).view };
-        p.cur = roleIndex(p.data.roles, u.role);
-    }
-
-    /// The loader's, once what files.want needs is in
-    pub fn show(p: *P, _: std.mem.Allocator) void {
-        const u = p.toUrl();
-        p.files.shown = p.files.want;
-        p.data = p.files.base[p.files.shown.view].?;
-        p.fromUrl(u);
-    }
-
-    pub fn update(_: *P, _: Msg, _: *tree.Event) void {}
-
-    pub fn view(p: *P, h: *H) N {
-        return h.div(.{
-            .class = "part",
-            .data_island = "champcharts",
-            .data_src = if (p.src.len > 0) p.src else null,
-            .data_stamp = p.stamp,
-            .data_root = p.root,
-            .data_js = p.js,
-            .data_wasm = p.wasm,
-            .data_busy = p.files.busy(),
-        }, .{h.div(.{ .class = "row2" }, .{p.laneCard(h)})});
-    }
-
-    fn laneCard(p: *P, h: *H) N {
-        const c = p.r().lane orelse return card.view(h, .{}, &.{ card.head(h, W.lane_head, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
-        for (&p.lane_metrics, c.metrics, W.lane_metrics) |*m, x, l| m.* = .{ .label = l, .fit = lane_fit, .s = .{ .line = x.line, .band = x.band } };
-        p.lane.a = p.data.name;
-        p.lane.metrics = &p.lane_metrics;
-        p.lane.games = c.games;
-        const tip = toggletip.view(h, "cp-lane", .{W.lane_term}, W.lane_head, W.lane_note.with(h, .{ .c = p.data.name }));
-        return card.view(h, .{}, &.{ card.head(h, W.lane_head, null, &.{ h.span(.{ .class = "note" }, .{&tip}), p.lane.switcher(h) }), p.lane.view(h) });
-    }
-};
-
 pub const css =
     \\@layer components {
     \\  .c-cpage, .c-cpage > .part { display: flex; flex-direction: column; gap: var(--sp-4); }
@@ -1222,6 +1299,7 @@ pub const css =
     \\  .c-cpage .from { margin: 0; padding: var(--sp-3) var(--card-px) 0; font-size: var(--fs-s); color: var(--muted); }
     \\  .c-cpage .none { margin: var(--sp-3) 0; color: var(--muted); }
     \\  .c-cpage .note { margin-left: auto; font-size: var(--fs-s); color: var(--muted); }
+    \\  .c-cpage .c-head .lg { margin-left: auto; font-size: var(--fs-s); color: var(--muted); }
     \\  .c-cpage .more { margin-left: auto; font-size: var(--fs-s); }
     \\  .c-cpage .plot { padding: var(--sp-1) 0 var(--sp-3); }
     \\  .c-cpage .row3, .c-cpage .row2 { display: grid; gap: var(--sp-4); grid-template-columns: minmax(0, 1fr); }

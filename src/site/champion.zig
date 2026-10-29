@@ -226,6 +226,7 @@ fn roleData(site: *const Site, ch: Champ, r: Role) !cp.Role {
         .patch_move = move,
         .lean = lean,
         .lane = try laneOf(site, ch, r),
+        .comeback = try comebackOf(site, ch, r),
         .build = if (builds_page.forChampion(site, site.view, ch, r)) |b| try buildblock.data(a, b.f, b.b, ch.name) else null,
         .rels = rels.items,
         .by_patch = by_patch,
@@ -290,8 +291,7 @@ fn laneOf(site: *const Site, ch: Champ, r: Role) !?cp.LaneCurves {
     const a = site.arena;
     const c = if (site.curves) |*c| c else return null;
     const base = c.baseline(r, .all) orelse return null;
-    var pairs: std.ArrayList(curvesfile.View) = .empty;
-    for (site.champs) |o| if (o.id != ch.id) if (c.get(r, .all, ch.id, o.id)) |v| try pairs.append(a, v);
+    const pairs = try lanePairs(site, c, ch, r);
     var games: std.ArrayList(u32) = .empty;
     for (0..base.minutes()) |i| {
         var n: u32 = 0;
@@ -323,6 +323,34 @@ fn laneOf(site: *const Site, ch: Champ, r: Role) !?cp.LaneCurves {
         o.* = .{ .line = line, .band = band };
     }
     return out;
+}
+
+/// ch's lane opponents in r with curves, from ch's side
+fn lanePairs(site: *const Site, c: *const curvesfile.Curves, ch: Champ, r: Role) !std.ArrayList(curvesfile.View) {
+    var pairs: std.ArrayList(curvesfile.View) = .empty;
+    for (site.champs) |o| if (o.id != ch.id) if (c.get(r, .all, ch.id, o.id)) |v| try pairs.append(site.arena, v);
+    return pairs;
+}
+
+/// ch's lanes in r by its gold lead at 10 and 15 minutes, summed over its pairs as
+/// laneOf, beside every lane in the role; null under cp.min_games lanes at 10
+fn comebackOf(site: *const Site, ch: Champ, r: Role) !?cp.Comeback {
+    const c = if (site.curves) |*c| c else return null;
+    const base = c.baseline(r, .all) orelse return null;
+    const pairs = try lanePairs(site, c, ch, r);
+    var out: cp.Comeback = .{ .at = @splat(@splat(.{ .games = 0, .wins = 0 })), .all = undefined };
+    for (&out.at, &out.all, std.enums.values(curvesfile.Comeback)) |*row, *all, at| for (row, all, 0..) |*o, *x, b| {
+        for (pairs.items) |v| {
+            const k = v.comeback(at, b);
+            o.games += k.games;
+            o.wins += k.wins;
+        }
+        const k = base.comeback(at, b);
+        x.* = .{ .games = k.games, .wins = k.wins };
+    };
+    var lanes: u32 = 0;
+    for (out.at[0]) |x| lanes += x.games;
+    return if (lanes < cp.min_games) null else out;
 }
 
 /// Minutes drawn while this many lanes are still going, as a matchup page's

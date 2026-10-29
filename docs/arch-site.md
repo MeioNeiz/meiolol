@@ -26,11 +26,12 @@ to the bare URL. ui.champpage's four islands (Top, Build, More, Charts, each its
 own ui-*.wasm) with a toolbar for region, period and rank, kept in the fragment
 (region=, period=, rank=). Each view's data files sit under its dir
 (data/champion/<slug>{,-build,-more,-charts}.bin); a rank pick above Platinum+ fetches
-<slug>{,-build,-more}-rank{,-patch,-all,-all-patch}.bin (Charts are from every rank: no
-rank files) (champrank.zig, from
+<slug>{,-build,-more}-rank{,-patch,-all,-all-patch}.bin (champrank.zig, from
 filters.zig's tally of every view's games by region, rank, patch, role and opponent).
-A ban counts under its game's rank, the median ladder tier of its players: Riot's ban
-order doesn't say reliably which player banned. Cards that stay Platinum+ under a rank
+Charts (lane curve, comeback odds, Pick-up, Also play) has no rank files: its lane cards
+are from every rank, the others stay Platinum+. A ban counts under its game's rank, the
+median ladder tier of its players: Riot's ban order doesn't say reliably which player
+banned. Cards that stay Platinum+ under a rank
 pick say so. Other views link in with their view in the query (html.View.query). The
 wasms that opt in (`pub const url_map`, dom.zig UrlMap) keep one virtual fragment and
 spread it over the address: role as the path's last segment, region and period in the
