@@ -258,22 +258,29 @@ fn select(a: Allocator, c: Ctx, s: *const state.Select) !ui.champselect.Screen {
         .ban_options = ban_options,
         .banning = b.turn == .ban,
         .draft = if (c.private) if (b.draft) |d| @floatCast(100 * d.win) else null else null,
-        .comp = if (s.comp) |x| try compView(a, c, x) else null,
     };
 }
 
-/// Words for everyone; the share, the mix's record, lean numbers and lane gold for testers
-fn compView(a: Allocator, c: Ctx, x: *const comp.Comp) !ui.compview.Comp {
+/// Words for everyone; the share, the mix's record, lean numbers and lane gold for
+/// testers. Not on the page yet: ui-app.wasm is at its budget, CompView waits for an
+/// island of its own (docs/plan/app.md APP6)
+pub fn compView(a: Allocator, c: Ctx, x: *const comp.Comp) !ui.compview.Comp {
     var teams: [2]ui.compview.Team = undefined;
     for (&teams, x.teams) |*out, t| {
-        const timing = try a.alloc(ui.compview.Timing, t.timing.len);
-        for (timing, t.timing) |*y, tm| y.* = .{
-            .champ = (try c.champ(a, tm.champion)).?,
-            .late = tm.lean == .late,
-            .gold = if (c.private) @intFromFloat(tm.gold) else null,
-            .win = if (c.private) @floatCast(tm.win) else null,
-        };
-        out.* = .{ .timing = timing };
+        // champ-facts.tsv and the stats file ship apart: a champion only the facts know
+        // gets no row
+        var timing: std.ArrayList(ui.compview.Timing) = .empty;
+        for (t.timing) |tm| {
+            const champ = (try c.champ(a, tm.champion)) orelse continue;
+            if (c.stats.?.index(tm.champion) == null) continue;
+            try timing.append(a, .{
+                .champ = champ,
+                .late = tm.lean == .late,
+                .gold = if (c.private) @intFromFloat(tm.gold) else null,
+                .win = if (c.private) @floatCast(tm.win) else null,
+            });
+        }
+        out.* = .{ .timing = timing.items };
         const d = t.damage orelse continue;
         out.damage = .{
             .magic = @floatCast(d.magic),
@@ -842,7 +849,14 @@ test "comp view: once all ten are locked, words for everyone and numbers for tes
     rows[2] = .{ .role = .middle, .ours = ahri, .theirs = syndra, .me = true, .facts = .{ .games = 900, .gold = .{ .mean = -420, .se = 100 }, .level6 = 40, .first_item = null } };
     const c: comp.Comp = .{
         .teams = .{
-            .{ .damage = .{ .magic = 0.81, .mix = .magic, .teams = .{ .games = 6_000, .wins = 2_850 }, .wins_less = true }, .timing = &.{.{ .champion = ahri, .role = .middle, .lean = .late, .gold = -394, .win = 3.1 }} },
+            .{
+                .damage = .{ .magic = 0.81, .mix = .magic, .teams = .{ .games = 6_000, .wins = 2_850 }, .wins_less = true },
+                .timing = &.{
+                    .{ .champion = ahri, .role = .middle, .lean = .late, .gold = -394, .win = 3.1 },
+                    // Newer than the stats file: no row
+                    .{ .champion = 999_999, .role = .top, .lean = .early, .gold = 300, .win = -2 },
+                },
+            },
             .{ .damage = null, .timing = &.{} },
         },
         .lanes = rows,
@@ -850,9 +864,10 @@ test "comp view: once all ten are locked, words for everyone and numbers for tes
     };
     sel.comp = &c;
 
-    const priv = (try data(a, .{ .stats = &f.stats, .icons = null, .private = true }, .{ .select = &sel }, .none)).screen.select.comp.?;
+    const priv = try compView(a, .{ .stats = &f.stats, .icons = null, .private = true }, sel.comp.?);
     try testing.expectApproxEqAbs(@as(f32, 47.5), priv.us.damage.?.rate.?, 0.01);
     try testing.expectEqual(-394, priv.us.timing[0].gold.?);
+    try testing.expectEqual(1, priv.us.timing.len);
     const mid = priv.lanes[2];
     try testing.expectEqualStrings("behind in lane, level 6 later", mid.us.?.line);
     try testing.expectEqualStrings("ahead in lane, level 6 sooner", mid.them.?.line);
@@ -860,12 +875,16 @@ test "comp view: once all ten are locked, words for everyone and numbers for tes
     try testing.expectEqual(.bad, mid.lean);
     try testing.expectEqual(null, priv.lanes[0].us);
 
-    const d = try data(a, .{ .stats = &f.stats, .icons = null, .private = false }, .{ .select = &sel }, .none);
-    const public = d.screen.select.comp.?;
+    const public = try compView(a, .{ .stats = &f.stats, .icons = null, .private = false }, sel.comp.?);
     try testing.expect(!public.us.damage.?.share and public.us.damage.?.rate == null and public.us.damage.?.wins_less);
     try testing.expectEqual(null, public.us.timing[0].win);
     try testing.expectEqualStrings("", public.lanes[2].gap);
-    const html = try render(a, d, null);
+    var t: ui.tree.Tree = .{};
+    var h: ui.H = .init(a, &t);
+    const n = ui.compview.view(&h, public);
+    var out: std.Io.Writer.Allocating = .init(a);
+    try ui.html.write(&t, n, &out.writer);
+    const html = out.written();
     try testing.expect(std.mem.find(u8, html, "Mostly magic damage") != null);
     try testing.expect(std.mem.find(u8, html, "Ahri leans late") != null);
     try testing.expect(std.mem.find(u8, html, "%") == null);

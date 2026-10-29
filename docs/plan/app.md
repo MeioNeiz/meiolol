@@ -112,18 +112,20 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
   per all games). Left: ban counts in the desktop stats file, my lane first while my
   opponent is unknown; private adds pools where names are visible
 - APP6 After picks: comp view, first pass done (both editions; comp.zig,
-  desktop/comp.zig, the shell's ui/compview.zig): once all ten are locked, above the
-  lane panel (in the shell under the board), each team's damage split bar and mix (and
-  "teams this one-sided win less often" when Learn's tally is 2 SE under even), its
-  champions with a clear early or late lean (`meiolol lean`), and five mirrored lane
-  rows (ahead, even or behind at 14 min, 2 SE; level 6 sooner or later); testers see the
-  magic share, the mix's win rate, lean numbers and lane gold. Data: champ-facts.tsv
-  (core/champfacts.zig), written by the site's shared view, listed in the desktop
-  manifest, fetched by update.zig (older exes skip it), not a stats file bump. Left:
-  comp leans (Malphite into AP teams) after their held-out look (data-and-model.md step
-  1); "who carries" (no shipped carry measure: gold or damage share per champion would
-  need a new tally); the loading screen's team pills from the same comp; a release so
-  testers get it
+  desktop/comp.zig): once all ten are locked, above the lane panel, each team's damage
+  split bar and mix (and "teams this one-sided win less often" when Learn's tally is 2
+  SE under even), its champions with a clear early or late lean (`meiolol lean`), and
+  five mirrored lane rows (ahead, even or behind at 14 min, 2 SE; level 6 sooner or
+  later); testers see the magic share, the mix's win rate, lean numbers and lane gold.
+  Data: champ-facts.tsv (core/champfacts.zig), written by the site's shared view, listed
+  in the desktop manifest, fetched by update.zig (older exes skip it), not a stats file
+  bump. Left: comp leans (Malphite into AP teams) after their held-out look
+  (data-and-model.md step 1); "who carries" (no shipped carry measure: gold or damage
+  share per champion would need a new tally); the loading screen's team pills from the
+  same comp; a release so testers get it; the shell: ui/compview.zig and
+  screens.compView are built and checked against the mock (under the board), and wait
+  for an island of their own (ui-appcomp.wasm, loaded once all ten are locked:
+  ui-app.wasm is at its 40 KB budget)
 - APP7 Private: scouting where names are visible (needs APP1's queue facts and AC6 for
   "me"), percentages, experimental models
 - APP10 Loading screen cards, first pass done: in GameStart the window shows
