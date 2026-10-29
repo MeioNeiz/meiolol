@@ -111,7 +111,7 @@ pub const css =
     \\  .c-choice[type="button"]:hover { border-color: var(--focus); }
     \\  .c-choice[type="button"]:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
     \\  .c-choice .nm { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--w-m); }
-    \\  .c-choice b.nm { font-size: var(--fs-l); font-weight: var(--w-b); }
+    \\  .c-choice b.nm { font-size: var(--fs-l); font-weight: var(--w-b); white-space: normal; text-wrap: balance; }
     \\  .c-choice .nm[data-side="us"] { color: var(--us); }
     \\  .c-choice .nm[data-side="them"] { color: var(--them); }
     \\  .c-choice .sub { font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -174,6 +174,11 @@ pub fn gallery(g: *Gallery) void {
     g.addFill("who won: sides", view(h, .{ .label = plain("Who won") }, &.{
         .{ .label = plain("Blue"), .side = .us, .icons = six[0..5] },
         .{ .label = plain("Red"), .side = .them, .icons = six[1..6] },
+    }));
+    g.addFill("three, text: labels wrap, never cut", view(h, .{}, &.{
+        .{ .label = plain("Nearly all") },
+        .{ .label = plain("About half") },
+        .{ .label = plain("Almost none") },
     }));
     g.addFill("four, text", view(h, .{}, &.{
         .{ .label = plain("Under 45%") },
