@@ -319,8 +319,7 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\<p>No analytics or advertising trackers, and no cookies unless you log in (see
         \\<a href="#accounts">Accounts</a>). Our web server logs each request to meio.lol
         \\without your IP address: time, page, status, the page that linked to it and browser
-        \\type, for security, fixing problems and counting visits. Requests to our old
-        \\addresses, plain-HTTP requests that are redirected and requests that fail are
+        \\type, for security, fixing problems and counting visits. Requests that fail are
         \\logged with the IP address. Logs are deleted after 14 days; hourly totals of visits
         \\by page and browser type, which identify no one, are kept 90 days. The Daily Draft
         \\keeps your guesses, streak and archive in your own browser (local storage), and
@@ -409,12 +408,14 @@ pub fn privacy(w: *Writer, info: Info) Writer.Error!void {
         \\<p>Deletion requests passed on by Riot Games are honoured, and you can ask us
         \\directly to delete any data about your account (below).</p>
         \\<h2>Where it is kept, and who else handles it</h2>
-        \\<p>Our servers are Oracle Cloud machines in London; copies of the backups and the
-        \\archive are on our own computers in the United Kingdom, and every deletion reaches
-        \\them too. We
-        \\never sell or share data, and there is no advertising. Mail to {contact} passes
-        \\through Cloudflare's email routing, which also keeps a copy, and reaches a Gmail
-        \\inbox.</p>
+        \\<p>The website, its database and its backups run on a server in Essex, England,
+        \\lent to us and run by us alone, with its storage on a file server beside it.
+        \\Further copies of the backups and the archive are on our own computers in the
+        \\United Kingdom, and every deletion reaches them too. You reach the site through
+        \\Cloudflare, which carries the traffic and caches public pages, so it sees your IP
+        \\address; Your games answers are marked never to be stored. We never sell or share
+        \\data, and there is no advertising. Mail to {contact} passes through Cloudflare's
+        \\email routing, which also keeps a copy, and reaches a Gmail inbox.</p>
         \\<h2>Your rights</h2>
         \\<p>You can object to our use of your data and have it erased ("Remove a Riot ID"
         \\above does both for your games), and ask for a copy of what we hold about you, to

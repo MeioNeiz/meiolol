@@ -26,8 +26,8 @@ published: no personal email on the site).
   apply to a site likely to be used by under-18s. This site has no public accounts, ads or
   tracking, which is most of what the code asks for (logins are for invited testers and
   admins only). Not researched beyond that
-- **EU transfers.** Data is stored in the UK (Oracle Cloud London; backup mirrors and
-  the archive on our own machines in the UK). The EU
+- **EU transfers.** Data is stored in the UK (C01 in Essex; backup mirrors and the
+  archive on our own machines in the UK); Cloudflare (US) carries the site's traffic. The EU
   treats the UK as adequate, so no extra safeguards are needed; check that this still
   holds when publishing
 
@@ -85,9 +85,11 @@ statistics sites, we collect only what the game exposes, we publish no names or 
 identifiers outside a looked-up player's own games, we never contact players, build
 advertising profiles or sell data, and anyone can object.
 
-**Where.** On Oracle Cloud servers in London. Copies of the backups and the archive are
+**Where.** On a server in Essex, England, lent to us and run by us alone, with its
+storage on a file server beside it. Further copies of the backups and the archive are
 kept on our own machines in the United Kingdom, and erasures are applied to them at the
-same time as to the live data. Mail to privacy@meio.lol passes through Cloudflare's
+same time as to the live data. Visitors reach the site through Cloudflare, which
+carries the traffic and caches public pages, so it sees IP addresses. Mail to privacy@meio.lol passes through Cloudflare's
 email routing, which keeps a copy, and reaches a Gmail inbox.
 
 **How long.**
@@ -168,8 +170,8 @@ days unused. The server logs them like any page visit (below).
 ## Server logs
 
 Our web server records each request to meio.lol without the IP address: time, page,
-status, referring page and browser type. Requests to our old addresses, plain-HTTP
-redirects and failed requests are recorded with the IP address. We use these only for
+status, referring page and browser type. Failed requests are recorded with the IP
+address. We use these only for
 security, fixing problems and counting visits, and delete them after 14 days; hourly
 totals of visits by page and browser type, which identify no one, are kept 90 days.
 

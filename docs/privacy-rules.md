@@ -42,7 +42,7 @@ keep** (our choice, cheap and harmless, or it deletes data: only Jacob changes i
 | Your games example player anonymised | src/api/example.zig, `meiolol your-example` | self, keep: a reviewer demo, a real name adds nothing |
 | Raw archive drops Riot IDs, hashes PUUIDs and match ids | src/lab/archive.zig, anonymise.rewriteMatch | self, keep: rewrites stored data; changing it is a data job (Jacob) |
 | Analysis snapshots (Mac, gpu-box) salted-hashed | src/lab/anonymise.zig, deploy/snapshot-gpu.sh | self, keep: lab copies, no page; hashing costs nothing |
-| nginx keeps no access log for /api/, the service never logs Riot IDs, no record of who looked up whom | jomify nginx, api service, docs/your-games.md | self, keep: costs nothing, and logs would otherwise need their own retention and erasure |
+| nginx keeps no access log for /api/, the service never logs Riot IDs, no record of who looked up whom | C01's nginx, api service, docs/your-games.md | self, keep: costs nothing, and logs would otherwise need their own retention and erasure |
 | Admin log redaction | src/admin.zig redact | not a player privacy rule (keeps secrets and commit subjects off the admin page) |
 
 ## For Jacob (not changed: data, retention, application text or servers)

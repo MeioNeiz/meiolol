@@ -329,6 +329,6 @@ pickup/mid.html 0e2d5f4f392f2b6d
 pickup/support.html e18a805e4bb9e68a
 pickup/top.html 7217d479c3da7a68
 pool.html 64182d3a49f30db4
-privacy.html 05b2def58d0d3d50
+privacy.html 8dcbbd7c1badca93
 robots.txt 331ea9090db0c9f6
 terms.html 03b12c14239ca85f
