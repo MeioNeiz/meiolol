@@ -59,3 +59,23 @@ rebuilding the backend on each edit (`zig build backend --watch`; log
 it runs. A build that fails keeps the last good binary, so one session's half-done edit
 holds the others' changes back until it compiles. Live checks (meio.lol) are for what
 only the box shows: real data volume, render swap, nginx.
+
+## ui.wasm sizes
+
+Each page family's ui.wasm has a gzip budget (40 KB, the login families 64 KB; stack.md),
+measured as served: the site writer's flate (src/store/raw.zig), the same on any host.
+`zig build ci` and `zig build ui-sizes` print each family against its budget and the
+last pushed main's size, marked at 90%. On growth over 200 B or a failure they list what
+grew: functions in raw bytes with their files, our callers of grown std code, and what
+grew in most families at once (a shared component). tools/wasmsize.zig; baselines in
+.git/meiolol-wasm-sizes/<sha>, recorded by any clean tree's full run (pre-push ci's).
+`zig build ui-sizes -- --base REV` compares with another recorded commit. Symbols come
+from a second build of each family with names (strip = false), built beside it; on
+that file `wasmsize --list` prints every function, `--numbers` std's number formatting
+and which of our functions keep each piece.
+
+Number formatting in wasm: tools/fmtlint.zig (in ci) flags format strings with numeric
+placeholders in src/site/ui and src/tpl. Each call site is code in every family it
+reaches, and each int type std prints adds ~170 B gz. Numbers go through phrase.num or
+fmt.write; old ones are listed in tools/fmtlint-allow.txt (the follow-up list), a
+line that never reaches wasm says `// fmt-ok: <why>`.
