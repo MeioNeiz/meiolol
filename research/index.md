@@ -13,8 +13,8 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | [policy](areas/policy.md) | Riot developer policy, production key, player privacy and GDPR | 4 | 172 | 620 |
 | [data](areas/data.md) | what the Riot API serves and how to crawl it | 4 | 179 | 457 |
 | [stats](areas/stats.md) | estimation and recommendation methods | 26 | 340 | 2443 |
-| [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 12 | 365 | 1842 |
-| [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 8 | 161 | 620 |
+| [ui](areas/ui.md) | the website and app UI: design, charts, templating, wasm, desktop GUI | 13 | 410 | 2116 |
+| [ops](areas/ops.md) | hosting, storage, rendering and SEO, toolchain | 8 | 179 | 704 |
 | [code](areas/code.md) | how we write code: Zig practice, idiom and style from docs and respected projects | 9 | 174 | 1966 |
 
 ## Questions
@@ -94,6 +94,7 @@ Each area page lists its questions, sources and every finding grouped by tag.
 | answered | now | [How do design systems keep a UI terse, uncluttered, clear and consistently coloured as many contributors add to it, and which of those rules can be checked automatically?](questions/ui-guardrails.md): How do design systems keep a UI terse, uncluttered, clear and consistently coloured as many contributors add to it, and which of those rules can be checked automatically? | 10 strong, 1 moderate, 1 contested | 37 | 26 (growing) | 10 |
 | answered | now | [What tooling lets meiolol's agents write and check better UI without a Node build step: layout and visual checks, component gallery, design token lints, accessibility?](questions/ui-tooling.md): What tooling lets meiolol's agents write and check better UI without a Node build step: layout and visual checks, component gallery, design token lints, accessibility? | 7 strong, 3 moderate | 21 | 18 (saturated) | 4 |
 | answered | now | [Can meiolol's browser code be all Zig (wasm) plus HTML and CSS, with no hand-written JS, and what would remain, cost and break?](questions/zig-only-frontend.md): Can meiolol's browser code be all Zig (wasm) plus HTML and CSS, with no hand-written JS, and what would remain, cost and break? | 15 strong, 5 moderate | 36 | 38 (growing) | 16 |
+| answered | soon | [How do mature frameworks send each page only the CSS it uses, without extra work for developers, and what does it cost in caching and correctness (client-rendered islands)?](questions/css-per-page.md): How do mature frameworks send each page only the CSS it uses, without extra work for developers, and what does it cost in caching and correctness (client-rendered islands)? | 18 strong, 3 moderate, 1 contested | 45 | 25 (growing) | 14 |
 | answered | soon | [Which GUI library fits a small Windows desktop window built in Zig 0.16 from macOS?](questions/zig-gui-options.md): Which GUI library fits a small Windows desktop window built in Zig 0.16 from macOS? | 5 strong, 3 moderate | 14 | 10 (saturated) | 4 |
 | answered | soon | [Could a Zig library or framework replace meiolol's hand-written w.print HTML and vanilla JS, and what would it give us?](questions/zig-web-ui.md): Could a Zig library or framework replace meiolol's hand-written w.print HTML and vanilla JS, and what would it give us? | 2 strong, 8 moderate, 3 weak | 10 | 4 (growing) |  |
 | decided | now | [How should meiolol's own Zig HTML template and component layer look?](questions/zig-html-templates.md): Syntax, escaping, composition and checks for our own small Zig HTML layer, shared by the static site and wasm | 8 strong, 8 moderate | 11 | 4 (slowing) | 3 |
@@ -128,6 +129,6 @@ Each area page lists its questions, sources and every finding grouped by tag.
 
 ## Health
 
-- 72 questions, 1130 sources, 8658 findings
-- Open leads: 284 (`josearch leads`)
+- 73 questions, 1175 sources, 8953 findings
+- Open leads: 298 (`josearch leads`)
 - Lint: 0 errors, 5 warnings (`josearch lint`)
