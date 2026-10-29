@@ -27,26 +27,72 @@ pub fn Phrase(comptime src: []const u8) type {
                     } else @compileError("phrase \"" ++ src ++ "\" has no hole {" ++ f ++ "}");
                 }
             }
-            var out: std.Io.Writer.Allocating = .init(h.mem);
-            inline for (segs) |s| {
-                if (!s.hole) {
-                    out.writer.writeAll(s.text) catch {
-                        h.oom = true;
-                    };
-                } else {
-                    if (!@hasField(A, s.text)) @compileError("phrase \"" ++ src ++ "\": no value for {" ++ s.text ++ "}");
-                    const v = @field(args, s.text);
-                    if (comptime !fmt.accepts(s.kind, @TypeOf(v))) {
-                        @compileError("phrase {" ++ s.text ++ ":" ++ @tagName(s.kind) ++ "} can't take " ++ @typeName(@TypeOf(v)));
-                    }
-                    fmt.write(&out.writer, s.kind, v) catch {
-                        h.oom = true;
-                    };
+            var holes: [lits.len - 1]Hole = undefined;
+            comptime var i = 0;
+            inline for (segs) |s| if (s.hole) {
+                if (!@hasField(A, s.text)) @compileError("phrase \"" ++ src ++ "\": no value for {" ++ s.text ++ "}");
+                const v = @field(args, s.text);
+                if (comptime !fmt.accepts(s.kind, @TypeOf(v))) {
+                    @compileError("phrase {" ++ s.text ++ ":" ++ @tagName(s.kind) ++ "} can't take " ++ @typeName(@TypeOf(v)));
                 }
-            }
-            return .{ .s = out.written() };
+                holes[i] = hole(s.kind, v);
+                i += 1;
+            };
+            return render(h, &lits, &holes);
         }
+
+        /// The literal text around each hole, empty where two touch
+        const lits = blk: {
+            var out: []const []const u8 = &.{""};
+            for (segs) |s| {
+                if (s.hole) out = out ++ [_][]const u8{""} else out = out[0 .. out.len - 1] ++ [_][]const u8{s.text};
+            }
+            break :blk out[0..out.len].*;
+        };
     };
+}
+
+/// A hole's value as one of three run-time types, so every phrase shares one writer per
+/// kind and one loop (ui.wasm size: each phrase's own copy cost several KB)
+const Value = union { f: f64, i: i64, s: []const u8 };
+const Hole = struct { write: *const fn (*std.Io.Writer, Value) std.Io.Writer.Error!void, v: Value };
+
+fn hole(comptime k: fmt.Kind, v: anytype) Hole {
+    const T = switch (@typeInfo(@TypeOf(v))) {
+        .float, .comptime_float => f64,
+        .int, .comptime_int => i64,
+        else => []const u8,
+    };
+    const w = struct {
+        fn write(out: *std.Io.Writer, x: Value) std.Io.Writer.Error!void {
+            return fmt.write(out, k, switch (T) {
+                f64 => x.f,
+                i64 => x.i,
+                else => x.s,
+            });
+        }
+    }.write;
+    return .{ .write = w, .v = switch (T) {
+        f64 => .{ .f = v },
+        i64 => .{ .i = @intCast(v) },
+        else => .{ .s = v },
+    } };
+}
+
+fn render(h: *tree.H, lits: []const []const u8, holes: []const Hole) tree.Text {
+    var out: std.Io.Writer.Allocating = .init(h.mem);
+    for (holes, lits[0..holes.len]) |x, l| {
+        out.writer.writeAll(l) catch {
+            h.oom = true;
+        };
+        x.write(&out.writer, x.v) catch {
+            h.oom = true;
+        };
+    }
+    out.writer.writeAll(lits[holes.len]) catch {
+        h.oom = true;
+    };
+    return .{ .s = out.written() };
 }
 
 const Seg = struct { text: []const u8, hole: bool, kind: fmt.Kind = .text };
@@ -74,11 +120,7 @@ fn parse(comptime src: []const u8) []const Seg {
 
 /// A bare number as text, through the one formatter
 pub fn num(h: *tree.H, comptime k: fmt.Kind, v: anytype) tree.Text {
-    var out: std.Io.Writer.Allocating = .init(h.mem);
-    fmt.write(&out.writer, k, v) catch {
-        h.oom = true;
-    };
-    return .{ .s = out.written() };
+    return render(h, &.{ "", "" }, &.{hole(k, v)});
 }
 
 /// A fixed catalogue word or label: `pub const title = plain("Champions");`

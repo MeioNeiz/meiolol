@@ -31,7 +31,10 @@ pub fn write(w: *W, comptime k: Kind, v: anytype) W.Error!void {
             try fixed(w, v, 1, false);
             try w.writeByte('%');
         },
-        .pct => try w.print("{d}%", .{v}),
+        .pct => {
+            try int(w, @intCast(v));
+            try w.writeByte('%');
+        },
         .count => try count(w, @intCast(v)),
         .points => {
             try sign(w, v);
@@ -42,12 +45,17 @@ pub fn write(w: *W, comptime k: Kind, v: anytype) W.Error!void {
             try count(w, @abs(v));
         },
         // Unsigned seconds: std puts "+" on a signed int given a width ("11:+54")
-        .time => try w.print("{d}:{d:0>2}", .{ @divTrunc(v, 60), @as(u64, @intCast(@mod(v, 60))) }),
-        .int => try w.print("{d}", .{v}),
+        .time => {
+            const s = @mod(v, 60);
+            try int(w, @intCast(@divTrunc(v, 60)));
+            try w.writeAll(if (s < 10) ":0" else ":");
+            try int(w, @intCast(s));
+        },
+        .int => try int(w, @intCast(v)),
         .dec => try fixed(w, @abs(v), 1, false),
         .kilo => {
             const n: u64 = @intCast(v);
-            if (n < 1000) return w.print("{d}", .{n});
+            if (n < 1000) return int(w, @intCast(n));
             const th = @as(f64, @floatFromInt(n)) / 1000;
             if (n < 9950) try fixed(w, th, 1, true) else try fixed(w, th, 0, true);
             try w.writeByte('k');
@@ -67,7 +75,7 @@ pub fn fixed(w: *W, x: anytype, comptime places: u4, trim: bool) W.Error!void {
     const n: u64 = @intFromFloat(r);
     const unit: u64 = @intFromFloat(scale);
     if (v < 0 and n != 0) try w.writeByte('-');
-    try w.print("{d}", .{n / unit});
+    try int(w, @intCast(n / unit));
     var frac = n % unit;
     if (places == 0 or (trim and frac == 0)) return;
     var digits: [9]u8 = undefined;
@@ -85,13 +93,20 @@ pub fn fixed(w: *W, x: anytype, comptime places: u4, trim: bool) W.Error!void {
     try w.writeAll(digits[0..len]);
 }
 
+/// Digits without std.fmt's print: each print format is its own copy in ui.wasm
+fn int(w: *W, v: i64) W.Error!void {
+    return w.printIntAny(v, 10, .lower, .{});
+}
+
 fn sign(w: *W, v: anytype) W.Error!void {
     if (v > 0) try w.writeByte('+') else if (v < 0) try w.writeAll("\u{2212}");
 }
 
 fn count(w: *W, v: u64) W.Error!void {
     var buf: [24]u8 = undefined;
-    const s = std.fmt.bufPrint(&buf, "{d}", .{v}) catch unreachable;
+    var bw: W = .fixed(&buf);
+    int(&bw, @intCast(v)) catch unreachable;
+    const s = bw.buffered();
     for (s, 0..) |c, i| {
         if (i > 0 and (s.len - i) % 3 == 0) try w.writeByte(',');
         try w.writeByte(c);
