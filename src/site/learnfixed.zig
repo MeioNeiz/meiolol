@@ -126,6 +126,21 @@ pub const splitpush: ld.Puzzle = .{
     .from = all_regions ++ ", 363,927 games",
 };
 
+pub const wincon: ld.Puzzle = .{
+    .id = "wincon",
+    .q = "Which comp idea shows up in real games?",
+    .setup = .{ .facts = &.{ .{ .v = "244", .label = "comp traits checked" }, .{ .v = "89,584", .label = "games, set aside before the check" } } },
+    .answer = .{ .pick = .{ .right = 2, .choices = &.{
+        .{ .text = "Dive or peel" },
+        .{ .text = "Front-to-back" },
+        .{ .text = "Mixed damage" },
+    } } },
+    .why = "Only damage showed: mixed damage tends to do better. No win condition or archetype did.",
+    .tip = "Mind your team's damage mix before any comp plan.",
+    .games = 89_584,
+    .from = all_regions ++ ", 89,584 games",
+};
+
 pub const luck: ld.Puzzle = .{
     .id = "luck",
     .q = "How much of that spread is skill?",
@@ -139,7 +154,7 @@ pub const luck: ld.Puzzle = .{
 
 pub const chapter1 = [_]ld.Puzzle{ know, newcomer };
 pub const chapter2 = [_]ld.Puzzle{ fed, fed_role, surrender, bounty };
-pub const chapter5 = [_]ld.Puzzle{ splitpush, luck };
+pub const chapter5 = [_]ld.Puzzle{ splitpush, wincon, luck };
 
 test "fixed puzzles: answers in range, games on every bar, no pick advice" {
     const std = @import("std");

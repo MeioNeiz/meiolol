@@ -317,7 +317,7 @@ pub const Page = struct {
     }
 
     fn iconSrc(p: *const Page, h: *H, c: ld.Champ) []const u8 {
-        return h.fmt("https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png", .{ p.d.ddragon, c.key });
+        return h.fmt(champ.icon_fmt, .{ p.d.ddragon, c.key });
     }
 
     fn icon(p: *const Page, h: *H, c: ld.Champ, px: champ.Px) N {
@@ -384,9 +384,9 @@ pub const Page = struct {
                     .champ = if (!open) .{ .name = c.name, .src = p.iconSrc(h, c) } else if (p.revealed) if (x.choices[x.right].champ) |y| .{ .name = y.name, .src = p.iconSrc(h, y) } else null else null,
                     .hidden = open,
                     .sel = open and p.revealed,
-                    .sub = if (open) .{ .s = "" } else damageWord(m[i]),
+                    .sub = if (open and !p.revealed) .{ .s = "" } else damageWord(m[i]),
                 };
-                if (open or m[i] == null) {
+                if ((open and !p.revealed) or m[i] == null) {
                     mx.unknown += 0.2;
                 } else {
                     const v: f32 = @floatFromInt(m[i].?);
@@ -705,14 +705,17 @@ test "a chapter end draft: the open seat stays hidden, then the right pick fills
     var h: H = .init(a, &t);
     var out: std.Io.Writer.Allocating = .init(a);
     try html.write(&t, shown(a, &draft_demo, 0, 0, null).?.view(&h), &out.writer);
-    const before = std.mem.count(u8, out.written(), "/Lux.png");
+    const before = std.mem.count(u8, out.written(), "/Lux.jpg");
+    const ap_before = std.mem.count(u8, out.written(), ">AP<");
     try testing.expect(std.mem.find(u8, out.written(), "Adds the magic your team lacks") == null);
     out = .init(a);
     try html.write(&t, shown(a, &draft_demo, 0, 0, 0).?.view(&h), &out.writer);
     try testing.expect(!h.oom);
     try testing.expect(std.mem.find(u8, out.written(), "Adds the magic your team lacks") != null);
     // On its card as before, now also in the open seat and the reasons list
-    try testing.expect(std.mem.count(u8, out.written(), "/Lux.png") > before);
+    try testing.expect(std.mem.count(u8, out.written(), "/Lux.jpg") > before);
+    // The filled seat gets its damage word
+    try testing.expectEqual(ap_before + 1, std.mem.count(u8, out.written(), ">AP<"));
 }
 
 test "a puzzle's link opens it" {
@@ -771,7 +774,7 @@ const draft_demo: ld.Data = .{ .ddragon = "16.21.1", .start = 0, .chapters = &.{
         .us = .{ ld.ch("Darius", "Darius"), ld.ch("LeeSin", "Lee Sin"), ld.ch("Zed", "Zed"), ld.ch("Jinx", "Jinx"), ld.ch("Thresh", "Thresh") },
         .them = .{ ld.ch("Ornn", "Ornn"), ld.ch("Elise", "Elise"), ld.ch("Ahri", "Ahri"), ld.ch("Caitlyn", "Caitlyn"), ld.ch("Nautilus", "Nautilus") },
         .bans = .{ &.{ ld.ch("Yasuo", "Yasuo"), ld.ch("Yone", "Yone") }, &.{ld.ch("Vex", "Vex")} },
-        .magic = .{ .{ 3, 8, 6, 4, null }, .{ 55, 88, 90, 2, 72 } },
+        .magic = .{ .{ 3, 8, 6, 4, 91 }, .{ 55, 88, 90, 2, 72 } },
     } },
     .answer = .{ .pick = .{ .right = 2, .choices = &.{
         .{ .text = "Pyke", .champ = ld.ch("Pyke", "Pyke"), .shown = "4% magic", .games = 5_200, .why = &.{.{ .text = "Hard into Caitlyn", .up = false }} },
