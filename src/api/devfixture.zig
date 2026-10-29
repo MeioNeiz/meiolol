@@ -50,8 +50,15 @@ pub fn seed(arena: Allocator, db: store.Db, match_json: []const u8, timeline_gz:
         s.queue = if (i % 5 == 4) 440 else 420;
         s.remake = i == 11;
         if (s.remake) s.duration_s = 200;
+        const slot: u8 = @intCast(i % 10);
+        // Beside them on their team in every third game
+        const beside: ?u8 = if (i % 3 != 0) null else if (slot % 5 == 4) slot - 1 else slot + 1;
+        // Strangers but for the two (friends.zig counts teammates by hash)
         const players = try arena.dupe(game.Summary.Player, base.players);
-        for (players) |*p| p.hash = "";
+        for (players, 0..) |*p, seat| p.hash = try arena.print("g{d}s{d}", .{ i, seat });
+        var buf: [game.hash_len]u8 = undefined;
+        players[slot].hash = try arena.dupe(u8, game.hashPuuid(&buf, fixture.puuid));
+        if (beside) |b| players[b].hash = try arena.dupe(u8, game.hashPuuid(&buf, duo.puuid));
         s.players = players;
         const id = try arena.print("EUW1_{d}", .{9000000000 + i});
         const has_timeline = i % 7 != 6 and !s.remake;
@@ -59,14 +66,11 @@ pub fn seed(arena: Allocator, db: store.Db, match_json: []const u8, timeline_gz:
         const summary: store.Blob = .{ .bytes = try store.raw.compress(arena, json) };
         const with: ?store.Blob = if (has_timeline) .{ .bytes = timeline } else null;
         try db.run("INSERT INTO matches VALUES (?, ?, ?, ?)", .{ id, now_s, summary, with });
-        const slot: u8 = @intCast(i % 10);
         try db.run("INSERT INTO player_games VALUES (?, ?, ?, ?)", .{ fixture.puuid, id, s.start_ms, slot });
         try db.run("INSERT INTO match_names VALUES (?, ?, '', 'Fixture#EUW')", .{ id, slot });
-        // Beside them on their team in every third game
-        if (i % 3 == 0) {
-            const beside: u8 = if (slot % 5 == 4) slot - 1 else slot + 1;
-            try db.run("INSERT INTO player_games VALUES (?, ?, ?, ?)", .{ duo.puuid, id, s.start_ms, beside });
-            try db.run("INSERT INTO match_names VALUES (?, ?, '', 'Duo#EUW')", .{ id, beside });
+        if (beside) |b| {
+            try db.run("INSERT INTO player_games VALUES (?, ?, ?, ?)", .{ duo.puuid, id, s.start_ms, b });
+            try db.run("INSERT INTO match_names VALUES (?, ?, '', 'Duo#EUW')", .{ id, b });
         }
     }
 }

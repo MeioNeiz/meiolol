@@ -116,7 +116,9 @@ pub fn tally(arena: Allocator, games: []const Game) !Tally {
         t.games += 1;
         try addTo(arena, &t.by_queue, s.queue, me.win);
         for (s.players, 0..) |p, i| {
-            if (i == g.slot) continue;
+            // No hash (an old or erased seat): nobody to count, and two such seats in a
+            // game would count one "player" twice
+            if (i == g.slot or p.hash.len == 0) continue;
             const gop = try t.others.getOrPut(arena, p.hash);
             if (!gop.found_existing) gop.value_ptr.* = .{};
             const o = gop.value_ptr;
@@ -334,4 +336,15 @@ test "effect: a friend without a kept Riot ID is left out" {
         try games.append(arena, g);
     }
     try testing.expectEqual(0, (try build(arena, games.items)).out.friends.len);
+}
+
+test "seats without a hash count as nobody, however many share a game" {
+    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var games: std.ArrayList(Game) = .empty;
+    for (0..4) |i| try games.append(arena, try fixture(arena, 420, @intCast(10 - i), i != 0, &.{ "", "", "dee" }, &.{}));
+    const b = try build(arena, games.items);
+    try testing.expectEqual(1, b.out.friends.len);
+    try testing.expectEqualStrings("dee#EUW", b.out.friends[0].riot_id);
 }

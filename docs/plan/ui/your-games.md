@@ -109,11 +109,18 @@ the tab's count chip ("23 games").
 
 ## Friends
 
-Today: a table whose cells are sentences ("No games apart in the queues you share",
-"+21 points (−42 to +84); 11 together, 3 apart"), and a two-line explanation under it.
+Old page (your.js, until the switch): a table whose cells are sentences.
 
-New, first screen: a summary band (with friends 15-8, 65%; alone 0-0) then
-`friend-row`s, a real table (`data-table`, sortable):
+Built (ui.yourfriends, island ui-yourfriends.wasm, /api/friends.bin): a Friends tab on
+lookups only (the example has no friends), the band and a DataTable with Friend, Together,
+Your rate (a DeltaBar dot with its range on ±50 points, row tip with the rates), Their
+rate (Fetch until their games are cached) and Usual pair; a row opens all champion and
+role pairs and Against. Polls every 15 s while older games or a fetched friend's games
+are coming. The filter row doesn't apply to it. Not yet: games together as game-rows in
+the expansion, last played as an avatar of their most played champion. The plan:
+
+A summary band (with friends 15-8, 65%; alone 0-0) then `friend-row`s, a real table
+(`data-table`, sortable):
 
 | Column | Shows |
 | --- | --- |

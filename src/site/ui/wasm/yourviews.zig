@@ -1,6 +1,7 @@
 //! ui-yourviews.wasm: the Your games page's head (ui.yourviews.YourViews), with its list
-//! from yoursrc.zig, and the loader of ui-yourtime.wasm once Over time shows. zjb's
-//! generated loader (ui-yourviews.js, `<script src data-wasm>`) calls `main`
+//! from yoursrc.zig, and the loaders of ui-yourtime.wasm and ui-yourfriends.wasm once
+//! their view shows. zjb's generated loader (ui-yourviews.js, `<script src data-wasm>`)
+//! calls `main`
 const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
@@ -11,9 +12,9 @@ const yv = ui.yourviews;
 pub const panic = zjb.panic;
 
 const gpa = std.heap.wasm_allocator;
-/// Over time is hidden by CSS until its tab is chosen, so it nears the viewport only then;
-/// Remove my data at the page's foot
-const lazy = [_][]const u8{ ui.yourtime.sel, ui.forget.sel };
+/// Over time and Friends are hidden by CSS until their tab is chosen, so each nears the
+/// viewport only then; Remove my data at the page's foot
+const lazy = [_][]const u8{ ui.yourtime.sel, ui.yourfriends.sel, ui.forget.sel };
 
 var page: yv.YourViews = undefined;
 var page0: yv.YourViews = undefined;
@@ -33,6 +34,7 @@ export fn main() void {
 
 fn swapped() void {
     page.id = src.id();
+    page.views = if (page.id.len > 0) &yv.looked_up else &yv.shipped;
     markTime();
 }
 

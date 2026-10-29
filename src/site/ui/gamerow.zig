@@ -106,7 +106,7 @@ pub fn view(h: *H, l: *const yl.List, g: yl.Game, o: Opts) N {
     return if (o.href != null) h.a(attrs, kids) else h.div(attrs, kids);
 }
 
-fn ago(h: *H, ms: i64) tree.Text {
+pub fn ago(h: *H, ms: i64) tree.Text {
     const m = @divFloor(@max(ms, 0), std.time.ms_per_min);
     if (m < 60) return W.mins.with(h, .{ .n = m });
     if (m < 48 * 60) return W.hours.with(h, .{ .n = @divFloor(m, 60) });

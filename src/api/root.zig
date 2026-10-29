@@ -11,6 +11,7 @@
 //!                                   the game page's binary data (ui.gamedata.Data)
 //!   GET  /api/friends?id=Name%23TAG who the player plays with (friends.zig), from the
 //!                                   games /api/games fetched; fetches nothing itself
+//!   GET  /api/friends.bin?id=..     the same as ui.yourfriends.Friends (ui.data)
 //!   POST /api/forget?id=Name%23TAG  objection: issue a profile icon; &check=1 checks it
 //!   GET  /api/forget?id=Name%23TAG  the objection's state
 //!   GET  /api/health                queue length
@@ -367,6 +368,12 @@ fn handle(ctx: *Context, request: *std.http.Server.Request) !void {
         const db = try cache.open(ctx.opts.db_path);
         defer db.close();
         const r = try friendsOf(arena, db, query);
+        return send(ctx, request, r);
+    }
+    if (std.mem.eql(u8, path, "/api/friends.bin") and method == .GET) {
+        const db = try cache.open(ctx.opts.db_path);
+        defer db.close();
+        const r = try friendsBin(ctx, arena, db, query);
         return send(ctx, request, r);
     }
     if (std.mem.eql(u8, path, "/api/forget") and (method == .POST or method == .GET)) {
@@ -826,13 +833,73 @@ pub const FriendsOut = struct {
 fn friendsOf(arena: Allocator, db: store.Db, query: []const u8) !Reply {
     const key = try riotIdParam(arena, query) orelse
         return errorReply(arena, .bad_request, "error", "expected ?id=Name#TAG");
-    const none: Reply = .{ .status = .ok, .body = "{\"state\":\"none\"}" };
-    const acct = try account(arena, db, key) orelse return none;
-    const puuid = acct.puuid orelse return none;
-    if (try db.scalar("SELECT 1 FROM blocked WHERE puuid = ?", .{puuid}) != null) {
-        return .{ .status = .ok, .body = "{\"state\":\"opted_out\"}" };
+    return switch (try findFriends(arena, db, key)) {
+        .none => .{ .status = .ok, .body = "{\"state\":\"none\"}" },
+        .opted_out => .{ .status = .ok, .body = "{\"state\":\"opted_out\"}" },
+        .ready => |out| .{ .status = .ok, .body = try std.json.Stringify.valueAlloc(arena, FriendsOut{ .state = "ready", .friends = out }, .{}) },
+    };
+}
+
+/// friendsOf as ui.yourfriends.Friends, for the Your games page's Friends view
+fn friendsBin(ctx: *Context, arena: Allocator, db: store.Db, query: []const u8) !Reply {
+    const key = try riotIdParam(arena, query) orelse
+        return errorReply(arena, .bad_request, "error", "expected ?id=Name#TAG");
+    const yf = ui.yourfriends;
+    var out: yf.Friends = .{ .state = .none };
+    switch (try findFriends(arena, db, key)) {
+        .none => {},
+        .opted_out => out.state = .opted_out,
+        .ready => |o| {
+            var ids: std.ArrayList(u32) = .empty;
+            const rec = struct {
+                fn f(r: friends.Record) yf.Record {
+                    return .{ .games = r.games, .wins = r.wins };
+                }
+            }.f;
+            const eff = struct {
+                fn f(e: ?friends.Effect) ?yf.Effect {
+                    const x = e orelse return null;
+                    return .{ .together = rec(x.with), .apart = rec(x.apart), .apart_rate = @floatCast(x.apart_rate), .diff = @floatCast(x.diff), .ci = @floatCast((x.hi - x.lo) / 2) };
+                }
+            }.f;
+            const list = try arena.alloc(yf.Friend, o.friends.len);
+            for (list, o.friends) |*f, x| {
+                const pairs = try arena.alloc(yf.Pair, x.champions.len);
+                for (pairs, x.champions) |*p, c| p.* = .{ .mine = try champIndex(arena, &ids, c.mine), .theirs = try champIndex(arena, &ids, c.theirs), .games = c.games, .wins = c.wins };
+                var rs: std.ArrayList(yf.Roles) = .empty;
+                for (x.roles) |r| try rs.append(arena, .{
+                    .mine = std.meta.stringToEnum(ui.role.Role, r.mine) orelse continue,
+                    .theirs = std.meta.stringToEnum(ui.role.Role, r.theirs) orelse continue,
+                    .games = r.games,
+                    .wins = r.wins,
+                });
+                f.* = .{ .riot_id = x.riot_id, .together = rec(x.together), .against = rec(x.against), .last_ms = x.last_ms, .you = eff(x.you), .them = eff(x.them), .their_games = x.their_games, .pairs = pairs, .roles = rs.items };
+            }
+            const champs = try arena.alloc(ui.champ.Champ, ids.items.len);
+            for (champs, ids.items) |*c, id| c.* = try ctx.shown.champ(id);
+            out = .{ .state = .ready, .games = o.games, .waiting = o.waiting, .with_friends = rec(o.with_friends), .alone = rec(o.alone), .champs = champs, .friends = list };
+        },
     }
-    if (try db.scalar("SELECT 1 FROM players WHERE puuid = ?", .{puuid}) == null) return none;
+    var bytes: std.ArrayList(u8) = .empty;
+    try ui.data.encode(arena, ui.yourfriends.Friends, out, &bytes);
+    return .{ .status = .ok, .body = bytes.items, .binary = true };
+}
+
+fn champIndex(arena: Allocator, ids: *std.ArrayList(u32), id: u32) !u16 {
+    const at = std.mem.findScalar(u32, ids.items, id) orelse blk: {
+        try ids.append(arena, id);
+        break :blk ids.items.len - 1;
+    };
+    return @intCast(at);
+}
+
+const Found = union(enum) { none, opted_out, ready: friends.Out };
+
+fn findFriends(arena: Allocator, db: store.Db, key: []const u8) !Found {
+    const acct = try account(arena, db, key) orelse return .none;
+    const puuid = acct.puuid orelse return .none;
+    if (try db.scalar("SELECT 1 FROM blocked WHERE puuid = ?", .{puuid}) != null) return .opted_out;
+    if (try db.scalar("SELECT 1 FROM players WHERE puuid = ?", .{puuid}) == null) return .none;
     var built = try friends.build(arena, try friendGames(arena, db, puuid));
     var out = &built.out;
     out.waiting = @intCast(try db.scalar("SELECT count(*) FROM backlog WHERE puuid = ?", .{puuid}) orelse 0);
@@ -847,7 +914,7 @@ fn friendsOf(arena: Allocator, db: store.Db, query: []const u8) !Reply {
         f.them = friends.effect(&t, mine);
     }
     out.friends = list;
-    return .{ .status = .ok, .body = try std.json.Stringify.valueAlloc(arena, FriendsOut{ .state = "ready", .friends = out.* }, .{}) };
+    return .{ .ready = out.* };
 }
 
 /// Every cached game of a player, newest first, summaries and names only
