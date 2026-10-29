@@ -85,8 +85,7 @@ docs/plan.md "Now". Read it first.
   answers it; other zig builds `deploy/slots.sh 1 zig build ...`. UI work: `test-ui`
   while iterating, `test` before a commit
 - Tests: `deploy/zb.sh test 2>&1 | tee $SCRATCH/t.log | tail -30`, then grep the log
-- Past ~200k context, hand over at the next natural break (step committed); a new
-  topic starts fresh (fleet skill)
+- Hand over at 25-33% context (a hook reminds; fleet skill); a new topic starts fresh
 - Team runs: shared state in the run's common.md; messages are "done: <path>" or
   "blocked: <why>, <path>", details in the file
 
