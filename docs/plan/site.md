@@ -248,7 +248,7 @@ beside each champion's and matchup's move; J27 asked for the why.
 Jacob's asks: fewer words, more information, much clearer what affects what; "get more
 creative". Ideas: each pick linked to the terms it moves (lane matchup, duo, comp lean)
 drawn as a grid or arrows sized by effect, words only on hover. J3: name the three
-detected cross-role kinds. Admin and /p/ only; the public draft tool follows J2.
+detected cross-role kinds. Admin and /private only; the public draft tool follows J2.
 
 ## Before the production review
 

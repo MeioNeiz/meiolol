@@ -92,7 +92,8 @@ file and packed rows: docs/architecture.md.
 - Updates (desktop/update.zig, J19): once the app is signed in (device.zig: POST
   /auth/device, the token in device.token beside the exe; until accounts.md AC4's
   cut-over, update.key beside it also works), a detached thread reads
-  https://meio.lol/p/desktop/update.signed (exes from before sign in: /admin/desktop/)
+  https://meio.lol/private/desktop/update.signed (older exes: /p/desktop/, before sign
+  in /admin/desktop/)
   at start and every 3 h (5 min after a failure; MEIOLOL_UPDATE_URL elsewhere), and at
   once after a sign in, checks its signature, and fetches each listed
   file whose SHA-256 differs from the local copy: stats.bin as stats-<patch>.bin (older stats-*.bin

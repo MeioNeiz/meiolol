@@ -12,7 +12,7 @@
   function next(account) {
     const n = new URLSearchParams(location.search).get("next");
     if (n && n.startsWith("/") && !n.startsWith("//")) return n;
-    return account.can.includes("view_admin") ? "/admin/" : account.can.includes("view_private") ? "/p/" : "/";
+    return account.can.includes("view_admin") ? "/admin" : account.can.includes("view_private") ? "/private" : "/";
   }
 
   function say(text) {
@@ -32,7 +32,7 @@
       if (!r.ok) throw new Error(r.status);
       const a = await r.json();
       me.replaceChildren(`Logged in as `, Object.assign(document.createElement("b"), { textContent: a.username }), ` (${a.role}).`);
-      const links = [["view_private", "/p/", "Draft tester"], ["view_admin", "/admin/", "Admin pages"], ["manage_accounts", "/admin/#accounts", "Accounts"]]
+      const links = [["view_private", "/private", "Draft tester"], ["view_admin", "/admin", "Admin pages"], ["manage_accounts", "/admin#accounts", "Accounts"]]
         .filter(([cap]) => a.can.includes(cap));
       for (const [i, [, href, text]] of links.entries()) {
         me.append(i ? " · " : " ", Object.assign(document.createElement("a"), { href, textContent: text }));

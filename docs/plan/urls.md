@@ -1,6 +1,6 @@
 # Plan: professional URLs (J32)
 
-Every page on clean, extensionless URLs (done: URL1-URL4). Jacob chose the hierarchy and
+Every page on clean, extensionless URLs (done: URL1-URL5). Jacob chose the hierarchy and
 approved the five additions below (J32). Old URLs get no redirects and never shape a new
 one (Jacob, 29 Oct: no URL made worse to match an old one, no complexity for them).
 Evidence: research/questions/site-url-scheme.md (Google docs, RFC 9110, six LoL sites'
@@ -35,8 +35,9 @@ filter URLs and canonicals). Any URL work follows this file; change it here firs
 
 - URL1-URL4 (done 28-29 Oct): ui/urls.zig spells every page's URL and reads it back;
   the generator, wasm, nginx and serve.zig on the scheme; old-URL redirects removed 29 Oct
-- URL5 (W2, legacy run): /admin and /private without .html; no redirects from the old
-  paths
+- URL5 (done 29 Oct): /admin and /private (was /p/) without .html, no redirects from
+  the old paths. Installed private apps' update check still reads /p/desktop/ (the same
+  files, not a redirect) until they have all updated
 
 ## Risks
 

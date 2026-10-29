@@ -239,8 +239,8 @@ bytes.
   request carrying it through `@notes` (deploy/nginx/meiolol.conf): the same request to
   itself without cookies, gzip or validators, then `sub_filter` adds site/notes.zig `tag`
   (keep the two in step) before `</body>`, private, no-store. Status codes go through;
-  assets skip the hop. Not a boundary: /p/ (view_private) and the API check the login
-- Files: p/notes.{css,js,wasm} (fixed names, no-cache) and admin/notes.html (list mode of
+  assets skip the hop. Not a boundary: /private (view_private) and the API check the login
+- Files: private/notes.{css,js,wasm} (fixed names, no-cache) and admin/notes (list mode of
   the same wasm, fetched again every 20 s while shown), written by `meiolol admin`
 - Paths: notesdata.canonical drops a trailing index.html, on POST and GET
 - API: /api/notes GET/POST/PATCH, ui.notesdata binary, bounds in notesdata.check;

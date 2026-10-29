@@ -341,7 +341,7 @@ fn head(p: *Page, h: *H) N {
             if (!live and p.live_down) W.live_down else null,
         }),
         card.spacer(h),
-        button.view(h, .{ .v = .quiet, .s = .s, .href = "notes.html" }, .{W.notes}),
+        button.view(h, .{ .v = .quiet, .s = .s, .href = "/admin/notes" }, .{W.notes}),
         button.view(h, .{ .v = .quiet, .s = .s, .href = "desktop/meiolol-desktop.zip" }, .{W.desktop}),
         button.view(h, .{ .s = .s, .on = h.on(p, .refresh) }, .{W.refresh}),
         if (p.me) |me| h.span(.{ .class = "me" }, .{

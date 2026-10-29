@@ -1,9 +1,9 @@
-//! The new admin page (/admin/new.html, ui.adminpage): an empty shell ui-admin.wasm fills
+//! The new admin page (/admin/new, ui.adminpage): an empty shell ui-admin.wasm fills
 //! from admin.bin, api/live.bin and /auth/ (the chart tabs: ui.admincharts in
 //! ui-admincharts.wasm, Traffic: ui.admintraffic in ui-admintraffic.wasm, Deploys and Logs:
 //! ui.adminops in ui-adminops.wasm, Models: ui.adminmodels in ui-adminmodels.wasm, all of
 //! which it loads), its stylesheet and code, written into the admin dir beside the old page
-//! by `meiolol admin`. Never public: nginx serves /admin/ to view_admin logins only
+//! by `meiolol admin`. Never public: nginx serves /admin to view_admin logins only
 const std = @import("std");
 const store = @import("store");
 const ui = @import("ui");

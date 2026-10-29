@@ -1,9 +1,9 @@
 // Private numbers on the public champion and matchup pages (docs/plan/app.md "Private
 // site"): the shipped draft model's win chances, which the public pages never show
-// (production-key.md "Product rules"). Served from /p/ only, so nginx's login gate covers
+// (production-key.md "Product rules"). Served from /private/ only, so nginx's login gate covers
 // both this script and its data; the header script (html.zig admin_link) loads it for
-// browsers that opened /admin/ or /p/, and for anyone else it is the login page's HTML,
-// which never runs. Data: /p/models/champ/<id>.json (draftmodel.zig writeSlices).
+// browsers that opened /admin or /private, and for anyone else it is the login page's HTML,
+// which never runs. Data: /private/models/champ/<id>.json (draftmodel.zig writeSlices).
 // Champion pages (ui.champpage): a box under the head, outside every island so no wasm
 // diff meets it, with each role's line and the model's figure for the matchup brief's
 // opponent, redrawn as the islands change. Matchup pages (/matchups/ROLE/A-vs-B): a
@@ -19,7 +19,7 @@
     if (!r.ok || !(r.headers.get("content-type") || "").includes("json")) throw new Error(`${r.status} ${url}`);
     return r.json();
   };
-  const slice = id => getJson(`/p/models/champ/${id}.json`);
+  const slice = id => getJson(`/private/models/champ/${id}.json`);
   const about = "Private, for admin logins only: the shipped draft model's estimate (every region and patch, refitted daily) of the team's win chance with every other pick its role's average. The public site never shows it.";
 
   if (document.readyState === "loading") await new Promise(r => document.addEventListener("DOMContentLoaded", r));

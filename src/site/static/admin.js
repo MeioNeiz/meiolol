@@ -7,9 +7,11 @@
 "use strict";
 
 let D = JSON.parse(document.getElementById("data").textContent);
-// The private site's Draft tester (/p/, admin.zig private): that tab alone, no box data,
-// shipped models only (admin-draft.js)
+// The private site's Draft tester (/private, admin.zig private): that tab alone, no box
+// data, shipped models only (admin-draft.js)
 const PRIVATE = D.private === true;
+// Relative paths are the page's files: from /admin (no slash) they would resolve at /
+const DIR = location.origin + (PRIVATE ? "/private/" : "/admin/");
 const NS = "http://www.w3.org/2000/svg";
 // Fixed per entity, never by rank (validated on the dark panel, adjacent pairs)
 const PALETTE = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#9085e9", "#8a8f98"];
@@ -598,7 +600,7 @@ const canAct = () => !!(ME && ME.can.includes("run_actions"));
 const runCache = new Map();
 
 async function fetchOk(path) {
-  const r = await fetch(path, { cache: "no-store", credentials: "same-origin" });
+  const r = await fetch(new URL(path, DIR), { cache: "no-store", credentials: "same-origin" });
   if (!r.ok) throw new Error(r.status + " " + r.statusText);
   return r;
 }
@@ -607,7 +609,7 @@ const getText = async path => (await fetchOk(path)).text();
 
 async function logOut() {
   await fetch("/auth/logout", { method: "POST", headers: { "X-Meiolol-Action": "1" }, credentials: "same-origin" }).catch(() => {});
-  location.assign("/login.html");
+  location.assign("/login");
 }
 
 async function pollLive() {
@@ -626,10 +628,10 @@ async function pollTraffic() {
 // localStorage
 async function pollDesktop() {
   try { DESKTOP = await getJson("desktop/info.json"); } catch (e) { DESKTOP = null; }
-  store("desktop", DESKTOP && { ...DESKTOP, href: new URL(DESKTOP_ZIP, location.href).pathname });
+  store("desktop", DESKTOP && { ...DESKTOP, href: DESKTOP_ZIP });
   document.getElementById("desktop-dl")?.replaceWith(desktopLink());
 }
-const DESKTOP_ZIP = "desktop/meiolol-desktop.zip";
+const DESKTOP_ZIP = "/admin/desktop/meiolol-desktop.zip";
 function desktopLink() {
   const d = DESKTOP;
   const about = d ? `patch ${d.patch}, built ${uk(Date.parse(d.built) / 1000)}, ${bytes(d.bytes)}` : null;
@@ -778,11 +780,11 @@ function render(keep) {
   if (!PRIVATE) {
     controls.append(desktopLink());
     // The notes tool's own "All notes" link shows only once it is on: this is the way in
-    controls.append(el("a", { class: "ghost", href: "notes.html", title: "Notes on the site, and the tool's on/off switch" }, "Notes"));
+    controls.append(el("a", { class: "ghost", href: "/admin/notes", title: "Notes on the site, and the tool's on/off switch" }, "Notes"));
     controls.append(el("button", { type: "button", class: "ghost", title: "Fetch everything now", onclick: () => refreshAll() }, "Refresh"));
   }
   if (ME) controls.append(el("span", { class: "me", title: `Signed in as ${ME.username} (${ME.role})` },
-    el("a", { class: "who", href: "/account.html" }, ME.username), el("button", { type: "button", onclick: logOut }, "Log out")));
+    el("a", { class: "who", href: "/account" }, ME.username), el("button", { type: "button", onclick: logOut }, "Log out")));
   top.append(controls);
   const nav = el("nav", { class: "tabs", "aria-label": "Sections" });
   TABS.forEach(([k, label], i) => nav.append(el("a", { href: "#" + k, "aria-current": k === ui.tab ? "page" : null, title: `${label} (${i + 1})`, onclick: ev => { ev.preventDefault(); setTab(k); } }, label)));
@@ -2097,7 +2099,7 @@ async function runAction(name, confirmText) {
   actionResult = null;
   render(true);
   try {
-    const r = await fetch("api/action/" + name, { method: "POST", headers: { "X-Meiolol-Action": "1" }, credentials: "same-origin", cache: "no-store" });
+    const r = await fetch(new URL("api/action/" + name, DIR), { method: "POST", headers: { "X-Meiolol-Action": "1" }, credentials: "same-origin", cache: "no-store" });
     const j = await r.json().catch(() => ({ ok: false, output: `${r.status} ${r.statusText}` }));
     actionResult = { name, ok: !!j.ok, output: j.output || "", at: nowS() };
   } catch (e) {

@@ -65,7 +65,7 @@ def bucket: (.rt * 1000) as $ms
         | map(select(. >= $ms)) | first) // 60000) | tostring;
 reduce (inputs | fromjson? | select(type == "object" and (.t | type) == "number"
         and (.s | type) == "number" and (.u | type) == "string")
-    | select(.u | startswith("/admin/") | not)) as $r
+    | select(.u | test("^/admin([/?]|$)") | not)) as $r
   ({from: null, hours: {}, pend: {}};
     ($r.t / 3600 | floor * 3600 | tostring) as $h
     | .from = ([.from, ($r.t | floor)] | map(select(. != null)) | min)

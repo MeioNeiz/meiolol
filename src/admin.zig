@@ -196,7 +196,7 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
         \\<meta name="viewport" content="width=device-width, initial-scale=1">
         \\<meta name="robots" content="noindex">
         \\<title>meiolol admin</title>
-        \\<link rel="stylesheet" href="admin.css">
+        \\<link rel="stylesheet" href="/admin/admin.css">
         \\</head>
         \\<body>
         \\<main id="app"><p>Loading…</p></main>
@@ -205,11 +205,11 @@ pub fn generate(gpa: std.mem.Allocator, io: Io, db: store.Db, o: Options) !void 
     try tpl.json(page).render(w);
     try w.writeAll(
         \\</script>
-        \\<script src="admin-setnet.js"></script>
-        \\<script src="admin-draft.js"></script>
-        \\<script src="admin-nn.js"></script>
-        \\<script src="admin-accounts.js"></script>
-        \\<script src="admin.js"></script>
+        \\<script src="/admin/admin-setnet.js"></script>
+        \\<script src="/admin/admin-draft.js"></script>
+        \\<script src="/admin/admin-nn.js"></script>
+        \\<script src="/admin/admin-accounts.js"></script>
+        \\<script src="/admin/admin.js"></script>
         \\</body>
         \\</html>
         \\
@@ -388,7 +388,7 @@ test "tsv rows by column name: optional cells null, rows short of a required cel
     try std.testing.expectEqual(@as(?f32, 0.5), e[1].ll_tunedw);
 }
 
-/// The private site's Draft tester (/p/, docs/plan/accounts.md AC3): the admin page in
+/// The private site's Draft tester (/private, docs/plan/accounts.md AC3): the admin page in
 /// private mode (admin.js PRIVATE), no box data, only the shipped models the web loop
 /// copies into models/; and pv.js, the public pages' private numbers. nginx serves it to
 /// view_private logins
@@ -402,14 +402,14 @@ pub fn private(gpa: std.mem.Allocator, io: Io, out_dir: []const u8, now_s: i64) 
         \\<meta name="viewport" content="width=device-width, initial-scale=1">
         \\<meta name="robots" content="noindex">
         \\<title>meiolol private</title>
-        \\<link rel="stylesheet" href="admin.css">
+        \\<link rel="stylesheet" href="/private/admin.css">
         \\</head>
         \\<body>
         \\<main id="app"><p>Loading…</p></main>
         \\<script id="data" type="application/json">{{"private":true,"now":{d}}}</script>
-        \\<script src="admin-setnet.js"></script>
-        \\<script src="admin-draft.js"></script>
-        \\<script src="admin.js"></script>
+        \\<script src="/private/admin-setnet.js"></script>
+        \\<script src="/private/admin-draft.js"></script>
+        \\<script src="/private/admin.js"></script>
         \\</body>
         \\</html>
         \\

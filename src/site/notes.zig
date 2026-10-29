@@ -1,4 +1,4 @@
-//! The notes tool's files (ui.notes, ui-notes.wasm) under /p/ at fixed names, and the tag
+//! The notes tool's files (ui.notes, ui-notes.wasm) under /private/ at fixed names, and the tag
 //! that loads them. nginx (deploy/nginx/meiolol.conf, @notes) or the dev server adds the
 //! tag to a page only for a request carrying the marker cookie, which the API sets at an
 //! admin's login: public pages hold none of it
@@ -9,7 +9,7 @@ const style = @import("style.zig");
 
 pub const css = ui.css.join(.{ ui.notes, ui.noteslist });
 
-/// Fixed names, revalidated each load (/p/ is no-cache), so the tag nginx adds is one
+/// Fixed names, revalidated each load (/private/ is no-cache), so the tag nginx adds is one
 /// string in its config
 pub const files = [_]struct { []const u8, []const u8 }{
     .{ "notes.css", css },
@@ -18,7 +18,7 @@ pub const files = [_]struct { []const u8, []const u8 }{
 };
 
 /// deploy/nginx/meiolol.conf's @notes holds this verbatim
-pub const tag = "<link rel=\"stylesheet\" href=\"/p/notes.css\"><script src=\"/p/notes.js\" data-wasm=\"/p/notes.wasm\" defer></script>";
+pub const tag = "<link rel=\"stylesheet\" href=\"/private/notes.css\"><script src=\"/private/notes.js\" data-wasm=\"/private/notes.wasm\" defer></script>";
 
 /// The marker; the dev server's has no __Host- prefix (that needs HTTPS)
 pub const cookie = ui.notesdata.marker;
@@ -36,7 +36,7 @@ pub fn marked(header: []const u8) bool {
     return false;
 }
 
-/// /admin/notes.html: every note (ui.noteslist), the same ui-notes.wasm in list mode
+/// /admin/notes: every note (ui.noteslist), the same ui-notes.wasm in list mode
 pub fn adminPage(a: std.mem.Allocator) ![]const u8 {
     var l: ui.noteslist.List = .{};
     var t: ui.Tree = .{};
@@ -55,7 +55,7 @@ pub fn adminPage(a: std.mem.Allocator) ![]const u8 {
         \\<title>Notes · meiolol admin</title>
         \\<link rel="icon" href="/favicon.svg" type="image/svg+xml">
         \\<link rel="stylesheet" href="/{s}">
-        \\<link rel="stylesheet" href="/p/notes.css">
+        \\<link rel="stylesheet" href="/private/notes.css">
         \\</head>
         \\<body>
         \\
@@ -63,7 +63,7 @@ pub fn adminPage(a: std.mem.Allocator) ![]const u8 {
     try ui.html.write(&t, n, w);
     try w.writeAll(
         \\
-        \\<script src="/p/notes.js" data-wasm="/p/notes.wasm" defer></script>
+        \\<script src="/private/notes.js" data-wasm="/private/notes.wasm" defer></script>
         \\</body>
         \\</html>
         \\
@@ -96,7 +96,7 @@ fn writeGz(a: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, name: []const u8, 
     try dir.writeFile(io, .{ .sub_path = try std.mem.concat(a, u8, &.{ name, ".gz" }), .data = try store.raw.compress(a, data) });
 }
 
-/// One of `files` by its name under /p/
+/// One of `files` by its name under /private/
 pub fn file(name: []const u8) ?[]const u8 {
     for (files) |f| if (std.mem.eql(u8, f[0], name)) return f[1];
     return null;
@@ -122,7 +122,7 @@ test adminPage {
     defer arena.deinit();
     const page = try adminPage(arena.allocator());
     try std.testing.expect(std.mem.find(u8, page, "data-island=\"noteslist\"") != null);
-    try std.testing.expect(std.mem.find(u8, page, "/p/notes.wasm") != null);
+    try std.testing.expect(std.mem.find(u8, page, "/private/notes.wasm") != null);
 }
 
 test writeFiles {

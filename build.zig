@@ -407,7 +407,7 @@ const ui_families = [_][]const u8{ "stats", "champion", "champbuild", "champmore
 const ui_budget = 40 * 1024;
 /// -Dwasm-dev
 var wasm_dev = false;
-/// Families only logins load (/p/): 64 KB (Jacob 27 Oct)
+/// Families only logins load (/admin, /private): 64 KB (Jacob 27 Oct)
 const ui_private = [_][]const u8{ "ui-tester", "ui-testercand", "ui-notes", "ui-admin", "ui-admincharts", "ui-admintraffic", "ui-adminops", "ui-adminmodels" };
 const ui_private_budget = 64 * 1024;
 

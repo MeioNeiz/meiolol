@@ -335,7 +335,7 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
             return request.respond(site.gallery.css, .{ .extra_headers = &.{.{ .name = "content-type", .value = "text/css; charset=utf-8" }} });
         }
         // The notes tool (site/notes.zig): its files, and the marker that adds its tag
-        if (std.mem.startsWith(u8, path, "p/")) if (site.notes.file(path["p/".len..])) |data| {
+        if (std.mem.startsWith(u8, path, "private/")) if (site.notes.file(path["private/".len..])) |data| {
             return request.respond(data, .{ .extra_headers = &.{
                 .{ .name = "content-type", .value = contentType(path) },
                 .{ .name = "cache-control", .value = "no-cache" },
@@ -348,7 +348,7 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
                 .{ .name = "set-cookie", .value = if (on) dev_marker_on else dev_marker_off },
             } });
         }
-        if (std.mem.eql(u8, path, "admin/notes.html") or std.mem.eql(u8, path, "admin/notes")) {
+        if (std.mem.eql(u8, path, "admin/notes")) {
             var arena_state: std.heap.ArenaAllocator = .init(ctx.gpa);
             defer arena_state.deinit();
             return request.respond(try site.notes.adminPage(arena_state.allocator()), .{ .extra_headers = &.{.{ .name = "content-type", .value = "text/html; charset=utf-8" }} });
@@ -357,7 +357,8 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
             var arena_state: std.heap.ArenaAllocator = .init(ctx.gpa);
             defer arena_state.deinit();
             if (try devAdmin(arena_state.allocator(), path)) |body| {
-                return request.respond(body, .{ .extra_headers = &.{.{ .name = "content-type", .value = contentType(path) }} });
+                const page = std.mem.eql(u8, path, "admin/new");
+                return request.respond(body, .{ .extra_headers = &.{.{ .name = "content-type", .value = if (page) contentType(".html") else contentType(path) }} });
             }
         }
     }
@@ -586,7 +587,7 @@ fn notFound(request: *std.http.Server.Request) !void {
 fn devAdmin(a: std.mem.Allocator, path: []const u8) !?[]const u8 {
     const ui = site.ui;
     const demo = ui.adminpage.Demo;
-    if (std.mem.eql(u8, path, "admin/new.html")) return try site_admin.page(a);
+    if (std.mem.eql(u8, path, "admin/new")) return try site_admin.page(a);
     if (std.mem.startsWith(u8, path, "admin/")) if (site_admin.file(path["admin/".len..])) |f| return f;
     var out: std.ArrayList(u8) = .empty;
     if (std.mem.eql(u8, path, "admin/admin.bin")) {
