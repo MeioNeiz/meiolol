@@ -131,7 +131,11 @@ like pair of bars per opponent: "Yone vs Jax" against "Jax vs everyone".
 - Practice drills (4-option drafts) leave the default path: their answers are not clear
   (34% agree with our own model). They come back as one "draft" puzzle per chapter end
   (proposal's boss) only where one option is clearly apart, on the DraftBoard with
-  ChoiceCards, revealed as a CandidateList in tiers with words (J2), never "+X%"
+  ChoiceCards, revealed as a CandidateList in tiers with words (J2), never "+X%".
+  Clearly apart: the four teammates deal under a fifth of their damage as magic
+  (learned.md Win, Sure), exactly one option brings 60%+ magic, and it is also the
+  model's best of the four. Box pack 27 Oct: 2-3 such drafts a day, so some chapters
+  end without one; the why line carries no number (that finding's Site:)
 - Daily five (later): one puzzle per finished chapter, same for everyone, ResultStrip (days)
 
 ## Components used (register names)
