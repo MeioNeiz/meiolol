@@ -16,8 +16,9 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 stage=/home/jacob/vm-web-stage
 with_data=0
 [[ ${1:-} == data ]] && with_data=1
-files=(deploy/nginx/meiolol.conf deploy/systemd/meiolol-api.service
-    deploy/systemd/meiolol-api-reload.path deploy/systemd/meiolol-api-reload.service
+files=(deploy/nginx/meiolol.conf deploy/nginx/meiolol-headers.conf
+    deploy/systemd/meiolol-api.service deploy/systemd/meiolol-api-reload.path
+    deploy/systemd/meiolol-api-reload.service
     deploy/systemd/meiolol-traffic.service deploy/systemd/meiolol-traffic.timer
     deploy/traffic.sh deploy/cache-version-receive.sh deploy/training-receive.sh
     deploy/accounts-send.sh)
@@ -112,6 +113,7 @@ if (( with_data )); then
 fi
 
 install -m 644 "$st/deploy/nginx/meiolol.conf" /etc/nginx/conf.d/meiolol.conf
+install -m 644 "$st/deploy/nginx/meiolol-headers.conf" /etc/nginx/
 install -m 600 "$st/meiolol-admin-token.conf" "$st/meiolol-desktop-key.conf" /etc/nginx/
 [[ -f /etc/nginx/meiolol-version.conf ]] || install -m 644 "$st/meiolol-version.conf" /etc/nginx/
 rm -f /etc/nginx/sites-enabled/default
