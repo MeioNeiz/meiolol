@@ -202,13 +202,22 @@ fn onPick(e: zjb.Handle) callconv(.c) void {
     focusText();
 }
 
-/// Escape closes whatever is open; n, with nothing open, starts a note as the Note button
+/// Escape closes whatever is open; n, with nothing open, starts a note as the Note button;
+/// Enter in the note's text saves it, Shift+Enter is a new line
 fn onKey(e: zjb.Handle) callconv(.c) void {
     defer e.release();
     const k = e.get("key", zjb.Handle);
     defer k.release();
     var buf: [16]u8 = undefined;
     const key = k.readString(&buf) catch return;
+    if (tool.mode == .form and std.mem.eql(u8, key, "Enter")) {
+        // isComposing: Enter that ends an IME word, not a save
+        if (e.get("shiftKey", bool) or e.get("isComposing", bool) or !inText(e)) return;
+        swallow(e);
+        var ev: ui.tree.Event = .{ .kind = .keydown, .text = key };
+        tool.update(.save, &ev);
+        return changed();
+    }
     if (tool.mode == .idle and tool.open == null) {
         if (!std.mem.eql(u8, key, "n") or !plainKey(e)) return;
         swallow(e);
@@ -221,6 +230,13 @@ fn onKey(e: zjb.Handle) callconv(.c) void {
     swallow(e);
     tool.reset();
     changed();
+}
+
+fn inText(e: zjb.Handle) bool {
+    const t = e.get("target", zjb.Handle);
+    if (t == .null) return false;
+    defer t.release();
+    return inTool(t) and t.call("matches", .{zjb.constString("textarea")}, bool);
 }
 
 /// No modifier, not held down, and not typed into a field (the site's search, a form)
