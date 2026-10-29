@@ -23,6 +23,53 @@ pub fn join(comptime components: anytype) []const u8 {
     };
 }
 
+/// Comments out, whitespace collapsed to one space and none around { } ; , or after a
+/// colon, no ; before }. Strings as written. Other spaces stay: selectors and calc() need
+/// them. `out` at least as long as `in`
+pub fn minify(out: []u8, in: []const u8) []u8 {
+    var n: usize = 0;
+    var i: usize = 0;
+    var space = false;
+    while (i < in.len) {
+        const c = in[i];
+        if (c == '/' and i + 1 < in.len and in[i + 1] == '*') {
+            i = if (std.mem.findPos(u8, in, i + 2, "*/")) |end| end + 2 else in.len;
+            continue;
+        }
+        if (std.ascii.isWhitespace(c)) {
+            space = true;
+            i += 1;
+            continue;
+        }
+        if (space and n > 0 and !tight(out[n - 1]) and out[n - 1] != ':' and !tight(c)) {
+            out[n] = ' ';
+            n += 1;
+        }
+        space = false;
+        if (c == '}' and n > 0 and out[n - 1] == ';') n -= 1;
+        out[n] = c;
+        n += 1;
+        i += 1;
+        if (c == '"' or c == '\'') {
+            while (i < in.len) {
+                out[n] = in[i];
+                n += 1;
+                i += 1;
+                if (in[i - 1] == '\\' and i < in.len) {
+                    out[n] = in[i];
+                    n += 1;
+                    i += 1;
+                } else if (in[i - 1] == c) break;
+            }
+        }
+    }
+    return out[0..n];
+}
+
+fn tight(c: u8) bool {
+    return c == '{' or c == '}' or c == ';' or c == ',';
+}
+
 /// 8 hex digits of a file's FNV-1a hash, at compile time: its hashed name (site/assets.zig)
 pub fn version(comptime bytes: []const u8) []const u8 {
     return comptime blk: {

@@ -15,16 +15,16 @@ const Io = std.Io;
 /// What the public stylesheet leaves out (ui.components): it is linked first
 pub const css = ui.css.join(.{ ui.alertband, ui.actionbutton, ui.adminpage, ui.timechart, ui.admincharts, ui.admintraffic, ui.steptimeline, ui.logview, ui.adminops, ui.adminmodels });
 pub const css_file = assets.hashed("admin.css", css);
-pub const js = assets.hashed("ui-admin.js", @embedFile("ui-admin.js"));
-pub const wasm = assets.hashed("ui-admin.wasm", @embedFile("ui-admin.wasm"));
-pub const charts_js = assets.hashed("ui-admincharts.js", @embedFile("ui-admincharts.js"));
-pub const charts_wasm = assets.hashed("ui-admincharts.wasm", @embedFile("ui-admincharts.wasm"));
-pub const traffic_js = assets.hashed("ui-admintraffic.js", @embedFile("ui-admintraffic.js"));
-pub const traffic_wasm = assets.hashed("ui-admintraffic.wasm", @embedFile("ui-admintraffic.wasm"));
-pub const ops_js = assets.hashed("ui-adminops.js", @embedFile("ui-adminops.js"));
-pub const ops_wasm = assets.hashed("ui-adminops.wasm", @embedFile("ui-adminops.wasm"));
-pub const models_js = assets.hashed("ui-adminmodels.js", @embedFile("ui-adminmodels.js"));
-pub const models_wasm = assets.hashed("ui-adminmodels.wasm", @embedFile("ui-adminmodels.wasm"));
+pub const js = assets.built("ui-admin.js", @embedFile("ui-admin.js"));
+pub const wasm = assets.built("ui-admin.wasm", @embedFile("ui-admin.wasm"));
+pub const charts_js = assets.built("ui-admincharts.js", @embedFile("ui-admincharts.js"));
+pub const charts_wasm = assets.built("ui-admincharts.wasm", @embedFile("ui-admincharts.wasm"));
+pub const traffic_js = assets.built("ui-admintraffic.js", @embedFile("ui-admintraffic.js"));
+pub const traffic_wasm = assets.built("ui-admintraffic.wasm", @embedFile("ui-admintraffic.wasm"));
+pub const ops_js = assets.built("ui-adminops.js", @embedFile("ui-adminops.js"));
+pub const ops_wasm = assets.built("ui-adminops.wasm", @embedFile("ui-adminops.wasm"));
+pub const models_js = assets.built("ui-adminmodels.js", @embedFile("ui-adminmodels.js"));
+pub const models_wasm = assets.built("ui-adminmodels.wasm", @embedFile("ui-adminmodels.wasm"));
 
 pub fn page(a: std.mem.Allocator) ![]const u8 {
     var p: ui.adminpage.Page = .{};
