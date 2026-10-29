@@ -34,7 +34,7 @@ pub fn build(b: *std.Build) void {
         "Run only tests whose name contains this (repeatable)",
     ) orelse &.{};
 
-    const fmt_paths = [_]std.Build.LazyPath{ b.path("build.zig"), b.path("build.zig.zon"), b.path("src") };
+    const fmt_paths = [_]std.Build.LazyPath{ b.path("build.zig"), b.path("build.zig.zon"), b.path("src"), b.path("tools") };
     const m = modules(b, target, optimize);
     const exes = [_]struct { name: []const u8, mod: *std.Build.Module, about: []const u8 }{
         .{ .name = "meiolol", .mod = m.backend, .about = "backend: crawl, stats" },
@@ -172,6 +172,10 @@ pub fn build(b: *std.Build) void {
         },
     });
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = win_draft_test, .filters = test_filters })).step);
+    for ([_][]const u8{ "wasmsize", "fmtlint" }) |t| {
+        const mod = hostTool(b, t).root_module;
+        test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = mod, .filters = test_filters })).step);
+    }
 
     // What the pre-push hook runs (deploy/hooks/pre-push): every push to main deploys
     const ci = b.step("ci", "Everything before a push: fmt, tests, cross-builds, scripts");
@@ -200,8 +204,20 @@ pub fn build(b: *std.Build) void {
     ci.dependOn(&shellExe(b, windows, .Debug, 0, .private).step);
     if (b.graph.host.result.os.tag == .macos) ci.dependOn(&shellMac(b, target, .Debug).step);
     ci.dependOn(&mock_exe.step);
-    // ui.wasm per page family: built, and its size against the budget (stack.md)
-    for (ui_families) |f| ci.dependOn(uiSize(b, uiWasm(b, f)));
+    // ui.wasm per page family: built, and its size against the budget (stack.md) and the
+    // last pushed main's
+    ci.dependOn(&uiSizes(b, &ui_families).step);
+    const fmtlint = b.addRunArtifact(hostTool(b, "fmtlint"));
+    fmtlint.addArgs(&.{ "src/site/ui", "src/tpl" });
+    fmtlint.setCwd(b.path("."));
+    ci.dependOn(&fmtlint.step);
+    // `zig build ui-sizes -- --base REV` compares with another recorded commit
+    const sizes = uiSizes(b, &ui_families);
+    sizes.addPassthruArgs();
+    b.step("ui-sizes", "ui.wasm sizes against budgets and the last pushed main").dependOn(&sizes.step);
+    for (ui_families) |f| {
+        b.step(b.fmt("ui-{s}-size", .{f}), b.fmt("Size of ui-{s}.wasm", .{f})).dependOn(&uiSizes(b, &.{f}).step);
+    }
     // Debug: ci only needs it to compile, and ReleaseFast spends up to a minute in LLVM
     const lab_check = labModule(b, b.resolveTargetQuery(gpu_box), .Debug, cand);
     ci.dependOn(&b.addExecutable(.{ .name = "meiolol-lab", .root_module = lab_check }).step);
@@ -379,6 +395,20 @@ const UiWasm = struct { name: []const u8, wasm: std.Build.LazyPath, js: std.Buil
 
 /// src/site/ui/wasm/<family>.zig as ui-<family>.wasm, and zjb's loader for it
 fn uiWasm(b: *std.Build, family: []const u8) UiWasm {
+    const exe = uiExe(b, family, true);
+    const zjb = b.dependency("zjb", .{});
+    const gen = b.addRunArtifact(zjb.artifact("generate_js"));
+    const js = gen.addOutputFileArg(b.fmt("{s}.js", .{exe.name}));
+    // The loader's global class: one per family, as a page may load several (champion,
+    // champbuild, champmore) and a second classic script declaring the same name throws
+    gen.addArg(b.fmt("Zjb_{s}", .{family}));
+    gen.addArtifactArg(exe);
+    gen.addArg("--loader");
+    return .{ .name = exe.name, .wasm = exe.getEmittedBin(), .js = js };
+}
+
+/// The family's wasm; `strip` false keeps a name section (and DWARF) for tools/wasmsize
+fn uiExe(b: *std.Build, family: []const u8, strip: bool) *std.Build.Step.Compile {
     const wasm_target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .freestanding });
     const zjb = b.dependency("zjb", .{});
     const tpl = b.createModule(.{ .root_source_file = b.path("src/tpl/root.zig") });
@@ -390,13 +420,13 @@ fn uiWasm(b: *std.Build, family: []const u8) UiWasm {
     const name = b.fmt("ui-{s}", .{family});
     const options = b.addOptions();
     options.addOption(bool, "dev", wasm_dev);
-    // Stripped: assets.zig hashes each file at compile time, which stalls on ReleaseSafe's
-    // 1.2 MB of DWARF
+    // Stripped when shipped: assets.zig hashes each file at compile time, which stalls on
+    // ReleaseSafe's 1.2 MB of DWARF
     const exe = b.addExecutable(.{ .name = name, .root_module = b.createModule(.{
         .root_source_file = b.path(b.fmt("src/site/ui/wasm/{s}.zig", .{family})),
         .target = wasm_target,
         .optimize = if (wasm_dev) .ReleaseSafe else .ReleaseSmall,
-        .strip = true,
+        .strip = strip,
         .imports = &.{
             .{ .name = "ui", .module = ui },
             .{ .name = "zjb", .module = zjb.module("zjb") },
@@ -405,36 +435,36 @@ fn uiWasm(b: *std.Build, family: []const u8) UiWasm {
     }) });
     exe.entry = .disabled;
     exe.rdynamic = true;
-    const gen = b.addRunArtifact(zjb.artifact("generate_js"));
-    const js = gen.addOutputFileArg(b.fmt("{s}.js", .{name}));
-    // The loader's global class: one per family, as a page may load several (champion,
-    // champbuild, champmore) and a second classic script declaring the same name throws
-    gen.addArg(b.fmt("Zjb_{s}", .{family}));
-    gen.addArtifactArg(exe);
-    gen.addArg("--loader");
-    return .{ .name = name, .wasm = exe.getEmittedBin(), .js = js };
+    return exe;
 }
 
-/// A size line per ui.wasm (raw and gzip), failing over its budget
-fn uiSize(b: *std.Build, w: UiWasm) *std.Build.Step {
-    const budget: u32 = if (wasm_dev) std.math.maxInt(u32) else for (ui_private) |p| {
-        if (std.mem.eql(u8, p, w.name)) break ui_private_budget;
-    } else ui_budget;
-    const run = b.addSystemCommand(&.{
-        "sh",      "-c",
-        b.fmt(
-            \\raw=$(wc -c < "$1"); gz=$(gzip -9 -c "$1" | wc -c); js=$(gzip -9 -c "$2" | wc -c)
-            \\echo "{s}.wasm: $raw B, $gz B gz; loader $js B gz (budget {d} B gz)"
-            \\[ "$gz" -le {d} ] || {{ echo "{s}.wasm over its budget"; exit 1; }}
-        , .{ w.name, budget, budget, w.name }),
-        "ui-size",
-    });
-    run.addFileArg(w.wasm);
-    run.addFileArg(w.js);
-    run.setName(b.fmt("{s} size", .{w.name}));
+/// tools/wasmsize over the families: gzip size against the budget and the last pushed
+/// main's, failing over a budget; on growth over 200 B or a failure, the functions that
+/// grew, their files and our callers of std code (from a build with names). All families
+/// from a clean tree (pre-push ci) record their sizes as the next baseline
+fn uiSizes(b: *std.Build, families: []const []const u8) *std.Build.Step.Run {
+    const run = b.addRunArtifact(hostTool(b, "wasmsize"));
+    run.setCwd(b.path("."));
+    if (families.len == ui_families.len and !wasm_dev) run.addArg("--record");
+    for (families) |f| {
+        const w = uiWasm(b, f);
+        const budget: u32 = if (wasm_dev) std.math.maxInt(u32) else for (ui_private) |p| {
+            if (std.mem.eql(u8, p, w.name)) break ui_private_budget;
+        } else ui_budget;
+        run.addArgs(&.{ w.name, b.fmt("{d}", .{budget}) });
+        run.addFileArg(w.wasm);
+        run.addFileArg(uiExe(b, f, false).getEmittedBin());
+    }
     run.has_side_effects = true;
-    b.step(b.fmt("{s}-size", .{w.name}), b.fmt("Size of {s}.wasm", .{w.name})).dependOn(&run.step);
-    return &run.step;
+    return run;
+}
+
+/// tools/<name>.zig, built for this machine
+fn hostTool(b: *std.Build, name: []const u8) *std.Build.Step.Compile {
+    return b.addExecutable(.{ .name = name, .root_module = b.createModule(.{
+        .root_source_file = b.path(b.fmt("tools/{s}.zig", .{name})),
+        .target = b.graph.host,
+    }) });
 }
 
 /// The desktop window (src/desktop_main.zig): dvui with its Direct3D 11 backend, tree-sitter
