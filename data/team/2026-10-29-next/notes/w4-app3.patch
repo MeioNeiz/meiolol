@@ -1,0 +1,630 @@
+diff --git a/docs/arch-app.md b/docs/arch-app.md
+index 1f7f7910..7c6bbf8b 100644
+--- a/docs/arch-app.md
++++ b/docs/arch-app.md
+@@ -40,6 +40,10 @@ file and packed rows: docs/architecture.md.
+   (ui-app.wasm) patches from it on each `app` message and keeps the charts' state. The
+   Mac build's `--dump DIR --seconds N` writes each change to DIR/<seq>/ for a look
+   against the mock client
++- Lane panel: a click on an ally's seat sends `lane` (role, 255 mine); the poller then
++  builds the card from that ally's side (board.allyLane: their champion, no pool,
++  mastery or rank) beside my own card's board and bans (state.lane_role, back to mine
++  when champ select ends). Not under practice, whose seat clicks place champions
+ - Page to shell: ui/toshell.zig's Out, written by ui-app.wasm through bridge.js. The
+   sign-in form (ui/signin.zig: the screen until there is data, else a line under it)
+   sends `signin`, which the shell hands to the poller (device.zig); never logged
+diff --git a/docs/plan/app.md b/docs/plan/app.md
+index 42d0e1cb..05688170 100644
+--- a/docs/plan/app.md
++++ b/docs/plan/app.md
+@@ -101,9 +101,11 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
+   Data's certificate: a "live client data: <error>" line in record's output means
+   https.get needs another root for port 2999
+ - APP3 Every role and pick order (both editions). Done: the board (Window layout
+-  below) with the mode chip and ideas for allies still to pick. Left: switch the lane
+-  panel to any ally's role (click a seat), and the blind-safe ranking itself (J2:
+-  options that hold up against the role's likely picks, not the average)
++  below) with the mode chip and ideas for allies still to pick; in the webview shell a
++  click on an ally's seat switches the lane panel to their role (options from everyone
++  who plays it, by the draft alone; "Your lane" or my seat goes back). Left: the
++  blind-safe ranking itself (J2: options that hold up against the role's likely picks,
++  not the average)
+ - APP4 Hovers: picks and bans from hovered champions, live (both editions). The board
+   shows ally hovers and intents and counts them in the draft; left: an enemy's hover
+   never shows, so nothing to do there; check ban hovers in a real capture (APP1)
+diff --git a/src/board.zig b/src/board.zig
+index 4018f65f..5023a908 100644
+--- a/src/board.zig
++++ b/src/board.zig
+@@ -99,12 +99,40 @@ pub fn build(arena: std.mem.Allocator, stats: *const Stats, opts: core.Options,
+         .their_bans = cs.their_bans,
+         .turn = cs.my_turn,
+         .stage = stage(cs.phase),
+-        .mode = if (card) |c| if (c.locked) .locked else if (c.opponent) |o| .{ .counter = o } else .blind else .blind,
++        .mode = if (card) |c| modeOf(c) else .blind,
+         .ban_options = if (cs.bans_open) try banOptions(arena, stats, cs, enemies, card) else &.{},
+         .draft = draft(stats, opts, allies, enemies),
+     };
+ }
+ 
++pub fn modeOf(card: *const lanecard.Card) Mode {
++    return if (card.locked) .locked else if (card.opponent) |o| .{ .counter = o } else .blind;
++}
++
++/// The lane card's input seen from the ally in `role`: their champion as mine, the rest
++/// of my team (me too) as allies. Their pool, mastery and rank aren't known: options
++/// come from everyone who plays the role, by the draft alone. Null when no other ally
++/// has the role
++pub fn allyLane(arena: std.mem.Allocator, mine: lanecard.Input, cs: session.ChampSelect, role: Role) !?lanecard.Input {
++    if (cs.my_role == role) return null;
++    const ally = for (cs.my_team) |sl| {
++        if (!sl.me and sl.role == role) break sl;
++    } else return null;
++    var allies: std.ArrayList(core.Pick) = .empty;
++    if (cs.my_champion != 0) try allies.append(arena, .{ .champion = cs.my_champion, .role = cs.my_role, .hover = !cs.my_locked });
++    for (cs.allies) |p| if (p.role != role) try allies.append(arena, p);
++    var in = mine;
++    in.role = role;
++    in.me = ally.champion;
++    in.locked = ally.champion != 0 and ally.state == .locked;
++    in.allies = allies.items;
++    in.pickable = null;
++    in.mastery = &.{};
++    in.tier = null;
++    in.expertise = null;
++    return in;
++}
++
+ fn seat(stats: *const Stats, opts: core.Options, sl: Slot, role: ?Role, guessed: bool) Seat {
+     var s: Seat = .{ .slot = sl, .role = role, .guessed = guessed };
+     if (sl.champion == 0) return s;
+@@ -316,3 +344,39 @@ test "board: seats, guessed enemy roles, ideas, bans, draft" {
+     try testing.expectEqual(1, d.hovers);
+     try testing.expect(d.win > 0.3 and d.win < 0.7 and d.se > 0);
+ }
++
++test "board: an ally's lane as the card sees it" {
++    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
++    defer arena_state.deinit();
++    const arena = arena_state.allocator();
++    var mine = [_]Slot{
++        .{ .champion = 122, .role = .top, .state = .locked },
++        .{ .role = .jungle },
++        .{ .champion = 103, .role = .middle, .state = .hover, .me = true },
++    };
++    const cs: session.ChampSelect = .{
++        .my_role = .middle,
++        .my_champion = 103,
++        .my_locked = false,
++        .allies = @constCast(&[_]core.Pick{.{ .champion = 122, .role = .top }}),
++        .enemies = &.{},
++        .bans = &.{},
++        .phase = "BAN_PICK",
++        .my_team = &mine,
++    };
++    var f = try cardscenes.fixture();
++    defer f.deinit();
++    const base: lanecard.Input = .{ .stats = &f.stats, .curves = null, .role = .middle, .me = 103, .pickable = &.{103}, .tier = "GOLD" };
++    const top = (try allyLane(arena, base, cs, .top)).?;
++    try testing.expectEqual(122, top.me);
++    try testing.expect(top.locked);
++    try testing.expectEqual(null, top.pickable);
++    try testing.expectEqual(null, top.expertise);
++    try testing.expectEqualSlices(core.Pick, &.{.{ .champion = 103, .role = .middle, .hover = true }}, top.allies);
++    const jungle = (try allyLane(arena, base, cs, .jungle)).?;
++    try testing.expectEqual(0, jungle.me);
++    try testing.expect(!jungle.locked);
++    try testing.expectEqual(2, jungle.allies.len);
++    try testing.expectEqual(null, try allyLane(arena, base, cs, .middle));
++    try testing.expectEqual(null, try allyLane(arena, base, cs, .bottom));
++}
+diff --git a/src/desktop/poller.zig b/src/desktop/poller.zig
+index 110ab250..230fa70b 100644
+--- a/src/desktop/poller.zig
++++ b/src/desktop/poller.zig
+@@ -506,7 +506,9 @@ const Poller = struct {
+     }
+ 
+     fn tick(p: *Poller, arena: std.mem.Allocator, data: *const Data) !state.Status {
+-        const cs = switch (try p.watch.step(arena)) {
++        const step = try p.watch.step(arena);
++        if (step != .select) state.lane_role.store(state.own_lane, .release);
++        const cs = switch (step) {
+             .phase => |phase| {
+                 // Live Client Data is up once the game has loaded; until then, waiting
+                 // After it, the client's end of game block; the game's history stays
+@@ -545,14 +547,17 @@ const Poller = struct {
+         const own = p.own.?;
+         const pool = p.watch.pool;
+         const by_mastery = state.by_mastery.load(.acquire);
++        const shown = state.lane_role.load(.acquire);
+         var h: std.hash.Wyhash = .init(cs.fingerprint());
+         h.update(std.mem.asBytes(&role));
+         h.update(std.mem.asBytes(&by_mastery));
++        h.update(&.{shown});
+         if (pool) |ids| h.update(std.mem.sliceAsBytes(ids));
+         p.fingerprint = h.final();
+ 
+         const sel = try arena.create(state.Select);
+-        sel.card = try lanecard.build(arena, .{
++        sel.ally = false;
++        const mine: lanecard.Input = .{
+             .stats = &data.stats,
+             .curves = if (data.curves) |*c| c else null,
+             .role = role,
+@@ -565,8 +570,13 @@ const Poller = struct {
+             .mastery = own.mastery,
+             .tier = own.tier,
+             .expertise = if (by_mastery) .fitted else null,
+-        });
++        };
++        sel.card = try lanecard.build(arena, mine);
+         sel.board = try board.build(arena, &data.stats, .{}, cs, &sel.card);
++        if (shown < core.Role.count) if (try board.allyLane(arena, mine, cs, @fromBackingInt(@intCast(shown)))) |in| {
++            sel.card = try lanecard.build(arena, in);
++            sel.ally = true;
++        };
+         sel.comp = try comp.after(arena, .{
+             .stats = &data.stats,
+             .curves = if (data.curves) |*c| c else null,
+diff --git a/src/desktop/state.zig b/src/desktop/state.zig
+index 739b3bde..b7a423a9 100644
+--- a/src/desktop/state.zig
++++ b/src/desktop/state.zig
+@@ -21,6 +21,8 @@ pub const Select = struct {
+     board: board.Board,
+     /// Once every seat is locked
+     comp: ?*const comp.Comp = null,
++    /// The card is an ally's lane (lane_role), not mine
++    ally: bool = false,
+ };
+ 
+ pub const Status = union(enum) {
+@@ -56,6 +58,11 @@ pub const Note = union(enum) {
+ /// The window's "Count your mastery points" box; the poller reads it each tick
+ pub var by_mastery: std.atomic.Value(bool) = .init(true);
+ 
++/// The lane the card shows (Role's backing int), set by a click on an ally's seat;
++/// `own_lane` shows mine. Back to mine when champ select ends
++pub var lane_role: std.atomic.Value(u8) = .init(own_lane);
++pub const own_lane = 255;
++
+ /// The sign-in form's, under the poller's mutex
+ pub const SignIn = struct {
+     /// No working sign in: the form is offered
+diff --git a/src/shell/channel.zig b/src/shell/channel.zig
+index 24b6f655..faea4f1d 100644
+--- a/src/shell/channel.zig
++++ b/src/shell/channel.zig
+@@ -62,6 +62,8 @@ pub const FromPage = union(enum) {
+     signin: struct { username: []const u8, password: []const u8 },
+     /// Options weigh the player's mastery points (champ select's toggle)
+     mastery: bool,
++    /// The lane panel shows this role's ally (a seat click), 255 my own lane
++    lane: u8,
+     /// Private edition: practice on or off, or a change to its draft (practice.zig)
+     practice: @import("ui").toshell.Practice,
+ };
+@@ -122,6 +124,7 @@ test "from page: each kind parses, anything else is an error" {
+     try std.testing.expectEqualStrings("https://meio.lol/", (try read(a, "{\"open\":\"https://meio.lol/\"}")).open);
+     try std.testing.expectEqualStrings("a\"b", (try read(a, "{\"signin\":{\"username\":\"ann\",\"password\":\"a\\\"b\"}}")).signin.password);
+     try std.testing.expectEqual(false, (try read(a, "{\"mastery\":false}")).mastery);
++    try std.testing.expectEqual(255, (try read(a, "{\"lane\":255}")).lane);
+     try std.testing.expectError(error.UnknownField, read(a, "{\"quit\":{}}"));
+     try std.testing.expect(std.meta.isError(read(a, "{\"drawn\":-1}")));
+     try std.testing.expect(std.meta.isError(read(a, "not json")));
+diff --git a/src/shell/client.zig b/src/shell/client.zig
+index 6971072c..0f0ac1e9 100644
+--- a/src/shell/client.zig
++++ b/src/shell/client.zig
+@@ -42,6 +42,14 @@ pub fn mastery(on: bool) void {
+     s.practice_changed();
+ }
+ 
++/// A seat click: the lane panel shows that ally's role (255 mine) from the next build
++pub fn lane(role: u8) void {
++    state.lane_role.store(role, .release);
++    const s = poller.lock();
++    defer poller.unlock();
++    s.practice_changed();
++}
++
+ pub fn current() Client {
+     const s = poller.lock();
+     defer poller.unlock();
+diff --git a/src/shell/mac.zig b/src/shell/mac.zig
+index ebd0c3f8..2bed3c7a 100644
+--- a/src/shell/mac.zig
++++ b/src/shell/mac.zig
+@@ -136,6 +136,7 @@ fn received(_: Id, _: Sel, _: Id, message: Id) callconv(.c) void {
+         },
+         .signin => |x| client.signIn(x.username, x.password),
+         .mastery => |on| client.mastery(on),
++        .lane => |r| client.lane(r),
+         .practice => |p| if (!@import("build_options").public) {
+             _ = practice.edit(p, @intFromFloat(nowMs() * 1000));
+         },
+diff --git a/src/shell/screens.zig b/src/shell/screens.zig
+index f5f32c1b..e8c3872d 100644
+--- a/src/shell/screens.zig
++++ b/src/shell/screens.zig
+@@ -253,8 +253,8 @@ fn select(a: Allocator, c: Ctx, s: *const state.Select) !ui.champselect.Screen {
+         .act = try c.act(a, .{ .ban = o.champion }),
+     };
+     return .{
+-        .board = .{ .lanes = try lanes(a, c, b), .bans_us = bans_us, .bans_them = bans_them },
+-        .lane = try lane(a, c, &s.card, b.mode),
++        .board = .{ .lanes = try lanes(a, c, b, if (s.ally) s.card.role else null), .bans_us = bans_us, .bans_them = bans_them },
++        .lane = try lane(a, c, &s.card, board.modeOf(&s.card), s.ally),
+         .ban_options = ban_options,
+         .banning = b.turn == .ban,
+         .draft = if (c.private) if (b.draft) |d| @floatCast(100 * d.win) else null else null,
+@@ -325,8 +325,8 @@ pub fn compView(a: Allocator, c: Ctx, x: *const comp.Comp) !ui.compview.Comp {
+ }
+ 
+ /// A row per role in draft order; a seat without a role takes the first row its side
+-/// left empty
+-fn lanes(a: Allocator, c: Ctx, b: *const board.Board) ![]const ui.draftboard.Lane {
++/// left empty. `shown`: the ally whose lane the panel shows
++fn lanes(a: Allocator, c: Ctx, b: *const board.Board, shown: ?core.Role) ![]const ui.draftboard.Lane {
+     var rows: [5]ui.draftboard.Lane = undefined;
+     for (&rows, ui.role.Role.all) |*r, role| r.* = .{ .role = role };
+     var filled: [2][5]bool = @splat(@splat(false));
+@@ -343,6 +343,7 @@ fn lanes(a: Allocator, c: Ctx, b: *const board.Board) ![]const ui.draftboard.Lan
+             break;
+         };
+     }
++    if (shown) |r| rows[@backingInt(r)].us.shown = true;
+     return a.dupe(ui.draftboard.Lane, &rows);
+ }
+ 
+@@ -392,7 +393,8 @@ fn seat(a: Allocator, c: Ctx, s: board.Seat, side: usize, k: usize) !ui.draftboa
+     return out;
+ }
+ 
+-fn lane(a: Allocator, c: Ctx, card: *const lanecard.Card, mode: board.Mode) !ui.champselect.Lane {
++/// `ally`: an ally's lane, without my pool or mastery
++fn lane(a: Allocator, c: Ctx, card: *const lanecard.Card, mode: board.Mode, ally: bool) !ui.champselect.Lane {
+     const options = try a.alloc(ui.champselect.Option, card.options.len);
+     for (options, card.options) |*x, o| {
+         const reasons = try a.alloc(ui.champselect.Reason, o.reasons.len);
+@@ -428,6 +430,7 @@ fn lane(a: Allocator, c: Ctx, card: *const lanecard.Card, mode: board.Mode) !ui.
+     } else null else null;
+     return .{
+         .role = uiRole(card.role),
++        .ally = ally,
+         .me = me_champ,
+         .them = them_champ,
+         .guessed = if (them) |o| o.guessed else false,
+@@ -439,9 +442,11 @@ fn lane(a: Allocator, c: Ctx, card: *const lanecard.Card, mode: board.Mode) !ui.
+         .sentence = card.sentence,
+         .thin = if (card.matchup) |m| m.thin else false,
+         .chart = chart,
+-        .caption = if (card.matchup) |m| try a.print("Gold, you minus them: the line is the average, the band the middle half of {d} games ({s}, EUW, {s}).", .{ m.games, m.bracket.label(), card.period }) else "",
++        .caption = if (card.matchup) |m| try a.print("Gold, {s} minus them: the line is the average, the band the middle half of {d} games ({s}, EUW, {s}).", .{
++            if (ally) if (me_champ) |x| x.name else "them" else "you", m.games, m.bracket.label(), card.period,
++        }) else "",
+         .options = options,
+-        .mastery = state.by_mastery.load(.acquire),
++        .mastery = if (ally) null else state.by_mastery.load(.acquire),
+         .scope = if (card.period.len > 0) try a.print("EUW, {s}", .{card.period}) else "EUW",
+     };
+ }
+@@ -837,6 +842,25 @@ test "champ select: the private edition's numbers, the public one's words" {
+     try testing.expectEqualStrings("Syndra", back.screen.select.lane.them.?.name);
+ }
+ 
++test "an ally's lane: their seat marked, no mastery toggle, their name in the caption" {
++    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
++    defer arena.deinit();
++    const a = arena.allocator();
++    var f = try fixture();
++    defer f.deinit();
++    var sel = testSelect();
++    sel.ally = true;
++    sel.card.role = .top;
++    sel.card.me = galio;
++    const s = (try data(a, .{ .stats = &f.stats, .icons = null, .private = false }, .{ .select = &sel }, .none)).screen.select;
++    try testing.expect(s.lane.ally);
++    try testing.expectEqual(null, s.lane.mastery);
++    try testing.expect(s.board.lanes[0].us.shown and !s.board.lanes[2].us.shown);
++    try testing.expect(std.mem.startsWith(u8, s.lane.caption, "Gold, Galio minus them"));
++    // The board's mode is still mine; the panel's is the card's
++    try testing.expectEqual(.counter, s.lane.mode);
++}
++
+ test "comp view: once all ten are locked, words for everyone and numbers for testers" {
+     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+     defer arena.deinit();
+diff --git a/src/shell/win.zig b/src/shell/win.zig
+index 6a886b56..6906225e 100644
+--- a/src/shell/win.zig
++++ b/src/shell/win.zig
+@@ -600,6 +600,7 @@ fn messageReceived(_: *Handler, _: [*c]c.ICoreWebView2, args: [*c]c.ICoreWebView
+         .open => |url| openExternal(url),
+         .signin => |x| client.signIn(x.username, x.password),
+         .mastery => |on| client.mastery(on),
++        .lane => |r| client.lane(r),
+         .practice => |p| if (!@import("build_options").public) {
+             _ = practice.edit(p, @intFromFloat(nowMs() * 1000));
+         },
+diff --git a/src/site/ui/app.zig b/src/site/ui/app.zig
+index 586a7c10..a35ece35 100644
+--- a/src/site/ui/app.zig
++++ b/src/site/ui/app.zig
+@@ -52,21 +52,54 @@ pub const Data = struct {
+ 
+ pub const sel = "[data-island=app]";
+ 
++/// toshell's lane: my own lane again
++pub const own_lane = 255;
++
+ pub const App = struct {
+     data: Data,
+     lane: lane.Held = .{},
+     team: lane.Held = .{},
+     form: signin.Form = .{},
+ 
+-    pub const Msg = enum { mastery, practice };
++    pub const Msg = union(enum) {
++        mastery,
++        practice,
++        /// The board row of an ally's seat
++        seat: u8,
++        own,
++    };
+ 
+     pub fn update(a: *App, m: Msg, _: *tree.Event) void {
+         switch (m) {
+             .mastery => if (a.data.screen == .select) if (a.data.screen.select.lane.mastery) |on| toshell.send(.mastery, !on),
+             .practice => if (a.data.practice) |on| toshell.practice(.on, !on),
++            .seat => |i| if (a.data.screen == .select) {
++                const rows = a.data.screen.select.board.lanes;
++                if (i < rows.len) toshell.send(.lane, @backingInt(rows[i].role));
++            },
++            .own => toshell.send(.lane, own_lane),
+         }
+     }
+ 
++    /// Ally seats switch the lane panel, mine switches back; not under practice, whose
++    /// clicks place champions
++    fn clicks(a: *App, h: *H, s: champselect.Screen) champselect.Clicks {
++        var on: champselect.Clicks = .{ .mastery = h.on(a, .mastery), .own = h.on(a, .own) };
++        if (a.data.practice == true) return on;
++        const seats = h.mem.alloc(?tree.Handler, s.board.lanes.len) catch {
++            h.oom = true;
++            return on;
++        };
++        for (seats, s.board.lanes, 0..) |*x, l, i| x.* = if (l.us.shown)
++            null
++        else if (l.us.you)
++            if (s.lane.ally) on.own else null
++        else
++            h.on(a, .{ .seat = @intCast(i) });
++        on.seats = seats;
++        return on;
++    }
++
+     pub fn view(a: *App, h: *H) N {
+         const d = a.data;
+         const head = h.el(.header, .{}, .{
+@@ -84,7 +117,7 @@ pub const App = struct {
+                     h.el(.h1, .{}, .{n.title}),
+                     if (n.text.len > 0) h.p(.{}, .{n.text}) else null,
+                 }),
+-                .select => |s| champselect.view(h, s, &a.lane, h.on(a, .mastery)),
++                .select => |s| champselect.view(h, s, &a.lane, a.clicks(h, s)),
+                 .loading => |s| loadscreen.view(h, s),
+                 .game => |s| gamescreen.view(h, s, .{ .lane = &a.lane, .team = &a.team }),
+                 .post => |s| postgame.view(h, s, &a.team),
+diff --git a/src/site/ui/champselect.zig b/src/site/ui/champselect.zig
+index 99a27e45..ecfe6428 100644
+--- a/src/site/ui/champselect.zig
++++ b/src/site/ui/champselect.zig
+@@ -9,6 +9,7 @@ const champ = @import("champ.zig");
+ const role = @import("role.zig");
+ const badge = @import("badge.zig");
+ const chip = @import("chip.zig");
++const button = @import("button.zig");
+ const card = @import("card.zig");
+ const fmt = @import("fmt.zig");
+ const draftboard = @import("draftboard.zig");
+@@ -38,6 +39,8 @@ pub const Mode = enum { blind, counter, locked };
+ 
+ pub const Lane = struct {
+     role: role.Role,
++    /// An ally's lane (a click on their seat): `me` is theirs, no pool or mastery
++    ally: bool = false,
+     me: ?champ.Champ = null,
+     them: ?champ.Champ = null,
+     /// Their role is a guess: enemy positions are hidden
+@@ -86,28 +89,36 @@ pub const BanOption = struct {
+     act: []const u8 = "",
+ };
+ 
+-/// `held`: the island's chart state; null draws no chart. `mastery` flips Lane.mastery
+-pub fn view(h: *H, s: Screen, held: ?*lanechart.Held, mastery: ?tree.Handler) N {
++/// The island's clicks: the mastery chip, an ally's seat (by board row) and back to
++/// your own lane
++pub const Clicks = struct {
++    mastery: ?tree.Handler = null,
++    seats: ?[]const ?tree.Handler = null,
++    own: ?tree.Handler = null,
++};
++
++/// `held`: the island's chart state; null draws no chart
++pub fn view(h: *H, s: Screen, held: ?*lanechart.Held, on: Clicks) N {
+     const bans = banOptions(h, s);
+     return h.div(.{ .class = "c-cs" }, .{
+         h.div(.{ .class = "board" }, .{
+             if (s.draft) |d| h.p(.{ .class = "draft", .style = h.vars(.{ .c = fmt.wrColour(d / 100, 0.2) }) }, .{W.draft.with(h, .{ .p = d })}) else null,
+-            draftboard.view(h, s.board),
++            draftboard.viewOn(h, s.board, on.seats),
+             if (!s.banning) bans else null,
+         }),
+         h.div(.{ .class = "side" }, .{
+             if (s.banning) bans else null,
+-            lane(h, s.lane, held, mastery),
++            lane(h, s.lane, held, on),
+         }),
+     });
+ }
+ 
+-fn lane(h: *H, l: Lane, held: ?*lanechart.Held, on_mastery: ?tree.Handler) N {
++fn lane(h: *H, l: Lane, held: ?*lanechart.Held, on: Clicks) N {
+     var opts = h.list();
+     for (l.options, 0..) |o, i| opts.add(option(h, i, o, l.mode == .locked));
+     return h.section(.{ .class = "lane" }, .{
+         h.div(.{ .class = "vs" }, .{
+-            champ.view(h, l.me, .{ .px = .@"48", .you = true, .named = false, .label = W.no_pick }),
++            champ.view(h, l.me, .{ .px = .@"48", .you = !l.ally, .named = false, .label = W.no_pick }),
+             h.div(.{ .class = "who" }, .{
+                 h.h2(.{}, .{
+                     if (l.me) |m| m.name else W.no_pick.s,
+@@ -115,6 +126,7 @@ fn lane(h: *H, l: Lane, held: ?*lanechart.Held, on_mastery: ?tree.Handler) N {
+                 }),
+                 h.span(.{ .class = "tags" }, .{
+                     badge.view(h, .us, .{role.Role.label(l.role)}),
++                    if (l.ally) badge.view(h, .neutral, .{W.ally}) else null,
+                     badge.view(h, if (l.mode == .locked) .accent else .neutral, .{switch (l.mode) {
+                         .blind => W.blind,
+                         .counter => W.counter,
+@@ -133,7 +145,8 @@ fn lane(h: *H, l: Lane, held: ?*lanechart.Held, on_mastery: ?tree.Handler) N {
+                 .counter => W.head_counter,
+                 .locked => W.head_locked,
+             }}),
+-            if (l.mastery) |m| chip.view(h, .{ .pressed = m, .on = on_mastery }, .{W.mastery}) else null,
++            if (l.mastery) |m| chip.view(h, .{ .pressed = m, .on = on.mastery }, .{W.mastery}) else null,
++            if (l.ally) button.view(h, .{ .s = .s, .on = on.own }, .{W.own}) else null,
+         }),
+         if (l.options.len == 0) h.p(.{ .class = "say" }, .{W.none}) else h.el(.ol, .{ .class = "opts" }, .{opts.done()}),
+         if (l.scope.len > 0) h.p(.{ .class = "scope" }, .{l.scope}) else null,
+@@ -199,6 +212,8 @@ const W = struct {
+     const head_counter = plain("Options into them");
+     const head_locked = plain("Other options");
+     const mastery = plain("Count mastery");
++    const ally = plain("Ally");
++    const own = plain("Your lane");
+     const none = plain("No champion you can pick has enough games in this role.");
+     const your_lane = plain("your lane");
+     const ban_now = plain("Your ban");
+@@ -241,6 +256,8 @@ pub const css =
+     \\    font-weight: var(--w-b); font-variant-numeric: tabular-nums; color: var(--c, var(--text)); }
+     \\  .c-cs .win > small { font-size: var(--fs-xs); font-weight: var(--w-r); color: var(--faint); }
+     \\  .c-cs .bans[data-turn] h3 { color: var(--turn); }
++    \\  .c-cs .c-draft .seat[role="button"] { cursor: pointer; }
++    \\  .c-cs .c-draft .seat[data-shown] { box-shadow: inset 0 0 0 1px var(--sel-line); border-radius: var(--r-s); }
+     \\}
+     \\
+ ;
+@@ -302,6 +319,27 @@ fn private(h: *H, s: Screen) Screen {
+     return p;
+ }
+ 
++/// Top's seat clicked: their lane, options from everyone who plays it
++fn allyLane(h: *H) Screen {
++    var s = sample;
++    const lanes = h.mem.dupe(draftboard.Lane, sample.board.lanes) catch {
++        h.oom = true;
++        return sample;
++    };
++    lanes[0].us.shown = true;
++    s.board.lanes = lanes;
++    s.lane = .{
++        .role = .top,
++        .ally = true,
++        .me = lanes[0].us.champ,
++        .mode = .locked,
++        .sentence = "",
++        .options = sample.lane.options[1..],
++        .scope = "EUW, last 30 days",
++    };
++    return s;
++}
++
+ fn chartState(h: *H) ?*lanechart.Held {
+     const x = h.mem.create(lanechart.Held) catch {
+         h.oom = true;
+@@ -313,8 +351,9 @@ fn chartState(h: *H) ?*lanechart.Held {
+ 
+ pub fn gallery(g: *Gallery) void {
+     const h = g.h;
+-    g.addFill("counter, public", view(h, sample, chartState(h), null));
+-    g.addFill("counter, private", view(h, private(h, sample), chartState(h), null));
++    g.addFill("counter, public", view(h, sample, chartState(h), .{}));
++    g.addFill("counter, private", view(h, private(h, sample), chartState(h), .{}));
++    g.addFill("an ally's lane", view(h, allyLane(h), chartState(h), .{}));
+     g.addFill("your ban, blind", view(h, .{
+         .board = .{ .lanes = draftboard.sample.lanes[0..5], .bans_them = draftboard.sample.bans_them },
+         .banning = true,
+@@ -323,5 +362,5 @@ pub fn gallery(g: *Gallery) void {
+             .{ .champ = demo("Smolder", "Smolder"), .role = .bot, .why = "wins often and is picked a lot in bot" },
+         },
+         .lane = .{ .role = .mid, .options = sample.lane.options[1..], .mastery = false, .scope = "EUW, last 30 days" },
+-    }, null, null));
++    }, null, .{}));
+ }
+diff --git a/src/site/ui/draftboard.zig b/src/site/ui/draftboard.zig
+index 3e516e9f..62683ca5 100644
+--- a/src/site/ui/draftboard.zig
++++ b/src/site/ui/draftboard.zig
+@@ -43,6 +43,8 @@ pub const Seat = struct {
+     /// Practice's click on the seat and on each idea (ui/practice.zig Act); "" for none
+     act: []const u8 = "",
+     idea_acts: []const []const u8 = &.{},
++    /// The lane panel beside shows this ally's lane
++    shown: bool = false,
+     // Full variant from here
+     /// In the draft's order, 1-10; null when the order isn't known
+     pick: ?u8 = null,
+@@ -102,9 +104,14 @@ pub const Side = enum { us, them };
+ 
+ /// The app's board; the full variant is fullOn's (kept apart so ui-app.wasm doesn't carry it)
+ pub fn view(h: *H, b: Board) N {
++    return viewOn(h, b, null);
++}
++
++/// `ally`: a click on our seat in each row (by row), for the app's lane panel
++pub fn viewOn(h: *H, b: Board, ally: ?[]const ?tree.Handler) N {
+     var rows = h.list();
+-    for (b.lanes) |l| rows.add(h.div(.{ .key = @as(u32, @backingInt(l.role)), .class = "lane" }, .{
+-        seat(h, l.us, .us),
++    for (b.lanes, 0..) |l, i| rows.add(h.div(.{ .key = @as(u32, @backingInt(l.role)), .class = "lane" }, .{
++        seatOn(h, l.us, .us, if (ally) |on| if (i < on.len) on[i] else null else null),
+         h.span(.{ .class = "mid" }, .{
+             role.view(h, l.role, .{ .s = .s }),
+             if (l.them.guessed and l.them.champ != null) h.span(.{ .class = "q", .role = "img", .aria_label = words.guessed }, .{"?"}) else null,
+@@ -122,6 +129,10 @@ pub fn view(h: *H, b: Board) N {
+ }
+ 
+ fn seat(h: *H, s: Seat, side: Side) N {
++    return seatOn(h, s, side, null);
++}
++
++fn seatOn(h: *H, s: Seat, side: Side, on: ?tree.Handler) N {
+     const line: ?N = if (s.picking)
+         badge.view(h, .turn, .{words.picking})
+     else switch (s.state) {
+@@ -140,6 +151,9 @@ fn seat(h: *H, s: Seat, side: Side) N {
+         .data_turn = s.picking,
+         .data_you = s.you,
+         .data_act = if (s.act.len > 0) s.act else null,
++        .data_shown = s.shown,
++        .role = if (on != null) "button" else null,
++        .on_click = on,
+     }, .{
+         champ.view(h, s.champ, .{
+             .px = .@"40",
+diff --git a/src/site/ui/toshell.zig b/src/site/ui/toshell.zig
+index 7e7314bf..9ca46e2a 100644
+--- a/src/site/ui/toshell.zig
++++ b/src/site/ui/toshell.zig
+@@ -8,6 +8,8 @@ pub const Out = union(enum) {
+     signin: SignIn,
+     /// Options weigh your mastery points
+     mastery: bool,
++    /// The lane panel shows this role's ally (Role.all's order), 255 my own lane
++    lane: u8,
+     /// Private edition: practice on or off, or a change to its draft (ui/practice.zig)
+     practice: Practice,
+ };

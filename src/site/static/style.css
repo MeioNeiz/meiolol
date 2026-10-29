@@ -199,19 +199,6 @@ a.gold, a.gold.up, a.gold.down { color: var(--text); font-weight: 500; }
 .tiles small { color: var(--faint); font-size: 12px; }
 section > h2 { margin-top: 28px; }
 .tiles > div.stale { opacity: 0.45; }
-/* Method page accuracy chart (evalchart.zig): series colours validated for colour-blind
-   separation on the panel; labels stay in text colour, the end dots carry the colour */
-.evalchart .line { fill: none; stroke-width: 2; }
-.evalchart .s1 { stroke: #3987e5; fill: #3987e5; }
-.evalchart .s2 { stroke: #d95926; fill: #d95926; }
-.evalchart .s3 { stroke: #199e70; fill: #199e70; }
-.evalchart polyline.s1, .evalchart polyline.s2, .evalchart polyline.s3 { fill: none; }
-.evalchart .end { stroke: var(--panel); stroke-width: 2; }
-.evalchart .legend { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0 0 8px; padding: 0; font-size: 14px; }
-.evalchart .legend i { display: inline-block; width: 14px; height: 3px; margin-right: 6px; vertical-align: middle; border-radius: 2px; }
-.evalchart .legend .s1 { background: #3987e5; }
-.evalchart .legend .s2 { background: #d95926; }
-.evalchart .legend .s3 { background: #199e70; }
 /* Phones: tables fit the screen without sideways scrolling. Labels and headers wrap,
    numbers stay on one line until 380px */
 @media (max-width: 480px) {

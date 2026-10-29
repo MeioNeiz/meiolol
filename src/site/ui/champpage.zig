@@ -43,6 +43,7 @@ const filterbar = @import("filterbar.zig");
 const url = @import("url.zig");
 const champrank = @import("champrank.zig");
 const lane = @import("lane.zig");
+const versus = @import("versus.zig");
 const plain = phrase.plain;
 const Phrase = phrase.Phrase;
 const H = tree.H;
@@ -106,6 +107,7 @@ pub const Role = struct {
     lean: ?i16 = null,
     lane: ?LaneCurves = null,
     comeback: ?Comeback = null,
+    kills: ?Kills = null,
     build: ?buildpanel.Data = null,
     /// Against or with each role: lane opponents first
     rels: []const Rel,
@@ -335,6 +337,10 @@ pub const W = struct {
     pub const comeback_buckets = [5]tree.Text{ plain("-1.5k"), plain("-1k"), plain("0"), plain("+1k"), plain("+1.5k") };
     pub const comeback_tip = Phrase("{l:text} at {m:text}: {r:rate} in {n:count} games, all lanes {a:rate}");
     pub const all_lanes = plain("dashed: all lanes");
+    pub const kills_head = plain("Lane kills");
+    pub const kills_them = "Opponent";
+    pub const first_blood = plain("First blood");
+    pub const kills = [3]tree.Text{ plain("Kills to 6 min"), plain("Kills 6-14 min"), plain("Kills after 14") };
     pub const players = plain("Players");
     pub const spread_head = Phrase("{n:count} · middle half {lo:pct}-{hi:pct}");
     pub const spread_note = Phrase("Players with 10+ games on it. Luck alone would spread the middle half over {lo:pct}-{hi:pct}.");
@@ -370,6 +376,21 @@ pub const usual_note = W.usual_note;
 
 fn rate(c: Counts) f32 {
     return @floatCast(buildpanel.rate(c.games, c.wins));
+}
+
+/// A Versus row of a and b in `games`, as the matchup page's head to head
+fn share(h: *H, label: tree.Text, games: u32, a: u32, b: u32) versus.Row {
+    const pa = rate(.{ .games = games, .wins = a });
+    const pb = rate(.{ .games = games, .wins = b });
+    const ra = @round(pa);
+    const rb = @round(pb);
+    return .{
+        .label = label,
+        .a = phrase.num(h, .pct, @as(u32, @intFromFloat(ra))),
+        .b = phrase.num(h, .pct, @as(u32, @intFromFloat(rb))),
+        .bars = .{ pa / 100, pb / 100 },
+        .lead = if (ra > rb) .a else if (rb > ra) .b else null,
+    };
 }
 
 /// ±95%, points
@@ -476,6 +497,7 @@ pub const ChartsRole = struct {
     role: role.Role,
     lane: ?LaneCurves = null,
     comeback: ?Comeback = null,
+    kills: ?Kills = null,
 };
 
 /// Games and wins by the champion's lane gold lead at 10 and 15 minutes, in the curves'
@@ -483,6 +505,15 @@ pub const ChartsRole = struct {
 pub const Comeback = struct {
     at: [2][5]Counts,
     all: [2][5]Counts,
+};
+
+/// Lanes where the champion took part in killing its lane opponent, and the other way,
+/// in each phase (0-6, 6-14, 14+ min); first blood from games of curves files v6+
+pub const Kills = struct {
+    games: u32,
+    first_blood: [2]u32,
+    kills: [3]u32,
+    deaths: [3]u32,
 };
 
 /// Files' rank type for the charts, which have no rank files
@@ -500,7 +531,7 @@ pub fn split(a: std.mem.Allocator, d: *const Data) !Split {
         t.* = .{ .role = x.role, .games = x.games, .wins = x.wins, .share = x.share, .thin = x.thin, .rank = x.rank, .of = x.of, .pick = x.pick, .ban = x.ban, .patch_move = x.patch_move, .lane = if (x.rels.len > 0) x.rels[0].opps else &.{} };
         b.* = .{ .role = x.role, .thin = x.thin, .build = x.build };
         m.* = .{ .role = x.role, .thin = x.thin, .games = x.games, .wins = x.wins, .lean = x.lean, .rels = x.rels, .by_patch = x.by_patch, .by_length = x.by_length };
-        c.* = .{ .role = x.role, .lane = x.lane, .comeback = x.comeback };
+        c.* = .{ .role = x.role, .lane = x.lane, .comeback = x.comeback, .kills = x.kills };
     }
     return .{
         .top = .{ .name = d.name, .slug = d.slug, .icon = d.icon, .patch = d.patch, .ddragon = d.ddragon, .champs = d.champs, .roles = top },
@@ -1157,6 +1188,7 @@ pub const Charts = struct {
         }, .{
             h.div(.{ .class = "row2" }, .{ p.laneCard(h), p.comebackCard(h) }),
             h.div(.{ .class = "row2" }, .{ p.pickupCard(h), p.alsoCard(h) }),
+            h.div(.{ .class = "row2" }, .{p.killsCard(h)}),
         });
     }
 
@@ -1214,6 +1246,24 @@ pub const Charts = struct {
             card.head(h, W.comeback, null, &.{ key, segmented.view(h, .{ .s = .s, .label = W.comeback_at }, &items) }),
             p.comeback.view(h),
         });
+    }
+
+    /// Share of lanes with each, the champion against the average opponent
+    fn killsCard(p: *P, h: *H) N {
+        const k = p.r().kills orelse return card.view(h, .{}, &.{ card.head(h, W.kills_head, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
+        var rows: [4]versus.Row = undefined;
+        var n: usize = 0;
+        // Curves files from before v6 have none: no row rather than 0%
+        if (k.first_blood[0] + k.first_blood[1] > 0) {
+            rows[n] = share(h, W.first_blood, k.games, k.first_blood[0], k.first_blood[1]);
+            n += 1;
+        }
+        for (W.kills, k.kills, k.deaths) |l, x, y| {
+            rows[n] = share(h, l, k.games, x, y);
+            n += 1;
+        }
+        const names: [2][]const u8 = .{ p.data.name, W.kills_them };
+        return card.view(h, .{}, &.{ card.head(h, W.kills_head, null, &.{versus.key(h, names)}), versus.rows(h, names, rows[0..n]) });
     }
 
     fn pickupCard(p: *P, h: *H) N {

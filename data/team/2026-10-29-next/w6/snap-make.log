@@ -1,0 +1,7 @@
+2026-10-29T18:10:43Z building HEAD 80bbc328
+2026-10-29T18:26:45Z gpu-box: building snap-20261029T1810Z
+2026-10-29T18:26:47Z restore from /mnt/wsl/archive/meiolol-backups (mirrored 2026-10-28T21:18:20Z)
+2026-10-29T18:56:27Z box: what backups leave out (rank_history after day 20753)
+ssh: connect to host 100.95.95.44 port 22: Connection timed out
+2026-10-29T18:58:32Z box: snapshot-extra failed
+2026-10-29T19:00:47Z snapshot-gpu.sh failed on gpu-box for snap-20261029T1810Z (1)

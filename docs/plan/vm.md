@@ -66,7 +66,7 @@ Migration mode, set 26-27 Oct (undo in VM6, from the new host where moved):
   plus Megatron; benchmarked on the real data before the switch (VM3)
 - Open: CPU type "host" (asked of Ethan); how long the Oracle box stays stopped but
   kept before it is terminated; privacy wording "a server in the United Kingdom"
-  (src/site/prose.zig "Where it is kept"; Ethan has admin on C01 and the shares)
+  (src/site/textpages.zig "Where it is kept"; Ethan has admin on C01 and the shares)
 
 ### VM1: storage
 

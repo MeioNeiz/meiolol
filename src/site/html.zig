@@ -6,6 +6,7 @@ const Writer = std.Io.Writer;
 pub const tpl = @import("tpl");
 const style = @import("style.zig");
 const assets = @import("assets.zig");
+const prose = @import("prose.zig");
 const ui = @import("ui");
 
 pub const product = "meiolol";
@@ -127,6 +128,7 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
         \\<html lang="en">
         \\<head>
         \\<meta charset="utf-8">
+        \\<meta http-equiv="Content-Security-Policy" content="{csp}">
         \\<meta name="viewport" content="width=device-width, initial-scale=1">
         \\<meta name="referrer" content="no-referrer">
         \\<title>{title}</title>
@@ -141,6 +143,7 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
         \\{subbar}{banner}<main class="wrap">
         \\
     , .{
+        .csp = csp,
         .title = p.title,
         .description = p.description,
         .css = toSite(style.file.path),
@@ -155,10 +158,7 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
         .look = tpl.trusted(search_loader),
         .subbar = tpl.when(p.nav.inChampions() or p.counterparts != null, Subbar{ .p = p }),
         // Remembered so shared pages link back into this view
-        .remember = if (p.view) |v| tpl.t(
-            \\<script>try{localStorage.setItem("view","{dir}")}catch(e){}</script>
-            \\
-        , .{ .dir = tpl.trusted(v.query()) }) else null,
+        .remember = if (p.view) |v| tpl.t("<script data-v=\"{v}\">" ++ remember ++ "</script>\n", .{ .v = v.query() }) else null,
         .meio_view = tpl.when(p.view == null, tpl.trusted(meio_view)),
         .admin = tpl.trusted(admin_link),
         .banner = tpl.when(!p.public, Preview{}),
@@ -217,13 +217,42 @@ fn navHref(a: std.mem.Allocator, p: Page, it: NavItem) ![]const u8 {
     return std.mem.concat(a, u8, &.{ it.path, q });
 }
 
+/// The CSP of every page with this head (deploy/nginx/meiolol-headers.conf adds framing,
+/// base-uri and object-src): scripts from this origin and the inline ones here by hash,
+/// wasm, style attributes (h.vars)
+const csp = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'" ++
+    hashes(&.{ search_loader, admin_link, meio_view, "<script>" ++ remember ++ "</script>", prose.admin_download }) ++
+    "; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://ddragon.leagueoflegends.com" ++
+    " https://raw.communitydragon.org";
+
+/// Each inline script's CSP source: its text between the tags, hashed
+fn hashes(comptime scripts: []const []const u8) []const u8 {
+    comptime {
+        @setEvalBranchQuota(1_000_000);
+        var out: []const u8 = "";
+        for (scripts) |s| {
+            const body = s[std.mem.findScalar(u8, s, '>').? + 1 .. std.mem.findLast(u8, s, "</script>").?];
+            var d: [32]u8 = undefined;
+            std.crypto.hash.sha2.Sha256.hash(body, &d, .{});
+            var b: [44]u8 = undefined;
+            out = out ++ " 'sha256-" ++ std.base64.standard.Encoder.encode(&b, &d) ++ "'";
+        }
+        return out;
+    }
+}
+
+/// Remembers the page's view (its data-v) so shared pages link back into it
+const remember = "try{localStorage.setItem(\"view\",document.currentScript.dataset.v)}catch(e){}";
+
 /// The header search's file (ui-sitesearch.js) on the box's first use, so a page that
 /// never searches loads none of it; "/" focuses the box. A submit before the island runs
-/// (window.meioSearch) that isn't a Riot ID waits for it: meioSearchGo, its first option
+/// (window.meioSearch) that isn't a Riot ID waits for it: meioSearchGo, its first option.
+/// If the island fails (script error, or the page still here 8 s on) that submit and later
+/// ones go as without JS
 const search_loader =
-    \\<script>{const f=document.querySelector("[data-island=search]");let on=false;const go=()=>{if(on||!f)return;on=true;const s=document.createElement("script");
-    \\s.src=f.dataset.js;s.dataset.wasm=f.dataset.wasm;document.head.append(s)};f?.addEventListener("focusin",go);f?.addEventListener("pointerdown",go);
-    \\f?.addEventListener("submit",e=>{if(window.meioSearch||f.querySelector("input").value.includes("#"))return;e.preventDefault();window.meioSearchGo=1;go()});
+    \\<script>{const f=document.querySelector("[data-island=search]");let on=false,bad=false;const own=()=>{bad=true;f.submit()};const go=()=>{if(on||!f)return;on=true;const s=document.createElement("script");
+    \\s.src=f.dataset.js;s.dataset.wasm=f.dataset.wasm;s.onerror=()=>{bad=true;if(window.meioSearchGo)own()};document.head.append(s)};f?.addEventListener("focusin",go);f?.addEventListener("pointerdown",go);
+    \\f?.addEventListener("submit",e=>{if(window.meioSearch||bad||f.querySelector("input").value.includes("#"))return;e.preventDefault();window.meioSearchGo=1;go();const h=location.href;setTimeout(()=>{if(location.href==h)own()},8000)});
     \\addEventListener("keydown",e=>{if(!f||e.key!="/"||e.ctrlKey||e.metaKey||e.altKey||e.target.closest?.("input,textarea,select,[contenteditable]"))return;e.preventDefault();go();f.querySelector("input").focus()})}</script>
     \\
 ;
@@ -342,6 +371,31 @@ const Preview = struct {
         try w.writeByte('\n');
     }
 };
+
+test "head: its CSP allows each inline script it writes, by hash" {
+    const views = [_]?View{ null, View.all[3] };
+    for (views) |v| {
+        var out: Writer.Allocating = .init(std.testing.allocator);
+        defer out.deinit();
+        try head(&out.writer, .{ .title = "t", .description = "d", .patch = "16.21", .data = "", .public = true, .view = v });
+        const page = out.written();
+        var n: usize = 0;
+        var at: usize = 0;
+        while (std.mem.findPos(u8, page, at, "<script")) |open| : (n += 1) {
+            const tag_end = std.mem.findScalarPos(u8, page, open, '>').? + 1;
+            const close = std.mem.findPos(u8, page, tag_end, "</script>").?;
+            at = close;
+            if (std.mem.find(u8, page[open..tag_end], " src=") != null) continue;
+            var d: [32]u8 = undefined;
+            std.crypto.hash.sha2.Sha256.hash(page[tag_end..close], &d, .{});
+            var b: [44]u8 = undefined;
+            const src = try std.mem.concat(std.testing.allocator, u8, &.{ "'sha256-", std.base64.standard.Encoder.encode(&b, &d), "'" });
+            defer std.testing.allocator.free(src);
+            try std.testing.expect(std.mem.find(u8, csp, src) != null);
+        }
+        try std.testing.expect(n >= 4);
+    }
+}
 
 test {
     _ = tpl;

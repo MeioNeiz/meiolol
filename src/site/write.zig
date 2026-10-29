@@ -11,6 +11,7 @@ const Writer = std.Io.Writer;
 const log = std.log.scoped(.site);
 
 const root = @import("root.zig");
+const sheets = @import("sheets.zig");
 const File = root.File;
 const assets = @import("assets.zig");
 const Options = root.Options;
@@ -138,7 +139,10 @@ const FileWriter = struct {
     gz_window: []u8,
 
     /// Also `path`.gz, for clients that accept gzip
-    fn write(fw: FileWriter, dir: std.Io.Dir, path: []const u8, data: []const u8) !void {
+    fn write(fw: FileWriter, dir: std.Io.Dir, path: []const u8, raw: []const u8) !void {
+        var arena: std.heap.ArenaAllocator = .init(fw.gpa);
+        defer arena.deinit();
+        const data = try sheets.deliver(arena.allocator(), raw);
         if (std.fs.path.dirname(path)) |d| try dir.createDirPath(fw.io, d);
         try dir.writeFile(fw.io, .{ .sub_path = path, .data = data });
         if (data.len < 1024) return;
@@ -218,9 +222,10 @@ test "views: a tree each, switches between them, shared pages once" {
         "<a href=\"/pool?region=all&amp;period=patch\">Patch 16.20</a>",
         "<a href=\"/pool\">EUW</a><a aria-current=\"page\">All regions</a>",
         "<a aria-disabled=\"true\" title=\"Champion pages and the champions board only\">Diamond+</a>",
-        "href=\"/" ++ @import("style.zig").file.path ++ "\"",
+        "<style>",
         "href=\"/daily\"",
     }) |s| try std.testing.expect(std.mem.find(u8, pool, s) != null);
+    try std.testing.expect(std.mem.find(u8, pool, @import("style.zig").file.path) == null);
     try std.testing.expect(std.mem.find(u8, tiers, "<a href=\"/champions?region=all&amp;period=patch\">Patch</a>") != null);
     // One page per champion, at the site root: the root view's, no switches until the
     // island takes the views
@@ -228,7 +233,7 @@ test "views: a tree each, switches between them, shared pages once" {
     for ([_][]const u8{
         "data-island=\"champion\" data-src=\"/data/champion/a.bin\"",
         "Ranked solo/duo in EUW, last 30 days",
-        "href=\"/" ++ @import("style.zig").file.path ++ "\"",
+        "<style>",
         "<a href=\"/champions\" aria-current=\"page\" data-view=\"\">",
     }) |s| try std.testing.expect(std.mem.find(u8, champ, s) != null);
     try std.testing.expect(std.mem.find(u8, champ, "<div class=\"picks\">") == null);

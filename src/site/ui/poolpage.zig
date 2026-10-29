@@ -141,7 +141,7 @@ pub const Page = struct {
         const entries = try a.alloc(champsearch.Entry, d.champs.len);
         for (entries, d.champs, 0..) |*e, c, i| e.* = .{
             .name = c.name,
-            .src = try a.print(icon_fmt, .{ d.ddragon, c.key }),
+            .src = try a.print(champ.icon_fmt, .{ d.ddragon, c.key }),
             .roles = if (mainOf(d, i)) |m| try a.dupe(Role, &.{m.role}) else &.{},
         };
         const ix = try a.create(champsearch.Index);
@@ -265,12 +265,10 @@ pub const Page = struct {
     }
 };
 
-pub const icon_fmt = "https://ddragon.leagueoflegends.com/cdn/{s}/img/champion/{s}.png";
-
 pub fn iconOf(d: *const Data, h: *H, id: u16) champ.Champ {
     const c = indexOf(d, id) orelse return .{ .name = "?", .src = "" };
     const x = d.champs[c];
-    return .{ .name = x.name, .src = h.fmt(icon_fmt, .{ d.ddragon, x.key }) };
+    return .{ .name = x.name, .src = h.fmt(champ.icon_fmt, .{ d.ddragon, x.key }) };
 }
 
 pub fn indexOf(d: *const Data, id: u16) ?usize {

@@ -1,9 +1,9 @@
 //! "Model accuracy vs data" on the method page: AUC on held-out games against the games
-//! the models learnt from, from the box's daily eval (data/eval-history.tsv, docs/model.md).
-//! Shows honestly how close to a coin flip draft prediction still is.
+//! the models learnt from, from the box's daily eval (data/eval-history.tsv, docs/model.md),
+//! drawn by ui.aucchart. Shows honestly how close to a coin flip draft prediction still is.
 
 const std = @import("std");
-const tpl = @import("tpl");
+const ui = @import("ui");
 
 const Writer = std.Io.Writer;
 
@@ -13,12 +13,12 @@ pub const Point = struct {
     auc: [series.len]f64,
 };
 
-const Series = struct { column: []const u8, label: []const u8, class: []const u8 };
+const Series = struct { column: []const u8, label: []const u8 };
 
 pub const series = [_]Series{
-    .{ .column = "auc_base", .label = "Champion win rates alone", .class = "s1" },
-    .{ .column = "auc_current", .label = "The draft model in use", .class = "s2" },
-    .{ .column = "auc_joint", .label = "Joint ratings (on trial)", .class = "s3" },
+    .{ .column = "auc_base", .label = "Champion win rates alone" },
+    .{ .column = "auc_current", .label = "The draft model in use" },
+    .{ .column = "auc_joint", .label = "Joint ratings (on trial)" },
 };
 
 /// The TSV's lines by its header's column names, sorted by games, one point per games
@@ -70,119 +70,51 @@ pub fn parse(arena: std.mem.Allocator, tsv: []const u8) ![]Point {
     return out.items;
 }
 
-const width = 640;
-const height = 260;
-const left = 56;
-const right = 28;
-const top = 16;
-const bottom = 36;
-
-/// The chart with its heading and caption; nothing under two points
-pub fn section(w: *Writer, points: []const Point) !void {
-    if (points.len < 2) return;
-    var lo: f64 = 0.5;
-    var hi: f64 = 0.5;
-    for (points) |p| for (p.auc) |v| {
-        lo = @min(lo, v);
-        hi = @max(hi, v);
-    };
-    // Room around the coin-flip line, in steps of 0.01
-    lo = @floor(lo * 100 - 1) / 100;
-    hi = @max(@ceil(hi * 100 + 1) / 100, 0.53);
-    const g: Geo = .{ .x0 = @floatFromInt(points[0].games), .x1 = @floatFromInt(points[points.len - 1].games), .lo = lo, .hi = hi };
+/// Under the method page's text: its heading and lead in, as markdown (ui.prose); "" under
+/// two points, as `chart`
+pub fn intro(a: std.mem.Allocator, points: []const Point) ![]const u8 {
+    if (points.len < 2) return "";
     const last = points[points.len - 1];
-    try tpl.renderPart(w,
-        \\<h2 id="accuracy">Model accuracy vs data</h2>
-        \\<p>How well each model tells winners from losers on ranked games it never saw, as
+    return std.fmt.allocPrint(a,
+        \\## Model accuracy vs data {{#accuracy}}
+        \\
+        \\How well each model tells winners from losers on ranked games it never saw, as
         \\more games come in. 0.5 is a coin flip, 1 would be always right. A draft decides
-        \\little of a game, so expect small numbers: at {games} games the best is {best:.3}.</p>
-        \\<figure class="chart evalchart">{legend}<svg viewBox="0 0 {width} {height}" role="img" aria-label="AUC by games learnt from, three models">
+        \\little of a game, so expect small numbers: at {d} games the best is {d:.3}.
         \\
-    , .{
-        .games = last.games,
-        .best = @max(last.auc[0], last.auc[1], last.auc[2]),
-        .width = width,
-        .height = height,
-        .legend = Legend{},
-    });
-    var tick = lo;
-    while (tick <= hi + 1e-9) : (tick += 0.01) {
-        try tpl.render(w,
-            \\<line class="{class}" x1="{l}" x2="{r}" y1="{y:.1}" y2="{y:.1}"/><text x="{tx}" y="{ty:.1}" text-anchor="end">{v:.2}</text>
-            \\
-        , .{
-            .class = if (@abs(tick - 0.5) < 1e-9) "zero" else "grid",
-            .l = left,
-            .r = width - right,
-            .y = g.py(tick),
-            .tx = left - 6,
-            .ty = g.py(tick) + 4,
-            .v = tick,
-        });
-    }
-    try tpl.render(w,
-        \\<text x="{x0}" y="{y}" text-anchor="start">{g0} games</text><text x="{x1}" y="{y}" text-anchor="end">{g1} games</text>
-        \\
-    , .{ .x0 = left, .x1 = width - right, .y = height - 12, .g0 = points[0].games, .g1 = last.games });
-    for (series, 0..) |s, k| {
-        try tpl.render(w,
-            \\<polyline class="line {class}" points="{points}"><title>{label}</title></polyline><circle class="end {class}" cx="{cx:.1}" cy="{cy:.1}" r="4"/>
-            \\
-        , .{
-            .class = s.class,
-            .points = Line{ .g = g, .points = points, .k = k },
-            .cx = g.px(last.games),
-            .cy = g.py(last.auc[k]),
-            .label = s.label,
-        });
-    }
-    try tpl.renderPart(w,
-        \\</svg>
-        \\<figcaption>AUC on held-out games (every platform, from one time cut) against the games the models learnt from; one point per daily run. Latest: {l0} {v0:.3}, {l1} {v1:.3}, {l2} {v2:.3}. The draft model in use stays until another beats it beyond noise.</figcaption></figure>
-        \\
-    , .{
-        .l0 = series[0].label,
-        .v0 = last.auc[0],
-        .l1 = series[1].label,
-        .v1 = last.auc[1],
-        .l2 = series[2].label,
-        .v2 = last.auc[2],
-    });
+    , .{ last.games, @max(last.auc[0], last.auc[1], last.auc[2]) });
 }
 
-const Legend = struct {
-    pub fn render(_: Legend, w: *Writer) Writer.Error!void {
-        try w.writeAll("<ul class=\"legend\">");
-        for (series) |s| try tpl.render(w, "<li><i class=\"{class}\"></i>{label}</li>", .{ .class = s.class, .label = s.label });
-        try w.writeAll("</ul>\n");
+/// The model in use first: the chart's answer
+const order = [_]struct { usize, ui.chart.Line }{ .{ 1, .main }, .{ 0, .prev }, .{ 2, .typ } };
+
+pub fn chart(h: *ui.H, points: []const Point) ui.N {
+    if (points.len < 2) return .none;
+    const games = h.mem.alloc(u32, points.len) catch return oom(h);
+    for (games, points) |*g, p| g.* = p.games;
+    var ss: [series.len]ui.aucchart.Series = undefined;
+    for (&ss, order) |*s, o| {
+        const auc = h.mem.alloc(f32, points.len) catch return oom(h);
+        for (auc, points) |*v, p| v.* = @floatCast(p.auc[o[0]]);
+        s.* = .{ .label = series[o[0]].label, .auc = auc, .kind = o[1] };
     }
-};
+    const last = points[points.len - 1];
+    const c: ui.aucchart.AucChart = .{
+        .games = games,
+        .series = h.mem.dupe(ui.aucchart.Series, &ss) catch return oom(h),
+        .caption = h.fmt("AUC on held-out games (every platform, from one time cut) against the games the models learnt from; one point per daily run. Latest: {s} {d:.3}, {s} {d:.3}, {s} {d:.3}. The draft model in use stays until another beats it beyond noise.", .{
+            series[0].label, last.auc[0],
+            series[1].label, last.auc[1],
+            series[2].label, last.auc[2],
+        }),
+    };
+    return c.view(h);
+}
 
-const Geo = struct {
-    x0: f64,
-    x1: f64,
-    lo: f64,
-    hi: f64,
-
-    fn px(g: Geo, games: u32) f64 {
-        const span = @max(g.x1 - g.x0, 1);
-        return left + (@as(f64, @floatFromInt(games)) - g.x0) / span * (width - left - right);
-    }
-
-    fn py(g: Geo, v: f64) f64 {
-        return top + (g.hi - v) / (g.hi - g.lo) * (height - top - bottom);
-    }
-};
-
-const Line = struct {
-    g: Geo,
-    points: []const Point,
-    k: usize,
-
-    pub fn render(l: Line, w: *Writer) Writer.Error!void {
-        for (l.points) |p| try w.print("{d:.1},{d:.1} ", .{ l.g.px(p.games), l.g.py(p.auc[l.k]) });
-    }
-};
+fn oom(h: *ui.H) ui.N {
+    h.oom = true;
+    return .none;
+}
 
 test "parse keeps the newest line per games count, sorted" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
@@ -199,10 +131,13 @@ test "parse keeps the newest line per games count, sorted" {
     try std.testing.expectEqual(2, points.len);
     try std.testing.expectEqual(8000, points[0].games);
     try std.testing.expectEqual(0.56, points[1].auc[2]);
-    var buf: [8192]u8 = undefined;
-    var w: Writer = .fixed(&buf);
-    try section(&w, points);
-    try std.testing.expect(std.mem.find(u8, w.buffered(), "class=\"line s3\"") != null);
+    var t: ui.Tree = .{};
+    var h: ui.H = .init(arena.allocator(), &t);
+    var out: Writer.Allocating = .init(arena.allocator());
+    try ui.html.write(&t, chart(&h, points), &out.writer);
+    try std.testing.expect(std.mem.find(u8, out.written(), "Joint ratings (on trial) 0.560") != null);
+    try std.testing.expect(std.mem.find(u8, try intro(arena.allocator(), points), "the best is 0.560.") != null);
+    try std.testing.expectEqualStrings("", try intro(arena.allocator(), points[0..1]));
 
     const regions =
         "date\ttest_platform\tgames\tauc_base\tauc_current\tauc_joint\n" ++

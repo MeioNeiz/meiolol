@@ -1,0 +1,17 @@
+cold-test	485.20	473.27	32.98	0	9.70
+split-sema	242.38	225.80	2.64	0	8.96
+x86-core	259.17	287.30	15.84	0	12.02
+split-ir	307.42	275.48	4.40	0	15.52
+x86-full	266.15	247.07	9.33	1	11.92
+split-full	322.66	276.12	4.88	0	19.13
+sema-base-1	243.26	219.69	3.06	0	19.08
+fix-test	251.01	248.98	31.56	0	18.90
+path-test	639.00	430.37	26.98	0	33.33
+before-backend-edit-test-1	567.38	397.54	20.60	0	26.08
+after-backend-edit-test-1	133.27	123.55	15.61	0	11.94
+before-backend-edit-exe-1	405.45	310.09	8.66	0	25.41
+after-backend-edit-exe-1	80.33	48.52	5.32	0	24.05
+before-ui-edit-test-1	477.40	424.69	28.07	0	17.26
+after-ui-edit-test-1	342.21	206.59	28.98	0	19.43
+after-ui-edit-test-ui-mac	28.41	19.34	4.56	0	22.99
+after-deploy-build-mac	185.22	198.81	16.96	0	10.31

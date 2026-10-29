@@ -227,6 +227,7 @@ fn roleData(site: *const Site, ch: Champ, r: Role) !cp.Role {
         .lean = lean,
         .lane = try laneOf(site, ch, r),
         .comeback = try comebackOf(site, ch, r),
+        .kills = try killsOf(site, ch, r),
         .build = if (builds_page.forChampion(site, site.view, ch, r)) |b| try buildblock.data(a, b.f, b.b, ch.name) else null,
         .rels = rels.items,
         .by_patch = by_patch,
@@ -351,6 +352,23 @@ fn comebackOf(site: *const Site, ch: Champ, r: Role) !?cp.Comeback {
     var lanes: u32 = 0;
     for (out.at[0]) |x| lanes += x.games;
     return if (lanes < cp.min_games) null else out;
+}
+
+/// ch's lanes in r with kills on and by its lane opponent, summed over its pairs as
+/// laneOf; null under cp.min_games lanes
+fn killsOf(site: *const Site, ch: Champ, r: Role) !?cp.Kills {
+    const c = if (site.curves) |*c| c else return null;
+    const pairs = try lanePairs(site, c, ch, r);
+    var out: cp.Kills = .{ .games = 0, .first_blood = @splat(0), .kills = @splat(0), .deaths = @splat(0) };
+    for (pairs.items) |v| {
+        out.games += v.games();
+        for (&out.first_blood, v.firstBlood()) |*o, x| o.* += x;
+        for (&out.kills, &out.deaths, 0..) |*k, *d, i| {
+            k.* += v.kills(i);
+            d.* += v.deaths(i);
+        }
+    }
+    return if (out.games < cp.min_games) null else out;
 }
 
 /// Minutes drawn while this many lanes are still going, as a matchup page's

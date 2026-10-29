@@ -367,7 +367,7 @@ test "fixture games to stats, curves and the website" {
         .{ "index.html", &.{ "data-island=\"lookup\" data-to=\"/your\"", "data-island=\"homechamps\" data-bin=\"", "Patch 15.13", "vs 15.12", "href=\"/patch?period=patch\" data-s=\"s\">All changes</a>", "<script src=\"/" ++ assets.home_js.path ++ "\" data-wasm=\"" ++ assets.home_wasm.path ++ "\" defer></script>" } },
         // Daily Draft (ui.dailypage): the fixture makes no puzzle, so the page says so
         .{ "daily.html", &.{ "<h1>Daily Draft</h1>", "No puzzle today." } },
-        .{ "privacy.html", &.{ "the date\nshown is the puzzle's, not the game's", "we keep only each puzzle's totals", "<h2 id=\"accounts\">Accounts</h2>" } },
+        .{ "privacy.html", &.{ "the date shown is the puzzle&#39;s, not the game&#39;s", "we keep only each puzzle&#39;s totals", "<h2 id=\"accounts\">Accounts</h2>" } },
         // Learn (ui.learnpage): the island with its chapters inline, a first visit on
         // chapter 1's first puzzle
         .{ "learn.html", &.{ "<div class=\"c-learn\" data-island=\"learn\" data-bin=\"", "Does knowing your champion matter?", "How often do mains win?", "<script src=\"/" ++ assets.learn_js.path ++ "\" data-wasm=\"" ++ assets.learn_wasm.path ++ "\" defer></script>" } },
@@ -387,7 +387,7 @@ test "fixture games to stats, curves and the website" {
         .{ "matchups/support/pyke-vs-rakan.html", &.{"<h3>Rakan with</h3>"} },
         // MatchupStrip: the lane opponents with a page, the current one lit; the pair's build
         .{ "matchups/top/darius-vs-mordekaiser.html", &.{ "<nav class=\"c-mstrip\" aria-label=\"Darius&#39;s Top opponents\">", "<a href=\"/matchups/top/darius-vs-mordekaiser\" aria-current=\"page\"", "data-island=\"champbuild\" data-bin=\"", "<h2>Build against Mordekaiser</h2>", "href=\"/champions/darius/top\"" } },
-        .{ "method.html", &.{ "Games to stabilise", "<li><b>Highest win rate</b>: marked among options", "<h2 id=\"lean\">Early or late</h2>" } },
+        .{ "method.html", &.{ "Games to stabilise", "<li><strong>Highest win rate</strong>: marked among options", "<h2 id=\"lean\">Early or late</h2>" } },
         // The board, pool and its section follow the view
         .{ "_v/patch/champions.html", &.{ "data-view=\"1\"", "<a href=\"/champions\">30 days</a>" } },
         .{ "_v/all/pool.html", &.{ "<div class=\"c-poolwrap\"><div class=\"c-poolpage\" data-island=\"pool\" data-bin=\"", "<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"all\"" } },

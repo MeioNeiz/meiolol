@@ -7,7 +7,9 @@ const store = @import("store");
 const ui = @import("ui");
 const style = @import("style.zig");
 
-pub const css = ui.css.join(.{ ui.notes, ui.noteslist });
+/// With every public component: a page inlines only those it uses (sheets.zig), and the
+/// tag comes after; repeated whole, the cascade stays the one sheet's
+pub const css = ui.css.join(ui.components) ++ ui.css.join(.{ ui.notes, ui.noteslist });
 
 /// Fixed names, revalidated each load (/p/ is no-cache), so the tag nginx adds is one
 /// string in its config
