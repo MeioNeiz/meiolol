@@ -1,0 +1,8 @@
+# The gpu-box's WSL, /etc/default/earlyoom (deploy/gpu-box.sh install; docs/compute.md
+# "WSL memory"). 29 Oct: five lanes' dev servers on data/snap, their watch builds and tests
+# filled the 24 GB and the 6 GB swap; the kernel's OOM kill took 4 min of thrashing, WSL
+# hung (Windows 1.2 GB free) and needed wsl --shutdown. Acts on memory alone (-s 100:
+# swapping is the hang), well before the kernel would: TERM below 10% available, KILL
+# below 5%. Dev servers, test binaries, compiles and browsers go first; sessions never.
+# No quotes in the regexes: systemd splits $EARLYOOM_ARGS on spaces and keeps quotes
+EARLYOOM_ARGS="-m 10,5 -s 100,100 -r 3600 --prefer ^(meiolol|test|zig|chrome|headless_shell)$ --avoid ^(claude|node|init|systemd|sshd|bash|zsh|wezterm.*)$"

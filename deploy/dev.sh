@@ -37,6 +37,17 @@ if pid=$(lsof -tiTCP:"$port" -sTCP:LISTEN 2> /dev/null) && [[ -n $pid ]]; then
         "builds: .zig-cache/dev-watch.log"
     exit 0
 fi
+# Worktree lanes each start one. A server on data/snap holds 3+ GB, plus ~8 GB of cache
+# while it loads: five at once with their watch builds and tests hung the gpu-box's WSL
+# (29 Oct, docs/compute.md "WSL memory")
+max=${MEIOLOL_DEV_MAX:-2}
+running=$(pgrep -u "$USER" -f '/meiolol dev( |$)' || true)
+if (($(wc -w <<< "$running") >= max)); then
+    echo "dev.sh: $max dev servers already run here (MEIOLOL_DEV_MAX): use one of them," \
+        "or stop yours when done (kill PID):"
+    for pid in $running; do echo "  $pid $(ps -o args= -p "$pid" | cut -c1-110)"; done
+    exit 1
+fi
 # Its own prefix, so other sessions' builds don't restart it. Outside the slots, so
 # capped as one (slots.sh MEIOLOL_ZIG_JOBS)
 prefix=zig-out/dev

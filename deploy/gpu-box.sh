@@ -6,9 +6,10 @@
 # and units install from HEAD's committed copy and meiolol from a clean checkout of HEAD,
 # never the working tree (jomify.sh's rule: 17 Oct, a hand copy ran 3 commits old).
 # Installs are recorded in ~/ml/bin/installed ("meiolol SHA TIME"), which drift reads.
-# WSL's /etc gets deploy/wsl (the lab disk's writeback and queue limits) as root, through
-# wsl.exe -u root, as does apt for the tools ci needs there (deploy/remote-build.sh):
-# zstd, shellcheck, jq; node from nodejs.org into ~/.local. Run-time pieces are elsewhere: lab-run.sh copies lab-gates
+# WSL's /etc gets deploy/wsl (the lab disk's writeback and queue limits, earlyoom's
+# thresholds) as root, through wsl.exe -u root, as does apt for earlyoom and the tools ci
+# needs there (deploy/remote-build.sh): zstd, shellcheck, jq; node from nodejs.org into
+# ~/.local. Run-time pieces are elsewhere: lab-run.sh copies lab-gates
 # and lab-usage into each run, snapshot.sh copies snapshot-gpu.sh for each make,
 # remote-build.sh sends build-job.sh with each build. docs/compute.md
 #
@@ -25,13 +26,15 @@ UNITS=(meiolol-lab-watch.service meiolol-archive-pull.service meiolol-archive-pu
     meiolol-backup-mirror.service meiolol-backup-mirror.timer meiolol-accounts-pull.service
     meiolol-accounts-pull.timer)
 TIMERS=(meiolol-archive-pull.timer meiolol-backup-mirror.timer meiolol-accounts-pull.timer)
-ETC=(sysctl.d/60-meiolol-disk.conf udev/rules.d/60-meiolol-disk.rules)
+ETC=(sysctl.d/60-meiolol-disk.conf udev/rules.d/60-meiolol-disk.rules default/earlyoom)
 # Root without a PATH: commands by full path
 WSL_ROOT="/mnt/c/Windows/System32/wsl.exe -u root -e"
 WATCH=meiolol-lab-watch
 # Commands ci needs on the gpu-box: apt's zstd, shellcheck and jq, and node, which
 # Ubuntu ships too old (18: `node --check` fails on ES modules), from nodejs.org
 CI_TOOLS="zstd shellcheck jq node"
+# From apt, before deploy/wsl's /etc files: dpkg then never meets a changed conffile
+APT="zstd shellcheck jq earlyoom"
 NODE_VERSION=v24.22.2
 NODE=node-$NODE_VERSION-linux-x64
 RECORD=ml/bin/installed
@@ -71,7 +74,8 @@ drift() {
         else echo "${paths[i]##*/}: DIFFERS from HEAD (deploy/gpu-box.sh install)"; fi
         i=$(( i + 1 ))
     done <<< "$have"
-    ssh "$HOST" "PATH=\$HOME/.local/bin:\$PATH; for t in $CI_TOOLS; do command -v \$t > /dev/null || echo \"\$t: MISSING (deploy/gpu-box.sh install)\"; done"
+    ssh "$HOST" "PATH=\$HOME/.local/bin:\$PATH; for t in $CI_TOOLS earlyoom; do command -v \$t > /dev/null || echo \"\$t: MISSING (deploy/gpu-box.sh install)\"; done; \
+        systemctl is-active -q earlyoom || echo 'earlyoom: not running (deploy/gpu-box.sh install)'"
     local rev
     rev=$(ssh "$HOST" "awk '\$1 == \"meiolol\" { s = \$2 } END { print s }' $RECORD 2> /dev/null || true")
     if [[ -z "$rev" ]] || ! git -C "$ROOT" cat-file -e "$rev^{commit}" 2> /dev/null; then
@@ -112,15 +116,16 @@ install() {
     while read -r f; do
         git -C "$ROOT" show "HEAD:$f" | sed 's/$/\r/' | ssh "$HOST" "cat > '$win/${f##*/}'"
     done < <(windows)
+    ssh "$HOST" "command -v $APT > /dev/null || { $WSL_ROOT /usr/bin/apt-get -qq update \
+        && $WSL_ROOT /usr/bin/env DEBIAN_FRONTEND=noninteractive /usr/bin/apt-get -qq -y install \
+        $APT > /dev/null; }"
     for f in "${ETC[@]}"; do git -C "$ROOT" show "HEAD:deploy/wsl/${f##*/}" > "$tmp/etc/${f##*/}"; done
     scp -q "$tmp"/etc/* "$HOST:/tmp/"
     ssh "$HOST" "for f in ${ETC[*]}; do $WSL_ROOT install -m 644 /tmp/\${f##*/} /etc/\$f || exit 1; \
         rm /tmp/\${f##*/}; done; $WSL_ROOT /usr/sbin/sysctl -q --system \
         && $WSL_ROOT /usr/bin/udevadm control --reload \
-        && $WSL_ROOT /usr/bin/udevadm trigger --action=change --subsystem-match=block"
-    ssh "$HOST" "command -v zstd shellcheck jq > /dev/null || { $WSL_ROOT /usr/bin/apt-get -qq update \
-        && $WSL_ROOT /usr/bin/env DEBIAN_FRONTEND=noninteractive /usr/bin/apt-get -qq -y install \
-        zstd shellcheck jq > /dev/null; }"
+        && $WSL_ROOT /usr/bin/udevadm trigger --action=change --subsystem-match=block \
+        && $WSL_ROOT /usr/bin/systemctl restart earlyoom"
     ssh "$HOST" "set -e; [ -x .local/node/$NODE/bin/node ] || { u=https://nodejs.org/dist/$NODE_VERSION; \
         cd /tmp; curl -fsSLO \$u/$NODE.tar.xz; \
         curl -fsSL \$u/SHASUMS256.txt | grep ' $NODE.tar.xz\$' | sha256sum -c --quiet -; \

@@ -103,9 +103,19 @@ no zig runs (deploy/zig-cache-prune.sh); the next builds start cold.
 ## WSL memory
 
 WSL2 takes half the PC's memory by default (15 GB). C:\Users\jacob\.wslconfig sets
-`memory=24GB` (8 GB left for Windows and League) and `autoMemoryReclaim=gradual` (idle
-Linux cache goes back to Windows). Takes effect after
-`wsl --shutdown` and a restart.
+`memory=24GB` (8 GB left for Windows and League; Windows alone used ~11.6 GB when WSL
+filled it, so it pages: 20 GB if games stutter) and `autoMemoryReclaim=gradual` (idle
+Linux cache goes back to Windows). Takes effect after `wsl --shutdown` and a restart.
+
+29 Oct 22:30: five team lanes' dev servers on data/snap, their watch builds and
+tests filled RAM and the 6 GB swap; the kernel's OOM kill took 4 min of thrashing and
+WSL hung until `wsl --shutdown`. Since then:
+- earlyoom (deploy/wsl/earlyoom, installed by deploy/gpu-box.sh) kills before that: TERM
+  under 10% available, KILL under 5%, swap ignored; dev servers, tests, compiles and
+  browsers first, never Claude sessions or shells. What it killed: `journalctl -u
+  earlyoom`
+- A dev server on data/snap holds 3+ GB (plus ~8 GB of page cache while it loads, for
+  minutes): deploy/dev.sh starts at most 2 on the machine (MEIOLOL_DEV_MAX)
 
 ## Disk resets
 
