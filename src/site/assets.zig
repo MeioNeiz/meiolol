@@ -4,69 +4,77 @@
 //! written; the web loop keeps a replaced copy three days (prune) for pages loaded or
 //! cached before a deploy
 const std = @import("std");
+const names = @import("asset_names");
 const ui = @import("ui");
 
 pub const Hashed = struct { plain: []const u8, path: []const u8, data: []const u8 };
 
-pub const search_js = hashed("search.js", @embedFile("static/search.js"));
-pub const stats_js = hashed("ui-stats.js", @embedFile("ui-stats.js"));
-pub const stats_wasm = hashed("ui-stats.wasm", @embedFile("ui-stats.wasm"));
-pub const champion_js = hashed("ui-champion.js", @embedFile("ui-champion.js"));
-pub const champion_wasm = hashed("ui-champion.wasm", @embedFile("ui-champion.wasm"));
-pub const champbuild_js = hashed("ui-champbuild.js", @embedFile("ui-champbuild.js"));
-pub const champbuild_wasm = hashed("ui-champbuild.wasm", @embedFile("ui-champbuild.wasm"));
-pub const champmore_js = hashed("ui-champmore.js", @embedFile("ui-champmore.js"));
-pub const champmore_wasm = hashed("ui-champmore.wasm", @embedFile("ui-champmore.wasm"));
-pub const champcharts_js = hashed("ui-champcharts.js", @embedFile("ui-champcharts.js"));
-pub const champcharts_wasm = hashed("ui-champcharts.wasm", @embedFile("ui-champcharts.wasm"));
-pub const matchup_js = hashed("ui-matchup.js", @embedFile("ui-matchup.js"));
-pub const matchup_wasm = hashed("ui-matchup.wasm", @embedFile("ui-matchup.wasm"));
-pub const matchmore_js = hashed("ui-matchmore.js", @embedFile("ui-matchmore.js"));
-pub const matchmore_wasm = hashed("ui-matchmore.wasm", @embedFile("ui-matchmore.wasm"));
-pub const games_js = hashed("ui-games.js", @embedFile("ui-games.js"));
-pub const games_wasm = hashed("ui-games.wasm", @embedFile("ui-games.wasm"));
-pub const gamemore_js = hashed("ui-gamemore.js", @embedFile("ui-gamemore.js"));
-pub const gamemore_wasm = hashed("ui-gamemore.wasm", @embedFile("ui-gamemore.wasm"));
-pub const gamelane_js = hashed("ui-gamelane.js", @embedFile("ui-gamelane.js"));
-pub const gamelane_wasm = hashed("ui-gamelane.wasm", @embedFile("ui-gamelane.wasm"));
-pub const finder_js = hashed("ui-finder.js", @embedFile("ui-finder.js"));
-pub const finder_wasm = hashed("ui-finder.wasm", @embedFile("ui-finder.wasm"));
-pub const findergrid_js = hashed("ui-findergrid.js", @embedFile("ui-findergrid.js"));
-pub const findergrid_wasm = hashed("ui-findergrid.wasm", @embedFile("ui-findergrid.wasm"));
-pub const learn_js = hashed("ui-learn.js", @embedFile("ui-learn.js"));
-pub const learn_wasm = hashed("ui-learn.wasm", @embedFile("ui-learn.wasm"));
-pub const patch_js = hashed("ui-patch.js", @embedFile("ui-patch.js"));
-pub const patch_wasm = hashed("ui-patch.wasm", @embedFile("ui-patch.wasm"));
-pub const pool_js = hashed("ui-pool.js", @embedFile("ui-pool.js"));
-pub const pool_wasm = hashed("ui-pool.wasm", @embedFile("ui-pool.wasm"));
-pub const poolgrid_js = hashed("ui-poolgrid.js", @embedFile("ui-poolgrid.js"));
-pub const poolgrid_wasm = hashed("ui-poolgrid.wasm", @embedFile("ui-poolgrid.wasm"));
-pub const daily_js = hashed("ui-daily.js", @embedFile("ui-daily.js"));
-pub const daily_wasm = hashed("ui-daily.wasm", @embedFile("ui-daily.wasm"));
-pub const dailydays_js = hashed("ui-dailydays.js", @embedFile("ui-dailydays.js"));
-pub const dailydays_wasm = hashed("ui-dailydays.wasm", @embedFile("ui-dailydays.wasm"));
-pub const home_js = hashed("ui-home.js", @embedFile("ui-home.js"));
-pub const home_wasm = hashed("ui-home.wasm", @embedFile("ui-home.wasm"));
-pub const homegame_js = hashed("ui-homegame.js", @embedFile("ui-homegame.js"));
-pub const homegame_wasm = hashed("ui-homegame.wasm", @embedFile("ui-homegame.wasm"));
-pub const your_js = hashed("ui-your.js", @embedFile("ui-your.js"));
-pub const your_wasm = hashed("ui-your.wasm", @embedFile("ui-your.wasm"));
-pub const yourviews_js = hashed("ui-yourviews.js", @embedFile("ui-yourviews.js"));
-pub const yourviews_wasm = hashed("ui-yourviews.wasm", @embedFile("ui-yourviews.wasm"));
-pub const yourtime_js = hashed("ui-yourtime.js", @embedFile("ui-yourtime.js"));
-pub const yourtime_wasm = hashed("ui-yourtime.wasm", @embedFile("ui-yourtime.wasm"));
-pub const yourlookup_js = hashed("ui-yourlookup.js", @embedFile("ui-yourlookup.js"));
-pub const yourlookup_wasm = hashed("ui-yourlookup.wasm", @embedFile("ui-yourlookup.wasm"));
-pub const yourfriends_js = hashed("ui-yourfriends.js", @embedFile("ui-yourfriends.js"));
-pub const yourfriends_wasm = hashed("ui-yourfriends.wasm", @embedFile("ui-yourfriends.wasm"));
-pub const forget_js = hashed("ui-forget.js", @embedFile("ui-forget.js"));
-pub const forget_wasm = hashed("ui-forget.wasm", @embedFile("ui-forget.wasm"));
-pub const tester_js = hashed("ui-tester.js", @embedFile("ui-tester.js"));
-pub const tester_wasm = hashed("ui-tester.wasm", @embedFile("ui-tester.wasm"));
-pub const testercand_js = hashed("ui-testercand.js", @embedFile("ui-testercand.js"));
-pub const testercand_wasm = hashed("ui-testercand.wasm", @embedFile("ui-testercand.wasm"));
+pub const search_js = built("search.js", @embedFile("static/search.js"));
+pub const stats_js = built("ui-stats.js", @embedFile("ui-stats.js"));
+pub const stats_wasm = built("ui-stats.wasm", @embedFile("ui-stats.wasm"));
+pub const champion_js = built("ui-champion.js", @embedFile("ui-champion.js"));
+pub const champion_wasm = built("ui-champion.wasm", @embedFile("ui-champion.wasm"));
+pub const champbuild_js = built("ui-champbuild.js", @embedFile("ui-champbuild.js"));
+pub const champbuild_wasm = built("ui-champbuild.wasm", @embedFile("ui-champbuild.wasm"));
+pub const champmore_js = built("ui-champmore.js", @embedFile("ui-champmore.js"));
+pub const champmore_wasm = built("ui-champmore.wasm", @embedFile("ui-champmore.wasm"));
+pub const champcharts_js = built("ui-champcharts.js", @embedFile("ui-champcharts.js"));
+pub const champcharts_wasm = built("ui-champcharts.wasm", @embedFile("ui-champcharts.wasm"));
+pub const matchup_js = built("ui-matchup.js", @embedFile("ui-matchup.js"));
+pub const matchup_wasm = built("ui-matchup.wasm", @embedFile("ui-matchup.wasm"));
+pub const matchmore_js = built("ui-matchmore.js", @embedFile("ui-matchmore.js"));
+pub const matchmore_wasm = built("ui-matchmore.wasm", @embedFile("ui-matchmore.wasm"));
+pub const games_js = built("ui-games.js", @embedFile("ui-games.js"));
+pub const games_wasm = built("ui-games.wasm", @embedFile("ui-games.wasm"));
+pub const gamemore_js = built("ui-gamemore.js", @embedFile("ui-gamemore.js"));
+pub const gamemore_wasm = built("ui-gamemore.wasm", @embedFile("ui-gamemore.wasm"));
+pub const gamelane_js = built("ui-gamelane.js", @embedFile("ui-gamelane.js"));
+pub const gamelane_wasm = built("ui-gamelane.wasm", @embedFile("ui-gamelane.wasm"));
+pub const finder_js = built("ui-finder.js", @embedFile("ui-finder.js"));
+pub const finder_wasm = built("ui-finder.wasm", @embedFile("ui-finder.wasm"));
+pub const findergrid_js = built("ui-findergrid.js", @embedFile("ui-findergrid.js"));
+pub const findergrid_wasm = built("ui-findergrid.wasm", @embedFile("ui-findergrid.wasm"));
+pub const learn_js = built("ui-learn.js", @embedFile("ui-learn.js"));
+pub const learn_wasm = built("ui-learn.wasm", @embedFile("ui-learn.wasm"));
+pub const patch_js = built("ui-patch.js", @embedFile("ui-patch.js"));
+pub const patch_wasm = built("ui-patch.wasm", @embedFile("ui-patch.wasm"));
+pub const pool_js = built("ui-pool.js", @embedFile("ui-pool.js"));
+pub const pool_wasm = built("ui-pool.wasm", @embedFile("ui-pool.wasm"));
+pub const poolgrid_js = built("ui-poolgrid.js", @embedFile("ui-poolgrid.js"));
+pub const poolgrid_wasm = built("ui-poolgrid.wasm", @embedFile("ui-poolgrid.wasm"));
+pub const daily_js = built("ui-daily.js", @embedFile("ui-daily.js"));
+pub const daily_wasm = built("ui-daily.wasm", @embedFile("ui-daily.wasm"));
+pub const dailydays_js = built("ui-dailydays.js", @embedFile("ui-dailydays.js"));
+pub const dailydays_wasm = built("ui-dailydays.wasm", @embedFile("ui-dailydays.wasm"));
+pub const home_js = built("ui-home.js", @embedFile("ui-home.js"));
+pub const home_wasm = built("ui-home.wasm", @embedFile("ui-home.wasm"));
+pub const homegame_js = built("ui-homegame.js", @embedFile("ui-homegame.js"));
+pub const homegame_wasm = built("ui-homegame.wasm", @embedFile("ui-homegame.wasm"));
+pub const your_js = built("ui-your.js", @embedFile("ui-your.js"));
+pub const your_wasm = built("ui-your.wasm", @embedFile("ui-your.wasm"));
+pub const yourviews_js = built("ui-yourviews.js", @embedFile("ui-yourviews.js"));
+pub const yourviews_wasm = built("ui-yourviews.wasm", @embedFile("ui-yourviews.wasm"));
+pub const yourtime_js = built("ui-yourtime.js", @embedFile("ui-yourtime.js"));
+pub const yourtime_wasm = built("ui-yourtime.wasm", @embedFile("ui-yourtime.wasm"));
+pub const yourlookup_js = built("ui-yourlookup.js", @embedFile("ui-yourlookup.js"));
+pub const yourlookup_wasm = built("ui-yourlookup.wasm", @embedFile("ui-yourlookup.wasm"));
+pub const yourfriends_js = built("ui-yourfriends.js", @embedFile("ui-yourfriends.js"));
+pub const yourfriends_wasm = built("ui-yourfriends.wasm", @embedFile("ui-yourfriends.wasm"));
+pub const forget_js = built("ui-forget.js", @embedFile("ui-forget.js"));
+pub const forget_wasm = built("ui-forget.wasm", @embedFile("ui-forget.wasm"));
+pub const tester_js = built("ui-tester.js", @embedFile("ui-tester.js"));
+pub const tester_wasm = built("ui-tester.wasm", @embedFile("ui-tester.wasm"));
+pub const testercand_js = built("ui-testercand.js", @embedFile("ui-testercand.js"));
+pub const testercand_wasm = built("ui-testercand.wasm", @embedFile("ui-testercand.wasm"));
 
-/// `plain` with 8 hex digits of `data`'s FNV-1a before its extension
+/// A file the build hashed (src/tools/assetnames.zig): `plain` with its 8 hex digits
+pub fn built(comptime plain: []const u8, comptime data: []const u8) Hashed {
+    const dot = comptime std.mem.findScalarLast(u8, plain, '.').?;
+    return .{ .plain = plain, .path = plain[0..dot] ++ "." ++ @field(names, plain) ++ plain[dot..], .data = data };
+}
+
+/// `plain` with 8 hex digits of `data`'s FNV-1a before its extension, at comptime: small
+/// data only, a megabyte takes minutes
 pub fn hashed(comptime plain: []const u8, comptime data: []const u8) Hashed {
     const dot = comptime std.mem.findScalarLast(u8, plain, '.').?;
     return .{ .plain = plain, .path = comptime plain[0..dot] ++ "." ++ ui.css.version(data) ++ plain[dot..], .data = data };
