@@ -175,8 +175,15 @@ pub const Account = struct {
                 field(h, W.new, W.new_hint, .{ .name = "new", .type = "password", .autocomplete = "new-password", .minlength = "8", .required = true }),
             },
         };
-        // POST, so a submit before the island never puts a password in the address
-        return h.el(.form, .{ .key = p.forms, .method = "post", .on_submit = h.on(p, .submit) }, .{
+        // A submit before the island starts: POST keeps the password out of the address,
+        // and /auth/ refuses it without X-Meiolol-Action, its body unread
+        const action = switch (p.kind) {
+            .login => "/auth/login",
+            .signup => "/auth/signup",
+            .join => "/auth/join",
+            .account => "/auth/password",
+        };
+        return h.el(.form, .{ .key = p.forms, .method = "post", .action = action, .on_submit = h.on(p, .submit) }, .{
             &fields,
             button.view(h, .{ .v = .primary, .submit = true, .disabled = p.busy }, .{switch (p.kind) {
                 .login => W.login,
@@ -431,7 +438,7 @@ test "the form's fields by kind, and a removed app by its id" {
         var out: std.Io.Writer.Allocating = .init(a);
         try @import("html.zig").write(&t, p.view(&h), &out.writer);
         try testing.expect(!h.oom);
-        try testing.expect(std.mem.find(u8, out.written(), "<form method=\"post\"") != null);
+        try testing.expect(std.mem.find(u8, out.written(), "<form method=\"post\" action=\"/auth/") != null);
         for (w[1]) |s| if (std.mem.find(u8, out.written(), s) == null) {
             std.debug.print("{t}: no {s}\n", .{ w[0], s });
             return error.TestUnexpectedResult;

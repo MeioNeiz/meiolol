@@ -123,9 +123,9 @@ the default switch (E0b). E10 follows E7; E11 follows each estimate that passes 
 
 - Champion page blocks follow the region and period picks: players' win rates, the
   builds strip, how hard to pick up, the pool section and the patch line
-- Scope chips (E1, site/scope.zig) on every block of the champion, matchup, build and
-  pool pages, marked where a block doesn't follow the picks, again by filters.js per
-  pick; pipeline_test checks each champion page block has one. Marked: the lean line
+- Scope chips (E1, ui.scopechip) on every block of the champion, matchup, build and
+  pool pages, marked where a block doesn't follow the page's picks; pipeline_test checks
+  each champion page block has one. Marked: the lean line
   (every region, 30 days), the patch line (whole patches), the matchup builds cards (the
   region's patch), rank on every fixed block (builds strip, players' win rates, pool,
   learning, lean, patch line), pool (every patch or all time), learning (every region).

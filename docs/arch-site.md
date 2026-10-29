@@ -47,14 +47,12 @@ ui.data; ~7 KB gz for Darius vs Garen's 126 opponents) instead of files: ui-matc
 ui-matchmore.wasm (More). The head's region and period are links to the page in each
 view (Segmented with href), ranks greyed: one view per page, no fragment pick.
 
-Scope chips (site/scope.zig Chip, J23): every block on the build and pool pages says
-the region, period and rank its numbers are from in the subbar's words
-("EUW · 30 days · Plat+"); a dimension the block doesn't follow is marked against the
-page's picks ("Plat+, not by rank", "Patch 16.21, not the 30 days picked"). Each chip
-carries its keys (data-region, data-period, data-rank; "*" for a block that follows
-every pick). Matchup and build pages: one chip in the hero for the page, its own on a block that
-differs (the matchup builds cards are the region's patch). Plain data in, markup out, so
-it can move into the frontend rework's ui.zig.
+Scope chips (ui.scopechip ScopeChip, a scope Chip; server side only): every block on
+the build and pool pages says the region, period and rank its numbers are from in the
+subbar's words ("EUW · 30 days · Plat+"); a dimension the block doesn't follow is marked
+against the page's picks ("Plat+, not by rank", "Patch 16.21, not the 30 days picked").
+Matchup and build pages: one chip in the hero for the page, its own on a block that
+differs (the matchup builds cards are the region's patch).
 
 `meiolol site --contact EMAIL` writes static files to data/site, framed as "learn your
 lane" for the production review (docs/concept.md "Application wording": no tier list,

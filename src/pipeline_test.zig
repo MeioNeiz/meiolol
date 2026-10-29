@@ -588,7 +588,8 @@ test "fixture games to stats, curves and the website" {
         const page = try loaded.get(arena, try std.fmt.allocPrint(arena, "{s}.html", .{p})) orelse return error.TestUnexpectedResult;
         try testing.expect(std.mem.find(u8, page, "<meta name=\"robots\" content=\"noindex\">") != null);
         try testing.expect(std.mem.find(u8, page, try std.fmt.allocPrint(arena, "data-island=\"account\" data-kind=\"{s}\"", .{p})) != null);
-        try testing.expect(std.mem.find(u8, page, "<form method=\"post\">") != null);
+        const action = if (std.mem.eql(u8, p, "account")) "password" else p;
+        try testing.expect(std.mem.find(u8, page, try std.fmt.allocPrint(arena, "<form method=\"post\" action=\"/auth/{s}\">", .{action})) != null);
         try testing.expect(std.mem.find(u8, page, "data-wasm=\"" ++ assets.account_wasm.path ++ "\"") != null);
     }
     // `meiolol site --views` and `render` reading it: the same bytes for every file

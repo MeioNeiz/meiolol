@@ -1373,6 +1373,13 @@ test "signup: the link and its shared password make accounts; wrong ones are slo
     try testing.expectError(error.BadRole, makeLink(f.db, testing.io, .owner, "x", "owner", now));
 }
 
+/// A NAME.bin route's answer to `v` in ui.data, as the island sends it
+fn postBin(f: *Fixture, token: ?[]const u8, path: []const u8, v: anytype) !Out {
+    var body: std.ArrayList(u8) = .empty;
+    try ui.data.encode(f.arena(), @TypeOf(v), v, &body);
+    return f.service.route(f.arena(), .{ .method = .POST, .path = path, .action = true, .token = token, .body = body.items }, Fixture.now);
+}
+
 /// A manager route's answer for the account signed in with `token`
 fn postAs(f: *Fixture, token: ?[]const u8, path: []const u8, body: anytype) !Out {
     const b = try std.json.Stringify.valueAlloc(f.arena(), body, .{});
@@ -1502,6 +1509,50 @@ test "NAME.bin: the same answers in ui.data, a ui.data body in; errors stay JSON
     try testing.expectEqual(Status.ok, (try post(&f, a, cookie, "revoke.bin", ad.Revoke{ .id = ds.devices[0].id })).status);
     const changed = try post(&f, a, cookie, "password.bin", ad.Password{ .password = "password-admin", .new = "brand new one" });
     try testing.expect(changed.bin and changed.set_cookie != null);
+}
+
+test "NAME.bin writes: none without X-Meiolol-Action; join and signup sign in; revoke is yours" {
+    var f: Fixture = undefined;
+    try f.init();
+    defer f.deinit();
+    const a = f.arena();
+    const admin = try f.signIn(.admin);
+    for ([_][]const u8{ "login.bin", "logout.bin", "join.bin", "signup.bin", "password.bin", "revoke.bin" }) |p| {
+        const out = try f.service.route(a, .{ .method = .POST, .path = p, .token = admin, .body = "x" }, Fixture.now);
+        try testing.expectEqual(Status.forbidden, out.status);
+        try testing.expect(out.set_cookie == null);
+    }
+    try testing.expectEqual(Status.no_content, try f.check(admin, "view_admin"));
+
+    const inv = try postAs(&f, admin, "invite", .{ .role = "private" });
+    const t = (try std.json.parseFromSliceLeaky(struct { invite: []const u8 }, a, inv.body, .{})).invite;
+    const joined = try postBin(&f, null, "join.bin", ad.Join{ .invite = t, .username = "pal", .password = "long enough" });
+    try testing.expect(joined.status == .ok and joined.bin);
+    const pal = try ui.data.decode(a, ad.Me, joined.body);
+    try testing.expectEqualStrings("pal", pal.username);
+    try testing.expectEqualStrings("private", pal.role);
+    try testing.expectEqual(Status.no_content, try f.check(cookieValue(joined.set_cookie.?).?, "view_private"));
+
+    var phc_buf: [128]u8 = undefined;
+    const phc = try f.service.hasher.hash(testing.allocator, testing.io, "shared secret", &phc_buf);
+    const link = try makeLink(f.db, testing.io, .private, phc, "owner", Fixture.now);
+    const up = try postBin(&f, null, "signup.bin", ad.Signup{ .link = &link, .email = "new@mail.com", .password = "shared secret" });
+    try testing.expect(up.status == .ok and up.bin);
+    try testing.expectEqualStrings("new@mail.com", (try ui.data.decode(a, ad.Me, up.body)).username);
+    try testing.expectEqual(Status.no_content, try f.check(cookieValue(up.set_cookie.?).?, "view_private"));
+
+    // Another account's app: not found, and still signed in
+    _ = try f.pair(.admin);
+    const appsOf = struct {
+        fn of(fx: *Fixture, token: []const u8) ![]const ad.Device {
+            const out = try fx.service.route(fx.arena(), .{ .method = .GET, .path = "devices.bin", .token = token }, Fixture.now);
+            return (try ui.data.decode(fx.arena(), ad.Devices, out.body)).devices;
+        }
+    }.of;
+    const id = (try appsOf(&f, admin))[0].id;
+    const private = try f.signIn(.private);
+    try testing.expectEqual(Status.not_found, (try postBin(&f, private, "revoke.bin", ad.Revoke{ .id = id })).status);
+    try testing.expectEqual(@as(usize, 1), (try appsOf(&f, admin)).len);
 }
 
 test "password: the old one first, then every other session ends" {
