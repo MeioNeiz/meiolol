@@ -46,6 +46,18 @@ pub const Setup = union(enum) {
     chips: Chips,
     /// A few big figures, each with what it counts ("+1,000 gold", "you, at 14 min")
     facts: []const Fact,
+    /// A real game's draft with one seat open (chapter ends)
+    draft: Draft,
+};
+
+/// Seats in role order. The open seat's champion is the game's own pick, not shown
+pub const Draft = struct {
+    role: Role,
+    us: [5]Champ,
+    them: [5]Champ,
+    bans: [2][]const Champ = .{ &.{}, &.{} },
+    /// Each seat's magic share of its damage, %, us then them; the open seat's unused
+    magic: [2][5]?u8 = @splat(@splat(null)),
 };
 
 pub const Fact = struct { v: []const u8, label: []const u8 };
@@ -89,7 +101,11 @@ pub const Choice = struct {
     /// Shown on reveal: its number ("54%", "92.7%") and games
     shown: []const u8 = "",
     games: u32 = 0,
+    /// The reveal's reasons in words ("Good into Ahri"), no numbers (why.md)
+    why: []const Why = &.{},
 };
+
+pub const Why = struct { text: []const u8, up: bool };
 
 pub const Puzzle = struct {
     id: []const u8,

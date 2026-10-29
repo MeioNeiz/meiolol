@@ -14,6 +14,8 @@ const puzzle = @import("puzzle.zig");
 const ld = @import("learndata.zig");
 const champ = @import("champ.zig");
 const choice = @import("choice.zig");
+const draftboard = @import("draftboard.zig");
+const candlist = @import("candlist.zig");
 const role = @import("role.zig");
 const phrase = @import("phrase.zig");
 const url = @import("url.zig");
@@ -40,6 +42,12 @@ const W = struct {
     pub const tips = plain("Your tips");
     pub const chapters = plain("Chapters");
     pub const games = Phrase("{n:count} games");
+    pub const your_team = plain("Your team");
+    pub const enemy = plain("Enemy team");
+    pub const your_pick = plain("your pick");
+    pub const ap = plain("AP");
+    pub const ad = plain("AD");
+    pub const both = plain("AD and AP");
 };
 
 pub const Page = struct {
@@ -212,6 +220,7 @@ pub const Page = struct {
             .tiles => |t| p.tilesStage(h, t),
             .chips => |c| p.chipsStage(h, c),
             .facts => |f| factsStage(h, f),
+            .draft => |d| p.draftStage(h, d, z.answer),
         };
         const tt = toggletip.view(h, "lp-src", .{W.games.with(h, .{ .n = z.games })}, W.games.with(h, .{ .n = z.games }), .{ .s = z.from });
         return puzzle.view(h, .{
@@ -357,6 +366,82 @@ pub const Page = struct {
         return h.div(.{ .class = "facts" }, .{l.done()});
     }
 
+    /// The game's draft with the open seat asked; once answered the right pick fills it
+    /// and the options' reasons follow in words
+    fn draftStage(p: *const Page, h: *H, d: ld.Draft, answer: ld.Answer) N {
+        const x = switch (answer) {
+            .pick => |x| x,
+            .guess => return .none,
+        };
+        var lanes: [5]draftboard.Lane = undefined;
+        var mix: [2]draftboard.Mix = .{ .{ .phys = 0, .magic = 0 }, .{ .phys = 0, .magic = 0 } };
+        for (&lanes, role.Role.all, 0..) |*l, r, i| {
+            var seats: [2]draftboard.Seat = undefined;
+            for (&seats, [2][5]ld.Champ{ d.us, d.them }, d.magic, &mix, 0..) |*st, side, m, *mx, si| {
+                const open = si == 0 and r == d.role;
+                const c = side[i];
+                st.* = .{
+                    .champ = if (!open) .{ .name = c.name, .src = p.iconSrc(h, c) } else if (p.revealed) if (x.choices[x.right].champ) |y| .{ .name = y.name, .src = p.iconSrc(h, y) } else null else null,
+                    .hidden = open,
+                    .sel = open and p.revealed,
+                    .sub = if (open) .{ .s = "" } else damageWord(m[i]),
+                };
+                if (open or m[i] == null) {
+                    mx.unknown += 0.2;
+                } else {
+                    const v: f32 = @floatFromInt(m[i].?);
+                    mx.magic += v / 500;
+                    mx.phys += (100 - v) / 500;
+                }
+            }
+            l.* = .{ .role = r, .us = seats[0], .them = seats[1], .ask = r == d.role and !p.revealed };
+        }
+        var bans: [2][]champ.Champ = undefined;
+        for (&bans, d.bans) |*dst, src| {
+            dst.* = h.mem.alloc(champ.Champ, src.len) catch {
+                h.oom = true;
+                return .none;
+            };
+            for (dst.*, src) |*o, c| o.* = .{ .name = c.name, .src = p.iconSrc(h, c) };
+        }
+        // No seat takes a click here: the answer is the ChoiceCards
+        const board = draftboard.fullOn(h, .{
+            .v = .full,
+            .lanes = h.mem.dupe(draftboard.Lane, &lanes) catch {
+                h.oom = true;
+                return .none;
+            },
+            .heads = .{ W.your_team, W.enemy },
+            .mix = mix,
+            .bans_us = bans[0],
+            .bans_them = bans[1],
+        }, &.{});
+        if (!p.revealed) return h.div(.{ .class = "draft" }, .{board});
+        const rows = h.mem.alloc(candlist.Row, x.choices.len) catch {
+            h.oom = true;
+            return .none;
+        };
+        for (x.choices, rows, 0..) |c, *o, i| {
+            const why = h.mem.alloc(candlist.Reason, c.why.len) catch {
+                h.oom = true;
+                return .none;
+            };
+            for (c.why, why) |w, *dst| dst.* = .{ .text = .{ .s = w.text }, .pp = if (w.up) 1 else -1 };
+            o.* = .{
+                .champ = if (c.champ) |y| .{ .name = y.name, .src = p.iconSrc(h, y) } else .{ .name = c.text, .src = "" },
+                .star = i == x.right,
+                .ref = p.pick != null and p.pick.? == i,
+                .reasons = why,
+            };
+        }
+        return h.div(.{ .class = "draft" }, .{ board, candlist.view(h, .{ .rows = rows, .mode = .words, .ref_label = W.your_pick }) });
+    }
+
+    fn damageWord(m: ?u8) tree.Text {
+        const v = m orelse return .{ .s = "" };
+        return if (v >= 60) W.ap else if (v <= 40) W.ad else W.both;
+    }
+
     fn choices(p: *Page, h: *H, x: ld.Pick) N {
         const cs = h.mem.alloc(choice.Choice, x.choices.len) catch {
             h.oom = true;
@@ -437,11 +522,12 @@ pub const css =
     \\  .c-learn .main { min-width: 0; }
     \\  .c-learn .path { display: grid; gap: var(--sp-3); }
     \\  .c-learn .duel { display: flex; align-items: center; gap: var(--sp-4) var(--sp-5); flex-wrap: wrap; }
-    \\  .c-learn .who { display: flex; align-items: center; gap: var(--sp-3); }
-    \\  .c-learn .who .nm { display: block; font-size: var(--fs-xl); font-weight: var(--w-b); }
+    \\  .c-learn .duel .who { display: flex; align-items: center; gap: var(--sp-3); }
+    \\  .c-learn .duel .who .nm { display: block; font-size: var(--fs-xl); font-weight: var(--w-b); }
     \\  .c-learn .vs { color: var(--faint); font-size: var(--fs-s); text-transform: uppercase; letter-spacing: 0.06em; }
     \\  .c-learn .vs3 { display: flex; gap: var(--sp-4); }
     \\  .c-learn .vs3 > span { display: grid; justify-items: center; gap: 2px; }
+    \\  .c-learn .draft { display: grid; gap: var(--sp-3); min-width: 0; }
     \\  .c-learn .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--sp-2); }
     \\  .c-learn .tile { display: grid; justify-items: center; gap: var(--sp-2); padding: var(--sp-3) var(--sp-2);
     \\    border-radius: var(--r-m); background: var(--bg); border: 1px solid var(--line); }
@@ -491,6 +577,8 @@ pub fn gallery(g: *@import("gallery.zig").Gallery) void {
     if (shown(h.mem, &facts_demo, 0, 0, null)) |p| g.addFill("facts setup with a slider", p.view(h));
     if (shown(h.mem, &facts_demo, 0, 0, 60)) |p| g.addFill("facts setup revealed: the bands", p.view(h));
     if (shown(h.mem, &chips_demo, 0, 0, null)) |p| g.addFill("chips setup: a champion and its figure", p.view(h));
+    if (shown(h.mem, &draft_demo, 0, 0, null)) |p| g.addFill("chapter end draft: the team lacks magic", p.view(h));
+    if (shown(h.mem, &draft_demo, 0, 0, 0)) |p| g.addFill("chapter end draft, a wrong pick revealed: reasons in words", p.view(h));
     if (shown(h.mem, &ld.demo, 1, 1, 1)) |p| {
         p.progress.set(h.mem, "know", 2) catch {
             h.oom = true;
@@ -608,6 +696,25 @@ test "ticks: a round step per range, fewer for gold's longer labels" {
     try testing.expectEqualSlices(f32, &.{ 200, 300, 400, 500, 600 }, Page.ticks(&h, 200, 600, .gold));
 }
 
+test "a chapter end draft: the open seat stays hidden, then the right pick fills it with reasons in words" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const html = @import("html.zig");
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    var out: std.Io.Writer.Allocating = .init(a);
+    try html.write(&t, shown(a, &draft_demo, 0, 0, null).?.view(&h), &out.writer);
+    const before = std.mem.count(u8, out.written(), "/Lux.png");
+    try testing.expect(std.mem.find(u8, out.written(), "Adds the magic your team lacks") == null);
+    out = .init(a);
+    try html.write(&t, shown(a, &draft_demo, 0, 0, 0).?.view(&h), &out.writer);
+    try testing.expect(!h.oom);
+    try testing.expect(std.mem.find(u8, out.written(), "Adds the magic your team lacks") != null);
+    // On its card as before, now also in the open seat and the reasons list
+    try testing.expect(std.mem.count(u8, out.written(), "/Lux.png") > before);
+}
+
 test "a puzzle's link opens it" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
@@ -652,4 +759,31 @@ const counter_demo: ld.Data = .{ .ddragon = "16.21.1", .start = 0, .chapters = &
     .tip = "A few matchups are lopsided: know the ones that beat your champion.",
     .games = 1_965,
     .from = "Ranked games, every region, all ranks, last 30 days; top lane games only",
+}} }} };
+
+/// A support seat on a team short of magic: Lux is the one option that brings it
+const draft_demo: ld.Data = .{ .ddragon = "16.21.1", .start = 0, .chapters = &.{.{ .title = "The basics", .puzzles = &.{.{
+    .id = "draft-demo",
+    .q = "Your team picks last. Which champion fits this draft?",
+    .ctx = "A real ranked game, Emerald, patch 16.21",
+    .setup = .{ .draft = .{
+        .role = .support,
+        .us = .{ ld.ch("Darius", "Darius"), ld.ch("LeeSin", "Lee Sin"), ld.ch("Zed", "Zed"), ld.ch("Jinx", "Jinx"), ld.ch("Thresh", "Thresh") },
+        .them = .{ ld.ch("Ornn", "Ornn"), ld.ch("Elise", "Elise"), ld.ch("Ahri", "Ahri"), ld.ch("Caitlyn", "Caitlyn"), ld.ch("Nautilus", "Nautilus") },
+        .bans = .{ &.{ ld.ch("Yasuo", "Yasuo"), ld.ch("Yone", "Yone") }, &.{ld.ch("Vex", "Vex")} },
+        .magic = .{ .{ 3, 8, 6, 4, null }, .{ 55, 88, 90, 2, 72 } },
+    } },
+    .answer = .{ .pick = .{ .right = 2, .choices = &.{
+        .{ .text = "Pyke", .champ = ld.ch("Pyke", "Pyke"), .shown = "4% magic", .games = 5_200, .why = &.{.{ .text = "Hard into Caitlyn", .up = false }} },
+        .{ .text = "Braum", .champ = ld.ch("Braum", "Braum"), .shown = "22% magic", .games = 4_100 },
+        .{ .text = "Lux", .champ = ld.ch("Lux", "Lux"), .shown = "91% magic", .games = 6_800, .why = &.{
+            .{ .text = "Adds the magic your team lacks", .up = true },
+            .{ .text = "Strong this patch", .up = true },
+        } },
+        .{ .text = "Leona", .champ = ld.ch("Leona", "Leona"), .shown = "28% magic", .games = 7_300, .why = &.{.{ .text = "Works with Jinx", .up = true }} },
+    } } },
+    .why = "Your four deal almost no magic damage: teams with mixed damage tend to do better.",
+    .tip = "Look at your team's damage before you lock in.",
+    .games = 23_400,
+    .from = "The options' games in the role, patch 16.21; teams' damage from 3,000 games",
 }} }} };

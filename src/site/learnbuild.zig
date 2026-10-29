@@ -9,11 +9,14 @@ const html = @import("html.zig");
 const matchup = @import("matchup.zig");
 const champion = @import("champion.zig");
 const lean = @import("../lean.zig");
+const learn = @import("../learn.zig");
+const daily = @import("../daily.zig");
 
 const core = @import("core");
 const curvesfile = core.curvesfile;
 
 const Site = root.Site;
+const log = std.log.scoped(.learn);
 const Role = core.Role;
 const Champ = root.Champ;
 
@@ -32,12 +35,15 @@ pub fn data(site: *const Site) !ld.Data {
         .{ .title = "Counter, or just strong?", .puzzles = try counters(site) },
         .{ .title = "Myth or measured", .puzzles = &fixed.chapter5 },
     };
+    const ends = try drafts(site, all.len);
     var start: u8 = 0;
     for (all, 0..) |c, i| {
         if (c.puzzles.len == 0) continue;
         // A first visit lands on chapter 1 (notes/learn.md Decisions)
         if (i == 1) start = @intCast(chapters.items.len);
-        try chapters.append(a, c);
+        var ch = c;
+        if (i < ends.len) ch.puzzles = try std.mem.concat(a, ld.Puzzle, &.{ c.puzzles, &.{ends[i]} });
+        try chapters.append(a, ch);
     }
     return .{ .ddragon = site.ddragon_version, .chapters = chapters.items, .start = start };
 }
@@ -718,6 +724,148 @@ fn damageBasic(site: *const Site) !?ld.Puzzle {
     };
 }
 
+/// Chapter ends (plan "Chapter end and the drills"): practice drafts (learn.zig) where
+/// one option is clearly apart. The four teammates deal under a fifth of their damage as
+/// magic (learned.md: about 5 points fewer wins, Sure) and the one option bringing magic
+/// is also the model's best of the four. Model gaps alone clear almost none (notes/
+/// learn.md L4). One per chapter while they last, a role not used yet first
+fn drafts(site: *const Site, chapters: usize) ![]const ld.Puzzle {
+    const facts = site.learn orelse return &.{};
+    const a = site.arena;
+    const json = for (site.daily_files) |f| {
+        if (std.mem.eql(u8, f.path, "learn/practice.json")) break f.data;
+    } else return &.{};
+    const pack = std.json.parseFromSliceLeaky([]learn.Practice, a, json, .{ .ignore_unknown_fields = true }) catch |err| {
+        log.warn("learn/practice.json: {t}", .{err});
+        return &.{};
+    };
+    var out: std.ArrayList(ld.Puzzle) = .empty;
+    var used: std.EnumSet(Role) = .empty;
+    for (0..2) |pass| for (pack) |p| {
+        if (out.items.len == chapters) break;
+        if ((pass == 0) == used.contains(p.hidden_role)) continue;
+        const right = clearOption(p, teamMagic(site, facts, p) orelse continue) orelse continue;
+        try out.append(a, try draftPuzzle(site, facts, p, right) orelse continue);
+        used.insert(p.hidden_role);
+    };
+    return out.items;
+}
+
+const draft_team_magic = 0.2;
+
+/// The four teammates' average magic share; null when one is unknown
+fn teamMagic(site: *const Site, facts: learn.Facts, p: learn.Practice) ?f64 {
+    var sum: f64 = 0;
+    for (Role.all, p.teams[p.hidden_team]) |r, id| {
+        if (r == p.hidden_role) continue;
+        const c = site.stats.index(id) orelse return null;
+        sum += facts.champs[c].magic orelse return null;
+    }
+    return sum / 4;
+}
+
+/// The option clearly apart, by draft()'s rule
+fn clearOption(p: learn.Practice, team_magic: f64) ?u8 {
+    if (team_magic >= draft_team_magic) return null;
+    var bringer: ?u8 = null;
+    for (p.options, 0..) |o, i| {
+        if (@as(f64, @floatFromInt(o.magic orelse continue)) < 100 * learn.brings_share) continue;
+        if (bringer != null) return null;
+        bringer = @intCast(i);
+    }
+    const b = bringer orelse return null;
+    for (p.options, 0..) |o, i| if (i != b and o.pp >= p.options[b].pp) return null;
+    return b;
+}
+
+fn draftPuzzle(site: *const Site, facts: learn.Facts, p: learn.Practice, right: u8) !?ld.Puzzle {
+    const a = site.arena;
+    var sides: [2][5]ld.Champ = undefined;
+    for (&sides, p.teams) |*side, team| for (side, team) |*dst, id| {
+        dst.* = uiChamp(matchup.champ(site, id) orelse return null);
+    };
+    var bans: [2][]ld.Champ = undefined;
+    for (&bans, p.bans) |*dst, ids| {
+        var l: std.ArrayList(ld.Champ) = .empty;
+        for (ids) |id| if (matchup.champ(site, id)) |c| try l.append(a, uiChamp(c));
+        dst.* = l.items;
+    }
+    const us = p.hidden_team;
+    var choices: [4]ld.Choice = undefined;
+    var games: u32 = 0;
+    for (p.options, &choices, 0..) |o, *ch, i| {
+        const c = matchup.champ(site, o.id) orelse return null;
+        var why: std.ArrayList(ld.Why) = .empty;
+        if (i == right) try why.append(a, .{ .text = "Adds the magic your team lacks", .up = true });
+        for (o.reasons) |r| if (try reasonWords(site, p.hidden_role, r)) |w| try why.append(a, w);
+        ch.* = .{
+            .text = c.name,
+            .champ = uiChamp(c),
+            .shown = if (o.magic) |m| try a.print("{d}% magic", .{m}) else "",
+            .games = o.games,
+            .why = why.items,
+        };
+        games += o.games;
+    }
+    var magic: [2][5]?u8 = undefined;
+    for (&magic, [2]u1{ us, 1 - us }) |*side, t| for (side, p.teams[t]) |*m, id| {
+        const c = site.stats.index(id);
+        m.* = if (c) |x| if (facts.champs[x].magic) |v| @intFromFloat(@round(100 * v)) else null else null;
+    };
+    return .{
+        .id = try a.print("draft-{x:0>8}", .{@as(u32, @truncate(std.hash.Wyhash.hash(0, std.mem.asBytes(&p.teams))))}),
+        .q = "Your team picks last. Which champion fits this draft?",
+        .ctx = try a.print("A real ranked game{s}{s}, patch {s}", .{ if (p.tier != null) ", " else "", if (p.tier) |t| try tierName(a, t) else "", p.patch }),
+        .setup = .{ .draft = .{
+            .role = champion.uiRole(p.hidden_role),
+            .us = sides[us],
+            .them = sides[1 - us],
+            .bans = .{ bans[us], bans[1 - us] },
+            .magic = magic,
+        } },
+        .answer = .{ .pick = .{ .right = right, .choices = try a.dupe(ld.Choice, &choices) } },
+        .why = "Your four deal almost no magic damage: teams with mixed damage tend to do better.",
+        .tip = "Look at your team's damage before you lock in.",
+        .games = games,
+        .from = try a.print("The options' games in the role, patch {s}; teams' damage from {d} games", .{ p.patch, facts.damage_games }),
+    };
+}
+
+/// "Emerald" from "EMERALD"
+fn tierName(a: std.mem.Allocator, t: []const u8) ![]const u8 {
+    const s = try std.ascii.allocLowerString(a, t);
+    if (s.len > 0) s[0] = std.ascii.toUpper(s[0]);
+    return s;
+}
+
+/// Reason gates (docs/plan/ui/why.md): half a point or more; pairs on 100+ games, and
+/// only those the data shows matter: the lane opponent, support or mid into the enemy
+/// bot, bot with support
+const reason_min_pp = 0.5;
+const reason_min_games = 100;
+
+fn reasonWords(site: *const Site, role: Role, r: daily.Reason) !?ld.Why {
+    if (!(@abs(r.pp) >= reason_min_pp)) return null;
+    const up = r.pp > 0;
+    if (r.kind == .base) return .{ .text = if (up) "Strong this patch" else "Weak this patch", .up = up };
+    if (r.games < reason_min_games) return null;
+    const other = (matchup.champ(site, r.id) orelse return null).name;
+    const a = site.arena;
+    switch (r.kind) {
+        .base => unreachable,
+        .enemy => {
+            const counts = r.role == role or (r.role == .bottom and (role == .utility or role == .middle));
+            if (!counts) return null;
+            return .{ .text = try a.print("{s} into {s}", .{ if (up) "Good" else "Hard", other }), .up = up };
+        },
+        .ally => {
+            const duo = (role == .bottom and r.role == .utility) or (role == .utility and r.role == .bottom);
+            if (!duo) return null;
+            return .{ .text = try a.print("{s} with {s}", .{ if (up) "Works" else "Awkward", other }), .up = up };
+        },
+    }
+}
+
 test leanRows {
     const row = struct {
         fn f(id: u32, role: Role, games: u32, gold: f64, win: f64) lean.Row {
@@ -790,4 +938,35 @@ test lopsidedPicks {
     const got = lopsidedPicks(&ls).?;
     for (got, [_]u32{ 1, 3, 5 }) |p, x| try std.testing.expectEqual(x, p.x);
     try std.testing.expectEqual(null, lopsidedPicks(ls[0..4]));
+}
+
+test clearOption {
+    const opt = struct {
+        fn f(pp: f64, magic: ?u8) learn.Option {
+            return .{ .id = 1, .pp = pp, .games = 500, .wins = 250, .magic = magic, .reasons = &.{}, .lane = null };
+        }
+    }.f;
+    var p: learn.Practice = .{
+        .patch = "16.21",
+        .tier = null,
+        .teams = @splat(@splat(0)),
+        .bans = .{ &.{}, &.{} },
+        .hidden_team = 0,
+        .hidden_role = .utility,
+        .difficulty = .easy,
+        .need = .magic,
+        .options = .{ opt(0.5, 10), opt(1.5, 80), opt(-0.3, 20), opt(0.9, null) },
+        .played = 0,
+        .won = true,
+        .minutes = 30,
+    };
+    try std.testing.expectEqual(@as(?u8, 1), clearOption(p, 0.1));
+    // The team already has magic enough
+    try std.testing.expectEqual(@as(?u8, null), clearOption(p, 0.25));
+    // The bringer is not also the model's best of the four
+    p.options[0].pp = 2;
+    try std.testing.expectEqual(@as(?u8, null), clearOption(p, 0.1));
+    // Two bringers: not clearly apart
+    p.options[0] = opt(0.5, 70);
+    try std.testing.expectEqual(@as(?u8, null), clearOption(p, 0.1));
 }

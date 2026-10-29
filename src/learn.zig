@@ -52,7 +52,7 @@ pub const Difficulty = enum {
 /// Damage type the hidden player's team lacks, judged from the four teammates
 pub const Need = enum { magic, physical };
 /// An option brings the needed type at this share or more, and lacks it at the other
-const brings_share = 0.6;
+pub const brings_share = 0.6;
 const lacks_share = 0.3;
 /// Easy drafts leave out options this far behind in lane at lane_minute (gold), when
 /// the curve has enough games
