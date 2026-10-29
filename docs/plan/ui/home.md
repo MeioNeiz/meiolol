@@ -51,8 +51,9 @@ Desktop 1280, a 12-column grid under the site header:
 Below (still the first screen at 1280x800 in part, the rest one scroll):
 
 - Champions: a role column each (one role and the role picker on a phone), five rows,
-  three lists: Most played, Win rate (over the champions table's games floor), Rising
-  (clear rises this patch; the choice hidden when none). A row goes to the champion page
+  two lists: Most played, Win rate (over the champions table's games floor). No Rising
+  list (note 44: read as unclear, and the Patch card beside it already has the patch's
+  moves). A row goes to the champion page
   in that role (Jacob: "if i pick on champion with its role ... i want that role"); the
   card and role heads to the champions table sorted as the list is
 - Footer as today, with Method and Desktop app in it

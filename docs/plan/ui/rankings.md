@@ -23,7 +23,7 @@ pages, each one ranking), not deep.
   answer column, plus win rate and games); a stat is a spec (label, unit, sort, which
   data, min games), not a page of its own
 - An index of rankings (one card per stat, its top 3 as icons) from the champions
-  section, and home's Champions card lists (Most played, Best win rate, Rising) link
+  section, and home's Champions card lists (Most played, Best win rate) link
   to their rankings
 
 ## Stats, data we have first (arch-stats.md)

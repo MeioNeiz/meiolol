@@ -217,7 +217,7 @@ test "the champions: one role at a time when narrow, a bad index skipped" {
     try testing.expectEqual(@as(usize, 1), count(page, "class=\"col\" data-on"));
 }
 
-test "the champions: Most played, Win rate, Rising once there are risers; links sort the table so" {
+test "the champions: Most played and Win rate; links sort the table so" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     var t: tree.Tree = .{};
@@ -228,20 +228,11 @@ test "the champions: Most played, Win rate, Rising once there are risers; links 
     try p.init(.{ .data = &d }, .{ .data = &d });
     defer p.deinit();
     var page = try p.shown();
-    try testing.expect(std.mem.find(u8, page, ">Rising</button>") == null);
     try testing.expect(std.mem.find(u8, page, "href=\"/champions#sort=6\"") != null);
     _ = p.ev(.click, p.id("aria-pressed", "false"), "");
     try testing.expectEqual(.best, p.state.list);
     page = try p.shown();
     try testing.expect(std.mem.find(u8, page, "href=\"/champions\"") != null);
-    var rising = d.rising;
-    rising[0] = d.roles[0][0..1];
-    d.rising = rising;
-    p.state.list = .rising;
-    p.i.render();
-    page = try p.shown();
-    try testing.expect(std.mem.find(u8, page, "href=\"/champions#sort=2\"") != null);
-    try testing.expectEqual(@as(usize, 4), count(page, ">None clear yet<"));
 }
 
 test "the Daily Draft card: Guess, then Open with the marks once played" {

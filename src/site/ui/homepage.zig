@@ -59,7 +59,6 @@ const W = struct {
     pub const list = plain("List");
     pub const played = plain("Most played");
     pub const best = plain("Win rate");
-    pub const rising = plain("Rising");
     pub const none = plain("None clear yet");
 };
 
@@ -277,8 +276,6 @@ pub const Champs = struct {
     roles: [5][]const Pick,
     /// Best win rate over the champions table's games floor, by role
     best: [5][]const Pick = @splat(&.{}),
-    /// Clear win rate rises since the last patch, biggest first, by role
-    rising: [5][]const Pick = @splat(&.{}),
     pub const Pick = struct {
         champ: u16,
         href: []const u8,
@@ -301,7 +298,7 @@ pub const HomeChamps = struct {
 
     const P = @This();
 
-    pub const List = enum { played, best, rising };
+    pub const List = enum { played, best };
 
     pub const Msg = union(enum) { role: Role, list: List };
 
@@ -317,7 +314,6 @@ pub const HomeChamps = struct {
         const frag = switch (p.list) {
             .played => "#sort=6",
             .best => return href,
-            .rising => "#sort=2",
         };
         return std.mem.concat(h.mem, u8, &.{ href, frag }) catch {
             h.oom = true;
@@ -332,12 +328,9 @@ pub const HomeChamps = struct {
         const lists = switch (p.list) {
             .played => d.roles,
             .best => d.best,
-            .rising => d.rising,
         };
-        var any_rising = false;
-        for (d.rising) |ps| any_rising = any_rising or ps.len > 0;
-        var items: [3]segmented.Item = undefined;
-        for (&items, std.enums.values(List), [_]tree.Text{ W.played, W.best, W.rising }) |*it, l, label| it.* = .{ .label = label, .selected = p.list == l, .on = h.on(p, .{ .list = l }) };
+        var items: [2]segmented.Item = undefined;
+        for (&items, std.enums.values(List), [_]tree.Text{ W.played, W.best }) |*it, l, label| it.* = .{ .label = label, .selected = p.list == l, .on = h.on(p, .{ .list = l }) };
         var top: f32 = 1;
         for (lists) |ps| for (ps) |x| {
             top = @max(top, x.share);
@@ -372,7 +365,7 @@ pub const HomeChamps = struct {
             h.div(.{ .class = "c-head" }, .{
                 h.h2(.{}, .{h.a(.{ .href = p.sorted(h, d.index) }, .{W.champions})}),
                 h.span(.{ .class = "count" }, .{W.games.with(h, .{ .n = d.games })}),
-                segmented.view(h, .{ .s = .s, .label = W.list }, items[0..if (any_rising) 3 else 2]),
+                segmented.view(h, .{ .s = .s, .label = W.list }, &items),
                 rolepicker.view(h, .{ .v = .compact, .label = W.role }, &roles),
             }),
             h.div(.{ .class = "cols" }, .{cols.done()}),
