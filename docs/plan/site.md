@@ -253,7 +253,7 @@ detected cross-role kinds. Admin and /private only; the public draft tool follow
 
 ## Before the production review
 
-- Privacy/terms into src/site/prose.zig from docs/legal once Jacob fills the
+- Privacy/terms into src/site/textpages.zig from docs/legal once Jacob fills the
   placeholders; objection by email (`meiolol forget`) until the form is live
 - Privacy rules (J10): docs/privacy-rules.md (each rule Riot, law or self-imposed, with
   quotes); Jacob's list at its end

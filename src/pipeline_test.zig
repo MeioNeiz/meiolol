@@ -387,7 +387,7 @@ test "fixture games to stats, curves and the website" {
         .{ "matchups/support/pyke-vs-rakan.html", &.{"<h3>Rakan with</h3>"} },
         // MatchupStrip: the lane opponents with a page, the current one lit; the pair's build
         .{ "matchups/top/darius-vs-mordekaiser.html", &.{ "<nav class=\"c-mstrip\" aria-label=\"Darius&#39;s Top opponents\">", "<a href=\"/matchups/top/darius-vs-mordekaiser\" aria-current=\"page\"", "data-island=\"champbuild\" data-bin=\"", "<h2>Build against Mordekaiser</h2>", "href=\"/champions/darius/top\"" } },
-        .{ "method.html", &.{ "Games to stabilise", "<li><b>Highest win rate</b>: marked among options", "<h2 id=\"lean\">Early or late</h2>" } },
+        .{ "method.html", &.{ "Games to stabilise", "<li><strong>Highest win rate</strong>: marked among options", "<h2 id=\"lean\">Early or late</h2>" } },
         // The board, pool and its section follow the view
         .{ "_v/patch/champions.html", &.{ "data-view=\"1\"", "<a href=\"/champions\">30 days</a>" } },
         .{ "_v/all/pool.html", &.{ "<div class=\"c-poolwrap\"><div class=\"c-poolpage\" data-island=\"pool\" data-bin=\"", "<p class=\"muted\"><span class=\"scope\" data-chip data-region=\"all\"" } },

@@ -45,7 +45,6 @@ const tpl = html.tpl;
 const score = core.score;
 
 pub const generate = @import("write.zig").generate;
-const biggestCurves = @import("extras.zig").biggestCurves;
 pub const Loaded = @import("views.zig").Loaded;
 const writeIndex = @import("home.zig").writeIndex;
 const writeTierList = @import("tierlist.zig").writeTierList;
@@ -354,7 +353,7 @@ pub const Site = struct {
     }
 
     fn info(s: *const Site) prose.Info {
-        return .{ .contact = s.opts.contact, .updated = s.opts.updated, .curves = biggestCurves(s.view_curves), .patch = s.patch };
+        return .{ .contact = s.opts.contact, .updated = s.opts.updated, .patch = s.patch };
     }
 };
 
@@ -585,7 +584,7 @@ pub fn renderShared(site: *const Site, w: *Writer, at: urls.Page) !bool {
         else => {
             // null: the body is textpages.body's
             const fixed = [_]struct { std.meta.Tag(urls.Page), []const u8, []const u8, html.Nav, ?*const fn (*Writer, prose.Info) Writer.Error!void }{
-                .{ .method, "Method", "Where meiolol's numbers come from and how lane curves, champion statistics and the Daily Draft are made.", .method, prose.method },
+                .{ .method, "Method", "Where meiolol's numbers come from and how lane curves, champion statistics and the Daily Draft are made.", .method, null },
                 .{ .download, "Champ select helper", "The meiolol champ select helper, a desktop app for Windows, in development.", .none, null },
                 .{ .privacy, "Privacy policy", "What meiolol collects and why.", .none, null },
                 .{ .terms, "Terms of use", "Terms for using meiolol.", .none, null },
@@ -604,7 +603,6 @@ pub fn renderShared(site: *const Site, w: *Writer, at: urls.Page) !bool {
                 } else false;
                 try html.head(w, p);
                 if (f[4]) |body| try body(w, site.info()) else _ = try textpages.body(site, w, at);
-                if (f[3] == .method) try evalchart.section(w, site.eval);
                 try html.foot(w, p);
                 return true;
             }

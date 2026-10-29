@@ -1,7 +1,7 @@
 # Terms of use (draft)
 
 Not legal advice: a plain English draft written by Claude, extending the placeholder in
-src/site/prose.zig. Jacob should read it before it goes live.
+src/site/textpages.zig. Jacob should read it before it goes live.
 
 ## Decisions for Jacob
 

@@ -37,7 +37,7 @@ keep** (our choice, cheap and harmless, or it deletes data: only Jacob changes i
 | --- | --- | --- |
 | Daily Draft game at least a week old | src/daily.zig min_age_days, daily page, method page "Daily Draft" | self (Q2, dropped by J10). daily2's area |
 | Daily Draft and Learn puzzles carry no names, Riot IDs, match ids, dates; only team totals and one approximate tier | src/daily.zig, src/learn.zig, privacy page | self. Showing per-seat ranks or stats is allowed by J10; daily2 decides. If added, the privacy page's Daily Draft line and lia.md "Safeguards" must say so |
-| "Never shows other players" site-wide (method page lead and "never does" list) | src/site/prose.zig method | self beyond champ select: narrowed to champ select (Riot) and hidden players on 20 Oct |
+| "Never shows other players" site-wide (method page lead and "never does" list) | src/site/textpages.zig method | self beyond champ select: narrowed to champ select (Riot) and hidden players on 20 Oct |
 | Your games showed no teammate or opponent names | src/api/game.zig, api/cache.zig, review.js | self, dropped 20 Oct (J18): a Players panel names all ten as at the game (api.db `match_names`, erased with the player); lia.md rebalanced |
 | Your games example player anonymised | src/api/example.zig, `meiolol your-example` | self, keep: a reviewer demo, a real name adds nothing |
 | Raw archive drops Riot IDs, hashes PUUIDs and match ids | src/lab/archive.zig, anonymise.rewriteMatch | self, keep: rewrites stored data; changing it is a data job (Jacob) |
