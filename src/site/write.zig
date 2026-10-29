@@ -228,7 +228,7 @@ test "views: a tree each, switches between them, shared pages once" {
     const champ = try read(arena, out, "champions/a.html");
     for ([_][]const u8{
         "data-island=\"champion\" data-src=\"/data/champion/a.bin\"",
-        "<span data-foot>in EUW, last 30 days",
+        "Ranked solo/duo in EUW, last 30 days",
         "href=\"/" ++ @import("style.zig").file.path ++ "\"",
         "<a href=\"/champions\" aria-current=\"page\" data-view=\"\">",
     }) |s| try std.testing.expect(std.mem.find(u8, champ, s) != null);

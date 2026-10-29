@@ -162,9 +162,6 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .hero p { margin: 0; }
 .prose { max-width: 720px; }
 .prose li { margin: 4px 0; }
-footer { border-top: 1px solid var(--line); padding: 20px 0 36px; font-size: 12px; color: var(--faint); margin-top: 24px; }
-footer a { color: var(--muted); }
-footer .legal { max-width: 720px; }
 input, select {
   font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
   border-radius: 6px; padding: 6px 8px; min-width: 0; flex: 1;
@@ -173,8 +170,6 @@ input, select {
 .notes .why { color: var(--muted); font-size: 14px; margin-top: 2px; }
 .notes li > div:first-child { display: flex; align-items: center; gap: 10px; font-weight: 600; }
 .notes li > div:first-child .muted { font-weight: 400; font-size: 14px; }
-.preview { background: var(--panel); border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12.5px; line-height: 1.55; }
-.preview .wrap { padding-top: 8px; padding-bottom: 8px; }
 button {
   font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line-2);
   border-radius: 8px; padding: 8px 14px; cursor: pointer;

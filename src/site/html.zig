@@ -12,13 +12,6 @@ pub const product = "meiolol";
 
 pub const boilerplate = core.boilerplate;
 
-/// Riot: a personal key may not serve the public while a production key is in review
-const preview_banner =
-    \\<div class="preview"><div class="wrap">Preview: this site is in review for a Riot
-    \\Games production API key and is not yet open to the public.</div></div>
-    \\
-;
-
 pub const Nav = enum {
     home,
     your,
@@ -178,7 +171,7 @@ pub fn head(w: *Writer, p: Page) Writer.Error!void {
         , .{ .dir = tpl.trusted(v.query()) }) else null,
         .meio_view = tpl.when(p.view == null, tpl.trusted(meio_view)),
         .admin = tpl.trusted(admin_link),
-        .banner = tpl.when(!p.public, tpl.trusted(preview_banner)),
+        .banner = tpl.when(!p.public, Preview{}),
     });
 }
 
@@ -378,26 +371,30 @@ fn viewLink(w: *Writer, p: Page, to: View, v: View, comptime key: []const u8, va
 }
 
 pub fn foot(w: *Writer, p: Page) Writer.Error!void {
-    try tpl.renderPart(w,
-        \\</main>
-        \\<footer><div class="wrap">
-        \\<p>Ranked solo/duo <span data-foot>{data}</span>. Updated daily.</p>
-        \\<p><a href="{privacy}">Privacy</a> · <a href="{terms}">Terms</a> ·
-        \\<a href="{method}">Method</a> · <a href="{download}">Desktop app</a></p>
-        \\<p class="legal">{legal}</p>
-        \\</div></footer>
-        \\</body>
-        \\</html>
-        \\
-    , .{
-        .data = p.data,
-        .privacy = "/privacy",
-        .terms = "/terms",
-        .method = "/method",
-        .download = "/download",
-        .legal = tpl.trusted(boilerplate),
-    });
+    try w.writeAll("</main>\n");
+    var buf: [8 * 1024]u8 = undefined;
+    var fba: std.heap.FixedBufferAllocator = .init(&buf);
+    var t: ui.Tree = .{};
+    var h: ui.H = .init(fba.allocator(), &t);
+    t.root = ui.site.foot(&h, .{ .data = p.data, .legal = boilerplate });
+    if (h.oom) return error.WriteFailed;
+    try ui.html.write(&t, t.root, w);
+    try w.writeAll("\n</body>\n</html>\n");
 }
+
+/// ui.site's preview strip, on every page until the production key
+const Preview = struct {
+    pub fn render(_: Preview, w: *Writer) Writer.Error!void {
+        var buf: [2 * 1024]u8 = undefined;
+        var fba: std.heap.FixedBufferAllocator = .init(&buf);
+        var t: ui.Tree = .{};
+        var h: ui.H = .init(fba.allocator(), &t);
+        t.root = ui.site.preview(&h);
+        if (h.oom) return error.WriteFailed;
+        try ui.html.write(&t, t.root, w);
+        try w.writeByte('\n');
+    }
+};
 
 test {
     _ = tpl;

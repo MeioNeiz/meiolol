@@ -1,14 +1,16 @@
 //! SiteHeader: every page's top bar: the logo, the page links, the search. Under 760 px
 //! of header the links give way to a menu button whose popover lists them and the pages
-//! under Champions, the current one selected (popovertarget: no script)
+//! under Champions, the current one selected (popovertarget: no script). Also every
+//! page's foot (`foot`) and the preview strip under the header (`preview`)
 const tree = @import("tree.zig");
 const Gallery = @import("gallery.zig").Gallery;
-const plain = @import("phrase.zig").plain;
+const phrase = @import("phrase.zig");
+const plain = phrase.plain;
 const H = tree.H;
 const N = tree.N;
 
 pub const name = "SiteHeader";
-pub const scope = .{ ".c-site", ".c-sitemenu" };
+pub const scope = .{ ".c-site", ".c-sitemenu", ".c-sitefoot", ".c-preview" };
 
 pub const Link = struct {
     label: tree.Text,
@@ -36,7 +38,38 @@ const W = struct {
     pub const pages = plain("Pages");
     pub const menu = plain("Menu");
     pub const champions = plain("Champions");
+    pub const data = phrase.Phrase("Ranked solo/duo {d:text}. Updated daily.");
+    pub const legal_pages = plain("Site");
+    /// Riot: a personal key may not serve the public while a production key is in review
+    pub const preview = plain("Preview: this site is in review for a Riot Games production API key and is not yet open to the public.");
 };
+
+pub const Foot = struct {
+    /// Where the page's numbers are from: "in EUW, last 30 days, 5,123 games"
+    data: []const u8,
+    links: []const Link = &foot_links,
+    /// Riot's legal line, quoted as given
+    legal: []const u8,
+};
+
+pub const foot_links = [_]Link{
+    .{ .label = plain("Privacy"), .href = "/privacy" },
+    .{ .label = plain("Terms"), .href = "/terms" },
+    .{ .label = plain("Method"), .href = "/method" },
+    .{ .label = plain("Desktop app"), .href = "/download" },
+};
+
+pub fn foot(h: *H, f: Foot) N {
+    return h.el(.footer, .{ .class = "c-sitefoot" }, .{h.div(.{ .class = "in" }, .{
+        h.p(.{}, .{W.data.with(h, .{ .d = f.data })}),
+        h.el(.nav, .{ .aria_label = W.legal_pages }, .{links(h, f.links)}),
+        h.p(.{ .class = "legal", .data_prose = {} }, .{tree.Text{ .s = f.legal }}),
+    })});
+}
+
+pub fn preview(h: *H) N {
+    return h.div(.{ .class = "c-preview" }, .{h.p(.{}, .{W.preview})});
+}
 
 pub fn view(h: *H, o: Opts) N {
     return h.el(.header, .{ .class = "c-site ui" }, .{h.div(.{ .class = "bar" }, .{
@@ -117,6 +150,16 @@ pub const css =
     \\  .c-sitemenu > a[aria-current="page"] { background: var(--sel-bg); color: var(--sel-ink); }
     \\  .c-sitemenu > .lab { padding: var(--sp-2) 12px 2px; margin-top: 2px; border-top: 1px solid var(--line);
     \\    font-size: var(--fs-xs); font-weight: var(--w-b); color: var(--faint); text-transform: uppercase; letter-spacing: 0.06em; }
+    \\  .c-sitefoot { margin-top: var(--sp-5); border-top: 1px solid var(--line); font-size: var(--fs-s); color: var(--faint); }
+    \\  .c-sitefoot > .in { max-width: var(--wrap); margin: 0 auto; padding: 20px var(--gutter) 36px; }
+    \\  .c-sitefoot p { margin: 0 0 var(--sp-3); }
+    \\  .c-sitefoot nav { display: flex; flex-wrap: wrap; margin: 0 0 var(--sp-3); }
+    \\  .c-sitefoot nav > a { color: var(--muted); }
+    \\  .c-sitefoot nav > a + a::before { content: "·"; display: inline-block; padding: 0 0.35em; color: var(--faint); }
+    \\  .c-sitefoot .legal { max-width: 720px; margin: 0; }
+    \\  .c-preview { background: var(--panel); border-bottom: 1px solid var(--line); color: var(--muted);
+    \\    font-size: var(--fs-s); line-height: 1.55; }
+    \\  .c-preview > p { max-width: var(--wrap); margin: 0 auto; padding: var(--sp-2) var(--gutter); }
     \\}
     \\
 ;
@@ -142,4 +185,9 @@ pub fn gallery(g: *Gallery) void {
     with_search.search = h.input(.{ .type = "search", .placeholder = plain("Champion or Riot ID"), .aria_label = plain("Search") });
     g.addFill("the bar; a menu button under 760 px", view(h, with_search));
     g.add("menu open, the current page selected", menu(h, o, true));
+    g.addFill("the preview strip", preview(h));
+    g.addFill("the foot", foot(h, .{
+        .data = "in EUW, last 30 days, 23,210 games",
+        .legal = "meiolol isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties.",
+    }));
 }
