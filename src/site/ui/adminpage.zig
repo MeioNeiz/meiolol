@@ -2,7 +2,7 @@
 //! wasm/admin.zig fetches admin.bin (the box's snapshot each web round), api/live.bin
 //! (the last 3 h, polled) and /auth/me.bin, sets `now` from the clock before each draw,
 //! and does what `want` asks after an update (an action, an account change). Tabs in the
-//! URL (#tab=ops). Tabs not rebuilt yet link to the old page
+//! URL (#tab=ops); the chart, traffic, ops and models tabs are islands of their own
 const std = @import("std");
 const tree = @import("tree.zig");
 const url = @import("url.zig");
@@ -197,8 +197,6 @@ pub const W = struct {
     pub const refresh = plain("Refresh");
     pub const log_out = plain("Log out");
     pub const tabs_label = plain("Admin sections");
-    pub const old = Phrase("{t:text} is still on the old page");
-    pub const open_old = plain("Open it there");
 
     pub const mins = Phrase("{n:count} min ago");
     pub const hours = Phrase("{n:count} h ago");
@@ -365,13 +363,8 @@ fn body(p: *Page, h: *H, s: *const ad.Snapshot) N {
             .overview => overview(p, h, s),
             .ops => controls(p, h, s),
             .accounts => accountsTab(p, h),
-            // AdminCharts, AdminTraffic and AdminOps, the islands below
-            .crawler, .riot, .storage, .ingest, .traffic, .deploys, .logs => .none,
-            else => |t| card.view(h, .{}, &.{h.p(.{}, .{
-                W.old.with(h, .{ .t = tab_names.get(t).s }),
-                ": ",
-                h.a(.{ .href = h.fmt("index.html#{t}", .{t}) }, .{W.open_old}),
-            })}),
+            // AdminCharts, AdminTraffic, AdminOps and AdminModels, the islands below
+            .crawler, .riot, .storage, .ingest, .traffic, .deploys, .logs, .models => .none,
         },
     });
 }
@@ -900,7 +893,7 @@ pub const Demo = struct {
 
 pub fn gallery(g: *Gallery) void {
     const a = g.h.mem;
-    const states = [_][]const u8{ "loading", "overview: two problems", "controls: a failed build", "controls: live API down", "accounts: a role asked, a link made", "a tab still on the old page", "snapshot failed" };
+    const states = [_][]const u8{ "loading", "overview: two problems", "controls: a failed build", "controls: live API down", "accounts: a role asked, a link made", "snapshot failed" };
     for (states, 0..) |caption, i| {
         const p = a.create(Page) catch return;
         p.* = switch (i) {
@@ -909,7 +902,6 @@ pub fn gallery(g: *Gallery) void {
             2 => Demo.page(.ops),
             3 => Demo.page(.ops),
             4 => Demo.page(.accounts),
-            5 => Demo.page(.models),
             else => .{ .snap_failed = true },
         };
         switch (i) {

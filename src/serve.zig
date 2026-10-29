@@ -597,6 +597,10 @@ fn devAdmin(a: std.mem.Allocator, path: []const u8) !?[]const u8 {
         try ui.data.encode(a, ui.admindata.Traffic, ui.admintraffic.Demo.data, &out);
     } else if (std.mem.eql(u8, path, "admin/api/log")) {
         return ui.adminops.Demo.log;
+    } else if (std.mem.eql(u8, path, "admin/models.bin")) {
+        try ui.data.encode(a, ui.modelsdata.Models, ui.adminmodels.Demo.models, &out);
+    } else if (std.mem.eql(u8, path, "admin/training/training.bin")) {
+        try ui.data.encode(a, ui.modelsdata.Training, ui.adminmodels.Demo.training, &out);
     } else if (std.mem.eql(u8, path, "auth/me.bin")) {
         try ui.data.encode(a, ui.accountsdata.Me, demo.me, &out);
     } else if (std.mem.eql(u8, path, "auth/accounts.bin")) {

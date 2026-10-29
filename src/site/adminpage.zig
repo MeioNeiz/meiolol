@@ -1,8 +1,9 @@
 //! The new admin page (/admin/new.html, ui.adminpage): an empty shell ui-admin.wasm fills
 //! from admin.bin, api/live.bin and /auth/ (the chart tabs: ui.admincharts in
-//! ui-admincharts.wasm, Traffic: ui.admintraffic in ui-admintraffic.wasm, Deploys and
-//! Logs: ui.adminops in ui-adminops.wasm, all of which it loads), its stylesheet and code, written into the admin dir beside the old page by
-//! `meiolol admin`. Never public: nginx serves /admin/ to view_admin logins only
+//! ui-admincharts.wasm, Traffic: ui.admintraffic in ui-admintraffic.wasm, Deploys and Logs:
+//! ui.adminops in ui-adminops.wasm, Models: ui.adminmodels in ui-adminmodels.wasm, all of
+//! which it loads), its stylesheet and code, written into the admin dir beside the old page
+//! by `meiolol admin`. Never public: nginx serves /admin/ to view_admin logins only
 const std = @import("std");
 const store = @import("store");
 const ui = @import("ui");
@@ -12,7 +13,7 @@ const style = @import("style.zig");
 const Io = std.Io;
 
 /// What the public stylesheet leaves out (ui.components): it is linked first
-pub const css = ui.css.join(.{ ui.alertband, ui.actionbutton, ui.adminpage, ui.timechart, ui.admincharts, ui.admintraffic, ui.steptimeline, ui.logview, ui.adminops });
+pub const css = ui.css.join(.{ ui.alertband, ui.actionbutton, ui.adminpage, ui.timechart, ui.admincharts, ui.admintraffic, ui.steptimeline, ui.logview, ui.adminops, ui.adminmodels });
 pub const css_file = assets.hashed("admin.css", css);
 pub const js = assets.hashed("ui-admin.js", @embedFile("ui-admin.js"));
 pub const wasm = assets.hashed("ui-admin.wasm", @embedFile("ui-admin.wasm"));
@@ -22,6 +23,8 @@ pub const traffic_js = assets.hashed("ui-admintraffic.js", @embedFile("ui-admint
 pub const traffic_wasm = assets.hashed("ui-admintraffic.wasm", @embedFile("ui-admintraffic.wasm"));
 pub const ops_js = assets.hashed("ui-adminops.js", @embedFile("ui-adminops.js"));
 pub const ops_wasm = assets.hashed("ui-adminops.wasm", @embedFile("ui-adminops.wasm"));
+pub const models_js = assets.hashed("ui-adminmodels.js", @embedFile("ui-adminmodels.js"));
+pub const models_wasm = assets.hashed("ui-adminmodels.wasm", @embedFile("ui-adminmodels.wasm"));
 
 pub fn page(a: std.mem.Allocator) ![]const u8 {
     var p: ui.adminpage.Page = .{};
@@ -34,6 +37,8 @@ pub fn page(a: std.mem.Allocator) ![]const u8 {
     const tn = tr.view(&h);
     var ops: ui.adminops.Ops = .{ .js = ops_js.path, .wasm = ops_wasm.path };
     const on = ops.view(&h);
+    var mo: ui.adminmodels.Models = .{ .js = models_js.path, .wasm = models_wasm.path };
+    const mn = mo.view(&h);
     if (h.oom) return error.OutOfMemory;
     var out: Io.Writer.Allocating = .init(a);
     const w = &out.writer;
@@ -57,6 +62,7 @@ pub fn page(a: std.mem.Allocator) ![]const u8 {
     try ui.html.write(&t, cn, w);
     try ui.html.write(&t, tn, w);
     try ui.html.write(&t, on, w);
+    try ui.html.write(&t, mn, w);
     try w.print(
         \\
         \\</main>
@@ -70,7 +76,7 @@ pub fn page(a: std.mem.Allocator) ![]const u8 {
 
 /// One of the page's files by its name under /admin/ (the dev server)
 pub fn file(name: []const u8) ?[]const u8 {
-    for ([_]assets.Hashed{ css_file, js, wasm, charts_js, charts_wasm, traffic_js, traffic_wasm, ops_js, ops_wasm }) |f| if (std.mem.eql(u8, f.path, name)) return f.data;
+    for ([_]assets.Hashed{ css_file, js, wasm, charts_js, charts_wasm, traffic_js, traffic_wasm, ops_js, ops_wasm, models_js, models_wasm }) |f| if (std.mem.eql(u8, f.path, name)) return f.data;
     return null;
 }
 
@@ -92,6 +98,8 @@ pub fn write(gpa: std.mem.Allocator, io: Io, out_dir: []const u8) !void {
         .{ traffic_wasm.path, traffic_wasm.data },
         .{ ops_js.path, ops_js.data },
         .{ ops_wasm.path, ops_wasm.data },
+        .{ models_js.path, models_js.data },
+        .{ models_wasm.path, models_wasm.data },
     };
     for (files) |f| {
         try dir.writeFile(io, .{ .sub_path = f[0], .data = f[1] });

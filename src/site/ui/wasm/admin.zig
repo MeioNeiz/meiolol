@@ -1,10 +1,10 @@
 //! ui-admin.wasm: /admin/ (ui.adminpage.Page), server-rendered empty, and the loader of
-//! ui-admincharts.wasm for the chart tabs (Traffic's, Deploys and Logs' likewise). Fetches admin.bin
-//! (the box's snapshot, again each 5 min), api/live.bin (each minute) and /auth/me.bin;
-//! accounts.bin once the Accounts tab shows. Polls only while the tab shows, catching up
-//! when it comes back. Runs what the page's `want` asks: an action (its result from the
-//! next live.bin), an account change, logout, copy. dom.fetch and dom.send keep one
-//! callback: every request here answers in `done`, by its Call
+//! ui-admincharts.wasm for the chart tabs (Traffic's, Deploys and Logs', Models' likewise).
+//! Fetches admin.bin (the box's snapshot, again each 5 min), api/live.bin (each minute) and
+//! /auth/me.bin; accounts.bin once the Accounts tab shows. Polls only while the tab shows,
+//! catching up when it comes back. Runs what the page's `want` asks: an action (its result
+//! from the next live.bin), an account change, logout, copy. dom.fetch and dom.send keep
+//! one callback: every request here answers in `done`, by its Call
 const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
@@ -45,8 +45,8 @@ var linking: ap.Link = .{ .token = "" };
 const live_ms = 60_000;
 const snap_s = 300;
 
-/// The chart, traffic, deploys and logs tabs' islands (dom.lazyLoad)
-const lazy = [_][]const u8{ ui.admincharts.sel, ui.admintraffic.sel, ui.adminops.sel };
+/// The chart, traffic, deploys, logs and models tabs' islands (dom.lazyLoad)
+const lazy = [_][]const u8{ ui.admincharts.sel, ui.admintraffic.sel, ui.adminops.sel, ui.adminmodels.sel };
 
 export fn main() void {
     dom.start();

@@ -29,6 +29,8 @@ pub const Unit = enum {
     rate,
     /// 0.693: model scores that move in the third decimal
     score,
+    /// +0.0012: a model's log loss against a baseline's on the same games
+    diff,
     /// 132.4 GB: sizes, the values in GB
     gb,
 };
@@ -521,6 +523,7 @@ pub const Time = struct {
             .count => phrase.num(h, .kilo, count(v)),
             .rate => phrase.num(h, .rate, v),
             .score => score(h, v),
+            .diff => diff(h, v),
             .gb => W.gb.with(h, .{ .n = v }),
         };
     }
@@ -530,6 +533,7 @@ pub const Time = struct {
             .count => phrase.num(h, .count, count(v)),
             .rate => phrase.num(h, .rate, v),
             .score => score(h, v),
+            .diff => diff(h, v),
             .gb => W.gb.with(h, .{ .n = v }),
         };
     }
@@ -660,6 +664,17 @@ fn spread(es: []End) void {
 fn shifted(p: chart.Plane, j: u32) chart.Plane {
     const d: f32 = @floatFromInt(j);
     return .{ .x = .{ .lo = p.x.lo - d, .hi = p.x.hi - d }, .y = p.y };
+}
+
+fn diff(h: *H, v: f32) tree.Text {
+    var out: std.Io.Writer.Allocating = .init(h.mem);
+    out.writer.writeAll(if (v < 0) "−" else if (v > 0) "+" else "") catch {
+        h.oom = true;
+    };
+    fmt.fixed(&out.writer, @abs(v), 4, false) catch {
+        h.oom = true;
+    };
+    return .{ .s = out.written() };
 }
 
 fn score(h: *H, v: f32) tree.Text {
