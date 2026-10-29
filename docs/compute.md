@@ -17,16 +17,19 @@ docs/lab-run.md.
   (deploy/lab-watch.sh, systemd user service meiolol-lab-watch, log ~/ml/runs/watcher.log)
   asks tasklist.exe every 3 s (5 while up). While LeagueClient.exe or League of
   Legends.exe is up, or Windows can't be asked, it stops every run's process group
-  (each run's pauses.log says when), ends remote-build jobs, and stops the process
-  groups of agents' zig compiles, headless Chromium (and the node driving it) and
-  `meiolol dev` (only those processes when the group also holds Claude, ssh or a login
-  shell).
+  (each run's pauses.log says when) and ends remote-build jobs. Only while the game
+  (League of Legends.exe) is up, or Windows can't be asked, not for the client alone
+  (Jacob), it also stops the process groups of agents' zig compiles, headless Chromium
+  (and the node driving it) and `meiolol dev` (only those processes when the group also
+  holds Claude, ssh or a login shell).
   Those go in ~/.cache/meiolol-league-stopped ("quiet:" log lines) and continue when
-  League closes or the watcher stops or starts. Not paused: ssh and rsync copies,
+  the game closes or the watcher stops or starts. Not paused: ssh and rsync copies,
   snapshot builds, the archive pull, the backup mirror
+- State each tick (up, down or unknown; removed when the watcher stops): client or game
+  in ~/.cache/meiolol-league, the game alone in ~/.cache/meiolol-league-game
 - Builds there wait: deploy/slots.sh (zb.sh, pre-push ci, gpu-box.sh install) grants no
-  slot while ~/.cache/meiolol-league, the watcher's state each tick, isn't down (a file
-  over a minute old: no watcher, builds go), and runs held builds at nice 19, idle I/O.
+  slot while ~/.cache/meiolol-league-game isn't down (a file over a minute old: no
+  watcher, builds go), and runs held builds at nice 19, idle I/O.
   Lowering the WSL VM's Windows priority needs admin: not done.
   Test: deploy/lab-watch-test.sh
 - Tell the sessions using it (cc-peers) before restarting WSL or

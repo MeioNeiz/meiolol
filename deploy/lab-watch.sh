@@ -6,10 +6,12 @@
 #   and continued once both are gone; each pause and resume goes to the run's
 #   pauses.log. A run started while League is up is stopped on the next tick
 # - Agents' heavy work (zig compiles and build runners, headless Chromium and the node
-#   driving it, `meiolol dev`): stopped the same way while League is up, the groups in
-#   ~/.cache/meiolol-league-stopped, continued when it closes and when the watcher stops
-#   or starts, so nothing stays frozen. deploy/slots.sh starts no build while the state
-#   in ~/.cache/meiolol-league (up, down or unknown, written each tick) isn't down
+#   driving it, `meiolol dev`): stopped the same way while the game (League of
+#   Legends.exe) runs, not for the client alone (Jacob), the groups in
+#   ~/.cache/meiolol-league-stopped, continued when the game closes and when the watcher
+#   stops or starts, so nothing stays frozen. State each tick (up, down or unknown):
+#   client or game in ~/.cache/meiolol-league, the game alone in
+#   ~/.cache/meiolol-league-game, where deploy/slots.sh starts no build unless down
 # - WSL restarts (a shutdown, a reboot): at start, a run that was live when WSL went down
 #   (job.pgid from the last day, older than this boot, no exit) runs again in its dir,
 #   twice at most (restarts); runs resume from their own checkpoints, if they keep any
@@ -37,6 +39,7 @@ fi
 cd "$runs" || exit 1
 mkdir -p "$awake_d" "$cache"
 state=$cache/meiolol-league
+gstate=$cache/meiolol-league-game
 stopped=$cache/meiolol-league-stopped
 flag=$home/awake
 # The holder's own log (taken, state every 10 min, released and why), copied in here
@@ -45,14 +48,16 @@ alog_at=$(stat -c %s "$alog" 2> /dev/null || echo 0)
 
 log() { echo "$(date -u +%FT%TZ) $*"; }
 
-# Prints up, down or unknown (Windows can't be asked: interop down, tasklist failing).
-# Unknown pauses like up (Jacob's rule fails safe) but is logged as itself, so a watcher
-# that can't see Windows shows in watcher.log and `lab-run.sh status`, not as League.
+# Prints game (League of Legends.exe, client or not), client (the client alone), down or
+# unknown (Windows can't be asked: interop down, tasklist failing). Unknown pauses like
+# the game (Jacob's rule fails safe) but is logged as itself, so a watcher that can't see
+# Windows shows in watcher.log and `lab-run.sh status`, not as League.
 # deploy/archive-pull.sh has its own check, which carries on when it can't ask
 league() {
     local out
     out=$("$tasklist" /NH /FO CSV 2>/dev/null) || { echo unknown; return; }
-    if grep -qiE '^"(LeagueClient|League of Legends)\.exe"' <<< "$out"; then echo up
+    if grep -qi '^"League of Legends\.exe"' <<< "$out"; then echo game
+    elif grep -qi '^"LeagueClient\.exe"' <<< "$out"; then echo client
     else echo down; fi
 }
 
@@ -135,7 +140,7 @@ unquiet() {
 boot=$(awk '$1 == "btime" { print $2 }' /proc/stat)
 if [[ -f $stopped ]] && (( $(stat -c %Y "$stopped") < boot )); then rm -f "$stopped"; fi
 unquiet "watcher start"
-trap 'unquiet "watcher stopping"; rm -f "$state"; exit 0' TERM INT HUP
+trap 'unquiet "watcher stopping"; rm -f "$state" "$gstate"; exit 0' TERM INT HUP
 
 for d in */; do
     d=${d%/}
@@ -150,15 +155,20 @@ for d in */; do
     log "restarted $d (WSL restart)"
 done
 
-was='' holder='' busy_was=''
+was='' game_was='' holder='' busy_was=''
 while true; do
-    league=$(league)
+    seen=$(league)
+    case $seen in client | game) league=up ;; *) league=$seen ;; esac
+    case $seen in client) game=down ;; game) game=up ;; *) game=$seen ;; esac
     if [[ "$league" != "$was" ]]; then
         if [[ $league == unknown ]]; then log "League unknown (tasklist failed): runs stay paused"
         else log "League $league"; fi
     fi
-    was=$league
+    # No "League " in it: lab-place reads those lines as client-or-game sessions
+    [[ $game != "$game_was" && $game != unknown ]] && log "game $game"
+    was=$league game_was=$game
     echo "$league" > "$state.new" && mv "$state.new" "$state"
+    echo "$game" > "$gstate.new" && mv "$gstate.new" "$gstate"
     now=up
     [[ $league == down ]] && now=down
     busy='' skip=$$
@@ -190,7 +200,7 @@ while true; do
         fi
     done
     # Not "League down": lab-place reads watcher.log's League lines as sessions
-    if [[ $now == up ]]; then quiet "$skip"; else unquiet "game closed"; fi
+    if [[ $game == down ]]; then unquiet "game closed"; else quiet "$skip"; fi
     [[ -n $busy ]] || busy=$(find "$awake_d" -type f -mmin -15 -printf '%f\n' | head -1)
     if [[ -n $busy ]]; then
         touch "$flag"

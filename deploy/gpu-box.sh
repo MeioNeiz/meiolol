@@ -109,7 +109,7 @@ install() {
     for f in "${SCRIPTS[@]}"; do git -C "$ROOT" show "HEAD:deploy/$f" > "$tmp/bin/$f"; done
     chmod 755 "$tmp"/bin/*
     for f in "${UNITS[@]}"; do git -C "$ROOT" show "HEAD:deploy/systemd/$f" > "$tmp/units/$f"; done
-    # A build slot: on the gpu-box it waits while League is up and runs at nice 19
+    # A build slot: on the gpu-box it waits while League's game runs, at nice 19
     # shellcheck disable=SC2016 # the inner sh expands them
     "$ROOT/deploy/slots.sh" 1 "$ROOT/deploy/build-tree.sh" gpu-box "$rev" sh -c \
         'zig build backend -Doptimize=ReleaseSafe \
