@@ -1,7 +1,7 @@
 //! ui-adminmodels.wasm: the admin page's Models tab (ui.adminmodels.Models). ui-admin.wasm
 //! adds its loader (ui-adminmodels.js), which calls `main`. Fetches models.bin and
-//! training/training.bin once the tab shows: both change at most each web round or lab push,
-//! so Refresh fetches them again
+//! training/training.bin once the tab shows, again after a failure when it shows next: both
+//! change at most each web round or lab push
 const std = @import("std");
 const zjb = @import("zjb");
 const ui = @import("ui");
@@ -57,4 +57,5 @@ fn done(ctx: i32, bytes: ?[]u8) void {
             state.training_failed = state.training == null;
         },
     }
+    if (state.models_failed or state.training_failed) asked = false;
 }

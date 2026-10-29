@@ -291,14 +291,15 @@ fn curve(a: Allocator, ts: []const Table) !?md.Curve {
 // ---------- the lab view (training.bin) ----------
 
 /// `meiolol admin --training DIR`: DIR as lab-push.sh stage() leaves it
-pub fn training(gpa: Allocator, io: Io, dir_path: []const u8, now: i64) !void {
+/// No clock in its bytes: lab-push uploads the view whenever a file in it changed
+pub fn training(gpa: Allocator, io: Io, dir_path: []const u8) !void {
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
     const a = arena_state.allocator();
     var dir = try Io.Dir.cwd().openDir(io, dir_path, .{});
     defer dir.close(io);
     const l: Lab = .{ .a = a, .io = io, .dir = dir };
-    const t = try l.view(now);
+    const t = try l.view();
     var bin: std.ArrayList(u8) = .empty;
     try ui.data.encode(a, md.Training, t, &bin);
     try writeGz(gpa, io, dir, "training.bin", bin.items);
@@ -361,7 +362,7 @@ const Lab = struct {
         };
     }
 
-    fn view(l: Lab, now: i64) !md.Training {
+    fn view(l: Lab) !md.Training {
         const a = l.a;
         const learned = try learnedOf(a, try l.read("learned.md") orelse "");
         var runs: std.ArrayList(md.Run) = .empty;
@@ -377,7 +378,6 @@ const Lab = struct {
             gpu_seen = std.fmt.parseInt(i64, hosts.get(r, "seen"), 10) catch null;
         };
         return .{
-            .made = now,
             .gpu_seen = gpu_seen,
             .runs = runs.items,
             .learned = learned,
@@ -924,14 +924,16 @@ test "training.bin from a staged lab view" {
     }
     var buf: [std.fs.max_path_bytes]u8 = undefined;
     const path = buf[0..try tmp.dir.realPath(io, &buf)];
-    try training(testing.allocator, io, path, 1793224600);
+    try training(testing.allocator, io, path);
 
     var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena_state.deinit();
     const a = arena_state.allocator();
     const bin = try tmp.dir.readFileAlloc(io, "training.bin", a, .limited(1 << 20));
     const t = try ui.data.decode(a, md.Training, bin);
-    try testing.expectEqual(1793224600, t.made);
+    // Same files, same bytes: lab-push uploads only on a change
+    try training(testing.allocator, io, path);
+    try testing.expectEqualSlices(u8, bin, try tmp.dir.readFileAlloc(io, "training.bin", a, .limited(1 << 20)));
     try testing.expectEqual(@as(?i64, 1793224200), t.gpu_seen);
     try testing.expectEqual(3, t.runs.len);
     // Newest first

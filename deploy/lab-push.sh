@@ -44,6 +44,28 @@ NEXT=''
 # Not a RETURN trap in push: set -e exits (an unreachable server) skip those
 trap 'rm -rf "${NEXT:-}"' EXIT
 
+# This script's own meiolol, built from origin/main (what the site runs): the checkout's
+# zig-out is whatever a session last installed, often days old. Rebuilt when origin/main
+# moves; a failed build keeps the last binary and isn't tried again at that commit
+meiolol_bin() {
+    local bin=$STATE/bin/meiolol rev
+    rev=$(git -C "$ROOT" rev-parse -q --verify origin/main) || { echo "$bin"; return; }
+    if [[ "$(cat "$STATE/bin/rev" 2>/dev/null)" != "$rev" \
+        && "$(cat "$STATE/bin/failed" 2>/dev/null)" != "$rev" ]]; then
+        mkdir -p "$STATE/bin"
+        # shellcheck disable=SC2016 # the inner sh expands it
+        if "$ROOT/deploy/slots.sh" 1 "$ROOT/deploy/build-tree.sh" lab-push "$rev" sh -c \
+            'zig build backend -Doptimize=ReleaseSafe && cp zig-out/bin/meiolol "$1.new"' \
+            _ "$bin" >&2 && mv "$bin.new" "$bin"; then
+            echo "$rev" > "$STATE/bin/rev"
+        else
+            echo "$rev" > "$STATE/bin/failed"
+            echo "lab-push: meiolol build at $rev failed, kept the last one" >&2
+        fi
+    fi
+    echo "$bin"
+}
+
 # The newest runs under $1 into $2/runs/<run>/ and their runs.tsv rows (no header) into
 # $2/rows; prints 1 when one is live. Runs on the Mac and, sent over ssh, on the gpu-box
 stage_runs() {
@@ -142,14 +164,14 @@ stage() {
         cp "$d"digest.md "$d"hypotheses.tsv "$out/campaigns/$f/" 2>/dev/null || true
     done
     (cd "$out/campaigns" && find . -mindepth 1 -maxdepth 1 -type d | cut -c3- | sort) > "$out/campaigns.txt"
-    # The new admin page's Models tab reads these files as training.bin and
-    # runs/*/metrics.bin, made by this checkout's build
-    "$ROOT/zig-out/bin/meiolol" admin --training "$out" \
-        || echo "lab-push: no training.bin (meiolol admin --training failed)" >&2
     # Seen to 10 min, so an idle gpu-box doesn't cause an upload a minute
     seen=$(cat "$STATE/gpu-seen" 2>/dev/null || true)
     printf 'host\tseen\n' > "$out/hosts.tsv"
     [[ -n "$GPU" ]] && printf '%s\t%s\n' "$GPU" "${seen:+$(( seen / 600 * 600 ))}" >> "$out/hosts.tsv"
+    # The new admin page's Models tab reads these files (hosts.tsv too) as training.bin
+    # and runs/*/metrics.bin
+    "$(meiolol_bin)" admin --training "$out" \
+        || echo "lab-push: no training.bin (meiolol admin --training failed)" >&2
     echo $(( mac || gpu ))
 }
 
@@ -179,7 +201,7 @@ model() {
     # The new tester page reads draft-model.bin, made by this checkout's build. Tried
     # once per copy: no-bin holds why it failed (delete it to try again)
     if [[ $kind == draft && ! -f "$cache/draft-model.bin" && ! -f "$cache/no-bin" ]]; then
-        if ! "$ROOT/zig-out/bin/meiolol" tester-bin "$cache" > "$cache/no-bin" 2>&1; then
+        if ! "$(meiolol_bin)" tester-bin "$cache" > "$cache/no-bin" 2>&1; then
             echo "lab-push: no draft-model.bin for $pick: $(tail -1 "$cache/no-bin")" >&2
         else
             rm -f "$cache/no-bin"
