@@ -343,7 +343,7 @@ data/tiers-rank-all.bin 4c240cfb8cd83537
 data/tiers-rank-patch.bin fa292dd251d359ee
 data/tiers-rank.bin 061698ea172da830
 data/tiers.bin a17e546e59c118df
-download.html 2d5bd724a5817674
+download.html 7ce316749e650be8
 index.html 6f9104742e2bc6f9
 learn.html 81e2cea7b5197c8e
 learn/champs.json 7c5a77a4464faa98
@@ -369,6 +369,6 @@ pickup/mid.html 5eaf58e7282c1b99
 pickup/support.html 56f28deb9c6952e3
 pickup/top.html 10a0d2ca2c3e69f6
 pool.html 76e22dcc40425ca6
-privacy.html 746b590c9342e749
+privacy.html 84dbb192f20ee3be
 robots.txt 331ea9090db0c9f6
 terms.html 15bae0bcfaad9831

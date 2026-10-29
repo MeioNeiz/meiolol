@@ -586,8 +586,8 @@ pub fn renderShared(site: *const Site, w: *Writer, at: urls.Page) !bool {
             // null: the body is textpages.body's
             const fixed = [_]struct { std.meta.Tag(urls.Page), []const u8, []const u8, html.Nav, ?*const fn (*Writer, prose.Info) Writer.Error!void }{
                 .{ .method, "Method", "Where meiolol's numbers come from and how lane curves, champion statistics and the Daily Draft are made.", .method, prose.method },
-                .{ .download, "Champ select helper", "The meiolol champ select helper, a desktop app for Windows, in development.", .none, prose.download },
-                .{ .privacy, "Privacy policy", "What meiolol collects and why.", .none, prose.privacy },
+                .{ .download, "Champ select helper", "The meiolol champ select helper, a desktop app for Windows, in development.", .none, null },
+                .{ .privacy, "Privacy policy", "What meiolol collects and why.", .none, null },
                 .{ .terms, "Terms of use", "Terms for using meiolol.", .none, null },
                 .{ .login, "Log in", "Log in to meiolol.", .none, account_page.login },
                 .{ .signup, "Make your account", "Make a meiolol account from a sign-up link.", .none, account_page.signup },

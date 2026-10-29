@@ -193,7 +193,7 @@ From research/questions/identity-and-privacy.md:
 - Logs: no Riot IDs. The service never logs them, and the Riot client shows account
   lookups by endpoint name instead of path. nginx does not log /api/ (`access_log off`
   below), since the query string holds the Riot ID
-- Privacy page: "Your games" section on the site (src/site/prose.zig) and in
+- Privacy page: "Your games" section on the site (src/site/textpages.zig) and in
   docs/legal/privacy.md, matching the above
 - Preview gating: /api/ is open without a login although a personal key may not serve
   the public: Jacob's call, knowing that policy, so Riot's reviewers can run it
