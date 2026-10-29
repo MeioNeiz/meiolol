@@ -68,8 +68,8 @@ players back.
 9. Our Zig "libraries" toward what the Rust crates give, checks outside ci: the open
    additions in docs/plan/libraries.md
 10. Jacob's open decisions: decisions.md "Open decisions"
-11. Professional URLs (J32), after the notes run: docs/plan/urls.md, the only scheme
-    to build
+11. Professional URLs (J32): public pages on the scheme (URL1-URL4); left: URL5,
+    /admin and /private without .html (docs/plan/urls.md)
 
 Others own: the TW2 mastery retry (meiolol-8f); neural nets vs today's model; the
 draft's "Rammus into high AD/AP" check.
