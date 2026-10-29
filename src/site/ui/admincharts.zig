@@ -204,21 +204,23 @@ const W = struct {
     pub const c_text = plain("Message");
 
     pub const space = plain("Space");
-    pub const space_sub = plain("Snapshots every 15 min; growth over the newest week.");
+    pub const space_sub = plain("Snapshots every 15 min; growth over the newest week, WAL excluded.");
+    pub const files_n = Phrase("{n:count} files, WAL included");
+    pub const growths = Phrase("Growth a day: meiolol {a:text}, timeline {b:text}, raw {c:text}. Files: {f:text}.");
     pub const disk_used = plain("Disk used");
     pub const of = Phrase("{a:text} of {b:text}");
     pub const disk_growth = plain("Disk growth");
     pub const per_day = Phrase("{b:text} / day");
-    pub const over = Phrase("over the last {t:text}, WAL excluded");
-    pub const over_day = Phrase("over the last {t:text}, WAL excluded; last 24 h {b:text} / day");
+    pub const over = Phrase("over the last {t:text}");
+    pub const over_day = Phrase("last 24 h {b:text} / day");
     pub const full_at = plain("Disk full around");
-    pub const full_in = Phrase("in ~{n:count} days at the week's rate");
-    pub const full_in2 = Phrase("in ~{n:count} days at the week's rate, ~{m:count} at the last 24 h's");
+    pub const full_in = Phrase("~{n:count} d at the week's rate");
+    pub const full_in2 = Phrase("~{n:count} d at the week's rate, ~{m:count} at the day's");
     pub const databases = plain("Databases");
     pub const per_stored = plain("Per stored match");
     pub const all_dbs = plain("all databases, WAL included");
     pub const db_growth = plain("Database growth");
-    pub const db_growth_sub = Phrase("meiolol {a:text}, timeline {b:text}, raw {c:text}; newest week, WAL excluded");
+
     pub const backups = plain("Backups");
     pub const backups_sub = Phrase("{n:count} files, newest {t:text}");
     pub const files = plain("Database files on disk");
@@ -950,7 +952,7 @@ pub fn storage(ch: *Charts, h: *H, s: *const ad.Snapshot) N {
         add(h, &tiles, .{
             .label = W.disk_growth,
             .value = if (g) |x| W.per_day.with(h, .{ .b = bytes(h, x).s }) else Text{ .s = "–" },
-            .ctx = if (g1) |x| W.over_day.with(h, .{ .t = span(h, span_s).s, .b = bytes(h, x).s }) else W.over.with(h, .{ .t = span(h, span_s).s }),
+            .ctx = if (g1) |x| W.over_day.with(h, .{ .b = bytes(h, x).s }) else W.over.with(h, .{ .t = span(h, span_s).s }),
         });
         if (g) |x| if (x > 0) {
             const left = @as(f64, @floatFromInt(d.free)) / x;
@@ -973,7 +975,7 @@ pub fn storage(ch: *Charts, h: *H, s: *const ad.Snapshot) N {
             h.oom = true;
         };
     }
-    add(h, &tiles, .{ .label = W.databases, .value = bytes(h, total), .ctx = .{ .s = parts.written() } });
+    add(h, &tiles, .{ .label = W.databases, .value = bytes(h, total), .ctx = W.files_n.with(h, .{ .n = s.files.len }) });
     for (s.counts) |c| if (std.mem.eql(u8, c.name, "matches") and c.rows > 0) {
         add(h, &tiles, .{ .label = W.per_stored, .value = bytes(h, total / @as(f64, @floatFromInt(c.rows))), .ctx = W.all_dbs });
     };
@@ -983,7 +985,6 @@ pub fn storage(ch: *Charts, h: *H, s: *const ad.Snapshot) N {
     add(h, &tiles, .{
         .label = W.db_growth,
         .value = if (gm == null and gt == null and gr == null) Text{ .s = "–" } else W.per_day.with(h, .{ .b = bytes(h, (gm orelse 0) + (gt orelse 0) + (gr orelse 0)).s }),
-        .ctx = W.db_growth_sub.with(h, .{ .a = bytes(h, gm).s, .b = bytes(h, gt).s, .c = bytes(h, gr).s }),
     });
     if (s.backups) |b| add(h, &tiles, .{
         .label = W.backups,
@@ -1018,6 +1019,7 @@ pub fn storage(ch: *Charts, h: *H, s: *const ad.Snapshot) N {
             card.head(h, W.space, null, &.{}),
             h.p(.{ .class = "lead" }, .{W.space_sub}),
             strip.view(h, tiles.items),
+            h.p(.{ .class = "lead" }, .{W.growths.with(h, .{ .a = bytes(h, gm).s, .b = bytes(h, gt).s, .c = bytes(h, gr).s, .f = @as([]const u8, parts.written()) })}),
         }),
         if (hist.len >= 2) h.p(.{ .class = "lead" }, .{W.files_sub}) else null,
         h.div(.{ .class = "charts" }, .{charts.done()}),
