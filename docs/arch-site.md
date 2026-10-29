@@ -213,7 +213,7 @@ detected reason that clears chance, else its usual gold at 14 against the enemy)
   else the clipboard, else a prompt to copy from.
   Not yet: an archive past the strip's 14
 
-## Your games service (src/api, src/site/your.zig, static/your.js)
+## Your games service (src/api; the page: src/site/yourpage.zig, ui.your*)
 
 `meiolol api` on the jomify server behind nginx at /api/; details, privacy decisions and
 deploy steps in docs/your-games.md. Requests answer from api.db (own SQLite file, not

@@ -169,7 +169,9 @@ pub const Loaded = struct {
             for (try root.pagePaths(&s)) |p| try out.append(arena, try root.filePath(arena, v, p));
             for (s.files) |f| try out.append(arena, try std.mem.concat(arena, u8, &.{ v.dir(), f.path }));
             if (!std.meta.eql(v, html.View.shared)) continue;
-            for (root.shared_pages) |p| try out.append(arena, try root.filePath(arena, html.View.all[0], p));
+            for (root.shared_pages) |p| {
+                if (root.sharedRenders(&s, p)) try out.append(arena, try root.filePath(arena, html.View.all[0], p));
+            }
             for (s.shared_files) |f| try out.append(arena, f.path);
         }
         return out.items;

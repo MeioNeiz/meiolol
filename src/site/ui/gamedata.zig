@@ -154,7 +154,7 @@ pub const Data = struct {
 pub const stamp = @import("tiers.zig").stamp;
 
 /// game.html#id=Name%23TAG&game=ms: a looked-up player's game (its start_ms in the Your
-/// games report; your.js's keys), which the API answers in place of the example's
+/// games report), which the API answers in place of the example's
 pub const Lookup = struct {
     /// Percent-encoded as in the fragment
     id: []const u8,

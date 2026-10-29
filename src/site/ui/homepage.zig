@@ -407,7 +407,7 @@ pub const HomeDaily = struct {
     }
 };
 
-/// your.js's `your-recent` (`[{"id":"Name#TAG","newest":ms},...]`, newest first) into
+/// ui-yourlookup's `your-recent` (`[{"id":"Name#TAG","newest":ms},...]`, newest first) into
 /// `out`; IDs with JSON escapes are skipped (a Riot ID has no quote or backslash)
 pub fn recentIds(json: []const u8, out: []idlookup.Id) []idlookup.Id {
     const key = "\"id\":\"";

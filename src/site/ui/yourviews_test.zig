@@ -1,4 +1,4 @@
-//! YourViews and YourList on the fake DOM, each its own runtime as on games.html: a
+//! YourViews and YourList on the fake DOM, each its own runtime as on your.html: a
 //! press in either writes the fragment, which the other reads as it would on ui-hash.
 //! Both write q/role/champ, so each must keep the keys it doesn't own (view) and agree
 //! on the filter after every press

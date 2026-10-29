@@ -5,7 +5,7 @@
 //!
 //!   GET  /api/games?id=Name%23TAG   state, player, report (game.zig); &refresh=1 checks
 //!                                   for new games sooner than a visit does
-//!   GET  /api/list?id=Name%23TAG    /api/games as games.html's binary data
+//!   GET  /api/list?id=Name%23TAG    /api/games as your.html's binary data
 //!                                   (ui.yourlist.Lookup); &refresh=1 the same
 //!   GET  /api/game?id=Name%23TAG&start=MS  one of the report's games with its detail, as
 //!                                   the game page's binary data (ui.gamedata.Data)
@@ -1149,7 +1149,7 @@ test "game: one looked-up game with its detail as the game page's data" {
     try std.testing.expect(!out.binary and std.mem.find(u8, out.body, "opted_out") != null);
 }
 
-test "list: the lookup's state, then its games as games.html reads them" {
+test "list: the lookup's state, then its games as your.html reads them" {
     var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();

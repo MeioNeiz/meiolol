@@ -25,7 +25,6 @@ pub const Page = union(enum) {
     learn,
     pool,
     your,
-    games,
     game,
     method,
     download,
@@ -120,7 +119,7 @@ pub fn parse(path: []const u8) ?Page {
     if (a != null) return null;
     const p = std.meta.stringToEnum(std.meta.Tag(Page), head) orelse return null;
     return switch (p) {
-        inline .learn, .pool, .your, .games, .game, .method, .download, .privacy, .terms, .login, .signup, .join, .account => |t| t,
+        inline .learn, .pool, .your, .game, .method, .download, .privacy, .terms, .login, .signup, .join, .account => |t| t,
         else => null,
     };
 }
@@ -142,7 +141,10 @@ pub fn legacy(a: std.mem.Allocator, old: []const u8) !?[]const u8 {
     }
     // The views' own sitemaps; the root's is still one
     if (std.mem.eql(u8, rest, "sitemap.xml")) return if (d.all or d.patch) "/sitemap.xml" else null;
-    const name = if (rest.len == 0 or rest[rest.len - 1] == '/')
+    // /games: the new Your games before it took /your's place
+    const name = if (std.mem.eql(u8, rest, "games"))
+        rest
+    else if (rest.len == 0 or rest[rest.len - 1] == '/')
         try std.mem.concat(a, u8, &.{ rest, "index" })
     else if (std.mem.endsWith(u8, rest, ".html")) rest[0 .. rest.len - 5] else return null;
     const p = try oldPage(a, name) orelse return null;
@@ -245,6 +247,7 @@ fn oldPage(a: std.mem.Allocator, name: []const u8) !?Page {
         return if (isPatch(out)) .{ .patch = out } else null;
     }
     if (eql(u8, name, "pickup")) return .{ .pickup = null };
+    if (eql(u8, name, "games")) return .your;
     if (cut(name, "pickup/")) |s| return .{ .pickup = std.meta.stringToEnum(Role, s) orelse return null };
     const p = parse(try std.mem.concat(a, u8, &.{ "/", name })) orelse return null;
     return switch (p) {
@@ -372,6 +375,8 @@ test "urls: old paths to new, views as the query" {
         .{ "/pickup.html", "/pickup" },
         .{ "/pickup/top.html", "/pickup/top" },
         .{ "/your.html", "/your" },
+        .{ "/games.html", "/your" },
+        .{ "/games", "/your" },
         .{ "/game.html", "/game" },
         .{ "/login.html", "/login" },
         .{ "/patch/", "/?period=patch" },

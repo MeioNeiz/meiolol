@@ -109,8 +109,6 @@ the tab's count chip ("23 games").
 
 ## Friends
 
-Old page (your.js, until the switch): a table whose cells are sentences.
-
 Built (ui.yourfriends, island ui-yourfriends.wasm, /api/friends.bin): a Friends tab on
 lookups only (the example has no friends), the band and a DataTable with Friend, Together,
 Your rate (a DeltaBar dot with its range on ±50 points, row tip with the rates), Their

@@ -8,7 +8,6 @@ const urls = ui.urls;
 const prose = @import("prose.zig");
 const account_page = @import("account.zig");
 const daily_page = @import("daily.zig");
-const your_page = @import("your.zig");
 const yourgame = @import("yourgame.zig");
 const yourpage = @import("yourpage.zig");
 const daily = @import("../daily.zig");
@@ -111,7 +110,7 @@ pub const Options = struct {
     eval_history: ?[]const u8 = null,
     /// `meiolol lean`'s file: the champion pages' early or late line where set
     lean: ?[]const u8 = null,
-    /// `meiolol your-example`'s file, served as data/your-example.json where it exists
+    /// `meiolol your-example`'s file: the example's game and list files (yourgame.files)
     your_example: ?[]const u8 = null,
     /// Contiguous runs of the games filters.zig counts at once, each on its own
     /// connection: the walk waits on the disk (cold B-tree pages one at a time), not the
@@ -135,12 +134,11 @@ pub const Static = enum {
 /// hands every other path, the home too, to `meiolol render`. All at the site root:
 /// nginx's try_files answers the URL of a directory that exists with its index.html or
 /// 403, never the renderer, so no subdirectory is written
-pub const core_static = [_][]const u8{ "robots.txt", "riot.txt", "chart.wasm" };
+pub const core_static = [_][]const u8{ "robots.txt", "riot.txt" };
 
 /// The core_static files, from the options alone
 pub fn coreFiles(arena: std.mem.Allocator, opts: Options) ![]const File {
     var files: std.ArrayList(File) = .empty;
-    try files.append(arena, .{ .path = "chart.wasm", .data = @embedFile("chart.wasm") });
     if (opts.riot_txt) |t| try files.append(arena, .{ .path = "riot.txt", .data = t });
     try files.append(arena, .{ .path = "robots.txt", .data = try robots(arena, opts) });
     return files.items;
@@ -368,8 +366,6 @@ pub const hashed_assets = [_]assets.Hashed{ style.file, style.font, assets.searc
 /// Front-end files at the site root; `Options.static_dir` serves them from disk instead
 pub const shared_assets = [_]File{
     .{ .path = "favicon.svg", .data = @embedFile("static/favicon.svg") },
-    .{ .path = "your.js", .data = @embedFile("static/your.js") },
-    .{ .path = "review.js", .data = @embedFile("static/review.js") },
     .{ .path = "account.js", .data = @embedFile("static/account.js") },
     // Linked for print, so it never holds up rendering; browsers still fetch it on each load
     .{ .path = "print.css", .data = @embedFile("static/print.css") },
@@ -393,8 +389,14 @@ pub fn asset(arena: std.mem.Allocator, io: std.Io, opts: Options, wanted: []cons
 /// Pages in no view, from the shared view (renderShared)
 pub const shared_pages = [_]urls.Page{ .learn, .method, .{ .daily = null }, .download, .your, .privacy, .terms };
 
+/// False for a shared page the shared view's `site` can't render: Your games without the
+/// example's list
+pub fn sharedRenders(site: *const Site, at: urls.Page) bool {
+    return at != .your or yourpage.listFile(site) != null;
+}
+
 /// Shared pages the static build writes but the sitemap leaves out
-pub const unlisted_pages = [_]urls.Page{ .game, .games };
+pub const unlisted_pages = [_]urls.Page{.game};
 
 /// `at`'s file in view `v`'s tree, from the site root: "_v/all/champions/top.html"
 /// (nginx: $uri.html), "index.html" for home
@@ -579,12 +581,11 @@ pub fn renderShared(site: *const Site, w: *Writer, at: urls.Page) !bool {
         .learn => try learn_page.write(site, w),
         .daily => |n| if (n) |x| return daily_page.route(site, w, x) else try daily_page.write(site, w),
         .game => return yourgame.writePage(site, w),
-        .games => return yourpage.writePage(site, w),
+        .your => return yourpage.writePage(site, w),
         else => {
             const fixed = [_]struct { std.meta.Tag(urls.Page), []const u8, []const u8, html.Nav, *const fn (*Writer, prose.Info) Writer.Error!void }{
                 .{ .method, "Method", "Where meiolol's numbers come from and how lane curves, champion statistics and the Daily Draft are made.", .method, prose.method },
                 .{ .download, "Champ select helper", "The meiolol champ select helper, a desktop app for Windows, in development.", .none, prose.download },
-                .{ .your, "Your games", "Look yourself up: your lane in each recent ranked game against how the matchup typically goes, with your highlights, streaks and record per matchup.", .your, your_page.page },
                 .{ .privacy, "Privacy policy", "What meiolol collects and why.", .none, prose.privacy },
                 .{ .terms, "Terms of use", "Terms for using meiolol.", .none, prose.terms },
                 .{ .login, "Log in", "Log in to meiolol.", .none, account_page.login },

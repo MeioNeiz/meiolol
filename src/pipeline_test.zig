@@ -734,7 +734,8 @@ test "fixture games to stats, curves and the website" {
         }
         var wants: std.ArrayList([]const u8) = .empty;
         try wants.appendSlice(arena, &.{ "index.html", "champions.html", "champions/darius.html", "champions/darius/top.html", "_v/all/index.html" });
-        for (site.shared_pages) |p| try wants.append(arena, try site.filePath(arena, site.html.View.all[0], p));
+        // Your games: none without the example's list (this site has none)
+        for (site.shared_pages) |p| if (p != .your) try wants.append(arena, try site.filePath(arena, site.html.View.all[0], p));
         for (wants.items) |want| {
             if (!seen.contains(want)) {
                 std.debug.print("pages.txt lacks {s}\n", .{want});
@@ -819,19 +820,18 @@ test "fixture games to stats, curves and the website" {
         }
     }
     try testing.expect(core_files >= site.core_static.len);
-    // The example without its detail; the game page and its data from the detail
+    // The game page and its data from the example's detail
     try testing.expect(std.mem.find(u8, example_json, "\"detail\":{") != null);
-    const served = (try core_loaded.get(arena, "data/your-example.json")).?;
-    try testing.expect(std.mem.find(u8, served, "\"detail\"") == null);
-    try testing.expect(std.mem.find(u8, served, "\"default\":\"mid\"") != null);
+    try testing.expectEqual(null, try core_loaded.get(arena, "data/your-example.json"));
     const game_page = (try core_loaded.get(arena, "game.html")).?;
     for ([_][]const u8{ "data-island=\"games\"", "data-src=\"data/your/mid.bin\"", "ui-games.", "noindex", "data-island=\"gamemore\"", "data-js=\"" ++ assets.gamemore_js.path ++ "\" data-wasm=\"" ++ assets.gamemore_wasm.path ++ "\"", "data-island=\"gamelane\"", "data-js=\"" ++ assets.gamelane_js.path ++ "\" data-wasm=\"" ++ assets.gamelane_wasm.path ++ "\"" }) |want| {
         try testing.expect(std.mem.find(u8, game_page, want) != null);
     }
     // The list page: the example's list in the island, rows opening /game
-    const games_page = (try core_loaded.get(arena, "games.html")).?;
-    for ([_][]const u8{ "data-island=\"your\" data-bin=\"", "class=\"c-player\"", "class=\"c-psum\"", "href=\"/game#g=0\"", "noindex", "data-wasm=\"" ++ assets.your_wasm.path ++ "\"", "data-island=\"yourviews\"", "data-island=\"yourtime\"", "data-js=\"" ++ assets.yourtime_js.path ++ "\" data-wasm=\"" ++ assets.yourtime_wasm.path ++ "\"", "data-wasm=\"" ++ assets.yourviews_wasm.path ++ "\"", "data-island=\"yourlookup\"", "data-island=\"forget\"", "data-island=\"yourfriends\"", "data-wasm=\"" ++ assets.yourfriends_wasm.path ++ "\"", "data-wasm=\"" ++ assets.forget_wasm.path ++ "\"", "data-js=\"" ++ assets.yourlookup_js.path ++ "\" data-wasm=\"" ++ assets.yourlookup_wasm.path ++ "\"", "An example player" }) |want| {
-        try testing.expect(std.mem.find(u8, games_page, want) != null);
+    const your_page = (try core_loaded.get(arena, "your.html")).?;
+    try testing.expect(std.mem.find(u8, your_page, "noindex") == null);
+    for ([_][]const u8{ "data-island=\"your\" data-bin=\"", "class=\"c-player\"", "class=\"c-psum\"", "href=\"/game#g=0\"", "data-wasm=\"" ++ assets.your_wasm.path ++ "\"", "data-island=\"yourviews\"", "data-island=\"yourtime\"", "data-js=\"" ++ assets.yourtime_js.path ++ "\" data-wasm=\"" ++ assets.yourtime_wasm.path ++ "\"", "data-wasm=\"" ++ assets.yourviews_wasm.path ++ "\"", "data-island=\"yourlookup\"", "data-island=\"forget\"", "data-island=\"yourfriends\"", "data-wasm=\"" ++ assets.yourfriends_wasm.path ++ "\"", "data-wasm=\"" ++ assets.forget_wasm.path ++ "\"", "data-js=\"" ++ assets.yourlookup_js.path ++ "\" data-wasm=\"" ++ assets.yourlookup_wasm.path ++ "\"", "An example player" }) |want| {
+        try testing.expect(std.mem.find(u8, your_page, want) != null);
     }
     // Home in every view: the shared view's example, its game file loaded lazily; the
     // Patch card's moves (all/ has none: its patch day isn't in views-moved.bin)
@@ -868,7 +868,7 @@ test "fixture games to stats, curves and the website" {
         try testing.expect(std.mem.find(u8, sitemap, want) != null);
     }
     // Unlisted pages, a main role's own URL and the views stay out: one sitemap
-    for ([_][]const u8{ "x.io/game<", "x.io/games<", "x.io/champions/darius/top<", "region=", "period=" }) |page| {
+    for ([_][]const u8{ "x.io/game<", "x.io/champions/darius/top<", "region=", "period=" }) |page| {
         try testing.expect(std.mem.find(u8, sitemap, page) == null);
     }
     try testing.expectEqual(null, try core_loaded.get(arena, "_v/patch/sitemap.xml"));

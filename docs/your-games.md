@@ -3,8 +3,8 @@
 The dynamic part of the site (docs/concept.md, product 1): enter a Riot ID, see each
 recent Summoner's Rift game's lane laid over the typical curve for that matchup at your
 rank, then a weekly roll-up and per-matchup trend. `meiolol api` (src/api) serves JSON
-at /api/ behind nginx on the jomify server; site/your.html + your.js (src/site/your.zig,
-static/your.js) is the page. Live, /api/ open without login: Deploy below.
+and ui.data binaries at /api/ behind nginx on the jomify server; /your
+(src/site/yourpage.zig, ui.your* islands) is the page. Live, /api/ open without login: Deploy below.
 
 ## How it works
 
@@ -91,7 +91,7 @@ copies the file into each site build; a failed run deletes it, so no stale examp
 | Call | Answer |
 | --- | --- |
 | GET /api/games?id=Name%23TAG | state (queued, fetching, ready, not_found, opted_out), progress (ahead, pending, total), player, report; `api: 2` where /api/list and /api/game exist (pages built for both APIs check it) |
-| GET /api/list?id=Name%23TAG | the same lookup as ui.yourlist.Lookup in ui.data's binary (games.html's wasm reads no JSON): state, progress, check_at, the report's games as ui.yourlist.List; always 200 (busy a state) but 400. &n=1..100: the newest n games. &cached=1: a glance, not a visit (Home's player bar): the cache only, nothing queued, looked_up kept; state none, opted_out or ready |
+| GET /api/list?id=Name%23TAG | the same lookup as ui.yourlist.Lookup in ui.data's binary (the page's wasm reads no JSON): state, progress, check_at, the report's games as ui.yourlist.List; always 200 (busy a state) but 400. &n=1..100: the newest n games. &cached=1: a glance, not a visit (Home's player bar): the cache only, nothing queued, looked_up kept; state none, opted_out or ready |
 | GET /api/game?id=Name%23TAG&start=MS | one game of the report (its start_ms) with its detail as ui.gamedata.Data in ui.data's binary, for game.html#id=Name%23TAG&game=MS; 404 JSON (state none or opted_out) when not cached or no timeline. Cache only, no Riot call, no refresh |
 | POST /api/forget?id=... | starts an objection: state pending, then issued with an icon |
 | POST /api/forget?id=...&check=1 | checks the icon: checking, then done or mismatch |
@@ -197,8 +197,7 @@ From research/questions/identity-and-privacy.md:
   docs/legal/privacy.md, matching the above
 - Preview gating: /api/ is open without a login although a personal key may not serve
   the public: Jacob's call, knowing that policy, so Riot's reviewers can run it
-  (research: they rarely use demo credentials). your.js still shows the preview note on
-  a 401. /admin/ needs a login (docs/hosting.md "Logins")
+  (research: they rarely use demo credentials). /admin/ needs a login (docs/hosting.md "Logins")
 
 ## Deploy (jomify server)
 

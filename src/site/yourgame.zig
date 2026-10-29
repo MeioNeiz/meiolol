@@ -1,7 +1,6 @@
 //! The game page (game.html) from `meiolol your-example`'s file: each role's player's
 //! games as ui.gamedata.Data (api/game.zig's Game with its Detail) in data/your/<role>.bin,
-//! and the file again without the detail for the pages that read it whole (home,
-//! your.html): twice the bytes otherwise
+//! and the default role's list for your.html
 const std = @import("std");
 const ui = @import("ui");
 const game = @import("../api/game.zig");
@@ -18,17 +17,14 @@ const gd = ui.gamedata;
 const log = std.log.scoped(.site);
 
 pub const page_path = "/game";
-pub const example_path = "data/your-example.json";
 const data_dir = "data/your/";
 pub const list_path = data_dir ++ "list.bin";
 const roles = [_][]const u8{ "top", "jungle", "mid", "bot", "support" };
 
-/// The example's files: itself stripped, then each role's games, the default role's
-/// first (writePage reads that one; the views file keeps no other field for it)
+/// The example's files: each role's games, the default role's first (writePage reads that
+/// one; the views file keeps no other field for it)
 pub fn files(site: *const Site, json: []const u8, out: *std.ArrayList(File)) !void {
     const a = site.arena;
-    // Unreadable: as it is, for your.js to report
-    try out.append(a, .{ .path = example_path, .data = stripped(a, json) catch json });
     const ex = parse(a, json) catch |err| return log.warn("your example: {t}", .{err});
     var order: [roles.len + 1][]const u8 = undefined;
     order[0] = ex.default;
@@ -165,42 +161,13 @@ fn fillNulls(comptime T: type, arena: Allocator, v: *std.json.Value) Allocator.E
     }
 }
 
-/// `json` with every game's `detail` left out
-pub fn stripped(arena: Allocator, json: []const u8) ![]u8 {
-    const v = try std.json.parseFromSliceLeaky(std.json.Value, arena, json, .{});
-    if (v != .object) return error.BadExample;
-    for (v.object.values()) |p| {
-        if (p != .object) continue;
-        const r = p.object.get("report") orelse continue;
-        if (r != .object) continue;
-        const games = r.object.get("games") orelse continue;
-        if (games != .array) continue;
-        for (games.array.items) |*g| if (g.* == .object) {
-            _ = g.object.orderedRemove("detail");
-        };
-    }
-    return std.json.Stringify.valueAlloc(arena, v, .{});
-}
-
 const testing = std.testing;
-
-test "stripped drops only the detail" {
-    var arena_state: std.heap.ArenaAllocator = .init(testing.allocator);
-    defer arena_state.deinit();
-    const arena = arena_state.allocator();
-    const json =
-        \\{"default":"mid","mid":{"state":"ready","report":{"games":[{"win":true,"detail":{"kills":[]}}],"weeks":[]}}}
-    ;
-    try testing.expectEqualStrings(
-        \\{"default":"mid","mid":{"state":"ready","report":{"games":[{"win":true}],"weeks":[]}}}
-    , try stripped(arena, json));
-}
 
 test "the game page's file: the default role's, never the list" {
     const list: File = .{ .path = list_path, .data = "" };
     const mid: File = .{ .path = data_dir ++ "mid.bin", .data = "" };
     const top: File = .{ .path = data_dir ++ "top.bin", .data = "" };
-    const ex: File = .{ .path = example_path, .data = "" };
+    const ex: File = .{ .path = "data/daily.bin", .data = "" };
     try std.testing.expectEqualStrings(mid.path, gameFile(&.{ ex, mid, top, list }).?.path);
     try std.testing.expectEqualStrings(mid.path, gameFile(&.{ list, ex, mid, top }).?.path);
     // An example without detail: no role file, the list alone

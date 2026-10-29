@@ -1,4 +1,4 @@
-//! The Your games lookup (games.html#id=Name%23TAG): the status line above the list, its
+//! The Your games lookup (your.html#id=Name%23TAG): the status line above the list, its
 //! Check for new games and Not you?, and when to ask /api/list again. Island YourLookup
 //! (ui-yourlookup.wasm, which ui-your loads once the URL has an id). A list goes to
 //! YourList as its root's data-bin (a List's file, base64; removed for the example
@@ -519,7 +519,7 @@ test recentJson {
     const one = try recentJson(a, null, "A#1");
     defer a.free(one);
     try testing.expectEqualStrings("[{\"id\":\"A#1\"}]", one);
-    // your.js's shape, a repeat in other case moved up, at most 5
+    // The old your.js's shape, a repeat in other case moved up, at most 5
     const old = "[{\"id\":\"B#2\",\"newest\":5},{\"id\":\"a#1\",\"newest\":3},{\"id\":\"C#3\"},{\"id\":\"D#4\"},{\"id\":\"E#5\"},{\"id\":\"F#6\"}]";
     const two = try recentJson(a, old, "A#1");
     defer a.free(two);

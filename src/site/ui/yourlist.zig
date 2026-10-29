@@ -87,7 +87,7 @@ pub const List = struct {
 };
 
 /// /api/list's answer (api/root.zig): a lookup's state, and the list once ready. The
-/// page polls while queued or fetching, as your.js does /api/games
+/// page polls while queued or fetching
 pub const Lookup = struct {
     state: State,
     /// Jobs ahead in the queue

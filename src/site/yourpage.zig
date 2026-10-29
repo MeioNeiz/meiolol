@@ -1,4 +1,4 @@
-//! The Your games list (games.html, unlisted): the example player's list
+//! Your games (your.html): the example player's list
 //! (yourgame.list_path) as ui.yourviews.YourViews (the head), ui.yourtime.YourTime (Over
 //! time, hidden until chosen), ui.yourfriends.YourFriends (a lookup's Friends, empty
 //! here) and ui.yourpage.YourList, its rows opening game.html; a
@@ -15,13 +15,17 @@ const Site = root.Site;
 const Writer = std.Io.Writer;
 const log = std.log.scoped(.site);
 
-pub const page_path = "/games";
+pub const page_path = "/your";
+
+/// The example's list, which the page needs
+pub fn listFile(site: *const Site) ?root.File {
+    for (site.daily_files) |x| if (std.mem.eql(u8, x.path, yourgame.list_path)) return x;
+    return null;
+}
 
 /// False without the example's list
 pub fn writePage(site: *const Site, w: *Writer) !bool {
-    const f = for (site.daily_files) |x| {
-        if (std.mem.eql(u8, x.path, yourgame.list_path)) break x;
-    } else return false;
+    const f = listFile(site) orelse return false;
     const a = site.arena;
     const l = try a.create(ui.yourlist.List);
     l.* = ui.data.decode(a, ui.yourlist.List, f.data) catch |err| switch (err) {
@@ -32,7 +36,7 @@ pub fn writePage(site: *const Site, w: *Writer) !bool {
         },
     };
     var p = try site.sharedPage("Your games | meiolol", "Your recent ranked games day by day: the result, your lane at 14 minutes and the win chance through each game, with your champions and roles beside them.", .your);
-    p.index = false;
+    p.canonical = try site.canonical(.your);
     try html.head(w, p);
     const enc = std.base64.standard.Encoder;
     const bin = try a.alloc(u8, enc.calcSize(f.data.len));

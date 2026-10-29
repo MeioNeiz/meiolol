@@ -1,4 +1,4 @@
-//! The Your games list (games.html, docs/plan/ui/your-games.md "Games"), under
+//! The Your games list (your.html, docs/plan/ui/your-games.md "Games"), under
 //! YourViews' PlayerBar: ProfileSummary beside the games as day groups of GameRow, "Show
 //! older" at the foot. Island YourList (ui-your.wasm); the filter is in the URL, which
 //! YourViews' filter row writes too. The server renders without a clock (dates, no

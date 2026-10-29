@@ -252,9 +252,7 @@ test "views: a tree each, switches between them, shared pages once" {
         "<script src=\"/" ++ assets.home_js.path ++ "\" data-wasm=\"",
     }) |s| try std.testing.expect(std.mem.find(u8, home, s) != null);
     try std.testing.expect(std.mem.find(u8, home, "class=\"subbar\"") == null);
-    const your = try read(arena, out, "your.html");
-    try std.testing.expect(std.mem.find(u8, your, "<script src=\"review.js\" defer></script>\n<script src=\"your.js\" defer></script>") != null);
-    for ([_][]const u8{ "review.js", "print.css" }) |f| _ = try read(arena, out, f);
+    _ = try read(arena, out, "print.css");
     // Pages link the hashed names only
     try std.testing.expectError(error.FileNotFound, read(arena, out, "style.css"));
     for (root.hashed_assets) |h| try std.testing.expectEqualStrings(h.data, try read(arena, out, h.path));

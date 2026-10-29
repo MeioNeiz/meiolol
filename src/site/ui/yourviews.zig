@@ -1,4 +1,4 @@
-//! The Your games page's head (games.html, docs/plan/ui/your-games.md "Structure"):
+//! The Your games page's head (your.html, docs/plan/ui/your-games.md "Structure"):
 //! PlayerBar with the views' tabs and the filter row as its bands, then the chosen view.
 //! The Games view is YourList, Over time YourTime and Friends YourFriends, the next
 //! islands on the page, each hidden in the other views (CSS: the DOM order is the reading order). Island YourViews

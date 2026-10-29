@@ -358,21 +358,6 @@ fn modules(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.lang.O
     // serve.zig's test of nginx's redirects against urls.legacy
     backend.addAnonymousImport("redirect-samples.tsv", .{ .root_source_file = b.path("deploy/nginx/redirect-samples.tsv") });
 
-    // The lane chart for Your games (src/site/chart_wasm.zig), embedded the same way
-    const chart_wasm = b.addExecutable(.{
-        .name = "chart",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/site/chart_wasm.zig"),
-            .target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .freestanding }),
-            .optimize = .ReleaseSmall,
-            .imports = &.{.{ .name = "tpl", .module = b.createModule(.{
-                .root_source_file = b.path("src/tpl/root.zig"),
-            }) }},
-        }),
-    });
-    chart_wasm.entry = .disabled;
-    chart_wasm.rdynamic = true;
-    backend.addAnonymousImport("chart.wasm", .{ .root_source_file = chart_wasm.getEmittedBin() });
     // The site's islands, per page family (src/site/ui/wasm), with zjb's loaders
     for (ui_families) |f| {
         const u = uiWasm(b, f);
