@@ -135,7 +135,7 @@ pub const wincon: ld.Puzzle = .{
         .{ .text = "Front-to-back" },
         .{ .text = "Mixed damage" },
     } } },
-    .why = "Only damage showed: mixed damage tends to do better. No win condition or archetype did.",
+    .why = "Damage mix showed: mixed damage tends to do better. No win condition or archetype did.",
     .tip = "Mind your team's damage mix before any comp plan.",
     .games = 89_584,
     .from = all_regions ++ ", 89,584 games",

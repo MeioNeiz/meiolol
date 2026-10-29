@@ -133,10 +133,11 @@ like pair of bars per opponent: "Yone vs Jax" against "Jax vs everyone".
   (proposal's boss) only where one option is clearly apart, on the DraftBoard with
   ChoiceCards, revealed with each option's reasons in words (J2), never "+X%"; Learn's
   own short list, not CandidateList (its code put ui-learn.wasm over 40 KB)
-  Clearly apart: the four teammates deal under a fifth of their damage as magic
-  (learned.md Win, Sure), exactly one option brings 60%+ magic, and it is also the
-  model's best of the four. Box pack 27 Oct: 2-3 such drafts a day, so some chapters
-  end without one; the why line carries no number (that finding's Site:)
+  Clearly apart: the four teammates' magic shares average under a fifth (stands in for
+  learned.md's team share, Win, Sure), exactly one option brings 60%+ magic (an option
+  of unknown share rules the draft out), and it is also the model's best of the four.
+  Box pack 27 Oct: 2-3 such drafts a day, each used once, so some chapters end without
+  one; the why line ("little magic damage") carries no number (that finding's Site:)
 - Daily five (later): one puzzle per finished chapter, same for everyone, ResultStrip (days)
 
 ## Components used (register names)

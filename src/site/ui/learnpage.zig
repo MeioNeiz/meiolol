@@ -791,7 +791,7 @@ const draft_demo: ld.Data = .{ .ddragon = "16.21.1", .start = 0, .chapters = &.{
         } },
         .{ .text = "Leona", .champ = ld.ch("Leona", "Leona"), .shown = "28% magic", .games = 7_300, .why = &.{.{ .text = "Works with Jinx", .up = true }} },
     } } },
-    .why = "Your four deal almost no magic damage: teams with mixed damage tend to do better.",
+    .why = "Your four deal little magic damage: teams with mixed damage tend to do better.",
     .tip = "Look at your team's damage before you lock in.",
     .games = 23_400,
     .from = "The options' games in the role, patch 16.21; teams' damage from 3,000 games",

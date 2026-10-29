@@ -725,10 +725,11 @@ fn damageBasic(site: *const Site) !?ld.Puzzle {
 }
 
 /// Chapter ends (plan "Chapter end and the drills"): practice drafts (learn.zig) where
-/// one option is clearly apart. The four teammates deal under a fifth of their damage as
-/// magic (learned.md: about 5 points fewer wins, Sure) and the one option bringing magic
-/// is also the model's best of the four. Model gaps alone clear almost none (notes/
-/// learn.md L4). One per chapter while they last, a role not used yet first
+/// one option is clearly apart. The four teammates' magic shares average under a fifth
+/// (learned.md: a team under a fifth of its damage as magic wins about 5 points less,
+/// Sure; the plain average stands in for the team share, as in learn.zig teamNeed) and
+/// the one option bringing magic is also the model's best of the four. Model gaps alone
+/// clear almost none (notes/learn.md L4)
 fn drafts(site: *const Site, chapters: usize) ![]const ld.Puzzle {
     const facts = site.learn orelse return &.{};
     const a = site.arena;
@@ -739,14 +740,31 @@ fn drafts(site: *const Site, chapters: usize) ![]const ld.Puzzle {
         log.warn("learn/practice.json: {t}", .{err});
         return &.{};
     };
+    var clear: std.ArrayList(End) = .empty;
+    for (pack) |p| {
+        const right = clearOption(p, teamMagic(site, facts, p) orelse continue) orelse continue;
+        const puzzle = try draftPuzzle(site, facts, p, right) orelse continue;
+        try clear.append(a, .{ .role = p.hidden_role, .puzzle = puzzle });
+    }
+    return pickEnds(a, clear.items, chapters);
+}
+
+const End = struct { role: Role, puzzle: ld.Puzzle };
+
+/// One per chapter while they last, a role not used yet first. Each draft at most once:
+/// its id keys saved progress and #p= links
+fn pickEnds(a: std.mem.Allocator, clear: []const End, chapters: usize) ![]const ld.Puzzle {
     var out: std.ArrayList(ld.Puzzle) = .empty;
     var used: std.EnumSet(Role) = .empty;
-    for (0..2) |pass| for (pack) |p| {
+    for (0..2) |pass| for (clear) |e| {
         if (out.items.len == chapters) break;
-        if ((pass == 0) == used.contains(p.hidden_role)) continue;
-        const right = clearOption(p, teamMagic(site, facts, p) orelse continue) orelse continue;
-        try out.append(a, try draftPuzzle(site, facts, p, right) orelse continue);
-        used.insert(p.hidden_role);
+        if (pass == 0 and used.contains(e.role)) continue;
+        const taken = for (out.items) |o| {
+            if (std.mem.eql(u8, o.id, e.puzzle.id)) break true;
+        } else false;
+        if (taken) continue;
+        try out.append(a, e.puzzle);
+        used.insert(e.role);
     };
     return out.items;
 }
@@ -769,7 +787,8 @@ fn clearOption(p: learn.Practice, team_magic: f64) ?u8 {
     if (team_magic >= draft_team_magic) return null;
     var bringer: ?u8 = null;
     for (p.options, 0..) |o, i| {
-        if (@as(f64, @floatFromInt(o.magic orelse continue)) < 100 * learn.brings_share) continue;
+        // Unknown could be a second bringer
+        if (@as(f64, @floatFromInt(o.magic orelse return null)) < 100 * learn.brings_share) continue;
         if (bringer != null) return null;
         bringer = @intCast(i);
     }
@@ -825,7 +844,7 @@ fn draftPuzzle(site: *const Site, facts: learn.Facts, p: learn.Practice, right: 
             .magic = magic,
         } },
         .answer = .{ .pick = .{ .right = right, .choices = try a.dupe(ld.Choice, &choices) } },
-        .why = "Your four deal almost no magic damage: teams with mixed damage tend to do better.",
+        .why = "Your four deal little magic damage: teams with mixed damage tend to do better.",
         .tip = "Look at your team's damage before you lock in.",
         .games = games,
         .from = try a.print("The options' games in the role, patch {s}; teams' damage from {d} games", .{ p.patch, facts.damage_games }),
@@ -961,6 +980,9 @@ test clearOption {
         .won = true,
         .minutes = 30,
     };
+    // An option with unknown magic could bring it too
+    try std.testing.expectEqual(@as(?u8, null), clearOption(p, 0.1));
+    p.options[3].magic = 30;
     try std.testing.expectEqual(@as(?u8, 1), clearOption(p, 0.1));
     // The team already has magic enough
     try std.testing.expectEqual(@as(?u8, null), clearOption(p, 0.25));
@@ -970,4 +992,36 @@ test clearOption {
     // Two bringers: not clearly apart
     p.options[0] = opt(0.5, 70);
     try std.testing.expectEqual(@as(?u8, null), clearOption(p, 0.1));
+}
+
+test pickEnds {
+    const end = struct {
+        fn f(id: []const u8, role: Role) End {
+            return .{ .role = role, .puzzle = .{
+                .id = id,
+                .q = "",
+                .setup = .{ .facts = &.{} },
+                .answer = .{ .pick = .{ .right = 0, .choices = &.{} } },
+                .why = "",
+                .tip = "",
+                .games = 0,
+                .from = "",
+            } };
+        }
+    }.f;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // Six chapters, two clear drafts: two ends, never a repeat
+    const two = [_]End{ end("draft-a", .top), end("draft-c", .middle) };
+    const got = try pickEnds(a, &two, 6);
+    try std.testing.expectEqual(2, got.len);
+    try std.testing.expectEqualStrings("draft-a", got[0].id);
+    try std.testing.expectEqualStrings("draft-c", got[1].id);
+    // A role not used yet first, then the rest in order, each once
+    const four = [_]End{ end("draft-a", .top), end("draft-b", .top), end("draft-c", .middle), end("draft-a", .jungle) };
+    const all = try pickEnds(a, &four, 6);
+    try std.testing.expectEqual(3, all.len);
+    for (all, [_][]const u8{ "draft-a", "draft-c", "draft-b" }) |p, id| try std.testing.expectEqualStrings(id, p.id);
+    try std.testing.expectEqual(1, (try pickEnds(a, &four, 1)).len);
 }

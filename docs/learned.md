@@ -179,12 +179,14 @@ How to write a line:
 - Beyond which champions are picked, a comp's damage makes a small difference, about
   1-2 points for a comp clearly off: damage far from half magic loses, magic-heavy
   teams (60%+) about 2 points more, and physical damage into an armour-leaning team does
-  worse. No coaching win condition (dive vs peel, engage vs disengage, front-to-back,
-  healing vs anti-heal, split vs waveclear) or archetype was found among 244 traits.
-  Sure: 89,584 sealed games of 2253Z, 32 pre-declared with Holm; associations beside
-  champion strength, not a measurable prediction gain. Site: the damage-mix reason;
-  "physical damage into armour" may become a reason without a number. Evidence:
-  docs/model.md "Comp discovery"
+  worse. Tankier teams did a little better into penetration items (+0.6 points per sd,
+  against theory). No coaching win condition (dive vs peel, engage vs disengage,
+  front-to-back, healing vs anti-heal, split vs waveclear) or archetype was found among
+  244 traits. Sure: 89,584 sealed games of 2253Z, 32 pre-declared with Holm;
+  associations beside champion strength, not a measurable prediction gain. Site: the
+  damage-mix reason; "physical damage into armour" may become a reason without a
+  number; Learn's myth card (damage mix showed, no win condition or archetype did).
+  Evidence: docs/model.md "Comp discovery"
 - A team that deals under a fifth of its damage as magic wins about 5 points less often
   than its champions suggest, and lopsided teams (that, or over 60% magic) about 3 less
   than balanced ones; tankiness and crowd control make a point at most. Sure: 44,353
