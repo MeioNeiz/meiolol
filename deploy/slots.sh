@@ -11,10 +11,19 @@
 #   deploy/slots.sh status                holders and waiters
 # Sourced (zb.sh): slots_enqueue W, slots_take (0 once held, 1 not yet), slots_release.
 # State: ~/.cache/meiolol-slots (MEIOLOL_SLOTS_DIR), entries named by pid: a dead
-# holder's or waiter's entry is dropped by the next caller
+# holder's or waiter's entry is dropped by the next caller.
+# On the gpu-box (WSL on Jacob's PC) no slot is granted while League is up: the watcher
+# (deploy/lab-watch.sh) writes up, down or unknown to ~/.cache/meiolol-league each few s
+# (MEIOLOL_LEAGUE_FILE; a file a minute old means no watcher: builds go). A held run goes
+# to nice 19 and idle I/O there, so the watcher's lag before it stops one costs little
 slots_dir=${MEIOLOL_SLOTS_DIR:-$HOME/.cache/meiolol-slots}
 slots_n=${MEIOLOL_SLOTS:-6}
 slots_mine=""
+MEIOLOL_LEAGUE_FILE=${MEIOLOL_LEAGUE_FILE-}
+slots_league_file=${MEIOLOL_LEAGUE_FILE:-$HOME/.cache/meiolol-league}
+slots_wsl=""
+[ -r /proc/version ] && grep -qi microsoft /proc/version && slots_wsl=1
+slots_league_said=""
 
 # The gate: a mkdir lock held for a few milliseconds around each decision
 _slots_gate() {
@@ -55,8 +64,20 @@ slots_enqueue() {
     _slots_ungate
 }
 
+# 0 while League (or a watcher that can't ask Windows) keeps builds here waiting
+_slots_league() {
+    local st
+    [ -n "$slots_wsl$MEIOLOL_LEAGUE_FILE" ] || return 1
+    st=$(cat "$slots_league_file" 2> /dev/null) || return 1
+    [ "$st" != down ] && [ -n "$(find "$slots_league_file" -mmin -1 2> /dev/null)" ] || return 1
+    [ -n "$slots_league_said" ] \
+        || echo "slots: League $st on this PC: no build starts until it closes (docs/compute.md)" >&2
+    slots_league_said=1
+}
+
 slots_take() {
     local used=0 f b head="" hw=0 w=${slots_mine##*-} code=1
+    ! _slots_league || return 1
     _slots_gate
     _slots_prune
     for f in "$slots_dir"/held/*; do
@@ -77,6 +98,10 @@ slots_take() {
         : > "$slots_dir/held/$$-$w-${slots_mine%%-*}"
         slots_mine=held
         export MEIOLOL_ZIG_JOBS=$((2 * w))
+        if [ -n "$slots_wsl" ]; then
+            renice -n 19 -p $$ > /dev/null
+            ionice -c 3 -p $$
+        fi
         code=0
     fi
     _slots_ungate

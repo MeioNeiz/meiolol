@@ -19,6 +19,8 @@
 set -euo pipefail
 
 HOST=${GPU_HOST:-gpu-box}
+# Run on the gpu-box itself (WSL), it acts here: the PC has no ssh alias for itself
+[[ -z ${GPU_HOST-} ]] && grep -qsi microsoft /proc/version && HOST=local
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 . "$ROOT/deploy/lib.sh"
 SCRIPTS=(lab-watch.sh archive-pull.sh backup-mirror.sh accounts-pull.sh)
@@ -41,13 +43,22 @@ RECORD=ml/bin/installed
 # What the mirror's meiolol is built from, for drift. Lab and GPU code isn't in it
 MEIOLOL_PATHS=(src build.zig build.zig.zon ':(exclude)src/lab' ':(exclude)src/gpu')
 
+# CMD on the host, from its home dir
+on() { if [[ $HOST == local ]]; then (cd && bash -c "$1"); else ssh "$HOST" "$1"; fi; }
+# put DIR FILE...: DIR relative to the host's home, or absolute
+put() {
+    local d=$1
+    shift
+    if [[ $HOST == local ]]; then (cd && cp "$@" "$d"); else scp -q "$@" "$HOST:$d"; fi
+}
+
 head_hash() { git -C "$ROOT" show "HEAD:$1" | shasum -a 256 | cut -d' ' -f1; }
 crlf_hash() { git -C "$ROOT" show "HEAD:$1" | sed 's/$/\r/' | shasum -a 256 | cut -d' ' -f1; }
 windows() { git -C "$ROOT" ls-tree --name-only HEAD deploy/windows/; }
 # %USERPROFILE%\.meiolol as a WSL path. cmd.exe reads stdin, so it gets /dev/null
 # shellcheck disable=SC2016 # expands on the host
 win_dir() {
-    ssh "$HOST" 'cd /mnt/c && /mnt/c/Windows/System32/cmd.exe /c "echo %USERPROFILE%" \
+    on 'cd /mnt/c && /mnt/c/Windows/System32/cmd.exe /c "echo %USERPROFILE%" \
         < /dev/null | tr -d "\r\n" | xargs -0 wslpath'
 }
 
@@ -65,7 +76,7 @@ drift() {
     done < <(windows)
     for f in "${ETC[@]}"; do paths+=("/etc/$f"); want+=("$(head_hash "deploy/wsl/${f##*/}")"); done
     # One line per path, - when missing
-    have=$(ssh "$HOST" "for p in $(printf "'%s' " "${paths[@]}"); do \
+    have=$(on "for p in $(printf "'%s' " "${paths[@]}"); do \
         if [ -f \"\$p\" ]; then sha256sum \"\$p\" | cut -d' ' -f1; else echo -; fi; done")
     i=0
     while IFS= read -r f; do
@@ -74,10 +85,10 @@ drift() {
         else echo "${paths[i]##*/}: DIFFERS from HEAD (deploy/gpu-box.sh install)"; fi
         i=$(( i + 1 ))
     done <<< "$have"
-    ssh "$HOST" "PATH=\$HOME/.local/bin:\$PATH; for t in $CI_TOOLS earlyoom; do command -v \$t > /dev/null || echo \"\$t: MISSING (deploy/gpu-box.sh install)\"; done; \
+    on "PATH=\$HOME/.local/bin:\$PATH; for t in $CI_TOOLS earlyoom; do command -v \$t > /dev/null || echo \"\$t: MISSING (deploy/gpu-box.sh install)\"; done; \
         systemctl is-active -q earlyoom || echo 'earlyoom: not running (deploy/gpu-box.sh install)'"
     local rev
-    rev=$(ssh "$HOST" "awk '\$1 == \"meiolol\" { s = \$2 } END { print s }' $RECORD 2> /dev/null || true")
+    rev=$(on "awk '\$1 == \"meiolol\" { s = \$2 } END { print s }' $RECORD 2> /dev/null || true")
     if [[ -z "$rev" ]] || ! git -C "$ROOT" cat-file -e "$rev^{commit}" 2> /dev/null; then
         echo "meiolol: installed commit not recorded in ~/$RECORD"
     elif git -C "$ROOT" diff --quiet "$rev" HEAD -- "${MEIOLOL_PATHS[@]}"; then
@@ -98,40 +109,42 @@ install() {
     for f in "${SCRIPTS[@]}"; do git -C "$ROOT" show "HEAD:deploy/$f" > "$tmp/bin/$f"; done
     chmod 755 "$tmp"/bin/*
     for f in "${UNITS[@]}"; do git -C "$ROOT" show "HEAD:deploy/systemd/$f" > "$tmp/units/$f"; done
+    # A build slot: on the gpu-box it waits while League is up and runs at nice 19
     # shellcheck disable=SC2016 # the inner sh expands them
-    "$ROOT/deploy/build-tree.sh" gpu-box "$rev" sh -c 'zig build backend -Doptimize=ReleaseSafe \
+    "$ROOT/deploy/slots.sh" 1 "$ROOT/deploy/build-tree.sh" gpu-box "$rev" sh -c \
+        'zig build backend -Doptimize=ReleaseSafe \
         -Dtarget=x86_64-linux-musl -Dcpu=x86_64_v3 --prefix zig-out/gpu-box \
         --cache-dir "$1/.zig-cache" && cp zig-out/gpu-box/bin/meiolol "$2/bin/meiolol.new"' \
         _ "$ROOT" "$tmp"
-    ssh "$HOST" "mkdir -p ml/bin ml/runs .config/systemd/user"
-    scp -q "$tmp"/bin/* "$HOST:ml/bin/"
+    on "mkdir -p ml/bin ml/runs .config/systemd/user"
+    put ml/bin/ "$tmp"/bin/*
     # The units' environment drop-ins on the host (*.d/) are kept
-    scp -q "$tmp"/units/* "$HOST:.config/systemd/user/"
-    ssh "$HOST" "mv ml/bin/meiolol.new ml/bin/meiolol \
+    put .config/systemd/user/ "$tmp"/units/*
+    on "mv ml/bin/meiolol.new ml/bin/meiolol \
         && echo 'meiolol $rev $(date -u +%FT%TZ)' >> $RECORD"
     # WSL can write there, so nothing there runs elevated: the archive mount (admin) is
     # installed once, by hand, by install-watchdog.ps1 (docs/compute.md)
     win=$(win_dir)/.meiolol
-    ssh "$HOST" "mkdir -p '$win'"
+    on "mkdir -p '$win'"
     while read -r f; do
-        git -C "$ROOT" show "HEAD:$f" | sed 's/$/\r/' | ssh "$HOST" "cat > '$win/${f##*/}'"
+        git -C "$ROOT" show "HEAD:$f" | sed 's/$/\r/' | on "cat > '$win/${f##*/}'"
     done < <(windows)
-    ssh "$HOST" "command -v $APT > /dev/null || { $WSL_ROOT /usr/bin/apt-get -qq update \
+    on "command -v $APT > /dev/null || { $WSL_ROOT /usr/bin/apt-get -qq update \
         && $WSL_ROOT /usr/bin/env DEBIAN_FRONTEND=noninteractive /usr/bin/apt-get -qq -y install \
         $APT > /dev/null; }"
     for f in "${ETC[@]}"; do git -C "$ROOT" show "HEAD:deploy/wsl/${f##*/}" > "$tmp/etc/${f##*/}"; done
-    scp -q "$tmp"/etc/* "$HOST:/tmp/"
-    ssh "$HOST" "for f in ${ETC[*]}; do $WSL_ROOT install -m 644 /tmp/\${f##*/} /etc/\$f || exit 1; \
+    put /tmp/ "$tmp"/etc/*
+    on "for f in ${ETC[*]}; do $WSL_ROOT install -m 644 /tmp/\${f##*/} /etc/\$f || exit 1; \
         rm /tmp/\${f##*/}; done; $WSL_ROOT /usr/sbin/sysctl -q --system \
         && $WSL_ROOT /usr/bin/udevadm control --reload \
         && $WSL_ROOT /usr/bin/udevadm trigger --action=change --subsystem-match=block \
         && $WSL_ROOT /usr/bin/systemctl restart earlyoom"
-    ssh "$HOST" "set -e; [ -x .local/node/$NODE/bin/node ] || { u=https://nodejs.org/dist/$NODE_VERSION; \
+    on "set -e; [ -x .local/node/$NODE/bin/node ] || { u=https://nodejs.org/dist/$NODE_VERSION; \
         cd /tmp; curl -fsSLO \$u/$NODE.tar.xz; \
         curl -fsSL \$u/SHASUMS256.txt | grep ' $NODE.tar.xz\$' | sha256sum -c --quiet -; \
         mkdir -p ~/.local/node; tar -xJf $NODE.tar.xz -C ~/.local/node; rm $NODE.tar.xz; }; \
         mkdir -p .local/bin; ln -sfn ~/.local/node/$NODE/bin/node .local/bin/node"
-    ssh "$HOST" "loginctl enable-linger \$USER; systemctl --user daemon-reload \
+    on "loginctl enable-linger \$USER; systemctl --user daemon-reload \
         && systemctl --user enable -q $WATCH ${TIMERS[*]} \
         && systemctl --user restart $WATCH \
         && systemctl --user start ${TIMERS[*]} \

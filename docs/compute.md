@@ -13,10 +13,22 @@ docs/lab-run.md.
 
 ## Rules
 
-- gpu-box: long runs only while League isn't running (Jacob). The watcher
-  (deploy/lab-watch.sh, systemd user service meiolol-lab-watch) stops every run's process
-  group while LeagueClient.exe or League of Legends.exe is up and continues it after;
-  each run's pauses.log says when. If Windows can't be asked, runs stay paused
+- gpu-box: nothing heavy while League runs (Jacob: no stutter). The watcher
+  (deploy/lab-watch.sh, systemd user service meiolol-lab-watch, log ~/ml/runs/watcher.log)
+  asks tasklist.exe every 3 s (5 while up). While LeagueClient.exe or League of
+  Legends.exe is up, or Windows can't be asked, it stops every run's process group
+  (each run's pauses.log says when), ends remote-build jobs, and stops the process
+  groups of agents' zig compiles, headless Chromium (and the node driving it) and
+  `meiolol dev` (only those processes when the group also holds Claude, ssh or a login
+  shell).
+  Those go in ~/.cache/meiolol-league-stopped ("quiet:" log lines) and continue when
+  League closes or the watcher stops or starts. Not paused: ssh and rsync copies,
+  snapshot builds, the archive pull, the backup mirror
+- Builds there wait: deploy/slots.sh (zb.sh, pre-push ci, gpu-box.sh install) grants no
+  slot while ~/.cache/meiolol-league, the watcher's state each tick, isn't down (a file
+  over a minute old: no watcher, builds go), and runs held builds at nice 19, idle I/O.
+  Lowering the WSL VM's Windows priority needs admin: not done.
+  Test: deploy/lab-watch-test.sh
 - Tell the sessions using it (cc-peers) before restarting WSL or
   rebooting the gpu-box: it kills running jobs
 - WSL comes back by itself: two Windows tasks, at boot and every 2 min, as Jacob, logged
