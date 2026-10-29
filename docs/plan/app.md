@@ -105,8 +105,8 @@ Ranked. Ids for team runs and claims ("APP3: taken by <session>" in the run's co
   click on an ally's seat switches the lane panel to their role (options from everyone
   who plays it, by the draft alone, while they still pick; once they lock their matchup
   only, nothing rating their pick; "Your lane" or my seat goes back; role-less queues
-  have no seat clicks). The blind-safe ranking (J2) was measured and doesn't pick
-  better than the average opponent (model.md "Blind pick ranking (J2)"): the list stays
+  have no seat clicks). The blind-safe ranking (J2) doesn't pick better than the
+  average opponent (model.md "Blind pick ranking (J2)"): the list stays
 - APP4 Hovers: picks and bans from hovered champions, live (both editions). The board
   shows ally hovers and intents and counts them in the draft; left: an enemy's hover
   never shows, so nothing to do there; check ban hovers in a real capture (APP1)

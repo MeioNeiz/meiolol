@@ -38,12 +38,14 @@ How to write a line:
   suggestions; the desktop app still scores with counts until its stats file keeps the
   fitted model. Evidence: docs/model.md "Pair cells that borrow strength (A4)", "A4 on
   the new pin, shipped form"
-- Before your lane opponent picks, ranking by an average opponent is already the safe
-  choice: favouring champions with fewer bad matchups, or ones that hold up against the
-  role's likely picks, does not pick better. Sure: not detected on 57k dev games; on
-  86k held-out games (29 Oct snap) at most 7% more of the ranking's link to winning,
-  with its AUC slightly down. Site: the app keeps its blind ranking; "safe blind" stays
-  a label, not a different list. Evidence: docs/model.md "Blind pick ranking (J2)"
+- Before your lane opponent picks, ranking as if they were average is as good as any
+  safer ranking we tried: favouring champions whose estimated matchups vary less is a
+  hair better by one measure and a hair worse by another. Sure: 86k held-out games (29
+  Oct snap), no enemy known: winners' picks rank a little higher (at most 7% of the
+  ranking's link to winning; not seen on 57k dev games), winner-loser pairs are ordered
+  slightly worse on both. The safer lists push popular champions down, so they partly
+  measure popularity, not safety. Site: the app keeps its blind ranking; "safe blind"
+  stays a label, not a different list. Evidence: docs/model.md "Blind pick ranking (J2)"
 - (early) The draft alone has a little more to give than our best model takes: knowing
   exactly how every pair of champions does together and against each other would call
   about 56.5% of games right, against about 55.4% now. Most of what is left sits in
