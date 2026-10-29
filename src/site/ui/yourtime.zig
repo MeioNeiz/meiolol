@@ -62,7 +62,12 @@ const W = struct {
     pub const week = plain("Week");
     pub const games = plain("Games");
     pub const wl = plain("W–L");
-    pub const per = plain("Per game");
+    pub const per = plain("Trend");
+    pub const per_tip = plain("The chart's measure in each game, oldest to newest.");
+    pub const win = plain("Win");
+    pub const loss = plain("Loss");
+    pub const tip = Phrase("{r:text} · {w:text} · {d:text}");
+    pub const tip_mean = Phrase("Average of 5: {v:text}");
     pub const last = plain("Last");
     pub const none = plain("No games match");
     pub const no_measure = plain("No games with this figure");
@@ -320,7 +325,7 @@ fn specOf(comptime by: By) table.Spec(Row) {
             .{ .label = W.chance, .cell = wcCell, .sort = wcSort, .tip = W.wc_tip },
             .{ .label = W.g14, .cell = g14Cell, .sort = g14Sort, .priority = 3 },
             .{ .label = W.vt, .cell = vtCell, .sort = vtSort, .priority = 2, .tip = W.vt_tip },
-            .{ .label = W.per, .cell = perCell, .num = false, .priority = 3 },
+            .{ .label = W.per, .cell = perCell, .num = false, .priority = 3, .tip = W.per_tip },
             .{ .label = W.last, .cell = lastCell, .sort = lastOf, .priority = 3 },
         },
         .default_sort = if (by == .week) 0 else 1,
@@ -352,6 +357,12 @@ pub const YourTime = struct {
     /// Its own file, loaded when the view shows (dom.lazyLoad)
     js: []const u8 = "",
     wasm: []const u8 = "",
+    /// The game the chart's pointer picked; a tap keeps it after the pointer leaves
+    at: ?u16 = null,
+    pinned: bool = false,
+    press: chart.Press = .{},
+    /// Games on the chart at the last view
+    shown: u16 = 0,
 
     const P = @This();
 
@@ -365,7 +376,7 @@ pub const YourTime = struct {
         desc: bool = true,
     };
 
-    pub const Msg = union(enum) { measure: Measure, by: By };
+    pub const Msg = union(enum) { measure: Measure, by: By, plot };
 
     pub fn toUrl(p: *const P) Url {
         const f = yp.urlOf(p.l, p.filter);
@@ -387,6 +398,7 @@ pub const YourTime = struct {
         p.filter = yp.filterOf(p.l, .{ .q = u.q, .role = u.role, .champ = u.champ });
         p.m = u.measure;
         p.by = u.by;
+        p.at = null;
         p.champs = .{ .rows = &.{} };
         p.matchups = .{ .rows = &.{} };
         p.weeks = .{ .rows = &.{} };
@@ -409,8 +421,29 @@ pub const YourTime = struct {
 
     pub fn update(p: *P, m: Msg, ev: *tree.Event) void {
         switch (m) {
-            .measure => |x| p.m = x,
+            .measure => |x| {
+                p.m = x;
+                p.at = null;
+            },
             .by => |x| p.by = x,
+            .plot => {
+                switch (p.press.pointer(ev)) {
+                    .none => {},
+                    .hover => |f| {
+                        p.at = @intCast(gametrend.pick(f, p.shown));
+                        p.pinned = false;
+                    },
+                    .tap => |f| {
+                        p.at = @intCast(gametrend.pick(f, p.shown));
+                        p.pinned = true;
+                    },
+                    .range => p.at = @intCast(gametrend.pick(std.math.clamp(ev.x / @max(1, ev.w), 0, 1), p.shown)),
+                    .leave => if (!p.pinned) {
+                        p.at = null;
+                    },
+                }
+                return;
+            },
         }
         ev.push = true;
     }
@@ -490,6 +523,7 @@ pub const YourTime = struct {
         var hi: f32 = -std.math.inf(f32);
         var sum: f32 = 0;
         var last_week: ?i32 = null;
+        var tip_line: tree.Text = .{ .s = "" };
         var i = games.len;
         while (i > 0) {
             i -= 1;
@@ -502,6 +536,7 @@ pub const YourTime = struct {
             const date = yp.dayText(h, day);
             const me = p.l.champs[g.champ].name;
             const who = if (g.opp) |o| W.vs.with(h, .{ .a = me, .b = p.l.champs[o].name }) else tree.Text{ .s = me };
+            if (p.at != null and p.at.? == pts.items.len) tip_line = W.tip.with(h, .{ .r = (if (g.win) W.win else W.loss).s, .w = who.s, .d = date.s });
             pts.append(h.mem, .{
                 .v = v,
                 .win = g.win,
@@ -516,6 +551,24 @@ pub const YourTime = struct {
             last_week = weekOf(day);
         }
         const mean = sum / @as(f32, @floatFromInt(pts.items.len));
+        p.shown = @intCast(@min(pts.items.len, std.math.maxInt(u16)));
+        if (p.at) |a| if (a >= pts.items.len) {
+            p.at = null;
+        };
+        const tip: N = if (p.at) |a| blk: {
+            const vs = h.mem.alloc(f32, pts.items.len) catch {
+                h.oom = true;
+                return .none;
+            };
+            for (vs, pts.items) |*v, pt| v.* = pt.v;
+            const rm = gametrend.rolling(h, vs) orelse return .none;
+            break :blk h.span(.{}, .{
+                h.b(.{}, .{text(h, m, vs[a])}),
+                " ",
+                tip_line,
+                h.small(.{}, .{W.tip_mean.with(h, .{ .v = text(h, m, rm[a]).s })}),
+            });
+        } else .none;
         const s = scaleOf(m, lo, hi);
         const plane: chart.Plane = .{ .x = .{ .lo = 0, .hi = 1 }, .y = s };
         var ticks: [5]chart.Tick = undefined;
@@ -536,6 +589,15 @@ pub const YourTime = struct {
                 .wc => 50,
                 .vt, .g14 => 0,
                 .kda, .cs => mean,
+            },
+            .at = if (p.at) |a| a else null,
+            .tip = tip,
+            .on = .{
+                .down = h.on(p, .plot),
+                .move = h.on(p, .plot),
+                .up = h.on(p, .plot),
+                .leave = h.on(p, .plot),
+                .cancel = h.on(p, .plot),
             },
         });
     }
@@ -732,6 +794,37 @@ test "measures, groups and the URL" {
     var bare: YourTime = .{ .l = &yp.demo.list };
     n = bare.view(&h);
     try testing.expectEqualStrings("KDA", t.attr(t.find(n, "class", "c-chart c-gtrend").?, "aria-label").?);
+    try testing.expect(!h.oom);
+}
+
+test "the chart: the pointer picks the nearest game, a tap keeps it" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var t: tree.Tree = .{};
+    var h: H = .init(arena.allocator(), &t);
+    var p: YourTime = .{ .l = &demo.list };
+    _ = p.view(&h);
+    try testing.expectEqual(10, p.shown);
+    var ev: tree.Event = .{ .kind = .pointermove, .x = 99, .w = 100 };
+    p.update(.plot, &ev);
+    try testing.expectEqual(@as(?u16, 9), p.at);
+    try testing.expect(!ev.push);
+    var n = p.view(&h);
+    try testing.expect(t.find(n, "class", "tip") != null);
+    try testing.expectEqual(1, t.count(n, "data-at"));
+    ev = .{ .kind = .pointerleave };
+    p.update(.plot, &ev);
+    try testing.expectEqual(null, p.at);
+    for ([_]tree.Ev{ .pointerdown, .pointerup, .pointerleave }) |k| {
+        ev = .{ .kind = k, .x = 5, .w = 100 };
+        p.update(.plot, &ev);
+    }
+    try testing.expectEqual(@as(?u16, 0), p.at);
+    n = p.view(&h);
+    try testing.expect(t.find(n, "class", "tip") != null);
+    ev = .{ .kind = .click };
+    p.update(.{ .measure = .kda }, &ev);
+    try testing.expectEqual(null, p.at);
     try testing.expect(!h.oom);
 }
 
