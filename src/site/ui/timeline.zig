@@ -82,9 +82,6 @@ const W = struct {
     pub const star = plain("★");
 };
 
-/// Deaths shown in a stack before "+n"
-const cap = 2;
-
 pub const Timeline = struct {
     game: *const Game,
     mode: Mode = .wc,
@@ -95,7 +92,8 @@ pub const Timeline = struct {
     /// ChartTip at this second
     tip: ?u16 = null,
     press: chart.Press = .{},
-    /// Home's small game: no presses, deaths as ticks
+    /// Home's small game: no presses, deaths as ticks, epic objectives only, no fight
+    /// marks
     compact: bool = false,
 
     const T = @This();
@@ -321,6 +319,7 @@ pub const Timeline = struct {
         var l = h.list();
         var last: [2][2]f32 = .{ .{ -100, -100 }, .{ -100, -100 } };
         for (t.game.objectives) |o| {
+            if (t.compact and !o.kind.epic()) continue;
             const x = p.x.at(@floatFromInt(o.t));
             const side = &last[@intFromBool(!o.ours)];
             const row: u8 = if (x - side[0] >= 1.6) 0 else if (x - side[1] >= 1.6) 1 else 0;
@@ -341,29 +340,31 @@ pub const Timeline = struct {
             stop = i;
             break;
         };
-        for (t.game.moments, 0..) |m, i| {
+        if (!t.compact) for (t.game.moments, 0..) |m, i| {
             const on = is(t.cur, i);
             l.add(h.button(.{
                 .key = i,
                 .class = "fm",
                 .type = "button",
-                .tabindex = if (!t.compact and is(stop, i)) @as(i8, 0) else -1,
+                .tabindex = if (is(stop, i)) @as(i8, 0) else -1,
                 .data_won = if (m.us > m.them) "us" else if (m.them > m.us) "them" else "even",
                 .data_dim = !t.inRange(m.t),
                 .data_ref = if (on) "tl-cur" else null,
                 .aria_current = on,
                 .aria_label = W.mark.with(h, .{ .t = m.t, .a = m.us, .b = m.them }),
                 .style = h.vars(.{ .x = p.x.at(@floatFromInt(m.t)) }),
-                .on_click = if (t.compact) null else h.on(t, .{ .mark = @as(u8, @intCast(i)) }),
+                .on_click = h.on(t, .{ .mark = @as(u8, @intCast(i)) }),
             }, .{}));
-        }
+        };
         return h.div(.{ .class = "fs", .role = "group", .aria_label = W.fights }, .{l.done()});
     }
 
     /// EdgeMarks: the enemy's deaths stacked up from the plot's top edge (`under`
-    /// false), yours down from its bottom, one stack a minute: two portraits, then "+n"
+    /// false), yours down from its bottom, one stack a minute, every death a portrait
+    /// (overlapping past two); the band as tall as the tallest stack
     fn edge(t: *T, h: *H, p: chart.Plane, under: bool) N {
         var stacks = h.list();
+        var tallest: usize = 0;
         const ds = t.game.deaths;
         var i: usize = 0;
         while (i < ds.len) {
@@ -382,12 +383,11 @@ pub const Timeline = struct {
                 }
             }
             var kids = h.list();
-            const shown = if (n > cap) cap - 1 else n;
-            for (group[0..shown]) |k| {
+            for (group[0..n]) |k| {
                 const d = ds[k];
                 kids.add(h.span(.{ .class = "pt", .data_you = d.you }, .{h.img(.{ .src = d.champ.src, .alt = d.champ.name })}));
             }
-            if (n > shown) kids.add(h.span(.{ .class = "more" }, .{ "+", n - shown }));
+            tallest = @max(tallest, n);
             stacks.add(h.span(.{
                 .class = "st",
                 .data_dim = !t.inRange(ds[i].t),
@@ -395,7 +395,12 @@ pub const Timeline = struct {
             }, .{ kids.done(), h.el(.i, .{ .class = "tk" }, .{}) }));
             i = j;
         }
-        return h.div(.{ .class = "em", .data_at = if (under) "bottom" else "top", .data_compact = t.compact }, .{stacks.done()});
+        return h.div(.{
+            .class = "em",
+            .data_at = if (under) "bottom" else "top",
+            .data_compact = t.compact,
+            .style = h.vars(.{ .n = @max(tallest, 2) }),
+        }, .{stacks.done()});
     }
 };
 
@@ -426,20 +431,22 @@ pub const css =
     \\  .c-tl .ob[data-k="inhib"] { transform: none; border-radius: 50%; }
     \\  .c-tl .ob[data-k="grubs"] { transform: none; border-radius: 50%; width: 5px; height: 5px; margin-left: -2.5px; }
     \\  .c-tl [data-dim] { opacity: 0.3; }
-    \\  .c-tl > .em { position: relative; height: 36px; }
+    \\  .c-tl > .em { position: relative; height: calc(15px + (var(--n) - 1) * 11px + 6px); }
     \\  .c-tl .st { position: absolute; left: calc(var(--x) * 1%); bottom: 3px; display: flex; flex-direction: column-reverse;
-    \\    align-items: center; gap: 1px; transform: translateX(-50%); }
+    \\    align-items: center; transform: translateX(-50%); }
+    \\  .c-tl .st > .pt + .pt { margin-bottom: -4px; }
+    \\  .c-tl > .em[data-at="bottom"] .st > .pt + .pt { margin: -4px 0 0; }
+    \\  .c-tl .st > .pt:hover { position: relative; z-index: 1; transform: scale(1.6); }
     \\  .c-tl > .em[data-at="bottom"] .st { top: 3px; bottom: auto; flex-direction: column; }
     \\  .c-tl .pt { display: block; width: 15px; height: 15px; border-radius: 50%; overflow: hidden;
     \\    box-shadow: 0 0 0 1.2px var(--them); }
     \\  .c-tl > .em[data-at="bottom"] .pt { box-shadow: 0 0 0 1.2px var(--us); }
     \\  .c-tl > .em .pt[data-you] { box-shadow: 0 0 0 2px var(--accent); }
     \\  .c-tl .pt img { display: block; width: 100%; height: 100%; }
-    \\  .c-tl .more { font-weight: var(--w-b); color: var(--t2); line-height: 1; }
     \\  .c-tl .tk { display: none; width: 3px; height: calc(var(--n) * 2px + 4px); border-radius: 1px; background: var(--them); }
     \\  .c-tl > .em[data-at="bottom"] .tk { background: var(--us); }
     \\  .c-tl > .em[data-compact] { height: 14px; }
-    \\  .c-tl > .em[data-compact] .pt, .c-tl > .em[data-compact] .more { display: none; }
+    \\  .c-tl > .em[data-compact] .pt { display: none; }
     \\  .c-tl > .em[data-compact] .tk { display: block; }
     \\  .c-tl .star { position: absolute; top: 2px; left: calc(var(--x) * 1%); transform: translateX(-50%);
     \\    color: var(--turn); line-height: 1; pointer-events: none; }
@@ -447,7 +454,7 @@ pub const css =
     \\  @container (max-width: 480px) {
     \\    .c-tl .ob[data-minor] { display: none; }
     \\    .c-tl > .em { height: 14px; }
-    \\    .c-tl .pt, .c-tl .more { display: none; }
+    \\    .c-tl .pt { display: none; }
     \\    .c-tl .tk { display: block; }
     \\  }
     \\}

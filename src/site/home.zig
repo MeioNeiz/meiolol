@@ -233,7 +233,8 @@ fn champsOf(site: *const Site, up: []const u8) !?*hp.HomeChamps {
     if (site.games == 0) return null;
     const d = try a.create(hp.Champs);
     var champs: std.ArrayList(ui.champ.Champ) = .empty;
-    d.* = .{ .champs = &.{}, .games = site.games, .roles = @splat(&.{}) };
+    d.* = .{ .champs = &.{}, .games = site.games, .index = try site.championsHref(null, up), .roles = @splat(&.{}) };
+    for (Role.all, &d.role_hrefs) |r, *href| href.* = try site.championsHref(r, up);
     const counts = try a.alloc(u32, site.champs.len);
     for (Role.all, &d.roles) |r, *out| {
         for (site.champs, counts) |ch, *n| n.* = site.stats.champRole(r, ch.c).games;
