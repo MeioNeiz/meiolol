@@ -26,41 +26,60 @@ pub const Kind = enum {
 };
 
 pub fn write(w: *W, comptime k: Kind, v: anytype) W.Error!void {
+    const info = @typeInfo(@TypeOf(v));
+    if (info == .int or info == .comptime_int) return whole(w, k, .of(v));
     switch (k) {
         .rate => {
             try fixed(w, v, 1, false);
             try w.writeByte('%');
         },
-        .pct => {
-            try int(w, @intCast(v));
-            try w.writeByte('%');
-        },
-        .count => try count(w, @intCast(v)),
         .points => {
             try sign(w, v);
             try fixed(w, @abs(v), 1, false);
         },
-        .signed => {
-            try sign(w, v);
-            try count(w, @abs(v));
-        },
-        // Unsigned seconds: std puts "+" on a signed int given a width ("11:+54")
-        .time => {
-            const s = @mod(v, 60);
-            try int(w, @intCast(@divTrunc(v, 60)));
-            try w.writeAll(if (s < 10) ":0" else ":");
-            try int(w, @intCast(s));
-        },
-        .int => try int(w, @intCast(v)),
         .dec => try fixed(w, @abs(v), 1, false),
+        .text => try w.writeAll(v),
+        else => @compileError("fmt." ++ @tagName(k) ++ " takes an int"),
+    }
+}
+
+/// Any i64 or u64 as sign and size, so every int kind is total over both
+pub const Int = struct {
+    neg: bool,
+    mag: u64,
+
+    pub fn of(v: anytype) Int {
+        return .{ .neg = v < 0, .mag = @abs(v) };
+    }
+};
+
+pub fn whole(w: *W, comptime k: Kind, x: Int) W.Error!void {
+    switch (k) {
+        .pct => {
+            try int(w, x, false);
+            try w.writeByte('%');
+        },
+        .count => try int(w, x, true),
+        .signed => {
+            if (x.mag != 0) try w.writeAll(if (x.neg) "\u{2212}" else "+");
+            try digits(w, x.mag, true);
+        },
+        .time => {
+            if (x.neg) try w.writeByte('-');
+            try digits(w, x.mag / 60, false);
+            try w.writeAll(if (x.mag % 60 < 10) ":0" else ":");
+            try digits(w, x.mag % 60, false);
+        },
+        .int => try int(w, x, false),
         .kilo => {
-            const n: u64 = @intCast(v);
-            if (n < 1000) return int(w, @intCast(n));
+            if (x.neg) try w.writeByte('-');
+            const n = x.mag;
+            if (n < 1000) return digits(w, n, false);
             const th = @as(f64, @floatFromInt(n)) / 1000;
             if (n < 9950) try fixed(w, th, 1, true) else try fixed(w, th, 0, true);
             try w.writeByte('k');
         },
-        .text => try w.writeAll(v),
+        else => @compileError("fmt." ++ @tagName(k) ++ " takes a float or text"),
     }
 }
 
@@ -75,42 +94,51 @@ pub fn fixed(w: *W, x: anytype, comptime places: u4, trim: bool) W.Error!void {
     const n: u64 = @intFromFloat(r);
     const unit: u64 = @intFromFloat(scale);
     if (v < 0 and n != 0) try w.writeByte('-');
-    try int(w, @intCast(n / unit));
+    try digits(w, n / unit, false);
     var frac = n % unit;
     if (places == 0 or (trim and frac == 0)) return;
-    var digits: [9]u8 = undefined;
+    var fig: [9]u8 = undefined;
     var k: usize = places;
     while (k > 0) {
         k -= 1;
-        digits[k] = '0' + @as(u8, @intCast(frac % 10));
+        fig[k] = '0' + @as(u8, @intCast(frac % 10));
         frac /= 10;
     }
     var len: usize = places;
-    if (trim) while (len > 0 and digits[len - 1] == '0') {
+    if (trim) while (len > 0 and fig[len - 1] == '0') {
         len -= 1;
     };
     try w.writeByte('.');
-    try w.writeAll(digits[0..len]);
+    try w.writeAll(fig[0..len]);
 }
 
-/// Digits without std.fmt's print: each print format is its own copy in ui.wasm
-fn int(w: *W, v: i64) W.Error!void {
-    return w.printIntAny(v, 10, .lower, .{});
+fn int(w: *W, x: Int, sep: bool) W.Error!void {
+    if (x.neg) try w.writeByte('-');
+    try digits(w, x.mag, sep);
+}
+
+/// Without std.fmt's print (each print format is its own copy in ui.wasm); a comma
+/// every three digits when `sep`
+fn digits(w: *W, v: u64, sep: bool) W.Error!void {
+    var buf: [26]u8 = undefined;
+    var i: usize = buf.len;
+    var n = v;
+    var k: u8 = 0;
+    while (true) : (k += 1) {
+        if (sep and k > 0 and k % 3 == 0) {
+            i -= 1;
+            buf[i] = ',';
+        }
+        i -= 1;
+        buf[i] = '0' + @as(u8, @intCast(n % 10));
+        n /= 10;
+        if (n == 0) break;
+    }
+    return w.writeAll(buf[i..]);
 }
 
 fn sign(w: *W, v: anytype) W.Error!void {
     if (v > 0) try w.writeByte('+') else if (v < 0) try w.writeAll("\u{2212}");
-}
-
-fn count(w: *W, v: u64) W.Error!void {
-    var buf: [24]u8 = undefined;
-    var bw: W = .fixed(&buf);
-    int(&bw, @intCast(v)) catch unreachable;
-    const s = bw.buffered();
-    for (s, 0..) |c, i| {
-        if (i > 0 and (s.len - i) % 3 == 0) try w.writeByte(',');
-        try w.writeByte(c);
-    }
 }
 
 /// Which Kind a value type may take, checked at compile time by words.zig
@@ -291,4 +319,22 @@ test "numbers read as the mock's" {
     try w.writeByte(' ');
     try fixed(&w, @as(f64, -0.1234567894), 9, true);
     try std.testing.expectEqualStrings("0.000000002 -0.123456789", w.buffered());
+}
+
+test "ints are total over i64 and u64" {
+    var buf: [128]u8 = undefined;
+    var w: W = .fixed(&buf);
+    try write(&w, .count, std.math.maxInt(u64));
+    try w.writeByte(' ');
+    try write(&w, .signed, std.math.minInt(i64));
+    try w.writeByte(' ');
+    try write(&w, .int, std.math.minInt(i64));
+    try w.writeByte(' ');
+    try write(&w, .pct, @as(i64, -5));
+    try w.writeByte(' ');
+    try write(&w, .time, @as(i64, -30));
+    try w.writeByte(' ');
+    try write(&w, .signed, 0);
+    try std.testing.expectEqualStrings("18,446,744,073,709,551,615 \u{2212}9,223,372,036,854,775,808 " ++
+        "-9223372036854775808 -5% -0:30 0", w.buffered());
 }

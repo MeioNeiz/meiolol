@@ -54,27 +54,27 @@ pub fn Phrase(comptime src: []const u8) type {
 
 /// A hole's value as one of three run-time types, so every phrase shares one writer per
 /// kind and one loop (ui.wasm size: each phrase's own copy cost several KB)
-const Value = union { f: f64, i: i64, s: []const u8 };
+const Value = union { f: f64, i: fmt.Int, s: []const u8 };
 const Hole = struct { write: *const fn (*std.Io.Writer, Value) std.Io.Writer.Error!void, v: Value };
 
 fn hole(comptime k: fmt.Kind, v: anytype) Hole {
     const T = switch (@typeInfo(@TypeOf(v))) {
         .float, .comptime_float => f64,
-        .int, .comptime_int => i64,
+        .int, .comptime_int => fmt.Int,
         else => []const u8,
     };
     const w = struct {
         fn write(out: *std.Io.Writer, x: Value) std.Io.Writer.Error!void {
-            return fmt.write(out, k, switch (T) {
-                f64 => x.f,
-                i64 => x.i,
-                else => x.s,
-            });
+            return switch (T) {
+                f64 => fmt.write(out, k, x.f),
+                fmt.Int => fmt.whole(out, k, x.i),
+                else => fmt.write(out, k, x.s),
+            };
         }
     }.write;
     return .{ .write = w, .v = switch (T) {
         f64 => .{ .f = v },
-        i64 => .{ .i = @intCast(v) },
+        fmt.Int => .{ .i = .of(v) },
         else => .{ .s = v },
     } };
 }
