@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # The gpu-box's standing meiolol pieces, which no push deploys: the League watcher
-# (lab-watch.sh), the raw archive pull (archive-pull.sh), the backup mirror
-# (backup-mirror.sh, with the meiolol it runs `backup --mirror` with), their systemd user
-# units, and the Windows side (deploy/windows, CRLF, in %USERPROFILE%\.meiolol). Scripts
-# and units install from HEAD's committed copy and meiolol from a clean checkout of HEAD,
-# never the working tree (jomify.sh's rule: 17 Oct, a hand copy ran 3 commits old).
+# (lab-watch.sh, and a timer for when it is stuck), the raw archive pull (archive-pull.sh),
+# the backup mirror (backup-mirror.sh, with the meiolol it runs `backup --mirror` with),
+# their systemd user units, and the Windows side (deploy/windows, CRLF, in
+# %USERPROFILE%\.meiolol). Scripts and units install from HEAD's committed copy and
+# meiolol from a clean checkout of HEAD, never the working tree (jomify.sh's rule: 17 Oct,
+# a hand copy ran 3 commits old).
 # Installs are recorded in ~/ml/bin/installed ("meiolol SHA TIME"), which drift reads.
 # WSL's /etc gets deploy/wsl (the lab disk's writeback and queue limits, earlyoom's
 # thresholds) as root, through wsl.exe -u root, as does apt for earlyoom and the tools ci
@@ -24,10 +25,11 @@ HOST=${GPU_HOST:-gpu-box}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 . "$ROOT/deploy/lib.sh"
 SCRIPTS=(lab-watch.sh archive-pull.sh backup-mirror.sh accounts-pull.sh)
-UNITS=(meiolol-lab-watch.service meiolol-archive-pull.service meiolol-archive-pull.timer
-    meiolol-backup-mirror.service meiolol-backup-mirror.timer meiolol-accounts-pull.service
+UNITS=(meiolol-lab-watch.service meiolol-lab-watch-stale.service meiolol-lab-watch-stale.timer
+    meiolol-archive-pull.service meiolol-archive-pull.timer meiolol-backup-mirror.service
+    meiolol-backup-mirror.timer meiolol-accounts-pull.service meiolol-accounts-pull.timer)
+TIMERS=(meiolol-lab-watch-stale.timer meiolol-archive-pull.timer meiolol-backup-mirror.timer
     meiolol-accounts-pull.timer)
-TIMERS=(meiolol-archive-pull.timer meiolol-backup-mirror.timer meiolol-accounts-pull.timer)
 ETC=(sysctl.d/60-meiolol-disk.conf udev/rules.d/60-meiolol-disk.rules default/earlyoom)
 # Root without a PATH: commands by full path
 WSL_ROOT="/mnt/c/Windows/System32/wsl.exe -u root -e"
@@ -45,11 +47,13 @@ MEIOLOL_PATHS=(src build.zig build.zig.zon ':(exclude)src/lab' ':(exclude)src/gp
 
 # CMD on the host, from its home dir
 on() { if [[ $HOST == local ]]; then (cd && bash -c "$1"); else ssh "$HOST" "$1"; fi; }
-# put DIR FILE...: DIR relative to the host's home, or absolute
+# put DIR FILE...: DIR relative to the host's home, or absolute. Locally a new inode, so
+# a script running meanwhile (bash reads it as it goes) keeps its old bytes
 put() {
     local d=$1
     shift
-    if [[ $HOST == local ]]; then (cd && cp "$@" "$d"); else scp -q "$@" "$HOST:$d"; fi
+    if [[ $HOST == local ]]; then (cd && cp --remove-destination "$@" "$d")
+    else scp -q "$@" "$HOST:$d"; fi
 }
 
 head_hash() { git -C "$ROOT" show "HEAD:$1" | shasum -a 256 | cut -d' ' -f1; }

@@ -23,14 +23,17 @@ docs/lab-run.md.
   process groups of agents' zig compiles, headless Chromium (and the node driving it)
   and meiolol binaries not in ~/ml/bin (`meiolol dev|eval`, `meiolol-lab bench`); only
   those processes when the group also holds Claude, ssh or a login shell. A Claude Bash
-  call's shell (job control) is stopped with its command, so the call waits, never
-  ends 147. Not paused: ssh and rsync copies, snapshot builds, the archive pull, the
-  backup mirror
+  call's shell (job control) is stopped with its command, and every shell between them
+  that started a group (timeout, setsid, set -m), so the call waits, never ends 147.
+  In a terminal's login shell its direct job runs on (only its compilers stop). Not
+  paused: ssh and rsync copies, snapshot builds, the archive pull, the backup mirror
 - Stopped groups go in ~/.cache/meiolol-league-stopped ("quiet:" log lines) and continue
   when the game closes or the watcher stops, starts or exits any way (the unit's
-  ExecStopPost). Stopped groups keep their locks (push.sh, build-tree, slots gate,
-  .git/index.lock) until then: not stale, don't remove them. The Mac's lab-run builds
-  over ssh wait the same way
+  ExecStopPost), and by a timer (meiolol-lab-watch-stale, each minute) once
+  ~/.cache/meiolol-league-game is over a minute old (a watcher stuck on /mnt/c or
+  tasklist.exe; WARNING line in watcher.log). Stopped groups keep their locks (push.sh,
+  build-tree, slots gate, .git/index.lock) until then: not stale, don't remove them. The
+  Mac's lab-run builds over ssh wait the same way
 - Windows unanswered (tasklist fails, hangs 10 s or lists nothing, twice in a tick):
   nothing changes for 2 ticks, then unknown (as the game); after 3 min agents' work goes
   on (blind, WARNING lines in watcher.log), runs stay paused

@@ -1,0 +1,8 @@
+[Unit]
+Description=Continue what a stuck League watcher stopped (lab-watch.sh, gpu-box)
+
+[Service]
+Type=oneshot
+# Past 60 s without a game state write (slots.sh's rule); logs to the watcher's log
+ExecStart=%h/ml/bin/lab-watch.sh resume-stale
+TimeoutStartSec=30

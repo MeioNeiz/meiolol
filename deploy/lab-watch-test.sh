@@ -5,17 +5,20 @@
 # `meiolol-lab bench`, a zig beside an ssh (only the zig stops), a lab run of meiolol-lab
 # (paused by the run rule, not recorded), a meiolol from ~/ml/bin, a Claude whose args
 # say `meiolol dev`, a plain loop (the last three left alone), a zig run by a job-control
-# shell (a Claude Bash call: both stop, the shell never sees 147), a terminal's login shell
+# shell (a Claude Bash call: both stop, the shell never sees 147), the same whose command
+# puts the zig in a group of its own (timeout: all three stop), a terminal's login shell
 # (it and its own job run on, a zig below that job stops). Checks: the client alone
 # pauses the lab run but not builds or slots; the game stops everything and slots wait;
 # the game closing while the client stays continues builds and lets slots go, the run
 # waits for the client; slots don't renice; Windows failing once or twice changes
 # nothing, an empty answer isn't down, 3 failures in a row pause, and after the grace
 # agents' work goes on while the run stays paused; an unwritable list stops nothing; a
+# group continued by someone else stops again; a watcher stuck (SIGSTOP) past the stale
+# limit: `resume-stale` continues everything, not while the game state is fresh; a
 # watcher stopped (TERM, even mid-hang in tasklist), killed (KILL, then a new one, even
 # with tasklist hanging or ~/ml/runs gone (and back: the log moves back, a run from
 # before boot restarts), or `resume` as the unit's ExecStopPost) leaves
-# nothing stopped; a list from another boot or a reused pid continues nothing.
+# nothing stopped; a list from another boot, a reused pid or a "g 1" continues nothing.
 # On the gpu-box: deploy/lab-watch-test.sh (about 2 min)
 set -u
 [ "$(ps -o sid= -p $$ | tr -d ' ')" = $$ ] || exec setsid -w "$0" "$@"
@@ -69,9 +72,16 @@ bash -c '"$1" -N host & "$2" build & wait' _ "$t/bin/ssh" "$t/bin/zig" & mixed=$
 "$t/bin/meiolol-lab" "$t/spin" run & run=$!
 # A Claude Bash call: bash -c under set -m, its command a group of its own
 bash -c 'set -m; "$1" build; echo "rc=$?" > "$2"' _ "$t/jc/zig" "$t/rc" & jcsh=$!
+# The same, its command a script whose timeout puts the zig in a group of its own
+cat > "$t/nested" << 'END'
+set -m
+bash -c 'timeout 600 "$1" build; :' _ "$1"
+echo "rc=$?" > "$2"
+END
+bash "$t/nested" "$t/jc/zig" "$t/rc2" & jc2=$!
 (exec -a -bash bash "$t/termjob" "$t/bin/zig") & term=$!
 pids+=("$build" "$chrome" "$dev" "$bench" "$mixed" "$plain" "$mlbin" "$claude" "$run")
-pids+=("$jcsh" "$term")
+pids+=("$jcsh" "$jc2" "$term")
 echo "$run" > "$t/runs/r1/job.pgid"
 heavy=("$build" "$chrome" "$dev" "$bench")
 spared=("$plain" "$mlbin" "$claude")
@@ -127,12 +137,14 @@ spared_run() {
         || bad "$1: a spared group was stopped: $(ps -o pid=,stat=,args= -p "$plain,$mlbin,$claude")"
 }
 
-jcjob='' tzig='' tsh='' tin=''
+jcjob='' jc2sh='' jc2t='' tzig='' tsh='' tin=''
 # shellcheck disable=SC2016 # eval expands them
 until_ok 10 eval 'jcjob=$(pgrep -P "$jcsh" -x zig) && tzig=$(pgrep -P "$term" -x zig) \
-    && tsh=$(pgrep -P "$term" -x bash) && tin=$(pgrep -P "$tsh" -x zig)' \
+    && tsh=$(pgrep -P "$term" -x bash) && tin=$(pgrep -P "$tsh" -x zig) \
+    && jc2sh=$(pgrep -P "$jc2" -x bash) && jc2t=$(pgrep -P "$jc2sh" -x timeout) \
+    && pgrep -P "$jc2t" -x zig > /dev/null' \
     || bad "job-control stand-ins didn't start"
-pids+=("$jcjob" "$tzig" "$tsh")
+pids+=("$jcjob" "$jc2sh" "$jc2t" "$tzig" "$tsh")
 
 watch
 until_ok 10 states down down && ok "state files say down" || bad "state files: $(said)"
@@ -183,6 +195,11 @@ if all s "$jcsh" "$jcjob" && [ ! -e "$t/rc" ]; then
 else
     bad "job-control shell: $(ps -o pid=,stat= -p "$jcsh,$jcjob"), $(cat "$t/rc" 2> /dev/null)"
 fi
+if all s "$jc2" "$jc2sh" "$jc2t" && [ ! -e "$t/rc2" ]; then
+    ok "a job-control shell's job that starts a group (timeout): all three stopped, saw nothing"
+else
+    bad "nested groups: $(ps -o pid=,stat=,args= -p "$jc2,$jc2sh,$jc2t"), $(cat "$t/rc2" 2> /dev/null)"
+fi
 if proc "$tin" && ! proc "$term" && ! proc "$tzig" && ! proc "$tsh"; then
     ok "a terminal: only the zig below its job stopped"
 else
@@ -214,6 +231,8 @@ until_ok 4 all r "${heavy[@]}" "$mixed" || bad "a group still stopped after the 
 touch "$t/done"
 until_ok 10 grep -qx rc=0 "$t/rc" && ok "the job-control shell's job ended well after the game" \
     || bad "job-control shell after the game: $(cat "$t/rc" 2> /dev/null)"
+until_ok 10 grep -qx rc=0 "$t/rc2" && ok "the nested groups' job ended well after the game" \
+    || bad "nested groups after the game: $(cat "$t/rc2" 2> /dev/null)"
 ! proc "$tin" && ok "the terminal's zig continues" || bad "the terminal's zig stays stopped"
 until_ok 10 test -f "$t/ran" && ok "the waiting slot went once the game closed" \
     || bad "the waiting slot never went"
@@ -256,6 +275,27 @@ all r "${heavy[@]}" && logs | grep -q "can't write" \
     && ok "list unwritable: nothing stopped, logged" || bad "list unwritable: something stopped"
 rmdir "$t/meiolol-league-stopped"
 until_ok 10 all s "${heavy[@]}" || bad "list writable again: not stopped"
+kill -CONT -- "-$build"
+until_ok 12 group "$build" s && ok "a recorded group continued by someone else: stopped again" \
+    || bad "a recorded group continued by someone else: left running"
+
+# A watcher stuck (a /mnt/c read that never returns): the timer's resume-stale
+resume_stale() { MEIOLOL_WATCH_TEST=$t bash "$here/lab-watch.sh" resume-stale >> "$t/watch.err" 2>&1; }
+resume_stale
+all s "${heavy[@]}" && ok "resume-stale, game state fresh: nothing continued" \
+    || bad "resume-stale continued with a fresh game state"
+kill -STOP "$watcher"
+sleep 7
+resume_stale
+if all r "${heavy[@]}" "$mixed" && [ ! -e "$t/meiolol-league-stopped" ] \
+    && logs | grep -q "WARNING: watcher stuck"; then
+    ok "watcher stuck past the limit: resume-stale continued everything, a WARNING line"
+else
+    bad "watcher stuck: $(ps -o pid=,stat= -p "$build,$dev"), $(logs | tail -3)"
+fi
+kill -CONT "$watcher"
+until_ok 10 all s "${heavy[@]}" && ok "the watcher unstuck: stopped again" \
+    || bad "the watcher unstuck: not stopped again"
 
 # Stopped while tasklist hangs
 touch "$t/hang"
@@ -346,10 +386,12 @@ until_ok 10 states down down || bad "states: $(said)"
 group "$build" s && ok "a list from another boot continues nothing" \
     || bad "a list from another boot continued its group"
 stop_watcher TERM
-printf 'boot %s\ng %s 1\n' "$(cat /proc/sys/kernel/random/boot_id)" "$plain" > "$t/meiolol-league-stopped"
+printf 'boot %s\ng 1 -\ng %s 1\n' "$(cat /proc/sys/kernel/random/boot_id)" "$plain" \
+    > "$t/meiolol-league-stopped"
 watch
 until_ok 10 states down down || bad "states: $(said)"
-group "$plain" s && ok "a reused pid is not continued" || bad "a reused pid was continued"
+all s "$plain" "$build" && ok "a reused pid and a g 1 are not continued" \
+    || bad "a reused pid or g 1 continued something"
 stop_watcher TERM
 kill -CONT -- "-$build"
 kill -CONT -- "-$plain"

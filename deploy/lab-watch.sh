@@ -10,10 +10,12 @@
 #   bench`): stopped the same way while the game (League of Legends.exe) runs, not for
 #   the client alone (Jacob), the groups in ~/.cache/meiolol-league-stopped, continued
 #   when the game closes and when the watcher stops or starts (and by the unit's
-#   ExecStopPost, `lab-watch.sh resume`, after any exit), so nothing stays frozen. State
-#   each tick (up, down, unknown, blind): client or game in ~/.cache/meiolol-league, the
-#   game alone in ~/.cache/meiolol-league-game, where deploy/slots.sh waits on up or
-#   unknown
+#   ExecStopPost, `lab-watch.sh resume`, after any exit), so nothing stays frozen; a
+#   watcher stuck (a /mnt/c read or tasklist.exe that won't end) leaves the game state
+#   unwritten: past STALE s (slots.sh's rule) the timer's `resume-stale` continues
+#   them. State each tick (up, down, unknown, blind): client or game in
+#   ~/.cache/meiolol-league, the game alone in ~/.cache/meiolol-league-game, where
+#   deploy/slots.sh waits on up or unknown
 # - Windows unanswered (tasklist failed, hung or said nothing, twice in a tick): nothing
 #   changes until 3 ticks in a row; then unknown, which pauses like the game. After
 #   GRACE (3 min) of it, agents' work goes on (game state blind, a WARNING line every
@@ -32,15 +34,18 @@
 # asks DIR/tasklist instead of Windows and stops only processes of its own session
 #   lab-watch.sh           the watcher
 #   lab-watch.sh resume    continues what a watcher stopped, removes its state, exits
+#   lab-watch.sh resume-stale  the same, only if the game state is over STALE s old
+#                          (meiolol-lab-watch-stale.timer, each minute)
 set -u
 win=/mnt/c/Windows/System32
 test_dir=${MEIOLOL_WATCH_TEST-}
 if [[ -n $test_dir ]]; then
     runs=$test_dir/runs jobs=$test_dir/jobs awake_d=$test_dir/awake.d cache=$test_dir
     mlbin=$test_dir/mlbin tasklist=$test_dir/tasklist tick=1 ask_s=2 retry_s=0.2 grace=12
+    stale=5
 else
     runs=~/ml/runs jobs=~/ml/build/jobs awake_d=~/ml/awake.d cache=~/.cache mlbin=~/ml/bin
-    tasklist=$win/tasklist.exe tick=3 ask_s=10 retry_s=1 grace=180
+    tasklist=$win/tasklist.exe tick=3 ask_s=10 retry_s=1 grace=180 stale=60
 fi
 mkdir -p "$cache"
 state=$cache/meiolol-league
@@ -72,7 +77,8 @@ unquiet() {
     first=$(head -1 "$stopped")
     if [[ $first == "boot $boot" || $first != boot* ]]; then
         while read -r kind id at; do
-            [[ $kind == [gp] ]] || continue
+            # 1 or less would continue every process (kill -CONT -- -1)
+            [[ $kind == [gp] && $id =~ ^[0-9]+$ ]] && (( id > 1 )) || continue
             s=$(started "$id")
             [[ -z $at || $at == - || $s == - || $s == "$at" ]] || continue
             [[ $kind == g ]] && id=-$id
@@ -91,6 +97,14 @@ unquiet() {
 if [[ ${1-} == resume ]]; then
     unquiet "watcher exited"
     rm -f "$state" "$gstate"
+    exit 0
+fi
+if [[ ${1-} == resume-stale ]]; then
+    [[ -f $stopped ]] || exit 0
+    age=$(( $(date +%s) - $(stat -c %Y "$gstate" 2> /dev/null || echo 0) ))
+    (( age > stale )) || exit 0
+    log "WARNING: watcher stuck (game state ${age}s old): continuing what it stopped"
+    unquiet "watcher stuck"
     exit 0
 fi
 unquiet "watcher start"
@@ -117,6 +131,9 @@ league() {
     echo "$a"
 }
 
+# Reads and writes on /mnt/c (9p) can hang under Windows load: bounded
+win_io() { timeout -k 2 5 "$@"; }
+
 # The Windows side of the awake holder: %USERPROFILE%\.meiolol; asked again each minute
 # until Windows answers. No holder in tests
 home='' vbs='' flag='' alog='' alog_at=0 home_at=0
@@ -124,18 +141,18 @@ win_home() {
     local h
     if [[ -n $test_dir ]]; then home=$test_dir/win
     else
-        h=$(cd /mnt/c && timeout -k 2 "$ask_s" $win/cmd.exe /c 'echo %USERPROFILE%' \
-            2> /dev/null < /dev/null) || return 1
+        h=$(timeout -k 2 "$ask_s" sh -c 'cd /mnt/c && exec "$1" /c "$2"' _ "$win/cmd.exe" \
+            'echo %USERPROFILE%' 2> /dev/null < /dev/null) || return 1
         h=${h%$'\r'}
         [[ -n $h ]] || return 1
         home=$(wslpath "$h")/.meiolol
         vbs=$(wslpath -w "$home/meiolol-awake.vbs")
     fi
-    mkdir -p "$home"
+    win_io mkdir -p "$home"
     flag=$home/awake
     # The holder's own log (taken, state every 10 min, released and why), copied in here
     alog=$home/awake.log
-    alog_at=$(stat -c %s "$alog" 2> /dev/null || echo 0)
+    alog_at=$(win_io stat -c %s "$alog" 2> /dev/null || echo 0)
 }
 
 # Agents' heavy work, one "g PGID ARGS" (stop the group) or "p PID ARGS" (that process
@@ -149,13 +166,15 @@ win_home() {
 # are left to their own rules. In tests the test script (its session's leader) is no job
 # shell
 heavy() {
-    local only='' keep_bin=' ' p
+    local only='' keep_bin=' ' p snap exe
     [[ -n $test_dir ]] && only=$(ps -o sid= -p $$)
-    for p in $(pgrep -u "$(id -u)" '^meiolol'); do
-        [[ $(readlink "/proc/$p/exe" 2> /dev/null) == "$mlbin"/* ]] && keep_bin+="$p "
+    snap=$(ps -u "$(id -u)" -o pid=,pgid=,sid=,ppid=,comm=,args=)
+    # From the same snapshot: one started after it isn't in it. One gone since is kept
+    for p in $(awk '$5 ~ /^meiolol/ { print $1 }' <<< "$snap"); do
+        exe=$(readlink "/proc/$p/exe" 2> /dev/null)
+        [[ -z $exe || $exe == "$mlbin"/* ]] && keep_bin+="$p "
     done
-    ps -u "$(id -u)" -o pid=,pgid=,sid=,ppid=,comm=,args= \
-        | awk -v skip=" $1 " -v only="$only" -v keep_bin="$keep_bin" '
+    awk -v skip=" $1 " -v only="$only" -v keep_bin="$keep_bin" '
         {
             pid = $1; pg[pid] = $2; sid[pid] = $3; pp[pid] = $4; comm[pid] = $5
             a = $0; sub(/^ *[0-9]+ +[0-9]+ +[0-9]+ +[0-9]+ +[^ ]+ +/, "", a); args[pid] = a
@@ -188,36 +207,58 @@ heavy() {
             for (p in want) {
                 g = pg[p]
                 if (g <= 1 || index(skip, " " g " ")) continue
-                # A job-control shell waiting on the group (Claude runs each Bash call
-                # under set -m, its pipeline a group of its own) sees it stop, ends the
-                # call with 147 and, exiting, hangs up the stopped group: that shell is
-                # stopped too, first (continued last). One kept (a login shell in a
-                # terminal) sees nothing stop that it waits on itself
-                j = pp[g]; jg = 0
-                if ((g in pg) && (j in pg) && pg[j] != g && comm[j] ~ /^(ba|da|z)?sh$/ \
-                    && j + 0 != only + 0)
-                    jg = pg[j]
-                if (jg && (held[jg] || jg <= 1 || index(skip, " " jg " "))) {
+                # A job-control shell waiting on a group (Claude runs each Bash call
+                # under set -m, its pipeline a group of its own; timeout, setsid or a
+                # nested set -m make more below) sees it stop, ends with 147 and, exiting,
+                # hangs up the stopped group. So each shell above that started a group of
+                # its own, up to the session leader (a Claude Bash call shell), is
+                # stopped too, outermost first (continued last). Below a kept one (a login
+                # shell in a terminal), whose job would stop, only processes: never one
+                # a shell started
+                n = 0; blocked = 0; c = g; j = pp[g]
+                for (k = 0; k < 16; k++) {
+                    s = pp[c]
+                    if (!(c in pg) || !(s in pg) || pg[s] == c \
+                        || comm[s] !~ /^(ba|da|z)?sh$/ || s + 0 == only + 0)
+                        break
+                    c = pg[s]
+                    if (held[c] || c <= 1 || index(skip, " " c " ")) { blocked = 1; break }
+                    up[++n] = c
+                }
+                s = sid[g]
+                if (!blocked && (s in pg) && s != g && s != up[n] \
+                    && comm[s] ~ /^(ba|da|z)?sh$/ && s + 0 != only + 0 && !held[s] && s > 1 \
+                    && !index(skip, " " s " "))
+                    up[++n] = s
+                if (blocked) {
                     if (pp[p] != j && !seen["p" p]++) print "p", p, substr(args[p], 1, 90)
                     continue
                 }
-                if (jg && !seen["g" jg]++)
-                    print "g", jg, "job shell of " g ": " substr(args[jg], 1, 70)
+                for (k = n; k >= 1; k--)
+                    if (!seen["g" up[k]]++)
+                        print "g", up[k], "job shell of " g ": " substr(args[up[k]], 1, 70)
                 if (held[g]) { if (!seen["p" p]++) print "p", p, substr(args[p], 1, 90) }
                 else if (!seen["g" g]++)
                     print "g", g, substr(args[g] != "" ? args[g] : args[p], 1, 90)
             }
-        }'
+        }' <<< "$snap"
 }
 
-# Stops what heavy finds that isn't stopped yet; recorded first (a watcher killed
-# mid-tick still continues it) and never stopped unless the record is there
+# Stops what heavy finds; recorded first (a watcher killed mid-tick still continues it)
+# and never stopped unless the record is there. One recorded is stopped again, quietly:
+# something else may have continued it (the kernel, for a group whose shell exited)
 declare -A unrecorded
 quiet() {
     local kind id what rec
     while read -r kind id what; do
-        grep -q "^$kind $id " "$stopped" 2> /dev/null && continue
+        # No "League " in it: lab-place reads those lines as client-or-game sessions
+        what=${what//League/league}
         rec="$kind $id $(started "$id")"
+        if grep -qx "$rec" "$stopped" 2> /dev/null; then
+            [[ $kind == g ]] && id=-$id
+            kill -STOP -- "$id" 2> /dev/null
+            continue
+        fi
         { [[ -s $stopped ]] || echo "boot $boot" > "$stopped"; } 2> /dev/null
         if ! { echo "$rec" >> "$stopped" && grep -qx "$rec" "$stopped"; } 2> /dev/null; then
             [[ -n ${unrecorded[$kind$id]-} ]] \
@@ -225,8 +266,6 @@ quiet() {
             unrecorded[$kind$id]=1
             continue
         fi
-        # No "League " in it: lab-place reads those lines as client-or-game sessions
-        what=${what//League/league}
         if [[ $kind == g ]]; then
             kill -STOP -- "-$id" 2> /dev/null && log "quiet: stopped group $id: $what"
         else
@@ -234,8 +273,6 @@ quiet() {
         fi
     done < <(heavy "$1")
 }
-
-win_home || home_at=$((SECONDS + 60))
 
 # Once ~/ml/runs is writable (at start, or later: wsl-mount.ps1 mounts the lab disk some
 # seconds after WSL starts), the log moves there and runs that were live when WSL went
@@ -352,21 +389,22 @@ while true; do
     if [[ -z $home ]]; then
         :
     elif [[ -n $busy ]]; then
-        touch "$flag"
+        win_io touch "$flag"
         if [[ -n $vbs ]] && { [[ -z $holder ]] || ! kill -0 "$holder" 2>/dev/null; }; then
             (cd /mnt/c && exec "$win/wscript.exe" "$vbs" "$(wslpath -w "$flag")") &
             holder=$!
         fi
     else
-        rm -f "$flag"
+        win_io rm -f "$flag"
     fi
     [[ "$busy" != "$busy_was" ]] && log "awake: ${busy:-no (Windows may sleep)}"
     busy_was=$busy
     if [[ -n $alog ]]; then
-        size=$(stat -c %s "$alog" 2> /dev/null || echo 0)
+        size=$(win_io stat -c %s "$alog" 2> /dev/null || echo 0)
         (( size < alog_at )) && alog_at=0
         if (( size > alog_at )); then
-            tail -c +$(( alog_at + 1 )) "$alog" | tr -d '\r' | sed 's/Z awake/Z holder: awake/'
+            win_io tail -c +$(( alog_at + 1 )) "$alog" | tr -d '\r' \
+                | sed 's/Z awake/Z holder: awake/'
             alog_at=$size
         fi
     fi
