@@ -366,9 +366,9 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
     defer arena_state.deinit();
     const arena = arena_state.allocator();
     const query = queryOf(request.head.target);
-    // As nginx's redirect include (deploy/nginx/meiolol-redirects.conf): an old .html URL
-    // to its new one, 302 until URL4 (docs/plan/urls.md)
-    if (std.mem.endsWith(u8, path, ".html")) if (try oldTo(arena, path, query)) |to| return redirect(request, .found, to);
+    // As nginx's $meiolol_old map (deploy/nginx/meiolol.conf): an old .html URL to its new
+    // one
+    if (std.mem.endsWith(u8, path, ".html")) if (try oldTo(arena, path, query)) |to| return redirect(request, .moved_permanently, to);
     const names = try candidates(arena, path, viewDir(query));
     if (ctx.opts.render) |rendered| {
         const entry = rendered.acquire();
@@ -412,7 +412,7 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
     if (ctx.opts.root != null) for (names) |name| {
         if (try serveFile(ctx, request, name, gzip)) return;
     };
-    if (try oldTo(arena, path, query)) |to| return redirect(request, .found, to);
+    if (try oldTo(arena, path, query)) |to| return redirect(request, .moved_permanently, to);
     if (path.len > 0 and path[path.len - 1] == '/') {
         return redirect(request, .moved_permanently, try std.mem.concat(arena, u8, &.{ "/", std.mem.trimEnd(u8, path, "/"), query }));
     }
@@ -420,7 +420,7 @@ fn respond(ctx: *Context, request: *std.http.Server.Request) !void {
     if (std.mem.findAny(u8, path, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") != null) {
         const lower = try std.ascii.allocLowerString(arena, path);
         if (try exists(ctx, arena, try candidates(arena, lower, viewDir(query)))) {
-            return redirect(request, .found, try std.mem.concat(arena, u8, &.{ "/", lower, query }));
+            return redirect(request, .moved_permanently, try std.mem.concat(arena, u8, &.{ "/", lower, query }));
         }
     }
     if (ctx.opts.render) |rendered| return notFoundPage(ctx, rendered, request);

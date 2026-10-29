@@ -81,11 +81,11 @@ URLs are clean (docs/plan/urls.md; arch-site.md "Website"): nginx's
 ?region= and ?period= to the internal view tree (also in both proxy_cache_keys; other
 query keys such as the pool's ?champs= are state and stay out). `location = /` goes
 straight to @render (deploy/cache-warm.sh warms it first). Old .html URLs: a
-server-level `return 302` from the $meiolol_old map (mirrors urls.legacy, the old view
+server-level `return 301` from the $meiolol_old map (mirrors urls.legacy, the old view
 dirs turned into the query; deploy/url-smoke.sh curls deploy/nginx/redirect-samples.tsv
 on C01); a trailing slash 301s off. The renderer does the same (serve.zig) and gzips
 what it sends when the client accepts it (nginx compresses only HTML itself; stats.bin
-is ~12 MB raw), with Vary: Accept-Encoding; on a miss whose lowercase is a page, a 302
+is ~12 MB raw), with Vary: Accept-Encoding; on a miss whose lowercase is a page, a 301
 to it.
 - `meiolol render` (systemd meiolol-render@a or @b) on the box's private address
   10.0.0.3:8091, every view loaded up front from data/views.bin. Loading views from the

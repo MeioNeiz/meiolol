@@ -69,23 +69,21 @@ legacy keys with replaceState.
     inverted (fragment to query); legacy translation (champion, pool, learn); pv.js
     matchup regex, search.js, gamesrc.zig, dailydays.zig, your.js; champpage's
     `pool.html#slug` (no pool= key)
-  - nginx: redirect include before try_files (regex rules mirrored by urls.legacy), as
-    302 first; slash strip; `location = /index.html` becomes internal; `map
-    $arg_region:$arg_period` to the view tree; proxy_cache_key adds the view (else
-    @render serves the wrong view); host 308 stays
+  - nginx: redirect include before try_files (regex rules mirrored by urls.legacy); slash
+    strip; `location = /index.html` becomes internal; `map $arg_region:$arg_period` to
+    the view tree; proxy_cache_key adds the view (else @render serves the wrong view);
+    host 308 stays
   - serve.zig: drop the add-a-slash dir 301; lowercase 301 on a miss when that page
     exists
   - Smoke script: curl old samples on C01, expect each Location
 - URL3 (done) notes: notesdata.canonical = urls.legacy then the index strip; migrate
   stored rows once through the Zig function (not SQL LIKE), legacy hash keys too
   (urls.moveState). traffic.sh joins old and new paths through the map (`meiolol urls`)
-- URL4 (302 to 301) from 29 Oct ~06:00 UTC. Docs (arch-site.md, hosting.md, frontend.md) in
-  the commits that change the code
+- URL4 (done): old URLs and the lowercase fix 301
 
 ## Risks
 
 - Relative links count depth: a partial move breaks data-src ../; all at once (URL2)
-- 301s are cached forever by browsers: hence 302 first (URL4)
 - Shared desktop shell test paths (shell/channel.zig) and qa.mjs page list
 - The production key application quotes meio.lol URLs: they keep working via 301;
   update the text only if it is resubmitted. noindex in preview: no ranking at risk

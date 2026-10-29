@@ -16,7 +16,7 @@ index.html), all hrefs root-relative. Each view has its own stats, pool and curv
 --platform all`). Header switches link to the same page in another view (a matchup that
 view lacks: the matchups finder); localStorage remembers the last view's query so shared
 pages (Daily Draft, Learn, Your games, legal: root only, made from the EUW patch view)
-link back into it. Old .html URLs 302 to the new ones: urls.legacy, mirrored by nginx's
+link back into it. Old .html URLs 301 to the new ones: urls.legacy, mirrored by nginx's
 $meiolol_old map (deploy/nginx/redirect-samples.tsv checks both).
 
 Champion pages are the exception: root view only, /champions/<slug> (main role, canonical)
