@@ -139,7 +139,8 @@ pub const Table = struct {
   champion/ahri.html) and fixes page weight: champions.html is 1.73 MB today (850 KB of
   it a spread SVG per row); the spikes' server table is 16 KB gz with every row
   reachable
-- One ui.wasm per page family if the 40 KB gz budget is reached (stats, games, play).
+- One ui.wasm per page family if the 40 KB gz budget is reached (stats, games, play;
+  measured as served, in ci: dev-flow.md "ui.wasm sizes").
   Floor per file: runtime + std ~20 KB gz (decode, tree, island, diff, dom, zjb, url).
   A family over 40 splits into files of its own, ~10 KB gz of runtime repeated in each
   (champion, 27 + 31 + 37 KB gz: ui-champion.wasm the head, ui-champbuild.wasm the build,

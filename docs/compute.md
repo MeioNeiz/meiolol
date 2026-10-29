@@ -75,9 +75,8 @@ M5: 185 s vs 230 s, so it stays on the Mac.
   League is up (the Mac builds them again) and keeps Windows awake while one runs
 - ci there needs zstd, shellcheck, jq and node 24 (Ubuntu's 18 can't `--check` ES
   modules): deploy/gpu-box.sh install; versions head the output. Not built there:
-  shellMac (macOS only). Linux skips 4 tests. Open: the ui.wasm gzip budgets use the
-  host's gzip, and GNU gzip -9 makes ~20 B more than Apple's from the same wasm
-  (ui-daily 40973 vs 40953 of 40960), so ci fails there on that step alone
+  shellMac (macOS only). Linux skips 4 tests. ui.wasm budgets are measured in-process,
+  the same on every host (dev-flow.md "ui.wasm sizes")
 
 ## gpu-box storage
 
