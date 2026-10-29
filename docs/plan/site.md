@@ -95,19 +95,18 @@ gotta make someone think". Plan: docs/plan/ui/learn.md (content: docs/learn-prop
 Status: the ui.learnpage island (src/site/learn.zig, learnbuild.zig, learnfixed.zig).
 Chapters of puzzles, one a screen; a first visit lands on chapter 1, chapter 0 ("The
 basics": roles, a counter, early or late, damage where damage facts load) one tap away
-in the Chapters aside. A puzzle: a setup (rate rows, a duel, tiles or chips), a short
-question, a guess (slider, no value until touched) or ChoiceCards, Lock in; then every
-row with its games, stars 0-3, one line why and a takeaway; a chapter's end lists its
-takeaways. Hand-written puzzles from finished checks in learnfixed.zig; generated ones
-from live data: lane leader that loses, early or late (`meiolol lean`), counter or just
+in the Chapters aside. A puzzle: a setup (rate rows, a duel, tiles, big figures or chips),
+a short question, a guess (slider, no value until touched) or ChoiceCards, Lock in;
+then every row with its games, stars 0-3, one line why and a takeaway. A chapter's
+last puzzle is a real game's draft where one option is clearly apart (DraftBoard,
+reasons in words; none on the dev snapshot, which has no damage facts), then its
+takeaways.
+Hand-written puzzles from finished checks in learnfixed.zig; generated ones from live
+data: lane leader that loses, early or late (`meiolol lean`), counter or just
 strong (lane curves, every region, 30 days). Progress in localStorage, links #p=<id>.
 No win chance or points anywhere in Learn.
 
 Next (order and detail: data/team/2026-10-29-next/notes/w5.md):
-- A guess readable before the first touch (chips setups show no scale); Your tips only
-  for this chapter
-- Setups as pictures, not chips plus a line repeating them; counter wording
-- Chapter-end drafts where one option is clearly apart (plan "Chapter end")
 - More myth or measured cards, only from final learned.md lines whose Site: allows it
 - Hand-written numbers refreshed when their checks are rerun
 - Later: a daily five; "your lane, your game" (an export from the pack)
