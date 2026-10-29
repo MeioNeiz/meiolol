@@ -37,6 +37,8 @@ Desktop 1280, a 12-column grid under the site header:
       done today: your result as the same chip as Daily's summary
     - Patch 16.21: the three biggest win rate changes as champion icon, role icon,
       "+2.6" on the diverging scale (the patch page's rows, `change-chip` from stats)
+      in one order, biggest rise to biggest fall, a rule where rises turn to falls and
+      the bars on one axis down the list (note 43: up then down by size read as random)
     - Learn: today's lesson title and a progress ring of the five
 - Right (8/12): the review (`game-header`, `timeline-graph` in its compact form: the
   fight strip above and deaths as ticks on the plot's edges, game-detail.md; the
