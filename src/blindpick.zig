@@ -7,14 +7,15 @@
 //! low end of the base rating's own uncertainty.
 //!
 //! Per test seat, each ranking's percentile of the champion actually picked; reports
-//! winners' minus losers' mean percentile (± paired by game against today's ranking),
-//! AUC and the win rate of picks in each ranking's top 10%. Two scenarios: the other
+//! winners' minus losers' mean percentile and AUC (each ± paired by game against today's
+//! ranking) and the win rate of picks in each ranking's top 10%. Two scenarios: the other
 //! eight known, and allies only (no enemy picked yet).
 
 const std = @import("std");
 const store = @import("store");
 const core = @import("core");
 const stats = @import("stats.zig");
+const additive = @import("additive.zig");
 const eval = @import("eval.zig");
 const analysis = @import("analysis.zig");
 const par = @import("par.zig");
@@ -76,13 +77,27 @@ pub fn run(
     var list: analysis.GameList = .{ .gpa = gpa };
     defer list.items.deinit(gpa);
     _ = try stats.scan(gpa, io, db, patches, platforms, 0, &list);
-    var parts = try eval.split(gpa, list.items.items, platforms, opts);
+    const classes = try stats.kitClasses(gpa, db);
+    defer gpa.free(classes);
+    try runGames(gpa, io, champs, classes, list.items.items, platforms, opts, w);
+}
+
+fn runGames(
+    gpa: std.mem.Allocator,
+    io: Io,
+    champs: []const core.statsfile.Champion,
+    classes: []const additive.KitClass,
+    games: []Game,
+    platforms: []const []const u8,
+    opts: eval.Options,
+    w: *Io.Writer,
+) !void {
+    var parts = try eval.split(gpa, games, platforms, opts);
     defer parts.deinit(gpa);
     const train = parts.train;
     const tests = parts.tests;
+    if (train.len == 0 or tests.len < 2) return error.TooFewGames;
 
-    const classes = try stats.kitClasses(gpa, db);
-    defer gpa.free(classes);
     var shipped: eval.Model = try .buildShipped(gpa, champs, train, classes);
     defer shipped.deinit(gpa);
     const st = &shipped.stats;
@@ -99,11 +114,12 @@ pub fn run(
     var arena_state: std.heap.ArenaAllocator = .init(gpa);
     defer arena_state.deinit();
     const offsets = try offsetsOf(arena_state.allocator(), st, opts.pick_min_games);
+    try offsetTable(w, st, &offsets, opts.pick_min_games);
 
     const seats = tests.len * 2 * Role.count;
+    const pct = try gpa.alloc([nv]f32, seats);
+    defer gpa.free(pct);
     for (scenarios) |sc| {
-        const pct = try gpa.alloc([nv]f32, seats);
-        defer gpa.free(pct);
         try par.forEach(io, tests.len, Rank{
             .gpa = gpa,
             .st = st,
@@ -113,7 +129,7 @@ pub fn run(
             .scenario = sc,
             .pct = pct,
         }, Rank.game);
-        try report(gpa, w, sc, tests, pct);
+        try report(w, sc, try summarise(gpa, tests, pct));
     }
 }
 
@@ -166,6 +182,41 @@ fn offsetsOf(arena: std.mem.Allocator, st: *const core.Stats, min_games: u32) !O
     return out;
 }
 
+/// Each offset over the candidate champion-roles: its mean, spread and correlation with
+/// log role games. A spread of shrunk estimates grows with the games behind them, so an
+/// offset that tracks games partly ranks by popularity, not by safety
+fn offsetTable(w: *Io.Writer, st: *const core.Stats, offsets: *const Offsets, min_games: u32) !void {
+    try w.writeAll("\n## Offsets\n\nPer champion-role with the candidates' train games: " ++
+        "mean, spread and correlation with log role games.\n\n" ++
+        "| offset | champion-roles | mean | sd | r with log games |\n| --- | --- | --- | --- | --- |\n");
+    for (variants[1..], 1..) |v, vi| {
+        var n: f64 = 0;
+        var sx: f64 = 0;
+        var sy: f64 = 0;
+        var sxx: f64 = 0;
+        var syy: f64 = 0;
+        var sxy: f64 = 0;
+        for (Role.all) |r| for (0..st.n) |c| {
+            const games = st.champRole(r, c).games;
+            if (games < min_games) continue;
+            const x = offsets[vi][@backingInt(r)][c];
+            const y = @log(@as(f64, @floatFromInt(games)));
+            n += 1;
+            sx += x;
+            sy += y;
+            sxx += x * x;
+            syy += y * y;
+            sxy += x * y;
+        };
+        const vx = sxx / n - (sx / n) * (sx / n);
+        const vy = syy / n - (sy / n) * (sy / n);
+        const r = (sxy / n - sx / n * sy / n) / @sqrt(vx * vy);
+        try w.print("| {s} | {d} | {d:.4} | {d:.4} | {d:.2} |\n", .{
+            v.label(), @as(usize, @intFromFloat(n)), sx / n, @sqrt(vx), r,
+        });
+    }
+}
+
 /// Weighted quantile of `sorted` (ascending), total weight `sw`
 fn quantile(sorted: anytype, sw: f64, q: f64) f64 {
     var acc: f64 = 0;
@@ -183,7 +234,8 @@ const Rank = struct {
     min_games: u32,
     offsets: *const Offsets,
     scenario: Scenario,
-    /// Per seat (game, side, role); NaN when the pick was no candidate
+    /// Per seat (game, side, role); NaN when the pick was not ranked: no candidate, or
+    /// under two candidates
     pct: [][nv]f32,
 
     fn game(c: Rank, gi: usize) !void {
@@ -239,44 +291,81 @@ const Rank = struct {
     }
 };
 
-fn report(
-    gpa: std.mem.Allocator,
-    w: *Io.Writer,
-    sc: Scenario,
-    games: []const Game,
-    pct: []const [nv]f32,
-) !void {
+const Paired = struct {
+    diff: f64,
+    /// 95%, by game
+    half: f64,
+
+    /// diff: the per-game terms' sum, unless given
+    fn of(per_game: []const f64, diff: ?f64) Paired {
+        var total: f64 = 0;
+        for (per_game) |x| total += x;
+        const n: f64 = @floatFromInt(per_game.len);
+        var ss: f64 = 0;
+        for (per_game) |x| ss += (x - total / n) * (x - total / n);
+        return .{ .diff = diff orelse total, .half = 1.96 * @sqrt(n / (n - 1) * ss) };
+    }
+};
+
+const Summary = struct {
+    picks: usize,
+    unranked: usize,
+    rows: [nv]Row,
+
+    const Row = struct {
+        winners: f64,
+        losers: f64,
+        auc: f64,
+        /// Against today's ranking; zero for it
+        gap_vs: Paired,
+        auc_vs: Paired,
+        top_n: usize,
+        top_win: f64,
+
+        fn gap(r: Row) f64 {
+            return r.winners - r.losers;
+        }
+    };
+};
+
+/// Gap and AUC per ranking, each paired by game against today's: both are sums over seats
+/// (AUC by its DeLong placements), so their difference splits into per-game terms
+fn summarise(gpa: std.mem.Allocator, games: []const Game, pct: []const [nv]f32) !Summary {
     var nw: f64 = 0;
     var nl: f64 = 0;
-    var missed: usize = 0;
+    var unranked: usize = 0;
     for (games, 0..) |g, gi| for (0..2) |s| for (0..Role.count) |r| {
         const p = pct[(gi * 2 + s) * Role.count + r];
         if (std.math.isNan(p[0])) {
-            missed += 1;
+            unranked += 1;
             continue;
         }
         if (g.winner == s) nw += 1 else nl += 1;
     };
-    try w.print("\n## {s}\n\n{d} picks ({d} not candidates). Gap: winners' mean percentile " ++
-        "minus losers' (1 = the ranking's top); ± 95% paired by game against today's.\n\n" ++
-        "| ranking | winners | losers | gap | gap vs today | AUC | top 10% win |\n" ++
-        "| --- | --- | --- | --- | --- | --- | --- |\n", .{
-        sc.label(), @as(usize, @intFromFloat(nw + nl)), missed,
-    });
+    if (nw == 0 or nl == 0) return error.TooFewGames;
+    const n: usize = @intFromFloat(nw + nl);
+    var out: Summary = .{ .picks = n, .unranked = unranked, .rows = undefined };
 
-    const q = try gpa.alloc(f64, @intFromFloat(nw + nl));
+    const q = try gpa.alloc(f64, n);
     defer gpa.free(q);
-    const won = try gpa.alloc(bool, q.len);
+    const won = try gpa.alloc(bool, n);
     defer gpa.free(won);
-    const per_game = try gpa.alloc(f64, games.len);
-    defer gpa.free(per_game);
-    for (variants, 0..) |v, vi| {
+    const place = try gpa.alloc(f64, n);
+    defer gpa.free(place);
+    // Per game: today's AUC terms, then this ranking's gap and AUC differences from today
+    const auc0 = try gpa.alloc(f64, games.len);
+    defer gpa.free(auc0);
+    const d_gap = try gpa.alloc(f64, games.len);
+    defer gpa.free(d_gap);
+    const d_auc = try gpa.alloc(f64, games.len);
+    defer gpa.free(d_auc);
+    for (variants, &out.rows, 0..) |v, *row, vi| {
         var sw: f64 = 0;
         var sl: f64 = 0;
         var top_n: f64 = 0;
         var top_w: f64 = 0;
         var k: usize = 0;
-        @memset(per_game, 0);
+        @memset(d_gap, 0);
         for (games, 0..) |g, gi| for (0..2) |s| for (0..Role.count) |r| {
             const p = pct[(gi * 2 + s) * Role.count + r];
             if (std.math.isNan(p[0])) continue;
@@ -290,56 +379,61 @@ fn report(
                 top_n += 1;
                 top_w += @floatFromInt(@intFromBool(win));
             }
-            // This seat's share of the gap's difference from today's ranking
             const d = x - p[0];
-            per_game[gi] += if (win) d / nw else -d / nl;
+            d_gap[gi] += if (win) d / nw else -d / nl;
         };
-        const gap = sw / nw - sl / nl;
-        try w.print("| {s} | {d:.4} | {d:.4} | {d:.4} |", .{ v.label(), sw / nw, sl / nl, gap });
-        if (v == .current) try w.writeAll(" |") else {
-            var total: f64 = 0;
-            for (per_game) |x| total += x;
-            const n: f64 = @floatFromInt(games.len);
-            var ss: f64 = 0;
-            for (per_game) |x| ss += (x - total / n) * (x - total / n);
-            const se = @sqrt(n / (n - 1) * ss);
-            const sign = if (total >= 0) "+" else "";
-            try w.print(" {s}{d:.4} ± {d:.4} |", .{ sign, total, 1.96 * se });
+        const auc = try eval.auc(gpa, q, won, place);
+        const terms = if (v == .current) auc0 else d_auc;
+        @memset(terms, 0);
+        k = 0;
+        for (games, 0..) |g, gi| for (0..2) |s| for (0..Role.count) |r| {
+            if (std.math.isNan(pct[(gi * 2 + s) * Role.count + r][0])) continue;
+            terms[gi] += (place[k] - auc) / if (g.winner == s) nw else nl;
+            k += 1;
+        };
+        if (v != .current) for (d_auc, auc0) |*d, t| {
+            d.* -= t;
+        };
+        row.* = .{
+            .winners = sw / nw,
+            .losers = sl / nl,
+            .auc = auc,
+            .gap_vs = if (v == .current) .{ .diff = 0, .half = 0 } else .of(d_gap, null),
+            .auc_vs = if (v == .current) .{ .diff = 0, .half = 0 } else .of(d_auc, auc - out.rows[0].auc),
+            .top_n = @intFromFloat(top_n),
+            .top_win = top_w / @max(top_n, 1),
+        };
+    }
+    return out;
+}
+
+fn report(w: *Io.Writer, sc: Scenario, sum: Summary) !void {
+    try w.print("\n## {s}\n\n{d} picks ({d} not ranked: no candidate, or under two). Gap: " ++
+        "winners' mean percentile minus losers' (1 = the ranking's top); \"vs today\" ± 95% " ++
+        "paired by game.\n\n" ++
+        "| ranking | winners | losers | gap | gap vs today | AUC | AUC vs today | top 10% win |\n" ++
+        "| --- | --- | --- | --- | --- | --- | --- | --- |\n", .{ sc.label(), sum.picks, sum.unranked });
+    for (variants, sum.rows) |v, row| {
+        try w.print("| {s} | {d:.4} | {d:.4} | {d:.4} |", .{ v.label(), row.winners, row.losers, row.gap() });
+        if (v == .current) try w.print(" | {d:.4} |", .{row.auc}) else {
+            try w.print(" {f} | {d:.4} | {f} |", .{ signed(row.gap_vs), row.auc, signed(row.auc_vs) });
         }
-        const top: usize = @intFromFloat(top_n);
-        try w.print(" {d:.4} | {d:.2}% of {d} |\n", .{
-            try auc(gpa, q, won), 100 * top_w / @max(top_n, 1), top,
-        });
+        if (v == .current) try w.writeAll(" |");
+        try w.print(" {d:.2}% of {d} |\n", .{ 100 * row.top_win, row.top_n });
     }
 }
 
-/// Mann-Whitney: chance a random winner's pick ranks above a random loser's; ties half
-fn auc(gpa: std.mem.Allocator, p: []const f64, won: []const bool) !f64 {
-    const idx = try gpa.alloc(usize, p.len);
-    defer gpa.free(idx);
-    for (idx, 0..) |*x, i| x.* = i;
-    std.mem.sort(usize, idx, p, struct {
-        fn lt(ps: []const f64, a: usize, b: usize) bool {
-            return ps[a] < ps[b];
-        }
-    }.lt);
-    var rank_sum: f64 = 0;
-    var pos: f64 = 0;
-    var i: usize = 0;
-    while (i < idx.len) {
-        var j = i;
-        while (j < idx.len and p[idx[j]] == p[idx[i]]) j += 1;
-        const avg = @as(f64, @floatFromInt(i + j - 1)) / 2 + 1;
-        for (idx[i..j]) |k| if (won[k]) {
-            rank_sum += avg;
-            pos += 1;
-        };
-        i = j;
-    }
-    const neg = @as(f64, @floatFromInt(p.len)) - pos;
-    if (pos == 0 or neg == 0) return 0.5;
-    return (rank_sum - pos * (pos + 1) / 2) / (pos * neg);
+fn signed(p: Paired) Signed {
+    return .{ .p = p };
 }
+
+const Signed = struct {
+    p: Paired,
+
+    pub fn format(s: Signed, w: *Io.Writer) Io.Writer.Error!void {
+        try w.print("{s}{d:.4} ± {d:.4}", .{ if (s.p.diff >= 0) "+" else "", s.p.diff, s.p.half });
+    }
+};
 
 test "weighted quantile" {
     const P = struct { x: f64, wt: f64 };
@@ -347,4 +441,169 @@ test "weighted quantile" {
     try std.testing.expectEqual(-1, quantile(&v, 4, 0.10));
     try std.testing.expectEqual(0, quantile(&v, 4, 0.5));
     try std.testing.expectEqual(1, quantile(&v, 4, 0.9));
+}
+
+const testing = std.testing;
+
+/// Ten champions, all in every game, roles at random; in the middle lane champion 1 loses
+/// to champion 2 nine games in ten, every other result a coin flip
+fn plantedGames(arena: std.mem.Allocator, n: usize) ![]Game {
+    var rng: std.Random.DefaultPrng = .init(5);
+    const rnd = rng.random();
+    const games = try arena.alloc(Game, n);
+    const mid = @backingInt(Role.middle);
+    for (games, 0..) |*g, i| {
+        var ids: [10]u32 = .{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+        rnd.shuffle(u32, &ids);
+        g.* = .{
+            .id = i,
+            .start = @intCast(i),
+            .patch = 16020,
+            .platform = 0,
+            .teams = .{ ids[0..5].*, ids[5..10].* },
+            .winner = rnd.int(u1),
+            .duration_s = 1800,
+        };
+        for (0..2) |s| if (g.teams[s][mid] == 1 and g.teams[1 - s][mid] == 2) {
+            g.winner = @intCast(if (rnd.float(f64) < 0.9) 1 - s else s);
+        };
+    }
+    return games;
+}
+
+const planted_champs = blk: {
+    var c: [10]core.statsfile.Champion = undefined;
+    for (&c, 0..) |*x, i| x.* = .{ .id = i + 1, .name = "X" };
+    break :blk c;
+};
+
+test "offsets: a planted bad lane matchup lowers the 10th percentile and the mean" {
+    const gpa = testing.allocator;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const games = try plantedGames(arena, 3000);
+    var m: eval.Model = try .buildShipped(gpa, &planted_champs, games, &.{});
+    defer m.deinit(gpa);
+    const st = &m.stats;
+    const off = try offsetsOf(arena, st, 10);
+    const mid = @backingInt(Role.middle);
+    const a = st.index(1).?;
+    const b = st.index(2).?;
+    const q10 = off[@backingInt(Variant.q10)][mid];
+    const mean = off[@backingInt(Variant.mean)][mid];
+    // Each of nine opponents weighs about 11%, so the 10th percentile is the worst matchup
+    try testing.expectEqual(score.matchupLogit(st, .{}, .middle, a, .middle, b), q10[a]);
+    try testing.expect(q10[a] < -0.5);
+    try testing.expect(mean[a] < 0 and mean[b] > 0);
+    for (0..st.n) |c| if (c != a) try testing.expect(q10[c] > q10[a]);
+    // Top lane has no planted effect: every offset there is small
+    for (off[@backingInt(Variant.q10)][@backingInt(Role.top)]) |x| try testing.expect(x > -0.5);
+}
+
+test "summary: paired gap and AUC differences, their intervals against a jackknife" {
+    const gpa = testing.allocator;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var rng: std.Random.DefaultPrng = .init(9);
+    const rnd = rng.random();
+    const n_games = 300;
+    const games = try arena.alloc(Game, n_games);
+    const pct = try arena.alloc([nv]f32, n_games * 2 * Role.count);
+    for (games, 0..) |*g, gi| {
+        g.* = .{ .id = gi, .start = @intCast(gi), .patch = 0, .platform = 0, .teams = @splat(@splat(0)), .winner = rnd.int(u1) };
+        // A game-level shift shared by its seats, so clustering by game matters
+        const shift = 0.2 * rnd.float(f32);
+        for (0..2) |s| for (0..Role.count) |r| {
+            const p = &pct[(gi * 2 + s) * Role.count + r];
+            const won: f32 = if (g.winner == s) 1 else 0;
+            p[0] = @min(1, 0.8 * rnd.float(f32) + shift);
+            for (p[1..], 1..) |*x, vi| {
+                const vf: f32 = @floatFromInt(vi);
+                x.* = p[0] + 0.05 * vf * (rnd.float(f32) - 0.5) + 0.01 * vf * won;
+            }
+        };
+    }
+    pct[3] = @splat(std.math.nan(f32));
+    const sum = try summarise(gpa, games, pct);
+    try testing.expectEqual(1, sum.unranked);
+    try testing.expectEqual(n_games * 10 - 1, sum.picks);
+    const q = try arena.alloc(f64, sum.picks);
+    const won = try arena.alloc(bool, sum.picks);
+    // The per-game sums give each difference exactly; jackknife by game for the spread
+    const sub_pct = try arena.alloc([nv]f32, pct.len - 10);
+    for (1..nv) |vi| {
+        const row = sum.rows[vi];
+        try testing.expectApproxEqAbs(row.gap() - sum.rows[0].gap(), row.gap_vs.diff, 1e-9);
+        var k: usize = 0;
+        for (games, 0..) |g, gi| for (0..2) |s| for (0..Role.count) |r| {
+            const p = pct[(gi * 2 + s) * Role.count + r];
+            if (std.math.isNan(p[0])) continue;
+            q[k] = p[vi];
+            won[k] = g.winner == s;
+            k += 1;
+        };
+        try testing.expectApproxEqAbs(try eval.auc(gpa, q, won, null), row.auc, 1e-12);
+        try testing.expectApproxEqAbs(row.auc - sum.rows[0].auc, row.auc_vs.diff, 1e-12);
+    }
+    var jack: [nv][2]f64 = @splat(.{ 0, 0 });
+    var jack_ss: [nv][2]f64 = @splat(.{ 0, 0 });
+    for (0..n_games) |drop| {
+        @memcpy(sub_pct[0 .. drop * 10], pct[0 .. drop * 10]);
+        @memcpy(sub_pct[drop * 10 ..], pct[(drop + 1) * 10 ..]);
+        const sub_games = try std.mem.concat(arena, Game, &.{ games[0..drop], games[drop + 1 ..] });
+        const s = try summarise(gpa, sub_games, sub_pct);
+        for (1..nv) |vi| {
+            const d = [2]f64{ s.rows[vi].gap() - s.rows[0].gap(), s.rows[vi].auc - s.rows[0].auc };
+            for (0..2) |m| {
+                jack[vi][m] += d[m];
+                jack_ss[vi][m] += d[m] * d[m];
+            }
+        }
+    }
+    const n: f64 = n_games;
+    for (1..nv) |vi| for (0..2) |m| {
+        const mean = jack[vi][m] / n;
+        const se = @sqrt((n - 1) / n * (jack_ss[vi][m] - n * mean * mean));
+        const half = if (m == 0) sum.rows[vi].gap_vs.half else sum.rows[vi].auc_vs.half;
+        const ratio = half / 1.96 / se;
+        try testing.expect(ratio > 0.85 and ratio < 1.15);
+    };
+}
+
+test "summary and run: too few games is an error, not NaN or a panic" {
+    const gpa = testing.allocator;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const games = try plantedGames(arena, 400);
+    const pct = try arena.alloc([nv]f32, 2 * 10);
+    @memset(pct, @splat(std.math.nan(f32)));
+    try testing.expectError(error.TooFewGames, summarise(gpa, games[0..2], pct));
+
+    var discard: Io.Writer.Discarding = .init(&.{});
+    var o: eval.Options = .{ .cuts = .{ .test_ = 0, .dev = 0, .bounds = @splat(0) } };
+    try testing.expectError(error.TooFewGames, runGames(gpa, testing.io, &planted_champs, &.{}, games, &.{"EUW1"}, o, &discard.writer));
+    o.cuts.?.test_ = games[games.len - 1].start;
+    try testing.expectError(error.TooFewGames, runGames(gpa, testing.io, &planted_champs, &.{}, games, &.{"EUW1"}, o, &discard.writer));
+}
+
+test "run on planted games: every table filled, the planted matchup in the offsets" {
+    const gpa = testing.allocator;
+    var arena_state: std.heap.ArenaAllocator = .init(gpa);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const games = try plantedGames(arena, 1500);
+    for ([_]bool{ true, false }) |dev| {
+        var out: Io.Writer.Allocating = .init(arena);
+        try runGames(gpa, testing.io, &planted_champs, &.{}, games, &.{"EUW1"}, .{ .dev = dev }, &out.writer);
+        const text = out.written();
+        try testing.expect(std.mem.indexOf(u8, text, if (dev) "Dev-val: " else "Test: ") != null);
+        for (scenarios) |sc| try testing.expect(std.mem.indexOf(u8, text, sc.label()) != null);
+        try testing.expect(std.mem.indexOf(u8, text, "nan") == null);
+        try testing.expect(std.mem.indexOf(u8, text, "inf") == null);
+        // Header, two scenarios: one row per ranking each, five offsets
+        try testing.expectEqual(2 * (2 + nv) + 2 + nv - 1, std.mem.count(u8, text, "\n| "));
+    }
 }

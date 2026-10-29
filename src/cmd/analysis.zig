@@ -73,7 +73,8 @@ pub const usage_eval =
     \\                               with mastery_pre.tsv and mastery_pre_pool.tsv
     \\                               (meiolol-lab mastery-pre); fits lanecard.Expertise
     \\              --blind          only the blind pick ranking (J2): lane opponent
-    \\                               hidden, today's ranking against safe variants
+    \\                               hidden, today's ranking against safe variants. On
+    \\                               test (no --dev) only with --test-look
     \\
 ;
 
@@ -110,9 +111,12 @@ pub fn cmdEval(c: *Cmd) !u8 {
     if ((replay_only or blind_only) and history != null) return error.Usage;
     if (replay_only and blind_only) return error.Usage;
     const lab = o.setnets.len > 0;
+    // Neither scores a set net
+    if ((replay_only or blind_only) and lab) return error.Usage;
     if (history != null and (o.dev or lab)) return error.Usage;
-    // A lab model on the test window is a test look: declared, then counted
-    if (test_look != (lab and !o.dev)) return error.Usage;
+    // A lab model or the blind variants on the test window is a test look: declared,
+    // then counted
+    if (test_look != ((lab or blind_only) and !o.dev)) return error.Usage;
     const io = c.init.io;
     const db = try c.open();
     defer db.close();
