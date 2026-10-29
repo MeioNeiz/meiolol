@@ -251,7 +251,8 @@ pub fn cmdSite(c: *Cmd) !u8 {
 }
 
 /// Champion portraits and, unless `patch` is null (the dev server: a restart each edit),
-/// the item, spell and rune art of `patch` and the demos (src/icons.zig) cached in DIR/ddragon, copied into `out_dir` unless null. Failing, it
+/// the item, spell and rune art of `patch`, the demos and the last art_patches (games
+/// pages link a game's own patch's; src/icons.zig) cached in DIR/ddragon, copied into `out_dir` unless null. Failing, it
 /// warns: the pages go out, their art where cached (nginx redirects the rest to Data
 /// Dragon)
 fn makeIcons(c: *Cmd, db: store.Db, out_dir: ?[]const u8, patch: ?[]const u8) void {
@@ -266,9 +267,18 @@ fn makeIcons(c: *Cmd, db: store.Db, out_dir: ?[]const u8, patch: ?[]const u8) vo
     };
     report("icons", n);
     const live = patch orelse return;
+    var patches: std.ArrayList([]const u8) = .empty;
+    const recent = main.ddragon.recentPatches(gpa, c.arena, io, art_patches) catch |err| blk: {
+        std.log.warn("art: patches: {t}", .{err});
+        break :blk &.{};
+    };
+    for ([_][]const []const u8{ &.{ live, ui.art.demo_patch }, recent }) |list| for (list) |p| {
+        for (patches.items) |had| {
+            if (std.mem.eql(u8, had, p)) break;
+        } else patches.append(c.arena, p) catch return;
+    };
     var paths: std.ArrayList([]const u8) = .empty;
-    for ([_][]const u8{ live, ui.art.demo_patch }, 0..) |p, i| {
-        if (i > 0 and std.mem.eql(u8, p, live)) break;
+    for (patches.items) |p| {
         const d = main.ddragon.buildData(gpa, c.arena, io, p) catch |err| {
             std.log.warn("art: {s}: {t}", .{ p, err });
             continue;
@@ -283,6 +293,10 @@ fn makeIcons(c: *Cmd, db: store.Db, out_dir: ?[]const u8, patch: ?[]const u8) vo
     };
     report("art", art);
 }
+
+/// A game's page links its own patch's art: the last few cover nearly every game shown;
+/// older ones redirect to Data Dragon
+const art_patches = 3;
 
 fn report(what: []const u8, n: main.icons.Counts) void {
     if (n.failed > 0) {

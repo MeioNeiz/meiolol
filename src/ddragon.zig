@@ -85,6 +85,43 @@ pub fn fetch(http: *std.http.Client, arena: std.mem.Allocator, url: []const u8) 
     return res.body;
 }
 
+/// The newest `n` patches ("16.21", "16.20", ...) Data Dragon has
+pub fn recentPatches(gpa: std.mem.Allocator, arena: std.mem.Allocator, io: std.Io, n: usize) ![]const []const u8 {
+    var http: std.http.Client = .{ .allocator = gpa, .io = io };
+    defer http.deinit();
+    const versions = try std.json.parseFromSliceLeaky(
+        []const []const u8,
+        arena,
+        try fetch(&http, arena, base ++ "/api/versions.json"),
+        .{},
+    );
+    return patchesIn(arena, versions, n);
+}
+
+fn patchesIn(arena: std.mem.Allocator, versions: []const []const u8, n: usize) ![]const []const u8 {
+    var out: std.ArrayList([]const u8) = .empty;
+    for (versions) |v| {
+        if (out.items.len == n) break;
+        var parts = std.mem.splitScalar(u8, v, '.');
+        const major = parts.next().?;
+        const minor = parts.next() orelse continue;
+        _ = std.fmt.parseInt(u16, major, 10) catch continue;
+        _ = std.fmt.parseInt(u16, minor, 10) catch continue;
+        const patch = v[0 .. major.len + 1 + minor.len];
+        if (out.items.len > 0 and std.mem.eql(u8, out.items[out.items.len - 1], patch)) continue;
+        try out.append(arena, patch);
+    }
+    return out.items;
+}
+
+test "patchesIn: newest first, each once, odd names skipped" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const got = try patchesIn(arena.allocator(), &.{ "16.21.1", "16.20.2", "16.20.1", "lolpatch_7.20", "16.19.1" }, 3);
+    try std.testing.expectEqual(3, got.len);
+    for ([_][]const u8{ "16.21", "16.20", "16.19" }, got) |want, p| try std.testing.expectEqualStrings(want, p);
+}
+
 /// The Data Dragon version for `patch` ("16.20" -> "16.20.1"), else the newest
 pub fn versionFor(http: *std.http.Client, arena: std.mem.Allocator, patch: []const u8) ![]const u8 {
     const versions = try std.json.parseFromSliceLeaky(
