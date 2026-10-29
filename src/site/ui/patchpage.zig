@@ -1,6 +1,5 @@
 //! Patch changes (/patch; docs/plan/ui/patch.md): what Riot changed this patch, next
-//! to what moved. PatchHead, the counts (each filters the table), filter chips and the
-//! role in place, then every champion role with enough games on both patches in one
+//! to what moved. PatchHead, filter chips with their counts and the role in place, then every champion role with enough games on both patches in one
 //! DataTable: Riot's badge, both rates, the change drawn with its range, the lane lead,
 //! its matchups that moved. A row opens what Riot changed and its matchup moves. The
 //! items and runes Riot changed sit over the table as chips, one open at a time.
@@ -13,7 +12,6 @@ const phrase = @import("phrase.zig");
 const table = @import("table.zig");
 const card = @import("card.zig");
 const chip = @import("chip.zig");
-const strip = @import("strip.zig");
 const rolepicker = @import("rolepicker.zig");
 const role = @import("role.zig");
 const delta = @import("delta.zig");
@@ -144,10 +142,8 @@ pub const Move = struct {
 pub const Gold = struct { minute: u8, prev: i16, cur: i16, games: u32 };
 
 const W = struct {
-    pub const won_more = plain("won more");
-    pub const won_less = plain("won less");
-    pub const lanes = plain("lanes moved");
-    pub const mu_moved = plain("matchups moved");
+    pub const up = phrase.Phrase("▲{n:count}");
+    pub const down = phrase.Phrase("▼{n:count}");
     pub const moved = plain("Moved clearly");
     pub const all = plain("All");
     pub const role_label = plain("Role");
@@ -202,9 +198,6 @@ fn inRole(s: Shown, r: Role) bool {
     const want = roleOf(s) orelse return true;
     return want == r;
 }
-
-/// The counts above the table, each a filter of it
-pub const Only = enum { up, down, lane, riot, mu };
 
 fn share(c: Count) f64 {
     return @as(f64, @floatFromInt(c[1])) / @as(f64, @floatFromInt(@max(c[0], 1)));
@@ -488,8 +481,6 @@ pub const Page = struct {
     /// The chips: neither is All
     moved: bool = true,
     riot: bool = true,
-    /// A count pressed: only its rows, over the chips
-    only: ?Only = null,
     /// The item or rune open over the table: Data.items' index, then runes' after them
     kit: ?u16 = null,
     /// From the page to the site root; the data file from the page and its hash (stamp)
@@ -505,13 +496,12 @@ pub const Page = struct {
         return p;
     }
 
-    pub const Msg = union(enum) { role: Shown, moved, riot, all, only: Only, kit: u16 };
+    pub const Msg = union(enum) { role: Shown, moved, riot, all, kit: u16 };
 
     pub const Url = struct {
         role: Shown = .all,
         moved: bool = true,
         riot: bool = true,
-        only: ?Only = null,
         sort: u8 = 4,
         desc: bool = true,
     };
@@ -521,7 +511,6 @@ pub const Page = struct {
             .role = p.role,
             .moved = p.moved,
             .riot = p.riot or !p.d.riot,
-            .only = p.only,
             .sort = p.table.sort,
             .desc = p.table.desc,
         };
@@ -531,7 +520,6 @@ pub const Page = struct {
         p.role = u.role;
         p.moved = u.moved;
         p.riot = u.riot and p.d.riot;
-        p.only = u.only;
         p.table.fromUrl(.{ .sort = u.sort, .desc = u.desc });
         p.refilter();
     }
@@ -539,13 +527,6 @@ pub const Page = struct {
     fn keep(p: *const P, l: *const Line) bool {
         const r = l.row();
         if (!inRole(p.role, r.role)) return false;
-        if (p.only) |o| return switch (o) {
-            .up => r.clear and points(r.prev, r.cur) > 0,
-            .down => r.clear and points(r.prev, r.cur) < 0,
-            .lane => if (r.lane) |x| x.clear else false,
-            .riot => r.change != null,
-            .mu => l.mus() > 0,
-        };
         if (!p.moved and !p.riot) return true;
         return (p.moved and l.moved()) or (p.riot and r.change != null);
     }
@@ -571,20 +552,12 @@ pub const Page = struct {
     pub fn update(p: *P, m: Msg, ev: *tree.Event) void {
         switch (m) {
             .role => |s| p.role = s,
-            .moved => {
-                p.moved = !p.moved;
-                p.only = null;
-            },
-            .riot => {
-                p.riot = !p.riot;
-                p.only = null;
-            },
+            .moved => p.moved = !p.moved,
+            .riot => p.riot = !p.riot,
             .all => {
                 p.moved = false;
                 p.riot = false;
-                p.only = null;
             },
-            .only => |o| p.only = if (p.only == o) null else o,
             .kit => |k| {
                 p.kit = if (p.kit == k) null else k;
                 return;
@@ -594,9 +567,9 @@ pub const Page = struct {
         p.refilter();
     }
 
-    const Counts = struct { up: u32 = 0, down: u32 = 0, lane: u32 = 0, riot: u32 = 0, mu: u32 = 0 };
+    const Counts = struct { up: u32 = 0, down: u32 = 0, riot: u32 = 0, all: u32 = 0 };
 
-    /// The role's: rows moved each way, lanes moved, champions Riot changed, matchups
+    /// The role's: rows moved each way, champions Riot changed, every row
     fn counts(p: *const P, h: *H) Counts {
         var c: Counts = .{};
         const seen = h.mem.alloc(bool, p.d.champs.len) catch {
@@ -606,28 +579,16 @@ pub const Page = struct {
         @memset(seen, false);
         for (p.d.rows) |r| {
             if (!inRole(p.role, r.role)) continue;
+            c.all += 1;
             if (r.clear) {
                 if (points(r.prev, r.cur) > 0) c.up += 1 else c.down += 1;
             }
-            if (r.lane) |x| c.lane += @intFromBool(x.clear);
             if (r.change != null and !seen[r.champ]) {
                 seen[r.champ] = true;
                 c.riot += 1;
             }
         }
-        // Each pair once: from the side first in Data.champs, or the side with a row
-        for (p.d.rows) |r| {
-            if (!inRole(p.role, r.role)) continue;
-            for (r.moves) |m| {
-                if (m.moved() and (r.champ < m.them or !p.hasRow(m.them, r.role))) c.mu += 1;
-            }
-        }
         return c;
-    }
-
-    fn hasRow(p: *const P, c: u16, r: Role) bool {
-        for (p.d.rows) |x| if (x.champ == c and x.role == r) return true;
-        return false;
     }
 
     pub fn view(p: *P, h: *H) N {
@@ -654,38 +615,23 @@ pub const Page = struct {
                 .finished = d.finished,
                 .notes = if (d.notes.len > 0) d.notes else null,
             }),
-            p.countStrip(h, c),
             p.kits(h),
             card.view(h, .{ .flush = true }, &.{
                 card.toolbar(h, &.{
                     h.div(.{ .class = "chips" }, .{
-                        chip.view(h, .{ .pressed = p.only == null and p.moved, .on = h.on(p, .moved) }, .{W.moved}),
-                        if (d.riot) chip.view(h, .{ .pressed = p.only == null and p.riot, .on = h.on(p, .riot) }, .{W.changed}) else null,
-                        chip.view(h, .{ .pressed = p.only == null and !p.moved and !p.riot, .on = h.on(p, .all) }, .{W.all}),
+                        chip.view(h, .{ .pressed = p.moved, .on = h.on(p, .moved) }, .{
+                            W.moved,
+                            h.span(.{ .class = "n", .data_d = "up" }, .{W.up.with(h, .{ .n = c.up })}),
+                            h.span(.{ .class = "n", .data_d = "down" }, .{W.down.with(h, .{ .n = c.down })}),
+                        }),
+                        if (d.riot) chip.view(h, .{ .pressed = p.riot, .on = h.on(p, .riot) }, .{ W.changed, h.span(.{ .class = "n" }, .{phrase.num(h, .count, c.riot)}) }) else null,
+                        chip.view(h, .{ .pressed = !p.moved and !p.riot, .on = h.on(p, .all) }, .{ W.all, h.span(.{ .class = "n" }, .{phrase.num(h, .count, c.all)}) }),
                     }),
                     rolepicker.view(h, .{ .v = .compact, .label = W.role_label }, &roles),
                 }),
                 if (p.table.rows.len > 0) p.table.view(h) else h.p(.{ .class = "empty" }, .{W.none}),
             }),
         });
-    }
-
-    fn countStrip(p: *P, h: *H, c: Counts) N {
-        var cells: [5]strip.Item = undefined;
-        var n: usize = 0;
-        const Cell = struct { o: Only, n: u32, l: tree.Text };
-        for ([_]Cell{
-            .{ .o = .up, .n = c.up, .l = W.won_more },
-            .{ .o = .down, .n = c.down, .l = W.won_less },
-            .{ .o = .lane, .n = c.lane, .l = W.lanes },
-            .{ .o = .riot, .n = c.riot, .l = W.changed },
-            .{ .o = .mu, .n = c.mu, .l = W.mu_moved },
-        }) |x| {
-            if (x.o == .riot and !p.d.riot) continue;
-            cells[n] = .{ .label = x.l, .value = phrase.num(h, .count, x.n), .on = h.on(p, .{ .only = x.o }), .pressed = p.only == x.o };
-            n += 1;
-        }
-        return strip.view(h, cells[0..n]);
     }
 
     /// Items then runes Riot changed, a chip each; the open one's lines and who uses it
@@ -771,6 +717,9 @@ pub const css =
     \\  .c-patch { display: grid; gap: var(--sp-4); min-width: 0; }
     \\  .c-patch .c-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2) var(--sp-4); }
     \\  .c-patch .chips { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+    \\  .c-patch .c-toolbar .n { margin-left: 2px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    \\  .c-patch .c-toolbar .n[data-d="up"] { color: var(--us); }
+    \\  .c-patch .c-toolbar .n[data-d="down"] { color: var(--them); }
     \\  .c-patch .c-table-wrap { overflow-x: clip; }
     \\  .c-patch .c-table thead th { top: var(--header); }
     \\  .c-patch .who { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; color: inherit; text-decoration: none; }
@@ -913,17 +862,16 @@ pub fn gallery(g: *Gallery) void {
     if (shown(h.mem, &demo, true)) |p| g.addFill("moved clearly and changed by Riot, Darius open", p.view(h));
     if (shown(h.mem, &demo, false)) |p| {
         p.kit = 0;
-        p.only = .mu;
         p.refilter();
-        p.table.open = 0;
-        g.addFill("Bastionbreaker open over the table; matchups moved pressed, Miss Fortune open", p.view(h));
+        p.table.open = 1;
+        g.addFill("Bastionbreaker open over the table, Miss Fortune open", p.view(h));
     }
     if (shown(h.mem, &demo, false)) |p| {
         p.role = .bot;
-        p.only = .lane;
+        p.moved = false;
         p.refilter();
         p.table.open = 0;
-        g.addFill("bot, lanes moved pressed, Jinx open: no matchup moved", p.view(h));
+        g.addFill("bot, Riot changed only, Jinx open: no matchup moved", p.view(h));
     }
     var no_riot = demo;
     no_riot.riot = false;

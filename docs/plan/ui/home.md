@@ -74,14 +74,17 @@ on the page, ~150 in the first screen.
 
 - Lookup: Enter or the button goes to your.html#id=... (exists). Typing a champion name
   instead offers the champion (the header search's logic, shared `search` component)
-- Review on home: the stat cells are live (press a cell, the graph shows it), no
-  range drag (that is the game page's); "Open" goes to the full game
+- Review on home: the stat cells are live (press a cell, the graph shows it); the
+  graph shows the reading under the pointer or a tap, no range drag (that is the game
+  page's); "Open" goes to the full game. The cells sit boxed under a rule, apart from
+  the axis (loose under it they read as moments on the timeline). The graph grows to
+  the side column's height, so the card has no empty band
 - Example role switch (exists)
 
 ## Components used (register names)
 
 IdLookup, Chip, TodayCard, ChampIcon, Delta (patch changes, as stats uses it),
-GameHeader, TimelineChart (compact: FightStrip, edge ticks; read-only), StatStrip, Segmented, RolePicker,
+GameHeader, TimelineChart (compact: FightStrip, edge ticks; reading tip only), StatStrip, Segmented, RolePicker,
 ChampSearch, PlayerBar (compact), ResultStrip (form).
 
 ## Data needed

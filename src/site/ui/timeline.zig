@@ -92,8 +92,8 @@ pub const Timeline = struct {
     /// ChartTip at this second
     tip: ?u16 = null,
     press: chart.Press = .{},
-    /// Home's small game: no presses, deaths as ticks, epic objectives only, no fight
-    /// marks
+    /// Home's small game: a reading tip only (no range, no moment), deaths as ticks,
+    /// epic objectives only, no fight marks
     compact: bool = false,
 
     const T = @This();
@@ -191,7 +191,13 @@ pub const Timeline = struct {
                 ev.handled = true;
                 if (t.cur != null) ev.after = .{ .op = .focus, .ref = "tl-cur" };
             },
-            .plot => switch (t.press.pointer(ev)) {
+            .plot => if (t.compact) switch (t.press.pointer(ev)) {
+                // Read-only: the reading under the pointer, never a range or a moment
+                .none => {},
+                .hover, .tap => |f| t.tip = t.sec(f),
+                .range => t.tip = t.sec(std.math.clamp(ev.x / @max(1, ev.w), 0, 1)),
+                .leave => t.tip = null,
+            } else switch (t.press.pointer(ev)) {
                 .none => {},
                 .hover => |f| t.tip = t.sec(f),
                 .leave => t.tip = null,
@@ -281,14 +287,14 @@ pub const Timeline = struct {
                 chart.line(h, p, v, .main),
             },
             .over = over.done(),
-            .press = live,
-            .on = if (live) .{
+            .press = true,
+            .on = .{
                 .down = h.on(t, .plot),
                 .move = h.on(t, .plot),
                 .up = h.on(t, .plot),
                 .leave = h.on(t, .plot),
                 .cancel = h.on(t, .plot),
-            } else .{},
+            },
             .on_key = if (live) h.on(t, .key) else null,
         });
     }

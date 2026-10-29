@@ -24,13 +24,16 @@ pub const scope = .{".c-hl"};
 const gold_cuts: [4]f32 = .{ 250, 750, 1500, 2500 };
 const short_s = 300;
 const lane_s = 14 * 60;
+/// A streak's pips
+const form_n = 10;
 
 const W = struct {
     pub const streaks = plain("Streaks");
     pub const lane = plain("Lane");
     pub const fights = plain("Fights");
     pub const games = plain("Games");
-    pub const streak = plain("Current streak");
+    pub const win_streak = plain("Win streak");
+    pub const loss_streak = plain("Loss streak");
     pub const longest = plain("Longest win streak");
     pub const record = plain("Record");
     pub const lead = plain("Biggest lead at 14");
@@ -42,12 +45,10 @@ const W = struct {
     pub const long = plain("Longest game");
     pub const fast = plain("Fastest win");
     pub const most = phrase.Phrase("Most played, {n:count} games");
-    pub const wins = phrase.Phrase("{n:count} wins");
-    pub const losses = phrase.Phrase("{n:count} losses");
     pub const wl = phrase.Phrase("{w:int}–{l:int}");
     pub const ratio = phrase.Phrase("{r:dec}");
     pub const moved = phrase.Phrase("{a:int}% → {b:int}%");
-    pub const all = plain("All highlights");
+    pub const all = plain("Highlights");
 };
 
 /// Indices into the games given to `of`
@@ -147,14 +148,25 @@ const Tiles = struct {
     fn streak(t: Tiles) ?Tile {
         const s = t.r.streak orelse return null;
         if (s.n < 2) return null;
-        return .{ .label = W.streak, .value = if (s.win) W.wins.with(t.h, .{ .n = s.n }) else W.losses.with(t.h, .{ .n = s.n }) };
+        var rs: [form_n]bool = undefined;
+        var n: usize = 0;
+        for (t.games) |g| if (!g.remake and n < form_n) {
+            rs[n] = g.win;
+            n += 1;
+        };
+        std.mem.reverse(bool, rs[0..n]);
+        const form = t.h.mem.dupe(bool, rs[0..n]) catch {
+            t.h.oom = true;
+            return null;
+        };
+        return .{ .label = if (s.win) W.win_streak else W.loss_streak, .value = phrase.num(t.h, .count, s.n), .form = form, .run = s.n };
     }
 
     fn longest(t: Tiles) ?Tile {
         // The current run already says it
         if (t.r.longest < 2) return null;
         if (t.r.streak) |s| if (s.win and s.n == t.r.longest) return null;
-        return .{ .label = W.longest, .value = W.wins.with(t.h, .{ .n = t.r.longest }) };
+        return .{ .label = W.longest, .value = phrase.num(t.h, .count, t.r.longest) };
     }
 
     fn record(t: Tiles) ?Tile {
@@ -204,8 +216,9 @@ fn tilesOf(h: *H, l: *const yl.List, games: []const yl.Game, to: Links) ?Tiles {
 fn group(h: *H, title: tree.Text, tiles: []const ?Tile) ?N {
     var row = h.list();
     for (tiles) |t| if (t) |x| row.add(recordtile.view(h, x));
-    if (row.items.items.len == 0) return null;
-    return h.section(.{ .class = "grp" }, .{ h.el(.h3, .{}, .{title}), h.div(.{ .class = "tiles" }, .{row.done()}) });
+    const n = row.items.items.len;
+    if (n == 0) return null;
+    return h.section(.{ .class = "grp", .style = h.vars(.{ .n = n }) }, .{ h.el(.h3, .{}, .{title}), h.div(.{ .class = "tiles" }, .{row.done()}) });
 }
 
 /// The Highlights view: `games` the filtered list, newest first
@@ -233,30 +246,40 @@ pub fn top(h: *H, l: *const yl.List, games: []const yl.Game, to: Links, more: ?t
     };
     if (n == 0) return .none;
     return h.div(.{ .class = "c-hl", .data_top = true }, .{
-        h.div(.{ .class = "tiles" }, .{row.done()}),
         if (more) |m| h.button(.{ .type = "button", .class = "more", .on_click = m }, .{W.all}) else null,
+        h.div(.{ .class = "tiles" }, .{row.done()}),
     });
 }
 
 pub const css =
     \\@layer components {
-    \\  .c-hl { display: grid; gap: var(--sp-4); }
-    \\  .c-hl > .grp { display: grid; gap: var(--sp-2); }
-    \\  .c-hl h3 { margin: 0; font-size: var(--fs-s); font-weight: var(--w-b); color: var(--t2); }
-    \\  .c-hl .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: var(--sp-2); }
-    \\  .c-hl[data-top] { gap: var(--sp-2); }
+    \\  /* Each group one card, wide as its records (--n), filling the row; records split by 1 px lines, from
+    \\     each tile's shadow so a short last row leaves no line-coloured hole */
+    \\  .c-hl { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
+    \\  .c-hl > .grp { flex: var(--n) 1 calc(var(--n) * 190px); min-width: 0; display: flex; flex-direction: column;
+    \\    background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-l); overflow: hidden; }
+    \\  .c-hl h3 { margin: 0; padding: var(--sp-2) var(--sp-4); background: var(--panel-2); border-bottom: 1px solid var(--line);
+    \\    font-size: var(--fs-s); font-weight: var(--w-b); color: var(--t2); }
+    \\  .c-hl .tiles { flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1px; }
+    \\  .c-hl .tiles > .c-rtile { border: 0; border-radius: 0; padding: var(--sp-4); background: none;
+    \\    box-shadow: 1px 0 0 var(--line), 0 1px 0 var(--line), 1px 1px 0 var(--line); }
+    \\  .c-hl[data-top] { display: flex; flex-direction: column; gap: var(--sp-1); padding-top: var(--sp-3);
+    \\    background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-l); overflow: hidden; }
     \\  .c-hl[data-top] .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    \\  .c-hl > .more { all: unset; justify-self: end; cursor: pointer; color: var(--accent); font-size: var(--fs-s); }
+    \\  .c-hl[data-top] .c-rtile { padding: var(--sp-1) var(--sp-4) var(--sp-3); box-shadow: none; border-left: 1px solid var(--line); }
+    \\  .c-hl[data-top] .c-rtile:first-child { border-left: 0; }
+    \\  .c-hl > .more { all: unset; align-self: start; margin-inline: var(--sp-4); cursor: pointer; color: var(--accent); font-size: var(--fs-s); }
     \\  .c-hl > .more:hover { text-decoration: underline; }
     \\  .c-hl > .more:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-ctl); }
     \\  @media (max-width: 760px) {
     \\    .c-hl .tiles, .c-hl[data-top] .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    \\    .c-hl > .grp { flex-basis: 100%; }
     \\  }
     \\}
     \\
 ;
 
-/// The gallery's "All highlights" press, which goes nowhere
+/// The gallery's "Highlights" press, which goes nowhere
 const Tap = struct {
     pub const Msg = union(enum) { more };
     pub fn update(_: *Tap, _: Msg, _: *tree.Event) void {}

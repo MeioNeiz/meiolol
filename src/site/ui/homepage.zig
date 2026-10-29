@@ -469,6 +469,11 @@ pub const css =
     \\    .c-home > .hero .td { grid-area: td; }
     \\  }
     \\  .c-hrev { container-type: inline-size; }
+    \\  /* The side column can run taller (a patch with six changes): the graph takes the rest, no empty band */
+    \\  .c-hrev > .c-card { display: flex; flex-direction: column; }
+    \\  .c-hrev .gr { flex: 1; display: flex; flex-direction: column; }
+    \\  .c-hrev .gr > .c-tl { flex: 1; }
+    \\  .c-hrev .c-tl > .plot { flex: 1 0 auto; height: auto; min-height: calc(var(--h) * 1px); }
     \\  .c-hrev .c-head { padding-inline: var(--card-px); }
     \\  .c-hrev .c-head > .c-btn { margin-left: auto; }
     \\  .c-hrev .you { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
@@ -480,9 +485,12 @@ pub const css =
     \\  .c-hrev .form > i[data-ok] { background: var(--us); }
     \\  .c-hrev .hd { padding: var(--sp-3) var(--card-px); border-bottom: 1px solid var(--line); }
     \\  .c-hrev .gr { padding: var(--sp-2) var(--card-px) var(--sp-3); }
-    \\  .c-hrev .gr > .c-seg { margin-bottom: var(--sp-2); }
-    \\  .c-hrev .cells { margin-top: var(--sp-2); }
-    \\  .c-hrev .cells > .c-strip { justify-content: space-between; }
+    \\  .c-hrev .gr > .c-seg { align-self: start; margin-bottom: var(--sp-2); }
+    \\  /* Boxed under a rule: spread loose under the x axis they read as points on the timeline */
+    \\  .c-hrev .cells { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--line); }
+    \\  .c-hrev .cells > .c-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: var(--sp-2); }
+    \\  .c-hrev .cells > * > :where(*) { padding: var(--sp-2) var(--sp-3); background: var(--panel-2); border-radius: var(--r-s); }
+    \\  .c-hrev .cells > .c-strip > [data-press] { margin: 0; }
     \\  .c-hch { container-type: inline-size; }
     \\  .c-hch .c-head { padding-inline: var(--card-px); }
     \\  .c-hch .c-head > .c-seg { margin-left: auto; }

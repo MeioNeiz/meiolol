@@ -1,7 +1,8 @@
 //! RecordTile: one record from a player's games (your-games.md "Highlights"): the figure
 //! large, a label of 1-3 words, and the game it came from as a chip (your champion and
 //! theirs, W or L, the date), a link to that game at the record's moment. Colour only
-//! where the figure is good or bad for you (a lead, a swing); counts and times plain
+//! where the figure is good or bad for you (a lead, a swing); counts and times plain. A
+//! streak shows the newest results as pips under the figure, its run boxed
 const tree = @import("tree.zig");
 const phrase = @import("phrase.zig");
 const fmt = @import("fmt.zig");
@@ -28,6 +29,9 @@ pub const Tile = struct {
     /// The figure's colour; null is plain ink
     step: ?fmt.Step = null,
     game: ?Chip = null,
+    /// Results as pips, oldest first; the last `run` boxed as the streak
+    form: []const bool = &.{},
+    run: usize = 0,
 };
 
 const W = struct {
@@ -41,7 +45,19 @@ pub fn view(h: *H, t: Tile) N {
     return h.div(.{ .class = "c-rtile" }, .{
         h.b(.{ .class = "val", .style = if (t.step) |s| h.vars(.{ .c = s }) else null }, .{t.value}),
         h.span(.{ .class = "lab" }, .{t.label}),
+        if (t.form.len > 0) form(h, t.form, t.run) else null,
         if (t.game) |c| chip(h, c) else null,
+    });
+}
+
+fn form(h: *H, rs: []const bool, run: usize) N {
+    const k = rs.len - @min(run, rs.len);
+    var before = h.list();
+    var boxed = h.list();
+    for (rs, 0..) |w, i| (if (i < k) &before else &boxed).add(h.el(.i, .{ .key = i, .data_win = w }, .{}));
+    return h.span(.{ .class = "form", .aria_hidden = true }, .{
+        before.done(),
+        if (run > 0) h.span(.{ .class = "run", .data_win = rs[rs.len - 1] }, .{boxed.done()}) else null,
     });
 }
 
@@ -68,6 +84,12 @@ pub const css =
     \\    font-size: var(--fs-xs); font-variant-numeric: tabular-nums; text-decoration: none; }
     \\  .c-rtile > a.chip:hover { background: var(--ctl-bg-2); color: var(--text); }
     \\  .c-rtile > a.chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+    \\  .c-rtile > .form { display: flex; align-items: center; gap: 3px; margin-top: var(--sp-1); }
+    \\  .c-rtile .form i { width: 7px; height: 14px; border-radius: 2px; background: var(--them); opacity: 0.35; }
+    \\  .c-rtile .form i[data-win] { background: var(--us); }
+    \\  .c-rtile .form > .run { display: flex; gap: 3px; padding: 2px; border-radius: 4px; box-shadow: 0 0 0 1px var(--them); }
+    \\  .c-rtile .form > .run[data-win] { box-shadow: 0 0 0 1px var(--us); }
+    \\  .c-rtile .form > .run i { opacity: 1; }
     \\  .c-rtile .r { font-weight: var(--w-b); color: var(--them); }
     \\  .c-rtile .r[data-win] { color: var(--us); }
     \\}
@@ -81,4 +103,5 @@ pub fn gallery(g: *Gallery) void {
     g.add("a lead", view(h, .{ .label = plain("Biggest lead at 14"), .value = plain("+1,759"), .step = .of(1759, .{ 250, 750, 1500, 2500 }), .game = .{ .me = ahri, .opp = zed, .win = true, .date = plain("19 Oct"), .href = "#" } }));
     g.add("a time, no opponent", view(h, .{ .label = plain("Longest game"), .value = plain("41:07"), .game = .{ .me = ahri, .win = false, .date = plain("17 Oct"), .href = "#" } }));
     g.add("no game", view(h, .{ .label = plain("Record"), .value = plain("16–8") }));
+    g.add("a streak", view(h, .{ .label = plain("Win streak"), .value = plain("5"), .form = &.{ true, false, false, true, false, true, true, true, true, true }, .run = 5 }));
 }

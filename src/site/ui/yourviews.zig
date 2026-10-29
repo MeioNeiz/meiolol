@@ -165,7 +165,7 @@ pub const css =
     \\  .c-yviews { display: grid; gap: var(--sp-3); }
     \\  .c-yviews .filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-4); }
     \\  .c-yviews .note { margin: 0; color: var(--muted); font-size: var(--fs-s); }
-    \\  .c-yviews > .cards { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 1fr); gap: var(--sp-2); align-items: start; }
+    \\  .c-yviews > .cards { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 1fr); gap: var(--sp-2); }
     \\  .c-yviews:not([data-view="games"]) ~ [data-island="your"] { display: none; }
     \\  .c-yviews:not([data-view="time"]) ~ [data-island="yourtime"] { display: none; }
     \\  .c-yviews:not([data-view="friends"]) ~ [data-island="yourfriends"] { display: none; }
