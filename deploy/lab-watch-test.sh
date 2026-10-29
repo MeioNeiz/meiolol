@@ -13,7 +13,8 @@
 # nothing, an empty answer isn't down, 3 failures in a row pause, and after the grace
 # agents' work goes on while the run stays paused; an unwritable list stops nothing; a
 # watcher stopped (TERM, even mid-hang in tasklist), killed (KILL, then a new one, even
-# with tasklist hanging or ~/ml/runs gone, or `resume` as the unit's ExecStopPost) leaves
+# with tasklist hanging or ~/ml/runs gone (and back: the log moves back, a run from
+# before boot restarts), or `resume` as the unit's ExecStopPost) leaves
 # nothing stopped; a list from another boot or a reused pid continues nothing.
 # On the gpu-box: deploy/lab-watch-test.sh (about 2 min)
 set -u
@@ -304,8 +305,22 @@ until_ok 4 grep -q "continued 6 (watcher start)" "$t/meiolol-lab-watch.log" \
     || bad "runs dir gone: $(cat "$t/meiolol-lab-watch.log" "$t/watch.err")"
 until_ok 10 all s "${heavy[@]}" && ok "runs dir gone: the watcher runs on" \
     || bad "runs dir gone: the watcher doesn't work"
-stop_watcher TERM
+# The lab disk mounts later: the log moves back and a run live before the WSL restart
+# runs again
+mkdir "$t/runs.away/r2"
+printf '#!/bin/sh\ntouch again exit\n' > "$t/runs.away/r2/job.sh"
+chmod +x "$t/runs.away/r2/job.sh"
+sh -c : & wait $!
+echo "$!" > "$t/runs.away/r2/job.pgid"
+touch -d "@$(( $(awk '$1 == "btime" { print $2 }' /proc/stat) - 60 ))" \
+    "$t/runs.away/r2/job.pgid"
 mv "$t/runs.away" "$t/runs"
+until_ok 16 test -f "$t/runs/r2/again" && ok "runs dir back: a run from before boot restarted" \
+    || bad "runs dir back: run not restarted: $(logs)"
+grep -q "back: logging here" "$t/runs/watcher.log" \
+    && ok "runs dir back: the log moved back" || bad "runs dir back: log not moved: $(logs)"
+stop_watcher TERM
+rm -rf "$t/runs/r2"
 
 # Killed, the game closed meanwhile
 watch

@@ -18,16 +18,16 @@
 #   changes until 3 ticks in a row; then unknown, which pauses like the game. After
 #   GRACE (3 min) of it, agents' work goes on (game state blind, a WARNING line every
 #   10 min) and runs stay paused
-# - WSL restarts (a shutdown, a reboot): at start, a run that was live when WSL went down
-#   (job.pgid from the last day, older than this boot, no exit) runs again in its dir,
-#   twice at most (restarts); runs resume from their own checkpoints, if they keep any
+# - WSL restarts (a shutdown, a reboot): a run that was live when WSL went down runs
+#   again, once ~/ml/runs is there (runs_back)
 # - Sleep (Jacob: awake while busy): while a run is live, or another job keeps a file in
 #   ~/ml/awake.d fresh (touched in the last 15 min, eg the archive pull), Windows is held
 #   awake by deploy/windows/meiolol-awake.ps1, which watches a flag file this keeps fresh
 # - Builds (deploy/remote-build.sh, jobs in ~/ml/build/jobs): ended while League is up,
 #   and keep Windows awake while one runs
 # Log: ~/ml/runs/watcher.log, or ~/.cache/meiolol-lab-watch.log when ~/ml/runs is missing
-# or read-only (a lab disk reset); then runs are left alone until it is back.
+# or read-only (the lab disk not mounted yet, or a reset); runs are left alone until it is
+# back, and the log moves back with them.
 # Tests (deploy/lab-watch-test.sh): MEIOLOL_WATCH_TEST=DIR keeps every path under DIR,
 # asks DIR/tasklist instead of Windows and stops only processes of its own session
 #   lab-watch.sh           the watcher
@@ -95,7 +95,7 @@ if [[ ${1-} == resume ]]; then
 fi
 unquiet "watcher start"
 trap 'unquiet "watcher stopping"; rm -f "$state" "$gstate"; exit 0' TERM INT HUP
-[[ $logf == "$runs"/* ]] || log "$runs not writable: logging here, runs left alone"
+[[ $logf == "$runs"/* ]] || log "$runs not writable: logging here, runs left alone until it is"
 
 # One answer from Windows: game (League of Legends.exe, client or not), client (the
 # client alone), down, or unknown (tasklist failed, hung past ASK_S or listed nothing)
@@ -237,8 +237,22 @@ quiet() {
 
 win_home || home_at=$((SECONDS + 60))
 
-btime=$(awk '$1 == "btime" { print $2 }' /proc/stat)
-if cd "$runs" 2> /dev/null; then
+# Once ~/ml/runs is writable (at start, or later: wsl-mount.ps1 mounts the lab disk some
+# seconds after WSL starts), the log moves there and runs that were live when WSL went
+# down (job.pgid from the last day, older than this boot, no exit) run again in their
+# dir, twice at most (restarts); runs resume from their own checkpoints, if they keep any
+runs_ok=''
+runs_back() {
+    local d since btime
+    { : >> "$runs/watcher.log"; } 2> /dev/null || return 0
+    runs_ok=1
+    if [[ $logf != "$runs"/* ]]; then
+        logf=$runs/watcher.log
+        exec >> "$logf" 2>&1
+        log "$runs back: logging here (meanwhile $cache/meiolol-lab-watch.log)"
+    fi
+    cd "$runs" || return 0
+    btime=$(awk '$1 == "btime" { print $2 }' /proc/stat)
     for d in */; do
         d=${d%/}
         [[ -f $d/job.pgid && ! -f $d/exit && ! -f $d/stopped ]] || continue
@@ -251,7 +265,8 @@ if cd "$runs" 2> /dev/null; then
         (cd "$d" && nohup perl -e 'setpgrp(0,0); exec @ARGV' ./job.sh >> log 2>&1 < /dev/null &)
         log "restarted $d (WSL restart)"
     done
-fi
+}
+runs_back
 
 was='' game_was='' holder='' busy_was='' known='' fails=0 first_fail=0 warned=0
 while true; do
@@ -293,12 +308,14 @@ while true; do
     now=up
     [[ $league == down ]] && now=down
     busy='' skip=$$
+    [[ -n $runs_ok ]] || runs_back
     if cd "$runs" 2> /dev/null; then
         for d in */; do
             d=${d%/}
             [[ -f $d/job.pgid && ! -f $d/exit && ! -f $d/stopped ]] || continue
             pg=$(cat "$d/job.pgid")
-            kill -0 -- "-$pg" 2>/dev/null || continue
+            # 1 or less would signal every process (kill -STOP -- -1)
+            [[ $pg =~ ^[0-9]+$ ]] && (( pg > 1 )) && kill -0 -- "-$pg" 2>/dev/null || continue
             busy=$d skip+=" $pg"
             if [[ $now == up && ! -f $d/paused ]]; then
                 kill -STOP -- "-$pg" && touch "$d/paused" && log "STOP" >> "$d/pauses.log" \
@@ -314,7 +331,7 @@ while true; do
     for d in "$jobs"/*/; do
         [[ -f $d/job.pgid && ! -f $d/exit ]] || continue
         pg=$(cat "$d/job.pgid")
-        kill -0 -- "-$pg" 2> /dev/null || continue
+        [[ $pg =~ ^[0-9]+$ ]] && (( pg > 1 )) && kill -0 -- "-$pg" 2> /dev/null || continue
         skip+=" $pg"
         if [[ $now == up ]]; then
             kill -TERM -- "-$pg" && log "ended build ${d%/} (League $league)"

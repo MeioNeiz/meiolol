@@ -14,7 +14,8 @@ docs/lab-run.md.
 ## Rules
 
 - gpu-box: nothing heavy while League runs (Jacob: no stutter). The watcher
-  (deploy/lab-watch.sh, systemd user service meiolol-lab-watch, log ~/ml/runs/watcher.log)
+  (deploy/lab-watch.sh, systemd user service meiolol-lab-watch, log ~/ml/runs/watcher.log;
+  ~/.cache/meiolol-lab-watch.log until the lab disk is mounted)
   asks tasklist.exe every 3 s (5 while up). While LeagueClient.exe or League of
   Legends.exe is up, or Windows can't be asked, it stops every run's process group
   (each run's pauses.log says when) and ends remote-build jobs. Only while the game
