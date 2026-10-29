@@ -98,5 +98,17 @@ test "ends without a page are disabled" {
     try @import("html.zig").write(&t, n, &out.writer);
     const s = out.written();
     try std.testing.expectEqual(@as(usize, 2), std.mem.count(u8, s, "disabled"));
-    try std.testing.expect(std.mem.indexOf(u8, s, "href") == null);
+    try std.testing.expect(std.mem.find(u8, s, "href") == null);
+}
+
+test "a finished pair's games without so far" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var t: tree.Tree = .{};
+    var h: H = .init(arena.allocator(), &t);
+    const n = view(&h, .{ .pair = .{ .cur = "16.20", .prev = "16.19" }, .games = 5, .finished = true });
+    var out: std.Io.Writer.Allocating = .init(arena.allocator());
+    try @import("html.zig").write(&t, n, &out.writer);
+    try std.testing.expect(std.mem.find(u8, out.written(), "5 games") != null);
+    try std.testing.expect(std.mem.find(u8, out.written(), "so far") == null);
 }

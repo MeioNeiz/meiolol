@@ -36,6 +36,9 @@ const patch = "15.13";
 const start_ms = 1_752_000_000_000;
 /// The patch before, its games a day earlier: in the patch day only (patch.html)
 const prev_patch = "15.12";
+/// Two days earlier: prev_patch against it is the older pair's page
+/// (patches/15.12-15.11.html)
+const older_patch = "15.11";
 
 test "fixture games to stats, curves and the website" {
     const gpa = testing.allocator;
@@ -193,6 +196,7 @@ test "fixture games to stats, curves and the website" {
     try db.exec("DELETE FROM forgotten");
 
     try fillPrev(arena, db);
+    try fillOn(arena, db, older_patch, 2, 3000);
     var prev_cv = try curves.build(gpa, io, db, &.{prev_patch}, 0, &.{"EUW1"}, &.{});
     defer prev_cv.builder.deinit();
     try testing.expectEqual(games, prev_cv.summary.games);
@@ -201,9 +205,9 @@ test "fixture games to stats, curves and the website" {
     try tmp.dir.writeFile(io, .{ .sub_path = "curves-prev.bin", .data = prev_curves_bytes.written() });
     const prev_curves_path = try std.fs.path.join(arena, &.{ dir, "curves-prev.bin" });
 
-    // Data Dragon's files for both patches, as patchnotes caches them: Riot changed
-    // Darius' Q cooldown
-    for ([_][]const u8{ prev_patch ++ ".1", patch ++ ".1" }, [_][]const u8{ "9,8,7,6,5", "9,7.75,6.5,5.25,4" }) |v, cd| {
+    // Data Dragon's files for the three patches, as patchnotes caches them: Riot changed
+    // Darius' Q cooldown each time
+    for ([_][]const u8{ older_patch ++ ".1", prev_patch ++ ".1", patch ++ ".1" }, [_][]const u8{ "10,9,8,7,6", "9,8,7,6,5", "9,7.75,6.5,5.25,4" }) |v, cd| {
         const vdir = try std.fs.path.join(arena, &.{ "ddragon", v });
         try tmp.dir.createDirPath(io, vdir);
         try tmp.dir.writeFile(io, .{ .sub_path = try std.fs.path.join(arena, &.{ vdir, "championFull.json" }), .data = try arena.print(
@@ -227,6 +231,7 @@ test "fixture games to stats, curves and the website" {
         .curves = @splat(curves_path),
         .builds = .{ recent_builds_path, builds_path, recent_builds_path, builds_path },
         .prev_patch = prev_patch,
+        .older_pairs = &.{.{ prev_patch, older_patch }},
         .curves_prev = .{ null, prev_curves_path, null, prev_curves_path },
         .ddragon_dir = try std.fs.path.join(arena, &.{ dir, "ddragon" }),
         .builds_prev = .{ null, prev_builds_path, null, prev_builds_path },
@@ -327,6 +332,13 @@ test "fixture games to stats, curves and the website" {
         // games; Darius, whom Riot changed, in his main role all the same; in every view,
         // linking the patch view's pages, and a tab after Matchups
         .{ "patch/patch.html", &.{ "<h1>Patch 15.13 vs 15.12</h1>", "<div class=\"c-patch\" data-island=\"patch\" data-src=\"data/patch.bin\" data-stamp=\"", "href=\"../patch/champion/darius.html#role=top\"", "<span class=\"ar\" aria-hidden=\"true\">▲</span>Q</span>", "league-of-legends-patch-25-13-notes/", "<script src=\"../" ++ assets.patch_js.path ++ "\" data-wasm=\"" ++ assets.patch_wasm.path ++ "\" defer></script>" } },
+        // The older pair's page: PatchHead's ‹ › from every patch.html, back to the
+        // newest; win rates only, Riot's changes its own
+        .{ "patches/15.12-15.11.html", &.{ "<h1>Patch 15.12 vs 15.11</h1>", "data-src=\"../data/patch-15.12-15.11.bin\"", "href=\"../patch.html\"", "<span class=\"ar\" aria-hidden=\"true\">▲</span>Q</span>" } },
+        .{ "all/patches/15.12-15.11.html", &.{ "<h1>Patch 15.12 vs 15.11</h1>", "href=\"../../all/patch.html\"" } },
+        .{ "patch.html", &.{"href=\"patches/15.12-15.11.html\""} },
+        .{ "patch/patch.html", &.{"href=\"../patches/15.12-15.11.html\""} },
+        .{ "all/patch/patch.html", &.{"href=\"../../all/patches/15.12-15.11.html\""} },
         .{ "all/patch.html", &.{ "<h1>Patch 15.13 vs 15.12</h1>", "href=\"../all/patch/champion/darius.html#role=top\"", "title=\"This page counts every game we crawl (Plat+)\" data-rank=\"5\"" } },
         .{ "champions.html", &.{"Matchups</a>\n<a href=\"patch.html\">Patch changes</a>"} },
         .{ "index.html", &.{"New patch: <a href=\"patch/patch.html\">what changed in 15.13 since 15.12</a>."} },
@@ -383,6 +395,12 @@ test "fixture games to stats, curves and the website" {
             std.debug.print("{s} lacks {s}\n", .{ pg[0], want });
             return error.TestUnexpectedResult;
         };
+    }
+    // The older pair's period switch stays on it: no patch view has the page
+    {
+        const pair_page = try std.Io.Dir.cwd().readFileAlloc(io, try std.fs.path.join(arena, &.{ out, "patches/15.12-15.11.html" }), arena, .limited(1 << 20));
+        try testing.expect(std.mem.find(u8, pair_page, "patch/patches/") == null);
+        try testing.expect(std.mem.find(u8, pair_page, "so far") == null);
     }
     // Matchup first screen: the numbers and opponents, the pair's build, then the lane
     // beside head to head, the outcome cards last
@@ -1599,15 +1617,20 @@ fn fillGames(arena: std.mem.Allocator, db: store.Db, n_games: usize, varied: boo
 
 /// The fixture game `games` times on prev_patch, a day before start_ms
 fn fillPrev(arena: std.mem.Allocator, db: store.Db) !void {
+    return fillOn(arena, db, prev_patch, 1, 2000);
+}
+
+/// The fixture game `games` times on `p`, `days` before start_ms, match ids from `first`
+fn fillOn(arena: std.mem.Allocator, db: store.Db, p: []const u8, days: i64, first: usize) !void {
     const body = @embedFile("riot/testdata/match.json");
     const json = try store.raw.decompress(arena, @embedFile("riot/testdata/timeline.json.gz"));
     const ct = try riot.crawl.compactTimeline(arena, json);
     for (0..games) |n| {
         var doc = try riot.match.parse(arena, body);
-        doc.metadata.matchId = try arena.print("EUW1_{d}", .{2000 + n});
+        doc.metadata.matchId = try arena.print("EUW1_{d}", .{first + n});
         doc.info.platformId = "EUW1";
-        doc.info.gameVersion = prev_patch ++ ".1.1";
-        doc.info.gameStartTimestamp = start_ms - std.time.ms_per_day;
+        doc.info.gameVersion = try arena.print("{s}.1.1", .{p});
+        doc.info.gameStartTimestamp = start_ms - days * std.time.ms_per_day;
         try riot.match.storeRows(db, doc, "riot");
         try db.run("INSERT INTO timeline.timelines VALUES (?,?,?,?)", .{
             doc.metadata.matchId, ct.frames, ct.events, store.Blob{ .bytes = ct.blob },

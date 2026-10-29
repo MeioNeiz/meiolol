@@ -352,22 +352,37 @@ pub fn previousPatch(arena: std.mem.Allocator, db: store.Db, chosen: []const []c
 
 /// The site's older patch pages: adjacent EUW pairs {cur, prev} below `chosen`, newest
 /// first. The oldest patch in the database was crawled from partway, so a pair's
-/// patches are both whole only when an older patch has games too
+/// patches are both whole only when the patch below them was crawled too
 pub fn olderPairs(arena: std.mem.Allocator, db: store.Db, chosen: []const []const u8) ![]const [2][]const u8 {
     if (chosen.len != 1) return &.{};
-    return pairsBelow(arena, try stats.patches(arena, db, &.{"EUW1"}), chosen[0]);
+    const all = try stats.patches(arena, db, &.{"EUW1"});
+    const at = patchIndex(all, chosen[0]) orelse return &.{};
+    const games = try arena.alloc(u64, all.len);
+    @memset(games, 0);
+    // Only the patches a pair could rest on: each count reads its patch's rows
+    for (at + 3..@min(all.len, at + 3 + max_older_pairs)) |i| {
+        games[i] = try stats.countGames(db, &.{all[i]}, &.{"EUW1"});
+    }
+    return pairsBelow(arena, all, games, at);
 }
 
 const max_older_pairs = 4;
 
-/// `all` newest first
-fn pairsBelow(arena: std.mem.Allocator, all: []const []const u8, chosen: []const u8) ![]const [2][]const u8 {
+/// EUW games the patch below a pair needs to count as crawled: a crawled patch has tens
+/// of thousands, stray games from before the crawl began (players' match histories
+/// reach back) far fewer
+const whole_floor = 10_000;
+
+fn patchIndex(all: []const []const u8, patch: []const u8) ?usize {
+    for (all, 0..) |p, i| if (std.mem.eql(u8, p, patch)) return i;
+    return null;
+}
+
+/// `all` newest first, `games` each one's, from below all[at]
+fn pairsBelow(arena: std.mem.Allocator, all: []const []const u8, games: []const u64, at: usize) ![]const [2][]const u8 {
     var out: std.ArrayList([2][]const u8) = .empty;
-    const at = for (all, 0..) |p, i| {
-        if (std.mem.eql(u8, p, chosen)) break i;
-    } else return &.{};
     var j = at + 1;
-    while (j + 2 < all.len and out.items.len < max_older_pairs) : (j += 1) {
+    while (j + 2 < all.len and games[j + 2] >= whole_floor and out.items.len < max_older_pairs) : (j += 1) {
         try out.append(arena, .{ all[j], all[j + 1] });
     }
     return out.items;
@@ -378,13 +393,23 @@ test pairsBelow {
     defer arena.deinit();
     const a = arena.allocator();
     const all = [_][]const u8{ "16.22", "16.21", "16.20", "16.19" };
-    try std.testing.expectEqualDeep(&[_][2][]const u8{.{ "16.21", "16.20" }}, try pairsBelow(a, &all, "16.22"));
-    try std.testing.expectEqual(0, (try pairsBelow(a, all[1..], "16.21")).len);
-    try std.testing.expectEqual(0, (try pairsBelow(a, &all, "15.1")).len);
+    const crawled: [8]u64 = @splat(whole_floor);
+    try std.testing.expectEqualDeep(&[_][2][]const u8{.{ "16.21", "16.20" }}, try pairsBelow(a, &all, &crawled, 0));
+    try std.testing.expectEqual(0, (try pairsBelow(a, all[1..], &crawled, 0)).len);
+    // A stray handful on the oldest patch: 16.20 may be partial
+    try std.testing.expectEqual(0, (try pairsBelow(a, &all, &.{ 0, 0, 0, 40 }, 0)).len);
+    // Sorted as the database's list is: 16.10 above 16.9
+    var shuffled = [_][]const u8{ "16.8", "16.10", "16.7", "16.9", "16.6" };
+    stats.sortPatches(&shuffled);
+    try std.testing.expectEqualDeep(&[_][2][]const u8{ .{ "16.9", "16.8" }, .{ "16.8", "16.7" } }, try pairsBelow(a, &shuffled, &crawled, 0));
     const many = [_][]const u8{ "16.9", "16.8", "16.7", "16.6", "16.5", "16.4", "16.3", "16.2" };
-    const got = try pairsBelow(a, &many, "16.9");
+    const got = try pairsBelow(a, &many, &crawled, 0);
     try std.testing.expectEqual(max_older_pairs, got.len);
     try std.testing.expectEqualDeep([2][]const u8{ "16.5", "16.4" }, got[3]);
+    // Stops at the first patch below that wasn't crawled
+    var gap = crawled;
+    gap[5] = 0;
+    try std.testing.expectEqual(2, (try pairsBelow(a, &many, &gap, 0)).len);
 }
 
 /// Default log format plus a UTC timestamp, for the crawl log on the box
