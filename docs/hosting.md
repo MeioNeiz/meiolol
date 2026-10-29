@@ -69,8 +69,9 @@ Megatron's pace. Without the cache, measured 26 Oct (Python, O_DIRECT, 2 GB file
   failed, then loops, LVM and /srv/meiolol, and on failure runs again every 30 s until
   Megatron answers (journal: "Megatron (192.168.18.54) not answering"). Each user unit
   on ~/ml/meiolol fails its pre-start check ("waiting for the data disk") and restarts
-  until data/ is there; the Megatron mirror timer skips. Megatron pausing while up:
-  `hard` stalls IO until it is back
+  until data/ is there; the Megatron mirror timer skips. A reboot with C01's packets to
+  Megatron dropped for 5 min: disk up 10 s after they passed again, every unit within
+  a minute, no hand step. Megatron pausing while up: `hard` stalls IO until it is back
 - Alerts: health.sh lines for a share or the disk not mounted; with the disk down
   health.sh itself is missing, which mac-watch.sh reports (docs/data-safety.md "Health
   alerts")
