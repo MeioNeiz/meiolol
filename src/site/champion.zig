@@ -228,6 +228,7 @@ fn roleData(site: *const Site, ch: Champ, r: Role) !cp.Role {
         .lane = try laneOf(site, ch, r),
         .comeback = try comebackOf(site, ch, r),
         .kills = try killsOf(site, ch, r),
+        .ranks = try ranksOf(site, ch, r),
         .build = if (builds_page.forChampion(site, site.view, ch, r)) |b| try buildblock.data(a, b.f, b.b, ch.name) else null,
         .rels = rels.items,
         .by_patch = by_patch,
@@ -292,7 +293,7 @@ fn laneOf(site: *const Site, ch: Champ, r: Role) !?cp.LaneCurves {
     const a = site.arena;
     const c = if (site.curves) |*c| c else return null;
     const base = c.baseline(r, .all) orelse return null;
-    const pairs = try lanePairs(site, c, ch, r);
+    const pairs = try lanePairs(site, c, ch, r, .all);
     var games: std.ArrayList(u32) = .empty;
     for (0..base.minutes()) |i| {
         var n: u32 = 0;
@@ -326,10 +327,10 @@ fn laneOf(site: *const Site, ch: Champ, r: Role) !?cp.LaneCurves {
     return out;
 }
 
-/// ch's lane opponents in r with curves, from ch's side
-fn lanePairs(site: *const Site, c: *const curvesfile.Curves, ch: Champ, r: Role) !std.ArrayList(curvesfile.View) {
+/// ch's lane opponents in r with curves in bracket b, from ch's side
+fn lanePairs(site: *const Site, c: *const curvesfile.Curves, ch: Champ, r: Role, b: curvesfile.Bracket) !std.ArrayList(curvesfile.View) {
     var pairs: std.ArrayList(curvesfile.View) = .empty;
-    for (site.champs) |o| if (o.id != ch.id) if (c.get(r, .all, ch.id, o.id)) |v| try pairs.append(site.arena, v);
+    for (site.champs) |o| if (o.id != ch.id) if (c.get(r, b, ch.id, o.id)) |v| try pairs.append(site.arena, v);
     return pairs;
 }
 
@@ -338,7 +339,7 @@ fn lanePairs(site: *const Site, c: *const curvesfile.Curves, ch: Champ, r: Role)
 fn comebackOf(site: *const Site, ch: Champ, r: Role) !?cp.Comeback {
     const c = if (site.curves) |*c| c else return null;
     const base = c.baseline(r, .all) orelse return null;
-    const pairs = try lanePairs(site, c, ch, r);
+    const pairs = try lanePairs(site, c, ch, r, .all);
     var out: cp.Comeback = .{ .at = @splat(@splat(.{ .games = 0, .wins = 0 })), .all = undefined };
     for (&out.at, &out.all, std.enums.values(curvesfile.Comeback)) |*row, *all, at| for (row, all, 0..) |*o, *x, b| {
         for (pairs.items) |v| {
@@ -358,7 +359,7 @@ fn comebackOf(site: *const Site, ch: Champ, r: Role) !?cp.Comeback {
 /// laneOf; null under cp.min_games lanes
 fn killsOf(site: *const Site, ch: Champ, r: Role) !?cp.Kills {
     const c = if (site.curves) |*c| c else return null;
-    const pairs = try lanePairs(site, c, ch, r);
+    const pairs = try lanePairs(site, c, ch, r, .all);
     var out: cp.Kills = .{ .games = 0, .first_blood = @splat(0), .kills = @splat(0), .deaths = @splat(0) };
     for (pairs.items) |v| {
         out.games += v.games();
@@ -369,6 +370,33 @@ fn killsOf(site: *const Site, ch: Champ, r: Role) !?cp.Kills {
         }
     }
     return if (out.games < cp.min_games) null else out;
+}
+
+/// ch's lanes in r by rank bracket, summed over its pairs as laneOf, with its gold lead
+/// at 14 minutes weighted by lanes still going then; null under two brackets of
+/// cp.min_games lanes
+fn ranksOf(site: *const Site, ch: Champ, r: Role) !?cp.Ranks {
+    const c = if (site.curves) |*c| c else return null;
+    const at = curvesfile.lane_minute - 1;
+    var out: cp.Ranks = undefined;
+    var shown: usize = 0;
+    for (&out, [_]curvesfile.Bracket{ .low, .mid, .high }) |*o, b| {
+        o.* = .{ .games = 0, .wins = 0 };
+        var lanes: u32 = 0;
+        var sum: f64 = 0;
+        for ((try lanePairs(site, c, ch, r, b)).items) |v| {
+            o.games += v.games();
+            o.wins += v.wins();
+            if (at < v.minutes()) {
+                const n = v.minute(at).n;
+                lanes += n;
+                sum += @as(f64, @floatFromInt(n)) * @as(f64, @floatFromInt(v.estimate(.gold, at).mean));
+            }
+        }
+        if (lanes >= cp.min_games) o.gold = @intFromFloat(@round(sum / @as(f64, @floatFromInt(lanes))));
+        shown += @intFromBool(o.games >= cp.min_games);
+    }
+    return if (shown < 2) null else out;
 }
 
 /// Minutes drawn while this many lanes are still going, as a matchup page's

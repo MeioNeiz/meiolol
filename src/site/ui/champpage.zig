@@ -108,6 +108,7 @@ pub const Role = struct {
     lane: ?LaneCurves = null,
     comeback: ?Comeback = null,
     kills: ?Kills = null,
+    ranks: ?Ranks = null,
     build: ?buildpanel.Data = null,
     /// Against or with each role: lane opponents first
     rels: []const Rel,
@@ -341,6 +342,12 @@ pub const W = struct {
     pub const kills_them = "Opponent";
     pub const first_blood = plain("First blood");
     pub const kills = [3]tree.Text{ plain("Kills to 6 min"), plain("Kills 6-14 min"), plain("Kills after 14") };
+    pub const by_rank = plain("By rank");
+    pub const brackets = [3]tree.Text{ plain("Iron-Silver"), plain("Gold-Emerald"), plain("Diamond+") };
+    pub const rank_tip = Phrase("{r:rate} in {n:count} lanes · gold at 14 {g:signed}");
+    pub const rank_tip_thin = Phrase("{r:rate} in {n:count} lanes");
+    pub const rank_key = plain("dashed: every rank");
+    pub const rank_note = plain("Lanes by the middle rank of the game's ten players. We crawl from Platinum up, so lower brackets are thin.");
     pub const players = plain("Players");
     pub const spread_head = Phrase("{n:count} · middle half {lo:pct}-{hi:pct}");
     pub const spread_note = Phrase("Players with 10+ games on it. Luck alone would spread the middle half over {lo:pct}-{hi:pct}.");
@@ -498,6 +505,7 @@ pub const ChartsRole = struct {
     lane: ?LaneCurves = null,
     comeback: ?Comeback = null,
     kills: ?Kills = null,
+    ranks: ?Ranks = null,
 };
 
 /// Games and wins by the champion's lane gold lead at 10 and 15 minutes, in the curves'
@@ -516,6 +524,17 @@ pub const Kills = struct {
     deaths: [3]u32,
 };
 
+/// Lanes by the game's rank bracket (W.brackets: the curves' Iron-Silver, Gold-Emerald,
+/// Diamond+ by the players' median tier), summed over the champion's pairs
+pub const Ranks = [3]Bracket;
+
+pub const Bracket = struct {
+    games: u32,
+    wins: u32,
+    /// Lead in gold at 14 minutes against the average opponent; null on too few lanes
+    gold: ?i16 = null,
+};
+
 /// Files' rank type for the charts, which have no rank files
 pub const NoRank = struct { groups: [1][]const ChartsRole };
 
@@ -531,7 +550,7 @@ pub fn split(a: std.mem.Allocator, d: *const Data) !Split {
         t.* = .{ .role = x.role, .games = x.games, .wins = x.wins, .share = x.share, .thin = x.thin, .rank = x.rank, .of = x.of, .pick = x.pick, .ban = x.ban, .patch_move = x.patch_move, .lane = if (x.rels.len > 0) x.rels[0].opps else &.{} };
         b.* = .{ .role = x.role, .thin = x.thin, .build = x.build };
         m.* = .{ .role = x.role, .thin = x.thin, .games = x.games, .wins = x.wins, .lean = x.lean, .rels = x.rels, .by_patch = x.by_patch, .by_length = x.by_length };
-        c.* = .{ .role = x.role, .lane = x.lane, .comeback = x.comeback, .kills = x.kills };
+        c.* = .{ .role = x.role, .lane = x.lane, .comeback = x.comeback, .kills = x.kills, .ranks = x.ranks };
     }
     return .{
         .top = .{ .name = d.name, .slug = d.slug, .icon = d.icon, .patch = d.patch, .ddragon = d.ddragon, .champs = d.champs, .roles = top },
@@ -1129,6 +1148,7 @@ pub const Charts = struct {
     lane_metrics: [3]lane.Metric = undefined,
     comeback: trend.Trend = .{ .label = W.comeback, .points = &.{} },
     pickup: trend.Trend = .{ .label = W.pickup, .points = &.{}, .height = 110 },
+    ranks: trend.Trend = .{ .label = W.by_rank, .points = &.{} },
     /// Comeback.at's index: 10 or 15 minutes
     at: u8 = 0,
 
@@ -1188,7 +1208,7 @@ pub const Charts = struct {
         }, .{
             h.div(.{ .class = "row2" }, .{ p.laneCard(h), p.comebackCard(h) }),
             h.div(.{ .class = "row2" }, .{ p.pickupCard(h), p.alsoCard(h) }),
-            h.div(.{ .class = "row2" }, .{p.killsCard(h)}),
+            h.div(.{ .class = "row2" }, .{ p.killsCard(h), p.rankCard(h) }),
         });
     }
 
@@ -1264,6 +1284,41 @@ pub const Charts = struct {
         }
         const names: [2][]const u8 = .{ p.data.name, W.kills_them };
         return card.view(h, .{}, &.{ card.head(h, W.kills_head, null, &.{versus.key(h, names)}), versus.rows(h, names, rows[0..n]) });
+    }
+
+    /// Win rate by rank bracket, dashed at its rate over every rank; brackets under
+    /// min_games left out
+    fn rankCard(p: *P, h: *H) N {
+        const none = card.view(h, .{}, &.{ card.head(h, W.by_rank, null, &.{}), h.p(.{ .class = "none" }, .{W.none}) });
+        const k = p.r().ranks orelse return none;
+        const pts = h.mem.alloc(trend.Point, k.len) catch {
+            h.oom = true;
+            return .none;
+        };
+        var all: Counts = .{ .games = 0, .wins = 0 };
+        var n: usize = 0;
+        for (k, W.brackets) |b, l| {
+            all.games += b.games;
+            all.wins += b.wins;
+            if (b.games < min_games) continue;
+            const c: Counts = .{ .games = b.games, .wins = b.wins };
+            pts[n] = .{
+                .label = l,
+                .sub = phrase.num(h, .kilo, b.games),
+                .v = rate(c),
+                .ci = ci(c),
+                .tip = if (b.gold) |g| W.rank_tip.with(h, .{ .r = rate(c), .n = b.games, .g = @as(i32, g) }) else W.rank_tip_thin.with(h, .{ .r = rate(c), .n = b.games }),
+            };
+            n += 1;
+        }
+        if (n < 2) return none;
+        p.ranks.points = pts[0..n];
+        p.ranks.ref = rate(all);
+        if (p.ranks.tip) |t| if (t >= n) {
+            p.ranks.tip = null;
+        };
+        const tip = toggletip.view(h, "cp-rank", .{W.rank_key}, W.by_rank, W.rank_note);
+        return card.view(h, .{}, &.{ card.head(h, W.by_rank, null, &.{h.span(.{ .class = "note" }, .{&tip})}), p.ranks.view(h) });
     }
 
     fn pickupCard(p: *P, h: *H) N {
@@ -1396,4 +1451,29 @@ test "a rare role is listed and opens faded, with its games" {
     try html.write(&t, p.view(&h), &w.writer);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), "data-thin") != null);
     try std.testing.expect(std.mem.indexOf(u8, w.written(), "<p class=\"rare\">A rare role for Karthus: 120 games.</p>") != null);
+}
+
+test "by rank: brackets under min_games left out, no chart under two" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var roles = [_]ChartsRole{.{ .role = .top, .ranks = .{
+        .{ .games = 40, .wins = 20 },
+        .{ .games = 900, .wins = 470, .gold = 120 },
+        .{ .games = 300, .wins = 140 },
+    } }};
+    const d: ChartsData = .{ .name = "Darius", .ddragon = "", .champs = &.{}, .roles = &roles };
+    var p: Charts = .{ .data = &d, .root = "/" };
+    var t: tree.Tree = .{};
+    var h: H = .init(a, &t);
+    var w: std.Io.Writer.Allocating = .init(a);
+    try html.write(&t, p.view(&h), &w.writer);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "Iron-Silver") == null);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "Gold-Emerald") != null);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "Diamond+") != null);
+
+    roles[0].ranks.?[2].games = 99;
+    w.clearRetainingCapacity();
+    try html.write(&t, p.view(&h), &w.writer);
+    try std.testing.expect(std.mem.indexOf(u8, w.written(), "Gold-Emerald") == null);
 }

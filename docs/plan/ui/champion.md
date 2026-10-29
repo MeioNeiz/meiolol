@@ -124,12 +124,16 @@ its kind. Candidates, data we have first (arch-stats.md):
   against all lanes dashed; all ranks)
 - Early kills: done ("Lane kills", Versus rows as the matchup page's head to head:
   first blood, kills before 6, 6-14, after 14, against the average opponent; all ranks)
-- By rank bracket: Iron-Silver, Gold-Emerald, Diamond+ (curves brackets; stats by rank)
+- By rank bracket: done ("By rank", beside Lane kills: win rate over the curves' brackets
+  Iron-Silver, Gold-Emerald, Diamond+ (the game's median tier), its rate at every rank
+  dashed, gold at 14 in the tip; brackets under 100 lanes left out, so on our Platinum+
+  crawl mostly two)
 - Item timing: first core item minute against win rate (builds' minutes per game:
   new counting)
 - Side (blue, red) and games played on it in the last 30 days: new counting
 One chart style for all (Chart frame), two per row as Pick-up and Also play. The
-Charts island (ui-champcharts.wasm) holds Lane, comeback odds, Pick-up and Also play;
+Charts island (ui-champcharts.wasm) holds Lane, comeback odds, Pick-up, Also play, Lane
+kills and By rank;
 ui-champmore.wasm the matchups and trends.
 
 ## References (research refs/champion/notes.md, 27 shots)
